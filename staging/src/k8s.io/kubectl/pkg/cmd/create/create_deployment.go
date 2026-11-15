@@ -82,7 +82,7 @@ type CreateDeploymentOptions struct {
 	genericiooptions.IOStreams
 }
 
-// NewCreateDeploymentOptions returns an initialized CreateDeploymentOptions instance
+// NewCreateDeploymentOptions 返回一个已初始化的 CreateDeploymentOptions 实例
 func NewCreateDeploymentOptions(ioStreams genericiooptions.IOStreams) *CreateDeploymentOptions {
 	return &CreateDeploymentOptions{
 		Port:       -1,
@@ -92,8 +92,8 @@ func NewCreateDeploymentOptions(ioStreams genericiooptions.IOStreams) *CreateDep
 	}
 }
 
-// NewCmdCreateDeployment is a macro command to create a new deployment.
-// This command is better known to users as `kubectl create deployment`.
+// NewCmdCreateDeployment 是用于创建新部署的宏命令。
+// 该命令对用户而言更为人熟知的名称是 `kubectl create deployment`。
 func NewCmdCreateDeployment(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewCreateDeploymentOptions(ioStreams)
 	cmd := &cobra.Command{

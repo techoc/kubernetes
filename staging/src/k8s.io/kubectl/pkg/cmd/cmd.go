@@ -103,7 +103,7 @@ func NewDefaultKubectlCommand() *cobra.Command {
 	})
 }
 
-// NewDefaultKubectlCommandWithArgs creates the `kubectl` command with arguments
+// NewDefaultKubectlCommandWithArgs 创建带有参数的 `kubectl` 命令
 func NewDefaultKubectlCommandWithArgs(o KubectlOptions) *cobra.Command {
 	cmd := NewKubectlCommand(o)
 

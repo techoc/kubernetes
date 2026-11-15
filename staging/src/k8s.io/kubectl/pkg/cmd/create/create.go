@@ -39,27 +39,28 @@ import (
 )
 
 // CreateOptions is the commandline options for 'create' sub command
+// 生命周期：NewCreateOptions（构造默认值）→ Complete（从 cmd 填充）→ Validate（校验组合）→ RunCreate（消费）
 type CreateOptions struct {
-	PrintFlags  *genericclioptions.PrintFlags
-	RecordFlags *genericclioptions.RecordFlags
+	PrintFlags  *genericclioptions.PrintFlags  // -o 输出格式等打印选项
+	RecordFlags *genericclioptions.RecordFlags // --record，已废弃但保留解析兼容旧脚本
 
-	DryRunStrategy cmdutil.DryRunStrategy
+	DryRunStrategy cmdutil.DryRunStrategy // none / client / server
 
-	ValidationDirective string
-	CreateAnnotation    bool
+	ValidationDirective string // --validate=strict|warn|ignore
+	CreateAnnotation    bool   // --save-config
 
-	fieldManager string
+	fieldManager string // --field-manager，SSA 字段归属标识，未导出：只在本命令内使用
 
-	FilenameOptions  resource.FilenameOptions
-	Selector         string
-	EditBeforeCreate bool
-	Raw              string
+	FilenameOptions  resource.FilenameOptions // -f 文件/目录/URL/stdin 及 --recursive
+	Selector         string                   // --selector，过滤清单中的资源
+	EditBeforeCreate bool                     // --edit，创建前先打开编辑器修改
+	Raw              string                   // --raw，直接 POST 原始内容到指定 URI
 
-	Recorder    genericclioptions.Recorder
-	PrintObj    func(obj kruntime.Object) error
-	editOptions *editor.EditOptions
+	Recorder    genericclioptions.Recorder      // --record 的执行体；未启用时是 NoopRecorder
+	PrintObj    func(obj kruntime.Object) error // Complete 里由 PrintFlags 装配的输出闭包
+	editOptions *editor.EditOptions             // --edit 时复用 kubectl edit 的完整实现
 
-	genericiooptions.IOStreams
+	genericiooptions.IOStreams // stdin/stdout/stderr，注入编辑器与 printer
 }
 
 var (
@@ -79,29 +80,37 @@ var (
 		kubectl create -f registry.yaml --edit -o json`))
 )
 
-// NewCreateOptions returns an initialized CreateOptions instance
+// NewCreateOptions 只填充编译期即可确定的默认值（默认输出后缀 "created"）；
+// 其余字段留零值，等 Complete 阶段从命令行解析后再填。
 func NewCreateOptions(ioStreams genericiooptions.IOStreams) *CreateOptions {
 	return &CreateOptions{
+		// 打印前缀 "created"：输出形如 "pod/foo created"
 		PrintFlags:  genericclioptions.NewPrintFlags("created").WithTypeSetter(scheme.Scheme),
 		RecordFlags: genericclioptions.NewRecordFlags(),
 
+		// Complete 里若未启用 --record 会被覆盖为真实 recorder；这里先给 no-op 占位
 		Recorder: genericclioptions.NoopRecorder{},
 
 		IOStreams: ioStreams,
 	}
 }
 
-// NewCmdCreate returns new initialized instance of create sub command
+// NewCmdCreate 返回 `kubectl create` 命令的新实例。
+// 它本身不直接创建任何具体资源，而是一个"命令聚合器"：
+//   - 无参数时依赖 -f FILENAME 从文件/stdin 读取资源清单并 POST 到 apiserver；
+//   - 末尾注册的各 NewCmdCreateXxx 才是创建具体资源（namespace、secret、deployment 等）的快捷方式。
 func NewCmdCreate(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
+	// 用默认值构造 options，持有本命令的全部可配置状态（文件选项、编辑开关、selector 等）
 	o := NewCreateOptions(ioStreams)
 
 	cmd := &cobra.Command{
 		Use:                   "create -f FILENAME",
-		DisableFlagsInUseLine: true,
+		DisableFlagsInUseLine: true, // 用法行已含 "-f FILENAME"，禁止 cobra 自动追加 "[flags]"
 		Short:                 i18n.T("Create a resource from a file or from stdin"),
 		Long:                  createLong,
 		Example:               createExample,
 		Run: func(cmd *cobra.Command, args []string) {
+			// 经典三段式：Complete（把 flag/args 解析进 options）→ Validate（校验组合合法性）→ RunCreate（真正发请求）
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate())
 			cmdutil.CheckErr(o.RunCreate(f))
@@ -109,23 +118,26 @@ func NewCmdCreate(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobr
 	}
 
 	// bind flag structs
+	// --record 已废弃但仍保留解析，避免老脚本报 "unknown flag"
 	o.RecordFlags.AddFlags(cmd)
 
 	usage := "to use to create the resource"
 	cmdutil.AddFilenameOptionFlags(cmd, &o.FilenameOptions, usage)
 	cmdutil.AddValidateFlags(cmd)
 	cmd.Flags().BoolVar(&o.EditBeforeCreate, "edit", o.EditBeforeCreate, "Edit the API resource before creating")
+	// 编辑器换行符风格跟随平台：Windows 用 CRLF，其余用 LF，避免编辑后 diff 出现整文件变更
 	cmd.Flags().Bool("windows-line-endings", runtime.GOOS == "windows",
 		"Only relevant if --edit=true. Defaults to the line ending native to your platform.")
-	cmdutil.AddApplyAnnotationFlags(cmd)
+	cmdutil.AddApplyAnnotationFlags(cmd) // --save-config：把创建时的选项写进 last-applied annotation，供后续 kubectl apply diff
 	cmdutil.AddDryRunFlag(cmd)
-	cmdutil.AddLabelSelectorFlagVar(cmd, &o.Selector)
+	cmdutil.AddLabelSelectorFlagVar(cmd, &o.Selector) // --selector：只处理清单中匹配 label 的资源
 	cmd.Flags().StringVar(&o.Raw, "raw", o.Raw, "Raw URI to POST to the server.  Uses the transport specified by the kubeconfig file.")
-	cmdutil.AddFieldManagerFlagVar(cmd, &o.fieldManager, "kubectl-create")
+	cmdutil.AddFieldManagerFlagVar(cmd, &o.fieldManager, "kubectl-create") // --field-manager：SSA 冲突检测时标识本命令的字段归属
 
-	o.PrintFlags.AddFlags(cmd)
+	o.PrintFlags.AddFlags(cmd) // -o name 等输出格式；create 默认打印 "xxx/yyy created"，不需要完整对象
 
 	// create subcommands
+	// 聚合所有 `create <type>` 快捷子命令，它们共享同一个 factory 和 ioStreams
 	cmd.AddCommand(NewCmdCreateNamespace(f, ioStreams))
 	cmd.AddCommand(NewCmdCreateQuota(f, ioStreams))
 	cmd.AddCommand(NewCmdCreateSecret(f, ioStreams))
@@ -147,15 +159,21 @@ func NewCmdCreate(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobr
 }
 
 // Validate makes sure there is no discrepancy in command options
+// Validate 校验 flag 组合的互斥性。注意仅在 Validate 阶段报错可以在
+// 触碰 apiserver 之前就拦下非法组合（如 --raw 与 --edit 不能并存）。
 func (o *CreateOptions) Validate() error {
+	// -f 文件、目录、URL 或 kustomize.yaml 至少要给一个
 	if err := o.FilenameOptions.RequireFilenameOrKustomize(); err != nil {
 		return err
 	}
 
+	// --raw 模式直接 POST 原始内容到指定 URI，绕过资源构建流程，
+	// 因此和所有依赖清单解析/编辑/输出的 flag 都互斥
 	if len(o.Raw) > 0 {
 		if o.EditBeforeCreate {
 			return fmt.Errorf("--raw and --edit are mutually exclusive")
 		}
+		// raw 只接受一个数据源，多对象 POST 到任意 URI 语义不明确
 		if len(o.FilenameOptions.Filenames) != 1 {
 			return fmt.Errorf("--raw can only use a single local file or stdin")
 		}
@@ -171,6 +189,7 @@ func (o *CreateOptions) Validate() error {
 		if o.PrintFlags.OutputFormat != nil && len(*o.PrintFlags.OutputFormat) > 0 {
 			return fmt.Errorf("--raw and --output are mutually exclusive")
 		}
+		// 只允许路径形式（如 /api/v1/namespaces/test/pods），拒绝整 URL —— 目标主机由 kubeconfig 决定
 		if _, err := url.ParseRequestURI(o.Raw); err != nil {
 			return fmt.Errorf("--raw must be a valid URL path: %v", err)
 		}
@@ -179,33 +198,43 @@ func (o *CreateOptions) Validate() error {
 	return nil
 }
 
-// Complete completes all the required options
+// Complete 把命令行 flag/args 解析成可执行状态：解析 --record、--dry-run、--validate、
+// --save-config，并在 --edit 时提前初始化编辑器 options，最后装配 PrintObj 输出函数。
+// 调用顺序在 Run 回调里位于 Validate 之前——先"收集"，再"校验"，最后"执行"。
 func (o *CreateOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []string) error {
+	// create 的资源都来自 -f 文件/stdin，不接受位置参数
 	if len(args) != 0 {
 		return cmdutil.UsageErrorf(cmd, "Unexpected args: %v", args)
 	}
 	var err error
+	// --record 生命周期：flags.Complete 解析 → ToRecorder 产出写入 change-cause 的记录器
 	o.RecordFlags.Complete(cmd)
 	o.Recorder, err = o.RecordFlags.ToRecorder()
 	if err != nil {
 		return err
 	}
 
+	// client / server / none 三种 dry-run 模式；server 模式要传给 apiserver 但不落库
 	o.DryRunStrategy, err = cmdutil.GetDryRunStrategy(cmd)
 	if err != nil {
 		return err
 	}
+	// server dry-run 下部分输出格式（如 -o yaml 展示 status）需与真实 create 区分，故联动调整
 	cmdutil.PrintFlagsWithDryRunStrategy(o.PrintFlags, o.DryRunStrategy)
 
+	// --validate=strict/warn/ignore，传给 f.Validator 决定 schema 校验行为
 	o.ValidationDirective, err = cmdutil.GetValidationDirective(cmd)
 	if err != nil {
 		return err
 	}
 
+	// --save-config：把当前配置写入 last-applied-configuration 注解，供 apply 做三方 diff
 	o.CreateAnnotation = cmdutil.GetFlagBool(cmd, cmdutil.ApplyAnnotationsFlag)
 
 	if o.EditBeforeCreate {
+		// --edit 复用 kubectl edit 的整套实现：打开编辑器改完 YAML 后再走创建流程
 		editOptions := editor.NewEditOptions(editor.EditBeforeCreateMode, o.IOStreams)
+		// 编辑期间文件、校验、输出、注解等行为都与 create 保持一致
 		editOptions.FilenameOptions = o.FilenameOptions
 		editOptions.ValidateOptions = cmdutil.ValidateOptions{
 			ValidationDirective: o.ValidationDirective,
@@ -225,6 +254,7 @@ func (o *CreateOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []s
 		return err
 	}
 
+	// 闭包缓存 printer，RunCreate 循环里直接回调即可，无需重复解析输出格式
 	o.PrintObj = func(obj kruntime.Object) error {
 		return printer.PrintObj(obj, o.Out)
 	}
@@ -232,9 +262,13 @@ func (o *CreateOptions) Complete(f cmdutil.Factory, cmd *cobra.Command, args []s
 	return nil
 }
 
-// RunCreate performs the creation
+// RunCreate 是创建的执行入口，按优先级分三条路径：
+//  1. --edit：交给 edit 流程（打开编辑器 → 保存后创建）；
+//  2. --raw：绕过资源构建，直接把文件内容 POST 到指定 URI；
+//  3. 默认：用 Builder 读入清单 → 逐个资源 POST → 打印结果。
 func (o *CreateOptions) RunCreate(f cmdutil.Factory) error {
 	if o.EditBeforeCreate {
+		// Complete() 未执行完就到这里说明 Run 回调顺序被破坏，防御性检查
 		if o.editOptions == nil {
 			return fmt.Errorf("EditBeforeCreate requires edit options to be initialized via Complete()")
 		}
@@ -243,6 +277,7 @@ func (o *CreateOptions) RunCreate(f cmdutil.Factory) error {
 
 	// raw only makes sense for a single file resource multiple objects aren't likely to do what you want.
 	// the validator enforces this, so
+	// --raw 路径：RESTClient 的 transport（TLS/认证）由 kubeconfig 提供，Body 来自唯一的数据源文件
 	if len(o.Raw) > 0 {
 		restClient, err := f.RESTClient()
 		if err != nil {
@@ -251,16 +286,20 @@ func (o *CreateOptions) RunCreate(f cmdutil.Factory) error {
 		return rawhttp.RawPost(restClient, o.IOStreams, o.Raw, o.FilenameOptions.Filenames[0])
 	}
 
+	// 按前面的 ValidationDirective 取 schema 校验器（OpenAPI/CELSchema），Builder 读入时会调用
 	schema, err := f.Validator(o.ValidationDirective)
 	if err != nil {
 		return err
 	}
 
+	// 从 kubeconfig 解析目标 namespace；enforceNamespace 表示清单里是否允许省略/覆盖 namespace
 	cmdNamespace, enforceNamespace, err := f.ToRawKubeConfigLoader().Namespace()
 	if err != nil {
 		return err
 	}
 
+	// Builder 把 -f/--selector 指定的输入统一转成可访问的 resource.Info 列表：
+	// Unstructured：不经 Go 类型解码，未知类型也能创建（否则 create 无从谈起）；Schema：读入即做校验；Flatten：展开 List
 	r := f.NewBuilder().
 		Unstructured().
 		Schema(schema).
@@ -276,19 +315,24 @@ func (o *CreateOptions) RunCreate(f cmdutil.Factory) error {
 	}
 
 	count := 0
+	// Visit 逐个处理解析出的资源；出错时携带来源信息，便于定位是哪个文件出的问题
 	err = r.Visit(func(info *resource.Info, err error) error {
 		if err != nil {
 			return err
 		}
+		// --save-config 时写入 last-applied-configuration，供后续 apply 做三方合并
 		if err := util.CreateOrUpdateAnnotation(o.CreateAnnotation, info.Object, scheme.DefaultJSONEncoder()); err != nil {
 			return cmdutil.AddSourceToErr("creating", info.Source, err)
 		}
 
+		// --record 写 change-cause；失败只降级记日志，不阻断创建
 		if err := o.Recorder.Record(info.Object); err != nil {
 			klog.V(4).Infof("error recording current command: %v", err)
 		}
 
 		if o.DryRunStrategy != cmdutil.DryRunClient {
+			// resource.Helper 封装 POST：DryRun(server) 时加 ?dryRun=server 参数，
+			// fieldManager/fieldValidation 对应 --field-manager 与 --validate
 			obj, err := resource.
 				NewHelper(info.Client, info.Mapping).
 				DryRun(o.DryRunStrategy == cmdutil.DryRunServer).
@@ -298,11 +342,13 @@ func (o *CreateOptions) RunCreate(f cmdutil.Factory) error {
 			if err != nil {
 				return cmdutil.AddSourceToErr("creating", info.Source, err)
 			}
+			// 用 apiserver 返回的对象刷新 info（补全 uid/resourceVersion 等服务端字段）
 			info.Refresh(obj, true)
 		}
 
 		count++
 
+		// client dry-run 时 info.Object 保持本地状态，只打印不落库
 		return o.PrintObj(info.Object)
 	})
 	if err != nil {
