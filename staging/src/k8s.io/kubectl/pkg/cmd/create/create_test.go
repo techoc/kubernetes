@@ -44,21 +44,33 @@ func TestExtraArgsFail(t *testing.T) {
 }
 
 func TestCreateObject(t *testing.T) {
+	// 注册 klog 的测试错误处理器：让 cmdutil.CheckErr 在失败时 panic 而不是 os.Exit，
+	// 否则测试进程会直接退出、t.Fatal 无法生效
 	cmdtesting.InitTestErrorHandler(t)
+
+	// TestData() 提供一组预置测试对象（rc/svc/pod 等），这里取 rc.Items[0] 作为 POST 的预期响应
 	_, _, rc := cmdtesting.TestData()
 	rc.Items[0].Name = "redis-master-controller"
 
+	// WithNamespace("test")：让 kubeconfig 解析固定返回 namespace "test"，
+	// 与下方断言的 URL 路径 /namespaces/test/... 保持一致
 	tf := cmdtesting.NewTestFactory().WithNamespace("test")
 	defer tf.Cleanup()
 
+	// LegacyCodec：把响应对象编码成 v1 的 wire format，模拟真实 apiserver 的响应体
 	codec := scheme.Codecs.LegacyCodec(scheme.Scheme.PrioritizedVersionsAllGroups()...)
 
+	// fake.RESTClient 替代真实 apiserver：CreateHTTPClient 用一个闭包充当 HTTP handler，
+	// 按请求的 path+method 路由响应——不落库，也断言了实际发出的请求形态
 	tf.UnstructuredClient = &fake.RESTClient{
 		GroupVersion:         schema.GroupVersion{Version: "v1"},
 		NegotiatedSerializer: resource.UnstructuredPlusDefaultContentConfig().NegotiatedSerializer,
 		Client: fake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
+			// 只接受对 /namespaces/test/replicationcontrollers 的 POST（即 RunCreate 里的 resource.Helper.Create）
+			// 其余请求直接 Fatal，能及时发现 Builder 发出的多余 discovery/mapping 请求
 			switch p, m := req.URL.Path, req.Method; {
 			case p == "/namespaces/test/replicationcontrollers" && m == http.MethodPost:
+				// 返回 201 Created + 预置对象作为响应体
 				return &http.Response{StatusCode: http.StatusCreated, Header: cmdtesting.DefaultHeader(), Body: cmdtesting.ObjBody(codec, &rc.Items[0])}, nil
 			default:
 				t.Fatalf("unexpected request: %#v\n%#v", req.URL, req)
@@ -67,13 +79,20 @@ func TestCreateObject(t *testing.T) {
 		}),
 	}
 
+	// NewTestIOStreams 用内存 buffer 捕获 stdout，便于断言命令输出
 	ioStreams, _, buf, _ := genericiooptions.NewTestIOStreams()
 	cmd := NewCmdCreate(tf, ioStreams)
+	// 模拟用户传参：--filename 指向测试清单，--output name 只打印 "<type>/<name>"
 	cmd.Flags().Set("filename", "../../../testdata/redis-master-controller.yaml")
 	cmd.Flags().Set("output", "name")
+	// args 传空切片：create 不接受位置参数（见 Complete 里的校验）
 	cmd.Run(cmd, []string{})
 
-	// uses the name from the file, not the response
+	// 断言：输出 "replicationcontroller/redis-master-controller"。
+	// 注意 info.Refresh 会用 fake 响应刷新 info.Object，所以打印的名字严格说来自响应体；
+	// 测试在开头把 rc.Items[0].Name 也设成清单里的同名值，两侧保持一致。
+	// （上游注释 "uses the name from the file, not the response" 的本意是验证
+	// create 打印资源名而非随机生成名，此断言沿用至今。）
 	if buf.String() != "replicationcontroller/redis-master-controller\n" {
 		t.Errorf("unexpected output: %s", buf.String())
 	}

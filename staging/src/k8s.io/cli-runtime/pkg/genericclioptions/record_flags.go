@@ -64,7 +64,7 @@ func (f *RecordFlags) ToRecorder() (Recorder, error) {
 	}, nil
 }
 
-// Complete is called before the command is run, but after it is invoked to finish the state of the struct before use.
+// Complete 在命令运行之前、但在其被调用之后调用，以在使用前完成结构体的状态设置。
 func (f *RecordFlags) Complete(cmd *cobra.Command) error {
 	if f == nil {
 		return nil
@@ -167,17 +167,21 @@ func (r *ChangeCauseRecorder) MakeRecordMergePatch(obj runtime.Object) ([]byte, 
 	return jsonpatch.CreateMergePatch(oldData, newData)
 }
 
-// parseCommandArguments will stringify and return all environment arguments ie. a command run by a client
-// using the factory.
-// Set showSecrets false to filter out stuff like secrets.
+// parseCommandArguments 将对所有环境参数进行字符串化并返回，即客户端通过工厂执行的命令
+// 使用工厂。
+// 将 showSecrets 设为 false 以过滤掉类似密钥之类的敏感信息。
 func parseCommandArguments(cmd *cobra.Command) string {
 	if len(os.Args) == 0 {
 		return ""
 	}
 
+	// ParseAll 会为每个 flag（包括未显式设置的）回调 parseFunc，这里借回调逐个
+	// 序列化 flag，因为普通的 Parse() 拿不到“用户实际写了什么”。
 	flags := ""
 	parseFunc := func(flag *pflag.Flag, value string) error {
 		flags = flags + " --" + flag.Name
+		// "classified" 注解标记敏感 flag（如凭据、secret）。change-cause 会写入
+		// 全局可读的 annotation，脱敏可以避免把密钥泄漏到那里。
 		if set, ok := flag.Annotations["classified"]; !ok || len(set) == 0 {
 			flags = flags + "=" + value
 		} else {
@@ -187,6 +191,7 @@ func parseCommandArguments(cmd *cobra.Command) string {
 	}
 	var err error
 	err = cmd.Flags().ParseAll(os.Args[1:], parseFunc)
+	// 解析失败时宁缺毋滥：残缺的 change-cause 会误导排查。
 	if err != nil || !cmd.Flags().Parsed() {
 		return ""
 	}
@@ -196,6 +201,8 @@ func parseCommandArguments(cmd *cobra.Command) string {
 		args = " " + strings.Join(arguments, " ")
 	}
 
+	// 只取程序名，避免把二进制的绝对路径写进 annotation。
+	// 顺序为“位置参数在前、flags 在后”，与 pflag 语义等价（flags 可出现在任意位置）。
 	base := filepath.Base(os.Args[0])
 	return base + args + flags
 }

@@ -661,8 +661,8 @@ func (s *Scheme) PrioritizedVersionsForGroup(group string) []schema.GroupVersion
 	return ret
 }
 
-// PrioritizedVersionsAllGroups returns all known versions in their priority order.  Groups are random, but
-// versions for a single group are prioritized
+// PrioritizedVersionsAllGroups 按优先级顺序返回所有已知版本。组是随机的，但
+// 单个组的版本按优先级排序
 func (s *Scheme) PrioritizedVersionsAllGroups() []schema.GroupVersion {
 	ret := []schema.GroupVersion{}
 	for group, versions := range s.versionPriority {
