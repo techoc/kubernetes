@@ -22,23 +22,110 @@
 
 ### 2.1 kubectl → REST
 
-| 阶段 | 文件 | 锚点 |
-| --- | --- | --- |
-| 进程入口 | `cmd/kubectl/kubectl.go:31` | `main` |
-| 命令树 | `staging/src/k8s.io/kubectl/pkg/cmd/cmd.go:165` | `NewKubectlCommand` |
-| create 命令 | `staging/src/k8s.io/kubectl/pkg/cmd/create/create.go:95` | `NewCmdCreate` |
-| 执行 | `staging/src/k8s.io/kubectl/pkg/cmd/create/create.go:236` | `CreateOptions.RunCreate` |
-| 通用 REST | `staging/src/k8s.io/cli-runtime/pkg/resource/helper.go:206` | `Helper.Create` |
-| POST 组装 | `staging/src/k8s.io/cli-runtime/pkg/resource/helper.go:240` | `Helper.createResource` |
-| REST 请求起点 | `staging/src/k8s.io/client-go/rest/request.go:243` | `Request.Resource` |
-| REST 请求终点 | `staging/src/k8s.io/client-go/rest/request.go:1142` | `Request.Do` |
-| typed client | `staging/src/k8s.io/client-go/kubernetes/clientset.go:500` | `NewForConfig` |
-| 泛型 client | `staging/src/k8s.io/client-go/gentype/type.go:205` | `Client.Create` |
-| Pod client | `staging/src/k8s.io/client-go/kubernetes/typed/core/v1/pod.go:68` | `newPods` |
-| kubeconfig | `staging/src/k8s.io/client-go/tools/clientcmd/client_config.go:681` | `BuildConfigFromFlags` |
-| RESTClient | `staging/src/k8s.io/client-go/rest/config.go:344` | `RESTClientFor` |
+行号按 `release-1.37-zh` 的 `205d183e7fb` 核对；函数名比行号稳定。
 
-先把 `kubectl create -f pod.yaml` 的 dynamic/resource builder 路径和 `Clientset.CoreV1().Pods(ns).Create(...)` 的 typed 路径分开画。相同点是最后都落到 REST `POST`；不同点是对象发现、版本协商与类型转换。
+| 阶段          | 文件                                                                | 锚点                      |
+|---------------|---------------------------------------------------------------------|---------------------------|
+| 进程入口      | `cmd/kubectl/kubectl.go:31`                                         | `main`                    |
+| 命令树        | `staging/src/k8s.io/kubectl/pkg/cmd/cmd.go:165`                     | `NewKubectlCommand`       |
+| create 命令   | `staging/src/k8s.io/kubectl/pkg/cmd/create/create.go:102`           | `NewCmdCreate`            |
+| 执行          | `staging/src/k8s.io/kubectl/pkg/cmd/create/create.go:269`           | `CreateOptions.RunCreate` |
+| Builder 装配  | `staging/src/k8s.io/cli-runtime/pkg/resource/builder.go:1183`       | `Builder.Do`              |
+| 清单解码      | `staging/src/k8s.io/cli-runtime/pkg/resource/visitor.go:589`        | `StreamVisitor.Visit`     |
+| 对象发现      | `staging/src/k8s.io/cli-runtime/pkg/resource/mapper.go:42`          | `mapper.infoForData`      |
+| 通用 REST     | `staging/src/k8s.io/cli-runtime/pkg/resource/helper.go:206`         | `Helper.Create`           |
+| POST 组装     | `staging/src/k8s.io/cli-runtime/pkg/resource/helper.go:240`         | `Helper.createResource`   |
+| REST 请求起点 | `staging/src/k8s.io/client-go/rest/request.go:242`                  | `Request.Resource`        |
+| REST 请求终点 | `staging/src/k8s.io/client-go/rest/request.go:1131`                 | `Request.Do`              |
+| typed client  | `staging/src/k8s.io/client-go/kubernetes/clientset.go:492`          | `NewForConfig`            |
+| 泛型 client   | `staging/src/k8s.io/client-go/gentype/type.go:205`                  | `Client.Create`           |
+| Pod client    | `staging/src/k8s.io/client-go/kubernetes/typed/core/v1/pod.go:66`   | `newPods`                 |
+| kubeconfig    | `staging/src/k8s.io/client-go/tools/clientcmd/client_config.go:680` | `BuildConfigFromFlags`    |
+| RESTClient    | `staging/src/k8s.io/client-go/rest/config.go:329`                   | `RESTClientFor`           |
+
+两条路径不是 `dynamic client` 对 `typed client`，而是 cli-runtime 的 `resource.Builder` + `resource.Helper` 对 client-go
+的生成式 `Clientset`。前者底层仍是用文件里的 GroupVersion 现造的 RESTClient。
+
+**路径 A：`kubectl create -f pod.yaml`（Builder/Helper）**
+
+```
+main (cmd/kubectl/kubectl.go:31)
+  └─ NewKubectlCommand (cmd.go:165) 命令树注册
+     └─ NewCmdCreate (create/create.go:102)
+        └─ cobra Run: Complete → Validate → RunCreate (:269)
+           ├─ f.Validator(directive) 取 schema 校验器
+           ├─ ToRawKubeConfigLoader().Namespace() 取默认 ns
+           └─ f.NewBuilder().Unstructured().Schema(...)
+                 .FilenameParam(...).Flatten().Do()   builder.go:1183
+              └─ visitByPaths (:1129) → FileVisitor.Visit (visitor.go:545)
+                 └─ StreamVisitor.Visit (:589)
+                    ├─ YAMLOrJSONDecoder → runtime.RawExtension
+                    ├─ ValidateSchema(ext.Raw)
+                    └─ mapper.infoForData (mapper.go:42)
+                       ├─ decoder.Decode → GVK（取自文件 apiVersion/kind）
+                       ├─ RESTMapper.RESTMapping(GK, version) → Mapping  ← 对象发现
+                       ├─ clientFn(gvk.GroupVersion()) → RESTClient      ← 版本协商
+                       │     └─ RESTClientFor (config.go:329)
+                       └─ Info{Object(unstructured), Mapping, Client, Namespace, Name}
+
+r.Visit (result.go:95) 逐个 Info:
+  ├─ CreateOrUpdateAnnotation / Recorder
+  └─ resource.NewHelper(info.Client, info.Mapping).Create (helper.go:206)
+     └─ createResource (:240)
+        c.Post().NamespaceIfScoped().Resource(m.Resource)
+         .VersionedParams(opts).Body(obj).Do(ctx).Get()
+                                    │
+                                    ▼
+                        Request.Do (request.go:1131)
+```
+
+`Unstructured()`（builder.go:308）是关键开关：对象一路是 `map[string]interface{}`，`kind` 决定资源，`RESTMapper` 把 GVK 翻译成
+REST 路径与 scope。CRD 未安装时 `ensure CRDs are installed first`（mapper.go:69）就出自这里。
+
+**路径 B：`Clientset.CoreV1().Pods(ns).Create(...)`（typed）**
+
+```
+BuildConfigFromFlags (client_config.go:680) → *rest.Config
+  └─ kubernetes.NewForConfig (clientset.go:492)
+     ├─ HTTPClientFor → 共享 transport
+     └─ NewForConfigAndClient (:512) → corev1.NewForConfig
+          绑定 corev1.SchemeGroupVersion + scheme.Codecs  ← 版本编译期钉死
+
+Clientset.CoreV1().Pods(ns)
+  └─ newPods (typed/core/v1/pod.go:66)
+     └─ gentype.NewClientWithListAndApply("pods", c.RESTClient(),
+           scheme.ParameterCodec, ns, new(Pod), new(PodList),
+           PrefersProtobuf[*corev1.Pod]())                ← 无需发现/协商
+        └─ Client[T].Create (gentype/type.go:205)
+           result := newObject()  // *corev1.Pod
+           c.client.Post().UseProtobufAsDefaultIfPreferred(...)
+            .NamespaceIfScoped(ns, ns != "").Resource("pods")
+            .VersionedParams(&opts, c.parameterCodec).Body(obj)
+            .Do(ctx).Into(result)                       ← 类型化回填
+                                    │
+                                    ▼
+                        Request.Do (request.go:1131)  ← 与路径 A 汇合
+```
+
+**相同点**
+
+- 终点都是 `Request.Do` → `request()`（request.go:1032）→ `http.Client.Do` → `transformResponse`，HTTP 动词 `POST`，URL 形如
+  `/api/v1/namespaces/{ns}/pods`。
+- 都把 `metav1.CreateOptions`（dryRun / fieldManager / fieldValidation）经 `VersionedParams` 编进 query string。
+- 都依赖 `rest.Config` 提供的 TLS/认证 transport，响应都经 `NegotiatedSerializer` 解码。
+
+**不同点**
+
+|           | Builder/Helper                                                            | Typed Clientset                                 |
+|-----------|---------------------------------------------------------------------------|-------------------------------------------------|
+| 对象发现  | 运行时 `RESTMapper.RESTMapping(GK, version)`，依赖 discovery/CRD 已安装   | 无，生成代码写死 `"pods"`                       |
+| 版本协商  | 取文件 `apiVersion`，`clientFn(gv)` 现造对应 GV 的 RESTClient，默认 JSON  | 绑定 `corev1.SchemeGroupVersion`，protobuf 优先 |
+| 类型转换  | `runtime.Decoder` → unstructured，无 Go 类型；返回值也是 unstructured     | 编译期 `*corev1.Pod`，`Into(result)` 回填       |
+| Namespace | kubeconfig、对象 metadata、`DefaultNamespace`/`RequireNamespace` 共同决定 | `Pods(ns)` 构造时传入                           |
+| 输入规模  | `Flatten` + `Visit` 支持多对象与 List                                     | 一次一个强类型对象                              |
+| 失败时机  | 运行时 GVK 无法映射时报错                                                 | 类型错误在编译期                                |
+
+一句话：路径 A 是"先看 YAML 写的是什么，再问 apiserver 该往哪发"；路径 B 是"早就知道发什么、发给谁，直接发"。
 
 ### 2.2 apiserver 启动与路由
 
@@ -59,19 +146,19 @@
 
 ### 2.3 handler → strategy → admission → etcd
 
-| 阶段 | 文件 | 锚点 |
-| --- | --- | --- |
-| create handler | `staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:53` | `createHandler` |
-| POST 入口 | `staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:245` | `CreateResource` |
-| store | `staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:564` | `Store.Create` / `Store.create` |
-| create 前置 | `staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:103` | `BeforeCreate` |
-| validating admission | `staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:218` | `AdmissionToValidateObjectFunc` |
-| Pod 策略 | `pkg/registry/core/pod/strategy.go:68` | `Strategy` / `PrepareForCreate` / `Validate` / `Canonicalize` |
-| Pod 字段校验 | `pkg/apis/core/validation/validation.go:5746` | `ValidatePodCreate` |
-| storage 装配 | `pkg/registry/core/pod/storage/storage.go:81` | `NewStorage` |
-| etcd 工厂 | `pkg/controlplane/apiserver/config.go:210` | `NewStorageFactoryConfigEffectiveVersion` / `Etcd.ApplyWithStorageFactoryTo` |
-| Store 完成 | `staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:1638` | `CompleteWithOptions` |
-| etcd 写入 | `staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:293` | `Create` / `GuaranteedUpdate` |
+| 阶段                 | 文件                                                                       | 锚点                                                                         |
+|----------------------|----------------------------------------------------------------------------|------------------------------------------------------------------------------|
+| create handler       | `staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:53`         | `createHandler`                                                              |
+| POST 入口            | `staging/src/k8s.io/apiserver/pkg/endpoints/handlers/create.go:245`        | `CreateResource`                                                             |
+| store                | `staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:514`  | `Store.Create`；内部 `create` 在 :545                                        |
+| create 前置          | `staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:103`             | `BeforeCreate`                                                               |
+| validating admission | `staging/src/k8s.io/apiserver/pkg/registry/rest/create.go:218`             | `AdmissionToValidateObjectFunc`                                              |
+| Pod 策略             | `pkg/registry/core/pod/strategy.go:68`                                     | `Strategy` / `PrepareForCreate` / `Validate` / `Canonicalize`                |
+| Pod 字段校验         | `pkg/apis/core/validation/validation.go:5746`                              | `ValidatePodCreate`                                                          |
+| storage 装配         | `pkg/registry/core/pod/storage/storage.go:81`                              | `NewStorage`                                                                 |
+| etcd 工厂            | `pkg/controlplane/apiserver/config.go:210`                                 | `NewStorageFactoryConfigEffectiveVersion` / `Etcd.ApplyWithStorageFactoryTo` |
+| Store 完成           | `staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go:1638` | `CompleteWithOptions`                                                        |
+| etcd 写入            | `staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:293`              | `Create` / `GuaranteedUpdate`                                                |
 
 真实顺序值得抄在纸上：mutating admission → `PrepareForCreate` → 静态 `Validate` → validating admission → `Storage.Create`。`zz_generated.*` 不在这个链条的业务语义层，别把生成代码当起点。
 

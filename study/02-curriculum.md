@@ -11,6 +11,7 @@
 精读：
 
 - `AGENTS.md`、`CONTRIBUTING.md`、`README.md:35`
+- `07-mental-model.md`、`08-gotchas.md` 先扫一遍，后面几周带着它们读代码
 - `Makefile:127`、`Makefile:160`、`Makefile:186`、`Makefile:208`、`Makefile:524`
 - `hack/make-rules/test.sh`、`hack/make-rules/verify.sh`、`hack/make-rules/update.sh`
 - `go.work:9`、`go.mod:220`、`vendor/modules.txt`
@@ -40,10 +41,12 @@ make verify WHAT="boilerplate gofmt test-code"
 - `staging/src/k8s.io/api/core/v1/types.go`、`register.go`
 - `pkg/apis/core/types.go`、`pkg/apis/core/install/install.go:34`、`pkg/api/legacyscheme/scheme.go`
 - `staging/src/k8s.io/apimachinery/pkg/runtime/scheme.go:100`
-- `staging/src/k8s.io/client-go/rest/request.go:243`
+- `staging/src/k8s.io/client-go/rest/request.go:242`
 - `staging/src/k8s.io/client-go/tools/cache/controller.go`
 - `staging/src/k8s.io/client-go/util/workqueue/queue.go`
 - `staging/src/k8s.io/sample-controller/controller.go`
+
+本周对照 `07-mental-model.md` §1 的"六张面孔"，确认自己说的 GVK、GVR、外部类型、内部类型不是同一个东西。
 
 动手：
 

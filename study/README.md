@@ -12,16 +12,19 @@
 
 ## 文档导航
 
-| 文件 | 用途 |
-| --- | --- |
-| `02-curriculum.md` | 10 周目标、精读路径、每周产出与验收标准 |
-| `01-code-map.md` | 目录边界、Pod 创建链路、函数级代码地图 |
-| `03-exercises.md` | 从单元到集成测试、可复现实验、Debug 任务 |
-| `04-workflow.md` | 构建、测试、verify、update、生成物与依赖边界 |
-| `05-contribution.md` | 贡献前约束、PR 自检清单、review 处理 |
-| `06-progress.md` | 打卡表、能力矩阵、阶段复盘问题 |
+| 文件                 | 用途                                              |
+|----------------------|---------------------------------------------------|
+| `02-curriculum.md`   | 10 周目标、精读路径、每周产出与验收标准           |
+| `01-code-map.md`     | 目录边界、Pod 创建链路、函数级代码地图            |
+| `07-mental-model.md` | 接口的骨架作用、GVK/GVR 与内外部类型、术语速查    |
+| `08-gotchas.md`      | 22 条反直觉清单：以为是什么、实际是什么、怎么验证 |
+| `03-exercises.md`    | 从单元到集成测试、可复现实验、Debug 任务          |
+| `04-workflow.md`     | 构建、测试、verify、update、生成物与依赖边界      |
+| `05-contribution.md` | 贡献前约束、PR 自检清单、review 处理              |
+| `06-progress.md`     | 打卡表、能力矩阵、阶段复盘问题                    |
 
-建议阅读顺序：`02-curriculum.md` → `01-code-map.md` → `03-exercises.md`。`04-workflow.md` 在第 1 周就要扫一遍，真正动手前再精读。
+建议阅读顺序：`02-curriculum.md` → `07-mental-model.md` → `01-code-map.md` → `03-exercises.md`。`08-gotchas.md`
+放在手边当纠偏清单，每读完一个子系统扫一遍。`04-workflow.md` 在第 1 周就要扫一遍，真正动手前再精读。
 
 ## 核心主线
 
@@ -39,7 +42,9 @@ kubectl create -f pod.yaml
 
 控制器只负责把 `Deployment`、`ReplicaSet` 等上层期望状态收敛成 Pod，不是直接创建 Pod 的必经路径。方案会专门用一条支线讲清 reconcile 与声明式 API。
 
-仓库没有 `kubectl create pod` 子命令；`staging/src/k8s.io/kubectl/pkg/cmd/create/create.go:95` 的 `NewCmdCreate` 注册的是 `deployment`、`job` 等。练习统一用 `kubectl create -f pod.yaml` 或 typed client。
+仓库没有 `kubectl create pod` 子命令；`staging/src/k8s.io/kubectl/pkg/cmd/create/create.go:102` 的 `NewCmdCreate` 注册的是
+`deployment`、`job` 等。练习统一用 `kubectl create -f pod.yaml` 或 typed client。两条客户端路径的详细对照见
+`01-code-map.md` §2.1。
 
 ## 学习产出
 

@@ -39,7 +39,7 @@
 不看文件，能回答 8/12 才算主线过关：
 
 1. `staging/src/k8s.io/client-go` 为什么不能去 `vendor/` 改？
-2. `kubectl create -f pod.yaml` 的 dynamic 路径与 typed client 路径在哪分叉、在哪汇合？
+2. `kubectl create -f pod.yaml` 的 Builder/Helper 路径与 typed client 路径在哪分叉、在哪汇合？（提示：对象发现、版本协商、类型转换）
 3. `DefaultBuildHandlerChain` 与 create handler 里的 admission 链分别做什么？
 4. mutating admission、`PrepareForCreate`、静态 validation、validating admission 的顺序是什么？
 5. `pkg/registry/core/pod/strategy.go` 与 `generic/registry/store.go` 各负责什么？

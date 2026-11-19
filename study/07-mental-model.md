@@ -1,0 +1,97 @@
+# 心智模型：撑起项目的类型与名词
+
+`01-code-map.md` 给的是"哪个文件哪个函数"，这份给的是"项目由哪些接口和类型撑起来"。行号按 `release-1.37-zh` 的
+`205d183e7fb` 核对，函数名比行号稳定。
+
+## 1. 一条对象经历的六张面孔
+
+同一个 Pod 在不同层里不是同一个 Go 类型。认错面孔是读源码时最常见的迷路原因。
+
+```
+YAML 字节
+  │  apiVersion: v1 / kind: Pod
+  ▼
+GVK（GroupVersionKind，wire 上带着的字符串标识）
+  │  RESTMapper.RESTMapping(GK, version)
+  ▼
+GVR（GroupVersionResource，决定 URL：/api/v1/namespaces/ns/pods）
+  │  codec.Decode
+  ▼
+runtime.Object（interface{}，unstructured map 或类型化指针）
+  │  scheme.ObjectKinds / conversion / defaulting
+  ▼
+外部类型 *v1.Pod → 内部类型 *core.Pod（只存在于 apiserver 进程内）
+  │  storage 编码
+  ▼
+etcd 中的 protobuf 字节
+```
+
+- **GVK = 对象的类型名**（"你是什么"）；**GVR = 对象在 HTTP 树上的地址**（"往哪发"）。`RESTMapper` 是二者之间的翻译表（
+  `staging/src/k8s.io/apimachinery/pkg/api/meta/interfaces.go:117` 的 `RESTMapper`、:95 的 `RESTMapping`）。
+- **外部类型** = 线上 JSON/protobuf 的稳定契约，`staging/src/k8s.io/api/core/v1/types.go`。**内部类型** = apiserver
+  内部实现用的版本无关表示，`pkg/apis/core/types.go`。二者之间的 conversion / defaulting 在 `pkg/apis/core/v1/`。
+- **unstructured** = `map[string]interface{}` + GVK，没有 Go 类型。CRD 对象只能是这种形态；`kubectl create -f` 也走它，见
+  `01-code-map.md` §2.1。
+- 客户端以为自己交出的是 `*v1.Pod`，服务端收到的先是字节，解码成内部类型，校验、默认化、落盘后再编码回某个版本的字节。
+  **没有任何一层把 Go 指针跨进程传过去**。
+
+## 2. 贯穿全项目的接口骨架
+
+这些接口是"接缝"。看懂接缝，就不用读完整个实现也能判断某个行为归谁。
+
+| 接缝             | 接口 / 类型                                                         | 位置                                                                         | 一句话职责                                                |
+|------------------|---------------------------------------------------------------------|------------------------------------------------------------------------------|-----------------------------------------------------------|
+| wire 编解码      | `runtime.Object`、`Encoder`、`Decoder`                              | `staging/src/k8s.io/apimachinery/pkg/runtime/interfaces.go:337` / :52 / :104 | GVK ↔ 字节；`Object` 是所有可编解码对象的根               |
+| 类型注册表       | `Scheme`                                                            | `.../runtime/scheme.go`                                                      | GVK ↔ Go type，挂 defaulting / conversion 函数            |
+| GVK ↔ GVR        | `RESTMapper`                                                        | `.../api/meta/interfaces.go:117`                                             | 资源发现；CRD 装上才认得自定义 Kind                       |
+| 通用 REST 客户端 | `RESTClient` + `Request`                                            | `staging/src/k8s.io/client-go/rest/client.go:87`、`rest/request.go`          | 把链式调用拼成 HTTP 请求，统一处理 response               |
+| 资源级 REST 封装 | `resource.Helper` 的 `RESTClient` 接口                              | `staging/src/k8s.io/cli-runtime/pkg/resource/interfaces.go:39`               | kubectl 侧按 Mapping 发 POST/PUT/PATCH                    |
+| 服务端资源契约   | `rest.Storage` / `rest.Creater`                                     | `staging/src/k8s.io/apiserver/pkg/registry/rest/rest.go:58` / :202           | handler 眼里的资源能力：`New()`、CRUD、subresource        |
+| 策略             | `podStrategy` 的 `PrepareForCreate` / `Validate` / `Canonicalize`   | `pkg/registry/core/pod/strategy.go:60` / :87 / :124 / :143                   | 某个资源生命周期里的规则，不是通用 CRUD                   |
+| Admission 插件   | `admission.Interface` + `MutationInterface` / `ValidationInterface` | `staging/src/k8s.io/apiserver/pkg/admission/interfaces.go:124`               | `Handles(op)` 决定是否参与；Admit 改对象，Validate 只否决 |
+| 缓存 + 事件      | `SharedIndexInformer`                                               | `staging/src/k8s.io/client-go/tools/cache/shared_informer.go:294`            | LIST/WATCH → 本地索引缓存 + 分发事件                      |
+| 工作队列         | `TypedRateLimitingInterface[T]`                                     | `staging/src/k8s.io/client-go/util/workqueue/rate_limiting_queue.go:27`      | 事件去重、限速重试、`Forget` 收敛                         |
+| 调度扩展点       | `framework.Framework`                                               | `pkg/scheduler/framework/interface.go:193`                                   | 声明插件扩展点契约，与各插件实现分离                      |
+| 容器运行时       | `container.Runtime`                                                 | `pkg/kubelet/container/runtime.go:74`                                        | kubelet 眼里的运行时；CRI 是它的 gRPC 实现                |
+
+读新子系统时先找它的接口定义，再看一两个实现，最后才看装配入口。顺序反过来就是在背目录。
+
+## 3. 四个反复出现的模式
+
+**装配器 + 实现分离。** `cmd/` 只做 flag 解析与装配，业务逻辑在 `pkg/` 或 `staging/`。看见 `NewXxxCommand` 就知道这里不该有
+if-else 业务分支，顺着它 new 出来的东西往下走。
+
+**接口在调用方定义。** `resource.Helper` 只要求一个最小的 `RESTClient` 接口，`RESTClient` 实现它；controller 只依赖
+informer + workqueue 的契约。这让 fake client 能顶替真客户端做单测。看到 `fake.NewSimpleClientset()` 就该想到：单测里跑的是同一个
+reconcile 逻辑，只是 I/O 被替换。
+
+**分层过滤，不合并职责。** 请求链上 authentication → authorization → mutating admission → strategy defaulting/validate →
+validating admission → storage。每一步都能独立拒绝；错误位置和语义不同，不能互换。
+
+**生成代码包围手写代码。** clientset、informer、lister、deepcopy、conversion、protobuf、openapi 都是生成的。手写代码负责规则，生成器负责机械展开。看到
+`Code generated by ... DO NOT EDIT.`，去改 tag / 类型定义，跑 `make update`，别直接动产物。
+
+## 4. 名词速查
+
+| 名词                          | 属于哪层        | 容易混成什么                                                                   |
+|-------------------------------|-----------------|--------------------------------------------------------------------------------|
+| `kube-apiserver`              | 进程            | "集群"的同义词；实际只是控制面的一部分                                         |
+| `Operation` / `OperationType` | admission       | 与 HTTP verb 不是一一对应，CONNECT 对应 exec/portforward                       |
+| `Strategy`                    | registry        | 调度插件的策略；这里的 Strategy 专指资源生命周期规则                           |
+| `Store`                       | registry        | Kubernetes 对象存储接口；是 generic registry 里的 CRUD 实现                    |
+| `Binding`                     | Pod subresource | scheduler 调度的"绑定"动作；服务端由 `BindingREST` 处理                        |
+| `PodConfig`                   | kubelet         | apiserver 里的 Pod 对象本身；它是多源 Pod 变更的合并器                         |
+| `pod worker`                  | kubelet         | Kubelet 主 goroutine；实际是每 Pod 一个 worker 的串行器                        |
+| `SyncPod`                     | kubelet / CRI   | apiserver 的 status update；是把期望状态对齐到容器的本地动作                   |
+| `PLEG`                        | kubelet         | CRI 本身；它只是 runtime 健康探测 + 容器事件来源                               |
+| `ConformanceIt`               | E2E             | 一个独立测试框架；它是 Ginkgo 用例上的标记 + golden list 治理                  |
+| `feature gate`                | 全项目          | "配置文件里的开关"；代码里是编译期注册的 `FeatureGate` 对象，有 lifecycle 阶段 |
+| `CRD`                         | apiextensions   | "只是个 YAML schema"；它会动态注册 REST 存储、参与 discovery、支持最终态收敛   |
+| `DRA`                         | 动态资源分配    | Device Plugin；DRA 是新一代资源分配 API，二者机制不同                          |
+
+## 5. 怎么把这份表用起来
+
+读 `01-code-map.md` 里任意一条调用链时，每跨一个接缝就回来查一次：这里传的是 GVK 还是 GVR？是外部类型还是内部类型？是
+request 侧的 `Request` 还是 server 侧的 `rest.Storage`？答不上来就说明还停在函数跳转层面，没进入模型层面。
+
+推荐的自测：不查文档，在一张纸上画出 `kubectl create -f pod.yaml` 经过的全部接缝，标出每处接口名。能画全，主链路就通了。
