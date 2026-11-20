@@ -2,6 +2,27 @@
 
 所有命令都在仓库根目录执行。练习以“理解行为”为目标，`git diff` 只保留真实想提交的改动。
 
+## 0.1 make 命令速解
+
+本手册反复出现下面三条命令，先看懂它们再往下走：
+
+```bash
+TERM=xterm make help
+make test WHAT=./pkg/registry/core/pod GOFLAGS=-v
+KUBE_TEST_ARGS='-run ^TestPodStrategyValidate$' make test WHAT=./pkg/registry/core/pod GOFLAGS=-v
+```
+
+| 命令                                                            | 做什么                           | 关键点                                                                                                                                                                                                            |
+|-----------------------------------------------------------------|----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `TERM=xterm make help`                                          | 列出所有可用 make 目标，不改文件 | `TERM=xterm` 只对这一条命令生效；帮助脚本用 `tput`，无终端环境里 `TERM` 为空会报错                                                                                                                                |
+| `make test WHAT=./pkg/registry/core/pod GOFLAGS=-v`             | 跑该包的全部单测                 | `WHAT=` 限定范围，不写会枚举整个 workspace；`GOFLAGS=-v` 原样传给 go test；脚本默认带 `-race`、超时和 cache mutation detector                                                                                     |
+| `KUBE_TEST_ARGS='-run ^TestPodStrategyValidate$' make test ...` | 只跑名字精确匹配的那个测试       | `KUBE_TEST_ARGS` 经 `Makefile:50` 的 `.EXPORT_ALL_VARIABLES` 传给 `test.sh`，最终变成 go test 参数；`^`/`$` 是正则锚点，防止误匹配到 `TestPodStrategyValidateUpdate`（同文件 1983 行）；单引号防止 shell 展开 `$` |
+
+实际链路：`Makefile` → `hack/make-rules/test.sh` → `gotestsum` → `go test`。学习阶段永远带 `WHAT`，否则全仓库单测会吃掉整个下午。
+
+递进关系：第 1 条是“有哪些命令可用”，第 2 条是“这个包整体没坏”，第 3 条是“精准复现某个测试的行为”。日常改代码先用第 3
+条做快速反馈，改完再跑第 2 条确认没波及其他测试。
+
 ## 0. 环境准备
 
 ```bash
@@ -23,7 +44,7 @@ etcd --version
 
 ## 1. 第一个闭环：Pod strategy
 
-目标：观察“测试 → 生产代码 → 定向验证”的最短回路。
+目标：观察“测试 → 生产代码 → 定向验证”的最短回路。命令各参数的含义见 §0.1。
 
 ```bash
 make test WHAT=./pkg/registry/core/pod GOFLAGS=-v

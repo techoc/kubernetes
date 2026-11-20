@@ -54,7 +54,7 @@ import (
 	"k8s.io/kubectl/pkg/util"
 )
 
-// EditOptions contains all the options for running edit cli command.
+// EditOptions 包含 kubectl edit 命令的所有选项
 type EditOptions struct {
 	resource.FilenameOptions
 	RecordFlags *genericclioptions.RecordFlags
@@ -90,7 +90,7 @@ type EditOptions struct {
 	Subresource string
 }
 
-// NewEditOptions returns an initialized EditOptions instance
+// NewEditOptions 返回初始化的 EditOptions 实例
 func NewEditOptions(editMode EditMode, ioStreams genericiooptions.IOStreams) *EditOptions {
 	return &EditOptions{
 		RecordFlags: genericclioptions.NewRecordFlags(),
@@ -156,7 +156,7 @@ func (e *editPrinterOptions) PrintObj(obj runtime.Object, out io.Writer) error {
 	return p.PrintObj(obj, out)
 }
 
-// Complete completes all the required options
+// Complete 完成所有必需的选项初始化
 func (o *EditOptions) Complete(f cmdutil.Factory, args []string, cmd *cobra.Command) error {
 	var err error
 
@@ -225,33 +225,35 @@ func (o *EditOptions) Complete(f cmdutil.Factory, args []string, cmd *cobra.Comm
 	return nil
 }
 
-// Validate checks the EditOptions to see if there is sufficient information to run the command.
+// Validate 校验 EditOptions（edit 命令不需要额外校验）
 func (o *EditOptions) Validate() error {
 	return nil
 }
 
-// Run performs the execution
+// Run 执行编辑命令的核心逻辑
 func (o *EditOptions) Run() error {
 	edit := NewDefaultEditor(editorEnvs())
-	// editFn is invoked for each edit session (once with a list for normal edit, once for each individual resource in a edit-on-create invocation)
+	// editFn 是每次编辑会话的回调函数：普通编辑时传入资源列表调用一次，创建前编辑时每个资源调用一次
 	editFn := func(infos []*resource.Info) error {
 		var (
-			results  = editResults{}
-			original = []byte{}
-			edited   = []byte{}
-			file     string
+			results  = editResults{} // 编辑结果，包含错误信息和临时文件路径
+			original = []byte{}      // 原始内容，用于比较是否有修改
+			edited   = []byte{}      // 编辑后的内容
+			file     string          // 临时文件路径
 			err      error
 		)
 
-		containsError := false
-		// loop until we succeed or cancel editing
+		containsError := false // 标记上一次循环是否发生过错误（用于重试逻辑）
+		// 循环编辑直到成功或用户取消
 		for {
-			// get the object we're going to serialize as input to the editor
+			// 获取要序列化并传入编辑器的对象
 			var originalObj runtime.Object
 			switch len(infos) {
 			case 1:
+				// 单个资源直接使用
 				originalObj = infos[0].Object
 			default:
+				// 多个资源时包装为 List 对象，方便在编辑器中一次性编辑
 				l := &unstructured.UnstructuredList{
 					Object: map[string]interface{}{
 						"kind":       "List",
@@ -265,18 +267,22 @@ func (o *EditOptions) Run() error {
 				originalObj = l
 			}
 
-			// generate the file to edit
+			// 生成要编辑的文件内容
 			buf := &bytes.Buffer{}
 			var w io.Writer = buf
+			// Windows 系统使用 CRLF 换行符
 			if o.WindowsLineEndings {
 				w = crlf.NewCRLFWriter(w)
 			}
 
+			// 写入编辑器提示头（注释行，告诉用户如何操作）
 			if o.editPrinterOptions.addHeader {
 				results.header.writeTo(w, o.EditMode)
 			}
 
 			if !containsError {
+				// 首次编辑：提取 managedFields 并序列化原始对象
+				// 提取 managedFields 是因为编辑器不应暴露字段管理器内部信息
 				if err := o.extractManagedFields(originalObj); err != nil {
 					return preservedFile(err, results.file, o.ErrOut)
 				}
@@ -286,36 +292,38 @@ func (o *EditOptions) Run() error {
 				}
 				original = buf.Bytes()
 			} else {
-				// In case of an error, preserve the edited file.
-				// Remove the comments (header) from it since we already
-				// have included the latest header in the buffer above.
+				// 重试时：保留上次编辑的内容，去掉旧注释头（新头已写入）
+				// 这样用户不需要重新输入之前修改的内容
 				buf.Write(cmdutil.ManualStrip(edited))
 			}
 
-			// launch the editor
-			editedDiff := edited
+			// 启动编辑器，创建临时文件并等待用户保存退出
+			editedDiff := edited // 保存上次编辑内容，用于检测用户是否修改
 			edited, file, err = edit.LaunchTempFile(fmt.Sprintf("%s-edit-", filepath.Base(os.Args[0])), o.editPrinterOptions.ext, buf)
 			if err != nil {
 				return preservedFile(err, results.file, o.ErrOut)
 			}
 
-			// If we're retrying the loop because of an error, and no change was made in the file, short-circuit
+			// 重试时如果用户没有修改文件（去掉注释后内容相同），直接退出
+			// 防止用户不修改就保存导致无限循环
 			if containsError && bytes.Equal(cmdutil.StripComments(editedDiff), cmdutil.StripComments(edited)) {
 				return preservedFile(fmt.Errorf("%s", "Edit cancelled, no valid changes were saved."), file, o.ErrOut)
 			}
-			// cleanup any file from the previous pass
+			// 清理上一次循环创建的临时文件
 			if len(results.file) > 0 {
 				os.Remove(results.file)
 			}
 			klog.V(4).Infof("User edited:\n%s", string(edited))
 
-			// Apply validation
+			// 对编辑后的内容进行 Schema 校验
 			schema, err := o.f.Validator(o.ValidationDirective)
 			if err != nil {
 				return preservedFile(err, file, o.ErrOut)
 			}
+			// 去掉注释行后再校验，避免注释被当作 YAML/JSON 内容解析
 			err = schema.ValidateBytes(cmdutil.StripComments(edited))
 			if err != nil {
+				// 校验失败：记录错误、设置重试标志，重新打开编辑器
 				results = editResults{
 					file: file,
 				}
@@ -325,13 +333,14 @@ func (o *EditOptions) Run() error {
 				continue
 			}
 
-			// Compare content without comments
+			// 比较原始内容和编辑后内容（去掉注释），无变化则取消编辑
 			if bytes.Equal(cmdutil.StripComments(original), cmdutil.StripComments(edited)) {
 				os.Remove(file)
 				fmt.Fprintln(o.ErrOut, "Edit cancelled, no changes made.")
 				return nil
 			}
 
+			// 检查文件是否为空（只有空白或注释）
 			lines, err := hasLines(bytes.NewBuffer(edited))
 			if err != nil {
 				return preservedFile(err, file, o.ErrOut)
@@ -346,20 +355,20 @@ func (o *EditOptions) Run() error {
 				file: file,
 			}
 
-			// parse the edited file
+			// 解析编辑后的文件内容
 			updatedInfos, err := o.updatedResultGetter(edited).Infos()
 			if err != nil {
-				// syntax error
+				// YAML/JSON 语法错误：记录原因并重新打开编辑器
 				containsError = true
 				results.header.reasons = append(results.header.reasons, editReason{head: fmt.Sprintf("The edited file had a syntax error: %v", err)})
 				continue
 			}
 
-			// not a syntax error as it turns out...
+			// 解析成功，清除错误标志
 			containsError = false
 			updatedVisitor := resource.InfoListVisitor(updatedInfos)
 
-			// we need to add back managedFields to both updated and original object
+			// 恢复之前提取的 managedFields，确保字段管理器信息不丢失
 			if err := o.restoreManagedFields(updatedInfos); err != nil {
 				return preservedFile(err, file, o.ErrOut)
 			}
@@ -367,22 +376,26 @@ func (o *EditOptions) Run() error {
 				return preservedFile(err, file, o.ErrOut)
 			}
 
-			// need to make sure the original namespace wasn't changed while editing
+			// 校验 namespace 是否被用户修改，防止跨命名空间更新
 			if err := updatedVisitor.Visit(resource.RequireNamespace(o.CmdNamespace)); err != nil {
 				return preservedFile(err, file, o.ErrOut)
 			}
 
-			// iterate through all items to apply annotations
+			// 为所有资源添加 annotation（如 last-applied-configuration 和 kubectl 命令记录）
 			if err := o.visitAnnotation(updatedVisitor); err != nil {
 				return preservedFile(err, file, o.ErrOut)
 			}
 
+			// 根据编辑模式执行不同的更新策略
 			switch o.EditMode {
 			case NormalEditMode:
+				// 普通编辑：计算 diff 并打 patch
 				err = o.visitToPatch(infos, updatedVisitor, &results)
 			case ApplyEditMode:
+				// 编辑 last-applied-configuration annotation
 				err = o.visitToApplyEditPatch(infos, updatedVisitor)
 			case EditBeforeCreateMode:
+				// 创建前编辑：直接创建资源
 				err = o.visitToCreate(updatedVisitor)
 			default:
 				err = fmt.Errorf("unsupported edit mode %q", o.EditMode)
@@ -391,11 +404,11 @@ func (o *EditOptions) Run() error {
 				return preservedFile(err, results.file, o.ErrOut)
 			}
 
-			// Handle all possible errors
+			// 处理所有可能的错误类型
 			//
-			// 1. retryable: propose kubectl replace -f
-			// 2. notfound: indicate the location of the saved configuration of the deleted resource
-			// 3. invalid: retry those on the spot by looping ie. reloading the editor
+			// 1. retryable（如冲突）：建议用户用 kubectl replace -f 手动重试
+			// 2. notfound（资源已被删除）：保存编辑内容到文件，提示用户
+			// 3. invalid（校验失败）：通过 containsError=true 进入下一轮循环，重新打开编辑器
 			if results.retryable > 0 {
 				fmt.Fprintf(o.ErrOut, "You can run `%s replace -f %s` to try this update again.\n", filepath.Base(os.Args[0]), file)
 				return cmdutil.ErrExit
@@ -406,6 +419,7 @@ func (o *EditOptions) Run() error {
 			}
 
 			if len(results.edit) == 0 {
+				// 没有需要重试的编辑，清理临时文件并退出
 				if results.notfound == 0 {
 					os.Remove(file)
 				} else {
@@ -414,14 +428,16 @@ func (o *EditOptions) Run() error {
 				return nil
 			}
 
+			// 还有需要重试的无效资源，重新打开编辑器
 			if len(results.header.reasons) > 0 {
 				containsError = true
 			}
 		}
 	}
 
+	// 根据编辑模式获取资源并调用 editFn
 	switch o.EditMode {
-	// If doing normal edit we cannot use Visit because we need to edit a list for convenience. Ref: #20519
+	// 普通编辑模式：一次性获取所有资源，作为列表传入编辑器（方便批量编辑）
 	case NormalEditMode:
 		infos, err := o.OriginalResult.Infos()
 		if err != nil {
@@ -432,6 +448,7 @@ func (o *EditOptions) Run() error {
 		}
 		return editFn(infos)
 	case ApplyEditMode:
+		// 编辑 last-applied-configuration：从 annotation 中提取原始配置进行编辑
 		infos, err := o.OriginalResult.Infos()
 		if err != nil {
 			return err
@@ -443,6 +460,7 @@ func (o *EditOptions) Run() error {
 				return err
 			}
 			if data == nil {
+				// 跳过没有 last-applied-configuration annotation 的资源
 				continue
 			}
 
@@ -456,7 +474,7 @@ func (o *EditOptions) Run() error {
 			return errors.New("no last-applied-configuration annotation found on resources, to create the annotation, use command `kubectl apply set-last-applied --create-annotation`")
 		}
 		return editFn(annotationInfos)
-	// If doing an edit before created, we don't want a list and instead want the normal behavior as kubectl create.
+	// 创建前编辑模式：逐个资源调用 editFn，类似 kubectl create 的行为
 	case EditBeforeCreateMode:
 		return o.OriginalResult.Visit(func(info *resource.Info, err error) error {
 			return editFn([]*resource.Info{info})
@@ -466,6 +484,8 @@ func (o *EditOptions) Run() error {
 	}
 }
 
+// extractManagedFields 从对象中提取 managedFields 并缓存
+// 序列化到编辑器之前需要清除 managedFields，避免用户看到字段管理器内部信息
 func (o *EditOptions) extractManagedFields(obj runtime.Object) error {
 	o.managedFields = make(map[types.UID][]metav1.ManagedFieldsEntry)
 	if meta.IsListType(obj) {
@@ -487,6 +507,7 @@ func (o *EditOptions) extractManagedFields(obj runtime.Object) error {
 	return nil
 }
 
+// clearManagedFields 清除单个对象的 managedFields 并返回 UID 和原值
 func clearManagedFields(obj runtime.Object) (types.UID, []metav1.ManagedFieldsEntry, error) {
 	metaObjs, err := meta.Accessor(obj)
 	if err != nil {
@@ -497,6 +518,8 @@ func clearManagedFields(obj runtime.Object) (types.UID, []metav1.ManagedFieldsEn
 	return metaObjs.GetUID(), mf, nil
 }
 
+// restoreManagedFields 将之前提取的 managedFields 恢复到对象中
+// 确保提交到 API server 时字段管理器信息完整
 func (o *EditOptions) restoreManagedFields(infos []*resource.Info) error {
 	for _, info := range infos {
 		metaObjs, err := meta.Accessor(info.Object)
@@ -509,6 +532,7 @@ func (o *EditOptions) restoreManagedFields(infos []*resource.Info) error {
 	return nil
 }
 
+// visitToApplyEditPatch 处理 apply edit 模式：将编辑后的 last-applied-configuration 打 patch 到服务器
 func (o *EditOptions) visitToApplyEditPatch(originalInfos []*resource.Info, patchVisitor resource.Visitor) error {
 	err := patchVisitor.Visit(func(info *resource.Info, incomingErr error) error {
 		editObjUID, err := meta.NewAccessor().UID(info.Object)
@@ -516,6 +540,7 @@ func (o *EditOptions) visitToApplyEditPatch(originalInfos []*resource.Info, patc
 			return err
 		}
 
+		// 通过 UID 匹配原始对象
 		var originalInfo *resource.Info
 		for _, i := range originalInfos {
 			originalObjUID, err := meta.NewAccessor().UID(i.Object)
@@ -541,6 +566,7 @@ func (o *EditOptions) visitToApplyEditPatch(originalInfos []*resource.Info, patc
 			return err
 		}
 
+		// 无变化则跳过
 		if reflect.DeepEqual(originalJS, editedJS) {
 			printer, err := o.ToPrinter("skipped")
 			if err != nil {
@@ -548,6 +574,7 @@ func (o *EditOptions) visitToApplyEditPatch(originalInfos []*resource.Info, patc
 			}
 			return printer.PrintObj(info.Object, o.Out)
 		}
+		// 将修改后的 annotation 打 patch 到服务器
 		err = o.annotationPatch(info)
 		if err != nil {
 			return err
@@ -562,6 +589,7 @@ func (o *EditOptions) visitToApplyEditPatch(originalInfos []*resource.Info, patc
 	return err
 }
 
+// annotationPatch 将 last-applied-configuration annotation 的变更打 patch 到服务器
 func (o *EditOptions) annotationPatch(update *resource.Info) error {
 	patch, _, patchType, err := GetApplyPatch(update.Object.(runtime.Unstructured))
 	if err != nil {
@@ -580,7 +608,8 @@ func (o *EditOptions) annotationPatch(update *resource.Info) error {
 	return err
 }
 
-// GetApplyPatch is used to get and apply patches
+// GetApplyPatch 计算包含 last-applied-configuration annotation 变更的 merge patch
+// 原理：比较添加 annotation 前后的 JSON，生成只更新 annotation 的 patch
 func GetApplyPatch(obj runtime.Unstructured) ([]byte, []byte, types.PatchType, error) {
 	beforeJSON, err := encodeToJSON(obj)
 	if err != nil {
@@ -595,16 +624,19 @@ func GetApplyPatch(obj runtime.Unstructured) ([]byte, []byte, types.PatchType, e
 	if annotations == nil {
 		annotations = map[string]string{}
 	}
+	// 设置 last-applied-configuration annotation
 	annotations[corev1.LastAppliedConfigAnnotation] = string(beforeJSON)
 	accessor.SetAnnotations(objCopy, annotations)
 	afterJSON, err := encodeToJSON(objCopy.(runtime.Unstructured))
 	if err != nil {
 		return nil, beforeJSON, types.MergePatchType, err
 	}
+	// 生成只包含 annotation 变更的 merge patch
 	patch, err := jsonpatch.CreateMergePatch(beforeJSON, afterJSON)
 	return patch, beforeJSON, types.MergePatchType, err
 }
 
+// encodeToJSON 将 unstructured 对象序列化为 JSON 字节
 func encodeToJSON(obj runtime.Unstructured) ([]byte, error) {
 	serialization, err := runtime.Encode(unstructured.UnstructuredJSONScheme, obj)
 	if err != nil {
@@ -617,6 +649,7 @@ func encodeToJSON(obj runtime.Unstructured) ([]byte, error) {
 	return js, nil
 }
 
+// visitToPatch 处理普通编辑模式：计算原始对象和编辑后对象的 diff，然后打 patch 到服务器
 func (o *EditOptions) visitToPatch(originalInfos []*resource.Info, patchVisitor resource.Visitor, results *editResults) error {
 	err := patchVisitor.Visit(func(info *resource.Info, incomingErr error) error {
 		editObjUID, err := meta.NewAccessor().UID(info.Object)
@@ -624,6 +657,7 @@ func (o *EditOptions) visitToPatch(originalInfos []*resource.Info, patchVisitor 
 			return err
 		}
 
+		// 通过 UID 匹配原始对象，用于计算 diff
 		var originalInfo *resource.Info
 		for _, i := range originalInfos {
 			originalObjUID, err := meta.NewAccessor().UID(i.Object)
@@ -649,8 +683,8 @@ func (o *EditOptions) visitToPatch(originalInfos []*resource.Info, patchVisitor 
 			return err
 		}
 
+		// 无变化则跳过
 		if reflect.DeepEqual(originalJS, editedJS) {
-			// no edit, so just skip it.
 			printer, err := o.ToPrinter("skipped")
 			if err != nil {
 				return err
@@ -658,6 +692,7 @@ func (o *EditOptions) visitToPatch(originalInfos []*resource.Info, patchVisitor 
 			return printer.PrintObj(info.Object, o.Out)
 		}
 
+		// 设置前置条件：apiVersion、kind、name、managedFields 不允许被修改
 		preconditions := []mergepatch.PreconditionFunc{
 			mergepatch.RequireKeyUnchanged("apiVersion"),
 			mergepatch.RequireKeyUnchanged("kind"),
@@ -665,20 +700,20 @@ func (o *EditOptions) visitToPatch(originalInfos []*resource.Info, patchVisitor 
 			mergepatch.RequireKeyUnchanged("managedFields"),
 		}
 
-		// Create the versioned struct from the type defined in the mapping
-		// (which is the API version we'll be submitting the patch to)
+		// 根据 GVK 创建版本化对象，用于 strategic merge patch
 		versionedObject, err := scheme.Scheme.New(info.Mapping.GroupVersionKind)
 		var patchType types.PatchType
 		var patch []byte
 		switch {
 		case runtime.IsNotRegisteredError(err):
-			// fall back to generic JSON merge patch
+			// 类型未注册（如 CRD），回退到通用的 JSON merge patch
 			patchType = types.MergePatchType
 			patch, err = jsonpatch.CreateMergePatch(originalJS, editedJS)
 			if err != nil {
 				klog.V(4).Infof("Unable to calculate diff, no merge is possible: %v", err)
 				return err
 			}
+			// 校验前置条件：确保关键字段未被修改
 			var patchMap map[string]interface{}
 			err = json.Unmarshal(patch, &patchMap)
 			if err != nil {
@@ -694,6 +729,7 @@ func (o *EditOptions) visitToPatch(originalInfos []*resource.Info, patchVisitor 
 		case err != nil:
 			return err
 		default:
+			// 类型已注册，使用 strategic merge patch（能正确处理 list 合并等语义）
 			patchType = types.StrategicMergePatchType
 			patch, err = strategicpatch.CreateTwoWayMergePatch(originalJS, editedJS, versionedObject, preconditions...)
 			if err != nil {
@@ -709,15 +745,18 @@ func (o *EditOptions) visitToPatch(originalInfos []*resource.Info, patchVisitor 
 			fmt.Fprintf(o.Out, "Patch: %s\n", string(patch))
 		}
 
+		// 将 patch 提交到 API server
 		patched, err := resource.NewHelper(info.Client, info.Mapping).
 			WithFieldManager(o.FieldManager).
 			WithFieldValidation(o.ValidationDirective).
 			WithSubresource(o.Subresource).
 			Patch(info.Namespace, info.Name, patchType, patch, nil)
 		if err != nil {
+			// patch 失败时记录错误，继续处理下一个资源
 			fmt.Fprintln(o.ErrOut, results.addError(err, info))
 			return nil
 		}
+		// 用服务器返回的对象更新本地 info
 		info.Refresh(patched, true)
 		printer, err := o.ToPrinter("edited")
 		if err != nil {
@@ -728,6 +767,7 @@ func (o *EditOptions) visitToPatch(originalInfos []*resource.Info, patchVisitor 
 	return err
 }
 
+// visitToCreate 处理创建前编辑模式：直接将编辑后的对象创建到服务器
 func (o *EditOptions) visitToCreate(createVisitor resource.Visitor) error {
 	err := createVisitor.Visit(func(info *resource.Info, incomingErr error) error {
 		obj, err := resource.NewHelper(info.Client, info.Mapping).
@@ -747,15 +787,16 @@ func (o *EditOptions) visitToCreate(createVisitor resource.Visitor) error {
 	return err
 }
 
+// visitAnnotation 为所有资源添加 annotation
 func (o *EditOptions) visitAnnotation(annotationVisitor resource.Visitor) error {
-	// iterate through all items to apply annotations
 	err := annotationVisitor.Visit(func(info *resource.Info, incomingErr error) error {
-		// put configuration annotation in "updates"
+		// 如果需要，添加 last-applied-configuration annotation
 		if o.ApplyAnnotation {
 			if err := util.CreateOrUpdateAnnotation(true, info.Object, scheme.DefaultJSONEncoder()); err != nil {
 				return err
 			}
 		}
+		// 记录 kubectl 命令到 annotation（用于 kubectl annotate --all 等场景）
 		if err := o.Recorder.Record(info.Object); err != nil {
 			klog.V(4).Infof("error recording current command: %v", err)
 		}
@@ -766,32 +807,33 @@ func (o *EditOptions) visitAnnotation(annotationVisitor resource.Visitor) error 
 	return err
 }
 
-// EditMode can be either NormalEditMode, EditBeforeCreateMode or ApplyEditMode
+// EditMode 编辑模式：普通编辑、创建前编辑、或编辑 last-applied-configuration
 type EditMode string
 
 const (
-	// NormalEditMode is an edit mode
+	// NormalEditMode 普通编辑模式：编辑已存在的资源
 	NormalEditMode EditMode = "normal_mode"
 
-	// EditBeforeCreateMode is an edit mode
+	// EditBeforeCreateMode 创建前编辑模式：先编辑再创建资源（kubectl apply --edit-last-applied）
 	EditBeforeCreateMode EditMode = "edit_before_create_mode"
 
-	// ApplyEditMode is an edit mode
+	// ApplyEditMode 编辑 last-applied-configuration annotation
 	ApplyEditMode EditMode = "edit_last_applied_mode"
 )
 
-// editReason preserves a message about the reason this file must be edited again
+// editReason 记录需要重新编辑的原因
 type editReason struct {
-	head  string
-	other []string
+	head  string   // 主要错误信息
+	other []string // 详细的错误原因列表
 }
 
-// editHeader includes a list of reasons the edit must be retried
+// editHeader 编辑头信息，包含所有需要重试的原因
+// 在重新打开编辑器时，这些原因会作为注释写入文件顶部
 type editHeader struct {
 	reasons []editReason
 }
 
-// writeTo outputs the current header information into a stream
+// writeTo 将编辑头信息（注释行）写入输出流
 func (h *editHeader) writeTo(w io.Writer, editMode EditMode) error {
 	if editMode == ApplyEditMode {
 		fmt.Fprint(w, `# Please edit the 'last-applied-configuration' annotations below.
@@ -820,15 +862,17 @@ func (h *editHeader) writeTo(w io.Writer, editMode EditMode) error {
 	return nil
 }
 
-// editResults capture the result of an update
+// editResults 记录编辑结果：错误统计、需要重试的资源、临时文件路径
 type editResults struct {
-	header    editHeader
-	retryable int
-	notfound  int
-	edit      []*resource.Info
-	file      string
+	header    editHeader       // 编辑头，包含错误原因
+	retryable int              // 可重试的错误数（如冲突）
+	notfound  int              // 资源不存在的错误数
+	edit      []*resource.Info // 需要重新编辑的资源列表
+	file      string           // 临时文件路径，出错时保留
 }
 
+// addError 根据错误类型分类统计，并返回错误消息
+// Invalid 错误会加入重试列表，NotFound 表示资源已删除，其他错误标记为可重试
 func (r *editResults) addError(err error, info *resource.Info) string {
 	resourceString := info.Mapping.Resource.Resource
 	if len(info.Mapping.Resource.Group) > 0 {
@@ -837,6 +881,7 @@ func (r *editResults) addError(err error, info *resource.Info) string {
 
 	switch {
 	case apierrors.IsInvalid(err):
+		// 校验失败：加入需要重新编辑的列表，记录详细原因
 		r.edit = append(r.edit, info)
 		reason := editReason{
 			head: fmt.Sprintf("%s %q was not valid", resourceString, info.Name),
@@ -851,17 +896,18 @@ func (r *editResults) addError(err error, info *resource.Info) string {
 		r.header.reasons = append(r.header.reasons, reason)
 		return fmt.Sprintf("error: %s %q is invalid", resourceString, info.Name)
 	case apierrors.IsNotFound(err):
+		// 资源已被删除，无法更新
 		r.notfound++
 		return fmt.Sprintf("error: %s %q could not be found on the server", resourceString, info.Name)
 	default:
+		// 其他错误（如冲突）：标记为可重试
 		r.retryable++
 		return fmt.Sprintf("error: %s %q could not be patched: %v", resourceString, info.Name, err)
 	}
 }
 
-// preservedFile writes out a message about the provided file if it exists to the
-// provided output stream when an error happens. Used to notify the user where
-// their updates were preserved.
+// preservedFile 出错时通知用户临时文件的保存位置
+// 确保用户的编辑内容不会丢失
 func preservedFile(err error, path string, out io.Writer) error {
 	if len(path) > 0 {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -871,9 +917,8 @@ func preservedFile(err error, path string, out io.Writer) error {
 	return err
 }
 
-// hasLines returns true if any line in the provided stream is non empty - has non-whitespace
-// characters, or the first non-whitespace character is a '#' indicating a comment. Returns
-// any errors encountered reading the stream.
+// hasLines 检查文件是否有有效内容（非空、非纯注释的行）
+// 用于判断用户是否真的编辑了文件，还是只保存了空文件
 func hasLines(r io.Reader) (bool, error) {
 	// TODO: if any files we read have > 64KB lines, we'll need to switch to bytes.ReadLine
 	// TODO: probably going to be secrets
@@ -889,8 +934,8 @@ func hasLines(r io.Reader) (bool, error) {
 	return false, nil
 }
 
-// hashOnLineBreak returns a string built from the provided string by inserting any necessary '#'
-// characters after '\n' characters, indicating a comment.
+// hashOnLineBreak 在多行字符串的每行开头添加 '#' 注释符
+// 用于将错误信息格式化为编辑器注释头中的多行注释
 func hashOnLineBreak(s string) string {
 	r := ""
 	for i, ch := range s {
@@ -904,7 +949,7 @@ func hashOnLineBreak(s string) string {
 	return r
 }
 
-// editorEnvs returns an ordered list of env vars to check for editor preferences.
+// editorEnvs 返回用于查找编辑器的环境变量列表（按优先级排序）
 func editorEnvs() []string {
 	return []string{
 		"KUBE_EDITOR",
