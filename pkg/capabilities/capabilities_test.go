@@ -21,7 +21,10 @@ import (
 	"testing"
 )
 
+// TestGet 验证 Get 在两种场景下的行为：
+// 未初始化时返回安全的默认能力集；Initialize 后返回所设置的能力集。
 func TestGet(t *testing.T) {
+	// 每个测试结束后重置全局状态，避免污染其他用例。
 	defer ResetForTest()
 	defaultCap := Capabilities{
 		AllowPrivileged: false,
@@ -37,6 +40,7 @@ func TestGet(t *testing.T) {
 		t.Fatalf("expected Capabilities: %#v, got a non-default: %#v", defaultCap, res)
 	}
 
+	// 重新初始化后，Get 应反映出显式设置的能力。
 	cap := Capabilities{
 		PrivilegedSources: PrivilegedSources{
 			HostNetworkSources: []string{"A", "B"},
@@ -50,6 +54,9 @@ func TestGet(t *testing.T) {
 		t.Fatalf("expected Capabilities: %#v , got a different: %#v", cap, res)
 	}
 }
+
+// TestSetup 表驱动验证 Setup 的便捷封装：
+// 传入的 allowPrivileged 与带宽限制应原样落到全局能力配置中。
 func TestSetup(t *testing.T) {
 	defer ResetForTest()
 	testCases := []struct {
@@ -80,6 +87,7 @@ func TestSetup(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个用例前重置，因为 Initialize 每个进程只生效一次。
 			ResetForTest()
 
 			Setup(tc.allowPrivileged, tc.perConnectionBytesPerSec)

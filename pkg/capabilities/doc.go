@@ -14,5 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package capabilities manages system level capabilities
+// Package capabilities 管理系统级别的能力（capabilities）配置，
+// 例如是否允许特权容器、哪些 Pod 来源可以使用宿主命名空间，
+// 以及单连接的带宽限制。配置是进程全局的，只能初始化一次。
 package capabilities
