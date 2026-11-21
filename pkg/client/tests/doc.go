@@ -14,5 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package tests runs tests against the client which require an internal client
+// Package tests 运行那些需要使用内部客户端（internal client）的客户端测试。
+// 这些测试依赖 Kubernetes 仓库内部的 API 类型与 scheme，因此放在仓库内部而非
+// client-go 中。
 package tests

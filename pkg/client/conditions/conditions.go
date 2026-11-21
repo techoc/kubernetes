@@ -25,14 +25,19 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-// ErrPodCompleted is returned by PodRunning or PodContainerRunning to indicate that
-// the pod has already reached completed state.
+// ErrPodCompleted 由 PodRunning 或 PodContainerRunning 返回，用于表明
+// Pod 已经进入完成状态（成功或失败）。
 var ErrPodCompleted = fmt.Errorf("pod ran to completion")
 
-// PodRunning returns true if the pod is running, false if the pod has not yet reached running state,
-// returns ErrPodCompleted if the pod has run to completion, or an error in any other case.
+// PodRunning 判断 Pod 是否正在运行：
+//   - 返回 true 表示 Pod 已进入 Running 状态；
+//   - 返回 false 表示 Pod 尚未进入 Running 状态；
+//   - 返回 ErrPodCompleted 表示 Pod 已经运行结束（成功或失败）；
+//   - 其他异常情况返回相应错误。
 func PodRunning(event watch.Event) (bool, error) {
 	switch event.Type {
+	// 收到删除事件说明被监听的 Pod 已消失，视作 NotFound 交由调用方处理，
+	// 避免调用方一直等待一个永远不会再出现的对象。
 	case watch.Deleted:
 		return false, errors.NewNotFound(schema.GroupResource{Resource: "pods"}, "")
 	}
@@ -41,6 +46,8 @@ func PodRunning(event watch.Event) (bool, error) {
 		switch t.Status.Phase {
 		case v1.PodRunning:
 			return true, nil
+		// 终态相位（成功/失败）不可能再变为 Running，须单独告知调用方，
+		// 使其能与"尚未开始运行"的普通 false 区分开来。
 		case v1.PodFailed, v1.PodSucceeded:
 			return false, ErrPodCompleted
 		}
@@ -48,16 +55,21 @@ func PodRunning(event watch.Event) (bool, error) {
 	return false, nil
 }
 
-// PodCompleted returns true if the pod has run to completion, false if the pod has not yet
-// reached running state, or an error in any other case.
+// PodCompleted 判断 Pod 是否已经运行结束：
+//   - 返回 true 表示 Pod 已进入 Failed 或 Succeeded 终态；
+//   - 返回 false 表示 Pod 尚未结束（可能仍在运行或未开始）；
+//   - 其他异常情况（如对象被删除）返回相应错误。
 func PodCompleted(event watch.Event) (bool, error) {
 	switch event.Type {
+	// 与 PodRunning 一致：删除事件意味着对象不复存在，返回 NotFound
+	// 让调用方及时停止等待，而不是无限期地监听该 Pod。
 	case watch.Deleted:
 		return false, errors.NewNotFound(schema.GroupResource{Resource: "pods"}, "")
 	}
 	switch t := event.Object.(type) {
 	case *v1.Pod:
 		switch t.Status.Phase {
+		// 只有成功与失败是终态，其余相位均视为尚未完成。
 		case v1.PodFailed, v1.PodSucceeded:
 			return true, nil
 		}

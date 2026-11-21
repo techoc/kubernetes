@@ -35,7 +35,10 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// TestClientContentType 验证客户端在不同配置下发出的请求内容类型、请求路径与
+// 请求体是否正确：默认配置使用 protobuf，显式指定时则用 JSON。
 func TestClientContentType(t *testing.T) {
+	// 用生成的客户端创建一个 Pod，用于校验核心资源的序列化行为。
 	createPodFunc := func(t *testing.T, config *rest.Config) {
 		client, err := kubernetes.NewForConfig(config)
 		if err != nil {
@@ -49,6 +52,8 @@ func TestClientContentType(t *testing.T) {
 		}
 	}
 
+	// 通过 UpdateScale 校验子资源（scale）请求的序列化行为，
+	// 因为子资源走的是 autoscaling/v1 这组单独的编解码器。
 	updateScaleFunc := func(t *testing.T, config *rest.Config) {
 		client, err := kubernetes.NewForConfig(config)
 		if err != nil {
@@ -62,6 +67,8 @@ func TestClientContentType(t *testing.T) {
 		}
 	}
 
+	// 复用核心 RESTClient 来操作自定义资源（Example），用于校验
+	// 通过底层 RESTClient 发起的请求默认使用 JSON 而非 protobuf。
 	createExampleViaRESTClientFunc := func(t *testing.T, config *rest.Config) {
 		kubeClient, err := kubernetes.NewForConfig(config)
 		if err != nil {
@@ -78,6 +85,9 @@ func TestClientContentType(t *testing.T) {
 	}
 
 	tests := []struct {
+		// name 是用例名称；createFunc 是发起请求的辅助函数；
+		// contentType 传入客户端配置；expectedPath 是期望的请求路径；
+		// expectContentType 与 expectBody 分别是期望的请求头与请求体。
 		name              string
 		createFunc        func(*testing.T, *rest.Config)
 		contentType       string
@@ -141,6 +151,8 @@ func TestClientContentType(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 用原子计数而非普通变量，因为 HTTP handler 在独立 goroutine 中执行，
+			// 主测试 goroutine 随后会读取它，需要避免数据竞争。
 			var calls atomic.Uint64
 			ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls.Add(1)
@@ -161,6 +173,7 @@ func TestClientContentType(t *testing.T) {
 					t.Fatal(err)
 				}
 				_ = r.Body.Close()
+				// 用 cmp.Diff 输出逐字节差异，方便定位 protobuf/JSON 序列化问题。
 				if diff := cmp.Diff(tc.expectBody, string(body)); len(diff) > 0 {
 					t.Errorf("body diff (-want, +got):\n%s", diff)
 				}
@@ -178,6 +191,7 @@ func TestClientContentType(t *testing.T) {
 
 			tc.createFunc(t, config)
 
+			// 断言恰好发出一次请求，防止客户端重定向或重试掩盖序列化问题。
 			if calls.Load() != 1 {
 				t.Errorf("unexpected handler call count: %d", calls.Load())
 			}
