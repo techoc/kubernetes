@@ -14,5 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package probe contains utilities for health probing, as well as health status information.
+// Package probe 提供健康探针（health probing）的工具和状态信息。
+//
+// Kubernetes 使用探针来检测容器的健康状态，支持三种类型：
+//   - LivenessProbe（存活探针）：判断容器是否存活，失败时重启容器
+//   - ReadinessProbe（就绪探针）：判断容器是否就绪，失败时从 Service 端点中移除
+//   - StartupProbe（启动探针）：判断容器是否启动完成，失败时重启容器
+//
+// 探针支持四种执行方式：HTTP GET、TCP Socket、Exec（执行命令）、gRPC。
+// 每种方式对应一个子包（http、tcp、exec、grpc），实现各自的 Prober 接口。
+//
+// 核心类型：
+//   - Result：探针执行结果（Success/Warning/Failure/Unknown）
+//   - ProbeDialer：优化的 TCP 拨号器，减少 TIME-WAIT 状态的 socket 残留
 package probe

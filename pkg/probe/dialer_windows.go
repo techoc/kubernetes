@@ -23,16 +23,24 @@ import (
 	"syscall"
 )
 
-// ProbeDialer returns a dialer optimized for probes to avoid lingering sockets on TIME-WAIT state.
-// The dialer reduces the TIME-WAIT period to 1 seconds instead of the OS default of 60 seconds.
-// Using 1 second instead of 0 because SO_LINGER socket option to 0 causes pending data to be
-// discarded and the connection to be aborted with an RST rather than for the pending data to be
-// transmitted and the connection closed cleanly with a FIN.
+// ProbeDialer 返回一个为探针优化的 TCP 拨号器，避免 socket 长时间停留在 TIME-WAIT 状态。
+//
+// 问题背景：高频探针（如每1秒一次）会产生大量短连接，默认 OS 的 TIME-WAIT 周期为60秒，
+// 导致端口耗尽（"port exhaustion"）。此拨号器将 SO_LINGER 设置为1秒，显著减少端口占用时间。
+//
+// 为什么用1秒而不是0秒：SO_LINGER 设为0会导致待发送数据被丢弃，连接以 RST 包强制终止，
+// 而不是正常发送完数据后用 FIN 包优雅关闭。1秒是一个折中值，既减少了 TIME-WAIT 时间，
+// 又保证了数据能完整传输。
+//
+// 注意：Windows 平台使用 syscall.Handle(fd) 而非 int(fd)，因为 Windows 的文件描述符类型不同。
+//
 // Ref: https://issues.k8s.io/89898
 func ProbeDialer() *net.Dialer {
 	dialer := &net.Dialer{
+		// Control 函数在连接建立前执行，用于设置 socket 选项
 		Control: func(network, address string, c syscall.RawConn) error {
 			return c.Control(func(fd uintptr) {
+				// Windows 上使用 syscall.Handle(fd) 转换文件描述符
 				syscall.SetsockoptLinger(syscall.Handle(fd), syscall.SOL_SOCKET, syscall.SO_LINGER, &syscall.Linger{Onoff: 1, Linger: 1})
 			})
 		},
