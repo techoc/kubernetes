@@ -34,6 +34,9 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// TestDropDisabledSnapshotDataSource 验证 EnforceDataSourceBackwardsCompatibility
+// 在传入 nil 旧对象（创建请求）时不会修改新旧 PVC：旧对象本就不该被改动，
+// 而这里没有可提供“已在使用”证据的旧 spec，新对象也应保持原样。
 func TestDropDisabledSnapshotDataSource(t *testing.T) {
 	pvcWithoutDataSource := func() *core.PersistentVolumeClaim {
 		return &core.PersistentVolumeClaim{
@@ -78,18 +81,19 @@ func TestDropDisabledSnapshotDataSource(t *testing.T) {
 			oldpvc := oldpvcInfo.pvc()
 			newpvc := newpvcInfo.pvc()
 			if newpvc == nil {
+				// 新对象为 nil 时没有 spec 可处理，跳过该组合。
 				continue
 			}
 
 			t.Run(fmt.Sprintf("old pvc %v, new pvc %v", oldpvcInfo.description, newpvcInfo.description), func(t *testing.T) {
 				EnforceDataSourceBackwardsCompatibility(&newpvc.Spec, nil)
 
-				// old pvc should never be changed
+				// 旧对象是只读输入，函数在任何情况下都不应改动它。
 				if !reflect.DeepEqual(oldpvc, oldpvcInfo.pvc()) {
 					t.Errorf("old pvc changed: %v", cmp.Diff(oldpvc, oldpvcInfo.pvc()))
 				}
 
-				// new pvc should not be changed
+				// 旧对象为 nil 时不提供任何“已在用”的证据，因此新对象也不应被改动。
 				if !reflect.DeepEqual(newpvc, newpvcInfo.pvc()) {
 					t.Errorf("new pvc changed: %v", cmp.Diff(newpvc, newpvcInfo.pvc()))
 				}
@@ -98,7 +102,10 @@ func TestDropDisabledSnapshotDataSource(t *testing.T) {
 	}
 }
 
-// TestPVCDataSourceSpecFilter checks to ensure the DropDisabledFields function behaves correctly for PVCDataSource featuregate
+// TestPVCDataSourceSpecFilter 验证 PVCDataSource 特性门控下 DataSource 的裁剪：
+// 空 spec 与 APIGroup 非法的 DataSource 应被丢弃；APIGroup 为空字符串
+// （核心组）或显式为空指针的 DataSource 都是合法 Clone 来源，必须保留。
+// 注意本用例面向旧对象为 nil 的创建路径。
 func TestPVCDataSourceSpecFilter(t *testing.T) {
 	apiGroup := ""
 	validSpec := core.PersistentVolumeClaimSpec{
@@ -115,6 +122,7 @@ func TestPVCDataSourceSpecFilter(t *testing.T) {
 		},
 	}
 
+	// 非法 APIGroup 不是有效的卷克隆来源，应被丢弃。
 	invalidAPIGroup := "invalid.pvc.api.group"
 	invalidSpec := core.PersistentVolumeClaimSpec{
 		DataSource: &core.TypedLocalObjectReference{
@@ -184,7 +192,9 @@ func makeDataSourceRef(apiGroup, kind, name string, namespace *string) *core.Typ
 	}
 }
 
-// TestDataSourceFilter checks to ensure CrossNamespaceVolumeDataSource works
+// TestDataSourceFilter 验证 DropDisabledFields 对跨命名空间数据源的裁剪：
+// 门控关闭时新出现的跨命名空间 DataSourceRef 应被丢弃；但旧 spec 中已存在
+// 该字段时（升级/回滚场景）必须保留，以免破坏既有对象；门控开启时一律保留。
 func TestDataSourceFilter(t *testing.T) {
 	ns := "ns1"
 	volumeDataSource := makeDataSource(coreGroup, pvcKind, "my-vol")
@@ -215,6 +225,7 @@ func TestDataSourceFilter(t *testing.T) {
 			want:    volumeDataSource,
 			wantRef: volumeDataSourceRef,
 		},
+		// 门控开启时跨命名空间引用应保留。
 		"xns enabled with xns volume ds": {
 			spec:       core.PersistentVolumeClaimSpec{DataSourceRef: xnsVolumeDataSourceRef},
 			xnsEnabled: true,
@@ -226,18 +237,19 @@ func TestDataSourceFilter(t *testing.T) {
 			xnsEnabled: true,
 			wantRef:    xnsVolumeDataSourceRef,
 		},
+		// 门控关闭且旧 spec 未使用该字段：这是新建的跨命名空间引用，必须丢弃。
 		"xns volume ds": {
 			spec: core.PersistentVolumeClaimSpec{DataSourceRef: xnsVolumeDataSourceRef},
 		},
 		"xns volume ds when xns volume exists in oldSpec": {
 			spec:    core.PersistentVolumeClaimSpec{DataSourceRef: xnsVolumeDataSourceRef},
 			oldSpec: core.PersistentVolumeClaimSpec{DataSourceRef: xnsVolumeDataSourceRef},
-			wantRef: xnsVolumeDataSourceRef, // existing field isn't dropped.
+			wantRef: xnsVolumeDataSourceRef, // 旧 spec 已包含该字段，不能因门控关闭而丢弃。
 		},
 		"xns volume ds when volume exists in oldSpec": {
 			spec:    core.PersistentVolumeClaimSpec{DataSourceRef: xnsVolumeDataSourceRef},
 			oldSpec: core.PersistentVolumeClaimSpec{DataSourceRef: volumeDataSourceRef},
-			wantRef: xnsVolumeDataSourceRef, // existing field isn't dropped.8
+			wantRef: xnsVolumeDataSourceRef, // 旧 spec 已有 DataSourceRef，整个字段都应保留。
 		},
 	}
 
@@ -259,8 +271,9 @@ func TestDataSourceFilter(t *testing.T) {
 	}
 }
 
-// TestDataSourceRef checks to ensure the DataSourceRef field handles backwards
-// compatibility with the DataSource field
+// TestDataSourceRef 验证 NormalizeDataSources 在 DataSource 与 DataSourceRef
+// 之间的双向补齐：同命名空间引用会在两个字段间互相填充，跨命名空间引用只保留
+// 在 DataSourceRef 中（DataSource 类型无法表达命名空间），避免数据被错误截断。
 func TestDataSourceRef(t *testing.T) {
 	ns := "ns1"
 	volumeDataSource := makeDataSource(coreGroup, pvcKind, "my-vol")
@@ -361,6 +374,9 @@ func TestDataSourceRef(t *testing.T) {
 	}
 }
 
+// TestDropDisabledVolumeAttributesClass 验证 VolumeAttributesClass 门控对 VAC 字段的裁剪：
+// 门控关闭时只有旧 spec 已带 VAC 的更新请求才保留该字段；门控开启时一律保留；
+// 这里通过切换到 1.35 之前的仿真版本，确保“特性未在旧版本使用”的判断生效。
 func TestDropDisabledVolumeAttributesClass(t *testing.T) {
 	vacName := ptr.To("foo")
 
@@ -412,6 +428,7 @@ func TestDropDisabledVolumeAttributesClass(t *testing.T) {
 	for testName, test := range tests {
 		t.Run(testName, func(t *testing.T) {
 			if !test.vacEnabled {
+				// 仿真版本低于 VAC 引入版本，门控关闭时才会真正裁剪该字段。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, test.vacEnabled)
@@ -424,6 +441,10 @@ func TestDropDisabledVolumeAttributesClass(t *testing.T) {
 	}
 }
 
+// TestDropDisabledFieldsFromStatus 验证 DropDisabledFieldsFromStatus 按特性门控
+// 和旧对象状态裁剪 PVC status 中的新字段（AllocatedResources、ResizeStatus、
+// VolumeAttributesClassName、ModifyVolumeStatus、HealthStatus）：
+// 创建请求在门控关闭时丢弃，更新请求中旧对象已使用该字段则保留，避免破坏既有对象。
 func TestDropDisabledFieldsFromStatus(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 	tests := []struct {
@@ -435,6 +456,7 @@ func TestDropDisabledFieldsFromStatus(t *testing.T) {
 		oldPVC                              *core.PersistentVolumeClaim
 		expected                            *core.PersistentVolumeClaim
 	}{
+		// 门控关闭且旧对象未使用该字段：创建路径必须丢弃 AllocatedResources。
 		{
 			name:                                "for:newPVC=hasAllocatedResource,oldPVC=doesnot,featuregate=false; should drop field",
 			enableRecoverVolumeExpansionFailure: false,
@@ -459,6 +481,7 @@ func TestDropDisabledFieldsFromStatus(t *testing.T) {
 			oldPVC:                              withAllocatedResource("5G"),
 			expected:                            withAllocatedResource("5G"),
 		},
+		// 旧对象已有该字段，即使门控关闭也要保留，避免升级后字段突然消失。
 		{
 			name:                                "for:newPVC=hasAllocatedResource,oldPVC=hasAllocatedResource,featuregate=false; should keep field",
 			enableRecoverVolumeExpansionFailure: false,
@@ -571,6 +594,7 @@ func TestDropDisabledFieldsFromStatus(t *testing.T) {
 			oldPVC:                              withVolumeAttributesModifyStatus("bar", core.PersistentVolumeClaimModifyVolumePending),
 			expected:                            withVolumeAttributesModifyStatus("bar", core.PersistentVolumeClaimModifyVolumePending),
 		},
+		// HealthStatus 由独立门控控制：门控关闭且旧对象不存在时必须丢弃。
 		{
 			name:                  "for:newPVC=hasHealthStatus,oldPVC=nil,featuregate=CSIVolumeHealth=false; should drop field",
 			enableCSIVolumeHealth: false,
@@ -625,10 +649,12 @@ func TestDropDisabledFieldsFromStatus(t *testing.T) {
 	}
 }
 
+// getPVC 返回不含任何 status 字段的空 PVC，作为裁剪结果的基准。
 func getPVC() *core.PersistentVolumeClaim {
 	return &core.PersistentVolumeClaim{}
 }
 
+// withAllocatedResource 构造带 AllocatedResources 的 PVC，用于检查扩容恢复相关字段的裁剪。
 func withAllocatedResource(q string) *core.PersistentVolumeClaim {
 	return &core.PersistentVolumeClaim{
 		Status: core.PersistentVolumeClaimStatus{
@@ -639,6 +665,7 @@ func withAllocatedResource(q string) *core.PersistentVolumeClaim {
 	}
 }
 
+// withResizeStatus 构造带 AllocatedResourceStatuses 的 PVC，用于检查节点扩容状态字段的裁剪。
 func withResizeStatus(status core.ClaimResourceStatus) *core.PersistentVolumeClaim {
 	return &core.PersistentVolumeClaim{
 		Status: core.PersistentVolumeClaimStatus{
@@ -649,6 +676,7 @@ func withResizeStatus(status core.ClaimResourceStatus) *core.PersistentVolumeCla
 	}
 }
 
+// withVolumeAttributesClassName 构造带 CurrentVolumeAttributesClassName 的 PVC。
 func withVolumeAttributesClassName(vacName string) *core.PersistentVolumeClaim {
 	return &core.PersistentVolumeClaim{
 		Status: core.PersistentVolumeClaimStatus{
@@ -657,6 +685,7 @@ func withVolumeAttributesClassName(vacName string) *core.PersistentVolumeClaim {
 	}
 }
 
+// withHealthStatus 构造带 HealthStatus 的 PVC，用于检查 CSI 卷健康字段的裁剪。
 func withHealthStatus() *core.PersistentVolumeClaim {
 	return &core.PersistentVolumeClaim{
 		Status: core.PersistentVolumeClaimStatus{
@@ -672,6 +701,8 @@ func withHealthStatus() *core.PersistentVolumeClaim {
 	}
 }
 
+// withVolumeAttributesModifyStatus 构造带 ModifyVolumeStatus 的 PVC，
+// 用于检查 VAC 修改状态字段的裁剪。
 func withVolumeAttributesModifyStatus(target string, status core.PersistentVolumeClaimModifyVolumeStatus) *core.PersistentVolumeClaim {
 	return &core.PersistentVolumeClaim{
 		Status: core.PersistentVolumeClaimStatus{
@@ -683,6 +714,9 @@ func withVolumeAttributesModifyStatus(target string, status core.PersistentVolum
 	}
 }
 
+// TestWarnings 验证 GetWarningsForPersistentVolumeClaim 的告警内容：
+// nil PVC 与整数大小的资源请求不告警；storage 请求/限制中的小数字节值会分别告警；
+// 使用已弃用的 beta storage class 注解时给出迁移提示。
 func TestWarnings(t *testing.T) {
 	testcases := []struct {
 		name     string

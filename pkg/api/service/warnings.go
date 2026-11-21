@@ -25,22 +25,28 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/helper"
 )
 
+// GetWarningsForService 为 Service 对象生成警告信息。
+// 涵盖：弃用注解、IP/CIDR 格式问题、headless 服务中被忽略的字段、
+// 弃用的 externalIPs、互相冲突的 type 与 IP 字段等。
 func GetWarningsForService(service, oldService *api.Service) []string {
 	if service == nil {
 		return nil
 	}
 	var warnings []string
 
+	// 拓扑感知提示的注解已被 AnnotationTopologyMode 取代。
 	if _, ok := service.Annotations[api.DeprecatedAnnotationTopologyAwareHints]; ok {
 		warnings = append(warnings, fmt.Sprintf("annotation %s is deprecated, please use %s instead", api.DeprecatedAnnotationTopologyAwareHints, api.AnnotationTopologyMode))
 	}
 
+	// 已分配 clusterIP 的服务，逐个检查 clusterIPs 中的 IP 格式警告。
 	if helper.IsServiceIPSet(service) {
 		for i, clusterIP := range service.Spec.ClusterIPs {
 			warnings = append(warnings, utilvalidation.GetWarningsForIP(field.NewPath("spec").Child("clusterIPs").Index(i), clusterIP)...)
 		}
 	}
 
+	// headless 服务不参与负载均衡，若干 LB/IP 相关字段会被忽略。
 	if isHeadlessService(service) {
 		if service.Spec.LoadBalancerIP != "" {
 			warnings = append(warnings, "spec.loadBalancerIP is ignored for headless services")
@@ -53,23 +59,27 @@ func GetWarningsForService(service, oldService *api.Service) []string {
 		}
 	}
 
+	// externalIPs 的格式检查。
 	for i, externalIP := range service.Spec.ExternalIPs {
 		warnings = append(warnings, utilvalidation.GetWarningsForIP(field.NewPath("spec").Child("externalIPs").Index(i), externalIP)...)
 	}
 
-	// Warn about using externalIPs
+	// 警告使用 externalIPs：该字段已弃用，部分集群可能不再支持。
 	if len(service.Spec.ExternalIPs) > 0 && !isHeadlessService(service) && service.Spec.Type != api.ServiceTypeExternalName { //nolint:staticcheck // SA1019 testing deprecated field
 		warnings = append(warnings, "spec.externalIPs is deprecated and may no longer be implemented in some clusters")
 	}
 
+	// loadBalancerIP 的格式检查。
 	if len(service.Spec.LoadBalancerIP) > 0 {
 		warnings = append(warnings, utilvalidation.GetWarningsForIP(field.NewPath("spec").Child("loadBalancerIP"), service.Spec.LoadBalancerIP)...)
 	}
 
+	// LoadBalancerSourceRanges 中每个 CIDR 的格式检查。
 	for i, cidr := range service.Spec.LoadBalancerSourceRanges {
 		warnings = append(warnings, utilvalidation.GetWarningsForCIDR(field.NewPath("spec").Child("loadBalancerSourceRanges").Index(i), cidr)...)
 	}
 
+	// type 与 IP/ExternalName 字段互相冲突时，后者会被忽略。
 	if service.Spec.Type == api.ServiceTypeExternalName && len(service.Spec.ExternalIPs) > 0 {
 		warnings = append(warnings, fmt.Sprintf("spec.externalIPs is ignored when spec.type is %q", api.ServiceTypeExternalName))
 	}
@@ -77,6 +87,7 @@ func GetWarningsForService(service, oldService *api.Service) []string {
 		warnings = append(warnings, fmt.Sprintf("spec.externalName is ignored when spec.type is not %q", api.ServiceTypeExternalName))
 	}
 
+	// PreferClose 已弃用，改用 PreferSameZone。
 	if service.Spec.TrafficDistribution != nil && *service.Spec.TrafficDistribution == api.ServiceTrafficDistributionPreferClose {
 		warnings = append(warnings, fmt.Sprintf("spec.trafficDistribution: %q is deprecated; use %q", api.ServiceTrafficDistributionPreferClose, api.ServiceTrafficDistributionPreferSameZone))
 	}
@@ -84,6 +95,8 @@ func GetWarningsForService(service, oldService *api.Service) []string {
 	return warnings
 }
 
+// isHeadlessService 判断是否为 headless 服务：
+// ClusterIP 类型且 clusterIP 为 None。
 func isHeadlessService(service *api.Service) bool {
 	return service != nil && service.Spec.Type == api.ServiceTypeClusterIP && service.Spec.ClusterIP == api.ClusterIPNone
 }

@@ -35,6 +35,10 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// TestPodLevelResourcesDefaults 验证开启 PodLevelResources 特性后，hugepages 在不同层级（Pod/容器）
+// 的请求与限制组合下，默认值填充与校验结果是否符合预期。
+// 每个用例走三条路径：直接 Pod、Deployment 模板、以及从 Deployment 模板还原的 Pod，
+// 确保默认值逻辑在嵌套场景下也一致。
 func TestPodLevelResourcesDefaults(t *testing.T) {
 	resCPU := v1.ResourceName(v1.ResourceCPU)
 	valCPU1 := resource.MustParse("1")
@@ -46,6 +50,7 @@ func TestPodLevelResourcesDefaults(t *testing.T) {
 	resHugepage1Gi := v1.ResourceName("hugepages-1Gi")
 	valHugepage1Gi := resource.MustParse("1Gi")
 
+	// R 表示 request、L 表示 limit；用例覆盖 Pod 与容器之间 hugepages 的各种组合。
 	testCases := []struct {
 		name               string
 		podResources       *v1.ResourceRequirements
@@ -275,12 +280,14 @@ func TestPodLevelResourcesDefaults(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 该特性默认可能关闭，测试中显式开启并传入对应校验选项。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, true)
 			opts := validation.PodValidationOptions{PodLevelResourcesEnabled: true}
 
-			// Step 1: Pod defaulting and validation
+			// Step 1: 独立的 Pod 经过默认值填充与校验。
 			podForPodValidation1 := makePod(tc.podResources, tc.containerResources)
 
+			// 先填默认值再转 internal：校验器只接受无版本的 core 类型。
 			corev1.SetDefaults_Pod(podForPodValidation1)
 			corev1.SetDefaults_PodSpec(&podForPodValidation1.Spec)
 
@@ -289,12 +296,13 @@ func TestPodLevelResourcesDefaults(t *testing.T) {
 				t.Fatalf("Step 1: Failed to convert v1.Pod to core.Pod: %v", err)
 			}
 
+			// 将校验结果换算成布尔值，与用例预期比较。
 			podErrs := validation.ValidatePodSpec(&internalPod.Spec, &internalPod.ObjectMeta, field.NewPath("spec"), opts)
 			if len(podErrs) > 0 != tc.expectErr {
 				t.Errorf("Step 1: Pod validation failed. expectErr=%v, got errs: %v", tc.expectErr, podErrs.ToAggregate())
 			}
 
-			// Step 2: Deployment defaulting and validation
+			// Step 2: 嵌入式场景：Deployment 的 Pod 模板经过同样的默认值与校验流程。
 			podForPodValidation2 := makePod(tc.podResources, tc.containerResources)
 			deployment := &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-deploy", Namespace: "test-ns"},
@@ -305,6 +313,7 @@ func TestPodLevelResourcesDefaults(t *testing.T) {
 				},
 			}
 
+			// Deployment 与 Pod 有各自的默认值函数，两者都要执行，顺序与 API server 一致。
 			apisapps1.SetDefaults_Deployment(deployment)
 			corev1.SetDefaults_PodSpec(&deployment.Spec.Template.Spec)
 			internalPodTemplateSpec := &core.PodTemplateSpec{}
@@ -312,12 +321,14 @@ func TestPodLevelResourcesDefaults(t *testing.T) {
 				t.Fatalf("Step 2: Failed to convert v1.PodTemplateSpec to core.PodTemplateSpec: %v", err)
 			}
 
+			// 模板有自己的校验入口，用它确认结果与普通 Pod 一致。
 			podErrs = validation.ValidatePodTemplateSpec(internalPodTemplateSpec, field.NewPath("template"), opts)
 			if len(podErrs) > 0 != tc.expectErr {
 				t.Errorf("Step 2: Pod Template validation failed. expectErr=%v, got errs: %v", tc.expectErr, podErrs.ToAggregate())
 			}
 
-			// Step 3: Validate the defaulted pod spec from the deployment
+			// Step 3: 把 Deployment 中已填过默认值的 PodSpec 再当作独立 Pod 校验，
+			// 防止默认值只在某条填充路径上生效。
 			podForPodValidation3 := &v1.Pod{
 				Spec: deployment.Spec.Template.Spec,
 			}
@@ -336,6 +347,7 @@ func TestPodLevelResourcesDefaults(t *testing.T) {
 	}
 }
 
+// makePod 根据给定的 Pod 级与容器级资源构造测试用 Pod；podResources 为 nil 时不设置 Pod 级资源。
 func makePod(podResources *v1.ResourceRequirements, containersResources []v1.ResourceRequirements) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "test-ns"},
@@ -351,6 +363,7 @@ func makePod(podResources *v1.ResourceRequirements, containersResources []v1.Res
 	return pod
 }
 
+// makeContainers 为每个资源规格生成一个命名唯一的容器，便于在错误信息中定位。
 func makeContainers(resourceRequirements []v1.ResourceRequirements) []v1.Container {
 	containers := []v1.Container{}
 	for idx, containerResources := range resourceRequirements {

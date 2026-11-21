@@ -24,11 +24,12 @@ import (
 	"k8s.io/kubernetes/pkg/apis/storage"
 )
 
+// GetWarningsForStorageClass 检查 StorageClass 的 allowedTopologies 是否引用了弃用的节点标签。
 func GetWarningsForStorageClass(sc *storage.StorageClass) []string {
 	var warnings []string
 
 	if sc != nil && sc.AllowedTopologies != nil {
-		// use of deprecated node labels in allowedTopologies's matchLabelExpressions
+		// allowedTopologies[i].matchLabelExpressions[j].key 可能使用了弃用的节点标签。
 		for i, topo := range sc.AllowedTopologies {
 			for j, expression := range topo.MatchLabelExpressions {
 				if msg, deprecated := nodeapi.GetNodeLabelDeprecatedMessage(expression.Key); deprecated {
@@ -41,6 +42,8 @@ func GetWarningsForStorageClass(sc *storage.StorageClass) []string {
 	return warnings
 }
 
+// GetWarningsForCSIStorageCapacity 检查 CSIStorageCapacity 的 nodeTopology 节点选择器，
+// 复用 node 包的通用检查逻辑。
 func GetWarningsForCSIStorageCapacity(csc *storage.CSIStorageCapacity) []string {
 	if csc != nil {
 		return nodeapi.GetWarningsForNodeSelector(csc.NodeTopology, field.NewPath("nodeTopology"))

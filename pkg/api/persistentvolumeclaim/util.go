@@ -32,19 +32,19 @@ const (
 	deprecatedStorageClassAnnotationsMsg        = `deprecated since v1.8; use "storageClassName" attribute instead`
 )
 
-// DropDisabledFields removes disabled fields from the pvc spec.
-// This should be called from PrepareForCreate/PrepareForUpdate for all resources containing a pvc spec.
+// DropDisabledFields 从 PVC spec 中移除被特性开关禁用的字段。
+// 凡是包含 PVC spec 的资源，都应在 PrepareForCreate/PrepareForUpdate 中调用它。
 func DropDisabledFields(pvcSpec, oldPVCSpec *core.PersistentVolumeClaimSpec) {
-	// Drop the contents of the volumeAttributesClassName if the VolumeAttributesClass
-	// feature gate is disabled.
+	// VolumeAttributesClass 特性关闭时清除 volumeAttributesClassName，
+	// 但如果旧对象已经在用则保留，避免更新时丢数据。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
 		if oldPVCSpec == nil || oldPVCSpec.VolumeAttributesClassName == nil {
 			pvcSpec.VolumeAttributesClassName = nil
 		}
 	}
 
-	// Drop the contents of the dataSourceRef field if the CrossNamespaceVolumeDataSource
-	// feature gate is disabled and dataSourceRef.Namespace is specified.
+	// CrossNamespaceVolumeDataSource 特性关闭时，清除带 namespace 的 dataSourceRef。
+	// 该字段是旧版 dataSource 的替代，namespace 为空时属于同命名空间引用，不受此限制。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.CrossNamespaceVolumeDataSource) &&
 		pvcSpec.DataSourceRef != nil && pvcSpec.DataSourceRef.Namespace != nil && len(*pvcSpec.DataSourceRef.Namespace) != 0 {
 		if !dataSourceRefInUse(oldPVCSpec) {
@@ -53,41 +53,33 @@ func DropDisabledFields(pvcSpec, oldPVCSpec *core.PersistentVolumeClaimSpec) {
 	}
 }
 
-// EnforceDataSourceBackwardsCompatibility drops the data source field under certain conditions
-// to maintain backwards compatibility with old behavior.
-// See KEP 1495 for details.
-// Specifically, if this is an update of a PVC with no data source, or a creation of a new PVC,
-// and the dataSourceRef field is not filled in, then we will drop "invalid" data sources
-// (anything other than a PVC or a VolumeSnapshot) from this request as if an empty PVC had
-// been requested.
-// This should be called before NormalizeDataSources, so that data sources other than PVCs
-// and VolumeSnapshots can only be set through the dataSourceRef field and not the dataSource
-// field.
+// EnforceDataSourceBackwardsCompatibility 在特定条件下清除 dataSource 字段，
+// 以维持与旧行为的向后兼容（详见 KEP 1495）。
+// 具体来说：如果这是对“无数据源 PVC”的更新或新建 PVC，且 dataSourceRef 未填写，
+// 那么请求中“无效”的数据源（非 PVC、非 VolumeSnapshot）会被当作空 PVC 一样丢弃。
+// 必须在 NormalizeDataSources 之前调用，确保非 PVC/VolumeSnapshot 的数据源只能通过
+// dataSourceRef 字段设置，而不能通过 dataSource 字段。
 func EnforceDataSourceBackwardsCompatibility(pvcSpec, oldPVCSpec *core.PersistentVolumeClaimSpec) {
-	// Check if the old PVC has a data source here is so that on updates from old clients
-	// that omit dataSourceRef, we preserve the data source, even if it would have been
-	// invalid to specify it at using the dataSource field at create.
+	// 旧 PVC 已有数据源时直接返回：老客户端更新时可能不带 dataSourceRef，
+	// 此时要保留原有数据源，即使它当初是通过已废弃的字段设置的。
 	if dataSourceInUse(oldPVCSpec) {
 		return
 	}
 
-	// Check if dataSourceRef is empty is because if it's not empty, then there is
-	// definitely a newer client and it definitely either wants to create a non-empty
-	// volume, or it wants to update a PVC that has a data source. Whether the
-	// specified data source is valid or satisfiable is a matter for validation and
-	// the volume populator code, but we can say with certainty that the client is
-	// not expecting the legacy behavior of ignoring invalid data sources.
+	// dataSourceRef 非空说明客户端是新版：它要么想创建非空卷，要么想更新带数据源的 PVC。
+	// 该数据源是否有效应由校验和 volume populator 判断，我们不能假定它期待旧行为。
 	if pvcSpec.DataSourceRef != nil {
 		return
 	}
 
-	// Historically, we only allow PVCs and VolumeSnapshots in the dataSource field.
-	// All other values are silently dropped.
+	// 历史上 dataSource 字段只允许 PVC 和 VolumeSnapshot，其他值一律静默丢弃。
 	if !dataSourceIsPvcOrSnapshot(pvcSpec.DataSource) {
 		pvcSpec.DataSource = nil
 	}
 }
 
+// DropDisabledFieldsFromStatus 从 PVC status 中移除被特性开关禁用的字段，
+// 处理逻辑与 DropDisabledFields 类似：旧对象已在用的字段要保留。
 func DropDisabledFieldsFromStatus(pvc, oldPVC *core.PersistentVolumeClaim) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
 		if oldPVC == nil || oldPVC.Status.CurrentVolumeAttributesClassName == nil {
@@ -99,6 +91,7 @@ func DropDisabledFieldsFromStatus(pvc, oldPVC *core.PersistentVolumeClaim) {
 	}
 
 	if !utilfeature.DefaultFeatureGate.Enabled(features.RecoverVolumeExpansionFailure) {
+		// 只有旧 PVC 没有记录已分配资源时才清除，防止回滚特性开关时丢失状态。
 		if !helper.ClaimContainsAllocatedResources(oldPVC) {
 			pvc.Status.AllocatedResources = nil
 		}
@@ -114,6 +107,7 @@ func DropDisabledFieldsFromStatus(pvc, oldPVC *core.PersistentVolumeClaim) {
 	}
 }
 
+// dataSourceInUse 判断旧 PVC spec 中是否已经设置了任一数据源字段。
 func dataSourceInUse(oldPVCSpec *core.PersistentVolumeClaimSpec) bool {
 	if oldPVCSpec == nil {
 		return false
@@ -124,6 +118,9 @@ func dataSourceInUse(oldPVCSpec *core.PersistentVolumeClaimSpec) bool {
 	return false
 }
 
+// dataSourceIsPvcOrSnapshot 判断数据源是否是传统允许的两种类型：
+// 核心组的 PVC，或 snapshot.storage.k8s.io 组的 VolumeSnapshot。
+// APIGroup 为 nil 表示核心组，等同于空字符串。
 func dataSourceIsPvcOrSnapshot(dataSource *core.TypedLocalObjectReference) bool {
 	if dataSource != nil {
 		apiGroup := ""
@@ -142,6 +139,7 @@ func dataSourceIsPvcOrSnapshot(dataSource *core.TypedLocalObjectReference) bool 
 	return false
 }
 
+// dataSourceRefInUse 判断旧 PVC spec 中是否已经设置了 dataSourceRef。
 func dataSourceRefInUse(oldPVCSpec *core.PersistentVolumeClaimSpec) bool {
 	if oldPVCSpec == nil {
 		return false
@@ -152,12 +150,12 @@ func dataSourceRefInUse(oldPVCSpec *core.PersistentVolumeClaimSpec) bool {
 	return false
 }
 
-// NormalizeDataSources ensures that DataSource and DataSourceRef have the same contents
-// as long as both are not explicitly set.
-// This should be used by creates/gets of PVCs, but not updates
+// NormalizeDataSources 在 DataSource 与 DataSourceRef 只有一个被显式设置时，
+// 让两者内容保持一致（互相同步）。
+// 用于 PVC 的创建和读取路径，不用于更新路径。
 func NormalizeDataSources(pvcSpec *core.PersistentVolumeClaimSpec) {
 	if pvcSpec.DataSource != nil && pvcSpec.DataSourceRef == nil {
-		// Using the old way of setting a data source
+		// 老式写法：只设置了 dataSource，补出对应的 dataSourceRef。
 		pvcSpec.DataSourceRef = &core.TypedObjectReference{
 			Kind: pvcSpec.DataSource.Kind,
 			Name: pvcSpec.DataSource.Name,
@@ -167,8 +165,9 @@ func NormalizeDataSources(pvcSpec *core.PersistentVolumeClaimSpec) {
 			pvcSpec.DataSourceRef.APIGroup = &apiGroup
 		}
 	} else if pvcSpec.DataSourceRef != nil && pvcSpec.DataSource == nil {
+		// 新式写法：只有 dataSourceRef 且没有 namespace（同命名空间引用），补出 dataSource。
+		// 跨命名空间的 dataSourceRef 不能映射到本地的 dataSource 字段。
 		if pvcSpec.DataSourceRef.Namespace == nil || len(*pvcSpec.DataSourceRef.Namespace) == 0 {
-			// Using the new way of setting a data source
 			pvcSpec.DataSource = &core.TypedLocalObjectReference{
 				Kind: pvcSpec.DataSourceRef.Kind,
 				Name: pvcSpec.DataSourceRef.Name,
@@ -181,6 +180,7 @@ func NormalizeDataSources(pvcSpec *core.PersistentVolumeClaimSpec) {
 	}
 }
 
+// GetWarningsForPersistentVolumeClaim 为 PVC 对象生成警告信息。
 func GetWarningsForPersistentVolumeClaim(pv *core.PersistentVolumeClaim) []string {
 	var warnings []string
 
@@ -188,6 +188,7 @@ func GetWarningsForPersistentVolumeClaim(pv *core.PersistentVolumeClaim) []strin
 		return nil
 	}
 
+	// beta storage class 注解已由 spec.storageClassName 取代。
 	if _, ok := pv.ObjectMeta.Annotations[core.BetaStorageClassAnnotation]; ok {
 		warnings = append(warnings,
 			fmt.Sprintf(
@@ -203,9 +204,12 @@ func GetWarningsForPersistentVolumeClaim(pv *core.PersistentVolumeClaim) []strin
 	return warnings
 }
 
+// GetWarningsForPersistentVolumeClaimSpec 检查 PVC spec 中 storage 的请求值和限制值。
+// 存储容量必须是整数字节，小数（毫字节）值无效。
 func GetWarningsForPersistentVolumeClaimSpec(fieldPath *field.Path, pvSpec core.PersistentVolumeClaimSpec) []string {
 
 	var warnings []string
+	// Quantity 内部以毫为单位保存，对 1000 取余可检测出小数字节。
 	requestValue := pvSpec.Resources.Requests[core.ResourceStorage]
 	if requestValue.MilliValue()%int64(1000) != int64(0) {
 		warnings = append(warnings, fmt.Sprintf(

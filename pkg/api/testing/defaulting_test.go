@@ -35,6 +35,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 )
 
+// orderedGroupVersionKinds 让 GVK 可按字符串排序，使测试执行顺序稳定、失败输出可复现。
 type orderedGroupVersionKinds []schema.GroupVersionKind
 
 func (o orderedGroupVersionKinds) Len() int      { return len(o) }
@@ -44,8 +45,10 @@ func (o orderedGroupVersionKinds) Less(i, j int) bool {
 }
 
 // TODO: add a reflexive test that verifies that all SetDefaults functions are registered
+// TestDefaulting 验证哪些类型会在 fuzz 后触发默认值设置。
+// 对 fuzz 出的对象调用 scheme.Default，检查结果是否与预期“会/不会”发生默认值变化。
 func TestDefaulting(t *testing.T) {
-	// these are the known types with defaulters - you must add to this list if you add a top level defaulter
+	// 这些是已知带 defaulter 的类型；新增顶层 defaulter 时必须同步更新此列表。
 	typesWithDefaulting := map[schema.GroupVersionKind]struct{}{
 		{Group: "", Version: "v1", Kind: "ConfigMap"}:                                                              {},
 		{Group: "", Version: "v1", Kind: "ConfigMapList"}:                                                          {},
@@ -248,52 +251,55 @@ func TestDefaulting(t *testing.T) {
 	scheme := legacyscheme.Scheme
 	var testTypes orderedGroupVersionKinds
 	for gvk := range scheme.AllKnownTypes() {
+		// 内部版本不参与默认值测试，只检查对外的带版本类型。
 		if gvk.Version == runtime.APIVersionInternal {
 			continue
 		}
 		testTypes = append(testTypes, gvk)
 	}
+	// 排序保证子测试执行顺序确定，便于定位失败。
 	sort.Sort(testTypes)
 
 	for _, gvk := range testTypes {
 		t.Run(gvk.String(), func(t *testing.T) {
-			// Each sub-tests gets its own fuzzer instance to make running it independent
-			// from what other tests ran before.
+			// 每个子测试使用独立的 fuzzer 实例，避免受其他测试执行顺序的影响。
 			f := randfill.New().NilChance(.5).NumElements(1, 1).RandSource(rand.NewSource(1))
 			f.Funcs(
+				// RawExtension 不走通用 fuzz，否则会生成无法序列化的随机字节。
 				func(s *runtime.RawExtension, c randfill.Continue) {},
 				func(s *metav1.LabelSelector, c randfill.Continue) {
 					c.FillNoCustom(s)
-					s.MatchExpressions = nil // need to fuzz this specially
+					s.MatchExpressions = nil // 这部分需要专门构造 fuzz 数据
 				},
 				func(s *metav1.ListOptions, c randfill.Continue) {
 					c.FillNoCustom(s)
-					s.LabelSelector = "" // need to fuzz requirement strings specially
-					s.FieldSelector = "" // need to fuzz requirement strings specially
+					s.LabelSelector = "" // 选择器字符串需要专门 fuzz
+					s.FieldSelector = "" // 选择器字符串需要专门 fuzz
 				},
 				func(s *extensionsv1beta1.ScaleStatus, c randfill.Continue) {
 					c.FillNoCustom(s)
-					s.TargetSelector = "" // need to fuzz requirement strings specially
+					s.TargetSelector = "" // 选择器字符串需要专门 fuzz
 				},
-				// Custom fuzzer functions for admissionregistration.k8s.io/v1 types
+				// admissionregistration.k8s.io/v1 类型的自定义 fuzz 函数：
+				// 把这些字段置空，确保能触发对应的默认值填充。
 				func(s *admissionregistrationv1.MutatingAdmissionPolicySpec, c randfill.Continue) {
 					c.FillNoCustom(s)
-					s.FailurePolicy = nil     // Ensure FailurePolicy is nil to trigger defaulting
-					s.ReinvocationPolicy = "" // Ensure ReinvocationPolicy is empty to trigger defaulting
+					s.FailurePolicy = nil     // 置空以触发默认值
+					s.ReinvocationPolicy = "" // 置空以触发默认值
 				},
 				func(s *admissionregistrationv1.ValidatingAdmissionPolicySpec, c randfill.Continue) {
 					c.FillNoCustom(s)
-					s.FailurePolicy = nil // Ensure FailurePolicy is nil to trigger defaulting
+					s.FailurePolicy = nil // 置空以触发默认值
 				},
 				func(s *admissionregistrationv1.MatchResources, c randfill.Continue) {
 					c.FillNoCustom(s)
-					s.MatchPolicy = nil       // Ensure MatchPolicy is nil to trigger defaulting
-					s.NamespaceSelector = nil // Ensure NamespaceSelector is nil to trigger defaulting
-					s.ObjectSelector = nil    // Ensure ObjectSelector is nil to trigger defaulting
+					s.MatchPolicy = nil       // 置空以触发默认值
+					s.NamespaceSelector = nil // 置空以触发默认值
+					s.ObjectSelector = nil    // 置空以触发默认值
 				},
 				func(s *admissionregistrationv1.Rule, c randfill.Continue) {
 					c.FillNoCustom(s)
-					s.Scope = nil // Ensure Scope is nil to trigger defaulting
+					s.Scope = nil // 置空以触发默认值
 				},
 			)
 
@@ -305,16 +311,15 @@ func TestDefaulting(t *testing.T) {
 					if !expectedChanged || changedOnce {
 						break
 					}
-					// This uses to be 300, but for ResourceClaimList that was not high enough
-					// because depending on the starting conditions, the fuzzer never created the
-					// one combination where defaulting kicked in (empty string in non-empty slice
-					// in another non-empty slice).
+					// 早期上限是 300，但对 ResourceClaimList 不够：受初始条件影响，
+					// fuzzer 可能迟迟生成不出触发默认值的组合（非空切片中的空字符串
+					// 嵌套在另一个非空切片里）。
 					if iter > 3000 {
 						t.Errorf("expected %s to trigger defaulting due to fuzzing", gvk)
 						break
 					}
-					// if we expected defaulting, continue looping until the fuzzer gives us one
-					// at worst, we will timeout
+					// 预期会触发默认值的类型，继续循环直到 fuzzer 生成符合条件的对象；
+					// 最坏情况下由上面的上限兜底报错。
 				}
 				iter++
 
@@ -324,20 +329,23 @@ func TestDefaulting(t *testing.T) {
 				}
 				f.Fill(src)
 
+				// 清空 GVK：默认值测试只关心字段变化，类型元信息会干扰比较。
 				src.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{})
 
 				original := src.DeepCopyObject()
 
-				// get internal
+				// 在副本上调用 Default，与原始对象对比即可看出默认值是否生效。
 				withDefaults := src.DeepCopyObject()
 				scheme.Default(withDefaults)
 
 				if !reflect.DeepEqual(original, withDefaults) {
 					diff := cmp.Diff(original, withDefaults)
+					// 只记录第一次差异，避免多次触发时刷屏。
 					if !changedOnce {
 						t.Logf("got diff (-fuzzed, +with defaults):\n%s", diff)
 						changedOnce = true
 					}
+					// 未列入白名单的类型不应发生变化，否则说明多注册了 defaulter 或列表需要更新。
 					if !expectedChanged {
 						t.Errorf("{Group: \"%s\", Version: \"%s\", Kind: \"%s\"} did not expect defaults to be set - update expected or check defaulter registering: %s", gvk.Group, gvk.Version, gvk.Kind, diff)
 					}
@@ -348,6 +356,8 @@ func TestDefaulting(t *testing.T) {
 
 }
 
+// BenchmarkPodDefaulting 测量对 fuzz 出的 Pod 执行默认值填充的开销。
+// 预生成 100 个对象循环复用，计时只覆盖 Default 调用。
 func BenchmarkPodDefaulting(b *testing.B) {
 	f := randfill.New().NilChance(.5).NumElements(1, 1).RandSource(rand.NewSource(1))
 	items := make([]apiv1.Pod, 100)

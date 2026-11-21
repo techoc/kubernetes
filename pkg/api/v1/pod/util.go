@@ -26,49 +26,49 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// ContainerType signifies container type
+// ContainerType 表示容器类型，用位掩码表示，便于组合成可同时匹配的容器集合。
 type ContainerType int
 
 const (
-	// Containers is for normal containers
+	// Containers 表示普通容器。
 	Containers ContainerType = 1 << iota
-	// InitContainers is for init containers
+	// InitContainers 表示初始化容器。
 	InitContainers
-	// EphemeralContainers is for ephemeral containers
+	// EphemeralContainers 表示临时容器。
 	EphemeralContainers
 )
 
-// AllContainers specifies that all containers be visited
+// AllContainers 指定访问所有类型的容器。
 const AllContainers ContainerType = InitContainers | Containers | EphemeralContainers
 
-// AllFeatureEnabledContainers returns a ContainerType mask which includes all container
-// types except for the ones guarded by feature gate.
+// AllFeatureEnabledContainers 返回包含所有不受特性开关保护的容器类型的 ContainerType 掩码。
+// 当前所有容器类型均已默认启用，因此直接返回 AllContainers；保留函数是为了让调用方
+// 不必关心哪些类型受开关保护。
 func AllFeatureEnabledContainers() ContainerType {
 	return AllContainers
 }
 
-// ContainerVisitor is called with each container spec, and returns true
-// if visiting should continue.
+// ContainerVisitor 在每个容器 spec 上被调用，返回值表示是否继续访问后续容器。
 type ContainerVisitor func(container *v1.Container, containerType ContainerType) (shouldContinue bool)
 
-// Visitor is called with each object name, and returns true if visiting should continue
+// Visitor 在每个对象名称上被调用，返回值表示是否继续访问后续名称。
 type Visitor func(name string) (shouldContinue bool)
 
+// skipEmptyNames 包装 visitor，过滤掉空名称。
+// 空引用在 spec 中允许存在（如未指定的 secret 名），不应触发依赖方的误判。
 func skipEmptyNames(visitor Visitor) Visitor {
 	return func(name string) bool {
 		if len(name) == 0 {
-			// continue visiting
+			// 跳过空名称，继续访问。
 			return true
 		}
-		// delegate to visitor
+		// 交给真正的 visitor 处理。
 		return visitor(name)
 	}
 }
 
-// VisitContainers invokes the visitor function with a pointer to every container
-// spec in the given pod spec with type set in mask. If visitor returns false,
-// visiting is short-circuited. VisitContainers returns true if visiting completes,
-// false if visiting was short-circuited.
+// VisitContainers 用 mask 指定的容器类型过滤，对给定 pod spec 中的每个容器调用 visitor。
+// 若 visitor 返回 false，则提前终止遍历。全部访问完成返回 true，被提前终止返回 false。
 func VisitContainers(podSpec *v1.PodSpec, mask ContainerType, visitor ContainerVisitor) bool {
 	for c, t := range ContainerIter(podSpec, mask) {
 		if !visitor(c, t) {
@@ -78,8 +78,9 @@ func VisitContainers(podSpec *v1.PodSpec, mask ContainerType, visitor ContainerV
 	return true
 }
 
-// ContainerIter returns an iterator over all containers in the given pod spec with a masked type.
-// The iteration order is InitContainers, then main Containers, then EphemeralContainers.
+// ContainerIter 返回一个迭代器，遍历给定 pod spec 中类型被 mask 选中的所有容器。
+// 遍历顺序固定为 InitContainers、普通 Containers，最后是 EphemeralContainers，
+// 保证依赖该顺序的逻辑行为稳定。
 func ContainerIter(podSpec *v1.PodSpec, mask ContainerType) iter.Seq2[*v1.Container, ContainerType] {
 	return func(yield func(*v1.Container, ContainerType) bool) {
 		if mask&InitContainers != 0 {
@@ -97,6 +98,7 @@ func ContainerIter(podSpec *v1.PodSpec, mask ContainerType) iter.Seq2[*v1.Contai
 			}
 		}
 		if mask&EphemeralContainers != 0 {
+			// 临时容器结构体嵌在 EphemeralContainerCommon 里，这里做指针转换以复用同一个 visitor。
 			for i := range podSpec.EphemeralContainers {
 				if !yield((*v1.Container)(&podSpec.EphemeralContainers[i].EphemeralContainerCommon), EphemeralContainers) {
 					return
@@ -106,11 +108,11 @@ func ContainerIter(podSpec *v1.PodSpec, mask ContainerType) iter.Seq2[*v1.Contai
 	}
 }
 
-// VisitPodSecretNames invokes the visitor function with the name of every secret
-// referenced by the pod spec. If visitor returns false, visiting is short-circuited.
-// Transitive references (e.g. pod -> pvc -> pv -> secret) are not visited.
-// Returns true if visiting completed, false if visiting was short-circuited.
+// VisitPodSecretNames 对 pod spec 引用的每个 secret 名称调用 visitor。
+// 若 visitor 返回 false，则提前终止遍历。不递归访问传递引用（如 pod -> pvc -> pv -> secret）。
+// 全部访问完成返回 true，被提前终止返回 false。
 func VisitPodSecretNames(pod *v1.Pod, visitor Visitor) bool {
+	// 先过滤空名称，避免镜像拉取密钥等字段为空时产生无意义的回调。
 	visitor = skipEmptyNames(visitor)
 	for _, reference := range pod.Spec.ImagePullSecrets {
 		if !visitor(reference.Name) {
@@ -142,6 +144,7 @@ func VisitPodSecretNames(pod *v1.Pod, visitor Visitor) bool {
 				return false
 			}
 		case source.Projected != nil:
+			// Projected 卷可同时挂载多个来源，需逐个检查其中的 secret。
 			for j := range source.Projected.Sources {
 				if source.Projected.Sources[j].Secret != nil {
 					if !visitor(source.Projected.Sources[j].Secret.Name) {
@@ -170,6 +173,7 @@ func VisitPodSecretNames(pod *v1.Pod, visitor Visitor) bool {
 				return false
 			}
 		case source.CSI != nil:
+			// CSI 只关心节点发布阶段的密钥，其他阶段的引用由驱动自行处理。
 			if source.CSI.NodePublishSecretRef != nil && !visitor(source.CSI.NodePublishSecretRef.Name) {
 				return false
 			}
@@ -178,7 +182,8 @@ func VisitPodSecretNames(pod *v1.Pod, visitor Visitor) bool {
 	return true
 }
 
-// visitContainerSecretNames returns true unless the visitor returned false when invoked with a secret reference
+// visitContainerSecretNames 访问容器通过 envFrom 和 env.valueFrom 引用的 secret 名称，
+// 仅当 visitor 返回 false 时才返回 false。
 func visitContainerSecretNames(container *v1.Container, visitor Visitor) bool {
 	for _, env := range container.EnvFrom {
 		if env.SecretRef != nil {
@@ -188,6 +193,7 @@ func visitContainerSecretNames(container *v1.Container, visitor Visitor) bool {
 		}
 	}
 	for _, envVar := range container.Env {
+		// 只有 valueFrom 形式的 secret 引用才是间接引用，直接写死的 value 不涉及 secret。
 		if envVar.ValueFrom != nil && envVar.ValueFrom.SecretKeyRef != nil {
 			if !visitor(envVar.ValueFrom.SecretKeyRef.Name) {
 				return false
@@ -197,10 +203,9 @@ func visitContainerSecretNames(container *v1.Container, visitor Visitor) bool {
 	return true
 }
 
-// VisitPodConfigmapNames invokes the visitor function with the name of every configmap
-// referenced by the pod spec. If visitor returns false, visiting is short-circuited.
-// Transitive references (e.g. pod -> pvc -> pv -> secret) are not visited.
-// Returns true if visiting completed, false if visiting was short-circuited.
+// VisitPodConfigmapNames 对 pod spec 引用的每个 configmap 名称调用 visitor。
+// 若 visitor 返回 false，则提前终止遍历。不递归访问传递引用（如 pod -> pvc -> pv -> secret）。
+// 全部访问完成返回 true，被提前终止返回 false。
 func VisitPodConfigmapNames(pod *v1.Pod, visitor Visitor) bool {
 	visitor = skipEmptyNames(visitor)
 	VisitContainers(&pod.Spec, AllContainers, func(c *v1.Container, containerType ContainerType) bool {
@@ -211,6 +216,7 @@ func VisitPodConfigmapNames(pod *v1.Pod, visitor Visitor) bool {
 		source = &pod.Spec.Volumes[i].VolumeSource
 		switch {
 		case source.Projected != nil:
+			// Projected 卷可同时挂载多个来源，需逐个检查其中的 configmap。
 			for j := range source.Projected.Sources {
 				if source.Projected.Sources[j].ConfigMap != nil {
 					if !visitor(source.Projected.Sources[j].ConfigMap.Name) {
@@ -227,7 +233,8 @@ func VisitPodConfigmapNames(pod *v1.Pod, visitor Visitor) bool {
 	return true
 }
 
-// visitContainerConfigmapNames returns true unless the visitor returned false when invoked with a configmap reference
+// visitContainerConfigmapNames 访问容器通过 envFrom 和 env.valueFrom 引用的 configmap 名称，
+// 仅当 visitor 返回 false 时才返回 false。
 func visitContainerConfigmapNames(container *v1.Container, visitor Visitor) bool {
 	for _, env := range container.EnvFrom {
 		if env.ConfigMapRef != nil {
@@ -246,8 +253,8 @@ func visitContainerConfigmapNames(container *v1.Container, visitor Visitor) bool
 	return true
 }
 
-// GetContainerStatus extracts the status of container "name" from "statuses".
-// It returns true if "name" exists, else returns false.
+// GetContainerStatus 从 statuses 中提取名为 name 的容器状态。
+// 找到返回对应状态及 true，否则返回零值和 false。
 func GetContainerStatus(statuses []v1.ContainerStatus, name string) (v1.ContainerStatus, bool) {
 	for i := range statuses {
 		if statuses[i].Name == name {
@@ -257,15 +264,15 @@ func GetContainerStatus(statuses []v1.ContainerStatus, name string) (v1.Containe
 	return v1.ContainerStatus{}, false
 }
 
-// GetExistingContainerStatus extracts the status of container "name" from "statuses",
-// It also returns if "name" exists.
+// GetExistingContainerStatus 从 statuses 中提取名为 name 的容器状态，不关心其是否存在。
+// 不存在时返回零值状态，调用方无需处理第二个返回值。
 func GetExistingContainerStatus(statuses []v1.ContainerStatus, name string) v1.ContainerStatus {
 	status, _ := GetContainerStatus(statuses, name)
 	return status
 }
 
-// GetIndexOfContainerStatus gets the index of status of container "name" from "statuses",
-// It returns (index, true) if "name" exists, else returns (0, false).
+// GetIndexOfContainerStatus 从 statuses 中获取名为 name 的容器状态的下标。
+// 找到返回 (下标, true)，否则返回 (0, false)。
 func GetIndexOfContainerStatus(statuses []v1.ContainerStatus, name string) (int, bool) {
 	for i := range statuses {
 		if statuses[i].Name == name {
@@ -275,11 +282,9 @@ func GetIndexOfContainerStatus(statuses []v1.ContainerStatus, name string) (int,
 	return 0, false
 }
 
-// IsPodAvailable returns true if a pod is available; false otherwise.
-// Precondition for an available pod is that it must be ready. On top
-// of that, there are two cases when a pod can be considered available:
-// 1. minReadySeconds == 0, or
-// 2. LastTransitionTime (is set) + minReadySeconds <= current time
+// IsPodAvailable 判断 pod 是否可用，可用需满足两个条件：pod 必须 Ready，且
+// 在此基础上满足以下之一：1. minReadySeconds == 0；
+// 2. Ready 条件的 LastTransitionTime（若已设置）+ minReadySeconds <= 当前时间。
 func IsPodAvailable(pod *v1.Pod, minReadySeconds int32, now metav1.Time) bool {
 	if !IsPodReady(pod) {
 		return false
@@ -287,55 +292,54 @@ func IsPodAvailable(pod *v1.Pod, minReadySeconds int32, now metav1.Time) bool {
 
 	c := GetPodReadyCondition(pod.Status)
 	minReadySecondsDuration := time.Duration(minReadySeconds) * time.Second
+	// LastTransitionTime 为零表示从未就绪过，此时不能仅凭 Ready 就认定稳定可用。
 	if minReadySeconds == 0 || (!c.LastTransitionTime.IsZero() && c.LastTransitionTime.Add(minReadySecondsDuration).Compare(now.Time) <= 0) {
 		return true
 	}
 	return false
 }
 
-// IsPodReady returns true if a pod is ready; false otherwise.
+// IsPodReady 判断 pod 是否处于 Ready 状态。
 func IsPodReady(pod *v1.Pod) bool {
 	return IsPodReadyConditionTrue(pod.Status)
 }
 
-// IsPodTerminal returns true if a pod is terminal, all containers are stopped and cannot ever regress.
+// IsPodTerminal 判断 pod 是否处于终态：所有容器都已停止且状态不会再回退。
 func IsPodTerminal(pod *v1.Pod) bool {
 	return IsPodPhaseTerminal(pod.Status.Phase)
 }
 
-// IsPodPhaseTerminal returns true if the pod's phase is terminal.
+// IsPodPhaseTerminal 判断给定的 pod phase 是否为终态。
 func IsPodPhaseTerminal(phase v1.PodPhase) bool {
 	return phase == v1.PodFailed || phase == v1.PodSucceeded
 }
 
-// IsPodReadyConditionTrue returns true if a pod is ready; false otherwise.
+// IsPodReadyConditionTrue 判断给定状态中的 PodReady 条件是否为 True。
 func IsPodReadyConditionTrue(status v1.PodStatus) bool {
 	condition := GetPodReadyCondition(status)
 	return condition != nil && condition.Status == v1.ConditionTrue
 }
 
-// IsContainersReadyConditionTrue returns true if a pod is ready; false otherwise.
+// IsContainersReadyConditionTrue 判断给定状态中的 ContainersReady 条件是否为 True。
 func IsContainersReadyConditionTrue(status v1.PodStatus) bool {
 	condition := GetContainersReadyCondition(status)
 	return condition != nil && condition.Status == v1.ConditionTrue
 }
 
-// GetPodReadyCondition extracts the pod ready condition from the given status and returns that.
-// Returns nil if the condition is not present.
+// GetPodReadyCondition 从给定状态中提取 PodReady 条件，不存在时返回 nil。
 func GetPodReadyCondition(status v1.PodStatus) *v1.PodCondition {
 	_, condition := GetPodCondition(&status, v1.PodReady)
 	return condition
 }
 
-// GetContainersReadyCondition extracts the containers ready condition from the given status and returns that.
-// Returns nil if the condition is not present.
+// GetContainersReadyCondition 从给定状态中提取 ContainersReady 条件，不存在时返回 nil。
 func GetContainersReadyCondition(status v1.PodStatus) *v1.PodCondition {
 	_, condition := GetPodCondition(&status, v1.ContainersReady)
 	return condition
 }
 
-// GetPodCondition extracts the provided condition from the given status and returns that.
-// Returns nil and -1 if the condition is not present, and the index of the located condition.
+// GetPodCondition 从给定状态中提取指定类型的条件，返回其下标和条件指针。
+// 条件不存在时返回 -1 和 nil。
 func GetPodCondition(status *v1.PodStatus, conditionType v1.PodConditionType) (int, *v1.PodCondition) {
 	if status == nil {
 		return -1, nil
@@ -343,8 +347,8 @@ func GetPodCondition(status *v1.PodStatus, conditionType v1.PodConditionType) (i
 	return GetPodConditionFromList(status.Conditions, conditionType)
 }
 
-// GetPodConditionFromList extracts the provided condition from the given list of condition and
-// returns the index of the condition and the condition. Returns -1 and nil if the condition is not present.
+// GetPodConditionFromList 从条件列表中提取指定类型的条件，返回其下标和条件指针。
+// 条件不存在时返回 -1 和 nil。
 func GetPodConditionFromList(conditions []v1.PodCondition, conditionType v1.PodConditionType) (int, *v1.PodCondition) {
 	if conditions == nil {
 		return -1, nil
@@ -357,20 +361,19 @@ func GetPodConditionFromList(conditions []v1.PodCondition, conditionType v1.PodC
 	return -1, nil
 }
 
-// UpdatePodCondition updates existing pod condition or creates a new one. Sets LastTransitionTime to now if the
-// status has changed.
-// Returns true if pod condition has changed or has been added.
+// UpdatePodCondition 更新已有的 pod 条件或新增一个条件。状态发生变化时把 LastTransitionTime 设为当前时间。
+// 条件发生变更或新增时返回 true。
 func UpdatePodCondition(status *v1.PodStatus, condition *v1.PodCondition) bool {
 	condition.LastTransitionTime = metav1.Now()
-	// Try to find this pod condition.
+	// 先查找同类型的已有条件，决定是新增还是更新。
 	conditionIndex, oldCondition := GetPodCondition(status, condition.Type)
 
 	if oldCondition == nil {
-		// We are adding new pod condition.
+		// 新条件直接追加。
 		status.Conditions = append(status.Conditions, *condition)
 		return true
 	}
-	// We are updating an existing condition, so we need to check if it has changed.
+	// 状态未变时沿用旧的转换时间，避免仅因为重新上报就刷新时间、扰乱事件语义。
 	if condition.Status == oldCondition.Status {
 		condition.LastTransitionTime = oldCondition.LastTransitionTime
 	}
@@ -382,13 +385,12 @@ func UpdatePodCondition(status *v1.PodStatus, condition *v1.PodCondition) bool {
 		condition.LastTransitionTime.Equal(&oldCondition.LastTransitionTime)
 
 	status.Conditions[conditionIndex] = *condition
-	// Return true if one of the fields have changed.
+	// 只要任一字段变化就认为条件发生变更。
 	return !isEqual
 }
 
-// IsRestartableInitContainer returns true if the container has ContainerRestartPolicyAlways.
-// This function is not checking if the container passed to it is indeed an init container.
-// It is just checking if the container restart policy has been set to always.
+// IsRestartableInitContainer 判断容器是否设置了 ContainerRestartPolicyAlways。
+// 本函数不校验传入的是否确实是 init 容器，只看重启策略字段本身。
 func IsRestartableInitContainer(initContainer *v1.Container) bool {
 	if initContainer == nil || initContainer.RestartPolicy == nil {
 		return false
@@ -396,12 +398,12 @@ func IsRestartableInitContainer(initContainer *v1.Container) bool {
 	return *initContainer.RestartPolicy == v1.ContainerRestartPolicyAlways
 }
 
-// IsContainerRestartable returns true if the container can be restarted. A container can be
-// restarted if it has a pod-level restart policy "Always" or "OnFailure" and not override by
-// container-level restart policy, or a container-level restart policy "Always" or "OnFailure",
-// or a container level restart rule with action "Restart".
+// IsContainerRestartable 判断容器是否可重启。满足以下任一条件即可重启：
+// pod 级重启策略为 Always 或 OnFailure 且未被容器级策略覆盖；容器级重启策略为 Always 或 OnFailure；
+// 或者容器级重启规则中存在动作为 Restart 的规则。
 func IsContainerRestartable(pod v1.PodSpec, container v1.Container) bool {
 	if container.RestartPolicy != nil {
+		// 显式规则优先于容器级重启策略，命中 Restart 即认为可重启。
 		for _, rule := range container.RestartPolicyRules {
 			if rule.Action == v1.ContainerRestartRuleActionRestart {
 				return true
@@ -409,13 +411,13 @@ func IsContainerRestartable(pod v1.PodSpec, container v1.Container) bool {
 		}
 		return *container.RestartPolicy != v1.ContainerRestartPolicyNever
 	}
+	// 未设置容器级策略时回落到 pod 级策略。
 	return pod.RestartPolicy != v1.RestartPolicyNever
 }
 
-// ContainerShouldRestart checks if a container should be restarted by its restart policy.
-// First, the container-level restartPolicyRules are evaluated in order. An action is taken if any
-// rules are matched. Second, the container-level restart policy is used. Lastly, if no container
-// level policy are specified, pod-level restart policy is used.
+// ContainerShouldRestart 根据重启策略判断容器是否应重启。
+// 先按顺序匹配容器级的 restartPolicyRules，命中任一规则即采取对应动作；再使用容器级重启策略；
+// 最后在未指定容器级策略时回落到 pod 级策略。
 func ContainerShouldRestart(container v1.Container, pod v1.PodSpec, exitCode int32) bool {
 	if container.RestartPolicy != nil {
 		rule, ok := FindMatchingContainerRestartRule(container, exitCode)
@@ -424,16 +426,17 @@ func ContainerShouldRestart(container v1.Container, pod v1.PodSpec, exitCode int
 			case v1.ContainerRestartRuleActionRestart:
 				return true
 			case v1.ContainerRestartRuleActionRestartAllContainers:
+				// 该动作依赖特性开关，未开启时按容器级策略处理。
 				if utilfeature.DefaultFeatureGate.Enabled(features.RestartAllContainersOnContainerExits) {
 					return true
 				}
-				// If feature is not enabled, fallback to container-level policy.
+				// 特性未启用，回落到容器级策略。
 			default:
-				// Do nothing, fallback to container-level restart policy.
+				// 未知动作不做处理，回落到容器级重启策略。
 			}
 		}
 
-		// Check container-level restart policy if no rules matched.
+		// 没有规则命中时才检查容器级重启策略。
 		switch *container.RestartPolicy {
 		case v1.ContainerRestartPolicyAlways:
 			return true
@@ -442,7 +445,7 @@ func ContainerShouldRestart(container v1.Container, pod v1.PodSpec, exitCode int
 		case v1.ContainerRestartPolicyNever:
 			return false
 		default:
-			// Do nothing, fallback to pod-level restart policy.
+			// 未知策略不做处理，回落到 pod 级策略。
 		}
 	}
 
@@ -454,14 +457,13 @@ func ContainerShouldRestart(container v1.Container, pod v1.PodSpec, exitCode int
 	case v1.RestartPolicyNever:
 		return false
 	default:
-		// Default policy is Always, so we return true here.
+		// 未指定时默认策略为 Always，因此返回 true。
 		return true
 	}
 }
 
-// FindMatchingContainerRestartRule returns a rule and true if the exitCode matched
-// one of the restart rules for the given container. Returns and empty rule and
-// false if no rules matched.
+// FindMatchingContainerRestartRule 若 exitCode 命中给定容器的某条重启规则，
+// 返回该规则和 true；没有规则命中时返回空规则和 false。
 func FindMatchingContainerRestartRule(container v1.Container, exitCode int32) (rule v1.ContainerRestartRule, found bool) {
 	for _, rule := range container.RestartPolicyRules {
 		if rule.ExitCodes != nil {
@@ -481,16 +483,15 @@ func FindMatchingContainerRestartRule(container v1.Container, exitCode int32) (r
 					return rule, true
 				}
 			default:
-				// Do nothing, continue to the next rule.
+				// 未知操作符不做处理，继续检查下一条规则。
 			}
 		}
 	}
 	return v1.ContainerRestartRule{}, false
 }
 
-// AllContainersCouldRestart returns true if all containers could be restarted
-// for the given pod. This is true if any container has a RestartAllContainers
-// action.
+// AllContainersCouldRestart 判断给定 pod 中的所有容器是否都有可能触发全体容器重启。
+// 只要任一容器配置了 RestartAllContainers 动作即返回 true。
 func AllContainersCouldRestart(pod *v1.PodSpec) bool {
 	if pod == nil {
 		return false
@@ -512,12 +513,10 @@ func AllContainersCouldRestart(pod *v1.PodSpec) bool {
 	return false
 }
 
-// CalculatePodStatusObservedGeneration calculates the observedGeneration for the pod status.
-// This is used to track the generation of the pod that was observed by the kubelet.
-// The observedGeneration is set to the pod's generation when the feature gate
-// PodObservedGenerationTracking is enabled OR if status.observedGeneration is already set.
-// This protects against an infinite loop of kubelet trying to clear the value after the FG is turned off, and
-// the API server preserving existing values when an incoming update tries to clear it.
+// CalculatePodStatusObservedGeneration 计算 pod status 的 observedGeneration，用于记录 kubelet
+// 实际观察到的 pod generation。当特性开关 PodObservedGenerationTracking 开启，或
+// status.observedGeneration 已有值时，取 pod 的 generation。
+// 这样可避免死循环：开关关闭后 kubelet 试图清空该值，而 API server 又在更新中保留原值。
 func CalculatePodStatusObservedGeneration(pod *v1.Pod) int64 {
 	if pod.Status.ObservedGeneration != 0 || utilfeature.DefaultFeatureGate.Enabled(features.PodObservedGenerationTracking) {
 		return pod.Generation
@@ -525,11 +524,10 @@ func CalculatePodStatusObservedGeneration(pod *v1.Pod) int64 {
 	return 0
 }
 
-// CalculatePodConditionObservedGeneration calculates the observedGeneration for a particular pod condition.
-// The observedGeneration is set to the pod's generation when the feature gate
-// PodObservedGenerationTracking is enabled OR if condition[].observedGeneration is already set.
-// This protects against an infinite loop of kubelet trying to clear the value after the FG is turned off, and
-// the API server preserving existing values when an incoming update tries to clear it.
+// CalculatePodConditionObservedGeneration 计算某条 pod 条件的 observedGeneration。
+// 当特性开关 PodObservedGenerationTracking 开启，或 condition[].observedGeneration 已有值时，
+// 取 pod 的 generation。
+// 这样可避免死循环：开关关闭后 kubelet 试图清空该值，而 API server 又在更新中保留原值。
 func CalculatePodConditionObservedGeneration(podStatus *v1.PodStatus, generation int64, conditionType v1.PodConditionType) int64 {
 	if podStatus == nil {
 		return 0

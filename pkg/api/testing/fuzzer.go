@@ -47,15 +47,15 @@ import (
 	storagefuzzer "k8s.io/kubernetes/pkg/apis/storage/fuzzer"
 )
 
-// overrideGenericFuncs override some generic fuzzer funcs from k8s.io/apiserver in order to have more realistic
-// values in a Kubernetes context.
+// overrideGenericFuncs 覆写 k8s.io/apiserver 中若干通用 fuzzer 函数，
+// 让随机生成的值更贴近 Kubernetes 的真实使用场景。
 func overrideGenericFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(j *runtime.Object, c randfill.Continue) {
-			// TODO: uncomment when round trip starts from a versioned object
+			// TODO: 当 round-trip 从带版本的对象开始时，放开下面的分支。
 			if true { // c.Bool() {
+				// TypeMeta 不参与 round-trip，因此这里不设置它。
 				*j = &runtime.Unknown{
-					// We do not set TypeMeta here because it is not carried through a round trip
 					Raw:         []byte(`{"apiVersion":"unknown.group/unknown","kind":"Something","someKey":"someValue"}`),
 					ContentType: runtime.ContentTypeJSON,
 				}
@@ -67,12 +67,13 @@ func overrideGenericFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(r *runtime.RawExtension, c randfill.Continue) {
-			// Pick an arbitrary type and fuzz it
+			// 随机选一种类型做 fuzz，再把对象编码成 RawExtension.Raw。
 			types := []runtime.Object{&api.Pod{}, &apps.Deployment{}, &api.Service{}}
 			obj := types[c.Rand.Intn(len(types))]
 			c.Fill(obj)
 
 			var codec runtime.Codec
+			// Deployment 用 apps/v1 编码；其余用 core/v1。
 			switch obj.(type) {
 			case *apps.Deployment:
 				codec = apitesting.TestCodec(codecs, appsv1.SchemeGroupVersion)
@@ -80,19 +81,18 @@ func overrideGenericFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 				codec = apitesting.TestCodec(codecs, v1.SchemeGroupVersion)
 			}
 
-			// Convert the object to raw bytes
 			bytes, err := runtime.Encode(codec, obj)
 			if err != nil {
 				panic(fmt.Sprintf("Failed to encode object: %v", err))
 			}
 
-			// Set the bytes field on the RawExtension
 			r.Raw = bytes
 		},
 	}
 }
 
-// FuzzerFuncs is a list of fuzzer functions
+// FuzzerFuncs 是合并后的 fuzzer 函数列表：通用覆写 + 各 API group 的自定义 fuzzer。
+// round-trip 测试用它生成覆盖各种字段组合的对象。
 var FuzzerFuncs = fuzzer.MergeFuzzerFuncs(
 	overrideGenericFuncs,
 	corefuzzer.Funcs,

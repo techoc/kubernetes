@@ -20,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// getClaimRefNamespace 返回 PV 所绑定 PVC 的命名空间；未绑定时返回空字符串。
 func getClaimRefNamespace(pv *corev1.PersistentVolume) string {
 	if pv.Spec.ClaimRef != nil {
 		return pv.Spec.ClaimRef.Namespace
@@ -27,23 +28,24 @@ func getClaimRefNamespace(pv *corev1.PersistentVolume) string {
 	return ""
 }
 
-// Visitor is called with each object's namespace and name, and returns true if visiting should continue
+// Visitor 在每个对象上以命名空间和名称被调用，返回值表示是否继续访问后续对象。
 type Visitor func(namespace, name string, kubeletVisible bool) (shouldContinue bool)
 
+// skipEmptyNames 包装 Visitor，跳过空名称的条目（它们通常是未填字段而非真实引用）。
 func skipEmptyNames(visitor Visitor) Visitor {
 	return func(namespace, name string, kubeletVisible bool) bool {
 		if len(name) == 0 {
-			// continue visiting
+			// 空名称跳过，继续遍历其他引用。
 			return true
 		}
-		// delegate to visitor
+		// 非空名称交给真正的 visitor 处理。
 		return visitor(namespace, name, kubeletVisible)
 	}
 }
 
-// VisitPVSecretNames invokes the visitor function with the name of every secret
-// referenced by the PV spec. If visitor returns false, visiting is short-circuited.
-// Returns true if visiting completed, false if visiting was short-circuited.
+// VisitPVSecretNames 对 PV spec 引用的每个 Secret 调用 visitor。
+// visitor 返回 false 会短路遍历。返回 true 表示遍历完成，false 表示被短路。
+// 注意区分 kubelet 可见的 Secret 与仅 controller 可见的 Secret（如 CSI controller 用）。
 func VisitPVSecretNames(pv *corev1.PersistentVolume, visitor Visitor) bool {
 	visitor = skipEmptyNames(visitor)
 	source := &pv.Spec.PersistentVolumeSource
@@ -61,10 +63,10 @@ func VisitPVSecretNames(pv *corev1.PersistentVolume, visitor Visitor) bool {
 		return true
 	case source.CephFS != nil:
 		if source.CephFS.SecretRef != nil {
-			// previously persisted PV objects use claimRef namespace
+			// 历史遗留的 PV 未显式记录 secret 命名空间，使用 claimRef 的命名空间。
 			ns := getClaimRefNamespace(pv)
 			if len(source.CephFS.SecretRef.Namespace) > 0 {
-				// use the secret namespace if namespace is set
+				// 新版对象显式设置了命名空间时以它为准。
 				ns = source.CephFS.SecretRef.Namespace
 			}
 			if !visitor(ns, source.CephFS.SecretRef.Name, true /* kubeletVisible */) {
@@ -77,10 +79,10 @@ func VisitPVSecretNames(pv *corev1.PersistentVolume, visitor Visitor) bool {
 		}
 	case source.FlexVolume != nil:
 		if source.FlexVolume.SecretRef != nil {
-			// previously persisted PV objects use claimRef namespace
+			// 历史遗留的 PV 未显式记录 secret 命名空间，使用 claimRef 的命名空间。
 			ns := getClaimRefNamespace(pv)
 			if len(source.FlexVolume.SecretRef.Namespace) > 0 {
-				// use the secret namespace if namespace is set
+				// 新版对象显式设置了命名空间时以它为准。
 				ns = source.FlexVolume.SecretRef.Namespace
 			}
 			if !visitor(ns, source.FlexVolume.SecretRef.Name, true /* kubeletVisible */) {
@@ -89,10 +91,10 @@ func VisitPVSecretNames(pv *corev1.PersistentVolume, visitor Visitor) bool {
 		}
 	case source.RBD != nil:
 		if source.RBD.SecretRef != nil {
-			// previously persisted PV objects use claimRef namespace
+			// 历史遗留的 PV 未显式记录 secret 命名空间，使用 claimRef 的命名空间。
 			ns := getClaimRefNamespace(pv)
 			if len(source.RBD.SecretRef.Namespace) > 0 {
-				// use the secret namespace if namespace is set
+				// 新版对象显式设置了命名空间时以它为准。
 				ns = source.RBD.SecretRef.Namespace
 			}
 			if !visitor(ns, source.RBD.SecretRef.Name, true /* kubeletVisible */) {
@@ -111,10 +113,10 @@ func VisitPVSecretNames(pv *corev1.PersistentVolume, visitor Visitor) bool {
 		}
 	case source.ISCSI != nil:
 		if source.ISCSI.SecretRef != nil {
-			// previously persisted PV objects use claimRef namespace
+			// 历史遗留的 PV 未显式记录 secret 命名空间，使用 claimRef 的命名空间。
 			ns := getClaimRefNamespace(pv)
 			if len(source.ISCSI.SecretRef.Namespace) > 0 {
-				// use the secret namespace if namespace is set
+				// 新版对象显式设置了命名空间时以它为准。
 				ns = source.ISCSI.SecretRef.Namespace
 			}
 			if !visitor(ns, source.ISCSI.SecretRef.Name, true /* kubeletVisible */) {

@@ -30,8 +30,11 @@ func podRef(uid string) *v1.ObjectReference {
 	return &ref
 }
 
+// TestPackSubsets 验证 RepackSubsets 把多个 EndpointSubset 规范化的行为：
+// 按地址+端口去重并排序，空地址/端口的子集被丢弃，重复地址只保留先出现的 TargetRef，
+// 同一地址若分别出现在 Ready 与 NotReady 中会被拆到不同子集，混合地址也按就绪状态归类。
 func TestPackSubsets(t *testing.T) {
-	// The downside of table-driven tests is that some things have to live outside the table.
+	// 表驱动测试的代价：有些对象要在表格外定义，才能在多个 case 中复用同一个引用。
 	fooObjRef := v1.ObjectReference{Name: "foo"}
 	barObjRef := v1.ObjectReference{Name: "bar"}
 
@@ -45,6 +48,7 @@ func TestPackSubsets(t *testing.T) {
 			given:  []v1.EndpointSubset{{Addresses: []v1.EndpointAddress{}, Ports: []v1.EndpointPort{}}},
 			expect: []v1.EndpointSubset{},
 		}, {
+			// 没有任何地址的子集不产生任何 endpoint，应整体丢弃。
 			name:   "empty addresses",
 			given:  []v1.EndpointSubset{{Addresses: []v1.EndpointAddress{}, Ports: []v1.EndpointPort{{Port: 111}}}},
 			expect: []v1.EndpointSubset{},
@@ -149,6 +153,8 @@ func TestPackSubsets(t *testing.T) {
 				Ports:             []v1.EndpointPort{{Port: 111}},
 			}},
 		}, {
+			// 同一 IP 同时出现在 Ready 和 NotReady：视为非法输入，Ready 优先，
+			// 最终只在 NotReady 子集中保留一份（由去重逻辑的遍历顺序决定）。
 			name: "one set, two duplicate ips, one port, notReady is covered by ready",
 			given: []v1.EndpointSubset{{
 				Addresses:         []v1.EndpointAddress{{IP: "1.2.3.4"}},
@@ -214,8 +220,8 @@ func TestPackSubsets(t *testing.T) {
 				Ports: []v1.EndpointPort{{Port: 111}},
 			}},
 			expect: []v1.EndpointSubset{{
-				// finding the same address twice is considered an error on input, only the first address+port
-				// reference is preserved
+				// 同一个地址出现两次属于非法输入，只保留先出现的 TargetRef；
+				// 因为 Ready 地址先遍历，所以保留的是 foo 而不是 bar。
 				NotReadyAddresses: []v1.EndpointAddress{{IP: "1.2.3.4", TargetRef: &fooObjRef}},
 				Ports:             []v1.EndpointPort{{Port: 111}},
 			}},
@@ -457,6 +463,7 @@ func TestPackSubsets(t *testing.T) {
 
 	for _, tc := range testCases {
 		result := RepackSubsets(tc.given)
+		// 期望值也排序后再比较，使断言只关注内容而非子集顺序。
 		if !reflect.DeepEqual(result, SortSubsets(tc.expect)) {
 			t.Errorf("case %q: expected %s, got %s", tc.name, dump.Pretty(SortSubsets(tc.expect)), dump.Pretty(result))
 		}

@@ -25,17 +25,22 @@ import (
 	"k8s.io/kubernetes/pkg/apis/node"
 )
 
+// TestWarnings 验证 GetWarningsForRuntimeClass 只在 RuntimeClass 的
+// scheduling.nodeSelector 使用了弃用节点标签时给出警告；nil 输入和普通标签
+// 都不应产生警告。
 func TestWarnings(t *testing.T) {
 	testcases := []struct {
 		name     string
 		template *node.RuntimeClass
 		expected []string
 	}{
+		// nil 对象应安全返回，不产生警告。
 		{
 			name:     "null",
 			template: nil,
 			expected: nil,
 		},
+		// 没有 scheduling 配置时无警告。
 		{
 			name: "no warning",
 			template: &node.RuntimeClass{
@@ -45,6 +50,7 @@ func TestWarnings(t *testing.T) {
 			},
 			expected: nil,
 		},
+		// 两个 beta 标签都已弃用，各产生一条带替代建议的警告。
 		{
 			name: "warning",
 			template: &node.RuntimeClass{
@@ -67,6 +73,7 @@ func TestWarnings(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run("podspec_"+tc.name, func(t *testing.T) {
+			// 用集合比较而非顺序比较：nodeSelector 是 map，警告顺序不确定。
 			actual := sets.New[string](GetWarningsForRuntimeClass(tc.template)...)
 			expected := sets.New[string](tc.expected...)
 			for _, missing := range sets.List[string](expected.Difference(actual)) {

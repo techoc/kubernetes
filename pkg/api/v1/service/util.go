@@ -28,7 +28,7 @@ const (
 	defaultLoadBalancerSourceRanges = "0.0.0.0/0"
 )
 
-// IsAllowAll checks whether the utilnet.IPNet allows traffic from 0.0.0.0/0
+// IsAllowAll 检查 IPNet 集合是否包含 0.0.0.0/0，即允许所有来源的流量。
 func IsAllowAll(ipnets utilnet.IPNetSet) bool {
 	for _, s := range ipnets.StringSlice() {
 		if s == "0.0.0.0/0" {
@@ -38,13 +38,12 @@ func IsAllowAll(ipnets utilnet.IPNetSet) bool {
 	return false
 }
 
-// GetLoadBalancerSourceRanges first try to parse and verify LoadBalancerSourceRanges field from a service.
-// If the field is not specified, turn to parse and verify the AnnotationLoadBalancerSourceRangesKey annotation from a service,
-// extracting the source ranges to allow, and if not present returns a default (allow-all) value.
+// GetLoadBalancerSourceRanges 先解析并校验 LoadBalancerSourceRanges 字段；
+// 未指定时退而解析 sourceRange 注解；两者都没有则返回默认值（允许所有来源）。
 func GetLoadBalancerSourceRanges(service *v1.Service) (utilnet.IPNetSet, error) {
 	var ipnets utilnet.IPNetSet
 	var err error
-	// if SourceRange field is specified, ignore sourceRange annotation
+	// spec 字段优先于注解：两者同时存在时注解被忽略。
 	if len(service.Spec.LoadBalancerSourceRanges) > 0 {
 		specs := service.Spec.LoadBalancerSourceRanges
 		ipnets, err = utilnet.ParseIPNets(specs...)
@@ -67,14 +66,14 @@ func GetLoadBalancerSourceRanges(service *v1.Service) (utilnet.IPNetSet, error) 
 	return ipnets, nil
 }
 
-// ExternallyAccessible checks if service is externally accessible.
+// ExternallyAccessible 判断 Service 是否可从集群外部访问。
 func ExternallyAccessible(service *v1.Service) bool {
 	return service.Spec.Type == v1.ServiceTypeLoadBalancer ||
 		service.Spec.Type == v1.ServiceTypeNodePort ||
 		(service.Spec.Type == v1.ServiceTypeClusterIP && len(service.Spec.ExternalIPs) > 0)
 }
 
-// ExternalPolicyLocal checks if service is externally accessible and has ETP = Local.
+// ExternalPolicyLocal 判断 Service 是否外部可访问且 externalTrafficPolicy=Local。
 func ExternalPolicyLocal(service *v1.Service) bool {
 	if !ExternallyAccessible(service) {
 		return false
@@ -82,7 +81,7 @@ func ExternalPolicyLocal(service *v1.Service) bool {
 	return service.Spec.ExternalTrafficPolicy == v1.ServiceExternalTrafficPolicyLocal
 }
 
-// InternalPolicyLocal checks if service has ITP = Local.
+// InternalPolicyLocal 判断 Service 的 internalTrafficPolicy 是否为 Local。
 func InternalPolicyLocal(service *v1.Service) bool {
 	if service.Spec.InternalTrafficPolicy == nil {
 		return false
@@ -90,7 +89,7 @@ func InternalPolicyLocal(service *v1.Service) bool {
 	return *service.Spec.InternalTrafficPolicy == v1.ServiceInternalTrafficPolicyLocal
 }
 
-// NeedsHealthCheck checks if service needs health check.
+// NeedsHealthCheck 判断 Service 是否需要健康检查：仅 LoadBalancer 类型且 ETP=Local 时需要。
 func NeedsHealthCheck(service *v1.Service) bool {
 	if service.Spec.Type != v1.ServiceTypeLoadBalancer {
 		return false

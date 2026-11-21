@@ -28,18 +28,16 @@ import (
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
 )
 
-// RepackSubsets takes a slice of EndpointSubset objects, expands it to the full
-// representation, and then repacks that into the canonical layout.  This
-// ensures that code which operates on these objects can rely on the common
-// form for things like comparison.  The result is a newly allocated slice.
+// RepackSubsets 把 EndpointSubset 切片展开为完整表示后再按规范布局重新打包，
+// 使依赖对象比较的代码可以假定统一的形态。返回新分配的切片。
 func RepackSubsets(subsets []v1.EndpointSubset) []v1.EndpointSubset {
-	// First map each unique port definition to the sets of hosts that
-	// offer it.
+	// 第一遍：把每个唯一的端口定义映射到提供它的地址集合。
+	// 同一个地址可能出现在多个 subset 中，用 addressKey 去重。
 	allAddrs := map[addressKey]*v1.EndpointAddress{}
 	portToAddrReadyMap := map[v1.EndpointPort]addressSet{}
 	for i := range subsets {
 		if len(subsets[i].Ports) == 0 {
-			// Don't discard endpoints with no ports defined, use a sentinel.
+			// 没有端口的 endpoint 也要保留，用 Port=-1 作为哨兵键。
 			mapAddressesByPort(&subsets[i], v1.EndpointPort{Port: -1}, allAddrs, portToAddrReadyMap)
 		} else {
 			for _, port := range subsets[i].Ports {
@@ -48,10 +46,10 @@ func RepackSubsets(subsets []v1.EndpointSubset) []v1.EndpointSubset {
 		}
 	}
 
-	// Next, map the sets of hosts to the sets of ports they offer.
-	// Go does not allow maps or slices as keys to maps, so we have
-	// to synthesize an artificial key and do a sort of 2-part
-	// associative entity.
+	// 第二遍：反过来把地址集合映射到它们提供的端口集合。
+	// Go 不允许用 map/slice 作为 map 的 key，
+	// 所以先对地址集合做哈希，用字符串作为人工 key，
+	// 形成“地址集合 ↔ 端口集合”的双向关联。
 	type keyString string
 	keyToAddrReadyMap := map[keyString]addressSet{}
 	addrReadyMapKeyToPorts := map[keyString][]v1.EndpointPort{}
@@ -62,13 +60,13 @@ func RepackSubsets(subsets []v1.EndpointSubset) []v1.EndpointSubset {
 			addrReadyMapKeyToPorts[key] = append(addrReadyMapKeyToPorts[key], port)
 		} else {
 			if _, found := addrReadyMapKeyToPorts[key]; !found {
-				// Force it to be present in the map
+				// 即使没有真实端口，也要在 map 中占位，保留无端口的 endpoint。
 				addrReadyMapKeyToPorts[key] = nil
 			}
 		}
 	}
 
-	// Next, build the N-to-M association the API wants.
+	// 第三遍：按 API 期望的形态构建 N 对 M 的 association。
 	final := []v1.EndpointSubset{}
 	for key, ports := range addrReadyMapKeyToPorts {
 		var readyAddrs, notReadyAddrs []v1.EndpointAddress
@@ -82,17 +80,17 @@ func RepackSubsets(subsets []v1.EndpointSubset) []v1.EndpointSubset {
 		final = append(final, v1.EndpointSubset{Addresses: readyAddrs, NotReadyAddresses: notReadyAddrs, Ports: ports})
 	}
 
-	// Finally, sort it.
+	// 最后排序，保证输出形态确定。
 	return SortSubsets(final)
 }
 
-// The sets of hosts must be de-duped, using IP+UID as the key.
+// 地址集合以 IP+UID 为键去重：同一 IP 可能属于不同的 Pod（如 Mesos 场景）。
 type addressKey struct {
 	ip  string
 	uid types.UID
 }
 
-// mapAddressesByPort adds all ready and not-ready addresses into a map by a single port.
+// mapAddressesByPort 把某个 subset 中所有 ready/not-ready 地址按单个端口登记到映射中。
 func mapAddressesByPort(subset *v1.EndpointSubset, port v1.EndpointPort, allAddrs map[addressKey]*v1.EndpointAddress, portToAddrReadyMap map[v1.EndpointPort]addressSet) {
 	for k := range subset.Addresses {
 		mapAddressByPort(&subset.Addresses[k], port, true, allAddrs, portToAddrReadyMap)
@@ -102,19 +100,19 @@ func mapAddressesByPort(subset *v1.EndpointSubset, port v1.EndpointPort, allAddr
 	}
 }
 
-// mapAddressByPort adds one address into a map by port, registering the address with a unique pointer, and preserving
-// any existing ready state.
+// mapAddressByPort 登记单个地址与端口的关联，保留已记录的 ready 状态。
+// not-ready 优先于 ready：一旦某地址对该端口曾是不就绪，后续不能改回就绪。
 func mapAddressByPort(addr *v1.EndpointAddress, port v1.EndpointPort, ready bool, allAddrs map[addressKey]*v1.EndpointAddress, portToAddrReadyMap map[v1.EndpointPort]addressSet) *v1.EndpointAddress {
-	// use addressKey to distinguish between two endpoints that are identical addresses
-	// but may have come from different hosts, for attribution. For instance, Mesos
-	// assigns pods the node IP, but the pods are distinct.
+	// 用 addressKey 区分 IP 相同但来源不同的 endpoint（例如使用节点 IP 的 Pod），
+	// 以便归属到不同的宿主。例如 Mesos 会给 Pod 分配节点 IP，
+	// 但 Pod 彼此是不同的对象。
 	key := addressKey{ip: addr.IP}
 	if addr.TargetRef != nil {
 		key.uid = addr.TargetRef.UID
 	}
 
-	// Accumulate the address. The full EndpointAddress structure is preserved for use when
-	// we rebuild the subsets so that the final TargetRef has all of the necessary data.
+	// 保留完整的 EndpointAddress 结构，重建 subset 时 TargetRef 等信息才不会丢失。
+	// 同一个地址只在首次出现时复制入 allAddrs。
 	existingAddress := allAddrs[key]
 	if existingAddress == nil {
 		// Make a copy so we don't write to the
@@ -124,13 +122,13 @@ func mapAddressByPort(addr *v1.EndpointAddress, port v1.EndpointPort, ready bool
 		allAddrs[key] = existingAddress
 	}
 
-	// Remember that this port maps to this address.
+	// 记录该端口到该地址的映射。
 	if _, found := portToAddrReadyMap[port]; !found {
 		portToAddrReadyMap[port] = addressSet{}
 	}
-	// if we have not yet recorded this port for this address, or if the previous
-	// state was ready, write the current ready state. not ready always trumps
-	// ready.
+	// 如果该地址此前没有记录这个端口，或之前是 ready 状态，
+	// 就写入当前的 ready 状态。not-ready 优先：一旦不就绪就不能被后续的 ready 覆盖。
+	//
 	if wasReady, found := portToAddrReadyMap[port][existingAddress]; !found || wasReady {
 		portToAddrReadyMap[port][existingAddress] = ready
 	}
@@ -144,11 +142,14 @@ type addrReady struct {
 	ready bool
 }
 
+// hashAddresses 把地址集合压成字符串以便作为 map key。
+// DeepHashObject 基于 spew，不能很好地处理非基本类型的 map key，
+// 所以先转成切片、排序，再计算哈希。
 func hashAddresses(addrs addressSet) string {
-	// Flatten the list of addresses into a string so it can be used as a
-	// map key.  Unfortunately, DeepHashObject is implemented in terms of
-	// spew, and spew does not handle non-primitive map keys well.  So
-	// first we collapse it into a slice, sort the slice, then hash that.
+	// 把地址列表展开成可哈希的字符串。
+	// DeepHashObject 基于 spew，不能很好地处理非基本类型的 map key，
+	// 所以先把集合转成切片、排序，再计算哈希。
+	// 排序保证哈希结果与遍历顺序无关。
 	slice := make([]addrReady, 0, len(addrs))
 	for k, ready := range addrs {
 		slice = append(slice, addrReady{k, ready})
@@ -159,8 +160,10 @@ func hashAddresses(addrs addressSet) string {
 	return hex.EncodeToString(hasher.Sum(nil)[0:])
 }
 
+// lessAddrReady 比较两个带就绪状态的地址。
+// ready 状态不参与哈希：同一地址不会重复出现。
 func lessAddrReady(a, b addrReady) bool {
-	// ready is not significant to hashing since we can't have duplicate addresses
+	// ready 不参与比较：同一地址不会重复出现，哈希只按地址本身。
 	return LessEndpointAddress(a.addr, b.addr)
 }
 
@@ -172,7 +175,7 @@ func (sl addrsReady) Less(i, j int) bool {
 	return lessAddrReady(sl[i], sl[j])
 }
 
-// LessEndpointAddress compares IP addresses lexicographically and returns true if first argument is lesser than second
+// LessEndpointAddress 按 IP 的字节序比较地址，IP 相同再按 TargetRef.UID 比较。
 func LessEndpointAddress(a, b *v1.EndpointAddress) bool {
 	ipComparison := bytes.Compare([]byte(a.IP), []byte(b.IP))
 	if ipComparison != 0 {
@@ -187,8 +190,8 @@ func LessEndpointAddress(a, b *v1.EndpointAddress) bool {
 	return a.TargetRef.UID < b.TargetRef.UID
 }
 
-// SortSubsets sorts an array of EndpointSubset objects in place.  For ease of
-// use it returns the input slice.
+// SortSubsets 就地排序 EndpointSubset 切片（地址、端口各自排序后再排 subset 本身），
+// 为方便使用同时返回入参切片。
 func SortSubsets(subsets []v1.EndpointSubset) []v1.EndpointSubset {
 	for i := range subsets {
 		ss := &subsets[i]
@@ -200,6 +203,7 @@ func SortSubsets(subsets []v1.EndpointSubset) []v1.EndpointSubset {
 	return subsets
 }
 
+// hashObject 计算对象的深度哈希并返回字节切片。
 func hashObject(hasher hash.Hash, obj interface{}) []byte {
 	hashutil.DeepHashObject(hasher, obj)
 	return hasher.Sum(nil)

@@ -33,8 +33,12 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// TestVisitContainers 验证 VisitContainers 按 mask 选择容器类型、保持遍历顺序，
+// 并允许回调修改容器字段（这里通过清空 SecurityContext 验证修改会写回原 spec）。
 func TestVisitContainers(t *testing.T) {
 	setAllFeatureEnabledContainersDuringTest := ContainerType(0)
+	// mask 是要访问的容器类型位掩码；wantContainers 同时断言选中类型和顺序
+	//（顺序固定为 init -> regular -> ephemeral）。
 	testCases := []struct {
 		desc           string
 		spec           *v1.PodSpec
@@ -199,6 +203,8 @@ func TestVisitContainers(t *testing.T) {
 	}
 }
 
+// TestContainerIter 验证 ContainerIter 迭代器与 VisitContainers 行为一致：
+// 按 mask 过滤、保持顺序，并且第二个返回值报告每个容器所属的真实类型。
 func TestContainerIter(t *testing.T) {
 	testCases := []struct {
 		desc           string
@@ -340,7 +346,13 @@ func TestContainerIter(t *testing.T) {
 	}
 }
 
+// TestPodSecrets 验证 VisitPodSecretNames 能找到 Pod 中所有 Secret 引用。
+// 做法是先构造一个把 Secret 名字设为“结构体路径”的 Pod，再用反射枚举
+// v1.Pod 中所有名字含 secret 的字段路径，双向比对以发现漏报或多余字段。
+// 这样新增字段时测试会主动失败并提示更新实现或白名单。
 func TestPodSecrets(t *testing.T) {
+	// 这个 stub 穷举 Pod 中可能出现的 Secret 引用位置；
+	// 每个引用的名字就是反射发现的字段路径，便于精确定位漏报。
 	// Stub containing all possible secret references in a pod.
 	// The names of the referenced secrets match struct paths detected by reflection.
 	pod := &v1.Pod{
@@ -434,10 +446,12 @@ func TestPodSecrets(t *testing.T) {
 		return true
 	})
 
+	// 名字含 secret 但不是 Secret 对象引用的字段（如 SecretFile），需要显式排除。
 	// excludedSecretPaths holds struct paths to fields with "secret" in the name that are not actually references to secret API objects
 	excludedSecretPaths := sets.New[string](
 		"Spec.Volumes[*].VolumeSource.CephFS.SecretFile",
 	)
+	// 期望路径清单：每条都必须在上面的 stub 中有一个以该路径为名字的引用。
 	// expectedSecretPaths holds struct paths to fields with "secret" in the name that are references to secret API objects.
 	// every path here should be represented as an example in the Pod stub above, with the secret name set to the path.
 	expectedSecretPaths := sets.New[string](
@@ -461,6 +475,7 @@ func TestPodSecrets(t *testing.T) {
 		"Spec.Volumes[*].VolumeSource.StorageOS.SecretRef",
 		"Spec.Volumes[*].VolumeSource.CSI.NodePublishSecretRef",
 	)
+	// 反射结果与期望清单双向比对：少了说明新增字段没被访问到，多了说明白名单该更新。
 	secretPaths := collectResourcePaths(t, "secret", nil, "", reflect.TypeOf(&v1.Pod{}))
 	secretPaths = secretPaths.Difference(excludedSecretPaths)
 	if missingPaths := expectedSecretPaths.Difference(secretPaths); len(missingPaths) > 0 {
@@ -481,6 +496,7 @@ func TestPodSecrets(t *testing.T) {
 		t.Error("Extra secret names extracted. Verify VisitPodSecretNames() is correctly extracting secret names")
 	}
 
+	// 空名字段必须被忽略，否则会向调用方返回无法使用的 Secret 名。
 	// emptyPod is a stub containing empty object names
 	emptyPod := &v1.Pod{
 		Spec: v1.PodSpec{
@@ -497,7 +513,9 @@ func TestPodSecrets(t *testing.T) {
 	})
 }
 
-// collectResourcePaths traverses the object, computing all the struct paths that lead to fields with resourcename in the name.
+// collectResourcePaths 递归遍历类型定义，收集名字中含 resourcename 的字段路径。
+// 它服务于 TestPodSecrets/TestPodConfigmaps 的反射交叉检查：
+// 处理指针解引用、map/slice 的通配下标，并跳过含环的 ObjectMeta。
 func collectResourcePaths(t *testing.T, resourcename string, path *field.Path, name string, tp reflect.Type) sets.Set[string] {
 	resourcename = strings.ToLower(resourcename)
 	resourcePaths := sets.New[string]()
@@ -515,6 +533,7 @@ func collectResourcePaths(t *testing.T, resourcename string, path *field.Path, n
 	case reflect.Pointer:
 		resourcePaths.Insert(sets.List[string](collectResourcePaths(t, resourcename, path, name, tp.Elem()))...)
 	case reflect.Struct:
+		// ObjectMeta 是通用结构且包含指针环，递归没有意义，直接跳过。
 		// ObjectMeta is generic and therefore should never have a field with a specific resource's name;
 		// it contains cycles so it's easiest to just skip it.
 		if name == "ObjectMeta" {
@@ -531,13 +550,17 @@ func collectResourcePaths(t *testing.T, resourcename string, path *field.Path, n
 	case reflect.Slice:
 		resourcePaths.Insert(sets.List[string](collectResourcePaths(t, resourcename, path.Key("*"), "", tp.Elem()))...)
 	default:
+		// 基本类型无法继续下钻，递归到此结束。
 		// all primitive types
 	}
 
 	return resourcePaths
 }
 
+// TestPodConfigmaps 与 TestPodSecrets 同构：验证 VisitPodConfigmapNames
+// 覆盖 Pod 中全部 ConfigMap 引用，且忽略空名字。
 func TestPodConfigmaps(t *testing.T) {
+	// 每个引用的名字就是其字段路径，便于反射比对时定位漏报。
 	// Stub containing all possible ConfigMap references in a pod.
 	// The names of the referenced ConfigMaps match struct paths detected by reflection.
 	pod := &v1.Pod{
@@ -592,6 +615,7 @@ func TestPodConfigmaps(t *testing.T) {
 		return true
 	})
 
+	// 期望路径清单：每条都要在 stub 中有对应的引用实例。
 	// expectedPaths holds struct paths to fields with "ConfigMap" in the name that are references to ConfigMap API objects.
 	// every path here should be represented as an example in the Pod stub above, with the ConfigMap name set to the path.
 	expectedPaths := sets.New[string](
@@ -623,6 +647,7 @@ func TestPodConfigmaps(t *testing.T) {
 		t.Error("Extra names extracted. Verify VisitPodConfigmapNames() is correctly extracting resource names")
 	}
 
+	// 空名字段必须被忽略，否则会向调用方返回无法使用的 Secret 名。
 	// emptyPod is a stub containing empty object names
 	emptyPod := &v1.Pod{
 		Spec: v1.PodSpec{
@@ -639,6 +664,8 @@ func TestPodConfigmaps(t *testing.T) {
 	})
 }
 
+// newPod 构造只带一个 PodReady condition 的 Pod。
+// beforeSec 控制条件最后一次变化距今多久，用于测试 minReadySeconds 语义。
 func newPod(now metav1.Time, ready bool, beforeSec int) *v1.Pod {
 	conditionStatus := v1.ConditionFalse
 	if ready {
@@ -657,6 +684,8 @@ func newPod(now metav1.Time, ready bool, beforeSec int) *v1.Pod {
 	}
 }
 
+// TestIsPodAvailable 验证 IsPodAvailable 的判定：Pod 必须 Ready 且
+// Ready 状态的持续时间已达到 minReadySeconds；时间戳缺失或未满时长都返回 false。
 func TestIsPodAvailable(t *testing.T) {
 	now := metav1.Now()
 	tests := []struct {
@@ -675,6 +704,7 @@ func TestIsPodAvailable(t *testing.T) {
 			expected:        false,
 		},
 		{
+			// 零时间戳不能当作“已经 Ready 很久”，否则会误判为可用。
 			pod: func() *v1.Pod {
 				pod := newPod(now, true, 0)
 				pod.Status.Conditions[0].LastTransitionTime = metav1.Time{}
@@ -713,6 +743,8 @@ func TestIsPodAvailable(t *testing.T) {
 	}
 }
 
+// TestIsPodTerminal 验证只有 Succeeded/Failed 是终态；
+// Unknown/Pending/Running 以及空 phase 都不是。
 func TestIsPodTerminal(t *testing.T) {
 	now := metav1.Now()
 
@@ -755,6 +787,9 @@ func TestIsPodTerminal(t *testing.T) {
 	}
 }
 
+// TestGetContainerStatus 验证按名字查找 ContainerStatus 的两个 API：
+// GetContainerStatus 在找不到时返回零值，GetExistingContainerStatus 同理；
+// 空名字和 nil 状态列表都要安全返回零值而不 panic。
 func TestGetContainerStatus(t *testing.T) {
 	type ExpectedStruct struct {
 		status v1.ContainerStatus
@@ -798,11 +833,14 @@ func TestGetContainerStatus(t *testing.T) {
 		assert.Equal(t, test.expected.status, resultStatus, "GetContainerStatus: "+test.desc)
 		assert.Equal(t, test.expected.exists, exists, "GetContainerStatus: "+test.desc)
 
+		// 两个函数语义一致，用同一组期望值验证，避免实现漂移。
 		resultStatus = GetExistingContainerStatus(test.status, test.name)
 		assert.Equal(t, test.expected.status, resultStatus, "GetExistingContainerStatus: "+test.desc)
 	}
 }
 
+// TestGetIndexOfContainerStatus 验证按名字返回状态数组下标；
+// 找不到时 exists 为 false 且下标无意义（约定返回 0）。
 func TestGetIndexOfContainerStatus(t *testing.T) {
 	testStatus := []v1.ContainerStatus{
 		{
@@ -850,6 +888,8 @@ func TestGetIndexOfContainerStatus(t *testing.T) {
 	}
 }
 
+// TestUpdatePodCondition 验证 UpdatePodCondition 返回“是否发生了变更”：
+// 条件完全相同则不更新，Type 或 Status 不同则需要更新。
 func TestUpdatePodCondition(t *testing.T) {
 	time := metav1.Now()
 
@@ -916,6 +956,8 @@ func TestUpdatePodCondition(t *testing.T) {
 	}
 }
 
+// TestGetContainersReadyCondition 验证从 PodStatus 中取出 ContainersReady 条件；
+// 不存在时返回 nil 而不是零值条件。
 func TestGetContainersReadyCondition(t *testing.T) {
 	time := metav1.Now()
 
@@ -955,6 +997,8 @@ func TestGetContainersReadyCondition(t *testing.T) {
 	}
 }
 
+// TestIsContainersReadyConditionTrue 验证只有 ContainersReady=True 才返回 true；
+// False 或条件缺失都返回 false。
 func TestIsContainersReadyConditionTrue(t *testing.T) {
 	time := metav1.Now()
 
@@ -1010,6 +1054,8 @@ func TestIsContainersReadyConditionTrue(t *testing.T) {
 	}
 }
 
+// TestCalculatePodStatusObservedGeneration 验证 PodLevelResourcesTracking 相关逻辑：
+// 未设置 observedGeneration 时回退到 metadata.Generation，已设置则保留原值。
 func TestCalculatePodStatusObservedGeneration(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1046,6 +1092,8 @@ func TestCalculatePodStatusObservedGeneration(t *testing.T) {
 	}
 }
 
+// TestCalculatePodConditionObservedGeneration 与上例对应，但针对单个 PodCondition：
+// condition 未设置 observedGeneration 时使用 Pod 的 Generation。
 func TestCalculatePodConditionObservedGeneration(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1090,6 +1138,9 @@ func TestCalculatePodConditionObservedGeneration(t *testing.T) {
 	}
 }
 
+// TestIsContainerRestartable 验证容器可重启性判定的优先级：
+// 容器级 restartPolicyRules/restartPolicy 优先，未设置时回退到 Pod 级 RestartPolicy；
+// 只有 Never 表示不可重启，空策略按可重启处理。
 func TestIsContainerRestartable(t *testing.T) {
 	var (
 		containerRestartPolicyAlways    = v1.ContainerRestartPolicyAlways
@@ -1104,6 +1155,7 @@ func TestIsContainerRestartable(t *testing.T) {
 		expected  bool
 	}{
 		{
+			// 即使容器和 Pod 都是 Never，Restart 动作规则也强制可重启。
 			name:    "Container: Rule action 'Restart' should always be true",
 			podSpec: v1.PodSpec{RestartPolicy: v1.RestartPolicyNever},
 			container: v1.Container{
@@ -1174,6 +1226,10 @@ func TestIsContainerRestartable(t *testing.T) {
 	}
 }
 
+// TestContainerHasRestartablePolicy 验证 ContainerShouldRestart 的完整判定链：
+// 1) 退出生码规则（In/NotIn + Restart/RestartAllContainers）命中即为 true；
+// 2) 规则不命中时回退容器级策略；3) 再回退 Pod 级策略（最低优先级）。
+// 因为规则字段受特性门控保护，测试开头需要显式打开相关特性。
 func TestContainerHasRestartablePolicy(t *testing.T) {
 	var (
 		containerRestartPolicyAlways    = v1.ContainerRestartPolicyAlways
@@ -1302,6 +1358,7 @@ func TestContainerHasRestartablePolicy(t *testing.T) {
 			exitCode:  1,
 			expected:  false,
 		},
+		// 以下用例覆盖最低优先级的 Pod 级策略回退。
 		// --- Scenarios for Pod-Level Restart Policy (Lowest Priority) ---
 		{
 			name:      "Pod Policy: Fallback to pod 'Always'",
@@ -1332,6 +1389,8 @@ func TestContainerHasRestartablePolicy(t *testing.T) {
 			expected:  true,
 		},
 	}
+	// 重启规则字段默认可能关闭；显式开启三个相关特性，确保被测逻辑可达。
+	// SetFeatureGatesDuringTest 会在用例结束后恢复全局状态。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.ContainerRestartRules:                true,
 		features.NodeDeclaredFeatures:                 true,
@@ -1340,6 +1399,7 @@ func TestContainerHasRestartablePolicy(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 用 tc.name 作为子测试名，失败时可以直接看出是哪条规则组合。
 			// Execute the function under test
 			got := ContainerShouldRestart(tc.container, tc.podSpec, tc.exitCode)
 
@@ -1351,6 +1411,8 @@ func TestContainerHasRestartablePolicy(t *testing.T) {
 	}
 }
 
+// TestAllContainersCouldRestart 验证 Pod 中存在 RestartAllContainers 规则时返回 true，
+// 规则可位于 init 容器、sidecar 或普通容器；没有任何规则时返回 false。
 func TestAllContainersCouldRestart(t *testing.T) {
 	restartPolicyAlways := v1.ContainerRestartPolicyAlways
 
@@ -1435,7 +1497,11 @@ func TestAllContainersCouldRestart(t *testing.T) {
 	}
 }
 
+// TestFindMatchingContainerRestartRule 验证按退出生码匹配规则：
+// In/NotIn 操作符语义、多条规则命中时取第一条、无匹配返回 false 和零值规则。
 func TestFindMatchingContainerRestartRule(t *testing.T) {
+	// 三条共享规则分别代表 In 命中、NotIn 命中和更靠后的 In 规则；
+	// 复用它们便于断言“返回的是哪条规则”以及“优先返回第一条”。
 	ruleIn := v1.ContainerRestartRule{
 		Action: v1.ContainerRestartRuleActionRestart,
 		ExitCodes: &v1.ContainerRestartRuleOnExitCodes{
@@ -1485,6 +1551,7 @@ func TestFindMatchingContainerRestartRule(t *testing.T) {
 			expectedRule:  ruleNotIn,
 		},
 		{
+			// 两条规则都匹配 42 时，必须返回先声明的那条，说明匹配是短路的。
 			name: "matches the first rule if two rules both matched",
 			container: v1.Container{
 				RestartPolicyRules: []v1.ContainerRestartRule{ruleIn, ruleIn42},

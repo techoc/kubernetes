@@ -32,6 +32,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestDropDisabledFields 验证 DropDisabledSpecFields 对 VolumeAttributesClassName
+// 的处理：特性关闭时清除新 spec 中的字段，除非旧对象已经在使用它（避免更新时丢配置）；
+// 特性开启时则无论新旧取值都原样保留。
 func TestDropDisabledFields(t *testing.T) {
 	vacName := ptr.To("vac")
 
@@ -42,6 +45,7 @@ func TestDropDisabledFields(t *testing.T) {
 		expectNewSpec *api.PersistentVolumeSpec
 		vacEnabled    bool
 	}{
+		// 特性关闭、创建场景（旧 spec 为 nil）：新字段应被清除。
 		"disabled vac clears volume attributes class name": {
 			vacEnabled:    false,
 			newSpec:       specWithVACName(vacName),
@@ -49,6 +53,7 @@ func TestDropDisabledFields(t *testing.T) {
 			oldSpec:       nil,
 			expectOldSpec: nil,
 		},
+		// 特性开启：新字段正常保留。
 		"enabled vac preserve volume attributes class name": {
 			vacEnabled:    true,
 			newSpec:       specWithVACName(vacName),
@@ -56,6 +61,7 @@ func TestDropDisabledFields(t *testing.T) {
 			oldSpec:       nil,
 			expectOldSpec: nil,
 		},
+		// 特性开启且新旧都使用该字段：两者都不变。
 		"enabled vac preserve volume attributes class name when both old and new have it": {
 			vacEnabled:    true,
 			newSpec:       specWithVACName(vacName),
@@ -63,6 +69,7 @@ func TestDropDisabledFields(t *testing.T) {
 			oldSpec:       specWithVACName(vacName),
 			expectOldSpec: specWithVACName(vacName),
 		},
+		// 特性关闭但旧对象已在用该字段：必须保留，防止更新丢失已有配置。
 		"disabled vac old pv had volume attributes class name": {
 			vacEnabled:    false,
 			newSpec:       specWithVACName(vacName),
@@ -70,6 +77,7 @@ func TestDropDisabledFields(t *testing.T) {
 			oldSpec:       specWithVACName(vacName),
 			expectOldSpec: specWithVACName(vacName),
 		},
+		// 特性开启、旧对象未使用该字段：新字段仍保留。
 		"enabled vac preserves volume attributes class name when old pv did not had it": {
 			vacEnabled:    true,
 			newSpec:       specWithVACName(vacName),
@@ -77,6 +85,7 @@ func TestDropDisabledFields(t *testing.T) {
 			oldSpec:       specWithVACName(nil),
 			expectOldSpec: specWithVACName(nil),
 		},
+		// 新旧都没有该字段：清除是空操作，结果仍为 nil。
 		"disabled vac neither new pv nor old pv had volume attributes class name": {
 			vacEnabled:    false,
 			newSpec:       specWithVACName(nil),
@@ -89,11 +98,13 @@ func TestDropDisabledFields(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			if !tc.vacEnabled {
+				// 关闭特性时同时把模拟版本降到 1.35，覆盖按版本判断的分支。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeAttributesClass, tc.vacEnabled)
 
 			DropDisabledSpecFields(tc.newSpec, tc.oldSpec)
+			// 新旧 spec 都要校验：函数只应改动新对象，旧对象必须保持不变。
 			if !reflect.DeepEqual(tc.newSpec, tc.expectNewSpec) {
 				t.Error(cmp.Diff(tc.newSpec, tc.expectNewSpec))
 			}
@@ -104,6 +115,8 @@ func TestDropDisabledFields(t *testing.T) {
 	}
 }
 
+// specWithVACName 构造一个带 CSI 数据源的 PV spec，
+// vacName 非 nil 时顺带设置 VolumeAttributesClassName。
 func specWithVACName(vacName *string) *api.PersistentVolumeSpec {
 	pvSpec := &api.PersistentVolumeSpec{
 		PersistentVolumeSource: api.PersistentVolumeSource{
@@ -120,17 +133,22 @@ func specWithVACName(vacName *string) *api.PersistentVolumeSpec {
 	return pvSpec
 }
 
+// TestWarnings 验证 GetWarningsForPersistentVolume 能覆盖各类弃用点：
+// 旧注解、nodeAffinity 中的 beta 标签、Recycle 回收策略，以及多种已弃用的
+// 存储插件；nil 对象和无问题的对象都不产生警告。
 func TestWarnings(t *testing.T) {
 	testcases := []struct {
 		name     string
 		template *api.PersistentVolume
 		expected []string
 	}{
+		// nil 对象应安全返回，不产生警告。
 		{
 			name:     "null",
 			template: nil,
 			expected: nil,
 		},
+		// 普通 Bound PV 没有弃用字段，不告警。
 		{
 			name: "no warning",
 			template: &api.PersistentVolume{
@@ -143,6 +161,7 @@ func TestWarnings(t *testing.T) {
 			},
 			expected: nil,
 		},
+		// 两个旧注解和一个 nodeAffinity 中的 beta 标签，合计三条警告。
 		{
 			name: "warning",
 			template: &api.PersistentVolume{
@@ -180,6 +199,7 @@ func TestWarnings(t *testing.T) {
 				`spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0].key: beta.kubernetes.io/os is deprecated since v1.14; use "kubernetes.io/os" instead`,
 			},
 		},
+		// Recycle 回收策略已弃用，应提示改用动态供给。
 		{
 			name: "PersistentVolumeReclaimRecycle deprecation warning",
 			template: &api.PersistentVolume{
@@ -191,6 +211,7 @@ func TestWarnings(t *testing.T) {
 				`spec.persistentVolumeReclaimPolicy: The Recycle reclaim policy is deprecated. Instead, the recommended approach is to use dynamic provisioning.`,
 			},
 		},
+		// 以下用例分别覆盖各已弃用的存储插件，各应产生一条弃用警告。
 		{
 			name: "PV CephFS deprecation warning",
 			template: &api.PersistentVolume{
@@ -313,6 +334,7 @@ func TestWarnings(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run("podspec_"+tc.name, func(t *testing.T) {
+			// 用集合比较：注解和 nodeSelector 来自 map，警告顺序不稳定。
 			actual := sets.New[string](GetWarningsForPersistentVolume(tc.template)...)
 			expected := sets.New[string](tc.expected...)
 			for _, missing := range sets.List[string](expected.Difference(actual)) {

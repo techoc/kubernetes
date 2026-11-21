@@ -30,6 +30,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// parseTimeOrDie 解析 RFC3339 时间戳；测试夹具中的时间一定合法，出错即视为编程错误。
 func parseTimeOrDie(ts string) metav1.Time {
 	t, err := time.Parse(time.RFC3339, ts)
 	if err != nil {
@@ -38,6 +39,8 @@ func parseTimeOrDie(ts string) metav1.Time {
 	return metav1.Time{Time: t}
 }
 
+// benchmarkPod 是一个字段完整的静态 Pod 样例，供多个基准共用，
+// 避免每次基准都做 fuzz 或文件解码。
 var benchmarkPod = api.Pod{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Pod",
@@ -128,6 +131,7 @@ var benchmarkPod = api.Pod{
 	},
 }
 
+// BenchmarkPodCopy 测量静态 Pod 夹具的 DeepCopy 开销，并在结束后确认拷贝内容一致。
 func BenchmarkPodCopy(b *testing.B) {
 	var result *api.Pod
 	for i := 0; i < b.N; i++ {
@@ -138,6 +142,7 @@ func BenchmarkPodCopy(b *testing.B) {
 	}
 }
 
+// BenchmarkNodeCopy 测量从 JSON 文件解码出的 Node 的 DeepCopy 开销。
 func BenchmarkNodeCopy(b *testing.B) {
 	data, err := os.ReadFile("node_example.json")
 	if err != nil {
@@ -149,6 +154,7 @@ func BenchmarkNodeCopy(b *testing.B) {
 	}
 
 	var result *api.Node
+	// 拷贝循环之外不加计时，这里直接测 DeepCopy 本身。
 	for i := 0; i < b.N; i++ {
 		result = node.DeepCopy()
 	}
@@ -157,6 +163,7 @@ func BenchmarkNodeCopy(b *testing.B) {
 	}
 }
 
+// BenchmarkReplicationControllerCopy 测量从 JSON 文件解码出的 ReplicationController 的 DeepCopy 开销。
 func BenchmarkReplicationControllerCopy(b *testing.B) {
 	data, err := os.ReadFile("replication_controller_example.json")
 	if err != nil {

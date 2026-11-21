@@ -14,7 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package testing contains
-// - all generic API tests which depend on Kubernetes API types
-// - all cross-Kubernetes-API tests.
+// Package testing 包含两类测试：
+//   - 所有依赖 Kubernetes API 类型的通用 API 测试；
+//   - 所有跨 Kubernetes API 的测试。
+//
+// 这里的辅助函数多为供各 API group 的测试文件调用的公共入口，
+// 以此避免每个 group 重复编写转换、兼容性、序列化等测试逻辑。
 package testing

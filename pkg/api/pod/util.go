@@ -36,35 +36,33 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// ContainerType signifies container type
+// ContainerType 表示容器类型，用位掩码表示，便于组合成可同时匹配的容器集合。
 type ContainerType int
 
 const (
-	// Containers is for normal containers
+	// Containers 表示普通容器。
 	Containers ContainerType = 1 << iota
-	// InitContainers is for init containers
+	// InitContainers 表示初始化容器。
 	InitContainers
-	// EphemeralContainers is for ephemeral containers
+	// EphemeralContainers 表示临时容器。
 	EphemeralContainers
 )
 
-// AllContainers specifies that all containers be visited
+// AllContainers 指定访问所有类型的容器。
 const AllContainers ContainerType = (InitContainers | Containers | EphemeralContainers)
 
-// AllFeatureEnabledContainers returns a ContainerType mask which includes all container
-// types except for the ones guarded by feature gate.
+// AllFeatureEnabledContainers 返回包含所有不受特性开关保护的容器类型的 ContainerType 掩码。
+// 当前所有容器类型均已默认启用，因此直接返回 AllContainers；保留函数是为了让调用方
+// 不必关心哪些类型受开关保护。
 func AllFeatureEnabledContainers() ContainerType {
 	return AllContainers
 }
 
-// ContainerVisitor is called with each container spec, and returns true
-// if visiting should continue.
+// ContainerVisitor 在每个容器 spec 上被调用，返回值表示是否继续访问后续容器。
 type ContainerVisitor func(container *api.Container, containerType ContainerType) (shouldContinue bool)
 
-// VisitContainers invokes the visitor function with a pointer to every container
-// spec in the given pod spec with type set in mask. If visitor returns false,
-// visiting is short-circuited. VisitContainers returns true if visiting completes,
-// false if visiting was short-circuited.
+// VisitContainers 用 mask 指定的容器类型过滤，对给定 pod spec 中的每个容器调用 visitor。
+// 若 visitor 返回 false，则提前终止遍历。全部访问完成返回 true，被提前终止返回 false。
 func VisitContainers(podSpec *api.PodSpec, mask ContainerType, visitor ContainerVisitor) bool {
 	for c, t := range ContainerIter(podSpec, mask) {
 		if !visitor(c, t) {
@@ -74,8 +72,9 @@ func VisitContainers(podSpec *api.PodSpec, mask ContainerType, visitor Container
 	return true
 }
 
-// ContainerIter returns an iterator over all containers in the given pod spec with a masked type.
-// The iteration order is InitContainers, then main Containers, then EphemeralContainers.
+// ContainerIter 返回一个迭代器，遍历给定 pod spec 中类型被 mask 选中的所有容器。
+// 遍历顺序固定为 InitContainers、普通 Containers，最后是 EphemeralContainers，
+// 保证依赖该顺序的逻辑（如投递顺序）行为稳定。
 func ContainerIter(podSpec *api.PodSpec, mask ContainerType) iter.Seq2[*api.Container, ContainerType] {
 	return func(yield func(*api.Container, ContainerType) bool) {
 		if mask&InitContainers != 0 {
@@ -102,25 +101,27 @@ func ContainerIter(podSpec *api.PodSpec, mask ContainerType) iter.Seq2[*api.Cont
 	}
 }
 
-// Visitor is called with each object name, and returns true if visiting should continue
+// Visitor 在每个对象名称上被调用，返回值表示是否继续访问后续名称。
 type Visitor func(name string) (shouldContinue bool)
 
+// skipEmptyNames 包装 visitor，过滤掉空名称。
+// 空引用在 spec 中允许存在（如未指定的 secret 名），不应触发依赖方的误判。
 func skipEmptyNames(visitor Visitor) Visitor {
 	return func(name string) bool {
 		if len(name) == 0 {
-			// continue visiting
+			// 跳过空名称，继续访问。
 			return true
 		}
-		// delegate to visitor
+		// 交给真正的 visitor 处理。
 		return visitor(name)
 	}
 }
 
-// VisitPodSecretNames invokes the visitor function with the name of every secret
-// referenced by the pod spec. If visitor returns false, visiting is short-circuited.
-// Transitive references (e.g. pod -> pvc -> pv -> secret) are not visited.
-// Returns true if visiting completed, false if visiting was short-circuited.
+// VisitPodSecretNames 对 pod spec 引用的每个 secret 名称调用 visitor。
+// 若 visitor 返回 false，则提前终止遍历。不递归访问传递引用（如 pod -> pvc -> pv -> secret）。
+// 全部访问完成返回 true，被提前终止返回 false。
 func VisitPodSecretNames(pod *api.Pod, visitor Visitor, containerType ContainerType) bool {
+	// 先过滤空名称，避免镜像拉取密钥等字段为空时产生无意义的回调。
 	visitor = skipEmptyNames(visitor)
 	for _, reference := range pod.Spec.ImagePullSecrets {
 		if !visitor(reference.Name) {
@@ -187,6 +188,7 @@ func VisitPodSecretNames(pod *api.Pod, visitor Visitor, containerType ContainerT
 	return true
 }
 
+// visitContainerSecretNames 访问容器通过 envFrom 和 env.valueFrom 引用的 secret 名称。
 func visitContainerSecretNames(container *api.Container, visitor Visitor) bool {
 	for _, env := range container.EnvFrom {
 		if env.SecretRef != nil {
@@ -205,10 +207,9 @@ func visitContainerSecretNames(container *api.Container, visitor Visitor) bool {
 	return true
 }
 
-// VisitPodConfigmapNames invokes the visitor function with the name of every configmap
-// referenced by the pod spec. If visitor returns false, visiting is short-circuited.
-// Transitive references (e.g. pod -> pvc -> pv -> secret) are not visited.
-// Returns true if visiting completed, false if visiting was short-circuited.
+// VisitPodConfigmapNames 对 pod spec 引用的每个 configmap 名称调用 visitor。
+// 若 visitor 返回 false，则提前终止遍历。不递归访问传递引用（如 pod -> pvc -> pv -> secret）。
+// 全部访问完成返回 true，被提前终止返回 false。
 func VisitPodConfigmapNames(pod *api.Pod, visitor Visitor, containerType ContainerType) bool {
 	visitor = skipEmptyNames(visitor)
 	VisitContainers(&pod.Spec, containerType, func(c *api.Container, containerType ContainerType) bool {
@@ -235,6 +236,7 @@ func VisitPodConfigmapNames(pod *api.Pod, visitor Visitor, containerType Contain
 	return true
 }
 
+// visitContainerConfigmapNames 访问容器通过 envFrom 和 env.valueFrom 引用的 configmap 名称。
 func visitContainerConfigmapNames(container *api.Container, visitor Visitor) bool {
 	for _, env := range container.EnvFrom {
 		if env.ConfigMapRef != nil {
@@ -253,26 +255,25 @@ func visitContainerConfigmapNames(container *api.Container, visitor Visitor) boo
 	return true
 }
 
-// IsPodReady returns true if a pod is ready; false otherwise.
+// IsPodReady 判断 pod 是否处于 Ready 状态。
 func IsPodReady(pod *api.Pod) bool {
 	return IsPodReadyConditionTrue(pod.Status)
 }
 
-// IsPodReadyConditionTrue returns true if a pod is ready; false otherwise.
+// IsPodReadyConditionTrue 判断给定状态中的 PodReady 条件是否为 True。
 func IsPodReadyConditionTrue(status api.PodStatus) bool {
 	condition := GetPodReadyCondition(status)
 	return condition != nil && condition.Status == api.ConditionTrue
 }
 
-// GetPodReadyCondition extracts the pod ready condition from the given status and returns that.
-// Returns nil if the condition is not present.
+// GetPodReadyCondition 从给定状态中提取 PodReady 条件，不存在时返回 nil。
 func GetPodReadyCondition(status api.PodStatus) *api.PodCondition {
 	_, condition := GetPodCondition(&status, api.PodReady)
 	return condition
 }
 
-// GetPodCondition extracts the provided condition from the given status and returns that.
-// Returns nil and -1 if the condition is not present, and the index of the located condition.
+// GetPodCondition 从给定状态中提取指定类型的条件，返回其下标和条件指针。
+// 条件不存在时返回 -1 和 nil。
 func GetPodCondition(status *api.PodStatus, conditionType api.PodConditionType) (int, *api.PodCondition) {
 	if status == nil {
 		return -1, nil
@@ -285,20 +286,19 @@ func GetPodCondition(status *api.PodStatus, conditionType api.PodConditionType) 
 	return -1, nil
 }
 
-// UpdatePodCondition updates existing pod condition or creates a new one. Sets LastTransitionTime to now if the
-// status has changed.
-// Returns true if pod condition has changed or has been added.
+// UpdatePodCondition 更新已有的 pod 条件或新增一个条件。状态发生变化时把 LastTransitionTime 设为当前时间。
+// 条件发生变更或新增时返回 true。
 func UpdatePodCondition(status *api.PodStatus, condition *api.PodCondition) bool {
 	condition.LastTransitionTime = metav1.Now()
-	// Try to find this pod condition.
+	// 先查找同类型的已有条件，决定是新增还是更新。
 	conditionIndex, oldCondition := GetPodCondition(status, condition.Type)
 
 	if oldCondition == nil {
-		// We are adding new pod condition.
+		// 新条件直接追加。
 		status.Conditions = append(status.Conditions, *condition)
 		return true
 	}
-	// We are updating an existing condition, so we need to check if it has changed.
+	// 状态未变时沿用旧的转换时间，避免仅因为重新上报就刷新时间、扰乱事件语义。
 	if condition.Status == oldCondition.Status {
 		condition.LastTransitionTime = oldCondition.LastTransitionTime
 	}
@@ -310,10 +310,11 @@ func UpdatePodCondition(status *api.PodStatus, condition *api.PodCondition) bool
 		condition.LastTransitionTime.Equal(&oldCondition.LastTransitionTime)
 
 	status.Conditions[conditionIndex] = *condition
-	// Return true if one of the fields have changed.
+	// 只要任一字段变化就认为条件发生变更。
 	return !isEqual
 }
 
+// checkContainerUseIndivisibleHugePagesValues 检查容器的 limit 或 request 中是否存在非大页整数倍的大页资源值。
 func checkContainerUseIndivisibleHugePagesValues(container api.Container) bool {
 	for resourceName, quantity := range container.Resources.Limits {
 		if helper.IsHugePageResourceName(resourceName) {
@@ -334,21 +335,22 @@ func checkContainerUseIndivisibleHugePagesValues(container api.Container) bool {
 	return false
 }
 
-// usesIndivisibleHugePagesValues returns true if the one of the containers uses non-integer multiple
-// of huge page unit size
+// usesIndivisibleHugePagesValues 判断是否有容器使用了非大页单位整数倍的资源值。
 func usesIndivisibleHugePagesValues(podSpec *api.PodSpec) bool {
 	foundIndivisibleHugePagesValue := false
 	VisitContainers(podSpec, AllContainers, func(c *api.Container, containerType ContainerType) bool {
 		if checkContainerUseIndivisibleHugePagesValues(*c) {
 			foundIndivisibleHugePagesValue = true
 		}
-		return !foundIndivisibleHugePagesValue // continue visiting if we haven't seen an invalid value yet
+		// 发现非法值后即可停止，没必要继续遍历。
+		return !foundIndivisibleHugePagesValue
 	})
 
 	if foundIndivisibleHugePagesValue {
 		return true
 	}
 
+	// 容器检查通过后还要看 pod 级别的 Overhead，同样可能携带大页资源。
 	for resourceName, quantity := range podSpec.Overhead {
 		if helper.IsHugePageResourceName(resourceName) {
 			if !helper.IsHugePageResourceValueDivisible(resourceName, quantity) {
@@ -360,7 +362,7 @@ func usesIndivisibleHugePagesValues(podSpec *api.PodSpec) bool {
 	return false
 }
 
-// hasInvalidTopologySpreadConstraintLabelSelector return true if spec.TopologySpreadConstraints have any entry with invalid labelSelector
+// hasInvalidTopologySpreadConstraintLabelSelector 判断 spec.TopologySpreadConstraints 中是否存在 labelSelector 非法的条目。
 func hasInvalidTopologySpreadConstraintLabelSelector(spec *api.PodSpec) bool {
 	for _, constraint := range spec.TopologySpreadConstraints {
 		errs := metavalidation.ValidateLabelSelector(constraint.LabelSelector, metavalidation.LabelSelectorValidationOptions{AllowInvalidLabelValueInSelector: false}, nil)
@@ -371,7 +373,7 @@ func hasInvalidTopologySpreadConstraintLabelSelector(spec *api.PodSpec) bool {
 	return false
 }
 
-// hasInvalidTopologySpreadConstrainMatchLabelKeys return true if spec.TopologySpreadConstraints have any entry with invalid MatchLabelKeys
+// hasInvalidTopologySpreadConstrainMatchLabelKeys 判断 spec.TopologySpreadConstraints 中是否存在 MatchLabelKeys 非法的条目。
 func hasInvalidTopologySpreadConstrainMatchLabelKeys(spec *api.PodSpec) bool {
 	for _, constraint := range spec.TopologySpreadConstraints {
 		errs := apivalidation.ValidateMatchLabelKeysAndMismatchLabelKeys(nil, constraint.MatchLabelKeys, nil, constraint.LabelSelector)
@@ -382,7 +384,8 @@ func hasInvalidTopologySpreadConstrainMatchLabelKeys(spec *api.PodSpec) bool {
 	return false
 }
 
-// hasLegacyInvalidTopologySpreadConstrainMatchLabelKeys return true if spec.TopologySpreadConstraints have any entry with invalid MatchLabelKeys against legacy validation
+// hasLegacyInvalidTopologySpreadConstrainMatchLabelKeys 按旧版校验规则判断
+// spec.TopologySpreadConstraints 中是否存在 MatchLabelKeys 非法的条目。
 func hasLegacyInvalidTopologySpreadConstrainMatchLabelKeys(spec *api.PodSpec) bool {
 	for _, constraint := range spec.TopologySpreadConstraints {
 		errs := apivalidation.ValidateMatchLabelKeysInTopologySpread(nil, constraint.MatchLabelKeys, constraint.LabelSelector)
@@ -393,7 +396,7 @@ func hasLegacyInvalidTopologySpreadConstrainMatchLabelKeys(spec *api.PodSpec) bo
 	return false
 }
 
-// hasNonLocalProjectedTokenPath return true if spec.Volumes have any entry with non-local projected token path
+// hasNonLocalProjectedTokenPath 判断 spec.Volumes 中是否存在路径非本地的 projected token。
 func hasNonLocalProjectedTokenPath(spec *api.PodSpec) bool {
 	for _, volume := range spec.Volumes {
 		if volume.Projected != nil {
@@ -411,12 +414,14 @@ func hasNonLocalProjectedTokenPath(spec *api.PodSpec) bool {
 	return false
 }
 
-// GetValidationOptionsFromPodSpecAndMeta returns validation options based on pod specs and metadata
+// GetValidationOptionsFromPodSpecAndMeta 根据新旧 pod spec 与元数据生成校验选项。
+// 核心原则是：特性开关关闭时，对旧对象已经使用过的字段必须放宽校验，避免存量对象无法更新。
 func GetValidationOptionsFromPodSpecAndMeta(podSpec, oldPodSpec *api.PodSpec, podMeta, oldPodMeta *metav1.ObjectMeta) apivalidation.PodValidationOptions {
-	// default pod validation options based on feature gate
+	// 先按特性开关给出默认的校验选项。
 	opts := apivalidation.PodValidationOptions{
+		// 关闭特性开关但允许 PodDeletionCost 字段的非法值，是为了兼容存量对象。
 		AllowInvalidPodDeletionCost: !utilfeature.DefaultFeatureGate.Enabled(features.PodDeletionCost),
-		// Do not allow pod spec to use non-integer multiple of huge page unit size default
+		// 默认不允许使用非大页单位整数倍的大页值。
 		AllowIndivisibleHugePagesValues:                     false,
 		AllowInvalidLabelValueInSelector:                    false,
 		AllowInvalidTopologySpreadConstraintLabelSelector:   false,
@@ -433,15 +438,14 @@ func GetValidationOptionsFromPodSpecAndMeta(podSpec, oldPodSpec *api.PodSpec, po
 		OldPodViolatesLegacyMatchLabelKeysValidation:        false,
 		AllowContainerRestartPolicyRules:                    utilfeature.DefaultFeatureGate.Enabled(features.ContainerRestartRules),
 		AllowUserNamespacesWithVolumeDevices:                false,
-		// This also allows restart rules on sidecar containers.
+		// 该开关同时也允许 sidecar 容器配置重启规则。
 		AllowRestartAllContainers:                               utilfeature.DefaultFeatureGate.Enabled(features.RestartAllContainersOnContainerExits),
 		AllowImageVolumeWithDigest:                              utilfeature.DefaultFeatureGate.Enabled(features.ImageVolumeWithDigest),
 		AllowExistingRestartContainerForNonSidecarInitContainer: hasRestartContainerForNonSidecarInitContainer(oldPodSpec),
 		AllowSysAdminWhenPrivilegeEscalationFalse:               false,
 	}
 
-	// If old spec uses relaxed validation or enabled the RelaxedEnvironmentVariableValidation feature gate,
-	// we must allow it
+	// 特性开关开启或旧 spec 已经使用了宽松命名规则时，必须继续允许宽松校验。
 	opts.AllowRelaxedEnvironmentVariableValidation = useRelaxedEnvironmentVariableValidation(podSpec, oldPodSpec)
 	opts.AllowEnvFilesValidation = useAllowEnvFilesValidation(oldPodSpec)
 	opts.AllowUserNamespacesHostNetworkSupport = useAllowUserNamespacesHostNetworkSupport(oldPodSpec)
@@ -450,26 +454,26 @@ func GetValidationOptionsFromPodSpecAndMeta(podSpec, oldPodSpec *api.PodSpec, po
 	opts.AllowTaintTolerationComparisonOperators = allowTaintTolerationComparisonOperators(oldPodSpec)
 
 	if oldPodSpec != nil {
-		// if old spec used non-integer multiple of huge page unit size, we must allow it
+		// 旧 spec 用了非法大页值时必须继续放行，否则更新会被新规则拒绝。
 		opts.AllowIndivisibleHugePagesValues = usesIndivisibleHugePagesValues(oldPodSpec)
 
 		opts.AllowInvalidLabelValueInSelector = hasInvalidLabelValueInAffinitySelector(oldPodSpec)
 		opts.AllowInvalidLabelValueInRequiredNodeAffinity = hasInvalidLabelValueInRequiredNodeAffinity(oldPodSpec)
-		// if old spec has invalid labelSelector in topologySpreadConstraint, we must allow it
+		// 旧 spec 中 topologySpreadConstraint 的 labelSelector 非法时同样需要放行。
 		opts.AllowInvalidTopologySpreadConstraintLabelSelector = hasInvalidTopologySpreadConstraintLabelSelector(oldPodSpec)
 		if opts.AllowMatchLabelKeysInPodTopologySpread {
 			if opts.AllowMatchLabelKeysInPodTopologySpreadSelectorMerge {
-				// If old spec has invalid MatchLabelKeys, we must set true
+				// 新旧校验规则不同：selector merge 开关下按新规则判断旧对象是否违规。
 				opts.OldPodViolatesMatchLabelKeysValidation = hasInvalidTopologySpreadConstrainMatchLabelKeys(oldPodSpec)
 			} else {
-				// If old spec has invalid MatchLabelKeys against legacy validation, we must set true
+				// 否则按旧版规则判断，保证历史对象继续可更新。
 				opts.OldPodViolatesLegacyMatchLabelKeysValidation = hasLegacyInvalidTopologySpreadConstrainMatchLabelKeys(oldPodSpec)
 			}
 		}
-		// if old spec has an invalid projected token volume path, we must allow it
+		// 旧 spec 的 projected token 路径非法时放行。
 		opts.AllowNonLocalProjectedTokenPath = hasNonLocalProjectedTokenPath(oldPodSpec)
 
-		// if old spec has invalid sysctl with hostNet or hostIPC, we must allow it when update
+		// 旧 spec 在 hostNet/hostIPC 下使用了非法 sysctl 时，更新时也需要放行。
 		if oldPodSpec.SecurityContext != nil && len(oldPodSpec.SecurityContext.Sysctls) != 0 {
 			for _, s := range oldPodSpec.SecurityContext.Sysctls {
 				err := apivalidation.ValidateHostSysctl(s.Name, oldPodSpec, nil)
@@ -480,23 +484,22 @@ func GetValidationOptionsFromPodSpecAndMeta(podSpec, oldPodSpec *api.PodSpec, po
 			}
 		}
 
-		// If oldPod has resize policy set on the restartable init container, we must allow it
+		// 旧对象的 sidecar（可重启 init 容器）配置了 resize policy 时必须继续允许。
 		opts.AllowSidecarResizePolicy = opts.AllowSidecarResizePolicy || hasRestartableInitContainerResizePolicy(oldPodSpec)
 
 		opts.AllowContainerRestartPolicyRules = opts.AllowContainerRestartPolicyRules || containerRestartRulesInUse(oldPodSpec)
 		opts.AllowRestartAllContainers = opts.AllowRestartAllContainers || restartAllContainersActionInUse(oldPodSpec)
 
-		// If old spec has userns and volume devices (doesn't work), we still allow
-		// modifications to it.
+		// 旧对象同时使用了 userns 和 volume devices（该组合不生效），仍允许对其进行修改。
 		opts.AllowUserNamespacesWithVolumeDevices = hasUserNamespacesWithVolumeDevices(oldPodSpec)
 
-		// If old spec already had an image volume with empty reference, allow it
+		// 旧 spec 中 image volume 的引用为空时继续放行，避免存量对象卡住。
 		opts.AllowEmptyImageVolumeReference = hasEmptyImageVolumeReference(oldPodSpec)
 
 		opts.AllowSysAdminWhenPrivilegeEscalationFalse = useAllowSysAdminWhenPrivilegeEscalationFalse(oldPodSpec)
 	}
 	if oldPodMeta != nil && !opts.AllowInvalidPodDeletionCost {
-		// This is an update, so validate only if the existing object was valid.
+		// 更新操作只对原本合法的存量对象收紧校验：旧注解已有错误则继续放行。
 		_, err := helper.GetDeletionCostFromPodAnnotations(oldPodMeta.Annotations)
 		opts.AllowInvalidPodDeletionCost = err != nil
 	}
@@ -504,6 +507,8 @@ func GetValidationOptionsFromPodSpecAndMeta(podSpec, oldPodSpec *api.PodSpec, po
 	return opts
 }
 
+// useRelaxedEnvironmentVariableValidation 判断是否应允许宽松的环境变量名规则。
+// 开关开启时直接允许；否则仅在新对象使用了旧对象已有的宽松名称时才允许，避免放宽新对象的校验。
 func useRelaxedEnvironmentVariableValidation(podSpec, oldPodSpec *api.PodSpec) bool {
 	if utilfeature.DefaultFeatureGate.Enabled(features.RelaxedEnvironmentVariableValidation) {
 		return true
@@ -527,8 +532,9 @@ func useRelaxedEnvironmentVariableValidation(podSpec, oldPodSpec *api.PodSpec) b
 	return false
 }
 
+// useAllowUserNamespacesHostNetworkSupport 判断是否允许 user namespace 与 hostNetwork 同时使用。
 func useAllowUserNamespacesHostNetworkSupport(oldPodSpec *api.PodSpec) bool {
-	// Return true early if feature gate is enabled
+	// 开关开启时直接允许。
 	if utilfeature.DefaultFeatureGate.Enabled(features.UserNamespacesHostNetworkSupport) {
 		return true
 	}
@@ -537,15 +543,16 @@ func useAllowUserNamespacesHostNetworkSupport(oldPodSpec *api.PodSpec) bool {
 		return false
 	}
 
-	// If a pod with user namespaces and hostNetwork already exists in the cluster,
-	// this allows it to continue using the UserNamespacesHostNetworkSupport
-	// validation logic even after the feature gate is disabled.
+	// 集群中已存在同时使用 user namespace 和 hostNetwork 的 pod 时，
+	// 即使开关后续被关闭，也允许它沿用原有的校验逻辑，避免存量对象无法更新。
 	userNamespaces := !*oldPodSpec.HostUsers
 	return oldPodSpec.HostNetwork && userNamespaces
 }
 
+// useAllowEnvFilesValidation 判断是否允许 env.valueFrom.fileKeyRef。
+// 旧对象已使用该字段时必须放行，否则开关回退后存量对象无法更新。
 func useAllowEnvFilesValidation(oldPodSpec *api.PodSpec) bool {
-	// Return true early if feature gate is enabled
+	// 开关开启时直接允许。
 	if utilfeature.DefaultFeatureGate.Enabled(features.EnvFiles) {
 		return true
 	}
@@ -563,6 +570,7 @@ func useAllowEnvFilesValidation(oldPodSpec *api.PodSpec) bool {
 	return false
 }
 
+// hasEnvFileKeyRef 检查环境变量列表中是否存在 fileKeyRef 引用。
 func hasEnvFileKeyRef(envs []api.EnvVar) bool {
 	for _, env := range envs {
 		if env.ValueFrom != nil && env.ValueFrom.FileKeyRef != nil {
@@ -572,6 +580,7 @@ func hasEnvFileKeyRef(envs []api.EnvVar) bool {
 	return false
 }
 
+// useAllowSysAdminWhenPrivilegeEscalationFalse 判断旧对象是否已经在禁用特权提升的同时申请了 CAP_SYS_ADMIN。
 func useAllowSysAdminWhenPrivilegeEscalationFalse(oldPodSpec *api.PodSpec) bool {
 	if oldPodSpec == nil {
 		return false
@@ -586,6 +595,7 @@ func useAllowSysAdminWhenPrivilegeEscalationFalse(oldPodSpec *api.PodSpec) bool 
 	return false
 }
 
+// hasSysAdminAndPrivilegeEscalationFalse 检查安全上下文是否同时满足：未显式开启特权提升、添加了 CAP_SYS_ADMIN。
 func hasSysAdminAndPrivilegeEscalationFalse(sc *api.SecurityContext) bool {
 	if sc == nil {
 		return false
@@ -604,6 +614,8 @@ func hasSysAdminAndPrivilegeEscalationFalse(sc *api.SecurityContext) bool {
 	return false
 }
 
+// gatherPodEnvVarNames 收集 pod 中所有容器的环境变量名和 envFrom 前缀。
+// envFrom 前缀也需要收集，因为宽松命名规则同样作用于注入后的变量名。
 func gatherPodEnvVarNames(podSpec *api.PodSpec) sets.Set[string] {
 	podEnvVarNames := sets.Set[string]{}
 
@@ -640,35 +652,32 @@ func gatherPodEnvVarNames(podSpec *api.PodSpec) sets.Set[string] {
 	return podEnvVarNames
 }
 
+// relaxedEnvVarUsed 判断环境变量名是否属于"只在宽松规则下合法、且旧对象已在用"的情形。
 func relaxedEnvVarUsed(name string, oldPodEnvVarNames sets.Set[string]) bool {
-	// A length of 0 means this is not an update request,
-	// or the old pod does not exist in the env.
-	// We will let the feature gate decide whether to use relaxed rules.
+	// 集合为空表示这是创建请求或旧对象没有环境变量，此时交给特性开关决定是否宽松。
 	if oldPodEnvVarNames.Len() == 0 {
 		return false
 	}
 
 	if len(validation.IsEnvVarName(name)) == 0 || len(validation.IsRelaxedEnvVarName(name)) != 0 {
-		// It's either a valid name by strict rules or an invalid name under relaxed rules.
-		// Either way, we'll use strict rules to validate.
+		// 严格规则合法，或宽松规则也不合法：两种情况都用严格规则校验即可。
 		return false
 	}
 
-	// The name in question failed strict rules but passed relaxed rules.
+	// 走到这里说明该名称只在宽松规则下合法。
 	if oldPodEnvVarNames.Has(name) {
-		// This relaxed-rules name was already in use.
+		// 旧对象已经使用过该名称，必须继续允许。
 		return true
 	}
 
 	return false
 }
 
-// GetValidationOptionsFromPodTemplate will return pod validation options for specified template.
+// GetValidationOptionsFromPodTemplate 返回指定 pod 模板对应的校验选项。
 func GetValidationOptionsFromPodTemplate(podTemplate, oldPodTemplate *api.PodTemplateSpec) apivalidation.PodValidationOptions {
 	var newPodSpec, oldPodSpec *api.PodSpec
 	var newPodMeta, oldPodMeta *metav1.ObjectMeta
-	// we have to be careful about nil pointers here
-	// replication controller in particular is prone to passing nil
+	// 必须小心空指针：replication controller 尤其容易传入 nil 模板。
 	if podTemplate != nil {
 		newPodSpec = &podTemplate.Spec
 		newPodMeta = &podTemplate.ObjectMeta
@@ -680,8 +689,8 @@ func GetValidationOptionsFromPodTemplate(podTemplate, oldPodTemplate *api.PodTem
 	return GetValidationOptionsFromPodSpecAndMeta(newPodSpec, oldPodSpec, newPodMeta, oldPodMeta)
 }
 
-// DropDisabledTemplateFields removes disabled fields from the pod template metadata and spec.
-// This should be called from PrepareForCreate/PrepareForUpdate for all resources containing a PodTemplateSpec
+// DropDisabledTemplateFields 从 pod 模板的元数据和 spec 中清除被禁用的字段。
+// 所有包含 PodTemplateSpec 的资源都应在 PrepareForCreate/PrepareForUpdate 中调用它。
 func DropDisabledTemplateFields(podTemplate, oldPodTemplate *api.PodTemplateSpec) {
 	var (
 		podSpec           *api.PodSpec
@@ -700,8 +709,8 @@ func DropDisabledTemplateFields(podTemplate, oldPodTemplate *api.PodTemplateSpec
 	dropDisabledFields(podSpec, podAnnotations, oldPodSpec, oldPodAnnotations)
 }
 
-// DropDisabledPodFields removes disabled fields from the pod metadata and spec.
-// This should be called from PrepareForCreate/PrepareForUpdate for all resources containing a Pod
+// DropDisabledPodFields 从 pod 的元数据和 spec 中清除被禁用的字段。
+// 所有包含 Pod 的资源都应在 PrepareForCreate/PrepareForUpdate 中调用它。
 func DropDisabledPodFields(pod, oldPod *api.Pod) {
 	var (
 		podSpec           *api.PodSpec
@@ -725,25 +734,25 @@ func DropDisabledPodFields(pod, oldPod *api.Pod) {
 	dropDisabledPodStatusFields(podStatus, oldPodStatus, podSpec, oldPodSpec)
 }
 
-// dropDisabledFields removes disabled fields from the pod metadata and spec.
+// dropDisabledFields 从 pod 元数据和 spec 中清除被禁用的字段。
+// 统一的判断模式：特性开关关闭且旧对象未使用该字段时才清除，避免更新时丢失存量数据。
 func dropDisabledFields(
 	podSpec *api.PodSpec, podAnnotations map[string]string,
 	oldPodSpec *api.PodSpec, oldPodAnnotations map[string]string,
 ) {
-	// the new spec must always be non-nil
+	// 新 spec 必须非 nil，便于后续统一字段访问。
 	if podSpec == nil {
 		podSpec = &api.PodSpec{}
 	}
 
-	// If the feature is disabled and not in use, drop the hostUsers field.
+	// 特性开关关闭且旧对象未使用时清除 hostUsers。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.UserNamespacesSupport) && !hostUsersInUse(oldPodSpec) {
 		podSpec.HostUsers = nil
 	}
 
-	// If the feature is disabled and not in use, drop the SupplementalGroupsPolicy field.
+	// 特性开关关闭且旧对象未使用时清除 SupplementalGroupsPolicy。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.SupplementalGroupsPolicy) && !supplementalGroupsPolicyInUse(oldPodSpec) {
-		// Drop the field in podSpec only if SecurityContext is not nil.
-		// If it is nil, there is no need to set supplementalGroupsPolicy=nil (it will be nil too).
+		// 仅在 SecurityContext 非 nil 时才需要置空；为 nil 时该字段本就是 nil，无需操作。
 		if podSpec.SecurityContext != nil {
 			podSpec.SecurityContext.SupplementalGroupsPolicy = nil
 		}
@@ -764,8 +773,8 @@ func dropDisabledFields(
 	dropDisabledEvictionResponders(podSpec, oldPodSpec)
 
 	if !utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) && !inPlacePodVerticalScalingInUse(oldPodSpec) {
-		// Drop ResizePolicy fields. Don't drop updates to Resources field as template.spec.resources
-		// field is mutable for certain controllers. Let ValidatePodUpdate handle it.
+		// 只清除 ResizePolicy；Resources 字段对部分控制器可变，不能在这里清除，
+		// 由 ValidatePodUpdate 负责校验其合法性。
 		for i := range podSpec.Containers {
 			podSpec.Containers[i].ResizePolicy = nil
 		}
@@ -826,7 +835,7 @@ func dropDisabledFields(
 	}
 
 	if !utilfeature.DefaultFeatureGate.Enabled(features.HostnameOverride) && !setHostnameOverrideInUse(oldPodSpec) {
-		// Set HostnameOverride to nil only if feature is disabled and it is not used
+		// 仅在开关关闭且旧对象未使用时清空 HostnameOverride。
 		podSpec.HostnameOverride = nil
 	}
 
@@ -838,7 +847,7 @@ func dropDisabledFields(
 	DropInitContainerAnnotations(podAnnotations)
 }
 
-// setHostnameOverrideInUse returns true if any pod's spec defines HostnameOverride field.
+// setHostnameOverrideInUse 判断 pod spec 是否设置了 HostnameOverride 字段。
 func setHostnameOverrideInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil || podSpec.HostnameOverride == nil {
 		return false
@@ -846,6 +855,7 @@ func setHostnameOverrideInUse(podSpec *api.PodSpec) bool {
 	return true
 }
 
+// dropFileKeyRefInUse 在 EnvFiles 特性关闭且旧对象未使用时清除环境变量中的 fileKeyRef。
 func dropFileKeyRefInUse(podSpec, oldPodSpec *api.PodSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.EnvFiles) || podFileKeyRefInUse(oldPodSpec) {
 		return
@@ -861,6 +871,7 @@ func dropFileKeyRefInUse(podSpec, oldPodSpec *api.PodSpec) {
 	})
 }
 
+// podFileKeyRefInUse 判断 pod spec 是否有容器使用了 fileKeyRef。
 func podFileKeyRefInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -879,11 +890,14 @@ func podFileKeyRefInUse(podSpec *api.PodSpec) bool {
 	return inUse
 }
 
+// dropContainerStopSignals 在特性关闭且旧对象未使用时清除容器生命周期中的停止信号。
 func dropContainerStopSignals(podSpec, oldPodSpec *api.PodSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.ContainerStopSignals) || containerStopSignalsInUse(oldPodSpec) {
 		return
 	}
 
+	// StopSignal 是 Lifecycle 中唯一受该特性保护的字段；清空后若 Lifecycle 已为空则一并移除，
+	// 避免留下空对象。
 	wipeLifecycle := func(ctr *api.Container) {
 		if ctr.Lifecycle == nil {
 			return
@@ -905,6 +919,7 @@ func dropContainerStopSignals(podSpec, oldPodSpec *api.PodSpec) {
 	})
 }
 
+// containerStopSignalsInUse 判断 pod spec 是否有容器使用了停止信号。
 func containerStopSignalsInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -923,6 +938,7 @@ func containerStopSignalsInUse(podSpec *api.PodSpec) bool {
 	return inUse
 }
 
+// dropHTTPProbeProtocol 在特性关闭且旧对象未使用时清除 HTTP 探针和生命周期钩子中的协议字段。
 func dropHTTPProbeProtocol(podSpec, oldPodSpec *api.PodSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.H2CContainerProbe) || httpProbeProtocolInUse(oldPodSpec) {
 		return
@@ -951,6 +967,7 @@ func dropHTTPProbeProtocol(podSpec, oldPodSpec *api.PodSpec) {
 	})
 }
 
+// httpProbeProtocolInUse 判断 pod spec 是否有容器在 HTTP 探针或生命周期钩子中设置了协议。
 func httpProbeProtocolInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -976,14 +993,15 @@ func httpProbeProtocolInUse(podSpec *api.PodSpec) bool {
 	return inUse
 }
 
+// dropDisabledPodLevelResources 在 PodLevelResources 关闭且旧对象未使用时清除 pod 级别的 Resources。
 func dropDisabledPodLevelResources(podSpec, oldPodSpec *api.PodSpec) {
-	// If the feature is disabled and not in use, drop Resources at the pod-level
-	// from PodSpec.
+	// 特性关闭且旧 spec 未使用该字段时才清除，避免更新时丢数据。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources) && !podLevelResourcesInUse(oldPodSpec) {
 		podSpec.Resources = nil
 	}
 }
 
+// grpcProbeModeInUse 判断 pod spec 是否有容器在 gRPC 探针中设置了 Mode。
 func grpcProbeModeInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -999,12 +1017,13 @@ func grpcProbeModeInUse(podSpec *api.PodSpec) bool {
 	return inUse
 }
 
-// probeHasGRPCMode checks if Mode is set to any value (including Plaintext),
-// so existing field values are preserved when the feature gate is disabled.
+// probeHasGRPCMode 检查探针的 Mode 是否被设置为任意值（包括 Plaintext）。
+// 这样即使开关关闭，已有字段值也会被保留，不会因为值为默认值而被误清除。
 func probeHasGRPCMode(probe *api.Probe) bool {
 	return probe != nil && probe.GRPC != nil && probe.GRPC.Mode != nil
 }
 
+// dropDisabledGRPCContainerProbeTLS 在特性关闭且旧对象未使用时清除 gRPC 探针的 TLS Mode 字段。
 func dropDisabledGRPCContainerProbeTLS(podSpec, oldPodSpec *api.PodSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.GRPCContainerProbeTLS) || grpcProbeModeInUse(oldPodSpec) {
 		return
@@ -1017,27 +1036,28 @@ func dropDisabledGRPCContainerProbeTLS(podSpec, oldPodSpec *api.PodSpec) {
 	})
 }
 
+// dropProbeGRPCTLS 清除单个探针 gRPC 配置中的 Mode 字段。
 func dropProbeGRPCTLS(p *api.Probe) {
 	if p != nil && p.GRPC != nil {
 		p.GRPC.Mode = nil
 	}
 }
 
-// dropDisabledPodStatusFields removes disabled fields from the pod status
+// dropDisabledPodStatusFields 从 pod status 中清除被禁用的字段。
 func dropDisabledPodStatusFields(podStatus, oldPodStatus *api.PodStatus, podSpec, oldPodSpec *api.PodSpec) {
-	// the new status is always be non-nil
+	// 新 status 必须非 nil，便于后续统一字段访问。
 	if podStatus == nil {
 		podStatus = &api.PodStatus{}
 	}
 
 	if !utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodLevelResourcesVerticalScaling) && !podLevelStatusResourcesInUse(oldPodStatus) {
-		// Drop Resources and AllocatedResources fields from PodStatus
+		// 清除 pod 级别的 Resources 和 AllocatedResources。
 		podStatus.Resources = nil
 		podStatus.AllocatedResources = nil
 	}
 
 	if !utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) && !inPlacePodVerticalScalingInUse(oldPodSpec) {
-		// Drop Resources fields
+		// 清除容器状态中的 Resources 字段。
 		dropResourcesField := func(csl []api.ContainerStatus) {
 			for i := range csl {
 				csl[i].Resources = nil
@@ -1047,7 +1067,7 @@ func dropDisabledPodStatusFields(podStatus, oldPodStatus *api.PodStatus, podSpec
 		dropResourcesField(podStatus.InitContainerStatuses)
 		dropResourcesField(podStatus.EphemeralContainerStatuses)
 
-		// Drop AllocatedResources field
+		// 清除容器状态中的 AllocatedResources 字段。
 		dropAllocatedResourcesField := func(csl []api.ContainerStatus) {
 			for i := range csl {
 				csl[i].AllocatedResources = nil
@@ -1104,7 +1124,7 @@ func dropDisabledPodStatusFields(podStatus, oldPodStatus *api.PodStatus, podSpec
 		dropMessageField(podStatus.EphemeralContainerStatuses)
 	}
 
-	// drop ContainerStatus.User field to empty (disable SupplementalGroupsPolicy)
+	// 清空 ContainerStatus.User（对应禁用 SupplementalGroupsPolicy 的场景）。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.SupplementalGroupsPolicy) && !supplementalGroupsPolicyInUse(oldPodSpec) {
 		dropUserField := func(csl []api.ContainerStatus) {
 			for i := range csl {
@@ -1134,9 +1154,8 @@ func dropDisabledPodStatusFields(podStatus, oldPodStatus *api.PodStatus, podSpec
 	}
 }
 
-// dropDisabledDynamicResourceAllocationFields removes pod claim references from
-// container specs and pod-level resource claims unless they are already used
-// by the old pod spec.
+// dropDisabledDynamicResourceAllocationFields 从容器 spec 和 pod 级别移除资源声明引用。
+// 旧 pod spec 已使用这些字段时予以保留。
 func dropDisabledDynamicResourceAllocationFields(podSpec, oldPodSpec *api.PodSpec) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) && !dynamicResourceAllocationInUse(oldPodSpec) {
 		dropResourceClaimRequests(podSpec.Containers)
@@ -1146,6 +1165,7 @@ func dropDisabledDynamicResourceAllocationFields(podSpec, oldPodSpec *api.PodSpe
 	}
 }
 
+// draExendedResourceInUse 判断 pod status 是否使用了扩展资源声明状态。
 func draExendedResourceInUse(podStatus *api.PodStatus) bool {
 	if podStatus != nil && podStatus.ExtendedResourceClaimStatus != nil {
 		return true
@@ -1153,6 +1173,7 @@ func draExendedResourceInUse(podStatus *api.PodStatus) bool {
 	return false
 }
 
+// dropPodNodeAllocatableResourceStatus 在特性关闭且旧对象未使用时清除节点可分配资源声明状态。
 func dropPodNodeAllocatableResourceStatus(podStatus, oldPodStatus *api.PodStatus) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRANodeAllocatableResources) || draNodeAllocatableResourceStatusInUse(oldPodStatus) {
 		return
@@ -1160,6 +1181,7 @@ func dropPodNodeAllocatableResourceStatus(podStatus, oldPodStatus *api.PodStatus
 	podStatus.NodeAllocatableResourceClaimStatuses = nil
 }
 
+// draNodeAllocatableResourceStatusInUse 判断 pod status 是否存在节点可分配资源声明状态。
 func draNodeAllocatableResourceStatusInUse(podStatus *api.PodStatus) bool {
 	if podStatus == nil {
 		return false
@@ -1167,6 +1189,7 @@ func draNodeAllocatableResourceStatusInUse(podStatus *api.PodStatus) bool {
 	return len(podStatus.NodeAllocatableResourceClaimStatuses) > 0
 }
 
+// volumeHealthInUse 判断 pod status 是否存在卷健康状态。
 func volumeHealthInUse(podStatus *api.PodStatus) bool {
 	if podStatus == nil {
 		return false
@@ -1174,6 +1197,7 @@ func volumeHealthInUse(podStatus *api.PodStatus) bool {
 	return len(podStatus.VolumeHealth) > 0
 }
 
+// resourceHealthStatusInUse 判断容器状态中是否存在资源健康状态。
 func resourceHealthStatusInUse(podStatus *api.PodStatus) bool {
 	if podStatus == nil {
 		return false
@@ -1201,6 +1225,7 @@ func resourceHealthStatusInUse(podStatus *api.PodStatus) bool {
 	return false
 }
 
+// resourceHealthStatusMessageInUse 判断容器状态的资源健康状态中是否存在 Message 字段。
 func resourceHealthStatusMessageInUse(podStatus *api.PodStatus) bool {
 	if podStatus == nil {
 		return false
@@ -1232,38 +1257,39 @@ func resourceHealthStatusMessageInUse(podStatus *api.PodStatus) bool {
 	return false
 }
 
+// dynamicResourceAllocationInUse 判断 pod spec 是否使用了动态资源分配。
 func dynamicResourceAllocationInUse(podSpec *api.PodSpec) bool {
-	// We only need to check this field because the containers cannot have
-	// resource requirements entries for claims without a corresponding
-	// entry at the pod spec level.
+	// 只需检查 pod 级别的 ResourceClaims：容器不能引用 pod 级别不存在的声明，
+	// 因此该字段非空即可代表特性被使用。
 	if podSpec != nil && len(podSpec.ResourceClaims) > 0 {
 		return true
 	}
 	return false
 }
 
+// dropResourceClaimRequests 清除容器资源需求中的声明引用。
 func dropResourceClaimRequests(containers []api.Container) {
 	for i := range containers {
 		containers[i].Resources.Claims = nil
 	}
 }
 
+// dropEphemeralResourceClaimRequests 清除临时容器资源需求中的声明引用。
 func dropEphemeralResourceClaimRequests(containers []api.EphemeralContainer) {
 	for i := range containers {
 		containers[i].Resources.Claims = nil
 	}
 }
 
-// dropDisabledProcMountField removes disabled fields from PodSpec related
-// to ProcMount only if it is not already used by the old spec
+// dropDisabledProcMountField 仅当旧 spec 未使用时，清除 PodSpec 中被禁用的 ProcMount 相关字段。
 func dropDisabledProcMountField(podSpec, oldPodSpec *api.PodSpec) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.ProcMountType) && !procMountInUse(oldPodSpec) {
 		defaultProcMount := api.DefaultProcMount
 		VisitContainers(podSpec, AllContainers, func(c *api.Container, containerType ContainerType) bool {
 			if c.SecurityContext != nil && c.SecurityContext.ProcMount != nil {
-				// The ProcMount field was improperly forced to non-nil in 1.12.
-				// If the feature is disabled, and the existing object is not using any non-default values, and the ProcMount field is present in the incoming object, force to the default value.
-				// Note: we cannot force the field to nil when the feature is disabled because it causes a diff against previously persisted data.
+				// 1.12 曾错误地强制把 ProcMount 设为非 nil。当开关关闭、旧对象未使用非默认值、
+				// 而新对象又带着该字段时，将其强制回默认值。
+				// 注意：不能置为 nil，否则会与已持久化的数据产生 diff。
 				c.SecurityContext.ProcMount = &defaultProcMount
 			}
 			return true
@@ -1271,8 +1297,7 @@ func dropDisabledProcMountField(podSpec, oldPodSpec *api.PodSpec) {
 	}
 }
 
-// dropDisabledNodeInclusionPolicyFields removes disabled fields from PodSpec related
-// to NodeInclusionPolicy only if it is not used by the old spec.
+// dropDisabledNodeInclusionPolicyFields 仅当旧 spec 未使用时，清除 PodSpec 中被禁用的 NodeInclusionPolicy 相关字段。
 func dropDisabledNodeInclusionPolicyFields(podSpec, oldPodSpec *api.PodSpec) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.NodeInclusionPolicyInPodTopologySpread) && podSpec != nil {
 		if !nodeTaintsPolicyInUse(oldPodSpec) {
@@ -1288,8 +1313,8 @@ func dropDisabledNodeInclusionPolicyFields(podSpec, oldPodSpec *api.PodSpec) {
 	}
 }
 
-// dropDisabledMatchLabelKeysFieldInPodAffinity removes disabled fields from PodSpec related
-// to MatchLabelKeys in required/preferred PodAffinity/PodAntiAffinity only if it is not already used by the old spec.
+// dropDisabledMatchLabelKeysFieldInPodAffinity 仅当旧 spec 未使用时，清除 PodSpec 中
+// required/preferred PodAffinity/PodAntiAffinity 里被禁用的 MatchLabelKeys 相关字段。
 func dropDisabledMatchLabelKeysFieldInPodAffinity(podSpec, oldPodSpec *api.PodSpec) {
 	if podSpec == nil || podSpec.Affinity == nil || utilfeature.DefaultFeatureGate.Enabled(features.MatchLabelKeysInPodAffinity) || matchLabelKeysFieldInPodAffinityInUse(oldPodSpec) {
 		return
@@ -1305,8 +1330,8 @@ func dropDisabledMatchLabelKeysFieldInPodAffinity(podSpec, oldPodSpec *api.PodSp
 	}
 }
 
-// dropDisabledMatchLabelKeysFieldInTopologySpread removes disabled fields from PodSpec related
-// to MatchLabelKeys in TopologySpread only if it is not already used by the old spec.
+// dropDisabledMatchLabelKeysFieldInTopologySpread 仅当旧 spec 未使用时，清除 PodSpec 中
+// TopologySpread 里被禁用的 MatchLabelKeys 字段。
 func dropDisabledMatchLabelKeysFieldInTopologySpread(podSpec, oldPodSpec *api.PodSpec) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.MatchLabelKeysInPodTopologySpread) && !matchLabelKeysInTopologySpreadInUse(oldPodSpec) {
 		for i := range podSpec.TopologySpreadConstraints {
@@ -1315,7 +1340,7 @@ func dropDisabledMatchLabelKeysFieldInTopologySpread(podSpec, oldPodSpec *api.Po
 	}
 }
 
-// dropMatchLabelKeysFieldInWeightedPodAffnityTerm removes MatchLabelKeys and MismatchLabelKeys fields from WeightedPodAffinityTerm
+// dropMatchLabelKeysFieldInWeightedPodAffnityTerm 清除 WeightedPodAffinityTerm 中的 MatchLabelKeys 和 MismatchLabelKeys 字段。
 func dropMatchLabelKeysFieldInWeightedPodAffnityTerm(terms []api.WeightedPodAffinityTerm) {
 	for i := range terms {
 		terms[i].PodAffinityTerm.MatchLabelKeys = nil
@@ -1323,7 +1348,7 @@ func dropMatchLabelKeysFieldInWeightedPodAffnityTerm(terms []api.WeightedPodAffi
 	}
 }
 
-// dropMatchLabelKeysFieldInPodAffnityTerm removes MatchLabelKeys and MismatchLabelKeys fields from PodAffinityTerm
+// dropMatchLabelKeysFieldInPodAffnityTerm 清除 PodAffinityTerm 中的 MatchLabelKeys 和 MismatchLabelKeys 字段。
 func dropMatchLabelKeysFieldInPodAffnityTerm(terms []api.PodAffinityTerm) {
 	for i := range terms {
 		terms[i].MatchLabelKeys = nil
@@ -1331,21 +1356,21 @@ func dropMatchLabelKeysFieldInPodAffnityTerm(terms []api.PodAffinityTerm) {
 	}
 }
 
-// dropUserFieldsInKeyToPaths removes User fields from each KeyToPath item
+// dropUserFieldsInKeyToPaths 清除每个 KeyToPath 项中的 User 字段。
 func dropUserFieldsInKeyToPaths(items []api.KeyToPath) {
 	for j := range items {
 		items[j].User = nil
 	}
 }
 
-// dropUserFieldsInDownwardAPIVolumeFiles removes User fields from each DownwardAPIVolumeFile item
+// dropUserFieldsInDownwardAPIVolumeFiles 清除每个 DownwardAPIVolumeFile 项中的 User 字段。
 func dropUserFieldsInDownwardAPIVolumeFiles(items []api.DownwardAPIVolumeFile) {
 	for j := range items {
 		items[j].User = nil
 	}
 }
 
-// matchLabelKeysFieldInPodAffinityInUse returns true if given affinityTerms have MatchLabelKeys field set.
+// matchLabelKeysFieldInPodAffinityInUse 判断给定的亲和性条目是否设置了 MatchLabelKeys 或 MismatchLabelKeys。
 func matchLabelKeysFieldInPodAffinityInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil || podSpec.Affinity == nil {
 		return false
@@ -1382,8 +1407,7 @@ func matchLabelKeysFieldInPodAffinityInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
-// matchLabelKeysInTopologySpreadInUse returns true if the pod spec is non-nil
-// and has MatchLabelKeys field set in TopologySpreadConstraints.
+// matchLabelKeysInTopologySpreadInUse 判断 pod spec 非 nil 且 TopologySpreadConstraints 中设置了 MatchLabelKeys。
 func matchLabelKeysInTopologySpreadInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1397,8 +1421,7 @@ func matchLabelKeysInTopologySpreadInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
-// nodeAffinityPolicyInUse returns true if the pod spec is non-nil and has NodeAffinityPolicy field set
-// in TopologySpreadConstraints
+// nodeAffinityPolicyInUse 判断 pod spec 非 nil 且 TopologySpreadConstraints 中设置了 NodeAffinityPolicy。
 func nodeAffinityPolicyInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1411,8 +1434,7 @@ func nodeAffinityPolicyInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
-// nodeTaintsPolicyInUse returns true if the pod spec is non-nil and has NodeTaintsPolicy field set
-// in TopologySpreadConstraints
+// nodeTaintsPolicyInUse 判断 pod spec 非 nil 且 TopologySpreadConstraints 中设置了 NodeTaintsPolicy。
 func nodeTaintsPolicyInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1425,15 +1447,17 @@ func nodeTaintsPolicyInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
-// hostUsersInUse returns true if the pod spec has spec.hostUsers field set.
+// hostUsersInUse 判断 pod spec 是否设置了 spec.hostUsers 字段。
 func hostUsersInUse(podSpec *api.PodSpec) bool {
 	return podSpec != nil && podSpec.HostUsers != nil
 }
 
+// supplementalGroupsPolicyInUse 判断 pod spec 的 SecurityContext 是否设置了 SupplementalGroupsPolicy。
 func supplementalGroupsPolicyInUse(podSpec *api.PodSpec) bool {
 	return podSpec != nil && podSpec.SecurityContext != nil && podSpec.SecurityContext.SupplementalGroupsPolicy != nil
 }
 
+// podObservedGenerationTrackingInUse 判断 pod status 或其条件中是否记录了 ObservedGeneration。
 func podObservedGenerationTrackingInUse(podStatus *api.PodStatus) bool {
 	if podStatus == nil {
 		return false
@@ -1452,8 +1476,7 @@ func podObservedGenerationTrackingInUse(podStatus *api.PodStatus) bool {
 	return false
 }
 
-// podLevelResourcesInUse returns true if pod-spec is non-nil and Resources field at
-// pod-level has non-empty Requests or Limits.
+// podLevelResourcesInUse 判断 pod spec 非 nil 且 pod 级别 Resources 含有非空的 Requests 或 Limits。
 func podLevelResourcesInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1474,8 +1497,7 @@ func podLevelResourcesInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
-// podLevelStatusResourcesInUse checks if AllocationResources or Resources are set
-// in PodStatus.
+// podLevelStatusResourcesInUse 检查 PodStatus 中是否设置了 AllocatedResources 或 Resources。
 func podLevelStatusResourcesInUse(podStatus *api.PodStatus) bool {
 	if podStatus == nil {
 		return false
@@ -1484,7 +1506,7 @@ func podLevelStatusResourcesInUse(podStatus *api.PodStatus) bool {
 	return podStatus.Resources != nil || podStatus.AllocatedResources != nil
 }
 
-// inPlacePodVerticalScalingInUse returns true if pod spec is non-nil and ResizePolicy is set
+// inPlacePodVerticalScalingInUse 判断 pod spec 非 nil 且普通或 init 容器设置了 ResizePolicy。
 func inPlacePodVerticalScalingInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1501,7 +1523,7 @@ func inPlacePodVerticalScalingInUse(podSpec *api.PodSpec) bool {
 	return inUse
 }
 
-// procMountInUse returns true if the pod spec is non-nil and has a SecurityContext's ProcMount field set to a non-default value
+// procMountInUse 判断 pod spec 非 nil 且有容器的 SecurityContext.ProcMount 被设为非默认值。
 func procMountInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1522,6 +1544,7 @@ func procMountInUse(podSpec *api.PodSpec) bool {
 	return inUse
 }
 
+// clusterTrustBundleProjectionInUse 判断 pod spec 的卷中是否投影了 ClusterTrustBundle。
 func clusterTrustBundleProjectionInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1541,6 +1564,7 @@ func clusterTrustBundleProjectionInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
+// rroInUse 判断 pod spec 是否有容器挂载点设置了 RecursiveReadOnly。
 func rroInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1558,6 +1582,7 @@ func rroInUse(podSpec *api.PodSpec) bool {
 	return inUse
 }
 
+// emptyDirVolumeModeInUse 判断 pod spec 的 emptyDir 卷是否设置了 Mode。
 func emptyDirVolumeModeInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1570,6 +1595,7 @@ func emptyDirVolumeModeInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
+// bindMountOptionsInUse 判断 pod spec 是否有容器挂载点设置了 BindMountOptions。
 func bindMountOptionsInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1587,6 +1613,7 @@ func bindMountOptionsInUse(podSpec *api.PodSpec) bool {
 	return inUse
 }
 
+// dropDisabledClusterTrustBundleProjection 在特性关闭且旧对象未使用时清除 ClusterTrustBundle 投影。
 func dropDisabledClusterTrustBundleProjection(podSpec, oldPodSpec *api.PodSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.ClusterTrustBundleProjection) {
 		return
@@ -1595,7 +1622,7 @@ func dropDisabledClusterTrustBundleProjection(podSpec, oldPodSpec *api.PodSpec) 
 		return
 	}
 
-	// If the pod was already using it, it can keep using it.
+	// 旧 pod 已使用该字段时允许继续使用，避免更新时丢数据。
 	if clusterTrustBundleProjectionInUse(oldPodSpec) {
 		return
 	}
@@ -1611,6 +1638,7 @@ func dropDisabledClusterTrustBundleProjection(podSpec, oldPodSpec *api.PodSpec) 
 	}
 }
 
+// podCertificateProjectionInUse 判断 pod spec 的卷中是否投影了 PodCertificate。
 func podCertificateProjectionInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1630,6 +1658,7 @@ func podCertificateProjectionInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
+// dropDisabledPodCertificateProjection 在特性关闭且旧对象未使用时清除 PodCertificate 投影。
 func dropDisabledPodCertificateProjection(podSpec, oldPodSpec *api.PodSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodCertificateRequest) {
 		return
@@ -1638,7 +1667,7 @@ func dropDisabledPodCertificateProjection(podSpec, oldPodSpec *api.PodSpec) {
 		return
 	}
 
-	// If the pod was already using it, it can keep using it.
+	// 旧 pod 已使用该字段时允许继续使用。
 	if podCertificateProjectionInUse(oldPodSpec) {
 		return
 	}
@@ -1654,6 +1683,8 @@ func dropDisabledPodCertificateProjection(podSpec, oldPodSpec *api.PodSpec) {
 	}
 }
 
+// dropDisabledAtomicWriteVolumeUserFields 在特性关闭且旧对象未使用时，
+// 清除各类卷及其投影来源中的 User/DefaultUser 字段。
 func dropDisabledAtomicWriteVolumeUserFields(podSpec, oldPodSpec *api.PodSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.AtomicWriteVolumeUserFields) {
 		return
@@ -1662,7 +1693,7 @@ func dropDisabledAtomicWriteVolumeUserFields(podSpec, oldPodSpec *api.PodSpec) {
 		return
 	}
 
-	// If the pod was already using it, it can keep using it.
+	// 旧 pod 已使用这些字段时允许继续使用。
 	if atomicWriteVolumeUserFieldsInUse(oldPodSpec) {
 		return
 	}
@@ -1701,6 +1732,7 @@ func dropDisabledAtomicWriteVolumeUserFields(podSpec, oldPodSpec *api.PodSpec) {
 	}
 }
 
+// atomicWriteVolumeUserFieldsInUse 判断 pod spec 的卷中是否使用了 User/DefaultUser 字段。
 func atomicWriteVolumeUserFieldsInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1781,6 +1813,7 @@ func atomicWriteVolumeUserFieldsInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
+// hasInvalidLabelValueInAffinitySelector 判断亲和性/反亲和性条目中的 selector 是否含非法标签值。
 func hasInvalidLabelValueInAffinitySelector(spec *api.PodSpec) bool {
 	if spec.Affinity != nil {
 		if spec.Affinity.PodAffinity != nil {
@@ -1815,9 +1848,8 @@ func hasInvalidLabelValueInAffinitySelector(spec *api.PodSpec) bool {
 	return false
 }
 
-// IsRestartableInitContainer returns true if the container has ContainerRestartPolicyAlways.
-// This function is not checking if the container passed to it is indeed an init container.
-// It is just checking if the container restart policy has been set to always.
+// IsRestartableInitContainer 判断容器的重启策略是否为 Always。
+// 该函数不校验传入的容器是否真的是 init 容器，只检查重启策略字段。
 func IsRestartableInitContainer(initContainer *api.Container) bool {
 	if initContainer == nil || initContainer.RestartPolicy == nil {
 		return false
@@ -1825,6 +1857,7 @@ func IsRestartableInitContainer(initContainer *api.Container) bool {
 	return *initContainer.RestartPolicy == api.ContainerRestartPolicyAlways
 }
 
+// hasInvalidLabelValueInRequiredNodeAffinity 判断必需节点亲和性的 NodeSelectorTerms 是否含非法标签值。
 func hasInvalidLabelValueInRequiredNodeAffinity(spec *api.PodSpec) bool {
 	if spec == nil ||
 		spec.Affinity == nil ||
@@ -1835,12 +1868,14 @@ func hasInvalidLabelValueInRequiredNodeAffinity(spec *api.PodSpec) bool {
 	return helper.HasInvalidLabelValueInNodeSelectorTerms(spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms)
 }
 
+// dropImageVolumes 在 ImageVolume 特性关闭且旧对象未使用时清除镜像卷。
 // KEP: https://kep.k8s.io/4639
 func dropImageVolumes(podSpec, oldPodSpec *api.PodSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.ImageVolume) || imageVolumesInUse(oldPodSpec) {
 		return
 	}
 
+	// 先记录被删除的镜像卷名称，再据此清理所有容器对它们的挂载引用。
 	imageVolumeNames := sets.New[string]()
 	var newVolumes []api.Volume
 	for _, v := range podSpec.Volumes {
@@ -1874,6 +1909,7 @@ func dropImageVolumes(podSpec, oldPodSpec *api.PodSpec) {
 	}
 }
 
+// imageVolumesInUse 判断 pod spec 中是否存在镜像卷。
 func imageVolumesInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1888,6 +1924,7 @@ func imageVolumesInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
+// dropSELinuxChangePolicy 在特性关闭且旧对象未使用时清除 pod 级别的 SELinuxChangePolicy。
 func dropSELinuxChangePolicy(podSpec, oldPodSpec *api.PodSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.SELinuxChangePolicy) || seLinuxChangePolicyInUse(oldPodSpec) {
 		return
@@ -1898,6 +1935,7 @@ func dropSELinuxChangePolicy(podSpec, oldPodSpec *api.PodSpec) {
 	podSpec.SecurityContext.SELinuxChangePolicy = nil
 }
 
+// seLinuxChangePolicyInUse 判断 pod spec 的 SecurityContext 是否设置了 SELinuxChangePolicy。
 func seLinuxChangePolicyInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil || podSpec.SecurityContext == nil {
 		return false
@@ -1905,20 +1943,22 @@ func seLinuxChangePolicyInUse(podSpec *api.PodSpec) bool {
 	return podSpec.SecurityContext.SELinuxChangePolicy != nil
 }
 
+// useOnlyRecursiveSELinuxChangePolicy 判断是否只允许 Recursive 这一种 SELinux 变更策略。
 func useOnlyRecursiveSELinuxChangePolicy(oldPodSpec *api.PodSpec) bool {
 	if utilfeature.DefaultFeatureGate.Enabled(features.SELinuxMount) {
-		// All policies are allowed
+		// 开关开启时所有策略都允许。
 		return false
 	}
 
 	if seLinuxChangePolicyInUse(oldPodSpec) {
-		// The old pod spec has *any* policy: we need to keep that object update-able.
+		// 旧对象已设置任意策略：必须保持其可更新性，不能收紧校验。
 		return false
 	}
-	// No feature gate + no value in the old object -> only Recursive is allowed
+	// 开关关闭且旧对象没有值：只允许 Recursive。
 	return true
 }
 
+// taintTolerationComparisonOperatorsInUse 判断 pod spec 的容忍规则是否使用了 Lt/Gt 比较操作符。
 func taintTolerationComparisonOperatorsInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1931,9 +1971,9 @@ func taintTolerationComparisonOperatorsInUse(podSpec *api.PodSpec) bool {
 	return false
 }
 
+// allowTaintTolerationComparisonOperators 判断是否允许容忍规则使用比较操作符。
 func allowTaintTolerationComparisonOperators(oldPodSpec *api.PodSpec) bool {
-	// allow the operators if the feature gate is enabled or the old pod spec uses
-	// comparison operators
+	// 开关开启，或旧 spec 已使用比较操作符时允许。
 	if utilfeature.DefaultFeatureGate.Enabled(features.TaintTolerationComparisonOperators) ||
 		taintTolerationComparisonOperatorsInUse(oldPodSpec) {
 		return true
@@ -1941,7 +1981,9 @@ func allowTaintTolerationComparisonOperators(oldPodSpec *api.PodSpec) bool {
 	return false
 }
 
+// hasUserNamespacesWithVolumeDevices 判断 pod 是否同时启用了 user namespace 并使用了 volume devices。
 func hasUserNamespacesWithVolumeDevices(podSpec *api.PodSpec) bool {
+	// HostUsers 为 nil 或 true 表示未启用 user namespace。
 	if podSpec.HostUsers == nil || *podSpec.HostUsers {
 		return false
 	}
@@ -1950,15 +1992,15 @@ func hasUserNamespacesWithVolumeDevices(podSpec *api.PodSpec) bool {
 	VisitContainers(podSpec, AllContainers, func(c *api.Container, _ ContainerType) bool {
 		if len(c.VolumeDevices) > 0 {
 			hasVolumeDevices = true
-			return false // stop iterating
+			return false // 已找到，停止遍历
 		}
-		return true // keep iterating
+		return true // 继续遍历
 	})
 	return hasVolumeDevices
 }
 
-// hasRestartableInitContainerResizePolicy returns true if the pod spec is non-nil and
-// it has any init container with ContainerRestartPolicyAlways and non-nil ResizePolicy.
+// hasRestartableInitContainerResizePolicy 判断 pod spec 非 nil 且存在
+// 同时设置了 ContainerRestartPolicyAlways 和 ResizePolicy 的 init 容器。
 func hasRestartableInitContainerResizePolicy(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1971,7 +2013,7 @@ func hasRestartableInitContainerResizePolicy(podSpec *api.PodSpec) bool {
 	return false
 }
 
-// hasEmptyImageVolumeReference returns true if the pod spec has any image volume with an empty reference.
+// hasEmptyImageVolumeReference 判断 pod spec 是否存在引用为空的镜像卷。
 func hasEmptyImageVolumeReference(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -1984,8 +2026,8 @@ func hasEmptyImageVolumeReference(podSpec *api.PodSpec) bool {
 	return false
 }
 
-// HasAPIObjectReference returns true if a reference to an API object is found in the pod spec,
-// along with the plural resource of the referenced API type, or an error if an unknown field is encountered.
+// HasAPIObjectReference 判断 pod spec 中是否引用了 API 对象，
+// 返回引用类型对应的复数资源名；遇到未知字段时返回错误。
 func HasAPIObjectReference(pod *api.Pod) (bool, string, error) {
 	if pod.Spec.ServiceAccountName != "" {
 		return true, "serviceaccounts", nil
@@ -2013,6 +2055,7 @@ func HasAPIObjectReference(pod *api.Pod) (bool, string, error) {
 			v.DownwardAPI != nil, v.EmptyDir != nil, v.FC != nil, v.FlexVolume != nil, v.Flocker != nil, v.GCEPersistentDisk != nil,
 			v.GitRepo != nil, v.HostPath != nil, v.Image != nil, v.ISCSI != nil, v.NFS != nil, v.PhotonPersistentDisk != nil,
 			v.PortworxVolume != nil, v.Quobyte != nil, v.RBD != nil, v.ScaleIO != nil, v.StorageOS != nil, v.VsphereVolume != nil:
+			// 这些卷类型不引用 Kubernetes API 对象，无需额外权限。
 			continue
 		case v.ConfigMap != nil:
 			return true, "configmaps (via configmap volumes)", nil
@@ -2030,7 +2073,7 @@ func HasAPIObjectReference(pod *api.Pod) (bool, string, error) {
 			return true, "secrets (via azureFile volumes)", nil
 		case v.Projected != nil:
 			for _, s := range v.Projected.Sources {
-				// Reject projected volume sources that require the Kubernetes API
+				// 投影卷中需要 Kubernetes API 权限的来源在此逐一识别。
 				switch {
 				case s.ConfigMap != nil:
 					return true, "configmaps (via projected volumes)", nil
@@ -2043,10 +2086,10 @@ func HasAPIObjectReference(pod *api.Pod) (bool, string, error) {
 				case s.PodCertificate != nil:
 					return true, "podcertificates", nil
 				case s.DownwardAPI != nil:
-					// Allow projected volume sources that don't require the Kubernetes API
+					// DownwardAPI 来源不访问 Kubernetes API，放行。
 					continue
 				default:
-					// Reject unknown volume types
+					// 未知来源一律按需要引用处理并返回错误，避免遗漏造成权限判断失效。
 					return true, "", fmt.Errorf("unknown source for projected volume %q", v.Name)
 				}
 			}
@@ -2058,8 +2101,7 @@ func HasAPIObjectReference(pod *api.Pod) (bool, string, error) {
 	return false, "", nil
 }
 
-// ApparmorFieldForAnnotation takes a pod annotation and returns the converted
-// apparmor profile field.
+// ApparmorFieldForAnnotation 将 pod 注解转换为对应的 AppArmor profile 字段。
 func ApparmorFieldForAnnotation(annotation string) *api.AppArmorProfile {
 	if annotation == api.DeprecatedAppArmorAnnotationValueUnconfined {
 		return &api.AppArmorProfile{Type: api.AppArmorProfileTypeUnconfined}
@@ -2079,15 +2121,16 @@ func ApparmorFieldForAnnotation(annotation string) *api.AppArmorProfile {
 		}
 	}
 
-	// we can only reach this code path if the localhostProfile name has a zero
-	// length or if the annotation has an unrecognized value
+	// 只有 localhostProfile 名称为空或注解值无法识别时才会走到这里。
 	return nil
 }
 
+// dropContainerRestartRules 清除容器上受特性保护的重启策略与重启规则。
 func dropContainerRestartRules(podSpec *api.PodSpec) {
 	if podSpec == nil {
 		return
 	}
+	// init 容器的 Always 策略早于该特性存在，需保留；其余策略和所有规则都要清除。
 	for i, c := range podSpec.InitContainers {
 		if c.RestartPolicy != nil && *c.RestartPolicy != api.ContainerRestartPolicyAlways {
 			podSpec.InitContainers[i].RestartPolicy = nil
@@ -2104,6 +2147,7 @@ func dropContainerRestartRules(podSpec *api.PodSpec) {
 	}
 }
 
+// containerRestartRulesInUse 判断旧 pod spec 是否使用了受特性保护的重启策略或重启规则。
 func containerRestartRulesInUse(oldPodSpec *api.PodSpec) bool {
 	if oldPodSpec == nil {
 		return false
@@ -2124,14 +2168,14 @@ func containerRestartRulesInUse(oldPodSpec *api.PodSpec) bool {
 	return false
 }
 
-// dropDisabledSchedulingGroup removes pod scheduling group from its spec
-// unless it is already used by the old pod spec.
+// dropDisabledSchedulingGroup 从 pod spec 中移除调度组，旧 spec 已使用时保留。
 func dropDisabledSchedulingGroup(podSpec, oldPodSpec *api.PodSpec) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.GenericWorkload) && !schedulingGroupInUse(oldPodSpec) {
 		podSpec.SchedulingGroup = nil
 	}
 }
 
+// schedulingGroupInUse 判断 pod spec 是否设置了调度组。
 func schedulingGroupInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false
@@ -2140,6 +2184,7 @@ func schedulingGroupInUse(podSpec *api.PodSpec) bool {
 	return podSpec.SchedulingGroup != nil
 }
 
+// restartAllContainersActionInUse 判断旧 spec 是否使用了 RestartAllContainers 动作或 sidecar 重启规则。
 func restartAllContainersActionInUse(oldPodSpec *api.PodSpec) bool {
 	if oldPodSpec == nil {
 		return false
@@ -2157,7 +2202,7 @@ func restartAllContainersActionInUse(oldPodSpec *api.PodSpec) bool {
 				return true
 			}
 		}
-		// This feature also allows sidecar containers to have rules.
+		// 该特性同时允许 sidecar 容器配置重启规则。
 		if c.RestartPolicy != nil && *c.RestartPolicy == api.ContainerRestartPolicyAlways && len(c.RestartPolicyRules) > 0 {
 			return true
 		}
@@ -2165,6 +2210,7 @@ func restartAllContainersActionInUse(oldPodSpec *api.PodSpec) bool {
 	return false
 }
 
+// imageVolumeWithDigestInUse 判断容器状态的卷挂载中是否记录了镜像卷的摘要状态。
 func imageVolumeWithDigestInUse(oldPodStatus *api.PodStatus) bool {
 	if oldPodStatus == nil {
 		return false
@@ -2197,6 +2243,7 @@ func imageVolumeWithDigestInUse(oldPodStatus *api.PodStatus) bool {
 	return false
 }
 
+// dropImageVolumeWithDigest 清除容器状态中卷挂载的摘要状态字段。
 func dropImageVolumeWithDigest(podStatus *api.PodStatus) {
 	if podStatus == nil {
 		return
@@ -2221,8 +2268,8 @@ func dropImageVolumeWithDigest(podStatus *api.PodStatus) {
 	}
 }
 
-// hasRestartContainerForNonSidecarInitContainer returns true if any non-sidecar init container
-// has a RestartContainer resize policy.
+// hasRestartContainerForNonSidecarInitContainer 判断是否存在配置了 RestartContainer resize policy
+// 的非 sidecar init 容器。
 func hasRestartContainerForNonSidecarInitContainer(spec *api.PodSpec) bool {
 	if spec == nil {
 		return false
@@ -2239,17 +2286,15 @@ func hasRestartContainerForNonSidecarInitContainer(spec *api.PodSpec) bool {
 	return false
 }
 
-// DefaultPodLevelResources runs all pod-level resource defaulting in dependency order,
-// converting container specs to v1.PodSpec once to avoid redundant conversions.
+// DefaultPodLevelResources 按依赖顺序执行所有 pod 级别资源的默认值填充。
+// 将容器 spec 一次性转换为 v1.PodSpec，避免重复转换。
 //
-// Order matters:
-//  1. Set pod-level hugepage limits from aggregated container hugepage limits.
-//  2. Default pod-level requests from aggregated container requests (also fills requests
-//     for any resource that has a pod-level limit but no pod-level request, including
-//     hugepage limits set in step 1).
-//  3. Default pod-level limits to max(pod-level requests, aggregated container limits)
-//     for resources where all containers have limits. Step 2 must run first so that
-//     pod-level requests are complete before the max() comparison.
+// 顺序很关键：
+//  1. 用容器大页 limit 的汇总值设置 pod 级别大页 limit。
+//  2. 用容器 request 的汇总值填充 pod 级别 request（同时为有 pod 级别 limit 但无 request
+//     的资源补齐 request，包括第 1 步设置的大页 limit）。
+//  3. 对所有容器都设置了 limit 的资源，将 pod 级别 limit 设为 max(pod 级别 request, 容器 limit 汇总)。
+//     第 2 步必须先执行，确保 max() 比较时 pod 级别 request 已完整。
 func DefaultPodLevelResources(pod *api.Pod) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources) ||
 		!utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourcesFixDefaulting) {
@@ -2263,8 +2308,8 @@ func DefaultPodLevelResources(pod *api.Pod) {
 	}
 
 	v1PodSpec := &apiv1.PodSpec{}
-	// Ephemeral containers are excluded here as they cannot specify resources and do not contribute
-	// to QoS or pod-level resource defaulting. If this changes, this location may need to be updated.
+	// 此处排除临时容器：它们不能声明资源，也不参与 QoS 或 pod 级别资源默认值计算。
+	// 若该前提发生变化，需要同步更新此处。
 	if err := corev1.Convert_core_PodSpec_To_v1_PodSpec(&api.PodSpec{
 		Containers:     pod.Spec.Containers,
 		InitContainers: pod.Spec.InitContainers,
@@ -2278,8 +2323,8 @@ func DefaultPodLevelResources(pod *api.Pod) {
 	defaultPodLevelLimits(pod, v1Pod)
 }
 
-// defaultHugePagePodLevelLimits applies default values for pod-level hugepage limits,
-// setting pod-level hugepage limit equal to aggregated container limits if not specified.
+// defaultHugePagePodLevelLimits 填充 pod 级别的大页 limit：
+// 未指定时，将其设为容器大页 limit 的汇总值。
 func defaultHugePagePodLevelLimits(pod *api.Pod, v1Pod *apiv1.Pod) {
 	if pod.Spec.Resources == nil {
 		return
@@ -2296,11 +2341,12 @@ func defaultHugePagePodLevelLimits(pod *api.Pod, v1Pod *apiv1.Pod) {
 	aggrCtrLims := resourcehelper.AggregateContainerLimits(v1Pod, resourcehelper.PodResourcesOptions{})
 	for key, aggrCtrLim := range aggrCtrLims {
 		coreKey := api.ResourceName(key)
-		// Only default hugepages here; non-hugepage resources (CPU/Memory) are overcommittable and defaulted in subsequent steps.
+		// 这里只处理大页：CPU/内存等资源可超卖，留给后续步骤填充。
 		if !resourcehelper.IsSupportedPodLevelResource(key) || !helper.IsHugePageResourceName(coreKey) {
 			continue
 		}
 
+		// 若该资源已有 pod 级别 request，说明用户显式配置过，无需再补 limit。
 		if _, exists := pod.Spec.Resources.Requests[coreKey]; exists {
 			continue
 		}
@@ -2315,8 +2361,8 @@ func defaultHugePagePodLevelLimits(pod *api.Pod, v1Pod *apiv1.Pod) {
 	}
 }
 
-// defaultPodLevelRequests applies default values for pod-level requests from aggregated container
-// requests (for overcommittable resources) and pod-level limits.
+// defaultPodLevelRequests 用容器 request 的汇总值（针对可超卖资源）和 pod 级别 limit
+// 填充 pod 级别 request。
 func defaultPodLevelRequests(pod *api.Pod, v1Pod *apiv1.Pod) {
 	if pod.Spec.Resources == nil {
 		return
@@ -2333,11 +2379,14 @@ func defaultPodLevelRequests(pod *api.Pod, v1Pod *apiv1.Pod) {
 	aggrCtrReqs := resourcehelper.AggregateContainerRequests(v1Pod, resourcehelper.PodResourcesOptions{})
 	for key, aggrCtrReq := range aggrCtrReqs {
 		coreKey := api.ResourceName(key)
+		// 只对支持 pod 级别且允许超卖的资源，用容器 request 汇总补齐缺失的 request。
 		if _, exists := podReqs[coreKey]; !exists && resourcehelper.IsSupportedPodLevelResource(key) && helper.IsOvercommitAllowed(coreKey) {
 			podReqs[coreKey] = aggrCtrReq
 		}
 	}
 
+	// 有 pod 级别 limit 但缺 request 的资源，直接用 limit 作为 request；
+	// 这样可保证 request <= limit，同时覆盖第 1 步补出的大页 limit。
 	if pod.Spec.Resources.Limits != nil {
 		for key, podLim := range pod.Spec.Resources.Limits {
 			if _, exists := podReqs[key]; !exists && resourcehelper.IsSupportedPodLevelResource(apiv1.ResourceName(key)) {
@@ -2351,8 +2400,8 @@ func defaultPodLevelRequests(pod *api.Pod, v1Pod *apiv1.Pod) {
 	}
 }
 
-// defaultPodLevelLimits sets pod-level limits equal to max(PLR request, aggregated container limits)
-// if all containers have limits set for candidate resources.
+// defaultPodLevelLimits 对候选资源（所有容器都设置了 limit）将 pod 级别 limit
+// 设为 max(pod 级别 request, 容器 limit 汇总值)。
 func defaultPodLevelLimits(pod *api.Pod, v1Pod *apiv1.Pod) {
 	if pod.Spec.Resources == nil {
 		return
@@ -2362,20 +2411,14 @@ func defaultPodLevelLimits(pod *api.Pod, v1Pod *apiv1.Pod) {
 	}
 
 	candidates := sets.New[api.ResourceName]()
-	// We iterate over pod-level requests because the presence of a pod-level request
-	// is the necessary signal for pod-level resource management. Due to existing
-	// defaulting logic, if a resource has container-level limits, they would be
-	// propagated to container-level requests, and then aggregated to pod-level
-	// requests (if not explicitly set). Thus, any resource that is a candidate
-	// for pod-level limit defaulting will already be present in the pod-level
-	// requests map. This makes iterating over Requests both efficient and
-	// sufficient for identifying defaulting candidates.
+	// 遍历 pod 级别 request 而非 limit：request 存在是启用 pod 级别资源管理的必要信号。
+	// 现有默认值逻辑会把容器 limit 传播到容器 request，再汇总到 pod 级别 request（未显式设置时），
+	// 因此所有需要补 limit 的候选资源必定已在 request map 中，遍历 request 即可完整定位候选者。
 	for resName := range pod.Spec.Resources.Requests {
 		if !resourcehelper.IsSupportedPodLevelResource(apiv1.ResourceName(resName)) {
 			continue
 		}
-		// If pod-level limits for that resource is already set, defaulting logic
-		// should not be applied.
+		// 已有 pod 级别 limit 的资源不做默认值填充。
 		if _, ok := pod.Spec.Resources.Limits[resName]; !ok {
 			candidates.Insert(resName)
 		}
@@ -2400,10 +2443,8 @@ func defaultPodLevelLimits(pod *api.Pod, v1Pod *apiv1.Pod) {
 			podReq = pod.Spec.Resources.Requests[resName]
 		}
 
-		// If the pod-level request exceeds the aggregated container limits, raise the
-		// pod-level limit to match the pod-level request. This ensures the pod remains
-		// valid (requests <= limits) and prevents the apiserver from rejecting the
-		// update during subsequent validation.
+		// pod 级别 request 超过容器 limit 汇总时，把 pod 级别 limit 抬高到 request，
+		// 保证 request <= limit，避免后续校验拒绝更新。
 		if podReq.Cmp(val) > 0 {
 			val = podReq
 		}
@@ -2414,11 +2455,11 @@ func defaultPodLevelLimits(pod *api.Pod, v1Pod *apiv1.Pod) {
 	}
 }
 
-// aggregateContainerLimits returns the aggregated limits for candidate resources across all containers in the pod spec.
-// It also filters the candidates set, removing any resource for which not all containers have limits specified.
+// aggregateContainerLimits 返回候选资源在所有容器上的 limit 汇总值。
+// 同时过滤候选集合：只要有任一容器没设置该资源的 limit，就将其从候选中移除。
 func aggregateContainerLimits(spec *api.PodSpec, candidates sets.Set[api.ResourceName], v1Pod *apiv1.Pod) apiv1.ResourceList {
-	// For a resource limit to be defaulted at the pod level, all containers (including init containers
-	// and sidecars) must specify a limit for that resource.
+	// 资源要在 pod 级别补 limit，前提是包括 init 容器和 sidecar 在内的所有容器
+	// 都显式设置了该资源的 limit。
 	VisitContainers(spec, AllContainers, func(ctr *api.Container, _ ContainerType) bool {
 		for resName := range candidates {
 			if _, ok := ctr.Resources.Limits[resName]; !ok {
@@ -2442,23 +2483,22 @@ var initContainerAnnotations = map[string]struct{}{
 	"pod.alpha.kubernetes.io/init-container-statuses": {},
 }
 
-// DropInitContainerAnnotations deletes the legacy alpha/beta init container
-// annotations from the provided map in place. Support for these annotations was
-// removed in v1.8 in favor of the Spec.InitContainers field.
+// DropInitContainerAnnotations 就地删除 map 中遗留的 alpha/beta init 容器注解。
+// 这些注解在 v1.8 已被 Spec.InitContainers 字段取代。
 func DropInitContainerAnnotations(annotations map[string]string) {
 	for k := range initContainerAnnotations {
 		delete(annotations, k)
 	}
 }
 
-// dropDisabledEvictionResponders removes eviction responders from its spec
-// unless it is already used by the old pod spec.
+// dropDisabledEvictionResponders 从 pod spec 中移除驱逐响应者配置，旧 spec 已使用时保留。
 func dropDisabledEvictionResponders(podSpec, oldPodSpec *api.PodSpec) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.EvictionRequestAPI) && !evictionRespondersInUse(oldPodSpec) {
 		podSpec.EvictionResponders = nil
 	}
 }
 
+// evictionRespondersInUse 判断 pod spec 是否配置了驱逐响应者。
 func evictionRespondersInUse(podSpec *api.PodSpec) bool {
 	if podSpec == nil {
 		return false

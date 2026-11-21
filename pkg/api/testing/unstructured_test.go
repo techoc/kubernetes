@@ -39,20 +39,17 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// doRoundTrip 对单个 GVK 验证两条通道：JSON -> map -> 对象，以及 DefaultUnstructuredConverter 往返。
 func doRoundTrip(t *testing.T, internalVersion schema.GroupVersion, externalVersion schema.GroupVersion, kind string) {
-	// We do fuzzing on the internal version of the object, and only then
-	// convert to the external version. This is because custom fuzzing
-	// function are only supported for internal objects.
+	// 先对 internal 版本做 fuzz 再转 external：自定义 fuzz 函数只支持 internal 对象。
 	internalObj, err := legacyscheme.Scheme.New(internalVersion.WithKind(kind))
 	if err != nil {
 		t.Fatalf("Couldn't create internal object %v: %v", kind, err)
 	}
 	seed := rand.Int63()
 	fuzzer.FuzzerFor(FuzzerFuncs, rand.NewSource(seed), legacyscheme.Codecs).
-		// We are explicitly overwriting custom fuzzing functions, to ensure
-		// that InitContainers and their statuses are not generated. This is
-		// because in this test we are simply doing json operations, in which
-		// those disappear.
+		// 覆写默认 fuzz 函数，不生成 InitContainers 及其状态：
+		// 本测试只做 JSON 操作，这些字段会在转换中消失，留着会造成假阳性。
 		Funcs(
 			func(s *api.PodSpec, c randfill.Continue) {
 				c.FillNoCustom(s)
@@ -72,6 +69,8 @@ func doRoundTrip(t *testing.T, internalVersion schema.GroupVersion, externalVers
 		t.Fatalf("Conversion for %v failed: %v", kind, err)
 	}
 
+	// 第一条通道：对象 -> JSON -> 无类型 map -> JSON -> 对象，
+	// 模拟 unstructured 客户端中转数据的过程。
 	data, err := json.Marshal(item)
 	if err != nil {
 		t.Errorf("Error when marshaling object: %v", err)
@@ -89,6 +88,7 @@ func doRoundTrip(t *testing.T, internalVersion schema.GroupVersion, externalVers
 		t.Errorf("Error when marshaling unstructured: %v", err)
 		return
 	}
+	// 反射创建同类型空对象，作为 JSON 回转的目标。
 	unmarshalledObj := reflect.New(reflect.TypeOf(item).Elem()).Interface()
 	err = json.Unmarshal(data, &unmarshalledObj)
 	if err != nil {
@@ -100,6 +100,7 @@ func doRoundTrip(t *testing.T, internalVersion schema.GroupVersion, externalVers
 		return
 	}
 
+	// 第二条通道：走 DefaultUnstructuredConverter 的专用转换路径。
 	newUnstr, err := runtime.DefaultUnstructuredConverter.ToUnstructured(item)
 	if err != nil {
 		t.Errorf("ToUnstructured failed: %v", err)
@@ -113,13 +114,16 @@ func doRoundTrip(t *testing.T, internalVersion schema.GroupVersion, externalVers
 		return
 	}
 
+	// 语义等价比较，容忍 map 顺序等无关差异。
 	if !apiequality.Semantic.DeepEqual(item, newObj) {
 		t.Errorf("Object changed, diff: %v", cmp.Diff(item, newObj))
 	}
 }
 
+// TestRoundTrip 对所有可 round-trip 的外部类型重复做随机 unstructured 往返测试。
 func TestRoundTrip(t *testing.T) {
 	for gvk := range legacyscheme.Scheme.AllKnownTypes() {
+		// 不可 round-trip 的类型和内部版本无法参与 unstructured 往返。
 		if nonRoundTrippableTypes.Has(gvk.Kind) {
 			continue
 		}
@@ -127,6 +131,7 @@ func TestRoundTrip(t *testing.T) {
 			continue
 		}
 		t.Logf("Testing: %v in %v", gvk.Kind, gvk.GroupVersion().String())
+		// 每个类型跑 50 轮，失败即停，避免同一类型刷出大量重复错误。
 		for i := 0; i < 50; i++ {
 			doRoundTrip(t, schema.GroupVersion{Group: gvk.Group, Version: runtime.APIVersionInternal}, gvk.GroupVersion(), gvk.Kind)
 			if t.Failed() {
@@ -136,9 +141,11 @@ func TestRoundTrip(t *testing.T) {
 	}
 }
 
+// TestRoundtripToUnstructured 复用 apitesting 的通用实现，覆盖 scheme 中更多类型的 unstructured 往返。
 func TestRoundtripToUnstructured(t *testing.T) {
 	skipped := sets.New[schema.GroupVersionKind]()
 	for gvk := range legacyscheme.Scheme.AllKnownTypes() {
+		// 收集不可 round-trip 的类型交给通用测试跳过。
 		if nonRoundTrippableTypes.Has(gvk.Kind) {
 			skipped.Insert(gvk)
 		}
@@ -147,6 +154,7 @@ func TestRoundtripToUnstructured(t *testing.T) {
 	roundtrip.RoundtripToUnstructured(t, legacyscheme.Scheme, FuzzerFuncs, skipped, nil)
 }
 
+// TestRoundTripWithEmptyCreationTimestamp 验证空的 creationTimestamp 不会导致 unstructured 回转失败。
 func TestRoundTripWithEmptyCreationTimestamp(t *testing.T) {
 	for gvk := range legacyscheme.Scheme.AllKnownTypes() {
 		if nonRoundTrippableTypes.Has(gvk.Kind) {
@@ -170,14 +178,14 @@ func TestRoundTripWithEmptyCreationTimestamp(t *testing.T) {
 		unstructObj := &metaunstruct.Unstructured{}
 		unstructObj.Object = unstrBody
 
+		// 通过 ObjectMeta accessor 把时间戳置空，模拟客户端省略该字段的情形。
 		if meta, err := meta.Accessor(unstructObj); err == nil {
 			meta.SetCreationTimestamp(metav1.Time{})
 		} else {
 			t.Fatalf("Unable to set creation timestamp: %v", err)
 		}
 
-		// attempt to re-convert unstructured object - conversion should not fail
-		// based on empty metadata fields, such as creationTimestamp
+		// 空的 creationTimestamp 等元数据字段不应导致回转失败。
 		newObj := reflect.New(reflect.TypeOf(item).Elem()).Interface().(runtime.Object)
 		err = runtime.DefaultUnstructuredConverter.FromUnstructured(unstructObj.Object, newObj)
 		if err != nil {
@@ -186,6 +194,7 @@ func TestRoundTripWithEmptyCreationTimestamp(t *testing.T) {
 	}
 }
 
+// BenchmarkToUnstructured 测量对象转 unstructured map 的开销。
 func BenchmarkToUnstructured(b *testing.B) {
 	items := benchmarkItems(b)
 	size := len(items)
@@ -200,6 +209,8 @@ func BenchmarkToUnstructured(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkFromUnstructured 测量 unstructured map 回转成对象的开销。
+// map 预先转换好，计时只覆盖 FromUnstructured 调用。
 func BenchmarkFromUnstructured(b *testing.B) {
 	items := benchmarkItems(b)
 	convertor := runtime.DefaultUnstructuredConverter
@@ -222,6 +233,7 @@ func BenchmarkFromUnstructured(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkToUnstructuredViaJSON 测量通过 JSON 往返构造 map 的开销，作为转换器性能的对照。
 func BenchmarkToUnstructuredViaJSON(b *testing.B) {
 	items := benchmarkItems(b)
 	var data [][]byte
@@ -243,6 +255,7 @@ func BenchmarkToUnstructuredViaJSON(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkFromUnstructuredViaJSON 测量通过 JSON 往返从 map 还原对象的开销，作为转换器性能的对照。
 func BenchmarkFromUnstructuredViaJSON(b *testing.B) {
 	items := benchmarkItems(b)
 	var unstr []map[string]interface{}

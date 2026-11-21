@@ -24,11 +24,12 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 )
 
-// TestSelectableFieldLabelConversionsOfKind verifies that given resource have field
-// label conversion defined for each its selectable field.
-// fields contains selectable fields of the resource.
-// labelMap maps deprecated labels to their canonical names.
+// TestSelectableFieldLabelConversionsOfKind 验证给定资源的每个可选字段（selectable field）
+// 都定义了对应的 label 转换规则。
+// fields 参数给出该资源的可选字段集合；
+// labelMap 把已弃用的 label 名映射到其规范名称。
 func TestSelectableFieldLabelConversionsOfKind(t *testing.T, apiVersion string, kind string, fields fields.Set, labelMap map[string]string) {
+	// 这些 label 不是合法的字段标签，转换时必须报错。
 	badFieldLabels := []string{
 		"name",
 		".name",
@@ -50,6 +51,7 @@ func TestSelectableFieldLabelConversionsOfKind(t *testing.T, apiVersion string, 
 		t.Logf("no selectable fields for kind %q, skipping", kind)
 	}
 	for label := range fields {
+		// "name" 已被 "metadata.name" 取代，不应再作为可选字段存在。
 		if label == "name" {
 			t.Logf("FIXME: \"name\" is deprecated by \"metadata.name\", it should be removed from selectable fields of kind=%s", kind)
 			continue
@@ -62,6 +64,7 @@ func TestSelectableFieldLabelConversionsOfKind(t *testing.T, apiVersion string, 
 			if l, exists := labelMap[label]; exists {
 				expectedLabel = l
 			}
+			// 转换后的 label 名应与（可能映射后的）原名一致，值保持不变。
 			if newLabel != expectedLabel {
 				t.Errorf("kind=%s label=%s: got unexpected label name (%q != %q)", kind, label, newLabel, expectedLabel)
 			}
@@ -71,6 +74,7 @@ func TestSelectableFieldLabelConversionsOfKind(t *testing.T, apiVersion string, 
 		}
 	}
 
+	// 非法 label 必须全部被拒绝，否则说明转换规则过于宽松。
 	for _, label := range badFieldLabels {
 		_, _, err := legacyscheme.Scheme.ConvertFieldLabel(gvk, label, "value")
 		if err == nil {

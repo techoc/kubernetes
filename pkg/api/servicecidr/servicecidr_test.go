@@ -29,6 +29,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// newServiceCIDR 构造测试用的 ServiceCIDR：secondary 非空时把它作为第二个 CIDR，
+// 用来模拟同时覆盖 IPv4 和 IPv6 的 ServiceCIDR。
 func newServiceCIDR(name, primary, secondary string) *networkingv1.ServiceCIDR {
 	serviceCIDR := &networkingv1.ServiceCIDR{
 		ObjectMeta: metav1.ObjectMeta{
@@ -43,6 +45,9 @@ func newServiceCIDR(name, primary, secondary string) *networkingv1.ServiceCIDR {
 	return serviceCIDR
 }
 
+// TestOverlapsPrefix 验证 OverlapsPrefix 只返回与给定 prefix 有重叠的 ServiceCIDR：
+// 无论 prefix 是更大还是更小、IPv4 还是 IPv6，只要相交就应命中；多个 CIDR 重叠时
+// 全部返回，完全不相交时返回空列表。
 func TestOverlapsPrefix(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -186,6 +191,7 @@ func TestOverlapsPrefix(t *testing.T) {
 			prefix: netip.MustParsePrefix("2001:db2::/64"),
 			want:   []string{},
 		},
+		// 多个 ServiceCIDR 互相重叠且 prefix 也重叠时，所有匹配的都要返回。
 		{
 			name: "multiple ServiceCIDR match with overlap contained",
 			serviceCIDRs: []*networkingv1.ServiceCIDR{
@@ -221,7 +227,7 @@ func TestOverlapsPrefix(t *testing.T) {
 			for _, serviceCIDR := range OverlapsPrefix(lister, tt.prefix) {
 				got = append(got, serviceCIDR.Name)
 			}
-			// sort slices to make the order predictable and avoid flakiness
+			// 对切片排序以固定顺序，避免 lister 返回顺序不确定导致测试偶发失败。
 			sort.Strings(got)
 			sort.Strings(tt.want)
 			if !reflect.DeepEqual(got, tt.want) {
@@ -231,6 +237,9 @@ func TestOverlapsPrefix(t *testing.T) {
 	}
 }
 
+// TestContainsPrefix 验证 ContainsPrefix 只返回完整包含给定 prefix 的 ServiceCIDR：
+// 与 OverlapsPrefix 不同，prefix 比 CIDR 更大（范围更广）时不应命中；
+// 多个 CIDR 都能包含时才全部返回。
 func TestContainsPrefix(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -374,6 +383,7 @@ func TestContainsPrefix(t *testing.T) {
 			prefix: netip.MustParsePrefix("2001:db2::/64"),
 			want:   []string{},
 		},
+		// 多个 CIDR 有重叠时，凡是完整包含该 prefix 的都要返回。
 		{
 			name: "multiple ServiceCIDR match with overlap",
 			serviceCIDRs: []*networkingv1.ServiceCIDR{
@@ -399,7 +409,7 @@ func TestContainsPrefix(t *testing.T) {
 			for _, serviceCIDR := range ContainsPrefix(lister, tt.prefix) {
 				got = append(got, serviceCIDR.Name)
 			}
-			// sort slices to make the order predictable and avoid flakiness
+			// 对切片排序以固定顺序，避免 lister 返回顺序不确定导致测试偶发失败。
 			sort.Strings(got)
 			sort.Strings(tt.want)
 			if !reflect.DeepEqual(got, tt.want) {
@@ -409,6 +419,9 @@ func TestContainsPrefix(t *testing.T) {
 	}
 }
 
+// TestContainsAddress 验证 ContainsAddress 对单个 IP 的包含判断：
+// 匹配范围随 CIDR 掩码而定，同时排除网络地址与 IPv4 广播地址（Service 不会分配它们），
+// IPv6 广播地址则视为可用地址。
 func TestContainsAddress(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -424,6 +437,7 @@ func TestContainsAddress(t *testing.T) {
 			address: netip.MustParseAddr("10.0.0.1"),
 			want:    []string{"kubernetes"},
 		},
+		// IPv4 的广播地址不应被分配给 Service，故不命中。
 		{
 			name: "only one ServiceCIDR and IPv4 address broadcast",
 			serviceCIDRs: []*networkingv1.ServiceCIDR{
@@ -432,6 +446,7 @@ func TestContainsAddress(t *testing.T) {
 			address: netip.MustParseAddr("10.0.0.255"),
 			want:    []string{},
 		},
+		// 网络地址同样不可分配，不应命中。
 		{
 			name: "only one ServiceCIDR and IPv4 address base",
 			serviceCIDRs: []*networkingv1.ServiceCIDR{
@@ -456,6 +471,7 @@ func TestContainsAddress(t *testing.T) {
 			address: netip.MustParseAddr("2001:db8::2:3"),
 			want:    []string{"kubernetes"},
 		},
+		// IPv6 没有广播地址概念，因此 2001:db8::ffff:ffff 仍视为可分配地址。
 		{
 			name: "only one ServiceCIDR and IPv6 address broadcast",
 			serviceCIDRs: []*networkingv1.ServiceCIDR{
@@ -577,7 +593,7 @@ func TestContainsAddress(t *testing.T) {
 			for _, serviceCIDR := range ContainsAddress(lister, tt.address) {
 				got = append(got, serviceCIDR.Name)
 			}
-			// sort slices to make the order predictable and avoid flakiness
+			// 对切片排序以固定顺序，避免 lister 返回顺序不确定导致测试偶发失败。
 			sort.Strings(got)
 			sort.Strings(tt.want)
 			if !reflect.DeepEqual(got, tt.want) {
@@ -587,6 +603,9 @@ func TestContainsAddress(t *testing.T) {
 	}
 }
 
+// Test_PrefixContainIP 验证 PrefixContainsIP 的边界规则：
+// IPv4 中要排除网络地址和广播地址，IPv6 只排除网络地址；
+// 范围之外的 IP 一律返回 false。
 func Test_PrefixContainIP(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -647,6 +666,8 @@ func Test_PrefixContainIP(t *testing.T) {
 	}
 }
 
+// TestIPToAddr 验证 IPToAddr 能把 net.IP 规范化成 netip.Addr：
+// IPv4/IPv6 正常转换，IPv4-mapped IPv6 地址还原成 IPv4，非法输入返回零值。
 func TestIPToAddr(t *testing.T) {
 	tests := []struct {
 		name string
@@ -663,11 +684,13 @@ func TestIPToAddr(t *testing.T) {
 			ip:   "2001:db8::2",
 			want: netip.MustParseAddr("2001:db8::2"),
 		},
+		// IPv4 映射地址应还原为纯 IPv4 地址，避免与真实 IPv6 混淆。
 		{
 			name: "IPv4 in IPv6",
 			ip:   "::ffff:192.168.0.1",
 			want: netip.MustParseAddr("192.168.0.1"),
 		},
+		// 非法字符串解析后为 nil，转换结果应是零值 Addr。
 		{
 			name: "invalid",
 			ip:   "invalid_ip",
@@ -684,6 +707,8 @@ func TestIPToAddr(t *testing.T) {
 	}
 }
 
+// TestBroadcastAddress 验证 broadcastAddress 对 IPv4/IPv6 各种掩码长度
+// （奇偶掩码）都能正确计算广播地址，空子网应返回错误。
 func TestBroadcastAddress(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -691,6 +716,7 @@ func TestBroadcastAddress(t *testing.T) {
 		want    netip.Addr
 		wantErr bool
 	}{
+		// 零值 Prefix 是非法子网，必须返回错误，而不是静默算出错误地址。
 		{
 			name:    "emty subnet",
 			wantErr: true,

@@ -29,7 +29,10 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/validation"
 )
 
+// TestCompatibility_v1_PodSecurityContext 验证 v1 Pod 的安全上下文字段与 1.0.0 版本的语义兼容。
+// 通过 compat.TestCompatibility 对比新旧校验器产出的错误键，确保新增字段不会改变旧有行为。
 func TestCompatibility_v1_PodSecurityContext(t *testing.T) {
+	// 每个用例用不同字段的 true/false 取值，覆盖默认值为 false 时字段是否出现在校验错误中的差异。
 	cases := []struct {
 		name         string
 		input        string
@@ -158,11 +161,13 @@ func TestCompatibility_v1_PodSecurityContext(t *testing.T) {
 		},
 	}
 
+	// validator 用当前 internal 类型的校验逻辑，供兼容测试与新版本做对照。
 	validator := func(obj runtime.Object) field.ErrorList {
 		opts := podutil.GetValidationOptionsFromPodSpecAndMeta(&(obj.(*api.Pod).Spec), nil, &(obj.(*api.Pod).ObjectMeta), nil)
 		return validation.ValidatePodSpec(&(obj.(*api.Pod).Spec), &(obj.(*api.Pod).ObjectMeta), field.NewPath("spec"), opts)
 	}
 
+	// expectedKeys 必须出现，absentKeys 必须不出现，以此锁定字段默认值的兼容行为。
 	for _, tc := range cases {
 		t.Logf("Testing 1.0.0 backward compatibility for %v", tc.name)
 		compat.TestCompatibility(t, v1.SchemeGroupVersion, []byte(tc.input), validator, tc.expectedKeys, tc.absentKeys)

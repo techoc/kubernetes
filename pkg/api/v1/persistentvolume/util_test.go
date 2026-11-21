@@ -27,22 +27,29 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestPVSecrets 验证 VisitPVSecretNames 能覆盖 PV 中所有真正的 Secret 引用：
+// 用反射枚举 api.PersistentVolume 里名字含 secret 的字段路径作为基准，
+// 确保没有漏掉新字段、也没有把 SecretFile 这类非引用字段算进来；
+// 同时检查提取出的（命名空间, 名字）组合，以及空名字不会被收集。
 func TestPVSecrets(t *testing.T) {
-	// Stub containing all possible secret references in a PV.
-	// The names of the referenced secrets match struct paths detected by reflection.
+	// 包含 PV 中所有可能 Secret 引用的桩数据。
+	// 被引用 Secret 的名字与反射探测到的结构体路径一致，便于反查漏掉的字段。
 	secretNamespace := "Spec.PersistentVolumeSource.AzureFile.SecretNamespace"
 	pvs := []*corev1.PersistentVolume{
+		// AzureFile 未显式指定 SecretNamespace 时，应回退到 ClaimRef 的命名空间。
 		{Spec: corev1.PersistentVolumeSpec{
 			ClaimRef: &corev1.ObjectReference{Namespace: "claimrefns", Name: "claimrefname"},
 			PersistentVolumeSource: corev1.PersistentVolumeSource{
 				AzureFile: &corev1.AzureFilePersistentVolumeSource{
 					SecretName: "Spec.PersistentVolumeSource.AzureFile.SecretName"}}}},
+		// AzureFile 显式指定 SecretNamespace 时，应以该字段为准。
 		{Spec: corev1.PersistentVolumeSpec{
 			ClaimRef: &corev1.ObjectReference{Namespace: "claimrefns", Name: "claimrefname"},
 			PersistentVolumeSource: corev1.PersistentVolumeSource{
 				AzureFile: &corev1.AzureFilePersistentVolumeSource{
 					SecretName:      "Spec.PersistentVolumeSource.AzureFile.SecretName",
 					SecretNamespace: &secretNamespace}}}},
+		// CephFS 带显式命名空间。
 		{Spec: corev1.PersistentVolumeSpec{
 			ClaimRef: &corev1.ObjectReference{Namespace: "claimrefns", Name: "claimrefname"},
 			PersistentVolumeSource: corev1.PersistentVolumeSource{
@@ -50,12 +57,14 @@ func TestPVSecrets(t *testing.T) {
 					SecretRef: &corev1.SecretReference{
 						Name:      "Spec.PersistentVolumeSource.CephFS.SecretRef",
 						Namespace: "cephfs"}}}}},
+		// CephFS 未指定命名空间时，应回退到 ClaimRef 的命名空间。
 		{Spec: corev1.PersistentVolumeSpec{
 			ClaimRef: &corev1.ObjectReference{Namespace: "claimrefns", Name: "claimrefname"},
 			PersistentVolumeSource: corev1.PersistentVolumeSource{
 				CephFS: &corev1.CephFSPersistentVolumeSource{
 					SecretRef: &corev1.SecretReference{
 						Name: "Spec.PersistentVolumeSource.CephFS.SecretRef"}}}}},
+		// Cinder 没有 ClaimRef，只能用 SecretRef 自带的命名空间。
 		{Spec: corev1.PersistentVolumeSpec{
 			PersistentVolumeSource: corev1.PersistentVolumeSource{
 				Cinder: &corev1.CinderPersistentVolumeSource{
@@ -121,6 +130,7 @@ func TestPVSecrets(t *testing.T) {
 					SecretRef: &corev1.ObjectReference{
 						Name:      "Spec.PersistentVolumeSource.StorageOS.SecretRef",
 						Namespace: "storageosns"}}}}},
+		// CSI 有五个独立的 Secret 引用字段，必须逐个覆盖。
 		{Spec: corev1.PersistentVolumeSpec{
 			ClaimRef: &corev1.ObjectReference{Namespace: "claimrefns", Name: "claimrefname"},
 			PersistentVolumeSource: corev1.PersistentVolumeSource{
@@ -161,6 +171,7 @@ func TestPVSecrets(t *testing.T) {
 	extractedNamesWithNamespace := sets.New[string]()
 
 	for _, pv := range pvs {
+		// 返回 true 表示继续遍历，收集所有引用而不在第一个处停止。
 		VisitPVSecretNames(pv, func(namespace, name string, kubeletVisible bool) bool {
 			extractedNames.Insert(name)
 			extractedNamesWithNamespace.Insert(namespace + "/" + name)
@@ -168,13 +179,13 @@ func TestPVSecrets(t *testing.T) {
 		})
 	}
 
-	// excludedSecretPaths holds struct paths to fields with "secret" in the name that are not actually references to secret API objects
+	// excludedSecretPaths 是名字含 "secret" 但并非 Secret API 对象引用的字段路径。
 	excludedSecretPaths := sets.New[string](
 		"Spec.PersistentVolumeSource.CephFS.SecretFile",
 		"Spec.PersistentVolumeSource.AzureFile.SecretNamespace",
 	)
-	// expectedSecretPaths holds struct paths to fields with "secret" in the name that are references to secret API objects.
-	// every path here should be represented as an example in the PV stub above, with the secret name set to the path.
+	// expectedSecretPaths 是名字含 "secret" 且确实引用 Secret 对象的字段路径。
+	// 上面每个路径都应在 PV 桩数据中有对应例子，且 Secret 名字设为该路径本身。
 	expectedSecretPaths := sets.New[string](
 		"Spec.PersistentVolumeSource.AzureFile.SecretName",
 		"Spec.PersistentVolumeSource.CephFS.SecretRef",
@@ -190,6 +201,7 @@ func TestPVSecrets(t *testing.T) {
 		"Spec.PersistentVolumeSource.CSI.ControllerExpandSecretRef",
 		"Spec.PersistentVolumeSource.CSI.NodeExpandSecretRef",
 	)
+	// 反射枚举内部 API 类型的结构体路径，作为核对 VisitPVSecretNames 覆盖度的独立基准。
 	secretPaths := collectSecretPaths(t, nil, "", reflect.TypeOf(&api.PersistentVolume{}))
 	secretPaths = secretPaths.Difference(excludedSecretPaths)
 	if missingPaths := expectedSecretPaths.Difference(secretPaths); len(missingPaths) > 0 {
@@ -201,6 +213,8 @@ func TestPVSecrets(t *testing.T) {
 		t.Error("Extra fields with 'secret' in the name found. Verify VisitPVSecretNames() is including these fields if appropriate, then correct expectedSecretPaths")
 	}
 
+	// 桩数据中的 Secret 名字应恰好覆盖全部预期路径：新增字段时这里会先失败，
+	// 提醒补充桩数据，而不是误以为是 VisitPVSecretNames 漏了字段。
 	if missingNames := expectedSecretPaths.Difference(extractedNames); len(missingNames) > 0 {
 		t.Logf("Missing expected secret names:\n%s", strings.Join(sets.List[string](missingNames), "\n"))
 		t.Error("Missing expected secret names. Verify the PV stub above includes these references, then verify VisitPVSecretNames() is correctly finding the missing names")
@@ -210,6 +224,7 @@ func TestPVSecrets(t *testing.T) {
 		t.Error("Extra secret names extracted. Verify VisitPVSecretNames() is correctly extracting secret names")
 	}
 
+	// 命名空间来源有两种：SecretRef 自带的值，或回退到 ClaimRef.Namespace。
 	expectedNamespacedNames := sets.New[string](
 		"claimrefns/Spec.PersistentVolumeSource.AzureFile.SecretName",
 		"Spec.PersistentVolumeSource.AzureFile.SecretNamespace/Spec.PersistentVolumeSource.AzureFile.SecretName",
@@ -248,6 +263,7 @@ func TestPVSecrets(t *testing.T) {
 		t.Error("Extra namespaced names extracted. Verify VisitPVSecretNames() is correctly extracting secret names")
 	}
 
+	// 空 Secret 名字不构成有效引用，回调不应被调用。
 	emptyPV := &corev1.PersistentVolume{
 		Spec: corev1.PersistentVolumeSpec{
 			ClaimRef: &corev1.ObjectReference{Namespace: "claimrefns", Name: "claimrefname"},
@@ -262,11 +278,13 @@ func TestPVSecrets(t *testing.T) {
 	})
 }
 
-// collectSecretPaths traverses the object, computing all the struct paths that lead to fields with "secret" in the name.
+// collectSecretPaths 递归遍历对象类型，收集所有名字中含 "secret" 的结构体字段路径，
+// 用于独立核对 VisitPVSecretNames 是否覆盖了全部真实 Secret 引用字段。
 func collectSecretPaths(t *testing.T, path *field.Path, name string, tp reflect.Type) sets.Set[string] {
 	secretPaths := sets.New[string]()
 
 	if tp.Kind() == reflect.Pointer {
+		// 先解引用指针，避免把 *T 与 T 的字段重复统计。
 		secretPaths.Insert(sets.List[string](collectSecretPaths(t, path, name, tp.Elem()))...)
 		return secretPaths
 	}
@@ -279,8 +297,8 @@ func collectSecretPaths(t *testing.T, path *field.Path, name string, tp reflect.
 	case reflect.Pointer:
 		secretPaths.Insert(sets.List[string](collectSecretPaths(t, path, name, tp.Elem()))...)
 	case reflect.Struct:
-		// ObjectMeta should not have any field with the word "secret" in it;
-		// it contains cycles so it's easiest to just skip it.
+		// ObjectMeta 里不应有含 "secret" 的字段；
+		// 而且它包含循环引用，直接跳过最省事。
 		if name == "ObjectMeta" {
 			break
 		}
@@ -289,13 +307,14 @@ func collectSecretPaths(t *testing.T, path *field.Path, name string, tp reflect.
 			secretPaths.Insert(sets.List[string](collectSecretPaths(t, path.Child(field.Name), field.Name, field.Type))...)
 		}
 	case reflect.Interface:
+		// 接口里无法静态判断具体类型，遍历到此处需人工确认。
 		t.Errorf("cannot find secret fields in interface{} field %s", path.String())
 	case reflect.Map:
 		secretPaths.Insert(sets.List[string](collectSecretPaths(t, path.Key("*"), "", tp.Elem()))...)
 	case reflect.Slice:
 		secretPaths.Insert(sets.List[string](collectSecretPaths(t, path.Key("*"), "", tp.Elem()))...)
 	default:
-		// all primitive types
+		// 基本类型，无子字段可遍历。
 	}
 
 	return secretPaths

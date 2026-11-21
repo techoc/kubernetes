@@ -25,10 +25,11 @@ import (
 )
 
 const (
+	// 未显式配置 sourceRanges 时使用的默认值：允许所有来源。
 	defaultLoadBalancerSourceRanges = "0.0.0.0/0"
 )
 
-// IsAllowAll checks whether the utilnet.IPNet allows traffic from 0.0.0.0/0
+// IsAllowAll 检查 IPNet 集合是否包含 0.0.0.0/0，即是否允许所有来源的流量。
 func IsAllowAll(ipnets utilnet.IPNetSet) bool {
 	for _, s := range ipnets.StringSlice() {
 		if s == "0.0.0.0/0" {
@@ -38,13 +39,13 @@ func IsAllowAll(ipnets utilnet.IPNetSet) bool {
 	return false
 }
 
-// GetLoadBalancerSourceRanges first try to parse and verify LoadBalancerSourceRanges field from a service.
-// If the field is not specified, turn to parse and verify the AnnotationLoadBalancerSourceRangesKey annotation from a service,
-// extracting the source ranges to allow, and if not present returns a default (allow-all) value.
+// GetLoadBalancerSourceRanges 先解析并校验 Service 的 LoadBalancerSourceRanges 字段；
+// 若该字段为空，则退而解析注解 AnnotationLoadBalancerSourceRangesKey；
+// 两者都没有时使用默认值（允许所有来源）。
 func GetLoadBalancerSourceRanges(service *api.Service) (utilnet.IPNetSet, error) {
 	var ipnets utilnet.IPNetSet
 	var err error
-	// if SourceRange field is specified, ignore sourceRange annotation
+	// spec 字段优先于注解：两者同时存在时注解被忽略。
 	if len(service.Spec.LoadBalancerSourceRanges) > 0 {
 		specs := service.Spec.LoadBalancerSourceRanges
 		ipnets, err = utilnet.ParseIPNets(specs...)
@@ -53,6 +54,7 @@ func GetLoadBalancerSourceRanges(service *api.Service) (utilnet.IPNetSet, error)
 			return nil, fmt.Errorf("service.Spec.LoadBalancerSourceRanges: %v is not valid. Expecting a list of IP ranges. For example, 10.0.0.0/24. Error msg: %v", specs, err)
 		}
 	} else {
+		// 注解里是以逗号分隔的单个字符串，需要去空白后拆分。
 		val := service.Annotations[api.AnnotationLoadBalancerSourceRangesKey]
 		val = strings.TrimSpace(val)
 		if val == "" {
@@ -67,14 +69,16 @@ func GetLoadBalancerSourceRanges(service *api.Service) (utilnet.IPNetSet, error)
 	return ipnets, nil
 }
 
-// ExternallyAccessible checks if service is externally accessible.
+// ExternallyAccessible 判断 Service 是否可从集群外部访问：
+// LoadBalancer、NodePort 类型，或带 ExternalIP 的 ClusterIP 类型。
 func ExternallyAccessible(service *api.Service) bool {
 	return service.Spec.Type == api.ServiceTypeLoadBalancer ||
 		service.Spec.Type == api.ServiceTypeNodePort ||
 		(service.Spec.Type == api.ServiceTypeClusterIP && len(service.Spec.ExternalIPs) > 0)
 }
 
-// RequestsOnlyLocalTraffic checks if service requests OnlyLocal traffic.
+// RequestsOnlyLocalTraffic 判断 Service 是否要求流量只路由到本节点上的 endpoint。
+// 只有 LoadBalancer 和 NodePort 类型支持 ExternalTrafficPolicy=Local。
 func RequestsOnlyLocalTraffic(service *api.Service) bool {
 	if service.Spec.Type != api.ServiceTypeLoadBalancer &&
 		service.Spec.Type != api.ServiceTypeNodePort {
@@ -84,7 +88,8 @@ func RequestsOnlyLocalTraffic(service *api.Service) bool {
 	return service.Spec.ExternalTrafficPolicy == api.ServiceExternalTrafficPolicyLocal
 }
 
-// NeedsHealthCheck checks if service needs health check.
+// NeedsHealthCheck 判断 Service 是否需要健康检查：
+// 只有 LoadBalancer 类型且要求 Local 流量时才需要。
 func NeedsHealthCheck(service *api.Service) bool {
 	if service.Spec.Type != api.ServiceTypeLoadBalancer {
 		return false

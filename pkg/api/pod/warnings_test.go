@@ -35,6 +35,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// BenchmarkNoWarnings 基准测试“完全不产生警告”的 Pod：
+// 用于衡量干净 spec 上警告检查的固定开销。
 func BenchmarkNoWarnings(b *testing.B) {
 	ctx := context.TODO()
 	resources := api.ResourceList{
@@ -100,6 +102,8 @@ func BenchmarkNoWarnings(b *testing.B) {
 	}
 }
 
+// BenchmarkWarnings 基准测试“产生大量警告”的 Pod：
+// 重复 IP、重复 secret、小数字节值等都会触发警告，衡量最坏路径的开销。
 func BenchmarkWarnings(b *testing.B) {
 	ctx := context.TODO()
 	resources := api.ResourceList{
@@ -144,6 +148,8 @@ func BenchmarkWarnings(b *testing.B) {
 	}
 }
 
+// TestWarnings 表驱动验证 Pod/PodTemplate 的各种警告场景。
+// 每个用例同时以 Pod 和 PodTemplate 两种形态运行，确认两条入口产生一致结果。
 func TestWarnings(t *testing.T) {
 	containerRestartPolicyAlways := api.ContainerRestartPolicyAlways
 	resources := api.ResourceList{
@@ -152,6 +158,8 @@ func TestWarnings(t *testing.T) {
 		api.ResourceEphemeralStorage: resource.MustParse("4m"),
 	}
 	testName := "Test"
+	// 表驱动用例覆盖各类弃用字段、重复定义、非法值等场景；
+	// expected 中字符串需与警告文案精确匹配（排序后比较）。
 	testcases := []struct {
 		name                  string
 		template              *api.PodTemplateSpec
@@ -1835,11 +1843,13 @@ func TestWarnings(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-
+		// GitRepo 特性在 1.33 已 GA；通过模拟版本降级关闭它，
+		// 才能覆盖“插件被禁用”时的告警文案。
 		if !tc.gitRepoPluginDisabled {
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 		}
 
+		// 第一条路径：直接把模板交给 GetWarningsForPodTemplate。
 		t.Run("podspec_"+tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GitRepoVolumeDriver, !tc.gitRepoPluginDisabled)
 			var oldTemplate *api.PodTemplateSpec
@@ -1847,11 +1857,13 @@ func TestWarnings(t *testing.T) {
 				oldTemplate = tc.oldTemplate
 			}
 			actual := GetWarningsForPodTemplate(context.TODO(), nil, tc.template, oldTemplate)
+			// 警告顺序不稳定，排序后比较；EquateEmpty 把 nil 和空切片视为等价。
 			if diff := cmp.Diff(actual, tc.expected, cmpopts.SortSlices(stringLess), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("bad warning output; diff (-got +want)\n%s", diff)
 			}
 		})
 
+		// 第二条路径：把模板内容包成 Pod，验证 GetWarningsForPod 结果一致。
 		t.Run("pod_"+tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GitRepoVolumeDriver, !tc.gitRepoPluginDisabled)
 			var pod *api.Pod
@@ -1862,6 +1874,7 @@ func TestWarnings(t *testing.T) {
 				}
 			}
 			actual := GetWarningsForPod(context.TODO(), pod, &api.Pod{})
+			// 警告顺序不稳定，排序后比较；EquateEmpty 把 nil 和空切片视为等价。
 			if diff := cmp.Diff(actual, tc.expected, cmpopts.SortSlices(stringLess), cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("bad warning output; diff (-got +want)\n%s", diff)
 			}
@@ -1869,10 +1882,13 @@ func TestWarnings(t *testing.T) {
 	}
 }
 
+// stringLess 为警告切片排序提供确定的字符串顺序。
 func stringLess(a, b string) bool {
 	return a < b
 }
 
+// TestTemplateOnlyWarnings 验证只对 PodTemplate 生效的警告（如 AppArmor 注解）。
+// Pod 对象的同类告警走 applyAppArmorVersionSkew，因此这里只测模板入口。
 func TestTemplateOnlyWarnings(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -1948,6 +1964,7 @@ func TestTemplateOnlyWarnings(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
+		// 第一条路径：直接把模板交给 GetWarningsForPodTemplate。
 		t.Run("podspec_"+tc.name, func(t *testing.T) {
 			var oldTemplate *api.PodTemplateSpec
 			if tc.oldTemplate != nil {
@@ -1963,6 +1980,7 @@ func TestTemplateOnlyWarnings(t *testing.T) {
 			}
 		})
 
+		// 第二条路径：把模板内容包成 Pod，验证 GetWarningsForPod 结果一致。
 		t.Run("pod_"+tc.name, func(t *testing.T) {
 			var pod *api.Pod
 			if tc.template != nil {
@@ -1979,6 +1997,7 @@ func TestTemplateOnlyWarnings(t *testing.T) {
 	}
 }
 
+// TestCheckForOverLap 验证虚拟路径重叠检查：完全相同或一个路径是另一个的父目录都算重叠。
 func TestCheckForOverLap(t *testing.T) {
 	testCase := map[string]struct {
 		checkPaths []pathAndSource

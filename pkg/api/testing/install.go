@@ -17,7 +17,9 @@ limitations under the License.
 package testing
 
 import (
-	// Initialize install packages
+	// 空导入（blank import）只为触发各 API group 的 init()，
+	// 把外部版本类型、内部类型及转换/默认值函数注册到 legacyscheme.Scheme。
+	// 这里必须覆盖全部 group：后续 round-trip、fuzz、转换测试都依赖完整的 scheme。
 	_ "k8s.io/kubernetes/pkg/apis/admission/install"
 	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 	_ "k8s.io/kubernetes/pkg/apis/apps/install"

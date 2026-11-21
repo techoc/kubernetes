@@ -41,7 +41,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestVisitContainers 验证 VisitContainers 能按 ContainerType 掩码（普通/init/临时容器）
+// 遍历 PodSpec 中指定类别的容器，并在回调里就地修改容器（清空 SecurityContext）时，
+// 修改确实反映到原 spec 上——这是调用方依赖的关键语义。
 func TestVisitContainers(t *testing.T) {
+	// 哨兵掩码：实际取值依赖特性门控，需在子测试里用 AllFeatureEnabledContainers() 动态解析。
 	setAllFeatureEnabledContainersDuringTest := ContainerType(0)
 	testCases := []struct {
 		desc           string
@@ -50,12 +54,14 @@ func TestVisitContainers(t *testing.T) {
 		mask           ContainerType
 	}{
 		{
+			// 空 PodSpec：任何掩码都应得到空结果。
 			desc:           "empty podspec",
 			spec:           &api.PodSpec{},
 			wantContainers: []string{},
 			mask:           AllContainers,
 		},
 		{
+			// 只选普通容器：掩码 Containers 应过滤掉 init/临时容器。
 			desc: "regular containers",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -75,6 +81,7 @@ func TestVisitContainers(t *testing.T) {
 			mask:           Containers,
 		},
 		{
+			// 只选 init 容器，期望顺序 i1、i2。
 			desc: "init containers",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -94,6 +101,7 @@ func TestVisitContainers(t *testing.T) {
 			mask:           InitContainers,
 		},
 		{
+			// 只选临时容器（ephemeral containers）。
 			desc: "ephemeral containers",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -113,6 +121,7 @@ func TestVisitContainers(t *testing.T) {
 			mask:           EphemeralContainers,
 		},
 		{
+			// AllContainers：期望顺序是 init → 普通 → 临时，与字段在结构体里的存放顺序不同。
 			desc: "all container types",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -132,6 +141,7 @@ func TestVisitContainers(t *testing.T) {
 			mask:           AllContainers,
 		},
 		{
+			// 用哨兵值覆盖“随特性门控变化的容器类型”分支。
 			desc: "all feature enabled container types with ephemeral containers enabled",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -151,6 +161,7 @@ func TestVisitContainers(t *testing.T) {
 			mask:           setAllFeatureEnabledContainersDuringTest,
 		},
 		{
+			// 每类容器都带 SecurityContext，验证回调的修改对所有类型都生效。
 			desc: "dropping fields",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -173,10 +184,12 @@ func TestVisitContainers(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			// 子测试内解析哨兵，避免使用过期/全局的掩码值。
 			if tc.mask == setAllFeatureEnabledContainersDuringTest {
 				tc.mask = AllFeatureEnabledContainers()
 			}
 
+			// 回调负责收集名字并清空 SecurityContext，用来验证“就地修改”语义。
 			gotContainers := []string{}
 			VisitContainers(tc.spec, tc.mask, func(c *api.Container, containerType ContainerType) bool {
 				gotContainers = append(gotContainers, c.Name)
@@ -185,6 +198,7 @@ func TestVisitContainers(t *testing.T) {
 				}
 				return true
 			})
+			// 先断言遍历顺序，再逐类检查字段是否已被清空。
 			if !cmp.Equal(gotContainers, tc.wantContainers) {
 				t.Errorf("VisitContainers() = %+v, want %+v", gotContainers, tc.wantContainers)
 			}
@@ -207,6 +221,9 @@ func TestVisitContainers(t *testing.T) {
 	}
 }
 
+// TestContainerIter 验证 ContainerIter 迭代器按掩码产出容器，并同时返回容器所属类型。
+// 这里用名字首字母（i/c/e）交叉校验返回的 containerType，确保类型标记与容器一致；
+// 出现未知类型会直接报错，防止新增类型被静默忽略。
 func TestContainerIter(t *testing.T) {
 	testCases := []struct {
 		desc           string
@@ -215,12 +232,14 @@ func TestContainerIter(t *testing.T) {
 		mask           ContainerType
 	}{
 		{
+			// 空 spec：迭代器不应产出任何元素。
 			desc:           "empty podspec",
 			spec:           &api.PodSpec{},
 			wantContainers: []string{},
 			mask:           AllContainers,
 		},
 		{
+			// 仅普通容器，类型标记必须是 Containers。
 			desc: "regular containers",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -240,6 +259,7 @@ func TestContainerIter(t *testing.T) {
 			mask:           Containers,
 		},
 		{
+			// 仅 init 容器，类型标记必须是 InitContainers。
 			desc: "init containers",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -259,6 +279,7 @@ func TestContainerIter(t *testing.T) {
 			mask:           InitContainers,
 		},
 		{
+			// 位或掩码组合 init 与普通容器，验证顺序仍是 init 在前。
 			desc: "init + main containers",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -278,6 +299,7 @@ func TestContainerIter(t *testing.T) {
 			mask:           InitContainers | Containers,
 		},
 		{
+			// 仅临时容器，类型标记必须是 EphemeralContainers。
 			desc: "ephemeral containers",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -297,6 +319,7 @@ func TestContainerIter(t *testing.T) {
 			mask:           EphemeralContainers,
 		},
 		{
+			// 三种类型全开，顺序 init → 普通 → 临时。
 			desc: "all container types",
 			spec: &api.PodSpec{
 				Containers: []api.Container{
@@ -323,6 +346,7 @@ func TestContainerIter(t *testing.T) {
 			for c, containerType := range ContainerIter(tc.spec, tc.mask) {
 				gotContainers = append(gotContainers, c.Name)
 
+				// 按名字前缀交叉验证迭代器返回的类型标记是否正确。
 				switch containerType {
 				case InitContainers:
 					if c.Name[0] != 'i' {
@@ -348,9 +372,12 @@ func TestContainerIter(t *testing.T) {
 	}
 }
 
+// TestPodSecrets 验证 VisitPodSecretNames 能找出 Pod 中“所有且仅有”的 Secret 引用。
+// 手法：构造一个“引用名即 struct 路径”的 Pod 桩，再用反射遍历 api.Pod 收集所有
+// 名字里含 secret 的字段路径，两边集合做差集，既防漏也防多。
 func TestPodSecrets(t *testing.T) {
-	// Stub containing all possible secret references in a pod.
-	// The names of the referenced secrets match struct paths detected by reflection.
+	// 这个桩覆盖 Pod 中所有可能的 Secret 引用位置；
+	// 每个引用的“名字”故意设成反射得到的 struct 路径，便于之后按路径核对。
 	pod := &api.Pod{
 		Spec: api.PodSpec{
 			Containers: []api.Container{{
@@ -442,12 +469,12 @@ func TestPodSecrets(t *testing.T) {
 		return true
 	}, AllContainers)
 
-	// excludedSecretPaths holds struct paths to fields with "secret" in the name that are not actually references to secret API objects
+	// 名字含 secret 但并非 Secret API 对象引用的字段路径（如 CephFS.SecretFile），需显式排除。
 	excludedSecretPaths := sets.New[string](
 		"Spec.Volumes[*].VolumeSource.CephFS.SecretFile",
 	)
-	// expectedSecretPaths holds struct paths to fields with "secret" in the name that are references to secret API objects.
-	// every path here should be represented as an example in the Pod stub above, with the secret name set to the path.
+	// 期望的 Secret 引用字段路径集合。
+	// 每条路径都应在上面的 Pod 桩里有对应示例，且引用名设为该路径本身。
 	expectedSecretPaths := sets.New[string](
 		"Spec.Containers[*].EnvFrom[*].SecretRef",
 		"Spec.Containers[*].Env[*].ValueFrom.SecretKeyRef",
@@ -469,6 +496,7 @@ func TestPodSecrets(t *testing.T) {
 		"Spec.Volumes[*].VolumeSource.StorageOS.SecretRef",
 		"Spec.Volumes[*].VolumeSource.CSI.NodePublishSecretRef",
 	)
+	// 反射扫描结果与期望集合双向做差：先查路径，再查桩里实际抽到的名字。
 	secretPaths := collectResourcePaths(t, "secret", nil, "", reflect.TypeOf(&api.Pod{}))
 	secretPaths = secretPaths.Difference(excludedSecretPaths)
 	if missingPaths := expectedSecretPaths.Difference(secretPaths); len(missingPaths) > 0 {
@@ -489,7 +517,7 @@ func TestPodSecrets(t *testing.T) {
 		t.Error("Extra secret names extracted. Verify VisitPodSecretNames() is correctly extracting secret names")
 	}
 
-	// emptyPod is a stub containing empty object names
+	// 额外的桩：空名字不应被回调收集，否则回调会直接 t.Fatalf。
 	emptyPod := &api.Pod{
 		Spec: api.PodSpec{
 			Containers: []api.Container{{
@@ -505,11 +533,13 @@ func TestPodSecrets(t *testing.T) {
 	}, AllContainers)
 }
 
-// collectResourcePaths traverses the object, computing all the struct paths that lead to fields with resourcename in the name.
+// collectResourcePaths 递归遍历类型 tp，收集所有名字里含 resourcename 的字段的 struct 路径。
+// 用于与“手写 Pod 桩”的期望集合比对，防止新增字段时漏掉引用路径。
 func collectResourcePaths(t *testing.T, resourcename string, path *field.Path, name string, tp reflect.Type) sets.Set[string] {
 	resourcename = strings.ToLower(resourcename)
 	resourcePaths := sets.New[string]()
 
+	// 指针先解引用再递归，避免结果里留下指针层级的差异。
 	if tp.Kind() == reflect.Pointer {
 		resourcePaths.Insert(sets.List[string](collectResourcePaths(t, resourcename, path, name, tp.Elem()))...)
 		return resourcePaths
@@ -523,8 +553,8 @@ func collectResourcePaths(t *testing.T, resourcename string, path *field.Path, n
 	case reflect.Pointer:
 		resourcePaths.Insert(sets.List[string](collectResourcePaths(t, resourcename, path, name, tp.Elem()))...)
 	case reflect.Struct:
-		// ObjectMeta is generic and therefore should never have a field with a specific resource's name;
-		// it contains cycles so it's easiest to just skip it.
+		// ObjectMeta 是通用结构，不应包含具体资源名字段；
+		// 而且它存在引用环，直接跳过最简单。
 		if name == "ObjectMeta" {
 			break
 		}
@@ -539,15 +569,17 @@ func collectResourcePaths(t *testing.T, resourcename string, path *field.Path, n
 	case reflect.Slice:
 		resourcePaths.Insert(sets.List[string](collectResourcePaths(t, resourcename, path.Key("*"), "", tp.Elem()))...)
 	default:
-		// all primitive types
+		// 基本类型：没有子字段，无需继续递归。
 	}
 
 	return resourcePaths
 }
 
+// TestPodConfigmaps 与 TestPodSecrets 对称：验证 VisitPodConfigmapNames 能找出 Pod 中
+// 所有 ConfigMap 引用，同样用反射路径集合与手写桩双向比对。
 func TestPodConfigmaps(t *testing.T) {
-	// Stub containing all possible ConfigMap references in a pod.
-	// The names of the referenced ConfigMaps match struct paths detected by reflection.
+	// 覆盖 Pod 中所有可能的 ConfigMap 引用位置的桩。
+	// 每个引用的名字设为反射得到的 struct 路径，便于按路径核对。
 	pod := &api.Pod{
 		Spec: api.PodSpec{
 			Containers: []api.Container{{
@@ -600,8 +632,8 @@ func TestPodConfigmaps(t *testing.T) {
 		return true
 	}, AllContainers)
 
-	// expectedPaths holds struct paths to fields with "ConfigMap" in the name that are references to ConfigMap API objects.
-	// every path here should be represented as an example in the Pod stub above, with the ConfigMap name set to the path.
+	// 期望的 ConfigMap 引用字段路径集合。
+	// 每条路径都应在上面的桩里有示例，且引用名设为该路径。
 	expectedPaths := sets.New[string](
 		"Spec.Containers[*].EnvFrom[*].ConfigMapRef",
 		"Spec.Containers[*].Env[*].ValueFrom.ConfigMapKeyRef",
@@ -631,7 +663,7 @@ func TestPodConfigmaps(t *testing.T) {
 		t.Error("Extra names extracted. Verify VisitPodConfigmapNames() is correctly extracting resource names")
 	}
 
-	// emptyPod is a stub containing empty object names
+	// 空名字不应被回调收集，否则直接 t.Fatalf。
 	emptyPod := &api.Pod{
 		Spec: api.PodSpec{
 			Containers: []api.Container{{
@@ -647,6 +679,9 @@ func TestPodConfigmaps(t *testing.T) {
 	}, AllContainers)
 }
 
+// TestDropFSGroupFields 验证 DropDisabledPodFields 对 FSGroupChangePolicy 的处理：
+// 旧 Pod 未使用该字段时（新建场景）应清除；旧 Pod 已用时必须保留，
+// 否则升级/回滚过程中会丢掉用户已有配置。
 func TestDropFSGroupFields(t *testing.T) {
 	nofsGroupPod := func() *api.Pod {
 		return &api.Pod{
@@ -741,6 +776,8 @@ func TestDropFSGroupFields(t *testing.T) {
 
 }
 
+// TestDropProcMount 验证 ProcMountType 特性关闭时，只有旧 Pod 未用 ProcMount 的新增字段
+// 才会被清除；特性开启或旧 Pod 已用时保留。遍历开关 × 旧 Pod × 新 Pod 的全组合。
 func TestDropProcMount(t *testing.T) {
 	procMount := api.UnmaskedProcMount
 	defaultProcMount := api.DefaultProcMount
@@ -820,28 +857,28 @@ func TestDropProcMount(t *testing.T) {
 					}
 					dropDisabledFields(&newPod.Spec, nil, oldPodSpec, nil)
 
-					// old pod should never be changed
+					// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 					if !reflect.DeepEqual(oldPod, oldPodInfo.pod()) {
 						t.Errorf("old pod changed: %v", cmp.Diff(oldPod, oldPodInfo.pod()))
 					}
 
 					switch {
 					case enabled || oldPodHasProcMount:
-						// new pod should not be changed if the feature is enabled, or if the old pod had ProcMount
+						// 特性开启或旧 Pod 已用 ProcMount：新 Pod 不应变化。
 						if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod changed: %v", cmp.Diff(newPod, newPodInfo.pod()))
 						}
 					case newPodHasProcMount:
-						// new pod should be changed
+						// 特性关闭且是新增字段：新 Pod 应发生变化。
 						if reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod was not changed")
 						}
-						// new pod should not have ProcMount
+						// 变化的具体表现是 ProcMount 被清除。
 						if procMountInUse(&newPod.Spec) {
 							t.Errorf("new pod had ProcMount: %#v", &newPod.Spec)
 						}
 					default:
-						// new pod should not need to be changed
+						// 特性关闭且新 Pod 也没有该字段：无需变化。
 						if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod changed: %v", cmp.Diff(newPod, newPodInfo.pod()))
 						}
@@ -852,6 +889,9 @@ func TestDropProcMount(t *testing.T) {
 	}
 }
 
+// TestDropDynamicResourceAllocation 验证 DRA 相关字段（容器 Claims、Pod ResourceClaims、
+// 状态里的 ResourceClaimStatuses / 扩展资源 / 节点可分配资源状态）在特性关闭时的清除规则：
+// 旧 Pod 已用则保留，否则清除；扩展资源与节点可分配资源各有独立门控。
 func TestDropDynamicResourceAllocation(t *testing.T) {
 	resourceClaimName := "external-claim"
 
@@ -1210,6 +1250,7 @@ func TestDropDynamicResourceAllocation(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.description, func(t *testing.T) {
+			// 门控已 GA，需按要关闭的门控降低模拟版本：主门控关→1.34，仅扩展门控关→1.36。
 			if !tc.enabled {
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.34"))
 			} else if !tc.extendedEnabled {
@@ -1224,12 +1265,13 @@ func TestDropDynamicResourceAllocation(t *testing.T) {
 			}
 			featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, overrides)
 
+			// 深拷贝后再传入：既验证新 Pod 的结果，也验证旧 Pod 不被修改。
 			oldPod := tc.oldPod.DeepCopy()
 			newPod := tc.newPod.DeepCopy()
 			wantPod := tc.wantPod
 			DropDisabledPodFields(newPod, oldPod)
 
-			// old pod should never be changed
+			// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 			if diff := cmp.Diff(oldPod, tc.oldPod); diff != "" {
 				t.Errorf("old pod changed: %s", diff)
 			}
@@ -1241,6 +1283,9 @@ func TestDropDynamicResourceAllocation(t *testing.T) {
 	}
 }
 
+// TestValidatePodDeletionCostOption 验证 PodDeletionCost 门控关闭时，
+// GetValidationOptionsFromPodSpecAndMeta 会放宽校验以兼容旧对象：
+// 创建请求不放宽；更新时旧注解值非法才允许保留非法值。
 func TestValidatePodDeletionCostOption(t *testing.T) {
 	testCases := []struct {
 		name                            string
@@ -1281,7 +1326,7 @@ func TestValidatePodDeletionCostOption(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodDeletionCost, tc.featureEnabled)
-			// The new pod doesn't impact the outcome.
+			// 该选项只由旧 Pod 决定，新 Pod 传 nil 不影响结果。
 			gotOptions := GetValidationOptionsFromPodSpecAndMeta(nil, nil, nil, tc.oldPodMeta)
 			if tc.wantAllowInvalidPodDeletionCost != gotOptions.AllowInvalidPodDeletionCost {
 				t.Errorf("unexpected diff, want: %v, got: %v", tc.wantAllowInvalidPodDeletionCost, gotOptions.AllowInvalidPodDeletionCost)
@@ -1290,6 +1335,8 @@ func TestValidatePodDeletionCostOption(t *testing.T) {
 	}
 }
 
+// TestDropDisabledPodStatusFields_HostIPs 验证 HostIPs 已是 GA 字段、不会被 drop：
+// 四种新旧组合都应原样保留。
 func TestDropDisabledPodStatusFields_HostIPs(t *testing.T) {
 	podWithHostIPs := func() *api.PodStatus {
 		return &api.PodStatus{
@@ -1349,6 +1396,7 @@ func TestDropDisabledPodStatusFields_HostIPs(t *testing.T) {
 	}
 }
 
+// makeHostIPs 把一串 IP 字符串转成 api.HostIP 切片，便于构造测试桩。
 func makeHostIPs(ips ...string) []api.HostIP {
 	ret := []api.HostIP{}
 	for _, ip := range ips {
@@ -1357,6 +1405,9 @@ func makeHostIPs(ips ...string) []api.HostIP {
 	return ret
 }
 
+// TestDropDisabledPodStatusFields_ObservedGeneration 验证 PodStatus 顶层的
+// ObservedGeneration 与 Conditions 内的 ObservedGeneration 都不会被 drop：
+// 覆盖两处字段各自有/无的组合。
 func TestDropDisabledPodStatusFields_ObservedGeneration(t *testing.T) {
 	now := metav1.NewTime(time.Now())
 
@@ -1441,6 +1492,8 @@ func TestDropDisabledPodStatusFields_ObservedGeneration(t *testing.T) {
 	}
 }
 
+// TestDropNodeInclusionPolicyFields 验证 NodeInclusionPolicyInPodTopologySpread 门控关闭时，
+// TopologySpreadConstraints 中的 NodeAffinityPolicy / NodeTaintsPolicy 只在旧 Pod 未用时清除。
 func TestDropNodeInclusionPolicyFields(t *testing.T) {
 	ignore := api.NodeInclusionPolicyIgnore
 	honor := api.NodeInclusionPolicyHonor
@@ -1675,6 +1728,7 @@ func TestDropNodeInclusionPolicyFields(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 门控已 GA，只有禁用路径需要先降低模拟版本才能关闭。
 			if !test.enabled {
 				// TODO: this will be removed in 1.36
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.32"))
@@ -1689,6 +1743,9 @@ func TestDropNodeInclusionPolicyFields(t *testing.T) {
 	}
 }
 
+// Test_dropDisabledMatchLabelKeysFieldInPodAffinity 验证 MatchLabelKeysInPodAffinity 门控关闭时，
+// PodAffinity / PodAntiAffinity 的 required 与 preferred 两种 term 中的
+// MatchLabelKeys / MismatchLabelKeys 字段：旧 Pod 已用则保留，否则清除。
 func Test_dropDisabledMatchLabelKeysFieldInPodAffinity(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -1864,6 +1921,7 @@ func Test_dropDisabledMatchLabelKeysFieldInPodAffinity(t *testing.T) {
 			},
 		},
 		{
+			// 注意名字写的是 enabled，但 enabled 字段为 false：这里测的是“门控关闭但双方都在用”的兼容路径。
 			name:    "[PodAffinity/required] feature enabled, both pods use MatchLabelKeys/MismatchLabelKeys fields",
 			enabled: false,
 			oldPodSpec: &api.PodSpec{
@@ -2547,6 +2605,8 @@ func Test_dropDisabledMatchLabelKeysFieldInPodAffinity(t *testing.T) {
 	}
 }
 
+// Test_dropDisabledMatchLabelKeysFieldInTopologySpread 验证 MatchLabelKeysInPodTopologySpread
+// 门控关闭时，TopologySpreadConstraints 的 MatchLabelKeys 字段只在旧 Pod 未用时清除。
 func Test_dropDisabledMatchLabelKeysFieldInTopologySpread(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -2650,6 +2710,7 @@ func Test_dropDisabledMatchLabelKeysFieldInTopologySpread(t *testing.T) {
 			},
 		},
 		{
+			// 同上：名字与 enabled=false 不一致，实际验证门控关闭时的兼容保留逻辑。
 			name:    "feature enabled, both pods use MatchLabelKeys fields",
 			enabled: false,
 			oldPodSpec: &api.PodSpec{
@@ -2672,6 +2733,7 @@ func Test_dropDisabledMatchLabelKeysFieldInTopologySpread(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 直接按用例设置门控：dropDisabledFields 只在新 Pod 新增字段时才清除。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.MatchLabelKeysInPodTopologySpread, test.enabled)
 
 			dropDisabledFields(test.podSpec, nil, test.oldPodSpec, nil)
@@ -2682,6 +2744,8 @@ func Test_dropDisabledMatchLabelKeysFieldInTopologySpread(t *testing.T) {
 	}
 }
 
+// TestDropHostUsers 验证 UserNamespacesSupport 门控关闭时，PodSpec.HostUsers
+// 只在旧 Pod 未设置时清除；注意 true 与 false 都算“已使用”。
 func TestDropHostUsers(t *testing.T) {
 	falseVar := false
 	trueVar := true
@@ -2737,7 +2801,7 @@ func TestDropHostUsers(t *testing.T) {
 				}
 
 				t.Run(fmt.Sprintf("feature enabled=%v, old pod %v, new pod %v", enabled, oldPodInfo.description, newPodInfo.description), func(t *testing.T) {
-					// Set emulation version so that the feature gate can be disabled in the test
+					// 降低模拟版本，才能把已 GA 的门控关掉以测试禁用路径。
 					if !enabled {
 						featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 						featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.UserNamespacesSupport, enabled)
@@ -2745,28 +2809,28 @@ func TestDropHostUsers(t *testing.T) {
 
 					DropDisabledPodFields(newPod, oldPod)
 
-					// old pod should never be changed
+					// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 					if !reflect.DeepEqual(oldPod, oldPodInfo.pod()) {
 						t.Errorf("old pod changed: %v", cmp.Diff(oldPod, oldPodInfo.pod()))
 					}
 
 					switch {
 					case enabled || oldPodHasHostUsers:
-						// new pod should not be changed if the feature is enabled, or if the old pod had hostUsers
+						// 特性开启或旧 Pod 已用 HostUsers：新 Pod 不应变化。
 						if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod changed: %v", cmp.Diff(newPod, newPodInfo.pod()))
 						}
 					case newPodHasHostUsers:
-						// new pod should be changed
+						// 特性关闭且是新增字段：新 Pod 应发生变化。
 						if reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod was not changed")
 						}
-						// new pod should not have hostUsers
+						// 变化的具体表现是 HostUsers 被清除。
 						if exp := podWithoutHostUsers(); !reflect.DeepEqual(newPod, exp) {
 							t.Errorf("new pod had hostUsers: %v", cmp.Diff(newPod, exp))
 						}
 					default:
-						// new pod should not need to be changed
+						// 特性关闭且新 Pod 也没有该字段：无需变化。
 						if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod changed: %v", cmp.Diff(newPod, newPodInfo.pod()))
 						}
@@ -2778,6 +2842,8 @@ func TestDropHostUsers(t *testing.T) {
 
 }
 
+// TestDropGRPCContainerProbeTLS 验证 GRPCContainerProbeTLS 门控关闭时，
+// 三类容器（普通/init/临时）的 gRPC 探针 TLS Mode 字段只在旧 Pod 未用时清除。
 func TestDropGRPCContainerProbeTLS(t *testing.T) {
 	grpcProbeModeTLS := func() *api.GRPCProbeMode {
 		mode := api.GRPCProbeModeTLS
@@ -2904,28 +2970,28 @@ func TestDropGRPCContainerProbeTLS(t *testing.T) {
 
 					DropDisabledPodFields(newPod, oldPod)
 
-					// old pod should never be changed
+					// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 					if !reflect.DeepEqual(oldPod, oldPodInfo.pod()) {
 						t.Errorf("old pod changed: %v", cmp.Diff(oldPod, oldPodInfo.pod()))
 					}
 
 					switch {
 					case enabled || oldPodHasTLS:
-						// new pod should not be changed if the feature is enabled, or if the old pod had TLS
+						// 特性开启或旧 Pod 已用 TLS：新 Pod 不应变化。
 						if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod changed: %v", cmp.Diff(newPod, newPodInfo.pod()))
 						}
 					case newPodHasTLS:
-						// new pod should be changed
+						// 特性关闭且是新增字段：新 Pod 应发生变化。
 						if reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod was not changed")
 						}
-						// new pod should not have TLS
+						// 变化的具体表现是 gRPC 探针的 TLS Mode 被清除。
 						if exp := podWithGRPCNoTLS(); !reflect.DeepEqual(newPod, exp) {
 							t.Errorf("new pod had TLS: %v", cmp.Diff(newPod, exp))
 						}
 					default:
-						// new pod should not need to be changed
+						// 特性关闭且新 Pod 也没有该字段：无需变化。
 						if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod changed: %v", cmp.Diff(newPod, newPodInfo.pod()))
 						}
@@ -2936,6 +3002,9 @@ func TestDropGRPCContainerProbeTLS(t *testing.T) {
 	}
 }
 
+// TestValidateTopologySpreadConstraintLabelSelectorOption 验证旧 Pod 中存在非法
+// TopologySpreadConstraint LabelSelector 时，会打开对应的校验放宽选项，
+// 以便已有对象在升级后仍可通过校验；新建或旧值合法时不放宽。
 func TestValidateTopologySpreadConstraintLabelSelectorOption(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -2987,7 +3056,7 @@ func TestValidateTopologySpreadConstraintLabelSelectorOption(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Pod meta doesn't impact the outcome.
+			// Pod 元数据不影响该选项，传 nil 即可。
 			gotOptions := GetValidationOptionsFromPodSpecAndMeta(&api.PodSpec{}, tc.oldPodSpec, nil, nil)
 			if tc.wantOption != gotOptions.AllowInvalidTopologySpreadConstraintLabelSelector {
 				t.Errorf("Got AllowInvalidLabelValueInSelector=%t, want %t", gotOptions.AllowInvalidTopologySpreadConstraintLabelSelector, tc.wantOption)
@@ -2996,6 +3065,9 @@ func TestValidateTopologySpreadConstraintLabelSelectorOption(t *testing.T) {
 	}
 }
 
+// TestOldPodViolatesMatchLabelKeysValidationOption 验证旧 Pod 中 MatchLabelKeys 与
+// LabelSelector（多个 NotIn 表达式）冲突时，会打开 OldPodViolatesMatchLabelKeysValidation
+// 选项，使已有对象在门控开启后仍能通过校验。
 func TestOldPodViolatesMatchLabelKeysValidationOption(t *testing.T) {
 	testCases := []struct {
 		name                               string
@@ -3072,6 +3144,9 @@ func TestOldPodViolatesMatchLabelKeysValidationOption(t *testing.T) {
 	}
 }
 
+// TestOldPodViolatesLegacyMatchLabelKeysValidationOption 与上例类似，但覆盖
+// SelectorMerge 门控关闭时的“旧版”校验逻辑：旧 Pod 中 MatchLabelKeys 与单个
+// NotIn 表达式冲突时打开对应放宽选项。
 func TestOldPodViolatesLegacyMatchLabelKeysValidationOption(t *testing.T) {
 	testCases := []struct {
 		name                               string
@@ -3134,6 +3209,9 @@ func TestOldPodViolatesLegacyMatchLabelKeysValidationOption(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateAllowNonLocalProjectedTokenPathOption 验证旧 Pod 中 Projected 卷的
+// ServiceAccountToken Path 含 ".."（非本地路径）时，打开校验放宽选项以兼容已有对象。
 func TestValidateAllowNonLocalProjectedTokenPathOption(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -3207,7 +3285,7 @@ func TestValidateAllowNonLocalProjectedTokenPathOption(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Pod meta doesn't impact the outcome.
+			// Pod 元数据不影响该选项，传 nil 即可。
 			gotOptions := GetValidationOptionsFromPodSpecAndMeta(&api.PodSpec{}, tc.oldPodSpec, nil, nil)
 			if tc.wantOption != gotOptions.AllowNonLocalProjectedTokenPath {
 				t.Errorf("Got AllowNonLocalProjectedTokenPath=%t, want %t", gotOptions.AllowNonLocalProjectedTokenPath, tc.wantOption)
@@ -3216,6 +3294,9 @@ func TestValidateAllowNonLocalProjectedTokenPathOption(t *testing.T) {
 	}
 }
 
+// TestDropAtomicWriteVolumeUserFields 验证 AtomicWriteVolumeUserFields 门控关闭时，
+// 各类 Volume（secret/downwardapi/configmap/projected）及其投影中的 DefaultUser/User
+// 字段：旧 Pod 未用时清除，防止绕过门控新增字段。
 func TestDropAtomicWriteVolumeUserFields(t *testing.T) {
 	volumesWithUserFields := []api.Volume{
 		{
@@ -3479,6 +3560,9 @@ func TestDropAtomicWriteVolumeUserFields(t *testing.T) {
 	}
 }
 
+// TestDropInPlacePodVerticalScaling 验证 InPlacePodVerticalScaling 门控关闭时，
+// 容器的 ResizePolicy 与 ContainerStatus 的 AllocatedResources/Resources 等
+// 原地垂直扩缩容字段：旧 Pod 已用则保留，否则清除。同时验证 spec 与 status 两侧都处理。
 func TestDropInPlacePodVerticalScaling(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.34"))
 	podWithInPlaceVerticalScaling := func() *api.Pod {
@@ -3583,29 +3667,29 @@ func TestDropInPlacePodVerticalScaling(t *testing.T) {
 						dropDisabledFields(&newPod.Spec, nil, oldPodSpec, nil)
 						dropDisabledPodStatusFields(&newPod.Status, oldPodStatus, &newPod.Spec, oldPodSpec)
 
-						// old pod should never be changed
+						// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 						if !reflect.DeepEqual(oldPod, oldPodInfo.pod()) {
 							t.Errorf("old pod changed: %v", cmp.Diff(oldPod, oldPodInfo.pod()))
 						}
 
 						switch {
 						case ippvsEnabled || oldPodHasInPlaceVerticalScaling:
-							// new pod shouldn't change if feature enabled or if old pod has ResizePolicy set
+							// 特性开启或旧 Pod 已用 ResizePolicy：新 Pod 不应变化。
 							expected := newPodInfo.pod()
 							if !reflect.DeepEqual(newPod, expected) {
 								t.Errorf("new pod changed: %v", cmp.Diff(newPod, expected))
 							}
 						case newPodHasInPlaceVerticalScaling:
-							// new pod should be changed
+							// 特性关闭且是新增字段：新 Pod 应发生变化。
 							if reflect.DeepEqual(newPod, newPodInfo.pod()) {
 								t.Errorf("new pod was not changed")
 							}
-							// new pod should not have ResizePolicy
+							// 变化的具体表现是 ResizePolicy 与相关状态字段被清除。
 							if !reflect.DeepEqual(newPod, podWithoutInPlaceVerticalScaling()) {
 								t.Errorf("new pod has ResizePolicy: %v", cmp.Diff(newPod, podWithoutInPlaceVerticalScaling()))
 							}
 						default:
-							// new pod should not need to be changed
+							// 特性关闭且新 Pod 也没有该字段：无需变化。
 							if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 								t.Errorf("new pod changed: %v", cmp.Diff(newPod, newPodInfo.pod()))
 							}
@@ -3618,6 +3702,9 @@ func TestDropInPlacePodVerticalScaling(t *testing.T) {
 	}
 }
 
+// TestDropPodLevelResources 验证 PodLevelResources 门控关闭时，PodSpec.Resources
+// （pod 级资源请求/限制）只在旧 Pod 未用时清除；空 ResourceRequirements 或空
+// Requests/Limits 列表都视为“未使用”。
 func TestDropPodLevelResources(t *testing.T) {
 	containers := []api.Container{
 		{
@@ -3678,7 +3765,7 @@ func TestDropPodLevelResources(t *testing.T) {
 		{
 			description:          "is empty struct",
 			hasPodLevelResources: false,
-			// refactor to generalize and use podWithPodLevelResources()
+			// 这里另造空 Resources 结构，是为了与“完全无 Resources 字段”区分开。
 			pod: func() *api.Pod {
 				return &api.Pod{
 					Spec: api.PodSpec{
@@ -3729,24 +3816,23 @@ func TestDropPodLevelResources(t *testing.T) {
 
 					dropDisabledFields(&newPod.Spec, nil, oldPodSpec, nil)
 
-					// old pod should never be changed
+					// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 					if !reflect.DeepEqual(oldPod, oldPodInfo.pod()) {
 						t.Errorf("old pod changed: %v", cmp.Diff(oldPod, oldPodInfo.pod()))
 					}
 
 					switch {
 					case enabled || oldPodHasPodLevelResources:
-						// new pod shouldn't change if feature enabled or if old pod has
-						// any pod level resources
+						// 特性开启或旧 Pod 已有任意 pod 级资源：新 Pod 不应变化。
 						if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod changed: %v", cmp.Diff(newPod, newPodInfo.pod()))
 						}
 					case newPodHasPodLevelResources:
-						// new pod should be changed
+						// 特性关闭且是新增字段：新 Pod 应发生变化。
 						if reflect.DeepEqual(newPod, newPodInfo.pod()) {
 							t.Errorf("new pod was not changed")
 						}
-						// new pod should not have any pod-level resources
+						// 变化的具体表现是 pod 级资源被完全清除。
 						if !reflect.DeepEqual(newPod, podWithoutPodLevelResources()) {
 							t.Errorf("new pod has pod-level resources: %v", cmp.Diff(newPod, podWithoutPodLevelResources()))
 						}
@@ -3761,6 +3847,9 @@ func TestDropPodLevelResources(t *testing.T) {
 	}
 }
 
+// TestDropClusterTrustBundleProjectedVolumes 验证 ClusterTrustBundleProjection 门控关闭时，
+// Projected 卷中的 ClusterTrustBundle 投影：旧 Pod 已有则保留，新增则清除。
+// 注意父特性 ClusterTrustBundle 在最开始被显式开启，避免干扰子门控测试。
 func TestDropClusterTrustBundleProjectedVolumes(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ClusterTrustBundle, true)
 
@@ -3916,6 +4005,8 @@ func TestDropClusterTrustBundleProjectedVolumes(t *testing.T) {
 	}
 }
 
+// TestDropPodCertificateProjectedVolumes 验证 PodCertificateRequest 门控关闭时，
+// Projected 卷中的 PodCertificate 投影：旧 Pod 已有则保留，新增则清除。
 func TestDropPodCertificateProjectedVolumes(t *testing.T) {
 	testCases := []struct {
 		description                     string
@@ -4069,6 +4160,9 @@ func TestDropPodCertificateProjectedVolumes(t *testing.T) {
 	}
 }
 
+// TestDropContainerStopSignals 验证 ContainerStopSignals 门控关闭时，Lifecycle.StopSignal
+// 字段只在旧 Pod 未用时清除；若 Lifecycle 还有其他字段（如 PreStop），则只删 StopSignal
+// 而保留整个 Lifecycle。对三类容器分别验证。
 func TestDropContainerStopSignals(t *testing.T) {
 	makeContainer := func(lifecycle *api.Lifecycle) api.Container {
 		container := api.Container{Name: "foo"}
@@ -4103,35 +4197,35 @@ func TestDropContainerStopSignals(t *testing.T) {
 		newLifecycle       *api.Lifecycle
 		expectedLifecycle  *api.Lifecycle
 	}{
-		// feature gate is turned on and stopsignal is not in use - Lifecycle stays nil
+		// 门控开启且未用 StopSignal：Lifecycle 保持 nil。
 		{
 			featuregateEnabled: true,
 			oldLifecycle:       nil,
 			newLifecycle:       nil,
 			expectedLifecycle:  nil,
 		},
-		// feature gate is turned off and StopSignal is in use - StopSignal is not dropped
+		// 门控关闭但旧 Pod 已用 StopSignal：必须保留（兼容旧对象）。
 		{
 			featuregateEnabled: false,
 			oldLifecycle:       &api.Lifecycle{StopSignal: ptr.To(api.SIGTERM)},
 			newLifecycle:       &api.Lifecycle{StopSignal: ptr.To(api.SIGTERM)},
 			expectedLifecycle:  &api.Lifecycle{StopSignal: ptr.To(api.SIGTERM)},
 		},
-		// feature gate is turned off and StopSignal is not in use - Entire lifecycle is dropped
+		// 门控关闭且旧 Pod 未用 StopSignal：Lifecycle 里只有新增的 StopSignal，整个 Lifecycle 都被清除。
 		{
 			featuregateEnabled: false,
 			oldLifecycle:       &api.Lifecycle{StopSignal: nil},
 			newLifecycle:       &api.Lifecycle{StopSignal: ptr.To(api.SIGTERM)},
 			expectedLifecycle:  nil,
 		},
-		// feature gate is turned on and StopSignal is in use - StopSignal is not dropped
+		// 门控开启且新 Pod 用了 StopSignal：正常保留。
 		{
 			featuregateEnabled: true,
 			oldLifecycle:       &api.Lifecycle{StopSignal: nil},
 			newLifecycle:       &api.Lifecycle{StopSignal: ptr.To(api.SIGTERM)},
 			expectedLifecycle:  &api.Lifecycle{StopSignal: ptr.To(api.SIGTERM)},
 		},
-		// feature gate is turned off and PreStop is in use - StopSignal alone is dropped
+		// 门控关闭且 Lifecycle 还有 PreStop：只删 StopSignal，保留 PreStop。
 		{
 			featuregateEnabled: false,
 			oldLifecycle: &api.Lifecycle{StopSignal: nil, PreStop: &api.LifecycleHandler{
@@ -4144,7 +4238,7 @@ func TestDropContainerStopSignals(t *testing.T) {
 				Exec: &api.ExecAction{Command: []string{"foo"}},
 			}},
 		},
-		// feature gate is turned on and PreStop is in use - StopSignal is not dropped
+		// 门控开启且有 PreStop：StopSignal 与其他字段都保留。
 		{
 			featuregateEnabled: true,
 			oldLifecycle: &api.Lifecycle{StopSignal: nil, PreStop: &api.LifecycleHandler{
@@ -4157,7 +4251,7 @@ func TestDropContainerStopSignals(t *testing.T) {
 				Exec: &api.ExecAction{Command: []string{"foo"}},
 			}},
 		},
-		// feature gate is turned off and PreStop and StopSignal are in use - nothing is dropped
+		// 旧 Pod 已同时用 PreStop 与 StopSignal：门控关闭也必须原样保留。
 		{
 			featuregateEnabled: true,
 			oldLifecycle: &api.Lifecycle{StopSignal: ptr.To(api.SIGTERM), PreStop: &api.LifecycleHandler{
@@ -4175,7 +4269,7 @@ func TestDropContainerStopSignals(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test_%d", i), func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ContainerStopSignals, tc.featuregateEnabled)
-			// Containers
+			// 普通容器（Containers）。
 			{
 				oldPod := makePod(api.Linux, []api.Container{makeContainer(tc.oldLifecycle.DeepCopy())}, nil, nil)
 				newPod := makePod(api.Linux, []api.Container{makeContainer(tc.newLifecycle.DeepCopy())}, nil, nil)
@@ -4186,7 +4280,7 @@ func TestDropContainerStopSignals(t *testing.T) {
 					t.Fatalf("Unexpected modification to new pod; diff (-got +want)\n%s", diff)
 				}
 			}
-			// InitContainers
+			// init 容器（InitContainers）。
 			{
 				oldPod := makePod(api.Linux, nil, []api.Container{makeContainer(tc.oldLifecycle.DeepCopy())}, nil)
 				newPod := makePod(api.Linux, nil, []api.Container{makeContainer(tc.newLifecycle.DeepCopy())}, nil)
@@ -4196,7 +4290,7 @@ func TestDropContainerStopSignals(t *testing.T) {
 					t.Fatalf("Unexpected modification to new pod; diff (-got +want)\n%s", diff)
 				}
 			}
-			// EphemeralContainers
+			// 临时容器（EphemeralContainers）。
 			{
 				oldPod := makePod(api.Linux, nil, nil, []api.EphemeralContainer{makeEphemeralContainer(tc.oldLifecycle.DeepCopy())})
 				newPod := makePod(api.Linux, nil, nil, []api.EphemeralContainer{makeEphemeralContainer(tc.newLifecycle.DeepCopy())})
@@ -4211,6 +4305,8 @@ func TestDropContainerStopSignals(t *testing.T) {
 	}
 }
 
+// TestDropHTTPProbeProtocol 验证 H2CContainerProbe 门控关闭时，HTTPGet 探针的
+// Protocol 字段（HTTP2）只在旧 Pod 未用时清除，且只清该字段、保留探针其余部分。
 func TestDropHTTPProbeProtocol(t *testing.T) {
 	h2c := api.HTTPProtocolHTTP2
 
@@ -4285,6 +4381,9 @@ func TestDropHTTPProbeProtocol(t *testing.T) {
 	}
 }
 
+// TestDropSupplementalGroupsPolicy 验证 SupplementalGroupsPolicy 门控关闭时，
+// PodSecurityContext.SupplementalGroupsPolicy 与 ContainerStatus.User 中的
+// SupplementalGroups 等字段：旧 Pod 已用则保留，否则清除（spec 与 status 两侧）。
 func TestDropSupplementalGroupsPolicy(t *testing.T) {
 	supplementalGroupsPolicyMerge := api.SupplementalGroupsPolicyMerge
 	podWithSupplementalGroupsPolicy := func() *api.Pod {
@@ -4375,7 +4474,7 @@ func TestDropSupplementalGroupsPolicy(t *testing.T) {
 						"feature enabled=%v, old pod %v, new pod %v", enabled, oldPodInfo.description, newPodInfo.description,
 					),
 					func(t *testing.T) {
-						// Set emulation version so that the feature gate can be disabled in the test
+						// 降低模拟版本以允许关闭已 GA 的门控。
 						featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.34"))
 						featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SupplementalGroupsPolicy, enabled)
 
@@ -4388,27 +4487,27 @@ func TestDropSupplementalGroupsPolicy(t *testing.T) {
 						dropDisabledFields(&newPod.Spec, nil, oldPodSpec, nil)
 						dropDisabledPodStatusFields(&newPod.Status, oldPodStatus, &newPod.Spec, oldPodSpec)
 
-						// old pod should never be changed
+						// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 						if !reflect.DeepEqual(oldPod, oldPodInfo.pod()) {
 							t.Errorf("old pod changed: %v", cmp.Diff(oldPod, oldPodInfo.pod()))
 						}
 						switch {
 						case enabled || oldPodHasSupplementalGroupsPolicy:
-							// new pod shouldn't change if feature enabled or if old pod has SupplementalGroupsPolicy and User set
+							// 特性开启或旧 Pod 已用该策略/User：新 Pod 不应变化。
 							if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 								t.Errorf("new pod changed: %v", cmp.Diff(newPod, newPodInfo.pod()))
 							}
 						case newPodHasSupplementalGroupsPolicy:
-							// new pod should be changed
+							// 特性关闭且是新增字段：新 Pod 应发生变化。
 							if reflect.DeepEqual(newPod, newPodInfo.pod()) {
 								t.Errorf("new pod was not changed")
 							}
-							// new pod should not have SupplementalGroupsPolicy and User fields
+							// 变化的具体表现是策略与 User 字段被清除。
 							if !reflect.DeepEqual(newPod, podWithoutSupplementalGroupsPolicy()) {
 								t.Errorf("new pod has SupplementalGroups and User: %v", cmp.Diff(newPod, podWithoutSupplementalGroupsPolicy()))
 							}
 						default:
-							// new pod should not need to be changed
+							// 特性关闭且新 Pod 也没有该字段：无需变化。
 							if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 								t.Errorf("new pod changed: %v", cmp.Diff(newPod, newPodInfo.pod()))
 							}
@@ -4420,6 +4519,8 @@ func TestDropSupplementalGroupsPolicy(t *testing.T) {
 	}
 }
 
+// TestDropImageVolumes 验证 ImageVolume 门控关闭时，Image 类型的 Volume 及其挂载
+// 只在旧 Pod 未用时清除；同时验证非 Image 卷（HostPath）与对应挂载不受影响。
 func TestDropImageVolumes(t *testing.T) {
 	const (
 		volumeNameImage = "volume"
@@ -4555,17 +4656,18 @@ func TestDropImageVolumes(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.description, func(t *testing.T) {
 			if !tc.enabled {
-				// Set emulation version to v1.35 (last version before GA) to allow disabling the feature gate
+				// 将模拟版本设为 v1.35（GA 前最后一版），才能关闭 ImageVolume 门控。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ImageVolume, tc.enabled)
 
+			// 深拷贝后再传入：既验证新 Pod 的结果，也验证旧 Pod 不被修改。
 			oldPod := tc.oldPod.DeepCopy()
 			newPod := tc.newPod.DeepCopy()
 			wantPod := tc.wantPod
 			DropDisabledPodFields(newPod, oldPod)
 
-			// old pod should never be changed
+			// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 			if diff := cmp.Diff(oldPod, tc.oldPod); diff != "" {
 				t.Errorf("old pod changed: %s", diff)
 			}
@@ -4577,6 +4679,9 @@ func TestDropImageVolumes(t *testing.T) {
 	}
 }
 
+// TestDropSELinuxChangePolicy 验证 SELinuxChangePolicy 门控关闭时，
+// PodSecurityContext.SELinuxChangePolicy：旧 Pod 已有任意值（Recursive/MountOption）则保留，
+// 否则清除。另附带验证 SELinuxMount 门控对该字段无影响，确保组合场景不误删。
 func TestDropSELinuxChangePolicy(t *testing.T) {
 	podRecursive := &api.Pod{
 		Spec: api.PodSpec{
@@ -4663,7 +4768,7 @@ func TestDropSELinuxChangePolicy(t *testing.T) {
 			gates:   []featuregate.Feature{features.SELinuxChangePolicy},
 			wantPod: podRecursive,
 		},
-		// In theory, SELinuxMount does not have any effect on dropping SELinuxChangePolicy field, but for completeness:
+		// 理论上 SELinuxMount 不影响 SELinuxChangePolicy 的清除，但为完整性仍覆盖其组合场景。
 		{
 			name:    "no old pod, new pod with Recursive, SELinuxChangePolicy + SELinuxMount features enabled",
 			oldPod:  nil,
@@ -4695,11 +4800,11 @@ func TestDropSELinuxChangePolicy(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// un-lock locked feature gates, if necessary
+			// 必要时降低模拟版本，以解锁已锁定的门控。
 			if !slices.Contains(tc.gates, features.SELinuxChangePolicy) {
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 			}
-			// Set feature gates for the test. *Disable* those that are not in tc.gates.
+			// 按 tc.gates 设置门控：不在列表中的门控一律显式关闭，避免默认值干扰。
 			allGates := []featuregate.Feature{features.SELinuxChangePolicy, features.SELinuxMount}
 			enabledGates := sets.New(tc.gates...)
 			for _, gate := range allGates {
@@ -4711,7 +4816,7 @@ func TestDropSELinuxChangePolicy(t *testing.T) {
 			newPod := tc.newPod.DeepCopy()
 			DropDisabledPodFields(newPod, oldPod)
 
-			// old pod should never be changed
+			// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 			if diff := cmp.Diff(oldPod, tc.oldPod); diff != "" {
 				t.Errorf("old pod changed: %s", diff)
 			}
@@ -4723,6 +4828,9 @@ func TestDropSELinuxChangePolicy(t *testing.T) {
 	}
 }
 
+// TestValidateAllowSidecarResizePolicy 验证旧 Pod 中“sidecar（RestartPolicy=Always 的 init 容器）
+// 设置了 ResizePolicy”时，打开校验放宽选项以兼容已有对象；普通容器/init 容器不受影响。
+// 另外 InPlacePodVerticalScaling 门控开启时一律放宽。
 func TestValidateAllowSidecarResizePolicy(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.34"))
 	restartPolicyAlways := api.ContainerRestartPolicyAlways
@@ -4895,6 +5003,8 @@ func TestValidateAllowSidecarResizePolicy(t *testing.T) {
 	}
 }
 
+// TestValidateInvalidLabelValueInNodeSelectorOption 验证旧 Pod 的 Required NodeAffinity
+// MatchExpressions 中含非法 label value 时，打开校验放宽选项以兼容已有对象。
 func TestValidateInvalidLabelValueInNodeSelectorOption(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -4960,7 +5070,7 @@ func TestValidateInvalidLabelValueInNodeSelectorOption(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Pod meta doesn't impact the outcome.
+			// Pod 元数据不影响该选项，传 nil 即可。
 			gotOptions := GetValidationOptionsFromPodSpecAndMeta(&api.PodSpec{}, tc.oldPodSpec, nil, nil)
 			if tc.wantOption != gotOptions.AllowInvalidLabelValueInRequiredNodeAffinity {
 				t.Errorf("Got AllowInvalidLabelValueInRequiredNodeAffinity=%t, want %t", gotOptions.AllowInvalidLabelValueInRequiredNodeAffinity, tc.wantOption)
@@ -4969,6 +5079,10 @@ func TestValidateInvalidLabelValueInNodeSelectorOption(t *testing.T) {
 	}
 }
 
+// TestHasAPIReferences 验证 HasAPIObjectReference 能判断 Pod 是否引用了
+// “需要 API 对象才能运行的资源”（如 Secret/ConfigMap/PVC/PodCertificate 等），
+// 并返回对应的资源类型描述；HostPath/EmptyDir 等本地卷不算引用。
+// 覆盖 ServiceAccountName、各类 Volume、Projected 卷、环境变量等多种引用位置。
 func TestHasAPIReferences(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -5375,6 +5489,8 @@ func TestHasAPIReferences(t *testing.T) {
 	}
 }
 
+// TestDropHostnameOverride 验证 HostnameOverride 门控关闭时，PodSpec.HostnameOverride
+// 只在旧 Pod 未设置时清除；门控已 GA，测试时先降低模拟版本以便关闭。
 func TestDropHostnameOverride(t *testing.T) {
 	podWithoutHostnameOverride := func() *api.Pod {
 		return &api.Pod{
@@ -5462,6 +5578,8 @@ func TestDropHostnameOverride(t *testing.T) {
 	}
 }
 
+// TestDropEmptyDirVolumeMode 验证 EmptyDirVolumeMode 门控关闭时，
+// EmptyDir 卷的 Mode 字段只在旧 Pod 未设置时清除。
 func TestDropEmptyDirVolumeMode(t *testing.T) {
 	mode := int32(0o755)
 
@@ -5563,6 +5681,8 @@ func TestDropEmptyDirVolumeMode(t *testing.T) {
 	}
 }
 
+// TestDropVolumeBindMountOptions 验证 VolumeBindMountOptions 门控关闭时，
+// VolumeMount.BindMountOptions 字段只在旧 Pod 未设置时清除。
 func TestDropVolumeBindMountOptions(t *testing.T) {
 	podWithBindMountOptions := func() *api.Pod {
 		return &api.Pod{
@@ -5660,6 +5780,9 @@ func TestDropVolumeBindMountOptions(t *testing.T) {
 	}
 }
 
+// TestDropFileKeyRefInUse 验证 EnvFiles 门控关闭时，环境变量的 FileKeyRef 字段
+// 只在旧 Pod 未使用时清除；清除时只置 FileKeyRef 为 nil，保留 ValueFrom 与其他环境变量。
+// 同时验证旧 Pod 不被修改，且覆盖多容器/mixed env/nil Env 等场景。
 func TestDropFileKeyRefInUse(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -6103,7 +6226,7 @@ func TestDropFileKeyRefInUse(t *testing.T) {
 
 			if tc.oldPodSpec != nil {
 				oldPodSpecCopy := tc.oldPodSpec.DeepCopy()
-				// old pod should never be changed
+				// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 				if diff := cmp.Diff(tc.oldPodSpec, oldPodSpecCopy); diff != "" {
 					t.Errorf("old pod changed: %s", diff)
 				}
@@ -6112,7 +6235,8 @@ func TestDropFileKeyRefInUse(t *testing.T) {
 	}
 }
 
-// TestPodFileKeyRefInUse tests the podFileKeyRefInUse function
+// TestPodFileKeyRefInUse 验证 podFileKeyRefInUse 能正确识别 PodSpec 中
+// 是否使用了 FileKeyRef 环境变量来源；需要覆盖三类容器与 nil/空值等边界情况。
 func TestPodFileKeyRefInUse(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -6264,6 +6388,9 @@ func TestPodFileKeyRefInUse(t *testing.T) {
 	}
 }
 
+// TestValidateContainerRestartRulesOption 验证旧 Pod 中容器（含 init/sidecar）
+// 已使用 RestartPolicy/RestartPolicyRules 时，打开校验放宽选项以兼容已有对象；
+// 门控开启时一律放宽。
 func TestValidateContainerRestartRulesOption(t *testing.T) {
 	policyNever := api.ContainerRestartPolicyNever
 	testCases := []struct {
@@ -6341,7 +6468,7 @@ func TestValidateContainerRestartRulesOption(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ContainerRestartRules, tc.featureEnabled)
-			// The new pod doesn't impact the outcome.
+			// 该选项只由旧 Pod 决定，新 Pod 传 nil 不影响结果。
 			gotOptions := GetValidationOptionsFromPodSpecAndMeta(nil, tc.oldPodSpec, nil, nil)
 			if tc.want != gotOptions.AllowContainerRestartPolicyRules {
 				t.Errorf("unexpected diff, want: %v, got: %v", tc.want, gotOptions.AllowInvalidPodDeletionCost)
@@ -6350,6 +6477,9 @@ func TestValidateContainerRestartRulesOption(t *testing.T) {
 	}
 }
 
+// Test_dropContainerRestartRules 验证 ContainerRestartRules 门控关闭时，
+// 三类容器（init/普通/临时）的 RestartPolicyRules 只在旧 Pod 未用时清除；
+// 门控开启或旧 Pod 已有规则时保留。
 func Test_dropContainerRestartRules(t *testing.T) {
 	var (
 		always = api.ContainerRestartPolicyAlways
@@ -6457,7 +6587,7 @@ func Test_dropContainerRestartRules(t *testing.T) {
 			wantPod := tc.expected
 			DropDisabledPodFields(newPod, oldPod)
 
-			// old pod should never be changed
+			// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 			if diff := cmp.Diff(oldPod, tc.oldPod); diff != "" {
 				t.Errorf("old pod changed: %s", diff)
 			}
@@ -6469,6 +6599,9 @@ func Test_dropContainerRestartRules(t *testing.T) {
 	}
 }
 
+// TestHasUserNamespacesWithVolumeDevices 验证 hasUserNamespacesWithVolumeDevices
+// 只在 HostUsers=false（启用 user namespace）且存在 volumeDevice 时返回 true，
+// 覆盖三类容器；HostUsers=true 或 nil 时均为 false。
 func TestHasUserNamespacesWithVolumeDevices(t *testing.T) {
 	falseVar := false
 	trueVar := true
@@ -6552,6 +6685,8 @@ func TestHasUserNamespacesWithVolumeDevices(t *testing.T) {
 	}
 }
 
+// TestTaintTolerationComparisonOperatorsInUse 验证 taintTolerationComparisonOperatorsInUse
+// 仅当 Tolerations 里出现 Lt/Gt 比较操作符时返回 true；Equal/Exists 不算。
 func TestTaintTolerationComparisonOperatorsInUse(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -6649,6 +6784,9 @@ func TestTaintTolerationComparisonOperatorsInUse(t *testing.T) {
 	}
 }
 
+// TestAllowTaintTolerationComparisonOperators 验证 allowTaintTolerationComparisonOperators：
+// 门控开启时一律 true；门控关闭时，仅当旧 Pod 已使用 Lt/Gt 操作符才返回 true，
+// 以兼容已有对象。
 func TestAllowTaintTolerationComparisonOperators(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -6750,6 +6888,8 @@ func TestAllowTaintTolerationComparisonOperators(t *testing.T) {
 	}
 }
 
+// TestDisabledSchedulingGroup 验证 GenericWorkload 门控关闭时，PodSpec.SchedulingGroup
+// 只在旧 Pod 未设置时清除。
 func TestDisabledSchedulingGroup(t *testing.T) {
 	podWithSchedulingGroup := &api.Pod{
 		Spec: api.PodSpec{
@@ -6827,12 +6967,13 @@ func TestDisabledSchedulingGroup(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.GenericWorkload, tc.enabled)
 
+			// 深拷贝后再传入：既验证新 Pod 的结果，也验证旧 Pod 不被修改。
 			oldPod := tc.oldPod.DeepCopy()
 			newPod := tc.newPod.DeepCopy()
 			wantPod := tc.wantPod
 			DropDisabledPodFields(newPod, oldPod)
 
-			// Old pod should be never changed
+			// 旧 Pod 作为比较基准，不应被修改。
 			if diff := cmp.Diff(oldPod, tc.oldPod); diff != "" {
 				t.Errorf("Old pod changed (-want,+got): %s", diff)
 			}
@@ -6844,6 +6985,9 @@ func TestDisabledSchedulingGroup(t *testing.T) {
 	}
 }
 
+// TestValidateRestartAllContainersOption 验证旧 Pod 已使用 RestartAllContainers
+// 动作规则时，打开校验放宽选项；需要同时开关 ContainerRestartRules 与
+// RestartAllContainersOnContainerExits 两个门控。
 func TestValidateRestartAllContainersOption(t *testing.T) {
 	policyAlways := api.ContainerRestartPolicyAlways
 	testCases := []struct {
@@ -6914,7 +7058,7 @@ func TestValidateRestartAllContainersOption(t *testing.T) {
 				features.ContainerRestartRules:                tc.featureEnabled,
 				features.RestartAllContainersOnContainerExits: tc.featureEnabled,
 			})
-			// The new pod doesn't impact the outcome.
+			// 该选项只由旧 Pod 决定，新 Pod 传 nil 不影响结果。
 			gotOptions := GetValidationOptionsFromPodSpecAndMeta(nil, tc.oldPodSpec, nil, nil)
 			if tc.want != gotOptions.AllowRestartAllContainers {
 				t.Errorf("unexpected diff, want: %v, got: %v", tc.want, gotOptions.AllowRestartAllContainers)
@@ -6923,6 +7067,10 @@ func TestValidateRestartAllContainersOption(t *testing.T) {
 	}
 }
 
+// TestDropDisabledPodStatusFields_InPlacePodLevelResourcesVerticalScaling 验证
+// InPlacePodLevelResourcesVerticalScaling 门控关闭时，PodStatus 中的 pod 级资源状态
+// （Resources / AllocatedResources / Resize）只在旧 Pod 未用时清除；需先开启父门控
+// NodeDeclaredFeatures，再切换子门控。
 func TestDropDisabledPodStatusFields_InPlacePodLevelResourcesVerticalScaling(t *testing.T) {
 	testCases := []struct {
 		description                                string
@@ -7036,25 +7184,25 @@ func TestDropDisabledPodStatusFields_InPlacePodLevelResourcesVerticalScaling(t *
 						}
 						dropDisabledPodStatusFields(&newPod.Status, oldPodStatus, &newPod.Spec, oldPodSpec)
 
-						// old pod should never be changed
+						// DropDisabledPodFields 只应改新 Pod，旧 Pod 必须保持原样。
 						if !reflect.DeepEqual(oldPod, oldPodInfo.pod()) {
 							t.Errorf("old pod changed: %v", cmp.Diff(oldPod, oldPodInfo.pod()))
 						}
 
 						switch {
 						case ippvsEnabled || oldPodHasInPlacePodLevelResourcesVerticalScaling:
-							// new pod shouldn't change if feature enabled
+							// 特性开启或旧 Pod 已有 pod 级资源状态：新 Pod 不应变化。
 							expected := newPodInfo.pod()
 							if !reflect.DeepEqual(newPod, expected) {
 								t.Errorf("new pod changed: %v %t", cmp.Diff(newPod, expected), ippvsEnabled)
 							}
 						case newPodHasInPlacePodLevelResourcesVerticalScaling:
-							// new pod should be changed
+							// 特性关闭且是新增字段：新 Pod 应发生变化。
 							if reflect.DeepEqual(newPod, newPodInfo.pod()) {
 								t.Errorf("new pod was not changed")
 							}
 						default:
-							// new pod should not need to be changed
+							// 特性关闭且新 Pod 也没有该字段：无需变化。
 							if !reflect.DeepEqual(newPod, newPodInfo.pod()) {
 								t.Errorf("new pod changed: %v %t", cmp.Diff(newPod, newPodInfo.pod()), newPodHasInPlacePodLevelResourcesVerticalScaling)
 							}
@@ -7066,6 +7214,8 @@ func TestDropDisabledPodStatusFields_InPlacePodLevelResourcesVerticalScaling(t *
 	}
 }
 
+// TestResourceHealthStatusInUse 验证 resourceHealthStatusInUse 能在三类容器状态中
+// 检测到 AllocatedResourcesStatus[].Resources[] 的 ResourceHealth 条目；空/nil 不算使用。
 func TestResourceHealthStatusInUse(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -7195,6 +7345,9 @@ func TestResourceHealthStatusInUse(t *testing.T) {
 	}
 }
 
+// TestDropDisabledPodStatusFields_ResourceHealthStatus 验证 ResourceHealthStatus 门控关闭时，
+// 三类容器状态里的 AllocatedResourcesStatus 只在旧 Pod 未使用时清除；
+// 特别注意“旧 Pod 有该字段”的回归用例（bug fix），确保不会误删已有状态。
 func TestDropDisabledPodStatusFields_ResourceHealthStatus(t *testing.T) {
 	podStatusWithResourceHealth := func() *api.PodStatus {
 		return &api.PodStatus{
@@ -7362,6 +7515,8 @@ func TestDropDisabledPodStatusFields_ResourceHealthStatus(t *testing.T) {
 	}
 }
 
+// TestResourceHealthStatusMessageInUse 验证 resourceHealthStatusMessageInUse 能检测
+// 三类容器状态中 ResourceHealth.Message 是否已设置；仅有 Health 而无 Message 不算使用。
 func TestResourceHealthStatusMessageInUse(t *testing.T) {
 	message := "test message"
 	testCases := []struct {
@@ -7507,6 +7662,9 @@ func TestResourceHealthStatusMessageInUse(t *testing.T) {
 	}
 }
 
+// TestDropDisabledPodStatusFields_ResourceHealthStatusMessage 验证 ResourceHealthStatusMessage
+// 门控关闭时，ResourceHealth.Message 只在旧 Pod 未使用时清除。
+// 由于 Message 依赖 ResourceHealthStatus，测试中需显式开启父门控 ResourceHealthStatus。
 func TestDropDisabledPodStatusFields_ResourceHealthStatusMessage(t *testing.T) {
 	message1 := "ECC error detected"
 	message2 := "GPU temperature high"
@@ -7684,7 +7842,7 @@ func TestDropDisabledPodStatusFields_ResourceHealthStatusMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Enable ResourceHealthStatus as well since ResourceHealthStatusMessage depends on it
+			// Message 特性依赖 ResourceHealthStatus，必须同时开启父门控才能生效。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ResourceHealthStatus, true)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ResourceHealthStatusMessage, tt.enabled)
 			dropDisabledPodStatusFields(tt.podStatus, tt.oldPodStatus, &api.PodSpec{}, &api.PodSpec{})
@@ -7696,6 +7854,10 @@ func TestDropDisabledPodStatusFields_ResourceHealthStatusMessage(t *testing.T) {
 	}
 }
 
+// TestHasRestartContainerForNonSidecarInitContainer 验证
+// hasRestartContainerForNonSidecarInitContainer 只在“非 sidecar 的 init 容器”
+// 使用了 RestartContainer 重置策略时返回 true；sidecar（RestartPolicy=Always）
+// 即便有 RestartContainer 也不算，NotRequired 策略也不算。
 func TestHasRestartContainerForNonSidecarInitContainer(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -7797,6 +7959,9 @@ func TestHasRestartContainerForNonSidecarInitContainer(t *testing.T) {
 	}
 }
 
+// TestGetValidationOptionsAllowSysAdminWhenPrivilegeEscalationFalse 验证：
+// 旧 Pod 已设置 CAP_SYS_ADMIN 且 AllowPrivilegeEscalation 为 false 或 nil 时，
+// 打开校验放宽选项以兼容已有对象；true 或未加该 capability 则不放宽。
 func TestGetValidationOptionsAllowSysAdminWhenPrivilegeEscalationFalse(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -7884,6 +8049,8 @@ func TestGetValidationOptionsAllowSysAdminWhenPrivilegeEscalationFalse(t *testin
 	}
 }
 
+// TestDropDisabledPodStatusFields_VolumeHealth 验证 CSIVolumeHealth 门控关闭时，
+// PodStatus.VolumeHealth 只在旧 Pod 未使用时清除；门控开启时一律保留。
 func TestDropDisabledPodStatusFields_VolumeHealth(t *testing.T) {
 	podStatusWithVolumeHealth := func() *api.PodStatus {
 		return &api.PodStatus{
@@ -7960,6 +8127,8 @@ func TestDropDisabledPodStatusFields_VolumeHealth(t *testing.T) {
 	}
 }
 
+// TestDisableEvictionResponders 验证 EvictionRequestAPI 门控关闭时，
+// PodSpec.EvictionResponders 只在旧 Pod 未设置时清除。
 func TestDisableEvictionResponders(t *testing.T) {
 	podWithResponders := &api.Pod{
 		Spec: api.PodSpec{
@@ -8037,12 +8206,13 @@ func TestDisableEvictionResponders(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EvictionRequestAPI, tc.enabled)
 
+			// 深拷贝后再传入：既验证新 Pod 的结果，也验证旧 Pod 不被修改。
 			oldPod := tc.oldPod.DeepCopy()
 			newPod := tc.newPod.DeepCopy()
 			wantPod := tc.wantPod
 			DropDisabledPodFields(newPod, oldPod)
 
-			// Old pod should be never changed
+			// 旧 Pod 作为比较基准，不应被修改。
 			if diff := cmp.Diff(oldPod, tc.oldPod); diff != "" {
 				t.Errorf("Old pod changed (-want,+got): %s", diff)
 			}

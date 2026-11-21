@@ -22,22 +22,25 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// DropDisabledFields removes disabled fields from the spec unless they were in
-// use there before.
+// DropDisabledFields 从 ResourceClaimSpec 中移除被特性开关禁用的字段，
+// 但保留旧 spec 中已经在用的字段。
 //
-// Theoretically some features could be in use in an old ResourceClaim status
-// and not in use in the spec. This can only occur in a spec update, which is
-// currently prevented because the entire spec is immutable. Even if it was
-// allowed, preventing adding disabled fields to the spec is the right thing to
-// do regardless of what may have ended up in the status earlier.
+// 理论上某些特性可能只在旧 ResourceClaim 的 status 中使用而未出现在 spec 中。
+// 这只可能发生在 spec 更新场景，而目前整个 spec 是不可变的，所以不会出现。
+// 即便将来允许更新，禁止向 spec 添加被禁用的字段也是正确的做法，
+// 无需考虑 status 里曾经有什么。
 func DropDisabledFields(new, old *resource.ResourceClaimSpec) {
 	dropDisabledDRAPrioritizedListFields(new, old)
-	dropDisabledDRADeviceTaintsFields(new, old) // Intentionally after dropDisabledDRAPrioritizedListFields to avoid iterating over FirstAvailable slice which needs to be dropped.
+	// 注意顺序：DeviceTaints 的清理必须放在 PrioritizedList 之后，
+	// 否则会遍历即将被剔除的 FirstAvailable 切片。
+	dropDisabledDRADeviceTaintsFields(new, old)
 	dropDisabledDRAAdminAccessFields(new, old)
 	dropDisabledDRAResourceClaimConsumableCapacityFields(new, old)
 	dropDisabledDRADerivedAttributesFields(new, old)
 }
 
+// dropDisabledDRADeviceTaintsFields 在 DRADeviceTaints 特性关闭且旧对象未使用时，
+// 清除请求中的 Tolerations（包括 Exactly 和各个 FirstAvailable 子请求）。
 func dropDisabledDRADeviceTaintsFields(new, old *resource.ResourceClaimSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRADeviceTaints) ||
 		draDeviceTaintsInUse(old) {
@@ -54,6 +57,7 @@ func dropDisabledDRADeviceTaintsFields(new, old *resource.ResourceClaimSpec) {
 	}
 }
 
+// draDeviceTaintsInUse 检查旧 spec 中是否已使用 device taints（即 Tolerations 非空）。
 func draDeviceTaintsInUse(spec *resource.ResourceClaimSpec) bool {
 	if spec == nil {
 		return false
@@ -73,6 +77,8 @@ func draDeviceTaintsInUse(spec *resource.ResourceClaimSpec) bool {
 	return false
 }
 
+// dropDisabledDRAPrioritizedListFields 在 DRAPrioritizedList 特性关闭且旧对象未使用时，
+// 清除所有请求中的 FirstAvailable 列表。
 func dropDisabledDRAPrioritizedListFields(new, old *resource.ResourceClaimSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAPrioritizedList) {
 		return
@@ -86,6 +92,7 @@ func dropDisabledDRAPrioritizedListFields(new, old *resource.ResourceClaimSpec) 
 	}
 }
 
+// draPrioritizedListFeatureInUse 检查旧 spec 中是否有请求使用了 FirstAvailable。
 func draPrioritizedListFeatureInUse(spec *resource.ResourceClaimSpec) bool {
 	if spec == nil {
 		return false
@@ -100,10 +107,12 @@ func draPrioritizedListFeatureInUse(spec *resource.ResourceClaimSpec) bool {
 	return false
 }
 
+// dropDisabledDRAAdminAccessFields 在 DRAAdminAccess 特性关闭且旧对象未使用时，
+// 清除请求中的 AdminAccess 字段。
 func dropDisabledDRAAdminAccessFields(new, old *resource.ResourceClaimSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAAdminAccess) ||
 		DRAAdminAccessFeatureInUse(old) {
-		// No need to drop anything.
+		// 无需清理。
 		return
 	}
 
@@ -114,7 +123,7 @@ func dropDisabledDRAAdminAccessFields(new, old *resource.ResourceClaimSpec) {
 	}
 }
 
-// DRAAdminAccessFeatureInUse checks whether the feature is in use in the spec.
+// DRAAdminAccessFeatureInUse 检查旧 spec 中是否已使用 AdminAccess 字段。
 func DRAAdminAccessFeatureInUse(spec *resource.ResourceClaimSpec) bool {
 	if spec == nil {
 		return false
@@ -129,10 +138,12 @@ func DRAAdminAccessFeatureInUse(spec *resource.ResourceClaimSpec) bool {
 	return false
 }
 
+// dropDisabledDRAResourceClaimConsumableCapacityFields 在 DRAConsumableCapacity 特性关闭
+// 且旧对象未使用时，清除 Constraints 的 DistinctAttribute 以及请求中的 Capacity 字段。
 func dropDisabledDRAResourceClaimConsumableCapacityFields(new, old *resource.ResourceClaimSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAConsumableCapacity) ||
 		DRAConsumableCapacityFeatureInUse(old) {
-		// No need to drop anything.
+		// 无需清理。
 		return
 	}
 
@@ -151,7 +162,7 @@ func dropDisabledDRAResourceClaimConsumableCapacityFields(new, old *resource.Res
 	}
 }
 
-// DRAConsumableCapacityFeatureInUse checks whether the feature is in use in the spec.
+// DRAConsumableCapacityFeatureInUse 检查旧 spec 中是否已使用可消费容量相关字段。
 func DRAConsumableCapacityFeatureInUse(spec *resource.ResourceClaimSpec) bool {
 	if spec == nil {
 		return false
@@ -177,6 +188,8 @@ func DRAConsumableCapacityFeatureInUse(spec *resource.ResourceClaimSpec) bool {
 	return false
 }
 
+// dropDisabledDRADerivedAttributesFields 在 DRADerivedAttributes 特性关闭且旧对象未使用时，
+// 清除请求中的 DerivedAttributes 字段。
 func dropDisabledDRADerivedAttributesFields(new, old *resource.ResourceClaimSpec) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRADerivedAttributes) ||
 		draDerivedAttributesInUse(old) {
@@ -193,6 +206,7 @@ func dropDisabledDRADerivedAttributesFields(new, old *resource.ResourceClaimSpec
 	}
 }
 
+// draDerivedAttributesInUse 检查旧 spec 中是否已使用 DerivedAttributes 字段。
 func draDerivedAttributesInUse(spec *resource.ResourceClaimSpec) bool {
 	if spec == nil {
 		return false
