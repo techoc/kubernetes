@@ -16,8 +16,8 @@ limitations under the License.
 
 package convert
 
-// These imports are the API groups the client will support.
-// TODO: Remove these manual install once we don't need legacy scheme in convert
+// 这些空导入用于注册客户端支持的所有 API group。
+// TODO: 当 convert 不再依赖 legacy scheme 时，移除这些手工注册。
 import (
 	_ "k8s.io/kubernetes/pkg/apis/admission/install"
 	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"

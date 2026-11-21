@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kubectl provides the functions used by the kubectl command line tool
-// under k8s.io/kubernetes/cmd. The functions are kept in this package to better
-// support unit testing. The main() method for kubectl is only an entry point
-// and should contain no functionality.
+// Package kubectl 提供 k8s.io/kubernetes/cmd 下 kubectl 命令行工具使用的函数。
+// 这些函数放在本包中是为了便于单元测试；kubectl 的 main() 只是入口，
+// 不应包含任何实际功能。
 package kubectl

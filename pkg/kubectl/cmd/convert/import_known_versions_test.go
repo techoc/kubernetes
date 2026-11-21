@@ -27,6 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 )
 
+// TestKnownVersions 验证所有已知的 API 版本都已在 scheme 中注册。
 func TestKnownVersions(t *testing.T) {
 	legacytypes := legacyscheme.Scheme.AllKnownTypes()
 	alreadyErroredGroups := map[string]bool{}

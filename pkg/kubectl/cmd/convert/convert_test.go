@@ -39,6 +39,7 @@ type checkField struct {
 	expected string
 }
 
+// TestConvertObject 验证对象经 ConvertOptions 转换后能正确序列化为期望的 YAML。
 func TestConvertObject(t *testing.T) {
 	testcases := []testcase{
 		{

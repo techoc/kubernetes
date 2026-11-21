@@ -61,7 +61,7 @@ var (
 		kubectl convert -f . | kubectl create -f -`))
 )
 
-// ConvertOptions have the data required to perform the convert operation
+// ConvertOptions 保存执行 convert 操作所需的参数与状态。
 type ConvertOptions struct {
 	PrintFlags *genericclioptions.PrintFlags
 	Printer    printers.ResourcePrinter
@@ -77,6 +77,7 @@ type ConvertOptions struct {
 	genericiooptions.IOStreams
 }
 
+// NewConvertOptions 构造 ConvertOptions 并设置默认输出格式为 yaml、默认在本地转换。
 func NewConvertOptions(ioStreams genericiooptions.IOStreams) *ConvertOptions {
 	return &ConvertOptions{
 		PrintFlags: genericclioptions.NewPrintFlags("converted").WithTypeSetter(scheme.Scheme).WithDefaultOutput("yaml"),
@@ -85,8 +86,7 @@ func NewConvertOptions(ioStreams genericiooptions.IOStreams) *ConvertOptions {
 	}
 }
 
-// NewCmdConvert creates a command object for the generic "convert" action, which
-// translates the config file into a given version.
+// NewCmdConvert 创建 "convert" 命令对象，把配置文件转换为指定 API 版本。
 func NewCmdConvert(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cobra.Command {
 	o := NewConvertOptions(ioStreams)
 
@@ -111,7 +111,7 @@ func NewCmdConvert(f cmdutil.Factory, ioStreams genericiooptions.IOStreams) *cob
 	return cmd
 }
 
-// Complete collects information required to run Convert command from command line.
+// Complete 从命令行收集执行 Convert 命令所需的信息：文件名、命名空间、校验器和 printer。
 func (o *ConvertOptions) Complete(f cmdutil.Factory, cmd *cobra.Command) (err error) {
 	err = o.FilenameOptions.RequireFilenameOrKustomize()
 	if err != nil {
@@ -137,11 +137,12 @@ func (o *ConvertOptions) Complete(f cmdutil.Factory, cmd *cobra.Command) (err er
 	return err
 }
 
-// RunConvert implements the generic Convert command
+// RunConvert 实现 convert 命令：读取资源、转换为目标版本并输出。
 func (o *ConvertOptions) RunConvert() error {
 	b := o.builder().
 		WithScheme(scheme.Scheme).
 		LocalParam(o.local)
+	// 非本地模式需要向 API server 校验资源，先构造校验器。
 	if !o.local {
 		schema, err := o.validator()
 		if err != nil {
@@ -189,10 +190,8 @@ func (o *ConvertOptions) RunConvert() error {
 	return o.Printer.PrintObj(objects, o.Out)
 }
 
-// asVersionedObject converts a list of infos into a single object - either a List containing
-// the objects as children, or if only a single Object is present, as that object. The provided
-// version will be preferred as the conversion target, but the Object's mapping version will be
-// used if that version is not present.
+// asVersionedObject 把一组 info 合并为单个对象：对象只有一个时直接返回它，
+// 否则包装成 List。优先转换为指定版本，未指定时退回对象映射中的版本。
 func asVersionedObject(infos []*resource.Info, forceList bool, specifiedOutputVersion schema.GroupVersion, encoder runtime.Encoder, iostream genericclioptions.IOStreams) (runtime.Object, error) {
 	objects, err := asVersionedObjects(infos, specifiedOutputVersion, encoder, iostream)
 	if err != nil {
@@ -228,9 +227,8 @@ func asVersionedObject(infos []*resource.Info, forceList bool, specifiedOutputVe
 	return object, nil
 }
 
-// asVersionedObjects converts a list of infos into versioned objects. The provided
-// version will be preferred as the conversion target, but the Object's mapping version will be
-// used if that version is not present.
+// asVersionedObjects 把一组 info 逐个转换为带版本的对象。
+// 优先使用指定版本，未指定时使用对象自身映射的版本。
 func asVersionedObjects(infos []*resource.Info, specifiedOutputVersion schema.GroupVersion, encoder runtime.Encoder, iostream genericclioptions.IOStreams) ([]runtime.Object, error) {
 	objects := []runtime.Object{}
 	for _, info := range infos {
@@ -240,15 +238,15 @@ func asVersionedObjects(infos []*resource.Info, specifiedOutputVersion schema.Gr
 
 		targetVersions := []schema.GroupVersion{}
 		// objects that are not part of api.Scheme must be converted to JSON
-		// TODO: convert to map[string]interface{}, attach to runtime.Unknown?
+		// TODO: 未来考虑转成 map[string]interface{} 并挂到 runtime.Unknown 上。
 		if !specifiedOutputVersion.Empty() {
 			if _, _, err := scheme.Scheme.ObjectKinds(info.Object); runtime.IsNotRegisteredError(err) {
-				// TODO: ideally this would encode to version, but we don't expose multiple codecs here.
+				// TODO: 理想情况下应按目标版本编码，但这里没有暴露多个 codec。
 				data, err := runtime.Encode(encoder, info.Object)
 				if err != nil {
 					return nil, err
 				}
-				// TODO: Set ContentEncoding and ContentType.
+				// TODO: 设置 ContentEncoding 与 ContentType。
 				objects = append(objects, &runtime.Unknown{Raw: data})
 				continue
 			}
@@ -264,9 +262,8 @@ func asVersionedObjects(infos []*resource.Info, specifiedOutputVersion schema.Gr
 
 		converted, err := tryConvert(scheme.Scheme, info.Object, targetVersions...)
 		if err != nil {
-			// Dont fail on not registered error converting objects.
-			// Simply warn the user with the error returned from api-machinery and continue with the rest of the file
-			// fail on all other errors
+			// 转换时遇到“类型未注册”不算致命错误：向用户告警后继续处理其余对象；
+			// 其他转换错误仍直接失败。
 			if runtime.IsNotRegisteredError(err) {
 				fmt.Fprintln(iostream.ErrOut, err.Error())
 				continue
@@ -279,8 +276,8 @@ func asVersionedObjects(infos []*resource.Info, specifiedOutputVersion schema.Gr
 	return objects, nil
 }
 
-// tryConvert attempts to convert the given object to the provided versions in order. This function assumes
-// the object is in internal version.
+// tryConvert 按给定顺序尝试把对象转换为某个版本，假定输入是 internal 版本。
+// 全部失败时返回最后一个错误。
 func tryConvert(converter runtime.ObjectConvertor, object runtime.Object, versions ...schema.GroupVersion) (runtime.Object, error) {
 	var last error
 	for _, version := range versions {
