@@ -29,6 +29,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+// makeEndpointsArray 构造一组 Endpoints 对象供测试使用。
 func makeEndpointsArray(name string, ips []string, ports []corev1.EndpointPort) []runtime.Object {
 	return []runtime.Object{
 		makeEndpoints(name, ips, ports),
@@ -36,6 +37,7 @@ func makeEndpointsArray(name string, ips []string, ports []corev1.EndpointPort) 
 	}
 }
 
+// makeEndpoints 构造包含指定 IP 与端口的 Endpoints 对象。
 func makeEndpoints(name string, ips []string, ports []corev1.EndpointPort) *corev1.Endpoints {
 	endpoints := &corev1.Endpoints{
 		ObjectMeta: metav1.ObjectMeta{
@@ -58,6 +60,7 @@ func makeEndpoints(name string, ips []string, ports []corev1.EndpointPort) *core
 	return endpoints
 }
 
+// makeEndpointSlice 构造一个包含指定 IP 与端口的 EndpointSlice。
 func makeEndpointSlice(name string, ips []string, ports []corev1.EndpointPort) *discoveryv1.EndpointSlice {
 	slice := &discoveryv1.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
@@ -84,6 +87,7 @@ func makeEndpointSlice(name string, ips []string, ports []corev1.EndpointPort) *
 	return slice
 }
 
+// verifyCreatesAndUpdates 校验 fake 客户端记录的创建与更新操作。
 func verifyCreatesAndUpdates(fakeClient *fake.Clientset, expectedCreates, expectedUpdates []runtime.Object) error {
 	errors := []error{}
 

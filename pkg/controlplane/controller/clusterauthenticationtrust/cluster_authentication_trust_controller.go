@@ -48,12 +48,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// 本包使用的常量定义。
 const (
 	configMapNamespace = "kube-system"
 	configMapName      = "extension-apiserver-authentication"
 )
 
-// Controller holds the running state for the controller
+// Controller 持有控制器的运行状态。
 type Controller struct {
 	requiredAuthenticationData ClusterAuthenticationInfo
 
@@ -61,40 +62,39 @@ type Controller struct {
 	configMapClient corev1client.ConfigMapsGetter
 	namespaceClient corev1client.NamespacesGetter
 
-	// queue is where incoming work is placed to de-dup and to allow "easy" rate limited requeues on errors.
-	// we only ever place one entry in here, but it is keyed as usual: namespace/name
+	// 工作队列用于去重并支持出错时方便的限流重试；这里只会放入一个条目，但仍按 namespace/name 作为 key。
 	queue workqueue.TypedRateLimitingInterface[string]
 
-	// kubeSystemConfigMapInformer is tracked so that we can start these on Run
+	// 跟踪 kube-system ConfigMap informer，以便在 Run 中启动它。
 	kubeSystemConfigMapInformer cache.SharedIndexInformer
 
-	// preRunCaches are the caches to sync before starting the work of this control loop
+	// preRunCaches 是控制循环开始前需要同步的缓存。
 	preRunCaches []cache.InformerSynced
 }
 
-// ClusterAuthenticationInfo holds the information that will included in public configmap.
+// ClusterAuthenticationInfo 保存将要写入公开 ConfigMap 的信息。
 type ClusterAuthenticationInfo struct {
-	// ClientCA is the CA that can be used to verify the identity of normal clients
+	// ClientCA 用于校验普通客户端身份。
 	ClientCA dynamiccertificates.CAContentProvider
 
-	// RequestHeaderUsernameHeaders are the headers used by this kube-apiserver to determine username
+	// RequestHeaderUsernameHeaders 是本 apiserver 用于确定用户名的请求头。
 	RequestHeaderUsernameHeaders headerrequest.StringSliceProvider
-	// RequestHeaderUIDHeaders are the headers used by this kube-apiserver to determine UID
+	// RequestHeaderUIDHeaders 是用于确定 UID 的请求头。
 	RequestHeaderUIDHeaders headerrequest.StringSliceProvider
-	// RequestHeaderGroupHeaders are the headers used by this kube-apiserver to determine groups
+	// RequestHeaderGroupHeaders 是用于确定用户组的请求头。
 	RequestHeaderGroupHeaders headerrequest.StringSliceProvider
-	// RequestHeaderExtraHeaderPrefixes are the headers used by this kube-apiserver to determine user.extra
+	// RequestHeaderExtraHeaderPrefixes 是用于确定 user.extra 的请求头前缀。
 	RequestHeaderExtraHeaderPrefixes headerrequest.StringSliceProvider
-	// RequestHeaderAllowedNames are the sujbects allowed to act as a front proxy
+	// RequestHeaderAllowedNames 是允许充当前端代理的主体。
 	RequestHeaderAllowedNames headerrequest.StringSliceProvider
-	// RequestHeaderCA is the CA that can be used to verify the front proxy
+	// RequestHeaderCA 用于校验前端代理。
 	RequestHeaderCA dynamiccertificates.CAContentProvider
 }
 
-// NewClusterAuthenticationTrustController returns a controller that will maintain the kube-system configmap/extension-apiserver-authentication
-// that holds information about how to aggregated apiservers are recommended (but not required) to configure themselves.
+// NewClusterAuthenticationTrustController 返回一个控制器，维护 kube-system/extension-apiserver-authentication ConfigMap，
+// 其中保存聚合 apiserver 被推荐（但非强制）采用的自配置方式。
 func NewClusterAuthenticationTrustController(requiredAuthenticationData ClusterAuthenticationInfo, kubeClient kubernetes.Interface) *Controller {
-	// we construct our own informer because we need such a small subset of the information available.  Just one namespace.
+	// 只需一个 namespace 下的少量数据，因此自建专用 informer 而非共享工厂。
 	kubeSystemConfigMapInformer := corev1informers.NewConfigMapInformer(kubeClient, configMapNamespace, 12*time.Hour, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 
 	c := &Controller{
@@ -123,8 +123,8 @@ func NewClusterAuthenticationTrustController(requiredAuthenticationData ClusterA
 			return true // always return true just in case.  The checks are fairly cheap
 		},
 		Handler: cache.ResourceEventHandlerFuncs{
-			// we have a filter, so any time we're called, we may as well queue. We only ever check one configmap
-			// so we don't have to be choosy about our key.
+			// informer 已带过滤器，任何回调都直接入队即可；
+			// 只检查一个 ConfigMap，无需挑剔 key。
 			AddFunc: func(obj interface{}) {
 				c.queue.Add(keyFn())
 			},
@@ -137,6 +137,7 @@ func NewClusterAuthenticationTrustController(requiredAuthenticationData ClusterA
 	return c
 }
 
+// syncConfigMap 将当前认证信息同步到 ConfigMap。
 func (c *Controller) syncConfigMap() error {
 	originalAuthConfigMap, err := c.configMapLister.ConfigMaps(configMapNamespace).Get(configMapName)
 	if apierrors.IsNotFound(err) {
@@ -146,7 +147,7 @@ func (c *Controller) syncConfigMap() error {
 	} else if err != nil {
 		return err
 	}
-	// keep the original to diff against later before updating
+	// 保留原对象以便更新前做差异比较。
 	authConfigMap := originalAuthConfigMap.DeepCopy()
 
 	existingAuthenticationInfo, err := getClusterAuthenticationInfoFor(originalAuthConfigMap.Data)
@@ -178,9 +179,10 @@ func (c *Controller) syncConfigMap() error {
 	return nil
 }
 
+// createNamespaceIfNeeded 在命名空间不存在时创建它。
 func createNamespaceIfNeeded(nsClient corev1client.NamespacesGetter, ns string) error {
 	if _, err := nsClient.Namespaces().Get(context.TODO(), ns, metav1.GetOptions{}); err == nil {
-		// the namespace already exists
+		// 命名空间已存在。
 		return nil
 	}
 	newNs := &corev1.Namespace{
@@ -196,6 +198,7 @@ func createNamespaceIfNeeded(nsClient corev1client.NamespacesGetter, ns string) 
 	return err
 }
 
+// writeConfigMap 创建或更新目标 ConfigMap。
 func writeConfigMap(configMapClient corev1client.ConfigMapsGetter, required *corev1.ConfigMap) error {
 	_, err := configMapClient.ConfigMaps(required.Namespace).Update(context.TODO(), required, metav1.UpdateOptions{})
 	if apierrors.IsNotFound(err) {
@@ -203,11 +206,10 @@ func writeConfigMap(configMapClient corev1client.ConfigMapsGetter, required *cor
 		return err
 	}
 
-	// If the configmap is too big, clear the entire thing and count on this controller (or another one) to add the correct data back.
-	// We return the original error which causes the controller to re-queue.
-	// Too big means
-	//   1. request is so big the generic request catcher finds it
-	//   2. the content is so large that that the server sends a validation error "Too long: must have at most 1048576 characters"
+	// ConfigMap 过大时清空全部内容，依赖本控制器（或其他控制器）重新写入正确数据。
+	// 返回原始错误使控制器重新入队。过大指：
+	//   1. 请求过大被通用请求拦截器发现
+	//   2. 内容过大导致服务端返回校验错误 "Too long: must have at most 1048576 characters"
 	if apierrors.IsRequestEntityTooLargeError(err) || (apierrors.IsInvalid(err) && strings.Contains(err.Error(), "Too long")) {
 		if deleteErr := configMapClient.ConfigMaps(required.Namespace).Delete(context.TODO(), required.Name, metav1.DeleteOptions{}); deleteErr != nil {
 			return deleteErr
@@ -218,7 +220,7 @@ func writeConfigMap(configMapClient corev1client.ConfigMapsGetter, required *cor
 	return err
 }
 
-// combinedClusterAuthenticationInfo combines two sets of authentication information into a new one
+// combinedClusterAuthenticationInfo 把两份认证信息合并为一份。
 func combinedClusterAuthenticationInfo(lhs, rhs ClusterAuthenticationInfo) (ClusterAuthenticationInfo, error) {
 	ret := ClusterAuthenticationInfo{
 		RequestHeaderAllowedNames:        combineUniqueStringSlices(lhs.RequestHeaderAllowedNames, rhs.RequestHeaderAllowedNames),
@@ -241,6 +243,7 @@ func combinedClusterAuthenticationInfo(lhs, rhs ClusterAuthenticationInfo) (Clus
 	return ret, nil
 }
 
+// getConfigMapDataFor 把认证信息序列化为 ConfigMap 的 data。
 func getConfigMapDataFor(authenticationInfo ClusterAuthenticationInfo) (map[string]string, error) {
 	data := map[string]string{}
 	if authenticationInfo.ClientCA != nil {
@@ -256,7 +259,7 @@ func getConfigMapDataFor(authenticationInfo ClusterAuthenticationInfo) (map[stri
 	if caBytes := authenticationInfo.RequestHeaderCA.CurrentCABundleContent(); len(caBytes) > 0 {
 		var err error
 
-		// encoding errors aren't going to get better, so just fail on them.
+		// 编码错误不会自行恢复，直接失败。
 		data["requestheader-username-headers"], err = jsonSerializeStringSlice(authenticationInfo.RequestHeaderUsernameHeaders.Value())
 		if err != nil {
 			return nil, err
@@ -287,6 +290,7 @@ func getConfigMapDataFor(authenticationInfo ClusterAuthenticationInfo) (map[stri
 	return data, nil
 }
 
+// getClusterAuthenticationInfoFor 从 ConfigMap data 反序列化认证信息。
 func getClusterAuthenticationInfoFor(data map[string]string) (ClusterAuthenticationInfo, error) {
 	ret := ClusterAuthenticationInfo{}
 
@@ -332,6 +336,7 @@ func getClusterAuthenticationInfoFor(data map[string]string) (ClusterAuthenticat
 	return ret, nil
 }
 
+// jsonSerializeStringSlice 将字符串切片序列化为 JSON 字符串。
 func jsonSerializeStringSlice(in []string) (string, error) {
 	out, err := json.Marshal(in)
 	if err != nil {
@@ -340,6 +345,7 @@ func jsonSerializeStringSlice(in []string) (string, error) {
 	return string(out), err
 }
 
+// jsonDeserializeStringSlice 将 JSON 字符串反序列化为字符串切片提供者。
 func jsonDeserializeStringSlice(in string) (headerrequest.StringSliceProvider, error) {
 	if len(in) == 0 {
 		return nil, nil
@@ -352,6 +358,7 @@ func jsonDeserializeStringSlice(in string) (headerrequest.StringSliceProvider, e
 	return headerrequest.StaticStringSlice(out), nil
 }
 
+// combineUniqueStringSlices 合并两个字符串切片并去重。
 func combineUniqueStringSlices(lhs, rhs headerrequest.StringSliceProvider) headerrequest.StringSliceProvider {
 	ret := []string{}
 	present := sets.String{}
@@ -379,6 +386,7 @@ func combineUniqueStringSlices(lhs, rhs headerrequest.StringSliceProvider) heade
 	return headerrequest.StaticStringSlice(ret)
 }
 
+// combineCertLists 合并两份 CA 证书列表并去重。
 func combineCertLists(lhs, rhs dynamiccertificates.CAContentProvider) (dynamiccertificates.CAContentProvider, error) {
 	certificates := []*x509.Certificate{}
 
@@ -402,7 +410,7 @@ func combineCertLists(lhs, rhs dynamiccertificates.CAContentProvider) (dynamicce
 	certificates = filterExpiredCerts(certificates...)
 
 	finalCertificates := []*x509.Certificate{}
-	// now check for duplicates. n^2, but super simple
+	// 检查重复项：n^2 复杂度，但实现简单。
 	for i := range certificates {
 		found := false
 		for j := range finalCertificates {
@@ -424,14 +432,13 @@ func combineCertLists(lhs, rhs dynamiccertificates.CAContentProvider) (dynamicce
 	if len(finalCABytes) == 0 {
 		return nil, nil
 	}
-	// it makes sense for this list to be static because the combination of sources is only used just before writing and
-	// is recalculated
+	// 该列表保持静态是合理的：组合结果只在写入前计算并每次重新生成。
 	return dynamiccertificates.NewStaticCAContent("combined", finalCABytes)
 }
 
-// filterExpiredCerts checks are all certificates in the bundle valid, i.e. they have not expired.
-// The function returns new bundle with only valid certificates or error if no valid certificate is found.
-// We allow five minutes of slack for NotAfter comparisons
+// filterExpiredCerts 检查证书包中的证书是否全部有效（未过期），
+// 返回仅含有效证书的新包；若无有效证书则返回错误。
+// NotAfter 比较允许 5 分钟余量。
 func filterExpiredCerts(certs ...*x509.Certificate) []*x509.Certificate {
 	fiveMinutesAgo := time.Now().Add(-5 * time.Minute)
 
@@ -445,85 +452,87 @@ func filterExpiredCerts(certs ...*x509.Certificate) []*x509.Certificate {
 	return validCerts
 }
 
-// Enqueue a method to allow separate control loops to cause the controller to trigger and reconcile content.
+// Enqueue 供其他控制循环调用，触发控制器重新协调内容。
 func (c *Controller) Enqueue() {
 	c.queue.Add(keyFn())
 }
 
-// Run the controller until stopped.
+// Run 运行控制器直到停止。
 func (c *Controller) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
-	// make sure the work queue is shutdown which will trigger workers to end
+	// 确保关闭工作队列，从而让 worker 退出。
 	defer c.queue.ShutDown()
 
 	klog.Infof("Starting cluster_authentication_trust_controller controller")
 	defer klog.Infof("Shutting down cluster_authentication_trust_controller controller")
 
-	// we have a personal informer that is narrowly scoped, start it.
+	// 启动范围受限的专用 informer。
 	go c.kubeSystemConfigMapInformer.Run(ctx.Done())
 
-	// wait for your secondary caches to fill before starting your work
+	// 开始工作前等待辅助缓存填充完毕。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, c.preRunCaches...) {
 		return
 	}
 
-	// only run one worker
+	// 只运行一个 worker。
 	go wait.Until(c.runWorker, time.Second, ctx.Done())
 
-	// checks are cheap.  run once a minute just to be sure we stay in sync in case fsnotify fails again
-	// start timer that rechecks every minute, just in case.  this also serves to prime the controller quickly.
+	// 检查开销很小，每分钟执行一次以防 fsnotify 再次失效；
+	// 启动每分钟重查的定时器，同时用于快速预热控制器。
 	_ = wait.PollImmediateUntil(1*time.Minute, func() (bool, error) {
 		c.queue.Add(keyFn())
 		return false, nil
 	}, ctx.Done())
 
-	// wait until we're told to stop
+	// 等待停止信号。
 	<-ctx.Done()
 }
 
+// runWorker 持续处理工作队列中的任务。
 func (c *Controller) runWorker() {
-	// hot loop until we're told to stop.  processNextWorkItem will automatically wait until there's work
-	// available, so we don't worry about secondary waits
+	// 热循环直到收到停止信号；processNextWorkItem 会自动等待工作项，
+	// 因此无需额外等待。
 	for c.processNextWorkItem() {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个 key，退出时返回 false。
 func (c *Controller) processNextWorkItem() bool {
-	// pull the next work item from queue.  It should be a key we use to lookup something in a cache
+	// 从队列取出下一个工作项，该 key 用于在缓存中查找对象。
 	key, quit := c.queue.Get()
 	if quit {
 		return false
 	}
-	// you always have to indicate to the queue that you've completed a piece of work
+	// 必须向队列标记该工作项已处理完成。
 	defer c.queue.Done(key)
 
-	// do your work on the key.  This method will contains your "do stuff" logic
+	// 对该 key 执行实际处理逻辑。
 	err := c.syncConfigMap()
 	if err == nil {
-		// if you had no error, tell the queue to stop tracking history for your key.  This will
-		// reset things like failure counts for per-item rate limiting
+		// 无错误时通知队列停止跟踪该 key 的历史，重置逐项限流的失败计数。
 		c.queue.Forget(key)
 		return true
 	}
 
-	// there was a failure so be sure to report it.  This method allows for pluggable error handling
-	// which can be used for things like cluster-monitoring
+	// 出现失败必须上报，该方法支持可插拔的错误处理，
+	// 例如用于集群监控。
 	utilruntime.HandleError(fmt.Errorf("%v failed with : %v", key, err))
-	// since we failed, we should requeue the item to work on later.  This method will add a backoff
-	// to avoid hotlooping on particular items (they're probably still not going to work right away)
-	// and overall controller protection (everything I've done is broken, this controller needs to
-	// calm down or it can starve other useful work) cases.
+	// 失败后应重新入队稍后处理。该方法加入退避，
+	// 避免对特定项热循环（它们短期内可能仍无法成功），
+	// 同时保护控制器整体（若所有操作都失败，需冷静下来，
+	// 否则会饿死其他有用的工作）。
 	c.queue.AddRateLimited(key)
 
 	return true
 }
 
+// keyFn 返回工作队列中唯一的任务 key。
 func keyFn() string {
-	// this format matches DeletionHandlingMetaNamespaceKeyFunc for our single key
+	// 该格式与单 key 场景下的 DeletionHandlingMetaNamespaceKeyFunc 一致。
 	return configMapNamespace + "/" + configMapName
 }
 
+// encodeCertificates 将证书编码为 PEM 字节。
 func encodeCertificates(certs ...*x509.Certificate) ([]byte, error) {
 	b := bytes.Buffer{}
 	for _, cert := range certs {

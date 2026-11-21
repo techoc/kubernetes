@@ -14,10 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package samples contains two kube-like generic control plane apiserver, one
-// with CRDs (generic) and one without (minimum).
+// Package samples 包含两个类似 kube 的通用控制面 apiserver：一个带 CRD（generic），一个不带（minimum）。
 //
-// They are here mainly to preserve the feasibility to construct these kind of
-// control planes. Eventually, we might promote them to be example for 3rd parties
-// to follow.
+// 它们主要用于验证构建这类控制面的可行性。未来或许会将其推广为供第三方参考的示例。
 package samples

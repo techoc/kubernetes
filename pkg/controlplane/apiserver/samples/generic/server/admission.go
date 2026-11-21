@@ -33,7 +33,7 @@ import (
 	"k8s.io/kubernetes/plugin/pkg/admission/serviceaccount"
 )
 
-// DefaultOffAdmissionPlugins get admission plugins off by default for kube-apiserver.
+// DefaultOffAdmissionPlugins 返回 kube-apiserver 默认关闭的准入插件集合。
 func DefaultOffAdmissionPlugins() sets.Set[string] {
 	defaultOnPlugins := sets.New[string](
 		lifecycle.PluginName,                 // NamespaceLifecycle
@@ -50,5 +50,6 @@ func DefaultOffAdmissionPlugins() sets.Set[string] {
 		mutatingadmissionpolicy.PluginName,   // MutatingAdmissionPolicy
 	)
 
+	// 默认关闭集合等于全部插件减去上述默认开启的插件。
 	return sets.New(options.AllOrderedPlugins...).Difference(defaultOnPlugins)
 }

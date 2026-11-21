@@ -29,7 +29,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Test_Controller validates the garbage collection logic for the apiserverleasegc controller.
+// Test_Controller 验证 apiserverleasegc 控制器的回收逻辑。
 func Test_Controller(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	tests := []struct {

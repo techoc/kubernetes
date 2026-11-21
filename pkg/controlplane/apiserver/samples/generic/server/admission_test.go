@@ -36,6 +36,7 @@ import (
 	"k8s.io/kubernetes/plugin/pkg/admission/storage/storageobjectinuseprotection"
 )
 
+// intentionallyOffPlugins 列出通用控制面额外有意关闭的插件。
 var intentionallyOffPlugins = sets.New[string](
 	limitranger.PluginName,                  // LimitRanger
 	setdefault.PluginName,                   // DefaultStorageClass
@@ -52,6 +53,7 @@ var intentionallyOffPlugins = sets.New[string](
 	podresize.PluginName,                    // PodResize
 )
 
+// TestDefaultOffAdmissionPlugins 验证通用控制面默认关闭的插件集合与预期一致。
 func TestDefaultOffAdmissionPlugins(t *testing.T) {
 	expectedOff := kubeoptions.DefaultOffAdmissionPlugins().Union(intentionallyOffPlugins)
 	if missing := DefaultOffAdmissionPlugins().Difference(expectedOff); missing.Len() > 0 {

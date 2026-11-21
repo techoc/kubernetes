@@ -28,7 +28,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
-// Test_Controller validates the garbage collection logic for the apiserverleasegc controller.
+// Test_Controller 验证控制器能创建缺失的系统命名空间。
 func Test_Controller(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -137,6 +137,7 @@ func Test_Controller(t *testing.T) {
 	}
 }
 
+// expectAction 断言客户端记录了预期的操作。
 func expectAction(t *testing.T, actions []k8stesting.Action, expected [][]string) {
 	t.Helper()
 	if len(actions) != len(expected) {

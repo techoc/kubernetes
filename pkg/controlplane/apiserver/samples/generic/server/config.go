@@ -30,6 +30,7 @@ import (
 	generatedopenapi "k8s.io/kubernetes/pkg/generated/openapi"
 )
 
+// Config 保存 sample 控制面各服务器的配置。
 type Config struct {
 	Options options.CompletedOptions
 
@@ -40,9 +41,11 @@ type Config struct {
 	ExtraConfig
 }
 
+// ExtraConfig 保存额外的扩展配置（当前为空）。
 type ExtraConfig struct {
 }
 
+// completedConfig 保存完成后的内部配置。
 type completedConfig struct {
 	Options options.CompletedOptions
 
@@ -53,11 +56,12 @@ type completedConfig struct {
 	ExtraConfig
 }
 
+// CompletedConfig 内嵌私有指针，防止本包之外实例化。
 type CompletedConfig struct {
-	// Embed a private pointer that cannot be instantiated outside of this package.
 	*completedConfig
 }
 
+// Complete 完成各子服务器配置的构建。
 func (c *Config) Complete() (CompletedConfig, error) {
 	return CompletedConfig{&completedConfig{
 		Options: c.Options,
@@ -70,8 +74,7 @@ func (c *Config) Complete() (CompletedConfig, error) {
 	}}, nil
 }
 
-// NewConfig creates all the self-contained pieces making up an
-// sample-generic-controlplane, but does not wire them yet into a server object.
+// NewConfig 构建组成 sample-generic-controlplane 的各个独立部件，但尚未将它们组装为服务器对象。
 func NewConfig(opts options.CompletedOptions) (*Config, error) {
 	c := &Config{
 		Options: opts,
@@ -88,6 +91,7 @@ func NewConfig(opts options.CompletedOptions) (*Config, error) {
 		return nil, err
 	}
 
+	// 各子服务器共享同一个 service resolver 与准入初始化器。
 	serviceResolver := webhook.NewDefaultServiceResolver()
 	kubeAPIs, pluginInitializer, err := controlplaneapiserver.CreateConfig(opts, genericConfig, versionedInformers, nil, storageFactory, serviceResolver, nil)
 	if err != nil {

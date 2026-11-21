@@ -40,13 +40,14 @@ import (
 	"k8s.io/kubernetes/pkg/controlplane/reconcilers"
 )
 
+// kubernetes service 控制器使用的常量。
 const (
 	kubernetesServiceName = "kubernetes"
 )
 
-// Controller is the controller manager for the core bootstrap Kubernetes
-// controller loops, which manage creating the "kubernetes" service and
-// provide the IP repair check on service IPs
+// Controller 管理核心引导控制器循环，
+// 负责创建 "kubernetes" Service，
+// 并检查 Service IP。
 type Controller struct {
 	Config
 
@@ -58,20 +59,21 @@ type Controller struct {
 	stopCh chan struct{} // closed by Stop()
 }
 
+// Config 保存 kubernetes Service 控制器的配置。
 type Config struct {
 	PublicIP net.IP
 
 	EndpointReconciler reconcilers.EndpointReconciler
 	EndpointInterval   time.Duration
 
-	// ServiceIP indicates where the kubernetes service will live.  It may not be nil.
+	// ServiceIP 指定 kubernetes Service 的 IP，不可为 nil。
 	ServiceIP                 net.IP
 	ServicePort               int
 	PublicServicePort         int
 	KubernetesServiceNodePort int
 }
 
-// New returns a controller for watching the kubernetes service endpoints.
+// New 返回监听 kubernetes Service 端点的控制器。
 func New(config Config, client kubernetes.Interface, serviceInformer v1informers.ServiceInformer) *Controller {
 	return &Controller{
 		Config:        config,
@@ -82,14 +84,14 @@ func New(config Config, client kubernetes.Interface, serviceInformer v1informers
 	}
 }
 
-// Start begins the core controller loops that must exist for bootstrapping
-// a cluster.
+// Start 启动集群引导所必需的核心控制循环，
+// 这些循环在引导集群时必须存在。
 func (c *Controller) Start(stopCh <-chan struct{}) {
 	if !cache.WaitForCacheSync(stopCh, c.serviceSynced) {
 		runtime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
 		return
 	}
-	// Reconcile during first run removing itself until server is ready.
+	// 首次运行时反复协调并移除自身端点，直到服务器就绪。
 	endpointPorts := createEndpointPortSpec(c.PublicServicePort, "https")
 	if err := c.EndpointReconciler.RemoveEndpoints(kubernetesServiceName, c.PublicIP, endpointPorts); err == nil {
 		klog.Error("Found stale data, removed previous endpoints on kubernetes service, apiserver didn't exit successfully previously")
@@ -109,7 +111,7 @@ func (c *Controller) Start(stopCh <-chan struct{}) {
 	go c.Run(localStopCh)
 }
 
-// Stop cleans up this API Servers endpoint reconciliation leases so another master can take over more quickly.
+// Stop 清理本 apiserver 的端点协调租约，使其他 master 更快接管。
 func (c *Controller) Stop() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -135,16 +137,16 @@ func (c *Controller) Stop() {
 
 	select {
 	case <-finishedReconciling:
-		// done
+		// 完成。
 	case <-time.After(2 * c.EndpointInterval):
-		// don't block server shutdown forever if we can't reach etcd to remove ourselves
+		// 无法连接 etcd 清理自身时不要无限阻塞服务器关闭。
 		klog.Warning("RemoveEndpoints() timed out")
 	}
 }
 
-// Run periodically updates the kubernetes service
+// Run 定期更新 kubernetes Service。
 func (c *Controller) Run(ch <-chan struct{}) {
-	// wait until process is ready
+	// 等待进程就绪。
 	ctx := wait.ContextForChannel(ch)
 	err := wait.PollUntilContextCancel(ctx, 100*time.Millisecond, true, func(context.Context) (bool, error) {
 		var code int
@@ -156,18 +158,16 @@ func (c *Controller) Run(ch <-chan struct{}) {
 	}
 
 	wait.NonSlidingUntil(func() {
-		// Service definition is not reconciled after first
-		// run, ports and type will be corrected only during
-		// start.
+		// Service 定义在首次运行后不再协调，端口与类型只在启动时修正。
 		if err := c.UpdateKubernetesService(false); err != nil {
 			runtime.HandleError(fmt.Errorf("unable to sync kubernetes service: %v", err))
 		}
 	}, c.EndpointInterval, ch)
 }
 
-// UpdateKubernetesService attempts to update the default Kube service.
+// UpdateKubernetesService 尝试更新默认的 kubernetes Service。
 func (c *Controller) UpdateKubernetesService(reconcile bool) error {
-	// Update service & endpoint records.
+	// 更新 Service 与 Endpoints 记录。
 	servicePorts, serviceType := createPortAndServiceSpec(c.ServicePort, c.PublicServicePort, c.KubernetesServiceNodePort, "https")
 	if err := c.CreateOrUpdateMasterServiceIfNeeded(kubernetesServiceName, c.ServiceIP, servicePorts, serviceType, reconcile); err != nil {
 		return err
@@ -179,11 +179,10 @@ func (c *Controller) UpdateKubernetesService(reconcile bool) error {
 	return nil
 }
 
-// createPortAndServiceSpec creates an array of service ports.
-// If the NodePort value is 0, just the servicePort is used, otherwise, a node port is exposed.
+// createPortAndServiceSpec 创建 Service 端口数组。
+// NodePort 为 0 时仅使用 servicePort，否则暴露节点端口。
 func createPortAndServiceSpec(servicePort int, targetServicePort int, nodePort int, servicePortName string) ([]corev1.ServicePort, corev1.ServiceType) {
-	// Use the Cluster IP type for the service port if NodePort isn't provided.
-	// Otherwise, we will be binding the master service to a NodePort.
+	// 未提供 NodePort 时使用 ClusterIP 类型，否则将 master Service 绑定到 NodePort。
 	servicePorts := []corev1.ServicePort{{
 		Protocol:   corev1.ProtocolTCP,
 		Port:       int32(servicePort),
@@ -198,7 +197,7 @@ func createPortAndServiceSpec(servicePort int, targetServicePort int, nodePort i
 	return servicePorts, serviceType
 }
 
-// createEndpointPortSpec creates the endpoint ports
+// createEndpointPortSpec 创建 Endpoints 端口。
 func createEndpointPortSpec(endpointPort int, endpointPortName string) []corev1.EndpointPort {
 	return []corev1.EndpointPort{{
 		Protocol: corev1.ProtocolTCP,
@@ -207,12 +206,12 @@ func createEndpointPortSpec(endpointPort int, endpointPortName string) []corev1.
 	}}
 }
 
-// CreateOrUpdateMasterServiceIfNeeded will create the specified service if it
-// doesn't already exist.
+// CreateOrUpdateMasterServiceIfNeeded 在指定 Service 不存在时创建它，
+// 已存在则按需更新。
 func (c *Controller) CreateOrUpdateMasterServiceIfNeeded(serviceName string, serviceIP net.IP, servicePorts []corev1.ServicePort, serviceType corev1.ServiceType, reconcile bool) error {
 	if s, err := c.serviceLister.Services(metav1.NamespaceDefault).Get(serviceName); err == nil {
-		// The service already exists.
-		// This path is no executed since 1.17 2a9a9fa, keeping it in case it needs to be revisited
+		// Service 已存在。
+		// 自 1.17（2a9a9fa）起该分支不再执行，保留以备将来重新审视。
 		if reconcile {
 			if svc, updated := getMasterServiceUpdateIfNeeded(s, servicePorts, serviceType); updated {
 				klog.Warningf("Resetting master service %q to %#v", serviceName, svc)
@@ -231,7 +230,7 @@ func (c *Controller) CreateOrUpdateMasterServiceIfNeeded(serviceName string, ser
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: servicePorts,
-			// maintained by this code, not by the pod selector
+			// 由本代码维护，而非 pod selector。
 			Selector:        nil,
 			ClusterIP:       serviceIP.String(),
 			IPFamilyPolicy:  &singleStack,
@@ -247,10 +246,10 @@ func (c *Controller) CreateOrUpdateMasterServiceIfNeeded(serviceName string, ser
 	return err
 }
 
-// getMasterServiceUpdateIfNeeded sets service attributes for the given apiserver service.
+// getMasterServiceUpdateIfNeeded 设置给定 apiserver Service 的属性。
 func getMasterServiceUpdateIfNeeded(svc *corev1.Service, servicePorts []corev1.ServicePort, serviceType corev1.ServiceType) (s *corev1.Service, updated bool) {
-	// Determine if the service is in the format we expect
-	// (servicePorts are present and service type matches)
+	// 判断 Service 是否符合预期格式。
+	// （端口存在且 Service 类型匹配）
 	formatCorrect := checkServiceFormat(svc, servicePorts, serviceType)
 	if formatCorrect {
 		return svc, false
@@ -260,9 +259,9 @@ func getMasterServiceUpdateIfNeeded(svc *corev1.Service, servicePorts []corev1.S
 	return svc, true
 }
 
-// Determine if the service is in the correct format
-// getMasterServiceUpdateIfNeeded expects (servicePorts are correct
-// and service type matches).
+// 判断 Service 格式是否正确；
+// getMasterServiceUpdateIfNeeded 假定端口正确，
+// 且 Service 类型匹配。
 func checkServiceFormat(s *corev1.Service, ports []corev1.ServicePort, serviceType corev1.ServiceType) (formatCorrect bool) {
 	if s.Spec.Type != serviceType {
 		return false

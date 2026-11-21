@@ -43,11 +43,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 协调式选主控制器使用的常量。
 const (
 	controllerName = "leader-election-controller"
 
-	// Requeue interval is the interval at which a Lease is requeued to verify that it is
-	// being renewed properly.
+	// Requeue interval 是重新入队 Lease 以检查其是否正常续约的间隔。
 	defaultRequeueInterval = 5 * time.Second
 	noRequeue              = 0
 
@@ -58,9 +58,9 @@ const (
 	leaseCandidateValidDuration = 30 * time.Minute
 )
 
-// Controller is the leader election controller, which observes component identity leases for
-// components that have self-nominated as candidate leaders for leases and elects leaders
-// for those leases, favoring candidates with higher versions.
+// Controller 是选主控制器，观察自荐为候选者的组件身份租约，
+// 并为这些租约选举 leader，
+// 优先选择版本更高的候选者。
 type Controller struct {
 	leaseInformer     coordinationv1informers.LeaseInformer
 	leaseClient       coordinationv1client.CoordinationV1Interface
@@ -75,6 +75,7 @@ type Controller struct {
 	clock clock.Clock
 }
 
+// Run 启动选主控制器及选举 worker。
 func (c *Controller) Run(ctx context.Context, workers int) {
 	var wg sync.WaitGroup
 	defer utilruntime.HandleCrashWithContext(ctx)
@@ -95,7 +96,7 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 		return
 	}
 
-	// This controller is leader elected and may start after informers have already started. List on startup.
+	// 本控制器自身是选主运行的，可能在 informer 启动后才开始，因此启动时需要先 List 一次。
 	lcs, err := c.leaseCandidateInformer.Lister().List(labels.Everything())
 	if err != nil {
 		utilruntime.HandleErrorWithContext(ctx, err, "Failed to list lease candidates")
@@ -115,6 +116,7 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// NewController 创建协调式选主控制器。
 func NewController(leaseInformer coordinationv1informers.LeaseInformer, leaseCandidateInformer coordinationv1beta1.LeaseCandidateInformer, leaseClient coordinationv1client.CoordinationV1Interface, leaseCandidateClient coordinationv1beta1client.CoordinationV1beta1Interface) (*Controller, error) {
 	c := &Controller{
 		leaseInformer:          leaseInformer,
@@ -159,11 +161,13 @@ func NewController(leaseInformer coordinationv1informers.LeaseInformer, leaseCan
 	return c, nil
 }
 
+// runElectionWorker 启动选举处理 worker。
 func (c *Controller) runElectionWorker(ctx context.Context) {
 	for c.processNextElectionItem(ctx) {
 	}
 }
 
+// processNextElectionItem 处理队列中的下一个选举任务。
 func (c *Controller) processNextElectionItem(ctx context.Context) bool {
 	key, shutdown := c.queue.Get()
 	if shutdown {
@@ -181,6 +185,7 @@ func (c *Controller) processNextElectionItem(ctx context.Context) bool {
 	return true
 }
 
+// enqueueCandidate 将候选者变更加入工作队列。
 func (c *Controller) enqueueCandidate(obj any) {
 	lc, ok := obj.(*v1beta1.LeaseCandidate)
 	if !ok {
@@ -189,13 +194,14 @@ func (c *Controller) enqueueCandidate(obj any) {
 	if lc == nil {
 		return
 	}
-	// Ignore candidates that transitioned to Pending because reelection is already in progress
+	// 忽略转为 Pending 的候选者，因为重新选举已在进行中。
 	if lc.Spec.PingTime != nil && lc.Spec.RenewTime.Before(lc.Spec.PingTime) {
 		return
 	}
 	c.queue.Add(types.NamespacedName{Namespace: lc.Namespace, Name: lc.Spec.LeaseName})
 }
 
+// enqueueLease 将 Lease 变更加入工作队列。
 func (c *Controller) enqueueLease(obj any) {
 	lease, ok := obj.(*v1.Lease)
 	if !ok {
@@ -204,6 +210,7 @@ func (c *Controller) enqueueLease(obj any) {
 	c.queue.Add(types.NamespacedName{Namespace: lease.Namespace, Name: lease.Name})
 }
 
+// electionNeeded 判断是否需要发起新一轮选举。
 func (c *Controller) electionNeeded(candidates []*v1beta1.LeaseCandidate, leaseNN types.NamespacedName) (bool, error) {
 	lease, err := c.leaseInformer.Lister().Leases(leaseNN.Namespace).Get(leaseNN.Name)
 	if err != nil && !apierrors.IsNotFound(err) {
@@ -216,7 +223,7 @@ func (c *Controller) electionNeeded(candidates []*v1beta1.LeaseCandidate, leaseN
 		return true, nil
 	}
 
-	// every 15min enforce an election to update all candidates. Every 30min we garbage collect.
+	// 每 15 分钟强制选举以更新所有候选者，每 30 分钟执行一次垃圾回收。
 	for _, candidate := range candidates {
 		if candidate.Spec.RenewTime != nil && candidate.Spec.RenewTime.Add(leaseCandidateValidDuration/2).Before(c.clock.Now()) {
 			return true, nil
@@ -242,16 +249,16 @@ func (c *Controller) electionNeeded(candidates []*v1beta1.LeaseCandidate, leaseN
 	return true, nil
 }
 
-// reconcileElectionStep steps through a step in an election.
-// A step looks at the current state of Lease and LeaseCandidates and takes one of the following action
-// - do nothing (because leader is already optimal or still waiting for an event)
-// - request ack from candidates (update LeaseCandidate PingTime)
-// - finds the most optimal candidate and elect (update the Lease object)
-// Instead of keeping a map and lock on election, the state is
-// calculated every time by looking at the lease, and set of available candidates.
-// PingTime + electionDuration > time.Now: We just asked all candidates to ack and are still waiting for response
-// PingTime + electionDuration < time.Now: Candidate has not responded within the appropriate PingTime. Continue the election.
-// RenewTime + 5 seconds > time.Now: All candidates acked in the last 5 seconds, continue the election.
+// reconcileElectionStep 推进选举状态机一步：
+// 查看 Lease 与 LeaseCandidate 当前状态并采取相应动作。
+// - 不操作（leader 已最优或仍在等待事件）
+// - 请求候选者 ack（更新 LeaseCandidate 的 PingTime）
+// - 选出最优候选者并完成选举（更新 Lease 对象）
+// 不维护选举状态 map 与锁，
+// 而是每次根据租约和可用候选者集合重新计算状态。
+// PingTime + electionDuration > now：已请求所有候选者 ack，仍在等待响应。
+// PingTime + electionDuration < now：候选者未在规定时间响应，继续选举。
+// RenewTime + 5s > now：所有候选者最近 5 秒内已 ack，继续选举。
 func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.NamespacedName) (requeue time.Duration, err error) {
 	candidates, err := c.listAdmissableCandidates(leaseNN)
 	if err != nil {
@@ -261,7 +268,7 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 	}
 	klog.V(6).Infof("Reconciling election for %s, candidates: %d", leaseNN, len(candidates))
 
-	// Check if an election is really needed by looking at the current lease and candidates
+	// 根据当前租约与候选者判断确实需要发起选举。
 	needElection, err := c.electionNeeded(candidates, leaseNN)
 	if !needElection {
 		return defaultRequeueInterval, err
@@ -277,7 +284,7 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 		if candidate.Spec.PingTime != nil && candidate.Spec.PingTime.Add(electionDuration).After(now) &&
 			candidate.Spec.RenewTime != nil && candidate.Spec.RenewTime.Before(candidate.Spec.PingTime) {
 
-			// continue waiting for the election to timeout
+			// 继续等待选举超时。
 			canVoteYet = false
 			continue
 		}
@@ -286,8 +293,8 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 		}
 
 		if candidate.Spec.PingTime == nil ||
-			// If PingTime is outdated, send another PingTime only if it already acked the first one.
-			// This checks for pingTime <= renewTime because equality is possible in unit tests using a fake clock.
+			// PingTime 过期时，仅当候选者已 ack 第一次 ping 才发送新的 PingTime。
+			// 用 pingTime <= renewTime 是因为单测假时钟下二者可能相等。
 			(candidate.Spec.PingTime.Add(electionDuration).Before(now) && !candidate.Spec.RenewTime.Before(candidate.Spec.PingTime)) {
 			clone := candidate.DeepCopy()
 			clone.Spec.PingTime = &metav1.MicroTime{Time: now}
@@ -305,7 +312,7 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 		return defaultRequeueInterval, nil
 	}
 
-	// election is ongoing as long as unexpired PingTimes exist
+	// 只要存在未过期的 PingTime，选举就仍在进行中。
 	for _, candidate := range candidates {
 		if candidate.Spec.PingTime == nil {
 			continue // shouldn't be the case after the above
@@ -315,10 +322,9 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 			continue // this has renewed already
 		}
 
-		// If a candidate has a PingTime within the election duration, they have not acked
-		// and we should wait until we receive their response
+		// 候选者的 PingTime 仍在选举时长内说明尚未 ack，需等待其响应。
 		if candidate.Spec.PingTime.Add(electionDuration).After(now) {
-			// continue waiting for the election to timeout
+			// 继续等待选举超时。
 			return noRequeue, nil
 		}
 	}
@@ -358,12 +364,11 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 		}
 		leaderLease.Spec.HolderIdentity = &electee.Name
 	default:
-		// do not set the holder identity, but leave it to some other controller. But fall
-		// through to create the lease (without holder).
+		// 不设置 holder 身份，留给其他控制器处理；但仍继续创建不含 holder 的租约。
 		klog.V(2).Infof("Election for strategy %q is not handled by %s", strategy, controllerName)
 	}
 
-	// create the leader election lease
+	// 创建选主租约。
 	_, err = c.leaseClient.Leases(leaseNN.Namespace).Create(ctx, leaderLease, metav1.CreateOptions{})
 	if err == nil {
 		if leaderLease.Spec.HolderIdentity != nil {
@@ -376,7 +381,7 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 		return noRequeue, err
 	}
 
-	// Get existing lease
+	// 获取已有租约。
 	existing, err := c.leaseClient.Leases(leaseNN.Namespace).Get(ctx, leaseNN.Name, metav1.GetOptions{})
 	if err != nil {
 		return noRequeue, err
@@ -389,7 +394,7 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 	strategyChanged := existing.Spec.Strategy == nil || *existing.Spec.Strategy != strategy
 	differentHolder := leaderLease.Spec.HolderIdentity != nil && *leaderLease.Spec.HolderIdentity != *existing.Spec.HolderIdentity
 
-	// Update lease
+	// 更新租约。
 	if strategyChanged {
 		klog.Infof("Lease %s strategy changed to %q", leaseNN, strategy)
 		existing.Spec.Strategy = &strategy
@@ -417,7 +422,7 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 		} else {
 			klog.V(5).Infof("Lease %s already has the most optimal leader %q", leaseNN, "")
 		}
-		// We need to requeue to ensure that we are aware of an expired lease
+		// 需要重新入队，确保能感知租约过期。
 		return defaultRequeueInterval, nil
 	}
 
@@ -429,6 +434,7 @@ func (c *Controller) reconcileElectionStep(ctx context.Context, leaseNN types.Na
 	return defaultRequeueInterval, nil
 }
 
+// listAdmissableCandidates 列出可参与选举的候选者。
 func (c *Controller) listAdmissableCandidates(leaseNN types.NamespacedName) ([]*v1beta1.LeaseCandidate, error) {
 	leases, err := c.leaseCandidateInformer.Lister().LeaseCandidates(leaseNN.Namespace).List(labels.Everything())
 	if err != nil {

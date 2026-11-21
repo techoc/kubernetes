@@ -17,7 +17,7 @@ limitations under the License.
 package controlplane
 
 import (
-	// These imports are the API groups the API server will support.
+	// 这些导入用于注册 API 服务器所支持的 API 组。
 	_ "k8s.io/kubernetes/pkg/apis/admission/install"
 	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 	_ "k8s.io/kubernetes/pkg/apis/apiserverinternal/install"

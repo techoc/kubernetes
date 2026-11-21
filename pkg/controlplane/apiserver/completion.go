@@ -21,25 +21,29 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 )
 
+// completedConfig 保存完成配置后的内部状态。
 type completedConfig struct {
 	Generic genericapiserver.CompletedConfig
 	*Extra
 }
 
-// CompletedConfig embeds a private pointer that cannot be instantiated outside of this package
+// CompletedConfig 内嵌私有指针，保证无法在本包之外实例化。
 type CompletedConfig struct {
 	*completedConfig
 }
 
+// Complete 完成配置，填充发现地址与默认的 peer 端点重建间隔。
 func (c *Config) Complete() CompletedConfig {
 	cfg := completedConfig{
 		c.Generic.Complete(c.VersionedInformers),
 		&c.Extra,
 	}
 
+	// 发现地址必须使用外部可访问的地址，而非内部监听地址。
 	discoveryAddresses := discovery.DefaultAddresses{DefaultAddress: cfg.Generic.ExternalAddress}
 	cfg.Generic.DiscoveryAddresses = discoveryAddresses
 
+	// 用户未显式配置时回退到默认值，避免零值导致重建过于频繁。
 	if cfg.Extra.PeerEndpointReconcileInterval == 0 {
 		cfg.Extra.PeerEndpointReconcileInterval = DefaultPeerEndpointReconcileInterval
 	}

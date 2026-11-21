@@ -42,15 +42,16 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// 默认 ServiceCIDR 控制器使用的常量。
 const (
 	controllerName         = "kubernetes-service-cidr-controller"
 	DefaultServiceCIDRName = "kubernetes"
 )
 
-// NewController returns a new *Controller that generates the default ServiceCIDR
-// from the `--service-cluster-ip-range` flag and recreates it if necessary,
-// but doesn't update it if is different.
-// It follows the same logic that the kubernetes.default Service.
+// NewController 创建控制器，根据 --service-cluster-ip-range 生成默认 ServiceCIDR，
+// 必要时重建，
+// 但配置不同时不会更新已有对象。
+// 逻辑与 kubernetes.default Service 一致。
 func NewController(
 	primaryRange net.IPNet,
 	secondaryRange net.IPNet,
@@ -61,13 +62,12 @@ func NewController(
 		interval: 10 * time.Second, // same as DefaultEndpointReconcilerInterval
 	}
 
-	// obtain configuration from flags
+	// 从命令行 flag 获取配置。
 	c.cidrs = append(c.cidrs, primaryRange.String())
 	if secondaryRange.IP != nil {
 		c.cidrs = append(c.cidrs, secondaryRange.String())
 	}
-	// instead of using the shared informers from the controlplane instance, we construct our own informer
-	// because we need such a small subset of the information available, only the kubernetes.default ServiceCIDR
+	// 只关心 kubernetes.default ServiceCIDR 这一小部分数据，因此自建 informer 而非使用控制面共享 informer。
 	c.serviceCIDRInformer = networkingv1informers.NewFilteredServiceCIDRInformer(client, 12*time.Hour,
 		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 		func(options *metav1.ListOptions) {
@@ -80,7 +80,7 @@ func NewController(
 	return c
 }
 
-// Controller manages selector-based service ipAddress.
+// Controller 管理基于选择器的 Service IP 地址（ServiceCIDR）。
 type Controller struct {
 	cidrs []string // order matters, first cidr defines the default IP family
 
@@ -97,7 +97,7 @@ type Controller struct {
 	reportedNotReadyCondition bool
 }
 
-// Start will not return until the default ServiceCIDR exists or stopCh is closed.
+// Start 在默认 ServiceCIDR 存在或 stopCh 关闭前不会返回。
 func (c *Controller) Start(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 	logger := klog.FromContext(ctx)
@@ -119,8 +119,8 @@ func (c *Controller) Start(ctx context.Context) {
 		return
 	}
 
-	// wait until first successfully sync
-	// this blocks apiserver startup so poll with a short interval
+	// 等待首次同步成功；
+	// 这会阻塞 apiserver 启动，因此使用较短的轮询间隔。
 	err := wait.PollUntilContextCancel(ctx, 100*time.Millisecond, true, func(ctx context.Context) (bool, error) {
 		syncErr := c.sync(ctx)
 		return syncErr == nil, nil
@@ -129,7 +129,7 @@ func (c *Controller) Start(ctx context.Context) {
 		logger.Error(err, "error initializing the default ServiceCIDR")
 	}
 
-	// run the sync loop in the background with the defined interval
+	// 在后台按指定间隔运行同步循环。
 	go wait.UntilWithContext(ctx, func(ctx context.Context) {
 		err := c.sync(ctx)
 		if err != nil {
@@ -138,14 +138,15 @@ func (c *Controller) Start(ctx context.Context) {
 	}, c.interval)
 }
 
+// sync 确保默认 ServiceCIDR 对象存在且配置正确。
 func (c *Controller) sync(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 
-	// check if the default ServiceCIDR already exist
+	// 检查默认 ServiceCIDR 是否已存在。
 	serviceCIDR, err := c.serviceCIDRLister.Get(DefaultServiceCIDRName)
-	// if exists
+	// 若已存在：
 	if err == nil {
-		// single to dual stack upgrade
+		// 单栈升级到双栈。
 		if len(c.cidrs) == 2 && len(serviceCIDR.Spec.CIDRs) == 1 && c.cidrs[0] == serviceCIDR.Spec.CIDRs[0] {
 			logger.Info("Updating default ServiceCIDR from single-stack to dual-stack", "from", serviceCIDR.Spec.CIDRs, "to", c.cidrs)
 			serviceCIDRcopy := serviceCIDR.DeepCopy()
@@ -161,12 +162,12 @@ func (c *Controller) sync(ctx context.Context) error {
 		return nil
 	}
 
-	// unknown error
+	// 未知错误。
 	if !apierrors.IsNotFound(err) {
 		return err
 	}
 
-	// default ServiceCIDR does not exist
+	// 默认 ServiceCIDR 不存在。
 	logger.Info("Creating default ServiceCIDR", "CIDRs", c.cidrs)
 	serviceCIDR = &networkingapiv1.ServiceCIDR{
 		ObjectMeta: metav1.ObjectMeta{
@@ -185,39 +186,39 @@ func (c *Controller) sync(ctx context.Context) error {
 	return nil
 }
 
+// syncStatus 同步 ServiceCIDR 的状态字段。
 func (c *Controller) syncStatus(ctx context.Context, serviceCIDR *networkingapiv1.ServiceCIDR) {
 	logger := klog.FromContext(ctx)
 
-	// don't sync the status of the ServiceCIDR if is being deleted,
-	// deletion must be handled by the controller-manager
+	// 正在删除的 ServiceCIDR 不同步状态，
+	// 删除由 controller-manager 负责。
 	if !serviceCIDR.GetDeletionTimestamp().IsZero() {
 		logger.V(6).Info("ServiceCIDR is being deleted, skipping status sync", "serviceCIDR", klog.KObj(serviceCIDR))
 		return
 	}
 
-	// This controller will set the Ready condition to true if the Ready condition
-	// does not exist and the CIDR values match this controller CIDR values.
+	// 当 Ready 条件不存在且 CIDR 值匹配本控制器配置时，
+	// 将 Ready 设为 true。
 	sameConfig := reflect.DeepEqual(c.cidrs, serviceCIDR.Spec.CIDRs)
 	currentReadyCondition := apimeta.FindStatusCondition(serviceCIDR.Status.Conditions, networkingapiv1.ServiceCIDRConditionReady)
 
-	// Handle inconsistent configuration
+	// 处理配置不一致。
 	if !sameConfig {
 		if !c.reportedMismatchedCIDRs {
 			logger.Info("Inconsistent ServiceCIDR status", "serviceCIDR", klog.KObj(serviceCIDR), "controllerCIDRs", c.cidrs, "serviceCIDRs", serviceCIDR.Spec.CIDRs)
 			c.eventRecorder.Eventf(serviceCIDR, v1.EventTypeWarning, "KubernetesDefaultServiceCIDRInconsistent", "The default ServiceCIDR %v does not match the controller flag configurations %s", serviceCIDR.Spec.CIDRs, c.cidrs)
 			c.reportedMismatchedCIDRs = true
 		}
-		// Regardless of the current Ready condition, inconsistent config is a problem.
-		// We don't try to change the Ready status in this case.
+		// 无论当前 Ready 条件如何，配置不一致都是问题，但此时不修改 Ready 状态。
 		return
 	}
 
-	// Configuration is consistent (sameConfig)
+	// 配置一致（sameConfig）。
 	switch {
-	// Current Ready=False, should not happen state.
-	// Don't try to overwrite Ready=False set by another component to avoid hotlooping.
-	// The default ServiceCIDR should never have this condition set to False, if this
-	// is the case, then it will require an intervention by the cluster administrator.
+	// 当前 Ready=False 属于不应出现的状态。
+	// 不要覆盖其他组件设置的 False，避免热循环。
+	// 默认 ServiceCIDR 不应被设为 False，
+	// 若出现则需要集群管理员介入。
 	case currentReadyCondition != nil && currentReadyCondition.Status == metav1.ConditionFalse:
 		if !c.reportedNotReadyCondition {
 			logger.Info("Default ServiceCIDR condition Ready is False, but controller configuration matches. Please validate your cluster's network configuration.", "serviceCIDR", klog.KObj(serviceCIDR), "status", currentReadyCondition.Status, "reason", currentReadyCondition.Reason, "message", currentReadyCondition.Message)
@@ -225,11 +226,11 @@ func (c *Controller) syncStatus(ctx context.Context, serviceCIDR *networkingapiv
 			c.reportedNotReadyCondition = true
 		}
 
-	// Current Ready=True and config matches, nothing to do.
+	// 当前 Ready=True 且配置一致，无需处理。
 	case currentReadyCondition != nil && currentReadyCondition.Status == metav1.ConditionTrue:
 		logger.V(6).Info("ServiceCIDR is Ready and configuration matches. No status update needed.", "serviceCIDR", klog.KObj(serviceCIDR))
 
-	// No condition set and ServiceCIDR matches this apiserver configuration, set condition to True
+	// 未设置条件且 ServiceCIDR 与本 apiserver 配置一致，将条件设为 True。
 	case currentReadyCondition == nil || currentReadyCondition.Status == metav1.ConditionUnknown:
 		logger.Info("Setting default ServiceCIDR condition Ready to True")
 		svcApplyStatus := networkingapiv1apply.ServiceCIDRStatus().WithConditions(

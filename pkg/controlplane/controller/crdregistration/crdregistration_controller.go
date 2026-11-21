@@ -35,15 +35,16 @@ import (
 	v1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 )
 
-// AutoAPIServiceRegistration is an interface which callers can re-declare locally and properly cast to for
-// adding and removing APIServices
+// AutoAPIServiceRegistration 是调用方可在本地重新声明并正确转换的接口，
+// 用于添加和移除 APIService。
 type AutoAPIServiceRegistration interface {
-	// AddAPIServiceToSync adds an API service to auto-register.
+	// AddAPIServiceToSync 添加待自动注册的 APIService。
 	AddAPIServiceToSync(in *v1.APIService)
-	// RemoveAPIServiceToSync removes an API service to auto-register.
+	// RemoveAPIServiceToSync 移除待自动注册的 APIService。
 	RemoveAPIServiceToSync(name string)
 }
 
+// crdRegistrationController 监听 CRD 变更并同步对应的 APIService。
 type crdRegistrationController struct {
 	crdLister crdlisters.CustomResourceDefinitionLister
 	crdSynced cache.InformerSynced
@@ -54,13 +55,13 @@ type crdRegistrationController struct {
 
 	syncedInitialSet chan struct{}
 
-	// queue is where incoming work is placed to de-dup and to allow "easy" rate limited requeues on errors
-	// this is actually keyed by a groupVersion
+	// 工作队列用于去重，并支持出错时方便的限流重试。
+	// 队列实际以 groupVersion 为 key。
 	queue workqueue.TypedRateLimitingInterface[schema.GroupVersion]
 }
 
-// NewCRDRegistrationController returns a controller which will register CRD GroupVersions with the auto APIService registration
-// controller so they automatically stay in sync.
+// NewCRDRegistrationController 创建一个控制器，把 CRD 的组版本注册到自动 APIService 注册器，
+// 使两者自动保持同步。
 func NewCRDRegistrationController(crdinformer crdinformers.CustomResourceDefinitionInformer, apiServiceRegistration AutoAPIServiceRegistration) *crdRegistrationController {
 	c := &crdRegistrationController{
 		crdLister:              crdinformer.Lister(),
@@ -80,8 +81,8 @@ func NewCRDRegistrationController(crdinformer crdinformers.CustomResourceDefinit
 			c.enqueueCRD(cast)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			// Enqueue both old and new object to make sure we remove and add appropriate API services.
-			// The working queue will resolve any duplicates and only changes will stay in the queue.
+			// 新旧对象都入队，确保正确移除与添加对应的 APIService。
+			// 工作队列会去重，最终只保留有变化的部分。
 			c.enqueueCRD(oldObj.(*apiextensionsv1.CustomResourceDefinition))
 			c.enqueueCRD(newObj.(*apiextensionsv1.CustomResourceDefinition))
 		},
@@ -106,20 +107,21 @@ func NewCRDRegistrationController(crdinformer crdinformers.CustomResourceDefinit
 	return c
 }
 
+// Run 启动控制器并处理初始 CRD 列表。
 func (c *crdRegistrationController) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
-	// make sure the work queue is shutdown which will trigger workers to end
+	// 确保关闭工作队列，从而让 worker 退出。
 	defer c.queue.ShutDown()
 
 	klog.Infof("Starting crd-autoregister controller")
 	defer klog.Infof("Shutting down crd-autoregister controller")
 
-	// wait for your secondary caches to fill before starting your work
+	// 开始工作前等待辅助缓存填充完毕。
 	if !cache.WaitForNamedCacheSync("crd-autoregister", stopCh, c.crdSynced) {
 		return
 	}
 
-	// process each item in the list once
+	// 对列表中的每个元素处理一次。
 	if crds, err := c.crdLister.List(labels.Everything()); err != nil {
 		utilruntime.HandleError(err)
 	} else {
@@ -133,70 +135,73 @@ func (c *crdRegistrationController) Run(workers int, stopCh <-chan struct{}) {
 	}
 	close(c.syncedInitialSet)
 
-	// start up your worker threads based on workers.  Some controllers have multiple kinds of workers
+	// 根据 workers 数量启动工作线程。
 	for range workers {
-		// runWorker will loop until "something bad" happens.  The .Until will then rekick the worker
-		// after one second
+		// runWorker 循环工作直到出错，.Until 会在出错后一秒重启 worker。
+
 		go wait.Until(c.runWorker, time.Second, stopCh)
 	}
 
-	// wait until we're told to stop
+	// 等待停止信号。
 	<-stopCh
 }
 
-// WaitForInitialSync blocks until the initial set of CRD resources has been processed
+// WaitForInitialSync 阻塞直到初始 CRD 集合处理完毕。
 func (c *crdRegistrationController) WaitForInitialSync() {
 	<-c.syncedInitialSet
 }
 
+// runWorker 持续处理工作队列中的 CRD。
 func (c *crdRegistrationController) runWorker() {
-	// hot loop until we're told to stop.  processNextWorkItem will automatically wait until there's work
-	// available, so we don't worry about secondary waits
+	// 热循环直到收到停止信号。processNextWorkItem 会在无工作时自动等待，
+	// 因此无需额外等待。
 	for c.processNextWorkItem() {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个 key，退出时返回 false。
 func (c *crdRegistrationController) processNextWorkItem() bool {
-	// pull the next work item from queue.  It should be a key we use to lookup something in a cache
+	// 从队列取出下一个工作项，该 key 用于在缓存中查找对象。
 	key, quit := c.queue.Get()
 	if quit {
 		return false
 	}
-	// you always have to indicate to the queue that you've completed a piece of work
+	// 必须向队列标记该工作项已处理完成。
 	defer c.queue.Done(key)
 
-	// do your work on the key.  This method will contains your "do stuff" logic
+	// 对该 key 执行实际处理逻辑。
 	err := c.syncHandler(key)
 	if err == nil {
-		// if you had no error, tell the queue to stop tracking history for your key.  This will
-		// reset things like failure counts for per-item rate limiting
+		// 无错误时通知队列停止跟踪该 key 的历史，
+		// 从而重置逐项限流的失败计数。
 		c.queue.Forget(key)
 		return true
 	}
 
-	// there was a failure so be sure to report it.  This method allows for pluggable error handling
-	// which can be used for things like cluster-monitoring
+	// 出现失败必须上报，该方法支持可插拔的错误处理，
+	// 例如用于集群监控。
 	utilruntime.HandleError(fmt.Errorf("%v failed with : %v", key, err))
-	// since we failed, we should requeue the item to work on later.  This method will add a backoff
-	// to avoid hotlooping on particular items (they're probably still not going to work right away)
-	// and overall controller protection (everything I've done is broken, this controller needs to
-	// calm down or it can starve other useful work) cases.
+	// 失败后应重新入队稍后处理。该方法会加入退避，
+	// 避免对特定项热循环（它们短期内可能仍无法成功），
+	// 同时保护控制器整体（若所有操作都失败，需冷静下来，
+	// 否则会饿死其他有用的工作）。
 	c.queue.AddRateLimited(key)
 
 	return true
 }
 
+// enqueueCRD 将 CRD 加入工作队列。
 func (c *crdRegistrationController) enqueueCRD(crd *apiextensionsv1.CustomResourceDefinition) {
 	for _, version := range crd.Spec.Versions {
 		c.queue.Add(schema.GroupVersion{Group: crd.Spec.Group, Version: version.Name})
 	}
 }
 
+// handleVersionUpdate 处理 CRD 版本变更，同步 APIService 注册。
 func (c *crdRegistrationController) handleVersionUpdate(groupVersion schema.GroupVersion) error {
 	apiServiceName := groupVersion.Version + "." + groupVersion.Group
 
-	// check all CRDs.  There shouldn't that many, but if we have problems later we can index them
+	// 检查所有 CRD；数量通常不多，若后续有性能问题可加索引。
 	crds, err := c.crdLister.List(labels.Everything())
 	if err != nil {
 		return err

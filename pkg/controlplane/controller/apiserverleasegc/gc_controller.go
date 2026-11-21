@@ -34,7 +34,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Controller deletes expired apiserver leases.
+// Controller 删除过期的 apiserver lease。
 type Controller struct {
 	kubeclientset kubernetes.Interface
 
@@ -47,10 +47,9 @@ type Controller struct {
 	gcCheckPeriod time.Duration
 }
 
-// NewAPIServerLeaseGC creates a new Controller.
+// NewAPIServerLeaseGC 创建一个新的 Controller。
 func NewAPIServerLeaseGC(clientset kubernetes.Interface, gcCheckPeriod time.Duration, leaseNamespace, leaseLabelSelector string) *Controller {
-	// we construct our own informer because we need such a small subset of the information available.
-	// Just one namespace with label selection.
+	// 只关心单个 namespace 且带标签筛选的一小部分数据，因此自建专用 informer 而非共享工厂。
 	leaseInformer := informers.NewFilteredLeaseInformer(
 		clientset,
 		leaseNamespace,
@@ -69,14 +68,14 @@ func NewAPIServerLeaseGC(clientset kubernetes.Interface, gcCheckPeriod time.Dura
 	}
 }
 
-// Run starts one worker.
+// Run 启动一个 worker。
 //
-//logcheck:context // RunWithContext should be used instead of Run in code which supports contextual logging.
+//logcheck:context // 支持上下文日志的代码中应改用 RunWithContext。
 func (c *Controller) Run(stopCh <-chan struct{}) {
 	c.RunWithContext(wait.ContextForChannel(stopCh))
 }
 
-// RunWithContext starts one worker with a context.
+// RunWithContext 启动一个带上下文的 worker。
 func (c *Controller) RunWithContext(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	defer utilruntime.HandleCrashWithContext(ctx)
@@ -84,7 +83,7 @@ func (c *Controller) RunWithContext(ctx context.Context) {
 
 	logger.Info("Starting apiserver lease garbage collector")
 
-	// we have a personal informer that is narrowly scoped, start it.
+	// 启动范围受限的专用 informer。
 	go c.leaseInformer.RunWithContext(ctx)
 
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, c.leasesSynced) {
@@ -97,6 +96,7 @@ func (c *Controller) RunWithContext(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// gc 定期清理过期 lease，删除前会从 apiserver 二次确认以避免误删。
 func (c *Controller) gc(ctx context.Context) {
 	leases, err := c.leaseLister.Leases(c.leaseNamespace).List(labels.Everything())
 	logger := klog.FromContext(ctx)
@@ -105,33 +105,29 @@ func (c *Controller) gc(ctx context.Context) {
 		return
 	}
 	for _, lease := range leases {
-		// evaluate lease from cache
+		// 先根据缓存快速判断，减少不必要的 API 调用。
 		if !isLeaseExpired(lease) {
 			continue
 		}
-		// double check latest lease from apiserver before deleting
+		// 删除前向 apiserver 拉取最新租约二次确认，避免误删已被续租的对象。
 		lease, err := c.kubeclientset.CoordinationV1().Leases(c.leaseNamespace).Get(ctx, lease.Name, metav1.GetOptions{})
 		if err != nil && !errors.IsNotFound(err) {
 			logger.Error(err, "Error getting lease")
 			continue
 		}
 		if errors.IsNotFound(err) || lease == nil {
-			// In an HA cluster, this can happen if the lease was deleted
-			// by the same GC controller in another apiserver, which is legit.
-			// We don't expect other components to delete the lease.
+			// HA 集群中租约可能已被其他 apiserver 上的 GC 删除，属正常情况。
 			logger.V(4).Info("Cannot find apiserver lease", "err", err)
 			continue
 		}
-		// evaluate lease from apiserver
+		// 再按 apiserver 返回的最新数据判断是否过期。
 		if !isLeaseExpired(lease) {
 			continue
 		}
 		if err := c.kubeclientset.CoordinationV1().Leases(c.leaseNamespace).Delete(
 			ctx, lease.Name, metav1.DeleteOptions{}); err != nil {
 			if errors.IsNotFound(err) {
-				// In an HA cluster, this can happen if the lease was deleted
-				// by the same GC controller in another apiserver, which is legit.
-				// We don't expect other components to delete the lease.
+				// HA 集群中租约可能已被其他 apiserver 的 GC 抢先删除，属正常情况。
 				logger.V(4).Info("Apiserver lease is gone already", "err", err)
 			} else {
 				logger.Error(err, "Error deleting lease")
@@ -140,11 +136,10 @@ func (c *Controller) gc(ctx context.Context) {
 	}
 }
 
+// isLeaseExpired 判断租约是否过期；缺少续约时间或租约时长视为非法并应回收。
 func isLeaseExpired(lease *v1.Lease) bool {
 	currentTime := time.Now()
-	// Leases created by the apiserver lease controller should have non-nil renew time
-	// and lease duration set. Leases without these fields set are invalid and should
-	// be GC'ed.
+	// apiserver lease 控制器创建的租约应带续约时间与时长；缺失这些字段的租约非法，应被回收。
 	return lease.Spec.RenewTime == nil ||
 		lease.Spec.LeaseDurationSeconds == nil ||
 		lease.Spec.RenewTime.Add(time.Duration(*lease.Spec.LeaseDurationSeconds)*time.Second).Before(currentTime)

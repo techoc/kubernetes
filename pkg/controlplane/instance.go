@@ -86,7 +86,7 @@ import (
 	kubeoptions "k8s.io/kubernetes/pkg/kubeapiserver/options"
 	kubeletclient "k8s.io/kubernetes/pkg/kubelet/client"
 
-	// RESTStorage installers
+	// RESTStorage 安装器（副作用导入）。
 	admissionregistrationrest "k8s.io/kubernetes/pkg/registry/admissionregistration/rest"
 	apiserverinternalrest "k8s.io/kubernetes/pkg/registry/apiserverinternal/rest"
 	appsrest "k8s.io/kubernetes/pkg/registry/apps/rest"
@@ -112,104 +112,92 @@ import (
 )
 
 const (
-	// DefaultEndpointReconcilerInterval is the default amount of time for how often the endpoints for
-	// the kubernetes Service are reconciled.
+	// DefaultEndpointReconcilerInterval 是 kubernetes Service endpoints 的默认协调间隔。
 	DefaultEndpointReconcilerInterval = 10 * time.Second
-	// DefaultEndpointReconcilerTTL is the default TTL timeout for the storage layer
+	// DefaultEndpointReconcilerTTL 是存储层的默认 TTL。
 	DefaultEndpointReconcilerTTL = 15 * time.Second
-	// IdentityLeaseComponentLabelKey is used to apply a component label to identity lease objects, indicating:
-	//   1. the lease is an identity lease (different from leader election leases)
-	//   2. which component owns this lease
+	// IdentityLeaseComponentLabelKey 用于给 identity 租约打组件标签，表明：
+	//   1. 该租约是 identity 租约（不同于 leader election 租约）
+	//   2. 该租约归属哪个组件
 	// TODO(sttts): remove this indirection
 	IdentityLeaseComponentLabelKey = controlplaneapiserver.IdentityLeaseComponentLabelKey
-	// repairLoopInterval defines the interval used to run the Services ClusterIP and NodePort repair loops
+	// repairLoopInterval 是 Service ClusterIP 与 NodePort 修复循环的执行间隔。
 	repairLoopInterval = 3 * time.Minute
 )
 
 var (
-	// AdditionalStorageProvidersForTests allows tests to inject additional test-only API groups.
-	// Only meant for use in integration tests.
+	// AdditionalStorageProvidersForTests 供集成测试注入额外的测试用 API 组。
 	AdditionalStorageProvidersForTests func(client *kubernetes.Clientset) []controlplaneapiserver.RESTStorageProvider
 )
 
-// Extra defines extra configuration for kube-apiserver
+// Extra 定义 kube-apiserver 的额外配置。
 type Extra struct {
 	EndpointReconcilerConfig EndpointReconcilerConfig
 	KubeletClientConfig      kubeletclient.KubeletClientConfig
 
-	// Values to build the IP addresses used by discovery
-	// The range of IPs to be assigned to services with type=ClusterIP or greater
+	// 以下值用于构造发现接口使用的 IP 地址：ServiceIPRange 是 ClusterIP 及以上类型 Service 的 IP 范围。
 	ServiceIPRange net.IPNet
-	// The IP address for the GenericAPIServer service (must be inside ServiceIPRange)
+	// GenericAPIServer Service 的 IP（必须在 ServiceIPRange 内）。
 	APIServerServiceIP net.IP
 
-	// dual stack services, the range represents an alternative IP range for service IP
-	// must be of different family than primary (ServiceIPRange)
+	// 双栈场景下 SecondaryServiceIPRange 是备用 IP 范围，地址族必须与主范围不同。
 	SecondaryServiceIPRange net.IPNet
-	// the secondary IP address the GenericAPIServer service (must be inside SecondaryServiceIPRange)
+	// GenericAPIServer Service 的备用 IP（必须在 SecondaryServiceIPRange 内）。
 	SecondaryAPIServerServiceIP net.IP
 
-	// Port for the apiserver service.
+	// apiserver Service 的端口。
 	APIServerServicePort int
 
-	// TODO, we can probably group service related items into a substruct to make it easier to configure
-	// the API server items and `Extra*` fields likely fit nicely together.
+	// TODO: 可将 Service 相关字段归入子结构，便于配置。
 
-	// The range of ports to be assigned to services with type=NodePort or greater
+	// NodePort 及以上类型 Service 的端口范围。
 	ServiceNodePortRange utilnet.PortRange
-	// If non-zero, the "kubernetes" services uses this port as NodePort.
+	// 非零时 "kubernetes" Service 使用该端口作为 NodePort。
 	KubernetesServiceNodePort int
 
-	// Number of masters running; all masters must be started with the
-	// same value for this field. (Numbers > 1 currently untested.)
+	// 运行的 master 数量；所有 master 必须配置相同值（大于 1 目前未测试）。
 	MasterCount int
 
-	// MasterEndpointReconcileTTL sets the time to live in seconds of an
-	// endpoint record recorded by each master. The endpoints are checked at an
-	// interval that is 2/3 of this value and this value defaults to 15s if
-	// unset. In very large clusters, this value may be increased to reduce the
-	// possibility that the master endpoint record expires (due to other load
-	// on the etcd server) and causes masters to drop in and out of the
-	// kubernetes service record. It is not recommended to set this value below
-	// 15s.
+	// MasterEndpointReconcileTTL 是每个 master 记录的端点 TTL（秒），检查间隔为其 2/3，默认 15s。
+	// 超大集群可调大该值，降低因 etcd 负载导致租约过期、master 端点频繁进出的概率；不建议低于 15s。
 	MasterEndpointReconcileTTL time.Duration
 
-	// Selects which reconciler to use
+	// 选择使用的 endpoint reconciler。
 	EndpointReconcilerType reconcilers.Type
 
-	// RepairServicesInterval interval used by the repair loops for
-	// the Services NodePort and ClusterIP resources
+	// RepairServicesInterval 是 Service NodePort 与 ClusterIP 修复循环的间隔。
 	RepairServicesInterval time.Duration
 }
 
-// Config defines configuration for the master
+// Config 定义 master 的配置。
 type Config struct {
 	ControlPlane controlplaneapiserver.Config
 	Extra
 }
 
+// completedConfig 保存完成后的内部配置。
 type completedConfig struct {
 	ControlPlane controlplaneapiserver.CompletedConfig
 	*Extra
 }
 
-// CompletedConfig embeds a private pointer that cannot be instantiated outside of this package
+// CompletedConfig 内嵌私有指针，防止本包之外实例化。
 type CompletedConfig struct {
 	*completedConfig
 }
 
-// EndpointReconcilerConfig holds the endpoint reconciler and endpoint reconciliation interval to be
-// used by the master.
+// EndpointReconcilerConfig 保存 master 使用的 endpoint reconciler 及其协调间隔。
 type EndpointReconcilerConfig struct {
 	Reconciler reconcilers.EndpointReconciler
 	Interval   time.Duration
 }
 
-// Instance contains state for a Kubernetes cluster api server instance.
+// Instance 保存 Kubernetes 集群 apiserver 实例的状态。
 type Instance struct {
 	ControlPlane *controlplaneapiserver.Server
 }
 
+// createMasterCountReconciler 创建基于 master 数量的 endpoint reconciler。
 func (c *Config) createMasterCountReconciler() reconcilers.EndpointReconciler {
 	endpointClient := corev1client.NewForConfigOrDie(c.ControlPlane.Generic.LoopbackClientConfig)
 	endpointSliceClient := discoveryclient.NewForConfigOrDie(c.ControlPlane.Generic.LoopbackClientConfig)
@@ -218,10 +206,12 @@ func (c *Config) createMasterCountReconciler() reconcilers.EndpointReconciler {
 	return reconcilers.NewMasterCountEndpointReconciler(c.Extra.MasterCount, endpointsAdapter)
 }
 
+// createNoneReconciler 创建空操作 endpoint reconciler。
 func (c *Config) createNoneReconciler() reconcilers.EndpointReconciler {
 	return reconcilers.NewNoneEndpointReconciler()
 }
 
+// createLeaseReconciler 创建基于租约的 endpoint reconciler。
 func (c *Config) createLeaseReconciler() reconcilers.EndpointReconciler {
 	endpointClient := corev1client.NewForConfigOrDie(c.ControlPlane.Generic.LoopbackClientConfig)
 	endpointSliceClient := discoveryclient.NewForConfigOrDie(c.ControlPlane.Generic.LoopbackClientConfig)
@@ -240,10 +230,11 @@ func (c *Config) createLeaseReconciler() reconcilers.EndpointReconciler {
 	return reconcilers.NewLeaseEndpointReconciler(endpointsAdapter, masterLeases)
 }
 
+// createEndpointReconciler 按配置类型创建对应的 endpoint reconciler。
 func (c *Config) createEndpointReconciler() reconcilers.EndpointReconciler {
 	klog.Infof("Using reconciler: %v", c.Extra.EndpointReconcilerType)
 	switch c.Extra.EndpointReconcilerType {
-	// there are numerous test dependencies that depend on a default controller
+	// 许多测试依赖默认的 master-count 控制器。
 	case reconcilers.MasterCountReconcilerType:
 		return c.createMasterCountReconciler()
 	case "", reconcilers.LeaseEndpointReconcilerType:
@@ -256,11 +247,10 @@ func (c *Config) createEndpointReconciler() reconcilers.EndpointReconciler {
 	return nil
 }
 
-// Complete fills in any fields not set that are required to have valid data. It's mutating the receiver.
+// Complete 补全未设置的必填字段，会修改接收者。
 func (c *Config) Complete() CompletedConfig {
 	if c.ControlPlane.PeerEndpointReconcileInterval == 0 && c.EndpointReconcilerConfig.Interval != 0 {
-		// default this to the endpoint reconciler value before the generic
-		// controlplane completion can kick in
+		// 在通用控制面完成配置前，先用 endpoint reconciler 的间隔作为默认值。
 		c.ControlPlane.PeerEndpointReconcileInterval = c.EndpointReconcilerConfig.Interval
 	}
 
@@ -280,17 +270,15 @@ func (c *Config) Complete() CompletedConfig {
 		cfg.Extra.APIServerServiceIP = apiServerServiceIP
 	}
 
-	// override the default discovery addresses in the generic controlplane adding service IP support
+	// 覆盖通用控制面的默认发现地址，加入 Service IP 支持。
 	discoveryAddresses := discovery.DefaultAddresses{DefaultAddress: cfg.ControlPlane.Generic.ExternalAddress}
 	discoveryAddresses.CIDRRules = append(discoveryAddresses.CIDRRules,
 		discovery.CIDRRule{IPRange: cfg.Extra.ServiceIPRange, Address: net.JoinHostPort(cfg.Extra.APIServerServiceIP.String(), strconv.Itoa(cfg.Extra.APIServerServicePort))})
 	cfg.ControlPlane.Generic.DiscoveryAddresses = discoveryAddresses
 
 	if cfg.Extra.ServiceNodePortRange.Size == 0 {
-		// TODO: Currently no way to specify an empty range (do we need to allow this?)
-		// We should probably allow this for clouds that don't require NodePort to do load-balancing (GCE)
-		// but then that breaks the strict nestedness of ServiceType.
-		// Review post-v1
+		// TODO: 目前无法指定空范围。对不需要 NodePort 做负载均衡的云（如 GCE）或许应允许，
+		// 但会破坏 ServiceType 的严格嵌套关系，v1 后再审视。
 		cfg.Extra.ServiceNodePortRange = kubeoptions.DefaultServiceNodePortRange
 		klog.Infof("Node port range unspecified. Defaulting to %v.", cfg.Extra.ServiceNodePortRange)
 	}
@@ -314,10 +302,7 @@ func (c *Config) Complete() CompletedConfig {
 	return CompletedConfig{&cfg}
 }
 
-// New returns a new instance of Master from the given config.
-// Certain config fields will be set to a default value if unset.
-// Certain config fields must be specified, including:
-// KubeletClientConfig
+// New 根据给定配置创建 Master 实例。部分未设置字段会被赋予默认值，KubeletClientConfig 必须显式指定。
 func (c CompletedConfig) New(delegationTarget genericapiserver.DelegationTarget) (*Instance, error) {
 	if reflect.DeepEqual(c.Extra.KubeletClientConfig, kubeletclient.KubeletClientConfig{}) {
 		return nil, fmt.Errorf("Master.New() called with empty config.KubeletClientConfig")
@@ -382,8 +367,7 @@ func (c CompletedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 				c.Extra.SecondaryServiceIPRange,
 				client,
 			)
-			// The default serviceCIDR must exist before the apiserver is healthy
-			// otherwise the allocators for Services will not work.
+			// 默认 ServiceCIDR 必须在 apiserver 健康前就绪，否则 Service 分配器无法工作。
 			controller.Start(hookContext)
 			return nil
 		})
@@ -393,6 +377,7 @@ func (c CompletedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 
 }
 
+// StorageProviders 返回 kube-apiserver 的全部 REST 存储提供者。
 func (c CompletedConfig) StorageProviders(client *kubernetes.Clientset) ([]controlplaneapiserver.RESTStorageProvider, error) {
 	legacyRESTStorageProvider, err := corerest.New(corerest.Config{
 		GenericConfig: *c.ControlPlane.NewCoreGenericConfig(),
@@ -413,13 +398,9 @@ func (c CompletedConfig) StorageProviders(client *kubernetes.Clientset) ([]contr
 		return nil, err
 	}
 
-	// The order here is preserved in discovery.
-	// If resources with identical names exist in more than one of these groups (e.g. "deployments.apps"" and "deployments.extensions"),
-	// the order of this list determines which group an unqualified resource name (e.g. "deployments") should prefer.
-	// This priority order is used for local discovery, but it ends up aggregated in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go
-	// with specific priorities.
-	// TODO: describe the priority all the way down in the RESTStorageProviders and plumb it back through the various discovery
-	// handlers that we have.
+	// 列表顺序会被发现接口保留：多个组存在同名资源时，顺序决定非限定资源名优先归属的组。
+	// 本地发现使用该顺序，聚合时由 aggregator.go 的特定优先级覆盖。
+	// TODO: 将优先级下沉到 RESTStorageProviders 并贯穿各发现处理器。
 	providers := []controlplaneapiserver.RESTStorageProvider{
 		legacyRESTStorageProvider,
 		apiserverinternalrest.StorageProvider{},
@@ -439,8 +420,7 @@ func (c CompletedConfig) StorageProviders(client *kubernetes.Clientset) ([]contr
 		storagerest.RESTStorageProvider{},
 		svmrest.RESTStorageProvider{},
 		flowcontrolrest.RESTStorageProvider{InformerFactory: c.ControlPlane.Generic.SharedInformerFactory},
-		// keep apps after extensions so legacy clients resolve the extensions versions of shared resource names.
-		// See https://github.com/kubernetes/kubernetes/issues/42392
+		// apps 放在 extensions 之后，使旧客户端优先解析共享资源名的 extensions 版本（见 issue #42392）。
 		appsrest.StorageProvider{},
 		admissionregistrationrest.RESTStorageProvider{Authorizer: c.ControlPlane.Generic.Authorization.Authorizer, DiscoveryClient: client.Discovery()},
 		eventsrest.RESTStorageProvider{TTL: c.ControlPlane.EventTTL},
@@ -458,7 +438,7 @@ func (c CompletedConfig) StorageProviders(client *kubernetes.Clientset) ([]contr
 }
 
 var (
-	// genericStableAPIGroupVersionsEnabledByDefault is a list of our stable versions for API groups provided by GenericStorageProviders.
+	// genericStableAPIGroupVersionsEnabledByDefault 是通用存储提供者所提供 API 组的默认启用稳定版本。
 	genericStableAPIGroupVersionsEnabledByDefault = []schema.GroupVersion{
 		admissionregistrationv1.SchemeGroupVersion,
 		apiv1.SchemeGroupVersion,
@@ -470,7 +450,7 @@ var (
 		rbacv1.SchemeGroupVersion,
 		flowcontrolv1.SchemeGroupVersion,
 	}
-	// stableAPIGroupVersionsEnabledByDefault is a list of our stable versions for additional API groups only provided in kube-apiserver.
+	// stableAPIGroupVersionsEnabledByDefault 是仅 kube-apiserver 提供的额外 API 组的默认启用稳定版本。
 	stableAPIGroupVersionsEnabledByDefault = []schema.GroupVersion{
 		appsv1.SchemeGroupVersion,
 		autoscalingapiv1.SchemeGroupVersion,
@@ -486,7 +466,7 @@ var (
 		svmv1.SchemeGroupVersion,
 	}
 
-	// genericBetaAPIGroupVersionsDisabledByDefault is for all future beta groupVersions for API groups provided by GenericStorageProviders.
+	// genericBetaAPIGroupVersionsDisabledByDefault 是通用 API 组中所有默认禁用的 beta 版本。
 	genericBetaAPIGroupVersionsDisabledByDefault = []schema.GroupVersion{
 		admissionregistrationv1beta1.SchemeGroupVersion,
 		authenticationv1beta1.SchemeGroupVersion,
@@ -497,7 +477,7 @@ var (
 		flowcontrolv1beta3.SchemeGroupVersion,
 		svmv1beta1.SchemeGroupVersion,
 	}
-	// betaAPIGroupVersionsDisabledByDefault is for all future beta groupVersions for additional API groups only provided in kube-apiserver.
+	// betaAPIGroupVersionsDisabledByDefault 是 kube-apiserver 额外 API 组中默认禁用的 beta 版本。
 	betaAPIGroupVersionsDisabledByDefault = []schema.GroupVersion{
 		storageapiv1beta1.SchemeGroupVersion,
 		networkingapiv1beta1.SchemeGroupVersion,
@@ -506,7 +486,7 @@ var (
 		schedulingapiv1beta1.SchemeGroupVersion,
 	}
 
-	// genericAlphaAPIGroupVersionsDisabledByDefault holds the alpha APIs we have for API groups provided by GenericStorageProviders. They are always disabled by default.
+	// genericAlphaAPIGroupVersionsDisabledByDefault 是通用 API 组中默认禁用的 alpha 版本。
 	genericAlphaAPIGroupVersionsDisabledByDefault = []schema.GroupVersion{
 		admissionregistrationv1alpha1.SchemeGroupVersion,
 		apiserverinternalv1alpha1.SchemeGroupVersion,
@@ -515,7 +495,7 @@ var (
 		coordinationv1alpha2.SchemeGroupVersion,
 		certificatesv1alpha1.SchemeGroupVersion,
 	}
-	// alphaAPIGroupVersionsDisabledByDefault holds the alpha APIs we have for additional API groups only provided in kube-apiserver. They are always disabled by default.
+	// alphaAPIGroupVersionsDisabledByDefault 是 kube-apiserver 额外 API 组中默认禁用的 alpha 版本。
 	alphaAPIGroupVersionsDisabledByDefault = []schema.GroupVersion{
 		lifecyclev1alpha1.SchemeGroupVersion,
 		resourcev1alpha3.SchemeGroupVersion,
@@ -524,24 +504,21 @@ var (
 	}
 )
 
-// DefaultGenericAPIResourceConfigSource returns default configuration for resources served by GenericStorageProviders.
+// DefaultGenericAPIResourceConfigSource 返回通用存储提供者所提供资源的默认配置。
 func DefaultGenericAPIResourceConfigSource() *serverstorage.ResourceConfig {
 	ret := serverstorage.NewResourceConfig()
-	// NOTE: GroupVersions listed here will be enabled by default. Don't put alpha or beta versions in the list.
+	// 此处列出的版本默认启用，勿将 alpha/beta 放入；显式禁用 alpha/beta 以完整覆盖所有可服务版本。
 	ret.EnableVersions(genericStableAPIGroupVersionsEnabledByDefault...)
-	// disable alpha and beta versions explicitly so we have a full list of what's possible to serve
 	ret.DisableVersions(genericBetaAPIGroupVersionsDisabledByDefault...)
 	ret.DisableVersions(genericAlphaAPIGroupVersionsDisabledByDefault...)
 	return ret
 }
 
-// DefaultAPIResourceConfigSource returns default configuration for resources served by kube-apiserver.
+// DefaultAPIResourceConfigSource 返回 kube-apiserver 所提供资源的默认配置。
 func DefaultAPIResourceConfigSource() *serverstorage.ResourceConfig {
-	// start with generic configuration
+	// 以通用配置为基础。此处列出的版本默认启用，勿将 alpha/beta 放入；显式禁用 alpha/beta 以完整覆盖。
 	ret := DefaultGenericAPIResourceConfigSource()
-	// NOTE: GroupVersions listed here will be enabled by default. Don't put alpha or beta versions in the list.
 	ret.EnableVersions(stableAPIGroupVersionsEnabledByDefault...)
-	// disable alpha and beta versions explicitly so we have a full list of what's possible to serve
 	ret.DisableVersions(betaAPIGroupVersionsDisabledByDefault...)
 	ret.DisableVersions(alphaAPIGroupVersionsDisabledByDefault...)
 	return ret

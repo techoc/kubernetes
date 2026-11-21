@@ -64,12 +64,13 @@ import (
 	"k8s.io/kubernetes/pkg/serviceaccount"
 )
 
-// Config defines configuration for the master
+// Config 定义 master（控制面）的配置。
 type Config struct {
 	Generic *genericapiserver.Config
 	Extra
 }
 
+// Extra 保存控制面特有的、非通用 API 服务器的配置项。
 type Extra struct {
 	ClusterAuthenticationInfo clusterauthenticationtrust.ClusterAuthenticationInfo
 
@@ -80,20 +81,16 @@ type Extra struct {
 	EnableLogsSupport bool
 	ProxyTransport    *http.Transport
 
-	// EndpointSliceGetter is a getter to look up endpoint slices for IP routing.
-	// If nil, endpoint slice routing is unavailable.
+	// EndpointSliceGetter 用于查找 EndpointSlice 以进行 IP 路由；为 nil 时不可用。
 	EndpointSliceGetter proxy.EndpointSliceGetter
 
-	// PeerProxy, if not nil, sets proxy transport between kube-apiserver peers for requests
-	// that can not be served locally
+	// PeerProxy 在 kube-apiserver 之间为无法本地处理的请求提供代理通道。
 	PeerProxy utilpeerproxy.Interface
-	// PeerEndpointReconcileInterval defines how often the endpoint leases are reconciled in etcd.
+	// PeerEndpointReconcileInterval 定义 etcd 中对等端点租约的重建频率。
 	PeerEndpointReconcileInterval time.Duration
-	// PeerEndpointLeaseReconciler updates the peer endpoint leases
+	// PeerEndpointLeaseReconciler 更新对等端点租约。
 	PeerEndpointLeaseReconciler peerreconcilers.PeerEndpointLeaseReconciler
-	// PeerAdvertiseAddress is the IP for this kube-apiserver which is used by peer apiservers to route a request
-	// to this apiserver. This happens in cases where the peer is not able to serve the request due to
-	// version skew. If unset, AdvertiseAddress/BindAddress will be used.
+	// PeerAdvertiseAddress 是本 apiserver 通告给对等节点的 IP，供版本偏差导致对端无法本地服务时路由请求；未设置时使用 AdvertiseAddress/BindAddress。
 	PeerAdvertiseAddress peerreconcilers.PeerAdvertiseAddress
 
 	ServiceAccountIssuer                serviceaccount.TokenGenerator
@@ -101,7 +98,7 @@ type Extra struct {
 	ServiceAccountExtendedMaxExpiration time.Duration
 	ExtendExpiration                    bool
 
-	// ServiceAccountIssuerDiscovery
+	// 以下字段用于 ServiceAccount issuer 发现。
 	ServiceAccountIssuerURL        string
 	ServiceAccountJWKSURI          string
 	ServiceAccountPublicKeysGetter serviceaccount.PublicKeysGetter
@@ -110,15 +107,13 @@ type Extra struct {
 
 	VersionedInformers clientgoinformers.SharedInformerFactory
 
-	// Coordinated Leader Election timers
+	// 协调式 Leader Election 的定时器配置。
 	CoordinatedLeadershipLeaseDuration time.Duration
 	CoordinatedLeadershipRenewDeadline time.Duration
 	CoordinatedLeadershipRetryPeriod   time.Duration
 }
 
-// BuildGenericConfig takes the generic controlplane apiserver options and produces
-// the genericapiserver.Config associated with it. The genericapiserver.Config is
-// often shared between multiple delegated apiservers.
+// BuildGenericConfig 根据通用控制面选项生成 genericapiserver.Config，该配置通常由多个委托 apiserver 共享。
 func BuildGenericConfig(
 	s options.CompletedOptions,
 	schemes []*runtime.Scheme,
@@ -147,13 +142,9 @@ func BuildGenericConfig(
 		return
 	}
 
-	// Use protobufs for self-communication.
-	// Since not every generic apiserver has to support protobufs, we
-	// cannot default to it in generic apiserver and need to explicitly
-	// set it in kube-apiserver.
+	// 自通信使用 protobuf：并非所有通用 apiserver 都支持 protobuf，因此需在 kube-apiserver 显式设置。
 	genericConfig.LoopbackClientConfig.ContentConfig.ContentType = "application/vnd.kubernetes.protobuf"
-	// Disable compression for self-communication, since we are going to be
-	// on a fast local network
+	// 本地回环走快速网络，禁用压缩以减少开销。
 	genericConfig.LoopbackClientConfig.DisableCompression = true
 
 	kubeClientConfig := genericConfig.LoopbackClientConfig
@@ -187,7 +178,7 @@ func BuildGenericConfig(
 	if lastErr = s.Traces.ApplyTo(genericConfig.EgressSelector, genericConfig); lastErr != nil {
 		return
 	}
-	// wrap the definitions to revert any changes from disabled features
+	// 过滤掉被禁用特性带来的 OpenAPI 定义变更。
 	getOpenAPIDefinitions = openapi.GetOpenAPIDefinitionsWithoutDisabledFeatures(getOpenAPIDefinitions)
 	namer := openapinamer.NewDefinitionNamer(schemes...)
 	genericConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(getOpenAPIDefinitions, namer)
@@ -212,8 +203,7 @@ func BuildGenericConfig(
 	if lastErr != nil {
 		return
 	}
-	// storageFactory.StorageConfig is copied from etcdOptions.StorageConfig,
-	// the StorageObjectCountTracker is still nil. Here we copy from genericConfig.
+	// storageFactory 的 StorageConfig 从 etcd 选项拷贝而来，其中 StorageObjectCountTracker 仍为 nil，需从 genericConfig 补齐。
 	storageFactory.StorageConfig.StorageObjectCountTracker = genericConfig.StorageObjectCountTracker
 	if lastErr = s.Etcd.ApplyWithStorageFactoryTo(storageFactory, genericConfig); lastErr != nil {
 		return
@@ -221,7 +211,7 @@ func BuildGenericConfig(
 
 	ctx := wait.ContextForChannel(genericConfig.DrainedNotify())
 
-	// Authentication.ApplyTo requires already applied OpenAPIConfig and EgressSelector if present
+	// Authentication.ApplyTo 依赖已应用的 OpenAPIConfig 与 EgressSelector，必须在它们之后调用。
 	if lastErr = s.Authentication.ApplyTo(ctx, &genericConfig.Authentication, genericConfig.SecureServing, genericConfig.EgressSelector, genericConfig.OpenAPIConfig, genericConfig.OpenAPIV3Config, clientgoExternalClient, versionedInformers, genericConfig.APIServerID); lastErr != nil {
 		return
 	}
@@ -252,7 +242,7 @@ func BuildGenericConfig(
 	return
 }
 
-// BuildAuthorizer constructs the authorizer. If authorization is not set in s, it returns nil, nil, false, nil
+// BuildAuthorizer 构造授权器；若 s 中未配置授权，则返回 (nil, nil, false, nil)。
 func BuildAuthorizer(ctx context.Context, s options.CompletedOptions, egressSelector *egressselector.EgressSelector, apiserverID string, versionedInformers clientgoinformers.SharedInformerFactory) (authorizer.Authorizer, authorizer.RuleResolver, bool, error) {
 	authorizationConfig, err := s.Authorization.ToAuthorizationConfig(versionedInformers)
 	if err != nil {
@@ -283,8 +273,7 @@ func BuildAuthorizer(ctx context.Context, s options.CompletedOptions, egressSele
 	return authorizer, ruleResolver, enablesRBAC, err
 }
 
-// CreateConfig takes the generic controlplane apiserver options and
-// creates a config for the generic Kube APIs out of it.
+// CreateConfig 根据通用控制面选项创建通用 Kube API 的配置。
 func CreateConfig(
 	opts options.CompletedOptions,
 	genericConfig *genericapiserver.Config,
@@ -373,7 +362,7 @@ func CreateConfig(
 		config.ClusterAuthenticationInfo.RequestHeaderUIDHeaders = requestHeaderConfig.UIDHeaders
 	}
 
-	// setup admission
+	// 设置准入插件初始化器，供后续 ApplyTo 使用。
 	genericAdmissionConfig := controlplaneadmission.Config{
 		ExternalInformers:    versionedInformers,
 		LoopbackClientConfig: genericConfig.LoopbackClientConfig,
@@ -405,7 +394,7 @@ func CreateConfig(
 	}
 
 	if len(opts.Authentication.ServiceAccounts.KeyFiles) > 0 {
-		// Load and set the public keys.
+		// 从配置的密钥文件加载并注入公钥。
 		var pubKeys []any
 		for _, f := range opts.Authentication.ServiceAccounts.KeyFiles {
 			keys, err := keyutil.PublicKeysFromFile(f)
@@ -429,10 +418,10 @@ func CreateConfig(
 	return config, genericInitializers, nil
 }
 
-// CreateProxyTransport creates the dialer infrastructure to connect to the nodes.
+// CreateProxyTransport 创建连接节点所需的拨号传输层。
 func CreateProxyTransport() *http.Transport {
 	var proxyDialerFn utilnet.DialFunc
-	// Proxying to pods and services is IP-based... don't expect to be able to verify the hostname
+	// 到 Pod 与 Service 的代理基于 IP，无法校验主机名，故跳过 TLS 验证。
 	proxyTLSClientConfig := &tls.Config{InsecureSkipVerify: true}
 	proxyTransport := utilnet.SetTransportDefaults(&http.Transport{
 		DialContext:     proxyDialerFn,

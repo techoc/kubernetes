@@ -51,32 +51,31 @@ import (
 )
 
 var (
-	// IdentityLeaseGCPeriod is the interval which the lease GC controller checks for expired leases
-	// IdentityLeaseGCPeriod is exposed so integration tests can tune this value.
+	// IdentityLeaseGCPeriod 是 identity lease GC 控制器检查过期租约的间隔。
+	// 暴露该变量以便集成测试调整。
 	IdentityLeaseGCPeriod = 3600 * time.Second
-	// IdentityLeaseDurationSeconds is the duration of kube-apiserver lease in seconds
-	// IdentityLeaseDurationSeconds is exposed so integration tests can tune this value.
+	// IdentityLeaseDurationSeconds 是 kube-apiserver identity 租约的时长（秒）。
+	// 暴露该变量以便集成测试调整。
 	IdentityLeaseDurationSeconds = 3600
-	// IdentityLeaseRenewIntervalPeriod is the interval of kube-apiserver renewing its lease in seconds
-	// IdentityLeaseRenewIntervalPeriod is exposed so integration tests can tune this value.
+	// IdentityLeaseRenewIntervalPeriod 是 kube-apiserver 续租间隔（秒）。
+	// 暴露该变量以便集成测试调整。
 	IdentityLeaseRenewIntervalPeriod = 10 * time.Second
 
-	// LeaseCandidateGCPeriod is the interval which the leasecandidate GC controller checks for expired leases
-	// This is exposed so integration tests can tune this value.
+	// LeaseCandidateGCPeriod 是 LeaseCandidate GC 控制器检查过期租约的间隔。
+	// 暴露该变量以便集成测试调整。
 	LeaseCandidateGCPeriod = 30 * time.Minute
 )
 
 const (
-	// IdentityLeaseComponentLabelKey is used to apply a component label to identity lease objects, indicating:
-	//   1. the lease is an identity lease (different from leader election leases)
-	//   2. which component owns this lease
+	// IdentityLeaseComponentLabelKey 用于给 identity 租约打组件标签，表明：
+	//   1. 该租约是 identity 租约（不同于 leader election 租约）
+	//   2. 该租约归属哪个组件
 	IdentityLeaseComponentLabelKey = "apiserver.kubernetes.io/identity"
-	// KubeAPIServer defines variable used internally when referring to kube-apiserver component
+	// KubeAPIServer 是内部引用 kube-apiserver 组件时使用的名称。
 	KubeAPIServer = "kube-apiserver"
 )
 
-// Server is a struct that contains a generic control plane apiserver instance
-// that can be run to start serving the APIs.
+// Server 持有一个可运行并开始提供 API 服务的通用控制面 apiserver 实例。
 type Server struct {
 	GenericAPIServer *genericapiserver.GenericAPIServer
 
@@ -86,10 +85,8 @@ type Server struct {
 	VersionedInformers        clientgoinformers.SharedInformerFactory
 }
 
-// New returns a new instance of Master from the given config.
-// Certain config fields will be set to a default value if unset.
-// Certain config fields must be specified, including:
-// KubeletClientConfig
+// New 根据给定配置创建 Server 实例。
+// 部分未设置的配置字段会被赋予默认值，另一些字段则必须显式指定。
 func (c completedConfig) New(name string, delegationTarget genericapiserver.DelegationTarget) (*Server, error) {
 	generic, err := c.Generic.New(name, delegationTarget)
 	if err != nil {
@@ -107,19 +104,12 @@ func (c completedConfig) New(name string, delegationTarget genericapiserver.Dele
 		c.ServiceAccountPublicKeysGetter,
 	)
 	if err != nil {
-		// If there was an error, skip installing the endpoints and log the
-		// error, but continue on. We don't return the error because the
-		// metadata responses require additional, backwards incompatible
-		// validation of command-line options.
+		// 构造失败时仅记录错误并跳过安装端点，不中断启动：metadata 响应需要额外的、不向后兼容的命令行参数校验。
 		msg := fmt.Sprintf("Could not construct pre-rendered responses for"+
 			" ServiceAccountIssuerDiscovery endpoints. Endpoints will not be"+
 			" enabled. Error: %v", err)
 		if c.ServiceAccountIssuerURL != "" {
-			// The user likely expects this feature to be enabled if issuer URL is
-			// set and the feature gate is enabled. In the future, if there is no
-			// longer a feature gate and issuer URL is not set, the user may not
-			// expect this feature to be enabled. We log the former case as an Error
-			// and the latter case as an Info.
+			// 若设置了 issuer URL，用户很可能期望该特性启用，故记为 Error；反之记为 Info。
 			klog.Error(msg)
 		} else {
 			klog.Info(msg)
@@ -156,8 +146,7 @@ func (c completedConfig) New(name string, delegationTarget genericapiserver.Dele
 	if utilfeature.DefaultFeatureGate.Enabled(apiserverfeatures.CoordinatedLeaderElection) {
 		leaseInformer := s.VersionedInformers.Coordination().V1().Leases()
 		lcInformer := s.VersionedInformers.Coordination().V1beta1().LeaseCandidates()
-		// Ensure that informers are registered before starting. Coordinated Leader Election leader-elected
-		// and may register informer handlers after they are started.
+		// 启动前先注册 informer：协调式 Leader Election 选主后可能才注册 handler，若 informer 未提前注册将错过事件。
 		_ = leaseInformer.Informer()
 		_ = lcInformer.Informer()
 		s.GenericAPIServer.AddPostStartHookOrDie("start-kube-apiserver-coordinated-leader-election-controller", func(hookContext genericapiserver.PostStartHookContext) error {
@@ -207,19 +196,19 @@ func (c completedConfig) New(name string, delegationTarget genericapiserver.Dele
 				return nil
 			})
 		if c.Extra.PeerProxy != nil {
-			// Wait for handler to be ready
+			// 等待代理 handler 缓存同步完成后再对外服务。
 			s.GenericAPIServer.AddPostStartHookOrDie("mixed-version-proxy-handler", func(context genericapiserver.PostStartHookContext) error {
 				err := c.Extra.PeerProxy.WaitForCacheSync(context.Done())
 				return err
 			})
 
-			// Run local-discovery sync loop
+			// 启动本地发现缓存同步循环。
 			s.GenericAPIServer.AddPostStartHookOrDie("local-discovery-cache-sync", func(context genericapiserver.PostStartHookContext) error {
 				err := c.Extra.PeerProxy.RunLocalDiscoveryCacheSync(context.Done())
 				return err
 			})
 
-			// Run peer-discovery workers
+			// 启动对等发现相关 worker。
 			s.GenericAPIServer.AddPostStartHookOrDie("peer-discovery-workers", func(context genericapiserver.PostStartHookContext) error {
 				go c.Extra.PeerProxy.RunPeerDiscoveryCacheSync(context, 1)
 				go c.Extra.PeerProxy.RunPeerDiscoveryActiveGVTracker(context)
@@ -231,11 +220,11 @@ func (c completedConfig) New(name string, delegationTarget genericapiserver.Dele
 
 	s.GenericAPIServer.AddPostStartHookOrDie("start-cluster-authentication-info-controller", func(hookContext genericapiserver.PostStartHookContext) error {
 		controller := clusterauthenticationtrust.NewClusterAuthenticationTrustController(s.ClusterAuthenticationInfo, client)
-		// prime values and start listeners
+		// 预热 CA 值并启动监听。
 		if s.ClusterAuthenticationInfo.ClientCA != nil {
 			s.ClusterAuthenticationInfo.ClientCA.AddListener(controller)
 			if controller, ok := s.ClusterAuthenticationInfo.ClientCA.(dynamiccertificates.ControllerRunner); ok {
-				// runonce to be sure that we have a value.
+				// 先执行一次确保拿到初始值。
 				if err := controller.RunOnce(hookContext); err != nil {
 					runtime.HandleError(err)
 				}
@@ -245,7 +234,7 @@ func (c completedConfig) New(name string, delegationTarget genericapiserver.Dele
 		if s.ClusterAuthenticationInfo.RequestHeaderCA != nil {
 			s.ClusterAuthenticationInfo.RequestHeaderCA.AddListener(controller)
 			if controller, ok := s.ClusterAuthenticationInfo.RequestHeaderCA.(dynamiccertificates.ControllerRunner); ok {
-				// runonce to be sure that we have a value.
+				// 同样先执行一次确保拿到初始值。
 				if err := controller.RunOnce(hookContext); err != nil {
 					runtime.HandleError(err)
 				}
@@ -262,7 +251,7 @@ func (c completedConfig) New(name string, delegationTarget genericapiserver.Dele
 		holderIdentity := s.GenericAPIServer.APIServerID + "_" + string(uuid.NewUUID())
 		peeraddress := getPeerAddress(c.Extra.PeerAdvertiseAddress, c.Generic.PublicAddress, publicServicePort)
 
-		// must replace ':,[]' in [ip:port] to be able to store this as a valid label value
+		// [ip:port] 中的 ':,' 和 '[]' 必须替换，才能作为合法的 label 值存储。
 		controller := lease.NewController(
 			clock.RealClock{},
 			client,
@@ -307,6 +296,7 @@ func (c completedConfig) New(name string, delegationTarget genericapiserver.Dele
 	return s, nil
 }
 
+// labelAPIServerHeartbeatFunc 返回处理函数，为 identity 租约打上组件、主机名与对等地址标签。
 func labelAPIServerHeartbeatFunc(identity string, peeraddress string) lease.ProcessLeaseFunc {
 	return func(lease *coordinationapiv1.Lease) error {
 		if lease.Labels == nil {
@@ -317,7 +307,7 @@ func labelAPIServerHeartbeatFunc(identity string, peeraddress string) lease.Proc
 			lease.Annotations = map[string]string{}
 		}
 
-		// This label indiciates the identity of the lease object.
+		// 该 label 标识租约对象所属组件的身份。
 		lease.Labels[IdentityLeaseComponentLabelKey] = identity
 
 		hostname, err := os.Hostname()
@@ -325,10 +315,10 @@ func labelAPIServerHeartbeatFunc(identity string, peeraddress string) lease.Proc
 			return err
 		}
 
-		// convenience label to easily map a lease object to a specific apiserver
+		// 便于将租约对象映射到具体 apiserver 的主机名标签。
 		lease.Labels[apiv1.LabelHostname] = hostname
 
-		// Include apiserver network location <ip_port> used by peers to proxy requests between kube-apiservers
+		// 记录 apiserver 的网络位置 <ip_port>，供对等节点在 apiserver 间代理请求。
 		if utilfeature.DefaultFeatureGate.Enabled(apiserverfeatures.UnknownVersionInteroperabilityProxy) {
 			if peeraddress != "" {
 				lease.Annotations[apiv1.AnnotationPeerAdvertiseAddress] = peeraddress

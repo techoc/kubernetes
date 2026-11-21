@@ -29,19 +29,21 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// LeaderElectionTimers 保存协调式选主的租约定时器配置。
 type LeaderElectionTimers struct {
 	LeaseDuration time.Duration
 	RenewDeadline time.Duration
 	RetryPeriod   time.Duration
 }
 
+// NewRunner 构造选主成功后运行的 worker 函数。
 type NewRunner func() (func(ctx context.Context, workers int), error)
 
-// RunWithLeaderElection runs the provided runner function with leader election.
-// newRunnerFn might be called multiple times, and it should return another
-// controller instance's Run method each time.
-// RunWithLeaderElection only returns when the context is done, or initial
-// leader election fails.
+// RunWithLeaderElection 在选主成功后运行给定的 runner。
+// newRunnerFn 可能被调用多次，每次应返回另一个控制器实例的 Run 方法。
+
+// 仅在上下文结束或初次选主失败时返回。
+
 func RunWithLeaderElection(ctx context.Context, config *rest.Config, newRunnerFn NewRunner, timers LeaderElectionTimers) {
 	hostname, err := os.Hostname()
 	if err != nil {

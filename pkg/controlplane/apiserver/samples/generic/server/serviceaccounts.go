@@ -27,38 +27,43 @@ import (
 	"k8s.io/kubernetes/pkg/serviceaccount"
 )
 
-// clientGetter implements ServiceAccountTokenGetter using a factory function
+// clientGetter 基于 informer lister 实现 ServiceAccountTokenGetter。
 type clientGetter struct {
 	secretLister         v1listers.SecretLister
 	serviceAccountLister v1listers.ServiceAccountLister
 }
 
-// genericTokenGetter returns a ServiceAccountTokenGetter that does not depend
-// on pods, nodes, validatingWebhookConfigurations, or mutatingWebhookConfigurations.
+// genericTokenGetter 返回一个不依赖 Pod、Node 及 Webhook 配置的 ServiceAccountTokenGetter。
 func genericTokenGetter(factory informers.SharedInformerFactory) serviceaccount.ServiceAccountTokenGetter {
 	return clientGetter{secretLister: factory.Core().V1().Secrets().Lister(), serviceAccountLister: factory.Core().V1().ServiceAccounts().Lister()}
 }
 
+// GetServiceAccount 从 lister 读取对应资源；不支持的资源返回 NotFound。
 func (c clientGetter) GetServiceAccount(ctx context.Context, namespace, name string) (*v1.ServiceAccount, error) {
 	return c.serviceAccountLister.ServiceAccounts(namespace).Get(name)
 }
 
+// GetPod 从 lister 读取对应资源；不支持的资源返回 NotFound。
 func (c clientGetter) GetPod(ctx context.Context, namespace, name string) (*v1.Pod, error) {
 	return nil, apierrors.NewNotFound(v1.Resource("pods"), name)
 }
 
+// GetSecret 从 lister 读取对应资源；不支持的资源返回 NotFound。
 func (c clientGetter) GetSecret(ctx context.Context, namespace, name string) (*v1.Secret, error) {
 	return c.secretLister.Secrets(namespace).Get(name)
 }
 
+// GetNode 从 lister 读取对应资源；不支持的资源返回 NotFound。
 func (c clientGetter) GetNode(ctx context.Context, name string) (*v1.Node, error) {
 	return nil, apierrors.NewNotFound(v1.Resource("nodes"), name)
 }
 
+// GetValidatingWebhookConfiguration 从 lister 读取对应资源；不支持的资源返回 NotFound。
 func (c clientGetter) GetValidatingWebhookConfiguration(ctx context.Context, name string) (*admissionregistrationv1.ValidatingWebhookConfiguration, error) {
 	return nil, apierrors.NewNotFound(admissionregistrationv1.Resource("validatingwebhookconfigurations"), name)
 }
 
+// GetMutatingWebhookConfiguration 从 lister 读取对应资源；不支持的资源返回 NotFound。
 func (c clientGetter) GetMutatingWebhookConfiguration(ctx context.Context, name string) (*admissionregistrationv1.MutatingWebhookConfiguration, error) {
 	return nil, apierrors.NewNotFound(admissionregistrationv1.Resource("mutatingwebhookconfigurations"), name)
 }

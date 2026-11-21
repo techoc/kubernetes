@@ -32,6 +32,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestCreateOrUpdateMasterService 验证 master Service 的创建与更新逻辑。
 func TestCreateOrUpdateMasterService(t *testing.T) {
 	singleStack := corev1.IPFamilyPolicySingleStack
 	ns := metav1.NamespaceDefault

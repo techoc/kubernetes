@@ -31,6 +31,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 )
 
+// validateTokenRequest 校验 ServiceAccount token 请求相关的 flag 是否成套配置。
 func validateTokenRequest(options *Options) []error {
 	var errs []error
 
@@ -51,11 +52,10 @@ func validateTokenRequest(options *Options) []error {
 	return errs
 }
 
+// validateAPIPriorityAndFairness 校验启用 APF 时未通过 runtime-config 禁用其所需的 API 组。
 func validateAPIPriorityAndFairness(options *Options) []error {
 	if options.Features.EnablePriorityAndFairness {
-		// If none of the following runtime config options are specified,
-		// APF is assumed to be turned on. The internal APF controller uses
-		// v1 so it should be enabled.
+		// 未显式指定以下 runtime-config 时默认认为 APF 开启；内部 APF 控制器使用 v1，故必须启用。
 		enabledAPIString := options.APIEnablement.RuntimeConfig.String()
 		testConfigs := []string{"flowcontrol.apiserver.k8s.io/v1", "api/ga", "api/all"} // in the order of precedence
 		for _, testConfig := range testConfigs {
@@ -71,6 +71,7 @@ func validateAPIPriorityAndFairness(options *Options) []error {
 	return nil
 }
 
+// validateUnknownVersionInteroperabilityProxyFlags 校验对等代理相关 flag 只有在对应特性开启时才能使用。
 func validateUnknownVersionInteroperabilityProxyFlags(options *Options) []error {
 	err := []error{}
 	if !utilfeature.DefaultFeatureGate.Enabled(apiserverfeatures.UnknownVersionInteroperabilityProxy) {
@@ -87,8 +88,10 @@ func validateUnknownVersionInteroperabilityProxyFlags(options *Options) []error 
 	return err
 }
 
+// abstractSocketRegex 校验以 @ 开头的 abstract socket 名称是否合法。
 var abstractSocketRegex = regexp.MustCompile(`^@([a-zA-Z0-9_-]+\.)*[a-zA-Z0-9_-]+$`)
 
+// validateServiceAccountTokenSigningConfig 校验外部 JWT 签发端点与其他签发方式的互斥关系及特性开关。
 func validateServiceAccountTokenSigningConfig(options *Options) []error {
 	if len(options.ServiceAccountSigningEndpoint) == 0 {
 		return nil
@@ -102,7 +105,7 @@ func validateServiceAccountTokenSigningConfig(options *Options) []error {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.ExternalServiceAccountTokenSigner) {
 		errors = append(errors, fmt.Errorf("setting `--service-account-signing-endpoint` requires enabling ExternalServiceAccountTokenSigner feature gate"))
 	}
-	// Ensure ServiceAccountSigningEndpoint is a valid abstract socket name if prefixed with '@'.
+	// 以 @ 开头时必须是合法的 abstract socket 名称。
 	if strings.HasPrefix(options.ServiceAccountSigningEndpoint, "@") && !abstractSocketRegex.MatchString(options.ServiceAccountSigningEndpoint) {
 		errors = append(errors, fmt.Errorf("invalid value %q passed for `--service-account-signing-endpoint`, when prefixed with @ must be a valid abstract socket name", options.ServiceAccountSigningEndpoint))
 	}
@@ -110,6 +113,7 @@ func validateServiceAccountTokenSigningConfig(options *Options) []error {
 	return errors
 }
 
+// validateCoordinatedLeadershipFlags 校验协调式选主的租约时长、续约期限与重试周期满足递减关系。
 func validateCoordinatedLeadershipFlags(options *Options) []error {
 	var errs []error
 	if options.CoordinatedLeadershipLeaseDuration <= options.CoordinatedLeadershipRenewDeadline {
@@ -121,7 +125,7 @@ func validateCoordinatedLeadershipFlags(options *Options) []error {
 	return errs
 }
 
-// Validate checks Options and return a slice of found errs.
+// Validate 校验 Options 并返回发现的所有错误。
 func (s *Options) Validate() []error {
 	var errs []error
 

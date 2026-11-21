@@ -34,6 +34,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// LeaseCandidateGCController 回收过期的 LeaseCandidate。
 type LeaseCandidateGCController struct {
 	kubeclientset kubernetes.Interface
 
@@ -46,7 +47,7 @@ type LeaseCandidateGCController struct {
 	clock clock.Clock
 }
 
-// NewLeaseCandidateGC creates a new LeaseCandidateGCController.
+// NewLeaseCandidateGC 创建一个新的 LeaseCandidateGCController。
 func NewLeaseCandidateGC(clientset kubernetes.Interface, gcCheckPeriod time.Duration, leaseCandidateInformer coordinationv1beta1informers.LeaseCandidateInformer) *LeaseCandidateGCController {
 	return &LeaseCandidateGCController{
 		kubeclientset:          clientset,
@@ -58,7 +59,7 @@ func NewLeaseCandidateGC(clientset kubernetes.Interface, gcCheckPeriod time.Dura
 	}
 }
 
-// Run starts one worker.
+// Run 启动一个 worker。
 func (c *LeaseCandidateGCController) Run(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 	defer klog.Infof("Shutting down apiserver leasecandidate garbage collector")
@@ -73,6 +74,7 @@ func (c *LeaseCandidateGCController) Run(ctx context.Context) {
 	wait.UntilWithContext(ctx, c.gc, c.gcCheckPeriod)
 }
 
+// gc 执行一次过期候选者清理。
 func (c *LeaseCandidateGCController) gc(ctx context.Context) {
 	lcs, err := c.leaseCandidateLister.List(labels.Everything())
 	if err != nil {
@@ -80,7 +82,7 @@ func (c *LeaseCandidateGCController) gc(ctx context.Context) {
 		return
 	}
 	for _, leaseCandidate := range lcs {
-		// evaluate lease from cache
+		// 先根据缓存判断租约状态。
 		if !isLeaseCandidateExpired(c.clock, leaseCandidate) {
 			continue
 		}
@@ -89,7 +91,7 @@ func (c *LeaseCandidateGCController) gc(ctx context.Context) {
 			klog.ErrorS(err, "Error getting lc")
 			continue
 		}
-		// evaluate lease from apiserver
+		// 再根据 apiserver 返回的最新数据判断。
 		if !isLeaseCandidateExpired(c.clock, lc) {
 			continue
 		}

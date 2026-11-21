@@ -37,21 +37,23 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// legacy token 跟踪控制器使用的常量。
 const (
 	ConfigMapName    = "kube-apiserver-legacy-service-account-token-tracking"
 	ConfigMapDataKey = "since"
 	dateFormat       = "2006-01-02"
 )
 
+// 控制器使用的包级变量。
 var (
 	queueKey = metav1.NamespaceSystem + "/" + ConfigMapName
 )
 
-// Controller maintains a timestamp value configmap `kube-apiserver-legacy-service-account-token-tracking`
-// in `kube-system` to indicates if the tracking for legacy tokens is enabled in
-// the cluster. For HA clusters, the configmap will be eventually created after
-// all controller instances have enabled the feature. When disabling this
-// feature, existing configmap will be deleted.
+// Controller 维护 `kube-system` 中的时间戳 ConfigMap `kube-apiserver-legacy-service-account-token-tracking`，
+// 用于表明集群是否启用了 legacy token 跟踪。
+// 在 HA 集群中，所有控制器实例都启用该特性后，ConfigMap 最终会被创建。
+// 禁用该特性时，已有的 ConfigMap 会被删除。
+
 type Controller struct {
 	configMapClient   corev1client.ConfigMapsGetter
 	configMapInformer cache.SharedIndexInformer
@@ -59,20 +61,20 @@ type Controller struct {
 	configMapSynced   cache.InformerSynced
 	queue             workqueue.TypedRateLimitingInterface[string]
 
-	// rate limiter controls the rate limit of the creation of the configmap.
-	// this is useful in multi-apiserver cluster to prevent config existing in a
-	// cluster with mixed enabled/disabled controllers. otherwise, those
-	// apiservers will fight to create/delete until all apiservers are enabled
-	// or disabled.
+	// 限流器控制 ConfigMap 的创建速率。
+	// 在多 apiserver 集群中，这可以避免部分 apiserver 启用、部分禁用时配置反复出现：
+	// 否则这些 apiserver 会争相创建/删除，直到全部启用或全部禁用。
+
 	creationRatelimiter *rate.Limiter
 	clock               clock.Clock
 }
 
-// NewController returns a Controller struct.
+// NewController 返回一个 Controller 实例。
 func NewController(cs kubernetes.Interface) *Controller {
 	return newController(cs, clock.RealClock{}, rate.NewLimiter(rate.Every(30*time.Minute), 1))
 }
 
+// newController 创建使用指定时钟与限流器的控制器，供测试注入。
 func newController(cs kubernetes.Interface, cl clock.Clock, limiter *rate.Limiter) *Controller {
 	informer := corev1informers.NewFilteredConfigMapInformer(cs, metav1.NamespaceSystem, 12*time.Hour, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, func(options *metav1.ListOptions) {
 		options.FieldSelector = fields.OneTermEqualSelector("metadata.name", ConfigMapName).String()
@@ -106,18 +108,19 @@ func newController(cs kubernetes.Interface, cl clock.Clock, limiter *rate.Limite
 	return c
 }
 
+// enqueue 将同步任务加入工作队列。
 func (c *Controller) enqueue() {
 	c.queue.Add(queueKey)
 }
 
-// Run starts the controller sync loop.
+// Run 启动控制器的同步循环。
 //
 //logcheck:context // RunWithContext should be used instead of Run in code which supports contextual logging.
 func (c *Controller) Run(stopCh <-chan struct{}) {
 	c.RunWithContext(wait.ContextForChannel(stopCh))
 }
 
-// RunWithContext starts the controller sync loop with a context.
+// RunWithContext 启动带上下文的控制器同步循环。
 func (c *Controller) RunWithContext(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
@@ -140,11 +143,13 @@ func (c *Controller) RunWithContext(ctx context.Context) {
 	logger.Info("Ending legacy_token_tracking_controller")
 }
 
+// runWorker 持续处理工作队列中的任务。
 func (c *Controller) runWorker(ctx context.Context) {
 	for c.processNext(ctx) {
 	}
 }
 
+// processNext 处理队列中的下一个任务。
 func (c *Controller) processNext(ctx context.Context) bool {
 	key, quit := c.queue.Get()
 	if quit {
@@ -161,6 +166,7 @@ func (c *Controller) processNext(ctx context.Context) bool {
 	return true
 }
 
+// syncConfigMap 将 legacy token 使用情况同步到 ConfigMap。
 func (c *Controller) syncConfigMap(ctx context.Context) error {
 	obj, exists, err := c.configMapCache.GetByKey(queueKey)
 	if err != nil {
@@ -183,7 +189,7 @@ func (c *Controller) syncConfigMap(ctx context.Context) error {
 			if apierrors.IsAlreadyExists(err) {
 				return nil
 			}
-			// don't consume the creationRatelimiter for an unsuccessful attempt
+			// 失败的尝试不应消耗创建限流器的配额。
 			r.CancelAt(now)
 			return err
 		}

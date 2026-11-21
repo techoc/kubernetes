@@ -14,9 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// sample-generic-controlplane is a kube-like generic control plane
-// It is compatible to kube-apiserver, but lacks the container domain
-// specific APIs.
+// sample-generic-controlplane 是一个类似 kube 的通用控制面。
+// 它与 kube-apiserver 兼容，但不包含容器领域相关的专用 API。
 package main
 
 import (
@@ -29,7 +28,9 @@ import (
 	"k8s.io/kubernetes/pkg/controlplane/apiserver/samples/generic/server"
 )
 
+// main 是 sample-generic-controlplane 的入口。
 func main() {
+	// 由 server 包构造命令，入口只负责执行并透传退出码。
 	command := server.NewCommand()
 	code := cli.Run(command)
 	os.Exit(code)

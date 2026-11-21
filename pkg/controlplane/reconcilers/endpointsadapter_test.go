@@ -31,8 +31,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+// noEndpoints 是测试中使用的空 Endpoints 对象。
 var noEndpoints = &corev1.Endpoints{}
 
+// TestEndpointsAdapterGet 验证 Get 能读取 Endpoints。
 func TestEndpointsAdapterGet(t *testing.T) {
 	endpoints1, epSlice1 := generateEndpointsAndSlice("foo", "testing", []int{80, 443}, []string{"10.1.2.3", "10.1.2.4"})
 
@@ -98,16 +100,17 @@ func TestEndpointsAdapterGet(t *testing.T) {
 	}
 }
 
+// TestEndpointsAdapterCreate 验证 Create 同时创建 Endpoints 与 EndpointSlice。
 func TestEndpointsAdapterCreate(t *testing.T) {
 	endpoints1, epSlice1 := generateEndpointsAndSlice("foo", "testing", []int{80}, []string{"10.1.2.3", "10.1.2.4"})
 
-	// even if an Endpoints resource includes an IPv6 address, it should not be
-	// included in the corresponding EndpointSlice.
+	// 即使 Endpoints 包含 IPv6 地址，也不应将其
+	// 纳入对应的 IPv4 EndpointSlice。
 	endpoints2, _ := generateEndpointsAndSlice("foo", "testing", []int{80}, []string{"10.1.2.5", "10.1.2.6", "1234::5678:0000:0000:9abc:def0"})
 	_, epSlice2 := generateEndpointsAndSlice("foo", "testing", []int{80}, []string{"10.1.2.5", "10.1.2.6"})
 
-	// ensure that Endpoints with only IPv6 addresses result in EndpointSlice
-	// with an IPv6 address type.
+	// 确保仅含 IPv6 地址的 Endpoints 生成
+	// 地址类型为 IPv6 的 EndpointSlice。
 	endpoints3, epSlice3 := generateEndpointsAndSlice("foo", "testing", []int{80}, []string{"1234::5678:0000:0000:9abc:def0"})
 	epSlice3.AddressType = discovery.AddressTypeIPv6
 
@@ -151,11 +154,11 @@ func TestEndpointsAdapterCreate(t *testing.T) {
 			namespaceParam: endpoints1.Namespace,
 			endpointsParam: endpoints1,
 
-			// We expect the create to be attempted, we just also expect it to fail
+			// 期望尝试创建但同时失败。
 			expectCreate: []runtime.Object{endpoints1},
 		},
 		"existing-endpointslice-incorrect": {
-			// No error when we need to create the Endpoints but the correct
+			// 需要创建 Endpoints 且 EndpointSlice 已正确时不应报错，
 			// EndpointSlice already exists
 			expectedError:  nil,
 			expectedResult: endpoints1,
@@ -165,7 +168,7 @@ func TestEndpointsAdapterCreate(t *testing.T) {
 			endpointsParam: endpoints1,
 		},
 		"existing-endpointslice-correct": {
-			// No error when we need to create the Endpoints but an incorrect
+			// 需要创建 Endpoints 且 EndpointSlice 不正确时也不应报错，
 			// EndpointSlice already exists
 			expectedError:  nil,
 			expectedResult: endpoints2,
@@ -200,16 +203,17 @@ func TestEndpointsAdapterCreate(t *testing.T) {
 	}
 }
 
+// TestEndpointsAdapterUpdate 验证 Update 同步更新 Endpoints 与 EndpointSlice。
 func TestEndpointsAdapterUpdate(t *testing.T) {
 	endpoints1, epSlice1 := generateEndpointsAndSlice("foo", "testing", []int{80}, []string{"10.1.2.3", "10.1.2.4"})
 	endpoints2, epSlice2 := generateEndpointsAndSlice("foo", "testing", []int{80, 443}, []string{"10.1.2.3", "10.1.2.4", "10.1.2.5"})
 	endpoints3, _ := generateEndpointsAndSlice("bar", "testing", []int{80, 443}, []string{"10.1.2.3", "10.1.2.4", "10.1.2.5"})
 
-	// ensure that EndpointSlice with deprecated IP address type is replaced
-	// with one that has an IPv4 address type.
+	// 确保已弃用 IP 地址类型的 EndpointSlice 被替换为
+	// IPv4 地址类型的版本。
 	endpoints4, _ := generateEndpointsAndSlice("foo", "testing", []int{80}, []string{"10.1.2.7", "10.1.2.8"})
 	_, epSlice4IP := generateEndpointsAndSlice("foo", "testing", []int{80}, []string{"10.1.2.7", "10.1.2.8"})
-	// "IP" is a deprecated address type, ensuring that it is handled properly.
+	// "IP" 是已弃用的地址类型，需确保被正确处理。
 	epSlice4IP.AddressType = discovery.AddressType("IP")
 	_, epSlice4IPv4 := generateEndpointsAndSlice("foo", "testing", []int{80}, []string{"10.1.2.7", "10.1.2.8"})
 
@@ -229,8 +233,8 @@ func TestEndpointsAdapterUpdate(t *testing.T) {
 			namespaceParam: "testing",
 			endpointsParam: endpoints1,
 
-			// Even though there's no change, we still expect Update() to be
-			// called, because this unit test ALWAYS calls Update().
+			// 即使没有变化，仍期望调用 Update()，
+			// 因为该单测总是调用 Update()。
 			expectUpdate: []runtime.Object{endpoints1},
 		},
 		"existing-endpointslice-replaced-with-updated-ipv4-address-type": {
@@ -240,8 +244,8 @@ func TestEndpointsAdapterUpdate(t *testing.T) {
 			namespaceParam: "testing",
 			endpointsParam: endpoints4,
 
-			// When AddressType changes, we Delete+Create the EndpointSlice,
-			// so that shows up in expectCreate, not expectUpdate.
+			// AddressType 变化时会先删后建 EndpointSlice，
+			// 因此体现在 expectCreate 而非 expectUpdate 中。
 			expectUpdate: []runtime.Object{endpoints4},
 			expectCreate: []runtime.Object{epSlice4IPv4},
 		},
@@ -284,11 +288,11 @@ func TestEndpointsAdapterUpdate(t *testing.T) {
 			namespaceParam: "testing",
 			endpointsParam: endpoints3,
 
-			// We expect the update to be attempted, we just also expect it to fail
+			// 期望尝试更新但同时失败。
 			expectUpdate: []runtime.Object{endpoints3},
 		},
 		"missing-endpointslice": {
-			// No error when we need to update the Endpoints but the
+			// 需要更新 Endpoints 且 EndpointSlice 已正确时不应报错，
 			// EndpointSlice doesn't exist
 			expectedError:  nil,
 			expectedResult: endpoints1,
@@ -323,6 +327,7 @@ func TestEndpointsAdapterUpdate(t *testing.T) {
 	}
 }
 
+// generateEndpointsAndSlice 构造配套的 Endpoints 与 EndpointSlice 测试数据。
 func generateEndpointsAndSlice(name, namespace string, ports []int, addresses []string) (*corev1.Endpoints, *discovery.EndpointSlice) {
 	trueBool := true
 
@@ -377,6 +382,7 @@ func generateEndpointsAndSlice(name, namespace string, ports []int, addresses []
 	}, epSlice
 }
 
+// TestEndpointManagerEnsureEndpointSliceFromEndpoints 验证 EndpointSlice 按需创建或更新。
 func TestEndpointManagerEnsureEndpointSliceFromEndpoints(t *testing.T) {
 	endpoints1, epSlice1 := generateEndpointsAndSlice("foo", "testing", []int{80, 443}, []string{"10.1.2.3", "10.1.2.4"})
 	endpoints2, epSlice2 := generateEndpointsAndSlice("foo", "testing", []int{80, 443}, []string{"10.1.2.3", "10.1.2.4", "10.1.2.5"})

@@ -40,6 +40,7 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// 测试用的全局变量。
 var (
 	someRandomCA = []byte(`-----BEGIN CERTIFICATE-----
 MIIBqDCCAU2gAwIBAgIUfbqeieihh/oERbfvRm38XvS/xHAwCgYIKoZIzj0EAwIw
@@ -79,6 +80,7 @@ YkNtGc1RUDHwecCTFpJtPb7Yu/E=
 	anotherRandomCAProvider dynamiccertificates.CAContentProvider
 )
 
+// init 初始化测试用的客户端与 informer。
 func init() {
 	var err error
 	someRandomCAProvider, err = dynamiccertificates.NewStaticCAContent("foo", someRandomCA)
@@ -91,6 +93,7 @@ func init() {
 	}
 }
 
+// TestWriteClientCAs 验证客户端 CA 变更会正确写入 ConfigMap。
 func TestWriteClientCAs(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -456,6 +459,7 @@ func TestWriteClientCAs(t *testing.T) {
 	}
 }
 
+// getFinalConfigMaps 返回客户端中最终生成的 ConfigMap。
 func getFinalConfigMaps(t *testing.T, client *fake.Clientset) (map[string]*corev1.ConfigMap, bool) {
 	ret := map[string]*corev1.ConfigMap{}
 	created := false
@@ -475,8 +479,9 @@ func getFinalConfigMaps(t *testing.T, client *fake.Clientset) (map[string]*corev
 	return ret, created
 }
 
+// TestWriteConfigMapDeleted 验证 ConfigMap 被删除后能重新创建。
 func TestWriteConfigMapDeleted(t *testing.T) {
-	// the basics are tested above, this checks the deletion logic when the ca bundles are too large
+	// 基本场景已在上面覆盖，此处验证 CA 包过大时的删除逻辑。
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Namespace: metav1.NamespaceSystem, Name: "extension-apiserver-authentication"},
 		Data: map[string]string{

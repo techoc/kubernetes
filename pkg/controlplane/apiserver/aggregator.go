@@ -50,6 +50,7 @@ import (
 	"k8s.io/kubernetes/pkg/controlplane/controller/crdregistration"
 )
 
+// CreateAggregatorConfig 构造聚合服务器的配置，复用 kube-apiserver 配置为基础并做针对性调整。
 func CreateAggregatorConfig(
 	kubeAPIServerConfig genericapiserver.Config,
 	commandOptions options.CompletedOptions,
@@ -59,36 +60,30 @@ func CreateAggregatorConfig(
 	peerProxy utilpeerproxy.Interface,
 	pluginInitializers []admission.PluginInitializer,
 ) (*aggregatorapiserver.Config, error) {
-	// make a shallow copy to let us twiddle a few things
-	// most of the config actually remains the same.  We only need to mess with a couple items related to the particulars of the aggregator
+	// 浅拷贝配置：大部分配置保持不变，仅需调整与聚合服务器相关的少数项。
 	genericConfig := kubeAPIServerConfig
+	// 清空 post start hooks 与 RESTOptionsGetter，避免与其他服务器重复安装。
 	genericConfig.PostStartHooks = map[string]genericapiserver.PostStartHookConfigEntry{}
 	genericConfig.RESTOptionsGetter = nil
-	// prevent generic API server from installing the OpenAPI handler. Aggregator server
-	// has its own customized OpenAPI handler.
+	// 聚合服务器有自己定制的 OpenAPI handler，需阻止通用服务器重复安装。
 	genericConfig.SkipOpenAPIInstallation = true
 
 	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.StorageVersionAPI) &&
 		utilfeature.DefaultFeatureGate.Enabled(genericfeatures.APIServerIdentity) {
-		// Add StorageVersionPrecondition handler to aggregator-apiserver.
-		// The handler will block write requests to built-in resources until the
-		// target resources' storage versions are up-to-date.
+		// StorageVersionPrecondition 会阻塞对内置资源的写请求，直到目标资源的存储版本更新完毕。
 		genericConfig.BuildHandlerChainFunc = genericapiserver.BuildHandlerChainWithStorageVersionPrecondition
 	}
 
 	if peerProxy != nil {
 		originalHandlerChainBuilder := genericConfig.BuildHandlerChainFunc
 		genericConfig.BuildHandlerChainFunc = func(apiHandler http.Handler, c *genericapiserver.Config) http.Handler {
-			// Add peer proxy handler to aggregator-apiserver.
-			// wrap the peer proxy handler first.
+			// 先包裹 peer proxy handler，使其位于处理器链的最外层。
 			apiHandler = peerProxy.WrapHandler(apiHandler)
 			return originalHandlerChainBuilder(apiHandler, c)
 		}
 	}
 
-	// copy the etcd options so we don't mutate originals.
-	// we assume that the etcd options have been completed already.  avoid messing with anything outside
-	// of changes to StorageConfig as that may lead to unexpected behavior when the options are applied.
+	// 复制 etcd 选项以避免修改原对象；假定其已完成，仅改动 StorageConfig 相关字段。
 	etcdOptions := *commandOptions.Etcd
 	etcdOptions.StorageConfig.Codec = aggregatorscheme.Codecs.LegacyCodec(v1.SchemeGroupVersion, v1beta1.SchemeGroupVersion)
 	etcdOptions.StorageConfig.EncodeVersioner = runtime.NewMultiGroupVersioner(v1.SchemeGroupVersion, schema.GroupKind{Group: v1beta1.GroupName})
@@ -97,7 +92,7 @@ func CreateAggregatorConfig(
 		return nil, err
 	}
 
-	// override MergedResourceConfig with aggregator defaults and registry
+	// 用聚合服务器的默认资源配置与 scheme 覆盖 MergedResourceConfig。
 	if err := commandOptions.APIEnablement.ApplyTo(
 		&genericConfig,
 		aggregatorapiserver.DefaultAPIResourceConfigSource(),
@@ -121,20 +116,20 @@ func CreateAggregatorConfig(
 		},
 	}
 
-	// we need to clear the poststarthooks so we don't add them multiple times to all the servers (that fails)
+	// 清空 post start hooks，避免所有服务器重复添加导致失败。
 	aggregatorConfig.GenericConfig.PostStartHooks = map[string]genericapiserver.PostStartHookConfigEntry{}
 
 	return aggregatorConfig, nil
 }
 
+// CreateAggregatorServer 创建聚合服务器，注册 peer proxy 的 informer handler 并启动自动注册控制器。
 func CreateAggregatorServer(aggregatorConfig aggregatorapiserver.CompletedConfig, delegateAPIServer genericapiserver.DelegationTarget, crds apiextensionsinformers.CustomResourceDefinitionInformer, crdAPIEnabled bool, apiVersionPriorities map[schema.GroupVersion]APIServicePriority) (*aggregatorapiserver.APIAggregator, error) {
 	aggregatorServer, err := aggregatorConfig.NewWithDelegate(delegateAPIServer)
 	if err != nil {
 		return nil, err
 	}
 
-	// Set informers for peer proxy handler to exclude CRD and APIService GVs
-	// from peer proxying and peer-aggregated discovery.
+	// 为 peer proxy 注册 informer handler，将 CRD 与 APIService 的 GV 排除在 peer 代理与聚合发现之外。
 	if aggregatorConfig.ExtraConfig.PeerProxy != nil {
 		if err := aggregatorConfig.ExtraConfig.PeerProxy.RegisterCRDInformerHandlers(crds.Informer(), crdExtractor); err != nil {
 			return nil, err
@@ -147,7 +142,7 @@ func CreateAggregatorServer(aggregatorConfig aggregatorapiserver.CompletedConfig
 		}
 	}
 
-	// create controllers for auto-registration
+	// 创建用于自动注册的控制器。
 	apiRegistrationClient, err := apiregistrationclient.NewForConfig(aggregatorConfig.GenericConfig.LoopbackClientConfig)
 	if err != nil {
 		return nil, err
@@ -166,7 +161,7 @@ func CreateAggregatorServer(aggregatorConfig aggregatorapiserver.CompletedConfig
 			autoRegistrationController)
 	}
 
-	// Imbue all builtin group-priorities onto the aggregated discovery
+	// 将内置组的优先级写入聚合发现，使其顺序与本地发现一致。
 	if aggregatorConfig.GenericConfig.AggregatedDiscoveryGroupManager != nil {
 		for gv, entry := range apiVersionPriorities {
 			aggregatorConfig.GenericConfig.AggregatedDiscoveryGroupManager.SetGroupVersionPriority(metav1.GroupVersion(gv), int(entry.Group), int(entry.Version))
@@ -178,9 +173,9 @@ func CreateAggregatorServer(aggregatorConfig aggregatorapiserver.CompletedConfig
 			go crdRegistrationController.Run(5, context.Done())
 		}
 		go func() {
-			// let the CRD controller process the initial set of CRDs before starting the autoregistration controller.
-			// this prevents the autoregistration controller's initial sync from deleting APIServices for CRDs that still exist.
-			// we only need to do this if CRDs are enabled on this server.  We can't use discovery because we are the source for discovery.
+			// 先让 CRD 控制器处理初始 CRD 集合，再启动自动注册控制器，
+			// 防止自动注册的初始同步误删仍存在的 CRD 所对应的 APIService。
+			// 此处无法依赖发现接口，因为本服务器就是发现的来源。
 			if crdAPIEnabled {
 				klog.Infof("waiting for initial CRD sync...")
 				crdRegistrationController.WaitForInitialSync()
@@ -210,8 +205,7 @@ func CreateAggregatorServer(aggregatorConfig aggregatorapiserver.CompletedConfig
 	return aggregatorServer, nil
 }
 
-// crdExtractor extracts group-versions from CustomResourceDefinition objects
-// for use in the peer proxy exclusion filter.
+// crdExtractor 从 CustomResourceDefinition 对象中提取组版本，供 peer proxy 排除过滤器使用。
 func crdExtractor(obj interface{}) []schema.GroupVersion {
 	crd, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 	if !ok {
@@ -225,16 +219,14 @@ func crdExtractor(obj interface{}) []schema.GroupVersion {
 	return gvs
 }
 
-// apiServiceExtractor extracts group-versions from APIService objects
-// for use in the peer proxy exclusion filter. Only aggregated APIs
-// (those with a Service reference) are excluded.
+// apiServiceExtractor 从 APIService 对象中提取组版本，供 peer proxy 排除过滤器使用；仅排除指向 Service 的聚合 API。
 func apiServiceExtractor(obj interface{}) []schema.GroupVersion {
 	apiService, ok := obj.(*v1.APIService)
 	if !ok {
 		klog.Errorf("Expected APIService but got %T", obj)
 		return nil
 	}
-	// Only exclude if the APIService points to a service, implying it's an aggregated API
+	// 只有指向 Service 的 APIService 才是聚合 API，才需要排除。
 	if apiService.Spec.Service == nil {
 		return nil
 	}
@@ -242,11 +234,11 @@ func apiServiceExtractor(obj interface{}) []schema.GroupVersion {
 	return []schema.GroupVersion{gv}
 }
 
+// makeAPIService 为给定的组版本构造 APIService；若版本未配置优先级则返回 nil。
 func makeAPIService(gv schema.GroupVersion, apiVersionPriorities map[schema.GroupVersion]APIServicePriority) *v1.APIService {
 	apiServicePriority, ok := apiVersionPriorities[gv]
 	if !ok {
-		// if we aren't found, then we shouldn't register ourselves because it could result in a CRD group version
-		// being permanently stuck in the APIServices list.
+		// 未配置优先级时不应注册，否则 CRD 的组版本可能永久滞留在 APIServices 列表中。
 		klog.Infof("Skipping APIService creation for %v", gv)
 		return nil
 	}
@@ -261,17 +253,16 @@ func makeAPIService(gv schema.GroupVersion, apiVersionPriorities map[schema.Grou
 	}
 }
 
-// makeAPIServiceAvailableHealthCheck returns a healthz check that returns healthy
-// once all of the specified services have been observed to be available at least once.
+// makeAPIServiceAvailableHealthCheck 返回一个 healthz 检查：当所有指定服务至少被观测到一次可用时即健康。
 func makeAPIServiceAvailableHealthCheck(name string, apiServices []*v1.APIService, apiServiceInformer informers.APIServiceInformer) healthz.HealthChecker {
-	// Track the auto-registered API services that have not been observed to be available yet
+	// 记录尚未观测到可用的自动注册 API 服务。
 	pendingServiceNamesLock := &sync.RWMutex{}
 	pendingServiceNames := sets.NewString()
 	for _, service := range apiServices {
 		pendingServiceNames.Insert(service.Name)
 	}
 
-	// When an APIService in the list is seen as available, remove it from the pending list
+	// APIService 变为可用时，将其从待处理集合中移除。
 	handleAPIServiceChange := func(service *v1.APIService) {
 		pendingServiceNamesLock.Lock()
 		defer pendingServiceNamesLock.Unlock()
@@ -283,13 +274,13 @@ func makeAPIServiceAvailableHealthCheck(name string, apiServices []*v1.APIServic
 		}
 	}
 
-	// Watch add/update events for APIServices
+	// 监听 APIService 的新增与更新事件。
 	apiServiceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{ //nolint:errcheck // no way to return error
 		AddFunc:    func(obj interface{}) { handleAPIServiceChange(obj.(*v1.APIService)) },
 		UpdateFunc: func(old, new interface{}) { handleAPIServiceChange(new.(*v1.APIService)) },
 	})
 
-	// Don't return healthy until the pending list is empty
+	// 待处理集合未清空前不报告健康。
 	return healthz.NamedCheck(name, func(r *http.Request) error {
 		pendingServiceNamesLock.RLock()
 		defer pendingServiceNamesLock.RUnlock()
@@ -300,24 +291,21 @@ func makeAPIServiceAvailableHealthCheck(name string, apiServices []*v1.APIServic
 	})
 }
 
-// APIServicePriority defines group priority that is used in discovery. This controls
-// group position in the kubectl output.
+// APIServicePriority 定义发现时使用的组优先级，决定 kubectl 输出中组的位置。
 type APIServicePriority struct {
-	// Group indicates the order of the group relative to other groups.
+	// Group 表示该组相对于其他组的顺序。
 	Group int32
-	// Version indicates the relative order of the Version inside of its group.
+	// Version 表示该版本在其组内的相对顺序。
 	Version int32
 }
 
-// DefaultGenericAPIServicePriorities returns the APIService priorities for generic APIs
+// DefaultGenericAPIServicePriorities 返回通用 API 的 APIService 优先级。
 func DefaultGenericAPIServicePriorities() map[schema.GroupVersion]APIServicePriority {
-	// The proper way to resolve this letting the aggregator know the desired group and version-within-group order of the underlying servers
-	// is to refactor the genericapiserver.DelegationTarget to include a list of priorities based on which APIs were installed.
-	// This requires the APIGroupInfo struct to evolve and include the concept of priorities and to avoid mistakes, the core storage map there needs to be updated.
-	// That ripples out every bit as far as you'd expect, so for 1.7 we'll include the list here instead of being built up during storage.
+	// 理想做法是重构 DelegationTarget 让其携带已安装 API 的优先级，但影响面过大，
+	// 因此这里直接硬编码优先级列表，而非在构建存储时动态生成。
 	return map[schema.GroupVersion]APIServicePriority{
 		{Group: "", Version: "v1"}: {Group: 18000, Version: 1},
-		// to my knowledge, nothing below here collides
+		// 据目前所知，以下各组的优先级不会冲突。
 		{Group: "events.k8s.io", Version: "v1"}:                      {Group: 17750, Version: 15},
 		{Group: "events.k8s.io", Version: "v1beta1"}:                 {Group: 17750, Version: 5},
 		{Group: "authentication.k8s.io", Version: "v1"}:              {Group: 17700, Version: 15},
@@ -346,12 +334,11 @@ func DefaultGenericAPIServicePriorities() map[schema.GroupVersion]APIServicePrio
 		{Group: "resource.k8s.io", Version: "v1alpha3"}:              {Group: 15900, Version: 9},
 		{Group: "storagemigration.k8s.io", Version: "v1"}:            {Group: 15800, Version: 15},
 		{Group: "storagemigration.k8s.io", Version: "v1beta1"}:       {Group: 15800, Version: 9},
-		// Append a new group to the end of the list if unsure.
-		// You can use min(existing group)-100 as the initial value for a group.
-		// Version can be set to 9 (to have space around) for a new group.
+		// 不确定时把新组追加到列表末尾，组优先级可取现有最小值减 100，版本优先级设为 9 以留出空间。
 	}
 }
 
+// apiServicesToRegister 遍历委托服务器暴露的路径，生成需要自动注册的 APIService 列表。
 func apiServicesToRegister(delegateAPIServer genericapiserver.DelegationTarget, registration autoregister.AutoAPIServiceRegistration, apiVersionPriorities map[schema.GroupVersion]APIServicePriority) []*v1.APIService {
 	apiServices := []*v1.APIService{}
 
@@ -366,7 +353,7 @@ func apiServicesToRegister(delegateAPIServer genericapiserver.DelegationTarget, 
 		if !strings.HasPrefix(curr, "/apis/") {
 			continue
 		}
-		// this comes back in a list that looks like /apis/rbac.authorization.k8s.io/v1alpha1
+		// 路径形如 /apis/rbac.authorization.k8s.io/v1alpha1，按 / 切分后取组与版本。
 		tokens := strings.Split(curr, "/")
 		if len(tokens) != 4 {
 			continue

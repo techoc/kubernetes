@@ -29,20 +29,15 @@ import (
 	utilnet "k8s.io/utils/net"
 )
 
-// EndpointsAdapter provides a simple interface for reading and writing both
-// Endpoints and Endpoint Slices.
-// NOTE: This is an incomplete adapter implementation that is only suitable for
-// use in this package. This takes advantage of the Endpoints used in this
-// package always having a consistent set of ports, a single subset, and a small
-// set of addresses. Any more complex Endpoints resource would likely translate
-// into multiple Endpoint Slices creating significantly more complexity instead
-// of the 1:1 mapping this allows.
+// EndpointsAdapter 提供读写 Endpoints 与 EndpointSlice 的简单接口。
+// 注意：这是不完整的适配器，仅适用于本包——这里的 Endpoints 总是端口一致、单个 subset 且地址较少，
+// 从而保持 1:1 映射。更复杂的 Endpoints 会拆成多个 EndpointSlice，显著增加复杂度。
 type EndpointsAdapter struct {
 	endpointClient      corev1client.EndpointsGetter
 	endpointSliceClient discoveryclient.EndpointSlicesGetter
 }
 
-// NewEndpointsAdapter returns a new EndpointsAdapter.
+// NewEndpointsAdapter 返回一个新的 EndpointsAdapter。
 func NewEndpointsAdapter(endpointClient corev1client.EndpointsGetter, endpointSliceClient discoveryclient.EndpointSlicesGetter) EndpointsAdapter {
 	return EndpointsAdapter{
 		endpointClient:      endpointClient,
@@ -50,15 +45,12 @@ func NewEndpointsAdapter(endpointClient corev1client.EndpointsGetter, endpointSl
 	}
 }
 
-// Get takes the name and namespace of the Endpoints resource, and returns a
-// corresponding Endpoints object if it exists, and an error if there is any.
+// Get 根据 namespace 与 name 读取 Endpoints 对象。
 func (adapter *EndpointsAdapter) Get(namespace, name string, getOpts metav1.GetOptions) (*corev1.Endpoints, error) {
 	return adapter.endpointClient.Endpoints(namespace).Get(context.TODO(), name, getOpts)
 }
 
-// Create accepts a namespace and Endpoints object and creates the Endpoints
-// object and matching EndpointSlice. The created Endpoints object or an error will be
-// returned.
+// Create 创建 Endpoints 对象及对应的 EndpointSlice。
 func (adapter *EndpointsAdapter) Create(namespace string, endpoints *corev1.Endpoints) (*corev1.Endpoints, error) {
 	endpoints, err := adapter.endpointClient.Endpoints(namespace).Create(context.TODO(), endpoints, metav1.CreateOptions{})
 	if err == nil {
@@ -67,8 +59,7 @@ func (adapter *EndpointsAdapter) Create(namespace string, endpoints *corev1.Endp
 	return endpoints, err
 }
 
-// Update accepts a namespace and Endpoints object and updates it and its
-// matching EndpointSlice. The updated Endpoints object or an error will be returned.
+// Update 更新 Endpoints 对象及对应的 EndpointSlice。
 func (adapter *EndpointsAdapter) Update(namespace string, endpoints *corev1.Endpoints) (*corev1.Endpoints, error) {
 	endpoints, err := adapter.endpointClient.Endpoints(namespace).Update(context.TODO(), endpoints, metav1.UpdateOptions{})
 	if err == nil {
@@ -77,9 +68,7 @@ func (adapter *EndpointsAdapter) Update(namespace string, endpoints *corev1.Endp
 	return endpoints, err
 }
 
-// EnsureEndpointSliceFromEndpoints accepts a namespace and Endpoints resource
-// and creates or updates a corresponding EndpointSlice. An error will be returned
-// if it fails to sync the EndpointSlice.
+// EnsureEndpointSliceFromEndpoints 确保 EndpointSlice 与 Endpoints 一致，必要时创建或更新。
 func (adapter *EndpointsAdapter) EnsureEndpointSliceFromEndpoints(namespace string, endpoints *corev1.Endpoints) error {
 	endpointSlice := endpointSliceFromEndpoints(endpoints)
 	currentEndpointSlice, err := adapter.endpointSliceClient.EndpointSlices(namespace).Get(context.TODO(), endpointSlice.Name, metav1.GetOptions{})
@@ -93,7 +82,7 @@ func (adapter *EndpointsAdapter) EnsureEndpointSliceFromEndpoints(namespace stri
 		return err
 	}
 
-	// required for transition from IP to IPv4 address type.
+	// 地址类型从 IP 过渡到 IPv4 时需要重建 EndpointSlice。
 	if currentEndpointSlice.AddressType != endpointSlice.AddressType {
 		err = adapter.endpointSliceClient.EndpointSlices(namespace).Delete(context.TODO(), endpointSlice.Name, metav1.DeleteOptions{})
 		if err != nil {
@@ -113,16 +102,14 @@ func (adapter *EndpointsAdapter) EnsureEndpointSliceFromEndpoints(namespace stri
 	return err
 }
 
-// endpointSliceFromEndpoints generates an EndpointSlice from an Endpoints
-// resource.
+// endpointSliceFromEndpoints 根据 Endpoints 生成 EndpointSlice。
 func endpointSliceFromEndpoints(endpoints *corev1.Endpoints) *discovery.EndpointSlice {
 	endpointSlice := &discovery.EndpointSlice{}
 	endpointSlice.Name = endpoints.Name
 	endpointSlice.Namespace = endpoints.Namespace
 	endpointSlice.Labels = map[string]string{discovery.LabelServiceName: endpoints.Name}
 
-	// TODO: Add support for dual stack here (and in the rest of
-	// EndpointsAdapter).
+	// TODO: 在此处（及 EndpointsAdapter 其余部分）支持双栈。
 	endpointSlice.AddressType = discovery.AddressTypeIPv4
 
 	if len(endpoints.Subsets) > 0 {
@@ -146,8 +133,7 @@ func endpointSliceFromEndpoints(endpoints *corev1.Endpoints) *discovery.Endpoint
 	return endpointSlice
 }
 
-// getEndpointsFromAddresses returns a list of Endpoints from addresses that
-// match the provided address type.
+// getEndpointsFromAddresses 返回与给定地址类型匹配的地址对应的 Endpoint 列表。
 func getEndpointsFromAddresses(addresses []corev1.EndpointAddress, addressType discovery.AddressType, ready bool) []discovery.Endpoint {
 	endpoints := []discovery.Endpoint{}
 	isIPv6AddressType := addressType == discovery.AddressTypeIPv6
@@ -161,7 +147,7 @@ func getEndpointsFromAddresses(addresses []corev1.EndpointAddress, addressType d
 	return endpoints
 }
 
-// endpointFromAddress generates an Endpoint from an EndpointAddress resource.
+// endpointFromAddress 根据 EndpointAddress 生成 Endpoint。
 func endpointFromAddress(address corev1.EndpointAddress, ready bool) discovery.Endpoint {
 	ep := discovery.Endpoint{
 		Addresses:  []string{address.IP},
@@ -176,7 +162,7 @@ func endpointFromAddress(address corev1.EndpointAddress, ready bool) discovery.E
 	return ep
 }
 
-// allAddressesIPv6 returns true if all provided addresses are IPv6.
+// allAddressesIPv6 判断所有地址是否均为 IPv6。
 func allAddressesIPv6(addresses []corev1.EndpointAddress) bool {
 	if len(addresses) == 0 {
 		return false
@@ -191,8 +177,7 @@ func allAddressesIPv6(addresses []corev1.EndpointAddress) bool {
 	return true
 }
 
-// setSkipMirrorTrue sets endpointslice.kubernetes.io/skip-mirror to true. It
-// returns true if this has resulted in a change to the Endpoints resource.
+// setSkipMirrorTrue 设置 skip-mirror 标签为 true，返回是否发生了变更。
 func setSkipMirrorTrue(e *corev1.Endpoints) bool {
 	skipMirrorVal, ok := e.Labels[discovery.LabelSkipMirror]
 	if !ok || skipMirrorVal != "true" {

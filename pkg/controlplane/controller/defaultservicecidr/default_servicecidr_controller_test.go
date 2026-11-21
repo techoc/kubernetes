@@ -32,11 +32,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试使用的常量。
 const (
 	defaultIPv4CIDR = "10.16.0.0/16"
 	defaultIPv6CIDR = "2001:db8::/64"
 )
 
+// newController 构造带 fake 客户端的测试控制器。
 func newController(t *testing.T, cidrsFromFlags []string, objects ...*networkingapiv1.ServiceCIDR) (*fake.Clientset, *Controller) {
 	var runtimeObjects []runtime.Object
 	for _, cidr := range objects {
@@ -67,6 +69,7 @@ func newController(t *testing.T, cidrsFromFlags []string, objects ...*networking
 	return client, c
 }
 
+// TestControllerSync 验证控制器能正确创建默认 ServiceCIDR。
 func TestControllerSync(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -168,6 +171,7 @@ func TestControllerSync(t *testing.T) {
 	}
 }
 
+// TestControllerSyncConversions 验证不同 CIDR 表示形式的转换与同步。
 func TestControllerSyncConversions(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -337,21 +341,22 @@ func TestControllerSyncConversions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
 
-			// Initialize controller and client with the existing ServiceCIDR
+			// 用已有 ServiceCIDR 初始化控制器与客户端。
 			client, controller := newController(t, tc.controllerCIDRs, tc.existingCIDR)
 
-			// Call the syncStatus method directly
+			// 直接调用 syncStatus 方法。
 			err := controller.sync(ctx)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			// Verify the expected actions
+			// 校验预期的操作。
 			expectAction(t, client.Actions(), tc.expectedAction)
 		})
 	}
 }
 
+// expectAction 断言客户端记录了预期的操作。
 func expectAction(t *testing.T, actions []k8stesting.Action, expected [][]string) {
 	t.Helper()
 	if len(actions) != len(expected) {

@@ -33,8 +33,10 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// throttlePeriod 是测试中使用的限流周期。
 const throttlePeriod = 30 * time.Second
 
+// TestSyncConfigMap 验证 legacy token 使用情况能正确写入 ConfigMap。
 func TestSyncConfigMap(t *testing.T) {
 	now := time.Now().UTC()
 	tests := []struct {
@@ -142,7 +144,7 @@ func TestSyncConfigMap(t *testing.T) {
 			}
 
 			for _, createAt := range test.nextCreateAt {
-				// delete the existing configmap to trigger second create
+				// 删除现有 ConfigMap 以触发第二次创建。
 				controller.configMapCache.Delete(&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{Namespace: metav1.NamespaceSystem, Name: ConfigMapName},
 				})

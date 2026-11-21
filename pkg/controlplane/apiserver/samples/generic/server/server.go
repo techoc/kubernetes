@@ -48,14 +48,15 @@ import (
 	controlplaneapiserver "k8s.io/kubernetes/pkg/controlplane/apiserver"
 	"k8s.io/kubernetes/pkg/controlplane/apiserver/options"
 	_ "k8s.io/kubernetes/pkg/features"
-	// add the kubernetes feature gates
+	// 导入 kubernetes 特性开关注册（副作用导入）。
 )
 
+// init 注册日志相关的特性开关。
 func init() {
 	utilruntime.Must(logsapi.AddFeatureGates(utilfeature.DefaultMutableFeatureGate))
 }
 
-// NewCommand creates a *cobra.Command object with default parameters
+// NewCommand 创建带有默认参数的 cobra 命令。
 func NewCommand() *cobra.Command {
 	s := NewOptions()
 	cmd := &cobra.Command{
@@ -64,11 +65,11 @@ func NewCommand() *cobra.Command {
 a system serving APIs like Kubernetes, but without the container domain specific
 APIs.`,
 
-		// stop printing usage when the command errors
+		// 命令出错时不打印 usage。
 		SilenceUsage: true,
 		PersistentPreRunE: func(*cobra.Command, []string) error {
 			// silence client-go warnings.
-			// kube-apiserver loopback clients should not log self-issued warnings.
+			// kube-apiserver 回环客户端不应记录自身发出的告警。
 			rest.SetDefaultWarningHandler(rest.NoWarnings{})
 			return nil
 		},
@@ -76,8 +77,8 @@ APIs.`,
 			verflag.PrintAndExitIfRequested()
 			fs := cmd.Flags()
 
-			// Activate logging as soon as possible, after that
-			// show flags with the final logging configuration.
+			// 尽早激活日志配置，
+			// 随后打印带最终日志配置的 flag。
 			if err := logsapi.ValidateAndApply(s.Logs, utilfeature.DefaultFeatureGate); err != nil {
 				return err
 			}
@@ -125,6 +126,7 @@ APIs.`,
 	return cmd
 }
 
+// NewOptions 创建 sample 服务器选项，调整默认准入插件与证书目录等。
 func NewOptions() *options.Options {
 	s := options.NewOptions()
 	s.Admission.GenericAdmission.DefaultOffPlugins = DefaultOffAdmissionPlugins()
@@ -132,15 +134,15 @@ func NewOptions() *options.Options {
 	wd, _ := os.Getwd()
 	s.SecureServing.ServerCert.CertDirectory = filepath.Join(wd, ".sample-minimal-controlplane")
 
-	// Wire ServiceAccount authentication without relying on pods and nodes.
+	// 注入不依赖 Pod 与 Node 的 ServiceAccount token getter。
 	s.Authentication.ServiceAccounts.OptionalTokenGetter = genericTokenGetter
 
 	return s
 }
 
-// Run runs the specified APIServer. This should never exit.
+// Run 运行指定的 APIServer，正常情况下不应退出。
 func Run(ctx context.Context, opts options.CompletedOptions) error {
-	// To help debugging, immediately log version
+	// 启动即打印版本信息，便于调试。
 	klog.Infof("Version: %+v", version.Get())
 
 	klog.InfoS("Golang settings", "GOGC", os.Getenv("GOGC"), "GOMAXPROCS", os.Getenv("GOMAXPROCS"), "GOTRACEBACK", os.Getenv("GOTRACEBACK"))
@@ -166,7 +168,7 @@ func Run(ctx context.Context, opts options.CompletedOptions) error {
 	return prepared.Run(ctx)
 }
 
-// CreateServerChain creates the apiservers connected via delegation.
+// CreateServerChain 创建通过委托连接的 apiserver 链：apiextensions → 原生 API → aggregator。
 func CreateServerChain(config CompletedConfig) (*aggregatorapiserver.APIAggregator, error) {
 	// 1. CRDs
 	notFoundHandler := notfoundhandler.New(config.ControlPlane.Generic.Serializer, genericapifilters.NoMuxAndDiscoveryIncompleteKey)
@@ -193,10 +195,10 @@ func CreateServerChain(config CompletedConfig) (*aggregatorapiserver.APIAggregat
 		return nil, fmt.Errorf("failed to install APIs: %w", err)
 	}
 
-	// 3. Aggregator for APIServices, discovery and OpenAPI
+	// 3. 用于 APIService、发现与 OpenAPI 的聚合服务器
 	aggregatorServer, err := controlplaneapiserver.CreateAggregatorServer(config.Aggregator, nativeAPIs.GenericAPIServer, apiExtensionsServer.Informers.Apiextensions().V1().CustomResourceDefinitions(), crdAPIEnabled, controlplaneapiserver.DefaultGenericAPIServicePriorities())
 	if err != nil {
-		// we don't need special handling for innerStopCh because the aggregator server doesn't create any go routines
+		// aggregator 服务器不创建 goroutine，因此无需特殊处理内部停止通道。
 		return nil, fmt.Errorf("failed to create kube-aggregator: %w", err)
 	}
 

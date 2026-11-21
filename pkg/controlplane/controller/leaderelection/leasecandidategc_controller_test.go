@@ -30,6 +30,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestLeaseCandidateGCController 验证过期 LeaseCandidate 会被回收。
 func TestLeaseCandidateGCController(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -114,7 +115,7 @@ func TestLeaseCandidateGCController(t *testing.T) {
 			leaseCandidateInformer := informerFactory.Coordination().V1beta1().LeaseCandidates()
 			controller := NewLeaseCandidateGC(client, 10*time.Millisecond, leaseCandidateInformer)
 
-			// Create lease candidates
+			// 创建候选租约。
 			for _, lc := range tc.leaseCandidates {
 				_, err := client.CoordinationV1beta1().LeaseCandidates(lc.Namespace).Create(ctx, lc, metav1.CreateOptions{})
 				if err != nil {

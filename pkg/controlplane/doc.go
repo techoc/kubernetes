@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package controlplane contains code for setting up and running a Kubernetes
-// cluster control plane API server.
+// Package controlplane 包含用于搭建和运行 Kubernetes 集群控制面 API 服务器的代码。
 package controlplane

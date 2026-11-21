@@ -31,6 +31,7 @@ import (
 	"k8s.io/kubernetes/pkg/controlplane/apiserver/options"
 )
 
+// CreateAPIExtensionsConfig 构造 CRD（apiextensions）服务器的配置。
 func CreateAPIExtensionsConfig(
 	kubeAPIServerConfig server.Config,
 	kubeInformers informers.SharedInformerFactory,
@@ -40,26 +41,23 @@ func CreateAPIExtensionsConfig(
 	serviceResolver webhook.ServiceResolver,
 	authResolverWrapper webhook.AuthenticationInfoResolverWrapper,
 ) (*apiextensionsapiserver.Config, error) {
-	// make a shallow copy to let us twiddle a few things
-	// most of the config actually remains the same.  We only need to mess with a couple items related to the particulars of the apiextensions
+	// 浅拷贝配置，仅调整与 apiextensions 服务器相关的少数项；清空钩子与 RESTOptionsGetter 避免重复安装。
 	genericConfig := kubeAPIServerConfig
 	genericConfig.PostStartHooks = map[string]server.PostStartHookConfigEntry{}
 	genericConfig.RESTOptionsGetter = nil
 
-	// copy the etcd options so we don't mutate originals.
-	// we assume that the etcd options have been completed already.  avoid messing with anything outside
-	// of changes to StorageConfig as that may lead to unexpected behavior when the options are applied.
+	// 复制 etcd 选项避免修改原对象；假定其已完成，仅改动 StorageConfig 相关字段。
 	etcdOptions := *commandOptions.Etcd
-	// this is where the true decodable levels come from.
+	// 真正的可解码版本由此处的 codec 决定。
 	etcdOptions.StorageConfig.Codec = apiextensionsapiserver.Codecs.LegacyCodec(v1beta1.SchemeGroupVersion, v1.SchemeGroupVersion)
-	// prefer the more compact serialization (v1beta1) for storage until https://issue.k8s.io/82292 is resolved for objects whose v1 serialization is too big but whose v1beta1 serialization can be stored
+	// 优先使用更紧凑的 v1beta1 序列化存储，规避 v1 序列化过大而 v1beta1 可存储的问题（issue #82292）。
 	etcdOptions.StorageConfig.EncodeVersioner = runtime.NewMultiGroupVersioner(v1beta1.SchemeGroupVersion, schema.GroupKind{Group: v1beta1.GroupName})
 	etcdOptions.SkipHealthEndpoints = true // avoid double wiring of health checks
 	if err := etcdOptions.ApplyTo(&genericConfig); err != nil {
 		return nil, err
 	}
 
-	// override MergedResourceConfig with apiextensions defaults and registry
+	// 用 apiextensions 的默认资源配置与 scheme 覆盖 MergedResourceConfig。
 	if err := commandOptions.APIEnablement.ApplyTo(
 		&genericConfig,
 		apiextensionsapiserver.DefaultAPIResourceConfigSource(),
@@ -79,7 +77,7 @@ func CreateAPIExtensionsConfig(
 		},
 	}
 
-	// we need to clear the poststarthooks so we don't add them multiple times to all the servers (that fails)
+	// 清空 post start hooks，避免重复添加导致失败。
 	apiextensionsConfig.GenericConfig.PostStartHooks = map[string]server.PostStartHookConfigEntry{}
 
 	return apiextensionsConfig, nil

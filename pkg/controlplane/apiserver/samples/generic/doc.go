@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// sample-generic-controlplane is a kube-like generic control plane
-// - with CRDs
-// - with generic Kube native APIs
-// - with aggregation
-// - without the container domain specific APIs.
+// sample-generic-controlplane 是一个类似 kube 的通用控制面：
+// - 支持 CRD
+// - 支持通用 Kube 原生 API
+// - 支持聚合
+// - 不包含容器领域相关的专用 API。
 package main

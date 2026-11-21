@@ -26,6 +26,7 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// pickBestLeaderOldestEmulationVersion 选出模拟版本最旧的候选者作为 leader。
 func pickBestLeaderOldestEmulationVersion(candidates []*v1beta1.LeaseCandidate) *v1beta1.LeaseCandidate {
 	var electee *v1beta1.LeaseCandidate
 	for _, c := range candidates {
@@ -39,6 +40,7 @@ func pickBestLeaderOldestEmulationVersion(candidates []*v1beta1.LeaseCandidate) 
 	return electee
 }
 
+// pickBestStrategy 根据候选者选出最合适的协调选主策略。
 func pickBestStrategy(candidates []*v1beta1.LeaseCandidate) (v1.CoordinatedLeaseStrategy, error) {
 	nilStrategy := v1.CoordinatedLeaseStrategy("")
 	if len(candidates) == 0 {
@@ -62,6 +64,7 @@ func pickBestStrategy(candidates []*v1beta1.LeaseCandidate) (v1.CoordinatedLease
 	return strategy, nil
 }
 
+// validLeaseCandidateForOldestEmulationVersion 判断候选者是否参与最旧版本选主。
 func validLeaseCandidateForOldestEmulationVersion(l *v1beta1.LeaseCandidate) bool {
 	_, err := semver.ParseTolerant(l.Spec.EmulationVersion)
 	if err != nil {
@@ -71,6 +74,7 @@ func validLeaseCandidateForOldestEmulationVersion(l *v1beta1.LeaseCandidate) boo
 	return err == nil
 }
 
+// getEmulationVersionOrZero 返回候选者的模拟版本，缺失时返回零值。
 func getEmulationVersionOrZero(l *v1beta1.LeaseCandidate) semver.Version {
 	value := l.Spec.EmulationVersion
 	v, err := semver.ParseTolerant(value)
@@ -80,6 +84,7 @@ func getEmulationVersionOrZero(l *v1beta1.LeaseCandidate) semver.Version {
 	return v
 }
 
+// getBinaryVersionOrZero 返回候选者的二进制版本，缺失时返回零值。
 func getBinaryVersionOrZero(l *v1beta1.LeaseCandidate) semver.Version {
 	value := l.Spec.BinaryVersion
 	v, err := semver.ParseTolerant(value)
@@ -108,6 +113,7 @@ func compare(lhs, rhs *v1beta1.LeaseCandidate) int {
 	return result
 }
 
+// isLeaseExpired 判断租约是否已过期。
 func isLeaseExpired(clock clock.Clock, lease *v1.Lease) bool {
 	currentTime := clock.Now()
 	return lease.Spec.RenewTime == nil ||
@@ -115,6 +121,7 @@ func isLeaseExpired(clock clock.Clock, lease *v1.Lease) bool {
 		lease.Spec.RenewTime.Add(time.Duration(*lease.Spec.LeaseDurationSeconds)*time.Second).Before(currentTime)
 }
 
+// isLeaseCandidateExpired 判断候选租约是否已过期。
 func isLeaseCandidateExpired(clock clock.Clock, lease *v1beta1.LeaseCandidate) bool {
 	currentTime := clock.Now()
 	return lease.Spec.RenewTime == nil ||

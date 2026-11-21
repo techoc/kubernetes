@@ -51,6 +51,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestAddFlags 验证所有 flag 被正确注册并能解析为预期的选项值。
 func TestAddFlags(t *testing.T) {
 	componentGlobalsRegistry := basecompatibility.NewComponentGlobalsRegistry()
 	fs := pflag.NewFlagSet("addflagstest", pflag.PanicOnError)
@@ -131,7 +132,7 @@ func TestAddFlags(t *testing.T) {
 	fs.Parse(args)
 	utilruntime.Must(componentGlobalsRegistry.Set())
 
-	// This is a snapshot of expected options parsed by args.
+	// 这是 args 解析后预期选项的快照。
 	expected := &Options{
 		GenericServerRunOptions: &apiserveroptions.ServerRunOptions{
 			AdvertiseAddress:             netutils.ParseIPSloppy("192.168.10.10"),
@@ -311,7 +312,7 @@ func TestAddFlags(t *testing.T) {
 	if !s.Authorization.AreLegacyFlagsSet() {
 		t.Errorf("expected legacy authorization flags to be set")
 	}
-	// setting the method to nil since methods can't be compared with reflect.DeepEqual
+	// 将方法置为 nil，因为方法无法用 reflect.DeepEqual 比较。
 	s.Authorization.AreLegacyFlagsSet = nil
 
 	if !reflect.DeepEqual(expected, s) {
@@ -327,6 +328,7 @@ func TestAddFlags(t *testing.T) {
 	}
 }
 
+// TestCompleteForServiceAccount 验证 Complete 能正确处理 ServiceAccount 签名密钥与外部签发端点。
 func TestCompleteForServiceAccount(t *testing.T) {
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -334,13 +336,13 @@ func TestCompleteForServiceAccount(t *testing.T) {
 		panic("Error while generating first RSA key")
 	}
 
-	// Marshal the private key into PEM format
+	// 将私钥编码为 PEM 格式以便写入临时文件。
 	privateKeyPEM := &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 	}
 
-	// Open a file to write the private key
+	// 写入临时私钥文件，测试结束后由 Cleanup 清理。
 	privateKeyFile, err := os.Create("private_key.pem")
 	if err != nil {
 		t.Fatalf("Failed to create private key file: %v", err)
@@ -350,7 +352,7 @@ func TestCompleteForServiceAccount(t *testing.T) {
 		_ = os.Remove("private_key.pem")
 	})
 
-	// Write the PEM-encoded private key to the file
+	// 将 PEM 编码的私钥写入文件。
 	if err := pem.Encode(privateKeyFile, privateKeyPEM); err != nil {
 		t.Fatalf("Failed to encode private key: %v", err)
 	}
@@ -492,7 +494,7 @@ func TestCompleteForServiceAccount(t *testing.T) {
 
 			options := NewOptions()
 			if tc.externalSigner {
-				// create and start mock signer.
+				// 创建并启动 mock 签发器。
 				socketPath := utilnettesting.MakeSocketNameForTest(t, fmt.Sprintf("mock-external-jwt-signer-%d.sock", time.Now().Nanosecond()))
 				mockSigner := v1testing.NewMockSigner(t, socketPath)
 				defer mockSigner.CleanUp()

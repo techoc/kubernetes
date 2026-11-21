@@ -30,9 +30,10 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 )
 
+// TestGroupVersions 验证已注册的 GroupVersion 集合符合预期。
 func TestGroupVersions(t *testing.T) {
-	// legacyUnsuffixedGroups contains the groups released prior to deciding that kubernetes API groups should be dns-suffixed
-	// new groups should be suffixed with ".k8s.io" (https://github.com/kubernetes/kubernetes/pull/31887#issuecomment-244462396)
+	// legacyUnsuffixedGroups 包含在决定 API 组需带 DNS 后缀之前发布的组。
+	// 新组应以 ".k8s.io" 为后缀（见 PR #31887）。
 	legacyUnsuffixedGroups := sets.NewString(
 		"",
 		"apps",
@@ -42,7 +43,7 @@ func TestGroupVersions(t *testing.T) {
 		"policy",
 	)
 
-	// No new groups should be added to the legacyUnsuffixedGroups exclusion list
+	// 不应向 legacyUnsuffixedGroups 排除列表添加新组。
 	if len(legacyUnsuffixedGroups) != 6 {
 		t.Errorf("No additional unnamespaced groups should be created")
 	}
@@ -52,9 +53,9 @@ func TestGroupVersions(t *testing.T) {
 	}
 }
 
-// These types are registered in external versions, and therefore include json tags,
-// but are also registered in internal versions (or referenced from internal types),
-// so we explicitly allow tags for them
+// 这些类型注册在外部版本中，因此带 JSON tag；
+// 但也注册在内部版本中（或被内部类型引用），
+// 因此显式允许它们带 tag。
 var typesAllowedTags = map[reflect.Type]bool{
 	reflect.TypeOf(intstr.IntOrString{}):              true,
 	reflect.TypeOf(metav1.Time{}):                     true,
@@ -78,6 +79,7 @@ var typesAllowedTags = map[reflect.Type]bool{
 	reflect.TypeOf(runtime.RawExtension{}):            true,
 }
 
+// init 初始化允许的非标准类型列表。
 func init() {
 	for _, t := range []reflect.Type{
 		reflect.TypeFor[schedulingv1alpha3.WorkloadPodGroupSchedulingPolicy](),
@@ -89,12 +91,13 @@ func init() {
 	}
 }
 
-// These fields are limited exceptions to the standard JSON naming structure.
-// Additions should only be made if a non-standard field name was released and cannot be changed for compatibility reasons.
+// 这些字段是对标准 JSON 命名规则的有限例外。
+// 仅在非标准字段名已发布且因兼容性无法修改时才可新增。
 var allowedNonstandardJSONNames = map[reflect.Type]string{
 	reflect.TypeOf(v1.DaemonEndpoint{}): "Port",
 }
 
+// TestTypeTags 验证 API 类型的 JSON tag 规范。
 func TestTypeTags(t *testing.T) {
 	if err := apinamingtest.VerifyTagNaming(legacyscheme.Scheme, typesAllowedTags, allowedNonstandardJSONNames); err != nil {
 		t.Errorf("%v", err)

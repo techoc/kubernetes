@@ -48,32 +48,29 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// init 调整日志配置的重复应用策略，避免多个测试服务器实例冲突。
 func init() {
-	// If instantiated more than once or together with other servers, the
-	// servers would try to modify the global logging state. This must get
-	// ignored during testing.
+	// 多个服务器实例会修改全局日志状态，测试中需忽略重复应用。
 	logsapi.ReapplyHandling = logsapi.ReapplyHandlingIgnoreUnchanged
 }
 
-// This key is for testing purposes only and is not considered secure.
+// 该密钥仅用于测试，不安全。
 const ecdsaPrivateKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIEZmTmUhuanLjPA2CLquXivuwBDHTt5XYwgIr/kA1LtRoAoGCCqGSM49
 AwEHoUQDQgAEH6cuzP8XuD5wal6wf9M6xDljTOPLX2i8uIp/C/ASqiIGUeeKQtX0
 /IR3qCXyThP/dbCiHrF3v1cuhBOHY8CLVg==
 -----END EC PRIVATE KEY-----`
 
-// TearDownFunc is to be called to tear down a test server.
+// TearDownFunc 用于清理测试服务器。
 type TearDownFunc func()
 
-// TestServerInstanceOptions Instance options the TestServer
+// TestServerInstanceOptions 定义测试服务器实例选项。
 type TestServerInstanceOptions struct {
-	// SkipHealthzCheck returns without waiting for the server to become healthy.
-	// Useful for testing server configurations expected to prevent /healthz from completing.
+	// SkipHealthzCheck 为 true 时不等待服务器健康检查通过，适用于预期 /healthz 无法完成的场景。
 	SkipHealthzCheck bool
 }
 
-// TestServer represents a running test server with everything to access it and
-// its backing store etcd.
+// TestServer 表示一个运行中的测试服务器，包含访问它及其后端 etcd 所需的一切。
 type TestServer struct {
 	ClientConfig      *restclient.Config             // Rest client config
 	ServerOpts        *controlplaneapiserver.Options // ServerOpts
@@ -83,14 +80,12 @@ type TestServer struct {
 	EtcdStoragePrefix string                         // storage prefix in etcd
 }
 
-// NewDefaultTestServerOptions default options for TestServer instances
+// NewDefaultTestServerOptions 返回测试服务器实例的默认选项。
 func NewDefaultTestServerOptions() *TestServerInstanceOptions {
 	return &TestServerInstanceOptions{}
 }
 
-// StartTestServer starts an etcd server and sample-generic-controlplane and
-// returns a TestServer struct with a tear-down func and clients to access it
-// and its backing store.
+// StartTestServer 启动 etcd 与 sample-generic-controlplane，返回包含清理函数和访问客户端的 TestServer。
 func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, customFlags []string, storageConfig *storagebackend.Config) (result TestServer, err error) {
 	tCtx := ktesting.Init(t)
 
@@ -105,12 +100,10 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 
 	var errCh chan error
 	tearDown := func() {
-		// Cancel is stopping apiserver and cleaning up
-		// after itself, including shutting down its storage layer.
+		// 取消上下文会停止 apiserver 并清理其存储层。
 		tCtx.Cancel("tearing down")
 
-		// If the apiserver was started, let's wait for it to
-		// shutdown clearly.
+		// 若 apiserver 已启动，等待其干净关闭。
 		if errCh != nil {
 			err, ok := <-errCh
 			if ok && err != nil {
@@ -213,7 +206,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 	if !instanceOptions.SkipHealthzCheck {
 		t.Logf("Waiting for /healthz to be ok...")
 
-		// wait until healthz endpoint returns ok
+		// 轮询等待 /healthz 返回 ok。
 		err = wait.PollUntilContextTimeout(tCtx, 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 			select {
 			case err := <-errCh:
@@ -235,7 +228,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 		}
 	}
 
-	// wait until default namespace is created
+	// 等待 default namespace 被创建完成。
 	err = wait.PollUntilContextTimeout(tCtx, 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		select {
 		case err := <-errCh:
@@ -274,7 +267,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 		return result, err
 	}
 
-	// from here the caller must call tearDown
+	// 从这里开始调用方必须负责调用 tearDown 清理资源。
 	result.ClientConfig = restclient.CopyConfig(s.GenericAPIServer.LoopbackClientConfig)
 	result.ClientConfig.QPS = 1000
 	result.ClientConfig.Burst = 10000
@@ -289,7 +282,7 @@ func StartTestServer(t ktesting.TB, instanceOptions *TestServerInstanceOptions, 
 	return result, nil
 }
 
-// StartTestServerOrDie calls StartTestServer t.Fatal if it does not succeed.
+// StartTestServerOrDie 调用 StartTestServer，失败时直接 t.Fatal。
 func StartTestServerOrDie(t ktesting.TB, instanceOptions *TestServerInstanceOptions, flags []string, storageConfig *storagebackend.Config) *TestServer {
 	result, err := StartTestServer(t, instanceOptions, flags, storageConfig)
 	if err == nil {
@@ -300,13 +293,14 @@ func StartTestServerOrDie(t ktesting.TB, instanceOptions *TestServerInstanceOpti
 	return nil
 }
 
+// createLocalhostListenerOnFreePort 在本地随机空闲端口上创建监听器。
 func createLocalhostListenerOnFreePort() (net.Listener, int, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// get port
+	// 从监听器地址中取出实际分配的端口。
 	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
 		ln.Close() //nolint:errcheck // best effort
@@ -316,13 +310,8 @@ func createLocalhostListenerOnFreePort() (net.Listener, int, error) {
 	return ln, tcpAddr.Port, nil
 }
 
-// pkgPath returns the absolute file path to this package's directory. With go
-// test, we can just look at the runtime call stack. However, bazel compiles go
-// binaries with the -trimpath option so the simple approach fails however we
-// can consult environment variables to derive the path.
-//
-// The approach taken here works for both go test and bazel on the assumption
-// that if and only if trimpath is passed, we are running under bazel.
+// pkgPath 返回本包目录的绝对路径。go test 下可直接看调用栈；bazel 使用 -trimpath 编译，需借助环境变量推导路径。
+// 该方法对两者均适用，前提是仅 bazel 会传入 -trimpath。
 func pkgPath(t ktesting.TB) (string, error) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -331,15 +320,13 @@ func pkgPath(t ktesting.TB) (string, error) {
 
 	pkgPath := filepath.Dir(thisFile)
 
-	// If we find bazel env variables, then -trimpath was passed so we need to
-	// construct the path from the environment.
+	// 发现 bazel 环境变量说明使用了 -trimpath，需从环境变量重建路径。
 	if testSrcdir, testWorkspace := os.Getenv("TEST_SRCDIR"), os.Getenv("TEST_WORKSPACE"); testSrcdir != "" && testWorkspace != "" {
 		t.Logf("Detected bazel env varaiables: TEST_SRCDIR=%q TEST_WORKSPACE=%q", testSrcdir, testWorkspace)
 		pkgPath = filepath.Join(testSrcdir, testWorkspace, pkgPath)
 	}
 
-	// If the path is still not absolute, something other than bazel compiled
-	// with -trimpath.
+	// 路径仍非绝对说明有非 bazel 的编译过程传入了 -trimpath。
 	if !filepath.IsAbs(pkgPath) {
 		return "", fmt.Errorf("can't construct an absolute path from %q", pkgPath)
 	}

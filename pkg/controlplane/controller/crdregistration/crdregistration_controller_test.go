@@ -28,6 +28,7 @@ import (
 	apiregistration "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 )
 
+// TestHandleVersionUpdate 验证 CRD 版本变更能正确同步 APIService。
 func TestHandleVersionUpdate(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -43,8 +44,8 @@ func TestHandleVersionUpdate(t *testing.T) {
 				{
 					Spec: apiextensionsv1.CustomResourceDefinitionSpec{
 						Group: "group.com",
-						// Version field is deprecated and crd registration won't rely on it at all.
-						// defaulting route will fill up Versions field if user only provided version field.
+						// Version 字段已弃用，CRD 注册完全不依赖它。
+						// 若用户只提供了 version 字段，默认值填充逻辑会补全 Versions。
 						Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
 							{
 								Name:    "v1",
@@ -116,14 +117,18 @@ func TestHandleVersionUpdate(t *testing.T) {
 	}
 }
 
+// fakeAPIServiceRegistration 是测试用的 APIService 注册桩。
 type fakeAPIServiceRegistration struct {
 	added   []*apiregistration.APIService
 	removed []string
 }
 
+// AddAPIServiceToSync 记录待注册的 APIService。
 func (a *fakeAPIServiceRegistration) AddAPIServiceToSync(in *apiregistration.APIService) {
 	a.added = append(a.added, in)
 }
+
+// RemoveAPIServiceToSync 记录待移除的 APIService。
 func (a *fakeAPIServiceRegistration) RemoveAPIServiceToSync(name string) {
 	a.removed = append(a.removed, name)
 }

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package options contains flags and options for initializing an apiserver
+// Package options 包含初始化 apiserver 所需的 flag 与选项。
 package options
 
 import (
@@ -45,8 +45,7 @@ import (
 	"k8s.io/kubernetes/pkg/serviceaccount/externaljwt/plugin"
 )
 
-// Options define the flags and validation for a generic controlplane. If the
-// structs are nil, the options are not added to the command line and not validated.
+// Options 定义通用控制面的 flag 与校验规则。若某个子结构为 nil，则对应选项不会加入命令行也不参与校验。
 type Options struct {
 	Flagz                   flagz.Reader
 	GenericServerRunOptions *genericoptions.ServerRunOptions
@@ -70,14 +69,10 @@ type Options struct {
 	ProxyClientCertFile string
 	ProxyClientKeyFile  string
 
-	// PeerCAFile is the ca bundle used by this kube-apiserver to verify peer apiservers'
-	// serving certs when routing a request to the peer in the case the request can not be served
-	// locally due to version skew.
+	// PeerCAFile 是本 kube-apiserver 校验对端服务证书的 CA 包，用于版本偏差导致请求无法本地处理时路由到对端。
 	PeerCAFile string
 
-	// PeerAdvertiseAddress is the IP for this kube-apiserver which is used by peer apiservers to route a request
-	// to this apiserver. This happens in cases where the peer is not able to serve the request due to
-	// version skew.
+	// PeerAdvertiseAddress 是本 kube-apiserver 通告给对端的 IP，供版本偏差时对端无法本地服务时路由请求到此。
 	PeerAdvertiseAddress peerreconcilers.PeerAdvertiseAddress
 
 	EnableAggregatorRouting             bool
@@ -98,17 +93,17 @@ type Options struct {
 	CoordinatedLeadershipRetryPeriod   time.Duration
 }
 
-// completedServerRunOptions is a private wrapper that enforces a call of Complete() before Run can be invoked.
+// completedOptions 是私有包装，强制在使用前先调用 Complete()。
 type completedOptions struct {
 	Options
 }
 
+// CompletedOptions 内嵌私有指针，确保无法在本包之外实例化。
 type CompletedOptions struct {
-	// Embed a private pointer that cannot be instantiated outside of this package.
 	*completedOptions
 }
 
-// NewOptions creates a new ServerRunOptions object with default parameters
+// NewOptions 创建带有默认参数的新 Options 对象。
 func NewOptions() *Options {
 	s := Options{
 		GenericServerRunOptions: genericoptions.NewServerRunOptions(),
@@ -134,14 +129,15 @@ func NewOptions() *Options {
 		CoordinatedLeadershipRetryPeriod:    2 * time.Second,
 	}
 
-	// Overwrite the default for storage data format.
+	// 覆盖存储数据格式的默认值为 protobuf。
 	s.Etcd.DefaultStorageMediaType = "application/vnd.kubernetes.protobuf"
 
 	return &s
 }
 
+// AddFlags 把各子选项的 flag 注册到对应的 flag set。
 func (s *Options) AddFlags(fss *cliflag.NamedFlagSets) {
-	// Add the generic flags.
+	// 注册通用 flag。
 	s.GenericServerRunOptions.AddUniversalFlags(fss.FlagSet("generic"))
 	s.Etcd.AddFlags(fss.FlagSet("etcd"))
 	s.SecureServing.AddFlags(fss.FlagSet("secure serving"))
@@ -156,8 +152,7 @@ func (s *Options) AddFlags(fss *cliflag.NamedFlagSets) {
 	logsapi.AddFlags(s.Logs, fss.FlagSet("logs"))
 	s.Traces.AddFlags(fss.FlagSet("traces"))
 
-	// Note: the weird ""+ in below lines seems to be the only way to get gofmt to
-	// arrange these text blocks sensibly. Grrr.
+	// 下面各行中的 ""+ 是为了让 gofmt 合理排版这些文本块。
 	fs := fss.FlagSet("misc")
 	fs.DurationVar(&s.EventTTL, "event-ttl", s.EventTTL,
 		"Amount of time to retain events.")
@@ -216,6 +211,7 @@ func (s *Options) AddFlags(fss *cliflag.NamedFlagSets) {
 		"The period for retrying to renew a coordinated leader election lease.")
 }
 
+// Complete 完成选项处理：补全默认值、生成自签证书并把各子选项置于最终状态。
 func (o *Options) Complete(ctx context.Context, alternateDNS []string, alternateIPs []net.IP) (CompletedOptions, error) {
 	if o == nil {
 		return CompletedOptions{completedOptions: &completedOptions{}}, nil
@@ -229,7 +225,7 @@ func (o *Options) Complete(ctx context.Context, alternateDNS []string, alternate
 		return CompletedOptions{}, err
 	}
 
-	// set defaults
+	// 设置默认通告地址与自签证书。
 	if err := completed.GenericServerRunOptions.DefaultAdvertiseAddress(completed.SecureServing.SecureServingOptions); err != nil {
 		return CompletedOptions{}, err
 	}
@@ -239,12 +235,8 @@ func (o *Options) Complete(ctx context.Context, alternateDNS []string, alternate
 	}
 
 	if o.GenericServerRunOptions.RequestTimeout > 0 {
-		// Setting the EventsHistoryWindow as a maximum of the value set in the
-		// watchcache-specific options and the value of the request timeout plus
-		// some epsilon.
-		// This is done to make sure that the list+watch pattern can still be
-		// usable in large clusters with the elevated request timeout where the
-		// initial list can take a considerable amount of time.
+		// EventsHistoryWindow 取 watchcache 配置值与请求超时加余量的较大者，
+		// 确保大集群中请求超时调高、初次 list 耗时较长时 list+watch 仍可用。
 		completed.Etcd.StorageConfig.EventsHistoryWindow = max(completed.Etcd.StorageConfig.EventsHistoryWindow, completed.GenericServerRunOptions.RequestTimeout+15*time.Second)
 	}
 
@@ -261,9 +253,8 @@ func (o *Options) Complete(ctx context.Context, alternateDNS []string, alternate
 		klog.Infof("external host was not specified, using %v", completed.GenericServerRunOptions.ExternalHost)
 	}
 
-	// put authorization options in final state
+	// 先完成授权选项，再据此调整认证选项。
 	completed.Authorization.Complete()
-	// adjust authentication for completed authorization
 	completed.Authentication.ApplyAuthorization(completed.Authorization)
 
 	err := o.completeServiceAccountOptions(ctx, &completed)
@@ -287,10 +278,11 @@ func (o *Options) Complete(ctx context.Context, alternateDNS []string, alternate
 	}, nil
 }
 
+// completeServiceAccountOptions 完成 ServiceAccount token 签发相关配置并处理配置冲突告警。
 func (o *Options) completeServiceAccountOptions(ctx context.Context, completed *completedOptions) error {
 	transitionWarningFmt := "service-account-extend-token-expiration is true, in order to correctly trigger safe transition logic, service-account-max-token-expiration must be set longer than %d seconds (currently %s)"
 	expExtensionWarningFmt := "service-account-extend-token-expiration is true, enabling tokens valid up to %d seconds, which is longer than service-account-max-token-expiration set to %s"
-	// verify service-account-max-token-expiration
+	// 校验 token 最大过期时间的取值边界。
 	if completed.Authentication.ServiceAccounts.MaxExpiration != 0 {
 		lowBound := time.Hour
 		upBound := time.Duration(1<<32) * time.Second
@@ -338,12 +330,12 @@ func (o *Options) completeServiceAccountOptions(ctx context.Context, completed *
 			expExtensionWarningFmt = "service-account-extend-token-expiration is true, tokens validity will be caped at the smaller of %d seconds and maximum token lifetime supported by external-jwt-signer (%s)"
 			completed.ServiceAccountIssuer = plugin
 			completed.Authentication.ServiceAccounts.ExternalPublicKeysGetter = cache
-			// shorten ExtendedExpiration, if needed, to fit within the external signer's max expiration
+			// 缩短扩展过期时间，使其不超过外部签发器支持的最大过期时间。
 			completed.Authentication.ServiceAccounts.MaxExtendedExpiration = min(maxExternalExpiration, completed.Authentication.ServiceAccounts.MaxExtendedExpiration)
 		}
 	}
 
-	// Set Max expiration and warn on conflicting configuration.
+	// 设置最大过期时间，并对冲突配置发出告警。
 	if completed.Authentication.ServiceAccounts.ExtendExpiration && completed.Authentication.ServiceAccounts.MaxExpiration != 0 {
 		if completed.Authentication.ServiceAccounts.MaxExpiration < serviceaccount.WarnOnlyBoundTokenExpirationSeconds*time.Second {
 			klog.Warningf(transitionWarningFmt, serviceaccount.WarnOnlyBoundTokenExpirationSeconds, completed.Authentication.ServiceAccounts.MaxExpiration)
@@ -357,10 +349,8 @@ func (o *Options) completeServiceAccountOptions(ctx context.Context, completed *
 	return nil
 }
 
-// ServiceIPRange checks if the serviceClusterIPRange flag is nil, raising a warning if so and
-// setting service ip range to the default value in kubeoptions.DefaultServiceIPCIDR
-// for now until the default is removed per the deprecation timeline guidelines.
-// Returns service ip range, api server service IP, and an error
+// ServiceIPRange 校验 service IP 范围；若未指定则告警并使用默认值（待按弃用计划移除）。
+// 返回 service IP 范围、apiserver 的 service IP 以及错误。
 func ServiceIPRange(passedServiceClusterIPRange net.IPNet) (net.IPNet, net.IP, error) {
 	serviceClusterIPRange := passedServiceClusterIPRange
 	if passedServiceClusterIPRange.IP == nil {
@@ -373,7 +363,7 @@ func ServiceIPRange(passedServiceClusterIPRange net.IPNet) (net.IPNet, net.IP, e
 		return net.IPNet{}, net.IP{}, fmt.Errorf("the service cluster IP range must be at least %d IP addresses", 8)
 	}
 
-	// Select the first valid IP from ServiceClusterIPRange to use as the GenericAPIServer service IP.
+	// 取 ServiceClusterIPRange 中第一个有效 IP 作为 GenericAPIServer 的 service IP。
 	apiServerServiceIP, err := netutil.GetIndexedIP(&serviceClusterIPRange, 1)
 	if err != nil {
 		return net.IPNet{}, net.IP{}, err

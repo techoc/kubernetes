@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package reconcilers provides objects for managing the list of active masters.
-// NOTE: The Lease reconciler is not the intended way for any apiserver other
-// than kube-apiserver to accomplish the task of Endpoint registration. This is
-// a special case for the time being.
+// Package reconcilers 提供用于管理活跃 master 列表的对象。
+// 注意：Lease reconciler 并非 kube-apiserver 之外的其他 apiserver 完成 Endpoint
+// 注册的推荐方式，目前这只是一种特殊处理。
 package reconcilers

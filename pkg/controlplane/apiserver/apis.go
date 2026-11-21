@@ -38,13 +38,15 @@ import (
 	rbacrest "k8s.io/kubernetes/pkg/registry/rbac/rest"
 )
 
-// RESTStorageProvider is a factory type for REST storage.
+// RESTStorageProvider 是 REST 存储的工厂接口。
 type RESTStorageProvider interface {
+	// GroupName 返回该提供者对应的 API 组名。
 	GroupName() string
+	// NewRESTStorage 根据资源配置与 REST 选项构造 API 组信息。
 	NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, error)
 }
 
-// NewCoreGenericConfig returns a new core rest generic config.
+// NewCoreGenericConfig 返回 core 组的 REST 通用配置。
 func (c *CompletedConfig) NewCoreGenericConfig() *corerest.GenericConfig {
 	return &corerest.GenericConfig{
 		StorageFactory:              c.Extra.StorageFactory,
@@ -59,16 +61,11 @@ func (c *CompletedConfig) NewCoreGenericConfig() *corerest.GenericConfig {
 	}
 }
 
-// GenericStorageProviders returns a set of APIs for a generic control plane.
-// They ought to be a subset of those served by kube-apiserver.
+// GenericStorageProviders 返回通用控制面的一组 API 存储提供者，它们应是 kube-apiserver 所提供 API 的子集。
 func (c *CompletedConfig) GenericStorageProviders(discovery discovery.DiscoveryInterface) ([]RESTStorageProvider, error) {
-	// The order here is preserved in discovery.
-	// If resources with identical names exist in more than one of these groups (e.g. "deployments.apps"" and "deployments.extensions"),
-	// the order of this list determines which group an unqualified resource name (e.g. "deployments") should prefer.
-	// This priority order is used for local discovery, but it ends up aggregated in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go
-	// with specific priorities.
-	// TODO: describe the priority all the way down in the RESTStorageProviders and plumb it back through the various discovery
-	// handlers that we have.
+	// 列表顺序会被发现接口保留：当多个组存在同名资源时，顺序决定了非限定资源名优先归属的组。
+	// 本地发现使用该顺序，聚合时会由 aggregator.go 中特定的优先级覆盖。
+	// TODO: 将优先级下沉到 RESTStorageProviders 并贯穿各发现处理器。
 	return []RESTStorageProvider{
 		c.NewCoreGenericConfig(),
 		apiserverinternalrest.StorageProvider{},
@@ -84,11 +81,11 @@ func (c *CompletedConfig) GenericStorageProviders(discovery discovery.DiscoveryI
 	}, nil
 }
 
-// InstallAPIs will install the APIs for the restStorageProviders if they are enabled.
+// InstallAPIs 安装所有已启用的 REST 存储提供者对应的 API。
 func (s *Server) InstallAPIs(restStorageProviders ...RESTStorageProvider) error {
 	nonLegacy := []*genericapiserver.APIGroupInfo{}
 
-	// used later in the loop to filter the served resource by those that have expired.
+	// 该评估器用于过滤在当前版本已过期或尚未引入的资源。
 	resourceExpirationEvaluatorOpts := genericapiserver.ResourceExpirationEvaluatorOptions{
 		CurrentVersion:                          s.GenericAPIServer.EffectiveVersion.EmulationVersion(),
 		Prerelease:                              s.GenericAPIServer.EffectiveVersion.BinaryVersion().PreRelease(),
@@ -107,15 +104,13 @@ func (s *Server) InstallAPIs(restStorageProviders ...RESTStorageProvider) error 
 			return fmt.Errorf("problem initializing API group %q: %w", groupName, err)
 		}
 		if len(apiGroupInfo.VersionedResourcesStorageMap) == 0 {
-			// If we have no storage for any resource configured, this API group is effectively disabled.
-			// This can happen when an entire API group, version, or development-stage (alpha, beta, GA) is disabled.
+			// 未配置任何资源存储意味着该 API 组实际被禁用（可能是整个组、某个版本或某开发阶段被禁用）。
 			klog.Infof("API group %q is not enabled, skipping.", groupName)
 			continue
 		}
 
-		// Remove resources that serving kinds that are removed or not introduced yet at the current version.
-		// We do this here so that we don't accidentally serve versions without resources or openapi information that for kinds we don't serve.
-		// This is a spot above the construction of individual storage handlers so that no sig accidentally forgets to check.
+		// 移除当前版本已删除或尚未引入的 kind，避免提供没有资源或 openapi 信息的版本。
+		// 放在此处统一处理，避免各 SIG 在构建存储处理器时遗漏检查。
 		err = resourceExpirationEvaluator.RemoveUnavailableKinds(groupName, apiGroupInfo.Scheme, apiGroupInfo.VersionedResourcesStorageMap, s.APIResourceConfigSource)
 		if err != nil {
 			return err
@@ -136,12 +131,12 @@ func (s *Server) InstallAPIs(restStorageProviders ...RESTStorageProvider) error 
 		}
 
 		if len(groupName) == 0 {
-			// the legacy group for core APIs is special that it is installed into /api via this special install method.
+			// core API 的 legacy 组比较特殊，需通过专用方法安装到 /api。
 			if err := s.GenericAPIServer.InstallLegacyAPIGroup(genericapiserver.DefaultLegacyAPIPrefix, &apiGroupInfo); err != nil {
 				return fmt.Errorf("error in registering legacy API: %w", err)
 			}
 		} else {
-			// everything else goes to /apis
+			// 其他组统一安装到 /apis。
 			nonLegacy = append(nonLegacy, &apiGroupInfo)
 		}
 	}

@@ -34,7 +34,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Controller ensure system namespaces exist.
+// Controller 确保系统命名空间存在。
 type Controller struct {
 	client kubernetes.Interface
 
@@ -45,7 +45,7 @@ type Controller struct {
 	interval         time.Duration
 }
 
-// NewController creates a new Controller to ensure system namespaces exist.
+// NewController 创建用于确保系统命名空间存在的 Controller。
 func NewController(systemNamespaces []string, clientset kubernetes.Interface, namespaceInformer coreinformers.NamespaceInformer) *Controller {
 	interval := 1 * time.Minute
 
@@ -58,7 +58,7 @@ func NewController(systemNamespaces []string, clientset kubernetes.Interface, na
 	}
 }
 
-// Run starts one worker.
+// Run 启动一个 worker。
 func (c *Controller) Run(stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer klog.Infof("Shutting down system namespaces controller")
@@ -75,8 +75,9 @@ func (c *Controller) Run(stopCh <-chan struct{}) {
 	<-stopCh
 }
 
+// sync 检查并创建所有系统命名空间。
 func (c *Controller) sync() {
-	// Loop the system namespace list, and create them if they do not exist
+	// 遍历系统命名空间列表，不存在则创建。
 	for _, ns := range c.systemNamespaces {
 		if err := c.createNamespaceIfNeeded(ns); err != nil {
 			utilruntime.HandleError(fmt.Errorf("unable to create required kubernetes system Namespace %s: %v", ns, err))
@@ -84,9 +85,10 @@ func (c *Controller) sync() {
 	}
 }
 
+// createNamespaceIfNeeded 在命名空间不存在时创建它。
 func (c *Controller) createNamespaceIfNeeded(ns string) error {
 	if _, err := c.namespaceLister.Get(ns); err == nil {
-		// the namespace already exists
+		// 命名空间已存在。
 		return nil
 	}
 	newNs := &v1.Namespace{

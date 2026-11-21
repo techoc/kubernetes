@@ -32,11 +32,13 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestBuildGenericConfig 验证通用配置构建正确，且各处共享同一个 StorageObjectCountTracker。
 func TestBuildGenericConfig(t *testing.T) {
 	opts := options.NewOptions()
 	s := (&apiserveroptions.SecureServingOptions{
 		BindAddress: netutils.ParseIPSloppy("127.0.0.1"),
 	}).WithLoopback()
+	// 使用临时监听端口构造 secure serving 配置，避免固定端口冲突。
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen on 127.0.0.1:0")
@@ -61,6 +63,7 @@ func TestBuildGenericConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to build generic config: %v", err)
 	}
+	// 断言 tracker 在 genericConfig、storageFactory 与 RESTOptions 三者间一致。
 	if genericConfig.StorageObjectCountTracker == nil {
 		t.Errorf("genericConfig StorageObjectCountTracker is absent")
 	}

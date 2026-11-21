@@ -44,6 +44,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// init 注册测试所需的 scheme。
 func init() {
 	var scheme = runtime.NewScheme()
 
@@ -55,14 +56,17 @@ func init() {
 	codecs = serializer.NewCodecFactory(scheme)
 }
 
+// codecs 是测试使用的序列化器工厂。
 var codecs serializer.CodecFactory
 
+// fakeLeases 是测试用的租约实现。
 type fakeLeases struct {
 	storageLeases
 }
 
 var _ Leases = &fakeLeases{}
 
+// newFakeLeases 创建 fakeLeases 实例。
 func newFakeLeases(t *testing.T, baseKey string, s storage.Interface) *fakeLeases {
 	return &fakeLeases{
 		storageLeases{
@@ -74,6 +78,7 @@ func newFakeLeases(t *testing.T, baseKey string, s storage.Interface) *fakeLease
 	}
 }
 
+// SetKeys 设置 fake 存储中的租约 key。
 func (f *fakeLeases) SetKeys(keys []string) error {
 	for _, ip := range keys {
 		if err := f.UpdateLease(ip); err != nil {
@@ -83,6 +88,7 @@ func (f *fakeLeases) SetKeys(keys []string) error {
 	return nil
 }
 
+// TestLeaseEndpointReconciler 验证基于租约的 endpoints 协调逻辑。
 func TestLeaseEndpointReconciler(t *testing.T) {
 	server, sc := etcd3testing.NewUnsecuredEtcd3TestClientServer(t)
 	t.Cleanup(func() { server.Terminate(t) })
@@ -272,7 +278,7 @@ func TestLeaseEndpointReconciler(t *testing.T) {
 			ip:            "1.2.3.4",
 			endpointPorts: []corev1.EndpointPort{{Name: "foo", Port: 8080, Protocol: "TCP"}},
 			initialState: []runtime.Object{
-				// can't use makeEndpointsArray() here because we don't want the
+				// 此处不能用 makeEndpointsArray()，因为不希望 Endpoints
 				// skip-mirror label
 				&corev1.Endpoints{
 					ObjectMeta: metav1.ObjectMeta{
@@ -288,7 +294,7 @@ func TestLeaseEndpointReconciler(t *testing.T) {
 			},
 			expectUpdate: []runtime.Object{
 				makeEndpoints("foo", []string{"1.2.3.4"}, []corev1.EndpointPort{{Name: "foo", Port: 8080, Protocol: "TCP"}}),
-				// EndpointSlice does not get updated because it was already correct
+				// EndpointSlice 因已正确而无需更新。
 			},
 			expectLeases: []string{"1.2.3.4"},
 		},
@@ -330,8 +336,8 @@ func TestLeaseEndpointReconciler(t *testing.T) {
 	}
 	for _, test := range reconcileTests {
 		t.Run(test.testName, func(t *testing.T) {
-			// use the same base key used by the controlplane, but add a random
-			// prefix so we can reuse the etcd instance for subtests independently.
+			// 使用与控制面相同的 base key，但加上随机
+			// 前缀，以便各子测试独立复用 etcd 实例。
 			// pkg/controlplane/instance.go:268:
 			// masterLeases, err := reconcilers.NewLeases(config, "/masterleases/", ttl)
 			// ref: https://issues.k8s.io/114049
@@ -364,7 +370,7 @@ func TestLeaseEndpointReconciler(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			// sort for comparison
+			// 排序以便比较。
 			sort.Strings(leases)
 			sort.Strings(test.expectLeases)
 			if !reflect.DeepEqual(leases, test.expectLeases) {
@@ -420,8 +426,8 @@ func TestLeaseEndpointReconciler(t *testing.T) {
 	}
 	for _, test := range nonReconcileTests {
 		t.Run(test.testName, func(t *testing.T) {
-			// use the same base key used by the controlplane, but add a random
-			// prefix so we can reuse the etcd instance for subtests independently.
+			// 使用与控制面相同的 base key，但加上随机
+			// 前缀，以便各子测试独立复用 etcd 实例。
 			// pkg/controlplane/instance.go:268:
 			// masterLeases, err := reconcilers.NewLeases(config, "/masterleases/", ttl)
 			// ref: https://issues.k8s.io/114049
@@ -453,7 +459,7 @@ func TestLeaseEndpointReconciler(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			// sort for comparison
+			// 排序以便比较。
 			sort.Strings(leases)
 			sort.Strings(test.expectLeases)
 			if !reflect.DeepEqual(leases, test.expectLeases) {
@@ -463,6 +469,7 @@ func TestLeaseEndpointReconciler(t *testing.T) {
 	}
 }
 
+// TestLeaseRemoveEndpoints 验证移除租约时同步更新 endpoints。
 func TestLeaseRemoveEndpoints(t *testing.T) {
 	server, sc := etcd3testing.NewUnsecuredEtcd3TestClientServer(t)
 	t.Cleanup(func() { server.Terminate(t) })
@@ -535,8 +542,8 @@ func TestLeaseRemoveEndpoints(t *testing.T) {
 	}
 	for _, test := range stopTests {
 		t.Run(test.testName, func(t *testing.T) {
-			// use the same base key used by the controlplane, but add a random
-			// prefix so we can reuse the etcd instance for subtests independently.
+			// 使用与控制面相同的 base key，但加上随机
+			// 前缀，以便各子测试独立复用 etcd 实例。
 			// pkg/controlplane/instance.go:268:
 			// masterLeases, err := reconcilers.NewLeases(config, "/masterleases/", ttl)
 			// ref: https://issues.k8s.io/114049
@@ -558,7 +565,7 @@ func TestLeaseRemoveEndpoints(t *testing.T) {
 				r.StopReconciling()
 			}
 			err = r.RemoveEndpoints(test.serviceName, netutils.ParseIPSloppy(test.ip), test.endpointPorts)
-			// if the ip is not on the endpoints, it must return an storage error and stop reconciling
+			// IP 不在 endpoints 中时应返回存储错误并停止协调。
 			if !slices.Contains(test.endpointKeys, test.ip) {
 				if !storage.IsNotFound(err) {
 					t.Errorf("expected error StorageError: key not found, Code: 1, Key: /registry/base/key/%s got:  %v", test.ip, err)
@@ -576,7 +583,7 @@ func TestLeaseRemoveEndpoints(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			// sort for comparison
+			// 排序以便比较。
 			sort.Strings(leases)
 			sort.Strings(test.expectLeases)
 			if !reflect.DeepEqual(leases, test.expectLeases) {
@@ -586,6 +593,7 @@ func TestLeaseRemoveEndpoints(t *testing.T) {
 	}
 }
 
+// TestApiserverShutdown 验证 apiserver 关闭时停止协调但不误删租约。
 func TestApiserverShutdown(t *testing.T) {
 	server, sc := etcd3testing.NewUnsecuredEtcd3TestClientServer(t)
 	t.Cleanup(func() { server.Terminate(t) })
@@ -652,8 +660,8 @@ func TestApiserverShutdown(t *testing.T) {
 	}
 	for _, test := range reconcileTests {
 		t.Run(test.testName, func(t *testing.T) {
-			// use the same base key used by the controlplane, but add a random
-			// prefix so we can reuse the etcd instance for subtests independently.
+			// 使用与控制面相同的 base key，但加上随机
+			// 前缀，以便各子测试独立复用 etcd 实例。
 			// pkg/controlplane/instance.go:268:
 			// masterLeases, err := reconcilers.NewLeases(config, "/masterleases/", ttl)
 			// ref: https://issues.k8s.io/114049
@@ -681,7 +689,7 @@ func TestApiserverShutdown(t *testing.T) {
 					t.Errorf("unexpected error remove endpoints: %v", err)
 				}
 
-				// reconcile endpoints in another goroutine
+				// 在另一个 goroutine 中协调 endpoints。
 				err = r.ReconcileEndpoints(test.serviceName, netutils.ParseIPSloppy(test.ip), test.endpointPorts, false)
 				if err != nil {
 					t.Errorf("unexpected error reconciling: %v", err)
@@ -709,7 +717,7 @@ func TestApiserverShutdown(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
-			// sort for comparison
+			// 排序以便比较。
 			sort.Strings(leases)
 			sort.Strings(test.expectLeases)
 			if !reflect.DeepEqual(leases, test.expectLeases) {

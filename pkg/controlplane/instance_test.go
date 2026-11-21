@@ -88,7 +88,7 @@ import (
 	storagerest "k8s.io/kubernetes/pkg/registry/storage/rest"
 )
 
-// setUp is a convenience function for setting up for (most) tests.
+// setUp 是多数测试共用的初始化辅助函数。
 func setUp(t *testing.T) (*etcd3testing.EtcdTestServer, Config, *assert.Assertions) {
 	server, storageConfig := etcd3testing.NewUnsecuredEtcd3TestClientServer(t)
 
@@ -114,7 +114,7 @@ func setUp(t *testing.T) (*etcd3testing.EtcdTestServer, Config, *assert.Assertio
 	resourceEncoding := resourceconfig.MergeResourceEncodingConfigs(storageFactoryConfig.DefaultResourceEncoding, storageFactoryConfig.ResourceEncodingOverrides)
 	storageFactory := serverstorage.NewDefaultStorageFactory(*storageConfig, "application/vnd.kubernetes.protobuf", storageFactoryConfig.Serializer, resourceEncoding, DefaultAPIResourceConfigSource(), nil)
 	etcdOptions := options.NewEtcdOptions(storageConfig)
-	// unit tests don't need watch cache and it leaks lots of goroutines with etcd testing functions during unit tests
+	// 单测不需要 watch cache，且与 etcd 测试配合会泄漏大量 goroutine。
 	etcdOptions.EnableWatchCache = false
 	err := etcdOptions.ApplyWithStorageFactoryTo(storageFactory, config.ControlPlane.Generic)
 	if err != nil {
@@ -132,7 +132,7 @@ func setUp(t *testing.T) (*etcd3testing.EtcdTestServer, Config, *assert.Assertio
 		TLSClientConfig: &tls.Config{},
 	})
 
-	// set fake SecureServingInfo because the listener port is needed for the kubernetes service
+	// 设置假的 SecureServingInfo，因为 kubernetes Service 需要监听端口。
 	config.ControlPlane.Generic.SecureServing = &genericapiserver.SecureServingInfo{Listener: fakeLocalhost443Listener{}}
 
 	getOpenAPIDefinitions := openapi.GetOpenAPIDefinitionsWithoutDisabledFeatures(generatedopenapi.GetOpenAPIDefinitions)
@@ -148,16 +148,20 @@ func setUp(t *testing.T) (*etcd3testing.EtcdTestServer, Config, *assert.Assertio
 	return server, *config, assert.New(t)
 }
 
+// fakeLocalhost443Listener 是占用 443 端口的假监听器，用于测试。
 type fakeLocalhost443Listener struct{}
 
+// Accept 空实现。
 func (fakeLocalhost443Listener) Accept() (net.Conn, error) {
 	return nil, nil
 }
 
+// Close 空实现。
 func (fakeLocalhost443Listener) Close() error {
 	return nil
 }
 
+// Addr 返回固定的 localhost:443 地址。
 func (fakeLocalhost443Listener) Addr() net.Addr {
 	return &net.TCPAddr{
 		IP:   net.IPv4(127, 0, 0, 1),
@@ -165,9 +169,9 @@ func (fakeLocalhost443Listener) Addr() net.Addr {
 	}
 }
 
-// TestLegacyRestStorageStrategies ensures that all Storage objects which are using the generic registry Store have
-// their various strategies properly wired up. This surfaced as a bug where strategies defined Export functions, but
-// they were never used outside of unit tests because the export strategies were not assigned inside the Store.
+// TestLegacyRestStorageStrategies 确保所有使用通用 registry Store 的 Storage 对象
+// 都正确装配了各自的策略。曾出现策略定义了 Export 函数却
+// 因 Store 未赋值而在单测之外从未被调用的问题。
 func TestLegacyRestStorageStrategies(t *testing.T) {
 	_, etcdserver, apiserverCfg, _ := newInstance(t)
 	defer etcdserver.Terminate(t)
@@ -198,6 +202,7 @@ func TestLegacyRestStorageStrategies(t *testing.T) {
 	}
 }
 
+// TestCertificatesRestStorageStrategies 验证 certificates REST 存储策略。
 func TestCertificatesRestStorageStrategies(t *testing.T) {
 	_, etcdserver, apiserverCfg, _ := newInstance(t)
 	defer etcdserver.Terminate(t)
@@ -219,16 +224,19 @@ func TestCertificatesRestStorageStrategies(t *testing.T) {
 	}
 }
 
+// fakeAuthorizer 是测试用的授权器桩。
 type fakeAuthorizer struct {
 	decision authorizer.Decision
 	reason   string
 	err      error
 }
 
+// Authorize 始终允许请求。
 func (f *fakeAuthorizer) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	return f.decision, f.reason, f.err
 }
 
+// newInstance 构造测试用 Instance。
 func newInstance(t *testing.T) (*Instance, *etcd3testing.EtcdTestServer, CompletedConfig, *assert.Assertions) {
 	etcdserver, config, assert := setUp(t)
 
@@ -274,6 +282,7 @@ func TestVersion(t *testing.T) {
 	}
 }
 
+// decodeResponse 将 HTTP 响应解码为对象。
 func decodeResponse(resp *http.Response, obj interface{}) error {
 	defer resp.Body.Close()
 
@@ -287,15 +296,15 @@ func decodeResponse(resp *http.Response, obj interface{}) error {
 	return nil
 }
 
-// Because we need to be backwards compatible with release 1.1, at endpoints
-// that exist in release 1.1, the responses should have empty APIVersion.
+// 为兼容 1.1 版本，在 1.1 已有的端点上，
+// 响应中的 APIVersion 应为空。
 func TestAPIVersionOfDiscoveryEndpoints(t *testing.T) {
 	apiserver, etcdserver, _, assert := newInstance(t)
 	defer etcdserver.Terminate(t)
 
 	server := httptest.NewServer(apiserver.ControlPlane.GenericAPIServer.Handler.GoRestfulContainer.ServeMux)
 
-	// /api exists in release-1.1
+	// /api 在 1.1 中存在
 	resp, err := http.Get(server.URL + "/api")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -304,7 +313,7 @@ func TestAPIVersionOfDiscoveryEndpoints(t *testing.T) {
 	assert.NoError(decodeResponse(resp, &apiVersions))
 	assert.Equal("", apiVersions.APIVersion)
 
-	// /api/v1 exists in release-1.1
+	// /api/v1 在 1.1 中存在
 	resp, err = http.Get(server.URL + "/api/v1")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -313,7 +322,7 @@ func TestAPIVersionOfDiscoveryEndpoints(t *testing.T) {
 	assert.NoError(decodeResponse(resp, &resourceList))
 	assert.Equal("", resourceList.APIVersion)
 
-	// /apis exists in release-1.1
+	// /apis 在 1.1 中存在
 	resp, err = http.Get(server.URL + "/apis")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -322,8 +331,8 @@ func TestAPIVersionOfDiscoveryEndpoints(t *testing.T) {
 	assert.NoError(decodeResponse(resp, &groupList))
 	assert.Equal("", groupList.APIVersion)
 
-	// /apis/autoscaling doesn't exist in release-1.1, so the APIVersion field
-	// should be non-empty in the results returned by the server.
+	// /apis/autoscaling 在 1.1 中不存在，因此返回结果中
+	// 的 APIVersion 字段应非空。
 	resp, err = http.Get(server.URL + "/apis/autoscaling")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -332,8 +341,8 @@ func TestAPIVersionOfDiscoveryEndpoints(t *testing.T) {
 	assert.NoError(decodeResponse(resp, &group))
 	assert.Equal("v1", group.APIVersion)
 
-	// apis/autoscaling/v1 doesn't exist in release-1.1, so the APIVersion field
-	// should be non-empty in the results returned by the server.
+	// apis/autoscaling/v1 在 1.1 中不存在，因此返回结果中
+	// 的 APIVersion 字段应非空。
 
 	resp, err = http.Get(server.URL + "/apis/autoscaling/v1")
 	if err != nil {
@@ -345,7 +354,7 @@ func TestAPIVersionOfDiscoveryEndpoints(t *testing.T) {
 
 }
 
-// This test doesn't cover the apiregistration and apiextensions group, as they are installed by other apiservers.
+// 该测试不覆盖 apiregistration 与 apiextensions 组，它们由其他 apiserver 安装。
 func TestStorageVersionHashes(t *testing.T) {
 	apiserver, etcdserver, _, _ := newInstance(t)
 	defer etcdserver.Terminate(t)
@@ -378,7 +387,7 @@ func TestStorageVersionHashes(t *testing.T) {
 				t.Errorf("expect the storageVersionHash of %s/%s to exist", g.GroupVersion, r.Name)
 				continue
 			}
-			// Uncomment the following line if you want to update storageversionhash/data.go
+			// 如需更新 storageversionhash/data.go，请取消下面这行的注释。
 			// fmt.Printf("\"%s/%s\": \"%s\",\n", g.GroupVersion, r.Name, r.StorageVersionHash)
 			expected := gvrToStorageVersionHash[g.GroupVersion+"/"+r.Name]
 			if r.StorageVersionHash != expected {
@@ -393,6 +402,7 @@ func TestStorageVersionHashes(t *testing.T) {
 	}
 }
 
+// TestNoAlphaVersionsEnabledByDefault 验证默认不启用 alpha 版本。
 func TestNoAlphaVersionsEnabledByDefault(t *testing.T) {
 	config := DefaultAPIResourceConfigSource()
 	for gv, enable := range config.GroupVersionConfigs {
@@ -406,9 +416,9 @@ func TestNoAlphaVersionsEnabledByDefault(t *testing.T) {
 			continue
 		}
 
-		// we have enabled an alpha api by resource {g,v,r}, we also expect the
-		// alpha api by version {g,v} to be disabled. This is so a programmer
-		// remembers to add the new alpha version to alphaAPIGroupVersionsDisabledByDefault.
+		// 若按资源 {g,v,r} 启用了某个 alpha API，则按版本 {g,v} 的
+		// alpha API 也应被禁用，以提醒开发者
+		// 将新 alpha 版本加入 alphaAPIGroupVersionsDisabledByDefault。
 		gr := gvr.GroupVersion()
 		if enabled, found := config.GroupVersionConfigs[gr]; !found || enabled {
 			t.Errorf("Alpha API version %q should be disabled by default", gr.String())
@@ -416,6 +426,7 @@ func TestNoAlphaVersionsEnabledByDefault(t *testing.T) {
 	}
 }
 
+// TestNoBetaVersionsEnabledByDefault 验证默认不启用 beta 版本。
 func TestNoBetaVersionsEnabledByDefault(t *testing.T) {
 	config := DefaultAPIResourceConfigSource()
 	for gv, enable := range config.GroupVersionConfigs {
@@ -429,9 +440,9 @@ func TestNoBetaVersionsEnabledByDefault(t *testing.T) {
 			continue
 		}
 
-		// we have enabled a beta api by resource {g,v,r}, we also expect the
-		// beta api by version {g,v} to be disabled. This is so a programmer
-		// remembers to add the new beta version to betaAPIGroupVersionsDisabledByDefault.
+		// 若按资源 {g,v,r} 启用了某个 beta API，则按版本 {g,v} 的
+		// beta API 也应被禁用，以提醒开发者
+		// 将新 beta 版本加入 betaAPIGroupVersionsDisabledByDefault。
 		gr := gvr.GroupVersion()
 		if enabled, found := config.GroupVersionConfigs[gr]; !found || enabled {
 			t.Errorf("Beta API version %q should be disabled by default", gr.String())
@@ -439,8 +450,9 @@ func TestNoBetaVersionsEnabledByDefault(t *testing.T) {
 	}
 }
 
+// TestDefaultVars 验证默认配置变量。
 func TestDefaultVars(t *testing.T) {
-	// stableAPIGroupVersionsEnabledByDefault should not contain beta or alpha
+	// stableAPIGroupVersionsEnabledByDefault 不应包含 beta 或 alpha 版本。
 	for i := range stableAPIGroupVersionsEnabledByDefault {
 		gv := stableAPIGroupVersionsEnabledByDefault[i]
 		if strings.Contains(gv.Version, "beta") || strings.Contains(gv.Version, "alpha") {
@@ -448,7 +460,7 @@ func TestDefaultVars(t *testing.T) {
 		}
 	}
 
-	// betaAPIGroupVersionsDisabledByDefault should contain only beta version
+	// betaAPIGroupVersionsDisabledByDefault 应只包含 beta 版本。
 	for i := range betaAPIGroupVersionsDisabledByDefault {
 		gv := betaAPIGroupVersionsDisabledByDefault[i]
 		if !strings.Contains(gv.Version, "beta") {
@@ -456,7 +468,7 @@ func TestDefaultVars(t *testing.T) {
 		}
 	}
 
-	// alphaAPIGroupVersionsDisabledByDefault should contain only alpha version
+	// alphaAPIGroupVersionsDisabledByDefault 应只包含 alpha 版本。
 	for i := range alphaAPIGroupVersionsDisabledByDefault {
 		gv := alphaAPIGroupVersionsDisabledByDefault[i]
 		if !strings.Contains(gv.Version, "alpha") {
@@ -465,9 +477,10 @@ func TestDefaultVars(t *testing.T) {
 	}
 }
 
+// TestNewBetaResourcesEnabledByDefault 验证新 beta 资源的默认启用状态。
 func TestNewBetaResourcesEnabledByDefault(t *testing.T) {
-	// legacyEnabledBetaResources is nearly a duplication from elsewhere.  This is intentional.  These types already have
-	// GA equivalents available and should therefore never have a beta enabled by default again.
+	// legacyEnabledBetaResources 与其他地方近乎重复，这是有意为之：这些类型已有
+	// GA 等价物，因此不应再次默认启用其 beta 版本。
 	legacyEnabledBetaResources := map[schema.GroupVersionResource]bool{
 		batchapiv1beta1.SchemeGroupVersion.WithResource("cronjobs"):              true,
 		discoveryv1beta1.SchemeGroupVersion.WithResource("endpointslices"):       true,
@@ -493,9 +506,9 @@ func TestNewBetaResourcesEnabledByDefault(t *testing.T) {
 	}
 }
 
-// TestGenericStorageProviders is a smoke test that ensures that the kube
-// storage providers and the generic storage providers don't unexpectedly
-// divert, i.e. the later is an equally ordered subset.
+// TestGenericStorageProviders 是冒烟测试，确保 kube
+// 存储提供者与通用存储提供者不会意外
+// 偏离，即后者是顺序一致的子集。
 func TestGenericStorageProviders(t *testing.T) {
 	_, config, _ := setUp(t)
 	completed := config.Complete()
@@ -510,7 +523,7 @@ func TestGenericStorageProviders(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// create generic storage providers. These should be an equally ordered subset
+	// 创建通用存储提供者，它们应是顺序一致的子集。
 	generic, err := completed.ControlPlane.GenericStorageProviders(client.Discovery())
 	if err != nil {
 		t.Fatal(err)
@@ -541,7 +554,7 @@ func TestGenericStorageProviders(t *testing.T) {
 			gt = reflect.TypeOf(generic[g])
 		}
 
-		// special case: we identify full core and generic core
+		// 特殊情况：区分完整 core 与通用 core。
 		if kt.Kind() == reflect.Pointer && kt.Elem().PkgPath() == reflect.TypeOf(corerest.Config{}).PkgPath() {
 			kt = reflect.TypeOf(&corerest.GenericConfig{})
 		}
@@ -563,7 +576,7 @@ func TestGenericStorageProviders(t *testing.T) {
 			appsrest.StorageProvider,
 			resourcerest.RESTStorageProvider,
 			lifecyclerest.RESTStorageProvider:
-			// all these are non-generic, but kube specific
+			// 这些都是非通用、kube 特有的资源。
 			continue
 		default:
 			t.Errorf("Unexpected, uncategorized storage %T from %s. Put into the list above for kube-specific APIs, or into GenericStorageProviders for generic APIs", kube[k], kt.PkgPath())
@@ -575,9 +588,9 @@ func TestGenericStorageProviders(t *testing.T) {
 	}
 }
 
-// TestGetResetFieldsHasAllVersions verifies that every storage implementing
-// ResetFieldsStrategy or ResetFieldsFilterStrategy returns entries for all
-// served API versions of that resource.
+// TestGetResetFieldsHasAllVersions 验证每个实现
+// ResetFieldsStrategy 或 ResetFieldsFilterStrategy 的 Storage 都返回其资源
+// 所有可服务 API 版本的条目。
 func TestGetResetFieldsHasAllVersions(t *testing.T) {
 	_, config, _ := setUp(t)
 
@@ -591,7 +604,7 @@ func TestGetResetFieldsHasAllVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Enable all versions (including alpha and beta) to test comprehensively.
+	// 启用所有版本（含 alpha/beta）以全面覆盖。
 	allVersionsConfig := DefaultAPIResourceConfigSource()
 	allVersionsConfig.EnableVersions(betaAPIGroupVersionsDisabledByDefault...)
 	allVersionsConfig.EnableVersions(alphaAPIGroupVersionsDisabledByDefault...)
@@ -617,7 +630,7 @@ func TestGetResetFieldsHasAllVersions(t *testing.T) {
 			}
 		}
 
-		// Check every storage that implements GetResetFields or GetResetFieldsFilter.
+		// 检查每个实现 GetResetFields 或 GetResetFieldsFilter 的 Storage。
 		for v, resourcesInVersion := range apiGroupInfo.VersionedResourcesStorageMap {
 			for resource, storage := range resourcesInVersion {
 				servedVersions := allServedVersionsByResource[resource]
@@ -654,7 +667,7 @@ func TestGetResetFieldsHasAllVersions(t *testing.T) {
 	}
 }
 
-// TestDeclarativeValidationEnablementInStrategies verifies that every CreateStrategy and
+// TestDeclarativeValidationEnablementInStrategies 验证每个 CreateStrategy 和
 // UpdateStrategy installed supports declarative validation.
 func TestDeclarativeValidationEnablementInStrategies(t *testing.T) {
 	_, config, _ := setUp(t)
@@ -669,8 +682,8 @@ func TestDeclarativeValidationEnablementInStrategies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Enable all versions (including alpha and beta) so the check covers
-	// every resource that kube-apiserver can serve.
+	// 启用所有版本（含 alpha/beta），使检查覆盖
+	// kube-apiserver 可提供的所有资源。
 	allVersionsConfig := DefaultAPIResourceConfigSource()
 	allVersionsConfig.EnableVersions(betaAPIGroupVersionsDisabledByDefault...)
 	allVersionsConfig.EnableVersions(alphaAPIGroupVersionsDisabledByDefault...)
@@ -688,7 +701,7 @@ func TestDeclarativeValidationEnablementInStrategies(t *testing.T) {
 				gs, ok := storage.(registry.GenericStore)
 				if !ok {
 					// Non-generic storage (e.g. proxy/exec subresources)
-					// has no strategy to check.
+					// 没有需要检查的策略。
 					continue
 				}
 				name := gvr(groupName, v, resource)
@@ -707,6 +720,7 @@ func TestDeclarativeValidationEnablementInStrategies(t *testing.T) {
 	}
 }
 
+// gvr 将 group/version/resource 拼接为字符串 key。
 func gvr(g string, v string, r string) string {
 	var gvr string
 	if len(g) == 0 {
@@ -717,7 +731,7 @@ func gvr(g string, v string, r string) string {
 	return gvr
 }
 
-// noStorageVersionHash lists resources that legitimately with empty storage
+// noStorageVersionHash 列出合法具有空存储版本哈希的资源。
 // version hash.
 var noStorageVersionHash = sets.NewString(
 	"v1/bindings",
@@ -730,8 +744,8 @@ var noStorageVersionHash = sets.NewString(
 	"authorization.k8s.io/v1/subjectaccessreviews",
 )
 
-// gvrToStorageVersionHash shouldn't change unless we intentionally change the
-// storage version of a resource.
+// gvrToStorageVersionHash 不应变更，除非有意修改资源的
+// 存储版本。
 var gvrToStorageVersionHash = map[string]string{
 	"v1/configmaps":             "qFsyl6wFWjQ=",
 	"v1/endpoints":              "fWeeMqaN/OA=",

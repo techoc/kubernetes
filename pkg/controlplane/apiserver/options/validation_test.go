@@ -34,6 +34,7 @@ import (
 	kubeoptions "k8s.io/kubernetes/pkg/kubeapiserver/options"
 )
 
+// TestValidateAPIPriorityAndFairness 验证 APF 与 runtime-config 的冲突校验。
 func TestValidateAPIPriorityAndFairness(t *testing.T) {
 	const conflict = "conflicts with --enable-priority-and-fairness=true"
 	tests := []struct {
@@ -115,6 +116,7 @@ func TestValidateAPIPriorityAndFairness(t *testing.T) {
 	}
 }
 
+// TestValidateUnknownVersionInteroperabilityProxy 验证对等代理 flag 依赖特性开关的校验。
 func TestValidateUnknownVersionInteroperabilityProxy(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -162,6 +164,7 @@ func TestValidateUnknownVersionInteroperabilityProxy(t *testing.T) {
 	}
 }
 
+// TestValidateOptions 验证各子选项及跨字段校验汇总的错误。
 func TestValidateOptions(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -235,6 +238,7 @@ func TestValidateOptions(t *testing.T) {
 	}
 }
 
+// TestValidateServiceAccountTokenSigningConfig 验证外部 JWT 签发端点相关配置的互斥与格式校验。
 func TestValidateServiceAccountTokenSigningConfig(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -371,6 +375,7 @@ func TestValidateServiceAccountTokenSigningConfig(t *testing.T) {
 	}
 }
 
+// TestValidateCoordinatedLeadershipFlags 验证协调式选主定时器之间的大小关系校验。
 func TestValidateCoordinatedLeadershipFlags(t *testing.T) {
 	tests := []struct {
 		name           string

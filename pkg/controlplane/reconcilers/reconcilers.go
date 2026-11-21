@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package reconcilers Endpoint Reconcilers for the apiserver
+// Package reconcilers 提供 apiserver 的 Endpoint Reconciler。
 package reconcilers
 
 import (
@@ -23,56 +23,50 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// EndpointReconciler knows how to reconcile the endpoints for the apiserver service.
+// EndpointReconciler 负责协调 apiserver Service 的 endpoints。
 type EndpointReconciler interface {
-	// ValidateIP ensures the given IP address meets any requirements to
-	// successfully call ReconcileEndpoints with this reconciler type.
+	// ValidateIP 确保给定 IP 满足该 reconciler 类型成功调用 ReconcileEndpoints 的要求。
 	ValidateIP(ip net.IP) error
 
-	// ReconcileEndpoints sets the endpoints for the given apiserver service (ro or rw).
-	// ReconcileEndpoints expects that the endpoints objects it manages will all be
-	// managed only by ReconcileEndpoints; therefore, to understand this, you need only
-	// understand the requirements.
+	// ReconcileEndpoints 设置给定 apiserver Service（ro 或 rw）的 endpoints。
+	// 它假定所管理的 endpoints 对象只由自己管理，因此理解这些要求即可。
 	//
-	// Requirements:
-	//  * All apiservers MUST use the same ports for their {rw, ro} services.
-	//  * All apiservers MUST use ReconcileEndpoints and only ReconcileEndpoints to manage the
-	//      endpoints for their {rw, ro} services.
-	//  * ReconcileEndpoints is called periodically from all apiservers.
+	// 要求：
+	//  * 所有 apiserver 必须使用相同的 {rw, ro} Service 端口。
+	//  * 所有 apiserver 必须且只能通过 ReconcileEndpoints 管理其 endpoints。
+	//  * 所有 apiserver 都会周期性调用 ReconcileEndpoints。
 	ReconcileEndpoints(serviceName string, ip net.IP, endpointPorts []corev1.EndpointPort, reconcilePorts bool) error
-	// RemoveEndpoints removes this apiserver's lease.
+	// RemoveEndpoints 移除本 apiserver 的租约。
 	RemoveEndpoints(serviceName string, ip net.IP, endpointPorts []corev1.EndpointPort) error
-	// StopReconciling turns any later ReconcileEndpoints call into a noop.
+	// StopReconciling 使之后的 ReconcileEndpoints 调用变为空操作。
 	StopReconciling()
-	// Destroy shuts down all internal structures.
-	// Destroy needs to be implemented in thread-safe way and be prepared for being
-	// called more than once.
+	// Destroy 关闭所有内部资源，必须线程安全且支持重复调用。
 	Destroy()
 }
 
-// Type the reconciler type
+// Type 表示 reconciler 的类型。
 type Type string
 
 const (
-	// MasterCountReconcilerType will select the original reconciler
+	// MasterCountReconcilerType 选择原始的基于 master 数量的 reconciler。
 	MasterCountReconcilerType Type = "master-count"
-	// LeaseEndpointReconcilerType will select a storage based reconciler
+	// LeaseEndpointReconcilerType 选择基于存储的 reconciler。
 	LeaseEndpointReconcilerType Type = "lease"
-	// NoneEndpointReconcilerType will turn off the endpoint reconciler
+	// NoneEndpointReconcilerType 关闭 endpoint reconciler。
 	NoneEndpointReconcilerType Type = "none"
 )
 
-// Types an array of reconciler types
+// Types 是 reconciler 类型数组。
 type Types []Type
 
-// AllTypes export all reconcilers
+// AllTypes 导出所有 reconciler 类型。
 var AllTypes = Types{
 	MasterCountReconcilerType,
 	LeaseEndpointReconcilerType,
 	NoneEndpointReconcilerType,
 }
 
-// Names returns a slice of all the reconciler names
+// Names 返回所有 reconciler 名称的切片。
 func (t Types) Names() []string {
 	strs := make([]string, len(t))
 	for i, v := range t {

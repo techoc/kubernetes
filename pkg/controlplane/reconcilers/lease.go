@@ -16,10 +16,8 @@ limitations under the License.
 
 package reconcilers
 
-/*
-Original Source:
-https://github.com/openshift/origin/blob/bb340c5dd5ff72718be86fb194dedc0faed7f4c7/pkg/cmd/server/election/lease_endpoint_reconciler.go
-*/
+// 原始来源：
+// https://github.com/openshift/origin/blob/bb340c5dd5ff72718be86fb194dedc0faed7f4c7/pkg/cmd/server/election/lease_endpoint_reconciler.go
 
 import (
 	"fmt"
@@ -44,21 +42,22 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/validation"
 )
 
-// Leases is an interface which assists in managing the set of active masters
+// Leases 接口用于管理活跃 master 集合。
 type Leases interface {
-	// ListLeases retrieves a list of the current master IPs
+	// ListLeases 列出当前 master 的 IP。
 	ListLeases() ([]string, error)
 
-	// UpdateLease adds or refreshes a master's lease
+	// UpdateLease 添加或刷新 master 的租约。
 	UpdateLease(ip string) error
 
-	// RemoveLease removes a master's lease
+	// RemoveLease 移除 master 的租约。
 	RemoveLease(ip string) error
 
-	// Destroy cleans up everything on shutdown.
+	// Destroy 在关闭时清理所有资源。
 	Destroy()
 }
 
+// storageLeases 基于存储后端实现 Leases。
 type storageLeases struct {
 	storage   storage.Interface
 	destroyFn func()
@@ -68,7 +67,7 @@ type storageLeases struct {
 
 var _ Leases = &storageLeases{}
 
-// ListLeases retrieves a list of the current master IPs from storage
+// ListLeases 从存储中列出当前 master 的 IP。
 func (s *storageLeases) ListLeases() ([]string, error) {
 	ipInfoList := &corev1.EndpointsList{}
 	storageOpts := storage.ListOptions{
@@ -93,12 +92,11 @@ func (s *storageLeases) ListLeases() ([]string, error) {
 	return ipList, nil
 }
 
-// UpdateLease resets the TTL on a master IP in storage
-// UpdateLease will create a new key if it doesn't exist.
+// UpdateLease 重置存储中 master IP 的 TTL，若 key 不存在则创建。
 func (s *storageLeases) UpdateLease(ip string) error {
 	key := path.Join(s.baseKey, ip)
 	return s.storage.GuaranteedUpdate(apirequest.NewDefaultContext(), key, &corev1.Endpoints{}, true, nil, func(input kruntime.Object, respMeta storage.ResponseMeta) (kruntime.Object, *uint64, error) {
-		// just make sure we've got the right IP set, and then refresh the TTL
+		// 确保 IP 设置正确，然后刷新 TTL。
 		existing := input.(*corev1.Endpoints)
 		existing.Subsets = []corev1.EndpointSubset{
 			{
@@ -106,13 +104,10 @@ func (s *storageLeases) UpdateLease(ip string) error {
 			},
 		}
 
-		// leaseTime needs to be in seconds
+		// TTL 必须以秒为单位。
 		leaseTime := uint64(s.leaseTime / time.Second)
 
-		// NB: GuaranteedUpdate does not perform the store operation unless
-		// something changed between load and store (not including resource
-		// version), meaning we can't refresh the TTL without actually
-		// changing a field.
+		// GuaranteedUpdate 仅在加载后对象发生变化时才执行写入，因此必须实际修改字段才能刷新 TTL。
 		existing.Generation++
 
 		klog.V(6).Infof("Resetting TTL on master IP %q listed in storage to %v", ip, leaseTime)
@@ -121,20 +116,20 @@ func (s *storageLeases) UpdateLease(ip string) error {
 	}, nil)
 }
 
-// RemoveLease removes the lease on a master IP in storage
+// RemoveLease 从存储中移除 master IP 的租约。
 func (s *storageLeases) RemoveLease(ip string) error {
 	key := path.Join(s.baseKey, ip)
 	return s.storage.Delete(apirequest.NewDefaultContext(), key, &corev1.Endpoints{}, nil, rest.ValidateAllObjectFunc, nil, storage.DeleteOptions{})
 }
 
+// Destroy 调用底层清理函数（通过 once 保证只执行一次）。
 func (s *storageLeases) Destroy() {
 	s.destroyFn()
 }
 
-// NewLeases creates a new etcd-based Leases implementation.
+// NewLeases 创建一个新的基于 etcd 的 Leases 实现。
 func NewLeases(config *storagebackend.ConfigForResource, baseKey string, leaseTime time.Duration) (Leases, error) {
-	// note that newFunc, newListFunc
-	// can be left blank unless the storage.Watch method is used
+	// 不使用 storage.Watch 时 newFunc/newListFunc 可留空。
 	leaseStorage, destroyFn, err := storagefactory.Create(*config, nil, nil, baseKey)
 	if err != nil {
 		return nil, fmt.Errorf("error creating storage factory: %v", err)
@@ -148,6 +143,7 @@ func NewLeases(config *storagebackend.ConfigForResource, baseKey string, leaseTi
 	}, nil
 }
 
+// leaseEndpointReconciler 基于租约列表协调 endpoints。
 type leaseEndpointReconciler struct {
 	epAdapter             EndpointsAdapter
 	masterLeases          Leases
@@ -155,7 +151,7 @@ type leaseEndpointReconciler struct {
 	reconcilingLock       sync.Mutex
 }
 
-// NewLeaseEndpointReconciler creates a new LeaseEndpoint reconciler
+// NewLeaseEndpointReconciler 创建一个新的基于租约的 EndpointReconciler。
 func NewLeaseEndpointReconciler(epAdapter EndpointsAdapter, masterLeases Leases) EndpointReconciler {
 	return &leaseEndpointReconciler{
 		epAdapter:    epAdapter,
@@ -163,30 +159,24 @@ func NewLeaseEndpointReconciler(epAdapter EndpointsAdapter, masterLeases Leases)
 	}
 }
 
+// ValidateIP 校验 IP 是否为合法的 endpoint 地址。
 func (r *leaseEndpointReconciler) ValidateIP(ip net.IP) error {
 	return validation.ValidateEndpointIP(ip.String(), nil).ToAggregate()
 }
 
-// ReconcileEndpoints lists keys in a special etcd directory.
-// Each key is expected to have a TTL of R+n, where R is the refresh interval
-// at which this function is called, and n is some small value.  If an
-// apiserver goes down, it will fail to refresh its key's TTL and the key will
-// expire. ReconcileEndpoints will notice that the endpoints object is
-// different from the directory listing, and update the endpoints object
-// accordingly.
+// ReconcileEndpoints 列出特殊 etcd 目录中的 key。每个 key 的 TTL 为 R+n（R 为本函数调用间隔，n 为小余量）；
+// apiserver 宕机后无法续租，key 过期，ReconcileEndpoints 会据此更新 endpoints 对象。
 func (r *leaseEndpointReconciler) ReconcileEndpoints(serviceName string, ip net.IP, endpointPorts []corev1.EndpointPort, reconcilePorts bool) error {
-	// reconcile endpoints only if apiserver was not shutdown
+	// apiserver 关闭后不再协调。
 	if r.stopReconcilingCalled.Load() {
 		return nil
 	}
 
-	// Ensure that there will be no race condition with the RemoveEndpoints.
+	// 加锁避免与 RemoveEndpoints 竞争。
 	r.reconcilingLock.Lock()
 	defer r.reconcilingLock.Unlock()
 
-	// Refresh the TTL on our key, independently of whether any error or
-	// update conflict happens below. This makes sure that at least some of
-	// the masters will add our endpoint.
+	// 无论后续是否出错或冲突，先刷新自己的租约 TTL，确保至少部分 master 会保留本端点。
 	if err := r.masterLeases.UpdateLease(ip.String()); err != nil {
 		return err
 	}
@@ -194,8 +184,7 @@ func (r *leaseEndpointReconciler) ReconcileEndpoints(serviceName string, ip net.
 	return r.doReconcile(serviceName, endpointPorts, reconcilePorts)
 }
 
-// doReconcile can be called from ReconcileEndpoints() or RemoveEndpoints().
-// it is NOT SAFE to call it from multiple goroutines.
+// doReconcile 由 ReconcileEndpoints 或 RemoveEndpoints 调用，非并发安全（调用方需持锁）。
 func (r *leaseEndpointReconciler) doReconcile(serviceName string, endpointPorts []corev1.EndpointPort, reconcilePorts bool) error {
 	e, err := r.epAdapter.Get(corev1.NamespaceDefault, serviceName, metav1.GetOptions{})
 	shouldCreate := false
@@ -204,7 +193,7 @@ func (r *leaseEndpointReconciler) doReconcile(serviceName string, endpointPorts 
 			return err
 		}
 
-		// there are no endpoints and we should stop reconciling
+		// endpoints 不存在且已停止协调，无需处理。
 		if r.stopReconcilingCalled.Load() {
 			return nil
 		}
@@ -218,33 +207,29 @@ func (r *leaseEndpointReconciler) doReconcile(serviceName string, endpointPorts 
 		}
 	}
 
-	// ... and the list of master IP keys from etcd
+	// 读取 etcd 中的 master IP 租约列表。
 	masterIPs, err := r.masterLeases.ListLeases()
 	if err != nil {
 		return err
 	}
 
-	// Since we just refreshed our own key, assume that zero endpoints
-	// returned from storage indicates an issue or invalid state, and thus do
-	// not update the endpoints list based on the result.
-	// If the controller was ordered to stop and is this is the last apiserver
-	// we keep going to remove our endpoint before shutting down.
+	// 刚刷新过自己的租约，若存储返回零个 master IP 说明状态异常，拒绝清空 endpoints。
+	// 但若已被要求停止且这是最后一个 apiserver，则仍需继续以移除自身端点。
 	if !r.stopReconcilingCalled.Load() && len(masterIPs) == 0 {
 		return fmt.Errorf("no API server IP addresses were listed in storage, refusing to erase all endpoints for the kubernetes Service")
 	}
 
-	// Don't use the EndpointSliceMirroring controller to mirror this to
-	// EndpointSlices. This may change in the future.
+	// 禁止 EndpointSliceMirroring 控制器镜像该 Endpoints，未来可能改变。
 	skipMirrorChanged := setSkipMirrorTrue(e)
 
-	// Next, we compare the current list of endpoints with the list of master IP keys
+	// 将当前 endpoints 与 master IP 列表比较。
 	formatCorrect, ipCorrect, portsCorrect := checkEndpointSubsetFormatWithLease(e, masterIPs, endpointPorts, reconcilePorts)
 	if !skipMirrorChanged && formatCorrect && ipCorrect && portsCorrect {
 		return r.epAdapter.EnsureEndpointSliceFromEndpoints(corev1.NamespaceDefault, e)
 	}
 
 	if !formatCorrect {
-		// Something is egregiously wrong, just re-make the endpoints record.
+		// 格式严重错误，直接重建 endpoints 记录。
 		e.Subsets = []corev1.EndpointSubset{{
 			Addresses: []corev1.EndpointAddress{},
 			Ports:     endpointPorts,
@@ -252,18 +237,18 @@ func (r *leaseEndpointReconciler) doReconcile(serviceName string, endpointPorts 
 	}
 
 	if !formatCorrect || !ipCorrect {
-		// repopulate the addresses according to the expected IPs from etcd
+		// 按 etcd 中的预期 IP 重新填充地址。
 		e.Subsets[0].Addresses = make([]corev1.EndpointAddress, len(masterIPs))
 		for ind, ip := range masterIPs {
 			e.Subsets[0].Addresses[ind] = corev1.EndpointAddress{IP: ip}
 		}
 
-		// Lexicographic order is retained by this step.
+		// 该步骤保持字典序。
 		e.Subsets = endpointsv1.RepackSubsets(e.Subsets)
 	}
 
 	if len(e.Subsets) != 0 && !portsCorrect {
-		// Reset ports.
+		// 重置端口。
 		e.Subsets[0].Ports = endpointPorts
 	}
 
@@ -278,14 +263,9 @@ func (r *leaseEndpointReconciler) doReconcile(serviceName string, endpointPorts 
 	return err
 }
 
-// checkEndpointSubsetFormatWithLease determines if the endpoint is in the
-// format ReconcileEndpoints expects when the controller is using leases.
-//
-// Return values:
-//   - formatCorrect is true if exactly one subset is found.
-//   - ipsCorrect when the addresses in the endpoints match the expected addresses list
-//   - portsCorrect is true when endpoint ports exactly match provided ports.
-//     portsCorrect is only evaluated when reconcilePorts is set to true.
+// checkEndpointSubsetFormatWithLease 判断租约模式下 endpoints 是否符合预期格式：
+// formatCorrect 表示恰好一个 subset；ipsCorrect 表示地址与预期列表一致；
+// portsCorrect 表示端口完全匹配，仅在 reconcilePorts 为 true 时计算。
 func checkEndpointSubsetFormatWithLease(e *corev1.Endpoints, expectedIPs []string, ports []corev1.EndpointPort, reconcilePorts bool) (formatCorrect bool, ipsCorrect bool, portsCorrect bool) {
 	if len(e.Subsets) != 1 {
 		return false, false, false
@@ -309,15 +289,13 @@ func checkEndpointSubsetFormatWithLease(e *corev1.Endpoints, expectedIPs []strin
 	if len(sub.Addresses) != len(expectedIPs) {
 		ipsCorrect = false
 	} else {
-		// check the actual content of the addresses
-		// present addrs is used as a set (the keys) and to indicate if a
-		// value was already found (the values)
+		// 检查地址内容：presentAddrs 的 key 作为集合，value 标记是否已出现。
 		presentAddrs := make(map[string]bool, len(expectedIPs))
 		for _, ip := range expectedIPs {
 			presentAddrs[ip] = false
 		}
 
-		// uniqueness is assumed amongst all Addresses.
+		// 假定地址本身唯一。
 		for _, addr := range sub.Addresses {
 			if alreadySeen, ok := presentAddrs[addr.IP]; alreadySeen || !ok {
 				ipsCorrect = false
@@ -331,8 +309,9 @@ func checkEndpointSubsetFormatWithLease(e *corev1.Endpoints, expectedIPs []strin
 	return true, ipsCorrect, portsCorrect
 }
 
+// RemoveEndpoints 移除本 apiserver 的租约并重新协调 endpoints。
 func (r *leaseEndpointReconciler) RemoveEndpoints(serviceName string, ip net.IP, endpointPorts []corev1.EndpointPort) error {
-	// Ensure that there will be no race condition with the ReconcileEndpoints.
+	// 加锁避免与 ReconcileEndpoints 竞争。
 	r.reconcilingLock.Lock()
 	defer r.reconcilingLock.Unlock()
 
@@ -343,10 +322,12 @@ func (r *leaseEndpointReconciler) RemoveEndpoints(serviceName string, ip net.IP,
 	return r.doReconcile(serviceName, endpointPorts, true)
 }
 
+// StopReconciling 标记停止协调。
 func (r *leaseEndpointReconciler) StopReconciling() {
 	r.stopReconcilingCalled.Store(true)
 }
 
+// Destroy 释放底层租约存储。
 func (r *leaseEndpointReconciler) Destroy() {
 	r.masterLeases.Destroy()
 }

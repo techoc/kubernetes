@@ -32,18 +32,20 @@ import (
 	quotainstall "k8s.io/kubernetes/pkg/quota/v1/install"
 )
 
-// Config holds the configuration needed to for initialize the admission plugins
+// Config 保存初始化准入插件所需的配置。
 type Config struct {
 	LoopbackClientConfig *rest.Config
 	ExternalInformers    externalinformers.SharedInformerFactory
 	APIResourceConfig    storage.APIResourceConfigSource
 }
 
-// New sets up the plugins and admission start hooks needed for admission
+// New 设置准入所需的插件与准入启动钩子。
 func (c *Config) New(proxyTransport *http.Transport, egressSelector *egressselector.EgressSelector, serviceResolver webhook.ServiceResolver, tp trace.TracerProvider) ([]admission.PluginInitializer, error) {
+	// Webhook 插件需要独立的认证解析器，以便通过代理/egress 选择器访问外部服务。
 	webhookAuthResolverWrapper := webhook.NewDefaultAuthenticationInfoResolverWrapper(proxyTransport, egressSelector, c.LoopbackClientConfig, tp)
 	webhookPluginInitializer := webhookinit.NewPluginInitializer(webhookAuthResolverWrapper, serviceResolver)
 
+	// 配额配置依赖外部 informer 与启用的 API 资源，必须先构造成功再创建插件初始化器。
 	quotaConfiguration, err := quotainstall.NewQuotaConfigurationForAdmission(c.ExternalInformers, c.APIResourceConfig)
 	if err != nil {
 		return nil, err

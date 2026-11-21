@@ -25,6 +25,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestMasterCountEndpointReconciler 验证基于 master 数量的 endpoints 协调逻辑。
 func TestMasterCountEndpointReconciler(t *testing.T) {
 	reconcileTests := []struct {
 		testName          string
@@ -303,6 +304,7 @@ func TestMasterCountEndpointReconciler(t *testing.T) {
 	}
 }
 
+// TestEmptySubsets 验证空 subset 场景下的协调行为。
 func TestEmptySubsets(t *testing.T) {
 	endpoints := makeEndpointsArray("foo", nil, nil)
 	fakeClient := fake.NewSimpleClientset(endpoints...)

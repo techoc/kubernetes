@@ -36,6 +36,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestReconcileElectionStep 验证选举状态机各步骤的协调逻辑。
 func TestReconcileElectionStep(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 
@@ -353,7 +354,7 @@ func TestReconcileElectionStep(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Set up the fake client with the existing lease
+			// 用已有租约构造 fake 客户端。
 			if tc.existingLease != nil {
 				_, err = client.CoordinationV1().Leases(tc.existingLease.Namespace).Create(ctx, tc.existingLease, metav1.CreateOptions{})
 				if err != nil {
@@ -361,7 +362,7 @@ func TestReconcileElectionStep(t *testing.T) {
 				}
 			}
 
-			// Set up the fake client with the candidates
+			// 用候选者构造 fake 客户端。
 			for _, candidate := range tc.candidates {
 				_, err = client.CoordinationV1beta1().LeaseCandidates(candidate.Namespace).Create(ctx, candidate, metav1.CreateOptions{})
 				if err != nil {
@@ -389,7 +390,7 @@ func TestReconcileElectionStep(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				// Check the lease holder identity
+				// 校验租约的 holder 身份。
 				if tc.expectedHolderIdentity != nil && (lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != *tc.expectedHolderIdentity) {
 					t.Errorf("reconcileElectionStep() holderIdentity = %s, want %s", strOrNil(lease.Spec.HolderIdentity), *tc.expectedHolderIdentity)
 				} else if tc.expectedHolderIdentity == nil && lease.Spec.HolderIdentity != nil && *lease.Spec.HolderIdentity != "" {
@@ -401,7 +402,7 @@ func TestReconcileElectionStep(t *testing.T) {
 					t.Errorf("reconcileElectionStep() preferredHolder = %s, want nil", *lease.Spec.PreferredHolder)
 				}
 
-				// Check chosen strategy in the Lease
+				// 校验租约中记录的选举策略。
 				if tc.expectedStrategy != nil && (lease.Spec.Strategy == nil || *lease.Spec.Strategy != *tc.expectedStrategy) {
 					t.Errorf("reconcileElectionStep() strategy = %s, want %s", strOrNil(lease.Spec.Strategy), *tc.expectedStrategy)
 				} else if tc.expectedStrategy == nil && lease.Spec.Strategy != nil && *lease.Spec.Strategy != "" {
@@ -411,7 +412,7 @@ func TestReconcileElectionStep(t *testing.T) {
 				t.Errorf("reconcileElectionStep() expected no lease to be created")
 			}
 
-			// Verify that ping to candidate was issued
+			// 验证已向候选者发出 ping。
 			if tc.candidatesPinged {
 				pinged := false
 				candidatesList, err := client.CoordinationV1beta1().LeaseCandidates(tc.leaseNN.Namespace).List(ctx, metav1.ListOptions{})
@@ -439,6 +440,7 @@ func TestReconcileElectionStep(t *testing.T) {
 	}
 }
 
+// TestController 验证控制器端到端的选主行为。
 func TestController(t *testing.T) {
 	cases := []struct {
 		name                            string
@@ -682,7 +684,7 @@ func TestController(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// collect go routines using t.logf
+			// 通过 t.Logf 收集 goroutine 信息。
 			var wg sync.WaitGroup
 			defer wg.Wait()
 
@@ -729,8 +731,8 @@ func TestController(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				ticker := time.NewTicker(10 * time.Millisecond)
-				// Mock out the removal of preferredHolder leases.
-				// When controllers are running, they are expected to do this voluntarily
+				// 模拟移除 preferredHolder 租约；
+				// 控制器运行时应主动执行该操作。
 				for {
 					select {
 					case <-ctx.Done():
@@ -765,8 +767,8 @@ func TestController(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				ticker := time.NewTicker(10 * time.Millisecond)
-				// Mock out leasecandidate ack.
-				// When controllers are running, they are expected to watch and ack
+				// 模拟候选者 ack；
+				// 控制器运行时应监听并确认。
 				for {
 					select {
 					case <-ctx.Done():
@@ -837,6 +839,7 @@ func TestController(t *testing.T) {
 	}
 }
 
+// strOrNil 把指针值转为字符串表示，nil 返回 nil。
 func strOrNil[T any](s *T) string {
 	if s == nil {
 		return "<nil>"

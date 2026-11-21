@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestPickBestLeaderOldestEmulationVersion 验证最旧模拟版本选主逻辑。
 func TestPickBestLeaderOldestEmulationVersion(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -189,6 +190,7 @@ func TestPickBestLeaderOldestEmulationVersion(t *testing.T) {
 	}
 }
 
+// TestValidLeaseCandidateForOldestEmulationVersion 验证候选者有效性判断。
 func TestValidLeaseCandidateForOldestEmulationVersion(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -236,6 +238,7 @@ func TestValidLeaseCandidateForOldestEmulationVersion(t *testing.T) {
 	}
 }
 
+// TestGetEmulationVersion 验证模拟版本的读取。
 func TestGetEmulationVersion(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -262,6 +265,7 @@ func TestGetEmulationVersion(t *testing.T) {
 	}
 }
 
+// TestGetBinaryVersion 验证二进制版本的读取。
 func TestGetBinaryVersion(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -288,6 +292,7 @@ func TestGetBinaryVersion(t *testing.T) {
 	}
 }
 
+// TestCompare 验证候选者比较逻辑。
 func TestCompare(t *testing.T) {
 	nowTime := time.Now()
 	cases := []struct {
@@ -431,6 +436,7 @@ func TestCompare(t *testing.T) {
 	}
 }
 
+// TestShouldReelect 验证重新选主判断。
 func TestShouldReelect(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -536,6 +542,7 @@ func TestShouldReelect(t *testing.T) {
 	}
 }
 
+// TestPickBestStrategy 验证选主策略的选择。
 func TestPickBestStrategy(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -748,6 +755,7 @@ func TestPickBestStrategy(t *testing.T) {
 	}
 }
 
+// shouldReelect 测试辅助函数，判断是否需要重新选主。
 func shouldReelect(candidates []*v1beta1.LeaseCandidate, currentLeader *v1beta1.LeaseCandidate) bool {
 	pickedLeader := pickBestLeaderOldestEmulationVersion(candidates)
 	if pickedLeader == nil {

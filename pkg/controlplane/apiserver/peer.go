@@ -36,14 +36,13 @@ import (
 )
 
 const (
-	// DefaultPeerEndpointReconcileInterval is the default amount of time for how often
-	// the peer endpoint leases are reconciled.
+	// DefaultPeerEndpointReconcileInterval 是对等端点租约的默认重建间隔。
 	DefaultPeerEndpointReconcileInterval = 10 * time.Second
-	// DefaultPeerEndpointReconcilerTTL is the default TTL timeout for peer endpoint
-	// leases on the storage layer
+	// DefaultPeerEndpointReconcilerTTL 是存储层中对等端点租约的默认 TTL。
 	DefaultPeerEndpointReconcilerTTL = 15 * time.Second
 )
 
+// BuildPeerProxy 构造对等代理 handler，使无法本地服务的请求能被转发到其他 apiserver。
 func BuildPeerProxy(
 	leaseInformer coordinationv1informers.LeaseInformer,
 	loopbackClientConfig *rest.Config,
@@ -78,8 +77,7 @@ func BuildPeerProxy(
 			return nil, err
 		}
 
-		// We only set the DialHolder if an egress dialer is explicitly configured for the
-		// ControlPlane network context, otherwise the transport will fall back to the default direct dialer.
+		// 仅为 ControlPlane 网络上下文显式配置的 egress dialer 设置 DialHolder，否则 transport 回退到默认直连。
 		if egressDialer != nil {
 			proxyClientConfig.DialHolder = &transport.DialHolder{Dial: egressDialer}
 		}
@@ -96,8 +94,7 @@ func BuildPeerProxy(
 	)
 }
 
-// CreatePeerEndpointLeaseReconciler creates a apiserver endpoint lease reconciliation loop
-// The peer endpoint leases are used to find network locations of apiservers for peer proxy
+// CreatePeerEndpointLeaseReconciler 创建 apiserver 端点租约重建循环，租约供对等代理定位各 apiserver 的网络地址。
 func CreatePeerEndpointLeaseReconciler(c genericapiserver.Config, storageFactory serverstorage.StorageFactory) (reconcilers.PeerEndpointLeaseReconciler, error) {
 	ttl := DefaultPeerEndpointReconcilerTTL
 	config, err := storageFactory.NewConfig(api.Resource("apiServerPeerIPInfo"), &api.Endpoints{})
@@ -108,8 +105,7 @@ func CreatePeerEndpointLeaseReconciler(c genericapiserver.Config, storageFactory
 	return reconciler, err
 }
 
-// utility function to get the apiserver address that is used by peer apiservers to proxy
-// requests to this apiserver in case the peer is incapable of serving the request
+// getPeerAddress 返回对等 apiserver 用于代理请求到本 apiserver 的地址；优先使用显式通告地址。
 func getPeerAddress(peerAdvertiseAddress reconcilers.PeerAdvertiseAddress, publicAddress net.IP, publicServicePort int) string {
 	if peerAdvertiseAddress.PeerAdvertiseIP != "" && peerAdvertiseAddress.PeerAdvertisePort != "" {
 		return net.JoinHostPort(peerAdvertiseAddress.PeerAdvertiseIP, peerAdvertiseAddress.PeerAdvertisePort)
