@@ -23,16 +23,15 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// StaticConfigSuffix is the reserved suffix for manifest-based admission configurations.
-// Resources with names ending in this suffix can only be created via static manifest
-// files loaded at API server startup, not through the REST API.
-// NOTE: This constant is duplicated in staging/src/k8s.io/apiserver/pkg/admission/plugin/manifest/validation.go
-// because this package cannot import from staging. Keep both in sync.
+// StaticConfigSuffix 是基于清单（manifest）的准入配置保留的后缀。
+// 名称以该后缀结尾的资源只能通过 API Server 启动时加载的静态清单文件创建，
+// 不能通过 REST API 创建或修改。
+// 注意：这个常量在 staging/src/k8s.io/apiserver/pkg/admission/plugin/manifest/validation.go 中有一份副本，
+// 因为当前包不能从 staging 导入，修改时必须两处保持同步。
 const StaticConfigSuffix = ".static.k8s.io"
 
-// ValidateStaticSuffix validates that the name does not end with the reserved static suffix.
-// When the ManifestBasedAdmissionControlConfig feature gate is enabled, returns an error
-// if the name uses the reserved suffix.
+// ValidateStaticSuffix 校验名称没有使用保留的静态配置后缀。
+// 当名称以该后缀结尾时返回错误，防止通过 API 覆盖启动时加载的静态配置。
 func ValidateStaticSuffix(name string, fldPath *field.Path) field.ErrorList {
 	var allErrors field.ErrorList
 	if strings.HasSuffix(name, StaticConfigSuffix) {
@@ -42,7 +41,8 @@ func ValidateStaticSuffix(name string, fldPath *field.Path) field.ErrorList {
 	return allErrors
 }
 
-// WarningsForStaticSuffix returns warnings if the name uses the reserved static suffix.
+// WarningsForStaticSuffix 在名称使用了保留的静态配置后缀时返回警告信息，
+// 用于校验之外的提示场景（例如 dry-run）。
 func WarningsForStaticSuffix(name string) []string {
 	if strings.HasSuffix(name, StaticConfigSuffix) {
 		return []string{

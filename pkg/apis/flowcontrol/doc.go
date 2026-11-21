@@ -17,5 +17,5 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=flowcontrol.apiserver.k8s.io
 
-// Package flowcontrol provides api definitions for the "flowcontrol.apiserver.k8s.io" api group.
+// Package flowcontrol 提供 "flowcontrol.apiserver.k8s.io" API 组的定义。
 package flowcontrol

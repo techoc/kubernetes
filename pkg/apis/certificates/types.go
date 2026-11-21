@@ -99,19 +99,19 @@ type CertificateSigningRequestSpec struct {
 	Usages []KeyUsage
 
 	// Information about the requesting user.
-	// See user.Info interface for details.
+	// 详见 user.Info 接口。
 	// +optional
 	Username string
 	// UID information about the requesting user.
-	// See user.Info interface for details.
+	// 详见 user.Info 接口。
 	// +optional
 	UID string
 	// Group information about the requesting user.
-	// See user.Info interface for details.
+	// 详见 user.Info 接口。
 	// +optional
 	Groups []string
 	// Extra information about the requesting user.
-	// See user.Info interface for details.
+	// 详见 user.Info 接口。
 	// +optional
 	Extra map[string]ExtraValue
 }
@@ -138,7 +138,7 @@ const (
 	LegacyUnknownSignerName = "kubernetes.io/legacy-unknown"
 )
 
-// ExtraValue masks the value so protobuf can generate
+// ExtraValue 对值做掩码，使 protobuf 能够生成
 type ExtraValue []string
 
 type CertificateSigningRequestStatus struct {
@@ -163,7 +163,7 @@ const (
 type CertificateSigningRequestCondition struct {
 	// type of the condition. Known conditions include "Approved", "Denied", and "Failed".
 	Type RequestConditionType
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False 或 Unknown。
 	// Approved, Denied, and Failed conditions may not be "False" or "Unknown".
 	// If unset, should be treated as "True".
 	// +optional
@@ -345,17 +345,17 @@ type PodCertificateRequestSpec struct {
 	// The key must be one of RSA3072, RSA4096, ECDSAP256, ECDSAP384, ECDSAP521,
 	// or ED25519. Note that this list may be expanded in the future.
 	//
-	// Signer implementations do not need to support all key types supported by
-	// kube-apiserver and kubelet.  If a signer does not support the key type
-	// used for a given PodCertificateRequest, it must deny the request by
-	// setting a status.conditions entry with a type of "Denied" and a reason of
-	// "UnsupportedKeyType". It may also suggest a key type that it does support
-	// in the message field.
+	// Signer 实现无需支持 kube-apiserver 和 kubelet 支持的所有密钥类型。
+	// 若 signer 不支持某个 PodCertificateRequest 使用的密钥类型，
+	// 它必须通过以下方式拒绝该请求：
+	// 设置 status.conditions 条目，type 为 "Denied"、reason 为
+	// "UnsupportedKeyType"。它也可以在 message 字段中建议自己支持的密钥类型。
+	// （承接上一行）。
 	//
-	// Deprecated: This field is replaced by StubPKCS10Request. If
+	// 已弃用：该字段由 StubPKCS10Request 取代。若
 	// StubPKCS10Request is set, this field must be empty.  Signer
 	// implementations should extract the public key from the StubPKCS10Request
-	// field.
+	// 字段。
 	//
 	// +optional
 	PKIXPublicKey []byte
@@ -381,7 +381,7 @@ type PodCertificateRequestSpec struct {
 	// [ED25519 Specification](https://ed25519.cr.yp.to/) (as implemented by the
 	// golang library crypto/ed25519.Sign).
 	//
-	// Deprecated: This field is replaced by StubPKCS10Request. If
+	// 已弃用：该字段由 StubPKCS10Request 取代。若
 	// StubPKCS10Request is set, this field must be empty.
 	//
 	// +optional
@@ -399,12 +399,12 @@ type PodCertificateRequestSpec struct {
 	// ECDSAP384, ECDSAP521, or ED25519. Note that this list may be expanded in
 	// the future.
 	//
-	// Signer implementations do not need to support all key types supported by
-	// kube-apiserver and kubelet.  If a signer does not support the key type
-	// used for a given PodCertificateRequest, it must deny the request by
-	// setting a status.conditions entry with a type of "Denied" and a reason of
-	// "UnsupportedKeyType". It may also suggest a key type that it does support
-	// in the message field.
+	// Signer 实现无需支持 kube-apiserver 和 kubelet 支持的所有密钥类型。
+	// 若 signer 不支持某个 PodCertificateRequest 使用的密钥类型，
+	// 它必须通过以下方式拒绝该请求：
+	// 设置 status.conditions 条目，type 为 "Denied"、reason 为
+	// "UnsupportedKeyType"。它也可以在 message 字段中建议自己支持的密钥类型。
+	// （承接上一行）。
 	StubPKCS10Request []byte
 
 	// unverifiedUserAnnotations allow pod authors to pass additional information to

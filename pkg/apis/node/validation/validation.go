@@ -17,19 +17,20 @@ limitations under the License.
 package validation
 
 import (
+	"regexp"
+
 	apivalidation "k8s.io/apimachinery/pkg/api/validation"
 	unversionedvalidation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/kubernetes/pkg/apis/core"
 	corevalidation "k8s.io/kubernetes/pkg/apis/core/validation"
 	"k8s.io/kubernetes/pkg/apis/node"
-	"regexp"
 )
 
-// Define normalization rules to handle field name differences across API versions.
-// v1alpha1 nests fields under "spec" (e.g. "spec.runtimeHandler", "spec.scheduling")
-// while v1/v1beta1 expose them at the top level ("handler", "scheduling"), matching
-// the internal type used by handwritten validation.
+// 定义归一化规则，用来处理不同 API 版本之间的字段名差异：
+// v1alpha1 把字段嵌套在 "spec" 下（如 "spec.runtimeHandler"、"spec.scheduling"），
+// 而 v1/v1beta1 把它们暴露在顶层（"handler"、"scheduling"），
+// 与手写校验使用的内部类型保持一致。这样同一套声明式校验规则可以复用于各版本。
 var NodeNormalizationRules = []field.NormalizationRule{
 	{
 		Regexp:      regexp.MustCompile(`^spec\.runtimeHandler(.*)$`),
@@ -41,9 +42,12 @@ var NodeNormalizationRules = []field.NormalizationRule{
 	},
 }
 
-// ValidateRuntimeClass validates the RuntimeClass
+// ValidateRuntimeClass 校验 RuntimeClass 对象：
+// 包括元数据、必填且符合 DNS Label 格式的 handler、可选的 overhead 与 scheduling。
 func ValidateRuntimeClass(rc *node.RuntimeClass) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMeta(&rc.ObjectMeta, false, apivalidation.NameIsDNSSubdomain, field.NewPath("metadata"))
+	// handler 必填，且必须是合法的 DNS Label（小写短名称），
+	// 因为它会作为 CRI 运行时句柄使用，命名约束比对象名更严格。
 	if rc.Handler == "" {
 		allErrs = append(allErrs, field.Required(field.NewPath("handler"), "").MarkCoveredByDeclarative())
 	} else {
@@ -52,6 +56,7 @@ func ValidateRuntimeClass(rc *node.RuntimeClass) field.ErrorList {
 		}
 	}
 
+	// overhead/scheduling 是可选字段，只有非空时才做进一步校验。
 	if rc.Overhead != nil {
 		allErrs = append(allErrs, validateOverhead(rc.Overhead, field.NewPath("overhead"))...)
 	}
@@ -62,7 +67,9 @@ func ValidateRuntimeClass(rc *node.RuntimeClass) field.ErrorList {
 	return allErrs
 }
 
-// ValidateRuntimeClassUpdate validates an update to the object
+// ValidateRuntimeClassUpdate 校验 RuntimeClass 的更新：
+// 元数据按常规规则更新，但 handler 一旦创建便不可变更，
+// 因为运行中 Pod 的运行时由 handler 决定，变更会导致语义不一致。
 func ValidateRuntimeClassUpdate(new, old *node.RuntimeClass) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMetaUpdate(&new.ObjectMeta, &old.ObjectMeta, field.NewPath("metadata"))
 
@@ -71,12 +78,15 @@ func ValidateRuntimeClassUpdate(new, old *node.RuntimeClass) field.ErrorList {
 	return allErrs
 }
 
+// validateOverhead 校验 Pod 运行时的固定资源开销。
 func validateOverhead(overhead *node.Overhead, fldPath *field.Path) field.ErrorList {
-	// reuse the ResourceRequirements validation logic
+	// 复用 ResourceRequirements 的校验逻辑，
+	// 把 PodFixed 当作 Limits 校验，保证资源名称与数量格式与容器资源一致。
 	return corevalidation.ValidateContainerResourceRequirements(&core.ResourceRequirements{Limits: overhead.PodFixed}, nil, fldPath,
 		corevalidation.PodValidationOptions{})
 }
 
+// validateScheduling 校验调度约束：nodeSelector 的标签格式与 tolerations 的合法性。
 func validateScheduling(s *node.Scheduling, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if s.NodeSelector != nil {
@@ -86,12 +96,16 @@ func validateScheduling(s *node.Scheduling, fldPath *field.Path) field.ErrorList
 	return allErrs
 }
 
+// validateTolerations 校验 toleration 列表本身，并额外检查重复项：
+// 准入阶段追加 RuntimeClass 的 toleration 时会去重，
+// 存储层也要求列表键唯一，避免歧义。
 func validateTolerations(tolerations []core.Toleration, fldPath *field.Path) field.ErrorList {
 	allErrs := corevalidation.ValidateTolerations(tolerations, fldPath, corevalidation.PodValidationOptions{}, corevalidation.KeyFormatCovered)
-	// Ensure uniquenes of tolerations.
+	// 确保 toleration 唯一，重复项会导致准入阶段合并时语义不确定。
 	tolerationSet := map[core.Toleration]bool{}
 	for i, t := range tolerations {
-		// listKey includes the toleration fields identified as listKeys in the API.
+		// listKey 只包含 API 中定义为列表键（listKeys）的字段，
+		// TolerationSeconds 不参与重复性判断，因此两个仅时长不同的 toleration 仍视为重复。
 		listKey := core.Toleration{
 			Key:      t.Key,
 			Operator: t.Operator,

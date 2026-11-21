@@ -25,21 +25,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// IsKubernetesSignerName checks if signerName is one reserved by the Kubernetes project.
+// IsKubernetesSignerName 判断 signerName 是否属于 Kubernetes 项目保留的域名。
 func IsKubernetesSignerName(signerName string) bool {
 	hostName, _, _ := strings.Cut(signerName, "/")
 	return hostName == "kubernetes.io" || strings.HasSuffix(hostName, ".kubernetes.io")
 }
 
-// ValidateSignerName checks that signerName is syntactically valid.
+// ValidateSignerName 校验 signerName 在语法上是否合法。
 //
-// ensure signerName is of the form domain.com/something and up to 571 characters.
-// This length and format is specified to accommodate signerNames like:
-// <fqdn>/<resource-namespace>.<resource-name>.
-// The max length of a FQDN is 253 characters (DNS1123Subdomain max length)
-// The max length of a namespace name is 63 characters (DNS1123Label max length)
-// The max length of a resource name is 253 characters (DNS1123Subdomain max length)
-// We then add an additional 2 characters to account for the one '.' and one '/'.
+// 要求 signerName 形如 domain.com/something，且最长 571 个字符。
+// 这一长度和格式是为了容纳形如 <fqdn>/<resource-namespace>.<resource-name> 的 signerName：
+// FQDN 最长 253 个字符（DNS1123Subdomain 的上限）；
+// namespace 名最长 63 个字符（DNS1123Label 的上限）；
+// 资源名最长 253 个字符（DNS1123Subdomain 的上限）；
+// 再加上一个 '.' 和一个 '/'，合计额外 2 个字符。
 func ValidateSignerName(fldPath *field.Path, signerName string) field.ErrorList {
 	var el field.ErrorList
 	if len(signerName) == 0 {
@@ -48,58 +47,52 @@ func ValidateSignerName(fldPath *field.Path, signerName string) field.ErrorList 
 	}
 
 	segments := strings.Split(signerName, "/")
-	// validate that there is one '/' in the signerName.
-	// we do this after validating the domain segment to provide more info to the user.
+	// 校验 signerName 中恰好有一个 '/'。
+	// 放在域名段校验之后，是为了给用户提供更有针对性的错误信息。
 	if len(segments) != 2 {
 		el = append(el, field.Invalid(fldPath, signerName, "must be a fully qualified domain and path of the form 'example.com/signer-name'"))
-		// return early here as we should not continue attempting to validate a missing or malformed path segment
-		// (i.e. one containing multiple or zero `/`)
+		// 此处提前返回：路径段缺失或格式错误（含多个或零个 `/`）时不应继续校验。
 		return el
 	}
 
-	// validate that segments[0] is less than 253 characters altogether
+	// 校验 segments[0] 总长度不超过 253 个字符。
 	maxDomainSegmentLength := validation.DNS1123SubdomainMaxLength
 	if len(segments[0]) > maxDomainSegmentLength {
 		el = append(el, field.TooLong(fldPath, "" /*unused*/, maxDomainSegmentLength))
 	}
-	// validate that segments[0] consists of valid DNS1123 labels separated by '.'
+	// 校验 segments[0] 由 '.' 分隔的合法 DNS1123 label 组成。
 	domainLabels := strings.Split(segments[0], ".")
 	for _, lbl := range domainLabels {
-		// use IsDNS1123Label as we want to ensure the max length of any single label in the domain
-		// is 63 characters
+		// 使用 IsDNS1123Label 是为了确保域名中单个 label 的长度不超过 63。
 		if errs := validation.IsDNS1123Label(lbl); len(errs) > 0 {
 			for _, err := range errs {
 				el = append(el, field.Invalid(fldPath, segments[0], fmt.Sprintf("validating label %q: %s", lbl, err)))
 			}
-			// if we encounter any errors whilst parsing the domain segment, break from
-			// validation as any further error messages will be duplicates, and non-distinguishable
-			// from each other, confusing users.
+			// 域名段一旦出错就停止校验：后续错误信息只会重复且难以区分，反而让用户困惑。
 			break
 		}
 	}
 
-	// validate that there is at least one '.' in segments[0]
+	// 校验 segments[0] 至少包含一个 '.'（即至少两个由点分隔的段）。
 	if len(domainLabels) < 2 {
 		el = append(el, field.Invalid(fldPath, segments[0], "should be a domain with at least two segments separated by dots"))
 	}
 
-	// validate that segments[1] consists of valid DNS1123 subdomains separated by '.'.
+	// 校验 segments[1] 由 '.' 分隔的合法 DNS1123 subdomain 组成。
 	pathLabels := strings.Split(segments[1], ".")
 	for _, lbl := range pathLabels {
-		// use IsDNS1123Subdomain because it enforces a length restriction of 253 characters
-		// which is required in order to fit a full resource name into a single 'label'
+		// 使用 IsDNS1123Subdomain 是因为它强制 253 字符的长度上限，
+		// 这样才能容纳一个完整的资源名作为单个 label。
 		if errs := validation.IsDNS1123Subdomain(lbl); len(errs) > 0 {
 			for _, err := range errs {
 				el = append(el, field.Invalid(fldPath, segments[1], fmt.Sprintf("validating label %q: %s", lbl, err)))
 			}
-			// if we encounter any errors whilst parsing the path segment, break from
-			// validation as any further error messages will be duplicates, and non-distinguishable
-			// from each other, confusing users.
+			// 路径段一旦出错就停止校验：后续错误信息只会重复且难以区分，反而让用户困惑。
 			break
 		}
 	}
 
-	// ensure that segments[1] can accommodate a dns label + dns subdomain + '.'
+	// 确保 segments[1] 能容纳 dns label + dns subdomain + '.'。
 	maxPathSegmentLength := validation.DNS1123SubdomainMaxLength + validation.DNS1123LabelMaxLength + 1
 	maxSignerNameLength := maxDomainSegmentLength + maxPathSegmentLength + 1
 	if len(signerName) > maxSignerNameLength {
@@ -109,8 +102,9 @@ func ValidateSignerName(fldPath *field.Path, signerName string) field.ErrorList 
 	return el
 }
 
-// ValidateClusterTrustBundleName checks that a ClusterTrustBundle name conforms
-// to the rules documented on the type.
+// ValidateClusterTrustBundleName 校验 ClusterTrustBundle 名称是否符合类型文档中的规则。
+// 返回的函数可直接用作 apimachinery 的名称校验器：无 signerName 时按 DNS 子域名校验；
+// 有 signerName 时名称必须以 signerName 中的 '/' 换成 ':' 后加 ':' 为前缀。
 func ValidateClusterTrustBundleName(signerName string) func(name string, prefix bool) []string {
 	return func(name string, isPrefix bool) []string {
 		if signerName == "" {
@@ -128,9 +122,11 @@ func ValidateClusterTrustBundleName(signerName string) func(name string, prefix 
 	}
 }
 
+// extractSignerNameFromClusterTrustBundleName 从 ClusterTrustBundle 名称中提取 signerName。
+// 若名称包含 ':'，则将最后一个 ':' 之前的部分中的 ':' 还原为 '/' 作为 signerName。
 func extractSignerNameFromClusterTrustBundleName(name string) (string, bool) {
 	if splitPoint := strings.LastIndex(name, ":"); splitPoint != -1 {
-		// This looks like it refers to a signerName trustbundle.
+		// 名称中包含 ':'，说明它是与某个 signerName 绑定的 trustbundle。
 		return strings.ReplaceAll(name[:splitPoint], ":", "/"), true
 	} else {
 		return "", false

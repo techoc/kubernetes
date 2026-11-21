@@ -23,11 +23,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// addDefaultingFuncs 向 Scheme 注册 v1beta1 版本的默认值处理函数。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// SetDefaults_ValidatingAdmissionPolicySpec sets defaults for ValidatingAdmissionPolicySpec
+// SetDefaults_ValidatingAdmissionPolicySpec 为验证准入策略规格设置默认值，
+// 未指定失败策略时默认为 Fail。
 func SetDefaults_ValidatingAdmissionPolicySpec(obj *admissionregistrationv1beta1.ValidatingAdmissionPolicySpec) {
 	if obj.FailurePolicy == nil {
 		policy := admissionregistrationv1beta1.Fail
@@ -35,7 +37,8 @@ func SetDefaults_ValidatingAdmissionPolicySpec(obj *admissionregistrationv1beta1
 	}
 }
 
-// SetDefaults_MatchResources sets defaults for MatchResources
+// SetDefaults_MatchResources 为 MatchResources 设置默认值：
+// 匹配策略默认为 Equivalent，空选择器表示匹配全部命名空间/对象。
 func SetDefaults_MatchResources(obj *admissionregistrationv1beta1.MatchResources) {
 	if obj.MatchPolicy == nil {
 		policy := admissionregistrationv1beta1.Equivalent
@@ -51,7 +54,9 @@ func SetDefaults_MatchResources(obj *admissionregistrationv1beta1.MatchResources
 	}
 }
 
-// SetDefaults_ValidatingWebhook sets defaults for webhook validating
+// SetDefaults_ValidatingWebhook 为验证 webhook 设置默认值。
+// v1beta1 保留了历史默认值：失败策略为 Ignore、匹配策略为 Exact、超时 30 秒，
+// 这些与 v1 版本不同，升级时需特别注意行为差异。
 func SetDefaults_ValidatingWebhook(obj *admissionregistrationv1beta1.ValidatingWebhook) {
 	if obj.FailurePolicy == nil {
 		policy := admissionregistrationv1beta1.Ignore
@@ -79,12 +84,15 @@ func SetDefaults_ValidatingWebhook(obj *admissionregistrationv1beta1.ValidatingW
 		*obj.TimeoutSeconds = 30
 	}
 
+	// 未指定 AdmissionReviewVersions 时，使用当前版本作为默认值。
 	if len(obj.AdmissionReviewVersions) == 0 {
 		obj.AdmissionReviewVersions = []string{admissionregistrationv1beta1.SchemeGroupVersion.Version}
 	}
 }
 
-// SetDefaults_MutatingWebhook sets defaults for webhook mutating
+// SetDefaults_MutatingWebhook 为变更 webhook 设置默认值。
+// 与验证 webhook 一样保留 v1beta1 的历史默认行为，
+// 另外把重新调用策略默认为 Never。
 func SetDefaults_MutatingWebhook(obj *admissionregistrationv1beta1.MutatingWebhook) {
 	if obj.FailurePolicy == nil {
 		policy := admissionregistrationv1beta1.Ignore
@@ -116,19 +124,22 @@ func SetDefaults_MutatingWebhook(obj *admissionregistrationv1beta1.MutatingWebho
 		obj.ReinvocationPolicy = &never
 	}
 
+	// 未指定 AdmissionReviewVersions 时，使用当前版本作为默认值。
 	if len(obj.AdmissionReviewVersions) == 0 {
 		obj.AdmissionReviewVersions = []string{admissionregistrationv1beta1.SchemeGroupVersion.Version}
 	}
 }
 
-// SetDefaults_ServiceReference sets defaults for Webhook's ServiceReference
+// SetDefaults_ServiceReference 为 webhook 的服务引用设置默认值，
+// 未指定端口时默认使用 HTTPS 标准端口 443。
 func SetDefaults_ServiceReference(obj *admissionregistrationv1beta1.ServiceReference) {
 	if obj.Port == nil {
 		obj.Port = ptr.To[int32](443)
 	}
 }
 
-// SetDefaults_MutatingAdmissionPolicySpec sets defaults for MutatingAdmissionPolicySpec
+// SetDefaults_MutatingAdmissionPolicySpec 为变更准入策略规格设置默认值，
+// 未指定失败策略时默认为 Fail。
 func SetDefaults_MutatingAdmissionPolicySpec(obj *admissionregistrationv1beta1.MutatingAdmissionPolicySpec) {
 	if obj.FailurePolicy == nil {
 		policy := admissionregistrationv1beta1.Fail

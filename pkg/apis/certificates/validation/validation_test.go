@@ -54,11 +54,16 @@ var (
 	validUsages     = []capi.KeyUsage{capi.UsageKeyEncipherment}
 )
 
+// TestValidateCertificateSigningRequestCreate 表驱动验证 CSR 创建时的 spec 校验：
+// 依次覆盖 request（PEM 内容）、usages（非空、合法、不重复）、signerName（格式、域名限定、
+// 路径标签合法性、长度上限）以及 expirationSeconds（最短 10 分钟）等必填与约束；
+// 状态条件部分验证 Approved/Denied 互斥、Failed 可与 Approved 共存，
+// 防止创建阶段就写入逻辑上互相矛盾的条件组合。
 func TestValidateCertificateSigningRequestCreate(t *testing.T) {
 	specPath := field.NewPath("spec")
-	// maxLengthSignerName is a signerName that is of maximum length, utilising
-	// the max length specifications defined in validation.go.
-	// It is of the form <fqdn(253)>/<resource-namespace(63)>.<resource-name(253)>
+	// maxLengthSignerName 按 validation.go 中的长度上限构造出最长的 signerName：
+	// 形式为 <fqdn(253)>/<resource-namespace(63)>.<resource-name(253)>，
+	// 长度定义参考 validation.go 中的上限规格。
 	maxLengthFQDN := fmt.Sprintf("%s.%s.%s.%s", strings.Repeat("a", 63), strings.Repeat("a", 63), strings.Repeat("a", 63), strings.Repeat("a", 61))
 	maxLengthSignerName := fmt.Sprintf("%s/%s.%s", maxLengthFQDN, strings.Repeat("a", 63), strings.Repeat("a", 253))
 	tests := map[string]struct {
@@ -208,7 +213,7 @@ func TestValidateCertificateSigningRequestCreate(t *testing.T) {
 				Spec: capi.CertificateSigningRequestSpec{
 					Usages:  validUsages,
 					Request: newCSRPEM(t),
-					// this string is longer than the max signerName limit (635 chars)
+					// 该字符串超过 signerName 的长度上限（635 字符），用于触发 TooLong 错误。
 					SignerName: maxLengthSignerName + ".toolong",
 				},
 			},
@@ -222,7 +227,7 @@ func TestValidateCertificateSigningRequestCreate(t *testing.T) {
 				Spec: capi.CertificateSigningRequestSpec{
 					Usages:  validUsages,
 					Request: newCSRPEM(t),
-					// this string is longer than the max signerName limit (635 chars)
+					// FQDN 部分超过 253 字符，即使总长未超限也应单独被拒绝。
 					SignerName: fmt.Sprintf("%s.extra/valid-path", maxLengthFQDN),
 				},
 			},
@@ -254,13 +259,13 @@ func TestValidateCertificateSigningRequestCreate(t *testing.T) {
 			},
 		},
 		"signerName of max length in format <fully-qualified-domain-name>/<resource-namespace>.<resource-name> is valid": {
-			// ensure signerName is of the form domain.com/something and up to 571 characters.
-			// This length and format is specified to accommodate signerNames like:
-			// <fqdn>/<resource-namespace>.<resource-name>.
-			// The max length of a FQDN is 253 characters (DNS1123Subdomain max length)
-			// The max length of a namespace name is 63 characters (DNS1123Label max length)
-			// The max length of a resource name is 253 characters (DNS1123Subdomain max length)
-			// We then add an additional 2 characters to account for the one '.' and one '/'.
+			// 该用例验证 signerName 恰好取到上限时仍然合法：
+			// 规定这个长度和格式是为了容纳形如下述结构的 signerName：
+			// <fqdn>/<resource-namespace>.<resource-name>。
+			// FQDN 最长 253 字符（DNS1123Subdomain 的上限）。
+			// 命名空间最长 63 字符（DNS1123Label 的上限）。
+			// 资源名最长 253 字符（DNS1123Subdomain 的上限）。
+			// 再加上 '.' 和 '/' 各 1 个字符，共 2 个。
 			csr: capi.CertificateSigningRequest{
 				ObjectMeta: validObjectMeta,
 				Spec: capi.CertificateSigningRequestSpec{
@@ -441,6 +446,8 @@ func TestValidateCertificateSigningRequestCreate(t *testing.T) {
 	}
 }
 
+// newCSRPEM 用随机 Ed25519 密钥现场生成一个合法的 CERTIFICATE REQUEST PEM 块，
+// 供各用例作为 spec.request 的有效基线；失败时直接 Fatal，因为后续所有用例都依赖它。
 func newCSRPEM(t *testing.T) []byte {
 	template := &x509.CertificateRequest{
 		Subject: pkix.Name{
@@ -471,6 +478,10 @@ func newCSRPEM(t *testing.T) []byte {
 	return p
 }
 
+// Test_getValidationOptions 验证兼容性选项的推导逻辑：
+// 新建和干净对象走严格校验；旧对象里出现互斥条件、重复/空条件类型、legacy signer、
+// 未知或重复 usages、以及证书内容未变（或本来就是非法内容）时，
+// 自动生成对应的宽容选项，使历史遗留对象在更新时不被新规则卡死。
 func Test_getValidationOptions(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -559,6 +570,9 @@ func Test_getValidationOptions(t *testing.T) {
 	}
 }
 
+// TestValidateCertificateSigningRequestUpdate 验证普通更新子资源时的约束：
+// 审批条件（Approved/Denied）和证书内容不允许随意增删，Failed 条件与 finalizer 可变更；
+// 用集合比较错误而非顺序比较，因为一次更新可能同时产生多条独立错误。
 func TestValidateCertificateSigningRequestUpdate(t *testing.T) {
 	validUpdateMeta := validObjectMeta
 	validUpdateMeta.ResourceVersion = "1"
@@ -582,6 +596,7 @@ func TestValidateCertificateSigningRequestUpdate(t *testing.T) {
 		newCSR: &capi.CertificateSigningRequest{ObjectMeta: validUpdateMeta, Spec: validSpec},
 		oldCSR: &capi.CertificateSigningRequest{ObjectMeta: validUpdateMeta, Spec: validSpec},
 	}, {
+		// 已有非法证书时只改 finalizer 应放行：已有脏数据不能阻塞元数据的正常维护。
 		name:   "finalizer change with invalid status",
 		newCSR: &capi.CertificateSigningRequest{ObjectMeta: validUpdateMeta, Spec: validSpec, Status: capi.CertificateSigningRequestStatus{Certificate: invalidCertificateNoPEM}},
 		oldCSR: &capi.CertificateSigningRequest{ObjectMeta: validUpdateMetaWithFinalizers, Spec: validSpec, Status: capi.CertificateSigningRequestStatus{Certificate: invalidCertificateNoPEM}},
@@ -686,6 +701,10 @@ func TestValidateCertificateSigningRequestUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateCertificateSigningRequestStatusUpdate 验证 status 子资源更新的校验：
+// 审批条件与证书内容不可篡改，但允许一次性写入合法证书；
+// 还覆盖了对存量脏数据（无效证书、未知/重复 usages）做无关修改时不被误伤，
+// 以及互斥条件、重复 usages 等错误必须报出。
 func TestValidateCertificateSigningRequestStatusUpdate(t *testing.T) {
 	validUpdateMeta := validObjectMeta
 	validUpdateMeta.ResourceVersion = "1"
@@ -822,6 +841,9 @@ func TestValidateCertificateSigningRequestStatusUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateCertificateSigningRequestApprovalUpdate 验证 approval 子资源更新的特殊权限：
+// 只有此路径允许添加 Approved/Denied 条件，但删除这些条件、设置证书仍然禁止，
+// 以此把“审批”与“签发”“普通修改”三条权限路径严格隔开。
 func TestValidateCertificateSigningRequestApprovalUpdate(t *testing.T) {
 	validUpdateMeta := validObjectMeta
 	validUpdateMeta.ResourceVersion = "1"
@@ -849,6 +871,7 @@ func TestValidateCertificateSigningRequestApprovalUpdate(t *testing.T) {
 		newCSR: &capi.CertificateSigningRequest{ObjectMeta: validUpdateMeta, Spec: validSpec, Status: capi.CertificateSigningRequestStatus{Certificate: invalidCertificateNoPEM}},
 		oldCSR: &capi.CertificateSigningRequest{ObjectMeta: validUpdateMetaWithFinalizers, Spec: validSpec, Status: capi.CertificateSigningRequestStatus{Certificate: invalidCertificateNoPEM}},
 	}, {
+		// approval 子资源的核心能力：只有这里可以添加审批条件，且不应报错。
 		name: "add Approved condition",
 		newCSR: &capi.CertificateSigningRequest{ObjectMeta: validUpdateMeta, Spec: validSpec, Status: capi.CertificateSigningRequestStatus{
 			Conditions: []capi.CertificateSigningRequestCondition{{Type: capi.CertificateApproved, Status: core.ConditionTrue}},
@@ -922,7 +945,7 @@ func TestValidateCertificateSigningRequestApprovalUpdate(t *testing.T) {
 	}
 }
 
-// Test_validateCertificateSigningRequestOptions verifies validation options are effective in tolerating specific aspects of CSRs
+// Test_validateCertificateSigningRequestOptions 验证各宽容选项确实只放过对应的特殊点：每个用例先用宽松选项校验必须零错误，再用严格选项校验必须出现预期错误。
 func Test_validateCertificateSigningRequestOptions(t *testing.T) {
 	validSpec := capi.CertificateSigningRequestSpec{
 		Usages:     validUsages,
@@ -931,22 +954,22 @@ func Test_validateCertificateSigningRequestOptions(t *testing.T) {
 	}
 
 	tests := []struct {
-		// testcase name
+		// 用例名称。
 		name string
 
-		// csr being validated
+		// 待校验的 CSR。
 		csr *capi.CertificateSigningRequest
 
-		// options that allow the csr to pass validation
+		// 能让该 CSR 通过校验的宽容选项。
 		lenientOpts certificateValidationOptions
 
-		// regexes matching expected errors when validating strictly
+		// 严格校验时预期错误的正则匹配（用于错误信息含随机值的场景）。
 		strictRegexes []regexp.Regexp
 
-		// expected errors (after filtering out errors matched by strictRegexes) when validating strictly
+		// 严格校验时预期出现的错误（正则匹配项过滤后剩余的部分）。
 		strictErrs []string
 	}{
-		// valid strict cases
+		// 严格校验下本身就合法的用例：无需任何宽容选项。
 		{
 			name: "no status",
 			csr:  &capi.CertificateSigningRequest{ObjectMeta: validObjectMeta, Spec: validSpec},
@@ -981,7 +1004,7 @@ func Test_validateCertificateSigningRequestOptions(t *testing.T) {
 			},
 		},
 
-		// legacy signer
+		// 旧版 signerName：严格模式必须拒绝，宽松选项放行。
 		{
 			name: "legacy signer",
 			csr: &capi.CertificateSigningRequest{
@@ -996,7 +1019,7 @@ func Test_validateCertificateSigningRequestOptions(t *testing.T) {
 			strictErrs:  []string{`spec.signerName: Invalid value: "kubernetes.io/legacy-unknown": the legacy signerName is not allowed via this API version`},
 		},
 
-		// invalid condition cases
+		// 各类非法条件组合：空类型、互斥、重复类型。
 		{
 			name: "empty condition type",
 			csr: &capi.CertificateSigningRequest{ObjectMeta: validObjectMeta, Spec: validSpec,
@@ -1026,7 +1049,7 @@ func Test_validateCertificateSigningRequestOptions(t *testing.T) {
 			strictErrs:  []string{`status.conditions[1].type: Duplicate value: "Approved"`},
 		},
 
-		// invalid allowArbitraryCertificate cases
+		// 非法证书内容：宽松选项完全跳过证书解析，严格模式逐一报出具体的格式错误。
 		{
 			name: "status.certificate, no PEM",
 			csr: &capi.CertificateSigningRequest{ObjectMeta: validObjectMeta, Spec: validSpec,
@@ -1101,18 +1124,18 @@ func Test_validateCertificateSigningRequestOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// make sure the lenient options validate with no errors
+			// 先用宽松选项校验：这一遍必须零错误，否则说明宽容选项没有真正生效。
 			for _, err := range validateCertificateSigningRequest(tt.csr, tt.lenientOpts) {
 				t.Errorf("unexpected error with lenient options: %s", err.Error())
 			}
 
-			// make sure the strict options produce the expected errors
+			// 再用严格选项校验，收集全部错误用于后续比对。
 			gotErrs := sets.NewString()
 			for _, err := range validateCertificateSigningRequest(tt.csr, certificateValidationOptions{}) {
 				gotErrs.Insert(err.Error())
 			}
 
-			// filter errors matching strictRegexes and ensure every strictRegex matches at least one error
+			// 正则匹配的错误须逐条命中并移除，确保每条正则都真正匹配到了错误，剩余错误再与严格预期集合精确比对。
 			for _, expectedRegex := range tt.strictRegexes {
 				matched := false
 				for _, err := range gotErrs.List() {
@@ -1137,6 +1160,8 @@ func Test_validateCertificateSigningRequestOptions(t *testing.T) {
 	}
 }
 
+// mustMakeCertificate 使用固定随机种子生成自签名证书，
+// 保证 ClusterTrustBundle 测试中“内容相同但 PEM 编码不同”的重复证书用例可复现。
 func mustMakeCertificate(t *testing.T, template *x509.Certificate) []byte {
 	gen := mathrand.New(mathrand.NewSource(12345))
 
@@ -1153,6 +1178,8 @@ func mustMakeCertificate(t *testing.T, template *x509.Certificate) []byte {
 	return cert
 }
 
+// mustMakePEMBlock 把证书 DER 包装成带指定类型与头部的 PEM 块，
+// 方便构造合法与非法的 trustBundle 条目。
 func mustMakePEMBlock(blockType string, headers map[string]string, data []byte) string {
 	return string(pem.EncodeToMemory(&pem.Block{
 		Type:    blockType,
@@ -1161,6 +1188,11 @@ func mustMakePEMBlock(blockType string, headers map[string]string, data []byte) 
 	}))
 }
 
+// TestValidateClusterTrustBundle 表驱动验证 ClusterTrustBundle 创建校验：
+// 覆盖信任锚内容（必须至少一条、CA 位、X.509 可解析、去重、PEM 块类型与头部）、
+// signerName 与对象名的前缀约束、bundle 大小上限；
+// 同时验证 SuppressBundleParsing 开关能跳过内容解析，以及同一批用例在“无字段变更”的
+// 更新路径上不会误报 trustBundle 错误。
 func TestValidateClusterTrustBundle(t *testing.T) {
 	goodCert1 := mustMakeCertificate(t, &x509.Certificate{
 		SerialNumber: big.NewInt(0),
@@ -1190,6 +1222,7 @@ func TestValidateClusterTrustBundle(t *testing.T) {
 	goodCert1Block := string(mustMakePEMBlock("CERTIFICATE", nil, goodCert1))
 	goodCert2Block := string(mustMakePEMBlock("CERTIFICATE", nil, goodCert2))
 
+	// 仅改变 PEM 内部换行格式，DER 内容不变：用于验证去重按证书内容而非字节串比较。
 	goodCert1AlternateBlock := strings.ReplaceAll(goodCert1Block, "\n", "\n\t\n")
 
 	badNotCACertBlock := string(mustMakePEMBlock("CERTIFICATE", nil, badNotCACert))
@@ -1198,6 +1231,7 @@ func TestValidateClusterTrustBundle(t *testing.T) {
 	badBlockTypeBlock := string(mustMakePEMBlock("NOTACERTIFICATE", nil, goodCert1))
 	badNonParseableBlock := string(mustMakePEMBlock("CERTIFICATE", nil, []byte("this is not a certificate")))
 
+	// 构造超过 Secret 大小上限的 bundle，验证创建时按存储上限拒绝。
 	badTooBigBundle := ""
 	for i := 0; i < (core.MaxSecretSize/len(goodCert1Block))+1; i++ {
 		badTooBigBundle += goodCert1Block + "\n"
@@ -1448,9 +1482,10 @@ func TestValidateClusterTrustBundle(t *testing.T) {
 				t.Fatalf("Unexpected error output from Validate; diff (-got +want)\n%s", diff)
 			}
 
-			// When there are no changes to the object,
-			// ValidateClusterTrustBundleUpdate should not report errors about
-			// the TrustBundle field.
+			// 对象内容不变时，更新路径不应再报 trustBundle 相关错误，
+			// 对象内容未发生任何变化时，
+			// ValidateClusterTrustBundleUpdate 不应报告关于
+			// TrustBundle 字段的错误。
 			tc.bundle.ObjectMeta.ResourceVersion = "1"
 			newBundle := tc.bundle.DeepCopy()
 			newBundle.ObjectMeta.ResourceVersion = "2"
@@ -1470,6 +1505,8 @@ func TestValidateClusterTrustBundle(t *testing.T) {
 	}
 }
 
+// TestValidateClusterTrustBundleUpdate 验证 bundle 更新时 signerName 不可变、
+// 对象名必须与 signerName 前缀一致；追加证书允许，清空 bundle 或替换成垃圾内容都被拒绝。
 func TestValidateClusterTrustBundleUpdate(t *testing.T) {
 	goodCert1 := mustMakeCertificate(t, &x509.Certificate{
 		SerialNumber: big.NewInt(0),
@@ -1600,10 +1637,20 @@ func TestValidateClusterTrustBundleUpdate(t *testing.T) {
 	}
 }
 
+// TestValidatePodCertificateRequestCreate 验证 PodCertificateRequest 创建校验。
+// 用例覆盖：Ed25519/ECDSA/RSA 各算法的合法与非法密钥（曲线、模长限制）、
+// 持有证明签名（消息错、签名密钥错）、PKCS#10 与公钥二选一互斥、
+// signerName/Pod/ServiceAccount/Node 各标识字段的格式与非空、
+// maxExpirationSeconds 的范围（含 kubernetes.io 签名者的更严格上限）、
+// 公钥与证明的大小上限，以及用户注解键名、前缀长度、总大小的校验。
+// 所有密码学材料都在测试内现场生成，保证签名验证走的是真实路径。
 func TestValidatePodCertificateRequestCreate(t *testing.T) {
 	podUID1 := "pod-uid-1"
+	// 持有证明签名的消息就是 Pod UID，签名错消息或错密钥都应被验签拦下。
 	_, _, ed25519PubPKIX1, ed25519Proof1, ed25519CSR1 := mustMakeEd25519KeyAndProof(t, []byte(podUID1), []string{})
+	// 用另一个 UID 签名：密钥本身合法，但签名消息与被申请 Pod 不匹配。
 	_, _, ed25519PubPKIX2, ed25519Proof2, _ := mustMakeEd25519KeyAndProof(t, []byte("other-value"), []string{})
+	// 用另一把密钥签同一消息：公钥字段来自第一把密钥，验签必然失败。
 	_, _, _, ed25519Proof3, _ := mustMakeEd25519KeyAndProof(t, []byte(podUID1), []string{})
 	_, _, ecdsaP224PubPKIX1, ecdsaP224Proof1 := mustMakeECDSAKeyAndProof(t, elliptic.P224(), []byte(podUID1))
 	_, _, ecdsaP256PubPKIX1, ecdsaP256Proof1 := mustMakeECDSAKeyAndProof(t, elliptic.P256(), []byte(podUID1))
@@ -2209,6 +2256,7 @@ func TestValidatePodCertificateRequestCreate(t *testing.T) {
 			},
 		},
 		{
+			// 超长公钥直接触发大小上限；下面的公钥长度恰好超过上限一个字节，用于验证边界判断是严格的。
 			description: "pkixPublicKey too long",
 			pcr: &capi.PodCertificateRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2344,6 +2392,9 @@ func TestValidatePodCertificateRequestCreate(t *testing.T) {
 	}
 }
 
+// TestValidatePodCertificateRequestUpdate 验证 PCR 创建后 spec 整体不可变：
+// 任意字段（signer、Pod/SA/Node 标识、有效期、公钥、注解）变化都报 immutability 错误，
+// 保证证书申请与最初核验过的身份始终一一对应。
 func TestValidatePodCertificateRequestUpdate(t *testing.T) {
 	podUID1 := "pod-uid-1"
 	_, _, pubPKIX1, proof1, _ := mustMakeEd25519KeyAndProof(t, []byte(podUID1), []string{})
@@ -2429,8 +2480,16 @@ func TestValidatePodCertificateRequestUpdate(t *testing.T) {
 	}
 }
 
+// TestValidatePodCertificateRequestStatusUpdate 验证 PCR 状态机的合法性。
+// 用例覆盖：无变化放行、未知条件类型拒绝、Issued/Denied/Failed 条件必须为 True、
+// 各状态间合法的单向流转与禁止的流转（如 Denied/Failed/Issued 回到 pending、
+// Denied 与 Failed 互换、签发后更换证书）、
+// 以及已签发证书链的时间边界（notBefore/notAfter/beginRefreshAt）、时长范围、
+// 叶证书 DNS 名称与邮箱地址的合法性。
+// 证书由真实 CA 与中间 CA 现场签发，确保 X.509 校验路径被完整执行。
 func TestValidatePodCertificateRequestStatusUpdate(t *testing.T) {
 	caCertDER, caPrivKey := mustMakeCA(t)
+	// 中间 CA 用于验证“由中间 CA 签发的证书链同样被接受”。
 	intermediateCACertDER, intermediateCAPrivKey := mustMakeIntermediateCA(t, caCertDER, caPrivKey)
 
 	podUID1 := "pod-uid-1"
@@ -2438,8 +2497,11 @@ func TestValidatePodCertificateRequestStatusUpdate(t *testing.T) {
 
 	pod1Cert1 := mustSignCertForPublicKey(t, 24*time.Hour, pub1, caCertDER, caPrivKey, false, "", "")
 	pod1Cert2 := mustSignCertForPublicKey(t, 18*time.Hour, pub1, caCertDER, caPrivKey, false, "", "")
+	// 50 分钟有效期：小于一小时下限，应被拒绝。
 	badCertTooShort := mustSignCertForPublicKey(t, 50*time.Minute, pub1, caCertDER, caPrivKey, false, "", "")
+	// 25 小时有效期：超过请求允许的最大有效期，应被拒绝。
 	badCertTooLong := mustSignCertForPublicKey(t, 25*time.Hour, pub1, caCertDER, caPrivKey, false, "", "")
+	// 下面几张证书分别带上空 DNS 名、连续点、前导点和尾随点，用于验证 DNS 名称校验。
 	certWithBadDNSName1 := mustSignCertForPublicKey(t, 24*time.Hour, pub1, caCertDER, caPrivKey, true, "", "")
 	certWithBadDNSName2 := mustSignCertForPublicKey(t, 24*time.Hour, pub1, caCertDER, caPrivKey, true, "test-name..example", "")
 	certWithBadDNSName3 := mustSignCertForPublicKey(t, 24*time.Hour, pub1, caCertDER, caPrivKey, true, ".example", "")
@@ -3836,6 +3898,7 @@ func TestValidatePodCertificateRequestStatusUpdate(t *testing.T) {
 			},
 		},
 		{
+			// 刷新时间过早会导致客户端拿到即将过期的证书，必须留出至少 10 分钟。
 			description: "beginRefreshAt must be >= notBefore + 10 min",
 			oldPCR: &capi.PodCertificateRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -4419,6 +4482,7 @@ func TestValidatePodCertificateRequestStatusUpdate(t *testing.T) {
 	}
 }
 
+// mustMakeCA 生成测试用的 Ed25519 根 CA 证书及私钥，有效期固定，便于精确断言证书时间约束。
 func mustMakeCA(t *testing.T) ([]byte, ed25519.PrivateKey) {
 	signPub, signPriv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -4441,6 +4505,7 @@ func mustMakeCA(t *testing.T) ([]byte, ed25519.PrivateKey) {
 	return caCertDER, signPriv
 }
 
+// mustMakeIntermediateCA 用根 CA 签发一张中间 CA，供测试验证多级证书链被正确接受。
 func mustMakeIntermediateCA(t *testing.T, rootDER []byte, rootPrivateKey crypto.PrivateKey) ([]byte, ed25519.PrivateKey) {
 	intermediatePub, intermediatePriv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -4468,6 +4533,7 @@ func mustMakeIntermediateCA(t *testing.T, rootDER []byte, rootPrivateKey crypto.
 	return intermediateCertDER, intermediatePriv
 }
 
+// mustParseTime 解析 RFC3339 时间戳，解析失败直接 Fatal：测试中的时间都是硬编码常量。
 func mustParseTime(t *testing.T, stamp string) time.Time {
 	got, err := time.Parse(time.RFC3339, stamp)
 	if err != nil {
@@ -4476,6 +4542,8 @@ func mustParseTime(t *testing.T, stamp string) time.Time {
 	return got
 }
 
+// mustMakeEd25519KeyAndProof 生成 Ed25519 密钥对、PKIX 公钥、持有证明签名以及 PKCS#10 请求，
+// 签名内容为传入的待签消息（通常是 Pod UID），便于验证签名与身份的绑定关系。
 func mustMakeEd25519KeyAndProof(t *testing.T, toBeSigned []byte, pkcs10DNSSANS []string) (ed25519.PrivateKey, ed25519.PublicKey, []byte, []byte, []byte) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -4495,6 +4563,8 @@ func mustMakeEd25519KeyAndProof(t *testing.T, toBeSigned []byte, pkcs10DNSSANS [
 	return priv, pub, pubPKIX, sig, pkcs10DER
 }
 
+// mustMakeECDSAKeyAndProof 生成指定曲线的 ECDSA 密钥与持有证明；
+// 签名前先哈希待签消息，与生产代码的验签流程保持一致。
 func mustMakeECDSAKeyAndProof(t *testing.T, curve elliptic.Curve, toBeSigned []byte) (*ecdsa.PrivateKey, *ecdsa.PublicKey, []byte, []byte) {
 	priv, err := ecdsa.GenerateKey(curve, rand.Reader)
 	if err != nil {
@@ -4511,6 +4581,8 @@ func mustMakeECDSAKeyAndProof(t *testing.T, curve elliptic.Curve, toBeSigned []b
 	return priv, &priv.PublicKey, pubPKIX, sig
 }
 
+// mustMakeRSAKeyAndProof 生成指定模长的 RSA 密钥与 PSS 签名，
+// 用于覆盖 RSA 模长下限（3072/4096）的允许与拒绝场景。
 func mustMakeRSAKeyAndProof(t *testing.T, modulusSize int, toBeSigned []byte) (*rsa.PrivateKey, *rsa.PublicKey, []byte, []byte) {
 	priv, err := rsa.GenerateKey(rand.Reader, modulusSize)
 	if err != nil {
@@ -4527,6 +4599,8 @@ func mustMakeRSAKeyAndProof(t *testing.T, modulusSize int, toBeSigned []byte) (*
 	return priv, &priv.PublicKey, pubPKIX, sig
 }
 
+// mustSignCertForPublicKey 用给定 CA 签发一张叶证书，
+// 可按需注入非法 DNS 名或邮箱地址，以便测试证书链内容校验而不必手写 ASN.1。
 func mustSignCertForPublicKey(t *testing.T, validity time.Duration, subjectPublicKey crypto.PublicKey, caCertDER []byte, caPrivateKey crypto.PrivateKey, usebadDNSName bool, badDNSName, badEmailAddress string) string {
 	certTemplate := &x509.Certificate{
 		Subject: pkix.Name{
@@ -4537,6 +4611,7 @@ func mustSignCertForPublicKey(t *testing.T, validity time.Duration, subjectPubli
 		NotBefore:   mustParseTime(t, "1970-01-01T00:00:00Z"),
 		NotAfter:    mustParseTime(t, "1970-01-01T00:00:00Z").Add(validity),
 	}
+	// 只有需要触发 DNS 校验失败的用例才写入 DNS 名称，其他证书保持干净。
 	if usebadDNSName {
 		certTemplate.DNSNames = append(certTemplate.DNSNames, badDNSName)
 	}
@@ -4562,6 +4637,7 @@ func mustSignCertForPublicKey(t *testing.T, validity time.Duration, subjectPubli
 	return string(certPEM)
 }
 
+// pemEncode 把 DER 数据编码为指定类型的 PEM 字符串，简化非法 PEM 用例的构造。
 func pemEncode(blockType string, data []byte) string {
 	return string(pem.EncodeToMemory(&pem.Block{
 		Type:  blockType,
@@ -4656,7 +4732,8 @@ Leading non-PEM content
 Trailing non-PEM content
 `)
 
-	// first character is invalid
+	// 第一个字符被改坏，DER/ASN.1 解析必然失败，用于触发证书内容解析错误。
+	// 第一个字符被改坏，DER/ASN.1 解析必然失败，用于触发证书内容解析错误。
 	invalidCertificateNonASN1Data = []byte(`
 Leading non-PEM content
 -----BEGIN CERTIFICATE-----

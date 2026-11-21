@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestValidatePodLogOptions 验证 Pod 日志选项的校验规则与错误汇总。
 func TestValidatePodLogOptions(t *testing.T) {
 
 	var (

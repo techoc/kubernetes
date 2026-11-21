@@ -31,6 +31,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试 v1beta1 资源 API 与内部类型之间的转换，覆盖 DeviceRequest/ResourceSliceSpec/Device 等结构的字段重排，以及非法输入应产生的错误。
 func TestConversion(t *testing.T) {
 	nodeName := "test-node"
 	testcases := []struct {

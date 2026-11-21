@@ -26,19 +26,20 @@ import (
 	"k8s.io/kubernetes/pkg/apis/rbac"
 	v1 "k8s.io/kubernetes/pkg/apis/rbac/v1"
 
-	// install RBAC types
+	// 安装 RBAC 类型，使 scheme 能够执行转换。
 	_ "k8s.io/kubernetes/pkg/apis/rbac/install"
 )
 
-// TestHelpersRoundTrip confirms that the rbac.New* helper functions produce RBAC objects that match objects
-// that have gone through conversion and defaulting.  This is required because these helper functions are
-// used to create the bootstrap RBAC policy which is used during reconciliation.  If they produced objects
-// that did not match, reconciliation would incorrectly add duplicate data to the cluster's RBAC policy.
+// TestHelpersRoundTrip 确认 rbac.New* 辅助函数生成的对象与经过转换、默认化的对象一致。
+// 这些函数用于创建 bootstrap RBAC 策略；若结果不一致，协调时会在集群策略中
+// 重复添加数据。
 func TestHelpersRoundTrip(t *testing.T) {
+	// 分别构造角色绑定、集群角色绑定以及对应的主体集合。
 	rb := rbac.NewRoleBinding("role", "ns").Groups("g").SAs("ns", "sa").Users("u").BindingOrDie()
 	rbcr := rbac.NewRoleBindingForClusterRole("role", "ns").Groups("g").SAs("ns", "sa").Users("u").BindingOrDie()
 	crb := rbac.NewClusterBinding("role").Groups("g").SAs("ns", "sa").Users("u").BindingOrDie()
 
+	// 同时构造普通角色与集群角色，覆盖规则构建器。
 	role := &rbac.Role{
 		Rules: []rbac.PolicyRule{
 			rbac.NewRule("verb").Groups("g").Resources("foo").RuleOrDie(),
@@ -52,12 +53,14 @@ func TestHelpersRoundTrip(t *testing.T) {
 		},
 	}
 
+	// 把内部对象转为外部版本并应用默认化，再转回内部对象。
 	for _, internalObj := range []runtime.Object{&rb, &rbcr, &crb, role, clusterRole} {
 		v1Obj, err := legacyscheme.Scheme.ConvertToVersion(internalObj, v1.SchemeGroupVersion)
 		if err != nil {
 			t.Errorf("err on %T: %v", internalObj, err)
 			continue
 		}
+		// 默认化会填充 APIGroup 等字段，往返一致才说明辅助函数输出正确。
 		legacyscheme.Scheme.Default(v1Obj)
 		roundTrippedObj, err := legacyscheme.Scheme.ConvertToVersion(v1Obj, rbac.SchemeGroupVersion)
 		if err != nil {
@@ -71,6 +74,7 @@ func TestHelpersRoundTrip(t *testing.T) {
 	}
 }
 
+// TestResourceMatches 校验资源通配符、子资源以及路径片段的匹配规则。
 func TestResourceMatches(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -80,12 +84,14 @@ func TestResourceMatches(t *testing.T) {
 		expected                  bool
 	}{
 		{
+			// 通配符可匹配任意资源。
 			name:                      "all matches 01",
 			ruleResources:             []string{"*"},
 			combinedRequestedResource: "foo",
 			expected:                  true,
 		},
 		{
+			// 只要有一条规则匹配即视为匹配。
 			name:                      "checks all rules",
 			ruleResources:             []string{"doesn't match", "*"},
 			combinedRequestedResource: "foo",
@@ -105,6 +111,7 @@ func TestResourceMatches(t *testing.T) {
 			expected:                  false,
 		},
 		{
+			// 子资源中的星号只匹配路径片段，不能跨段匹配。
 			name:                      "matches subresource",
 			ruleResources:             []string{"*/scale"},
 			combinedRequestedResource: "foo/scale",
@@ -112,6 +119,7 @@ func TestResourceMatches(t *testing.T) {
 			expected:                  true,
 		},
 		{
+			// 部分命中不应算作匹配，避免权限被意外放大。
 			name:                      "doesn't match partial subresource hit",
 			ruleResources:             []string{"foo/bar", "*/other"},
 			combinedRequestedResource: "foo/other/segment",
@@ -162,6 +170,7 @@ func TestResourceMatches(t *testing.T) {
 		},
 	}
 
+	// 逐条构造规则并调用 ResourceMatches 验证预期结果。
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			rule := &rbac.PolicyRule{
@@ -176,6 +185,7 @@ func TestResourceMatches(t *testing.T) {
 	}
 }
 
+// TestPolicyRuleBuilder 校验规则构建器的合法性判断与生成结果。
 func TestPolicyRuleBuilder(t *testing.T) {
 	tests := []struct {
 		testName   string
@@ -188,6 +198,7 @@ func TestPolicyRuleBuilder(t *testing.T) {
 		policyRule rbac.PolicyRule
 	}{
 		{
+			// 全部字段为空时构建失败。
 			testName:   "all empty",
 			verbs:      nil,
 			groups:     nil,
@@ -230,6 +241,7 @@ func TestPolicyRuleBuilder(t *testing.T) {
 			},
 		},
 		{
+			// 非资源 URL 不能与 API 组、资源或资源名混用。
 			testName:   "nonResourceURLs with no-empty groups",
 			verbs:      []string{"get"},
 			groups:     []string{""},
@@ -270,6 +282,7 @@ func TestPolicyRuleBuilder(t *testing.T) {
 			policyRule: rbac.PolicyRule{},
 		},
 		{
+			// resourceNames 只能与 list/watch/get 等按名访问的动词搭配。
 			testName:   "resourceNames with illegal verb",
 			verbs:      []string{"list", "watch", "create", "deletecollection"},
 			groups:     []string{""},
@@ -290,6 +303,7 @@ func TestPolicyRuleBuilder(t *testing.T) {
 			policyRule: rbac.PolicyRule{},
 		},
 	}
+	// 合法用例比较生成的规则，非法用例确认返回错误。
 	for _, tc := range tests {
 		actual, err := rbac.NewRule(tc.verbs...).Groups(tc.groups...).Resources(tc.resources...).Names(tc.names...).URLs(tc.urls...).Rule()
 		if err != nil {

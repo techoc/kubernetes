@@ -28,15 +28,23 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Test for #101370
+// 该测试针对 issue #101370：修复 CPU 指标同时存在 AverageValue 和 Utilization 时，
+// 转换到 v1 应优先取 Utilization 值，且不能被目标对象中已有的旧值干扰。
+// TestConvert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscalerSpec
+// 用表驱动方式验证 internal HPA Spec 到 v1 Spec 的转换：
+// 包括 CPU 利用率优先于 AverageValue、目标对象旧值被覆盖、
+// 无指标时保留目标字段，以及只有利用率指标的情况。
 func TestConvert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscalerSpec(t *testing.T) {
 
+	// args 保存一次用例的输入、输出对象和期望结果。
 	type args struct {
 		in        *autoscaling.HorizontalPodAutoscalerSpec
 		out       *autoscalingv1.HorizontalPodAutoscalerSpec
 		expectOut *autoscalingv1.HorizontalPodAutoscalerSpec
 		s         conversion.Scope
 	}
+	// 前两个用例验证同一组指标在不同初始 out 值下都能得到 Utilization=70；
+	// 后两个用例分别验证无指标和只有利用率指标时目标字段不被误改。
 	tests := []struct {
 		name    string
 		args    args
@@ -178,6 +186,7 @@ func TestConvert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAuto
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 同时检查错误是否符合预期，以及输出对象与期望值是否完全一致。
 			if err := Convert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscalerSpec(tt.args.in, tt.args.out, tt.args.s); (err != nil) != tt.wantErr {
 				t.Errorf("Convert_autoscaling_HorizontalPodAutoscalerSpec_To_v1_HorizontalPodAutoscalerSpec() error = %v, wantErr %v", err, tt.wantErr)
 			}

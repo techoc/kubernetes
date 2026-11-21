@@ -21,25 +21,25 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包对应的 API 组名。
 const GroupName = "coordination.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha2"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接收不带组名的 resource，返回带组名的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
 	localSchemeBuilder = &coordinationv1alpha2.SchemeBuilder
-	// AddToScheme is a common registration function for mapping packaged scoped group & version keys to a scheme
+	// AddToScheme 是通用的注册函数，把本包的 group/version 与类型映射到 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
+	// 这里只手动注册手写函数，生成器负责注册其余部分：
 	// generated functions takes place in the generated files. The separation
 	// makes the code compile even when the generated files are missing.
 	localSchemeBuilder.Register(RegisterDefaults)

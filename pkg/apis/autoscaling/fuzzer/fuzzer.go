@@ -27,26 +27,32 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Funcs returns the fuzzer functions for the autoscaling api group.
+// Funcs 返回 autoscaling API 组的 fuzz 函数集合。
+// 这些函数把随机生成的对象修正为满足 API 约束的合法对象，
+// 避免 fuzz 测试因为非法值而失败，而不是因为真正的转换 bug 失败。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
+		// fuzz ScaleStatus 时保证 Selector 是合法的标签选择器字符串，
+		// 直接随机生成的字符串无法通过反序列化校验。
 		func(s *autoscaling.ScaleStatus, c randfill.Continue) {
-			c.FillNoCustom(s) // fuzz self without calling this function again
+			c.FillNoCustom(s) // 递归填充自身字段，但不再次调用当前 fuzz 函数，避免无限递归
 
-			// ensure we have a valid selector
+			// 重新生成一个合法的标签选择器，并转换成字符串形式
 			metaSelector := &metav1.LabelSelector{}
 			c.Fill(metaSelector)
 			labelSelector, _ := metav1.LabelSelectorAsSelector(metaSelector)
 			s.Selector = labelSelector.String()
 		},
+		// fuzz HPA Spec 时，用合法取值覆盖随机生成的指标与伸缩行为字段，
+		// 确保后续转换和序列化测试拿到结构完整的对象。
 		func(s *autoscaling.HorizontalPodAutoscalerSpec, c randfill.Continue) {
-			c.FillNoCustom(s) // fuzz self without calling this function again
+			c.FillNoCustom(s) // 递归填充自身字段，但不再次调用当前 fuzz 函数，避免无限递归
 			s.MinReplicas = ptr.To[int32](c.Rand.Int31())
 
 			randomQuantity := func() resource.Quantity {
 				var q resource.Quantity
 				c.Fill(&q)
-				// precalc the string for benchmarking purposes
+				// 预先计算一次字符串形式，避免基准测试中重复计算影响测量
 				_ = q.String()
 				return q
 			}
@@ -128,12 +134,14 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 				},
 			}
 		},
+		// fuzz HPA Status 时，用固定的指标类型组合覆盖随机字段，
+		// 保证 CurrentMetrics 里的每种指标都有对应的合法取值。
 		func(s *autoscaling.HorizontalPodAutoscalerStatus, c randfill.Continue) {
-			c.FillNoCustom(s) // fuzz self without calling this function again
+			c.FillNoCustom(s) // 递归填充自身字段，但不再次调用当前 fuzz 函数，避免无限递归
 			randomQuantity := func() resource.Quantity {
 				var q resource.Quantity
 				c.Fill(&q)
-				// precalc the string for benchmarking purposes
+				// 预先计算一次字符串形式，避免基准测试中重复计算影响测量
 				_ = q.String()
 				return q
 			}

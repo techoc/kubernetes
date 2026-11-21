@@ -22,9 +22,11 @@ import (
 	"errors"
 )
 
-// ParseCSR decodes a PEM encoded CSR
+// ParseCSR 解码一段 PEM 编码的证书签名请求（CSR），
+// 返回可用于字段校验的 x509.CertificateRequest。
+// 注意请求体必须是 "CERTIFICATE REQUEST" 类型的 PEM 块，其他类型一律拒绝。
 func ParseCSR(pemBytes []byte) (*x509.CertificateRequest, error) {
-	// extract PEM from request object
+	// 从请求对象中解出 PEM 块；pem.Decode 对非法输入静默返回 nil，故需显式判空。
 	block, _ := pem.Decode(pemBytes)
 	if block == nil || block.Type != "CERTIFICATE REQUEST" {
 		return nil, errors.New("PEM block type must be CERTIFICATE REQUEST")

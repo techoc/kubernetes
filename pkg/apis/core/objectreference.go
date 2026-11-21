@@ -23,15 +23,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// SetGroupVersionKind sets the API version and kind of the object reference
+// SetGroupVersionKind 把传入的 GVK 分解后写入对象引用的 APIVersion 与 Kind 字段。
 func (obj *ObjectReference) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
-// GroupVersionKind returns the API version and kind of the object reference
+// GroupVersionKind 从对象引用的 APIVersion 与 Kind 字段还原出 GVK。
 func (obj *ObjectReference) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
 }
 
-// GetObjectKind returns the kind of object reference
+// GetObjectKind 返回对象引用自身，使其实现 schema.ObjectKind 接口。
 func (obj *ObjectReference) GetObjectKind() schema.ObjectKind { return obj }

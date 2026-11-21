@@ -27,6 +27,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestDefaultWithPriorityLevelConfiguration 验证 v1 版本优先级级别配置的默认化行为：
+// 豁免级别和可借出比例默认为 0，限制级别未指定的名义并发份额默认为 30；
+// 显式设为 0 的名义并发份额不应被默认化覆盖。
 func TestDefaultWithPriorityLevelConfiguration(t *testing.T) {
 	tests := []struct {
 		name     string

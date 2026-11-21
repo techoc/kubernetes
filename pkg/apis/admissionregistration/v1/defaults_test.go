@@ -30,6 +30,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestDefaultAdmissionWebhook 验证 v1 版本验证/变更 webhook 配置经过默认化后，
+// 失败策略、匹配策略、超时、选择器、重新调用策略、规则作用域和服务端口都被正确填充。
 func TestDefaultAdmissionWebhook(t *testing.T) {
 	fail := v1.Fail
 	equivalent := v1.Equivalent
@@ -133,6 +135,8 @@ func TestDefaultAdmissionWebhook(t *testing.T) {
 	}
 }
 
+// TestDefaultAdmissionPolicy 验证 v1 版本验证准入策略及其绑定经过默认化后，
+// 失败策略、匹配资源策略和选择器、规则作用域均被正确填充。
 func TestDefaultAdmissionPolicy(t *testing.T) {
 	fail := v1.Fail
 	equivalent := v1.Equivalent

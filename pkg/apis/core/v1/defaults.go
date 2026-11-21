@@ -32,10 +32,12 @@ import (
 	"k8s.io/kubernetes/pkg/util/parsers"
 )
 
+// addDefaultingFuncs 向 scheme 注册 v1 的所有默认值填充函数。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_ResourceList 将资源值向上取整到毫（milli）级精度，以保持 API 兼容性。
 func SetDefaults_ResourceList(obj *v1.ResourceList) {
 	for key, val := range *obj {
 		// TODO(#18538): We round up resource values to milli scale to maintain API compatibility.
@@ -47,6 +49,7 @@ func SetDefaults_ResourceList(obj *v1.ResourceList) {
 	}
 }
 
+// SetDefaults_ReplicationController 从 Pod 模板的标签中填充 RC 的 selector 与 Labels。
 func SetDefaults_ReplicationController(obj *v1.ReplicationController) {
 	var labels map[string]string
 	if obj.Spec.Template != nil {
@@ -61,8 +64,11 @@ func SetDefaults_ReplicationController(obj *v1.ReplicationController) {
 			obj.Labels = labels
 		}
 	}
-	// obj.Spec.Replicas is defaulted declaratively
+	// obj.Spec.Replicas 通过声明式默认值机制填充。
 }
+
+// SetDefaults_Volume 在卷源未指定任何字段时默认使用 EmptyDir；
+// 并对 Image 卷根据镜像 tag 填充默认拉取策略。
 func SetDefaults_Volume(obj *v1.Volume) {
 	if ptr.AllPtrFieldsNil(&obj.VolumeSource) {
 		obj.VolumeSource = v1.VolumeSource{
@@ -70,7 +76,7 @@ func SetDefaults_Volume(obj *v1.Volume) {
 		}
 	}
 	if utilfeature.DefaultFeatureGate.Enabled(features.ImageVolume) && obj.Image != nil && obj.Image.PullPolicy == "" {
-		// PullPolicy defaults to Always if :latest tag is specified, or IfNotPresent otherwise.
+		// 镜像 tag 为 :latest 时拉取策略默认为 Always，否则为 IfNotPresent。
 		_, tag, _, _ := parsers.ParseImageName(obj.Image.Reference)
 		if tag == "latest" {
 			obj.Image.PullPolicy = v1.PullAlways
@@ -79,12 +85,14 @@ func SetDefaults_Volume(obj *v1.Volume) {
 		}
 	}
 }
+
+// SetDefaults_Container 填充容器的默认镜像拉取策略、终止消息路径与终止消息策略。
 func SetDefaults_Container(obj *v1.Container) {
 	if obj.ImagePullPolicy == "" {
-		// Ignore error and assume it has been validated elsewhere
+		// 忽略解析错误：镜像名的合法性假定已在别处校验过。
 		_, tag, _, _ := parsers.ParseImageName(obj.Image)
 
-		// Check image tag
+		// 根据镜像 tag 决定拉取策略。
 		if tag == "latest" {
 			obj.ImagePullPolicy = v1.PullAlways
 		} else {
@@ -99,10 +107,13 @@ func SetDefaults_Container(obj *v1.Container) {
 	}
 }
 
+// SetDefaults_EphemeralContainer 复用普通容器的默认值填充逻辑处理临时容器的公共字段。
 func SetDefaults_EphemeralContainer(obj *v1.EphemeralContainer) {
 	SetDefaults_Container((*v1.Container)(&obj.EphemeralContainerCommon))
 }
 
+// SetDefaults_Service 填充 Service 的默认会话亲和性、类型、端口协议与目标端口，
+// 以及外部/内部流量策略和 LoadBalancer 相关的默认取值。
 func SetDefaults_Service(obj *v1.Service) {
 	if obj.Spec.SessionAffinity == "" {
 		obj.Spec.SessionAffinity = v1.ServiceAffinityNone
@@ -132,8 +143,7 @@ func SetDefaults_Service(obj *v1.Service) {
 			sp.TargetPort = intstr.FromInt32(sp.Port)
 		}
 	}
-	// Defaults ExternalTrafficPolicy field for externally-accessible service
-	// to Global for consistency.
+	// 为保持一致，对可外部访问的 Service 默认设置 ExternalTrafficPolicy 为 Cluster。
 	if service.ExternallyAccessible(obj) && obj.Spec.ExternalTrafficPolicy == "" {
 		obj.Spec.ExternalTrafficPolicy = v1.ServiceExternalTrafficPolicyCluster
 	}
@@ -161,17 +171,20 @@ func SetDefaults_Service(obj *v1.Service) {
 	}
 
 }
+
+// SetDefaults_Pod 填充 Pod 特有（而非 PodSpec 通用）的默认值：
+// 修正负的终止宽限期、由 limit 推导 request，以及服务链接、主机网络和探针协议等默认值。
 func SetDefaults_Pod(obj *v1.Pod) {
-	// Enforced on Pod but not on PodSpec. For historical reasons, PodTemplate is not defaulted this way.
+	// 该修正只作用于 Pod 而不作用于 PodSpec：出于历史原因，PodTemplate 不按此方式填充默认值。
 	if obj.Spec.TerminationGracePeriodSeconds != nil && *obj.Spec.TerminationGracePeriodSeconds < 0 {
 		obj.Spec.TerminationGracePeriodSeconds = ptr.To[int64](1)
 	}
 
-	// If limits are specified, but requests are not, default requests to limits
-	// This is done here rather than a more specific defaulting pass on v1.ResourceRequirements
-	// because we only want this defaulting semantic to take place on a v1.Pod and not a v1.PodTemplate
+	// 若只指定了 limit 而未指定 request，则用 limit 填充 request。
+	// 这一逻辑放在这里而不是 ResourceRequirements 的默认值填充中，
+	// 是因为只希望对 v1.Pod 生效，而不影响 v1.PodTemplate。
 	for i := range obj.Spec.Containers {
-		// set requests to limits if requests are not specified, but limits are
+		// 未指定 request 但指定了 limit 时，将 request 设为 limit。
 		if obj.Spec.Containers[i].Resources.Limits != nil {
 			if obj.Spec.Containers[i].Resources.Requests == nil {
 				obj.Spec.Containers[i].Resources.Requests = make(v1.ResourceList)
@@ -196,10 +209,9 @@ func SetDefaults_Pod(obj *v1.Pod) {
 		}
 	}
 
-	// Pod Requests default values must be applied after container-level default values
-	// have been populated. When PodLevelResourcesFixDefaulting is enabled, this
-	// defaulting is deferred to PrepareForCreate so it runs after admission webhooks
-	// have injected all containers, giving a complete view of the pod.
+	// Pod 级 request 的默认值必须在容器级默认值填充之后应用。
+	// 开启 PodLevelResourcesFixDefaulting 时，这一步会推迟到 PrepareForCreate，
+	// 以便在准入 webhook 注入所有容器之后执行，从而看到完整的 Pod。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources) &&
 		!utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourcesFixDefaulting) {
 		defaultHugePagePodLimits(obj)
@@ -222,34 +234,37 @@ func SetDefaults_Pod(obj *v1.Pod) {
 		defaultHTTPProbeProtocolEphemeral(obj.Spec.EphemeralContainers)
 	}
 }
+
+// SetDefaults_PodStatus 保持单值 PodIP 与列表 PodIPs 同步；两者都存在且不一致时以 PodIP 为准。
 func SetDefaults_PodStatus(obj *v1.PodStatus) {
 	// Keep the singular PodIP and the PodIPs list in sync.
 	hasIP := len(obj.PodIP) > 0
 	hasIPs := len(obj.PodIPs) > 0
 	switch {
 	case hasIP && !hasIPs:
-		// default the list from the singular field
+		// 用单值字段填充列表。
 		obj.PodIPs = []v1.PodIP{{IP: obj.PodIP}}
 	case !hasIP && hasIPs:
-		// default the singular field from the list
+		// 用列表填充单值字段。
 		obj.PodIP = obj.PodIPs[0].IP
 	case hasIP && hasIPs && obj.PodIPs[0].IP != obj.PodIP:
-		// when both are specified and mismatch, PodIP is authoritative for
-		// compatibility with older kubelets
+		// 两者都存在且不一致时，为兼容旧 kubelet 以 PodIP 为准。
 		obj.PodIPs = []v1.PodIP{{IP: obj.PodIP}}
 	}
 }
 
+// SetDefaults_PodSpec 填充 PodSpec 的通用默认值（DNS 策略、重启策略、安全上下文、
+// 终止宽限期、调度器名称等）。新增字段应优先放到 SetDefaults_Pod 而非此处，
+// 以免影响所有携带 PodSpec 的对象。
 func SetDefaults_PodSpec(obj *v1.PodSpec) {
-	// New fields added here will break upgrade tests:
+	// 在此处新增字段会破坏升级测试：
 	// https://github.com/kubernetes/kubernetes/issues/69445
-	// In most cases the new defaulted field can added to SetDefaults_Pod instead of here, so
-	// that it only materializes in the Pod object and not all objects with a PodSpec field.
+	// 大多数情况下，新的默认值字段应加到 SetDefaults_Pod 而不是这里，
+	// 这样它只会出现在 Pod 对象上，而不会出现在所有含 PodSpec 字段的对象上。
 
-	// DeprecatedServiceAccount is an alias for ServiceAccountName; keep the two
-	// in sync, with ServiceAccountName winning when both are set. This was
-	// historically applied during conversion and produces identical
-	// serializations, so it is exempt from the new-field caution above.
+	// DeprecatedServiceAccount 是 ServiceAccountName 的别名，需保持两者一致；
+	// 两者都设置时以 ServiceAccountName 为准。这一处理历史上是在转换阶段完成的，
+	// 且产生完全一致的序列化结果，因此不受上面“新增字段需谨慎”的约束。
 	if len(obj.ServiceAccountName) == 0 {
 		obj.ServiceAccountName = obj.DeprecatedServiceAccount
 	}
@@ -260,7 +275,7 @@ func SetDefaults_PodSpec(obj *v1.PodSpec) {
 	if obj.RestartPolicy == "" {
 		obj.RestartPolicy = v1.RestartPolicyAlways
 	}
-	// Always default an empty securityContext to preserve historical behavior.
+	// 始终将空的 securityContext 默认初始化，以保持历史行为。
 	if obj.SecurityContext == nil {
 		obj.SecurityContext = &v1.PodSecurityContext{}
 	}
@@ -272,6 +287,8 @@ func SetDefaults_PodSpec(obj *v1.PodSpec) {
 		obj.SchedulerName = v1.DefaultSchedulerName
 	}
 }
+
+// SetDefaults_Probe 填充探针的超时、周期与成功/失败阈值默认值。
 func SetDefaults_Probe(obj *v1.Probe) {
 	if obj.TimeoutSeconds == 0 {
 		obj.TimeoutSeconds = 1
@@ -286,41 +303,55 @@ func SetDefaults_Probe(obj *v1.Probe) {
 		obj.FailureThreshold = 3
 	}
 }
+
+// SetDefaults_SecretVolumeSource 为 Secret 卷填充默认文件权限。
 func SetDefaults_SecretVolumeSource(obj *v1.SecretVolumeSource) {
 	if obj.DefaultMode == nil {
 		perm := int32(v1.SecretVolumeSourceDefaultMode)
 		obj.DefaultMode = &perm
 	}
 }
+
+// SetDefaults_ConfigMapVolumeSource 为 ConfigMap 卷填充默认文件权限。
 func SetDefaults_ConfigMapVolumeSource(obj *v1.ConfigMapVolumeSource) {
 	if obj.DefaultMode == nil {
 		perm := int32(v1.ConfigMapVolumeSourceDefaultMode)
 		obj.DefaultMode = &perm
 	}
 }
+
+// SetDefaults_DownwardAPIVolumeSource 为 DownwardAPI 卷填充默认文件权限。
 func SetDefaults_DownwardAPIVolumeSource(obj *v1.DownwardAPIVolumeSource) {
 	if obj.DefaultMode == nil {
 		perm := int32(v1.DownwardAPIVolumeSourceDefaultMode)
 		obj.DefaultMode = &perm
 	}
 }
+
+// SetDefaults_Secret 将未指定类型的 Secret 默认设为 Opaque 类型。
 func SetDefaults_Secret(obj *v1.Secret) {
 	if obj.Type == "" {
 		obj.Type = v1.SecretTypeOpaque
 	}
 }
+
+// SetDefaults_ProjectedVolumeSource 为投影卷填充默认文件权限。
 func SetDefaults_ProjectedVolumeSource(obj *v1.ProjectedVolumeSource) {
 	if obj.DefaultMode == nil {
 		perm := int32(v1.ProjectedVolumeSourceDefaultMode)
 		obj.DefaultMode = &perm
 	}
 }
+
+// SetDefaults_ServiceAccountTokenProjection 将 ServiceAccount token 的默认有效期设为 1 小时。
 func SetDefaults_ServiceAccountTokenProjection(obj *v1.ServiceAccountTokenProjection) {
 	hour := int64(time.Hour.Seconds())
 	if obj.ExpirationSeconds == nil {
 		obj.ExpirationSeconds = &hour
 	}
 }
+
+// SetDefaults_PersistentVolume 填充 PV 的默认阶段、回收策略与卷模式。
 func SetDefaults_PersistentVolume(obj *v1.PersistentVolume) {
 	if obj.Status.Phase == "" {
 		obj.Status.Phase = v1.VolumePending
@@ -333,17 +364,23 @@ func SetDefaults_PersistentVolume(obj *v1.PersistentVolume) {
 		*obj.Spec.VolumeMode = v1.PersistentVolumeFilesystem
 	}
 }
+
+// SetDefaults_PersistentVolumeClaim 填充 PVC 的默认阶段。
 func SetDefaults_PersistentVolumeClaim(obj *v1.PersistentVolumeClaim) {
 	if obj.Status.Phase == "" {
 		obj.Status.Phase = v1.ClaimPending
 	}
 }
+
+// SetDefaults_PersistentVolumeClaimSpec 填充 PVC spec 的默认卷模式。
 func SetDefaults_PersistentVolumeClaimSpec(obj *v1.PersistentVolumeClaimSpec) {
 	if obj.VolumeMode == nil {
 		obj.VolumeMode = new(v1.PersistentVolumeMode)
 		*obj.VolumeMode = v1.PersistentVolumeFilesystem
 	}
 }
+
+// SetDefaults_Endpoints 将 Endpoints 端口的默认协议设为 TCP。
 func SetDefaults_Endpoints(obj *v1.Endpoints) {
 	for i := range obj.Subsets {
 		ss := &obj.Subsets[i]
@@ -355,6 +392,8 @@ func SetDefaults_Endpoints(obj *v1.Endpoints) {
 		}
 	}
 }
+
+// SetDefaults_HTTPGetAction 将 HTTPGet 探针的默认路径设为 '/'、默认协议设为 HTTP。
 func SetDefaults_HTTPGetAction(obj *v1.HTTPGetAction) {
 	if obj.Path == "" {
 		obj.Path = "/"
@@ -364,14 +403,12 @@ func SetDefaults_HTTPGetAction(obj *v1.HTTPGetAction) {
 	}
 }
 
-// SetDefaults_Namespace adds a default label for all namespaces
+// SetDefaults_Namespace 为所有 Namespace 添加默认的名称标签。
 func SetDefaults_Namespace(obj *v1.Namespace) {
-	// we can't SetDefaults for nameless namespaces (generateName).
-	// This code needs to be kept in sync with the implementation that exists
-	// in Namespace Canonicalize strategy (pkg/registry/core/namespace)
+	// 无法为没有名称（使用 generateName）的 Namespace 设置该标签。
+	// 这段代码需要与 Namespace Canonicalize 策略（pkg/registry/core/namespace）中的实现保持一致。
 
-	// note that this can result in many calls to feature enablement in some cases, but
-	// we assume that there's no real cost there.
+	// 注意这在某些情况下可能导致多次特性开关查询，但我们认为其开销可以忽略。
 	if len(obj.Name) > 0 {
 		if obj.Labels == nil {
 			obj.Labels = map[string]string{}
@@ -380,11 +417,14 @@ func SetDefaults_Namespace(obj *v1.Namespace) {
 	}
 }
 
+// SetDefaults_NamespaceStatus 将 Namespace 的默认阶段设为 Active。
 func SetDefaults_NamespaceStatus(obj *v1.NamespaceStatus) {
 	if obj.Phase == "" {
 		obj.Phase = v1.NamespaceActive
 	}
 }
+
+// SetDefaults_NodeStatus 在只有 Capacity 时用其填充 Allocatable。
 func SetDefaults_NodeStatus(obj *v1.NodeStatus) {
 	if obj.Allocatable == nil && obj.Capacity != nil {
 		obj.Allocatable = make(v1.ResourceList, len(obj.Capacity))
@@ -394,13 +434,18 @@ func SetDefaults_NodeStatus(obj *v1.NodeStatus) {
 		obj.Allocatable = obj.Capacity
 	}
 }
+
+// SetDefaults_ObjectFieldSelector 将字段选择器的默认 API 版本设为 v1。
 func SetDefaults_ObjectFieldSelector(obj *v1.ObjectFieldSelector) {
 	if obj.APIVersion == "" {
 		obj.APIVersion = "v1"
 	}
 }
+
+// SetDefaults_LimitRangeItem 为容器类型的 LimitRange 项填充默认限制与默认 request：
+// 默认 limit 取自 max，默认 request 取自默认 limit 或 min。
 func SetDefaults_LimitRangeItem(obj *v1.LimitRangeItem) {
-	// for container limits, we apply default values
+	// 只对容器类型的限制应用默认值。
 	if obj.Type == v1.LimitTypeContainer {
 
 		if obj.Default == nil {
@@ -410,19 +455,19 @@ func SetDefaults_LimitRangeItem(obj *v1.LimitRangeItem) {
 			obj.DefaultRequest = make(v1.ResourceList)
 		}
 
-		// If a default limit is unspecified, but the max is specified, default the limit to the max
+		// 未指定默认 limit 但指定了 max 时，用 max 填充默认 limit。
 		for key, value := range obj.Max {
 			if _, exists := obj.Default[key]; !exists {
 				obj.Default[key] = value.DeepCopy()
 			}
 		}
-		// If a default limit is specified, but the default request is not, default request to limit
+		// 已指定默认 limit 但未指定默认 request 时，用 limit 填充 request。
 		for key, value := range obj.Default {
 			if _, exists := obj.DefaultRequest[key]; !exists {
 				obj.DefaultRequest[key] = value.DeepCopy()
 			}
 		}
-		// If a default request is not specified, but the min is provided, default request to the min
+		// 未指定默认 request 但指定了 min 时，用 min 填充 request。
 		for key, value := range obj.Min {
 			if _, exists := obj.DefaultRequest[key]; !exists {
 				obj.DefaultRequest[key] = value.DeepCopy()
@@ -430,13 +475,15 @@ func SetDefaults_LimitRangeItem(obj *v1.LimitRangeItem) {
 		}
 	}
 }
+
+// SetDefaults_ConfigMap 保证 ConfigMap 的 Data map 非 nil。
 func SetDefaults_ConfigMap(obj *v1.ConfigMap) {
 	if obj.Data == nil {
 		obj.Data = make(map[string]string)
 	}
 }
 
-// With host networking default all container ports to host ports.
+// defaultHostNetworkPorts 在使用主机网络时，把未设置的 HostPort 默认设为 ContainerPort。
 func defaultHostNetworkPorts(containers *[]v1.Container) {
 	for i := range *containers {
 		for j := range (*containers)[i].Ports {
@@ -447,6 +494,7 @@ func defaultHostNetworkPorts(containers *[]v1.Container) {
 	}
 }
 
+// defaultHTTPGetProtocol 将 HTTPGet 动作的协议默认设为 HTTP/1.1。
 func defaultHTTPGetProtocol(action *v1.HTTPGetAction) {
 	if action != nil && action.Protocol == nil {
 		defaultProtocol := v1.HTTPProtocolHTTP1
@@ -454,6 +502,7 @@ func defaultHTTPGetProtocol(action *v1.HTTPGetAction) {
 	}
 }
 
+// defaultHTTPProbeProtocol 为普通容器的各类探针与生命周期钩子中的 HTTPGet 动作填充默认协议。
 func defaultHTTPProbeProtocol(containers []v1.Container) {
 	for i := range containers {
 		if containers[i].LivenessProbe != nil {
@@ -476,6 +525,7 @@ func defaultHTTPProbeProtocol(containers []v1.Container) {
 	}
 }
 
+// defaultHTTPProbeProtocolEphemeral 为临时容器的各类探针与生命周期钩子中的 HTTPGet 动作填充默认协议。
 func defaultHTTPProbeProtocolEphemeral(containers []v1.EphemeralContainer) {
 	for i := range containers {
 		if containers[i].LivenessProbe != nil {
@@ -498,6 +548,7 @@ func defaultHTTPProbeProtocolEphemeral(containers []v1.EphemeralContainer) {
 	}
 }
 
+// SetDefaults_HostPathVolumeSource 将 HostPath 卷的默认类型设为 Unset。
 func SetDefaults_HostPathVolumeSource(obj *v1.HostPathVolumeSource) {
 	typeVol := v1.HostPathUnset
 	if obj.Type == nil {
@@ -505,6 +556,7 @@ func SetDefaults_HostPathVolumeSource(obj *v1.HostPathVolumeSource) {
 	}
 }
 
+// SetDefaults_PodLogOptions 在 PodLogsQuerySplitStreams 特性开启时，将日志流默认设为 All。
 func SetDefaults_PodLogOptions(obj *v1.PodLogOptions) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLogsQuerySplitStreams) {
 		if obj.Stream == nil {
@@ -513,19 +565,14 @@ func SetDefaults_PodLogOptions(obj *v1.PodLogOptions) {
 	}
 }
 
-// defaultPodRequests applies default values for pod-level requests, only when
-// pod-level limits are set, in following scenarios:
-// 1. When at least one container (regular, init or sidecar) has requests set:
-// The pod-level requests become equal to the effective requests of all containers
-// in the pod.
-// 2. When no containers have requests set: The pod-level requests become equal to
-// pod-level limits.
-// This defaulting behavior ensures consistent resource accounting at the pod-level
-// while maintaining compatibility with the container-level specifications, as detailed
-// in KEP-2837: https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/2837-pod-level-resource-spec/README.md#proposed-validation--defaulting-rules
+// defaultPodRequests 仅在设置了 Pod 级 limit 时，按以下规则填充 Pod 级 request：
+// 1. 若至少一个容器（普通/init/sidecar）设置了 request，则 Pod 级 request 取所有容器有效 request 之和；
+// 2. 若没有容器设置 request，则 Pod 级 request 取 Pod 级 limit。
+// 这一行为既保证 Pod 级资源统计的一致性，又兼容容器级的资源声明，
+// 详见 KEP-2837：https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/2837-pod-level-resource-spec/README.md#proposed-validation--defaulting-rules
 // TODO(ndixita): Remove defaultPodRequests once PodLevelResourcesFixDefaulting feature gate is GA.
 func defaultPodRequests(obj *v1.Pod) {
-	// We only populate defaults when the pod-level resources are partly specified already.
+	// 只有在 Pod 级资源已部分指定时才填充默认值。
 	if obj.Spec.Resources == nil {
 		return
 	}
@@ -542,44 +589,35 @@ func defaultPodRequests(obj *v1.Pod) {
 
 	aggrCtrReqs := resourcehelper.AggregateContainerRequests(obj, resourcehelper.PodResourcesOptions{})
 
-	// When containers specify requests for a resource (supported by
-	// PodLevelResources feature) and pod-level requests are not set, the pod-level requests
-	// default to the effective requests of all the containers for that resource.
+	// 若容器指定了某资源的 request（PodLevelResources 特性支持）而 Pod 级 request 未设置，
+	// 则将 Pod 级 request 设为所有容器对该资源的有效 request 之和。
 	for key, aggrCtrLim := range aggrCtrReqs {
-		// Default pod level requests for overcommittable resources from aggregated container requests.
+		// 对可超卖资源，用容器 request 的聚合值填充 Pod 级 request。
 		if _, exists := podReqs[key]; !exists && resourcehelper.IsSupportedPodLevelResource(key) && corev1helper.IsOvercommitAllowed(key) {
 			podReqs[key] = aggrCtrLim.DeepCopy()
 		}
 	}
 
-	// When no containers specify requests for a resource, the pod-level requests
-	// will default to match the pod-level limits, if pod-level
-	// limits exist for that resource.
-	// Defaulting for pod level hugepages requests is dependent on defaultHugePagePodLimits,
-	// if defaultHugePagePodLimits defined the limit, the request will be set here.
+	// 若没有容器指定某资源的 request，且 Pod 级 limit 存在，则 Pod 级 request 取 Pod 级 limit。
+	// Pod 级大页 request 的默认值依赖 defaultHugePagePodLimits：
+	// 后者若定义了 limit，这里就会填充对应的 request。
 	for key, podLim := range obj.Spec.Resources.Limits {
 		if _, exists := podReqs[key]; !exists && resourcehelper.IsSupportedPodLevelResource(key) {
 			podReqs[key] = podLim.DeepCopy()
 		}
 	}
 
-	// Only set pod-level resource requests in the PodSpec if the requirements map
-	// contains entries after collecting container-level requests and pod-level limits.
+	// 只有在收集容器级 request 与 Pod 级 limit 后结果非空时，才写回 PodSpec 的 Pod 级 request。
 	if len(podReqs) > 0 {
 		obj.Spec.Resources.Requests = podReqs
 	}
 }
 
-// defaultHugePagePodLimits applies default values for pod-level limits, only when
-// container hugepage limits are set, but not at pod level, in following
-// scenario:
-// 1. When at least one container (regular, init or sidecar) has hugepage
-// limits set:
-// The pod-level limit becomes equal to the aggregated hugepages limit of all
-// the containers in the pod.
+// defaultHugePagePodLimits 仅在容器设置了大页 limit 而 Pod 级未设置时，
+// 用所有容器大页 limit 的聚合值填充 Pod 级 limit。
 // TODO(ndixita): Remove defaultHugePagePodLimits once PodLevelResourcesFixDefaulting feature gate is GA.
 func defaultHugePagePodLimits(pod *v1.Pod) {
-	// We only populate hugepage limit defaults when the pod-level resources are partly specified.
+	// 只有在 Pod 级资源已部分指定时才填充大页 limit 默认值。
 	if pod.Spec.Resources == nil {
 		return
 	}
@@ -596,15 +634,14 @@ func defaultHugePagePodLimits(pod *v1.Pod) {
 
 	aggrCtrLims := resourcehelper.AggregateContainerLimits(pod, resourcehelper.PodResourcesOptions{})
 
-	// When containers specify limits for hugepages and pod-level limits are not
-	// set for that resource, the pod-level limit will default to the aggregated
-	// hugepages limit of all the containers.
+	// 若容器指定了大页 limit 而 Pod 级未指定该资源的 limit，
+	// 则用所有容器大页 limit 的聚合值填充 Pod 级 limit。
 	for key, aggrCtrLim := range aggrCtrLims {
 		if !resourcehelper.IsSupportedPodLevelResource(key) || !corev1helper.IsHugePageResourceName(key) {
 			continue
 		}
 
-		// We do not default pod-level hugepage limits if there is a hugepage request.
+		// 已存在大页 request 时不填充 Pod 级大页 limit，避免引入不一致。
 		if _, exists := pod.Spec.Resources.Requests[key]; exists {
 			continue
 		}
@@ -614,8 +651,7 @@ func defaultHugePagePodLimits(pod *v1.Pod) {
 		}
 	}
 
-	// Only set pod-level resource limits in the PodSpec if the requirements map
-	// contains entries after collecting container-level limits and pod-level limits for hugepages.
+	// 只有在收集容器级 limit 与大页 Pod 级 limit 后结果非空时，才写回 PodSpec。
 	if len(podLims) > 0 {
 		pod.Spec.Resources.Limits = podLims
 	}

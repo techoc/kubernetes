@@ -27,6 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestValidateEventForCoreV1Events 校验 core/v1 事件的命名空间与 involvedObject 规则。
 func TestValidateEventForCoreV1Events(t *testing.T) {
 	table := []struct {
 		*core.Event
@@ -216,6 +217,7 @@ func TestValidateEventForCoreV1Events(t *testing.T) {
 		},
 	}
 
+	// 同一对象分别走创建与更新校验，两者的预期结果应一致。
 	for _, item := range table {
 		createErrs := ValidateEventCreate(item.Event, v1.SchemeGroupVersion)
 		if e, a := item.valid, len(createErrs) == 0; e != a {
@@ -228,6 +230,7 @@ func TestValidateEventForCoreV1Events(t *testing.T) {
 	}
 }
 
+// TestValidateEventForNewV1beta1Events 校验带 EventTime 的事件会触发新版校验规则。
 func TestValidateEventForNewV1beta1Events(t *testing.T) {
 	someTime := metav1.MicroTime{Time: time.Unix(1505828956, 0)}
 	table := []struct {
@@ -391,6 +394,7 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz`,
 		},
 	}
 
+	// 创建与更新路径都需按新规则校验。
 	for _, item := range table {
 		createErrs := ValidateEventCreate(item.Event, eventsv1beta1.SchemeGroupVersion)
 		if e, a := item.valid, len(createErrs) == 0; e != a {
@@ -403,6 +407,7 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz`,
 	}
 }
 
+// TestValidateEventCreateForNewV1Events 校验 events/v1 创建的必填字段与禁用字段。
 func TestValidateEventCreateForNewV1Events(t *testing.T) {
 	someTime := metav1.MicroTime{Time: time.Unix(1505828956, 0)}
 	table := []struct {
@@ -736,6 +741,7 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz`,
 		},
 	}
 
+	// 创建路径需要完整校验，更新路径由其他用例覆盖。
 	for _, item := range table {
 		createErrs := ValidateEventCreate(item.Event, eventsv1.SchemeGroupVersion)
 		if e, a := item.valid, len(createErrs) == 0; e != a {
@@ -744,6 +750,7 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz`,
 	}
 }
 
+// TestValidateEventUpdateForNewV1Events 校验 events/v1 更新时不可变字段的限制。
 func TestValidateEventUpdateForNewV1Events(t *testing.T) {
 	someTime := metav1.MicroTime{Time: time.Unix(1505828956, 0)}
 	table := []struct {
@@ -1305,6 +1312,7 @@ func TestValidateEventUpdateForNewV1Events(t *testing.T) {
 		},
 	}
 
+	// 逐项校验更新路径是否拒绝不可变字段的修改。
 	for _, item := range table {
 		updateErrs := ValidateEventUpdate(item.newEvent, item.oldEvent, eventsv1.SchemeGroupVersion)
 		if e, a := item.valid, len(updateErrs) == 0; e != a {
@@ -1313,6 +1321,7 @@ func TestValidateEventUpdateForNewV1Events(t *testing.T) {
 	}
 }
 
+// TestEventV1EventTimeImmutability 校验 EventTime 按微秒精度判断不可变性。
 func TestEventV1EventTimeImmutability(t *testing.T) {
 	testcases := []struct {
 		Name  string
@@ -1333,6 +1342,7 @@ func TestEventV1EventTimeImmutability(t *testing.T) {
 			Valid: true,
 		},
 		{
+			// 同一微秒内的纳秒变化视为未修改，因为存储精度只到微秒。
 			Name:  "modify nanoseconds within the same microsecond",
 			Old:   metav1.NewMicroTime(time.Unix(100, int64(5*time.Nanosecond))),
 			New:   metav1.NewMicroTime(time.Unix(100, int64(6*time.Nanosecond))),
@@ -1366,6 +1376,7 @@ func TestEventV1EventTimeImmutability(t *testing.T) {
 				Type:                "Normal",
 			}
 
+			// 深拷贝后只修改 EventTime，确保其他字段完全一致。
 			newEvent := oldEvent.DeepCopy()
 			newEvent.EventTime = tc.New
 

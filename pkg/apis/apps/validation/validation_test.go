@@ -2226,10 +2226,10 @@ func TestValidateDaemonSetUpdate(t *testing.T) {
 	}
 	for testName, successCase := range successCases {
 		t.Run(testName, func(t *testing.T) {
-			// ResourceVersion is required for updates.
+			// 更新操作必须提供 ResourceVersion。
 			successCase.old.ObjectMeta.ResourceVersion = "1"
 			successCase.update.ObjectMeta.ResourceVersion = "2"
-			// Check test setup
+			// 检查测试前置条件。
 			if successCase.expectedErrNum > 0 {
 				t.Errorf("%q has incorrect test setup with expectedErrNum %d, expected no error", testName, successCase.expectedErrNum)
 			}
@@ -2445,17 +2445,17 @@ func TestValidateDaemonSetUpdate(t *testing.T) {
 	}
 	for testName, errorCase := range errorCases {
 		t.Run(testName, func(t *testing.T) {
-			// ResourceVersion is required for updates.
+			// 更新操作必须提供 ResourceVersion。
 			errorCase.old.ObjectMeta.ResourceVersion = "1"
 			errorCase.update.ObjectMeta.ResourceVersion = "2"
-			// Check test setup
+			// 检查测试前置条件。
 			if errorCase.expectedErrNum <= 0 {
 				t.Errorf("%q has incorrect test setup with expectedErrNum %d, expected at least one error", testName, errorCase.expectedErrNum)
 			}
 			if len(errorCase.old.ObjectMeta.ResourceVersion) == 0 || len(errorCase.update.ObjectMeta.ResourceVersion) == 0 {
 				t.Errorf("%q has incorrect test setup with no resource version set", testName)
 			}
-			// Run the tests
+			// 执行测试。
 			if errs := ValidateDaemonSetUpdate(&errorCase.update, &errorCase.old, corevalidation.PodValidationOptions{}); len(errs) != errorCase.expectedErrNum {
 				t.Errorf("%q expected %d errors, but got %d error: %v", testName, errorCase.expectedErrNum, len(errs), errs)
 			} else {
@@ -3126,17 +3126,17 @@ func TestValidateDeploymentUpdate(t *testing.T) {
 	}
 	for testName, successCase := range successCases {
 		t.Run(testName, func(t *testing.T) {
-			// ResourceVersion is required for updates.
+			// 更新操作必须提供 ResourceVersion。
 			successCase.old.ObjectMeta.ResourceVersion = "1"
 			successCase.update.ObjectMeta.ResourceVersion = "2"
-			// Check test setup
+			// 检查测试前置条件。
 			if successCase.expectedErrNum > 0 {
 				t.Errorf("%q has incorrect test setup with expectedErrNum %d, expected no error", testName, successCase.expectedErrNum)
 			}
 			if len(successCase.old.ObjectMeta.ResourceVersion) == 0 || len(successCase.update.ObjectMeta.ResourceVersion) == 0 {
 				t.Errorf("%q has incorrect test setup with no resource version set", testName)
 			}
-			// Run the tests
+			// 执行测试。
 			if errs := ValidateDeploymentUpdate(&successCase.update, &successCase.old, corevalidation.PodValidationOptions{}); len(errs) != 0 {
 				t.Errorf("%q expected no error, but got: %v", testName, errs)
 			}
@@ -3205,17 +3205,17 @@ func TestValidateDeploymentUpdate(t *testing.T) {
 		}
 		for testName, errorCase := range errorCases {
 			t.Run(testName, func(t *testing.T) {
-				// ResourceVersion is required for updates.
+				// 更新操作必须提供 ResourceVersion。
 				errorCase.old.ObjectMeta.ResourceVersion = "1"
 				errorCase.update.ObjectMeta.ResourceVersion = "2"
-				// Check test setup
+				// 检查测试前置条件。
 				if errorCase.expectedErrNum <= 0 {
 					t.Errorf("%q has incorrect test setup with expectedErrNum %d, expected at least one error", testName, errorCase.expectedErrNum)
 				}
 				if len(errorCase.old.ObjectMeta.ResourceVersion) == 0 || len(errorCase.update.ObjectMeta.ResourceVersion) == 0 {
 					t.Errorf("%q has incorrect test setup with no resource version set", testName)
 				}
-				// Run the tests
+				// 执行测试。
 				if errs := ValidateDeploymentUpdate(&errorCase.update, &errorCase.old, corevalidation.PodValidationOptions{}); len(errs) != errorCase.expectedErrNum {
 					t.Errorf("%q expected %d errors, but got %d error: %v", testName, errorCase.expectedErrNum, len(errs), errs)
 				} else {
@@ -3543,17 +3543,17 @@ func TestValidateReplicaSetUpdate(t *testing.T) {
 	}
 	for testName, successCase := range successCases {
 		t.Run(testName, func(t *testing.T) {
-			// ResourceVersion is required for updates.
+			// 更新操作必须提供 ResourceVersion。
 			successCase.old.ObjectMeta.ResourceVersion = "1"
 			successCase.update.ObjectMeta.ResourceVersion = "2"
-			// Check test setup
+			// 检查测试前置条件。
 			if successCase.expectedErrNum > 0 {
 				t.Errorf("%q has incorrect test setup with expectedErrNum %d, expected no error", testName, successCase.expectedErrNum)
 			}
 			if len(successCase.old.ObjectMeta.ResourceVersion) == 0 || len(successCase.update.ObjectMeta.ResourceVersion) == 0 {
 				t.Errorf("%q has incorrect test setup with no resource version set", testName)
 			}
-			// Run the tests
+			// 执行测试。
 			if errs := ValidateReplicaSetUpdate(&successCase.update, &successCase.old, corevalidation.PodValidationOptions{}); len(errs) != 0 {
 				t.Errorf("%q expected no error, but got: %v", testName, errs)
 			}
@@ -3617,17 +3617,17 @@ func TestValidateReplicaSetUpdate(t *testing.T) {
 	}
 	for testName, errorCase := range errorCases {
 		t.Run(testName, func(t *testing.T) {
-			// ResourceVersion is required for updates.
+			// 更新操作必须提供 ResourceVersion。
 			errorCase.old.ObjectMeta.ResourceVersion = "1"
 			errorCase.update.ObjectMeta.ResourceVersion = "2"
-			// Check test setup
+			// 检查测试前置条件。
 			if errorCase.expectedErrNum <= 0 {
 				t.Errorf("%q has incorrect test setup with expectedErrNum %d, expected at least one error", testName, errorCase.expectedErrNum)
 			}
 			if len(errorCase.old.ObjectMeta.ResourceVersion) == 0 || len(errorCase.update.ObjectMeta.ResourceVersion) == 0 {
 				t.Errorf("%q has incorrect test setup with no resource version set", testName)
 			}
-			// Run the tests
+			// 执行测试。
 			if errs := ValidateReplicaSetUpdate(&errorCase.update, &errorCase.old, corevalidation.PodValidationOptions{}); len(errs) != errorCase.expectedErrNum {
 				t.Errorf("%q expected %d errors, but got %d error: %v", testName, errorCase.expectedErrNum, len(errs), errs)
 			} else {

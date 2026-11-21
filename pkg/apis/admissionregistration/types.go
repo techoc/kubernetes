@@ -20,568 +20,526 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Rule is a tuple of APIGroups, APIVersion, and Resources.It is recommended
-// to make sure that all the tuple expansions are valid.
+// Rule 是 APIGroups、APIVersion 与 Resources 组成的元组。建议确保该元组展开后的所有组合都是合法的。
 type Rule struct {
-	// APIGroups is the API groups the resources belong to. '*' is all groups.
-	// If '*' is present, the length of the slice must be one.
-	// Required.
+	// APIGroups 是资源所属的 API 组。'*' 表示所有组。
+	// 如果出现 '*'，该切片的长度必须为 1。
+	// 必填。
 	APIGroups []string
 
-	// APIVersions is the API versions the resources belong to. '*' is all versions.
-	// If '*' is present, the length of the slice must be one.
-	// Required.
+	// APIVersions 是资源所属的 API 版本。'*' 表示所有版本。
+	// 如果出现 '*'，该切片的长度必须为 1。
+	// 必填。
 	APIVersions []string
 
-	// Resources is a list of resources this rule applies to.
+	// Resources 是该规则适用的资源列表。
 	//
-	// For example:
-	// 'pods' means pods.
-	// 'pods/log' means the log subresource of pods.
-	// '*' means all resources, but not subresources.
-	// 'pods/*' means all subresources of pods.
-	// '*/scale' means all scale subresources.
-	// '*/*' means all resources and their subresources.
+	// 例如：
+	// 'pods' 表示 pods。
+	// 'pods/log' 表示 pods 的 log 子资源。
+	// '*' 表示所有资源，但不包括子资源。
+	// 'pods/*' 表示 pods 的所有子资源。
+	// '*/scale' 表示所有资源的 scale 子资源。
+	// '*/*' 表示所有资源及其子资源。
 	//
-	// If wildcard is present, the validation rule will ensure resources do not
-	// overlap with each other.
+	// 如果出现通配符，校验规则会确保各资源之间不重叠。
 	//
-	// Depending on the enclosing object, subresources might not be allowed.
-	// Required.
+	// 根据外层对象的不同，可能不允许使用子资源。
+	// 必填。
 	Resources []string
 
-	// scope specifies the scope of this rule.
-	// Valid values are "Cluster", "Namespaced", and "*"
-	// "Cluster" means that only cluster-scoped resources will match this rule.
-	// Namespace API objects are cluster-scoped.
-	// "Namespaced" means that only namespaced resources will match this rule.
-	// "*" means that there are no scope restrictions.
-	// Subresources match the scope of their parent resource.
-	// Default is "*".
+	// scope 指定该规则的作用域。
+	// 合法取值为 "Cluster"、"Namespaced" 和 "*"。
+	// "Cluster" 表示只有集群级资源才匹配该规则。
+	// Namespace 这一 API 对象属于集群级资源。
+	// "Namespaced" 表示只有命名空间级资源才匹配该规则。
+	// "*" 表示不限制作用域。
+	// 子资源与其父资源的作用域相同。
+	// 默认为 "*"。
 	//
 	// +optional
 	Scope *ScopeType
 }
 
-// ScopeType specifies the type of scope being used
+// ScopeType 指定所使用的作用域类型。
 type ScopeType string
 
+// ScopeType 的合法取值。
 const (
-	// ClusterScope means that scope is limited to cluster-scoped objects.
-	// Namespace objects are cluster-scoped.
+	// ClusterScope 表示作用域限定为集群级对象。
+	// Namespace 对象属于集群级资源。
 	ClusterScope ScopeType = "Cluster"
-	// NamespacedScope means that scope is limited to namespaced objects.
+	// NamespacedScope 表示作用域限定为命名空间级对象。
 	NamespacedScope ScopeType = "Namespaced"
-	// AllScopes means that all scopes are included.
+	// AllScopes 表示包含所有作用域。
 	AllScopes ScopeType = "*"
 )
 
-// ParameterNotFoundActionType specifies a failure policy that defines how a binding
-// is evaluated when the param referred by its perNamespaceParamRef is not found.
+// ParameterNotFoundActionType 指定一种失败策略，用于定义当其 perNamespaceParamRef
+// 引用的参数未找到时应如何评估绑定。
 type ParameterNotFoundActionType string
 
+// 参数未找到时允许的处置动作。
 const (
-	// Allow means all requests will be admitted if no param resources
-	// could be found.
+	// Allow 表示当找不到任何参数资源时，所有请求都会被准入。
 	AllowAction ParameterNotFoundActionType = "Allow"
-	// Deny means all requests will be denied if no param resources are found.
+	// Deny 表示当找不到任何参数资源时，所有请求都会被拒绝。
 	DenyAction ParameterNotFoundActionType = "Deny"
 )
 
-// FailurePolicyType specifies the type of failure policy
+// FailurePolicyType 指定失败策略的类型。
 type FailurePolicyType string
 
+// 失败策略的合法取值。
 const (
-	// Ignore means that an error calling the admission webhook or admission policy is ignored.
+	// Ignore 表示调用准入 webhook 或准入策略时发生的错误会被忽略。
 	Ignore FailurePolicyType = "Ignore"
-	// Fail means that an error calling the admission webhook or admission policy causes resource admission to fail.
+	// Fail 表示调用准入 webhook 或准入策略时发生的错误会导致资源准入失败。
 	Fail FailurePolicyType = "Fail"
 )
 
-// MatchPolicyType specifies the type of match policy
+// MatchPolicyType 指定匹配策略的类型。
 type MatchPolicyType string
 
+// 匹配策略的合法取值。
 const (
-	// Exact means requests should only be sent to the admission webhook or admission policy if they exactly match a given rule.
+	// Exact 表示只有当请求与给定规则完全匹配时，才会发送给准入 webhook 或准入策略。
 	Exact MatchPolicyType = "Exact"
-	// Equivalent means requests should be sent to the admission webhook or admission policy if they modify a resource listed
-	// in rules via another API group or version.
+	// Equivalent 表示只要请求通过另一个 API 组或版本修改了规则中列出的资源，
+	// 就应发送给准入 webhook 或准入策略。
 	Equivalent MatchPolicyType = "Equivalent"
 )
 
-// SideEffectClass denotes the type of side effects resulting from calling the webhook
+// SideEffectClass 表示调用 webhook 所产生的副作用类型。
 type SideEffectClass string
 
+// webhook 副作用类型的合法取值。
 const (
-	// SideEffectClassUnknown means that no information is known about the side effects of calling the webhook.
-	// If a request with the dry-run attribute would trigger a call to this webhook, the request will instead fail.
+	// SideEffectClassUnknown 表示不清楚调用 webhook 会有哪些副作用。
+	// 如果带 dry-run 属性的请求会触发对该 webhook 的调用，则该请求会直接失败。
 	SideEffectClassUnknown SideEffectClass = "Unknown"
-	// SideEffectClassNone means that calling the webhook will have no side effects.
+	// SideEffectClassNone 表示调用 webhook 不会有任何副作用。
 	SideEffectClassNone SideEffectClass = "None"
-	// SideEffectClassSome means that calling the webhook will possibly have side effects.
-	// If a request with the dry-run attribute would trigger a call to this webhook, the request will instead fail.
+	// SideEffectClassSome 表示调用 webhook 可能会产生副作用。
+	// 如果带 dry-run 属性的请求会触发对该 webhook 的调用，则该请求会直接失败。
 	SideEffectClassSome SideEffectClass = "Some"
-	// SideEffectClassNoneOnDryRun means that calling the webhook will possibly have side effects, but if the
-	// request being reviewed has the dry-run attribute, the side effects will be suppressed.
+	// SideEffectClassNoneOnDryRun 表示调用 webhook 可能会产生副作用，但如果被审查的
+	// 请求带有 dry-run 属性，这些副作用会被抑制。
 	SideEffectClassNoneOnDryRun SideEffectClass = "NoneOnDryRun"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ValidatingAdmissionPolicy describes the definition of an admission validation policy that accepts or rejects an object without changing it.
+// ValidatingAdmissionPolicy 描述了一种准入校验策略的定义，它只接受或拒绝对象而不修改对象。
 type ValidatingAdmissionPolicy struct {
 	metav1.TypeMeta
-	// Standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据；更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。
 	// +optional
 	metav1.ObjectMeta
-	// Specification of the desired behavior of the ValidatingAdmissionPolicy.
+	// ValidatingAdmissionPolicy 期望行为的规格说明。
 	Spec ValidatingAdmissionPolicySpec
-	// The status of the ValidatingAdmissionPolicy, including warnings that are useful to determine if the policy
-	// behaves in the expected way.
-	// Populated by the system.
-	// Read-only.
+	// ValidatingAdmissionPolicy 的状态，包括用于判断策略是否按预期运行的警告信息。
+	// 由系统填充。
+	// 只读。
 	// +optional
 	Status ValidatingAdmissionPolicyStatus
 }
 
-// ValidatingAdmissionPolicyStatus represents the status of an admission validation policy.
+// ValidatingAdmissionPolicyStatus 表示准入校验策略的状态。
 type ValidatingAdmissionPolicyStatus struct {
-	// The generation observed by the controller.
+	// 控制器观测到的 generation。
 	// +optional
 	ObservedGeneration int64
-	// The results of type checking for each expression.
-	// Presence of this field indicates the completion of the type checking.
+	// 每个表达式的类型检查结果。
+	// 该字段出现即表示类型检查已完成。
 	// +optional
 	TypeChecking *TypeChecking
-	// The conditions represent the latest available observations of a policy's current state.
+	// conditions 表示对策略当前状态的最新可用观测结果。
 	// +optional
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition
 }
 
-// ValidatingAdmissionPolicyConditionType is the condition type of admission validation policy.
+// ValidatingAdmissionPolicyConditionType 是准入校验策略的条件类型。
 type ValidatingAdmissionPolicyConditionType string
 
-// TypeChecking contains results of type checking the expressions in the
-// ValidatingAdmissionPolicy
+// TypeChecking 包含对 ValidatingAdmissionPolicy 中表达式进行类型检查的结果。
 type TypeChecking struct {
-	// The type checking warnings for each expression.
+	// 每个表达式的类型检查警告。
 	// +optional
 	// +listType=atomic
 	ExpressionWarnings []ExpressionWarning
 }
 
-// ExpressionWarning is a warning information that targets a specific expression.
+// ExpressionWarning 是面向特定表达式的警告信息。
 type ExpressionWarning struct {
-	// The path to the field that refers the expression.
-	// For example, the reference to the expression of the first item of
-	// validations is "spec.validations[0].expression"
+	// 指向该表达式的字段路径。
+	// 例如，对 validations 中第一项的表达式的引用为 "spec.validations[0].expression"。
 	FieldRef string
-	// The content of type checking information in a human-readable form.
-	// Each line of the warning contains the type that the expression is checked
-	// against, followed by the type check error from the compiler.
+	// 人类可读形式的类型检查信息内容。
+	// 每条警告行包含表达式被检查时所依据的类型，后接编译器返回的类型检查错误。
 	Warning string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ValidatingAdmissionPolicyList is a list of ValidatingAdmissionPolicy.
+// ValidatingAdmissionPolicyList 是 ValidatingAdmissionPolicy 的列表。
 type ValidatingAdmissionPolicyList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta
-	// List of ValidatingAdmissionPolicy.
+	// ValidatingAdmissionPolicy 列表。
 	Items []ValidatingAdmissionPolicy
 }
 
-// ValidatingAdmissionPolicySpec is the specification of the desired behavior of the AdmissionPolicy.
+// ValidatingAdmissionPolicySpec 是 AdmissionPolicy 期望行为的规格说明。
 type ValidatingAdmissionPolicySpec struct {
-	// ParamKind specifies the kind of resources used to parameterize this policy.
-	// If absent, there are no parameters for this policy and the param CEL variable will not be provided to validation expressions.
-	// If ParamKind refers to a non-existent kind, this policy definition is mis-configured and the FailurePolicy is applied.
-	// If paramKind is specified but paramRef is unset in ValidatingAdmissionPolicyBinding, the params variable will be null.
+	// ParamKind 指定用于为该策略提供参数（参数化）的资源类型。
+	// 若未指定，则该策略没有参数，也不会向校验表达式提供 param CEL 变量。
+	// 如果 ParamKind 指向一个不存在的 Kind，则该策略定义为配置错误，会应用 FailurePolicy。
+	// 如果指定了 paramKind 但 ValidatingAdmissionPolicyBinding 中未设置 paramRef，则 params 变量为 null。
 	// +optional
 	ParamKind *ParamKind
 
-	// MatchConstraints specifies what resources this policy is designed to validate.
-	// The MutatingAdmissionPolicy cares about a request if it matches _all_ Constraint.
-	// However, in order to prevent clusters from being put into an unstable state that cannot be recovered from via the API
-	// ValidatingAdmissionPolicy cannot match ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding.
-	// Required.
+	// MatchConstraints 指定该策略旨在校验哪些资源。
+	// 当请求匹配_所有_约束（Constraint）时，AdmissionPolicy 才会关注该请求。
+	// 但是，为防止集群陷入无法通过 API 恢复的不稳定状态，
+	// ValidatingAdmissionPolicy 不能匹配 ValidatingAdmissionPolicy 和 ValidatingAdmissionPolicyBinding。
+	// 必填。
 	MatchConstraints *MatchResources
 
-	// validations contain CEL expressions which are used to validate admission requests.
-	// validations and auditAnnotations may not both be empty; a minimum of one validations or auditAnnotations is
-	// required.
+	// validations 包含用于校验准入请求的 CEL 表达式。
+	// validations 和 auditAnnotations 不能同时为空；至少需要提供一个 validations 或 auditAnnotations。
 	// +optional
 	Validations []Validation
 
-	// failurePolicy defines how to handle failures for the admission policy. Failures can
-	// occur from CEL expression parse errors, type check errors, runtime errors and invalid
-	// or mis-configured policy definitions or bindings.
+	// failurePolicy 定义如何处理该准入策略的失败。失败可能由以下原因引起：CEL 表达式解析错误、
+	// 类型检查错误、运行时错误，以及无效或配置错误的策略定义与绑定。
 	//
-	// A policy is invalid if spec.paramKind refers to a non-existent Kind.
-	// A binding is invalid if spec.paramRef.name refers to a non-existent resource.
+	// 如果 spec.paramKind 指向不存在的 Kind，则策略无效。
+	// 如果 spec.paramRef.name 指向不存在的资源，则绑定无效。
 	//
-	// failurePolicy does not define how validations that evaluate to false are handled.
+	// failurePolicy 不定义如何处置计算结果为 false 的校验。
 	//
-	// When failurePolicy is set to Fail, ValidatingAdmissionPolicyBinding validationActions
-	// define how failures are enforced.
+	// 当 failurePolicy 设为 Fail 时，由 ValidatingAdmissionPolicyBinding 的 validationActions
+	// 定义如何强制执行失败。
 	//
-	// Allowed values are Ignore or Fail. Defaults to Fail.
+	// 允许的值为 Ignore 或 Fail。默认为 Fail。
 	// +optional
 	FailurePolicy *FailurePolicyType
 
-	// auditAnnotations contains CEL expressions which are used to produce audit
-	// annotations for the audit event of the API request.
-	// validations and auditAnnotations may not both be empty; a least one of validations or auditAnnotations is
-	// required.
-	// A maximum of 20 auditAnnotation are allowed per ValidatingAdmissionPolicy.
+	// auditAnnotations 包含 CEL 表达式，用于为 API 请求的审计事件生成审计注解。
+	// validations 和 auditAnnotations 不能同时为空；至少需要提供一个 validations 或 auditAnnotations。
+	// 每条 ValidatingAdmissionPolicy 最多允许 20 个 auditAnnotation。
 	// +optional
 	AuditAnnotations []AuditAnnotation
 
-	// MatchConditions is a list of conditions that must be met for a request to be validated.
-	// Match conditions filter requests that have already been matched by the rules,
-	// namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests.
-	// There are a maximum of 64 match conditions allowed.
+	// MatchConditions 是请求被校验前必须满足的条件列表。
+	// 匹配条件用于过滤已被规则、namespaceSelector 和 objectSelector 匹配过的请求。
+	// 空的 matchConditions 列表匹配所有请求。
+	// 最多允许 64 个匹配条件。
 	//
-	// If a parameter object is provided, it can be accessed via the `params` handle in the same
-	// manner as validation expressions.
+	// 如果提供了参数对象，则可以通过 `params` 句柄访问它，方式与校验表达式相同。
 	//
-	// The exact matching logic is (in order):
-	//   1. If ANY matchCondition evaluates to FALSE, the policy is skipped.
-	//   2. If ALL matchConditions evaluate to TRUE, the policy is evaluated.
-	//   3. If any matchCondition evaluates to an error (but none are FALSE):
-	//      - If failurePolicy=Fail, reject the request
-	//      - If failurePolicy=Ignore, the policy is skipped
+	// 精确的匹配逻辑如下（按顺序）：
+	//   1. 如果_任意_ matchCondition 计算结果为 FALSE，则跳过该策略。
+	//   2. 如果_所有_ matchCondition 计算结果均为 TRUE，则对该策略进行求值。
+	//   3. 如果任一 matchCondition 计算出错（但没有为 FALSE 的）：
+	//      - 若 failurePolicy=Fail，则拒绝该请求
+	//      - 若 failurePolicy=Ignore，则跳过该策略
 	//
 	// +optional
 	MatchConditions []MatchCondition
 
-	// Variables contain definitions of variables that can be used in composition of other expressions.
-	// Each variable is defined as a named CEL expression.
-	// The variables defined here will be available under `variables` in other expressions of the policy
-	// except MatchConditions because MatchConditions are evaluated before the rest of the policy.
+	// Variables 包含可在其他表达式组合中使用的变量定义。
+	// 每个变量都定义为一个具名的 CEL 表达式。
+	// 此处定义的变量在策略的其他表达式中可通过 `variables` 访问，但 MatchConditions 除外，
+	// 因为 MatchConditions 会在策略其余部分之前求值。
 	//
-	// The expression of a variable can refer to other variables defined earlier in the list but not those after.
-	// Thus, Variables must be sorted by the order of first appearance and acyclic.
+	// 变量的表达式可以引用列表中更早定义的其他变量，但不能引用其后的变量。
+	// 因此，Variables 必须按首次出现的顺序排序且无环。
 	// +listType=atomic
 	// +optional
 	Variables []Variable
 }
 
-// ParamKind is a tuple of Group Kind and Version.
+// ParamKind 是由 Group、Kind 和 Version 组成的元组。
 type ParamKind struct {
-	// APIVersion is the API group version the resources belong to.
-	// In format of "group/version".
-	// Required.
+	// APIVersion 是资源所属的 API 组版本。
+	// 格式为 "group/version"。
+	// 必填。
 	APIVersion string
 
-	// Kind is the API kind the resources belong to.
-	// Required.
+	// Kind 是资源所属的 API kind。
+	// 必填。
 	Kind string
 }
 
-// Validation specifies the CEL expression which is used to apply the validation.
+// Validation 指定用于执行校验的 CEL 表达式。
 type Validation struct {
-	// Expression represents the expression which will be evaluated by CEL.
-	// ref: https://github.com/google/cel-spec
-	// CEL expressions have access to the contents of the API request/response, organized into CEL variables as well as some other useful variables:
+	// Expression 表示将由 CEL 求值的表达式。
+	// 参考：https://github.com/google/cel-spec
+	// CEL 表达式可以访问 API 请求/响应的内容，这些内容被组织为 CEL 变量以及一些其他有用的变量：
 	//
-	//'object' - The object from the incoming request. The value is null for DELETE requests.
-	//'oldObject' - The existing object. The value is null for CREATE requests.
-	//'request' - Attributes of the API request([ref](/pkg/apis/admission/types.go#AdmissionRequest)).
-	//'params' - Parameter resource referred to by the policy binding being evaluated. Only populated if the policy has a ParamKind.
-	//'namespaceObject' - The namespace object that the incoming object belongs to. The value is null for cluster-scoped resources.
-	//'variables' - Map of composited variables, from its name to its lazily evaluated value.
-	//  For example, a variable named 'foo' can be accessed as 'variables.foo'
-	// - 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.
-	//   See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
-	// - 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the
-	//   request resource.
+	//'object' - 来自传入请求的对象。对于 DELETE 请求，其值为 null。
+	//'oldObject' - 已有的对象。对于 CREATE 请求，其值为 null。
+	//'request' - API 请求的属性（[ref](/pkg/apis/admission/types.go#AdmissionRequest)）。
+	//'params' - 被评估的策略绑定所引用的参数资源。仅当策略具有 ParamKind 时才会填充。
+	//'namespaceObject' - 传入对象所属的命名空间对象。对于集群级资源，其值为 null。
+	//'variables' - 组合变量的映射，从名称到其惰性求值的值。
+	//  例如，名为 'foo' 的变量可通过 'variables.foo' 访问。
+	// - 'authorizer' - 一个 CEL Authorizer，可用于对请求主体（用户或服务账号）执行授权检查。
+	//   参见 https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
+	// - 'authorizer.requestResource' - 由 'authorizer' 构造并使用请求资源配置而成的 CEL ResourceCheck。
 	//
-	// The `apiVersion`, `kind`, `metadata.name` and `metadata.generateName` are always accessible from the root of the
-	// object. No other metadata properties are accessible.
+	// `apiVersion`、`kind`、`metadata.name` 和 `metadata.generateName` 始终可从对象根部访问。
+	// 其他元数据属性均不可访问。
 	//
-	// Only property names of the form `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` are accessible.
-	// Accessible property names are escaped according to the following rules when accessed in the expression:
-	// - '__' escapes to '__underscores__'
-	// - '.' escapes to '__dot__'
-	// - '-' escapes to '__dash__'
-	// - '/' escapes to '__slash__'
-	// - Property names that exactly match a CEL RESERVED keyword escape to '__{keyword}__'. The keywords are:
+	// 只有形如 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` 的属性名才可访问。
+	// 在表达式中访问时，可访问的属性名按如下规则转义：
+	// - '__' 转义为 '__underscores__'
+	// - '.' 转义为 '__dot__'
+	// - '-' 转义为 '__dash__'
+	// - '/' 转义为 '__slash__'
+	// - 与 CEL 保留关键字完全匹配的属性名转义为 '__{keyword}__'。这些关键字包括：
 	//	  "true", "false", "null", "in", "as", "break", "const", "continue", "else", "for", "function", "if",
-	//	  "import", "let", "loop", "package", "namespace", "return".
-	// Examples:
-	//   - Expression accessing a property named "namespace": {"Expression": "object.__namespace__ > 0"}
-	//   - Expression accessing a property named "x-prop": {"Expression": "object.x__dash__prop > 0"}
-	//   - Expression accessing a property named "redact__d": {"Expression": "object.redact__underscores__d > 0"}
+	//	  "import", "let", "loop", "package", "namespace", "return"。
+	// 示例：
+	//   - 访问名为 "namespace" 的属性：{"Expression": "object.__namespace__ > 0"}
+	//   - 访问名为 "x-prop" 的属性：{"Expression": "object.x__dash__prop > 0"}
+	//   - 访问名为 "redact__d" 的属性：{"Expression": "object.redact__underscores__d > 0"}
 	//
-	// Equality on arrays with list type of 'set' or 'map' ignores element order, i.e. [1, 2] == [2, 1].
-	// Concatenation on arrays with x-kubernetes-list-type use the semantics of the list type:
-	//   - 'set': `X + Y` performs a union where the array positions of all elements in `X` are preserved and
-	//     non-intersecting elements in `Y` are appended, retaining their partial order.
-	//   - 'map': `X + Y` performs a merge where the array positions of all keys in `X` are preserved but the values
-	//     are overwritten by values in `Y` when the key sets of `X` and `Y` intersect. Elements in `Y` with
-	//     non-intersecting keys are appended, retaining their partial order.
-	// Required.
+	// 对 list 类型为 'set' 或 'map' 的数组所做的相等比较会忽略元素顺序，即 [1, 2] == [2, 1]。
+	// 对带有 x-kubernetes-list-type 的数组所做的拼接遵循该列表类型的语义：
+	//   - 'set'：`X + Y` 执行并集操作，保留 `X` 中所有元素的位置，
+	//     并将 `Y` 中不相交的元素追加到末尾，保持其相对顺序。
+	//   - 'map'：`X + Y` 执行合并操作，保留 `X` 中所有键的位置，但当 `X` 与 `Y` 的键集合相交时，
+	//     对应的值会被 `Y` 中的值覆盖。`Y` 中键不相交的元素会被追加，保持其相对顺序。
+	// 必填。
 	Expression string
-	// Message represents the message displayed when validation fails. The message is required if the Expression contains
-	// line breaks. The message must not contain line breaks.
-	// If unset, the message is "failed rule: {Rule}".
-	// e.g. "must be a URL with the host matching spec.host"
-	// If ExpressMessage is specified, Message will be ignored
-	// If the Expression contains line breaks. Eith Message or ExpressMessage is required.
-	// The message must not contain line breaks.
-	// If unset, the message is "failed Expression: {Expression}".
+	// Message 表示校验失败时显示的消息。当 Expression 包含换行符时必须提供该消息，且消息本身不得包含换行符。
+	// 如果未设置，消息为 "failed rule: {Rule}"。
+	// 例如 "must be a URL with the host matching spec.host"。
+	// 如果指定了 ExpressMessage，则忽略 Message。
+	// 如果 Expression 包含换行符，则 Eith Message 或 ExpressMessage 为必填。
+	// 消息不得包含换行符。
+	// 如果未设置，消息为 "failed Expression: {Expression}"。
 	// +optional
 	Message string
-	// Reason represents a machine-readable description of why this validation failed.
-	// If this is the first validation in the list to fail, this reason, as well as the
-	// corresponding HTTP response code, are used in the
-	// HTTP response to the client.
-	// The currently supported reasons are: "Unauthorized", "Forbidden", "Invalid", "RequestEntityTooLarge".
-	// If not set, StatusReasonInvalid is used in the response to the client.
+	// Reason 表示对校验失败原因的机器可读描述。
+	// 如果这是列表中第一个失败的校验，则该原因以及对应的 HTTP 响应码
+	// 会包含在返回给客户端的 HTTP 响应中。
+	// 当前支持的原因有："Unauthorized"、"Forbidden"、"Invalid"、"RequestEntityTooLarge"。
+	// 如果未设置，则响应中使用 StatusReasonInvalid。
 	// +optional
 	Reason *metav1.StatusReason
-	// messageExpression declares a CEL expression that evaluates to the validation failure message that is returned when this rule fails.
-	// Since messageExpression is used as a failure message, it must evaluate to a string.
-	// If both message and messageExpression are present on a validation, then messageExpression will be used if validation fails.
-	// If messageExpression results in a runtime error, the runtime error is logged, and the validation failure message is produced
-	// as if the messageExpression field were unset. If messageExpression evaluates to an empty string, a string with only spaces, or a string
-	// that contains line breaks, then the validation failure message will also be produced as if the messageExpression field were unset, and
-	// the fact that messageExpression produced an empty string/string with only spaces/string with line breaks will be logged.
-	// messageExpression has access to all the same variables as the `expression` except for 'authorizer' and 'authorizer.requestResource'.
-	// Example:
+	// messageExpression 声明一个 CEL 表达式，其求值结果为该规则失败时返回的校验失败消息。
+	// 由于 messageExpression 用作失败消息，它必须求值为字符串。
+	// 如果一条校验同时包含 message 和 messageExpression，则校验失败时使用 messageExpression。
+	// 如果 messageExpression 求值出现运行时错误，会记录该错误，并像未设置 messageExpression 字段一样
+	// 生成校验失败消息。如果 messageExpression 求值为空字符串、仅包含空格的字符串或含换行符的字符串，
+	// 同样会像未设置该字段一样生成校验失败消息，并记录该字段产生了空字符串/纯空格字符串/含换行符字符串的事实。
+	// messageExpression 可访问与 `expression` 相同的所有变量，但 'authorizer' 和 'authorizer.requestResource' 除外。
+	// 示例：
 	// "object.x must be less than max ("+string(params.max)+")"
 	// +optional
 	MessageExpression string
 }
 
-// Variable is the definition of a variable that is used for composition. A variable is defined as a named expression.
+// Variable 是用于组合（composition）的变量定义。变量定义为一个具名表达式。
 // +structType=atomic
 type Variable struct {
-	// Name is the name of the variable. The name must be a valid CEL identifier and unique among all variables.
-	// The variable can be accessed in other expressions through `variables`
-	// For example, if name is "foo", the variable will be available as `variables.foo`
+	// Name 是变量的名称。该名称必须是合法的 CEL 标识符，且在所有变量中唯一。
+	// 可以通过 `variables` 在其他表达式中访问该变量。
+	// 例如，若名称为 "foo"，则该变量可通过 `variables.foo` 访问。
 	Name string
 
-	// Expression is the expression that will be evaluated as the value of the variable.
-	// The CEL expression has access to the same identifiers as the CEL expressions in Validation.
+	// Expression 是会被求值并作为变量值的表达式。
+	// 该 CEL 表达式可访问与 Validation 中的 CEL 表达式相同的标识符。
 	Expression string
 }
 
-// AuditAnnotation describes how to produce an audit annotation for an API request.
+// AuditAnnotation 描述如何为 API 请求生成审计注解。
 type AuditAnnotation struct {
-	// key specifies the audit annotation key. The audit annotation keys of
-	// a ValidatingAdmissionPolicy must be unique. The key must be a qualified
-	// name ([A-Za-z0-9][-A-Za-z0-9_.]*) no more than 63 bytes in length.
+	// key 指定审计注解的键。同一个 ValidatingAdmissionPolicy 的审计注解键必须唯一。
+	// 该键必须是一个合格名称（[A-Za-z0-9][-A-Za-z0-9_.]*），且长度不超过 63 字节。
 	//
-	// The key is combined with the resource name of the
-	// ValidatingAdmissionPolicy to construct an audit annotation key:
-	// "{ValidatingAdmissionPolicy name}/{key}".
+	// 该键会与 ValidatingAdmissionPolicy 的资源名组合，构成审计注解键：
+	// "{ValidatingAdmissionPolicy name}/{key}"。
 	//
-	// If an admission webhook uses the same resource name as this ValidatingAdmissionPolicy
-	// and the same audit annotation key, the annotation key will be identical.
-	// In this case, the first annotation written with the key will be included
-	// in the audit event and all subsequent annotations with the same key
-	// will be discarded.
+	// 如果某个准入 webhook 使用与此 ValidatingAdmissionPolicy 相同的资源名
+	// 以及相同的审计注解键，则两者的注解键完全相同。
+	// 在这种情况下，只有第一个用该键写入的注解会包含在审计事件中，
+	// 后续所有同键注解都会被丢弃。
 	//
-	// Required.
+	// 必填。
 	Key string
 
-	// valueExpression represents the expression which is evaluated by CEL to
-	// produce an audit annotation value. The expression must evaluate to either
-	// a string or null value. If the expression evaluates to a string, the
-	// audit annotation is included with the string value. If the expression
-	// evaluates to null or empty string the audit annotation will be omitted.
-	// The valueExpression may be no longer than 5kb in length.
-	// If the result of the valueExpression is more than 10kb in length, it
-	// will be truncated to 10kb.
+	// valueExpression 表示由 CEL 求值以生成审计注解值的表达式。
+	// 该表达式必须求值为字符串或 null。如果求值为字符串，则该字符串作为审计注解的值包含进来；
+	// 如果求值为 null 或空字符串，则省略该审计注解。
+	// valueExpression 的长度不得超过 5kb。
+	// 如果 valueExpression 的结果长度超过 10kb，则会被截断到 10kb。
 	//
-	// If multiple ValidatingAdmissionPolicyBinding resources match an
-	// API request, then the valueExpression will be evaluated for
-	// each binding. All unique values produced by the valueExpressions
-	// will be joined together in a comma-separated list.
+	// 如果有多个 ValidatingAdmissionPolicyBinding 资源匹配某个 API 请求，
+	// 则会针对每个绑定对 valueExpression 求值一次。
+	// 所有 valueExpression 产生的唯一值会以逗号分隔的列表形式连接在一起。
 	//
-	// Required.
+	// 必填。
 	ValueExpression string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ValidatingAdmissionPolicyBinding binds the ValidatingAdmissionPolicy with paramerized resources.
-// ValidatingAdmissionPolicyBinding and parameter CRDs together define how cluster administrators configure policies for clusters.
+// ValidatingAdmissionPolicyBinding 将 ValidatingAdmissionPolicy 与参数化的资源绑定在一起。
+// ValidatingAdmissionPolicyBinding 与参数 CRD 共同定义了集群管理员如何为集群配置策略。
 //
-// For a given admission request, each binding will cause its policy to be
-// evaluated N times, where N is 1 for policies/bindings that don't use
-// params, otherwise N is the number of parameters selected by the binding.
+// 对于给定的准入请求，每个绑定都会使其策略被求值 N 次：对于不使用参数的策略/绑定，N 为 1；
+// 否则 N 为该绑定所选参数的数量。
 //
-// The CEL expressions of a policy must have a computed CEL cost below the maximum
-// CEL budget. Each evaluation of the policy is given an independent CEL cost budget.
-// Adding/removing policies, bindings, or params can not affect whether a
-// given (policy, binding, param) combination is within its own CEL budget.
+// 策略的 CEL 表达式计算出的 CEL 开销必须低于最大 CEL 预算。
+// 每次策略求值都有独立的 CEL 开销预算。
+// 增加/删除策略、绑定或参数不会影响某个给定的（策略、绑定、参数）组合是否在其自身的 CEL 预算内。
 type ValidatingAdmissionPolicyBinding struct {
 	metav1.TypeMeta
-	// Standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据；更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。
 	// +optional
 	metav1.ObjectMeta
-	// Specification of the desired behavior of the ValidatingAdmissionPolicyBinding.
+	// ValidatingAdmissionPolicyBinding 期望行为的规格说明。
 	Spec ValidatingAdmissionPolicyBindingSpec
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ValidatingAdmissionPolicyBindingList is a list of PolicyBinding.
+// ValidatingAdmissionPolicyBindingList 是 PolicyBinding 的列表。
 type ValidatingAdmissionPolicyBindingList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta
-	// List of PolicyBinding.
+	// PolicyBinding 列表。
 	Items []ValidatingAdmissionPolicyBinding
 }
 
-// ValidatingAdmissionPolicyBindingSpec is the specification of the ValidatingAdmissionPolicyBinding.
+// ValidatingAdmissionPolicyBindingSpec 是 ValidatingAdmissionPolicyBinding 的规格说明。
 type ValidatingAdmissionPolicyBindingSpec struct {
-	// PolicyName references a ValidatingAdmissionPolicy name which the ValidatingAdmissionPolicyBinding binds to.
-	// If the referenced resource does not exist, this binding is considered invalid and will be ignored
-	// Required.
+	// PolicyName 引用该 ValidatingAdmissionPolicyBinding 所绑定的 ValidatingAdmissionPolicy 名称。
+	// 如果引用的资源不存在，则该绑定被视为无效并被忽略。
+	// 必填。
 	PolicyName string
 
-	// paramRef specifies the parameter resource used to configure the admission control policy.
-	// It should point to a resource of the type specified in ParamKind of the bound ValidatingAdmissionPolicy.
-	// If the policy specifies a ParamKind and the resource referred to by ParamRef does not exist, this binding is considered mis-configured and the FailurePolicy of the ValidatingAdmissionPolicy applied.
-	// If the policy does not specify a ParamKind then this field is ignored, and the rules are evaluated without a param.
+	// paramRef 指定用于配置准入控制策略的参数资源。
+	// 它应指向所绑定 ValidatingAdmissionPolicy 的 ParamKind 中指定类型的资源。
+	// 如果策略指定了 ParamKind，但 ParamRef 引用的资源不存在，则该绑定被视为配置错误，
+	// 并会应用 ValidatingAdmissionPolicy 的 FailurePolicy。
+	// 如果策略未指定 ParamKind，则忽略该字段，并在不带参数的情况下求值规则。
 	// +optional
 	ParamRef *ParamRef
 
-	// MatchResources declares what resources match this binding and will be validated by it.
-	// Note that this is intersected with the policy's matchConstraints, so only requests that are matched by the policy can be selected by this.
-	// If this is unset, all resources matched by the policy are validated by this binding
-	// When resourceRules is unset, it does not constrain resource matching. If a resource is matched by the other fields of this object, it will be validated.
-	// Note that this is differs from ValidatingAdmissionPolicy matchConstraints, where resourceRules are required.
+	// MatchResources 声明哪些资源匹配此绑定并将由其校验。
+	// 请注意，这会与策略的 matchConstraints 取交集，因此此绑定只能选中已被策略匹配的请求。
+	// 如果未设置，则该绑定会校验策略匹配的所有资源。
+	// 当 resourceRules 未设置时，它不限制资源匹配。如果某个资源被该对象的其他字段匹配，则会被校验。
+	// 请注意，这与 ValidatingAdmissionPolicy 的 matchConstraints 不同，后者要求必须提供 resourceRules。
 	// +optional
 	MatchResources *MatchResources
 
-	// validationActions declares how Validations of the referenced ValidatingAdmissionPolicy are enforced.
-	// If a validation evaluates to false it is always enforced according to these actions.
+	// validationActions 声明如何强制执行所引用 ValidatingAdmissionPolicy 的校验（Validations）。
+	// 如果某条校验求值为 false，则始终按这些动作强制执行。
 	//
-	// Failures defined by the ValidatingAdmissionPolicy's FailurePolicy are enforced according
-	// to these actions only if the FailurePolicy is set to Fail, otherwise the failures are
-	// ignored. This includes compilation errors, runtime errors and misconfigurations of the policy.
+	// 只有当 FailurePolicy 设为 Fail 时，ValidatingAdmissionPolicy 的 FailurePolicy 所定义的失败
+	// 才会按这些动作强制执行；否则失败会被忽略。这包括策略的编译错误、运行时错误和配置错误。
 	//
-	// validationActions is declared as a set of action values. Order does
-	// not matter. validationActions may not contain duplicates of the same action.
+	// validationActions 声明为一组动作值，顺序无关紧要，且不得包含重复的动作。
 	//
-	// The supported actions values are:
+	// 支持的动作值有：
 	//
-	// "Deny" specifies that a validation failure results in a denied request.
+	// "Deny" 表示校验失败会导致请求被拒绝。
 	//
-	// "Warn" specifies that a validation failure is reported to the request client
-	// in HTTP Warning headers, with a warning code of 299. Warnings can be sent
-	// both for allowed or denied admission responses.
+	// "Warn" 表示校验失败会通过 HTTP Warning 头报告给请求客户端，警告码为 299。
+	// 无论准入响应是允许还是拒绝，都可以发送警告。
 	//
-	// "Audit" specifies that a validation failure is included in the published
-	// audit event for the request. The audit event will contain a
-	// `validation.policy.admission.k8s.io/validation_failure` audit annotation
-	// with a value containing the details of the validation failures, formatted as
-	// a JSON list of objects, each with the following fields:
-	// - message: The validation failure message string
-	// - policy: The resource name of the ValidatingAdmissionPolicy
-	// - binding: The resource name of the ValidatingAdmissionPolicyBinding
-	// - expressionIndex: The index of the failed validations in the ValidatingAdmissionPolicy
-	// - validationActions: The enforcement actions enacted for the validation failure
-	// Example audit annotation:
+	// "Audit" 表示校验失败会被包含在针对该请求发布的审计事件中。
+	// 审计事件将包含一个 `validation.policy.admission.k8s.io/validation_failure` 审计注解，
+	// 其值包含校验失败的详细信息，格式为 JSON 对象列表，每个对象包含以下字段：
+	// - message：校验失败消息字符串
+	// - policy：ValidatingAdmissionPolicy 的资源名
+	// - binding：ValidatingAdmissionPolicyBinding 的资源名
+	// - expressionIndex：在 ValidatingAdmissionPolicy 中失败的校验的索引
+	// - validationActions：针对该校验失败执行的强制动作
+	// 审计注解示例：
 	// `"validation.policy.admission.k8s.io/validation_failure": "[{\"message\": \"Invalid value\", {\"policy\": \"policy.example.com\", {\"binding\": \"policybinding.example.com\", {\"expressionIndex\": \"1\", {\"validationActions\": [\"Audit\"]}]"`
 	//
-	// Clients should expect to handle additional values by ignoring
-	// any values not recognized.
+	// 客户端应当预期能处理额外的值，即忽略任何无法识别的值。
 	//
-	// "Deny" and "Warn" may not be used together since this combination
-	// needlessly duplicates the validation failure both in the
-	// API response body and the HTTP warning headers.
+	// "Deny" 和 "Warn" 不能同时使用，因为这种组合会在 API 响应体和 HTTP 警告头中
+	// 无谓地重复报告同一次校验失败。
 	//
-	// Required.
+	// 必填。
 	ValidationActions []ValidationAction
 }
 
-// ParamRef describes how to locate the params to be used as input to
-// expressions of rules applied by a policy binding.
+// ParamRef 描述如何定位参数，这些参数会作为输入提供给策略绑定所应用的规则表达式。
 // +structType=atomic
 type ParamRef struct {
-	// name is the name of the resource being referenced.
+	// name 是被引用资源的名称。
 	//
-	// One of `name` or `selector` must be set, but `name` and `selector` are
-	// mutually exclusive properties. If one is set, the other must be unset.
+	// 必须设置 `name` 或 `selector` 之一，但 `name` 与 `selector` 互斥：
+	// 设置其中一个时，另一个必须留空。
 	//
-	// A single parameter used for all admission requests can be configured
-	// by setting the `name` field, leaving `selector` blank, and setting namespace
-	// if `paramKind` is namespace-scoped.
+	// 只需设置 `name` 字段、留空 `selector`，并在 `paramKind` 为命名空间级时设置 namespace，
+	// 即可配置一个对所有准入请求都使用的单一参数。
 	//
 	// +optional
 	Name string
 
-	// namespace is the namespace of the referenced resource. Allows limiting
-	// the search for params to a specific namespace. Applies to both `name` and
-	// `selector` fields.
+	// namespace 是被引用资源所在的命名空间，用于将参数搜索限定到特定命名空间，
+	// 对 `name` 和 `selector` 字段均适用。
 	//
-	// A per-namespace parameter may be used by specifying a namespace-scoped
-	// `paramKind` in the policy and leaving this field empty.
+	// 在策略中指定命名空间级的 `paramKind` 并留空此字段，即可使用按命名空间划分的参数。
 	//
-	// - If `paramKind` is cluster-scoped, this field MUST be unset. Setting this
-	// field results in a configuration error.
+	// - 如果 `paramKind` 是集群级的，则必须不设置此字段，否则会导致配置错误。
 	//
-	// - If `paramKind` is namespace-scoped, the namespace of the object being
-	// evaluated for admission will be used when this field is left unset. Take
-	// care that if this is left empty the binding must not match any cluster-scoped
-	// resources, which will result in an error.
+	// - 如果 `paramKind` 是命名空间级的，留空此字段时会使用被准入对象所在的命名空间。
+	//   请注意，如果留空，则该绑定不得匹配任何集群级资源，否则会导致错误。
 	//
 	// +optional
 	Namespace string
 
-	// selector can be used to match multiple param objects based on their labels.
-	// Supply selector: {} to match all resources of the ParamKind.
+	// selector 可用于按标签匹配多个参数对象。
+	// 提供 selector: {} 可匹配该 ParamKind 的所有资源。
 	//
-	// If multiple params are found, they are all evaluated with the policy expressions
-	// and the results are ANDed together.
+	// 如果找到多个参数，会针对策略表达式对它们逐一求值，并将结果按逻辑与（AND）组合。
 	//
-	// One of `name` or `selector` must be set, but `name` and `selector` are
-	// mutually exclusive properties. If one is set, the other must be unset.
+	// 必须设置 `name` 或 `selector` 之一，但 `name` 与 `selector` 互斥：
+	// 设置其中一个时，另一个必须留空。
 	//
 	// +optional
 	Selector *metav1.LabelSelector
 
-	// parameterNotFoundAction controls the behavior of the binding when the resource
-	// exists, and name or selector is valid, but there are no parameters
-	// matched by the binding. If the value is set to `Allow`, then no
-	// matched parameters will be treated as successful validation by the binding.
-	// If set to `Deny`, then no matched parameters will be subject to the
-	// `failurePolicy` of the policy.
+	// parameterNotFoundAction 控制当资源存在、name 或 selector 有效，但绑定未匹配到任何参数时的行为。
+	// 如果设为 `Allow`，则没有匹配到参数会被该绑定视为校验成功。
+	// 如果设为 `Deny`，则没有匹配到参数会受策略的 `failurePolicy` 约束。
 	//
-	// Allowed values are `Allow` or `Deny`
+	// 允许值为 `Allow` 或 `Deny`。
 	//
-	// Required
+	// 必填。
 	ParameterNotFoundAction *ParameterNotFoundActionType
 }
 
-// MatchResources decides whether to run the admission control policy on an object based
-// on whether it meets the match criteria.
-// The exclude rules take precedence over include rules (if a resource matches both, it is excluded)
+// MatchResources 根据对象是否满足匹配条件，决定是否对其运行准入控制策略。
+// 排除规则优先于包含规则（如果某资源同时匹配两者，则会被排除）。
 type MatchResources struct {
-	// NamespaceSelector decides whether to run the admission control policy on an object based
-	// on whether the namespace for that object matches the selector. If the
-	// object itself is a namespace, the matching is performed on
-	// object.metadata.labels. If the object is another cluster scoped resource,
-	// it never skips the policy.
+	// NamespaceSelector 根据对象所在命名空间是否匹配该选择器，决定是否对该对象运行准入控制策略。
+	// 如果对象本身是一个命名空间，则匹配针对 object.metadata.labels 进行。
+	// 如果对象是另一个集群级资源，则永远不会跳过该策略。
 	//
-	// For example, to run the webhook on any objects whose namespace is not
-	// associated with "runlevel" of "0" or "1";  you will set the selector as
-	// follows:
+	// 例如，若要对命名空间未关联 "runlevel" 为 "0" 或 "1" 的所有对象运行 webhook，
+	// 应按如下方式设置选择器：
 	// "namespaceSelector": {
 	//   "matchExpressions": [
 	//     {
@@ -595,9 +553,8 @@ type MatchResources struct {
 	//   ]
 	// }
 	//
-	// If instead you want to only run the policy on any objects whose
-	// namespace is associated with the "environment" of "prod" or "staging";
-	// you will set the selector as follows:
+	// 反之，如果只想对命名空间关联了 "environment" 为 "prod" 或 "staging" 的对象运行该策略，
+	// 应按如下方式设置选择器：
 	// "namespaceSelector": {
 	//   "matchExpressions": [
 	//     {
@@ -611,179 +568,170 @@ type MatchResources struct {
 	//   ]
 	// }
 	//
-	// See
+	// 更多标签选择器示例参见：
 	// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-	// for more examples of label selectors.
 	//
-	// Default to the empty LabelSelector, which matches everything.
+	// 默认为空的 LabelSelector，它匹配所有对象。
 	// +optional
 	NamespaceSelector *metav1.LabelSelector
-	// ObjectSelector decides whether to run the policy based on if the
-	// object has matching labels. objectSelector is evaluated against both
-	// the oldObject and newObject that would be sent to the cel policy, and
-	// is considered to match if either object matches the selector. A null
-	// object (oldObject in the case of create, or newObject in the case of
-	// delete) or an object that cannot have labels (like a
-	// DeploymentRollback or a PodProxyOptions object) is not considered to
-	// match.
-	// Use the object selector only if the webhook is opt-in, because end
-	// users may skip the admission webhook by setting the labels.
-	// Default to the empty LabelSelector, which matches everything.
+	// ObjectSelector 根据对象是否具有匹配的标签来决定是否运行该策略。
+	// objectSelector 会同时针对将发送给 CEL 策略的 oldObject 和 newObject 求值，
+	// 只要其中任一对象匹配选择器即视为匹配。null 对象（CREATE 时为 oldObject，
+	// DELETE 时为 newObject）或无法具有标签的对象（如 DeploymentRollback 或 PodProxyOptions 对象）
+	// 均视为不匹配。
+	// 仅当 webhook 是选择加入（opt-in）时才使用对象选择器，因为终端用户可以通过设置标签
+	// 来跳过该准入 webhook。
+	// 默认为空的 LabelSelector，它匹配所有对象。
 	// +optional
 	ObjectSelector *metav1.LabelSelector
-	// ResourceRules describes what operations on what resources/subresources the policy matches.
-	// The policy cares about an operation if it matches _any_ Rule.
+	// ResourceRules 描述该策略匹配哪些资源/子资源上的哪些操作。
+	// 只要匹配_任意_ Rule，该策略就关注该操作。
 	// +listType=atomic
 	// +optional
 	ResourceRules []NamedRuleWithOperations
-	// ExcludeResourceRules describes what operations on what resources/subresources the policy should not care about.
-	// The exclude rules take precedence over include rules (if a resource matches both, it is excluded)
+	// ExcludeResourceRules 描述该策略不应关注哪些资源/子资源上的哪些操作。
+	// 排除规则优先于包含规则（如果某资源同时匹配两者，则会被排除）。
 	// +listType=atomic
 	// +optional
 	ExcludeResourceRules []NamedRuleWithOperations
-	// matchPolicy defines how the "MatchResources" list is used to match incoming requests.
-	// Allowed values are "Exact" or "Equivalent".
+	// matchPolicy 定义如何使用 "MatchResources" 列表来匹配传入的请求。
+	// 允许值为 "Exact" 或 "Equivalent"。
 	//
-	// - Exact: match a request only if it exactly matches a specified rule.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// but "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the policy.
+	// - Exact：只有当请求与指定规则完全匹配时才匹配该请求。
+	// 例如，如果 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改，
+	// 但 "rules" 只包含 `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`，
+	// 则对 apps/v1beta1 或 extensions/v1beta1 的请求不会被发送给该策略。
 	//
-	// - Equivalent: match a request if modifies a resource listed in rules, even via another API group or version.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// and "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the policy.
+	// - Equivalent：只要请求修改了规则中列出的资源，即使通过另一个 API 组或版本，也会匹配该请求。
+	// 例如，如果 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改，
+	// 且 "rules" 只包含 `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`，
+	// 则对 apps/v1beta1 或 extensions/v1beta1 的请求会被转换为 apps/v1 后发送给该策略。
 	//
-	// Defaults to "Equivalent"
+	// 默认为 "Equivalent"。
 	// +optional
 	MatchPolicy *MatchPolicyType
 }
 
-// ValidationAction specifies a policy enforcement action.
+// ValidationAction 指定一种策略强制动作。
 type ValidationAction string
 
+// 策略强制动作的合法取值。
 const (
-	// Deny specifies that a validation failure results in a denied request.
+	// Deny 表示校验失败会导致请求被拒绝。
 	Deny ValidationAction = "Deny"
-	// Warn specifies that a validation failure is reported to the request client
-	// in HTTP Warning headers, with a warning code of 299. Warnings can be sent
-	// both for allowed or denied admission responses.
+	// Warn 表示校验失败会通过 HTTP Warning 头（警告码 299）报告给请求客户端。
+	// 无论准入响应是允许还是拒绝，都可以发送警告。
 	Warn ValidationAction = "Warn"
-	// Audit specifies that a validation failure is included in the published
-	// audit event for the request. The audit event will contain a
-	// `validation.policy.admission.k8s.io/validation_failure` audit annotation
-	// with a value containing the details of the validation failure.
+	// Audit 表示校验失败会被包含在针对该请求发布的审计事件中。
+	// 审计事件将包含一个 `validation.policy.admission.k8s.io/validation_failure` 审计注解，
+	// 其值包含校验失败的详细信息。
 	Audit ValidationAction = "Audit"
 )
 
-// NamedRuleWithOperations is a tuple of Operations and Resources with ResourceNames.
+// NamedRuleWithOperations 是由 Operations、Resources 以及 ResourceNames 组成的元组。
 type NamedRuleWithOperations struct {
-	// ResourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.
+	// ResourceNames 是该规则适用名称的可选白名单。空集合表示允许所有名称。
 	// +optional
 	ResourceNames []string
-	// RuleWithOperations is a tuple of Operations and Resources.
+	// RuleWithOperations 是由 Operations 和 Resources 组成的元组。
 	RuleWithOperations RuleWithOperations
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ValidatingWebhookConfiguration describes the configuration of an admission webhook that accepts or rejects and object without changing it.
+// ValidatingWebhookConfiguration 描述一种准入 webhook 的配置，它只接受或拒绝对象而不修改对象。
 type ValidatingWebhookConfiguration struct {
 	metav1.TypeMeta
-	// Standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据；更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。
 	// +optional
 	metav1.ObjectMeta
-	// Webhooks is a list of webhooks and the affected resources and operations.
+	// Webhooks 是 webhook 及其所影响的资源与操作的列表。
 	// +optional
 	Webhooks []ValidatingWebhook
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ValidatingWebhookConfigurationList is a list of ValidatingWebhookConfiguration.
+// ValidatingWebhookConfigurationList 是 ValidatingWebhookConfiguration 的列表。
 type ValidatingWebhookConfigurationList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta
-	// List of ValidatingWebhookConfigurations.
+	// ValidatingWebhookConfiguration 列表。
 	Items []ValidatingWebhookConfiguration
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// MutatingWebhookConfiguration describes the configuration of and admission webhook that accept or reject and may change the object.
+// MutatingWebhookConfiguration 描述一种准入 webhook 的配置，它可以接受或拒绝对象，也可以修改对象。
 type MutatingWebhookConfiguration struct {
 	metav1.TypeMeta
-	// Standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据；更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。
 	// +optional
 	metav1.ObjectMeta
-	// Webhooks is a list of webhooks and the affected resources and operations.
+	// Webhooks 是 webhook 及其所影响的资源与操作的列表。
 	// +optional
 	Webhooks []MutatingWebhook
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// MutatingWebhookConfigurationList is a list of MutatingWebhookConfiguration.
+// MutatingWebhookConfigurationList 是 MutatingWebhookConfiguration 的列表。
 type MutatingWebhookConfigurationList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta
-	// List of MutatingWebhookConfiguration.
+	// MutatingWebhookConfiguration 列表。
 	Items []MutatingWebhookConfiguration
 }
 
-// ValidatingWebhook describes an admission webhook and the resources and operations it applies to.
+// ValidatingWebhook 描述一个准入 webhook 及其适用的资源和操作。
 type ValidatingWebhook struct {
-	// The name of the admission webhook.
-	// Name should be fully qualified, e.g., imagepolicy.kubernetes.io, where
-	// "imagepolicy" is the name of the webhook, and kubernetes.io is the name
-	// of the organization.
-	// Required.
+	// 准入 webhook 的名称。
+	// 名称应为完全限定名，例如 imagepolicy.kubernetes.io，其中 "imagepolicy" 是 webhook 名称，
+	// kubernetes.io 是组织名称。
+	// 必填。
 	Name string
 
-	// ClientConfig defines how to communicate with the hook.
-	// Required
+	// ClientConfig 定义如何与该 hook 通信。
+	// 必填。
 	ClientConfig WebhookClientConfig
 
-	// Rules describes what operations on what resources/subresources the webhook cares about.
-	// The webhook cares about an operation if it matches _any_ Rule.
+	// Rules 描述该 webhook 关注哪些资源/子资源上的哪些操作。
+	// 只要匹配_任意_ Rule，该 webhook 就关注该操作。
 	Rules []RuleWithOperations
 
-	// FailurePolicy defines how unrecognized errors from the admission endpoint are handled -
-	// allowed values are Ignore or Fail. Defaults to Ignore.
+	// FailurePolicy 定义如何处理来自准入端点的无法识别的错误，
+	// 允许值为 Ignore 或 Fail，默认为 Ignore。
 	// +optional
 	FailurePolicy *FailurePolicyType
 
-	// matchPolicy defines how the "rules" list is used to match incoming requests.
-	// Allowed values are "Exact" or "Equivalent".
+	// matchPolicy 定义如何使用 "rules" 列表来匹配传入的请求。
+	// 允许值为 "Exact" 或 "Equivalent"。
 	//
-	// - Exact: match a request only if it exactly matches a specified rule.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// but "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the webhook.
+	// - Exact：只有当请求与指定规则完全匹配时才匹配该请求。
+	// 例如，如果 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改，
+	// 但 "rules" 只包含 `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`，
+	// 则对 apps/v1beta1 或 extensions/v1beta1 的请求不会被发送给该 webhook。
 	//
-	// - Equivalent: match a request if modifies a resource listed in rules, even via another API group or version.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// and "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the webhook.
+	// - Equivalent：只要请求修改了规则中列出的资源，即使通过另一个 API 组或版本，也会匹配该请求。
+	// 例如，如果 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改，
+	// 且 "rules" 只包含 `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`，
+	// 则对 apps/v1beta1 或 extensions/v1beta1 的请求会被转换为 apps/v1 后发送给该 webhook。
 	//
 	// +optional
 	MatchPolicy *MatchPolicyType
 
-	// NamespaceSelector decides whether to run the webhook on an object based
-	// on whether the namespace for that object matches the selector. If the
-	// object itself is a namespace, the matching is performed on
-	// object.metadata.labels. If the object is another cluster scoped resource,
-	// it never skips the webhook.
+	// NamespaceSelector 根据对象所在命名空间是否匹配该选择器，决定是否对该对象运行 webhook。
+	// 如果对象本身是一个命名空间，则匹配针对 object.metadata.labels 进行。
+	// 如果对象是另一个集群级资源，则永远不会跳过该 webhook。
 	//
-	// For example, to run the webhook on any objects whose namespace is not
-	// associated with "runlevel" of "0" or "1";  you will set the selector as
-	// follows:
+	// 例如，若要对命名空间未关联 "runlevel" 为 "0" 或 "1" 的所有对象运行 webhook，
+	// 应按如下方式设置选择器：
 	// "namespaceSelector": {
 	//   "matchExpressions": [
 	//     {
@@ -797,9 +745,8 @@ type ValidatingWebhook struct {
 	//   ]
 	// }
 	//
-	// If instead you want to only run the webhook on any objects whose
-	// namespace is associated with the "environment" of "prod" or "staging";
-	// you will set the selector as follows:
+	// 反之，如果只想对命名空间关联了 "environment" 为 "prod" 或 "staging" 的对象运行 webhook，
+	// 应按如下方式设置选择器：
 	// "namespaceSelector": {
 	//   "matchExpressions": [
 	//     {
@@ -813,116 +760,106 @@ type ValidatingWebhook struct {
 	//   ]
 	// }
 	//
-	// See
+	// 更多标签选择器示例参见：
 	// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-	// for more examples of label selectors.
 	//
-	// Default to the empty LabelSelector, which matches everything.
+	// 默认为空的 LabelSelector，它匹配所有对象。
 	// +optional
 	NamespaceSelector *metav1.LabelSelector
 
-	// ObjectSelector decides whether to run the webhook based on if the
-	// object has matching labels. objectSelector is evaluated against both
-	// the oldObject and newObject that would be sent to the webhook, and
-	// is considered to match if either object matches the selector. A null
-	// object (oldObject in the case of create, or newObject in the case of
-	// delete) or an object that cannot have labels (like a
-	// DeploymentRollback or a PodProxyOptions object) is not considered to
-	// match.
-	// Use the object selector only if the webhook is opt-in, because end
-	// users may skip the admission webhook by setting the labels.
-	// Default to the empty LabelSelector, which matches everything.
+	// ObjectSelector 根据对象是否具有匹配的标签来决定是否运行 webhook。
+	// objectSelector 会同时针对将发送给 webhook 的 oldObject 和 newObject 求值，
+	// 只要其中任一对象匹配选择器即视为匹配。null 对象（CREATE 时为 oldObject，
+	// DELETE 时为 newObject）或无法具有标签的对象（如 DeploymentRollback 或 PodProxyOptions 对象）
+	// 均视为不匹配。
+	// 仅当 webhook 是选择加入（opt-in）时才使用对象选择器，因为终端用户可以通过设置标签
+	// 来跳过该准入 webhook。
+	// 默认为空的 LabelSelector，它匹配所有对象。
 	// +optional
 	ObjectSelector *metav1.LabelSelector
 
-	// SideEffects states whether this webhook has side effects.
-	// Acceptable values are: Unknown, None, Some, NoneOnDryRun
-	// Webhooks with side effects MUST implement a reconciliation system, since a request may be
-	// rejected by a future step in the admission chain and the side effects therefore need to be undone.
-	// Requests with the dryRun attribute will be auto-rejected if they match a webhook with
-	// sideEffects == Unknown or Some. Defaults to Unknown.
+	// SideEffects 声明该 webhook 是否有副作用。
+	// 可接受的值为：Unknown、None、Some、NoneOnDryRun。
+	// 有副作用的 webhook 必须实现一套协调（reconciliation）系统，因为请求可能会被准入链中
+	// 后续步骤拒绝，从而需要撤销这些副作用。
+	// 带 dryRun 属性的请求如果匹配到 sideEffects 为 Unknown 或 Some 的 webhook，会被自动拒绝。
+	// 默认为 Unknown。
 	// +optional
 	SideEffects *SideEffectClass
 
-	// TimeoutSeconds specifies the timeout for this webhook. After the timeout passes,
-	// the webhook call will be ignored or the API call will fail based on the
-	// failure policy.
-	// The timeout value must be between 1 and 30 seconds.
+	// TimeoutSeconds 指定该 webhook 的超时时间。超时后，根据失败策略，
+	// 要么忽略该 webhook 调用，要么让 API 调用失败。
+	// 超时值必须在 1 到 30 秒之间。
 	// +optional
 	TimeoutSeconds *int32
 
-	// AdmissionReviewVersions is an ordered list of preferred `AdmissionReview`
-	// versions the Webhook expects. API server will try to use first version in
-	// the list which it supports. If none of the versions specified in this list
-	// supported by API server, validation will fail for this object.
-	// If the webhook configuration has already been persisted with a version apiserver
-	// does not understand, calls to the webhook will fail and be subject to the failure policy.
+	// AdmissionReviewVersions 是 webhook 期望的 `AdmissionReview` 版本的有序首选列表。
+	// API 服务器会尝试使用列表中它支持的第一个版本。如果列表中的所有版本都不被 API 服务器支持，
+	// 则该对象的校验会失败。
+	// 如果 webhook 配置已经以 API 服务器无法理解的版本持久化，则对该 webhook 的调用会失败，
+	// 并受失败策略约束。
 	// +optional
 	AdmissionReviewVersions []string
 
-	// MatchConditions is a list of conditions that must be met for a request to be sent to this
-	// webhook. Match conditions filter requests that have already been matched by the rules,
-	// namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests.
-	// There are a maximum of 64 match conditions allowed.
+	// MatchConditions 是请求被发送到该 webhook 之前必须满足的条件列表。
+	// 匹配条件用于过滤已被规则、namespaceSelector 和 objectSelector 匹配过的请求。
+	// 空的 matchConditions 列表匹配所有请求。
+	// 最多允许 64 个匹配条件。
 	//
-	// The exact matching logic is (in order):
-	//   1. If ANY matchCondition evaluates to FALSE, the webhook is skipped.
-	//   2. If ALL matchConditions evaluate to TRUE, the webhook is called.
-	//   3. If any matchCondition evaluates to an error (but none are FALSE):
-	//      - If failurePolicy=Fail, reject the request
-	//      - If failurePolicy=Ignore, the error is ignored and the webhook is skipped
+	// 精确的匹配逻辑如下（按顺序）：
+	//   1. 如果_任意_ matchCondition 计算结果为 FALSE，则跳过该 webhook。
+	//   2. 如果_所有_ matchCondition 计算结果均为 TRUE，则调用该 webhook。
+	//   3. 如果任一 matchCondition 计算出错（但没有为 FALSE 的）：
+	//      - 若 failurePolicy=Fail，则拒绝该请求
+	//      - 若 failurePolicy=Ignore，则忽略该错误并跳过该 webhook
 	//
 	// +optional
 	MatchConditions []MatchCondition
 }
 
-// MutatingWebhook describes an admission webhook and the resources and operations it applies to.
+// MutatingWebhook 描述一个准入 webhook 及其适用的资源和操作。
 type MutatingWebhook struct {
-	// The name of the admission webhook.
-	// Name should be fully qualified, e.g., imagepolicy.kubernetes.io, where
-	// "imagepolicy" is the name of the webhook, and kubernetes.io is the name
-	// of the organization.
-	// Required.
+	// 准入 webhook 的名称。
+	// 名称应为完全限定名，例如 imagepolicy.kubernetes.io，其中 "imagepolicy" 是 webhook 名称，
+	// kubernetes.io 是组织名称。
+	// 必填。
 	Name string
 
-	// ClientConfig defines how to communicate with the hook.
-	// Required
+	// ClientConfig 定义如何与该 hook 通信。
+	// 必填。
 	ClientConfig WebhookClientConfig
 
-	// Rules describes what operations on what resources/subresources the webhook cares about.
-	// The webhook cares about an operation if it matches _any_ Rule.
+	// Rules 描述该 webhook 关注哪些资源/子资源上的哪些操作。
+	// 只要匹配_任意_ Rule，该 webhook 就关注该操作。
 	Rules []RuleWithOperations
 
-	// FailurePolicy defines how unrecognized errors from the admission endpoint are handled -
-	// allowed values are Ignore or Fail. Defaults to Ignore.
+	// FailurePolicy 定义如何处理来自准入端点的无法识别的错误，
+	// 允许值为 Ignore 或 Fail，默认为 Ignore。
 	// +optional
 	FailurePolicy *FailurePolicyType
 
-	// matchPolicy defines how the "rules" list is used to match incoming requests.
-	// Allowed values are "Exact" or "Equivalent".
+	// matchPolicy 定义如何使用 "rules" 列表来匹配传入的请求。
+	// 允许值为 "Exact" 或 "Equivalent"。
 	//
-	// - Exact: match a request only if it exactly matches a specified rule.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// but "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would not be sent to the webhook.
+	// - Exact：只有当请求与指定规则完全匹配时才匹配该请求。
+	// 例如，如果 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改，
+	// 但 "rules" 只包含 `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`，
+	// 则对 apps/v1beta1 或 extensions/v1beta1 的请求不会被发送给该 webhook。
 	//
-	// - Equivalent: match a request if modifies a resource listed in rules, even via another API group or version.
-	// For example, if deployments can be modified via apps/v1, apps/v1beta1, and extensions/v1beta1,
-	// and "rules" only included `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`,
-	// a request to apps/v1beta1 or extensions/v1beta1 would be converted to apps/v1 and sent to the webhook.
+	// - Equivalent：只要请求修改了规则中列出的资源，即使通过另一个 API 组或版本，也会匹配该请求。
+	// 例如，如果 deployments 可通过 apps/v1、apps/v1beta1 和 extensions/v1beta1 修改，
+	// 且 "rules" 只包含 `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]`，
+	// 则对 apps/v1beta1 或 extensions/v1beta1 的请求会被转换为 apps/v1 后发送给该 webhook。
 	//
 	// +optional
 	MatchPolicy *MatchPolicyType
 
-	// NamespaceSelector decides whether to run the webhook on an object based
-	// on whether the namespace for that object matches the selector. If the
-	// object itself is a namespace, the matching is performed on
-	// object.metadata.labels. If the object is another cluster scoped resource,
-	// it never skips the webhook.
+	// NamespaceSelector 根据对象所在命名空间是否匹配该选择器，决定是否对该对象运行 webhook。
+	// 如果对象本身是一个命名空间，则匹配针对 object.metadata.labels 进行。
+	// 如果对象是另一个集群级资源，则永远不会跳过该 webhook。
 	//
-	// For example, to run the webhook on any objects whose namespace is not
-	// associated with "runlevel" of "0" or "1";  you will set the selector as
-	// follows:
+	// 例如，若要对命名空间未关联 "runlevel" 为 "0" 或 "1" 的所有对象运行 webhook，
+	// 应按如下方式设置选择器：
 	// "namespaceSelector": {
 	//   "matchExpressions": [
 	//     {
@@ -936,9 +873,8 @@ type MutatingWebhook struct {
 	//   ]
 	// }
 	//
-	// If instead you want to only run the webhook on any objects whose
-	// namespace is associated with the "environment" of "prod" or "staging";
-	// you will set the selector as follows:
+	// 反之，如果只想对命名空间关联了 "environment" 为 "prod" 或 "staging" 的对象运行 webhook，
+	// 应按如下方式设置选择器：
 	// "namespaceSelector": {
 	//   "matchExpressions": [
 	//     {
@@ -952,221 +888,203 @@ type MutatingWebhook struct {
 	//   ]
 	// }
 	//
-	// See
+	// 更多标签选择器示例参见：
 	// https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-	// for more examples of label selectors.
 	//
-	// Default to the empty LabelSelector, which matches everything.
+	// 默认为空的 LabelSelector，它匹配所有对象。
 	// +optional
 	NamespaceSelector *metav1.LabelSelector
 
-	// ObjectSelector decides whether to run the webhook based on if the
-	// object has matching labels. objectSelector is evaluated against both
-	// the oldObject and newObject that would be sent to the webhook, and
-	// is considered to match if either object matches the selector. A null
-	// object (oldObject in the case of create, or newObject in the case of
-	// delete) or an object that cannot have labels (like a
-	// DeploymentRollback or a PodProxyOptions object) is not considered to
-	// match.
-	// Use the object selector only if the webhook is opt-in, because end
-	// users may skip the admission webhook by setting the labels.
-	// Default to the empty LabelSelector, which matches everything.
+	// ObjectSelector 根据对象是否具有匹配的标签来决定是否运行 webhook。
+	// objectSelector 会同时针对将发送给 webhook 的 oldObject 和 newObject 求值，
+	// 只要其中任一对象匹配选择器即视为匹配。null 对象（CREATE 时为 oldObject，
+	// DELETE 时为 newObject）或无法具有标签的对象（如 DeploymentRollback 或 PodProxyOptions 对象）
+	// 均视为不匹配。
+	// 仅当 webhook 是选择加入（opt-in）时才使用对象选择器，因为终端用户可以通过设置标签
+	// 来跳过该准入 webhook。
+	// 默认为空的 LabelSelector，它匹配所有对象。
 	// +optional
 	ObjectSelector *metav1.LabelSelector
 
-	// SideEffects states whether this webhook has side effects.
-	// Acceptable values are: Unknown, None, Some, NoneOnDryRun
-	// Webhooks with side effects MUST implement a reconciliation system, since a request may be
-	// rejected by a future step in the admission chain and the side effects therefore need to be undone.
-	// Requests with the dryRun attribute will be auto-rejected if they match a webhook with
-	// sideEffects == Unknown or Some. Defaults to Unknown.
+	// SideEffects 声明该 webhook 是否有副作用。
+	// 可接受的值为：Unknown、None、Some、NoneOnDryRun。
+	// 有副作用的 webhook 必须实现一套协调（reconciliation）系统，因为请求可能会被准入链中
+	// 后续步骤拒绝，从而需要撤销这些副作用。
+	// 带 dryRun 属性的请求如果匹配到 sideEffects 为 Unknown 或 Some 的 webhook，会被自动拒绝。
+	// 默认为 Unknown。
 	// +optional
 	SideEffects *SideEffectClass
 
-	// TimeoutSeconds specifies the timeout for this webhook. After the timeout passes,
-	// the webhook call will be ignored or the API call will fail based on the
-	// failure policy.
-	// The timeout value must be between 1 and 30 seconds.
+	// TimeoutSeconds 指定该 webhook 的超时时间。超时后，根据失败策略，
+	// 要么忽略该 webhook 调用，要么让 API 调用失败。
+	// 超时值必须在 1 到 30 秒之间。
 	// +optional
 	TimeoutSeconds *int32
 
-	// AdmissionReviewVersions is an ordered list of preferred `AdmissionReview`
-	// versions the Webhook expects. API server will try to use first version in
-	// the list which it supports. If none of the versions specified in this list
-	// supported by API server, validation will fail for this object.
-	// If the webhook configuration has already been persisted with a version apiserver
-	// does not understand, calls to the webhook will fail and be subject to the failure policy.
+	// AdmissionReviewVersions 是 webhook 期望的 `AdmissionReview` 版本的有序首选列表。
+	// API 服务器会尝试使用列表中它支持的第一个版本。如果列表中的所有版本都不被 API 服务器支持，
+	// 则该对象的校验会失败。
+	// 如果 webhook 配置已经以 API 服务器无法理解的版本持久化，则对该 webhook 的调用会失败，
+	// 并受失败策略约束。
 	// +optional
 	AdmissionReviewVersions []string
 
-	// reinvocationPolicy indicates whether this webhook should be called multiple times as part of a single admission evaluation.
-	// Allowed values are "Never" and "IfNeeded".
+	// reinvocationPolicy 指示该 webhook 在单次准入评估中是否应被多次调用。
+	// 允许值为 "Never" 和 "IfNeeded"。
 	//
-	// Never: the webhook will not be called more than once in a single admission evaluation.
+	// Never：在单次准入评估中，该 webhook 不会被调用超过一次。
 	//
-	// IfNeeded: the webhook will be called at least one additional time as part of the admission evaluation
-	// if the object being admitted is modified by other admission plugins after the initial webhook call.
-	// Webhooks that specify this option *must* be idempotent, and hence able to process objects they previously admitted.
-	// Note:
-	// * the number of additional invocations is not guaranteed to be exactly one.
-	// * if additional invocations result in further modifications to the object, webhooks are not guaranteed to be invoked again.
-	// * webhooks that use this option may be reordered to minimize the number of additional invocations.
-	// * to validate an object after all mutations are guaranteed complete, use a validating admission webhook instead.
+	// IfNeeded：如果在初次调用 webhook 之后，被准入的对象被其他准入插件修改，
+	// 则该 webhook 会在该准入评估中至少被额外调用一次。
+	// 指定此选项的 webhook *必须* 是幂等的，因此必须能够处理它们之前已准入过的对象。
+	// 注意：
+	// * 额外调用的次数不保证恰好为一次。
+	// * 如果额外调用导致对象被进一步修改，不保证 webhook 会再次被调用。
+	// * 使用此选项的 webhook 可能会被重新排序，以尽量减少额外调用的次数。
+	// * 如果要在所有变更都确保完成后再校验对象，请改用校验型准入 webhook。
 	//
-	// Defaults to "Never".
+	// 默认为 "Never"。
 	// +optional
 	ReinvocationPolicy *ReinvocationPolicyType
 
-	// MatchConditions is a list of conditions that must be met for a request to be sent to this
-	// webhook. Match conditions filter requests that have already been matched by the rules,
-	// namespaceSelector, and objectSelector. An empty list of matchConditions matches all requests.
-	// There are a maximum of 64 match conditions allowed.
+	// MatchConditions 是请求被发送到该 webhook 之前必须满足的条件列表。
+	// 匹配条件用于过滤已被规则、namespaceSelector 和 objectSelector 匹配过的请求。
+	// 空的 matchConditions 列表匹配所有请求。
+	// 最多允许 64 个匹配条件。
 	//
-	// The exact matching logic is (in order):
-	//   1. If ANY matchCondition evaluates to FALSE, the webhook is skipped.
-	//   2. If ALL matchConditions evaluate to TRUE, the webhook is called.
-	//   3. If any matchCondition evaluates to an error (but none are FALSE):
-	//      - If failurePolicy=Fail, reject the request
-	//      - If failurePolicy=Ignore, the error is ignored and the webhook is skipped
+	// 精确的匹配逻辑如下（按顺序）：
+	//   1. 如果_任意_ matchCondition 计算结果为 FALSE，则跳过该 webhook。
+	//   2. 如果_所有_ matchCondition 计算结果均为 TRUE，则调用该 webhook。
+	//   3. 如果任一 matchCondition 计算出错（但没有为 FALSE 的）：
+	//      - 若 failurePolicy=Fail，则拒绝该请求
+	//      - 若 failurePolicy=Ignore，则忽略该错误并跳过该 webhook
 	//
 	// +optional
 	MatchConditions []MatchCondition
 }
 
-// ReinvocationPolicyType specifies what type of policy is used when other admission plugins also perform
-// modifications.
+// ReinvocationPolicyType 指定当其他准入插件也执行修改时所采用的策略类型。
 // +enum
 type ReinvocationPolicyType string
 
+// 重新调用策略的预定义取值。
 var (
-	// NeverReinvocationPolicy indicates that the mutation must not be called more than once in a
-	// single admission evaluation.
+	// NeverReinvocationPolicy 表示在单次准入评估中，该变更操作不得被调用超过一次。
 	NeverReinvocationPolicy ReinvocationPolicyType = "Never"
-	// IfNeededReinvocationPolicy indicates that the mutation may be called at least one
-	// additional time as part of the admission evaluation if the object being admitted is
-	// modified by other admission plugins after the initial mutation call.
+	// IfNeededReinvocationPolicy 表示如果在初次变更调用之后，被准入的对象被其他准入插件修改，
+	// 则该变更操作在准入评估中可能至少被额外调用一次。
 	IfNeededReinvocationPolicy ReinvocationPolicyType = "IfNeeded"
 )
 
-// RuleWithOperations is a tuple of Operations and Resources. It is recommended to make
-// sure that all the tuple expansions are valid.
+// RuleWithOperations 是由 Operations 和 Resources 组成的元组。建议确保该元组展开后的所有组合都是合法的。
 type RuleWithOperations struct {
-	// Operations is the operations the admission hook cares about - CREATE, UPDATE, or *
-	// for all operations.
-	// If '*' is present, the length of the slice must be one.
-	// Required.
+	// Operations 是准入 hook 关注的操作：CREATE、UPDATE，或用 * 表示所有操作。
+	// 如果出现 '*'，该切片的长度必须为 1。
+	// 必填。
 	Operations []OperationType
-	// Rule is embedded, it describes other criteria of the rule, like
-	// APIGroups, APIVersions, Resources, etc.
+	// Rule 被嵌入其中，描述该规则的其他条件，如 APIGroups、APIVersions、Resources 等。
 	Rule
 }
 
-// OperationType specifies what type of operation the admission hook cares about.
+// OperationType 指定准入 hook 关注的操作类型。
 type OperationType string
 
-// The constants should be kept in sync with those defined in k8s.io/kubernetes/pkg/admission/interface.go.
+// 这些常量需要与 k8s.io/kubernetes/pkg/admission/interface.go 中定义的常量保持同步。
 const (
+	// OperationAll 用通配符 '*' 表示所有操作类型。
 	OperationAll OperationType = "*"
-	Create       OperationType = "CREATE"
-	Update       OperationType = "UPDATE"
-	Delete       OperationType = "DELETE"
-	Connect      OperationType = "CONNECT"
+	// Create 表示创建操作。
+	Create OperationType = "CREATE"
+	// Update 表示更新操作。
+	Update OperationType = "UPDATE"
+	// Delete 表示删除操作。
+	Delete OperationType = "DELETE"
+	// Connect 表示连接（子资源）操作。
+	Connect OperationType = "CONNECT"
 )
 
-// WebhookClientConfig contains the information to make a TLS
-// connection with the webhook
+// WebhookClientConfig 包含与 webhook 建立 TLS 连接所需的信息。
 type WebhookClientConfig struct {
-	// `url` gives the location of the webhook, in standard URL form
-	// (`scheme://host:port/path`). Exactly one of `url` or `service`
-	// must be specified.
+	// `url` 以标准 URL 形式（`scheme://host:port/path`）给出 webhook 的位置。
+	// `url` 与 `service` 必须且只能指定其中一个。
 	//
-	// The `host` should not refer to a service running in the cluster; use
-	// the `service` field instead. The host might be resolved via external
-	// DNS in some apiservers (e.g., `kube-apiserver` cannot resolve
-	// in-cluster DNS as that would be a layering violation). `host` may
-	// also be an IP address.
+	// `host` 不应指向集群内运行的服务，而应使用 `service` 字段。
+	// 在某些 API 服务器中，host 可能通过外部 DNS 解析（例如 kube-apiserver 无法解析集群内 DNS，
+	// 因为那会违反分层原则）。`host` 也可以是 IP 地址。
 	//
-	// Please note that using `localhost` or `127.0.0.1` as a `host` is
-	// risky unless you take great care to run this webhook on all hosts
-	// which run an apiserver which might need to make calls to this
-	// webhook. Such installs are likely to be non-portable, i.e., not easy
-	// to turn up in a new cluster.
+	// 请注意，除非你非常确定要在所有运行 apiserver 且可能需要调用该 webhook 的主机上都运行它，
+	// 否则使用 `localhost` 或 `127.0.0.1` 作为 `host` 是有风险的。
+	// 这类安装很可能不具备可移植性，即难以在新集群中重新搭建。
 	//
-	// The scheme must be "https"; the URL must begin with "https://".
+	// scheme 必须是 "https"；URL 必须以 "https://" 开头。
 	//
-	// A path is optional, and if present may be any string permissible in
-	// a URL. You may use the path to pass an arbitrary string to the
-	// webhook, for example, a cluster identifier.
+	// path 是可选的，如果存在，可以是 URL 中允许的任何字符串。
+	// 可以通过 path 向 webhook 传递任意字符串，例如集群标识符。
 	//
-	// Attempting to use a user or basic auth e.g. "user:password@" is not
-	// allowed. Fragments ("#...") and query parameters ("?...") are not
-	// allowed, either.
+	// 不允许在 URL 中携带用户名或基本认证信息。
+	// 同样不允许片段（"#..."）和查询参数（"?..."）。
 	//
 	// +optional
 	URL *string
 
-	// `service` is a reference to the service for this webhook. Either
-	// `service` or `url` must be specified.
+	// `service` 是对该 webhook 所对应服务的引用。`service` 或 `url` 必须指定其中一个。
 	//
-	// If the webhook is running within the cluster, then you should use `service`.
+	// 如果 webhook 运行在集群内部，则应使用 `service`。
 	//
 	// +optional
 	Service *ServiceReference
 
-	// `caBundle` is a PEM encoded CA bundle which will be used to validate the webhook's server certificate.
-	// If unspecified, system trust roots on the apiserver are used.
+	// `caBundle` 是经过 PEM 编码的 CA 证书包，用于校验 webhook 的服务器证书。
+	// 如果未指定，则使用 API 服务器上的系统信任根证书。
 	// +optional
 	CABundle []byte
 }
 
-// ServiceReference holds a reference to Service.legacy.k8s.io
+// ServiceReference 保存对 Service.legacy.k8s.io 的引用。
 type ServiceReference struct {
-	// `namespace` is the namespace of the service.
-	// Required
+	// `namespace` 是服务所在的命名空间。
+	// 必填。
 	Namespace string
-	// `name` is the name of the service.
-	// Required
+	// `name` 是服务的名称。
+	// 必填。
 	Name string
 
-	// `path` is an optional URL path which will be sent in any request to
-	// this service.
+	// `path` 是可选的 URL 路径，会在发往该服务的所有请求中携带。
 	// +optional
 	Path *string
 
-	// If specified, the port on the service that hosting webhook.
-	// `port` should be a valid port number (1-65535, inclusive).
+	// 如果指定，则表示承载 webhook 的服务上的端口。
+	// `port` 应为合法端口号（1-65535，含两端）。
 	// +optional
 	Port int32
 }
 
-// MatchCondition represents a condition which must by fulfilled for a request to be sent to a webhook.
+// MatchCondition 表示请求被发送到 webhook 之前必须满足的条件。
 type MatchCondition struct {
-	// Name is an identifier for this match condition, used for strategic merging of MatchConditions,
-	// as well as providing an identifier for logging purposes. A good name should be descriptive of
-	// the associated expression.
-	// Name must be a qualified name consisting of alphanumeric characters, '-', '_' or '.', and
-	// must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or
-	// '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]') with an
-	// optional DNS subdomain prefix and '/' (e.g. 'example.com/MyName')
+	// Name 是该匹配条件的标识符，用于 MatchConditions 的策略性合并，同时也作为日志用途的标识符。
+	// 好的名称应能描述对应的表达式。
+	// Name 必须是限定名称，由字母数字字符、'-'、'_' 或 '.' 组成，且必须以字母数字字符开头和结尾
+	// （例如 'MyName'、'my.name' 或 '123-abc'；校验所用的正则为
+	// '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]'），并可带有可选的 DNS 子域前缀和 '/'
+	// （例如 'example.com/MyName'）。
 	//
-	// Required.
+	// 必填。
 	Name string
 
-	// Expression represents the expression which will be evaluated by CEL. Must evaluate to bool.
-	// CEL expressions have access to the contents of the AdmissionRequest and Authorizer, organized into CEL variables:
+	// Expression 表示将由 CEL 求值的表达式，其结果必须为 bool。
+	// CEL 表达式可以访问 AdmissionRequest 和 Authorizer 的内容，这些内容被组织为 CEL 变量：
 	//
-	// 'object' - The object from the incoming request. The value is null for DELETE requests.
-	// 'oldObject' - The existing object. The value is null for CREATE requests.
-	// 'request' - Attributes of the admission request(/pkg/apis/admission/types.go#AdmissionRequest).
-	// 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.
-	//   See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
-	// 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the
-	//   request resource.
-	// 'variables' - Map of composited variables, from its name to its lazily evaluated value.
-	//   For example, a variable named 'foo' can be access as 'variables.foo'
-	// Documentation on CEL: https://kubernetes.io/docs/reference/using-api/cel/
+	// 'object' - 来自传入请求的对象。对于 DELETE 请求，其值为 null。
+	// 'oldObject' - 已有的对象。对于 CREATE 请求，其值为 null。
+	// 'request' - 准入请求的属性（/pkg/apis/admission/types.go#AdmissionRequest）。
+	// 'authorizer' - 一个 CEL Authorizer，可用于对请求主体（用户或服务账号）执行授权检查。
+	//   参见 https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
+	// 'authorizer.requestResource' - 由 'authorizer' 构造并使用请求资源配置而成的 CEL ResourceCheck。
+	// 'variables' - 组合变量的映射，从名称到其惰性求值的值。
+	//   例如，名为 'foo' 的变量可通过 'variables.foo' 访问。
+	// CEL 文档：https://kubernetes.io/docs/reference/using-api/cel/
 	//
-	// Required.
+	// 必填。
 	Expression string
 }
 
@@ -1175,97 +1093,93 @@ type MatchCondition struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// MutatingAdmissionPolicy describes an admission policy that may mutate an object.
+// MutatingAdmissionPolicy 描述一种可能修改对象的准入策略。
 type MutatingAdmissionPolicy struct {
 	metav1.TypeMeta
-	// Standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据；更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。
 	// +optional
 	metav1.ObjectMeta
-	// Specification of the desired behavior of the MutatingAdmissionPolicy.
+	// MutatingAdmissionPolicy 期望行为的规格说明。
 	Spec MutatingAdmissionPolicySpec
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// MutatingAdmissionPolicyList is a list of MutatingAdmissionPolicy.
+// MutatingAdmissionPolicyList 是 MutatingAdmissionPolicy 的列表。
 type MutatingAdmissionPolicyList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta
-	// List of ValidatingAdmissionPolicy.
+	// ValidatingAdmissionPolicy 列表。
 	Items []MutatingAdmissionPolicy
 }
 
-// MutatingAdmissionPolicySpec is the specification of the desired behavior of the admission policy.
+// MutatingAdmissionPolicySpec 是该准入策略期望行为的规格说明。
 type MutatingAdmissionPolicySpec struct {
-	// paramKind specifies the kind of resources used to parameterize this policy.
-	// If absent, there are no parameters for this policy and the param CEL variable will not be provided to validation expressions.
-	// If paramKind refers to a non-existent kind, this policy definition is mis-configured and the FailurePolicy is applied.
-	// If paramKind is specified but paramRef is unset in MutatingAdmissionPolicyBinding, the params variable will be null.
+	// paramKind 指定用于为该策略提供参数（参数化）的资源类型。
+	// 若未指定，则该策略没有参数，也不会向校验表达式提供 param CEL 变量。
+	// 如果 paramKind 指向一个不存在的 Kind，则该策略定义为配置错误，会应用 FailurePolicy。
+	// 如果指定了 paramKind 但 MutatingAdmissionPolicyBinding 中未设置 paramRef，则 params 变量为 null。
 	// +optional
 	ParamKind *ParamKind
 
-	// matchConstraints specifies what resources this policy is designed to validate.
-	// The AdmissionPolicy cares about a request if it matches _all_ Constraints.
-	// However, in order to prevent clusters from being put into an unstable state that cannot be recovered from via the API
-	// MutatingAdmissionPolicy cannot match MutatingAdmissionPolicy and MutatingAdmissionPolicyBinding.
-	// Only the CREATE, UPDATE, and CONNECT operations are allowed.
-	// '*' matches only CREATE, UPDATE, and CONNECT.
-	// Required.
+	// matchConstraints 指定该策略旨在校验哪些资源。
+	// 当请求匹配_所有_约束（Constraint）时，该 AdmissionPolicy 才会关注该请求。
+	// 但是，为防止集群陷入无法通过 API 恢复的不稳定状态，
+	// MutatingAdmissionPolicy 不能匹配 MutatingAdmissionPolicy 和 MutatingAdmissionPolicyBinding。
+	// 仅允许 CREATE、UPDATE 和 CONNECT 操作。
+	// '*' 仅匹配 CREATE、UPDATE 和 CONNECT。
+	// 必填。
 	MatchConstraints *MatchResources
 
-	// variables contain definitions of variables that can be used in composition of other expressions.
-	// Each variable is defined as a named CEL expression.
-	// The variables defined here will be available under `variables` in other expressions of the policy
-	// except matchConditions because matchConditions are evaluated before the rest of the policy.
+	// variables 包含可在其他表达式组合中使用的变量定义。
+	// 每个变量都定义为一个具名的 CEL 表达式。
+	// 此处定义的变量在策略的其他表达式中可通过 `variables` 访问，但 matchConditions 除外，
+	// 因为 matchConditions 会在策略其余部分之前求值。
 	//
-	// The expression of a variable can refer to other variables defined earlier in the list but not those after.
-	// Thus, variables must be sorted by the order of first appearance and acyclic.
+	// 变量的表达式可以引用列表中更早定义的其他变量，但不能引用其后的变量。
+	// 因此，variables 必须按首次出现的顺序排序且无环。
 	// +listType=atomic
 	// +optional
 	Variables []Variable
 
-	// mutations contain operations to perform on matching objects.
-	// mutations may not be empty; a minimum of one mutation is required.
-	// mutations are evaluated in order, and are reinvoked according to
-	// the reinvocationPolicy.
-	// The mutations of a policy are invoked for each binding of this policy
-	// and reinvocation of mutations occurs on a per binding basis.
+	// mutations 包含要对匹配对象执行的操作。
+	// mutations 不能为空，至少需要一项变更。
+	// mutations 按顺序求值，并根据 reinvocationPolicy 被重新调用。
+	// 策略的变更会针对该策略的每个绑定各调用一次，且变更的重新调用按绑定逐一进行。
 	//
 	// +listType=atomic
 	// +optional
 	Mutations []Mutation
 
-	// failurePolicy defines how to handle failures for the admission policy. Failures can
-	// occur from CEL expression parse errors, type check errors, runtime errors and invalid
-	// or mis-configured policy definitions or bindings.
+	// failurePolicy 定义如何处理该准入策略的失败。失败可能由以下原因引起：CEL 表达式解析错误、
+	// 类型检查错误、运行时错误，以及无效或配置错误的策略定义与绑定。
 	//
-	// A policy is invalid if paramKind refers to a non-existent Kind.
-	// A binding is invalid if paramRef.name refers to a non-existent resource.
+	// 如果 paramKind 指向不存在的 Kind，则策略无效。
+	// 如果 paramRef.name 指向不存在的资源，则绑定无效。
 	//
-	// failurePolicy does not define how validations that evaluate to false are handled.
+	// failurePolicy 不定义如何处置计算结果为 false 的校验。
 	//
-	// Allowed values are Ignore or Fail. Defaults to Fail.
+	// 允许的值为 Ignore 或 Fail。默认为 Fail。
 	// +optional
 	FailurePolicy *FailurePolicyType
 
-	// matchConditions is a list of conditions that must be met for a request to be validated.
-	// Match conditions filter requests that have already been matched by the matchConstraints,
-	// An empty list of matchConditions matches all requests.
-	// There are a maximum of 64 match conditions allowed.
+	// matchConditions 是请求被校验前必须满足的条件列表。
+	// 匹配条件用于过滤已被 matchConstraints 匹配过的请求。
+	// 空的 matchConditions 列表匹配所有请求。
+	// 最多允许 64 个匹配条件。
 	//
-	// If a parameter object is provided, it can be accessed via the `params` handle in the same
-	// manner as validation expressions.
+	// 如果提供了参数对象，则可以通过 `params` 句柄访问它，方式与校验表达式相同。
 	//
-	// The exact matching logic is (in order):
-	//   1. If ANY matchCondition evaluates to FALSE, the policy is skipped.
-	//   2. If ALL matchConditions evaluate to TRUE, the policy is evaluated.
-	//   3. If any matchCondition evaluates to an error (but none are FALSE):
-	//      - If failurePolicy=Fail, reject the request
-	//      - If failurePolicy=Ignore, the policy is skipped
+	// 精确的匹配逻辑如下（按顺序）：
+	//   1. 如果_任意_ matchCondition 计算结果为 FALSE，则跳过该策略。
+	//   2. 如果_所有_ matchCondition 计算结果均为 TRUE，则对该策略进行求值。
+	//   3. 如果任一 matchCondition 计算出错（但没有为 FALSE 的）：
+	//      - 若 failurePolicy=Fail，则拒绝该请求
+	//      - 若 failurePolicy=Ignore，则跳过该策略
 	//
 	// +patchMergeKey=name
 	// +patchStrategy=merge
@@ -1274,57 +1188,58 @@ type MutatingAdmissionPolicySpec struct {
 	// +optional
 	MatchConditions []MatchCondition
 
-	// reinvocationPolicy indicates whether mutations may be called multiple times per MutatingAdmissionPolicyBinding
-	// as part of a single admission evaluation.
-	// Allowed values are "Never" and "IfNeeded".
+	// reinvocationPolicy 指示在单次准入评估中，是否允许每个 MutatingAdmissionPolicyBinding
+	// 多次调用这些变更操作。
+	// 允许值为 "Never" 和 "IfNeeded"。
 	//
-	// Never: These mutations will not be called more than once per binding in a single admission evaluation.
+	// Never：在单次准入评估中，每个绑定对这些变更的调用不会超过一次。
 	//
-	// IfNeeded: These mutations may be invoked more than once per binding for a single admission request and there is no guarantee of
-	// order with respect to other admission plugins, admission webhooks, bindings of this policy and admission policies.  Mutations are only
-	// reinvoked when mutations change the object after this mutation is invoked.
-	// Required.
+	// IfNeeded：对于单次准入请求，这些变更每个绑定可能被调用多次，且不保证相对于其他准入插件、
+	// 准入 webhook、该策略的其他绑定以及其他准入策略的调用顺序。
+	// 只有在这些变更被调用后又修改了对象时，才会重新调用变更。
+	// 必填。
 	ReinvocationPolicy ReinvocationPolicyType
 }
 
-// Mutation specifies the operation that performs a Mutation.
+// Mutation 指定执行变更（Mutation）的操作。
 type Mutation struct {
-	// patchType indicates the patch strategy used.
-	// Allowed values are "ApplyConfiguration" and "JSONPatch".
-	// Required.
+	// patchType 指示所使用的补丁策略。
+	// 允许值为 "ApplyConfiguration" 和 "JSONPatch"。
+	// 必填。
 	//
 	// +unionDiscriminator
 	PatchType PatchType
 
-	// applyConfiguration defines the desired configuration values of an object.
-	// The configuration is applied to the admission object using
-	// [structured merge diff](https://github.com/kubernetes-sigs/structured-merge-diff).
-	// A CEL expression is used to create apply configuration.
+	// applyConfiguration 定义对象期望的配置值。
+	// 该配置通过 [structured merge diff](https://github.com/kubernetes-sigs/structured-merge-diff)
+	// 应用到准入对象上。
+	// 使用一个 CEL 表达式来创建 apply configuration。
 	ApplyConfiguration *ApplyConfiguration
 
-	// jsonPatch defines a [JSON patch](https://jsonpatch.com/) to perform a mutation to the object.
-	// A CEL expression is used to create the JSON patch.
+	// jsonPatch 定义一个 [JSON patch](https://jsonpatch.com/)，用于对对象执行变更。
+	// 使用一个 CEL 表达式来创建该 JSON 补丁。
 	JSONPatch *JSONPatch
 }
 
-// PatchType specifies the type of patch operation for a mutation.
+// PatchType 指定变更所使用的补丁操作类型。
 // +enum
 type PatchType string
 
+// 变更补丁类型的合法取值。
 const (
-	// ApplyConfiguration indicates that the mutation is using apply configuration to mutate the object.
+	// PatchTypeApplyConfiguration 表示该变更使用 apply configuration 来修改对象。
 	PatchTypeApplyConfiguration PatchType = "ApplyConfiguration"
-	// JSONPatch indicates that the object is mutated through JSON Patch.
+	// PatchTypeJSONPatch 表示通过 JSON Patch 来修改对象。
 	PatchTypeJSONPatch PatchType = "JSONPatch"
 )
 
-// ApplyConfiguration defines the desired configuration values of an object.
+// ApplyConfiguration 定义对象期望的配置值。
 type ApplyConfiguration struct {
-	// expression will be evaluated by CEL to create an apply configuration.
-	// ref: https://github.com/google/cel-spec
+	// expression 将由 CEL 求值以创建 apply configuration。
+	// 参考：https://github.com/google/cel-spec
 	//
-	// Apply configurations are declared in CEL using object initialization. For example, this CEL expression
-	// returns an apply configuration to set a single field:
+	// Apply configuration 在 CEL 中通过对象初始化来声明。例如，以下 CEL 表达式
+	// 返回一个只设置单个字段的 apply configuration：
 	//
 	//	Object{
 	//	  spec: Object.spec{
@@ -1332,51 +1247,50 @@ type ApplyConfiguration struct {
 	//	  }
 	//	}
 	//
-	// Apply configurations may not modify atomic structs, maps or arrays due to the risk of accidental deletion of
-	// values not included in the apply configuration.
+	// Apply configuration 不得修改原子结构体、map 或数组，否则可能意外删除
+	// apply configuration 中未包含的值。
 	//
-	// CEL expressions have access to the object types needed to create apply configurations:
-	// - 'Object' - CEL type of the resource object.
-	// - 'Object.<fieldName>' - CEL type of object field (such as 'Object.spec')
-	// - 'Object.<fieldName1>.<fieldName2>...<fieldNameN>` - CEL type of nested field (such as 'Object.spec.containers')
+	// CEL 表达式可以访问创建 apply configuration 所需的对象类型：
+	// - 'Object' - 资源对象的 CEL 类型。
+	// - 'Object.<fieldName>' - 对象字段的 CEL 类型（如 'Object.spec'）。
+	// - 'Object.<fieldName1>.<fieldName2>...<fieldNameN>` - 嵌套字段的 CEL 类型（如 'Object.spec.containers'）。
 	//
-	// CEL expressions have access to the contents of the API request, organized into CEL variables as well as some other useful variables:
+	// CEL 表达式可以访问 API 请求的内容，这些内容被组织为 CEL 变量以及一些其他有用的变量：
 	//
-	// - 'object' - The object from the incoming request. The value is null for DELETE requests.
-	// - 'oldObject' - The existing object. The value is null for CREATE requests.
-	// - 'request' - Attributes of the API request([ref](/pkg/apis/admission/types.go#AdmissionRequest)).
-	// - 'params' - Parameter resource referred to by the policy binding being evaluated. Only populated if the policy has a ParamKind.
-	// - 'namespaceObject' - The namespace object that the incoming object belongs to. The value is null for cluster-scoped resources.
-	// - 'variables' - Map of composited variables, from its name to its lazily evaluated value.
-	//   For example, a variable named 'foo' can be accessed as 'variables.foo'.
-	// - 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.
-	//   See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
-	// - 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the
-	//   request resource.
+	// - 'object' - 来自传入请求的对象。对于 DELETE 请求，其值为 null。
+	// - 'oldObject' - 已有的对象。对于 CREATE 请求，其值为 null。
+	// - 'request' - API 请求的属性（[ref](/pkg/apis/admission/types.go#AdmissionRequest)）。
+	// - 'params' - 被评估的策略绑定所引用的参数资源。仅当策略具有 ParamKind 时才会填充。
+	// - 'namespaceObject' - 传入对象所属的命名空间对象。对于集群级资源，其值为 null。
+	// - 'variables' - 组合变量的映射，从名称到其惰性求值的值。
+	//   例如，名为 'foo' 的变量可通过 'variables.foo' 访问。
+	// - 'authorizer' - 一个 CEL Authorizer，可用于对请求主体（用户或服务账号）执行授权检查。
+	//   参见 https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
+	// - 'authorizer.requestResource' - 由 'authorizer' 构造并使用请求资源配置而成的 CEL ResourceCheck。
 	//
-	// The `apiVersion`, `kind`, `metadata.name` and `metadata.generateName` are always accessible from the root of the
-	// object. No other metadata properties are accessible.
+	// `apiVersion`、`kind`、`metadata.name` 和 `metadata.generateName` 始终可从对象根部访问。
+	// 其他元数据属性均不可访问。
 	//
-	// Only property names of the form `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` are accessible.
-	// Required.
+	// 只有形如 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` 的属性名才可访问。
+	// 必填。
 	Expression string
 }
 
-// JSONPatch defines a JSON Patch.
+// JSONPatch 定义一个 JSON Patch。
 type JSONPatch struct {
-	// expression will be evaluated by CEL to create a [JSON patch](https://jsonpatch.com/).
-	// ref: https://github.com/google/cel-spec
+	// expression 将由 CEL 求值以创建 [JSON patch](https://jsonpatch.com/)。
+	// 参考：https://github.com/google/cel-spec
 	//
-	// expression must return an array of JSONPatch values.
+	// expression 必须返回一个 JSONPatch 值数组。
 	//
-	// For example, this CEL expression returns a JSON patch to conditionally modify a value:
+	// 例如，以下 CEL 表达式返回一个有条件修改值的 JSON 补丁：
 	//
 	//	  [
 	//	    JSONPatch{op: "test", path: "/spec/example", value: "Red"},
 	//	    JSONPatch{op: "replace", path: "/spec/example", value: "Green"}
 	//	  ]
 	//
-	// To define an object for the patch value, use Object types. For example:
+	// 要为补丁值定义对象，请使用 Object 类型。例如：
 	//
 	//	  [
 	//	    JSONPatch{
@@ -1386,7 +1300,7 @@ type JSONPatch struct {
 	//	    }
 	//	  ]
 	//
-	// To use strings containing '/' and '~' as JSONPatch path keys, use "jsonpatch.escapeKey". For example:
+	// 要使用包含 '/' 和 '~' 的字符串作为 JSONPatch 路径键，请使用 "jsonpatch.escapeKey"。例如：
 	//
 	//	  [
 	//	    JSONPatch{
@@ -1396,39 +1310,38 @@ type JSONPatch struct {
 	//	    },
 	//	  ]
 	//
-	// CEL expressions have access to the types needed to create JSON patches and objects:
+	// CEL 表达式可以访问创建 JSON 补丁和对象所需的类型：
 	//
-	// - 'JSONPatch' - CEL type of JSON Patch operations. JSONPatch has the fields 'op', 'from', 'path' and 'value'.
-	//   See [JSON patch](https://jsonpatch.com/) for more details. The 'value' field may be set to any of: string,
-	//   integer, array, map or object.  If set, the 'path' and 'from' fields must be set to a
-	//   [JSON pointer](https://datatracker.ietf.org/doc/html/rfc6901/) string, where the 'jsonpatch.escapeKey()' CEL
-	//   function may be used to escape path keys containing '/' and '~'.
-	// - 'Object' - CEL type of the resource object.
-	// - 'Object.<fieldName>' - CEL type of object field (such as 'Object.spec')
-	// - 'Object.<fieldName1>.<fieldName2>...<fieldNameN>` - CEL type of nested field (such as 'Object.spec.containers')
+	// - 'JSONPatch' - JSON Patch 操作的 CEL 类型。JSONPatch 包含 'op'、'from'、'path' 和 'value' 字段。
+	//   更多细节参见 [JSON patch](https://jsonpatch.com/)。'value' 字段可设为字符串、
+	//   整数、数组、map 或对象。如果设置了 'path' 和 'from' 字段，它们必须是
+	//   [JSON pointer](https://datatracker.ietf.org/doc/html/rfc6901/) 字符串，
+	//   其中可以使用 'jsonpatch.escapeKey()' CEL 函数来转义包含 '/' 和 '~' 的路径键。
+	// - 'Object' - 资源对象的 CEL 类型。
+	// - 'Object.<fieldName>' - 对象字段的 CEL 类型（如 'Object.spec'）。
+	// - 'Object.<fieldName1>.<fieldName2>...<fieldNameN>` - 嵌套字段的 CEL 类型（如 'Object.spec.containers'）。
 	//
-	// CEL expressions have access to the contents of the API request, organized into CEL variables as well as some other useful variables:
+	// CEL 表达式可以访问 API 请求的内容，这些内容被组织为 CEL 变量以及一些其他有用的变量：
 	//
-	// - 'object' - The object from the incoming request. The value is null for DELETE requests.
-	// - 'oldObject' - The existing object. The value is null for CREATE requests.
-	// - 'request' - Attributes of the API request([ref](/pkg/apis/admission/types.go#AdmissionRequest)).
-	// - 'params' - Parameter resource referred to by the policy binding being evaluated. Only populated if the policy has a ParamKind.
-	// - 'namespaceObject' - The namespace object that the incoming object belongs to. The value is null for cluster-scoped resources.
-	// - 'variables' - Map of composited variables, from its name to its lazily evaluated value.
-	//   For example, a variable named 'foo' can be accessed as 'variables.foo'.
-	// - 'authorizer' - A CEL Authorizer. May be used to perform authorization checks for the principal (user or service account) of the request.
-	//   See https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
-	// - 'authorizer.requestResource' - A CEL ResourceCheck constructed from the 'authorizer' and configured with the
-	//   request resource.
+	// - 'object' - 来自传入请求的对象。对于 DELETE 请求，其值为 null。
+	// - 'oldObject' - 已有的对象。对于 CREATE 请求，其值为 null。
+	// - 'request' - API 请求的属性（[ref](/pkg/apis/admission/types.go#AdmissionRequest)）。
+	// - 'params' - 被评估的策略绑定所引用的参数资源。仅当策略具有 ParamKind 时才会填充。
+	// - 'namespaceObject' - 传入对象所属的命名空间对象。对于集群级资源，其值为 null。
+	// - 'variables' - 组合变量的映射，从名称到其惰性求值的值。
+	//   例如，名为 'foo' 的变量可通过 'variables.foo' 访问。
+	// - 'authorizer' - 一个 CEL Authorizer，可用于对请求主体（用户或服务账号）执行授权检查。
+	//   参见 https://pkg.go.dev/k8s.io/apiserver/pkg/cel/library#Authz
+	// - 'authorizer.requestResource' - 由 'authorizer' 构造并使用请求资源配置而成的 CEL ResourceCheck。
 	//
-	// CEL expressions have access to [Kubernetes CEL function libraries](https://kubernetes.io/docs/reference/using-api/cel/#cel-options-language-features-and-libraries)
-	// as well as:
+	// CEL 表达式可以访问 [Kubernetes CEL 函数库](https://kubernetes.io/docs/reference/using-api/cel/#cel-options-language-features-and-libraries)，
+	// 以及：
 	//
-	// - 'jsonpatch.escapeKey' - Performs JSONPatch key escaping. '~' and  '/' are escaped as '~0' and `~1' respectively).
+	// - 'jsonpatch.escapeKey' - 执行 JSONPatch 键转义，'~' 和 '/' 分别被转义为 '~0' 和 '~1'。
 	//
 	//
-	// Only property names of the form `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` are accessible.
-	// Required.
+	// 只有形如 `[a-zA-Z_.-/][a-zA-Z0-9_.-/]*` 的属性名才可访问。
+	// 必填。
 	Expression string
 }
 
@@ -1437,62 +1350,60 @@ type JSONPatch struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// MutatingAdmissionPolicyBinding binds the MutatingAdmissionPolicy with parametrized resources.
-// MutatingAdmissionPolicyBinding and the optional parameter resource together define how cluster administrators
-// configure policies for clusters.
+// MutatingAdmissionPolicyBinding 将 MutatingAdmissionPolicy 与参数化的资源绑定在一起。
+// MutatingAdmissionPolicyBinding 与可选的参数资源共同定义了集群管理员如何为集群配置策略。
 //
-// For a given admission request, each binding will cause its policy to be
-// evaluated N times, where N is 1 for policies/bindings that don't use
-// params, otherwise N is the number of parameters selected by the binding.
-// Each evaluation is constrained by a [runtime cost budget](https://kubernetes.io/docs/reference/using-api/cel/#runtime-cost-budget).
+// 对于给定的准入请求，每个绑定都会使其策略被求值 N 次：对于不使用参数的策略/绑定，N 为 1；
+// 否则 N 为该绑定所选参数的数量。
+// 每次求值都受 [运行时开销预算](https://kubernetes.io/docs/reference/using-api/cel/#runtime-cost-budget) 的限制。
 //
-// Adding/removing policies, bindings, or params can not affect whether a
-// given (policy, binding, param) combination is within its own CEL budget.
+// 增加/删除策略、绑定或参数不会影响某个给定的（策略、绑定、参数）组合是否在其自身的 CEL 预算内。
 type MutatingAdmissionPolicyBinding struct {
 	metav1.TypeMeta
-	// Standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// 标准对象元数据；更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。
 	// +optional
 	metav1.ObjectMeta
-	// Specification of the desired behavior of the MutatingAdmissionPolicyBinding.
+	// MutatingAdmissionPolicyBinding 期望行为的规格说明。
 	Spec MutatingAdmissionPolicyBindingSpec
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.32
 
-// MutatingAdmissionPolicyBindingList is a list of MutatingAdmissionPolicyBinding.
+// MutatingAdmissionPolicyBindingList 是 MutatingAdmissionPolicyBinding 的列表。
 type MutatingAdmissionPolicyBindingList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta
-	// List of PolicyBinding.
+	// PolicyBinding 列表。
 	Items []MutatingAdmissionPolicyBinding
 }
 
-// MutatingAdmissionPolicyBindingSpec is the specification of the MutatingAdmissionPolicyBinding.
+// MutatingAdmissionPolicyBindingSpec 是 MutatingAdmissionPolicyBinding 的规格说明。
 type MutatingAdmissionPolicyBindingSpec struct {
-	// policyName references a MutatingAdmissionPolicy name which the MutatingAdmissionPolicyBinding binds to.
-	// If the referenced resource does not exist, this binding is considered invalid and will be ignored
-	// Required.
+	// policyName 引用该 MutatingAdmissionPolicyBinding 所绑定的 MutatingAdmissionPolicy 名称。
+	// 如果引用的资源不存在，则该绑定被视为无效并被忽略。
+	// 必填。
 	PolicyName string
-	// paramRef specifies the parameter resource used to configure the admission control policy.
-	// It should point to a resource of the type specified in spec.ParamKind of the bound MutatingAdmissionPolicy.
-	// If the policy specifies a ParamKind and the resource referred to by ParamRef does not exist, this binding is considered mis-configured and the FailurePolicy of the MutatingAdmissionPolicy applied.
-	// If the policy does not specify a ParamKind then this field is ignored, and the rules are evaluated without a param.
+	// paramRef 指定用于配置准入控制策略的参数资源。
+	// 它应指向所绑定 MutatingAdmissionPolicy 的 spec.ParamKind 中指定类型的资源。
+	// 如果策略指定了 ParamKind，但 ParamRef 引用的资源不存在，则该绑定被视为配置错误，
+	// 并会应用 MutatingAdmissionPolicy 的 FailurePolicy。
+	// 如果策略未指定 ParamKind，则忽略该字段，并在不带参数的情况下求值规则。
 	// +optional
 	ParamRef *ParamRef
 
-	// matchResources limits what resources match this binding and may be mutated by it.
-	// Note that if matchResources matches a resource, the resource must also match a policy's matchConstraints and
-	// matchConditions before the resource may be mutated.
-	// When matchResources is unset, it does not constrain resource matching, and only the policy's matchConstraints
-	// and matchConditions must match for the resource to be mutated.
-	// Additionally, matchResources.resourceRules are optional and do not constraint matching when unset.
-	// Note that this is differs from MutatingAdmissionPolicy matchConstraints, where resourceRules are required.
-	// The CREATE, UPDATE and CONNECT operations are allowed.  The DELETE operation may not be matched.
-	// '*' matches CREATE, UPDATE and CONNECT.
+	// matchResources 限定哪些资源匹配此绑定，从而可能被该绑定变更。
+	// 请注意，即使 matchResources 匹配了某资源，该资源还必须匹配策略的 matchConstraints
+	// 和 matchConditions，才可以被变更。
+	// 当 matchResources 未设置时，它不限制资源匹配；资源只需匹配策略的 matchConstraints
+	// 和 matchConditions 即可被变更。
+	// 此外，matchResources.resourceRules 是可选的，未设置时不限制匹配。
+	// 请注意，这与 MutatingAdmissionPolicy 的 matchConstraints 不同，后者要求必须提供 resourceRules。
+	// 允许 CREATE、UPDATE 和 CONNECT 操作，不允许匹配 DELETE 操作。
+	// '*' 匹配 CREATE、UPDATE 和 CONNECT。
 	// +optional
 	MatchResources *MatchResources
 }

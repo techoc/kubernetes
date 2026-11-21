@@ -20,6 +20,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 向 Scheme 注册 v1 版本的默认值处理函数。
+// 该包本身没有额外的默认化逻辑，直接引用生成器注册的默认函数即可，
+// 保证 CSR 等资源在解码后具备与旧版本一致的可选字段语义。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }

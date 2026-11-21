@@ -71,7 +71,7 @@ func ValidateEvictionRequestStatus(status, oldStatus *lifecycle.EvictionRequestS
 
 	// observedGeneration covered by DV
 
-	// conditions
+	// 条件列表。
 	conditionsPath := fldPath.Child("conditions")
 	// conditions validation covered by DV
 	allErrs = append(allErrs, validation2.ValidateConditions(status.Conditions, conditionsPath)...)
@@ -113,7 +113,7 @@ func ValidateEvictionStatus(status, oldStatus *lifecycle.EvictionStatus, fldPath
 
 	// observedGeneration covered by DV
 
-	// conditions
+	// 条件列表。
 	conditionsPath := fldPath.Child("conditions")
 	// conditions validation covered by DV
 	allErrs = append(allErrs, validation2.ValidateConditions(status.Conditions, conditionsPath)...)

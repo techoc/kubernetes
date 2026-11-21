@@ -20,6 +20,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 向 scheme 注册本版本的默认值设定函数。
+// 由生成的 defaults.go（RegisterDefaults 所在文件）通过 init 机制调用，
+// 保证反序列化后的对象在进入校验前已填充默认值。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }

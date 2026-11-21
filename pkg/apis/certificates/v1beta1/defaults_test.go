@@ -31,7 +31,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestIsKubeletServingCSR 校验 kubelet serving CSR 的识别规则。
 func TestIsKubeletServingCSR(t *testing.T) {
+	// 按给定选项生成 CSR 并解析，构造测试输入。
 	newCSR := func(base pemOptions, overlays ...pemOptions) *x509.CertificateRequest {
 		b := csrWithOpts(base, overlays...)
 		csr, err := ParseCSR(b)
@@ -101,6 +103,7 @@ func TestIsKubeletServingCSR(t *testing.T) {
 	}
 }
 
+// TestIsKubeletClientCSR 校验 kubelet client CSR 的识别规则。
 func TestIsKubeletClientCSR(t *testing.T) {
 	newCSR := func(base pemOptions, overlays ...pemOptions) *x509.CertificateRequest {
 		b := csrWithOpts(base, overlays...)
@@ -181,6 +184,7 @@ func TestIsKubeletClientCSR(t *testing.T) {
 	}
 }
 
+// 各类 kubelet CSR 的典型 usage 与证书主体选项。
 var (
 	kubeletClientUsages = []capi.KeyUsage{
 		capi.UsageDigitalSignature,
@@ -213,6 +217,7 @@ var (
 	}
 )
 
+// TestSetDefaults_CertificateSigningRequestSpec 校验 signerName 与 usages 的默认化。
 func TestSetDefaults_CertificateSigningRequestSpec(t *testing.T) {
 	tests := map[string]struct {
 		csr                capi.CertificateSigningRequestSpec
@@ -245,14 +250,14 @@ func TestSetDefaults_CertificateSigningRequestSpec(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// create a deepcopy to be sure we don't modify anything in-place
+			// 使用深拷贝，确保默认化不会修改共享的测试数据。
 			csrSpec := test.csr.DeepCopy()
 			SetDefaults_CertificateSigningRequestSpec(csrSpec)
 			if *csrSpec.SignerName != test.expectedSignerName {
 				t.Errorf("expected signerName to be defaulted to %q but it is %q", test.expectedSignerName, *csrSpec.SignerName)
 			}
 
-			// only check expectedUsages if it is non-nil
+			// 仅当用例声明了期望的 usages 时才检查该项。
 			if test.expectedUsages != nil {
 				if !reflect.DeepEqual(test.expectedUsages, csrSpec.Usages) {
 					t.Errorf("expected usages to be defaulted to %v but it is %v", test.expectedUsages, csrSpec.Usages)
@@ -262,6 +267,7 @@ func TestSetDefaults_CertificateSigningRequestSpec(t *testing.T) {
 	}
 }
 
+// TestSetDefaults_CertificateSigningRequestSpec_KubeletServing 校验 serving 场景的 signerName 推断。
 func TestSetDefaults_CertificateSigningRequestSpec_KubeletServing(t *testing.T) {
 	tests := map[string]struct {
 		csr                capi.CertificateSigningRequestSpec
@@ -302,7 +308,7 @@ func TestSetDefaults_CertificateSigningRequestSpec_KubeletServing(t *testing.T) 
 		"does not default to kubelet-serving if it is missing an expected usage": {
 			csr: capi.CertificateSigningRequestSpec{
 				Request: csrWithOpts(kubeletServerPEMOptions),
-				// Remove the first usage in 'kubeletServerUsages'
+				// 删除首个 usage，模拟缺失预期 usage 的场景。
 				Usages:   kubeletServerUsages[1:],
 				Username: kubeletServerPEMOptions.cn,
 			},
@@ -335,7 +341,7 @@ func TestSetDefaults_CertificateSigningRequestSpec_KubeletServing(t *testing.T) 
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// create a deepcopy to be sure we don't modify anything in-place
+			// 使用深拷贝，确保默认化不会修改共享的测试数据。
 			csrSpec := test.csr.DeepCopy()
 			SetDefaults_CertificateSigningRequestSpec(csrSpec)
 			if *csrSpec.SignerName != test.expectedSignerName {
@@ -345,6 +351,7 @@ func TestSetDefaults_CertificateSigningRequestSpec_KubeletServing(t *testing.T) 
 	}
 }
 
+// TestSetDefaults_CertificateSigningRequestSpec_KubeletClient 校验 client 场景的 signerName 推断。
 func TestSetDefaults_CertificateSigningRequestSpec_KubeletClient(t *testing.T) {
 	tests := map[string]struct {
 		csr                capi.CertificateSigningRequestSpec
@@ -409,7 +416,7 @@ func TestSetDefaults_CertificateSigningRequestSpec_KubeletClient(t *testing.T) {
 		"does not default to kube-apiserver-client-kubelet if it is missing an expected usage": {
 			csr: capi.CertificateSigningRequestSpec{
 				Request: csrWithOpts(kubeletClientPEMOptions),
-				// Remove the first usage in 'kubeletClientUsages'
+				// 删除首个 usage，模拟缺失预期 usage 的场景。
 				Usages: kubeletClientUsages[1:],
 			},
 			expectedSignerName: capi.LegacyUnknownSignerName,
@@ -417,7 +424,7 @@ func TestSetDefaults_CertificateSigningRequestSpec_KubeletClient(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			// create a deepcopy to be sure we don't modify anything in-place
+			// 使用深拷贝，确保默认化不会修改共享的测试数据。
 			csrSpec := test.csr.DeepCopy()
 			SetDefaults_CertificateSigningRequestSpec(csrSpec)
 			if *csrSpec.SignerName != test.expectedSignerName {
@@ -427,6 +434,7 @@ func TestSetDefaults_CertificateSigningRequestSpec_KubeletClient(t *testing.T) {
 	}
 }
 
+// pemOptions 描述生成测试 CSR 时可覆盖的证书字段。
 type pemOptions struct {
 	cn             string
 	org            string
@@ -436,8 +444,8 @@ type pemOptions struct {
 	uris           []string
 }
 
-// overlayPEMOptions overlays one set of pemOptions on top of another to allow
-// for easily overriding a single field in the options
+// overlayPEMOptions 将后一组选项叠加到前一组上，
+// 便于在基础选项上只覆盖单个字段。
 func overlayPEMOptions(opts ...pemOptions) pemOptions {
 	if len(opts) == 0 {
 		return pemOptions{}
@@ -466,6 +474,7 @@ func overlayPEMOptions(opts ...pemOptions) pemOptions {
 	return base
 }
 
+// csrWithOpts 按选项生成 ed25519 密钥与 PEM 编码的 CSR。
 func csrWithOpts(base pemOptions, overlays ...pemOptions) []byte {
 	opts := overlayPEMOptions(append([]pemOptions{base}, overlays...)...)
 	uris := make([]*url.URL, len(opts.uris))
@@ -487,16 +496,19 @@ func csrWithOpts(base pemOptions, overlays ...pemOptions) []byte {
 		URIs:           uris,
 	}
 
+	// 使用 ed25519 生成测试密钥，避免依赖 RSA 的密钥封装位。
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		panic(err)
 	}
 
+	// 用证书模板与生成的密钥创建 CSR 的 DER 编码。
 	csrDER, err := x509.CreateCertificateRequest(rand.Reader, template, key)
 	if err != nil {
 		panic(err)
 	}
 
+	// 把 DER 封装成 PEM 块，供 ParseCSR 解析。
 	csrPemBlock := &pem.Block{
 		Type:  "CERTIFICATE REQUEST",
 		Bytes: csrDER,

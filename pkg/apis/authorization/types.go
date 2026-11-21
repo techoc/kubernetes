@@ -22,257 +22,249 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// SubjectAccessReview checks whether or not a user or group can perform an action.  Not filling in a
-// spec.namespace means "in all namespaces".
+// SubjectAccessReview 用于检查某个用户或群组是否可以执行某个动作。
+// 若未填写 spec.namespace，则表示“在所有命名空间中”进行检查。
 type SubjectAccessReview struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
 
-	// Spec holds information about the request being evaluated
+	// Spec 保存待评估请求的相关信息。
 	Spec SubjectAccessReviewSpec
 
-	// Status is filled in by the server and indicates whether the request is allowed or not
+	// Status 由服务端填充，表示请求是否被允许。
 	Status SubjectAccessReviewStatus
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// SelfSubjectAccessReview checks whether or the current user can perform an action.  Not filling in a
-// spec.namespace means "in all namespaces".  Self is a special case, because users should always be able
-// to check whether they can perform an action
+// SelfSubjectAccessReview 用于检查当前用户是否可以执行某个动作。
+// 若未填写 spec.namespace，则表示“在所有命名空间中”进行检查。
+// Self 是一种特殊情形：用户应当始终能够检查自己是否可以执行某个动作。
 type SelfSubjectAccessReview struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
 
-	// Spec holds information about the request being evaluated.
+	// Spec 保存待评估请求的相关信息。
 	Spec SelfSubjectAccessReviewSpec
 
-	// Status is filled in by the server and indicates whether the request is allowed or not
+	// Status 由服务端填充，表示请求是否被允许。
 	Status SubjectAccessReviewStatus
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// LocalSubjectAccessReview checks whether or not a user or group can perform an action in a given namespace.
-// Having a namespace scoped resource makes it much easier to grant namespace scoped policy that includes permissions
-// checking.
+// LocalSubjectAccessReview 用于检查某个用户或群组在给定命名空间内是否可以执行某个动作。
+// 提供命名空间级别的资源，可以更方便地授予包含权限检查的命名空间级策略。
 type LocalSubjectAccessReview struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
 
-	// Spec holds information about the request being evaluated.  spec.namespace must be equal to the namespace
-	// you made the request against.  If empty, it is defaulted.
+	// Spec 保存待评估请求的相关信息。spec.namespace 必须等于发起请求时所针对的命名空间；
+	// 若为空，则会使用默认值填充。
 	Spec SubjectAccessReviewSpec
 
-	// Status is filled in by the server and indicates whether the request is allowed or not
+	// Status 由服务端填充，表示请求是否被允许。
 	Status SubjectAccessReviewStatus
 }
 
-// ResourceAttributes includes the authorization attributes available for resource requests to the Authorizer interface
+// ResourceAttributes 包含资源请求可提供给 Authorizer 接口的授权属性。
 type ResourceAttributes struct {
-	// Namespace is the namespace of the action being requested.  Currently, there is no distinction between no namespace and all namespaces
-	// "" (empty) is defaulted for LocalSubjectAccessReviews
-	// "" (empty) is empty for cluster-scoped resources
-	// "" (empty) means "all" for namespace scoped resources from a SubjectAccessReview or SelfSubjectAccessReview
+	// Namespace 是被请求动作所在的命名空间。当前，未指定命名空间与所有命名空间之间没有区别：
+	// 对于 LocalSubjectAccessReview，""（空）会被填充为默认值；
+	// 对于集群作用域资源，""（空）表示空；
+	// 对于来自 SubjectAccessReview 或 SelfSubjectAccessReview 的命名空间作用域资源，""（空）表示“所有”。
 	Namespace string
-	// Verb is a kubernetes resource API verb, like: get, list, watch, create, update, delete, proxy.  "*" means all.
+	// Verb 是 Kubernetes 资源 API 动词，例如 get、list、watch、create、update、delete、proxy，"*" 表示全部。
 	Verb string
-	// Group is the API Group of the Resource.  "*" means all.
+	// Group 是资源所属的 API Group，"*" 表示全部。
 	Group string
-	// Version is the API Version of the Resource.  "*" means all.
+	// Version 是资源的 API Version，"*" 表示全部。
 	Version string
-	// Resource is one of the existing resource types.  "*" means all.
+	// Resource 是已有的资源类型之一，"*" 表示全部。
 	Resource string
-	// Subresource is one of the existing resource types.  "" means none.
+	// Subresource 是已有的子资源类型之一，"" 表示没有子资源。
 	Subresource string
-	// Name is the name of the resource being requested for a "get" or deleted for a "delete". "" (empty) means all.
+	// Name 是 "get" 请求中被请求的资源名称，或 "delete" 请求中被删除的资源名称；""（空）表示全部。
 	Name string
-	// fieldSelector describes the limitation on access based on field.  It can only limit access, not broaden it.
+	// fieldSelector 描述基于字段对访问的限制。它只能缩小访问范围，不能扩大。
 	// +optional
 	FieldSelector *FieldSelectorAttributes
-	// labelSelector describes the limitation on access based on labels.  It can only limit access, not broaden it.
+	// labelSelector 描述基于标签对访问的限制。它只能缩小访问范围，不能扩大。
 	// +optional
 	LabelSelector *LabelSelectorAttributes
 }
 
-// LabelSelectorAttributes indicates a label limited access.
-// Webhook authors are encouraged to
-// * ensure rawSelector and requirements are not both set
-// * consider the requirements field if set
-// * not try to parse or consider the rawSelector field if set. This is to avoid another CVE-2022-2880 (i.e. getting different systems to agree on how exactly to parse a query is not something we want), see https://www.oxeye.io/resources/golang-parameter-smuggling-attack for more details.
-// For the *SubjectAccessReview endpoints of the kube-apiserver:
-// * If rawSelector is empty and requirements are empty, the request is not limited.
-// * If rawSelector is present and requirements are empty, the rawSelector will be parsed and limited if the parsing succeeds.
-// * If rawSelector is empty and requirements are present, the requirements should be honored
-// * If rawSelector is present and requirements are present, the request is invalid.
+// LabelSelectorAttributes 表示基于标签的访问限制。
+// Webhook 作者应当：
+//   - 确保不同时设置 rawSelector 和 requirements；
+//   - 如果设置了 requirements，则考虑该字段；
+//   - 如果设置了 rawSelector，不要尝试解析或考虑该字段。这是为了避免再次出现 CVE-2022-2880
+//     （即不希望让不同系统就如何精确解析查询达成一致），详见 https://www.oxeye.io/resources/golang-parameter-smuggling-attack。
+//
+// 对于 kube-apiserver 的 *SubjectAccessReview 端点：
+// * 若 rawSelector 为空且 requirements 为空，则请求不受限制；
+// * 若存在 rawSelector 且 requirements 为空，则在解析成功的前提下解析并限制 rawSelector；
+// * 若 rawSelector 为空且存在 requirements，则应当遵循 requirements；
+// * 若 rawSelector 和 requirements 同时存在，则请求无效。
 type LabelSelectorAttributes struct {
-	// rawSelector is the serialization of a field selector that would be included in a query parameter.
-	// Webhook implementations are encouraged to ignore rawSelector.
-	// The kube-apiserver's *SubjectAccessReview will parse the rawSelector as long as the requirements are not present.
+	// rawSelector 是会出现在查询参数中的字段选择器的序列化形式。
+	// Webhook 实现应当忽略 rawSelector。
+	// 只要 requirements 不存在，kube-apiserver 的 *SubjectAccessReview 就会解析 rawSelector。
 	// +optional
 	RawSelector string
 
-	// requirements is the parsed interpretation of a label selector.
-	// All requirements must be met for a resource instance to match the selector.
-	// Webhook implementations should handle requirements, but how to handle them is up to the webhook.
-	// Since requirements can only limit the request, it is safe to authorize as unlimited request if the requirements
-	// are not understood.
+	// requirements 是对标签选择器解析后的解释结果。
+	// 资源实例必须满足所有条件才能匹配该选择器。
+	// Webhook 实现应当处理 requirements，但具体如何处理由 Webhook 自行决定。
+	// 由于 requirements 只能缩小请求范围，因此在不理解 requirements 时按不受限制的请求来授权是安全的。
 	// +optional
 	// +listType=atomic
 	Requirements []metav1.LabelSelectorRequirement
 }
 
-// FieldSelectorAttributes indicates a field limited access.
-// Webhook authors are encouraged to
-// * ensure rawSelector and requirements are not both set
-// * consider the requirements field if set
-// * not try to parse or consider the rawSelector field if set. This is to avoid another CVE-2022-2880 (i.e. getting different systems to agree on how exactly to parse a query is not something we want), see https://www.oxeye.io/resources/golang-parameter-smuggling-attack for more details.
-// For the *SubjectAccessReview endpoints of the kube-apiserver:
-// * If rawSelector is empty and requirements are empty, the request is not limited.
-// * If rawSelector is present and requirements are empty, the rawSelector will be parsed and limited if the parsing succeeds.
-// * If rawSelector is empty and requirements are present, the requirements should be honored
-// * If rawSelector is present and requirements are present, the request is invalid.
+// FieldSelectorAttributes 表示基于字段的访问限制。
+// Webhook 作者应当：
+//   - 确保不同时设置 rawSelector 和 requirements；
+//   - 如果设置了 requirements，则考虑该字段；
+//   - 如果设置了 rawSelector，不要尝试解析或考虑该字段。这是为了避免再次出现 CVE-2022-2880
+//     （即不希望让不同系统就如何精确解析查询达成一致），详见 https://www.oxeye.io/resources/golang-parameter-smuggling-attack。
+//
+// 对于 kube-apiserver 的 *SubjectAccessReview 端点：
+// * 若 rawSelector 为空且 requirements 为空，则请求不受限制；
+// * 若存在 rawSelector 且 requirements 为空，则在解析成功的前提下解析并限制 rawSelector；
+// * 若 rawSelector 为空且存在 requirements，则应当遵循 requirements；
+// * 若 rawSelector 和 requirements 同时存在，则请求无效。
 type FieldSelectorAttributes struct {
-	// rawSelector is the serialization of a field selector that would be included in a query parameter.
-	// Webhook implementations are encouraged to ignore rawSelector.
-	// The kube-apiserver's *SubjectAccessReview will parse the rawSelector as long as the requirements are not present.
+	// rawSelector 是会出现在查询参数中的字段选择器的序列化形式。
+	// Webhook 实现应当忽略 rawSelector。
+	// 只要 requirements 不存在，kube-apiserver 的 *SubjectAccessReview 就会解析 rawSelector。
 	// +optional
 	RawSelector string
 
-	// requirements is the parsed interpretation of a field selector.
-	// All requirements must be met for a resource instance to match the selector.
-	// Webhook implementations should handle requirements, but how to handle them is up to the webhook.
-	// Since requirements can only limit the request, it is safe to authorize as unlimited request if the requirements
-	// are not understood.
+	// requirements 是对字段选择器解析后的解释结果。
+	// 资源实例必须满足所有条件才能匹配该选择器。
+	// Webhook 实现应当处理 requirements，但具体如何处理由 Webhook 自行决定。
+	// 由于 requirements 只能缩小请求范围，因此在不理解 requirements 时按不受限制的请求来授权是安全的。
 	// +optional
 	// +listType=atomic
 	Requirements []metav1.FieldSelectorRequirement
 }
 
-// NonResourceAttributes includes the authorization attributes available for non-resource requests to the Authorizer interface
+// NonResourceAttributes 包含非资源请求可提供给 Authorizer 接口的授权属性。
 type NonResourceAttributes struct {
-	// Path is the URL path of the request
+	// Path 是请求的 URL 路径。
 	Path string
-	// Verb is the standard HTTP verb
+	// Verb 是标准的 HTTP 动词。
 	Verb string
 }
 
-// SubjectAccessReviewSpec is a description of the access request.  Exactly one of ResourceAttributes
-// and NonResourceAttributes must be set
+// SubjectAccessReviewSpec 是对访问请求的描述。ResourceAttributes 和 NonResourceAttributes 必须且只能设置其中一个。
 type SubjectAccessReviewSpec struct {
-	// ResourceAttributes describes information for a resource access request
+	// ResourceAttributes 描述资源访问请求的相关信息。
 	ResourceAttributes *ResourceAttributes
-	// NonResourceAttributes describes information for a non-resource access request
+	// NonResourceAttributes 描述非资源访问请求的相关信息。
 	NonResourceAttributes *NonResourceAttributes
 
-	// User is the user you're testing for.
-	// If you specify "User" but not "Group", then is it interpreted as "What if User were not a member of any groups
+	// User 是待检查的用户。
+	// 如果只指定 "User" 而不指定 "Group"，则会被解释为“假设该用户不属于任何群组会怎样”。
 	User string
-	// Groups is the groups you're testing for.
+	// Groups 是待检查的群组。
 	Groups []string
-	// Extra corresponds to the user.Info.GetExtra() method from the authenticator.  Since that is input to the authorizer
-	// it needs a reflection here.
+	// Extra 对应认证器中的 user.Info.GetExtra() 方法。由于它是授权器的输入，因此需要在此处有所体现。
 	Extra map[string]ExtraValue
-	// UID information about the requesting user.
+	// UID 是发起请求用户的 UID 信息。
 	UID string
 }
 
-// ExtraValue masks the value so protobuf can generate
+// ExtraValue 对值进行包装，以便 protobuf 能够生成代码。
 // +protobuf.nullable=true
 type ExtraValue []string
 
-// SelfSubjectAccessReviewSpec is a description of the access request.  Exactly one of ResourceAttributes
-// and NonResourceAttributes must be set
+// SelfSubjectAccessReviewSpec 是对访问请求的描述。ResourceAttributes 和 NonResourceAttributes 必须且只能设置其中一个。
 type SelfSubjectAccessReviewSpec struct {
-	// ResourceAttributes describes information for a resource access request
+	// ResourceAttributes 描述资源访问请求的相关信息。
 	ResourceAttributes *ResourceAttributes
-	// NonResourceAttributes describes information for a non-resource access request
+	// NonResourceAttributes 描述非资源访问请求的相关信息。
 	NonResourceAttributes *NonResourceAttributes
 }
 
-// SubjectAccessReviewStatus represents the current state of a SubjectAccessReview.
+// SubjectAccessReviewStatus 表示 SubjectAccessReview 的当前状态。
 type SubjectAccessReviewStatus struct {
-	// Allowed is required. True if the action would be allowed, false otherwise.
+	// Allowed 为必填字段。若该动作会被允许则为 true，否则为 false。
 	Allowed bool
-	// Denied is optional. True if the action would be denied, otherwise
-	// false. If both allowed is false and denied is false, then the
-	// authorizer has no opinion on whether to authorize the action. Denied
-	// may not be true if Allowed is true.
+	// Denied 为可选字段。若该动作会被拒绝则为 true，否则为 false。
+	// 若 Allowed 和 Denied 同时为 false，则表示授权器对该动作是否应被授权没有意见。
+	// 当 Allowed 为 true 时，Denied 不允许为 true。
 	Denied bool
-	// Reason is optional.  It indicates why a request was allowed or denied.
+	// Reason 为可选字段，用于说明请求被允许或拒绝的原因。
 	Reason string
-	// EvaluationError is an indication that some error occurred during the authorization check.
-	// It is entirely possible to get an error and be able to continue determine authorization status in spite of it.
-	// For instance, RBAC can be missing a role, but enough roles are still present and bound to reason about the request.
+	// EvaluationError 表示授权检查过程中发生了错误。
+	// 即使发生错误，也完全有可能继续确定授权状态。
+	// 例如 RBAC 可能缺少某个角色，但仍有足够的角色被绑定，足以推断出该请求的结果。
 	EvaluationError string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// SelfSubjectRulesReview enumerates the set of actions the current user can perform within a namespace.
-// The returned list of actions may be incomplete depending on the server's authorization mode,
-// and any errors experienced during the evaluation. SelfSubjectRulesReview should be used by UIs to show/hide actions,
-// or to quickly let an end user reason about their permissions. It should NOT Be used by external systems to
-// drive authorization decisions as this raises confused deputy, cache lifetime/revocation, and correctness concerns.
-// SubjectAccessReview, and LocalAccessReview are the correct way to defer authorization decisions to the API server.
+// SelfSubjectRulesReview 枚举当前用户在某个命名空间内可以执行的动作集合。
+// 返回的动作列表可能不完整，这取决于服务端的授权模式以及评估过程中遇到的任何错误。
+// SelfSubjectRulesReview 应用于 UI 显示或隐藏动作，或帮助最终用户快速了解自身权限。
+// 不应被外部系统用于驱动授权决策，否则会引发“混淆代理（confused deputy）”、缓存生命周期/撤销以及正确性问题。
+// 将授权决策委托给 API server 的正确方式是 SubjectAccessReview 和 LocalAccessReview。
 type SelfSubjectRulesReview struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
 
-	// Spec holds information about the request being evaluated.
+	// Spec 保存待评估请求的相关信息。
 	Spec SelfSubjectRulesReviewSpec
 
-	// Status is filled in by the server and indicates the set of actions a user can perform.
+	// Status 由服务端填充，表示用户可以执行的动作集合。
 	Status SubjectRulesReviewStatus
 }
 
-// SelfSubjectRulesReviewSpec defines the specification for SelfSubjectRulesReview.
+// SelfSubjectRulesReviewSpec 定义 SelfSubjectRulesReview 的规格。
 type SelfSubjectRulesReviewSpec struct {
-	// Namespace to evaluate rules for. Required.
+	// Namespace 是要评估规则所在的命名空间，必填。
 	Namespace string
 }
 
-// SubjectRulesReviewStatus contains the result of a rules check. This check can be incomplete depending on
-// the set of authorizers the server is configured with and any errors experienced during evaluation.
-// Because authorization rules are additive, if a rule appears in a list it's safe to assume the subject has that permission,
-// even if that list is incomplete.
+// SubjectRulesReviewStatus 包含规则检查的结果。根据服务端配置的授权器集合以及评估过程中遇到的任何错误，
+// 该检查可能是不完整的。由于授权规则是叠加式的，若某条规则出现在列表中，就可以安全地认为主体拥有该权限，
+// 即使该列表并不完整。
 type SubjectRulesReviewStatus struct {
-	// ResourceRules is the list of actions the subject is allowed to perform on resources.
-	// The list ordering isn't significant, may contain duplicates, and possibly be incomplete.
+	// ResourceRules 是主体被允许对资源执行的动作列表。
+	// 列表顺序无关紧要，可能包含重复项，也可能不完整。
 	ResourceRules []ResourceRule
-	// NonResourceRules is the list of actions the subject is allowed to perform on non-resources.
-	// The list ordering isn't significant, may contain duplicates, and possibly be incomplete.
+	// NonResourceRules 是主体被允许对非资源执行的动作列表。
+	// 列表顺序无关紧要，可能包含重复项，也可能不完整。
 	NonResourceRules []NonResourceRule
-	// Incomplete is true when the rules returned by this call are incomplete. This is most commonly
-	// encountered when an authorizer, such as an external authorizer, doesn't support rules evaluation.
+	// 当本次调用返回的规则不完整时，Incomplete 为 true。最常见的情况是某个授权器（例如外部授权器）
+	// 不支持规则评估。
 	Incomplete bool
-	// EvaluationError can appear in combination with Rules. It indicates an error occurred during
-	// rule evaluation, such as an authorizer that doesn't support rule evaluation, and that
-	// ResourceRules and/or NonResourceRules may be incomplete.
+	// EvaluationError 可以和 Rules 同时出现。它表示规则评估过程中发生了错误，例如某个授权器不支持规则评估，
+	// 以及/或者 ResourceRules 与 NonResourceRules 可能不完整。
 	EvaluationError string
 }
 
-// ResourceRule is the list of actions the subject is allowed to perform on resources. The list ordering isn't significant,
-// may contain duplicates, and possibly be incomplete.
+// ResourceRule 是主体被允许对资源执行的动作列表。列表顺序无关紧要，可能包含重复项，也可能不完整。
 type ResourceRule struct {
-	// Verb is a list of kubernetes resource API verbs, like: get, list, watch, create, update, delete, proxy.  "*" means all.
+	// Verbs 是 Kubernetes 资源 API 动词列表，例如 get、list、watch、create、update、delete、proxy，"*" 表示全部。
 	Verbs []string
-	// APIGroups is the name of the APIGroup that contains the resources.  If multiple API groups are specified, any action requested against one of
-	// the enumerated resources in any API group will be allowed.  "*" means all.
+	// APIGroups 是包含这些资源的 APIGroup 名称。若指定了多个 API group，则对其中任一 API group 中列举的资源
+	// 发起的任何动作都将被允许，"*" 表示全部。
 	APIGroups []string
-	// Resources is a list of resources this rule applies to.  "*" means all in the specified apiGroups.
-	//  "*/foo" represents the subresource 'foo' for all resources in the specified apiGroups.
+	// Resources 是该规则适用的资源列表，"*" 表示指定 apiGroups 中的全部资源；
+	// "*/foo" 表示指定 apiGroups 中所有资源的子资源 'foo'。
 	Resources []string
-	// ResourceNames is an optional white list of names that the rule applies to.  An empty set means that everything is allowed.  "*" means all.
+	// ResourceNames 是规则适用的名称白名单（可选）。空集合表示允许全部，"*" 表示全部。
 	ResourceNames []string
 }
 
-// NonResourceRule holds information that describes a rule for the non-resource
+// NonResourceRule 保存用于描述非资源规则的信息。
 type NonResourceRule struct {
-	// Verb is a list of kubernetes non-resource API verbs, like: get, post, put, delete, patch, head, options.  "*" means all.
+	// Verbs 是 Kubernetes 非资源 API 动词列表，例如 get、post、put、delete、patch、head、options，"*" 表示全部。
 	Verbs []string
 
-	// NonResourceURLs is a set of partial urls that a user should have access to.  *s are allowed, but only as the full,
-	// final step in the path.  "*" means all.
+	// NonResourceURLs 是用户应有权访问的部分 URL 集合。允许使用 *，但只能作为路径中完整的最后一级，"*" 表示全部。
 	NonResourceURLs []string
 }

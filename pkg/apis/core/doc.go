@@ -17,9 +17,9 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=
 
-// Package core contains the latest (or "internal") version of the
-// Kubernetes API objects. This is the API objects as represented in memory.
-// The contract presented to clients is located in the versioned packages,
-// which are sub-directories. The first one is "v1". Those packages
-// describe how a particular version is serialized to storage/network.
+// Package core 包含最新（即“内部”）版本的
+// Kubernetes API 对象，即对象在内存中的表示形式。
+// 提供给客户端的契约位于带版本的包中，
+// 它们是子目录，第一个是 "v1"。这些包
+// 描述特定版本如何被序列化到存储/网络中。
 package core

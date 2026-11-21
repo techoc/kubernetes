@@ -21,7 +21,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// HasDefaultAnnotation returns true if the object metadata has the default annotation set.
+// HasDefaultAnnotation 判断对象元数据上是否设置了“默认 IngressClass”注解。
+// 该注解由 networkingv1.AnnotationIsDefaultIngressClass 定义，值必须严格为 "true"。
 func HasDefaultAnnotation(obj metav1.ObjectMeta) bool {
 	return obj.Annotations[networkingv1.AnnotationIsDefaultIngressClass] == "true"
 }

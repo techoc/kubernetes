@@ -29,16 +29,24 @@ import (
 	node "k8s.io/kubernetes/pkg/apis/node"
 )
 
+// TestRuntimeClassConversion 验证 RuntimeClass 在 v1alpha1 外部类型与内部类型之间
+// 双向转换后字段保持一致，重点覆盖 spec 展开（unnest）带来的字段映射。
 func TestRuntimeClassConversion(t *testing.T) {
+	// 测试用例共享的常量：name 是对象名，handler 是运行时 handler，
+	// cpuOverhead 是固定 CPU 开销的字符串表示。
 	const (
 		name        = "puppy"
 		handler     = "heidi"
 		cpuOverhead = "100"
 	)
+	// 使用 map 组成表驱动测试：每个场景同时给出期望的内部对象与外部对象，
+	// 双向转换都要得到对应的期望值。
 	tests := map[string]struct {
 		internal *node.RuntimeClass
 		external *v1alpha1.RuntimeClass
 	}{
+		// 所有字段都填写的场景：验证 handler、overhead、scheduling 及其子字段
+		// 在双向转换中都不丢失。
 		"fully-specified": {
 			internal: &node.RuntimeClass{
 				ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -77,6 +85,8 @@ func TestRuntimeClassConversion(t *testing.T) {
 				},
 			},
 		},
+		// overhead 非空但内容为空：验证空的 Overhead 对象不会被当成 nil 丢弃，
+		// 否则往返转换后字段的有无会发生变化。
 		"empty-overhead": {
 			internal: &node.RuntimeClass{
 				ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -91,6 +101,8 @@ func TestRuntimeClassConversion(t *testing.T) {
 				},
 			},
 		},
+		// scheduling 非空但内容为空：与空 overhead 同理，
+		// 确认空调度对象也会被原样保留。
 		"empty-scheduling": {
 			internal: &node.RuntimeClass{
 				ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -105,6 +117,8 @@ func TestRuntimeClassConversion(t *testing.T) {
 				},
 			},
 		},
+		// overhead 与 scheduling 都为 nil 的最小对象：
+		// 验证转换不会凭空创建空的 Overhead/Scheduling 对象。
 		"empty": {
 			internal: &node.RuntimeClass{
 				ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -119,6 +133,8 @@ func TestRuntimeClassConversion(t *testing.T) {
 		},
 	}
 
+	// 每个场景都做双向转换，确保两个方向的转换函数互逆，
+	// 这也是发现字段映射遗漏或空对象处理错误的关键。
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			convertedInternal := &node.RuntimeClass{}

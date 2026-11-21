@@ -71,8 +71,8 @@ const (
 // TokenReview attempts to authenticate a token to a known user.
 type TokenReview struct {
 	metav1.TypeMeta
-	// ObjectMeta fulfills the metav1.ObjectMetaAccessor interface so that the stock
-	// REST handler paths work
+	// ObjectMeta 实现 metav1.ObjectMetaAccessor 接口，以便标准
+	// REST handler 路径能够正常工作。
 	metav1.ObjectMeta
 
 	// Spec holds information about the request being evaluated
@@ -84,7 +84,7 @@ type TokenReview struct {
 
 // TokenReviewSpec is a description of the token authentication request.
 type TokenReviewSpec struct {
-	// Token is the opaque bearer token.
+	// Token 是不透明的 bearer token。
 	Token string `datapolicy:"token"`
 	// Audiences is a list of the identifiers that the resource server presented
 	// with the token identifies as. Audience-aware token authenticators will
@@ -130,7 +130,7 @@ type UserInfo struct {
 	Extra map[string]ExtraValue
 }
 
-// ExtraValue masks the value so protobuf can generate
+// ExtraValue 对值做掩码，使 protobuf 能够生成
 type ExtraValue []string
 
 // AttestationValue masks the value so protobuf can generate
@@ -141,8 +141,8 @@ type AttestationValue []string
 // TokenRequest requests a token for a given service account.
 type TokenRequest struct {
 	metav1.TypeMeta
-	// ObjectMeta fulfills the metav1.ObjectMetaAccessor interface so that the stock
-	// REST handler paths work
+	// ObjectMeta 实现 metav1.ObjectMetaAccessor 接口，以便标准
+	// REST handler 路径能够正常工作。
 	metav1.ObjectMeta
 
 	Spec   TokenRequestSpec
@@ -181,7 +181,7 @@ type TokenRequestSpec struct {
 
 // TokenRequestStatus is the result of a token request.
 type TokenRequestStatus struct {
-	// Token is the opaque bearer token.
+	// Token 是不透明的 bearer token。
 	Token string `datapolicy:"token"`
 	// ExpirationTimestamp is the time of expiration of the returned token.
 	ExpirationTimestamp metav1.Time

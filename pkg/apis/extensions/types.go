@@ -15,15 +15,12 @@ limitations under the License.
 */
 
 /*
-This file (together with pkg/apis/extensions/v1beta1/types.go) contain the experimental
-types in kubernetes. These API objects are experimental, meaning that the
-APIs may be broken at any time by the kubernetes team.
+// 此文件（连同 pkg/apis/extensions/v1beta1/types.go）包含 kubernetes 中的实验性
+// 类型。这些 API 对象处于实验阶段，意味着 kubernetes 团队随时可能破坏这些 API。
 
-DISCLAIMER: The implementation of the experimental API group itself is
-a temporary one meant as a stopgap solution until kubernetes has proper
-support for multiple API groups. The transition may require changes
-beyond registration differences. In other words, experimental API group
-support is experimental.
+// 免责声明：实验性 API group 本身的实现只是临时方案，作为 kubernetes 正式支持
+// 多个 API group 之前的权宜之计。这一过渡可能需要超出注册机制差异范围的改动。
+// 换句话说，实验性 API group 的支持本身也是实验性的。
 */
 
 package extensions

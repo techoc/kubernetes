@@ -29,31 +29,35 @@ import (
 	"k8s.io/kubernetes/pkg/apis/policy"
 )
 
+// supportedUnhealthyPodEvictionPolicies 列出不健康 Pod 允许逐出策略的合法取值集合。
 var supportedUnhealthyPodEvictionPolicies = sets.NewString(
 	string(policy.IfHealthyBudget),
 	string(policy.AlwaysAllow),
 )
 
+// PodDisruptionBudgetValidationOptions 控制 PDB 校验的宽松程度。
 type PodDisruptionBudgetValidationOptions struct {
+	// AllowInvalidLabelValueInSelector 允许 selector 中出现不合法的标签值，
+	// 用于兼容历史遗留对象；新建对象应始终使用严格校验。
 	AllowInvalidLabelValueInSelector bool
 }
 
-// ValidatePodDisruptionBudget validates a PodDisruptionBudget and returns an ErrorList
-// with any errors.
+// ValidatePodDisruptionBudget 校验 PodDisruptionBudget 并返回所有校验错误。
 func ValidatePodDisruptionBudget(pdb *policy.PodDisruptionBudget, opts PodDisruptionBudgetValidationOptions) field.ErrorList {
 	allErrs := ValidatePodDisruptionBudgetSpec(pdb.Spec, opts, field.NewPath("spec"))
 	return allErrs
 }
 
-// ValidatePodDisruptionBudgetSpec validates a PodDisruptionBudgetSpec and returns an ErrorList
-// with any errors.
+// ValidatePodDisruptionBudgetSpec 校验 PodDisruptionBudgetSpec 并返回所有校验错误。
 func ValidatePodDisruptionBudgetSpec(spec policy.PodDisruptionBudgetSpec, opts PodDisruptionBudgetValidationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
+	// minAvailable 与 maxUnavailable 语义互斥，同时设置会让预期副本数无法确定。
 	if spec.MinAvailable != nil && spec.MaxUnavailable != nil {
 		allErrs = append(allErrs, field.Invalid(fldPath, spec, "minAvailable and maxUnavailable cannot be both set"))
 	}
 
+	// 两种阈值都必须是正整数或百分比，且不能超过 100%。
 	if spec.MinAvailable != nil {
 		allErrs = append(allErrs, appsvalidation.ValidatePositiveIntOrPercent(*spec.MinAvailable, fldPath.Child("minAvailable"))...)
 		allErrs = append(allErrs, appsvalidation.IsNotMoreThan100Percent(*spec.MinAvailable, fldPath.Child("minAvailable"))...)
@@ -68,6 +72,7 @@ func ValidatePodDisruptionBudgetSpec(spec policy.PodDisruptionBudgetSpec, opts P
 
 	allErrs = append(allErrs, unversionedvalidation.ValidateLabelSelector(spec.Selector, labelSelectorValidationOptions, fldPath.Child("selector"))...)
 
+	// 逐出策略若非空，必须是已知枚举值，否则 disruption controller 无法解释其语义。
 	if spec.UnhealthyPodEvictionPolicy != nil && !supportedUnhealthyPodEvictionPolicies.Has(string(*spec.UnhealthyPodEvictionPolicy)) {
 		allErrs = append(allErrs, field.NotSupported(fldPath.Child("unhealthyPodEvictionPolicy"), *spec.UnhealthyPodEvictionPolicy, supportedUnhealthyPodEvictionPolicies.List()))
 	}
@@ -75,13 +80,11 @@ func ValidatePodDisruptionBudgetSpec(spec policy.PodDisruptionBudgetSpec, opts P
 	return allErrs
 }
 
-// ValidatePodDisruptionBudgetStatusUpdate validates a PodDisruptionBudgetStatus and returns an ErrorList
-// with any errors.
+// ValidatePodDisruptionBudgetStatusUpdate 校验 PDB 状态更新并返回所有校验错误。
 func ValidatePodDisruptionBudgetStatusUpdate(status, oldStatus policy.PodDisruptionBudgetStatus, fldPath *field.Path, apiVersion schema.GroupVersion) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, unversionedvalidation.ValidateConditions(status.Conditions, fldPath.Child("conditions"))...)
-	// Don't run other validations for v1beta1 since we don't want to introduce
-	// new validations retroactively.
+	// 不对 v1beta1 追加其他校验：版本已冻结，追溯性引入新约束会拒绝过去合法的对象。
 	if apiVersion == policyapiv1beta1.SchemeGroupVersion {
 		return allErrs
 	}
@@ -92,16 +95,19 @@ func ValidatePodDisruptionBudgetStatusUpdate(status, oldStatus policy.PodDisrupt
 	return allErrs
 }
 
+// sysctlPatternSegmentFmt 定义 sysctl 模式中单个路径段的合法格式，
+// 允许小写字母、数字、连字符、下划线，以及末尾的通配符 *。
 const sysctlPatternSegmentFmt string = "([a-z0-9][-_a-z0-9]*)?[a-z0-9*]"
 
-// SysctlContainSlashPatternFmt is a regex that contains a slash used for matching valid sysctl patterns.
+// SysctlContainSlashPatternFmt 是用于匹配合法 sysctl 模式的正则表达式片段，允许名称中包含斜杠。
 const SysctlContainSlashPatternFmt string = "(" + apivalidation.SysctlSegmentFmt + "[\\./])*" + sysctlPatternSegmentFmt
 
+// sysctlContainSlashPatternRegexp 是完整匹配 sysctl 模式的预编译正则。
 var sysctlContainSlashPatternRegexp = regexp.MustCompile("^" + SysctlContainSlashPatternFmt + "$")
 
-// IsValidSysctlPattern checks if name is a valid sysctl pattern.
-// i.e. matches sysctlContainSlashPatternRegexp.
-// More info:
+// IsValidSysctlPattern 检查 name 是否为合法的 sysctl 模式，
+// 即是否匹配 sysctlContainSlashPatternRegexp。
+// 更多信息参见：
 //
 //	https://man7.org/linux/man-pages/man8/sysctl.8.html
 //	https://man7.org/linux/man-pages/man5/sysctl.d.5.html

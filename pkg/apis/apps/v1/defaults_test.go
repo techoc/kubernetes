@@ -37,6 +37,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestSetDefaultDaemonSetSpec 校验标签传播、更新策略与历史版本上限的默认化。
 func TestSetDefaultDaemonSetSpec(t *testing.T) {
 	defaultLabels := map[string]string{"foo": "bar"}
 	maxUnavailable := intstr.FromInt32(1)
@@ -67,7 +68,7 @@ func TestSetDefaultDaemonSetSpec(t *testing.T) {
 		original *appsv1.DaemonSet
 		expected *appsv1.DaemonSet
 	}{
-		{ // Labels change/defaulting test.
+		{ // 验证默认标签从 Pod 模板传播到 DaemonSet。
 			original: &appsv1.DaemonSet{
 				Spec: appsv1.DaemonSetSpec{
 					Template: defaultTemplate,
@@ -90,7 +91,7 @@ func TestSetDefaultDaemonSetSpec(t *testing.T) {
 				},
 			},
 		},
-		{ // Labels change/defaulting test.
+		{ // 已设置的标签不应被模板标签覆盖。
 			original: &appsv1.DaemonSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -121,7 +122,7 @@ func TestSetDefaultDaemonSetSpec(t *testing.T) {
 				},
 			},
 		},
-		{ // OnDeleteDaemonSetStrategyType update strategy.
+		{ // OnDelete 策略下不应填充 RollingUpdate 参数。
 			original: &appsv1.DaemonSet{
 				Spec: appsv1.DaemonSetSpec{
 					Template: templateNoLabel,
@@ -140,7 +141,7 @@ func TestSetDefaultDaemonSetSpec(t *testing.T) {
 				},
 			},
 		},
-		{ // Custom unique label key.
+		{ // 验证默认标签键的取值来源。
 			original: &appsv1.DaemonSet{
 				Spec: appsv1.DaemonSetSpec{},
 			},
@@ -160,6 +161,7 @@ func TestSetDefaultDaemonSetSpec(t *testing.T) {
 		},
 	}
 
+	// 通过编解码往返触发默认化，再比较期望的 spec。
 	for i, test := range tests {
 		original := test.original
 		expected := test.expected
@@ -175,6 +177,7 @@ func TestSetDefaultDaemonSetSpec(t *testing.T) {
 	}
 }
 
+// TestSetDefaultStatefulSet 校验 StatefulSet 各项默认值及特性门控对 MaxUnavailable 的影响。
 func TestSetDefaultStatefulSet(t *testing.T) {
 	defaultLabels := map[string]string{"foo": "bar"}
 	var defaultPartition int32 = 0
@@ -195,6 +198,7 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 		},
 	}
 
+	// 每条用例声明原始对象、期望结果与门控开关。
 	tests := []struct {
 		name                       string
 		original                   *appsv1.StatefulSet
@@ -293,6 +297,7 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 			},
 		},
 		{
+			// 未显式设置策略类型时，默认化必须保留已有的 Partition 值。
 			name: "UpdateStrategy.RollingUpdate.Partition is not lost when UpdateStrategy.Type is not set",
 			original: &appsv1.StatefulSet{
 				Spec: appsv1.StatefulSetSpec{
@@ -421,6 +426,7 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 			},
 		},
 		{
+			// Recreate 策略不使用滚动更新参数，默认化不应填充。
 			name: "Recreate update strategy does not populate RollingUpdate",
 			original: &appsv1.StatefulSet{
 				Spec: appsv1.StatefulSetSpec{
@@ -450,6 +456,7 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 			},
 		},
 		{
+			// MaxUnavailable 默认化受特性门控控制，关闭时保持字段为空。
 			name: "MaxUnavailable disabled, with maxUnavailable not specified",
 			original: &appsv1.StatefulSet{
 				Spec: appsv1.StatefulSetSpec{
@@ -554,6 +561,7 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 			enableMaxUnavailablePolicy: false,
 		},
 		{
+			// 门控开启且未指定时，MaxUnavailable 默认为 1。
 			name: "MaxUnavailable enabled, with no maxUnavailable specified",
 			original: &appsv1.StatefulSet{
 				Spec: appsv1.StatefulSetSpec{
@@ -623,6 +631,7 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 		},
 	}
 
+	// 每条用例在独立的门控状态下执行编解码往返。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.MaxUnavailableStatefulSet, test.enableMaxUnavailablePolicy)
@@ -640,6 +649,7 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 	}
 }
 
+// TestSetDefaultDeployment 校验副本数、滚动更新参数等默认值。
 func TestSetDefaultDeployment(t *testing.T) {
 	defaultIntOrString := intstr.FromString("25%")
 	differentIntOrString := intstr.FromInt32(5)
@@ -775,6 +785,7 @@ func TestSetDefaultDeployment(t *testing.T) {
 		},
 	}
 
+	// 通过往返编解码触发默认化并比较 spec。
 	for _, test := range tests {
 		original := test.original
 		expected := test.expected
@@ -790,6 +801,7 @@ func TestSetDefaultDeployment(t *testing.T) {
 	}
 }
 
+// TestDefaultDeploymentAvailability 确保默认参数不会让滚动更新期间可用副本降为零。
 func TestDefaultDeploymentAvailability(t *testing.T) {
 	d := roundTrip(t, runtime.Object(&appsv1.Deployment{})).(*appsv1.Deployment)
 
@@ -798,11 +810,13 @@ func TestDefaultDeploymentAvailability(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	// 默认参数必须始终至少保留一个可用副本。
 	if *(d.Spec.Replicas)-int32(maxUnavailable) <= 0 {
 		t.Fatalf("the default value of maxUnavailable can lead to no active replicas during rolling update")
 	}
 }
 
+// TestSetDefaultReplicaSetReplicas 校验副本数未设置时才默认为 1，显式 0 需保留。
 func TestSetDefaultReplicaSetReplicas(t *testing.T) {
 	tests := []struct {
 		rs             appsv1.ReplicaSet
@@ -870,6 +884,7 @@ func TestSetDefaultReplicaSetReplicas(t *testing.T) {
 	}
 }
 
+// TestDefaultRequestIsNotSetForReplicaSet 校验只设置 limit 时不会自动补出 request。
 func TestDefaultRequestIsNotSetForReplicaSet(t *testing.T) {
 	s := v1.PodSpec{}
 	s.Containers = []v1.Container{
@@ -896,6 +911,7 @@ func TestDefaultRequestIsNotSetForReplicaSet(t *testing.T) {
 	}
 	output := roundTrip(t, runtime.Object(rs))
 	rs2 := output.(*appsv1.ReplicaSet)
+	// 仅设置 CPU limit 的对象经过默认化后，request 应保持为零值。
 	defaultRequest := rs2.Spec.Template.Spec.Containers[0].Resources.Requests
 	requestValue := defaultRequest[v1.ResourceCPU]
 	if requestValue.String() != "0" {
@@ -903,17 +919,21 @@ func TestDefaultRequestIsNotSetForReplicaSet(t *testing.T) {
 	}
 }
 
+// roundTrip 将对象编码、解码并转换为目标类型，以此触发完整的默认化流程。
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
+	// 使用 legacy codec 编码，使输出携带默认版本信息。
 	data, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(SchemeGroupVersion), obj)
 	if err != nil {
 		t.Errorf("%v\n %#v", err, obj)
 		return nil
 	}
+	// 通用解码器会在解码时应用默认值。
 	obj2, err := runtime.Decode(legacyscheme.Codecs.UniversalDecoder(), data)
 	if err != nil {
 		t.Errorf("%v\nData: %s\nSource: %#v", err, string(data), obj)
 		return nil
 	}
+	// 显式转换为调用方期望的类型，避免解码结果类型不符。
 	obj3 := reflect.New(reflect.TypeOf(obj).Elem()).Interface().(runtime.Object)
 	err = legacyscheme.Scheme.Convert(obj2, obj3, nil)
 	if err != nil {

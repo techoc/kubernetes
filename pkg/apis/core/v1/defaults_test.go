@@ -38,12 +38,12 @@ import (
 	corev1 "k8s.io/kubernetes/pkg/apis/core/v1"
 	"k8s.io/kubernetes/pkg/features"
 
-	// ensure types are installed
+	// 仅用于触发 init：确保 v1 相关类型已注册到 scheme 中
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
-// featureGatedPodDefaults contains defaults applied to Pods only when all feature gates are enabled.
-// These are set in SetDefaults_Pod (not SetDefaults_PodSpec) to avoid spurious workload rollouts.
+// featureGatedPodDefaults 记录仅在所有特性门控都开启时才会应用到 Pod 上的默认值。
+// 这些默认值在 SetDefaults_Pod 中设置（而非 SetDefaults_PodSpec），避免读取旧版本数据时触发工作负载的无谓滚动更新。
 var featureGatedPodDefaults = map[string]string{
 	".Spec.Containers[0].Lifecycle.PostStart.HTTPGet.Protocol":                                           `"HTTP1"`,
 	".Spec.Containers[0].Lifecycle.PreStop.HTTPGet.Protocol":                                             `"HTTP1"`,
@@ -62,19 +62,22 @@ var featureGatedPodDefaults = map[string]string{
 	".Spec.InitContainers[0].StartupProbe.ProbeHandler.HTTPGet.Protocol":                                 `"HTTP1"`,
 }
 
-// TestWorkloadDefaults detects changes to defaults within PodTemplateSpec.
-// Defaulting changes within this type can cause spurious rollouts of workloads on API server update.
+// TestWorkloadDefaults 检测 PodTemplateSpec 内部默认值的变化。
+// 该类型中的默认值变更可能在 API Server 升级后引发工作负载的无谓滚动更新。
 func TestWorkloadDefaults(t *testing.T) {
 	t.Run("enabled_features", func(t *testing.T) { testWorkloadDefaults(t, true) })
+	// 分别在特性门控全开与全关两种状态下运行，确保默认值集合不受门控状态影响。
 	t.Run("disabled_features", func(t *testing.T) { testWorkloadDefaults(t, false) })
 }
 func testWorkloadDefaults(t *testing.T, featuresEnabled bool) {
 	setAllFeatures(t, featuresEnabled)
-	// New defaults under PodTemplateSpec are only acceptable if they would not be applied when reading data from a previous release.
-	// Forbidden: adding a new field `MyField *bool` and defaulting it to a non-nil value
-	// Forbidden: defaulting an existing field `MyField *bool` when it was previously not defaulted
-	// Forbidden: changing an existing default value
-	// Allowed: adding a new field `MyContainer *MyType` and defaulting a child of that type (e.g. `MyContainer.MyChildField`) if and only if MyContainer is non-nil
+	// PodTemplateSpec 下新增默认值只有在读取旧版本数据时不会被应用才是可接受的。
+	// 禁止：新增字段 `MyField *bool` 并将其默认为非 nil 值。
+	// 禁止：对过去不设默认值的已有字段 `MyField *bool` 新增默认值。
+	// 禁止：修改已有的默认值。
+	// 允许：新增字段 `MyContainer *MyType` 并对其子字段设默认值（如 `MyContainer.MyChildField`），但前提是 MyContainer 本身非 nil。
+	// 期望的默认值清单按字段路径索引，值是该字段序列化后的 JSON 文本；
+	// 一旦新增或改动默认值，这里就会失配，从而提醒维护者评估升级兼容性。
 	expectedDefaults := map[string]string{
 		".Spec.Containers[0].Env[0].ValueFrom.FieldRef.APIVersion":       `"v1"`,
 		".Spec.Containers[0].Env[0].ValueFrom.FileKeyRef.Optional":       "false",
@@ -198,6 +201,7 @@ func testWorkloadDefaults(t *testing.T, featuresEnabled bool) {
 	}
 	t.Run("empty PodTemplateSpec", func(t *testing.T) {
 		rc := &v1.ReplicationController{Spec: v1.ReplicationControllerSpec{Template: &v1.PodTemplateSpec{}}}
+		// 用一个完全空的模板做探测，任何非零字段都必然来自默认化逻辑。
 		template := rc.Spec.Template
 		defaults := detectDefaults(t, rc, reflect.ValueOf(template))
 		if !reflect.DeepEqual(expectedDefaults, defaults) {
@@ -206,6 +210,7 @@ func testWorkloadDefaults(t *testing.T, featuresEnabled bool) {
 		}
 	})
 	t.Run("hostnet PodTemplateSpec with ports", func(t *testing.T) {
+		// hostNetwork + 显式端口的场景：需要把“已知输入值”与默认值区分开，避免误报。
 		rc := &v1.ReplicationController{
 			Spec: v1.ReplicationControllerSpec{
 				Template: &v1.PodTemplateSpec{
@@ -224,7 +229,7 @@ func testWorkloadDefaults(t *testing.T, featuresEnabled bool) {
 		template := rc.Spec.Template
 		defaults := detectDefaults(t, rc, reflect.ValueOf(template))
 		expected := func() map[string]string {
-			// Set values that are known inputs
+			// 先登记那些由用例显式填入的值，它们不是默认值。
 			m := map[string]string{
 				".Spec.HostNetwork":                          "true",
 				".Spec.Containers[0].Ports[0].ContainerPort": "12345",
@@ -232,6 +237,7 @@ func testWorkloadDefaults(t *testing.T, featuresEnabled bool) {
 			m[".Spec.Containers"] = `[{"name":"","ports":[{"containerPort":12345,"protocol":"TCP"}],"resources":{},"terminationMessagePath":"/dev/termination-log","terminationMessagePolicy":"File","imagePullPolicy":"IfNotPresent"}]`
 			m[".Spec.Containers[0].Ports"] = `[{"containerPort":12345,"protocol":"TCP"}]`
 			for k, v := range expectedDefaults {
+				// 已知输入优先，剩余的键才沿用空模板场景下观测到的默认值。
 				if _, found := m[k]; !found {
 					m[k] = v
 				}
@@ -245,20 +251,21 @@ func testWorkloadDefaults(t *testing.T, featuresEnabled bool) {
 	})
 }
 
-// TestPodDefaults detects changes to defaults within PodSpec.
-// Defaulting changes within this type (*especially* within containers) can cause kubelets to restart containers on API server update.
+// TestPodDefaults 检测 PodSpec 内部默认值的变化。
+// 该类型中的默认值变更（尤其是容器内部字段）可能在 API Server 升级后导致 kubelet 重启容器。
 func TestPodDefaults(t *testing.T) {
 	t.Run("enabled_features", func(t *testing.T) { testPodDefaults(t, true) })
+	// 与 PodTemplateSpec 一样，需要在门控全开/全关两种状态下锁定默认值集合。
 	t.Run("disabled_features", func(t *testing.T) { testPodDefaults(t, false) })
 }
 func testPodDefaults(t *testing.T, featuresEnabled bool) {
 	setAllFeatures(t, featuresEnabled)
 	pod := &v1.Pod{}
-	// New defaults under PodSpec are only acceptable if they would not be applied when reading data from a previous release.
-	// Forbidden: adding a new field `MyField *bool` and defaulting it to a non-nil value
-	// Forbidden: defaulting an existing field `MyField *bool` when it was previously not defaulted
-	// Forbidden: changing an existing default value
-	// Allowed: adding a new field `MyContainer *MyType` and defaulting a child of that type (e.g. `MyContainer.MyChildField`) if and only if MyContainer is non-nil
+	// PodSpec 下新增默认值只有在读取旧版本数据时不会被应用才是可接受的。
+	// 禁止：新增字段 `MyField *bool` 并将其默认为非 nil 值。
+	// 禁止：对过去不设默认值的已有字段 `MyField *bool` 新增默认值。
+	// 禁止：修改已有的默认值。
+	// 允许：新增字段 `MyContainer *MyType` 并对其子字段设默认值（如 `MyContainer.MyChildField`），但前提是 MyContainer 本身非 nil。
 	expectedDefaults := map[string]string{
 		".Spec.Containers[0].Env[0].ValueFrom.FieldRef.APIVersion":       `"v1"`,
 		".Spec.Containers[0].Env[0].ValueFrom.FileKeyRef.Optional":       "false",
@@ -280,7 +287,7 @@ func testPodDefaults(t *testing.T, featuresEnabled bool) {
 		".Spec.Containers[0].ReadinessProbe.PeriodSeconds":               `10`,
 		".Spec.Containers[0].ReadinessProbe.SuccessThreshold":            `1`,
 		".Spec.Containers[0].ReadinessProbe.TimeoutSeconds":              `1`,
-		".Spec.Containers[0].Resources.Requests":                         `{"":"0"}`, // this gets defaulted from the limits field
+		".Spec.Containers[0].Resources.Requests":                         `{"":"0"}`, // 该值是从 limits 字段默认推导出来的
 		".Spec.Containers[0].StartupProbe.FailureThreshold":              "3",
 		".Spec.Containers[0].StartupProbe.ProbeHandler.HTTPGet.Path":     `"/"`,
 		".Spec.Containers[0].StartupProbe.ProbeHandler.HTTPGet.Scheme":   `"HTTP"`,
@@ -332,7 +339,7 @@ func testPodDefaults(t *testing.T, featuresEnabled bool) {
 		".Spec.InitContainers[0].ReadinessProbe.PeriodSeconds":                                             `10`,
 		".Spec.InitContainers[0].ReadinessProbe.SuccessThreshold":                                          `1`,
 		".Spec.InitContainers[0].ReadinessProbe.TimeoutSeconds":                                            `1`,
-		".Spec.InitContainers[0].Resources.Requests":                                                       `{"":"0"}`, // this gets defaulted from the limits field
+		".Spec.InitContainers[0].Resources.Requests":                                                       `{"":"0"}`, // 该值是从 limits 字段默认推导出来的
 		".Spec.InitContainers[0].TerminationMessagePath":                                                   `"/dev/termination-log"`,
 		".Spec.InitContainers[0].TerminationMessagePolicy":                                                 `"File"`,
 		".Spec.InitContainers[0].StartupProbe.FailureThreshold":                                            "3",
@@ -384,6 +391,7 @@ func testPodDefaults(t *testing.T, featuresEnabled bool) {
 		".Spec.Volumes[0].VolumeSource.Secret.DefaultMode":                                            `420`,
 	}
 	if featuresEnabled {
+		// 门控开启时，特性相关的默认值会额外出现在 Pod 上，需要并入期望集合。
 		maps.Copy(expectedDefaults, featureGatedPodDefaults)
 	}
 	defaults := detectDefaults(t, pod, reflect.ValueOf(pod))
@@ -393,8 +401,12 @@ func testPodDefaults(t *testing.T, featuresEnabled bool) {
 	}
 }
 
+// TestPodResourcesDefaults 验证 Pod 级别 resources 与容器级别 resources 的默认值推导关系，
+// 重点覆盖 PodLevelResources 特性门控开启时的请求值汇总与回退逻辑。
 func TestPodResourcesDefaults(t *testing.T) {
 	cases := []struct {
+		// 表格字段：podLevelResourcesEnabled 控制是否开启 PodLevelResources 门控；
+		// podResources 为 Pod 级输入，containers 为各容器输入，expectedPodSpec 为默认化后的期望结果。
 		name                     string
 		podLevelResourcesEnabled bool
 		containers               []v1.Container
@@ -402,12 +414,14 @@ func TestPodResourcesDefaults(t *testing.T) {
 		expectedPodSpec          v1.PodSpec
 	}{
 		{
+			// 双方均未设置资源：默认情况下什么都不应被填充。
 			name:       "pod resources=unset, container resources=unset",
 			containers: []v1.Container{{Resources: v1.ResourceRequirements{}}, {Resources: v1.ResourceRequirements{}}},
 			expectedPodSpec: v1.PodSpec{
 				Containers: []v1.Container{{Resources: v1.ResourceRequirements{}}, {Resources: v1.ResourceRequirements{}}},
 			},
 		}, {
+			// 容器仅设置 limits：期望 requests 按 limits 复制（传统默认行为）。
 			name: "pod resources=unset, container requests=unset limits=set",
 			containers: []v1.Container{
 				{
@@ -454,6 +468,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// 容器仅设置 requests：期望保持原样，不反向推导 limits。
 			name: "pod resources=unset, container requests=set limits=unset",
 			containers: []v1.Container{
 				{
@@ -492,6 +507,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// 容器 requests 与 limits 均显式设置：默认值不应覆盖任何一方。
 			name: "pod resources=unset, container requests=set limits=set",
 			containers: []v1.Container{
 				{
@@ -546,6 +562,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// 门控开启且仅 Pod 设置 limits：Pod 级 requests 应由 limits 推导。
 			name:                     "pod requests=unset limits=set, container resources=unset",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -567,6 +584,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// Pod 级 limits 为 nil 时退化为容器级默认：容器 limits 仍推导各自的 requests。
 			name:                     "pod limits=nil, container requests=unset limits=set",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -617,6 +635,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// 空 map 与 nil 等价：同样不应干扰容器级资源的默认化。
 			name:                     "pod limits=empty map, container requests=unset limits=set",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -667,6 +686,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// Pod 级 requests 为空 map：期望由 Pod limits 与各容器 requests 汇总计算。
 			name:                     "pod requests=empty map limits=set, container requests=unset limits=set",
 			podLevelResourcesEnabled: true,
 			containers: []v1.Container{
@@ -731,6 +751,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// Pod 级 requests 为 nil：与空 map 场景应有相同的汇总结果。
 			name:                     "pod requests=nil limits=set, container requests=unset limits=set",
 			podLevelResourcesEnabled: true,
 			containers: []v1.Container{
@@ -795,6 +816,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// Pod 与容器同时设置 limits：Pod 级 requests 取各容器 requests 之和。
 			name:                     "pod requests=unset limits=set, container requests=unset limits=set",
 			podLevelResourcesEnabled: true,
 			containers: []v1.Container{
@@ -858,6 +880,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// 容器已有 requests 时，Pod 级 requests 应累加各容器的显式 requests。
 			name:                     "pod requests=unset limits=set, container requests=set limits=unset",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -913,6 +936,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// 仅 CPU 有 limit：只推导 CPU 的 requests，不应凭空生成内存字段。
 			name:                     "pod requests=unset cpu limits=set, container resources=unset",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -945,6 +969,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// Pod 与容器双方均显式设置 requests/limits：验证优先级与汇总行为。
 			name:                     "pod requests=unset limits=set, container requests=set limits=set",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1016,6 +1041,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// 容器仅设置内存 requests：CPU 部分仍需由 Pod limits 推导，内存部分保持显式值。
 			name:                     "pod requests=unset limits=set, container memory requests=set limits=unset",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1069,6 +1095,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// 容器出现非 CPU/内存资源：验证这些受限资源不参与默认推导。
 			name:                     "pod limits=set, container unsupported requests=set limits=set",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1126,6 +1153,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// Pod 与容器均含非标准资源：验证默认逻辑对这类资源的处理策略。
 			name:                     "pod unsupported resources limits=set, container unsupported requests=set limits=set",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1178,6 +1206,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// 标准资源与非标准资源混用：验证只对受支持资源做汇总。
 			name:                     "pod supported and unsupported resources limits=set, container unsupported requests=set limits=set",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1236,6 +1265,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// HugePages 场景一：Pod 仅有 CPU limit，容器 HugePages limit 不应被误汇总。
 			name:                     "pod has cpu limit with hugepages requests=unset limits=unset, container hugepages requests=unset limits=set",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1298,6 +1328,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// HugePages 场景二：Pod 仅有 CPU request，同样不应波及 HugePages。
 			name:                     "pod has cpu request with hugepages requests=unset limits=unset, container hugepages requests=unset limits=set",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1360,6 +1391,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// Pod 与容器同时设置同规格 HugePages limit：验证默认与汇总行为。
 			name:                     "pod hugepages requests=unset limits=set, container hugepages requests=unset limits=set",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1423,6 +1455,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// HugePages 已有 requests：验证已有值不被 limits 覆盖。
 			name:                     "pod hugepages requests=set limits=set, container hugepages requests=unset limits=set",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1490,6 +1523,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// 容器无 HugePages 设置而 Pod 有：验证 Pod 级值如何向下传递。
 			name:                     "pod hugepages requests=set limits=set, container hugepages requests=unset limits=unset",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1525,6 +1559,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 				},
 			},
 		}, {
+			// Pod 与容器使用不同 HugePages 页大小：验证两者互不干扰。
 			name:                     "pod hugepages requests=unset limits=set, container hugepages requests=unset limits=set different hugepagesizes between pod and container level",
 			podLevelResourcesEnabled: true,
 			podResources: &v1.ResourceRequirements{
@@ -1594,6 +1629,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.podLevelResourcesEnabled {
+				// 仅对该用例开启门控；SetFeatureGateDuringTest 会在子测试结束时自动恢复。
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, true)
 			}
 			spec := v1.PodSpec{
@@ -1601,7 +1637,9 @@ func TestPodResourcesDefaults(t *testing.T) {
 				Resources:  tc.podResources,
 			}
 			p := v1.Pod{Spec: *spec.DeepCopy()}
+			// 深拷贝避免用例输入被默认化逻辑就地修改，影响后续断言。
 			corev1.SetDefaults_Pod(&p)
+			// 逐个容器校验 requests：只检查期望集合中出现的资源键。
 			for i, container := range p.Spec.Containers {
 				for resource, quantity := range container.Resources.Requests {
 					if quantity.Cmp(tc.expectedPodSpec.Containers[i].Resources.Requests[resource]) != 0 {
@@ -1611,6 +1649,7 @@ func TestPodResourcesDefaults(t *testing.T) {
 			}
 
 			if tc.podResources != nil {
+				// 仅在 Pod 级资源存在时校验其默认值，避免空指针解引用。
 				for resource, quantity := range p.Spec.Resources.Requests {
 					if quantity.Cmp(tc.expectedPodSpec.Resources.Requests[resource]) != 0 {
 						t.Errorf("got: %v, expected: %v", quantity, tc.expectedPodSpec.Resources.Requests[resource])
@@ -1621,8 +1660,11 @@ func TestPodResourcesDefaults(t *testing.T) {
 	}
 }
 
+// TestPodHostNetworkDefaults 验证 hostNetwork 开启时 HostPort 的默认值设置位置：
+// 只应由 SetDefaults_Pod 处理，而不应在 SetDefaults_PodSpec 中生效。
 func TestPodHostNetworkDefaults(t *testing.T) {
 	cases := []struct {
+		// expectPodDefault 与 expectPodSpecDefault 分别记录两条默认化路径上是否期望 HostPort 被填充。
 		name                 string
 		hostNet              bool
 		expectPodDefault     bool
@@ -1649,13 +1691,15 @@ func TestPodHostNetworkDefaults(t *testing.T) {
 						ContainerPort: portNum,
 						Protocol:      v1.ProtocolTCP,
 						// Note: HostPort is not set
+						// 有意留空 HostPort，这样才能观察默认化是否发生。
 					}},
 				}},
 			}
 
-			// Test Pod defaulting.
+			// 走 Pod 级别的默认化路径。
 			p := v1.Pod{Spec: *spec.DeepCopy()}
 			corev1.SetDefaults_Pod(&p)
+			// hostNetwork=true 时 HostPort 应等于 ContainerPort；为 false 时应保持 0。
 			if got := p.Spec.Containers[0].Ports[0].HostPort; tc.expectPodDefault && got == 0 {
 				t.Errorf("expected Pod HostPort to be defaulted, got %v", got)
 			}
@@ -1663,9 +1707,10 @@ func TestPodHostNetworkDefaults(t *testing.T) {
 				t.Errorf("expected Pod HostPort to be 0, got %v", got)
 			}
 
-			// Test PodSpec defaulting.
+			// 走 PodSpec 级别的默认化路径。
 			s := spec.DeepCopy()
 			corev1.SetDefaults_PodSpec(s)
+			// 该路径不应设置 HostPort，两个用例均期望保持为 0。
 			if got := s.Containers[0].Ports[0].HostPort; tc.expectPodSpecDefault && got == 0 {
 				t.Errorf("expected PodSpec HostPort to be defaulted, got %v", got)
 			}
@@ -1681,6 +1726,8 @@ type testPath struct {
 	value reflect.Value
 }
 
+// detectDefaults 通过反射遍历对象字段，把每个非零字段的路径和序列化值记录下来，
+// 从而穷举出当前版本实际施加的所有默认值。
 func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[string]string {
 	defaults := map[string]string{}
 	toVisit := []testPath{{path: "", value: v}}
@@ -1690,6 +1737,7 @@ func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[strin
 		toVisit = toVisit[1:]
 
 		legacyscheme.Scheme.Default(obj)
+		// 每次访问都重新默认化，使后续字段能观察到默认值带来的连带影响。
 		defaultedV := visit.value
 		zeroV := reflect.Zero(visit.value.Type())
 
@@ -1705,6 +1753,7 @@ func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[strin
 
 		case visit.value.Kind() == reflect.Slice:
 			if !visit.value.IsNil() {
+				// 切片已有值：可能是默认值也可能是显式输入，先记录再尝试下钻到元素。
 				// if we already have a value, we either got defaulted or there
 				// was a fixed input - flag it and see if we can descend
 				// anyway.
@@ -1713,8 +1762,11 @@ func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[strin
 				toVisit = append(toVisit, testPath{path: visit.path + "[0]", value: visit.value.Index(0)})
 			} else if visit.value.Type().Elem().Kind() == reflect.Struct {
 				if strings.HasPrefix(visit.path, ".ObjectMeta.ManagedFields[") {
+					// 元数据 managedFields 由系统维护，不属于 API 默认值范畴，直接跳过。
 					break
 				}
+				// 对 nil 的结构体切片，临时追加一个零值元素以便递归发现其子字段默认值；
+				// ManagedFields 是元数据内部实现，跳过以免产生噪声。
 				// if we don't already have a value, and contain structs, add an empty item so we can recurse
 				item := reflect.New(visit.value.Type().Elem()).Elem()
 				visit.value.Set(reflect.Append(visit.value, item))
@@ -1725,13 +1777,16 @@ func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[strin
 
 		case visit.value.Kind() == reflect.Map:
 			if !visit.value.IsNil() {
+				// map 已有值说明被默认化，记录其 JSON 表示。
 				// if we already have a value, we got defaulted
 				marshaled, _ := json.Marshal(defaultedV.Interface())
 				defaults[visit.path] = string(marshaled)
 			} else if visit.value.Type().Key().Kind() == reflect.String && visit.value.Type().Elem().Kind() == reflect.Struct {
 				if strings.HasPrefix(visit.path, ".ObjectMeta.ManagedFields[") {
+					// 同样跳过 managedFields。
 					break
 				}
+				// 对 nil 的结构体 map 注入一个零值条目，递归探测其结构内部。
 				// if we don't already have a value, and contain structs, add an empty item so we can recurse
 				item := reflect.New(visit.value.Type().Elem()).Elem()
 				visit.value.Set(reflect.MakeMap(visit.value.Type()))
@@ -1758,6 +1813,7 @@ func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[strin
 			}
 
 		case isPrimitive(visit.value.Kind()):
+			// 基本类型只有非零值才算被默认化。
 			if !reflect.DeepEqual(defaultedV.Interface(), zeroV.Interface()) {
 				marshaled, _ := json.Marshal(defaultedV.Interface())
 				defaults[visit.path] = string(marshaled)
@@ -1771,6 +1827,7 @@ func detectDefaults(t *testing.T, obj runtime.Object, v reflect.Value) map[strin
 	return defaults
 }
 
+// isPrimitive 判断某种类是否属于需要比较零值的基本类型。
 func isPrimitive(k reflect.Kind) bool {
 	switch k {
 	case reflect.String, reflect.Bool, reflect.Int32, reflect.Int64, reflect.Int:
@@ -1780,6 +1837,8 @@ func isPrimitive(k reflect.Kind) bool {
 	}
 }
 
+// roundTrip 将对象编码为 wire 格式再解码并转换回内部版本，
+// 借此触发默认化链条，模拟对象经过 API Server 往返后的状态。
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 	codec := legacyscheme.Codecs.LegacyCodec(corev1.SchemeGroupVersion)
 	data, err := runtime.Encode(codec, obj)
@@ -1801,8 +1860,11 @@ func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 	return obj3
 }
 
+// TestSetDefaultServiceAccountAlias 验证废弃字段 deprecatedServiceAccount 向 serviceAccountName 的别名同步，
+// 包括两者冲突时新字段优先的规则。
 func TestSetDefaultServiceAccountAlias(t *testing.T) {
 	tests := []struct {
+		// 覆盖新旧字段的各种组合：都为空、相同、冲突以及仅设置其中之一。
 		name                     string
 		serviceAccountName       string
 		deprecatedServiceAccount string
@@ -1825,6 +1887,7 @@ func TestSetDefaultServiceAccountAlias(t *testing.T) {
 			obj2 := roundTrip(t, runtime.Object(pod))
 			pod2 := obj2.(*v1.Pod)
 			if pod2.Spec.ServiceAccountName != tc.expected {
+				// 两个字段在往返后都应收敛到同一个期望值。
 				t.Errorf("expected serviceAccountName %q, got %q", tc.expected, pod2.Spec.ServiceAccountName)
 			}
 			if pod2.Spec.DeprecatedServiceAccount != tc.expected {
@@ -1834,8 +1897,11 @@ func TestSetDefaultServiceAccountAlias(t *testing.T) {
 	}
 }
 
+// TestSetDefaultReplicationController 验证 RC 的 selector 和 labels 从 Pod 模板标签复制的默认化规则，
+// 以及已有值不被覆盖的行为。
 func TestSetDefaultReplicationController(t *testing.T) {
 	tests := []struct {
+		// expectLabels / expectSelector 标记 roundTrip 后 RC 的 Labels / Selector 是否应等于模板标签。
 		rc             *v1.ReplicationController
 		expectLabels   bool
 		expectSelector bool
@@ -1920,6 +1986,7 @@ func TestSetDefaultReplicationController(t *testing.T) {
 
 	for _, test := range tests {
 		rc := test.rc
+		// 通过 roundTrip 触发默认化，再比较复制关系。
 		obj2 := roundTrip(t, runtime.Object(rc))
 		rc2, ok := obj2.(*v1.ReplicationController)
 		if !ok {
@@ -1943,8 +2010,11 @@ func TestSetDefaultReplicationController(t *testing.T) {
 	}
 }
 
+// TestSetDefaultReplicationControllerReplicas 验证副本数未设置时默认为 1，
+// 而已设置的值（包括 0）必须原样保留。
 func TestSetDefaultReplicationControllerReplicas(t *testing.T) {
 	tests := []struct {
+		// 三个用例分别覆盖 nil（未设置）、显式 0 与显式 3。
 		rc             v1.ReplicationController
 		expectReplicas int32
 	}{
@@ -2010,9 +2080,13 @@ func TestSetDefaultReplicationControllerReplicas(t *testing.T) {
 	}
 }
 
+// InitContainerValidator 是校验 init container 某个字段子集的断言函数类型。
 type InitContainerValidator func(got, expected *v1.Container) error
 
+// TestSetDefaultReplicationControllerInitContainers 验证 init container 经过默认化后，
+// 镜像拉取策略、字段引用、端口协议、资源、探针和生命周期钩子等均被正确填充。
 func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
+	// 各 validator 只比较用例关心的字段，避免被其他默认化差异干扰。
 	assertEnvFieldRef := func(got, expected *v1.Container) error {
 		if len(got.Env) != len(expected.Env) {
 			return fmt.Errorf("different number of env: got <%v>, expected <%v>", len(got.Env), len(expected.Env))
@@ -2095,7 +2169,7 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 	}
 
 	assertProb := func(got, expected *v1.Container) error {
-		// Assert LivenessProbe
+		// 校验存活探针的默认路径、协议与各阈值。
 		if got.LivenessProbe.ProbeHandler.HTTPGet.Path != expected.LivenessProbe.ProbeHandler.HTTPGet.Path ||
 			got.LivenessProbe.ProbeHandler.HTTPGet.Scheme != expected.LivenessProbe.ProbeHandler.HTTPGet.Scheme ||
 			got.LivenessProbe.FailureThreshold != expected.LivenessProbe.FailureThreshold ||
@@ -2105,7 +2179,7 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 			return fmt.Errorf("different LivenessProbe: got <%v>, expected <%v>", got.LivenessProbe, expected.LivenessProbe)
 		}
 
-		// Assert ReadinessProbe
+		// 校验就绪探针的默认路径、协议与各阈值。
 		if got.ReadinessProbe.ProbeHandler.HTTPGet.Path != expected.ReadinessProbe.ProbeHandler.HTTPGet.Path ||
 			got.ReadinessProbe.ProbeHandler.HTTPGet.Scheme != expected.ReadinessProbe.ProbeHandler.HTTPGet.Scheme ||
 			got.ReadinessProbe.FailureThreshold != expected.ReadinessProbe.FailureThreshold ||
@@ -2128,9 +2202,11 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 	}
 
 	cpu, _ := resource.ParseQuantity("100m")
+	// 预解析数量值，供期望资源列表复用。
 	mem, _ := resource.ParseQuantity("100Mi")
 
 	tests := []struct {
+		// 每个用例只设置 init container 的某一个方面，并用对应 validator 校验默认化结果。
 		name       string
 		rc         v1.ReplicationController
 		expected   []v1.Container
@@ -2138,6 +2214,7 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 	}{
 		{
 			name: "imagePullIPolicy",
+			// 期望未指定拉取策略时默认为 PullAlways（由镜像名无 tag 推导）。
 			rc: v1.ReplicationController{
 				Spec: v1.ReplicationControllerSpec{
 					Template: &v1.PodTemplateSpec{
@@ -2161,6 +2238,7 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 		},
 		{
 			name: "FieldRef",
+			// 期望 FieldRef 的 APIVersion 被默认填充为 v1。
 			rc: v1.ReplicationController{
 				Spec: v1.ReplicationControllerSpec{
 					Template: &v1.PodTemplateSpec{
@@ -2205,6 +2283,7 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 		},
 		{
 			name: "ContainerPort",
+			// 期望容器端口协议被默认填充为 TCP。
 			rc: v1.ReplicationController{
 				Spec: v1.ReplicationControllerSpec{
 					Template: &v1.PodTemplateSpec{
@@ -2238,6 +2317,7 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 		},
 		{
 			name: "Resources",
+			// 已显式设置的 limits/requests 应保持原值。
 			rc: v1.ReplicationController{
 				Spec: v1.ReplicationControllerSpec{
 					Template: &v1.PodTemplateSpec{
@@ -2280,6 +2360,7 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 		},
 		{
 			name: "Probe",
+			// 期望探针的默认路径、协议与四个阈值全部补齐。
 			rc: v1.ReplicationController{
 				Spec: v1.ReplicationControllerSpec{
 					Template: &v1.PodTemplateSpec{
@@ -2340,6 +2421,7 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 		},
 		{
 			name: "LifeCycle",
+			// 期望生命周期钩子的 HTTPGet 路径与协议被默认填充。
 			rc: v1.ReplicationController{
 				Spec: v1.ReplicationControllerSpec{
 					Template: &v1.PodTemplateSpec{
@@ -2394,6 +2476,7 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 	}
 
 	assertInitContainers := func(got, expected []v1.Container, validators []InitContainerValidator) error {
+		// 统一比较容器数量并对每个容器运行该用例指定的 validators。
 		if len(got) != len(expected) {
 			return fmt.Errorf("different number of init container: got <%d>, expected <%d>",
 				len(got), len(expected))
@@ -2428,6 +2511,8 @@ func TestSetDefaultReplicationControllerInitContainers(t *testing.T) {
 	}
 }
 
+// TestSetDefaultService 验证空 Service 的默认 type 为 ClusterIP、sessionAffinity 为 None，
+// 且不应生成空的 sessionAffinityConfig。
 func TestSetDefaultService(t *testing.T) {
 	svc := &v1.Service{}
 	obj2 := roundTrip(t, runtime.Object(svc))
@@ -2443,8 +2528,11 @@ func TestSetDefaultService(t *testing.T) {
 	}
 }
 
+// TestSetDefaultServiceSessionAffinityConfig 验证 ClientIP 会话亲和场景下，
+// 无论配置缺失到哪一层，超时时间都会被填充为默认值。
 func TestSetDefaultServiceSessionAffinityConfig(t *testing.T) {
 	testCases := map[string]v1.Service{
+		// 三种残缺程度：整个 config 缺失、ClientIP 缺失、TimeoutSeconds 缺失。
 		"SessionAffinityConfig is empty": {
 			Spec: v1.ServiceSpec{
 				SessionAffinity:       v1.ServiceAffinityClientIP,
@@ -2474,6 +2562,7 @@ func TestSetDefaultServiceSessionAffinityConfig(t *testing.T) {
 		obj2 := roundTrip(t, runtime.Object(&test))
 		svc2 := obj2.(*v1.Service)
 		if svc2.Spec.SessionAffinityConfig == nil || svc2.Spec.SessionAffinityConfig.ClientIP == nil || svc2.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds == nil {
+			// 任一层级缺失都意味着默认化未完整执行，直接致命失败。
 			t.Fatalf("Case: %s, unexpected empty SessionAffinityConfig/ClientIP/TimeoutSeconds when session affinity type: %s, got: %v", name, v1.ServiceAffinityClientIP, svc2.Spec.SessionAffinityConfig)
 		}
 		if *svc2.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds != v1.DefaultClientIPServiceAffinitySeconds {
@@ -2482,10 +2571,13 @@ func TestSetDefaultServiceSessionAffinityConfig(t *testing.T) {
 	}
 }
 
+// TestSetDefaultServiceLoadbalancerIPMode 验证 LoadBalancer 类型 Service 的 Ingress IPMode：
+// 未设置时默认为 VIP，已设置时保持原值。
 func TestSetDefaultServiceLoadbalancerIPMode(t *testing.T) {
 	modeVIP := v1.LoadBalancerIPModeVIP
 	modeProxy := v1.LoadBalancerIPModeProxy
 	testCases := []struct {
+		// 分别覆盖仅设置 IP（期望默认 VIP）与 IP + IPMode 均已设置（期望保持 Proxy）两种输入。
 		name           string
 		svc            *v1.Service
 		expectedIPMode []*v1.LoadBalancerIPMode
@@ -2533,6 +2625,7 @@ func TestSetDefaultServiceLoadbalancerIPMode(t *testing.T) {
 	}
 }
 
+// TestSetDefaultSecretVolumeSource 验证 Secret 卷的 DefaultMode 被填充为默认权限。
 func TestSetDefaultSecretVolumeSource(t *testing.T) {
 	s := v1.PodSpec{}
 	s.Volumes = []v1.Volume{
@@ -2549,12 +2642,14 @@ func TestSetDefaultSecretVolumeSource(t *testing.T) {
 	pod2 := output.(*v1.Pod)
 	defaultMode := pod2.Spec.Volumes[0].VolumeSource.Secret.DefaultMode
 	expectedMode := v1.SecretVolumeSourceDefaultMode
+	// roundTrip 触发默认化后再读取 DefaultMode，与常量默认值比较。
 
 	if defaultMode == nil || *defaultMode != expectedMode {
 		t.Errorf("Expected secret DefaultMode %v, got %v", expectedMode, defaultMode)
 	}
 }
 
+// TestSetDefaultConfigMapVolumeSource 验证 ConfigMap 卷的 DefaultMode 被填充为默认权限。
 func TestSetDefaultConfigMapVolumeSource(t *testing.T) {
 	s := v1.PodSpec{}
 	s.Volumes = []v1.Volume{
@@ -2571,12 +2666,14 @@ func TestSetDefaultConfigMapVolumeSource(t *testing.T) {
 	pod2 := output.(*v1.Pod)
 	defaultMode := pod2.Spec.Volumes[0].VolumeSource.ConfigMap.DefaultMode
 	expectedMode := v1.ConfigMapVolumeSourceDefaultMode
+	// roundTrip 触发默认化后再读取 DefaultMode，与常量默认值比较。
 
 	if defaultMode == nil || *defaultMode != expectedMode {
 		t.Errorf("Expected v1.ConfigMap DefaultMode %v, got %v", expectedMode, defaultMode)
 	}
 }
 
+// TestSetDefaultDownwardAPIVolumeSource 验证 DownwardAPI 卷的 DefaultMode 被填充为默认权限。
 func TestSetDefaultDownwardAPIVolumeSource(t *testing.T) {
 	s := v1.PodSpec{}
 	s.Volumes = []v1.Volume{
@@ -2593,12 +2690,14 @@ func TestSetDefaultDownwardAPIVolumeSource(t *testing.T) {
 	pod2 := output.(*v1.Pod)
 	defaultMode := pod2.Spec.Volumes[0].VolumeSource.DownwardAPI.DefaultMode
 	expectedMode := v1.DownwardAPIVolumeSourceDefaultMode
+	// roundTrip 触发默认化后再读取 DefaultMode，与常量默认值比较。
 
 	if defaultMode == nil || *defaultMode != expectedMode {
 		t.Errorf("Expected DownwardAPI DefaultMode %v, got %v", expectedMode, defaultMode)
 	}
 }
 
+// TestSetDefaultProjectedVolumeSource 验证 Projected 卷的 DefaultMode 被填充为默认权限。
 func TestSetDefaultProjectedVolumeSource(t *testing.T) {
 	s := v1.PodSpec{}
 	s.Volumes = []v1.Volume{
@@ -2615,12 +2714,14 @@ func TestSetDefaultProjectedVolumeSource(t *testing.T) {
 	pod2 := output.(*v1.Pod)
 	defaultMode := pod2.Spec.Volumes[0].VolumeSource.Projected.DefaultMode
 	expectedMode := v1.ProjectedVolumeSourceDefaultMode
+	// roundTrip 触发默认化后再读取 DefaultMode，与常量默认值比较。
 
 	if defaultMode == nil || *defaultMode != expectedMode {
 		t.Errorf("Expected v1.ProjectedVolumeSource DefaultMode %v, got %v", expectedMode, defaultMode)
 	}
 }
 
+// TestSetDefaultSecret 验证空 Secret 的类型被默认填充为 Opaque。
 func TestSetDefaultSecret(t *testing.T) {
 	s := &v1.Secret{}
 	obj2 := roundTrip(t, runtime.Object(s))
@@ -2631,11 +2732,13 @@ func TestSetDefaultSecret(t *testing.T) {
 	}
 }
 
+// TestSetDefaultPersistentVolume 验证 PV 的默认 phase、回收策略，以及 VolumeMode 未设置时默认为 Filesystem。
 func TestSetDefaultPersistentVolume(t *testing.T) {
 	fsMode := v1.PersistentVolumeFilesystem
 	blockMode := v1.PersistentVolumeBlock
 
 	tests := []struct {
+		// 覆盖 VolumeMode 为 nil（期望默认 Filesystem）以及显式 Filesystem/Block 三种输入。
 		name               string
 		volumeMode         *v1.PersistentVolumeMode
 		expectedVolumeMode v1.PersistentVolumeMode
@@ -2677,11 +2780,13 @@ func TestSetDefaultPersistentVolume(t *testing.T) {
 	}
 }
 
+// TestSetDefaultPersistentVolumeClaim 验证 PVC 的默认 phase 与 VolumeMode 默认化规则。
 func TestSetDefaultPersistentVolumeClaim(t *testing.T) {
 	fsMode := v1.PersistentVolumeFilesystem
 	blockMode := v1.PersistentVolumeBlock
 
 	tests := []struct {
+		// 覆盖 VolumeMode 为 nil（期望默认 Filesystem）以及显式 Filesystem/Block 三种输入。
 		name               string
 		volumeMode         *v1.PersistentVolumeMode
 		expectedVolumeMode v1.PersistentVolumeMode
@@ -2720,11 +2825,13 @@ func TestSetDefaultPersistentVolumeClaim(t *testing.T) {
 	}
 }
 
+// TestSetDefaultEphemeral 验证临时卷（Ephemeral）中 PVC 模板的 VolumeMode 默认化规则。
 func TestSetDefaultEphemeral(t *testing.T) {
 	fsMode := v1.PersistentVolumeFilesystem
 	blockMode := v1.PersistentVolumeBlock
 
 	tests := []struct {
+		// 覆盖 VolumeMode 为 nil（期望默认 Filesystem）以及显式 Filesystem/Block 三种输入。
 		name               string
 		volumeMode         *v1.PersistentVolumeMode
 		expectedVolumeMode v1.PersistentVolumeMode
@@ -2772,8 +2879,10 @@ func TestSetDefaultEphemeral(t *testing.T) {
 	}
 }
 
+// TestSetDefaultEndpointsProtocol 验证 Endpoints 端口协议未设置时默认为 TCP，已设置时原样保留。
 func TestSetDefaultEndpointsProtocol(t *testing.T) {
 	in := &v1.Endpoints{Subsets: []v1.EndpointSubset{
+		// 刻意混入空协议与显式 UDP 两种端口，验证“空则填充、非空则保留”。
 		{Ports: []v1.EndpointPort{{}, {Protocol: "UDP"}, {}}},
 	}}
 	obj := roundTrip(t, runtime.Object(in))
@@ -2794,6 +2903,7 @@ func TestSetDefaultEndpointsProtocol(t *testing.T) {
 	}
 }
 
+// TestSetDefaultServiceTargetPort 验证 Service 端口的 TargetPort 未设置时默认等于 Port，已设置时不被覆盖。
 func TestSetDefaultServiceTargetPort(t *testing.T) {
 	in := &v1.Service{Spec: v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 1234}}}}
 	obj := roundTrip(t, runtime.Object(in))
@@ -2803,6 +2913,7 @@ func TestSetDefaultServiceTargetPort(t *testing.T) {
 	}
 
 	in = &v1.Service{Spec: v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 1234, TargetPort: intstr.FromInt32(5678)}}}}
+	// 第二段：显式 TargetPort 必须保持不变。
 	obj = roundTrip(t, runtime.Object(in))
 	out = obj.(*v1.Service)
 	if out.Spec.Ports[0].TargetPort != intstr.FromInt32(5678) {
@@ -2810,8 +2921,9 @@ func TestSetDefaultServiceTargetPort(t *testing.T) {
 	}
 }
 
+// TestSetDefaultServicePort 验证 Service 端口的协议与 TargetPort：显式设置时保留，未设置时分别默认为 TCP 和 Port。
 func TestSetDefaultServicePort(t *testing.T) {
-	// Unchanged if set.
+	// 第一段：显式设置的协议和 TargetPort 不应被更改。
 	in := &v1.Service{Spec: v1.ServiceSpec{
 		Ports: []v1.ServicePort{
 			{Protocol: "UDP", Port: 9376, TargetPort: intstr.FromString("p")},
@@ -2832,7 +2944,7 @@ func TestSetDefaultServicePort(t *testing.T) {
 		t.Errorf("Expected port %v, got %v", in.Spec.Ports[1].Port, out.Spec.Ports[1].TargetPort)
 	}
 
-	// Defaulted.
+	// 第二段：空值应被默认化为 TCP 以及与 Port 相同的 TargetPort。
 	in = &v1.Service{Spec: v1.ServiceSpec{
 		Ports: []v1.ServicePort{
 			{Protocol: "", Port: 9376, TargetPort: intstr.FromString("")},
@@ -2854,6 +2966,8 @@ func TestSetDefaultServicePort(t *testing.T) {
 	}
 }
 
+// TestSetDefaultServiceExternalTraffic 验证 ExternalTrafficPolicy 只在 NodePort/LoadBalancer
+// 等对外暴露类型上默认填充为 Cluster，其余类型保持为空。
 func TestSetDefaultServiceExternalTraffic(t *testing.T) {
 	in := &v1.Service{}
 	obj := roundTrip(t, runtime.Object(in))
@@ -2863,6 +2977,7 @@ func TestSetDefaultServiceExternalTraffic(t *testing.T) {
 	}
 
 	in = &v1.Service{Spec: v1.ServiceSpec{Type: v1.ServiceTypeNodePort}}
+	// NodePort 类型应默认填充 Cluster。
 	obj = roundTrip(t, runtime.Object(in))
 	out = obj.(*v1.Service)
 	if out.Spec.ExternalTrafficPolicy != v1.ServiceExternalTrafficPolicyCluster {
@@ -2870,6 +2985,7 @@ func TestSetDefaultServiceExternalTraffic(t *testing.T) {
 	}
 
 	in = &v1.Service{Spec: v1.ServiceSpec{Type: v1.ServiceTypeLoadBalancer}}
+	// LoadBalancer 类型同样应默认填充 Cluster。
 	obj = roundTrip(t, runtime.Object(in))
 	out = obj.(*v1.Service)
 	if out.Spec.ExternalTrafficPolicy != v1.ServiceExternalTrafficPolicyCluster {
@@ -2877,6 +2993,7 @@ func TestSetDefaultServiceExternalTraffic(t *testing.T) {
 	}
 
 	in = &v1.Service{Spec: v1.ServiceSpec{Type: v1.ServiceTypeClusterIP, ExternalIPs: []string{"1.2.3.4"}}}
+	// 带 ExternalIP 的 ClusterIP 也视为对外暴露，应默认填充 Cluster。
 	obj = roundTrip(t, runtime.Object(in))
 	out = obj.(*v1.Service)
 	if out.Spec.ExternalTrafficPolicy != v1.ServiceExternalTrafficPolicyCluster {
@@ -2884,6 +3001,7 @@ func TestSetDefaultServiceExternalTraffic(t *testing.T) {
 	}
 
 	in = &v1.Service{Spec: v1.ServiceSpec{Type: v1.ServiceTypeClusterIP}}
+	// 普通 ClusterIP 不填充该字段。
 	obj = roundTrip(t, runtime.Object(in))
 	out = obj.(*v1.Service)
 	if out.Spec.ExternalTrafficPolicy != "" {
@@ -2891,6 +3009,7 @@ func TestSetDefaultServiceExternalTraffic(t *testing.T) {
 	}
 
 	in = &v1.Service{Spec: v1.ServiceSpec{Type: v1.ServiceTypeExternalName}}
+	// ExternalName 也不填充该字段。
 	obj = roundTrip(t, runtime.Object(in))
 	out = obj.(*v1.Service)
 	if out.Spec.ExternalTrafficPolicy != "" {
@@ -2898,6 +3017,7 @@ func TestSetDefaultServiceExternalTraffic(t *testing.T) {
 	}
 }
 
+// TestSetDefaultNamespace 验证空 Namespace 的状态被默认填充为 Active。
 func TestSetDefaultNamespace(t *testing.T) {
 	s := &v1.Namespace{}
 	obj2 := roundTrip(t, runtime.Object(s))
@@ -2908,6 +3028,7 @@ func TestSetDefaultNamespace(t *testing.T) {
 	}
 }
 
+// TestSetDefaultNamespaceLabels 验证 Namespace 的 metadata.name 标签被默认设置为其名称。
 func TestSetDefaultNamespaceLabels(t *testing.T) {
 	theNs := "default-ns-labels-are-great"
 	s := &v1.Namespace{
@@ -2923,8 +3044,11 @@ func TestSetDefaultNamespaceLabels(t *testing.T) {
 	}
 }
 
+// TestSetDefaultPodSpecHostNetwork 验证 hostNetwork 开启时，普通容器与 init container 的 HostPort
+// 都会被默认设置为对应的 ContainerPort。
 func TestSetDefaultPodSpecHostNetwork(t *testing.T) {
 	portNum := int32(8080)
+	// 用 ContainerPort 与 HostPort 的相等关系来验证默认化是否生效。
 	s := v1.PodSpec{}
 	s.HostNetwork = true
 	s.Containers = []v1.Container{
@@ -2963,6 +3087,8 @@ func TestSetDefaultPodSpecHostNetwork(t *testing.T) {
 	}
 }
 
+// TestSetDefaultNodeStatusAllocatable 验证 Node 状态中 Allocatable 的默认化：
+// 未设置时回退到 Capacity，已设置时保持原值。
 func TestSetDefaultNodeStatusAllocatable(t *testing.T) {
 	capacity := v1.ResourceList{
 		v1.ResourceCPU:    resource.MustParse("1000m"),
@@ -2973,28 +3099,30 @@ func TestSetDefaultNodeStatusAllocatable(t *testing.T) {
 		v1.ResourceMemory: resource.MustParse("5G"),
 	}
 	tests := []struct {
+		// 四个用例覆盖 capacity/allocatable 的有无组合，验证回退与保留规则。
 		capacity            v1.ResourceList
 		allocatable         v1.ResourceList
 		expectedAllocatable v1.ResourceList
-	}{{ // Everything set, no defaulting.
+	}{{ // 两者都设置，无需默认化。
 		capacity:            capacity,
 		allocatable:         allocatable,
 		expectedAllocatable: allocatable,
-	}, { // Allocatable set, no defaulting.
+	}, { // 仅 Allocatable 设置，保持原值。
 		capacity:            nil,
 		allocatable:         allocatable,
 		expectedAllocatable: allocatable,
-	}, { // Capacity set, allocatable defaults to capacity.
+	}, { // 仅 Capacity 设置，Allocatable 应回退为 Capacity。
 		capacity:            capacity,
 		allocatable:         nil,
 		expectedAllocatable: capacity,
-	}, { // Nothing set, allocatable "defaults" to capacity.
+	}, { // 两者都未设置，Allocatable 最终也为 nil。
 		capacity:            nil,
 		allocatable:         nil,
 		expectedAllocatable: nil,
 	}}
 
 	copyResourceList := func(rl v1.ResourceList) v1.ResourceList {
+		// 深拷贝资源列表，避免默认化修改输入后污染同一结构体中的共享引用。
 		if rl == nil {
 			return nil
 		}
@@ -3006,6 +3134,7 @@ func TestSetDefaultNodeStatusAllocatable(t *testing.T) {
 	}
 
 	resourceListsEqual := func(a v1.ResourceList, b v1.ResourceList) bool {
+		// 用 Cmp 比较数量值，避免 Quantity 内部表示差异导致误判。
 		if len(a) != len(b) {
 			return false
 		}
@@ -3037,6 +3166,7 @@ func TestSetDefaultNodeStatusAllocatable(t *testing.T) {
 	}
 }
 
+// TestSetDefaultObjectFieldSelectorAPIVersion 验证 FieldRef 的 APIVersion 未设置时默认为 v1。
 func TestSetDefaultObjectFieldSelectorAPIVersion(t *testing.T) {
 	s := v1.PodSpec{
 		Containers: []v1.Container{
@@ -3059,13 +3189,15 @@ func TestSetDefaultObjectFieldSelectorAPIVersion(t *testing.T) {
 	s2 := pod2.Spec
 
 	apiVersion := s2.Containers[0].Env[0].ValueFrom.FieldRef.APIVersion
+	// 读取往返后的字段，与期望的 v1 比较。
 	if apiVersion != "v1" {
 		t.Errorf("Expected default APIVersion v1, got: %v", apiVersion)
 	}
 }
 
+// TestSetMinimumScalePod 验证资源请求的“取整”默认行为：极小的 requests 会被提升到最小可表示单位。
 func TestSetMinimumScalePod(t *testing.T) {
-	// verify we default if limits are specified (and that request=0 is preserved)
+	// 有 limits 时会触发默认化；同时验证 request=0 这类显式值不被覆盖。
 	s := v1.PodSpec{}
 	s.Containers = []v1.Container{
 		{
@@ -3104,8 +3236,10 @@ func TestSetMinimumScalePod(t *testing.T) {
 	}
 }
 
+// TestSetDefaultRequestsPod 验证容器 requests 默认从 limits 推导，且显式设置为零的值被保留。
 func TestSetDefaultRequestsPod(t *testing.T) {
 	// verify we default if limits are specified (and that request=0 is preserved)
+	// 第一段：limits 存在时，缺失的 CPU request 应从 limits 复制，而显式为 0 的 memory request 保持为 0。
 	s := v1.PodSpec{}
 	s.Containers = []v1.Container{
 		{
@@ -3153,7 +3287,7 @@ func TestSetDefaultRequestsPod(t *testing.T) {
 		t.Errorf("Expected request memory: %s, got: %s", "0", requestValue.String())
 	}
 
-	// verify we do nothing if no limits are specified
+	// 第二段：没有任何 limits 时，不应凭空生成 requests。
 	s = v1.PodSpec{}
 	s.Containers = []v1.Container{{}}
 	s.InitContainers = []v1.Container{{}}
@@ -3172,6 +3306,8 @@ func TestSetDefaultRequestsPod(t *testing.T) {
 	}
 }
 
+// TestDefaultRequestIsNotSetForReplicationController 验证 PodTemplateSpec（RC 模板）中的容器不会
+// 像独立 Pod 那样从 limits 推导 requests，以免升级时改变工作负载的配置。
 func TestDefaultRequestIsNotSetForReplicationController(t *testing.T) {
 	s := v1.PodSpec{}
 	s.Containers = []v1.Container{
@@ -3199,12 +3335,14 @@ func TestDefaultRequestIsNotSetForReplicationController(t *testing.T) {
 	output := roundTrip(t, runtime.Object(rc))
 	rc2 := output.(*v1.ReplicationController)
 	defaultRequest := rc2.Spec.Template.Spec.Containers[0].Resources.Requests
+	// 即使容器设置了 CPU limit，模板中的 request 也应保持为 0。
 	requestValue := defaultRequest[v1.ResourceCPU]
 	if requestValue.String() != "0" {
 		t.Errorf("Expected 0 request value, got: %s", requestValue.String())
 	}
 }
 
+// TestSetDefaultLimitRangeItem 验证 LimitRange 条目的默认 default/defaultRequest 推导规则。
 func TestSetDefaultLimitRangeItem(t *testing.T) {
 	limitRange := &v1.LimitRange{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3230,26 +3368,28 @@ func TestSetDefaultLimitRangeItem(t *testing.T) {
 	defaultLimit := limitRange2.Spec.Limits[0].Default
 	defaultRequest := limitRange2.Spec.Limits[0].DefaultRequest
 
-	// verify that default cpu was set to the max
+	// default 取自 max 中与容器相关的 CPU 上限。
 	defaultValue := defaultLimit[v1.ResourceCPU]
 	if defaultValue.String() != "100m" {
 		t.Errorf("Expected default cpu: %s, got: %s", "100m", defaultValue.String())
 	}
-	// verify that default request was set to the limit
+	// defaultRequest 的 CPU 值取自同一 max。
 	requestValue := defaultRequest[v1.ResourceCPU]
 	if requestValue.String() != "100m" {
 		t.Errorf("Expected request cpu: %s, got: %s", "100m", requestValue.String())
 	}
-	// verify that if a min is provided, it will be the default if no limit is specified
+	// 若某资源在 max 中没有对应值而 min 中提供了，则 defaultRequest 取 min 的值。
 	requestMinValue := defaultRequest[v1.ResourceMemory]
 	if requestMinValue.String() != "100Mi" {
 		t.Errorf("Expected request memory: %s, got: %s", "100Mi", requestMinValue.String())
 	}
 }
 
+// TestSetDefaultProbe 验证空探针的超时、周期、成功/失败阈值被填充为默认值。
 func TestSetDefaultProbe(t *testing.T) {
 	originalProbe := v1.Probe{}
 	expectedProbe := v1.Probe{
+		// 期望值：初始延迟为 0，其余四个阈值使用官方默认值。
 		InitialDelaySeconds: 0,
 		TimeoutSeconds:      1,
 		PeriodSeconds:       10,
@@ -3270,10 +3410,13 @@ func TestSetDefaultProbe(t *testing.T) {
 	}
 }
 
+// TestSetDefaultProbeGRPCMode 验证 gRPC 探针的 Mode 字段默认化行为：
+// 显式设置的模式保留，未设置时保持 nil。
 func TestSetDefaultProbeGRPCMode(t *testing.T) {
 	tlsMode := v1.GRPCProbeModeTLS
 	plaintextMode := v1.GRPCProbeModePlaintext
 	tests := []struct {
+		// 覆盖显式 TLS、显式 Plaintext 与未设置（nil）三种输入。
 		name         string
 		grpc         *v1.GRPCAction
 		expectedMode *v1.GRPCProbeMode
@@ -3317,6 +3460,7 @@ func TestSetDefaultProbeGRPCMode(t *testing.T) {
 			}
 			output := roundTrip(t, runtime.Object(pod)).(*v1.Pod)
 			actualMode := output.Spec.Containers[0].LivenessProbe.GRPC.Mode
+			// 同时比较 nil 性与非 nil 时的具体值。
 			if (actualMode == nil) != (tc.expectedMode == nil) || (actualMode != nil && *actualMode != *tc.expectedMode) {
 				t.Errorf("expected Mode %v, got %v", tc.expectedMode, actualMode)
 			}
@@ -3324,6 +3468,7 @@ func TestSetDefaultProbeGRPCMode(t *testing.T) {
 	}
 }
 
+// TestSetDefaultSchedulerName 验证空 Pod 的调度器名称被默认设置为 default-scheduler。
 func TestSetDefaultSchedulerName(t *testing.T) {
 	pod := &v1.Pod{}
 
@@ -3333,6 +3478,7 @@ func TestSetDefaultSchedulerName(t *testing.T) {
 	}
 }
 
+// TestSetDefaultHostPathVolumeSource 验证 HostPath 卷的 Type 未设置时默认为空字符串（HostPathUnset）。
 func TestSetDefaultHostPathVolumeSource(t *testing.T) {
 	s := v1.PodSpec{}
 	s.Volumes = []v1.Volume{
@@ -3355,6 +3501,7 @@ func TestSetDefaultHostPathVolumeSource(t *testing.T) {
 	}
 }
 
+// TestSetDefaultEnableServiceLinks 验证 enableServiceLinks 缺省时默认为 true。
 func TestSetDefaultEnableServiceLinks(t *testing.T) {
 	pod := &v1.Pod{}
 	output := roundTrip(t, runtime.Object(pod)).(*v1.Pod)
@@ -3363,10 +3510,13 @@ func TestSetDefaultEnableServiceLinks(t *testing.T) {
 	}
 }
 
+// TestSetDefaultServiceInternalTrafficPolicy 验证 Service 的 internalTrafficPolicy：
+// 普通 Service 默认设为 Cluster；ExternalName 类型及已显式设置的场景保持不变。
 func TestSetDefaultServiceInternalTrafficPolicy(t *testing.T) {
 	cluster := v1.ServiceInternalTrafficPolicyCluster
 	local := v1.ServiceInternalTrafficPolicyLocal
 	testCases := []struct {
+		// 覆盖默认填充、已设置 Cluster、ExternalName 类型与已设置 Local 四种场景。
 		name                          string
 		expectedInternalTrafficPolicy *v1.ServiceInternalTrafficPolicy
 		svc                           v1.Service
@@ -3416,9 +3566,13 @@ func TestSetDefaultServiceInternalTrafficPolicy(t *testing.T) {
 	}
 }
 
+// TestSetDefaults_Volume 验证卷的默认化：空卷源回退为 emptyDir，
+// Image 卷的 PullPolicy 依据镜像 tag 推导；依赖 ImageVolume 门控开启。
 func TestSetDefaults_Volume(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ImageVolume, true)
+	// 必须开启 ImageVolume 门控，否则 Image 卷字段在编解码阶段会被裁剪。
 	for desc, tc := range map[string]struct {
+		// 表格涵盖空卷回退、带 tag、latest tag 与无 tag 四种镜像引用形式。
 		given, expected *v1.Volume
 	}{
 		"defaults to emptyDir": {
@@ -3447,9 +3601,13 @@ func TestSetDefaults_Volume(t *testing.T) {
 	}
 }
 
+// TestSetDefaults_PodLogOptions 验证 Pod 日志选项的 Stream 默认为 All，且已指定的流不被覆盖；
+// 依赖 PodLogsQuerySplitStreams 门控开启。
 func TestSetDefaults_PodLogOptions(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLogsQuerySplitStreams, true)
+	// 门控关闭时该字段不会被编解码保留，因此测试中显式开启。
 	for desc, tc := range map[string]struct {
+		// 分别覆盖未设置（应默认 All）与显式指定 Stdout（应保留）两种输入。
 		given, expected *v1.PodLogOptions
 	}{
 		"defaults to All": {
@@ -3470,18 +3628,24 @@ func TestSetDefaults_PodLogOptions(t *testing.T) {
 	}
 }
 
+// setAllFeatures 将所有未锁定到默认值的特性门控统一打开或关闭，
+// 用于在门控全开/全关两种状态下运行同一组默认值探测。
 func setAllFeatures(t *testing.T, featuresEnabled bool) {
 	features := featuregatetesting.FeatureOverrides{}
 	for feature, featureSpec := range utilfeature.DefaultFeatureGate.DeepCopy().GetAll() {
 		if !featureSpec.LockToDefault {
+			// 锁定到默认值的门控不允许覆盖，否则 SetFeatureGatesDuringTest 会报错。
 			features[feature] = featuresEnabled
 		}
 	}
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, features)
 }
 
+// TestSetDefaultPodStatusPodIPs 验证 PodIP 与 PodIPs 的一致性默认化：
+// 仅有其一会从另一方补全，两者冲突时以单值的 PodIP 为准。
 func TestSetDefaultPodStatusPodIPs(t *testing.T) {
 	tests := []struct {
+		// 覆盖单边设置、冲突、双栈一致以及两边都为空的场景。
 		name      string
 		podIP     string
 		podIPs    []v1.PodIP
@@ -3509,8 +3673,10 @@ func TestSetDefaultPodStatusPodIPs(t *testing.T) {
 	}
 }
 
+// TestSetDefaultPodTerminationGracePeriodSeconds 验证终止宽限期：负值被钳制为 1，零值与正值原样保留。
 func TestSetDefaultPodTerminationGracePeriodSeconds(t *testing.T) {
 	tests := []struct {
+		// 覆盖负值钳制、零值保留与正值保留三种输入。
 		name     string
 		grace    *int64
 		expected *int64

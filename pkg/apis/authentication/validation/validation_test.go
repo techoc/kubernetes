@@ -23,9 +23,14 @@ import (
 	"k8s.io/kubernetes/pkg/apis/authentication"
 )
 
+// TestValidateTokenRequestAttestations 验证 TokenRequest 中 attestations 的校验规则：
+// 只有绑定 webhook 对象的请求才允许携带证明信息，且必须恰好提供一个
+// admissionReviewAPIGroups 证明，其值为单个非空字符串。
 func TestValidateTokenRequestAttestations(t *testing.T) {
+	// 取一个大于最小令牌年龄的合法过期时间，避免其他校验项干扰 attestations 测试。
 	validExpiration := int64(MinTokenAgeSec + 1)
 
+	// 复用的合法 webhook 绑定对象引用。
 	webhookRef := &authentication.BoundObjectReference{
 		Kind:       "ValidatingWebhookConfiguration",
 		APIVersion: "admissionregistration.k8s.io/v1",
@@ -196,6 +201,7 @@ func TestValidateTokenRequestAttestations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			errs := ValidateTokenRequest(tt.tr)
+			// 期望报错时比较聚合后的完整错误信息，确保定位到具体字段，而非仅判断有无错误。
 			if tt.wantErr != "" {
 				if len(errs) == 0 {
 					t.Fatalf("expected error %q, got none", tt.wantErr)

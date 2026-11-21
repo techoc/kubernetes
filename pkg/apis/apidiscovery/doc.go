@@ -17,5 +17,5 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=apidiscovery.k8s.io
 
-// Package apidiscovery provides api definitions for the "apidiscovery.k8s.io" api group.
+// Package apidiscovery 提供 "apidiscovery.k8s.io" API 组的定义。
 package apidiscovery

@@ -22,20 +22,25 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 共享这些默认值可避免每次默认化都重新分配指针对象。
 var (
 	defaultPortName = ""
 	defaultProtocol = v1.ProtocolTCP
 )
 
+// addDefaultingFuncs 向 scheme 注册本版本的默认值函数。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_EndpointPort 为未指定的端口名和协议补齐默认值。
 func SetDefaults_EndpointPort(obj *discoveryv1.EndpointPort) {
+	// 端口名为空是历史兼容行为，缺省为空串而不是拒绝该请求。
 	if obj.Name == nil {
 		obj.Name = &defaultPortName
 	}
 
+	// 协议缺省为 TCP，避免下游组件处理 nil 值。
 	if obj.Protocol == nil {
 		obj.Protocol = &defaultProtocol
 	}

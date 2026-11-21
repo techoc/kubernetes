@@ -30,7 +30,7 @@ import (
 )
 
 func addConversionFuncs(scheme *runtime.Scheme) error {
-	// Add field conversion funcs.
+	// 注册字段标签（field label）转换函数，让基于字段选择器的查询在外部版本与内部版本之间通用。
 	err := scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("Pod"),
 		func(label, value string) (string, string, error) {
 			switch label {
@@ -46,7 +46,7 @@ func addConversionFuncs(scheme *runtime.Scheme) error {
 				"status.podIPs",
 				"status.nominatedNodeName":
 				return label, value, nil
-			// This is for backwards compatibility with old v1 clients which send spec.host
+			// 兼容仍发送 spec.host 的旧 v1 客户端，将其映射到 spec.nodeName。
 			case "spec.host":
 				return "spec.nodeName", value, nil
 			default:
@@ -101,6 +101,7 @@ func addConversionFuncs(scheme *runtime.Scheme) error {
 	return nil
 }
 
+// Convert_v1_ReplicationController_To_apps_ReplicaSet 把 v1 ReplicationController 转换为 apps.ReplicaSet。
 func Convert_v1_ReplicationController_To_apps_ReplicaSet(in *v1.ReplicationController, out *apps.ReplicaSet, s conversion.Scope) error {
 	out.ObjectMeta = in.ObjectMeta
 	if err := Convert_v1_ReplicationControllerSpec_To_apps_ReplicaSetSpec(&in.Spec, &out.Spec, s); err != nil {
@@ -112,6 +113,8 @@ func Convert_v1_ReplicationController_To_apps_ReplicaSet(in *v1.ReplicationContr
 	return nil
 }
 
+// Convert_v1_ReplicationControllerSpec_To_apps_ReplicaSetSpec 转换 RC spec 到 ReplicaSet spec，
+// 其中 map 类型的 selector 会转换为 metav1.LabelSelector。
 func Convert_v1_ReplicationControllerSpec_To_apps_ReplicaSetSpec(in *v1.ReplicationControllerSpec, out *apps.ReplicaSetSpec, s conversion.Scope) error {
 	out.Replicas = *in.Replicas
 	out.MinReadySeconds = in.MinReadySeconds
@@ -127,6 +130,8 @@ func Convert_v1_ReplicationControllerSpec_To_apps_ReplicaSetSpec(in *v1.Replicat
 	return nil
 }
 
+// Convert_v1_ReplicationControllerStatus_To_apps_ReplicaSetStatus 转换 RC status 到 ReplicaSet status，
+// 并逐条转换 condition 列表。
 func Convert_v1_ReplicationControllerStatus_To_apps_ReplicaSetStatus(in *v1.ReplicationControllerStatus, out *apps.ReplicaSetStatus, s conversion.Scope) error {
 	out.Replicas = in.Replicas
 	out.FullyLabeledReplicas = in.FullyLabeledReplicas
@@ -145,6 +150,8 @@ func Convert_v1_ReplicationControllerStatus_To_apps_ReplicaSetStatus(in *v1.Repl
 	return nil
 }
 
+// Convert_apps_ReplicaSet_To_v1_ReplicationController 把 apps.ReplicaSet 转换为 v1 ReplicationController。
+// 无法无损转换的字段（如 selector）会以 non-convertible 注解的形式保留在输出对象上。
 func Convert_apps_ReplicaSet_To_v1_ReplicationController(in *apps.ReplicaSet, out *v1.ReplicationController, s conversion.Scope) error {
 	out.ObjectMeta = in.ObjectMeta
 	if err := Convert_apps_ReplicaSetSpec_To_v1_ReplicationControllerSpec(&in.Spec, &out.Spec, s); err != nil {
@@ -163,6 +170,8 @@ func Convert_apps_ReplicaSet_To_v1_ReplicationController(in *apps.ReplicaSet, ou
 	return nil
 }
 
+// Convert_apps_ReplicaSetSpec_To_v1_ReplicationControllerSpec 转换 ReplicaSet spec 到 RC spec，
+// LabelSelector 无法无损转换时返回相应错误，由上层记录为不可转换注解。
 func Convert_apps_ReplicaSetSpec_To_v1_ReplicationControllerSpec(in *apps.ReplicaSetSpec, out *v1.ReplicationControllerSpec, s conversion.Scope) error {
 	out.Replicas = new(int32)
 	*out.Replicas = in.Replicas
@@ -178,6 +187,8 @@ func Convert_apps_ReplicaSetSpec_To_v1_ReplicationControllerSpec(in *apps.Replic
 	return invalidErr
 }
 
+// Convert_apps_ReplicaSetStatus_To_v1_ReplicationControllerStatus 转换 ReplicaSet status 到 RC status，
+// 并逐条转换 condition 列表。
 func Convert_apps_ReplicaSetStatus_To_v1_ReplicationControllerStatus(in *apps.ReplicaSetStatus, out *v1.ReplicationControllerStatus, s conversion.Scope) error {
 	out.Replicas = in.Replicas
 	out.FullyLabeledReplicas = in.FullyLabeledReplicas
@@ -196,42 +207,47 @@ func Convert_apps_ReplicaSetStatus_To_v1_ReplicationControllerStatus(in *apps.Re
 	return nil
 }
 
+// Convert_core_NodeSpec_To_v1_NodeSpec 转换 NodeSpec 到 v1，
+// 并把内部 PodCIDRs 的第一个值同步到 v1 中已废弃的单值字段 PodCIDR。
 func Convert_core_NodeSpec_To_v1_NodeSpec(in *core.NodeSpec, out *v1.NodeSpec, s conversion.Scope) error {
 	if err := autoConvert_core_NodeSpec_To_v1_NodeSpec(in, out, s); err != nil {
 		return err
 	}
-	// at the this point autoConvert copied core.PodCIDRs -> v1.PodCIDRs
-	// v1.PodCIDR (singular value field, which does not exist in core) needs to
-	// be set with core.PodCIDRs[0]
+	// 此时 autoConvert 已把 core.PodCIDRs 复制到 v1.PodCIDRs；
+	// v1 中单值字段 PodCIDR（内部版本不存在）需用 PodCIDRs[0] 填充。
 	if len(in.PodCIDRs) > 0 {
 		out.PodCIDR = in.PodCIDRs[0]
 	}
 	return nil
 }
 
+// Convert_v1_NodeSpec_To_core_NodeSpec 转换 v1 NodeSpec 到内部版本，
+// 处理已废弃的单值 PodCIDR 与 PodCIDRs 之间的兼容性：两者不一致时以 PodCIDR 为准。
 func Convert_v1_NodeSpec_To_core_NodeSpec(in *v1.NodeSpec, out *core.NodeSpec, s conversion.Scope) error {
 	if err := autoConvert_v1_NodeSpec_To_core_NodeSpec(in, out, s); err != nil {
 		return err
 	}
-	// If both fields (v1.PodCIDRs and v1.PodCIDR) are provided and differ, then PodCIDR is authoritative for compatibility with older clients
+	// 若两个字段同时存在且不一致，为兼容旧客户端以单值 PodCIDR 为准。
 	if (len(in.PodCIDR) > 0 && len(in.PodCIDRs) > 0) && (in.PodCIDR != in.PodCIDRs[0]) {
 		out.PodCIDRs = []string{in.PodCIDR}
 	}
 
-	// at the this point, autoConvert copied v1.PodCIDRs -> core.PodCIDRs
-	// if v1.PodCIDRs was empty but v1.PodCIDR is not, then set core.PodCIDRs[0] with v1.PodCIDR
+	// 此时 autoConvert 已把 v1.PodCIDRs 复制到 core.PodCIDRs；
+	// 若 v1.PodCIDRs 为空而 PodCIDR 非空，则用 PodCIDR 填充 core.PodCIDRs[0]。
 	if len(in.PodCIDR) > 0 && len(in.PodCIDRs) == 0 {
 		out.PodCIDRs = []string{in.PodCIDR}
 	}
 	return nil
 }
 
+// Convert_v1_Secret_To_core_Secret 转换 v1 Secret 到内部版本，
+// 并把 StringData 中的字符串内容合并到 Data（同名 key 以 StringData 为准）。
 func Convert_v1_Secret_To_core_Secret(in *v1.Secret, out *core.Secret, s conversion.Scope) error {
 	if err := autoConvert_v1_Secret_To_core_Secret(in, out, s); err != nil {
 		return err
 	}
 
-	// StringData overwrites Data
+	// StringData 会覆盖 Data 中的同名条目。
 	if len(in.StringData) > 0 {
 		if out.Data == nil {
 			out.Data = map[string][]byte{}
@@ -244,6 +260,7 @@ func Convert_v1_Secret_To_core_Secret(in *v1.Secret, out *core.Secret, s convers
 	return nil
 }
 
+// Convert_v1_ResourceList_To_core_ResourceList 转换资源列表；由于两个版本的 Quantity 表示一致，这里只需复制。
 // +k8s:conversion-fn=copy-only
 func Convert_v1_ResourceList_To_core_ResourceList(in *v1.ResourceList, out *core.ResourceList, s conversion.Scope) error {
 	if *in == nil {
@@ -253,7 +270,7 @@ func Convert_v1_ResourceList_To_core_ResourceList(in *v1.ResourceList, out *core
 		*out = make(core.ResourceList, len(*in))
 	}
 	for key, val := range *in {
-		// Moved to defaults
+		// 相关处理已移至默认值填充逻辑。
 		// TODO(#18538): We round up resource values to milli scale to maintain API compatibility.
 		// In the future, we should instead reject values that need rounding.
 		// const milliScale = -3
@@ -264,6 +281,7 @@ func Convert_v1_ResourceList_To_core_ResourceList(in *v1.ResourceList, out *core
 	return nil
 }
 
+// AddFieldLabelConversionsForEvent 为 Event 注册受支持的字段标签转换，使字段选择器可用于事件查询。
 func AddFieldLabelConversionsForEvent(scheme *runtime.Scheme) error {
 	return scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("Event"),
 		func(label, value string) (string, string, error) {
@@ -288,6 +306,7 @@ func AddFieldLabelConversionsForEvent(scheme *runtime.Scheme) error {
 		})
 }
 
+// AddFieldLabelConversionsForNamespace 为 Namespace 注册受支持的字段标签转换。
 func AddFieldLabelConversionsForNamespace(scheme *runtime.Scheme) error {
 	return scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("Namespace"),
 		func(label, value string) (string, string, error) {
@@ -301,6 +320,7 @@ func AddFieldLabelConversionsForNamespace(scheme *runtime.Scheme) error {
 		})
 }
 
+// AddFieldLabelConversionsForSecret 为 Secret 注册受支持的字段标签转换。
 func AddFieldLabelConversionsForSecret(scheme *runtime.Scheme) error {
 	return scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("Secret"),
 		func(label, value string) (string, string, error) {
@@ -315,6 +335,7 @@ func AddFieldLabelConversionsForSecret(scheme *runtime.Scheme) error {
 		})
 }
 
+// AddFieldLabelConversionsForService 为 Service 注册受支持的字段标签转换。
 func AddFieldLabelConversionsForService(scheme *runtime.Scheme) error {
 	return scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("Service"),
 		func(label, value string) (string, string, error) {
@@ -330,35 +351,36 @@ func AddFieldLabelConversionsForService(scheme *runtime.Scheme) error {
 		})
 }
 
-// Convert_core_PodTemplateSpec_To_v1_PodTemplateSpec is defined outside the autogenerated file
-// so that generated conversions in other API packages that embed PodTemplateSpec can find it.
+// Convert_core_PodTemplateSpec_To_v1_PodTemplateSpec 定义在自动生成文件之外，
+// 以便其他内嵌 PodTemplateSpec 的 API 包中生成的转换代码能够引用到它。
 // +k8s:conversion-fn=copy-only
 func Convert_core_PodTemplateSpec_To_v1_PodTemplateSpec(in *core.PodTemplateSpec, out *v1.PodTemplateSpec, s conversion.Scope) error {
 	return autoConvert_core_PodTemplateSpec_To_v1_PodTemplateSpec(in, out, s)
 }
 
-// Convert_v1_PodTemplateSpec_To_core_PodTemplateSpec is defined outside the autogenerated file
-// so that generated conversions in other API packages that embed PodTemplateSpec can find it.
+// Convert_v1_PodTemplateSpec_To_core_PodTemplateSpec 定义在自动生成文件之外，
+// 以便其他内嵌 PodTemplateSpec 的 API 包中生成的转换代码能够引用到它。
 // +k8s:conversion-fn=copy-only
 func Convert_v1_PodTemplateSpec_To_core_PodTemplateSpec(in *v1.PodTemplateSpec, out *core.PodTemplateSpec, s conversion.Scope) error {
 	return autoConvert_v1_PodTemplateSpec_To_core_PodTemplateSpec(in, out, s)
 }
 
-// Convert_core_PersistentVolumeSpec_To_v1_PersistentVolumeSpec is defined outside the autogenerated file for use by other API packages
-// This is needed because it is referenced from other APIs, but is invisible at code-generation time because of the build tags.
+// Convert_core_PersistentVolumeSpec_To_v1_PersistentVolumeSpec 定义在自动生成文件之外，供其他 API 包使用。
+// 之所以这样做，是因为它被其他 API 引用，但在代码生成时因构建标签而不可见。
 // +k8s:conversion-fn=copy-only
 func Convert_core_PersistentVolumeSpec_To_v1_PersistentVolumeSpec(in *core.PersistentVolumeSpec, out *v1.PersistentVolumeSpec, s conversion.Scope) error {
 	return autoConvert_core_PersistentVolumeSpec_To_v1_PersistentVolumeSpec(in, out, s)
 }
 
-// Convert_v1_PersistentVolumeSpec_To_core_PersistentVolumeSpec is defined outside the autogenerated file for use by other API packages
-// This is needed because it is referenced from other APIs, but is invisible at code-generation time because of the build tags.
+// Convert_v1_PersistentVolumeSpec_To_core_PersistentVolumeSpec 定义在自动生成文件之外，供其他 API 包使用。
+// 之所以这样做，是因为它被其他 API 引用，但在代码生成时因构建标签而不可见。
 // +k8s:conversion-fn=copy-only
 func Convert_v1_PersistentVolumeSpec_To_core_PersistentVolumeSpec(in *v1.PersistentVolumeSpec, out *core.PersistentVolumeSpec, s conversion.Scope) error {
 	return autoConvert_v1_PersistentVolumeSpec_To_core_PersistentVolumeSpec(in, out, s)
 }
 
-// Convert_Slice_string_To_Pointer_string is needed because decoding URL parameters requires manual assistance.
+// Convert_Slice_string_To_Pointer_string 把 URL 参数解析得到的字符串切片转换为字符串指针；
+// 因为 URL 参数的解码需要手工辅助转换，所以这里取切片的第一个元素。
 func Convert_Slice_string_To_Pointer_string(in *[]string, out **string, s conversion.Scope) error {
 	if len(*in) == 0 {
 		return nil

@@ -29,8 +29,8 @@ import (
 // storage version.
 type StorageVersionMigration struct {
 	metav1.TypeMeta
-	// Standard object metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准的对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta
 	// Specification of the migration.
@@ -82,8 +82,8 @@ type StorageVersionMigrationStatus struct {
 type StorageVersionMigrationList struct {
 	metav1.TypeMeta
 
-	// Standard list metadata
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 	// Items is the list of StorageVersionMigration

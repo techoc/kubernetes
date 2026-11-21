@@ -18,14 +18,15 @@ package v1
 
 import (
 	"fmt"
+
 	"k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/apis/scheduling"
 )
 
-// SystemPriorityClasses define system priority classes that are auto-created at cluster bootstrapping.
-// Our API validation logic ensures that any priority class that has a system prefix or its value
-// is higher than HighestUserDefinablePriority is equal to one of these SystemPriorityClasses.
+// systemPriorityClasses 定义集群引导阶段自动创建的系统优先级类。
+// API 校验逻辑确保任何带系统前缀或值高于 HighestUserDefinablePriority 的优先级类，
+// 都必须与这里定义的某个系统优先级类完全一致，防止伪装或冲突。
 var systemPriorityClasses = []*v1.PriorityClass{
 	{
 		ObjectMeta: metav1.ObjectMeta{
@@ -43,8 +44,9 @@ var systemPriorityClasses = []*v1.PriorityClass{
 	},
 }
 
-// SystemPriorityClasses returns a deep copy of the list of system priority classes.
-// If only the names are needed, use SystemPriorityClassNames().
+// SystemPriorityClasses 返回系统优先级类列表的深拷贝。
+// 使用深拷贝避免调用方修改返回值污染包内的共享数据；
+// 如果只需要名称，请使用 SystemPriorityClassNames()。
 func SystemPriorityClasses() []*v1.PriorityClass {
 	retval := make([]*v1.PriorityClass, 0, len(systemPriorityClasses))
 	for _, c := range systemPriorityClasses {
@@ -53,7 +55,7 @@ func SystemPriorityClasses() []*v1.PriorityClass {
 	return retval
 }
 
-// SystemPriorityClassNames returns the names of system priority classes.
+// SystemPriorityClassNames 返回所有系统优先级类的名称。
 func SystemPriorityClassNames() []string {
 	retval := make([]string, 0, len(systemPriorityClasses))
 	for _, c := range systemPriorityClasses {
@@ -62,8 +64,8 @@ func SystemPriorityClassNames() []string {
 	return retval
 }
 
-// IsKnownSystemPriorityClass returns true if there's any of the system priority classes exactly
-// matches "name", "value", "globalDefault". otherwise it will return an error.
+// IsKnownSystemPriorityClass 判断是否存在名称、值、globalDefault 完全匹配的系统优先级类。
+// 若名称匹配但值或 globalDefault 不符，返回带有具体差异的错误信息。
 func IsKnownSystemPriorityClass(name string, value int32, globalDefault bool) (bool, error) {
 	for _, spc := range systemPriorityClasses {
 		if spc.Name == name {

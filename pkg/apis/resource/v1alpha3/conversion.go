@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 注册本版本的自定义转换函数；当前无需额外转换，直接返回 nil。
 func addConversionFuncs(scheme *runtime.Scheme) error {
 	return nil
 }

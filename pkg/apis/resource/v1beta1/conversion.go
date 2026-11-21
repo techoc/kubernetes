@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/resource"
 )
 
+// 注册本版本的转换函数，包括 ResourceSlice 的字段标签转换。
 func addConversionFuncs(scheme *runtime.Scheme) error {
 	if err := scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("ResourceSlice"),
 		func(label, value string) (string, string, error) {
@@ -44,12 +45,13 @@ func addConversionFuncs(scheme *runtime.Scheme) error {
 	return nil
 }
 
+// 把 v1beta1 的 DeviceRequest 转换为内部表示。
 func Convert_v1beta1_DeviceRequest_To_resource_DeviceRequest(in *resourcev1beta1.DeviceRequest, out *resource.DeviceRequest, s conversion.Scope) error {
 	if err := autoConvert_v1beta1_DeviceRequest_To_resource_DeviceRequest(in, out, s); err != nil {
 		return err
 	}
-	// If any fields on the main request is set, we create a ExactDeviceRequest
-	// and set the Exactly field. It might be invalid but that will be caught in validation.
+	// 只要主请求（main request）上设置了任一字段，就构造一个 Exactly 子结构，
+	// 并把各字段填入其中；结果可能非法，但那由校验阶段负责捕获。
 	if hasAnyMainRequestFieldsSet(in) {
 		var exactDeviceRequest resource.ExactDeviceRequest
 		exactDeviceRequest.DeviceClassName = in.DeviceClassName
@@ -101,6 +103,7 @@ func Convert_v1beta1_DeviceRequest_To_resource_DeviceRequest(in *resourcev1beta1
 	return nil
 }
 
+// 判断 v1beta1 DeviceRequest 的主请求字段是否至少有一个被设置；用于决定是否需要构造 Exactly 子结构。
 func hasAnyMainRequestFieldsSet(deviceRequest *resourcev1beta1.DeviceRequest) bool {
 	return deviceRequest.DeviceClassName != "" ||
 		deviceRequest.Selectors != nil ||
@@ -112,6 +115,7 @@ func hasAnyMainRequestFieldsSet(deviceRequest *resourcev1beta1.DeviceRequest) bo
 		deviceRequest.DerivedAttributes != nil
 }
 
+// 把内部 DeviceRequest 转换为 v1beta1 表示：将 Exactly 中的字段摊平到主请求。
 func Convert_resource_DeviceRequest_To_v1beta1_DeviceRequest(in *resource.DeviceRequest, out *resourcev1beta1.DeviceRequest, s conversion.Scope) error {
 	if err := autoConvert_resource_DeviceRequest_To_v1beta1_DeviceRequest(in, out, s); err != nil {
 		return err
@@ -164,6 +168,7 @@ func Convert_resource_DeviceRequest_To_v1beta1_DeviceRequest(in *resource.Device
 	return nil
 }
 
+// 把 v1beta1 的 ResourceSliceSpec 转换为内部表示；把空字符串/false 映射为 nil 指针，以区分“未指定”与“显式为零值”。
 func Convert_v1beta1_ResourceSliceSpec_To_resource_ResourceSliceSpec(in *resourcev1beta1.ResourceSliceSpec, out *resource.ResourceSliceSpec, s conversion.Scope) error {
 	if err := autoConvert_v1beta1_ResourceSliceSpec_To_resource_ResourceSliceSpec(in, out, s); err != nil {
 		return err
@@ -181,6 +186,7 @@ func Convert_v1beta1_ResourceSliceSpec_To_resource_ResourceSliceSpec(in *resourc
 	return nil
 }
 
+// 把内部 ResourceSliceSpec 转换为 v1beta1 表示；nil 指针映射回空字符串/false。
 func Convert_resource_ResourceSliceSpec_To_v1beta1_ResourceSliceSpec(in *resource.ResourceSliceSpec, out *resourcev1beta1.ResourceSliceSpec, s conversion.Scope) error {
 	if err := autoConvert_resource_ResourceSliceSpec_To_v1beta1_ResourceSliceSpec(in, out, s); err != nil {
 		return err
@@ -198,6 +204,7 @@ func Convert_resource_ResourceSliceSpec_To_v1beta1_ResourceSliceSpec(in *resourc
 	return nil
 }
 
+// 把 v1beta1 的 Device 转换为内部表示，将 BasicDevice 中的字段摊平，并逐项转换属性、容量、计数器消耗与污点。
 func Convert_v1beta1_Device_To_resource_Device(in *resourcev1beta1.Device, out *resource.Device, s conversion.Scope) error {
 	if err := autoConvert_v1beta1_Device_To_resource_Device(in, out, s); err != nil {
 		return err
@@ -260,6 +267,7 @@ func Convert_v1beta1_Device_To_resource_Device(in *resourcev1beta1.Device, out *
 	return nil
 }
 
+// 把内部 Device 转换为 v1beta1 表示，将摊平的字段重新收拢到 BasicDevice 中。
 func Convert_resource_Device_To_v1beta1_Device(in *resource.Device, out *resourcev1beta1.Device, s conversion.Scope) error {
 	if err := autoConvert_resource_Device_To_v1beta1_Device(in, out, s); err != nil {
 		return err
@@ -320,6 +328,7 @@ func Convert_resource_Device_To_v1beta1_Device(in *resource.Device, out *resourc
 	return nil
 }
 
+// 批量转换设备属性映射；QualifiedName 的底层表示一致，可直接类型转换键。
 func convert_resource_Attributes_To_v1beta1_Attributes(in map[resource.QualifiedName]resource.DeviceAttribute, out map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute, s conversion.Scope) error {
 	for k, v := range in {
 		var a resourcev1beta1.DeviceAttribute
@@ -331,6 +340,7 @@ func convert_resource_Attributes_To_v1beta1_Attributes(in map[resource.Qualified
 	return nil
 }
 
+// 批量转换设备容量映射，逻辑与属性转换相同。
 func convert_resource_Capacity_To_v1beta1_Capacity(in map[resource.QualifiedName]resource.DeviceCapacity, out map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceCapacity, s conversion.Scope) error {
 	for k, v := range in {
 		var c resourcev1beta1.DeviceCapacity
@@ -342,6 +352,7 @@ func convert_resource_Capacity_To_v1beta1_Capacity(in map[resource.QualifiedName
 	return nil
 }
 
+// 批量把 v1beta1 设备属性映射转换为内部表示。
 func convert_v1beta1_Attributes_To_resource_Attributes(in map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceAttribute, out map[resource.QualifiedName]resource.DeviceAttribute, s conversion.Scope) error {
 	for k, v := range in {
 		var a resource.DeviceAttribute
@@ -353,6 +364,7 @@ func convert_v1beta1_Attributes_To_resource_Attributes(in map[resourcev1beta1.Qu
 	return nil
 }
 
+// 批量把 v1beta1 设备容量映射转换为内部表示。
 func convert_v1beta1_Capacity_To_resource_Capacity(in map[resourcev1beta1.QualifiedName]resourcev1beta1.DeviceCapacity, out map[resource.QualifiedName]resource.DeviceCapacity, s conversion.Scope) error {
 	for k, v := range in {
 		var c resource.DeviceCapacity

@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
-	// ensure types are installed
+	// 确保相关类型已注册到 scheme。
 	_ "k8s.io/kubernetes/pkg/apis/scheduling/install"
 )
 

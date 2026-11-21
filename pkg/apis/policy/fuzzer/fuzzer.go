@@ -23,11 +23,13 @@ import (
 	"k8s.io/kubernetes/pkg/apis/policy"
 )
 
-// Funcs returns the fuzzer functions for the policy api group.
+// Funcs 返回 policy API 组使用的 fuzzer 函数。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
+	// 手工 fuzz 用于补充自动生成的随机值无法保证的字段约束。
 	return []interface{}{
+		// DisruptionsAllowed 必须是非负整数，随机取值限定为 0 或 1。
 		func(s *policy.PodDisruptionBudgetStatus, c randfill.Continue) {
-			c.FillNoCustom(s) // fuzz self without calling this function again
+			c.FillNoCustom(s) // 用通用规则填充，避免递归调用本函数造成无限循环。
 			s.DisruptionsAllowed = int32(c.Rand.Intn(2))
 		},
 	}

@@ -34,8 +34,8 @@ import (
 )
 
 func newValidatingWebhookConfiguration(hooks []admissionregistration.ValidatingWebhook, defaultAdmissionReviewVersions bool) *admissionregistration.ValidatingWebhookConfiguration {
-	// If the test case did not specify an AdmissionReviewVersions, default it so the test passes as
-	// this field will be defaulted in production code.
+	// 若测试用例没有指定 AdmissionReviewVersions，这里补上默认值，使校验能通过；
+	// 因为生产代码中该字段也会被默认化，测试要模拟同样的行为。
 	for i := range hooks {
 		if defaultAdmissionReviewVersions && len(hooks[i].AdmissionReviewVersions) == 0 {
 			hooks[i].AdmissionReviewVersions = []string{"v1beta1"}
@@ -50,6 +50,7 @@ func newValidatingWebhookConfiguration(hooks []admissionregistration.ValidatingW
 }
 
 func TestValidateValidatingWebhookConfiguration(t *testing.T) {
+	// SideEffects 是必填字段，准备合法值与未知值以构造通过/失败两类用例。
 	noSideEffect := admissionregistration.SideEffectClassNone
 	unknownSideEffect := admissionregistration.SideEffectClassUnknown
 	validClientConfig := admissionregistration.WebhookClientConfig{
@@ -831,6 +832,7 @@ func TestValidateValidatingWebhookConfiguration(t *testing.T) {
 }
 
 func TestValidateValidatingWebhookConfigurationUpdate(t *testing.T) {
+	// SideEffects 是必填字段，准备合法值与未知值以构造通过/失败两类用例。
 	noSideEffect := admissionregistration.SideEffectClassNone
 	unknownSideEffect := admissionregistration.SideEffectClassUnknown
 	validClientConfig := admissionregistration.WebhookClientConfig{
@@ -1011,8 +1013,8 @@ func TestValidateValidatingWebhookConfigurationUpdate(t *testing.T) {
 }
 
 func newMutatingWebhookConfiguration(hooks []admissionregistration.MutatingWebhook, defaultAdmissionReviewVersions bool) *admissionregistration.MutatingWebhookConfiguration {
-	// If the test case did not specify an AdmissionReviewVersions, default it so the test passes as
-	// this field will be defaulted in production code.
+	// 若测试用例没有指定 AdmissionReviewVersions，这里补上默认值，使校验能通过；
+	// 因为生产代码中该字段也会被默认化，测试要模拟同样的行为。
 	for i := range hooks {
 		if defaultAdmissionReviewVersions && len(hooks[i].AdmissionReviewVersions) == 0 {
 			hooks[i].AdmissionReviewVersions = []string{"v1beta1"}
@@ -1027,6 +1029,7 @@ func newMutatingWebhookConfiguration(hooks []admissionregistration.MutatingWebho
 }
 
 func TestValidateMutatingWebhookConfiguration(t *testing.T) {
+	// SideEffects 是必填字段，准备合法值与未知值以构造通过/失败两类用例。
 	noSideEffect := admissionregistration.SideEffectClassNone
 	unknownSideEffect := admissionregistration.SideEffectClassUnknown
 	validClientConfig := admissionregistration.WebhookClientConfig{
@@ -1809,6 +1812,7 @@ func TestValidateMutatingWebhookConfiguration(t *testing.T) {
 
 func TestValidateMutatingWebhookConfigurationUpdate(t *testing.T) {
 	unknownSideEffect := admissionregistration.SideEffectClassUnknown
+	// SideEffects 是必填字段，准备合法值与未知值以构造通过/失败两类用例。
 	noSideEffect := admissionregistration.SideEffectClassNone
 	validClientConfig := admissionregistration.WebhookClientConfig{
 		URL: ptr.To("https://example.com"),
@@ -3407,7 +3411,8 @@ func TestValidateValidatingAdmissionPolicyUpdate(t *testing.T) {
 		},
 		// TODO: CustomAuditAnnotations: string valueExpression with {oldObject} is allowed
 	}
-	// Include the test library, which includes the test() function in the storage environment during test
+	// 注入测试库：它提供 test() 函数，并加入存储环境的兼容版本，
+	// 这样旧表达式（按存储环境编译）能识别 test()，而新表达式不能，以区分两种编译模式。
 	base := environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion())
 	extended, err := base.Extend(environment.VersionedOptions{
 		IntroducedVersion: version.MustParseGeneric("1.999"),
@@ -3416,6 +3421,7 @@ func TestValidateValidatingAdmissionPolicyUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 临时替换全局编译器；用 defer 恢复，避免污染同包其他测试。
 	originalCompiler := getStrictStatelessCELCompiler()
 	lazyStrictStatelessCELCompiler = plugincel.NewCompiler(extended)
 	defer func() {

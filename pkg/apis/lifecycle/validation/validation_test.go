@@ -120,7 +120,7 @@ func TestValidateEvictionRequestStatusUpdate(t *testing.T) {
 		input    *lifecycle.EvictionRequestStatus
 		oldInput *lifecycle.EvictionRequestStatus
 	}{
-		// conditions
+		// 条件列表。
 		// this is different from Eviction
 		"Evicted condition can be reverted to false": {
 			oldInput: mkValidEvictionRequestStatus(addERCondition(clock, lifecycle.EvictionConditionTargetEvicted, true)),
@@ -165,7 +165,7 @@ func TestValidateEvictionRequestStatusUpdate(t *testing.T) {
 
 		errors []*field.Error
 	}{
-		// conditions
+		// 条件列表。
 		"add invalid condition": {
 			oldInput: mkValidEvictionRequestStatus(),
 			input: mkValidEvictionRequestStatus(func(obj *lifecycle.EvictionRequestStatus) {
@@ -316,7 +316,7 @@ func TestValidateEvictionStatusUpdate(t *testing.T) {
 		oldInput            *lifecycle.EvictionStatus
 		explicitEmptyUpdate bool
 	}{
-		// conditions
+		// 条件列表。
 		"Evicted condition can be set": {
 			oldInput: mkValidEvictionStatus(1,
 				setStateFor(lifecycle.ResponderStateCompleted, 0),
@@ -845,7 +845,7 @@ func TestValidateEvictionStatusUpdate(t *testing.T) {
 
 		errors []*field.Error
 	}{
-		// conditions
+		// 条件列表。
 		"add invalid condition": {
 			oldInput: mkValidEvictionStatus(1),
 			input: mkValidEvictionStatus(1, func(obj *lifecycle.EvictionStatus) {

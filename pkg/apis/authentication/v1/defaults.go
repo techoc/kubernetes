@@ -21,10 +21,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 把本版本的默认值注册函数挂到 scheme 上。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// 为 TokenRequestSpec 设置默认值：未指定过期时间时默认为一小时。
 func SetDefaults_TokenRequestSpec(obj *authenticationv1.TokenRequestSpec) {
 	if obj.ExpirationSeconds == nil {
 		hour := int64(60 * 60)

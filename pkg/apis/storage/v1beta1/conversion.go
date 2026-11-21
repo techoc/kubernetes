@@ -22,8 +22,8 @@ import (
 	storage "k8s.io/kubernetes/pkg/apis/storage"
 )
 
-// Convert_storage_CSINode_To_v1beta1_CSINode is a manual conversion function
-// that handles the Status field which does not exist in v1beta1.
+// Convert_storage_CSINode_To_v1beta1_CSINode 是从内部版本到 v1beta1 的手动转换函数。
+// v1beta1 中不存在 Status 字段，需借助该函数显式处理字段差异（由生成的转换逻辑丢弃 Status）。
 func Convert_storage_CSINode_To_v1beta1_CSINode(in *storage.CSINode, out *storagev1beta1.CSINode, s conversion.Scope) error {
 	return autoConvert_storage_CSINode_To_v1beta1_CSINode(in, out, s)
 }

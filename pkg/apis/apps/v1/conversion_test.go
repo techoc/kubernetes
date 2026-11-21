@@ -80,7 +80,7 @@ func TestV12StatefulSetSpecConversion(t *testing.T) {
 	}
 
 	for k, tc := range testcases {
-		// apps -> appsv1
+		// apps → appsv1 方向。
 		internal1 := &appsv1.StatefulSetSpec{}
 		if err := legacyscheme.Scheme.Convert(tc.stsSpec1, internal1, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "from apps to appsv1", err)
@@ -90,7 +90,7 @@ func TestV12StatefulSetSpecConversion(t *testing.T) {
 			t.Errorf("%q - %q: expected\n\t%#v, got \n\t%#v", k, "from apps to appsv1", tc.stsSepc2, internal1)
 		}
 
-		// appsv1 -> apps
+		// appsv1 → apps 方向。
 		internal2 := &apps.StatefulSetSpec{}
 		if err := legacyscheme.Scheme.Convert(tc.stsSepc2, internal2, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "from appsv1 to apps", err)
@@ -155,7 +155,7 @@ func TestV1StatefulSetStatusConversion(t *testing.T) {
 	}
 
 	for k, tc := range testcases {
-		// apps -> appsv1
+		// apps → appsv1 方向。
 		internal1 := &appsv1.StatefulSetStatus{}
 		if err := legacyscheme.Scheme.Convert(tc.stsStatus1, internal1, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "from apps to appsv1", err)
@@ -165,7 +165,7 @@ func TestV1StatefulSetStatusConversion(t *testing.T) {
 			t.Errorf("%q - %q: expected\n\t%#v, got \n\t%#v", k, "from apps to appsv1", tc.stsStatus2, internal1)
 		}
 
-		// appsv1 -> apps
+		// appsv1 → apps 方向。
 		internal2 := &apps.StatefulSetStatus{}
 		if err := legacyscheme.Scheme.Convert(tc.stsStatus2, internal2, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "from appsv1 to apps", err)
@@ -203,7 +203,7 @@ func TestV1StatefulSetUpdateStrategyConversion(t *testing.T) {
 	}
 
 	for k, tc := range testcases {
-		// apps -> appsv1
+		// apps → appsv1 方向。
 		internal1 := &appsv1.StatefulSetUpdateStrategy{}
 		if err := legacyscheme.Scheme.Convert(tc.stsUpdateStrategy1, internal1, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", "apps -> appsv1", k, err)
@@ -213,7 +213,7 @@ func TestV1StatefulSetUpdateStrategyConversion(t *testing.T) {
 			t.Errorf("%q - %q: expected\n\t%#v, got \n\t%#v", "apps -> appsv1", k, tc.stsUpdateStrategy2, internal1)
 		}
 
-		// appsv1 -> apps
+		// appsv1 → apps 方向。
 		internal2 := &apps.StatefulSetUpdateStrategy{}
 		if err := legacyscheme.Scheme.Convert(tc.stsUpdateStrategy2, internal2, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", "appsv1 -> apps", k, err)
@@ -317,7 +317,7 @@ func TestV1DeploymentConversion(t *testing.T) {
 	}
 
 	for k, tc := range testcases {
-		// apps -> v1beta2
+		// apps → v1beta2 方向。
 		internal1 := &appsv1.Deployment{}
 		if err := legacyscheme.Scheme.Convert(tc.deployment1, internal1, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "from apps to v1beta2", err)
@@ -326,7 +326,7 @@ func TestV1DeploymentConversion(t *testing.T) {
 			t.Errorf("%q - %q: expected\n\t%#v, got \n\t%#v", k, "from apps to v1beta2", tc.deployment2, internal1)
 		}
 
-		// v1beta2 -> apps
+		// v1beta2 → apps 方向。
 		internal2 := &apps.Deployment{}
 		if err := legacyscheme.Scheme.Convert(tc.deployment2, internal2, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "from v1beta2 to apps", err)
@@ -410,7 +410,7 @@ func TestV1DeploymentSpecConversion(t *testing.T) {
 		},
 	}
 
-	// apps -> appsv1
+	// apps → appsv1 方向。
 	for k, tc := range testcases {
 		internal := &appsv1.DeploymentSpec{}
 		if err := legacyscheme.Scheme.Convert(tc.deploymentSpec1, internal, nil); err != nil {
@@ -422,7 +422,7 @@ func TestV1DeploymentSpecConversion(t *testing.T) {
 		}
 	}
 
-	// appsv1 -> apps
+	// appsv1 → apps 方向。
 	for k, tc := range testcases {
 		internal := &apps.DeploymentSpec{}
 		if err := legacyscheme.Scheme.Convert(tc.deploymentSpec2, internal, nil); err != nil {
@@ -455,7 +455,7 @@ func TestV1DeploymentStrategyConversion(t *testing.T) {
 	}
 
 	for k, tc := range testcases {
-		// apps -> appsv1
+		// apps → appsv1 方向。
 		internal1 := &appsv1.DeploymentStrategy{}
 		if err := legacyscheme.Scheme.Convert(tc.deploymentStrategy1, internal1, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "apps -> appsv1", err)
@@ -464,7 +464,7 @@ func TestV1DeploymentStrategyConversion(t *testing.T) {
 			t.Errorf("%q - %q: expected\n\t%#v, got \n\t%#v", k, "apps -> appsv1", tc.deploymentStrategy2, internal1)
 		}
 
-		// appsv1 -> apps
+		// appsv1 → apps 方向。
 		internal2 := &apps.DeploymentStrategy{}
 		if err := legacyscheme.Scheme.Convert(tc.deploymentStrategy2, internal2, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "appsv1 -> apps", err)
@@ -502,7 +502,7 @@ func TestV1RollingUpdateDeploymentConversion(t *testing.T) {
 	}
 
 	for k, tc := range testcases {
-		// apps -> appsv1
+		// apps → appsv1 方向。
 		internal1 := &appsv1.RollingUpdateDeployment{}
 		if err := legacyscheme.Scheme.Convert(tc.rollingUpdateDeployment1, internal1, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "apps -> appsv1", err)
@@ -511,7 +511,7 @@ func TestV1RollingUpdateDeploymentConversion(t *testing.T) {
 			t.Errorf("%q - %q: expected\n\t%#v, got \n\t%#v", k, "apps -> appsv1", tc.rollingUpdateDeployment2, internal1)
 		}
 
-		// appsv1 -> apps
+		// appsv1 → apps 方向。
 		internal2 := &apps.RollingUpdateDeployment{}
 		if err := legacyscheme.Scheme.Convert(tc.rollingUpdateDeployment2, internal2, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "appsv1 -> apps", err)
@@ -578,7 +578,7 @@ func TestV1ReplicaSetSpecConversion(t *testing.T) {
 	}
 
 	for k, tc := range testcases {
-		// apps -> appsv1
+		// apps → appsv1 方向。
 		internal1 := &appsv1.ReplicaSetSpec{}
 		if err := legacyscheme.Scheme.Convert(tc.replicaset1, internal1, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "apps -> appsv1", err)
@@ -588,7 +588,7 @@ func TestV1ReplicaSetSpecConversion(t *testing.T) {
 			t.Errorf("%q - %q: expected\n\t%+v, got \n\t%+v", k, "apps -> appsv1", tc.replicaset2, internal1)
 		}
 
-		// appsv1 -> apps
+		// appsv1 → apps 方向。
 		internal2 := &apps.ReplicaSetSpec{}
 		if err := legacyscheme.Scheme.Convert(tc.replicaset2, internal2, nil); err != nil {
 			t.Errorf("%q - %q: unexpected error: %v", k, "appsv1 -> apps", err)

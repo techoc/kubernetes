@@ -30,9 +30,9 @@ const (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // EvictionRequest defines a request that should ideally result in a graceful eviction of a
-// .spec.target (e.g. termination of a pod).
+// .spec.target（例如 Pod 的终止）。
 //
-// The evictionrequest-controller observes intents of all EvictionRequests and transforms them into
+// evictionrequest-controller 观察所有 EvictionRequest 的意图，并将其转换为
 // Evictions.
 //   - .spec.requester is set as a label on the Eviction for easier lookup.
 //   - Each target can have a set of responders assigned to it. Eviction objects are observed by
@@ -42,14 +42,14 @@ const (
 // There is many-to-many relationship between EvictionRequests and Evictions in general.
 // And many-to-one if the target is a  pod.
 //
-// If all requesters withdraw their eviction intent for a common target, the eviction will be
+// 若所有请求者都撤回对同一目标的驱逐意图，驱逐将被
 // canceled. Deleting an EvictionRequest also counts as a withdrawal.
 // Once all EvictionRequest of a target are removed, the corresponding Evictions are eventually
 // garbage collected.
 type EvictionRequest struct {
 	metav1.TypeMeta
 
-	// metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// metadata 是标准的对象元数据；更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。
 	// +optional
 	metav1.ObjectMeta
 
@@ -59,30 +59,30 @@ type EvictionRequest struct {
 	Spec EvictionRequestSpec
 
 	// status represents the most recently observed status of the eviction request.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status EvictionRequestStatus
 }
 
 // EvictionRequestSpec is a specification of an EvictionRequest.
 type EvictionRequestSpec struct {
-	// target contains a reference to an object (e.g. a pod) that should be evicted.
-	// This field is required and immutable.
+	// target 包含对要被驱逐的对象（例如 Pod）的引用。
+	// 该字段必填且不可变。
 	// +required
 	Target EvictionRequestTarget
 
 	// requester allows you to identify the entity, that requested the eviction of the target.
 	//
-	// It must be a valid domain-prefixed key (such as "acme.io/foo").
+	// 必须是带域名前缀的合法 key（例如 "acme.io/foo"）。
 	// Domain names *.k8s.io and *.kubernetes.io are reserved.
-	// This field is required and immutable.
+	// 该字段必填且不可变。
 	// +required
 	Requester string
 
-	// intent specifies the action that should be taken for the specified target.
+	// intent 指定对目标对象应采取的动作。
 	//
-	// - Eviction means that the requester is interested in the eviction of the target.
-	// - Withdrawn means that the requester is no longer interested in the eviction of the target.
+	// - Eviction 表示请求者希望对目标执行驱逐。
+	// - Withdrawn 表示请求者不再希望对目标执行驱逐。
 	//   If all requesters' intents are withdrawn for a common target, the eviction will be canceled.
 	//   Cancellation consequences:
 	//   - Inactive responders will never run.
@@ -94,8 +94,8 @@ type EvictionRequestSpec struct {
 
 // EvictionRequestTarget contains a reference to an object that should be evicted.
 type EvictionRequestTarget struct {
-	// pod references a pod that is subject to eviction/termination.
-	// Pods that are part of a PodGroup (.spec.schedulingGroup is set) are not supported.
+	// pod 引用一个将被驱逐/终止的 Pod。
+	// 不支持属于 PodGroup 的 Pod（即设置了 .spec.schedulingGroup 的 Pod）。
 	// +optional
 	Pod *EvictionRequestPodReference
 }
@@ -103,13 +103,13 @@ type EvictionRequestTarget struct {
 // EvictionRequestPodReference contains enough information to locate the referenced pod inside the
 // same namespace.
 type EvictionRequestPodReference struct {
-	// name of the target.
-	// This field is required.
+	// 目标名称。
+	// 该字段必填。
 	// +required
 	Name string
 	// uid of the target.
 	// It can be found in .metadata.uid of the target and is a lowercase UUID in 8-4-4-4-12 format.
-	// This field is required.
+	// 该字段必填。
 	// +required
 	UID apimachinerytypes.UID
 }
@@ -155,7 +155,7 @@ type EvictionRequestStatus struct {
 	// observedGeneration is EvictionRequest's .metadata.generation observed by the evictionrequest-controller.
 	// The observed generation value cannot be negative and can only be incremented.
 	// The minimum value is 1.
-	// This field is managed by evictionrequest-controller.
+	// 该字段由 evictionrequest-controller 管理。
 	// +optional
 	ObservedGeneration *int64
 }
@@ -166,7 +166,7 @@ type EvictionRequestStatus struct {
 type EvictionRequestList struct {
 	metav1.TypeMeta
 	// metadata is the standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 
@@ -177,12 +177,12 @@ type EvictionRequestList struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Eviction initiates an eviction process, which should ideally result in a graceful eviction of a
-// .spec.target (e.g. termination of a pod).
+// .spec.target（例如 Pod 的终止）。
 //
-// The evictionrequest-controller observes intents of all EvictionRequests and transforms them into
+// evictionrequest-controller 观察所有 EvictionRequest 的意图，并将其转换为
 // Evictions. It manages the Eviction lifecycle.
 // Requesters are preserved in .status.requesters even after they have withdrawn their request.
-// If all requesters withdraw their eviction intent for a common target, the eviction will be
+// 若所有请求者都撤回对同一目标的驱逐意图，驱逐将被
 // canceled. Once all EvictionRequest corresponding to this Eviction .spec.target have been
 // removed, this Eviction object will eventually be garbage collected.
 //
@@ -202,7 +202,7 @@ type EvictionRequestList struct {
 type Eviction struct {
 	metav1.TypeMeta
 
-	// metadata is the standard object metadata; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata.
+	// metadata 是标准的对象元数据；更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata。
 	// .metadata.name set by the evictionrequest-controller is purely informative and subject to change.
 	// .spec.target field should be used to identify the target precisesly.
 	//
@@ -223,7 +223,7 @@ type Eviction struct {
 
 	// status represents the most recently observed status of the eviction.
 	// Populated by responders and evictionrequest-controller.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status EvictionStatus
 }
@@ -244,8 +244,8 @@ const (
 
 // EvictionSpec is a specification of an Eviction.
 type EvictionSpec struct {
-	// target contains a reference to an object (e.g. a pod) that should be evicted.
-	// This field is required and immutable.
+	// target 包含对要被驱逐的对象（例如 Pod）的引用。
+	// 该字段必填且不可变。
 	// +required
 	Target EvictionTarget
 }
@@ -253,8 +253,8 @@ type EvictionSpec struct {
 // EvictionTarget contains a reference to an object that should be evicted.
 // +union
 type EvictionTarget struct {
-	// pod references a pod that is subject to eviction/termination.
-	// Pods that are part of a PodGroup (.spec.schedulingGroup is set) are not supported.
+	// pod 引用一个将被驱逐/终止的 Pod。
+	// 不支持属于 PodGroup 的 Pod（即设置了 .spec.schedulingGroup 的 Pod）。
 	// +optional
 	Pod *EvictionPodReference
 }
@@ -262,13 +262,13 @@ type EvictionTarget struct {
 // EvictionPodReference contains enough information to locate the referenced pod inside the same
 // namespace.
 type EvictionPodReference struct {
-	// name of the target.
-	// This field is required.
+	// 目标名称。
+	// 该字段必填。
 	// +required
 	Name string
 	// uid of the target.
 	// It can be found in .metadata.uid of the target and is a lowercase UUID in 8-4-4-4-12 format.
-	// This field is required.
+	// 该字段必填。
 	// +required
 	UID apimachinerytypes.UID
 }
@@ -294,7 +294,7 @@ type EvictionStatus struct {
 	// observedGeneration is Eviction's .metadata.generation observed by the evictionrequest-controller.
 	// The observed generation value cannot be negative and can only be incremented.
 	// The minimum value is 1.
-	// This field is managed by evictionrequest-controller.
+	// 该字段由 evictionrequest-controller 管理。
 	// +optional
 	ObservedGeneration *int64
 
@@ -328,7 +328,7 @@ type EvictionStatus struct {
 	//
 	// The maximum length of the responders list is 11.
 	// The length and keys of the list cannot change once set.
-	// This field is managed by evictionrequest-controller.
+	// 该字段由 evictionrequest-controller 管理。
 	// +optional
 	// +patchMergeKey=name
 	// +patchStrategy=merge
@@ -377,27 +377,27 @@ const (
 	EvictionConditionReasonAwaitingEviction EvictionConditionReason = "AwaitingEviction"
 	// EvictionConditionReasonEvictionInvalid means that the Eviction is not accepted because the
 	// initial configuration is not valid.
-	// This reason is set for the Failed condition.
+	// 该原因用于 Failed 状态的条件。
 	EvictionConditionReasonEvictionInvalid EvictionConditionReason = "EvictionInvalid"
 	// EvictionConditionReasonCanceledDueToNoRequesters means that the Eviction is canceled because there is no
 	// EvictionRequest with the same target and Eviction intent in .spec.intent.
-	// This reason is set for the Failed condition.
+	// 该原因用于 Failed 状态的条件。
 	EvictionConditionReasonCanceledDueToNoRequesters EvictionConditionReason = "CanceledDueToNoRequesters"
 	// EvictionConditionReasonSucceeded means that the Eviction has successfully evicted the target.
-	// This reason is set for the Failed condition.
+	// 该原因用于 Failed 状态的条件。
 	EvictionConditionReasonSucceeded EvictionConditionReason = "Succeeded"
 	// EvictionConditionReasonNoFurtherResponder means that the Eviction responders failed to evict
 	// the target and that no further responder is available.
-	// This reason is set for the Failed condition.
+	// 该原因用于 Failed 状态的条件。
 	EvictionConditionReasonNoFurtherResponder EvictionConditionReason = "NoFurtherResponder"
 	// EvictionConditionReasonPodDeleted means that the target pod has been deleted.
-	// This reason is set for the TargetEvicted condition.
+	// 该原因用于 TargetEvicted 条件。
 	EvictionConditionReasonPodDeleted EvictionConditionReason = "PodDeleted"
 	// EvictionConditionReasonPodTerminal means that the target pod has reached a terminal state.
-	// This reason is set for the TargetEvicted condition.
+	// 该原因用于 TargetEvicted 条件。
 	EvictionConditionReasonPodTerminal EvictionConditionReason = "PodTerminal"
 	// EvictionConditionReasonEvictionFailed means that the eviction of the target was unsuccessful.
-	// This reason is set for the TargetEvicted condition.
+	// 该原因用于 TargetEvicted 条件。
 	EvictionConditionReasonEvictionFailed EvictionConditionReason = "EvictionFailed"
 )
 
@@ -406,16 +406,16 @@ const (
 type Requester struct {
 	// name allows you to identify the entity, that requested the eviction of the target.
 	//
-	// It must be a valid domain-prefixed key (such as "acme.io/foo").
+	// 必须是带域名前缀的合法 key（例如 "acme.io/foo"）。
 	// This field must be unique for each requester.
-	// This field is required.
+	// 该字段必填。
 	// +required
 	Name string
 
-	// intent specifies the action that should be taken for the specified target.
+	// intent 指定对目标对象应采取的动作。
 	//
-	// - Eviction means that the requester is interested in the eviction of the target.
-	// - Withdrawn means that the requester is no longer interested in the eviction of the target.
+	// - Eviction 表示请求者希望对目标执行驱逐。
+	// - Withdrawn 表示请求者不再希望对目标执行驱逐。
 	//   If all requesters' intents are withdrawn, the eviction will be canceled.
 	//   Cancellation consequences:
 	//   - Inactive responders will never run.
@@ -449,9 +449,9 @@ const (
 type TargetResponder struct {
 	// name allows you to identify the responder reacting to the Eviction.
 	//
-	// It must be a valid domain-prefixed key (such as "acme.io/foo").
+	// 必须是带域名前缀的合法 key（例如 "acme.io/foo"）。
 	// This field must be unique for each responder.
-	// This field is required.
+	// 该字段必填。
 	// +required
 	Name string
 
@@ -466,7 +466,7 @@ type TargetResponder struct {
 	//
 	// The minimum value is 0 and the maximum value is 100000.
 	// The interval 0-999 is reserved for responders with *.k8s.io suffix.
-	// This field is required and immutable.
+	// 该字段必填且不可变。
 	// +required
 	Priority *int32
 
@@ -531,15 +531,15 @@ const (
 type ResponderStatus struct {
 	// name allows you to identify the responder reacting to the Eviction.
 	//
-	// It must be a valid domain-prefixed key (such as "acme.io/foo").
+	// 必须是带域名前缀的合法 key（例如 "acme.io/foo"）。
 	// This field is initialized by Kubernetes and must be unique for each responder.
-	// This field is required.
+	// 该字段必填。
 	// +required
 	Name string
 
 	// startTime tracks the time at which this responder was designated as active and should start
 	// processing the eviction request.
-	// It should reflect the present time when set.
+	// 设置时应反映当前时间。
 	// This field is initialized by Kubernetes when this responder becomes active.
 	// This field becomes immutable once set.
 	// +optional
@@ -547,7 +547,7 @@ type ResponderStatus struct {
 
 	// heartbeatTime is the last time at which the eviction process was reported to be in progress
 	// by the responder.
-	// It should reflect the present time when set.
+	// 设置时应反映当前时间。
 	// Responders should avoid heartbeats more frequent than 20 seconds to avoid overloading the
 	// control-plane.
 	// +optional
@@ -563,7 +563,7 @@ type ResponderStatus struct {
 	// completionTime tracks the time at which the Responder stopped processing the eviction request.
 	// Completion means that the responders has either fully or partially completed the
 	// eviction process, which may have resulted in target eviction (e.g. pod termination).
-	// It should reflect the present time when set.
+	// 设置时应反映当前时间。
 	// This field becomes immutable once set.
 	// +optional
 	CompletionTime *metav1.Time
@@ -581,7 +581,7 @@ type ResponderStatus struct {
 type EvictionList struct {
 	metav1.TypeMeta
 	// metadata is the standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 

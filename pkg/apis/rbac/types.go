@@ -94,7 +94,7 @@ type RoleRef struct {
 // Role is a namespaced, logical grouping of PolicyRules that can be referenced as a unit by a RoleBinding.
 type Role struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
+	// 标准的对象元数据。
 	metav1.ObjectMeta
 
 	// Rules holds all the PolicyRules for this Role
@@ -115,7 +115,7 @@ type RoleBinding struct {
 
 	// RoleRef can reference a Role in the current namespace or a ClusterRole in the global namespace.
 	// If the RoleRef cannot be resolved, the Authorizer must return an error.
-	// This field is immutable.
+	// 该字段不可变。
 	RoleRef RoleRef
 }
 
@@ -124,7 +124,7 @@ type RoleBinding struct {
 // RoleBindingList is a collection of RoleBindings
 type RoleBindingList struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
+	// 标准的对象元数据。
 	metav1.ListMeta
 
 	// Items is a list of roleBindings
@@ -136,7 +136,7 @@ type RoleBindingList struct {
 // RoleList is a collection of Roles
 type RoleList struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
+	// 标准的对象元数据。
 	metav1.ListMeta
 
 	// Items is a list of roles
@@ -148,7 +148,7 @@ type RoleList struct {
 // ClusterRole is a cluster level, logical grouping of PolicyRules that can be referenced as a unit by a RoleBinding or ClusterRoleBinding.
 type ClusterRole struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
+	// 标准的对象元数据。
 	metav1.ObjectMeta
 
 	// Rules holds all the PolicyRules for this ClusterRole
@@ -173,7 +173,7 @@ type AggregationRule struct {
 // and adds who information via Subject.
 type ClusterRoleBinding struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
+	// 标准的对象元数据。
 	metav1.ObjectMeta
 
 	// Subjects holds references to the objects the role applies to.
@@ -181,7 +181,7 @@ type ClusterRoleBinding struct {
 
 	// RoleRef can only reference a ClusterRole in the global namespace.
 	// If the RoleRef cannot be resolved, the Authorizer must return an error.
-	// This field is immutable.
+	// 该字段不可变。
 	RoleRef RoleRef
 }
 
@@ -190,7 +190,7 @@ type ClusterRoleBinding struct {
 // ClusterRoleBindingList is a collection of ClusterRoleBindings
 type ClusterRoleBindingList struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
+	// 标准的对象元数据。
 	metav1.ListMeta
 
 	// Items is a list of ClusterRoleBindings
@@ -202,7 +202,7 @@ type ClusterRoleBindingList struct {
 // ClusterRoleList is a collection of ClusterRoles
 type ClusterRoleList struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
+	// 标准的对象元数据。
 	metav1.ListMeta
 
 	// Items is a list of ClusterRoles

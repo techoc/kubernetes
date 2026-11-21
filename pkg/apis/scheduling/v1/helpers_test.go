@@ -24,6 +24,8 @@ import (
 	"k8s.io/kubernetes/pkg/apis/scheduling"
 )
 
+// TestIsKnownSystemPriorityClass 验证 IsKnownSystemPriorityClass 能准确识别系统内置 PriorityClass，
+// 覆盖名称/值匹配但被篡改配置的反例，防止仅凭名称或优先级值就误判为系统类。
 func TestIsKnownSystemPriorityClass(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -41,7 +43,7 @@ func TestIsKnownSystemPriorityClass(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: scheduling.SystemNodeCritical,
 				},
-				Value:       scheduling.SystemCriticalPriority, // This is the value of system cluster critical
+				Value:       scheduling.SystemCriticalPriority, // 取系统 cluster critical 的优先级值，但名称并非内置类
 				Description: "Used for system critical pods that must not be moved from their current node.",
 			},
 			expected: false,
@@ -72,6 +74,7 @@ func TestIsKnownSystemPriorityClass(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		// 逐一校验名称 + 值 + GlobalDefault 的组合，任一属性不符都应返回 false。
 		if is, err := IsKnownSystemPriorityClass(test.pc.Name, test.pc.Value, test.pc.GlobalDefault); test.expected != is {
 			t.Errorf("Test [%v]: Expected %v, but got %v. Error: %v", test.name, test.expected, is, err)
 		}

@@ -30,6 +30,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestDefaultAdmissionWebhook 验证 v1beta1 版本 webhook 的默认化行为：
+// 注意失败策略默认为 Ignore、匹配策略默认为 Exact、超时 30 秒，与 v1 版本不同。
 func TestDefaultAdmissionWebhook(t *testing.T) {
 	ignore := v1beta1.Ignore
 	exact := v1beta1.Exact
@@ -142,6 +144,7 @@ func TestDefaultAdmissionWebhook(t *testing.T) {
 	}
 }
 
+// TestDefaultAdmissionPolicy 验证 v1beta1 版本准入策略及绑定默认化后字段被正确填充。
 func TestDefaultAdmissionPolicy(t *testing.T) {
 	fail := v1beta1.Fail
 	never := v1beta1.NeverReinvocationPolicy

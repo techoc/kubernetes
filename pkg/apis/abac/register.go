@@ -22,17 +22,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// GroupName is the API group for abac
+// GroupName 是 abac 的 API 组名。
 const GroupName = "abac.authorization.kubernetes.io"
 
-// SchemeGroupVersion is the API group version used to register abac internal
+// SchemeGroupVersion 是注册 abac 内部类型所用的 API 组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Scheme is the default instance of runtime.Scheme to which types in the abac API group are api.Registry.
-// TODO: remove this, abac should not have its own scheme.
+// Scheme 是 abac API 组类型注册到的默认 runtime.Scheme 实例。
+// TODO: 移除它，abac 不应拥有独立的 scheme。
 var Scheme = runtime.NewScheme()
 
-// Codecs provides access to encoding and decoding for the scheme
+// Codecs 提供基于该 scheme 的编码与解码能力。
 var Codecs = serializer.NewCodecFactory(Scheme)
 
 func init() {
@@ -41,9 +41,9 @@ func init() {
 }
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 是本包的 scheme 构造器，保存了需要执行的初始化函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme is a common registration function for mapping packaged scoped group & version keys to a scheme
+	// AddToScheme 是通用的注册函数，把本包的 group/version 与类型映射到 scheme。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 

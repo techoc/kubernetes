@@ -22,11 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 向 Scheme 注册 v1alpha1 版本的默认值处理函数。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// SetDefaults_ValidatingAdmissionPolicySpec sets defaults for ValidatingAdmissionPolicySpec
+// SetDefaults_ValidatingAdmissionPolicySpec 为验证准入策略规格设置默认值，
+// 未指定失败策略时默认为 Fail。
 func SetDefaults_ValidatingAdmissionPolicySpec(obj *admissionregistrationv1alpha1.ValidatingAdmissionPolicySpec) {
 	if obj.FailurePolicy == nil {
 		policy := admissionregistrationv1alpha1.Fail
@@ -34,7 +36,8 @@ func SetDefaults_ValidatingAdmissionPolicySpec(obj *admissionregistrationv1alpha
 	}
 }
 
-// SetDefaults_MatchResources sets defaults for MatchResources
+// SetDefaults_MatchResources 为 MatchResources 设置默认值：
+// 匹配策略默认为 Equivalent，空选择器表示匹配全部命名空间/对象。
 func SetDefaults_MatchResources(obj *admissionregistrationv1alpha1.MatchResources) {
 	if obj.MatchPolicy == nil {
 		policy := admissionregistrationv1alpha1.Equivalent
@@ -50,7 +53,8 @@ func SetDefaults_MatchResources(obj *admissionregistrationv1alpha1.MatchResource
 	}
 }
 
-// SetDefaults_ParamRef sets defaults for ParamRef
+// SetDefaults_ParamRef 为参数引用设置默认值：
+// 参数对象不存在时默认按 Deny 处理，避免因缺少参数而意外放行请求。
 func SetDefaults_ParamRef(obj *admissionregistrationv1alpha1.ParamRef) {
 	if obj.ParameterNotFoundAction == nil {
 		v := admissionregistrationv1alpha1.DenyAction
@@ -58,7 +62,8 @@ func SetDefaults_ParamRef(obj *admissionregistrationv1alpha1.ParamRef) {
 	}
 }
 
-// SetDefaults_MutatingAdmissionPolicySpec sets defaults for MutatingAdmissionPolicySpec
+// SetDefaults_MutatingAdmissionPolicySpec 为变更准入策略规格设置默认值，
+// 未指定失败策略时默认为 Fail。
 func SetDefaults_MutatingAdmissionPolicySpec(obj *admissionregistrationv1alpha1.MutatingAdmissionPolicySpec) {
 	if obj.FailurePolicy == nil {
 		policy := admissionregistrationv1alpha1.Fail

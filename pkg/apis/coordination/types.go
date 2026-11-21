@@ -90,7 +90,7 @@ type LeaseList struct {
 	// +optional
 	metav1.ListMeta
 
-	// items is a list of schema objects.
+	// items 是 schema 对象列表。
 	Items []Lease
 }
 
@@ -110,7 +110,7 @@ type LeaseCandidateSpec struct {
 	// LeaseName is the name of the lease for which this candidate is contending.
 	// The limits on this field are the same as on Lease.name. Multiple lease candidates
 	// may reference the same Lease.name.
-	// This field is immutable.
+	// 该字段不可变。
 	// +required
 	LeaseName string
 	// PingTime is the last time that the server has requested the LeaseCandidate
@@ -128,7 +128,7 @@ type LeaseCandidateSpec struct {
 	// +optional
 	RenewTime *metav1.MicroTime
 	// BinaryVersion is the binary version. It must be in a semver format without leading `v`.
-	// This field is required.
+	// 该字段必填。
 	// +required
 	BinaryVersion string
 	// EmulationVersion is the emulation version. It must be in a semver format without leading `v`.
@@ -153,6 +153,6 @@ type LeaseCandidateList struct {
 	// +optional
 	metav1.ListMeta
 
-	// items is a list of schema objects.
+	// items 是 schema 对象列表。
 	Items []LeaseCandidate
 }

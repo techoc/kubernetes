@@ -27,6 +27,8 @@ import (
 	schedulingapiv1 "k8s.io/kubernetes/pkg/apis/scheduling/v1"
 )
 
+// TestValidatePriorityClass 验证普通优先级类与预定义系统优先级类均能通过校验，
+// 而非法名称、带命名空间、名称与值不匹配的系统类等场景会被拒绝。
 func TestValidatePriorityClass(t *testing.T) {
 	spcs := schedulingapiv1.SystemPriorityClasses()
 	successCases := map[string]scheduling.PriorityClass{
@@ -82,6 +84,8 @@ func TestValidatePriorityClass(t *testing.T) {
 	}
 }
 
+// TestValidatePriorityClassUpdate 验证更新时 description、globalDefault 等可变字段可以修改，
+// 而 name、namespace、value、preemptionPolicy 的变更会被拒绝，并检查错误类型是否符合预期。
 func TestValidatePriorityClassUpdate(t *testing.T) {
 	preemptLowerPriority := core.PreemptLowerPriority
 	preemptNever := core.PreemptNever
@@ -182,6 +186,8 @@ func TestValidatePriorityClassUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateWorkload 覆盖 Workload 创建校验的成功与失败场景：
+// 合法模板树应通过，模板无子节点、深度超限、名称重复、优先级不一致等应报错。
 func TestValidateWorkload(t *testing.T) {
 	successCases := map[string]*scheduling.Workload{
 		"basic and gang policies": mkWorkload(),
@@ -298,16 +304,16 @@ func TestValidateWorkload(t *testing.T) {
 			workload: mkWorkload(func(w *scheduling.Workload) {
 				w.Spec.PodGroupTemplates = nil
 				w.Spec.CompositePodGroupTemplates = []scheduling.CompositePodGroupTemplate{
-					{ // depth 1
+					{ // 第 1 层
 						Name: "cpg1",
 						CompositePodGroupTemplates: []scheduling.CompositePodGroupTemplate{
-							{ // depth 2
+							{ // 第 2 层
 								Name: "cpg2",
 								CompositePodGroupTemplates: []scheduling.CompositePodGroupTemplate{
-									{ // depth 3
+									{ // 第 3 层
 										Name: "cpg3",
 										CompositePodGroupTemplates: []scheduling.CompositePodGroupTemplate{
-											{ // depth 4
+											{ // 第 4 层
 												Name: "cpg4", PodGroupTemplates: []scheduling.PodGroupTemplate{{Name: "leaf"}},
 											},
 										},
@@ -365,6 +371,8 @@ func TestValidateWorkload(t *testing.T) {
 	}
 }
 
+// TestValidateWorkloadUpdate 验证 Workload 更新时的校验行为：
+// 合法 spec 变更可以更新，违反层级约束的 spec 会被拒绝。
 func TestValidateWorkloadUpdate(t *testing.T) {
 	successCases := map[string]struct {
 		old    *scheduling.Workload
@@ -411,7 +419,8 @@ func TestValidateWorkloadUpdate(t *testing.T) {
 	}
 }
 
-// mkWorkload produces a Workload which passes validation with no tweaks.
+// mkWorkload 构造一个默认可通过校验的 Workload。
+// tweaks 允许各测试场景在此基础上做局部修改，避免重复构造完整对象。
 func mkWorkload(tweaks ...func(w *scheduling.Workload)) *scheduling.Workload {
 	w := &scheduling.Workload{
 		ObjectMeta: metav1.ObjectMeta{Name: "workload", Namespace: "ns"},
@@ -501,6 +510,8 @@ func mkWorkload(tweaks ...func(w *scheduling.Workload)) *scheduling.Workload {
 	return w
 }
 
+// TestValidatePodGroup 验证 PodGroup 名称校验以及 parentCompositePodGroupName
+// 与 workloadRef 之间的依赖关系：设置父 CPG 名称时必须同时提供 workloadRef。
 func TestValidatePodGroup(t *testing.T) {
 	successCases := map[string]*scheduling.PodGroup{
 		"gang policy": mkPodGroup(),
@@ -586,6 +597,8 @@ func TestValidatePodGroup(t *testing.T) {
 	}
 }
 
+// TestValidatePodGroupUpdate 验证 PodGroup 更新场景：
+// 不修改不可变字段时应通过，修改 name/namespace 等应被拒绝。
 func TestValidatePodGroupUpdate(t *testing.T) {
 	successCases := map[string]struct {
 		old    *scheduling.PodGroup
@@ -644,6 +657,8 @@ func TestValidatePodGroupUpdate(t *testing.T) {
 	}
 }
 
+// TestValidatePodGroupStatusUpdate 验证 PodGroup 状态更新校验：
+// 合法 conditions 与 resourceClaimStatuses 应通过，引用不存在的资源声明应报错。
 func TestValidatePodGroupStatusUpdate(t *testing.T) {
 	now := metav1.Now()
 	successCases := map[string]struct {
@@ -816,7 +831,8 @@ func TestValidatePodGroupStatusUpdate(t *testing.T) {
 	}
 }
 
-// mkPodGroup produces a PodGroup which passes validation with no tweaks.
+// mkPodGroup 构造一个默认可通过校验的 PodGroup。
+// tweaks 允许各测试场景按需修改字段。
 func mkPodGroup(tweaks ...func(pg *scheduling.PodGroup)) *scheduling.PodGroup {
 	pg := &scheduling.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{Name: "workload", Namespace: "ns"},
@@ -843,6 +859,8 @@ func mkPodGroup(tweaks ...func(pg *scheduling.PodGroup)) *scheduling.PodGroup {
 	return pg
 }
 
+// TestValidateCompositePodGroup 验证 CompositePodGroup 名称与元数据校验，
+// 合法名称通过，非法名称或带命名空间的场景被拒绝。
 func TestValidateCompositePodGroup(t *testing.T) {
 	successCases := map[string]*scheduling.CompositePodGroup{
 		"gang policy": mkCompositePodGroup(),
@@ -933,6 +951,7 @@ func TestValidateCompositePodGroup(t *testing.T) {
 	}
 }
 
+// TestValidateCompositePodGroupUpdate 验证 CompositePodGroup 更新时不可变字段校验。
 func TestValidateCompositePodGroupUpdate(t *testing.T) {
 	successCases := map[string]struct {
 		old    *scheduling.CompositePodGroup
@@ -991,6 +1010,7 @@ func TestValidateCompositePodGroupUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateCompositePodGroupStatusUpdate 验证 CompositePodGroup 状态更新时 conditions 的校验。
 func TestValidateCompositePodGroupStatusUpdate(t *testing.T) {
 	now := metav1.Now()
 	successCases := map[string]struct {
@@ -1137,7 +1157,8 @@ func TestValidateCompositePodGroupStatusUpdate(t *testing.T) {
 	}
 }
 
-// mkCompositePodGroup produces a CompositePodGroup which passes validation with no tweaks.
+// mkCompositePodGroup 构造一个默认可通过校验的 CompositePodGroup。
+// tweaks 允许各测试场景按需修改字段。
 func mkCompositePodGroup(tweaks ...func(cpg *scheduling.CompositePodGroup)) *scheduling.CompositePodGroup {
 	cpg := &scheduling.CompositePodGroup{
 		ObjectMeta: metav1.ObjectMeta{Name: "workload", Namespace: "ns"},

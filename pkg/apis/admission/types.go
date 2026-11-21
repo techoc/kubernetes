@@ -25,92 +25,92 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// AdmissionReview describes an admission review request/response.
+// AdmissionReview 描述一次准入审查的请求/响应。
 type AdmissionReview struct {
 	metav1.TypeMeta
 
-	// Request describes the attributes for the admission request.
+	// Request 描述准入请求的属性。
 	// +optional
 	Request *AdmissionRequest
 
-	// Response describes the attributes for the admission response.
+	// Response 描述准入响应的属性。
 	// +optional
 	Response *AdmissionResponse
 }
 
-// AdmissionRequest describes the admission.Attributes for the admission request.
+// AdmissionRequest 描述准入请求的 admission.Attributes。
 type AdmissionRequest struct {
-	// UID is an identifier for the individual request/response. It allows us to distinguish instances of requests which are
-	// otherwise identical (parallel requests, requests when earlier requests did not modify etc)
-	// The UID is meant to track the round trip (request/response) between the KAS and the WebHook, not the user request.
-	// It is suitable for correlating log entries between the webhook and apiserver, for either auditing or debugging.
+	// UID 是每个请求/响应的标识符，用于区分原本相同的请求实例，
+	// 例如并发请求，或先前请求未修改对象的场景。
+	// 该 UID 用于跟踪 KAS 与 WebHook 之间的一次往返（请求/响应），而不是用户请求本身。
+	// 它适合用于关联 webhook 与 apiserver 两侧的日志，便于审计或调试。
 	UID types.UID
-	// Kind is the fully-qualified type of object being submitted (for example, v1.Pod or autoscaling.v1.Scale)
+	// Kind 是被提交对象的完整限定类型（例如 v1.Pod 或 autoscaling.v1.Scale）。
 	Kind metav1.GroupVersionKind
-	// Resource is the fully-qualified resource being requested (for example, v1.pods)
+	// Resource 是被请求资源的完整限定名称（例如 v1.pods）。
 	Resource metav1.GroupVersionResource
-	// SubResource is the subresource being requested, if any (for example, "status" or "scale")
+	// SubResource 是被请求的子资源（如有），例如 "status" 或 "scale"。
 	// +optional
 	SubResource string
 
-	// RequestKind is the fully-qualified type of the original API request (for example, v1.Pod or autoscaling.v1.Scale).
-	// If this is specified and differs from the value in "kind", an equivalent match and conversion was performed.
+	// RequestKind 是原始 API 请求的完整限定类型（例如 v1.Pod 或 autoscaling.v1.Scale）。
+	// 若该字段存在且与 "kind" 不同，说明执行了等价匹配与转换。
 	//
-	// For example, if deployments can be modified via apps/v1 and apps/v1beta1, and a webhook registered a rule of
-	// `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]` and `matchPolicy: Equivalent`,
-	// an API request to apps/v1beta1 deployments would be converted and sent to the webhook
-	// with `kind: {group:"apps", version:"v1", kind:"Deployment"}` (matching the rule the webhook registered for),
-	// and `requestKind: {group:"apps", version:"v1beta1", kind:"Deployment"}` (indicating the kind of the original API request).
+	// 例如，若 deployment 可通过 apps/v1 和 apps/v1beta1 修改，而 webhook 注册了如下规则：
+	// `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]` 且 `matchPolicy: Equivalent`，
+	// 则针对 apps/v1beta1 deployment 的 API 请求会被转换后发送给该 webhook。
+	// 其中 `kind: {group:"apps", version:"v1", kind:"Deployment"}` 匹配 webhook 注册的规则，
+	// 而 `requestKind: {group:"apps", version:"v1beta1", kind:"Deployment"}` 表示原始 API 请求的类型。
 	//
-	// See documentation for the "matchPolicy" field in the webhook configuration type for more details.
+	// 更多细节参见 webhook 配置类型中 "matchPolicy" 字段的文档。
 	// +optional
 	RequestKind *metav1.GroupVersionKind
-	// RequestResource is the fully-qualified resource of the original API request (for example, v1.pods).
+	// RequestResource 是原始 API 请求的完整限定资源（例如 v1.pods）。
 	// If this is specified and differs from the value in "resource", an equivalent match and conversion was performed.
 	//
-	// For example, if deployments can be modified via apps/v1 and apps/v1beta1, and a webhook registered a rule of
-	// `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]` and `matchPolicy: Equivalent`,
-	// an API request to apps/v1beta1 deployments would be converted and sent to the webhook
-	// with `resource: {group:"apps", version:"v1", resource:"deployments"}` (matching the resource the webhook registered for),
-	// and `requestResource: {group:"apps", version:"v1beta1", resource:"deployments"}` (indicating the resource of the original API request).
+	// 例如，若 deployment 可通过 apps/v1 和 apps/v1beta1 修改，而 webhook 注册了如下规则：
+	// `apiGroups:["apps"], apiVersions:["v1"], resources: ["deployments"]` 且 `matchPolicy: Equivalent`，
+	// 则针对 apps/v1beta1 deployment 的 API 请求会被转换后发送给该 webhook。
+	// 其中 `resource: {group:"apps", version:"v1", resource:"deployments"}` 匹配 webhook 注册的资源，
+	// 而 `requestResource: {group:"apps", version:"v1beta1", resource:"deployments"}` 表示原始 API 请求的资源。
 	//
-	// See documentation for the "matchPolicy" field in the webhook configuration type.
+	// 参见 webhook 配置类型中 "matchPolicy" 字段的文档。
 	// +optional
 	RequestResource *metav1.GroupVersionResource
-	// RequestSubResource is the name of the subresource of the original API request, if any (for example, "status" or "scale")
+	// RequestSubResource 是原始 API 请求中的子资源名称（如有），例如 "status" 或 "scale"。
 	// If this is specified and differs from the value in "subResource", an equivalent match and conversion was performed.
-	// See documentation for the "matchPolicy" field in the webhook configuration type.
+	// 参见 webhook 配置类型中 "matchPolicy" 字段的文档。
 	// +optional
 	RequestSubResource string
 
-	// Name is the name of the object as presented in the request.  On a CREATE operation, the client may omit name and
-	// rely on the server to generate the name.  If that is the case, this method will return the empty string.
+	// Name 是请求中给出的对象名称。CREATE 操作时客户端可以省略 name，
+	// 由服务端生成。此时该方法返回空字符串。
 	// +optional
 	Name string
-	// Namespace is the namespace associated with the request (if any).
+	// Namespace 是请求关联的命名空间（如有）。
 	// +optional
 	Namespace string
-	// Operation is the operation being performed. This may be different than the operation
-	// requested. e.g. a patch can result in either a CREATE or UPDATE Operation.
+	// Operation 是实际执行的操作，可能与请求中的操作不同。
+	// 例如 patch 最终可能转化为 CREATE 或 UPDATE。
 	Operation Operation
-	// UserInfo is information about the requesting user
+	// UserInfo 是发起请求的用户信息。
 	UserInfo authentication.UserInfo
-	// Object is the object from the incoming request.
+	// Object 来自传入的请求。
 	// +optional
 	Object runtime.Object
-	// OldObject is the existing object. Only populated for DELETE and UPDATE requests.
+	// OldObject 是已存在的对象，仅在 DELETE 和 UPDATE 请求中填充。
 	// +optional
 	OldObject runtime.Object
-	// DryRun indicates that modifications will definitely not be persisted for this request.
-	// Calls to webhooks must have no side effects if DryRun is true.
-	// Defaults to false.
+	// DryRun 表示该请求的修改一定不会被持久化。
+	// DryRun 为 true 时，对 webhook 的调用必须没有副作用。
+	// 默认为 false。
 	// +optional
 	DryRun *bool
-	// Options is the operation option structure of the operation being performed.
-	// e.g. `meta.k8s.io/v1.DeleteOptions` or `meta.k8s.io/v1.CreateOptions`. This may be
-	// different than the options the caller provided. e.g. for a patch request the performed
-	// Operation might be a CREATE, in which case the Options will a
-	// `meta.k8s.io/v1.CreateOptions` even though the caller provided `meta.k8s.io/v1.PatchOptions`.
+	// Options 是实际操作对应的操作选项结构。
+	// 例如 `meta.k8s.io/v1.DeleteOptions` 或 `meta.k8s.io/v1.CreateOptions`。它可能
+	// 与调用方提供的选项不同。例如 patch 请求最终执行的是
+	// CREATE 操作，此时 Options 会是
+	// `meta.k8s.io/v1.CreateOptions`，即使调用方提供的是 `meta.k8s.io/v1.PatchOptions`。
 	// +optional
 	Options runtime.Object
 }
@@ -118,46 +118,46 @@ type AdmissionRequest struct {
 // AdmissionResponse describes an admission response.
 type AdmissionResponse struct {
 	// UID is an identifier for the individual request/response.
-	// This should be copied over from the corresponding AdmissionRequest.
+	// 应从对应的 AdmissionRequest 中原样复制。
 	UID types.UID
-	// Allowed indicates whether or not the admission request was permitted.
+	// Allowed 表示准入请求是否被允许。
 	Allowed bool
-	// Result contains extra details into why an admission request was denied.
-	// This field IS NOT consulted in any way if "Allowed" is "true".
+	// Result 包含准入请求被拒绝的详细原因。
+	// 当 "Allowed" 为 "true" 时，不会以任何方式读取该字段。
 	// +optional
 	Result *metav1.Status
-	// Patch contains the actual patch. Currently we only support a response in the form of JSONPatch, RFC 6902.
+	// Patch 包含实际的补丁。目前仅支持 RFC 6902 的 JSONPatch 形式。
 	// +optional
 	Patch []byte
-	// PatchType indicates the form the Patch will take. Currently we only support "JSONPatch".
+	// PatchType 表示 Patch 的形式。目前仅支持 "JSONPatch"。
 	// +optional
 	PatchType *PatchType
-	// AuditAnnotations is an unstructured key value map set by remote admission controller (e.g. error=image-blacklisted).
-	// MutatingAdmissionWebhook and ValidatingAdmissionWebhook admission controller will prefix the keys with
-	// admission webhook name (e.g. imagepolicy.example.com/error=image-blacklisted). AuditAnnotations will be provided by
-	// the admission webhook to add additional context to the audit log for this request.
+	// AuditAnnotations 是由远程准入控制器设置的非结构化键值映射（例如 error=image-blacklisted）。
+	// MutatingAdmissionWebhook 和 ValidatingAdmissionWebhook 准入控制器会给 key 加上
+	// webhook 名称前缀（例如 imagepolicy.example.com/error=image-blacklisted）。AuditAnnotations 由
+	// 准入 webhook 提供，用于向该请求的审计日志补充上下文。
 	// +optional
 	AuditAnnotations map[string]string
-	// warnings is a list of warning messages to return to the requesting API client.
-	// Warning messages describe a problem the client making the API request should correct or be aware of.
-	// Limit warnings to 120 characters if possible.
-	// Warnings over 256 characters and large numbers of warnings may be truncated.
+	// warnings 是返回给发起请求的 API 客户端的警告消息列表。
+	// 警告消息描述客户端应注意或修正的问题。
+	// 警告尽量控制在 120 个字符以内。
+	// 超过 256 个字符的警告或数量过多的警告可能被截断。
 	// +optional
 	Warnings []string
 }
 
-// PatchType is the type of patch being used to represent the mutated object
+// PatchType 是表示变更对象所使用的补丁类型。
 type PatchType string
 
-// PatchType constants.
+// PatchType 常量。
 const (
 	PatchTypeJSONPatch PatchType = "JSONPatch"
 )
 
-// Operation is the type of resource operation being checked for admission control
+// Operation 是需要做准入检查的资源操作类型。
 type Operation string
 
-// Operation constants
+// Operation 常量。
 const (
 	Create  Operation = "CREATE"
 	Update  Operation = "UPDATE"

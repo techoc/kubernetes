@@ -37,6 +37,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试 DaemonSet 经编解码往返后的默认值：标签传播、滚动更新策略与 revisionHistoryLimit。
 func TestSetDefaultDaemonSetSpec(t *testing.T) {
 	defaultLabels := map[string]string{"foo": "bar"}
 	maxUnavailable := intstr.FromInt32(1)
@@ -175,6 +176,7 @@ func TestSetDefaultDaemonSetSpec(t *testing.T) {
 	}
 }
 
+// 测试 StatefulSet 默认值，并覆盖 MaxUnavailable Pod 管理策略特性开关下的不同期望。
 func TestSetDefaultStatefulSet(t *testing.T) {
 	defaultLabels := map[string]string{"foo": "bar"}
 	var defaultPartition int32 = 0
@@ -482,6 +484,7 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 	}
 }
 
+// 测试 Deployment 默认值，包括副本数、策略及滚动更新参数。
 func TestSetDefaultDeployment(t *testing.T) {
 	defaultIntOrString := intstr.FromString("25%")
 	differentIntOrString := intstr.FromInt32(5)
@@ -632,6 +635,7 @@ func TestSetDefaultDeployment(t *testing.T) {
 	}
 }
 
+// 验证默认 Deployment 在满足副本条件时被视为可用（Available）。
 func TestDefaultDeploymentAvailability(t *testing.T) {
 	d := roundTrip(t, runtime.Object(&appsv1beta2.Deployment{})).(*appsv1beta2.Deployment)
 
@@ -645,6 +649,7 @@ func TestDefaultDeploymentAvailability(t *testing.T) {
 	}
 }
 
+// 测试 ReplicaSet 的 replicas 默认值（默认为 1）。
 func TestSetDefaultReplicaSetReplicas(t *testing.T) {
 	tests := []struct {
 		rs             appsv1beta2.ReplicaSet
@@ -712,6 +717,7 @@ func TestSetDefaultReplicaSetReplicas(t *testing.T) {
 	}
 }
 
+// 验证 ReplicaSet 默认值处理不会给容器设置 resources.requests，避免产生非预期的资源请求。
 func TestDefaultRequestIsNotSetForReplicaSet(t *testing.T) {
 	s := v1.PodSpec{}
 	s.Containers = []v1.Container{
@@ -745,6 +751,7 @@ func TestDefaultRequestIsNotSetForReplicaSet(t *testing.T) {
 	}
 }
 
+// 将对象经 legacy scheme 编码再解码，返回默认值处理完成后的对象；用于验证默认值逻辑在序列化路径上的效果。
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 	data, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(SchemeGroupVersion), obj)
 	if err != nil {

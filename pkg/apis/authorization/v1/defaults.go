@@ -20,6 +20,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 向 scheme 注册 v1 版本的默认值设置函数。
+// 该函数通过 init 钩子被调用，而实际注册逻辑由生成器生成的 RegisterDefaults 提供。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
+	// 复用生成的 RegisterDefaults，避免手写与生成逻辑不一致。
 	return RegisterDefaults(scheme)
 }

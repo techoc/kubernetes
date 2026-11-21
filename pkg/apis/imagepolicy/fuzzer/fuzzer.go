@@ -20,7 +20,10 @@ import (
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// Funcs returns the fuzzer functions for the imagepolicy api group.
+// Funcs 返回 imagepolicy API 组的 fuzzer 函数列表，供 round-trip 测试注册使用。
+// 当前返回空切片：该组的类型没有需要特殊处理的字段（如指针默认值或枚举），
+// 完全交给通用反射 fuzzer 即可；保留此入口是为了让 fuzzer 注册逻辑保持统一。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
+	// 没有自定义 fuzzer：返回值留空，保持与生成代码的约定一致。
 	return []interface{}{}
 }

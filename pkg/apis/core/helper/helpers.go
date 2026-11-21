@@ -34,9 +34,9 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core"
 )
 
-// IsPodLevelResourcesSet check if PodLevelResources pod-level resources are set.
-// It returns true if either the Requests or Limits maps are non-empty.
-// Note: keep this in sync with k8s.io/component-helpers/resource.IsPodLevelResourcesSet
+// IsPodLevelResourcesSet 检查是否设置了 Pod 级资源（PodLevelResources）。
+// 只要 Requests 或 Limits map 非空即返回 true。
+// 注意：需与 k8s.io/component-helpers/resource.IsPodLevelResourcesSet 保持一致。
 func IsPodLevelResourcesSet(pod *core.Pod) bool {
 	if pod.Spec.Resources == nil {
 		return false
@@ -46,6 +46,7 @@ func IsPodLevelResourcesSet(pod *core.Pod) bool {
 		return false
 	}
 
+	// 只认可受支持的 Pod 级资源，忽略其他资源名。
 	for name := range pod.Spec.Resources.Requests {
 		if resourcehelper.IsSupportedPodLevelResource(v1.ResourceName(name)) {
 			return true
@@ -61,20 +62,19 @@ func IsPodLevelResourcesSet(pod *core.Pod) bool {
 	return false
 }
 
-// IsHugePageResourceName returns true if the resource name has the huge page
-// resource prefix.
+// IsHugePageResourceName 判断资源名是否带有大页（huge page）资源前缀。
 func IsHugePageResourceName(name core.ResourceName) bool {
 	return strings.HasPrefix(string(name), core.ResourceHugePagesPrefix)
 }
 
-// IsHugePageResourceValueDivisible returns true if the resource value of storage is
-// integer multiple of page size.
+// IsHugePageResourceValueDivisible 判断存储类资源值是否为页大小的整数倍。
 func IsHugePageResourceValueDivisible(name core.ResourceName, quantity resource.Quantity) bool {
 	pageSize, err := HugePageSizeFromResourceName(name)
 	if err != nil {
 		return false
 	}
 
+	// 页大小必须为正且是整字节数，否则无法做整除判断。
 	if pageSize.Sign() <= 0 || pageSize.MilliValue()%int64(1000) != int64(0) {
 		return false
 	}
@@ -82,22 +82,19 @@ func IsHugePageResourceValueDivisible(name core.ResourceName, quantity resource.
 	return quantity.Value()%pageSize.Value() == 0
 }
 
-// IsQuotaHugePageResourceName returns true if the resource name has the quota
-// related huge page resource prefix.
+// IsQuotaHugePageResourceName 判断资源名是否带有与大页配额相关的资源前缀。
 func IsQuotaHugePageResourceName(name core.ResourceName) bool {
 	return strings.HasPrefix(string(name), core.ResourceHugePagesPrefix) || strings.HasPrefix(string(name), core.ResourceRequestsHugePagesPrefix)
 }
 
-// HugePageResourceName returns a ResourceName with the canonical hugepage
-// prefix prepended for the specified page size.  The page size is converted
-// to its canonical representation.
+// HugePageResourceName 为指定的页大小加上规范的大页前缀，生成对应的 ResourceName。
+// 页大小会先被转换为规范表示形式。
 func HugePageResourceName(pageSize resource.Quantity) core.ResourceName {
 	return core.ResourceName(fmt.Sprintf("%s%s", core.ResourceHugePagesPrefix, pageSize.String()))
 }
 
-// HugePageSizeFromResourceName returns the page size for the specified huge page
-// resource name.  If the specified input is not a valid huge page resource name
-// an error is returned.
+// HugePageSizeFromResourceName 从大页资源名中解析出页大小。
+// 输入不是合法的大页资源名时返回错误。
 func HugePageSizeFromResourceName(name core.ResourceName) (resource.Quantity, error) {
 	if !IsHugePageResourceName(name) {
 		return resource.Quantity{}, fmt.Errorf("resource name: %s is an invalid hugepage name", name)
@@ -106,8 +103,7 @@ func HugePageSizeFromResourceName(name core.ResourceName) (resource.Quantity, er
 	return resource.ParseQuantity(pageSize)
 }
 
-// NonConvertibleFields iterates over the provided map and filters out all but
-// any keys with the "non-convertible.kubernetes.io" prefix.
+// NonConvertibleFields 遍历给定的 map，筛出所有带有 "non-convertible.kubernetes.io" 前缀的键。
 func NonConvertibleFields(annotations map[string]string) map[string]string {
 	nonConvertibleKeys := map[string]string{}
 	for key, value := range annotations {
@@ -118,14 +114,13 @@ func NonConvertibleFields(annotations map[string]string) map[string]string {
 	return nonConvertibleKeys
 }
 
-// Semantic can do semantic deep equality checks for core objects.
-// Example: apiequality.Semantic.DeepEqual(aPod, aPodWithNonNilButEmptyMaps) == true
+// Semantic 可对 core 对象做语义层面的深度比较。
+// 例如 apiequality.Semantic.DeepEqual(aPod, aPodWithNonNilButEmptyMaps) == true。
 var Semantic = conversion.EqualitiesOrDie(
 	func(a, b resource.Quantity) bool {
-		// Ignore formatting, only care that numeric value stayed the same.
+		// 只比较数值大小，忽略格式差异：不同格式（如 DecimalSI 与 BinarySI）
+		// 表示的是同一个量时不应视为不同。未初始化的 Quantity 与 0 等价。
 		// TODO: if we decide it's important, it should be safe to start comparing the format.
-		//
-		// Uninitialized quantities are equivalent to 0 quantities.
 		return a.Cmp(b) == 0
 	},
 	func(a, b metav1.MicroTime) bool {
@@ -154,7 +149,7 @@ var standardResourceQuotaScopes = sets.New(
 	core.ResourceQuotaScopeVolumeAttributesClass,
 )
 
-// IsStandardResourceQuotaScope returns true if the scope is a standard value
+// IsStandardResourceQuotaScope 判断给定 scope 是否为标准取值。
 func IsStandardResourceQuotaScope(scope core.ResourceQuotaScope) bool {
 	return standardResourceQuotaScopes.Has(scope) || scope == core.ResourceQuotaScopeCrossNamespacePodAffinity
 }
@@ -180,7 +175,7 @@ var pvcStorageQuotaResources = sets.New(
 	core.ResourceRequestsStorage,
 )
 
-// IsResourceQuotaScopeValidForResource returns true if the resource applies to the specified scope
+// IsResourceQuotaScopeValidForResource 判断某个资源是否适用于指定的配额 scope。
 func IsResourceQuotaScopeValidForResource(scope core.ResourceQuotaScope, resource core.ResourceName) bool {
 	switch scope {
 	case core.ResourceQuotaScopeTerminating, core.ResourceQuotaScopeNotTerminating, core.ResourceQuotaScopeNotBestEffort,
@@ -201,28 +196,27 @@ var standardContainerResources = sets.New(
 	core.ResourceEphemeralStorage,
 )
 
-// IsStandardContainerResourceName returns true if the container can make a resource request
-// for the specified resource
+// IsStandardContainerResourceName 判断容器是否可以针对该资源发起 request。
 func IsStandardContainerResourceName(name core.ResourceName) bool {
 	return standardContainerResources.Has(name) || IsHugePageResourceName(name)
 }
 
-// IsNodeAllocatableResourceName returns true if the resource name is valid for DRA NodeAllocatableResources.
-// Currently, only cpu, memory, and hugepages are supported (excluding ephemeral-storage for alpha).
+// IsNodeAllocatableResourceName 判断资源名是否对 DRA NodeAllocatableResources 有效。
+// 目前仅支持 cpu、memory 和 hugepages（alpha 阶段暂不支持 ephemeral-storage）。
 func IsNodeAllocatableResourceName(name core.ResourceName) bool {
 	return name == core.ResourceCPU || name == core.ResourceMemory || IsHugePageResourceName(name)
 }
 
-// IsExtendedResourceName returns true if:
-// 1. the resource name is not in the default namespace;
-// 2. resource name does not have "requests." prefix,
-// to avoid confusion with the convention in quota
-// 3. it satisfies the rules in IsQualifiedName() after converted into quota resource name
+// IsExtendedResourceName 在以下条件全部满足时返回 true：
+// 1. 资源名不在默认命名空间中；
+// 2. 资源名没有 "requests." 前缀，以免与配额约定产生混淆；
+// 3. 转换为配额资源名后满足 IsQualifiedName() 的规则。
 func IsExtendedResourceName(name core.ResourceName) bool {
 	if IsNativeResource(name) || strings.HasPrefix(string(name), core.DefaultResourceRequestsPrefix) {
 		return false
 	}
-	// Ensure it satisfies the rules in IsQualifiedName() after converted into quota resource name
+	// 确保转换为配额资源名后满足 IsQualifiedName() 的规则，
+	// 这样扩展资源才能安全地用于配额统计。
 	nameForQuota := fmt.Sprintf("%s%s", core.DefaultResourceRequestsPrefix, string(name))
 	if errs := validation.IsQualifiedName(nameForQuota); len(errs) != 0 {
 		return false
@@ -230,16 +224,14 @@ func IsExtendedResourceName(name core.ResourceName) bool {
 	return true
 }
 
-// IsNativeResource returns true if the resource name is in the
-// *kubernetes.io/ namespace. Partially-qualified (unprefixed) names are
-// implicitly in the kubernetes.io/ namespace.
+// IsNativeResource 判断资源名是否位于 *kubernetes.io/ 命名空间中。
+// 不带前缀（部分限定）的名称隐式属于 kubernetes.io/ 命名空间。
 func IsNativeResource(name core.ResourceName) bool {
 	return !strings.Contains(string(name), "/") ||
 		strings.Contains(string(name), core.ResourceDefaultNamespacePrefix)
 }
 
-// IsOvercommitAllowed returns true if the resource is in the default
-// namespace and is not hugepages.
+// IsOvercommitAllowed 判断资源是否位于默认命名空间且不是大页资源。
 func IsOvercommitAllowed(name core.ResourceName) bool {
 	return IsNativeResource(name) &&
 		!IsHugePageResourceName(name)
@@ -251,7 +243,7 @@ var standardLimitRangeTypes = sets.New(
 	core.LimitTypePersistentVolumeClaim,
 )
 
-// IsStandardLimitRangeType returns true if the type is Pod or Container
+// IsStandardLimitRangeType 判断类型是否为 Pod、Container 或 PersistentVolumeClaim。
 func IsStandardLimitRangeType(value core.LimitType) bool {
 	return standardLimitRangeTypes.Has(value)
 }
@@ -278,8 +270,7 @@ var standardQuotaResources = sets.New(
 	core.ResourceServicesLoadBalancers,
 )
 
-// IsStandardQuotaResourceName returns true if the resource is known to
-// the quota tracking system
+// IsStandardQuotaResourceName 判断资源是否为配额跟踪系统已知的资源。
 func IsStandardQuotaResourceName(name core.ResourceName) bool {
 	return standardQuotaResources.Has(name) || IsQuotaHugePageResourceName(name)
 }
@@ -307,7 +298,7 @@ var standardResources = sets.New(
 	core.ResourceServicesLoadBalancers,
 )
 
-// IsStandardResourceName returns true if the resource is known to the system
+// IsStandardResourceName 判断资源是否为系统已知的资源。
 func IsStandardResourceName(name core.ResourceName) bool {
 	return standardResources.Has(name) || IsQuotaHugePageResourceName(name)
 }
@@ -324,16 +315,15 @@ var integerResources = sets.New(
 	core.ResourceServicesLoadBalancers,
 )
 
-// IsIntegerResourceName returns true if the resource is measured in integer values
+// IsIntegerResourceName 判断资源是否以整数计量。
 func IsIntegerResourceName(name core.ResourceName) bool {
 	return integerResources.Has(name) || IsExtendedResourceName(name)
 }
 
-// IsServiceIPSet aims to check if the service's ClusterIP is set or not
-// the objective is not to perform validation here
+// IsServiceIPSet 检查 Service 的 ClusterIP 是否已设置。
+// 目的不是在此处做校验，调用方需自行保证 Service 已通过语义校验。
 func IsServiceIPSet(service *core.Service) bool {
-	// This function assumes that the service is semantically validated
-	// it does not test if the IP is valid, just makes sure that it is set.
+	// 本函数假定 Service 已通过语义校验，只检查 ClusterIP 是否被设置，不验证 IP 的合法性。
 	return len(service.Spec.ClusterIP) > 0 &&
 		service.Spec.ClusterIP != core.ClusterIPNone
 }
@@ -344,13 +334,13 @@ var standardFinalizers = sets.New(
 	metav1.FinalizerDeleteDependents,
 )
 
-// IsStandardFinalizerName checks if the input string is a standard finalizer name
+// IsStandardFinalizerName 检查输入字符串是否为标准的 finalizer 名称。
 func IsStandardFinalizerName(str string) bool {
 	return standardFinalizers.Has(str)
 }
 
-// GetAccessModesAsString returns a string representation of an array of access modes.
-// modes, when present, are always in the same order: RWO,ROX,RWX,RWOP.
+// GetAccessModesAsString 把访问模式数组转为字符串表示。
+// 存在时各模式始终按固定顺序输出：RWO、ROX、RWX、RWOP。
 func GetAccessModesAsString(modes []core.PersistentVolumeAccessMode) string {
 	modes = removeDuplicateAccessModes(modes)
 	modesStr := []string{}
@@ -369,7 +359,7 @@ func GetAccessModesAsString(modes []core.PersistentVolumeAccessMode) string {
 	return strings.Join(modesStr, ",")
 }
 
-// GetAccessModesFromString returns an array of AccessModes from a string created by GetAccessModesAsString
+// GetAccessModesFromString 将 GetAccessModesAsString 生成的字符串还原为访问模式数组。
 func GetAccessModesFromString(modes string) []core.PersistentVolumeAccessMode {
 	strmodes := strings.Split(modes, ",")
 	accessModes := []core.PersistentVolumeAccessMode{}
@@ -389,7 +379,7 @@ func GetAccessModesFromString(modes string) []core.PersistentVolumeAccessMode {
 	return accessModes
 }
 
-// removeDuplicateAccessModes returns an array of access modes without any duplicates
+// removeDuplicateAccessModes 去除访问模式数组中的重复项。
 func removeDuplicateAccessModes(modes []core.PersistentVolumeAccessMode) []core.PersistentVolumeAccessMode {
 	accessModes := []core.PersistentVolumeAccessMode{}
 	for _, m := range modes {
@@ -400,6 +390,7 @@ func removeDuplicateAccessModes(modes []core.PersistentVolumeAccessMode) []core.
 	return accessModes
 }
 
+// ContainsAccessMode 判断访问模式数组中是否包含指定模式。
 func ContainsAccessMode(modes []core.PersistentVolumeAccessMode, mode core.PersistentVolumeAccessMode) bool {
 	for _, m := range modes {
 		if m == mode {
@@ -409,6 +400,7 @@ func ContainsAccessMode(modes []core.PersistentVolumeAccessMode, mode core.Persi
 	return false
 }
 
+// ClaimContainsAllocatedResources 判断 PVC 是否已分配资源（Status.AllocatedResources 非空）。
 func ClaimContainsAllocatedResources(pvc *core.PersistentVolumeClaim) bool {
 	if pvc == nil {
 		return false
@@ -420,6 +412,7 @@ func ClaimContainsAllocatedResources(pvc *core.PersistentVolumeClaim) bool {
 	return false
 }
 
+// ClaimContainsAllocatedResourceStatus 判断 PVC 是否记录了对等资源的状态信息。
 func ClaimContainsAllocatedResourceStatus(pvc *core.PersistentVolumeClaim) bool {
 	if pvc == nil {
 		return false
@@ -431,8 +424,8 @@ func ClaimContainsAllocatedResourceStatus(pvc *core.PersistentVolumeClaim) bool 
 	return false
 }
 
-// GetTolerationsFromPodAnnotations gets the json serialized tolerations data from Pod.Annotations
-// and converts it to the []Toleration type in core.
+// GetTolerationsFromPodAnnotations 从 Pod.Annotations 中读取 JSON 序列化的容忍数据，
+// 并将其实例化为 core 包中的 []Toleration。
 func GetTolerationsFromPodAnnotations(annotations map[string]string) ([]core.Toleration, error) {
 	var tolerations []core.Toleration
 	if len(annotations) > 0 && annotations[core.TolerationsAnnotationKey] != "" {
@@ -444,8 +437,8 @@ func GetTolerationsFromPodAnnotations(annotations map[string]string) ([]core.Tol
 	return tolerations, nil
 }
 
-// AddOrUpdateTolerationInPod tries to add a toleration to the pod's toleration list.
-// Returns true if something was updated, false otherwise.
+// AddOrUpdateTolerationInPod 尝试向 Pod 的容忍列表添加或更新一条容忍。
+// 发生更新时返回 true，无需变更时返回 false。
 func AddOrUpdateTolerationInPod(pod *core.Pod, toleration *core.Toleration) bool {
 	podTolerations := pod.Spec.Tolerations
 
@@ -453,6 +446,7 @@ func AddOrUpdateTolerationInPod(pod *core.Pod, toleration *core.Toleration) bool
 	updated := false
 	for i := range podTolerations {
 		if toleration.MatchToleration(&podTolerations[i]) {
+			// 已存在语义完全相同的容忍则无需改动，直接返回。
 			if Semantic.DeepEqual(toleration, podTolerations[i]) {
 				return false
 			}
@@ -472,8 +466,8 @@ func AddOrUpdateTolerationInPod(pod *core.Pod, toleration *core.Toleration) bool
 	return true
 }
 
-// GetTaintsFromNodeAnnotations gets the json serialized taints data from Pod.Annotations
-// and converts it to the []Taint type in core.
+// GetTaintsFromNodeAnnotations 从注解中读取 JSON 序列化的污点数据，
+// 并将其实例化为 core 包中的 []Taint。
 func GetTaintsFromNodeAnnotations(annotations map[string]string) ([]core.Taint, error) {
 	var taints []core.Taint
 	if len(annotations) > 0 && annotations[core.TaintsAnnotationKey] != "" {
@@ -485,9 +479,9 @@ func GetTaintsFromNodeAnnotations(annotations map[string]string) ([]core.Taint, 
 	return taints, nil
 }
 
-// GetPersistentVolumeClass returns StorageClassName.
+// GetPersistentVolumeClass 返回 PV 的 StorageClassName。
 func GetPersistentVolumeClass(volume *core.PersistentVolume) string {
-	// Use beta annotation first
+	// 优先使用 beta 注解，兼容仍依赖它的旧对象。
 	if class, found := volume.Annotations[core.BetaStorageClassAnnotation]; found {
 		return class
 	}
@@ -495,10 +489,9 @@ func GetPersistentVolumeClass(volume *core.PersistentVolume) string {
 	return volume.Spec.StorageClassName
 }
 
-// GetPersistentVolumeClaimClass returns StorageClassName. If no storage class was
-// requested, it returns "".
+// GetPersistentVolumeClaimClass 返回 PVC 的 StorageClassName，未指定时返回 ""。
 func GetPersistentVolumeClaimClass(claim *core.PersistentVolumeClaim) string {
-	// Use beta annotation first
+	// 优先使用 beta 注解，兼容仍依赖它的旧对象。
 	if class, found := claim.Annotations[core.BetaStorageClassAnnotation]; found {
 		return class
 	}
@@ -510,9 +503,9 @@ func GetPersistentVolumeClaimClass(claim *core.PersistentVolumeClaim) string {
 	return ""
 }
 
-// PersistentVolumeClaimHasClass returns true if given claim has set StorageClassName field.
+// PersistentVolumeClaimHasClass 判断给定 PVC 是否设置了 StorageClassName。
 func PersistentVolumeClaimHasClass(claim *core.PersistentVolumeClaim) bool {
-	// Use beta annotation first
+	// 优先使用 beta 注解，兼容仍依赖它的旧对象。
 	if _, found := claim.Annotations[core.BetaStorageClassAnnotation]; found {
 		return true
 	}
@@ -524,18 +517,18 @@ func PersistentVolumeClaimHasClass(claim *core.PersistentVolumeClaim) bool {
 	return false
 }
 
-// GetDeletionCostFromPodAnnotations returns the integer value of pod-deletion-cost. Returns 0
-// if not set or the value is invalid.
+// GetDeletionCostFromPodAnnotations 返回 pod-deletion-cost 注解的整数值。
+// 注解未设置或值非法时返回 0。
 func GetDeletionCostFromPodAnnotations(annotations map[string]string) (int32, error) {
 	if value, exist := annotations[core.PodDeletionCost]; exist {
-		// values that start with plus sign (e.g, "+10") or leading zeros (e.g., "008") are not valid.
+		// 拒绝带 '+' 号（如 "+10"）或前导零（如 "008"）的值，统一规范的数字表示。
 		if !validFirstDigit(value) {
 			return 0, fmt.Errorf("invalid value %q", value)
 		}
 
 		i, err := strconv.ParseInt(value, 10, 32)
 		if err != nil {
-			// make sure we default to 0 on error.
+			// 解析出错时默认返回 0，避免把无效值传递给调用方。
 			return 0, err
 		}
 		return int32(i), nil
@@ -543,6 +536,7 @@ func GetDeletionCostFromPodAnnotations(annotations map[string]string) (int32, er
 	return 0, nil
 }
 
+// validFirstDigit 校验字符串首字符是否合法：只允许 '-' 或 1-9，或唯一的 "0"。
 func validFirstDigit(str string) bool {
 	if len(str) == 0 {
 		return false
@@ -550,8 +544,7 @@ func validFirstDigit(str string) bool {
 	return str[0] == '-' || (str[0] == '0' && str == "0") || (str[0] >= '1' && str[0] <= '9')
 }
 
-// HasInvalidLabelValueInNodeSelectorTerms checks if there's an invalid label value
-// in one NodeSelectorTerm's MatchExpression values
+// HasInvalidLabelValueInNodeSelectorTerms 检查 NodeSelectorTerm 的 MatchExpression 值中是否存在非法 label 值。
 func HasInvalidLabelValueInNodeSelectorTerms(terms []core.NodeSelectorTerm) bool {
 	for _, term := range terms {
 		for _, expression := range term.MatchExpressions {

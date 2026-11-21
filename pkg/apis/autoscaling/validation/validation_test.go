@@ -28,6 +28,8 @@ import (
 )
 
 var (
+	// hpaOpts 构造测试用的校验选项：scaleTargetRef 必须给出合法的 apiVersion，
+	// 而对象指标沿用历史行为，允许 apiGroup 为空（老对象里常见这种写法）。
 	hpaOpts = func(minReplica int32) HorizontalPodAutoscalerSpecValidationOptions {
 		return HorizontalPodAutoscalerSpecValidationOptions{
 			MinReplicasLowerBound: minReplica,
@@ -45,6 +47,9 @@ var (
 	hpaScaleToZeroSpecValidationOpts = hpaOpts(0)
 )
 
+// TestValidateScale 验证 Scale 副本数校验：0 副本是允许的（缩容到零合法），负数必须被拒绝；
+// 同时覆盖 metadata.managedFields 中非法 operation 也会被通用元数据校验拦下，
+// 说明 Scale 校验并非只看 spec.replicas。
 func TestValidateScale(t *testing.T) {
 	successCases := []autoscaling.Scale{{
 		ObjectMeta: metav1.ObjectMeta{
@@ -72,12 +77,14 @@ func TestValidateScale(t *testing.T) {
 		},
 	}}
 
+	// 成功用例特意包含 replicas=0：缩容到零是合法状态，不能被当成负数一并拒绝。
 	for _, successCase := range successCases {
 		if errs := ValidateScale(&successCase); len(errs) != 0 {
 			t.Errorf("expected success: %v", errs)
 		}
 	}
 
+	// 错误用例分别针对负数副本和元数据字段，确保两部分校验都生效。
 	errorCases := []struct {
 		scale autoscaling.Scale
 		msg   string
@@ -119,6 +126,11 @@ func TestValidateScale(t *testing.T) {
 	}
 }
 
+// TestValidateBehavior 通过完整的 HPA 校验来测试 behavior（扩缩容行为）规则。
+// 成功场景包括 behavior 为空、合法的 Min/Max/Disabled 选择策略、多个策略并存；
+// 失败场景覆盖 scaleUp 与 scaleDown 两条路径上的典型错误：缺少策略、稳定窗口超过 3600 秒、
+// 策略周期超过 1800 秒、非法 selectPolicy、非法策略类型、周期或数值为零/负数。
+// 两侧对称地测一遍，是为了防止只在一侧实现校验。
 func TestValidateBehavior(t *testing.T) {
 	maxPolicy := autoscaling.MaxPolicySelect
 	minPolicy := autoscaling.MinPolicySelect
@@ -191,12 +203,14 @@ func TestValidateBehavior(t *testing.T) {
 			}},
 		},
 	}}
+	// 把 behavior 塞进一个其余字段都合法的 HPA，隔离出 behavior 本身的校验结果。
 	for _, behavior := range successCases {
 		hpa := prepareHPAWithBehavior(behavior)
 		if errs := ValidateHorizontalPodAutoscaler(&hpa, hpaSpecValidationOpts); len(errs) != 0 {
 			t.Errorf("expected success: %v", errs)
 		}
 	}
+	// 每个错误用例只制造一处违规，便于断言第一条错误就是预期的那条。
 	errorCases := []struct {
 		behavior autoscaling.HorizontalPodAutoscalerBehavior
 		msg      string
@@ -385,6 +399,7 @@ func TestValidateBehavior(t *testing.T) {
 		},
 		msg: "spec.behavior.scaleDown.policies[0].value: Invalid value: -1: must be greater than zero",
 	}}
+	// 只检查第一条错误：这些用例各自只包含一个违规点，断言首条即可避免顺序噪声。
 	for _, c := range errorCases {
 		hpa := prepareHPAWithBehavior(c.behavior)
 		if errs := ValidateHorizontalPodAutoscaler(&hpa, hpaSpecValidationOpts); len(errs) == 0 {
@@ -395,6 +410,8 @@ func TestValidateBehavior(t *testing.T) {
 	}
 }
 
+// prepareHPAWithBehavior 构造一个除 behavior 外全部合法的 HPA，
+// 让 behavior 相关测试不必重复写 scaleTargetRef、minReplicas、metrics 等样板字段。
 func prepareHPAWithBehavior(b autoscaling.HorizontalPodAutoscalerBehavior) autoscaling.HorizontalPodAutoscaler {
 	return autoscaling.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
@@ -425,6 +442,13 @@ func prepareHPAWithBehavior(b autoscaling.HorizontalPodAutoscalerBehavior) autos
 	}
 }
 
+// TestValidateHorizontalPodAutoscaler 是 HPA spec 校验的主表驱动测试。
+// 成功用例覆盖 Resource、ContainerResource、Pods、Object、External 各类指标源及其
+// Utilization/Value/AverageValue 目标形式，以及不设置 metrics 的合法情形；
+// 失败用例覆盖 scaleTargetRef 必填项与格式、minReplicas 下界、maxReplicas 不小于 minReplicas、
+// 资源名与容器名校验、指标目标值互斥与正数约束、指标名、数值合法性、apiVersion 格式、
+// 指标源类型以及同一指标填写多个源等违规。
+// 末尾的双层循环把四种指标源的类型与内容两两错配，验证每种错配都会被拒绝。
 func TestValidateHorizontalPodAutoscaler(t *testing.T) {
 	metricLabelSelector, err := metav1.ParseToLabelSelector("label=value")
 	if err != nil {
@@ -707,6 +731,7 @@ func TestValidateHorizontalPodAutoscaler(t *testing.T) {
 		},
 	}
 
+	// ReplicationController 属于核心组，允许 apiVersion 留空；其余目标必须显式给出 API 组。
 	for _, successCase := range successCases {
 		hpaOpts := hpaSpecValidationOpts
 		if successCase.Spec.ScaleTargetRef.Kind == "ReplicationController" {
@@ -717,6 +742,7 @@ func TestValidateHorizontalPodAutoscaler(t *testing.T) {
 		}
 	}
 
+	// 失败表按 msg 断言首条错误，覆盖必填字段、非法取值和各字段间的约束。
 	errorCases := []struct {
 		horizontalPodAutoscaler autoscaling.HorizontalPodAutoscaler
 		msg                     string
@@ -1543,6 +1569,7 @@ func TestValidateHorizontalPodAutoscaler(t *testing.T) {
 		},
 	}
 
+	// 每个失败用例只改坏一处字段，因此首条错误应当包含对应的 msg。
 	for _, c := range errorCases {
 		errs := ValidateHorizontalPodAutoscaler(&c.horizontalPodAutoscaler, hpaSpecValidationOpts)
 		if len(errs) == 0 {
@@ -1552,6 +1579,7 @@ func TestValidateHorizontalPodAutoscaler(t *testing.T) {
 		}
 	}
 
+	// 这张表把四种指标源的名字与其合法内容配对，下面的双层循环再故意打乱配对。
 	sourceTypes := map[autoscaling.MetricSourceType]autoscaling.MetricSpec{
 		autoscaling.ResourceMetricSourceType: {
 			Resource: &autoscaling.ResourceMetricSource{
@@ -1601,6 +1629,7 @@ func TestValidateHorizontalPodAutoscaler(t *testing.T) {
 		},
 	}
 
+	// 跳过正确配对，只测类型与内容不一致的组合；这类错误必须由类型互斥校验兜住。
 	for correctType, spec := range sourceTypes {
 		for incorrectType := range sourceTypes {
 			if correctType == incorrectType {
@@ -1633,6 +1662,8 @@ func TestValidateHorizontalPodAutoscaler(t *testing.T) {
 	}
 }
 
+// prepareMinReplicasCases 按给定的 minReplicas 生成两个 HPA（对象指标与外部指标各一个），
+// 供缩容到零的启用/禁用测试复用，避免每种场景重复构造完整对象。
 func prepareMinReplicasCases(t *testing.T, minReplicas int32) []autoscaling.HorizontalPodAutoscaler {
 	metricLabelSelector, err := metav1.ParseToLabelSelector("label=value")
 	if err != nil {
@@ -1701,6 +1732,8 @@ func prepareMinReplicasCases(t *testing.T, minReplicas int32) []autoscaling.Hori
 	return minReplicasCases
 }
 
+// TestValidateHorizontalPodAutoscalerScaleToZeroEnabled 验证选项放开下界后 minReplicas=0 合法，
+// 两种指标源都要通过，说明该约束与指标类型无关。
 func TestValidateHorizontalPodAutoscalerScaleToZeroEnabled(t *testing.T) {
 	zeroMinReplicasCases := prepareMinReplicasCases(t, 0)
 	for _, successCase := range zeroMinReplicasCases {
@@ -1710,8 +1743,11 @@ func TestValidateHorizontalPodAutoscalerScaleToZeroEnabled(t *testing.T) {
 	}
 }
 
+// TestValidateHorizontalPodAutoscalerScaleToZeroDisabled 验证默认下界为 1 时 0 副本被拒绝，
+// 同时确认 minReplicas=1 仍然通过——防止收紧校验时误伤正常配置。
 func TestValidateHorizontalPodAutoscalerScaleToZeroDisabled(t *testing.T) {
 	zeroMinReplicasCases := prepareMinReplicasCases(t, 0)
+	// 断言的是下界错误而不是泛泛的“失败”，确保拒绝原因确实是副本数下界。
 	errorMsg := "must be greater than or equal to 1"
 
 	for _, errorCase := range zeroMinReplicasCases {
@@ -1733,6 +1769,8 @@ func TestValidateHorizontalPodAutoscalerScaleToZeroDisabled(t *testing.T) {
 	}
 }
 
+// TestValidateHorizontalPodAutoscalerUpdateScaleToZeroEnabled 验证开关打开时，
+// minReplicas 在 0 与其他值之间双向切换都允许，这是缩容到零功能可演进的前提。
 func TestValidateHorizontalPodAutoscalerUpdateScaleToZeroEnabled(t *testing.T) {
 	zeroMinReplicasCases := prepareMinReplicasCases(t, 0)
 	nonZeroMinReplicasCases := prepareMinReplicasCases(t, 1)
@@ -1750,6 +1788,9 @@ func TestValidateHorizontalPodAutoscalerUpdateScaleToZeroEnabled(t *testing.T) {
 	}
 }
 
+// TestValidateHorizontalPodAutoscalerScaleToZeroUpdateDisabled 验证开关关闭时：
+// 把对象改成 0 副本会被拒绝；反向把历史遗留的 0 副本对象改回合法值则允许，
+// 否则存量对象将永远无法修正。
 func TestValidateHorizontalPodAutoscalerScaleToZeroUpdateDisabled(t *testing.T) {
 	zeroMinReplicasCases := prepareMinReplicasCases(t, 0)
 	nonZeroMinReplicasCases := prepareMinReplicasCases(t, 1)
@@ -1765,12 +1806,16 @@ func TestValidateHorizontalPodAutoscalerScaleToZeroUpdateDisabled(t *testing.T) 
 			t.Errorf("unexpected error: %q, expected: %q", errs[0], errorMsg)
 		}
 
+		// 反向更新必须放行：旧对象即使不符合当前规则，也应允许被修正为合法状态。
 		if errs := ValidateHorizontalPodAutoscalerUpdate(&nonZeroCase, &zeroCase, hpaSpecValidationOpts); len(errs) != 0 {
 			t.Errorf("expected success: %v", errs)
 		}
 	}
 }
 
+// TestValidateHorizontalPodAutoscalerConfigurableToleranceEnabled 验证可调容差字段的合法取值：
+// 小数、大于 1 的值、零、不同 Quantity 表示以及未设置都通过；
+// 负容差必须被拒绝，缺少策略仍要按原有规则报错。
 func TestValidateHorizontalPodAutoscalerConfigurableToleranceEnabled(t *testing.T) {
 	policiesList := []autoscaling.HPAScalingPolicy{{
 		Type:          autoscaling.PodsScalingPolicy,
@@ -1803,6 +1848,7 @@ func TestValidateHorizontalPodAutoscalerConfigurableToleranceEnabled(t *testing.
 			Policies: policiesList,
 		},
 	}
+	// 容差只是附加字段，不能替代策略列表；下面的失败用例专门验证这一点。
 	for _, c := range successCases {
 		b := autoscaling.HorizontalPodAutoscalerBehavior{
 			ScaleDown: &c,
@@ -1864,6 +1910,8 @@ func TestValidateHorizontalPodAutoscalerConfigurableToleranceEnabled(t *testing.
 	}
 }
 
+// TestValidateHorizontalPodAutoscalerConfigurableToleranceDisabled 验证功能关闭时容差字段被忽略：
+// 带着容差不会报错，也不会改变“必须有策略”这一既有约束。
 func TestValidateHorizontalPodAutoscalerConfigurableToleranceDisabled(t *testing.T) {
 	maxPolicy := autoscaling.MaxPolicySelect
 	policiesList := []autoscaling.HPAScalingPolicy{{
@@ -1925,6 +1973,8 @@ func TestValidateHorizontalPodAutoscalerConfigurableToleranceDisabled(t *testing
 	}
 }
 
+// TestValidateHorizontalPodAutoscalerUpdateConfigurableToleranceEnabled 验证更新时容差的增删
+// 在两个方向上都不算字段变更违规，功能可以平滑开启和关闭。
 func TestValidateHorizontalPodAutoscalerUpdateConfigurableToleranceEnabled(t *testing.T) {
 	policiesList := []autoscaling.HPAScalingPolicy{{
 		Type:          autoscaling.PodsScalingPolicy,
@@ -1951,6 +2001,10 @@ func TestValidateHorizontalPodAutoscalerUpdateConfigurableToleranceEnabled(t *te
 	}
 }
 
+// TestValidateHorizontalPodAutoscalerUpdateInvalidHPA 验证兼容性策略：
+// 存量的非法对象（这里 apiVersion 格式非法）在其他字段变更时应继续允许更新；
+// 一旦本次修改碰到了之前被容忍的非法字段，就必须按当前规则校验并拒绝，
+// 防止借更新路径写入新的非法值。
 func TestValidateHorizontalPodAutoscalerUpdateInvalidHPA(t *testing.T) {
 	existingHPA := autoscaling.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1997,11 +2051,13 @@ func TestValidateHorizontalPodAutoscalerUpdateInvalidHPA(t *testing.T) {
 	}
 	modifiedHPAReplicasChanged := existingHPA.DeepCopy()
 	modifiedHPAReplicasChanged.Spec.MinReplicas = ptr.To[int32](1)
-	// API Version is not modifed, so it should not be checked.
+	// 本次改动没有碰 apiVersion，因此沿用宽容选项继续放行旧对象的非法格式。
+	// 本次改动没有碰 apiVersion，因此沿用宽容选项继续放行旧对象的非法格式。
 	if errs := ValidateHorizontalPodAutoscalerUpdate(modifiedHPAReplicasChanged, &existingHPA, opts); len(errs) != 0 {
 		t.Errorf("expected success: %v", errs)
 	}
 
+	// 这次改动碰到了对象指标的 apiVersion，宽容选项关闭后必须报错。
 	modifiedHPAMetricsChanged := existingHPA.DeepCopy()
 	modifiedHPAMetricsChanged.Spec.Metrics[0].Object.DescribedObject.APIVersion = "invalidAPIVersion/v1/v3"
 	opts.ObjectMetricsValidationOptions.AllowInvalidAPIVersion = false
@@ -2009,6 +2065,7 @@ func TestValidateHorizontalPodAutoscalerUpdateInvalidHPA(t *testing.T) {
 		t.Error("expected error, APIVersion should be checked")
 	}
 
+	// 这次改动碰到了 scaleTargetRef 的 apiVersion，同样必须报错。
 	modifiedHPAScaleRefChanged := existingHPA.DeepCopy()
 	modifiedHPAScaleRefChanged.Spec.ScaleTargetRef.APIVersion = "invalidAPIVersion/v1/v4"
 	opts.ScaleTargetRefValidationOptions.AllowInvalidAPIVersion = false
@@ -2017,6 +2074,10 @@ func TestValidateHorizontalPodAutoscalerUpdateInvalidHPA(t *testing.T) {
 	}
 }
 
+// TestValidateHorizontalPodAutoscalerStatusUpdate 验证 HPA 状态更新的校验：
+// observedGeneration 为 nil、0、正数以及多个条件都非负时通过；
+// 负数 observedGeneration（含非首条条件）以及负的 currentReplicas/desiredReplicas 被拒绝，
+// 断言错误定位到具体字段路径，便于调用方修正。
 func TestValidateHorizontalPodAutoscalerStatusUpdate(t *testing.T) {
 	baseHPA := autoscaling.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2026,6 +2087,7 @@ func TestValidateHorizontalPodAutoscalerStatusUpdate(t *testing.T) {
 		},
 	}
 
+	// 表里的每条用例只翻转一个状态维度，错误路径要能精确定位到出问题的字段。
 	testCases := []struct {
 		name        string
 		status      autoscaling.HorizontalPodAutoscalerStatus
@@ -2076,6 +2138,7 @@ func TestValidateHorizontalPodAutoscalerStatusUpdate(t *testing.T) {
 				},
 			},
 		}, {
+			// generation 是递增的非负计数，负数永远是脏数据，必须拦下。
 			name: "invalid: condition with negative observedGeneration",
 			status: autoscaling.HorizontalPodAutoscalerStatus{
 				CurrentReplicas: 1,

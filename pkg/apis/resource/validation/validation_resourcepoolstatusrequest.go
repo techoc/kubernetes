@@ -24,40 +24,41 @@ import (
 	"k8s.io/kubernetes/pkg/apis/resource"
 )
 
-// ValidateResourcePoolStatusRequest validates a ResourcePoolStatusRequest.
+// ValidateResourcePoolStatusRequest 校验 ResourcePoolStatusRequest 的对象元数据。
 func ValidateResourcePoolStatusRequest(request *resource.ResourcePoolStatusRequest) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMeta(&request.ObjectMeta, false, apimachineryvalidation.NameIsDNSSubdomain, field.NewPath("metadata"))
 	return allErrs
 }
 
-// ValidateResourcePoolStatusRequestUpdate tests if an update to ResourcePoolStatusRequest is valid.
+// ValidateResourcePoolStatusRequestUpdate 校验 ResourcePoolStatusRequest 的更新是否合法。
 func ValidateResourcePoolStatusRequestUpdate(request, oldRequest *resource.ResourcePoolStatusRequest) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMetaUpdate(&request.ObjectMeta, &oldRequest.ObjectMeta, field.NewPath("metadata"))
 	return allErrs
 }
 
-// ValidateResourcePoolStatusRequestStatusUpdate tests if a status update to ResourcePoolStatusRequest is valid.
+// ValidateResourcePoolStatusRequestStatusUpdate 校验状态更新是否合法。
 func ValidateResourcePoolStatusRequestStatusUpdate(request, oldRequest *resource.ResourcePoolStatusRequest) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMetaUpdate(&request.ObjectMeta, &oldRequest.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateResourcePoolStatusRequestStatusUpdate(request.Status, oldRequest.Status, field.NewPath("status"))...)
 	return allErrs
 }
 
+// validateResourcePoolStatusRequestStatusUpdate 校验状态的不可变性与 conditions 约束。
 func validateResourcePoolStatusRequestStatusUpdate(status, oldStatus *resource.ResourcePoolStatusRequestStatus, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Once status is set, it becomes immutable (request is complete) — not DV covered
+	// 状态一旦设置即视为请求完成，此后不可变（未被 DV 覆盖）。
 	if oldStatus != nil {
 		allErrs = append(allErrs, apimachineryvalidation.ValidateImmutableField(status, oldStatus, fldPath)...)
 		return allErrs
 	}
 
-	// If new status is nil, nothing to validate
+	// 新状态为空时没有需要校验的内容。
 	if status == nil {
 		return allErrs
 	}
 
-	// Validate conditions — not DV covered
+	// conditions 需要满足通用条件格式约束（未被 DV 覆盖）。
 	allErrs = append(allErrs, metav1validation.ValidateConditions(status.Conditions, fldPath.Child("conditions"))...)
 
 	return allErrs

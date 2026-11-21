@@ -46,7 +46,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 
-	// ensure types are installed
+	// 确保相关类型已注册到 scheme。
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 	// ensure types are installed corereplicationcontroller<->replicaset conversions
 	_ "k8s.io/kubernetes/pkg/apis/apps/install"
@@ -1012,7 +1012,7 @@ func assertMemoryIdentical(t *testing.T, path string, a, b reflect.Value) {
 		}
 	case reflect.Bool, reflect.Int, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64, reflect.String:
-		// Assume scalars are copied by value
+		// 假设标量类型按值复制。
 	default:
 		t.Errorf("%s: unexpected kind: %v", path, a.Kind())
 	}

@@ -19,8 +19,8 @@ limitations under the License.
 
 package core
 
-// MatchToleration checks if the toleration matches tolerationToMatch. Tolerations are unique by <key,effect,operator,value>,
-// if the two tolerations have same <key,effect,operator,value> combination, regard as they match.
+// MatchToleration 判断当前容忍是否与 tolerationToMatch 匹配。
+// 容忍以 <key,effect,operator,value> 组合作为唯一标识，四者全部相同才视为匹配。
 // TODO: uniqueness check for tolerations in api validations.
 func (t *Toleration) MatchToleration(tolerationToMatch *Toleration) bool {
 	return t.Key == tolerationToMatch.Key &&

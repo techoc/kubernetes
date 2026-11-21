@@ -27,6 +27,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试 Endpoint 在 v1beta1 与内部表示之间的双向转换，重点覆盖拓扑信息（zone、hostname）的迁移与去重。
 func TestEndpointZoneConverstion(t *testing.T) {
 	testcases := []struct {
 		desc     string

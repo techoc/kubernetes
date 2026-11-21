@@ -74,17 +74,17 @@ const (
 // For resources that are not local to a node, the node name is not set. Instead,
 // the driver may use a node selector to specify where the devices are available.
 //
-// This is an alpha type and requires enabling the DynamicResourceAllocation
-// feature gate.
+// 这是 alpha 类型，需要开启 DynamicResourceAllocation 特性。
+// 特性开关。
 type ResourceSlice struct {
 	metav1.TypeMeta
-	// Standard object metadata
+	// 标准的对象元数据。
 	// +optional
 	metav1.ObjectMeta
 
 	// Contains the information published by the driver.
 	//
-	// Changing the spec automatically increments the metadata.generation number.
+	// 修改 spec 会自动递增 metadata.generation。
 	Spec ResourceSliceSpec
 }
 
@@ -106,7 +106,7 @@ type ResourceSliceSpec struct {
 	// A field selector can be used to list only ResourceSlice
 	// objects with a certain driver name.
 	//
-	// Must be a DNS subdomain and should end with a DNS domain owned by the
+	// 必须是 DNS 子域，并应以所属的 DNS 域结尾，
 	// vendor of the driver. This field is immutable.
 	//
 	// +required
@@ -126,8 +126,8 @@ type ResourceSliceSpec struct {
 	// new nodes of the same type as some old node might also make new
 	// resources available.
 	//
-	// Exactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.
-	// This field is immutable.
+	// NodeName、NodeSelector、AllNodes 和 PerDeviceNodeSelection 必须且只能设置一个。
+	// 该字段不可变。
 	//
 	// +optional
 	// +oneOf=NodeSelection
@@ -138,7 +138,7 @@ type ResourceSliceSpec struct {
 	//
 	// Must use exactly one term.
 	//
-	// Exactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.
+	// NodeName、NodeSelector、AllNodes 和 PerDeviceNodeSelection 必须且只能设置一个。
 	//
 	// +optional
 	// +oneOf=NodeSelection
@@ -146,7 +146,7 @@ type ResourceSliceSpec struct {
 
 	// AllNodes indicates that all nodes have access to the resources in the pool.
 	//
-	// Exactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.
+	// NodeName、NodeSelector、AllNodes 和 PerDeviceNodeSelection 必须且只能设置一个。
 	//
 	// +optional
 	// +oneOf=NodeSelection
@@ -168,7 +168,7 @@ type ResourceSliceSpec struct {
 	// device. If it is set to true, every device defined the ResourceSlice
 	// must specify this individually.
 	//
-	// Exactly one of NodeName, NodeSelector, AllNodes, and PerDeviceNodeSelection must be set.
+	// NodeName、NodeSelector、AllNodes 和 PerDeviceNodeSelection 必须且只能设置一个。
 	//
 	// +optional
 	// +oneOf=NodeSelection
@@ -379,8 +379,8 @@ type Device struct {
 
 	// NodeName identifies the node where the device is available.
 	//
-	// Must only be set if Spec.PerDeviceNodeSelection is set to true.
-	// At most one of NodeName, NodeSelector and AllNodes can be set.
+	// 仅当 Spec.PerDeviceNodeSelection 为 true 时才可设置。
+	// NodeName、NodeSelector 和 AllNodes 最多只能设置一个。
 	//
 	// +optional
 	// +oneOf=DeviceNodeSelection
@@ -391,8 +391,8 @@ type Device struct {
 	//
 	// Must use exactly one term.
 	//
-	// Must only be set if Spec.PerDeviceNodeSelection is set to true.
-	// At most one of NodeName, NodeSelector and AllNodes can be set.
+	// 仅当 Spec.PerDeviceNodeSelection 为 true 时才可设置。
+	// NodeName、NodeSelector 和 AllNodes 最多只能设置一个。
 	//
 	// +optional
 	// +oneOf=DeviceNodeSelection
@@ -401,8 +401,8 @@ type Device struct {
 
 	// AllNodes indicates that all nodes have access to the device.
 	//
-	// Must only be set if Spec.PerDeviceNodeSelection is set to true.
-	// At most one of NodeName, NodeSelector and AllNodes can be set.
+	// 仅当 Spec.PerDeviceNodeSelection 为 true 时才可设置。
+	// NodeName、NodeSelector 和 AllNodes 最多只能设置一个。
 	//
 	// +optional
 	// +oneOf=DeviceNodeSelection
@@ -415,8 +415,8 @@ type Device struct {
 	// any device in a ResourceSlice, then the maximum number of
 	// allowed devices per ResourceSlice is 64 instead of 128.
 	//
-	// This is a beta field and requires enabling the DRADeviceTaints
-	// feature gate.
+	// 这是 beta 字段，需要开启 DRADeviceTaints 特性。
+	// 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -428,8 +428,8 @@ type Device struct {
 	// If set to true, the scheduler will set the ResourceClaim.Status.Allocation.NodeSelector
 	// to match the node where the allocation was made.
 	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gates.
+	// 这是 beta 字段，需要开启 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性。
+	// 特性开关。
 	//
 	// +optional
 	// +featureGate=DRADeviceBindingConditions,DRAResourceClaimDeviceStatus
@@ -444,8 +444,8 @@ type Device struct {
 	// All entries are condition types, which means
 	// they must be labels.
 	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gates.
+	// 这是 beta 字段，需要开启 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性。
+	// 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -460,8 +460,8 @@ type Device struct {
 	// All entries are condition types, which means
 	// they must be labels.
 	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gates.
+	// 这是 beta 字段，需要开启 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性。
+	// 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -601,7 +601,7 @@ type DeviceCounterConsumption struct {
 	// one common group: the intersection of the CompatibilityGroups of all
 	// co-allocated devices on that counter set must be non-empty. Devices
 	// that consume from different counter sets are never compared via this
-	// field.
+	// 字段。
 	//
 	// An unset field, an explicit nil, and an empty list are equivalent and
 	// mean "no groups": such a device is only co-allocatable with sibling
@@ -810,7 +810,7 @@ type DeviceAttribute struct {
 
 	// IntValues is a non-empty list of numbers.
 	//
-	// This is an alpha field and requires enabling the DRAListTypeAttributes feature gate.
+	// 这是 alpha 字段，需要开启 DRAListTypeAttributes 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -829,7 +829,7 @@ type DeviceAttribute struct {
 	// StringValues is a non-empty list of strings.
 	// Each string must not be longer than 64 characters.
 	//
-	// This is an alpha field and requires enabling the DRAListTypeAttributes feature gate.
+	// 这是 alpha 字段，需要开启 DRAListTypeAttributes 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -840,7 +840,7 @@ type DeviceAttribute struct {
 	// VersionValues is a non-empty list of semantic versions according to semver.org spec 2.0.0.
 	// Each version string must not be longer than 64 characters.
 	//
-	// This is an alpha field and requires enabling the DRAListTypeAttributes feature gate.
+	// 这是 alpha 字段，需要开启 DRAListTypeAttributes 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -932,7 +932,7 @@ const (
 // ResourceSliceList is a collection of ResourceSlices.
 type ResourceSliceList struct {
 	metav1.TypeMeta
-	// Standard list metadata
+	// 标准列表元数据。
 	// +optional
 	metav1.ListMeta
 
@@ -948,11 +948,11 @@ type ResourceSliceList struct {
 // stanza tracks whether this claim has been satisfied and what specific
 // resources have been allocated.
 //
-// This is an alpha type and requires enabling the DynamicResourceAllocation
-// feature gate.
+// 这是 alpha 类型，需要开启 DynamicResourceAllocation 特性。
+// 特性开关。
 type ResourceClaim struct {
 	metav1.TypeMeta
-	// Standard object metadata
+	// 标准的对象元数据。
 	// +optional
 	metav1.ObjectMeta
 
@@ -973,8 +973,8 @@ type ResourceClaimSpec struct {
 	Devices DeviceClaim
 
 	// Controller is tombstoned since Kubernetes 1.32 where
-	// it got removed. May be reused once decoding v1alpha3 is no longer
-	// supported.
+	// 该字段已被移除。待不再需要兼容 v1alpha3 解码时可复用。
+	// 支持。
 	// Controller string
 }
 
@@ -1155,10 +1155,10 @@ type ExactDeviceRequest struct {
 	// it has these tainted devices. Once all pods are evicted, the
 	// claim will get deallocated.
 	//
-	// The maximum number of tolerations is 16.
+	// tolerations 的最大数量为 16。
 	//
-	// This is a beta field and requires enabling the DRADeviceTaints
-	// feature gate.
+	// 这是 beta 字段，需要开启 DRADeviceTaints 特性。
+	// 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -1201,7 +1201,7 @@ type ExactDeviceRequest struct {
 	// The maximum number of derived attributes is 32.
 	//
 	// This is an alpha field and requires enabling the DRADerivedAttributes
-	// feature gate.
+	// 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -1292,10 +1292,10 @@ type DeviceSubRequest struct {
 	// it has these tainted devices. Once all pods are evicted, the
 	// claim will get deallocated.
 	//
-	// The maximum number of tolerations is 16.
+	// tolerations 的最大数量为 16。
 	//
-	// This is a beta field and requires enabling the DRADeviceTaints
-	// feature gate.
+	// 这是 beta 字段，需要开启 DRADeviceTaints 特性。
+	// 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -1338,7 +1338,7 @@ type DeviceSubRequest struct {
 	// The maximum number of derived attributes is 32.
 	//
 	// This is an alpha field and requires enabling the DRADerivedAttributes
-	// feature gate.
+	// 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -1572,8 +1572,8 @@ type DeviceConstraint struct {
 	// constraint. If this is not specified, this constraint applies to all
 	// requests in this claim.
 	//
-	// References to subrequests must include the name of the main request
-	// and may include the subrequest using the format <main request>[/<subrequest>]. If just
+	// 对子请求的引用必须包含主请求的名称，
+	// 并可使用 <主请求>[/<子请求>] 的格式包含子请求。若只
 	// the main request is given, the constraint applies to all subrequests.
 	//
 	// +optional
@@ -1639,8 +1639,8 @@ type DeviceClaimConfiguration struct {
 	// Requests lists the names of requests where the configuration applies.
 	// If empty, it applies to all requests.
 	//
-	// References to subrequests must include the name of the main request
-	// and may include the subrequest using the format <main request>[/<subrequest>]. If just
+	// 对子请求的引用必须包含主请求的名称，
+	// 并可使用 <主请求>[/<子请求>] 的格式包含子请求。若只
 	// the main request is given, the configuration applies to all subrequests.
 	//
 	// +optional
@@ -1670,8 +1670,8 @@ type OpaqueDeviceConfiguration struct {
 	// An admission policy provided by the driver developer could use this
 	// to decide whether it needs to validate them.
 	//
-	// Must be a DNS subdomain and should end with a DNS domain owned by the
-	// vendor of the driver.
+	// 必须是 DNS 子域，并应以所属的 DNS 域结尾，
+	// 驱动供应商。
 	//
 	// +required
 	Driver string
@@ -1780,8 +1780,8 @@ type ResourceClaimStatus struct {
 	ReservedFor []ResourceClaimConsumerReference
 
 	// DeallocationRequested is tombstoned since Kubernetes 1.32 where
-	// it got removed. May be reused once decoding v1alpha3 is no longer
-	// supported.
+	// 该字段已被移除。待不再需要兼容 v1alpha3 解码时可复用。
+	// 支持。
 	// DeallocationRequested bool
 
 	// Devices contains the status of each device allocated for this
@@ -1836,15 +1836,15 @@ type AllocationResult struct {
 	NodeSelector *core.NodeSelector
 
 	// Controller is tombstoned since Kubernetes 1.32 where
-	// it got removed. May be reused once decoding v1alpha3 is no longer
-	// supported.
+	// 该字段已被移除。待不再需要兼容 v1alpha3 解码时可复用。
+	// 支持。
 	// Controller string
 
 	// AllocationTimestamp stores the time when the resources were allocated.
 	// This field is not guaranteed to be set, in which case that time is unknown.
 	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gate.
+	// 这是 beta 字段，需要开启 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性。
+	// 特性开关。
 	//
 	// +optional
 	// +featureGate=DRADeviceBindingConditions,DRAResourceClaimDeviceStatus
@@ -1893,8 +1893,8 @@ type DeviceRequestAllocationResult struct {
 	// plugin should be invoked to process the allocation once the claim is
 	// needed on a node.
 	//
-	// Must be a DNS subdomain and should end with a DNS domain owned by the
-	// vendor of the driver.
+	// 必须是 DNS 子域，并应以所属的 DNS 域结尾，
+	// 驱动供应商。
 	//
 	// +required
 	Driver string
@@ -1928,10 +1928,10 @@ type DeviceRequestAllocationResult struct {
 	// A copy of all tolerations specified in the request at the time
 	// when the device got allocated.
 	//
-	// The maximum number of tolerations is 16.
+	// tolerations 的最大数量为 16。
 	//
-	// This is a beta field and requires enabling the DRADeviceTaints
-	// feature gate.
+	// 这是 beta 字段，需要开启 DRADeviceTaints 特性。
+	// 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -1941,8 +1941,8 @@ type DeviceRequestAllocationResult struct {
 	// BindingConditions contains a copy of the BindingConditions
 	// from the corresponding ResourceSlice at the time of allocation.
 	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gates.
+	// 这是 beta 字段，需要开启 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性。
+	// 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -1952,8 +1952,8 @@ type DeviceRequestAllocationResult struct {
 	// BindingFailureConditions contains a copy of the BindingFailureConditions
 	// from the corresponding ResourceSlice at the time of allocation.
 	//
-	// This is a beta field and requires enabling the DRADeviceBindingConditions and DRAResourceClaimDeviceStatus
-	// feature gates.
+	// 这是 beta 字段，需要开启 DRADeviceBindingConditions 和 DRAResourceClaimDeviceStatus 特性。
+	// 特性开关。
 	//
 	// +optional
 	// +listType=atomic
@@ -2006,8 +2006,8 @@ type DeviceAllocationConfiguration struct {
 	// Requests lists the names of requests where the configuration applies.
 	// If empty, its applies to all requests.
 	//
-	// References to subrequests must include the name of the main request
-	// and may include the subrequest using the format <main request>[/<subrequest>]. If just
+	// 对子请求的引用必须包含主请求的名称，
+	// 并可使用 <主请求>[/<子请求>] 的格式包含子请求。若只
 	// the main request is given, the configuration applies to all subrequests.
 	//
 	// +optional
@@ -2030,7 +2030,7 @@ const (
 // ResourceClaimList is a collection of claims.
 type ResourceClaimList struct {
 	metav1.TypeMeta
-	// Standard list metadata
+	// 标准列表元数据。
 	// +optional
 	metav1.ListMeta
 
@@ -2045,11 +2045,11 @@ type ResourceClaimList struct {
 // the device requests of a claim to apply these presets.
 // Cluster scoped.
 //
-// This is an alpha type and requires enabling the DynamicResourceAllocation
-// feature gate.
+// 这是 alpha 类型，需要开启 DynamicResourceAllocation 特性。
+// 特性开关。
 type DeviceClass struct {
 	metav1.TypeMeta
-	// Standard object metadata
+	// 标准的对象元数据。
 	// +optional
 	metav1.ObjectMeta
 
@@ -2060,7 +2060,7 @@ type DeviceClass struct {
 	// allocations are done once based on whatever was set in classes at
 	// the time of allocation.
 	//
-	// Changing the spec automatically increments the metadata.generation number.
+	// 修改 spec 会自动递增 metadata.generation。
 	Spec DeviceClassSpec
 }
 
@@ -2084,8 +2084,8 @@ type DeviceClassSpec struct {
 	Config []DeviceClassConfiguration
 
 	// SuitableNodes is tombstoned since Kubernetes 1.32 where
-	// it got removed. May be reused once decoding v1alpha3 is no longer
-	// supported.
+	// 该字段已被移除。待不再需要兼容 v1alpha3 解码时可复用。
+	// 支持。
 	// SuitableNodes *core.NodeSelector
 
 	// ExtendedResourceName is the extended resource name for the devices of this class.
@@ -2112,7 +2112,7 @@ type DeviceClassConfiguration struct {
 // DeviceClassList is a collection of classes.
 type DeviceClassList struct {
 	metav1.TypeMeta
-	// Standard list metadata
+	// 标准列表元数据。
 	// +optional
 	metav1.ListMeta
 
@@ -2124,11 +2124,11 @@ type DeviceClassList struct {
 
 // ResourceClaimTemplate is used to produce ResourceClaim objects.
 //
-// This is an alpha type and requires enabling the DynamicResourceAllocation
-// feature gate.
+// 这是 alpha 类型，需要开启 DynamicResourceAllocation 特性。
+// 特性开关。
 type ResourceClaimTemplate struct {
 	metav1.TypeMeta
-	// Standard object metadata
+	// 标准的对象元数据。
 	// +optional
 	metav1.ObjectMeta
 
@@ -2144,7 +2144,7 @@ type ResourceClaimTemplate struct {
 type ResourceClaimTemplateSpec struct {
 	// ObjectMeta may contain labels and annotations that will be copied into the ResourceClaim
 	// when creating it. No other fields are allowed and will be rejected during
-	// validation.
+	// 校验。
 	// +optional
 	metav1.ObjectMeta
 
@@ -2159,7 +2159,7 @@ type ResourceClaimTemplateSpec struct {
 // ResourceClaimTemplateList is a collection of claim templates.
 type ResourceClaimTemplateList struct {
 	metav1.TypeMeta
-	// Standard list metadata
+	// 标准列表元数据。
 	// +optional
 	metav1.ListMeta
 
@@ -2195,8 +2195,8 @@ type AllocatedDeviceStatus struct {
 	// plugin should be invoked to process the allocation once the claim is
 	// needed on a node.
 	//
-	// Must be a DNS subdomain and should end with a DNS domain owned by the
-	// vendor of the driver.
+	// 必须是 DNS 子域，并应以所属的 DNS 域结尾，
+	// 驱动供应商。
 	//
 	// +required
 	Driver string
@@ -2286,13 +2286,13 @@ type NetworkDeviceData struct {
 // in the ResourceSlice by the DRA driver.
 type DeviceTaintRule struct {
 	metav1.TypeMeta
-	// Standard object metadata
+	// 标准的对象元数据。
 	// +optional
 	metav1.ObjectMeta
 
 	// Spec specifies the selector and one taint.
 	//
-	// Changing the spec automatically increments the metadata.generation number.
+	// 修改 spec 会自动递增 metadata.generation。
 	Spec DeviceTaintRuleSpec
 
 	// Status provides information about what was requested in the spec.
@@ -2389,7 +2389,7 @@ const DeviceTaintConditionEvictionInProgress = "EvictionInProgress"
 // DeviceTaintRuleList is a collection of DeviceTaintRules.
 type DeviceTaintRuleList struct {
 	metav1.TypeMeta
-	// Standard list metadata
+	// 标准列表元数据。
 	// +optional
 	metav1.ListMeta
 
@@ -2404,7 +2404,7 @@ type DeviceTaintRuleList struct {
 // Users should delete and recreate requests to get updated information.
 type ResourcePoolStatusRequest struct {
 	metav1.TypeMeta
-	// Standard object metadata
+	// 标准的对象元数据。
 	// +required
 	metav1.ObjectMeta
 
@@ -2605,7 +2605,7 @@ const ResourcePoolStatusRequestConditionFailed = "Failed"
 // ResourcePoolStatusRequestList is a collection of ResourcePoolStatusRequests.
 type ResourcePoolStatusRequestList struct {
 	metav1.TypeMeta
-	// Standard list metadata
+	// 标准列表元数据。
 	// +optional
 	metav1.ListMeta
 

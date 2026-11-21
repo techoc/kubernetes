@@ -20,6 +20,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 向 scheme 注册本版本的默认值设置函数。
+// 本版本的缺省逻辑全部由生成的 RegisterDefaults 提供，
+// 因此这里只需统一挂载，无需额外手写默认值规则。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }

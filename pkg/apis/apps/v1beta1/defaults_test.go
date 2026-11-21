@@ -37,6 +37,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestSetDefaultDeployment 验证 Deployment 的默认值处理：
+// 副本数、滚动更新策略参数、历史版本上限、进度截止时间以及 Pod 模板字段
+// 在为空时按 v1beta1 的语义补全，已显式设置的取值则保持不变。
 func TestSetDefaultDeployment(t *testing.T) {
 	defaultIntOrString := intstr.FromString("25%")
 	differentIntOrString := intstr.FromInt32(5)
@@ -50,6 +53,8 @@ func TestSetDefaultDeployment(t *testing.T) {
 			SchedulerName:                 v1.DefaultSchedulerName,
 		},
 	}
+	// 用例包含输入对象与期望对象；部分用例显式设置了字段，
+	// 用于验证默认值不会覆盖用户的显式配置。
 	tests := []struct {
 		original *appsv1beta1.Deployment
 		expected *appsv1beta1.Deployment
@@ -175,6 +180,7 @@ func TestSetDefaultDeployment(t *testing.T) {
 	for _, test := range tests {
 		original := test.original
 		expected := test.expected
+		// 走编码-解码-转换链路触发默认化，模拟真实 API 请求的行为。
 		obj2 := roundTrip(t, runtime.Object(original))
 		got, ok := obj2.(*appsv1beta1.Deployment)
 		if !ok {
@@ -187,9 +193,12 @@ func TestSetDefaultDeployment(t *testing.T) {
 	}
 }
 
+// TestDefaultDeploymentAvailability 验证默认的 maxUnavailable（25%）不会
+// 在滚动更新时让所有副本都不可用，即至少保留一个活跃副本。
 func TestDefaultDeploymentAvailability(t *testing.T) {
 	d := roundTrip(t, runtime.Object(&appsv1beta1.Deployment{})).(*appsv1beta1.Deployment)
 
+	// 按默认副本数把百分比换算成具体数量，向下取整得到的不可用副本数最小。
 	maxUnavailable, err := intstr.GetScaledValueFromIntOrPercent(d.Spec.Strategy.RollingUpdate.MaxUnavailable, int(*(d.Spec.Replicas)), false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -200,6 +209,8 @@ func TestDefaultDeploymentAvailability(t *testing.T) {
 	}
 }
 
+// TestSetDefaultStatefulSet 验证 StatefulSet 的默认值处理，包括更新策略、
+// Pod 管理策略、副本数、selector、PVC 保留策略以及受特性开关控制的 maxUnavailable。
 func TestSetDefaultStatefulSet(t *testing.T) {
 	defaultLabels := map[string]string{"foo": "bar"}
 	var defaultPartition int32 = 0
@@ -220,6 +231,8 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 		},
 	}
 
+	// 用例按名称分组，enableMaxUnavailablePolicy 控制 MaxUnavailableStatefulSet
+	// 特性开关的取值，用于覆盖开关打开/关闭两种默认化行为。
 	tests := []struct {
 		name                       string
 		original                   *appsv1beta1.StatefulSet
@@ -493,6 +506,8 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// maxUnavailable 的默认值受特性开关控制，必须按用例设置后
+			// 再走默认化链路，否则期望值无法匹配。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.MaxUnavailableStatefulSet, test.enableMaxUnavailablePolicy)
 			obj2 := roundTrip(t, runtime.Object(test.original))
 			got, ok := obj2.(*appsv1beta1.StatefulSet)
@@ -507,6 +522,8 @@ func TestSetDefaultStatefulSet(t *testing.T) {
 	}
 }
 
+// roundTrip 将对象编码、解码并转换为目标版本，
+// 用于验证版本转换链路上的默认化行为，而不仅是直接调用默认函数。
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 	data, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(SchemeGroupVersion), obj)
 	if err != nil {

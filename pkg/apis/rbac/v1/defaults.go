@@ -21,22 +21,30 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 向 scheme 注册本版本的默认值函数。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_ClusterRoleBinding 为 RoleRef 补齐默认的 APIGroup。
 func SetDefaults_ClusterRoleBinding(obj *rbacv1.ClusterRoleBinding) {
+	// 未指定 APIGroup 时填充 RBAC 内置组名。
 	if len(obj.RoleRef.APIGroup) == 0 {
 		obj.RoleRef.APIGroup = GroupName
 	}
 }
+
+// SetDefaults_RoleBinding 为 RoleRef 补齐默认的 APIGroup。
 func SetDefaults_RoleBinding(obj *rbacv1.RoleBinding) {
 	if len(obj.RoleRef.APIGroup) == 0 {
 		obj.RoleRef.APIGroup = GroupName
 	}
 }
+
+// SetDefaults_Subject 按主体类型推导默认的 APIGroup。
 func SetDefaults_Subject(obj *rbacv1.Subject) {
 	if len(obj.APIGroup) == 0 {
+		// ServiceAccount 属于核心组（空串），User 和 Group 属于 RBAC 组。
 		switch obj.Kind {
 		case rbacv1.ServiceAccountKind:
 			obj.APIGroup = ""

@@ -31,12 +31,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestSetDefaultNetworkPolicy 校验 NetworkPolicy 的 PolicyTypes 推断规则。
 func TestSetDefaultNetworkPolicy(t *testing.T) {
 	tests := []struct {
 		original *networkingv1.NetworkPolicy
 		expected *networkingv1.NetworkPolicy
 	}{
-		{ // Empty NetworkPolicy should be set to PolicyTypes Ingress
+		{ // 空 NetworkPolicy 默认只允许入口流量。
 			original: &networkingv1.NetworkPolicy{
 				Spec: networkingv1.NetworkPolicySpec{
 					PodSelector: metav1.LabelSelector{
@@ -53,7 +54,7 @@ func TestSetDefaultNetworkPolicy(t *testing.T) {
 				},
 			},
 		},
-		{ // Empty Ingress NetworkPolicy should be set to PolicyTypes Ingress
+		{ // Ingress 为空列表时仍默认包含 Ingress 策略类型。
 			original: &networkingv1.NetworkPolicy{
 				Spec: networkingv1.NetworkPolicySpec{
 					PodSelector: metav1.LabelSelector{
@@ -72,7 +73,7 @@ func TestSetDefaultNetworkPolicy(t *testing.T) {
 				},
 			},
 		},
-		{ // Defined Ingress and Egress should be set to Ingress,Egress
+		{ // 同时定义 Ingress 与 Egress 时两种策略类型都应存在。
 			original: &networkingv1.NetworkPolicy{
 				Spec: networkingv1.NetworkPolicySpec{
 					PodSelector: metav1.LabelSelector{
@@ -139,7 +140,7 @@ func TestSetDefaultNetworkPolicy(t *testing.T) {
 				},
 			},
 		},
-		{ // Egress only with unset PolicyTypes should be set to Ingress, Egress
+		{ // 仅定义 Egress 且未指定 PolicyTypes 时，仍默认包含 Ingress 与 Egress。
 			original: &networkingv1.NetworkPolicy{
 				Spec: networkingv1.NetworkPolicySpec{
 					PodSelector: metav1.LabelSelector{
@@ -178,7 +179,7 @@ func TestSetDefaultNetworkPolicy(t *testing.T) {
 				},
 			},
 		},
-		{ // Egress only with PolicyTypes set to Egress should be set to only Egress
+		{ // 已显式指定 PolicyTypes 时不应被默认化覆盖。
 			original: &networkingv1.NetworkPolicy{
 				Spec: networkingv1.NetworkPolicySpec{
 					PodSelector: metav1.LabelSelector{
@@ -220,6 +221,7 @@ func TestSetDefaultNetworkPolicy(t *testing.T) {
 		},
 	}
 
+	// 通过往返编解码触发默认化并比较 spec。
 	for i, test := range tests {
 		original := test.original
 		expected := test.expected
@@ -235,6 +237,7 @@ func TestSetDefaultNetworkPolicy(t *testing.T) {
 	}
 }
 
+// TestSetDefaultsForIngressClassParametersReference 校验参数引用的 Scope 默认值。
 func TestSetDefaultsForIngressClassParametersReference(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -242,6 +245,7 @@ func TestSetDefaultsForIngressClassParametersReference(t *testing.T) {
 		expected *networkingv1.IngressClass
 	}{
 		{
+			// 参数引用存在但未指定 Scope 时默认为 Cluster。
 			name: "populated parameters sets the default Scope",
 			original: &networkingv1.IngressClass{
 				Spec: networkingv1.IngressClassSpec{
@@ -264,6 +268,7 @@ func TestSetDefaultsForIngressClassParametersReference(t *testing.T) {
 			},
 		},
 		{
+			// 已有的 Scope 不应被默认值覆盖。
 			name: "existing scope is not overridden",
 			original: &networkingv1.IngressClass{
 				Spec: networkingv1.IngressClassSpec{
@@ -289,6 +294,7 @@ func TestSetDefaultsForIngressClassParametersReference(t *testing.T) {
 			},
 		},
 		{
+			// 没有参数引用时不应生成 Scope 默认值。
 			name: "empty Parameters does not set the default Scope",
 			original: &networkingv1.IngressClass{
 				Spec: networkingv1.IngressClassSpec{
@@ -320,6 +326,7 @@ func TestSetDefaultsForIngressClassParametersReference(t *testing.T) {
 	}
 }
 
+// roundTrip 编码后解码并转换类型，以此触发默认化流程。
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 	t.Helper()
 	data, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(SchemeGroupVersion), obj)

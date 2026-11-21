@@ -21,7 +21,7 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-input=k8s.io/api/policy/v1beta1
 
-// Package policy is for any kind of policy object.  Suitable examples, even if
-// they aren't all here, are policyv1beta1.PodDisruptionBudget,
-// NetworkPolicy, etc.
+// Package policy 用于各类策略对象。典型的例子包括
+// 未在此列出的有 policyv1beta1.PodDisruptionBudget 等，
+// NetworkPolicy 等。
 package v1beta1

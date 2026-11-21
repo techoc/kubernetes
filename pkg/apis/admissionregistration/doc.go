@@ -17,8 +17,8 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=admissionregistration.k8s.io
 
-// Package admissionregistration is the internal version of the API.
-// AdmissionConfiguration and AdmissionPluginConfiguration are legacy static admission plugin configuration
-// ValidatingWebhookConfiguration, and MutatingWebhookConfiguration are for the
-// new dynamic admission controller configuration.
+// Package admissionregistration 是该 API 的内部版本。
+// AdmissionConfiguration 与 AdmissionPluginConfiguration 是遗留的静态准入插件配置。
+// ValidatingWebhookConfiguration 与 MutatingWebhookConfiguration 用于
+// 新的动态准入控制器配置。
 package admissionregistration

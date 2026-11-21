@@ -53,13 +53,13 @@ type PodDisruptionBudgetSpec struct {
 	// IfHealthyBudget policy means that running pods (status.phase="Running"),
 	// but not yet healthy can be evicted only if the guarded application is not
 	// disrupted (status.currentHealthy is at least equal to status.desiredHealthy).
-	// Healthy pods will be subject to the PDB for eviction.
+	// 健康的 Pod 会受到 PDB 的驱逐保护。
 	//
 	// AlwaysAllow policy means that all running pods (status.phase="Running"),
 	// but not yet healthy are considered disrupted and can be evicted regardless
 	// of whether the criteria in a PDB is met. This means perspective running
 	// pods of a disrupted application might not get a chance to become healthy.
-	// Healthy pods will be subject to the PDB for eviction.
+	// 健康的 Pod 会受到 PDB 的驱逐保护。
 	//
 	// Additional policies may be added in the future.
 	// Clients making eviction decisions should disallow eviction of unhealthy pods
@@ -77,14 +77,14 @@ const (
 	// IfHealthyBudget policy means that running pods (status.phase="Running"),
 	// but not yet healthy can be evicted only if the guarded application is not
 	// disrupted (status.currentHealthy is at least equal to status.desiredHealthy).
-	// Healthy pods will be subject to the PDB for eviction.
+	// 健康的 Pod 会受到 PDB 的驱逐保护。
 	IfHealthyBudget UnhealthyPodEvictionPolicyType = "IfHealthyBudget"
 
 	// AlwaysAllow policy means that all running pods (status.phase="Running"),
 	// but not yet healthy are considered disrupted and can be evicted regardless
 	// of whether the criteria in a PDB is met. This means perspective running
 	// pods of a disrupted application might not get a chance to become healthy.
-	// Healthy pods will be subject to the PDB for eviction.
+	// 健康的 Pod 会受到 PDB 的驱逐保护。
 	AlwaysAllow UnhealthyPodEvictionPolicyType = "AlwaysAllow"
 )
 

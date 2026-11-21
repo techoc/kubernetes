@@ -24,17 +24,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 把本版本的默认值注册函数挂到 scheme 上。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// 为 DeviceTaint 设置默认值：未指定时间时使用当前时间（精确到秒）。
 func SetDefaults_DeviceTaint(obj *resourceapi.DeviceTaint) {
 	if obj.TimeAdded == nil {
 		obj.TimeAdded = &metav1.Time{Time: time.Now().Truncate(time.Second)}
 	}
 }
 
-// SetDefaults_ResourcePoolStatusRequestSpec sets defaults for ResourcePoolStatusRequestSpec.
+// SetDefaults_ResourcePoolStatusRequestSpec 为 ResourcePoolStatusRequestSpec 设置默认值：limit 为空时取默认上限。
 func SetDefaults_ResourcePoolStatusRequestSpec(obj *resourceapi.ResourcePoolStatusRequestSpec) {
 	if obj.Limit == nil {
 		defaultLimit := resourceapi.ResourcePoolStatusRequestLimitDefault

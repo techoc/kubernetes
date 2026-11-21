@@ -18,6 +18,7 @@ package validation
 
 import "testing"
 
+// TestIsKubernetesSignerName 验证 Kubernetes 保留 signer 域名（kubernetes.io 及其子域）的识别。
 func TestIsKubernetesSignerName(t *testing.T) {
 	testCases := []struct {
 		name string

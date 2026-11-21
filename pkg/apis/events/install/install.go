@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package install installs the events API group, making it available as
-// an option to all of the API encoding/decoding machinery.
+// Package install 负责把 events API 组注册到编码/解码机制中，
+// 使其可以参与所有 API 对象的编码与解码。
 package install
 
 import (
@@ -31,7 +31,7 @@ func init() {
 	Install(legacyscheme.Scheme)
 }
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API 组并把该组的所有版本类型加入 scheme。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(events.AddToScheme(scheme))
 	utilruntime.Must(v1beta1.AddToScheme(scheme))

@@ -23,10 +23,10 @@ import (
 	"k8s.io/kubernetes/pkg/apis/abac"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包对应的 API 组名。
 const GroupName = "abac.authorization.kubernetes.io"
 
-// SchemeGroupVersion is the API group and version for abac v1beta1
+// SchemeGroupVersion 是 abac v1beta1 的 API 组与版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
 func init() {
@@ -37,19 +37,19 @@ func init() {
 }
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 是本包的 scheme 构造器，保存了需要执行的初始化函数。
 	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
 	SchemeBuilder runtime.SchemeBuilder
 	// localSchemeBuilder ïs a pointer to SchemeBuilder instance. Using localSchemeBuilder
 	// defaulting and conversion init funcs are registered as well.
 	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is a common registration function for mapping packaged scoped group & version keys to a scheme
+	// AddToScheme 是通用的注册函数，把本包的 group/version 与类型映射到 scheme。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
+	// 这里只手动注册手写函数，生成器负责注册其余部分：
 	// generated functions takes place in the generated files. The separation
 	// makes the code compile even when the generated files are missing.
 	localSchemeBuilder.Register(addKnownTypes, RegisterDefaults)

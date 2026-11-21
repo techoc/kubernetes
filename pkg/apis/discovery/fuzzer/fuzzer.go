@@ -24,21 +24,27 @@ import (
 	"k8s.io/kubernetes/pkg/apis/discovery"
 )
 
-// Funcs returns the fuzzer functions for the discovery api group.
+// Funcs 返回 discovery API group 的 fuzzer 函数集合，
+// 供 roundtrip 测试构造随机的 EndpointSlice 对象使用。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
+		// 针对 EndpointSlice 定制 fuzz 逻辑：AddressType 必须是合法枚举，
+		// 端口的 Name/Protocol 需要满足字段约束（非空字符串与合法协议）。
 		func(obj *discovery.EndpointSlice, c randfill.Continue) {
-			c.FillNoCustom(obj) // fuzz self without calling this function again
+			c.FillNoCustom(obj) // 填充除本函数定制字段外的其他字段，避免递归调用自身
 
+			// AddressType 只允许三个合法取值，随机生成任意字符串会导致校验失败。
 			addressTypes := []discovery.AddressType{discovery.AddressTypeIPv4, discovery.AddressTypeIPv6, discovery.AddressTypeFQDN}
 			obj.AddressType = addressTypes[c.Rand.Intn(len(addressTypes))]
 
 			for i, endpointPort := range obj.Ports {
+				// 端口名缺省时必须是空字符串（而非 nil），与默认值语义保持一致。
 				if endpointPort.Name == nil {
 					emptyStr := ""
 					obj.Ports[i].Name = &emptyStr
 				}
 
+				// 协议是必填字段，从合法的协议枚举中挑选，避免随机值无法通过校验。
 				if endpointPort.Protocol == nil {
 					protos := []corev1.Protocol{corev1.ProtocolTCP, corev1.ProtocolUDP, corev1.ProtocolSCTP}
 					obj.Ports[i].Protocol = &protos[c.Rand.Intn(len(protos))]

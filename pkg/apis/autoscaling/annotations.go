@@ -16,31 +16,31 @@ limitations under the License.
 
 package autoscaling
 
-// MetricSpecsAnnotation is the annotation which holds non-CPU-utilization HPA metric
-// specs when converting the `Metrics` field from autoscaling/v2
+// MetricSpecsAnnotation 用于在 autoscaling/v2 与旧版本互转时，
+// 以注解形式保存 CPU 利用率以外的 HPA 指标规格（`Metrics` 字段）。
 const MetricSpecsAnnotation = "autoscaling.alpha.kubernetes.io/metrics"
 
-// MetricStatusesAnnotation is the annotation which holds non-CPU-utilization HPA metric
-// statuses when converting the `CurrentMetrics` field from autoscaling/v2
+// MetricStatusesAnnotation 用于在 autoscaling/v2 与旧版本互转时，
+// 以注解形式保存 CPU 利用率以外的 HPA 指标状态（`CurrentMetrics` 字段）。
 const MetricStatusesAnnotation = "autoscaling.alpha.kubernetes.io/current-metrics"
 
-// HorizontalPodAutoscalerConditionsAnnotation is the annotation which holds the conditions
-// of an HPA when converting the `Conditions` field from autoscaling/v2
+// HorizontalPodAutoscalerConditionsAnnotation 用于在 autoscaling/v2 与旧版本互转时，
+// 以注解形式保存 HPA 的 `Conditions` 字段。
 const HorizontalPodAutoscalerConditionsAnnotation = "autoscaling.alpha.kubernetes.io/conditions"
 
-// DefaultCPUUtilization is the default value for CPU utilization, provided no other
-// metrics are present.  This is here because it's used by both the v2 defaulting
-// logic, and the pseudo-defaulting done in v1 conversion.
+// DefaultCPUUtilization 是在没有其他指标时使用的 CPU 利用率默认值。
+// 放在这里是因为 v2 的默认值逻辑和 v1 转换中的伪默认值逻辑都要用到它，
+// 集中定义可避免两处取值不一致。
 const DefaultCPUUtilization = 80
 
-// BehaviorSpecsAnnotation is the annotation which holds the HPA constraints specs
-// when converting the `Behavior` field from autoscaling/v2beta2
+// BehaviorSpecsAnnotation 用于在 autoscaling/v2beta2 与旧版本互转时，
+// 以注解形式保存 HPA 的伸缩行为约束（`Behavior` 字段）。
 const BehaviorSpecsAnnotation = "autoscaling.alpha.kubernetes.io/behavior"
 
-// ToleranceScaleDownAnnotation is the annotation which holds the HPA tolerance specs
-// when converting the `ScaleDown.Tolerance` field from autoscaling/v2
+// ToleranceScaleDownAnnotation 用于在 autoscaling/v2 与旧版本互转时，
+// 以注解形式保存 HPA 的缩容容差（`ScaleDown.Tolerance` 字段）。
 const ToleranceScaleDownAnnotation = "autoscaling.alpha.kubernetes.io/scale-down-tolerance"
 
-// ToleranceScaleUpAnnotation is the annotation which holds the HPA tolerance specs
-// when converting the `ScaleUp.Tolerance` field from autoscaling/v2
+// ToleranceScaleUpAnnotation 用于在 autoscaling/v2 与旧版本互转时，
+// 以注解形式保存 HPA 的扩容容差（`ScaleUp.Tolerance` 字段）。
 const ToleranceScaleUpAnnotation = "autoscaling.alpha.kubernetes.io/scale-up-tolerance"

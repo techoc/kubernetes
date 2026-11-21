@@ -22,19 +22,25 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addConversionFuncs 向 scheme 注册字段标签（field label）的转换规则。
+// 字段标签转换让外部客户端可以按指定字段筛选/监听资源，
+// 这里为 ClusterTrustBundle 与 PodCertificateRequest 两种资源分别注册。
 func addConversionFuncs(scheme *runtime.Scheme) error {
 	err := scheme.AddFieldLabelConversionFunc(
 		SchemeGroupVersion.WithKind("ClusterTrustBundle"),
 		func(label, value string) (string, string, error) {
 			switch label {
+			// 仅支持按名称与签名者名称筛选 ClusterTrustBundle。
 			case "metadata.name", "spec.signerName":
 				return label, value, nil
 			default:
+				// 未列入白名单的标签直接拒绝，防止误用不支持的筛选条件。
 				return "", "", fmt.Errorf("field label not supported: %s", label)
 			}
 		},
 	)
 	if err != nil {
+		// 包装错误以标明注册失败对应的资源类型。
 		return fmt.Errorf("while adding ClusterTrustBundle field label conversion func: %w", err)
 	}
 
@@ -42,6 +48,8 @@ func addConversionFuncs(scheme *runtime.Scheme) error {
 		SchemeGroupVersion.WithKind("PodCertificateRequest"),
 		func(label, value string) (string, string, error) {
 			switch label {
+			// PodCertificateRequest 额外支持按 podName 与 nodeName 筛选，
+			// 这类请求总是与特定的 Pod 和节点绑定。
 			case "metadata.name", "spec.signerName", "spec.podName", "spec.nodeName":
 				return label, value, nil
 			default:

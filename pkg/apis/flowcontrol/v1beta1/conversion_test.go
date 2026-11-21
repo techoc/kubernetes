@@ -24,6 +24,8 @@ import (
 	"k8s.io/kubernetes/pkg/apis/flowcontrol"
 )
 
+// TestConvert_v1beta1_LimitedPriorityLevelConfiguration_To_flowcontrol_LimitedPriorityLevelConfiguration 验证
+// v1beta1 的 AssuredConcurrencyShares 能正确映射到内部类型的 NominalConcurrencyShares。
 func TestConvert_v1beta1_LimitedPriorityLevelConfiguration_To_flowcontrol_LimitedPriorityLevelConfiguration(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -60,6 +62,8 @@ func TestConvert_v1beta1_LimitedPriorityLevelConfiguration_To_flowcontrol_Limite
 	}
 }
 
+// TestConvert_flowcontrol_LimitedPriorityLevelConfiguration_To_v1beta1_LimitedPriorityLevelConfiguration 验证
+// 内部类型的 NominalConcurrencyShares 能正确映射回 v1beta1 的 AssuredConcurrencyShares。
 func TestConvert_flowcontrol_LimitedPriorityLevelConfiguration_To_v1beta1_LimitedPriorityLevelConfiguration(t *testing.T) {
 	tests := []struct {
 		name     string

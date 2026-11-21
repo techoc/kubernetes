@@ -37,15 +37,18 @@ const (
 	NoteLengthLimit              = 1024
 )
 
+// ValidateEventCreate 校验 Event 的创建请求。
+// 无论请求版本如何，都必须先通过旧版校验；对于 events.k8s.io/v1 及更新版本，
+// 还会执行更严格的校验。为向后兼容，core/v1 与 events/v1beta1 只做旧版校验。
 func ValidateEventCreate(event *core.Event, requestVersion schema.GroupVersion) field.ErrorList {
-	// Make sure events always pass legacy validation.
+	// 确保事件始终通过旧版校验。
 	allErrs := legacyValidateEvent(event, requestVersion)
 	if requestVersion == v1.SchemeGroupVersion || requestVersion == eventsv1beta1.SchemeGroupVersion {
-		// No further validation for backwards compatibility.
+		// 为向后兼容，不再做进一步校验。
 		return allErrs
 	}
 
-	// Strict validation applies to creation via events.k8s.io/v1 API and newer.
+	// 严格校验适用于通过 events.k8s.io/v1 API 及更新版本发起的创建请求。
 	allErrs = append(allErrs, ValidateObjectMeta(&event.ObjectMeta, true, apimachineryvalidation.NameIsDNSSubdomain, field.NewPath("metadata"))...)
 	allErrs = append(allErrs, validateV1EventSeries(event)...)
 	zeroTime := time.Time{}
@@ -55,6 +58,7 @@ func ValidateEventCreate(event *core.Event, requestVersion schema.GroupVersion) 
 	if event.Type != v1.EventTypeNormal && event.Type != v1.EventTypeWarning {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("type"), "", fmt.Sprintf("has invalid value: %v", event.Type)))
 	}
+	// 新 API 中事件时间和序列相关字段取代了旧的 first/lastTimestamp、count 等字段，必须保持未设置。
 	if event.FirstTimestamp.Time != zeroTime {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("firstTimestamp"), "", "needs to be unset"))
 	}
@@ -70,21 +74,25 @@ func ValidateEventCreate(event *core.Event, requestVersion schema.GroupVersion) 
 	return allErrs
 }
 
+// ValidateEventUpdate 校验 Event 的更新请求。
+// 旧事件先做旧版校验；events.k8s.io/v1 及更新版本还会校验元数据更新、
+// 序列变化以及一系列不可变字段，并对 eventTime 做微秒级容差的不可变检查。
 func ValidateEventUpdate(newEvent, oldEvent *core.Event, requestVersion schema.GroupVersion) field.ErrorList {
-	// Make sure the new event always passes legacy validation.
+	// 确保新事件始终通过旧版校验。
 	allErrs := legacyValidateEvent(newEvent, requestVersion)
 	if requestVersion == v1.SchemeGroupVersion || requestVersion == eventsv1beta1.SchemeGroupVersion {
-		// No further validation for backwards compatibility.
+		// 为向后兼容，不再做进一步校验。
 		return allErrs
 	}
 
-	// Strict validation applies to update via events.k8s.io/v1 API and newer.
+	// 严格校验适用于通过 events.k8s.io/v1 API 及更新版本发起的更新请求。
 	allErrs = append(allErrs, ValidateObjectMetaUpdate(&newEvent.ObjectMeta, &oldEvent.ObjectMeta, field.NewPath("metadata"))...)
-	// if the series was modified, validate the new data
+	// 若序列发生变化，则校验新的数据。
 	if !reflect.DeepEqual(newEvent.Series, oldEvent.Series) {
 		allErrs = append(allErrs, validateV1EventSeries(newEvent)...)
 	}
 
+	// 以下字段不允许更新。
 	allErrs = append(allErrs, ValidateImmutableField(newEvent.InvolvedObject, oldEvent.InvolvedObject, field.NewPath("involvedObject"))...)
 	allErrs = append(allErrs, ValidateImmutableField(newEvent.Reason, oldEvent.Reason, field.NewPath("reason"))...)
 	allErrs = append(allErrs, ValidateImmutableField(newEvent.Message, oldEvent.Message, field.NewPath("message"))...)
@@ -95,11 +103,10 @@ func ValidateEventUpdate(newEvent, oldEvent *core.Event, requestVersion schema.G
 	allErrs = append(allErrs, ValidateImmutableField(newEvent.Reason, oldEvent.Reason, field.NewPath("reason"))...)
 	allErrs = append(allErrs, ValidateImmutableField(newEvent.Type, oldEvent.Type, field.NewPath("type"))...)
 
-	// Disallow changes to eventTime greater than microsecond-level precision.
-	// Tolerating sub-microsecond changes is required to tolerate updates
-	// from clients that correctly truncate to microsecond-precision when serializing,
-	// or from clients built with incorrect nanosecond-precision protobuf serialization.
-	// See https://github.com/kubernetes/kubernetes/issues/111928
+	// 禁止 eventTime 发生超过微秒精度的变更。
+	// 容忍亚微秒级变更是为了兼容两类客户端：序列化时正确截断到微秒精度的客户端，
+	// 以及使用错误的纳秒精度 protobuf 序列化的客户端。
+	// 参见 https://github.com/kubernetes/kubernetes/issues/111928
 	newTruncated := newEvent.EventTime.Truncate(time.Microsecond).UTC()
 	oldTruncated := oldEvent.EventTime.Truncate(time.Microsecond).UTC()
 	if newTruncated != oldTruncated {
@@ -114,6 +121,7 @@ func ValidateEventUpdate(newEvent, oldEvent *core.Event, requestVersion schema.G
 	return allErrs
 }
 
+// validateV1EventSeries 校验 events.k8s.io/v1 的 Event Series：count 至少为 2，且 lastObservedTime 必须设置。
 func validateV1EventSeries(event *core.Event) field.ErrorList {
 	allErrs := field.ErrorList{}
 	zeroTime := time.Time{}
@@ -128,10 +136,10 @@ func validateV1EventSeries(event *core.Event) field.ErrorList {
 	return allErrs
 }
 
-// legacyValidateEvent makes sure that the event makes sense.
+// legacyValidateEvent 校验 Event 的语义是否合理，兼容新旧两种事件格式。
 func legacyValidateEvent(event *core.Event, requestVersion schema.GroupVersion) field.ErrorList {
 	allErrs := field.ErrorList{}
-	// Because go
+	// 取零值时间用于判断字段是否被设置。
 	zeroTime := time.Time{}
 
 	reportingControllerFieldName := "reportingController"
@@ -139,16 +147,16 @@ func legacyValidateEvent(event *core.Event, requestVersion schema.GroupVersion) 
 		reportingControllerFieldName = "reportingComponent"
 	}
 
-	// "New" Events need to have EventTime set, so it's validating old object.
+	// EventTime 为零说明是旧格式事件；非零则是新格式事件，需按新规则校验。
 	if event.EventTime.Time == zeroTime {
-		// Make sure event.Namespace and the involvedInvolvedObject.Namespace agree
+		// 确保 event.Namespace 与 involvedObject.Namespace 一致。
 		if len(event.InvolvedObject.Namespace) == 0 {
-			// event.Namespace must also be empty (or "default", for compatibility with old clients)
+			// involvedObject.Namespace 为空时，event.Namespace 也必须为空（或为 "default"，兼容旧客户端）。
 			if event.Namespace != metav1.NamespaceNone && event.Namespace != metav1.NamespaceDefault {
 				allErrs = append(allErrs, field.Invalid(field.NewPath("involvedObject", "namespace"), event.InvolvedObject.Namespace, "does not match event.namespace"))
 			}
 		} else {
-			// event namespace must match
+			// involvedObject.Namespace 非空时，event.Namespace 必须与其一致。
 			if event.Namespace != event.InvolvedObject.Namespace {
 				allErrs = append(allErrs, field.Invalid(field.NewPath("involvedObject", "namespace"), event.InvolvedObject.Namespace, "does not match event.namespace"))
 			}

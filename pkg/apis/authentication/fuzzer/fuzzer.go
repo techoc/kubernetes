@@ -20,7 +20,9 @@ import (
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// Funcs returns the fuzzer functions for the authentication api group.
+// Funcs 返回 authentication API 组专用的 fuzzer 函数列表。
+// 当前该组的类型不需要定制生成逻辑，因此返回空列表，
+// 完全依赖 apimachinery 提供的通用 fuzzer 即可。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{}
 }

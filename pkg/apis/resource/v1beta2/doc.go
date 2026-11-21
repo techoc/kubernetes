@@ -21,5 +21,5 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-input=k8s.io/api/resource/v1beta2
 
-// Package v1beta2 is the v1beta2 version of the resource API.
+// Package v1beta2 是 resource API 的 v1beta2 版本。
 package v1beta2

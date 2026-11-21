@@ -24,20 +24,23 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// addDefaultingFuncs 向 scheme 注册 v1beta1 版本的默认值函数。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// SetDefaults_PriorityClass sets additional defaults compared to its counterpart
-// in extensions.
+// SetDefaults_PriorityClass 相比 extensions 中的同名实现补充了额外默认值。
 func SetDefaults_PriorityClass(obj *v1beta1.PriorityClass) {
+	// 未指定抢占策略时沿用“抢占低优先级 Pod”的历史行为。
 	if obj.PreemptionPolicy == nil {
 		preemptLowerPriority := apiv1.PreemptLowerPriority
 		obj.PreemptionPolicy = &preemptLowerPriority
 	}
 }
 
+// SetDefaults_PodGroup 仅在特性门控开启时为 PodGroup 补齐抢占策略。
 func SetDefaults_PodGroup(in *v1beta1.PodGroup) {
+	// 门控关闭时保持字段为空，以维持旧版本行为。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodGroupPreemptionPolicy) {
 		if in.Spec.PreemptionPolicy == nil {
 			preemptLowerPriority := v1beta1.PreemptLowerPriority

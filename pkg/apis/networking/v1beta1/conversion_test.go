@@ -27,6 +27,8 @@ import (
 	"k8s.io/kubernetes/pkg/apis/networking"
 )
 
+// TestIngressBackendConversion 验证 IngressSpec 在 v1beta1 与内部类型之间双向转换时，
+// 数字端口、命名端口和空服务名都能正确映射且不丢失信息。
 func TestIngressBackendConversion(t *testing.T) {
 	scheme := runtime.NewScheme()
 	assert.NoError(t, RegisterConversions(scheme))
@@ -95,11 +97,13 @@ func TestIngressBackendConversion(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			convertedInternal := networking.IngressSpec{}
+			// 先验证外部版本 -> 内部版本的转换结果符合预期。
 			require.NoError(t,
 				Convert_v1beta1_IngressSpec_To_networking_IngressSpec(&test.external, &convertedInternal, nil))
 			assert.Equal(t, test.internal, convertedInternal, "v1beta1.IngressSpec -> networking.IngressSpec")
 
 			convertedV1beta1 := v1beta1.IngressSpec{}
+			// 再反向转换回外部版本，确保往返转换无信息丢失。
 			require.NoError(t,
 				Convert_networking_IngressSpec_To_v1beta1_IngressSpec(&test.internal, &convertedV1beta1, nil))
 			assert.Equal(t, test.external, convertedV1beta1, "networking.IngressSpec -> v1beta1.IngressSpec")

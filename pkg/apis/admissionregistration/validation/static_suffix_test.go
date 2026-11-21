@@ -23,6 +23,8 @@ import (
 	"k8s.io/apiserver/pkg/admission/plugin/manifest"
 )
 
+// TestValidateStaticSuffix 验证 ValidateStaticSuffix 只拒绝以 .static.k8s.io 结尾的名称，
+// 相似后缀、部分匹配以及空名称都应放行。
 func TestValidateStaticSuffix(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -63,6 +65,7 @@ func TestValidateStaticSuffix(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 只要返回任何错误即视为拒绝，这里不关心错误的具体内容。
 			errs := ValidateStaticSuffix(tc.inputName, field.NewPath("metadata", "name"))
 			gotError := len(errs) > 0
 			if gotError != tc.wantError {
@@ -72,6 +75,7 @@ func TestValidateStaticSuffix(t *testing.T) {
 	}
 }
 
+// TestWarningsForStaticSuffix 验证带静态配置后缀的名称会产生告警，但不阻止创建。
 func TestWarningsForStaticSuffix(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -106,6 +110,8 @@ func TestWarningsForStaticSuffix(t *testing.T) {
 	}
 }
 
+// TestStaticConfigSuffixInSync 确保 pkg 侧与 staging 侧的静态配置后缀常量保持一致，
+// 防止两边漂移导致校验与告警行为不一致。
 func TestStaticConfigSuffixInSync(t *testing.T) {
 	if StaticConfigSuffix != manifest.StaticConfigSuffix {
 		t.Errorf("StaticConfigSuffix constants are out of sync: pkg=%q, staging=%q", StaticConfigSuffix, manifest.StaticConfigSuffix)

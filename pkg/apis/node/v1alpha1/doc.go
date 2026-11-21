@@ -17,9 +17,9 @@ limitations under the License.
 // +k8s:conversion-gen=k8s.io/kubernetes/pkg/apis/node
 // +k8s:conversion-gen-external-types=k8s.io/api/node/v1alpha1
 
-// Default generation is explicitly disabled to preserve existing behavior.
-// If enabled corev1's SetDefaults_ResourceList (defaults.go)
-// will default RuntimeClass's overhead.podFixed field.
+// 显式禁用默认值生成，以保持既有行为不变。
+// 开启后会使用 corev1 的 SetDefaults_ResourceList（defaults.go），
+// 它会对 RuntimeClass 的 overhead.podFixed 字段做默认值填充。
 // +k8s:defaulter-gen=false
 
 // +k8s:validation-gen=TypesWithField=TypeMeta

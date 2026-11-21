@@ -23,12 +23,18 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// addDefaultingFuncs 向 scheme 注册本版本的默认值函数。
+// scheme 在解码对象后调用这些函数，把未设置的字段补成默认值。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_PodGroup 为 PodGroup 设置默认抢占策略。
+// 只有在 PodGroupPreemptionPolicy 特性开启时才补默认值：关闭时保持字段为 nil，
+// 避免旧客户端看到未被请求的新字段，也便于特性回滚后对象恢复原貌。
 func SetDefaults_PodGroup(in *schedulingv1alpha3.PodGroup) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodGroupPreemptionPolicy) {
+		// 不覆盖用户显式指定的策略，仅填补未设置的字段。
 		if in.Spec.PreemptionPolicy == nil {
 			preemptLowerPriority := schedulingv1alpha3.PreemptLowerPriority
 			in.Spec.PreemptionPolicy = &preemptLowerPriority
@@ -36,6 +42,9 @@ func SetDefaults_PodGroup(in *schedulingv1alpha3.PodGroup) {
 	}
 }
 
+// SetDefaults_CompositePodGroup 为 CompositePodGroup 设置默认抢占策略，
+// 语义与 SetDefaults_PodGroup 相同：受 PodGroupPreemptionPolicy 门控，
+// 且只补空值、不覆盖用户配置。
 func SetDefaults_CompositePodGroup(in *schedulingv1alpha3.CompositePodGroup) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodGroupPreemptionPolicy) {
 		if in.Spec.PreemptionPolicy == nil {

@@ -18,14 +18,16 @@ package core
 
 import "encoding/json"
 
-// This file implements json marshaling/unmarshaling interfaces on objects that are currently marshaled into annotations
-// to prevent anyone from marshaling these internal structs.
+// 本文件为那些当前会被序列化进注解（annotation）的内部对象实现 json 编解码接口，
+// 目的是阻止任何人直接序列化这些内部结构体：它们只应通过外部版本转换后再落盘。
 
 var _ = json.Marshaler(&AvoidPods{})
 var _ = json.Unmarshaler(&AvoidPods{})
 
-// MarshalJSON panics to prevent marshalling of internal structs
+// MarshalJSON 故意 panic，防止内部结构体被直接序列化。
+// 内部版本与对外 wire 版本不同，直接序列化会暴露不应公开的数据结构。
 func (AvoidPods) MarshalJSON() ([]byte, error) { panic("do not marshal internal struct") }
 
-// UnmarshalJSON panics to prevent unmarshalling of internal structs
+// UnmarshalJSON 故意 panic，防止数据被直接反序列化到内部结构体。
+// 数据必须先经过外部版本校验与转换，才能进入内部表示。
 func (*AvoidPods) UnmarshalJSON([]byte) error { panic("do not unmarshal to internal struct") }

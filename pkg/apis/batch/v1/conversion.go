@@ -18,9 +18,11 @@ package v1
 
 import (
 	"fmt"
+
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 注册 Job 的字段标签转换函数，使字段选择器能作用于内部版本。
 func addConversionFuncs(scheme *runtime.Scheme) error {
 	return scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("Job"),
 		func(label, value string) (string, string, error) {

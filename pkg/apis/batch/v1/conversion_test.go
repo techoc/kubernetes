@@ -17,10 +17,11 @@ limitations under the License.
 package v1_test
 
 import (
-	_ "k8s.io/kubernetes/pkg/apis/batch/install"
 	"math/rand"
 	"reflect"
 	"testing"
+
+	_ "k8s.io/kubernetes/pkg/apis/batch/install"
 
 	extv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/apitesting/fuzzer"
@@ -111,7 +112,7 @@ func assertMemoryIdentical(t *testing.T, path string, a, b reflect.Value) {
 		}
 	case reflect.Bool, reflect.Int, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64, reflect.String:
-		// Assume scalars are copied by value
+		// 假设标量类型按值复制。
 	default:
 		t.Errorf("%s: unexpected kind: %v", path, a.Kind())
 	}

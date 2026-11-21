@@ -25,9 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// ValidateCustom_EvictionResponder_Name is wired into the generated declarative validation by
-// +k8s:customValidation on corev1.EvictionResponder.Name. It enforces that the
-// k8s-prefixed-label-key value, is not prefixed with a k8s.io or kubernetes.io domain.
+// ValidateCustom_EvictionResponder_Name 通过 corev1.EvictionResponder.Name 上的
+// +k8s:customValidation 指令接入生成的声明式校验。它强制要求 k8s 前缀的 label key 值
+// 不得以 k8s.io 或 kubernetes.io 域名作为前缀。
 func ValidateCustom_EvictionResponder_Name(ctx context.Context, op operation.Operation, fldPath *field.Path, value, oldValue *string) field.ErrorList {
 	if value != nil {
 		return ValidateForbiddenReservedDomainSuffixes(fldPath, *value, []string{".k8s.io", ".kubernetes.io"})
@@ -36,21 +36,21 @@ func ValidateCustom_EvictionResponder_Name(ctx context.Context, op operation.Ope
 	return nil
 }
 
-// ValidateCustom_EvictionResponder_Priority is wired into the generated declarative validation by
-// +k8s:customValidation on corev1.EvictionResponder.Priority. It ensures that k8s priority
-// intervals are reserved for k8s responder use.
+// ValidateCustom_EvictionResponder_Priority 通过 corev1.EvictionResponder.Priority 上的
+// +k8s:customValidation 指令接入生成的声明式校验。它确保 k8s 优先级区间保留给 k8s 响应器使用。
 func ValidateCustom_EvictionResponder_Priority(ctx context.Context, op operation.Operation, fldPath *field.Path, value, oldValue *int32) field.ErrorList {
 	const reservedKubernetesRespondersPriority = 1000
 	if value != nil && *value >= 0 && *value < reservedKubernetesRespondersPriority {
-		// There is no need to check the responder name since we do not yet allow k8s responders here.
-		// The default imperative-eviction responder is set to the Eviction object directly.
-		// Once we allow core responders, they should have assigned priorities.
+		// 这里无需检查响应器名称，因为目前尚不允许 k8s 响应器。
+		// 默认的命令式驱逐响应器直接设置在 Eviction 对象上。
+		// 待允许核心响应器后，需要为其分配相应的优先级。
 		return field.ErrorList{field.Invalid(fldPath, *value, "priorities 0-999 are reserved for responders with *.k8s.io suffix")}
 	}
 	return nil
 }
 
-// ValidateForbiddenReservedDomainSuffixes checks that the reservedSuffixes are not being used
+// ValidateForbiddenReservedDomainSuffixes 校验 value 未使用保留的域名后缀 reservedSuffixes。
+// 校验时对域名部分做小写化、去首尾空白和去尾随点处理，避免通过大小写或点号绕过。
 func ValidateForbiddenReservedDomainSuffixes(fldPath *field.Path, value string, reservedSuffixes []string) field.ErrorList {
 	var allErrors field.ErrorList
 	segments := strings.SplitN(value, "/", 2)

@@ -20,12 +20,13 @@ import (
 	"k8s.io/api/flowcontrol/v1beta1"
 )
 
-// Default settings for flow-schema
+// flow-schema 的默认设置。
 const (
 	FlowSchemaDefaultMatchingPrecedence int32 = 1000
 )
 
-// Default settings for priority-level-configuration
+// priority-level-configuration 的默认设置。
+// 注意此版本仍使用 AssuredConcurrencyShares 字段（v1beta3 起改名为 NominalConcurrencyShares）。
 const (
 	PriorityLevelConfigurationDefaultHandSize                 int32 = 8
 	PriorityLevelConfigurationDefaultQueues                   int32 = 64
@@ -33,13 +34,16 @@ const (
 	PriorityLevelConfigurationDefaultAssuredConcurrencyShares int32 = 30
 )
 
-// SetDefaults_FlowSchema sets default values for flow schema
+// SetDefaults_FlowSchemaSpec 为 flow schema 规格设置默认值：
+// 未指定匹配优先级时使用默认值，使不同 schema 之间有确定的先后顺序。
 func SetDefaults_FlowSchemaSpec(spec *v1beta1.FlowSchemaSpec) {
 	if spec.MatchingPrecedence == 0 {
 		spec.MatchingPrecedence = FlowSchemaDefaultMatchingPrecedence
 	}
 }
 
+// SetDefaults_ExemptPriorityLevelConfiguration 为豁免型优先级级别配置设置默认值：
+// 豁免级别不参与并发限制，名义并发份额和可借出比例默认为 0。
 func SetDefaults_ExemptPriorityLevelConfiguration(eplc *v1beta1.ExemptPriorityLevelConfiguration) {
 	if eplc.NominalConcurrencyShares == nil {
 		eplc.NominalConcurrencyShares = new(int32)
@@ -51,6 +55,8 @@ func SetDefaults_ExemptPriorityLevelConfiguration(eplc *v1beta1.ExemptPriorityLe
 	}
 }
 
+// SetDefaults_LimitedPriorityLevelConfiguration 为限制型优先级级别配置设置默认值：
+// 保证并发份额使用默认值，可借出比例默认为 0。
 func SetDefaults_LimitedPriorityLevelConfiguration(lplc *v1beta1.LimitedPriorityLevelConfiguration) {
 	if lplc.AssuredConcurrencyShares == 0 {
 		lplc.AssuredConcurrencyShares = PriorityLevelConfigurationDefaultAssuredConcurrencyShares
@@ -61,7 +67,8 @@ func SetDefaults_LimitedPriorityLevelConfiguration(lplc *v1beta1.LimitedPriority
 	}
 }
 
-// SetDefaults_FlowSchema sets default values for flow schema
+// SetDefaults_QueuingConfiguration 为排队配置设置默认值：
+// 手数、队列数和队列长度限制分别使用默认常量，保证请求排队行为可预测。
 func SetDefaults_QueuingConfiguration(cfg *v1beta1.QueuingConfiguration) {
 	if cfg.HandSize == 0 {
 		cfg.HandSize = PriorityLevelConfigurationDefaultHandSize

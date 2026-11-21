@@ -28,36 +28,40 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Funcs returns the fuzzer functions for the certificates api group.
+// Funcs 返回 certificates API group 的 fuzzer 函数集合，
+// 供 roundtrip 测试构造合法且可序列化的随机对象使用。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
+		// CSR 的 usages、signerName、expirationSeconds 都有取值/格式约束，
+		// 随机字节无法通过这些约束，因此显式赋合法值。
 		func(obj *certificates.CertificateSigningRequestSpec, c randfill.Continue) {
-			c.FillNoCustom(obj) // fuzz self without calling this function again
+			c.FillNoCustom(obj) // 填充除本函数定制字段外的其他字段，避免递归调用自身
 			obj.Usages = []certificates.KeyUsage{certificates.UsageKeyEncipherment}
 			obj.SignerName = "example.com/custom-sample-signer"
 			obj.ExpirationSeconds = csr.DurationToExpirationSeconds(time.Hour + time.Minute + time.Second)
 		},
+		// Condition 的 status 不能为空，空值会在校验时被拒绝。
 		func(obj *certificates.CertificateSigningRequestCondition, c randfill.Continue) {
-			c.FillNoCustom(obj) // fuzz self without calling this function again
+			c.FillNoCustom(obj) // 填充除本函数定制字段外的其他字段，避免递归调用自身
 			if len(obj.Status) == 0 {
 				obj.Status = api.ConditionTrue
 			}
 		},
+		// PodCertificateRequestSpec 的 fuzz 逻辑：保证字段在 roundtrip 前后保持一致。
 		func(obj *certificates.PodCertificateRequestSpec, c randfill.Continue) {
-			c.FillNoCustom(obj) // fuzz self without calling this function again
+			c.FillNoCustom(obj) // 填充除本函数定制字段外的其他字段，避免递归调用自身
 
-			// MaxExpirationSeconds has a field defaulter, so we should make
-			// sure it's non-nil.  Otherwise,
-			// pkg/api/testing/serialization_test.go TestRoundTripTypes will
-			// fail with diffs due to the defaulting.
+			// MaxExpirationSeconds 带有字段默认值设定器，必须保证非 nil，
+			// 否则 pkg/api/testing/serialization_test.go 的 TestRoundTripTypes
+			// 会因默认值填充前后的差异而失败。
 			if obj.MaxExpirationSeconds == nil {
 				obj.MaxExpirationSeconds = ptr.To[int32](86400)
 			}
 
-			// Clear PKIXPublicKey and ProofOfPossession since they are dropped
-			// in the v1 version of PodCertificateRequest, causing roundtrip failures.
-			obj.PKIXPublicKey = nil     //nolint:staticcheck // Deprecated fields need to be cleared for roundtrip
-			obj.ProofOfPossession = nil //nolint:staticcheck // Deprecated fields need to be cleared for roundtrip
+			// 清空 PKIXPublicKey 与 ProofOfPossession：这两个字段在 v1 版本的
+			// PodCertificateRequest 中会被丢弃，不清空将导致 roundtrip 比较失败。
+			obj.PKIXPublicKey = nil     //nolint:staticcheck // 为满足 roundtrip 需要清空已废弃字段
+			obj.ProofOfPossession = nil //nolint:staticcheck // 为满足 roundtrip 需要清空已废弃字段
 		},
 	}
 }

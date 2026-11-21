@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	// NamespaceDefault means the object is in the default namespace which is applied when not specified by clients
+	// NamespaceDefault 表示对象位于默认命名空间，客户端未指定命名空间时会采用该值
 	NamespaceDefault = "default"
-	// NamespaceAll is the default argument to specify on a context when you want to list or filter resources across all namespaces
+	// NamespaceAll 是在上下文中指定跨所有命名空间列出或过滤资源时使用的默认参数
 	NamespaceAll = ""
 	// NamespaceNone is the argument for a context when there is no namespace.
 	NamespaceNone = ""

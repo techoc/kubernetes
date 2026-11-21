@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestValidateForbiddenReservedSuffixes 验证保留域名后缀的禁止规则。
 func TestValidateForbiddenReservedSuffixes(t *testing.T) {
 	reservedSuffixes := []string{".k8s.io", ".kubernetes.io"}
 	goodValues := []string{

@@ -22,8 +22,8 @@ import (
 	"k8s.io/kubernetes/pkg/apis/flowcontrol"
 )
 
-// LimitedPriorityLevelConfiguration.AssuredConcurrencyShares has been
-// renamed to NominalConcurrencyShares in v1beta3.
+// LimitedPriorityLevelConfiguration.AssuredConcurrencyShares 在 v1beta3 中已重命名为 NominalConcurrencyShares。
+// 因此自动生成的转换无法覆盖该字段，需要手动赋值完成映射。
 func Convert_v1beta2_LimitedPriorityLevelConfiguration_To_flowcontrol_LimitedPriorityLevelConfiguration(in *v1beta2.LimitedPriorityLevelConfiguration, out *flowcontrol.LimitedPriorityLevelConfiguration, s conversion.Scope) error {
 	if err := autoConvert_v1beta2_LimitedPriorityLevelConfiguration_To_flowcontrol_LimitedPriorityLevelConfiguration(in, out, nil); err != nil {
 		return err
@@ -33,8 +33,8 @@ func Convert_v1beta2_LimitedPriorityLevelConfiguration_To_flowcontrol_LimitedPri
 	return nil
 }
 
-// LimitedPriorityLevelConfiguration.AssuredConcurrencyShares has been
-// renamed to NominalConcurrencyShares in v1beta3.
+// LimitedPriorityLevelConfiguration.AssuredConcurrencyShares 在 v1beta3 中已重命名为 NominalConcurrencyShares。
+// 反向转换时同样需要手动把内部字段映射回旧字段名。
 func Convert_flowcontrol_LimitedPriorityLevelConfiguration_To_v1beta2_LimitedPriorityLevelConfiguration(in *flowcontrol.LimitedPriorityLevelConfiguration, out *v1beta2.LimitedPriorityLevelConfiguration, s conversion.Scope) error {
 	if err := autoConvert_flowcontrol_LimitedPriorityLevelConfiguration_To_v1beta2_LimitedPriorityLevelConfiguration(in, out, nil); err != nil {
 		return err

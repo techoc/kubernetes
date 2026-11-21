@@ -29,7 +29,7 @@ import (
 
 // +k8s:deepcopy-gen=false
 
-// PolicyRuleBuilder let's us attach methods.  A no-no for API types.
+// PolicyRuleBuilder 允许挂接方法，这在普通 API 类型上是不允许的。
 // We use it to construct rules in code.  It's more compact than trying to write them
 // out in a literal and allows us to perform some basic checking during construction
 type PolicyRuleBuilder struct {
@@ -91,7 +91,7 @@ func (r *PolicyRuleBuilder) Rule() (rbacv1.PolicyRule, error) {
 			return rbacv1.PolicyRule{}, fmt.Errorf("resource rule may not have nonResourceURLs: %#v", r.PolicyRule)
 		}
 		if len(r.PolicyRule.APIGroups) == 0 {
-			// this a common bug
+			// 这是一个常见错误。
 			return rbacv1.PolicyRule{}, fmt.Errorf("resource rule must have apiGroups: %#v", r.PolicyRule)
 		}
 	default:

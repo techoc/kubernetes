@@ -23,31 +23,31 @@ import (
 )
 
 var (
-	// SchemeBuilder stores functions to add things to a scheme.
+	// SchemeBuilder 保存用于向 scheme 注册类型的函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	// AddToScheme applies all stored functions t oa scheme.
+	// AddToScheme 依次执行所有已保存的注册函数。
 	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包对应的 API 组名。
 const GroupName = "apps"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接收不带组名的 kind，返回带组名的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接收不带组名的 resource，返回带组名的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-// Adds the list of known types to the given scheme.
+// 把本组的已知类型注册到给定的 scheme。
 func addKnownTypes(scheme *runtime.Scheme) error {
-	// TODO this will get cleaned up with the scheme types are fixed
+	// TODO: 待 scheme 类型修正后清理这里。
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&DaemonSet{},
 		&DaemonSetList{},

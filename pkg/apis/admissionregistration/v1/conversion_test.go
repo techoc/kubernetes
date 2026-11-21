@@ -17,10 +17,11 @@ limitations under the License.
 package v1_test
 
 import (
-	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 	"math/rand"
 	"reflect"
 	"testing"
+
+	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 
 	extv1 "k8s.io/api/admissionregistration/v1"
 	"k8s.io/apimachinery/pkg/api/apitesting/fuzzer"
@@ -30,6 +31,9 @@ import (
 	internalfuzzer "k8s.io/kubernetes/pkg/apis/admissionregistration/fuzzer"
 )
 
+// assertMemoryIdentical 递归比较两个值的内存布局是否一致：
+// 结构体逐字段检查名称、偏移和类型大小；指针、map、slice 检查是否共享同一底层引用。
+// 用于验证版本化类型与内部类型之间的转换是零拷贝的（仅复用引用，不深拷贝）。
 func assertMemoryIdentical(t *testing.T, path string, a, b reflect.Value) {
 	t.Helper()
 	if a.Kind() != b.Kind() {
@@ -73,6 +77,8 @@ func assertMemoryIdentical(t *testing.T, path string, a, b reflect.Value) {
 	}
 }
 
+// TestMutatingAdmissionPolicyMemoryIdenticalConversion 验证 MutatingAdmissionPolicy 在 v1 与内部类型间双向转换时，
+// 随机生成的对象内存布局保持一致，即转换只复用引用而不做深拷贝。
 func TestMutatingAdmissionPolicyMemoryIdenticalConversion(t *testing.T) {
 	f := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, internalfuzzer.Funcs), rand.NewSource(1), legacyscheme.Codecs).NilChance(0).NumElements(1, 1)
 	t.Run("v1 to internal", func(t *testing.T) {
@@ -95,6 +101,7 @@ func TestMutatingAdmissionPolicyMemoryIdenticalConversion(t *testing.T) {
 	})
 }
 
+// TestMutatingAdmissionPolicyBindingMemoryIdenticalConversion 验证 MutatingAdmissionPolicyBinding 双向转换时内存布局一致。
 func TestMutatingAdmissionPolicyBindingMemoryIdenticalConversion(t *testing.T) {
 	f := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, internalfuzzer.Funcs), rand.NewSource(1), legacyscheme.Codecs).NilChance(0).NumElements(1, 1)
 	t.Run("v1 to internal", func(t *testing.T) {
@@ -117,6 +124,7 @@ func TestMutatingAdmissionPolicyBindingMemoryIdenticalConversion(t *testing.T) {
 	})
 }
 
+// TestMutatingAdmissionPolicyListMemoryIdenticalConversion 验证 MutatingAdmissionPolicyList 双向转换时内存布局一致。
 func TestMutatingAdmissionPolicyListMemoryIdenticalConversion(t *testing.T) {
 	f := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, internalfuzzer.Funcs), rand.NewSource(1), legacyscheme.Codecs).NilChance(0).NumElements(1, 1)
 	t.Run("v1 to internal", func(t *testing.T) {
@@ -139,6 +147,7 @@ func TestMutatingAdmissionPolicyListMemoryIdenticalConversion(t *testing.T) {
 	})
 }
 
+// TestMutatingAdmissionPolicyBindingListMemoryIdenticalConversion 验证 MutatingAdmissionPolicyBindingList 双向转换时内存布局一致。
 func TestMutatingAdmissionPolicyBindingListMemoryIdenticalConversion(t *testing.T) {
 	f := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, internalfuzzer.Funcs), rand.NewSource(1), legacyscheme.Codecs).NilChance(0).NumElements(1, 1)
 	t.Run("v1 to internal", func(t *testing.T) {
@@ -161,6 +170,7 @@ func TestMutatingAdmissionPolicyBindingListMemoryIdenticalConversion(t *testing.
 	})
 }
 
+// TestValidatingAdmissionPolicyMemoryIdenticalConversion 验证 ValidatingAdmissionPolicy 双向转换时内存布局一致。
 func TestValidatingAdmissionPolicyMemoryIdenticalConversion(t *testing.T) {
 	f := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, internalfuzzer.Funcs), rand.NewSource(1), legacyscheme.Codecs).NilChance(0).NumElements(1, 1)
 	t.Run("v1 to internal", func(t *testing.T) {

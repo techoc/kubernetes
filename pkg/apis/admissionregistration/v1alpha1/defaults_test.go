@@ -29,6 +29,8 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
 )
 
+// TestDefaultAdmissionPolicy 验证 v1alpha1 版本验证/变更准入策略经过默认化后，
+// 失败策略、匹配资源策略和选择器、规则作用域均被正确填充。
 func TestDefaultAdmissionPolicy(t *testing.T) {
 	fail := v1alpha1.Fail
 	never := v1alpha1.NeverReinvocationPolicy
@@ -154,6 +156,8 @@ func TestDefaultAdmissionPolicy(t *testing.T) {
 	}
 }
 
+// TestDefaultAdmissionPolicyBinding 验证 v1alpha1 版本策略绑定经过默认化后，
+// 参数引用的 parameterNotFoundAction 与匹配资源策略被正确填充。
 func TestDefaultAdmissionPolicyBinding(t *testing.T) {
 	denyAction := v1alpha1.DenyAction
 	equivalent := v1alpha1.Equivalent

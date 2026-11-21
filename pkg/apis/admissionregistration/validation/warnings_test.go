@@ -24,13 +24,14 @@ import (
 	"k8s.io/kubernetes/pkg/apis/admissionregistration"
 )
 
-// testExcludedResources is a representative excluded set; the production set is supplied by the
-// caller (see pkg/kubeapiserver/admission/exclusion), so these helpers don't depend on it.
+// testExcludedResources 是一个有代表性的排除集合；生产环境中的集合由调用方提供，
+// 参见 pkg/kubeapiserver/admission/exclusion，因此这里的辅助函数不依赖具体的生产集合。
 var testExcludedResources = []schema.GroupResource{
 	{Group: "authentication.k8s.io", Resource: "tokenreviews"},
 	{Group: "authorization.k8s.io", Resource: "subjectaccessreviews"},
 }
 
+// 构造一个仅含 Rule 部分（不含 Operations）的 RuleWithOperations，便于构造测试用例。
 func rule(groups, versions, resources []string) admissionregistration.RuleWithOperations {
 	return admissionregistration.RuleWithOperations{
 		Rule: admissionregistration.Rule{
@@ -41,6 +42,7 @@ func rule(groups, versions, resources []string) admissionregistration.RuleWithOp
 	}
 }
 
+// 测试 Webhook 规则中引用被排除资源时是否产生恰当警告，且通配符规则与组名不匹配时不误报。
 func TestWarningsForWebhookRules(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -21,12 +21,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Default settings for flow-schema
+// flow-schema 的默认设置。
 const (
 	FlowSchemaDefaultMatchingPrecedence int32 = 1000
 )
 
-// Default settings for priority-level-configuration
+// priority-level-configuration 的默认设置。
 const (
 	PriorityLevelConfigurationDefaultHandSize                 int32 = 8
 	PriorityLevelConfigurationDefaultQueues                   int32 = 64
@@ -34,13 +34,16 @@ const (
 	PriorityLevelConfigurationDefaultNominalConcurrencyShares int32 = 30
 )
 
-// SetDefaults_FlowSchema sets default values for flow schema
+// SetDefaults_FlowSchemaSpec 为 flow schema 规格设置默认值：
+// 未指定匹配优先级时使用默认值，使不同 schema 之间有确定的先后顺序。
 func SetDefaults_FlowSchemaSpec(spec *v1.FlowSchemaSpec) {
 	if spec.MatchingPrecedence == 0 {
 		spec.MatchingPrecedence = FlowSchemaDefaultMatchingPrecedence
 	}
 }
 
+// SetDefaults_ExemptPriorityLevelConfiguration 为豁免型优先级级别配置设置默认值：
+// 豁免级别不参与并发限制，因此名义并发份额和可借出比例都默认为 0。
 func SetDefaults_ExemptPriorityLevelConfiguration(eplc *v1.ExemptPriorityLevelConfiguration) {
 	if eplc.NominalConcurrencyShares == nil {
 		eplc.NominalConcurrencyShares = new(int32)
@@ -52,6 +55,8 @@ func SetDefaults_ExemptPriorityLevelConfiguration(eplc *v1.ExemptPriorityLevelCo
 	}
 }
 
+// SetDefaults_LimitedPriorityLevelConfiguration 为限制型优先级级别配置设置默认值：
+// 名义并发份额使用默认值，可借出比例默认为 0（不向其他级别借出并发度）。
 func SetDefaults_LimitedPriorityLevelConfiguration(lplc *v1.LimitedPriorityLevelConfiguration) {
 	if lplc.NominalConcurrencyShares == nil {
 		lplc.NominalConcurrencyShares = ptr.To(PriorityLevelConfigurationDefaultNominalConcurrencyShares)
@@ -62,7 +67,8 @@ func SetDefaults_LimitedPriorityLevelConfiguration(lplc *v1.LimitedPriorityLevel
 	}
 }
 
-// SetDefaults_FlowSchema sets default values for flow schema
+// SetDefaults_QueuingConfiguration 为排队配置设置默认值：
+// 手数、队列数和队列长度限制分别使用默认常量，保证请求排队行为可预测。
 func SetDefaults_QueuingConfiguration(cfg *v1.QueuingConfiguration) {
 	if cfg.HandSize == 0 {
 		cfg.HandSize = PriorityLevelConfigurationDefaultHandSize

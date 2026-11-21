@@ -24,12 +24,13 @@ import (
 	apiscorev1 "k8s.io/kubernetes/pkg/apis/core/v1"
 )
 
-// ValidateCustom_EvictionRequestSpec_Requester is wired into the generated declarative validation by
-// +k8s:customValidation on corev1.EvictionRequestSpec.Requester. It enforces that the
-// k8s-prefixed-label-key value, is not prefixed with a k8s.io or kubernetes.io domain.
+// ValidateCustom_EvictionRequestSpec_Requester 通过 corev1.EvictionRequestSpec.Requester 上的
+// +k8s:customValidation 标记接入生成的声明式校验链。它的作用是确保 k8s 前缀标签键
+// （k8s-prefixed-label-key）的值不以 k8s.io 或 kubernetes.io 域名作为前缀，
+// 防止用户伪造 Kubernetes 保留的命名空间。
 func ValidateCustom_EvictionRequestSpec_Requester(ctx context.Context, op operation.Operation, fldPath *field.Path, value, oldValue *string) field.ErrorList {
 	if value != nil {
-		// Once, we have k8s requesters, we need to check a set of supported requesters that can bypass this validation.
+		// 将来出现 k8s 内置的 requester 时，需要维护一个可以绕过该校验的受支持 requester 集合。
 		return apiscorev1.ValidateForbiddenReservedDomainSuffixes(fldPath, *value, []string{".k8s.io", ".kubernetes.io"})
 
 	}

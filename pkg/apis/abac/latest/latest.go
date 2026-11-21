@@ -17,11 +17,12 @@ limitations under the License.
 package latest
 
 import (
-	//Init the abac api package
+	// 初始化 abac API 包：空导入触发各版本的注册。
 	_ "k8s.io/kubernetes/pkg/apis/abac"
 	_ "k8s.io/kubernetes/pkg/apis/abac/v0"
 	_ "k8s.io/kubernetes/pkg/apis/abac/v1beta1"
 )
 
+// 本包只是把 abac 各版本聚合到一起，结构与其他 latest 包不同。
 // TODO: this file is totally wrong, it should look like other latest files.
-// lavalamp is in the middle of fixing this code, so wait for the new way of doing things..
+// lavalamp 正在重写这段代码，先等待新的实现方式。

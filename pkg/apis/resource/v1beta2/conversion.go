@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 注册本版本需要的转换函数，主要为 ResourceSlice 的字段标签转换。
 func addConversionFuncs(scheme *runtime.Scheme) error {
 	if err := scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("ResourceSlice"),
 		func(label, value string) (string, string, error) {

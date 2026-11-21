@@ -18,17 +18,15 @@ package util
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-// IsDefaultStorageClassAnnotation represents a StorageClass annotation that
-// marks a class as the default StorageClass
+// IsDefaultStorageClassAnnotation 是把某个 StorageClass 标记为默认类的注解键。
 const IsDefaultStorageClassAnnotation = "storageclass.kubernetes.io/is-default-class"
 
-// BetaIsDefaultStorageClassAnnotation is the beta version of IsDefaultStorageClassAnnotation.
-// TODO: remove Beta when no longer used
+// BetaIsDefaultStorageClassAnnotation 是 IsDefaultStorageClassAnnotation 的 beta 版本。
+// TODO: 不再使用时移除 Beta 版本。
 const BetaIsDefaultStorageClassAnnotation = "storageclass.beta.kubernetes.io/is-default-class"
 
-// IsDefaultAnnotation returns a boolean if
-// the annotation is set
-// TODO: remove Beta when no longer needed
+// IsDefaultAnnotation 判断对象是否被标记为默认 StorageClass，兼容 GA 与 beta 两个版本的注解。
+// TODO: 不再需要时移除对 Beta 注解的判断。
 func IsDefaultAnnotation(obj metav1.ObjectMeta) bool {
 	if obj.Annotations[IsDefaultStorageClassAnnotation] == "true" {
 		return true

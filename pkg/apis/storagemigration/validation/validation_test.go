@@ -29,7 +29,7 @@ import (
 const dns1035ErrMsg = "a DNS-1035 label must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123', regex used for validation is '[a-z]([-a-z0-9]*[a-z0-9])?')"
 const dns1123ErrMsg = "a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (e.g. 'example.com', regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*')"
 
-// TestValidateStorageVersionMigration tests the ValidateStorageVersionMigration function
+// TestValidateStorageVersionMigration 测试 ValidateStorageVersionMigration 函数。
 func TestValidateStorageVersionMigration(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -130,6 +130,8 @@ func TestValidateStorageVersionMigration(t *testing.T) {
 		})
 	}
 }
+
+// 测试 StorageVersionMigration 更新校验：spec 不可变，但元数据变更应被允许。
 func TestValidateStorageVersionMigrationUpdate(t *testing.T) {
 	validSVM := &storagemigration.StorageVersionMigration{
 		ObjectMeta: metav1.ObjectMeta{
@@ -208,10 +210,10 @@ func TestValidateStorageVersionMigrationUpdate(t *testing.T) {
 }
 
 var (
-	// Add a time variable
+	// 统一的时间戳，供各 condition 复用，避免时间差异干扰比较。
 	now = metav1.Now()
 
-	// Add LastTransitionTime to all conditions
+	// 为所有 condition 设置 LastTransitionTime。
 	runningCond   = metav1.Condition{Type: string(storagemigration.MigrationRunning), Status: metav1.ConditionTrue, Reason: "Running", LastTransitionTime: now}
 	succeededCond = metav1.Condition{Type: string(storagemigration.MigrationSucceeded), Status: metav1.ConditionTrue, Reason: "Succeeded", LastTransitionTime: now}
 	failedCond    = metav1.Condition{Type: string(storagemigration.MigrationFailed), Status: metav1.ConditionTrue, Reason: "Failed", LastTransitionTime: now}
@@ -221,6 +223,7 @@ var (
 	failedFalseCond    = metav1.Condition{Type: string(storagemigration.MigrationFailed), Status: metav1.ConditionFalse, Reason: "NotFailed", LastTransitionTime: now}
 )
 
+// 构造用于状态更新测试的 StorageVersionMigration，可指定 status.resourceVersion 与一组 condition。
 func newTestSVM(rv string, conditions ...metav1.Condition) *storagemigration.StorageVersionMigration {
 	return &storagemigration.StorageVersionMigration{
 		ObjectMeta: metav1.ObjectMeta{
@@ -240,6 +243,7 @@ func newTestSVM(rv string, conditions ...metav1.Condition) *storagemigration.Sto
 	}
 }
 
+// 测试状态更新校验：resourceVersion 不可变、格式需合法，且 succeeded/failed 状态不可撤销或同时为真。
 func TestValidateStorageVersionMigrationStatusUpdate(t *testing.T) {
 	tests := []struct {
 		name           string

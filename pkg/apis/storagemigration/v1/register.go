@@ -22,13 +22,13 @@ import (
 	svmv1 "k8s.io/api/storagemigration/v1"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包对应的 API 组名。
 const GroupName = "storagemigration.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接收不带组名的 resource，返回带组名的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }

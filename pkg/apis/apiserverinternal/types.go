@@ -32,7 +32,7 @@ type StorageVersion struct {
 	Spec StorageVersionSpec
 
 	// API server instances report the version they can decode and the version they
-	// encode objects to when persisting objects in the backend.
+	// 持久化对象到后端时所使用的编码方式。
 	Status StorageVersionStatus
 }
 
@@ -40,7 +40,7 @@ type StorageVersion struct {
 type StorageVersionSpec struct{}
 
 // StorageVersionStatus API server instances report the versions they can decode and the version they
-// encode objects to when persisting objects in the backend.
+// 持久化对象到后端时所使用的编码方式。
 type StorageVersionStatus struct {
 	// The reported versions per API server instance.
 	// +optional
@@ -101,18 +101,18 @@ type StorageVersionCondition struct {
 	// Type of the condition.
 	// +optional
 	Type StorageVersionConditionType
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False 或 Unknown。
 	// +required
 	Status ConditionStatus
 	// If set, this represents the .metadata.generation that the condition was set based upon.
 	// +optional
 	ObservedGeneration int64
-	// Last time the condition transitioned from one status to another.
+	// 条件最近一次从一种状态变为另一种状态的时间。
 	LastTransitionTime metav1.Time
-	// The reason for the condition's last transition.
+	// 条件最近一次状态变化的原因。
 	// +required
 	Reason string
-	// A human readable message indicating details about the transition.
+	// 用自然语言描述状态变化的详细信息。
 	// +required
 	Message string
 }

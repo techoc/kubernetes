@@ -30,7 +30,7 @@ func init() {
 	Install(legacyscheme.Scheme)
 }
 
-// Install registers the API group and adds types to a scheme
+// Install 注册 API 组并把该组的所有版本类型加入 scheme。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(storagemigration.AddToScheme(scheme))
 	utilruntime.Must(v1beta1.AddToScheme(scheme))

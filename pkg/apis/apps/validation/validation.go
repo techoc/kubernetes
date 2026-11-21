@@ -48,7 +48,7 @@ type StatefulSetValidationOptions struct {
 
 // ValidateStatefulSetName can be used to check whether the given StatefulSet name is valid.
 // Prefix indicates this name will be used as part of generation, in which case
-// trailing dashes are allowed.
+// 允许结尾的连字符。
 func ValidateStatefulSetName(name string, prefix bool) []string {
 	// TODO: Validate that there's room for the suffix inserted by the pods.
 	// Currently this is just "-index". In the future we may allow a user
@@ -319,7 +319,7 @@ func ValidateStatefulSetStatusUpdate(statefulSet, oldStatefulSet *apps.StatefulS
 
 // ValidateControllerRevisionName can be used to check whether the given ControllerRevision name is valid.
 // Prefix indicates this name will be used as part of generation, in which case
-// trailing dashes are allowed.
+// 允许结尾的连字符。
 var ValidateControllerRevisionName = apimachineryvalidation.NameIsDNSSubdomain
 
 // validateControllerRevision collects errors for the fields of state and returns those errors as an ErrorList. If the
@@ -531,7 +531,7 @@ func ValidateDaemonSetUpdateStrategy(strategy *apps.DaemonSetUpdateStrategy, fld
 
 // ValidateDaemonSetName can be used to check whether the given daemon set name is valid.
 // Prefix indicates this name will be used as part of generation, in which case
-// trailing dashes are allowed.
+// 允许结尾的连字符。
 var ValidateDaemonSetName = apimachineryvalidation.NameIsDNSSubdomain
 
 // ValidateDeploymentName validates that the given name can be used as a deployment name.
@@ -744,7 +744,7 @@ func ValidateDeploymentRollback(obj *apps.DeploymentRollback) field.ErrorList {
 // ValidateReplicaSetName can be used to check whether the given ReplicaSet
 // name is valid.
 // Prefix indicates this name will be used as part of generation, in which case
-// trailing dashes are allowed.
+// 允许结尾的连字符。
 var ValidateReplicaSetName = apimachineryvalidation.NameIsDNSSubdomain
 
 // ValidateReplicaSet tests if required fields in the ReplicaSet are set.

@@ -19,9 +19,9 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +k8s:defaulter-gen-input=k8s.io/api/events/v1beta1
 
-// v1beta1 is no longer served. Its legacy validation diverges significantly
-// from v1, violating the declarative validation framework's requirement
-// for validation equivalence across all versions of a resource.
+// v1beta1 已不再提供服务，其遗留校验逻辑与
+// 与 v1 不一致，违反了声明式校验框架的要求，
+// 用于跨资源所有版本的校验等价性检查。
 // +k8s:validation-gen=false
 
 // +groupName=events.k8s.io

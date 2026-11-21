@@ -18,8 +18,11 @@ package core
 
 import "testing"
 
+// TestMatchToleration 验证容忍仅在 key/operator/value/effect 全部相同时才匹配；
+// 特别地，TolerationSeconds 不参与匹配判定。
 func TestMatchToleration(t *testing.T) {
 
+	// 两个不同的 tolerationSeconds 用于验证该字段不影响匹配结果。
 	tolerationSeconds := int64(5)
 	tolerationToMatchSeconds := int64(3)
 	testCases := []struct {

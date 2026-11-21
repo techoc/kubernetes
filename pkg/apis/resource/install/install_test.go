@@ -29,6 +29,7 @@ import (
 	internal "k8s.io/kubernetes/pkg/apis/resource"
 )
 
+// TestResourceVersioner 验证单对象与列表的 resourceVersion 都能通过 accessor 读取。
 func TestResourceVersioner(t *testing.T) {
 	claim := internal.ResourceClaim{ObjectMeta: metav1.ObjectMeta{ResourceVersion: "10"}}
 	version, err := meta.NewAccessor().ResourceVersion(&claim)
@@ -39,6 +40,7 @@ func TestResourceVersioner(t *testing.T) {
 		t.Errorf("unexpected version %v", version)
 	}
 
+	// 列表的 resourceVersion 与单对象语义相同，因此一并验证。
 	claimList := internal.ResourceClaimList{ListMeta: metav1.ListMeta{ResourceVersion: "10"}}
 	version, err = meta.NewAccessor().ResourceVersion(&claimList)
 	if err != nil {
@@ -49,12 +51,14 @@ func TestResourceVersioner(t *testing.T) {
 	}
 }
 
+// TestCodec 验证内部类型编码为 v1beta2 后带有正确的 TypeMeta。
 func TestCodec(t *testing.T) {
 	claim := internal.ResourceClaim{}
 	data, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Group: "resource.k8s.io", Version: "v1beta2"}), &claim)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// 通过 JSON 反序列化检查编码结果中的 APIVersion 与 Kind。
 	other := internal.ResourceClaim{}
 	if err := json.Unmarshal(data, &other); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -64,6 +68,7 @@ func TestCodec(t *testing.T) {
 	}
 }
 
+// TestUnversioned 校验 metav1.Status 被 scheme 识别为无版本对象。
 func TestUnversioned(t *testing.T) {
 	for _, obj := range []runtime.Object{
 		&metav1.Status{},

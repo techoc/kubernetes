@@ -20,7 +20,11 @@ import (
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// Funcs returns the fuzzer functions for the authorization api group.
+// Funcs 返回 authorization API 组所使用的 fuzzer 函数集合。
+// 本组类型均为普通结构体，通用 fuzzer 已能充分覆盖，故此处不注册自定义 fuzzer；
+// 只有当类型带有必须成立的不变量（如互斥字段、受限取值）时，才需要提供自定义 fuzzer，
+// 以免随机生成的数据破坏约束、在 round-trip 测试中制造假失败。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
+	// 返回空的自定义 fuzzer 列表：authorization 组无需特殊处理。
 	return []interface{}{}
 }

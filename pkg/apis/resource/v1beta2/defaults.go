@@ -24,10 +24,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 把本版本的默认值注册函数挂到 scheme 上。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// 为 v1beta2 的 ExactDeviceRequest 设置默认值：默认精确数量分配，数量缺省为 1。
 func SetDefaults_ExactDeviceRequest(obj *resourceapi.ExactDeviceRequest) {
 	if obj.AllocationMode == "" {
 		obj.AllocationMode = resourceapi.DeviceAllocationModeExactCount
@@ -38,6 +40,7 @@ func SetDefaults_ExactDeviceRequest(obj *resourceapi.ExactDeviceRequest) {
 	}
 }
 
+// 为 v1beta2 的 DeviceSubRequest 设置默认值：默认精确数量分配，数量缺省为 1。
 func SetDefaults_DeviceSubRequest(obj *resourceapi.DeviceSubRequest) {
 	if obj.AllocationMode == "" {
 		obj.AllocationMode = resourceapi.DeviceAllocationModeExactCount
@@ -48,6 +51,7 @@ func SetDefaults_DeviceSubRequest(obj *resourceapi.DeviceSubRequest) {
 	}
 }
 
+// 为 DeviceTaint 设置默认值：未指定时间时使用当前时间（精确到秒）。
 func SetDefaults_DeviceTaint(obj *resourceapi.DeviceTaint) {
 	if obj.TimeAdded == nil {
 		obj.TimeAdded = &metav1.Time{Time: time.Now().Truncate(time.Second)}

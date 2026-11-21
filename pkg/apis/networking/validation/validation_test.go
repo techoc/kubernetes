@@ -34,6 +34,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// makeValidNetworkPolicy 构造一个最小的合法 NetworkPolicy：仅设置 name、namespace 和 PodSelector，
+// 作为所有 tweak 的基线，使每个用例只引入一个变量。
 func makeValidNetworkPolicy() *networking.NetworkPolicy {
 	return &networking.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "bar"},
@@ -45,8 +47,10 @@ func makeValidNetworkPolicy() *networking.NetworkPolicy {
 	}
 }
 
+// netpolTweak 定义对 NetworkPolicy 的单点修改，用于表驱动地组合合法/非法场景。
 type netpolTweak func(networkPolicy *networking.NetworkPolicy)
 
+// makeNetworkPolicyCustom 在基线对象上依次应用 tweak，返回定制后的 NetworkPolicy。
 func makeNetworkPolicyCustom(tweaks ...netpolTweak) *networking.NetworkPolicy {
 	networkPolicy := makeValidNetworkPolicy()
 	for _, fn := range tweaks {
@@ -55,6 +59,8 @@ func makeNetworkPolicyCustom(tweaks ...netpolTweak) *networking.NetworkPolicy {
 	return networkPolicy
 }
 
+// makePort 构造 NetworkPolicyPort；port 为 0/空字符串时不设置 Port 字段，endPort 为 0 时不设置 EndPort，
+// 以此模拟“未指定端口/端口范围”的合法形态。
 func makePort(proto *api.Protocol, port intstr.IntOrString, endPort int32) networking.NetworkPolicyPort {
 	r := networking.NetworkPolicyPort{
 		Protocol: proto,
@@ -69,13 +75,17 @@ func makePort(proto *api.Protocol, port intstr.IntOrString, endPort int32) netwo
 	return r
 }
 
+// TestValidateNetworkPolicy 验证 ValidateNetworkPolicy 对 NetworkPolicy 各字段的校验：
+// 覆盖 ingress/egress 的 peer 组合、协议与端口（含命名端口和端口范围）、CIDR 格式以及 policyTypes，
+// 并区分严格/宽松 IP CIDR 校验下的行为。
 func TestValidateNetworkPolicy(t *testing.T) {
 	protocolTCP := api.ProtocolTCP
 	protocolUDP := api.ProtocolUDP
 	protocolICMP := api.Protocol("ICMP")
 	protocolSCTP := api.ProtocolSCTP
 
-	// Tweaks used below.
+	// 以下 tweak 用于逐项构造测试用例：每个函数只改动合法 NetworkPolicy 的一个字段，
+	// 便于在成功/失败用例中精确控制变量。
 	setIngressEmptyFirstElement := func(networkPolicy *networking.NetworkPolicy) {
 		networkPolicy.Spec.Ingress = []networking.NetworkPolicyIngressRule{{}}
 	}
@@ -212,6 +222,7 @@ func TestValidateNetworkPolicy(t *testing.T) {
 		networkPolicy.Spec.PolicyTypes = []networking.PolicyType{networking.PolicyTypeIngress, networking.PolicyTypeEgress}
 	}
 
+	// 覆盖端口、peer 类型、CIDR 族与 policyTypes 的合法组合。
 	successCases := []*networking.NetworkPolicy{
 		makeNetworkPolicyCustom(setIngressEmptyFirstElement),
 		makeNetworkPolicyCustom(setIngressFromEmptyFirstElement, setIngressEmptyPorts),
@@ -251,7 +262,7 @@ func TestValidateNetworkPolicy(t *testing.T) {
 			setIngressPorts(makePort(&protocolTCP, intstr.FromInt32(32768), 32768))),
 	}
 
-	// Success cases are expected to pass validation.
+	// 成功用例应通过校验。
 	for _, v := range successCases {
 		t.Run("", func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.StrictIPCIDRValidation, true)
@@ -261,6 +272,7 @@ func TestValidateNetworkPolicy(t *testing.T) {
 		})
 	}
 
+	// 严格校验关闭时，旧式带前导零的 CIDR 仍需兼容通过。
 	legacyValidationCases := []*networking.NetworkPolicy{
 		makeNetworkPolicyCustom(setIngressFromIPBlockIPV4, func(networkPolicy *networking.NetworkPolicy) {
 			networkPolicy.Spec.Ingress[0].From[0].IPBlock.CIDR = "001.002.003.000/0"
@@ -275,8 +287,10 @@ func TestValidateNetworkPolicy(t *testing.T) {
 		})
 	}
 
+	// 用非法标签键（含大写与特殊字符）触发 selector 校验失败。
 	invalidSelector := map[string]string{"NoUppercaseOrSpecialCharsLike=Equals": "b"}
 
+	// 每个用例只破坏一个约束，便于定位校验失败的具体字段。
 	errorCases := map[string]*networking.NetworkPolicy{
 		"namespaceSelector and ipBlock": makeNetworkPolicyCustom(setIngressFromNamespaceSelector, setIngressFromIPBlockIPV4),
 		"podSelector and ipBlock":       makeNetworkPolicyCustom(setEgressToPodSelector, setEgressToIPBlockIPV4),
@@ -388,7 +402,7 @@ func TestValidateNetworkPolicy(t *testing.T) {
 		"invalid endport range defined": makeNetworkPolicyCustom(setEgressToNamespaceSelector, setEgressPorts(makePort(&protocolTCP, intstr.FromInt32(30000), 65537))),
 	}
 
-	// Error cases are not expected to pass validation.
+	// 失败用例应被校验拒绝。
 	for testName, networkPolicy := range errorCases {
 		t.Run(testName, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.StrictIPCIDRValidation, true)
@@ -399,11 +413,14 @@ func TestValidateNetworkPolicy(t *testing.T) {
 	}
 }
 
+// TestValidateNetworkPolicyUpdate 验证更新时的字段不可变性和 CIDR 例外列表处理：
+// 修复旧对象中已有的非法 CIDR 允许通过；改动 name、新增非法 CIDR 则必须报错。
 func TestValidateNetworkPolicyUpdate(t *testing.T) {
 	type npUpdateTest struct {
 		old    networking.NetworkPolicy
 		update networking.NetworkPolicy
 	}
+	// 更新校验的场景：不变、修改 spec，以及修复/未修复旧有的非法 CIDR。
 	successCases := map[string]npUpdateTest{
 		"no change": {
 			old: networking.NetworkPolicy{
@@ -443,6 +460,7 @@ func TestValidateNetworkPolicyUpdate(t *testing.T) {
 				},
 			},
 		},
+		// 把 Except 从非规范主机位改为规范网络位，属于允许的修复。
 		"fix pre-existing invalid CIDR": {
 			old: networking.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "bar"},
@@ -483,6 +501,7 @@ func TestValidateNetworkPolicyUpdate(t *testing.T) {
 				},
 			},
 		},
+		// 未修复旧有的非法 CIDR，但新增内容本身合法，仍应通过。
 		"fail to fix pre-existing invalid CIDR": {
 			old: networking.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "bar"},
@@ -537,6 +556,7 @@ func TestValidateNetworkPolicyUpdate(t *testing.T) {
 		})
 	}
 
+	// 这些变更必须被拒绝：改 name 属于元数据不可变，新增非法 CIDR 属于引入新错误。
 	errorCases := map[string]npUpdateTest{
 		"change name": {
 			old: networking.NetworkPolicy{
@@ -609,6 +629,8 @@ func TestValidateNetworkPolicyUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateIngress 验证 Ingress 的整体校验：pathType 与 path 的组合规则、host 通配符、
+// defaultBackend/rules 的互斥与必填关系，并检查错误信息落在预期的字段路径上。
 func TestValidateIngress(t *testing.T) {
 	servicePort := networking.ServiceBackendPort{
 		Number: 80,
@@ -660,6 +682,7 @@ func TestValidateIngress(t *testing.T) {
 		},
 	}
 
+	// 每个用例只 tweak 基准对象的一个字段，期望错误按字段路径精确断言。
 	testCases := map[string]struct {
 		tweakIngress       func(ing *networking.Ingress)
 		expectErrsOnFields []string
@@ -676,7 +699,7 @@ func TestValidateIngress(t *testing.T) {
 			},
 			expectErrsOnFields: []string{},
 		},
-		// invalid use cases
+		// 以下为非法使用场景。
 		"backend with no service": {
 			tweakIngress: func(ing *networking.Ingress) {
 				ing.Spec.DefaultBackend.Service.Name = ""
@@ -864,6 +887,8 @@ func TestValidateIngress(t *testing.T) {
 	}
 }
 
+// TestValidateIngressRuleValue 专门验证 path 的合法性：绝对路径要求、重复斜杠、'/./'、'/../'、
+// 编码斜杠（%2f/%2F）等；ImplementationSpecific 对重复斜杠宽容，Prefix/Exact 则拒绝。
 func TestValidateIngressRuleValue(t *testing.T) {
 	serviceBackend := networking.IngressServiceBackend{
 		Name: "defaultbackend",
@@ -873,6 +898,7 @@ func TestValidateIngressRuleValue(t *testing.T) {
 		},
 	}
 	fldPath := field.NewPath("testing.http.paths[0].path")
+	// 用相同的 serviceBackend 排除 backend 干扰，让断言只受 path 与 pathType 影响。
 	testCases := map[string]struct {
 		pathType     networking.PathType
 		path         string
@@ -987,6 +1013,9 @@ func TestValidateIngressRuleValue(t *testing.T) {
 	}
 }
 
+// TestValidateIngressCreate 验证创建 Ingress 时的校验：ingressClassName 与旧注解的一致性、
+// 正则路径（合法与非法）、resource backend、TLS secret 名称、通配符 host，
+// 以及 RelaxedServiceNameValidation 门控对 Service 名称的影响。
 func TestValidateIngressCreate(t *testing.T) {
 	implementationPathType := networking.PathTypeImplementationSpecific
 	exactPathType := networking.PathTypeExact
@@ -1016,6 +1045,7 @@ func TestValidateIngressCreate(t *testing.T) {
 		},
 	}
 
+	// disableRelaxedServiceName 用于将该门控回退到 1.36 版本并显式关闭，以测试旧行为。
 	testCases := map[string]struct {
 		tweakIngress              func(ingress *networking.Ingress)
 		expectedErrs              field.ErrorList
@@ -1243,6 +1273,8 @@ func TestValidateIngressCreate(t *testing.T) {
 	}
 }
 
+// TestValidateIngressUpdate 验证更新 Ingress 时的兼容性规则：历史遗留的非法正则路径和宽松 Service 名称
+// 在满足条件时可继续存在，但新增非法内容必须报错；同样检查 TLS secret 与通配符 host。
 func TestValidateIngressUpdate(t *testing.T) {
 	implementationPathType := networking.PathTypeImplementationSpecific
 	exactPathType := networking.PathTypeExact
@@ -1271,6 +1303,7 @@ func TestValidateIngressUpdate(t *testing.T) {
 		},
 	}
 
+	// 更新场景同时设置新旧对象，用来验证历史遗留内容不会被“回写式”校验卡住。
 	testCases := map[string]struct {
 		tweakIngresses            func(newIngress, oldIngress *networking.Ingress)
 		expectedErrs              field.ErrorList
@@ -1881,8 +1914,10 @@ func TestValidateIngressUpdate(t *testing.T) {
 	}
 }
 
+// netIngressTweak 定义对 IngressClass 的单点修改，便于表驱动构造用例。
 type netIngressTweak func(ingressClass *networking.IngressClass)
 
+// makeValidIngressClass 构造合法的 IngressClass 并按需应用 tweak。
 func makeValidIngressClass(name, controller string, tweaks ...netIngressTweak) *networking.IngressClass {
 	ingressClass := &networking.IngressClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1899,6 +1934,7 @@ func makeValidIngressClass(name, controller string, tweaks ...netIngressTweak) *
 	return ingressClass
 }
 
+// makeIngressClassParams 构造 IngressClassParametersReference，覆盖 apiGroup、kind、name、scope、namespace 全部字段。
 func makeIngressClassParams(apiGroup *string, kind, name string, scope, namespace *string) *networking.IngressClassParametersReference {
 	return &networking.IngressClassParametersReference{
 		APIGroup:  apiGroup,
@@ -1909,6 +1945,8 @@ func makeIngressClassParams(apiGroup *string, kind, name string, scope, namespac
 	}
 }
 
+// TestValidateIngressClass 验证 IngressClass 校验：name 与 controller 的合法性/长度限制，以及 parameters 的
+// kind、name、scope、namespace 组合规则（Namespace 作用域必须指定 namespace，Cluster 作用域禁止指定）。
 func TestValidateIngressClass(t *testing.T) {
 	setParams := func(params *networking.IngressClassParametersReference) netIngressTweak {
 		return func(ingressClass *networking.IngressClass) {
@@ -1916,6 +1954,7 @@ func TestValidateIngressClass(t *testing.T) {
 		}
 	}
 
+	// 覆盖 name/controller 合法性与 parameters 各字段的组合。
 	testCases := map[string]struct {
 		ingressClass *networking.IngressClass
 		expectedErrs field.ErrorList
@@ -2040,6 +2079,7 @@ func TestValidateIngressClass(t *testing.T) {
 	}
 }
 
+// TestValidateIngressClassUpdate 验证更新 IngressClass 时 controller 不可变，而 parameters 可以修改。
 func TestValidateIngressClassUpdate(t *testing.T) {
 	setResourceVersion := func(version string) netIngressTweak {
 		return func(ingressClass *networking.IngressClass) {
@@ -2053,6 +2093,7 @@ func TestValidateIngressClassUpdate(t *testing.T) {
 		}
 	}
 
+	// 验证更新时 controller 不可变而 parameters 可变。
 	testCases := map[string]struct {
 		newIngressClass *networking.IngressClass
 		oldIngressClass *networking.IngressClass
@@ -2092,6 +2133,8 @@ func TestValidateIngressClassUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateIngressTLS 验证 Ingress TLS 的校验：TLS hosts 必须是合法 DNS 名称、通配符只能位于最左侧，
+// 且非法 host 会在 spec.tls[i].hosts[j] 上报告错误。
 func TestValidateIngressTLS(t *testing.T) {
 	pathTypeImplementationSpecific := networking.PathTypeImplementationSpecific
 	serviceBackend := &networking.IngressServiceBackend{
@@ -2134,6 +2177,7 @@ func TestValidateIngressTLS(t *testing.T) {
 		}
 	}
 
+	// 期望错误信息按 '字段路径: 片段' 格式给出，便于断言字段与原因。
 	errorCases := map[string]networking.Ingress{}
 
 	wildcardHost := "foo.*.bar.com"
@@ -2158,7 +2202,8 @@ func TestValidateIngressTLS(t *testing.T) {
 		}
 	}
 
-	// Test for wildcard host and wildcard TLS
+	// 覆盖 rule host 与 TLS host 同时为通配符的场景。
+	// 合法的通配符 TLS 应与通配符 rule host 匹配。
 	validCases := map[string]networking.Ingress{}
 	wildHost := "*.bar.com"
 	goodWildcardTLS := newValid()
@@ -2175,9 +2220,8 @@ func TestValidateIngressTLS(t *testing.T) {
 	}
 }
 
-// TestValidateEmptyIngressTLS verifies that an empty TLS configuration can be
-// specified, which ingress controllers may interpret to mean that TLS should be
-// used with a default certificate that the ingress controller furnishes.
+// TestValidateEmptyIngressTLS 验证允许空的 TLS 配置：ingress controller 可据此使用其提供的默认证书。
+// 分别构造 TLS 项为空结构体和 Hosts 为空切片两种形态。
 func TestValidateEmptyIngressTLS(t *testing.T) {
 	pathTypeImplementationSpecific := networking.PathTypeImplementationSpecific
 	serviceBackend := &networking.IngressServiceBackend{
@@ -2211,6 +2255,7 @@ func TestValidateEmptyIngressTLS(t *testing.T) {
 		}
 	}
 
+	// 空 TLS 项与空 Hosts 都应视为合法。
 	validCases := map[string]networking.Ingress{}
 	goodEmptyTLS := newValid()
 	goodEmptyTLS.Spec.TLS = []networking.IngressTLS{
@@ -2230,6 +2275,8 @@ func TestValidateEmptyIngressTLS(t *testing.T) {
 	}
 }
 
+// TestValidateIngressStatusUpdate 验证 Ingress status 更新时 LoadBalancer ingress 的 IP 与 hostname 校验，
+// 其中遗留格式 IP（前导零）仅在严格校验关闭或值未变化时允许。
 func TestValidateIngressStatusUpdate(t *testing.T) {
 	serviceBackend := &networking.IngressServiceBackend{
 		Name: "defaultbackend",
@@ -2305,6 +2352,7 @@ func TestValidateIngressStatusUpdate(t *testing.T) {
 		},
 	}
 
+	// legacyIPs 标记决定是否关闭严格 IP 校验，以覆盖遗留格式兼容路径。
 	successCases := map[string]struct {
 		oldValue  networking.Ingress
 		newValue  networking.Ingress
@@ -2335,6 +2383,7 @@ func TestValidateIngressStatusUpdate(t *testing.T) {
 		})
 	}
 
+	// 期望错误按 '字段路径: 原因片段' 编码在用例名中。
 	errorCases := map[string]networking.Ingress{
 		"status.loadBalancer.ingress[0].ip: must be a valid IP address": invalidIP,
 		"status.loadBalancer.ingress[0].ip: must not have leading 0s":   legacyIP,
@@ -2358,7 +2407,9 @@ func TestValidateIngressStatusUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateIPAddress 验证 IPAddress 的 name 必须是规范 IP（IPv4/IPv6），parentRef 必须存在且字段合法。
 func TestValidateIPAddress(t *testing.T) {
+	// 只断言错误数量：IPAddress 的 name 与 parentRef 可能同时产生多个错误。
 	testCases := map[string]struct {
 		expectedErrors int
 		ipAddress      *networking.IPAddress
@@ -2504,6 +2555,7 @@ func TestValidateIPAddress(t *testing.T) {
 	}
 }
 
+// TestValidateIPAddressUpdate 验证 IPAddress 更新时 spec.parentRef 不可修改也不可删除。
 func TestValidateIPAddressUpdate(t *testing.T) {
 	old := &networking.IPAddress{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2520,6 +2572,7 @@ func TestValidateIPAddressUpdate(t *testing.T) {
 		},
 	}
 
+	// 用函数式构造新对象，保证旧对象不被用例修改。
 	testCases := []struct {
 		name      string
 		new       func(svc *networking.IPAddress) *networking.IPAddress
@@ -2568,8 +2621,10 @@ func TestValidateIPAddressUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateServiceCIDR 验证 ServiceCIDR 的 CIDR 列表：至多一个 IPv4 与一个 IPv6、每个 CIDR 必须规范（无前导零、无大写等）。
 func TestValidateServiceCIDR(t *testing.T) {
 
+	// 每个用例声明期望的错误数量，覆盖地址族数量与 CIDR 格式两类约束。
 	testCases := map[string]struct {
 		expectedErrors int
 		ipRange        *networking.ServiceCIDR
@@ -2726,6 +2781,8 @@ func TestValidateServiceCIDR(t *testing.T) {
 	}
 }
 
+// TestValidateServiceCIDRUpdate 验证 ServiceCIDR 更新规则：单栈升级为双栈（追加另一地址族）允许，
+// 但修改、删除、重排 CIDR 或重复添加同地址族 CIDR 均被拒绝。
 func TestValidateServiceCIDRUpdate(t *testing.T) {
 	oldServiceCIDRv4 := &networking.ServiceCIDR{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2755,11 +2812,12 @@ func TestValidateServiceCIDRUpdate(t *testing.T) {
 		},
 	}
 
-	// Define expected immutable field error for convenience
+	// 预先构造字段路径，既避免重复书写，也让期望错误与校验器报告的路径完全一致。
 	cidrsPath := field.NewPath("spec").Child("cidrs")
 	cidr0Path := cidrsPath.Index(0)
 	cidr1Path := cidrsPath.Index(1)
 
+	// 准备单栈 v4、单栈 v6 与双栈三种基线对象，覆盖所有升级/降级组合。
 	testCases := []struct {
 		name         string
 		old          *networking.ServiceCIDR
@@ -2822,7 +2880,7 @@ func TestValidateServiceCIDRUpdate(t *testing.T) {
 			old:  oldServiceCIDRv4,
 			new: func() *networking.ServiceCIDR {
 				out := oldServiceCIDRv4.DeepCopy()
-				// Change primary CIDR during upgrade
+				// 升级到双栈时改动主 CIDR 应被拒绝：主 CIDR 不可变。
 				out.Spec.CIDRs = []string{"10.0.0.0/16", "fd00:1234::/64"}
 				return out
 			}(),
@@ -2833,7 +2891,7 @@ func TestValidateServiceCIDRUpdate(t *testing.T) {
 			old:  oldServiceCIDRv6,
 			new: func() *networking.ServiceCIDR {
 				out := oldServiceCIDRv6.DeepCopy()
-				// Change primary CIDR during upgrade
+				// 同上：升级时改动主 CIDR 属于非法变更。
 				out.Spec.CIDRs = []string{"fd00:abcd::/64", "192.168.0.0/24"}
 				return out
 			}(),
@@ -2854,7 +2912,7 @@ func TestValidateServiceCIDRUpdate(t *testing.T) {
 			old:  oldServiceCIDRDual,
 			new: func() *networking.ServiceCIDR {
 				out := oldServiceCIDRDual.DeepCopy()
-				// Swap order
+				// 交换两个 CIDR 的顺序同样属于变更，应被拒绝。
 				out.Spec.CIDRs = []string{"fd00:1234::/64", "192.168.0.0/24"}
 				return out
 			}(),
@@ -2934,7 +2992,7 @@ func TestValidateServiceCIDRUpdate(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Ensure ResourceVersion is set for update validation
+			// 更新校验要求新旧对象的 ResourceVersion 一致。
 			tc.new.ResourceVersion = tc.old.ResourceVersion
 			errs := ValidateServiceCIDRUpdate(tc.new, tc.old)
 
@@ -2950,6 +3008,8 @@ func TestValidateServiceCIDRUpdate(t *testing.T) {
 	}
 }
 
+// TestAllowRelaxedServiceNameValidation 验证 allowRelaxedServiceNameValidation 的判定逻辑：
+// 门控开启时恒为 true；关闭时仅当旧 Ingress 中出现符合 DNS1123 但不符合 DNS1035 的历史 Service 名称才返回 true。
 func TestAllowRelaxedServiceNameValidation(t *testing.T) {
 	basicIngress := func(serviceNames ...string) *networking.Ingress {
 		if len(serviceNames) == 0 {
@@ -2988,6 +3048,7 @@ func TestAllowRelaxedServiceNameValidation(t *testing.T) {
 		return ing
 	}
 
+	// 同时覆盖门控关闭与开启两种状态：开启时应无视旧对象内容直接放宽。
 	tests := []struct {
 		name    string
 		ingress *networking.Ingress
@@ -3042,7 +3103,7 @@ func TestAllowRelaxedServiceNameValidation(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Test feature with gate disabled
+			// 门控关闭时，函数应根据旧对象中是否存在“宽松”Service 名称来判断。
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.36"))
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RelaxedServiceNameValidation, false)
 			got := allowRelaxedServiceNameValidation(tc.ingress)
@@ -3050,7 +3111,7 @@ func TestAllowRelaxedServiceNameValidation(t *testing.T) {
 				t.Errorf("allowRelaxedServiceNameValidation() = %v, want %v", got, tc.expect)
 			}
 
-			// Test feature with gate enabled - it should always return true
+			// 门控开启时应无条件返回 true，与 Ingress 内容无关。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RelaxedServiceNameValidation, true)
 			got = allowRelaxedServiceNameValidation(tc.ingress)
 			if got != true {

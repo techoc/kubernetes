@@ -29,7 +29,7 @@ import (
 // labels, which must be joined to produce the full set of endpoints.
 type EndpointSlice struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
+	// 标准的对象元数据。
 	// +optional
 	metav1.ObjectMeta
 	// addressType specifies the type of address carried by this EndpointSlice.
@@ -81,7 +81,7 @@ type Endpoint struct {
 	// endpoints to distinguish endpoints from each other (e.g. in DNS names).
 	// Multiple endpoints which use the same hostname should be considered
 	// fungible (e.g. multiple A values in DNS). Must pass DNS Label (RFC 1123)
-	// validation.
+	// 校验。
 	// +optional
 	Hostname *string
 	// targetRef is a reference to a Kubernetes object that represents this
@@ -135,11 +135,11 @@ type EndpointConditions struct {
 // EndpointHints provides hints describing how an endpoint should be consumed.
 type EndpointHints struct {
 	// forZones indicates the zone(s) this endpoint should be consumed by when
-	// using topology aware routing. May contain a maximum of 8 entries.
+	// 使用拓扑感知路由。最多可包含 8 个条目。
 	ForZones []ForZone
 
 	// forNodes indicates the node(s) this endpoint should be consumed by when
-	// using topology aware routing. May contain a maximum of 8 entries.
+	// 使用拓扑感知路由。最多可包含 8 个条目。
 	ForNodes []ForNode
 }
 
@@ -196,7 +196,7 @@ type EndpointPort struct {
 // EndpointSliceList represents a list of endpoint slices.
 type EndpointSliceList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
+	// 标准列表元数据。
 	// +optional
 	metav1.ListMeta
 	// List of endpoint slices

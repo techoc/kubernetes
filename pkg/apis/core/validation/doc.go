@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package validation has functions for validating the correctness of api
-// objects and explaining what is wrong with them when they aren't valid.
+// Package validation 提供校验 API 对象正确性的函数，
+// 校验对象并在对象不合法时说明具体问题。
 package validation

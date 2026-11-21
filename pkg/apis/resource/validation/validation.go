@@ -56,36 +56,37 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// ResourceNormalizationRules handles the structural differences between v1beta1
-// (flattened fields) and v1/v1beta2 (fields under 'exactly') for validation error paths.
+// ResourceNormalizationRules 用于处理 v1beta1（扁平化字段）与
+// v1/v1beta2（字段位于 'exactly' 之下）之间的结构差异，
+// 以便校验错误路径在不同版本间保持一致。
 var ResourceNormalizationRules = []field.NormalizationRule{
 	{
-		// ResourceClaim
+		// ResourceClaim（资源申领对象）的错误路径 normalization 规则
 		Regexp:      regexp.MustCompile(`spec\.devices\.requests\[(\d+)\]\.(deviceClassName|selectors|allocationMode|count|adminAccess|tolerations|derivedAttributes)`),
 		Replacement: "spec.devices.requests[$1].exactly.$2",
 	},
 	{
-		// ResourceClaimTemplate (RCT.Spec.Spec adds an extra "spec." prefix)
+		// ResourceClaimTemplate（RCT.Spec.Spec 会额外带一层 "spec." 前缀）
 		Regexp:      regexp.MustCompile(`spec\.spec\.devices\.requests\[(\d+)\]\.(deviceClassName|selectors|allocationMode|count|adminAccess|tolerations|derivedAttributes)`),
 		Replacement: "spec.spec.devices.requests[$1].exactly.$2",
 	},
 	{
-		// This v1beta1 'basic' to flattened rule is to support ResourceSlice
+		// 这条 v1beta1 的 'basic' 到扁平化字段的映射规则用于支持 ResourceSlice
 		Regexp:      regexp.MustCompile(`spec\.devices\[(\d+)\]\.basic\.`),
 		Replacement: "spec.devices[$1].",
 	},
 }
 
 var (
-	// validateResourceDriverName reuses the validation of a CSI driver because
-	// the allowed values are exactly the same.
+	// 复用 CSI 驱动名称的校验函数来校验资源驱动名称，
+	// 因为二者允许的名称格式完全一致。
 	validateDriverName      = corevalidation.ValidateCSIDriverName
 	validateDeviceName      = corevalidation.ValidateDNS1123Label
 	validateDeviceClassName = corevalidation.ValidateDNS1123Subdomain
 	validateRequestName     = corevalidation.ValidateDNS1123Label
 	validateCounterName     = corevalidation.ValidateDNS1123Label
 
-	// this is the max length limit for domain/ID
+	// domain/ID 组合键的最大长度上限（域名最长长度 + '/' + ID 最长长度）
 	attributeAndCapacityMaxKeyLength = resource.DeviceMaxDomainLength + 1 + resource.DeviceMaxIDLength
 )
 
@@ -115,25 +116,27 @@ func validateUID(uid string, fldPath *field.Path) field.ErrorList {
 	return allErrs.WithOrigin("format=k8s-uuid")
 }
 
-// ValidateResourceClaim validates a ResourceClaim.
+// ValidateResourceClaim 校验一个 ResourceClaim（资源申领）对象的合法性。
+// 依次校验对象元数据（名称必须合法、必须带命名空间）以及 devices（设备申领）规格。
 func ValidateResourceClaim(resourceClaim *resource.ResourceClaim) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMeta(&resourceClaim.ObjectMeta, true, corevalidation.ValidateResourceClaimName, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateResourceClaimSpec(&resourceClaim.Spec, field.NewPath("spec"), false)...)
 	return allErrs
 }
 
-// ValidateResourceClaimUpdate tests if an update to ResourceClaim is valid.
+// ValidateResourceClaimUpdate 判断对 ResourceClaim 的更新是否合法。
+// 元数据仍会完整校验；spec 是不可变字段，因此更新时只检查其是否被修改。
 func ValidateResourceClaimUpdate(resourceClaim, oldClaim *resource.ResourceClaim) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMeta(&resourceClaim.ObjectMeta, true, corevalidation.ValidateResourceClaimName, field.NewPath("metadata"))
 	allErrs = append(allErrs, corevalidation.ValidateObjectMetaUpdate(&resourceClaim.ObjectMeta, &oldClaim.ObjectMeta, field.NewPath("metadata"))...)
-	// The spec is immutable. On update, we only check for immutability.
-	// Re-validating other fields is skipped because the user cannot change them;
-	// the only actionable error is for the immutability violation.
+	// spec 是不可变字段。更新时只需要检查不可变性：
+	// 其他字段用户无法修改，跳过重复校验，只保留对违反不可变性这一可操作错误的检查。
 	allErrs = append(allErrs, apimachineryvalidation.ValidateImmutableField(resourceClaim.Spec, oldClaim.Spec, field.NewPath("spec")).WithOrigin("immutable").MarkCoveredByDeclarative()...)
 	return allErrs
 }
 
-// ValidateResourceClaimStatusUpdate tests if an update to the status of a ResourceClaim is valid.
+// ValidateResourceClaimStatusUpdate 判断对 ResourceClaim 状态（status）的更新是否合法。
+// 除了元数据更新校验外，还会根据 spec 中的请求名称集合来校验状态中的预留、分配结果等。
 func ValidateResourceClaimStatusUpdate(resourceClaim, oldClaim *resource.ResourceClaim) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMetaUpdate(&resourceClaim.ObjectMeta, &oldClaim.ObjectMeta, field.NewPath("metadata"))
 	requestNames := gatherRequestNames(&resourceClaim.Spec.Devices)
@@ -147,27 +150,24 @@ func validateResourceClaimSpec(spec *resource.ResourceClaimSpec, fldPath *field.
 	return allErrs
 }
 
-// deviceValidationOptions holds validation options and shared state (like accumulators)
-// that are used during the validation of a DeviceClaim.
+// deviceValidationOptions 保存校验 DeviceClaim（设备申领）时使用的选项和共享状态
+// （例如累计器、约束引用关系），供各个子校验函数复用。
 type deviceValidationOptions struct {
-	// stored indicates whether the object being validated is already stored
-	// in the API server. If true, certain previously valid fields (like CEL expressions) are
-	// considered valid without re-evaluation, allowing for relaxed validation on updates.
+	// stored 表示被校验的对象是否已经存在于 API Server 中。
+	// 若为 true，某些此前已通过校验的字段（如 CEL 表达式）无需重新求值即视为合法，
+	// 这样可以在更新时放宽校验（ratcheting），避免旧对象因规则收紧而无法更新。
 	stored bool
 
-	// totalDerivedAttrCost tracks the cumulative compilation cost of all derived
-	// attribute CEL expressions across the entire DeviceClaim. This ensures their
-	// combined cost does not exceed the allowed budget.
+	// totalDerivedAttrCost 累计整个 DeviceClaim 中所有派生属性（derived attribute）
+	// CEL 表达式的编译成本，确保它们的总成本不超过允许的预算上限。
 	totalDerivedAttrCost *uint64
 
-	// constraintAttributes maps a request/subrequest reference ("req" or
-	// "req/subreq") to the set of attribute names referenced by constraints
-	// targeting it:
-	// - If an attribute name is in the "" key, it applies to all requests.
-	// - If an attribute name is in the "req" key, it applies to all subrequests
-	//   of "req".
-	// - If an attribute name is in the "req/subreq" key, it applies to that
-	//   specific subrequest.
+	// constraintAttributes 将请求/子请求引用（"req" 或 "req/subreq"）映射到
+	// 指向该请求的约束所引用的属性名集合：
+	// - 属性名出现在 "" 键下：表示对所有请求生效（全局约束）。
+	// - 属性名出现在 "req" 键下：表示对 "req" 的所有子请求生效。
+	// - 属性名出现在 "req/subreq" 键下：表示只对特定子请求生效。
+	// 该映射用于判断某个派生属性是否真正被约束引用，避免无用的表达式。
 	constraintAttributes map[string]sets.Set[string]
 }
 
@@ -184,15 +184,15 @@ func gatherConstraintAttributes(constraints []resource.DeviceConstraint) map[str
 		}
 
 		if len(constraint.Requests) == 0 {
-			// A constraint with an empty requests list applies globally, so we
-			// use the empty string key to represent all requests.
+			// requests 列表为空的约束是全局约束，对所有请求生效，
+			// 因此用空字符串作为键来代表“所有请求”。
 			if attrs[""] == nil {
 				attrs[""] = sets.New[string]()
 			}
 			attrs[""].Insert(attrName)
 		} else {
-			// A constraint might target multiple explicit requests or subrequests,
-			// so we track the attribute usage for each individual target.
+			// 一个约束可能同时指向多个显式请求或子请求，
+			// 因此需要为每个目标单独记录其使用的属性。
 			for _, req := range constraint.Requests {
 				if attrs[req] == nil {
 					attrs[req] = sets.New[string]()
@@ -241,13 +241,13 @@ type requestNames map[string]sets.Set[string]
 
 func (r requestNames) Has(s string) bool {
 	segments := strings.Split(s, "/")
-	// If there are more than one / in the string, we
-	// know there can't be any match.
+	// 如果字符串中包含多个 '/'（即分段超过两个），
+	// 则不可能与任何请求名匹配，直接返回 false。
 	if len(segments) > 2 {
 		return false
 	}
-	// If the first segment doesn't have a match, we
-	// don't need to check the other one.
+	// 如果第一段（请求名）就没有匹配项，
+	// 则无需再检查第二段（子请求名）。
 	subRequestNames, found := r[segments[0]]
 	if !found {
 		return false
@@ -255,8 +255,8 @@ func (r requestNames) Has(s string) bool {
 	if len(segments) == 1 {
 		return true
 	}
-	// If the first segment matched and we have another one,
-	// check for a match for that too.
+	// 如果第一段已经匹配且还存在第二段，
+	// 则继续检查第二段（子请求名）是否匹配。
 	return subRequestNames.Has(segments[1])
 }
 
@@ -357,9 +357,9 @@ func validateDeviceAllocationMode(deviceAllocationMode resource.DeviceAllocation
 			allErrs = append(allErrs, field.Invalid(countFldPath, count, "must be greater than zero"))
 		}
 	default:
-		// NOTE: Declarative validation does not (yet) enforce the real requiredness of this field
-		// because v1beta1 uses a bespoke form of union which makes this field truly optional
-		// in some cases and truly required in others. DO NOT REMOVE THIS CODE UNLESS THAT IS RESOLVED.
+		// 注意：声明式校验目前尚未正确强制该字段的必填语义，
+		// 因为 v1beta1 使用了一种特殊的 union 形式：该字段在某些情况下确实可选，
+		// 在另一些情况下则确实必填。在该问题被解决之前，请勿移除这段代码。
 		allErrs = append(allErrs, field.NotSupported(allocModeFldPath, deviceAllocationMode, []resource.DeviceAllocationMode{resource.DeviceAllocationModeAll, resource.DeviceAllocationModeExactCount}).MarkCoveredByDeclarative())
 	}
 	return allErrs
@@ -395,10 +395,9 @@ func validateSelector(selector resource.DeviceSelector, fldPath *field.Path, opt
 
 func validateCELExpression(expression string, fldPath *field.Path, opts deviceValidationOptions, derivedAttribute bool) field.ErrorList {
 	if opts.stored {
-		// If a CEL expression is stored, it must have been valid at the
-		// time it was stored and thus must also be valid now. Returning
-		// early here allows relaxing validation more quickly without
-		// ratcheting and is cheaper.
+		// 已经存储的 CEL 表达式在写入时必然是合法的，因此现在也一定合法。
+		// 这里提前返回可以跳过编译，既更廉价，也能在不依赖 ratcheting 的情况下
+		// 更快地放宽校验规则。
 		return nil
 	}
 	envType := environment.NewExpressions
@@ -406,7 +405,7 @@ func validateCELExpression(expression string, fldPath *field.Path, opts deviceVa
 	var allErrs field.ErrorList
 	if len(expression) > resource.CELSelectorExpressionMaxLength {
 		allErrs = append(allErrs, field.TooLong(fldPath, "" /*unused*/, resource.CELSelectorExpressionMaxLength))
-		// Don't bother compiling too long expressions.
+		// 表达式过长时直接返回，不再尝试编译，避免浪费 CPU 资源。
 		return allErrs
 	}
 
@@ -451,18 +450,16 @@ func convertCELErrorToValidationError(fldPath *field.Path, expression string, er
 }
 
 func isAttributeUsedByConstraint(attrName, reqName string, constraintAttributes map[string]sets.Set[string]) bool {
-	// Check if the attribute is used by a globally applied constraint.
+	// 检查该属性是否被全局约束（不指定具体请求的约束）使用。
 	if globalAttrs, ok := constraintAttributes[""]; ok && globalAttrs.Has(attrName) {
 		return true
 	}
-	// Check if the attribute is used by a constraint explicitly targeting this
-	// request or subrequest.
+	// 检查该属性是否被明确指向当前请求或子请求的约束使用。
 	if reqAttrs, ok := constraintAttributes[reqName]; ok && reqAttrs.Has(attrName) {
 		return true
 	}
-	// If this is a subrequest (e.g. "req/subreq"), check if the attribute is
-	// used by a constraint targeting the parent request ("req"), as that
-	// applies to all of its subrequests.
+	// 如果当前对象是子请求（如 "req/subreq"），还需检查属性是否被指向父请求
+	// （"req"）的约束使用，因为作用于父请求的约束对其所有子请求都生效。
 	if parentReqName, _, found := strings.Cut(reqName, "/"); found {
 		if parentAttrs, ok := constraintAttributes[parentReqName]; ok && parentAttrs.Has(attrName) {
 			return true
@@ -485,15 +482,13 @@ func validateDeviceDerivedAttributes(attrs []resource.DeviceDerivedAttribute, fl
 func validateDeviceDerivedAttribute(attr resource.DeviceDerivedAttribute, fldPath *field.Path, opts deviceValidationOptions, requestName string) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Declarative validation checks for non-empty value,
-	// no need to check that here.
+	// 非空值已由声明式校验负责检查，此处无需重复校验。
 	if attr.Name != "" {
 		if !isAttributeUsedByConstraint(string(attr.Name), requestName, opts.constraintAttributes) {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("name"), attr.Name, "must be referenced by at least one matchAttribute or distinctAttribute constraint targeting this request"))
 		}
 	}
-	// Declarative validation checks for non-empty value,
-	// no need to check that here.
+	// 非空值已由声明式校验负责检查，此处无需重复校验。
 	if attr.Expression != "" {
 		allErrs = append(allErrs, validateCELExpression(attr.Expression, fldPath.Child("expression"), opts, true)...)
 	}
@@ -585,13 +580,13 @@ func validateResourceClaimStatusUpdate(status, oldStatus *resource.ResourceClaim
 		},
 		fldPath.Child("devices"), uniquenessCovered)...)
 
-	// Now check for invariants that must be valid for a ResourceClaim.
+	// 接下来检查 ResourceClaim 必须满足的不变量（跨字段约束）。
 	if len(status.ReservedFor) > 0 {
 		if status.Allocation == nil {
 			allErrs = append(allErrs, field.Forbidden(fldPath.Child("reservedFor"), "may not be specified when `allocated` is not set"))
 		} else {
-			// Items may be removed from ReservedFor while the claim is meant to be deallocated,
-			// but not added.
+			// 当资源申领等待释放时，允许从 ReservedFor 中移除条目，
+			// 但不允许新增条目，防止在释放过程中引入新的消费者。
 			if claimDeleted {
 				oldSet := sets.New(oldStatus.ReservedFor...)
 				newSet := sets.New(status.ReservedFor...)
@@ -603,10 +598,9 @@ func validateResourceClaimStatusUpdate(status, oldStatus *resource.ResourceClaim
 		}
 	}
 
-	// Updates to a populated status.Allocation are not allowed.
-	// Unmodified fields don't need to be validated again and,
-	// in this particular case, must not be validated again because
-	// validation for new results is tighter than it was before.
+	// 已经有内容的 status.Allocation 不允许更新。
+	// 未修改的字段无需再次校验；在这个特定场景下更不能再校验，
+	// 因为针对新分配结果的校验规则比历史上更严格，重新校验会误伤旧数据。
 	if oldStatus.Allocation != nil && status.Allocation != nil {
 		allErrs = append(allErrs, apimachineryvalidation.ValidateImmutableField(status.Allocation, oldStatus.Allocation, fldPath.Child("allocation")).WithOrigin("update").MarkCoveredByDeclarative()...)
 	} else if status.Allocation != nil {
@@ -630,9 +624,9 @@ func validateResourceClaimUserReference(ref resource.ResourceClaimConsumerRefere
 	return allErrs
 }
 
-// validateAllocationResult enforces constraints for *new* results, which in at
-// least one case (admin access) are more strict than before. Therefore it
-// may not be called to re-validate results which were stored earlier.
+// validateAllocationResult 只针对**新**的分配结果执行校验，
+// 其中至少有一条规则（adminAccess 管理员访问权限）比历史上更严格。
+// 因此不得用它重新校验此前已存储的结果，否则会破坏既有对象。
 func validateAllocationResult(allocation *resource.AllocationResult, fldPath *field.Path, requestNames requestNames, stored bool) field.ErrorList {
 	var allErrs field.ErrorList
 	allErrs = append(allErrs, validateDeviceAllocationResult(allocation.Devices, fldPath.Child("devices"), requestNames, stored)...)
@@ -696,11 +690,12 @@ func validateAllocationConfigSource(source resource.AllocationConfigSource, fldP
 	return allErrs
 }
 
-// ValidateDeviceClass validates a DeviceClass.
+// ValidateDeviceClass 校验一个 DeviceClass（设备类）对象的合法性。
+// 包括元数据（名称使用长名称规则）以及选择器、配置、扩展资源名等规格字段。
 func ValidateDeviceClass(class *resource.DeviceClass) field.ErrorList {
 	validateClassName := func(fldPath *field.Path, name string) field.ErrorList {
-		// validate.LongName doesn't respect operation type currently (CREATE or UPDATE)
-		// so it is ok to use operation.Operation{} here
+		// validate.LongName 目前不区分操作类型（CREATE 还是 UPDATE），
+		// 因此这里传入空的 operation.Operation{} 是安全的。
 		return validate.LongName(context.Background(), operation.Operation{}, fldPath, &name, nil).MarkCoveredByDeclarative()
 	}
 	allErrs := corevalidation.ValidateObjectMetaWithOpts(&class.ObjectMeta, false, validateClassName, field.NewPath("metadata"))
@@ -708,7 +703,8 @@ func ValidateDeviceClass(class *resource.DeviceClass) field.ErrorList {
 	return allErrs
 }
 
-// ValidateDeviceClassUpdate tests if an update to DeviceClass is valid.
+// ValidateDeviceClassUpdate 判断对 DeviceClass 的更新是否合法。
+// 会重新校验元数据和规格，其中未变化的选择器/配置被视为“已存储”以免重复校验 CEL。
 func ValidateDeviceClassUpdate(class, oldClass *resource.DeviceClass) field.ErrorList {
 	validateClassName := func(fldPath *field.Path, name string) field.ErrorList {
 		return validate.LongName(context.Background(), operation.Operation{}, fldPath, &name, nil).MarkCoveredByDeclarative()
@@ -722,9 +718,8 @@ func ValidateDeviceClassUpdate(class, oldClass *resource.DeviceClass) field.Erro
 
 func validateDeviceClassSpec(spec, oldSpec *resource.DeviceClassSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
-	// If the selectors are exactly as before, we treat the CEL expressions as "stored".
-	// Any change, including merely reordering selectors, triggers validation as new
-	// expressions.
+	// 如果选择器与旧值完全一致，则其中的 CEL 表达式被视为“已存储”而跳过重新编译。
+	// 任何变动（即使只是选择器顺序变化）都会触发按新表达式进行的完整校验。
 	stored := false
 	if oldSpec != nil {
 		stored = apiequality.Semantic.DeepEqual(spec.Selectors, oldSpec.Selectors)
@@ -734,7 +729,7 @@ func validateDeviceClassSpec(spec, oldSpec *resource.DeviceClassSpec, fldPath *f
 			return validateSelector(selector, fldPath, deviceValidationOptions{stored: stored})
 		},
 		fldPath.Child("selectors"), sizeCovered)...)
-	// Same logic as above for configs.
+	// 配置的校验采用与上面选择器相同的“未变化即视为已存储”逻辑。
 	stored = false
 	if oldSpec != nil {
 		stored = apiequality.Semantic.DeepEqual(spec.Config, oldSpec.Config)
@@ -755,7 +750,8 @@ func validateDeviceClassConfiguration(config resource.DeviceClassConfiguration, 
 	return validateDeviceConfiguration(config.DeviceConfiguration, fldPath, stored)
 }
 
-// ValidateResourceClaimTemplate validates a ResourceClaimTemplate.
+// ValidateResourceClaimTemplate 校验一个 ResourceClaimTemplate（资源申领模板）对象。
+// 模板的 spec 内嵌了真正的 ResourceClaimSpec，校验逻辑与 ResourceClaim 一致。
 func ValidateResourceClaimTemplate(template *resource.ResourceClaimTemplate) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMeta(&template.ObjectMeta, true, corevalidation.ValidateResourceClaimTemplateName, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateResourceClaimTemplateSpec(&template.Spec, field.NewPath("spec"), false)...)
@@ -768,12 +764,12 @@ func validateResourceClaimTemplateSpec(spec *resource.ResourceClaimTemplateSpec,
 	return allErrs
 }
 
-// ValidateResourceClaimTemplateUpdate tests if an update to template is valid.
+// ValidateResourceClaimTemplateUpdate 判断对 ResourceClaimTemplate 的更新是否合法。
+// 模板 spec 是不可变字段，仅检查其是否被修改。
 func ValidateResourceClaimTemplateUpdate(template, oldTemplate *resource.ResourceClaimTemplate) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMetaUpdate(&template.ObjectMeta, &oldTemplate.ObjectMeta, field.NewPath("metadata"))
-	// The spec is immutable. On update, we only check for immutability.
-	// Re-validating other fields is skipped because the user cannot change them;
-	// the only actionable error is for the immutability violation.
+	// spec 是不可变字段。更新时只需要检查不可变性：
+	// 其他字段用户无法修改，跳过重复校验，只保留对违反不可变性这一可操作错误的检查。
 	allErrs = append(allErrs, apimachineryvalidation.ValidateImmutableField(template.Spec, oldTemplate.Spec, field.NewPath("spec"))...)
 	return allErrs
 }
@@ -786,14 +782,16 @@ func validateNodeName(name string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateResourceSlice tests if a ResourceSlice object is valid.
+// ValidateResourceSlice 判断一个 ResourceSlice（资源分片）对象是否合法。
+// 会校验驱动、资源池、节点选择方式（四选一）以及设备、共享计数器等内容。
 func ValidateResourceSlice(slice *resource.ResourceSlice) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMeta(&slice.ObjectMeta, false, apimachineryvalidation.NameIsDNSSubdomain, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateResourceSliceSpec(&slice.Spec, nil, field.NewPath("spec"))...)
 	return allErrs
 }
 
-// ValidateResourceSliceUpdate tests if a ResourceSlice update is valid.
+// ValidateResourceSliceUpdate 判断一次 ResourceSlice 更新是否合法。
+// 与创建时相比，额外校验不可变字段（资源池名、驱动名、节点名）以及变化部分的 CEL 表达式。
 func ValidateResourceSliceUpdate(resourceSlice, oldResourceSlice *resource.ResourceSlice) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMetaUpdate(&resourceSlice.ObjectMeta, &oldResourceSlice.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateResourceSliceSpec(&resourceSlice.Spec, &oldResourceSlice.Spec, field.NewPath("spec"))...)
@@ -824,8 +822,8 @@ func validateResourceSliceSpec(spec, oldSpec *resource.ResourceSliceSpec, fldPat
 		setFields = append(setFields, "`nodeSelector`")
 		allErrs = append(allErrs, corevalidation.ValidateNodeSelector(spec.NodeSelector, false, fldPath.Child("nodeSelector"))...)
 		if len(spec.NodeSelector.NodeSelectorTerms) != 1 {
-			// This additional constraint simplifies merging of different selectors
-			// when devices are allocated from different slices.
+			// 这项额外约束（nodeSelectorTerms 必须恰好一个）简化了
+			// 从不同分片分配设备时多个节点选择器的合并逻辑。
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("nodeSelector", "nodeSelectorTerms"), spec.NodeSelector.NodeSelectorTerms, "must have exactly one node selector term"))
 		}
 	}
@@ -880,7 +878,7 @@ func validateResourceSliceSpec(spec, oldSpec *resource.ResourceSliceSpec, fldPat
 			return counterSet.Name
 		}, fldPath.Child("sharedCounters"), sizeCovered, uniquenessCovered)...)
 
-	// The name format is validated declaratively; see the field's tags.
+	// 名称格式由声明式校验负责（参见该字段的标签），此处只校验业务约束。
 	if spec.PartitionTypeAttribute != nil {
 		allErrs = append(allErrs, validatePartitionTypeAttribute(spec, fldPath)...)
 	}
@@ -890,10 +888,9 @@ func validateResourceSliceSpec(spec, oldSpec *resource.ResourceSliceSpec, fldPat
 	return allErrs
 }
 
-// validatePartitionTypeAttribute checks that a slice naming a partition type
-// attribute declares devices which consume counters, and that each of those
-// devices carries the attribute as a string. Devices which consume no counters
-// are exempt and may appear alongside them.
+// validatePartitionTypeAttribute 校验：声明了 partitionTypeAttribute（分区类型属性）
+// 的分片必须包含消耗计数器的设备，并且每个这样的设备都必须以字符串形式携带该属性。
+// 不消耗计数器的设备不受此约束，可以与它们共存于同一分片中。
 func validatePartitionTypeAttribute(spec *resource.ResourceSliceSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	name := string(*spec.PartitionTypeAttribute)
@@ -903,14 +900,14 @@ func validatePartitionTypeAttribute(spec *resource.ResourceSliceSpec, fldPath *f
 			"may only be set on a slice which declares devices that consume counters"))
 	}
 
-	// A malformed name is reported declaratively; no device can carry it, so
-	// checking each of them would only bury that one error.
+	// 名称格式错误会由声明式校验报告；由于任何设备都不可能携带非法名称，
+	// 逐个设备检查只会淹没那一条真正的错误，因此这里直接返回。
 	if len(validateFullyQualifiedName(*spec.PartitionTypeAttribute, nil)) > 0 {
 		return allErrs
 	}
 
-	// A name in the driver's own domain may also be declared bare. Strip the
-	// prefix once here rather than allocating driver+"/" per device below.
+	// 属于驱动自身域的属性名也可以省略域名前缀直接声明。
+	// 这里先一次性去掉前缀，避免在下面的设备循环中为每个设备都拼接 driver + "/"。
 	bareName, _ := strings.CutPrefix(name, spec.Driver+"/")
 
 	for i, device := range spec.Devices {
@@ -933,10 +930,9 @@ func validatePartitionTypeAttribute(spec *resource.ResourceSliceSpec, fldPath *f
 	return allErrs
 }
 
-// validateSkipNodeOperations checks business logic constraints on SkipNodeOperations:
-// NodePrepareResources cannot be skipped unless NodeUnprepareResources is also skipped
-// (or "*" is specified). Other checks (e.g. valid enum values, set uniqueness) are handled
-// by declarative validation.
+// validateSkipNodeOperations 校验 SkipNodeOperations 上的业务逻辑约束：
+// 除非同时跳过 NodeUnprepareResources（或指定了 "*"），否则不能单独跳过 NodePrepareResources。
+// 其他检查（例如枚举值是否合法、集合是否唯一）由声明式校验负责。
 func validateSkipNodeOperations(skipOps []resource.SkipNodeOperation, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	skipSet := sets.New(skipOps...)
@@ -951,12 +947,10 @@ func validateSkipNodeOperations(skipOps []resource.SkipNodeOperation, fldPath *f
 	return allErrs
 }
 
-// lookupQualifiedAttribute finds a device attribute by its fully qualified
-// name. A key that carries no domain defaults to the driver's own domain, so an
-// attribute in the driver's domain may be declared either explicitly or bare.
-// The explicit form wins, keeping the result deterministic when a device
-// declares both; bareName (the name with the driver's domain stripped, empty
-// when the name is in another domain) is consulted only when non-empty.
+// lookupQualifiedAttribute 根据完全限定名查找设备属性。
+// 不带域名的键默认属于驱动自身的域，因此驱动域内的属性既可以显式声明（带域名），
+// 也可以省略域名声明。当两种形式同时存在时，显式形式优先，以保证结果确定性；
+// bareName（去掉驱动域名后的名称，若属性属于其他域则为空）仅在非空时才作为后备键查找。
 func lookupQualifiedAttribute(attributes map[resource.QualifiedName]resource.DeviceAttribute, name, bareName string) (resource.DeviceAttribute, bool) {
 	if attribute, ok := attributes[resource.QualifiedName(name)]; ok {
 		return attribute, true
@@ -1036,7 +1030,7 @@ func validateCounterSet(counterSet resource.CounterSet, fldPath *field.Path) fie
 	if len(counterSet.Counters) == 0 {
 		allErrs = append(allErrs, field.Required(fldPath.Child("counters"), "").MarkCoveredByDeclarative())
 	} else {
-		// The size limit is enforced for across all sets by the caller.
+		// 所有计数器集合的总数上限由调用方统一检查，此处只校验单个集合。
 		allErrs = append(allErrs, validateMap(counterSet.Counters, resource.ResourceSliceMaxCountersPerCounterSet, validation.DNS1123LabelMaxLength,
 			validateCounterName, validateDeviceCounter, fldPath.Child("counters"), keysCovered)...)
 	}
@@ -1061,9 +1055,8 @@ func validateDevice(device resource.Device, oldDevice *resource.Device, fldPath 
 	allowMultipleAllocations := device.AllowMultipleAllocations != nil && *device.AllowMultipleAllocations
 	allErrs = append(allErrs, validateDeviceName(device.Name, fldPath.Child("name"))...)
 
-	// Warn about exceeding the maximum length only once. If any individual
-	// field is too large, then so is the combination.
-	// we count the total number of attribute entries (scalars and list items)
+	// 超出最大长度只报告一次：如果单个字段都超限，那么总量必然也超限。
+	// 这里统计的是属性条目的总数（包含标量条目和列表中的每一项）。
 	attributeAndCapacityLength := len(device.Attributes) + len(device.Capacity)
 	if attributeAndCapacityLength > resource.ResourceSliceMaxAttributesAndCapacitiesPerDevice {
 		allErrs = append(allErrs, field.Invalid(fldPath, attributeAndCapacityLength, fmt.Sprintf("the total number of attributes and capacities must not exceed %d", resource.ResourceSliceMaxAttributesAndCapacitiesPerDevice)))
@@ -1074,8 +1067,8 @@ func validateDevice(device resource.Device, oldDevice *resource.Device, fldPath 
 	}
 
 	allErrs = append(allErrs, validateMap(device.Attributes, -1, attributeAndCapacityMaxKeyLength, validateQualifiedName, validateDeviceAttribute, fldPath.Child("attributes"))...)
-	// If the entire capacity is the same as before then validation can be skipped.
-	// We could also do the DeepEqual on the entire spec, but here it is a bit cheaper.
+	// 如果整个 capacity 与旧值相同，则可以跳过校验。
+	// 对完整 spec 做 DeepEqual 也可行，但只对 capacity 做比较开销更小。
 	if oldDevice == nil || !apiequality.Semantic.DeepEqual(oldDevice.Capacity, device.Capacity) {
 		if allowMultipleAllocations {
 			allErrs = append(allErrs, validateMap(device.Capacity, -1, attributeAndCapacityMaxKeyLength, validateQualifiedName, validateMultiAllocatableDeviceCapacity, fldPath.Child("capacity"))...)
@@ -1083,8 +1076,8 @@ func validateDevice(device resource.Device, oldDevice *resource.Device, fldPath 
 			allErrs = append(allErrs, validateMap(device.Capacity, -1, attributeAndCapacityMaxKeyLength, validateQualifiedName, validateSingleAllocatableDeviceCapacity, fldPath.Child("capacity"))...)
 		}
 	}
-	// If the entire set is the same as before then validation can be skipped.
-	// We could also do the DeepEqual on the entire spec, but here it is a bit cheaper.
+	// 如果整个集合（taints）与旧值相同，则可以跳过校验。
+	// 对完整 spec 做 DeepEqual 也可行，但只对 taints 做比较开销更小。
 	if oldDevice == nil || !apiequality.Semantic.DeepEqual(oldDevice.Taints, device.Taints) {
 		allErrs = append(allErrs, validateSlice(device.Taints, resource.DeviceTaintsMaxLength,
 			func(taint resource.DeviceTaint, fldPath *field.Path) field.ErrorList {
@@ -1159,7 +1152,8 @@ func validateNodeAllocatableResources(mappings map[corev1.ResourceName]resource.
 	return allErrs
 }
 
-// validateNodeAllocatableMapping validates a mapped node allocatable resource configuration
+// validateNodeAllocatableMapping 校验“映射型”节点可分配资源配置：
+// 检查 capacityKey 引用是否存在、乘数是否为正数，以及 capacityKey 与 capacityMultiplier 是否成对出现。
 func validateNodeAllocatableMapping(mapping *resource.NodeAllocatableMapping, capacities map[resource.QualifiedName]resource.DeviceCapacity, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if mapping.CapacityKey != nil {
@@ -1194,7 +1188,8 @@ func validateNodeAllocatableMapping(mapping *resource.NodeAllocatableMapping, ca
 	return allErrs
 }
 
-// validateNodeAllocatableOverheadMapping validates an overhead node allocatable resource configuration
+// validateNodeAllocatableOverheadMapping 校验“开销型”节点可分配资源配置：
+// perPod 与 perContainer 至少要设置一个，且都不能为负数。
 func validateNodeAllocatableOverheadMapping(overhead *resource.NodeAllocatableOverhead, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if overhead.PerPod == nil && overhead.PerContainer == nil {
@@ -1212,10 +1207,10 @@ func validateNodeAllocatableOverheadMapping(overhead *resource.NodeAllocatableOv
 	return allErrs
 }
 
-// numEntriesDeviceAttribute counts the total number of entries in the device's attributes,
-// counting each item in list values separately.
-// This is used to enforce the maximum number of attributes and capacities
-// per device when the DRAListTypeAttributes feature gate is enabled.
+// numEntriesDeviceAttribute 统计设备属性中的条目总数，
+// 列表类型属性中的每一项都会单独计数。
+// 当 DRAListTypeAttributes 特性门控开启时，该函数用于强制每个设备可拥有的
+// 属性与容量条目总数上限。
 func numEntriesDeviceAttribute(device resource.Device) int {
 	numEntries := 0
 	for _, attr := range device.Attributes {
@@ -1223,8 +1218,8 @@ func numEntriesDeviceAttribute(device resource.Device) int {
 			numEntries++
 			continue
 		}
-		// These fields are actually mutually exclusive, but we count the total number of entries across all of them.
-		// If setting multiple fields in the list value, the validation will fail later and report that exactly one value must be specified.
+		// 这些列表字段实际上是互斥的，但仍把所有字段中的条目数累加在一起。
+		// 如果同时设置了多个列表字段，后续校验会失败并提示“必须且只能指定一个值”。
 		numEntries += len(attr.BoolValues) + len(attr.IntValues) + len(attr.StringValues) + len(attr.VersionValues)
 	}
 	return numEntries
@@ -1256,13 +1251,13 @@ var (
 
 	semverRe = regexp.MustCompile(`^` +
 
-		// dot-separated version segments (e.g. 1.2.3)
+		// 以点分隔的版本号段（例如 1.2.3）
 		numericIdentifier + `\.` + numericIdentifier + `\.` + numericIdentifier +
 
-		// optional dot-separated prerelease segments (e.g. -alpha.PRERELEASE.1)
+		// 可选的预发布版本段，以 '-' 开头、各段以点分隔（例如 -alpha.PRERELEASE.1）
 		`(-` + preReleaseIdentifier + `(\.` + preReleaseIdentifier + `)*)?` +
 
-		// optional dot-separated build identifier segments (e.g. +build.id.20240305)
+		// 可选的构建标识段，以 '+' 开头、各段以点分隔（例如 +build.id.20240305）
 		`(\+` + buildIdentifier + `(\.` + buildIdentifier + `)*)?` +
 		`$`)
 )
@@ -1319,7 +1314,7 @@ func validateDeviceAttribute(attribute resource.DeviceAttribute, fldPath *field.
 	case 0:
 		allErrs = append(allErrs, field.Invalid(fldPath, "", "exactly one value must be specified").WithOrigin("union").MarkCoveredByDeclarative())
 	case 1:
-		// Okay.
+		// 恰好指定了一个值，合法。
 	default:
 		allErrs = append(allErrs, field.Invalid(fldPath, attribute, "exactly one value must be specified").WithOrigin("union").MarkCoveredByDeclarative())
 	}
@@ -1345,8 +1340,8 @@ func validateDeviceAttributeVersionValue(value *string, fldPath *field.Path) fie
 	return allErrs
 }
 
-// validateMultiAllocatableDeviceCapacity must check requestPolicy in consumable capacity.
-// It only gets called for new or modified capacity.
+// validateMultiAllocatableDeviceCapacity 用于校验可多次分配设备的可消耗容量中的 requestPolicy。
+// 仅在容量是新增或发生修改时才会调用。
 func validateMultiAllocatableDeviceCapacity(capacity resource.DeviceCapacity, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if capacity.RequestPolicy != nil {
@@ -1356,7 +1351,8 @@ func validateMultiAllocatableDeviceCapacity(capacity resource.DeviceCapacity, fl
 	return allErrs
 }
 
-// validateSingleAllocatableDeviceCapacity must not allow consumable capacity.
+// validateSingleAllocatableDeviceCapacity 禁止单次分配设备使用可消耗容量（consumable capacity）：
+// 这类设备不允许设置 requestPolicy。
 func validateSingleAllocatableDeviceCapacity(capacity resource.DeviceCapacity, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if capacity.RequestPolicy != nil {
@@ -1366,9 +1362,10 @@ func validateSingleAllocatableDeviceCapacity(capacity resource.DeviceCapacity, f
 	return allErrs
 }
 
-// validateRequestPolicy validates at most one of ValidRequestValues can be defined.
-// If any ValidRequestValues are defined, Default must also be defined and valid.
-// Only gets called for new or modified policy.
+// validateRequestPolicy 校验容量请求策略（requestPolicy）：
+// validValues（离散取值）和 validRange（连续范围）最多只能定义一个；
+// 一旦定义了其中之一，就必须同时定义合法的 default。
+// 仅在策略是新增或修改时才会调用。
 func validateRequestPolicy(maxCapacity apiresource.Quantity, policy *resource.CapacityRequestPolicy, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(policy.ValidValues) > 0 && policy.ValidRange != nil {
@@ -1402,7 +1399,7 @@ func validateRequestPolicyValidValues(defaultValue apiresource.Quantity, maxCapa
 	var allErrs field.ErrorList
 	foundDefault := false
 
-	// Check if validValues is sorted in ascending order
+	// 检查 validValues 是否按升序排列，便于后续查找和保证确定性。
 	for i := range len(validValues) - 1 {
 		if validValues[i].Cmp(validValues[i+1]) > 0 {
 			allErrs = append(allErrs, field.Invalid(
@@ -1412,9 +1409,9 @@ func validateRequestPolicyValidValues(defaultValue apiresource.Quantity, maxCapa
 		}
 	}
 
-	// Choose the key function based on whether fractional capacity values are
-	// supported. When DRAFractionalCapacityRange is enabled, use decimal precision;
-	// otherwise, use integer-based keys.
+	// 根据是否支持小数容量值来选择键函数：
+	// DRAFractionalCapacityRange 门控开启时使用十进制精度（inf.Dec），
+	// 否则使用基于整数的键进行去重判断。
 	quantityKeyFunc := quantityKeyInt
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAFractionalCapacityRange) {
 		quantityKeyFunc = quantityKeyAsDec
@@ -1437,8 +1434,9 @@ func validateRequestPolicyValidValues(defaultValue apiresource.Quantity, maxCapa
 	return allErrs
 }
 
-// validateRequestPolicyRange validates a CapacityRequestPolicyRange.
-// Only gets called for a new or modified range.
+// validateRequestPolicyRange 校验一个 CapacityRequestPolicyRange（连续容量请求范围）：
+// 检查 min/default/max 的大小关系、是否超出容量上限，以及步长是否合法。
+// 仅在范围是新增或修改时才会调用。
 func validateRequestPolicyRange(defaultValue apiresource.Quantity, maxCapacity apiresource.Quantity, valueRange resource.CapacityRequestPolicyRange, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if valueRange.Min == nil {
@@ -1464,12 +1462,12 @@ func validateRequestPolicyRange(defaultValue apiresource.Quantity, maxCapacity a
 	}
 	useMilli := false
 	if utilfeature.DefaultFeatureGate.Enabled(features.DRAFractionalCapacityRange) {
-		// The default is not part of the range, so rangeHasFractional does not see it.
-		// A fractional default with an integer range must still use the milli path, or the
-		// integer path reads default.Value() (which rounds) and accepts a non-multiple.
+		// default 不属于范围本身，因此 rangeHasFractional 检查不到它。
+		// 即使范围是整数而 default 是小数，也必须走毫单位（milli）计算路径，
+		// 否则整数路径会读取会四舍五入的 default.Value()，错误地接受非整数倍的值。
 		useMilli = rangeHasFractional(valueRange) || isFractionalQuantity(defaultValue)
-		// Overflow guards apply when DRAFractionalCapacityRange is enabled and the incoming
-		// range has fractional values.
+		// 当 DRAFractionalCapacityRange 门控开启且输入范围包含小数时，
+		// 需要进行溢出保护检查。
 		if useMilli {
 			hasUnsafeValue := false
 			for _, pair := range []struct {
@@ -1491,7 +1489,7 @@ func validateRequestPolicyRange(defaultValue apiresource.Quantity, maxCapacity a
 				}
 			}
 			if hasUnsafeValue {
-				// fast return to avoid unsafe calculation
+				// 发现无法安全表示的值后快速返回，避免后续不安全的算术运算。
 				return allErrs
 			}
 		}
@@ -1505,12 +1503,11 @@ func validateRequestPolicyRange(defaultValue apiresource.Quantity, maxCapacity a
 			if added.Cmp(maxCapacity) > 0 {
 				allErrs = append(allErrs, field.Invalid(fldPath.Child("step"), valueRange.Step.String(), fmt.Sprintf("one step %s is larger than capacity value: %s", added.String(), maxCapacity.String())))
 			}
-			// The integer path of validateRequestPolicyRangeStep below reads step,
-			// min, max and the default value with Quantity.Value(), which only holds
-			// in [0, MaxInt64]: above it a positive multiple of 2^64 reads as 0 and the
-			// step check divides by zero, and a negative decimal-backed bound can read
-			// back positive. Reject those before the arithmetic. The milli path is
-			// bounded by the hasUnsafeValue check above instead.
+			// 下面 validateRequestPolicyRangeStep 的整数路径使用 Quantity.Value() 读取
+			// step、min、max 和 default，而该方法只有在 [0, MaxInt64] 区间内才可靠：
+			// 超过该范围时，2^64 的正整数倍会被读成 0，导致步长检查出现除零；
+			// 而十进制表示的负数边界可能被读回为正数。因此在算术运算前先拒绝这些值。
+			// 毫单位路径则由上面的 hasUnsafeValue 检查负责兜底。
 			hasUnsafeValue := false
 			if !useMilli {
 				for _, pair := range []struct {
@@ -1531,8 +1528,8 @@ func validateRequestPolicyRange(defaultValue apiresource.Quantity, maxCapacity a
 				}
 			}
 			if !hasUnsafeValue {
-				// Use milli-value arithmetic whenever any field is fractional.
-				// useMilli is set only when the DRAFractionalCapacityRange gate is on.
+				// 只要任一字段包含小数，就使用毫单位（milli）算术避免精度丢失。
+				// useMilli 仅在 DRAFractionalCapacityRange 门控开启时才可能为 true。
 				allErrs = append(allErrs, validateRequestPolicyRangeStep(defaultValue, *valueRange.Min, *valueRange.Step, useMilli, fldPath.Child("step"))...)
 				if valueRange.Max != nil {
 					allErrs = append(allErrs, validateRequestPolicyRangeStep(*valueRange.Max, *valueRange.Min, *valueRange.Step, useMilli, fldPath.Child("step"))...)
@@ -1543,12 +1540,11 @@ func validateRequestPolicyRange(defaultValue apiresource.Quantity, maxCapacity a
 	return allErrs
 }
 
-// validateRequestPolicyRangeStep checks if the value is a valid step increment
-// starting from the minimum value (i.e., value - min is a multiple of step).
+// validateRequestPolicyRangeStep 校验 value 是否是从 min 出发、按 step 递增得到的合法取值
+// （即 value - min 必须是 step 的整数倍）。
 //
-// Pre-requisite: value, min, and step must be pre-validated to ensure they
-// don't underflow or overflow the supported value range (int64 or milli-value)
-// and that step is not zero.
+// 前置条件：value、min 和 step 必须事先校验过，确保不会下溢或溢出支持的值域
+// （int64 或毫单位值域），并且 step 不为零。
 func validateRequestPolicyRangeStep(value, min, step apiresource.Quantity, useMilli bool, fldPath *field.Path) field.ErrorList {
 	var stepVal, minVal, val int64
 	if useMilli {
@@ -1566,16 +1562,17 @@ func validateRequestPolicyRangeStep(value, min, step apiresource.Quantity, useMi
 	return nil
 }
 
-// boundOverInt64Message is the field error for a consumable-capacity validRange
-// bound above the range where Quantity.Value() is usable.
+// boundOverInt64Message 是可消耗容量 validRange 边界超出 Quantity.Value()
+// 可用范围时返回的错误信息。
 const boundOverInt64Message = "must not be larger than 9223372036854775807"
 
-// validateInt64Range reports whether q is in [0, MaxInt64], the range where
-// Quantity.Value() returns a number the bound can be reasoned about with. Above
-// MaxInt64 it overflows, so a positive multiple of 2^64 reads back as 0; below
-// zero it does not round as documented once the quantity is decimal-backed and
-// can read back with the wrong sign (#110653). Sign() alone misses the first
-// case and CmpInt64 alone misses the second, so the check needs both.
+// validateInt64Range 检查 q 是否位于 [0, MaxInt64] 区间内——
+// 只有在这个范围内 Quantity.Value() 返回的值才可用于边界推理。
+// 超过 MaxInt64 会发生溢出，2^64 的正整数倍会被读回为 0；
+// 低于零时，一旦 quantity 是十进制表示的，取整行为就不符合文档描述，
+// 甚至可能读回错误的正负号（#110653）。
+// 单独使用 Sign() 会漏掉第一种情况，单独使用 CmpInt64 会漏掉第二种，
+// 因此这里必须同时做两项检查。
 func validateInt64Range(q apiresource.Quantity, fldPath *field.Path) field.ErrorList {
 	if q.Sign() < 0 {
 		return field.ErrorList{field.Invalid(fldPath, q.String(), apimachineryvalidation.IsNegativeErrorMsg)}
@@ -1586,7 +1583,7 @@ func validateInt64Range(q apiresource.Quantity, fldPath *field.Path) field.Error
 	return nil
 }
 
-// rangeHasFractional reports whether any non-nil field of r has sub-integer precision.
+// rangeHasFractional 判断范围 r 中任一非空字段是否包含亚整数精度（小数部分）。
 func rangeHasFractional(r resource.CapacityRequestPolicyRange) bool {
 	for _, q := range []*apiresource.Quantity{r.Min, r.Max, r.Step} {
 		if q != nil && isFractionalQuantity(*q) {
@@ -1596,7 +1593,7 @@ func rangeHasFractional(r resource.CapacityRequestPolicyRange) bool {
 	return false
 }
 
-// isFractionalQuantity reports whether q has sub-integer precision.
+// isFractionalQuantity 判断数量 q 是否包含亚整数精度（即是否为小数）。
 func isFractionalQuantity(q apiresource.Quantity) bool {
 	dec := q.AsDec()
 	infDec := inf.Dec{}
@@ -1605,7 +1602,7 @@ func isFractionalQuantity(q apiresource.Quantity) bool {
 }
 
 func validateDeviceCounter(counter resource.Counter, fldPath *field.Path) field.ErrorList {
-	// Any parsed quantity is valid.
+	// 计数器值只要能被解析为 Quantity 即为合法，因此这里无需额外校验。
 	return nil
 }
 
@@ -1645,8 +1642,8 @@ func validateQualifiedName(name resource.QualifiedName, fldPath *field.Path) fie
 func validateFullyQualifiedName(name resource.FullyQualifiedName, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	allErrs = append(allErrs, validateQualifiedName(resource.QualifiedName(name), fldPath)...)
-	// validateQualifiedName checks that both parts are valid.
-	// What we need to enforce here is that there really is a domain.
+	// validateQualifiedName 只会检查域名和名称两部分各自的格式是否合法，
+	// 这里还需要额外确保名称中确实包含域名（即存在 '/'）。
 	if !strings.Contains(string(name), "/") {
 		allErrs = append(allErrs, field.Invalid(fldPath, name, "a fully qualified name must be a domain and a name separated by a slash"))
 	}
@@ -1664,21 +1661,22 @@ func validateCIdentifier(id string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// validationOption is an option for validation.
+// validationOption 是校验辅助函数的可选标志，
+// 用于标记某类检查已经由声明式校验覆盖，从而在错误上打标记。
 type validationOption int
 
 const (
-	// The validation of each item is covered by declarative validation.
+	// 列表中每个元素的校验已由声明式校验覆盖。
 	itemsCovered validationOption = iota
-	// The list size check is covered by declarative validation.
+	// 列表长度（元素数量）的检查已由声明式校验覆盖。
 	sizeCovered
-	// The uniqueness check is covered by declarative validation.
+	// 元素唯一性（无重复）的检查已由声明式校验覆盖。
 	uniquenessCovered
-	// key validation is covered by declarative validation.
+	// Map 键的校验已由声明式校验覆盖。
 	keysCovered
 )
 
-// validateItems validates each item in a slice.
+// validateItems 逐个校验切片中的元素，并可在元素校验被声明式校验覆盖时给错误打标记。
 func validateItems[T any](slice []T, validateItem func(T, *field.Path) field.ErrorList, fldPath *field.Path, opts ...validationOption) field.ErrorList {
 	var allErrs field.ErrorList
 	for i, item := range slice {
@@ -1692,36 +1690,33 @@ func validateItems[T any](slice []T, validateItem func(T, *field.Path) field.Err
 	return allErrs
 }
 
-// validateSlice ensures that a slice does not exceed a certain maximum size
-// and that all entries are valid.
-// A negative maxSize disables the length check.
+// validateSlice 确保切片长度不超过指定的 maxSize，并且每个元素都合法。
+// maxSize 为负数时禁用长度检查。
 func validateSlice[T any](slice []T, maxSize int, validateItem func(T, *field.Path) field.ErrorList, fldPath *field.Path, opts ...validationOption) field.ErrorList {
 	if maxSize >= 0 && len(slice) > maxSize {
-		// Dumping the entire field into the error message is likely to be too long,
-		// in particular when it is already beyond the maximum size. Instead this
-		// just shows the number of entries.
+		// 把整个字段内容写进错误信息通常会太长，尤其在元素数量已经超限时。
+		// 因此这里只报告实际元素数量，而不输出字段内容。
 		err := field.TooMany(fldPath, len(slice), maxSize).WithOrigin("maxItems")
 		if slices.Contains(opts, sizeCovered) {
 			err = err.MarkCoveredByDeclarative()
 		}
-		// maxSize check short-circuits for DOS protection
+		// 长度检查不通过时直接短路返回，避免继续处理超大输入造成 DoS。
 		return field.ErrorList{err}
 	}
 	return validateItems(slice, validateItem, fldPath, opts...)
 }
 
-// validateSet ensures that a slice contains no duplicates, does not
-// exceed a certain maximum size and that all entries are valid.
+// validateSet 在 validateSlice 的基础上，额外确保切片中没有重复元素
+// （通过 itemKey 提取的键判重），且元素数量不超过 maxSize。
 func validateSet[T any, K comparable](slice []T, maxSize int, validateItem func(item T, fldPath *field.Path) field.ErrorList, itemKey func(T) K, fldPath *field.Path, opts ...validationOption) field.ErrorList {
 	if maxSize >= 0 && len(slice) > maxSize {
-		// Dumping the entire field into the error message is likely to be too long,
-		// in particular when it is already beyond the maximum size. Instead this
-		// just shows the number of entries.
+		// 把整个字段内容写进错误信息通常会太长，尤其在元素数量已经超限时。
+		// 因此这里只报告实际元素数量，而不输出字段内容。
 		err := field.TooMany(fldPath, len(slice), maxSize).WithOrigin("maxItems")
 		if slices.Contains(opts, sizeCovered) {
 			err = err.MarkCoveredByDeclarative()
 		}
-		// maxSize check short-circuits for DOS protection
+		// 长度检查不通过时直接短路返回，避免继续处理超大输入造成 DoS。
 		return field.ErrorList{err}
 	}
 
@@ -1745,35 +1740,33 @@ func validateSet[T any, K comparable](slice []T, maxSize int, validateItem func(
 	return allErrs
 }
 
-// stringKey uses the item itself as a key for validateSet.
+// stringKey 直接把字符串元素本身作为 validateSet 的判重键。
 func stringKey(item string) string {
 	return item
 }
 
-// quantityKeyAsDec uses a scaled inf.Dec of the item as itself
-// as a key for validateSet.
+// quantityKeyAsDec 使用 Quantity 的十进制（inf.Dec）表示作为 validateSet 的判重键，
+// 这样不同书写形式但数值相同的 Quantity 也能被识别为重复。
 func quantityKeyAsDec(item apiresource.Quantity) string {
 	return item.AsDec().String()
 }
 
-// quantityKeyInt uses base-10 integer of the item itself
-// as a key for validateSet.
+// quantityKeyInt 使用 Quantity 的十进制整数值（Value()）作为 validateSet 的判重键。
 func quantityKeyInt(item apiresource.Quantity) string {
 	return strconv.FormatInt(item.Value(), 10)
 }
 
-// validateMap validates keys, items and the maximum length of a map.
-// A negative maxSize disables the length check.
+// validateMap 校验 Map 的键、值以及元素数量上限。
+// maxSize 为负数时禁用长度检查。
 //
-// Keys larger than truncateKeyLen get truncated in the middle. A very
-// small limit gets increased because it is okay to include more details.
-// This is not used for validation of keys, which has to be done by
-// the callback function.
+// 超过 truncateKeyLen 的键会在中间被截断以控制错误信息长度；若该上限过小则会被调大，
+// 因为多显示一些细节是可接受的。截断仅用于构造错误路径，
+// 键本身的合法性必须由 validateKey 回调函数负责校验。
 func validateMap[K ~string, T any](m map[K]T, maxSize, truncateKeyLen int, validateKey func(K, *field.Path) field.ErrorList, validateItem func(T, *field.Path) field.ErrorList, fldPath *field.Path, opts ...validationOption) field.ErrorList {
 	var allErrs field.ErrorList
 	if maxSize >= 0 && len(m) > maxSize {
 		allErrs = append(allErrs, field.TooMany(fldPath, len(m), maxSize))
-		// maxSize check short-circuits for DOS protection
+		// 长度检查不通过时直接短路返回，避免继续处理超大输入造成 DoS。
 		return allErrs
 	}
 	for key, item := range m {
@@ -1790,8 +1783,8 @@ func validateMap[K ~string, T any](m map[K]T, maxSize, truncateKeyLen int, valid
 }
 
 func truncateIfTooLong(str string, maxLen int) string {
-	// The caller was overly restrictive. Increase the length to something reasonable
-	// (https://github.com/kubernetes/kubernetes/pull/127511#discussion_r1826206362).
+	// 调用方传入的限制过于严格，这里把长度调大到合理值，
+	// 以便错误信息能包含足够的上下文（见 PR 讨论链接）。
 	if maxLen < 16 {
 		maxLen = 16
 	}
@@ -1820,24 +1813,25 @@ func validateDeviceStatus(device resource.AllocatedDeviceStatus, fldPath *field.
 		allErrs = append(allErrs, field.TooMany(fldPath.Child("conditions"), len(device.Conditions), resource.AllocatedDeviceStatusMaxConditions))
 	}
 	allErrs = append(allErrs, metav1validation.ValidateConditions(device.Conditions, fldPath.Child("conditions"))...)
-	if device.Data != nil && len(device.Data.Raw) > 0 { // Data is an optional field.
+	if device.Data != nil && len(device.Data.Raw) > 0 { // Data 是可选字段。
 		allErrs = append(allErrs, validateRawExtension(*device.Data, fldPath.Child("data"), false, resource.AllocatedDeviceStatusDataMaxLength)...)
 	}
 	allErrs = append(allErrs, validateNetworkDeviceData(device.NetworkData, fldPath.Child("networkData"))...)
 	return allErrs
 }
 
-// validateRawExtension validates RawExtension as in https://github.com/kubernetes/kubernetes/pull/125549/
+// validateRawExtension 按 PR #125549 的规则校验 RawExtension：
+// 内容必须是合法的 JSON 对象、非空，并且在新建时不能超过长度上限
+// （历史存量数据予以豁免）。
 func validateRawExtension(rawExtension runtime.RawExtension, fldPath *field.Path, stored bool, rawExtensionMaxLength int) field.ErrorList {
 	var allErrs field.ErrorList
 	var v any
 	if len(rawExtension.Raw) == 0 {
 		allErrs = append(allErrs, field.Required(fldPath, ""))
 	} else if !stored && len(rawExtension.Raw) > rawExtensionMaxLength {
-		// Don't even bother with parsing when too large.
-		// Only applies on create. Existing parameters are grand-fathered in
-		// because the limit was introduced in 1.32. This also means that it
-		// can be changed in the future.
+		// 数据过大时甚至不会尝试解析，直接报长度错误。
+		// 该限制只在创建时生效：由于上限是 1.32 才引入的，
+		// 存量数据被豁免（grand-fathered），这也意味着该上限未来仍可调整。
 		allErrs = append(allErrs, field.TooLong(fldPath, "" /* unused */, rawExtensionMaxLength))
 	} else if err := json.Unmarshal(rawExtension.Raw, &v); err != nil {
 		allErrs = append(allErrs, field.Invalid(fldPath, "<value omitted>", fmt.Sprintf("error parsing data as JSON: %v", err.Error())))
@@ -1870,14 +1864,16 @@ func validateNetworkDeviceData(networkDeviceData *resource.NetworkDeviceData, fl
 	return allErrs
 }
 
-// ValidateDeviceTaintRule tests if a DeviceTaintRule object is valid.
+// ValidateDeviceTaintRule 判断一个 DeviceTaintRule（设备污点规则）对象是否合法。
+// 会校验元数据和规则规格（设备选择器与污点定义）。
 func ValidateDeviceTaintRule(deviceTaint *resource.DeviceTaintRule) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMeta(&deviceTaint.ObjectMeta, false, apimachineryvalidation.NameIsDNSSubdomain, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateDeviceTaintRuleSpec(&deviceTaint.Spec, nil, field.NewPath("spec"))...)
 	return allErrs
 }
 
-// ValidateDeviceTaintRuleUpdate tests if a DeviceTaintRule update is valid.
+// ValidateDeviceTaintRuleUpdate 判断一次 DeviceTaintRule 更新是否合法。
+// 规格校验会同时传入旧值，以便对未变化的字段跳过重复校验。
 func ValidateDeviceTaintRuleUpdate(deviceTaint, oldDeviceTaint *resource.DeviceTaintRule) field.ErrorList {
 	allErrs := corevalidation.ValidateObjectMetaUpdate(&deviceTaint.ObjectMeta, &oldDeviceTaint.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, validateDeviceTaintRuleSpec(&deviceTaint.Spec, &oldDeviceTaint.Spec, field.NewPath("spec"))...)
@@ -1925,14 +1921,14 @@ var validDeviceTaintEffects = sets.New(resource.DeviceTaintEffectNoSchedule, res
 func validateDeviceTaint(taint resource.DeviceTaint, oldTaint *resource.DeviceTaint, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	allErrs = append(allErrs, metav1validation.ValidateLabelName(taint.Key, fldPath.Child("key"))...) // Includes checking for non-empty.
+	allErrs = append(allErrs, metav1validation.ValidateLabelName(taint.Key, fldPath.Child("key"))...) // 包含非空检查。
 	if taint.Value != "" {
 		allErrs = append(allErrs, validateLabelValue(taint.Value, fldPath.Child("value"))...)
 	}
 	if oldTaint == nil || oldTaint.Effect != taint.Effect {
 		switch {
 		case taint.Effect == "":
-			allErrs = append(allErrs, field.Required(fldPath.Child("effect"), "").MarkCoveredByDeclarative()) // Required in a taint.
+			allErrs = append(allErrs, field.Required(fldPath.Child("effect"), "").MarkCoveredByDeclarative()) // 在污点中该字段为必填项。
 		case !validDeviceTaintEffects.Has(taint.Effect):
 			allErrs = append(allErrs, field.NotSupported(fldPath.Child("effect"), taint.Effect, sets.List(validDeviceTaintEffects)).MarkCoveredByDeclarative())
 		}
@@ -1961,7 +1957,7 @@ func validateDeviceToleration(toleration resource.DeviceToleration, fldPath *fie
 	}
 	switch {
 	case toleration.Effect == "":
-		// Optional in a toleration.
+		// 对容忍（toleration）而言 effect 是可选字段，为空是合法的。
 	case !validDeviceTaintEffects.Has(toleration.Effect):
 		allErrs = append(allErrs, field.NotSupported(fldPath.Child("effect"), toleration.Effect, sets.List(validDeviceTaintEffects)).MarkCoveredByDeclarative())
 	}
@@ -1972,7 +1968,8 @@ func validateDeviceToleration(toleration resource.DeviceToleration, fldPath *fie
 func validateLabelValue(value string, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// There's no metav1validation.ValidateLabelValue.
+	// metav1validation 中没有可直接复用的 ValidateLabelValue，
+	// 因此这里调用 util/validation 中的 IsValidLabelValue。
 	for _, msg := range validation.IsValidLabelValue(value) {
 		allErrs = append(allErrs, field.Invalid(fldPath, value, msg))
 	}
@@ -1988,7 +1985,8 @@ func validateDeviceBindingParameters(bindingConditions, bindingFailureConditions
 	allErrs = append(allErrs, validateSlice(bindingFailureConditions, resource.BindingFailureConditionsMaxSize,
 		metav1validation.ValidateLabelName, fldPath.Child("bindingFailureConditions"), sizeCovered)...)
 
-	// ensure BindingConditions and BindingFailureConditions contain no duplicate items and do not overlap with each other
+	// 确保 BindingConditions 与 BindingFailureConditions 内部都没有重复项，
+	// 并且两个集合之间没有交集（同一个条件不能既表示成功又表示失败）。
 	conditionsSet := sets.New[string]()
 	for i, condition := range bindingConditions {
 		if conditionsSet.Has(condition) {
@@ -2019,12 +2017,13 @@ func validateDeviceBindingParameters(bindingConditions, bindingFailureConditions
 	return allErrs
 }
 
-// ValidateDeviceTaintRuleStatusUpdate tests if a DeviceTaintRule status update is valid.
+// ValidateDeviceTaintRuleStatusUpdate 判断一次 DeviceTaintRule 状态更新是否合法。
+// 会校验元数据更新、status.conditions 的合法性以及条件数量是否超限。
 func ValidateDeviceTaintRuleStatusUpdate(rule, oldRule *resource.DeviceTaintRule) field.ErrorList {
 	var allErrs field.ErrorList
 
 	fldPath := field.NewPath("status")
-	allErrs = corevalidation.ValidateObjectMetaUpdate(&rule.ObjectMeta, &oldRule.ObjectMeta, field.NewPath("metadata")) // Covers invalid name changes.
+	allErrs = corevalidation.ValidateObjectMetaUpdate(&rule.ObjectMeta, &oldRule.ObjectMeta, field.NewPath("metadata")) // 包含对非法名称变更的检查。
 	allErrs = append(allErrs, metav1validation.ValidateConditions(rule.Status.Conditions, fldPath.Child("conditions"))...)
 	if len(rule.Status.Conditions) > resource.DeviceTaintRuleStatusMaxConditions {
 		allErrs = append(allErrs, field.TooMany(fldPath.Child("conditions"), len(rule.Status.Conditions), resource.DeviceTaintRuleStatusMaxConditions))

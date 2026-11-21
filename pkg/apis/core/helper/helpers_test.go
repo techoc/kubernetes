@@ -23,6 +23,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestSemantic 验证 Semantic 深度比较会忽略 Quantity 的格式差异，但比较数值大小。
 func TestSemantic(t *testing.T) {
 	table := []struct {
 		a, b        interface{}
@@ -46,6 +47,7 @@ func TestSemantic(t *testing.T) {
 	}
 }
 
+// TestIsStandardResource 验证标准资源名（含大页资源）的判定结果。
 func TestIsStandardResource(t *testing.T) {
 	testCases := []struct {
 		input  string
@@ -66,6 +68,7 @@ func TestIsStandardResource(t *testing.T) {
 	}
 }
 
+// TestIsStandardContainerResource 验证容器可申请的标准资源名判定。
 func TestIsStandardContainerResource(t *testing.T) {
 	testCases := []struct {
 		input  string
@@ -83,6 +86,7 @@ func TestIsStandardContainerResource(t *testing.T) {
 	}
 }
 
+// TestIsNodeAllocatableResource 验证 DRA 可分配资源名的判定（仅 cpu/内存/大页）。
 func TestIsNodeAllocatableResource(t *testing.T) {
 	testCases := []struct {
 		input  string
@@ -102,6 +106,7 @@ func TestIsNodeAllocatableResource(t *testing.T) {
 	}
 }
 
+// TestGetAccessModesFromString 验证访问模式字符串能正确解析为对应的模式集合。
 func TestGetAccessModesFromString(t *testing.T) {
 	modes := GetAccessModesFromString("ROX")
 	if !ContainsAccessMode(modes, core.ReadOnlyMany) {
@@ -142,6 +147,7 @@ func TestGetAccessModesFromString(t *testing.T) {
 	}
 }
 
+// TestRemoveDuplicateAccessModes 验证重复访问模式会被去重。
 func TestRemoveDuplicateAccessModes(t *testing.T) {
 	modes := []core.PersistentVolumeAccessMode{
 		core.ReadWriteOnce, core.ReadOnlyMany, core.ReadOnlyMany, core.ReadOnlyMany,
@@ -152,6 +158,7 @@ func TestRemoveDuplicateAccessModes(t *testing.T) {
 	}
 }
 
+// TestIsHugePageResourceName 验证大页资源名前缀的识别。
 func TestIsHugePageResourceName(t *testing.T) {
 	testCases := []struct {
 		name   core.ResourceName
@@ -181,6 +188,7 @@ func TestIsHugePageResourceName(t *testing.T) {
 	}
 }
 
+// TestIsHugePageResourceValueDivisible 验证存储值能否被页大小整除的判定，含非法资源名场景。
 func TestIsHugePageResourceValueDivisible(t *testing.T) {
 	testCases := []struct {
 		name     core.ResourceName
@@ -235,6 +243,7 @@ func TestIsHugePageResourceValueDivisible(t *testing.T) {
 	}
 }
 
+// TestHugePageResourceName 验证由页大小生成规范大页资源名，并检查规范表示不会退化。
 func TestHugePageResourceName(t *testing.T) {
 	testCases := []struct {
 		pageSize resource.Quantity
@@ -249,7 +258,7 @@ func TestHugePageResourceName(t *testing.T) {
 			name:     core.ResourceName("hugepages-1Gi"),
 		},
 		{
-			// verify we do not regress our canonical representation
+			// 验证规范表示不会退化：字节数形式的页大小应生成同样的资源名。
 			pageSize: *resource.NewQuantity(int64(2097152), resource.BinarySI),
 			name:     core.ResourceName("hugepages-2Mi"),
 		},
@@ -261,6 +270,7 @@ func TestHugePageResourceName(t *testing.T) {
 	}
 }
 
+// TestHugePageSizeFromResourceName 验证从大页资源名解析页大小，非法名称应返回错误。
 func TestHugePageSizeFromResourceName(t *testing.T) {
 	testCases := []struct {
 		name      core.ResourceName
@@ -294,6 +304,7 @@ func TestHugePageSizeFromResourceName(t *testing.T) {
 	}
 }
 
+// TestIsOvercommitAllowed 验证允许超卖的资源范围：原生资源允许，大页资源不允许。
 func TestIsOvercommitAllowed(t *testing.T) {
 	testCases := []struct {
 		name    core.ResourceName
@@ -319,6 +330,7 @@ func TestIsOvercommitAllowed(t *testing.T) {
 	}
 }
 
+// TestIsServiceIPSet 验证 Service ClusterIP 设置判定，覆盖 nil、headless 与各地址族场景。
 func TestIsServiceIPSet(t *testing.T) {
 	testCases := []struct {
 		input  core.ServiceSpec
@@ -389,6 +401,7 @@ func TestIsServiceIPSet(t *testing.T) {
 	}
 }
 
+// TestHasInvalidLabelValueInNodeSelectorTerms 验证 NodeSelectorTerm 中非法 label 值的检测。
 func TestHasInvalidLabelValueInNodeSelectorTerms(t *testing.T) {
 	testCases := []struct {
 		name   string

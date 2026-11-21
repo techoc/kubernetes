@@ -22,53 +22,53 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Policy contains a single ABAC policy rule
+// Policy 包含一条 ABAC 策略规则。
 type Policy struct {
 	metav1.TypeMeta
 
-	// Spec describes the policy rule
+	// Spec 描述策略规则。
 	Spec PolicySpec
 }
 
-// PolicySpec contains the attributes for a policy rule
+// PolicySpec 包含策略规则的属性。
 type PolicySpec struct {
 
-	// User is the username this rule applies to.
-	// Either user or group is required to match the request.
-	// "*" matches all users.
+	// User 是该规则适用的用户名。
+	// user 或 group 至少有一个要匹配请求。
+	// "*" 匹配所有用户。
 	User string
 
-	// Group is the group this rule applies to.
-	// Either user or group is required to match the request.
-	// "*" matches all groups.
+	// Group 是该规则适用的用户组。
+	// user 或 group 至少有一个要匹配请求。
+	// "*" 匹配所有用户组。
 	Group string
 
-	// Readonly matches readonly requests when true, and all requests when false
+	// 为 true 时只匹配只读请求，为 false 时匹配所有请求。
 	Readonly bool
 
-	// APIGroup is the name of an API group. APIGroup, Resource, and Namespace are required to match resource requests.
-	// "*" matches all API groups
+	// APIGroup 是 API 组的名称。匹配资源请求时需要 APIGroup、Resource 和 Namespace。
+	// "*" 匹配所有 API 组。
 	APIGroup string
 
-	// Resource is the name of a resource. APIGroup, Resource, and Namespace are required to match resource requests.
-	// "*" matches all resources
+	// Resource 是资源名称。匹配资源请求时需要 APIGroup、Resource 和 Namespace。
+	// "*" 匹配所有资源。
 	Resource string
 
-	// Namespace is the name of a namespace. APIGroup, Resource, and Namespace are required to match resource requests.
-	// "*" matches all namespaces (including unnamespaced requests)
+	// Namespace 是命名空间名称。匹配资源请求时需要 APIGroup、Resource 和 Namespace。
+	// "*" 匹配所有命名空间（包括无命名空间的请求）。
 	Namespace string
 
-	// NonResourcePath matches non-resource request paths.
-	// "*" matches all paths
-	// "/foo/*" matches all subpaths of foo
+	// NonResourcePath 匹配非资源请求路径。
+	// "*" 匹配所有路径。
+	// "/foo/*" 匹配 foo 的所有子路径。
 	NonResourcePath string
 
 	// TODO: "expires" string in RFC3339 format.
 
 	// TODO: want a way to allow some users to restart containers of a pod but
-	// not delete or modify it.
+	// 不得删除或修改它。
 
 	// TODO: want a way to allow a controller to create a pod based only on a
-	// certain podTemplates.
+	// 特定的 podTemplate。
 
 }

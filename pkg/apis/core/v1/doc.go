@@ -21,5 +21,5 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-input=k8s.io/api/core/v1
 
-// Package v1 is the v1 version of the API.
+// Package v1 是该 API 的 v1 版本。
 package v1

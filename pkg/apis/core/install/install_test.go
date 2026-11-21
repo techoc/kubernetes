@@ -29,6 +29,7 @@ import (
 	internal "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestResourceVersioner 验证 meta 访问器能从 Pod 和 PodList 中正确读出 ResourceVersion。
 func TestResourceVersioner(t *testing.T) {
 	pod := internal.Pod{ObjectMeta: metav1.ObjectMeta{ResourceVersion: "10"}}
 	version, err := meta.NewAccessor().ResourceVersion(&pod)
@@ -49,6 +50,7 @@ func TestResourceVersioner(t *testing.T) {
 	}
 }
 
+// TestCodec 验证通过 legacy codec 编码内部 Pod 后，解码得到的外部表示带有正确的 APIVersion/Kind。
 func TestCodec(t *testing.T) {
 	pod := internal.Pod{}
 	data, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(schema.GroupVersion{Group: "", Version: "v1"}), &pod)
@@ -64,6 +66,7 @@ func TestCodec(t *testing.T) {
 	}
 }
 
+// TestUnversioned 验证 metav1.Status 被 scheme 视为无版本对象。
 func TestUnversioned(t *testing.T) {
 	for _, obj := range []runtime.Object{
 		&metav1.Status{},

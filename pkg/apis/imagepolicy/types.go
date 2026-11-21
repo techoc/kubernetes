@@ -22,48 +22,47 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ImageReview checks if the set of images in a pod are allowed.
+// ImageReview 用于检查 Pod 中的一组镜像是否被允许运行。
 type ImageReview struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
 
-	// Spec holds information about the pod being evaluated
+	// Spec 保存待检查 Pod 的相关信息。
 	Spec ImageReviewSpec
 
-	// Status is filled in by the backend and indicates whether the pod should be allowed.
+	// Status 由后端（webhook）填写，指明该 Pod 是否应被允许创建。
 	Status ImageReviewStatus
 }
 
-// ImageReviewSpec is a description of the pod creation request.
+// ImageReviewSpec 描述 Pod 创建请求中与镜像审查相关的内容。
 type ImageReviewSpec struct {
-	// Containers is a list of a subset of the information in each container of the Pod being created.
+	// Containers 是被创建 Pod 中每个容器信息的子集列表。
 	Containers []ImageReviewContainerSpec
-	// Annotations is a list of key-value pairs extracted from the Pod's annotations.
-	// It only includes keys which match the pattern `*.image-policy.k8s.io/*`.
-	// It is up to each webhook backend to determine how to interpret these annotations, if at all.
+	// Annotations 是从 Pod 注解中提取出的键值对集合。
+	// 仅包含匹配 `*.image-policy.k8s.io/*` 模式的键。
+	// 是否以及如何解释这些注解由各 webhook 后端自行决定。
 	Annotations map[string]string
-	// Namespace is the namespace the pod is being created in.
+	// Namespace 是 Pod 将要创建所在的命名空间。
 	Namespace string
 }
 
-// ImageReviewContainerSpec is a description of a container within the pod creation request.
+// ImageReviewContainerSpec 描述 Pod 创建请求中的单个容器。
 type ImageReviewContainerSpec struct {
-	// This can be in the form image:tag or image@SHA:012345679abcdef.
+	// 镜像可以是 image:tag 或 image@SHA:012345679abcdef 的形式。
 	Image string
-	// In future, we may add command line overrides, exec health check command lines, and so on.
+	// 未来可能加入命令行覆盖、exec 健康检查命令等信息。
 }
 
-// ImageReviewStatus is the result of the review for the pod creation request.
+// ImageReviewStatus 是镜像审查对 Pod 创建请求给出的结果。
 type ImageReviewStatus struct {
-	// Allowed indicates that all images were allowed to be run.
+	// Allowed 表示所有镜像都被允许运行。
 	Allowed bool
-	// Reason should be empty unless Allowed is false in which case it
-	// may contain a short description of what is wrong.  Kubernetes
-	// may truncate excessively long errors when displaying to the user.
+	// Reason 通常应为空，仅当 Allowed 为 false 时才可能有值。
+	// 此时可包含一段简短的问题描述。
+	// 向用户展示时，Kubernetes 可能会截断过长的错误信息。
 	Reason string
-	// AuditAnnotations will be added to the attributes object of the
-	// admission controller request using 'AddAnnotation'.  The keys should
-	// be prefix-less (i.e., the admission controller will add an
-	// appropriate prefix).
+	// AuditAnnotations 会通过 AddAnnotation 添加到准入控制器请求的属性对象中。
+	// 其中的键不应带前缀。
+	// （准入控制器会自动补上适当的前缀。）
 	AuditAnnotations map[string]string
 }

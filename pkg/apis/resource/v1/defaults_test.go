@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
 
-	// ensure types are installed
+	// 确保相关类型已注册到 scheme。
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	_ "k8s.io/kubernetes/pkg/apis/resource/install"
 )
@@ -46,14 +46,14 @@ func TestSetDefaultAllocationMode(t *testing.T) {
 		},
 	}
 
-	// fields should be defaulted
+	// 这些字段应当被默认值填充。
 	defaultMode := v1.DeviceAllocationModeExactCount
 	defaultCount := int64(1)
 	output := roundTrip(t, runtime.Object(claim)).(*v1.ResourceClaim)
 	assert.Equal(t, defaultMode, output.Spec.Devices.Requests[0].Exactly.AllocationMode)
 	assert.Equal(t, defaultCount, output.Spec.Devices.Requests[0].Exactly.Count)
 
-	// field should not change
+	// 该字段不应发生变化。
 	nonDefaultMode := v1.DeviceAllocationModeExactCount
 	nonDefaultCount := int64(10)
 	claim = &v1.ResourceClaim{
@@ -105,7 +105,7 @@ func TestSetDefaultAllocationModeWithSubRequests(t *testing.T) {
 	assert.Equal(t, defaultMode, output.Spec.Devices.Requests[0].FirstAvailable[1].AllocationMode)
 	assert.Equal(t, defaultCount, output.Spec.Devices.Requests[0].FirstAvailable[1].Count)
 
-	// field should not change
+	// 该字段不应发生变化。
 	nonDefaultMode := v1.DeviceAllocationModeExactCount
 	nonDefaultCount := int64(10)
 	claim = &v1.ResourceClaim{
@@ -146,11 +146,11 @@ func TestSetDefaultDeviceTaint(t *testing.T) {
 		},
 	}
 
-	// fields should be defaulted
+	// 这些字段应当被默认值填充。
 	output := roundTrip(t, slice).(*v1.ResourceSlice)
 	assert.WithinDuration(t, time.Now(), ptr.Deref(output.Spec.Devices[0].Taints[0].TimeAdded, metav1.Time{}).Time, time.Minute /* allow for some processing delay */, "time added default")
 
-	// field should not change
+	// 该字段不应发生变化。
 	timeAdded, _ := time.ParseInLocation(time.RFC3339, "2006-01-02T15:04:05Z", time.UTC)
 	slice.Spec.Devices[0].Taints[0].TimeAdded = &metav1.Time{Time: timeAdded}
 	output = roundTrip(t, slice).(*v1.ResourceSlice)

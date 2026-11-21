@@ -21,7 +21,8 @@ import (
 	"testing"
 )
 
-// TestEphemeralContainer ensures that the tags of Container and EphemeralContainerCommon are kept in sync.
+// TestEphemeralContainer 通过反射确保 Container 与 EphemeralContainerCommon 的字段标签保持一致。
+// 两者的字段必须同步，否则临时容器在序列化/反序列化时会出现字段不匹配的问题。
 func TestEphemeralContainer(t *testing.T) {
 	ephemeralType := reflect.TypeOf(EphemeralContainerCommon{})
 	containerType := reflect.TypeOf(Container{})

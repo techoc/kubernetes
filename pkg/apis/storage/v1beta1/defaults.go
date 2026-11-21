@@ -24,11 +24,14 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// addDefaultingFuncs 把本包的默认值注册函数挂到 scheme 上，供反序列化时自动填充默认值。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_StorageClass 为 StorageClass 未指定的字段填充默认值 Delete 与 Immediate。
 func SetDefaults_StorageClass(obj *storagev1beta1.StorageClass) {
+	// 未指定回收策略时默认删除 PV，未指定绑定模式时默认立即绑定。
 	if obj.ReclaimPolicy == nil {
 		obj.ReclaimPolicy = new(v1.PersistentVolumeReclaimPolicy)
 		*obj.ReclaimPolicy = v1.PersistentVolumeReclaimDelete
@@ -40,7 +43,10 @@ func SetDefaults_StorageClass(obj *storagev1beta1.StorageClass) {
 	}
 }
 
+// SetDefaults_CSIDriver 为 CSIDriver 的布尔开关与枚举字段填充默认值。
+// 默认值逻辑与 v1 保持一致，确保跨版本转换后的对象语义相同。
 func SetDefaults_CSIDriver(obj *storagev1beta1.CSIDriver) {
+	// 默认需要 attach 操作，且不要求挂载时传递 Pod 信息、不启用容量感知调度。
 	if obj.Spec.AttachRequired == nil {
 		obj.Spec.AttachRequired = new(bool)
 		*(obj.Spec.AttachRequired) = true
@@ -57,6 +63,7 @@ func SetDefaults_CSIDriver(obj *storagev1beta1.CSIDriver) {
 		obj.Spec.FSGroupPolicy = new(storagev1beta1.FSGroupPolicy)
 		*obj.Spec.FSGroupPolicy = storagev1beta1.ReadWriteOnceWithFSTypeFSGroupPolicy
 	}
+	// 生命周期模式列表为空时默认按 CSI 规范支持持久卷。
 	if len(obj.Spec.VolumeLifecycleModes) == 0 {
 		obj.Spec.VolumeLifecycleModes = append(obj.Spec.VolumeLifecycleModes, storagev1beta1.VolumeLifecyclePersistent)
 	}
@@ -64,6 +71,7 @@ func SetDefaults_CSIDriver(obj *storagev1beta1.CSIDriver) {
 		obj.Spec.RequiresRepublish = new(bool)
 		*(obj.Spec.RequiresRepublish) = false
 	}
+	// 特性门控开启时才填充 SELinuxMount 默认值，避免门控关闭时注入仅在该特性下有意义的配置。
 	if obj.Spec.SELinuxMount == nil && utilfeature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
 		obj.Spec.SELinuxMount = new(bool)
 		*(obj.Spec.SELinuxMount) = false

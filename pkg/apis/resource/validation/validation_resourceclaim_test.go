@@ -36,6 +36,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// testClaim 构造一个最小合法的 ResourceClaim，spec 深拷贝后供各场景局部修改。
 func testClaim(name, namespace string, spec resource.ResourceClaimSpec) *resource.ResourceClaim {
 	return &resource.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -46,6 +47,7 @@ func testClaim(name, namespace string, spec resource.ResourceClaimSpec) *resourc
 	}
 }
 
+// 测试中共享的合法/非法取值。集中定义便于断言中精确引用预期错误值。
 const (
 	goodName          = "foo"
 	goodName2         = "bar"
@@ -54,6 +56,7 @@ const (
 	badSubrequestName = "&^%$"
 )
 
+// 共享的测试数据：合法 spec、非法请求名组合，以及可复用的合法 CEL selector。
 var (
 	badRequestFormat      = fmt.Sprintf("%s/%s/%s", goodName, goodName, goodName)
 	badFullSubrequestName = fmt.Sprintf("%s/%s", badName, badSubrequestName)
@@ -101,6 +104,9 @@ var (
 	conditionValidationErrMessage = "name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]')"
 )
 
+// TestValidateClaim 覆盖 ResourceClaim 创建校验的主要分支：
+// 元数据、request/constraint/config 的引用关系、分配模式、CEL 表达式、
+// 派生属性，以及 feature gate 对校验行为的影响。
 func TestValidateClaim(t *testing.T) {
 	now := metav1.Now()
 	badValue := "spaces not allowed"
@@ -305,6 +311,7 @@ func TestValidateClaim(t *testing.T) {
 				field.TooMany(field.NewPath("spec", "devices", "constraints"), resource.DeviceConstraintsMaxSize+1, resource.DeviceConstraintsMaxSize).MarkCoveredByDeclarative(),
 				field.TooMany(field.NewPath("spec", "devices", "config"), resource.DeviceConfigMaxSize+1, resource.DeviceConfigMaxSize).MarkCoveredByDeclarative(),
 			},
+			// 同时构造约束和配置中的非法请求引用，验证两类字段都会报错。
 			claim: func() *resource.ResourceClaim {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
 				claim.Spec.Devices.Constraints = []resource.DeviceConstraint{
@@ -319,6 +326,7 @@ func TestValidateClaim(t *testing.T) {
 						MatchAttribute: nil,
 					},
 				}
+				// 超过上限后，校验会短路，不再逐项报告内部字段错误。
 				for i := len(claim.Spec.Devices.Constraints); i < resource.DeviceConstraintsMaxSize+1; i++ {
 					claim.Spec.Devices.Constraints = append(claim.Spec.Devices.Constraints, resource.DeviceConstraint{MatchAttribute: ptr.To(resource.FullyQualifiedName("foo/bar"))})
 				}
@@ -345,6 +353,7 @@ func TestValidateClaim(t *testing.T) {
 						},
 					})
 				}
+				// 复制合法 request 并改名，快速构造大量合法项以触发数量上限。
 				for i := len(claim.Spec.Devices.Requests); i < resource.DeviceRequestsMaxSize+1; i++ {
 					req := claim.Spec.Devices.Requests[0].DeepCopy()
 					req.Name += fmt.Sprintf("%d", i)
@@ -383,6 +392,7 @@ func TestValidateClaim(t *testing.T) {
 		"valid-request": {
 			claim: func() *resource.ResourceClaim {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
+				// 恰好填满上限，验证边界值本身合法。
 				for i := len(claim.Spec.Devices.Constraints); i < resource.DeviceConstraintsMaxSize; i++ {
 					claim.Spec.Devices.Constraints = append(claim.Spec.Devices.Constraints, resource.DeviceConstraint{MatchAttribute: ptr.To(resource.FullyQualifiedName("foo/bar"))})
 				}
@@ -456,6 +466,7 @@ func TestValidateClaim(t *testing.T) {
 			claim: func() *resource.ResourceClaim {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
 
+				// 依次构造：合法 All 模式、负数 Count、非法模式、All 模式带 Count、重名 request。
 				goodReq := &claim.Spec.Devices.Requests[0]
 				goodReq.Name = "foo"
 				goodReq.Exactly.AllocationMode = resource.DeviceAllocationModeExactCount
@@ -470,22 +481,25 @@ func TestValidateClaim(t *testing.T) {
 				req = goodReq.DeepCopy()
 				req.Name += "3"
 				req.Exactly.AllocationMode = resource.DeviceAllocationModeExactCount
+				// Count 必须为正数，否则应报错。
 				req.Exactly.Count = -1
 				claim.Spec.Devices.Requests = append(claim.Spec.Devices.Requests, *req)
 
 				req = goodReq.DeepCopy()
 				req.Name += "4"
+				// 未知分配模式，应被 NotSupported 拒绝。
 				req.Exactly.AllocationMode = resource.DeviceAllocationMode("other")
 				claim.Spec.Devices.Requests = append(claim.Spec.Devices.Requests, *req)
 
 				req = goodReq.DeepCopy()
 				req.Name += "5"
+				// All 模式不允许指定 Count，这里故意设置非零值以触发错误。
 				req.Exactly.AllocationMode = resource.DeviceAllocationModeAll
 				req.Exactly.Count = 2
 				claim.Spec.Devices.Requests = append(claim.Spec.Devices.Requests, *req)
 
 				req = goodReq.DeepCopy()
-				// Same name -> duplicate.
+				// 名称相同，因此应被判为重复项。
 				goodReq.Name = "foo"
 				claim.Spec.Devices.Requests = append(claim.Spec.Devices.Requests, *req)
 
@@ -498,7 +512,7 @@ func TestValidateClaim(t *testing.T) {
 				field.Invalid(field.NewPath("spec", "devices", "config").Index(1).Child("opaque", "parameters"), "<value omitted>", "error parsing data as JSON: unexpected end of JSON input"),
 				field.Invalid(field.NewPath("spec", "devices", "config").Index(2).Child("opaque", "parameters"), "<value omitted>", "must be a valid JSON object"),
 				field.Required(field.NewPath("spec", "devices", "config").Index(3).Child("opaque", "parameters"), ""),
-				field.TooLong(field.NewPath("spec", "devices", "config").Index(5).Child("opaque", "parameters"), "" /* unused */, resource.OpaqueParametersMaxLength),
+				field.TooLong(field.NewPath("spec", "devices", "config").Index(5).Child("opaque", "parameters"), "" /* 该参数未被使用，仅占位。 */, resource.OpaqueParametersMaxLength),
 			},
 			claim: func() *resource.ResourceClaim {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
@@ -518,6 +532,7 @@ func TestValidateClaim(t *testing.T) {
 							Opaque: &resource.OpaqueDeviceConfiguration{
 								Driver: "dra.example.com",
 								Parameters: runtime.RawExtension{
+									// 不完整的 JSON，用于验证 JSON 解析错误。
 									Raw: []byte(`{`),
 								},
 							},
@@ -528,6 +543,7 @@ func TestValidateClaim(t *testing.T) {
 							Opaque: &resource.OpaqueDeviceConfiguration{
 								Driver: "dra.example.com",
 								Parameters: runtime.RawExtension{
+									// 是合法 JSON 但不是对象，应被拒绝。
 									Raw: []byte(`"hello-world"`),
 								},
 							},
@@ -538,6 +554,7 @@ func TestValidateClaim(t *testing.T) {
 							Opaque: &resource.OpaqueDeviceConfiguration{
 								Driver: "dra.example.com",
 								Parameters: runtime.RawExtension{
+									// JSON null 不代表对象，应被拒绝。
 									Raw: []byte(`null`),
 								},
 							},
@@ -558,6 +575,7 @@ func TestValidateClaim(t *testing.T) {
 							Opaque: &resource.OpaqueDeviceConfiguration{
 								Driver: "dra.example.com",
 								Parameters: runtime.RawExtension{
+									// 比长度上限多一个字节，验证边界值检查。
 									Raw: []byte(`{"str": "` + strings.Repeat("x", resource.OpaqueParametersMaxLength-9-2+1 /* too large by one */) + `"}`),
 								},
 							},
@@ -577,13 +595,13 @@ func TestValidateClaim(t *testing.T) {
 				claim.Spec.Devices.Requests[1].Name += "-2"
 				claim.Spec.Devices.Requests[1].Exactly.Selectors = []resource.DeviceSelector{
 					{
-						// Good selector.
+						// 合法选择器，不应产生错误。
 						CEL: &resource.CELDeviceSelector{
 							Expression: `device.driver == "dra.example.com"`,
 						},
 					},
 					{
-						// Bad selector.
+						// 非法选择器，用于触发编译错误。
 						CEL: &resource.CELDeviceSelector{
 							Expression: `device.attributes[true].someBoolean`,
 						},
@@ -594,7 +612,7 @@ func TestValidateClaim(t *testing.T) {
 		},
 		"CEL-length": {
 			wantFailures: field.ErrorList{
-				field.TooLong(field.NewPath("spec", "devices", "requests").Index(1).Child("exactly", "selectors").Index(1).Child("cel", "expression"), "" /*unused*/, resource.CELSelectorExpressionMaxLength),
+				field.TooLong(field.NewPath("spec", "devices", "requests").Index(1).Child("exactly", "selectors").Index(1).Child("cel", "expression"), "" /* 该参数未被使用，仅占位。 */, resource.CELSelectorExpressionMaxLength),
 			},
 			claim: func() *resource.ResourceClaim {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
@@ -603,13 +621,13 @@ func TestValidateClaim(t *testing.T) {
 				expression := `device.driver == ""`
 				claim.Spec.Devices.Requests[1].Exactly.Selectors = []resource.DeviceSelector{
 					{
-						// Good selector.
+						// 合法选择器：长度恰好在上限之内。
 						CEL: &resource.CELDeviceSelector{
 							Expression: strings.ReplaceAll(expression, `""`, `"`+strings.Repeat("x", resource.CELSelectorExpressionMaxLength-len(expression))+`"`),
 						},
 					},
 					{
-						// Too long by one selector.
+						// 超出长度上限一个字符，应报错。
 						CEL: &resource.CELDeviceSelector{
 							Expression: strings.ReplaceAll(expression, `""`, `"`+strings.Repeat("x", resource.CELSelectorExpressionMaxLength-len(expression)+1)+`"`),
 						},
@@ -627,7 +645,7 @@ func TestValidateClaim(t *testing.T) {
 				claim.Spec.Devices.Requests[0].Exactly.Selectors = []resource.DeviceSelector{
 					{
 						CEL: &resource.CELDeviceSelector{
-							// From https://github.com/kubernetes/kubernetes/blob/50fc400f178d2078d0ca46aee955ee26375fc437/test/integration/apiserver/cel/validatingadmissionpolicy_test.go#L2150.
+							// 取自 Kubernetes CEL 集成测试中的高成本表达式，用于触发 cost 上限。
 							Expression: `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(x, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(y, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z2, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z3, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z4, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z5, int('1'.find('[0-9]*')) < 100)))))))`,
 						},
 					},
@@ -652,6 +670,7 @@ func TestValidateClaim(t *testing.T) {
 									Count:           1,
 									DerivedAttributes: []resource.DeviceDerivedAttribute{
 										{
+											// 派生属性名带 derived/ 前缀，可被约束按名称引用。
 											Name:       "derived/sharedNumaNode",
 											Expression: `device.attributes["dra.example.com"]["numa"]`,
 										},
@@ -661,7 +680,8 @@ func TestValidateClaim(t *testing.T) {
 						},
 						Constraints: []resource.DeviceConstraint{
 							{
-								Requests:       []string{goodName},
+								Requests: []string{goodName},
+								// 约束引用上面定义的派生属性，因此该属性是“被使用”的。
 								MatchAttribute: ptr.To(resource.FullyQualifiedName("derived/sharedNumaNode")),
 							},
 						},
@@ -729,7 +749,7 @@ func TestValidateClaim(t *testing.T) {
 						},
 						Constraints: []resource.DeviceConstraint{
 							{
-								// Empty requests means globally applied constraint
+								// requests 为空表示全局约束，作用于该 claim 的所有 request。
 								MatchAttribute: ptr.To(resource.FullyQualifiedName("derived/sharedNumaNode")),
 							},
 						},
@@ -766,7 +786,7 @@ func TestValidateClaim(t *testing.T) {
 						},
 						Constraints: []resource.DeviceConstraint{
 							{
-								Requests:       []string{goodName}, // Parent constraint applies to all subrequests
+								Requests:       []string{goodName}, // 父级约束作用于该 request 下的所有子请求。
 								MatchAttribute: ptr.To(resource.FullyQualifiedName("derived/sharedNumaNode")),
 							},
 						},
@@ -782,7 +802,8 @@ func TestValidateClaim(t *testing.T) {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
 				claim.Spec.Devices.Requests[0].Exactly.DerivedAttributes = []resource.DeviceDerivedAttribute{
 					{
-						Name:       resource.FullyQualifiedName("derived/sharedNumaNode"), // Unreferenced attribute
+						// 校验要求每个派生属性至少被一条针对该 request 的约束引用，否则报错。
+						Name:       resource.FullyQualifiedName("derived/sharedNumaNode"), // 未被任何约束引用的派生属性。
 						Expression: `device.attributes["dra.example.com"]["numa"]`,
 					},
 				}
@@ -811,7 +832,8 @@ func TestValidateClaim(t *testing.T) {
 				}
 				claim.Spec.Devices.Constraints = []resource.DeviceConstraint{
 					{
-						Requests:       []string{goodName2}, // Targets goodName2, NOT goodName
+						// 约束的作用对象必须与被检查的 request 一致，否则不算引用。
+						Requests:       []string{goodName2}, // 该约束指向 goodName2，而非 goodName，因此派生属性仍未被引用。
 						MatchAttribute: ptr.To(resource.FullyQualifiedName("derived/sharedNumaNode")),
 					},
 				}
@@ -830,7 +852,8 @@ func TestValidateClaim(t *testing.T) {
 						Expression: `device.attributes["dra.example.com"]["numa"]`,
 					},
 					{
-						Name:       "derived/sharedNumaNode", // Duplicate name
+						// 同一 request 内派生属性名必须唯一，否则调度时无法确定取值。
+						Name:       "derived/sharedNumaNode", // 名称重复。
 						Expression: `device.attributes["dra.example.com"]["socket"]`,
 					},
 				}
@@ -851,8 +874,9 @@ func TestValidateClaim(t *testing.T) {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
 				claim.Spec.Devices.Requests[0].Exactly.DerivedAttributes = []resource.DeviceDerivedAttribute{
 					{
-						Name:       "derived/sharedNumaNode",
-						Expression: `device.attributes[true].someBoolean`, // Invalid map lookup key type (boolean instead of string)
+						Name: "derived/sharedNumaNode",
+						// CEL 编译期即可发现类型错误，无需等到运行时。
+						Expression: `device.attributes[true].someBoolean`, // map 的键类型非法：这里用了 boolean，应为 string。
 					},
 				}
 				claim.Spec.Devices.Constraints = []resource.DeviceConstraint{
@@ -872,8 +896,9 @@ func TestValidateClaim(t *testing.T) {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
 				claim.Spec.Devices.Requests[0].Exactly.DerivedAttributes = []resource.DeviceDerivedAttribute{
 					{
-						Name:       "derived/sharedNumaNode",
-						Expression: `device.attributes`, // Invalid return type (map instead of primitive scalar or list)
+						Name: "derived/sharedNumaNode",
+						// 派生属性只能求值为基本标量（或开启 gate 时的列表），以便约束直接比较。
+						Expression: `device.attributes`, // 返回类型非法：map 不是允许的基本标量或列表。
 					},
 				}
 				claim.Spec.Devices.Constraints = []resource.DeviceConstraint{
@@ -887,7 +912,7 @@ func TestValidateClaim(t *testing.T) {
 		},
 		"derived-attributes-CEL-length": {
 			wantFailures: field.ErrorList{
-				field.TooLong(field.NewPath("spec", "devices", "requests").Index(0).Child("exactly", "derivedAttributes").Index(0).Child("expression"), "" /*unused*/, resource.CELSelectorExpressionMaxLength),
+				field.TooLong(field.NewPath("spec", "devices", "requests").Index(0).Child("exactly", "derivedAttributes").Index(0).Child("expression"), "" /* 该参数未被使用，仅占位。 */, resource.CELSelectorExpressionMaxLength),
 			},
 			claim: func() *resource.ResourceClaim {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
@@ -895,7 +920,8 @@ func TestValidateClaim(t *testing.T) {
 				claim.Spec.Devices.Requests[0].Exactly.DerivedAttributes = []resource.DeviceDerivedAttribute{
 					{
 						Name: "derived/sharedNumaNode",
-						// Expression length exceeds maximum allowed characters (1023)
+						// 用字符串替换构造精确长度，避免手工计算出错。
+						// 表达式长度超过 1023 字符的上限。
 						Expression: strings.ReplaceAll(expression, `""`, `"`+strings.Repeat("x", resource.CELSelectorExpressionMaxLength-len(expression)+1)+`"`),
 					},
 				}
@@ -909,17 +935,17 @@ func TestValidateClaim(t *testing.T) {
 			}(),
 		},
 
-		// derived-attributes-CEL-cost-under-limit verifies that an expression
-		// with a cost of ~500k-600k is valid because it falls under the 1,000,000 budget limit.
+		// derived-attributes-CEL-cost-under-limit 验证开销约 50 万至 60 万的表达式仍然合法：
+		// 它低于 1,000,000 的预算上限。
 		"derived-attributes-CEL-cost-under-limit": {
 			claim: func() *resource.ResourceClaim {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
 				claim.Spec.Devices.Requests[0].Exactly.DerivedAttributes = []resource.DeviceDerivedAttribute{
 					{
 						Name: "derived/sharedNumaNode1",
-						// This expression uses 5 levels of nested .all() loops over arrays of 10 elements.
-						// Each nesting level multiplies the cost estimate by 10, resulting in a single expression
-						// complexity of ~500k-600k. This is well within the 1,000,000 budget limit.
+						// 该表达式对长度为 10 的数组使用了 5 层嵌套 .all() 循环。
+						// 每嵌套一层，开销估算乘以 10，单个表达式的复杂度约为
+						// 50 万至 60 万，远低于 1,000,000 的预算上限。
 						Expression: `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(x, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(y, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z2, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z3, int('1'.find('[0-9]*')) < 100)))))`,
 					},
 				}
@@ -942,7 +968,7 @@ func TestValidateClaim(t *testing.T) {
 				claim.Spec.Devices.Requests[0].Exactly.DerivedAttributes = []resource.DeviceDerivedAttribute{
 					{
 						Name: "derived/sharedNumaNode1",
-						// This expression uses 7 levels of nested .all() loops, making it exceed the 1,000,000 per-expression budget limit.
+						// 该表达式使用 7 层嵌套 .all() 循环，超过单表达式 1,000,000 的开销预算。
 						Expression: `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(x, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(y, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z2, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z3, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z4, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z5, int('1'.find('[0-9]*')) < 100)))))))`,
 					},
 				}
@@ -955,10 +981,9 @@ func TestValidateClaim(t *testing.T) {
 				return claim
 			}(),
 		},
-		// derived-attributes-CEL-cost-exceeds-limit verifies that the cost limit for derived
-		// attribute CEL expressions is a shared budget across the entire DeviceClaim.
-		// Two derived attributes are defined, each with an expression whose individual
-		// cost is below the limit, but their combined cost exceeds it.
+		// derived-attributes-CEL-cost-exceeds-limit 验证派生属性 CEL 表达式的开销上限是
+		// 整个 DeviceClaim 共享的预算，而不是每个属性各自独立计算。
+		// 这里定义了两个派生属性，每个表达式的开销单独都未超限，但两者合计超出了上限。
 		"derived-attributes-CEL-cost-exceeds-limit": {
 			wantFailures: field.ErrorList{
 				field.Forbidden(field.NewPath("spec", "devices"), "too complex, total cost of derived attribute CEL expressions in the claim exceeds cost limit"),
@@ -968,15 +993,15 @@ func TestValidateClaim(t *testing.T) {
 				claim.Spec.Devices.Requests[0].Exactly.DerivedAttributes = []resource.DeviceDerivedAttribute{
 					{
 						Name: "derived/sharedNumaNode1",
-						// This expression uses 5 levels of nested .all() loops over arrays of 10 elements.
-						// Each nesting level multiplies the cost estimate by 10, resulting in a single expression
-						// complexity of ~500k-600k. This is well within the 1,000,000 budget limit.
+						// 该表达式对长度为 10 的数组使用了 5 层嵌套 .all() 循环。
+						// 每嵌套一层，开销估算乘以 10，单个表达式的复杂度约为
+						// 50 万至 60 万，低于 1,000,000 的预算上限。
 						Expression: `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(x, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(y, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z2, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z3, int('1'.find('[0-9]*')) < 100)))))`,
 					},
 					{
 						Name: "derived/sharedNumaNode2",
-						// The exact same expression as above. By itself, it is valid, but combined with the previous
-						// expression, the total sum of derived attribute costs across the claim exceeds the 1,000,000 limit.
+						// 与上一个表达式完全相同：单独使用合法，但与前一个表达式的开销合计后，
+						// 整个 claim 内派生属性的总开销超过了 1,000,000 的上限。
 						Expression: `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(x, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(y, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z2, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].all(z3, int('1'.find('[0-9]*')) < 100)))))`,
 					},
 				}
@@ -1001,8 +1026,9 @@ func TestValidateClaim(t *testing.T) {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
 				claim.Spec.Devices.Requests[0].Exactly.DerivedAttributes = []resource.DeviceDerivedAttribute{
 					{
-						Name:       "derived/sharedNumaNode",
-						Expression: `[1, 2, 3]`, // List return type (rejected if DRAListTypeAttributes feature gate is disabled)
+						Name: "derived/sharedNumaNode",
+						// 同一个表达式在开关不同时应得到不同结论，用来验证 gate 生效。
+						Expression: `[1, 2, 3]`, // 列表返回类型：DRAListTypeAttributes feature gate 关闭时应被拒绝。
 					},
 				}
 				claim.Spec.Devices.Constraints = []resource.DeviceConstraint{
@@ -1021,7 +1047,7 @@ func TestValidateClaim(t *testing.T) {
 				claim.Spec.Devices.Requests[0].Exactly.DerivedAttributes = []resource.DeviceDerivedAttribute{
 					{
 						Name:       "derived/sharedNumaNode",
-						Expression: `[1, 2, 3]`, // List return type (allowed if DRAListTypeAttributes feature gate is enabled)
+						Expression: `[1, 2, 3]`, // 列表返回类型：DRAListTypeAttributes feature gate 开启时允许。
 					},
 				}
 				claim.Spec.Devices.Constraints = []resource.DeviceConstraint{
@@ -1034,6 +1060,7 @@ func TestValidateClaim(t *testing.T) {
 			}(),
 			listTypeAttributesFeatureGate: true,
 		},
+		// firstAvailable 表示按优先级尝试多个子请求，与 exactly 互斥。
 		"prioritized-list-valid": {
 			wantFailures: nil,
 			claim: func() *resource.ResourceClaim {
@@ -1064,6 +1091,7 @@ func TestValidateClaim(t *testing.T) {
 			},
 			claim: func() *resource.ResourceClaim {
 				claim := testClaim(goodName, goodNS, validClaimSpecWithFirstAvailable)
+				// 即使是零值 Exactly，只要非空就意味着同时设置了两个互斥字段。
 				claim.Spec.Devices.Requests[0].Exactly = &resource.ExactDeviceRequest{}
 				return claim
 			}(),
@@ -1100,6 +1128,7 @@ func TestValidateClaim(t *testing.T) {
 				claim := testClaim(goodName, goodNS, validClaimSpec)
 				claim.Spec.Devices.Requests[0].Exactly = nil
 				var subRequests []resource.DeviceSubRequest
+				// 生成 9 个子请求，超过 firstAvailable 的 8 个上限。
 				for i := 0; i <= 8; i++ {
 					subRequests = append(subRequests, resource.DeviceSubRequest{
 						Name:            fmt.Sprintf("subreq-%d", i),
@@ -1234,16 +1263,18 @@ func TestValidateClaim(t *testing.T) {
 				claim := testClaim(goodName, goodNS, validClaimSpecWithFirstAvailable)
 				claim.Spec.Devices.Requests[0].FirstAvailable[0].Tolerations = []resource.DeviceToleration{
 					{
-						// One invalid case to verify the field path.
-						// Full test for validateDeviceToleration is below.
+						// 这里只放一个非法用例，用于校验字段路径是否正确；
+						// validateDeviceToleration 的完整测试见下文。
 						Operator: "",
 					},
 				}
 				claim.Spec.Devices.Requests = append(claim.Spec.Devices.Requests, *validClaimSpec.Devices.Requests[0].DeepCopy())
+				// 第二个 request 用于集中放置 toleration 的各类非法值。
 				claim.Spec.Devices.Requests[1].Name += "-other"
 				claim.Spec.Devices.Requests[1].Exactly.Tolerations = []resource.DeviceToleration{
 					{
-						// Minimal valid toleration: match all taints.
+						// operator 为 Exists 时无需 key/value，是校验允许的最小组合。
+						// 最小合法 toleration：匹配所有 taint。
 						Operator: resource.DeviceTolerationOpExists,
 					},
 					{
@@ -1258,7 +1289,7 @@ func TestValidateClaim(t *testing.T) {
 						Effect:   resource.DeviceTaintEffectNoSchedule,
 					},
 					{
-						// Invalid, operator is required.
+						// 非法：operator 为必填字段。
 						Operator: "",
 					},
 					{
@@ -1277,6 +1308,7 @@ func TestValidateClaim(t *testing.T) {
 		},
 	}
 
+	// feature gate 按场景显式设置，避免测试间的全局状态相互干扰。
 	for name, scenario := range scenarios {
 		t.Run(name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -1289,6 +1321,8 @@ func TestValidateClaim(t *testing.T) {
 	}
 }
 
+// TestValidateClaimUpdate 验证 spec 在更新时不可变，
+// 以及历史遗留的超长配置在未被修改时仍然允许通过。
 func TestValidateClaimUpdate(t *testing.T) {
 	scenarios := map[string]struct {
 		oldClaim     *resource.ResourceClaim
@@ -1325,7 +1359,8 @@ func TestValidateClaimUpdate(t *testing.T) {
 				return claim
 			}(),
 			update: func(claim *resource.ResourceClaim) *resource.ResourceClaim {
-				// No changes -> remains valid.
+				// 这是兼容性测试：旧对象可能携带现在非法的配置，未改动时不应被更新请求阻断。
+				// 没有任何改动，应仍然合法。
 				return claim
 			},
 		},
@@ -1333,6 +1368,7 @@ func TestValidateClaimUpdate(t *testing.T) {
 
 	for name, scenario := range scenarios {
 		t.Run(name, func(t *testing.T) {
+			// 更新校验不应因为 ResourceVersion 这类元数据而失败。
 			scenario.oldClaim.ResourceVersion = "1"
 			errs := ValidateResourceClaimUpdate(scenario.update(scenario.oldClaim.DeepCopy()), scenario.oldClaim)
 			assertFailures(t, scenario.wantFailures, errs)
@@ -1340,6 +1376,8 @@ func TestValidateClaimUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateClaimStatusUpdate 覆盖状态更新规则：分配结果不可变、预留引用、
+// shareID 与设备状态合法性，以及多个 DRA feature gate 开关下的差异化行为。
 func TestValidateClaimStatusUpdate(t *testing.T) {
 	goodShareID := types.UID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	goodShareID2 := types.UID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
@@ -1354,17 +1392,18 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 		Allocation: &resource.AllocationResult{
 			Devices: resource.DeviceAllocationResult{
 				Results: []resource.DeviceRequestAllocationResult{{
-					Request:     goodName,
-					Driver:      goodName,
-					Pool:        goodName,
-					Device:      goodName,
-					AdminAccess: ptr.To(false), // Required for new allocations.
+					Request: goodName,
+					Driver:  goodName,
+					Pool:    goodName,
+					Device:  goodName,
+					// 1.35 起 AdminAccess 为必填；旧对象通过仿真版本兼容。
+					AdminAccess: ptr.To(false), // 新分配必须显式设置该字段。
 				}},
 			},
 		},
 	}
 	validAllocatedClaimOld := validAllocatedClaim.DeepCopy()
-	validAllocatedClaimOld.Status.Allocation.Devices.Results[0].AdminAccess = nil // Not required in 1.31.
+	validAllocatedClaimOld.Status.Allocation.Devices.Results[0].AdminAccess = nil // 1.31 版本不要求设置该字段。
 
 	scenarios := map[string]struct {
 		adminAccess                   bool
@@ -1431,11 +1470,12 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 				claim.Status.Allocation = &resource.AllocationResult{
 					Devices: resource.DeviceAllocationResult{
 						Results: []resource.DeviceRequestAllocationResult{{
-							Request:     goodName,
-							Driver:      goodName,
-							Pool:        goodName,
-							Device:      goodName,
-							AdminAccess: nil, // Intentionally not set.
+							Request: goodName,
+							Driver:  goodName,
+							Pool:    goodName,
+							Device:  goodName,
+							// 同一字段在新旧版本要求不同，是状态兼容性测试的核心。
+							AdminAccess: nil, // 故意不设置，用于验证旧版本数据的兼容性。
 						}},
 					},
 				}
@@ -1448,7 +1488,7 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 			update: func(claim *resource.ResourceClaim) *resource.ResourceClaim {
 				claim.Status.Allocation = &resource.AllocationResult{
 					NodeSelector: &core.NodeSelector{
-						// Must not be empty.
+						// nodeSelector 不能为空，否则应报错。
 					},
 				}
 				return claim
@@ -1665,7 +1705,7 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 				field.Required(field.NewPath("status", "allocation", "devices", "config").Index(3).Child("opaque"), ""),
 				field.Required(field.NewPath("status", "allocation", "devices", "config").Index(4).Child("opaque", "driver"), "").MarkCoveredByDeclarative(),
 				field.Required(field.NewPath("status", "allocation", "devices", "config").Index(4).Child("opaque", "parameters"), ""),
-				field.TooLong(field.NewPath("status", "allocation", "devices", "config").Index(6).Child("opaque", "parameters"), "" /* unused */, resource.OpaqueParametersMaxLength),
+				field.TooLong(field.NewPath("status", "allocation", "devices", "config").Index(6).Child("opaque", "parameters"), "" /* 该参数未被使用，仅占位。 */, resource.OpaqueParametersMaxLength),
 			},
 			oldClaim: validClaim,
 			update: func(claim *resource.ResourceClaim) *resource.ResourceClaim {
@@ -1733,7 +1773,7 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 							},
 						},
 					},
-					// Other invalid resource.DeviceConfiguration are covered elsewhere. */
+					// 其他非法的 resource.DeviceConfiguration 已在别处覆盖。
 				}
 				return claim
 			},
@@ -1756,7 +1796,7 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 				return claim
 			}(),
 			update: func(claim *resource.ResourceClaim) *resource.ResourceClaim {
-				// No change -> remains valid.
+				// 没有任何改动，校验时旧值已超长也应视为合法。
 				return claim
 			},
 		},
@@ -1821,8 +1861,8 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 							Raw: []byte(`{"kind": "foo", "apiVersion": "dra.example.com/v1"}`),
 						},
 						NetworkData: &resource.NetworkDeviceData{
-							InterfaceName:   strings.Repeat("𝄞", 256/4), // the G clef unicode character is exactly 4 bytes so repeating this 256/4 times means that it is exactly 256 bytes worth of length and should be valid.
-							HardwareAddress: strings.Repeat("𝄞", 128/4), // the G clef unicode character is exactly 4 bytes so repeating this 128/4 times means that it is exactly 128 bytes worth of length and should be valid.
+							InterfaceName:   strings.Repeat("𝄞", 256/4), // 高音谱号字符恰好占 4 字节，重复 64 次正好为 256 字节，应合法。
+							HardwareAddress: strings.Repeat("𝄞", 128/4), // 该字符占 4 字节，重复 32 次正好为 128 字节，应合法。
 							IPs: []string{
 								"10.9.8.0/24",
 								"2001:db8::/64",
@@ -1943,8 +1983,8 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 						Pool:   goodName,
 						Device: goodName,
 						NetworkData: &resource.NetworkDeviceData{
-							InterfaceName:   strings.Repeat("𝄞", resource.NetworkDeviceDataInterfaceNameMaxLength),   // the G clef unicode character is exactly 4 bytes in length and should exceed the byte length limit for this field by a factor of 4
-							HardwareAddress: strings.Repeat("𝄞", resource.NetworkDeviceDataHardwareAddressMaxLength), // the G clef unicode character is exactly 4 bytes in length and should exceed the byte length limit for this field by a factor of 4
+							InterfaceName:   strings.Repeat("𝄞", resource.NetworkDeviceDataInterfaceNameMaxLength),   // 高音谱号占 4 字节，按字符数上限重复会使字节数超出上限 4 倍。
+							HardwareAddress: strings.Repeat("𝄞", resource.NetworkDeviceDataHardwareAddressMaxLength), // 同理，按字符数上限重复会超出字节数上限 4 倍。
 							IPs: []string{
 								"300.9.8.0/24",
 								"010.009.008.000/24",
@@ -1980,7 +2020,7 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 		"invalid-data-device-status-limits": {
 			wantFailures: field.ErrorList{
 				field.TooMany(field.NewPath("status", "devices").Index(0).Child("conditions"), resource.AllocatedDeviceStatusMaxConditions+1, resource.AllocatedDeviceStatusMaxConditions),
-				field.TooLong(field.NewPath("status", "devices").Index(0).Child("data"), "" /* unused */, resource.AllocatedDeviceStatusDataMaxLength),
+				field.TooLong(field.NewPath("status", "devices").Index(0).Child("data"), "" /* 该参数未被使用，仅占位。 */, resource.AllocatedDeviceStatusDataMaxLength),
 				field.TooMany(field.NewPath("status", "devices").Index(0).Child("networkData", "ips"), resource.NetworkDeviceDataMaxIPs+1, resource.NetworkDeviceDataMaxIPs).MarkCoveredByDeclarative(),
 			},
 			oldClaim: func() *resource.ResourceClaim { return validAllocatedClaim }(),
@@ -2139,7 +2179,7 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 		"invalid-data-device-status-limits-feature-gate": {
 			wantFailures: field.ErrorList{
 				field.TooMany(field.NewPath("status", "devices").Index(0).Child("conditions"), resource.AllocatedDeviceStatusMaxConditions+1, resource.AllocatedDeviceStatusMaxConditions),
-				field.TooLong(field.NewPath("status", "devices").Index(0).Child("data"), "" /* unused */, resource.AllocatedDeviceStatusDataMaxLength),
+				field.TooLong(field.NewPath("status", "devices").Index(0).Child("data"), "" /* 该参数未被使用，仅占位。 */, resource.AllocatedDeviceStatusDataMaxLength),
 				field.TooMany(field.NewPath("status", "devices").Index(0).Child("networkData", "ips"), resource.NetworkDeviceDataMaxIPs+1, resource.NetworkDeviceDataMaxIPs).MarkCoveredByDeclarative(),
 			},
 			oldClaim: func() *resource.ResourceClaim { return validAllocatedClaim }(),
@@ -2780,6 +2820,7 @@ func TestValidateClaimStatusUpdate(t *testing.T) {
 
 	for name, scenario := range scenarios {
 		t.Run(name, func(t *testing.T) {
+			// 关闭 AdminAccess 时回退仿真版本到 1.35，模拟旧版本对象的校验行为。
 			if !scenario.adminAccess {
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 			}

@@ -26,15 +26,17 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
-// Funcs contains the fuzzer functions for the resource group.
+// Funcs 包含 resource API 组的模糊测试函数。
 //
-// Leaving fields empty which then get replaced by the default
-// leads to errors during roundtrip tests.
+// 这里刻意让某些字段保持为空，交由默认值填充逻辑补全；
+// 如果模糊测试随意填充这些字段，往返测试（roundtrip）可能因默认值差异而失败。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(r *resource.ExactDeviceRequest, c randfill.Continue) {
-			c.FillNoCustom(r) // fuzz self without calling this function again
+			c.FillNoCustom(r) // 先填充自身字段，避免递归调用此函数
 
+			// AllocationMode 为空时随机选取合法枚举值，
+			// 否则生成的值可能不是默认值且无法通过往返测试。
 			if r.AllocationMode == "" {
 				r.AllocationMode = []resource.DeviceAllocationMode{
 					resource.DeviceAllocationModeAll,

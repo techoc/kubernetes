@@ -26,6 +26,7 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/rbac/install"
 )
 
+// 测试 v1alpha1 RoleBinding 向内部表示的转换，覆盖 user/group/serviceAccount 的 APIGroup 补全与通配符用户的兼容处理。
 func TestConversion(t *testing.T) {
 	testcases := map[string]struct {
 		old      *v1alpha1.RoleBinding

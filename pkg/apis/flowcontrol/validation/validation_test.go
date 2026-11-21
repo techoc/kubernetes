@@ -34,6 +34,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试 FlowSchema 校验：覆盖规则完整性、Subject/Resource/NonResource 各类联合字段的合法性，以及保留名称的约束。
 func TestFlowSchemaValidation(t *testing.T) {
 	badExempt := flowcontrol.FlowSchemaSpec{
 		MatchingPrecedence: 1,
@@ -733,6 +734,7 @@ func TestFlowSchemaValidation(t *testing.T) {
 	}
 }
 
+// 测试 PriorityLevelConfiguration 校验：包括 exempt/limited 类型约束、并发份额以及版本相关的注解兼容性处理。
 func TestPriorityLevelConfigurationValidation(t *testing.T) {
 	badSpec := flowcontrol.PriorityLevelConfigurationSpec{
 		Type: flowcontrol.PriorityLevelEnablementLimited,
@@ -784,7 +786,7 @@ func TestPriorityLevelConfigurationValidation(t *testing.T) {
 			Name: flowcontrol.PriorityLevelConfigurationNameExempt,
 		},
 		Spec: flowcontrol.PriorityLevelConfigurationSpec{
-			// changing the type from exempt to limited
+			// 把保留的 exempt 类型改为 limited，以测试该保留名称的类型复用限制。
 			Type:   flowcontrol.PriorityLevelEnablementLimited,
 			Exempt: &flowcontrol.ExemptPriorityLevelConfiguration{},
 			Limited: &flowcontrol.LimitedPriorityLevelConfiguration{
@@ -1122,7 +1124,7 @@ func TestPriorityLevelConfigurationValidation(t *testing.T) {
 				},
 			},
 		},
-		// the internal object should never have the round trip annotation
+		// 内部对象不应携带 round-trip 兼容注解，因此这里预期报 Forbidden 错误。
 		requestGV: &schema.GroupVersion{},
 		expectedErrors: field.ErrorList{
 			field.Forbidden(field.NewPath("metadata").Child("annotations"), fmt.Sprintf("annotation '%s' is forbidden", flowcontrolv1beta3.PriorityLevelPreserveZeroConcurrencySharesKey)),
@@ -1174,6 +1176,7 @@ func TestPriorityLevelConfigurationValidation(t *testing.T) {
 	}
 }
 
+// 测试 FlowSchema Status 的校验。
 func TestValidateFlowSchemaStatus(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -1216,6 +1219,7 @@ func TestValidateFlowSchemaStatus(t *testing.T) {
 	}
 }
 
+// 测试 PriorityLevelConfiguration Status 的校验。
 func TestValidatePriorityLevelConfigurationStatus(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -1258,6 +1262,7 @@ func TestValidatePriorityLevelConfigurationStatus(t *testing.T) {
 	}
 }
 
+// 测试非资源 URL 路径的合法性校验。
 func TestValidateNonResourceURLPath(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -1325,6 +1330,7 @@ func TestValidateNonResourceURLPath(t *testing.T) {
 	}
 }
 
+// 测试 Limited 配置的并发份额校验，并覆盖不同请求版本对零份额的兼容行为。
 func TestValidateLimitedPriorityLevelConfiguration(t *testing.T) {
 	errExpectedFn := func(fieldName string, v int32, msg string) field.ErrorList {
 		return field.ErrorList{
@@ -1380,6 +1386,7 @@ func TestValidateLimitedPriorityLevelConfiguration(t *testing.T) {
 	}
 }
 
+// 测试借贷（borrowing）相关字段的校验：lendablePercent 需在 0 到 100 之间，borrowingLimitPercent 若指定则必须非负。
 func TestValidateLimitedPriorityLevelConfigurationWithBorrowing(t *testing.T) {
 	errLendablePercentFn := func(v int32) field.ErrorList {
 		return field.ErrorList{

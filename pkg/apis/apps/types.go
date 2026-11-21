@@ -108,8 +108,8 @@ type RollingUpdateStatefulSetStrategy struct {
 	// Partition are updated. All pods from ordinal Partition-1 to 0 remain untouched.
 	// This is helpful in being able to do a canary based deployment. The default value is 0.
 	Partition int32
-	// The maximum number of pods that can be unavailable during the update.
-	// Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%).
+	// 更新期间允许不可用的 Pod 最大数量。
+	// 值可以是绝对数量（如 5）或期望 Pod 数的百分比（如 10%）。
 	// Absolute number is calculated from percentage by rounding up. This can not be 0.
 	// Defaults to 1. This field is beta-level and is enabled by default. The field applies to all pods in the range 0 to
 	// Replicas-1. That means if there is any unavailable pod in the range 0 to Replicas-1, it
@@ -129,11 +129,11 @@ type PersistentVolumeClaimRetentionPolicyType string
 const (
 	// RetainPersistentVolumeClaimRetentionPolicyType is the default
 	// PersistentVolumeClaimRetentionPolicy and specifies that
-	// PersistentVolumeClaims associated with StatefulSet VolumeClaimTemplates
+	// 与 StatefulSet VolumeClaimTemplates 关联的 PersistentVolumeClaims。
 	// will not be deleted.
 	RetainPersistentVolumeClaimRetentionPolicyType PersistentVolumeClaimRetentionPolicyType = "Retain"
 	// DeletePersistentVolumeClaimRetentionPolicyType specifies that
-	// PersistentVolumeClaims associated with StatefulSet VolumeClaimTemplates
+	// 与 StatefulSet VolumeClaimTemplates 关联的 PersistentVolumeClaims。
 	// will be deleted in the scenario specified in
 	// StatefulSetPersistentVolumeClaimPolicy.
 	DeletePersistentVolumeClaimRetentionPolicyType PersistentVolumeClaimRetentionPolicyType = "Delete"
@@ -180,19 +180,19 @@ type StatefulSetSpec struct {
 	// +optional
 	Replicas int32
 
-	// Selector is a label query over pods that should match the replica count.
+	// Selector 是对 Pod 的标签查询，用于匹配副本数量。
 	// If empty, defaulted to labels on the pod template.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 	// +optional
 	Selector *metav1.LabelSelector
 
-	// Template is the object that describes the pod that will be created if
+	// Template 是描述待创建 Pod 的对象；当
 	// insufficient replicas are detected. Each pod stamped out by the StatefulSet
 	// will fulfill this Template, but have a unique identity from the rest
 	// of the StatefulSet. Each pod will be named with the format
 	// <statefulsetname>-<podindex>. For example, a pod in a StatefulSet named
 	// "web" with index number "3" would be named "web-3".
-	// The only allowed template.spec.restartPolicy value is "Always".
+	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	Template api.PodTemplateSpec
 
 	// VolumeClaimTemplates is a list of claims that pods are allowed to reference.
@@ -235,9 +235,9 @@ type StatefulSetSpec struct {
 	// StatefulSetSpec version. The default value is 10.
 	RevisionHistoryLimit *int32
 
-	// Minimum number of seconds for which a newly created pod should be ready
+	// 新建 Pod 必须保持 Ready 状态的最短秒数。
 	// without any of its container crashing for it to be considered available.
-	// Defaults to 0 (pod will be considered available as soon as it is ready)
+	// 默认为 0，即 Pod 一旦 Ready 就被认为可用。
 	// +optional
 	MinReadySeconds int32
 
@@ -315,13 +315,13 @@ const (
 type StatefulSetCondition struct {
 	// Type of statefulset condition.
 	Type StatefulSetConditionType
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False 或 Unknown。
 	Status api.ConditionStatus
-	// The last time this condition was updated.
+	// 该条件最近一次更新的时间。
 	LastTransitionTime metav1.Time
-	// The reason for the condition's last transition.
+	// 条件最近一次状态变化的原因。
 	Reason string
-	// A human readable message indicating details about the transition.
+	// 用自然语言描述状态变化的详细信息。
 	Message string
 }
 
@@ -345,8 +345,8 @@ type StatefulSetList struct {
 // the Data field. ControllerRevisions may, however, be deleted.
 type ControllerRevision struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准的对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta
 
@@ -397,21 +397,21 @@ type DeploymentSpec struct {
 	Selector *metav1.LabelSelector
 
 	// Template describes the pods that will be created.
-	// The only allowed template.spec.restartPolicy value is "Always".
+	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	Template api.PodTemplateSpec
 
 	// The deployment strategy to use to replace existing pods with new ones.
 	// +optional
 	Strategy DeploymentStrategy
 
-	// Minimum number of seconds for which a newly created pod should be ready
-	// without any of its container crashing, for it to be considered available.
-	// Defaults to 0 (pod will be considered available as soon as it is ready)
+	// 新建 Pod 必须保持 Ready 状态的最短秒数。
+	// 且没有任何容器崩溃，才会被视为可用。
+	// 默认为 0，即 Pod 一旦 Ready 就被认为可用。
 	// +optional
 	MinReadySeconds int32
 
 	// The number of old ReplicaSets to retain to allow rollback.
-	// This is a pointer to distinguish between explicit zero and not specified.
+	// 使用指针类型，以区分显式设置为 0 与未设置。
 	// This is set to the max value of int32 (i.e. 2147483647) by default, which means
 	// "retaining all old ReplicaSets".
 	// +optional
@@ -422,7 +422,7 @@ type DeploymentSpec struct {
 	// +optional
 	Paused bool
 
-	// DEPRECATED.
+	// 已弃用。
 	// The config this deployment is rolling back to. Will be cleared after rollback is done.
 	// +optional
 	RollbackTo *RollbackConfig
@@ -440,7 +440,7 @@ type DeploymentSpec struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // DeploymentRollback stores the information required to rollback a deployment.
-// DEPRECATED.
+// 已弃用。
 type DeploymentRollback struct {
 	metav1.TypeMeta
 	// Required: This must match the Name of a deployment.
@@ -453,7 +453,7 @@ type DeploymentRollback struct {
 }
 
 // RollbackConfig specifies the state of a revision to roll back to.
-// DEPRECATED.
+// 已弃用。
 type RollbackConfig struct {
 	// The revision to rollback to. If set to 0, rollback to the last revision.
 	// +optional
@@ -477,7 +477,7 @@ type DeploymentStrategy struct {
 	// Rolling update config params. Present only if DeploymentStrategyType =
 	// RollingUpdate.
 	//---
-	// TODO: Update this to follow our convention for oneOf, whatever we decide it
+	// TODO: 按我们最终确定的 oneOf 约定更新此处，
 	// to be.
 	// +optional
 	RollingUpdate *RollingUpdateDeployment
@@ -496,7 +496,7 @@ const (
 
 // RollingUpdateDeployment is the spec to control the desired behavior of rolling update.
 type RollingUpdateDeployment struct {
-	// The maximum number of pods that can be unavailable during the update.
+	// 更新期间允许不可用的 Pod 最大数量。
 	// Value can be an absolute number (ex: 5) or a percentage of total pods at the start of update (ex: 10%).
 	// Absolute number is calculated from percentage by rounding down.
 	// This can not be 0 if MaxSurge is 0.
@@ -554,7 +554,7 @@ type DeploymentStatus struct {
 	// Total number of terminating pods targeted by this deployment. Terminating pods have a non-null
 	// .metadata.deletionTimestamp and have not yet reached the Failed or Succeeded .status.phase.
 	//
-	// This is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default).
+	// 这是 beta 字段，需要开启 DeploymentReplicaSetTerminatingReplicas 特性（默认开启）。
 	// +optional
 	TerminatingReplicas *int32
 
@@ -590,15 +590,15 @@ const (
 type DeploymentCondition struct {
 	// Type of deployment condition.
 	Type DeploymentConditionType
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False 或 Unknown。
 	Status api.ConditionStatus
-	// The last time this condition was updated.
+	// 该条件最近一次更新的时间。
 	LastUpdateTime metav1.Time
-	// Last time the condition transitioned from one status to another.
+	// 条件最近一次从一种状态变为另一种状态的时间。
 	LastTransitionTime metav1.Time
-	// The reason for the condition's last transition.
+	// 条件最近一次状态变化的原因。
 	Reason string
-	// A human readable message indicating details about the transition.
+	// 用自然语言描述状态变化的详细信息。
 	Message string
 }
 
@@ -622,7 +622,7 @@ type DaemonSetUpdateStrategy struct {
 
 	// Rolling update config params. Present only if type = "RollingUpdate".
 	//---
-	// TODO: Update this to follow our convention for oneOf, whatever we decide it
+	// TODO: 按我们最终确定的 oneOf 约定更新此处，
 	// to be. Same as Deployment `strategy.rollingUpdate`.
 	// See https://github.com/kubernetes/kubernetes/issues/35345
 	// +optional
@@ -649,8 +649,8 @@ type RollingUpdateDaemonSet struct {
 	// number is calculated from percentage by rounding up.
 	// This cannot be 0 if MaxSurge is 0
 	// Default value is 1.
-	// Example: when this is set to 30%, at most 30% of the total number of nodes
-	// that should be running the daemon pod (i.e. status.desiredNumberScheduled)
+	// 示例：设为 30% 时，最多允许 30% 的节点
+	// （即 status.desiredNumberScheduled）处于不可用状态。
 	// can have their pods stopped for an update at any given time. The update
 	// starts by stopping at most 30% of those DaemonSet pods and then brings
 	// up new DaemonSet pods in their place. Once the new pods are available,
@@ -662,12 +662,12 @@ type RollingUpdateDaemonSet struct {
 
 	// The maximum number of nodes with an existing available DaemonSet pod that
 	// can have an updated DaemonSet pod during during an update.
-	// Value can be an absolute number (ex: 5) or a percentage of desired pods (ex: 10%).
+	// 值可以是绝对数量（如 5）或期望 Pod 数的百分比（如 10%）。
 	// This can not be 0 if MaxUnavailable is 0.
 	// Absolute number is calculated from percentage by rounding up to a minimum of 1.
 	// Default value is 0.
-	// Example: when this is set to 30%, at most 30% of the total number of nodes
-	// that should be running the daemon pod (i.e. status.desiredNumberScheduled)
+	// 示例：设为 30% 时，最多允许 30% 的节点
+	// （即 status.desiredNumberScheduled）处于不可用状态。
 	// can have their a new pod created before the old pod is marked as deleted.
 	// The update starts by launching new pods on 30% of nodes. Once an updated
 	// pod is available (Ready for at least minReadySeconds) the old DaemonSet pod
@@ -685,7 +685,7 @@ type RollingUpdateDaemonSet struct {
 // DaemonSetSpec is the specification of a daemon set.
 type DaemonSetSpec struct {
 	// A label query over pods that are managed by the daemon set.
-	// Must match in order to be controlled.
+	// 必须匹配才能被控制。
 	// If empty, defaulted to labels on Pod template.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 	// +optional
@@ -695,7 +695,7 @@ type DaemonSetSpec struct {
 	// The DaemonSet will create exactly one copy of this pod on every node
 	// that matches the template's node selector (or on every node if no node
 	// selector is specified).
-	// The only allowed template.spec.restartPolicy value is "Always".
+	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	// More info: https://kubernetes.io/docs/concepts/workloads/controllers/replicationcontroller#pod-template
 	Template api.PodTemplateSpec
 
@@ -710,14 +710,14 @@ type DaemonSetSpec struct {
 	// +optional
 	MinReadySeconds int32
 
-	// DEPRECATED.
+	// 已弃用。
 	// A sequence number representing a specific generation of the template.
 	// Populated by the system. It can be set only during the creation.
 	// +optional
 	TemplateGeneration int64
 
 	// The number of old history to retain to allow rollback.
-	// This is a pointer to distinguish between explicit zero and not specified.
+	// 使用指针类型，以区分显式设置为 0 与未设置。
 	// Defaults to 10.
 	// +optional
 	RevisionHistoryLimit *int32
@@ -749,13 +749,13 @@ type DaemonSetStatus struct {
 	// +optional
 	UpdatedNumberScheduled int32
 
-	// The number of nodes that should be running the
+	// 应当运行该
 	// daemon pod and have one or more of the daemon pod running and
 	// available (ready for at least spec.minReadySeconds)
 	// +optional
 	NumberAvailable int32
 
-	// The number of nodes that should be running the
+	// 应当运行该
 	// daemon pod and have none of the daemon pod running and available
 	// (ready for at least spec.minReadySeconds)
 	// +optional
@@ -780,13 +780,13 @@ type DaemonSetConditionType string
 type DaemonSetCondition struct {
 	// Type of DaemonSet condition.
 	Type DaemonSetConditionType
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False 或 Unknown。
 	Status api.ConditionStatus
-	// Last time the condition transitioned from one status to another.
+	// 条件最近一次从一种状态变为另一种状态的时间。
 	LastTransitionTime metav1.Time
-	// The reason for the condition's last transition.
+	// 条件最近一次状态变化的原因。
 	Reason string
-	// A human readable message indicating details about the transition.
+	// 用自然语言描述状态变化的详细信息。
 	Message string
 }
 
@@ -795,21 +795,21 @@ type DaemonSetCondition struct {
 // DaemonSet represents the configuration of a daemon set.
 type DaemonSet struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准的对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta
 
 	// The desired behavior of this daemon set.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Spec DaemonSetSpec
 
 	// The current status of this daemon set. This data may be
-	// out of date by some window of time.
+	// 在一段时间内处于过期状态。
 	// Populated by the system.
 	// Read-only.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status DaemonSetStatus
 }
@@ -827,8 +827,8 @@ const (
 // DaemonSetList is a collection of daemon sets.
 type DaemonSetList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 
@@ -849,7 +849,7 @@ type ReplicaSet struct {
 	Spec ReplicaSetSpec
 
 	// Status is the current status of this ReplicaSet. This data may be
-	// out of date by some window of time.
+	// 在一段时间内处于过期状态。
 	// +optional
 	Status ReplicaSetStatus
 }
@@ -872,22 +872,22 @@ type ReplicaSetSpec struct {
 	// Replicas is the number of desired replicas.
 	Replicas int32
 
-	// Minimum number of seconds for which a newly created pod should be ready
-	// without any of its container crashing, for it to be considered available.
-	// Defaults to 0 (pod will be considered available as soon as it is ready)
+	// 新建 Pod 必须保持 Ready 状态的最短秒数。
+	// 且没有任何容器崩溃，才会被视为可用。
+	// 默认为 0，即 Pod 一旦 Ready 就被认为可用。
 	// +optional
 	MinReadySeconds int32
 
-	// Selector is a label query over pods that should match the replica count.
-	// Must match in order to be controlled.
+	// Selector 是对 Pod 的标签查询，用于匹配副本数量。
+	// 必须匹配才能被控制。
 	// If empty, defaulted to labels on pod template.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 	// +optional
 	Selector *metav1.LabelSelector
 
-	// Template is the object that describes the pod that will be created if
+	// Template 是描述待创建 Pod 的对象；当
 	// insufficient replicas are detected.
-	// The only allowed template.spec.restartPolicy value is "Always".
+	// template.spec.restartPolicy 唯一允许的值是 "Always"。
 	// +optional
 	Template api.PodTemplateSpec
 }
@@ -913,7 +913,7 @@ type ReplicaSetStatus struct {
 	// The number of terminating pods for this replica set. Terminating pods have a non-null .metadata.deletionTimestamp
 	// and have not yet reached the Failed or Succeeded .status.phase.
 	//
-	// This is a beta field and requires enabling DeploymentReplicaSetTerminatingReplicas feature (enabled by default).
+	// 这是 beta 字段，需要开启 DeploymentReplicaSetTerminatingReplicas 特性（默认开启）。
 	// +optional
 	TerminatingReplicas *int32
 
@@ -941,15 +941,15 @@ const (
 type ReplicaSetCondition struct {
 	// Type of replica set condition.
 	Type ReplicaSetConditionType
-	// Status of the condition, one of True, False, Unknown.
+	// 条件的状态，取值为 True、False 或 Unknown。
 	Status api.ConditionStatus
 	// The last time the condition transitioned from one status to another.
 	// +optional
 	LastTransitionTime metav1.Time
-	// The reason for the condition's last transition.
+	// 条件最近一次状态变化的原因。
 	// +optional
 	Reason string
-	// A human readable message indicating details about the transition.
+	// 用自然语言描述状态变化的详细信息。
 	// +optional
 	Message string
 }

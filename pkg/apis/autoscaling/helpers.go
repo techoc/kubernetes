@@ -16,12 +16,11 @@ limitations under the License.
 
 package autoscaling
 
-// DropRoundTripHorizontalPodAutoscalerAnnotations removes any annotations used to
-// serialize round-tripped fields from HorizontalPodAutoscaler later API versions,
-// and returns false if no changes were made and the original input object was returned.
+// DropRoundTripHorizontalPodAutoscalerAnnotations 移除 HorizontalPodAutoscaler 中
+// 用于在高版本 API 间往返保存字段的所有注解。
+// 如果没有任何改动，返回原始输入 map 和 false，调用方据此可以避免不必要的拷贝。
 //
-// It should always be called when converting internal -> external versions, prior
-// to setting any of the custom annotations:
+// internal -> external 转换时，在设置任何自定义注解之前都应先调用它，例如：
 //
 //	annotations, copiedAnnotations := DropRoundTripHorizontalPodAutoscalerAnnotations(externalObj.Annotations)
 //	externalObj.Annotations = annotations
@@ -41,6 +40,7 @@ func DropRoundTripHorizontalPodAutoscalerAnnotations(in map[string]string) (out 
 	_, hasMetricsStatuses := in[MetricStatusesAnnotation]
 	_, hasConditions := in[HorizontalPodAutoscalerConditionsAnnotation]
 	if hasMetricsSpecs || hasBehaviorSpecs || hasToleranceScaleDown || hasToleranceScaleUp || hasMetricsStatuses || hasConditions {
+		// 必须先拷贝再删除，否则会污染调用方持有的原始 map。
 		out = DeepCopyStringMap(in)
 		delete(out, MetricSpecsAnnotation)
 		delete(out, BehaviorSpecsAnnotation)
@@ -53,8 +53,8 @@ func DropRoundTripHorizontalPodAutoscalerAnnotations(in map[string]string) (out 
 	return in, false
 }
 
-// DeepCopyStringMap returns a copy of the input map.
-// If input is nil, an empty map is returned.
+// DeepCopyStringMap 返回输入 map 的一份拷贝。
+// 输入为 nil 时返回空 map，这样调用方可以直接往结果里写入而无需再判空。
 func DeepCopyStringMap(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for k, v := range in {

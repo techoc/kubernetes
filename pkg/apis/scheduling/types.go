@@ -83,7 +83,7 @@ type PriorityClass struct {
 	Description string
 
 	// preemptionPolicy it the Policy for preempting pods with lower priority.
-	// One of Never, PreemptLowerPriority.
+	// 取值为 Never 或 PreemptLowerPriority。
 	// Defaults to PreemptLowerPriority if unset.
 	// +optional
 	PreemptionPolicy *core.PreemptionPolicy
@@ -94,7 +94,7 @@ type PriorityClass struct {
 // PriorityClassList is a collection of priority classes.
 type PriorityClassList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
+	// 标准列表元数据。
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	metav1.ListMeta
@@ -111,8 +111,8 @@ type PriorityClassList struct {
 // Workload API enablement is toggled by the GenericWorkload feature gate.
 type Workload struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准的对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	//
 	// +optional
 	metav1.ObjectMeta
@@ -128,7 +128,7 @@ type Workload struct {
 // WorkloadList contains a list of Workload resources.
 type WorkloadList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
+	// 标准列表元数据。
 	//
 	// +optional
 	metav1.ListMeta
@@ -150,7 +150,7 @@ type WorkloadSpec struct {
 	// ControllerRef is an optional reference to the controlling object, such as a
 	// Deployment or Job. This field is intended for use by tools like CLIs
 	// to provide a link back to the original workload definition.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	ControllerRef *TypedLocalObjectReference
@@ -218,7 +218,7 @@ type PodGroupTemplate struct {
 
 	// SchedulingConstraints defines optional scheduling constraints (e.g. topology) for this PodGroupTemplate.
 	// This field is only available when the TopologyAwareWorkloadScheduling feature gate is enabled.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	// +featureGate=TopologyAwareWorkloadScheduling
@@ -233,7 +233,7 @@ type PodGroupTemplate struct {
 	// This is a beta-level field and requires that the
 	// DRAWorkloadResourceClaims feature gate is enabled.
 	//
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	// +patchMergeKey=name
@@ -245,30 +245,30 @@ type PodGroupTemplate struct {
 
 	// DisruptionMode defines the mode in which a given PodGroup can be disrupted.
 	// One of Single, All.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	DisruptionMode *DisruptionMode
 
 	// PriorityClassName indicates the priority that should be considered when scheduling
 	// a pod group created from this template.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	PriorityClassName string
 
 	// Priority is the value of priority of pod groups created from this template. Various
 	// system components use this field to find the priority of the pod group.
-	// The higher the value, the higher the priority.
-	// This field is immutable.
+	// 数值越大，优先级越高。
+	// 该字段不可变。
 	//
 	// +optional
 	Priority *int32
 
-	// PreemptionPolicy is the Policy for preempting pods/podgroups with lower priority.
-	// One of Never, PreemptLowerPriority.
-	// This field is immutable.
-	// This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.
+	// PreemptionPolicy 定义抢占低优先级 Pod/PodGroup 的策略。
+	// 取值为 Never 或 PreemptLowerPriority。
+	// 该字段不可变。
+	// 仅当 PodGroupPreemptionPolicy 特性开关开启时该字段才可用。
 	//
 	// +featureGate=PodGroupPreemptionPolicy
 	// +optional
@@ -289,14 +289,14 @@ type CompositePodGroupTemplate struct {
 	SchedulingPolicy CompositePodGroupSchedulingPolicy
 
 	// SchedulingConstraints defines optional scheduling constraints (e.g. topology) for this CompositePodGroupTemplate.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	SchedulingConstraints *CompositePodGroupSchedulingConstraints
 
 	// DisruptionMode defines the mode in which a given CompositePodGroup can be disrupted.
 	// One of Single, All.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	DisruptionMode *CompositeDisruptionMode
@@ -306,7 +306,7 @@ type CompositePodGroupTemplate struct {
 	// admission control can set this to the global default priority class if it exists.
 	// Otherwise, composite pod groups created from this template will have the priority set
 	// to zero.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	PriorityClassName string
@@ -315,16 +315,16 @@ type CompositePodGroupTemplate struct {
 	// Various system components use this field to find the priority of the composite pod group.
 	// When Priority Admission Controller is enabled, it prevents users from setting this field.
 	// The admission controller populates this field from PriorityClassName.
-	// The higher the value, the higher the priority.
-	// This field is immutable.
+	// 数值越大，优先级越高。
+	// 该字段不可变。
 	//
 	// +optional
 	Priority *int32
 
-	// PreemptionPolicy is the Policy for preempting pods/podgroups with lower priority.
-	// One of Never, PreemptLowerPriority.
-	// This field is immutable.
-	// This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.
+	// PreemptionPolicy 定义抢占低优先级 Pod/PodGroup 的策略。
+	// 取值为 Never 或 PreemptLowerPriority。
+	// 该字段不可变。
+	// 仅当 PodGroupPreemptionPolicy 特性开关开启时该字段才可用。
 	//
 	// +featureGate=PodGroupPreemptionPolicy
 	// +optional
@@ -478,8 +478,8 @@ type AllDisruptionMode struct {
 // PodGroup API enablement is toggled by the GenericWorkload feature gate.
 type PodGroup struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准的对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	//
 	// +optional
 	metav1.ObjectMeta
@@ -500,7 +500,7 @@ type PodGroup struct {
 // PodGroupList contains a list of PodGroup resources.
 type PodGroupList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
+	// 标准列表元数据。
 	//
 	// +optional
 	metav1.ListMeta
@@ -515,7 +515,7 @@ type PodGroupSpec struct {
 	// within the same namespace as this pod group.
 	// If it's nil, then this pod group is a root of a workload's hierarchy.
 	// This field is used only when the CompositePodGroup feature gate is enabled.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +featureGate=CompositePodGroup
 	// +optional
@@ -523,20 +523,20 @@ type PodGroupSpec struct {
 
 	// WorkloadRef references an optional PodGroup template within the Workload
 	// object that was used to create the PodGroup.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	WorkloadRef *WorkloadReference
 
 	// SchedulingPolicy defines the scheduling policy for this instance of the PodGroup.
-	// Controllers are expected to fill this field by copying it from a PodGroupTemplate.
+	// 控制器应从 PodGroupTemplate 复制该字段来填充。
 	//
 	// +required
 	SchedulingPolicy PodGroupSchedulingPolicy
 
 	// SchedulingConstraints defines optional scheduling constraints (e.g. topology) for this PodGroup.
-	// Controllers are expected to fill this field by copying it from a PodGroupTemplate.
-	// This field is immutable.
+	// 控制器应从 PodGroupTemplate 复制该字段来填充。
+	// 该字段不可变。
 	// This field is only available when the TopologyAwareWorkloadScheduling feature gate is enabled.
 	//
 	// +optional
@@ -550,7 +550,7 @@ type PodGroupSpec struct {
 	// This is a beta-level field and requires that the
 	// DRAWorkloadResourceClaims feature gate is enabled.
 	//
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	// +patchMergeKey=name
@@ -561,19 +561,19 @@ type PodGroupSpec struct {
 	ResourceClaims []PodGroupResourceClaim
 
 	// DisruptionMode defines the mode in which a given PodGroup can be disrupted.
-	// Controllers are expected to fill this field by copying it from a PodGroupTemplate.
+	// 控制器应从 PodGroupTemplate 复制该字段来填充。
 	// One of Single, All. Defaults to Single if unset.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	DisruptionMode *DisruptionMode
 
 	// PriorityClassName defines the priority that should be considered when scheduling this pod group.
-	// Controllers are expected to fill this field by copying it from a PodGroupTemplate.
+	// 控制器应从 PodGroupTemplate 复制该字段来填充。
 	// Otherwise, it is validated and resolved similarly to the PriorityClassName on PodGroupTemplate
 	// (i.e. if no priority class is specified, admission control can set this to the global default
 	// priority class if it exists. Otherwise, the pod group's priority will be zero).
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	PriorityClassName string
@@ -582,18 +582,18 @@ type PodGroupSpec struct {
 	// use this field to find the priority of the pod group. When Priority Admission
 	// Controller is enabled, it prevents users from setting this field. The admission
 	// controller populates this field from PriorityClassName.
-	// The higher the value, the higher the priority.
-	// This field is immutable.
+	// 数值越大，优先级越高。
+	// 该字段不可变。
 	//
 	// +optional
 	Priority *int32
 
-	// PreemptionPolicy is the Policy for preempting pods/podgroups with lower priority.
+	// PreemptionPolicy 定义抢占低优先级 Pod/PodGroup 的策略。
 	// One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset.
 	// When Priority Admission Controller is enabled, it populates this field from PriorityClassName,
 	// and defaults to PreemptLowerPriority if value is unset in PriorityClass.
-	// This field is immutable.
-	// This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.
+	// 该字段不可变。
+	// 仅当 PodGroupPreemptionPolicy 特性开关开启时该字段才可用。
 	//
 	// +featureGate=PodGroupPreemptionPolicy
 	// +optional
@@ -687,14 +687,14 @@ type WorkloadReference struct {
 	// WorkloadName is the name of the Workload object that contains a template
 	// that was used when creating a pod group. It must
 	// be a DNS name.
-	// This field is required.
+	// 该字段必填。
 	//
 	// +required
 	WorkloadName string
 
 	// TemplateName is the name of a template within the Workload object that
 	// was used to create a pod group. It must be a DNS label.
-	// This field is required.
+	// 该字段必填。
 	//
 	// +required
 	TemplateName string
@@ -731,8 +731,8 @@ type TopologyConstraint struct {
 type CompositePodGroup struct {
 	metav1.TypeMeta
 
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准的对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	//
 	// +optional
 	metav1.ObjectMeta
@@ -753,7 +753,7 @@ type CompositePodGroup struct {
 // CompositePodGroupList contains a list of CompositePodGroup resources.
 type CompositePodGroupList struct {
 	metav1.TypeMeta
-	// Standard list metadata.
+	// 标准列表元数据。
 	//
 	// +optional
 	metav1.ListMeta
@@ -767,47 +767,47 @@ type CompositePodGroupSpec struct {
 	// ParentCompositePodGroupName contains the name of the parent composite pod group
 	// within the same namespace as this composite pod group. It must be a DNS name.
 	// If it's nil, then this composite pod group is a root of a workload's hierarchy.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	ParentCompositePodGroupName *string
 
 	// WorkloadRef references an optional CompositePodGroup template within the
 	// Workload object that was used to create the CompositePodGroup.
-	// This field is required.
-	// This field is immutable.
+	// 该字段必填。
+	// 该字段不可变。
 	//
 	// +required
 	WorkloadRef *WorkloadReference
 
 	// SchedulingPolicy defines the scheduling policy for this instance of the CompositePodGroup.
-	// Controllers are expected to fill this field by copying it from a CompositePodGroupTemplate.
-	// This field is immutable.
+	// 控制器应从 CompositePodGroupTemplate 复制该字段来填充。
+	// 该字段不可变。
 	//
 	// +required
 	SchedulingPolicy CompositePodGroupSchedulingPolicy
 
 	// SchedulingConstraints defines optional scheduling constraints (e.g. topology) for this CompositePodGroup.
-	// Controllers are expected to fill this field by copying it from a CompositePodGroupTemplate.
-	// This field is immutable.
+	// 控制器应从 CompositePodGroupTemplate 复制该字段来填充。
+	// 该字段不可变。
 	//
 	// +optional
 	SchedulingConstraints *CompositePodGroupSchedulingConstraints
 
 	// DisruptionMode defines the mode in which a given CompositePodGroup can be disrupted.
-	// Controllers are expected to fill this field by copying it from a CompositePodGroupTemplate.
+	// 控制器应从 CompositePodGroupTemplate 复制该字段来填充。
 	// One of Single, All. Defaults to Single if unset.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	DisruptionMode *CompositeDisruptionMode
 
 	// PriorityClassName defines the priority that should be considered when scheduling this CompositePodGroup.
-	// Controllers are expected to fill this field by copying it from a CompositePodGroupTemplate.
+	// 控制器应从 CompositePodGroupTemplate 复制该字段来填充。
 	// If left unspecified, it is validated and resolved similarly to the PriorityClassName field in Pods
 	// (i.e. if no priority class is specified, admission control can set this to the global default
 	// priority class if it exists. Otherwise, the composite pod group's priority will be zero).
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	PriorityClassName string
@@ -816,18 +816,18 @@ type CompositePodGroupSpec struct {
 	// use this field to find the priority of the composite pod group. When Priority Admission
 	// Controller is enabled, it prevents users from setting this field. The admission
 	// controller populates this field from PriorityClassName.
-	// The higher the value, the higher the priority.
-	// This field is immutable.
+	// 数值越大，优先级越高。
+	// 该字段不可变。
 	//
 	// +optional
 	Priority *int32
 
-	// PreemptionPolicy is the Policy for preempting pods/podgroups with lower priority.
+	// PreemptionPolicy 定义抢占低优先级 Pod/PodGroup 的策略。
 	// One of Never, PreemptLowerPriority. Defaults to PreemptLowerPriority if unset.
 	// When Priority Admission Controller is enabled, it populates this field from PriorityClassName,
 	// and defaults to PreemptLowerPriority if value is unset in PriorityClass.
-	// This field is immutable.
-	// This field is available only when the PodGroupPreemptionPolicy feature gate is enabled.
+	// 该字段不可变。
+	// 仅当 PodGroupPreemptionPolicy 特性开关开启时该字段才可用。
 	//
 	// +featureGate=PodGroupPreemptionPolicy
 	// +optional
@@ -840,7 +840,7 @@ type CompositePodGroupSpec struct {
 // +union
 type CompositePodGroupSchedulingPolicy struct {
 	// Basic specifies that the groups of this composite group should be scheduled independently.
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	Basic *CompositeBasicSchedulingPolicy

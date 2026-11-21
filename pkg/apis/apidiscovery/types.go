@@ -22,87 +22,87 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// APIGroupDiscoveryList is a resource containing a list of APIGroupDiscovery.
-// This is one of the types able to be returned from the /api and /apis endpoint and contains an aggregated
-// list of API resources (built-ins, Custom Resource Definitions, resources from aggregated servers)
-// that a cluster supports.
+// APIGroupDiscoveryList 是包含 APIGroupDiscovery 列表的资源。
+// 它是 /api 和 /apis 端点可返回的类型之一，包含一个聚合的
+// API 资源列表（内置资源、CRD、来自聚合 server 的资源），
+// 即集群支持的资源。
 type APIGroupDiscoveryList struct {
 	v1.TypeMeta
-	// ResourceVersion will not be set, because this does not have a replayable ordering among multiple apiservers.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 不会设置 ResourceVersion，因为多个 apiserver 之间不存在可重放的顺序。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	v1.ListMeta
-	// items is the list of groups for discovery. The groups are listed in priority order.
+	// items 是用于发现的组列表，按优先级排序。
 	Items []APIGroupDiscovery
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// APIGroupDiscovery holds information about which resources are being served for all version of the API Group.
-// It contains a list of APIVersionDiscovery that holds a list of APIResourceDiscovery types served for a version.
-// Versions are in descending order of preference, with the first version being the preferred entry.
+// APIGroupDiscovery 保存该 API 组所有版本所提供资源的信息。
+// 它包含 APIVersionDiscovery 列表，后者保存某个版本提供的 APIResourceDiscovery 类型列表。
+// 版本按优先级降序排列，第一个是首选版本。
 type APIGroupDiscovery struct {
 	v1.TypeMeta
-	// Standard object's metadata.
-	// The only field completed will be name. For instance, resourceVersion will be empty.
-	// name is the name of the API group whose discovery information is presented here.
-	// name is allowed to be "" to represent the legacy, ungroupified resources.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准的对象元数据。
+	// 只会填充 name 字段，例如 resourceVersion 会是空的。
+	// name 是此处展示发现信息的 API 组名。
+	// name 可以为空字符串，表示传统的无组资源。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	v1.ObjectMeta
-	// versions are the versions supported in this group. They are sorted in descending order of preference,
-	// with the preferred version being the first entry.
+	// versions 是该组支持的版本，按优先级降序排列，
+	// 首选版本排在第一位。
 	// +listType=map
 	// +listMapKey=version
 	Versions []APIVersionDiscovery
 }
 
-// APIVersionDiscovery holds a list of APIResourceDiscovery types that are served for a particular version within an API Group.
+// APIVersionDiscovery 保存某 API 组内特定版本所提供的 APIResourceDiscovery 类型列表。
 type APIVersionDiscovery struct {
-	// version is the name of the version within a group version.
+	// version 是组版本内的版本名。
 	Version string
-	// resources is a list of APIResourceDiscovery objects for the corresponding group version.
+	// resources 是对应组版本的 APIResourceDiscovery 对象列表。
 	// +listType=map
 	// +listMapKey=resource
 	Resources []APIResourceDiscovery
-	// freshness marks whether a group version's discovery document is up to date.
-	// "Current" indicates the discovery document was recently
-	// refreshed. "Stale" indicates the discovery document could not
-	// be retrieved and the returned discovery document may be
-	// significantly out of date. Clients that require the latest
-	// version of the discovery information be retrieved before
-	// performing an operation should not use the aggregated document
-	// and instead retrieve the necessary version docs directly.
+	// freshness 标记某个组版本的发现文档是否是最新的。
+	// "Current" 表示发现文档最近刚
+	// 刷新过。"Stale" 表示无法获取发现文档，
+	// 因此返回的文档可能已经
+	// 明显过时。需要最新发现信息的客户端
+	// 在执行操作前应先直接获取所需版本的文档，
+	// 而不应使用聚合文档。
+	// （承接上一行）。
 	Freshness DiscoveryFreshness
 }
 
-// APIResourceDiscovery provides information about an API resource for discovery.
+// APIResourceDiscovery 提供某个 API 资源的发现信息。
 type APIResourceDiscovery struct {
-	// resource is the plural name of the resource.  This is used in the URL path and is the unique identifier
-	// for this resource across all versions in the API group.
-	// Resources with non-empty groups are located at /apis/<APIGroupDiscovery.objectMeta.name>/<APIVersionDiscovery.version>/<APIResourceDiscovery.Resource>
-	// Resources with empty groups are located at /api/v1/<APIResourceDiscovery.Resource>
+	// resource 是资源的复数名称，用于 URL 路径，是该资源在整个 API 组所有版本中的唯一标识。
+	// （承接上一行）。
+	// 非空组的资源位于 /apis/<APIGroupDiscovery.objectMeta.name>/<APIVersionDiscovery.version>/<APIResourceDiscovery.Resource>
+	// 空组的资源位于 /api/v1/<APIResourceDiscovery.Resource>
 	Resource string
-	// responseKind describes the group, version, and kind of the serialization schema for the object type this endpoint typically returns.
-	// APIs may return other objects types at their discretion, such as error conditions, requests for alternate representations, or other operation specific behavior.
-	// This value will be null or empty if an APIService reports subresources but supports no operations on the parent resource
+	// responseKind 描述该端点通常返回的对象类型所使用的序列化 schema 的组、版本和 kind。
+	// API 可以自行决定返回其他对象类型，例如错误状态、替代表示形式的请求或其他操作相关的行为。
+	// 若 APIService 声明了子资源但不支持对父资源执行任何操作，该值为 null 或空。
 	ResponseKind *v1.GroupVersionKind
-	// scope indicates the scope of a resource, either Cluster or Namespaced
+	// scope 表示资源的作用域，取值为 Cluster 或 Namespaced。
 	Scope ResourceScope
-	// singularResource is the singular name of the resource.  This allows clients to handle plural and singular opaquely.
-	// For many clients the singular form of the resource will be more understandable to users reading messages and should be used when integrating the name of the resource into a sentence.
-	// The command line tool kubectl, for example, allows use of the singular resource name in place of plurals.
-	// The singular form of a resource should always be an optional element - when in doubt use the canonical resource name.
+	// singularResource 是资源的单数名称，使客户端可以统一处理复数与单数形式。
+	// 对许多客户端而言，资源的单数形式在面向用户的消息中更易理解，将资源名嵌入句子时应使用单数形式。
+	// 例如命令行工具 kubectl 允许用单数资源名代替复数形式。
+	// 单数形式应始终是可选元素——不确定时使用规范的资源名。
 	SingularResource string
-	// verbs is a list of supported API operation types (this includes
-	// but is not limited to get, list, watch, create, update, patch,
-	// delete, deletecollection, and proxy).
+	// verbs 是支持的 API 操作类型列表（包括
+	// 但不限于 get、list、watch、create、update、patch、
+	// delete、deletecollection 和 proxy）。
 	// +listType=set
 	Verbs []string
-	// shortNames is a list of suggested short names of the resource.
+	// shortNames 是该资源推荐的简称列表。
 	// +listType=set
 	ShortNames []string
-	// categories is a list of the grouped resources this resource belongs to (e.g. 'all').
+	// categories 是该资源所属的资源分组列表（例如 'all'）。
 	// Clients may use this to simplify acting on multiple resource types at once.
 	// +listType=set
 	Categories []string
@@ -133,7 +133,7 @@ type APISubresourceDiscovery struct {
 	// subresource is the name of the subresource.  This is used in the URL path and is the unique identifier
 	// for this resource across all versions.
 	Subresource string
-	// responseKind describes the group, version, and kind of the serialization schema for the object type this endpoint typically returns.
+	// responseKind 描述该端点通常返回的对象类型所使用的序列化 schema 的组、版本和 kind。
 	// Some subresources do not return normal resources, these will have null or empty return types.
 	ResponseKind *v1.GroupVersionKind
 	// acceptedTypes describes the kinds that this endpoint accepts.
@@ -145,8 +145,8 @@ type APISubresourceDiscovery struct {
 	// +listMapKey=version
 	// +listMapKey=kind
 	AcceptedTypes []v1.GroupVersionKind
-	// verbs is a list of supported API operation types (this includes
-	// but is not limited to get, list, watch, create, update, patch,
+	// verbs 是支持的 API 操作类型列表（包括
+	// 但不限于 get、list、watch、create、update、patch、
 	// delete, deletecollection, and proxy). Subresources may define
 	// custom verbs outside the standard Kubernetes verb set. Clients
 	// should expect the behavior of standard verbs to align with

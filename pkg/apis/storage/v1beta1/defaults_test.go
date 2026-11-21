@@ -55,7 +55,7 @@ func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 func TestSetDefaultVolumeBindingMode(t *testing.T) {
 	class := &storagev1beta1.StorageClass{}
 
-	// field should be defaulted
+	// 该字段应当被默认值填充。
 	defaultMode := storagev1beta1.VolumeBindingImmediate
 	output := roundTrip(t, runtime.Object(class)).(*storagev1beta1.StorageClass)
 	outMode := output.VolumeBindingMode
@@ -69,7 +69,7 @@ func TestSetDefaultVolumeBindingMode(t *testing.T) {
 func TestSetDefaultAttachRequired(t *testing.T) {
 	driver := &storagev1beta1.CSIDriver{}
 
-	// field should be defaulted
+	// 该字段应当被默认值填充。
 	defaultAttach := true
 	defaultPodInfo := false
 	output := roundTrip(t, runtime.Object(driver)).(*storagev1beta1.CSIDriver)
@@ -90,7 +90,7 @@ func TestSetDefaultAttachRequired(t *testing.T) {
 func TestSetDefaultStorageCapacityEnabled(t *testing.T) {
 	driver := &storagev1beta1.CSIDriver{}
 
-	// field should be defaulted
+	// 该字段应当被默认值填充。
 	defaultStorageCapacity := false
 	output := roundTrip(t, runtime.Object(driver)).(*storagev1beta1.CSIDriver)
 	outStorageCapacity := output.Spec.StorageCapacity
@@ -104,7 +104,7 @@ func TestSetDefaultStorageCapacityEnabled(t *testing.T) {
 func TestSetDefaultVolumeLifecycleModesEnabled(t *testing.T) {
 	driver := &storagev1beta1.CSIDriver{}
 
-	// field should be defaulted
+	// 该字段应当被默认值填充。
 	defaultMode := storagev1beta1.VolumeLifecyclePersistent
 	output := roundTrip(t, runtime.Object(driver)).(*storagev1beta1.CSIDriver)
 	outModes := output.Spec.VolumeLifecycleModes
@@ -155,7 +155,7 @@ func TestSetDefaultCSIDriver(t *testing.T) {
 func TestSetDefaultSELinuxMountReadWriteOncePodEnabled(t *testing.T) {
 	driver := &storagev1beta1.CSIDriver{}
 
-	// field should be defaulted
+	// 该字段应当被默认值填充。
 	defaultSELinuxMount := false
 	output := roundTrip(t, runtime.Object(driver)).(*storagev1beta1.CSIDriver)
 	outSELinuxMount := output.Spec.SELinuxMount
@@ -171,7 +171,7 @@ func TestSetDefaultSELinuxMountReadWriteOncePodDisabled(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SELinuxMountReadWriteOncePod, false)
 	driver := &storagev1beta1.CSIDriver{}
 
-	// field should not be defaulted
+	// 该字段不应被默认值填充。
 	output := roundTrip(t, runtime.Object(driver)).(*storagev1beta1.CSIDriver)
 	outSELinuxMount := output.Spec.SELinuxMount
 	if outSELinuxMount != nil {
@@ -183,7 +183,7 @@ func TestSetDefaultPreventPodSchedulingIfMissingVolumeLimitScalingEnabled(t *tes
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeLimitScaling, true)
 	driver := &storagev1beta1.CSIDriver{}
 
-	// field should be defaulted
+	// 该字段应当被默认值填充。
 	defaultPreventPodSchedulingIfMissing := false
 	output := roundTrip(t, runtime.Object(driver)).(*storagev1beta1.CSIDriver)
 	outPreventPodSchedulingIfMissing := output.Spec.PreventPodSchedulingIfMissing
@@ -198,7 +198,7 @@ func TestSetDefaultPreventPodSchedulingIfMissingVolumeLimitScalingDisabled(t *te
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.VolumeLimitScaling, false)
 	driver := &storagev1beta1.CSIDriver{}
 
-	// field should not be defaulted
+	// 该字段不应被默认值填充。
 	output := roundTrip(t, runtime.Object(driver)).(*storagev1beta1.CSIDriver)
 	outPreventPodSchedulingIfMissing := output.Spec.PreventPodSchedulingIfMissing
 	if outPreventPodSchedulingIfMissing != nil {

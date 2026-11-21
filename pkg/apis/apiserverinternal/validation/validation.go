@@ -28,7 +28,7 @@ import (
 	apivalidation "k8s.io/kubernetes/pkg/apis/core/validation"
 )
 
-// ValidateStorageVersion validate the storage version object.
+// ValidateStorageVersion 校验 StorageVersion 对象：校验元数据与状态两个层次。
 func ValidateStorageVersion(sv *apiserverinternal.StorageVersion) field.ErrorList {
 	var allErrs field.ErrorList
 	allErrs = append(allErrs, apivalidation.ValidateObjectMeta(&sv.ObjectMeta, false, ValidateStorageVersionName, field.NewPath("metadata"))...)
@@ -36,7 +36,7 @@ func ValidateStorageVersion(sv *apiserverinternal.StorageVersion) field.ErrorLis
 	return allErrs
 }
 
-// ValidateStorageVersionName is a ValidateNameFunc for storage version names
+// ValidateStorageVersionName 实现 StorageVersion 名称的 ValidateNameFunc，要求形式为 <group>.<resource>。
 func ValidateStorageVersionName(name string, prefix bool) []string {
 	var allErrs []string
 	idx := strings.LastIndex(name, ".")
@@ -53,19 +53,20 @@ func ValidateStorageVersionName(name string, prefix bool) []string {
 	return allErrs
 }
 
-// ValidateStorageVersionUpdate tests if an update to a StorageVersion is valid.
+// ValidateStorageVersionUpdate 校验 StorageVersion 的更新是否合法。
 func ValidateStorageVersionUpdate(sv, oldSV *apiserverinternal.StorageVersion) field.ErrorList {
-	// no error since StorageVersionSpec is an empty spec
+	// StorageVersionSpec 是空 spec，无可校验内容，因此永远不报错。
 	return field.ErrorList{}
 }
 
-// ValidateStorageVersionStatusUpdate tests if an update to a StorageVersionStatus is valid.
+// ValidateStorageVersionStatusUpdate 校验 StorageVersionStatus 的更新是否合法。
 func ValidateStorageVersionStatusUpdate(sv, oldSV *apiserverinternal.StorageVersion) field.ErrorList {
 	var allErrs field.ErrorList
 	allErrs = append(allErrs, validateStorageVersionStatus(sv.Status, field.NewPath("status"))...)
 	return allErrs
 }
 
+// 校验 StorageVersionStatus：各 API Server 上报的存储版本需互不重复，并校验公共版本与 condition。
 func validateStorageVersionStatus(ss apiserverinternal.StorageVersionStatus, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	allAPIServerIDs := sets.New[string]()
@@ -84,6 +85,7 @@ func validateStorageVersionStatus(ss apiserverinternal.StorageVersionStatus, fld
 	return allErrs
 }
 
+// 校验单个 API Server 上报的存储版本：ID 格式、版本格式，以及编码版本必须出现在可解码版本中；每个服务版本也必须可解码。
 func validateServerStorageVersion(ssv apiserverinternal.ServerStorageVersion, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, msg := range apimachineryvalidation.NameIsDNSSubdomain(ssv.APIServerID, false) {
@@ -124,6 +126,7 @@ func validateServerStorageVersion(ssv apiserverinternal.ServerStorageVersion, fl
 	return allErrs
 }
 
+// 计算所有 API Server 共用的编码版本；若不存在或不一致则返回 nil。
 func commonVersion(ssv []apiserverinternal.ServerStorageVersion) *string {
 	if len(ssv) == 0 {
 		return nil
@@ -137,6 +140,7 @@ func commonVersion(ssv []apiserverinternal.ServerStorageVersion) *string {
 	return &commonVersion
 }
 
+// 校验用户上报的 commonEncodingVersion 与实际各服务器编码版本的一致性。
 func validateCommonVersion(svs apiserverinternal.StorageVersionStatus, fldPath *field.Path) *field.Error {
 	actualCommonVersion := commonVersion(svs.StorageVersions)
 	if actualCommonVersion == nil && svs.CommonEncodingVersion == nil {
@@ -154,10 +158,11 @@ func validateCommonVersion(svs apiserverinternal.StorageVersionStatus, fldPath *
 	return nil
 }
 
+// 校验 Status 中的 condition：类型必须唯一且为合法限定名，reason 与 message 不可为空。
 func validateStorageVersionCondition(conditions []apiserverinternal.StorageVersionCondition, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
-	// We do not verify that the condition type or the condition status is
-	// a predefined one because we might add more type or status later.
+	// 这里不要求 condition 的 type/status 属于预定义取值，
+	// 因为将来可能新增更多 type 或 status。
 	seenType := make(map[apiserverinternal.StorageVersionConditionType]int)
 	for i, condition := range conditions {
 		if ii, ok := seenType[condition.Type]; ok {
@@ -180,11 +185,11 @@ func validateStorageVersionCondition(conditions []apiserverinternal.StorageVersi
 const dns1035LabelFmt string = "[a-z]([-a-z0-9]*[a-z0-9])?"
 const dns1035LabelErrMsg string = "a DNS-1035 label, which must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character"
 
-// isValidAPIVersion tests whether the value passed is a valid apiVersion. A
-// valid apiVersion contains a version string that matches DNS_LABEL format,
-// with an optional group/ prefix, where the group string matches DNS_SUBDOMAIN
-// format. If the value is not valid, a list of error strings is returned.
-// Otherwise an empty list (or nil) is returned.
+// isValidAPIVersion 检查给定值是否为合法的 apiVersion。
+// 合法的 apiVersion 包含一个符合 DNS_LABEL 格式的版本字符串，
+// 并可带 group/ 前缀，其中 group 需符合 DNS_SUBDOMAIN 格式。
+// 若不合法则返回错误信息列表，
+// 否则返回空列表或 nil。
 func isValidAPIVersion(apiVersion string) []string {
 	var errs []string
 	parts := strings.Split(apiVersion, "/")
@@ -213,6 +218,7 @@ func isValidAPIVersion(apiVersion string) []string {
 	return errs
 }
 
+// 为每条错误信息加上统一前缀（原地修改），便于定位是 group 部分还是 version 部分出错。
 func prefixEach(msgs []string, prefix string) []string {
 	for i := range msgs {
 		msgs[i] = prefix + msgs[i]

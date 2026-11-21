@@ -25,7 +25,10 @@ import (
 	"k8s.io/kubernetes/pkg/apis/flowcontrol"
 )
 
+// TestConvert_v1beta3_PriorityLevelConfiguration_To_flowcontrol_PriorityLevelConfiguration 验证
+// v1beta3 -> internal 转换时会移除保留零并发份额的往返注解，且不修改源对象的 annotations。
 func TestConvert_v1beta3_PriorityLevelConfiguration_To_flowcontrol_PriorityLevelConfiguration(t *testing.T) {
+	// inObjFn/outObjFn 构造带指定并发份额和注解的 v1beta3/内部对象，便于表驱动测试复用。
 	inObjFn := func(shares int32, annotations map[string]string) *v1beta3.PriorityLevelConfiguration {
 		return &v1beta3.PriorityLevelConfiguration{
 			ObjectMeta: metav1.ObjectMeta{
@@ -106,6 +109,7 @@ func TestConvert_v1beta3_PriorityLevelConfiguration_To_flowcontrol_PriorityLevel
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 深拷贝源对象，用于之后断言转换没有就地修改源对象的注解。
 			copy := test.in.DeepCopy()
 
 			out := &flowcontrol.PriorityLevelConfiguration{}
@@ -122,6 +126,9 @@ func TestConvert_v1beta3_PriorityLevelConfiguration_To_flowcontrol_PriorityLevel
 	}
 }
 
+// TestConvert_flowcontrol_PriorityLevelConfiguration_To_v1beta3_PriorityLevelConfiguration 验证
+// internal -> v1beta3 转换时，NominalConcurrencyShares 为 0 会添加往返注解，
+// 非 0 时不添加，且已存在的注解（含非空值）被原样保留、源对象不被修改。
 func TestConvert_flowcontrol_PriorityLevelConfiguration_To_v1beta3_PriorityLevelConfiguration(t *testing.T) {
 	inObjFn := func(shares int32, annotations map[string]string) *flowcontrol.PriorityLevelConfiguration {
 		return &flowcontrol.PriorityLevelConfiguration{
@@ -218,6 +225,7 @@ func TestConvert_flowcontrol_PriorityLevelConfiguration_To_v1beta3_PriorityLevel
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 深拷贝源对象，用于之后断言转换没有就地修改源对象的注解。
 			copy := test.in.DeepCopy()
 
 			out := &v1beta3.PriorityLevelConfiguration{}

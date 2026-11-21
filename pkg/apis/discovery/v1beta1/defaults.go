@@ -23,14 +23,19 @@ import (
 )
 
 var (
+	// defaultPortName 是 EndpointPort 名称为空时的默认值，用空字符串表示匿名端口。
 	defaultPortName = ""
+	// defaultProtocol 是 EndpointPort 协议未指定时的默认值，选用 TCP 以保持向后兼容。
 	defaultProtocol = v1.ProtocolTCP
 )
 
+// addDefaultingFuncs 向 scheme 注册默认值设置函数。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_EndpointPort 为 EndpointPort 填充默认值：
+// 名称缺省为空字符串，协议缺省为 TCP。
 func SetDefaults_EndpointPort(obj *discoveryv1beta1.EndpointPort) {
 	if obj.Name == nil {
 		obj.Name = &defaultPortName

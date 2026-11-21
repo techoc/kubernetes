@@ -17,6 +17,6 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=internal.apiserver.k8s.io
 
-// Package apiserverinternal contains the "internal" version of the API used by
-// the apiservers themselves.
+// Package apiserverinternal 包含 apiserver 内部使用的 API 版本，
+// 供 apiserver 使用。
 package apiserverinternal

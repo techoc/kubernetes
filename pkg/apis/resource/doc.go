@@ -16,6 +16,6 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
-// Package resource contains the latest (or "internal") version of the
-// Kubernetes resource API objects.
+// Package resource 包含最新（即“内部”）版本的
+// Kubernetes 资源 API 对象。
 package resource

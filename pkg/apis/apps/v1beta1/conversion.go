@@ -30,8 +30,10 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core"
 )
 
+// addConversionFuncs 注册 v1beta1 apps 资源的转换函数。
 func addConversionFuncs(scheme *runtime.Scheme) error {
-	// Add field label conversions for kinds having selectable nothing but ObjectMeta fields.
+	// StatefulSet 只有 ObjectMeta 字段和 status.successful 可被字段选择器使用，
+	// 其余字段直接报错，避免静默返回错误的选择结果。
 	if err := scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind("StatefulSet"),
 		func(label, value string) (string, string, error) {
 			switch label {
@@ -47,10 +49,14 @@ func addConversionFuncs(scheme *runtime.Scheme) error {
 	return nil
 }
 
+// Convert_autoscaling_ScaleStatus_To_v1beta1_ScaleStatus 把 internal ScaleStatus 转成 v1beta1 版本，
+// 并把选择器拆分成 TargetSelector 和仅含 matchLabels 的 Selector。
 func Convert_autoscaling_ScaleStatus_To_v1beta1_ScaleStatus(in *autoscaling.ScaleStatus, out *appsv1beta1.ScaleStatus, s conversion.Scope) error {
 	out.Replicas = int32(in.Replicas)
 	out.TargetSelector = in.Selector
 
+	// 旧版 Selector 只支持 matchLabels，含 matchExpressions 时留空，
+	// 完整表达式仍保存在 TargetSelector 中。
 	out.Selector = nil
 	selector, err := metav1.ParseToLabelSelector(in.Selector)
 	if err != nil {
@@ -63,9 +69,12 @@ func Convert_autoscaling_ScaleStatus_To_v1beta1_ScaleStatus(in *autoscaling.Scal
 	return nil
 }
 
+// Convert_v1beta1_ScaleStatus_To_autoscaling_ScaleStatus 把 v1beta1 ScaleStatus 转成 internal 版本，
+// 优先使用 TargetSelector，缺失时再由 Selector 的标签构造字符串选择器。
 func Convert_v1beta1_ScaleStatus_To_autoscaling_ScaleStatus(in *appsv1beta1.ScaleStatus, out *autoscaling.ScaleStatus, s conversion.Scope) error {
 	out.Replicas = in.Replicas
 
+	// TargetSelector 保留完整语义，优先使用；老字段只有 matchLabels，需要转换格式。
 	if in.TargetSelector != "" {
 		out.Selector = in.TargetSelector
 	} else if in.Selector != nil {
@@ -80,16 +89,16 @@ func Convert_v1beta1_ScaleStatus_To_autoscaling_ScaleStatus(in *appsv1beta1.Scal
 	return nil
 }
 
-// Convert_v1beta1_StatefulSetSpec_To_apps_StatefulSetSpec augments auto-conversion to preserve < 1.17 behavior
-// setting apiVersion/kind in nested persistent volume claim objects.
+// Convert_v1beta1_StatefulSetSpec_To_apps_StatefulSetSpec 在自动转换之外做了补充，
+// 保持 1.17 之前对嵌套 PVC 对象 apiVersion/kind 的处理行为。
 func Convert_v1beta1_StatefulSetSpec_To_apps_StatefulSetSpec(in *appsv1beta1.StatefulSetSpec, out *apps.StatefulSetSpec, s conversion.Scope) error {
 	if err := autoConvert_v1beta1_StatefulSetSpec_To_apps_StatefulSetSpec(in, out, s); err != nil {
 		return err
 	}
-	// set APIVersion/Kind to behave the same as reflective conversion < 1.17.
+	// 清空 APIVersion/Kind，与 1.17 之前的反射转换行为保持一致。
 	// see https://issue.k8s.io/87583
 	if out.VolumeClaimTemplates != nil {
-		// copy so we don't modify the input
+		// 复制一份再改，避免修改共享的输入切片。
 		templatesCopy := make([]core.PersistentVolumeClaim, len(out.VolumeClaimTemplates))
 		copy(templatesCopy, out.VolumeClaimTemplates)
 		out.VolumeClaimTemplates = templatesCopy
@@ -101,16 +110,16 @@ func Convert_v1beta1_StatefulSetSpec_To_apps_StatefulSetSpec(in *appsv1beta1.Sta
 	return nil
 }
 
-// Convert_apps_StatefulSetSpec_To_v1beta1_StatefulSetSpec augments auto-conversion to preserve < 1.17 behavior
-// setting apiVersion/kind in nested persistent volume claim objects.
+// Convert_apps_StatefulSetSpec_To_v1beta1_StatefulSetSpec 在自动转换之外做了补充，
+// 保持 1.17 之前对嵌套 PVC 对象 apiVersion/kind 的处理行为。
 func Convert_apps_StatefulSetSpec_To_v1beta1_StatefulSetSpec(in *apps.StatefulSetSpec, out *appsv1beta1.StatefulSetSpec, s conversion.Scope) error {
 	if err := autoConvert_apps_StatefulSetSpec_To_v1beta1_StatefulSetSpec(in, out, s); err != nil {
 		return err
 	}
-	// set APIVersion/Kind to behave the same as reflective conversion < 1.17.
+	// 清空 APIVersion/Kind，与 1.17 之前的反射转换行为保持一致。
 	// see https://issue.k8s.io/87583
 	if out.VolumeClaimTemplates != nil {
-		// copy so we don't modify the input
+		// 复制一份再改，避免修改共享的输入切片。
 		templatesCopy := make([]corev1.PersistentVolumeClaim, len(out.VolumeClaimTemplates))
 		copy(templatesCopy, out.VolumeClaimTemplates)
 		out.VolumeClaimTemplates = templatesCopy

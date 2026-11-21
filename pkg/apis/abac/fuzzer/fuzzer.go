@@ -20,7 +20,8 @@ import (
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// Funcs returns the fuzzer functions for the abac api group.
+// Funcs 返回 abac API 组的 fuzz 函数列表。
+// abac 类型无需特殊 fuzz 逻辑，因此返回空列表。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{}
 }

@@ -33,15 +33,17 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
-// Funcs returns the fuzzer functions for the core group.
+// Funcs 返回 core API 组的 fuzz 函数集合，供 round-trip 测试使用。
+// 各自定义函数负责生成“合法”的对象：满足字段间的同步约束、默认值和校验规则，
+// 否则外部/内部版本转换往返时会出现差异。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(q *resource.Quantity, c randfill.Continue) {
 			*q = *resource.NewQuantity(c.Int63n(1000), resource.DecimalExponent)
 		},
 		func(j *core.ObjectReference, c randfill.Continue) {
-			// We have to customize the randomization of TypeMetas because their
-			// APIVersion and Kind must remain blank in memory.
+			// 对象引用的 APIVersion 与 Kind 在内存中必须保持为空（它们由序列化器填充），
+			// 因此需要自定义随机化逻辑，避免 fuzz 出非空值导致往返不一致。
 			j.APIVersion = c.String(0)
 			j.Kind = c.String(0)
 			j.Namespace = c.String(0)
@@ -68,21 +70,21 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 		func(s *core.ServiceAccountTokenProjection, c randfill.Continue) {
 			c.FillNoCustom(s)
 			if s.ExpirationSeconds == nil {
-				// Defaulted; valid objects always carry a value.
+				// 该字段会被默认值填充，合法对象始终带有取值，fuzz 时也要补上。
 				s.ExpirationSeconds = ptr.To[int64](3600)
 			}
 		},
 		func(s *core.PodSpec, c randfill.Continue) {
 			c.FillNoCustom(s)
-			// has a default value
+			// 该字段有默认值，需要显式设置以免影响往返一致性。
 			ttl := int64(30)
 			if c.Bool() {
 				ttl = int64(c.Uint32())
 			}
 			s.TerminationGracePeriodSeconds = &ttl
 
-			// DeprecatedServiceAccount is an alias for ServiceAccountName kept
-			// in sync by defaulting; valid objects always have them equal.
+			// DeprecatedServiceAccount 是 ServiceAccountName 的旧别名，默认值填充会保证两者一致，
+			// 因此这里也直接复用同一取值。
 			s.DeprecatedServiceAccount = s.ServiceAccountName //nolint:staticcheck // SA1019 DeprecatedServiceAccount must be fuzzed for backward compatibility
 
 			c.Fill(s.SecurityContext)
@@ -104,7 +106,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 		func(s *core.PodStatus, c randfill.Continue) {
 			c.Fill(&s)
 			s.HostIPs = []core.HostIP{{IP: s.HostIP}}
-			// PodIP and PodIPs[0] are kept in sync by defaulting
+			// 默认值填充会保证 PodIP 与 PodIPs[0] 同步，fuzz 时也据此构造一致的取值。
 			if len(s.PodIP) > 0 {
 				s.PodIPs = []core.PodIP{{IP: s.PodIP}}
 			} else {
@@ -122,7 +124,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 		func(j *core.ReplicationController, c randfill.Continue) {
 			c.FillNoCustom(j)
 
-			// match defaulting
+			// 与默认值填充逻辑保持一致。
 			if j.Spec.Template != nil {
 				if len(j.Labels) == 0 {
 					j.Labels = j.Spec.Template.Labels
@@ -133,17 +135,17 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(j *core.ReplicationControllerSpec, c randfill.Continue) {
-			c.FillNoCustom(j) // fuzz self without calling this function again
-			//j.TemplateRef = nil // this is required for round trip
+			c.FillNoCustom(j) // 只 fuzz 自身字段，避免递归调用本函数
+			//j.TemplateRef = nil // 往返测试需要该字段为 nil
 
-			// match defaulting
+			// 与默认值填充逻辑保持一致。
 			if j.Replicas == nil {
 				replicas := int32(0)
 				j.Replicas = &replicas
 			}
 		},
 		func(j *core.List, c randfill.Continue) {
-			c.FillNoCustom(j) // fuzz self without calling this function again
+			c.FillNoCustom(j) // 只 fuzz 自身字段，避免递归调用本函数
 			// TODO: uncomment when round trip starts from a versioned object
 			if false { //j.Items == nil {
 				j.Items = []runtime.Object{}
@@ -153,7 +155,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			randomQuantity := func() resource.Quantity {
 				var q resource.Quantity
 				c.Fill(&q)
-				// precalc the string for benchmarking purposes
+				// 预先计算字符串，避免基准测试中把转换开销计入。
 				_ = q.String()
 				return q
 			}
@@ -197,8 +199,8 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			policies := []core.RestartPolicy{core.RestartPolicyAlways, core.RestartPolicyNever, core.RestartPolicyOnFailure}
 			*rp = policies[c.Rand.Intn(len(policies))]
 		},
-		// core.DownwardAPIVolumeFile needs to have a specific func since FieldRef has to be
-		// defaulted to a version otherwise roundtrip will fail
+		// DownwardAPIVolumeFile 需要专门的 fuzz 函数：FieldRef 的 APIVersion 必须被默认值填充，
+		// 否则外部/内部版本往返会失败。
 		func(m *core.DownwardAPIVolumeFile, c randfill.Continue) {
 			m.Path = c.String(0)
 			versions := []string{"v1"}
@@ -211,66 +213,61 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(s *core.SecretVolumeSource, c randfill.Continue) {
-			c.FillNoCustom(s) // fuzz self without calling this function again
+			c.FillNoCustom(s) // 只 fuzz 自身字段，避免递归调用本函数
 
 			if c.Bool() {
 				opt := c.Bool()
 				s.Optional = &opt
 			}
-			// DefaultMode should always be set, it has a default
-			// value and it is expected to be between 0 and 0777
+			// DefaultMode 有默认值，合法对象始终会设置它，且取值应在 0 到 0777 之间。
 			var mode int32
 			c.Fill(&mode)
 			mode &= 0777
 			s.DefaultMode = &mode
 		},
 		func(cm *core.ConfigMapVolumeSource, c randfill.Continue) {
-			c.FillNoCustom(cm) // fuzz self without calling this function again
+			c.FillNoCustom(cm) // 只 fuzz 自身字段，避免递归调用本函数
 
 			if c.Bool() {
 				opt := c.Bool()
 				cm.Optional = &opt
 			}
-			// DefaultMode should always be set, it has a default
-			// value and it is expected to be between 0 and 0777
+			// DefaultMode 有默认值，合法对象始终会设置它，且取值应在 0 到 0777 之间。
 			var mode int32
 			c.Fill(&mode)
 			mode &= 0777
 			cm.DefaultMode = &mode
 		},
 		func(d *core.DownwardAPIVolumeSource, c randfill.Continue) {
-			c.FillNoCustom(d) // fuzz self without calling this function again
+			c.FillNoCustom(d) // 只 fuzz 自身字段，避免递归调用本函数
 
-			// DefaultMode should always be set, it has a default
-			// value and it is expected to be between 0 and 0777
+			// DefaultMode 有默认值，合法对象始终会设置它，且取值应在 0 到 0777 之间。
 			var mode int32
 			c.Fill(&mode)
 			mode &= 0777
 			d.DefaultMode = &mode
 		},
 		func(s *core.ProjectedVolumeSource, c randfill.Continue) {
-			c.FillNoCustom(s) // fuzz self without calling this function again
+			c.FillNoCustom(s) // 只 fuzz 自身字段，避免递归调用本函数
 
-			// DefaultMode should always be set, it has a default
-			// value and it is expected to be between 0 and 0777
+			// DefaultMode 有默认值，合法对象始终会设置它，且取值应在 0 到 0777 之间。
 			var mode int32
 			c.Fill(&mode)
 			mode &= 0777
 			s.DefaultMode = &mode
 		},
 		func(k *core.KeyToPath, c randfill.Continue) {
-			c.FillNoCustom(k) // fuzz self without calling this function again
+			c.FillNoCustom(k) // 只 fuzz 自身字段，避免递归调用本函数
 			k.Key = c.String(0)
 			k.Path = c.String(0)
 
-			// Mode is not mandatory, but if it is set, it should be
-			// a value between 0 and 0777
+			// Mode 不是必填项，但一旦设置就必须落在 0 到 0777 的范围内。
 			if k.Mode != nil {
 				*k.Mode &= 0777
 			}
 		},
 		func(vs *core.VolumeSource, c randfill.Continue) {
-			// Exactly one of the fields must be set.
+			// 卷源的各字段是互斥的，必须且只能设置一个。
 			v := reflect.ValueOf(vs).Elem()
 			i := int(c.Uint64() % uint64(v.NumField()))
 			t := v.Field(i).Addr()
@@ -291,7 +288,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(i *core.PersistentVolumeClaimSpec, c randfill.Continue) {
-			// Match defaulting in pkg/apis/core/v1/defaults.go.
+			// 与 pkg/apis/core/v1/defaults.go 中的默认值填充保持一致。
 			volumeMode := core.PersistentVolumeMode(c.String(0))
 			if volumeMode == "" {
 				volumeMode = core.PersistentVolumeFilesystem
@@ -328,18 +325,18 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			*p = types[c.Rand.Intn(len(types))]
 		},
 		func(ct *core.Container, c randfill.Continue) {
-			c.FillNoCustom(ct)                                          // fuzz self without calling this function again
-			ct.TerminationMessagePath = "/" + ct.TerminationMessagePath // Must be non-empty
+			c.FillNoCustom(ct)                                          // 只 fuzz 自身字段，避免递归调用本函数
+			ct.TerminationMessagePath = "/" + ct.TerminationMessagePath // 该字段不能为空
 			ct.TerminationMessagePolicy = "File"
 		},
 		func(ep *core.EphemeralContainer, c randfill.Continue) {
-			c.FillNoCustom(ep)                                                                   // fuzz self without calling this function again
-			ep.EphemeralContainerCommon.TerminationMessagePath = "/" + ep.TerminationMessagePath // Must be non-empty
+			c.FillNoCustom(ep)                                                                   // 只 fuzz 自身字段，避免递归调用本函数
+			ep.EphemeralContainerCommon.TerminationMessagePath = "/" + ep.TerminationMessagePath // 该字段不能为空
 			ep.EphemeralContainerCommon.TerminationMessagePolicy = "File"
 		},
 		func(p *core.Probe, c randfill.Continue) {
 			c.FillNoCustom(p)
-			// These fields have default values.
+			// 这些字段都有默认值（为 0 时会被默认填充为 1）。
 			intFieldsWithDefaults := [...]string{"TimeoutSeconds", "PeriodSeconds", "SuccessThreshold", "FailureThreshold"}
 			v := reflect.ValueOf(p).Elem()
 			for _, field := range intFieldsWithDefaults {
@@ -379,17 +376,17 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(cm *core.ConfigMapEnvSource, c randfill.Continue) {
-			c.FillNoCustom(cm) // fuzz self without calling this function again
+			c.FillNoCustom(cm) // 只 fuzz 自身字段，避免递归调用本函数
 			if c.Bool() {
 				opt := c.Bool()
 				cm.Optional = &opt
 			}
 		},
 		func(s *core.SecretEnvSource, c randfill.Continue) {
-			c.FillNoCustom(s) // fuzz self without calling this function again
+			c.FillNoCustom(s) // 只 fuzz 自身字段，避免递归调用本函数
 		},
 		func(sc *core.SecurityContext, c randfill.Continue) {
-			c.FillNoCustom(sc) // fuzz self without calling this function again
+			c.FillNoCustom(sc) // 只 fuzz 自身字段，避免递归调用本函数
 			if c.Bool() {
 				priv := c.Bool()
 				sc.Privileged = &priv
@@ -405,7 +402,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(s *core.Secret, c randfill.Continue) {
-			c.FillNoCustom(s) // fuzz self without calling this function again
+			c.FillNoCustom(s) // 只 fuzz 自身字段，避免递归调用本函数
 			s.Type = core.SecretTypeOpaque
 		},
 		func(r *core.RBDVolumeSource, c randfill.Continue) {
@@ -446,7 +443,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			}
 		},
 		func(pv *core.PersistentVolume, c randfill.Continue) {
-			c.FillNoCustom(pv) // fuzz self without calling this function again
+			c.FillNoCustom(pv) // 只 fuzz 自身字段，避免递归调用本函数
 			types := []core.PersistentVolumePhase{core.VolumeAvailable, core.VolumePending, core.VolumeBound, core.VolumeReleased, core.VolumeFailed}
 			pv.Status.Phase = types[c.Rand.Intn(len(types))]
 			pv.Status.Message = c.String(0)
@@ -456,7 +453,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			pv.Spec.VolumeMode = &volumeModes[c.Rand.Intn(len(volumeModes))]
 		},
 		func(pvc *core.PersistentVolumeClaim, c randfill.Continue) {
-			c.FillNoCustom(pvc) // fuzz self without calling this function again
+			c.FillNoCustom(pvc) // 只 fuzz 自身字段，避免递归调用本函数
 			types := []core.PersistentVolumeClaimPhase{core.ClaimBound, core.ClaimPending, core.ClaimLost}
 			pvc.Status.Phase = types[c.Rand.Intn(len(types))]
 			volumeModes := []core.PersistentVolumeMode{core.PersistentVolumeFilesystem, core.PersistentVolumeBlock}
@@ -504,8 +501,8 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			s.Finalizers = []core.FinalizerName{core.FinalizerKubernetes}
 		},
 		func(s *core.Namespace, c randfill.Continue) {
-			c.FillNoCustom(s) // fuzz self without calling this function again
-			// Match name --> label defaulting
+			c.FillNoCustom(s) // 只 fuzz 自身字段，避免递归调用本函数
+			// 与 name 到 label 的默认值填充逻辑保持一致。
 			if len(s.Name) > 0 {
 				if s.Labels == nil {
 					s.Labels = map[string]string{}
@@ -517,23 +514,23 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			s.Phase = core.NamespaceActive
 		},
 		func(http *core.HTTPGetAction, c randfill.Continue) {
-			c.FillNoCustom(http)            // fuzz self without calling this function again
-			http.Path = "/" + http.Path     // can't be blank
-			http.Scheme = "x" + http.Scheme // can't be blank
+			c.FillNoCustom(http)            // 只 fuzz 自身字段，避免递归调用本函数
+			http.Path = "/" + http.Path     // 路径不能为空
+			http.Scheme = "x" + http.Scheme // 协议不能为空
 		},
 		func(ss *core.ServiceSpec, c randfill.Continue) {
-			c.FillNoCustom(ss) // fuzz self without calling this function again
+			c.FillNoCustom(ss) // 只 fuzz 自身字段，避免递归调用本函数
 			if len(ss.Ports) == 0 {
-				// There must be at least 1 port.
+				// Service 至少要有一个端口，否则对象不合法。
 				ss.Ports = append(ss.Ports, core.ServicePort{})
 				c.Fill(&ss.Ports[0])
 			}
 			for i := range ss.Ports {
 				switch ss.Ports[i].TargetPort.Type {
 				case intstr.Int:
-					ss.Ports[i].TargetPort.IntVal = 1 + ss.Ports[i].TargetPort.IntVal%65535 // non-zero
+					ss.Ports[i].TargetPort.IntVal = 1 + ss.Ports[i].TargetPort.IntVal%65535 // 端口号不能为 0
 				case intstr.String:
-					ss.Ports[i].TargetPort.StrVal = "x" + ss.Ports[i].TargetPort.StrVal // non-empty
+					ss.Ports[i].TargetPort.StrVal = "x" + ss.Ports[i].TargetPort.StrVal // 命名端口不能为空
 				}
 			}
 			types := []core.ServiceAffinity{core.ServiceAffinityNone, core.ServiceAffinityClientIP}

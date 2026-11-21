@@ -24,6 +24,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestVisitContainersWithPath 验证三类容器（init/普通/临时）的遍历顺序及对应字段路径。
 func TestVisitContainersWithPath(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -140,6 +141,7 @@ func TestVisitContainersWithPath(t *testing.T) {
 	}
 }
 
+// TestConvertDownwardAPIFieldLabel 验证 downward API 字段标签的转换，含带下标标签与旧版 spec.host 的兼容。
 func TestConvertDownwardAPIFieldLabel(t *testing.T) {
 	testCases := []struct {
 		version       string

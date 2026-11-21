@@ -21,11 +21,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 把本包的默认值注册函数挂到 scheme，供版本转换与反序列化使用。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_HTTPIngressPath 为未指定 PathType 的路径填充默认匹配类型。
 func SetDefaults_HTTPIngressPath(obj *networkingv1beta1.HTTPIngressPath) {
+	// v1beta1 为兼容旧行为，缺省路径匹配类型为 ImplementationSpecific。
 	var defaultPathType = networkingv1beta1.PathTypeImplementationSpecific
 	if obj.PathType == nil {
 		obj.PathType = &defaultPathType

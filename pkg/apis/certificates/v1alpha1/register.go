@@ -21,10 +21,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name used in this package.
+// GroupName 是本包对应的 API 组名。
 const GroupName = "certificates.k8s.io"
 
-// SchemeGroupVersion is the group and version used in this package.
+// SchemeGroupVersion 是本包使用的组和版本。
 var SchemeGroupVersion = schema.GroupVersion{
 	Group:   GroupName,
 	Version: "v1alpha1",
@@ -36,7 +36,7 @@ var (
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
+	// 这里只手动注册手写函数，生成器负责注册其余部分：
 	// generated functions takes place in the generated files. The separation
 	// makes the code compile even when the generated files are missing.
 	localSchemeBuilder.Register(addDefaultingFuncs, addConversionFuncs)

@@ -84,8 +84,8 @@ type StorageClass struct {
 // StorageClassList is a collection of storage classes.
 type StorageClassList struct {
 	metav1.TypeMeta
-	// Standard list metadata
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 
@@ -102,8 +102,8 @@ type StorageClassList struct {
 type VolumeAttachment struct {
 	metav1.TypeMeta
 
-	// Standard object metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准的对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta
 
@@ -113,7 +113,7 @@ type VolumeAttachment struct {
 
 	// Status of the VolumeAttachment request.
 	// Populated by the entity completing the attach or detach
-	// operation, i.e. the external-attacher.
+	// 即外部 attacher 执行的操作。
 	// +optional
 	Status VolumeAttachmentStatus
 }
@@ -123,8 +123,8 @@ type VolumeAttachment struct {
 // VolumeAttachmentList is a collection of VolumeAttachment objects.
 type VolumeAttachmentList struct {
 	metav1.TypeMeta
-	// Standard list metadata
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 
@@ -167,27 +167,27 @@ type VolumeAttachmentSource struct {
 // The status of a VolumeAttachment request.
 type VolumeAttachmentStatus struct {
 	// Indicates the volume is successfully attached.
-	// This field must only be set by the entity completing the attach
-	// operation, i.e. the external-attacher.
+	// 该字段只能由完成 attach 的实体设置，
+	// 即外部 attacher 执行的操作。
 	Attached bool
 
 	// Upon successful attach, this field is populated with any
 	// information returned by the attach operation that must be passed
 	// into subsequent WaitForAttach or Mount calls.
-	// This field must only be set by the entity completing the attach
-	// operation, i.e. the external-attacher.
+	// 该字段只能由完成 attach 的实体设置，
+	// 即外部 attacher 执行的操作。
 	// +optional
 	AttachmentMetadata map[string]string
 
 	// The last error encountered during attach operation, if any.
-	// This field must only be set by the entity completing the attach
-	// operation, i.e. the external-attacher.
+	// 该字段只能由完成 attach 的实体设置，
+	// 即外部 attacher 执行的操作。
 	// +optional
 	AttachError *VolumeError
 
 	// The last error encountered during detach operation, if any.
 	// This field must only be set by the entity completing the detach
-	// operation, i.e. the external-attacher.
+	// 即外部 attacher 执行的操作。
 	// +optional
 	DetachError *VolumeError
 }
@@ -241,14 +241,14 @@ const (
 type CSIDriver struct {
 	metav1.TypeMeta
 
-	// Standard object metadata.
+	// 标准的对象元数据。
 	// metadata.Name indicates the name of the CSI driver that this object
 	// refers to; it MUST be the same name returned by the CSI GetPluginName()
 	// call for that driver.
 	// The driver name must be 63 characters or less, beginning and ending with
 	// an alphanumeric character ([a-z0-9A-Z]) with dashes (-), dots (.), and
 	// alphanumerics between.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	metav1.ObjectMeta
 
 	// Specification of the CSI Driver.
@@ -261,8 +261,8 @@ type CSIDriver struct {
 type CSIDriverList struct {
 	metav1.TypeMeta
 
-	// Standard list metadata
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 
@@ -282,7 +282,7 @@ type CSIDriverSpec struct {
 	// If the value is specified to false, the attach operation will be skipped.
 	// Otherwise the attach operation will be called.
 	//
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	AttachRequired *bool
@@ -330,7 +330,7 @@ type CSIDriverSpec struct {
 	// A driver can support one or more of these mode and
 	// more modes may be added in the future.
 	//
-	// This field is immutable.
+	// 该字段不可变。
 	//
 	// +optional
 	VolumeLifecycleModes []VolumeLifecycleMode
@@ -692,8 +692,8 @@ type CSINodeStatus struct {
 type CSINodeList struct {
 	metav1.TypeMeta
 
-	// Standard list metadata
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 
@@ -737,7 +737,7 @@ type CSIStorageCapacity struct {
 	//
 	// Objects are namespaced.
 	//
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta
 
@@ -755,7 +755,7 @@ type CSIStorageCapacity struct {
 	// object (non-empty, DNS subdomain). If that object no longer exists,
 	// the CSIStorageCapacity object is obsolete and should be removed by its
 	// creator.
-	// This field is immutable.
+	// 该字段不可变。
 	StorageClassName string
 
 	// Capacity is the value reported by the CSI driver in its GetCapacityResponse
@@ -790,8 +790,8 @@ type CSIStorageCapacity struct {
 // CSIStorageCapacityList is a collection of CSIStorageCapacity objects.
 type CSIStorageCapacityList struct {
 	metav1.TypeMeta
-	// Standard list metadata
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 
@@ -807,13 +807,13 @@ type CSIStorageCapacityList struct {
 type VolumeAttributesClass struct {
 	metav1.TypeMeta
 
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准的对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta
 
 	// Name of the CSI driver
-	// This field is immutable.
+	// 该字段不可变。
 	DriverName string
 
 	// parameters hold volume attributes defined by the CSI driver. These values
@@ -838,8 +838,8 @@ type VolumeAttributesClass struct {
 type VolumeAttributesClassList struct {
 	metav1.TypeMeta
 
-	// Standard list metadata
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 

@@ -32,6 +32,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestSetDefaultHPA 验证 v1 HPA 的 MinReplicas 默认值：
+// 未指定时补为 1，已指定时保留原值。通过编码-解码-转换的往返流程触发默认值逻辑。
 func TestSetDefaultHPA(t *testing.T) {
 	tests := []struct {
 		hpa            autoscalingv1.HorizontalPodAutoscaler
@@ -54,6 +56,7 @@ func TestSetDefaultHPA(t *testing.T) {
 		},
 	}
 
+	// 两个用例分别覆盖 MinReplicas 未指定和显式指定为 3 的场景。
 	for _, test := range tests {
 		hpa := &test.hpa
 		obj2 := roundTrip(t, runtime.Object(hpa))
@@ -69,6 +72,8 @@ func TestSetDefaultHPA(t *testing.T) {
 	}
 }
 
+// TestHorizontalPodAutoscalerAnnotations 验证 v1 <-> internal 往返转换后，
+// 用于跨版本保存字段的注解都被清掉。用例分别使用空值、随机字符串和空数组作为注解值。
 func TestHorizontalPodAutoscalerAnnotations(t *testing.T) {
 	tests := []struct {
 		hpa  autoscalingv1.HorizontalPodAutoscaler
@@ -117,6 +122,7 @@ func TestHorizontalPodAutoscalerAnnotations(t *testing.T) {
 
 	for _, test := range tests {
 		hpa := &test.hpa
+		// 先拷贝一份，用于确认往返转换不会修改输入对象。
 		hpaBeforeMuatate := *hpa.DeepCopy()
 		obj := roundTrip(t, runtime.Object(hpa))
 		final_obj, ok := obj.(*autoscalingv1.HorizontalPodAutoscaler)
@@ -134,6 +140,8 @@ func TestHorizontalPodAutoscalerAnnotations(t *testing.T) {
 	}
 }
 
+// roundTrip 把对象按 v1 编码，再用通用解码器解码并转换成同类型对象，
+// 从而在测试里完整走一遍默认化和转换流程。
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 	data, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(SchemeGroupVersion), obj)
 	if err != nil {
@@ -145,6 +153,7 @@ func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 		t.Errorf("%v\nData: %s\nSource: %#v", err, string(data), obj)
 		return nil
 	}
+	// 新建一个同类型的空对象作为转换目标，避免复用输入对象掩盖问题。
 	obj3 := reflect.New(reflect.TypeOf(obj).Elem()).Interface().(runtime.Object)
 	err = legacyscheme.Scheme.Convert(obj2, obj3, nil)
 	if err != nil {

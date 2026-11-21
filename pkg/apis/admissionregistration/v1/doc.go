@@ -22,8 +22,8 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-input=k8s.io/api/admissionregistration/v1
 
-// Package v1 is the v1 version of the API.
-// AdmissionConfiguration and AdmissionPluginConfiguration are legacy static admission plugin configuration
-// ValidatingWebhookConfiguration, and MutatingWebhookConfiguration are for the
-// new dynamic admission controller configuration.
+// Package v1 是该 API 的 v1 版本。
+// AdmissionConfiguration 与 AdmissionPluginConfiguration 是遗留的静态准入插件配置。
+// ValidatingWebhookConfiguration 与 MutatingWebhookConfiguration 用于
+// 新的动态准入控制器配置。
 package v1

@@ -34,6 +34,7 @@ import (
 	. "k8s.io/kubernetes/pkg/apis/batch/v1"
 )
 
+// TestSetDefaultJob 校验 Job 各字段的默认值以及 PodFailurePolicy 的补全行为。
 func TestSetDefaultJob(t *testing.T) {
 	defaultLabels := map[string]string{"default": "default"}
 	validPodTemplateSpec := v1.PodTemplateSpec{
@@ -44,6 +45,7 @@ func TestSetDefaultJob(t *testing.T) {
 		expected     *batchv1.Job
 		expectLabels bool
 	}{
+		// 部分字段未指定时，默认化应只补全缺失值。
 		"Pod failure policy with some field values unspecified -> set default values": {
 			original: &batchv1.Job{
 				Spec: batchv1.JobSpec{
@@ -137,6 +139,7 @@ func TestSetDefaultJob(t *testing.T) {
 			},
 			expectLabels: true,
 		},
+		// PodReplacementPolicy 的默认值会受 PodFailurePolicy 影响。
 		"Pod failure policy and defaulting for pod replacement policy": {
 			original: &batchv1.Job{
 				Spec: batchv1.JobSpec{
@@ -180,6 +183,7 @@ func TestSetDefaultJob(t *testing.T) {
 			},
 			expectLabels: true,
 		},
+		// 全部未指定时所有指针字段都应取默认值。
 		"All unspecified -> sets all to default values": {
 			original: &batchv1.Job{
 				Spec: batchv1.JobSpec{
@@ -223,6 +227,7 @@ func TestSetDefaultJob(t *testing.T) {
 			},
 			expectLabels: true,
 		},
+		// 对象自带标签时，不应从 Pod 模板复制默认标签。
 		"All unspecified -> all pointers are defaulted and no default labels": {
 			original: &batchv1.Job{
 				ObjectMeta: metav1.ObjectMeta{
@@ -246,6 +251,7 @@ func TestSetDefaultJob(t *testing.T) {
 				},
 			},
 		},
+		// 并行度为 0 时仍需补全 BackoffLimit。
 		"WQ: Parallelism explicitly 0 and completions unset -> BackoffLimit is defaulted": {
 			original: &batchv1.Job{
 				Spec: batchv1.JobSpec{
@@ -391,6 +397,7 @@ func TestSetDefaultJob(t *testing.T) {
 			},
 			expectLabels: true,
 		},
+		// 按索引重试时全局重试上限被抬到 int32 最大值，由按索引上限接管。
 		"BackoffLimitPerIndex specified, but no BackoffLimit -> default BackoffLimit to max int32": {
 			original: &batchv1.Job{
 				Spec: batchv1.JobSpec{
@@ -418,6 +425,7 @@ func TestSetDefaultJob(t *testing.T) {
 			},
 			expectLabels: true,
 		},
+		// 已显式指定全局上限时默认化不应覆盖。
 		"BackoffLimitPerIndex and BackoffLimit specified -> no change": {
 			original: &batchv1.Job{
 				Spec: batchv1.JobSpec{
@@ -448,6 +456,7 @@ func TestSetDefaultJob(t *testing.T) {
 		},
 	}
 
+	// 逐字段比较，避免指针字段的 nil 与非 nil 差异被忽略。
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			original := test.original
@@ -458,6 +467,7 @@ func TestSetDefaultJob(t *testing.T) {
 				t.Fatalf("Unexpected object: %v", actual)
 			}
 
+			// suspend 是指针字段，单独比较以确定是否默认化。
 			if diff := cmp.Diff(expected.Spec.Suspend, actual.Spec.Suspend); diff != "" {
 				t.Errorf(".spec.suspend does not match; -want,+got:\n%s", diff)
 			}
@@ -468,6 +478,7 @@ func TestSetDefaultJob(t *testing.T) {
 			if diff := cmp.Diff(expected.Spec.PodFailurePolicy, actual.Spec.PodFailurePolicy); diff != "" {
 				t.Errorf("unexpected diff in errors (-want, +got):\n%s", diff)
 			}
+			// 校验默认标签是否按预期从模板传播到 Job。
 			if test.expectLabels != reflect.DeepEqual(actual.Labels, actual.Spec.Template.Labels) {
 				if test.expectLabels {
 					t.Errorf("Expected labels: %v, got: %v", actual.Spec.Template.Labels, actual.Labels)
@@ -488,6 +499,7 @@ func TestSetDefaultJob(t *testing.T) {
 	}
 }
 
+// validateDefaultInt32 比较指针型整数字段，显式区分 nil 与具体值。
 func validateDefaultInt32(t *testing.T, field string, actual *int32, expected *int32) {
 	if (actual == nil) != (expected == nil) {
 		t.Errorf("Got different *%s than expected: %v %v", field, actual, expected)
@@ -499,17 +511,21 @@ func validateDefaultInt32(t *testing.T, field string, actual *int32, expected *i
 	}
 }
 
+// roundTrip 通过编解码往返触发默认化。
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
+	// 使用 legacy codec 编码为外部版本。
 	data, err := runtime.Encode(legacyscheme.Codecs.LegacyCodec(SchemeGroupVersion), obj)
 	if err != nil {
 		t.Errorf("%v\n %#v", err, obj)
 		return nil
 	}
+	// 通用解码器在解码时应用默认值。
 	obj2, err := runtime.Decode(legacyscheme.Codecs.UniversalDecoder(), data)
 	if err != nil {
 		t.Errorf("%v\nData: %s\nSource: %#v", err, string(data), obj)
 		return nil
 	}
+	// 转换为调用方期望的具体类型。
 	obj3 := reflect.New(reflect.TypeOf(obj).Elem()).Interface().(runtime.Object)
 	err = legacyscheme.Scheme.Convert(obj2, obj3, nil)
 	if err != nil {
@@ -519,11 +535,13 @@ func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 	return obj3
 }
 
+// TestSetDefaultCronJob 校验并发策略与历史作业数上限的默认值。
 func TestSetDefaultCronJob(t *testing.T) {
 	tests := map[string]struct {
 		original *batchv1.CronJob
 		expected *batchv1.CronJob
 	}{
+		// 空对象应填充并发策略与历史记录上限。
 		"empty batchv1.CronJob should default batchv1.ConcurrencyPolicy and Suspend": {
 			original: &batchv1.CronJob{},
 			expected: &batchv1.CronJob{
@@ -535,6 +553,7 @@ func TestSetDefaultCronJob(t *testing.T) {
 				},
 			},
 		},
+		// 已显式设置的字段不应被默认值覆盖。
 		"set fields should not be defaulted": {
 			original: &batchv1.CronJob{
 				Spec: batchv1.CronJobSpec{

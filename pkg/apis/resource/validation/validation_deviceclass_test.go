@@ -27,6 +27,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// testClass 构造一个只带合法名称的 DeviceClass，供各场景复用。
 func testClass(name string) *resource.DeviceClass {
 	return &resource.DeviceClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -35,6 +36,8 @@ func testClass(name string) *resource.DeviceClass {
 	}
 }
 
+// TestValidateClass 验证 DeviceClass 的元数据、扩展资源名、CEL selector 和配置项。
+// 同时覆盖声明式校验覆盖标记（MarkCoveredByDeclarative）与命令式校验的对应关系。
 func TestValidateClass(t *testing.T) {
 	goodName := "foo"
 	now := metav1.Now()
@@ -200,10 +203,12 @@ func TestValidateClass(t *testing.T) {
 						Expression: "true",
 					},
 				}
+				// 三个 selector 分别覆盖：合法、缺少 CEL、CEL 表达式引用未定义变量。
+				// 末尾补满到上限，确保只报告预期的三条错误，不会混入 TooMany。
 				class.Spec.Selectors = []resource.DeviceSelector{
 					validSelector,
 					{
-						/* Missing CEL. */
+						/* 缺少 CEL 字段。 */
 					},
 					{
 						CEL: &resource.CELDeviceSelector{
@@ -211,6 +216,7 @@ func TestValidateClass(t *testing.T) {
 						},
 					},
 				}
+				// 补到数量上限，隔离出“字段内容非法”这一类错误，避免 TooMany 干扰断言。
 				for i := len(class.Spec.Selectors); i < resource.DeviceSelectorsMaxSize; i++ {
 					class.Spec.Selectors = append(class.Spec.Selectors, validSelector)
 				}
@@ -228,6 +234,7 @@ func TestValidateClass(t *testing.T) {
 						Expression: "true",
 					},
 				}
+				// 超过数量上限，验证 TooMany 错误带有 maxItems origin 和声明式覆盖标记。
 				for i := 0; i < resource.DeviceSelectorsMaxSize+1; i++ {
 					class.Spec.Selectors = append(class.Spec.Selectors, validSelector)
 				}
@@ -242,7 +249,7 @@ func TestValidateClass(t *testing.T) {
 				field.Invalid(field.NewPath("spec", "config").Index(3).Child("opaque", "parameters"), "<value omitted>", "must be a valid JSON object"),
 				field.Required(field.NewPath("spec", "config").Index(4).Child("opaque", "parameters"), ""),
 				field.Required(field.NewPath("spec", "config").Index(5).Child("opaque"), ""),
-				field.TooLong(field.NewPath("spec", "config").Index(7).Child("opaque", "parameters"), "" /* unused */, resource.OpaqueParametersMaxLength),
+				field.TooLong(field.NewPath("spec", "config").Index(7).Child("opaque", "parameters"), "" /* 该参数未被使用，仅占位。 */, resource.OpaqueParametersMaxLength),
 			},
 			class: func() *resource.DeviceClass {
 				class := testClass(goodName)
@@ -254,18 +261,19 @@ func TestValidateClass(t *testing.T) {
 						},
 					},
 				}
+				// 逐个构造非法配置：缺字段、非法 JSON、非对象、nil 对象、空配置、超长参数。
 				class.Spec.Config = []resource.DeviceClassConfiguration{
 					validConfig,
 					{
 						DeviceConfiguration: resource.DeviceConfiguration{
-							Opaque: &resource.OpaqueDeviceConfiguration{ /* Bad, both fields are required! */ },
+							Opaque: &resource.OpaqueDeviceConfiguration{ /* 非法：两个字段都是必填项。 */ },
 						},
 					},
 					{
 						DeviceConfiguration: resource.DeviceConfiguration{
 							Opaque: &resource.OpaqueDeviceConfiguration{
 								Driver:     goodName,
-								Parameters: runtime.RawExtension{Raw: []byte(`xxx`)}, /* Bad, not JSON. */
+								Parameters: runtime.RawExtension{Raw: []byte(`xxx`)}, /* 非法：不是合法 JSON。 */
 							},
 						},
 					},
@@ -273,7 +281,7 @@ func TestValidateClass(t *testing.T) {
 						DeviceConfiguration: resource.DeviceConfiguration{
 							Opaque: &resource.OpaqueDeviceConfiguration{
 								Driver:     goodName,
-								Parameters: runtime.RawExtension{Raw: []byte(`"hello-world"`)}, /* Bad, not object. */
+								Parameters: runtime.RawExtension{Raw: []byte(`"hello-world"`)}, /* 非法：不是 JSON 对象。 */
 							},
 						},
 					},
@@ -281,12 +289,12 @@ func TestValidateClass(t *testing.T) {
 						DeviceConfiguration: resource.DeviceConfiguration{
 							Opaque: &resource.OpaqueDeviceConfiguration{
 								Driver:     goodName,
-								Parameters: runtime.RawExtension{Raw: []byte(`null`)}, /* Bad, nil object. */
+								Parameters: runtime.RawExtension{Raw: []byte(`null`)}, /* 非法：nil 对象。 */
 							},
 						},
 					},
 					{
-						DeviceConfiguration: resource.DeviceConfiguration{ /* Bad, empty. */ },
+						DeviceConfiguration: resource.DeviceConfiguration{ /* 非法：内容为空。 */ },
 					},
 					{
 						DeviceConfiguration: resource.DeviceConfiguration{
@@ -300,11 +308,12 @@ func TestValidateClass(t *testing.T) {
 						DeviceConfiguration: resource.DeviceConfiguration{
 							Opaque: &resource.OpaqueDeviceConfiguration{
 								Driver:     goodName,
-								Parameters: runtime.RawExtension{Raw: []byte(`{"str": "` + strings.Repeat("x", resource.OpaqueParametersMaxLength-9-2+1 /* too large by one */) + `"}`)},
+								Parameters: runtime.RawExtension{Raw: []byte(`{"str": "` + strings.Repeat("x", resource.OpaqueParametersMaxLength-9-2+1 /* 超出一个字节 */) + `"}`)},
 							},
 						},
 					},
 				}
+				// 补到数量上限，使其他用例只暴露配置内容错误，不被 TooMany 干扰。
 				for i := len(class.Spec.Config); i < resource.DeviceConfigMaxSize; i++ {
 					class.Spec.Config = append(class.Spec.Config, validConfig)
 				}
@@ -325,6 +334,7 @@ func TestValidateClass(t *testing.T) {
 						},
 					},
 				}
+				// 超过数量上限，验证配置列表的 maxItems 限制。
 				for i := len(class.Spec.Config); i < resource.DeviceConfigMaxSize+1; i++ {
 					class.Spec.Config = append(class.Spec.Config, validConfig)
 				}
@@ -341,6 +351,8 @@ func TestValidateClass(t *testing.T) {
 	}
 }
 
+// TestValidateClassUpdate 验证更新时的配置大小限制：
+// 新增超大配置应被拒绝，但历史遗留的超大配置在未被修改时允许通过。
 func TestValidateClassUpdate(t *testing.T) {
 	validClass := testClass(goodName)
 
@@ -369,7 +381,7 @@ func TestValidateClassUpdate(t *testing.T) {
 		},
 		"invalid-config-too-large": {
 			wantFailures: field.ErrorList{
-				field.TooLong(field.NewPath("spec", "config").Index(0).Child("opaque", "parameters"), "" /* unused */, resource.OpaqueParametersMaxLength),
+				field.TooLong(field.NewPath("spec", "config").Index(0).Child("opaque", "parameters"), "" /* 该参数未被使用，仅占位。 */, resource.OpaqueParametersMaxLength),
 			},
 			oldClass: validClass,
 			update: func(class *resource.DeviceClass) *resource.DeviceClass {
@@ -377,7 +389,7 @@ func TestValidateClassUpdate(t *testing.T) {
 					DeviceConfiguration: resource.DeviceConfiguration{
 						Opaque: &resource.OpaqueDeviceConfiguration{
 							Driver:     goodName,
-							Parameters: runtime.RawExtension{Raw: []byte(`{"str": "` + strings.Repeat("x", resource.OpaqueParametersMaxLength-9-2+1 /* too large by one */) + `"}`)},
+							Parameters: runtime.RawExtension{Raw: []byte(`{"str": "` + strings.Repeat("x", resource.OpaqueParametersMaxLength-9-2+1 /* 超出一个字节 */) + `"}`)},
 						},
 					},
 				}}
@@ -391,21 +403,23 @@ func TestValidateClassUpdate(t *testing.T) {
 					DeviceConfiguration: resource.DeviceConfiguration{
 						Opaque: &resource.OpaqueDeviceConfiguration{
 							Driver:     goodName,
-							Parameters: runtime.RawExtension{Raw: []byte(`{"str": "` + strings.Repeat("x", resource.OpaqueParametersMaxLength-9-2+1 /* too large by one */) + `"}`)},
+							Parameters: runtime.RawExtension{Raw: []byte(`{"str": "` + strings.Repeat("x", resource.OpaqueParametersMaxLength-9-2+1 /* 超出一个字节 */) + `"}`)},
 						},
 					},
 				}}
 				return class
 			}(),
 			update: func(class *resource.DeviceClass) *resource.DeviceClass {
-				// No changes -> remains valid.
+				// 没有任何改动，应仍然合法。
 				return class
 			},
 		},
 	}
 
+	// 每个场景都基于深拷贝执行，避免元数据字段的修改泄漏到其他场景。
 	for name, scenario := range scenarios {
 		t.Run(name, func(t *testing.T) {
+			// 更新校验不关心 ResourceVersion，只要 spec/status 没有非法变更即可。
 			scenario.oldClass.ResourceVersion = "1"
 			errs := ValidateDeviceClassUpdate(scenario.update(scenario.oldClass.DeepCopy()), scenario.oldClass)
 			assertFailures(t, scenario.wantFailures, errs)

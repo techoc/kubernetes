@@ -39,6 +39,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 时区测试用例：涵盖合法值、LOCAL 特殊值，以及前后空格/非法名称等边界。
 var (
 	timeZoneEmpty      = ""
 	timeZoneLocal      = "LOCAL"
@@ -50,14 +51,19 @@ var (
 	timeZoneEmptySpace = " "
 )
 
+// 比较 field.Error 时忽略易变字段，只校验字段路径和错误类型。
 var ignoreErrValueDetail = cmpopts.IgnoreFields(field.Error{}, "BadValue", "Detail", "Origin")
 
+// getValidManualSelector 构造手工 selector 测试用的标签集；
+// 手工 selector 用普通标签，避免与自动生成的 controller-uid 标签混淆。
 func getValidManualSelector() *metav1.LabelSelector {
 	return &metav1.LabelSelector{
 		MatchLabels: map[string]string{"a": "b"},
 	}
 }
 
+// getValidPodTemplateSpecForManual 构造与手工 selector 匹配的 Pod 模板；
+// 标签必须与 selector 对齐，OnFailure 是 Job 允许的重启策略。
 func getValidPodTemplateSpecForManual(selector *metav1.LabelSelector) api.PodTemplateSpec {
 	return api.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -67,12 +73,16 @@ func getValidPodTemplateSpecForManual(selector *metav1.LabelSelector) api.PodTem
 	}
 }
 
+// getValidGeneratedSelector 构造自动生成的 selector；
+// 同时带新旧两套标签，便于验证 legacy 标签迁移的兼容路径。
 func getValidGeneratedSelector() *metav1.LabelSelector {
 	return &metav1.LabelSelector{
 		MatchLabels: map[string]string{batch.ControllerUidLabel: "1a2b3c", batch.LegacyControllerUidLabel: "1a2b3c", batch.JobNameLabel: "myjob", batch.LegacyJobNameLabel: "myjob"},
 	}
 }
 
+// getValidPodTemplateSpecForGenerated 构造与自动生成 selector 匹配的 Pod 模板；
+// 带一个 initContainer，用于校验 podFailurePolicy 中的容器名引用。
 func getValidPodTemplateSpecForGenerated(selector *metav1.LabelSelector) api.PodTemplateSpec {
 	return api.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -83,6 +93,8 @@ func getValidPodTemplateSpecForGenerated(selector *metav1.LabelSelector) api.Pod
 	}
 }
 
+// TestValidateJobCreate 验证 Job 创建校验：合法 Job 必须通过，
+// 各类非法字段（successPolicy、podFailurePolicy、数值上下界、selector 匹配、标签前缀等）必须报错且错误信息匹配预期。
 func TestValidateJobCreate(t *testing.T) {
 	validJobObjectMeta := metav1.ObjectMeta{
 		Name:      "myjob",
@@ -96,6 +108,7 @@ func TestValidateJobCreate(t *testing.T) {
 	validGeneratedSelector := getValidGeneratedSelector()
 	validPodTemplateSpecForGenerated := getValidPodTemplateSpecForGenerated(validGeneratedSelector)
 	validPodTemplateSpecForGeneratedRestartPolicyNever := getValidPodTemplateSpecForGenerated(validGeneratedSelector)
+	// podFailurePolicy/successPolicy 要求 restartPolicy 为 Never，单独派生模板避免污染其它用例。
 	validPodTemplateSpecForGeneratedRestartPolicyNever.Spec.RestartPolicy = api.RestartPolicyNever
 	validHostNetPodTemplateSpec := func() api.PodTemplateSpec {
 		spec := getValidPodTemplateSpecForGenerated(validGeneratedSelector)
@@ -107,6 +120,7 @@ func TestValidateJobCreate(t *testing.T) {
 		return spec
 	}()
 
+	// successCases 覆盖各特性组合的合法 Job；RequirePrefixedLabels 控制是否强制要求新前缀标签。
 	successCases := map[string]struct {
 		opts JobValidationOptions
 		job  batch.Job
@@ -423,6 +437,7 @@ func TestValidateJobCreate(t *testing.T) {
 			},
 		},
 	}
+	// 合法用例不应产生任何错误；用例名即子测试名，便于定位失败特性。
 	for k, v := range successCases {
 		t.Run(k, func(t *testing.T) {
 			if errs := ValidateJobCreate(&v.job, v.opts); len(errs) != 0 {
@@ -432,6 +447,8 @@ func TestValidateJobCreate(t *testing.T) {
 	}
 	negative := int32(-1)
 	negative64 := int64(-1)
+	// errorCases 的键是期望错误信息："字段路径: 错误内容"，
+	// 断言时按冒号拆开，分别校验 Field 和错误文本。
 	errorCases := map[string]struct {
 		opts JobValidationOptions
 		job  batch.Job
@@ -1446,12 +1463,14 @@ func TestValidateJobCreate(t *testing.T) {
 		},
 	}
 
+	// 必须报错，并且首个错误的字段路径与文本都要包含用例名中的期望值。
 	for k, v := range errorCases {
 		t.Run(k, func(t *testing.T) {
 			errs := ValidateJobCreate(&v.job, v.opts)
 			if len(errs) == 0 {
 				t.Errorf("expected failure for %s", k)
 			} else {
+				// SplitN 限制切分次数，避免错误文本中的冒号干扰字段路径匹配。
 				s := strings.SplitN(k, ":", 2)
 				err := errs[0]
 				if err.Field != s[0] || !strings.Contains(err.Error(), s[1]) {
@@ -1462,12 +1481,15 @@ func TestValidateJobCreate(t *testing.T) {
 	}
 }
 
+// TestValidateJobUpdate 验证 Job 更新校验：可变字段允许修改，
+// 不可变字段（selector、managedBy、successPolicy、podFailurePolicy、completions、调度策略等）修改必须报错。
 func TestValidateJobUpdate(t *testing.T) {
 	validGeneratedSelector := getValidGeneratedSelector()
 	validPodTemplateSpecForGenerated := getValidPodTemplateSpecForGenerated(validGeneratedSelector)
 	validPodTemplateSpecForGeneratedRestartPolicyNever := getValidPodTemplateSpecForGenerated(validGeneratedSelector)
 	validPodTemplateSpecForGeneratedRestartPolicyNever.Spec.RestartPolicy = api.RestartPolicyNever
 
+	// 构造节点亲和性，用于验证亲和性变更在更新中的可变性判定。
 	validNodeAffinity := &api.Affinity{
 		NodeAffinity: &api.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &api.NodeSelector{
@@ -1495,10 +1517,8 @@ func TestValidateJobUpdate(t *testing.T) {
 			},
 		},
 	}
-	// This is to test immutability of the selector, both the new and old
-	// selector should match the labels in the template, which is immutable
-	// on its own; therfore, the only way to test selector immutability is
-	// when the new selector is changed but still matches the existing labels.
+	// 为验证 selector 不可变：新旧 selector 都必须匹配模板标签（模板本身不可变），
+	// 因此只能在保持标签匹配的前提下改动 selector，才能单独触发 selector 不可变校验。
 	newSelector := getValidGeneratedSelector()
 	newSelector.MatchLabels["foo"] = "bar"
 	validTolerations := []api.Toleration{{
@@ -1507,6 +1527,7 @@ func TestValidateJobUpdate(t *testing.T) {
 		Value:    "bar",
 		Effect:   api.TaintEffectPreferNoSchedule,
 	}}
+	// 每个用例通过 update 函数对 old 的副本做变更；err 为 nil 表示变更应被允许。
 	cases := map[string]struct {
 		old    batch.Job
 		update func(*batch.Job)
@@ -2625,7 +2646,10 @@ func TestValidateJobUpdate(t *testing.T) {
 			},
 		},
 	}
+	// 只关心错误类型和字段路径，忽略易变的错误值和细节。
 	ignoreValueAndDetail := cmpopts.IgnoreFields(field.Error{}, "BadValue", "Detail")
+	// 每个子测试都深拷贝旧对象后再改，避免污染其他用例；
+	// ResourceVersion 设为 "1" 以满足更新校验的前置条件。
 	for k, tc := range cases {
 		t.Run(k, func(t *testing.T) {
 			tc.old.ResourceVersion = "1"
@@ -2633,6 +2657,7 @@ func TestValidateJobUpdate(t *testing.T) {
 			tc.update(update)
 			errs := ValidateJobUpdate(update, &tc.old, tc.opts)
 			var wantErrs field.ErrorList
+			// err 为 nil 时期望空错误列表，否则期望单个指定错误。
 			if tc.err != nil {
 				wantErrs = append(wantErrs, tc.err)
 			}
@@ -2643,6 +2668,8 @@ func TestValidateJobUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateJobUpdateStatus 验证 Job 状态更新校验：计数非负、UID 不重复不为空，
+// 以及在特性开关开启时 startTime 对未暂停 Job 的不可变性。
 func TestValidateJobUpdateStatus(t *testing.T) {
 	now := time.Now()
 
@@ -2880,6 +2907,8 @@ func TestValidateJobUpdateStatus(t *testing.T) {
 	}
 }
 
+// TestValidateCronJob 验证 CronJob 创建与更新的整体校验：
+// 合法用例（含 hostnet、@hourly、合法 timeZone）通过，非法用例（schedule、name、模板等）报错。
 func TestValidateCronJob(t *testing.T) {
 	validManualSelector := getValidManualSelector()
 	validPodTemplateSpec := getValidPodTemplateSpecForGenerated(getValidGeneratedSelector())
@@ -2894,6 +2923,7 @@ func TestValidateCronJob(t *testing.T) {
 		return spec
 	}()
 
+	// 合法 CronJob 用例；同时用于创建和更新（无变更更新）校验。
 	successCases := map[string]batch.CronJob{
 		"basic scheduled job": {
 			ObjectMeta: metav1.ObjectMeta{
@@ -2961,14 +2991,14 @@ func TestValidateCronJob(t *testing.T) {
 			},
 		},
 	}
+	// 合法用例创建与无变更更新都应通过。
 	for k, v := range successCases {
 		t.Run(k, func(t *testing.T) {
 			if errs := ValidateCronJobCreate(&v, corevalidation.PodValidationOptions{}); len(errs) != 0 {
 				t.Errorf("expected success for %s: %v", k, errs)
 			}
 
-			// Update validation should pass same success cases
-			// copy to avoid polluting the testcase object, set a resourceVersion to allow validating update, and test a no-op update
+			// 深拷贝避免污染原始用例；设置 resourceVersion 使更新校验可执行，覆盖无变更更新场景。
 			v = *v.DeepCopy()
 			v.ResourceVersion = "1"
 			if errs := ValidateCronJobUpdate(&v, &v, corevalidation.PodValidationOptions{}); len(errs) != 0 {
@@ -2980,6 +3010,7 @@ func TestValidateCronJob(t *testing.T) {
 	negative := int32(-1)
 	negative64 := int64(-1)
 
+	// 非法 CronJob 用例，键为期望的 "字段路径: 错误内容"。
 	errorCases := map[string]batch.CronJob{
 		"spec.schedule: Invalid value": {
 			ObjectMeta: metav1.ObjectMeta{
@@ -3351,8 +3382,8 @@ func TestValidateCronJob(t *testing.T) {
 				}
 			}
 
-			// Update validation should fail all failure cases other than the 52 character name limit
-			// copy to avoid polluting the testcase object, set a resourceVersion to allow validating update, and test a no-op update
+			// 除 52 字符名称限制外，其他失败用例在更新校验中同样应失败；
+			// 深拷贝并设置 resourceVersion，用无变更更新验证更新路径的错误一致。
 			oldSpec := *v.DeepCopy()
 			oldSpec.ResourceVersion = "1"
 			oldSpec.Spec.TimeZone = nil
@@ -3362,6 +3393,7 @@ func TestValidateCronJob(t *testing.T) {
 
 			errs = ValidateCronJobUpdate(&newSpec, &oldSpec, corevalidation.PodValidationOptions{})
 			if len(errs) == 0 {
+				// 名称长度只在创建时校验，更新时跳过，否则应报错。
 				if k == "metadata.name: must be no more than 52 characters" {
 					return
 				}
@@ -3377,6 +3409,8 @@ func TestValidateCronJob(t *testing.T) {
 	}
 }
 
+// TestValidateCronJobSchedulingUpdate 验证 CronJob 模板中 scheduling 配置的更新规则：
+// 命令式路径仅校验 gang minCount<=parallelism，basic/gang 切换与增删均放行。
 func TestValidateCronJobSchedulingUpdate(t *testing.T) {
 	validPodTemplateSpec := getValidPodTemplateSpecForGenerated(getValidGeneratedSelector())
 	validPodTemplateSpec.Labels = map[string]string{}
@@ -3386,8 +3420,8 @@ func TestValidateCronJobSchedulingUpdate(t *testing.T) {
 			Spec: batch.CronJobSpec{
 				Schedule:          "* * * * ?",
 				ConcurrencyPolicy: batch.AllowConcurrent,
-				// Parallelism large enough that the gang minCount values used below do not
-				// trip the minCount<=parallelism check; these cases only exercise immutability.
+				// Parallelism 设得足够大，避免误触 minCount<=parallelism 校验；
+				// 本测试只关心调度策略的可变性判定。
 				JobTemplate: batch.JobTemplateSpec{Spec: batch.JobSpec{Parallelism: ptr.To[int32](8), Template: validPodTemplateSpec}},
 			},
 		}
@@ -3401,12 +3435,9 @@ func TestValidateCronJobSchedulingUpdate(t *testing.T) {
 		return &batch.JobSchedulingConfiguration{SchedulingPolicy: &schedulingv1alpha3.WorkloadPodGroupSchedulingPolicy{Gang: &schedulingv1alpha3.WorkloadPodGroupGangSchedulingPolicy{MinCount: new(minCount)}}}
 	}
 
-	// The CronJob update path does not enforce scheduling immutability
-	// (each Job from a CronJob gets its own Workload/PodGroup, so the handwritten
-	// validation leaves the template alone). Policy immutability on the jobTemplate
-	// is instead enforced declaratively via the shared scheduling policy type; that
-	// is covered in the declarative_validation tests. The only scheduling rule this
-	// imperative path enforces is the structural gang minCount<=parallelism check.
+	// CronJob 更新路径不强制 scheduling 不可变：每个 Job 都有独立 Workload/PodGroup，
+	// 手写校验不干预模板；jobTemplate 的策略不可变性交由共享调度策略类型声明式校验覆盖。
+	// 命令式路径唯一强制的是结构性规则 gang minCount<=parallelism。
 	cases := map[string]struct {
 		old    *batch.JobSchedulingConfiguration
 		update *batch.JobSchedulingConfiguration
@@ -3461,6 +3492,8 @@ func TestValidateCronJobSchedulingUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateJobSchedulingUpdate 验证 Job 更新时 scheduling 配置的可变性：
+// 仅拒绝 basic<->gang 的原地切换，增删调度配置与 minCount 调整均放行。
 func TestValidateJobSchedulingUpdate(t *testing.T) {
 	validSelector := getValidGeneratedSelector()
 	validPodTemplateSpec := getValidPodTemplateSpecForGenerated(validSelector)
@@ -3475,17 +3508,16 @@ func TestValidateJobSchedulingUpdate(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "myjob", Namespace: metav1.NamespaceDefault, UID: types.UID("1a2b3c")},
 			Spec: batch.JobSpec{
 				Selector: validSelector,
-				// Parallelism large enough that the gang minCount values used below do
-				// not trip the minCount<=parallelism check; these cases only exercise
-				// the basic/gang variant immutability.
+				// Parallelism 设大避免触发 minCount<=parallelism 校验；
+				// 本测试只验证 basic/gang 变体的不可变性。
 				Parallelism: ptr.To[int32](8),
 				Template:    validPodTemplateSpec,
 				Scheduling:  sched,
 			},
 		}
 	}
-	// Only an in-place basic<->gang variant switch is rejected; adding or removing
-	// spec.scheduling is left to declarative validation, and gang minCount is mutable.
+	// 仅拒绝 basic<->gang 原地切换；增删 spec.scheduling 由声明式校验负责，
+	// gang minCount 在此路径中可变。
 	policyPath := field.NewPath("spec", "scheduling", "schedulingPolicy")
 	cases := map[string]struct {
 		old    *batch.JobSchedulingConfiguration
@@ -3542,6 +3574,8 @@ func TestValidateJobSchedulingUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateJobSchedulingGangMinCount 验证 Job 创建时 gang minCount 的结构性约束：
+// minCount 不得超过 parallelism（nil 按 1 计），且 all disruption 仅允许 gang 策略。
 func TestValidateJobSchedulingGangMinCount(t *testing.T) {
 	validSelector := getValidGeneratedSelector()
 	validPodTemplateSpec := getValidPodTemplateSpecForGenerated(validSelector)
@@ -3635,6 +3669,7 @@ func TestValidateJobSchedulingGangMinCount(t *testing.T) {
 	ignoreValueAndDetail := cmpopts.IgnoreFields(field.Error{}, "BadValue", "Detail")
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
+			// 开启前缀标签要求，避免标签校验错误干扰调度规则的断言。
 			tc.opts.RequirePrefixedLabels = true
 			errs := ValidateJobCreate(mkJob(tc.parallelism, tc.sched), tc.opts)
 			var wantErrs field.ErrorList
@@ -3648,6 +3683,8 @@ func TestValidateJobSchedulingGangMinCount(t *testing.T) {
 	}
 }
 
+// TestValidateCronJobCreateGangMinCount 验证 CronJob 创建时 jobTemplate 中 gang minCount 的上限：
+// 超过 parallelism（nil 按 1 计）必须报错。
 func TestValidateCronJobCreateGangMinCount(t *testing.T) {
 	validPodTemplateSpec := getValidPodTemplateSpecForGenerated(getValidGeneratedSelector())
 	validPodTemplateSpec.Labels = map[string]string{}
@@ -3704,6 +3741,8 @@ func TestValidateCronJobCreateGangMinCount(t *testing.T) {
 	}
 }
 
+// TestValidateCronJobUpdateGangMinCount 验证 CronJob 更新时 minCount 与 parallelism 的联动：
+// 降低 parallelism 使其低于 minCount 必须报错，同步提高二者或仅提高 minCount 则允许。
 func TestValidateCronJobUpdateGangMinCount(t *testing.T) {
 	validPodTemplateSpec := getValidPodTemplateSpecForGenerated(getValidGeneratedSelector())
 	validPodTemplateSpec.Labels = map[string]string{}
@@ -3763,6 +3802,8 @@ func TestValidateCronJobUpdateGangMinCount(t *testing.T) {
 	}
 }
 
+// TestValidateCronJobScheduleTZ 验证 schedule 内 TZ/CRON_TZ 与 spec.timeZone 的互斥规则：
+// 创建时含 TZ 应报错，更新时移除 TZ 可行，但同时设置 timeZone 或新增 TZ 会被拒绝。
 func TestValidateCronJobScheduleTZ(t *testing.T) {
 	validPodTemplateSpec := getValidPodTemplateSpecForGenerated(getValidGeneratedSelector())
 	validPodTemplateSpec.Labels = map[string]string{}
@@ -3855,6 +3896,7 @@ func TestValidateCronJobScheduleTZ(t *testing.T) {
 				return
 			}
 
+			// 深拷贝后设置不同 resourceVersion，构造合法的更新前后对象。
 			oldSpec := v.cronJob.DeepCopy()
 			oldSpec.ResourceVersion = "1"
 
@@ -3882,6 +3924,8 @@ func TestValidateCronJobScheduleTZ(t *testing.T) {
 	}
 }
 
+// TestValidateCronJobSpec 验证 validateCronJobSpec 对 timeZone 变更的增量校验：
+// 仅当新旧 timeZone 不同时才校验新值；旧值非法但未变更时放行。
 func TestValidateCronJobSpec(t *testing.T) {
 	validPodTemplateSpec := getValidPodTemplateSpecForGenerated(getValidGeneratedSelector())
 	validPodTemplateSpec.Labels = map[string]string{}
@@ -4074,6 +4118,7 @@ func TestValidateCronJobSpec(t *testing.T) {
 		},
 	}
 
+	// 断言是否报错与 expectErr 一致；用例名已说明是否触发校验。
 	for k, v := range cases {
 		errs := validateCronJobSpec(v.new, v.old, field.NewPath("spec"), corevalidation.PodValidationOptions{})
 		if len(errs) > 0 && !v.expectErr {
@@ -4084,8 +4129,10 @@ func TestValidateCronJobSpec(t *testing.T) {
 	}
 }
 
+// TestTimeZones 用 go1.19（2022-08-02）的全部合法时区名回归校验：
+// 保证合法时区不被误判为非法。
 func TestTimeZones(t *testing.T) {
-	// all valid time zones as of go1.19 release on 2022-08-02
+	// go1.19 发布时的全部合法时区列表。
 	data := []string{
 		`Africa/Abidjan`,
 		`Africa/Accra`,
@@ -4683,6 +4730,7 @@ func TestTimeZones(t *testing.T) {
 		`WET`,
 		`Zulu`,
 	}
+	// 逐个校验，任何合法时区报错即视为回归。
 	for _, tz := range data {
 		errs := validateTimeZone(&tz, nil)
 		if len(errs) > 0 {
@@ -4691,6 +4739,8 @@ func TestTimeZones(t *testing.T) {
 	}
 }
 
+// TestValidateIndexesString 验证索引区间字符串解析：合法字符串返回正确的索引总数，
+// 多余空格、越界、非递增顺序、重复分隔符等非法输入返回精确错误信息。
 func TestValidateIndexesString(t *testing.T) {
 	testCases := map[string]struct {
 		indexesString string
@@ -4774,6 +4824,7 @@ func TestValidateIndexesString(t *testing.T) {
 		},
 	}
 
+	// 同时校验错误信息（精确文本）与索引总数。
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			gotTotal, gotErr := validateIndexesFormat(tc.indexesString, tc.completions)
@@ -4793,6 +4844,8 @@ func TestValidateIndexesString(t *testing.T) {
 	}
 }
 
+// TestValidateFailedIndexesNotOverlapCompleted 验证 failedIndexes 与 completedIndexes 不得重叠：
+// 非法片段（如 "x"、"y"）被跳过重叠检测，仅重叠的索引触发错误。
 func TestValidateFailedIndexesNotOverlapCompleted(t *testing.T) {
 	testCases := map[string]struct {
 		completedIndexesStr string
@@ -4850,6 +4903,7 @@ func TestValidateFailedIndexesNotOverlapCompleted(t *testing.T) {
 			completions:         20,
 		},
 	}
+	// 校验重叠检测的错误信息；期望无错误时也必须不报错。
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			gotErr := validateFailedIndexesNotOverlapCompleted(tc.completedIndexesStr, tc.failedIndexesStr, tc.completions)
@@ -4866,8 +4920,8 @@ func TestValidateFailedIndexesNotOverlapCompleted(t *testing.T) {
 	}
 }
 
-// TestValidateScheduleFormatPanicRecovery tests that validateScheduleFormat
-// properly recovers from panics in cron.ParseStandard and returns validation errors
+// TestValidateScheduleFormatPanicRecovery 验证 validateScheduleFormat 能从 cron.ParseStandard 的 panic 中恢复，
+// 并返回 ErrorTypeInvalid 类型的校验错误，而不是让 panic 逃逸。
 func TestValidateScheduleFormatPanicRecovery(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -4898,7 +4952,7 @@ func TestValidateScheduleFormatPanicRecovery(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// This should not panic and should return a validation error
+			// 即使 cron 解析触发 panic，也必须被恢复为校验错误。
 			errs := validateScheduleFormat(tc.schedule, false, nil, field.NewPath("spec", "schedule"))
 
 			if len(errs) == 0 {
@@ -4906,13 +4960,13 @@ func TestValidateScheduleFormatPanicRecovery(t *testing.T) {
 				return
 			}
 
-			// Check that the error message contains expected text
+			// 错误信息须包含预期文本，确认走的是恢复后的错误分支。
 			errMsg := errs[0].Error()
 			if !strings.Contains(errMsg, tc.expected) {
 				t.Errorf("Expected error message to contain %q, but got: %s", tc.expected, errMsg)
 			}
 
-			// Verify it's an Invalid field error
+			// 确认错误类型为 Invalid，而非其他校验类型。
 			if errs[0].Type != field.ErrorTypeInvalid {
 				t.Errorf("Expected ErrorTypeInvalid, but got: %v", errs[0].Type)
 			}
@@ -4920,8 +4974,8 @@ func TestValidateScheduleFormatPanicRecovery(t *testing.T) {
 	}
 }
 
-// TestValidateScheduleFormatNormalCases tests normal validation cases
-// to ensure panic recovery doesn't interfere with normal operation
+// TestValidateScheduleFormatNormalCases 验证常规校验路径：panic 恢复逻辑不应干扰正常 schedule/TZ 校验，
+// 包括允许与禁止 TZ、与 timeZone 字段互斥等场景。
 func TestValidateScheduleFormatNormalCases(t *testing.T) {
 	testCases := []struct {
 		name              string

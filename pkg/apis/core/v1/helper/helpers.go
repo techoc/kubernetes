@@ -18,8 +18,9 @@ package helper
 
 import (
 	"fmt"
-	"k8s.io/klog/v2"
 	"strings"
+
+	"k8s.io/klog/v2"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,16 +32,16 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// IsExtendedResourceName returns true if:
-// 1. the resource name is not in the default namespace;
-// 2. resource name does not have "requests." prefix,
-// to avoid confusion with the convention in quota
-// 3. it satisfies the rules in IsQualifiedName() after converted into quota resource name
+// IsExtendedResourceName 在以下条件全部满足时返回 true：
+// 1. 资源名不在默认命名空间中；
+// 2. 资源名没有 "requests." 前缀，以免与配额约定产生混淆；
+// 3. 转换为配额资源名后满足 IsQualifiedName() 的规则。
 func IsExtendedResourceName(name v1.ResourceName) bool {
 	if IsNativeResource(name) || strings.HasPrefix(string(name), v1.DefaultResourceRequestsPrefix) {
 		return false
 	}
-	// Ensure it satisfies the rules in IsQualifiedName() after converted into quota resource name
+	// 确保转换为配额资源名后满足 IsQualifiedName() 的规则，
+	// 这样扩展资源才能安全地用于配额统计。
 	nameForQuota := fmt.Sprintf("%s%s", v1.DefaultResourceRequestsPrefix, string(name))
 	if errs := validation.IsQualifiedName(nameForQuota); len(errs) != 0 {
 		return false
@@ -48,36 +49,31 @@ func IsExtendedResourceName(name v1.ResourceName) bool {
 	return true
 }
 
-// IsPrefixedNativeResource returns true if the resource name is in the
-// *kubernetes.io/ namespace.
+// IsPrefixedNativeResource 判断资源名是否位于 *kubernetes.io/ 命名空间。
 func IsPrefixedNativeResource(name v1.ResourceName) bool {
 	return strings.Contains(string(name), v1.ResourceDefaultNamespacePrefix)
 }
 
-// IsNativeResource returns true if the resource name is in the
-// *kubernetes.io/ namespace. Partially-qualified (unprefixed) names are
-// implicitly in the kubernetes.io/ namespace.
+// IsNativeResource 判断资源名是否位于 *kubernetes.io/ 命名空间。
+// 不带前缀（部分限定）的名称隐式属于 kubernetes.io/ 命名空间。
 func IsNativeResource(name v1.ResourceName) bool {
 	return !strings.Contains(string(name), "/") ||
 		IsPrefixedNativeResource(name)
 }
 
-// IsHugePageResourceName returns true if the resource name has the huge page
-// resource prefix.
+// IsHugePageResourceName 判断资源名是否带有大页（huge page）资源前缀。
 func IsHugePageResourceName(name v1.ResourceName) bool {
 	return strings.HasPrefix(string(name), v1.ResourceHugePagesPrefix)
 }
 
-// HugePageResourceName returns a ResourceName with the canonical hugepage
-// prefix prepended for the specified page size.  The page size is converted
-// to its canonical representation.
+// HugePageResourceName 为指定的页大小加上规范的大页前缀，生成对应的 ResourceName。
+// 页大小会先被转换为规范表示形式。
 func HugePageResourceName(pageSize resource.Quantity) v1.ResourceName {
 	return v1.ResourceName(fmt.Sprintf("%s%s", v1.ResourceHugePagesPrefix, pageSize.String()))
 }
 
-// HugePageSizeFromResourceName returns the page size for the specified huge page
-// resource name.  If the specified input is not a valid huge page resource name
-// an error is returned.
+// HugePageSizeFromResourceName 从大页资源名中解析出页大小。
+// 输入不是合法的大页资源名时返回错误。
 func HugePageSizeFromResourceName(name v1.ResourceName) (resource.Quantity, error) {
 	if !IsHugePageResourceName(name) {
 		return resource.Quantity{}, fmt.Errorf("resource name: %s is an invalid hugepage name", name)
@@ -86,9 +82,8 @@ func HugePageSizeFromResourceName(name v1.ResourceName) (resource.Quantity, erro
 	return resource.ParseQuantity(pageSize)
 }
 
-// HugePageUnitSizeFromByteSize returns hugepage size has the format.
-// `size` must be guaranteed to divisible into the largest units that can be expressed.
-// <size><unit-prefix>B (1024 = "1KB", 1048576 = "1MB", etc).
+// HugePageUnitSizeFromByteSize 把字节大小转换为 "<size><unit-prefix>B" 格式的大页大小字符串。
+// size 必须能被表示为最大的可用单位（如 1024 = "1KB"，1048576 = "1MB"）。
 func HugePageUnitSizeFromByteSize(size int64) (string, error) {
 	// hugePageSizeUnitList is borrowed from opencontainers/runc/libcontainer/cgroups/utils.go
 	var hugePageSizeUnitList = []string{"B", "KB", "MB", "GB", "TB", "PB"}
@@ -104,7 +99,7 @@ func HugePageUnitSizeFromByteSize(size int64) (string, error) {
 	return fmt.Sprintf("%d%s", size, hugePageSizeUnitList[idx]), nil
 }
 
-// IsHugePageMedium returns true if the volume medium is in 'HugePages[-size]' format
+// IsHugePageMedium 判断卷介质是否为 'HugePages[-size]' 格式。
 func IsHugePageMedium(medium v1.StorageMedium) bool {
 	if medium == v1.StorageMediumHugePages {
 		return true
@@ -112,8 +107,8 @@ func IsHugePageMedium(medium v1.StorageMedium) bool {
 	return strings.HasPrefix(string(medium), string(v1.StorageMediumHugePagesPrefix))
 }
 
-// HugePageSizeFromMedium returns the page size for the specified huge page medium.
-// If the specified input is not a valid huge page medium an error is returned.
+// HugePageSizeFromMedium 从大页介质名中解析出页大小。
+// 输入不是合法的大页介质时返回错误。
 func HugePageSizeFromMedium(medium v1.StorageMedium) (resource.Quantity, error) {
 	if !IsHugePageMedium(medium) {
 		return resource.Quantity{}, fmt.Errorf("medium: %s is not a hugepage medium", medium)
@@ -125,26 +120,25 @@ func HugePageSizeFromMedium(medium v1.StorageMedium) (resource.Quantity, error) 
 	return resource.ParseQuantity(pageSize)
 }
 
-// IsOvercommitAllowed returns true if the resource is in the default
-// namespace and is not hugepages.
+// IsOvercommitAllowed 判断资源是否位于默认命名空间且不是大页资源。
 func IsOvercommitAllowed(name v1.ResourceName) bool {
 	return IsNativeResource(name) &&
 		!IsHugePageResourceName(name)
 }
 
-// IsAttachableVolumeResourceName returns true when the resource name is prefixed in attachable volume
+// IsAttachableVolumeResourceName 判断资源名是否带有可挂载卷资源前缀。
 func IsAttachableVolumeResourceName(name v1.ResourceName) bool {
 	return strings.HasPrefix(string(name), v1.ResourceAttachableVolumesPrefix)
 }
 
-// IsServiceIPSet aims to check if the service's ClusterIP is set or not
-// the objective is not to perform validation here
+// IsServiceIPSet 检查 Service 的 ClusterIP 是否已设置。
+// 目的不是在此处做校验，调用方需自行保证 Service 已通过语义校验。
 func IsServiceIPSet(service *v1.Service) bool {
 	return service.Spec.ClusterIP != v1.ClusterIPNone && service.Spec.ClusterIP != ""
 }
 
-// GetAccessModesAsString returns a string representation of an array of access modes.
-// modes, when present, are always in the same order: RWO,ROX,RWX,RWOP.
+// GetAccessModesAsString 把访问模式数组转为字符串表示。
+// 存在时各模式始终按固定顺序输出：RWO、ROX、RWX、RWOP。
 func GetAccessModesAsString(modes []v1.PersistentVolumeAccessMode) string {
 	modes = removeDuplicateAccessModes(modes)
 	modesStr := []string{}
@@ -163,7 +157,7 @@ func GetAccessModesAsString(modes []v1.PersistentVolumeAccessMode) string {
 	return strings.Join(modesStr, ",")
 }
 
-// GetAccessModesFromString returns an array of AccessModes from a string created by GetAccessModesAsString
+// GetAccessModesFromString 将 GetAccessModesAsString 生成的字符串还原为访问模式数组。
 func GetAccessModesFromString(modes string) []v1.PersistentVolumeAccessMode {
 	strmodes := strings.Split(modes, ",")
 	accessModes := []v1.PersistentVolumeAccessMode{}
@@ -183,7 +177,7 @@ func GetAccessModesFromString(modes string) []v1.PersistentVolumeAccessMode {
 	return accessModes
 }
 
-// removeDuplicateAccessModes returns an array of access modes without any duplicates
+// removeDuplicateAccessModes 去除访问模式数组中的重复项。
 func removeDuplicateAccessModes(modes []v1.PersistentVolumeAccessMode) []v1.PersistentVolumeAccessMode {
 	accessModes := []v1.PersistentVolumeAccessMode{}
 	for _, m := range modes {
@@ -194,6 +188,7 @@ func removeDuplicateAccessModes(modes []v1.PersistentVolumeAccessMode) []v1.Pers
 	return accessModes
 }
 
+// ContainsAccessMode 判断访问模式数组中是否包含指定模式。
 func ContainsAccessMode(modes []v1.PersistentVolumeAccessMode, mode v1.PersistentVolumeAccessMode) bool {
 	for _, m := range modes {
 		if m == mode {
@@ -203,7 +198,7 @@ func ContainsAccessMode(modes []v1.PersistentVolumeAccessMode, mode v1.Persisten
 	return false
 }
 
-// NodeSelectorRequirementKeysExistInNodeSelectorTerms checks if a NodeSelectorTerm with key is already specified in terms
+// NodeSelectorRequirementKeysExistInNodeSelectorTerms 检查 terms 中是否已存在与 reqs 同 key 的 NodeSelectorTerm。
 func NodeSelectorRequirementKeysExistInNodeSelectorTerms(reqs []v1.NodeSelectorRequirement, terms []v1.NodeSelectorTerm) bool {
 	for _, req := range reqs {
 		for _, term := range terms {
@@ -217,8 +212,7 @@ func NodeSelectorRequirementKeysExistInNodeSelectorTerms(reqs []v1.NodeSelectorR
 	return false
 }
 
-// TopologySelectorRequirementsAsSelector converts the []TopologySelectorLabelRequirement api type into a struct
-// that implements labels.Selector.
+// TopologySelectorRequirementsAsSelector 把 []TopologySelectorLabelRequirement 转换为实现 labels.Selector 的结构。
 func TopologySelectorRequirementsAsSelector(tsm []v1.TopologySelectorLabelRequirement) (labels.Selector, error) {
 	if len(tsm) == 0 {
 		return labels.Nothing(), nil
@@ -236,16 +230,16 @@ func TopologySelectorRequirementsAsSelector(tsm []v1.TopologySelectorLabelRequir
 	return selector, nil
 }
 
-// MatchTopologySelectorTerms checks whether given labels match topology selector terms in ORed;
-// nil or empty term matches no objects; while empty term list matches all objects.
+// MatchTopologySelectorTerms 检查给定标签是否匹配任一拓扑选择器项（各项之间为 OR 关系）。
+// nil 或空的项不匹配任何对象；而空的项列表则匹配所有对象。
 func MatchTopologySelectorTerms(topologySelectorTerms []v1.TopologySelectorTerm, lbls labels.Set) bool {
 	if len(topologySelectorTerms) == 0 {
-		// empty term list matches all objects
+		// 空的项列表表示不设限制，匹配所有对象。
 		return true
 	}
 
 	for _, req := range topologySelectorTerms {
-		// nil or empty term selects no objects
+		// nil 或空项不匹配任何对象，跳过。
 		if len(req.MatchLabelExpressions) == 0 {
 			continue
 		}
@@ -261,8 +255,8 @@ func MatchTopologySelectorTerms(topologySelectorTerms []v1.TopologySelectorTerm,
 	return false
 }
 
-// AddOrUpdateTolerationInPodSpec tries to add a toleration to the toleration list in PodSpec.
-// Returns true if something was updated, false otherwise.
+// AddOrUpdateTolerationInPodSpec 尝试向 PodSpec 的容忍列表添加或更新一条容忍。
+// 发生更新时返回 true，无需变更时返回 false。
 func AddOrUpdateTolerationInPodSpec(spec *v1.PodSpec, toleration *v1.Toleration) bool {
 	podTolerations := spec.Tolerations
 
@@ -289,7 +283,8 @@ func AddOrUpdateTolerationInPodSpec(spec *v1.PodSpec, toleration *v1.Toleration)
 	return true
 }
 
-// GetMatchingTolerations returns true and list of Tolerations matching all Taints if all are tolerated, or false otherwise.
+// GetMatchingTolerations 检查所有污点是否都被容忍：
+// 若全部被容忍，返回 true 及每条污点对应的容忍；否则返回 false。
 func GetMatchingTolerations(logger klog.Logger, taints []v1.Taint, tolerations []v1.Toleration) (bool, []v1.Toleration) {
 	if len(taints) == 0 {
 		return true, []v1.Toleration{}
@@ -315,8 +310,7 @@ func GetMatchingTolerations(logger klog.Logger, taints []v1.Taint, tolerations [
 	return true, result
 }
 
-// ScopedResourceSelectorRequirementsAsSelector converts the ScopedResourceSelectorRequirement api type into a struct that implements
-// labels.Selector.
+// ScopedResourceSelectorRequirementsAsSelector 把 ScopedResourceSelectorRequirement 转换为实现 labels.Selector 的结构。
 func ScopedResourceSelectorRequirementsAsSelector(ssr v1.ScopedResourceSelectorRequirement) (labels.Selector, error) {
 	selector := labels.NewSelector()
 	var op selection.Operator

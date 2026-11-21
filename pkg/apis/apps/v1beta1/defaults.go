@@ -26,10 +26,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// addDefaultingFuncs 向 scheme 注册 v1beta1 apps 资源的默认值设置函数。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_StatefulSet 设置 StatefulSet 的 Pod 管理、更新策略、PVC 保留及副本数默认值。
 func SetDefaults_StatefulSet(obj *appsv1beta1.StatefulSet) {
 	if len(obj.Spec.PodManagementPolicy) == 0 {
 		obj.Spec.PodManagementPolicy = appsv1beta1.OrderedReadyPodManagement
@@ -38,6 +40,7 @@ func SetDefaults_StatefulSet(obj *appsv1beta1.StatefulSet) {
 	if obj.Spec.UpdateStrategy.Type == "" {
 		obj.Spec.UpdateStrategy.Type = appsv1beta1.OnDeleteStatefulSetStrategyType
 	}
+	// selector 和对象标签默认取自 pod 模板，保证选择范围一致。
 	labels := obj.Spec.Template.Labels
 	if labels != nil {
 		if obj.Spec.Selector == nil {
@@ -50,6 +53,7 @@ func SetDefaults_StatefulSet(obj *appsv1beta1.StatefulSet) {
 		}
 	}
 
+	// PVC 默认保留，避免 StatefulSet 删除或缩容时误删用户数据。
 	if obj.Spec.PersistentVolumeClaimRetentionPolicy == nil {
 		obj.Spec.PersistentVolumeClaimRetentionPolicy = &appsv1beta1.StatefulSetPersistentVolumeClaimRetentionPolicy{}
 	}
@@ -68,12 +72,14 @@ func SetDefaults_StatefulSet(obj *appsv1beta1.StatefulSet) {
 		obj.Spec.RevisionHistoryLimit = new(int32)
 		*obj.Spec.RevisionHistoryLimit = 10
 	}
+	// 滚动更新参数只在 RollingUpdate 策略下有意义，OnDelete 不应被补默认值。
 	if obj.Spec.UpdateStrategy.Type == appsv1beta1.RollingUpdateStatefulSetStrategyType &&
 		obj.Spec.UpdateStrategy.RollingUpdate != nil {
 
 		if obj.Spec.UpdateStrategy.RollingUpdate.Partition == nil {
 			obj.Spec.UpdateStrategy.RollingUpdate.Partition = ptr.To[int32](0)
 		}
+		// MaxUnavailable 受特性开关控制，关闭时不能写入该字段。
 		if utilfeature.DefaultFeatureGate.Enabled(features.MaxUnavailableStatefulSet) {
 			if obj.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable == nil {
 				obj.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable = ptr.To(intstr.FromInt32(1))
@@ -82,14 +88,13 @@ func SetDefaults_StatefulSet(obj *appsv1beta1.StatefulSet) {
 	}
 }
 
-// SetDefaults_Deployment sets additional defaults compared to its counterpart
-// in extensions. These addons are:
-// - MaxUnavailable during rolling update set to 25% (1 in extensions)
-// - MaxSurge value during rolling update set to 25% (1 in extensions)
-// - RevisionHistoryLimit set to 2 (not set in extensions)
-// - ProgressDeadlineSeconds set to 600s (not set in extensions)
+// SetDefaults_Deployment 设置 Deployment 的默认值，与 extensions 版本相比额外补充：
+// - 滚动更新的 MaxUnavailable 为 25%（extensions 为 1）
+// - 滚动更新的 MaxSurge 为 25%（extensions 为 1）
+// - RevisionHistoryLimit 为 2（extensions 不设置）
+// - ProgressDeadlineSeconds 为 600 秒（extensions 不设置）
 func SetDefaults_Deployment(obj *appsv1beta1.Deployment) {
-	// Default labels and selector to labels from pod template spec.
+	// 对象标签和 selector 默认取自 pod 模板，保证选择范围一致。
 	labels := obj.Spec.Template.Labels
 
 	if labels != nil {
@@ -100,13 +105,13 @@ func SetDefaults_Deployment(obj *appsv1beta1.Deployment) {
 			obj.Labels = labels
 		}
 	}
-	// Set appsv1beta1.DeploymentSpec.Replicas to 1 if it is not set.
+	// 未指定副本数时默认 1 个，保证创建后有一个可用实例。
 	if obj.Spec.Replicas == nil {
 		obj.Spec.Replicas = new(int32)
 		*obj.Spec.Replicas = 1
 	}
 	strategy := &obj.Spec.Strategy
-	// Set default appsv1beta1.DeploymentStrategyType as RollingUpdate.
+	// 默认使用滚动更新，避免重建策略造成服务中断。
 	if strategy.Type == "" {
 		strategy.Type = appsv1beta1.RollingUpdateDeploymentStrategyType
 	}
@@ -116,12 +121,12 @@ func SetDefaults_Deployment(obj *appsv1beta1.Deployment) {
 			strategy.RollingUpdate = &rollingUpdate
 		}
 		if strategy.RollingUpdate.MaxUnavailable == nil {
-			// Set default MaxUnavailable as 25% by default.
+			// 默认最多 25% 副本不可用，在升级速度与可用性之间取平衡。
 			maxUnavailable := intstr.FromString("25%")
 			strategy.RollingUpdate.MaxUnavailable = &maxUnavailable
 		}
 		if strategy.RollingUpdate.MaxSurge == nil {
-			// Set default MaxSurge as 25% by default.
+			// 默认最多额外创建 25% 副本，与 MaxUnavailable 配合限制升级影响面。
 			maxSurge := intstr.FromString("25%")
 			strategy.RollingUpdate.MaxSurge = &maxSurge
 		}

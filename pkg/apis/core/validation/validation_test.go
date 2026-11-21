@@ -12850,7 +12850,7 @@ func TestValidatePod(t *testing.T) {
 								PodAffinityTerm: core.PodAffinityTerm{
 									LabelSelector: &metav1.LabelSelector{
 										MatchExpressions: []metav1.LabelSelectorRequirement{
-											// This one should be created from MatchLabelKeys.
+											// 该项应由 MatchLabelKeys 生成。
 											{
 												Key:      "key",
 												Operator: metav1.LabelSelectorOpIn,
@@ -12882,7 +12882,7 @@ func TestValidatePod(t *testing.T) {
 							{
 								LabelSelector: &metav1.LabelSelector{
 									MatchExpressions: []metav1.LabelSelectorRequirement{
-										// This one should be created from MatchLabelKeys.
+										// 该项应由 MatchLabelKeys 生成。
 										{
 											Key:      "key",
 											Operator: metav1.LabelSelectorOpIn,
@@ -12915,7 +12915,7 @@ func TestValidatePod(t *testing.T) {
 								PodAffinityTerm: core.PodAffinityTerm{
 									LabelSelector: &metav1.LabelSelector{
 										MatchExpressions: []metav1.LabelSelectorRequirement{
-											// This one should be created from MatchLabelKeys.
+											// 该项应由 MatchLabelKeys 生成。
 											{
 												Key:      "key",
 												Operator: metav1.LabelSelectorOpIn,
@@ -12947,7 +12947,7 @@ func TestValidatePod(t *testing.T) {
 							{
 								LabelSelector: &metav1.LabelSelector{
 									MatchExpressions: []metav1.LabelSelectorRequirement{
-										// This one should be created from MatchLabelKeys.
+										// 该项应由 MatchLabelKeys 生成。
 										{
 											Key:      "key",
 											Operator: metav1.LabelSelectorOpIn,
@@ -14806,7 +14806,7 @@ func TestValidatePodUpdate(t *testing.T) {
 				podtest.SetAffinity(&core.Affinity{
 					NodeAffinity: &core.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &core.NodeSelector{
-							// Add 1 MatchExpression and 1 MatchField.
+							// 增加一个 MatchExpression 和一个 MatchField。
 							NodeSelectorTerms: []core.NodeSelectorTerm{{
 								MatchExpressions: []core.NodeSelectorRequirement{{
 									Key:      "expr",
@@ -14871,7 +14871,7 @@ func TestValidatePodUpdate(t *testing.T) {
 				podtest.SetAffinity(&core.Affinity{
 					NodeAffinity: &core.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &core.NodeSelector{
-							// Add 1 MatchExpression and 1 MatchField.
+							// 增加一个 MatchExpression 和一个 MatchField。
 							NodeSelectorTerms: []core.NodeSelectorTerm{{
 								MatchExpressions: []core.NodeSelectorRequirement{{
 									Key:      "expr",
@@ -14913,7 +14913,7 @@ func TestValidatePodUpdate(t *testing.T) {
 				podtest.SetAffinity(&core.Affinity{
 					NodeAffinity: &core.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &core.NodeSelector{
-							// Add 1 MatchExpression and 1 MatchField.
+							// 增加一个 MatchExpression 和一个 MatchField。
 							NodeSelectorTerms: []core.NodeSelectorTerm{{
 								MatchExpressions: []core.NodeSelectorRequirement{{
 									Key:      "expr",
@@ -14992,7 +14992,7 @@ func TestValidatePodUpdate(t *testing.T) {
 				podtest.SetAffinity(&core.Affinity{
 					NodeAffinity: &core.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &core.NodeSelector{
-							// Add 1 MatchExpression and 1 MatchField.
+							// 增加一个 MatchExpression 和一个 MatchField。
 							NodeSelectorTerms: []core.NodeSelectorTerm{{
 								MatchExpressions: []core.NodeSelectorRequirement{{
 									Key:      "expr",
@@ -15031,7 +15031,7 @@ func TestValidatePodUpdate(t *testing.T) {
 				podtest.SetAffinity(&core.Affinity{
 					NodeAffinity: &core.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &core.NodeSelector{
-							// Add 1 MatchExpression and 1 MatchField.
+							// 增加一个 MatchExpression 和一个 MatchField。
 							NodeSelectorTerms: []core.NodeSelectorTerm{{
 								MatchExpressions: []core.NodeSelectorRequirement{{
 									Key:      "expr",
@@ -26338,7 +26338,7 @@ func TestValidateTopologySpreadConstraints(t *testing.T) {
 			MatchLabelKeys:    []string{"foo"},
 			LabelSelector: &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
-					// This one should be created from MatchLabelKeys.
+					// 该项应由 MatchLabelKeys 生成。
 					{
 						Key:      "foo",
 						Operator: metav1.LabelSelectorOpNotIn,
@@ -26468,7 +26468,7 @@ func TestValidateTopologySpreadConstraints(t *testing.T) {
 			MatchLabelKeys:    []string{"foo"},
 			LabelSelector: &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
-					// This one should be created from MatchLabelKeys.
+					// 该项应由 MatchLabelKeys 生成。
 					{
 						Key:      "foo",
 						Operator: metav1.LabelSelectorOpNotIn,
@@ -26498,7 +26498,7 @@ func TestValidateTopologySpreadConstraints(t *testing.T) {
 			MatchLabelKeys:    []string{"foo"},
 			LabelSelector: &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
-					// This one should be created from MatchLabelKeys.
+					// 该项应由 MatchLabelKeys 生成。
 					{
 						Key:      "foo",
 						Operator: metav1.LabelSelectorOpNotIn,
@@ -26527,7 +26527,7 @@ func TestValidateTopologySpreadConstraints(t *testing.T) {
 			MatchLabelKeys:    []string{"foo"},
 			LabelSelector: &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
-					// This one should be created from MatchLabelKeys.
+					// 该项应由 MatchLabelKeys 生成。
 					{
 						Key:      "foo",
 						Operator: metav1.LabelSelectorOpNotIn,
@@ -26574,7 +26574,7 @@ func TestValidateTopologySpreadConstraints(t *testing.T) {
 			MatchLabelKeys:    []string{"foo"},
 			LabelSelector: &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
-					// This one should be created from MatchLabelKeys.
+					// 该项应由 MatchLabelKeys 生成。
 					{
 						Key:      "foo",
 						Operator: metav1.LabelSelectorOpNotIn,

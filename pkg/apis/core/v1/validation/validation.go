@@ -30,8 +30,9 @@ var validLogStreams = sets.New[string](
 	v1.LogStreamAll,
 )
 
-// ValidatePodLogOptions checks if options that are set are at the correct
-// value. Any incorrect value will be returned to the ErrorList.
+// ValidatePodLogOptions 校验 Pod 日志请求中已设置选项的取值是否合法，所有错误都会汇总到 ErrorList 返回。
+// 主要约束：tailLines 非负、limitBytes 与 sinceSeconds 大于 0、sinceTime 与 sinceSeconds 互斥、
+// stream 必须为合法值，且指定具体 stream 时不允许同时指定 tailLines。
 func ValidatePodLogOptions(opts *v1.PodLogOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if opts.TailLines != nil && *opts.TailLines < 0 {
@@ -48,7 +49,7 @@ func ValidatePodLogOptions(opts *v1.PodLogOptions) field.ErrorList {
 			allErrs = append(allErrs, field.Invalid(field.NewPath("sinceSeconds"), *opts.SinceSeconds, "must be greater than 0"))
 		}
 	}
-	// opts.Stream can be nil because defaulting might not apply if no URL params are provided.
+	// 若请求没有携带任何 URL 参数，默认值填充可能不会执行，因此 opts.Stream 可能为 nil。
 	if opts.Stream != nil {
 		if !validLogStreams.Has(*opts.Stream) {
 			allErrs = append(allErrs, field.NotSupported(field.NewPath("stream"), *opts.Stream, validLogStreams.UnsortedList()))

@@ -18,6 +18,7 @@ package core
 
 import "testing"
 
+// TestTaintToString 验证污点在有无 value/effect 的四种组合下都能输出预期字符串。
 func TestTaintToString(t *testing.T) {
 	testCases := []struct {
 		taint          *Taint
@@ -60,6 +61,7 @@ func TestTaintToString(t *testing.T) {
 	}
 }
 
+// TestMatchTaint 验证污点匹配只看 key:effect：value 不同仍视为匹配，key/effect 不同则不匹配。
 func TestMatchTaint(t *testing.T) {
 	testCases := []struct {
 		description  string

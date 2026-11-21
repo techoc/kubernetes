@@ -24,6 +24,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/rbac"
 )
 
+// 测试 ClusterRoleBinding 校验：合法绑定应通过；roleRef、subject 等字段非法时应报出对应类型与字段的错误。
 func TestValidateClusterRoleBinding(t *testing.T) {
 	errs := ValidateClusterRoleBinding(
 		&rbac.ClusterRoleBinding{
@@ -139,6 +140,7 @@ func TestValidateClusterRoleBinding(t *testing.T) {
 	}
 }
 
+// 测试 RoleBinding 校验，与 ClusterRoleBinding 类似，额外要求 namespace 非空。
 func TestValidateRoleBinding(t *testing.T) {
 	errs := ValidateRoleBinding(
 		&rbac.RoleBinding{
@@ -245,6 +247,7 @@ func TestValidateRoleBinding(t *testing.T) {
 	}
 }
 
+// 测试 RoleBinding 更新校验：roleRef 属于不可变字段，修改应被拒绝。
 func TestValidateRoleBindingUpdate(t *testing.T) {
 	old := &rbac.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Namespace: metav1.NamespaceDefault, Name: "master", ResourceVersion: "1"},
@@ -293,6 +296,7 @@ func TestValidateRoleBindingUpdate(t *testing.T) {
 	}
 }
 
+// Role 校验的测试数据结构：包含待校验角色、期望是否报错、错误类型与字段路径。
 type ValidateRoleTest struct {
 	role    rbac.Role
 	wantErr bool
@@ -300,6 +304,7 @@ type ValidateRoleTest struct {
 	field   string
 }
 
+// 按期望执行 ValidateRole 校验并核对错误类型与字段路径。
 func (v ValidateRoleTest) test(t *testing.T) {
 	errs := ValidateRole(&v.role)
 	if len(errs) == 0 {
@@ -322,6 +327,7 @@ func (v ValidateRoleTest) test(t *testing.T) {
 	}
 }
 
+// ClusterRole 校验的测试数据结构，字段含义同 ValidateRoleTest。
 type ValidateClusterRoleTest struct {
 	role    rbac.ClusterRole
 	wantErr bool
@@ -329,6 +335,7 @@ type ValidateClusterRoleTest struct {
 	field   string
 }
 
+// 按期望执行 ValidateClusterRole 校验并核对错误类型与字段路径。
 func (v ValidateClusterRoleTest) test(t *testing.T) {
 	errs := ValidateClusterRole(&v.role, ClusterRoleValidationOptions{false})
 	if len(errs) == 0 {
@@ -351,6 +358,7 @@ func (v ValidateClusterRoleTest) test(t *testing.T) {
 	}
 }
 
+// 校验 Role 缺少 namespace 时应报 Required 错误。
 func TestValidateRoleZeroLengthNamespace(t *testing.T) {
 	ValidateRoleTest{
 		role: rbac.Role{
@@ -362,6 +370,7 @@ func TestValidateRoleZeroLengthNamespace(t *testing.T) {
 	}.test(t)
 }
 
+// 校验 Role 缺少 name 时应报 Required 错误。
 func TestValidateRoleZeroLengthName(t *testing.T) {
 	ValidateRoleTest{
 		role: rbac.Role{
@@ -373,6 +382,7 @@ func TestValidateRoleZeroLengthName(t *testing.T) {
 	}.test(t)
 }
 
+// 校验合法的 Role 应通过。
 func TestValidateRoleValidRole(t *testing.T) {
 	ValidateRoleTest{
 		role: rbac.Role{
@@ -385,6 +395,7 @@ func TestValidateRoleValidRole(t *testing.T) {
 	}.test(t)
 }
 
+// 校验合法 ClusterRole（无需 namespace）应通过。
 func TestValidateRoleValidRoleNoNamespace(t *testing.T) {
 	ValidateClusterRoleTest{
 		role: rbac.ClusterRole{
@@ -396,6 +407,7 @@ func TestValidateRoleValidRoleNoNamespace(t *testing.T) {
 	}.test(t)
 }
 
+// 校验 ClusterRole 中的非资源 URL 规则应通过。
 func TestValidateRoleNonResourceURL(t *testing.T) {
 	ValidateClusterRoleTest{
 		role: rbac.ClusterRole{
@@ -411,6 +423,7 @@ func TestValidateRoleNonResourceURL(t *testing.T) {
 	}.test(t)
 }
 
+// 校验 Role（命名空间内）中使用非资源 URL 应报 Invalid 错误。
 func TestValidateRoleNamespacedNonResourceURL(t *testing.T) {
 	ValidateRoleTest{
 		role: rbac.Role{
@@ -419,7 +432,7 @@ func TestValidateRoleNamespacedNonResourceURL(t *testing.T) {
 				Name:      "default",
 			},
 			Rules: []rbac.PolicyRule{{
-				// non-resource URLs are invalid for namespaced rules
+				// 非资源 URL 对命名空间内的规则无效。
 				Verbs:           []string{"get"},
 				NonResourceURLs: []string{"/*"},
 			}},
@@ -430,6 +443,7 @@ func TestValidateRoleNamespacedNonResourceURL(t *testing.T) {
 	}.test(t)
 }
 
+// 校验非资源 URL 规则未提供 verbs 时应报 Required 错误。
 func TestValidateRoleNonResourceURLNoVerbs(t *testing.T) {
 	ValidateClusterRoleTest{
 		role: rbac.ClusterRole{
@@ -447,6 +461,7 @@ func TestValidateRoleNonResourceURLNoVerbs(t *testing.T) {
 	}.test(t)
 }
 
+// 校验同一条规则中混用非资源 URL 与资源字段应报 Invalid 错误。
 func TestValidateRoleMixedNonResourceAndResource(t *testing.T) {
 	ValidateRoleTest{
 		role: rbac.Role{
@@ -467,6 +482,7 @@ func TestValidateRoleMixedNonResourceAndResource(t *testing.T) {
 	}.test(t)
 }
 
+// 校验合法的资源规则应通过。
 func TestValidateRoleValidResource(t *testing.T) {
 	ValidateRoleTest{
 		role: rbac.Role{
@@ -484,6 +500,7 @@ func TestValidateRoleValidResource(t *testing.T) {
 	}.test(t)
 }
 
+// 校验资源规则缺少 apiGroups 时应报 Required 错误。
 func TestValidateRoleNoAPIGroup(t *testing.T) {
 	ValidateRoleTest{
 		role: rbac.Role{
@@ -502,6 +519,7 @@ func TestValidateRoleNoAPIGroup(t *testing.T) {
 	}.test(t)
 }
 
+// 校验资源规则缺少 resources 时应报 Required 错误。
 func TestValidateRoleNoResources(t *testing.T) {
 	ValidateRoleTest{
 		role: rbac.Role{

@@ -34,10 +34,10 @@ import (
 	"k8s.io/kubernetes/pkg/apis/flowcontrol/internalbootstrap"
 )
 
-// ValidateFlowSchemaName validates name for flow-schema.
+// ValidateFlowSchemaName 校验 FlowSchema 的名称。
 var ValidateFlowSchemaName = apimachineryvalidation.NameIsDNSSubdomain
 
-// ValidatePriorityLevelConfigurationName validates name for priority-level-configuration.
+// ValidatePriorityLevelConfigurationName 校验 PriorityLevelConfiguration 的名称。
 var ValidatePriorityLevelConfigurationName = apimachineryvalidation.NameIsDNSSubdomain
 
 var supportedDistinguisherMethods = sets.NewString(
@@ -75,41 +75,44 @@ var supportedLimitResponseType = sets.NewString(
 	string(flowcontrol.LimitResponseTypeReject),
 )
 
-// PriorityLevelValidationOptions holds the validation options for a priority level object
+// PriorityLevelValidationOptions 保存优先级级别对象的校验选项。
+// 目前为空，预留给后续按版本切换的校验开关。
 type PriorityLevelValidationOptions struct{}
 
-// ValidateFlowSchema validates the content of flow-schema
+// ValidateFlowSchema 校验 FlowSchema 对象的整体内容，包括元数据、spec 和 status。
 func ValidateFlowSchema(fs *flowcontrol.FlowSchema) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMeta(&fs.ObjectMeta, false, ValidateFlowSchemaName, field.NewPath("metadata"))
 	specPath := field.NewPath("spec")
 	allErrs = append(allErrs, ValidateFlowSchemaSpec(fs.Name, &fs.Spec, specPath)...)
 	if mand, ok := internalbootstrap.MandatoryFlowSchemas[fs.Name]; ok {
-		// Check for almost exact equality.  This is a pretty
-		// strict test, and it is OK in this context because both
-		// sides of this comparison are intended to ultimately
-		// come from the same code.
+		// 强制内置的 FlowSchema 与引导代码中的固定 spec 完全一致。
+		// 这里采用严格的深度比较是可行的，因为比较双方最终都来自同一份引导代码。
 		if !apiequality.Semantic.DeepEqual(fs.Spec, mand.Spec) {
 			allErrs = append(allErrs, field.Invalid(specPath, fs.Spec, fmt.Sprintf("spec of '%s' must equal the fixed value", fs.Name)))
 		}
 	}
+	// status 由控制器写入，但也必须满足结构约束。
 	allErrs = append(allErrs, ValidateFlowSchemaStatus(&fs.Status, field.NewPath("status"))...)
 	return allErrs
 }
 
-// ValidateFlowSchemaUpdate validates the update of flow-schema
+// ValidateFlowSchemaUpdate 校验 FlowSchema 的更新。
+// 当前更新校验与创建校验一致：所有字段都按全量规则重新校验。
 func ValidateFlowSchemaUpdate(old, fs *flowcontrol.FlowSchema) field.ErrorList {
 	return ValidateFlowSchema(fs)
 }
 
-// ValidateFlowSchemaSpec validates the content of flow-schema's spec
+// ValidateFlowSchemaSpec 校验 FlowSchema 的 spec：匹配优先级、区分方法、引用的优先级级别和规则。
 func ValidateFlowSchemaSpec(fsName string, spec *flowcontrol.FlowSchemaSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
+	// 匹配优先级必须是正数，数值越小越先匹配。
 	if spec.MatchingPrecedence <= 0 {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("matchingPrecedence"), spec.MatchingPrecedence, "must be a positive value"))
 	}
 	if spec.MatchingPrecedence > flowcontrol.FlowSchemaMaxMatchingPrecedence {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("matchingPrecedence"), spec.MatchingPrecedence, fmt.Sprintf("must not be greater than %v", flowcontrol.FlowSchemaMaxMatchingPrecedence)))
 	}
+	// 优先级 1 是保留给内置的 exempt schema 的，防止用户请求绕过豁免逻辑。
 	if (spec.MatchingPrecedence == 1) && (fsName != flowcontrol.FlowSchemaNameExempt) {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("matchingPrecedence"), spec.MatchingPrecedence, "only the schema named 'exempt' may have matchingPrecedence 1"))
 	}
@@ -131,7 +134,7 @@ func ValidateFlowSchemaSpec(fsName string, spec *flowcontrol.FlowSchemaSpec, fld
 	return allErrs
 }
 
-// ValidateFlowSchemaPolicyRulesWithSubjects validates policy-rule-with-subjects object.
+// ValidateFlowSchemaPolicyRulesWithSubjects 校验带 subject 的策略规则：subject 列表与资源/非资源规则不能同时为空。
 func ValidateFlowSchemaPolicyRulesWithSubjects(rule *flowcontrol.PolicyRulesWithSubjects, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(rule.Subjects) > 0 {
@@ -142,6 +145,7 @@ func ValidateFlowSchemaPolicyRulesWithSubjects(rule *flowcontrol.PolicyRulesWith
 		allErrs = append(allErrs, field.Required(fldPath.Child("subjects"), "subjects must contain at least one value"))
 	}
 
+	// 两类规则必须至少有一类非空，否则该 FlowSchema 永远匹配不到请求。
 	if len(rule.ResourceRules) == 0 && len(rule.NonResourceRules) == 0 {
 		allErrs = append(allErrs, field.Required(fldPath, "at least one of resourceRules and nonResourceRules has to be non-empty"))
 	}
@@ -154,7 +158,7 @@ func ValidateFlowSchemaPolicyRulesWithSubjects(rule *flowcontrol.PolicyRulesWith
 	return allErrs
 }
 
-// ValidateFlowSchemaSubject validates flow-schema's subject object.
+// ValidateFlowSchemaSubject 校验 subject，并确保只填写与 kind 相匹配的那一组身份字段。
 func ValidateFlowSchemaSubject(subject *flowcontrol.Subject, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	switch subject.Kind {
@@ -188,7 +192,7 @@ func ValidateFlowSchemaSubject(subject *flowcontrol.Subject, fldPath *field.Path
 	return allErrs
 }
 
-// ValidateServiceAccountSubject validates subject of "ServiceAccount" kind
+// ValidateServiceAccountSubject 校验 "ServiceAccount" 类型的 subject，name 和 namespace 都是必填项。
 func ValidateServiceAccountSubject(subject *flowcontrol.ServiceAccountSubject, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if subject == nil {
@@ -213,7 +217,7 @@ func ValidateServiceAccountSubject(subject *flowcontrol.ServiceAccountSubject, f
 	return allErrs
 }
 
-// ValidateUserSubject validates subject of "User" kind
+// ValidateUserSubject 校验 "User" 类型的 subject。
 func ValidateUserSubject(subject *flowcontrol.UserSubject, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if subject == nil {
@@ -225,7 +229,7 @@ func ValidateUserSubject(subject *flowcontrol.UserSubject, fldPath *field.Path) 
 	return allErrs
 }
 
-// ValidateGroupSubject validates subject of "Group" kind
+// ValidateGroupSubject 校验 "Group" 类型的 subject。
 func ValidateGroupSubject(subject *flowcontrol.GroupSubject, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if subject == nil {
@@ -237,7 +241,7 @@ func ValidateGroupSubject(subject *flowcontrol.GroupSubject, fldPath *field.Path
 	return allErrs
 }
 
-// ValidateFlowSchemaNonResourcePolicyRule validates non-resource policy-rule in the flow-schema.
+// ValidateFlowSchemaNonResourcePolicyRule 校验非资源策略规则；通配符 '*' 只能单独出现，不能与其他值混用。
 func ValidateFlowSchemaNonResourcePolicyRule(rule *flowcontrol.NonResourcePolicyRule, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -248,7 +252,7 @@ func ValidateFlowSchemaNonResourcePolicyRule(rule *flowcontrol.NonResourcePolicy
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("verbs"), rule.Verbs, "if '*' is present, must not specify other verbs"))
 		}
 	} else if !supportedVerbs.IsSuperset(sets.NewString(rule.Verbs...)) {
-		// only supported verbs are allowed
+		// 只允许使用已知的请求动词，避免拼写错误导致规则意外失效。
 		allErrs = append(allErrs, field.NotSupported(fldPath.Child("verbs"), rule.Verbs, supportedVerbs.List()))
 	}
 
@@ -269,7 +273,7 @@ func ValidateFlowSchemaNonResourcePolicyRule(rule *flowcontrol.NonResourcePolicy
 	return allErrs
 }
 
-// ValidateFlowSchemaResourcePolicyRule validates resource policy-rule in the flow-schema.
+// ValidateFlowSchemaResourcePolicyRule 校验资源策略规则，包括 verbs、apiGroups、resources 和 namespaces。
 func ValidateFlowSchemaResourcePolicyRule(rule *flowcontrol.ResourcePolicyRule, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -280,7 +284,7 @@ func ValidateFlowSchemaResourcePolicyRule(rule *flowcontrol.ResourcePolicyRule, 
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("verbs"), rule.Verbs, "if '*' is present, must not specify other verbs"))
 		}
 	} else if !supportedVerbs.IsSuperset(sets.NewString(rule.Verbs...)) {
-		// only supported verbs are allowed
+		// 只允许使用已知的请求动词，避免拼写错误导致规则意外失效。
 		allErrs = append(allErrs, field.NotSupported(fldPath.Child("verbs"), rule.Verbs, supportedVerbs.List()))
 	}
 
@@ -296,6 +300,7 @@ func ValidateFlowSchemaResourcePolicyRule(rule *flowcontrol.ResourcePolicyRule, 
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("resources"), rule.Resources, "if '*' is present, must not specify other resources"))
 	}
 
+	// 非集群作用域的规则至少要指定一个 namespace，否则匹配范围不明确。
 	if len(rule.Namespaces) == 0 && !rule.ClusterScope {
 		allErrs = append(allErrs, field.Required(fldPath.Child("namespaces"), "resource rules that are not cluster scoped must supply at least one namespace"))
 	} else if hasWildcard(rule.Namespaces) {
@@ -315,11 +320,12 @@ func ValidateFlowSchemaResourcePolicyRule(rule *flowcontrol.ResourcePolicyRule, 
 
 const nsErrIntro = "each member of this list must be '*' or a DNS-1123 label; "
 
-// ValidateFlowSchemaStatus validates status for the flow-schema.
+// ValidateFlowSchemaStatus 校验 FlowSchema 的 status，condition 的 type 不允许重复。
 func ValidateFlowSchemaStatus(status *flowcontrol.FlowSchemaStatus, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	keys := sets.NewString()
 	for i, condition := range status.Conditions {
+		// 同一类型的 condition 出现多次会让状态含义产生歧义。
 		if keys.Has(string(condition.Type)) {
 			allErrs = append(allErrs, field.Duplicate(fldPath.Child("conditions").Index(i).Child("type"), condition.Type))
 		}
@@ -329,12 +335,12 @@ func ValidateFlowSchemaStatus(status *flowcontrol.FlowSchemaStatus, fldPath *fie
 	return allErrs
 }
 
-// ValidateFlowSchemaStatusUpdate validates the update of status for the flow-schema.
+// ValidateFlowSchemaStatusUpdate 校验 FlowSchema status 的更新，只处理 status 部分。
 func ValidateFlowSchemaStatusUpdate(old, fs *flowcontrol.FlowSchema) field.ErrorList {
 	return ValidateFlowSchemaStatus(&fs.Status, field.NewPath("status"))
 }
 
-// ValidateFlowSchemaCondition validates condition in the flow-schema's status.
+// ValidateFlowSchemaCondition 校验 FlowSchema status 中的单个 condition。
 func ValidateFlowSchemaCondition(condition *flowcontrol.FlowSchemaCondition, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(condition.Type) == 0 {
@@ -343,13 +349,12 @@ func ValidateFlowSchemaCondition(condition *flowcontrol.FlowSchemaCondition, fld
 	return allErrs
 }
 
-// ValidatePriorityLevelConfiguration validates priority-level-configuration.
+// ValidatePriorityLevelConfiguration 校验优先级级别配置对象，包括元数据、spec、内置对象约束和 status。
 func ValidatePriorityLevelConfiguration(pl *flowcontrol.PriorityLevelConfiguration, requestGV schema.GroupVersion, opts PriorityLevelValidationOptions) field.ErrorList {
 	allErrs := apivalidation.ValidateObjectMeta(&pl.ObjectMeta, false, ValidatePriorityLevelConfigurationName, field.NewPath("metadata"))
 
-	// the roundtrip annotation is only for use in v1beta3, and after
-	// conversion, the internal object should not have the roundtrip
-	// annotation, so we should forbid it, if it's set.
+	// roundtrip 注解仅供 v1beta3 转换过程使用；转换完成后内部对象不应保留它，
+	// 因此这里显式禁止用户设置，避免内部表示被外部数据污染。
 	if _, ok := pl.ObjectMeta.Annotations[flowcontrolv1beta3.PriorityLevelPreserveZeroConcurrencySharesKey]; ok {
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("metadata").Child("annotations"), fmt.Sprintf("annotation '%s' is forbidden", flowcontrolv1beta3.PriorityLevelPreserveZeroConcurrencySharesKey)))
 	}
@@ -361,6 +366,8 @@ func ValidatePriorityLevelConfiguration(pl *flowcontrol.PriorityLevelConfigurati
 	return allErrs
 }
 
+// ValidateIfMandatoryPriorityLevelConfigurationObject 校验内置优先级级别配置未被随意篡改。
+// 内置对象是 API Priority and Fairness 正确运行的基础，允许修改的范围被严格限制。
 func ValidateIfMandatoryPriorityLevelConfigurationObject(pl *flowcontrol.PriorityLevelConfiguration, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	mand, ok := internalbootstrap.MandatoryPriorityLevelConfigurations[pl.Name]
@@ -369,9 +376,8 @@ func ValidateIfMandatoryPriorityLevelConfigurationObject(pl *flowcontrol.Priorit
 	}
 
 	if pl.Name == flowcontrol.PriorityLevelConfigurationNameExempt {
-		// we allow the admin to change the contents of the 'Exempt' field of
-		// the singleton 'exempt' priority level object, every other fields of
-		// the Spec should not be allowed to change.
+		// exempt 这个单例对象允许管理员调整 spec.exempt（放行请求的范围），
+		// 但其余字段属于系统运行的关键参数，不允许修改。
 		want := &mand.Spec
 		have := pl.Spec.DeepCopy()
 		have.Exempt = want.Exempt
@@ -381,19 +387,18 @@ func ValidateIfMandatoryPriorityLevelConfigurationObject(pl *flowcontrol.Priorit
 		return allErrs
 	}
 
-	// Check for almost exact equality.  This is a pretty
-	// strict test, and it is OK in this context because both
-	// sides of this comparison are intended to ultimately
-	// come from the same code.
+	// 其余内置对象要求 spec 与引导代码中的固定值完全一致。
+	// 比较双方最终都来自同一份引导代码，因此严格比较是安全的。
 	if !apiequality.Semantic.DeepEqual(pl.Spec, mand.Spec) {
 		allErrs = append(allErrs, field.Invalid(fldPath, pl.Spec, fmt.Sprintf("spec of '%s' must equal the fixed value", pl.Name)))
 	}
 	return allErrs
 }
 
-// ValidatePriorityLevelConfigurationSpec validates priority-level-configuration's spec.
+// ValidatePriorityLevelConfigurationSpec 校验 spec.type 与对象名称是否匹配，并按 Exempt/Limited 分类校验其余字段。
 func ValidatePriorityLevelConfigurationSpec(spec *flowcontrol.PriorityLevelConfigurationSpec, requestGV schema.GroupVersion, name string, fldPath *field.Path, opts PriorityLevelValidationOptions) field.ErrorList {
 	var allErrs field.ErrorList
+	// 名为 exempt 的对象必须是 Exempt 类型，其他对象则不能是 Exempt 类型。
 	if (name == flowcontrol.PriorityLevelConfigurationNameExempt) != (spec.Type == flowcontrol.PriorityLevelEnablementExempt) {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("type"), spec.Type, "must be 'Exempt' if and only if `name` is 'exempt'"))
 	}
@@ -425,7 +430,7 @@ func ValidatePriorityLevelConfigurationSpec(spec *flowcontrol.PriorityLevelConfi
 	return allErrs
 }
 
-// ValidateLimitedPriorityLevelConfiguration validates the configuration for an execution-limited priority level
+// ValidateLimitedPriorityLevelConfiguration 校验 Limited 类型的优先级级别配置，包括并发份额、限流响应和借出/借入比例。
 func ValidateLimitedPriorityLevelConfiguration(lplc *flowcontrol.LimitedPriorityLevelConfiguration, requestGV schema.GroupVersion, fldPath *field.Path, opts PriorityLevelValidationOptions) field.ErrorList {
 	var allErrs field.ErrorList
 	if lplc.NominalConcurrencyShares < 0 {
@@ -443,6 +448,8 @@ func ValidateLimitedPriorityLevelConfiguration(lplc *flowcontrol.LimitedPriority
 	return allErrs
 }
 
+// ValidateExemptPriorityLevelConfiguration 校验 Exempt 类型的优先级级别配置。
+// Exempt 请求不受排队限流约束，但仍需保证并发份额和借出比例是合法数值。
 func ValidateExemptPriorityLevelConfiguration(eplc *flowcontrol.ExemptPriorityLevelConfiguration, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if eplc.NominalConcurrencyShares != nil && *eplc.NominalConcurrencyShares < 0 {
@@ -454,6 +461,9 @@ func ValidateExemptPriorityLevelConfiguration(eplc *flowcontrol.ExemptPriorityLe
 	return allErrs
 }
 
+// getVersionedFieldNameForConcurrencyShares 按请求的版本返回并发份额字段的名称。
+// 老版本中该字段叫 assuredConcurrencyShares，新版本改名为 nominalConcurrencyShares，
+// 错误信息必须使用请求version对应的字段，否则用户无法定位问题字段。
 func getVersionedFieldNameForConcurrencyShares(requestGV schema.GroupVersion) string {
 	switch {
 	case requestGV == flowcontrolv1beta1.SchemeGroupVersion ||
@@ -464,7 +474,7 @@ func getVersionedFieldNameForConcurrencyShares(requestGV schema.GroupVersion) st
 	}
 }
 
-// ValidateLimitResponse validates a LimitResponse
+// ValidateLimitResponse 校验 LimitResponse：Reject 不允许带 queuing，Queue 则必须带合法的 queuing 配置。
 func ValidateLimitResponse(lr flowcontrol.LimitResponse, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	switch lr.Type {
@@ -488,14 +498,14 @@ func ValidateLimitResponse(lr flowcontrol.LimitResponse, fldPath *field.Path) fi
 	return allErrs
 }
 
-// ValidatePriorityLevelQueuingConfiguration validates queuing-configuration for a priority-level
+// ValidatePriorityLevelQueuingConfiguration 校验排队参数，包括队列长度、队列数和 shuffle sharding 的手牌大小。
 func ValidatePriorityLevelQueuingConfiguration(queuing *flowcontrol.QueuingConfiguration, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if queuing.QueueLengthLimit <= 0 {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("queueLengthLimit"), queuing.QueueLengthLimit, "must be positive"))
 	}
 
-	// validate input arguments for shuffle-sharding
+	// 这些参数会作为 shuffle sharding 的输入，必须落在算法可接受的范围内。
 	if queuing.Queues <= 0 {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("queues"), queuing.Queues, "must be positive"))
 	} else if queuing.Queues > priorityLevelConfigurationQueuingMaxQueues {
@@ -515,7 +525,7 @@ func ValidatePriorityLevelQueuingConfiguration(queuing *flowcontrol.QueuingConfi
 	return allErrs
 }
 
-// ValidatePriorityLevelConfigurationStatus validates priority-level-configuration's status.
+// ValidatePriorityLevelConfigurationStatus 校验优先级级别配置的 status，condition 的 type 不允许重复。
 func ValidatePriorityLevelConfigurationStatus(status *flowcontrol.PriorityLevelConfigurationStatus, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	keys := sets.NewString()
@@ -529,12 +539,12 @@ func ValidatePriorityLevelConfigurationStatus(status *flowcontrol.PriorityLevelC
 	return allErrs
 }
 
-// ValidatePriorityLevelConfigurationStatusUpdate validates the update of priority-level-configuration's status.
+// ValidatePriorityLevelConfigurationStatusUpdate 校验优先级级别配置 status 的更新，只处理 status 部分。
 func ValidatePriorityLevelConfigurationStatusUpdate(old, pl *flowcontrol.PriorityLevelConfiguration) field.ErrorList {
 	return ValidatePriorityLevelConfigurationStatus(&pl.Status, field.NewPath("status"))
 }
 
-// ValidatePriorityLevelConfigurationCondition validates condition in priority-level-configuration's status.
+// ValidatePriorityLevelConfigurationCondition 校验优先级级别配置 status 中的单个 condition。
 func ValidatePriorityLevelConfigurationCondition(condition *flowcontrol.PriorityLevelConfigurationCondition, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(condition.Type) == 0 {
@@ -543,16 +553,16 @@ func ValidatePriorityLevelConfigurationCondition(condition *flowcontrol.Priority
 	return allErrs
 }
 
-// ValidateNonResourceURLPath validates non-resource-url path by following rules:
-//  1. Slash must be the leading character of the path
-//  2. White-space is forbidden in the path
-//  3. Continuous/double slash is forbidden in the path
-//  4. Wildcard "*" should only do suffix glob matching. Note that wildcard also matches slashes.
+// ValidateNonResourceURLPath 按以下规则校验非资源 URL 路径：
+//  1. 路径必须以斜杠开头
+//  2. 路径中不允许出现空白字符
+//  3. 路径中不允许出现连续的斜杠
+//  4. 通配符 "*" 只能用于后缀匹配，且它本身也能匹配斜杠
 func ValidateNonResourceURLPath(path string, fldPath *field.Path) *field.Error {
 	if len(path) == 0 {
 		return field.Invalid(fldPath, path, "must not be empty")
 	}
-	if path == "/" { // root path
+	if path == "/" { // 根路径是唯一合法的特例，直接放行
 		return nil
 	}
 
@@ -565,6 +575,7 @@ func ValidateNonResourceURLPath(path string, fldPath *field.Path) *field.Error {
 	if strings.Contains(path, "//") {
 		return field.Invalid(fldPath, path, "must not contain double slash")
 	}
+	// 通配符只能单独出现在末尾，防止出现难以推理的前缀/中间匹配语义。
 	wildcardCount := strings.Count(path, "*")
 	if wildcardCount > 1 || (wildcardCount == 1 && path[len(path)-2:] != "/*") {
 		return field.Invalid(fldPath, path, "wildcard can only do suffix matching")
@@ -572,10 +583,12 @@ func ValidateNonResourceURLPath(path string, fldPath *field.Path) *field.Error {
 	return nil
 }
 
+// hasWildcard 判断操作列表中是否包含通配符 "*"。
 func hasWildcard(operations []string) bool {
 	return memberInList("*", operations...)
 }
 
+// memberInList 判断目标值是否出现在给定列表中。
 func memberInList(seek string, a ...string) bool {
 	for _, ai := range a {
 		if ai == seek {

@@ -25,6 +25,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// testClaimTemplate 构造一个最小合法的 ResourceClaimTemplate，便于各场景在此基础上做局部修改。
+// spec 会深拷贝，避免不同场景之间共享指针导致相互污染。
 func testClaimTemplate(name, namespace string, spec resource.ResourceClaimSpec) *resource.ResourceClaimTemplate {
 	return &resource.ResourceClaimTemplate{
 		ObjectMeta: metav1.ObjectMeta{
@@ -37,6 +39,9 @@ func testClaimTemplate(name, namespace string, spec resource.ResourceClaimSpec) 
 	}
 }
 
+// TestValidateClaimTemplate 覆盖创建时元数据和 spec 的校验。
+// 关键规则：name/namespace 必填；嵌套 request 复用 claim 的校验逻辑，
+// firstAvailable 子请求中的 class 名称错误由声明式 schema 覆盖。
 func TestValidateClaimTemplate(t *testing.T) {
 	now := metav1.Now()
 	badValue := "spaces not allowed"
@@ -220,6 +225,8 @@ func TestValidateClaimTemplate(t *testing.T) {
 	}
 }
 
+// TestValidateClaimTemplateUpdate 验证模板创建后 spec 不可变，
+// 包括 exactly 和 firstAvailable 两种请求形式下的 deviceClassName 修改。
 func TestValidateClaimTemplateUpdate(t *testing.T) {
 	validClaimTemplate := testClaimTemplate(goodName, goodNS, validClaimSpec)
 
@@ -258,8 +265,10 @@ func TestValidateClaimTemplateUpdate(t *testing.T) {
 		},
 	}
 
+	// 每个场景用深拷贝隔离，避免前一个用例的修改影响后续断言。
 	for name, scenario := range scenarios {
 		t.Run(name, func(t *testing.T) {
+			// ResourceVersion 属于元数据，更新校验应忽略它。
 			scenario.oldClaimTemplate.ResourceVersion = "1"
 			errs := ValidateResourceClaimTemplateUpdate(scenario.update(scenario.oldClaimTemplate.DeepCopy()), scenario.oldClaimTemplate)
 			assertFailures(t, scenario.wantFailures, errs)

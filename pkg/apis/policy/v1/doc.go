@@ -21,6 +21,6 @@ limitations under the License.
 // +k8s:validation-gen=TypesWithField=TypeMeta
 // +k8s:validation-gen-input=k8s.io/api/policy/v1
 
-// Package policy is for any kind of policy object. Currently, this only
-// includes policyv1.PodDisruptionBudget
+// Package policy 用于各类策略对象。目前仅包含
+// 包含 policyv1.PodDisruptionBudget。
 package v1

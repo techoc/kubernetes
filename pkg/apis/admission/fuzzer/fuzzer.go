@@ -24,9 +24,12 @@ import (
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// Funcs returns the fuzzer functions for the admission api group.
+// Funcs 返回 admission API 组专用的 fuzzer 函数列表。
+// 这些函数会被混入序列化/往返测试中，为特定类型生成可控的测试数据。
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
+		// RawExtension 内部可放任意 JSON，默认 fuzzer 会生成难以预测的随机字节，
+		// 导致编码/解码往返测试不稳定。这里固定填充一个合法的 Unstructured 对象。
 		func(s *runtime.RawExtension, c randfill.Continue) {
 			u := &unstructured.Unstructured{Object: map[string]interface{}{
 				"apiVersion": "unknown.group/unknown",

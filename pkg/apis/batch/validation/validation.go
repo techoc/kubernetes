@@ -42,9 +42,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// maxParallelismForIndexJob is the maximum parallelism that an Indexed Job
-// is allowed to have. This threshold allows to cap the length of
-// .status.completedIndexes.
+// maxParallelismForIndexJob 是 Indexed Job 允许的最大 parallelism。
+// 设置该上限是为了限制 .status.completedIndexes 的长度，避免 status 体积失控。
 const maxParallelismForIndexedJob = 100000
 
 // maxFailedIndexesForIndexedJob is the maximum number of failed indexes that

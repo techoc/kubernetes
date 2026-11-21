@@ -24,181 +24,152 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NetworkPolicy describes what network traffic is allowed for a set of pods
+// NetworkPolicy 描述一组 Pod 允许哪些网络流量。
 type NetworkPolicy struct {
 	metav1.TypeMeta
 
 	// +optional
 	metav1.ObjectMeta
 
-	// spec represents the specification of the desired behavior for this NetworkPolicy.
+	// spec 表示本 NetworkPolicy 的期望行为规格。
 	// +optional
 	Spec NetworkPolicySpec
 }
 
-// PolicyType describes the NetworkPolicy type
-// This type is beta-level in 1.8
+// PolicyType 描述 NetworkPolicy 的类型。
+// 该类型自 1.8 起为 beta 级别。
 type PolicyType string
 
 const (
-	// PolicyTypeIngress is a NetworkPolicy that affects ingress traffic on selected pods
+	// PolicyTypeIngress 表示影响被选中 Pod 入站流量的 NetworkPolicy。
 	PolicyTypeIngress PolicyType = "Ingress"
-	// PolicyTypeEgress is a NetworkPolicy that affects egress traffic on selected pods
+	// PolicyTypeEgress 表示影响被选中 Pod 出站流量的 NetworkPolicy。
 	PolicyTypeEgress PolicyType = "Egress"
 )
 
-// NetworkPolicySpec provides the specification of a NetworkPolicy
+// NetworkPolicySpec 定义 NetworkPolicy 的具体规格。
 type NetworkPolicySpec struct {
-	// podSelector selects the pods to which this NetworkPolicy object applies.
-	// The array of rules is applied to any pods selected by this field. An empty
-	// selector matches all pods in the policy's namespace.
-	// Multiple network policies can select the same set of pods. In this case,
-	// the ingress rules for each are combined additively.
-	// This field is optional. If it is not specified, it defaults to an empty selector.
+	// podSelector 选择本 NetworkPolicy 适用的 Pod。规则数组作用于该字段选中的所有 Pod；
+	// 空选择器匹配策略所在命名空间中的全部 Pod。
+	// 多个 NetworkPolicy 可以选择同一组 Pod，此时各策略的 ingress 规则会叠加生效。
+	// 该字段可选；未指定时默认为空选择器。
 	// +optional
 	PodSelector metav1.LabelSelector
 
-	// ingress is a list of ingress rules to be applied to the selected pods.
-	// Traffic is allowed to a pod if there are no NetworkPolicies selecting the pod
-	// (and cluster policy otherwise allows the traffic), OR if the traffic source is
-	// the pod's local node, OR if the traffic matches at least one ingress rule
-	// across all of the NetworkPolicy objects whose podSelector matches the pod. If
-	// this field is empty then this NetworkPolicy does not allow any traffic (and serves
-	// solely to ensure that the pods it selects are isolated by default)
+	// ingress 是作用于被选中 Pod 的入站规则列表。
+	// 当没有 NetworkPolicy 选中该 Pod（且集群策略允许该流量），或流量来源是该 Pod 所在节点，
+	// 或流量匹配 podSelector 选中该 Pod 的所有 NetworkPolicy 中至少一条 ingress 规则时，
+	// 流量才被允许。该字段为空表示此 NetworkPolicy 不允许任何入站流量
+	// （此时它仅用于确保其选中的 Pod 默认被隔离）。
 	// +optional
 	Ingress []NetworkPolicyIngressRule
 
-	// egress is a list of egress rules to be applied to the selected pods. Outgoing traffic
-	// is allowed if there are no NetworkPolicies selecting the pod (and cluster policy
-	// otherwise allows the traffic), OR if the traffic matches at least one egress rule
-	// across all of the NetworkPolicy objects whose podSelector matches the pod. If
-	// this field is empty then this NetworkPolicy limits all outgoing traffic (and serves
-	// solely to ensure that the pods it selects are isolated by default).
-	// This field is beta-level in 1.8
+	// egress 是作用于被选中 Pod 的出站规则列表。
+	// 当没有 NetworkPolicy 选中该 Pod（且集群策略允许该流量），或流量匹配 podSelector 选中
+	// 该 Pod 的所有 NetworkPolicy 中至少一条 egress 规则时，出站流量才被允许。
+	// 该字段为空表示此 NetworkPolicy 限制所有出站流量
+	// （此时它仅用于确保其选中的 Pod 默认被隔离）。
+	// 该类型自 1.8 起为 beta 级别。
 	// +optional
 	Egress []NetworkPolicyEgressRule
 
-	// policyTypes is a list of rule types that the NetworkPolicy relates to.
-	// Valid options are ["Ingress"], ["Egress"], or ["Ingress", "Egress"].
-	// If this field is not specified, it will default based on the existence of ingress or egress rules;
-	// policies that contain an egress section are assumed to affect egress, and all policies
-	// (whether or not they contain an ingress section) are assumed to affect ingress.
-	// If you want to write an egress-only policy, you must explicitly specify policyTypes [ "Egress" ].
-	// Likewise, if you want to write a policy that specifies that no egress is allowed,
-	// you must specify a policyTypes value that include "Egress" (since such a policy would not include
-	// an egress section and would otherwise default to just [ "Ingress" ]).
-	// This field is beta-level in 1.8
+	// policyTypes 是 NetworkPolicy 涉及的规则类型列表。
+	// 合法取值为 ["Ingress"]、["Egress"] 或 ["Ingress", "Egress"]。
+	// 未指定时，会根据 ingress/egress 规则是否存在推导默认值：含 egress 段的策略被认为影响 egress，
+	// 而所有策略（无论是否含 ingress 段）都被认为影响 ingress。
+	// 如需编写仅控制 egress 的策略，必须显式指定 policyTypes 为 [ "Egress" ]。
+	// 同理，如需编写禁止所有 egress 的策略，也必须显式在 policyTypes 中包含 "Egress"
+	// （因为这类策略不含 egress 段，否则会被默认推导为仅 [ "Ingress" ]）。
+	// 该类型自 1.8 起为 beta 级别。
 	// +optional
 	PolicyTypes []PolicyType
 }
 
-// NetworkPolicyIngressRule describes a particular set of traffic that is allowed to the pods
-// matched by a NetworkPolicySpec's podSelector. The traffic must match both ports and from.
+// NetworkPolicyIngressRule 描述一组允许访问 podSelector 选中 Pod 的流量。流量必须同时匹配 ports 和 from。
 type NetworkPolicyIngressRule struct {
-	// ports is a list of ports which should be made accessible on the pods selected for
-	// this rule. Each item in this list is combined using a logical OR. If this field is
-	// empty or missing, this rule matches all ports (traffic not restricted by port).
-	// If this field is present and contains at least one item, then this rule allows
-	// traffic only if the traffic matches at least one port in the list.
+	// ports 是本规则选中的 Pod 上应开放的端口列表，列表各项按逻辑“或”组合。
+	// 该字段为空或缺失时，规则匹配所有端口（不按端口限制流量）；
+	// 存在且至少有一项时，只有流量匹配列表中某个端口才被允许。
 	// +optional
 	Ports []NetworkPolicyPort
 
-	// from is a list of sources which should be able to access the pods selected for this rule.
-	// Items in this list are combined using a logical OR operation. If this field is
-	// empty or missing, this rule matches all sources (traffic not restricted by
-	// source). If this field is present and contains at least one item, this rule
-	// allows traffic only if the traffic matches at least one item in the from list.
+	// from 是可访问本规则选中 Pod 的来源列表，各项按逻辑“或”组合。
+	// 该字段为空或缺失时，规则匹配所有来源（不按来源限制流量）；
+	// 存在且至少有一项时，只有流量匹配 from 列表中某一项才被允许。
 	// +optional
 	From []NetworkPolicyPeer
 }
 
-// NetworkPolicyEgressRule describes a particular set of traffic that is allowed out of pods
-// matched by a NetworkPolicySpec's podSelector. The traffic must match both ports and to.
-// This type is beta-level in 1.8
+// NetworkPolicyEgressRule 描述一组允许从 podSelector 选中 Pod 发出的流量。流量必须同时匹配 ports 和 to。
+// 该类型自 1.8 起为 beta 级别。
 type NetworkPolicyEgressRule struct {
-	// ports is a list of destination ports for outgoing traffic.
-	// Each item in this list is combined using a logical OR. If this field is
-	// empty or missing, this rule matches all ports (traffic not restricted by port).
-	// If this field is present and contains at least one item, then this rule allows
-	// traffic only if the traffic matches at least one port in the list.
+	// ports 是出站流量的目标端口列表，各项按逻辑“或”组合。
+	// 该字段为空或缺失时，规则匹配所有端口（不按端口限制流量）；
+	// 存在且至少有一项时，只有流量匹配列表中某个端口才被允许。
 	// +optional
 	Ports []NetworkPolicyPort
 
-	// to is a list of destinations for outgoing traffic of pods selected for this rule.
-	// Items in this list are combined using a logical OR operation. If this field is
-	// empty or missing, this rule matches all destinations (traffic not restricted by
-	// destination). If this field is present and contains at least one item, this rule
-	// allows traffic only if the traffic matches at least one item in the to list.
+	// to 是本规则选中 Pod 出站流量的目标列表，各项按逻辑“或”组合。
+	// 该字段为空或缺失时，规则匹配所有目标（不按目标限制流量）；
+	// 存在且至少有一项时，只有流量匹配 to 列表中某一项才被允许。
 	// +optional
 	To []NetworkPolicyPeer
 }
 
-// NetworkPolicyPort describes a port to allow traffic on
+// NetworkPolicyPort 描述允许流量通过的端口。
 type NetworkPolicyPort struct {
-	// protocol represents the protocol (TCP, UDP, or SCTP) which traffic must match.
-	// If not specified, this field defaults to TCP.
+	// protocol 表示流量必须匹配的协议，可选 TCP、UDP 或 SCTP。未指定时默认为 TCP。
 	// +optional
 	Protocol *api.Protocol
 
-	// port represents the port on the given protocol. This can either be a numerical or named
-	// port on a pod. If this field is not provided, this matches all port names and
-	// numbers.
-	// If present, only traffic on the specified protocol AND port will be matched.
+	// port 表示指定协议上的端口，可以是 Pod 上的数字端口或命名端口。
+	// 未提供该字段时匹配所有端口名和端口号；提供时，只匹配同时满足指定协议与指定端口的流量。
 	// +optional
 	Port *intstr.IntOrString
 
-	// endPort indicates that the range of ports from port to endPort if set, inclusive,
-	// should be allowed by the policy. This field cannot be defined if the port field
-	// is not defined or if the port field is defined as a named (string) port.
-	// The endPort must be equal or greater than port.
+	// endPort 表示策略允许的端口范围（含端点）的终止端口，范围为 port 到 endPort。
+	// 若未定义 port，或 port 是命名（字符串）端口，则不能定义该字段。
+	// endPort 必须大于或等于 port。
 	// +optional
 	EndPort *int32
 }
 
-// IPBlock describes a particular CIDR (Ex. "192.168.1.0/24","2001:db8::/64") that is allowed
-// to the pods matched by a NetworkPolicySpec's podSelector. The except entry describes CIDRs
-// that should not be included within this rule.
+// IPBlock 描述允许访问 podSelector 选中 Pod 的某个 CIDR（如 "192.168.1.0/24"、"2001:db8::/64"）。
+// except 列出不应包含在该规则中的 CIDR。
 type IPBlock struct {
-	// cidr is a string representing the IPBlock
-	// Valid examples are "192.168.1.0/24" or "2001:db8::/64"
+	// cidr 是表示 IPBlock 的字符串，如 "192.168.1.0/24" 或 "2001:db8::/64"。
 	CIDR string
 
-	// except is a list of CIDRs that should not be included within the IPBlock
-	// Valid examples are "192.168.1.0/24" or "2001:db8::/64"
-	// Except values will be rejected if they are outside the cidr range
+	// except 是不应包含在 IPBlock 中的 CIDR 列表，如 "192.168.1.0/24" 或 "2001:db8::/64"。
+	// 超出 cidr 范围的 Except 值会被拒绝。
 	// +optional
 	Except []string
 }
 
-// NetworkPolicyPeer describes a peer to allow traffic to/from.
+// NetworkPolicyPeer 描述允许与其收发流量的对端。
 type NetworkPolicyPeer struct {
-	// podSelector is a label selector which selects pods. This field follows standard label
-	// selector semantics; if present but empty, it selects all pods.
+	// podSelector 是选择 Pod 的标签选择器，遵循标准标签选择器语义；存在但为空时选择所有 Pod。
 	//
-	// If namespaceSelector is also set, then the NetworkPolicyPeer as a whole selects
-	// the pods matching podSelector in the Namespaces selected by namespaceSelector.
-	// Otherwise it selects the pods matching podSelector in the policy's own namespace.
+	// 若同时设置了 namespaceSelector，则整个 NetworkPolicyPeer 选择 namespaceSelector
+	// 选中的命名空间中匹配 podSelector 的 Pod；否则选择策略自身命名空间中匹配 podSelector 的 Pod。
 	// +optional
 	PodSelector *metav1.LabelSelector
 
-	// namespaceSelector selects namespaces using cluster-scoped labels. This field follows
-	// standard label selector semantics; if present but empty, it selects all namespaces.
+	// namespaceSelector 使用集群级标签选择命名空间，遵循标准标签选择器语义；存在但为空时选择所有命名空间。
 	//
-	// If podSelector is also set, then the NetworkPolicyPeer as a whole selects
-	// the pods matching podSelector in the namespaces selected by namespaceSelector.
-	// Otherwise it selects all pods in the namespaces selected by namespaceSelector.
+	// 若同时设置了 podSelector，则整个 NetworkPolicyPeer 选择 namespaceSelector 选中的
+	// 命名空间中匹配 podSelector 的 Pod；否则选择 namespaceSelector 选中命名空间中的所有 Pod。
 	// +optional
 	NamespaceSelector *metav1.LabelSelector
 
-	// ipBlock defines policy on a particular IPBlock. If this field is set then
-	// neither of the other fields can be.
+	// ipBlock 针对特定 IPBlock 定义策略。设置了该字段时，其它两个字段都不能设置。
 	// +optional
 	IPBlock *IPBlock
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// NetworkPolicyList is a list of NetworkPolicy objects.
+// NetworkPolicyList 是 NetworkPolicy 对象的列表。
 type NetworkPolicyList struct {
 	metav1.TypeMeta
 
@@ -210,77 +181,66 @@ type NetworkPolicyList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Ingress is a collection of rules that allow inbound connections to reach the
-// endpoints defined by a backend. An Ingress can be configured to give services
-// externally-reachable urls, load balance traffic, terminate SSL, offer name
-// based virtual hosting etc.
+// Ingress 是一组规则，允许入站连接到达后端定义的端点。Ingress 可配置为服务提供外部可访问的 URL、
+// 负载均衡流量、终止 SSL、提供基于名称的虚拟主机等。
 type Ingress struct {
 	metav1.TypeMeta
 
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta
 
-	// spec is the desired state of the Ingress.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// spec 表示 Ingress 的期望状态。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Spec IngressSpec
 
-	// status is the current state of the Ingress.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// status 表示 Ingress 的当前状态。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status IngressStatus
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// IngressList is a collection of Ingress.
+// IngressList 是 Ingress 的集合。
 type IngressList struct {
 	metav1.TypeMeta
 
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
 
-	// items is the list of Ingress.
+	// items 是 Ingress 的列表。
 	Items []Ingress
 }
 
-// IngressSpec describes the Ingress the user wishes to exist.
+// IngressSpec 描述用户期望的 Ingress。
 type IngressSpec struct {
-	// ingressClassName is the name of the IngressClass cluster resource. The
-	// associated IngressClass defines which controller will implement the
-	// resource. This replaces the deprecated `kubernetes.io/ingress.class`
-	// annotation. For backwards compatibility, when that annotation is set, it
-	// must be given precedence over this field. The controller may emit a
-	// warning if the field and annotation have different values.
-	// Implementations of this API should ignore Ingresses without a class
-	// specified. An IngressClass resource may be marked as default, which can
-	// be used to set a default value for this field. For more information,
-	// refer to the IngressClass documentation.
+	// ingressClassName 是 IngressClass 集群资源的名称，关联的 IngressClass 决定由哪个控制器实现该资源。
+	// 它取代了已废弃的 `kubernetes.io/ingress.class` 注解。为向后兼容，设置该注解时其优先级高于本字段；
+	// 当字段值与注解值不同时，控制器可以发出警告。
+	// 本 API 的实现应忽略未指定 class 的 Ingress。IngressClass 资源可被标记为默认，
+	// 用于为本字段提供默认值。更多信息请参阅 IngressClass 文档。
 	// +optional
 	IngressClassName *string
 
-	// defaultBackend is the backend that should handle requests that don't
-	// match any rule. If Rules are not specified, DefaultBackend must be specified.
-	// If DefaultBackend is not set, the handling of requests that do not match any
-	// of the rules will be up to the Ingress controller.
+	// defaultBackend 是处理不匹配任何规则的请求的后端。
+	// 未指定 Rules 时，必须指定 DefaultBackend。若未设置 DefaultBackend，
+	// 不匹配任何规则的请求如何处理由 Ingress 控制器决定。
 	// +optional
 	DefaultBackend *IngressBackend
 
-	// tls represents the TLS configuration. Currently the ingress only supports a
-	// single TLS port, 443. If multiple members of this list specify different hosts,
-	// they will be multiplexed on the same port according to the hostname specified
-	// through the SNI TLS extension, if the ingress controller fulfilling the
-	// ingress supports SNI.
+	// tls 表示 TLS 配置。目前 Ingress 只支持单一 TLS 端口 443。
+	// 若列表中的多项指定了不同的主机，且实现该 Ingress 的控制器支持 SNI，
+	// 则会根据 SNI TLS 扩展中的主机名在同一端口上进行复用。
 	// +listType=atomic
 	// +optional
 	TLS []IngressTLS
 
-	// rules is a list of host rules used to configure the Ingress. If unspecified, or
-	// no rule matches, all traffic is sent to the default backend.
+	// rules 是用于配置 Ingress 的主机规则列表。未指定或没有规则匹配时，所有流量发往默认后端。
 	// +listType=atomic
 	// +optional
 	Rules []IngressRule
@@ -288,309 +248,251 @@ type IngressSpec struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// IngressClass represents the class of the Ingress, referenced by the Ingress
-// Spec. The `ingressclass.kubernetes.io/is-default-class` annotation can be
-// used to indicate that an IngressClass should be considered default. When a
-// single IngressClass resource has this annotation set to true, new Ingress
-// resources without a class specified will be assigned this default class.
+// IngressClass 表示 Ingress 的类别，由 Ingress 的 spec 引用。`ingressclass.kubernetes.io/is-default-class`
+// 注解可用于标记某个 IngressClass 为默认类。当且仅当一个 IngressClass 资源设置了该注解为 true 时，
+// 未指定 class 的新 Ingress 资源会被分配这个默认类。
 type IngressClass struct {
 	metav1.TypeMeta
 
 	metav1.ObjectMeta
 
-	// spec is the desired state of the IngressClass.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// spec 表示 IngressClass 的期望状态。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Spec IngressClassSpec
 }
 
-// IngressClassSpec provides information about the class of an Ingress.
+// IngressClassSpec 提供 Ingress 类别的相关信息。
 type IngressClassSpec struct {
-	// controller refers to the name of the controller that should handle this
-	// class. This allows for different "flavors" that are controlled by the
-	// same controller. For example, you may have different parameters for the
-	// same implementing controller. This should be specified as a
-	// domain-prefixed path no more than 250 characters in length, e.g.
-	// "acme.io/ingress-controller". This field is immutable.
+	// controller 是应处理该类别的控制器名称，允许同一控制器管理不同“风味”的配置，
+	// 例如同一控制器实现使用不同参数。取值应为带域名前缀的路径，长度不超过 250 个字符，
+	// 如 "acme.io/ingress-controller"。该字段不可变。
 	Controller string
 
-	// parameters is a link to a custom resource containing additional
-	// configuration for the controller. This is optional if the controller does
-	// not require extra parameters.
+	// parameters 指向一个自定义资源，其中包含控制器的附加配置。控制器不需要额外参数时该字段可省略。
 	// +optional
 	Parameters *IngressClassParametersReference
 }
 
 const (
-	// IngressClassParametersReferenceScopeNamespace indicates that the
-	// referenced Parameters resource is namespace-scoped.
+	// IngressClassParametersReferenceScopeNamespace 表示被引用的 Parameters 资源是命名空间级的。
 	IngressClassParametersReferenceScopeNamespace = "Namespace"
-	// IngressClassParametersReferenceScopeCluster indicates that the
-	// referenced Parameters resource is cluster-scoped.
+	// IngressClassParametersReferenceScopeCluster 表示被引用的 Parameters 资源是集群级的。
 	IngressClassParametersReferenceScopeCluster = "Cluster"
 )
 
-// IngressClassParametersReference identifies an API object. This can be used
-// to specify a cluster or namespace-scoped resource.
+// IngressClassParametersReference 标识一个 API 对象，可用于指定集群级或命名空间级的资源。
 type IngressClassParametersReference struct {
-	// apiGroup is the group for the resource being referenced. If apiGroup is
-	// not specified, the specified kind must be in the core API group. For any
-	// other third-party types, apiGroup is required.
+	// apiGroup 是被引用资源所属的 API 组。未指定 apiGroup 时，指定的 kind 必须属于 core API 组；
+	// 其它第三方类型必须指定 apiGroup。
 	// +optional
 	APIGroup *string
 
-	// kind is the type of resource being referenced.
+	// kind 是被引用资源的类型。
 	Kind string
 
-	// name is the name of resource being referenced.
+	// name 是被引用资源的名称。
 	Name string
 
-	// scope represents if this refers to a cluster or namespace scoped resource.
-	// This may be set to "Cluster" (default) or "Namespace".
+	// scope 表示引用的是集群级还是命名空间级资源，可取 "Cluster"（默认）或 "Namespace"。
 	// +optional
 	Scope *string
 
-	// namespace is the namespace of the resource being referenced. This field is
-	// required when scope is set to "Namespace" and must be unset when scope is set to
-	// "Cluster".
+	// namespace 是被引用资源所在的命名空间。scope 为 "Namespace" 时必填，为 "Cluster" 时必须不设置。
 	// +optional
 	Namespace *string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// IngressClassList is a collection of IngressClasses.
+// IngressClassList 是 IngressClass 的集合。
 type IngressClassList struct {
 	metav1.TypeMeta
 
-	// Standard object's metadata.
+	// 标准对象元数据。
 	// +optional
 	metav1.ListMeta
 
-	// items is the list of IngressClasses.
+	// items 是 IngressClass 的列表。
 	Items []IngressClass
 }
 
-// IngressTLS describes the transport layer security associated with an ingress.
+// IngressTLS 描述与 Ingress 关联的传输层安全（TLS）配置。
 type IngressTLS struct {
-	// hosts is a list of hosts included in the TLS certificate. The values in
-	// this list must match the name/s used in the tlsSecret. Defaults to the
-	// wildcard host setting for the loadbalancer controller fulfilling this
-	// Ingress, if left unspecified.
+	// hosts 是 TLS 证书中包含的主机名列表，取值必须与 tlsSecret 中使用的名称一致。
+	// 未指定时，默认使用实现该 Ingress 的负载均衡器控制器的通配符主机设置。
 	// +listType=atomic
 	// +optional
 	Hosts []string
 
-	// secretName is the name of the secret used to terminate TLS traffic on
-	// port 443. Field is left optional to allow TLS routing based on SNI
-	// hostname alone. If the SNI host in a listener conflicts with the "Host"
-	// header field used by an IngressRule, the SNI host is used for termination
-	// and value of the "Host" header is used for routing.
+	// secretName 是用于在 443 端口终止 TLS 流量的 Secret 名称。
+	// 该字段可选，以支持仅基于 SNI 主机名进行 TLS 路由。若监听器中的 SNI 主机与 IngressRule 使用的
+	// "Host" 头字段冲突，则使用 SNI 主机进行 TLS 终止，使用 "Host" 头的值进行路由。
 	// +optional
 	SecretName string
-	// TODO: Consider specifying different modes of termination, protocols etc.
+	// TODO: 考虑支持不同的终止模式、协议等。
 }
 
-// IngressStatus describes the current state of the Ingress.
+// IngressStatus 描述 Ingress 的当前状态。
 type IngressStatus struct {
-	// loadBalancer contains the current status of the load-balancer.
+	// loadBalancer 包含负载均衡器的当前状态。
 	// +optional
 	LoadBalancer IngressLoadBalancerStatus
 }
 
-// IngressLoadBalancerStatus represents the status of a load-balancer
+// IngressLoadBalancerStatus 表示负载均衡器的状态。
 type IngressLoadBalancerStatus struct {
-	// ingress is a list containing ingress points for the load-balancer.
+	// ingress 是负载均衡器入口点的列表。
 	// +optional
 	Ingress []IngressLoadBalancerIngress
 }
 
-// IngressLoadBalancerIngress represents the status of a load-balancer ingress point.
+// IngressLoadBalancerIngress 表示负载均衡器某个入口点的状态。
 type IngressLoadBalancerIngress struct {
-	// ip is set for load-balancer ingress points that are IP based.
+	// 对于基于 IP 的负载均衡器入口点，设置 ip 字段。
 	// +optional
 	IP string
 
-	// hostname is set for load-balancer ingress points that are DNS based.
+	// 对于基于 DNS 的负载均衡器入口点，设置 hostname 字段。
 	// +optional
 	Hostname string
 
-	// ports provides information about the ports exposed by this LoadBalancer.
+	// ports 提供该负载均衡器暴露端口的信息。
 	// +optional
 	Ports []IngressPortStatus
 }
 
-// IngressPortStatus represents the error condition of an ingress port
+// IngressPortStatus 表示 Ingress 端口的错误状况。
 type IngressPortStatus struct {
-	// port is the port number of the ingress port.
+	// port 是 Ingress 端口的端口号。
 	Port int32
 
-	// protocol is the protocol of the ingress port.
+	// protocol 是 Ingress 端口的协议。
 	Protocol api.Protocol
 
-	// error indicates a problem on this port.
-	// The format of the error must comply with the following rules:
-	// - Kubernetes-defined error values use CamelCase names
-	// - Provider-specific error values must follow label-name style (e.g.
-	//   example.com/name).
+	// error 表示该端口存在的问题。
+	// error 的格式必须遵循以下规则：
+	// - Kubernetes 定义的错误值使用驼峰命名
+	// - 云厂商特定的错误值必须遵循标签名称风格（如 example.com/name）。
 	Error *string
 }
 
-// IngressRule represents the rules mapping the paths under a specified host to
-// the related backend services. Incoming requests are first evaluated for a
-// host match, then routed to the backend associated with the matching
-// IngressRuleValue.
+// IngressRule 表示将指定主机下的路径映射到相应后端服务的规则。
+// 入站请求先进行主机匹配，再路由到匹配的 IngressRuleValue 所关联的后端。
 type IngressRule struct {
-	// host is the fully qualified domain name of a network host, as defined by RFC 3986.
-	// Note the following deviations from the "host" part of the
-	// URI as defined in RFC 3986:
-	// 1. IPs are not allowed. Currently an IngressRuleValue can only apply to
-	//    the IP in the Spec of the parent Ingress.
-	// 2. The `:` delimiter is not respected because ports are not allowed.
-	//	  Currently the port of an Ingress is implicitly :80 for http and
-	//	  :443 for https.
-	// Both these may change in the future.
-	// Incoming requests are matched against the host before the
-	// IngressRuleValue. If the host is unspecified, the Ingress routes all
-	// traffic based on the specified IngressRuleValue.
+	// host 是 RFC 3986 定义的网络主机完全限定域名。
+	// 与 RFC 3986 中 URI 的 "host" 部分相比，有以下差异：
+	// 1. 不允许使用 IP。目前 IngressRuleValue 只能作用于父 Ingress spec 中的 IP。
+	// 2. 不识别 `:` 分隔符，因为不允许指定端口。目前 Ingress 的端口隐含为 http 的 :80 和 https 的 :443。
+	// 这两点在将来可能会变化。
+	// 入站请求先与 host 匹配，再匹配 IngressRuleValue。未指定 host 时，Ingress 基于
+	// IngressRuleValue 路由全部流量。
 	//
-	// host can be "precise" which is a domain name without the terminating dot of
-	// a network host (e.g. "foo.bar.com") or "wildcard", which is a domain name
-	// prefixed with a single wildcard label (e.g. "*.foo.com").
-	// The wildcard character '*' must appear by itself as the first DNS label and
-	// matches only a single label. You cannot have a wildcard label by itself (e.g. Host == "*").
-	// Requests will be matched against the host field in the following way:
-	// 1. If host is precise, the request matches this rule if the http host header is equal to Host.
-	// 2. If host is a wildcard, then the request matches this rule if the http host header
-	// is to equal to the suffix (removing the first label) of the wildcard rule.
+	// host 可以是“精确”域名（不带结尾点，如 "foo.bar.com"），也可以是“通配符”域名
+	// （以单个通配符标签开头，如 "*.foo.com"）。通配符 '*' 必须单独作为第一个 DNS 标签出现，
+	// 且只匹配一个标签；不能只有通配符标签（如 Host == "*"）。
+	// 请求与 host 字段的匹配规则如下：
+	// 1. host 为精确域名时，HTTP host 头与 Host 相等即匹配该规则。
+	// 2. host 为通配符域名时，HTTP host 头等于去掉第一个标签后的后缀即匹配该规则。
 	// +optional
 	Host string
 
-	// IngressRuleValue represents a rule to route requests for this
-	// IngressRule. If unspecified, the rule defaults to a http catch-all.
-	// Whether that sends just traffic matching the host to the default backend
-	// or all traffic to the default backend, is left to the controller
-	// fulfilling the Ingress. Http is currently the only supported
-	// IngressRuleValue.
+	// IngressRuleValue 表示此 IngressRule 的请求路由规则。未指定时，规则默认为 HTTP 通配。
+	// 究竟是只把匹配 host 的流量发往默认后端，还是把所有流量发往默认后端，
+	// 由实现该 Ingress 的控制器决定。目前仅支持 HTTP 这一种 IngressRuleValue。
 	// +optional
 	IngressRuleValue
 }
 
-// IngressRuleValue represents a rule to apply against incoming requests. If the
-// rule is satisfied, the request is routed to the specified backend. Currently
-// mixing different types of rules in a single Ingress is disallowed, so exactly
-// one of the following must be set.
+// IngressRuleValue 表示作用于入站请求的规则。规则满足时，请求被路由到指定后端。
+// 目前不允许在同一个 Ingress 中混用不同类型的规则，因此以下字段必须且只能设置一个。
 type IngressRuleValue struct {
 	//TODO:
-	// 1. Consider renaming this resource and the associated rules so they
-	// aren't tied to Ingress. They can be used to route intra-cluster traffic.
-	// 2. Consider adding fields for ingress-type specific global options
-	// usable by a loadbalancer, like http keep-alive.
+	// 1. 考虑为本资源及相关规则改名，使其不再与 Ingress 绑定；它们也可用于集群内部流量路由。
+	// 2. 考虑增加特定于 ingress 类型的全局选项字段，供负载均衡器使用，例如 http keep-alive。
 
 	// +optional
 	HTTP *HTTPIngressRuleValue
 }
 
-// HTTPIngressRuleValue is a list of http selectors pointing to backends.
-// In the example: http://<host>/<path>?<searchpart> -> backend where
-// where parts of the url correspond to RFC 3986, this resource will be used
-// to match against everything after the last '/' and before the first '?'
-// or '#'.
+// HTTPIngressRuleValue 是一组指向后端的 HTTP 选择器。
+// 以 http://<host>/<path>?<searchpart> -> backend 为例，URL 各部分的含义遵循 RFC 3986；
+// 本资源用于匹配最后一个 '/' 之后、第一个 '?' 或 '#' 之前的全部内容。
 type HTTPIngressRuleValue struct {
-	// paths is a collection of paths that map requests to backends.
+	// paths 是把请求映射到后端的路径集合。
 	// +listType=atomic
 	Paths []HTTPIngressPath
-	// TODO: Consider adding fields for ingress-type specific global
-	// options usable by a loadbalancer, like http keep-alive.
+	// TODO: 考虑增加特定于 ingress 类型的全局选项字段，供负载均衡器使用，例如 http keep-alive。
 }
 
-// PathType represents the type of path referred to by a HTTPIngressPath.
+// PathType 表示 HTTPIngressPath 引用的路径类型。
 type PathType string
 
 const (
-	// PathTypeExact matches the URL path exactly and with case sensitivity.
+	// PathTypeExact 区分大小写、精确匹配 URL 路径。
 	PathTypeExact = PathType("Exact")
 
-	// PathTypePrefix matches based on a URL path prefix split by '/'. Matching
-	// is case sensitive and done on a path element by element basis. A path
-	// element refers to the list of labels in the path split by the '/'
-	// separator. A request is a match for path p if every p is an element-wise
-	// prefix of p of the request path. Note that if the last element of the
-	// path is a substring of the last element in request path, it is not a
-	// match (e.g. /foo/bar matches /foo/bar/baz, but does not match
-	// /foo/barbaz). If multiple matching paths exist in an Ingress spec, the
-	// longest matching path is given priority.
-	// Examples:
-	// - /foo/bar does not match requests to /foo/barbaz
-	// - /foo/bar matches request to /foo/bar and /foo/bar/baz
-	// - /foo and /foo/ both match requests to /foo and /foo/. If both paths are
-	//   present in an Ingress spec, the longest matching path (/foo/) is given
-	//   priority.
+	// PathTypePrefix 按 '/' 切分 URL 路径后进行前缀匹配。匹配区分大小写，并逐路径元素进行。
+	// 路径元素指路径被 '/' 分隔后的各标签。若请求路径的每个元素都以路径 p 的对应元素为前缀，则视为匹配。
+	// 注意：路径最后一个元素若是请求路径最后元素的子串，不算匹配
+	// （如 /foo/bar 匹配 /foo/bar/baz，但不匹配 /foo/barbaz）。
+	// Ingress spec 中若存在多个匹配路径，最长匹配路径优先。
+	// 示例：
+	// - /foo/bar 不匹配 /foo/barbaz 的请求
+	// - /foo/bar 匹配 /foo/bar 和 /foo/bar/baz 的请求
+	// - /foo 和 /foo/ 都匹配 /foo 和 /foo/ 的请求；若两者同时出现在 Ingress spec 中，
+	//   较长者 /foo/ 优先。
 	PathTypePrefix = PathType("Prefix")
 
-	// PathTypeImplementationSpecific matching is up to the IngressClass.
-	// Implementations can treat this as a separate PathType or treat it
-	// identically to Prefix or Exact path types.
+	// PathTypeImplementationSpecific 的匹配方式由 IngressClass 自行决定。
+	// 实现方可以将其当作独立的 PathType，也可以与 Prefix 或 Exact 同等处理。
 	PathTypeImplementationSpecific = PathType("ImplementationSpecific")
 )
 
-// HTTPIngressPath associates a path with a backend. Incoming urls matching the
-// path are forwarded to the backend.
+// HTTPIngressPath 将路径与后端关联，匹配该路径的入站 URL 会被转发到对应后端。
 type HTTPIngressPath struct {
-	// path is matched against the path of an incoming request. Currently it can
-	// contain characters disallowed from the conventional "path" part of a URL
-	// as defined by RFC 3986. Paths must begin with a '/' and must be present
-	// when using PathType with value "Exact" or "Prefix".
+	// path 与入站请求的路径进行匹配。目前它可以包含 RFC 3986 所定义的常规 URL "path" 部分
+	// 不允许的字符。路径必须以 '/' 开头；当 PathType 为 "Exact" 或 "Prefix" 时必须提供该字段。
 	// +optional
 	Path string
 
-	// pathType determines the interpretation of the path matching. PathType can
-	// be one of Exact, Prefix, or ImplementationSpecific. Implementations are
-	// required to support all path types.
+	// pathType 决定路径匹配的解释方式，可取 Exact、Prefix 或 ImplementationSpecific。
+	// 实现方必须支持所有路径类型。
 	// +optional
 	PathType *PathType
 
-	// backend defines the referenced service endpoint to which the traffic
-	// will be forwarded to.
+	// backend 定义流量将被转发到的服务端点。
 	Backend IngressBackend
 }
 
-// IngressBackend describes all endpoints for a given service and port.
+// IngressBackend 描述给定服务和端口的所有端点。
 type IngressBackend struct {
-	// service references a service as a backend.
-	// This is a mutually exclusive setting with "Resource".
+	// service 将某个服务引用为后端，与 "Resource" 互斥。
 	// +optional
 	Service *IngressServiceBackend
 
-	// resource is an ObjectRef to another Kubernetes resource in the namespace
-	// of the Ingress object. If resource is specified, a service.Name and
-	// service.Port must not be specified.
-	// This is a mutually exclusive setting with "Service".
+	// resource 是指向 Ingress 对象所在命名空间中另一个 Kubernetes 资源的 ObjectRef。
+	// 指定了 resource 时，不得指定 service.Name 和 service.Port，与 "Service" 互斥。
 	// +optional
 	Resource *api.TypedLocalObjectReference
 }
 
-// IngressServiceBackend references a Kubernetes Service as a Backend.
+// IngressServiceBackend 把 Kubernetes Service 引用为后端。
 type IngressServiceBackend struct {
-	// name is the referenced service. The service must exist in
-	// the same namespace as the Ingress object.
+	// name 是被引用的服务，该服务必须与 Ingress 对象位于同一命名空间。
 	Name string
 
-	// port of the referenced service. A port name or port number
-	// is required for a IngressServiceBackend.
+	// port 是被引用服务的端口。IngressServiceBackend 必须提供端口名或端口号。
 	Port ServiceBackendPort
 }
 
-// ServiceBackendPort is the service port being referenced.
+// ServiceBackendPort 表示被引用的服务端口。
 type ServiceBackendPort struct {
-	// name is the name of the port on the Service.
-	// This must be an IANA_SVC_NAME (following RFC6335).
-	// This is a mutually exclusive setting with "Number".
+	// name 是 Service 上的端口名，必须是 IANA_SVC_NAME（遵循 RFC6335），与 "Number" 互斥。
 	// +optional
 	Name string
 
-	// number is the numerical port number (e.g. 80) on the Service.
-	// This is a mutually exclusive setting with "Name".
+	// number 是 Service 上的数字端口号（如 80），与 "Name" 互斥。
 	// +optional
 	Number int32
 }
@@ -599,13 +501,12 @@ type ServiceBackendPort struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// IPAddress represents a single IP of a single IP Family. The object is designed to be used by APIs
-// that operate on IP addresses. The object is used by the Service core API for allocation of IP addresses.
-// An IP address can be represented in different formats, to guarantee the uniqueness of the IP,
-// the name of the object is the IP address in canonical format, four decimal digits separated
-// by dots suppressing leading zeros for IPv4 and the representation defined by RFC 5952 for IPv6.
-// Valid: 192.168.1.5 or 2001:db8::1 or 2001:db8:aaaa:bbbb:cccc:dddd:eeee:1
-// Invalid: 10.01.2.3 or 2001:db8:0:0:0::1
+// IPAddress 表示单一 IP 家族中的一个 IP 地址，供操作 IP 地址的 API 使用。
+// Service 核心 API 用它来分配 IP 地址。IP 地址可以有多种表示形式；为保证唯一性，
+// 对象名称使用 IP 的规范格式：IPv4 为去掉前导零、以点分隔的四段十进制数字，
+// IPv6 采用 RFC 5952 定义的格式。
+// 合法示例：192.168.1.5、2001:db8::1 或 2001:db8:aaaa:bbbb:cccc:dddd:eeee:1。
+// 非法示例：10.01.2.3 或 2001:db8:0:0:0::1。
 type IPAddress struct {
 	metav1.TypeMeta
 	// +optional
@@ -614,33 +515,34 @@ type IPAddress struct {
 	Spec IPAddressSpec
 }
 
-// IPAddressSpec describe the attributes in an IP Address,
+// IPAddressSpec 描述 IP 地址的属性。
 type IPAddressSpec struct {
-	// ParentRef references the resource that an IPAddress is attached to.
-	// An IPAddress must reference a parent object.
+	// ParentRef 指向 IPAddress 所关联的资源。IPAddress 必须关联一个父对象。
 	// +required
 	ParentRef *ParentReference
 }
+
+// ParentReference 是对父对象的引用，包含组、资源类型、命名空间和名称。
 type ParentReference struct {
-	// Group is the group of the object being referenced.
+	// Group 是被引用对象所属的 API 组。
 	Group string
-	// Resource is the resource of the object being referenced.
+	// Resource 是被引用对象的资源类型。
 	Resource string
-	// Namespace is the namespace of the object being referenced.
+	// Namespace 是被引用对象所在的命名空间。
 	Namespace string
-	// Name is the name of the object being referenced.
+	// Name 是被引用对象的名称。
 	Name string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// IPAddressList contains a list of IPAddress.
+// IPAddressList 包含 IPAddress 的列表。
 type IPAddressList struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ListMeta
 
-	// Items is the list of IPAddress
+	// Items 是 IPAddress 的列表。
 	Items []IPAddress
 }
 
@@ -648,48 +550,49 @@ type IPAddressList struct {
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// ServiceCIDR defines a range of IP addresses using CIDR format (e.g. 192.168.0.0/24 or 2001:db2::/64).
-// This range is used to allocate ClusterIPs to Service objects.
+// ServiceCIDR 使用 CIDR 格式定义 IP 地址范围（如 192.168.0.0/24 或 2001:db2::/64），
+// 该范围用于为 Service 对象分配 ClusterIP。
 type ServiceCIDR struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ObjectMeta
-	// spec is the desired state of the ServiceCIDR.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// spec 表示 ServiceCIDR 的期望状态。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Spec ServiceCIDRSpec
-	// status represents the current state of the ServiceCIDR.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
+	// status 表示 ServiceCIDR 的当前状态。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#spec-and-status
 	// +optional
 	Status ServiceCIDRStatus
 }
 
+// ServiceCIDRSpec 定义可分配 Service ClusterIP 的 CIDR 范围。
 type ServiceCIDRSpec struct {
-	// CIDRs defines the IP blocks in CIDR notation (e.g. "192.168.0.0/24" or "2001:db8::/64")
-	// from which to assign service cluster IPs. Max of two CIDRs is allowed, one of each IP family.
-	// This field is immutable.
+	// CIDRs 以 CIDR 表示法定义可从中分配 Service ClusterIP 的 IP 块
+	// （如 "192.168.0.0/24" 或 "2001:db8::/64"）。最多允许两个 CIDR，每个 IP 家族各一个。
+	// 该字段不可变。
 	// +optional
 	CIDRs []string
 }
 
-// ServiceCIDRStatus describes the current state of the ServiceCIDR.
+// ServiceCIDRStatus 描述 ServiceCIDR 的当前状态。
 type ServiceCIDRStatus struct {
-	// conditions holds an array of metav1.Condition that describe the state of the ServiceCIDR.
+	// conditions 保存一组 metav1.Condition，描述 ServiceCIDR 的状态。
 	Conditions []metav1.Condition
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:prerelease-lifecycle-gen:introduced=1.27
 
-// ServiceCIDRList contains a list of ServiceCIDR objects.
+// ServiceCIDRList 包含 ServiceCIDR 对象的列表。
 type ServiceCIDRList struct {
 	metav1.TypeMeta
-	// Standard object's metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
+	// 标准对象元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata
 	// +optional
 	metav1.ListMeta
-	// items is the list of ServiceCIDRs.
+	// items 是 ServiceCIDR 的列表。
 	Items []ServiceCIDR
 }

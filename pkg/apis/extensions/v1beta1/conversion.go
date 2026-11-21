@@ -66,11 +66,11 @@ func Convert_v1beta1_NetworkPolicySpec_To_networking_NetworkPolicySpec(in *exten
 		return err
 	}
 	if out.Ingress == nil {
-		// Produce a zero-length non-nil slice for compatibility with previous manual conversion.
+		// 生成长度为零的非 nil 切片，以保持与旧的手写转换逻辑兼容。
 		out.Ingress = make([]networking.NetworkPolicyIngressRule, 0)
 	}
 	if out.Egress == nil {
-		// Produce a zero-length non-nil slice for compatibility with previous manual conversion.
+		// 生成长度为零的非 nil 切片，以保持与旧的手写转换逻辑兼容。
 		out.Egress = make([]networking.NetworkPolicyEgressRule, 0)
 	}
 	return nil
@@ -81,11 +81,11 @@ func Convert_networking_NetworkPolicySpec_To_v1beta1_NetworkPolicySpec(in *netwo
 		return err
 	}
 	if out.Ingress == nil {
-		// Produce a zero-length non-nil slice for compatibility with previous manual conversion.
+		// 生成长度为零的非 nil 切片，以保持与旧的手写转换逻辑兼容。
 		out.Ingress = make([]extensionsv1beta1.NetworkPolicyIngressRule, 0)
 	}
 	if out.Egress == nil {
-		// Produce a zero-length non-nil slice for compatibility with previous manual conversion.
+		// 生成长度为零的非 nil 切片，以保持与旧的手写转换逻辑兼容。
 		out.Egress = make([]extensionsv1beta1.NetworkPolicyEgressRule, 0)
 	}
 	return nil
@@ -96,7 +96,7 @@ func Convert_v1beta1_NetworkPolicyIngressRule_To_networking_NetworkPolicyIngress
 		return err
 	}
 	if out.Ports == nil {
-		// Produce a zero-length non-nil slice for compatibility with previous manual conversion.
+		// 生成长度为零的非 nil 切片，以保持与旧的手写转换逻辑兼容。
 		out.Ports = make([]networking.NetworkPolicyPort, 0)
 	}
 	return nil
@@ -107,7 +107,7 @@ func Convert_networking_NetworkPolicyIngressRule_To_v1beta1_NetworkPolicyIngress
 		return err
 	}
 	if out.Ports == nil {
-		// Produce a zero-length non-nil slice for compatibility with previous manual conversion.
+		// 生成长度为零的非 nil 切片，以保持与旧的手写转换逻辑兼容。
 		out.Ports = make([]extensionsv1beta1.NetworkPolicyPort, 0)
 	}
 	return nil
@@ -118,11 +118,11 @@ func Convert_v1beta1_NetworkPolicyEgressRule_To_networking_NetworkPolicyEgressRu
 		return err
 	}
 	if out.Ports == nil {
-		// Produce a zero-length non-nil slice for compatibility with previous manual conversion.
+		// 生成长度为零的非 nil 切片，以保持与旧的手写转换逻辑兼容。
 		out.Ports = make([]networking.NetworkPolicyPort, 0)
 	}
 	if out.To == nil {
-		// Produce a zero-length non-nil slice for compatibility with previous manual conversion.
+		// 生成长度为零的非 nil 切片，以保持与旧的手写转换逻辑兼容。
 		out.To = make([]networking.NetworkPolicyPeer, 0)
 	}
 	return nil
@@ -133,11 +133,11 @@ func Convert_networking_NetworkPolicyEgressRule_To_v1beta1_NetworkPolicyEgressRu
 		return err
 	}
 	if out.Ports == nil {
-		// Produce a zero-length non-nil slice for compatibility with previous manual conversion.
+		// 生成长度为零的非 nil 切片，以保持与旧的手写转换逻辑兼容。
 		out.Ports = make([]extensionsv1beta1.NetworkPolicyPort, 0)
 	}
 	if out.To == nil {
-		// Produce a zero-length non-nil slice for compatibility with previous manual conversion.
+		// 生成长度为零的非 nil 切片，以保持与旧的手写转换逻辑兼容。
 		out.To = make([]extensionsv1beta1.NetworkPolicyPeer, 0)
 	}
 	return nil

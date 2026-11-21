@@ -129,7 +129,7 @@ var validOS = sets.New(core.Linux, core.Windows)
 // additional responders.
 const MaxPodEvictionResponders = 10
 
-// ValidateHasLabel requires that metav1.ObjectMeta has a Label with key and expectedValue
+// ValidateHasLabel 校验 metav1.ObjectMeta 必须包含指定 key 且值等于 expectedValue 的标签。
 func ValidateHasLabel(meta metav1.ObjectMeta, fldPath *field.Path, key, expectedValue string) field.ErrorList {
 	allErrs := field.ErrorList{}
 	actualValue, found := meta.Labels[key]
@@ -145,12 +145,12 @@ func ValidateHasLabel(meta metav1.ObjectMeta, fldPath *field.Path, key, expected
 	return allErrs
 }
 
-// ValidateAnnotations validates that a set of annotations are correctly defined.
+// ValidateAnnotations 校验一组注解是否定义正确（键、值格式与整体大小）。
 func ValidateAnnotations(annotations map[string]string, fldPath *field.Path) field.ErrorList {
 	return apimachineryvalidation.ValidateAnnotations(annotations, fldPath)
 }
 
-// ValidateUserAnnotations validates that the UserAnnotations are correctly defined.
+// ValidateUserAnnotations 校验 UserAnnotations（用户自定义注解）的键是否为合法的域名前缀形式，并检查总大小。
 func ValidateUserAnnotations(userAnnotations map[string]string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for k := range userAnnotations {
@@ -163,6 +163,7 @@ func ValidateUserAnnotations(userAnnotations map[string]string, fldPath *field.P
 	return allErrs
 }
 
+// ValidateDNS1123Label 校验 value 是否为合法的 DNS-1123 标签（短名称），并将错误附带 format=k8s-short-name 来源。
 func ValidateDNS1123Label(value string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, msg := range validation.IsDNS1123Label(value) {
@@ -171,7 +172,7 @@ func ValidateDNS1123Label(value string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateQualifiedName validates if name is what Kubernetes calls a "qualified name".
+// ValidateQualifiedName 校验 value 是否符合 Kubernetes 所称的“限定名”（qualified name）格式。
 func ValidateQualifiedName(value string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, msg := range validation.IsQualifiedName(value) {
@@ -180,7 +181,7 @@ func ValidateQualifiedName(value string, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateDNS1123SubdomainWithUnderScore validates that a name is a proper DNS subdomain but allows for an underscore in the string
+// ValidateDNS1123SubdomainWithUnderScore 校验 value 是否为合法 DNS 子域名，但允许字符串中出现下划线。
 func ValidateDNS1123SubdomainWithUnderScore(value string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, msg := range validation.IsDNS1123SubdomainWithUnderscore(value) {
@@ -189,7 +190,7 @@ func ValidateDNS1123SubdomainWithUnderScore(value string, fldPath *field.Path) f
 	return allErrs
 }
 
-// ValidateDNS1123Subdomain validates that a name is a proper DNS subdomain.
+// ValidateDNS1123Subdomain 校验 value 是否为合法的 DNS 子域名（长名称），错误附带 format=k8s-long-name 来源。
 func ValidateDNS1123Subdomain(value string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, msg := range validation.IsDNS1123Subdomain(value) {
@@ -198,6 +199,7 @@ func ValidateDNS1123Subdomain(value string, fldPath *field.Path) field.ErrorList
 	return allErrs
 }
 
+// ValidatePodSpecificAnnotations 校验 Pod 专有注解：镜像 Pod 注解要求 spec.nodeName，同时解析 tolerations 注解并校验其合法性。
 func ValidatePodSpecificAnnotations(annotations map[string]string, spec *core.PodSpec, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -223,7 +225,7 @@ func ValidatePodSpecificAnnotations(annotations map[string]string, spec *core.Po
 	return allErrs
 }
 
-// ValidateTolerationsInPodAnnotations tests that the serialized tolerations in Pod.Annotations has valid data
+// ValidateTolerationsInPodAnnotations 校验 Pod.Annotations 中序列化后的 tolerations 数据是否合法。
 func ValidateTolerationsInPodAnnotations(annotations map[string]string, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -240,6 +242,7 @@ func ValidateTolerationsInPodAnnotations(annotations map[string]string, fldPath 
 	return allErrs
 }
 
+// ValidatePodSpecificAnnotationUpdates 校验 Pod 专有注解的更新：禁止移除或修改 AppArmor 旧注解与镜像 Pod 注解。
 func ValidatePodSpecificAnnotationUpdates(newPod *core.Pod, oldAnnotations map[string]string, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	newAnnotations := newPod.Annotations
@@ -270,6 +273,7 @@ func ValidatePodSpecificAnnotationUpdates(newPod *core.Pod, oldAnnotations map[s
 	return allErrs
 }
 
+// ValidateEndpointsSpecificAnnotations 校验 Endpoints 专有注解；当前无实际检查项，保留扩展点。
 func ValidateEndpointsSpecificAnnotations(annotations map[string]string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	return allErrs
@@ -353,9 +357,7 @@ var ValidateResourceClaimTemplateName = apimachineryvalidation.NameIsDNSSubdomai
 // name for a PodGroup is valid.
 var ValidatePodGroupName = apimachineryvalidation.NameIsDNSSubdomain
 
-// ValidateRuntimeClassName can be used to check whether the given RuntimeClass name is valid.
-// Prefix indicates this name will be used as part of generation, in which case
-// trailing dashes are allowed.
+// ValidateRuntimeClassName 校验给定的 RuntimeClass 名称是否合法（DNS 子域名规则）。
 func ValidateRuntimeClassName(name string, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	for _, msg := range apimachineryvalidation.NameIsDNSSubdomain(name, false) {
@@ -364,18 +366,18 @@ func ValidateRuntimeClassName(name string, fldPath *field.Path) field.ErrorList 
 	return allErrs
 }
 
-// validateOverhead can be used to check whether the given Overhead is valid.
+// validateOverhead 校验 Pod Overhead 资源列表是否合法，复用容器资源需求的校验逻辑。
 func validateOverhead(overhead core.ResourceList, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	// reuse the ResourceRequirements validation logic
 	return ValidateContainerResourceRequirements(&core.ResourceRequirements{Limits: overhead}, nil, fldPath, opts)
 }
 
-// Validates that given value is not negative.
+// ValidateNonnegativeField 校验给定的 int64 值不为负数。
 func ValidateNonnegativeField(value int64, fldPath *field.Path) field.ErrorList {
 	return apimachineryvalidation.ValidateNonnegativeField(value, fldPath)
 }
 
-// Validates that a Quantity is not negative
+// ValidateNonnegativeQuantity 校验给定的 Quantity 不为负数。
 func ValidateNonnegativeQuantity(value resource.Quantity, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if value.Cmp(resource.Quantity{}) < 0 {
@@ -384,7 +386,7 @@ func ValidateNonnegativeQuantity(value resource.Quantity, fldPath *field.Path) f
 	return allErrs
 }
 
-// Validates that given value is positive.
+// ValidatePositiveField 校验给定的 int64 值大于零。
 func ValidatePositiveField(value int64, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if value <= 0 {
@@ -393,7 +395,7 @@ func ValidatePositiveField(value int64, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// Validates that a Quantity is positive
+// ValidatePositiveQuantityValue 校验给定的 Quantity 大于零。
 func ValidatePositiveQuantityValue(value resource.Quantity, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if value.Cmp(resource.Quantity{}) <= 0 {
@@ -402,10 +404,12 @@ func ValidatePositiveQuantityValue(value resource.Quantity, fldPath *field.Path)
 	return allErrs
 }
 
+// ValidateImmutableField 校验不可变字段在更新前后保持一致。
 func ValidateImmutableField(newVal, oldVal interface{}, fldPath *field.Path) field.ErrorList {
 	return apimachineryvalidation.ValidateImmutableField(newVal, oldVal, fldPath)
 }
 
+// ValidateImmutableAnnotation 校验指定注解在更新前后保持不变，否则报错。
 func ValidateImmutableAnnotation(newVal string, oldVal string, annotation string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -415,8 +419,7 @@ func ValidateImmutableAnnotation(newVal string, oldVal string, annotation string
 	return allErrs
 }
 
-// ValidateObjectMetaWithOpts validates an object's metadata on creation. It expects that name generation has already
-// been performed.
+// ValidateObjectMetaWithOpts 在对象创建时校验元数据，假定名称生成已完成；额外校验 finalizer 名称合法性。
 func ValidateObjectMetaWithOpts(meta *metav1.ObjectMeta, isNamespaced bool, nameFn ValidateNameFuncWithErrors, fldPath *field.Path) field.ErrorList {
 	allErrs := apimachineryvalidation.ValidateObjectMetaWithOpts(meta, isNamespaced, nameFn, fldPath)
 	// run additional checks for the finalizer name
@@ -426,8 +429,8 @@ func ValidateObjectMetaWithOpts(meta *metav1.ObjectMeta, isNamespaced bool, name
 	return allErrs
 }
 
-// ValidateObjectMeta validates an object's metadata on creation. It expects that name generation has already
-// been performed.
+// ValidateObjectMeta 在对象创建时校验元数据，假定名称生成已完成；额外校验 finalizer 名称合法性。
+// TODO: Remove calls to this method scattered in validations of specific resources, e.g., ValidatePodUpdate.
 // TODO: Remove calls to this method scattered in validations of specific resources, e.g., ValidatePodUpdate.
 func ValidateObjectMeta(meta *metav1.ObjectMeta, requiresNamespace bool, nameFn ValidateNameFunc, fldPath *field.Path) field.ErrorList {
 	allErrs := apimachineryvalidation.ValidateObjectMeta(meta, requiresNamespace, apimachineryvalidation.ValidateNameFunc(nameFn), fldPath)
@@ -438,7 +441,7 @@ func ValidateObjectMeta(meta *metav1.ObjectMeta, requiresNamespace bool, nameFn 
 	return allErrs
 }
 
-// ValidateObjectMetaUpdate validates an object's metadata when updated
+// ValidateObjectMetaUpdate 在对象更新时校验元数据，并额外校验所有 finalizer 名称的合法性。
 func ValidateObjectMetaUpdate(newMeta, oldMeta *metav1.ObjectMeta, fldPath *field.Path) field.ErrorList {
 	allErrs := apimachineryvalidation.ValidateObjectMetaUpdate(newMeta, oldMeta, fldPath)
 	// run additional checks for the finalizer name
@@ -449,6 +452,7 @@ func ValidateObjectMetaUpdate(newMeta, oldMeta *metav1.ObjectMeta, fldPath *fiel
 	return allErrs
 }
 
+// ValidateVolumes 校验 Pod 的卷列表：收集所有卷名并检查重复，同时识别临时 PVC 的名称冲突。
 func ValidateVolumes(volumes []core.Volume, podMeta *metav1.ObjectMeta, fldPath *field.Path, opts PodValidationOptions) (map[string]core.VolumeSource, field.ErrorList) {
 	allErrs := field.ErrorList{}
 
@@ -494,6 +498,7 @@ func ValidateVolumes(volumes []core.Volume, podMeta *metav1.ObjectMeta, fldPath 
 	return vols, allErrs
 }
 
+// IsMatchedVolume 判断给定名称的卷是否存在于卷映射中。
 func IsMatchedVolume(name string, volumes map[string]core.VolumeSource) bool {
 	if _, ok := volumes[name]; ok {
 		return true
@@ -501,8 +506,7 @@ func IsMatchedVolume(name string, volumes map[string]core.VolumeSource) bool {
 	return false
 }
 
-// isMatched checks whether the volume with the given name is used by a
-// container and if so, if it involves a PVC.
+// isMatchedDevice 判断给定名称的卷是否被容器使用，并报告其是否涉及 PVC（持久化卷声明）。
 func isMatchedDevice(name string, volumes map[string]core.VolumeSource) (isMatched bool, isPVC bool) {
 	if source, ok := volumes[name]; ok {
 		if source.PersistentVolumeClaim != nil ||
@@ -514,6 +518,7 @@ func isMatchedDevice(name string, volumes map[string]core.VolumeSource) (isMatch
 	return false, false
 }
 
+// mountNameAlreadyExists 判断挂载名称是否已存在于设备映射中（名称冲突检测）。
 func mountNameAlreadyExists(name string, devices map[string]string) bool {
 	if _, ok := devices[name]; ok {
 		return true
@@ -521,6 +526,7 @@ func mountNameAlreadyExists(name string, devices map[string]string) bool {
 	return false
 }
 
+// mountPathAlreadyExists 判断挂载路径是否已存在于设备映射中（路径冲突检测）。
 func mountPathAlreadyExists(mountPath string, devices map[string]string) bool {
 	for _, devPath := range devices {
 		if mountPath == devPath {
@@ -531,6 +537,7 @@ func mountPathAlreadyExists(mountPath string, devices map[string]string) bool {
 	return false
 }
 
+// deviceNameAlreadyExists 判断设备名称是否已存在于挂载映射中（名称冲突检测）。
 func deviceNameAlreadyExists(name string, mounts map[string]string) bool {
 	if _, ok := mounts[name]; ok {
 		return true
@@ -538,6 +545,7 @@ func deviceNameAlreadyExists(name string, mounts map[string]string) bool {
 	return false
 }
 
+// devicePathAlreadyExists 判断设备路径是否已存在于挂载映射中（路径冲突检测）。
 func devicePathAlreadyExists(devicePath string, mounts map[string]string) bool {
 	for _, mountPath := range mounts {
 		if mountPath == devicePath {
@@ -548,6 +556,7 @@ func devicePathAlreadyExists(devicePath string, mounts map[string]string) bool {
 	return false
 }
 
+// validateVolumeSource 校验 VolumeSource：确保恰好设置一种卷类型，并逐类型校验具体参数。
 func validateVolumeSource(source *core.VolumeSource, fldPath *field.Path, volName string, podMeta *metav1.ObjectMeta, opts PodValidationOptions) field.ErrorList {
 	numVolumes := 0
 	allErrs := field.ErrorList{}
@@ -815,6 +824,7 @@ func validateVolumeSource(source *core.VolumeSource, fldPath *field.Path, volNam
 	return allErrs
 }
 
+// validateHostPathVolumeSource 校验 hostPath 卷：路径必填、不能含回退路径段，并校验 hostPathType。
 func validateHostPathVolumeSource(hostPath *core.HostPathVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(hostPath.Path) == 0 {
@@ -827,6 +837,7 @@ func validateHostPathVolumeSource(hostPath *core.HostPathVolumeSource, fldPath *
 	return allErrs
 }
 
+// validateGitRepoVolumeSource 校验 gitRepo 卷：仓库地址必填，目录必须为相对下降路径。
 func validateGitRepoVolumeSource(gitRepo *core.GitRepoVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(gitRepo.Repository) == 0 {
@@ -838,6 +849,7 @@ func validateGitRepoVolumeSource(gitRepo *core.GitRepoVolumeSource, fldPath *fie
 	return allErrs
 }
 
+// validateISCSIVolumeSource 校验 Pod 中 iSCSI 卷的门户地址、IQN、LUN、认证方式等字段。
 func validateISCSIVolumeSource(iscsi *core.ISCSIVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(iscsi.TargetPortal) == 0 {
@@ -878,6 +890,7 @@ func validateISCSIVolumeSource(iscsi *core.ISCSIVolumeSource, fldPath *field.Pat
 	return allErrs
 }
 
+// validateISCSIPersistentVolumeSource 校验 PV 中 iSCSI 卷的参数，包括 initiatorName 场景下的名称长度限制。
 func validateISCSIPersistentVolumeSource(iscsi *core.ISCSIPersistentVolumeSource, pvName string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(iscsi.TargetPortal) == 0 {
@@ -927,6 +940,7 @@ func validateISCSIPersistentVolumeSource(iscsi *core.ISCSIPersistentVolumeSource
 	return allErrs
 }
 
+// validateFCVolumeSource 校验 Fibre Channel 卷：targetWWNs 与 wwids 必须二选一且 LUN 等参数合法。
 func validateFCVolumeSource(fc *core.FCVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(fc.TargetWWNs) < 1 && len(fc.WWIDs) < 1 {
@@ -949,6 +963,7 @@ func validateFCVolumeSource(fc *core.FCVolumeSource, fldPath *field.Path) field.
 	return allErrs
 }
 
+// validateGCEPersistentDiskVolumeSource 校验 GCE 持久磁盘卷：磁盘名必填，分区号须在 0-255 之间。
 func validateGCEPersistentDiskVolumeSource(pd *core.GCEPersistentDiskVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(pd.PDName) == 0 {
@@ -960,6 +975,7 @@ func validateGCEPersistentDiskVolumeSource(pd *core.GCEPersistentDiskVolumeSourc
 	return allErrs
 }
 
+// validateAWSElasticBlockStoreVolumeSource 校验 AWS EBS 卷：volumeID 必填，分区号须在 0-255 之间。
 func validateAWSElasticBlockStoreVolumeSource(PD *core.AWSElasticBlockStoreVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(PD.VolumeID) == 0 {
@@ -971,6 +987,7 @@ func validateAWSElasticBlockStoreVolumeSource(PD *core.AWSElasticBlockStoreVolum
 	return allErrs
 }
 
+// validateSecretVolumeSource 校验 Secret 卷：secretName 必填，defaultMode 合法，并校验 defaultUser。
 func validateSecretVolumeSource(secretSource *core.SecretVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(secretSource.SecretName) == 0 {
@@ -991,6 +1008,7 @@ func validateSecretVolumeSource(secretSource *core.SecretVolumeSource, fldPath *
 	return allErrs
 }
 
+// validateConfigMapVolumeSource 校验 ConfigMap 卷：name 必填，defaultMode 合法，并校验 defaultUser。
 func validateConfigMapVolumeSource(configMapSource *core.ConfigMapVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(configMapSource.Name) == 0 {
@@ -1011,6 +1029,7 @@ func validateConfigMapVolumeSource(configMapSource *core.ConfigMapVolumeSource, 
 	return allErrs
 }
 
+// validateKeyToPath 校验 KeyToPath 映射：key 与 path 必填，path 为非保留相对路径，mode 合法。
 func validateKeyToPath(kp *core.KeyToPath, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(kp.Key) == 0 {
@@ -1028,6 +1047,7 @@ func validateKeyToPath(kp *core.KeyToPath, fldPath *field.Path) field.ErrorList 
 	return allErrs
 }
 
+// validatePersistentClaimVolumeSource 校验 PVC 卷源：claimName 必填。
 func validatePersistentClaimVolumeSource(claim *core.PersistentVolumeClaimVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(claim.ClaimName) == 0 {
@@ -1036,6 +1056,7 @@ func validatePersistentClaimVolumeSource(claim *core.PersistentVolumeClaimVolume
 	return allErrs
 }
 
+// validateNFSVolumeSource 校验 NFS 卷：server 与 path 必填，且 path 必须为绝对路径。
 func validateNFSVolumeSource(nfs *core.NFSVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(nfs.Server) == 0 {
@@ -1050,6 +1071,7 @@ func validateNFSVolumeSource(nfs *core.NFSVolumeSource, fldPath *field.Path) fie
 	return allErrs
 }
 
+// validateQuobyteVolumeSource 校验 Quobyte 卷：registry 必须是 host:port 形式，tenant 长度受限。
 func validateQuobyteVolumeSource(quobyte *core.QuobyteVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(quobyte.Registry) == 0 {
@@ -1070,6 +1092,7 @@ func validateQuobyteVolumeSource(quobyte *core.QuobyteVolumeSource, fldPath *fie
 	return allErrs
 }
 
+// validateGlusterfsVolumeSource 校验 Pod 中 Glusterfs 卷：endpoints 名称与路径必填。
 func validateGlusterfsVolumeSource(glusterfs *core.GlusterfsVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(glusterfs.EndpointsName) == 0 {
@@ -1080,6 +1103,8 @@ func validateGlusterfsVolumeSource(glusterfs *core.GlusterfsVolumeSource, fldPat
 	}
 	return allErrs
 }
+
+// validateGlusterfsPersistentVolumeSource 校验 PV 中 Glusterfs 卷：endpoints、路径及命名空间的一致性。
 func validateGlusterfsPersistentVolumeSource(glusterfs *core.GlusterfsPersistentVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(glusterfs.EndpointsName) == 0 {
@@ -1101,6 +1126,7 @@ func validateGlusterfsPersistentVolumeSource(glusterfs *core.GlusterfsPersistent
 	return allErrs
 }
 
+// validateFlockerVolumeSource 校验 Flocker 卷：datasetName 与 datasetUUID 必须二选一，且名称不含 '/'。
 func validateFlockerVolumeSource(flocker *core.FlockerVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(flocker.DatasetName) == 0 && len(flocker.DatasetUUID) == 0 {
@@ -1123,6 +1149,7 @@ var validVolumeDownwardAPIFieldPathExpressions = sets.New(
 	"metadata.annotations",
 	"metadata.uid")
 
+// validateDownwardAPIVolumeFile 校验 DownwardAPI 卷中的单个文件项：路径合法，fieldRef 与 resourceFieldRef 不能同时设置且引用字段受支持。
 func validateDownwardAPIVolumeFile(file *core.DownwardAPIVolumeFile, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(file.Path) == 0 {
@@ -1148,6 +1175,7 @@ func validateDownwardAPIVolumeFile(file *core.DownwardAPIVolumeFile, fldPath *fi
 	return allErrs
 }
 
+// validateDownwardAPIVolumeSource 校验 DownwardAPI 卷源：defaultMode、defaultUser 与所有 items 的合法性。
 func validateDownwardAPIVolumeSource(downwardAPIVolume *core.DownwardAPIVolumeSource, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -1163,6 +1191,7 @@ func validateDownwardAPIVolumeSource(downwardAPIVolume *core.DownwardAPIVolumeSo
 	return allErrs
 }
 
+// validateProjectionSources 校验 projected 卷的所有投影源，检查数量上限、必填字段以及各 item 路径不重复。
 func validateProjectionSources(projection *core.ProjectedVolumeSource, projectionMode *int32, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allPaths := sets.Set[string]{}
@@ -1381,6 +1410,7 @@ func validateProjectionSources(projection *core.ProjectedVolumeSource, projectio
 	return allErrs
 }
 
+// validateProjectedVolumeSource 校验 projected 卷源：defaultMode、defaultUser 及各投影来源的合法性。
 func validateProjectedVolumeSource(projection *core.ProjectedVolumeSource, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -1404,6 +1434,7 @@ var supportedHostPathTypes = sets.New(
 	core.HostPathCharDev,
 	core.HostPathBlockDev)
 
+// validateHostPathType 校验 hostPath 的 type 是否为受支持的类型。
 func validateHostPathType(hostPathType *core.HostPathType, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -1414,9 +1445,7 @@ func validateHostPathType(hostPathType *core.HostPathType, fldPath *field.Path) 
 	return allErrs
 }
 
-// This validate will make sure targetPath:
-// 1. is not abs path
-// 2. does not have any element which is ".."
+// validateLocalDescendingPath 校验目标路径：必须是相对路径且不包含任何 '..' 路径段。
 func validateLocalDescendingPath(targetPath string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if path.IsAbs(targetPath) {
@@ -1428,10 +1457,7 @@ func validateLocalDescendingPath(targetPath string, fldPath *field.Path) field.E
 	return allErrs
 }
 
-// validatePathNoBacksteps makes sure the targetPath does not have any `..` path elements when split
-//
-// This assumes the OS of the apiserver and the nodes are the same. The same check should be done
-// on the node to ensure there are no backsteps.
+// validatePathNoBacksteps 校验目标路径不能以 '/' 分割后出现 '..' 段；假定 apiserver 与节点操作系统一致，节点侧仍需做同样检查。
 func validatePathNoBacksteps(targetPath string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	parts := strings.Split(filepath.ToSlash(targetPath), "/")
@@ -1444,8 +1470,7 @@ func validatePathNoBacksteps(targetPath string, fldPath *field.Path) field.Error
 	return allErrs
 }
 
-// validateMountPropagation verifies that MountPropagation field is valid and
-// allowed for given container.
+// validateMountPropagation 校验挂载传播模式是否合法，且是否被当前容器所允许。
 func validateMountPropagation(mountPropagation *core.MountPropagationMode, container *core.Container, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -1476,7 +1501,7 @@ func validateMountPropagation(mountPropagation *core.MountPropagationMode, conta
 	return allErrs
 }
 
-// validateMountRecursiveReadOnly validates RecursiveReadOnly mounts.
+// validateMountRecursiveReadOnly 校验 recursiveReadOnly 挂载：仅能在 readOnly 为 true 时使用，且依赖相应特性门控。
 func validateMountRecursiveReadOnly(mount core.VolumeMount, fldPath *field.Path) field.ErrorList {
 	if mount.RecursiveReadOnly == nil {
 		return nil
@@ -1502,10 +1527,7 @@ func validateMountRecursiveReadOnly(mount core.VolumeMount, fldPath *field.Path)
 	return allErrs
 }
 
-// ValidateLocalNonReservedPath makes sure targetPath:
-// 1. is not abs path
-// 2. does not contain any '..' elements
-// 3. does not start with '..'
+// ValidateLocalNonReservedPath 校验目标路径：非绝对路径、不含 '..' 段且不以 '..' 开头（保留路径）。
 func ValidateLocalNonReservedPath(targetPath string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, validateLocalDescendingPath(targetPath, fldPath)...)
@@ -1516,6 +1538,7 @@ func ValidateLocalNonReservedPath(targetPath string, fldPath *field.Path) field.
 	return allErrs
 }
 
+// validateRBDVolumeSource 校验 Pod 中 RBD 卷：monitors 与 image 必填。
 func validateRBDVolumeSource(rbd *core.RBDVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(rbd.CephMonitors) == 0 {
@@ -1527,6 +1550,7 @@ func validateRBDVolumeSource(rbd *core.RBDVolumeSource, fldPath *field.Path) fie
 	return allErrs
 }
 
+// validateRBDPersistentVolumeSource 校验 PV 中 RBD 卷：monitors 与 image 必填。
 func validateRBDPersistentVolumeSource(rbd *core.RBDPersistentVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(rbd.CephMonitors) == 0 {
@@ -1538,6 +1562,7 @@ func validateRBDPersistentVolumeSource(rbd *core.RBDPersistentVolumeSource, fldP
 	return allErrs
 }
 
+// validateCinderVolumeSource 校验 Pod 中 Cinder 卷：volumeID 必填，secretRef.name 若设置则必填。
 func validateCinderVolumeSource(cd *core.CinderVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(cd.VolumeID) == 0 {
@@ -1551,6 +1576,7 @@ func validateCinderVolumeSource(cd *core.CinderVolumeSource, fldPath *field.Path
 	return allErrs
 }
 
+// validateCinderPersistentVolumeSource 校验 PV 中 Cinder 卷：volumeID 必填，secretRef 的 name 与 namespace 必填。
 func validateCinderPersistentVolumeSource(cd *core.CinderPersistentVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(cd.VolumeID) == 0 {
@@ -1567,6 +1593,7 @@ func validateCinderPersistentVolumeSource(cd *core.CinderPersistentVolumeSource,
 	return allErrs
 }
 
+// validateCephFSVolumeSource 校验 Pod 中 CephFS 卷：monitors 必填。
 func validateCephFSVolumeSource(cephfs *core.CephFSVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(cephfs.Monitors) == 0 {
@@ -1575,6 +1602,7 @@ func validateCephFSVolumeSource(cephfs *core.CephFSVolumeSource, fldPath *field.
 	return allErrs
 }
 
+// validateCephFSPersistentVolumeSource 校验 PV 中 CephFS 卷：monitors 必填。
 func validateCephFSPersistentVolumeSource(cephfs *core.CephFSPersistentVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(cephfs.Monitors) == 0 {
@@ -1583,6 +1611,7 @@ func validateCephFSPersistentVolumeSource(cephfs *core.CephFSPersistentVolumeSou
 	return allErrs
 }
 
+// validateFlexVolumeSource 校验 Pod 中 FlexVolume：driver 必填，且选项键不得使用 kubernetes.io/k8s.io 保留命名空间。
 func validateFlexVolumeSource(fv *core.FlexVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(fv.Driver) == 0 {
@@ -1604,6 +1633,7 @@ func validateFlexVolumeSource(fv *core.FlexVolumeSource, fldPath *field.Path) fi
 	return allErrs
 }
 
+// validateFlexPersistentVolumeSource 校验 PV 中 FlexVolume：driver 必填，且选项键不得使用 kubernetes.io/k8s.io 保留命名空间。
 func validateFlexPersistentVolumeSource(fv *core.FlexPersistentVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(fv.Driver) == 0 {
@@ -1625,6 +1655,7 @@ func validateFlexPersistentVolumeSource(fv *core.FlexPersistentVolumeSource, fld
 	return allErrs
 }
 
+// validateAzureFile 校验 Azure File 卷：secretName 与 shareName 必填。
 func validateAzureFile(azure *core.AzureFileVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if azure.SecretName == "" {
@@ -1636,6 +1667,7 @@ func validateAzureFile(azure *core.AzureFileVolumeSource, fldPath *field.Path) f
 	return allErrs
 }
 
+// validateAzureFilePV 校验 PV 中 Azure File 卷：secretName、shareName 及可选 secretNamespace 的合法性。
 func validateAzureFilePV(azure *core.AzureFilePersistentVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if azure.SecretName == "" {
@@ -1652,6 +1684,7 @@ func validateAzureFilePV(azure *core.AzureFilePersistentVolumeSource, fldPath *f
 	return allErrs
 }
 
+// validateAzureDisk 校验 Azure Disk 卷：diskName、cachingMode、diskKind 以及 URI 格式是否受支持。
 func validateAzureDisk(azure *core.AzureDiskVolumeSource, fldPath *field.Path) field.ErrorList {
 	var supportedCachingModes = sets.New(
 		core.AzureDataDiskCachingNone,
@@ -1695,6 +1728,7 @@ func validateAzureDisk(azure *core.AzureDiskVolumeSource, fldPath *field.Path) f
 	return allErrs
 }
 
+// validateVsphereVolumeSource 校验 vSphere 卷：volumePath 必填。
 func validateVsphereVolumeSource(cd *core.VsphereVirtualDiskVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(cd.VolumePath) == 0 {
@@ -1703,6 +1737,7 @@ func validateVsphereVolumeSource(cd *core.VsphereVirtualDiskVolumeSource, fldPat
 	return allErrs
 }
 
+// validatePhotonPersistentDiskVolumeSource 校验 Photon 持久磁盘卷：pdID 必填。
 func validatePhotonPersistentDiskVolumeSource(cd *core.PhotonPersistentDiskVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(cd.PdID) == 0 {
@@ -1711,6 +1746,7 @@ func validatePhotonPersistentDiskVolumeSource(cd *core.PhotonPersistentDiskVolum
 	return allErrs
 }
 
+// validatePortworxVolumeSource 校验 Portworx 卷：volumeID 必填。
 func validatePortworxVolumeSource(pwx *core.PortworxVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(pwx.VolumeID) == 0 {
@@ -1719,6 +1755,7 @@ func validatePortworxVolumeSource(pwx *core.PortworxVolumeSource, fldPath *field
 	return allErrs
 }
 
+// validateScaleIOVolumeSource 校验 Pod 中 ScaleIO 卷：gateway、system、volumeName 必填。
 func validateScaleIOVolumeSource(sio *core.ScaleIOVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if sio.Gateway == "" {
@@ -1733,6 +1770,7 @@ func validateScaleIOVolumeSource(sio *core.ScaleIOVolumeSource, fldPath *field.P
 	return allErrs
 }
 
+// validateScaleIOPersistentVolumeSource 校验 PV 中 ScaleIO 卷：gateway、system、volumeName 必填。
 func validateScaleIOPersistentVolumeSource(sio *core.ScaleIOPersistentVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if sio.Gateway == "" {
@@ -1747,6 +1785,7 @@ func validateScaleIOPersistentVolumeSource(sio *core.ScaleIOPersistentVolumeSour
 	return allErrs
 }
 
+// validateLocalVolumeSource 校验 local 卷：路径必填且不含回退路径段。
 func validateLocalVolumeSource(ls *core.LocalVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if ls.Path == "" {
@@ -1758,6 +1797,7 @@ func validateLocalVolumeSource(ls *core.LocalVolumeSource, fldPath *field.Path) 
 	return allErrs
 }
 
+// validateStorageOSVolumeSource 校验 Pod 中 StorageOS 卷：卷名/命名空间须为 DNS 标签，secretRef.name 若设置则必填。
 func validateStorageOSVolumeSource(storageos *core.StorageOSVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(storageos.VolumeName) == 0 {
@@ -1776,6 +1816,7 @@ func validateStorageOSVolumeSource(storageos *core.StorageOSVolumeSource, fldPat
 	return allErrs
 }
 
+// validateStorageOSPersistentVolumeSource 校验 PV 中 StorageOS 卷：卷名/命名空间须为 DNS 标签，secretRef 的 name 与 namespace 必填。
 func validateStorageOSPersistentVolumeSource(storageos *core.StorageOSPersistentVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(storageos.VolumeName) == 0 {
@@ -1797,6 +1838,7 @@ func validateStorageOSPersistentVolumeSource(storageos *core.StorageOSPersistent
 	return allErrs
 }
 
+// validateUserField 校验卷默认用户 ID（DefaultUser）是否为合法用户 ID。
 func validateUserField(user *int64, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if user == nil {
@@ -1810,6 +1852,7 @@ func validateUserField(user *int64, fldPath *field.Path) field.ErrorList {
 
 // validatePVSecretReference check whether provided SecretReference object is valid in terms of secret name and namespace.
 
+// validatePVSecretReference 校验 PV 使用的 SecretReference：name 须为 DNS 子域名，namespace 须为 DNS 标签。
 func validatePVSecretReference(secretRef *core.SecretReference, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(secretRef.Name) == 0 {
@@ -1840,6 +1883,7 @@ const (
 	FormatCovered
 )
 
+// ValidateCSIDriverName 校验 CSI 驱动名称：非空、长度不超过 63，并符合 DNS 标签格式；opts 可声明某些错误由声明式校验覆盖。
 func ValidateCSIDriverName(driverName string, fldPath *field.Path, opts ...ValidateCSIDriverNameOption) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -1871,6 +1915,7 @@ func ValidateCSIDriverName(driverName string, fldPath *field.Path, opts ...Valid
 	return allErrs
 }
 
+// validateCSIPersistentVolumeSource 校验 PV 中 CSI 卷源：驱动名、volumeHandle 及各类 Secret 引用的合法性。
 func validateCSIPersistentVolumeSource(csi *core.CSIPersistentVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -1894,6 +1939,7 @@ func validateCSIPersistentVolumeSource(csi *core.CSIPersistentVolumeSource, fldP
 	return allErrs
 }
 
+// validateCSIVolumeSource 校验 Pod 中 CSI 卷源：驱动名与 nodePublishSecretRef 的合法性。
 func validateCSIVolumeSource(csi *core.CSIVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateCSIDriverName(csi.Driver, fldPath.Child("driver"))...)
@@ -1911,6 +1957,7 @@ func validateCSIVolumeSource(csi *core.CSIVolumeSource, fldPath *field.Path) fie
 	return allErrs
 }
 
+// validateEphemeralVolumeSource 校验临时卷：volumeClaimTemplate 必须设置且其元数据与规格合法。
 func validateEphemeralVolumeSource(ephemeral *core.EphemeralVolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if ephemeral.VolumeClaimTemplate == nil {
@@ -1922,14 +1969,14 @@ func validateEphemeralVolumeSource(ephemeral *core.EphemeralVolumeSource, fldPat
 	return allErrs
 }
 
-// ValidatePersistentVolumeClaimTemplate verifies that the embedded object meta and spec are valid.
-// Checking of the object data is very minimal because only labels and annotations are used.
+// ValidatePersistentVolumeClaimTemplate 校验内嵌 PVC 模板的元数据与规格；因仅使用标签与注解，元数据检查较为宽松。
 func ValidatePersistentVolumeClaimTemplate(claimTemplate *core.PersistentVolumeClaimTemplate, fldPath *field.Path, opts PersistentVolumeClaimSpecValidationOptions) field.ErrorList {
 	allErrs := ValidateTemplateObjectMeta(&claimTemplate.ObjectMeta, fldPath.Child("metadata"))
 	allErrs = append(allErrs, ValidatePersistentVolumeClaimSpec(&claimTemplate.Spec, fldPath.Child("spec"), opts)...)
 	return allErrs
 }
 
+// ValidateTemplateObjectMeta 校验模板元数据：仅允许设置注解与标签，其他 ObjectMeta 字段一律禁止以避免混淆。
 func ValidateTemplateObjectMeta(objMeta *metav1.ObjectMeta, fldPath *field.Path) field.ErrorList {
 	allErrs := apimachineryvalidation.ValidateAnnotations(objMeta.Annotations, fldPath.Child("annotations"))
 	allErrs = append(allErrs, unversionedvalidation.ValidateLabels(objMeta.Labels, fldPath.Child("labels"))...)
@@ -1972,6 +2019,7 @@ var supportedReclaimPolicy = sets.New(
 
 var supportedVolumeModes = sets.New(core.PersistentVolumeBlock, core.PersistentVolumeFilesystem)
 
+// ValidationOptionsForPersistentVolume 根据当前特性门控与旧 PV 状态生成 PV 规格校验选项，保证升级/降级场景兼容。
 func ValidationOptionsForPersistentVolume(pv, oldPv *core.PersistentVolume) PersistentVolumeSpecValidationOptions {
 	opts := PersistentVolumeSpecValidationOptions{
 		EnableVolumeAttributesClass:                  utilfeature.DefaultMutableFeatureGate.Enabled(features.VolumeAttributesClass),
@@ -1988,6 +2036,7 @@ func ValidationOptionsForPersistentVolume(pv, oldPv *core.PersistentVolume) Pers
 	return opts
 }
 
+// ValidatePersistentVolumeSpec 校验 PV 规格：访问模式、容量、卷源、存储类、节点亲和性等，并支持内联卷场景。
 func ValidatePersistentVolumeSpec(pvSpec *core.PersistentVolumeSpec, pvName string, validateInlinePersistentVolumeSpec bool, fldPath *field.Path, opts PersistentVolumeSpecValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -2285,6 +2334,7 @@ func ValidatePersistentVolumeSpec(pvSpec *core.PersistentVolumeSpec, pvName stri
 	return allErrs
 }
 
+// ValidatePersistentVolume 校验整个 PersistentVolume 对象：元数据与规格。
 func ValidatePersistentVolume(pv *core.PersistentVolume, opts PersistentVolumeSpecValidationOptions) field.ErrorList {
 	metaPath := field.NewPath("metadata")
 	allErrs := ValidateObjectMeta(&pv.ObjectMeta, false, ValidatePersistentVolumeName, metaPath)
@@ -2292,8 +2342,7 @@ func ValidatePersistentVolume(pv *core.PersistentVolume, opts PersistentVolumeSp
 	return allErrs
 }
 
-// ValidatePersistentVolumeUpdate tests to see if the update is legal for an end user to make.
-// newPv is updated with fields that cannot be changed.
+// ValidatePersistentVolumeUpdate 校验用户对 PV 的更新是否合法：卷源等字段不可变，部分字段允许有限度修改。
 func ValidatePersistentVolumeUpdate(newPv, oldPv *core.PersistentVolume, opts PersistentVolumeSpecValidationOptions) field.ErrorList {
 	allErrs := ValidatePersistentVolume(newPv, opts)
 
@@ -2331,7 +2380,7 @@ func ValidatePersistentVolumeUpdate(newPv, oldPv *core.PersistentVolume, opts Pe
 	return allErrs
 }
 
-// ValidatePersistentVolumeStatusUpdate tests to see if the status update is legal for an end user to make.
+// ValidatePersistentVolumeStatusUpdate 校验 PV 状态更新是否合法（仅元数据与 resourceVersion 约束）。
 func ValidatePersistentVolumeStatusUpdate(newPv, oldPv *core.PersistentVolume) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newPv.ObjectMeta, &oldPv.ObjectMeta, field.NewPath("metadata"))
 	if len(newPv.ResourceVersion) == 0 {
@@ -2351,6 +2400,7 @@ type PersistentVolumeClaimSpecValidationOptions struct {
 	EnableVolumeAttributesClass bool
 }
 
+// ValidationOptionsForPersistentVolumeClaimCreate 为 PVC 创建操作生成校验选项，基于当前特性门控状态。
 func ValidationOptionsForPersistentVolumeClaimCreate() PersistentVolumeClaimSpecValidationOptions {
 	return PersistentVolumeClaimSpecValidationOptions{
 		EnableRecoverFromExpansionFailure: utilfeature.DefaultFeatureGate.Enabled(features.RecoverVolumeExpansionFailure),
@@ -2359,6 +2409,7 @@ func ValidationOptionsForPersistentVolumeClaimCreate() PersistentVolumeClaimSpec
 	}
 }
 
+// ValidationOptionsForPersistentVolumeClaim 根据 PVC 及旧对象状态生成校验选项，兼容旧对象中已存在的不规范值。
 func ValidationOptionsForPersistentVolumeClaim(pvc, oldPvc *core.PersistentVolumeClaim) PersistentVolumeClaimSpecValidationOptions {
 	opts := ValidationOptionsForPersistentVolumeClaimCreate()
 	if oldPvc == nil {
@@ -2389,6 +2440,7 @@ func ValidationOptionsForPersistentVolumeClaim(pvc, oldPvc *core.PersistentVolum
 	return opts
 }
 
+// ValidationOptionsForPersistentVolumeClaimTemplate 根据 PVC 模板及旧模板状态生成校验选项，兼容旧模板中已存在的非法标签选择器。
 func ValidationOptionsForPersistentVolumeClaimTemplate(claimTemplate, oldClaimTemplate *core.PersistentVolumeClaimTemplate) PersistentVolumeClaimSpecValidationOptions {
 	opts := PersistentVolumeClaimSpecValidationOptions{
 		AllowInvalidLabelValueInSelector: false,
@@ -2408,7 +2460,7 @@ func ValidationOptionsForPersistentVolumeClaimTemplate(claimTemplate, oldClaimTe
 	return opts
 }
 
-// allowInvalidAPIGroupInDataSourceOrRef returns true if the spec contains a data source or data source reference with an API group
+// allowInvalidAPIGroupInDataSourceOrRef 当 spec 中存在带非法 API 组的 dataSource 或 dataSourceRef 时返回 true，用于兼容旧对象。
 func allowInvalidAPIGroupInDataSourceOrRef(spec *core.PersistentVolumeClaimSpec) bool {
 	if spec.DataSource != nil && spec.DataSource.APIGroup != nil {
 		return true
@@ -2419,14 +2471,14 @@ func allowInvalidAPIGroupInDataSourceOrRef(spec *core.PersistentVolumeClaimSpec)
 	return false
 }
 
-// ValidatePersistentVolumeClaim validates a PersistentVolumeClaim
+// ValidatePersistentVolumeClaim 校验整个 PersistentVolumeClaim 对象：元数据与规格。
 func ValidatePersistentVolumeClaim(pvc *core.PersistentVolumeClaim, opts PersistentVolumeClaimSpecValidationOptions) field.ErrorList {
 	allErrs := ValidateObjectMeta(&pvc.ObjectMeta, true, ValidatePersistentVolumeName, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidatePersistentVolumeClaimSpec(&pvc.Spec, field.NewPath("spec"), opts)...)
 	return allErrs
 }
 
-// validateDataSource validates a DataSource/DataSourceRef in a PersistentVolumeClaimSpec
+// validateDataSource 校验 PVC 中的 DataSource 字段（名称、命名空间、API 组）是否合法。
 func validateDataSource(dataSource *core.TypedLocalObjectReference, fldPath *field.Path, allowInvalidAPIGroupInDataSourceOrRef bool) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -2452,7 +2504,7 @@ func validateDataSource(dataSource *core.TypedLocalObjectReference, fldPath *fie
 	return allErrs
 }
 
-// validateDataSourceRef validates a DataSourceRef in a PersistentVolumeClaimSpec
+// validateDataSourceRef 校验 PVC 中的 DataSourceRef 字段，并兼容旧的 DataSource 表达形式。
 func validateDataSourceRef(dataSourceRef *core.TypedObjectReference, fldPath *field.Path, allowInvalidAPIGroupInDataSourceOrRef bool) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -2484,7 +2536,7 @@ func validateDataSourceRef(dataSourceRef *core.TypedObjectReference, fldPath *fi
 	return allErrs
 }
 
-// ValidatePersistentVolumeClaimSpec validates a PersistentVolumeClaimSpec
+// ValidatePersistentVolumeClaimSpec 校验 PVC 规格：访问模式、资源请求、存储类、选择器与数据源等。
 func ValidatePersistentVolumeClaimSpec(spec *core.PersistentVolumeClaimSpec, fldPath *field.Path, opts PersistentVolumeClaimSpecValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(spec.AccessModes) == 0 {
@@ -2557,11 +2609,12 @@ func ValidatePersistentVolumeClaimSpec(spec *core.PersistentVolumeClaimSpec, fld
 	return allErrs
 }
 
+// isDataSourceEqualDataSourceRef 判断旧的 DataSource 与新的 DataSourceRef 是否指向同一对象，用于兼容性判断。
 func isDataSourceEqualDataSourceRef(dataSource *core.TypedLocalObjectReference, dataSourceRef *core.TypedObjectReference) bool {
 	return reflect.DeepEqual(dataSource.APIGroup, dataSourceRef.APIGroup) && dataSource.Kind == dataSourceRef.Kind && dataSource.Name == dataSourceRef.Name
 }
 
-// ValidatePersistentVolumeClaimUpdate validates an update to a PersistentVolumeClaim
+// ValidatePersistentVolumeClaimUpdate 校验用户对 PVC 的更新是否合法：允许扩容与存储类升级，其他关键字段不可变。
 func ValidatePersistentVolumeClaimUpdate(newPvc, oldPvc *core.PersistentVolumeClaim, opts PersistentVolumeClaimSpecValidationOptions) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newPvc.ObjectMeta, &oldPvc.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidatePersistentVolumeClaim(newPvc, opts)...)
@@ -2643,13 +2696,7 @@ func ValidatePersistentVolumeClaimUpdate(newPvc, oldPvc *core.PersistentVolumeCl
 	return allErrs
 }
 
-// Provide an upgrade path from PVC with storage class specified in beta
-// annotation to storage class specified in attribute. We allow update of
-// StorageClassName only if following four conditions are met at the same time:
-// 1. The old pvc's StorageClassAnnotation is set
-// 2. The old pvc's StorageClassName is not set
-// 3. The new pvc's StorageClassName is set and equal to the old value in annotation
-// 4. If the new pvc's StorageClassAnnotation is set,it must be equal to the old pv/pvc's StorageClassAnnotation
+// validateStorageClassUpgradeFromAnnotation 为从 beta 注解迁移到 spec.storageClassName 提供升级路径，仅在四个条件同时满足时允许更新存储类。
 func validateStorageClassUpgradeFromAnnotation(oldAnnotations, newAnnotations map[string]string, oldScName, newScName *string) bool {
 	oldSc, oldAnnotationExist := oldAnnotations[core.BetaStorageClassAnnotation]
 	newScInAnnotation, newAnnotationExist := newAnnotations[core.BetaStorageClassAnnotation]
@@ -2659,11 +2706,7 @@ func validateStorageClassUpgradeFromAnnotation(oldAnnotations, newAnnotations ma
 		(!newAnnotationExist || newScInAnnotation == oldSc) /* condition 4 */
 }
 
-// Provide an upgrade path from PVC with nil storage class. We allow update of
-// StorageClassName only if following four conditions are met at the same time:
-// 1. The new pvc's StorageClassName is not nil
-// 2. The old pvc's StorageClassName is nil
-// 3. The old pvc either does not have beta annotation set, or the beta annotation matches new pvc's StorageClassName
+// validateStorageClassUpgradeFromNil 为从 nil 存储类升级到显式存储类提供路径，仅在满足兼容性条件时允许更新。
 func validateStorageClassUpgradeFromNil(oldAnnotations map[string]string, oldScName, newScName *string, opts PersistentVolumeClaimSpecValidationOptions) bool {
 	oldAnnotation, oldAnnotationExist := oldAnnotations[core.BetaStorageClassAnnotation]
 	return newScName != nil /* condition 1 */ &&
@@ -2671,6 +2714,7 @@ func validateStorageClassUpgradeFromNil(oldAnnotations map[string]string, oldScN
 		(!oldAnnotationExist || *newScName == oldAnnotation) /* condition 3 */
 }
 
+// validatePersistentVolumeClaimResourceKey 校验 PVC 资源键：仅允许 storage 类资源，且请求量必须为正数。
 func validatePersistentVolumeClaimResourceKey(value string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, msg := range validation.IsQualifiedName(value) {
@@ -2695,6 +2739,7 @@ var resizeStatusSet = sets.New(core.PersistentVolumeClaimControllerResizeInProgr
 	core.PersistentVolumeClaimNodeResizeInProgress,
 	core.PersistentVolumeClaimNodeResizeInfeasible)
 
+// validatePodVolumeHealth 校验 Pod 状态中的卷健康信息（volumeHealth）。
 func validatePodVolumeHealth(volumeHealth []core.PodVolumeHealth, spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	volumeNames := sets.New[string]()
@@ -2713,6 +2758,7 @@ func validatePodVolumeHealth(volumeHealth []core.PodVolumeHealth, spec *core.Pod
 	return allErrs
 }
 
+// validateVolumeHealthStatus 校验单个卷健康状态记录。
 func validateVolumeHealthStatus(status *core.VolumeHealthStatus, fldPath *field.Path) field.ErrorList {
 	if status == nil {
 		return nil
@@ -2720,6 +2766,7 @@ func validateVolumeHealthStatus(status *core.VolumeHealthStatus, fldPath *field.
 	return validateVolumeHealthConditions(status.HealthConditions, fldPath.Child("healthConditions"))
 }
 
+// validateVolumeHealthConditions 校验卷健康条件列表：条件类型、状态与时间戳。
 func validateVolumeHealthConditions(conditions []core.VolumeHealthCondition, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i, condition := range conditions {
@@ -2728,6 +2775,7 @@ func validateVolumeHealthConditions(conditions []core.VolumeHealthCondition, fld
 	return allErrs
 }
 
+// validateVolumeHealthCondition 校验单条卷健康条件：类型、状态、原因及最后探测时间。
 func validateVolumeHealthCondition(condition core.VolumeHealthCondition, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(condition.Reason) == 0 {
@@ -2739,7 +2787,7 @@ func validateVolumeHealthCondition(condition core.VolumeHealthCondition, fldPath
 	return allErrs
 }
 
-// ValidatePersistentVolumeClaimStatusUpdate validates an update to status of a PersistentVolumeClaim
+// ValidatePersistentVolumeClaimStatusUpdate 校验 PVC 状态更新：容量、访问模式与阶段只能按规则变化。
 func ValidatePersistentVolumeClaimStatusUpdate(newPvc, oldPvc *core.PersistentVolumeClaim, validationOpts PersistentVolumeClaimSpecValidationOptions) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newPvc.ObjectMeta, &oldPvc.ObjectMeta, field.NewPath("metadata"))
 	if len(newPvc.ResourceVersion) == 0 {
@@ -2790,6 +2838,7 @@ var supportedPortProtocols = sets.New(
 	core.ProtocolUDP,
 	core.ProtocolSCTP)
 
+// validateContainerPorts 校验容器端口列表：端口范围、协议、名称唯一性以及 hostPort 合法性。
 func validateContainerPorts(ports []core.ContainerPort, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -2828,7 +2877,7 @@ func validateContainerPorts(ports []core.ContainerPort, fldPath *field.Path) fie
 	return allErrs
 }
 
-// ValidateEnv validates env vars
+// ValidateEnv 校验环境变量列表：名称格式、值来源字段的互斥性与引用的合法性。
 func ValidateEnv(vars []core.EnvVar, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -2878,6 +2927,7 @@ var validContainerResourceFieldPathPrefixesWithDownwardAPIHugePages = sets.New(h
 const hugepagesRequestsPrefixDownwardAPI string = `requests.hugepages-`
 const hugepagesLimitsPrefixDownwardAPI string = `limits.hugepages-`
 
+// validateEnvVarValueFrom 校验 EnvVar.ValueFrom 的各来源字段（fieldRef/resourceFieldRef/configMapKeyRef/secretKeyRef/fileKeyRef）是否合法且互斥。
 func validateEnvVarValueFrom(ev core.EnvVar, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -2927,6 +2977,7 @@ func validateEnvVarValueFrom(ev core.EnvVar, fldPath *field.Path, opts PodValida
 	return allErrs
 }
 
+// validateObjectFieldSelector 校验 DownwardAPI 对象字段选择器：API 版本与字段路径是否受支持。
 func validateObjectFieldSelector(fs *core.ObjectFieldSelector, expressions *sets.Set[string], fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -2962,6 +3013,7 @@ func validateObjectFieldSelector(fs *core.ObjectFieldSelector, expressions *sets
 	return allErrs
 }
 
+// validateContainerResourceFieldSelector 校验容器资源字段选择器：资源名、divisor 与容器名引用是否合法。
 func validateContainerResourceFieldSelector(fs *core.ResourceFieldSelector, expressions *sets.Set[string], prefixes *sets.Set[string], fldPath *field.Path, volume bool) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -2987,6 +3039,7 @@ func validateContainerResourceFieldSelector(fs *core.ResourceFieldSelector, expr
 	return allErrs
 }
 
+// ValidateEnvFrom 校验 envFrom 列表：来源类型互斥且 configMapRef/secretRef 引用合法。
 func ValidateEnvFrom(vars []core.EnvFromSource, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i, ev := range vars {
@@ -3022,6 +3075,7 @@ func ValidateEnvFrom(vars []core.EnvFromSource, fldPath *field.Path, opts PodVal
 	return allErrs
 }
 
+// validateConfigMapEnvSource 校验 envFrom 中的 ConfigMap 来源引用。
 func validateConfigMapEnvSource(configMapSource *core.ConfigMapEnvSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(configMapSource.Name) == 0 {
@@ -3034,6 +3088,7 @@ func validateConfigMapEnvSource(configMapSource *core.ConfigMapEnvSource, fldPat
 	return allErrs
 }
 
+// validateSecretEnvSource 校验 envFrom 中的 Secret 来源引用。
 func validateSecretEnvSource(secretSource *core.SecretEnvSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(secretSource.Name) == 0 {
@@ -3060,6 +3115,7 @@ var validContainerResourceDivisorForEphemeralStorage = sets.New(
 	"1k", "1M", "1G", "1T", "1P", "1E",
 	"1Ki", "1Mi", "1Gi", "1Ti", "1Pi", "1Ei")
 
+// validateContainerResourceDivisor 校验资源字段选择器的 divisor 是否为正数。
 func validateContainerResourceDivisor(rName string, divisor resource.Quantity, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	unsetDivisor := resource.Quantity{}
@@ -3088,6 +3144,7 @@ func validateContainerResourceDivisor(rName string, divisor resource.Quantity, f
 	return allErrs
 }
 
+// validateConfigMapKeySelector 校验 ConfigMap 键选择器：name 与 key 必填且 optional 使用正确。
 func validateConfigMapKeySelector(s *core.ConfigMapKeySelector, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -3106,6 +3163,7 @@ func validateConfigMapKeySelector(s *core.ConfigMapKeySelector, fldPath *field.P
 	return allErrs
 }
 
+// validateSecretKeySelector 校验 Secret 键选择器：name 与 key 必填且 optional 使用正确。
 func validateSecretKeySelector(s *core.SecretKeySelector, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -3124,6 +3182,7 @@ func validateSecretKeySelector(s *core.SecretKeySelector, fldPath *field.Path) f
 	return allErrs
 }
 
+// validateFileKeySelector 校验 FileKey 选择器：路径与 key 必填，且引用合法。
 func validateFileKeySelector(s *core.FileKeySelector, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -3153,6 +3212,7 @@ func validateFileKeySelector(s *core.FileKeySelector, fldPath *field.Path) field
 	return allErrs
 }
 
+// GetVolumeMountMap 将容器卷挂载列表转换为以挂载名称为键的映射，便于冲突检测。
 func GetVolumeMountMap(mounts []core.VolumeMount) map[string]string {
 	volmounts := make(map[string]string)
 
@@ -3163,6 +3223,7 @@ func GetVolumeMountMap(mounts []core.VolumeMount) map[string]string {
 	return volmounts
 }
 
+// GetVolumeDeviceMap 将容器卷设备列表转换为以设备名称为键的映射，便于冲突检测。
 func GetVolumeDeviceMap(devices []core.VolumeDevice) map[string]string {
 	volDevices := make(map[string]string)
 
@@ -3173,6 +3234,7 @@ func GetVolumeDeviceMap(devices []core.VolumeDevice) map[string]string {
 	return volDevices
 }
 
+// ValidateVolumeMounts 校验容器卷挂载：名称存在性、mountPath 冲突、子路径与挂载传播等。
 func ValidateVolumeMounts(mounts []core.VolumeMount, voldevices map[string]string, volumes map[string]core.VolumeSource, container *core.Container, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	mountpoints := sets.New[string]()
@@ -3233,6 +3295,7 @@ var supportedBindMountOptions = sets.New(
 	string(core.BindMountOptionNoSUID),
 )
 
+// validateBindMountOptions 校验 bind 挂载选项：仅在受支持的挂载类型下允许，且格式合法。
 func validateBindMountOptions(bindMountOptions []string, fldPath *field.Path) field.ErrorList {
 	if len(bindMountOptions) == 0 {
 		return nil
@@ -3251,6 +3314,7 @@ func validateBindMountOptions(bindMountOptions []string, fldPath *field.Path) fi
 	return allErrs
 }
 
+// ValidateVolumeDevices 校验容器卷设备：名称存在性、devicePath 冲突与设备类型限制。
 func ValidateVolumeDevices(devices []core.VolumeDevice, volmounts map[string]string, volumes map[string]core.VolumeSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	devicepath := sets.New[string]()
@@ -3299,6 +3363,7 @@ func ValidateVolumeDevices(devices []core.VolumeDevice, volmounts map[string]str
 	return allErrs
 }
 
+// validatePodResourceClaims 校验 Pod 级别的 ResourceClaims 名称是否合法且无重复。
 func validatePodResourceClaims(podMeta *metav1.ObjectMeta, claims []core.PodResourceClaim, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	podClaimNames := sets.New[string]()
@@ -3308,9 +3373,7 @@ func validatePodResourceClaims(podMeta *metav1.ObjectMeta, claims []core.PodReso
 	return allErrs
 }
 
-// gatherPodResourceClaimNames returns a set of all non-empty
-// PodResourceClaim.Name values. Validation that those names are valid is
-// handled by validatePodResourceClaims.
+// gatherPodResourceClaimNames 收集 PodSpec.ResourceClaims 中所有非空名称的集合；名称本身的合法性由 validatePodResourceClaims 负责。
 func gatherPodResourceClaimNames(claims []core.PodResourceClaim) sets.Set[string] {
 	podClaimNames := sets.Set[string]{}
 	for _, claim := range claims {
@@ -3321,6 +3384,7 @@ func gatherPodResourceClaimNames(claims []core.PodResourceClaim) sets.Set[string
 	return podClaimNames
 }
 
+// validatePodResourceClaim 校验单个 Pod ResourceClaim：名称与资源声明模板/引用的合法性。
 func validatePodResourceClaim(podMeta *metav1.ObjectMeta, claim core.PodResourceClaim, podClaimNames *sets.Set[string], fldPath *field.Path) field.ErrorList {
 	// static pods don't support resource claims
 	if podMeta != nil {
@@ -3357,6 +3421,7 @@ func validatePodResourceClaim(podMeta *metav1.ObjectMeta, claim core.PodResource
 	return allErrs
 }
 
+// validateLivenessProbe 校验 livenessProbe 配置是否合法。
 func validateLivenessProbe(probe *core.Probe, gracePeriod *int64, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -3370,6 +3435,7 @@ func validateLivenessProbe(probe *core.Probe, gracePeriod *int64, fldPath *field
 	return allErrs
 }
 
+// validateReadinessProbe 校验 readinessProbe 配置是否合法。
 func validateReadinessProbe(probe *core.Probe, gracePeriod *int64, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -3383,6 +3449,7 @@ func validateReadinessProbe(probe *core.Probe, gracePeriod *int64, fldPath *fiel
 	return allErrs
 }
 
+// validateStartupProbe 校验 startupProbe 配置是否合法。
 func validateStartupProbe(probe *core.Probe, gracePeriod *int64, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -3396,6 +3463,7 @@ func validateStartupProbe(probe *core.Probe, gracePeriod *int64, fldPath *field.
 	return allErrs
 }
 
+// validateProbe 校验探针通用字段：探测动作、延迟、超时、周期与成功/失败阈值。
 func validateProbe(probe *core.Probe, gracePeriod *int64, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -3415,6 +3483,7 @@ func validateProbe(probe *core.Probe, gracePeriod *int64, fldPath *field.Path, o
 	return allErrs
 }
 
+// validateInitContainerRestartPolicy 校验 init 容器（含 sidecar）的 restartPolicy 及相关规则是否合法。
 func validateInitContainerRestartPolicy(restartPolicy *core.ContainerRestartPolicy, restartRules []core.ContainerRestartRule, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	var allErrors field.ErrorList
 
@@ -3456,6 +3525,7 @@ type commonHandler struct {
 	Sleep     *core.SleepAction
 }
 
+// handlerFromProbe 从探针中提取其探测动作处理器，供统一校验使用。
 func handlerFromProbe(ph *core.ProbeHandler) commonHandler {
 	return commonHandler{
 		Exec:      ph.Exec,
@@ -3465,6 +3535,7 @@ func handlerFromProbe(ph *core.ProbeHandler) commonHandler {
 	}
 }
 
+// handlerFromLifecycle 从生命周期钩子中提取动作处理器，供统一校验使用。
 func handlerFromLifecycle(lh *core.LifecycleHandler) commonHandler {
 	return commonHandler{
 		Exec:      lh.Exec,
@@ -3474,6 +3545,7 @@ func handlerFromLifecycle(lh *core.LifecycleHandler) commonHandler {
 	}
 }
 
+// validateSleepAction 校验生命周期 sleep 动作：sleep 字段必须设置。
 func validateSleepAction(sleep *core.SleepAction, gracePeriod *int64, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	// We allow gracePeriod to be nil here because the pod in which this SleepAction
@@ -3486,6 +3558,7 @@ func validateSleepAction(sleep *core.SleepAction, gracePeriod *int64, fldPath *f
 	return allErrors
 }
 
+// validateClientIPAffinityConfig 校验 Service 的 clientIP affinity 配置：超时时间须在允许范围内。
 func validateClientIPAffinityConfig(config *core.SessionAffinityConfig, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if config == nil {
@@ -3505,6 +3578,7 @@ func validateClientIPAffinityConfig(config *core.SessionAffinityConfig, fldPath 
 	return allErrs
 }
 
+// validateAffinityTimeout 校验会话亲和超时时间的合法性。
 func validateAffinityTimeout(timeout *int32, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if *timeout <= 0 || *timeout > core.MaxClientIPServiceAffinitySeconds {
@@ -3513,8 +3587,7 @@ func validateAffinityTimeout(timeout *int32, fldPath *field.Path) field.ErrorLis
 	return allErrs
 }
 
-// AccumulateUniqueHostPorts extracts each HostPort of each Container,
-// accumulating the results and returning an error if any ports conflict.
+// AccumulateUniqueHostPorts 提取每个容器的 hostPort 并汇总；若端口冲突则返回错误。
 func AccumulateUniqueHostPorts(containers []core.Container, accumulator *sets.Set[string], fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -3538,13 +3611,13 @@ func AccumulateUniqueHostPorts(containers []core.Container, accumulator *sets.Se
 	return allErrs
 }
 
-// checkHostPortConflicts checks for colliding Port.HostPort values across
-// a slice of containers.
+// checkHostPortConflicts 检查一组容器之间是否存在冲突的 Port.HostPort 值。
 func checkHostPortConflicts(containers []core.Container, fldPath *field.Path) field.ErrorList {
 	allPorts := sets.Set[string]{}
 	return AccumulateUniqueHostPorts(containers, &allPorts, fldPath)
 }
 
+// validateExecAction 校验 exec 探测动作：命令不能为空。
 func validateExecAction(exec *core.ExecAction, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	if len(exec.Command) == 0 {
@@ -3558,6 +3631,7 @@ var supportedHTTPProtocols = sets.New(core.HTTPProtocolHTTP1, core.HTTPProtocolH
 
 var supportedGRPCProbeModes = sets.New(core.GRPCProbeModePlaintext, core.GRPCProbeModeTLS)
 
+// validateHTTPGetAction 校验 HTTPGet 探测动作：主机、路径、端口、HTTP 头与 scheme 的合法性。
 func validateHTTPGetAction(http *core.HTTPGetAction, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	if len(http.Path) == 0 {
@@ -3584,6 +3658,7 @@ func validateHTTPGetAction(http *core.HTTPGetAction, fldPath *field.Path) field.
 	return allErrors
 }
 
+// ValidatePortNumOrName 校验端口字段：必须是合法的数字或 IANA 服务名称。
 func ValidatePortNumOrName(port intstr.IntOrString, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if port.Type == intstr.Int {
@@ -3600,10 +3675,12 @@ func ValidatePortNumOrName(port intstr.IntOrString, fldPath *field.Path) field.E
 	return allErrs
 }
 
+// validateTCPSocketAction 校验 TCPSocket 探测动作中的 host 与 port。
 func validateTCPSocketAction(tcp *core.TCPSocketAction, fldPath *field.Path) field.ErrorList {
 	return ValidatePortNumOrName(tcp.Port, fldPath.Child("port"))
 }
 
+// validateGRPCAction 校验 gRPC 探测动作：端口必填且 service 字段格式合法。
 func validateGRPCAction(grpc *core.GRPCAction, fldPath *field.Path) field.ErrorList {
 	allErrors := ValidatePortNumOrName(intstr.FromInt32(grpc.Port), fldPath.Child("port"))
 	if grpc.Mode != nil && !supportedGRPCProbeModes.Has(*grpc.Mode) {
@@ -3612,6 +3689,7 @@ func validateGRPCAction(grpc *core.GRPCAction, fldPath *field.Path) field.ErrorL
 	return allErrors
 }
 
+// validateHandler 校验统一探测/生命周期动作处理器：exec、httpGet、tcpSocket、grpc、sleep 必须且只能设置一种。
 func validateHandler(handler commonHandler, gracePeriod *int64, fldPath *field.Path) field.ErrorList {
 	numHandlers := 0
 	allErrors := field.ErrorList{}
@@ -3684,6 +3762,7 @@ var supportedStopSignalsLinux = sets.New(
 
 var supportedStopSignalsWindows = sets.New(core.SIGKILL, core.SIGTERM)
 
+// validateStopSignal 校验容器 stopSignal 是否为受支持的信号名称。
 func validateStopSignal(stopSignal *core.Signal, fldPath *field.Path, os *core.PodOS) field.ErrorList {
 	allErrors := field.ErrorList{}
 
@@ -3702,6 +3781,7 @@ func validateStopSignal(stopSignal *core.Signal, fldPath *field.Path, os *core.P
 	return allErrors
 }
 
+// validateLifecycle 校验容器生命周期钩子（postStart、preStop、stop）的动作处理器。
 func validateLifecycle(lifecycle *core.Lifecycle, gracePeriod *int64, fldPath *field.Path, os *core.PodOS) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if lifecycle.PostStart != nil {
@@ -3721,6 +3801,7 @@ var supportedPullPolicies = sets.New(
 	core.PullIfNotPresent,
 	core.PullNever)
 
+// validatePullPolicy 校验容器镜像拉取策略是否为受支持的值。
 func validatePullPolicy(policy core.PullPolicy, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 
@@ -3739,6 +3820,7 @@ func validatePullPolicy(policy core.PullPolicy, fldPath *field.Path) field.Error
 var supportedResizeResources = sets.New(core.ResourceCPU, core.ResourceMemory)
 var supportedResizePolicies = sets.New(core.NotRequired, core.RestartContainer)
 
+// validateResizePolicy 校验容器资源调整策略：资源名与重启策略是否合法。
 func validateResizePolicy(policyList []core.ContainerResizePolicy, fldPath *field.Path, podRestartPolicy *core.RestartPolicy) field.ErrorList {
 	allErrors := field.ErrorList{}
 
@@ -3791,8 +3873,7 @@ var (
 	supportedContainerRestartRuleActionsWithRestartAllContainers = sets.New(core.ContainerRestartRuleActionRestart, core.ContainerRestartRuleActionRestartAllContainers)
 )
 
-// validateContainerRestartPolicy checks the container-level restartPolicy and restartPolicyRules are valid for
-// regular containers, init containers, and sidecar containers.
+// validateContainerRestartPolicy 校验容器级别的 restartPolicy 及 restartPolicyRules 对普通容器、init 容器与 sidecar 容器是否合法。
 func validateContainerRestartPolicy(policy *core.ContainerRestartPolicy, rules []core.ContainerRestartRule, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	var allErrs field.ErrorList
 	restartPolicyFld := fldPath.Child("restartPolicy")
@@ -3835,8 +3916,7 @@ func validateContainerRestartPolicy(policy *core.ContainerRestartPolicy, rules [
 	return allErrs
 }
 
-// validateEphemeralContainers is called by pod spec and template validation to validate the list of ephemeral containers.
-// Note that this is called for pod template even though ephemeral containers aren't allowed in pod templates.
+// validateEphemeralContainers 由 Pod 规格与模板校验调用，校验 ephemeral containers 列表；模板场景虽不允许使用该字段，仍执行校验。
 func validateEphemeralContainers(ephemeralContainers []core.EphemeralContainer, containers, initContainers []core.Container, volumes map[string]core.VolumeSource, podClaimNames sets.Set[string], fldPath *field.Path, opts PodValidationOptions, podRestartPolicy *core.RestartPolicy, hostUsers bool) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -3896,8 +3976,7 @@ func validateEphemeralContainers(ephemeralContainers []core.EphemeralContainer, 
 	return allErrs
 }
 
-// ValidateFieldAcceptList checks that only allowed fields are set.
-// The value must be a struct (not a pointer to a struct!).
+// validateFieldAllowList 通过反射检查结构体仅设置了允许列表中的字段，防止新增 ObjectMeta 字段被遗漏校验。
 func validateFieldAllowList(value interface{}, allowedFields map[string]bool, errorText string, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -3919,7 +3998,7 @@ func validateFieldAllowList(value interface{}, allowedFields map[string]bool, er
 	return allErrs
 }
 
-// validateInitContainers is called by pod spec and template validation to validate the list of init containers
+// validateInitContainers 由 Pod 规格与模板校验调用，校验 init containers 列表及其顺序、重启策略。
 func validateInitContainers(containers []core.Container, os *core.PodOS, regularContainers []core.Container, volumes map[string]core.VolumeSource, podClaimNames sets.Set[string], gracePeriod *int64, fldPath *field.Path, opts PodValidationOptions, podRestartPolicy *core.RestartPolicy, hostUsers bool) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -3992,8 +4071,7 @@ func validateInitContainers(containers []core.Container, os *core.PodOS, regular
 	return allErrs
 }
 
-// validateContainerCommon applies validation common to all container types. It's called by regular, init, and ephemeral
-// container list validation to require a properly formatted name, image, etc.
+// validateContainerCommon 对所有容器类型（普通、init、临时）执行的通用校验：名称、镜像格式等。
 func validateContainerCommon(ctr *core.Container, volumes map[string]core.VolumeSource, podClaimNames sets.Set[string], path *field.Path, opts PodValidationOptions, podRestartPolicy *core.RestartPolicy, hostUsers bool) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -4037,6 +4115,7 @@ func validateContainerCommon(ctr *core.Container, volumes map[string]core.Volume
 	return allErrs
 }
 
+// validateHostUsers 校验 hostUsers 字段与 Pod 其他设置（如 Windows hostProcess）是否兼容。
 func validateHostUsers(spec *core.PodSpec, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -4077,8 +4156,7 @@ func validateHostUsers(spec *core.PodSpec, fldPath *field.Path, opts PodValidati
 	return allErrs
 }
 
-// validateFileKeyRefVolumes validates that volumes referenced by FileKeyRef environment variables
-// are of type emptyDir. FileKeyRef requires emptyDir volumes to ensure proper file access.
+// validateFileKeyRefVolumes 校验 FileKeyRef 环境变量引用的卷必须为 emptyDir 类型，以保证文件访问正确。
 func validateFileKeyRefVolumes(spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -4116,6 +4194,7 @@ func validateFileKeyRefVolumes(spec *core.PodSpec, fldPath *field.Path) field.Er
 	return allErrs
 }
 
+// validatePodHostName 校验 Pod 的 hostname 与 subdomain：格式合法且组合后不超过 DNS 子域名长度限制。
 func validatePodHostName(spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -4141,7 +4220,7 @@ func validatePodHostName(spec *core.PodSpec, fldPath *field.Path) field.ErrorLis
 	return allErrs
 }
 
-// validateContainers is called by pod spec and template validation to validate the list of regular containers.
+// validateContainers 由 Pod 规格与模板校验调用，校验普通容器列表。
 func validateContainers(containers []core.Container, os *core.PodOS, volumes map[string]core.VolumeSource, podClaimNames sets.Set[string], gracePeriod *int64, fldPath *field.Path, opts PodValidationOptions, podRestartPolicy *core.RestartPolicy, hostUsers bool) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -4189,6 +4268,7 @@ func validateContainers(containers []core.Container, os *core.PodOS, volumes map
 	return allErrs
 }
 
+// validateRestartPolicy 校验 Pod 的 restartPolicy 是否为合法值。
 func validateRestartPolicy(restartPolicy *core.RestartPolicy, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	switch *restartPolicy {
@@ -4204,6 +4284,7 @@ func validateRestartPolicy(restartPolicy *core.RestartPolicy, fldPath *field.Pat
 	return allErrors
 }
 
+// ValidatePreemptionPolicy 校验 Pod 的 preemptionPolicy 是否为合法值。
 func ValidatePreemptionPolicy(preemptionPolicy *core.PreemptionPolicy, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	switch *preemptionPolicy {
@@ -4217,6 +4298,7 @@ func ValidatePreemptionPolicy(preemptionPolicy *core.PreemptionPolicy, fldPath *
 	return allErrors
 }
 
+// validateDNSPolicy 校验 Pod 的 dnsPolicy 是否为合法值，且与 hostNetwork 等设置兼容。
 func validateDNSPolicy(dnsPolicy *core.DNSPolicy, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	switch *dnsPolicy {
@@ -4232,6 +4314,7 @@ func validateDNSPolicy(dnsPolicy *core.DNSPolicy, fldPath *field.Path) field.Err
 
 var validFSGroupChangePolicies = sets.New(core.FSGroupChangeOnRootMismatch, core.FSGroupChangeAlways)
 
+// validateFSGroupChangePolicy 校验 fsGroupChangePolicy 是否为合法的策略值。
 func validateFSGroupChangePolicy(fsGroupPolicy *core.PodFSGroupChangePolicy, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	if !validFSGroupChangePolicies.Has(*fsGroupPolicy) {
@@ -4251,6 +4334,7 @@ const (
 	MaxDNSSearchListChars = 2048
 )
 
+// validateReadinessGates 校验 Pod 的 readinessGates：条件类型格式合法且不重复。
 func validateReadinessGates(readinessGates []core.PodReadinessGate, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i, value := range readinessGates {
@@ -4259,6 +4343,7 @@ func validateReadinessGates(readinessGates []core.PodReadinessGate, fldPath *fie
 	return allErrs
 }
 
+// validateSchedulingGates 校验 Pod 的 schedulingGates：门控名称格式合法且不重复。
 func validateSchedulingGates(schedulingGates []core.PodSchedulingGate, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	// There should be no duplicates in the list of scheduling gates.
@@ -4273,6 +4358,7 @@ func validateSchedulingGates(schedulingGates []core.PodSchedulingGate, fldPath *
 	return allErrs
 }
 
+// validatePodDNSConfig 校验 Pod 的 dnsConfig：nameservers、searches、options 及值格式。
 func validatePodDNSConfig(dnsConfig *core.PodDNSConfig, dnsPolicy *core.DNSPolicy, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -4319,11 +4405,7 @@ func validatePodDNSConfig(dnsConfig *core.PodDNSConfig, dnsPolicy *core.DNSPolic
 	return allErrs
 }
 
-// validatePodHostNetworkDeps checks fields which depend on whether HostNetwork is
-// true or not.  It should be called on all PodSpecs, but opts can change what
-// is enforce.  E.g. opts.ResourceIsPod should only be set when called in the
-// context of a Pod, and not on PodSpecs which are embedded in other resources
-// (e.g. Deployments).
+// validatePodHostNetworkDeps 校验依赖 HostNetwork 取值的字段；所有 PodSpec 均应调用，opts 可调整强制程度。
 func validatePodHostNetworkDeps(spec *core.PodSpec, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	// For <reasons> we keep `.HostNetwork` in .SecurityContext on the internal
 	// version of Pod.
@@ -4352,10 +4434,7 @@ func validatePodHostNetworkDeps(spec *core.PodSpec, fldPath *field.Path, opts Po
 	return allErrors
 }
 
-// validateImagePullSecrets checks to make sure the pull secrets are well
-// formed.  Right now, we only expect name to be set (it's the only field).  If
-// this ever changes and someone decides to set those fields, we'd like to
-// know.
+// validateImagePullSecrets 校验 imagePullSecrets 列表格式；当前仅检查 name，以保持对未来字段变更的敏感。
 func validateImagePullSecrets(imagePullSecrets []core.LocalObjectReference, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	for i, currPullSecret := range imagePullSecrets {
@@ -4368,7 +4447,7 @@ func validateImagePullSecrets(imagePullSecrets []core.LocalObjectReference, fldP
 	return allErrors
 }
 
-// validateAffinity checks if given affinities are valid
+// validateAffinity 校验 Pod 的 nodeAffinity、podAffinity 与 podAntiAffinity 是否合法。
 func validateAffinity(affinity *core.Affinity, opts PodValidationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -4387,6 +4466,7 @@ func validateAffinity(affinity *core.Affinity, opts PodValidationOptions, fldPat
 	return allErrs
 }
 
+// validateTaintEffect 校验污点（Taint）的 effect 是否为合法值。
 func validateTaintEffect(effect *core.TaintEffect, allowEmpty bool, fldPath *field.Path) field.ErrorList {
 	if !allowEmpty && len(*effect) == 0 {
 		return field.ErrorList{field.Required(fldPath, "")}
@@ -4410,7 +4490,7 @@ func validateTaintEffect(effect *core.TaintEffect, allowEmpty bool, fldPath *fie
 	return allErrors
 }
 
-// validateOnlyAddedTolerations validates updated pod tolerations.
+// validateOnlyAddedTolerations 校验更新后的 Pod tolerations：只允许新增，不允许修改或删除。
 func validateOnlyAddedTolerations(newTolerations []core.Toleration, oldTolerations []core.Toleration, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, old := range oldTolerations {
@@ -4434,6 +4514,7 @@ func validateOnlyAddedTolerations(newTolerations []core.Toleration, oldToleratio
 	return allErrs
 }
 
+// validateOnlyDeletedSchedulingGates 校验更新后的 schedulingGates：只允许删除，不允许新增或修改。
 func validateOnlyDeletedSchedulingGates(newGates, oldGates []core.PodSchedulingGate, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(newGates) == 0 {
@@ -4456,6 +4537,7 @@ func validateOnlyDeletedSchedulingGates(newGates, oldGates []core.PodSchedulingG
 	return allErrs
 }
 
+// ValidateHostAliases 校验 hostAliases 列表：IP 格式合法、主机名格式合法且无重复。
 func ValidateHostAliases(hostAliases []core.HostAlias, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i, hostAlias := range hostAliases {
@@ -4482,7 +4564,7 @@ const (
 	KeyFormatCovered ValidateTolerationsOption = iota
 )
 
-// ValidateTolerations tests if given tolerations have valid data.
+// ValidateTolerations 校验给定的 tolerations 列表数据是否合法（键、操作符、effect 与容忍秒数）。
 func ValidateTolerations(tolerations []core.Toleration, fldPath *field.Path, opts PodValidationOptions, validationOpts ...ValidateTolerationsOption) field.ErrorList {
 	allErrors := field.ErrorList{}
 	keyFormatCovered := slices.Contains(validationOpts, KeyFormatCovered)
@@ -4549,9 +4631,7 @@ func ValidateTolerations(tolerations []core.Toleration, fldPath *field.Path, opt
 	return allErrors
 }
 
-// validateContainersOnlyForPod does additional validation for containers on a pod versus a pod template
-// it only does additive validation of fields not covered in validateContainers and is not called for
-// ephemeral containers which require a conversion to core.Container.
+// validateContainersOnlyForPod 对 Pod（而非 Pod 模板）中的容器执行额外校验，仅补充 validateContainers 未覆盖的字段。
 func validateContainersOnlyForPod(containers []core.Container, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i, ctr := range containers {
@@ -4560,8 +4640,7 @@ func validateContainersOnlyForPod(containers []core.Container, fldPath *field.Pa
 	return allErrs
 }
 
-// validateContainerOnlyForPod does pod-only (i.e. not pod template) validation for a single container.
-// This is called by validateContainersOnlyForPod and validateEphemeralContainers directly.
+// validateContainerOnlyForPod 对单个容器执行仅限 Pod 的校验，由 validateContainersOnlyForPod 与临时容器校验直接调用。
 func validateContainerOnlyForPod(ctr *core.Container, path *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(ctr.Image) != len(strings.TrimSpace(ctr.Image)) {
@@ -4633,8 +4712,7 @@ type PodValidationOptions struct {
 	AllowSysAdminWhenPrivilegeEscalationFalse bool
 }
 
-// validatePodMetadataAndSpec tests if required fields in the pod.metadata and pod.spec are set,
-// and is called by ValidatePodCreate and ValidatePodUpdate.
+// validatePodMetadataAndSpec 校验 Pod 元数据与规格中的必填字段，由创建与更新流程共同调用。
 func validatePodMetadataAndSpec(pod *core.Pod, opts PodValidationOptions) field.ErrorList {
 	metaPath := field.NewPath("metadata")
 	specPath := field.NewPath("spec")
@@ -4671,7 +4749,7 @@ func validatePodMetadataAndSpec(pod *core.Pod, opts PodValidationOptions) field.
 	return allErrs
 }
 
-// validatePodIPs validates IPs in pod status
+// validatePodIPs 校验 Pod 状态中的 IP 列表格式与重复情况。
 func validatePodIPs(pod, oldPod *core.Pod) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -4720,7 +4798,7 @@ func validatePodIPs(pod, oldPod *core.Pod) field.ErrorList {
 	return allErrs
 }
 
-// validateHostIPs validates IPs in pod status
+// validateHostIPs 校验 Pod 状态中的 hostIP 列表格式与重复情况。
 func validateHostIPs(pod, oldPod *core.Pod) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -4768,12 +4846,7 @@ func validateHostIPs(pod, oldPod *core.Pod) field.ErrorList {
 	return allErrs
 }
 
-// ValidatePodSpec tests that the specified PodSpec has valid data.
-// This includes checking formatting and uniqueness.  It also canonicalizes the
-// structure by setting default values and implementing any backwards-compatibility
-// tricks.
-// The pod metadata is needed to validate generic ephemeral volumes. It is optional
-// and should be left empty unless the spec is from a real pod object.
+// ValidatePodSpec 校验 PodSpec 数据：格式、唯一性，并通过默认值与兼容逻辑规范化结构。
 func ValidatePodSpec(spec *core.PodSpec, podMeta *metav1.ObjectMeta, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -4893,6 +4966,7 @@ func ValidatePodSpec(spec *core.PodSpec, podMeta *metav1.ObjectMeta, fldPath *fi
 	return allErrs
 }
 
+// validatePodResources 校验 Pod 级资源请求/限制与容器级资源的一致性。
 func validatePodResources(spec *core.PodSpec, podClaimNames sets.Set[string], fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	if spec.Resources == nil {
 		return nil
@@ -4919,9 +4993,7 @@ func validatePodResources(spec *core.PodSpec, podClaimNames sets.Set[string], fl
 	return allErrs
 }
 
-// validatePodResourceConsistency checks if aggregate container-level requests are
-// less than or equal to pod-level requests, and individual container-level limits
-// are less than or equal to pod-level limits.
+// validatePodResourceConsistency 校验容器级请求总和不超过 Pod 级请求，且各容器限制不超过 Pod 级限制。
 func validatePodResourceConsistency(spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -4999,6 +5071,7 @@ func validatePodResourceConsistency(spec *core.PodSpec, fldPath *field.Path) fie
 	return allErrs
 }
 
+// validateLinux 校验 Pod 的 Linux 专属配置（sysctls、securityContext 等）。
 func validateLinux(spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	securityContext := spec.SecurityContext
@@ -5016,6 +5089,7 @@ func validateLinux(spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
+// validateWindows 校验 Pod 的 Windows 专属配置（securityContext、hostProcess 等）。
 func validateWindows(spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	securityContext := spec.SecurityContext
@@ -5112,7 +5186,7 @@ func validateWindows(spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	return allErrs
 }
 
-// ValidateNodeSelectorRequirement tests that the specified NodeSelectorRequirement fields has valid data
+// ValidateNodeSelectorRequirement 校验 NodeSelectorRequirement 的 key、operator 与 values 是否合法。
 func ValidateNodeSelectorRequirement(rq core.NodeSelectorRequirement, allowInvalidLabelValueInRequiredNodeAffinity bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	switch rq.Operator {
@@ -5148,7 +5222,7 @@ var nodeFieldSelectorValidators = map[string]func(string, bool) []string{
 	metav1.ObjectNameField: ValidateNodeName,
 }
 
-// ValidateNodeFieldSelectorRequirement tests that the specified NodeSelectorRequirement fields has valid data
+// ValidateNodeFieldSelectorRequirement 校验 Node 字段选择器要求的字段与取值是否合法。
 func ValidateNodeFieldSelectorRequirement(req core.NodeSelectorRequirement, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -5175,7 +5249,7 @@ func ValidateNodeFieldSelectorRequirement(req core.NodeSelectorRequirement, fldP
 	return allErrs
 }
 
-// ValidateNodeSelectorTerm tests that the specified node selector term has valid data
+// ValidateNodeSelectorTerm 校验单个节点选择器项：表达式列表非空且各项合法。
 func ValidateNodeSelectorTerm(term core.NodeSelectorTerm, allowInvalidLabelValueInRequiredNodeAffinity bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -5190,7 +5264,7 @@ func ValidateNodeSelectorTerm(term core.NodeSelectorTerm, allowInvalidLabelValue
 	return allErrs
 }
 
-// ValidateNodeSelector tests that the specified nodeSelector fields has valid data
+// ValidateNodeSelector 校验节点选择器整体结构：各项合法且表达式之间无冲突。
 func ValidateNodeSelector(nodeSelector *core.NodeSelector, allowInvalidLabelValueInRequiredNodeAffinity bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -5206,8 +5280,7 @@ func ValidateNodeSelector(nodeSelector *core.NodeSelector, allowInvalidLabelValu
 	return allErrs
 }
 
-// validateTopologySelectorLabelRequirement tests that the specified TopologySelectorLabelRequirement fields has valid data,
-// and constructs a set containing all of its Values.
+// validateTopologySelectorLabelRequirement 校验拓扑选择器标签要求，并构建其所有取值的集合。
 func validateTopologySelectorLabelRequirement(rq core.TopologySelectorLabelRequirement, fldPath *field.Path) (sets.Set[string], field.ErrorList) {
 	allErrs := field.ErrorList{}
 	valueSet := make(sets.Set[string])
@@ -5229,8 +5302,7 @@ func validateTopologySelectorLabelRequirement(rq core.TopologySelectorLabelRequi
 	return valueSet, allErrs
 }
 
-// ValidateTopologySelectorTerm tests that the specified topology selector term has valid data,
-// and constructs a map representing the term in raw form.
+// ValidateTopologySelectorTerm 校验单个拓扑选择器项，并构建其原始形式的映射。
 func ValidateTopologySelectorTerm(term core.TopologySelectorTerm, fldPath *field.Path) (map[string]sets.Set[string], field.ErrorList) {
 	allErrs := field.ErrorList{}
 	exprMap := make(map[string]sets.Set[string])
@@ -5252,7 +5324,7 @@ func ValidateTopologySelectorTerm(term core.TopologySelectorTerm, fldPath *field
 	return exprMap, allErrs
 }
 
-// ValidateAvoidPodsInNodeAnnotations tests that the serialized AvoidPods in Node.Annotations has valid data
+// ValidateAvoidPodsInNodeAnnotations 校验 Node.Annotations 中序列化的 AvoidPods 数据是否合法。
 func ValidateAvoidPodsInNodeAnnotations(annotations map[string]string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -5277,7 +5349,7 @@ func ValidateAvoidPodsInNodeAnnotations(annotations map[string]string, fldPath *
 	return allErrs
 }
 
-// validatePreferAvoidPodsEntry tests if given PreferAvoidPodsEntry has valid data.
+// validatePreferAvoidPodsEntry 校验单条 PreferAvoidPods 条目是否合法。
 func validatePreferAvoidPodsEntry(avoidPodEntry core.PreferAvoidPodsEntry, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	if avoidPodEntry.PodSignature.PodController == nil {
@@ -5292,7 +5364,7 @@ func validatePreferAvoidPodsEntry(avoidPodEntry core.PreferAvoidPodsEntry, fldPa
 	return allErrors
 }
 
-// ValidatePreferredSchedulingTerms tests that the specified SoftNodeAffinity fields has valid data
+// ValidatePreferredSchedulingTerms 校验软节点亲和性（PreferredSchedulingTerms）的权重与选择器是否合法。
 func ValidatePreferredSchedulingTerms(terms []core.PreferredSchedulingTerm, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -5308,7 +5380,7 @@ func ValidatePreferredSchedulingTerms(terms []core.PreferredSchedulingTerm, fldP
 	return allErrs
 }
 
-// validatePodAffinityTerm tests that the specified podAffinityTerm fields have valid data
+// validatePodAffinityTerm 校验单个 PodAffinityTerm：标签选择器、命名空间、拓扑键等字段。
 func validatePodAffinityTerm(podAffinityTerm core.PodAffinityTerm, allowInvalidLabelValueInSelector bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -5325,7 +5397,7 @@ func validatePodAffinityTerm(podAffinityTerm core.PodAffinityTerm, allowInvalidL
 	return append(allErrs, unversionedvalidation.ValidateLabelName(podAffinityTerm.TopologyKey, fldPath.Child("topologyKey"))...)
 }
 
-// validatePodAffinityTerms tests that the specified podAffinityTerms fields have valid data
+// validatePodAffinityTerms 校验 PodAffinityTerms 列表的每一项。
 func validatePodAffinityTerms(podAffinityTerms []core.PodAffinityTerm, allowInvalidLabelValueInSelector bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i, podAffinityTerm := range podAffinityTerms {
@@ -5334,7 +5406,7 @@ func validatePodAffinityTerms(podAffinityTerms []core.PodAffinityTerm, allowInva
 	return allErrs
 }
 
-// validateWeightedPodAffinityTerms tests that the specified weightedPodAffinityTerms fields have valid data
+// validateWeightedPodAffinityTerms 校验带权重的 Pod 亲和性项列表：权重范围与各项合法性。
 func validateWeightedPodAffinityTerms(weightedPodAffinityTerms []core.WeightedPodAffinityTerm, allowInvalidLabelValueInSelector bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for j, weightedTerm := range weightedPodAffinityTerms {
@@ -5346,7 +5418,7 @@ func validateWeightedPodAffinityTerms(weightedPodAffinityTerms []core.WeightedPo
 	return allErrs
 }
 
-// validatePodAntiAffinity tests that the specified podAntiAffinity fields have valid data
+// validatePodAntiAffinity 校验 PodAntiAffinity 的 required 与 preferred 项。
 func validatePodAntiAffinity(podAntiAffinity *core.PodAntiAffinity, allowInvalidLabelValueInSelector bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	// TODO:Uncomment below code once RequiredDuringSchedulingRequiredDuringExecution is implemented.
@@ -5365,7 +5437,7 @@ func validatePodAntiAffinity(podAntiAffinity *core.PodAntiAffinity, allowInvalid
 	return allErrs
 }
 
-// validateNodeAffinity tests that the specified nodeAffinity fields have valid data
+// validateNodeAffinity 校验 NodeAffinity 的 required 与 preferred 项。
 func validateNodeAffinity(na *core.NodeAffinity, opts PodValidationOptions, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	// TODO: Uncomment the next three lines once RequiredDuringSchedulingRequiredDuringExecution is implemented.
@@ -5381,7 +5453,7 @@ func validateNodeAffinity(na *core.NodeAffinity, opts PodValidationOptions, fldP
 	return allErrs
 }
 
-// validatePodAffinity tests that the specified podAffinity fields have valid data
+// validatePodAffinity 校验 PodAffinity 的 required 与 preferred 项。
 func validatePodAffinity(podAffinity *core.PodAffinity, allowInvalidLabelValueInSelector bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	// TODO:Uncomment below code once RequiredDuringSchedulingRequiredDuringExecution is implemented.
@@ -5400,6 +5472,7 @@ func validatePodAffinity(podAffinity *core.PodAffinity, allowInvalidLabelValueIn
 	return allErrs
 }
 
+// validateSeccompProfileField 校验容器/ Pod 的 seccompProfile 字段：类型与 localhostProfile 的匹配关系。
 func validateSeccompProfileField(sp *core.SeccompProfile, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if sp == nil {
@@ -5425,6 +5498,7 @@ func validateSeccompProfileField(sp *core.SeccompProfile, fldPath *field.Path) f
 	return allErrs
 }
 
+// ValidateSeccompProfile 校验 SeccompProfile 对象：类型合法，RuntimeDefault/Localhost 等字段组合正确。
 func ValidateSeccompProfile(p string, fldPath *field.Path) field.ErrorList {
 	if p == core.SeccompProfileRuntimeDefault || p == core.DeprecatedSeccompProfileDockerDefault {
 		return nil
@@ -5438,6 +5512,7 @@ func ValidateSeccompProfile(p string, fldPath *field.Path) field.ErrorList {
 	return field.ErrorList{field.Invalid(fldPath, p, "must be a valid seccomp profile")}
 }
 
+// ValidateSeccompPodAnnotations 校验 Pod 注解中旧版 seccomp 注解的格式与取值。
 func ValidateSeccompPodAnnotations(annotations map[string]string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if p, exists := annotations[core.SeccompPodAnnotationKey]; exists {
@@ -5452,7 +5527,7 @@ func ValidateSeccompPodAnnotations(annotations map[string]string, fldPath *field
 	return allErrs
 }
 
-// ValidateSeccompProfileType tests that the argument is a valid SeccompProfileType.
+// validateSeccompProfileType 校验参数是否为合法的 SeccompProfileType。
 func validateSeccompProfileType(fldPath *field.Path, seccompProfileType core.SeccompProfileType) *field.Error {
 	switch seccompProfileType {
 	case core.SeccompProfileTypeLocalhost, core.SeccompProfileTypeRuntimeDefault, core.SeccompProfileTypeUnconfined:
@@ -5464,6 +5539,7 @@ func validateSeccompProfileType(fldPath *field.Path, seccompProfileType core.Sec
 	}
 }
 
+// ValidateAppArmorProfileField 校验 AppArmorProfile 字段：类型与 profile 名称的组合是否合法。
 func ValidateAppArmorProfileField(profile *core.AppArmorProfile, fldPath *field.Path) field.ErrorList {
 	if profile == nil {
 		return nil
@@ -5506,6 +5582,7 @@ func ValidateAppArmorProfileField(profile *core.AppArmorProfile, fldPath *field.
 
 }
 
+// ValidateAppArmorPodAnnotations 校验 Pod 注解中旧版 AppArmor 注解的格式。
 func ValidateAppArmorPodAnnotations(annotations map[string]string, spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for k, p := range annotations {
@@ -5525,6 +5602,7 @@ func ValidateAppArmorPodAnnotations(annotations map[string]string, spec *core.Po
 	return allErrs
 }
 
+// ValidateAppArmorProfileFormat 校验 AppArmor profile 名称格式是否合法。
 func ValidateAppArmorProfileFormat(profile string) error {
 	if profile == "" || profile == v1.DeprecatedAppArmorBetaProfileRuntimeDefault || profile == v1.DeprecatedAppArmorBetaProfileNameUnconfined {
 		return nil
@@ -5535,7 +5613,7 @@ func ValidateAppArmorProfileFormat(profile string) error {
 	return nil
 }
 
-// validateAppArmorAnnotationsAndFieldsMatchOnCreate validates that AppArmor fields and annotations are consistent.
+// validateAppArmorAnnotationsAndFieldsMatchOnCreate 校验创建时 AppArmor 字段与旧注解保持一致，避免双轨配置冲突。
 func validateAppArmorAnnotationsAndFieldsMatchOnCreate(objectMeta metav1.ObjectMeta, podSpec *core.PodSpec, specPath *field.Path) field.ErrorList {
 	if podSpec.OS != nil && podSpec.OS.Name == core.Windows {
 		// Skip consistency check for windows pods.
@@ -5587,6 +5665,7 @@ func validateAppArmorAnnotationsAndFieldsMatchOnCreate(objectMeta metav1.ObjectM
 	return allErrs
 }
 
+// podSpecHasContainer 判断 PodSpec 中是否存在具有指定名称的容器。
 func podSpecHasContainer(spec *core.PodSpec, containerName string) bool {
 	var hasContainer bool
 	podshelper.VisitContainersWithPath(spec, field.NewPath("spec"), func(c *core.Container, _ *field.Path) bool {
@@ -5612,12 +5691,7 @@ const (
 
 var sysctlContainSlashRegexp = regexp.MustCompile("^" + SysctlContainSlashFmt + "$")
 
-// IsValidSysctlName checks that the given string is a valid sysctl name,
-// i.e. matches SysctlContainSlashFmt.
-// More info:
-//
-//	https://man7.org/linux/man-pages/man8/sysctl.8.html
-//	https://man7.org/linux/man-pages/man5/sysctl.d.5.html
+// IsValidSysctlName 校验给定字符串是否为合法 sysctl 名称（匹配 SysctlContainSlashFmt）。
 func IsValidSysctlName(name string) bool {
 	if len(name) > SysctlMaxLength {
 		return false
@@ -5625,6 +5699,7 @@ func IsValidSysctlName(name string) bool {
 	return sysctlContainSlashRegexp.MatchString(name)
 }
 
+// validateSysctls 校验 Pod 的 sysctls 列表：名称合法且均在安全白名单内。
 func validateSysctls(securityContext *core.PodSecurityContext, spec *core.PodSpec, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	names := make(map[string]struct{})
@@ -5647,7 +5722,7 @@ func validateSysctls(securityContext *core.PodSecurityContext, spec *core.PodSpe
 	return allErrs
 }
 
-// ValidateHostSysctl will return error if namespaced sysctls is applied to pod sharing the respective namespaces with the host.
+// ValidateHostSysctl 若命名空间的 sysctl 被应用于与宿主共享相应命名空间的 Pod，则返回错误。
 func ValidateHostSysctl(sysctl string, spec *core.PodSpec, fldPath *field.Path) *field.Error {
 	ns, _, _ := utilsysctl.GetNamespace(sysctl)
 	switch {
@@ -5661,6 +5736,7 @@ func ValidateHostSysctl(sysctl string, spec *core.PodSpec, fldPath *field.Path) 
 
 var validSELinuxChangePolicies = sets.New(core.SELinuxChangePolicyRecursive, core.SELinuxChangePolicyMountOption)
 
+// validateSELinuxChangePolicy 校验 SELinuxChangePolicy 是否为合法的取值。
 func validateSELinuxChangePolicy(seLinuxChangePolicy *core.PodSELinuxChangePolicy, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	if seLinuxChangePolicy == nil {
 		return nil
@@ -5681,9 +5757,7 @@ func validateSELinuxChangePolicy(seLinuxChangePolicy *core.PodSELinuxChangePolic
 	return allErrs
 }
 
-// validatePodSpecSecurityContext verifies the SecurityContext of a PodSpec,
-// whether that is defined in a Pod or in an embedded PodSpec (e.g. a
-// Deployment's pod template).
+// validatePodSpecSecurityContext 校验 PodSpec 的 SecurityContext，无论定义在 Pod 还是内嵌模板（如 Deployment 的 pod template）中。
 func validatePodSpecSecurityContext(securityContext *core.PodSecurityContext, spec *core.PodSpec, specPath, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -5732,6 +5806,7 @@ func validatePodSpecSecurityContext(securityContext *core.PodSecurityContext, sp
 	return allErrs
 }
 
+// validateShareProcessNamespace 校验 shareProcessNamespace 与其他设置（如 hostPID）是否冲突。
 func validateShareProcessNamespace(spec *core.PodSpec, fldPath *field.Path) (allErrs field.ErrorList) {
 	if spec.ShareProcessNamespace != nil && spec.HostPID && *spec.ShareProcessNamespace {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("shareProcessNamespace"), *spec.ShareProcessNamespace, "ShareProcessNamespace and HostPID cannot both be enabled"))
@@ -5739,6 +5814,7 @@ func validateShareProcessNamespace(spec *core.PodSpec, fldPath *field.Path) (all
 	return allErrs
 }
 
+// ValidateContainerUpdates 校验容器更新是否合法（如镜像不可变等约束）。
 func ValidateContainerUpdates(newContainers, oldContainers []core.Container, fldPath *field.Path) (allErrs field.ErrorList, stop bool) {
 	allErrs = field.ErrorList{}
 	if len(newContainers) != len(oldContainers) {
@@ -5760,7 +5836,7 @@ func ValidateContainerUpdates(newContainers, oldContainers []core.Container, fld
 	return allErrs, false
 }
 
-// ValidatePodCreate validates a pod in the context of its initial create
+// ValidatePodCreate 在 Pod 初始创建场景下校验其合法性。
 func ValidatePodCreate(pod *core.Pod, opts PodValidationOptions) field.ErrorList {
 	allErrs := validatePodMetadataAndSpec(pod, opts)
 
@@ -5779,7 +5855,7 @@ func ValidatePodCreate(pod *core.Pod, opts PodValidationOptions) field.ErrorList
 	return allErrs
 }
 
-// validateSeccompAnnotationsAndFields iterates through all containers and ensure that when both seccompProfile and seccomp annotations exist they match.
+// validateSeccompAnnotationsAndFields 遍历所有容器，确保 seccompProfile 字段与旧 seccomp 注解同时存在时二者一致。
 func validateSeccompAnnotationsAndFields(objectMeta metav1.ObjectMeta, podSpec *core.PodSpec, specPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -5818,6 +5894,7 @@ func validateSeccompAnnotationsAndFields(objectMeta metav1.ObjectMeta, podSpec *
 	return allErrs
 }
 
+// validateSeccompAnnotationsAndFieldsMatch 校验 seccomp 注解与字段是否匹配，兼容旧对象并存场景。
 func validateSeccompAnnotationsAndFieldsMatch(annotationValue string, seccompField *core.SeccompProfile, fldPath *field.Path) *field.Error {
 	if seccompField == nil {
 		return nil
@@ -5853,8 +5930,7 @@ var updatablePodSpecFields = []string{
 	"`spec.terminationGracePeriodSeconds` (allow it to be set to 1 if it was previously negative)",
 }
 
-// ValidatePodUpdate tests to see if the update is legal for an end user to make. newPod is updated with fields
-// that cannot be changed.
+// ValidatePodUpdate 校验终端用户对 Pod 的更新是否合法；newPod 中会填入不可变字段的旧值。
 func ValidatePodUpdate(newPod, oldPod *core.Pod, opts PodValidationOptions) field.ErrorList {
 	fldPath := field.NewPath("metadata")
 	allErrs := ValidateObjectMetaUpdate(&newPod.ObjectMeta, &oldPod.ObjectMeta, fldPath)
@@ -6000,7 +6076,7 @@ func ValidatePodUpdate(newPod, oldPod *core.Pod, opts PodValidationOptions) fiel
 	return allErrs
 }
 
-// ValidateContainerStateTransition test to if any illegal container state transitions are being attempted
+// ValidateContainerStateTransition 校验容器状态转换是否合法，禁止非法的状态跃迁。
 func ValidateContainerStateTransition(newStatuses, oldStatuses []core.ContainerStatus, fldPath *field.Path, podSpec core.PodSpec, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if opts.AllowContainerRestartPolicyRules {
@@ -6065,7 +6141,7 @@ func ValidateContainerStateTransition(newStatuses, oldStatuses []core.ContainerS
 	return allErrs
 }
 
-// ValidateInitContainerStateTransition test to if any illegal init container state transitions are being attempted
+// ValidateInitContainerStateTransition 校验 init 容器状态转换是否合法，禁止非法的状态跃迁。
 func ValidateInitContainerStateTransition(newStatuses, oldStatuses []core.ContainerStatus, fldpath *field.Path, podSpec core.PodSpec, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if opts.AllowContainerRestartPolicyRules {
@@ -6144,8 +6220,7 @@ func ValidateInitContainerStateTransition(newStatuses, oldStatuses []core.Contai
 	return allErrs
 }
 
-// ValidateEphemeralContainerStateTransition test to if any ephemeral containers are transitioned
-// from terminated state to non-terminated state.
+// ValidateEphemeralContainerStateTransition 校验临时容器不得从 terminated 状态转换回非 terminated 状态。
 func ValidateEphemeralContainerStateTransition(newStatuses, oldStatuses []core.ContainerStatus, fldpath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i, oldStatus := range oldStatuses {
@@ -6162,7 +6237,7 @@ func ValidateEphemeralContainerStateTransition(newStatuses, oldStatuses []core.C
 	return allErrs
 }
 
-// ValidatePodStatusUpdate checks for changes to status that shouldn't occur in normal operation.
+// ValidatePodStatusUpdate 校验 Pod 状态更新中不存在正常操作下不应发生的变化。
 func ValidatePodStatusUpdate(newPod, oldPod *core.Pod, opts PodValidationOptions) field.ErrorList {
 	fldPath := field.NewPath("metadata")
 	allErrs := ValidateObjectMetaUpdate(&newPod.ObjectMeta, &oldPod.ObjectMeta, fldPath)
@@ -6255,8 +6330,7 @@ func ValidatePodStatusUpdate(newPod, oldPod *core.Pod, opts PodValidationOptions
 	return allErrs
 }
 
-// validatePodConditions tests if the custom pod conditions are valid, and that the observedGeneration
-// is a non-negative integer.
+// validatePodConditions 校验自定义 Pod conditions 是否合法，且 observedGeneration 为非负整数。
 func validatePodConditions(conditions []core.PodCondition, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	systemConditions := sets.New(
@@ -6275,7 +6349,7 @@ func validatePodConditions(conditions []core.PodCondition, fldPath *field.Path) 
 	return allErrs
 }
 
-// validatePodResourceClaimStatuses validates the ResourceClaimStatuses slice in a pod status.
+// validatePodResourceClaimStatuses 校验 Pod 状态中的 ResourceClaimStatuses 列表。
 func validatePodResourceClaimStatuses(statuses []core.PodResourceClaimStatus, podClaims []core.PodResourceClaim, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -6302,7 +6376,7 @@ func validatePodResourceClaimStatuses(statuses []core.PodResourceClaimStatus, po
 	return allErrs
 }
 
-// validateNodeAllocatableResourceClaimStatus validates NodeAllocatableResourceClaimStatuses in a pod status
+// validateNodeAllocatableResourceClaimStatus 校验 Pod 状态中的 NodeAllocatableResourceClaimStatus 列表。
 func validateNodeAllocatableResourceClaimStatus(podStatus core.PodStatus, podSpec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -6349,7 +6423,7 @@ func validateNodeAllocatableResourceClaimStatus(podStatus core.PodStatus, podSpe
 	return allErrs
 }
 
-// validateNodeAllocatableMappedResources validates a list of mapped node allocatable resources
+// validateNodeAllocatableMappedResources 校验节点可分配资源的映射列表是否合法。
 func validateNodeAllocatableMappedResources(mapping []core.NodeAllocatableMappedResources, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i, item := range mapping {
@@ -6364,7 +6438,7 @@ func validateNodeAllocatableMappedResources(mapping []core.NodeAllocatableMapped
 	return allErrs
 }
 
-// validateNodeAllocatableOverheadResources validates a list of overhead node allocatable resources
+// validateNodeAllocatableOverheadResources 校验节点可分配开销资源列表是否合法。
 func validateNodeAllocatableOverheadResources(overhead []core.NodeAllocatableOverheadResources, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i, item := range overhead {
@@ -6386,7 +6460,7 @@ func validateNodeAllocatableOverheadResources(overhead []core.NodeAllocatableOve
 	return allErrs
 }
 
-// validatePodExtendedResourceClaimStatus validates the ExtendedResourceClaimStatus in a pod status.
+// validatePodExtendedResourceClaimStatus 校验 Pod 状态中的 ExtendedResourceClaimStatus 是否合法。
 func validatePodExtendedResourceClaimStatus(status *core.PodExtendedResourceClaimStatus, spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	if status == nil {
 		return nil
@@ -6440,6 +6514,7 @@ func validatePodExtendedResourceClaimStatus(status *core.PodExtendedResourceClai
 	return allErrs
 }
 
+// havePodClaim 判断 Pod 是否定义了指定名称的 ResourceClaim。
 func havePodClaim(podClaims []core.PodResourceClaim, name string) bool {
 	for _, podClaim := range podClaims {
 		if podClaim.Name == name {
@@ -6449,8 +6524,7 @@ func havePodClaim(podClaims []core.PodResourceClaim, name string) bool {
 	return false
 }
 
-// ValidatePodEphemeralContainersUpdate tests that a user update to EphemeralContainers is valid.
-// newPod and oldPod must only differ in their EphemeralContainers.
+// ValidatePodEphemeralContainersUpdate 校验用户对 EphemeralContainers 的更新是否合法；newPod 与 oldPod 应仅在该字段上不同。
 func ValidatePodEphemeralContainersUpdate(newPod, oldPod *core.Pod, opts PodValidationOptions) field.ErrorList {
 	// Part 1: Validate newPod's spec and updates to metadata
 	fldPath := field.NewPath("metadata")
@@ -6484,9 +6558,7 @@ func ValidatePodEphemeralContainersUpdate(newPod, oldPod *core.Pod, opts PodVali
 	return allErrs
 }
 
-// ValidatePodResize tests that an update to pod container resources is valid.
-// newPod and oldPod must only differ in their Containers[*].Resources and
-// Containers[*].ResizePolicy field.
+// ValidatePodResize 校验 Pod 原地调整容器资源的更新是否合法；newPod 与 oldPod 应仅在容器资源与 resizePolicy 上不同。
 func ValidatePodResize(newPod, oldPod *core.Pod, opts PodValidationOptions) field.ErrorList {
 	// Part 1: Validate newPod's spec and updates to metadata
 	fldPath := field.NewPath("metadata")
@@ -6670,8 +6742,7 @@ func ValidatePodResize(newPod, oldPod *core.Pod, opts PodValidationOptions) fiel
 	return allErrs
 }
 
-// validatePodResizeContainerOrdering validates container ordering for a resize request.
-// We do not allow adding, removing, re-ordering, or renaming containers on resize.
+// validatePodResizeContainerOrdering 校验 resize 请求中容器顺序未变：不允许添加、删除、重排或重命名容器。
 func validatePodResizeContainerOrdering(newPod, oldPod *core.Pod, specPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(newPod.Spec.Containers) != len(oldPod.Spec.Containers) {
@@ -6695,19 +6766,7 @@ func validatePodResizeContainerOrdering(newPod, oldPod *core.Pod, specPath *fiel
 	return allErrs
 }
 
-// validatePodLevelResourcesResize validates updates to pod-level resource requests/limits
-// for in-place resizing, and is intentionally designed to mutate the
-// podSpecToMutate, which is a deep copy of newPod.Spec
-//
-// The function performs a masking operation on its .Resources field:
-//
-// 1. Masking/Equalization: It modifies .Resources by dropping CPU/Memory
-// resource values in podSpecToMutate, and then copying specific CPU/Memory resource
-// values to match oldPod.Spec.Resources.
-// 2. Integrity Check: The resulting mutated spec is used to perform an equality
-// comparison (DeepEqual) against oldPod.Spec. If the specs match after masking,
-// it guarantees that no changes were made other than the allowed resource modifications
-// needed for the resize.
+// validatePodLevelResourcesResize 校验 Pod 级资源请求/限制的原地调整；会修改作为 newPod.Spec 深拷贝传入的 podSpecToMutate。
 func validatePodLevelResourcesResize(newPod, oldPod *core.Pod, podSpecToMutate *core.PodSpec, specPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -6751,6 +6810,7 @@ func validatePodLevelResourcesResize(newPod, oldPod *core.Pod, podSpecToMutate *
 	return allErrs
 }
 
+// dropCPUMemoryUpdates 在调整校验中忽略 CPU/内存变化，仅比较其他资源。
 func dropCPUMemoryUpdates(resourceList, oldResourceList core.ResourceList) core.ResourceList {
 	var mungedResourceList core.ResourceList
 	if resourceList == nil {
@@ -6772,8 +6832,7 @@ func dropCPUMemoryUpdates(resourceList, oldResourceList core.ResourceList) core.
 	return mungedResourceList
 }
 
-// dropCPUMemoryResourcesFromContainer deletes the cpu and memory resources from the
-// container, and copies them from the old pod container resources if present.
+// dropCPUMemoryResourcesFromContainer 从容器中删除 CPU 与内存资源，并在存在时从旧 Pod 容器中拷贝回来。
 // TODO(ndixita): refactor to reuse dropCPUMemoryResourceRequirementsUpdates
 func dropCPUMemoryResourcesFromContainer(container *core.Container, oldPodSpecContainer *core.Container) {
 	lim := dropCPUMemoryUpdates(container.Resources.Limits, oldPodSpecContainer.Resources.Limits)
@@ -6782,9 +6841,7 @@ func dropCPUMemoryResourcesFromContainer(container *core.Container, oldPodSpecCo
 	container.Resources = core.ResourceRequirements{Limits: lim, Requests: req, Claims: container.Resources.Claims}
 }
 
-// dropCPUMemoryResourceRequirementsUpdates deletes the cpu and memory resources
-// from the `resources` field, and copies them from old Pod spec's resources field
-// if present.
+// dropCPUMemoryResourceRequirementsUpdates 从资源字段中删除 CPU 与内存资源，并在存在时从旧 Pod 规格中拷贝。
 func dropCPUMemoryResourceRequirementsUpdates(resources *core.ResourceRequirements, oldPodResources *core.ResourceRequirements) *core.ResourceRequirements {
 	if resources == nil {
 		return resources
@@ -6816,6 +6873,7 @@ func dropCPUMemoryResourceRequirementsUpdates(resources *core.ResourceRequiremen
 	return resources
 }
 
+// validatePodLevelResourcesCoverDRA 校验 Pod 级资源是否覆盖 DRA（动态资源分配）相关声明。
 func validatePodLevelResourcesCoverDRA(pod *v1.Pod) (bool, string) {
 	if pod.Spec.Resources == nil {
 		return true, ""
@@ -6898,7 +6956,7 @@ func validatePodLevelResourcesCoverDRA(pod *v1.Pod) (bool, string) {
 	return true, ""
 }
 
-// isPodResizeRequestSupported checks whether the pod is running on a node with InPlacePodVerticalScaling enabled.
+// isPodResizeRequestSupported 检查 Pod 所在节点是否启用了 InPlacePodVerticalScaling，以判断是否支持原地调整。
 func isPodResizeRequestSupported(pod core.Pod) bool {
 	// TODO: Remove this after GA+3 releases of InPlacePodVerticalScaling
 	// This code handles the version skew as described in the KEP.
@@ -6915,8 +6973,7 @@ func isPodResizeRequestSupported(pod core.Pod) bool {
 	return true
 }
 
-// validateContainerResize validates the changes to the container's resource requirements for a pod resize request.
-// newRequriements and oldRequirements must be non-nil.
+// validateContainerResize 校验 resize 请求中容器资源需求的变化；newRequirements 与 oldRequirements 必须非空。
 func validateContainerResize(newRequirements, oldRequirements *core.ResourceRequirements, resizePolicies []core.ContainerResizePolicy, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -6933,6 +6990,7 @@ func validateContainerResize(newRequirements, oldRequirements *core.ResourceRequ
 	return allErrs
 }
 
+// resourcesRemoved 判断新资源需求是否删除了旧需求中已有的资源项。
 func resourcesRemoved(resourceList, oldResourceList core.ResourceList) bool {
 	if len(oldResourceList) > len(resourceList) {
 		return true
@@ -6946,7 +7004,7 @@ func resourcesRemoved(resourceList, oldResourceList core.ResourceList) bool {
 	return false
 }
 
-// ValidatePodBinding tests if required fields in the pod binding are legal.
+// ValidatePodBinding 校验 Pod 绑定对象中的必填字段是否合法。
 func ValidatePodBinding(binding *core.Binding) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -6970,15 +7028,14 @@ func ValidatePodBinding(binding *core.Binding) field.ErrorList {
 	return allErrs
 }
 
-// ValidatePodTemplate tests if required fields in the pod template are set.
+// ValidatePodTemplate 校验 Pod 模板中的必填字段是否设置。
 func ValidatePodTemplate(pod *core.PodTemplate, opts PodValidationOptions) field.ErrorList {
 	allErrs := ValidateObjectMeta(&pod.ObjectMeta, true, ValidatePodName, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidatePodTemplateSpec(&pod.Template, field.NewPath("template"), opts)...)
 	return allErrs
 }
 
-// ValidatePodTemplateUpdate tests to see if the update is legal for an end user to make. newPod is updated with fields
-// that cannot be changed.
+// ValidatePodTemplateUpdate 校验终端用户对 Pod 模板的更新是否合法；newPod 中会填入不可变字段的旧值。
 func ValidatePodTemplateUpdate(newPod, oldPod *core.PodTemplate, opts PodValidationOptions) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newPod.ObjectMeta, &oldPod.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidatePodTemplateSpec(&newPod.Template, field.NewPath("template"), opts)...)
@@ -6997,7 +7054,7 @@ var supportedServiceIPFamilyPolicy = sets.New(
 	core.IPFamilyPolicyPreferDualStack,
 	core.IPFamilyPolicyRequireDualStack)
 
-// ValidateService tests if required fields/annotations of a Service are valid.
+// validateService 校验 Service 的必填字段与注解是否合法。
 func validateService(service, oldService *core.Service) field.ErrorList {
 	metaPath := field.NewPath("metadata")
 
@@ -7208,6 +7265,7 @@ func validateService(service, oldService *core.Service) field.ErrorList {
 	return allErrs
 }
 
+// validateServicePort 校验 ServicePort：端口范围、协议、名称与 nodePort 的合法性。
 func validateServicePort(sp *core.ServicePort, requireName, isHeadlessService bool, allNames *sets.Set[string], fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -7252,6 +7310,7 @@ func validateServicePort(sp *core.ServicePort, requireName, isHeadlessService bo
 
 var validExternalTrafficPolicies = sets.New(core.ServiceExternalTrafficPolicyCluster, core.ServiceExternalTrafficPolicyLocal)
 
+// validateServiceExternalTrafficPolicy 校验 externalTrafficPolicy 的取值及与 Service 类型的兼容性。
 func validateServiceExternalTrafficPolicy(service *core.Service) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -7289,6 +7348,7 @@ func validateServiceExternalTrafficPolicy(service *core.Service) field.ErrorList
 	return allErrs
 }
 
+// validateServiceExternalTrafficFieldsUpdate 校验与外部流量策略相关字段在更新时是否合法变化。
 func validateServiceExternalTrafficFieldsUpdate(before, after *core.Service) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -7301,8 +7361,7 @@ func validateServiceExternalTrafficFieldsUpdate(before, after *core.Service) fie
 	return allErrs
 }
 
-// validateServiceInternalTrafficFieldsValue validates InternalTraffic related
-// spec have legal value.
+// validateServiceInternalTrafficFieldsValue 校验 internalTrafficPolicy 相关规格字段的取值是否合法。
 func validateServiceInternalTrafficFieldsValue(service *core.Service) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -7322,8 +7381,7 @@ func validateServiceInternalTrafficFieldsValue(service *core.Service) field.Erro
 	return allErrs
 }
 
-// validateServiceTrafficDistribution validates the values for the
-// trafficDistribution field.
+// validateServiceTrafficDistribution 校验 trafficDistribution 字段的取值是否合法。
 func validateServiceTrafficDistribution(service *core.Service) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -7351,7 +7409,7 @@ func validateServiceTrafficDistribution(service *core.Service) field.ErrorList {
 	return allErrs
 }
 
-// ValidateServiceCreate validates Services as they are created.
+// ValidateServiceCreate 校验 Service 创建请求的合法性。
 func ValidateServiceCreate(service *core.Service) field.ErrorList {
 	metaPath := field.NewPath("metadata")
 
@@ -7366,7 +7424,7 @@ func ValidateServiceCreate(service *core.Service) field.ErrorList {
 	return append(allErrs, validateService(service, nil)...)
 }
 
-// ValidateServiceUpdate tests if required fields in the service are set during an update
+// ValidateServiceUpdate 校验 Service 更新时必填字段是否仍然合法。
 func ValidateServiceUpdate(service, oldService *core.Service) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&service.ObjectMeta, &oldService.ObjectMeta, field.NewPath("metadata"))
 
@@ -7389,14 +7447,14 @@ func ValidateServiceUpdate(service, oldService *core.Service) field.ErrorList {
 	return append(allErrs, validateService(service, oldService)...)
 }
 
-// ValidateServiceStatusUpdate tests if required fields in the Service are set when updating status.
+// ValidateServiceStatusUpdate 校验 Service 状态更新时必填字段是否合法。
 func ValidateServiceStatusUpdate(service, oldService *core.Service) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&service.ObjectMeta, &oldService.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateLoadBalancerStatus(&service.Status.LoadBalancer, &oldService.Status.LoadBalancer, field.NewPath("status", "loadBalancer"), &service.Spec)...)
 	return allErrs
 }
 
-// ValidateReplicationController tests if required fields in the replication controller are set.
+// ValidateReplicationController 校验 ReplicationController 的必填字段是否设置。
 func ValidateReplicationController(controller *core.ReplicationController, opts PodValidationOptions) field.ErrorList {
 	validateLongName := func(fldPath *field.Path, name string) field.ErrorList {
 		return validate.LongName(context.Background(), operation.Operation{}, fldPath, &name, nil).MarkCoveredByDeclarative()
@@ -7406,20 +7464,21 @@ func ValidateReplicationController(controller *core.ReplicationController, opts 
 	return allErrs
 }
 
-// ValidateReplicationControllerUpdate tests if required fields in the replication controller are set.
+// ValidateReplicationControllerUpdate 校验 ReplicationController 更新时的必填字段是否合法。
 func ValidateReplicationControllerUpdate(controller, oldController *core.ReplicationController, opts PodValidationOptions) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&controller.ObjectMeta, &oldController.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateReplicationControllerSpec(&controller.Spec, &oldController.Spec, field.NewPath("spec"), opts)...)
 	return allErrs
 }
 
-// ValidateReplicationControllerStatusUpdate tests if required fields in the replication controller are set.
+// ValidateReplicationControllerStatusUpdate 校验 ReplicationController 状态更新时的必填字段是否合法。
 func ValidateReplicationControllerStatusUpdate(controller, oldController *core.ReplicationController) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&controller.ObjectMeta, &oldController.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateReplicationControllerStatus(controller.Status, field.NewPath("status"))...)
 	return allErrs
 }
 
+// ValidateReplicationControllerStatus 校验 ReplicationControllerStatus 的副本数字段是否合法。
 func ValidateReplicationControllerStatus(status core.ReplicationControllerStatus, statusPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateNonnegativeField(int64(status.Replicas), statusPath.Child("replicas"))...)
@@ -7443,7 +7502,7 @@ func ValidateReplicationControllerStatus(status core.ReplicationControllerStatus
 	return allErrs
 }
 
-// Validates that the given selector is non-empty.
+// ValidateNonEmptySelector 校验给定的标签选择器不为空。
 func ValidateNonEmptySelector(selectorMap map[string]string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	selector := labels.Set(selectorMap).AsSelector()
@@ -7453,7 +7512,7 @@ func ValidateNonEmptySelector(selectorMap map[string]string, fldPath *field.Path
 	return allErrs
 }
 
-// Validates the given template and ensures that it is in accordance with the desired selector and replicas.
+// ValidatePodTemplateSpecForRC 校验 Pod 模板规格与期望的选择器及副本数是否一致。
 func ValidatePodTemplateSpecForRC(template *core.PodTemplateSpec, selectorMap map[string]string, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if template == nil {
@@ -7479,7 +7538,7 @@ func ValidatePodTemplateSpecForRC(template *core.PodTemplateSpec, selectorMap ma
 	return allErrs
 }
 
-// ValidateReplicationControllerSpec tests if required fields in the replication controller spec are set.
+// ValidateReplicationControllerSpec 校验 ReplicationController 规格的必填字段是否设置。
 func ValidateReplicationControllerSpec(spec, oldSpec *core.ReplicationControllerSpec, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateNonnegativeField(int64(spec.MinReadySeconds), fldPath.Child("minReadySeconds")).MarkCoveredByDeclarative()...)
@@ -7493,7 +7552,7 @@ func ValidateReplicationControllerSpec(spec, oldSpec *core.ReplicationController
 	return allErrs
 }
 
-// ValidatePodTemplateSpec validates the spec of a pod template
+// ValidatePodTemplateSpec 校验 Pod 模板的规格是否合法。
 func ValidatePodTemplateSpec(spec *core.PodTemplateSpec, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, unversionedvalidation.ValidateLabels(spec.Labels, fldPath.Child("labels"))...)
@@ -7510,7 +7569,7 @@ func ValidatePodTemplateSpec(spec *core.PodTemplateSpec, fldPath *field.Path, op
 	return allErrs
 }
 
-// ValidateTaintsInNodeAnnotations tests that the serialized taints in Node.Annotations has valid data
+// ValidateTaintsInNodeAnnotations 校验 Node.Annotations 中序列化的 taints 数据是否合法。
 func ValidateTaintsInNodeAnnotations(annotations map[string]string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -7527,7 +7586,7 @@ func ValidateTaintsInNodeAnnotations(annotations map[string]string, fldPath *fie
 	return allErrs
 }
 
-// validateNodeTaints tests if given taints have valid data.
+// validateNodeTaints 校验给定的 taints 列表数据是否合法。
 func validateNodeTaints(taints []core.Taint, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 
@@ -7561,6 +7620,7 @@ func validateNodeTaints(taints []core.Taint, fldPath *field.Path) field.ErrorLis
 	return allErrors
 }
 
+// ValidateNodeSpecificAnnotations 校验 Node 专有注解（如容器运行时、镜像运行时版本）是否合法。
 func ValidateNodeSpecificAnnotations(annotations map[string]string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -7574,7 +7634,7 @@ func ValidateNodeSpecificAnnotations(annotations map[string]string, fldPath *fie
 	return allErrs
 }
 
-// validateNodeDeclaredFeatureName checks if a declared feature name is valid.
+// validateNodeDeclaredFeatureName 校验节点声明的特性名称是否为合法格式。
 func validateNodeDeclaredFeatureName(featureName string) error {
 	if len(featureName) > validation.DNS1123SubdomainMaxLength {
 		return fmt.Errorf("invalid feature name %q: must be no more than %d characters", featureName, validation.DNS1123SubdomainMaxLength)
@@ -7585,6 +7645,7 @@ func validateNodeDeclaredFeatureName(featureName string) error {
 	return nil
 }
 
+// validateNodeDeclaredFeatures 校验节点声明的特性列表：名称格式合法且不重复。
 func validateNodeDeclaredFeatures(nodeFeatures []string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	// We do not need to check feature gate again here as we do it in dropDisabledFields() (pkg/registry/core/node/strategy.go)
@@ -7605,7 +7666,7 @@ func validateNodeDeclaredFeatures(nodeFeatures []string, fldPath *field.Path) fi
 	return allErrs
 }
 
-// ValidateNode tests if required fields in the node are set.
+// ValidateNode 校验 Node 的必填字段是否设置。
 func ValidateNode(node *core.Node) field.ErrorList {
 	fldPath := field.NewPath("metadata")
 	allErrs := ValidateObjectMeta(&node.ObjectMeta, false, ValidateNodeName, fldPath)
@@ -7646,7 +7707,7 @@ func ValidateNode(node *core.Node) field.ErrorList {
 	return allErrs
 }
 
-// ValidateNodeResources is used to make sure a node has valid capacity and allocatable values.
+// ValidateNodeResources 校验 Node 的 capacity 与 allocatable 值是否合法。
 func ValidateNodeResources(node *core.Node) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -7664,7 +7725,7 @@ func ValidateNodeResources(node *core.Node) field.ErrorList {
 	return allErrs
 }
 
-// ValidateNodeUpdate tests to make sure a node update can be applied.  Modifies oldNode.
+// ValidateNodeUpdate 校验 Node 更新是否可以应用；会修改 oldNode。
 func ValidateNodeUpdate(node, oldNode *core.Node) field.ErrorList {
 	fldPath := field.NewPath("metadata")
 	allErrs := ValidateObjectMetaUpdate(&node.ObjectMeta, &oldNode.ObjectMeta, fldPath)
@@ -7739,9 +7800,7 @@ func ValidateNodeUpdate(node, oldNode *core.Node) field.ErrorList {
 	return allErrs
 }
 
-// validation specific to Node.Spec.ConfigSource
-// The field ConfigSource is deprecated and will not be used. The validation is kept in place
-// for the backward compatibility
+// validateNodeConfigSourceSpec Node.Spec.ConfigSource 专属校验；该字段已废弃，仅为向后兼容保留。
 func validateNodeConfigSourceSpec(source *core.NodeConfigSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	count := int(0)
@@ -7758,9 +7817,7 @@ func validateNodeConfigSourceSpec(source *core.NodeConfigSource, fldPath *field.
 	return allErrs
 }
 
-// validation specific to Node.Spec.ConfigSource.ConfigMap
-// The field ConfigSource is deprecated and will not be used. The validation is kept in place
-// for the backward compatibility
+// validateConfigMapNodeConfigSourceSpec Node.Spec.ConfigSource.ConfigMap 专属校验；该字段已废弃，仅为向后兼容保留。
 func validateConfigMapNodeConfigSourceSpec(source *core.ConfigMapNodeConfigSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	// uid and resourceVersion must not be set in spec
@@ -7773,7 +7830,7 @@ func validateConfigMapNodeConfigSourceSpec(source *core.ConfigMapNodeConfigSourc
 	return append(allErrs, validateConfigMapNodeConfigSource(source, fldPath)...)
 }
 
-// validation specififc to Node.Status.Config
+// validateNodeConfigStatus Node.Status.Config 专属校验。
 func validateNodeConfigStatus(status *core.NodeConfigStatus, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if status.Assigned != nil {
@@ -7788,7 +7845,7 @@ func validateNodeConfigStatus(status *core.NodeConfigStatus, fldPath *field.Path
 	return allErrs
 }
 
-// validation specific to Node.Status.Config.(Active|Assigned|LastKnownGood)
+// validateNodeConfigSourceStatus Node.Status.Config 中 Active/Assigned/LastKnownGood 的专属校验。
 func validateNodeConfigSourceStatus(source *core.NodeConfigSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	count := int(0)
@@ -7805,7 +7862,7 @@ func validateNodeConfigSourceStatus(source *core.NodeConfigSource, fldPath *fiel
 	return allErrs
 }
 
-// validation specific to Node.Status.Config.(Active|Assigned|LastKnownGood).ConfigMap
+// validateConfigMapNodeConfigSourceStatus Node.Status.Config 中 ConfigMap 相关状态的专属校验。
 func validateConfigMapNodeConfigSourceStatus(source *core.ConfigMapNodeConfigSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	// uid and resourceVersion must be set in status
@@ -7818,7 +7875,7 @@ func validateConfigMapNodeConfigSourceStatus(source *core.ConfigMapNodeConfigSou
 	return append(allErrs, validateConfigMapNodeConfigSource(source, fldPath)...)
 }
 
-// common validation
+// validateConfigMapNodeConfigSource Node 配置源的通用校验。
 func validateConfigMapNodeConfigSource(source *core.ConfigMapNodeConfigSource, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	// validate target configmap namespace
@@ -7848,8 +7905,7 @@ func validateConfigMapNodeConfigSource(source *core.ConfigMapNodeConfigSource, f
 	return allErrs
 }
 
-// Validate compute resource typename.
-// Refer to docs/design/resources.md for more details.
+// validateResourceName 校验计算资源类型名称；详见 docs/design/resources.md。
 func validateResourceName(value core.ResourceName, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, msg := range validation.IsQualifiedName(string(value)) {
@@ -7868,8 +7924,7 @@ func validateResourceName(value core.ResourceName, fldPath *field.Path) field.Er
 	return allErrs
 }
 
-// Validate container resource name
-// Refer to docs/design/resources.md for more details.
+// ValidateContainerResourceName 校验容器资源名称；详见 docs/design/resources.md。
 func ValidateContainerResourceName(value core.ResourceName, fldPath *field.Path) field.ErrorList {
 	allErrs := validateResourceName(value, fldPath)
 
@@ -7885,9 +7940,7 @@ func ValidateContainerResourceName(value core.ResourceName, fldPath *field.Path)
 	return allErrs
 }
 
-// validatePodResourceName verifies that:
-// 1. The resource name is a valid compute resource name for pod-level specification.
-// 2. The resource is supported by the PodLevelResources feature.
+// validatePodResourceName 校验 Pod 级资源名称：既要是合法计算资源名，也要被 PodLevelResources 特性支持。
 func validatePodResourceName(resourceName core.ResourceName, fldPath *field.Path) field.ErrorList {
 	allErrs := validateResourceName(resourceName, fldPath)
 	if len(allErrs) != 0 {
@@ -7901,8 +7954,7 @@ func validatePodResourceName(resourceName core.ResourceName, fldPath *field.Path
 	return allErrs
 }
 
-// Validate resource names that can go in a resource quota
-// Refer to docs/design/resources.md for more details.
+// ValidateResourceQuotaResourceName 校验可用于 ResourceQuota 的资源名称；详见 docs/design/resources.md。
 func ValidateResourceQuotaResourceName(value core.ResourceName, fldPath *field.Path) field.ErrorList {
 	allErrs := validateResourceName(value, fldPath)
 
@@ -7914,7 +7966,7 @@ func ValidateResourceQuotaResourceName(value core.ResourceName, fldPath *field.P
 	return allErrs
 }
 
-// Validate limit range types
+// validateLimitRangeTypeName 校验 LimitRange 的类型名称是否合法。
 func validateLimitRangeTypeName(value core.LimitType, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, msg := range validation.IsQualifiedName(string(value)) {
@@ -7933,8 +7985,7 @@ func validateLimitRangeTypeName(value core.LimitType, fldPath *field.Path) field
 	return allErrs
 }
 
-// Validate limit range resource name
-// limit types (other than Pod/Container) could contain storage not just cpu or memory
+// validateLimitRangeResourceName 校验 LimitRange 的资源名称；除 Pod/Container 外的类型可包含存储资源而非仅 CPU/内存。
 func validateLimitRangeResourceName(limitType core.LimitType, value core.ResourceName, fldPath *field.Path) field.ErrorList {
 	switch limitType {
 	case core.LimitTypePod, core.LimitTypeContainer:
@@ -7944,7 +7995,7 @@ func validateLimitRangeResourceName(limitType core.LimitType, value core.Resourc
 	}
 }
 
-// ValidateLimitRange tests if required fields in the LimitRange are set.
+// ValidateLimitRange 校验 LimitRange 的必填字段是否设置。
 func ValidateLimitRange(limitRange *core.LimitRange) field.ErrorList {
 	allErrs := ValidateObjectMeta(&limitRange.ObjectMeta, true, ValidateLimitRangeName, field.NewPath("metadata"))
 
@@ -8073,20 +8124,20 @@ func ValidateLimitRange(limitRange *core.LimitRange) field.ErrorList {
 	return allErrs
 }
 
-// ValidateServiceAccount tests if required fields in the ServiceAccount are set.
+// ValidateServiceAccount 校验 ServiceAccount 的必填字段是否设置。
 func ValidateServiceAccount(serviceAccount *core.ServiceAccount) field.ErrorList {
 	allErrs := ValidateObjectMeta(&serviceAccount.ObjectMeta, true, ValidateServiceAccountName, field.NewPath("metadata"))
 	return allErrs
 }
 
-// ValidateServiceAccountUpdate tests if required fields in the ServiceAccount are set.
+// ValidateServiceAccountUpdate 校验 ServiceAccount 更新时的必填字段是否合法。
 func ValidateServiceAccountUpdate(newServiceAccount, oldServiceAccount *core.ServiceAccount) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newServiceAccount.ObjectMeta, &oldServiceAccount.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateServiceAccount(newServiceAccount)...)
 	return allErrs
 }
 
-// ValidateSecret tests if required fields in the Secret are set.
+// ValidateSecret 校验 Secret 的必填字段是否设置。
 func ValidateSecret(secret *core.Secret) field.ErrorList {
 	allErrs := ValidateObjectMeta(&secret.ObjectMeta, true, ValidateSecretName, field.NewPath("metadata"))
 
@@ -8163,7 +8214,7 @@ func ValidateSecret(secret *core.Secret) field.ErrorList {
 	return allErrs
 }
 
-// ValidateSecretUpdate tests if required fields in the Secret are set.
+// ValidateSecretUpdate 校验 Secret 更新时的必填字段是否合法。
 func ValidateSecretUpdate(newSecret, oldSecret *core.Secret) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newSecret.ObjectMeta, &oldSecret.ObjectMeta, field.NewPath("metadata"))
 
@@ -8188,7 +8239,7 @@ func ValidateSecretUpdate(newSecret, oldSecret *core.Secret) field.ErrorList {
 // trailing dashes are allowed.
 var ValidateConfigMapName = apimachineryvalidation.NameIsDNSSubdomain
 
-// ValidateConfigMap tests whether required fields in the ConfigMap are set.
+// ValidateConfigMap 校验 ConfigMap 的必填字段是否设置。
 func ValidateConfigMap(cfg *core.ConfigMap) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateObjectMeta(&cfg.ObjectMeta, true, ValidateConfigMapName, field.NewPath("metadata"))...)
@@ -8220,7 +8271,7 @@ func ValidateConfigMap(cfg *core.ConfigMap) field.ErrorList {
 	return allErrs
 }
 
-// ValidateConfigMapUpdate tests if required fields in the ConfigMap are set.
+// ValidateConfigMapUpdate 校验 ConfigMap 更新时的必填字段是否合法。
 func ValidateConfigMapUpdate(newCfg, oldCfg *core.ConfigMap) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateObjectMetaUpdate(&newCfg.ObjectMeta, &oldCfg.ObjectMeta, field.NewPath("metadata"))...)
@@ -8241,6 +8292,7 @@ func ValidateConfigMapUpdate(newCfg, oldCfg *core.ConfigMap) field.ErrorList {
 	return allErrs
 }
 
+// validateBasicResource 校验基本资源数量是否合法。
 func validateBasicResource(quantity resource.Quantity, fldPath *field.Path) field.ErrorList {
 	if quantity.Value() < 0 {
 		return field.ErrorList{field.Invalid(fldPath, quantity.Value(), "must be a valid resource quantity")}
@@ -8248,15 +8300,17 @@ func validateBasicResource(quantity resource.Quantity, fldPath *field.Path) fiel
 	return field.ErrorList{}
 }
 
+// validatePodResourceRequirements 校验 Pod 级资源需求，使用 Pod 级资源名校验规则。
 func validatePodResourceRequirements(requirements *core.ResourceRequirements, podClaimNames sets.Set[string], fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	return validateResourceRequirements(requirements, validatePodResourceName, podClaimNames, fldPath, opts)
 }
 
+// ValidateContainerResourceRequirements 校验容器资源需求，使用容器资源名校验规则。
 func ValidateContainerResourceRequirements(requirements *core.ResourceRequirements, podClaimNames sets.Set[string], fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	return validateResourceRequirements(requirements, ValidateContainerResourceName, podClaimNames, fldPath, opts)
 }
 
-// Validates resource requirement spec.
+// validateResourceRequirements 校验资源需求规格（limits、requests、claims）整体是否合法。
 func validateResourceRequirements(requirements *core.ResourceRequirements, resourceNameFn func(core.ResourceName, *field.Path) field.ErrorList, podClaimNames sets.Set[string], fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	limPath := fldPath.Child("limits")
@@ -8326,9 +8380,7 @@ func validateResourceRequirements(requirements *core.ResourceRequirements, resou
 	return allErrs
 }
 
-// validateResourceClaimNames checks that the names in
-// ResourceRequirements.Claims have a corresponding entry in
-// PodSpec.ResourceClaims.
+// validateResourceClaimNames 校验 ResourceRequirements.Claims 中的名称在 PodSpec.ResourceClaims 中有对应条目。
 func validateResourceClaimNames(claims []core.ResourceClaim, podClaimNames sets.Set[string], fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	names := sets.Set[string]{}
@@ -8386,6 +8438,7 @@ func validateResourceClaimNames(claims []core.ResourceClaim, podClaimNames sets.
 	return allErrs
 }
 
+// validateResourceQuantityHugePageValue 校验 huge page 资源数量是否合法（必须为整数且受支持）。
 func validateResourceQuantityHugePageValue(name core.ResourceName, quantity resource.Quantity, opts PodValidationOptions) error {
 	if !helper.IsHugePageResourceName(name) {
 		return nil
@@ -8398,7 +8451,7 @@ func validateResourceQuantityHugePageValue(name core.ResourceName, quantity reso
 	return nil
 }
 
-// validateResourceQuotaScopes ensures that each enumerated hard resource constraint is valid for set of scopes
+// validateResourceQuotaScopes 校验 ResourceQuota 中每个枚举的 hard 资源约束对其作用域集合是否有效。
 func validateResourceQuotaScopes(resourceQuotaSpec *core.ResourceQuotaSpec, fld *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(resourceQuotaSpec.Scopes) == 0 {
@@ -8433,7 +8486,7 @@ func validateResourceQuotaScopes(resourceQuotaSpec *core.ResourceQuotaSpec, fld 
 	return allErrs
 }
 
-// validateScopedResourceSelectorRequirement tests that the match expressions has valid data
+// validateScopedResourceSelectorRequirement 校验作用域选择器中的匹配表达式是否合法。
 func validateScopedResourceSelectorRequirement(resourceQuotaSpec *core.ResourceQuotaSpec, fld *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	hardLimits := sets.New[core.ResourceName]()
@@ -8488,7 +8541,7 @@ func validateScopedResourceSelectorRequirement(resourceQuotaSpec *core.ResourceQ
 	return allErrs
 }
 
-// validateScopeSelector tests that the specified scope selector has valid data
+// validateScopeSelector 校验指定的 ScopeSelector 是否合法。
 func validateScopeSelector(resourceQuotaSpec *core.ResourceQuotaSpec, fld *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if resourceQuotaSpec.ScopeSelector == nil {
@@ -8498,7 +8551,7 @@ func validateScopeSelector(resourceQuotaSpec *core.ResourceQuotaSpec, fld *field
 	return allErrs
 }
 
-// ValidateResourceQuota tests if required fields in the ResourceQuota are set.
+// ValidateResourceQuota 校验 ResourceQuota 的必填字段是否设置。
 func ValidateResourceQuota(resourceQuota *core.ResourceQuota) field.ErrorList {
 	allErrs := ValidateObjectMeta(&resourceQuota.ObjectMeta, true, ValidateResourceQuotaName, field.NewPath("metadata"))
 
@@ -8508,6 +8561,7 @@ func ValidateResourceQuota(resourceQuota *core.ResourceQuota) field.ErrorList {
 	return allErrs
 }
 
+// ValidateResourceQuotaStatus 校验 ResourceQuotaStatus 的 used/hard 值是否合法。
 func ValidateResourceQuotaStatus(status *core.ResourceQuotaStatus, fld *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -8527,6 +8581,7 @@ func ValidateResourceQuotaStatus(status *core.ResourceQuotaStatus, fld *field.Pa
 	return allErrs
 }
 
+// ValidateResourceQuotaSpec 校验 ResourceQuotaSpec 的 scopes、scopeSelector 与 hard 值是否合法。
 func ValidateResourceQuotaSpec(resourceQuotaSpec *core.ResourceQuotaSpec, fld *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -8543,7 +8598,7 @@ func ValidateResourceQuotaSpec(resourceQuotaSpec *core.ResourceQuotaSpec, fld *f
 	return allErrs
 }
 
-// ValidateResourceQuantityValue enforces that specified quantity is valid for specified resource
+// ValidateResourceQuantityValue 校验给定资源对应的数量值是否合法。
 func ValidateResourceQuantityValue(resource core.ResourceName, value resource.Quantity, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, ValidateNonnegativeQuantity(value, fldPath)...)
@@ -8555,7 +8610,7 @@ func ValidateResourceQuantityValue(resource core.ResourceName, value resource.Qu
 	return allErrs
 }
 
-// ValidateResourceQuotaUpdate tests to see if the update is legal for an end user to make.
+// ValidateResourceQuotaUpdate 校验终端用户对 ResourceQuota 的更新是否合法。
 func ValidateResourceQuotaUpdate(newResourceQuota, oldResourceQuota *core.ResourceQuota) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newResourceQuota.ObjectMeta, &oldResourceQuota.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateResourceQuotaSpec(&newResourceQuota.Spec, field.NewPath("spec"))...)
@@ -8577,7 +8632,7 @@ func ValidateResourceQuotaUpdate(newResourceQuota, oldResourceQuota *core.Resour
 	return allErrs
 }
 
-// ValidateResourceQuotaStatusUpdate tests to see if the status update is legal for an end user to make.
+// ValidateResourceQuotaStatusUpdate 校验终端用户对 ResourceQuota 状态的更新是否合法。
 func ValidateResourceQuotaStatusUpdate(newResourceQuota, oldResourceQuota *core.ResourceQuota) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newResourceQuota.ObjectMeta, &oldResourceQuota.ObjectMeta, field.NewPath("metadata"))
 	if len(newResourceQuota.ResourceVersion) == 0 {
@@ -8598,7 +8653,7 @@ func ValidateResourceQuotaStatusUpdate(newResourceQuota, oldResourceQuota *core.
 	return allErrs
 }
 
-// ValidateNamespace tests if required fields are set.
+// ValidateNamespace 校验 Namespace 的必填字段是否设置。
 func ValidateNamespace(namespace *core.Namespace) field.ErrorList {
 	allErrs := ValidateObjectMeta(&namespace.ObjectMeta, false, ValidateNamespaceName, field.NewPath("metadata"))
 	for i := range namespace.Spec.Finalizers {
@@ -8607,14 +8662,14 @@ func ValidateNamespace(namespace *core.Namespace) field.ErrorList {
 	return allErrs
 }
 
-// Validate finalizer names
+// validateFinalizerName 校验 finalizer 名称是否合法。
 func validateFinalizerName(stringValue string, fldPath *field.Path) field.ErrorList {
 	allErrs := apimachineryvalidation.ValidateFinalizerName(stringValue, fldPath)
 	allErrs = append(allErrs, validateKubeFinalizerName(stringValue, fldPath)...)
 	return allErrs
 }
 
-// validateKubeFinalizerName checks for "standard" names of legacy finalizer
+// validateKubeFinalizerName 校验 finalizer 是否使用了遗留的“标准”名称（kubernetes.io 前缀）。
 func validateKubeFinalizerName(stringValue string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if len(strings.Split(stringValue, "/")) == 1 {
@@ -8626,13 +8681,13 @@ func validateKubeFinalizerName(stringValue string, fldPath *field.Path) field.Er
 	return allErrs
 }
 
-// ValidateNamespaceUpdate tests to make sure a namespace update can be applied.
+// ValidateNamespaceUpdate 校验 Namespace 更新是否可以应用。
 func ValidateNamespaceUpdate(newNamespace *core.Namespace, oldNamespace *core.Namespace) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newNamespace.ObjectMeta, &oldNamespace.ObjectMeta, field.NewPath("metadata"))
 	return allErrs
 }
 
-// ValidateNamespaceStatusUpdate tests to see if the update is legal for an end user to make.
+// ValidateNamespaceStatusUpdate 校验终端用户对 Namespace 状态的更新是否合法。
 func ValidateNamespaceStatusUpdate(newNamespace, oldNamespace *core.Namespace) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newNamespace.ObjectMeta, &oldNamespace.ObjectMeta, field.NewPath("metadata"))
 	if newNamespace.DeletionTimestamp.IsZero() {
@@ -8647,7 +8702,7 @@ func ValidateNamespaceStatusUpdate(newNamespace, oldNamespace *core.Namespace) f
 	return allErrs
 }
 
-// ValidateNamespaceFinalizeUpdate tests to see if the update is legal for an end user to make.
+// ValidateNamespaceFinalizeUpdate 校验终端用户对 Namespace finalize 操作的更新是否合法。
 func ValidateNamespaceFinalizeUpdate(newNamespace, oldNamespace *core.Namespace) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newNamespace.ObjectMeta, &oldNamespace.ObjectMeta, field.NewPath("metadata"))
 
@@ -8659,7 +8714,7 @@ func ValidateNamespaceFinalizeUpdate(newNamespace, oldNamespace *core.Namespace)
 	return allErrs
 }
 
-// ValidateEndpoints validates Endpoints on create and update.
+// ValidateEndpoints 校验 Endpoints 在创建与更新场景下的合法性。
 func ValidateEndpoints(endpoints, oldEndpoints *core.Endpoints) field.ErrorList {
 	allErrs := ValidateObjectMeta(&endpoints.ObjectMeta, true, ValidateEndpointsName, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateEndpointsSpecificAnnotations(endpoints.Annotations, field.NewPath("annotations"))...)
@@ -8679,21 +8734,19 @@ func ValidateEndpoints(endpoints, oldEndpoints *core.Endpoints) field.ErrorList 
 	return allErrs
 }
 
-// ValidateEndpointsCreate validates Endpoints on create.
+// ValidateEndpointsCreate 校验 Endpoints 创建时的合法性。
 func ValidateEndpointsCreate(endpoints *core.Endpoints) field.ErrorList {
 	return ValidateEndpoints(endpoints, nil)
 }
 
-// ValidateEndpointsUpdate validates Endpoints on update. NodeName changes are
-// allowed during update to accommodate the case where nodeIP or PodCIDR is
-// reused. An existing endpoint ip will have a different nodeName if this
-// happens.
+// ValidateEndpointsUpdate 校验 Endpoints 更新时的合法性；允许 NodeName 变化以适配 nodeIP/PodCIDR 被复用的场景。
 func ValidateEndpointsUpdate(newEndpoints, oldEndpoints *core.Endpoints) field.ErrorList {
 	allErrs := ValidateObjectMetaUpdate(&newEndpoints.ObjectMeta, &oldEndpoints.ObjectMeta, field.NewPath("metadata"))
 	allErrs = append(allErrs, ValidateEndpoints(newEndpoints, oldEndpoints)...)
 	return allErrs
 }
 
+// validateEndpointSubsets 校验 EndpointSubset 列表：地址、端口及就绪/未就绪地址的分组是否合法。
 func validateEndpointSubsets(subsets []core.EndpointSubset, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for i := range subsets {
@@ -8719,6 +8772,7 @@ func validateEndpointSubsets(subsets []core.EndpointSubset, fldPath *field.Path)
 	return allErrs
 }
 
+// validateEndpointAddress 校验单个 EndpointAddress：IP、hostname、nodeName 与 targetRef 是否合法。
 func validateEndpointAddress(address *core.EndpointAddress, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	allErrs = append(allErrs, IsValidIPForLegacyField(fldPath.Child("ip"), address.IP, nil)...)
@@ -8735,16 +8789,7 @@ func validateEndpointAddress(address *core.EndpointAddress, fldPath *field.Path)
 	return allErrs
 }
 
-// ValidateEndpointIP is used to validate Endpoints and EndpointSlice addresses, and also
-// (for historical reasons) external IPs. It disallows certain address types that don't
-// make sense in those contexts. Note that this function is _almost_, but not exactly,
-// equivalent to net.IP.IsGlobalUnicast(). (Unlike IsGlobalUnicast, it allows global
-// multicast IPs, which is probably a bug.)
-//
-// This function should not be used for new validations; the exact set of IPs that do and
-// don't make sense in a particular field is context-dependent (e.g., localhost makes
-// sense in some places; unspecified IPs make sense in fields that are used as bind
-// addresses rather than destination addresses).
+// ValidateEndpointIP 校验 Endpoints 与 EndpointSlice 地址以及（历史原因）外部 IP 的合法性；禁止某些在此类场景下无意义地址类型。
 func ValidateEndpointIP(ipAddress string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	ip := netutils.ParseIPSloppy(ipAddress)
@@ -8767,6 +8812,7 @@ func ValidateEndpointIP(ipAddress string, fldPath *field.Path) field.ErrorList {
 	return allErrs.WithOrigin("format=endpoint-ip")
 }
 
+// validateEndpointPort 校验单个 EndpointPort：名称、端口与协议是否合法。
 func validateEndpointPort(port *core.EndpointPort, requireName bool, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if requireName && len(port.Name) == 0 {
@@ -8788,7 +8834,7 @@ func validateEndpointPort(port *core.EndpointPort, requireName bool, fldPath *fi
 	return allErrs
 }
 
-// ValidateSecurityContext ensures the security context contains valid settings
+// ValidateSecurityContext 校验 SecurityContext 中的设置是否合法（capabilities、特权、用户/组、seLinuxOptions 等）。
 func ValidateSecurityContext(sc *core.SecurityContext, fldPath *field.Path, hostUsers, allowSysAdminWhenPrivilegeEscalationFalse bool) field.ErrorList {
 	allErrs := field.ErrorList{}
 	// this should only be true for testing since SecurityContext is defaulted by the core
@@ -8880,6 +8926,7 @@ var (
 	invalidUserNameDotsSpacesRegex = regexp.MustCompile(`^[\. ]+$`)
 )
 
+// validateWindowsSecurityContextOptions 校验 Windows 容器专属的安全上下文选项是否合法。
 func validateWindowsSecurityContextOptions(windowsOptions *core.WindowsSecurityContextOptions, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -8959,6 +9006,7 @@ func validateWindowsSecurityContextOptions(windowsOptions *core.WindowsSecurityC
 	return allErrs
 }
 
+// validateWindowsHostProcessPod 校验 Windows HostProcess Pod 的相关字段配置是否合法。
 func validateWindowsHostProcessPod(podSpec *core.PodSpec, fieldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -9021,7 +9069,7 @@ func validateWindowsHostProcessPod(podSpec *core.PodSpec, fieldPath *field.Path)
 	return allErrs
 }
 
-// validateOS validates the OS field within pod spec
+// validateOS 校验 PodSpec 中的 OS 字段是否合法。
 func validateOS(podSpec *core.PodSpec, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	os := podSpec.OS
@@ -9043,6 +9091,7 @@ var validLogStreams = sets.New[string](
 	core.LogStreamAll,
 )
 
+// ValidatePodLogOptions 校验 Pod 日志请求选项：容器、跟随、尾部行数、时间戳等参数是否合法且互斥。
 func ValidatePodLogOptions(opts *core.PodLogOptions, allowStreamSelection bool) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if opts.TailLines != nil && *opts.TailLines < 0 {
@@ -9080,7 +9129,7 @@ var (
 	supportedLoadBalancerIPMode = sets.New(core.LoadBalancerIPModeVIP, core.LoadBalancerIPModeProxy)
 )
 
-// ValidateLoadBalancerStatus validates required fields on a LoadBalancerStatus
+// ValidateLoadBalancerStatus 校验 LoadBalancerStatus 的必填字段是否合法。
 func ValidateLoadBalancerStatus(status, oldStatus *core.LoadBalancerStatus, fldPath *field.Path, spec *core.ServiceSpec) field.ErrorList {
 	allErrs := field.ErrorList{}
 	ingrPath := fldPath.Child("ingress")
@@ -9125,10 +9174,7 @@ func ValidateLoadBalancerStatus(status, oldStatus *core.LoadBalancerStatus, fldP
 	return allErrs
 }
 
-// validateVolumeNodeAffinity tests that the PersistentVolume.NodeAffinity has valid data
-// returns:
-// - true if volumeNodeAffinity is set
-// - errorList if there are validation errors
+// validateVolumeNodeAffinity 校验 PV.NodeAffinity 数据；返回是否已设置及错误列表。
 func validateVolumeNodeAffinity(nodeAffinity *core.VolumeNodeAffinity, opts PersistentVolumeSpecValidationOptions, fldPath *field.Path) (bool, field.ErrorList) {
 	allErrs := field.ErrorList{}
 
@@ -9145,6 +9191,7 @@ func validateVolumeNodeAffinity(nodeAffinity *core.VolumeNodeAffinity, opts Pers
 	return true, allErrs
 }
 
+// IsDecremented 判断更新值是否小于旧值（用于数值只能递增的校验场景）。
 func IsDecremented(update, old *int32) bool {
 	if update == nil && old != nil {
 		return true
@@ -9155,7 +9202,7 @@ func IsDecremented(update, old *int32) bool {
 	return *update < *old
 }
 
-// ValidateProcMountType tests that the argument is a valid ProcMountType.
+// ValidateProcMountType 校验参数是否为合法的 ProcMountType。
 func ValidateProcMountType(fldPath *field.Path, procMountType core.ProcMountType) *field.Error {
 	switch procMountType {
 	case core.DefaultProcMount, core.UnmaskedProcMount:
@@ -9169,7 +9216,7 @@ var (
 	supportedScheduleActions = sets.New(core.DoNotSchedule, core.ScheduleAnyway)
 )
 
-// validateTopologySpreadConstraints validates given TopologySpreadConstraints.
+// validateTopologySpreadConstraints 校验给定的 TopologySpreadConstraints 列表是否合法。
 func validateTopologySpreadConstraints(constraints []core.TopologySpreadConstraint, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -9230,7 +9277,7 @@ func validateTopologySpreadConstraints(constraints []core.TopologySpreadConstrai
 	return allErrs
 }
 
-// validateMinDomains tests that the argument is a valid MinDomains.
+// validateMinDomains 校验 minDomains 参数是否合法。
 func validateMinDomains(fldPath *field.Path, minDomains *int32, action core.UnsatisfiableConstraintAction) field.ErrorList {
 	if minDomains == nil {
 		return nil
@@ -9244,7 +9291,7 @@ func validateMinDomains(fldPath *field.Path, minDomains *int32, action core.Unsa
 	return allErrs
 }
 
-// ValidateTopologyKey tests that the argument is a valid TopologyKey.
+// ValidateTopologyKey 校验参数是否为合法的 TopologyKey。
 func ValidateTopologyKey(fldPath *field.Path, topologyKey string) *field.Error {
 	if len(topologyKey) == 0 {
 		return field.Required(fldPath, "can not be empty")
@@ -9252,7 +9299,7 @@ func ValidateTopologyKey(fldPath *field.Path, topologyKey string) *field.Error {
 	return nil
 }
 
-// ValidateWhenUnsatisfiable tests that the argument is a valid UnsatisfiableConstraintAction.
+// ValidateWhenUnsatisfiable 校验参数是否为合法的 UnsatisfiableConstraintAction。
 func ValidateWhenUnsatisfiable(fldPath *field.Path, action core.UnsatisfiableConstraintAction) *field.Error {
 	if !supportedScheduleActions.Has(action) {
 		return field.NotSupported(fldPath, action, sets.List(supportedScheduleActions))
@@ -9260,8 +9307,7 @@ func ValidateWhenUnsatisfiable(fldPath *field.Path, action core.UnsatisfiableCon
 	return nil
 }
 
-// ValidateSpreadConstraintNotRepeat tests that if `constraint` duplicates with `existingConstraintPairs`
-// on TopologyKey and WhenUnsatisfiable fields.
+// ValidateSpreadConstraintNotRepeat 校验给定约束是否在 TopologyKey 与 WhenUnsatisfiable 字段上与已有约束重复。
 func ValidateSpreadConstraintNotRepeat(fldPath *field.Path, constraint core.TopologySpreadConstraint, restingConstraints []core.TopologySpreadConstraint) *field.Error {
 	for _, restingConstraint := range restingConstraints {
 		if constraint.TopologyKey == restingConstraint.TopologyKey &&
@@ -9276,7 +9322,7 @@ var (
 	supportedPodTopologySpreadNodePolicies = sets.New(core.NodeInclusionPolicyIgnore, core.NodeInclusionPolicyHonor)
 )
 
-// validateNodeInclusionPolicy tests that the argument is a valid NodeInclusionPolicy.
+// validateNodeInclusionPolicy 校验参数是否为合法的 NodeInclusionPolicy。
 func validateNodeInclusionPolicy(fldPath *field.Path, policy *core.NodeInclusionPolicy) *field.Error {
 	if policy == nil {
 		return nil
@@ -9288,10 +9334,7 @@ func validateNodeInclusionPolicy(fldPath *field.Path, policy *core.NodeInclusion
 	return nil
 }
 
-// ValidateMatchLabelKeysAndMismatchLabelKeys checks if both matchLabelKeys and mismatchLabelKeys are valid.
-// - validate that all matchLabelKeys and mismatchLabelKeys are valid label names.
-// - validate that the user doens't specify the same key in both matchLabelKeys and labelSelector.
-// - validate that any matchLabelKeys are not duplicated with mismatchLabelKeys.
+// ValidateMatchLabelKeysAndMismatchLabelKeys 校验 matchLabelKeys 与 mismatchLabelKeys：均为合法标签名，且同一键不能同时出现在两者中。
 func ValidateMatchLabelKeysAndMismatchLabelKeys(fldPath *field.Path, matchLabelKeys, mismatchLabelKeys []string, labelSelector *metav1.LabelSelector) field.ErrorList {
 	var allErrs field.ErrorList
 	// 1. validate that all matchLabelKeys and mismatchLabelKeys are valid label names.
@@ -9340,7 +9383,7 @@ func ValidateMatchLabelKeysAndMismatchLabelKeys(fldPath *field.Path, matchLabelK
 	return allErrs
 }
 
-// ValidateMatchLabelKeysInTopologySpread tests that the elements are a valid label name and are not already included in labelSelector.
+// ValidateMatchLabelKeysInTopologySpread 校验拓扑分布约束中 matchLabelKeys 的元素为合法标签名且未包含在 labelSelector 中。
 func ValidateMatchLabelKeysInTopologySpread(fldPath *field.Path, matchLabelKeys []string, labelSelector *metav1.LabelSelector) field.ErrorList {
 	if len(matchLabelKeys) == 0 {
 		return nil
@@ -9370,8 +9413,7 @@ func ValidateMatchLabelKeysInTopologySpread(fldPath *field.Path, matchLabelKeys 
 	return allErrs
 }
 
-// validateLabelKeys tests that the label keys are a valid label name.
-// It's intended to be used for matchLabelKeys or mismatchLabelKeys.
+// validateLabelKeys 校验标签键列表是否为合法标签名；用于 matchLabelKeys 或 mismatchLabelKeys。
 func validateLabelKeys(fldPath *field.Path, labelKeys []string, labelSelector *metav1.LabelSelector) field.ErrorList {
 	if len(labelKeys) == 0 {
 		return nil
@@ -9389,9 +9431,7 @@ func validateLabelKeys(fldPath *field.Path, labelKeys []string, labelSelector *m
 	return allErrs
 }
 
-// ValidateServiceClusterIPsRelatedFields validates .spec.ClusterIPs,,
-// .spec.IPFamilies, .spec.ipFamilyPolicy.  This is exported because it is used
-// during IP init and allocation.
+// ValidateServiceClusterIPsRelatedFields 校验 .spec.ClusterIPs、.spec.IPFamilies、.spec.ipFamilyPolicy；因 IP 初始化与分配需要使用而导出。
 func ValidateServiceClusterIPsRelatedFields(service, oldService *core.Service) field.ErrorList {
 	// ClusterIP, ClusterIPs, IPFamilyPolicy and IPFamilies are validated prior (all must be unset) for ExternalName service
 	if service.Spec.Type == core.ServiceTypeExternalName {
@@ -9516,7 +9556,7 @@ func ValidateServiceClusterIPsRelatedFields(service, oldService *core.Service) f
 	return allErrs
 }
 
-// specific validation for clusterIPs in cases of user upgrading or downgrading to/from dualstack
+// validateUpgradeDowngradeClusterIPs 针对用户升级或降级到/自双栈场景的 clusterIPs 专项校验。
 func validateUpgradeDowngradeClusterIPs(oldService, service *core.Service) field.ErrorList {
 	allErrs := make(field.ErrorList, 0)
 
@@ -9574,7 +9614,7 @@ func validateUpgradeDowngradeClusterIPs(oldService, service *core.Service) field
 	return allErrs
 }
 
-// specific validation for ipFamilies in cases of user upgrading or downgrading to/from dualstack
+// validateUpgradeDowngradeIPFamilies 针对用户升级或降级到/自双栈场景的 ipFamilies 专项校验。
 func validateUpgradeDowngradeIPFamilies(oldService, service *core.Service) field.ErrorList {
 	allErrs := make(field.ErrorList, 0)
 	// bail out early for ExternalName
@@ -9640,13 +9680,14 @@ func validateUpgradeDowngradeIPFamilies(oldService, service *core.Service) field
 	return allErrs
 }
 
+// isHeadlessService 判断 Service 是否为 headless（无集群 IP）服务。
 func isHeadlessService(service *core.Service) bool {
 	return service != nil &&
 		len(service.Spec.ClusterIPs) == 1 &&
 		service.Spec.ClusterIPs[0] == core.ClusterIPNone
 }
 
-// validateLoadBalancerClassField validation for loadBalancerClass
+// validateLoadBalancerClassField 校验 Service 的 loadBalancerClass 字段。
 func validateLoadBalancerClassField(oldService, service *core.Service) field.ErrorList {
 	allErrs := make(field.ErrorList, 0)
 	if oldService != nil {
@@ -9674,12 +9715,12 @@ func validateLoadBalancerClassField(oldService, service *core.Service) field.Err
 	return allErrs
 }
 
-// isTypeLoadBalancer tests service type is loadBalancer or not
+// isTypeLoadBalancer 判断 Service 类型是否为 LoadBalancer。
 func isTypeLoadBalancer(service *core.Service) bool {
 	return service.Spec.Type == core.ServiceTypeLoadBalancer
 }
 
-// sameLoadBalancerClass check two services have the same loadBalancerClass or not
+// sameLoadBalancerClass 判断两个 Service 的 loadBalancerClass 是否相同。
 func sameLoadBalancerClass(oldService, service *core.Service) bool {
 	if oldService.Spec.LoadBalancerClass == nil && service.Spec.LoadBalancerClass == nil {
 		return true
@@ -9690,6 +9731,7 @@ func sameLoadBalancerClass(oldService, service *core.Service) bool {
 	return *oldService.Spec.LoadBalancerClass == *service.Spec.LoadBalancerClass
 }
 
+// ValidatePodAffinityTermSelector 校验 PodAffinityTerm 中标签选择器的合法性，并兼容历史遗留的非法标签值。
 func ValidatePodAffinityTermSelector(podAffinityTerm core.PodAffinityTerm, allowInvalidLabelValueInSelector bool, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	labelSelectorValidationOptions := unversionedvalidation.LabelSelectorValidationOptions{AllowInvalidLabelValueInSelector: allowInvalidLabelValueInSelector}
@@ -9711,6 +9753,7 @@ var (
 	initMaskNodeSelectorLabelChangeEqualities sync.Once
 )
 
+// getMaskNodeSelectorLabelChangeEqualities 构造用于比较节点选择器的 Equalities，屏蔽因掩码处理带来的无关差异。
 func getMaskNodeSelectorLabelChangeEqualities() conversion.Equalities {
 	initMaskNodeSelectorLabelChangeEqualities.Do(func() {
 		var eqs = apiequality.Semantic.Copy()
@@ -9731,6 +9774,7 @@ func getMaskNodeSelectorLabelChangeEqualities() conversion.Equalities {
 	return maskNodeSelectorLabelChangeEqualities
 }
 
+// validatePvNodeAffinity 校验 PV 节点亲和性在更新时是否合法。
 func validatePvNodeAffinity(newPvNodeAffinity, oldPvNodeAffinity *core.VolumeNodeAffinity, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if !getMaskNodeSelectorLabelChangeEqualities().DeepEqual(newPvNodeAffinity, oldPvNodeAffinity) {
@@ -9739,6 +9783,7 @@ func validatePvNodeAffinity(newPvNodeAffinity, oldPvNodeAffinity *core.VolumeNod
 	return allErrs
 }
 
+// validateNodeSelectorMutation 校验节点选择器的变更：仅允许追加，不允许修改或删除。
 func validateNodeSelectorMutation(fldPath *field.Path, newNodeSelector, oldNodeSelector map[string]string) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -9752,6 +9797,7 @@ func validateNodeSelectorMutation(fldPath *field.Path, newNodeSelector, oldNodeS
 	return allErrs
 }
 
+// validateNodeAffinityMutation 校验节点亲和性的变更：仅允许追加选择器项，不允许修改或删除。
 func validateNodeAffinityMutation(nodeAffinityPath *field.Path, newNodeAffinity, oldNodeAffinity *core.NodeAffinity) field.ErrorList {
 	var allErrs field.ErrorList
 	// If old node affinity was nil, anything can be set.
@@ -9782,6 +9828,7 @@ func validateNodeAffinityMutation(nodeAffinityPath *field.Path, newNodeAffinity,
 	return allErrs
 }
 
+// validateNodeSelectorTermHasOnlyAdditions 判断新的选择器项是否仅相对旧项有新增的表达式。
 func validateNodeSelectorTermHasOnlyAdditions(newTerm, oldTerm core.NodeSelectorTerm) bool {
 	if len(oldTerm.MatchExpressions) == 0 && len(oldTerm.MatchFields) == 0 {
 		if len(newTerm.MatchExpressions) > 0 || len(newTerm.MatchFields) > 0 {
@@ -9812,6 +9859,7 @@ func validateNodeSelectorTermHasOnlyAdditions(newTerm, oldTerm core.NodeSelector
 
 var validSupplementalGroupsPolicies = sets.New(core.SupplementalGroupsPolicyMerge, core.SupplementalGroupsPolicyStrict)
 
+// validateSupplementalGroupsPolicy 校验 supplementalGroupsPolicy 字段是否为合法取值。
 func validateSupplementalGroupsPolicy(supplementalGroupsPolicy *core.SupplementalGroupsPolicy, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	if !validSupplementalGroupsPolicies.Has(*supplementalGroupsPolicy) {
@@ -9820,6 +9868,7 @@ func validateSupplementalGroupsPolicy(supplementalGroupsPolicy *core.Supplementa
 	return allErrors
 }
 
+// validateContainerStatusUsers 校验容器状态中的用户 ID 信息（runAsUser、附加组等）是否合法。
 func validateContainerStatusUsers(containerStatuses []core.ContainerStatus, fldPath *field.Path, podOS *core.PodOS) field.ErrorList {
 	allErrors := field.ErrorList{}
 	osName := core.Linux
@@ -9862,6 +9911,7 @@ func validateContainerStatusUsers(containerStatuses []core.ContainerStatus, fldP
 	return allErrors
 }
 
+// validateContainerStatusNoAllocatedResourcesStatus 校验未使用扩展资源声明时，容器状态不应包含 allocatedResources 信息。
 func validateContainerStatusNoAllocatedResourcesStatus(containerStatuses []core.ContainerStatus, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 
@@ -9875,9 +9925,7 @@ func validateContainerStatusNoAllocatedResourcesStatus(containerStatuses []core.
 	return allErrors
 }
 
-// validateContainerStatusAllocatedResourcesStatus iterate the allocated resources health and validate:
-// - resourceName matches one of resources in container's resource requirements
-// - resourceID is not empty and unique
+// validateContainerStatusAllocatedResourcesStatus 遍历已分配资源的健康状态并校验：资源名匹配容器资源需求，resourceID 非空且唯一。
 func validateContainerStatusAllocatedResourcesStatus(containerStatuses []core.ContainerStatus, fldPath *field.Path, containers []core.Container, podStatus *core.PodStatus) field.ErrorList {
 	allErrors := field.ErrorList{}
 
@@ -9969,6 +10017,7 @@ func validateContainerStatusAllocatedResourcesStatus(containerStatuses []core.Co
 	return allErrors
 }
 
+// matchesExtendedResourceClaimStatus 判断容器状态中的扩展资源声明状态是否与容器资源需求中的声明匹配。
 func matchesExtendedResourceClaimStatus(resourceStatusName core.ResourceName, container core.Container, extendedResourceClaimStatus *core.PodExtendedResourceClaimStatus) bool {
 	if extendedResourceClaimStatus == nil {
 		return false
@@ -9992,9 +10041,7 @@ func matchesExtendedResourceClaimStatus(resourceStatusName core.ResourceName, co
 	return false
 }
 
-// resourceStatusName returns the ResourceStatus.Name form accepted for pod resource claims.
-// ResourceClaim.Request is optional, so the encoded form is either
-// "claim:<claimName>" or "claim:<claimName>/<requestName>".
+// resourceStatusName 返回 Pod 资源声明可接受的 ResourceStatus.Name 形式；由于 Request 可选，编码为 claim:<name> 或 claim:<name>/<request>。
 func resourceStatusName(claimName, requestName string) core.ResourceName {
 	if requestName == "" {
 		return core.ResourceName(resourceStatusClaimPrefix + claimName)
@@ -10002,6 +10049,7 @@ func resourceStatusName(claimName, requestName string) core.ResourceName {
 	return core.ResourceName(resourceStatusClaimPrefix + claimName + "/" + requestName)
 }
 
+// parseResourceStatusName 解析 ResourceStatus.Name 编码形式，返回声明名与请求名。
 func parseResourceStatusName(resourceStatusName string) (claimName, requestName string, ok bool) {
 	claimRef, ok := strings.CutPrefix(resourceStatusName, resourceStatusClaimPrefix)
 	if !ok {
@@ -10017,6 +10065,7 @@ func parseResourceStatusName(resourceStatusName string) (claimName, requestName 
 	return claimName, requestName, true
 }
 
+// validateImageVolumeSource 校验 image 卷源：引用字段是否合法且仅设置一种引用方式。
 func validateImageVolumeSource(imageVolume *core.ImageVolumeSource, fldPath *field.Path, opts PodValidationOptions) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if !opts.AllowEmptyImageVolumeReference && len(imageVolume.Reference) == 0 {
@@ -10026,7 +10075,7 @@ func validateImageVolumeSource(imageVolume *core.ImageVolumeSource, fldPath *fie
 	return allErrs
 }
 
-// isRestartableInitContainer returns true if the container has ContainerRestartPolicyAlways.
+// isRestartableInitContainer 判断容器是否设置了 ContainerRestartPolicyAlways（即可重启的 init 容器/sidecar）。
 func isRestartableInitContainer(initContainer *core.Container) bool {
 	if initContainer == nil || initContainer.RestartPolicy == nil {
 		return false
@@ -10034,20 +10083,17 @@ func isRestartableInitContainer(initContainer *core.Container) bool {
 	return *initContainer.RestartPolicy == core.ContainerRestartPolicyAlways
 }
 
-// IsValidIPForLegacyField is a wrapper around validation.IsValidIPForLegacyField that
-// handles setting strictValidation correctly. This is only for fields that use legacy IP
-// address validation; use validation.IsValidIP for new fields.
+// IsValidIPForLegacyField 对使用旧版 IP 校验的字段的包装，负责正确设置 strictValidation；新字段应使用 IsValidIP。
 func IsValidIPForLegacyField(fldPath *field.Path, value string, validOldIPs []string) field.ErrorList {
 	return validation.IsValidIPForLegacyField(fldPath, value, utilfeature.DefaultFeatureGate.Enabled(features.StrictIPCIDRValidation), validOldIPs)
 }
 
-// IsValidCIDRForLegacyField is a wrapper around validation.IsValidCIDRForLegacyField that
-// handles setting strictValidation correctly. This is only for fields that use legacy CIDR
-// value validation; use validation.IsValidCIDR for new fields.
+// IsValidCIDRForLegacyField 对使用旧版 CIDR 校验的字段的包装，负责正确设置 strictValidation；新字段应使用 IsValidCIDR。
 func IsValidCIDRForLegacyField(fldPath *field.Path, value string, validOldCIDRs []string) field.ErrorList {
 	return validation.IsValidCIDRForLegacyField(fldPath, value, utilfeature.DefaultFeatureGate.Enabled(features.StrictIPCIDRValidation), validOldCIDRs)
 }
 
+// validateNodeSwapStatus 校验节点 swap 状态中的字段是否合法。
 func validateNodeSwapStatus(nodeSwapStatus *core.NodeSwapStatus, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 
@@ -10067,6 +10113,7 @@ func validateNodeSwapStatus(nodeSwapStatus *core.NodeSwapStatus, fldPath *field.
 	return allErrors
 }
 
+// validateSchedulingGroup 校验 Pod 调度组（schedulingGates 相关状态）字段是否合法。
 func validateSchedulingGroup(schedulingGroup *core.PodSchedulingGroup, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if schedulingGroup.PodGroupName == nil {
@@ -10081,6 +10128,7 @@ func validateSchedulingGroup(schedulingGroup *core.PodSchedulingGroup, fldPath *
 	return allErrs
 }
 
+// validateImageVolumeStatus 校验 image 卷状态中的引用信息是否合法。
 func validateImageVolumeStatus(imageVolumeStatus *core.ImageVolumeStatus, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 
@@ -10100,7 +10148,7 @@ func validateImageVolumeStatus(imageVolumeStatus *core.ImageVolumeStatus, fldPat
 	return allErrors
 }
 
-// validateVolumeStatus returns an error if the given struct has more than 1 populated field.
+// validateVolumeStatus 校验卷状态结构体中最多只能填充一个字段。
 func validateVolumeStatus(volumeStatus *core.VolumeStatus, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 

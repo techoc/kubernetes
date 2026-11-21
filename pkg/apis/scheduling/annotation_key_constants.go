@@ -17,18 +17,17 @@ limitations under the License.
 package scheduling
 
 const (
-	// GroupTemplateNameAnnotation maps a child resource to its corresponding
-	// PodGroupTemplate or CompositePodGroupTemplate defined in the parent Workload.
-	// For example, in a TrainJob -> JobSet -> Job hierarchy, this annotation tells
-	// the child Job which template from the root Workload to use to create its PodGroup.
+	// GroupTemplateNameAnnotation 把子资源映射到父 Workload 中定义的
+	// PodGroupTemplate 或 CompositePodGroupTemplate。
+	// 例如在 TrainJob -> JobSet -> Job 这样的层级中，该注解告诉子 Job
+	// 应使用根 Workload 的哪个模板来创建自己的 PodGroup。
 	GroupTemplateNameAnnotation = GroupName + "/group-template-name"
 
-	// ParentCompositePodGroupAnnotation specifies the exact name of the runtime
-	// CompositePodGroup instance the child's PodGroup must attach to.
+	// ParentCompositePodGroupAnnotation 指定子对象的 PodGroup 必须挂载到的
+	// CompositePodGroup 运行实例的精确名称。
 	//
-	// This is required only in a delegated lifecycle model, where the parent
-	// (e.g., JobSet) creates the Workload and CompositePodGroup, but the child
-	// (e.g., Job) creates its own PodGroup. If the parent centrally manages
-	// both the CompositePodGroup and PodGroups, this annotation is unnecessary.
+	// 该注解仅在“生命周期委派”模型下才需要：父对象（如 JobSet）创建
+	// Workload 和 CompositePodGroup，而子对象（如 Job）自行创建 PodGroup。
+	// 若由父对象统一管理 CompositePodGroup 和所有 PodGroup，则不需要此注解。
 	ParentCompositePodGroupAnnotation = GroupName + "/parent-compositepodgroup"
 )

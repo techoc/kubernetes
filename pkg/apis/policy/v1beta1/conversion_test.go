@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/policy"
 )
 
+// TestConversion 通过 scheme 校验 v1beta1 与内部 PodDisruptionBudget 的双向转换。
 func TestConversion(t *testing.T) {
 	testcases := []struct {
 		Name      string
@@ -37,6 +38,7 @@ func TestConversion(t *testing.T) {
 		ExpectErr string
 	}{
 		{
+			// 空 selector 在内部表示中会补 Exists 条件，避免误选全部 Pod。
 			Name: "v1beta1 to internal with empty selector",
 			In: &v1beta1.PodDisruptionBudget{
 				Spec: v1beta1.PodDisruptionBudgetSpec{
@@ -58,12 +60,14 @@ func TestConversion(t *testing.T) {
 			},
 		},
 		{
+			// nil selector 表示不选择任何对象，转换后应保持为 nil。
 			Name:      "v1beta1 to internal with nil selector",
 			In:        &v1beta1.PodDisruptionBudget{},
 			Out:       &policy.PodDisruptionBudget{},
 			ExpectOut: &policy.PodDisruptionBudget{},
 		},
 		{
+			// 已有的 MatchLabels 应原样保留。
 			Name: "v1 to internal with existing selector",
 			In: &v1beta1.PodDisruptionBudget{
 				Spec: v1beta1.PodDisruptionBudgetSpec{
@@ -86,6 +90,7 @@ func TestConversion(t *testing.T) {
 			},
 		},
 		{
+			// 内部表示中的 DoesNotExist 条件在转回 v1beta1 时应被丢弃。
 			Name: "v1beta1 to internal with existing pdb selector",
 			In: &v1beta1.PodDisruptionBudget{
 				Spec: v1beta1.PodDisruptionBudgetSpec{
@@ -115,6 +120,7 @@ func TestConversion(t *testing.T) {
 			},
 		},
 		{
+			// 反向转换时同样会补出 Exists 条件。
 			Name: "internal to v1beta1 with empty selector",
 			In: &policy.PodDisruptionBudget{
 				Spec: policy.PodDisruptionBudgetSpec{
@@ -136,12 +142,14 @@ func TestConversion(t *testing.T) {
 			},
 		},
 		{
+			// nil selector 双向转换后仍应为 nil。
 			Name:      "internal to v1beta1 with nil selector",
 			In:        &policy.PodDisruptionBudget{},
 			Out:       &v1beta1.PodDisruptionBudget{},
 			ExpectOut: &v1beta1.PodDisruptionBudget{},
 		},
 		{
+			// 已有标签的双向转换必须保持相等。
 			Name: "internal to v1beta1 with existing selector",
 			In: &policy.PodDisruptionBudget{
 				Spec: policy.PodDisruptionBudgetSpec{
@@ -165,6 +173,7 @@ func TestConversion(t *testing.T) {
 		},
 	}
 
+	// 同时注册内部与外部类型，scheme.Convert 才能找到转换路径。
 	scheme := runtime.NewScheme()
 	if err := policy.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
@@ -174,6 +183,7 @@ func TestConversion(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// 逐条转换并断言预期错误与结果。
 	for _, tc := range testcases {
 		t.Run(tc.Name, func(t *testing.T) {
 			err := scheme.Convert(tc.In, tc.Out, nil)

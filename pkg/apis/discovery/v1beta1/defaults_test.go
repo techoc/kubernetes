@@ -28,12 +28,15 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestSetDefaultEndpointPort 验证 EndpointSlice 中 EndpointPort 的默认值处理：
+// 空名称和空协议会被补全，显式设置的取值不会被覆盖。
 func TestSetDefaultEndpointPort(t *testing.T) {
 	emptyStr := ""
 	fooStr := "foo"
 	protoTCP := v1.ProtocolTCP
 	protoUDP := v1.ProtocolUDP
 
+	// 每个用例包含输入对象与期望对象；这里的名称会在 t.Run 中作为子测试名。
 	tests := map[string]struct {
 		original *discovery.EndpointSlice
 		expected *discovery.EndpointSlice
@@ -69,6 +72,7 @@ func TestSetDefaultEndpointPort(t *testing.T) {
 	for _, test := range tests {
 		actual := test.original
 		expected := test.expected
+		// 直接调用 Scheme.Default，确保默认函数已正确注册到 legacy scheme。
 		legacyscheme.Scheme.Default(actual)
 		if !apiequality.Semantic.DeepEqual(actual, expected) {
 			t.Error(cmp.Diff(expected, actual))

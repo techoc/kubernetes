@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	// These constants repeats previous HPA behavior
+	// 这些常量复刻了旧版 HPA 的默认伸缩行为，保证行为兼容。
 	scaleUpLimitPercent         int32 = 100
 	scaleUpLimitMinimumPods     int32 = 4
 	scaleUpPeriod               int32 = 15
@@ -48,8 +48,8 @@ var (
 		},
 	}
 	scaleDownPeriod int32 = 15
-	// Currently we can set the downscaleStabilizationWindow from the command line
-	// So we can not rewrite the command line option from here
+	// 缩容稳定窗口可以通过命令行设置，因此这里不提供默认值覆盖它，
+	// 保留 nil 让 controller 使用命令行配置。
 	scaleDownLimitPercent    int32 = 100
 	defaultHPAScaleDownRules       = autoscalingv2.HPAScalingRules{
 		StabilizationWindowSeconds: nil,
@@ -64,15 +64,21 @@ var (
 	}
 )
 
+// addDefaultingFuncs 向 scheme 注册 v2 HPA 的默认值函数，
+// 由生成的 register/defaults 代码在 init 时调用。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_HorizontalPodAutoscaler 为 v2 HPA 设置默认值：
+// MinReplicas 默认为 1；没有任何指标时补一条默认的 CPU 利用率指标；
+// 若设置了 Behavior，再补齐其中未指定的伸缩规则字段。
 func SetDefaults_HorizontalPodAutoscaler(obj *autoscalingv2.HorizontalPodAutoscaler) {
 	if obj.Spec.MinReplicas == nil {
 		obj.Spec.MinReplicas = ptr.To[int32](1)
 	}
 
+	// 没有指标时 HPA 无法工作，补一条 CPU 利用率指标作为默认。
 	if len(obj.Spec.Metrics) == 0 {
 		utilizationDefaultVal := int32(autoscaling.DefaultCPUUtilization)
 		obj.Spec.Metrics = []autoscalingv2.MetricSpec{
@@ -91,36 +97,38 @@ func SetDefaults_HorizontalPodAutoscaler(obj *autoscalingv2.HorizontalPodAutosca
 	SetDefaults_HorizontalPodAutoscalerBehavior(obj)
 }
 
-// SetDefaults_HorizontalPodAutoscalerBehavior fills the behavior if it contains
-// at least one scaling rule policy (for scale-up or scale-down)
+// SetDefaults_HorizontalPodAutoscalerBehavior 在 Behavior 非 nil 时，
+// 为其中未指定的伸缩方向补齐默认规则（包括扩容和缩容两个方向）。
 func SetDefaults_HorizontalPodAutoscalerBehavior(obj *autoscalingv2.HorizontalPodAutoscaler) {
-	// If behavior contains a scaling rule policy (either for scale-up, scale-down, or both), we
-	// should fill all the unset scaling policy fields (i.e. StabilizationWindowSeconds,
-	// SelectPolicy, Policies) with default values
+	// 只要设置了 Behavior，就用默认值补齐 ScaleUp/ScaleDown 中未指定的字段
+	// （StabilizationWindowSeconds、SelectPolicy、Policies），
+	// 让 controller 端不必再处理 nil 字段。
 	if obj.Spec.Behavior != nil {
 		obj.Spec.Behavior.ScaleUp = GenerateHPAScaleUpRules(obj.Spec.Behavior.ScaleUp)
 		obj.Spec.Behavior.ScaleDown = GenerateHPAScaleDownRules(obj.Spec.Behavior.ScaleDown)
 	}
 }
 
-// GenerateHPAScaleUpRules returns a fully-initialized HPAScalingRules value
-// We guarantee that no pointer in the structure will have the 'nil' value
+// GenerateHPAScaleUpRules 返回一份完整初始化的扩容规则。
+// 保证返回结构中没有任何指针字段为 nil，调用方可以安全解引用。
 func GenerateHPAScaleUpRules(scalingRules *autoscalingv2.HPAScalingRules) *autoscalingv2.HPAScalingRules {
 	defaultScalingRules := defaultHPAScaleUpRules.DeepCopy()
 	return copyHPAScalingRules(scalingRules, defaultScalingRules)
 }
 
-// GenerateHPAScaleDownRules returns a fully-initialized HPAScalingRules value
-// We guarantee that no pointer in the structure will have the 'nil' value
-// EXCEPT StabilizationWindowSeconds, for reasoning check the comment for defaultHPAScaleDownRules
+// GenerateHPAScaleDownRules 返回一份完整初始化的缩容规则。
+// 保证除 StabilizationWindowSeconds 外没有指针字段为 nil；
+// 它保持 nil 的原因见 defaultHPAScaleDownRules 处的说明（命令行可配置）。
 func GenerateHPAScaleDownRules(scalingRules *autoscalingv2.HPAScalingRules) *autoscalingv2.HPAScalingRules {
 	defaultScalingRules := defaultHPAScaleDownRules.DeepCopy()
 	return copyHPAScalingRules(scalingRules, defaultScalingRules)
 }
 
-// copyHPAScalingRules copies all non-`nil` fields in HPA constraint structure
+// copyHPAScalingRules 把 from 中所有非 nil 字段覆盖到 to 上，
+// 返回合并后的规则：用户显式设置的值优先，未设置的字段沿用默认值。
 func copyHPAScalingRules(from, to *autoscalingv2.HPAScalingRules) *autoscalingv2.HPAScalingRules {
 	if from == nil {
+		// 没有用户配置时直接返回默认规则，避免无意义的逐字段判断。
 		return to
 	}
 	if from.SelectPolicy != nil {

@@ -22,9 +22,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addConversionFuncs 为 Job、JobTemplate、CronJob 注册字段标签转换函数。
+// 这些类型可选择字段很少，只允许 metadata 字段和 status.successful。
 func addConversionFuncs(scheme *runtime.Scheme) error {
 	var err error
-	// Add field label conversions for kinds having selectable nothing but ObjectMeta fields.
+	// 为仅支持 ObjectMeta 字段选择的 Kind 注册字段标签转换。
 	for _, kind := range []string{"Job", "JobTemplate", "CronJob"} { // don't close over range variables
 		err = scheme.AddFieldLabelConversionFunc(SchemeGroupVersion.WithKind(kind),
 			func(label, value string) (string, string, error) {
