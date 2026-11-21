@@ -16,9 +16,8 @@ limitations under the License.
 
 package options
 
-// This file exists to force the desired plugin implementations to be linked.
-// This should probably be part of some configuration fed into the build for a
-// given binary target.
+// 本文件用于强制链接所需的插件实现，确保它们注册到 admission.Plugins 中。
+// 理想情况下这应由二进制目标的构建配置驱动。
 import (
 	"github.com/spf13/pflag"
 
@@ -68,7 +67,8 @@ import (
 	validatingwebhook "k8s.io/apiserver/pkg/admission/plugin/webhook/validating"
 )
 
-// AllOrderedPlugins is the list of all the plugins in order.
+// AllOrderedPlugins 列出所有准入插件及其执行顺序。
+// 顺序决定执行语义：变更类插件先于校验类插件，资源配额与 AlwaysDeny 必须置于末尾。
 var AllOrderedPlugins = []string{
 	admit.PluginName,                        // AlwaysAdmit
 	autoprovision.PluginName,                // NamespaceAutoProvision
@@ -104,8 +104,8 @@ var AllOrderedPlugins = []string{
 	nodedeclaredfeatures.PluginName,         // NodeDeclaredFeatureValidator
 	podresize.PluginName,                    // PodResizeValidator
 
-	// new admission plugins should generally be inserted above here
-	// webhook, resourcequota, and deny plugins must go at the end
+	// 新准入插件通常应插入此处之上；
+	// webhook、resourcequota 与 deny 插件必须放在末尾。
 
 	mutatingadmissionpolicy.PluginName,   // MutatingAdmissionPolicy
 	mutatingwebhook.PluginName,           // MutatingAdmissionWebhook
@@ -115,22 +115,22 @@ var AllOrderedPlugins = []string{
 	deny.PluginName,                      // AlwaysDeny
 }
 
-// registerAllAdmissionPluginFlags registers legacy CLI flag options for admission plugins.
-// No new plugins should use CLI flags to configure themselves.
+// registerAllAdmissionPluginFlags 注册准入插件的旧版命令行标志。
+// 新插件不应再通过命令行标志配置自身。
 func registerAllAdmissionPluginFlags(fs *pflag.FlagSet) {
 	defaulttolerationseconds.RegisterFlags(fs)
 }
 
-// RegisterAllAdmissionPlugins registers all admission plugins.
-// The order of registration is irrelevant, see AllOrderedPlugins for execution order.
+// RegisterAllAdmissionPlugins 注册所有准入插件。
+// 注册顺序无关紧要，执行顺序见 AllOrderedPlugins。
 func RegisterAllAdmissionPlugins(plugins *admission.Plugins) {
-	admit.Register(plugins) // DEPRECATED as no real meaning
+	admit.Register(plugins) // 已废弃，实际无任何作用
 	alwayspullimages.Register(plugins)
 	antiaffinity.Register(plugins)
 	defaulttolerationseconds.Register(plugins)
 	defaultingressclass.Register(plugins)
 	denyserviceexternalips.Register(plugins)
-	deny.Register(plugins) // DEPRECATED as no real meaning
+	deny.Register(plugins) // 已废弃，实际无任何作用
 	eventratelimit.Register(plugins)
 	extendedresourcetoleration.Register(plugins)
 	gc.Register(plugins)
@@ -160,7 +160,7 @@ func RegisterAllAdmissionPlugins(plugins *admission.Plugins) {
 	podresize.Register(plugins)
 }
 
-// DefaultOffAdmissionPlugins get admission plugins off by default for kube-apiserver.
+// DefaultOffAdmissionPlugins 返回 kube-apiserver 中默认关闭的准入插件集合。
 func DefaultOffAdmissionPlugins() sets.Set[string] {
 	defaultOnPlugins := sets.New(
 		lifecycle.PluginName,                    // NamespaceLifecycle
@@ -183,11 +183,11 @@ func DefaultOffAdmissionPlugins() sets.Set[string] {
 		certsubjectrestriction.PluginName,       // CertificateSubjectRestriction
 		defaultingressclass.PluginName,          // DefaultIngressClass
 		podsecurity.PluginName,                  // PodSecurity
-		podtopologylabels.PluginName,            // PodTopologyLabels, only active when feature gate PodTopologyLabelsAdmission is enabled.
-		mutatingadmissionpolicy.PluginName,      // Mutatingadmissionpolicy, only active when feature gate MutatingAdmissionpolicy is enabled
-		validatingadmissionpolicy.PluginName,    // ValidatingAdmissionPolicy, only active when feature gate ValidatingAdmissionPolicy is enabled
-		nodedeclaredfeatures.PluginName,         // NodeDeclaredFeatureValidator, only active when feature gate NodeDeclaredFeatures is enabled
-		podresize.PluginName,                    // PodResizeValidator, only active when feature gate InPlacePodVerticalScaling is enabled
+		podtopologylabels.PluginName,            // PodTopologyLabels，仅在特性门控 PodTopologyLabelsAdmission 启用时生效
+		mutatingadmissionpolicy.PluginName,      // MutatingAdmissionPolicy，仅在特性门控 MutatingAdmissionPolicy 启用时生效
+		validatingadmissionpolicy.PluginName,    // ValidatingAdmissionPolicy，仅在特性门控 ValidatingAdmissionPolicy 启用时生效
+		nodedeclaredfeatures.PluginName,         // NodeDeclaredFeatureValidator，仅在特性门控 NodeDeclaredFeatures 启用时生效
+		podresize.PluginName,                    // PodResizeValidator，仅在特性门控 InPlacePodVerticalScaling 启用时生效
 	)
 
 	return sets.New(AllOrderedPlugins...).Difference(defaultOnPlugins)

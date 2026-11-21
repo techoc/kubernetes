@@ -34,25 +34,21 @@ import (
 	"k8s.io/component-base/featuregate"
 )
 
-// AdmissionOptions holds the admission options.
-// It is a wrap of generic AdmissionOptions.
+// AdmissionOptions 保存准入相关选项，是对通用 AdmissionOptions 的包装。
 type AdmissionOptions struct {
-	// GenericAdmission holds the generic admission options.
+	// GenericAdmission 保存通用的准入选项。
 	GenericAdmission *genericoptions.AdmissionOptions
-	// DEPRECATED flag, should use EnabledAdmissionPlugins and DisabledAdmissionPlugins.
-	// They are mutually exclusive, specify both will lead to an error.
+	// 已废弃的标志，应改用 EnabledAdmissionPlugins 和 DisabledAdmissionPlugins。
+	// 两者互斥，同时指定会报错。
 	PluginNames []string
 }
 
-// NewAdmissionOptions creates a new instance of AdmissionOptions
-// Note:
+// NewAdmissionOptions 创建一个新的 AdmissionOptions 实例。
+// 注意：
 //
-//	In addition it calls RegisterAllAdmissionPlugins to register
-//	all kube-apiserver admission plugins.
-//
-//	Provides the list of RecommendedPluginOrder that holds sane values
-//	that can be used by servers that don't care about admission chain.
-//	Servers that do care can overwrite/append that field after creation.
+//	它会调用 RegisterAllAdmissionPlugins 注册所有 kube-apiserver 准入插件，
+//	并提供一组合理的 RecommendedPluginOrder，适用于不关心准入链的 server；
+//	关心准入链的 server 可在创建后覆盖或追加该字段。
 func NewAdmissionOptions() *AdmissionOptions {
 	options := genericoptions.NewAdmissionOptions()
 	// register all admission plugins
@@ -67,7 +63,7 @@ func NewAdmissionOptions() *AdmissionOptions {
 	}
 }
 
-// AddFlags adds flags related to admission for kube-apiserver to the specified FlagSet
+// AddFlags 将 kube-apiserver 准入相关的标志添加到指定的 FlagSet。
 func (a *AdmissionOptions) AddFlags(fs *pflag.FlagSet) {
 	if a == nil {
 		return
@@ -86,8 +82,8 @@ func (a *AdmissionOptions) AddFlags(fs *pflag.FlagSet) {
 	a.GenericAdmission.AddFlags(fs)
 }
 
-// Validate verifies flags passed to kube-apiserver AdmissionOptions.
-// Kube-apiserver verifies PluginNames and then call generic AdmissionOptions.Validate.
+// Validate 校验传给 kube-apiserver AdmissionOptions 的标志。
+// kube-apiserver 先校验 PluginNames，再调用通用 AdmissionOptions.Validate。
 func (a *AdmissionOptions) Validate() []error {
 	if a == nil {
 		return nil
@@ -110,8 +106,8 @@ func (a *AdmissionOptions) Validate() []error {
 	return errs
 }
 
-// ApplyTo adds the admission chain to the server configuration.
-// Kube-apiserver just call generic AdmissionOptions.ApplyTo.
+// ApplyTo 将准入链添加到 server 配置中。
+// kube-apiserver 只需调用通用的 AdmissionOptions.ApplyTo。
 func (a *AdmissionOptions) ApplyTo(
 	c *server.Config,
 	informers informers.SharedInformerFactory,
@@ -126,14 +122,14 @@ func (a *AdmissionOptions) ApplyTo(
 	}
 
 	if a.PluginNames != nil {
-		// pass PluginNames to generic AdmissionOptions
+		// 将废弃的 PluginNames 转换为通用选项的启用/禁用插件列表。
 		a.GenericAdmission.EnablePlugins, a.GenericAdmission.DisablePlugins = computePluginNames(a.PluginNames, a.GenericAdmission.RecommendedPluginOrder)
 	}
 
 	return a.GenericAdmission.ApplyTo(c, informers, kubeClient, dynamicClient, features, effectiveVersion, pluginInitializers...)
 }
 
-// explicitly disable all plugins that are not in the enabled list
+// computePluginNames 显式禁用所有不在启用列表中的插件。
 func computePluginNames(explicitlyEnabled []string, all []string) (enabled []string, disabled []string) {
 	return explicitlyEnabled, sets.NewString(all...).Difference(sets.NewString(explicitlyEnabled...)).List()
 }

@@ -19,24 +19,24 @@ package modes
 import "k8s.io/apimachinery/pkg/util/sets"
 
 const (
-	// ModeAlwaysAllow is the mode to set all requests as authorized
+	// ModeAlwaysAllow 表示放行所有请求。
 	ModeAlwaysAllow string = "AlwaysAllow"
-	// ModeAlwaysDeny is the mode to set no requests as authorized
+	// ModeAlwaysDeny 表示拒绝所有请求。
 	ModeAlwaysDeny string = "AlwaysDeny"
-	// ModeABAC is the mode to use Attribute Based Access Control to authorize
+	// ModeABAC 表示使用基于属性的访问控制（ABAC）进行授权。
 	ModeABAC string = "ABAC"
-	// ModeWebhook is the mode to make an external webhook call to authorize
+	// ModeWebhook 表示通过调用外部 webhook 进行授权。
 	ModeWebhook string = "Webhook"
-	// ModeRBAC is the mode to use Role Based Access Control to authorize
+	// ModeRBAC 表示使用基于角色的访问控制（RBAC）进行授权。
 	ModeRBAC string = "RBAC"
-	// ModeNode is an authorization mode that authorizes API requests made by kubelets.
+	// ModeNode 是用于授权 kubelet 发出的 API 请求的授权模式。
 	ModeNode string = "Node"
 )
 
-// AuthorizationModeChoices is the list of supported authorization modes
+// AuthorizationModeChoices 列出所有受支持的授权模式。
 var AuthorizationModeChoices = []string{ModeAlwaysAllow, ModeAlwaysDeny, ModeABAC, ModeWebhook, ModeRBAC, ModeNode}
 
-// IsValidAuthorizationMode returns true if the given authorization mode is a valid one for the apiserver
+// IsValidAuthorizationMode 判断给定的授权模式是否为 apiserver 支持的有效模式。
 func IsValidAuthorizationMode(authzMode string) bool {
 	return sets.NewString(AuthorizationModeChoices...).Has(authzMode)
 }

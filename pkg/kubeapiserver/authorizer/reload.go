@@ -50,10 +50,11 @@ import (
 var _ = authorizer.Authorizer(&reloadableAuthorizerResolver{})
 var _ = authorizer.RuleResolver(&reloadableAuthorizerResolver{})
 
+// reloadableAuthorizerResolver 是支持热重载的授权器与规则解析器。
+// 它持有一个以 atomic.Pointer 发布的当前解析器，使授权调用无需加锁即可读取最新配置。
 type reloadableAuthorizerResolver struct {
-	// initialConfig holds the ReloadFile used to initiate background reloading,
-	// and information used to construct webhooks that isn't exposed in the authorization
-	// configuration file (dial function, backoff settings, etc)
+	// initialConfig 保存用于启动后台重载的 ReloadFile，
+	// 以及配置文件中未暴露但构造 webhook 所需的信息（拨号函数、退避设置等）。
 	initialConfig Config
 
 	apiServerID string
@@ -66,6 +67,7 @@ type reloadableAuthorizerResolver struct {
 	abacAuthorizer abac.PolicyList
 	compiler       authorizationcel.Compiler // non-nil and shared across reloads.
 
+	// lastLoadedLock 保护重载过程中的配置比对与 current 发布，避免并发重载相互覆盖。
 	lastLoadedLock   sync.Mutex
 	lastLoadedConfig *authzconfig.AuthorizationConfiguration
 	lastReadData     []byte
@@ -73,30 +75,33 @@ type reloadableAuthorizerResolver struct {
 	current atomic.Pointer[authorizerResolver]
 }
 
+// authorizerResolver 将授权器与规则解析器配对，作为一次配置快照整体发布。
 type authorizerResolver struct {
 	authorizer   authorizer.Authorizer
 	ruleResolver authorizer.RuleResolver
 }
 
+// Authorize 委托给当前的授权器进行鉴权。
 func (r *reloadableAuthorizerResolver) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	return r.current.Load().authorizer.Authorize(ctx, a)
 }
 
-// ConditionsAwareAuthorize delegates to the current authorizer.
+// ConditionsAwareAuthorize 委托给当前的授权器执行条件感知鉴权。
 func (r *reloadableAuthorizerResolver) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return r.current.Load().authorizer.ConditionsAwareAuthorize(ctx, a)
 }
 
-// EvaluateConditions delegates to the current authorizer.
+// EvaluateConditions 委托给当前的授权器评估 CEL 条件。
 func (r *reloadableAuthorizerResolver) EvaluateConditions(ctx context.Context, decision authorizer.ConditionsAwareDecision, data authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return r.current.Load().authorizer.EvaluateConditions(ctx, decision, data)
 }
 
+// RulesFor 委托给当前的规则解析器查询用户权限规则。
 func (r *reloadableAuthorizerResolver) RulesFor(ctx context.Context, user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
 	return r.current.Load().ruleResolver.RulesFor(ctx, user, namespace)
 }
 
-// newForConfig constructs
+// newForConfig 根据给定的授权配置构造联合授权器与规则解析器。
 func (r *reloadableAuthorizerResolver) newForConfig(authzConfig *authzconfig.AuthorizationConfiguration) (authorizer.Authorizer, authorizer.RuleResolver, error) {
 	if len(authzConfig.Authorizers) == 0 {
 		return nil, nil, fmt.Errorf("at least one authorization mode must be passed")
@@ -107,7 +112,7 @@ func (r *reloadableAuthorizerResolver) newForConfig(authzConfig *authzconfig.Aut
 		ruleResolvers []authorizer.RuleResolver
 	)
 
-	// Add SystemPrivilegedGroup as an authorizing group
+	// system:masters 组始终拥有最高权限，必须置于授权链最前且不可被配置移除。
 	superuserAuthorizer := authorizerfactory.NewPrivilegedGroups(user.SystemPrivilegedGroup)
 	authorizers = append(authorizers, union.NamedAuthorizer{
 		AuthorizerName: "kubernetes.io/system-privileged-group",
@@ -118,6 +123,7 @@ func (r *reloadableAuthorizerResolver) newForConfig(authzConfig *authzconfig.Aut
 		// Keep cases in sync with constant list in k8s.io/kubernetes/pkg/kubeapiserver/authorizer/modes/modes.go.
 		switch configuredAuthorizer.Type {
 		case authzconfig.AuthorizerType(modes.ModeNode):
+			// Node/ABAC/RBAC 等授权器在启动时构建一次，重载时不允许新增未在初始配置中启用的类型。
 			if r.nodeAuthorizer == nil {
 				return nil, nil, fmt.Errorf("authorizer type Node is not allowed if it was not enabled at initial server startup")
 			}
@@ -160,6 +166,7 @@ func (r *reloadableAuthorizerResolver) newForConfig(authzConfig *authzconfig.Aut
 			if configuredAuthorizer.Webhook.Timeout.Duration != 0 {
 				clientConfig.Timeout = configuredAuthorizer.Webhook.Timeout.Duration
 			}
+			// webhook 调用失败时的决策由 failurePolicy 决定，需在构造时确定。
 			var decisionOnError authorizer.Decision
 			switch configuredAuthorizer.Webhook.FailurePolicy {
 			case authzconfig.FailurePolicyNoOpinion:
@@ -170,6 +177,7 @@ func (r *reloadableAuthorizerResolver) newForConfig(authzConfig *authzconfig.Aut
 				return nil, nil, fmt.Errorf("unknown failurePolicy %q", configuredAuthorizer.Webhook.FailurePolicy)
 			}
 
+			// 缓存关闭时强制将 TTL 置零，避免误用配置中残留的时长。
 			authorizedTTL, unauthorizedTTL := configuredAuthorizer.Webhook.AuthorizedTTL.Duration, configuredAuthorizer.Webhook.UnauthorizedTTL.Duration
 			if !configuredAuthorizer.Webhook.CacheAuthorizedRequests {
 				authorizedTTL = 0
@@ -217,17 +225,18 @@ func (r *reloadableAuthorizerResolver) newForConfig(authzConfig *authzconfig.Aut
 	return unioned, union.NewRuleResolvers(ruleResolvers...), nil
 }
 
+// kubeapiserverWebhookMetrics 为 kube-apiserver 定制的 webhook 指标集合。
 type kubeapiserverWebhookMetrics struct {
-	// kube-apiserver doesn't report request metrics
+	// kube-apiserver 不上报请求级指标。
 	webhookmetrics.NoopRequestMetrics
-	// kube-apiserver does report webhook metrics
+	// 但会上报 webhook 指标。
 	webhookmetrics.WebhookMetrics
-	// kube-apiserver does report matchCondition metrics
+	// 以及 matchCondition 指标。
 	authorizationcel.MatcherMetrics
 }
 
-// runReload starts checking the config file for changes and reloads the authorizer when it changes.
-// Blocks until ctx is complete.
+// runReload 定期检查授权配置文件，发现变化时重载授权器。
+// 该方法会阻塞直到 ctx 结束。
 func (r *reloadableAuthorizerResolver) runReload(ctx context.Context) {
 	metrics.RegisterMetrics()
 	metrics.RecordAuthorizationConfigLastConfigInfo(r.apiServerID, string(r.lastReadData))
@@ -245,6 +254,7 @@ func (r *reloadableAuthorizerResolver) runReload(ctx context.Context) {
 	)
 }
 
+// checkFile 读取并校验授权配置文件，若内容或解析结果有变化则原子发布新的授权器。
 func (r *reloadableAuthorizerResolver) checkFile(ctx context.Context) {
 	r.lastLoadedLock.Lock()
 	defer r.lastLoadedLock.Unlock()
@@ -256,7 +266,7 @@ func (r *reloadableAuthorizerResolver) checkFile(ctx context.Context) {
 		return
 	}
 	if bytes.Equal(data, r.lastReadData) {
-		// no change
+		// 字节完全一致，无需重复解析。
 		return
 	}
 	klog.InfoS("found new authorization config data")
@@ -269,7 +279,7 @@ func (r *reloadableAuthorizerResolver) checkFile(ctx context.Context) {
 		return
 	}
 	if reflect.DeepEqual(config, r.lastLoadedConfig) {
-		// no change
+		// 解析后语义未变，无需重建授权器。
 		return
 	}
 	klog.InfoS("found new authorization config")

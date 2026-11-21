@@ -20,10 +20,10 @@ import (
 	"k8s.io/apiserver/pkg/admission"
 )
 
-// Config holds the configuration needed to for initialize the admission plugins
+// Config 持有初始化准入插件所需的配置。
 type Config struct{}
 
-// New sets up the plugins and admission start hooks needed for admission
+// New 构建准入插件所需的初始化器及启动钩子。
 func (c *Config) New() ([]admission.PluginInitializer, error) {
 	return []admission.PluginInitializer{NewPluginInitializer()}, nil
 }

@@ -46,7 +46,7 @@ const (
 	authorizationConfigFlag                 = "authorization-config"
 )
 
-// BuiltInAuthorizationOptions contains all build-in authorization options for API Server
+// BuiltInAuthorizationOptions 包含 API Server 所有内建的授权选项。
 type BuiltInAuthorizationOptions struct {
 	Modes                       []string
 	PolicyFile                  string
@@ -54,12 +54,11 @@ type BuiltInAuthorizationOptions struct {
 	WebhookVersion              string
 	WebhookCacheAuthorizedTTL   time.Duration
 	WebhookCacheUnauthorizedTTL time.Duration
-	// WebhookRetryBackoff specifies the backoff parameters for the authorization webhook retry logic.
-	// This allows us to configure the sleep time at each iteration and the maximum number of retries allowed
-	// before we fail the webhook call in order to limit the fan out that ensues when the system is degraded.
+	// WebhookRetryBackoff 指定授权 webhook 重试逻辑的退避参数。
+	// 通过配置每次迭代的休眠时间与最大重试次数，可在系统降级时限制请求放大效应。
 	WebhookRetryBackoff *wait.Backoff
 
-	// AuthorizationConfigurationFile is mutually exclusive with all of:
+	// AuthorizationConfigurationFile 与以下所有字段互斥：
 	//	- Modes
 	//	- WebhookConfigFile
 	//	- WebHookVersion
@@ -70,7 +69,7 @@ type BuiltInAuthorizationOptions struct {
 	AreLegacyFlagsSet func() bool
 }
 
-// NewBuiltInAuthorizationOptions create a BuiltInAuthorizationOptions with default value
+// NewBuiltInAuthorizationOptions 创建一个带默认值的 BuiltInAuthorizationOptions。
 func NewBuiltInAuthorizationOptions() *BuiltInAuthorizationOptions {
 	return &BuiltInAuthorizationOptions{
 		Modes:                       []string{},
@@ -81,7 +80,7 @@ func NewBuiltInAuthorizationOptions() *BuiltInAuthorizationOptions {
 	}
 }
 
-// Complete modifies authorization options
+// Complete 补全授权选项：未指定任何模式且未使用配置文件时，默认采用 AlwaysAllow。
 func (o *BuiltInAuthorizationOptions) Complete() []error {
 	if o == nil {
 		return nil
@@ -93,25 +92,21 @@ func (o *BuiltInAuthorizationOptions) Complete() []error {
 	return nil
 }
 
-// Validate checks invalid config combination
+// Validate 检查非法的配置组合。
 func (o *BuiltInAuthorizationOptions) Validate() []error {
 	if o == nil {
 		return nil
 	}
 	var allErrors []error
 
-	// if --authorization-config is set, check if
-	// 	- the feature flag is set
-	//	- legacyFlags are not set
-	//	- the config file can be loaded
-	//	- the config file represents a valid configuration
+	// 若设置了 --authorization-config，需检查旧标志未被设置且配置文件合法可加载。
 	if o.AuthorizationConfigurationFile != "" {
-		// error out if legacy flags are defined
+		// 与旧标志互斥，同时指定则报错。
 		if o.AreLegacyFlagsSet != nil && o.AreLegacyFlagsSet() {
 			return append(allErrors, fmt.Errorf("--%s can not be specified when --%s or --authorization-webhook-* flags are defined", authorizationConfigFlag, authorizationModeFlag))
 		}
 
-		// load/validate kube-apiserver authz config with no opinion about required modes
+		// 加载并校验 kube-apiserver 授权配置，此处不强制要求特定模式。
 		_, _, err := authorizer.LoadAndValidateFile(o.AuthorizationConfigurationFile, authorizationcel.NewDefaultCompiler(), nil)
 		if err != nil {
 			return append(allErrors, err)
@@ -120,7 +115,7 @@ func (o *BuiltInAuthorizationOptions) Validate() []error {
 		return allErrors
 	}
 
-	// validate the legacy flags using the legacy mode if --authorization-config is not passed
+	// 未使用 --authorization-config 时，按旧模式校验旧标志。
 	if len(o.Modes) == 0 {
 		allErrors = append(allErrors, fmt.Errorf("at least one authorization-mode must be passed"))
 	}
@@ -157,7 +152,7 @@ func (o *BuiltInAuthorizationOptions) Validate() []error {
 	return allErrors
 }
 
-// AddFlags returns flags of authorization for a API Server
+// AddFlags 将 API Server 授权相关的标志添加到指定的 FlagSet。
 func (o *BuiltInAuthorizationOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -189,7 +184,7 @@ func (o *BuiltInAuthorizationOptions) AddFlags(fs *pflag.FlagSet) {
 		"File with Authorization Configuration to configure the authorizer chain. "+
 		"This flag is mutually exclusive with the other --authorization-mode and --authorization-webhook-* flags.")
 
-	// preserves compatibility with any method set during initialization
+	// 保留初始化时可能已设置的方法，以便兼容外部注入的校验逻辑。
 	oldAreLegacyFlagsSet := o.AreLegacyFlagsSet
 	o.AreLegacyFlagsSet = func() bool {
 		if oldAreLegacyFlagsSet != nil && oldAreLegacyFlagsSet() {
@@ -204,7 +199,7 @@ func (o *BuiltInAuthorizationOptions) AddFlags(fs *pflag.FlagSet) {
 	}
 }
 
-// ToAuthorizationConfig convert BuiltInAuthorizationOptions to authorizer.Config
+// ToAuthorizationConfig 将 BuiltInAuthorizationOptions 转换为 authorizer.Config。
 func (o *BuiltInAuthorizationOptions) ToAuthorizationConfig(versionedInformerFactory versionedinformers.SharedInformerFactory) (*authorizer.Config, error) {
 	if o == nil {
 		return nil, nil
@@ -214,19 +209,14 @@ func (o *BuiltInAuthorizationOptions) ToAuthorizationConfig(versionedInformerFac
 	var err error
 	var authorizationConfigData string
 
-	// if --authorization-config is set, check if
-	// 	- the feature flag is set
-	//	- legacyFlags are not set
-	//	- the config file can be loaded
-	//	- the config file represents a valid configuration
-	// else,
-	//	- build the AuthorizationConfig from the legacy flags
+	// 使用 --authorization-config 时校验旧标志未设置并加载配置文件；
+	// 否则从旧标志构建 AuthorizationConfig。
 	if o.AuthorizationConfigurationFile != "" {
-		// error out if legacy flags are defined
+		// 与旧标志互斥，同时指定则报错。
 		if o.AreLegacyFlagsSet != nil && o.AreLegacyFlagsSet() {
 			return nil, fmt.Errorf("--%s can not be specified when --%s or --authorization-webhook-* flags are defined", authorizationConfigFlag, authorizationModeFlag)
 		}
-		// load/validate kube-apiserver authz config with no opinion about required modes
+		// 加载并校验 kube-apiserver 授权配置，此处不强制要求特定模式。
 		authorizationConfiguration, authorizationConfigData, err = authorizer.LoadAndValidateFile(o.AuthorizationConfigurationFile, authorizationcel.NewDefaultCompiler(), nil)
 		if err != nil {
 			return nil, err
@@ -249,7 +239,7 @@ func (o *BuiltInAuthorizationOptions) ToAuthorizationConfig(versionedInformerFac
 	}, nil
 }
 
-// buildAuthorizationConfiguration converts existing flags to the AuthorizationConfiguration format
+// buildAuthorizationConfiguration 将现有标志转换为 AuthorizationConfiguration 格式。
 func (o *BuiltInAuthorizationOptions) buildAuthorizationConfiguration() (*authzconfig.AuthorizationConfiguration, error) {
 	var authorizers []authzconfig.AuthorizerConfiguration
 
@@ -268,8 +258,8 @@ func (o *BuiltInAuthorizationOptions) buildAuthorizationConfiguration() (*authzc
 					CacheAuthorizedRequests:   o.WebhookCacheAuthorizedTTL != 0,
 					UnauthorizedTTL:           metav1.Duration{Duration: o.WebhookCacheUnauthorizedTTL},
 					CacheUnauthorizedRequests: o.WebhookCacheUnauthorizedTTL != 0,
-					// Timeout and FailurePolicy are required for the new configuration.
-					// Setting these two implicitly to preserve backward compatibility.
+					// 新配置要求显式设置 Timeout 与 FailurePolicy。
+					// 此处隐式赋予默认值，以保持向后兼容。
 					Timeout:                    metav1.Duration{Duration: 30 * time.Second},
 					FailurePolicy:              authzconfig.FailurePolicyNoOpinion,
 					SubjectAccessReviewVersion: o.WebhookVersion,

@@ -22,11 +22,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// include is the list of resources that the expression-based admission controllers
-// should intercept.
-// The version is omitted, all versions of the same GroupResource are treated the same.
-// If a resource is transient, i.e., not persisted in the storage, the resource must be
-// in either include or excluded list.
+// included 列出基于表达式的准入控制器应拦截的资源。
+// 此处省略版本，同一 GroupResource 的所有版本一视同仁。
+// 瞬态资源（即不落盘存储的资源）必须明确出现在 included 或 excluded 列表中，
+// 否则拦截器无法确定是否应处理它。
 var included = []schema.GroupResource{
 	{Group: "", Resource: "bindings"},
 	{Group: "", Resource: "pods/attach"},
@@ -39,9 +38,8 @@ var included = []schema.GroupResource{
 	{Group: "", Resource: "serviceaccounts/token"},
 }
 
-// excluded is the list of resources that the expression-based admission controllers
-// should ignore.
-// The version is omitted, all versions of the same GroupResource are treated the same.
+// excluded 列出基于表达式的准入控制器应忽略的资源。
+// 此处省略版本，同一 GroupResource 的所有版本一视同仁。
 var excluded = []schema.GroupResource{
 	// BEGIN interception of these non-persisted resources may break the cluster
 	{Group: "authentication.k8s.io", Resource: "selfsubjectreviews"},
@@ -53,14 +51,12 @@ var excluded = []schema.GroupResource{
 	// END interception of these non-persisted resources may break the cluster
 }
 
-// Included returns a copy of the list of resources that the expression-based admission controllers
-// should intercept.
+// Included 返回应被基于表达式的准入控制器拦截的资源列表副本。
 func Included() []schema.GroupResource {
 	return slices.Clone(included)
 }
 
-// Excluded returns a copy of the list of resources that the expression-based admission controllers
-// should ignore.
+// Excluded 返回应被基于表达式的准入控制器忽略的资源列表副本。
 func Excluded() []schema.GroupResource {
 	return slices.Clone(excluded)
 }

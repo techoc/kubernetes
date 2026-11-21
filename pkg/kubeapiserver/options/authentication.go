@@ -77,11 +77,11 @@ const (
 	oidcRequiredClaimFlag  = "oidc-required-claim"
 )
 
-// UpdateAuthenticationConfigTimeout controls how long we wait for calls to updateAuthenticationConfig to succeed.
-// Exported as a variable so that it can be overridden in integration tests.
+// UpdateAuthenticationConfigTimeout 控制等待 updateAuthenticationConfig 成功的时长。
+// 导出为变量以便集成测试中覆盖。
 var UpdateAuthenticationConfigTimeout = time.Minute
 
-// BuiltInAuthenticationOptions contains all build-in authentication options for API Server
+// BuiltInAuthenticationOptions 包含 API Server 所有内建的认证选项。
 type BuiltInAuthenticationOptions struct {
 	APIAudiences    []string
 	Anonymous       *AnonymousAuthenticationOptions
@@ -99,19 +99,19 @@ type BuiltInAuthenticationOptions struct {
 	TokenFailureCacheTTL time.Duration
 }
 
-// AnonymousAuthenticationOptions contains anonymous authentication options for API Server
+// AnonymousAuthenticationOptions 包含 API Server 的匿名认证选项。
 type AnonymousAuthenticationOptions struct {
 	Allow bool
-	// FlagsSet tracks whether any of the configuration options were set via a command-line flag.
+	// FlagsSet 记录该配置项是否由命令行标志显式设置，用于与配置文件互斥校验。
 	FlagsSet bool
 }
 
-// BootstrapTokenAuthenticationOptions contains bootstrap token authentication options for API Server
+// BootstrapTokenAuthenticationOptions 包含 API Server 的 bootstrap token 认证选项。
 type BootstrapTokenAuthenticationOptions struct {
 	Enable bool
 }
 
-// OIDCAuthenticationOptions contains OIDC authentication options for API Server
+// OIDCAuthenticationOptions 包含 API Server 的 OIDC 认证选项。
 type OIDCAuthenticationOptions struct {
 	CAFile         string
 	ClientID       string
@@ -123,11 +123,11 @@ type OIDCAuthenticationOptions struct {
 	SigningAlgs    []string
 	RequiredClaims map[string]string
 
-	// FlagsSet tracks whether any of the configuration options were set via a command-line flag.
+	// FlagsSet 记录任一配置是否由命令行标志显式设置，用于与配置文件互斥校验。
 	FlagsSet bool
 }
 
-// ServiceAccountAuthenticationOptions contains service account authentication options for API Server
+// ServiceAccountAuthenticationOptions 包含 API Server 的 ServiceAccount 认证选项。
 type ServiceAccountAuthenticationOptions struct {
 	KeyFiles              []string
 	Lookup                bool
@@ -136,32 +136,30 @@ type ServiceAccountAuthenticationOptions struct {
 	ExtendExpiration      bool
 	MaxExpiration         time.Duration
 	MaxExtendedExpiration time.Duration
-	// OptionalTokenGetter is a function that returns a service account token getter.
-	// If not set, the default token getter will be used.
+	// OptionalTokenGetter 返回自定义的 ServiceAccount token getter；未设置时使用默认值。
 	OptionalTokenGetter func(factory informers.SharedInformerFactory) serviceaccount.ServiceAccountTokenGetter
-	// ExternalPublicKeysGetter gets set if `--service-account-signing-endpoint` is passed.
-	// ExternalPublicKeysGetter is mutually exclusive with KeyFiles.
+	// 传入 `--service-account-signing-endpoint` 时设置 ExternalPublicKeysGetter。
+	// 它与 KeyFiles 互斥。
 	ExternalPublicKeysGetter serviceaccount.PublicKeysGetter
 }
 
-// TokenFileAuthenticationOptions contains token file authentication options for API Server
+// TokenFileAuthenticationOptions 包含 API Server 的 token 文件认证选项。
 type TokenFileAuthenticationOptions struct {
 	TokenFile string
 }
 
-// WebHookAuthenticationOptions contains web hook authentication options for API Server
+// WebHookAuthenticationOptions 包含 API Server 的 webhook 认证选项。
 type WebHookAuthenticationOptions struct {
 	ConfigFile string
 	Version    string
 	CacheTTL   time.Duration
 
-	// RetryBackoff specifies the backoff parameters for the authentication webhook retry logic.
-	// This allows us to configure the sleep time at each iteration and the maximum number of retries allowed
-	// before we fail the webhook call in order to limit the fan out that ensues when the system is degraded.
+	// RetryBackoff 指定认证 webhook 重试逻辑的退避参数。
+	// 通过配置每次迭代的休眠时间与最大重试次数，可在系统降级时限制请求放大效应。
 	RetryBackoff *wait.Backoff
 }
 
-// NewBuiltInAuthenticationOptions create a new BuiltInAuthenticationOptions, just set default token cache TTL
+// NewBuiltInAuthenticationOptions 创建 BuiltInAuthenticationOptions，仅设置 token 缓存 TTL 的默认值。
 func NewBuiltInAuthenticationOptions() *BuiltInAuthenticationOptions {
 	return &BuiltInAuthenticationOptions{
 		TokenSuccessCacheTTL: 10 * time.Second,
@@ -169,7 +167,7 @@ func NewBuiltInAuthenticationOptions() *BuiltInAuthenticationOptions {
 	}
 }
 
-// WithAll set default value for every build-in authentication option
+// WithAll 为每个内建认证选项设置默认值。
 func (o *BuiltInAuthenticationOptions) WithAll() *BuiltInAuthenticationOptions {
 	return o.
 		WithAnonymous().
@@ -182,7 +180,7 @@ func (o *BuiltInAuthenticationOptions) WithAll() *BuiltInAuthenticationOptions {
 		WithWebHook()
 }
 
-// WithAnonymous set default value for anonymous authentication
+// WithAnonymous 为匿名认证设置默认值。
 func (o *BuiltInAuthenticationOptions) WithAnonymous() *BuiltInAuthenticationOptions {
 	o.Anonymous = &AnonymousAuthenticationOptions{
 		Allow: true,
@@ -190,19 +188,19 @@ func (o *BuiltInAuthenticationOptions) WithAnonymous() *BuiltInAuthenticationOpt
 	return o
 }
 
-// WithBootstrapToken set default value for bootstrap token authentication
+// WithBootstrapToken 为 bootstrap token 认证设置默认值。
 func (o *BuiltInAuthenticationOptions) WithBootstrapToken() *BuiltInAuthenticationOptions {
 	o.BootstrapToken = &BootstrapTokenAuthenticationOptions{}
 	return o
 }
 
-// WithClientCert set default value for client cert
+// WithClientCert 为客户端证书认证设置默认值。
 func (o *BuiltInAuthenticationOptions) WithClientCert() *BuiltInAuthenticationOptions {
 	o.ClientCert = &genericoptions.ClientCertAuthenticationOptions{}
 	return o
 }
 
-// WithOIDC set default value for OIDC authentication
+// WithOIDC 为 OIDC 认证设置默认值。
 func (o *BuiltInAuthenticationOptions) WithOIDC() *BuiltInAuthenticationOptions {
 	o.OIDC = &OIDCAuthenticationOptions{
 		UsernameClaim: "sub",
@@ -211,13 +209,13 @@ func (o *BuiltInAuthenticationOptions) WithOIDC() *BuiltInAuthenticationOptions 
 	return o
 }
 
-// WithRequestHeader set default value for request header authentication
+// WithRequestHeader 为请求头认证设置默认值。
 func (o *BuiltInAuthenticationOptions) WithRequestHeader() *BuiltInAuthenticationOptions {
 	o.RequestHeader = &genericoptions.RequestHeaderAuthenticationOptions{}
 	return o
 }
 
-// WithServiceAccounts set default value for service account authentication
+// WithServiceAccounts 为 ServiceAccount 认证设置默认值。
 func (o *BuiltInAuthenticationOptions) WithServiceAccounts() *BuiltInAuthenticationOptions {
 	if o.ServiceAccounts == nil {
 		o.ServiceAccounts = &ServiceAccountAuthenticationOptions{}
@@ -228,13 +226,13 @@ func (o *BuiltInAuthenticationOptions) WithServiceAccounts() *BuiltInAuthenticat
 	return o
 }
 
-// WithTokenFile set default value for token file authentication
+// WithTokenFile 为 token 文件认证设置默认值。
 func (o *BuiltInAuthenticationOptions) WithTokenFile() *BuiltInAuthenticationOptions {
 	o.TokenFile = &TokenFileAuthenticationOptions{}
 	return o
 }
 
-// WithWebHook set default value for web hook authentication
+// WithWebHook 为 webhook 认证设置默认值。
 func (o *BuiltInAuthenticationOptions) WithWebHook() *BuiltInAuthenticationOptions {
 	o.WebHook = &WebHookAuthenticationOptions{
 		Version:      "v1beta1",
@@ -244,7 +242,7 @@ func (o *BuiltInAuthenticationOptions) WithWebHook() *BuiltInAuthenticationOptio
 	return o
 }
 
-// Validate checks invalid config combination
+// Validate 检查非法的配置组合。
 func (o *BuiltInAuthenticationOptions) Validate() []error {
 	if o == nil {
 		return nil
@@ -283,8 +281,7 @@ func (o *BuiltInAuthenticationOptions) Validate() []error {
 			allErrors = append(allErrors, errors.New("either `--service-account-key-file` or `--service-account-signing-endpoint` must be set"))
 		}
 
-		// Validate the JWKS URI when it is explicitly set.
-		// When unset, it is later derived from ExternalHost.
+		// 仅在显式设置时校验 JWKS URI；未设置时后续会从 ExternalHost 推导。
 		if o.ServiceAccounts.JWKSURI != "" {
 			if u, err := url.Parse(o.ServiceAccounts.JWKSURI); err != nil {
 				allErrors = append(allErrors, fmt.Errorf("service-account-jwks-uri must be a valid URL: %v", err))
@@ -323,8 +320,7 @@ func (o *BuiltInAuthenticationOptions) Validate() []error {
 	return allErrors
 }
 
-// certificatesOverlap returns true when there's at least one identical
-// certificate in the two certificate bundles
+// certificatesOverlap 判断两个 CA 证书包中是否存在至少一张相同的证书。
 func certificatesOverlap(a, b []*x509.Certificate) bool {
 	for _, ca := range a {
 		for _, cb := range b {
@@ -336,7 +332,7 @@ func certificatesOverlap(a, b []*x509.Certificate) bool {
 	return false
 }
 
-// AddFlags returns flags of authentication for a API Server
+// AddFlags 将 API Server 认证相关的标志添加到指定的 FlagSet。
 func (o *BuiltInAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 	if o == nil {
 		return
@@ -485,8 +481,8 @@ func (o *BuiltInAuthenticationOptions) AddFlags(fs *pflag.FlagSet) {
 	}
 }
 
-// ToAuthenticationConfig convert BuiltInAuthenticationOptions to kubeauthenticator.Config. Returns
-// an empty config if o is nil.
+// ToAuthenticationConfig 将 BuiltInAuthenticationOptions 转换为 kubeauthenticator.Config。
+// o 为 nil 时返回空配置。
 func (o *BuiltInAuthenticationOptions) ToAuthenticationConfig() (kubeauthenticator.Config, error) {
 	if o == nil {
 		return kubeauthenticator.Config{}, nil
@@ -509,8 +505,7 @@ func (o *BuiltInAuthenticationOptions) ToAuthenticationConfig() (kubeauthenticat
 		}
 	}
 
-	// When the authentication config file is provided,
-	// load the authentication config from the file, otherwise set up an empty configuration.
+	// 提供配置文件时从中加载认证配置，否则使用空配置对象。
 	if len(o.AuthenticationConfigFile) > 0 {
 		var err error
 		if ret.AuthenticationConfig, ret.AuthenticationConfigData, err = loadAuthenticationConfig(o.AuthenticationConfigFile); err != nil {
@@ -520,23 +515,21 @@ func (o *BuiltInAuthenticationOptions) ToAuthenticationConfig() (kubeauthenticat
 		ret.AuthenticationConfig = &apiserver.AuthenticationConfiguration{}
 	}
 
-	// Set up JWT authenticators from config file or from flags
+	// JWT 认证器既可来自配置文件也可来自标志。
 	if len(o.AuthenticationConfigFile) > 0 {
-		// all known signing algs are allowed when using authentication config
-		// TODO: what we really want to express is 'any alg is fine as long it matches a public key'
+		// 使用配置文件时允许所有已知签名算法。
+		// TODO: 真正想表达的是“只要匹配公钥，任何算法都可以”。
 		ret.OIDCSigningAlgs = oidc.AllValidSigningAlgorithms()
 	} else if o.OIDC != nil && len(o.OIDC.IssuerURL) > 0 && len(o.OIDC.ClientID) > 0 {
 		usernamePrefix := o.OIDC.UsernamePrefix
 
 		if o.OIDC.UsernamePrefix == "" && o.OIDC.UsernameClaim != "email" {
-			// Legacy CLI flag behavior. If a usernamePrefix isn't provided, prefix all claims other than "email"
-			// with the issuerURL.
-			//
-			// See https://github.com/kubernetes/kubernetes/issues/31380
+			// 兼容旧标志行为：未提供前缀时，除 email 外的所有声明都加上 issuerURL 前缀。
+			// 见 https://github.com/kubernetes/kubernetes/issues/31380
 			usernamePrefix = o.OIDC.IssuerURL + "#"
 		}
 		if o.OIDC.UsernamePrefix == "-" {
-			// Special value indicating usernames shouldn't be prefixed.
+			// 特殊值，表示不添加任何前缀。
 			usernamePrefix = ""
 		}
 
@@ -584,17 +577,17 @@ func (o *BuiltInAuthenticationOptions) ToAuthenticationConfig() (kubeauthenticat
 		ret.OIDCSigningAlgs = o.OIDC.SigningAlgs
 	}
 
-	// Set up anonymous authenticator from config file or flags
+	// 匿名认证器同样可来自配置文件或标志，两者互斥。
 	if o.Anonymous != nil {
 		switch {
 		case ret.AuthenticationConfig.Anonymous != nil && o.Anonymous.FlagsSet:
-			// Flags and config file are mutually exclusive
+			// 标志与配置文件互斥。
 			return kubeauthenticator.Config{}, field.Forbidden(field.NewPath("anonymous"), "--anonymous-auth flag cannot be set when anonymous field is configured in authentication configuration file")
 		case ret.AuthenticationConfig.Anonymous != nil:
-			// Use the config-file-specified values
+			// 优先采用配置文件中的值。
 			ret.Anonymous = *ret.AuthenticationConfig.Anonymous
 		default:
-			// Use the flag-specified values
+			// 否则采用标志指定的值。
 			ret.Anonymous = apiserver.AnonymousAuthConfig{Enabled: o.Anonymous.Allow}
 		}
 	}
@@ -665,8 +658,8 @@ func (o *BuiltInAuthenticationOptions) ToAuthenticationConfig() (kubeauthenticat
 	return ret, nil
 }
 
-// ApplyTo requires already applied OpenAPIConfig and EgressSelector if present.
-// The input context controls the lifecycle of background goroutines started to reload the authentication config file.
+// ApplyTo 要求已应用 OpenAPIConfig，并在存在时已应用 EgressSelector。
+// 入参 ctx 控制用于重载认证配置文件的后台 goroutine 的生命周期。
 func (o *BuiltInAuthenticationOptions) ApplyTo(
 	ctx context.Context,
 	authInfo *genericapiserver.AuthenticationInfo,
@@ -707,7 +700,7 @@ func (o *BuiltInAuthenticationOptions) ApplyTo(
 		authInfo.APIAudiences = authenticator.Audiences(o.ServiceAccounts.Issuers)
 	}
 
-	// If the optional token getter function is set, use it. Otherwise, use the default token getter.
+	// 优先使用注入的自定义 token getter，否则使用默认的基于 client 的实现。
 	if o.ServiceAccounts != nil && o.ServiceAccounts.OptionalTokenGetter != nil {
 		authenticatorConfig.ServiceAccountTokenGetter = o.ServiceAccounts.OptionalTokenGetter(versionedInformer)
 	} else {
@@ -757,7 +750,7 @@ func (o *BuiltInAuthenticationOptions) ApplyTo(
 		trackedAuthenticationConfigData := authenticatorConfig.AuthenticationConfigData
 		var mu sync.Mutex
 
-		// ensure anonymous config doesn't change on reload
+		// 匿名认证配置在热重载期间不允许变化，先保存初始快照用于比对。
 		originalFileAnonymousConfig := authenticatorConfig.AuthenticationConfig.DeepCopy().Anonymous
 
 		go filesystem.WatchUntil(
@@ -767,6 +760,7 @@ func (o *BuiltInAuthenticationOptions) ApplyTo(
 			func() {
 				// TODO collapse onto shared logic with DynamicEncryptionConfigContent controller
 
+				// 串行处理文件变更，避免并发回调交错更新跟踪状态。
 				mu.Lock()
 				defer mu.Unlock()
 
@@ -774,7 +768,7 @@ func (o *BuiltInAuthenticationOptions) ApplyTo(
 				if err != nil {
 					klog.ErrorS(err, "failed to read authentication config file")
 					authenticationconfigmetrics.RecordAuthenticationConfigAutomaticReloadFailure(apiServerID)
-					// we do not update the tracker here because this error could eventually resolve as we keep retrying
+					// 读取失败可能是暂时的，不更新跟踪值以便继续重试。
 					return
 				}
 
@@ -788,7 +782,7 @@ func (o *BuiltInAuthenticationOptions) ApplyTo(
 				if err != nil {
 					klog.ErrorS(err, "failed to load authentication config")
 					authenticationconfigmetrics.RecordAuthenticationConfigAutomaticReloadFailure(apiServerID)
-					// this config is not structurally valid and never will be, update the tracker so we stop retrying
+					// 结构非法永远不会变好，更新跟踪值以停止重试。
 					trackedAuthenticationConfigData = authConfigData
 					return
 				}
@@ -800,7 +794,7 @@ func (o *BuiltInAuthenticationOptions) ApplyTo(
 				if err := validationErrs.ToAggregate(); err != nil {
 					klog.ErrorS(err, "failed to validate authentication config")
 					authenticationconfigmetrics.RecordAuthenticationConfigAutomaticReloadFailure(apiServerID)
-					// this config is not semantically valid and never will be, update the tracker so we stop retrying
+					// 语义非法永远不会变好，更新跟踪值以停止重试。
 					trackedAuthenticationConfigData = authConfigData
 					return
 				}
@@ -810,7 +804,7 @@ func (o *BuiltInAuthenticationOptions) ApplyTo(
 				if err := updateAuthenticationConfig(timeoutCtx, authConfig); err != nil {
 					klog.ErrorS(err, "failed to update authentication config")
 					authenticationconfigmetrics.RecordAuthenticationConfigAutomaticReloadFailure(apiServerID)
-					// we do not update the tracker here because this error could eventually resolve as we keep retrying
+					// 更新失败可能是暂时的，不更新跟踪值以便继续重试。
 					return
 				}
 
@@ -829,29 +823,30 @@ func (o *BuiltInAuthenticationOptions) ApplyTo(
 	return nil
 }
 
-// ApplyAuthorization will conditionally modify the authentication options based on the authorization options
+// ApplyAuthorization 根据授权选项有条件地调整认证选项。
 func (o *BuiltInAuthenticationOptions) ApplyAuthorization(authorization *BuiltInAuthorizationOptions) {
 	if o == nil || authorization == nil || o.Anonymous == nil {
 		return
 	}
 
-	// authorization ModeAlwaysAllow cannot be combined with AnonymousAuth.
-	// in such a case the AnonymousAuth is stomped to false and you get a message
+	// AlwaysAllow 授权模式与匿名认证互斥，此时强制关闭匿名认证并记录告警。
 	if o.Anonymous.Allow && sets.NewString(authorization.Modes...).Has(authzmodes.ModeAlwaysAllow) {
 		klog.Warningf("AnonymousAuth is not allowed with the AlwaysAllow authorizer. Resetting AnonymousAuth to false. You should use a different authorizer")
 		o.Anonymous.Allow = false
 	}
 }
 
+// trackProvidedFlag 包装标志的值，记录它是否被显式设置过。
 func trackProvidedFlag(fs *pflag.FlagSet, flagName string, provided *bool) {
 	f := fs.Lookup(flagName)
 	f.Value = cliflag.NewTracker(f.Value, provided)
 }
 
+// validateOIDCOptions 校验 OIDC 标志与认证配置文件的互斥关系及完整性。
 func (o *BuiltInAuthenticationOptions) validateOIDCOptions() []error {
 	var allErrors []error
 
-	// Existing validation when jwt authenticator is configured with oidc-* flags
+	// 通过 oidc-* 标志配置 JWT 认证器时的既有校验。
 	if len(o.AuthenticationConfigFile) == 0 {
 		if o.OIDC != nil && o.OIDC.FlagsSet && (len(o.OIDC.IssuerURL) == 0 || len(o.OIDC.ClientID) == 0) {
 			allErrors = append(allErrors, fmt.Errorf("oidc-issuer-url and oidc-client-id must be specified together when any oidc-* flags are set"))
@@ -860,9 +855,7 @@ func (o *BuiltInAuthenticationOptions) validateOIDCOptions() []error {
 		return allErrors
 	}
 
-	// New validation when authentication config file is provided
-
-	// Authentication config file and oidc-* flags are mutually exclusive
+	// 提供认证配置文件时的新增校验：配置文件与 oidc-* 标志互斥。
 	if o.OIDC != nil && o.OIDC.FlagsSet {
 		allErrors = append(allErrors, fmt.Errorf("authentication-config file and oidc-* flags are mutually exclusive"))
 	}
@@ -875,6 +868,7 @@ var (
 	codecs    = serializer.NewCodecFactory(cfgScheme, serializer.EnableStrict)
 )
 
+// init 安装认证配置 API 到 scheme，供严格解码使用。
 func init() {
 	install.Install(cfgScheme)
 }
@@ -894,6 +888,7 @@ func loadAuthenticationConfig(configFilePath string) (*apiserver.AuthenticationC
 	return configuration, string(data), nil
 }
 
+// loadAuthenticationConfigFromData 从字节数据中严格解码认证配置。
 func loadAuthenticationConfigFromData(data []byte) (*apiserver.AuthenticationConfiguration, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("empty config data")

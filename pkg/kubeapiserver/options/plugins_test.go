@@ -21,8 +21,10 @@ import (
 	"testing"
 )
 
+// TestAdmissionPluginOrder 校验准入插件的顺序以变更类（策略、webhook）、
+// 校验类（策略、webhook）、配额、拒绝结尾。
 func TestAdmissionPluginOrder(t *testing.T) {
-	// Sanity check that the order of admission ends with mutating(policy, webhook), validating(policy, webhook), quota, deny.
+	// 插件顺序决定了执行语义：必须先变更再校验，最后做配额与拒绝检查。
 	allplugins := strings.Join(AllOrderedPlugins, ",")
 	expectSuffix := ",MutatingAdmissionPolicy,MutatingAdmissionWebhook,ValidatingAdmissionPolicy,ValidatingAdmissionWebhook,ResourceQuota,AlwaysDeny"
 	if !strings.HasSuffix(allplugins, expectSuffix) {

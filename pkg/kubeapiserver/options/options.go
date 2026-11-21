@@ -23,11 +23,11 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// DefaultServiceNodePortRange is the default port range for NodePort services.
+// DefaultServiceNodePortRange 是 NodePort Service 的默认端口范围。
 var DefaultServiceNodePortRange = utilnet.PortRange{Base: 30000, Size: 2768}
 
-// DefaultServiceIPCIDR is a CIDR notation of IP range from which to allocate service cluster IPs
+// DefaultServiceIPCIDR 以 CIDR 形式表示分配 Service 集群 IP 的地址范围。
 var DefaultServiceIPCIDR = net.IPNet{IP: netutils.ParseIPSloppy("10.0.0.0"), Mask: net.CIDRMask(24, 32)}
 
-// DefaultEtcdPathPrefix is the default key prefix of etcd for API Server
+// DefaultEtcdPathPrefix 是 API Server 在 etcd 中使用的默认键前缀。
 const DefaultEtcdPathPrefix = "/registry"

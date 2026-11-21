@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package options contains flags and options for initializing kube-apiserver
+// Package options 包含初始化 kube-apiserver 所需的标志与选项。
 package options
 
 import (
@@ -22,9 +22,10 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// NewSecureServingOptions gives default values for the kube-apiserver which are not the options wanted by
-// "normal" API servers running on the platform
+// NewSecureServingOptions 返回 kube-apiserver 的安全服务默认值，
+// 这些值与平台上运行的“普通” API server 所需的不同。
 func NewSecureServingOptions() *genericoptions.SecureServingOptionsWithLoopback {
+	// kube-apiserver 监听 6443 并启用 loopback，以便本地控制面组件安全访问。
 	o := genericoptions.SecureServingOptions{
 		BindAddress: netutils.ParseIPSloppy("0.0.0.0"),
 		BindPort:    6443,

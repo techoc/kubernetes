@@ -31,6 +31,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubeapiserver/authorizer/modes"
 )
 
+// TestAuthzValidate 覆盖授权选项校验的各类合法与非法组合。
 func TestAuthzValidate(t *testing.T) {
 	examplePolicyFile := "../../auth/authorizer/abac/example_policy_file.jsonl"
 
@@ -140,6 +141,8 @@ func TestAuthzValidate(t *testing.T) {
 	}
 }
 
+// TestBuiltInAuthorizationOptionsAddFlags 校验 AddFlags 注册的标志能被正确解析，
+// 并正确标记旧标志已被设置。
 func TestBuiltInAuthorizationOptionsAddFlags(t *testing.T) {
 	var args = []string{
 		fmt.Sprintf("--authorization-mode=%s,%s,%s,%s", modes.ModeAlwaysAllow, modes.ModeAlwaysDeny, modes.ModeABAC, modes.ModeWebhook),
@@ -177,7 +180,7 @@ func TestBuiltInAuthorizationOptionsAddFlags(t *testing.T) {
 		t.Fatal("legacy flags should have been configured")
 	}
 
-	// setting the method to nil since methods can't be compared with reflect.DeepEqual
+	// 函数字段无法用 reflect.DeepEqual 比较，比较前先置空。
 	opts.AreLegacyFlagsSet = nil
 
 	if !reflect.DeepEqual(opts, expected) {

@@ -45,40 +45,37 @@ import (
 	"k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac/bootstrappolicy"
 )
 
-// Config contains the data on how to authorize a request to the Kube API Server
+// Config 包含如何对 Kube API Server 的请求进行授权的数据。
 type Config struct {
-	// Options for ModeABAC
+	// ModeABAC 的选项
 
-	// Path to an ABAC policy file.
+	// ABAC 策略文件的路径。
 	PolicyFile string
 
-	// Options for ModeWebhook
+	// ModeWebhook 的选项
 
-	// WebhookRetryBackoff specifies the backoff parameters for the authorization webhook retry logic.
-	// This allows us to configure the sleep time at each iteration and the maximum number of retries allowed
-	// before we fail the webhook call in order to limit the fan out that ensues when the system is degraded.
+	// WebhookRetryBackoff 指定授权 webhook 重试逻辑的退避参数。
+	// 通过配置每次迭代的休眠时间与最大重试次数，可在系统降级时限制请求放大效应。
 	WebhookRetryBackoff *wait.Backoff
 
 	VersionedInformerFactory versionedinformers.SharedInformerFactory
 
-	// Optional field, custom dial function used to connect to webhook
+	// 可选字段，连接 webhook 时使用的自定义拨号函数。
 	CustomDial utilnet.DialFunc
 
-	// ReloadFile holds the filename to reload authorization configuration from
+	// ReloadFile 指定重新加载授权配置的文件名。
 	ReloadFile string
-	// AuthorizationConfiguration stores the configuration for the Authorizer chain
-	// It will deprecate most of the above flags when GA
+	// AuthorizationConfiguration 存储授权器链的配置。
+	// 当该特性 GA 后，它将取代上面的大部分标志。
 	AuthorizationConfiguration *authzconfig.AuthorizationConfiguration
-	// InitialAuthorizationConfigurationData holds the initial authorization configuration data
-	// that was read from the authorization configuration file.
+	// InitialAuthorizationConfigurationData 保存从授权配置文件中读取的初始配置数据。
 	InitialAuthorizationConfigurationData string
 }
 
-// New returns the right sort of union of multiple authorizer.Authorizer objects
-// based on the authorizationMode or an error.
-// stopCh is used to shut down config reload goroutines when the server is shutting down.
+// New 根据授权模式返回将多个 authorizer.Authorizer 对象组合而成的联合授权器，或返回错误。
+// ctx 用于在 server 关闭时终止配置重载的 goroutine。
 //
-// Note: the cel compiler construction depends on feature gates and the compatibility version to be initialized.
+// 注意：cel 编译器的构造依赖已初始化的特性门控与兼容性版本。
 func (config Config) New(ctx context.Context, serverID string) (authorizer.Authorizer, authorizer.RuleResolver, error) {
 	if len(config.AuthorizationConfiguration.Authorizers) == 0 {
 		return nil, nil, fmt.Errorf("at least one authorization mode must be passed")
@@ -95,7 +92,8 @@ func (config Config) New(ctx context.Context, serverID string) (authorizer.Autho
 
 	seenTypes := sets.New[authzconfig.AuthorizerType]()
 
-	// Build and store authorizers which will persist across reloads
+	// 构建并保存可在多次重载间复用的授权器（如 Node/RBAC/ABAC）。
+	// webhook 授权器依赖配置，因此每次重载时重建。
 	for _, configuredAuthorizer := range config.AuthorizationConfiguration.Authorizers {
 		seenTypes.Insert(configuredAuthorizer.Type)
 
@@ -139,11 +137,12 @@ func (config Config) New(ctx context.Context, serverID string) (authorizer.Autho
 		}
 	}
 
-	// Require all non-webhook authorizer types to remain specified in the file on reload
+	// 重载后必须在配置文件中保留所有非 webhook 类型的授权器：
+	// 只有 webhook 可以重复和动态重建，其余类型仅在此处构建一次。
 	seenTypes.Delete(authzconfig.TypeWebhook)
 	r.requireNonWebhookTypes = seenTypes
 
-	// Construct the authorizers / ruleResolvers for the given configuration
+	// 根据当前配置构造授权器与规则解析器。
 	authorizer, ruleResolver, err := r.newForConfig(r.initialConfig.AuthorizationConfiguration)
 	if err != nil {
 		return nil, nil, err
@@ -154,6 +153,7 @@ func (config Config) New(ctx context.Context, serverID string) (authorizer.Autho
 		ruleResolver: ruleResolver,
 	})
 
+	// 仅在配置了重载文件时启动定时重载，避免无谓的文件轮询。
 	if r.initialConfig.ReloadFile != "" {
 		go r.runReload(ctx)
 	}
@@ -161,15 +161,16 @@ func (config Config) New(ctx context.Context, serverID string) (authorizer.Autho
 	return r, r, nil
 }
 
-// RepeatableAuthorizerTypes is the list of Authorizer that can be repeated in the Authorization Config
+// repeatableAuthorizerTypes 列出在授权配置中允许重复出现的授权器类型。
 var repeatableAuthorizerTypes = []string{modes.ModeWebhook}
 
-// GetNameForAuthorizerMode returns the name to be set for the mode in AuthorizationConfiguration
-// For now, lower cases the mode name
+// GetNameForAuthorizerMode 返回在 AuthorizationConfiguration 中为该模式设置的名称。
+// 目前仅将模式名转为小写。
 func GetNameForAuthorizerMode(mode string) string {
 	return strings.ToLower(mode)
 }
 
+// LoadAndValidateFile 从文件读取授权配置并校验，同时返回原始文件内容供重载时比对。
 func LoadAndValidateFile(configFile string, compiler authorizationcel.Compiler, requireNonWebhookTypes sets.Set[authzconfig.AuthorizerType]) (*authzconfig.AuthorizationConfiguration, string, error) {
 	data, err := os.ReadFile(configFile)
 	if err != nil {
@@ -182,14 +183,15 @@ func LoadAndValidateFile(configFile string, compiler authorizationcel.Compiler, 
 	return config, string(data), nil
 }
 
+// LoadAndValidateData 解析并校验给定的授权配置数据。
 func LoadAndValidateData(data []byte, compiler authorizationcel.Compiler, requireNonWebhookTypes sets.Set[authzconfig.AuthorizerType]) (*authzconfig.AuthorizationConfiguration, error) {
-	// load the file and check for errors
+	// 加载配置并检查错误。
 	authorizationConfiguration, err := load.LoadFromData(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AuthorizationConfiguration from file: %w", err)
 	}
 
-	// validate the file and return any error
+	// 校验配置，返回所有聚合错误。
 	if errors := validation.ValidateAuthorizationConfiguration(compiler, nil, authorizationConfiguration,
 		sets.New(modes.AuthorizationModeChoices...),
 		sets.New(repeatableAuthorizerTypes...),
@@ -197,9 +199,9 @@ func LoadAndValidateData(data []byte, compiler authorizationcel.Compiler, requir
 		return nil, errors.ToAggregate()
 	}
 
-	// test to check if the authorizer names passed conform to the authorizers for type!=Webhook
-	// this test is only for kube-apiserver and hence checked here
-	// it preserves compatibility with o.buildAuthorizationConfiguration
+	// 检查非 webhook 授权器的名称是否符合约定。
+	// 这是 kube-apiserver 特有的校验，故在此处进行，
+	// 以保持与 o.buildAuthorizationConfiguration 的兼容性。
 	var allErrors []error
 	seenModes := sets.New[authzconfig.AuthorizerType]()
 	for _, authorizer := range authorizationConfiguration.Authorizers {

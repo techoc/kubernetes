@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kubeapiserver holds code that is common to both the kube-apiserver
-// and the federation-apiserver, but isn't part of a generic API server.
-// For instance, the non-delegated authorization options are used by those two
-// servers, but no generic API server is likely to use them.
+// Package kubeapiserver 存放 kube-apiserver 与 federation-apiserver 共用、
+// 但不属于通用 API server 的代码。
+// 例如非委托授权选项被这两个 server 使用，而通用 API server 通常不会用到它们。
 package kubeapiserver

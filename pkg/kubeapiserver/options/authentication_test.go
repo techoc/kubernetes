@@ -55,6 +55,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestAuthenticationValidate 覆盖认证选项校验的各类合法与非法组合。
 func TestAuthenticationValidate(t *testing.T) {
 	testCases := []struct {
 		name                              string
@@ -289,8 +290,7 @@ func TestAuthenticationValidate(t *testing.T) {
 			options.WebHook = testcase.testWebHook
 			options.AuthenticationConfigFile = testcase.testAuthenticationConfigFile
 
-			// SetFeatureGateEmulationVersionDuringTest needs to be called
-			// before any calls to SetFeatureGateDuringTest to work reliably.
+			// 必须先设置模拟版本，再调用 SetFeatureGateDuringTest，否则行为不可靠。
 			if testcase.emulationVersion != nil {
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.33"))
 			}
@@ -311,6 +311,7 @@ func TestAuthenticationValidate(t *testing.T) {
 	}
 }
 
+// TestToAuthenticationConfig 校验标志到认证配置的转换结果。
 func TestToAuthenticationConfig(t *testing.T) {
 	testOptions := &BuiltInAuthenticationOptions{
 		Anonymous: &AnonymousAuthenticationOptions{
@@ -404,7 +405,7 @@ func TestToAuthenticationConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// nil these out because you cannot compare pointers.  Ensure they are non-nil first
+	// 指针字段无法直接比较，比较前先确认非空再置 nil。
 	if resultConfig.ClientCAContentProvider == nil {
 		t.Error("missing client verify")
 	}
@@ -419,6 +420,7 @@ func TestToAuthenticationConfig(t *testing.T) {
 	}
 }
 
+// TestBuiltInAuthenticationOptionsAddFlags 校验 AddFlags 注册的标志能被正确解析。
 func TestBuiltInAuthenticationOptionsAddFlags(t *testing.T) {
 	var args = []string{
 		"--api-audiences=foo",
@@ -510,6 +512,7 @@ func TestBuiltInAuthenticationOptionsAddFlags(t *testing.T) {
 	}
 }
 
+// TestWithTokenGetterFunction 校验自定义 token getter 函数能被正确注入配置。
 func TestWithTokenGetterFunction(t *testing.T) {
 	fakeClientset := fake.NewSimpleClientset()
 	versionedInformer := informers.NewSharedInformerFactory(fakeClientset, 0)
@@ -539,6 +542,7 @@ func TestWithTokenGetterFunction(t *testing.T) {
 	}
 }
 
+// TestToAuthenticationConfig_Anonymous 校验匿名认证选项到配置的转换。
 func TestToAuthenticationConfig_Anonymous(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -792,6 +796,7 @@ jwt:
 	}
 }
 
+// TestToAuthenticationConfig_OIDC 校验 OIDC 选项到认证配置的转换。
 func TestToAuthenticationConfig_OIDC(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -1087,6 +1092,7 @@ jwt:
 	}
 }
 
+// TestValidateOIDCOptions 覆盖 OIDC 选项的合法性校验。
 func TestValidateOIDCOptions(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -1244,6 +1250,7 @@ func TestValidateOIDCOptions(t *testing.T) {
 	}
 }
 
+// TestLoadAuthenticationConfig 校验从文件加载并解析认证配置的行为。
 func TestLoadAuthenticationConfig(t *testing.T) {
 	testCases := []struct {
 		name                string
@@ -1581,6 +1588,7 @@ jwt:
 	}
 }
 
+// writeTempFile 将内容写入临时文件并返回其路径，供测试夹具使用。
 func writeTempFile(t *testing.T, content string) string {
 	t.Helper()
 	file, err := os.CreateTemp("", "config")
@@ -1588,7 +1596,7 @@ func writeTempFile(t *testing.T, content string) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		// An open file cannot be removed on Windows. Close it first.
+		// Windows 上无法删除仍打开的文件，需先关闭。
 		if err := file.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -1602,6 +1610,7 @@ func writeTempFile(t *testing.T, content string) string {
 	return file.Name()
 }
 
+// errString 返回 error 的消息文本，nil 时返回空字符串。
 func errString(err error) string {
 	if err == nil {
 		return ""
@@ -1609,6 +1618,7 @@ func errString(err error) string {
 	return err.Error()
 }
 
+// TestToAuthenticationConfigForServiceAccount 校验 ServiceAccount 相关选项到认证配置的转换。
 func TestToAuthenticationConfigForServiceAccount(t *testing.T) {
 
 	dummyExternalGetter := &dummyPublicKeyGetter{}
@@ -1634,7 +1644,7 @@ func TestToAuthenticationConfigForServiceAccount(t *testing.T) {
 		return
 	}
 	t.Cleanup(func() {
-		// An open file cannot be removed on Windows. Close it first.
+		// Windows 上无法删除仍打开的文件，需先关闭。
 		if err := publicKeyFile.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -1737,7 +1747,7 @@ func TestToAuthenticationConfigForServiceAccount(t *testing.T) {
 			return
 		}
 
-		// make out of scope fields nil
+		// 将不参与比较的字段置 nil。
 		resultConfig.AuthenticationConfig = nil
 
 		if tc.expectedExternalGetter {
@@ -1764,22 +1774,26 @@ func TestToAuthenticationConfigForServiceAccount(t *testing.T) {
 	}
 }
 
+// dummyPublicKeyGetter 是测试中使用的空实现公钥获取器。
 type dummyPublicKeyGetter struct {
 }
 
+// AddListener 是空实现，测试无需监听公钥变更。
 func (d *dummyPublicKeyGetter) AddListener(listener serviceaccount.Listener) {}
 
+// GetCacheAgeMaxSeconds 返回测试用的缓存最长时间。
 func (d *dummyPublicKeyGetter) GetCacheAgeMaxSeconds() int {
 	return 10
 }
 
+// GetPublicKeys 返回测试用的固定公钥列表。
 func (d *dummyPublicKeyGetter) GetPublicKeys(ctx context.Context, keyIDHint string) []serviceaccount.PublicKey {
 	return []serviceaccount.PublicKey{}
 }
 
-// getFileNotFoundForOS returns the expected error message for a file not found error on the current OS
-// - on Windows, the error message is "The system cannot find the file specified"
-// - on other, the error message is "no such file or directory"
+// getFileNotFoundForOS 返回当前操作系统下“文件不存在”的预期错误信息：
+// Windows 上为 "The system cannot find the file specified"，
+// 其他系统为 "no such file or directory"。
 func getFileNotFoundForOS() string {
 	if goruntime.GOOS == "windows" {
 		return "The system cannot find the file specified"

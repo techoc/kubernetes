@@ -42,7 +42,8 @@ import (
 	"k8s.io/kubernetes/pkg/apis/storagemigration"
 )
 
-// SpecialDefaultResourcePrefixes are prefixes compiled into Kubernetes.
+// SpecialDefaultResourcePrefixes 是编译进 Kubernetes 的特殊默认 etcd 键前缀。
+// 保留这些历史前缀是为了兼容已有集群中存储的数据路径。
 var SpecialDefaultResourcePrefixes = map[schema.GroupResource]string{
 	{Group: "", Resource: "replicationcontrollers"}:     "controllers",
 	{Group: "", Resource: "endpoints"}:                  "services/endpoints",
@@ -52,8 +53,8 @@ var SpecialDefaultResourcePrefixes = map[schema.GroupResource]string{
 	{Group: "networking.k8s.io", Resource: "ingresses"}: "ingress",
 }
 
-// DefaultWatchCacheSizes defines default resources for which watchcache
-// should be disabled.
+// DefaultWatchCacheSizes 定义默认应禁用 watch cache 的资源。
+// event 数量大且生命周期短，缓存它们收益极低却会消耗大量内存。
 func DefaultWatchCacheSizes() map[schema.GroupResource]int {
 	return map[schema.GroupResource]int{
 		{Resource: "events"}:                         0,
@@ -61,13 +62,15 @@ func DefaultWatchCacheSizes() map[schema.GroupResource]int {
 	}
 }
 
-// NewStorageFactoryConfig returns a new StorageFactoryConfig set up with necessary resource overrides.
+// NewStorageFactoryConfig 返回一个带有必要资源覆盖配置的新 StorageFactoryConfig。
 func NewStorageFactoryConfig() *StorageFactoryConfig {
 	return NewStorageFactoryConfigEffectiveVersion(compatibility.DefaultComponentGlobalsRegistry.EffectiveVersionFor(basecompatibility.DefaultKubeComponent))
 }
 
-// NewStorageFactoryConfigEffectiveVersion returns a new StorageFactoryConfig set up with necessary resource overrides for a given EffectiveVersion.
+// NewStorageFactoryConfigEffectiveVersion 针对给定的 EffectiveVersion 返回一个
+// 带有必要资源覆盖配置的新 StorageFactoryConfig。
 func NewStorageFactoryConfigEffectiveVersion(effectiveVersion basecompatibility.EffectiveVersion) *StorageFactoryConfig {
+	// 某些资源必须以非最新版本存储，以支持向还不支持新版本的老 apiserver 回滚一个版本。
 	resources := []schema.GroupVersionResource{
 		// If a resource has to be stored in a version that is not the
 		// latest, then it can be listed here. Usually this is the case
@@ -99,7 +102,7 @@ func NewStorageFactoryConfigEffectiveVersion(effectiveVersion basecompatibility.
 	}
 }
 
-// StorageFactoryConfig is a configuration for creating storage factory.
+// StorageFactoryConfig 是用于创建存储工厂的配置。
 type StorageFactoryConfig struct {
 	StorageConfig             storagebackend.Config
 	APIResourceConfig         *serverstorage.ResourceConfig
@@ -110,8 +113,8 @@ type StorageFactoryConfig struct {
 	EtcdServersOverrides      []string
 }
 
-// Complete completes the StorageFactoryConfig with provided etcdOptions returning completedStorageFactoryConfig.
-// This method mutates the receiver (StorageFactoryConfig).  It must never mutate the inputs.
+// Complete 用给定的 etcdOptions 补全 StorageFactoryConfig，返回 completedStorageFactoryConfig。
+// 该方法会修改接收者，但绝不修改输入参数。
 func (c *StorageFactoryConfig) Complete(etcdOptions *serveroptions.EtcdOptions) *completedStorageFactoryConfig {
 	c.StorageConfig = etcdOptions.StorageConfig
 	c.DefaultStorageMediaType = etcdOptions.DefaultStorageMediaType
@@ -119,17 +122,18 @@ func (c *StorageFactoryConfig) Complete(etcdOptions *serveroptions.EtcdOptions) 
 	return &completedStorageFactoryConfig{c}
 }
 
-// completedStorageFactoryConfig is a wrapper around StorageFactoryConfig completed with etcd options.
+// completedStorageFactoryConfig 是经 etcd 选项补全后的 StorageFactoryConfig 包装。
 //
-// Note: this struct is intentionally unexported so that it can only be constructed via a StorageFactoryConfig.Complete
-// call. The implied consequence is that this does not comply with golint.
+// 注意：该结构体故意保持非导出，确保只能通过 StorageFactoryConfig.Complete 构造；
+// 因此需要绕过 golint 对导出类型的要求。
 type completedStorageFactoryConfig struct {
 	*StorageFactoryConfig
 }
 
-// New returns a new storage factory created from the completed storage factory configuration.
+// New 根据已补全的配置创建一个新的存储工厂。
 func (c *completedStorageFactoryConfig) New() (*serverstorage.DefaultStorageFactory, error) {
 	resourceEncodingConfig := resourceconfig.MergeResourceEncodingConfigs(c.DefaultResourceEncoding, c.ResourceEncodingOverrides)
+	// 新旧 API 组中的同一资源共享底层存储，避免版本迁移时出现数据分裂。
 	storageFactory := serverstorage.NewDefaultStorageFactory(
 		c.StorageConfig,
 		c.DefaultStorageMediaType,
@@ -143,10 +147,11 @@ func (c *completedStorageFactoryConfig) New() (*serverstorage.DefaultStorageFact
 	storageFactory.AddCohabitatingResources(apps.Resource("daemonsets"), extensions.Resource("daemonsets"))
 	storageFactory.AddCohabitatingResources(apps.Resource("replicasets"), extensions.Resource("replicasets"))
 	storageFactory.AddCohabitatingResources(api.Resource("events"), events.Resource("events"))
-	storageFactory.AddCohabitatingResources(api.Resource("replicationcontrollers"), extensions.Resource("replicationcontrollers")) // to make scale subresources equivalent
+	storageFactory.AddCohabitatingResources(api.Resource("replicationcontrollers"), extensions.Resource("replicationcontrollers")) // 使 scale 子资源等价
 	storageFactory.AddCohabitatingResources(policy.Resource("podsecuritypolicies"), extensions.Resource("podsecuritypolicies"))
 	storageFactory.AddCohabitatingResources(networking.Resource("ingresses"), extensions.Resource("ingresses"))
 
+	// 按资源覆盖 etcd 服务器地址，供多 etcd 集群拆分流量的场景使用。
 	for _, override := range c.EtcdServersOverrides {
 		tokens := strings.Split(override, "#")
 		apiresource := strings.Split(tokens[0], "/")

@@ -18,6 +18,7 @@ package modes
 
 import "testing"
 
+// TestIsValidAuthorizationMode 校验合法与非法的授权模式能否被正确识别。
 func TestIsValidAuthorizationMode(t *testing.T) {
 	var tests = []struct {
 		authzMode string

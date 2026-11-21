@@ -49,15 +49,15 @@ import (
 	"k8s.io/kube-openapi/pkg/spec3"
 	"k8s.io/kube-openapi/pkg/validation/spec"
 
-	// Initialize all known client auth plugins.
+	// 注册所有已知客户端认证插件，供 webhook kubeconfig 等场景使用。
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/kubernetes/pkg/serviceaccount"
 )
 
-// Config contains the data on how to authenticate a request to the Kube API Server
+// Config 包含如何对 Kube API Server 的请求进行认证的数据。
 type Config struct {
-	// Anonymous holds the effective anonymous config, specified either via config file
-	// (hoisted out of AuthenticationConfig) or via flags (constructed from flag-specified values).
+	// Anonymous 保存生效的匿名认证配置，可能来自配置文件
+	//（从 AuthenticationConfig 中提取）或由标志值构造。
 	Anonymous apiserver.AnonymousAuthConfig
 
 	BootstrapToken bool
@@ -72,9 +72,8 @@ type Config struct {
 	WebhookTokenAuthnConfigFile string
 	WebhookTokenAuthnVersion    string
 	WebhookTokenAuthnCacheTTL   time.Duration
-	// WebhookRetryBackoff specifies the backoff parameters for the authentication webhook retry logic.
-	// This allows us to configure the sleep time at each iteration and the maximum number of retries allowed
-	// before we fail the webhook call in order to limit the fan out that ensues when the system is degraded.
+	// WebhookRetryBackoff 指定认证 webhook 重试逻辑的退避参数。
+	// 通过配置每次迭代的休眠时间与最大重试次数，可在系统降级时限制请求放大效应。
 	WebhookRetryBackoff *wait.Backoff
 
 	TokenSuccessCacheTTL time.Duration
@@ -82,36 +81,34 @@ type Config struct {
 
 	RequestHeaderConfig *authenticatorfactory.RequestHeaderConfig
 
-	// ServiceAccountPublicKeysGetter returns public keys for verifying service account tokens.
+	// ServiceAccountPublicKeysGetter 返回用于校验 ServiceAccount token 的公钥。
 	ServiceAccountPublicKeysGetter serviceaccount.PublicKeysGetter
-	// ServiceAccountTokenGetter fetches API objects used to verify bound objects in service account token claims.
+	// ServiceAccountTokenGetter 获取用于校验 ServiceAccount token 声明中绑定对象的 API 对象。
 	ServiceAccountTokenGetter   serviceaccount.ServiceAccountTokenGetter
 	SecretsWriter               typedv1core.SecretsGetter
 	BootstrapTokenAuthenticator authenticator.Token
-	// ClientCAContentProvider are the options for verifying incoming connections using mTLS and directly assigning to users.
-	// Generally this is the CA bundle file used to authenticate client certificates
-	// If this value is nil, then mutual TLS is disabled.
+	// ClientCAContentProvider 提供 mTLS 校验连接并直接映射用户的选项，
+	// 通常是用于认证客户端证书的 CA 包；为 nil 时禁用双向 TLS。
 	ClientCAContentProvider dynamiccertificates.CAContentProvider
 
-	// Optional field, custom dial function used to connect to webhook
+	// 可选字段，连接 webhook 时使用的自定义拨号函数。
 	CustomDial utilnet.DialFunc
 
 	EgressLookup egressselector.Lookup
 
-	// APIServerID is the ID of the API server
+	// APIServerID 是该 API server 的标识。
 	APIServerID string
 }
 
-// New returns an authenticator.Request or an error that supports the standard
-// Kubernetes authentication mechanisms.
+// New 返回一个支持 Kubernetes 标准认证机制的 authenticator.Request 或错误。
 func (config Config) New(serverLifecycle context.Context) (authenticator.Request, func(context.Context, *apiserver.AuthenticationConfiguration) error, *spec.SecurityDefinitions, spec3.SecuritySchemes, error) {
 	var authenticators []authenticator.Request
 	var tokenAuthenticators []authenticator.Token
 	securityDefinitionsV2 := spec.SecurityDefinitions{}
 	securitySchemesV3 := spec3.SecuritySchemes{}
 
-	// front-proxy, BasicAuth methods, local first, then remote
-	// Add the front proxy authenticator if requested
+	// 认证器按“本地优先、远程其次”的顺序排列：
+	// front-proxy、BasicAuth 等先于远程 webhook 执行。
 	if config.RequestHeaderConfig != nil {
 		requestHeaderAuthenticator := headerrequest.NewDynamicVerifyOptionsSecure(
 			config.RequestHeaderConfig.CAContentProvider.VerifyOptions,
@@ -124,13 +121,13 @@ func (config Config) New(serverLifecycle context.Context) (authenticator.Request
 		authenticators = append(authenticators, authenticator.WrapAudienceAgnosticRequest(config.APIAudiences, requestHeaderAuthenticator))
 	}
 
-	// X509 methods
+	// X509 客户端证书认证。
 	if config.ClientCAContentProvider != nil {
 		certAuth := x509.NewDynamic(config.ClientCAContentProvider.VerifyOptions, x509.CommonNameUserConversion)
 		authenticators = append(authenticators, certAuth)
 	}
 
-	// Bearer token methods, local first, then remote
+	// Bearer token 类认证器同样是本地优先、远程其次。
 	if len(config.TokenAuthFile) > 0 {
 		tokenAuth, err := newAuthenticatorFromTokenFile(config.TokenAuthFile)
 		if err != nil {
@@ -157,12 +154,10 @@ func (config Config) New(serverLifecycle context.Context) (authenticator.Request
 		tokenAuthenticators = append(tokenAuthenticators, authenticator.WrapAudienceAgnosticToken(config.APIAudiences, config.BootstrapTokenAuthenticator))
 	}
 
-	// NOTE(ericchiang): Keep the OpenID Connect after Service Accounts.
+	// NOTE(ericchiang): 必须让 OpenID Connect 排在 Service Account 之后。
 	//
-	// Because both plugins verify JWTs whichever comes first in the union experiences
-	// cache misses for all requests using the other. While the service account plugin
-	// simply returns an error, the OpenID Connect plugin may query the provider to
-	// update the keys, causing performance hits.
+	// 两者都校验 JWT，先命中的插件会对使用另一类 token 的请求产生缓存未命中；
+	// Service Account 插件仅返回错误，而 OIDC 插件可能查询 provider 更新密钥，造成性能损耗。
 	var updateAuthenticationConfig func(context.Context, *apiserver.AuthenticationConfiguration) error
 	if config.AuthenticationConfig != nil {
 		initialJWTAuthenticator, err := newJWTAuthenticator(serverLifecycle, config.AuthenticationConfig, config.OIDCSigningAlgs, config.APIAudiences, config.ServiceAccountIssuers, config.EgressLookup, config.APIServerID)
@@ -202,9 +197,8 @@ func (config Config) New(serverLifecycle context.Context) (authenticator.Request
 	}
 
 	if len(tokenAuthenticators) > 0 {
-		// Union the token authenticators
+		// 先合并所有 token 认证器，再按配置缓存认证结果以减少重复开销。
 		tokenAuth := tokenunion.New(tokenAuthenticators...)
-		// Optionally cache authentication results
 		if config.TokenSuccessCacheTTL > 0 || config.TokenFailureCacheTTL > 0 {
 			tokenAuth = tokencache.New(tokenAuth, true, config.TokenSuccessCacheTTL, config.TokenFailureCacheTTL)
 		}
@@ -240,23 +234,25 @@ func (config Config) New(serverLifecycle context.Context) (authenticator.Request
 	authenticator = group.NewAuthenticatedGroupAdder(authenticator)
 
 	if config.Anonymous.Enabled {
-		// If the authenticator chain returns an error, return an error (don't consider a bad bearer token
-		// or invalid username/password combination anonymous).
+		// 认证链报错时直接返回错误，避免把非法 token 或错误凭据当作匿名请求放行。
 		authenticator = union.NewFailOnError(authenticator, anonymous.NewAuthenticator(config.Anonymous.Conditions))
 	}
 
 	return authenticator, updateAuthenticationConfig, &securityDefinitionsV2, securitySchemesV3, nil
 }
 
+// jwtAuthenticatorWithCancel 包装 JWT 认证器及其生命周期取消函数，便于配置热更新时替换。
 type jwtAuthenticatorWithCancel struct {
 	jwtAuthenticator authenticator.Token
 	healthCheck      func() error
 	cancel           func()
 }
 
+// newJWTAuthenticator 根据认证配置构造 JWT 认证器及健康检查与取消函数。
 func newJWTAuthenticator(serverLifecycle context.Context, config *apiserver.AuthenticationConfiguration, oidcSigningAlgs []string, apiAudiences authenticator.Audiences, disallowedIssuers []string, egressLookup egressselector.Lookup, apiServerID string) (_ *jwtAuthenticatorWithCancel, buildErr error) {
 	ctx, cancel := context.WithCancel(serverLifecycle)
 
+	// 构造失败时立即取消派生的 context，避免泄漏 OIDC 后台 goroutine。
 	defer func() {
 		if buildErr != nil {
 			cancel()
@@ -289,7 +285,8 @@ func newJWTAuthenticator(serverLifecycle context.Context, config *apiserver.Auth
 		healthChecks = append(healthChecks, oidcAuth.HealthCheck)
 	}
 	return &jwtAuthenticatorWithCancel{
-		jwtAuthenticator: authenticator.WrapAudienceAgnosticToken(apiAudiences, tokenunion.NewFailOnError(jwtAuthenticators...)), // this handles the empty jwtAuthenticators slice case correctly
+		// tokenunion.NewFailOnError 能正确处理空切片，避免无 JWT 配置时误放行。
+		jwtAuthenticator: authenticator.WrapAudienceAgnosticToken(apiAudiences, tokenunion.NewFailOnError(jwtAuthenticators...)),
 		healthCheck: func() error {
 			var errs []error
 			for _, check := range healthChecks {
@@ -303,6 +300,7 @@ func newJWTAuthenticator(serverLifecycle context.Context, config *apiserver.Auth
 	}, nil
 }
 
+// authenticationConfigUpdater 负责在运行时热更新 OIDC/JWT 认证配置。
 type authenticationConfigUpdater struct {
 	serverLifecycle     context.Context
 	config              Config
@@ -310,13 +308,15 @@ type authenticationConfigUpdater struct {
 	issuers             sets.Set[string]
 }
 
-// the input ctx controls the timeout for updateAuthenticationConfig to return, not the lifetime of the constructed authenticators.
+// updateAuthenticationConfig 热更新 JWT 认证器配置。
+// 入参 ctx 仅控制本次更新的超时时间，不决定新建认证器的生命周期。
 func (c *authenticationConfigUpdater) updateAuthenticationConfig(ctx context.Context, authConfig *apiserver.AuthenticationConfiguration) error {
 	updatedJWTAuthenticator, err := newJWTAuthenticator(c.serverLifecycle, authConfig, c.config.OIDCSigningAlgs, c.config.APIAudiences, c.config.ServiceAccountIssuers, c.config.EgressLookup, c.config.APIServerID)
 	if err != nil {
 		return err
 	}
 
+	// 新认证器上线前必须先通过健康检查，防止切换到无法工作的 OIDC provider。
 	var lastErr error
 	if waitErr := wait.PollUntilContextCancel(ctx, 10*time.Second, true, func(_ context.Context) (done bool, err error) {
 		lastErr = updatedJWTAuthenticator.healthCheck()
@@ -331,12 +331,13 @@ func (c *authenticationConfigUpdater) updateAuthenticationConfig(ctx context.Con
 		newIssuers.Insert(jwt.Issuer.URL)
 	}
 
-	// Determine which issuers were removed (in old but not in new)
+	// 记录被移除的 issuer，稍后清理其指标。
 	removedIssuers := c.issuers.Difference(newIssuers)
 
 	oldJWTAuthenticator := c.jwtAuthenticatorPtr.Swap(updatedJWTAuthenticator)
 	c.issuers = newIssuers
 
+	// 延迟取消旧认证器：给仍在进行的请求留出完成时间，再清理过期指标。
 	go func() {
 		t := time.NewTimer(time.Minute)
 		defer t.Stop()
@@ -347,17 +348,14 @@ func (c *authenticationConfigUpdater) updateAuthenticationConfig(ctx context.Con
 		// TODO maybe track requests so we know when this is safe to do
 		oldJWTAuthenticator.cancel()
 
-		// Wait a bit to account for the lack of locks in shouldRecordFunc.
-		// This ensures any in-flight HTTP requests that checked shouldRecordFunc
-		// before the cancel() have time to complete their metric recording.
+		// shouldRecordFunc 未加锁，额外等待让取消前已检查过它的在途请求
+		// 有时间完成指标记录。
 		time.Sleep(30 * time.Second)
 
-		// Delete metrics for removed issuers.
-		// Note: If the configuration changes rapidly (e.g., an issuer is removed and then re-added
-		// within the grace period + sleep duration), we may delete metrics for an issuer that is
-		// now back in use. This is an unlikely edge case that would only occur during configuration
-		// churn, and the metrics would be re-established on the next JWKS fetch. The system will
-		// stabilize once configuration changes stop.
+		// 删除已移除 issuer 的指标。
+		// 注意：若配置在宽限期加休眠期内快速回滚（issuer 被移除后又重新加入），
+		// 可能误删仍在使用的指标。这属于配置抖动时的边缘情况，
+		// 下次 JWKS 拉取会重建指标，配置稳定后系统即恢复一致。
 		for _, issuer := range removedIssuers.UnsortedList() {
 			oidc.DeleteJWKSFetchMetrics(issuer, c.config.APIServerID)
 		}
@@ -366,7 +364,7 @@ func (c *authenticationConfigUpdater) updateAuthenticationConfig(ctx context.Con
 	return nil
 }
 
-// newAuthenticatorFromTokenFile returns an authenticator.Token or an error
+// newAuthenticatorFromTokenFile 从 CSV token 文件构造 token 认证器。
 func newAuthenticatorFromTokenFile(tokenAuthFile string) (authenticator.Token, error) {
 	tokenAuthenticator, err := tokenfile.NewCSV(tokenAuthFile)
 	if err != nil {
@@ -376,7 +374,7 @@ func newAuthenticatorFromTokenFile(tokenAuthFile string) (authenticator.Token, e
 	return tokenAuthenticator, nil
 }
 
-// newLegacyServiceAccountAuthenticator returns an authenticator.Token or an error
+// newLegacyServiceAccountAuthenticator 构造兼容旧版 ServiceAccount token 的认证器。
 func newLegacyServiceAccountAuthenticator(publicKeysGetter serviceaccount.PublicKeysGetter, lookup bool, apiAudiences authenticator.Audiences, serviceAccountGetter serviceaccount.ServiceAccountTokenGetter, secretsWriter typedv1core.SecretsGetter) (authenticator.Token, error) {
 	if publicKeysGetter == nil {
 		return nil, fmt.Errorf("no public key getter provided")
@@ -390,7 +388,7 @@ func newLegacyServiceAccountAuthenticator(publicKeysGetter serviceaccount.Public
 	return tokenAuthenticator, nil
 }
 
-// newServiceAccountAuthenticator returns an authenticator.Token or an error
+// newServiceAccountAuthenticator 构造新版 ServiceAccount token 认证器。
 func newServiceAccountAuthenticator(issuers []string, publicKeysGetter serviceaccount.PublicKeysGetter, apiAudiences authenticator.Audiences, serviceAccountGetter serviceaccount.ServiceAccountTokenGetter) (authenticator.Token, error) {
 	if publicKeysGetter == nil {
 		return nil, fmt.Errorf("no public key getter provided")
@@ -399,6 +397,7 @@ func newServiceAccountAuthenticator(issuers []string, publicKeysGetter serviceac
 	return tokenAuthenticator, nil
 }
 
+// newWebhookTokenAuthenticator 构造带缓存的远程 webhook token 认证器。
 func newWebhookTokenAuthenticator(config Config) (authenticator.Token, error) {
 	if config.WebhookRetryBackoff == nil {
 		return nil, errors.New("retry backoff parameters for authentication webhook has not been specified")

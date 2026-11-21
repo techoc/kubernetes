@@ -28,28 +28,29 @@ import (
 
 // TODO add a `WantsToRun` which takes a stopCh.  Might make it generic.
 
-// PluginInitializer is used for initialization of the Kubernetes specific admission plugins.
+// PluginInitializer 用于初始化 Kubernetes 特有的准入插件。
 type PluginInitializer struct {
 	loaders *initializer.ManifestLoaders
 }
 
 var _ admission.PluginInitializer = &PluginInitializer{}
 
-// NewPluginInitializer constructs new instance of PluginInitializer
+// NewPluginInitializer 构造一个新的 PluginInitializer 实例。
 func NewPluginInitializer() *PluginInitializer {
 	return &PluginInitializer{
 		loaders: newManifestLoaders(),
 	}
 }
 
-// Initialize checks the initialization interfaces implemented by each plugin
-// and provide the appropriate initialization data
+// Initialize 检查插件实现的初始化接口，并为其注入相应的初始化数据。
 func (i *PluginInitializer) Initialize(plugin admission.Interface) {
 	if wants, ok := plugin.(initializer.WantsManifestLoaders); ok {
 		wants.SetManifestLoaders(i.loaders)
 	}
 }
 
+// newManifestLoaders 构建清单加载器；特性门控关闭时返回空加载器，
+// 从而避免插件尝试从磁盘读取不会被使用的清单配置。
 func newManifestLoaders() *initializer.ManifestLoaders {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.ManifestBasedAdmissionControlConfig) {
 		return &initializer.ManifestLoaders{}
