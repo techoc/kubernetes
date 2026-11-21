@@ -14,6 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package internalversion 提供针对 Kubernetes 内部版本（internal version）资源的打印处理器。
+// 通过 AddHandlers 函数为所有核心资源类型注册表格打印逻辑，
+// 使 kubectl get 等命令能以表格形式展示各种资源。
+//
+// 核心概念：
+//   - 每种资源类型定义一组 TableColumnDefinition 描述表格列
+//   - 通过 TableHandler 注册列定义和对应的 print 函数
+//   - print 函数签名统一为 func(obj *Type, options printers.GenerateOptions) ([]metav1.TableRow, error)
+//   - 辅助函数处理通用格式化逻辑（时间戳、IP 地址、端口等）
 package internalversion
 
 import (
@@ -86,18 +95,23 @@ import (
 )
 
 const (
+	// loadBalancerWidth 是 LoadBalancer IP 地址显示的最大宽度，超出时截断
 	loadBalancerWidth = 16
 
-	// labelNodeRolePrefix is a label prefix for node roles
-	// It's copied over to here until it's merged in core: https://github.com/kubernetes/kubernetes/pull/39112
+	// labelNodeRolePrefix 是节点角色的 label 前缀
+	// 临时复制至此，等待合并到 core 包：https://github.com/kubernetes/kubernetes/pull/39112
 	labelNodeRolePrefix = "node-role.kubernetes.io/"
 
-	// nodeLabelRole specifies the role of a node
+	// nodeLabelRole 指定节点角色的 label 键名
 	nodeLabelRole = "kubernetes.io/role"
 )
 
-// AddHandlers adds print handlers for default Kubernetes types dealing with internal versions.
+// AddHandlers 为所有默认 Kubernetes 资源类型注册打印处理器。
+// 每种资源类型定义一组列定义（TableColumnDefinition），然后注册对应的 print 函数。
+// 列定义中的 Priority > 0 的列仅在 `kubectl get -o wide` 模式下显示。
+// 错误被忽略，因为 TableHandler 内部已记录日志。
 func AddHandlers(h printers.PrintHandler) {
+	// ---- Pod 资源：显示名称、就绪状态、状态、重启次数、年龄 ----
 	podColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Ready", Type: "string", Description: "The aggregate readiness state of this pod for accepting traffic."},
@@ -110,10 +124,11 @@ func AddHandlers(h printers.PrintHandler) {
 		{Name: "Readiness Gates", Type: "string", Priority: 1, Description: apiv1.PodSpec{}.SwaggerDoc()["readinessGates"]},
 	}
 
-	// Errors are suppressed as TableHandler already logs internally
+	// 错误被忽略，因为 TableHandler 内部已记录日志
 	_ = h.TableHandler(podColumnDefinitions, printPodList)
 	_ = h.TableHandler(podColumnDefinitions, printPod)
 
+	// ---- PodTemplate 资源 ----
 	podTemplateColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Containers", Type: "string", Description: "Names of each container in the template."},
@@ -123,6 +138,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(podTemplateColumnDefinitions, printPodTemplate)
 	_ = h.TableHandler(podTemplateColumnDefinitions, printPodTemplateList)
 
+	// ---- PodDisruptionBudget 资源：显示最小可用、最大不可用、允许中断数 ----
 	podDisruptionBudgetColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Min Available", Type: "string", Description: "The minimum number of pods that must be available."},
@@ -133,6 +149,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(podDisruptionBudgetColumnDefinitions, printPodDisruptionBudget)
 	_ = h.TableHandler(podDisruptionBudgetColumnDefinitions, printPodDisruptionBudgetList)
 
+	// ---- ReplicationController 资源：显示期望/当前/就绪副本数 ----
 	replicationControllerColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Desired", Type: "integer", Description: apiv1.ReplicationControllerSpec{}.SwaggerDoc()["replicas"]},
@@ -146,6 +163,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(replicationControllerColumnDefinitions, printReplicationController)
 	_ = h.TableHandler(replicationControllerColumnDefinitions, printReplicationControllerList)
 
+	// ---- ReplicaSet 资源：显示期望/当前/就绪副本数 ----
 	replicaSetColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Desired", Type: "integer", Description: appsv1.ReplicaSetSpec{}.SwaggerDoc()["replicas"]},
@@ -159,6 +177,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(replicaSetColumnDefinitions, printReplicaSet)
 	_ = h.TableHandler(replicaSetColumnDefinitions, printReplicaSetList)
 
+	// ---- DaemonSet 资源：显示调度/就绪/最新/可用节点数 ----
 	daemonSetColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Desired", Type: "integer", Description: appsv1.DaemonSetStatus{}.SwaggerDoc()["desiredNumberScheduled"]},
@@ -175,6 +194,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(daemonSetColumnDefinitions, printDaemonSet)
 	_ = h.TableHandler(daemonSetColumnDefinitions, printDaemonSetList)
 
+	// ---- Job 资源：显示状态、完成数、持续时间 ----
 	jobColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Status", Type: "string", Description: "Status of the job."},
@@ -188,6 +208,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(jobColumnDefinitions, printJob)
 	_ = h.TableHandler(jobColumnDefinitions, printJobList)
 
+	// ---- CronJob 资源：显示调度时间、时区、挂起状态、活跃 Job 数 ----
 	cronJobColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Schedule", Type: "string", Description: batchv1.CronJobSpec{}.SwaggerDoc()["schedule"]},
@@ -203,6 +224,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(cronJobColumnDefinitions, printCronJob)
 	_ = h.TableHandler(cronJobColumnDefinitions, printCronJobList)
 
+	// ---- Service 资源：显示类型、ClusterIP、外部IP、端口 ----
 	serviceColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Type", Type: "string", Description: apiv1.ServiceSpec{}.SwaggerDoc()["type"]},
@@ -216,6 +238,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(serviceColumnDefinitions, printService)
 	_ = h.TableHandler(serviceColumnDefinitions, printServiceList)
 
+	// ---- Ingress 资源：显示类、主机、地址、端口 ----
 	ingressColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Class", Type: "string", Description: "The name of the IngressClass resource that should be used for additional configuration"},
@@ -227,6 +250,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(ingressColumnDefinitions, printIngress)
 	_ = h.TableHandler(ingressColumnDefinitions, printIngressList)
 
+	// ---- IngressClass 资源：显示控制器和参数引用 ----
 	ingressClassColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Controller", Type: "string", Description: "Controller that is responsible for handling this class"},
@@ -236,6 +260,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(ingressClassColumnDefinitions, printIngressClass)
 	_ = h.TableHandler(ingressClassColumnDefinitions, printIngressClassList)
 
+	// ---- StatefulSet 资源：显示就绪 Pod 数 ----
 	statefulSetColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Ready", Type: "string", Description: "Number of the pod with ready state"},
@@ -246,6 +271,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(statefulSetColumnDefinitions, printStatefulSet)
 	_ = h.TableHandler(statefulSetColumnDefinitions, printStatefulSetList)
 
+	// ---- Endpoints 资源：显示端点地址 ----
 	endpointColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Endpoints", Type: "string", Description: apiv1.Endpoints{}.SwaggerDoc()["subsets"]},
@@ -254,6 +280,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(endpointColumnDefinitions, printEndpoints)
 	_ = h.TableHandler(endpointColumnDefinitions, printEndpointsList)
 
+	// ---- Node 资源：显示状态、角色、版本、IP 地址 ----
 	nodeColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Status", Type: "string", Description: "The status of the node"},
@@ -270,6 +297,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(nodeColumnDefinitions, printNode)
 	_ = h.TableHandler(nodeColumnDefinitions, printNodeList)
 
+	// ---- Event 资源：显示最后时间、类型、原因、对象、消息 ----
 	eventColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Last Seen", Type: "string", Description: apiv1.Event{}.SwaggerDoc()["lastTimestamp"]},
 		{Name: "Type", Type: "string", Description: apiv1.Event{}.SwaggerDoc()["type"]},
@@ -285,6 +313,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(eventColumnDefinitions, printEvent)
 	_ = h.TableHandler(eventColumnDefinitions, printEventList)
 
+	// ---- Namespace 资源：显示名称和状态 ----
 	namespaceColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Status", Type: "string", Description: "The status of the namespace"},
@@ -293,6 +322,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(namespaceColumnDefinitions, printNamespace)
 	_ = h.TableHandler(namespaceColumnDefinitions, printNamespaceList)
 
+	// ---- Secret 资源：显示类型和数据项数 ----
 	secretColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Type", Type: "string", Description: apiv1.Secret{}.SwaggerDoc()["type"]},
@@ -302,6 +332,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(secretColumnDefinitions, printSecret)
 	_ = h.TableHandler(secretColumnDefinitions, printSecretList)
 
+	// ---- ServiceAccount 资源 ----
 	serviceAccountColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Age", Type: "string", Description: metav1.ObjectMeta{}.SwaggerDoc()["creationTimestamp"]},
@@ -309,6 +340,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(serviceAccountColumnDefinitions, printServiceAccount)
 	_ = h.TableHandler(serviceAccountColumnDefinitions, printServiceAccountList)
 
+	// ---- PersistentVolume 资源：显示容量、访问模式、回收策略、状态 ----
 	persistentVolumeColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Capacity", Type: "string", Description: apiv1.PersistentVolumeSpec{}.SwaggerDoc()["capacity"]},
@@ -325,6 +357,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(persistentVolumeColumnDefinitions, printPersistentVolume)
 	_ = h.TableHandler(persistentVolumeColumnDefinitions, printPersistentVolumeList)
 
+	// ---- PersistentVolumeClaim 资源：显示状态、绑定的 PV、容量 ----
 	persistentVolumeClaimColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Status", Type: "string", Description: apiv1.PersistentVolumeClaimStatus{}.SwaggerDoc()["phase"]},
@@ -339,6 +372,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(persistentVolumeClaimColumnDefinitions, printPersistentVolumeClaim)
 	_ = h.TableHandler(persistentVolumeClaimColumnDefinitions, printPersistentVolumeClaimList)
 
+	// ---- ComponentStatus 资源：显示组件健康状态 ----
 	componentStatusColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Status", Type: "string", Description: "Status of the component conditions"},
@@ -348,6 +382,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(componentStatusColumnDefinitions, printComponentStatus)
 	_ = h.TableHandler(componentStatusColumnDefinitions, printComponentStatusList)
 
+	// ---- Deployment 资源：显示就绪/最新/可用副本数 ----
 	deploymentColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Ready", Type: "string", Description: "Number of the pod with ready state"},
@@ -361,6 +396,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(deploymentColumnDefinitions, printDeployment)
 	_ = h.TableHandler(deploymentColumnDefinitions, printDeploymentList)
 
+	// ---- HorizontalPodAutoscaler 资源：显示目标、指标、最小/最大副本数 ----
 	horizontalPodAutoscalerColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Reference", Type: "string", Description: autoscalingv2.HorizontalPodAutoscalerSpec{}.SwaggerDoc()["scaleTargetRef"]},
@@ -373,6 +409,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(horizontalPodAutoscalerColumnDefinitions, printHorizontalPodAutoscaler)
 	_ = h.TableHandler(horizontalPodAutoscalerColumnDefinitions, printHorizontalPodAutoscalerList)
 
+	// ---- ConfigMap 资源：显示数据项数 ----
 	configMapColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Data", Type: "string", Description: apiv1.ConfigMap{}.SwaggerDoc()["data"]},
@@ -381,6 +418,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(configMapColumnDefinitions, printConfigMap)
 	_ = h.TableHandler(configMapColumnDefinitions, printConfigMapList)
 
+	// ---- NetworkPolicy 资源：显示 Pod 选择器 ----
 	networkPolicyColumnDefinitioins := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Pod-Selector", Type: "string", Description: networkingv1.NetworkPolicySpec{}.SwaggerDoc()["podSelector"]},
@@ -389,6 +427,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(networkPolicyColumnDefinitioins, printNetworkPolicy)
 	_ = h.TableHandler(networkPolicyColumnDefinitioins, printNetworkPolicyList)
 
+	// ---- RoleBinding 资源：显示关联的 Role、用户、组、ServiceAccount ----
 	roleBindingsColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Role", Type: "string", Description: rbacv1beta1.RoleBinding{}.SwaggerDoc()["roleRef"]},
@@ -400,6 +439,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(roleBindingsColumnDefinitions, printRoleBinding)
 	_ = h.TableHandler(roleBindingsColumnDefinitions, printRoleBindingList)
 
+	// ---- ClusterRoleBinding 资源：显示关联的 ClusterRole ----
 	clusterRoleBindingsColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Role", Type: "string", Description: rbacv1beta1.ClusterRoleBinding{}.SwaggerDoc()["roleRef"]},
@@ -411,6 +451,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(clusterRoleBindingsColumnDefinitions, printClusterRoleBinding)
 	_ = h.TableHandler(clusterRoleBindingsColumnDefinitions, printClusterRoleBindingList)
 
+	// ---- CertificateSigningRequest 资源：显示签名者、请求者、证书状态 ----
 	certificateSigningRequestColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Age", Type: "string", Description: metav1.ObjectMeta{}.SwaggerDoc()["creationTimestamp"]},
@@ -422,6 +463,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(certificateSigningRequestColumnDefinitions, printCertificateSigningRequest)
 	_ = h.TableHandler(certificateSigningRequestColumnDefinitions, printCertificateSigningRequestList)
 
+	// ---- ClusterTrustBundle 资源：显示签名者 ----
 	clusterTrustBundleColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "SignerName", Type: "string", Description: certificatesv1.ClusterTrustBundleSpec{}.SwaggerDoc()["signerName"]},
@@ -429,6 +471,7 @@ func AddHandlers(h printers.PrintHandler) {
 	h.TableHandler(clusterTrustBundleColumnDefinitions, printClusterTrustBundle)
 	h.TableHandler(clusterTrustBundleColumnDefinitions, printClusterTrustBundleList)
 
+	// ---- PodCertificateRequest 资源：显示 Pod、ServiceAccount、节点、证书状态 ----
 	podCertificateRequestColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "PodName", Type: "string", Description: certificatesv1.PodCertificateRequestSpec{}.SwaggerDoc()["podName"]},
@@ -441,6 +484,7 @@ func AddHandlers(h printers.PrintHandler) {
 	h.TableHandler(podCertificateRequestColumnDefinitions, printPodCertificateRequest)
 	h.TableHandler(podCertificateRequestColumnDefinitions, printPodCertificateRequestList)
 
+	// ---- Lease 资源：显示持有者身份 ----
 	leaseColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Holder", Type: "string", Description: coordinationv1.LeaseSpec{}.SwaggerDoc()["holderIdentity"]},
@@ -449,6 +493,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(leaseColumnDefinitions, printLease)
 	_ = h.TableHandler(leaseColumnDefinitions, printLeaseList)
 
+	// ---- LeaseCandidate 资源：显示关联的 Lease、版本信息 ----
 	leaseCandidateColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "LeaseName", Type: "string", Description: coordinationv1alpha2.LeaseCandidateSpec{}.SwaggerDoc()["leaseName"]},
@@ -459,6 +504,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(leaseCandidateColumnDefinitions, printLeaseCandidate)
 	_ = h.TableHandler(leaseCandidateColumnDefinitions, printLeaseCandidateList)
 
+	// ---- StorageClass 资源：显示供应者、回收策略、绑定模式 ----
 	storageClassColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Provisioner", Type: "string", Description: storagev1.StorageClass{}.SwaggerDoc()["provisioner"]},
@@ -471,6 +517,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(storageClassColumnDefinitions, printStorageClass)
 	_ = h.TableHandler(storageClassColumnDefinitions, printStorageClassList)
 
+	// ---- VolumeAttributesClass 资源：显示驱动名称 ----
 	volumeAttributesClassColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "DriverName", Type: "string", Description: storagev1.VolumeAttributesClass{}.SwaggerDoc()["driverName"]},
@@ -480,6 +527,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(volumeAttributesClassColumnDefinitions, printVolumeAttributesClass)
 	_ = h.TableHandler(volumeAttributesClassColumnDefinitions, printVolumeAttributesClassList)
 
+	// ---- Status 资源：显示 API 调用返回的状态信息 ----
 	statusColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Status", Type: "string", Description: metav1.Status{}.SwaggerDoc()["status"]},
 		{Name: "Reason", Type: "string", Description: metav1.Status{}.SwaggerDoc()["reason"]},
@@ -488,6 +536,7 @@ func AddHandlers(h printers.PrintHandler) {
 
 	_ = h.TableHandler(statusColumnDefinitions, printStatus)
 
+	// ---- ControllerRevision 资源：显示控制器和修订版本号 ----
 	controllerRevisionColumnDefinition := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Controller", Type: "string", Description: "Controller of the object"},
@@ -497,6 +546,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(controllerRevisionColumnDefinition, printControllerRevision)
 	_ = h.TableHandler(controllerRevisionColumnDefinition, printControllerRevisionList)
 
+	// ---- ResourceQuota 资源：显示请求和限制 ----
 	resourceQuotaColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Request", Type: "string", Description: "Request represents a minimum amount of cpu/memory that a container may consume."},
@@ -506,6 +556,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(resourceQuotaColumnDefinitions, printResourceQuota)
 	_ = h.TableHandler(resourceQuotaColumnDefinitions, printResourceQuotaList)
 
+	// ---- PriorityClass 资源：显示优先级值、全局默认、抢占策略 ----
 	priorityClassColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Value", Type: "integer", Description: schedulingv1.PriorityClass{}.SwaggerDoc()["value"]},
@@ -516,6 +567,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(priorityClassColumnDefinitions, printPriorityClass)
 	_ = h.TableHandler(priorityClassColumnDefinitions, printPriorityClassList)
 
+	// ---- RuntimeClass 资源：显示处理器名称 ----
 	runtimeClassColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Handler", Type: "string", Description: metav1.ObjectMeta{}.SwaggerDoc()["handler"]},
@@ -524,6 +576,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(runtimeClassColumnDefinitions, printRuntimeClass)
 	_ = h.TableHandler(runtimeClassColumnDefinitions, printRuntimeClassList)
 
+	// ---- VolumeAttachment 资源：显示挂载器和附加状态 ----
 	volumeAttachmentColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Attacher", Type: "string", Format: "name", Description: storagev1.VolumeAttachmentSpec{}.SwaggerDoc()["attacher"]},
@@ -535,6 +588,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(volumeAttachmentColumnDefinitions, printVolumeAttachment)
 	_ = h.TableHandler(volumeAttachmentColumnDefinitions, printVolumeAttachmentList)
 
+	// ---- EndpointSlice 资源：显示地址类型、端口、端点 ----
 	endpointSliceColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "AddressType", Type: "string", Description: discoveryv1.EndpointSlice{}.SwaggerDoc()["addressType"]},
@@ -545,6 +599,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(endpointSliceColumnDefinitions, printEndpointSlice)
 	_ = h.TableHandler(endpointSliceColumnDefinitions, printEndpointSliceList)
 
+	// ---- CSINode 资源：显示注册的 CSI 驱动数量 ----
 	csiNodeColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Drivers", Type: "integer", Description: "Drivers indicates the number of CSI drivers registered on the node"},
@@ -553,6 +608,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(csiNodeColumnDefinitions, printCSINode)
 	_ = h.TableHandler(csiNodeColumnDefinitions, printCSINodeList)
 
+	// ---- CSIDriver 资源：显示附加要求、容量感知、生命周期模式 ----
 	csiDriverColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "AttachRequired", Type: "boolean", Description: storagev1.CSIDriverSpec{}.SwaggerDoc()["attachRequired"]},
@@ -571,6 +627,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(csiDriverColumnDefinitions, printCSIDriver)
 	_ = h.TableHandler(csiDriverColumnDefinitions, printCSIDriverList)
 
+	// ---- CSIStorageCapacity 资源：显示存储类和容量 ----
 	csiStorageCapacityColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "StorageClassName", Type: "string", Description: storagev1.CSIStorageCapacity{}.SwaggerDoc()["storageClassName"]},
@@ -579,6 +636,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(csiStorageCapacityColumnDefinitions, printCSIStorageCapacity)
 	_ = h.TableHandler(csiStorageCapacityColumnDefinitions, printCSIStorageCapacityList)
 
+	// ---- MutatingWebhookConfiguration 资源：显示 Webhook 数量 ----
 	mutatingWebhookColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Webhooks", Type: "integer", Description: "Webhooks indicates the number of webhooks registered in this configuration"},
@@ -587,6 +645,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(mutatingWebhookColumnDefinitions, printMutatingWebhook)
 	_ = h.TableHandler(mutatingWebhookColumnDefinitions, printMutatingWebhookList)
 
+	// ---- ValidatingWebhookConfiguration 资源：显示 Webhook 数量 ----
 	validatingWebhookColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Webhooks", Type: "integer", Description: "Webhooks indicates the number of webhooks registered in this configuration"},
@@ -595,6 +654,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(validatingWebhookColumnDefinitions, printValidatingWebhook)
 	_ = h.TableHandler(validatingWebhookColumnDefinitions, printValidatingWebhookList)
 
+	// ---- ValidatingAdmissionPolicy 资源：显示验证规则数、参数类型 ----
 	validatingAdmissionPolicy := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Validations", Type: "integer", Description: "Validations indicates the number of validation rules defined in this configuration"},
@@ -604,6 +664,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(validatingAdmissionPolicy, printValidatingAdmissionPolicy)
 	_ = h.TableHandler(validatingAdmissionPolicy, printValidatingAdmissionPolicyList)
 
+	// ---- ValidatingAdmissionPolicyBinding 资源：显示绑定的策略和参数 ----
 	validatingAdmissionPolicyBinding := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "PolicyName", Type: "string", Description: "PolicyName indicates the policy definition which the policy binding binded to"},
@@ -613,6 +674,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(validatingAdmissionPolicyBinding, printValidatingAdmissionPolicyBinding)
 	_ = h.TableHandler(validatingAdmissionPolicyBinding, printValidatingAdmissionPolicyBindingList)
 
+	// ---- MutatingAdmissionPolicy 资源：显示变异规则数、参数类型 ----
 	mutatingAdmissionPolicy := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Mutations", Type: "integer", Description: "Mutation indicates the number of mutations rules defined in this configuration"},
@@ -622,6 +684,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(mutatingAdmissionPolicy, printMutatingAdmissionPolicy)
 	_ = h.TableHandler(mutatingAdmissionPolicy, printMutatingAdmissionPolicyList)
 
+	// ---- MutatingAdmissionPolicyBinding 资源：显示绑定的策略和参数 ----
 	mutatingAdmissionPolicyBinding := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "PolicyName", Type: "string", Description: "PolicyName indicates the policy definition which the policy binding binded to"},
@@ -631,6 +694,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(mutatingAdmissionPolicyBinding, printMutatingAdmissionPolicyBinding)
 	_ = h.TableHandler(mutatingAdmissionPolicyBinding, printMutatingAdmissionPolicyBindingList)
 
+	// ---- FlowSchema 资源：显示优先级级别、匹配优先级、区分方法 ----
 	flowSchemaColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "PriorityLevel", Type: "string", Description: flowcontrolv1.PriorityLevelConfigurationReference{}.SwaggerDoc()["name"]},
@@ -642,6 +706,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(flowSchemaColumnDefinitions, printFlowSchema)
 	_ = h.TableHandler(flowSchemaColumnDefinitions, printFlowSchemaList)
 
+	// ---- PriorityLevelConfiguration 资源：显示类型、并发份额、队列配置 ----
 	priorityLevelColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Type", Type: "string", Description: flowcontrolv1.PriorityLevelConfigurationSpec{}.SwaggerDoc()["type"]},
@@ -654,6 +719,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(priorityLevelColumnDefinitions, printPriorityLevelConfiguration)
 	_ = h.TableHandler(priorityLevelColumnDefinitions, printPriorityLevelConfigurationList)
 
+	// ---- StorageVersion 资源：显示编码版本和存储版本 ----
 	storageVersionColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "CommonEncodingVersion", Type: "string", Description: apiserverinternalv1alpha1.StorageVersionStatus{}.SwaggerDoc()["commonEncodingVersion"]},
@@ -663,6 +729,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(storageVersionColumnDefinitions, printStorageVersion)
 	_ = h.TableHandler(storageVersionColumnDefinitions, printStorageVersionList)
 
+	// ---- Scale 资源：显示期望和可用副本数 ----
 	scaleColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Desired", Type: "integer", Description: autoscalingv1.ScaleSpec{}.SwaggerDoc()["replicas"]},
@@ -671,6 +738,7 @@ func AddHandlers(h printers.PrintHandler) {
 	}
 	_ = h.TableHandler(scaleColumnDefinitions, printScale)
 
+	// ---- DeviceClass 资源：设备类配置 ----
 	deviceClassColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Age", Type: "string", Description: metav1.ObjectMeta{}.SwaggerDoc()["creationTimestamp"]},
@@ -678,6 +746,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(deviceClassColumnDefinitions, printDeviceClass)
 	_ = h.TableHandler(deviceClassColumnDefinitions, printDeviceClassList)
 
+	// ---- ResourceClaim 资源：显示设备申请状态 ----
 	resourceClaimColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "State", Type: "string", Description: "A summary of the current state (allocated, pending, reserved, etc.)."},
@@ -686,6 +755,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(resourceClaimColumnDefinitions, printResourceClaim)
 	_ = h.TableHandler(resourceClaimColumnDefinitions, printResourceClaimList)
 
+	// ---- ResourceClaimTemplate 资源：设备申请模板 ----
 	resourceClaimTemplateColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Age", Type: "string", Description: metav1.ObjectMeta{}.SwaggerDoc()["creationTimestamp"]},
@@ -693,6 +763,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(resourceClaimTemplateColumnDefinitions, printResourceClaimTemplate)
 	_ = h.TableHandler(resourceClaimTemplateColumnDefinitions, printResourceClaimTemplateList)
 
+	// ---- ResourceSlice 资源：显示节点、驱动、资源池 ----
 	nodeResourceSliceColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Node", Type: "string", Description: resourceapi.ResourceSliceSpec{}.SwaggerDoc()["nodeName"]},
@@ -703,6 +774,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(nodeResourceSliceColumnDefinitions, printResourceSlice)
 	_ = h.TableHandler(nodeResourceSliceColumnDefinitions, printResourceSliceList)
 
+	// ---- ResourcePoolStatusRequest 资源：显示资源池状态查询结果 ----
 	resourcePoolStatusRequestColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Driver", Type: "string", Description: "The driver to query pools for."},
@@ -718,6 +790,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(resourcePoolStatusRequestColumnDefinitions, printResourcePoolStatusRequest)
 	_ = h.TableHandler(resourcePoolStatusRequestColumnDefinitions, printResourcePoolStatusRequestList)
 
+	// ---- DeviceTaint 资源：显示设备污点键值对和影响 ----
 	deviceTaintColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		// The filter criteria are not printed. They could be lengthy (CEL!) and in practice many of them
@@ -734,6 +807,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(deviceTaintColumnDefinitions, printDeviceTaint)
 	_ = h.TableHandler(deviceTaintColumnDefinitions, printDeviceTaintRuleList)
 
+	// ---- ServiceCIDR 资源：显示 Service CIDR 地址段 ----
 	serviceCIDRColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "CIDRs", Type: "string", Description: networkingv1.ServiceCIDRSpec{}.SwaggerDoc()["cidrs"]},
@@ -743,6 +817,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(serviceCIDRColumnDefinitions, printServiceCIDR)
 	_ = h.TableHandler(serviceCIDRColumnDefinitions, printServiceCIDRList)
 
+	// ---- IPAddress 资源：显示关联的父资源 ----
 	ipAddressColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "ParentRef", Type: "string", Description: networkingv1.IPAddressSpec{}.SwaggerDoc()["parentRef"]},
@@ -751,6 +826,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(ipAddressColumnDefinitions, printIPAddress)
 	_ = h.TableHandler(ipAddressColumnDefinitions, printIPAddressList)
 
+	// ---- StorageVersionMigration 资源：显示迁移的资源类型和状态 ----
 	storageVersionMigrationColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Resource", Type: "string", Description: "GroupResource to migrate"},
@@ -759,6 +835,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(storageVersionMigrationColumnDefinitions, printStorageVersionMigration)
 	_ = h.TableHandler(storageVersionMigrationColumnDefinitions, printStorageVersionMigrationList)
 
+	// ---- Workload 资源：工作负载定义 ----
 	workloadColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Age", Type: "string", Description: metav1.ObjectMeta{}.SwaggerDoc()["creationTimestamp"]},
@@ -766,6 +843,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(workloadColumnDefinitions, printWorkload)
 	_ = h.TableHandler(workloadColumnDefinitions, printWorkloadList)
 
+	// ---- PodGroup 资源：显示调度策略、关联的 Workload、状态 ----
 	podGroupColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Policy", Type: "string", Description: schedulingv1beta1.PodGroupSpec{}.SwaggerDoc()["schedulingPolicy"]},
@@ -776,6 +854,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(podGroupColumnDefinitions, printPodGroup)
 	_ = h.TableHandler(podGroupColumnDefinitions, printPodGroupList)
 
+	// ---- CompositePodGroup 资源：复合 Pod 组，显示调度策略 ----
 	compositePodGroupColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Policy", Type: "string", Description: schedulingv1alpha3.CompositePodGroupSpec{}.SwaggerDoc()["schedulingPolicy"]},
@@ -785,6 +864,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(compositePodGroupColumnDefinitions, printCompositePodGroup)
 	_ = h.TableHandler(compositePodGroupColumnDefinitions, printCompositePodGroupList)
 
+	// ---- EvictionRequest 资源：显示驱逐目标、请求者、意图 ----
 	evictionRequestColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Target", Type: "string", Description: lifecyclev1alpha1.EvictionRequestSpec{}.SwaggerDoc()["target"]},
@@ -797,6 +877,7 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(evictionRequestColumnDefinitions, printEvictionRequest)
 	_ = h.TableHandler(evictionRequestColumnDefinitions, printEvictionRequestList)
 
+	// ---- Eviction 资源：显示驱逐目标、响应者状态 ----
 	evictionColumnDefinitions := []metav1.TableColumnDefinition{
 		{Name: "Name", Type: "string", Format: "name", Description: metav1.ObjectMeta{}.SwaggerDoc()["name"]},
 		{Name: "Target", Type: "string", Description: lifecyclev1alpha1.EvictionSpec{}.SwaggerDoc()["target"]},
@@ -814,7 +895,8 @@ func AddHandlers(h printers.PrintHandler) {
 	_ = h.TableHandler(evictionColumnDefinitions, printEvictionList)
 }
 
-// Pass ports=nil for all ports.
+// formatEndpoints 将 Endpoints 格式化为逗号分隔的 IP:Port 字符串。
+// ports=nil 表示显示所有端口。最多显示 3 个端点，超出时显示 "+ N more..."。
 func formatEndpoints(endpoints *api.Endpoints, ports sets.String) string {
 	if len(endpoints.Subsets) == 0 {
 		return "<none>"
@@ -866,6 +948,7 @@ func formatEndpoints(endpoints *api.Endpoints, ports sets.String) string {
 	return ret
 }
 
+// formatDiscoveryPorts 将 EndpointSlice 的端口格式化为逗号分隔的字符串，最多显示 3 个。
 func formatDiscoveryPorts(ports []discovery.EndpointPort) string {
 	list := []string{}
 	max := 3
@@ -888,6 +971,7 @@ func formatDiscoveryPorts(ports []discovery.EndpointPort) string {
 	return listWithMoreString(list, more, count, max)
 }
 
+// formatDiscoveryEndpoints 将 EndpointSlice 的端点地址格式化为逗号分隔的字符串，最多显示 3 个。
 func formatDiscoveryEndpoints(endpoints []discovery.Endpoint) string {
 	list := []string{}
 	max := 3
@@ -906,6 +990,7 @@ func formatDiscoveryEndpoints(endpoints []discovery.Endpoint) string {
 	return listWithMoreString(list, more, count, max)
 }
 
+// listWithMoreString 将列表格式化为逗号分隔的字符串，超出 max 时追加 "+ N more..."。
 func listWithMoreString(list []string, more bool, count, max int) string {
 	ret := strings.Join(list, ",")
 	if more {
@@ -917,8 +1002,7 @@ func listWithMoreString(list []string, more bool, count, max int) string {
 	return ret
 }
 
-// translateMicroTimestampSince returns the elapsed time since timestamp in
-// human-readable approximation.
+// translateMicroTimestampSince 将 MicroTime 转换为距当前的相对时间字符串（如 "2m"、"3h"）。
 func translateMicroTimestampSince(timestamp metav1.MicroTime) string {
 	if timestamp.IsZero() {
 		return "<unknown>"
@@ -927,8 +1011,7 @@ func translateMicroTimestampSince(timestamp metav1.MicroTime) string {
 	return duration.HumanDuration(time.Since(timestamp.Time))
 }
 
-// translateTimestampSince returns the elapsed time since timestamp in
-// human-readable approximation.
+// translateTimestampSince 将 Time 转换为距当前的相对时间字符串（如 "2m"、"3h"）。
 func translateTimestampSince(timestamp metav1.Time) string {
 	if timestamp.IsZero() {
 		return "<unknown>"
@@ -937,8 +1020,7 @@ func translateTimestampSince(timestamp metav1.Time) string {
 	return duration.HumanDuration(time.Since(timestamp.Time))
 }
 
-// translateTimestampUntil returns the elapsed time until timestamp in
-// human-readable approximation.
+// translateTimestampUntil 将 Time 转换为距目标时间的剩余时间字符串（如 "in 5m"）。
 func translateTimestampUntil(timestamp metav1.Time) string {
 	if timestamp.IsZero() {
 		return "<unknown>"
@@ -952,6 +1034,7 @@ var (
 	podFailedConditions  = []metav1.TableRowCondition{{Type: metav1.RowCompleted, Status: metav1.ConditionTrue, Reason: string(api.PodFailed), Message: "The pod failed."}}
 )
 
+// printPodList 将 Pod 列表转换为表格行，每行对应一个 Pod。
 func printPodList(podList *api.PodList, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	rows := make([]metav1.TableRow, 0, len(podList.Items))
 	for i := range podList.Items {
@@ -964,6 +1047,7 @@ func printPodList(podList *api.PodList, options printers.GenerateOptions) ([]met
 	return rows, nil
 }
 
+// printPod 将单个 Pod 转换为表格行，显示名称、就绪状态、状态、重启次数和年龄。
 func printPod(pod *api.Pod, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	restarts := 0
 	restartableInitContainerRestarts := 0
@@ -1290,6 +1374,7 @@ func printReplicaSetList(list *apps.ReplicaSetList, options printers.GenerateOpt
 	return rows, nil
 }
 
+// printJob 将 Job 转换为表格行，显示状态、完成数、持续时间。
 func printJob(obj *batch.Job, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	row := metav1.TableRow{
 		Object: runtime.RawExtension{Object: obj},
@@ -1453,6 +1538,7 @@ func makePortString(ports []api.ServicePort) string {
 	return strings.Join(pieces, ",")
 }
 
+// printService 将 Service 转换为表格行，显示类型、ClusterIP、外部IP、端口。
 func printService(obj *api.Service, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	row := metav1.TableRow{
 		Object: runtime.RawExtension{Object: obj},
@@ -1600,6 +1686,7 @@ func printIngressClassList(list *networking.IngressClassList, options printers.G
 	return rows, nil
 }
 
+// printStatefulSet 将 StatefulSet 转换为表格行，显示就绪 Pod 数。
 func printStatefulSet(obj *apps.StatefulSet, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	row := metav1.TableRow{
 		Object: runtime.RawExtension{Object: obj},
@@ -1627,6 +1714,7 @@ func printStatefulSetList(list *apps.StatefulSetList, options printers.GenerateO
 	return rows, nil
 }
 
+// printDaemonSet 将 DaemonSet 转换为表格行，显示调度/就绪/最新/可用节点数。
 func printDaemonSet(obj *apps.DaemonSet, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	row := metav1.TableRow{
 		Object: runtime.RawExtension{Object: obj},
@@ -2018,6 +2106,7 @@ func printServiceAccountList(list *api.ServiceAccountList, options printers.Gene
 	return rows, nil
 }
 
+// printNode 将 Node 转换为表格行，显示状态、角色、年龄、版本。
 func printNode(obj *api.Node, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	row := metav1.TableRow{
 		Object: runtime.RawExtension{Object: obj},
@@ -2127,6 +2216,7 @@ func printNodeList(list *api.NodeList, options printers.GenerateOptions) ([]meta
 	return rows, nil
 }
 
+// printPersistentVolume 将 PV 转换为表格行，显示容量、访问模式、回收策略、状态。
 func printPersistentVolume(obj *api.PersistentVolume, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	row := metav1.TableRow{
 		Object: runtime.RawExtension{Object: obj},
@@ -2177,6 +2267,7 @@ func printPersistentVolumeList(list *api.PersistentVolumeList, options printers.
 	return rows, nil
 }
 
+// printPersistentVolumeClaim 将 PVC 转换为表格行，显示状态、绑定的 PV、容量。
 func printPersistentVolumeClaim(obj *api.PersistentVolumeClaim, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	row := metav1.TableRow{
 		Object: runtime.RawExtension{Object: obj},
@@ -2503,6 +2594,7 @@ func printComponentStatusList(list *api.ComponentStatusList, options printers.Ge
 	return rows, nil
 }
 
+// printDeployment 将 Deployment 转换为表格行，显示就绪/最新/可用副本数。
 func printDeployment(obj *apps.Deployment, options printers.GenerateOptions) ([]metav1.TableRow, error) {
 	row := metav1.TableRow{
 		Object: runtime.RawExtension{Object: obj},

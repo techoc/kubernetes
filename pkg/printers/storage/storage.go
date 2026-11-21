@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package storage 提供将 Kubernetes 资源对象转换为 metav1.Table 的功能。
+// 主要用于 API Server 的 table subresource（如 `kubectl get --output=custom-columns`），
+// 让服务器端直接返回表格数据而非客户端转换。
 package storage
 
 import (
@@ -25,12 +28,14 @@ import (
 	"k8s.io/kubernetes/pkg/printers"
 )
 
-// TableConvertor struct - converts objects to metav1.Table using printers.TableGenerator
+// TableConvertor 将 runtime 对象转换为 metav1.Table，内部使用 printers.TableGenerator。
+// 嵌入 TableGenerator 接口，复用其表格生成逻辑。
 type TableConvertor struct {
 	printers.TableGenerator
 }
 
-// ConvertToTable method - converts objects to metav1.Table objects using TableGenerator
+// ConvertToTable 将给定的 runtime 对象转换为 metav1.Table 对象。
+// 解析 tableOptions 中的 NoHeaders 选项，始终启用 Wide 模式以显示所有列。
 func (c TableConvertor) ConvertToTable(ctx context.Context, obj runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
 	noHeaders := false
 	if tableOptions != nil {

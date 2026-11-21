@@ -14,6 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package printers 提供 Kubernetes 资源对象的打印和表格生成功能。
+// 主要用于 kubectl get/describe 等命令将资源对象格式化为人类可读的输出。
+//
+// 核心概念：
+//   - ResourcePrinter: 资源打印器接口，定义如何将 runtime.Object 输出到 io.Writer
+//   - TableGenerator: 表格生成器接口，将资源对象转换为 metav1.Table 结构
+//   - HumanReadableGenerator: 表格生成器的具体实现，通过注册类型的打印处理器来生成表格
 package printers
 
 import (
@@ -22,16 +29,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// ResourcePrinter is an interface that knows how to print runtime objects.
+// ResourcePrinter 是资源打印器接口，知道如何打印 runtime 对象。
+// 用于 kubectl 等工具将 Kubernetes 资源格式化为人类可读的输出。
 type ResourcePrinter interface {
-	// Print receives a runtime object, formats it and prints it to a writer.
+	// PrintObj 接收一个 runtime 对象，格式化后输出到指定的 writer
 	PrintObj(runtime.Object, io.Writer) error
 }
 
-// ResourcePrinterFunc is a function that can print objects
+// ResourcePrinterFunc 是可直接作为 ResourcePrinter 使用的函数类型
+// 允许以函数形式实现打印逻辑，无需定义完整结构体
 type ResourcePrinterFunc func(runtime.Object, io.Writer) error
 
-// PrintObj implements ResourcePrinter
+// PrintObj 实现了 ResourcePrinter 接口
 func (fn ResourcePrinterFunc) PrintObj(obj runtime.Object, w io.Writer) error {
 	return fn(obj, w)
 }
