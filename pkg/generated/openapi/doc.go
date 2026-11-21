@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// openapi generated definitions.
+// Package openapi 包含生成的 OpenAPI 定义。
 package openapi

@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package generated is the destination for all generated files. Not all generated files are currently use this package
-// but the plan is to move as much of them as possible to this package.
+// Package generated 是所有生成文件的目标目录。
+// 目前并非所有生成文件都放在这里，但计划尽可能把它们迁移到本包。
 package generated

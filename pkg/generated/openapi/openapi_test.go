@@ -29,11 +29,12 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// TestOpenAPIRoundtrip 验证所有生成的 OpenAPI schema 经 JSON 序列化/反序列化后保持一致。
 func TestOpenAPIRoundtrip(t *testing.T) {
 	dummyRef := func(name string) spec.Ref { return spec.MustCreateRef("#/definitions/dummy") }
 	for name, value := range GetOpenAPIDefinitions(dummyRef) {
 		t.Run(name, func(t *testing.T) {
-			// TODO(kubernetes/gengo#193): We currently round-trip ints to floats.
+			// TODO(kubernetes/gengo#193): 目前整数会在 round-trip 中变成浮点数。
 			value.Schema = *handler.PruneDefaultsSchema(&value.Schema)
 			data, err := json.Marshal(value.Schema)
 			if err != nil {
@@ -47,16 +48,14 @@ func TestOpenAPIRoundtrip(t *testing.T) {
 				return
 			}
 
-			// Remove the embedded v2 schema if it presents.
-			// The v2 schema either become the schema (when serving v2) or get pruned (v3)
-			// and it is never round-tripped.
+			// 删除内嵌的 v2 schema：它要么直接作为 schema（v2 场景），要么被裁剪掉（v3），
+			// 本身不参与 round-trip，因此不纳入比较。
 			delete(roundTripped.Extensions, common.ExtensionV2Schema)
 			delete(value.Schema.Extensions, common.ExtensionV2Schema)
 
 			opts := []cmp.Option{
 				cmpopts.EquateEmpty(),
-				// jsonreference.Ref contains unexported fields. Compare
-				// by string representation provides a consistent
+				// jsonreference.Ref 含未导出字段，用字符串形式比较可以得到一致的结果：
 				cmp.Comparer(func(x, y jsonreference.Ref) bool {
 					return x.String() == y.String()
 				}),
