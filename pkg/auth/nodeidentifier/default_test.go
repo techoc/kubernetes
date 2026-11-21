@@ -22,6 +22,8 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
+// TestDefaultNodeIdentifier_NodeIdentity 表驱动验证节点身份判定：
+// 用户名前缀和 system:nodes 组两个条件缺一不可，nil 用户也要安全返回。
 func TestDefaultNodeIdentifier_NodeIdentity(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -55,6 +57,7 @@ func TestDefaultNodeIdentifier_NodeIdentity(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		// 每个用例独立构造 identifier，避免状态在用例间泄漏。
 		t.Run(tt.name, func(t *testing.T) {
 			nodeName, isNode := NewDefaultNodeIdentifier().NodeIdentity(tt.user)
 			if nodeName != tt.expectNodeName {

@@ -20,11 +20,10 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-// NodeIdentifier determines node information from a given user
+// NodeIdentifier 从用户信息中判定节点身份。
 type NodeIdentifier interface {
-	// NodeIdentity determines node information from the given user.Info.
-	// nodeName is the name of the Node API object associated with the user.Info,
-	// and may be empty if a specific node cannot be determined.
-	// isNode is true if the user.Info represents an identity issued to a node.
+	// NodeIdentity 根据给定的 user.Info 判定节点信息。
+	// nodeName 是与该 user.Info 关联的 Node API 对象名；若无法确定具体节点则为空。
+	// isNode 表示该 user.Info 是否是签发给某个节点的身份。
 	NodeIdentity(user.Info) (nodeName string, isNode bool)
 }

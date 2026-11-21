@@ -31,6 +31,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/abac/v1beta1"
 )
 
+// TestEmptyFile 验证空策略文件能被正常加载，得到空的 PolicyList。
 func TestEmptyFile(t *testing.T) {
 	_, err := newWithContents(t, "")
 	if err != nil {
@@ -38,6 +39,7 @@ func TestEmptyFile(t *testing.T) {
 	}
 }
 
+// TestOneLineFileNoNewLine 验证单行且末尾没有换行的 JSON 策略也能解析。
 func TestOneLineFileNoNewLine(t *testing.T) {
 	_, err := newWithContents(t, `{"user":"scheduler",  "readonly": true, "resource": "pods", "namespace":"ns1"}`)
 	if err != nil {
@@ -45,6 +47,7 @@ func TestOneLineFileNoNewLine(t *testing.T) {
 	}
 }
 
+// TestTwoLineFile 验证多行 JSONL 文件逐行解析，两个策略都被加载。
 func TestTwoLineFile(t *testing.T) {
 	_, err := newWithContents(t, `{"user":"scheduler",  "readonly": true, "resource": "pods"}
 {"user":"scheduler",  "readonly": true, "resource": "services"}
@@ -54,7 +57,7 @@ func TestTwoLineFile(t *testing.T) {
 	}
 }
 
-// Test the file that we will point users at as an example.
+// TestExampleFile 验证提供给用户参考的示例策略文件本身是合法可加载的。
 func TestExampleFile(t *testing.T) {
 	_, err := NewFromFile("./example_policy_file.jsonl")
 	if err != nil {
@@ -62,6 +65,7 @@ func TestExampleFile(t *testing.T) {
 	}
 }
 
+// TestAuthorizeV0 用无版本（v0）格式策略验证授权判定，并覆盖迁移加载路径。
 func TestAuthorizeV0(t *testing.T) {
 	a, err := newWithContents(t, `{                    "readonly": true, "resource": "events"   }
 {"user":"scheduler", "readonly": true, "resource": "pods"     }
@@ -90,17 +94,17 @@ func TestAuthorizeV0(t *testing.T) {
 		Path           string
 		ExpectDecision authorizer.Decision
 	}{
-		// Scheduler can read pods
+		// scheduler 可以读取 pods
 		{User: uScheduler, Verb: "list", Resource: "pods", NS: "ns1", ExpectDecision: authorizer.DecisionAllow},
 		{User: uScheduler, Verb: "list", Resource: "pods", NS: "", ExpectDecision: authorizer.DecisionAllow},
-		// Scheduler cannot write pods
+		// scheduler 不能写 pods（策略为 readonly）
 		{User: uScheduler, Verb: "create", Resource: "pods", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
 		{User: uScheduler, Verb: "create", Resource: "pods", NS: "", ExpectDecision: authorizer.DecisionNoOpinion},
-		// Scheduler can write bindings
+		// scheduler 可以写 bindings（对应策略非 readonly）
 		{User: uScheduler, Verb: "get", Resource: "bindings", NS: "ns1", ExpectDecision: authorizer.DecisionAllow},
 		{User: uScheduler, Verb: "get", Resource: "bindings", NS: "", ExpectDecision: authorizer.DecisionAllow},
 
-		// Alice can read and write anything in the right namespace.
+		// alice 在匹配命名空间内可读写任意资源。
 		{User: uAlice, Verb: "get", Resource: "pods", NS: "projectCaribou", ExpectDecision: authorizer.DecisionAllow},
 		{User: uAlice, Verb: "get", Resource: "widgets", NS: "projectCaribou", ExpectDecision: authorizer.DecisionAllow},
 		{User: uAlice, Verb: "get", Resource: "", NS: "projectCaribou", ExpectDecision: authorizer.DecisionAllow},
@@ -113,14 +117,14 @@ func TestAuthorizeV0(t *testing.T) {
 		{User: uAlice, Verb: "get", Resource: "widgets", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
 		{User: uAlice, Verb: "get", Resource: "", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
 
-		// Chuck can read events, since anyone can.
+		// chuck 可以读 events，因为所有人都可读。
 		{User: uChuck, Verb: "get", Resource: "events", NS: "ns1", ExpectDecision: authorizer.DecisionAllow},
 		{User: uChuck, Verb: "get", Resource: "events", NS: "", ExpectDecision: authorizer.DecisionAllow},
-		// Chuck can't do other things.
+		// chuck 不能做其他操作。
 		{User: uChuck, Verb: "update", Resource: "events", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
 		{User: uChuck, Verb: "get", Resource: "pods", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
 		{User: uChuck, Verb: "get", Resource: "floop", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
-		// Chunk can't access things with no kind or namespace
+		// chuck 不能访问没有 kind 或命名空间的请求。
 		{User: uChuck, Verb: "get", Path: "/", Resource: "", NS: "", ExpectDecision: authorizer.DecisionNoOpinion},
 	}
 	for i, tc := range testCases {
@@ -143,6 +147,7 @@ func TestAuthorizeV0(t *testing.T) {
 	}
 }
 
+// getResourceRules 把资源规则接口切片转成默认实现切片，方便在断言中比较字段。
 func getResourceRules(infos []authorizer.ResourceRuleInfo) []authorizer.DefaultResourceRuleInfo {
 	rules := make([]authorizer.DefaultResourceRuleInfo, len(infos))
 	for i, info := range infos {
@@ -156,6 +161,7 @@ func getResourceRules(infos []authorizer.ResourceRuleInfo) []authorizer.DefaultR
 	return rules
 }
 
+// getNonResourceRules 把非资源规则接口切片转成默认实现切片，便于断言比较。
 func getNonResourceRules(infos []authorizer.NonResourceRuleInfo) []authorizer.DefaultNonResourceRuleInfo {
 	rules := make([]authorizer.DefaultNonResourceRuleInfo, len(infos))
 	for i, info := range infos {
@@ -167,6 +173,7 @@ func getNonResourceRules(infos []authorizer.NonResourceRuleInfo) []authorizer.De
 	return rules
 }
 
+// TestRulesFor 验证 RulesFor 按用户和命名空间收集匹配的策略，生成资源/非资源规则。
 func TestRulesFor(t *testing.T) {
 	a, err := newWithContents(t, `
 {                    "readonly": true, "resource": "events"   }
@@ -340,6 +347,7 @@ func TestRulesFor(t *testing.T) {
 	}
 }
 
+// TestAuthorizeV1beta1 用带版本（v1beta1）格式策略验证授权判定。
 func TestAuthorizeV1beta1(t *testing.T) {
 	a, err := newWithContents(t,
 		`
@@ -382,17 +390,17 @@ func TestAuthorizeV1beta1(t *testing.T) {
 		Path           string
 		ExpectDecision authorizer.Decision
 	}{
-		// Scheduler can read pods
+		// scheduler 可以读取 pods
 		{User: uScheduler, Verb: "list", Resource: "pods", NS: "ns1", ExpectDecision: authorizer.DecisionAllow},
 		{User: uScheduler, Verb: "list", Resource: "pods", NS: "", ExpectDecision: authorizer.DecisionAllow},
-		// Scheduler cannot write pods
+		// scheduler 不能写 pods（策略为 readonly）
 		{User: uScheduler, Verb: "create", Resource: "pods", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
 		{User: uScheduler, Verb: "create", Resource: "pods", NS: "", ExpectDecision: authorizer.DecisionNoOpinion},
-		// Scheduler can write bindings
+		// scheduler 可以写 bindings（对应策略非 readonly）
 		{User: uScheduler, Verb: "get", Resource: "bindings", NS: "ns1", ExpectDecision: authorizer.DecisionAllow},
 		{User: uScheduler, Verb: "get", Resource: "bindings", NS: "", ExpectDecision: authorizer.DecisionAllow},
 
-		// Alice can read and write anything in the right namespace.
+		// alice 在匹配命名空间内可读写任意资源。
 		{User: uAlice, Verb: "get", Resource: "pods", NS: "projectCaribou", ExpectDecision: authorizer.DecisionAllow},
 		{User: uAlice, Verb: "get", Resource: "widgets", NS: "projectCaribou", ExpectDecision: authorizer.DecisionAllow},
 		{User: uAlice, Verb: "get", Resource: "", NS: "projectCaribou", ExpectDecision: authorizer.DecisionAllow},
@@ -404,39 +412,39 @@ func TestAuthorizeV1beta1(t *testing.T) {
 		{User: uAlice, Verb: "get", Resource: "widgets", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
 		{User: uAlice, Verb: "get", Resource: "", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
 
-		// Debbie can write to pods in the right namespace
+		// debbie 可以在正确命名空间写 pods
 		{User: uDebbie, Verb: "update", Resource: "pods", NS: "projectCaribou", ExpectDecision: authorizer.DecisionAllow},
 
-		// Chuck can read events, since anyone can.
+		// chuck 可以读 events，因为所有人都可读。
 		{User: uChuck, Verb: "get", Resource: "events", NS: "ns1", ExpectDecision: authorizer.DecisionAllow},
 		{User: uChuck, Verb: "get", Resource: "events", NS: "", ExpectDecision: authorizer.DecisionAllow},
-		// Chuck can't do other things.
+		// chuck 不能做其他操作。
 		{User: uChuck, Verb: "update", Resource: "events", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
 		{User: uChuck, Verb: "get", Resource: "pods", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
 		{User: uChuck, Verb: "get", Resource: "floop", NS: "ns1", ExpectDecision: authorizer.DecisionNoOpinion},
-		// Chuck can't access things with no resource or namespace
+		// chuck 不能访问没有资源或命名空间的请求。
 		{User: uChuck, Verb: "get", Path: "/", Resource: "", NS: "", ExpectDecision: authorizer.DecisionNoOpinion},
-		// but can access /api
+		// 但可以访问 /api
 		{User: uChuck, Verb: "get", Path: "/api", Resource: "", NS: "", ExpectDecision: authorizer.DecisionAllow},
-		// though he cannot write to it
+		// 但不能写 /api
 		{User: uChuck, Verb: "create", Path: "/api", Resource: "", NS: "", ExpectDecision: authorizer.DecisionNoOpinion},
-		// while he can write to /custom
+		// 但可以写 /custom
 		{User: uChuck, Verb: "update", Path: "/custom", Resource: "", NS: "", ExpectDecision: authorizer.DecisionAllow},
-		// he cannot get "/root"
+		// 不能读取 "/root"
 		{User: uChuck, Verb: "get", Path: "/root", Resource: "", NS: "", ExpectDecision: authorizer.DecisionNoOpinion},
-		// but can get any subpath
+		// 但可以读取任意子路径
 		{User: uChuck, Verb: "get", Path: "/root/", Resource: "", NS: "", ExpectDecision: authorizer.DecisionAllow},
 		{User: uChuck, Verb: "get", Path: "/root/test/1/2/3", Resource: "", NS: "", ExpectDecision: authorizer.DecisionAllow},
 
-		// the user "noresource" can get any non-resource request
+		// 用户 "noresource" 可以读取任意非资源请求
 		{User: uNoResource, Verb: "get", Path: "", Resource: "", NS: "", ExpectDecision: authorizer.DecisionAllow},
 		{User: uNoResource, Verb: "get", Path: "/", Resource: "", NS: "", ExpectDecision: authorizer.DecisionAllow},
 		{User: uNoResource, Verb: "get", Path: "/foo/bar/baz", Resource: "", NS: "", ExpectDecision: authorizer.DecisionAllow},
-		// but cannot get any request where IsResourceRequest() == true
+		// 但不能访问任何资源请求（IsResourceRequest() == true）
 		{User: uNoResource, Verb: "get", Path: "/", Resource: "", NS: "bar", ExpectDecision: authorizer.DecisionNoOpinion},
 		{User: uNoResource, Verb: "get", Path: "/foo/bar/baz", Resource: "foo", NS: "bar", ExpectDecision: authorizer.DecisionNoOpinion},
 
-		// Test APIGroup matching
+		// 验证 APIGroup 匹配
 		{User: uAPIGroup, Verb: "get", APIGroup: "x", Resource: "foo", NS: "projectAnyGroup", ExpectDecision: authorizer.DecisionAllow},
 		{User: uAPIGroup, Verb: "get", APIGroup: "x", Resource: "foo", NS: "projectEmptyGroup", ExpectDecision: authorizer.DecisionNoOpinion},
 		{User: uAPIGroup, Verb: "get", APIGroup: "x", Resource: "foo", NS: "projectXGroup", ExpectDecision: authorizer.DecisionAllow},
@@ -460,6 +468,8 @@ func TestAuthorizeV1beta1(t *testing.T) {
 	}
 }
 
+// TestSubjectMatches 表驱动验证用户/组匹配规则：
+// "*" 匹配所有，具体值需精确相等，主体不匹配则整条策略不成立。
 func TestSubjectMatches(t *testing.T) {
 	testCases := map[string]struct {
 		User        user.DefaultInfo
@@ -816,6 +826,8 @@ func TestSubjectMatches(t *testing.T) {
 	}
 }
 
+// newWithContents 把测试字符串写入临时文件后调用 NewFromFile，
+// 结束后删除临时文件，避免测试间共享状态。
 func newWithContents(t *testing.T, contents string) (PolicyList, error) {
 	f, err := os.CreateTemp("", "abac_test")
 	if err != nil {
@@ -832,6 +844,8 @@ func newWithContents(t *testing.T, contents string) (PolicyList, error) {
 	return pl, err
 }
 
+// TestPolicy 表驱动验证不同版本策略对象（v0/v1beta1）的匹配行为，
+// 兼容旧格式转换后的语义一致性。
 func TestPolicy(t *testing.T) {
 	tests := []struct {
 		policy  runtime.Object
@@ -839,7 +853,7 @@ func TestPolicy(t *testing.T) {
 		matches bool
 		name    string
 	}{
-		// v0 mismatches
+		// v0 旧格式用例：验证迁移到内部类型后语义保持一致。
 		{
 			policy: &v0.Policy{
 				Readonly: true,
@@ -901,7 +915,7 @@ func TestPolicy(t *testing.T) {
 			name:    "v0 namespace mis-match",
 		},
 
-		// v0 matches
+		// v0 匹配用例
 		{
 			policy: &v0.Policy{},
 			attr: authorizer.AttributesRecord{
@@ -957,7 +971,7 @@ func TestPolicy(t *testing.T) {
 			name:    "v0 resource match",
 		},
 
-		// v1 mismatches
+		// v1 不匹配用例
 		{
 			policy: &v1beta1.Policy{},
 			attr: authorizer.AttributesRecord{
@@ -1078,7 +1092,7 @@ func TestPolicy(t *testing.T) {
 			name:    "v1 non-resource wildcard subpath mis-match",
 		},
 
-		// v1 matches
+		// v1 匹配用例
 		{
 			policy: &v1beta1.Policy{
 				Spec: v1beta1.PolicySpec{

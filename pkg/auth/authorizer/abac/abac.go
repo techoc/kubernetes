@@ -14,7 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package abac authorizes Kubernetes API actions using an Attribute-based access control scheme.
+// Package abac 使用基于属性的访问控制（Attribute-based access control）方案
+// 对 Kubernetes API 请求做授权：策略以文件形式提供，逐行描述允许的属性组合。
 package abac
 
 import (
@@ -31,11 +32,13 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/kubernetes/pkg/apis/abac"
 
-	// Import latest API for init/side-effects
+	// 空导入 latest API，触发 init 副作用（把最新版本的类型/转换注册进 scheme）。
 	_ "k8s.io/kubernetes/pkg/apis/abac/latest"
 	v0 "k8s.io/kubernetes/pkg/apis/abac/v0"
 )
 
+// policyLoadError 携带策略文件加载失败的位置信息，
+// 便于在报错时指出具体是哪个文件、哪一行出了问题。
 type policyLoadError struct {
 	path string
 	line int
@@ -44,24 +47,26 @@ type policyLoadError struct {
 }
 
 func (p policyLoadError) Error() string {
+	// line >= 0 表示错误定位到了某一行，把原始行内容一并输出方便排查。
 	if p.line >= 0 {
 		return fmt.Sprintf("error reading policy file %s, line %d: %s: %v", p.path, p.line, string(p.data), p.err)
 	}
 	return fmt.Sprintf("error reading policy file %s: %v", p.path, p.err)
 }
 
+// 编译期断言：PolicyList 同时满足 Authorizer 和 RuleResolver 接口。
 var _ = authorizer.Authorizer(PolicyList{})
 var _ = authorizer.RuleResolver(PolicyList{})
 
-// PolicyList is simply a slice of Policy structs.
+// PolicyList 是 Policy 列表，一个元素即一条 ABAC 策略。
 type PolicyList []*abac.Policy
 
-// NewFromFile attempts to create a policy list from the given file.
+// NewFromFile 尝试从给定文件加载策略列表。
 //
-// TODO: Have policies be created via an API call and stored in REST storage.
+// TODO: 未来改为通过 API 创建策略并存入 REST storage。
 func NewFromFile(path string) (PolicyList, error) {
-	// File format is one map per line.  This allows easy concatenation of files,
-	// comments in files, and identification of errors by line number.
+	// 文件格式为每行一个 map：这样便于文件拼接、在文件中写注释，
+	// 并且可以精确定位出错的行号。
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -80,7 +85,7 @@ func NewFromFile(path string) (PolicyList, error) {
 		p := &abac.Policy{}
 		b := scanner.Bytes()
 
-		// skip comment lines and blank lines
+		// 跳过注释行和空行。
 		trimmed := strings.TrimSpace(string(b))
 		if len(trimmed) == 0 || strings.HasPrefix(trimmed, "#") {
 			continue
@@ -88,11 +93,13 @@ func NewFromFile(path string) (PolicyList, error) {
 
 		decodedObj, _, err := decoder.Decode(b, nil, nil)
 		if err != nil {
+			// 缺少 version/kind 或类型未注册，说明是旧的无版本格式，
+			// 走下面的兼容迁移路径；其他解码错误直接失败。
 			if !(runtime.IsMissingVersion(err) || runtime.IsMissingKind(err) || runtime.IsNotRegisteredError(err)) {
 				return nil, policyLoadError{path, i, b, err}
 			}
 			unversionedLines++
-			// Migrate unversioned policy object
+			// 把无版本的旧策略对象解码到 v0 类型，再转换成内部类型。
 			oldPolicy := &v0.Policy{}
 			if err := runtime.DecodeInto(decoder, b, oldPolicy); err != nil {
 				return nil, policyLoadError{path, i, b, err}
@@ -112,6 +119,7 @@ func NewFromFile(path string) (PolicyList, error) {
 	}
 
 	if unversionedLines > 0 {
+		// 提示用户旧格式仍被兼容但已不推荐，引导其迁移到带版本的格式。
 		klog.Warningf("Policy file %s contained unversioned rules. See docs/admin/authorization.md#abac-mode for ABAC file format details.", path)
 	}
 
@@ -121,10 +129,11 @@ func NewFromFile(path string) (PolicyList, error) {
 	return pl, nil
 }
 
+// matches 判断一条策略是否匹配请求的全部属性条件。
 func matches(p abac.Policy, a authorizer.Attributes) bool {
 	if subjectMatches(p, a.GetUser()) {
 		if verbMatches(p, a) {
-			// Resource and non-resource requests are mutually exclusive, at most one will match a policy
+			// 资源请求和非资源请求互斥，一条策略最多匹配其中一种。
 			if resourceMatches(p, a) {
 				return true
 			}
@@ -136,7 +145,7 @@ func matches(p abac.Policy, a authorizer.Attributes) bool {
 	return false
 }
 
-// subjectMatches returns true if specified user and group properties in the policy match the attributes
+// subjectMatches 判断策略中指定的用户和组属性是否匹配请求的用户信息。
 func subjectMatches(p abac.Policy, user user.Info) bool {
 	matched := false
 
@@ -146,7 +155,7 @@ func subjectMatches(p abac.Policy, user user.Info) bool {
 	username := user.GetName()
 	groups := user.GetGroups()
 
-	// If the policy specified a user, ensure it matches
+	// 策略指定了用户时必须匹配："*" 匹配所有，否则精确匹配用户名。
 	if len(p.Spec.User) > 0 {
 		if p.Spec.User == "*" {
 			matched = true
@@ -158,7 +167,7 @@ func subjectMatches(p abac.Policy, user user.Info) bool {
 		}
 	}
 
-	// If the policy specified a group, ensure it matches
+	// 策略指定了组时必须匹配："*" 匹配所有，否则用户所在组中至少有一个命中。
 	if len(p.Spec.Group) > 0 {
 		if p.Spec.Group == "*" {
 			matched = true
@@ -176,18 +185,20 @@ func subjectMatches(p abac.Policy, user user.Info) bool {
 		}
 	}
 
+	// 用户和组都没指定时也返回 false：空策略不授予任何权限。
 	return matched
 }
 
+// verbMatches 检查请求的操作是否被策略允许。
 func verbMatches(p abac.Policy, a authorizer.Attributes) bool {
-	// TODO: match on verb
+	// TODO: 按具体 verb 做匹配。
 
-	// All policies allow read only requests
+	// 所有策略都允许只读请求。
 	if a.IsReadOnly() {
 		return true
 	}
 
-	// Allow if policy is not readonly
+	// 非只读请求只有在策略本身不是 readonly 时才允许。
 	if !p.Spec.Readonly {
 		return true
 	}
@@ -195,18 +206,19 @@ func verbMatches(p abac.Policy, a authorizer.Attributes) bool {
 	return false
 }
 
+// nonResourceMatches 判断策略是否匹配一个非资源请求（如 /healthz）。
 func nonResourceMatches(p abac.Policy, a authorizer.Attributes) bool {
-	// A non-resource policy cannot match a resource request
+	// 只有非资源请求才可能匹配非资源策略。
 	if !a.IsResourceRequest() {
-		// Allow wildcard match
+		// 通配符匹配所有路径。
 		if p.Spec.NonResourcePath == "*" {
 			return true
 		}
-		// Allow exact match
+		// 精确匹配。
 		if p.Spec.NonResourcePath == a.GetPath() {
 			return true
 		}
-		// Allow a trailing * subpath match
+		// 以 * 结尾时按子路径前缀匹配，例如 "/api/*" 匹配 "/api/v1"。
 		if strings.HasSuffix(p.Spec.NonResourcePath, "*") && strings.HasPrefix(a.GetPath(), strings.TrimRight(p.Spec.NonResourcePath, "*")) {
 			return true
 		}
@@ -214,9 +226,11 @@ func nonResourceMatches(p abac.Policy, a authorizer.Attributes) bool {
 	return false
 }
 
+// resourceMatches 判断策略是否匹配一个资源请求。
 func resourceMatches(p abac.Policy, a authorizer.Attributes) bool {
-	// A resource policy cannot match a non-resource request
+	// 只有资源请求才可能匹配资源策略。
 	if a.IsResourceRequest() {
+		// 命名空间、资源、API 组依次比较，每项是 "*" 或与请求值相等即通过。
 		if p.Spec.Namespace == "*" || p.Spec.Namespace == a.GetNamespace() {
 			if p.Spec.Resource == "*" || p.Spec.Resource == a.GetResource() {
 				if p.Spec.APIGroup == "*" || p.Spec.APIGroup == a.GetAPIGroup() {
@@ -228,30 +242,30 @@ func resourceMatches(p abac.Policy, a authorizer.Attributes) bool {
 	return false
 }
 
-// Authorize implements authorizer.Authorize
+// Authorize 实现 authorizer.Authorize：任意一条策略匹配即放行。
 func (pl PolicyList) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	for _, p := range pl {
 		if matches(*p, a) {
 			return authorizer.DecisionAllow, "", nil
 		}
 	}
+	// 没有策略匹配时返回 NoOpinion，把决定权交给授权链中的下一个 authorizer。
 	return authorizer.DecisionNoOpinion, "No policy matched.", nil
-	// TODO: Benchmark how much time policy matching takes with a medium size
-	// policy file, compared to other steps such as encoding/decoding.
-	// Then, add Caching only if needed.
+	// TODO: 测量中等规模策略文件下匹配耗时与其他步骤（编解码）的对比，
+	// 只有确有需要时才加入缓存。
 }
 
-// ConditionsAwareAuthorize is not conditions-aware, converts the Authorize decision.
+// ConditionsAwareAuthorize 不支持条件判断，直接把 Authorize 的决策转换后返回。
 func (pl PolicyList) ConditionsAwareAuthorize(ctx context.Context, a authorizer.Attributes) authorizer.ConditionsAwareDecision {
 	return authorizer.ConditionsAwareDecisionFromParts(pl.Authorize(ctx, a))
 }
 
-// EvaluateConditions is not supported by this authorizer.
+// EvaluateConditions 不受该 authorizer 支持，调用即返回“不支持条件求值”错误。
 func (PolicyList) EvaluateConditions(_ context.Context, _ authorizer.ConditionsAwareDecision, _ authorizer.ConditionsData) (authorizer.Decision, string, error) {
 	return authorizer.DecisionDeny, "", authorizer.ErrorConditionEvaluationNotSupported
 }
 
-// RulesFor returns rules for the given user and namespace.
+// RulesFor 返回给定用户和命名空间下该策略列表对应的资源规则与非资源规则。
 func (pl PolicyList) RulesFor(ctx context.Context, user user.Info, namespace string) ([]authorizer.ResourceRuleInfo, []authorizer.NonResourceRuleInfo, bool, error) {
 	var (
 		resourceRules    []authorizer.ResourceRuleInfo
@@ -259,8 +273,10 @@ func (pl PolicyList) RulesFor(ctx context.Context, user user.Info, namespace str
 	)
 
 	for _, p := range pl {
+		// 只收集主体匹配、且命名空间匹配的策略。
 		if subjectMatches(*p, user) {
 			if p.Spec.Namespace == "*" || p.Spec.Namespace == namespace {
+				// 资源规则与非资源规则分别构造，一条策略可能同时产生两类规则。
 				if len(p.Spec.Resource) > 0 {
 					r := authorizer.DefaultResourceRuleInfo{
 						Verbs:     getVerbs(p.Spec.Readonly),
@@ -281,9 +297,12 @@ func (pl PolicyList) RulesFor(ctx context.Context, user user.Info, namespace str
 			}
 		}
 	}
+	// ABAC 不支持校验规则（第三返回值始终为 false）。
 	return resourceRules, nonResourceRules, false, nil
 }
 
+// getVerbs 把 readonly 标记转换成对应的操作集合：
+// 只读策略只允许 get/list/watch，非只读策略允许全部操作。
 func getVerbs(isReadOnly bool) []string {
 	if isReadOnly {
 		return []string{"get", "list", "watch"}

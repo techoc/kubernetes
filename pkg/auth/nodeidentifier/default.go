@@ -22,25 +22,24 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-// NewDefaultNodeIdentifier returns a default NodeIdentifier implementation,
-// which returns isNode=true if the user groups contain the system:nodes group
-// and the user name matches the format system:node:<nodeName>, and populates
-// nodeName if isNode is true
+// NewDefaultNodeIdentifier 返回默认的 NodeIdentifier 实现：
+// 当用户所属组包含 system:nodes 且用户名符合 system:node:<nodeName> 格式时，
+// 返回 isNode=true，并同时给出解析出的 nodeName。
 func NewDefaultNodeIdentifier() NodeIdentifier {
 	return defaultNodeIdentifier{}
 }
 
-// defaultNodeIdentifier implements NodeIdentifier
+// defaultNodeIdentifier 是 NodeIdentifier 的默认实现。
 type defaultNodeIdentifier struct{}
 
-// nodeUserNamePrefix is the prefix for usernames in the form `system:node:<nodeName>`
+// nodeUserNamePrefix 是 system:node:<nodeName> 形式用户名的固定前缀。
 const nodeUserNamePrefix = "system:node:"
 
-// NodeIdentity returns isNode=true if the user groups contain the system:nodes
-// group and the user name matches the format system:node:<nodeName>, and
-// populates nodeName if isNode is true
+// NodeIdentity 判断用户是否为节点身份：
+// 需要同时满足“用户名带 system:node: 前缀”和“所属组包含 system:nodes”，
+// 两个条件都满足时从用户名中截出节点名返回。
 func (defaultNodeIdentifier) NodeIdentity(u user.Info) (string, bool) {
-	// Make sure we're a node, and can parse the node name
+	// 先确认用户非空且用户名带节点前缀，否则不可能是节点身份。
 	if u == nil {
 		return "", false
 	}
@@ -50,6 +49,8 @@ func (defaultNodeIdentifier) NodeIdentity(u user.Info) (string, bool) {
 		return "", false
 	}
 
+	// 用户名前缀只是必要条件，还必须属于 system:nodes 组，
+	// 避免普通用户通过构造用户名伪装成节点。
 	isNode := false
 	for _, g := range u.GetGroups() {
 		if g == user.NodesGroup {
