@@ -49,6 +49,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// fakeExecPlugin 是不运行外部进程的假插件，直接返回预设的凭证与缓存参数。
 type fakeExecPlugin struct {
 	cacheKeyType  credentialproviderapi.PluginCacheKeyType
 	cacheDuration time.Duration
@@ -56,15 +57,16 @@ type fakeExecPlugin struct {
 	auth map[string]credentialproviderapi.AuthConfig
 }
 
-// countingFakeExecPlugin is a fakeExecPlugin that counts the number of times ExecPlugin is called
-// and sleeps for a second to simulate a slow plugin so that concurrent calls exercise the singleflight.
-// This is used to test the singleflight behavior in the perPodPluginProvider.
+// countingFakeExecPlugin 在 fakeExecPlugin 基础上统计 ExecPlugin 的调用次数，
+// 并故意睡眠一秒模拟慢插件，让并发调用重叠以触发 singleflight 合并。
+// 用于验证 perPodPluginProvider 中的 singleflight 行为。
 type countingFakeExecPlugin struct {
 	fakeExecPlugin
 	mu    sync.Mutex
 	count int
 }
 
+// ExecPlugin 返回预设响应，不执行真正的外部插件。
 func (f *fakeExecPlugin) ExecPlugin(ctx context.Context, image, serviceAccountToken string, serviceAccountAnnotations map[string]string) (*credentialproviderapi.CredentialProviderResponse, error) {
 	return &credentialproviderapi.CredentialProviderResponse{
 		CacheKeyType: f.cacheKeyType,
@@ -75,19 +77,21 @@ func (f *fakeExecPlugin) ExecPlugin(ctx context.Context, image, serviceAccountTo
 	}, nil
 }
 
+// ExecPlugin 记录调用次数并模拟慢插件，便于验证并发请求是否被合并。
 func (f *countingFakeExecPlugin) ExecPlugin(ctx context.Context, image, serviceAccountToken string, serviceAccountAnnotations map[string]string) (*credentialproviderapi.CredentialProviderResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.count++
-	// make the exec plugin slow so concurrent calls exercise the singleflight
+	// 故意放慢插件，让并发调用重叠，从而验证 singleflight 是否合并请求。
 	time.Sleep(time.Second)
 	return f.fakeExecPlugin.ExecPlugin(ctx, image, serviceAccountToken, serviceAccountAnnotations)
 }
 
+// TestSingleflightProvide 验证并发取凭证时请求被合并，token 不同则各自调用插件。
 func TestSingleflightProvide(t *testing.T) {
 	tclock := clock.RealClock{}
 
-	// Set up the counting fakeExecPlugin
+	// 准备带计数的假插件，便于检查插件实际被调用的次数。
 	execPlugin := &countingFakeExecPlugin{
 		fakeExecPlugin: fakeExecPlugin{
 			cacheKeyType: credentialproviderapi.RegistryPluginCacheKeyType,
@@ -97,7 +101,7 @@ func TestSingleflightProvide(t *testing.T) {
 		},
 	}
 
-	// Set up perPodPluginProvider
+	// 构造按 Pod 隔离的 provider，模拟真实调用路径。
 	pluginProvider := &pluginProvider{
 		plugin:         execPlugin,
 		group:          singleflight.Group{},
@@ -120,7 +124,7 @@ func TestSingleflightProvide(t *testing.T) {
 	const concurrentCalls = 5
 	results := make([]credentialprovider.DockerConfig, concurrentCalls)
 
-	// Test with serviceAccountProvider as nil
+	// serviceAccountProvider 为空时不应影响取凭证流程。
 	for i := 0; i < concurrentCalls; i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -131,12 +135,12 @@ func TestSingleflightProvide(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Check that ExecPlugin was called only once
+	// 并发调用应被 singleflight 合并成一次插件调用。
 	if execPlugin.count != 1 {
 		t.Errorf("expected ExecPlugin to be called once, but was called %d times", execPlugin.count)
 	}
 
-	// Repeat the test with a non-nil serviceAccountProvider if applicable
+	// 再验证带 serviceAccountProvider 时同样只调用一次插件。
 	pluginProvider.serviceAccountProvider = &serviceAccountProvider{
 		audience: "audience",
 		getServiceAccountFunc: func(namespace, name string) (*v1.ServiceAccount, error) {
@@ -153,7 +157,7 @@ func TestSingleflightProvide(t *testing.T) {
 		},
 	}
 
-	execPlugin.count = 0 // Reset count for the next test
+	execPlugin.count = 0 // 重置计数，避免污染下一组断言。
 	for i := 0; i < concurrentCalls; i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -164,17 +168,17 @@ func TestSingleflightProvide(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Verify single ExecPlugin call again
+	// 再次确认插件只被调用一次。
 	if execPlugin.count != 1 {
 		t.Errorf("expected ExecPlugin to be called once with serviceAccountProvider, but was called %d times", execPlugin.count)
 	}
 
-	// Repeat the test with different serviceaccount token (same serviceaccount but different pod)
+	// token 不同意味着缓存键不同，预期无法合并，需为每次调用分别取凭证。
 	pluginProvider.serviceAccountProvider.getServiceAccountTokenFunc = func(namespace, name string, tr *authenticationv1.TokenRequest) (*authenticationv1.TokenRequest, error) {
 		return &authenticationv1.TokenRequest{Status: authenticationv1.TokenRequestStatus{Token: rand.String(10)}}, nil
 	}
 
-	execPlugin.count = 0 // Reset count for the next test
+	execPlugin.count = 0 // 重置计数，避免污染下一组断言。
 	for i := 0; i < concurrentCalls; i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -185,12 +189,13 @@ func TestSingleflightProvide(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Check that ExecPlugin was called 5 times with different serviceaccount tokens
+	// token 各不相同，singleflight 不应合并请求。
 	if execPlugin.count != concurrentCalls {
 		t.Errorf("expected ExecPlugin to be called %d times with different serviceaccount tokens, but was called %d times", concurrentCalls, execPlugin.count)
 	}
 }
 
+// Test_ProvideWithCoordinates 覆盖镜像匹配、缓存键类型及服务账号模式下的凭证与日志输出。
 func Test_ProvideWithCoordinates(t *testing.T) {
 	klog.InitFlags(nil)
 	if err := flag.Set("v", "6"); err != nil {
@@ -471,7 +476,7 @@ func Test_ProvideWithCoordinates(t *testing.T) {
 						auth: map[string]credentialproviderapi.AuthConfig{
 							"test.registry.io/foo/bar": {
 								Username: "user",
-								Password: "token", // this is the service account token being echoed back
+								Password: "token", // 故意让插件回显 SA token，验证非 Token 缓存类型下的拒绝逻辑。
 							},
 						},
 					},
@@ -572,6 +577,7 @@ func Test_ProvideWithCoordinates(t *testing.T) {
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
+			// 用内存缓冲捕获 klog，便于断言失败场景下的具体日志原因。
 			var buf bytes.Buffer
 			klog.SetOutput(&buf)
 			klog.LogToStderr(false)
@@ -602,8 +608,8 @@ func Test_ProvideWithCoordinates(t *testing.T) {
 	}
 }
 
-// This test calls Provide in parallel for different registries and images
-// The purpose of this is to detect any race conditions while cache rw.
+// Test_ProvideParallel 并发为不同 registry 与镜像取凭证。
+// 目的是检测缓存读写过程中是否存在竞态条件。
 func Test_ProvideParallel(t *testing.T) {
 	tclock := clock.RealClock{}
 
@@ -677,6 +683,7 @@ func Test_ProvideParallel(t *testing.T) {
 	}
 }
 
+// Test_getCachedCredentials 验证缓存凭证的过期判断、到期清理与剩余键数量。
 func Test_getCachedCredentials(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	p := &pluginProvider{
@@ -738,9 +745,8 @@ func Test_getCachedCredentials(t *testing.T) {
 			name:      "It should delete expired credential during purge",
 			step:      18 * time.Minute,
 			keyLength: 0,
-			// while get call for random, cache purge will be called and it will delete expired
-			// image3 credentials. We cannot use image3 as getKey here, as it will get deleted during
-			// get only, we will not be able verify the purge call.
+			// 用随机键触发查询时会顺带执行缓存清理，从而删除已过期的 image3 凭证。
+			// 这里不能用 image3 作为查询键，否则查询阶段就会删除它，无法验证清理逻辑。
 			getKey: "random",
 			cacheEntry: cacheEntry{
 				key:       "\x00\x06image3\x00\x00",
@@ -757,10 +763,11 @@ func Test_getCachedCredentials(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 先写入缓存项，再用假时钟推进时间，精确控制过期与清理时机。
 			p.cache.Add(&tc.cacheEntry)
 			fakeClock.Step(tc.step)
 
-			// getCachedCredentials returns unexpired credentials.
+			// 查询应只返回未过期的凭证。
 			res, _, err := p.getCachedCredentials(tc.getKey, "")
 			if err != nil {
 				t.Errorf("Unexpected error %v", err)
@@ -771,7 +778,7 @@ func Test_getCachedCredentials(t *testing.T) {
 				t.Errorf("Unexpected response")
 			}
 
-			// Listkeys returns all the keys present in cache including expired keys.
+			// ListKeys 会返回缓存中的所有键，包括已过期的键。
 			if len(p.cache.ListKeys()) != tc.keyLength {
 				t.Errorf("Unexpected cache key length")
 			}
@@ -779,6 +786,7 @@ func Test_getCachedCredentials(t *testing.T) {
 	}
 }
 
+// Test_getCachedCredentials_pluginUsingServiceAccount 验证启用服务账号时缓存键包含 SA 身份信息。
 func Test_getCachedCredentials_pluginUsingServiceAccount(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 
@@ -882,9 +890,8 @@ func Test_getCachedCredentials_pluginUsingServiceAccount(t *testing.T) {
 			name:      "It should delete expired credential during purge",
 			step:      18 * time.Minute,
 			keyLength: 0,
-			// while get call for random, cache purge will be called, and it will delete expired
-			// image3 credentials. We cannot use image3 as getKey here, as it will get deleted during
-			// get only, we will not be able to verify the purge call.
+			// 用随机键触发查询时会顺带执行缓存清理，从而删除已过期的 image3 凭证。
+			// 这里不能用 image3 作为查询键，否则查询阶段就会删除它，无法验证清理逻辑。
 			getKey: "random",
 			cacheEntry: cacheEntry{
 				key:       "image3",
@@ -906,7 +913,7 @@ func Test_getCachedCredentials_pluginUsingServiceAccount(t *testing.T) {
 			}
 			fakeClock.Step(tc.step)
 
-			// getCachedCredentials returns unexpired credentials.
+			// 查询应只返回未过期的凭证。
 			res, _, err := p.getCachedCredentials(tc.getKey, serviceAccountCacheKey)
 			if err != nil {
 				t.Errorf("Unexpected error %v", err)
@@ -917,7 +924,7 @@ func Test_getCachedCredentials_pluginUsingServiceAccount(t *testing.T) {
 				t.Errorf("Unexpected response")
 			}
 
-			// Listkeys returns all the keys present in cache including expired keys.
+			// ListKeys 会返回缓存中的所有键，包括已过期的键。
 			if len(p.cache.ListKeys()) != tc.keyLength {
 				t.Errorf("Unexpected cache key length")
 			}
@@ -925,6 +932,7 @@ func Test_getCachedCredentials_pluginUsingServiceAccount(t *testing.T) {
 	}
 }
 
+// Test_encodeRequest 验证请求编码结果与各 API 版本的序列化格式一致。
 func Test_encodeRequest(t *testing.T) {
 	testcases := []struct {
 		name         string
@@ -1009,6 +1017,7 @@ func Test_encodeRequest(t *testing.T) {
 	}
 }
 
+// Test_decodeResponse 验证各版本响应能正确解码，错误的 Kind 或 Group 会被拒绝。
 func Test_decodeResponse(t *testing.T) {
 	testcases := []struct {
 		name             string
@@ -1103,6 +1112,7 @@ func Test_decodeResponse(t *testing.T) {
 	}
 }
 
+// Test_NoCacheResponse 验证缓存时长为 0 时仍返回凭证且不写入缓存。
 func Test_NoCacheResponse(t *testing.T) {
 	tclock := clock.RealClock{}
 	pluginProvider := &perPodPluginProvider{
@@ -1113,7 +1123,7 @@ func Test_NoCacheResponse(t *testing.T) {
 			cache:          cache.NewExpirationStore(cacheKeyFunc, &cacheExpirationPolicy{clock: tclock}),
 			plugin: &fakeExecPlugin{
 				cacheKeyType:  credentialproviderapi.GlobalPluginCacheKeyType,
-				cacheDuration: 0, // no cache
+				cacheDuration: 0, // 缓存时长为 0，不写入缓存。
 				auth: map[string]credentialproviderapi.AuthConfig{
 					"*.registry.io": {
 						Username: "user",
@@ -1147,6 +1157,7 @@ func Test_NoCacheResponse(t *testing.T) {
 	}
 }
 
+// Test_ExecPluginEnvVars 验证系统环境与插件配置环境的合并与覆盖顺序。
 func Test_ExecPluginEnvVars(t *testing.T) {
 	testcases := []struct {
 		name            string
@@ -1229,6 +1240,7 @@ func Test_ExecPluginEnvVars(t *testing.T) {
 			for _, envVar := range testcase.execPlugin.envVars {
 				configVars = append(configVars, fmt.Sprintf("%s=%s", envVar.Name, envVar.Value))
 			}
+			// 合并两类环境变量，验证插件配置能覆盖系统同名变量。
 			merged := mergeEnvVars(testcase.systemEnvVars, configVars)
 
 			err := validate(testcase.expectedEnvVars, merged)
@@ -1239,6 +1251,7 @@ func Test_ExecPluginEnvVars(t *testing.T) {
 	}
 }
 
+// validate 比较两个环境变量切片是否完全一致。
 func validate(expected, actual []string) error {
 	if len(actual) != len(expected) {
 		return fmt.Errorf("actual env var length [%d] and expected env var length [%d] don't match",
@@ -1254,6 +1267,7 @@ func validate(expected, actual []string) error {
 	return nil
 }
 
+// TestGenerateServiceAccountCacheKey_Deterministic 验证相同 SA 身份生成相同键，不同身份生成不同键。
 func TestGenerateServiceAccountCacheKey_Deterministic(t *testing.T) {
 	namespace1 := "default"
 	name1 := "service-account1"
@@ -1289,6 +1303,7 @@ func TestGenerateServiceAccountCacheKey_Deterministic(t *testing.T) {
 		{namespace2, name2, uid2, annotations2},
 	}
 
+	// 两两组合所有参数，确保缓存键只随影响身份的字段变化。
 	for _, tc := range testCases {
 		for _, tc2 := range testCases {
 			t.Run(fmt.Sprintf("%+v-%+v", tc, tc2), func(t *testing.T) {
@@ -1326,6 +1341,7 @@ func TestGenerateServiceAccountCacheKey_Deterministic(t *testing.T) {
 	}
 }
 
+// TestGenerateServiceAccountCacheKey 验证 SA 缓存键的字节格式、注解排序与 token 哈希。
 func TestGenerateServiceAccountCacheKey(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1403,6 +1419,7 @@ func TestGenerateServiceAccountCacheKey(t *testing.T) {
 	}
 }
 
+// TestGenerateCacheKey 验证镜像基础键与 SA 缓存键拼接后的字节格式。
 func TestGenerateCacheKey(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -1437,6 +1454,7 @@ func TestGenerateCacheKey(t *testing.T) {
 	}
 }
 
+// TestRequiredAnnotationNotFoundErr 验证缺少必需注解的错误能被正确识别。
 func TestRequiredAnnotationNotFoundErr(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1464,11 +1482,12 @@ func TestRequiredAnnotationNotFoundErr(t *testing.T) {
 	}
 }
 
+// Test_CacheKeyGeneration 验证插件缓存键类型与 SA 缓存类型的组合均生成预期键。
 func Test_CacheKeyGeneration(t *testing.T) {
 	type cacheKeyTestCase struct {
 		name                    string
 		pluginCacheKeyType      credentialproviderapi.PluginCacheKeyType
-		serviceAccountCacheType kubeletconfig.ServiceAccountTokenCacheType // empty string means no SA mode
+		serviceAccountCacheType kubeletconfig.ServiceAccountTokenCacheType // 空字符串表示未启用 SA 模式。
 		expectedCacheKeyFunc    func(t *testing.T, image string, saParams *cacheKeyParams) string
 	}
 
@@ -1565,7 +1584,7 @@ func Test_CacheKeyGeneration(t *testing.T) {
 			}
 			pluginProvider := createTestPerPodPluginProvider(t, tc.pluginCacheKeyType, saTokenCacheType)
 
-			// Test image and expected SA parameters
+			// 使用固定镜像与 SA 参数，便于精确比较生成的缓存键。
 			testImage := "test.registry.io/foo/bar"
 			var cacheTypeValue kubeletconfig.ServiceAccountTokenCacheType
 			if saTokenCacheType != nil {
@@ -1588,7 +1607,7 @@ func Test_CacheKeyGeneration(t *testing.T) {
 			dockerConfig, _ := pluginProvider.provideWithCoordinates(testImage)
 			verifyDockerConfig(t, dockerConfig)
 
-			// Verify the cache key is as expected
+			// 断言缓存键由插件缓存类型与 SA 缓存类型共同决定。
 			expectedCacheKey := tc.expectedCacheKeyFunc(t, testImage, saParams)
 			actualCacheKeys := pluginProvider.provider.cache.ListKeys()
 
@@ -1596,7 +1615,7 @@ func Test_CacheKeyGeneration(t *testing.T) {
 				t.Errorf("Expected cache key %q, got %v", expectedCacheKey, actualCacheKeys)
 			}
 
-			// Test cache hit (nil out plugin to ensure cache is used)
+			// 清空插件后再次取凭证，确保第二次结果来自缓存。
 			pluginProvider.provider.plugin = nil
 			cachedConfig, _ := pluginProvider.provideWithCoordinates(testImage)
 			verifyDockerConfig(t, cachedConfig)
@@ -1604,6 +1623,7 @@ func Test_CacheKeyGeneration(t *testing.T) {
 	}
 }
 
+// createTestPerPodPluginProvider 构造带缓存及可选 SA provider 的测试用 provider。
 func createTestPerPodPluginProvider(t *testing.T, pluginCacheKeyType credentialproviderapi.PluginCacheKeyType, saTokenCacheType *kubeletconfig.ServiceAccountTokenCacheType) *perPodPluginProvider {
 	t.Helper()
 
@@ -1626,7 +1646,7 @@ func createTestPerPodPluginProvider(t *testing.T, pluginCacheKeyType credentialp
 		},
 	}
 
-	// Add service account provider if needed
+	// 仅在指定 SA 缓存类型时装配 SA provider，覆盖未启用 SA 的场景。
 	if saTokenCacheType != nil {
 		provider.serviceAccountProvider = &serviceAccountProvider{
 			audience:                             "audience",
@@ -1660,6 +1680,7 @@ func createTestPerPodPluginProvider(t *testing.T, pluginCacheKeyType credentialp
 	}
 }
 
+// generateExpectedSACacheKey 按给定缓存类型生成期望的 SA 缓存键。
 func generateExpectedSACacheKey(t *testing.T, params *cacheKeyParams, cacheType kubeletconfig.ServiceAccountTokenCacheType) string {
 	t.Helper()
 
@@ -1671,6 +1692,7 @@ func generateExpectedSACacheKey(t *testing.T, params *cacheKeyParams, cacheType 
 	return key
 }
 
+// generateExpectedCacheKey 拼接基础键与 SA 缓存键，生成期望的缓存键。
 func generateExpectedCacheKey(t *testing.T, baseKey, saCacheKey string) string {
 	t.Helper()
 
@@ -1681,6 +1703,7 @@ func generateExpectedCacheKey(t *testing.T, baseKey, saCacheKey string) string {
 	return key
 }
 
+// verifyDockerConfig 断言凭证内容与测试夹具中预设的一致。
 func verifyDockerConfig(t *testing.T, config credentialprovider.DockerConfig) {
 	t.Helper()
 

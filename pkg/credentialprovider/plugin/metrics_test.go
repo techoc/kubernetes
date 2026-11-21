@@ -24,6 +24,7 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestKubeletCredentialProviderPluginErrors 验证插件错误计数器的上报。
 func TestKubeletCredentialProviderPluginErrors(t *testing.T) {
 	expectedValue := `
 	# HELP kubelet_credential_provider_plugin_errors_total [ALPHA] Number of errors from credential provider plugin
@@ -34,6 +35,7 @@ func TestKubeletCredentialProviderPluginErrors(t *testing.T) {
 		"kubelet_credential_provider_plugin_errors_total",
 	}
 
+	// 重置计数器，避免前序测试的残留值影响结果。
 	kubeletCredentialProviderPluginErrors.Reset()
 	registerMetrics()
 
@@ -43,6 +45,7 @@ func TestKubeletCredentialProviderPluginErrors(t *testing.T) {
 	}
 }
 
+// TestKubeletCredentialProviderPluginDuration 验证插件耗时直方图的桶与统计量。
 func TestKubeletCredentialProviderPluginDuration(t *testing.T) {
 	expectedValue := `
 	# HELP kubelet_credential_provider_plugin_duration [ALPHA] Duration of execution in seconds for credential provider plugin
@@ -75,6 +78,7 @@ func TestKubeletCredentialProviderPluginDuration(t *testing.T) {
 	}
 }
 
+// TestKubeletCredentialProviderConfigInfo 验证配置哈希 gauge 的上报。
 func TestKubeletCredentialProviderConfigInfo(t *testing.T) {
 	expectedValue := `
 	# HELP kubelet_credential_provider_config_info [ALPHA] Information about the last applied credential provider configuration with hash as label
@@ -85,16 +89,19 @@ func TestKubeletCredentialProviderConfigInfo(t *testing.T) {
 		"kubelet_credential_provider_config_info",
 	}
 
+	// 同时重置其他指标，避免残留的配置哈希干扰。
 	kubeletCredentialProviderPluginErrors.Reset()
 	kubeletCredentialProviderPluginDuration.Reset()
 	registerMetrics()
 
+	// 记录配置哈希，验证 gauge 标签值。
 	recordCredentialProviderConfigHash("sha256:abcd1234")
 	if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(expectedValue), metricNames...); err != nil {
 		t.Fatal(err)
 	}
 }
 
+// TestMultiplePluginErrors 验证多个插件的错误计数按标签分别累计。
 func TestMultiplePluginErrors(t *testing.T) {
 	expectedValue := `
 	# HELP kubelet_credential_provider_plugin_errors_total [ALPHA] Number of errors from credential provider plugin
@@ -117,6 +124,7 @@ func TestMultiplePluginErrors(t *testing.T) {
 	}
 }
 
+// TestMultiplePluginDurations 验证多个插件的耗时指标按标签分别记录。
 func TestMultiplePluginDurations(t *testing.T) {
 	expectedValue := `
 	# HELP kubelet_credential_provider_plugin_duration [ALPHA] Duration of execution in seconds for credential provider plugin
@@ -164,6 +172,7 @@ func TestMultiplePluginDurations(t *testing.T) {
 	}
 }
 
+// TestCredentialProviderConfigInfoWithDifferentHashes 验证只上报最后一个配置哈希。
 func TestCredentialProviderConfigInfoWithDifferentHashes(t *testing.T) {
 	expectedValue := `
 	# HELP kubelet_credential_provider_config_info [ALPHA] Information about the last applied credential provider configuration with hash as label
@@ -176,7 +185,8 @@ func TestCredentialProviderConfigInfoWithDifferentHashes(t *testing.T) {
 
 	registerMetrics()
 
-	// With custom collector, only the last hash is shown (current state)
+	// 自定义收集器只保留最新哈希，因此期望值仅包含 config2。
+	// 连续记录两个哈希，验证只保留最新状态。
 	recordCredentialProviderConfigHash("sha256:config1")
 	recordCredentialProviderConfigHash("sha256:config2")
 	if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(expectedValue), metricNames...); err != nil {

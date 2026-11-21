@@ -21,26 +21,29 @@ import (
 	"time"
 )
 
+// testProvider 是记录调用次数的假凭据提供者。
 type testProvider struct {
 	Count int
 }
 
-// Enabled implements dockerConfigProvider
+// Enabled 实现 dockerConfigProvider 接口。
 func (d *testProvider) Enabled() bool {
 	return true
 }
 
-// Provide implements dockerConfigProvider
+// Provide 实现 dockerConfigProvider 接口，并累计调用次数。
 func (d *testProvider) Provide(image string) DockerConfig {
 	d.Count++
 	return DockerConfig{}
 }
 
+// TestCachingProvider 验证缓存提供者在有效期内只调用底层提供者一次。
 func TestCachingProvider(t *testing.T) {
 	provider := &testProvider{
 		Count: 0,
 	}
 
+	// 设置一秒生命周期，便于快速验证缓存过期行为。
 	cache := &CachingDockerConfigProvider{
 		Provider: provider,
 		Lifetime: 1 * time.Second,
@@ -59,6 +62,7 @@ func TestCachingProvider(t *testing.T) {
 		t.Errorf("Unexpected number of Provide calls: %v", provider.Count)
 	}
 
+	// 等待缓存过期，验证过期后会重新获取凭据。
 	time.Sleep(cache.Lifetime)
 	cache.Provide(image)
 	cache.Provide(image)

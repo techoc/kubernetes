@@ -25,13 +25,15 @@ import (
 	"testing"
 )
 
+// TestReadDockerConfigFile 验证从临时目录读取 dockercfg 配置文件。
 func TestReadDockerConfigFile(t *testing.T) {
 	configJSONFileName := "config.json"
 	var fileInfo *os.File
 
-	//test dockerconfig json
+	// 构造 dockercfg JSON 测试数据。
 	inputDockerconfigJSONFile := "{ \"auths\": { \"http://foo.example.com\":{\"auth\":\"Zm9vOmJhcgo=\",\"email\":\"foo@example.com\"}}}"
 
+	// 使用临时目录，避免污染真实的 dockercfg。
 	preferredPath, err := os.MkdirTemp("", "test_foo_bar_dockerconfigjson_")
 	if err != nil {
 		t.Fatalf("Creating tmp dir fail: %v", err)
@@ -44,7 +46,7 @@ func TestReadDockerConfigFile(t *testing.T) {
 	}
 
 	if _, err := os.Stat(absDockerConfigFileLocation); os.IsNotExist(err) {
-		//create test cfg file
+		// 创建测试配置文件。
 		fileInfo, err = os.OpenFile(absDockerConfigFileLocation, os.O_CREATE|os.O_RDWR, 0664)
 		if err != nil {
 			t.Fatalf("While trying to create file %s: %v", absDockerConfigFileLocation, err)
@@ -52,8 +54,10 @@ func TestReadDockerConfigFile(t *testing.T) {
 		defer fileInfo.Close()
 	}
 
+	// 写入配置内容，供后续读取校验。
 	fileInfo.WriteString(inputDockerconfigJSONFile)
 
+	// 保存原路径并在测试后恢复，避免影响其他用例。
 	orgPreferredPath := GetPreferredDockercfgPath()
 	SetPreferredDockercfgPath(preferredPath)
 	defer SetPreferredDockercfgPath(orgPreferredPath)
@@ -61,8 +65,10 @@ func TestReadDockerConfigFile(t *testing.T) {
 		t.Errorf("Getting docker config file fail : %v preferredPath : %q", err, preferredPath)
 	}
 }
+
+// TestDockerConfigJsonJSONDecode 验证 .dockerconfigjson 格式的反序列化。
 func TestDockerConfigJsonJSONDecode(t *testing.T) {
-	// Fake values for testing.
+	// 使用假凭据，避免触及真实凭证。
 	input := []byte(`{"auths": {"http://foo.example.com":{"username": "foo", "password": "bar", "email": "foo@example.com"}, "http://bar.example.com":{"username": "bar", "password": "baz", "email": "bar@example.com"}}}`)
 
 	expect := DockerConfigJSON{
@@ -91,8 +97,9 @@ func TestDockerConfigJsonJSONDecode(t *testing.T) {
 	}
 }
 
+// TestDockerConfigJSONDecode 验证 .dockercfg 格式的反序列化。
 func TestDockerConfigJSONDecode(t *testing.T) {
-	// Fake values for testing.
+	// 使用假凭据，避免触及真实凭证。
 	input := []byte(`{"http://foo.example.com":{"username": "foo", "password": "bar", "email": "foo@example.com"}, "http://bar.example.com":{"username": "bar", "password": "baz", "email": "bar@example.com"}}`)
 
 	expect := DockerConfig(map[string]DockerConfigEntry{
@@ -119,15 +126,16 @@ func TestDockerConfigJSONDecode(t *testing.T) {
 	}
 }
 
+// TestDockerConfigEntryJSONDecode 验证单条凭据的 JSON 解码及错误处理。
 func TestDockerConfigEntryJSONDecode(t *testing.T) {
 	tests := []struct {
 		input  []byte
 		expect DockerConfigEntry
 		fail   bool
 	}{
-		// simple case, just decode the fields
+		// 普通情况：直接解析各字段。
 		{
-			// Fake values for testing.
+			// 使用假凭据，避免触及真实凭证。
 			input: []byte(`{"username": "foo", "password": "bar", "email": "foo@example.com"}`),
 			expect: DockerConfigEntry{
 				Username: "foo",
@@ -137,7 +145,7 @@ func TestDockerConfigEntryJSONDecode(t *testing.T) {
 			fail: false,
 		},
 
-		// auth field decodes to username & password
+		// auth 字段可解析出用户名和密码。
 		{
 			input: []byte(`{"auth": "Zm9vOmJhcg==", "email": "foo@example.com"}`),
 			expect: DockerConfigEntry{
@@ -148,9 +156,9 @@ func TestDockerConfigEntryJSONDecode(t *testing.T) {
 			fail: false,
 		},
 
-		// auth field overrides username & password
+		// auth 字段优先于用户名和密码。
 		{
-			// Fake values for testing.
+			// 使用假凭据，避免触及真实凭证。
 			input: []byte(`{"username": "foo", "password": "bar", "auth": "cGluZzpwb25n", "email": "foo@example.com"}`),
 			expect: DockerConfigEntry{
 				Username: "ping",
@@ -160,7 +168,7 @@ func TestDockerConfigEntryJSONDecode(t *testing.T) {
 			fail: false,
 		},
 
-		// poorly-formatted auth causes failure
+		// auth 格式非法时应解析失败。
 		{
 			input: []byte(`{"auth": "pants", "email": "foo@example.com"}`),
 			expect: DockerConfigEntry{
@@ -171,7 +179,7 @@ func TestDockerConfigEntryJSONDecode(t *testing.T) {
 			fail: true,
 		},
 
-		// invalid JSON causes failure
+		// 非法 JSON 应导致解析失败。
 		{
 			input: []byte(`{"email": false}`),
 			expect: DockerConfigEntry{
@@ -196,6 +204,7 @@ func TestDockerConfigEntryJSONDecode(t *testing.T) {
 	}
 }
 
+// TestDecodeDockerConfigFieldAuth 验证 auth 字段的多种 base64 编码与容错行为。
 func TestDecodeDockerConfigFieldAuth(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -203,61 +212,61 @@ func TestDecodeDockerConfigFieldAuth(t *testing.T) {
 		password string
 		fail     bool
 	}{
-		// auth field decodes to username & password
+		// auth 字段可解析出用户名和密码。
 		{
 			input:    "Zm9vOmJhcg==",
 			username: "foo",
 			password: "bar",
 		},
 
-		// some test as before but with field not well padded
+		// 与上一例相同，但 base64 填充不完整。
 		{
 			input:    "Zm9vOmJhcg",
 			username: "foo",
 			password: "bar",
 		},
 
-		// some test as before but with new line characters
+		// 与上一例相同，但包含换行符。
 		{
 			input:    "Zm9vOm\nJhcg==\n",
 			username: "foo",
 			password: "bar",
 		},
 
-		// standard encoding (with padding)
+		// 标准 base64 编码（带填充）。
 		{
 			input:    base64.StdEncoding.EncodeToString([]byte("foo:bar")),
 			username: "foo",
 			password: "bar",
 		},
 
-		// raw encoding (without padding)
+		// 原始 base64 编码（不带填充）。
 		{
 			input:    base64.RawStdEncoding.EncodeToString([]byte("foo:bar")),
 			username: "foo",
 			password: "bar",
 		},
 
-		// the input is encoded with encodeDockerConfigFieldAuth (standard encoding)
+		// 输入由 encodeDockerConfigFieldAuth 生成（标准编码）。
 		{
 			input:    encodeDockerConfigFieldAuth("foo", "bar"),
 			username: "foo",
 			password: "bar",
 		},
 
-		// good base64 data, but no colon separating username & password
+		// base64 合法，但缺少分隔用户名和密码的冒号。
 		{
 			input: "cGFudHM=",
 			fail:  true,
 		},
 
-		// only new line characters are ignored
+		// 只忽略换行符，尾部空格仍会导致失败。
 		{
 			input: "Zm9vOmJhcg== ",
 			fail:  true,
 		},
 
-		// bad base64 data
+		// 非法的 base64 数据。
 		{
 			input: "pants",
 			fail:  true,
@@ -280,14 +289,15 @@ func TestDecodeDockerConfigFieldAuth(t *testing.T) {
 	}
 }
 
+// TestDockerConfigEntryJSONCompatibleEncode 验证序列化时会生成兼容的 auth 字段。
 func TestDockerConfigEntryJSONCompatibleEncode(t *testing.T) {
 	tests := []struct {
 		input  DockerConfigEntry
 		expect []byte
 	}{
-		// simple case, just decode the fields
+		// 普通情况：各字段都应参与序列化。
 		{
-			// Fake values for testing.
+			// 使用假凭据，避免触及真实凭证。
 			expect: []byte(`{"username":"foo","password":"bar","email":"foo@example.com","auth":"Zm9vOmJhcg=="}`),
 			input: DockerConfigEntry{
 				Username: "foo",
@@ -309,6 +319,7 @@ func TestDockerConfigEntryJSONCompatibleEncode(t *testing.T) {
 	}
 }
 
+// TestReadDockerConfigFileFromBytes 验证从字节读取 .dockercfg 的成功与失败路径。
 func TestReadDockerConfigFileFromBytes(t *testing.T) {
 	testCases := []struct {
 		id               string
@@ -353,6 +364,7 @@ func TestReadDockerConfigFileFromBytes(t *testing.T) {
 	}
 }
 
+// TestReadDockerConfigJSONFileFromBytes 验证从字节读取 .dockerconfigjson 的成功与失败路径。
 func TestReadDockerConfigJSONFileFromBytes(t *testing.T) {
 	testCases := []struct {
 		id               string

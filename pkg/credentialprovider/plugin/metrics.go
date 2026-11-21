@@ -52,9 +52,8 @@ var (
 		[]string{"plugin_name"},
 	)
 
-	// kubeletCredentialProviderConfigInfo provides information about the credential provider configuration.
-	// The hash label is typically constant for the lifetime of the kubelet process, changing only when
-	// the configuration is updated and the kubelet is restarted.
+	// kubeletCredentialProviderConfigInfo 提供当前生效配置的描述信息。
+	// hash 标签通常在 kubelet 进程生命周期内不变，仅在配置更新并重启后变化。
 	kubeletCredentialProviderConfigInfo = metrics.NewDesc(
 		metrics.BuildFQName("", KubeletSubsystem, "credential_provider_config_info"),
 		"Information about the last applied credential provider configuration with hash as label",
@@ -67,7 +66,7 @@ var (
 
 var configHashProvider = configmetrics.NewAtomicHashProvider()
 
-// registerMetrics registers credential provider metrics.
+// registerMetrics 注册凭证插件相关指标，且只注册一次。
 func registerMetrics() {
 	registerOnce.Do(func() {
 		legacyregistry.MustRegister(kubeletCredentialProviderPluginErrors)
@@ -76,7 +75,7 @@ func registerMetrics() {
 	})
 }
 
-// recordCredentialProviderConfigHash records the hash of the credential provider configuration
+// recordCredentialProviderConfigHash 记录当前凭证插件配置的哈希。
 func recordCredentialProviderConfigHash(configHash string) {
 	configHashProvider.SetHashes(configHash)
 }

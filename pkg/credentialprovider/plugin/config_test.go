@@ -33,15 +33,17 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// Test_readCredentialProviderConfig 测试从单文件或目录读取凭据提供者配置。
+// 目录场景覆盖多文件合并、文件类型过滤、配置哈希及错误分支。
 func Test_readCredentialProviderConfig(t *testing.T) {
 	testcases := []struct {
 		name               string
-		configData         []string // Array to support multiple files for directory tests
-		fileNames          []string // Optional file names for directory tests
-		isDir              bool     // Whether to create a directory with multiple files
+		configData         []string // 配置内容数组，目录测试时支持多个文件
+		fileNames          []string // 目录测试时可选的文件名列表
+		isDir              bool     // 是否创建包含多个配置文件的目录
 		config             *kubeletconfig.CredentialProviderConfig
 		expectErr          string
-		expectedConfigHash string // Expected hash of the config
+		expectedConfigHash string // 期望的配置哈希值
 	}{
 		{
 			name:       "empty directory with no JSON or YAML files",
@@ -670,7 +672,7 @@ providers:
 			var err error
 
 			if testcase.isDir {
-				// Create a temporary directory for multiple config files
+				// 为多文件场景创建临时目录，测试结束后统一清理。
 				tempDir, err := os.MkdirTemp("", "config-dir")
 				if err != nil {
 					t.Fatal(err)
@@ -681,11 +683,13 @@ providers:
 					}
 				}()
 
+				// 文件名按字典序生成，使多文件合并顺序可预测。
 				for i, configData := range testcase.configData {
 					var fileName string
 					if testcase.fileNames != nil && i < len(testcase.fileNames) {
 						fileName = testcase.fileNames[i]
 					} else {
+						// 未显式指定文件名时，用序号保证排序稳定。
 						fileName = fmt.Sprintf("config-%03d.yaml", i)
 					}
 					filePath := fmt.Sprintf("%s/%s", tempDir, fileName)
@@ -708,7 +712,7 @@ providers:
 
 				configPath = tempDir
 			} else {
-				// Create a single temporary file
+				// 单文件场景创建临时文件，由 CloseAndRemove 负责清理。
 				file, err := os.CreateTemp("", "config.yaml")
 				if err != nil {
 					t.Fatal(err)
@@ -724,6 +728,7 @@ providers:
 				configPath = file.Name()
 			}
 
+			// 哈希与配置一起返回，供调用方检测配置是否发生变化。
 			authConfig, configHash, err := readCredentialProviderConfig(configPath)
 			if len(testcase.expectErr) == 0 {
 				if err != nil {
@@ -738,10 +743,12 @@ providers:
 				}
 			}
 
+			// 哈希期望值固定，防止配置内容变化未被察觉。
 			if configHash != testcase.expectedConfigHash {
 				t.Fatalf("expected config hash %q, got %q", testcase.expectedConfigHash, configHash)
 			}
 
+			// 目录场景期望的是所有文件按序合并后的结果。
 			if !reflect.DeepEqual(authConfig, testcase.config) {
 				t.Fatalf("expected auth config: %v, got: %v", testcase.config, authConfig)
 			}
@@ -749,6 +756,8 @@ providers:
 	}
 }
 
+// Test_validateCredentialProviderConfig 测试 CredentialProviderConfig 的校验规则，
+// 覆盖 ServiceAccountToken 特性门控开启和关闭两种情况。
 func Test_validateCredentialProviderConfig(t *testing.T) {
 	testcases := []struct {
 		name                          string
@@ -934,6 +943,7 @@ func Test_validateCredentialProviderConfig(t *testing.T) {
 			},
 		},
 		{
+			// 门控关闭时携带 tokenAttributes 必须报错，防止未就绪的 API 被使用。
 			name: "token attributes set without KubeletServiceAccountTokenForCredentialProviders feature gate enabled",
 			config: &kubeletconfig.CredentialProviderConfig{
 				Providers: []kubeletconfig.CredentialProvider{
@@ -953,6 +963,7 @@ func Test_validateCredentialProviderConfig(t *testing.T) {
 			expectErr: `providers.tokenAttributes: Forbidden: tokenAttributes is not supported when KubeletServiceAccountTokenForCredentialProviders feature gate is disabled`,
 		},
 		{
+			// 显式开启门控，才能覆盖 tokenAttributes 的字段级校验。
 			name: "token attributes not nil but empty ServiceAccountTokenAudience",
 			config: &kubeletconfig.CredentialProviderConfig{
 				Providers: []kubeletconfig.CredentialProvider{
@@ -1044,7 +1055,7 @@ func Test_validateCredentialProviderConfig(t *testing.T) {
 							ServiceAccountTokenAudience:          "audience",
 							CacheType:                            kubeletconfig.TokenServiceAccountTokenCacheType,
 							RequireServiceAccount:                ptr.To(true),
-							RequiredServiceAccountAnnotationKeys: []string{"cantendwithadash-", "now-with-dashes/simple"}, // first key is invalid
+							RequiredServiceAccountAnnotationKeys: []string{"cantendwithadash-", "now-with-dashes/simple"}, // 第一个键以短横线结尾，是非法的注解键名
 						},
 					},
 				},
@@ -1065,7 +1076,7 @@ func Test_validateCredentialProviderConfig(t *testing.T) {
 							ServiceAccountTokenAudience:          "audience",
 							CacheType:                            kubeletconfig.ServiceAccountServiceAccountTokenCacheType,
 							RequireServiceAccount:                ptr.To(true),
-							OptionalServiceAccountAnnotationKeys: []string{"cantendwithadash-", "now-with-dashes/simple"}, // first key is invalid
+							OptionalServiceAccountAnnotationKeys: []string{"cantendwithadash-", "now-with-dashes/simple"}, // 第一个键以短横线结尾，是非法的注解键名
 						},
 					},
 				},
@@ -1233,6 +1244,7 @@ func Test_validateCredentialProviderConfig(t *testing.T) {
 	}
 }
 
+// errString 将聚合错误转换为字符串，无错误时返回空字符串。
 func errString(errs errors.Aggregate) string {
 	if errs != nil {
 		return errs.Error()

@@ -40,13 +40,8 @@ var (
 	)
 )
 
-// readCredentialProviderConfig receives a path to a config file or directory.
-// If the path is a directory, it reads all "*.json", "*.yaml" and "*.yml" files in lexicographic order,
-// decodes them, and merges their entries into a single CredentialProviderConfig object.
-// If the path is a file, it decodes the file into a CredentialProviderConfig object directly.
-// It also returns the SHA256 hash of all the raw file content. This hash is exposed via metrics
-// as an external API to allow monitoring of configuration changes.
-// The hash format follows container digest conventions (sha256:hexstring) for consistency.
+// readCredentialProviderConfig 读取配置文件或目录；目录中的 *.json/*.yaml/*.yml 按文件名排序后解码合并。
+// 同时返回所有原始文件内容的 SHA256 哈希（格式遵循容器摘要约定 sha256:hexstring），供 metrics 监控配置变更。
 func readCredentialProviderConfig(configPath string) (*kubeletconfig.CredentialProviderConfig, string, error) {
 	if configPath == "" {
 		return nil, "", fmt.Errorf("credential provider config path is empty")
@@ -66,7 +61,7 @@ func readCredentialProviderConfig(configPath string) (*kubeletconfig.CredentialP
 			return nil, "", fmt.Errorf("unable to read directory %q: %w", configPath, err)
 		}
 
-		// Filter and sort *.json/*.yaml/*.yml files in lexicographic order
+		// 过滤并按名称排序，保证多文件合并顺序稳定、哈希可复现。
 		for _, entry := range entries {
 			ext := filepath.Ext(entry.Name())
 			if !entry.IsDir() && (ext == ".json" || ext == ".yaml" || ext == ".yml") {
@@ -89,7 +84,7 @@ func readCredentialProviderConfig(configPath string) (*kubeletconfig.CredentialP
 			return nil, "", fmt.Errorf("unable to read file %q: %w", filePath, err)
 		}
 
-		// Use length prefix to prevent hash collisions
+		// 长度前缀避免不同文件边界组合产生相同哈希。
 		dataLen := uint64(len(data))
 		if err := binary.Write(hasher, binary.BigEndian, dataLen); err != nil {
 			return nil, "", fmt.Errorf("error writing length prefix for file %q: %w", filePath, err)
@@ -103,7 +98,7 @@ func readCredentialProviderConfig(configPath string) (*kubeletconfig.CredentialP
 		configs = append(configs, config)
 	}
 
-	// Merge all configs into a single CredentialProviderConfig
+	// 合并为单一配置，重名 provider 视为配置错误。
 	mergedConfig := &kubeletconfig.CredentialProviderConfig{}
 	providerNames := sets.NewString()
 	for _, config := range configs {
@@ -120,7 +115,7 @@ func readCredentialProviderConfig(configPath string) (*kubeletconfig.CredentialP
 	return mergedConfig, configHash, nil
 }
 
-// decode decodes data into the internal CredentialProviderConfig type.
+// decode 把数据解码为内部 CredentialProviderConfig 类型。
 func decode(data []byte) (*kubeletconfig.CredentialProviderConfig, error) {
 	obj, gvk, err := codecs.UniversalDecoder().Decode(data, nil, nil)
 	if err != nil {
@@ -142,7 +137,7 @@ func decode(data []byte) (*kubeletconfig.CredentialProviderConfig, error) {
 	return nil, fmt.Errorf("unable to convert %T to *CredentialProviderConfig", obj)
 }
 
-// validateCredentialProviderConfig validates CredentialProviderConfig.
+// validateCredentialProviderConfig 校验 CredentialProviderConfig 的合法性。
 func validateCredentialProviderConfig(config *kubeletconfig.CredentialProviderConfig, saTokenForCredentialProviders bool) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -232,7 +227,7 @@ func validateCredentialProviderConfig(config *kubeletconfig.CredentialProviderCo
 			case len(provider.TokenAttributes.CacheType) == 0:
 				allErrs = append(allErrs, field.Required(fldPath.Child("cacheType"), fmt.Sprintf("cacheType is required to be set when tokenAttributes is specified. Supported values are: %s", strings.Join(sets.List(validCacheTypes), ", "))))
 			case validCacheTypes.Has(string(provider.TokenAttributes.CacheType)):
-				// ok
+				// 合法取值，无需报错。
 			default:
 				allErrs = append(allErrs, field.NotSupported(fldPath.Child("cacheType"), provider.TokenAttributes.CacheType, sets.List(validCacheTypes)))
 			}
@@ -242,14 +237,14 @@ func validateCredentialProviderConfig(config *kubeletconfig.CredentialProviderCo
 	return allErrs
 }
 
-// validateServiceAccountAnnotationKeys validates the service account annotation keys.
+// validateServiceAccountAnnotationKeys 校验 ServiceAccount 注解键的合法性与唯一性。
 func validateServiceAccountAnnotationKeys(fldPath *field.Path, keys []string) field.ErrorList {
 	allErrs := field.ErrorList{}
 
 	seenAnnotationKeys := sets.New[string]()
-	// Using the validation logic for keys from https://github.com/kubernetes/kubernetes/blob/69dbc74417304328a9fd3c161643dc4f0a057f41/staging/src/k8s.io/apimachinery/pkg/api/validation/objectmeta.go#L46-L51
+	// 沿用 apimachinery 对象元数据中注解键的校验规则。
 	for _, k := range keys {
-		// The rule is QualifiedName except that case doesn't matter, so convert to lowercase before checking.
+		// 校验规则与 QualifiedName 相同但不区分大小写，因此先转小写。
 		for _, msg := range validation.IsQualifiedName(strings.ToLower(k)) {
 			allErrs = append(allErrs, field.Invalid(fldPath, k, msg))
 		}

@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package credentialprovider supplies interfaces and implementations for
-// docker registry providers to expose their authentication scheme.
+// Package credentialprovider 提供接口与实现，供 Docker 镜像仓库的凭证插件暴露其认证方案。
 package credentialprovider

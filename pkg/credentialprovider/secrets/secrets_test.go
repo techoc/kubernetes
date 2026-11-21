@@ -28,21 +28,23 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// FakeKeyring a fake config credentials
+// FakeKeyring 是返回预设凭据的假 keyring。
 type FakeKeyring struct {
 	auth []credentialprovider.TrackedAuthConfig
 	ok   bool
 }
 
-// Lookup implements the DockerKeyring method for fetching credentials based on image name
-// return fake auth and ok
+// Lookup 实现 DockerKeyring 接口，直接返回预设的凭据与查找状态。
 func (f *FakeKeyring) Lookup(image string) ([]credentialprovider.TrackedAuthConfig, bool) {
 	return f.auth, f.ok
 }
 
+// Test_MakeDockerKeyring 验证从拉取密钥与默认 keyring 构造凭据环的行为。
 func Test_MakeDockerKeyring(t *testing.T) {
+	// 开启特性门控，使凭据携带来源与哈希。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletEnsureSecretPulledImages, true)
 
+	// 覆盖两种密钥格式、类型不匹配及默认 keyring 回退场景。
 	testcases := []struct {
 		name                string
 		image               string
@@ -337,11 +339,13 @@ func Test_MakeDockerKeyring(t *testing.T) {
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
+			// 用拉取密钥和默认 keyring 构造待测凭据环。
 			keyring, err := MakeDockerKeyring(testcase.pullSecrets, testcase.defaultKeyring)
 			if err != nil {
 				t.Fatalf("error creating secret-based docker keyring: %v", err)
 			}
 
+			// 查找目标镜像，校验凭据来源与哈希。
 			authConfigs, found := keyring.Lookup(testcase.image)
 			if found != testcase.found {
 				t.Logf("actual lookup status: %v", found)

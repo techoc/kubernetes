@@ -59,8 +59,7 @@ import (
 )
 
 const (
-	// globalCacheKey is the key used for caching credentials that are not specific to a registry or image.
-	// angle brackets are used to avoid conflicts with actual image or registry names.
+	// globalCacheKey 用于缓存不绑定仓库或镜像的凭证，尖括号形式避免与真实名称冲突。
 	globalCacheKey     = "<global>"
 	cachePurgeInterval = time.Minute * 15
 )
@@ -76,12 +75,13 @@ var (
 	}
 )
 
-// GetServiceAccountFunc is a function type that returns a service account for the given namespace and name.
+// GetServiceAccountFunc 按命名空间和名称查询 ServiceAccount。
 type GetServiceAccountFunc func(namespace, name string) (*v1.ServiceAccount, error)
 
-// getServiceAccountTokenFunc is a function type that returns a service account token for the given namespace and name.
+// getServiceAccountTokenFunc 为指定 ServiceAccount 创建令牌。
 type getServiceAccountTokenFunc func(namespace, name string, tr *authenticationv1.TokenRequest) (*authenticationv1.TokenRequest, error)
 
+// cacheKeyParams 汇总用于生成缓存键的上下文信息。
 type cacheKeyParams struct {
 	namespace          string
 	serviceAccountName string
@@ -93,14 +93,17 @@ type cacheKeyParams struct {
 	cacheType          kubeletconfig.ServiceAccountTokenCacheType
 }
 
+// cacheKeyBuilder 用带长度前缀的字节串拼接，避免字段内容拼接歧义。
 type cacheKeyBuilder struct {
 	builder *cryptobyte.Builder
 }
 
+// newCacheKeyBuilder 创建缓存键构造器。
 func newCacheKeyBuilder() *cacheKeyBuilder {
 	return &cacheKeyBuilder{builder: cryptobyte.NewBuilder(nil)}
 }
 
+// addString 追加带长度前缀的字符串。
 func (c *cacheKeyBuilder) addString(value string) *cacheKeyBuilder {
 	c.builder.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
 		b.AddBytes([]byte(value))
@@ -108,6 +111,7 @@ func (c *cacheKeyBuilder) addString(value string) *cacheKeyBuilder {
 	return c
 }
 
+// addAnnotations 按键排序后追加注解，保证生成的键稳定。
 func (c *cacheKeyBuilder) addAnnotations(annotations map[string]string) *cacheKeyBuilder {
 	keys := sets.StringKeySet(annotations).List()
 	c.builder.AddUint32(uint32(len(keys)))
@@ -122,6 +126,7 @@ func (c *cacheKeyBuilder) addAnnotations(annotations map[string]string) *cacheKe
 	return c
 }
 
+// build 输出最终缓存键。
 func (c *cacheKeyBuilder) build() (string, error) {
 	keyBytes, err := c.builder.Bytes()
 	if err != nil {
@@ -130,6 +135,7 @@ func (c *cacheKeyBuilder) build() (string, error) {
 	return string(keyBytes), nil
 }
 
+// init 安装凭证插件 API 与 kubelet 配置类型。
 func init() {
 	install.Install(scheme)
 	kubeletconfig.AddToScheme(scheme)
@@ -138,8 +144,7 @@ func init() {
 	kubeletconfigv1.AddToScheme(scheme)
 }
 
-// RegisterCredentialProviderPlugins is called from kubelet to register external credential provider
-// plugins according to the CredentialProviderConfig config file.
+// RegisterCredentialProviderPlugins 由 kubelet 调用，按配置文件注册外部凭证插件。
 func RegisterCredentialProviderPlugins(pluginConfigPath, pluginBinDir string,
 	getServiceAccountToken getServiceAccountTokenFunc,
 	getServiceAccount GetServiceAccountFunc,
@@ -162,16 +167,14 @@ func RegisterCredentialProviderPlugins(pluginConfigPath, pluginBinDir string,
 		return fmt.Errorf("failed to validate credential provider config: %v", errs.ToAggregate())
 	}
 
-	// Register metrics for credential providers
+	// 注册发生在配置校验通过之后，避免暴露无效配置的状态。
 	registerMetrics()
 
-	// Record the hash of the credential provider configuration.
-	// This hash is exposed via metrics as an external API to allow monitoring of configuration changes.
+	// 配置哈希作为 metrics 标签暴露，便于监控配置变更。
 	recordCredentialProviderConfigHash(configHash)
 
 	for _, provider := range credentialProviderConfig.Providers {
-		// Considering Windows binary with suffix ".exe", LookPath() helps to find the correct path.
-		// LookPath() also calls os.Stat().
+		// LookPath 可处理 Windows 的 .exe 后缀，并同时完成可执行文件存在性检查。
 		pluginBin, err := exec.LookPath(filepath.Join(pluginBinDir, provider.Name))
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) || errors.Is(err, exec.ErrNotFound) {
@@ -192,7 +195,7 @@ func RegisterCredentialProviderPlugins(pluginConfigPath, pluginBinDir string,
 	return nil
 }
 
-// newPluginProvider returns a new pluginProvider based on the credential provider config.
+// newPluginProvider 根据配置创建插件提供者。
 func newPluginProvider(pluginBinDir string, provider kubeletconfig.CredentialProvider,
 	getServiceAccountToken getServiceAccountTokenFunc,
 	getServiceAccount GetServiceAccountFunc,
@@ -229,7 +232,7 @@ func newPluginProvider(pluginBinDir string, provider kubeletconfig.CredentialPro
 	}, nil
 }
 
-// pluginProvider is the plugin-based implementation of the DockerConfigProvider interface.
+// pluginProvider 是基于外部插件的 DockerConfigProvider 实现。
 type pluginProvider struct {
 	name  string
 	clock clock.Clock
@@ -238,28 +241,25 @@ type pluginProvider struct {
 
 	group singleflight.Group
 
-	// matchImages defines the matching image URLs this plugin should operate against.
-	// The plugin provider will not return any credentials for images that do not match
-	// against this list of match URLs.
+	// matchImages 定义插件适用的镜像 URL；不匹配的镜像不会从该插件获取凭证。
 	matchImages []string
 
-	// cache stores DockerConfig entries with an expiration time based on the cache duration
-	// returned from the credential provider plugin.
+	// cache 保存凭证，过期时间由插件响应中的缓存时长决定。
 	cache cache.Store
-	// defaultCacheDuration is the default duration credentials are cached in-memory if the auth plugin
-	// response did not provide a cache duration for credentials.
+	// defaultCacheDuration 是插件未返回缓存时长时使用的默认内存缓存时长。
 	defaultCacheDuration time.Duration
 
-	// plugin is the exec implementation of the credential providing plugin.
+	// plugin 是凭证插件的 exec 实现。
 	plugin Plugin
 
-	// lastCachePurge is the last time cache is cleaned for expired entries.
+	// lastCachePurge 记录上次清理过期缓存的时间。
 	lastCachePurge time.Time
 
-	// serviceAccountProvider holds the logic for handling service account tokens when needed.
+	// serviceAccountProvider 在需要时处理 ServiceAccount 令牌。
 	serviceAccountProvider *serviceAccountProvider
 }
 
+// serviceAccountProvider 在需要时获取 ServiceAccount 及其绑定令牌。
 type serviceAccountProvider struct {
 	audience                             string
 	requireServiceAccount                bool
@@ -270,6 +270,7 @@ type serviceAccountProvider struct {
 	cacheType                            kubeletconfig.ServiceAccountTokenCacheType
 }
 
+// newServiceAccountProvider 按配置构造 ServiceAccount 提供者；未配置 audience 或特性关闭时返回 nil。
 func newServiceAccountProvider(
 	provider kubeletconfig.CredentialProvider,
 	getServiceAccount GetServiceAccountFunc,
@@ -293,26 +294,22 @@ func newServiceAccountProvider(
 	}
 }
 
+// requiredAnnotationNotFoundError 表示缺少必需的 ServiceAccount 注解。
 type requiredAnnotationNotFoundError string
 
+// Error 实现 error 接口。
 func (e requiredAnnotationNotFoundError) Error() string {
 	return fmt.Sprintf("required annotation %s not found", string(e))
 }
 
+// isRequiredAnnotationNotFoundError 判断错误是否由缺少必需注解引起。
 func isRequiredAnnotationNotFoundError(err error) bool {
 	var requiredAnnotationNotFoundErr requiredAnnotationNotFoundError
 	return errors.As(err, &requiredAnnotationNotFoundErr)
 }
 
-// getServiceAccountData returns the service account UID and required annotations for the service account.
-// If the service account does not exist, an error is returned.
-// saAnnotations is a map of annotation keys and values that the plugin requires to generate credentials
-// that's defined in the tokenAttributes in the credential provider config.
-// requiredServiceAccountAnnotationKeys are the keys that are required to be present in the service account.
-// If any of the keys defined in this list are not present in the service account, kubelet will not invoke the plugin
-// and will return an error.
-// optionalServiceAccountAnnotationKeys are the keys that are optional to be present in the service account.
-// If present, they will be added to the saAnnotations map.
+// getServiceAccountData 返回 ServiceAccount UID 及插件所需注解。
+// 缺失任一必需注解时不调用插件；可选注解仅在存在时加入 saAnnotations。
 func (s *serviceAccountProvider) getServiceAccountData(namespace, name string) (types.UID, map[string]string, error) {
 	sa, err := s.getServiceAccountFunc(namespace, name)
 	if err != nil {
@@ -322,6 +319,7 @@ func (s *serviceAccountProvider) getServiceAccountData(namespace, name string) (
 	saAnnotations := make(map[string]string, len(s.requiredServiceAccountAnnotationKeys)+len(s.optionalServiceAccountAnnotationKeys))
 	for _, k := range s.requiredServiceAccountAnnotationKeys {
 		val, ok := sa.Annotations[k]
+		// 缺少必需注解视为工作负载未选择该凭证流程，跳过插件调用。
 		if !ok {
 			return "", nil, requiredAnnotationNotFoundError(k)
 		}
@@ -337,7 +335,7 @@ func (s *serviceAccountProvider) getServiceAccountData(namespace, name string) (
 	return sa.UID, saAnnotations, nil
 }
 
-// getServiceAccountToken returns a service account token for the service account.
+// getServiceAccountToken 为 ServiceAccount 创建绑定到 Pod 的令牌。
 func (s *serviceAccountProvider) getServiceAccountToken(podNamespace, podName, serviceAccountName string, serviceAccountUID, podUID types.UID) (string, error) {
 	tr, err := s.getServiceAccountTokenFunc(podNamespace, serviceAccountName, &authenticationv1.TokenRequest{
 		ObjectMeta: metav1.ObjectMeta{
@@ -345,7 +343,7 @@ func (s *serviceAccountProvider) getServiceAccountToken(podNamespace, podName, s
 		},
 		Spec: authenticationv1.TokenRequestSpec{
 			Audiences: []string{s.audience},
-			// expirationSeconds is not set explicitly here. It has the same default value of "ExpirationSeconds" in the TokenRequestSpec.
+			// 不显式设置过期时间，沿用 TokenRequestSpec 的默认值。
 			BoundObjectRef: &authenticationv1.BoundObjectReference{
 				APIVersion: "v1",
 				Kind:       "Pod",
@@ -362,35 +360,31 @@ func (s *serviceAccountProvider) getServiceAccountToken(podNamespace, podName, s
 	return tr.Status.Token, nil
 }
 
-// cacheEntry is the cache object that will be stored in cache.Store.
+// cacheEntry 是存入 cache.Store 的缓存对象。
 type cacheEntry struct {
 	key         string
 	credentials credentialprovider.DockerConfig
 	expiresAt   time.Time
 }
 
-// cacheKeyFunc extracts AuthEntry.MatchKey as the cache key function for the plugin provider.
+// cacheKeyFunc 从缓存对象中提取键。
 func cacheKeyFunc(obj interface{}) (string, error) {
 	key := obj.(*cacheEntry).key
 	return key, nil
 }
 
-// cacheExpirationPolicy defines implements cache.ExpirationPolicy, determining expiration based on the expiresAt timestamp.
+// cacheExpirationPolicy 按 expiresAt 时间戳判断缓存是否过期。
 type cacheExpirationPolicy struct {
 	clock clock.Clock
 }
 
-// IsExpired returns true if the current time is after cacheEntry.expiresAt, which is determined by the
-// cache duration returned from the credential provider plugin response.
+// IsExpired 判断当前时间是否超过插件响应指定的缓存过期时间。
 func (c *cacheExpirationPolicy) IsExpired(entry *cache.TimestampedEntry) bool {
 	return c.clock.Now().After(entry.Obj.(*cacheEntry).expiresAt)
 }
 
-// perPluginProvider holds the shared pluginProvider and the per-request information
-// like podName, podNamespace, podUID and serviceAccountName.
-// This is used to provide the per-request information to the pluginProvider.provide method, so
-// that the plugin can use this information to get the pod's service account and generate bound service account tokens
-// for plugins running in service account token mode.
+// perPodPluginProvider 把共享的 pluginProvider 与单次请求的 Pod 信息绑定，
+// 使插件在 SA 令牌模式下能获取 Pod 的 ServiceAccount 并生成绑定令牌。
 type perPodPluginProvider struct {
 	provider *pluginProvider
 
@@ -401,17 +395,14 @@ type perPodPluginProvider struct {
 	serviceAccountName string
 }
 
-// provideWithCoordinates returns the DockerConfig and, if available, the ServiceAccountCoordinates
-// used for credential resolution. If ServiceAccountCoordinates is nil, it means no service account
-// context was used (e.g., the plugin is not operating in service account token mode or no service
-// account was provided for the request).
+// provideWithCoordinates 返回凭证及可用的 ServiceAccount 坐标；坐标为 nil 表示未使用 SA 上下文。
 func (p *perPodPluginProvider) provideWithCoordinates(image string) (credentialprovider.DockerConfig, *credentialprovider.ServiceAccountCoordinates) {
 	credentials, coordinates, err := p.provider.provide(image, p.podNamespace, p.podName, p.podUID, p.serviceAccountName)
 	if err == nil {
 		return credentials, coordinates
 	}
 
-	// If there was an error providing credentials, we log the error but do not return it.
+	// 取凭证失败时记录日志并返回空配置，避免单个插件阻塞镜像拉取。
 	if p.provider.serviceAccountProvider != nil {
 		klog.ErrorS(err, "Failed to provide credentials for image", "provider", p.provider.name, "image", image, "pod", klog.KRef(p.podNamespace, p.podName), "podUID", p.podUID, "serviceAccount", klog.KRef(p.podNamespace, p.serviceAccountName))
 	} else {
@@ -421,12 +412,9 @@ func (p *perPodPluginProvider) provideWithCoordinates(image string) (credentialp
 	return credentialprovider.DockerConfig{}, nil
 }
 
-// provide returns a credentialprovider.DockerConfig based on the credentials returned
-// from cache or the exec plugin. The returned ServiceAccountCoordinates may be nil.
-// If ServiceAccountCoordinates is nil, it means no service account context was used
-// (e.g., the plugin is not operating in service account token mode or no service account
-// was provided for the request).
+// provide 从缓存或 exec 插件获取凭证；未使用 SA 上下文时返回的坐标为 nil。
 func (p *pluginProvider) provide(image, podNamespace, podName string, podUID types.UID, serviceAccountName string) (credentialprovider.DockerConfig, *credentialprovider.ServiceAccountCoordinates, error) {
+	// 镜像不匹配任何 matchImages 时不调用插件。
 	if !p.isImageAllowed(image) {
 		return credentialprovider.DockerConfig{}, nil, nil
 	}
@@ -445,16 +433,11 @@ func (p *pluginProvider) provide(image, podNamespace, podName string, podUID typ
 			return credentialprovider.DockerConfig{}, nil, nil
 		}
 
-		// If the service account name is empty and the plugin has indicated that invoking the plugin
-		// without a service account is allowed, we will continue without generating a service account token.
-		// This is useful for plugins that are running in service account token mode and are also used
-		// to pull images for pods without service accounts (e.g., static pods).
+		// 允许无 SA 调用时继续（例如静态 Pod），此时不生成令牌。
 		if len(serviceAccountName) > 0 {
 			if serviceAccountUID, saAnnotations, err = p.serviceAccountProvider.getServiceAccountData(podNamespace, serviceAccountName); err != nil {
 				if isRequiredAnnotationNotFoundError(err) {
-					// The required annotation could be a mechanism for individual workloads to opt in to using service account tokens
-					// for image pull. If any of the required annotation is missing, we will not invoke the plugin. We will log the error
-					// at higher verbosity level as it could be noisy.
+					// 必需注解可视为工作负载的显式选择；缺失时跳过插件，并降低日志级别以免刷屏。
 					klog.V(5).ErrorS(err, "Failed to get service account data", "provider", p.name, "image", image, "pod", klog.KRef(podNamespace, podName), "podUID", podUID, "serviceAccount", klog.KRef(podNamespace, serviceAccountName))
 					return credentialprovider.DockerConfig{}, nil, nil
 				}
@@ -491,7 +474,7 @@ func (p *pluginProvider) provide(image, podNamespace, podName string, podUID typ
 		}
 	}
 
-	// Check if the credentials are cached and return them if found.
+	// 命中缓存即可跳过昂贵的插件调用。
 	cachedConfig, found, errCache := p.getCachedCredentials(image, serviceAccountCacheKey)
 	if errCache != nil {
 		return credentialprovider.DockerConfig{}, nil, fmt.Errorf("failed to get cached docker config: %w", errCache)
@@ -501,20 +484,12 @@ func (p *pluginProvider) provide(image, podNamespace, podName string, podUID typ
 		return cachedConfig, serviceAccountCoordinates, nil
 	}
 
-	// ExecPlugin is wrapped in single flight to exec plugin once for concurrent same image request.
-	// The caveat here is we don't know cacheKeyType yet, so if cacheKeyType is registry/global and credentials saved in cache
-	// on per registry/global basis then exec will be called for all requests if requests are made concurrently.
-	// foo.bar.registry
-	// foo.bar.registry/image1
-	// foo.bar.registry/image2
-	// When the plugin is operating in the service account token mode, the singleflight key is the image plus the serviceAccountCacheKey
-	// which is generated from the service account namespace, name, uid and the annotations passed to the plugin.
+	// singleflight 合并同一镜像的并发插件调用。由于此时尚不知道 cacheKeyType，
+	// 若插件按 registry/global 缓存，foo.bar.registry 与 foo.bar.registry/image1 等仍可能各自触发执行。
+	// SA 令牌模式下键还包含 SA 命名空间、名称、UID 与注解生成的 serviceAccountCacheKey。
 	singleFlightKey := image
 	if p.serviceAccountProvider != nil && len(serviceAccountName) > 0 {
-		// When the plugin is operating in the service account token mode, the singleflight key is the
-		// image + sa annotations + sa token.
-		// This does mean the singleflight key is different for each image pull request (even if the image is the same)
-		// and the workload is using the same service account.
+		// SA 令牌模式下键包含令牌与注解；即使同一工作负载拉取同一镜像，不同请求也可能无法合并。
 		if singleFlightKey, err = generateSingleFlightKey(image, serviceAccountTokenHash, saAnnotations); err != nil {
 			return credentialprovider.DockerConfig{}, nil, fmt.Errorf("error generating singleflight key: %w", err)
 		}
@@ -532,9 +507,7 @@ func (p *pluginProvider) provide(image, podNamespace, podName string, podUID typ
 		return credentialprovider.DockerConfig{}, nil, fmt.Errorf("invalid response type returned by external credential provider: %T", res)
 	}
 	if len(serviceAccountToken) > 0 && p.serviceAccountProvider.cacheType != kubeletconfig.TokenServiceAccountTokenCacheType {
-		// validate that the response credentials are not the echoed token back verbatim when cache
-		// type is not token. Only Token cache type is valid when the service account token
-		// is returned as the registry credentials.
+		// 非 Token 缓存类型不允许把服务账号令牌原样当密码返回，避免凭证扩散。
 		for _, authConfig := range response.Auth {
 			if authConfig.Password == serviceAccountToken {
 				return credentialprovider.DockerConfig{}, nil, fmt.Errorf("credential provider plugin returned the service account token as the password which is not allowed when service account cache type is not set to 'Token'")
@@ -563,13 +536,13 @@ func (p *pluginProvider) provide(image, podNamespace, podName string, podUID typ
 		}
 	}
 
-	// cache duration was explicitly 0 so don't cache this response at all.
+	// 显式 0 表示完全禁用缓存。
 	if response.CacheDuration != nil && response.CacheDuration.Duration == 0 {
 		return dockerConfig, serviceAccountCoordinates, nil
 	}
 
 	var expiresAt time.Time
-	// nil cache duration means use the default cache duration
+	// 未指定缓存时长时使用配置的默认值。
 	if response.CacheDuration == nil {
 		if p.defaultCacheDuration == 0 {
 			return dockerConfig, serviceAccountCoordinates, nil
@@ -591,15 +564,14 @@ func (p *pluginProvider) provide(image, podNamespace, podName string, podUID typ
 	}
 
 	if err := p.cache.Add(cachedEntry); err != nil {
-		// If we fail to add the credentials to the cache, we still return the credentials
-		// to the caller, but we log an error.
+		// 缓存写入失败不影响本次凭证返回，仅记录错误。
 		return dockerConfig, serviceAccountCoordinates, fmt.Errorf("failed to add credentials to cache: %w", err)
 	}
 
 	return dockerConfig, serviceAccountCoordinates, nil
 }
 
-// isImageAllowed returns true if the image matches against the list of allowed matches by the plugin.
+// isImageAllowed 判断镜像是否命中插件配置的 matchImages。
 func (p *pluginProvider) isImageAllowed(image string) bool {
 	for _, matchImage := range p.matchImages {
 		if matched, _ := credentialprovider.URLsMatchStr(matchImage, image); matched {
@@ -610,13 +582,12 @@ func (p *pluginProvider) isImageAllowed(image string) bool {
 	return false
 }
 
-// getCachedCredentials returns a credentialprovider.DockerConfig if cached from the plugin.
+// getCachedCredentials 按镜像、仓库、全局优先级查找缓存凭证。
 func (p *pluginProvider) getCachedCredentials(image, serviceAccountCacheKey string) (credentialprovider.DockerConfig, bool, error) {
 	p.Lock()
+	// 定期触发 List 以清理过期项；否则这些条目只会在被访问时才删除。
 	if p.clock.Now().After(p.lastCachePurge.Add(cachePurgeInterval)) {
-		// NewExpirationCache purges expired entries when List() is called
-		// The expired entry in the cache is removed only when Get or List called on it.
-		// List() is called on some interval to remove those expired entries on which Get is never called.
+		// 过期项仅在 Get/List 时清理，故周期性调用 List 回收不会再被访问的条目。
 		_ = p.cache.List()
 		p.lastCachePurge = p.clock.Now()
 	}
@@ -628,6 +599,7 @@ func (p *pluginProvider) getCachedCredentials(image, serviceAccountCacheKey stri
 		globalCacheKey,
 	}
 
+	// 按镜像、仓库、全局的顺序查找，优先使用最具体的缓存。
 	for _, baseCacheKey := range baseCacheKeyCandidates {
 		if config, found, err := p.lookupCredentialsInCache(baseCacheKey, serviceAccountCacheKey); err != nil {
 			return nil, false, err
@@ -639,7 +611,7 @@ func (p *pluginProvider) getCachedCredentials(image, serviceAccountCacheKey stri
 	return nil, false, nil
 }
 
-// lookupCredentialsInCache performs a single cache lookup for the given base key and service account cache key
+// lookupCredentialsInCache 用基础键与 SA 缓存键执行一次缓存查询。
 func (p *pluginProvider) lookupCredentialsInCache(baseKey, serviceAccountCacheKey string) (credentialprovider.DockerConfig, bool, error) {
 	cacheKey, err := generateCacheKey(baseKey, serviceAccountCacheKey)
 	if err != nil {
@@ -658,15 +630,12 @@ func (p *pluginProvider) lookupCredentialsInCache(baseKey, serviceAccountCacheKe
 	return nil, false, nil
 }
 
-// Plugin is the interface calling ExecPlugin. This is mainly for testability
-// so tests don't have to actually exec any processes.
+// Plugin 封装 ExecPlugin 调用，便于测试时无需真正启动外部进程。
 type Plugin interface {
 	ExecPlugin(ctx context.Context, image, serviceAccountToken string, serviceAccountAnnotations map[string]string) (*credentialproviderapi.CredentialProviderResponse, error)
 }
 
-// execPlugin is the implementation of the Plugin interface that execs a credential provider plugin based
-// on it's name provided in CredentialProviderConfig. It is assumed that the executable is available in the
-// plugin directory provided by the kubelet.
+// execPlugin 是 Plugin 的 exec 实现，按配置中的名称在 kubelet 的插件目录中查找可执行文件。
 type execPlugin struct {
 	name         string
 	apiVersion   string
@@ -677,12 +646,11 @@ type execPlugin struct {
 	environ      func() []string
 }
 
-// ExecPlugin executes the plugin binary with arguments and environment variables specified in CredentialProviderConfig:
+// ExecPlugin 按配置中的参数与环境变量执行插件二进制：
 //
 //	$ ENV_NAME=ENV_VALUE <plugin-name> args[0] args[1] <<<request
 //
-// The plugin is expected to receive the CredentialProviderRequest API via stdin from the kubelet and
-// return CredentialProviderResponse via stdout.
+// 插件从 stdin 接收 CredentialProviderRequest，并通过 stdout 返回 CredentialProviderResponse。
 func (e *execPlugin) ExecPlugin(ctx context.Context, image, serviceAccountToken string, serviceAccountAnnotations map[string]string) (*credentialproviderapi.CredentialProviderResponse, error) {
 	klog.V(5).InfoS("Getting image credentials from external exec plugin", "pluginName", e.name, "image", image)
 
@@ -696,10 +664,7 @@ func (e *execPlugin) ExecPlugin(ctx context.Context, image, serviceAccountToken 
 	stderr := &bytes.Buffer{}
 	stdin := bytes.NewBuffer(data)
 
-	// Use a catch-all timeout of 1 minute for all exec-based plugins, this should leave enough
-	// head room in case a plugin needs to retry a failed request while ensuring an exec plugin
-	// does not run forever. In the future we may want this timeout to be tweakable from the plugin
-	// config file.
+	// 统一设置 1 分钟超时：既给插件重试留出余量，又防止进程永久挂起。
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
 
@@ -711,10 +676,8 @@ func (e *execPlugin) ExecPlugin(ctx context.Context, image, serviceAccountToken 
 		configEnvVars = append(configEnvVars, fmt.Sprintf("%s=%s", v.Name, v.Value))
 	}
 
-	// Append current system environment variables, to the ones configured in the
-	// credential provider file. Failing to do so may result in unsuccessful execution
-	// of the provider binary, see https://github.com/kubernetes/kubernetes/issues/102750
-	// also, this behaviour is inline with Credential Provider Config spec
+	// 合并系统环境变量与配置中的变量，缺失系统变量会导致插件执行失败
+	// （见 https://github.com/kubernetes/kubernetes/issues/102750），也符合配置规范。
 	cmd.Env = mergeEnvVars(e.environ(), configEnvVars)
 
 	if err = e.runPlugin(ctx, cmd, image); err != nil {
@@ -722,7 +685,7 @@ func (e *execPlugin) ExecPlugin(ctx context.Context, image, serviceAccountToken 
 	}
 
 	data = stdout.Bytes()
-	// check that the response apiVersion matches what is expected
+	// 校验响应的 apiVersion，防止误用其他版本的响应。
 	gvk, err := json.DefaultMetaFactory.Interpret(data)
 	if err != nil {
 		return nil, fmt.Errorf("error reading GVK from response: %w", err)
@@ -734,13 +697,14 @@ func (e *execPlugin) ExecPlugin(ctx context.Context, image, serviceAccountToken 
 
 	response, err := e.decodeResponse(data)
 	if err != nil {
-		// err is explicitly not wrapped since it may contain credentials in the response.
+		// 不包装 err，以免错误信息泄露响应中的凭证。
 		return nil, errors.New("error decoding credential provider plugin response from stdout")
 	}
 
 	return response, nil
 }
 
+// runPlugin 执行插件二进制并记录耗时与错误指标。
 func (e *execPlugin) runPlugin(ctx context.Context, cmd *exec.Cmd, image string) error {
 	startTime := time.Now()
 	defer func() {
@@ -759,7 +723,7 @@ func (e *execPlugin) runPlugin(ctx context.Context, cmd *exec.Cmd, image string)
 	return nil
 }
 
-// encodeRequest encodes the internal CredentialProviderRequest type into the v1alpha1 version in json
+// encodeRequest 把内部 CredentialProviderRequest 编码为 JSON。
 func (e *execPlugin) encodeRequest(request *credentialproviderapi.CredentialProviderRequest) ([]byte, error) {
 	data, err := runtime.Encode(e.encoder, request)
 	if err != nil {
@@ -769,7 +733,7 @@ func (e *execPlugin) encodeRequest(request *credentialproviderapi.CredentialProv
 	return data, nil
 }
 
-// decodeResponse decodes data into the internal CredentialProviderResponse type
+// decodeResponse 把响应数据解码为内部 CredentialProviderResponse 类型。
 func (e *execPlugin) decodeResponse(data []byte) (*credentialproviderapi.CredentialProviderResponse, error) {
 	obj, gvk, err := codecs.UniversalDecoder().Decode(data, nil, nil)
 	if err != nil {
@@ -791,21 +755,20 @@ func (e *execPlugin) decodeResponse(data []byte) (*credentialproviderapi.Credent
 	return nil, fmt.Errorf("unable to convert %T to *CredentialProviderResponse", obj)
 }
 
-// parseRegistry extracts the registry hostname of an image (including port if specified).
+// parseRegistry 提取镜像的仓库主机名（含端口）。
 func parseRegistry(image string) string {
 	imageParts := strings.Split(image, "/")
 	return imageParts[0]
 }
 
-// mergedEnvVars overlays system defined env vars with credential provider env vars,
-// it gives priority to the credential provider vars allowing user to override system
-// env vars
+// mergedEnvVars 用凭证插件配置的环境变量覆盖系统同名变量，允许用户显式改写系统值。
 func mergeEnvVars(sysEnvVars, credProviderVars []string) []string {
 	mergedEnvVars := sysEnvVars
 	mergedEnvVars = append(mergedEnvVars, credProviderVars...)
 	return mergedEnvVars
 }
 
+// generateServiceAccountCacheKey 按 SA 上下文生成缓存键；Token 模式额外纳入令牌哈希。
 func generateServiceAccountCacheKey(params cacheKeyParams) (string, error) {
 	builder := newCacheKeyBuilder().
 		addString(params.namespace).
@@ -820,6 +783,7 @@ func generateServiceAccountCacheKey(params cacheKeyParams) (string, error) {
 	return builder.build()
 }
 
+// generateCacheKey 把基础键与 SA 缓存键拼接为最终键。
 func generateCacheKey(baseKey, serviceAccountCacheKey string) (string, error) {
 	builder := newCacheKeyBuilder().
 		addString(baseKey).
@@ -828,6 +792,7 @@ func generateCacheKey(baseKey, serviceAccountCacheKey string) (string, error) {
 	return builder.build()
 }
 
+// generateSingleFlightKey 生成合并并发插件调用所用的键。
 func generateSingleFlightKey(image, saTokenHash string, saAnnotations map[string]string) (string, error) {
 	builder := newCacheKeyBuilder().
 		addString(image).
@@ -837,7 +802,7 @@ func generateSingleFlightKey(image, saTokenHash string, saAnnotations map[string
 	return builder.build()
 }
 
-// getHashIfNotEmpty returns the sha256 hash of the data if it is not empty.
+// getHashIfNotEmpty 在数据非空时返回其 SHA256。
 func getHashIfNotEmpty(data string) string {
 	if len(data) > 0 {
 		return fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(data)))

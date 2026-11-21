@@ -27,13 +27,14 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// TestURLsMatch 验证带通配符的仓库地址与目标地址的匹配规则。
 func TestURLsMatch(t *testing.T) {
 	tests := []struct {
 		globURL       string
 		targetURL     string
 		matchExpected bool
 	}{
-		// match when there is no path component
+		// 无路径部分时按主机名匹配。
 		{
 			globURL:       "*.kubernetes.io",
 			targetURL:     "prefix.kubernetes.io",
@@ -54,7 +55,7 @@ func TestURLsMatch(t *testing.T) {
 			targetURL:     "prefix-good.kubernetes.io",
 			matchExpected: true,
 		},
-		// match with path components
+		// 带路径部分时也能匹配。
 		{
 			globURL:       "*.kubernetes.io/blah",
 			targetURL:     "prefix.kubernetes.io/blah",
@@ -65,7 +66,7 @@ func TestURLsMatch(t *testing.T) {
 			targetURL:     "prefix.kubernetes.io/foo/bar",
 			matchExpected: true,
 		},
-		// match with path components and ports
+		// 带路径和端口时也能匹配。
 		{
 			globURL:       "*.kubernetes.io:1111/blah",
 			targetURL:     "prefix.kubernetes.io:1111/blah",
@@ -76,7 +77,7 @@ func TestURLsMatch(t *testing.T) {
 			targetURL:     "prefix.kubernetes.io:1111/foo/bar",
 			matchExpected: true,
 		},
-		// no match when number of parts mismatch
+		// 段数不一致时不应匹配。
 		{
 			globURL:       "*.kubernetes.io",
 			targetURL:     "kubernetes.io",
@@ -97,7 +98,7 @@ func TestURLsMatch(t *testing.T) {
 			targetURL:     "a.kubernetes.io",
 			matchExpected: false,
 		},
-		// match when number of parts match
+		// 段数一致时应当匹配。
 		{
 			globURL:       "*kubernetes.io",
 			targetURL:     "kubernetes.io",
@@ -108,7 +109,7 @@ func TestURLsMatch(t *testing.T) {
 			targetURL:     "a.b.c.kubernetes.io",
 			matchExpected: true,
 		},
-		// no match when some parts mismatch
+		// 部分段不匹配时不应匹配。
 		{
 			globURL:       "kubernetes.io",
 			targetURL:     "kubernetes.com",
@@ -119,7 +120,7 @@ func TestURLsMatch(t *testing.T) {
 			targetURL:     "quay.io",
 			matchExpected: false,
 		},
-		// no match when ports mismatch
+		// 端口不匹配时不应匹配。
 		{
 			globURL:       "*.kubernetes.io:1234/blah",
 			targetURL:     "prefix.kubernetes.io:1111/blah",
@@ -140,6 +141,7 @@ func TestURLsMatch(t *testing.T) {
 	}
 }
 
+// TestDockerKeyringForGlob 验证 glob 形式的仓库配置能被目标镜像命中。
 func TestDockerKeyringForGlob(t *testing.T) {
 	tests := []struct {
 		globURL   string
@@ -214,6 +216,7 @@ func TestDockerKeyringForGlob(t *testing.T) {
 		email := "foo@bar.baz"
 		username := "foo"
 		password := "bar" // Fake value for testing.
+		// 用假凭据生成 auth 字段，避免触碰真实凭证。
 		auth := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
 		sampleDockerConfig := fmt.Sprintf(`{
    "%s": {
@@ -222,6 +225,7 @@ func TestDockerKeyringForGlob(t *testing.T) {
    }
 }`, test.globURL, email, auth)
 
+		// 用 glob 配置构造 keyring，检验匹配规则。
 		keyring := &BasicDockerKeyring{}
 		if cfg, err := ReadDockerConfigFileFromBytes([]byte(sampleDockerConfig)); err != nil {
 			t.Errorf("Error processing json blob %q, %v", sampleDockerConfig, err)
@@ -229,6 +233,7 @@ func TestDockerKeyringForGlob(t *testing.T) {
 			keyring.Add(nil, cfg)
 		}
 
+		// 查找时追加子路径，验证路径不参与精确匹配。
 		creds, ok := keyring.Lookup(test.targetURL + "/foo/bar")
 		if !ok {
 			t.Errorf("%d: Didn't find expected URL: %s", i, test.targetURL)
@@ -248,6 +253,7 @@ func TestDockerKeyringForGlob(t *testing.T) {
 	}
 }
 
+// TestKeyringMiss 验证不匹配的仓库地址不会命中凭据。
 func TestKeyringMiss(t *testing.T) {
 	tests := []struct {
 		globURL   string
@@ -305,7 +311,9 @@ func TestKeyringMiss(t *testing.T) {
 
 }
 
+// TestKeyringMissWithDockerHubCredentials 验证 Docker Hub 凭据不会泄露给其他仓库。
 func TestKeyringMissWithDockerHubCredentials(t *testing.T) {
+	// 使用默认仓库地址构造 Docker Hub 凭据。
 	url := defaultRegistryKey
 	email := "foo@bar.baz"
 	username := "foo"
@@ -325,12 +333,14 @@ func TestKeyringMissWithDockerHubCredentials(t *testing.T) {
 		keyring.Add(nil, cfg)
 	}
 
+	// Docker Hub 凭据不应被其他仓库命中。
 	val, ok := keyring.Lookup("world.mesos.org/foo/bar")
 	if ok {
 		t.Errorf("Found unexpected credential: %+v", val)
 	}
 }
 
+// TestKeyringHitWithUnqualifiedDockerHub 验证非限定镜像名能命中 Docker Hub 凭据。
 func TestKeyringHitWithUnqualifiedDockerHub(t *testing.T) {
 	url := defaultRegistryKey
 	email := "foo@bar.baz"
@@ -351,6 +361,7 @@ func TestKeyringHitWithUnqualifiedDockerHub(t *testing.T) {
 		keyring.Add(nil, cfg)
 	}
 
+	// 非限定镜像名应回退到默认仓库的凭据。
 	creds, ok := keyring.Lookup("google/docker-registry")
 	if !ok {
 		t.Errorf("Didn't find expected URL: %s", url)
@@ -372,6 +383,7 @@ func TestKeyringHitWithUnqualifiedDockerHub(t *testing.T) {
 	}
 }
 
+// TestKeyringHitWithUnqualifiedLibraryDockerHub 验证单个名称能命中 Docker Hub 凭据。
 func TestKeyringHitWithUnqualifiedLibraryDockerHub(t *testing.T) {
 	url := defaultRegistryKey
 	email := "foo@bar.baz"
@@ -392,6 +404,7 @@ func TestKeyringHitWithUnqualifiedLibraryDockerHub(t *testing.T) {
 		keyring.Add(nil, cfg)
 	}
 
+	// 单个名称也应视为 Docker Hub 官方镜像。
 	creds, ok := keyring.Lookup("jenkins")
 	if !ok {
 		t.Errorf("Didn't find expected URL: %s", url)
@@ -413,6 +426,7 @@ func TestKeyringHitWithUnqualifiedLibraryDockerHub(t *testing.T) {
 	}
 }
 
+// TestKeyringHitWithQualifiedDockerHub 验证完全限定的 Docker Hub 地址能命中凭据。
 func TestKeyringHitWithQualifiedDockerHub(t *testing.T) {
 	url := defaultRegistryKey
 	email := "foo@bar.baz"
@@ -433,6 +447,7 @@ func TestKeyringHitWithQualifiedDockerHub(t *testing.T) {
 		keyring.Add(nil, cfg)
 	}
 
+	// 完全限定的 Docker Hub 地址应命中同一凭据。
 	creds, ok := keyring.Lookup(url + "/google/docker-registry")
 	if !ok {
 		t.Errorf("Didn't find expected URL: %s", url)
@@ -454,6 +469,7 @@ func TestKeyringHitWithQualifiedDockerHub(t *testing.T) {
 	}
 }
 
+// TestIsDefaultRegistryMatch 验证镜像名是否被判定为默认仓库。
 func TestIsDefaultRegistryMatch(t *testing.T) {
 	samples := []map[bool]string{
 		{true: "foo/bar"},
@@ -474,6 +490,7 @@ func TestIsDefaultRegistryMatch(t *testing.T) {
 	}
 }
 
+// TestProvidersDockerKeyring 验证 keyring 每次查找都会调用底层 provider。
 func TestProvidersDockerKeyring(t *testing.T) {
 	provider := &testProvider{
 		Count: 0,
@@ -487,6 +504,7 @@ func TestProvidersDockerKeyring(t *testing.T) {
 	if provider.Count != 0 {
 		t.Errorf("Unexpected number of Provide calls: %v", provider.Count)
 	}
+	// 每次查找都应调用底层 provider，验证未启用缓存。
 	keyring.Lookup("foo")
 	if provider.Count != 1 {
 		t.Errorf("Unexpected number of Provide calls: %v", provider.Count)
@@ -501,8 +519,9 @@ func TestProvidersDockerKeyring(t *testing.T) {
 	}
 }
 
+// TestDockerKeyringLookup 验证同主机多条目时按路径 specificity 返回凭据。
 func TestDockerKeyringLookup(t *testing.T) {
-	// turn on the ensure secret pulled images feature to get the hashes with the creds
+	// 开启特性门控，使查找结果携带凭据哈希。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletEnsureSecretPulledImages, true)
 	ada := AuthConfig{
 		Username: "ada",
@@ -518,6 +537,7 @@ func TestDockerKeyringLookup(t *testing.T) {
 	}
 	graceHash := "f949b3837a1eb733a951b6aeda0b3327c09ec50c917de9ca35818e8fbf567e29"
 
+	// 同一主机配置多个条目，用于验证最长路径优先。
 	dk := &BasicDockerKeyring{}
 	dk.Add(nil, DockerConfig{
 		"bar.example.com/pong": DockerConfigEntry{
@@ -537,22 +557,22 @@ func TestDockerKeyringLookup(t *testing.T) {
 		match []TrackedAuthConfig
 		ok    bool
 	}{
-		// direct match
+		// 直接匹配。
 		{"bar.example.com", []TrackedAuthConfig{{AuthConfig: ada, AuthConfigHash: adaHash}}, true},
 
-		// direct match deeper than other possible matches
+		// 更深路径的直接匹配优先于其他候选。
 		{"bar.example.com/pong", []TrackedAuthConfig{{AuthConfig: grace, AuthConfigHash: graceHash}, {AuthConfig: ada, AuthConfigHash: adaHash}}, true},
 
-		// no direct match, deeper path ignored
+		// 无直接匹配时忽略更深路径的条目。
 		{"bar.example.com/ping", []TrackedAuthConfig{{AuthConfig: ada, AuthConfigHash: adaHash}}, true},
 
-		// match first part of path token
+		// 按路径首段匹配。
 		{"bar.example.com/pongz", []TrackedAuthConfig{{AuthConfig: grace, AuthConfigHash: graceHash}, {AuthConfig: ada, AuthConfigHash: adaHash}}, true},
 
-		// match regardless of sub-path
+		// 子路径不影响匹配结果。
 		{"bar.example.com/pong/pang", []TrackedAuthConfig{{AuthConfig: grace, AuthConfigHash: graceHash}, {AuthConfig: ada, AuthConfigHash: adaHash}}, true},
 
-		// no host match
+		// 主机名不匹配。
 		{"example.com", []TrackedAuthConfig{}, false},
 		{"foo.example.com", []TrackedAuthConfig{}, false},
 	}
@@ -569,11 +589,10 @@ func TestDockerKeyringLookup(t *testing.T) {
 	}
 }
 
-// This validates that dockercfg entries with a scheme and url path are properly matched
-// by images that only match the hostname.
-// NOTE: the above covers the case of a more specific match trumping just hostname.
+// TestIssue3797 验证带协议和路径的 dockercfg 条目能被仅含主机名的镜像匹配。
+// 注意：上面的用例已覆盖更具体的条目优先于仅主机名的情况。
 func TestIssue3797(t *testing.T) {
-	// turn on the ensure secret pulled images feature to get the hashes with the creds
+	// 开启特性门控，使查找结果携带凭据哈希。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletEnsureSecretPulledImages, true)
 	rex := AuthConfig{
 		Username: "rex",
@@ -582,6 +601,7 @@ func TestIssue3797(t *testing.T) {
 	}
 	rexHash := "899748fec74c8dd761845fca727f4249b05be275ff24026676fcd4351f656363"
 
+	// 条目包含协议和路径，验证仅主机名的镜像也能命中。
 	dk := &BasicDockerKeyring{}
 	dk.Add(nil, DockerConfig{
 		"https://quay.io/v1/": DockerConfigEntry{
@@ -596,10 +616,10 @@ func TestIssue3797(t *testing.T) {
 		match []TrackedAuthConfig
 		ok    bool
 	}{
-		// direct match
+		// 直接匹配。
 		{"quay.io", []TrackedAuthConfig{{AuthConfig: rex, AuthConfigHash: rexHash}}, true},
 
-		// partial matches
+		// 部分匹配。
 		{"quay.io/foo", []TrackedAuthConfig{{AuthConfig: rex, AuthConfigHash: rexHash}}, true},
 		{"quay.io/foo/bar", []TrackedAuthConfig{{AuthConfig: rex, AuthConfigHash: rexHash}}, true},
 	}

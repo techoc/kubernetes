@@ -31,7 +31,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
-// fakedockerConfigProviderWithCoordinates implements dockerConfigProviderWithCoordinates for testing
+// fakedockerConfigProviderWithCoordinates 是带调用计数的假凭据提供者。
 type fakedockerConfigProviderWithCoordinates struct {
 	dockerConfig         credentialprovider.DockerConfig
 	serviceAccountCoords *credentialprovider.ServiceAccountCoordinates
@@ -40,6 +40,7 @@ type fakedockerConfigProviderWithCoordinates struct {
 	mu                   sync.Mutex
 }
 
+// provideWithCoordinates 记录调用信息并返回预设凭据。
 func (f *fakedockerConfigProviderWithCoordinates) provideWithCoordinates(image string) (credentialprovider.DockerConfig, *credentialprovider.ServiceAccountCoordinates) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -49,19 +50,21 @@ func (f *fakedockerConfigProviderWithCoordinates) provideWithCoordinates(image s
 	return f.dockerConfig, f.serviceAccountCoords
 }
 
+// getCallCount 返回提供凭据的调用次数。
 func (f *fakedockerConfigProviderWithCoordinates) getCallCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.callCount
 }
 
+// getLastImageRequested 返回最近一次请求的镜像名。
 func (f *fakedockerConfigProviderWithCoordinates) getLastImageRequested() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.lastImageRequested
 }
 
-// createTestPluginProvider creates a pluginProvider for testing
+// createTestPluginProvider 构造使用假插件与假时钟的 provider。
 func createTestPluginProvider(dockerConfig credentialprovider.DockerConfig) *pluginProvider {
 	testClock := testingclock.NewFakeClock(time.Now())
 
@@ -91,22 +94,22 @@ func createTestPluginProvider(dockerConfig credentialprovider.DockerConfig) *plu
 	return provider
 }
 
-// setupTestProviders sets up test providers and cleans up after the test
+// setupTestProviders 重置全局注册表，并在测试后恢复原状态。
 func setupTestProviders(t *testing.T) {
 	t.Helper()
 
-	// Save original state
+	// 保存全局状态，结束后恢复以免影响其他测试。
 	providersMutex.Lock()
 	originalProviders := providers
 	originalSeenProviderNames := seenProviderNames
 
-	// Reset to clean state
+	// 清空注册表，保证各子测试互不干扰。
 	providers = make([]provider, 0)
 	seenProviderNames = sets.NewString()
 	providersMutex.Unlock()
 
 	t.Cleanup(func() {
-		// Restore original state
+		// 恢复原有注册表。
 		providersMutex.Lock()
 		providers = originalProviders
 		seenProviderNames = originalSeenProviderNames
@@ -114,6 +117,7 @@ func setupTestProviders(t *testing.T) {
 	})
 }
 
+// TestRegisterCredentialProviderPlugin 验证插件注册及重名注册时的 panic 行为。
 func TestRegisterCredentialProviderPlugin(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -136,6 +140,7 @@ func TestRegisterCredentialProviderPlugin(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试都清空注册表，避免相互污染。
 			setupTestProviders(t)
 
 			mockProvider1 := createTestPluginProvider(credentialprovider.DockerConfig{
@@ -145,10 +150,10 @@ func TestRegisterCredentialProviderPlugin(t *testing.T) {
 				},
 			})
 
-			// Register first provider
+			// 注册第一个插件，验证注册成功。
 			registerCredentialProviderPlugin(tc.firstProvider, mockProvider1)
 
-			// Verify first registration
+			// 校验注册表中的名称与实现。
 			providersMutex.RLock()
 			if len(providers) != 1 {
 				t.Errorf("Expected 1 provider after first registration, got %d", len(providers))
@@ -164,12 +169,12 @@ func TestRegisterCredentialProviderPlugin(t *testing.T) {
 			}
 			providersMutex.RUnlock()
 
-			// If we have a second provider to test, register it
+			// 存在第二个插件时继续注册，用于验证重名行为。
 			if tc.secondProvider != "" {
 				mockProvider2 := createTestPluginProvider(credentialprovider.DockerConfig{})
 
 				if tc.shouldPanic {
-					// Test that registering duplicate provider name panics
+					// 重名注册应触发 panic。
 					defer func() {
 						if r := recover(); r == nil {
 							t.Errorf("Expected panic for duplicate provider registration")
@@ -180,7 +185,7 @@ func TestRegisterCredentialProviderPlugin(t *testing.T) {
 				registerCredentialProviderPlugin(tc.secondProvider, mockProvider2)
 
 				if !tc.shouldPanic {
-					// If we didn't expect a panic, verify the second provider was registered
+					// 未触发 panic 时校验第二个插件已注册。
 					providersMutex.RLock()
 					if len(providers) != 2 {
 						t.Errorf("Expected 2 providers after second registration, got %d", len(providers))
@@ -192,6 +197,7 @@ func TestRegisterCredentialProviderPlugin(t *testing.T) {
 	}
 }
 
+// TestNewExternalCredentialProviderDockerKeyring 验证按注册表状态与特性门控构造 keyring。
 func TestNewExternalCredentialProviderDockerKeyring(t *testing.T) {
 	testCases := []struct {
 		name                         string
@@ -253,6 +259,7 @@ func TestNewExternalCredentialProviderDockerKeyring(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			setupTestProviders(t)
 
+			// 按用例开关门控，验证 Pod 信息是否注入。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletServiceAccountTokenForCredentialProviders, tc.featureGateEnabled)
 
 			tc.setupProviders()
@@ -291,6 +298,7 @@ func TestNewExternalCredentialProviderDockerKeyring(t *testing.T) {
 	}
 }
 
+// TestExternalCredentialProviderKeyringLookupNoProviders 验证无插件时查找失败。
 func TestExternalCredentialProviderKeyringLookupNoProviders(t *testing.T) {
 	keyring := &externalCredentialProviderKeyring{
 		providers: []dockerConfigProviderWithCoordinates{},
@@ -306,6 +314,7 @@ func TestExternalCredentialProviderKeyringLookupNoProviders(t *testing.T) {
 	}
 }
 
+// TestExternalCredentialProviderKeyringLookupWithProviders 验证多插件查找结果与服务账号来源。
 func TestExternalCredentialProviderKeyringLookupWithProviders(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletEnsureSecretPulledImages, true)
 
@@ -423,7 +432,7 @@ func TestExternalCredentialProviderKeyringLookupWithProviders(t *testing.T) {
 				t.Errorf("Expected %d configs, got %d", tc.expectedConfigCount, len(configs))
 			}
 
-			// Verify that each provider was called with the correct image
+			// 校验每个插件都收到正确的镜像名。
 			for i, provider := range tc.providers {
 				mockProvider := provider.(*fakedockerConfigProviderWithCoordinates)
 				if mockProvider.getCallCount() != 1 {
@@ -434,7 +443,7 @@ func TestExternalCredentialProviderKeyringLookupWithProviders(t *testing.T) {
 				}
 			}
 
-			// Verify service account coordinates in TrackedAuthConfig
+			// 校验结果中携带服务账号坐标。
 			if tc.expectedServiceAccountOK && len(configs) > 0 {
 				foundServiceAccountCoords := false
 				for _, config := range configs {
@@ -451,8 +460,9 @@ func TestExternalCredentialProviderKeyringLookupWithProviders(t *testing.T) {
 	}
 }
 
+// TestExternalCredentialProviderKeyringLookupConcurrency 验证并发查找的行为与调用计数。
 func TestExternalCredentialProviderKeyringLookupConcurrency(t *testing.T) {
-	// Test concurrent access to the keyring
+	// 并发访问 keyring，验证共享状态安全。
 	mockProvider := &fakedockerConfigProviderWithCoordinates{
 		dockerConfig: credentialprovider.DockerConfig{
 			"test.registry.io": credentialprovider.DockerConfigEntry{
@@ -474,6 +484,7 @@ func TestExternalCredentialProviderKeyringLookupConcurrency(t *testing.T) {
 	const numGoroutines = 10
 	const numCallsPerGoroutine = 5
 
+	// 启动多个 goroutine 同时查找，累计调用次数用于核对。
 	var wg sync.WaitGroup
 	var errorOccurred bool
 	var mu sync.Mutex
