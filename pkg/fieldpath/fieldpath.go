@@ -26,18 +26,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-// FormatMap formats map[string]string to a string.
+// FormatMap 把 map[string]string 格式化为字符串。
 func FormatMap(m map[string]string) (fmtStr string) {
-	// output with keys in sorted order to provide stable output
+	// 按 key 排序输出，保证结果稳定可比较。
 	keys := make([]string, 0, len(m))
 	var grow int
 	for k, v := range m {
 		keys = append(keys, k)
-		// why add 4: (for =, \n, " and ")
+		// 每个 key/value 额外预留 4 字节，分别对应 =、\n 和一对引号。
 		grow += len(k) + len(v) + 4
 	}
 	sort.Strings(keys)
-	// allocate space to avoid expansion
+	// 预分配足够容量，避免 append 过程中反复扩容。
 	dst := make([]byte, 0, grow)
 	for _, key := range keys {
 		if len(dst) > 0 {
@@ -50,9 +50,8 @@ func FormatMap(m map[string]string) (fmtStr string) {
 	return string(dst)
 }
 
-// ExtractFieldPathAsString extracts the field from the given object
-// and returns it as a string.  The object must be a pointer to an
-// API type.
+// ExtractFieldPathAsString 从给定对象中提取指定字段并以字符串返回。
+// obj 必须是指向 API 类型的指针。
 func ExtractFieldPathAsString(obj interface{}, fieldPath string) (string, error) {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
@@ -62,6 +61,7 @@ func ExtractFieldPathAsString(obj interface{}, fieldPath string) (string, error)
 	if path, subscript, ok := SplitMaybeSubscriptedPath(fieldPath); ok {
 		switch path {
 		case "metadata.annotations":
+			// annotation 的 key 不区分大小写合法性，按小写形式校验。
 			if errs := validation.IsQualifiedName(strings.ToLower(subscript)); len(errs) != 0 {
 				return "", fmt.Errorf("invalid key subscript in %s: %s", fieldPath, strings.Join(errs, ";"))
 			}
@@ -92,13 +92,11 @@ func ExtractFieldPathAsString(obj interface{}, fieldPath string) (string, error)
 	return "", fmt.Errorf("unsupported fieldPath: %v", fieldPath)
 }
 
-// SplitMaybeSubscriptedPath checks whether the specified fieldPath is
-// subscripted, and
-//   - if yes, this function splits the fieldPath into path and subscript, and
-//     returns (path, subscript, true).
-//   - if no, this function returns (fieldPath, "", false).
+// SplitMaybeSubscriptedPath 判断字段路径是否带有下标：
+//   - 带下标时拆成 path 与 subscript 并返回 (path, subscript, true)；
+//   - 不带下标时原样返回 (fieldPath, "", false)。
 //
-// Example inputs and outputs:
+// 输入与输出示例：
 //
 //	"metadata.annotations['myKey']" --> ("metadata.annotations", "myKey", true)
 //	"metadata.annotations['a[b]c']" --> ("metadata.annotations", "a[b]c", true)

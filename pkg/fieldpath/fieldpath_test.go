@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// BenchmarkFormatMap 测量 FormatMap 在真实 label/annotation 数据上的性能与分配情况。
 func BenchmarkFormatMap(b *testing.B) {
 	var s string
 	m := map[string]string{
@@ -44,10 +45,12 @@ func BenchmarkFormatMap(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		s = FormatMap(m)
 	}
-	// Avoid compiler optimizations
+	// 防止编译器优化掉整个循环。
 	_ = s
 }
 
+// TestExtractFieldPathAsString 表驱动验证字段提取：
+// 覆盖普通字段、带下标的 label/annotation，以及各类非法路径和 key。
 func TestExtractFieldPathAsString(t *testing.T) {
 	cases := []struct {
 		name                    string
@@ -210,6 +213,8 @@ func TestExtractFieldPathAsString(t *testing.T) {
 	}
 }
 
+// TestSplitMaybeSubscriptedPath 表驱动验证下标语法解析，
+// 包括下标内含括号/引号等边界情况。
 func TestSplitMaybeSubscriptedPath(t *testing.T) {
 	cases := []struct {
 		fieldPath         string
@@ -293,7 +298,7 @@ func TestSplitMaybeSubscriptedPath(t *testing.T) {
 	}
 }
 
-// TestFormatMap
+// TestFormatMap 验证 map 被格式化为按 key 排序、值带引号的稳定字符串。
 func TestFormatMap(t *testing.T) {
 	type args struct {
 		m map[string]string

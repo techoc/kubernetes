@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package fieldpath supplies methods for extracting fields from objects
-// given a path to a field.
+// Package fieldpath 提供按字段路径从对象中提取字段值的方法。
 package fieldpath
