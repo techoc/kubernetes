@@ -28,897 +28,896 @@ import (
 	kcmfeatures "k8s.io/controller-manager/pkg/features"
 )
 
-// Every feature gate should have an entry here following this template:
+// 每个功能门控都应在此按如下模板添加条目：
 //
 // // owner: @username
 // // kep: https://kep.k8s.io/NNN
 // MyFeature featuregate.Feature = "MyFeature"
 //
-// Feature gates should be listed in alphabetical, case-sensitive
-// (upper before any lower case character) order. This reduces the risk
-// of code conflicts because changes are more likely to be scattered
-// across the file.
+// 功能门控应按区分大小写的字母顺序排列
+// （大写字母排在小写字母之前）。这样能降低代码冲突的风险，
+// 因为改动更可能分散在
+// 文件的不同位置。
 const (
 	// owner: @aojea
 	//
-	// Allow kubelet to request a certificate without any Node IP available, only
-	// with DNS names.
+	// 允许 kubelet 在没有任何 Node IP、仅有
+	// DNS 名称的情况下申请证书。
 	AllowDNSOnlyNodeCSR featuregate.Feature = "AllowDNSOnlyNodeCSR"
 
 	// owner: @micahhausler
 	//
-	// Setting AllowInsecureKubeletCertificateSigningRequests to true disables node admission validation of CSRs
-	// for kubelet signers where CN=system:node:$nodeName.
+	// 将 AllowInsecureKubeletCertificateSigningRequests 设为 true 会禁用节点准入环节对
+	// kubelet 签名方（CN=system:node:$nodeName）的 CSR 校验。
 	AllowInsecureKubeletCertificateSigningRequests featuregate.Feature = "AllowInsecureKubeletCertificateSigningRequests"
 
 	// owner: @HirazawaUi
 	//
-	// Allow spec.terminationGracePeriodSeconds to be overridden by MaxPodGracePeriodSeconds in soft evictions.
+	// 在软驱逐中允许用 MaxPodGracePeriodSeconds 覆盖 spec.terminationGracePeriodSeconds。
 	AllowOverwriteTerminationGracePeriodSeconds featuregate.Feature = "AllowOverwriteTerminationGracePeriodSeconds"
 
 	// owner: @adrianmoisey
 	// kep: https://kep.k8s.io/5707
 	//
-	// When enabled, kube-proxy will program iptables/nftables/ipvs rules for Service.spec.externalIPs.
-	// When disabled, kube-proxy will not program rules for externalIPs, effectively disabling this
-	// deprecated feature.
+	// 启用后，kube-proxy 会为 Service.spec.externalIPs 编写 iptables/nftables/ipvs 规则。
+	// 禁用时，kube-proxy 不会为 externalIPs 编写规则，等同于关闭这一
+	// 已废弃特性。
 	AllowServiceExternalIPs featuregate.Feature = "AllowServiceExternalIPs"
 
 	// owner: @gavinkflam
 	// kep: https://kep.k8s.io/5936
 	//
-	// Add user fields to control atomic write volumes file owner UID
+	// 新增用户字段，用于控制 atomic write 卷文件属主 UID
 	AtomicWriteVolumeUserFields featuregate.Feature = "AtomicWriteVolumeUserFields"
 
 	// owner: @seans3
 	// kep: http://kep.k8s.io/4006
 	//
-	// Forces authorization of the "create" verb for pod subresources like exec, attach, and portforward.
-	// See: https://github.com/kubernetes/kubernetes/issues/133515
+	// 强制对 exec、attach、portforward 等 Pod 子资源执行 "create" 动词的授权。
+	// 参见：https://github.com/kubernetes/kubernetes/issues/133515
 	AuthorizePodWebsocketUpgradeCreatePermission featuregate.Feature = "AuthorizePodWebsocketUpgradeCreatePermission"
 
 	// owner: @szuecs
 	//
-	// Enable nodes to change CPUCFSQuotaPeriod
+	// 允许节点修改 CPUCFSQuotaPeriod
 	CPUCFSQuotaPeriod featuregate.Feature = "CustomCPUCFSQuotaPeriod"
 
 	// owner: @fromanirh
-	// beta: see below.
+	// beta：见下文。
 	//
-	// Allow fine-tuning of cpumanager policies, experimental, alpha-quality options
-	// Per https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
-	// We want to avoid a proliferation of feature gates. This feature gate:
-	// - will guard *a group* of cpumanager options whose quality level is alpha.
-	// - will never graduate to beta or stable.
-	// See https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
-	// for details about the removal of this feature gate.
+	// 允许微调 cpumanager 策略，即实验性的 alpha 质量选项
+	// 依据 https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
+	// 我们要避免功能门控泛滥。该门控：
+	// - 将守护一组质量为 alpha 的 cpumanager 选项。
+	// - 永远不会晋升到 beta 或 stable。
+	// 参见 https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
+	// 了解该门控移除的细节。
 	CPUManagerPolicyAlphaOptions featuregate.Feature = "CPUManagerPolicyAlphaOptions"
 
 	// owner: @fromanirh
-	// beta: see below.
+	// beta：见下文。
 	//
-	// Allow fine-tuning of cpumanager policies, experimental, beta-quality options
-	// Per https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
-	// We want to avoid a proliferation of feature gates. This feature gate:
-	// - will guard *a group* of cpumanager options whose quality level is beta.
-	// - is thus *introduced* as beta
-	// - will never graduate to stable.
-	// See https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
-	// for details about the removal of this feature gate.
+	// 允许微调 cpumanager 策略，即实验性的 beta 质量选项
+	// 依据 https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
+	// 我们要避免功能门控泛滥。该门控：
+	// - 将守护一组质量为 beta 的 cpumanager 选项。
+	// - 因此*引入*即为 beta
+	// - 永远不会晋升到 stable。
+	// 参见 https://groups.google.com/g/kubernetes-sig-architecture/c/Nxsc7pfe5rw/m/vF2djJh0BAAJ
+	// 了解该门控移除的细节。
 	CPUManagerPolicyBetaOptions featuregate.Feature = "CPUManagerPolicyBetaOptions"
 
 	// owner: @ffromani
 	//
-	// Allow the usage of options to fine-tune the cpumanager policies.
+	// 允许使用选项微调 cpumanager 策略。
 	CPUManagerPolicyOptions featuregate.Feature = "CPUManagerPolicyOptions"
 
 	// owner: @bitoku
 	// kep: https://kep.k8s.io/5825
 	//
-	// Enables using streaming RPCs for CRI list operations.
+	// 启用对 CRI list 操作使用流式 RPC。
 	CRIListStreaming featuregate.Feature = "CRIListStreaming"
 
 	// owner: @aramase
 	// kep:  http://kep.k8s.io/5538
 	//
-	// Enables CSI drivers to opt-in for receiving service account tokens from kubelet
-	// through the dedicated secrets field in NodePublishVolumeRequest instead of the volume_context field.
+	// 允许 CSI 驱动选择通过 NodePublishVolumeRequest 中
+	// 专用的 secrets 字段（而非 volume_context 字段）接收 kubelet 提供的服务账号令牌。
 	CSIServiceAccountTokenSecrets featuregate.Feature = "CSIServiceAccountTokenSecrets"
 
 	// owner: @fengzixu
 	//
-	// Enables kubelet to detect CSI volume condition and send the event of the abnormal volume to the corresponding pod that is using it.
+	// 允许 kubelet 检测 CSI 卷状态，并把异常卷事件发送给正在使用该卷的对应 Pod。
 	CSIVolumeHealth featuregate.Feature = "CSIVolumeHealth"
 
 	// owner: @HirazawaUi
 	//
-	// Enabling this feature gate will cause the pod's status to change due to a kubelet restart.
+	// 启用该门控会导致 Pod 状态因 kubelet 重启而发生变化。
 	ChangeContainerStatusOnKubeletRestart featuregate.Feature = "ChangeContainerStatusOnKubeletRestart"
 
 	// owner: @sanposhiho @wojtek-t
 	// kep: https://kep.k8s.io/5278
 	//
-	// Clear pod.Status.NominatedNodeName when pod is bound to a node.
-	// This prevents stale information from affecting external scheduling components.
+	// 在 Pod 绑定到节点时清除 pod.Status.NominatedNodeName。
+	// 避免过期信息影响外部调度组件。
 	ClearingNominatedNodeNameAfterBinding featuregate.Feature = "ClearingNominatedNodeNameAfterBinding"
 
 	// owner: @ahmedtd
 	//
-	// Enable ClusterTrustBundle objects and Kubelet integration.
+	// 启用 ClusterTrustBundle 对象及与 Kubelet 的集成。
 	ClusterTrustBundle featuregate.Feature = "ClusterTrustBundle"
 
 	// owner: @ahmedtd
 	//
-	// Enable ClusterTrustBundle Kubelet projected volumes.  Depends on ClusterTrustBundle.
+	// 启用 ClusterTrustBundle 的 Kubelet 投射卷。依赖 ClusterTrustBundle。
 	ClusterTrustBundleProjection featuregate.Feature = "ClusterTrustBundleProjection"
 
 	// owner: @tosi3k
 	// kep: https://kep.k8s.io/6012
 	//
-	// Enables support for CompositePodGroups.
+	// 启用对 CompositePodGroups 的支持。
 	CompositePodGroup featuregate.Feature = "CompositePodGroup"
 
 	// owner: @adrianreber
 	// kep: https://kep.k8s.io/2008
 	//
-	// Enables container Checkpoint support in the kubelet
+	// 在 kubelet 中启用容器 Checkpoint 支持
 	ContainerCheckpoint featuregate.Feature = "ContainerCheckpoint"
 
 	// onwer: @yuanwang04
 	// kep: https://kep.k8s.io/5307
 	//
-	// Supports container restart policy and container restart policy rules to override the pod restart policy.
-	// Enable a single container to restart even if the pod has restart policy "Never".
+	// 支持容器重启策略及容器重启策略规则，以覆盖 Pod 的重启策略。
+	// 允许单个容器重启，即使 Pod 的重启策略为 "Never"。
 	ContainerRestartRules featuregate.Feature = "ContainerRestartRules"
 
 	// owner: @sreeram-venkitesh
 	//
-	// Enables configuring custom stop signals for containers from container lifecycle
+	// 允许通过容器生命周期配置自定义停止信号
 	ContainerStopSignals featuregate.Feature = "ContainerStopSignals"
 
 	// owner: @jefftree
 	// kep: https://kep.k8s.io/4355
 	//
-	// Enables coordinated leader election in the API server
+	// 在 API server 中启用协调式 leader election
 	CoordinatedLeaderElection featuregate.Feature = "CoordinatedLeaderElection"
 
 	// owner: @ttakahashi21 @mkimuram
 	// kep: https://kep.k8s.io/3294
 	//
-	// Enable usage of Provision of PVCs from snapshots in other namespaces
+	// 允许从其他命名空间的快照创建 PVC
 	CrossNamespaceVolumeDataSource featuregate.Feature = "CrossNamespaceVolumeDataSource"
 
 	// owner: @ritazh
 	// kep: http://kep.k8s.io/5018
 	//
-	// Enables support for requesting admin access in a ResourceClaim.
-	// Admin access is granted even if a device is already in use and,
-	// depending on the DRA driver, may enable additional permissions
-	// when a container uses the allocated device.
+	// 启用在 ResourceClaim 中申请管理员访问权限的支持。
+	// 即使设备已被占用，管理员访问仍会被授予，并且
+	// 取决于 DRA 驱动，在容器使用所分配设备时
+	// 可能启用额外的权限。
 	DRAAdminAccess featuregate.Feature = "DRAAdminAccess"
 
 	// owner: @sunya-ch
 	// kep: https://kep.k8s.io/5075
 	//
-	// DRAConsumableCapacity
+	// DRAConsumableCapacity：启用按可消耗容量进行资源分配的支持。
 	DRAConsumableCapacity featuregate.Feature = "DRAConsumableCapacity"
 
 	// owner: @gauravkghildiyal
 	// kep: http://kep.k8s.io/6080
 	//
-	// Enables support for derived attributes in Dynamic Resource Allocation (DRA).
+	// 启用对动态资源分配（DRA）中派生属性的支持。
 	DRADerivedAttributes featuregate.Feature = "DRADerivedAttributes"
 
 	// owner: @KobayashiD27
 	// kep: http://kep.k8s.io/5007
-	// alpha: v1.34
+	// alpha：v1.34
 	//
-	// Enables support for delaying the binding of pods
-	// which depend on devices with binding conditions.
+	// 启用对延迟绑定那些依赖带绑定条件设备的 Pod 的支持
 	//
-	// DRAResourceClaimDeviceStatus also needs to be
-	// enabled.
+	// 还需要启用 DRAResourceClaimDeviceStatus
+	// 。
 	DRADeviceBindingConditions featuregate.Feature = "DRADeviceBindingConditions"
 
 	// owner: @omeryahud
 	// kep: https://kep.k8s.io/5963
 	//
-	// Enables drivers to declare opaque compatibility groups on each
-	// device.consumesCounters[] entry of a ResourceSlice. The scheduler then
-	// only co-allocates devices drawing from the same counter set when their
-	// declared groups intersect, moving detection of incompatible co-allocation
-	// (e.g. GPU MIG vs vGPU on one physical device) from preparation-time
-	// failure to scheduling-time rejection.
+	// 允许驱动在 ResourceSlice 的每个
+	// device.consumesCounters[] 条目上声明不透明的兼容性组。调度器随后
+	// 仅在声明的组有交集时，才把来自同一计数器集合的设备共同分配，
+	// 从而把不兼容共分配（例如同一物理设备上的 GPU MIG 与 vGPU）的检测
+	// 从准备阶段失败
+	// 前移到调度阶段拒绝。
 	//
-	// DRAPartitionableDevices also needs to be enabled, since the field lives
-	// on consumesCounters[] entries which only exist for partitionable devices.
+	// 还必须启用 DRAPartitionableDevices，因为该字段只存在于
+	// 可分区设备才有的 consumesCounters[] 条目上。
 	DRADeviceCompatibilityGroups featuregate.Feature = "DRADeviceCompatibilityGroups"
 
 	// owner: @pohly
 	// kep: http://kep.k8s.io/5055
 	//
-	// DeviceTaintRules allow administrators to add taints to devices.
+	// DeviceTaintRules 允许管理员给设备添加污点。
 	DRADeviceTaintRules featuregate.Feature = "DRADeviceTaintRules"
 
 	// owner: @pohly
 	// kep: http://kep.k8s.io/5055
 	//
-	// Marking devices as tainted can prevent using them for new pods and/or
-	// cause pods using them to stop. Users can decide to tolerate taints.
+	// 给设备打污点可阻止新 Pod 使用它们，和/或
+	// 让正在使用它们的 Pod 停止。用户可以选择容忍污点。
 	DRADeviceTaints featuregate.Feature = "DRADeviceTaints"
 
 	// owner: @yliaog
 	// kep: http://kep.k8s.io/5004
 	//
-	// Enables support for providing extended resource requests backed by DRA.
+	// 启用对由 DRA 支撑的扩展资源请求的支持。
 	DRAExtendedResource featuregate.Feature = "DRAExtendedResource"
 
 	// owner: @sunya-ch
 	// kep: https://kep.k8s.io/5075
 	//
-	// Enables fractional (milli-unit) values in CapacityRequestPolicyRange
-	// min, max, and step fields.
+	// 允许 CapacityRequestPolicyRange 的
+	// min、max 和 step 字段使用小数（毫单位）值。
 	DRAFractionalCapacityRange featuregate.Feature = "DRAFractionalCapacityRange"
 
 	// owner: @everpeace
 	// kep: http://kep.k8s.io/5491
 	//
-	// Enable list type attributes for DRA devices in ResourceSlice
-	// and extends ResourceClaim's matchAttribute/distinctAttribute
-	// semantics so that they can work with list type attributes.
+	// 在 ResourceSlice 中为 DRA 设备启用列表类型属性
+	// 并扩展 ResourceClaim 的 matchAttribute/distinctAttribute
+	// 语义，使其能够处理列表类型属性。
 	DRAListTypeAttributes featuregate.Feature = "DRAListTypeAttributes"
 
 	// owner: @pravk03
 	// kep: https://kep.k8s.io/5517
 	//
-	// Enables support for node allocatable resources backed by DRA.
+	// 启用对由 DRA 支撑的节点可分配资源的支持。
 	DRANodeAllocatableResources featuregate.Feature = "DRANodeAllocatableResources"
 
 	// owner: @troychiu
 	// kep: http://kep.k8s.io/5945
 	//
-	// Enables support for declaring that node-local operations (preparation and
-	// clean-up) are optional for devices.
+	// 启用声明节点本地操作（准备和
+	// 清理）对设备可选的支持。
 	DRAOptionalNodeOperations featuregate.Feature = "DRAOptionalNodeOperations"
 
 	// owner: @mortent, @cici37
 	// kep: http://kep.k8s.io/4815
 	//
-	// Enables support for dynamically partitioning devices based on
-	// which parts of them were allocated during scheduling.
+	// 启用根据调度过程中设备被分配的部分
+	// 对设备进行动态分区的支持。
 	//
 	DRAPartitionableDevices featuregate.Feature = "DRAPartitionableDevices"
 
 	// owner: @nmn3m
 	// kep: http://kep.k8s.io/5677
 	//
-	// Enables ResourceSlice.Spec.PartitionTypeAttribute, which opts a
-	// partitionable pool into the typed partitionSummary view of
-	// ResourcePoolStatusRequest. Depends on both DRAPartitionableDevices
-	// (the field is only meaningful for pools with SharedCounters) and
-	// DRAResourcePoolStatus (the feature that consumes it).
+	// 启用 ResourceSlice.Spec.PartitionTypeAttribute，它让
+	// 可分区资源池选择 ResourcePoolStatusRequest 的类型化
+	// partitionSummary 视图。同时依赖 DRAPartitionableDevices
+	// （该字段仅对带 SharedCounters 的池有意义）和
+	// DRAResourcePoolStatus（消费该字段的特性）。
 	DRAPartitionableDevicesType featuregate.Feature = "DRAPartitionableDevicesType"
 
 	// owner: @mortent
 	// kep: http://kep.k8s.io/4816
 	//
-	// Enables support for providing a prioritized list of requests
-	// for resources. The first entry that can be satisfied will
-	// be selected.
+	// 启用按优先级排列的资源请求列表支持。
+	// 将选择第一个能被满足的
+	// 条目。
 	DRAPrioritizedList featuregate.Feature = "DRAPrioritizedList"
 
 	// owner: @LionelJouin
 	// kep: http://kep.k8s.io/4817
 	//
-	// Enables support the ResourceClaim.status.devices field and for setting this
-	// status from DRA drivers.
+	// 启用对 ResourceClaim.status.devices 字段的支持，并允许
+	// 由 DRA 驱动设置该状态。
 	DRAResourceClaimDeviceStatus featuregate.Feature = "DRAResourceClaimDeviceStatus"
 
 	// owner: @aojea
 	// kep: http://kep.k8s.io/4817
 	//
-	// Enables fine-grained authorization checks for ResourceClaim status updates.
-	// Requires separate permission on resourceclaims/binding to update
-	// status.allocation and status.reservedFor, and per-driver permission on
-	// resourceclaims/driver using associated-node / arbitrary-node verb prefixes
-	// to update status.devices.
+	// 对 ResourceClaim 状态更新启用细粒度授权检查。
+	// 更新 status.allocation 和 status.reservedFor 需要对
+	// resourceclaims/binding 的单独权限；更新 status.devices 需要对
+	// resourceclaims/driver 使用 associated-node / arbitrary-node 动词前缀的
+	// 按驱动划分的权限。
 	DRAResourceClaimGranularStatusAuthorization featuregate.Feature = "DRAResourceClaimGranularStatusAuthorization"
 
 	// owner: @nmn3m
 	// kep: http://kep.k8s.io/5677
 	//
-	// Enables ResourcePoolStatusRequest API for querying DRA resource pool
-	// availability status.
+	// 启用 ResourcePoolStatusRequest API，用于查询 DRA 资源池的
+	// 可用性状态。
 	DRAResourcePoolStatus featuregate.Feature = "DRAResourcePoolStatus"
 
 	// owner: @pohly
 	// kep: http://kep.k8s.io/4381
 	//
-	// Enables aborting the per-node Filter operation in the scheduler after
-	// a certain time (10 seconds by default, configurable in the DynamicResources
-	// scheduler plugin configuration).
+	// 启用在调度器每节点 Filter 操作超过
+	// 一定时间后中止该操作（默认 10 秒，可在 DynamicResources
+	// 调度插件配置中调整）。
 	DRASchedulerFilterTimeout featuregate.Feature = "DRASchedulerFilterTimeout"
 
 	// owner: @nojnhuh
 	// kep: https://kep.k8s.io/5729
 	//
-	// Enables support for reserving and replicating templated ResourceClaims for an entire PodGroup.
+	// 启用为整个 PodGroup 预留并复制模板化 ResourceClaim 的支持。
 	DRAWorkloadResourceClaims featuregate.Feature = "DRAWorkloadResourceClaims"
 
 	// owner: @VeraQin
 	// kep: https://kep.k8s.io/5996
 	//
-	// Enables support for DefaultPodSysctls in Kubelet Configuration.
+	// 在 Kubelet 配置中启用对 DefaultPodSysctls 的支持。
 	DefaultPodSysctls featuregate.Feature = "DefaultPodSysctls"
 
 	// owner: @atiratree
 	// kep: http://kep.k8s.io/3973
 	//
-	// Deployments and replica sets can now also track terminating pods via .status.terminatingReplicas.
+	// Deployment 和 ReplicaSet 现在也可通过 .status.terminatingReplicas 跟踪正在终止的 Pod。
 	DeploymentReplicaSetTerminatingReplicas featuregate.Feature = "DeploymentReplicaSetTerminatingReplicas"
 
 	// owner: @aojea
 	//
-	// The apiservers with the MultiCIDRServiceAllocator feature enable, in order to support live migration from the old bitmap ClusterIP
-	// allocators to the new IPAddress allocators introduced by the MultiCIDRServiceAllocator feature, performs a dual-write on
-	// both allocators. This feature gate disables the dual write on the new Cluster IP allocators.
+	// 启用 MultiCIDRServiceAllocator 的 apiserver 为支持从旧的 bitmap ClusterIP 分配器在线迁移到
+	// MultiCIDRServiceAllocator 引入的新 IPAddress 分配器，会对两套分配器执行双写。
+	// 该门控用于禁用新 Cluster IP 分配器上的双写。
 	DisableAllocatorDualWrite featuregate.Feature = "DisableAllocatorDualWrite"
 
 	// owner: @ffromani
-	// beta: v1.33
+	// beta：v1.33
 	//
-	// Disables CPU Quota for containers which have exclusive CPUs allocated.
-	// Disables pod-Level CPU Quota for pods containing at least one container with exclusive CPUs allocated
-	// Exclusive CPUs for a container (init, application, sidecar) are allocated when:
-	// (1) cpumanager policy is static,
-	// (2) the pod has QoS Guaranteed,
-	// (3) the container has integer cpu request.
-	// The expected behavior is that CPU Quota for containers having exclusive CPUs allocated is disabled.
-	// Because this fix changes a long-established (but incorrect) behavior, users observing
-	// any regressions can use the DisableCPUQuotaWithExclusiveCPUs feature gate (default on) to
-	// restore the old behavior. Please file issues if you hit issues and have to use this Feature Gate.
-	// The Feature Gate will be locked to true and then removed in +2 releases (1.35) if there are no bug reported
+	// 对已分配独占 CPU 的容器禁用 CPU Quota。
+	// 对至少包含一个独占 CPU 容器的 Pod 禁用 Pod 级 CPU Quota
+	// 容器（init、application、sidecar）在以下条件下分配独占 CPU：
+	// （1）cpumanager 策略为 static，
+	// （2）Pod 的 QoS 为 Guaranteed，
+	// （3）容器有整数 CPU request。
+	// 预期行为是对分配了独占 CPU 的容器禁用 CPU Quota。
+	// 由于该修复改变了长期存在（但错误）的行为，遇到
+	// 回归的用户可用 DisableCPUQuotaWithExclusiveCPUs 门控（默认开启）
+	// 恢复旧行为。若不得不使用该门控并遇到问题，请提交 issue。
+	// 若无 bug 报告，该门控将在 2 个版本后（1.35）锁定为 true 并移除
 	DisableCPUQuotaWithExclusiveCPUs featuregate.Feature = "DisableCPUQuotaWithExclusiveCPUs"
 
 	// owner: @HirazawaUi
 	// kep: http://kep.k8s.io/4004
 	//
-	// DisableNodeKubeProxyVersion disable the status.nodeInfo.kubeProxyVersion field of v1.Node
+	// DisableNodeKubeProxyVersion 禁用 v1.Node 的 status.nodeInfo.kubeProxyVersion 字段
 	DisableNodeKubeProxyVersion featuregate.Feature = "DisableNodeKubeProxyVersion"
 
 	// owner: @pohly
 	// kep: http://kep.k8s.io/4381
 	//
-	// Enables support for resources with custom parameters and a lifecycle
-	// that is independent of a Pod. Resource allocation is done by the scheduler
-	// based on "structured parameters".
+	// 启用对具有自定义参数且生命周期
+	// 独立于 Pod 的资源的支持。资源由调度器基于
+	// "结构化参数"完成分配。
 	DynamicResourceAllocation featuregate.Feature = "DynamicResourceAllocation"
 
 	// owner: @nispriha
 	// kep: https://kep.k8s.io/5502
 	//
-	// Enables setting custom Unix permission bits on emptyDir volume directories.
+	// 允许为 emptyDir 卷目录设置自定义 Unix 权限位。
 	EmptyDirVolumeMode featuregate.Feature = "EmptyDirVolumeMode"
 
 	// owner: @HirazawaUi
 	// kep: http://kep.k8s.io/3721
 	//
-	// Allow containers to read environment variables from a file.
-	// Environment variables file must be produced by an initContainer and located within an emptyDir volume.
-	// The kubelet will populate the environment variables in the container
-	// from the specified file in the emptyDir volume, without mounting the file.
+	// 允许容器从文件中读取环境变量。
+	// 环境变量文件必须由 initContainer 生成，且位于 emptyDir 卷内。
+	// kubelet 会从 emptyDir 卷中指定的文件
+	// 填充容器的环境变量，而无需挂载该文件。
 	EnvFiles featuregate.Feature = "EnvFiles"
 
 	// owner: @harche
 	// kep: http://kep.k8s.io/3386
 	//
-	// Allows using event-driven PLEG (pod lifecycle event generator) through kubelet
-	// which avoids frequent relisting of containers which helps optimize performance.
+	// 允许通过 kubelet 使用事件驱动的 PLEG（Pod 生命周期事件生成器），
+	// 避免频繁重新列出容器，有助于优化性能。
 	EventedPLEG featuregate.Feature = "EventedPLEG"
 
 	// owner: @atiratree
 	// kep: http://kep.k8s.io/4563
 	//
-	// Enables a new .spec.evictionResponders Pod field, as well as new EvictionRequest and Eviction Resources.
-	// This can be used by a set of requesters and responders to coordinate graceful eviction of pods.
+	// 启用新的 .spec.evictionResponders Pod 字段以及新的 EvictionRequest 和 Eviction Resources。
+	// 供一组请求方与响应方协调 Pod 的优雅驱逐。
 	EvictionRequestAPI featuregate.Feature = "EvictionRequestAPI"
 
 	// owner: @andrewsykim @SergeyKanzhelev
 	//
-	// Ensure kubelet respects exec probe timeouts. Feature gate exists in-case existing workloads
-	// may depend on old behavior where exec probe timeouts were ignored.
-	// Locked to default, will remove in v1.38. Progress is reflected in KEP #1972 update
+	// 确保 kubelet 遵守 exec 探针超时。保留该门控是为了兼容可能
+	// 依赖忽略 exec 探针超时这一旧行为的已有工作负载。
+	// 已锁定默认值，将在 v1.38 移除。进展见 KEP #1972 更新
 	ExecProbeTimeout featuregate.Feature = "ExecProbeTimeout"
 
 	// owner: @seans3
 	// kep: http://kep.k8s.io/4006
 	//
-	// Enables the API server to proxy websockets to the kubelet for exec/attach
-	// if the kubelet has advertised that it supports them.
+	// 允许 API server 在 kubelet 声明支持时，为 exec/attach
+	// 将 websocket 代理到 kubelet。
 	ExtendWebSocketsToKubelet featuregate.Feature = "ExtendWebSocketsToKubelet"
 
 	// owner: @HarshalNeelkamal
 	//
-	// Enables external service account JWT signing and key management.
-	// If enabled, it allows passing --service-account-signing-endpoint flag to configure external signer.
+	// 启用外部服务账号 JWT 签名与密钥管理。
+	// 启用后可传入 --service-account-signing-endpoint 参数来配置外部签名方。
 	ExternalServiceAccountTokenSigner featuregate.Feature = "ExternalServiceAccountTokenSigner"
 
 	// owner: @amritansh1502
 	// kep: https://kep.k8s.io/4939
 	//
-	// Enables TLS support for gRPC health check probes.
+	// 启用对 gRPC 健康检查探针的 TLS 支持。
 	GRPCContainerProbeTLS featuregate.Feature = "GRPCContainerProbeTLS"
 
 	// owner: @erictune @wojtek-t
 	//
-	// Enables support for generic Workload API.
+	// 启用对通用 Workload API 的支持。
 	GenericWorkload featuregate.Feature = "GenericWorkload"
 
 	// owner: @vinayakankugoyal @thockin
 	//
-	// Controls if the gitRepo volume plugin is supported or not.
-	// KEP #5040 disables the gitRepo volume plugin by default starting v1.33,
-	// this provides a way for users to override it.
+	// 控制是否支持 gitRepo 卷插件。
+	// KEP #5040 从 v1.33 起默认禁用 gitRepo 卷插件，
+	// 该门控为用户提供覆盖此行为的方式。
 	GitRepoVolumeDriver featuregate.Feature = "GitRepoVolumeDriver"
 
 	// owner: @bobbypage
-	// Adds support for kubelet to detect node shutdown and gracefully terminate pods prior to the node being shutdown.
+	// 支持 kubelet 检测节点关停，并在节点关停前优雅终止 Pod。
 	GracefulNodeShutdown featuregate.Feature = "GracefulNodeShutdown"
 
 	// owner: @wzshiming
-	// Make the kubelet use shutdown configuration based on pod priority values for graceful shutdown.
+	// 让 kubelet 在优雅关停时使用基于 Pod 优先级值的配置。
 	GracefulNodeShutdownBasedOnPodPriority featuregate.Feature = "GracefulNodeShutdownBasedOnPodPriority"
 
 	// owner @amritansh1502
 	// kep: https://kep.k8s.io/5999
 	//
-	// Enables the Protocol field on HTTPGetAction to select the wire protocol (HTTP/1.1 or HTTP/2).
+	// 启用 HTTPGetAction 的 Protocol 字段，以选择线协议（HTTP/1.1 或 HTTP/2）。
 	H2CContainerProbe featuregate.Feature = "H2CContainerProbe"
 
 	// owner: @jm-franc
 	// kep: https://kep.k8s.io/4951
 	//
-	// Enables support of configurable HPA scale-up and scale-down tolerances.
+	// 启用可配置的 HPA 扩容与缩容容差。
 	HPAConfigurableTolerance featuregate.Feature = "HPAConfigurableTolerance"
 
 	// owner: @adrianmoisey
 	//
-	// Enables generation tracking for HorizontalPodAutoscaler
+	// 为 HorizontalPodAutoscaler 启用 generation 跟踪
 	HPAGeneration featuregate.Feature = "HPAGeneration"
 
 	// owner: @hakuna-matatah
 	//
-	// Enables an optimized selector store for HPA overlap detection.
+	// 为 HPA 重叠检测启用优化的选择器存储。
 	HPAOptimizedSelectorStore featuregate.Feature = "HPAOptimizedSelectorStore"
 
 	// owner: @johanneswuerbach
 	// kep: https://kep.k8s.io/2021
 	//
-	// Enables support of HPA scaling to zero pods when an object or custom metric is configured.
+	// 启用在配置对象或自定义指标时 HPA 缩容至零 Pod 的支持。
 	HPAScaleToZero featuregate.Feature = "HPAScaleToZero"
 
 	// owner: @HirazawaUi
 	// kep: https://kep.k8s.io/4762
 	//
-	// Allows setting any FQDN as the pod's hostname
+	// 允许将任意 FQDN 设为 Pod 的 hostname
 	HostnameOverride featuregate.Feature = "HostnameOverride"
 
 	// owner: @jingczhang
-	// beta: v1.37
+	// beta：v1.37
 	//
-	// Subtracts hugepage capacity from memory.available so the reported
-	// memory reflects actual regular-memory availability. This corrects a long-standing
-	// bug where hugepage-reserved RAM inflated AvailableBytes, delaying eviction.
-	// Users observing regressions can disable this feature gate to restore the old behavior.
+	// 从 memory.available 中扣除 hugepage 容量，使上报的
+	// memory 反映真实的普通内存可用性。这修正了长期存在的
+	// bug：hugepage 预留 RAM 抬高了 AvailableBytes，延迟驱逐。
+	// 遇到回归的用户可禁用该门控以恢复旧行为。
 	HugepageAwareEviction featuregate.Feature = "HugepageAwareEviction"
 
 	// owner: @haircommander
 	// kep: http://kep.k8s.io/4210
-	// ImageMaximumGCAge enables the Kubelet configuration field of the same name, allowing an admin
-	// to specify the age after which an image will be garbage collected.
+	// ImageMaximumGCAge 启用 Kubelet 的同名配置字段，允许管理员
+	// 指定镜像在多大年龄后被垃圾回收。
 	ImageMaximumGCAge featuregate.Feature = "ImageMaximumGCAge"
 
 	// owner: @saschagrunert
 	// kep: https://kep.k8s.io/4639
 	//
-	// Enables the image volume source.
+	// 启用镜像卷数据源。
 	ImageVolume featuregate.Feature = "ImageVolume"
 
 	// owner: @iholder101
 	// kep: https://kep.k8s.io/4639
 	//
-	// Enables adding the ImageVolume's digest to the pod's status.
+	// 启用将 ImageVolume 的 digest 写入 Pod 状态。
 	ImageVolumeWithDigest featuregate.Feature = "ImageVolumeWithDigest"
 
 	// owner: @ndixita
 	// kep: https://kep.k8s.io/5419
 	//
-	// Enables specifying resources at pod-level.
+	// 启用在 Pod 级别指定资源。
 	InPlacePodLevelResourcesVerticalScaling featuregate.Feature = "InPlacePodLevelResourcesVerticalScaling"
 
 	// owner: @vinaykul,@tallclair
 	// kep: http://kep.k8s.io/1287
 	//
-	// Enables In-Place Pod Vertical Scaling
+	// 启用 Pod 原地垂直扩缩容
 	InPlacePodVerticalScaling featuregate.Feature = "InPlacePodVerticalScaling"
 
 	// owner: @tallclair @esotsal
 	//
-	// Allow resource resize for containers in Guaranteed pods with integer CPU requests ( default false ).
-	// Applies only in nodes with InPlacePodVerticalScaling and CPU Manager features enabled, and
-	// CPU Manager Static Policy option set.
+	// 允许对使用整数 CPU request 的 Guaranteed Pod 中的容器调整资源（默认 false）。
+	// 仅在启用了 InPlacePodVerticalScaling 与 CPU Manager 特性，且
+	// 设置了 CPU Manager Static Policy 的节点上生效。
 	InPlacePodVerticalScalingExclusiveCPUs featuregate.Feature = "InPlacePodVerticalScalingExclusiveCPUs"
 
 	// owner: @tallclair @pkrishn
 	//
-	// Allow memory resize for containers in Guaranteed pods (default false) when Memory Manager Policy is set to Static.
-	// Applies only in nodes with InPlacePodVerticalScaling and Memory Manager features enabled.
+	// 当 Memory Manager 策略为 Static 时，允许调整 Guaranteed Pod 中容器的内存（默认 false）。
+	// 仅在启用了 InPlacePodVerticalScaling 与 Memory Manager 特性的节点上生效。
 	InPlacePodVerticalScalingExclusiveMemory featuregate.Feature = "InPlacePodVerticalScalingExclusiveMemory"
 
 	// owner: @natasha41575
 	//
-	// Allow in-place pod resize of running non-sidecar init containers.
+	// 允许对正在运行的非 sidecar init 容器进行原地 Pod 调整。
 	InPlacePodVerticalScalingInitContainers featuregate.Feature = "InPlacePodVerticalScalingInitContainers"
 
 	// owner: @natasha41575
 	// kep: https://kep.k8s.io/6030
 	//
-	// Allow in-place pod update of memory-backed volume size limit.
+	// 允许原地更新由内存支撑的卷大小限制。
 	InPlacePodVerticalScalingMemoryBackedVolumes featuregate.Feature = "InPlacePodVerticalScalingMemoryBackedVolumes"
 
 	// owner: @natasha41575
 	// kep: https://kep.k8s.io/5836
 	//
-	// Enables scheduler-triggered preemption for deferred in-place pod vertical scaling pods.
+	// 为延迟原地垂直扩缩容的 Pod 启用调度器触发的抢占。
 	InPlacePodVerticalScalingSchedulerPreemption featuregate.Feature = "InPlacePodVerticalScalingSchedulerPreemption"
 
 	// owner: @tetianakh
 	//
-	// Enables the fast path for inter-pod affinity calculations when the topology key is kubernetes.io/hostname.
+	// 当拓扑键为 kubernetes.io/hostname 时，启用 Pod 间亲和性计算的快速路径。
 	InterPodAffinityHostnameFastPath featuregate.Feature = "InterPodAffinityHostnameFastPath"
 
 	// owner: @mimowo
 	// kep: https://kep.k8s.io/4368
 	//
-	// Allows to delegate reconciliation of a Job object to an external controller.
+	// 允许把 Job 对象的协调委派给外部控制器。
 	JobManagedBy featuregate.Feature = "JobManagedBy"
 
 	// owner: @adrianmoisey @danwinship
 	// kep: https://kep.k8s.io/5495
 	//
-	// Allow use of IPVS mode in kube-proxy
+	// 允许在 kube-proxy 中使用 IPVS 模式
 	KubeProxyIPVS featuregate.Feature = "KubeProxyIPVS"
 
 	// owner: @austinabro321
 	// kep: https://kep.k8s.io/6032
 	//
-	// Enables a userspace TCP proxy in the nftables kube-proxy backend that
-	// serves localhost NodePort services on IPv4 and IPv6.
+	// 在 nftables kube-proxy 后端启用用户态 TCP 代理，
+	// 以在 IPv4 和 IPv6 上服务 localhost NodePort Service。
 	KubeProxyNFTablesLocalhostNodePorts featuregate.Feature = "KubeProxyNFTablesLocalhostNodePorts"
 
 	// owner: @tallclair
 	//
-	// Enables the kubelet allocated pods endpoint.
+	// 启用 kubelet 的 allocated pods 端点。
 	KubeletAllocatedPodsEndpoint featuregate.Feature = "KubeletAllocatedPodsEndpoint"
 
 	// owner: @marquiz
 	// kep: http://kep.k8s.io/4033
 	//
-	// Enable detection of the kubelet cgroup driver configuration option from
-	// the CRI.  The CRI runtime also needs to support this feature in which
-	// case the kubelet will ignore the cgroupDriver (--cgroup-driver)
-	// configuration option. If runtime doesn't support it, the kubelet will
-	// fallback to using it's cgroupDriver option.
+	// 启用从 CRI 检测 kubelet cgroup driver 配置选项。
+	// CRI 运行时尚需支持该特性，此时
+	// kubelet 会忽略 cgroupDriver（--cgroup-driver）
+	// 配置项。若运行时不支持，kubelet 将
+	// 回退使用其自身的 cgroupDriver 选项。
 	KubeletCgroupDriverFromCRI featuregate.Feature = "KubeletCgroupDriverFromCRI"
 
 	// owner: @lauralorenz @hankfreund
 	// kep: https://kep.k8s.io/5593
 	//
-	// Enables support for configurable per-node backoff maximums for restarting
-	// containers (aka containers in CrashLoopBackOff)
+	// 启用可配置的每节点容器重启退避上限，
+	// 即处于 CrashLoopBackOff 的容器
 	KubeletCrashLoopBackOffMax featuregate.Feature = "KubeletCrashLoopBackOffMax"
 
 	// owner: @stlaz
 	// kep: https://kep.k8s.io/2535
 	//
-	// Enables tracking credentials for image pulls in order to authorize image
-	// access for different tenants.
+	// 启用跟踪镜像拉取凭据，以便为不同租户的镜像访问
+	// 授权。
 	KubeletEnsureSecretPulledImages featuregate.Feature = "KubeletEnsureSecretPulledImages"
 
 	// owner: @vinayakankugoyal
 	// kep: http://kep.k8s.io/2862
 	//
-	// Enable fine-grained kubelet API authorization for webhook based
-	// authorization.
+	// 为基于 webhook 的授权启用 kubelet API 细粒度授权。
+	//
 	KubeletFineGrainedAuthz featuregate.Feature = "KubeletFineGrainedAuthz"
 
 	// owner: @AkihiroSuda
 	// kep: https://kep.k8s.io/2033
 	//
-	// Enables support for running kubelet in a user namespace.
-	// The user namespace has to be created before running kubelet.
-	// All the node components such as CRI need to be running in the same user namespace.
+	// 启用在用户命名空间中运行 kubelet 的支持。
+	// 用户命名空间必须在运行 kubelet 之前创建。
+	// CRI 等所有节点组件都需运行在同一个用户命名空间中。
 	KubeletInUserNamespace featuregate.Feature = "KubeletInUserNamespace"
 
-	// KubeletPSI enables Kubelet to surface PSI metrics
+	// KubeletPSI 让 Kubelet 暴露 PSI 指标
 	// owner: @roycaihw
 	// kep: https://kep.k8s.io/4205
 	KubeletPSI featuregate.Feature = "KubeletPSI"
 
 	// owner: @moshe010
 	//
-	// Enable POD resources API to return resources allocated by Dynamic Resource Allocation
+	// 启用 POD resources API 返回由动态资源分配的资源
 	KubeletPodResourcesDynamicResources featuregate.Feature = "KubeletPodResourcesDynamicResources"
 
 	// owner: @moshe010
 	//
-	// Enable POD resources API with Get method
+	// 启用带 Get 方法的 POD resources API
 	KubeletPodResourcesGet featuregate.Feature = "KubeletPodResourcesGet"
 
 	// owner: @ffromani
-	// Deprecated: v1.34
+	// 已废弃：v1.34
 	//
-	// issue: https://github.com/kubernetes/kubernetes/issues/119423
-	// Disables restricted output for the podresources API list endpoint.
-	// "Restricted" output only includes the pods which are actually running and thus they
-	// hold resources. Turns out this was originally the intended behavior, see:
+	// issue：https://github.com/kubernetes/kubernetes/issues/119423
+	// 禁用 podresources API list 端点的受限输出。
+	// "受限"输出仅包含实际运行的 Pod，因为它们
+	// 才占用资源。事实证明这原本就是预期行为，参见：
 	// https://github.com/kubernetes/kubernetes/pull/79409#issuecomment-505975671
-	// This behavior was lost over time and interaction with memory manager creates
-	// an unfixable bug because the endpoint returns spurious stale information the clients
-	// cannot filter out, because the API doesn't provide enough context. See:
+	// 该行为后来丢失，并且与 memory manager 的交互产生了
+	// 无法修复的 bug：端点返回客户端无法过滤的虚假陈旧信息，
+	// 因为 API 未提供足够上下文。参见：
 	// https://github.com/kubernetes/kubernetes/issues/132020
-	// The endpoint has returning extra information for long time, but that information
-	// is also useless for the purpose of this API. Nevertheless, we are changing a long-established
-	// albeit buggy behavior, so users observing any regressions can use the
-	// KubeletPodResourcesListUseActivePods/ feature gate (default on) to restore the old behavior.
-	// Please file issues if you hit issues and have to use this Feature Gate.
-	// The Feature Gate will be locked to true in +4 releases (1.38) and then removed (1.39)
-	// if there are no bug reported.
+	// 该端点长期返回额外信息，但这些信息
+	// 对该 API 的用途同样无用。尽管如此，我们仍要改变一个长期存在
+	// 但有 bug 的行为，遇到回归的用户可使用
+	// KubeletPodResourcesListUseActivePods 门控（默认开启）恢复旧行为。
+	// 若不得不使用该门控并遇到问题，请提交 issue。
+	// 若无 bug 报告，该门控将在 4 个版本后（1.38）锁定为 true，并在 1.39 移除
+	// 若无 bug 报告。
 	KubeletPodResourcesListUseActivePods featuregate.Feature = "KubeletPodResourcesListUseActivePods"
 
 	// owner: @hoskeri
 	//
-	// Restores previous behavior where Kubelet fails self registration if node create returns 403 Forbidden.
+	// 恢复旧行为：节点创建返回 403 Forbidden 时 Kubelet 自注册失败。
 	KubeletRegistrationGetOnExistsOnly featuregate.Feature = "KubeletRegistrationGetOnExistsOnly"
 
 	// owner: @kannon92
 	// kep: https://kep.k8s.io/4191
 	//
-	// The split image filesystem feature enables kubelet to perform garbage collection
-	// of images (read-only layers) and/or containers (writeable layers) deployed on
-	// separate filesystems.
+	// 镜像文件系统拆分特性让 kubelet 能对部署在
+	// 不同文件系统上的镜像（只读层）和/或容器（可写层）
+	// 执行垃圾回收。
 	KubeletSeparateDiskGC featuregate.Feature = "KubeletSeparateDiskGC"
 
 	// owner: @aramase
 	// kep: http://kep.k8s.io/4412
 	//
-	// Enable kubelet to send the service account token bound to the pod for which the image
-	// is being pulled to the credential provider plugin.
+	// 允许 kubelet 把绑定到正在拉取镜像的 Pod 的服务账号令牌
+	// 发送给 credential provider 插件。
 	KubeletServiceAccountTokenForCredentialProviders featuregate.Feature = "KubeletServiceAccountTokenForCredentialProviders"
 
 	// owner: @sallyom
 	// kep: https://kep.k8s.io/2832
 	//
-	// Add support for distributed tracing in the kubelet
+	// 在 kubelet 中添加对分布式追踪的支持
 	KubeletTracing featuregate.Feature = "KubeletTracing"
 
 	// owner: @RobertKrawitz
 	//
-	// Allow use of filesystems for ephemeral storage monitoring.
-	// Only applies if LocalStorageCapacityIsolation is set.
-	// Relies on UserNamespacesSupport feature, and thus should follow it when setting defaults.
+	// 允许使用文件系统进行临时存储监控。
+	// 仅在设置 LocalStorageCapacityIsolation 时生效。
+	// 依赖 UserNamespacesSupport 特性，因此设置默认值时应与其保持一致。
 	LocalStorageCapacityIsolationFSQuotaMonitoring featuregate.Feature = "LocalStorageCapacityIsolationFSQuotaMonitoring"
 
 	// owner: @sanposhiho
 	// kep: https://kep.k8s.io/3633
 	//
-	// Enables the MatchLabelKeys and MismatchLabelKeys in PodAffinity and PodAntiAffinity.
+	// 在 PodAffinity 和 PodAntiAffinity 中启用 MatchLabelKeys 与 MismatchLabelKeys。
 	MatchLabelKeysInPodAffinity featuregate.Feature = "MatchLabelKeysInPodAffinity"
 
 	// owner: @denkensk
 	// kep: https://kep.k8s.io/3243
 	//
-	// Enable MatchLabelKeys in PodTopologySpread.
+	// 在 PodTopologySpread 中启用 MatchLabelKeys。
 	MatchLabelKeysInPodTopologySpread featuregate.Feature = "MatchLabelKeysInPodTopologySpread"
 
 	// owner: @mochizuki875
 	// kep: https://kep.k8s.io/3243
 	//
-	// Enable merging key-value labels into LabelSelector corresponding to MatchLabelKeys in PodTopologySpread.
+	// 启用把键值标签合并到 PodTopologySpread 中 MatchLabelKeys 对应的 LabelSelector。
 	MatchLabelKeysInPodTopologySpreadSelectorMerge featuregate.Feature = "MatchLabelKeysInPodTopologySpreadSelectorMerge"
 
 	// owner: @krmayankk
 	// kep: https://kep.k8s.io/961
 	//
-	// Enables maxUnavailable for StatefulSet
+	// 为 StatefulSet 启用 maxUnavailable
 	MaxUnavailableStatefulSet featuregate.Feature = "MaxUnavailableStatefulSet"
 
 	// owner: @xiaoxubeii
 	// kep: https://kep.k8s.io/2570
 	//
-	// Enables kubelet to support memory QoS with cgroups v2.
+	// 启用 kubelet 通过 cgroups v2 支持 memory QoS。
 	MemoryQoS featuregate.Feature = "MemoryQoS"
 
 	// owner: @aojea
 	// kep: https://kep.k8s.io/1880
 	//
-	// Enables the dynamic configuration of Service IP ranges
+	// 启用 Service IP 范围的动态配置
 	MultiCIDRServiceAllocator featuregate.Feature = "MultiCIDRServiceAllocator"
 
 	// owner: torredil
 	// kep: https://kep.k8s.io/4876
 	//
-	// Makes CSINode.Spec.Drivers[*].Allocatable.Count mutable, allowing CSI drivers to
-	// update the number of volumes that can be allocated on a node
+	// 使 CSINode.Spec.Drivers[*].Allocatable.Count 可变，允许 CSI 驱动
+	// 更新节点上可分配的卷数量
 	MutableCSINodeAllocatableCount featuregate.Feature = "MutableCSINodeAllocatableCount"
 
 	// owner: huww98
 	// kep: https://kep.k8s.io/5381
 	//
-	// Makes PersistentVolume.Spec.NodeAffinity mutable, allowing CSI drivers to
-	// update the topology info when the data is migrated
+	// 使 PersistentVolume.Spec.NodeAffinity 可变，允许 CSI 驱动
+	// 在数据迁移时更新拓扑信息
 	MutablePVNodeAffinity featuregate.Feature = "MutablePVNodeAffinity"
 
 	// owner: @kannon92
 	// kep: https://kep.k8s.io/5440
 	//
-	// Enables mutable pod resources for suspended Jobs, regardless of whether they have started before.
+	// 为暂停的 Job 启用可变的 Pod 资源，无论其之前是否已启动。
 	MutablePodResourcesForSuspendedJobs featuregate.Feature = "MutablePodResourcesForSuspendedJobs"
 
 	// owner: @mimowo
 	// kep: https://kep.k8s.io/5440
 	//
-	// Enables mutable scheduling directives for suspended Jobs, regardless of whether they have started before.
+	// 为暂停的 Job 启用可变的调度指令，无论其之前是否已启动。
 	MutableSchedulingDirectivesForSuspendedJobs featuregate.Feature = "MutableSchedulingDirectivesForSuspendedJobs"
 
 	// owner: @aojea
 	//
-	// Allows kube-proxy to use netlink directly for nftables operations,
-	// rather than executing the nft command-line binary.
+	// 允许 kube-proxy 直接使用 netlink 执行 nftables 操作，
+	// 而不执行 nft 命令行程序。
 	NFTablesNetlink featuregate.Feature = "NFTablesNetlink"
 
 	// owner: @danwinship
 	// kep: https://kep.k8s.io/3866
 	//
-	// Allows running kube-proxy with `--mode nftables`.
+	// 允许以 `--mode nftables` 运行 kube-proxy。
 	NFTablesProxyMode featuregate.Feature = "NFTablesProxyMode"
 
 	// owner: @michaelasp
 	//
-	// Gate for Node Lifecycle Controller to ensure that the Lease object actually is stale before marking a node unhealthy.
+	// Node Lifecycle Controller 的门控，确保标记节点不健康前 Lease 对象确实已过期。
 	NodeControllerLeaseCircuitBreaker featuregate.Feature = "NodeControllerLeaseCircuitBreaker"
 
 	// owner: @pravk03, @tallclair
 	// kep: https://kep.k8s.io/5328
 	//
-	// Enables the DeclaredFeatures API in the NodeStatus, populated by the Kubelet. Also enables the scheduler filter using DeclaredFeatures.
+	// 启用由 Kubelet 填充的 NodeStatus 中的 DeclaredFeatures API，并启用使用该 API 的调度器过滤器。
 	NodeDeclaredFeatures featuregate.Feature = "NodeDeclaredFeatures"
 
 	// owner: @kerthcet
 	// kep: https://kep.k8s.io/3094
 	//
-	// Allow users to specify whether to take nodeAffinity/nodeTaint into consideration when
-	// calculating pod topology spread skew.
+	// 允许用户指定在计算 Pod 拓扑分布倾斜时
+	// 是否考虑 nodeAffinity/nodeTaint。
 	NodeInclusionPolicyInPodTopologySpread featuregate.Feature = "NodeInclusionPolicyInPodTopologySpread"
 
 	// owner: @rthallisey
 	// kep: https://kep.k8s.io/5683
 	//
-	// Enables well-known Node lifecycle conditions for lifecycle state.
+	// 为生命周期状态启用已知的 Node 生命周期 condition。
 	NodeLifecycleConditions featuregate.Feature = "NodeLifecycleConditions"
 
 	// owner: @aravindhp @LorbusChris
 	// kep: http://kep.k8s.io/2271
 	//
-	// Enables querying logs of node services using the /logs endpoint. Enabling this feature has security implications.
-	// The recommendation is to enable it on a need basis for debugging purposes and disabling otherwise.
+	// 启用通过 /logs 端点查询节点服务日志。启用该特性有安全影响。
+	// 建议仅在调试需要时启用，其他情况下禁用。
 	NodeLogQuery featuregate.Feature = "NodeLogQuery"
 
 	// owner: @iholder101 @kannon92
 	// kep: https://kep.k8s.io/2400
 	//
-	// Permits kubelet to run with swap enabled.
+	// 允许 kubelet 在启用 swap 的情况下运行。
 	NodeSwap featuregate.Feature = "NodeSwap"
 
 	// owner: @sanposhiho, @wojtek-t
 	// kep: https://kep.k8s.io/5278
 	//
-	// Extends NominatedNodeName field to express expected pod placement, allowing
-	// both the scheduler and external components (e.g., Cluster Autoscaler, Karpenter, Kueue)
-	// to share pod placement intentions. This enables better coordination between
-	// components, prevents inappropriate node scale-downs, and helps the scheduler
-	// resume work after restarts.
+	// 扩展 NominatedNodeName 字段以表达预期的 Pod 放置，使
+	// 调度器和外部组件（如 Cluster Autoscaler、Karpenter、Kueue）
+	// 能共享 Pod 放置意图。这有助于组件间更好协调，
+	// 避免不合适的节点缩容，并帮助调度器
+	// 在重启后恢复工作。
 	NominatedNodeNameForExpectation featuregate.Feature = "NominatedNodeNameForExpectation"
 
 	// owner: @bwsalmon
 	// kep: https://kep.k8s.io/5598
 	//
-	// Enables opportunistic batching in the scheduler.
+	// 在调度器中启用机会式批处理。
 	OpportunisticBatching featuregate.Feature = "OpportunisticBatching"
 
 	// owner: @tallclair
 	//
-	// Enables relisting individual pods on-demand.
+	// 启用按需重新列出单个 Pod。
 	PLEGOnDemandRelist featuregate.Feature = "PLEGOnDemandRelist"
 
 	// owner: @ArvindParekh
 	// kep: https://kep.k8s.io/5541
 	//
-	// Adds an Unused condition to PersistentVolumeClaim status that indicates when the PVC was last used by a pod.
+	// 为 PersistentVolumeClaim 状态添加 Unused condition，标识 PVC 上次被 Pod 使用的时间。
 	PersistentVolumeClaimUnusedSinceTime featuregate.Feature = "PersistentVolumeClaimUnusedSinceTime"
 
 	// owner: @haircommander
 	// kep: https://kep.k8s.io/2364
 	//
-	// Configures the Kubelet to use the CRI to populate pod and container stats, instead of supplimenting with stats from cAdvisor.
-	// Requires the CRI implementation supports supplying the required stats.
+	// 配置 Kubelet 使用 CRI 填充 Pod 和容器统计信息，而非用 cAdvisor 的数据补充。
+	// 要求 CRI 实现支持提供所需统计信息。
 	PodAndContainerStatsFromCRI featuregate.Feature = "PodAndContainerStatsFromCRI"
 
 	// owner: @ahmedtd
 	// kep: https://kep.k8s.io/4317
 	//
-	// Enable PodCertificateRequest objects and podCertificate projected volume sources.
+	// 启用 PodCertificateRequest 对象及 podCertificate 投射卷数据源。
 	PodCertificateRequest featuregate.Feature = "PodCertificateRequest"
 
 	// owner: @ahg-g
 	//
-	// Enables controlling pod ranking on replicaset scale-down.
+	// 启用在 ReplicaSet 缩容时控制 Pod 排序。
 	PodDeletionCost featuregate.Feature = "PodDeletionCost"
 
 	// owner: @wojtek-t @argh4k
 	// kep: https://kep.k8s.io/5710
 	//
-	// Enables specifying PreemptionPolicy at podgroup level.
+	// 启用在 podgroup 级别指定 PreemptionPolicy。
 	PodGroupPreemptionPolicy featuregate.Feature = "PodGroupPreemptionPolicy"
 
 	// owner: @KevinTMtz
 	// kep: https://kep.k8s.io/5526
 	//
-	// PodLevelResourceManagers enables pod-level resource management in the Topology, CPU, and Memory managers.
-	// This feature depends on the PodLevelResources feature.
+	// PodLevelResourceManagers 在 Topology、CPU 和 Memory manager 中启用 Pod 级资源管理。
+	// 该特性依赖 PodLevelResources 特性。
 	PodLevelResourceManagers featuregate.Feature = "PodLevelResourceManagers"
 
 	// owner: @ndixita
 	// key: https://kep.k8s.io/2837
 	//
-	// Enables specifying resources at pod-level.
+	// 启用在 Pod 级别指定资源。
 	PodLevelResources featuregate.Feature = "PodLevelResources"
 
 	// owner: @ndixita
 	//
-	// Enables PodLevelResourcesFixDefaulting.
+	// 启用 PodLevelResourcesFixDefaulting。
 	PodLevelResourcesFixDefaulting featuregate.Feature = "PodLevelResourcesFixDefaulting"
 
 	// owner: @KevinTMtz
 	// key: https://kep.k8s.io/2837
 	//
-	// Fixes handling of nil/empty pod-level resources values for QoS classes.
+	// 修复对 QoS 类别中 nil/空 Pod 级资源值的处理。
 	PodLevelResourcesFixKubeletQOSClass featuregate.Feature = "PodLevelResourcesFixKubeletQOSClass"
 
 	// owner: @knight42
 	// kep: https://kep.k8s.io/3288
 	//
-	// Enables only stdout or stderr of the container to be retrievd.
+	// 启用仅获取容器的 stdout 或 stderr。
 	PodLogsQuerySplitStreams featuregate.Feature = "PodLogsQuerySplitStreams"
 
 	// owner: @natasha41575
 	// kep: http://kep.k8s.io/5067
 	//
-	// Enables the pod to report status.ObservedGeneration to reflect the generation of the last observed podspec.
+	// 允许 Pod 上报 status.ObservedGeneration，以反映上次观察到的 podspec 的 generation。
 	PodObservedGenerationTracking featuregate.Feature = "PodObservedGenerationTracking"
 
 	// owner: @ddebroy, @kannon92, @Priyankasaggu11929
 	// kep: https://kep.k8s.io/3085, https://kep.k8s.io/4138
 	//
-	// Enables reporting of PodReadyToStartContainersCondition condition in pod status
-	// after pod sandbox creation, network configuration, volume mounting, and
-	// (if requested) dynamic resource allocation are complete.
+	// 启用在 Pod 状态中上报 PodReadyToStartContainersCondition condition，
+	// 上报时机为 Pod sandbox 创建、网络配置、卷挂载以及
+	// （如需要）动态资源分配完成之后。
 	PodReadyToStartContainersCondition featuregate.Feature = "PodReadyToStartContainersCondition"
 
 	// owner: @Huang-Wei
 	// kep: https://kep.k8s.io/3521
 	//
-	// Enable users to specify when a Pod is ready for scheduling.
+	// 允许用户指定 Pod 何时可被调度。
 	PodSchedulingReadiness featuregate.Feature = "PodSchedulingReadiness"
 
 	// owner: @munnerz
@@ -926,422 +925,424 @@ const (
 	// alpha: v1.33
 	// beta: v1.35
 	//
-	// Enables the PodTopologyLabelsAdmission admission plugin that mutates `pod/binding`
-	// requests by copying the `topology.kubernetes.io/{zone,region}` labels from the assigned
-	// Node object (in the Binding being admitted) onto the Binding
-	// so that it can be persisted onto the Pod object when the Pod is being scheduled.
-	// This allows workloads running in pods to understand the topology information of their assigned node.
-	// Enabling this feature also permits external schedulers to set labels on pods in an atomic
-	// operation when scheduling a Pod by setting the `metadata.labels` field on the submitted Binding,
-	// similar to how `metadata.annotations` behaves.
+	// 启用 PodTopologyLabelsAdmission 准入插件，它通过复制
+	// 已分配 Node 对象（在待准入的 Binding 中）的
+	// `topology.kubernetes.io/{zone,region}` 标签到 Binding 来修改 `pod/binding` 请求，
+	// 从而在 Pod 被调度时把标签持久化到 Pod 对象上。
+	// 这让 Pod 中运行的工作负载能了解所分配节点的拓扑信息。
+	// 启用该特性还允许外部调度器在调度 Pod 时，通过设置所提交 Binding 的
+	// `metadata.labels` 字段，以原子操作方式为 Pod 设置标签，
+	// 与 `metadata.annotations` 的行为类似。
 	PodTopologyLabelsAdmission featuregate.Feature = "PodTopologyLabelsAdmission"
 
 	// owner: @briansonnenberg
 	// kep: https://kep.k8s.io/4188
 	//
-	// Enables the PodsAPI feature to expose pod information via a gRPC API on the kubelet.
+	// 启用 PodsAPI 特性，通过 kubelet 上的 gRPC API 暴露 Pod 信息。
 	PodsAPI featuregate.Feature = "PodsAPI"
 
 	// owner: @seans3
 	// kep: http://kep.k8s.io/4006
 	//
-	// Enables PortForward to be proxied with a websocket client
+	// 允许使用 websocket 客户端代理 PortForward
 	PortForwardWebsockets featuregate.Feature = "PortForwardWebsockets"
 
 	// owner: @danwinship
 	// kep: https://kep.k8s.io/3015
 	//
-	// Enables PreferSameZone and PreferSameNode values for trafficDistribution
+	// 为 trafficDistribution 启用 PreferSameZone 和 PreferSameNode 值
 	PreferSameTrafficDistribution featuregate.Feature = "PreferSameTrafficDistribution"
 
 	// owner: @jessfraz
 	//
-	// Enables control over ProcMountType for containers.
+	// 启用对容器 ProcMountType 的控制。
 	ProcMountType featuregate.Feature = "ProcMountType"
 
 	// owner: @sjenning
 	//
-	// Allows resource reservations at the QoS level preventing pods at lower QoS levels from
-	// bursting into resources requested at higher QoS levels (memory only for now)
+	// 允许在 QoS 级别预留资源，防止较低 QoS 级别的 Pod
+	// 抢占较高 QoS 级别请求的资源（目前仅内存）
 	QOSReserved featuregate.Feature = "QOSReserved"
 
 	// owner: @gnufied
 	// kep: https://kep.k8s.io/1790
 	//
-	// Allow users to recover from volume expansion failure
+	// 允许用户从卷扩容失败中恢复
 	RecoverVolumeExpansionFailure featuregate.Feature = "RecoverVolumeExpansionFailure"
 
 	// owner: @AkihiroSuda
 	// kep: https://kep.k8s.io/3857
 	//
-	// Allows recursive read-only mounts.
+	// 允许递归只读挂载。
 	RecursiveReadOnlyMounts featuregate.Feature = "RecursiveReadOnlyMounts"
 
 	// owner: @lauralorenz
 	// kep: https://kep.k8s.io/4603
 	//
-	// Enables support for a lower internal cluster-wide backoff maximum for restarting
-	// containers (aka containers in CrashLoopBackOff)
+	// 启用更低的内部集群级重启退避上限，
+	// 即处于 CrashLoopBackOff 的容器
 	ReduceDefaultCrashLoopBackOffDecay featuregate.Feature = "ReduceDefaultCrashLoopBackOffDecay"
 
 	// owner: @HirazawaUi
 	// kep: https://kep.k8s.io/4369
 	//
-	// Allow almost all printable ASCII characters in environment variables
+	// 允许环境变量使用几乎所有可打印 ASCII 字符
 	RelaxedEnvironmentVariableValidation featuregate.Feature = "RelaxedEnvironmentVariableValidation"
 
 	// owner: @adrianmoisey
 	// kep: https://kep.k8s.io/5311
 	//
-	// Relaxed DNS search string validation.
+	// 放宽 DNS 搜索字符串校验。
 	RelaxedServiceNameValidation featuregate.Feature = "RelaxedServiceNameValidation"
 
 	// owner: @harshaln
 	//
-	// Enables running kubelet in a configuration that monitors and loads ClientCA from file paths
+	// 启用一种 kubelet 配置：从文件路径监控并加载 ClientCA
 	ReloadKubeletClientCAFile = "ReloadKubeletClientCAFile"
 
 	// owner: @zhangweikop
 	//
-	// Enable kubelet tls server to update certificate if the specified certificate files are changed.
-	// This feature is useful when specifying tlsCertFile & tlsPrivateKeyFile in kubelet Configuration.
-	// No effect for other cases such as using serverTLSbootstap.
+	// 当指定证书文件变化时，允许 kubelet tls server 更新证书。
+	// 在 kubelet 配置中指定 tlsCertFile 和 tlsPrivateKeyFile 时该特性很有用。
+	// 对其他情况（如使用 serverTLSbootstrap）无影响。
 	ReloadKubeletServerCertificateFile featuregate.Feature = "ReloadKubeletServerCertificateFile"
 
 	// owner: @SergeyKanzhelev
 	// kep: https://kep.k8s.io/4680
 	//
-	// Adds the AllocatedResourcesStatus to the container status.
+	// 在容器状态中添加 AllocatedResourcesStatus。
 	ResourceHealthStatus featuregate.Feature = "ResourceHealthStatus"
 
 	// owner: @SergeyKanzhelev
 	// kep: https://kep.k8s.io/4680
 	//
-	// Adds a message to the AllocatedResourcesStatus entries.
+	// 为 AllocatedResourcesStatus 条目添加消息。
 	ResourceHealthStatusMessage featuregate.Feature = "ResourceHealthStatusMessage"
 
 	// owner: @yuanwang04
 	// kep: https://kep.k8s.io/5532
 	//
-	// Restart the pod in-place on the same node.
+	// 在同一节点上原地重启 Pod。
 	RestartAllContainersOnContainerExits featuregate.Feature = "RestartAllContainersOnContainerExits"
 
 	// owner: @mikedanese
 	//
-	// Gets a server certificate for the kubelet from the Certificate Signing
-	// Request API instead of generating one self signed and auto rotates the
-	// certificate as expiration approaches.
+	// 从 Certificate Signing Request API 为 kubelet 获取服务端证书，
+	// 而非生成自签名证书，并在证书即将过期时
+	// 自动轮换。
 	RotateKubeletServerCertificate featuregate.Feature = "RotateKubeletServerCertificate"
 
 	// owner: @kiashok
 	// kep: https://kep.k8s.io/4216
 	//
-	// Adds support to pull images based on the runtime class specified.
+	// 支持根据指定的 runtime class 拉取镜像。
 	RuntimeClassInImageCriAPI featuregate.Feature = "RuntimeClassInImageCriApi"
 
 	// owner: @jsafrane
 	// kep: https://kep.k8s.io/1710
 	//
-	// Speed up container startup by mounting volumes with the correct SELinux label
-	// instead of changing each file on the volumes recursively.
-	// Enables the SELinuxChangePolicy field in PodSecurityContext before SELinuxMount featgure gate is enabled.
+	// 通过以正确的 SELinux 标签挂载卷来加速容器启动，
+	// 而不是递归修改卷上每个文件。
+	// 在 SELinuxMount 门控启用前，启用 PodSecurityContext 中的 SELinuxChangePolicy 字段。
 	SELinuxChangePolicy featuregate.Feature = "SELinuxChangePolicy"
 
 	// owner: @jsafrane
 	// kep: https://kep.k8s.io/1710
-	// Speed up container startup by mounting volumes with the correct SELinux label
-	// instead of changing each file on the volumes recursively.
+	// 通过以正确的 SELinux 标签挂载卷来加速容器启动，
+	// 而不是递归修改卷上每个文件。
 	SELinuxMount featuregate.Feature = "SELinuxMount"
 
 	// owner: @jsafrane
 	// kep: https://kep.k8s.io/1710
-	// Speed up container startup by mounting volumes with the correct SELinux label
-	// instead of changing each file on the volumes recursively.
-	// Initial implementation focused on ReadWriteOncePod volumes.
+	// 通过以正确的 SELinux 标签挂载卷来加速容器启动，
+	// 而不是递归修改卷上每个文件。
+	// 初始实现聚焦 ReadWriteOncePod 卷。
 	SELinuxMountReadWriteOncePod featuregate.Feature = "SELinuxMountReadWriteOncePod"
 
 	// owner: @macsko
 	// kep: http://kep.k8s.io/5229
 	//
-	// Makes all API calls during scheduling asynchronous, by introducing a new kube-scheduler-wide way of handling such calls.
+	// 通过引入 kube-scheduler 全局的调用处理方式，使调度期间的所有 API 调用异步化。
 	SchedulerAsyncAPICalls featuregate.Feature = "SchedulerAsyncAPICalls"
 
 	// owner: @sanposhiho
 	// kep: http://kep.k8s.io/4832
 	//
-	// Running some expensive operation within the scheduler's preemption asynchronously,
-	// which improves the scheduling latency when the preemption involves in.
+	// 把调度器抢占中的一些昂贵操作异步执行，
+	// 从而改善涉及抢占时的调度延迟。
 	SchedulerAsyncPreemption featuregate.Feature = "SchedulerAsyncPreemption"
 
 	// owner: @macsko
 	// kep: http://kep.k8s.io/5142
 	//
-	// Improves scheduling queue behavior by popping pods from the backoffQ when the activeQ is empty.
-	// This allows to process potentially schedulable pods ASAP, eliminating a penalty effect of the backoff queue.
+	// 改进调度队列行为：activeQ 为空时从 backoffQ 中弹出 Pod。
+	// 这样可尽快处理可能可调度的 Pod，消除退避队列带来的惩罚效应。
 	SchedulerPopFromBackoffQ featuregate.Feature = "SchedulerPopFromBackoffQ"
 
 	// owner: @geetasg
 	// kep: https://kep.k8s.io/6132
 	//
-	// Enables PreQueueingHint extension point to narrow pod evaluation on events.
+	// 启用 PreQueueingHint 扩展点，以在事件到达时缩小 Pod 评估范围。
 	SchedulerPreQueueingHints featuregate.Feature = "SchedulerPreQueueingHints"
 
 	// owner: @atosatto @yuanchen8911
 	// kep: http://kep.k8s.io/3902
 	//
-	// Decouples Taint Eviction Controller, performing taint-based Pod eviction, from Node Lifecycle Controller.
+	// 将执行基于污点的 Pod 驱逐的 Taint Eviction Controller 与 Node Lifecycle Controller 解耦。
 	SeparateTaintEvictionController featuregate.Feature = "SeparateTaintEvictionController"
 
 	// owner: @aramase
 	// kep: https://kep.k8s.io/4412
 	//
-	// ServiceAccountNodeAudienceRestriction is used to restrict the audience for which the
-	// kubelet can request a service account token for.
+	// ServiceAccountNodeAudienceRestriction 用于限制 kubelet
+	// 可申请服务账号令牌的 audience。
 	ServiceAccountNodeAudienceRestriction featuregate.Feature = "ServiceAccountNodeAudienceRestriction"
 
 	// owner: @munnerz
 	// kep: http://kep.k8s.io/4193
 	//
-	// Controls whether JTIs (UUIDs) are embedded into generated service account tokens, and whether these JTIs are
-	// recorded into the audit log for future requests made by these tokens.
+	// 控制是否在生成的服务账号令牌中嵌入 JTI（UUID），以及是否把这些 JTI
+	// 记录到审计日志，供这些令牌后续请求使用。
 	ServiceAccountTokenJTI featuregate.Feature = "ServiceAccountTokenJTI"
 
 	// owner: @munnerz
 	// kep: http://kep.k8s.io/4193
 	//
-	// Controls whether the apiserver supports binding service account tokens to Node objects.
+	// 控制 apiserver 是否支持把服务账号令牌绑定到 Node 对象。
 	ServiceAccountTokenNodeBinding featuregate.Feature = "ServiceAccountTokenNodeBinding"
 
 	// owner: @munnerz
 	// kep: http://kep.k8s.io/4193
 	//
-	// Controls whether the apiserver will validate Node claims in service account tokens.
+	// 控制 apiserver 是否校验服务账号令牌中的 Node claim。
 	ServiceAccountTokenNodeBindingValidation featuregate.Feature = "ServiceAccountTokenNodeBindingValidation"
 
 	// owner: @munnerz
 	// kep: http://kep.k8s.io/4193
 	//
-	// Controls whether the apiserver embeds the node name and uid for the associated node when issuing
-	// service account tokens bound to Pod objects.
+	// 控制 apiserver 在签发绑定到 Pod 对象的服务账号令牌时，是否嵌入关联节点的
+	// 名称和 uid。
 	ServiceAccountTokenPodNodeInfo featuregate.Feature = "ServiceAccountTokenPodNodeInfo"
 
 	// owner: @jpbetz
 	//
-	// When enabled, the apiserver ignores changes to status fields in writes to the ServiceCIDR root resource.
+	// 启用后，apiserver 会忽略对 ServiceCIDR 根资源写入时 status 字段的变更。
 	ServiceCIDRStatusFieldWiping featuregate.Feature = "ServiceCIDRStatusFieldWiping"
 
 	// owner: @michaelasp
 	// kep: http://kep.k8s.io/5647
 	//
-	// Introduces the ability for the DaemonSet controller to be able to read its writes
-	// prior to running a reconcile on the same object.
+	// 让 DaemonSet 控制器在对同一对象执行协调前，
+	// 能读取自己刚写入的数据。
 	StaleControllerConsistencyDaemonSet featuregate.Feature = "StaleControllerConsistencyDaemonSet"
 
 	// owner: @michaelasp
 	// kep: http://kep.k8s.io/5647
 	//
-	// Introduces the ability for the HPA controller to be able to read its writes
-	// prior to running a reconcile on the same object.
+	// 让 HPA 控制器在对同一对象执行协调前，
+	// 能读取自己刚写入的数据。
 	StaleControllerConsistencyHPA featuregate.Feature = "StaleControllerConsistencyHPA"
 
 	// owner: @michaelasp
 	// kep: http://kep.k8s.io/5647
 	//
-	// Introduces the ability for the Job controller to be able to read its writes
-	// prior to running a reconcile on the same object.
+	// 让 Job 控制器在对同一对象执行协调前，
+	// 能读取自己刚写入的数据。
 	StaleControllerConsistencyJob featuregate.Feature = "StaleControllerConsistencyJob"
 
 	// owner: @michaelasp
 	// kep: http://kep.k8s.io/5647
 	//
-	// Introduces the ability for the ReplicaSet controller to be able to read its writes
-	// prior to running a reconcile on the same object.
+	// 让 ReplicaSet 控制器在对同一对象执行协调前，
+	// 能读取自己刚写入的数据。
 	StaleControllerConsistencyReplicaSet featuregate.Feature = "StaleControllerConsistencyReplicaSet"
 
 	// owner: @michaelasp
 	// kep: http://kep.k8s.io/5647
 	//
-	// Introduces the ability for the StatefulSet controller to be able to read its writes
-	// prior to running a reconcile on the same object.
+	// 让 StatefulSet 控制器在对同一对象执行协调前，
+	// 能读取自己刚写入的数据。
 	StaleControllerConsistencyStatefulSet featuregate.Feature = "StaleControllerConsistencyStatefulSet"
 
 	// owner: @helayoty @galal-hussein
 	// kep: http://kep.k8s.io/3541
 	//
-	// Introduces a new update strategy for recreate the StatefulSet, similar to
-	// the Deployments' Recreate strategy.
+	// 引入重建 StatefulSet 的新更新策略，类似
+	// Deployment 的 Recreate 策略。
 	StatefulSetRecreateStrategy featuregate.Feature = "StatefulSetRecreateStrategy"
 
 	// owner: @liggitt
 	//
-	// Mitigates spurious statefulset rollouts due to controller revision comparison mismatches
-	// which are not semantically significant (e.g. serialization differences or missing defaulted fields).
+	// 缓解因 controller revision 比较不匹配而导致的 StatefulSet 虚假滚动更新，
+	// 这些不匹配在语义上并不重要（如序列化差异或缺失的默认值字段）。
 	StatefulSetSemanticRevisionComparison featuregate.Feature = "StatefulSetSemanticRevisionComparison"
 
 	// owner: @cupnes
 	// kep: https://kep.k8s.io/4049
 	//
-	// Enables scoring nodes by available storage capacity with
-	// StorageCapacityScoring feature gate.
+	// 启用通过 StorageCapacityScoring 门控
+	// 按可用存储容量对节点打分。
 	StorageCapacityScoring featuregate.Feature = "StorageCapacityScoring"
 
 	// owner: @ahutsunshine
 	//
-	// Allows namespace indexer for namespace scope resources in apiserver cache to accelerate list operations.
-	// Superseded by BtreeWatchCache.
+	// 允许在 apiserver 缓存中为命名空间作用域资源建立索引，以加速 list 操作。
+	// 已被 BtreeWatchCache 取代。
 	StorageNamespaceIndex featuregate.Feature = "StorageNamespaceIndex"
 
 	// owner: @enj, @michaelasp
 	// kep: https://kep.k8s.io/4192
 	//
-	// Enables support for the StorageVersionMigrator controller.
+	// 启用对 StorageVersionMigrator 控制器的支持。
 	StorageVersionMigrator featuregate.Feature = "StorageVersionMigrator"
 
 	// owner: @danwinship
 	// kep: https://kep.k8s.io/4858
 	//
-	// Requires stricter validation of IP addresses and CIDR values in API objects.
+	// 对 API 对象中的 IP 地址和 CIDR 值启用更严格的校验。
 	StrictIPCIDRValidation featuregate.Feature = "StrictIPCIDRValidation"
 
 	// owner: @everpeace
 	// kep: https://kep.k8s.io/3619
 	//
-	// Enable SupplementalGroupsPolicy feature in PodSecurityContext
+	// 在 PodSecurityContext 中启用 SupplementalGroupsPolicy 特性
 	SupplementalGroupsPolicy featuregate.Feature = "SupplementalGroupsPolicy"
 
 	// owner: @zhifei92
 	//
-	// Enables the systemd watchdog for the kubelet. When enabled, the kubelet will
-	// periodically notify the systemd watchdog to indicate that it is still alive.
-	// This can help prevent the system from restarting the kubelet if it becomes
-	// unresponsive. The feature gate is enabled by default, but should only be used
-	// if the system supports the systemd watchdog feature and has it configured properly.
+	// 为 kubelet 启用 systemd watchdog。启用后 kubelet 会
+	// 定期通知 systemd watchdog 表明自己仍在运行。
+	// 这可避免在 kubelet 无响应时系统重启它，
+	// 但该门控默认启用，仅应在系统支持并正确配置了
+	// systemd watchdog 特性时使用。
 	SystemdWatchdog = featuregate.Feature("SystemdWatchdog")
 
 	// owner: @helayoty
 	// kep: https://kep.k8s.io/5471
 	//
-	// Enables numeric comparison operators (Lt, Gt) for tolerations to match taints with threshold-based values.
+	// 为 toleration 启用数值比较运算符（Lt、Gt），以匹配基于阈值的污点值。
 	TaintTolerationComparisonOperators featuregate.Feature = "TaintTolerationComparisonOperators"
 
 	// owner: @44past4
 	// kep: https://kep.k8s.io/5732
 	//
-	// Enables topology-aware workload scheduling feature in kube-scheduler and related PodGroup API fields.
-	// When enabled, scheduler will try various placements for a pod group and pick the best one.
+	// 在 kube-scheduler 及相关 PodGroup API 字段中启用拓扑感知工作负载调度特性。
+	// 启用后，调度器会尝试 Pod 组的多种放置方式并选择最佳方案。
 	TopologyAwareWorkloadScheduling featuregate.Feature = "TopologyAwareWorkloadScheduling"
 
 	// owner: @PiotrProkop
 	// kep: https://kep.k8s.io/3545
 	//
-	// Allow fine-tuning of topology manager policies with alpha options.
-	// This feature gate:
-	// - will guard *a group* of topology manager options whose quality level is alpha.
-	// - will never graduate to beta or stable.
+	// 允许使用 alpha 选项微调 topology manager 策略。
+	// 该门控：
+	// - 将守护一组质量为 alpha 的 topology manager 选项。
+	// - 永远不会晋升到 beta 或 stable。
 	TopologyManagerPolicyAlphaOptions featuregate.Feature = "TopologyManagerPolicyAlphaOptions"
 
 	// owner: @PiotrProkop
 	// kep: https://kep.k8s.io/3545
 	//
-	// Allow fine-tuning of topology manager policies with beta options.
-	// This feature gate:
-	// - will guard *a group* of topology manager options whose quality level is beta.
-	// - is thus *introduced* as beta
-	// - will never graduate to stable.
+	// 允许使用 beta 选项微调 topology manager 策略。
+	// 该门控：
+	// - 将守护一组质量为 beta 的 topology manager 选项。
+	// - 因此*引入*即为 beta
+	// - 永远不会晋升到 stable。
 	TopologyManagerPolicyBetaOptions featuregate.Feature = "TopologyManagerPolicyBetaOptions"
 
 	// owner: @PiotrProkop
 	// kep: https://kep.k8s.io/3545
 	//
-	// Allow the usage of options to fine-tune the topology manager policies.
+	// 允许使用选项微调 topology manager 策略。
 	TopologyManagerPolicyOptions featuregate.Feature = "TopologyManagerPolicyOptions"
 
 	// owner: @seans3
 	// kep: http://kep.k8s.io/4006
 	//
-	// Enables StreamTranslator proxy to handle WebSockets upgrade requests for the
-	// version of the RemoteCommand subprotocol that supports the "close" signal.
+	// 启用 StreamTranslator 代理处理 RemoteCommand 子协议中
+	// 支持 "close" 信号版本的 WebSockets 升级请求。
 	TranslateStreamCloseWebsocketRequests featuregate.Feature = "TranslateStreamCloseWebsocketRequests"
 
 	// owner: @HirazawaUi
 	// kep: https://kep.k8s.io/5607
 	//
-	// Allow hostNetwork pods to use user namespaces
+	// 允许 hostNetwork Pod 使用用户命名空间
 	UserNamespacesHostNetworkSupport featuregate.Feature = "UserNamespacesHostNetworkSupport"
 
 	// owner: @rata, @giuseppe
 	// kep: https://kep.k8s.io/127
 	//
-	// Enables user namespace support for stateless pods.
+	// 为无状态 Pod 启用用户命名空间支持。
 	UserNamespacesSupport featuregate.Feature = "UserNamespacesSupport"
 
 	// owner: @mattcarry, @sunnylovestiramisu
 	// kep: https://kep.k8s.io/3751
 	//
-	// Enables user specified volume attributes for persistent volumes, like iops and throughput.
+	// 允许为持久卷指定用户自定义属性，如 iops 和 throughput。
 	VolumeAttributesClass featuregate.Feature = "VolumeAttributesClass"
 
 	// owner: @nispriha
 	// kep: https://kep.k8s.io/5855
 	//
-	// Enables bind mount options (noexec, nodev, nosuid) on volumeMounts.
+	// 在 volumeMounts 上启用绑定挂载选项（noexec、nodev、nosuid）。
 	VolumeBindMountOptions featuregate.Feature = "VolumeBindMountOptions"
 
 	// owner: @gnufied
 	// kep: https://kep.k8s.io/5030
 	// alpha: v1.35
-	// beta: v1.37
+	// beta：v1.37
 	//
-	// Enables volume limit scaling for CSI drivers. This allows scheduler to
-	// co-ordinate better with cluster-autoscaler for storage limits.
+	// 为 CSI 驱动启用卷数量限制扩展，使调度器能
+	// 与 cluster-autoscaler 在存储限制上更好协调。
 	VolumeLimitScaling featuregate.Feature = "VolumeLimitScaling"
 
 	// owner: @ksubrmnn
 	//
-	// Allows kube-proxy to create DSR loadbalancers for Windows
+	// 允许 kube-proxy 为 Windows 创建 DSR 负载均衡器
 	WinDSR featuregate.Feature = "WinDSR"
 
 	// owner: @ksubrmnn
 	//
-	// Allows kube-proxy to run in Overlay mode for Windows
+	// 允许 kube-proxy 在 Windows 上以 Overlay 模式运行
 	WinOverlay featuregate.Feature = "WinOverlay"
 
 	// owner: @jsturtevant
 	// kep: https://kep.k8s.io/4885
 	//
-	// Add CPU and Memory Affinity support to Windows nodes with CPUManager, MemoryManager and Topology manager
+	// 通过 CPUManager、MemoryManager 和 Topology manager 为 Windows 节点添加 CPU 与内存亲和性支持
 	WindowsCPUAndMemoryAffinity featuregate.Feature = "WindowsCPUAndMemoryAffinity"
 
 	// owner: @zylxjtu
 	// kep: https://kep.k8s.io/4802
 	//
-	// Enables support for graceful shutdown windows node.
+	// 启用 Windows 节点优雅关停支持。
 	WindowsGracefulNodeShutdown featuregate.Feature = "WindowsGracefulNodeShutdown"
 
 	// owner: @marosset
 	// kep: https://kep.k8s.io/3503
 	//
-	// Enables support for joining Windows containers to a hosts' network namespace.
+	// 启用把 Windows 容器加入宿主网络命名空间的支持。
 	WindowsHostNetwork featuregate.Feature = "WindowsHostNetwork"
 
 	// owner: @helayoty @mm4tt @wojtek-t
 	// kep: https://kep.k8s.io/5547
 	//
-	// Enables the Job controller to automatically create Workload and PodGroup
-	// objects for Jobs that qualify for gang scheduling.
+	// 启用 Job 控制器为符合条件的工作负载自动创建 Workload 和 PodGroup
+	// 对象，以支持 gang scheduling。
 	WorkloadWithJob featuregate.Feature = "WorkloadWithJob"
 )
 
-// defaultVersionedKubernetesFeatureGates consists of all known Kubernetes-specific feature keys with VersionedSpecs.
-// To add a new feature, define a key for it in pkg/features/kube_features.go and add it here. The features will be
-// available throughout Kubernetes binaries.
-// For features available via specific kubernetes components like apiserver,
-// cloud-controller-manager, etc find the respective kube_features.go file
-// (eg:staging/src/apiserver/pkg/features/kube_features.go), define the versioned
-// feature gate there, and reference it in this file.
-// To support n-3 compatibility version, features may only be removed 3 releases after graduation.
+// defaultVersionedKubernetesFeatureGates 包含所有已知的 Kubernetes 专有功能键及其 VersionedSpecs。
+// 添加新特性时，在 pkg/features/kube_features.go 中定义键并在此登记。这些特性将在
+// 所有 Kubernetes 二进制中可用。
+// 对于仅通过 apiserver、cloud-controller-manager 等特定组件提供的特性，
+// 需找到对应的 kube_features.go 文件
+// （如 staging/src/apiserver/pkg/features/kube_features.go），在其中定义版本化
+// 功能门控，并在本文件中引用。
+// 为支持 n-3 版本兼容，特性在毕业 3 个版本后才可移除。
 //
-// Entries are alphabetized.
+// 功能门控的注册入口见本文件末尾的 init 函数，它将版本化定义与依赖关系一次性加入默认门控。
+//
+// 条目按字母顺序排列。
 var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate.VersionedSpecs{
 	AllowDNSOnlyNodeCSR: {
 		{Version: version.MustParse("1.0"), Default: true, PreRelease: featuregate.GA},
@@ -1356,7 +1357,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	AllowOverwriteTerminationGracePeriodSeconds: {
 		{Version: version.MustParse("1.0"), Default: true, PreRelease: featuregate.GA},
 		{Version: version.MustParse("1.32"), Default: false, PreRelease: featuregate.Deprecated},
-		{Version: version.MustParse("1.35"), Default: false, PreRelease: featuregate.Deprecated, LockToDefault: true}, // remove in 1.38
+		{Version: version.MustParse("1.35"), Default: false, PreRelease: featuregate.Deprecated, LockToDefault: true}, // 在 1.38 移除
 	},
 
 	AllowServiceExternalIPs: {
@@ -1373,8 +1374,8 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 
 	CPUCFSQuotaPeriod: {
 		{Version: version.MustParse("1.12"), Default: false, PreRelease: featuregate.Alpha},
-		// see https://github.com/kubernetes/kubernetes/pull/136339 for full context
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA}, // LockToDefault in 1.37, remove in 1.40
+		// 完整背景参见 https://github.com/kubernetes/kubernetes/pull/136339
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA}, // 在 1.37 锁定默认值，在 1.40 移除
 	},
 
 	CPUManagerPolicyAlphaOptions: {
@@ -1388,7 +1389,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	CPUManagerPolicyOptions: {
 		{Version: version.MustParse("1.22"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.23"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.36
+		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.36 移除
 	},
 
 	CRIListStreaming: {
@@ -1397,7 +1398,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 
 	CSIServiceAccountTokenSecrets: {
 		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // GA in 1.36; remove in 1.39
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.36 毕业为 GA；在 1.39 移除
 	},
 
 	CSIVolumeHealth: {
@@ -1417,13 +1418,13 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	ClusterTrustBundle: {
 		{Version: version.MustParse("1.27"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA}, // LockToDefault in 1.38
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA}, // 在 1.38 锁定默认值
 	},
 
 	ClusterTrustBundleProjection: {
 		{Version: version.MustParse("1.29"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA}, // LockToDefault in 1.38
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA}, // 在 1.38 锁定默认值
 	},
 
 	CompositePodGroup: {
@@ -1451,7 +1452,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	DRAAdminAccess: {
 		{Version: version.MustParse("1.32"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // GA in 1.36; remove in 1.39
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.36 毕业为 GA；在 1.39 移除
 	},
 
 	DRAConsumableCapacity: {
@@ -1474,20 +1475,20 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 
 	DRADeviceTaintRules: {
 		{Version: version.MustParse("1.35"), Default: false, PreRelease: featuregate.Alpha},
-		{Version: version.MustParse("1.36"), Default: false, PreRelease: featuregate.Beta},                    // Depends on an off-by-default beta API.
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: false}, // LockToDefault: true in 1.38; remove in 1.41
+		{Version: version.MustParse("1.36"), Default: false, PreRelease: featuregate.Beta},                    // 依赖一个默认关闭的 beta API。
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: false}, // 在 1.38 设置 LockToDefault: true；在 1.41 移除
 	},
 
 	DRADeviceTaints: {
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: false}, // LockToDefault: true in 1.38; remove in 1.41
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: false}, // 在 1.38 设置 LockToDefault: true；在 1.41 移除
 	},
 
 	DRAExtendedResource: {
 		{Version: version.MustParse("1.34"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // GA in 1.37; remove in 1.40
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 毕业为 GA；在 1.40 移除
 	},
 
 	DRAFractionalCapacityRange: {
@@ -1521,13 +1522,13 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA},
 		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true},
-		// Remove completely in 1.40.
+		// 在 1.40 中彻底移除。
 	},
 
 	DRAResourceClaimDeviceStatus: {
 		{Version: version.MustParse("1.32"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.40
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.40 移除
 	},
 
 	DRAResourceClaimGranularStatusAuthorization: {
@@ -1560,20 +1561,20 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 		{Version: version.MustParse("1.31"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA},
-		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove after MultiCIDRServiceAllocator is GA
+		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 MultiCIDRServiceAllocator 毕业为 GA 后移除
 	},
 
 	DisableCPUQuotaWithExclusiveCPUs: {
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.Deprecated},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.Deprecated, LockToDefault: true}, // remove in 1.38
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.Deprecated, LockToDefault: true}, // 在 1.38 移除
 	},
 
 	DisableNodeKubeProxyVersion: {
 		{Version: version.MustParse("1.29"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.31"), Default: false, PreRelease: featuregate.Deprecated},
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.Deprecated},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.Deprecated, LockToDefault: true}, // lock to default in 1.36 and remove in v1.39
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.Deprecated, LockToDefault: true}, // 在 1.36 锁定默认值，并在 v1.39 移除
 	},
 
 	DynamicResourceAllocation: {
@@ -1602,7 +1603,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 
 	ExecProbeTimeout: {
 		{Version: version.MustParse("1.20"), Default: true, PreRelease: featuregate.GA},
-		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in v1.38
+		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 v1.38 移除
 	},
 
 	ExtendWebSocketsToKubelet: {
@@ -1647,7 +1648,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	HPAConfigurableTolerance: {
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.40
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.40 移除
 	},
 
 	HPAGeneration: {
@@ -1676,14 +1677,14 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	ImageMaximumGCAge: {
 		{Version: version.MustParse("1.29"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.30"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.38
+		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.38 移除
 	},
 
 	ImageVolume: {
 		{Version: version.MustParse("1.31"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // GA and LockToDefault in 1.36, remove in 1.39
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.36 毕业为 GA 并锁定默认值，在 1.39 移除
 	},
 
 	ImageVolumeWithDigest: {
@@ -1698,7 +1699,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	InPlacePodVerticalScaling: {
 		{Version: version.MustParse("1.27"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.38
+		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.38 移除
 	},
 
 	InPlacePodVerticalScalingExclusiveCPUs: {
@@ -1711,7 +1712,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 
 	InPlacePodVerticalScalingInitContainers: {
 		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.40
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.40 移除
 	},
 
 	InPlacePodVerticalScalingMemoryBackedVolumes: {
@@ -1729,7 +1730,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	JobManagedBy: {
 		{Version: version.MustParse("1.30"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.32"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.38
+		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.38 移除
 	},
 
 	KubeProxyIPVS: {
@@ -1748,7 +1749,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	KubeletCgroupDriverFromCRI: {
 		{Version: version.MustParse("1.28"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.31"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.37
+		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 移除
 	},
 
 	KubeletCrashLoopBackOffMax: {
@@ -1781,18 +1782,18 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	KubeletPodResourcesDynamicResources: {
 		{Version: version.MustParse("1.27"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.37
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 移除
 	},
 
 	KubeletPodResourcesGet: {
 		{Version: version.MustParse("1.27"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.37
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 移除
 	},
 
 	KubeletPodResourcesListUseActivePods: {
 		{Version: version.MustParse("1.0"), Default: false, PreRelease: featuregate.GA},
-		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.Deprecated}, // lock to default in 1.38, remove in 1.39
+		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.Deprecated}, // 在 1.38 锁定默认值，在 1.39 移除
 	},
 
 	KubeletRegistrationGetOnExistsOnly: {
@@ -1813,7 +1814,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	KubeletTracing: {
 		{Version: version.MustParse("1.25"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.27"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.37
+		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 移除
 	},
 
 	LocalStorageCapacityIsolationFSQuotaMonitoring: {
@@ -1851,14 +1852,14 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 		{Version: version.MustParse("1.27"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.31"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.GA},
-		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.37 (locked to default in 1.34)
+		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 移除（在 1.34 已锁定默认值）
 	},
 
 	MutableCSINodeAllocatableCount: {
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.34"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.38
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.38 移除
 	},
 
 	MutablePVNodeAffinity: {
@@ -1908,14 +1909,14 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	NodeLogQuery: {
 		{Version: version.MustParse("1.27"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.30"), Default: false, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.39, locked to default in 1.36
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.39 移除，在 1.36 已锁定默认值
 	},
 
 	NodeSwap: {
 		{Version: version.MustParse("1.22"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.28"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.30"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.37
+		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 移除
 	},
 
 	NominatedNodeNameForExpectation: {
@@ -1929,7 +1930,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 
 	PLEGOnDemandRelist: {
 		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in v1.40
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 v1.40 移除
 	},
 
 	PersistentVolumeClaimUnusedSinceTime: {
@@ -1945,7 +1946,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	PodCertificateRequest: {
 		{Version: version.MustParse("1.34"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.35"), Default: false, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA}, // LockToDefault in 1.38
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA}, // 在 1.38 锁定默认值
 	},
 
 	PodDeletionCost: {
@@ -1982,19 +1983,19 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	PodObservedGenerationTracking: {
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // GA in 1.35, remove in 1.38
+		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.35 毕业为 GA，在 1.38 移除
 	},
 
 	PodReadyToStartContainersCondition: {
 		{Version: version.MustParse("1.28"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.29"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // GA in 1.37, remove in 1.40
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 毕业为 GA，在 1.40 移除
 	},
 
 	PodSchedulingReadiness: {
 		{Version: version.MustParse("1.26"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.27"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.30"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // GA in 1.30; remove in 1.32
+		{Version: version.MustParse("1.30"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.30 毕业为 GA；在 1.32 移除
 	},
 
 	PodTopologyLabelsAdmission: {
@@ -2022,7 +2023,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 		{Version: version.MustParse("1.12"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.31"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.39
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.39 移除
 	},
 
 	QOSReserved: {
@@ -2032,13 +2033,13 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	RecoverVolumeExpansionFailure: {
 		{Version: version.MustParse("1.23"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.32"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // GA in 1.34; remove in 1.37
+		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.34 毕业为 GA；在 1.37 移除
 	},
 
 	RecursiveReadOnlyMounts: {
 		{Version: version.MustParse("1.30"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.31"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.36
+		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.36 移除
 	},
 
 	ReduceDefaultCrashLoopBackOffDecay: {
@@ -2048,13 +2049,13 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	RelaxedEnvironmentVariableValidation: {
 		{Version: version.MustParse("1.30"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.32"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.37
+		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 移除
 	},
 
 	RelaxedServiceNameValidation: {
 		{Version: version.MustParse("1.34"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.40
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.40 移除
 	},
 
 	ReloadKubeletClientCAFile: {
@@ -2091,20 +2092,20 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	SELinuxChangePolicy: {
 		{Version: version.MustParse("1.32"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.39, locked to default in 1.36
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.39 移除，在 1.36 已锁定默认值
 	},
 
 	SELinuxMount: {
 		{Version: version.MustParse("1.30"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA}, // it graduates to GA and gets enabled by default in 1.37. Lock in 1.38 to be on the safe side.
+		{Version: version.MustParse("1.37"), Default: true, PreRelease: featuregate.GA}, // 它在 1.37 毕业为 GA 并默认启用。为稳妥起见在 1.38 锁定。
 	},
 
 	SELinuxMountReadWriteOncePod: {
 		{Version: version.MustParse("1.25"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.27"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.28"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.39, locked to default in 1.36
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.39 移除，在 1.36 已锁定默认值
 	},
 
 	SchedulerAsyncAPICalls: {
@@ -2125,7 +2126,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 
 	SeparateTaintEvictionController: {
 		{Version: version.MustParse("1.29"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.37 (locked to default in 1.34)
+		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 移除（在 1.34 已锁定默认值）
 	},
 
 	ServiceAccountNodeAudienceRestriction: {
@@ -2187,8 +2188,8 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	},
 
 	StatefulSetSemanticRevisionComparison: {
-		// This is a mitigation for a 1.34 regression due to serialization differences that cannot be feature-gated,
-		// so this mitigation should not auto-disable even if emulating versions prior to 1.34 with --emulation-version.
+		// 这是对 1.34 回归的缓解措施，其根因是无法通过门控控制的序列化差异，
+		// 因此即使通过 --emulation-version 模拟 1.34 之前的版本，也不应自动禁用该缓解措施。
 		{Version: version.MustParse("1.0"), Default: true, PreRelease: featuregate.Beta},
 	},
 
@@ -2216,12 +2217,12 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	SupplementalGroupsPolicy: {
 		{Version: version.MustParse("1.31"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.38
+		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.38 移除
 	},
 
 	SystemdWatchdog: {
 		{Version: version.MustParse("1.32"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remov in 1.37
+		{Version: version.MustParse("1.35"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 移除
 	},
 
 	TaintTolerationComparisonOperators: {
@@ -2244,7 +2245,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	TopologyManagerPolicyOptions: {
 		{Version: version.MustParse("1.26"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.28"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.32"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.37
+		{Version: version.MustParse("1.32"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.37 移除
 	},
 
 	TranslateStreamCloseWebsocketRequests: {
@@ -2260,7 +2261,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 		{Version: version.MustParse("1.25"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.30"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // remove in 1.39.
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.39 移除。
 	},
 
 	VolumeAttributesClass: {
@@ -2384,7 +2385,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 
 	genericfeatures.DeclarativeValidation: {
 		{Version: version.MustParse("1.33"), Default: true, PreRelease: featuregate.Beta},
-		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // GA and LockToDefault in 1.36, remove in 1.39
+		{Version: version.MustParse("1.36"), Default: true, PreRelease: featuregate.GA, LockToDefault: true}, // 在 1.36 毕业为 GA 并锁定默认值，在 1.39 移除
 	},
 
 	genericfeatures.DeclarativeValidationBeta: {
@@ -2495,7 +2496,7 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	genericfeatures.WatchList: {
 		{Version: version.MustParse("1.27"), Default: false, PreRelease: featuregate.Alpha},
 		{Version: version.MustParse("1.32"), Default: true, PreRelease: featuregate.Beta},
-		// switch this back to false because the json and proto streaming encoders appear to work better.
+		// 将其切回 false，因为 json 和 proto 流式编码器表现更好。
 		{Version: version.MustParse("1.33"), Default: false, PreRelease: featuregate.Beta},
 		{Version: version.MustParse("1.34"), Default: true, PreRelease: featuregate.Beta},
 	},
@@ -2527,12 +2528,12 @@ var defaultVersionedKubernetesFeatureGates = map[featuregate.Feature]featuregate
 	},
 }
 
-// defaultKubernetesFeatureGateDependencies enumerates the dependencies of any feature gate that
-// depends on another. Dependencies ensure that a dependent feature gate can only be enabled if all
-// of its dependencies are also enabled, and ensures a feature at a higher stability level cannot
-// depend on a less stable feature.
+// defaultKubernetesFeatureGateDependencies 枚举所有存在依赖的功能门控的
+// 依赖关系。依赖确保被依赖门控只有在所有依赖都启用时才能开启，
+// 并保证更高稳定性级别的特性不能
+// 依赖较低稳定性级别的特性。
 //
-// Entries are alphabetized.
+// 条目按字母顺序排列。
 var defaultKubernetesFeatureGateDependencies = map[featuregate.Feature][]featuregate.Feature{
 	AllowDNSOnlyNodeCSR: {},
 
@@ -2590,7 +2591,7 @@ var defaultKubernetesFeatureGateDependencies = map[featuregate.Feature][]feature
 
 	DRADeviceCompatibilityGroups: {DynamicResourceAllocation, DRAPartitionableDevices},
 
-	DRADeviceTaintRules: {DRADeviceTaints}, // DynamicResourceAllocation is indirect.
+	DRADeviceTaintRules: {DRADeviceTaints}, // DynamicResourceAllocation 是间接依赖。
 
 	DRADeviceTaints: {DynamicResourceAllocation},
 
@@ -2610,7 +2611,7 @@ var defaultKubernetesFeatureGateDependencies = map[featuregate.Feature][]feature
 
 	DRAPrioritizedList: {DynamicResourceAllocation},
 
-	DRAResourceClaimDeviceStatus: {}, // Soft dependency on DynamicResourceAllocation due to on/off-by-default conflict.
+	DRAResourceClaimDeviceStatus: {}, // 由于默认开启/关闭的冲突，对 DynamicResourceAllocation 为软依赖。
 
 	DRAResourceClaimGranularStatusAuthorization: {DynamicResourceAllocation, DRAResourceClaimDeviceStatus},
 
@@ -2826,8 +2827,8 @@ var defaultKubernetesFeatureGateDependencies = map[featuregate.Feature][]feature
 
 	ResourceHealthStatusMessage: {ResourceHealthStatus},
 
-	// RestartAllContainersOnContainerExits introduces a new container restart rule action.
-	// All restart rules will be dropped by API if ContainerRestartRules feature is not enabled.
+	// RestartAllContainersOnContainerExits 引入一种新的容器重启规则动作。
+	// 若未启用 ContainerRestartRules 特性，API 会丢弃所有重启规则。
 	RestartAllContainersOnContainerExits: {ContainerRestartRules, NodeDeclaredFeatures},
 
 	RotateKubeletServerCertificate: {},
@@ -3010,16 +3011,19 @@ var defaultKubernetesFeatureGateDependencies = map[featuregate.Feature][]feature
 }
 
 func init() {
-	// Register all client-go features with kube's feature gate instance and make all client-go
-	// feature checks use kube's instance. The effect is that for kube binaries, client-go
-	// features are wired to the existing --feature-gates flag just as all other features
-	// are. Further, client-go features automatically support the existing mechanisms for
-	// feature enablement metrics and test overrides.
+	// 把所有 client-go 特性注册到 kube 的功能门控实例，并让所有 client-go
+	// 特性检查都使用 kube 的实例。效果是：对 kube 二进制而言，client-go
+	// 特性与其他特性一样接入现有的 --feature-gates 参数，并自动支持现有的特性启用指标与测试覆盖机制。
+	// 用 kube 的门控构造适配器，使 client-go 与 kube 共享同一份门控实例。
 	ca := &clientAdapter{utilfeature.DefaultMutableFeatureGate}
+	// 先注册 client-go 特性。runtime.Must 在注册失败时直接 panic，因为门控缺失会导致二进制行为不正确。
 	runtime.Must(clientfeatures.AddVersionedFeaturesToExistingFeatureGates(ca))
+	// 替换 client-go 全局门控，让后续 client-go 代码的门控检查都走 kube 实例。
 	clientfeatures.ReplaceFeatureGates(ca)
 
+	// 注册 Kubernetes 专有特性及依赖关系。顺序保证依赖门控在检查时已全部存在。
 	runtime.Must(utilfeature.DefaultMutableFeatureGate.AddVersioned(defaultVersionedKubernetesFeatureGates))
 	runtime.Must(utilfeature.DefaultMutableFeatureGate.AddDependencies(defaultKubernetesFeatureGateDependencies))
+	// zpages 特性单独注册，因为它来自 component-base 而非本包的版本化定义。
 	runtime.Must(zpagesfeatures.AddFeatureGates(utilfeature.DefaultMutableFeatureGate))
 }
