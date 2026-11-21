@@ -24,19 +24,18 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
-// NUMANodeInfo is a map from NUMANode ID to a list of CPU IDs associated with
-// that NUMANode.
+// NUMANodeInfo 是从 NUMA 节点 ID 到该节点所含 CPU ID 集合的映射。
 type NUMANodeInfo map[int]cpuset.CPUSet
 
-// CPUDetails is a map from CPU ID to Core ID, Socket ID, and NUMA ID.
+// CPUDetails 是从 CPU ID 到其核心、插槽、NUMA 节点与 Uncore 缓存信息的映射。
 type CPUDetails map[int]CPUInfo
 
-// CPUTopology contains details of node cpu, where :
-// CPU  - logical CPU, cadvisor - thread
-// Core - physical CPU, cadvisor - Core
-// Socket - socket, cadvisor - Socket
-// NUMA Node - NUMA cell, cadvisor - Node
-// UncoreCache - Split L3 Cache Topology, cadvisor
+// CPUTopology 描述节点 CPU 的拓扑结构，术语对应关系如下：
+// CPU         - 逻辑 CPU，对应 cadvisor 的 thread
+// Core        - 物理 CPU，对应 cadvisor 的 Core
+// Socket      - 插槽，对应 cadvisor 的 Socket
+// NUMA Node   - NUMA 单元，对应 cadvisor 的 Node
+// UncoreCache - 分片的 L3 缓存拓扑，对应 cadvisor 的 UncoreCache
 type CPUTopology struct {
 	NumCPUs        int
 	NumCores       int
@@ -46,8 +45,7 @@ type CPUTopology struct {
 	CPUDetails     CPUDetails
 }
 
-// CPUsPerCore returns the number of logical CPUs are associated with
-// each core.
+// CPUsPerCore 返回每个物理核心关联的逻辑 CPU 数量。
 func (topo *CPUTopology) CPUsPerCore() int {
 	if topo.NumCores == 0 {
 		return 0
@@ -55,8 +53,7 @@ func (topo *CPUTopology) CPUsPerCore() int {
 	return topo.NumCPUs / topo.NumCores
 }
 
-// CPUsPerSocket returns the number of logical CPUs are associated with
-// each socket.
+// CPUsPerSocket 返回每个插槽关联的逻辑 CPU 数量。
 func (topo *CPUTopology) CPUsPerSocket() int {
 	if topo.NumSockets == 0 {
 		return 0
@@ -64,8 +61,7 @@ func (topo *CPUTopology) CPUsPerSocket() int {
 	return topo.NumCPUs / topo.NumSockets
 }
 
-// CPUsPerUncore returns the number of logicial CPUs that are associated with
-// each UncoreCache
+// CPUsPerUncore 返回每个 Uncore 缓存关联的逻辑 CPU 数量。
 func (topo *CPUTopology) CPUsPerUncore() int {
 	if topo.NumUncoreCache == 0 {
 		return 0
@@ -73,8 +69,7 @@ func (topo *CPUTopology) CPUsPerUncore() int {
 	return topo.NumCPUs / topo.NumUncoreCache
 }
 
-// CPUCoreID returns the physical core ID which the given logical CPU
-// belongs to.
+// CPUCoreID 返回给定逻辑 CPU 所属的物理核心 ID。
 func (topo *CPUTopology) CPUCoreID(cpu int) (int, error) {
 	info, ok := topo.CPUDetails[cpu]
 	if !ok {
@@ -83,7 +78,7 @@ func (topo *CPUTopology) CPUCoreID(cpu int) (int, error) {
 	return info.CoreID, nil
 }
 
-// CPUCoreID returns the socket ID which the given logical CPU belongs to.
+// CPUSocketID 返回给定逻辑 CPU 所属的插槽 ID。
 func (topo *CPUTopology) CPUSocketID(cpu int) (int, error) {
 	info, ok := topo.CPUDetails[cpu]
 	if !ok {
@@ -92,7 +87,7 @@ func (topo *CPUTopology) CPUSocketID(cpu int) (int, error) {
 	return info.SocketID, nil
 }
 
-// CPUCoreID returns the NUMA node ID which the given logical CPU belongs to.
+// CPUNUMANodeID 返回给定逻辑 CPU 所属的 NUMA 节点 ID。
 func (topo *CPUTopology) CPUNUMANodeID(cpu int) (int, error) {
 	info, ok := topo.CPUDetails[cpu]
 	if !ok {
@@ -101,8 +96,7 @@ func (topo *CPUTopology) CPUNUMANodeID(cpu int) (int, error) {
 	return info.NUMANodeID, nil
 }
 
-// CheckAlignment returns alignment information for the given cpuset in
-// the context of the current CPU topology
+// CheckAlignment 结合当前 CPU 拓扑，返回给定 CPU 集合的对齐信息。
 func (topo *CPUTopology) CheckAlignment(cpus cpuset.CPUSet) Alignment {
 	cpuList := cpus.UnsortedList()
 	return Alignment{
@@ -110,7 +104,7 @@ func (topo *CPUTopology) CheckAlignment(cpus cpuset.CPUSet) Alignment {
 	}
 }
 
-// CPUInfo contains the NUMA, socket, UncoreCache and core IDs associated with a CPU.
+// CPUInfo 保存某个 CPU 关联的 NUMA 节点、插槽、Uncore 缓存与物理核心 ID。
 type CPUInfo struct {
 	NUMANodeID    int
 	SocketID      int
@@ -118,7 +112,7 @@ type CPUInfo struct {
 	UncoreCacheID int
 }
 
-// KeepOnly returns a new CPUDetails object with only the supplied cpus.
+// KeepOnly 返回仅包含指定 CPU 的新 CPUDetails。
 func (d CPUDetails) KeepOnly(cpus cpuset.CPUSet) CPUDetails {
 	result := CPUDetails{}
 	for cpu, info := range d {
@@ -129,7 +123,7 @@ func (d CPUDetails) KeepOnly(cpus cpuset.CPUSet) CPUDetails {
 	return result
 }
 
-// UncoreCaches returns all the uncorecache Id (L3 Index) associated with the CPUs in this CPUDetails
+// UncoreCaches 返回该 CPUDetails 中所有 CPU 关联的 Uncore 缓存 ID（L3 索引）。
 func (d CPUDetails) UncoreCaches() cpuset.CPUSet {
 	var numUnCoreIDs []int
 	for _, info := range d {
@@ -138,8 +132,7 @@ func (d CPUDetails) UncoreCaches() cpuset.CPUSet {
 	return cpuset.New(numUnCoreIDs...)
 }
 
-// UnCoresInNUMANodes returns all of the uncore IDs associated with the given
-// NUMANode IDs in this CPUDetails.
+// UncoreInNUMANodes 返回该 CPUDetails 中与给定 NUMA 节点 ID 关联的所有 Uncore 缓存 ID。
 func (d CPUDetails) UncoreInNUMANodes(ids ...int) cpuset.CPUSet {
 	var unCoreIDs []int
 	for _, id := range ids {
@@ -152,8 +145,8 @@ func (d CPUDetails) UncoreInNUMANodes(ids ...int) cpuset.CPUSet {
 	return cpuset.New(unCoreIDs...)
 }
 
-// CoresNeededInUncoreCache returns either the full list of all available unique core IDs associated with the given
-// UnCoreCache IDs in this CPUDetails or subset that matches the ask.
+// CoresNeededInUncoreCache 返回与给定 Uncore 缓存 ID 关联的核心 ID：
+// 若所需核心数不小于全部可用核心数，则返回全部；否则返回其中一部分。
 func (d CPUDetails) CoresNeededInUncoreCache(numCoresNeeded int, ids ...int) cpuset.CPUSet {
 	coreIDs := d.coresInUncoreCache(ids...)
 	if coreIDs.Size() <= numCoresNeeded {
@@ -163,7 +156,7 @@ func (d CPUDetails) CoresNeededInUncoreCache(numCoresNeeded int, ids ...int) cpu
 	return cpuset.New(tmpCoreIDs[:numCoresNeeded]...)
 }
 
-// Helper function that just gets the cores
+// coresInUncoreCache 收集与给定 Uncore 缓存 ID 关联的全部核心 ID。
 func (d CPUDetails) coresInUncoreCache(ids ...int) cpuset.CPUSet {
 	var coreIDs []int
 	for _, id := range ids {
@@ -176,8 +169,7 @@ func (d CPUDetails) coresInUncoreCache(ids ...int) cpuset.CPUSet {
 	return cpuset.New(coreIDs...)
 }
 
-// CPUsInUncoreCaches returns all the logical CPU IDs associated with the given
-// UnCoreCache IDs in this CPUDetails
+// CPUsInUncoreCaches 返回该 CPUDetails 中与给定 Uncore 缓存 ID 关联的所有逻辑 CPU ID。
 func (d CPUDetails) CPUsInUncoreCaches(ids ...int) cpuset.CPUSet {
 	var cpuIDs []int
 	for _, id := range ids {
@@ -190,8 +182,7 @@ func (d CPUDetails) CPUsInUncoreCaches(ids ...int) cpuset.CPUSet {
 	return cpuset.New(cpuIDs...)
 }
 
-// NUMANodes returns all of the NUMANode IDs associated with the CPUs in this
-// CPUDetails.
+// NUMANodes 返回该 CPUDetails 中所有 CPU 关联的 NUMA 节点 ID。
 func (d CPUDetails) NUMANodes() cpuset.CPUSet {
 	var numaNodeIDs []int
 	for _, info := range d {
@@ -200,8 +191,7 @@ func (d CPUDetails) NUMANodes() cpuset.CPUSet {
 	return cpuset.New(numaNodeIDs...)
 }
 
-// NUMANodesInSockets returns all of the logical NUMANode IDs associated with
-// the given socket IDs in this CPUDetails.
+// NUMANodesInSockets 返回该 CPUDetails 中与给定插槽 ID 关联的所有 NUMA 节点 ID。
 func (d CPUDetails) NUMANodesInSockets(ids ...int) cpuset.CPUSet {
 	var numaNodeIDs []int
 	for _, id := range ids {
@@ -214,8 +204,7 @@ func (d CPUDetails) NUMANodesInSockets(ids ...int) cpuset.CPUSet {
 	return cpuset.New(numaNodeIDs...)
 }
 
-// Sockets returns all of the socket IDs associated with the CPUs in this
-// CPUDetails.
+// Sockets 返回该 CPUDetails 中所有 CPU 关联的插槽 ID。
 func (d CPUDetails) Sockets() cpuset.CPUSet {
 	var socketIDs []int
 	for _, info := range d {
@@ -224,8 +213,7 @@ func (d CPUDetails) Sockets() cpuset.CPUSet {
 	return cpuset.New(socketIDs...)
 }
 
-// CPUsInSockets returns all of the logical CPU IDs associated with the given
-// socket IDs in this CPUDetails.
+// CPUsInSockets 返回该 CPUDetails 中与给定插槽 ID 关联的所有逻辑 CPU ID。
 func (d CPUDetails) CPUsInSockets(ids ...int) cpuset.CPUSet {
 	var cpuIDs []int
 	for _, id := range ids {
@@ -238,8 +226,7 @@ func (d CPUDetails) CPUsInSockets(ids ...int) cpuset.CPUSet {
 	return cpuset.New(cpuIDs...)
 }
 
-// SocketsInNUMANodes returns all of the logical Socket IDs associated with the
-// given NUMANode IDs in this CPUDetails.
+// SocketsInNUMANodes 返回该 CPUDetails 中与给定 NUMA 节点 ID 关联的所有插槽 ID。
 func (d CPUDetails) SocketsInNUMANodes(ids ...int) cpuset.CPUSet {
 	var socketIDs []int
 	for _, id := range ids {
@@ -252,8 +239,7 @@ func (d CPUDetails) SocketsInNUMANodes(ids ...int) cpuset.CPUSet {
 	return cpuset.New(socketIDs...)
 }
 
-// Cores returns all of the core IDs associated with the CPUs in this
-// CPUDetails.
+// Cores 返回该 CPUDetails 中所有 CPU 关联的物理核心 ID。
 func (d CPUDetails) Cores() cpuset.CPUSet {
 	var coreIDs []int
 	for _, info := range d {
@@ -262,8 +248,7 @@ func (d CPUDetails) Cores() cpuset.CPUSet {
 	return cpuset.New(coreIDs...)
 }
 
-// CoresInNUMANodes returns all of the core IDs associated with the given
-// NUMANode IDs in this CPUDetails.
+// CoresInNUMANodes 返回该 CPUDetails 中与给定 NUMA 节点 ID 关联的所有物理核心 ID。
 func (d CPUDetails) CoresInNUMANodes(ids ...int) cpuset.CPUSet {
 	var coreIDs []int
 	for _, id := range ids {
@@ -276,8 +261,7 @@ func (d CPUDetails) CoresInNUMANodes(ids ...int) cpuset.CPUSet {
 	return cpuset.New(coreIDs...)
 }
 
-// CoresInSockets returns all of the core IDs associated with the given socket
-// IDs in this CPUDetails.
+// CoresInSockets 返回该 CPUDetails 中与给定插槽 ID 关联的所有物理核心 ID。
 func (d CPUDetails) CoresInSockets(ids ...int) cpuset.CPUSet {
 	var coreIDs []int
 	for _, id := range ids {
@@ -290,7 +274,7 @@ func (d CPUDetails) CoresInSockets(ids ...int) cpuset.CPUSet {
 	return cpuset.New(coreIDs...)
 }
 
-// CPUs returns all of the logical CPU IDs in this CPUDetails.
+// CPUs 返回该 CPUDetails 中的全部逻辑 CPU ID。
 func (d CPUDetails) CPUs() cpuset.CPUSet {
 	var cpuIDs []int
 	for cpuID := range d {
@@ -299,8 +283,7 @@ func (d CPUDetails) CPUs() cpuset.CPUSet {
 	return cpuset.New(cpuIDs...)
 }
 
-// CPUsInNUMANodes returns all of the logical CPU IDs associated with the given
-// NUMANode IDs in this CPUDetails.
+// CPUsInNUMANodes 返回该 CPUDetails 中与给定 NUMA 节点 ID 关联的所有逻辑 CPU ID。
 func (d CPUDetails) CPUsInNUMANodes(ids ...int) cpuset.CPUSet {
 	var cpuIDs []int
 	for _, id := range ids {
@@ -313,8 +296,7 @@ func (d CPUDetails) CPUsInNUMANodes(ids ...int) cpuset.CPUSet {
 	return cpuset.New(cpuIDs...)
 }
 
-// CPUsInCores returns all of the logical CPU IDs associated with the given
-// core IDs in this CPUDetails.
+// CPUsInCores 返回该 CPUDetails 中与给定物理核心 ID 关联的所有逻辑 CPU ID。
 func (d CPUDetails) CPUsInCores(ids ...int) cpuset.CPUSet {
 	var cpuIDs []int
 	for _, id := range ids {
@@ -327,30 +309,34 @@ func (d CPUDetails) CPUsInCores(ids ...int) cpuset.CPUSet {
 	return cpuset.New(cpuIDs...)
 }
 
-// AreNUMANodesInSameSocket returns true for all NUMANodes in the same socket
+// AreNUMANodesInSameSocket 判断给定的 NUMA 节点是否都位于同一个插槽内。
 func (d CPUDetails) AreNUMANodesInSameSocket(numaNodes []int) bool {
 	allNUMAs := d.NUMANodes()
 	for _, id := range numaNodes {
 		if !allNUMAs.Contains(id) {
-			// return false if any NUMANode is out of range
+			// 任一 NUMA 节点不在当前拓扑范围内即返回 false。
 			return false
 		}
 	}
 	return d.SocketsInNUMANodes(numaNodes...).Size() <= 1
 }
 
+// getUncoreCacheID 返回核心所属的 Uncore 缓存 ID；
+// cAdvisor 未提供该信息时回退为插槽 ID。
 func getUncoreCacheID(core cadvisorapi.Core) int {
 	if len(core.UncoreCaches) < 1 {
-		// In case cAdvisor is nil, failback to socket alignment since uncorecache is not shared
+		// cAdvisor 未提供 Uncore 缓存信息时回退到插槽对齐：
+		// 此时按插槽作为缓存共享边界处理。
 		return core.SocketID
 	}
-	// Even though cadvisor API returns a slice, we only expect either 0 or a 1 uncore caches,
-	// so everything past the first entry should be discarded or ignored
+	// 虽然 cAdvisor API 返回的是切片，但预期最多只有一个 Uncore 缓存，
+	// 因此第一个元素之后的内容都忽略。
 	return core.UncoreCaches[0].Id
 }
 
-// Discover returns CPUTopology based on cadvisor node info
+// Discover 基于 cadvisor 提供的节点信息构建 CPU 拓扑。
 func Discover(logger klog.Logger, machineInfo *cadvisorapi.MachineInfo) (*CPUTopology, error) {
+	// 无法检测到 CPU 数量时直接报错，避免返回无意义的空拓扑。
 	if machineInfo.NumCores == 0 {
 		return nil, fmt.Errorf("could not detect number of cpus")
 	}
@@ -358,6 +344,7 @@ func Discover(logger klog.Logger, machineInfo *cadvisorapi.MachineInfo) (*CPUTop
 	CPUDetails := CPUDetails{}
 	numPhysicalCores := 0
 
+	// 遍历 cadvisor 的 NUMA 拓扑，为每个线程建立 CPU 到核心/插槽/节点的映射。
 	for _, node := range machineInfo.Topology {
 		numPhysicalCores += len(node.Cores)
 		for _, core := range node.Cores {
@@ -387,14 +374,14 @@ func Discover(logger klog.Logger, machineInfo *cadvisorapi.MachineInfo) (*CPUTop
 	}, nil
 }
 
-// getUniqueCoreID computes coreId as the lowest cpuID
-// for a given Threads []int slice. This will assure that coreID's are
-// platform unique (opposite to what cAdvisor reports)
+// getUniqueCoreID 以给定线程列表中的最小 CPU ID 作为核心 ID。
+// 这样可保证核心 ID 在平台上唯一，弥补 cAdvisor 上报值的不足。
 func getUniqueCoreID(threads []int) (coreID int, err error) {
 	if len(threads) == 0 {
 		return 0, fmt.Errorf("no cpus provided")
 	}
 
+	// 线程列表中存在重复时无法确定唯一核心 ID，直接报错。
 	if len(threads) != cpuset.New(threads...).Size() {
 		return 0, fmt.Errorf("cpus provided are not unique")
 	}

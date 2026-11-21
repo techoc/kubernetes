@@ -25,7 +25,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestIsContainerQOSGuaranteed 验证容器是否等价于 Guaranteed：
+// 要求容器自身的 requests 与 limits 完全一致，与 Pod 的 QoS 类别无关。
 func TestIsContainerQOSGuaranteed(t *testing.T) {
+	// 构造 requests==limits 的保证型容器。
 	guaranteedResources := v1.ResourceRequirements{
 		Requests: v1.ResourceList{
 			v1.ResourceCPU:    resource.MustParse("1"),
@@ -36,6 +39,7 @@ func TestIsContainerQOSGuaranteed(t *testing.T) {
 			v1.ResourceMemory: resource.MustParse("100Mi"),
 		},
 	}
+	// CPU 限制高于请求，容器属于可突发。
 	burstableCPUResources := v1.ResourceRequirements{
 		Requests: v1.ResourceList{
 			v1.ResourceCPU:    resource.MustParse("1"),
@@ -46,6 +50,7 @@ func TestIsContainerQOSGuaranteed(t *testing.T) {
 			v1.ResourceMemory: resource.MustParse("100Mi"),
 		},
 	}
+	// 内存限制高于请求，容器属于可突发。
 	burstableMemoryResources := v1.ResourceRequirements{
 		Requests: v1.ResourceList{
 			v1.ResourceCPU:    resource.MustParse("1"),
@@ -56,8 +61,10 @@ func TestIsContainerQOSGuaranteed(t *testing.T) {
 			v1.ResourceMemory: resource.MustParse("200Mi"),
 		},
 	}
+	// 未设置任何资源，属于 BestEffort。
 	bestEffortResources := v1.ResourceRequirements{}
 
+	// 用例覆盖 Pod 级 QoS 与容器级资源一致性的各种组合。
 	testCases := []struct {
 		name     string
 		pod      *v1.Pod
@@ -145,6 +152,7 @@ func TestIsContainerQOSGuaranteed(t *testing.T) {
 		},
 	}
 
+	// 逐用例调用 IsContainerEquivalentQOSGuaranteed 并断言结果。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := IsContainerEquivalentQOSGuaranteed(&tc.pod.Spec.Containers[0])

@@ -23,6 +23,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/winstats"
 )
 
+// getOSSpecificLabels 返回 Windows 构建版本标签（kubernetes.io/os 之外的 Windows 专有标签）。
 func getOSSpecificLabels() (map[string]string, error) {
 	osInfo, err := winstats.GetOSInfo()
 	if err != nil {
@@ -32,7 +33,7 @@ func getOSSpecificLabels() (map[string]string, error) {
 	return map[string]string{v1.LabelWindowsBuild: osInfo.GetBuild()}, nil
 }
 
-// runningInUserNS returns a pointer to true if the Kubelet is running in a user namespace.
+// runningInUserNS 在 Windows 上不支持用户命名空间，始终返回 nil。
 func (kl *Kubelet) runningInUserNS() *bool {
 	return nil
 }

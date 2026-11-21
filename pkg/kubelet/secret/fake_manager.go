@@ -22,26 +22,25 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// fakeManager implements Manager interface for testing purposes.
-// simple operations to apiserver.
+// fakeManager 是测试用的 Manager 假实现，只返回初始化时给定的 Secret。
 type fakeManager struct {
 	secrets []*v1.Secret
 }
 
-// NewFakeManager creates empty/fake secret manager
+// NewFakeManager 创建一个空的 Secret manager 假实现。
 func NewFakeManager() Manager {
 	return &fakeManager{}
 }
 
-// NewFakeManagerWithSecrets creates a fake secret manager with the provided secrets
+// NewFakeManagerWithSecrets 创建包含指定 Secret 的假 manager。
 func NewFakeManagerWithSecrets(secrets []*v1.Secret) Manager {
 	return &fakeManager{
 		secrets: secrets,
 	}
 }
 
-// GetSecret function returns the searched secret if it was provided during the manager initialization, otherwise, it returns an error.
-// If the manager was initialized without any secrets, it returns a nil secret."
+// GetSecret 返回初始化时提供的同名 Secret；找不到时返回错误。
+// 若初始化时未提供任何 Secret，则返回 nil。
 func (s *fakeManager) GetSecret(namespace, name string) (*v1.Secret, error) {
 	if s.secrets == nil {
 		return nil, nil
@@ -56,10 +55,10 @@ func (s *fakeManager) GetSecret(namespace, name string) (*v1.Secret, error) {
 	return nil, fmt.Errorf("secret %s not found", name)
 }
 
-// RegisterPod implements the RegisterPod method for testing purposes.
+// RegisterPod 为空实现，假 manager 不跟踪 Pod。
 func (s *fakeManager) RegisterPod(pod *v1.Pod) {
 }
 
-// UnregisterPod implements the UnregisterPod method for testing purposes.
+// UnregisterPod 为空实现，假 manager 不跟踪 Pod。
 func (s *fakeManager) UnregisterPod(pod *v1.Pod) {
 }

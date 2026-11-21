@@ -24,8 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestConvertPodSysctlsVariableToDotsSeparator tests whether the sysctls variable
-// can be correctly converted to a dot as a separator.
+// TestConvertPodSysctlsVariableToDotsSeparator 验证 sysctl 名称中的分隔符能被正确转换为点号。
 func TestConvertPodSysctlsVariableToDotsSeparator(t *testing.T) {
 
 	sysctls := []v1.Sysctl{

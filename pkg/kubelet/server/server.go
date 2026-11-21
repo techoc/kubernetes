@@ -103,10 +103,13 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util/format"
 )
 
+// init 把 metrics 组件用到的特性门控注册进全局 mutable gate。
 func init() {
+	// 把 metrics 相关的特性门控注册到全局 mutable gate，使其可被 --feature-gates 控制。
 	utilruntime.Must(metricsfeatures.AddFeatureGates(utilfeature.DefaultMutableFeatureGate))
 }
 
+// 以下是 kubelet HTTP 服务暴露的各端点路径。
 const (
 	metricsPath         = "/metrics"
 	cadvisorMetricsPath = "/metrics/cadvisor"
@@ -122,12 +125,13 @@ const (
 	runningPodsPath     = "/runningpods/"
 )
 
+// kubelet 组件名常量，用于 healthz、flagz、statusz 等组件的标识。
 const (
-	// Kubelet component name
+	// ComponentKubelet 是 kubelet 组件名。
 	ComponentKubelet = "kubelet"
 )
 
-// Server is a http.Handler which exposes kubelet functionality over HTTP.
+// Server 是一个 http.Handler，通过 HTTP 暴露 kubelet 功能。
 type Server struct {
 	flagz                flagz.Reader
 	auth                 AuthInterface
@@ -139,7 +143,7 @@ type Server struct {
 	extendedCheckers     []healthz.HealthChecker
 }
 
-// TLSOptions holds the TLS options.
+// TLSOptions 保存 TLS 相关配置。
 type TLSOptions struct {
 	MinVersion       uint16
 	CipherSuites     []uint16
@@ -149,7 +153,7 @@ type TLSOptions struct {
 	ClientCAFile     string
 }
 
-// containerInterface defines the restful.Container functions used on the root container
+// containerInterface 定义根 container 上使用的 restful.Container 方法子集。
 type containerInterface interface {
 	Add(service *restful.WebService) *restful.Container
 	Handle(path string, handler http.Handler)
@@ -157,28 +161,31 @@ type containerInterface interface {
 	ServeHTTP(w http.ResponseWriter, r *http.Request)
 	RegisteredWebServices() []*restful.WebService
 
-	// RegisteredHandlePaths returns the paths of handlers registered directly with the container (non-web-services)
-	// Used to test filters are being applied on non-web-service handlers
+	// RegisteredHandlePaths 返回直接注册到 container（非 web-service）的 handler 路径。
+	// 用于测试 filter 是否也应用在非 web-service 的 handler 上。
 	RegisteredHandlePaths() []string
 }
 
-// filteringContainer delegates all Handle(...) calls to Container.HandleWithFilter(...),
-// so we can ensure restful.FilterFunctions are used for all handlers
+// filteringContainer 把所有 Handle(...) 调用委托给 Container.HandleWithFilter(...)，
+// 从而确保所有 handler 都经过 restful.FilterFunctions 处理。
 type filteringContainer struct {
 	*restful.Container
 
 	registeredHandlePaths []string
 }
 
+// Handle 注册 handler 并记录路径，便于 /statusz 列出所有已注册端点。
 func (a *filteringContainer) Handle(path string, handler http.Handler) {
 	a.HandleWithFilter(path, handler)
 	a.registeredHandlePaths = append(a.registeredHandlePaths, path)
 }
+
+// RegisteredHandlePaths 返回通过 Handle 注册的路径列表。
 func (a *filteringContainer) RegisteredHandlePaths() []string {
 	return a.registeredHandlePaths
 }
 
-// ListenAndServeKubeletServer initializes a server to respond to HTTP network requests on the Kubelet.
+// ListenAndServeKubeletServer 初始化一个响应 Kubelet HTTP 网络请求的服务端。
 func ListenAndServeKubeletServer(
 	ctx context.Context,
 	host HostInterface,
@@ -197,10 +204,12 @@ func ListenAndServeKubeletServer(
 	handler := NewServer(ctx, host, resourceAnalyzer, checkers, flagz, auth, kubeCfg)
 	handler.InstallTracingFilter(tp)
 
+	// IdleTimeout 与 http.DefaultTransport 的 keep-alive 超时保持一致。
+	// 读写超时设为 4 分钟，需覆盖 exec/attach/port-forward 等长连接的建立过程。
 	s := &http.Server{
 		Addr:           net.JoinHostPort(address.String(), strconv.FormatUint(uint64(port), 10)),
 		Handler:        &handler,
-		IdleTimeout:    90 * time.Second, // matches http.DefaultTransport keep-alive timeout
+		IdleTimeout:    90 * time.Second,
 		ReadTimeout:    4 * 60 * time.Minute,
 		WriteTimeout:   4 * 60 * time.Minute,
 		MaxHeaderBytes: 1 << 20,
@@ -213,14 +222,14 @@ func ListenAndServeKubeletServer(
 			os.Exit(1)
 		}
 
-		// support a hollow node with plain HTTP
+		// 支持以纯 HTTP 方式运行的空壳节点（hollow node）。
 	} else if err := s.ListenAndServe(); err != nil {
 		logger.Error(err, "Failed to listen and serve")
 		os.Exit(1)
 	}
 }
 
-// ListenAndServeKubeletReadOnlyServer initializes a server to respond to HTTP network requests on the Kubelet.
+// ListenAndServeKubeletReadOnlyServer 初始化一个只读的 Kubelet HTTP 服务端。
 func ListenAndServeKubeletReadOnlyServer(
 	ctx context.Context,
 	host HostInterface,
@@ -235,10 +244,12 @@ func ListenAndServeKubeletReadOnlyServer(
 	s := NewServer(ctx, host, resourceAnalyzer, checkers, nil, nil, nil)
 	s.InstallTracingFilter(tp, otelrestful.WithPublicEndpoint())
 
+	// IdleTimeout 与 http.DefaultTransport 的 keep-alive 超时保持一致。
+	// 读写超时设为 4 分钟，需覆盖 exec/attach/port-forward 等长连接的建立过程。
 	server := &http.Server{
 		Addr:           net.JoinHostPort(address.String(), strconv.FormatUint(uint64(port), 10)),
 		Handler:        &s,
-		IdleTimeout:    90 * time.Second, // matches http.DefaultTransport keep-alive timeout
+		IdleTimeout:    90 * time.Second,
 		ReadTimeout:    4 * 60 * time.Minute,
 		WriteTimeout:   4 * 60 * time.Minute,
 		MaxHeaderBytes: 1 << 20,
@@ -250,9 +261,10 @@ func ListenAndServeKubeletReadOnlyServer(
 	}
 }
 
-// ListenAndServePodResources initializes a gRPC server to serve the PodResources service
+// ListenAndServePodResources 初始化一个 gRPC 服务端来提供 PodResources 服务。
 func ListenAndServePodResources(ctx context.Context, endpoint string, providers podresources.PodResourcesProviders) {
 	logger := klog.FromContext(ctx)
+	// 通过限流器限制 QPS，避免 podresources 查询拖垮 kubelet。
 	server := grpc.NewServer(apisgrpc.WithRateLimiter(ctx, "podresources", podresources.DefaultQPS, podresources.DefaultBurstTokens))
 
 	podresourcesapiv1alpha1.RegisterPodResourcesListerServer(server, podresources.NewV1alpha1PodResourcesServer(providers))
@@ -271,9 +283,10 @@ func ListenAndServePodResources(ctx context.Context, endpoint string, providers 
 	}
 }
 
-// ListenAndServePodsServer initializes an HTTP server to serve the Pod API.
+// ListenAndServePodsServer 初始化一个 HTTP 服务端来提供 Pod API。
 func ListenAndServePodsServer(ctx context.Context, endpoint string, srv podsv1alpha1.PodsServer) {
 	logger := klog.FromContext(ctx)
+	// 同时挂载限流与指标拦截器，分别用于保护 kubelet 和观测调用。
 	server := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			apisgrpc.LimiterUnaryServerInterceptor(rate.NewLimiter(rate.Limit(pods.DefaultQPS), int(pods.DefaultBurstTokens))),
@@ -298,16 +311,18 @@ func ListenAndServePodsServer(ctx context.Context, endpoint string, srv podsv1al
 		}
 	}()
 
+	// 等待 ctx 取消后优雅关闭，确保在途请求完成。
 	<-ctx.Done()
 	logger.Info("Shutting down pods API server")
 	server.GracefulStop()
 }
 
+// NodeRequestAttributesGetter 根据请求生成用于鉴权的属性列表。
 type NodeRequestAttributesGetter interface {
 	GetRequestAttributes(ctx context.Context, u user.Info, r *http.Request) []authorizer.Attributes
 }
 
-// AuthInterface contains all methods required by the auth filters
+// AuthInterface 包含 auth filter 所需的全部方法。
 type AuthInterface interface {
 	authenticator.Request
 	NodeRequestAttributesGetter
@@ -315,8 +330,7 @@ type AuthInterface interface {
 	dynamiccertificates.CAContentProvider
 }
 
-// HostInterface contains all the kubelet methods required by the server.
-// For testability.
+// HostInterface 包含 server 所需的全部 kubelet 方法，便于测试替换。
 type HostInterface interface {
 	stats.Provider
 	GetVersionInfo() (*cadvisorapi.VersionInfo, error)
@@ -336,7 +350,7 @@ type HostInterface interface {
 	GetAllocatedPodByName(namespace, name string) (*v1.Pod, error)
 }
 
-// NewServer initializes and configures a kubelet.Server object to handle HTTP requests.
+// NewServer 初始化并配置一个 kubelet.Server 对象来处理 HTTP 请求。
 func NewServer(
 	ctx context.Context,
 	host HostInterface,
@@ -363,12 +377,12 @@ func NewServer(
 	server.InstallAuthNotRequiredHandlers(ctx)
 	if kubeCfg != nil && kubeCfg.EnableDebuggingHandlers {
 		logger.Info("Adding debug handlers to kubelet server")
-		// To maintain backward compatibility serve logs and pprof only when enableDebuggingHandlers is also enabled
-		// see https://github.com/kubernetes/kubernetes/pull/87273
+		// 为保持向后兼容，仅当 enableDebuggingHandlers 也启用时才提供 logs 与 pprof，
+		// 参见 https://github.com/kubernetes/kubernetes/pull/87273。
 		server.InstallSystemLogHandler(kubeCfg.EnableSystemLogHandler, kubeCfg.EnableSystemLogQuery)
 		server.InstallProfilingHandler(kubeCfg.EnableProfilingHandler, kubeCfg.EnableContentionProfiling)
 		server.InstallDebugFlagsHandler(kubeCfg.EnableDebugFlagsHandler)
-		// must be done last so all paths are included in /statusz
+		// 必须最后执行，确保所有路径都被纳入 /statusz。
 		server.InstallAuthRequiredHandlers(ctx)
 	} else {
 		server.InstallDebuggingDisabledHandlers()
@@ -377,11 +391,11 @@ func NewServer(
 	return server
 }
 
-// InstallAuthFilter installs authentication filters with the restful Container.
+// InstallAuthFilter 在 restful Container 上安装认证与授权 filter。
 func (s *Server) InstallAuthFilter(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	s.restfulCont.Filter(func(req *restful.Request, resp *restful.Response, chain *restful.FilterChain) {
-		// Authenticate
+		// 认证。
 		info, ok, err := s.auth.AuthenticateRequest(req.Request)
 		if err != nil {
 			logger.Error(err, "Unable to authenticate the request due to an error")
@@ -393,7 +407,7 @@ func (s *Server) InstallAuthFilter(ctx context.Context) {
 			return
 		}
 
-		// Get authorization attributes
+		// 获取鉴权属性。
 		attrs := s.auth.GetRequestAttributes(ctx, info.User, req.Request)
 		var allowed bool
 		var msg string
@@ -409,6 +423,7 @@ func (s *Server) InstallAuthFilter(ctx context.Context) {
 
 			}
 
+			// 多个属性是“或”关系：任一允许即可放行。
 			if decision == authorizer.DecisionAllow {
 				allowed = true
 				break
@@ -421,22 +436,23 @@ func (s *Server) InstallAuthFilter(ctx context.Context) {
 				resp.WriteErrorString(http.StatusForbidden, "Authorization error: could not determine attributes for request")
 				return
 			}
-			// The attributes only differ by subresource so we just use the first one.
+			// 各属性仅在 subresource 上有差异，因此取第一个即可用于日志。
 			logger.V(2).Info("Forbidden", "user", attrs[0].GetUser().GetName(), "verb", attrs[0].GetVerb(), "resource", attrs[0].GetResource(), "subresource(s)", subresources)
 			resp.WriteErrorString(http.StatusForbidden, fmt.Sprintf("Forbidden (user=%s, verb=%s, resource=%s, subresource(s)=%v)\n", attrs[0].GetUser().GetName(), attrs[0].GetVerb(), attrs[0].GetResource(), subresources))
 			return
 		}
 
-		// Continue
+		// 继续后续处理。
 		chain.ProcessFilter(req, resp)
 	})
 }
 
-// InstallTracingFilter installs OpenTelemetry tracing filter with the restful Container.
+// InstallTracingFilter 在 restful Container 上安装 OpenTelemetry 链路追踪 filter。
 func (s *Server) InstallTracingFilter(tp oteltrace.TracerProvider, opts ...otelrestful.Option) {
 	s.restfulCont.Filter(otelrestful.OTelFilter("kubelet", append(opts, otelrestful.WithTracerProvider(tp))...))
 }
 
+// InstallZPages 注册 z-pages 端点（flagz/statusz），受对应特性门控控制。
 func (s *Server) InstallZPages() {
 	if utilfeature.DefaultFeatureGate.Enabled(zpagesfeatures.ComponentFlagz) {
 		if s.flagz != nil {
@@ -444,20 +460,20 @@ func (s *Server) InstallZPages() {
 			flagz.Install(s.restfulCont, ComponentKubelet, s.flagz)
 		}
 	}
-	// must be done last so all paths are included in /statusz
+	// 必须最后执行，确保所有路径都被纳入 /statusz。
 	if utilfeature.DefaultFeatureGate.Enabled(zpagesfeatures.ComponentStatusz) {
 		s.addMetricsBucketMatcher("statusz")
 		statusz.Install(s.restfulCont, ComponentKubelet, statusz.NewRegistry(compatibility.DefaultBuildEffectiveVersion(), statusz.WithListedPaths(s.restfulCont.RegisteredHandlePaths())))
 	}
 }
 
-// addMetricsBucketMatcher adds a regexp matcher and the relevant bucket to use when
-// it matches. Please be aware this is not thread safe and should not be used dynamically
+// addMetricsBucketMatcher 添加一个 metrics 桶名称，命中时使用对应桶上报。
+// 注意：该方法不是线程安全的，不应在运行时动态调用。
 func (s *Server) addMetricsBucketMatcher(bucket string) {
 	s.metricsBuckets.Insert(bucket)
 }
 
-// getMetricBucket find the appropriate metrics reporting bucket for the given path
+// getMetricBucket 为给定路径找到合适的 metrics 上报桶。
 func (s *Server) getMetricBucket(path string) string {
 	root := getURLRootPath(path)
 	if s.metricsBuckets.Has(root) {
@@ -466,7 +482,7 @@ func (s *Server) getMetricBucket(path string) string {
 	return "other"
 }
 
-// getMetricMethodBucket checks for unknown or invalid HTTP verbs
+// getMetricMethodBucket 检查是否为未知或非法的 HTTP 方法。
 func (s *Server) getMetricMethodBucket(method string) string {
 	if s.metricsMethodBuckets.Has(method) {
 		return method
@@ -474,10 +490,10 @@ func (s *Server) getMetricMethodBucket(method string) string {
 	return "other"
 }
 
-// InstallAuthNotRequiredHandlers registers request handlers that do not require authorization, which are
-// installed on both the unsecured and secured (TLS) servers.
-// NOTE: This method is maintained for backwards compatibility, but no new endpoints should be added
-// to this set. New handlers should be added under InstallAuthorizedHandlers.
+// InstallAuthNotRequiredHandlers 注册无需授权的请求 handler，这些 handler 会同时
+// 安装在不安全与安全（TLS）服务端上。
+// NOTE: 该方法仅为向后兼容而保留，不应再向此集合添加新端点。
+// 新 handler 应添加到 InstallAuthorizedHandlers 下。
 func (s *Server) InstallAuthNotRequiredHandlers(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	s.addMetricsBucketMatcher("healthz")
@@ -491,6 +507,7 @@ func (s *Server) InstallAuthNotRequiredHandlers(ctx context.Context) {
 
 	slis.SLIMetricsWithReset{}.Install(s.restfulCont)
 
+	// /pods 返回 kubelet 绑定的 Pod 列表及其 spec。
 	s.addMetricsBucketMatcher("pods")
 	ws := new(restful.WebService)
 	ws.Filter(GETOnlyRestfulFilter())
@@ -530,10 +547,11 @@ func (s *Server) InstallAuthNotRequiredHandlers(ctx context.Context) {
 		}
 	}
 
-	// cAdvisor metrics are exposed under the secured handler as well
+	// cAdvisor 指标同时通过安全 handler 暴露。
 	r := compbasemetrics.NewKubeRegistry()
 	r.RawMustRegister(metrics.NewPrometheusMachineCollector(prometheusHostAdapter{s.host}, includedMetrics))
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodAndContainerStatsFromCRI) {
+		// 从 CRI 获取容器统计，避免依赖 cAdvisor 的容器采集。
 		r.CustomRegister(collectors.NewCRIMetricsCollector(context.TODO(), s.host.ListPodSandboxMetrics, s.host.ListMetricDescriptors))
 		servermetrics.SetMetricsProvider(servermetrics.CRIMetricsProvider)
 	} else {
@@ -556,7 +574,7 @@ func (s *Server) InstallAuthNotRequiredHandlers(ctx context.Context) {
 		compbasemetrics.HandlerFor(resourceRegistry, compbasemetrics.HandlerOpts{ErrorHandling: compbasemetrics.ContinueOnError}),
 	)
 
-	// prober metrics are exposed under a different endpoint
+	// prober 指标通过独立端点暴露。
 
 	s.addMetricsBucketMatcher("metrics/probes")
 	p := compbasemetrics.NewKubeRegistry()
@@ -567,13 +585,12 @@ func (s *Server) InstallAuthNotRequiredHandlers(ctx context.Context) {
 		compbasemetrics.HandlerFor(p, compbasemetrics.HandlerOpts{ErrorHandling: compbasemetrics.ContinueOnError}),
 	)
 
-	// DO NOT ADD NEW HANDLERS HERE!
-	// See note in method comment.
+	// 不要在此处添加新 handler！
+	// 参见方法注释中的说明。
 }
 
-// InstallAuthRequiredHandlers registers the HTTP handlers that should only be installed on servers
-// with authorization enabled.
-// NOTE: New endpoints must require authorization.
+// InstallAuthRequiredHandlers 注册仅在启用授权时安装的 HTTP handler。
+// NOTE: 新端点必须要求授权。
 func (s *Server) InstallAuthRequiredHandlers(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	s.addMetricsBucketMatcher("run")
@@ -677,7 +694,7 @@ func (s *Server) InstallAuthRequiredHandlers(ctx context.Context) {
 		s.restfulCont.Add(ws)
 	}
 
-	// The /runningpods endpoint is used for testing only.
+	// /runningpods 端点仅用于测试。
 	s.addMetricsBucketMatcher("runningpods")
 	ws = new(restful.WebService)
 	ws.Filter(GETOnlyRestfulFilter())
@@ -689,7 +706,7 @@ func (s *Server) InstallAuthRequiredHandlers(ctx context.Context) {
 		Operation("getRunningPods"))
 	s.restfulCont.Add(ws)
 
-	// Only enable checkpoint API if the feature is enabled
+	// 仅在特性门控启用时才开启 checkpoint API。
 	if utilfeature.DefaultFeatureGate.Enabled(features.ContainerCheckpoint) {
 		s.addMetricsBucketMatcher("checkpoint")
 		ws = &restful.WebService{}
@@ -700,11 +717,11 @@ func (s *Server) InstallAuthRequiredHandlers(ctx context.Context) {
 		s.restfulCont.Add(ws)
 	}
 
-	// must be done last so all paths are included in /statusz
+	// 必须最后执行，确保所有路径都被纳入 /statusz。
 	s.InstallZPages()
 }
 
-// InstallDebuggingDisabledHandlers registers the HTTP request patterns that provide better error message
+// InstallDebuggingDisabledHandlers 为调试端点注册返回更明确错误信息的 handler。
 func (s *Server) InstallDebuggingDisabledHandlers() {
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Debug endpoints are disabled.", http.StatusMethodNotAllowed)
@@ -726,7 +743,7 @@ func (s *Server) InstallDebuggingDisabledHandlers() {
 	}
 }
 
-// InstallSystemLogHandler registers the HTTP request patterns for logs endpoint.
+// InstallSystemLogHandler 注册日志端点的 HTTP 请求模式。
 func (s *Server) InstallSystemLogHandler(enableSystemLogHandler bool, enableSystemLogQuery bool) {
 	s.addMetricsBucketMatcher("logs")
 	if enableSystemLogHandler {
@@ -742,6 +759,7 @@ func (s *Server) InstallSystemLogHandler(enableSystemLogHandler bool, enableSyst
 				Operation("getLogs").
 				Param(ws.PathParameter("logpath", "path to the log").DataType("string")))
 		} else {
+			// 启用日志查询时额外接受过滤参数，由 ServeLogs 负责解析。
 			ws.Route(ws.GET("/{logpath:*}").
 				To(s.getLogs).
 				Operation("getLogs").
@@ -759,17 +777,17 @@ func (s *Server) InstallSystemLogHandler(enableSystemLogHandler bool, enableSyst
 	}
 }
 
+// getHandlerForDisabledEndpoint 返回一个固定返回 405 的 handler，用于已禁用的端点。
 func getHandlerForDisabledEndpoint(errorMessage string) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, errorMessage, http.StatusMethodNotAllowed)
 	})
 }
 
-// InstallDebugFlagsHandler registers the HTTP request patterns for /debug/flags/v endpoint.
+// InstallDebugFlagsHandler 注册 /debug/flags/v 端点的 HTTP 请求模式。
 func (s *Server) InstallDebugFlagsHandler(enableDebugFlagsHandler bool) {
 	if enableDebugFlagsHandler {
-		// Setup flags handlers.
-		// so far, only logging related endpoints are considered valid to add for these debug flags.
+		// 设置 flags handler。目前只有日志相关端点被认为是适合通过该调试 flags 调整的。
 		s.restfulCont.Handle(debugFlagPath, routes.StringFlagPutHandler(logs.GlogSetter))
 	} else {
 		s.restfulCont.Handle(debugFlagPath, getHandlerForDisabledEndpoint("flags endpoint is disabled."))
@@ -777,7 +795,7 @@ func (s *Server) InstallDebugFlagsHandler(enableDebugFlagsHandler bool) {
 	}
 }
 
-// InstallProfilingHandler registers the HTTP request patterns for /debug/pprof endpoint.
+// InstallProfilingHandler 注册 /debug/pprof 端点的 HTTP 请求模式。
 func (s *Server) InstallProfilingHandler(enableProfilingLogHandler bool, enableContentionProfiling bool) {
 	s.addMetricsBucketMatcher("debug")
 	if !enableProfilingLogHandler {
@@ -785,6 +803,7 @@ func (s *Server) InstallProfilingHandler(enableProfilingLogHandler bool, enableC
 		return
 	}
 
+	// 根据子路径分发到对应的 pprof handler。
 	handlePprofEndpoint := func(req *restful.Request, resp *restful.Response) {
 		name := strings.TrimPrefix(req.Request.URL.Path, pprofBasePath)
 		switch name {
@@ -801,18 +820,19 @@ func (s *Server) InstallProfilingHandler(enableProfilingLogHandler bool, enableC
 		}
 	}
 
-	// Setup pprof handlers.
+	// 设置 pprof handlers。
 	ws := new(restful.WebService).Path(pprofBasePath)
 	ws.Filter(GETOnlyRestfulFilter())
 	ws.Route(ws.GET("/{subpath:*}").To(handlePprofEndpoint)).Doc("pprof endpoint")
 	s.restfulCont.Add(ws)
 
 	if enableContentionProfiling {
+		// 采样所有阻塞事件，否则 block profile 为空；仅在显式启用时开启以免影响性能。
 		goruntime.SetBlockProfileRate(1)
 	}
 }
 
-// getContainerLogs handles containerLogs request against the Kubelet
+// getContainerLogs 处理针对 Kubelet 的 containerLogs 请求。
 func (s *Server) getContainerLogs(request *restful.Request, response *restful.Response) {
 	podNamespace := request.PathParameter("podNamespace")
 	podID := request.PathParameter("podID")
@@ -837,24 +857,24 @@ func (s *Server) getContainerLogs(request *restful.Request, response *restful.Re
 	}
 
 	query := request.Request.URL.Query()
-	// backwards compatibility for the "tail" query parameter
+	// 兼容旧的 "tail" 查询参数。
 	if tail := request.QueryParameter("tail"); len(tail) > 0 {
 		query["tailLines"] = []string{tail}
-		// "all" is the same as omitting tail
+		// "all" 等同于不设置 tail。
 		if tail == "all" {
 			delete(query, "tailLines")
 		}
 	}
-	// container logs on the kubelet are locked to the v1 API version of PodLogOptions
+	// kubelet 上的容器日志固定使用 v1 版本的 PodLogOptions。
 	logOptions := &v1.PodLogOptions{}
 	if err := legacyscheme.ParameterCodec.DecodeParameters(query, v1.SchemeGroupVersion, logOptions); err != nil {
 		response.WriteError(http.StatusBadRequest, fmt.Errorf(`{"message": "Unable to decode query."}`))
 		return
 	}
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLogsQuerySplitStreams) {
-		// Even with defaulters, logOptions.Stream can be nil if no arguments are provided at all.
+		// 即使有默认值，完全没有参数时 logOptions.Stream 仍可能为 nil。
 		if logOptions.Stream == nil {
-			// Default to "All" to maintain backward compatibility.
+			// 默认为 "All"，保持向后兼容。
 			logOptions.Stream = ptr.To(v1.LogStreamAll)
 		}
 	}
@@ -869,12 +889,13 @@ func (s *Server) getContainerLogs(request *restful.Request, response *restful.Re
 		response.WriteError(http.StatusNotFound, fmt.Errorf("pod %q does not exist", podID))
 		return
 	}
-	// Check if containerName is valid.
+	// 检查 containerName 是否有效。
 	if kubecontainer.GetContainerSpec(pod, containerName) == nil {
 		response.WriteError(http.StatusNotFound, fmt.Errorf("container %q not found in pod %q", containerName, podID))
 		return
 	}
 
+	// 日志需要流式输出，因此底层 ResponseWriter 必须支持 Flusher。
 	if _, ok := response.ResponseWriter.(http.Flusher); !ok {
 		response.WriteError(http.StatusInternalServerError, fmt.Errorf("unable to convert %v into http.Flusher, cannot show logs", reflect.TypeOf(response)))
 		return
@@ -887,7 +908,7 @@ func (s *Server) getContainerLogs(request *restful.Request, response *restful.Re
 	)
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLogsQuerySplitStreams) {
 		wantedStream := logOptions.Stream
-		// No stream type specified, default to All
+		// 未指定流类型时默认为 All。
 		if wantedStream == nil {
 			allStream := v1.LogStreamAll
 			wantedStream = &allStream
@@ -904,6 +925,7 @@ func (s *Server) getContainerLogs(request *restful.Request, response *restful.Re
 			return
 		}
 	} else {
+		// 未启用分流特性时只支持合并的 All 流，显式指定 stdout/stderr 会报错。
 		if logOptions.Stream != nil && *logOptions.Stream != v1.LogStreamAll {
 			_ = response.WriteError(http.StatusBadRequest, fmt.Errorf("unable to return the given log stream: %q. Please enable PodLogsQuerySplitStreams feature gate in kubelet", *logOptions.Stream))
 			return
@@ -911,6 +933,7 @@ func (s *Server) getContainerLogs(request *restful.Request, response *restful.Re
 		stdout, stderr = fw, fw
 	}
 
+	// 使用 chunked 编码，以便日志持续流式返回而不是等待完整内容。
 	response.Header().Set("Transfer-Encoding", "chunked")
 	if err := s.host.GetKubeletContainerLogs(ctx, kubecontainer.GetPodFullName(pod), containerName, logOptions, stdout, stderr); err != nil {
 		response.WriteError(http.StatusBadRequest, err)
@@ -918,8 +941,7 @@ func (s *Server) getContainerLogs(request *restful.Request, response *restful.Re
 	}
 }
 
-// encodePods creates an v1.PodList object from pods and returns the encoded
-// PodList.
+// encodePods 把 pods 转换为 v1.PodList 并返回编码后的结果。
 func encodePods(pods []*v1.Pod) (data []byte, err error) {
 	podList := new(v1.PodList)
 	for _, pod := range pods {
@@ -932,12 +954,13 @@ func encodePods(pods []*v1.Pod) (data []byte, err error) {
 	return runtime.Encode(codec, podList)
 }
 
+// encodePod 把单个 Pod 编码为 v1 格式的字节流。
 func encodePod(pod *v1.Pod) (data []byte, err error) {
 	codec := legacyscheme.Codecs.LegacyCodec(v1.SchemeGroupVersion)
 	return runtime.Encode(codec, pod)
 }
 
-// getPods returns a list of pods bound to the Kubelet and their spec.
+// getPods 返回绑定到 Kubelet 的 Pod 列表及其 spec。
 func (s *Server) getPods(logger klog.Logger, request *restful.Request, response *restful.Response) {
 	pods := s.host.GetPods()
 	data, err := encodePods(pods)
@@ -948,9 +971,8 @@ func (s *Server) getPods(logger klog.Logger, request *restful.Request, response 
 	writeJSONResponse(logger, response, data)
 }
 
-// getRunningPods returns a list of pods running on Kubelet. The list is
-// provided by the container runtime, and is different from the list returned
-// by getPods, which is a set of desired pods to run.
+// getRunningPods 返回 Kubelet 上正在运行的 Pod 列表。该列表来自容器运行时，
+// 与 getPods 返回的“期望运行的 Pod 集合”不同。
 func (s *Server) getRunningPods(request *restful.Request, response *restful.Response) {
 	ctx := request.Request.Context()
 	logger := klog.FromContext(ctx)
@@ -967,6 +989,7 @@ func (s *Server) getRunningPods(request *restful.Request, response *restful.Resp
 	writeJSONResponse(logger, response, data)
 }
 
+// getAllocatedPods 返回已分配给 kubelet 的 Pod 列表，响应中不包含状态信息。
 func (s *Server) getAllocatedPods(request *restful.Request, response *restful.Response) {
 	ctx := request.Request.Context()
 	logger := klog.FromContext(ctx)
@@ -979,10 +1002,11 @@ func (s *Server) getAllocatedPods(request *restful.Request, response *restful.Re
 		return
 	}
 
-	// Filter out status from allocated pods.
+	// 从已分配的 Pod 中过滤掉状态。
 	copiedPods := make([]*v1.Pod, len(pods))
 	for i, pod := range pods {
-		copied := *pod // Shallow copy
+		// 浅拷贝后清空 Status，避免把状态数据泄露到分配接口的响应里。
+		copied := *pod
 		copied.Status = v1.PodStatus{}
 		copiedPods[i] = &copied
 	}
@@ -997,6 +1021,7 @@ func (s *Server) getAllocatedPods(request *restful.Request, response *restful.Re
 	writeJSONResponse(logger, response, data)
 }
 
+// getAllocatedPod 按命名空间与名称返回单个已分配的 Pod，响应中不包含状态信息。
 func (s *Server) getAllocatedPod(request *restful.Request, response *restful.Response) {
 	ctx := request.Request.Context()
 	logger := klog.FromContext(ctx)
@@ -1028,6 +1053,7 @@ func (s *Server) getAllocatedPod(request *restful.Request, response *restful.Res
 		return
 	}
 
+	// 若请求指定了 UID，则必须匹配，避免返回同名重建后的新 Pod。
 	if podUID != "" && pod.UID != podUID {
 		logger.V(3).Info("Allocated pod UID mismatch", "podNamespace", podNamespace, "podName", podID, "expectedUID", podUID, "actualUID", pod.UID)
 		if err := response.WriteErrorString(http.StatusNotFound, "pod not found"); err != nil {
@@ -1036,8 +1062,9 @@ func (s *Server) getAllocatedPod(request *restful.Request, response *restful.Res
 		return
 	}
 
-	// Filter out status from allocated pod.
-	copied := *pod // Shallow copy
+	// 从已分配的 Pod 中过滤掉状态。
+	// 浅拷贝后清空 Status，避免把状态数据泄露到分配接口的响应里。
+	copied := *pod
 	copied.Status = v1.PodStatus{}
 	data, err := encodePod(&copied)
 	if err != nil {
@@ -1050,20 +1077,19 @@ func (s *Server) getAllocatedPod(request *restful.Request, response *restful.Res
 	writeJSONResponse(logger, response, data)
 }
 
-// getLogs handles logs requests against the Kubelet.
+// getLogs 处理针对 Kubelet 的日志请求。
 func (s *Server) getLogs(request *restful.Request, response *restful.Response) {
 	s.host.ServeLogs(response, request.Request)
 }
 
-// GETOnlyRestfulFilter allows only GET. Use on WebServices that register read-only
-// kubelet APIs.
+// GETOnlyRestfulFilter 仅允许 GET 方法，用于注册只读 kubelet API 的 WebService。
 func GETOnlyRestfulFilter() restful.FilterFunction {
 	return AllowedMethodsRestfulFilter(http.MethodGet)
 }
 
-// AllowedMethodsRestfulFilter returns a restful.FilterFunction that rejects requests
-// whose HTTP method is not listed in allowed. It responds with 405 Method Not Allowed
-// and an Allow header listing the permitted methods (RFC 9110).
+// AllowedMethodsRestfulFilter 返回一个 restful.FilterFunction，拒绝 HTTP 方法不在
+// allowed 中的请求。拒绝时返回 405 Method Not Allowed，并在 Allow 头中列出允许的
+// 方法（RFC 9110）。
 func AllowedMethodsRestfulFilter(allowed ...string) restful.FilterFunction {
 	allowedSet := make(map[string]struct{}, len(allowed))
 	for _, m := range allowed {
@@ -1081,6 +1107,7 @@ func AllowedMethodsRestfulFilter(allowed ...string) restful.FilterFunction {
 	}
 }
 
+// execRequestParams 保存 exec 类请求的路径参数。
 type execRequestParams struct {
 	podNamespace  string
 	podName       string
@@ -1089,6 +1116,7 @@ type execRequestParams struct {
 	cmd           []string
 }
 
+// getExecRequestParams 从 restful 请求中解析 exec 参数。
 func getExecRequestParams(req *restful.Request) execRequestParams {
 	return execRequestParams{
 		podNamespace:  req.PathParameter("podNamespace"),
@@ -1099,12 +1127,14 @@ func getExecRequestParams(req *restful.Request) execRequestParams {
 	}
 }
 
+// portForwardRequestParams 保存 port-forward 请求的路径参数。
 type portForwardRequestParams struct {
 	podNamespace string
 	podName      string
 	podUID       types.UID
 }
 
+// getPortForwardRequestParams 从 restful 请求中解析 port-forward 参数。
 func getPortForwardRequestParams(req *restful.Request) portForwardRequestParams {
 	return portForwardRequestParams{
 		podNamespace: req.PathParameter("podNamespace"),
@@ -1113,15 +1143,17 @@ func getPortForwardRequestParams(req *restful.Request) portForwardRequestParams 
 	}
 }
 
+// responder 实现 proxy 的错误响应接口，把代理错误转换为 500 响应。
 type responder struct{}
 
+// Error 记录代理错误并返回 500。
 func (r *responder) Error(w http.ResponseWriter, req *http.Request, err error) {
 	logger := klog.FromContext(req.Context())
 	logger.Error(err, "Error while proxying request")
 	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
-// getAttach handles requests to attach to a container.
+// getAttach 处理 attach 到容器的请求。
 func (s *Server) getAttach(request *restful.Request, response *restful.Response) {
 	params := getExecRequestParams(request)
 	streamOpts, err := remotecommandserver.NewOptions(request.Request)
@@ -1143,7 +1175,7 @@ func (s *Server) getAttach(request *restful.Request, response *restful.Response)
 		return
 	}
 	var handler http.Handler = proxy.NewUpgradeAwareHandler(url, nil /*transport*/, false /*wrapTransport*/, true /*upgradeRequired*/, &responder{})
-	// If upgrade request is for V5 websockets, wrap with websocket/spdy stream translation.
+	// 若升级请求使用 V5 websocket，则包装为 websocket/spdy 流转换。
 	if utilfeature.DefaultFeatureGate.Enabled(features.ExtendWebSocketsToKubelet) &&
 		wsstream.IsWebSocketRequestWithStreamCloseProtocol(request.Request) {
 		servermetrics.IncWebSocketStreamingRequest("attach")
@@ -1158,7 +1190,7 @@ func (s *Server) getAttach(request *restful.Request, response *restful.Response)
 	handler.ServeHTTP(response.ResponseWriter, request.Request)
 }
 
-// getExec handles requests to run a command inside a container.
+// getExec 处理在容器内执行命令的请求。
 func (s *Server) getExec(request *restful.Request, response *restful.Response) {
 	params := getExecRequestParams(request)
 	streamOpts, err := remotecommandserver.NewOptions(request.Request)
@@ -1180,7 +1212,7 @@ func (s *Server) getExec(request *restful.Request, response *restful.Response) {
 		return
 	}
 	var handler http.Handler = proxy.NewUpgradeAwareHandler(url, nil /*transport*/, false /*wrapTransport*/, true /*upgradeRequired*/, &responder{})
-	// If upgrade request is for V5 websockets, wrap with websocket/spdy stream translation.
+	// 若升级请求使用 V5 websocket，则包装为 websocket/spdy 流转换。
 	if utilfeature.DefaultFeatureGate.Enabled(features.ExtendWebSocketsToKubelet) &&
 		wsstream.IsWebSocketRequestWithStreamCloseProtocol(request.Request) {
 		servermetrics.IncWebSocketStreamingRequest("exec")
@@ -1195,7 +1227,7 @@ func (s *Server) getExec(request *restful.Request, response *restful.Response) {
 	handler.ServeHTTP(response.ResponseWriter, request.Request)
 }
 
-// getRun handles requests to run a command inside a container.
+// getRun 处理在容器内运行命令的请求。
 func (s *Server) getRun(logger klog.Logger, request *restful.Request, response *restful.Response) {
 	params := getExecRequestParams(request)
 	pod, ok := s.host.GetPodByName(params.podNamespace, params.podName)
@@ -1204,7 +1236,7 @@ func (s *Server) getRun(logger klog.Logger, request *restful.Request, response *
 		return
 	}
 
-	// For legacy reasons, run uses different query param than exec.
+	// 出于历史原因，run 使用的查询参数与 exec 不同。
 	params.cmd = strings.Split(request.QueryParameter("cmd"), " ")
 	data, err := s.host.RunInContainer(request.Request.Context(), kubecontainer.GetPodFullName(pod), params.podUID, params.containerName, params.cmd)
 	if err != nil {
@@ -1214,11 +1246,12 @@ func (s *Server) getRun(logger klog.Logger, request *restful.Request, response *
 	writeJSONResponse(logger, response, data)
 }
 
-// Derived from go-restful writeJSON.
+// writeJSONResponse 派生自 go-restful 的 writeJSON：data 为 nil 时只写状态码，
+// 不写入 "null" 表示，避免污染响应体。
 func writeJSONResponse(logger klog.Logger, response *restful.Response, data []byte) {
 	if data == nil {
 		response.WriteHeader(http.StatusOK)
-		// do not write a nil representation
+		// 不写入 nil 表示。
 		return
 	}
 	response.Header().Set(restful.HEADER_ContentType, restful.MIME_JSON)
@@ -1228,11 +1261,12 @@ func writeJSONResponse(logger klog.Logger, response *restful.Response, data []by
 	}
 }
 
-// getPortForward handles a new restful port forward request. It determines the
-// pod name and uid and then calls ServePortForward.
+// getPortForward 处理新的 restful port-forward 请求：解析 Pod 名称与 uid，
+// 然后调用 ServePortForward。
 func (s *Server) getPortForward(request *restful.Request, response *restful.Response) {
 	params := getPortForwardRequestParams(request)
 
+	// 隧道模式下请求走 websocket，无法按 SPDY 的头部解析端口，因此使用空的 V4Options。
 	websocketSPDYTunnel := utilfeature.DefaultFeatureGate.Enabled(features.ExtendWebSocketsToKubelet) &&
 		wsstream.IsWebSocketRequestWithTunnelingProtocol(request.Request)
 	var portForwardOptions *portforward.V4Options
@@ -1253,6 +1287,7 @@ func (s *Server) getPortForward(request *restful.Request, response *restful.Resp
 		response.WriteError(http.StatusNotFound, fmt.Errorf("pod does not exist"))
 		return
 	}
+	// 指定了 uid 时必须与当前 Pod 匹配，防止转发到同名重建后的新 Pod。
 	if len(params.podUID) > 0 && pod.UID != params.podUID {
 		response.WriteError(http.StatusNotFound, fmt.Errorf("pod not found"))
 		return
@@ -1264,7 +1299,7 @@ func (s *Server) getPortForward(request *restful.Request, response *restful.Resp
 		return
 	}
 	var handler http.Handler = proxy.NewUpgradeAwareHandler(url, nil /*transport*/, false /*wrapTransport*/, true /*upgradeRequired*/, &responder{})
-	// If upgrade request is for tunneling websockets, wrap with tunneling handling.
+	// 若升级请求使用隧道式 websocket，则包装为隧道处理。
 	if websocketSPDYTunnel {
 		servermetrics.IncWebSocketStreamingRequest("portforward")
 		handler = translator.NewTunnelingHandler(handler)
@@ -1272,9 +1307,8 @@ func (s *Server) getPortForward(request *restful.Request, response *restful.Resp
 	handler.ServeHTTP(response.ResponseWriter, request.Request)
 }
 
-// checkpoint handles the checkpoint API request. It checks if the requested
-// podNamespace, pod and container actually exist and only then calls out
-// to the runtime to actually checkpoint the container.
+// checkpoint 处理 checkpoint API 请求。它先确认请求的 podNamespace、Pod 与容器
+// 确实存在，然后才调用运行时执行真正的容器 checkpoint。
 func (s *Server) checkpoint(request *restful.Request, response *restful.Response) {
 	ctx := request.Request.Context()
 	logger := klog.FromContext(ctx)
@@ -1318,12 +1352,10 @@ func (s *Server) checkpoint(request *restful.Request, response *restful.Response
 	}
 
 	options := &runtimeapi.CheckpointContainerRequest{}
-	// Query parameter to select an optional timeout. Without the timeout parameter
-	// the checkpoint command will use the default CRI timeout.
+	// 可选查询参数用于指定超时；不提供时 checkpoint 命令使用 CRI 的默认超时。
 	timeouts := request.Request.URL.Query()["timeout"]
 	if len(timeouts) > 0 {
-		// If the user specified one or multiple values for timeouts we
-		// are using the last available value.
+		// 若用户提供多个超时值，使用最后一个可用值。
 		timeout, err := strconv.ParseInt(timeouts[len(timeouts)-1], 10, 64)
 		if err != nil {
 			response.WriteError(
@@ -1355,9 +1387,9 @@ func (s *Server) checkpoint(request *restful.Request, response *restful.Response
 	)
 }
 
-// getURLRootPath trims a URL path.
-// For paths in the format of "/metrics/xxx", "metrics/xxx" is returned;
-// For all other paths, the first part of the path is returned.
+// getURLRootPath 截取 URL 路径的根部分。
+// 对于 "/metrics/xxx" 形式的路径，返回 "metrics/xxx"；
+// 其余路径返回第一段。
 func getURLRootPath(path string) string {
 	parts := strings.SplitN(strings.TrimPrefix(path, "/"), "/", 3)
 	if len(parts) == 0 {
@@ -1371,6 +1403,7 @@ func getURLRootPath(path string) string {
 	return parts[0]
 }
 
+// longRunningRequestPathMap 列出长连接端点，用于在指标中区分请求类型。
 var longRunningRequestPathMap = map[string]bool{
 	"exec":        true,
 	"attach":      true,
@@ -1378,12 +1411,13 @@ var longRunningRequestPathMap = map[string]bool{
 	"debug":       true,
 }
 
-// isLongRunningRequest determines whether the request is long-running or not.
+// isLongRunningRequest 判断请求是否为长连接请求。
 func isLongRunningRequest(path string) bool {
 	_, ok := longRunningRequestPathMap[path]
 	return ok
 }
 
+// statusesNoTracePred 定义哪些响应状态不记录 trace 日志，避免把正常返回刷屏。
 var statusesNoTracePred = httplog.StatusIsNot(
 	http.StatusOK,
 	http.StatusFound,
@@ -1394,11 +1428,11 @@ var statusesNoTracePred = httplog.StatusIsNot(
 	http.StatusSwitchingProtocols,
 )
 
-// ServeHTTP responds to HTTP requests on the Kubelet.
+// ServeHTTP 响应发往 Kubelet 的 HTTP 请求。
 func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	handler := httplog.WithLogging(s.restfulCont, statusesNoTracePred)
 
-	// monitor http requests
+	// 监控 http 请求；auth 为 nil 说明是只读服务端。
 	var serverType string
 	if s.auth == nil {
 		serverType = "readonly"
@@ -1415,39 +1449,43 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	servermetrics.HTTPInflightRequests.WithLabelValues(method, path, serverType, longRunning).Inc()
 	defer servermetrics.HTTPInflightRequests.WithLabelValues(method, path, serverType, longRunning).Dec()
 
-	// Use ObserveSince to ensure the duration is calculated when the defer executes,
-	// not when it's declared. In Go, arguments to deferred functions are evaluated
-	// immediately at the defer statement, which would cause the metric to record
-	// near-zero values (~2 microseconds) instead of actual request handling time.
+	// 使用 ObserveSince 确保时长在 defer 执行时计算，而非在声明时。
+	// Go 中 defer 的函数参数会立即求值，直接传入 time.Since 会记录接近零的值
+	// （约 2 微秒）而不是真实的请求处理耗时。
 	defer servermetrics.HTTPRequestsDuration.ObserveSince(time.Now(), method, path, serverType, longRunning)()
 
 	handler.ServeHTTP(w, req)
 }
 
-// prometheusHostAdapter adapts the HostInterface to the interface expected by the
-// cAdvisor prometheus collector.
+// prometheusHostAdapter 把 HostInterface 适配为 cAdvisor prometheus collector
+// 所需的接口。
 type prometheusHostAdapter struct {
 	host HostInterface
 }
 
+// GetRequestedContainersInfo 转发到 HostInterface 获取容器信息。
 func (a prometheusHostAdapter) GetRequestedContainersInfo(containerName string, options cadvisorapi.RequestOptions) (map[string]*cadvisorapi.ContainerInfo, error) {
 	return a.host.GetRequestedContainersInfo(containerName, options)
 }
+
+// GetVersionInfo 转发到 HostInterface 获取版本信息。
 func (a prometheusHostAdapter) GetVersionInfo() (*cadvisorapi.VersionInfo, error) {
 	return a.host.GetVersionInfo()
 }
+
+// GetMachineInfo 转发到 HostInterface 获取机器信息。
 func (a prometheusHostAdapter) GetMachineInfo() (*cadvisorapi.MachineInfo, error) {
 	return a.host.GetCachedMachineInfo()
 }
 
-// oomEventsHostAdapter wraps prometheusHostAdapter and replaces the per-container
-// OOM event count with the count maintained by the kubelet OOM watcher
-// (pkg/kubelet/oom), so that container_oom_events_total is generated by the
-// kubelet rather than by cadvisor.
+// oomEventsHostAdapter 包装 prometheusHostAdapter，把每个容器的 OOM 事件计数替换为
+// kubelet OOM watcher（pkg/kubelet/oom）维护的计数，使 container_oom_events_total
+// 由 kubelet 而非 cadvisor 生成。
 type oomEventsHostAdapter struct {
 	prometheusHostAdapter
 }
 
+// GetRequestedContainersInfo 覆盖容器统计中的 OOM 事件计数。
 func (a oomEventsHostAdapter) GetRequestedContainersInfo(containerName string, options cadvisorapi.RequestOptions) (map[string]*cadvisorapi.ContainerInfo, error) {
 	infos, err := a.prometheusHostAdapter.GetRequestedContainersInfo(containerName, options)
 	for _, info := range infos {
@@ -1459,11 +1497,11 @@ func (a oomEventsHostAdapter) GetRequestedContainersInfo(containerName string, o
 	return infos, err
 }
 
+// containerPrometheusLabelsFunc 返回一个把 cAdvisor 标签映射为 prometheus 标签的函数。
 func containerPrometheusLabelsFunc(s stats.Provider) metrics.ContainerLabelsFunc {
-	// containerPrometheusLabels maps cAdvisor labels to prometheus labels.
+	// containerPrometheusLabels 把 cAdvisor 标签映射为 prometheus 标签。
 	return func(c *cadvisorapi.ContainerInfo) map[string]string {
-		// Prometheus requires that all metrics in the same family have the same labels,
-		// so we arrange to supply blank strings for missing labels
+		// Prometheus 要求同一指标族的所有指标拥有相同标签，因此缺失标签用空字符串补齐。
 		var name, image, podName, namespace, containerName string
 		if len(c.Aliases) > 0 {
 			name = c.Aliases[0]
@@ -1478,7 +1516,7 @@ func containerPrometheusLabelsFunc(s stats.Provider) metrics.ContainerLabelsFunc
 		if v, ok := c.Spec.Labels[kubelettypes.KubernetesContainerNameLabel]; ok {
 			containerName = v
 		}
-		// Associate pod cgroup with pod so we have an accurate accounting of sandbox
+		// 把 Pod cgroup 关联到 Pod，以便准确统计 sandbox 资源。
 		if podName == "" && namespace == "" {
 			if pod, found := s.GetPodByCgroupfs(c.Name); found {
 				podName = pod.Name

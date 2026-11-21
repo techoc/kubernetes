@@ -26,15 +26,18 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// stateMemory 是基于内存的 State 实现，RWMutex 保护 podResources。
 type stateMemory struct {
 	sync.RWMutex
 	podResources PodResourceInfoMap
 }
 
+// 编译期断言：stateMemory 实现 State 接口。
 var _ State = &stateMemory{}
 
-// NewStateMemory creates new State to track resources resourcesated to pods
+// NewStateMemory 创建用于跟踪 Pod 资源信息的状态；resources 为 nil 时初始化为空 map。
 func NewStateMemory(logger klog.Logger, resources PodResourceInfoMap) State {
+	// nil map 无法写入，先初始化为空 map。
 	if resources == nil {
 		resources = PodResourceInfoMap{}
 	}
@@ -44,10 +47,12 @@ func NewStateMemory(logger klog.Logger, resources PodResourceInfoMap) State {
 	}
 }
 
+// GetContainerResources 返回容器已分配的资源（深拷贝）及是否存在。
 func (s *stateMemory) GetContainerResources(podUID types.UID, containerName string) (v1.ResourceRequirements, bool) {
 	s.RLock()
 	defer s.RUnlock()
 
+	// Pod 未登记时返回零值与 false。
 	resourceInfo, ok := s.podResources[podUID]
 	if !ok {
 		return v1.ResourceRequirements{}, ok
@@ -60,7 +65,7 @@ func (s *stateMemory) GetContainerResources(podUID types.UID, containerName stri
 	return *resources.DeepCopy(), ok
 }
 
-// GetPodLevelResources returns current resources information at pod-level
+// GetPodLevelResources 返回 Pod 级资源信息（副本）。
 func (s *stateMemory) GetPodLevelResources(podUID types.UID) (*v1.ResourceRequirements, bool) {
 	s.RLock()
 	defer s.RUnlock()
@@ -73,7 +78,7 @@ func (s *stateMemory) GetPodLevelResources(podUID types.UID) (*v1.ResourceRequir
 	return pr.PodLevelResources.DeepCopy(), ok
 }
 
-// GetEmptyDirVolumeLimit returns current resources information for emptyDir volume
+// GetEmptyDirVolumeLimit 返回 emptyDir 卷的当前大小限制（副本）。
 func (s *stateMemory) GetEmptyDirVolumeLimit(podUID types.UID, volumeName string) (*resource.Quantity, bool) {
 	s.RLock()
 	defer s.RUnlock()
@@ -92,12 +97,14 @@ func (s *stateMemory) GetEmptyDirVolumeLimit(podUID types.UID, volumeName string
 	return &sizeLimitCopy, ok
 }
 
+// GetPodResourceInfoMap 返回全部 Pod 资源信息的深拷贝。
 func (s *stateMemory) GetPodResourceInfoMap() PodResourceInfoMap {
 	s.RLock()
 	defer s.RUnlock()
 	return s.podResources.Clone()
 }
 
+// GetPodResourceInfo 返回指定 Pod 的资源信息及是否存在。
 func (s *stateMemory) GetPodResourceInfo(podUID types.UID) (PodResourceInfo, bool) {
 	s.RLock()
 	defer s.RUnlock()
@@ -106,6 +113,7 @@ func (s *stateMemory) GetPodResourceInfo(podUID types.UID) (PodResourceInfo, boo
 	return resourceInfo, ok
 }
 
+// SetContainerResources 保存容器的资源分配，必要时初始化 Pod 条目。
 func (s *stateMemory) SetContainerResources(logger klog.Logger, podUID types.UID, containerName string, resources v1.ResourceRequirements) error {
 	s.Lock()
 	defer s.Unlock()
@@ -117,6 +125,7 @@ func (s *stateMemory) SetContainerResources(logger klog.Logger, podUID types.UID
 		}
 	}
 
+	// Pod 条目存在但容器 map 为 nil 时也要补初始化。
 	if podInfo.ContainerResources == nil {
 		podInfo.ContainerResources = make(map[string]v1.ResourceRequirements)
 	}
@@ -128,6 +137,7 @@ func (s *stateMemory) SetContainerResources(logger klog.Logger, podUID types.UID
 	return nil
 }
 
+// SetPodLevelResources 保存 Pod 级资源信息。
 func (s *stateMemory) SetPodLevelResources(logger klog.Logger, podUID types.UID, resources *v1.ResourceRequirements) error {
 	s.Lock()
 	defer s.Unlock()
@@ -145,6 +155,7 @@ func (s *stateMemory) SetPodLevelResources(logger klog.Logger, podUID types.UID,
 	return nil
 }
 
+// SetEmptyDirVolumeLimit 保存 emptyDir 卷的大小限制。
 func (s *stateMemory) SetEmptyDirVolumeLimit(podUID types.UID, volumeName string, limit *resource.Quantity) error {
 	logger := klog.TODO()
 	s.Lock()
@@ -168,6 +179,7 @@ func (s *stateMemory) SetEmptyDirVolumeLimit(podUID types.UID, volumeName string
 	return nil
 }
 
+// SetPodResourceInfo 整体替换指定 Pod 的资源信息。
 func (s *stateMemory) SetPodResourceInfo(logger klog.Logger, podUID types.UID, resourceInfo PodResourceInfo) error {
 	s.Lock()
 	defer s.Unlock()
@@ -177,6 +189,7 @@ func (s *stateMemory) SetPodResourceInfo(logger klog.Logger, podUID types.UID, r
 	return nil
 }
 
+// RemovePod 删除指定 Pod 的资源信息。
 func (s *stateMemory) RemovePod(logger klog.Logger, podUID types.UID) error {
 	s.Lock()
 	defer s.Unlock()
@@ -185,6 +198,7 @@ func (s *stateMemory) RemovePod(logger klog.Logger, podUID types.UID) error {
 	return nil
 }
 
+// RemoveOrphanedPods 删除不在 remainingPods 中的 Pod 信息，清理孤儿状态。
 func (s *stateMemory) RemoveOrphanedPods(remainingPods sets.Set[types.UID]) {
 	s.Lock()
 	defer s.Unlock()

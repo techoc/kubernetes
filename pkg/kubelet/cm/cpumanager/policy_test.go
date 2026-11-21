@@ -20,7 +20,9 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
 )
 
+// 以下拓扑用于覆盖各种 socket / NUMA / SMT / uncore cache 组合下的 CPU 分配策略。
 var (
+	// 单 socket、开启超线程：8 个逻辑 CPU 对应 4 个物理核。
 	topoSingleSocketHT = &topology.CPUTopology{
 		NumCPUs:    8,
 		NumSockets: 1,
@@ -37,6 +39,7 @@ var (
 		},
 	}
 
+	// 双 socket、开启超线程，每个 socket 一个 NUMA 节点。
 	topoDualSocketHT = &topology.CPUTopology{
 		NumCPUs:        12,
 		NumSockets:     2,
@@ -58,6 +61,7 @@ var (
 		},
 	}
 
+	// 双 socket、无超线程，并划分多个 uncore cache 域。
 	topoUncoreDualSocketNoSMT = &topology.CPUTopology{
 		NumCPUs:        16,
 		NumSockets:     2,
@@ -83,6 +87,7 @@ var (
 		},
 	}
 
+	// 单 socket、多个 NUMA 节点，并带 uncore cache 划分。
 	topoUncoreSingleSocketMultiNuma = &topology.CPUTopology{
 		NumCPUs:        16,
 		NumSockets:     1,
@@ -108,6 +113,7 @@ var (
 		},
 	}
 
+	// 单 socket、开启超线程，带 uncore cache 划分。
 	topoUncoreSingleSocketSMT = &topology.CPUTopology{
 		NumCPUs:        16,
 		NumSockets:     1,
@@ -133,6 +139,7 @@ var (
 		},
 	}
 
+	// 单 socket、无超线程，带 uncore cache 划分。
 	topoUncoreSingleSocketNoSMT = &topology.CPUTopology{
 		NumCPUs:        16,
 		NumSockets:     1,
@@ -158,6 +165,7 @@ var (
 		},
 	}
 
+	// 双 socket、无超线程，每个 socket 一个 NUMA 节点。
 	topoDualSocketNoHT = &topology.CPUTopology{
 		NumCPUs:    8,
 		NumSockets: 2,
@@ -174,7 +182,7 @@ var (
 		},
 	}
 
-	// fake topology for testing purposes only
+	// 仅用于测试的假拓扑：三 socket、开启超线程，socket 与 NUMA 节点一一对应。
 	topoTripleSocketHT = &topology.CPUTopology{
 		NumCPUs:    18,
 		NumSockets: 3,
@@ -220,6 +228,7 @@ var (
 		145-146,153-154,161-162,167-168,175-176,183-184,189-190,197-198,205-206,213-214,221-222,227-228,235-236,243-244,
 		249-250,257-258,265-266,273-274,281-282,287
 	*/
+	// 四 socket、每核四路超线程的大规模拓扑（数据来自 hwloc lstopo 示例，见上方注释）。
 	topoQuadSocketFourWayHT = &topology.CPUTopology{
 		NumCPUs:    288,
 		NumSockets: 4,
@@ -528,6 +537,7 @@ var (
 		NUMA node2 CPU(s):   20-29,60-69
 		NUMA node3 CPU(s):   30-39,70-79
 	*/
+	// 双 socket、每 socket 多个 NUMA 节点，并开启超线程。
 	topoDualSocketMultiNumaPerSocketHT = &topology.CPUTopology{
 		NumCPUs:      80,
 		NumSockets:   2,
@@ -630,6 +640,7 @@ var (
 		NUMA node2 CPU(s):   2,6,10,14,18,22,26,30,34,38,42,46,50,54,58,62,66,70,74,78
 		NUMA node3 CPU(s):   3,7,11,15,19,23,27,31,35,39,43,47,51,55,59,63,67,71,75,79
 	*/
+	// 与上一个拓扑同构但 NUMA 编号不同的变体，用于验证策略不依赖具体编号。
 	topoDualSocketMultiNumaPerSocketHTType2 = &topology.CPUTopology{
 		NumCPUs:      80,
 		NumSockets:   2,
@@ -725,6 +736,7 @@ var (
 		TODO(fromanirh): replace with a real-world topology
 		once we find a suitable one.
 	*/
+	// 假拓扑：每个 NUMA 节点跨两个 socket，开启超线程。
 	fakeTopoMultiSocketDualSocketPerNumaHT = &topology.CPUTopology{
 		NumCPUs:      80,
 		NumSockets:   4,
@@ -831,6 +843,7 @@ var (
 		NUMA node6 CPU(s):   96-111,224-239
 		NUMA node7 CPU(s):   112-127,240-255
 	*/
+	// 大规模双 socket、每 socket 多 NUMA 节点、开启超线程的拓扑。
 	topoDualSocketMultiNumaPerSocketHTLarge = &topology.CPUTopology{
 		NumCPUs:      256,
 		NumSockets:   2,
@@ -1106,6 +1119,7 @@ var (
 		NUMA node0 CPU(s):     0-95,192-287
 		NUMA node1 CPU(s):     96-191,288-383
 	*/
+	// 双 socket、每 socket 单 NUMA 节点、开启超线程，并带 uncore cache 划分。
 	topoDualSocketSingleNumaPerSocketSMTUncore = &topology.CPUTopology{
 		NumCPUs:        384,
 		NumCores:       192,
@@ -1509,6 +1523,7 @@ var (
 		NUMA node(s):          1
 		NUMA node0 CPU(s):     0-127
 	*/
+	// 小规模单 socket、单 NUMA 节点、开启超线程，带 uncore cache。
 	topoSingleSocketSingleNumaPerSocketSMTSmallUncore = &topology.CPUTopology{
 		NumCPUs:        128,
 		NumCores:       64,
@@ -1656,6 +1671,7 @@ var (
 		NUMA node(s):          1
 		NUMA node0 CPU(s):     0-63
 	*/
+	// 小规模单 socket、单 NUMA 节点、无超线程，带 uncore cache。
 	topoSingleSocketSingleNumaPerSocketNoSMTSmallUncore = &topology.CPUTopology{
 		NumCPUs:        128,
 		NumCores:       64,
@@ -1740,6 +1756,7 @@ var (
 		NUMA node0 CPU(s):     0-31,64-95
 		NUMA node1 CPU(s):     32-63,96-127
 	*/
+	// 小规模双 socket、每 socket 单 NUMA 节点、无超线程，带 uncore cache。
 	topoSmallDualSocketSingleNumaPerSocketNoSMTUncore = &topology.CPUTopology{
 		NumCPUs:        64,
 		NumCores:       64,
@@ -1823,6 +1840,7 @@ var (
 		NUMA node(s):          1
 		NUMA node0 CPU(s):     0-31
 	*/
+	// 小规模单 socket、单 NUMA 节点、无超线程，带 uncore cache。
 	topoSmallSingleSocketSingleNumaPerSocketNoSMTUncore = &topology.CPUTopology{
 		NumCPUs:        32,
 		NumCores:       32,
@@ -1874,6 +1892,7 @@ var (
 		NUMA node(s):          1
 		NUMA node0 CPU(s):     0-255
 	*/
+	// 大规模单 socket、单 NUMA 节点、开启超线程，带 uncore cache。
 	topoLargeSingleSocketSingleNumaPerSocketSMTUncore = &topology.CPUTopology{
 		NumCPUs:        256,
 		NumCores:       128,
@@ -2152,6 +2171,7 @@ var (
 		NUMA node2 CPU(s):     96-143
 		NUMA node3 CPU(s):     144-191
 	*/
+	// 双 socket、每 socket 多 NUMA 节点，并带 uncore cache 划分。
 	topoDualSocketMultiNumaPerSocketUncore = &topology.CPUTopology{
 		NumCPUs:        192,
 		NumCores:       192,
@@ -2366,6 +2386,7 @@ var (
 		NUMA node2 CPU(s):     60-89,180-209
 		NUMA node3 CPU(s):     90-119,210-239
 	*/
+	// 双 socket、开启超线程，uncore cache 为单片结构（无细分）。
 	topoDualSocketSubNumaPerSocketHTMonolithicUncore = &topology.CPUTopology{
 		NumCPUs:        240,
 		NumCores:       120,
@@ -2624,6 +2645,7 @@ var (
 		Socket(s):             1
 		NUMA node(s):          1
 	*/
+	// 单 socket、单 NUMA 节点、仅含 P-core 且开启超线程，uncore cache 为单片结构。
 	topoSingleSocketSingleNumaPerSocketPCoreHTMonolithicUncore = &topology.CPUTopology{
 		NumCPUs:        24,
 		NumCores:       16, // 8 E-Cores and 8 P-Cores
@@ -2666,6 +2688,7 @@ var (
 		Socket(s):             1
 		NUMA node(s):          1
 	*/
+	// 大规模单 socket、单 NUMA 节点，带 uncore cache 划分。
 	topoLargeSingleSocketSingleNumaPerSocketUncore = &topology.CPUTopology{
 		NumCPUs:        128,
 		NumCores:       128,
@@ -2812,6 +2835,7 @@ var (
 		Socket(s):             1
 		NUMA node(s):          1
 	*/
+	// 单 socket、单 NUMA 节点，带 uncore cache 划分。
 	topoSingleSocketSingleNumaPerSocketUncore = &topology.CPUTopology{
 		NumCPUs:        64,
 		NumCores:       64,

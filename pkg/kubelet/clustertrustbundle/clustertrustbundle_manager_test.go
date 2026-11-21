@@ -51,6 +51,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestBeforeSynced 校验 informer 尚未同步时 GetTrustAnchorsByName 会返回错误。
 func TestBeforeSynced(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	kc := fake.NewSimpleClientset()
@@ -59,18 +60,21 @@ func TestBeforeSynced(t *testing.T) {
 
 	ctbManager, _ := NewBetaInformerManager(tCtx, informerFactory, 256, 5*time.Minute)
 
+	// 未启动 informer 就直接查询，用于验证“未同步即失败”的保护。
 	_, err := ctbManager.GetTrustAnchorsByName(tCtx, "foo", false)
 	if err == nil {
 		t.Fatalf("Got nil error, wanted non-nil")
 	}
 }
 
+// testClient 抽象不同 API 版本的 ClusterTrustBundle 创建/删除操作。
 type testClient[T clusterTrustBundle] interface {
 	Create(context.Context, *T, metav1.CreateOptions) (*T, error)
 	Delete(context.Context, string, metav1.DeleteOptions) error
 }
 
-// testingFunctionBundle is a API-version agnostic bundle of functions for handling CTBs in tests.
+// testingFunctionBundle 是与 API 版本无关的测试函数集合，
+// 用于让 v1alpha1/v1beta1/v1 复用同一套用例。
 type testingFunctionBundle[T clusterTrustBundle] struct {
 	ctbConstructor func(name, signerName string, labels map[string]string, bundle string) *T
 	ctbToObj       func(*T) runtime.Object
@@ -81,6 +85,7 @@ type testingFunctionBundle[T clusterTrustBundle] struct {
 	clientGetter               func(kubernetes.Interface) testClient[T]
 }
 
+// alphaFunctionsBundle 是 v1alpha1 版本的测试函数集合。
 var alphaFunctionsBundle = testingFunctionBundle[certificatesv1alpha1.ClusterTrustBundle]{
 	ctbConstructor: mustMakeAlphaCTB,
 	ctbToObj:       func(ctb *certificatesv1alpha1.ClusterTrustBundle) runtime.Object { return ctb },
@@ -95,6 +100,7 @@ var alphaFunctionsBundle = testingFunctionBundle[certificatesv1alpha1.ClusterTru
 	},
 }
 
+// betaFunctionsBundle 是 v1beta1 版本的测试函数集合。
 var betaFunctionsBundle = testingFunctionBundle[certificatesv1beta1.ClusterTrustBundle]{
 	ctbConstructor: mustMakeBetaCTB,
 	ctbToObj:       func(ctb *certificatesv1beta1.ClusterTrustBundle) runtime.Object { return ctb },
@@ -109,6 +115,7 @@ var betaFunctionsBundle = testingFunctionBundle[certificatesv1beta1.ClusterTrust
 	},
 }
 
+// gaFunctionsBundle 是 v1 版本的测试函数集合。
 var gaFunctionsBundle = testingFunctionBundle[certificatesv1.ClusterTrustBundle]{
 	ctbConstructor: mustMakeGACTB,
 	ctbToObj:       func(ctb *certificatesv1.ClusterTrustBundle) runtime.Object { return ctb },
@@ -123,6 +130,7 @@ var gaFunctionsBundle = testingFunctionBundle[certificatesv1.ClusterTrustBundle]
 	},
 }
 
+// TestGetTrustAnchorsByName 在三个 API 版本上复用同一套“按名称查询”用例。
 func TestGetTrustAnchorsByName(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tCtx.SyncTest("v1alpha1", func(tCtx ktesting.TContext) { testGetTrustAnchorsByName(tCtx, alphaFunctionsBundle) })
@@ -130,6 +138,8 @@ func TestGetTrustAnchorsByName(t *testing.T) {
 	tCtx.SyncTest("v1", func(tCtx ktesting.TContext) { testGetTrustAnchorsByName(tCtx, gaFunctionsBundle) })
 }
 
+// testGetTrustAnchorsByName 校验按名称获取信任锚，以及 allowMissing 为 true 时
+// 对不存在的 CTB 返回空结果。
 func testGetTrustAnchorsByName[T clusterTrustBundle](tCtx ktesting.TContext, b testingFunctionBundle[T]) {
 	defer tCtx.Cancel("test completed")
 	t := tCtx.TB()
@@ -145,6 +155,7 @@ func testGetTrustAnchorsByName[T clusterTrustBundle](tCtx ktesting.TContext, b t
 
 	ctbManager, _ := b.informerManagerConstructor(tCtx, informerFactory, 256, 5*time.Minute)
 
+	// 必须先等缓存同步，否则查询结果取决于 informer 的启动时序。
 	informerFactory.Start(tCtx.Done())
 	ctbInformer := b.informerGetter(informerFactory)
 	if !cache.WaitForCacheSync(tCtx.Done(), ctbInformer.HasSynced) {
@@ -170,7 +181,7 @@ func testGetTrustAnchorsByName[T clusterTrustBundle](tCtx ktesting.TContext, b t
 	}
 
 	_, err = ctbManager.GetTrustAnchorsByName(tCtx, "not-found", false)
-	if err == nil { // EQUALS nil
+	if err == nil { // 错误必须非 nil
 		t.Fatalf("While looking up nonexisting ClusterTrustBundle, got nil error, wanted non-nil")
 	}
 
@@ -180,6 +191,8 @@ func testGetTrustAnchorsByName[T clusterTrustBundle](tCtx ktesting.TContext, b t
 	}
 }
 
+// TestGetTrustAnchorsByNameCaching 校验按名称查询的缓存命中，
+// 以及 CTB 更新后缓存会被 informer 失效。
 func TestGetTrustAnchorsByNameCaching(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tCtx.SyncTest("v1alpha1", func(tCtx ktesting.TContext) { testGetTrustAnchorsByNameCaching(tCtx, alphaFunctionsBundle) })
@@ -187,6 +200,7 @@ func TestGetTrustAnchorsByNameCaching(t *testing.T) {
 	tCtx.SyncTest("v1", func(tCtx ktesting.TContext) { testGetTrustAnchorsByNameCaching(tCtx, gaFunctionsBundle) })
 }
 
+// testGetTrustAnchorsByNameCaching 是缓存场景的跨版本测试主体。
 func testGetTrustAnchorsByNameCaching[T clusterTrustBundle](tCtx ktesting.TContext, b testingFunctionBundle[T]) {
 	defer tCtx.Cancel("test completed")
 	t := tCtx.TB()
@@ -203,6 +217,7 @@ func testGetTrustAnchorsByNameCaching[T clusterTrustBundle](tCtx ktesting.TConte
 
 	ctbManager, _ := b.informerManagerConstructor(tCtx, informerFactory, 256, 5*time.Minute)
 
+	// 必须先等缓存同步，否则查询结果取决于 informer 的启动时序。
 	informerFactory.Start(tCtx.Done())
 	ctbInformer := b.informerGetter(informerFactory)
 	if !cache.WaitForCacheSync(tCtx.Done(), ctbInformer.HasSynced) {
@@ -246,9 +261,8 @@ func testGetTrustAnchorsByNameCaching[T clusterTrustBundle](tCtx ktesting.TConte
 		t.Fatalf("Error while adding new CTB: %v", err)
 	}
 
-	// We need to sleep long enough for the informer to notice the new
-	// ClusterTrustBundle, but much less than the 5 minutes of the cache TTL.
-	// This shows us that the informer is properly clearing the cache.
+	// 等待足够长让 informer 感知新的 ClusterTrustBundle，但远小于 5 分钟的缓存 TTL；
+	// 这样能证明缓存是被 informer 主动失效的，而不是自然过期。
 	time.Sleep(5 * time.Second)
 
 	func() {
@@ -265,6 +279,8 @@ func testGetTrustAnchorsByNameCaching[T clusterTrustBundle](tCtx ktesting.TConte
 	}()
 }
 
+// TestGetTrustAnchorsBySignerName 校验按签名者与标签选择器查询信任锚，
+// 包括去重、排序与 allowMissing 行为。
 func TestGetTrustAnchorsBySignerName(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tCtx.SyncTest("v1alpha1", func(tCtx ktesting.TContext) { testGetTrustAnchorsBySignerName(tCtx, alphaFunctionsBundle) })
@@ -272,6 +288,7 @@ func TestGetTrustAnchorsBySignerName(t *testing.T) {
 	tCtx.SyncTest("v1", func(tCtx ktesting.TContext) { testGetTrustAnchorsBySignerName(tCtx, gaFunctionsBundle) })
 }
 
+// testGetTrustAnchorsBySignerName 是签名者查询场景的跨版本测试主体。
 func testGetTrustAnchorsBySignerName[T clusterTrustBundle](tCtx ktesting.TContext, b testingFunctionBundle[T]) {
 	defer tCtx.Cancel("test completed")
 	t := tCtx.TB()
@@ -288,6 +305,7 @@ func testGetTrustAnchorsBySignerName[T clusterTrustBundle](tCtx ktesting.TContex
 
 	ctbManager, _ := b.informerManagerConstructor(tCtx, informerFactory, 256, 5*time.Minute)
 
+	// 必须先等缓存同步，否则查询结果取决于 informer 的启动时序。
 	informerFactory.Start(tCtx.Done())
 	ctbInformer := b.informerGetter(informerFactory)
 	if !cache.WaitForCacheSync(tCtx.Done(), ctbInformer.HasSynced) {
@@ -390,12 +408,13 @@ func testGetTrustAnchorsBySignerName[T clusterTrustBundle](tCtx ktesting.TContex
 	func() {
 		t.Log("signer-b label-b allowMissing=false should yield zero certificates (error)")
 		_, err := ctbManager.GetTrustAnchorsBySigner(tCtx, "foo.bar/b", &metav1.LabelSelector{MatchLabels: map[string]string{"label": "b"}}, false)
-		if err == nil { // EQUALS nil
+		if err == nil { // 错误必须非 nil
 			t.Fatalf("Got nil error while calling GetTrustAnchorsBySigner, wanted non-nil")
 		}
 	}()
 }
 
+// TestGetTrustAnchorsBySignerNameCaching 校验签名者查询的缓存失效行为。
 func TestGetTrustAnchorsBySignerNameCaching(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tCtx.SyncTest("v1alpha1", func(tCtx ktesting.TContext) { testGetTrustAnchorsBySignerNameCaching(tCtx, alphaFunctionsBundle) })
@@ -403,6 +422,7 @@ func TestGetTrustAnchorsBySignerNameCaching(t *testing.T) {
 	tCtx.SyncTest("v1", func(tCtx ktesting.TContext) { testGetTrustAnchorsBySignerNameCaching(tCtx, gaFunctionsBundle) })
 }
 
+// testGetTrustAnchorsBySignerNameCaching 是签名者缓存场景的跨版本测试主体。
 func testGetTrustAnchorsBySignerNameCaching[T clusterTrustBundle](tCtx ktesting.TContext, b testingFunctionBundle[T]) {
 	defer tCtx.Cancel("test completed")
 	t := tCtx.TB()
@@ -416,6 +436,7 @@ func testGetTrustAnchorsBySignerNameCaching[T clusterTrustBundle](tCtx ktesting.
 
 	ctbManager, _ := b.informerManagerConstructor(tCtx, informerFactory, 256, 5*time.Minute)
 
+	// 必须先等缓存同步，否则查询结果取决于 informer 的启动时序。
 	informerFactory.Start(tCtx.Done())
 	ctbInformer := b.informerGetter(informerFactory)
 	if !cache.WaitForCacheSync(tCtx.Done(), ctbInformer.HasSynced) {
@@ -458,9 +479,8 @@ func testGetTrustAnchorsBySignerNameCaching[T clusterTrustBundle](tCtx ktesting.
 		t.Fatalf("Error while adding new CTB: %v", err)
 	}
 
-	// We need to sleep long enough for the informer to notice the new
-	// ClusterTrustBundle, but much less than the 5 minutes of the cache TTL.
-	// This shows us that the informer is properly clearing the cache.
+	// 等待足够长让 informer 感知新的 ClusterTrustBundle，但远小于 5 分钟的缓存 TTL；
+	// 这样能证明缓存是被 informer 主动失效的，而不是自然过期。
 	time.Sleep(5 * time.Second)
 
 	func() {
@@ -478,6 +498,7 @@ func testGetTrustAnchorsBySignerNameCaching[T clusterTrustBundle](tCtx ktesting.
 	}()
 }
 
+// mustMakeRoot 生成自签名的 ed25519 根证书，并返回 PEM 编码。
 func mustMakeRoot(t ktesting.TB, cn string) string {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -505,6 +526,7 @@ func mustMakeRoot(t ktesting.TB, cn string) string {
 	}))
 }
 
+// mustMakeGACTB 构造 v1 ClusterTrustBundle 测试对象。
 func mustMakeGACTB(name, signerName string, labels map[string]string, bundle string) *certificatesv1.ClusterTrustBundle {
 	return &certificatesv1.ClusterTrustBundle{
 		ObjectMeta: metav1.ObjectMeta{
@@ -518,6 +540,7 @@ func mustMakeGACTB(name, signerName string, labels map[string]string, bundle str
 	}
 }
 
+// mustMakeBetaCTB 构造 v1beta1 ClusterTrustBundle 测试对象。
 func mustMakeBetaCTB(name, signerName string, labels map[string]string, bundle string) *certificatesv1beta1.ClusterTrustBundle {
 	return &certificatesv1beta1.ClusterTrustBundle{
 		ObjectMeta: metav1.ObjectMeta{
@@ -531,6 +554,7 @@ func mustMakeBetaCTB(name, signerName string, labels map[string]string, bundle s
 	}
 }
 
+// mustMakeAlphaCTB 构造 v1alpha1 ClusterTrustBundle 测试对象。
 func mustMakeAlphaCTB(name, signerName string, labels map[string]string, bundle string) *certificatesv1alpha1.ClusterTrustBundle {
 	return &certificatesv1alpha1.ClusterTrustBundle{
 		ObjectMeta: metav1.ObjectMeta{
@@ -544,6 +568,7 @@ func mustMakeAlphaCTB(name, signerName string, labels map[string]string, bundle 
 	}
 }
 
+// diffBundles 解析两组 PEM 块、排序后比较，避免块顺序不同造成假失败。
 func diffBundles(a, b []byte) string {
 	var block *pem.Block
 
@@ -588,6 +613,8 @@ func diffBundles(a, b []byte) string {
 	return cmp.Diff(aBlocks, bBlocks)
 }
 
+// TestLazyInformerManager_ensureManagerSet 校验依据 API 发现结果选择
+// 最合适的 informer 管理器（v1 > v1beta1 > v1alpha1），以及 API 不可用时的回退。
 func TestLazyInformerManager_ensureManagerSet(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -660,6 +687,7 @@ func TestLazyInformerManager_ensureManagerSet(t *testing.T) {
 				gvResources: make(map[string]*metav1.APIResourceList),
 			}
 
+			// 只为指定 API 版本暴露 clustertrustbundles 资源。
 			for _, gv := range tt.ctbsAvailableGVs {
 				fakeDisc.gvResources["certificates.k8s.io/"+gv] = &metav1.APIResourceList{
 					APIResources: []metav1.APIResource{
@@ -680,6 +708,7 @@ func TestLazyInformerManager_ensureManagerSet(t *testing.T) {
 				t.Errorf("expected error: %t, got %v", tt.wantError, err)
 			}
 
+			// 通过具体类型断言选择结果，避免依赖内部状态字符串。
 			switch manager := m.manager.(type) {
 			case *InformerManager[certificatesv1alpha1.ClusterTrustBundle]:
 				require.Equal(t, tt.wantManager, "v1alpha1")
@@ -698,31 +727,36 @@ func TestLazyInformerManager_ensureManagerSet(t *testing.T) {
 	}
 }
 
-// fakeDiscovery inherits DiscoveryInterface(via FakeDiscovery) with some methods serving testing data.
+// fakeDiscovery 通过内嵌 FakeDiscovery 实现 DiscoveryInterface，
+// 并用测试数据覆盖资源发现相关方法。
 type fakeDiscovery struct {
 	fakediscovery.FakeDiscovery
 	gvResources map[string]*metav1.APIResourceList
 	err         error
 }
 
+// ServerResourcesForGroupVersion 返回预置的资源列表与错误。
 func (d fakeDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	return d.gvResources[groupVersion], d.err
 }
 
+// ServerResourcesForGroupVersionWithContext 返回预置的资源列表与错误。
 func (d fakeDiscovery) ServerResourcesForGroupVersionWithContext(ctx context.Context, groupVersion string) (*metav1.APIResourceList, error) {
 	return d.gvResources[groupVersion], d.err
 }
 
+// fakeDiscoveryClientSet 用自定义 Discovery 实现替换 fake Clientset 的发现能力。
 type fakeDiscoveryClientSet struct {
 	*fake.Clientset
 	DiscoveryObj *fakeDiscovery
 }
 
+// Discovery 返回注入的 fakeDiscovery。
 func (c *fakeDiscoveryClientSet) Discovery() discovery.DiscoveryInterfaces {
 	return c.DiscoveryObj
 }
 
-// Create a fake Clientset with its Discovery method overridden.
+// NewFakeClientset 创建 fake Clientset，并替换其 Discovery 实现。
 func NewFakeClientset(fakeDiscovery fakeDiscovery) *fakeDiscoveryClientSet {
 	cs := &fakeDiscoveryClientSet{
 		Clientset:    fake.NewClientset(),

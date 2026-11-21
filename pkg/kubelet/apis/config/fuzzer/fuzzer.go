@@ -34,10 +34,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Funcs returns the fuzzer functions for the kubeletconfig apis.
+// Funcs 返回 kubeletconfig API 的模糊测试函数集合。
 func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
-		// provide non-empty values for fields with defaults, so the defaulter doesn't change values during round-trip
+		// 为带默认值的字段提供非空值，防止 defaulter 在 round-trip 时改写它们。
 		func(obj *kubeletconfig.KubeletConfiguration, c randfill.Continue) {
 			c.FillNoCustom(obj)
 			obj.EnableServer = true
@@ -117,6 +117,7 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 			obj.VolumePluginDir = kubeletconfigv1beta1.DefaultVolumePluginDir
 			obj.ContainerRuntimeEndpoint = "unix:///run/containerd/containerd.sock"
 
+			// Logging.Format 为空会导致 round-trip 前后不一致，这里补上默认值。
 			if obj.Logging.Format == "" {
 				obj.Logging.Format = "text"
 			}
@@ -124,16 +125,18 @@ func Funcs(codecs runtimeserializer.CodecFactory) []interface{} {
 			obj.MemoryThrottlingFactor = ptr.To(rand.Float64())
 			obj.MemoryReservationPolicy = kubeletconfig.NoneMemoryReservationPolicy
 			obj.LocalStorageCapacityIsolation = true
+			// 显式设置特性门控，避免默认门控影响模糊测试的稳定性。
 			obj.FeatureGates = map[string]bool{
 				"AllAlpha": false,
 				"AllBeta":  true,
 			}
+			// 新字段同样需要非零默认值，否则 defaulter 会在 round-trip 时改写。
 			obj.CrashLoopBackOff = kubeletconfig.CrashLoopBackOffConfig{
 				MaxContainerRestartPeriod: &metav1.Duration{Duration: 5 * time.Minute},
 			}
 		},
 
-		// tokenAttributes field is only supported in v1 CredentialProvider
+		// CredentialProvider 的 tokenAttributes 仅 v1 支持，置 nil 避免 v1beta1 round-trip 丢字段。
 		func(obj *kubeletconfig.CredentialProvider, c randfill.Continue) {
 			c.FillNoCustom(obj)
 			obj.TokenAttributes = nil

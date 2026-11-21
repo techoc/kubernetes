@@ -20,8 +20,8 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
-// ContainerInfo contains information required by the runtime to consume prepared resources.
+// ContainerInfo 包含运行时消费已准备资源所需的信息。
 type ContainerInfo struct {
-	// CDI Devices for the container
+	// CDIDevices 是容器使用的 CDI 设备列表。
 	CDIDevices []kubecontainer.CDIDevice
 }

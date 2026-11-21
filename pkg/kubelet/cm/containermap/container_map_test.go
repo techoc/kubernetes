@@ -20,9 +20,11 @@ import (
 	"testing"
 )
 
+// TestContainerMapCloneUnshared 验证 Clone 是深拷贝，修改克隆副本不会影响原映射。
+// TestContainerMap 验证容器映射的添加、查询、遍历与两种删除方式。
 func TestContainerMapCloneUnshared(t *testing.T) {
 	cm := NewContainerMap()
-	// add random fake data
+	// 写入一些无特殊含义的假数据。
 	cm.Add("fakePodUID-1", "fakeContainerName-a1", "fakeContainerID-A")
 	cm.Add("fakePodUID-2", "fakeContainerName-b2", "fakeContainerID-B")
 	cm.Add("fakePodUID-2", "fakeContainerName-c2", "fakeContainerID-C")
@@ -30,7 +32,7 @@ func TestContainerMapCloneUnshared(t *testing.T) {
 	cm.Add("fakePodUID-3", "fakeContainerName-e3", "fakeContainerID-E")
 	cm.Add("fakePodUID-3", "fakeContainerName-f3", "fakeContainerID-F")
 
-	// early sanity check, random ID, no special meaning
+	// 先做基本校验：随机 ID 无特殊含义。
 	podUID, containerName, err := cm.GetContainerRef("fakeContainerID-C")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -42,15 +44,16 @@ func TestContainerMapCloneUnshared(t *testing.T) {
 		t.Fatalf("unexpected data: cid=%q err=%v", cID, err)
 	}
 
+	// 克隆应为深拷贝，修改副本不应影响原映射。
 	cloned := cm.Clone()
 	cloned.RemoveByContainerRef("fakePodUID-2", "fakeContainerName-c2")
-	// check is actually gone
+	// 确认克隆后的映射中该条目已删除。
 	if cID, err := cloned.GetContainerID("fakePodUID-2", "fakeContainerName-c2"); err == nil || cID != "" {
 		t.Fatalf("unexpected data found: cid=%q", cID)
 	}
 
-	// check the original copy didn't change
-	// early sanity check, random ID, no special meaning
+	// 确认原映射未被克隆副本的修改影响。
+	// 先做基本校验：随机 ID 无特殊含义。
 	podUIDRedo, containerNameRedo, err2 := cm.GetContainerRef("fakeContainerID-C")
 	if err2 != nil {
 		t.Fatalf("unexpected error: %v", err2)
@@ -77,8 +80,7 @@ func TestContainerMap(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		// Build a new containerMap from the testCases, checking proper
-		// addition, retrieval along the way.
+		// 按测试用例构建容器映射，并在过程中校验添加与查询。
 		cm := NewContainerMap()
 		for i := range tc.containerNames {
 			cm.Add(tc.podUID, tc.containerNames[i], tc.containerIDs[i])
@@ -103,8 +105,7 @@ func TestContainerMap(t *testing.T) {
 			}
 		}
 
-		// Remove all entries from the containerMap, checking proper removal of
-		// each along the way.
+		// 逐个移除映射条目，并校验两种删除方式都能生效。
 		cm.Visit(func(podUID string, containerName string, containerID string) {
 			cm.RemoveByContainerID(containerID)
 			containerID, err := cm.GetContainerID(podUID, containerName)
@@ -112,6 +113,7 @@ func TestContainerMap(t *testing.T) {
 				t.Errorf("unexpected retrieval of containerID after removal: %v", containerID)
 			}
 
+			// 先重新加回，便于测试按容器引用删除。
 			cm.Add(podUID, containerName, containerID)
 
 			cm.RemoveByContainerRef(podUID, containerName)
@@ -121,7 +123,7 @@ func TestContainerMap(t *testing.T) {
 			}
 		})
 
-		// Verify containerMap now empty.
+		// 确认 containerMap 已清空。
 		if len(cm) != 0 {
 			t.Errorf("unexpected entries still in containerMap: %v", cm)
 		}

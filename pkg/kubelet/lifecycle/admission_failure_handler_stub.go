@@ -22,18 +22,18 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// AdmissionFailureHandlerStub is an AdmissionFailureHandler that does not perform any handling of admission failure.
-// It simply passes the failure on.
+// AdmissionFailureHandlerStub 是不对准入失败做任何处理的 AdmissionFailureHandler，
+// 只是把失败原样传递下去。
 type AdmissionFailureHandlerStub struct{}
 
 var _ AdmissionFailureHandler = &AdmissionFailureHandlerStub{}
 
-// NewAdmissionFailureHandlerStub returns an instance of AdmissionFailureHandlerStub.
+// NewAdmissionFailureHandlerStub 返回 AdmissionFailureHandlerStub 实例。
 func NewAdmissionFailureHandlerStub() *AdmissionFailureHandlerStub {
 	return &AdmissionFailureHandlerStub{}
 }
 
-// HandleAdmissionFailure simply passes admission rejection on, with no special handling.
+// HandleAdmissionFailure 直接返回传入的失败原因，不做特殊处理。
 func (n *AdmissionFailureHandlerStub) HandleAdmissionFailure(ctx context.Context, admitPod *v1.Pod, failureReasons []PredicateFailureReason, operation Operation) ([]PredicateFailureReason, error) {
 	return failureReasons, nil
 }

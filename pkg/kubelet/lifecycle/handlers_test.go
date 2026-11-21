@@ -48,6 +48,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// fakeContainerCommandRunner 记录 RunInContainer 的调用参数，并返回预置的输出与错误。
 type fakeContainerCommandRunner struct {
 	Cmd []string
 	ID  kubecontainer.ContainerID
@@ -55,24 +56,29 @@ type fakeContainerCommandRunner struct {
 	Msg string
 }
 
+// RunInContainer 记录命令与容器 ID，供测试断言生命周期钩子的执行内容。
 func (f *fakeContainerCommandRunner) RunInContainer(_ context.Context, id kubecontainer.ContainerID, cmd []string, timeout time.Duration) ([]byte, error) {
 	f.Cmd = cmd
 	f.ID = id
 	return []byte(f.Msg), f.Err
 }
 
+// stubPodStatusProvider 构造返回固定 Pod IP 的假状态提供者。
 func stubPodStatusProvider(podIP string) podStatusProvider {
 	return &fakePodStatusProvider{podIP: podIP}
 }
 
+// fakePodStatusProvider 为生命周期探测提供最小的 Pod 与 PodStatus 实现。
 type fakePodStatusProvider struct {
 	podIP string
 }
 
+// GetPod 返回仅含 UID 的 Pod，满足 handler 查询 Pod 的最小需求。
 func (f *fakePodStatusProvider) GetPod(_ context.Context, uid types.UID) (*kubecontainer.Pod, error) {
 	return &kubecontainer.Pod{ID: uid}, nil
 }
 
+// GetPodStatus 在状态中填入固定 IP，用于构造 HTTP 探测地址。
 func (f *fakePodStatusProvider) GetPodStatus(_ context.Context, pod *kubecontainer.Pod) (*kubecontainer.PodStatus, error) {
 	return &kubecontainer.PodStatus{
 		ID:  pod.ID,
@@ -80,6 +86,7 @@ func (f *fakePodStatusProvider) GetPodStatus(_ context.Context, pod *kubecontain
 	}, nil
 }
 
+// TestRunHandlerExec 验证 exec 生命周期钩子会把容器命令交给运行时执行。
 func TestRunHandlerExec(t *testing.T) {
 	_, tCtx := ktesting.NewTestContext(t)
 	fakeCommandRunner := fakeContainerCommandRunner{}
@@ -113,6 +120,7 @@ func TestRunHandlerExec(t *testing.T) {
 	}
 }
 
+// fakeHTTP 记录请求 URL 与头部，便于断言 HTTP 生命周期钩子。
 type fakeHTTP struct {
 	url     string
 	headers http.Header
@@ -120,12 +128,14 @@ type fakeHTTP struct {
 	resp    *http.Response
 }
 
+// Do 保存请求信息并返回预置响应。
 func (f *fakeHTTP) Do(req *http.Request) (*http.Response, error) {
 	f.url = req.URL.String()
 	f.headers = req.Header.Clone()
 	return f.resp, f.err
 }
 
+// TestRunHandlerHttp 验证 HTTP 钩子使用 Pod IP 与端口构造请求地址。
 func TestRunHandlerHttp(t *testing.T) {
 	_, tCtx := ktesting.NewTestContext(t)
 	fakeHTTPGetter := fakeHTTP{}
@@ -162,6 +172,7 @@ func TestRunHandlerHttp(t *testing.T) {
 	}
 }
 
+// TestRunHandlerHttpWithHeaders 验证用户自定义 HTTP 头会被正确附加。
 func TestRunHandlerHttpWithHeaders(t *testing.T) {
 	_, tCtx := ktesting.NewTestContext(t)
 	fakeHTTPDoer := fakeHTTP{}
@@ -204,6 +215,7 @@ func TestRunHandlerHttpWithHeaders(t *testing.T) {
 	}
 }
 
+// TestRunHandlerHttps 验证 HTTPS scheme 与端口被保留在请求 URL 中。
 func TestRunHandlerHttps(t *testing.T) {
 	_, tCtx := ktesting.NewTestContext(t)
 	fakeHTTPDoer := fakeHTTP{}
@@ -244,6 +256,7 @@ func TestRunHandlerHttps(t *testing.T) {
 	})
 }
 
+// TestRunHandlerHTTPPort 验证命名端口无法解析时会返回错误。
 func TestRunHandlerHTTPPort(t *testing.T) {
 	tests := []struct {
 		Name        string
@@ -306,6 +319,7 @@ func TestRunHandlerHTTPPort(t *testing.T) {
 	}
 }
 
+// TestRunHTTPHandler 覆盖 URL 构造的边界情况：缺失 Pod IP/host、路径斜杠、端口解析与各类 header。
 func TestRunHTTPHandler(t *testing.T) {
 	type expected struct {
 		OldURL    string
@@ -564,6 +578,7 @@ func TestRunHTTPHandler(t *testing.T) {
 			container.Lifecycle.PostStart.HTTPGet = tt.HTTPGet
 			pod.Spec.Containers = []v1.Container{container}
 
+			// verify 断言本次请求实际发出的 header 与 URL。
 			verify := func(t *testing.T, expectedHeader http.Header, expectedURL string) {
 				fakeHTTPDoer := fakeHTTP{}
 				handlerRunner := NewHandlerRunner(&fakeHTTPDoer, &fakeContainerCommandRunner{}, fakePodStatusProvider, nil)
@@ -581,6 +596,7 @@ func TestRunHTTPHandler(t *testing.T) {
 				}
 			}
 
+			// 只验证 HttpGet 处理器在本用例下的行为。
 			t.Run("consistent", func(t *testing.T) {
 				verify(t, tt.Expected.NewHeader, tt.Expected.NewURL)
 			})
@@ -588,6 +604,7 @@ func TestRunHTTPHandler(t *testing.T) {
 	}
 }
 
+// TestRunHandlerNil 验证未配置任何处理器的钩子会返回错误。
 func TestRunHandlerNil(t *testing.T) {
 	_, tCtx := ktesting.NewTestContext(t)
 	handlerRunner := NewHandlerRunner(&fakeHTTP{}, &fakeContainerCommandRunner{}, nil, nil)
@@ -612,6 +629,7 @@ func TestRunHandlerNil(t *testing.T) {
 	}
 }
 
+// TestRunHandlerExecFailure 验证 exec 失败时错误信息包含命令、容器与 Pod 上下文。
 func TestRunHandlerExecFailure(t *testing.T) {
 	_, tCtx := ktesting.NewTestContext(t)
 	expectedErr := fmt.Errorf("invalid command")
@@ -647,6 +665,7 @@ func TestRunHandlerExecFailure(t *testing.T) {
 	}
 }
 
+// TestRunHandlerHttpFailure 验证 HTTP 失败时返回的错误消息包含探测路径与 Pod 信息。
 func TestRunHandlerHttpFailure(t *testing.T) {
 	_, tCtx := ktesting.NewTestContext(t)
 	expectedErr := fmt.Errorf("fake http error")
@@ -690,12 +709,12 @@ func TestRunHandlerHttpFailure(t *testing.T) {
 	}
 }
 
+// TestRunHandlerHttpsFailureFallback 验证 HTTPS 失败后回退到 HTTP，并记录指标与事件。
 func TestRunHandlerHttpsFailureFallback(t *testing.T) {
 	_, tCtx := ktesting.NewTestContext(t)
 
-	// Since prometheus' gatherer is global, other tests may have updated metrics already, so
-	// we need to reset them prior running this test.
-	// This also implies that we can't run this test in parallel with other tests.
+	// Prometheus 的 gatherer 是全局的，其他测试可能已更新过指标，
+	// 因此运行本测试前需要先重置；这也意味着本测试不能与其他测试并行。
 	metrics.Register()
 	legacyregistry.Reset()
 
@@ -726,7 +745,7 @@ func TestRunHandlerHttpsFailureFallback(t *testing.T) {
 		Lifecycle: &v1.Lifecycle{
 			PostStart: &v1.LifecycleHandler{
 				HTTPGet: &v1.HTTPGetAction{
-					// set the scheme to https to ensure it falls back to HTTP.
+					// 置为 https 以验证失败后回退到 HTTP 的行为。
 					Scheme: "https",
 					Host:   "127.0.0.1",
 					Port:   intstr.FromInt32(int32(portNumber)),
@@ -777,6 +796,7 @@ kubelet_lifecycle_handler_http_fallbacks_total 1
 	}
 }
 
+// TestIsHTTPResponseError 验证 TLS 握手/响应类错误能被识别为 HTTP 响应错误。
 func TestIsHTTPResponseError(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
 	defer s.Close()
@@ -791,6 +811,7 @@ func TestIsHTTPResponseError(t *testing.T) {
 	}
 }
 
+// TestRunSleepHandler 验证 sleep 钩子受 Pod 终止宽限期的约束。
 func TestRunSleepHandler(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	handlerRunner := NewHandlerRunner(&fakeHTTP{}, &fakeContainerCommandRunner{}, nil, nil)
@@ -847,6 +868,7 @@ func TestRunSleepHandler(t *testing.T) {
 	}
 }
 
+// TestDeclaredFeaturesAdmitHandler 验证声明式特性准入：节点未声明的特性会拒绝 Pod，已 GA 的特性则允许。
 func TestDeclaredFeaturesAdmitHandler(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	pod := &v1.Pod{
@@ -854,6 +876,7 @@ func TestDeclaredFeaturesAdmitHandler(t *testing.T) {
 			Name: "test-pod",
 		},
 	}
+	// createMockFeature 构造带指定名称、推断行为与最高版本的假特性。
 	createMockFeature := func(t *testing.T, name string, inferForSched bool, maxVersionStr string) *ndftesting.MockFeature {
 		m := ndftesting.NewMockFeature(t)
 		m.SetName(name)

@@ -20,19 +20,17 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// IsContainerEquivalentQOSGuaranteed checks if a container is considered Guaranteed
-// from the perspective of resource managers that allocate exclusive resources.
-// This requires the container to have both requests and limits set and equal
-// for both CPU and Memory.
+// IsContainerEquivalentQOSGuaranteed 从独占资源管理器的视角判断容器是否可视为 Guaranteed。
+// 要求 CPU 和内存的 requests 与 limits 均已设置且相等。
 func IsContainerEquivalentQOSGuaranteed(container *v1.Container) bool {
-	// Check container-level CPU requests and limits are equal.
+	// 检查容器级 CPU requests 与 limits 是否相等。
 	cpuRequest := container.Resources.Requests[v1.ResourceCPU]
 	cpuLimit := container.Resources.Limits[v1.ResourceCPU]
 	if cpuRequest.IsZero() || !cpuRequest.Equal(cpuLimit) {
 		return false
 	}
 
-	// Check container-level Memory requests and limits are equal.
+	// 检查容器级内存 requests 与 limits 是否相等。
 	memRequest := container.Resources.Requests[v1.ResourceMemory]
 	memLimit := container.Resources.Limits[v1.ResourceMemory]
 	if memRequest.IsZero() || !memRequest.Equal(memLimit) {

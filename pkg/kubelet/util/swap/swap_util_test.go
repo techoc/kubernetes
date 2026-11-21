@@ -23,6 +23,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestIsSwapEnabled 验证解析 /proc/swaps 内容时能正确判断是否启用了交换。
 func TestIsSwapEnabled(t *testing.T) {
 	testCases := []struct {
 		name             string

@@ -28,6 +28,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestListPodResourcesV1alpha1 验证 v1alpha1 版本的 List 接口：
+// 覆盖无 Pod、有 Pod 无设备、有 Pod 有设备三种场景，并比对完整响应。
 func TestListPodResourcesV1alpha1(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podName := "pod-name"
@@ -42,6 +44,7 @@ func TestListPodResourcesV1alpha1(t *testing.T) {
 		},
 	}
 
+	// 用表驱动方式组织场景，便于后续扩展。
 	for _, tc := range []struct {
 		desc             string
 		pods             []*v1.Pod
@@ -123,10 +126,12 @@ func TestListPodResourcesV1alpha1(t *testing.T) {
 			},
 		},
 	} {
+		// 每个子测试使用独立的 mock provider，避免用例之间相互影响。
 		t.Run(tc.desc, func(t *testing.T) {
 			mockDevicesProvider := podresourcetest.NewMockDevicesProvider(t)
 			mockPodsProvider := podresourcetest.NewMockPodsProvider(t)
 
+			// 用 Maybe() 放宽调用次数，只校验行为与结果，不限制具体调用路径。
 			mockPodsProvider.EXPECT().GetPods().Return(tc.pods).Maybe()
 			mockDevicesProvider.EXPECT().GetDevices(string(podUID), containerName).Return(tc.devices).Maybe()
 			mockDevicesProvider.EXPECT().UpdateAllocatedDevices(logger).Return().Maybe()
@@ -136,6 +141,7 @@ func TestListPodResourcesV1alpha1(t *testing.T) {
 				Devices: mockDevicesProvider,
 			}
 			server := NewV1alpha1PodResourcesServer(providers)
+			// 直接调用 v1alpha1 服务，验证设备信息从 v1 到 v1alpha1 的转换。
 			resp, err := server.List(tCtx, &v1alpha1.ListPodResourcesRequest{})
 			if err != nil {
 				t.Errorf("want err = %v, got %q", nil, err)

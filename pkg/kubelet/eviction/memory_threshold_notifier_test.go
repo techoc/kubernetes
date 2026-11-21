@@ -36,6 +36,7 @@ import (
 
 const testCgroupPath = "/sys/fs/cgroups/memory"
 
+// nodeSummary 构造节点内存统计；allocatable 为 true 时使用 pods 系统容器的数据。
 func nodeSummary(available, workingSet, usage resource.Quantity, allocatable bool) *statsapi.Summary {
 	availableBytes := uint64(available.Value())
 	workingSetBytes := uint64(workingSet.Value())
@@ -64,6 +65,7 @@ func nodeSummary(available, workingSet, usage resource.Quantity, allocatable boo
 	}
 }
 
+// newTestMemoryThresholdNotifier 用固定 cgroup 路径和注入的 factory/handler 构造通知器。
 func newTestMemoryThresholdNotifier(threshold evictionapi.Threshold, factory NotifierFactory, handler func(string)) *linuxMemoryThresholdNotifier {
 	return &linuxMemoryThresholdNotifier{
 		threshold:  threshold,
@@ -74,6 +76,8 @@ func newTestMemoryThresholdNotifier(threshold evictionapi.Threshold, factory Not
 	}
 }
 
+// TestUpdateThreshold 验证根据 summary 计算 cgroup 阈值：节点级与可分配级信号，
+// 以及底层创建通知器失败时的错误传递。
 func TestUpdateThreshold(t *testing.T) {
 	testCases := []struct {
 		description        string
@@ -141,21 +145,23 @@ func TestUpdateThreshold(t *testing.T) {
 			notifierFactory := NewMockNotifierFactory(t)
 			notifier := NewMockCgroupNotifier(t)
 
+			// notifier 与 factory 均为 mock，按期望参数调用一次。
 			m := newTestMemoryThresholdNotifier(tc.evictionThreshold, notifierFactory, nil)
 			notifierFactory.EXPECT().NewCgroupNotifier(logger, testCgroupPath, memoryUsageAttribute, tc.expectedThreshold.Value()).Return(notifier, tc.updateThresholdErr).Times(1)
 			var events chan<- struct{} = m.events
 
-			// Use a WaitGroup to ensure the goroutine completes before test ends
+			// 用 WaitGroup 确保 UpdateThreshold 启动的 goroutine 在测试结束前完成。
 			var wg sync.WaitGroup
 			wg.Add(1)
 			notifier.EXPECT().Start(tCtx, events).Run(func(ctx context.Context, eventCh chan<- struct{}) {
 				defer wg.Done()
-				// Mock implementation completes immediately
+				// mock 实现立即完成，只负责释放 WaitGroup。
 			}).Maybe()
 
+			// UpdateThreshold 读取 summary 并计算新的绝对值阈值。
 			err := m.UpdateThreshold(tCtx, nodeSummary(tc.available, tc.workingSet, tc.usage, isAllocatableEvictionThreshold(tc.evictionThreshold)))
 
-			// Wait for the goroutine started by UpdateThreshold to complete
+			// 等待 UpdateThreshold 内部启动的 goroutine 结束，避免泄漏。
 			if err == nil {
 				wg.Wait()
 			}
@@ -169,6 +175,7 @@ func TestUpdateThreshold(t *testing.T) {
 	}
 }
 
+// TestUpdateThresholdWithInvalidSummary 验证 summary 不完整或找不到系统容器时返回错误。
 func TestUpdateThresholdWithInvalidSummary(t *testing.T) {
 	testCases := []struct {
 		description                  string
@@ -210,6 +217,8 @@ func TestUpdateThresholdWithInvalidSummary(t *testing.T) {
 	}
 }
 
+// TestStart 验证收到 cgroup 事件后会调用 handler：mock 连续发送 4 个事件，
+// handler 被调用 4 次后 WaitGroup 归零。
 func TestStart(t *testing.T) {
 	logger, tCtx := klogtesting.NewTestContext(t)
 	noResources := resource.MustParse("0")
@@ -224,6 +233,7 @@ func TestStart(t *testing.T) {
 	notifier := NewMockCgroupNotifier(t)
 
 	var wg sync.WaitGroup
+	// 四个事件对应四次 handler 调用，全部完成后测试结束。
 	wg.Add(4)
 	m := newTestMemoryThresholdNotifier(threshold, notifierFactory, func(string) {
 		wg.Done()
@@ -242,11 +252,13 @@ func TestStart(t *testing.T) {
 		t.Errorf("Unexpected error updating threshold: %v", err)
 	}
 
+	// Start 会阻塞读取事件 channel，因此放到 goroutine 中执行。
 	go m.Start(tCtx)
 
 	wg.Wait()
 }
 
+// TestThresholdDescription 验证描述文本包含 hard/soft 以及 allocatable 标记。
 func TestThresholdDescription(t *testing.T) {
 	testCases := []struct {
 		description        string
@@ -313,6 +325,7 @@ func TestThresholdDescription(t *testing.T) {
 				threshold:  tc.evictionThreshold,
 				cgroupPath: testCgroupPath,
 			}
+			// 描述用于日志和事件，必须能区分硬/软阈值与可分配信号。
 			desc := m.Description()
 			for _, expected := range tc.expectedSubstrings {
 				if !strings.Contains(desc, expected) {

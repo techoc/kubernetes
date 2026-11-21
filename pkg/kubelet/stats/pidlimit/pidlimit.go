@@ -21,6 +21,6 @@ import (
 )
 
 const (
-	// PIDs is the (internal) name for this resource
+	// PIDs 是 PID 资源的（内部）名称。
 	PIDs v1.ResourceName = "pid"
 )

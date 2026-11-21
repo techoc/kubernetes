@@ -35,22 +35,27 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// mockAffinityStore 是 topologyAffinityStore 的测试桩，固定返回预置的 hint。
 type mockAffinityStore struct {
 	hint topologymanager.TopologyHint
 }
 
+// GetAffinity 忽略传入参数，直接返回桩中固定的 hint。
 func (m *mockAffinityStore) GetAffinity(_ klog.Logger, podUID string, containerName string) topologymanager.TopologyHint {
 	return m.hint
 }
 
+// GetPolicy 在测试中不需要真实策略，返回 nil。
 func (m *mockAffinityStore) GetPolicy() topologymanager.Policy {
 	return nil
 }
 
+// Name 返回固定的 scope 名；测试不校验该值。
 func (m *mockAffinityStore) Name() string {
 	return "container"
 }
 
+// makeNUMADevice 构造一个绑定到指定 NUMA 节点的 device plugin 设备。
 func makeNUMADevice(id string, numa int) *pluginapi.Device {
 	return &pluginapi.Device{
 		ID:       id,
@@ -58,17 +63,21 @@ func makeNUMADevice(id string, numa int) *pluginapi.Device {
 	}
 }
 
+// makeSocketMask 用给定 NUMA 节点号构造 bitmask；测试只传合法节点号，故忽略错误。
 func makeSocketMask(sockets ...int) bitmask.BitMask {
 	mask, _ := bitmask.NewBitMask(sockets...)
 	return mask
 }
 
+// TestGetTopologyHints 校验容器维度的 hint 生成：请求量、设备的 NUMA 分布
+// 以及已分配设备共同决定每种资源的 hint 集合。
 func TestGetTopologyHints(t *testing.T) {
 	tcases := getCommonTestCases()
 
 	logger, _ := ktesting.NewTestContext(t)
 
 	for _, tc := range tcases {
+		// 假定测试机器有 0、1 两个 NUMA 节点；未声明拓扑的设备不贡献 NUMA 亲和性。
 		m := ManagerImpl{
 			allDevices:       NewResourceDeviceInstances(),
 			healthyDevices:   make(map[string]sets.Set[string]),
@@ -89,6 +98,7 @@ func TestGetTopologyHints(t *testing.T) {
 			}
 		}
 
+		// 预置已分配设备，验证生成 hint 时会从可用池中扣除这些设备。
 		for p := range tc.allocatedDevices {
 			for c := range tc.allocatedDevices[p] {
 				for r, devices := range tc.allocatedDevices[p][c] {
@@ -104,6 +114,7 @@ func TestGetTopologyHints(t *testing.T) {
 
 		hints := m.GetTopologyHints(logger, tc.pod, &tc.pod.Spec.Containers[0], lifecycle.AddOperation)
 
+		// hint 的返回顺序不作保证，先排序再比较，避免因顺序不同而误报。
 		for r := range tc.expectedHints {
 			sort.SliceStable(hints[r], func(i, j int) bool {
 				return hints[r][i].LessThan(hints[r][j])
@@ -118,6 +129,9 @@ func TestGetTopologyHints(t *testing.T) {
 	}
 }
 
+// TestTopologyAlignedAllocation 覆盖 devicesToAllocate 的拓扑对齐路径：
+// 按 hint 过滤可用设备，再调用 device plugin 的 GetPreferredAllocation，
+// 最后校验入选设备落在预期的 NUMA 节点上。
 func TestTopologyAlignedAllocation(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tcases := []struct {
@@ -443,6 +457,7 @@ func TestTopologyAlignedAllocation(t *testing.T) {
 			m.healthyDevices[tc.resource].Insert(d.ID)
 		}
 
+		// 仅当 device plugin 声明支持 GetPreferredAllocation 时才注册 endpoint。
 		if tc.getPreferredAllocationFunc != nil {
 			m.endpoints[tc.resource] = endpointInfo{
 				e: &MockEndpoint{
@@ -462,10 +477,12 @@ func TestTopologyAlignedAllocation(t *testing.T) {
 			t.Errorf("%v. expected allocation size: %v but got: %v", tc.description, tc.request, len(allocated))
 		}
 
+		// plugin 返回的设备可能包含非法 ID 或跨 NUMA 的设备，必须被过滤掉。
 		if !allocated.HasAll(tc.expectedPreferredAllocation...) {
 			t.Errorf("%v. expected preferred allocation: %v but not present in: %v", tc.description, tc.expectedPreferredAllocation, allocated.UnsortedList())
 		}
 
+		// 统计实际分配的设备在各 NUMA 节点上的数量，用于验证是否与 hint 对齐。
 		alignment := make(map[int]int)
 		if m.deviceHasTopologyAlignment(tc.resource) {
 			for d := range allocated {
@@ -481,6 +498,8 @@ func TestTopologyAlignedAllocation(t *testing.T) {
 	}
 }
 
+// TestGetPreferredAllocationParameters 校验传给 device plugin 的三个参数：
+// available（可选设备）、mustInclude（已分配且可复用的设备）、size（本次请求数量）。
 func TestGetPreferredAllocationParameters(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tcases := []struct {
@@ -651,6 +670,7 @@ func TestGetPreferredAllocationParameters(t *testing.T) {
 			opts: &pluginapi.DevicePluginOptions{GetPreferredAllocationAvailable: true},
 		}
 
+		// 由 mock endpoint 捕获实际传入的参数，稍后与期望值比较。
 		_, err := m.devicesToAllocate(tCtx, "podUID", "containerName", tc.resource, tc.request, sets.New[string](tc.reusableDevices...))
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
@@ -671,6 +691,8 @@ func TestGetPreferredAllocationParameters(t *testing.T) {
 	}
 }
 
+// TestGetPodDeviceRequest 校验 pod 级资源请求聚合：init 容器之间取最大值，
+// 用户容器求和，最终每种资源取两者较大值，与调度器对 extended resource 的语义一致。
 func TestGetPodDeviceRequest(t *testing.T) {
 	tcases := []struct {
 		description       string
@@ -918,10 +940,12 @@ func TestGetPodDeviceRequest(t *testing.T) {
 			healthyDevices: make(map[string]sets.Set[string]),
 		}
 
+		// 只有已注册的资源参与聚合，CPU、memory 等内置资源会被忽略。
 		for _, res := range tc.registeredDevices {
 			m.healthyDevices[res] = sets.New[string]()
 		}
 
+		// 聚合结果与期望值整体比较，覆盖多容器、init 容器组合等场景。
 		accumulatedResourceRequests := m.getPodDeviceRequest(tc.pod)
 
 		if !reflect.DeepEqual(accumulatedResourceRequests, tc.expected) {
@@ -930,6 +954,8 @@ func TestGetPodDeviceRequest(t *testing.T) {
 	}
 }
 
+// TestGetPodTopologyHints 校验 pod 维度的 hint 生成：同 pod 内所有容器共享设备池，
+// 已分配设备需从可用池中扣除，未注册的资源不参与计算。
 func TestGetPodTopologyHints(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tcases := getCommonTestCases()
@@ -951,7 +977,7 @@ func TestGetPodTopologyHints(t *testing.T) {
 			m.healthyDevices[r] = sets.New[string]()
 
 			for _, d := range tc.devices[r] {
-				//add `pluginapi.Device` with Topology
+				// 注册带 NUMA 拓扑的 device plugin 设备。
 				m.allDevices[r][d.ID] = d
 				m.healthyDevices[r].Insert(d.ID)
 			}
@@ -986,6 +1012,8 @@ func TestGetPodTopologyHints(t *testing.T) {
 	}
 }
 
+// TestDeviceNUMANodes 校验从设备拓扑中收集实际使用的 NUMA 节点，
+// 并丢弃超出机器 numaNodes 范围的非法节点 ID。
 func TestDeviceNUMANodes(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	resource := "testdevice"
@@ -996,6 +1024,7 @@ func TestDeviceNUMANodes(t *testing.T) {
 		}
 	}
 
+	// 汇总所有带拓扑设备实际所在的 NUMA 节点。
 	t.Run("collects NUMA nodes from all devices", func(t *testing.T) {
 		m := ManagerImpl{
 			allDevices: NewResourceDeviceInstances(),
@@ -1013,6 +1042,7 @@ func TestDeviceNUMANodes(t *testing.T) {
 		}
 	})
 
+	// 未声明拓扑的设备不贡献任何节点。
 	t.Run("device without topology is ignored", func(t *testing.T) {
 		m := ManagerImpl{
 			allDevices: NewResourceDeviceInstances(),
@@ -1030,6 +1060,7 @@ func TestDeviceNUMANodes(t *testing.T) {
 		}
 	})
 
+	// 没有任何带拓扑的设备时应返回空集合，而非全量节点。
 	t.Run("returns empty when no device has topology", func(t *testing.T) {
 		m := ManagerImpl{
 			allDevices: NewResourceDeviceInstances(),
@@ -1045,6 +1076,7 @@ func TestDeviceNUMANodes(t *testing.T) {
 		}
 	})
 
+	// 设备上报的未知 NUMA ID 必须丢弃，否则会生成越界的 bitmask。
 	t.Run("unknown NUMA IDs from device plugin are dropped", func(t *testing.T) {
 		m := ManagerImpl{
 			allDevices: NewResourceDeviceInstances(),
@@ -1063,10 +1095,13 @@ func TestDeviceNUMANodes(t *testing.T) {
 	})
 }
 
+// TestGenerateDeviceTopologyHintsFiltersNUMANodes 校验 hint 生成只使用设备实际
+// 所在的 NUMA 节点，避免在大规模 NUMA 机器上枚举出指数级的无效组合。
 func TestGenerateDeviceTopologyHintsFiltersNUMANodes(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	resource := "gpu"
 
+	// 设备只在一个节点时，只应生成该节点的 preferred hint。
 	t.Run("two node machine, device on one node", func(t *testing.T) {
 		m := ManagerImpl{
 			allDevices: NewResourceDeviceInstances(),
@@ -1091,6 +1126,7 @@ func TestGenerateDeviceTopologyHintsFiltersNUMANodes(t *testing.T) {
 		}
 	})
 
+	// 34 节点机器上枚举全部组合会爆炸；这里只应出现设备所在节点的组合。
 	t.Run("large NUMA machine with devices on small subset", func(t *testing.T) {
 		allNUMA := make([]int, 34)
 		for i := range allNUMA {
@@ -1130,6 +1166,7 @@ func TestGenerateDeviceTopologyHintsFiltersNUMANodes(t *testing.T) {
 		}
 	})
 
+	// 设备分布在两个节点时，仍应恰好生成一个覆盖整机的非 preferred hint。
 	t.Run("devices span all NUMA nodes", func(t *testing.T) {
 		m := ManagerImpl{
 			allDevices: NewResourceDeviceInstances(),
@@ -1160,6 +1197,7 @@ func TestGenerateDeviceTopologyHintsFiltersNUMANodes(t *testing.T) {
 		}
 	})
 
+	// 可复用设备所在的节点即使不在 available 中，也必须被纳入。
 	t.Run("reusable device on filtered node", func(t *testing.T) {
 		m := ManagerImpl{
 			allDevices: NewResourceDeviceInstances(),
@@ -1182,6 +1220,7 @@ func TestGenerateDeviceTopologyHintsFiltersNUMANodes(t *testing.T) {
 		}
 	})
 
+	// 可复用与可用设备位于不同节点时，需要生成覆盖两者的跨节点 hint。
 	t.Run("reusable and available on different nodes", func(t *testing.T) {
 		m := ManagerImpl{
 			allDevices: NewResourceDeviceInstances(),
@@ -1209,11 +1248,11 @@ func TestGenerateDeviceTopologyHintsFiltersNUMANodes(t *testing.T) {
 	})
 }
 
-// TestFilteredDeviceHintsMergeWithOtherProviders exercises policy.Merge with
-// the device hints produced by our changed code, without needing to wire up
-// real CPU/memory managers.
+// TestFilteredDeviceHintsMergeWithOtherProviders 在不搭建真实 CPU/memory manager
+// 的前提下，用本代码生成的设备 hint 与其它 provider 的 hint 走 policy.Merge。
 func TestFilteredDeviceHintsMergeWithOtherProviders(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 设备与 CPU/memory 的 preferred hint 都在 node 0，合并结果应落在 node 0。
 	t.Run("device on node 0", func(t *testing.T) {
 		numaNodes := []int{0, 1}
 		numaInfo := &topologymanager.NUMAInfo{
@@ -1249,6 +1288,7 @@ func TestFilteredDeviceHintsMergeWithOtherProviders(t *testing.T) {
 		assertMergePreferred(t, numaInfo, providersHints, makeSocketMask(0))
 	})
 
+	// 设备只在 node 1，合并结果必须跟随设备所在的节点。
 	t.Run("device on non-zero node only", func(t *testing.T) {
 		numaNodes := []int{0, 1}
 		numaInfo := &topologymanager.NUMAInfo{
@@ -1284,6 +1324,7 @@ func TestFilteredDeviceHintsMergeWithOtherProviders(t *testing.T) {
 		assertMergePreferred(t, numaInfo, providersHints, makeSocketMask(1))
 	})
 
+	// 机器不含 node 0 时，高编号节点同样应被正确处理。
 	t.Run("high NUMA node IDs without node 0", func(t *testing.T) {
 		numaNodes := []int{3, 7}
 		numaInfo := &topologymanager.NUMAInfo{
@@ -1320,9 +1361,12 @@ func TestFilteredDeviceHintsMergeWithOtherProviders(t *testing.T) {
 	})
 }
 
+// assertMergePreferred 在 best-effort 与 restricted 两种策略下验证合并后的
+// best hint 等于 expectedMask 且为 preferred。
 func assertMergePreferred(t *testing.T, numaInfo *topologymanager.NUMAInfo, providersHints []map[string][]topologymanager.TopologyHint, expectedMask bitmask.BitMask) {
 	t.Helper()
 	logger, _ := ktesting.NewTestContext(t)
+	// 两种策略都要求最终 hint 为 preferred；restricted 策略下不满足会被拒绝。
 	for _, policyName := range []string{"best-effort", "restricted"} {
 		t.Run(policyName, func(t *testing.T) {
 			var policy topologymanager.Policy
@@ -1350,14 +1394,22 @@ func assertMergePreferred(t *testing.T, numaInfo *topologymanager.NUMAInfo, prov
 	}
 }
 
+// topologyHintTestCase 是 hint 生成测试的通用用例结构，
+// 同时被容器维度和 pod 维度的测试复用。
 type topologyHintTestCase struct {
-	description      string
-	pod              *v1.Pod
-	devices          map[string][]*pluginapi.Device
+	// description 是用例描述，失败时用于定位。
+	description string
+	// pod 是被测 pod，包含设备资源请求。
+	pod *v1.Pod
+	// devices 按资源名索引该资源的可用设备列表。
+	devices map[string][]*pluginapi.Device
+	// allocatedDevices 记录已分配设备：pod -> 容器 -> 资源 -> 设备 ID。
 	allocatedDevices map[string]map[string]map[string][]string
-	expectedHints    map[string][]topologymanager.TopologyHint
+	// expectedHints 按资源名索引期望的 hint 集合。
+	expectedHints map[string][]topologymanager.TopologyHint
 }
 
+// getCommonTestCases 返回容器维度与 pod 维度测试共用的基础用例。
 func getCommonTestCases() []topologyHintTestCase {
 	return []topologyHintTestCase{
 		{
@@ -1793,6 +1845,8 @@ func getCommonTestCases() []topologyHintTestCase {
 	}
 }
 
+// getPodScopeTestCases 返回只在 pod 维度生效的用例：多容器共享设备池、
+// 未注册资源被忽略等场景。
 func getPodScopeTestCases() []topologyHintTestCase {
 	return []topologyHintTestCase{
 		{
@@ -2052,19 +2106,18 @@ func getPodScopeTestCases() []topologyHintTestCase {
 	}
 }
 
-// The following lifecycle tests verify that the device manager processes or
-// skips operations based on the given lifecycle.Operation.
-// Since GetTopologyHints* does not return an error when an operation is
-// unsupported (it silently returns empty hints to avoid aborting the entire
-// operation across all hint providers), the tests check log output to confirm
-// whether an operation was processed or skipped.
+// 以下生命周期测试验证 device manager 是否根据传入的 lifecycle.Operation
+// 处理或跳过操作。
+// GetTopologyHints* 在操作不受支持时不返回错误（而是静默返回空 hints，
+// 以免中断所有 hint provider 的整体流程），因此测试通过日志输出来确认
+// 操作是被处理还是被跳过。
 //
-// The test values used (e.g. device IDs, pod resource requests) are arbitrary
-// but correct values that let the code run the happy path; the exact values
-// have no special meaning. These tests do not validate the correctness of the
-// hint results, only whether the operation is processed or skipped for a given
-// lifecycle operation.
+// 测试中使用的取值（如设备 ID、pod 资源请求）是任意但合法的，仅用于让代码
+// 走通正常路径；具体数值没有特殊含义。这些测试不校验 hint 结果是否正确，
+// 只校验给定生命周期操作下操作是否被处理或跳过。
 
+// TestLifecycleGetTopologyHints 校验容器维度 hint 生成对生命周期操作的处理；
+// device manager 目前不区分操作类型，均正常执行。
 func TestLifecycleGetTopologyHints(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -2172,6 +2225,8 @@ func TestLifecycleGetTopologyHints(t *testing.T) {
 	}
 }
 
+// TestLifecycleGetPodTopologyHints 校验 pod 维度 hint 生成对生命周期操作的处理；
+// 当前所有操作均被支持。
 func TestLifecycleGetPodTopologyHints(t *testing.T) {
 	testCases := []struct {
 		description string

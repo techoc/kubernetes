@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
+// Test_MarkVolumeAsMountAttempted 验证挂载尝试标记的设置与查询。
 func Test_MarkVolumeAsMountAttempted(t *testing.T) {
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode", volumePluginMgr)
@@ -35,17 +36,21 @@ func Test_MarkVolumeAsMountAttempted(t *testing.T) {
 	podName := util.GetUniquePodName(&v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: "pod1uid"}})
 	volumeName := v1.UniqueVolumeName("fake-plugin/vol1")
 
+	// 标记前应为 false。
 	if asw.IsVolumeMountAttempted(podName, volumeName) {
 		t.Fatalf("expected IsVolumeMountAttempted false before MarkVolumeAsMountAttempted")
 	}
 
 	asw.MarkVolumeAsMountAttempted(podName, volumeName)
 
+	// 标记后应为 true。
 	if !asw.IsVolumeMountAttempted(podName, volumeName) {
 		t.Fatalf("expected IsVolumeMountAttempted true after MarkVolumeAsMountAttempted")
 	}
 }
 
+// Test_MarkVolumeAsMountAttempted_ClearedOnDeletePodFromVolume 验证从卷中删除 Pod 时
+// 会清除挂载尝试标记。
 func Test_MarkVolumeAsMountAttempted_ClearedOnDeletePodFromVolume(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	volumePluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
@@ -74,10 +79,12 @@ func Test_MarkVolumeAsMountAttempted_ClearedOnDeletePodFromVolume(t *testing.T) 
 		t.Fatalf("GetUniqueVolumeNameFromSpec failed: %v", err)
 	}
 
+	// 先把卷标记为已附加，才能关联 Pod 与卷。
 	if err := asw.MarkVolumeAsAttached(logger, emptyVolumeName, volumeSpec, "", "fake/device/path"); err != nil {
 		t.Fatalf("MarkVolumeAsAttached failed: %v", err)
 	}
 
+	// 标记挂载尝试后，查询应为 true。
 	asw.MarkVolumeAsMountAttempted(podName, generatedVolumeName)
 	if !asw.IsVolumeMountAttempted(podName, generatedVolumeName) {
 		t.Fatalf("expected IsVolumeMountAttempted true after MarkVolumeAsMountAttempted")
@@ -87,12 +94,16 @@ func Test_MarkVolumeAsMountAttempted_ClearedOnDeletePodFromVolume(t *testing.T) 
 		t.Fatalf("DeletePodFromVolume failed: %v", err)
 	}
 
+	// 删除 Pod 后标记应被清除。
 	if asw.IsVolumeMountAttempted(podName, generatedVolumeName) {
 		t.Fatalf("expected IsVolumeMountAttempted false after DeletePodFromVolume")
 	}
 }
 
+// Test_GetVolumesToReportHealth 验证只有存在于期望状态且尝试过挂载的卷
+// 才会被上报健康状态。
 func Test_GetVolumesToReportHealth(t *testing.T) {
+	// 用例覆盖：已尝试挂载、不在 DSW、未尝试挂载三种情况。
 	tests := []struct {
 		name          string
 		addToDSW      bool
@@ -131,6 +142,7 @@ func Test_GetVolumesToReportHealth(t *testing.T) {
 			podName := util.GetUniquePodName(pod)
 			outerVolumeName := pod.Spec.Volumes[0].Name
 
+			// 构造 DSW 与 ASW，并按用例决定是否把卷加入 DSW。
 			var volumeName v1.UniqueVolumeName
 			if tt.addToDSW {
 				var err error
@@ -152,6 +164,7 @@ func Test_GetVolumesToReportHealth(t *testing.T) {
 				t.Fatalf("expected %d volumes, got %d", tt.wantCount, len(got))
 			}
 
+			// 返回的卷信息应包含驱动名、句柄与外层卷名，且挂载路径为空。
 			if tt.wantCount > 0 {
 				if got[0].VolumeName != volumeName {
 					t.Errorf("VolumeName: got %q, want %q", got[0].VolumeName, volumeName)
@@ -174,6 +187,7 @@ func Test_GetVolumesToReportHealth(t *testing.T) {
 	}
 }
 
+// newCSITestPodAndSpec 构造使用 CSI 卷的测试 Pod 与卷规格。
 func newCSITestPodAndSpec(podName, podUID, volName, driver, handle string) (*v1.Pod, *volume.Spec) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -205,5 +219,6 @@ func newCSITestPodAndSpec(podName, podUID, volName, driver, handle string) (*v1.
 			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
 		},
 	}
+	// 通过 PVC 引用名为 pv-<volName> 的 CSI 持久卷。
 	return pod, &volume.Spec{PersistentVolume: pv}
 }

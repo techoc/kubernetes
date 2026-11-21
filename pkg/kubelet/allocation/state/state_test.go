@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TestPodResourceInfoMap_Clone 验证 PodResourceInfoMap.Clone 对 nil、空映射及各类字段的处理。
 func TestPodResourceInfoMap_Clone(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -122,11 +123,13 @@ func TestPodResourceInfoMap_Clone(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var cloned PodResourceInfoMap
+			// 克隆不应 panic，且结果应为非 nil 的独立映射。
 			require.NotPanics(t, func() {
 				cloned = test.original.Clone()
 			})
 
 			assert.NotNil(t, cloned)
+			// resource.Quantity 需按数值相等比较，不能直接用结构体比较。
 			diff := cmp.Diff(test.expected, cloned, cmp.Comparer(func(x, y resource.Quantity) bool {
 				return x.Equal(y)
 			}))
@@ -138,6 +141,8 @@ func TestPodResourceInfoMap_Clone(t *testing.T) {
 
 }
 
+// TestPodResourceInfoMap_Clone_DeepCopyIsolation 验证克隆结果与原始映射完全隔离，
+// 修改克隆不会影响原值。
 func TestPodResourceInfoMap_Clone_DeepCopyIsolation(t *testing.T) {
 	newBaseMap := func() PodResourceInfoMap {
 		return PodResourceInfoMap{
@@ -209,9 +214,10 @@ func TestPodResourceInfoMap_Clone_DeepCopyIsolation(t *testing.T) {
 			original := newBaseMap()
 			cloned := original.Clone()
 
-			// Perform the mutation on the clone and verify the original is unaffected.
+			// 修改克隆结果，然后校验原始映射未被影响。
 			test.mutate(cloned)
 
+			// 与全新构造的基准映射比较，任何对原映射的改动都会暴露出来。
 			diff := cmp.Diff(newBaseMap(), original, cmp.Comparer(func(x, y resource.Quantity) bool {
 				return x.Equal(y)
 			}))

@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// fakeCreatePod 构造仅包含名称、命名空间与 UID 的测试 Pod。
 func fakeCreatePod(name, namespace string, uid types.UID) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -36,6 +37,7 @@ func fakeCreatePod(name, namespace string, uid types.UID) *v1.Pod {
 	}
 }
 
+// TestPod 验证 Pod() 对普通、空字段与 nil Pod 的输出格式。
 func TestPod(t *testing.T) {
 	testCases := []struct {
 		caseName      string
@@ -53,6 +55,7 @@ func TestPod(t *testing.T) {
 	}
 }
 
+// TestPodAndPodDesc 验证 PodDesc() 的输出格式与 Pod() 保持一致。
 func TestPodAndPodDesc(t *testing.T) {
 	testCases := []struct {
 		caseName      string

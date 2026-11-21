@@ -25,21 +25,21 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// LockAndCheckSubPath empty implementation
+// LockAndCheckSubPath 为空实现：当前构建不支持 subPath 锁定。
 func LockAndCheckSubPath(volumePath, subPath string) ([]uintptr, error) {
 	return []uintptr{}, nil
 }
 
-// UnlockPath empty implementation
+// UnlockPath 为空实现：当前构建不支持路径解锁。
 func UnlockPath(fileHandles []uintptr) {
 }
 
-// LocalEndpoint empty implementation
+// LocalEndpoint 为空实现：当前构建不支持 unix socket 端点。
 func LocalEndpoint(path, file string) (string, error) {
 	return "", fmt.Errorf("LocalEndpoints are unsupported in this build")
 }
 
-// GetBootTime empty implementation
+// GetBootTime 为空实现：当前构建不支持获取系统启动时间。
 func GetBootTime(klog.Logger) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("GetBootTime is unsupported in this build")
 }

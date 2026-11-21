@@ -18,34 +18,29 @@ package oom
 
 import "sync"
 
-// oomEventCounts holds the cumulative number of OOM kills observed per
-// container, keyed by the cgroup name. The OOM watcher
-// writes it and the kubelet metrics server reads it to generate the
-// container_oom_events_total metric.
+// oomEventCounts 按 cgroup 名称累计每个容器观察到的 OOM kill 次数。
+// OOM watcher 写入，kubelet metrics server 读取，用于生成 container_oom_events_total 指标。
 //
-// ponytail: process global because the OOM watcher is a singleton. If more than
-// one watcher ever exists, pass an explicit counter to NewWatcher and to the
-// metrics server instead.
+// 说明：这里使用进程级全局变量，因为 OOM watcher 是单例。若将来存在多个 watcher，
+// 应改为向 NewWatcher 和 metrics server 显式传入计数器。
 //
-// ponytail: entries are never deleted, so the map grows by one for each distinct
-// cgroup that ever OOMs. OOM kills are rare and cgroup names are unique per
-// container, so this is a slow leak, not stale metrics (the collector only emits
-// for live containers). Prune against the live container set if it matters.
+// 说明：条目从不删除，因此每个曾发生 OOM 的 cgroup 都会让 map 增长一项。
+// OOM kill 很少见且 cgroup 名按容器唯一，所以这是缓慢泄漏，而不是过期指标
+// （collector 只输出存活容器的数据）。如有需要，可对照存活容器集合进行清理。
 var oomEventCounts = struct {
 	sync.Mutex
 	byContainer map[string]uint64
 }{byContainer: make(map[string]uint64)}
 
-// recordOOMKill increments the OOM kill counter for the given cgroup name.
+// recordOOMKill 递增指定 cgroup 名称的 OOM kill 计数。
 func recordOOMKill(containerName string) {
 	oomEventCounts.Lock()
 	defer oomEventCounts.Unlock()
 	oomEventCounts.byContainer[containerName]++
 }
 
-// OOMEventsForContainer returns the number of OOM kills observed for the given
-// cgroup name. It returns 0 for an unknown container and on
-// platforms where the OOM watcher does not run.
+// OOMEventsForContainer 返回指定 cgroup 名称观察到的 OOM kill 次数。
+// 未知容器或 OOM watcher 未运行的平台返回 0。
 func OOMEventsForContainer(containerName string) uint64 {
 	oomEventCounts.Lock()
 	defer oomEventCounts.Unlock()

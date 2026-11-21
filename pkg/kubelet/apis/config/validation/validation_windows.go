@@ -28,7 +28,8 @@ import (
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 )
 
-// validateKubeletOSConfiguration validates os specific kubelet configuration and returns an error if it is invalid.
+// validateKubeletOSConfiguration 校验 Windows 特有的 kubelet 配置，非法时返回错误；
+// 部分不支持的选项仅记录告警。
 func validateKubeletOSConfiguration(kc *kubeletconfig.KubeletConfiguration) error {
 	message := "ignored configuration option: %v (%v) %v is not supported on Windows"
 

@@ -45,16 +45,19 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// init 在包加载阶段注册镜像管理器使用的指标。
 func init() {
 	registerMetrics()
 }
 
+// ImagePodPullingTimeRecorder 负责记录 pod 镜像拉取的开始与结束时间，
+// 供镜像拉取耗时统计使用。
 type ImagePodPullingTimeRecorder interface {
 	RecordImageStartedPulling(podUID types.UID)
 	RecordImageFinishedPulling(podUID types.UID)
 }
 
-// imageManager provides the functionalities for image pulling.
+// imageManager 提供镜像拉取相关功能，覆盖镜像预检查、凭证查找、实际拉取与退避重试。
 type imageManager struct {
 	recorder         record.EventRecorder
 	imageService     kubecontainer.ImageService
@@ -62,16 +65,18 @@ type imageManager struct {
 	backOff          *flowcontrol.Backoff
 	prevPullErrMsg   sync.Map
 
-	// It will check the presence of the image, and report the 'image pulling', image pulled' events correspondingly.
+	// puller 负责检查镜像是否存在，并相应上报 "image pulling"、"image pulled" 事件。
 	puller      imagePuller
 	nodeKeyring credentialprovider.DockerKeyring
 
 	podPullingTimeRecorder ImagePodPullingTimeRecorder
 }
 
+// 编译期断言：imageManager 实现了 ImageManager 接口。
 var _ ImageManager = &imageManager{}
 
-// NewImageManager instantiates a new ImageManager object.
+// NewImageManager 创建一个新的 ImageManager 实例。
+// 构造时先对镜像服务做限流，再根据是否串行化选择串行或并行拉取器。
 func NewImageManager(
 	recorder record.EventRecorder,
 	nodeKeyring credentialprovider.DockerKeyring,
@@ -104,8 +109,8 @@ func NewImageManager(
 	}
 }
 
-// imagePullPrecheck inspects the pull policy and checks for image presence accordingly,
-// returning (imageRef, error msg, err) and logging any errors.
+// imagePullPrecheck 根据拉取策略检查镜像是否存在，
+// 返回（镜像引用、镜像是否已存在、错误消息、错误），并记录相关错误日志。
 func (m *imageManager) imagePullPrecheck(
 	ctx context.Context,
 	objRef *v1.ObjectReference,
@@ -135,7 +140,7 @@ func (m *imageManager) imagePullPrecheck(
 	return imageRef, imageFound, msg, nil
 }
 
-// records an event using ref, event msg. Log using the provided logger when ref is nil.
+// logIt 通过对象引用记录事件；当 ref 为 nil 时，改用传入的 logger 记录日志。
 func (m *imageManager) logIt(logger klog.Logger, objRef *v1.ObjectReference, eventtype, event, prefix, msg string) {
 	if objRef != nil {
 		m.recorder.Event(objRef, eventtype, event, msg)
@@ -150,28 +155,26 @@ func (m *imageManager) logIt(logger klog.Logger, objRef *v1.ObjectReference, eve
 	logger.Info(logMsg)
 }
 
-// imageNotPresentOnNeverPolicy error is a utility function that emits an event about
-// an image not being present and returns the appropriate error to be passed on.
+// imageNotPresentOnNeverPolicyError 在镜像不存在时上报事件，并返回需要向上传递的错误。
 //
-// Called in 2 scenarios:
-//  1. image is not present with `imagePullPolicy: Never“
-//  2. image is present but cannot be accessed with the presented set of credentials
+// 适用于两种场景：
+//  1. 镜像不存在，且拉取策略为 Never；
+//  2. 镜像存在，但当前凭证无法访问它。
 //
-// We don't want to reveal the presence of an image if it cannot be accessed, hence we
-// want the same behavior in both the above scenarios.
+// 我们不希望泄露"镜像存在但无法访问"这一事实，因此两种场景下保持完全一致的行为。
 func (m *imageManager) imageNotPresentOnNeverPolicyError(logger klog.Logger, logPrefix string, objRef *v1.ObjectReference, requestedImage string) (string, error) {
 	msg := fmt.Sprintf("Container image %q is not present with pull policy of Never", requestedImage)
 	m.logIt(logger, objRef, v1.EventTypeWarning, events.ErrImageNeverPullPolicy, logPrefix, msg)
 	return msg, ErrImageNeverPull
 }
 
-// EnsureImageExists pulls the image for the specified pod and requestedImage, and returns
-// (imageRef, error message, error).
+// EnsureImageExists 为指定 pod 和 requestedImage 拉取镜像，返回（镜像引用、错误消息、错误）。
 func (m *imageManager) EnsureImageExists(ctx context.Context, objRef *v1.ObjectReference, pod *v1.Pod, requestedImage string, pullSecrets []v1.Secret, podSandboxConfig *runtimeapi.PodSandboxConfig, podRuntimeHandler string, pullPolicy v1.PullPolicy) (imageRef, message string, err error) {
 	logger := klog.FromContext(ctx)
 	logPrefix := fmt.Sprintf("%s/%s/%s", pod.Namespace, pod.Name, requestedImage)
 
-	var ( // variables used to record metrics
+	// 用于记录指标的变量。
+	var (
 		imagePresentLocally *bool
 		imagePullRequired   *bool
 	)
@@ -179,7 +182,7 @@ func (m *imageManager) EnsureImageExists(ctx context.Context, objRef *v1.ObjectR
 		recordEnsureImageRequest(pullPolicy, imagePresentLocally, imagePullRequired)
 	}()
 
-	// If the image contains no tag or digest, a default tag should be applied.
+	// 镜像未携带 tag 或 digest 时，需要补上默认 tag。
 	image, err := applyDefaultImageTag(requestedImage)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to apply default image tag %q: %v", requestedImage, err)
@@ -206,7 +209,7 @@ func (m *imageManager) EnsureImageExists(ctx context.Context, objRef *v1.ObjectR
 		return "", message, err
 	}
 
-	// wrap the lookup in a function to ensure that we only look up credentials once and no earlier than needed
+	// 把凭证查找包装成函数，确保凭证只查找一次，且只在真正需要时才执行。
 	lookupPullCredentials := m.makeLookupPullCredentialsFunc(spec.Image, pod, pullSecrets, podSandboxConfig)
 
 	getPodCredentials := func() ([]kubeletconfiginternal.ImagePullSecret, *kubeletconfiginternal.ImagePullServiceAccount, error) {
@@ -216,12 +219,12 @@ func (m *imageManager) EnsureImageExists(ctx context.Context, objRef *v1.ObjectR
 		}
 
 		var imagePullSecrets []kubeletconfiginternal.ImagePullSecret
-		// we don't take the audience of the service account into account, so there can only
-		// be one imagePullServiceAccount per pod when we try to make a decision.
+		// 这里不考虑 ServiceAccount 的 audience，因此在做出决策时，
+		// 一个 pod 最多只会对应一个 imagePullServiceAccount。
 		var imagePullServiceAccount *kubeletconfiginternal.ImagePullServiceAccount
 		for _, s := range pullCredentials {
 			if s.Source == nil {
-				// we're only interested in creds that are not node accessible
+				// 只关心节点本身无法访问的凭证，节点可访问的凭证无需重复处理。
 				continue
 			}
 			switch {
@@ -245,14 +248,13 @@ func (m *imageManager) EnsureImageExists(ctx context.Context, objRef *v1.ObjectR
 	}
 
 	if imageRef != "" {
-		imagePullRequired = ptr.To(false) // should be overridden right after this if-block in case pull was required
+		imagePullRequired = ptr.To(false) // 若该分支之后实际发生了拉取，会立即被覆盖
 
 		if !utilfeature.DefaultFeatureGate.Enabled(features.KubeletEnsureSecretPulledImages) {
 			msg := fmt.Sprintf("Container image %q already present on machine", requestedImage)
 			m.logIt(logger, objRef, v1.EventTypeNormal, events.PulledImage, logPrefix, msg)
 
-			// we need to stop recording if it is still in progress, as the image
-			// has already been pulled by another pod.
+			// 镜像可能已由其他 pod 拉取完成，若耗时记录仍在进行，需要提前结束，避免重复计时。
 			m.podPullingTimeRecorder.RecordImageFinishedPulling(pod.UID)
 
 			return imageRef, msg, nil
@@ -264,8 +266,7 @@ func (m *imageManager) EnsureImageExists(ctx context.Context, objRef *v1.ObjectR
 			msg := fmt.Sprintf("Container image %q already present on machine and can be accessed by the pod", requestedImage)
 			m.logIt(logger, objRef, v1.EventTypeNormal, events.PulledImage, logPrefix, msg)
 
-			// we need to stop recording if it is still in progress, as the image
-			// has already been pulled by another pod.
+			// 镜像可能已由其他 pod 拉取完成，若耗时记录仍在进行，需要提前结束，避免重复计时。
 			m.podPullingTimeRecorder.RecordImageFinishedPulling(pod.UID)
 
 			return imageRef, msg, nil
@@ -274,8 +275,8 @@ func (m *imageManager) EnsureImageExists(ctx context.Context, objRef *v1.ObjectR
 	imagePullRequired = ptr.To(true)
 
 	if pullPolicy == v1.PullNever {
-		// The image is present as confirmed by imagePullPrecheck but it apparently
-		// wasn't accessible given the credentials check by the imagePullManager.
+		// imagePullPrecheck 已确认镜像存在，但经过 imagePullManager 的凭证检查后，
+		// 仍然判定当前凭证无法访问它。
 		msg, err := m.imageNotPresentOnNeverPolicyError(logger, logPrefix, objRef, requestedImage)
 		return "", msg, err
 	}
@@ -288,6 +289,8 @@ func (m *imageManager) EnsureImageExists(ctx context.Context, objRef *v1.ObjectR
 	return m.pullImage(ctx, logPrefix, objRef, pod.UID, requestedImage, spec, pullCredentials, podSandboxConfig)
 }
 
+// makeLookupPullCredentialsFunc 构造一个"仅执行一次"的凭证查找函数：
+// 返回镜像仓库对应的可用凭证，且整个生命周期内只真正查找一次。
 func (m *imageManager) makeLookupPullCredentialsFunc(image string, pod *v1.Pod, pullSecrets []v1.Secret, podSandboxConfig *runtimeapi.PodSandboxConfig) func() ([]credentialprovider.TrackedAuthConfig, error) {
 	return sync.OnceValues(func() ([]credentialprovider.TrackedAuthConfig, error) {
 		repoToPull, _, _, err := parsers.ParseImageName(image)
@@ -295,7 +298,7 @@ func (m *imageManager) makeLookupPullCredentialsFunc(image string, pod *v1.Pod, 
 			return nil, err
 		}
 
-		// construct the dynamic keyring using the providers we have in the kubelet
+		// 组合节点内置凭证提供者与外部凭证插件提供者，构造动态 keyring。
 		var podName, podNamespace, podUID string
 		if utilfeature.DefaultFeatureGate.Enabled(features.KubeletServiceAccountTokenForCredentialProviders) {
 			sandboxMetadata := podSandboxConfig.GetMetadata()
@@ -321,6 +324,8 @@ func (m *imageManager) makeLookupPullCredentialsFunc(image string, pod *v1.Pod, 
 	})
 }
 
+// pullImage 执行一次镜像拉取：先检查退避状态，再启动拉取并记录事件与耗时；
+// 失败时登记退避，成功时上报拉取结果。
 func (m *imageManager) pullImage(ctx context.Context, logPrefix string, objRef *v1.ObjectReference, podUID types.UID, image string, imgSpec kubecontainer.ImageSpec, pullCredentials []credentialprovider.TrackedAuthConfig, podSandboxConfig *runtimeapi.PodSandboxConfig) (imageRef, message string, err error) {
 	logger := klog.FromContext(ctx)
 	var pullSucceeded bool
@@ -340,14 +345,14 @@ func (m *imageManager) pullImage(ctx context.Context, logPrefix string, objRef *
 		}()
 	}
 
+	// 退避期内不再重复发起拉取，直接返回退避错误，避免对持续失败的镜像反复冲击。
 	backOffKey := fmt.Sprintf("%s_%s", podUID, image)
 	if m.backOff.IsInBackOffSinceUpdate(backOffKey, m.backOff.Clock.Now()) {
 		msg := fmt.Sprintf("Back-off pulling image %q", image)
 		m.logIt(logger, objRef, v1.EventTypeNormal, events.BackOffPullImage, logPrefix, msg)
 
-		// Wrap the error from the actual pull if available.
-		// This information is populated to the pods
-		// .status.containerStatuses[*].state.waiting.message.
+		// 包装真实拉取中产生的错误信息，它会填充到 pod 的
+		// .status.containerStatuses[*].state.waiting.message 中。
 		prevPullErrMsg, ok := m.prevPullErrMsg.Load(backOffKey)
 		if ok {
 			msg = fmt.Sprintf("%s: %s", msg, prevPullErrMsg)
@@ -355,7 +360,7 @@ func (m *imageManager) pullImage(ctx context.Context, logPrefix string, objRef *
 
 		return "", msg, ErrImagePullBackOff
 	}
-	// Ensure that the map cannot grow indefinitely.
+	// 清理已结算的退避键，确保 prevPullErrMsg 不会无界增长。
 	m.prevPullErrMsg.Delete(backOffKey)
 
 	m.podPullingTimeRecorder.RecordImageStartedPulling(podUID)
@@ -370,8 +375,7 @@ func (m *imageManager) pullImage(ctx context.Context, logPrefix string, objRef *
 		m.backOff.Next(backOffKey, m.backOff.Clock.Now())
 		msg, err := evalCRIPullErr(image, imagePullResult.err)
 
-		// Store the actual pull error for providing that information during
-		// the image pull back-off.
+		// 暂存真实拉取错误，用于退避期间向用户展示具体的失败原因。
 		m.prevPullErrMsg.Store(backOffKey, fmt.Sprintf("%s: %s", err, msg))
 
 		return "", msg, err
@@ -388,16 +392,17 @@ func (m *imageManager) pullImage(ctx context.Context, logPrefix string, objRef *
 	return imagePullResult.imageRef, "", nil
 }
 
+// evalCRIPullErr 把 CRI 拉取错误转换为用户可见的错误消息与统一的错误类型；
+// 无法匹配已知错误类型时，回退为通用的 ErrImagePull。
 func evalCRIPullErr(imgRef string, err error) (errMsg string, errRes error) {
-	// Error assertions via errors.Is is not supported by gRPC (remote runtime) errors right now.
-	// See https://github.com/grpc/grpc-go/issues/3616
+	// gRPC（远端运行时）错误目前不支持 errors.Is 断言，只能按错误字符串前缀匹配。
+	// 参见 https://github.com/grpc/grpc-go/issues/3616
 	if strings.HasPrefix(err.Error(), crierrors.ErrRegistryUnavailable.Error()) {
 		errMsg = fmt.Sprintf(
 			"image pull failed for %s because the registry is unavailable%s",
 			imgRef,
-			// Trim the error name from the message to convert errors like:
-			// "RegistryUnavailable: a more detailed explanation" to:
-			// "...because the registry is unavailable: a more detailed explanation"
+			// 去掉错误名前缀，把 "RegistryUnavailable: 更详细的说明" 之类的消息
+			// 转换为 "...because the registry is unavailable: 更详细的说明"。
 			strings.TrimPrefix(err.Error(), crierrors.ErrRegistryUnavailable.Error()),
 		)
 		return errMsg, crierrors.ErrRegistryUnavailable
@@ -407,37 +412,34 @@ func evalCRIPullErr(imgRef string, err error) (errMsg string, errRes error) {
 		errMsg = fmt.Sprintf(
 			"image pull failed for %s because the signature validation failed%s",
 			imgRef,
-			// Trim the error name from the message to convert errors like:
-			// "SignatureValidationFailed: a more detailed explanation" to:
-			// "...because the signature validation failed: a more detailed explanation"
+			// 去掉错误名前缀，把 "SignatureValidationFailed: 更详细的说明" 之类的消息
+			// 转换为 "...because the signature validation failed: 更详细的说明"。
 			strings.TrimPrefix(err.Error(), crierrors.ErrSignatureValidationFailed.Error()),
 		)
 		return errMsg, crierrors.ErrSignatureValidationFailed
 	}
 
-	// Fallback for no specific error
+	// 没有匹配到特定错误类型时的兜底处理。
 	return err.Error(), ErrImagePull
 }
 
-// applyDefaultImageTag parses a docker image string, if it doesn't contain any tag or digest,
-// a default tag will be applied.
+// applyDefaultImageTag 解析镜像字符串，若其中不含 tag 或 digest，则补上默认 tag。
 func applyDefaultImageTag(image string) (string, error) {
 	_, tag, digest, err := parsers.ParseImageName(image)
 	if err != nil {
 		return "", err
 	}
-	// we just concatenate the image name with the default tag here instead
+	// 这里直接拼接镜像名与默认 tag，而不是使用 dockerref.WithTag(named, ...)：
 	if len(digest) == 0 && len(tag) > 0 && !strings.HasSuffix(image, ":"+tag) {
-		// we just concatenate the image name with the default tag here instead
-		// of using dockerref.WithTag(named, ...) because that would cause the
-		// image to be fully qualified as docker.io/$name if it's a short name
-		// (e.g. just busybox). We don't want that to happen to keep the CRI
-		// agnostic wrt image names and default hostnames.
+		// 后者会把短名称（如 busybox）补全为 docker.io/$name。
+		// 为保持 CRI 对镜像名与默认主机名无感知，不能发生这种补全，故选择手动拼接。
 		image = image + ":" + tag
 	}
 	return image, nil
 }
 
+// trackedToImagePullCreds 把内部凭证记录转换为对外暴露的 ImagePullCredentials。
+// 没有来源（节点可访问）的凭证会被标记为节点与 pod 均可访问。
 func trackedToImagePullCreds(trackedCreds *credentialprovider.TrackedAuthConfig) *kubeletconfiginternal.ImagePullCredentials {
 	ret := &kubeletconfiginternal.ImagePullCredentials{}
 	switch {

@@ -22,25 +22,26 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager/checksum"
 )
 
+// protocol 是端口映射的协议类型。
 type protocol string
 
-// PortMapping is the port mapping configurations of a sandbox.
+// PortMapping 描述 sandbox 的端口映射配置。
 type PortMapping struct {
-	// protocol of the port mapping.
+	// Protocol 是端口映射协议。
 	Protocol *protocol
-	// Port number within the container.
+	// ContainerPort 是容器内的端口号。
 	ContainerPort *int32
-	// Port number on the host.
+	// HostPort 是宿主机上的端口号。
 	HostPort *int32
 }
 
-// Data contains all types of data that can be stored in the checkpoint.
+// Data 包含可存入 checkpoint 的所有数据类型。
 type Data struct {
 	PortMappings []*PortMapping `json:"port_mappings,omitempty"`
 	HostNetwork  bool           `json:"host_network,omitempty"`
 }
 
-// CheckpointData is a sample example structure to be used in test cases for checkpointing
+// CheckpointData 是 checkpoint 测试用例使用的示例结构。
 type CheckpointData struct {
 	Version  string
 	Name     string
@@ -48,18 +49,18 @@ type CheckpointData struct {
 	Checksum checksum.Checksum
 }
 
-// MarshalCheckpoint tries to marshal the CheckpointData into JSON data.
+// MarshalCheckpoint 重新计算校验和并将 CheckpointData 序列化为 JSON。
 func (cp *CheckpointData) MarshalCheckpoint() ([]byte, error) {
 	cp.Checksum = checksum.New(*cp.Data)
 	return json.Marshal(*cp)
 }
 
-// UnmarshalCheckpoint tries to unmarshal the passed JSON data into CheckpointData.
+// UnmarshalCheckpoint 把传入的 JSON 数据反序列化为 CheckpointData。
 func (cp *CheckpointData) UnmarshalCheckpoint(blob []byte) error {
 	return json.Unmarshal(blob, cp)
 }
 
-// VerifyChecksum verifies that CheckpointData's checksum is same as the checksum calculated by its data.
+// VerifyChecksum 校验 CheckpointData 的校验和与根据其数据计算出的校验和一致。
 func (cp *CheckpointData) VerifyChecksum() error {
 	return cp.Checksum.Verify(*cp.Data)
 }

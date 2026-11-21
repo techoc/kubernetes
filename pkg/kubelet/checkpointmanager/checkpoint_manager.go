@@ -25,34 +25,41 @@ import (
 	utilfs "k8s.io/kubernetes/pkg/util/filesystem"
 )
 
-// Checkpoint provides the process checkpoint data
+// Checkpoint 定义进程 checkpoint 数据的序列化与校验接口。
 type Checkpoint interface {
+	// MarshalCheckpoint 把 checkpoint 序列化为字节。
 	MarshalCheckpoint() ([]byte, error)
+	// UnmarshalCheckpoint 从字节反序列化 checkpoint。
 	UnmarshalCheckpoint(blob []byte) error
+	// VerifyChecksum 校验 checkpoint 的 checksum。
 	VerifyChecksum() error
 }
 
-// CheckpointManager provides the interface to manage checkpoint
+// CheckpointManager 提供 checkpoint 管理接口。
 type CheckpointManager interface {
-	// CreateCheckpoint persists checkpoint in CheckpointStore. checkpointKey is the key for utilstore to locate checkpoint.
-	// For file backed utilstore, checkpointKey is the file name to write the checkpoint data.
+	// CreateCheckpoint 把 checkpoint 持久化到 CheckpointStore。
+	// checkpointKey 是 utilstore 定位 checkpoint 的键；
+	// 对基于文件的 utilstore 而言就是写入的文件名。
 	CreateCheckpoint(checkpointKey string, checkpoint Checkpoint) error
-	// GetCheckpoint retrieves checkpoint from CheckpointStore.
+	// GetCheckpoint 从 CheckpointStore 读取 checkpoint。
 	GetCheckpoint(checkpointKey string, checkpoint Checkpoint) error
-	// WARNING: RemoveCheckpoint will not return error if checkpoint does not exist.
+	// 警告：checkpoint 不存在时 RemoveCheckpoint 不会返回错误。
 	RemoveCheckpoint(checkpointKey string) error
-	// ListCheckpoint returns the list of existing checkpoints.
+	// ListCheckpoints 返回现有 checkpoint 的列表。
 	ListCheckpoints() ([]string, error)
 }
 
-// impl is an implementation of CheckpointManager. It persists checkpoint in CheckpointStore
+// impl 是 CheckpointManager 的实现，把 checkpoint 持久化到 CheckpointStore。
 type impl struct {
-	path  string
+	// path 是 checkpoint 目录。
+	path string
+	// store 是底层存储实现。
 	store utilstore.Store
+	// mutex 保护底层存储的并发访问。
 	mutex sync.Mutex
 }
 
-// NewCheckpointManager returns a new instance of a checkpoint manager
+// NewCheckpointManager 创建 checkpoint 管理器。
 func NewCheckpointManager(checkpointDir string) (CheckpointManager, error) {
 	fstore, err := utilstore.NewFileStore(checkpointDir, &utilfs.DefaultFs{})
 	if err != nil {
@@ -62,10 +69,11 @@ func NewCheckpointManager(checkpointDir string) (CheckpointManager, error) {
 	return &impl{path: checkpointDir, store: fstore}, nil
 }
 
-// CreateCheckpoint persists checkpoint in CheckpointStore.
+// CreateCheckpoint 把 checkpoint 持久化到 CheckpointStore。
 func (manager *impl) CreateCheckpoint(checkpointKey string, checkpoint Checkpoint) error {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
+	// 先序列化再写入存储。
 	blob, err := checkpoint.MarshalCheckpoint()
 	if err != nil {
 		return err
@@ -73,17 +81,19 @@ func (manager *impl) CreateCheckpoint(checkpointKey string, checkpoint Checkpoin
 	return manager.store.Write(checkpointKey, blob)
 }
 
-// GetCheckpoint retrieves checkpoint from CheckpointStore.
+// GetCheckpoint 从 CheckpointStore 读取 checkpoint。
 func (manager *impl) GetCheckpoint(checkpointKey string, checkpoint Checkpoint) error {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
 	blob, err := manager.store.Read(checkpointKey)
 	if err != nil {
+		// 统一转换为 checkpoint 不存在的专用错误。
 		if err == utilstore.ErrKeyNotFound {
 			return errors.ErrCheckpointNotFound
 		}
 		return err
 	}
+	// 反序列化后必须校验 checksum，防止数据损坏。
 	err = checkpoint.UnmarshalCheckpoint(blob)
 	if err == nil {
 		err = checkpoint.VerifyChecksum()
@@ -91,14 +101,14 @@ func (manager *impl) GetCheckpoint(checkpointKey string, checkpoint Checkpoint) 
 	return err
 }
 
-// RemoveCheckpoint will not return error if checkpoint does not exist.
+// RemoveCheckpoint 删除 checkpoint；不存在时不返回错误。
 func (manager *impl) RemoveCheckpoint(checkpointKey string) error {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
 	return manager.store.Delete(checkpointKey)
 }
 
-// ListCheckpoints returns the list of existing checkpoints.
+// ListCheckpoints 返回现有 checkpoint 的列表。
 func (manager *impl) ListCheckpoints() ([]string, error) {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()

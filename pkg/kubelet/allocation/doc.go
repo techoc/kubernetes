@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package allocation handles tracking pod resource allocations.
+// Package allocation 负责跟踪 Pod 的资源分配状态。
 package allocation

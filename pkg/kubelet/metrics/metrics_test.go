@@ -25,24 +25,25 @@ import (
 
 const imagePullDurationKey = "kubelet_" + ImagePullDurationKey
 
+// TestImagePullDurationMetric 验证不同镜像大小分桶下拉取时长直方图的输出。
 func TestImagePullDurationMetric(t *testing.T) {
 	t.Run("register image pull duration", func(t *testing.T) {
 		Register()
 		defer clearMetrics()
 
-		// Pairs of image size in bytes and pull duration in seconds
+		// 每个数据点是（镜像字节数，拉取秒数）。
 		dataPoints := [][]float64{
-			// 0 byets, 0 seconds
+			// 0 字节，0 秒。
 			{0, 0},
-			// 5MB, 10 seconds
+			// 5MB，10 秒。
 			{5 * 1024 * 1024, 10},
-			// 15MB, 20 seconds
+			// 15MB，20 秒。
 			{15 * 1024 * 1024, 20},
-			// 500 MB, 200 seconds
+			// 500MB，200 秒。
 			{500 * 1024 * 1024, 200},
-			// 15 GB, 6000 seconds,
+			// 15GB，6000 秒。
 			{15 * 1024 * 1024 * 1024, 6000},
-			// 200 GB, 10000 seconds
+			// 200GB，10000 秒。
 			{200 * 1024 * 1024 * 1024, 10000},
 		}
 
@@ -72,6 +73,7 @@ func TestImagePullDurationMetric(t *testing.T) {
 	})
 }
 
+// clearMetrics 重置测试期间写入的指标，避免影响后续用例。
 func clearMetrics() {
 	ImagePullDuration.Reset()
 }

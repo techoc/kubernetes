@@ -26,24 +26,21 @@ import (
 	"k8s.io/utils/lru"
 )
 
+// lruCache 是带权威标记的 LRU 缓存：发生过驱逐后不再可信。
 type lruCache[K comparable, V any] struct {
 	cache   *lru.Cache
 	maxSize int
 
-	// authoritative indicates if we can consider the cached records an
-	// authoritative source.
-	// False if the cache is evicted any records because it reached capacity, or
-	// if there were errors during its initialization.
+	// authoritative 表示缓存内容是否可作为权威数据源：
+	// 容量不足发生驱逐或初始化出错时置为 false。
 	authoritative atomic.Bool
 
-	// deletingKeys is used by the eviction function to distinguish between keys
-	// being explicitly deleted and keys being removed because the cache was too
-	// large or being cleared.
-	//
-	// This is only modified by lruCache.Delete().
+	// deletingKeys 让驱逐函数区分“显式删除”与“容量/清空导致的移除”，
+	// 只有 lruCache.Delete() 会修改它。
 	deletingKeys sync.Map
 }
 
+// newLRUCache 创建 LRU 缓存并注册驱逐回调。
 func newLRUCache[K comparable, V any](size int) *lruCache[K, V] {
 	c := lru.New(size)
 	l := &lruCache[K, V]{
@@ -55,7 +52,7 @@ func newLRUCache[K comparable, V any](size int) *lruCache[K, V] {
 		if _, shouldIgnore := l.deletingKeys.Load(key); shouldIgnore {
 			return
 		}
-		// any eviction makes our cache non-authoritative
+		// 发生驱逐说明缓存不完整，不再作为权威源。
 		l.authoritative.Store(false)
 	}); err != nil {
 		panic(fmt.Sprintf("failed to set eviction function to the LRU cache: %v", err))
@@ -63,6 +60,7 @@ func newLRUCache[K comparable, V any](size int) *lruCache[K, V] {
 	return l
 }
 
+// Get 返回缓存值；nil 值也会以 (nil, true) 表示命中。
 func (c *lruCache[K, V]) Get(key K) (*V, bool) {
 	value, found := c.cache.Get(key)
 	if !found {
@@ -74,21 +72,24 @@ func (c *lruCache[K, V]) Get(key K) (*V, bool) {
 	return value.(*V), true
 }
 
+// Set 写入缓存。
 func (c *lruCache[K, V]) Set(key K, value *V) { c.cache.Add(key, value) }
-func (c *lruCache[K, V]) Len() int            { return c.cache.Len() }
-func (c *lruCache[K, V]) Clear()              { c.cache.Clear() }
 
-// Delete will prevent authoritative cache status changes.
-//
-// Must be called locked with an external write lock on `key`.
+// Len 返回当前缓存条目数。
+func (c *lruCache[K, V]) Len() int { return c.cache.Len() }
+
+// Clear 清空缓存。
+func (c *lruCache[K, V]) Clear() { c.cache.Clear() }
+
+// Delete 删除键且不改变权威标记；
+// 调用方必须已对 key 持有外部写锁。
 func (c *lruCache[K, V]) Delete(key K) {
 	c.deletingKeys.Store(key, struct{}{})
 	defer c.deletingKeys.Delete(key)
 	c.cache.Remove(key)
 }
 
-// cachedPullRecordsAccessor implements a write-through cache layer on top
-// of another PullRecordsAccessor
+// cachedPullRecordsAccessor 在另一个 PullRecordsAccessor 之上实现写穿透缓存。
 type cachedPullRecordsAccessor struct {
 	delegate PullRecordsAccessor
 
@@ -98,6 +99,7 @@ type cachedPullRecordsAccessor struct {
 	pulledRecords      *lruCache[string, kubeletconfiginternal.ImagePulledRecord]
 }
 
+// NewCachedPullRecordsAccessor 创建带缓存与指标包装的访问器，并预热缓存。
 func NewCachedPullRecordsAccessor(logger klog.Logger, delegate PullRecordsAccessor, intentsCacheSize, pulledRecordsCacheSize, stripedLocksSize int32) PullRecordsAccessor {
 	intentsCacheSize = min(intentsCacheSize, 1024)
 	pulledRecordsCacheSize = min(pulledRecordsCacheSize, 2000)
@@ -110,7 +112,7 @@ func NewCachedPullRecordsAccessor(logger klog.Logger, delegate PullRecordsAccess
 		pulledRecordsLocks: NewStripedLockSet(stripedLocksSize),
 		pulledRecords:      newLRUCache[string, kubeletconfiginternal.ImagePulledRecord](int(pulledRecordsCacheSize)),
 	}
-	// warm our caches and set authoritative
+	// 预热缓存：列表成功且不超过容量时才标记为权威。
 	_, err := c.ListImagePullIntents()
 	if err != nil {
 		logger.Info("there was an error initializing the image pull intents cache, the cache will work in a non-authoritative mode until the intents are listed successfully", "error", err)
@@ -122,6 +124,7 @@ func NewCachedPullRecordsAccessor(logger klog.Logger, delegate PullRecordsAccess
 	return NewMeteringRecordsAccessor(c, inMemIntentsPercent, inMemPulledRecordsPercent)
 }
 
+// ListImagePullIntents 从委托方列出 intent，并刷新缓存。
 func (c *cachedPullRecordsAccessor) ListImagePullIntents() ([]*kubeletconfiginternal.ImagePullIntent, error) {
 	return cacheRefreshingList(
 		c.intents,
@@ -131,26 +134,27 @@ func (c *cachedPullRecordsAccessor) ListImagePullIntents() ([]*kubeletconfiginte
 	)
 }
 
+// ImagePullIntentExists 先查缓存，未命中再在锁内查一次，最后才回源。
 func (c *cachedPullRecordsAccessor) ImagePullIntentExists(image string) (bool, error) {
-	// do the cheap Get() lock-free
+	// 先做无锁的快速查询。
 	if _, exists := c.intents.Get(image); exists {
 		return true, nil
 	}
 
-	// on a miss, lock on the image
+	// 未命中时对镜像加锁，避免并发回源。
 	c.intentsLocks.Lock(image)
 	defer c.intentsLocks.Unlock(image)
 
-	// check again if the image exists in the cache under image lock
+	// 持锁后再次检查，可能已被其他 goroutine 填充。
 	if _, exists := c.intents.Get(image); exists {
 		return true, nil
 	}
-	// if the cache is authoritative, return false on a miss
+	// 缓存权威时未命中即可确定不存在，无需回源。
 	if c.intents.authoritative.Load() {
 		return false, nil
 	}
 
-	// fall through to the expensive lookup
+	// 回退到开销更大的委托查询。
 	exists, err := c.delegate.ImagePullIntentExists(image)
 	if err == nil && exists {
 		c.intents.Set(image, &kubeletconfiginternal.ImagePullIntent{
@@ -160,6 +164,7 @@ func (c *cachedPullRecordsAccessor) ImagePullIntentExists(image string) (bool, e
 	return exists, err
 }
 
+// WriteImagePullIntent 写穿透到委托方，成功后更新缓存。
 func (c *cachedPullRecordsAccessor) WriteImagePullIntent(logger klog.Logger, image string) error {
 	c.intentsLocks.Lock(image)
 	defer c.intentsLocks.Unlock(image)
@@ -174,6 +179,7 @@ func (c *cachedPullRecordsAccessor) WriteImagePullIntent(logger klog.Logger, ima
 	return nil
 }
 
+// DeleteImagePullIntent 删除委托方记录并同步清理缓存。
 func (c *cachedPullRecordsAccessor) DeleteImagePullIntent(logger klog.Logger, image string) error {
 	c.intentsLocks.Lock(image)
 	defer c.intentsLocks.Unlock(image)
@@ -185,6 +191,7 @@ func (c *cachedPullRecordsAccessor) DeleteImagePullIntent(logger klog.Logger, im
 	return nil
 }
 
+// ListImagePulledRecords 从委托方列出拉取记录，并刷新缓存。
 func (c *cachedPullRecordsAccessor) ListImagePulledRecords() ([]*kubeletconfiginternal.ImagePulledRecord, error) {
 	return cacheRefreshingList(
 		c.pulledRecords,
@@ -194,28 +201,29 @@ func (c *cachedPullRecordsAccessor) ListImagePulledRecords() ([]*kubeletconfigin
 	)
 }
 
+// GetImagePulledRecord 先查缓存，未命中再持锁回源。
 func (c *cachedPullRecordsAccessor) GetImagePulledRecord(imageRef string) (*kubeletconfiginternal.ImagePulledRecord, bool, error) {
-	// do the cheap Get() lock-free
+	// 先做无锁的快速查询。
 	pulledRecord, exists := c.pulledRecords.Get(imageRef)
 	if exists {
 		return pulledRecord, true, nil
 	}
 
-	// on a miss, lock on the imageRef
+	// 未命中时对 imageRef 加锁，避免并发回源。
 	c.pulledRecordsLocks.Lock(imageRef)
 	defer c.pulledRecordsLocks.Unlock(imageRef)
 
-	// check again if the imageRef exists in the cache under imageRef lock
+	// 持锁后再次检查，可能已被其他 goroutine 填充。
 	pulledRecord, exists = c.pulledRecords.Get(imageRef)
 	if exists {
 		return pulledRecord, true, nil
 	}
-	// if the cache is authoritative, return false on a miss
+	// 缓存权威时未命中即可确定不存在，无需回源。
 	if c.pulledRecords.authoritative.Load() {
 		return nil, false, nil
 	}
 
-	// fall through to the expensive lookup
+	// 回退到开销更大的委托查询。
 	pulledRecord, exists, err := c.delegate.GetImagePulledRecord(imageRef)
 	if err == nil && exists {
 		c.pulledRecords.Set(imageRef, pulledRecord)
@@ -223,6 +231,7 @@ func (c *cachedPullRecordsAccessor) GetImagePulledRecord(imageRef string) (*kube
 	return pulledRecord, exists, err
 }
 
+// WriteImagePulledRecord 写穿透到委托方，成功后更新缓存。
 func (c *cachedPullRecordsAccessor) WriteImagePulledRecord(logger klog.Logger, record *kubeletconfiginternal.ImagePulledRecord) error {
 	c.pulledRecordsLocks.Lock(record.ImageRef)
 	defer c.pulledRecordsLocks.Unlock(record.ImageRef)
@@ -234,6 +243,7 @@ func (c *cachedPullRecordsAccessor) WriteImagePulledRecord(logger klog.Logger, r
 	return nil
 }
 
+// DeleteImagePulledRecord 删除委托方记录并同步清理缓存。
 func (c *cachedPullRecordsAccessor) DeleteImagePulledRecord(logger klog.Logger, imageRef string) error {
 	c.pulledRecordsLocks.Lock(imageRef)
 	defer c.pulledRecordsLocks.Unlock(imageRef)
@@ -245,16 +255,20 @@ func (c *cachedPullRecordsAccessor) DeleteImagePulledRecord(logger klog.Logger, 
 	return nil
 }
 
+// intentsSize 返回 pull intent 缓存使用率百分比。
 func (c *cachedPullRecordsAccessor) intentsSize() (uint, error) {
 	intentsUsage := c.intents.Len() * 100 / c.intents.maxSize
 	return uint(intentsUsage), nil
 }
 
+// pulledRecordsSize 返回拉取记录缓存使用率百分比。
 func (c *cachedPullRecordsAccessor) pulledRecordsSize() (uint, error) {
 	pulledRecordsUsage := c.pulledRecords.Len() * 100 / c.pulledRecords.maxSize
 	return uint(pulledRecordsUsage), nil
 }
 
+// cacheRefreshingList 是通用的列表+缓存刷新逻辑：
+// 非权威缓存先全局加锁，列表成功后按容量重建缓存。
 func cacheRefreshingList[K comparable, V any](
 	cache *lruCache[K, V],
 	delegateLocks *StripedLockSet,
@@ -263,8 +277,7 @@ func cacheRefreshingList[K comparable, V any](
 ) ([]*V, error) {
 	wasAuthoritative := cache.authoritative.Load()
 	if !wasAuthoritative {
-		// doing a full list gives us an opportunity to become authoritative
-		// if we get back an error-free result that fits in our cache
+		// 完整列表且结果能放进缓存时，有机会重新变为权威。
 		delegateLocks.GlobalLock()
 		defer delegateLocks.GlobalUnlock()
 	}
@@ -275,10 +288,10 @@ func cacheRefreshingList[K comparable, V any](
 	}
 
 	resultsAreAuthoritative := err == nil && len(results) < cache.maxSize
-	// populate the cache if that would make our cache authoritative or if the cache is currently empty
+	// 能让缓存变为权威或缓存为空时，才重建缓存。
 	if resultsAreAuthoritative || cache.Len() == 0 {
 		cache.Clear()
-		// populate up to maxSize results in the cache
+		// 最多写入 maxSize 条，超出部分不缓存。
 		for _, record := range results[:min(len(results), cache.maxSize)] {
 			cache.Set(recordToKey(record), record)
 		}
@@ -288,10 +301,12 @@ func cacheRefreshingList[K comparable, V any](
 	return results, err
 }
 
+// pullIntentToCacheKey 以镜像名作为 pull intent 的缓存键。
 func pullIntentToCacheKey(intent *kubeletconfiginternal.ImagePullIntent) string {
 	return intent.Image
 }
 
+// pulledRecordToCacheKey 以 ImageRef 作为拉取记录的缓存键。
 func pulledRecordToCacheKey(record *kubeletconfiginternal.ImagePulledRecord) string {
 	return record.ImageRef
 }

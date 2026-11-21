@@ -28,10 +28,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestVolumeStatsCollector 验证卷统计收集器把 Pod 卷指标导出为 Prometheus 指标，
+// 并按 PVC 聚合。
 func TestVolumeStatsCollector(t *testing.T) {
 	ctx := context.TODO()
-	// Fixed metadata on type and help text. We prepend this to every expected
-	// output so we only have to modify a single place when doing adjustments.
+	// 固定的指标类型与帮助文本；把它拼接到每个期望输出前，
+	// 调整时只需修改这一处。
 	const metadata = `
 		# HELP kubelet_volume_stats_available_bytes [ALPHA] Number of available bytes in the volume
 		# TYPE kubelet_volume_stats_available_bytes gauge
@@ -48,6 +50,7 @@ func TestVolumeStatsCollector(t *testing.T) {
 	`
 
 	var (
+		// 两个 Pod 引用同一个 PVC，用于验证指标按 PVC 去重聚合。
 		podStats = []statsapi.PodStats{
 			{
 				PodRef:    statsapi.PodReference{Name: "test-pod", Namespace: "test-namespace", UID: "UID_test-pod"},
@@ -85,7 +88,7 @@ func TestVolumeStatsCollector(t *testing.T) {
 				},
 			},
 			{
-				// Another pod references the same PVC (test-namespace/testpvc).
+				// 另一个 Pod 引用同一个 PVC（test-namespace/testpvc）。
 				PodRef:    statsapi.PodReference{Name: "test-pod-2", Namespace: "test-namespace", UID: "UID_test-pod"},
 				StartTime: metav1.Now(),
 				VolumeStats: []statsapi.VolumeStats{
@@ -128,19 +131,23 @@ func TestVolumeStatsCollector(t *testing.T) {
 		}
 	)
 
+	// 使用 mock 统计提供者，允许任意调用。
 	mockStatsProvider := statstest.NewMockProvider(t)
 
 	mockStatsProvider.EXPECT().ListPodStats(ctx).Return(podStats, nil).Maybe()
 	mockStatsProvider.EXPECT().ListPodStatsAndUpdateCPUNanoCoreUsage(ctx).Return(podStats, nil).Maybe()
+	// 采集并比较输出，确保指标内容与期望一致。
 	if err := testutil.CustomCollectAndCompare(&volumeStatsCollector{statsProvider: mockStatsProvider}, strings.NewReader(want), metrics...); err != nil {
 		t.Errorf("unexpected collecting result:\n%s", err)
 	}
 }
 
+// TestVolumeStatsCollectorWithNullVolumeStatus 验证存在无 PVC 引用的卷时，
+// 收集器只导出有 PVC 的卷指标。
 func TestVolumeStatsCollectorWithNullVolumeStatus(t *testing.T) {
 	ctx := context.TODO()
-	// Fixed metadata on type and help text. We prepend this to every expected
-	// output so we only have to modify a single place when doing adjustments.
+	// 固定的指标类型与帮助文本；把它拼接到每个期望输出前，
+	// 调整时只需修改这一处。
 	const metadata = `
 		# HELP kubelet_volume_stats_available_bytes [ALPHA] Number of available bytes in the volume
 		# TYPE kubelet_volume_stats_available_bytes gauge
@@ -157,6 +164,7 @@ func TestVolumeStatsCollectorWithNullVolumeStatus(t *testing.T) {
 	`
 
 	var (
+		// 只有一个 Pod，其中一个卷没有 PVC 引用。
 		podStats = []statsapi.PodStats{
 			{
 				PodRef:    statsapi.PodReference{Name: "test-pod", Namespace: "test-namespace", UID: "UID_test-pod"},
@@ -214,10 +222,12 @@ func TestVolumeStatsCollectorWithNullVolumeStatus(t *testing.T) {
 		}
 	)
 
+	// 使用 mock 统计提供者。
 	mockStatsProvider := statstest.NewMockProvider(t)
 
 	mockStatsProvider.EXPECT().ListPodStats(ctx).Return(podStats, nil).Maybe()
 	mockStatsProvider.EXPECT().ListPodStatsAndUpdateCPUNanoCoreUsage(ctx).Return(podStats, nil).Maybe()
+	// 采集并比较输出，确保只导出有 PVC 引用的卷指标。
 	if err := testutil.CustomCollectAndCompare(&volumeStatsCollector{statsProvider: mockStatsProvider}, strings.NewReader(want), metrics...); err != nil {
 		t.Errorf("unexpected collecting result:\n%s", err)
 	}

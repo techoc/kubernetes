@@ -28,11 +28,13 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// namedAccessor 把一个可读名称与 accessor 构造函数绑定，便于 benchmark 子项命名。
 type namedAccessor struct {
 	name         string
 	accessorInit func(b testing.TB) PullRecordsAccessor
 }
 
+// recordAccessorBenchmark 描述一次读基准：accessor、缓存记录数、并发倍数和是否命中。
 type recordAccessorBenchmark struct {
 	namedInit             namedAccessor
 	recordsInCache        int
@@ -40,28 +42,34 @@ type recordAccessorBenchmark struct {
 	cacheHit              bool
 }
 
+// benchmarkedCheckFunc 是基准循环中执行的具体操作，并校验结果符合预期。
 type benchmarkedCheckFunc func(b *testing.B, pullManager PullManager, imgRef string)
 
+// BenchmarkPullRecordsAccessorsCacheHit 测量缓存命中时读取 pulled record 的吞吐。
 func BenchmarkPullRecordsAccessorsCacheHit(b *testing.B) {
 	const expectHit = true
 	benchmarkAllPullAccessorsRead(b, expectHit, directRecordReadFunc(expectHit))
 }
 
+// BenchmarkPullRecordsAccessorCacheMiss 测量缓存未命中时的读取开销。
 func BenchmarkPullRecordsAccessorCacheMiss(b *testing.B) {
 	const expectHit = false
 	benchmarkAllPullAccessorsRead(b, expectHit, directRecordReadFunc(expectHit))
 }
 
+// BenchmarkPullManagerMustAttemptImagePullFalse 测量无需重新认证时的 MustAttemptImagePull 开销。
 func BenchmarkPullManagerMustAttemptImagePullFalse(b *testing.B) {
 	const expectHit = true
 	benchmarkAllPullAccessorsRead(b, expectHit, mustAttemptPullReadFunc(expectHit))
 }
 
+// BenchmarkPullManagerMustAttemptImagePullTrue 测量需要重新认证时的 MustAttemptImagePull 开销。
 func BenchmarkPullManagerMustAttemptImagePullTrue(b *testing.B) {
 	const expectHit = false
 	benchmarkAllPullAccessorsRead(b, expectHit, mustAttemptPullReadFunc(expectHit))
 }
 
+// directRecordReadFunc 直接调用 recordsAccessor 读取记录，校验命中状态与错误。
 func directRecordReadFunc(expectHit bool) benchmarkedCheckFunc {
 	return func(b *testing.B, pullManager PullManager, imgRef string) {
 		_, exists, err := pullManager.recordsAccessor.GetImagePulledRecord(imgRef)
@@ -71,6 +79,7 @@ func directRecordReadFunc(expectHit bool) benchmarkedCheckFunc {
 	}
 }
 
+// mustAttemptPullReadFunc 通过 MustAttemptImagePull 间接读取记录，覆盖凭据判定路径。
 func mustAttemptPullReadFunc(expectHit bool) benchmarkedCheckFunc {
 	return func(b *testing.B, pullManager PullManager, imgRef string) {
 		tCtx := ktesting.Init(b)
@@ -83,10 +92,9 @@ func mustAttemptPullReadFunc(expectHit bool) benchmarkedCheckFunc {
 	}
 }
 
-// BenchmarkPullManagerWriteImagePullIntent tests writing ImagePullIntents, which
-// is the method that is closes to direct writes.
-// We cannot do direct writes though because FSAccessor is not thread-safe and
-// would cause errors when the tests run in parallel.
+// BenchmarkPullManagerWriteImagePullIntent 测量写入 ImagePullIntent 的开销，
+// 这是最接近直接写盘的方法。不能绕过 PullManager 直接写：
+// FSAccessor 非线程安全，并行测试会出错。
 func BenchmarkPullManagerWriteImagePullIntent(b *testing.B) {
 	logger, _ := ktesting.NewTestContext(b)
 	benchmarkAllPullAccessorsWrite(b, func(b *testing.B, pullManager PullManager, imgRef string) {
@@ -96,6 +104,7 @@ func BenchmarkPullManagerWriteImagePullIntent(b *testing.B) {
 	})
 }
 
+// BenchmarkPullManagerWriteIfNotChanged 测量内容未变化时跳过写入的路径。
 func BenchmarkPullManagerWriteIfNotChanged(b *testing.B) {
 	benchmarkAllPullAccessorsWrite(b, func(b *testing.B, pullManager PullManager, imgRef string) {
 		tCtx := ktesting.Init(b)
@@ -110,6 +119,8 @@ func BenchmarkPullManagerWriteIfNotChanged(b *testing.B) {
 	})
 }
 
+// benchmarkAllPullAccessorsWrite 对文件系统 accessor 和内存缓存 accessor，
+// 在多种并发倍数下运行写入基准。
 func benchmarkAllPullAccessorsWrite(b *testing.B, writerRunner benchmarkedCheckFunc) {
 	imageRequests := make([]string, 0, generatedTestRequestsNum)
 	for range generatedTestRequestsNum {
@@ -117,6 +128,7 @@ func benchmarkAllPullAccessorsWrite(b *testing.B, writerRunner benchmarkedCheckF
 	}
 
 	createFSAccessor := namedAccessor{"FileSystemAccessor", setupFSRecordsAccessor}
+	// 0 表示串行执行，其余值作为 b.SetParallelism 的倍数。
 	const cacheSize = 500
 	createMemCachedAccessor := namedAccessor{
 		"InMemoryCache",
@@ -132,9 +144,8 @@ func benchmarkAllPullAccessorsWrite(b *testing.B, writerRunner benchmarkedCheckF
 	} {
 		for _, concurrency := range concurrencyMultipliers {
 			b.Run(fmt.Sprintf("Type=%s/ConcurrencyPerCPU=%d", namedInit.name, concurrency), func(b *testing.B) {
-				// an accessor must always be constructed within the leaf b.Run() as there
-				// can be many filesystem writes in the /tmp dir and we want the benchmark
-				// tempdir cleanup to always trigger before the next benchmark is run
+				// accessor 必须在叶子 b.Run() 内构造：/tmp 下会有大量文件写入，
+				// 需要在下一个基准开始前完成临时目录清理。
 				pullManger := PullManager{
 					recordsAccessor:     namedInit.accessorInit(b),
 					imagePolicyEnforcer: AlwaysVerifyImagePullPolicy(),
@@ -150,8 +161,9 @@ func benchmarkAllPullAccessorsWrite(b *testing.B, writerRunner benchmarkedCheckF
 
 }
 
+// benchmarkAllPullAccessorsRead 组合 accessor 类型、记录数和并发倍数运行读取基准。
 func benchmarkAllPullAccessorsRead(b *testing.B, hit bool, readerRunner benchmarkedCheckFunc) {
-	// Compare FS-cache with InMem-Cache authoritative
+	// 对比文件系统缓存与“内存缓存为权威源”两种模式。
 	recordsKepts := []int{50, 100, 200, 500, 2000}
 	concurrencyMultipliers := []int{0, 1, 2, 8, 16}
 
@@ -186,7 +198,7 @@ func benchmarkAllPullAccessorsRead(b *testing.B, hit bool, readerRunner benchmar
 		}
 	}
 
-	// Benchmark dependency of InMem-Cache on TotalRecords/CacheSize ratio
+	// 测量内存缓存性能随 总记录数/缓存容量 比例的变化。
 	const nonAuthoritativeRecordsNumber = 2_000
 	for _, concurrency := range concurrencyMultipliers {
 		for _, cacheSize := range []int{2000, 1000, 500, 250, 125} {
@@ -210,14 +222,14 @@ const (
 	generatedTestRequestsNum = 4_000
 )
 
+// benchmarkPullAccessorCacheRead 构造指定记录数的缓存后执行读取基准。
 func benchmarkPullAccessorCacheRead(b *testing.B, bc recordAccessorBenchmark, benchmarkedCheck benchmarkedCheckFunc) {
 	logger, _ := ktesting.NewTestContext(b)
 	b.Run(fmt.Sprintf("Type=%s/RecordsStored=%d/ConcurrencyPerCPU=%d", bc.namedInit.name, bc.recordsInCache, bc.concurrencyMultiplier), func(b *testing.B) {
+		// 生成预置记录和请求序列：命中模式从已有记录中取样，未命中模式使用随机 UUID。
 		genRecords, genRequests := generateRecordsAndRequests(bc.recordsInCache, bc.cacheHit)
 
-		// an accessor must always be constructed within the leaf b.Run() as there
-		// can be many filesystem writes in the /tmp dir and we want the benchmark
-		// tempdir cleanup to always trigger before the next benchmark is run
+		// accessor 必须在叶子 b.Run() 内构造，确保临时目录在下一个基准前清理。
 		accessor := bc.namedInit.accessorInit(b)
 		for _, r := range genRecords {
 			if err := accessor.WriteImagePulledRecord(logger, r); err != nil {
@@ -238,6 +250,7 @@ func benchmarkPullAccessorCacheRead(b *testing.B, bc recordAccessorBenchmark, be
 	})
 }
 
+// runBenchmark 按并发倍数选择串行循环或 RunParallel，并统一统计分配。
 func runBenchmark(b *testing.B, pullManger PullManager, generatedImgRefs []string, concurrencyMultiplier int, bf func(b *testing.B, pullManager PullManager, imgRef string)) {
 	b.ReportAllocs()
 	if concurrencyMultiplier == 0 {
@@ -250,7 +263,7 @@ func runBenchmark(b *testing.B, pullManger PullManager, generatedImgRefs []strin
 		return
 	}
 
-	// concurrencyMultiplier > 0
+	// 并发倍数大于 0 时使用并行基准，每个 goroutine 从随机位置开始取请求。
 	b.SetParallelism(concurrencyMultiplier)
 	b.ResetTimer()
 	b.RunParallel(func(p *testing.PB) {
@@ -265,6 +278,7 @@ func runBenchmark(b *testing.B, pullManger PullManager, generatedImgRefs []strin
 
 }
 
+// generateRecordsAndRequests 生成预置记录与请求序列，用于控制缓存命中率。
 func generateRecordsAndRequests(recordsNum int, generateHits bool) ([]*kubeletconfig.ImagePulledRecord, []string) {
 	generatedPulledRecords := make([]*kubeletconfig.ImagePulledRecord, 0, recordsNum)
 	for range recordsNum {
@@ -280,6 +294,7 @@ func generateRecordsAndRequests(recordsNum int, generateHits bool) ([]*kubeletco
 	generatedCacheRequests := make([]string, 0, generatedTestRequestsNum)
 	for range generatedTestRequestsNum {
 		var requestRef string
+		// 命中模式复用已有记录，未命中模式使用全新 UUID。
 		if generateHits {
 			requestRef = generatedPulledRecords[rand.IntnRange(0, recordsNum)].ImageRef
 		} else {
@@ -291,6 +306,7 @@ func generateRecordsAndRequests(recordsNum int, generateHits bool) ([]*kubeletco
 	return generatedPulledRecords, generatedCacheRequests
 }
 
+// setupFSRecordsAccessor 在测试临时目录上创建文件系统 accessor。
 func setupFSRecordsAccessor(t testing.TB) PullRecordsAccessor {
 	t.Helper()
 	logger, _ := ktesting.NewTestContext(t)
@@ -303,6 +319,8 @@ func setupFSRecordsAccessor(t testing.TB) PullRecordsAccessor {
 	return accessor
 }
 
+// setupInMemRecordsAccessor 在文件系统 accessor 之上包一层内存缓存，
+// 并按需把内存缓存设为权威源。
 func setupInMemRecordsAccessor(t testing.TB, cacheSize int, authoritative bool) PullRecordsAccessor {
 	logger, _ := ktesting.NewTestContext(t)
 	t.Helper()
@@ -317,6 +335,7 @@ func setupInMemRecordsAccessor(t testing.TB, cacheSize int, authoritative bool) 
 	if !ok {
 		t.Fatalf("the metered accessor's delegate is not an inMemAccesor: %T", gotMeteredAccessor.sizeExposedPullRecordsAccessor)
 	}
+	// 直接写入底层缓存开关，模拟权威/非权威两种部署模式。
 	inMemAccessor.intents.authoritative.Store(authoritative)
 	inMemAccessor.pulledRecords.authoritative.Store(authoritative)
 

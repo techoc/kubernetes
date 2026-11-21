@@ -27,6 +27,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestGetClient 验证 v1alpha1 与 v1 客户端能连接有效 socket，并在非法端点时返回错误。
 func TestGetClient(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	testCases := map[string]func(string, time.Duration, int) (any, *grpc.ClientConn, error){

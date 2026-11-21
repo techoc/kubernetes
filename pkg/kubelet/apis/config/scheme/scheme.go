@@ -24,11 +24,10 @@ import (
 	kubeletconfigv1beta1 "k8s.io/kubernetes/pkg/kubelet/apis/config/v1beta1"
 )
 
-// Utility functions for the Kubelet's kubeletconfig API group
+// 以下是 kubeletconfig API 组的工具函数。
 
-// NewSchemeAndCodecs is a utility function that returns a Scheme and CodecFactory
-// that understand the types in the kubeletconfig API group. Passing mutators allows
-// for adjusting the behavior of the CodecFactory, for example enable strict decoding.
+// NewSchemeAndCodecs 返回能识别 kubeletconfig API 组类型的 Scheme 与 CodecFactory。
+// 通过 mutators 可以调整 CodecFactory 的行为，例如开启严格解码。
 func NewSchemeAndCodecs(mutators ...serializer.CodecFactoryOptionsMutator) (*runtime.Scheme, *serializer.CodecFactory, error) {
 	scheme := runtime.NewScheme()
 	if err := kubeletconfig.AddToScheme(scheme); err != nil {

@@ -30,12 +30,16 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestCollectResourceMetrics 验证资源指标采集器在各种 Summary 输入下产出的指标文本。
+// 覆盖节点、容器、Pod 三类指标，以及采集失败、时间戳不一致、字段为空值等边界场景。
 func TestCollectResourceMetrics(t *testing.T) {
-	// a static timestamp: 2021-06-23 05:11:18.302091597 +0800
+	// 固定的采集时间戳：2021-06-23 05:11:18.302091597 +0800。
+	// 用固定值而非随机时间，保证各用例的时间戳断言具备确定性。
 	staticTimestamp := time.Unix(0, 1624396278302091597)
 	swapTimestamp := staticTimestamp.Add(10 * time.Second)
 	testTime := metav1.NewTime(staticTimestamp)
 	swapTestTime := metav1.NewTime(swapTimestamp)
+	// 只校验这些指标，避免其他指标的增删导致本测试无意义地失败。
 	interestedMetrics := []string{
 		"scrape_error",
 		"resource_scrape_error",
@@ -446,14 +450,19 @@ func TestCollectResourceMetrics(t *testing.T) {
 		},
 	}
 
+	// 逐条执行用例，每个用例作为独立子测试运行，便于精确定位失败项。
 	for _, test := range tests {
 		tc := test
 		t.Run(tc.name, func(t *testing.T) {
+			// 测试不依赖真实的上下文取消逻辑，使用 TODO 上下文即可。
 			ctx := context.TODO()
+			// 使用 mock 的 SummaryProvider 隔离被测采集器，按用例注入固定输入。
 			provider := summaryprovidertest.NewMockSummaryProvider(t)
 			provider.EXPECT().GetCPUAndMemoryStats(ctx).Return(tc.summary, tc.summaryErr).Maybe()
+			// 构造采集器，本测试只关心其采集逻辑，不涉及真实节点数据。
 			collector := NewResourceMetricsCollector(provider)
 
+			// 采集后与期望的指标文本逐项比对，指标值或时间戳不一致即判定失败。
 			if err := testutil.CustomCollectAndCompare(collector, strings.NewReader(tc.expectedMetrics), interestedMetrics...); err != nil {
 				t.Fatal(err)
 			}

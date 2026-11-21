@@ -24,15 +24,15 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// WorkQueue allows queuing items with a timestamp. An item is
-// considered ready to process if the timestamp has expired.
+// WorkQueue 允许按时间戳排队条目：时间戳到期后条目才算可处理。
 type WorkQueue interface {
-	// GetWork dequeues and returns all ready items.
+	// GetWork 取出并返回所有已就绪的条目。
 	GetWork() []types.UID
-	// Enqueue inserts a new item or overwrites an existing item.
+	// Enqueue 插入新条目，已存在时覆盖。
 	Enqueue(item types.UID, delay time.Duration)
 }
 
+// basicWorkQueue 是基于 map 与互斥锁的 WorkQueue 实现。
 type basicWorkQueue struct {
 	clock clock.Clock
 	lock  sync.Mutex
@@ -41,12 +41,13 @@ type basicWorkQueue struct {
 
 var _ WorkQueue = &basicWorkQueue{}
 
-// NewBasicWorkQueue returns a new basic WorkQueue with the provided clock
+// NewBasicWorkQueue 使用给定时钟创建基础的 WorkQueue。
 func NewBasicWorkQueue(clock clock.Clock) WorkQueue {
 	queue := make(map[types.UID]time.Time)
 	return &basicWorkQueue{queue: queue, clock: clock}
 }
 
+// GetWork 返回所有到期条目，并从队列中移除。
 func (q *basicWorkQueue) GetWork() []types.UID {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -61,6 +62,7 @@ func (q *basicWorkQueue) GetWork() []types.UID {
 	return items
 }
 
+// Enqueue 设置条目的到期时间；已存在时覆盖旧时间。
 func (q *basicWorkQueue) Enqueue(item types.UID, delay time.Duration) {
 	q.lock.Lock()
 	defer q.lock.Unlock()

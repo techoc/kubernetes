@@ -33,7 +33,9 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestConvertToAPIPodLevelResourcesStatus 验证 Pod 级资源状态转换对 v2 有损往返与真实 actuation 的区分。
 func TestConvertToAPIPodLevelResourcesStatus(t *testing.T) {
+	// 两个特性门控都需要开启才能转换 Pod 级资源状态。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.PodLevelResources:                       true,
 		features.InPlacePodLevelResourcesVerticalScaling: true,
@@ -46,16 +48,16 @@ func TestConvertToAPIPodLevelResourcesStatus(t *testing.T) {
 		expectedMilliCPU int64
 	}{
 		{
-			// 50m -> shares=51 -> weight=2 -> shares(readback)=28 -> 28m.
-			// Round-trip match: preserve allocated 50m.
+			// 50m -> shares=51 -> weight=2 -> shares(readback)=28 -> 28m。
+			// 属于往返损失，应保留原始分配的 50m。
 			name:             "preserve allocated request for lossy v2 roundtrip readback",
 			allocatedCPU:     "50m",
 			readbackShares:   28,
 			expectedMilliCPU: 50,
 		},
 		{
-			// Readback shares do not match the round-tripped allocated shares:
-			// treat as a real actuation and report the readback milliCPU.
+			// readback shares 与分配的往返值不匹配：
+			// 视为真实的资源调整，上报 readback 对应的 milliCPU。
 			name:             "use actuated request when readback is not a v2 roundtrip",
 			allocatedCPU:     "50m",
 			readbackShares:   102, // SharesToMilliCPU(102) == 100
@@ -93,6 +95,7 @@ func TestConvertToAPIPodLevelResourcesStatus(t *testing.T) {
 				CPUQuota:  &cpuQuota,
 			}
 
+			// 用 mock 容器管理器返回构造好的 cgroup 配置。
 			mockPCM := cmtesting.NewMockPodContainerManager(t)
 			mockPCM.EXPECT().GetPodCgroupConfig(pod, v1.ResourceMemory).Return(nil, nil)
 			mockPCM.EXPECT().GetPodCgroupConfig(pod, v1.ResourceCPU).Return(cpuCfg, nil)
@@ -100,6 +103,7 @@ func TestConvertToAPIPodLevelResourcesStatus(t *testing.T) {
 			mockCM := cmtesting.NewMockContainerManager(t)
 			mockCM.EXPECT().NewPodContainerManager().Return(mockPCM)
 
+			// 只注入容器管理器，调用转换函数。
 			kl := &Kubelet{containerManager: mockCM}
 			got := kl.convertToAPIPodLevelResourcesStatus(logger, pod, v1.PodStatus{})
 			require.NotNil(t, got)

@@ -21,12 +21,18 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Here go types that are common for all supported OS (windows, linux).
+// 以下类型在支持的操作系统（Windows、Linux）间通用。
 
+// userNsPodsManager 抽象用户命名空间管理器所需的 Pod 信息与映射计算能力。
 type userNsPodsManager interface {
+	// HandlerSupportsUserNamespaces 判断运行时 handler 是否支持用户命名空间。
 	HandlerSupportsUserNamespaces(runtimeHandler string) (bool, error)
+	// GetPodDir 返回指定 Pod 在磁盘上的目录。
 	GetPodDir(podUID types.UID) string
+	// ListPodsFromDisk 列出磁盘上记录的所有 Pod UID。
 	ListPodsFromDisk() ([]types.UID, error)
+	// GetKubeletMappings 计算 kubelet 使用的 UID/GID 映射范围（每个 Pod 分配 idsPerPod 个 ID）。
 	GetKubeletMappings(logger klog.Logger, idsPerPod uint32) (uint32, uint32, error)
+	// GetMaxPods 返回节点允许的最大 Pod 数量。
 	GetMaxPods() int
 }

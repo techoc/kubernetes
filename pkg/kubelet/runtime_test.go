@@ -23,6 +23,8 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
+// TestRuntimeStateSetRuntimeHandlersSortsAndCopies 验证 setRuntimeHandlers 会排序并复制输入，
+// 且不会修改调用方传入的切片。
 func TestRuntimeStateSetRuntimeHandlersSortsAndCopies(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -55,6 +57,7 @@ func TestRuntimeStateSetRuntimeHandlersSortsAndCopies(t *testing.T) {
 	}
 
 	for _, tt := range testCases {
+		// 输入切片必须保持不变，避免与调用方共享底层数组。
 		t.Run(tt.name, func(t *testing.T) {
 			state := &runtimeState{}
 			input := append([]kubecontainer.RuntimeHandler(nil), tt.handlers...)

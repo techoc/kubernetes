@@ -28,20 +28,21 @@ import (
 )
 
 const (
+	// ForbiddenReason 是 sysctl 被准入拒绝时的原因标识。
 	ForbiddenReason = "SysctlForbidden"
 )
 
-// patternAllowlist takes a list of sysctls or sysctl patterns (ending in *) and
-// checks validity via a sysctl and prefix map, rejecting those which are not known
-// to be namespaced.
+// patternAllowlist 保存 sysctl 完整名称与前缀到命名空间的映射，
+// 用于拒绝那些未知命名空间的 sysctl 或 sysctl 模式（以 * 结尾）。
 type patternAllowlist struct {
 	sysctls  map[string]utilsysctl.Namespace
 	prefixes map[string]utilsysctl.Namespace
 }
 
+// 编译期断言：patternAllowlist 实现了 PodAdmitHandler。
 var _ lifecycle.PodAdmitHandler = &patternAllowlist{}
 
-// NewAllowlist creates a new Allowlist from a list of sysctls and sysctl pattern (ending in *).
+// NewAllowlist 根据 sysctl 列表及 sysctl 模式（以 * 结尾）创建允许列表。
 func NewAllowlist(patterns []string) (*patternAllowlist, error) {
 	w := &patternAllowlist{
 		sysctls:  map[string]utilsysctl.Namespace{},
@@ -49,6 +50,7 @@ func NewAllowlist(patterns []string) (*patternAllowlist, error) {
 	}
 
 	for _, s := range patterns {
+		// 先做格式校验，避免把非法模式当作前缀处理。
 		if !policyvalidation.IsValidSysctlPattern(s) {
 			return nil, fmt.Errorf("sysctl %q must have at most %d characters and match regex %s",
 				s,
@@ -56,10 +58,12 @@ func NewAllowlist(patterns []string) (*patternAllowlist, error) {
 				policyvalidation.SysctlContainSlashPatternFmt,
 			)
 		}
+		// 通过已知的 sysctl 前缀映射判断其所属命名空间。
 		ns, sysctlOrPrefix, prefixed := utilsysctl.GetNamespace(s)
 		if ns == utilsysctl.UnknownNamespace {
 			return nil, fmt.Errorf("the sysctls %q are not known to be namespaced", sysctlOrPrefix)
 		}
+		// 以 * 结尾的模式按前缀存储，其余按完整名称存储。
 		if prefixed {
 			w.prefixes[sysctlOrPrefix] = ns
 		} else {
@@ -69,16 +73,16 @@ func NewAllowlist(patterns []string) (*patternAllowlist, error) {
 	return w, nil
 }
 
-// validateSysctl checks that a sysctl is allowlisted because it is known
-// to be namespaced by the Linux kernel. Note that being allowlisted is required, but not
-// sufficient: the container runtime might have a stricter check and refuse to launch a pod.
+// validateSysctl 检查 sysctl 是否在允许列表中（即已知被 Linux 内核命名空间隔离）。
+// 在允许列表中只是必要条件：容器运行时可能有更严格的检查并拒绝启动 Pod。
 //
-// The parameters hostNet, hostIPC, and hostUsers are used to forbid sysctls for pod sharing the
-// respective namespaces with the host. This check is only possible for sysctls on
-// the static default allowlist, not those on the custom allowlist provided by the admin.
+// hostNet、hostIPC、hostUsers 用于禁止与宿主共享相应命名空间的 Pod 使用对应 sysctl。
+// 该检查只适用于静态默认允许列表，不适用于管理员提供的自定义允许列表。
 func (w *patternAllowlist) validateSysctl(sysctl string, hostNet, hostIPC, hostUsers bool) error {
+	// 统一名称格式（例如把 / 转换为 .），保证匹配一致。
 	sysctl = utilsysctl.NormalizeName(sysctl)
 	nsErrorFmt := "%q not allowed with host %s enabled"
+	// 先匹配完整名称，再回退到前缀匹配。
 	if ns, found := w.sysctls[sysctl]; found {
 		if ns == utilsysctl.IPCNamespace && hostIPC {
 			return fmt.Errorf(nsErrorFmt, sysctl, ns)
@@ -91,6 +95,7 @@ func (w *patternAllowlist) validateSysctl(sysctl string, hostNet, hostIPC, hostU
 		}
 		return nil
 	}
+	// 前缀匹配覆盖以 * 结尾的自定义 sysctl 模式。
 	for p, ns := range w.prefixes {
 		if strings.HasPrefix(sysctl, p) {
 			if ns == utilsysctl.IPCNamespace && hostIPC {
@@ -108,9 +113,9 @@ func (w *patternAllowlist) validateSysctl(sysctl string, hostNet, hostIPC, hostU
 	return fmt.Errorf("%q not allowlisted", sysctl)
 }
 
-// Admit checks that all sysctls given in pod's security context
-// are valid according to the allowlist.
+// Admit 检查 Pod 安全上下文中的所有 sysctl 是否都符合允许列表。
 func (w *patternAllowlist) Admit(_ context.Context, attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
+	// 没有配置 sysctl 时直接准入。
 	pod := attrs.Pod
 	if pod.Spec.SecurityContext == nil || len(pod.Spec.SecurityContext.Sysctls) == 0 {
 		return lifecycle.PodAdmitResult{
@@ -118,9 +123,9 @@ func (w *patternAllowlist) Admit(_ context.Context, attrs *lifecycle.PodAdmitAtt
 		}
 	}
 
-	// The default for hostUsers is true, so a nil HostUsers means the pod
-	// shares the host user namespace.
+	// hostUsers 默认为 true，因此 nil 表示 Pod 与宿主共享用户命名空间。
 	hostUsers := pod.Spec.HostUsers == nil || *pod.Spec.HostUsers
+	// 任一 sysctl 不合法就拒绝整个 Pod。
 	for _, s := range pod.Spec.SecurityContext.Sysctls {
 		if err := w.validateSysctl(s.Name, pod.Spec.HostNetwork, pod.Spec.HostIPC, hostUsers); err != nil {
 			return lifecycle.PodAdmitResult{

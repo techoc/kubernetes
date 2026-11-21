@@ -45,23 +45,28 @@ const (
 	maxPods               = 110
 )
 
+// fakePodKiller 记录被驱逐的 Pod，并可模拟驱逐失败。
 type fakePodKiller struct {
 	killedPods          []*v1.Pod
 	errDuringPodKilling bool
 }
 
+// newFakePodKiller 创建 fakePodKiller；errPodKilling 为 true 时所有驱逐都失败。
 func newFakePodKiller(errPodKilling bool) *fakePodKiller {
 	return &fakePodKiller{killedPods: []*v1.Pod{}, errDuringPodKilling: errPodKilling}
 }
 
+// clear 清空已记录的驱逐结果。
 func (f *fakePodKiller) clear() {
 	f.killedPods = []*v1.Pod{}
 }
 
+// getKilledPods 返回已记录的被驱逐 Pod。
 func (f *fakePodKiller) getKilledPods() []*v1.Pod {
 	return f.killedPods
 }
 
+// killPodNow 记录被驱逐的 Pod；模拟失败时不记录任何 Pod 并返回错误。
 func (f *fakePodKiller) killPodNow(pod *v1.Pod, evict bool, gracePeriodOverride *int64, fn func(status *v1.PodStatus)) error {
 	if f.errDuringPodKilling {
 		f.killedPods = []*v1.Pod{}
@@ -71,22 +76,27 @@ func (f *fakePodKiller) killPodNow(pod *v1.Pod, evict bool, gracePeriodOverride 
 	return nil
 }
 
+// fakePodProvider 提供固定的节点 Pod 列表。
 type fakePodProvider struct {
 	pods []*v1.Pod
 }
 
+// newFakePodProvider 创建空的 fakePodProvider。
 func newFakePodProvider() *fakePodProvider {
 	return &fakePodProvider{pods: []*v1.Pod{}}
 }
 
+// setPods 设置节点上的 Pod 列表。
 func (f *fakePodProvider) setPods(pods []*v1.Pod) {
 	f.pods = pods
 }
 
+// getPods 返回节点上的 Pod 列表。
 func (f *fakePodProvider) getPods() []*v1.Pod {
 	return f.pods
 }
 
+// getTestCriticalPodAdmissionHandler 构造使用 fake provider/killer 的关键 Pod 准入处理器。
 func getTestCriticalPodAdmissionHandler(podProvider *fakePodProvider, podKiller *fakePodKiller) *CriticalPodAdmissionHandler {
 	return &CriticalPodAdmissionHandler{
 		getPodsFunc: podProvider.getPods,
@@ -95,6 +105,8 @@ func getTestCriticalPodAdmissionHandler(podProvider *fakePodProvider, podKiller 
 	}
 }
 
+// TestHandleAdmissionFailure 校验准入失败时的抢占决策：哪些 Pod 被驱逐、
+// 哪些失败原因被过滤，以及 resize 操作是否绕过抢占。
 func TestHandleAdmissionFailure(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	type testRun struct {
@@ -213,6 +225,7 @@ func TestHandleAdmissionFailure(t *testing.T) {
 	}
 	for _, r := range runs {
 		t.Run(r.testName, func(t *testing.T) {
+			// resize 场景是否绕过抢占由该门控决定，因此每个子测试单独设置。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodVerticalScalingSchedulerPreemption, r.featureGateEnabled)
 			podProvider := newFakePodProvider()
 			podKiller := newFakePodKiller(r.isPodKillerWithError)
@@ -221,6 +234,7 @@ func TestHandleAdmissionFailure(t *testing.T) {
 			podProvider.setPods(r.inputPods)
 			admitPodRef := allPods[r.admitPodType]
 			filteredReason, outErr := criticalPodAdmissionHandler.HandleAdmissionFailure(tCtx, admitPodRef, r.failReasons, r.operation)
+			// 以 fake killer 实际收到的 Pod 作为“被驱逐集合”的断言依据。
 			outputPods := podKiller.getKilledPods()
 			if !r.expectErr && outErr != nil {
 				t.Errorf("HandleAdmissionFailure returned an unexpected error during the %s test.  Err: %v", r.testName, outErr)
@@ -241,9 +255,11 @@ func TestHandleAdmissionFailure(t *testing.T) {
 	}
 }
 
+// BenchmarkGetPodsToPreempt 在 110 个小 Pod 的场景下测量选择抢占目标的耗时。
 func BenchmarkGetPodsToPreempt(t *testing.B) {
 	allPods := getTestPods()
 	inputPods := []*v1.Pod{}
+	// 用 110 个极小 Pod 构造最坏情况，衡量逐 Pod 计算的累计开销。
 	for i := 0; i < maxPods; i++ {
 		inputPods = append(inputPods, allPods[tinyBurstable])
 	}
@@ -256,6 +272,8 @@ func BenchmarkGetPodsToPreempt(t *testing.B) {
 	}
 }
 
+// TestGetPodsToPreempt 校验抢占目标选择：按 QoS 等级、请求量与优先级排序，
+// 并确保不会驱逐高于抢占者的关键 Pod。
 func TestGetPodsToPreempt(t *testing.T) {
 	type testRun struct {
 		testName              string
@@ -367,6 +385,7 @@ func TestGetPodsToPreempt(t *testing.T) {
 
 	for _, r := range runs {
 		t.Run(r.testName, func(t *testing.T) {
+			// 直接调用选择函数，避免依赖完整的准入链路。
 			outputPods, outErr := getPodsToPreempt(r.preemptor, r.inputPods, r.insufficientResources)
 			if !r.expectErr && outErr != nil {
 				t.Errorf("getPodsToPreempt returned an unexpected error during the %s test.  Err: %v", r.testName, outErr)
@@ -379,6 +398,7 @@ func TestGetPodsToPreempt(t *testing.T) {
 	}
 }
 
+// TestAdmissionRequirementsDistance 校验需求列表与 Pod 请求之间“距离”的计算。
 func TestAdmissionRequirementsDistance(t *testing.T) {
 	type testRun struct {
 		testName       string
@@ -423,6 +443,7 @@ func TestAdmissionRequirementsDistance(t *testing.T) {
 	}
 }
 
+// TestAdmissionRequirementsSubtract 校验从需求列表中扣除 Pod 请求的语义。
 func TestAdmissionRequirementsSubtract(t *testing.T) {
 	type testRun struct {
 		testName       string
@@ -473,6 +494,7 @@ func TestAdmissionRequirementsSubtract(t *testing.T) {
 	}
 }
 
+// TestSmallerResourceRequest 校验 Pod 请求量比较：内存优先于 CPU，其他资源忽略。
 func TestSmallerResourceRequest(t *testing.T) {
 	type testRun struct {
 		testName       string
@@ -481,6 +503,7 @@ func TestSmallerResourceRequest(t *testing.T) {
 		expectedResult bool
 	}
 
+	// 用例刻意只改变一个资源维度，以便确认比较函数实际依据的是哪一项。
 	podWithNoRequests := getPodWithResources("no-requests", v1.ResourceRequirements{})
 	podWithLowMemory := getPodWithResources("low-memory", v1.ResourceRequirements{
 		Requests: v1.ResourceList{
@@ -551,6 +574,7 @@ func TestSmallerResourceRequest(t *testing.T) {
 	}
 }
 
+// getTestPods 构造各 QoS/优先级类别的测试 Pod，并设置关键 Pod 的优先级字段。
 func getTestPods() map[string]*v1.Pod {
 	allPods := map[string]*v1.Pod{
 		tinyBurstable: getPodWithResources(tinyBurstable, v1.ResourceRequirements{
@@ -605,6 +629,7 @@ func getTestPods() map[string]*v1.Pod {
 			},
 		}),
 	}
+	// 关键 Pod 必须位于 kube-system 且使用系统优先级，才能命中抢占豁免逻辑。
 	allPods[clusterCritical].Namespace = kubeapi.NamespaceSystem
 	allPods[clusterCritical].Spec.PriorityClassName = scheduling.SystemClusterCritical
 	clusterPriority := scheduling.SystemCriticalPriority
@@ -618,6 +643,7 @@ func getTestPods() map[string]*v1.Pod {
 	return allPods
 }
 
+// getPodWithResources 构造只含一个容器、使用给定资源请求的 Pod。
 func getPodWithResources(name string, requests v1.ResourceRequirements) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -635,16 +661,20 @@ func getPodWithResources(name string, requests v1.ResourceRequirements) *v1.Pod 
 	}
 }
 
+// parseCPUToInt64 把 CPU 资源字符串解析为毫核数。
 func parseCPUToInt64(res string) int64 {
 	r := resource.MustParse(res)
 	return (&r).MilliValue()
 }
 
+// parseNonCPUResourceToInt64 把非 CPU 资源字符串解析为整数值。
 func parseNonCPUResourceToInt64(res string) int64 {
 	r := resource.MustParse(res)
 	return (&r).Value()
 }
 
+// getAdmissionRequirementList 按 cpu（毫核）、memory（Mi）、pods 构造需求列表，
+// 大于 0 的项才会被加入。
 func getAdmissionRequirementList(cpu, memory, pods int) admissionRequirementList {
 	reqs := []*admissionRequirement{}
 	if cpu > 0 {
@@ -668,6 +698,8 @@ func getAdmissionRequirementList(cpu, memory, pods int) admissionRequirementList
 	return admissionRequirementList(reqs)
 }
 
+// getPredicateFailureReasons 构造指定资源不足的失败原因列表，
+// otherReasonExist 为 true 时额外附加一个非资源类原因。
 func getPredicateFailureReasons(insufficientCPU, insufficientMemory, insufficientPods int, otherReasonExist bool) (reasonByPredicate []lifecycle.PredicateFailureReason) {
 	if insufficientCPU > 0 {
 		parsedN := parseCPUToInt64(fmt.Sprintf("%dm", insufficientCPU))
@@ -705,9 +737,8 @@ func getPredicateFailureReasons(insufficientCPU, insufficientMemory, insufficien
 	return
 }
 
-// this checks if the lists contents contain all of the same elements.
-// this is not correct if there are duplicate pods in the list.
-// for example: podListEqual([a, a, b], [a, b, b]) will return true
+// admissionRequirementListEqual 判断两个需求列表是否包含相同的元素集合。
+// 注意：列表中存在重复元素时会误判，例如 [a, a, b] 与 [a, b, b] 会返回 true。
 func admissionRequirementListEqual(list1 admissionRequirementList, list2 admissionRequirementList) bool {
 	if len(list1) != len(list2) {
 		return false
@@ -726,7 +757,7 @@ func admissionRequirementListEqual(list1 admissionRequirementList, list2 admissi
 	return true
 }
 
-// podListEqual checks if the lists contents contain all of the same elements.
+// podListEqual 判断两个 Pod 列表是否包含相同的元素集合（按元素计数比较）。
 func podListEqual(list1 []*v1.Pod, list2 []*v1.Pod) bool {
 	if len(list1) != len(list2) {
 		return false

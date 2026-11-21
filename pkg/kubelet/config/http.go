@@ -31,6 +31,7 @@ import (
 	utilio "k8s.io/utils/io"
 )
 
+// sourceURL 表示从 HTTP(S) URL 读取 Pod 配置的配置源。
 type sourceURL struct {
 	url         string
 	header      http.Header
@@ -41,7 +42,7 @@ type sourceURL struct {
 	client      *http.Client
 }
 
-// NewSourceURL specifies the URL where to read the Pod configuration from, then watches it for changes.
+// NewSourceURL 指定读取 Pod 配置的 URL，并周期性轮询其变化。
 func NewSourceURL(logger klog.Logger, url string, header http.Header, nodeName types.NodeName, period time.Duration, updates chan<- sourceUpdate) {
 	config := &sourceURL{
 		url:      url,
@@ -49,18 +50,17 @@ func NewSourceURL(logger klog.Logger, url string, header http.Header, nodeName t
 		nodeName: nodeName,
 		updates:  updates,
 		data:     nil,
-		// Timing out requests leads to retries. This client is only used to
-		// read the manifest URL passed to kubelet.
+		// 请求超时会触发重试；该客户端只用于读取传给 kubelet 的 manifest URL。
 		client: &http.Client{Timeout: 10 * time.Second},
 	}
 	logger.V(1).Info("Watching URL", "URL", url)
 	go wait.Until(func() { config.run(logger) }, period, wait.NeverStop)
 }
 
+// run 执行一次抓取，并对失败日志做限流，避免刷屏。
 func (s *sourceURL) run(logger klog.Logger) {
 	if err := s.extractFromURL(logger); err != nil {
-		// Don't log this multiple times per minute. The first few entries should be
-		// enough to get the point across.
+		// 不要每分钟重复打印。前几条日志足以说明问题。
 		if s.failureLogs < 3 {
 			logger.Info("Failed to read pods from URL", "err", err)
 		} else if s.failureLogs == 3 {
@@ -77,10 +77,12 @@ func (s *sourceURL) run(logger klog.Logger) {
 	}
 }
 
+// applyDefaults 为从该 URL 读取的 Pod 补齐默认值。
 func (s *sourceURL) applyDefaults(logger klog.Logger, pod *api.Pod) error {
 	return applyDefaults(logger, pod, s.url, false, s.nodeName)
 }
 
+// extractFromURL 拉取 URL 内容并解析为单个 Pod 或 Pod 列表，再通过 updates 通道发布。
 func (s *sourceURL) extractFromURL(logger klog.Logger) error {
 	req, err := http.NewRequest("GET", s.url, nil)
 	if err != nil {
@@ -92,40 +94,42 @@ func (s *sourceURL) extractFromURL(logger klog.Logger) error {
 		return err
 	}
 	defer resp.Body.Close()
+	// 限制读取长度，防止恶意 URL 返回超大响应。
 	data, err := utilio.ReadAtMost(resp.Body, maxConfigLength)
 	if err != nil {
 		return err
 	}
+	// 先检查状态码，非 200 的响应体不可信。
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%v: %v", s.url, resp.Status)
 	}
 	if len(data) == 0 {
-		// Emit an update with an empty PodList to allow HTTPSource to be marked as seen
+		// 发送空 PodList 更新，使 HTTPSource 被标记为已读取，避免误判为配置源消失。
 		s.updates <- sourceUpdate{Pods: []*v1.Pod{}}
 		return fmt.Errorf("zero-length data received from %v", s.url)
 	}
-	// Short circuit if the data has not changed since the last time it was read.
+	// 数据与上次相同则直接返回，避免重复发布更新。
 	if bytes.Equal(data, s.data) {
 		return nil
 	}
 	s.data = data
 
-	// First try as it is a single pod.
+	// 先按单个 Pod 解析。
 	parsed, pod, singlePodErr := tryDecodeSinglePod(logger, data, s.applyDefaults)
 	if parsed {
 		if singlePodErr != nil {
-			// It parsed but could not be used.
+			// 解析成功但内容不可用。
 			return singlePodErr
 		}
 		s.updates <- sourceUpdate{Pods: []*v1.Pod{pod}}
 		return nil
 	}
 
-	// That didn't work, so try a list of pods.
+	// 单 Pod 解析失败，再按 Pod 列表解析。
 	parsed, podList, multiPodErr := tryDecodePodList(logger, data, s.applyDefaults)
 	if parsed {
 		if multiPodErr != nil {
-			// It parsed but could not be used.
+			// 解析成功但内容不可用。
 			return multiPodErr
 		}
 		pods := make([]*v1.Pod, 0, len(podList.Items))

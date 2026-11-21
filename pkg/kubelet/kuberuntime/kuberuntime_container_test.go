@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// kuberuntime_container_test.go 覆盖容器移除、终止、状态转换、生命周期钩子、重启计数与资源更新等行为。
 package kuberuntime
 
 import (
@@ -49,12 +50,12 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/logs"
 )
 
-// TestRemoveContainer tests removing the container and its corresponding container logs.
+// TestRemoveContainer 验证移除容器时会同时清理其日志文件与遗留的日志软链接。
 func TestRemoveContainer(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeRuntime, _, m, err := createTestRuntimeManager(tCtx)
 	require.NoError(t, err)
-	// Swap in real ContainerLogManager for the stub.
+	// 用真实的 ContainerLogManager 替换测试桩，才能验证日志清理行为。
 	logManager, err := logs.NewContainerLogManager(m.runtimeService, m.osInterface, "1", 2, 10, metav1.Duration{Duration: 10 * time.Second})
 	require.NoError(t, err)
 	m.logManager = logManager
@@ -76,7 +77,7 @@ func TestRemoveContainer(t *testing.T) {
 		},
 	}
 
-	// Create fake sandbox and container
+	// 在 fake runtime 中创建 sandbox 与容器，作为测试前置状态。
 	_, fakeContainers := makeAndSetFakePod(tCtx, m, fakeRuntime, pod)
 	assert.Len(t, fakeContainers, 1)
 
@@ -98,23 +99,24 @@ func TestRemoveContainer(t *testing.T) {
 	err = m.removeContainer(tCtx, containerID, false)
 	assert.NoError(t, err)
 
-	// Verify container log is removed.
-	// We could not predict the order of `fakeOS.Removes`, so we use `assert.ElementsMatch` here.
+	// 校验日志文件与软链接都被删除。
+	// 删除顺序无法预测，因此用 ElementsMatch 做无序比较。
 	assert.ElementsMatch(t,
 		[]string{expectedContainerLogSymlink, expectedContainerLogPath, expectedContainerLogPathRotated},
 		fakeOS.Removes)
-	// Verify container is removed
+	// 校验容器本身也已从运行时移除。
 	assert.Contains(t, fakeRuntime.Called, "RemoveContainer")
 	containers, err := fakeRuntime.ListContainers(tCtx, &runtimeapi.ContainerFilter{Id: containerID})
 	assert.NoError(t, err)
 	assert.Empty(t, containers)
 }
 
+// TestRemoveContainer_keepLogs 验证保留日志模式下移除容器不会删除日志文件。
 func TestRemoveContainer_keepLogs(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeRuntime, _, m, err := createTestRuntimeManager(tCtx)
 	require.NoError(t, err)
-	// Swap in real ContainerLogManager for the stub.
+	// 用真实实现替换桩，确保日志策略真正生效。
 	logManager, err := logs.NewContainerLogManager(m.runtimeService, m.osInterface, "1", 2, 10, metav1.Duration{Duration: 10 * time.Second})
 	require.NoError(t, err)
 	m.logManager = logManager
@@ -136,7 +138,7 @@ func TestRemoveContainer_keepLogs(t *testing.T) {
 		},
 	}
 
-	// Create fake sandbox and container
+	// 准备 fake runtime 中的 sandbox 与容器。
 	_, fakeContainers := makeAndSetFakePod(tCtx, m, fakeRuntime, pod)
 	assert.Len(t, fakeContainers, 1)
 
@@ -159,17 +161,17 @@ func TestRemoveContainer_keepLogs(t *testing.T) {
 	err = m.removeContainer(tCtx, containerID, true)
 	require.NoError(t, err)
 
-	// Verify container logs are kept.
-	// We could not predict the order of `fakeOS.Removes`, so we use `assert.ElementsMatch` here.
+	// 校验日志文件未被删除。
+	// 这里没有删除操作，直接断言 Removes 为空即可。
 	require.Empty(t, fakeOS.Removes)
-	// Verify container is removed
+	// 容器本身仍应被移除。
 	require.Contains(t, fakeRuntime.Called, "RemoveContainer")
 	containers, err := fakeRuntime.ListContainers(tCtx, &runtimeapi.ContainerFilter{Id: containerID})
 	require.NoError(t, err)
 	require.Empty(t, containers)
 }
 
-// TestKillContainer tests killing the container in a Pod.
+// TestKillContainer 验证终止 Pod 中的容器；找不到容器时应返回错误。
 func TestKillContainer(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, _ := createTestRuntimeManager(tCtx)
@@ -206,9 +208,7 @@ func TestKillContainer(t *testing.T) {
 	}
 }
 
-// TestToKubeContainerStatus tests the converting the CRI container status to
-// the internal type (i.e., toKubeContainerStatus()) for containers in
-// different states.
+// TestToKubeContainerStatus 验证不同状态（created/running/exited/unknown）的 CRI 容器状态能被正确转换。
 func TestToKubeContainerStatus(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	cid := &kubecontainer.ContainerID{Type: "testRuntime", ID: "dummyid"}
@@ -309,8 +309,7 @@ func TestToKubeContainerStatus(t *testing.T) {
 	}
 }
 
-// TestToKubeContainerStatusWithResources tests the converting the CRI container status to
-// the internal type (i.e., toKubeContainerStatus()) for containers that returns Resources.
+// TestToKubeContainerStatusWithResources 验证带资源信息的 CRI 容器状态转换，包括 CPU/内存限制与 request 的推算。
 func TestToKubeContainerStatusWithResources(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported on Windows.")
@@ -500,6 +499,7 @@ func TestToKubeContainerStatusWithResources(t *testing.T) {
 	}
 }
 
+// TestToKubeContainerStatusWithUser 验证容器用户信息（UID/GID/附加组）的转换受 SupplementalGroupsPolicy 门控控制。
 func TestToKubeContainerStatusWithUser(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("Updating Pod Container User is not supported on Windows.")
@@ -572,7 +572,7 @@ func TestToKubeContainerStatusWithUser(t *testing.T) {
 		},
 	} {
 		t.Run(desc, func(t *testing.T) {
-			// Set emulation version so that the feature gate can be disabled in the test
+			// 固定仿真版本，才能在测试中关闭该特性门控。
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.34"))
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SupplementalGroupsPolicy, test.featureEnabled)
 			cStatus := &runtimeapi.ContainerStatus{
@@ -590,9 +590,10 @@ func TestToKubeContainerStatusWithUser(t *testing.T) {
 	}
 }
 
+// testLifeCycleHook 是生命周期钩子的共享测试逻辑，供普通容器与重启式 init 容器复用。
 func testLifeCycleHook(t *testing.T, testPod *v1.Pod, testContainer *v1.Container) {
 	tCtx := ktesting.Init(t)
-	// Setup
+	// 准备 fake runtime、Pod 与容器 ID。
 	fakeRuntime, _, m, _ := createTestRuntimeManager(tCtx)
 
 	gracePeriod := int64(30)
@@ -652,7 +653,7 @@ func testLifeCycleHook(t *testing.T, testPod *v1.Pod, testContainer *v1.Containe
 
 	m.runner = lcHanlder
 
-	// Configured and works as expected
+	// 场景：钩子已配置且执行成功。
 	t.Run("PreStop-CMDExec", func(t *testing.T) {
 		tCtx := ktesting.Init(t)
 		testContainer.Lifecycle = cmdLifeCycle
@@ -662,7 +663,7 @@ func testLifeCycleHook(t *testing.T, testPod *v1.Pod, testContainer *v1.Containe
 		}
 	})
 
-	// Configured and working HTTP hook
+	// 场景：配置了 HTTP 形式的 PreStop 钩子。
 	t.Run("PreStop-HTTPGet", func(t *testing.T) {
 		t.Run("consistent", func(t *testing.T) {
 			tCtx := ktesting.Init(t)
@@ -676,7 +677,7 @@ func testLifeCycleHook(t *testing.T, testPod *v1.Pod, testContainer *v1.Containe
 		})
 	})
 
-	// When there is no time to run PreStopHook
+	// 场景：宽限期过短，PreStop 钩子没有时间执行。
 	t.Run("PreStop-NoTimeToRun", func(t *testing.T) {
 		tCtx := ktesting.Init(t)
 		gracePeriodLocal := int64(0)
@@ -690,10 +691,10 @@ func testLifeCycleHook(t *testing.T, testPod *v1.Pod, testContainer *v1.Containe
 		}
 	})
 
-	// Post Start script
+	// 场景：PostStart 脚本会被调用。
 	t.Run("PostStart-CmdExe", func(t *testing.T) {
 		tCtx := ktesting.Init(t)
-		// Fake all the things you need before trying to create a container
+		// 先伪造创建容器所需的运行时状态。
 		fakeSandBox, _ := makeAndSetFakePod(tCtx, m, fakeRuntime, testPod)
 		fakeSandBoxConfig, _ := m.generatePodSandboxConfig(tCtx, testPod, 0)
 		testContainer.Lifecycle = cmdPostStart
@@ -711,7 +712,7 @@ func testLifeCycleHook(t *testing.T, testPod *v1.Pod, testContainer *v1.Containe
 			},
 		}
 
-		// Now try to create a container, which should in turn invoke PostStart Hook
+		// 创建容器时应触发 PostStart 钩子。
 		_, err := m.startContainer(tCtx, fakeSandBox.Id, fakeSandBoxConfig, containerStartSpec(testContainer), testPod, fakePodStatus, nil, "", []string{}, nil)
 		if err != nil {
 			t.Errorf("startContainer error =%v", err)
@@ -722,6 +723,7 @@ func testLifeCycleHook(t *testing.T, testPod *v1.Pod, testContainer *v1.Containe
 	})
 }
 
+// TestLifeCycleHook 验证普通容器的 PostStart/PreStop 钩子行为。
 func TestLifeCycleHook(t *testing.T) {
 	testPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -744,6 +746,7 @@ func TestLifeCycleHook(t *testing.T) {
 	testLifeCycleHook(t, testPod, &testPod.Spec.Containers[0])
 }
 
+// TestLifeCycleHookForRestartableInitContainer 验证重启式 init 容器同样支持生命周期钩子。
 func TestLifeCycleHookForRestartableInitContainer(t *testing.T) {
 	testPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -767,6 +770,7 @@ func TestLifeCycleHookForRestartableInitContainer(t *testing.T) {
 	testLifeCycleHook(t, testPod, &testPod.Spec.InitContainers[0])
 }
 
+// TestStartSpec 验证 startSpec 能按容器状态正确解析出目标容器 ID（含 init 容器与未知容器场景）。
 func TestStartSpec(t *testing.T) {
 	podStatus := &kubecontainer.PodStatus{
 		ContainerStatuses: []*kubecontainer.Status{
@@ -825,6 +829,7 @@ func TestStartSpec(t *testing.T) {
 	}
 }
 
+// TestRestartCountByLogDir 验证能从日志目录中的文件名推导出容器重启次数。
 func TestRestartCountByLogDir(t *testing.T) {
 	for _, tc := range []struct {
 		filenames    []string
@@ -854,7 +859,7 @@ func TestRestartCountByLogDir(t *testing.T) {
 			filenames:    []string{"5.log.rotated", "6.log", "7.log"},
 			restartCount: 8,
 		},
-		// no restart count log files
+		// 没有可解析的日志文件时应返回 0。
 		{
 			filenames:    []string{},
 			restartCount: 0,
@@ -863,22 +868,22 @@ func TestRestartCountByLogDir(t *testing.T) {
 			filenames:    []string{"a.log.rotated", "b.log.rotated", "12log.rotated"},
 			restartCount: 0,
 		},
-		// log extension twice
+		// 双重扩展名 .log.log.rotated 仍应取 145 作为计数。
 		{
 			filenames:    []string{"145.log.log.rotated"},
 			restartCount: 146,
 		},
-		// too big of the integer
+		// 超出 int64 的数字无法解析，返回 0。
 		{
 			filenames:    []string{"92233720368547758089223372036854775808.log.rotated"},
 			restartCount: 0,
 		},
-		// mix of log files
+		// 混合多种文件名时取可解析的最大编号加一。
 		{
 			filenames:    []string{"9223372036854775808.log.rotated", "23.log", "23a.log", "1aaa.log.rotated", "2.log", "3.log.rotated"},
 			restartCount: 24,
 		},
-		// prefixed
+		// 带前缀或负号的名称不符合命名规则，返回 0。
 		{
 			filenames:    []string{"rotated.23.log"},
 			restartCount: 0,
@@ -891,7 +896,7 @@ func TestRestartCountByLogDir(t *testing.T) {
 			filenames:    []string{"-42.log"},
 			restartCount: 0,
 		},
-		// same restart count multiple times
+		// 同一计数出现多次（含轮转文件）只计一次。
 		{
 			filenames:    []string{"6.log", "6.log.rotated", "6.log.rotated.rotated"},
 			restartCount: 7,
@@ -911,6 +916,7 @@ func TestRestartCountByLogDir(t *testing.T) {
 	}
 }
 
+// TestKillContainerGracePeriod 验证终止宽限期在 Pod 级、容器级与 reason 覆盖之间的优先级。
 func TestKillContainerGracePeriod(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -1076,7 +1082,7 @@ func TestKillContainerGracePeriod(t *testing.T) {
 	}
 }
 
-// TestUpdateContainerResources tests updating a container in a Pod.
+// TestUpdateContainerResources 验证更新容器资源会调用运行时的 UpdateContainerResources。
 func TestUpdateContainerResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeRuntime, _, m, errCreate := createTestRuntimeManager(tCtx)
@@ -1098,7 +1104,7 @@ func TestUpdateContainerResources(t *testing.T) {
 		},
 	}
 
-	// Create fake sandbox and container
+	// 准备 fake runtime 中的 sandbox 与容器。
 	_, fakeContainers := makeAndSetFakePod(tCtx, m, fakeRuntime, pod)
 	assert.Len(t, fakeContainers, 1)
 
@@ -1111,10 +1117,11 @@ func TestUpdateContainerResources(t *testing.T) {
 	err = m.updateContainerResources(tCtx, pod, &pod.Spec.Containers[0], containerID)
 	assert.NoError(t, err)
 
-	// Verify container is updated
+	// 校验运行时确实收到了资源更新调用。
 	assert.Contains(t, fakeRuntime.Called, "UpdateContainerResources")
 }
 
+// TestMakeMountsBindMountOptions 验证挂载选项只传递给声明了 BindMountOptions 的挂载点。
 func TestMakeMountsBindMountOptions(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)

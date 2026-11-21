@@ -41,11 +41,13 @@ import (
 	"k8s.io/client-go/util/keyutil"
 )
 
+// copyFile 把 src 文件的内容原样复制到 dst。
 func copyFile(src, dst string) (err error) {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
+	// defer 保证无论复制是否成功，文件句柄都会被关闭。
 	defer in.Close()
 	out, err := os.Create(dst)
 	if err != nil {
@@ -53,6 +55,7 @@ func copyFile(src, dst string) (err error) {
 	}
 	defer func() {
 		cerr := out.Close()
+		// 只有当前没有其他错误时才用关闭错误覆盖 err，避免丢失复制阶段的真实失败原因。
 		if err == nil {
 			err = cerr
 		}
@@ -61,10 +64,12 @@ func copyFile(src, dst string) (err error) {
 	return err
 }
 
+// TestLoadClientConfig 验证 LoadClientConfig 在 bootstrapPath 为空/已设置，
+// 以及 kubeconfig 合法/非法的组合场景下，都能得到预期的证书配置和客户端配置。
 func TestLoadClientConfig(t *testing.T) {
-	//Create a temporary folder under tmp to store the required certificate files and configuration files.
+	// 在临时目录下创建工作目录，存放测试所需的证书和配置文件，保证各次运行互不干扰。
 	fileDir := t.TempDir()
-	//Copy the required certificate file to the temporary directory.
+	// 把测试证书复制到临时目录，使 kubeconfig 中的相对路径只在本次测试内有效。
 	copyFile("./testdata/mycertinvalid.crt", fileDir+"/mycertinvalid.crt")
 	copyFile("./testdata/mycertvalid.crt", fileDir+"/mycertvalid.crt")
 	copyFile("./testdata/mycertinvalid.key", fileDir+"/mycertinvalid.key")
@@ -107,7 +112,7 @@ users:
 	if err != nil {
 		t.Fatal(err)
 	}
-	// os.CreateTemp also opens the file, and removing it without closing it will result in a failure.
+	// os.CreateTemp 已经打开文件，未关闭就删除会失败，因此必须显式关闭。
 	defer filevalid.Close()
 	os.WriteFile(filevalid.Name(), testDataValid, os.FileMode(0755))
 
@@ -274,6 +279,7 @@ users:
 	}
 
 	logger, _ := ktesting.NewTestContext(t)
+	// 逐个执行用例，直接比较 LoadClientConfig 的双返回值与预期配置，任何不一致都判失败。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			certConfig, clientConfig, err := LoadClientConfig(logger, test.kubeconfigPath, test.bootstrapPath, test.certDir)
@@ -290,6 +296,8 @@ users:
 	}
 }
 
+// TestLoadRESTClientConfig 验证 loadRESTClientConfig 能正确解析 kubeconfig，
+// 并正确还原当前上下文的 CA 数据与 BearerToken。
 func TestLoadRESTClientConfig(t *testing.T) {
 	testData := []byte(`
 apiVersion: v1
@@ -348,6 +356,8 @@ users:
 	}
 }
 
+// TestRequestNodeCertificateNoKeyData 验证传入空的私钥数据时，
+// requestNodeCertificate 会报错且不返回证书数据。
 func TestRequestNodeCertificateNoKeyData(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	certData, err := requestNodeCertificate(tCtx, newClientset(fakeClient{}), []byte{}, "fake-node-name")
@@ -359,6 +369,8 @@ func TestRequestNodeCertificateNoKeyData(t *testing.T) {
 	}
 }
 
+// TestRequestNodeCertificateErrorCreatingCSR 验证创建 CSR 失败时，
+// requestNodeCertificate 返回错误且不返回证书数据。
 func TestRequestNodeCertificateErrorCreatingCSR(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	client := newClientset(fakeClient{
@@ -378,6 +390,8 @@ func TestRequestNodeCertificateErrorCreatingCSR(t *testing.T) {
 	}
 }
 
+// TestRequestNodeCertificate 验证私钥合法且 CSR 创建成功时，
+// requestNodeCertificate 能正常返回 CSR 数据。
 func TestRequestNodeCertificate(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	privateKeyData, err := keyutil.MakeEllipticPrivateKeyPEM()
@@ -394,23 +408,31 @@ func TestRequestNodeCertificate(t *testing.T) {
 	}
 }
 
+// failureType 枚举 fakeClient 要模拟的失败场景。
 type failureType int
 
+// failureType 的枚举值。
 const (
+	// noError 表示所有操作都成功。
 	noError failureType = iota
+	// createError 表示创建 CSR 时返回错误。
 	createError
+	// certificateSigningRequestDenied 表示 CSR 被拒绝。
 	certificateSigningRequestDenied
 )
 
+// fakeClient 是 CSR 接口的测试替身，通过 failureType 控制模拟成功、创建失败或被拒绝等行为。
 type fakeClient struct {
 	certificatesclient.CertificateSigningRequestInterface
 	failureType failureType
 }
 
+// newClientset 构造一个 fake Clientset，按 failureType 注入创建、列出和监听 CSR 的反应器。
 func newClientset(opts fakeClient) *fake.Clientset {
 	f := fake.NewSimpleClientset()
 	switch opts.failureType {
 	case createError:
+		// 模拟创建 CSR 直接失败，用于覆盖错误处理分支。
 		f.PrependReactor("create", "certificatesigningrequests", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
 			switch action.GetResource().Version {
 			case "v1":
@@ -420,6 +442,7 @@ func newClientset(opts fakeClient) *fake.Clientset {
 			}
 		})
 	default:
+		// 默认模拟正常流程：创建与列出 CSR 均成功，并监听到一个已审批的 CSR。
 		f.PrependReactor("create", "certificatesigningrequests", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
 			switch action.GetResource().Version {
 			case "v1":
@@ -452,14 +475,18 @@ func newClientset(opts fakeClient) *fake.Clientset {
 	return f
 }
 
+// generateCSR 构造一个用于测试的 CertificateSigningRequest：
+// 被拒绝的场景只带拒绝条件，正常场景则带审批条件和签发的证书数据。
 func (c fakeClient) generateCSR() runtime.Object {
 	var condition certificatesv1.CertificateSigningRequestCondition
 	var certificateData []byte
 	if c.failureType == certificateSigningRequestDenied {
+		// 被拒绝的 CSR 不携带证书数据，模拟审批未通过的情况。
 		condition = certificatesv1.CertificateSigningRequestCondition{
 			Type: certificatesv1.CertificateDenied,
 		}
 	} else {
+		// 只有已审批的 CSR 才会带上签发的证书数据，模拟 kubelet 成功拿到新证书。
 		condition = certificatesv1.CertificateSigningRequestCondition{
 			Type: certificatesv1.CertificateApproved,
 		}

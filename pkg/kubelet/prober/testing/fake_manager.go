@@ -24,27 +24,27 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// FakeManager simulates a prober.Manager for testing.
+// FakeManager 是测试用的 prober.Manager 模拟实现。
 type FakeManager struct{}
 
-// Unused methods below.
+// 以下为未使用的方法。
 
-// AddPod simulates adding a Pod.
+// AddPod 模拟添加 Pod。
 func (FakeManager) AddPod(_ context.Context, _ *v1.Pod) {}
 
-// RemovePod simulates removing a Pod.
+// RemovePod 模拟移除 Pod。
 func (FakeManager) RemovePod(_ *v1.Pod) {}
 
-// Simulated stopping liveness and startup probes.
+// StopLivenessAndStartup 模拟停止存活与启动探针。
 func (FakeManager) StopLivenessAndStartup(_ *v1.Pod) {}
 
-// CleanupPods simulates cleaning up Pods.
+// CleanupPods 模拟清理 Pod。
 func (FakeManager) CleanupPods(_ map[types.UID]sets.Empty) {}
 
-// Start simulates start syncing the probe status
+// Start 模拟开始同步探针状态。
 func (FakeManager) Start() {}
 
-// UpdatePodStatus simulates updating the Pod Status.
+// UpdatePodStatus 模拟更新 Pod 状态，把所有容器标记为 Ready。
 func (FakeManager) UpdatePodStatus(_ context.Context, _ *v1.Pod, podStatus *v1.PodStatus) {
 	for i := range podStatus.ContainerStatuses {
 		podStatus.ContainerStatuses[i].Ready = true

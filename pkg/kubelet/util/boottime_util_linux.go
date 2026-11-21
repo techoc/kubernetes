@@ -29,9 +29,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// GetBootTime returns the time at which the machine was started, truncated to the nearest second.
-// It uses /proc/stat first, which is more accurate, and falls back to the less accurate
-// unix.Sysinfo if /proc/stat failed.
+// GetBootTime 返回机器启动时间并截断到秒。
+// 优先使用更精确的 /proc/stat；失败时回退到精度较低的 unix.Sysinfo。
 func GetBootTime(logger klog.Logger) (time.Time, error) {
 	bootTime, err := getBootTimeWithProcStat()
 	if err != nil {
@@ -41,6 +40,7 @@ func GetBootTime(logger klog.Logger) (time.Time, error) {
 	return bootTime, nil
 }
 
+// getBootTimeWithProcStat 从 /proc/stat 的 btime 字段解析启动时间。
 func getBootTimeWithProcStat() (time.Time, error) {
 	raw, err := os.ReadFile("/proc/stat")
 	if err != nil {
@@ -63,6 +63,7 @@ func getBootTimeWithProcStat() (time.Time, error) {
 	return time.Time{}, fmt.Errorf("can not find btime from /proc/stat: %s", raw)
 }
 
+// getBootTimeWithSysinfo 通过 unix.Sysinfo 的 uptime 反推启动时间，精度较低。
 func getBootTimeWithSysinfo() (time.Time, error) {
 	currentTime := time.Now()
 	var info unix.Sysinfo_t

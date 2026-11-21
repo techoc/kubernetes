@@ -41,11 +41,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// fakePodStatusProvider 是测试用的 Pod 与 PodStatus 提供者，返回预置数据并校验入参。
 type fakePodStatusProvider struct {
 	pod    *kubecontainer.Pod
 	status *kubecontainer.PodStatus
 }
 
+// GetPod 校验调用方查询的 UID 与预置 Pod 一致，避免测试误查其他 Pod。
 func (f fakePodStatusProvider) GetPod(_ context.Context, uid types.UID) (*kubecontainer.Pod, error) {
 	if uid != f.pod.ID {
 		return nil, fmt.Errorf("unexpected pod UID: got %s, want %s", uid, f.pod.ID)
@@ -53,6 +55,7 @@ func (f fakePodStatusProvider) GetPod(_ context.Context, uid types.UID) (*kubeco
 	return f.pod, nil
 }
 
+// GetPodStatus 校验入参是预置 Pod，否则返回错误以暴露调用错误。
 func (f fakePodStatusProvider) GetPodStatus(_ context.Context, pod *kubecontainer.Pod) (*kubecontainer.PodStatus, error) {
 	if pod != f.pod {
 		return nil, fmt.Errorf("Unexpected pod: %v", pod)
@@ -60,6 +63,7 @@ func (f fakePodStatusProvider) GetPodStatus(_ context.Context, pod *kubecontaine
 	return f.status, nil
 }
 
+// TestIsInitContainerFailed 表驱动校验 init 容器各种状态下的失败判定。
 func TestIsInitContainerFailed(t *testing.T) {
 	tests := []struct {
 		status      *kubecontainer.Status
@@ -112,12 +116,15 @@ func TestIsInitContainerFailed(t *testing.T) {
 			description: "Init container in created state should return false",
 		},
 	}
+	// 每个状态单独断言，失败时可直接定位到具体用例描述。
 	for i, test := range tests {
 		isFailed := isInitContainerFailed(test.status)
 		assert.Equal(t, test.isFailed, isFailed, "TestCase[%d]: %s", i, test.description)
 	}
 }
 
+// TestGetBackoffKey 校验退避键只随影响容器行为的字段变化，
+// 无关字段变更不应重置退避。
 func TestGetBackoffKey(t *testing.T) {
 	testSpecs := map[string]v1.PodSpec{
 		"empty resources": {
@@ -159,6 +166,7 @@ func TestGetBackoffKey(t *testing.T) {
 				Image: "registry.k8s.io/pause",
 			}
 			pod.Spec.Containers = append(pod.Spec.Containers, secondContainer)
+			// 以原始键为基准，逐项修改无关/相关字段并比较键是否变化。
 			originalKey := GetBackoffKey(pod, &pod.Spec.Containers[0])
 
 			podCopy := pod.DeepCopy()
@@ -197,6 +205,7 @@ func TestGetBackoffKey(t *testing.T) {
 	}
 }
 
+// TestToKubeContainer 校验 CRI 容器到 kubecontainer.Container 的字段映射。
 func TestToKubeContainer(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	c := &runtimeapi.Container{
@@ -233,13 +242,15 @@ func TestToKubeContainer(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expect, got)
 
-	// unable to convert a nil pointer to a runtime container
+	// nil 指针不能转换为运行时容器，应返回错误。
 	_, err = m.toKubeContainer(tCtx, nil)
 	assert.Error(t, err)
 	_, err = m.sandboxToKubeContainer(nil)
 	assert.Error(t, err)
 }
 
+// TestToKubeContainerWithRuntimeHandlerInImageSpecCri 校验开启 RuntimeClassInImageCriAPI
+// 后，runtime handler 从镜像规格而非注解中读取。
 func TestToKubeContainerWithRuntimeHandlerInImageSpecCri(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.RuntimeClassInImageCriAPI, true)
 	tCtx := ktesting.Init(t)
@@ -277,13 +288,14 @@ func TestToKubeContainerWithRuntimeHandlerInImageSpecCri(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expect, got)
 
-	// unable to convert a nil pointer to a runtime container
+	// nil 指针不能转换为运行时容器，应返回错误。
 	_, err = m.toKubeContainer(tCtx, nil)
 	assert.Error(t, err)
 	_, err = m.sandboxToKubeContainer(nil)
 	assert.Error(t, err)
 }
 
+// TestGetImageUser 校验镜像用户/UID 缺失、仅用户名、仅 UID 三种情况的返回值形态。
 func TestGetImageUser(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, i, m, err := createTestRuntimeManager(tCtx)
@@ -296,8 +308,8 @@ func TestGetImageUser(t *testing.T) {
 	}
 
 	type imageUserValues struct {
-		// getImageUser can return (*int64)(nil) so comparing with *uid will break
-		// type cannot be *int64 as Golang does not allow to take the address of a numeric constant"
+		// getImageUser 可能返回 (*int64)(nil)，直接与 *uid 比较会崩，
+		// 而 Go 不允许取数值常量的地址，所以这里用 interface{} 承载两种形态。
 		uid      interface{}
 		username string
 		err      error
@@ -369,6 +381,7 @@ func TestGetImageUser(t *testing.T) {
 	}
 }
 
+// TestToRuntimeProtocol 校验 Kubernetes 协议名到 CRI 协议的映射，未知协议回退为 TCP。
 func TestToRuntimeProtocol(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	logger := klog.FromContext(tCtx)
@@ -406,6 +419,7 @@ func TestToRuntimeProtocol(t *testing.T) {
 	}
 }
 
+// TestToKubeContainerState 校验 CRI 容器状态到 kubelet 容器状态的映射。
 func TestToKubeContainerState(t *testing.T) {
 	for _, test := range []struct {
 		name     string
@@ -446,6 +460,7 @@ func TestToKubeContainerState(t *testing.T) {
 	}
 }
 
+// TestGetAppArmorProfile 校验 Pod AppArmor 配置到新旧两种 CRI/注解表示的转换。
 func TestGetAppArmorProfile(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -523,6 +538,7 @@ func TestGetAppArmorProfile(t *testing.T) {
 	}
 }
 
+// TestMergeResourceConfig 校验源配置与更新配置的合并语义：更新非空字段覆盖源值。
 func TestMergeResourceConfig(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -584,6 +600,8 @@ func TestMergeResourceConfig(t *testing.T) {
 	}
 }
 
+// TestConvertResourceConfigToLinuxContainerResources 校验 cgroup 资源配置到 CRI
+// LinuxContainerResources 的字段映射。
 func TestConvertResourceConfigToLinuxContainerResources(t *testing.T) {
 	resCfg := &cm.ResourceConfig{
 		Memory:        ptr.To[int64](2048),
@@ -603,6 +621,7 @@ func TestConvertResourceConfigToLinuxContainerResources(t *testing.T) {
 	assert.Equal(t, resCfg.Unified, lcr.Unified)
 }
 
+// TestContainerByCreatedThenID 校验容器排序规则：创建时间倒序，同时间按 ID 升序。
 func TestContainerByCreatedThenID(t *testing.T) {
 	now := time.Now()
 
@@ -619,9 +638,9 @@ func TestContainerByCreatedThenID(t *testing.T) {
 				{Id: "c3", CreatedAt: now.Add(-10 * time.Minute).Unix()},
 			},
 			expected: []*runtimeapi.Container{
-				{Id: "c2"}, // newest
+				{Id: "c2"}, // 最新
 				{Id: "c3"},
-				{Id: "c1"}, // oldest
+				{Id: "c1"}, // 最旧
 			},
 		},
 		{
@@ -686,6 +705,7 @@ func TestContainerByCreatedThenID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
+			// 复制输入再排序，避免就地修改测试用例的期望数据。
 			containers := make([]*runtimeapi.Container, len(tt.input))
 			copy(containers, tt.input)
 
@@ -700,6 +720,7 @@ func TestContainerByCreatedThenID(t *testing.T) {
 	}
 }
 
+// TestPodSandboxByCreatedThenID 校验 sandbox 排序规则：Attempt 降序、创建时间降序、ID 升序。
 func TestPodSandboxByCreatedThenID(t *testing.T) {
 	now := time.Now()
 
@@ -801,6 +822,7 @@ func TestPodSandboxByCreatedThenID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 复制输入再排序，避免就地修改测试用例的期望数据。
 			sandboxes := make([]*runtimeapi.PodSandbox, len(tt.input))
 			copy(sandboxes, tt.input)
 

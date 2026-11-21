@@ -26,27 +26,27 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
 
-// Type defines the policy type
+// policyType 定义内存管理策略类型。
 type policyType string
 
-// Policy implements logic for pod container to a memory assignment.
+// Policy 实现 Pod 容器到内存的分配逻辑。
 type Policy interface {
+	// Name 返回策略名称。
 	Name() string
+	// Start 初始化策略并加载状态。
 	Start(logger klog.Logger, s state.State) error
-	// Allocate call is idempotent
+	// Allocate 调用是幂等的。
 	Allocate(ctx context.Context, s state.State, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) error
-	// RemoveContainer call is idempotent
+	// RemoveContainer 调用是幂等的。
 	RemoveContainer(logger klog.Logger, s state.State, podUID string, containerName string)
-	// GetTopologyHints implements the topologymanager.HintProvider Interface
-	// and is consulted to achieve NUMA aware resource alignment among this
-	// and other resource controllers.
+	// GetTopologyHints 实现 topologymanager.HintProvider 接口，
+	// 用于与其他资源控制器共同实现 NUMA 感知的资源对齐。
 	GetTopologyHints(logger klog.Logger, s state.State, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint
-	// GetPodTopologyHints implements the topologymanager.HintProvider Interface
-	// and is consulted to achieve NUMA aware resource alignment among this
-	// and other resource controllers.
+	// GetPodTopologyHints 实现 topologymanager.HintProvider 接口，
+	// 用于与其他资源控制器共同实现 Pod 级的 NUMA 感知资源对齐。
 	GetPodTopologyHints(logger klog.Logger, s state.State, pod *v1.Pod, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint
-	// AllocatePod is called to trigger the allocation of memory to a pod-level resources pod.
+	// AllocatePod 用于触发为 Pod 级资源 Pod 分配内存。
 	AllocatePod(logger klog.Logger, s state.State, pod *v1.Pod, operation lifecycle.Operation) error
-	// GetAllocatableMemory returns the amount of allocatable memory for each NUMA node
+	// GetAllocatableMemory 返回每个 NUMA 节点可分配的内存块。
 	GetAllocatableMemory(s state.State) []state.Block
 }

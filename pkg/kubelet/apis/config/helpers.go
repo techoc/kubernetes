@@ -16,9 +16,9 @@ limitations under the License.
 
 package config
 
-// KubeletConfigurationPathRefs returns pointers to all of the KubeletConfiguration fields that contain filepaths.
-// You might use this, for example, to resolve all relative paths against some common root before
-// passing the configuration to the application. This method must be kept up to date as new fields are added.
+// KubeletConfigurationPathRefs 返回 KubeletConfiguration 中所有文件路径字段的指针。
+// 例如可在把配置交给应用前，用它将所有相对路径解析到某个公共根目录。
+// 新增路径字段时必须同步更新本方法，否则该字段不会被解析。
 func KubeletConfigurationPathRefs(kc *KubeletConfiguration) []*string {
 	paths := []*string{}
 	paths = append(paths, &kc.StaticPodPath)

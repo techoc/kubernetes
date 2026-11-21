@@ -26,29 +26,27 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
 )
 
-// readyToUnmount returns true when reconciler can start unmounting volumes.
+// readyToUnmount 在 reconciler 可以开始卸载卷时返回 true。
 func (rc *reconciler) readyToUnmount() bool {
-	// During kubelet startup, all volumes present on disk are added as uncertain to ASW.
-	// Allow unmount only when DSW is fully populated to prevent unmounting volumes that
-	// did not reach DSW yet.
+	// kubelet 启动时，磁盘上的所有卷都会以“不确定”状态加入 ASW。
+	// 只有 DSW 完全填充后才允许卸载，避免卸载尚未进入 DSW 的卷。
 	if !rc.populatorHasAddedPods() {
 		return false
 	}
 
-	// Allow unmount only when ASW device paths were corrected from node.status to prevent
-	// calling unmount with a wrong devicePath.
+	// 只有 ASW 中的设备路径已从 node.status 修正后才允许卸载，
+	// 避免使用错误的 devicePath 调用卸载。
 	if len(rc.volumesNeedUpdateFromNodeStatus) != 0 {
 		return false
 	}
 	return true
 }
 
-// reconstructVolumes tries to reconstruct the actual state of world by scanning all pods' volume
-// directories from the disk. For the volumes that cannot support or fail reconstruction, it will
-// put the volumes to volumesFailedReconstruction to be cleaned up later when DesiredStateOfWorld
-// is populated.
+// reconstructVolumes 通过扫描磁盘上所有 Pod 的卷目录来重建实际状态。
+// 对于不支持重建或重建失败的卷，会放入 volumesFailedReconstruction，
+// 待 DesiredStateOfWorld 填充后再清理。
 func (rc *reconciler) reconstructVolumes(logger klog.Logger) {
-	// Get volumes information by reading the pod's directory
+	// 通过读取 Pod 目录获取卷信息。
 	podVolumes, err := getVolumesFromPodDir(logger, rc.kubeletPodsDir)
 	if err != nil {
 		logger.Error(err, "Cannot get volumes from disk, skip sync states for volume reconstruction")
@@ -59,13 +57,13 @@ func (rc *reconciler) reconstructVolumes(logger klog.Logger) {
 	for _, volume := range podVolumes {
 		if rc.actualStateOfWorld.VolumeExistsWithSpecName(volume.podName, volume.volumeSpecName) {
 			logger.V(4).Info("Volume exists in actual state, skip cleaning up mounts", "podName", volume.podName, "volumeSpecName", volume.volumeSpecName)
-			// There is nothing to reconstruct
+			// 已存在于实际状态中，无需重建。
 			continue
 		}
 		reconstructedVolume, err := rc.reconstructVolume(volume)
 		if err != nil {
 			logger.Info("Could not construct volume information", "podName", volume.podName, "volumeSpecName", volume.volumeSpecName, "err", err)
-			// We can't reconstruct the volume. Remember to check DSW after it's fully populated and force unmount the volume when it's orphaned.
+			// 无法重建该卷；待 DSW 完全填充后检查，若已成为孤儿则强制卸载。
 			rc.volumesFailedReconstruction = append(rc.volumesFailedReconstruction, volume)
 			continue
 		}
@@ -78,6 +76,7 @@ func (rc *reconciler) reconstructVolumes(logger klog.Logger) {
 			blockVolumeMapper: reconstructedVolume.blockVolumeMapper,
 			mounter:           reconstructedVolume.mounter,
 		}
+		// 同一个卷可能被多个 Pod 使用，复用已有的 globalVolumeInfo。
 		if cachedInfo, ok := reconstructedVolumes[reconstructedVolume.volumeName]; ok {
 			gvl = cachedInfo
 		}
@@ -88,15 +87,16 @@ func (rc *reconciler) reconstructVolumes(logger klog.Logger) {
 	}
 
 	if len(reconstructedVolumes) > 0 {
-		// Add the volumes to ASW
+		// 把重建出的卷加入实际状态。
 		rc.updateStates(logger, reconstructedVolumes)
 
-		// Remember to update devicePath from node.status.volumesAttached
+		// 记录待从 node.status.volumesAttached 更新的设备路径。
 		rc.volumesNeedUpdateFromNodeStatus = reconstructedVolumeNames
 	}
 	logger.V(2).Info("Volume reconstruction finished")
 }
 
+// updateStates 把重建出的卷以“不确定”状态写入实际状态缓存。
 func (rc *reconciler) updateStates(logger klog.Logger, reconstructedVolumes map[v1.UniqueVolumeName]*globalVolumeInfo) {
 	for _, gvl := range reconstructedVolumes {
 		err := rc.actualStateOfWorld.AddAttachUncertainReconstructedVolume(
@@ -107,6 +107,7 @@ func (rc *reconciler) updateStates(logger klog.Logger, reconstructedVolumes map[
 			continue
 		}
 		var seLinuxMountContext string
+		// 同一卷的所有 Pod 都标记为挂载不确定。
 		for _, volume := range gvl.podVolumes {
 			markVolumeOpts := operationexecutor.MarkVolumeOpts{
 				PodName:             volume.podName,
@@ -128,7 +129,7 @@ func (rc *reconciler) updateStates(logger klog.Logger, reconstructedVolumes map[
 			seLinuxMountContext = volume.seLinuxMountContext
 			logger.V(2).Info("Volume is marked as uncertain and added into the actual state", "pod", klog.KObj(volume.pod), "podName", volume.podName, "volumeName", volume.volumeName, "seLinuxMountContext", volume.seLinuxMountContext)
 		}
-		// If the volume has device to mount, we mark its device as uncertain.
+		// 若卷有需要挂载的设备，则把设备状态也标记为不确定。
 		if gvl.deviceMounter != nil || gvl.blockVolumeMapper != nil {
 			deviceMountPath, err := getDeviceMountPath(gvl)
 			if err != nil {
@@ -145,7 +146,7 @@ func (rc *reconciler) updateStates(logger klog.Logger, reconstructedVolumes map[
 	}
 }
 
-// cleanOrphanVolumes tries to clean up all volumes that failed reconstruction.
+// cleanOrphanVolumes 尝试清理所有重建失败的卷。
 func (rc *reconciler) cleanOrphanVolumes(logger klog.Logger) {
 	if len(rc.volumesFailedReconstruction) == 0 {
 		return
@@ -153,8 +154,7 @@ func (rc *reconciler) cleanOrphanVolumes(logger klog.Logger) {
 
 	for _, volume := range rc.volumesFailedReconstruction {
 		if rc.desiredStateOfWorld.VolumeExistsWithSpecName(volume.podName, volume.volumeSpecName) {
-			// Some pod needs the volume, don't clean it up and hope that
-			// reconcile() calls SetUp and reconstructs the volume in ASW.
+			// 仍有 Pod 需要该卷，不要清理；等待 reconcile() 调用 SetUp 并在 ASW 中重建它。
 			logger.V(4).Info("Volume exists in desired state, skip cleaning up mounts", "podName", volume.podName, "volumeSpecName", volume.volumeSpecName)
 			continue
 		}
@@ -163,20 +163,19 @@ func (rc *reconciler) cleanOrphanVolumes(logger klog.Logger) {
 	}
 
 	logger.V(2).Info("Orphan volume cleanup finished")
-	// Clean the cache, cleanup is one shot operation.
+	// 清理是一次性操作，完成后清空缓存。
 	rc.volumesFailedReconstruction = make([]podVolume, 0)
 }
 
-// updateReconstructedFromNodeStatus tries to file devicePaths of reconstructed volumes from
-// node.Status.VolumesAttached. This can be done only after connection to the API
-// server is established, i.e. it can't be part of reconstructVolumes().
+// updateReconstructedFromNodeStatus 尝试从 node.Status.VolumesAttached 填充重建卷的
+// 设备路径。这只能在连接 apiserver 之后进行，因此不能放在 reconstructVolumes() 里。
 func (rc *reconciler) updateReconstructedFromNodeStatus(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Updating reconstructed devicePaths")
 
 	if rc.kubeClient == nil {
-		// Skip reconstructing devicePath from node objects if kubelet is in standalone mode.
-		// Such kubelet is not expected to mount any attachable volume or Secrets / ConfigMap.
+		// kubelet 处于 standalone 模式时跳过从 Node 对象重建设备路径；
+		// 这种 kubelet 不会挂载可附加卷或 Secret / ConfigMap。
 		logger.V(2).Info("Skipped reconstruction of DevicePaths from node.status in standalone mode")
 		rc.volumesNeedUpdateFromNodeStatus = nil
 		return
@@ -184,7 +183,7 @@ func (rc *reconciler) updateReconstructedFromNodeStatus(ctx context.Context) {
 
 	node, fetchErr := rc.kubeClient.CoreV1().Nodes().Get(ctx, string(rc.nodeName), metav1.GetOptions{})
 	if fetchErr != nil {
-		// This may repeat few times per second until kubelet is able to read its own status for the first time.
+		// 在 kubelet 首次成功读取自身状态之前，这里可能每秒重复几次。
 		logger.V(4).Info("Failed to get Node status to reconstruct device paths", "err", fetchErr)
 		return
 	}
@@ -192,6 +191,7 @@ func (rc *reconciler) updateReconstructedFromNodeStatus(ctx context.Context) {
 	for _, volumeID := range rc.volumesNeedUpdateFromNodeStatus {
 		attachable := false
 		for _, attachedVolume := range node.Status.VolumesAttached {
+			// 在 node.status 中找到对应卷时更新设备路径，并标记为可附加。
 			if volumeID != attachedVolume.Name {
 				continue
 			}

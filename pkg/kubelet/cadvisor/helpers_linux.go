@@ -25,14 +25,13 @@ import (
 	cadvisorfs "github.com/google/cadvisor/lib/fs"
 )
 
-// imageFsInfoProvider knows how to translate the configured runtime
-// to its file system label for images.
+// imageFsInfoProvider 能把配置的运行时转换为对应的镜像文件系统标签。
 type imageFsInfoProvider struct {
 	runtimeEndpoint string
 }
 
-// ImageFsInfoLabel returns the image fs label for the configured runtime.
-// For remote runtimes, it handles additional runtimes natively understood by cAdvisor.
+// ImageFsInfoLabel 返回配置运行时的镜像文件系统标签；
+// 对远程运行时，也会处理 cAdvisor 原生支持的其他运行时。
 func (i *imageFsInfoProvider) ImageFsInfoLabel() (string, error) {
 	if detectCrioWorkaround(i) {
 		return cadvisorfs.LabelCrioImages, nil
@@ -40,8 +39,8 @@ func (i *imageFsInfoProvider) ImageFsInfoLabel() (string, error) {
 	return "", fmt.Errorf("no imagefs label for configured runtime")
 }
 
-// ContainerFsInfoLabel returns the container fs label for the configured runtime.
-// For remote runtimes, it handles addition runtimes natively understood by cAdvisor.
+// ContainerFsInfoLabel 返回配置运行时的容器文件系统标签；
+// 对远程运行时，也会处理 cAdvisor 原生支持的其他运行时。
 func (i *imageFsInfoProvider) ContainerFsInfoLabel() (string, error) {
 	if detectCrioWorkaround(i) {
 		return cadvisorfs.LabelCrioContainers, nil
@@ -49,14 +48,13 @@ func (i *imageFsInfoProvider) ContainerFsInfoLabel() (string, error) {
 	return "", fmt.Errorf("no containerfs label for configured runtime")
 }
 
-// This is a temporary workaround to get stats for cri-o from cadvisor
-// and should be removed.
-// Related to https://github.com/kubernetes/kubernetes/issues/51798
+// detectCrioWorkaround 是让 cAdvisor 获取 cri-o 统计数据的临时兼容方案，
+// 后续应当移除。参见 https://github.com/kubernetes/kubernetes/issues/51798。
 func detectCrioWorkaround(i *imageFsInfoProvider) bool {
 	return strings.HasSuffix(i.runtimeEndpoint, CrioSocketSuffix)
 }
 
-// NewImageFsInfoProvider returns a provider for the specified runtime configuration.
+// NewImageFsInfoProvider 返回指定运行时配置的 ImageFsInfoProvider。
 func NewImageFsInfoProvider(runtimeEndpoint string) ImageFsInfoProvider {
 	return &imageFsInfoProvider{runtimeEndpoint: runtimeEndpoint}
 }

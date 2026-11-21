@@ -21,9 +21,8 @@ import (
 	"testing"
 )
 
-// ExpectError calls t.Fatalf if the error does not contain a substr match.
-// If substr is empty, a nil error is expected.
-// It is useful to call ExpectError from subtests.
+// ExpectError 在错误不包含 substr 匹配时调用 t.Fatalf。
+// substr 为空表示期望无错误；适合在子测试中调用。
 func ExpectError(t *testing.T, err error, substr string) {
 	if err != nil {
 		if len(substr) == 0 {
@@ -36,9 +35,8 @@ func ExpectError(t *testing.T, err error, substr string) {
 	}
 }
 
-// SkipRest returns true if there was a non-nil error or if we expected an error that didn't happen,
-// and logs the appropriate error on the test object.
-// The return value indicates whether we should skip the rest of the test case due to the error result.
+// SkipRest 在出现非预期错误（或期望错误但未发生）时记录错误并返回 true。
+// 返回值表示是否应因该错误结果跳过测试用例的剩余部分。
 func SkipRest(t *testing.T, desc string, err error, contains string) bool {
 	if err != nil {
 		if len(contains) == 0 {

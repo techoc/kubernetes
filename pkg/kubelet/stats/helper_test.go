@@ -32,7 +32,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestCustomMetrics 验证自定义指标从 cadvisor 结构转换为 kubelet stats API。
 func TestCustomMetrics(t *testing.T) {
+	// 构造 gauge 与 cumulative 两种自定义指标。
 	spec := []cadvisorapi.MetricSpec{
 		{
 			Name:   "qos",
@@ -47,6 +49,7 @@ func TestCustomMetrics(t *testing.T) {
 			Units:  "count",
 		},
 	}
+	// 两个时间戳用于验证只取最新一次采样。
 	timestamp1 := time.Now()
 	timestamp2 := time.Now().Add(time.Minute)
 	metrics := map[string][]cadvisorapi.MetricVal{
@@ -71,6 +74,7 @@ func TestCustomMetrics(t *testing.T) {
 			},
 		},
 	}
+	// 组装带有自定义指标的容器信息。
 	cInfo := cadvisorapi.ContainerInfo{
 		Spec: cadvisorapi.ContainerSpec{
 			CustomMetrics: spec,
@@ -81,6 +85,7 @@ func TestCustomMetrics(t *testing.T) {
 			},
 		},
 	}
+	// 断言转换结果包含两种指标的最新值。
 	logger, _ := ktesting.NewTestContext(t)
 	assert.Contains(t, cadvisorInfoToUserDefinedMetrics(logger, &cInfo),
 		statsapi.UserDefinedMetric{
@@ -103,7 +108,9 @@ func TestCustomMetrics(t *testing.T) {
 		})
 }
 
+// TestMergeProcessStats 验证进程统计合并：nil 处理与计数累加。
 func TestMergeProcessStats(t *testing.T) {
+	// 用例覆盖双方 nil、单边 nil 与双方非 nil。
 	for _, tc := range []struct {
 		desc     string
 		first    *statsapi.ProcessStats
@@ -135,6 +142,7 @@ func TestMergeProcessStats(t *testing.T) {
 			expected: &statsapi.ProcessStats{ProcessCount: ptr.To[uint64](200)},
 		},
 	} {
+		// 用 cmp.Diff 比较，失败时输出差异。
 		t.Run(tc.desc, func(t *testing.T) {
 			got := mergeProcessStats(tc.first, tc.second)
 			if diff := cmp.Diff(tc.expected, got); diff != "" {
@@ -144,9 +152,10 @@ func TestMergeProcessStats(t *testing.T) {
 	}
 }
 
-// TestCadvisorPSIStruct checks the fields in cadvisor PSI structs. If cadvisor
-// PSI structs change, the conversion between cadvisor PSI structs and kubelet stats API structs needs to be re-evaluated and updated.
+// TestCadvisorPSIStructs 检查 cadvisor PSI 结构体的字段。
+// 若 cadvisor 的 PSI 结构变化，cadvisor 与 kubelet stats API 之间的转换需要重新评估并更新。
 func TestCadvisorPSIStructs(t *testing.T) {
+	// PSIStats 只允许 Full/Some 两个字段。
 	psiStatsFields := sets.New("Full", "Some")
 	s := cadvisorapi.PSIStats{}
 	st := reflect.TypeOf(s)
@@ -157,6 +166,7 @@ func TestCadvisorPSIStructs(t *testing.T) {
 		}
 	}
 
+	// PSIData 的字段名与类型必须与转换逻辑一致。
 	psiDataFields := map[string]reflect.Kind{
 		"Total":  reflect.Uint64,
 		"Avg10":  reflect.Float64,

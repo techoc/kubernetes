@@ -33,17 +33,14 @@ import (
 
 var _ ImagePullManager = &PullManager{}
 
-// writeRecordWhileMatchingLimit is a limit at which we stop writing yet-uncached
-// records that we found when we were checking if an image pull must be attempted.
-// This is to prevent unbounded writes in cases of high namespace turnover.
+// writeRecordWhileMatchingLimit 是在判断是否需要尝试拉取镜像时，停止写入
+// 尚未缓存的记录的阈值。这是为了防止在命名空间高频更替时写入无界增长。
 const writeRecordWhileMatchingLimit = 100
 
-// PullManager is an implementation of the ImagePullManager. It
-// tracks images pulled by the kubelet by creating records about ongoing and
-// successful pulls.
-// It tracks the credentials used with each successful pull in order to be able
-// to distinguish tenants requesting access to an image that exists on the kubelet's
-// node.
+// PullManager 实现了 ImagePullManager。它通过为进行中和已成功的拉取创建记录，
+// 跟踪 kubelet 拉取的镜像。
+// 它记录每次成功拉取所使用的凭证，以便区分请求访问 kubelet 节点上
+// 已存在镜像的不同租户。
 type PullManager struct {
 	recordsAccessor PullRecordsAccessor
 
@@ -51,12 +48,14 @@ type PullManager struct {
 
 	imageService kubecontainer.ImageService
 
-	intentAccessors *StripedLockSet // image -> sync.Mutex
-	intentCounters  *sync.Map       // image -> number of current in-flight pulls
+	intentAccessors *StripedLockSet // image -> sync.Mutex，为每个镜像的拉取意图串行化
+	intentCounters  *sync.Map       // image -> 当前进行中拉取的次数
 
-	pulledAccessors *StripedLockSet // imageRef -> sync.Mutex
+	pulledAccessors *StripedLockSet // imageRef -> sync.Mutex，为每个 imageRef 的记录读写串行化
 }
 
+// NewImagePullManager 创建 PullManager，使用给定的记录访问器、镜像拉取策略
+// 强制器与镜像服务，并调用 initialize 恢复上次运行遗留的拉取意图。
 func NewImagePullManager(ctx context.Context, recordsAccessor PullRecordsAccessor, imagePullPolicy ImagePullPolicyEnforcer, imageService kubecontainer.ImageService, lockStripesNum int32) (*PullManager, error) {
 	m := &PullManager{
 		recordsAccessor: recordsAccessor,
@@ -76,6 +75,7 @@ func NewImagePullManager(ctx context.Context, recordsAccessor PullRecordsAccesso
 	return m, nil
 }
 
+// RecordPullIntent 记录一次针对指定镜像的拉取意图，并递增该镜像的进行中拉取计数。
 func (f *PullManager) RecordPullIntent(logger klog.Logger, image string) error {
 	f.intentAccessors.Lock(image)
 	defer f.intentAccessors.Unlock(image)
@@ -88,6 +88,8 @@ func (f *PullManager) RecordPullIntent(logger klog.Logger, image string) error {
 	return nil
 }
 
+// RecordImagePulled 记录镜像拉取成功：写入（或按需合并）ImagePulledRecord，
+// 成功后递减对应镜像的拉取意图计数。
 func (f *PullManager) RecordImagePulled(ctx context.Context, image, imageRef string, credentials *kubeletconfiginternal.ImagePullCredentials) {
 	logger := klog.FromContext(ctx)
 	if err := f.writePulledRecordIfChanged(ctx, image, imageRef, credentials); err != nil {
@@ -95,24 +97,20 @@ func (f *PullManager) RecordImagePulled(ctx context.Context, image, imageRef str
 		return
 	}
 
-	// Notice we don't decrement in case of record write error, which leaves dangling
-	// imagePullIntents and refCount in the intentCounters map.
-	// This is done so that the successfully pulled image is still considered as pulled by the kubelet.
-	// The kubelet will attempt to turn the imagePullIntent into a pulled record again when
-	// it's restarted.
+	// 注意：记录写入出错时不递减计数，会留下悬空的 imagePullIntent 以及
+	// intentCounters 映射中的引用计数。
+	// 这样做是为了让成功拉取的镜像仍被 kubelet 视为已拉取。
+	// kubelet 重启时会再次尝试把 imagePullIntent 转换为 pulled 记录。
 	f.decrementImagePullIntent(ctx, image)
 }
 
-// writePulledRecordIfChanged writes an ImagePulledRecord into the f.pulledDir directory.
-// `image` is an image from a container of a Pod object.
-// `imageRef` is a reference to the `image“ as used by the CRI.
-// `credentials` is a set of credentials that should be written to a new/merged into
-// an existing record.
+// writePulledRecordIfChanged 把 ImagePulledRecord 写入 f.pulledDir 目录。
+// `image` 是 Pod 对象中容器的镜像。
+// `imageRef` 是 CRI 使用的镜像引用。
+// `credentials` 是应写入新记录或合并进已有记录的一组凭证。
 //
-// If `credentials` is nil, it marks a situation where an image was pulled under
-// unknown circumstances. We should record the image as tracked but no credentials
-// should be written in order to force credential verification when the image is
-// accessed the next time.
+// 若 `credentials` 为 nil，表示镜像在未知情况下被拉取。此时应把镜像记录为
+// 已跟踪，但不写入凭证，以便在该镜像下次被访问时强制进行凭证校验。
 func (f *PullManager) writePulledRecordIfChanged(ctx context.Context, image, imageRef string, credentials *kubeletconfiginternal.ImagePullCredentials) error {
 	logger := klog.FromContext(ctx)
 	f.pulledAccessors.Lock(imageRef)
@@ -137,10 +135,9 @@ func (f *PullManager) writePulledRecordIfChanged(ctx context.Context, image, ima
 			ImageRef:          imageRef,
 			CredentialMapping: make(map[string]kubeletconfiginternal.ImagePullCredentials),
 		}
-		// just the existence of the pulled record for a given imageRef is enough
-		// for us to consider it kubelet-pulled. The kubelet should fail safe
-		// if it does not find a credential record for the specific image, and it
-		// must require credential validation
+		// 只要某个 imageRef 存在 pulled 记录，就足以将其视为由 kubelet 拉取。
+		// 若找不到该镜像的凭证记录，kubelet 应采取安全失败策略，
+		// 并在下次访问时强制进行凭证校验。
 		if credentials != nil {
 			pulledRecord.CredentialMapping[sanitizedImage] = *credentials
 		}
@@ -155,13 +152,13 @@ func (f *PullManager) writePulledRecordIfChanged(ctx context.Context, image, ima
 	return f.recordsAccessor.WriteImagePulledRecord(logger, pulledRecord)
 }
 
+// RecordImagePullFailed 记录一次拉取失败：递减该镜像的拉取意图计数。
 func (f *PullManager) RecordImagePullFailed(ctx context.Context, image string) {
 	f.decrementImagePullIntent(ctx, image)
 }
 
-// decrementImagePullIntent decreses the number of how many times image pull
-// intent for a given `image` was requested, and removes the ImagePullIntent file
-// if the reference counter for the image reaches zero.
+// decrementImagePullIntent 递减指定 `image` 的拉取意图请求次数；
+// 当该镜像的引用计数归零时，删除其 ImagePullIntent 文件。
 func (f *PullManager) decrementImagePullIntent(ctx context.Context, image string) {
 	logger := klog.FromContext(ctx)
 	f.intentAccessors.Lock(image)
@@ -172,8 +169,7 @@ func (f *PullManager) decrementImagePullIntent(ctx context.Context, image string
 			logger.Error(err, "failed to remove image pull intent", "image", image)
 			return
 		}
-		// only delete the intent counter once the file was deleted to be consistent
-		// with the records
+		// 只有在文件删除成功后才删除意图计数，保证与记录的状态一致
 		f.intentCounters.Delete(image)
 		return
 	}
@@ -181,6 +177,8 @@ func (f *PullManager) decrementImagePullIntent(ctx context.Context, image string
 	f.decrementIntentCounterForImage(image)
 }
 
+// MustAttemptImagePull 判断对指定镜像是否必须尝试拉取（即是否需要进行凭证校验）。
+// 返回 true 表示需要拉取/校验；凭证策略直接放行或缓存凭证匹配成功时返回 false。
 func (f *PullManager) MustAttemptImagePull(ctx context.Context, image, imageRef string, getPodCredentials GetPodCredentials) (bool, error) {
 	if len(imageRef) == 0 {
 		return true, nil
@@ -199,7 +197,7 @@ func (f *PullManager) MustAttemptImagePull(ctx context.Context, image, imageRef 
 	var pulledRecord *kubeletconfiginternal.ImagePulledRecord
 
 	err := func() error {
-		// don't allow changes to the files we're using for our decision
+		// 在做出判断期间锁定相关文件，防止决策依据被并发修改
 		f.pulledAccessors.Lock(imageRef)
 		defer f.pulledAccessors.Unlock(imageRef)
 		f.intentAccessors.Lock(image)
@@ -216,9 +214,8 @@ func (f *PullManager) MustAttemptImagePull(ctx context.Context, image, imageRef 
 		case pulledRecord != nil:
 			imagePulledByKubelet = true
 		default:
-			// optimized check - we can check the intent number, however, if it's zero
-			// it may only mean kubelet restarted since writing the intent record and
-			// we must fall back to the actual cache
+			// 优化检查：可以先看意图计数，但计数为零可能只是 kubelet 自写入
+			// 意图记录后发生了重启，因此必须回退到实际缓存中确认。
 			imagePulledByKubelet = f.getIntentCounterForImage(image) > 0
 			if imagePulledByKubelet {
 				break
@@ -246,7 +243,7 @@ func (f *PullManager) MustAttemptImagePull(ctx context.Context, image, imageRef 
 	}
 
 	if pulledRecord == nil {
-		// we have no proper records of the image being pulled in the past, we can short-circuit here
+		// 过去没有该镜像被成功拉取的完整记录，这里可以直接短路处理
 		resultForMetrics = checkResultMustAuthenticate
 		return true, nil
 	}
@@ -265,7 +262,7 @@ func (f *PullManager) MustAttemptImagePull(ctx context.Context, image, imageRef 
 	}
 
 	if cachedCreds.NodePodsAccessible {
-		// anyone on this node can access the image
+		// 该节点上的任何人都能访问此镜像
 		resultForMetrics = checkResultCredentialRecordFound
 		return false, nil
 	}
@@ -284,7 +281,7 @@ func (f *PullManager) MustAttemptImagePull(ctx context.Context, image, imageRef 
 	for _, podSecret := range podSecrets {
 		for _, cachedSecret := range cachedCreds.KubernetesSecrets {
 
-			// we need to check hash len in case hashing failed while storing the record in the keyring
+			// 需要检查哈希长度，以防在 keyring 中存储记录时哈希计算失败
 			hashesMatch := len(cachedSecret.CredentialHash) > 0 && podSecret.CredentialHash == cachedSecret.CredentialHash
 			secretCoordinatesMatch := podSecret.UID == cachedSecret.UID &&
 				podSecret.Namespace == cachedSecret.Namespace &&
@@ -292,9 +289,9 @@ func (f *PullManager) MustAttemptImagePull(ctx context.Context, image, imageRef 
 
 			if hashesMatch {
 				if !secretCoordinatesMatch && len(cachedCreds.KubernetesSecrets) < writeRecordWhileMatchingLimit {
-					// While we're only matching at this point, we want to ensure this secret is considered valid in the future
-					// and so we make an additional write to the cache.
-					// writePulledRecord() is a noop in case the secret with the updated hash already appears in the cache.
+					// 虽然此刻只是做匹配，但我们希望确保该 secret 在未来也被视为有效，
+					// 因此额外向缓存写入一次。
+					// 若携带更新哈希的 secret 已存在于缓存，writePulledRecord() 不会做任何事。
 					if err := f.writePulledRecordIfChanged(ctx, image, imageRef, &kubeletconfiginternal.ImagePullCredentials{KubernetesSecrets: []kubeletconfiginternal.ImagePullSecret{podSecret}}); err != nil {
 						logger.Error(err, "failed to write an image pulled record", "image", image, "imageRef", imageRef)
 					}
@@ -305,9 +302,9 @@ func (f *PullManager) MustAttemptImagePull(ctx context.Context, image, imageRef 
 
 			if secretCoordinatesMatch {
 				if !hashesMatch && len(cachedCreds.KubernetesSecrets) < writeRecordWhileMatchingLimit {
-					// While we're only matching at this point, we want to ensure the updated credentials are considered valid in the future
-					// and so we make an additional write to the cache.
-					// writePulledRecord() is a noop in case the hash got updated in the meantime.
+					// 虽然此刻只是做匹配，但我们希望确保更新后的凭证在未来也被视为有效，
+					// 因此额外向缓存写入一次。
+					// 若哈希在此期间已被更新，writePulledRecord() 不会做任何事。
 					if err := f.writePulledRecordIfChanged(ctx, image, imageRef, &kubeletconfiginternal.ImagePullCredentials{KubernetesSecrets: []kubeletconfiginternal.ImagePullSecret{podSecret}}); err != nil {
 						logger.Error(err, "failed to write an image pulled record", "image", image, "imageRef", imageRef)
 					}
@@ -319,7 +316,7 @@ func (f *PullManager) MustAttemptImagePull(ctx context.Context, image, imageRef 
 	}
 
 	if podServiceAccount != nil && slices.Contains(cachedCreds.KubernetesServiceAccounts, *podServiceAccount) {
-		// we found a matching service account, no need to pull the image
+		// 找到了匹配的 service account，无需再拉取镜像
 		resultForMetrics = checkResultCredentialRecordFound
 		return false, nil
 	}
@@ -328,6 +325,8 @@ func (f *PullManager) MustAttemptImagePull(ctx context.Context, image, imageRef 
 	return true, nil
 }
 
+// PruneUnknownRecords 清理不再被使用的 ImagePulledRecord：删除在 until 之后
+// 未更新、且不在给定镜像列表中的记录，用于镜像垃圾回收。
 func (f *PullManager) PruneUnknownRecords(ctx context.Context, imageList []string, until time.Time) {
 	f.pulledAccessors.GlobalLock()
 	defer f.pulledAccessors.GlobalUnlock()
@@ -341,7 +340,7 @@ func (f *PullManager) PruneUnknownRecords(ctx context.Context, imageList []strin
 	imagesInUse := sets.New(imageList...)
 	for _, imageRecord := range pulledRecords {
 		if !imageRecord.LastUpdatedTime.Time.Before(until) {
-			// the image record was only updated after the GC started
+			// 该镜像记录是在 GC 开始之后才更新的，跳过
 			continue
 		}
 
@@ -356,13 +355,11 @@ func (f *PullManager) PruneUnknownRecords(ctx context.Context, imageList []strin
 
 }
 
-// initialize gathers all the images from pull intent records that exist
-// from the previous kubelet runs.
-// If the CRI reports any of the above images as already pulled, we turn the
-// pull intent into a pulled record and the original pull intent is deleted.
+// initialize 收集上一次 kubelet 运行留下的所有拉取意图记录中的镜像。
+// 若 CRI 报告其中某个镜像已被拉取，则把对应的拉取意图转为 pulled 记录，
+// 并删除原始的拉取意图。
 //
-// This method is not thread-safe and it should only be called upon the creation
-// of the PullManager.
+// 该方法不是线程安全的，只能在创建 PullManager 时调用。
 func (f *PullManager) initialize(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	pullIntents, err := f.recordsAccessor.ListImagePullIntents()
@@ -384,9 +381,8 @@ func (f *PullManager) initialize(ctx context.Context) {
 		inFlightPulls.Insert(intent.Image)
 	}
 
-	// Each of the images known to the CRI might consist of multiple tags and digests,
-	// which is what we track in the ImagePullIntent - we need to go through all of these
-	// for each image.
+	// CRI 已知的每个镜像可能对应多个 tag 与 digest，这正是 ImagePullIntent
+	// 中跟踪的内容——需要为每个镜像遍历所有这些 tag 与 digest。
 	for _, imageObj := range imageObjs {
 		existingRecordedImages := searchForExistingTagDigest(inFlightPulls, imageObj)
 
@@ -405,13 +401,17 @@ func (f *PullManager) initialize(ctx context.Context) {
 
 }
 
+// incrementIntentCounterForImage 递增指定镜像的进行中拉取意图计数。
 func (f *PullManager) incrementIntentCounterForImage(image string) {
 	f.intentCounters.Store(image, f.getIntentCounterForImage(image)+1)
 }
+
+// decrementIntentCounterForImage 递减指定镜像的进行中拉取意图计数。
 func (f *PullManager) decrementIntentCounterForImage(image string) {
 	f.intentCounters.Store(image, f.getIntentCounterForImage(image)-1)
 }
 
+// getIntentCounterForImage 读取指定镜像的拉取意图计数，不存在时返回 0。
 func (f *PullManager) getIntentCounterForImage(image string) int32 {
 	intentNumAny, ok := f.intentCounters.Load(image)
 	if !ok {
@@ -424,9 +424,9 @@ func (f *PullManager) getIntentCounterForImage(image string) int32 {
 	return intentNum
 }
 
-// searchForExistingTagDigest loops through the `image` RepoDigests and RepoTags
-// and tries to find all image digests/tags in `inFlightPulls`, which is a map of
-// containerImage -> pulling intent path.
+// searchForExistingTagDigest 遍历 `image` 的 RepoDigests 与 RepoTags，
+// 找出所有存在于 `inFlightPulls`（containerImage -> 拉取意图路径的映射）
+// 中的镜像 digest/tag。
 func searchForExistingTagDigest(inFlightPulls sets.Set[string], image kubecontainer.Image) sets.Set[string] {
 	existingRecordedImages := sets.New[string]()
 	for _, digest := range image.RepoDigests {
@@ -444,28 +444,27 @@ func searchForExistingTagDigest(inFlightPulls sets.Set[string], image kubecontai
 	return existingRecordedImages
 }
 
+// kubeSecretCoordinates 是镜像拉取 secret 的唯一坐标，用于合并与去重。
 type kubeSecretCoordinates struct {
 	UID       string
 	Namespace string
 	Name      string
 }
 
-// pulledRecordMergeNewCreds merges the credentials from `newCreds` into the `orig`
-// record for the `imageNoTagDigest` image.
-// `imageNoTagDigest` is the content of the `image` field from a pod's container
-// after any tag or digest were removed from it.
+// pulledRecordMergeNewCreds 把 `newCreds` 中的凭证合并进 `orig` 记录中
+// `imageNoTagDigest` 镜像对应的条目。
+// `imageNoTagDigest` 是 pod 容器 `image` 字段去除 tag 与 digest 后的内容。
 //
-// NOTE: pulledRecordMergeNewCreds() may be often called in the read path of
-// PullManager.MustAttemptImagePull() and so it's desirable to limit allocations
-// (e.g. DeepCopy()) until it is necessary.
+// 注意：pulledRecordMergeNewCreds() 常在 PullManager.MustAttemptImagePull()
+// 的读路径中被调用，因此应在确实需要时才进行分配（例如 DeepCopy()）。
 func pulledRecordMergeNewCreds(orig *kubeletconfiginternal.ImagePulledRecord, imageNoTagDigest string, newCreds *kubeletconfiginternal.ImagePullCredentials) (*kubeletconfiginternal.ImagePulledRecord, bool) {
 	if newCreds == nil {
-		// no new credential information to record
+		// 没有新的凭证信息需要记录
 		return orig, false
 	}
 
 	if !newCreds.NodePodsAccessible && len(newCreds.KubernetesSecrets) == 0 && len(newCreds.KubernetesServiceAccounts) == 0 {
-		// we don't have any secret, service account credentials or node-wide access to record
+		// 没有任何 secret、service account 凭证或节点级访问权限需要记录
 		return orig, false
 	}
 	selectedCreds, found := orig.CredentialMapping[imageNoTagDigest]
@@ -515,15 +514,14 @@ func pulledRecordMergeNewCreds(orig *kubeletconfiginternal.ImagePulledRecord, im
 	return ret, true
 }
 
-// mergePullSecrets merges two slices of ImagePullSecret object into one while
-// keeping the objects unique per `Namespace, Name, UID` key.
+// mergePullSecrets 把两片 ImagePullSecret 合并为一片，
+// 并按 `Namespace, Name, UID` 键保持对象唯一。
 //
-// In case an object from the `new` slice has the same `Namespace, Name, UID` combination
-// as an object from `orig`, the result will use the CredentialHash value of the
-// object from `new`.
+// 若 `new` 切片中的某个对象与 `orig` 中的对象具有相同的
+// `Namespace, Name, UID` 组合，则结果采用 `new` 中对象的 CredentialHash。
 //
-// The returned slice is sorted by Namespace, Name and UID (in this order). Also
-// returns an indicator whether the set of input secrets chaged.
+// 返回的切片按 Namespace、Name、UID 的顺序排序。
+// 同时返回一个指示，说明输入的 secret 集合是否发生了变化。
 func mergePullSecrets(orig, new []kubeletconfiginternal.ImagePullSecret) ([]kubeletconfiginternal.ImagePullSecret, bool) {
 	credSet := make(map[kubeSecretCoordinates]string)
 	for _, secret := range orig {
@@ -555,14 +553,13 @@ func mergePullSecrets(orig, new []kubeletconfiginternal.ImagePullSecret) ([]kube
 			CredentialHash: hash,
 		})
 	}
-	// we don't need to use the stable version because secret coordinates used for ordering are unique in the set
+	// 无需使用稳定排序版本，因为用于排序的 secret 坐标在该集合中是唯一的
 	slices.SortFunc(ret, imagePullSecretLess)
 
 	return ret, true
 }
 
-// imagePullSecretLess is a helper function to define ordering in a slice of
-// ImagePullSecret objects.
+// imagePullSecretLess 是辅助函数，用于确定 ImagePullSecret 切片中的排序规则。
 func imagePullSecretLess(a, b kubeletconfiginternal.ImagePullSecret) int {
 	if cmp := strings.Compare(a.Namespace, b.Namespace); cmp != 0 {
 		return cmp
@@ -575,10 +572,10 @@ func imagePullSecretLess(a, b kubeletconfiginternal.ImagePullSecret) int {
 	return strings.Compare(a.UID, b.UID)
 }
 
-// mergePullServiceAccounts merges two slices of ImagePullServiceAccount object into one while
-// keeping the objects unique per `Namespace, Name, UID` key.
-// The returned slice is sorted by Namespace, Name and UID (in this order).
-// Also returns an indicator whether the set of input service accounts changed.
+// mergePullServiceAccounts 把两片 ImagePullServiceAccount 合并为一片，
+// 并按 `Namespace, Name, UID` 键保持对象唯一。
+// 返回的切片按 Namespace、Name、UID 的顺序排序。
+// 同时返回一个指示，说明输入的 service account 集合是否发生了变化。
 func mergePullServiceAccounts(orig, new []kubeletconfiginternal.ImagePullServiceAccount) ([]kubeletconfiginternal.ImagePullServiceAccount, bool) {
 	credSet := sets.New[kubeletconfiginternal.ImagePullServiceAccount]()
 	for _, serviceAccount := range orig {
@@ -602,8 +599,7 @@ func mergePullServiceAccounts(orig, new []kubeletconfiginternal.ImagePullService
 	return ret, true
 }
 
-// imagePullServiceAccountLess is a helper function to define ordering in a slice of
-// ImagePullServiceAccount objects.
+// imagePullServiceAccountLess 是辅助函数，用于确定 ImagePullServiceAccount 切片中的排序规则。
 func imagePullServiceAccountLess(a, b kubeletconfiginternal.ImagePullServiceAccount) int {
 	if cmp := strings.Compare(a.Namespace, b.Namespace); cmp != 0 {
 		return cmp

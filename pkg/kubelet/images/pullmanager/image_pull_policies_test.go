@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestNeverVerifyPreloadedPullPolicy 验证“从不校验预加载镜像”策略：
+// 只有已存在拉取记录（镜像已预加载）时才跳过凭据校验。
 func TestNeverVerifyPreloadedPullPolicy(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -47,6 +49,8 @@ func TestNeverVerifyPreloadedPullPolicy(t *testing.T) {
 	}
 }
 
+// TestNewNeverVerifyAllowListedPullPolicy 覆盖 allowlist 策略的解析与匹配：
+// 非法模式应在构造时报错，合法模式按绝对地址/通配前缀分类，并正确决定是否需要凭据校验。
 func TestNewNeverVerifyAllowListedPullPolicy(t *testing.T) {
 	const basicTestImage = "test.io/test/test-image:tag"
 
@@ -222,6 +226,7 @@ func TestNewNeverVerifyAllowListedPullPolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 策略构造阶段即解析 allowlist，非法模式必须在这里暴露为错误。
 			policyEnforcer, err := NewNeverVerifyAllowListedPullPolicy(tt.allowlist)
 			if tt.wantErr != (err != nil) {
 				t.Fatalf("wanted error: %t, got: %v", tt.wantErr, err)
@@ -231,6 +236,7 @@ func TestNewNeverVerifyAllowListedPullPolicy(t *testing.T) {
 				return
 			}
 
+			// 绝对镜像地址与通配前缀分别计数，用于确认解析、去重和分类都正确。
 			if len(policyEnforcer.absoluteURLs) != tt.expectedAbsolutes {
 				t.Errorf("expected %d of absolute image URLs in the allowlist policy, got %d: %v", tt.expectedAbsolutes, len(policyEnforcer.absoluteURLs), policyEnforcer.absoluteURLs)
 			}
@@ -239,6 +245,7 @@ func TestNewNeverVerifyAllowListedPullPolicy(t *testing.T) {
 				t.Errorf("expected %d of wildcard image URLs in the allowlist policy, got %d: %v", tt.expectedWildcards, len(policyEnforcer.prefixes), policyEnforcer.prefixes)
 			}
 
+			// 命中 allowlist 或已有拉取记录时无需校验凭据，应返回 false。
 			got := policyEnforcer.RequireCredentialVerificationForImage(tt.inputImage, tt.imageRecordsExist)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewNeverVerifyAllowListedPullPolicy() = %v, want %v", got, tt.want)
@@ -247,6 +254,8 @@ func TestNewNeverVerifyAllowListedPullPolicy(t *testing.T) {
 	}
 }
 
+// TestTrimImageTagDigest 验证剥离镜像 tag/digest 的边界情况：
+// 熟悉名称、带端口的 registry、深层路径、tag 与 digest 多次出现，以及非法输入。
 func TestTrimImageTagDigest(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -357,6 +366,7 @@ func TestTrimImageTagDigest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 只剥离 tag/digest，仓库路径必须原样保留。
 			got, err := trimImageTagDigest(tt.image)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("removeTagDigest(%q) error = %v, wantErr %v", tt.image, err, tt.wantErr)

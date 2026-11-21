@@ -26,28 +26,27 @@ import (
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 )
 
-// FromServices builds environment variables that a container is started with,
-// which tell the container where to find the services it may need, which are
-// provided as an argument.
+// FromServices 构造容器启动时使用的环境变量，
+// 告知容器如何找到参数中传入的各个 Service。
 func FromServices(services []*v1.Service) []v1.EnvVar {
 	var result []v1.EnvVar
+	// 为每个 Service 生成环境变量。
 	for i := range services {
 		service := services[i]
 
-		// ignore services where ClusterIP is "None" or empty
-		// the services passed to this method should be pre-filtered
-		// only services that have the cluster IP set should be included here
+		// 忽略 ClusterIP 为 "None" 或空的 Service。
+		// 传入的 Service 应已预过滤，这里只处理设置了 ClusterIP 的 Service。
 		if !v1helper.IsServiceIPSet(service) {
 			continue
 		}
 
-		// Host
+		// 生成 Service 的 ClusterIP 环境变量。
 		name := makeEnvVariableName(service.Name) + "_SERVICE_HOST"
 		result = append(result, v1.EnvVar{Name: name, Value: service.Spec.ClusterIP})
-		// First port - give it the backwards-compatible name
+		// 第一个端口使用向后兼容的名称。
 		name = makeEnvVariableName(service.Name) + "_SERVICE_PORT"
 		result = append(result, v1.EnvVar{Name: name, Value: strconv.Itoa(int(service.Spec.Ports[0].Port))})
-		// All named ports (only the first may be unnamed, checked in validation)
+		// 为所有命名端口生成变量（只有第一个端口可以无名，校验阶段已检查）。
 		for i := range service.Spec.Ports {
 			sp := &service.Spec.Ports[i]
 			if sp.Name != "" {
@@ -55,12 +54,13 @@ func FromServices(services []*v1.Service) []v1.EnvVar {
 				result = append(result, v1.EnvVar{Name: pn, Value: strconv.Itoa(int(sp.Port))})
 			}
 		}
-		// Docker-compatible vars.
+		// 生成与 Docker 兼容的变量。
 		result = append(result, makeLinkVariables(service)...)
 	}
 	return result
 }
 
+// makeEnvVariableName 把名称转换为环境变量形式：转大写并将 - 替换为 _。
 func makeEnvVariableName(str string) string {
 	// TODO: If we simplify to "all names are DNS1123Subdomains" this
 	// will need two tweaks:
@@ -69,6 +69,7 @@ func makeEnvVariableName(str string) string {
 	return strings.ToUpper(strings.Replace(str, "-", "_", -1))
 }
 
+// makeLinkVariables 生成 Docker link 风格的服务端口环境变量。
 func makeLinkVariables(service *v1.Service) []v1.EnvVar {
 	prefix := makeEnvVariableName(service.Name)
 	all := []v1.EnvVar{}
@@ -83,7 +84,7 @@ func makeLinkVariables(service *v1.Service) []v1.EnvVar {
 		hostPort := net.JoinHostPort(service.Spec.ClusterIP, strconv.Itoa(int(sp.Port)))
 
 		if i == 0 {
-			// Docker special-cases the first port.
+			// Docker 对第一个端口有特殊处理，生成不带端口号的变量。
 			all = append(all, v1.EnvVar{
 				Name:  prefix + "_PORT",
 				Value: fmt.Sprintf("%s://%s", strings.ToLower(protocol), hostPort),

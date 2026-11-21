@@ -23,6 +23,7 @@ import (
 	"time"
 )
 
+// TestLocalStorage 验证状态写入磁盘后可读回，且 JSON 字段与 RFC3339Nano 时间格式符合预期。
 func TestLocalStorage(t *testing.T) {
 	var localStorageStateFileName = "graceful_node_shutdown_state"
 	tempdir := os.TempDir()

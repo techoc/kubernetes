@@ -25,6 +25,7 @@ import (
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
+// applySandboxResources 在 Windows 上暂不调整 sandbox 资源，直接返回 nil。
 func (m *kubeGenericRuntimeManager) applySandboxResources(ctx context.Context, pod *v1.Pod, config *runtimeapi.PodSandboxConfig) error {
 	return nil
 }

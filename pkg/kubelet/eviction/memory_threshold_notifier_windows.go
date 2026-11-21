@@ -30,14 +30,20 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/winstats"
 )
 
+// windowsMemoryThresholdNotifier 通过轮询全局提交内存来触发驱逐通知。
 type windowsMemoryThresholdNotifier struct {
+	// threshold 是触发通知的驱逐阈值。
 	threshold evictionapi.Threshold
-	events    chan struct{}
-	handler   func(string)
+	// events 在阈值被越过时收到信号。
+	events chan struct{}
+	// handler 在阈值被越过时被调用。
+	handler func(string)
 }
 
+// 编译期断言：windowsMemoryThresholdNotifier 实现了 ThresholdNotifier 接口。
 var _ ThresholdNotifier = &windowsMemoryThresholdNotifier{}
 
+// NewMemoryThresholdNotifier 创建 Windows 内存阈值通知器。
 func NewMemoryThresholdNotifier(logger klog.Logger, threshold evictionapi.Threshold, cgroupRoot string, factory NotifierFactory, handler func(string)) (ThresholdNotifier, error) {
 	logger.Info("Eviction manager: creating new WindowsMemoryThresholdNotifier")
 	return &windowsMemoryThresholdNotifier{
@@ -47,9 +53,11 @@ func NewMemoryThresholdNotifier(logger klog.Logger, threshold evictionapi.Thresh
 	}, nil
 }
 
+// Start 启动后台轮询并等待阈值事件。
 func (m *windowsMemoryThresholdNotifier) Start(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	logger.Info("Eviction manager: starting windowsMemoryThresholdNotifier", "notifier", m.Description())
+	// 后台协程定期轮询内存用量并触发阈值事件。
 	go func() {
 		for true {
 			time.Sleep(notifierRefreshInterval)
@@ -62,8 +70,9 @@ func (m *windowsMemoryThresholdNotifier) Start(ctx context.Context) {
 	}
 }
 
+// checkMemoryUsage 读取全局提交内存，低于阈值时发送事件。
 func (m *windowsMemoryThresholdNotifier) checkMemoryUsage(logger klog.Logger) {
-	// Get global commit limit
+	// 获取全局提交上限。
 	perfInfo, err := winstats.GetPerformanceInfo()
 	if err != nil {
 		logger.Error(err, "Eviction manager: error getting global memory status for node")
@@ -77,18 +86,20 @@ func (m *windowsMemoryThresholdNotifier) checkMemoryUsage(logger klog.Logger) {
 	commitTotalBytes := perfInfo.CommitTotalPages * perfInfo.PageSize
 	commitAvailableBytes := commitLimitBytes - commitTotalBytes
 
+	// 可用提交内存不高于阈值时触发通知。
 	if commitAvailableBytes <= uint64(evictionThresholdQuantity.Value()) {
 		m.events <- struct{}{}
 	}
 }
 
+// UpdateThreshold 在 Windows 上是空操作，由 Start 中的轮询协程负责检测。
 func (m *windowsMemoryThresholdNotifier) UpdateThreshold(ctx context.Context, summary *statsapi.Summary) error {
-	// Windows doesn't use cgroup notifiers to trigger eviction, so this function is a no-op.
-	// Instead the go-routine set up in Start() will poll the system for memory usage and
-	// trigger eviction when the threshold is crossed.
+	// Windows 不使用 cgroup 通知器触发驱逐，因此该函数为空操作。
+	// Start() 中启动的协程会轮询系统内存用量，在越过阈值时触发驱逐。
 	return nil
 }
 
+// Description 返回阈值的可读描述，包含 hard/soft 与 allocatable 标记。
 func (m *windowsMemoryThresholdNotifier) Description() string {
 	var hard, allocatable string
 	if isHardEvictionThreshold(m.threshold) {

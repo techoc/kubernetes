@@ -23,6 +23,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// Run 先重建卷状态，然后按固定周期执行 reconcile。
 func (rc *reconciler) Run(ctx context.Context, stopCh <-chan struct{}) {
 	logger := klog.FromContext(ctx)
 	rc.reconstructVolumes(logger)
@@ -30,30 +31,26 @@ func (rc *reconciler) Run(ctx context.Context, stopCh <-chan struct{}) {
 	wait.Until(func() { rc.reconcile(ctx) }, rc.loopSleepDuration, stopCh)
 }
 
+// reconcile 执行一轮卷对账：卸载、挂载/挂接、设备卸载与孤儿卷清理。
 func (rc *reconciler) reconcile(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	readyToUnmount := rc.readyToUnmount()
 	if readyToUnmount {
-		// Unmounts are triggered before mounts so that a volume that was
-		// referenced by a pod that was deleted and is now referenced by another
-		// pod is unmounted from the first pod before being mounted to the new
-		// pod.
+		// 先卸载再挂载：若某卷原本被已删除的 Pod 引用、现在改由新 Pod 引用，
+		// 需要先把它从旧 Pod 卸载，再挂载给新 Pod。
 		rc.unmountVolumes(logger)
 	}
 
-	// Next we mount required volumes. This function could also trigger
-	// attach if kubelet is responsible for attaching volumes.
-	// If underlying PVC was resized while in-use then this function also handles volume
-	// resizing.
+	// 接下来挂载所需卷；若 kubelet 负责挂接卷，此函数也可能触发 attach。
+	// 若底层 PVC 在使用中被扩容，这里也会处理卷扩容。
 	rc.mountOrAttachVolumes(logger)
 
-	// Unmount volumes only when DSW and ASW are fully populated to prevent unmounting a volume
-	// that is still needed, but it did not reach DSW yet.
+	// 只有 DSW 与 ASW 都完整填充后才卸载卷，避免卸载仍被需要、但尚未进入 DSW 的卷。
 	if readyToUnmount {
-		// Ensure devices that should be detached/unmounted are detached/unmounted.
+		// 确保应卸载/解挂的设备都已完成操作。
 		rc.unmountDetachDevices(logger)
 
-		// Clean up any orphan volumes that failed reconstruction.
+		// 清理重建失败后遗留的孤儿卷。
 		rc.cleanOrphanVolumes(logger)
 	}
 
@@ -61,9 +58,8 @@ func (rc *reconciler) reconcile(ctx context.Context) {
 		rc.updateReconstructedFromNodeStatus(ctx)
 	}
 	if len(rc.volumesNeedUpdateFromNodeStatus) == 0 {
-		// ASW is fully populated only after both devicePaths and uncertain volume attach-ability
-		// were reconstructed from the API server.
-		// This will start reconciliation of node.status.volumesInUse.
+		// 只有 devicePaths 与不确定的卷挂接能力都从 apiserver 重建完成后，ASW 才算完整；
+		// 此时才开始对账 node.status.volumesInUse。
 		rc.updateLastSyncTime()
 	}
 }

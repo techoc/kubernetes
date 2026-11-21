@@ -24,14 +24,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// NewCgroupNotifier creates a cgroup notifier that does nothing because cgroups do not exist on non-linux systems.
+// NewCgroupNotifier 创建空操作的 cgroup 通知器：非 Linux 系统没有 cgroups。
 func NewCgroupNotifier(logger klog.Logger, path, attribute string, threshold int64) (CgroupNotifier, error) {
 	logger.V(5).Info("cgroup notifications not supported")
 	return &unsupportedThresholdNotifier{}, nil
 }
 
+// unsupportedThresholdNotifier 是不支持 cgroup 通知的平台的空实现。
 type unsupportedThresholdNotifier struct{}
 
+// Start 为空实现，不监视任何阈值。
 func (*unsupportedThresholdNotifier) Start(context.Context, chan<- struct{}) {}
 
+// Stop 为空实现。
 func (*unsupportedThresholdNotifier) Stop() {}

@@ -32,6 +32,7 @@ import (
 
 const testCheckpoint = "pod_status_manager_state"
 
+// newTestStateCheckpoint 在临时目录上构造带空缓存的 stateCheckpoint。
 func newTestStateCheckpoint(t *testing.T) *stateCheckpoint {
 	logger, _ := ktesting.NewTestContext(t)
 	testingDir := getTestDir(t)
@@ -47,6 +48,7 @@ func newTestStateCheckpoint(t *testing.T) *stateCheckpoint {
 	return sc
 }
 
+// getTestDir 创建测试临时目录，并在用例结束时自动清理。
 func getTestDir(t *testing.T) string {
 	testingDir, err := os.MkdirTemp("", "pod_resource_allocation_state_test")
 	require.NoError(t, err, "failed to create temp dir")
@@ -58,12 +60,14 @@ func getTestDir(t *testing.T) string {
 	return testingDir
 }
 
+// verifyPodResourceAllocation 逐 Pod、逐容器比较资源分配，
+// 包括容器级、Pod 级和 emptyDir 卷限制。
 func verifyPodResourceAllocation(t *testing.T, expected, actual *PodResourceInfoMap, msgAndArgs string) {
 	for podUID, expectedPodInfo := range *expected {
 		actualPodInfo, exists := (*actual)[podUID]
 		require.True(t, exists, "actual state missing pod %s", podUID)
 
-		// ContainerResources validation
+		// 校验容器级 requests/limits。
 		require.Len(t, actualPodInfo.ContainerResources, len(expectedPodInfo.ContainerResources), msgAndArgs)
 		for containerName, expectedCtrReq := range expectedPodInfo.ContainerResources {
 			actualCtrReq, exists := actualPodInfo.ContainerResources[containerName]
@@ -76,7 +80,7 @@ func verifyPodResourceAllocation(t *testing.T, expected, actual *PodResourceInfo
 			}
 		}
 
-		// PodLevelResources validation
+		// 校验 Pod 级资源；期望为 nil 时实际也必须为 nil。
 		if expectedPodInfo.PodLevelResources == nil {
 			require.Nil(t, actualPodInfo.PodLevelResources, msgAndArgs)
 		} else {
@@ -89,7 +93,7 @@ func verifyPodResourceAllocation(t *testing.T, expected, actual *PodResourceInfo
 			}
 		}
 
-		// EmptyDirVolumeLimits validation
+		// 校验 emptyDir 卷限制。
 		if expectedPodInfo.EmptyDirVolumeLimits == nil {
 			require.Nil(t, actualPodInfo.EmptyDirVolumeLimits, msgAndArgs)
 		} else {
@@ -104,6 +108,8 @@ func verifyPodResourceAllocation(t *testing.T, expected, actual *PodResourceInfo
 	}
 }
 
+// Test_stateCheckpoint_storeState 覆盖各种资源数量写法下的写入与恢复：
+// 写入后新实例应能恢复，内容未变化时不应重写 checkpoint。
 func Test_stateCheckpoint_storeState(t *testing.T) {
 	type args struct {
 		resInfoMap PodResourceInfoMap
@@ -119,13 +125,13 @@ func Test_stateCheckpoint_storeState(t *testing.T) {
 	for _, fact := range factor {
 		for _, suf := range suffix {
 			if (suf == "E" || suf == "Ei") && (fact == "1000" || fact == "10000") {
-				// when fact is 1000 or 10000, suffix "E" or "Ei", the quantity value is overflow
-				// see detail https://github.com/kubernetes/apimachinery/blob/95b78024e3feada7739b40426690b4f287933fd8/pkg/api/resource/quantity.go#L301
+				// 1000/10000 与 E/Ei 组合会溢出，跳过这些组合，参见
+				// https://github.com/kubernetes/apimachinery/blob/95b78024e3feada7739b40426690b4f287933fd8/pkg/api/resource/quantity.go#L301
 				continue
 			}
 			qStr := fmt.Sprintf("%s%s", fact, suf)
 
-			// Test case 1: All fields populated
+			// 用例 1：容器级、Pod 级和卷限制全部填充。
 			tests = append(tests, testCase{
 				name: fmt.Sprintf("resource - %s - all fields populated", qStr),
 				args: args{
@@ -156,7 +162,7 @@ func Test_stateCheckpoint_storeState(t *testing.T) {
 				},
 			})
 
-			// Test case 2: Only container resources populated (pod level and volume limits are nil)
+			// 用例 2：只有容器级资源，Pod 级和卷限制为 nil。
 			tests = append(tests, testCase{
 				name: fmt.Sprintf("resource - %s - only container", qStr),
 				args: args{
@@ -177,7 +183,7 @@ func Test_stateCheckpoint_storeState(t *testing.T) {
 				},
 			})
 
-			// Test case 3: Container resources and volume limits populated (pod level resources is nil)
+			// 用例 3：容器级资源与卷限制，Pod 级资源为 nil。
 			tests = append(tests, testCase{
 				name: fmt.Sprintf("resource - %s - container and volume limits", qStr),
 				args: args{
@@ -203,7 +209,7 @@ func Test_stateCheckpoint_storeState(t *testing.T) {
 				},
 			})
 
-			// Test case 4: Container resources and pod level resources populated (volume limits is nil)
+			// 用例 4：容器级与 Pod 级资源，卷限制为 nil。
 			tests = append(tests, testCase{
 				name: fmt.Sprintf("resource - %s - container and pod-level", qStr),
 				args: args{
@@ -235,6 +241,7 @@ func Test_stateCheckpoint_storeState(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			logger, _ := ktesting.NewTestContext(t)
 			testDir := getTestDir(t)
+			// 先写入原始状态，再从同一目录新建实例验证恢复。
 			originalSC, err := NewStateCheckpoint(logger, testDir, testCheckpoint)
 			require.NoError(t, err)
 
@@ -246,6 +253,7 @@ func Test_stateCheckpoint_storeState(t *testing.T) {
 			actual := originalSC.GetPodResourceInfoMap()
 			verifyPodResourceAllocation(t, &tt.args.resInfoMap, &actual, "stored pod resource allocation is not equal to original pod resource allocation")
 
+			// 新实例应能从 checkpoint 恢复出与原始状态一致的数据。
 			newSC, err := NewStateCheckpoint(logger, testDir, testCheckpoint)
 			require.NoError(t, err)
 
@@ -254,15 +262,15 @@ func Test_stateCheckpoint_storeState(t *testing.T) {
 
 			checkpointPath := filepath.Join(testDir, testCheckpoint)
 			require.FileExists(t, checkpointPath)
-			require.NoError(t, os.Remove(checkpointPath)) // Remove the checkpoint file to track whether it's re-written.
+			require.NoError(t, os.Remove(checkpointPath)) // 删除 checkpoint 文件，用于检测是否被重写。
 
-			// Setting the pod allocations to the same values should not re-write the checkpoint.
+			// 写入相同的分配值不应重写 checkpoint，避免无谓的磁盘 IO。
 			for podUID, alloc := range tt.args.resInfoMap {
 				require.NoError(t, originalSC.SetPodResourceInfo(logger, podUID, alloc))
 				require.NoFileExists(t, checkpointPath, "checkpoint should not be re-written")
 			}
 
-			// Setting a new value should update the checkpoint.
+			// 写入新值时应更新 checkpoint。
 			require.NoError(t, originalSC.SetPodResourceInfo(logger, "foo-bar", PodResourceInfo{
 				ContainerResources: map[string]v1.ResourceRequirements{
 					"container1": {Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1")}},
@@ -277,16 +285,16 @@ func Test_stateCheckpoint_storeState(t *testing.T) {
 	}
 }
 
+// Test_stateCheckpoint_formatUpgraded 验证旧格式 checkpoint 在新增字段后仍能加载，
+// 缺失字段按零值处理。
 func Test_stateCheckpoint_formatUpgraded(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// Based on the PodResourceAllocationInfo struct, it's mostly possible that new field will be added
-	// in struct PodResourceAllocationInfo, rather than in struct PodResourceAllocationInfo.AllocationEntries.
-	// Emulate upgrade scenario by pretending that `ResizeStatusEntries` is a new field.
-	// The checkpoint content doesn't have it and that shouldn't prevent the checkpoint from being loaded.
+	// 新增字段更可能加在 PodResourceAllocationInfo 上而不是 AllocationEntries 上；
+	// 这里把 ResizeStatusEntries 当作新字段来模拟升级：
+	// 旧 checkpoint 不含该字段，但不应影响加载。
 	sc := newTestStateCheckpoint(t)
 
-	// prepare old checkpoint, ResizeStatusEntries is unset,
-	// pretend that the old checkpoint is unaware for the field ResizeStatusEntries
+	// 准备不含 ResizeStatusEntries 的旧 checkpoint。
 	const checkpointContent = `{"data":"{\"entries\":{\"pod1\":{\"ContainerResources\":{\"container1\":{\"requests\":{\"cpu\":\"1Ki\",\"memory\":\"1Ki\"}}}}}}","checksum":1178570812}`
 	expectedPodResourceAllocation := PodResourceInfoMap{
 		"pod1": {
@@ -300,6 +308,7 @@ func Test_stateCheckpoint_formatUpgraded(t *testing.T) {
 			},
 		},
 	}
+	// 从固定 JSON 内容反序列化旧格式 checkpoint。
 	checkpoint := &Checkpoint{}
 	err := checkpoint.UnmarshalCheckpoint([]byte(checkpointContent))
 	require.NoError(t, err, "failed to unmarshal checkpoint")
@@ -307,6 +316,7 @@ func Test_stateCheckpoint_formatUpgraded(t *testing.T) {
 	err = sc.checkpointManager.CreateCheckpoint(sc.checkpointName, checkpoint)
 	require.NoError(t, err, "failed to create old checkpoint")
 
+	// restoreState 应忽略缺失的新字段，只恢复已有数据。
 	actualPodResourceAllocation, _, err := restoreState(logger, sc.checkpointManager, sc.checkpointName)
 	require.NoError(t, err, "failed to restore state")
 

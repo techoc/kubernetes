@@ -39,10 +39,11 @@ import (
 )
 
 var (
-	// testHostNameserver and testHostDomain are also being used in dns_windows_test.go.
+	// testHostNameserver 与 testHostDomain 也被 dns_windows_test.go 复用。
 	testHostNameserver = "8.8.8.8"
 	testHostDomain     = "host.domain"
-	fetchEvent         = func(recorder *record.FakeRecorder) string {
+	// fetchEvent 以非阻塞方式取出 FakeRecorder 中的第一条事件，队列为空时返回空串。
+	fetchEvent = func(recorder *record.FakeRecorder) string {
 		select {
 		case event := <-recorder.Events:
 			return event
@@ -52,6 +53,8 @@ var (
 	}
 )
 
+// TestParseResolvConf 覆盖 resolv.conf 解析：忽略空行与注释，后出现的同名条目覆盖先前的，
+// 空的 nameserver/search 条目视为错误。
 func TestParseResolvConf(t *testing.T) {
 	testCases := []struct {
 		data        string
@@ -67,9 +70,9 @@ func TestParseResolvConf(t *testing.T) {
 		{"#comment\n", []string{}, []string{}, []string{}, false},
 		{" #comment\n", []string{}, []string{}, []string{}, false},
 		{"#comment\n#comment", []string{}, []string{}, []string{}, false},
-		{"#comment\nnameserver", []string{}, []string{}, []string{}, true},                           // nameserver empty
-		{"#comment\nnameserver\nsearch", []string{}, []string{}, []string{}, true},                   // nameserver and search empty
-		{"#comment\nnameserver 1.2.3.4\nsearch", []string{"1.2.3.4"}, []string{}, []string{}, false}, // nameserver specified and search empty
+		{"#comment\nnameserver", []string{}, []string{}, []string{}, true},                           // nameserver 缺省值
+		{"#comment\nnameserver\nsearch", []string{}, []string{}, []string{}, true},                   // nameserver 与 search 均为空
+		{"#comment\nnameserver 1.2.3.4\nsearch", []string{"1.2.3.4"}, []string{}, []string{}, false}, // 指定了 nameserver，search 为空
 		{"nameserver 1.2.3.4", []string{"1.2.3.4"}, []string{}, []string{}, false},
 		{" nameserver 1.2.3.4", []string{"1.2.3.4"}, []string{}, []string{}, false},
 		{"\tnameserver 1.2.3.4", []string{"1.2.3.4"}, []string{}, []string{}, false},
@@ -77,8 +80,8 @@ func TestParseResolvConf(t *testing.T) {
 		{"nameserver \t 1.2.3.4", []string{"1.2.3.4"}, []string{}, []string{}, false},
 		{"nameserver 1.2.3.4\nnameserver 5.6.7.8", []string{"1.2.3.4", "5.6.7.8"}, []string{}, []string{}, false},
 		{"nameserver 1.2.3.4 #comment", []string{"1.2.3.4"}, []string{}, []string{}, false},
-		{"search ", []string{}, []string{}, []string{}, false},  // search empty
-		{"search .", []string{}, []string{}, []string{}, false}, // ignore lone dot
+		{"search ", []string{}, []string{}, []string{}, false},  // search 为空
+		{"search .", []string{}, []string{}, []string{}, false}, // 忽略单独的 "."，它表示根域
 		{"search . foo", []string{}, []string{"foo"}, []string{}, false},
 		{"search foo .", []string{}, []string{"foo"}, []string{}, false},
 		{"search foo .  bar", []string{}, []string{"foo", "bar"}, []string{}, false},
@@ -99,6 +102,7 @@ func TestParseResolvConf(t *testing.T) {
 		{"options ndots:1 attempts:3\noptions ndots:1 attempts:3 ndots:5", []string{}, []string{}, []string{"ndots:5", "attempts:3"}, false},
 		{"nameserver 1.2.3.4\nsearch foo\nnameserver 5.6.7.8\nsearch bar\noptions ndots:5 attempts:4", []string{"1.2.3.4", "5.6.7.8"}, []string{"bar"}, []string{"ndots:5", "attempts:4"}, false},
 	}
+	// 逐条解析用例，校验解析结果或预期错误。
 	for i, tc := range testCases {
 		ns, srch, opts, err := parseResolvConf(strings.NewReader(tc.data))
 		if !tc.isErr {
@@ -112,9 +116,11 @@ func TestParseResolvConf(t *testing.T) {
 	}
 }
 
+// TestFormDNSSearchFitsLimits 校验搜索路径裁剪：单条路径不超过 256 字符、总长度不超过 2048 字符、
+// 路径数不超过 32；超限时裁剪并产生 Warning 事件。
 func TestFormDNSSearchFitsLimits(t *testing.T) {
 	searchPathList2048Chars := []string{
-		// 2048 = 128 + 127 * 15 + 15
+		// 2048 = 128 + 127*15 + 15，构造恰好达到长度上限的搜索路径列表
 		strings.Repeat("A", 128),
 		strings.Repeat("A", 127),
 		strings.Repeat("A", 127),
@@ -133,6 +139,7 @@ func TestFormDNSSearchFitsLimits(t *testing.T) {
 		strings.Repeat("A", 127),
 	}
 
+	// 任务用例期望的搜索域顺序与产生的告警事件文案。
 	recorder := record.NewFakeRecorder(20)
 	nodeRef := &v1.ObjectReference{
 		Kind:      "Node",
@@ -228,6 +235,7 @@ func TestFormDNSSearchFitsLimits(t *testing.T) {
 			logger, _ := ktesting.NewTestContext(t)
 			dnsSearch := configurer.formDNSSearchFitsLimits(logger, tc.hostNames, pod)
 			assert.EqualValues(t, tc.resultSearch, dnsSearch, "test [%d]", i)
+			// 事件格式为 "<type> <reason> <message>"，逐条比对。
 			for _, expectedEvent := range tc.events {
 				expected := fmt.Sprintf("%s %s %s", v1.EventTypeWarning, "DNSConfigForming", expectedEvent)
 				event := fetchEvent(recorder)
@@ -237,6 +245,7 @@ func TestFormDNSSearchFitsLimits(t *testing.T) {
 	}
 }
 
+// TestFormDNSNameserversFitsLimits 校验 nameserver 超过 3 个时被截断为前 3 个，且仅超限时才产生事件。
 func TestFormDNSNameserversFitsLimits(t *testing.T) {
 	recorder := record.NewFakeRecorder(20)
 	nodeRef := &v1.ObjectReference{
@@ -286,6 +295,7 @@ func TestFormDNSNameserversFitsLimits(t *testing.T) {
 
 	for _, tc := range testCases {
 		logger, _ := ktesting.NewTestContext(t)
+		// 截断结果写入实际配置，超限用例还应伴随一条事件。
 		appliedNameservers := configurer.formDNSNameserversFitsLimits(logger, tc.nameservers, pod)
 		assert.EqualValues(t, tc.expectedNameserver, appliedNameservers, tc.desc)
 		event := fetchEvent(recorder)
@@ -297,6 +307,7 @@ func TestFormDNSNameserversFitsLimits(t *testing.T) {
 	}
 }
 
+// TestMergeDNSOptions 校验 Pod DNSConfig 选项与现有 resolv.conf 选项的合并：同名选项由新值覆写。
 func TestMergeDNSOptions(t *testing.T) {
 	testOptionValue := "3"
 
@@ -336,13 +347,15 @@ func TestMergeDNSOptions(t *testing.T) {
 
 	for _, tc := range testCases {
 		options := mergeDNSOptions(tc.existingDNSConfigOptions, tc.dnsConfigOptions)
-		// Options order may be changed after conversion.
+		// 转换后选项顺序可能变化，因此按集合比较。
 		if !sets.New[string](options...).Equal(sets.New[string](tc.expectedOptions...)) {
 			t.Errorf("%s: mergeDNSOptions(%v, %v)=%v, want %v", tc.desc, tc.existingDNSConfigOptions, tc.dnsConfigOptions, options, tc.expectedOptions)
 		}
 	}
 }
 
+// TestGetPodDNSType 覆盖 DNSPolicy、hostNetwork 与集群 DNS 可用性组合下选出的 DNS 类型，
+// 以及非法策略返回错误的行为。
 func TestGetPodDNSType(t *testing.T) {
 	recorder := record.NewFakeRecorder(20)
 	nodeRef := &v1.ObjectReference{
@@ -433,6 +446,7 @@ func TestGetPodDNSType(t *testing.T) {
 			pod.Spec.DNSPolicy = tc.dnsPolicy
 			pod.Spec.HostNetwork = tc.hostNetwork
 
+			// 先按策略与 hostNetwork 决定类型，再决定是否回退到主机 DNS。
 			resType, err := getPodDNSType(pod)
 			if tc.expectedError {
 				if err == nil {
@@ -447,6 +461,8 @@ func TestGetPodDNSType(t *testing.T) {
 	}
 }
 
+// TestGetPodDNS 校验各 DNSPolicy 生成的服务端与搜索域，并验证使用自定义 resolv.conf 时
+// 搜索路径会与集群域合并且不超过 MaxDNSSearchPaths。
 func TestGetPodDNS(t *testing.T) {
 	ctx := ktesting.Init(t)
 	recorder := record.NewFakeRecorder(20)
@@ -506,6 +522,7 @@ func TestGetPodDNS(t *testing.T) {
 		t.Errorf("expected search \".\", got %+v", options[3].DNSSearch)
 	}
 
+	// 换成默认主机 resolv.conf 并桩掉主机配置读取，验证集群域与主机搜索域的合并且限制路径数。
 	configurer = NewConfigurer(recorder, nodeRef, nil, testClusterDNS, testClusterDNSDomain, defaultResolvConf)
 	configurer.getHostDNSConfig = fakeGetHostDNSConfigCustom
 
@@ -523,6 +540,7 @@ func TestGetPodDNS(t *testing.T) {
 	} else if options[0].DNS[0] != clusterNS {
 		t.Errorf("expected nameserver %s, got %v", clusterNS, options[0].DNS[0])
 	}
+	// 集群域会追加 ".svc.<domain>"、".svc"、domain 三条，但总数受 MaxDNSSearchPaths 限制。
 	expLength := len(options[1].DNSSearch) + 3
 
 	maxDNSSearchPaths := validation.MaxDNSSearchPaths
@@ -547,6 +565,8 @@ func TestGetPodDNS(t *testing.T) {
 	}
 }
 
+// TestGetPodDNSCustom 校验 Pod DNSConfig 与集群/主机 DNS 的合并顺序：不同 DNSPolicy 合并来源不同，
+// 自定义 nameserver/search 追加，同名 option 覆盖。
 func TestGetPodDNSCustom(t *testing.T) {
 	recorder := record.NewFakeRecorder(20)
 	nodeRef := &v1.ObjectReference{
@@ -570,6 +590,7 @@ func TestGetPodDNSCustom(t *testing.T) {
 		},
 	}
 
+	// 写入临时 resolv.conf，作为主机 DNS 的上游来源。
 	resolvConfContent := []byte(fmt.Sprintf("nameserver %s\nsearch %s\n", testHostNameserver, testHostDomain))
 	tmpfile, err := os.CreateTemp("", "tmpResolvConf")
 	if err != nil {
@@ -668,6 +689,7 @@ func TestGetPodDNSCustom(t *testing.T) {
 		},
 	}
 
+	// 每个用例独立设置 Pod 的 hostNetwork/DNSConfig/DNSPolicy 后再生成 DNS 配置。
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := ktesting.Init(t)
@@ -686,6 +708,7 @@ func TestGetPodDNSCustom(t *testing.T) {
 	}
 }
 
+// dnsConfigsAreEqual 按顺序比较服务器与搜索域，选项按集合比较（顺序无关）。
 func dnsConfigsAreEqual(resConfig, expectedConfig *runtimeapi.DNSConfig) bool {
 	if len(resConfig.Servers) != len(expectedConfig.Servers) ||
 		len(resConfig.Searches) != len(expectedConfig.Searches) ||
@@ -706,6 +729,7 @@ func dnsConfigsAreEqual(resConfig, expectedConfig *runtimeapi.DNSConfig) bool {
 	return sets.New[string](resConfig.Options...).Equal(sets.New[string](expectedConfig.Options...))
 }
 
+// newTestPods 构造 count 个 HostNetwork 测试 Pod；UID 与名称按序号递增以便区分。
 func newTestPods(count int) []*v1.Pod {
 	pods := make([]*v1.Pod, count)
 	for i := 0; i < count; i++ {

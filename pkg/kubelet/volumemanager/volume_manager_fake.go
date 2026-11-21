@@ -27,7 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/types"
 )
 
-// FakeVolumeManager is a test implementation that just tracks calls
+// FakeVolumeManager 是仅记录调用的测试实现。
 type FakeVolumeManager struct {
 	volumes                   map[v1.UniqueVolumeName]bool
 	reportedInUse             map[v1.UniqueVolumeName]bool
@@ -38,10 +38,11 @@ type FakeVolumeManager struct {
 
 var _ VolumeManager = &FakeVolumeManager{}
 
-// NewFakeVolumeManager creates a new VolumeManager test instance
+// NewFakeVolumeManager 创建 VolumeManager 的测试实例。
 func NewFakeVolumeManager(initialVolumes []v1.UniqueVolumeName, unmountDelay time.Duration, unmountError error, volumeAttachLimitExceeded bool) *FakeVolumeManager {
 	volumes := map[v1.UniqueVolumeName]bool{}
 	for _, v := range initialVolumes {
+		// 初始卷都视为已挂载。
 		volumes[v] = true
 	}
 	return &FakeVolumeManager{
@@ -53,23 +54,25 @@ func NewFakeVolumeManager(initialVolumes []v1.UniqueVolumeName, unmountDelay tim
 	}
 }
 
-// Run is not implemented
+// Run 未实现。
 func (f *FakeVolumeManager) Run(ctx context.Context, sourcesReady config.SourcesReady) {
 }
 
-// WaitForAttachAndMount is not implemented
+// WaitForAttachAndMount 默认返回成功，可按需模拟挂载数超限错误。
 func (f *FakeVolumeManager) WaitForAttachAndMount(ctx context.Context, pod *v1.Pod) error {
+	// 模拟卷挂载数量超过限制的错误。
 	if f.volumeAttachLimitExceeded {
 		return &VolumeAttachLimitExceededError{}
 	}
 	return nil
 }
 
-// WaitForUnmount is not implemented
+// WaitForUnmount 未实现，直接返回成功。
 func (f *FakeVolumeManager) WaitForUnmount(ctx context.Context, pod *v1.Pod) error {
 	return nil
 }
 
+// WaitForAllPodsUnmount 按配置的延迟模拟卸载耗时，并尊重上下文取消。
 func (f *FakeVolumeManager) WaitForAllPodsUnmount(ctx context.Context, pods []*v1.Pod) error {
 	select {
 	case <-ctx.Done():
@@ -79,22 +82,22 @@ func (f *FakeVolumeManager) WaitForAllPodsUnmount(ctx context.Context, pods []*v
 	}
 }
 
-// GetMountedVolumesForPod is not implemented
+// GetMountedVolumesForPod 未实现，返回 nil。
 func (f *FakeVolumeManager) GetMountedVolumesForPod(podName types.UniquePodName) container.VolumeMap {
 	return nil
 }
 
-// HasPossiblyMountedVolumesForPod is not implemented
+// HasPossiblyMountedVolumesForPod 未实现，始终返回 false。
 func (f *FakeVolumeManager) HasPossiblyMountedVolumesForPod(podName types.UniquePodName) bool {
 	return false
 }
 
-// GetExtraSupplementalGroupsForPod is not implemented
+// GetExtraSupplementalGroupsForPod 未实现，返回 nil。
 func (f *FakeVolumeManager) GetExtraSupplementalGroupsForPod(pod *v1.Pod) []int64 {
 	return nil
 }
 
-// GetVolumesInUse returns a list of the initial volumes
+// GetVolumesInUse 返回初始卷列表。
 func (f *FakeVolumeManager) GetVolumesInUse() []v1.UniqueVolumeName {
 	inuse := []v1.UniqueVolumeName{}
 	for v := range f.volumes {
@@ -103,27 +106,27 @@ func (f *FakeVolumeManager) GetVolumesInUse() []v1.UniqueVolumeName {
 	return inuse
 }
 
-// ReconcilerStatesHasBeenSynced is not implemented
+// ReconcilerStatesHasBeenSynced 未实现，始终返回 true。
 func (f *FakeVolumeManager) ReconcilerStatesHasBeenSynced() bool {
 	return true
 }
 
-// VolumeIsAttached is not implemented
+// VolumeIsAttached 未实现，始终返回 false。
 func (f *FakeVolumeManager) VolumeIsAttached(volumeName v1.UniqueVolumeName) bool {
 	return false
 }
 
-// MarkVolumesAsReportedInUse adds the given volumes to the reportedInUse map
+// MarkVolumesAsReportedInUse 把给定卷记入 reportedInUse。
 func (f *FakeVolumeManager) MarkVolumesAsReportedInUse(volumesReportedAsInUse []v1.UniqueVolumeName) {
 	for _, reportedVolume := range volumesReportedAsInUse {
+		// 只记录确实由本管理器跟踪的卷。
 		if _, ok := f.volumes[reportedVolume]; ok {
 			f.reportedInUse[reportedVolume] = true
 		}
 	}
 }
 
-// GetVolumesReportedInUse is a test function only that returns a list of volumes
-// from the reportedInUse map
+// GetVolumesReportedInUse 仅供测试，返回 reportedInUse 中的卷列表。
 func (f *FakeVolumeManager) GetVolumesReportedInUse() []v1.UniqueVolumeName {
 	inuse := []v1.UniqueVolumeName{}
 	for reportedVolume := range f.reportedInUse {
@@ -132,7 +135,7 @@ func (f *FakeVolumeManager) GetVolumesReportedInUse() []v1.UniqueVolumeName {
 	return inuse
 }
 
-// ResizeEphemeralVolume is not implemented
+// ResizeEphemeralVolume 未实现，直接返回成功。
 func (f *FakeVolumeManager) ResizeEphemeralVolume(pod *v1.Pod, volumeName string, newSize *resource.Quantity) error {
 	return nil
 }

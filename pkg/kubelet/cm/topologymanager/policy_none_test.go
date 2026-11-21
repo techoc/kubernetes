@@ -22,6 +22,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestPolicyNoneName 验证 none 策略的名称固定为 "none"。
 func TestPolicyNoneName(t *testing.T) {
 	tcases := []struct {
 		name     string
@@ -40,6 +41,7 @@ func TestPolicyNoneName(t *testing.T) {
 	}
 }
 
+// TestPolicyNoneCanAdmitPodResult 验证 none 策略无论 Preferred 取值都允许准入。
 func TestPolicyNoneCanAdmitPodResult(t *testing.T) {
 	tcases := []struct {
 		name     string
@@ -68,6 +70,7 @@ func TestPolicyNoneCanAdmitPodResult(t *testing.T) {
 	}
 }
 
+// TestPolicyNoneMerge 验证 none 策略合并提示时始终返回空提示并允许准入。
 func TestPolicyNoneMerge(t *testing.T) {
 	tcases := []struct {
 		name           string
@@ -103,6 +106,7 @@ func TestPolicyNoneMerge(t *testing.T) {
 		},
 	}
 
+	// Merge 需要 logger，测试中无需断言日志。
 	logger, _ := ktesting.NewTestContext(t)
 
 	for _, tc := range tcases {

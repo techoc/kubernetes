@@ -34,7 +34,7 @@ import (
 	watcherapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 )
 
-// Stub implementation for DevicePlugin.
+// Stub 是 DevicePlugin 的桩实现，主要用于测试设备插件相关逻辑。
 type Stub struct {
 	devs                       []*pluginapi.Device
 	socket                     string
@@ -48,52 +48,58 @@ type Stub struct {
 
 	server *grpc.Server
 
-	// allocFunc is used for handling allocation request
+	// allocFunc 处理分配请求。
 	allocFunc stubAllocFunc
 
-	// getPreferredAllocFunc is used for handling getPreferredAllocation request
+	// getPreferredAllocFunc 处理首选分配请求。
 	getPreferredAllocFunc stubGetPreferredAllocFunc
 
-	// registerControlFunc is used for controlling auto-registration of requests
+	// registerControlFunc 控制是否自动向 kubelet 注册。
 	registerControlFunc stubRegisterControlFunc
 
-	registrationStatus chan watcherapi.RegistrationStatus // for testing
-	endpoint           string                             // for testing
+	registrationStatus chan watcherapi.RegistrationStatus // 供测试使用。
+	endpoint           string                             // 供测试使用。
 
+	// kubeletRestartWatcher 监听 kubelet 套接字文件，用于检测 kubelet 重启。
 	kubeletRestartWatcher *fsnotify.Watcher
 
 	pluginapi.UnsafeDevicePluginServer
 	watcherapi.UnsafeRegistrationServer
 }
 
-// stubGetPreferredAllocFunc is the function called when a getPreferredAllocation request is received from Kubelet
+// stubGetPreferredAllocFunc 是收到 kubelet 首选分配请求时调用的函数。
 type stubGetPreferredAllocFunc func(r *pluginapi.PreferredAllocationRequest, devs map[string]*pluginapi.Device) (*pluginapi.PreferredAllocationResponse, error)
 
+// defaultGetPreferredAllocFunc 是首选分配请求的默认实现，返回空响应。
 func defaultGetPreferredAllocFunc(r *pluginapi.PreferredAllocationRequest, devs map[string]*pluginapi.Device) (*pluginapi.PreferredAllocationResponse, error) {
 	var response pluginapi.PreferredAllocationResponse
 
 	return &response, nil
 }
 
-// stubAllocFunc is the function called when an allocation request is received from Kubelet
+// stubAllocFunc 是收到 kubelet 分配请求时调用的函数。
 type stubAllocFunc func(r *pluginapi.AllocateRequest, devs map[string]*pluginapi.Device) (*pluginapi.AllocateResponse, error)
 
+// defaultAllocFunc 是分配请求的默认实现，返回空响应。
 func defaultAllocFunc(r *pluginapi.AllocateRequest, devs map[string]*pluginapi.Device) (*pluginapi.AllocateResponse, error) {
 	var response pluginapi.AllocateResponse
 
 	return &response, nil
 }
 
-// stubRegisterControlFunc is the function called when a registration request is received from Kubelet
+// stubRegisterControlFunc 决定是否响应 kubelet 的注册请求。
 type stubRegisterControlFunc func() bool
 
+// defaultRegisterControlFunc 默认始终允许注册。
 func defaultRegisterControlFunc() bool {
 	return true
 }
 
-// NewDevicePluginStub returns an initialized DevicePlugin Stub.
+// NewDevicePluginStub 返回初始化完成的 DevicePlugin Stub。
 func NewDevicePluginStub(logger klog.Logger, devs []*pluginapi.Device, socket string, name string, preStartContainerFlag bool, getPreferredAllocationFlag bool) *Stub {
 
+	// 创建 inotify watcher 以检测 kubelet 重启；失败时直接 panic，
+	// 因为测试桩无法在没有该能力的情况下模拟插件生命周期。
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		logger.Error(err, "Watcher creation failed")
@@ -117,26 +123,26 @@ func NewDevicePluginStub(logger klog.Logger, devs []*pluginapi.Device, socket st
 	}
 }
 
-// SetGetPreferredAllocFunc sets allocFunc of the device plugin
+// SetGetPreferredAllocFunc 设置设备插件的首选分配处理函数。
 func (m *Stub) SetGetPreferredAllocFunc(f stubGetPreferredAllocFunc) {
 	m.getPreferredAllocFunc = f
 }
 
-// SetAllocFunc sets allocFunc of the device plugin
+// SetAllocFunc 设置设备插件的分配处理函数。
 func (m *Stub) SetAllocFunc(f stubAllocFunc) {
 	m.allocFunc = f
 }
 
-// SetRegisterControlFunc sets RegisterControlFunc of the device plugin
+// SetRegisterControlFunc 设置设备插件的注册控制函数。
 func (m *Stub) SetRegisterControlFunc(f stubRegisterControlFunc) {
 	m.registerControlFunc = f
 }
 
-// Start starts the gRPC server of the device plugin. Can only
-// be called once.
+// Start 启动设备插件的 gRPC 服务端，只能调用一次。
 func (m *Stub) Start(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	logger.Info("Starting device plugin server")
+	// 先清理可能残留的套接字文件，避免 Listen 因文件已存在而失败。
 	err := m.cleanup()
 	if err != nil {
 		return err
@@ -165,6 +171,7 @@ func (m *Stub) Start(ctx context.Context) error {
 		}
 	}()
 
+	// 轮询确认服务端已可连接，保证返回后调用方可以立即访问套接字。
 	var lastDialErr error
 	wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
 		var conn *grpc.ClientConn
@@ -183,6 +190,7 @@ func (m *Stub) Start(ctx context.Context) error {
 	return nil
 }
 
+// Restart 停止并重新启动设备插件的 gRPC 服务端。
 func (m *Stub) Restart(ctx context.Context) error {
 	klog.FromContext(ctx).Info("Restarting Device Plugin server")
 	if m.server == nil {
@@ -195,9 +203,8 @@ func (m *Stub) Restart(ctx context.Context) error {
 	return m.Start(ctx)
 }
 
-// Stop stops the gRPC server. Can be called without a prior Start
-// and more than once. Not safe to be called concurrently by different
-// goroutines!
+// Stop 停止 gRPC 服务端。可以在未调用 Start 的情况下调用，也可以重复调用。
+// 但不能由多个 goroutine 并发调用！
 func (m *Stub) Stop(logger klog.Logger) error {
 	logger.Info("Stopping device plugin server")
 	if m.server == nil {
@@ -209,21 +216,22 @@ func (m *Stub) Stop(logger klog.Logger) error {
 	m.server.Stop()
 	m.wg.Wait()
 	m.server = nil
-	close(m.stop) // This prevents re-starting the server.
+	close(m.stop) // 关闭该通道可防止服务端被重新启动。
 
 	return m.cleanup()
 }
 
+// Watch 监听 kubelet 套接字文件，检测到 kubelet 重启后重启并重新注册插件。
 func (m *Stub) Watch(ctx context.Context, kubeletEndpoint, resourceName, pluginSockDir string) {
 	logger := klog.FromContext(ctx)
 	for {
 		select {
-		// Detect a kubelet restart by watching for a newly created
-		// 'pluginapi.KubeletSocket' file. When this occurs, restart
-		// the device plugin server
+		// 通过监听新创建的 kubelet 套接字文件来检测 kubelet 重启；
+		// 一旦发现，就重启设备插件服务端并重新注册。
 		case event := <-m.kubeletRestartWatcher.Events:
 			if event.Name == kubeletEndpoint && event.Op&fsnotify.Create == fsnotify.Create {
 				logger.Info("inotify: file created, restarting", "kubeletEndpoint", kubeletEndpoint)
+				// 重启可能因端口/套接字竞争而短暂失败，因此带超时重试。
 				var lastErr error
 
 				err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 2*time.Minute, false, func(context.Context) (done bool, err error) {
@@ -248,14 +256,14 @@ func (m *Stub) Watch(ctx context.Context, kubeletEndpoint, resourceName, pluginS
 				}
 			}
 
-		// Watch for any other fs errors and log them.
+		// 记录 inotify 的其他错误。
 		case err := <-m.kubeletRestartWatcher.Errors:
 			logger.Error(err, "inotify error")
 		}
 	}
 }
 
-// GetInfo is the RPC which return pluginInfo
+// GetInfo 返回插件信息，供 kubelet 的插件管理器识别插件类型与版本。
 func (m *Stub) GetInfo(ctx context.Context, req *watcherapi.InfoRequest) (*watcherapi.PluginInfo, error) {
 	klog.FromContext(ctx).Info("GetInfo")
 	return &watcherapi.PluginInfo{
@@ -265,7 +273,7 @@ func (m *Stub) GetInfo(ctx context.Context, req *watcherapi.InfoRequest) (*watch
 		SupportedVersions: []string{pluginapi.Version}}, nil
 }
 
-// NotifyRegistrationStatus receives the registration notification from watcher
+// NotifyRegistrationStatus 接收 watcher 发来的注册状态通知。
 func (m *Stub) NotifyRegistrationStatus(ctx context.Context, status *watcherapi.RegistrationStatus) (*watcherapi.RegistrationStatusResponse, error) {
 	logger := klog.FromContext(ctx)
 	if m.registrationStatus != nil {
@@ -277,11 +285,12 @@ func (m *Stub) NotifyRegistrationStatus(ctx context.Context, status *watcherapi.
 	return &watcherapi.RegistrationStatusResponse{}, nil
 }
 
-// Register registers the device plugin for the given resourceName with Kubelet.
+// Register 将设备插件以指定资源名注册到 kubelet。
 func (m *Stub) Register(ctx context.Context, kubeletEndpoint, resourceName string, pluginSockDir string) error {
 	logger := klog.FromContext(ctx)
 	logger.Info("Register", "kubeletEndpoint", kubeletEndpoint, "resourceName", resourceName, "socket", pluginSockDir)
 
+	// 存在 DEPRECATION 标记文件时跳过注册，用于兼容旧版 kubelet 的行为。
 	if pluginSockDir != "" {
 		if _, err := os.Stat(pluginSockDir + "DEPRECATION"); err == nil {
 			logger.Info("Deprecation file found. Skip registration")
@@ -289,6 +298,7 @@ func (m *Stub) Register(ctx context.Context, kubeletEndpoint, resourceName strin
 		}
 	}
 	logger.Info("Deprecation file not found. Invoke registration")
+	// 注册调用设置 10 秒超时，避免 kubelet 无响应时插件永久阻塞。
 	ctxDial, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -316,7 +326,7 @@ func (m *Stub) Register(ctx context.Context, kubeletEndpoint, resourceName strin
 
 	_, err = client.Register(ctx, reqt)
 	if err != nil {
-		// Stop server
+		// 注册失败时停止服务端，避免留下不可用的插件实例。
 		m.server.Stop()
 		logger.Error(err, "Client unable to register to kubelet")
 		return err
@@ -325,7 +335,7 @@ func (m *Stub) Register(ctx context.Context, kubeletEndpoint, resourceName strin
 	return err
 }
 
-// GetDevicePluginOptions returns DevicePluginOptions settings for the device plugin.
+// GetDevicePluginOptions 返回设备插件的选项配置。
 func (m *Stub) GetDevicePluginOptions(ctx context.Context, e *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
 	options := &pluginapi.DevicePluginOptions{
 		PreStartRequired:                m.preStartContainerFlag,
@@ -334,16 +344,16 @@ func (m *Stub) GetDevicePluginOptions(ctx context.Context, e *pluginapi.Empty) (
 	return options, nil
 }
 
-// PreStartContainer resets the devices received
+// PreStartContainer 在容器启动前重置设备状态。
 func (m *Stub) PreStartContainer(ctx context.Context, r *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
 	klog.FromContext(ctx).Info("PreStartContainer", "request", r)
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
 
-// ListAndWatch lists devices and update that list according to the Update call
+// ListAndWatch 向 kubelet 推送设备列表，并在 Update 被调用时推送更新。
 func (m *Stub) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
-	// Use klog.TODO() because this method must match the generated device
-	// plugin gRPC signature in api_grpc.pb.go, which does not accept a logger.
+	// 这里使用 klog.TODO()：该方法必须与 api_grpc.pb.go 中生成的设备插件
+	// gRPC 签名一致，而该签名不接受 logger 参数。
 	klog.TODO().Info("ListAndWatch")
 
 	s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
@@ -358,15 +368,16 @@ func (m *Stub) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAnd
 	}
 }
 
-// Update allows the device plugin to send new devices through ListAndWatch
+// Update 允许设备插件通过 ListAndWatch 推送新的设备列表。
 func (m *Stub) Update(devs []*pluginapi.Device) {
 	m.update <- devs
 }
 
-// GetPreferredAllocation gets the preferred allocation from a set of available devices
+// GetPreferredAllocation 从可用设备集合中选出首选的分配方案。
 func (m *Stub) GetPreferredAllocation(ctx context.Context, r *pluginapi.PreferredAllocationRequest) (*pluginapi.PreferredAllocationResponse, error) {
 	klog.FromContext(ctx).Info("GetPreferredAllocation", "request", r)
 
+	// 按设备 ID 建立索引，便于处理函数按 ID 查找设备。
 	devs := make(map[string]*pluginapi.Device)
 
 	for _, dev := range m.devs {
@@ -376,10 +387,11 @@ func (m *Stub) GetPreferredAllocation(ctx context.Context, r *pluginapi.Preferre
 	return m.getPreferredAllocFunc(r, devs)
 }
 
-// Allocate does a mock allocation
+// Allocate 执行模拟的设备分配。
 func (m *Stub) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	klog.FromContext(ctx).Info("Allocate", "request", r)
 
+	// 按设备 ID 建立索引，便于分配处理函数按 ID 查找设备。
 	devs := make(map[string]*pluginapi.Device)
 
 	for _, dev := range m.devs {
@@ -389,6 +401,7 @@ func (m *Stub) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*plu
 	return m.allocFunc(r, devs)
 }
 
+// cleanup 删除残留的套接字文件；文件不存在时视为成功。
 func (m *Stub) cleanup() error {
 	if err := os.Remove(m.socket); err != nil && !os.IsNotExist(err) {
 		return err

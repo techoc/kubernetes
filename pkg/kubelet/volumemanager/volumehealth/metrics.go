@@ -36,22 +36,24 @@ var (
 	)
 )
 
+// registerHealthMetrics 确保 CSI 存储健康指标只注册一次。
 func registerHealthMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(csiNodeStorageHealthStatus)
 	})
 }
 
+// setStorageHealthGauges 先清除该 driver 的旧序列，再为当前存在的健康条件置 1。
 func setStorageHealthGauges(driverName string, conditions []storageHealthKey) {
-	// Clear previous gauges for this driver by setting known keys; callers pass the full current set.
-	// We only set present conditions to 1. Recovery is reflected by absence of the condition in the
-	// next update; DeletePartialMatch clears prior series for the driver.
+	// 调用方传入当前完整的条件集合：先删除该 driver 的旧序列，
+	// 再仅把存在的条件置为 1。恢复情况通过下一次更新中条件缺失来体现。
 	csiNodeStorageHealthStatus.DeletePartialMatch(map[string]string{"driver_name": driverName})
 	for _, c := range conditions {
 		csiNodeStorageHealthStatus.WithLabelValues(driverName, c.status, c.reason).Set(1)
 	}
 }
 
+// storageHealthKey 描述一条存储健康条件（状态 + 原因）。
 type storageHealthKey struct {
 	status string
 	reason string

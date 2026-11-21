@@ -23,30 +23,30 @@ import (
 	api "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
-// RegistrationHandler is an interface for handling device plugin registration
-// and plugin directory cleanup.
+// RegistrationHandler 定义处理设备插件注册与插件目录清理的接口。
 type RegistrationHandler interface {
+	// CleanupPluginDirectory 清理插件目录中已失效的 socket 文件。
 	CleanupPluginDirectory(klog.Logger, string) error
 }
 
-// ClientHandler is an interface for handling device plugin connections.
+// ClientHandler 定义处理设备插件连接的接口。
 type ClientHandler interface {
+	// PluginConnected 在设备插件连接成功时回调。
 	PluginConnected(context.Context, string, DevicePlugin) error
+	// PluginDisconnected 在设备插件断开连接时回调。
 	PluginDisconnected(klog.Logger, string, string)
+	// PluginListAndWatchReceiver 接收设备插件 ListAndWatch 推送的资源更新。
 	PluginListAndWatchReceiver(klog.Logger, string, *api.ListAndWatchResponse)
 }
 
 // TODO: evaluate whether we need these error definitions.
 const (
-	// errFailedToDialDevicePlugin is the error raised when the device plugin could not be
-	// reached on the registered socket
+	// errFailedToDialDevicePlugin 表示无法通过注册的 socket 连接设备插件。
 	errFailedToDialDevicePlugin = "failed to dial device plugin:"
-	// errUnsupportedVersion is the error raised when the device plugin uses an API version not
-	// supported by the Kubelet registry
+	// errUnsupportedVersion 表示设备插件请求了 kubelet 注册表不支持的 API 版本。
 	errUnsupportedVersion = "requested API version %q is not supported by kubelet. Supported version is %q"
-	// errInvalidResourceName is the error raised when a device plugin is registering
-	// itself with an invalid ResourceName
+	// errInvalidResourceName 表示设备插件注册时使用了非法的 ResourceName。
 	errInvalidResourceName = "the ResourceName %q is invalid"
-	// errBadSocket is the error raised when the registry socket path is not absolute
+	// errBadSocket 表示注册使用的 socket 路径不是绝对路径。
 	errBadSocket = "bad socketPath, must be an absolute path:"
 )

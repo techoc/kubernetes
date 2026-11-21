@@ -25,24 +25,29 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// healthCheckerUnsupported 是不支持看门狗的平台上的空实现。
 type healthCheckerUnsupported struct{}
 
 var _ HealthChecker = &healthCheckerUnsupported{}
 
+// Option 配置空实现的健康检查器。
 type Option func(*healthCheckerUnsupported)
 
+// WithExtendedCheckers 在不支持的平台上忽略扩展检查器。
 func WithExtendedCheckers([]healthz.HealthChecker) Option {
 	return nil
 }
 
-// NewHealthChecker creates a fake one here
+// NewHealthChecker 在不支持看门狗的平台返回空实现。
 func NewHealthChecker(klog.Logger, ...Option) (HealthChecker, error) {
 	return &healthCheckerUnsupported{}, nil
 }
 
+// SetHealthCheckers 为空实现，不注册任何健康检查器。
 func (hc *healthCheckerUnsupported) SetHealthCheckers(syncLoop syncLoopHealthChecker, checkers []healthz.HealthChecker) {
 }
 
+// Start 为空实现，不启动任何检查循环。
 func (ow *healthCheckerUnsupported) Start(context.Context) {
 	return
 }

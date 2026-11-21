@@ -38,15 +38,18 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// 测试用的用户命名空间映射参数。
 const (
 	testUserNsLength = uint32(65536)
-	// skip the first block
+	// 跳过第一个块，避免与宿主上已占用的 UID 区间重叠。
 	minimumMappingUID = testUserNsLength
-	// allocate enough space for 2000 user namespaces
+	// 预留足够空间，可分配 2000 个用户命名空间。
 	mappingLen  = testUserNsLength * 2000
 	testMaxPods = 110
 )
 
+// testUserNsPodsManager 是 UserNsPodsManager 的测试实现，
+// 用可控的字段模拟 pod 目录、磁盘 pod 列表、运行时支持情况与映射配置。
 type testUserNsPodsManager struct {
 	podDir         string
 	podList        []types.UID
@@ -57,6 +60,7 @@ type testUserNsPodsManager struct {
 	userNsLength   uint32
 }
 
+// GetPodDir 返回 pod 目录；未配置时返回一个不会真正使用的占位路径。
 func (m *testUserNsPodsManager) GetPodDir(podUID types.UID) string {
 	if m.podDir == "" {
 		return "/tmp/non-existent-dir.This-is-not-used-in-tests"
@@ -64,6 +68,7 @@ func (m *testUserNsPodsManager) GetPodDir(podUID types.UID) string {
 	return m.podDir
 }
 
+// ListPodsFromDisk 返回模拟的磁盘 pod 列表；未配置时返回空列表。
 func (m *testUserNsPodsManager) ListPodsFromDisk() ([]types.UID, error) {
 	if len(m.podList) == 0 {
 		return nil, nil
@@ -71,6 +76,8 @@ func (m *testUserNsPodsManager) ListPodsFromDisk() ([]types.UID, error) {
 	return m.podList, nil
 }
 
+// HandlerSupportsUserNamespaces 模拟运行时是否支持用户命名空间；
+// runtimeHandler 为 "error" 时返回错误，用于覆盖错误分支。
 func (m *testUserNsPodsManager) HandlerSupportsUserNamespaces(runtimeHandler string) (bool, error) {
 	if runtimeHandler == "error" {
 		return false, errors.New("unknown runtime")
@@ -78,6 +85,7 @@ func (m *testUserNsPodsManager) HandlerSupportsUserNamespaces(runtimeHandler str
 	return m.userns, nil
 }
 
+// GetKubeletMappings 返回 kubelet 可用的映射起始 ID 与长度；未配置时使用默认值。
 func (m *testUserNsPodsManager) GetKubeletMappings(logger klog.Logger, idsPerPod uint32) (uint32, uint32, error) {
 	if m.mappingFirstID != 0 {
 		return m.mappingFirstID, m.mappingLen, nil
@@ -85,6 +93,7 @@ func (m *testUserNsPodsManager) GetKubeletMappings(logger klog.Logger, idsPerPod
 	return minimumMappingUID, mappingLen, nil
 }
 
+// GetMaxPods 返回最大 pod 数；未配置时返回测试默认值。
 func (m *testUserNsPodsManager) GetMaxPods() int {
 	if m.maxPods != 0 {
 		return m.maxPods
@@ -93,8 +102,11 @@ func (m *testUserNsPodsManager) GetMaxPods() int {
 	return testMaxPods
 }
 
+// TestUserNsManagerAllocate 验证 allocateOne 的分配行为：
+// 分配区间互不重叠且长度正确，重复记录具有幂等性，重复分配与释放后区间可复用。
 func TestUserNsManagerAllocate(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 启用用户命名空间特性门控，否则被测代码路径不会生效。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, true)
 
 	customUserNsLength := uint32(1048576)
@@ -135,15 +147,16 @@ func TestUserNsManagerAllocate(t *testing.T) {
 			assert.Equal(t, tc.userNsLength, length, "m.isSet(%d).length=%v", allocated, length)
 			assert.True(t, m.isSet(allocated), "m.isSet(%d)", allocated)
 
+			// 用同一 manager 连续分配两次，验证两次分配互不重叠且长度一致。
 			allocated2, length2, err := m.allocateOne(logger, "two")
 			require.NoError(t, err)
 			assert.NotEqual(t, allocated, allocated2, "allocated != allocated2")
 			assert.Equal(t, length, length2, "length == length2")
 
-			// verify that re-adding the same pod with the same settings won't fail
+			// 重复记录同一 pod 应幂等成功；分配范围一旦不同就必须报错，避免记录被静默覆盖。
 			err = m.record(logger, "two", allocated2, length2)
 			require.NoError(t, err)
-			// but it fails if anyting is different
+			// 分配范围不同时应失败。
 			err = m.record(logger, "two", allocated2+1, length2)
 			require.Error(t, err)
 
@@ -153,12 +166,13 @@ func TestUserNsManagerAllocate(t *testing.T) {
 			assert.False(t, m.isSet(allocated2), "m.nsSet(%d)", allocated2)
 
 			var allocs []uint32
+			// 批量分配大量范围，验证分配始终落在映射区间内。
 			for i := 0; i < 1000; i++ {
 				allocated, length, err = m.allocateOne(logger, types.UID(fmt.Sprintf("%d", i)))
 				assert.Equal(t, tc.userNsLength, length, "length is not the expected. iter: %v", i)
 				require.NoError(t, err)
 				assert.GreaterOrEqual(t, allocated, tc.mappingFirstID)
-				// The last ID of the userns range (allocated+userNsLength) should be within bounds.
+				// userns 区间最后一个 ID（allocated+userNsLength）不得越过映射上界。
 				assert.LessOrEqual(t, allocated, tc.mappingFirstID+tc.mappingLen-tc.userNsLength)
 				allocs = append(allocs, allocated)
 			}
@@ -176,6 +190,8 @@ func TestUserNsManagerAllocate(t *testing.T) {
 	}
 }
 
+// TestMakeUserNsManager 验证 MakeUserNsManager 在映射参数非法时拒绝构造：
+// 起始 ID 或长度非整块、起始 ID 过小、区间容不下 maxPods、区间越界等都应报错。
 func TestMakeUserNsManager(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, true)
@@ -241,6 +257,8 @@ func TestMakeUserNsManager(t *testing.T) {
 	}
 }
 
+// TestUserNsManagerParseUserNsFile 验证 parseUserNsFileAndRecord 对用户命名空间文件的校验：
+// 要求 UID/GID 映射各只有一条、长度为整块、容器内根 ID 为 0，且 UID 与 GID 起始 ID 一致。
 func TestUserNsManagerParseUserNsFile(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, true)
@@ -314,7 +332,7 @@ func TestUserNsManagerParseUserNsFile(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// We don't validate the result. It was parsed with the json parser, we trust that.
+			// 不校验解析后的具体值：内容由 JSON 解析器保证，此处只关心校验逻辑是否按预期报错。
 			_, err = m.parseUserNsFileAndRecord(logger, types.UID(tc.name), []byte(tc.file))
 			if (tc.success && err == nil) || (!tc.success && err != nil) {
 				return
@@ -325,6 +343,8 @@ func TestUserNsManagerParseUserNsFile(t *testing.T) {
 	}
 }
 
+// TestGetOrCreateUserNamespaceMappings 验证 GetOrCreateUserNamespaceMappings 的决策逻辑：
+// 未开启、显式 opt-in 或运行时无支持时使用 NODE 模式，只有支持用户命名空间时使用 POD 模式。
 func TestGetOrCreateUserNamespaceMappings(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, true)
 
@@ -388,7 +408,7 @@ func TestGetOrCreateUserNamespaceMappings(t *testing.T) {
 					HostUsers: &falseVal,
 				},
 			},
-			// This handler name makes the fake runtime return an error.
+			// 该 handler 名称会让 fake runtime 返回错误，用于覆盖错误分支。
 			runtimeHandler: "error",
 		},
 	}
@@ -396,7 +416,7 @@ func TestGetOrCreateUserNamespaceMappings(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			logger, _ := ktesting.NewTestContext(t)
-			// These tests will create the userns file, so use an existing podDir.
+			// 这些测试会创建 userns 文件，故使用临时目录作为真实存在的 podDir，避免污染工作区。
 			testUserNsPodsManager := &testUserNsPodsManager{
 				podDir: t.TempDir(),
 				userns: tc.runtimeUserns,
@@ -416,6 +436,8 @@ func TestGetOrCreateUserNamespaceMappings(t *testing.T) {
 	}
 }
 
+// TestCleanupOrphanedPodUsernsAllocations 验证清理逻辑只保留仍然存在或正在运行的 pod 的分配，
+// 其余已记录的分配都会被释放。
 func TestCleanupOrphanedPodUsernsAllocations(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, true)
@@ -477,7 +499,7 @@ func TestCleanupOrphanedPodUsernsAllocations(t *testing.T) {
 			m, err := MakeUserNsManager(logger, testUserNsPodsManager, nil)
 			require.NoError(t, err)
 
-			// Record the userns range as used
+			// 先把若干 pod 记录为已分配，制造清理前的状态，才能观察清理效果。
 			for i, pod := range tc.podSetBeforeCleanup {
 				err := m.record(logger, pod, uint32((i+1)*65536), 65536)
 				require.NoError(t, err)
@@ -499,14 +521,18 @@ func TestCleanupOrphanedPodUsernsAllocations(t *testing.T) {
 	}
 }
 
+// failingUserNsPodsManager 在 testUserNsPodsManager 基础上让 ListPodsFromDisk 始终失败，
+// 用于覆盖构造 manager 时读取磁盘 pod 出错的路径。
 type failingUserNsPodsManager struct {
 	testUserNsPodsManager
 }
 
+// ListPodsFromDisk 固定返回权限错误，模拟无法读取磁盘 pod 列表。
 func (m *failingUserNsPodsManager) ListPodsFromDisk() ([]types.UID, error) {
 	return nil, os.ErrPermission
 }
 
+// TestMakeUserNsManagerFailsListPod 验证从磁盘读取 pod 列表失败时，构造 manager 会返回错误。
 func TestMakeUserNsManagerFailsListPod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, true)
@@ -517,11 +543,12 @@ func TestMakeUserNsManagerFailsListPod(t *testing.T) {
 	assert.ErrorContains(t, err, "read pods from disk")
 }
 
+// TestRecordBounds 验证 record 的边界检查：仅允许一个 pod 时，越界的分配会被拒绝。
 func TestRecordBounds(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, true)
 
-	// Allow exactly for 1 pod
+	// 只允许分配 1 个 pod 的空间。
 	testUserNsPodsManager := &testUserNsPodsManager{
 		mappingFirstID: 65536,
 		mappingLen:     65536,
@@ -530,11 +557,12 @@ func TestRecordBounds(t *testing.T) {
 	m, err := MakeUserNsManager(logger, testUserNsPodsManager, nil)
 	require.NoError(t, err)
 
-	// The first pod allocation should succeed.
+	// 先占满唯一可用的映射空间，用于验证越界记录会被拒绝。
+	// 第一个 pod 的分配应当成功。
 	err = m.record(logger, types.UID(fmt.Sprintf("%d", 0)), 65536, 65536)
 	require.NoError(t, err)
 
-	// The next allocation should fail, as there is no space left.
+	// 空间已耗尽，下一次分配必须失败。
 	err = m.record(logger, types.UID(fmt.Sprintf("%d", 2)), uint32(2*65536), 65536)
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "out of range")

@@ -27,9 +27,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// userNsUnitLength 是每个 Pod 用户命名空间映射的最小 ID 数量。
 const userNsUnitLength = 65536
 
-// validateKubeletOSConfiguration validates os specific kubelet configuration and returns an error if it is invalid.
+// validateKubeletOSConfiguration 校验 Linux 特有的 kubelet 配置，非法时返回错误。
+// 包括 cgroup v1 限制、单进程 OOM kill 与用户命名空间 ID 范围。
 func validateKubeletOSConfiguration(kc *kubeletconfig.KubeletConfiguration) error {
 	isCgroup1 := !libcontainercgroups.IsCgroup2UnifiedMode()
 	if kc.FailCgroupV1 && isCgroup1 {
@@ -49,7 +51,7 @@ func validateKubeletOSConfiguration(kc *kubeletconfig.KubeletConfiguration) erro
 				return fmt.Errorf("invalid configuration: userNamespaces.idsPerPod must be a multiple of %d", userNsUnitLength)
 			}
 			if *idsPerPod > math.MaxUint32 {
-				// int64() is needed for 32-bit targets
+				// 32 位平台上需要先转 int64 再格式化，避免溢出。
 				return fmt.Errorf("invalid configuration: userNamespaces.idsPerPod must not be more than %d", int64(math.MaxUint32))
 			}
 		}

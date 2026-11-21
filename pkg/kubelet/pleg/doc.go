@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package pleg contains types and a generic implementation of the pod
-// lifecycle event generator.
+// Package pleg 包含 Pod 生命周期事件生成器的类型与通用实现。
 package pleg

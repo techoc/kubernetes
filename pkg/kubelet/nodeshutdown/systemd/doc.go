@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package systemd provides utility functions for kubelet to perform systemd related operations.
+// Package systemd 提供 kubelet 执行 systemd 相关操作的实用函数。
 package systemd

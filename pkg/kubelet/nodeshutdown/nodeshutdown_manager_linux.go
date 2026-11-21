@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package nodeshutdown can watch for node level shutdown events and trigger graceful termination of pods running on the node prior to a system shutdown.
+// Package nodeshutdown 监听节点级关机事件，并在系统关机前触发节点上 Pod 的优雅终止。
 package nodeshutdown
 
 import (
@@ -40,13 +40,16 @@ import (
 )
 
 const (
+	// dbusReconnectPeriod 是 dbus 连接断开后重新监听关机事件的重试间隔。
 	dbusReconnectPeriod = 1 * time.Second
 )
 
+// systemDbus 是创建 dbus 连接的可替换函数，便于测试注入 mock。
 var systemDbus = func() (dbusInhibiter, error) {
 	return systemd.NewDBusCon()
 }
 
+// dbusInhibiter 抽象了与 logind 交互所需的能力（inhibit 锁与关机事件监听）。
 type dbusInhibiter interface {
 	CurrentInhibitDelay() (time.Duration, error)
 	InhibitShutdown() (systemd.InhibitLock, error)
@@ -57,12 +60,13 @@ type dbusInhibiter interface {
 	Close() error
 }
 
-// managerImpl has functions that can be used to interact with the Node Shutdown Manager.
+// managerImpl 实现 Node Shutdown Manager 的核心逻辑。
 type managerImpl struct {
 	logger   klog.Logger
 	recorder record.EventRecorder
 	nodeRef  *v1.ObjectReference
 
+	// getPods 获取当前活跃 Pod，用于关机时逐个终止。
 	getPods        eviction.ActivePodsFunc
 	syncNodeStatus func(context.Context)
 
@@ -70,6 +74,7 @@ type managerImpl struct {
 	dbusCon     dbusInhibiter
 	inhibitLock systemd.InhibitLock
 
+	// nodeShuttingDownMutex 保护 nodeShuttingDownNow 的并发访问。
 	nodeShuttingDownMutex sync.Mutex
 	nodeShuttingDownNow   bool
 	podManager            *podManager
@@ -78,8 +83,9 @@ type managerImpl struct {
 	storage       storage
 }
 
-// NewManager returns a new node shutdown manager.
+// NewManager 返回一个新的节点关机管理器。
 func NewManager(conf *Config) Manager {
+	// 特性门控关闭时返回空实现，避免引入额外开销。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.GracefulNodeShutdown) {
 		m := managerStub{}
 		return m
@@ -87,7 +93,7 @@ func NewManager(conf *Config) Manager {
 
 	podManager := newPodManager(conf)
 
-	// Disable if the configuration is empty
+	// 配置为空时同样返回空实现。
 	if len(podManager.shutdownGracePeriodByPodPriority) == 0 {
 		m := managerStub{}
 		return m
@@ -114,7 +120,7 @@ func NewManager(conf *Config) Manager {
 	return manager
 }
 
-// Admit rejects all pods if node is shutting
+// Admit 在节点正在关机时拒绝所有 Pod 的准入。
 func (m *managerImpl) Admit(ctx context.Context, attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
 	nodeShuttingDown := m.ShutdownStatus() != nil
 
@@ -128,7 +134,7 @@ func (m *managerImpl) Admit(ctx context.Context, attrs *lifecycle.PodAdmitAttrib
 	return lifecycle.PodAdmitResult{Admit: true}
 }
 
-// setMetrics sets the metrics for the node shutdown manager.
+// setMetrics 从持久化状态中恢复并设置节点关机相关指标。
 func (m *managerImpl) setMetrics() {
 	if m.enableMetrics && m.storage != nil {
 		sta := state{}
@@ -146,12 +152,14 @@ func (m *managerImpl) setMetrics() {
 	}
 }
 
-// Start starts the node shutdown manager and will start watching the node for shutdown events.
+// Start 启动节点关机管理器，开始监听节点关机事件。
 func (m *managerImpl) Start(ctx context.Context) error {
 	stop, err := m.start(ctx)
 	if err != nil {
 		return err
 	}
+	// 启动监听循环：一旦当前监听结束（连接断开或事件流关闭），
+	// 等待一个重连周期后重新建立监听。
 	go func() {
 		for {
 			if stop != nil {
@@ -169,6 +177,7 @@ func (m *managerImpl) Start(ctx context.Context) error {
 				t.Stop()
 				return
 			}
+			// 重新建立 dbus 连接与关机事件监听。
 			m.logger.V(1).Info("Restarting watch for node shutdown events")
 			stop, err = m.start(ctx)
 			if err != nil {
@@ -181,14 +190,14 @@ func (m *managerImpl) Start(ctx context.Context) error {
 	return nil
 }
 
+// start 建立一次 dbus 连接、获取 inhibit 锁并启动关机事件监听，返回停止通道。
 func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 	systemBus, err := m.newDBusConn()
 	if err != nil {
 		return nil, err
 	}
 
-	// Close any previous dbus connection before replacing it to avoid
-	// leaking goroutines and file descriptors. See #120613.
+	// 替换前先关闭旧的 dbus 连接，避免泄漏 goroutine 与文件描述符。参见 #120613。
 	if m.dbusCon != nil {
 		if err := m.dbusCon.Close(); err != nil {
 			m.logger.Error(err, "Failed to close previous dbus connection, ignoring and starting a new one anyway")
@@ -196,8 +205,7 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 	}
 	m.dbusCon = systemBus
 
-	// If we fail after this point, close the new connection so we don't
-	// leak dbus goroutines on every retry.
+	// 若后续步骤失败，则关闭新连接，避免每次重试都泄漏 dbus goroutine。
 	startSucceeded := false
 	defer func() {
 		if !startSucceeded {
@@ -213,7 +221,8 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 		return nil, err
 	}
 
-	// If the logind's InhibitDelayMaxUSec as configured in (logind.conf) is less than periodRequested, attempt to update the value to periodRequested.
+	// 若 logind.conf 中配置的 InhibitDelayMaxUSec 小于请求的宽限期，
+	// 则尝试将其调整为请求值。
 	if periodRequested := m.podManager.periodRequested(); periodRequested > currentInhibitDelay {
 		err := m.dbusCon.OverrideInhibitDelay(periodRequested)
 		if err != nil {
@@ -225,7 +234,7 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 			return nil, err
 		}
 
-		// The ReloadLogindConf call is asynchronous. Poll with exponential backoff until the configuration is updated.
+		// ReloadLogindConf 是异步生效的，需以指数退避轮询直到配置更新完成。
 		backoff := wait.Backoff{
 			Duration: 100 * time.Millisecond,
 			Factor:   2.0,
@@ -235,7 +244,7 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 		attempt := 0
 		err = wait.ExponentialBackoff(backoff, func() (bool, error) {
 			attempt += 1
-			// Read the current inhibitDelay again, if the override was successful, currentInhibitDelay will be equal to shutdownGracePeriodRequested.
+			// 再次读取当前 inhibitDelay；若覆盖成功，该值应等于请求的关机宽限期。
 			updatedInhibitDelay, err = m.dbusCon.CurrentInhibitDelay()
 			if err != nil {
 				return false, err
@@ -264,6 +273,7 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 		return nil, err
 	}
 
+	// 建立关机事件监听；失败时释放已获取的 inhibit 锁，避免残留锁阻塞关机。
 	events, err := m.dbusCon.MonitorShutdown(m.logger)
 	if err != nil {
 		releaseErr := m.dbusCon.ReleaseInhibitLock(m.inhibitLock)
@@ -276,10 +286,11 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 	startSucceeded = true
 	stop := make(chan struct{})
 	go func() {
-		// Monitor for shutdown events. This follows the logind Inhibit Delay pattern described on https://www.freedesktop.org/wiki/Software/systemd/inhibit/
-		// 1. When shutdown manager starts, an inhibit lock is taken.
-		// 2. When shutdown(true) event is received, process the shutdown and release the inhibit lock.
-		// 3. When shutdown(false) event is received, this indicates a previous shutdown was cancelled. In this case, acquire the inhibit lock again.
+		// 监听关机事件，遵循 https://www.freedesktop.org/wiki/Software/systemd/inhibit/
+		// 中描述的 logind Inhibit Delay 模式：
+		// 1. 关机管理器启动时获取一个 inhibit 锁；
+		// 2. 收到 shutdown(true) 事件时处理关机并释放 inhibit 锁；
+		// 3. 收到 shutdown(false) 事件表示之前的关机被取消，此时重新获取 inhibit 锁。
 		for {
 			select {
 			case <-ctx.Done():
@@ -311,7 +322,7 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 				m.nodeShuttingDownMutex.Unlock()
 
 				if isShuttingDown {
-					// Update node status and ready condition
+					// 异步同步节点状态与 Ready 条件，避免阻塞关机事件处理。
 					nodeStatusCtx := klog.NewContext(ctx, m.logger)
 					go m.syncNodeStatus(nodeStatusCtx)
 
@@ -319,6 +330,7 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 						m.logger.Error(err, "Shutdown manager failed to process shutdown event")
 					}
 				} else {
+					// 关机被取消，重新获取 inhibit 锁以便下次关机时仍能延迟。
 					_ = m.acquireInhibitLock()
 				}
 			}
@@ -327,6 +339,7 @@ func (m *managerImpl) start(ctx context.Context) (chan struct{}, error) {
 	return stop, nil
 }
 
+// acquireInhibitLock 获取新的 inhibit 锁，并释放此前持有的旧锁。
 func (m *managerImpl) acquireInhibitLock() error {
 	lock, err := m.dbusCon.InhibitShutdown()
 	if err != nil {
@@ -339,7 +352,7 @@ func (m *managerImpl) acquireInhibitLock() error {
 	return nil
 }
 
-// ShutdownStatus will return an error if the node is currently shutting down.
+// ShutdownStatus 在节点正在关机时返回错误，否则返回 nil。
 func (m *managerImpl) ShutdownStatus() error {
 	m.nodeShuttingDownMutex.Lock()
 	defer m.nodeShuttingDownMutex.Unlock()
@@ -350,10 +363,12 @@ func (m *managerImpl) ShutdownStatus() error {
 	return nil
 }
 
+// processShutdownEvent 处理关机事件：记录关机时间指标并优雅终止节点上的 Pod。
 func (m *managerImpl) processShutdownEvent(ctx context.Context) error {
 	m.logger.V(1).Info("Shutdown manager processing shutdown event")
 	activePods := m.getPods()
 
+	// 无论成功与否都要释放 inhibit 锁，让系统能够继续关机。
 	defer func() {
 		m.dbusCon.ReleaseInhibitLock(m.inhibitLock)
 		m.logger.V(1).Info("Shutdown manager completed processing shutdown event, node will shutdown shortly")
@@ -370,6 +385,7 @@ func (m *managerImpl) processShutdownEvent(ctx context.Context) error {
 		metrics.GracefulShutdownStartTime.Set(timestamp(startTime))
 		metrics.GracefulShutdownEndTime.Set(0)
 
+		// 记录关机结束时间，供下一次启动时通过 setMetrics 恢复指标。
 		defer func() {
 			endTime := time.Now()
 			err := m.storage.Store(state{

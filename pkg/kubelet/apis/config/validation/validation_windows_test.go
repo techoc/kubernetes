@@ -19,7 +19,8 @@ limitations under the License.
 package validation_test
 
 var (
-	// These config options are not supported on Windows.
+	// Windows 校验测试使用的配置：关闭按 QoS 划分的 cgroup，且不设置节点可分配资源约束；
+	// 这些配置项在 Windows 上均不受支持。
 	cgroupsPerQOS          = false
 	enforceNodeAllocatable = []string{}
 )

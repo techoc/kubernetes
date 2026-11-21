@@ -21,6 +21,7 @@ import (
 	"testing"
 )
 
+// TestNewEmptyiBitMask 验证 NewEmptyBitMask 构造的空掩码，其 String() 输出应为 "00"。
 func TestNewEmptyiBitMask(t *testing.T) {
 	tcases := []struct {
 		name         string
@@ -39,6 +40,7 @@ func TestNewEmptyiBitMask(t *testing.T) {
 	}
 }
 
+// TestNewBitMask 表驱动验证 NewBitMask 按给定位集合构造掩码，覆盖单个位与多位组合。
 func TestNewBitMask(t *testing.T) {
 	tcases := []struct {
 		name         string
@@ -69,6 +71,7 @@ func TestNewBitMask(t *testing.T) {
 	}
 }
 
+// TestAdd 表驱动验证 Add 置位操作，包括越界位（-1、64）被忽略、掩码保持为空的场景。
 func TestAdd(t *testing.T) {
 	tcases := []struct {
 		name         string
@@ -105,6 +108,7 @@ func TestAdd(t *testing.T) {
 	}
 }
 
+// TestRemove 表驱动验证 Remove 清除指定位，覆盖清除单个/多个位以及越界位不影响已有结果的场景。
 func TestRemove(t *testing.T) {
 	tcases := []struct {
 		name         string
@@ -146,6 +150,7 @@ func TestRemove(t *testing.T) {
 	}
 }
 
+// TestAnd 表驱动验证 And 对多个掩码逐位求交集，覆盖多掩码组合与位递减序列。
 func TestAnd(t *testing.T) {
 	tcases := []struct {
 		name    string
@@ -185,6 +190,7 @@ func TestAnd(t *testing.T) {
 	}
 	for _, tc := range tcases {
 		var bitMasks []BitMask
+		// 逐个构造参与位运算的掩码。
 		for i := range tc.masks {
 			bitMask, _ := NewBitMask(tc.masks[i]...)
 			bitMasks = append(bitMasks, bitMask)
@@ -197,6 +203,7 @@ func TestAnd(t *testing.T) {
 	}
 }
 
+// TestOr 表驱动验证 Or 对多个掩码逐位求并集，覆盖空掩码与多位组合。
 func TestOr(t *testing.T) {
 	tcases := []struct {
 		name   string
@@ -236,6 +243,7 @@ func TestOr(t *testing.T) {
 	}
 	for _, tc := range tcases {
 		var bitMasks []BitMask
+		// 逐个构造参与位运算的掩码。
 		for i := range tc.masks {
 			bitMask, _ := NewBitMask(tc.masks[i]...)
 			bitMasks = append(bitMasks, bitMask)
@@ -247,6 +255,7 @@ func TestOr(t *testing.T) {
 	}
 }
 
+// TestClear 表驱动验证 Clear 清空掩码中的全部位。
 func TestClear(t *testing.T) {
 	tcases := []struct {
 		name        string
@@ -278,6 +287,7 @@ func TestClear(t *testing.T) {
 	}
 }
 
+// TestFill 表驱动验证 Fill 将掩码所有位置 1，覆盖空掩码与已置位掩码。
 func TestFill(t *testing.T) {
 	tcases := []struct {
 		name       string
@@ -309,6 +319,7 @@ func TestFill(t *testing.T) {
 	}
 }
 
+// TestIsEmpty 表驱动验证 IsEmpty 对空掩码返回 true、对非空掩码返回 false。
 func TestIsEmpty(t *testing.T) {
 	tcases := []struct {
 		name          string
@@ -340,6 +351,7 @@ func TestIsEmpty(t *testing.T) {
 	}
 }
 
+// TestIsSet 表驱动验证 IsSet 判断单个位是否置位，越界位应返回 false。
 func TestIsSet(t *testing.T) {
 	tcases := []struct {
 		name        string
@@ -381,6 +393,7 @@ func TestIsSet(t *testing.T) {
 	}
 }
 
+// TestAnySet 表驱动验证 AnySet 判断一组位中是否存在已置位，覆盖越界位与无交集场景。
 func TestAnySet(t *testing.T) {
 	tcases := []struct {
 		name        string
@@ -428,6 +441,7 @@ func TestAnySet(t *testing.T) {
 	}
 }
 
+// TestIsEqual 表驱动验证 IsEqual 对相同与不同掩码的相等性判断。
 func TestIsEqual(t *testing.T) {
 	tcases := []struct {
 		name          string
@@ -476,6 +490,7 @@ func TestIsEqual(t *testing.T) {
 	}
 }
 
+// TestCount 表驱动验证 Count 统计掩码中已置位的位数。
 func TestCount(t *testing.T) {
 	tcases := []struct {
 		name          string
@@ -507,6 +522,7 @@ func TestCount(t *testing.T) {
 	}
 }
 
+// TestGetBits 表驱动验证 GetBits 返回掩码中已置位的位列表，空掩码返回 nil。
 func TestGetBits(t *testing.T) {
 	tcases := []struct {
 		name         string
@@ -538,6 +554,7 @@ func TestGetBits(t *testing.T) {
 	}
 }
 
+// TestIsNarrowerThan 表驱动验证 IsNarrowerThan 判断首个掩码是否比次掩码更窄（置位集合是否为其子集）。
 func TestIsNarrowerThan(t *testing.T) {
 	tcases := []struct {
 		name                  string
@@ -580,6 +597,7 @@ func TestIsNarrowerThan(t *testing.T) {
 	}
 }
 
+// TestIterateBitMasks 表驱动验证 IterateBitMasks 能枚举 n 位下全部非空掩码，数量应为 2^n - 1。
 func TestIterateBitMasks(t *testing.T) {
 	tcases := []struct {
 		name    string
@@ -607,30 +625,30 @@ func TestIterateBitMasks(t *testing.T) {
 		},
 	}
 	for _, tc := range tcases {
-		// Generate a list of bits from tc.numbits.
+		// 按 tc.numbits 生成 0..n-1 的位列表。
 		var bits []int
 		for i := 0; i < tc.numbits; i++ {
 			bits = append(bits, i)
 		}
 
-		// Calculate the expected number of masks. Since we always have masks
-		// with bits from 0..n, this is just (2^n - 1) since we want 1 mask
-		// represented by each integer between 1 and 2^n-1.
+		// 计算期望掩码数量。由于位始终取自 0..n，1 到 2^n-1 之间的每个整数
+		// 恰好对应一个掩码，因此总数为 (2^n - 1)。
 		expectedNumMasks := (1 << uint(tc.numbits)) - 1
 
-		// Iterate all masks and count them.
+		// 遍历全部掩码并计数。
 		numMasks := 0
 		IterateBitMasks(bits, func(BitMask) {
 			numMasks++
 		})
 
-		// Compare the number of masks generated to the expected amount.
+		// 将实际生成的掩码数量与期望值对比。
 		if expectedNumMasks != numMasks {
 			t.Errorf("Expected to iterate %v masks, got %v", expectedNumMasks, numMasks)
 		}
 	}
 }
 
+// TestIsLessThan 表驱动验证 IsLessThan 按数值大小比较两个掩码。
 func TestIsLessThan(t *testing.T) {
 	tcases := []struct {
 		name               string
@@ -667,6 +685,7 @@ func TestIsLessThan(t *testing.T) {
 	}
 }
 
+// TestIsGreaterThan 表驱动验证 IsGreaterThan 按数值大小比较两个掩码。
 func TestIsGreaterThan(t *testing.T) {
 	tcases := []struct {
 		name                 string

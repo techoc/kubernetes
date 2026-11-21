@@ -31,10 +31,12 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// Test all public methods behave ok when the feature gate is disabled.
+// 验证特性门控关闭时所有公开方法的行为。
 
+// TestMakeUserNsManagerDisabled 验证门控关闭时仍可成功创建管理器。
 func TestMakeUserNsManagerDisabled(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 先把仿真版本设为 1.35，使该特性门控在测试中仍可被关闭。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, false)
 
@@ -43,6 +45,7 @@ func TestMakeUserNsManagerDisabled(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestReleaseDisabled 验证门控关闭时 Release 可以安全调用。
 func TestReleaseDisabled(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
@@ -55,10 +58,12 @@ func TestReleaseDisabled(t *testing.T) {
 	m.Release(logger, "some-pod")
 }
 
+// TestGetOrCreateUserNamespaceMappingsDisabled 验证门控关闭时不会创建任何用户命名空间映射。
 func TestGetOrCreateUserNamespaceMappingsDisabled(t *testing.T) {
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, false)
 
+	// 预置 true/false 指针，便于构造 HostUsers 的三种取值。
 	trueVal := true
 	falseVal := false
 
@@ -99,6 +104,7 @@ func TestGetOrCreateUserNamespaceMappingsDisabled(t *testing.T) {
 		},
 	}
 
+	// 覆盖 pod 为 nil 以及 HostUsers 为 nil/true/false 四种情况。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			logger, _ := ktesting.NewTestContext(t)
@@ -107,6 +113,7 @@ func TestGetOrCreateUserNamespaceMappingsDisabled(t *testing.T) {
 			require.NoError(t, err)
 
 			userns, err := m.GetOrCreateUserNamespaceMappings(logger, test.pod, "")
+			// 门控关闭时不应产生任何映射。
 			assert.Nil(t, userns)
 			if test.success {
 				assert.NoError(t, err)
@@ -117,6 +124,7 @@ func TestGetOrCreateUserNamespaceMappingsDisabled(t *testing.T) {
 	}
 }
 
+// TestCleanupOrphanedPodUsernsAllocationsDisabled 验证门控关闭时孤儿分配清理可以安全执行。
 func TestCleanupOrphanedPodUsernsAllocationsDisabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))

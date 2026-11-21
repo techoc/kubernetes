@@ -27,10 +27,13 @@ import (
 )
 
 const (
+	// PreferClosestNUMANodes 是优先选择 NUMA 距离更近节点的策略选项。
 	PreferClosestNUMANodes string = "prefer-closest-numa-nodes"
-	MaxAllowableNUMANodes  string = "max-allowable-numa-nodes"
+	// MaxAllowableNUMANodes 是允许参与拓扑对齐的最大 NUMA 节点数选项。
+	MaxAllowableNUMANodes string = "max-allowable-numa-nodes"
 )
 
+// 策略选项按稳定性分级；只有对应特性门控开启时才允许使用 alpha/beta 选项。
 var (
 	alphaOptions  = sets.New[string]()
 	betaOptions   = sets.New[string]()
@@ -40,6 +43,7 @@ var (
 	)
 )
 
+// CheckPolicyOptionAvailable 校验策略选项是否已知且在当前门控下可用。
 func CheckPolicyOptionAvailable(option string) error {
 	if !alphaOptions.Has(option) && !betaOptions.Has(option) && !stableOptions.Has(option) {
 		return fmt.Errorf("unknown Topology Manager Policy option: %q", option)
@@ -56,15 +60,19 @@ func CheckPolicyOptionAvailable(option string) error {
 	return nil
 }
 
+// PolicyOptions 保存解析后的 Topology Manager 策略选项。
 type PolicyOptions struct {
-	PreferClosestNUMA     bool
+	// PreferClosestNUMA 表示是否优先选择 NUMA 距离更近的节点。
+	PreferClosestNUMA bool
+	// MaxAllowableNUMANodes 是允许的最大 NUMA 节点数。
 	MaxAllowableNUMANodes int
 }
 
+// NewPolicyOptions 解析并校验策略选项，返回填充好的 PolicyOptions。
 func NewPolicyOptions(logger klog.Logger, policyOptions map[string]string) (PolicyOptions, error) {
 	opts := PolicyOptions{
-		// Set MaxAllowableNUMANodes to the default. This will be overwritten
-		// if the user has specified a policy option for MaxAllowableNUMANodes.
+		// 先把 MaxAllowableNUMANodes 设为默认值；
+		// 若用户显式指定该选项，会在下面覆盖。
 		MaxAllowableNUMANodes: defaultMaxAllowableNUMANodes,
 	}
 
@@ -73,6 +81,7 @@ func NewPolicyOptions(logger klog.Logger, policyOptions map[string]string) (Poli
 			return opts, err
 		}
 
+		// 按选项名称解析对应类型的值。
 		switch name {
 		case PreferClosestNUMANodes:
 			optValue, err := strconv.ParseBool(value)
@@ -86,17 +95,19 @@ func NewPolicyOptions(logger klog.Logger, policyOptions map[string]string) (Poli
 				return opts, fmt.Errorf("unable to convert policy option to integer %q: %w", name, err)
 			}
 
+			// 低于默认值会破坏 kubelet 的预期，直接拒绝。
 			if optValue < defaultMaxAllowableNUMANodes {
 				return opts, fmt.Errorf("the minimum value of %q should not be less than %v", name, defaultMaxAllowableNUMANodes)
 			}
 
+			// 高于默认值仅告警，不阻止启动。
 			if optValue > defaultMaxAllowableNUMANodes {
 				logger.Info("WARNING: the value of max-allowable-numa-nodes is more than the default recommended value", "max-allowable-numa-nodes", optValue, "defaultMaxAllowableNUMANodes", defaultMaxAllowableNUMANodes)
 			}
 			opts.MaxAllowableNUMANodes = optValue
 		default:
-			// this should never be reached, we already detect unknown options,
-			// but we keep it as further safety.
+			// 正常情况下不会到达这里（未知选项已在前面拦截），
+			// 保留该分支作为额外防护。
 			return opts, fmt.Errorf("unsupported topologymanager option: %q (%s)", name, value)
 		}
 	}

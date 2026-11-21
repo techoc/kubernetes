@@ -26,13 +26,16 @@ import (
 	"k8s.io/api/core/v1"
 )
 
+// TestConvertToTimestamp 验证时间字符串转换后保持不变。
 func TestConvertToTimestamp(t *testing.T) {
 	timestamp := "2017-02-17T15:34:49.830882016+08:00"
 	convertedTimeStamp := ConvertToTimestamp(timestamp).GetString()
 	assert.Equal(t, timestamp, convertedTimeStamp)
 }
 
+// TestLen 验证 SortedContainerStatuses 的 Len 返回元素个数。
 func TestLen(t *testing.T) {
+	// 用例覆盖单元素与多元素切片。
 	var cases = []struct {
 		statuses SortedContainerStatuses
 		expected int
@@ -46,12 +49,15 @@ func TestLen(t *testing.T) {
 			expected: 2,
 		},
 	}
+	// 逐用例比较长度。
 	for _, data := range cases {
 		assert.Equal(t, data.expected, data.statuses.Len())
 	}
 }
 
+// TestSwap 验证 Swap 交换两个状态的位置。
 func TestSwap(t *testing.T) {
+	// 用例为两个状态，交换后顺序应反转。
 	var cases = []struct {
 		statuses SortedContainerStatuses
 		expected SortedContainerStatuses
@@ -62,6 +68,7 @@ func TestSwap(t *testing.T) {
 		},
 	}
 	for _, data := range cases {
+		// 交换后应与期望顺序一致。
 		data.statuses.Swap(0, 1)
 		if !reflect.DeepEqual(data.statuses, data.expected) {
 			t.Errorf(
@@ -73,6 +80,7 @@ func TestSwap(t *testing.T) {
 	}
 }
 
+// TestLess 验证 Less 按名称排序。
 func TestLess(t *testing.T) {
 	var cases = []struct {
 		statuses SortedContainerStatuses
@@ -88,6 +96,7 @@ func TestLess(t *testing.T) {
 		},
 	}
 	for _, data := range cases {
+		// 逐用例比较 Less 结果。
 		actual := data.statuses.Less(0, 1)
 		if actual != data.expected {
 			t.Errorf(
@@ -99,10 +108,12 @@ func TestLess(t *testing.T) {
 	}
 }
 
+// TestSortInitContainerStatuses 验证 init 容器状态按容器定义顺序排序。
 func TestSortInitContainerStatuses(t *testing.T) {
 	pod := v1.Pod{
 		Spec: v1.PodSpec{},
 	}
+	// 覆盖状态顺序错乱、缺失状态等场景。
 	var cases = []struct {
 		containers     []v1.Container
 		statuses       []v1.ContainerStatus
@@ -130,6 +141,7 @@ func TestSortInitContainerStatuses(t *testing.T) {
 		},
 	}
 	for _, data := range cases {
+		// 设置容器定义后调用排序并比较结果。
 		pod.Spec.InitContainers = data.containers
 		SortInitContainerStatuses(&pod, data.statuses)
 		if !reflect.DeepEqual(data.statuses, data.sortedStatuses) {
@@ -139,10 +151,12 @@ func TestSortInitContainerStatuses(t *testing.T) {
 	}
 }
 
+// TestSortStatusesOfInitContainers 验证按状态 map 生成有序的 init 容器状态列表。
 func TestSortStatusesOfInitContainers(t *testing.T) {
 	pod := v1.Pod{
 		Spec: v1.PodSpec{},
 	}
+	// 覆盖完整、乱序与部分状态的情况。
 	var tests = []struct {
 		containers     []v1.Container
 		statusMap      map[string]*v1.ContainerStatus
@@ -170,15 +184,18 @@ func TestSortStatusesOfInitContainers(t *testing.T) {
 		},
 	}
 	for _, data := range tests {
+		// 逐用例比较排序结果。
 		pod.Spec.InitContainers = data.containers
 		result := SortStatusesOfInitContainers(&pod, data.statusMap)
 		require.Equal(t, result, data.expectStatuses, "Unexpected result from SortStatusesOfInitContainers: %v", result)
 	}
 }
 
+// TestNewTimestamp 验证 NewTimestamp 返回当前时间。
 func TestNewTimestamp(t *testing.T) {
 	timeStart := time.Now()
 	timestamp := NewTimestamp()
 	timeEnd := time.Now()
+	// 生成的时间应落在调用前后的时间区间内。
 	assert.WithinDuration(t, timestamp.Get(), timeStart, timeEnd.Sub(timeStart))
 }

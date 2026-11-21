@@ -24,10 +24,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// startWatch 在未支持文件监视的构建中只记录错误，不启动 watch。
 func (s *sourceFile) startWatch(logger klog.Logger) {
 	logger.Error(nil, "Watching source file is unsupported in this build")
 }
 
+// consumeWatchEvent 在未支持文件监视的构建中直接返回错误。
 func (s *sourceFile) consumeWatchEvent(logger klog.Logger, e *watchEvent) error {
 	return fmt.Errorf("consuming watch event is unsupported in this build")
 }

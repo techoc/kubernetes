@@ -34,6 +34,7 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// checkObject 断言对象在 store 中存在或不存在，并校验不存在时的错误信息。
 func checkObject(t *testing.T, store manager.Store, ns, name string, shouldExist bool) {
 	_, err := store.Get(ns, name)
 	if shouldExist && err != nil {
@@ -44,26 +45,31 @@ func checkObject(t *testing.T, store manager.Store, ns, name string, shouldExist
 	}
 }
 
+// noObjectTTL 返回"无 TTL"，使缓存对象不会过期。
 func noObjectTTL() (time.Duration, bool) {
 	return time.Duration(0), false
 }
 
+// getSecret 返回从 fake clientset 读取 Secret 的 GetObjectFunc。
 func getSecret(fakeClient clientset.Interface) manager.GetObjectFunc {
 	return func(namespace, name string, opts metav1.GetOptions) (runtime.Object, error) {
 		return fakeClient.CoreV1().Secrets(namespace).Get(context.TODO(), name, opts)
 	}
 }
 
+// envSecrets 描述一个容器引用的 Secret 名称。
 type envSecrets struct {
 	envVarNames  []string
 	envFromNames []string
 }
 
+// secretsToAttach 描述 Pod 需要挂载的镜像拉取 Secret 与容器环境变量 Secret。
 type secretsToAttach struct {
 	imagePullSecretNames []string
 	containerEnvSecrets  []envSecrets
 }
 
+// podWithSecrets 按描述构造带有 Secret 引用的 Pod。
 func podWithSecrets(ns, podName string, toAttach secretsToAttach) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -72,10 +78,12 @@ func podWithSecrets(ns, podName string, toAttach secretsToAttach) *v1.Pod {
 		},
 		Spec: v1.PodSpec{},
 	}
+	// 镜像拉取 Secret 挂在 Pod 级。
 	for _, name := range toAttach.imagePullSecretNames {
 		pod.Spec.ImagePullSecrets = append(
 			pod.Spec.ImagePullSecrets, v1.LocalObjectReference{Name: name})
 	}
+	// 每个描述对应一个容器，容器名按序号生成。
 	for i, secrets := range toAttach.containerEnvSecrets {
 		container := v1.Container{
 			Name: fmt.Sprintf("container-%d", i),
@@ -106,6 +114,7 @@ func podWithSecrets(ns, podName string, toAttach secretsToAttach) *v1.Pod {
 	return pod
 }
 
+// TestCacheBasedSecretManager 验证缓存型 Secret 管理器的注册、更新与注销语义。
 func TestCacheBasedSecretManager(t *testing.T) {
 	fakeClient := &fake.Clientset{}
 	store := manager.NewObjectStore(getSecret(fakeClient), clock.RealClock{}, noObjectTTL, 0)
@@ -113,7 +122,7 @@ func TestCacheBasedSecretManager(t *testing.T) {
 		manager: manager.NewCacheBasedManager(store, getSecretNames),
 	}
 
-	// Create a pod with some secrets.
+	// 创建带有若干 Secret 的 Pod。
 	s1 := secretsToAttach{
 		imagePullSecretNames: []string{"s1"},
 		containerEnvSecrets: []envSecrets{
@@ -123,7 +132,7 @@ func TestCacheBasedSecretManager(t *testing.T) {
 		},
 	}
 	manager.RegisterPod(podWithSecrets("ns1", "name1", s1))
-	// Update the pod with a different secrets.
+	// 用不同的 Secret 更新同一个 Pod，旧引用应被清理。
 	s2 := secretsToAttach{
 		imagePullSecretNames: []string{"s1"},
 		containerEnvSecrets: []envSecrets{
@@ -133,9 +142,9 @@ func TestCacheBasedSecretManager(t *testing.T) {
 		},
 	}
 	manager.RegisterPod(podWithSecrets("ns1", "name1", s2))
-	// Create another pod, but with same secrets in different namespace.
+	// 在另一个命名空间创建 Pod，同名 Secret 应独立存在。
 	manager.RegisterPod(podWithSecrets("ns2", "name2", s2))
-	// Create and delete a pod with some other secrets.
+	// 创建后立即删除 Pod，其 Secret 不应残留在缓存中。
 	s3 := secretsToAttach{
 		imagePullSecretNames: []string{"s5"},
 		containerEnvSecrets: []envSecrets{
@@ -146,9 +155,10 @@ func TestCacheBasedSecretManager(t *testing.T) {
 	manager.RegisterPod(podWithSecrets("ns3", "name", s3))
 	manager.UnregisterPod(podWithSecrets("ns3", "name", s3))
 
-	// We should have only: s1, s3 and s4 secrets in namespaces: ns1 and ns2.
+	// 最终只应在 ns1/ns2 中保留 s1、s3、s4、s40，其余都应被清理。
 	for _, ns := range []string{"ns1", "ns2", "ns3"} {
 		for _, secret := range []string{"s1", "s2", "s3", "s4", "s5", "s6", "s20", "s40", "s50"} {
+			// 逐命名空间、逐 Secret 断言缓存内容，确保更新与注销都正确清理旧对象。
 			shouldExist :=
 				(secret == "s1" || secret == "s3" || secret == "s4" || secret == "s40") && (ns == "ns1" || ns == "ns2")
 			checkObject(t, store, ns, secret, shouldExist)

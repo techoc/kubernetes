@@ -23,7 +23,9 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// TestNewAlignment 验证 CPU 集合在 uncore cache 层级上的对齐判断。
 func TestNewAlignment(t *testing.T) {
+	// 构造 32 核、8 个 uncore cache 组的拓扑，每组 4 个 CPU。
 	topo := &CPUTopology{
 		NumCPUs:        32,
 		NumSockets:     1,
@@ -66,6 +68,7 @@ func TestNewAlignment(t *testing.T) {
 		},
 	}
 
+	// 覆盖空集合、单 CPU、部分/整组/跨组等对齐场景。
 	tests := []struct {
 		name string
 		topo *CPUTopology
@@ -81,40 +84,41 @@ func TestNewAlignment(t *testing.T) {
 	}, {
 		name: "single random CPU",
 		topo: topo,
-		cpus: cpuset.New(11), // any single id is fine, no special meaning
+		cpus: cpuset.New(11), // 任意单个 CPU ID 均可，无特殊含义。
 		want: Alignment{
 			UncoreCache: true,
 		},
 	}, {
 		name: "less CPUs than a uncore cache group",
 		topo: topo,
-		cpus: cpuset.New(29, 30, 31), // random cpus as long as they belong to the same uncore cache
+		cpus: cpuset.New(29, 30, 31), // 任意 CPU 均可，只要它们属于同一个 uncore cache 组。
 		want: Alignment{
 			UncoreCache: true,
 		},
 	}, {
 		name: "enough CPUs to fill a uncore cache group",
 		topo: topo,
-		cpus: cpuset.New(8, 9, 10, 11), // random cpus as long as they belong to the same uncore cache
+		cpus: cpuset.New(8, 9, 10, 11), // 任意 CPU 均可，只要它们属于同一个 uncore cache 组。
 		want: Alignment{
 			UncoreCache: true,
 		},
 	}, {
 		name: "more CPUs than a full a uncore cache group",
 		topo: topo,
-		cpus: cpuset.New(9, 10, 11, 23), // random cpus as long as they belong to the same uncore cache
+		cpus: cpuset.New(9, 10, 11, 23), // 任意 CPU 均可，只要它们属于同一个 uncore cache 组。
 		want: Alignment{
 			UncoreCache: false,
 		},
 	}, {
 		name: "enough CPUs to exactly fill multiple uncore cache groups",
 		topo: topo,
-		cpus: cpuset.New(8, 9, 10, 11, 16, 17, 18, 19), // random cpus as long as they belong to the same uncore cache
+		cpus: cpuset.New(8, 9, 10, 11, 16, 17, 18, 19), // 任意 CPU 均可，只要它们属于同一个 uncore cache 组。
 		want: Alignment{
 			UncoreCache: false,
 		},
 	}}
 
+	// 逐个用例校验 CheckAlignment 的结果。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.topo.CheckAlignment(tt.cpus)

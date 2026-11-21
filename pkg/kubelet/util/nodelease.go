@@ -27,14 +27,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// SetNodeOwnerFunc helps construct a newLeasePostProcessFunc which sets
-// a node OwnerReference to the given lease object
+// SetNodeOwnerFunc 构造一个续约后处理函数，用于给 Lease 设置 Node 的 OwnerReference。
 func SetNodeOwnerFunc(ctx context.Context, c clientset.Interface, nodeName string) func(lease *coordinationv1.Lease) error {
 	return func(lease *coordinationv1.Lease) error {
-		// Setting owner reference needs node's UID. Note that it is different from
-		// kubelet.nodeRef.UID. When lease is initially created, it is possible that
-		// the connection between master and node is not ready yet. So try to set
-		// owner reference every time when renewing the lease, until successful.
+		// 设置 owner 引用需要 Node 的 UID（注意它不同于 kubelet.nodeRef.UID）。
+		// 租约刚创建时 master 与 node 可能尚未连通，因此每次续约都尝试补设 owner 引用。
 		if len(lease.OwnerReferences) == 0 {
 			if node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{}); err == nil {
 				lease.OwnerReferences = []metav1.OwnerReference{

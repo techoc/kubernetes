@@ -22,7 +22,8 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/apis/config"
 )
 
+// Convert_config_CredentialProvider_To_v1beta1_CredentialProvider 将内部 CredentialProvider 转换为 v1beta1 版本。
 func Convert_config_CredentialProvider_To_v1beta1_CredentialProvider(in *config.CredentialProvider, out *configv1beta1.CredentialProvider, s conversion.Scope) error {
-	// This conversion intentionally omits the tokenAttributes field which is only supported in v1 CredentialProvider.
+	// 此处刻意省略 tokenAttributes 字段，因为只有 v1 的 CredentialProvider 支持它。
 	return autoConvert_config_CredentialProvider_To_v1beta1_CredentialProvider(in, out, s)
 }

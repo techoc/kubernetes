@@ -25,13 +25,13 @@ import (
 	nodev1 "k8s.io/client-go/listers/node/v1"
 )
 
-// Manager caches RuntimeClass API objects, and provides accessors to the Kubelet.
+// Manager 缓存 RuntimeClass API 对象，并向 kubelet 提供访问方法。
 type Manager struct {
 	informerFactory informers.SharedInformerFactory
 	lister          nodev1.RuntimeClassLister
 }
 
-// NewManager returns a new RuntimeClass Manager. Run must be called before the manager can be used.
+// NewManager 返回新的 RuntimeClass Manager；使用前必须先调用 Start。
 func NewManager(client clientset.Interface) *Manager {
 	const resyncPeriod = 0
 
@@ -44,23 +44,21 @@ func NewManager(client clientset.Interface) *Manager {
 	}
 }
 
-// Start starts syncing the RuntimeClass cache with the apiserver.
+// Start 开始与 apiserver 同步 RuntimeClass 缓存。
 func (m *Manager) Start(stopCh <-chan struct{}) {
 	m.informerFactory.Start(stopCh)
 }
 
-// WaitForCacheSync exposes the WaitForCacheSync method on the informer factory for testing
-// purposes.
+// WaitForCacheSync 暴露 informer factory 的 WaitForCacheSync，便于测试。
 func (m *Manager) WaitForCacheSync(stopCh <-chan struct{}) {
 	m.informerFactory.WaitForCacheSync(stopCh)
 }
 
-// LookupRuntimeHandler returns the RuntimeHandler string associated with the given RuntimeClass
-// name (or the default of "" for nil). If the RuntimeClass is not found, it returns an
-// errors.NotFound error.
+// LookupRuntimeHandler 返回指定 RuntimeClass 名称关联的 RuntimeHandler；
+// nil 或空名称返回默认值 ""；RuntimeClass 不存在时返回 NotFound 错误。
 func (m *Manager) LookupRuntimeHandler(runtimeClassName *string) (string, error) {
 	if runtimeClassName == nil || *runtimeClassName == "" {
-		// The default RuntimeClass always resolves to the empty runtime handler.
+		// 默认 RuntimeClass 始终解析为空 runtime handler。
 		return "", nil
 	}
 

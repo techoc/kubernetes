@@ -22,40 +22,33 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// Manager is the interface for registering and unregistering
-// objects referenced by pods in the underlying cache and
-// extracting those from that cache if needed.
+// Manager 定义在底层缓存中注册/注销 Pod 引用对象的接口，
+// 并在需要时从缓存中取出这些对象。
 type Manager interface {
-	// Get object by its namespace and name.
+	// GetObject 按 namespace 和 name 获取对象。
 	GetObject(namespace, name string) (runtime.Object, error)
 
-	// WARNING: Register/UnregisterPod functions should be efficient,
-	// i.e. should not block on network operations.
+	// 警告：RegisterPod/UnregisterPod 必须高效，不能阻塞在网络操作上。
 
-	// RegisterPod registers all objects referenced from a given pod.
+	// RegisterPod 注册给定 Pod 引用的所有对象。
 	//
-	// NOTE: All implementations of RegisterPod should be idempotent.
+	// 注意：所有 RegisterPod 实现都必须是幂等的。
 	RegisterPod(pod *v1.Pod)
 
-	// UnregisterPod unregisters objects referenced from a given pod that are not
-	// used by any other registered pod.
+	// UnregisterPod 注销给定 Pod 引用、且不再被其他已注册 Pod 使用的对象。
 	//
-	// NOTE: All implementations of UnregisterPod should be idempotent.
+	// 注意：所有 UnregisterPod 实现都必须是幂等的。
 	UnregisterPod(pod *v1.Pod)
 }
 
-// Store is the interface for a object cache that
-// can be used by cacheBasedManager.
+// Store 是 cacheBasedManager 可使用的对象缓存接口。
 type Store interface {
-	// AddReference adds a reference from referencedFrom to the object to the store.
-	// Note that multiple additions to the store has to be allowed
-	// in the implementations and effectively treated as refcounted.
+	// AddReference 增加 referencedFrom 对对象的引用。
+	// 实现必须允许多次添加，并按引用计数语义处理。
 	AddReference(namespace, name string, referencedFrom types.UID)
-	// DeleteReference deletes a reference from referencedFrom to the object from the store.
-	// Note that object should be deleted only when there was a
-	// corresponding Delete call for each of Add calls (effectively
-	// when refcount of every referenceFrom was reduced to zero).
+	// DeleteReference 删除 referencedFrom 对对象的引用。
+	// 只有当每次 Add 都有对应的 Delete、引用计数归零时，对象才应被删除。
 	DeleteReference(namespace, name string, referencedFrom types.UID)
-	// Get an object from a store.
+	// Get 从 store 中获取对象。
 	Get(namespace, name string) (runtime.Object, error)
 }

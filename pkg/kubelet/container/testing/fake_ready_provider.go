@@ -20,17 +20,17 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
-// FakeReadyProvider implements a fake ready provider
+// FakeReadyProvider 是测试用的 ready provider 假实现。
 type FakeReadyProvider struct {
 	kubecontainer.SourcesReadyProvider
 }
 
-// AllReady notifies caller that the Fake Provider is ready.
+// AllReady 始终返回 true，表示所有数据源都已就绪。
 func (frp *FakeReadyProvider) AllReady() bool {
 	return true
 }
 
-// NewFakeReadyProvider creates a FakeReadyProvider object
+// NewFakeReadyProvider 创建一个 FakeReadyProvider 实例。
 func NewFakeReadyProvider() kubecontainer.SourcesReadyProvider {
 	return &FakeReadyProvider{}
 }

@@ -45,6 +45,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestFeatureEnabled 验证 Windows 优雅节点关机特性的启用条件：
+// 特性门控开启且 ShutdownGracePeriodRequested 大于 0 时才启用。
 func TestFeatureEnabled(t *testing.T) {
 	var tests = []struct {
 		desc                         string
@@ -86,6 +88,7 @@ func TestFeatureEnabled(t *testing.T) {
 			fakeVolumeManager := volumemanager.NewFakeVolumeManager([]v1.UniqueVolumeName{}, 0, nil, false)
 			nodeRef := &v1.ObjectReference{Kind: "Node", Name: "test", UID: types.UID("test"), Namespace: ""}
 
+			// 未启用时 NewManager 返回 managerStub，启用时返回真实实现。
 			manager := NewManager(&Config{
 				Logger:                          logger,
 				VolumeManager:                   fakeVolumeManager,
@@ -103,6 +106,8 @@ func TestFeatureEnabled(t *testing.T) {
 	}
 }
 
+// Test_managerImpl_ProcessShutdownEvent 覆盖关机事件处理的三类结果：
+// 宽限期内完成、超时、以及卷卸载超时，并断言日志中的关键信息。
 func Test_managerImpl_ProcessShutdownEvent(t *testing.T) {
 	var (
 		fakeRecorder      = &record.FakeRecorder{}
@@ -201,8 +206,8 @@ func Test_managerImpl_ProcessShutdownEvent(t *testing.T) {
 				nodeRef:  nodeRef,
 				volumeManager: volumemanager.NewFakeVolumeManager(
 					[]v1.UniqueVolumeName{},
-					3*time.Second, // This value is intentionally longer than the shutdownGracePeriodSeconds (2s) to test the behavior
-					// for volume unmount operations that take longer than the allowed grace period.
+					3*time.Second, // 故意长于 shutdownGracePeriodSeconds（2 秒），用于测试超时行为
+					// 卷卸载操作耗时超过允许的宽限期。
 					fmt.Errorf("unmount timeout"), false,
 				),
 				shutdownGracePeriodByPodPriority: []kubeletconfig.ShutdownGracePeriodByPodPriority{
@@ -232,7 +237,7 @@ func Test_managerImpl_ProcessShutdownEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Use a buffered logger because this test asserts log output.
+			// 使用带缓冲的 logger，因为用例要断言日志内容。
 			logger := ktesting.NewLogger(t,
 				ktesting.NewConfig(
 					ktesting.BufferLogs(true),
@@ -254,6 +259,7 @@ func Test_managerImpl_ProcessShutdownEvent(t *testing.T) {
 					clock:                            tt.fields.clock,
 				},
 			}
+			// ProcessShutdownEvent 本身不返回错误，失败通过日志和事件体现。
 			err := m.ProcessShutdownEvent(tCtx)
 			if tt.wantErr {
 				require.Error(t, err, "managerImpl.processShutdownEvent() should return an error")
@@ -268,20 +274,20 @@ func Test_managerImpl_ProcessShutdownEvent(t *testing.T) {
 
 			log := underlier.GetBuffer().String()
 			if tt.expectedOutputContains != "" && !strings.Contains(log, tt.expectedOutputContains) {
-				// Log will be shown on failure. To see it
-				// during a successful run use "go test -v".
+				// 失败时日志会随错误输出展示；成功运行想查看日志可用 go test -v。
 				t.Errorf("managerImpl.processShutdownEvent() should have logged %s, see actual output above.", tt.expectedOutputContains)
 			}
 
 			if tt.expectedOutputNotContains != "" && strings.Contains(log, tt.expectedOutputNotContains) {
-				// Log will be shown on failure. To see it
-				// during a successful run use "go test -v".
+				// 失败时日志会随错误输出展示；成功运行想查看日志可用 go test -v。
 				t.Errorf("managerImpl.processShutdownEvent() should have not logged %s, see actual output above.", tt.expectedOutputNotContains)
 			}
 		})
 	}
 }
 
+// Test_addToExistingOrder 验证把 kubelet 及其依赖插入关机顺序的逻辑：
+// 保留已有顺序、去重，并保证依赖排在 kubelet 之后。
 func Test_addToExistingOrder(t *testing.T) {
 	var tests = []struct {
 		desc          string
@@ -331,7 +337,7 @@ func Test_addToExistingOrder(t *testing.T) {
 			existingOrder: []string{"d", "f", "kubelet", "a", "b", "c"},
 			expectedOrder: []string{"d", "f", "kubelet", "a", "b", "c"},
 		},
-		// The following two should not happen in practice, but we should handle it gracefully
+		// 下面两个用例现实中不应出现，但实现仍需优雅处理重复项。
 		{
 			desc:          "dependencies has redundant string, expectedOrder remove the redundant string",
 			dependencies:  []string{"a", "b", "b", "c"},
@@ -348,6 +354,7 @@ func Test_addToExistingOrder(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
+			// kubelet 自身必须排在依赖项之前，同时尽量保持 existingOrder 的相对顺序。
 			order := addToExistingOrder(tc.dependencies, tc.existingOrder)
 
 			assert.Equal(t, order, tc.expectedOrder)

@@ -42,72 +42,70 @@ import (
 	utilsnet "k8s.io/utils/net"
 )
 
-// HandlerRunner runs a lifecycle handler for a container.
+// HandlerRunner 为容器执行生命周期钩子。
 type HandlerRunner interface {
 	Run(ctx context.Context, containerID ContainerID, pod *v1.Pod, container *v1.Container, handler *v1.LifecycleHandler) (string, error)
 }
 
-// RuntimeHelper wraps kubelet to make container runtime
-// able to get necessary informations like the RunContainerOptions, DNS settings, Host IP.
+// RuntimeHelper 包装 kubelet 的能力，使容器运行时可以获取 RunContainerOptions、
+// DNS 设置、主机 IP 等必要信息。
 type RuntimeHelper interface {
 	GenerateRunContainerOptions(ctx context.Context, pod *v1.Pod, container *v1.Container, podIP string, podIPs []string, imageVolumes ImageVolumes) (contOpts *RunContainerOptions, cleanupAction func(), err error)
 	GetPodDNS(ctx context.Context, pod *v1.Pod) (dnsConfig *runtimeapi.DNSConfig, err error)
-	// GetPodCgroupParent returns the CgroupName identifier, and its literal cgroupfs form on the host
-	// of a pod.
+	// GetPodCgroupParent 返回 pod 的 CgroupName 标识及其在宿主上的字面 cgroupfs 形式。
 	GetPodCgroupParent(pod *v1.Pod) string
 	GetPodDir(podUID types.UID) string
 	GeneratePodHostNameAndDomain(logger klog.Logger, pod *v1.Pod) (hostname string, hostDomain string, err error)
-	// GetExtraSupplementalGroupsForPod returns a list of the extra
-	// supplemental groups for the Pod. These extra supplemental groups come
-	// from annotations on persistent volumes that the pod depends on.
+	// GetExtraSupplementalGroupsForPod 返回 Pod 的额外补充组。
+	// 这些组来自 Pod 依赖的持久卷上的注解。
 	GetExtraSupplementalGroupsForPod(pod *v1.Pod) []int64
 
-	// GetOrCreateUserNamespaceMappings returns the configuration for the sandbox user namespace
+	// GetOrCreateUserNamespaceMappings 返回 sandbox 用户命名空间的配置。
 	GetOrCreateUserNamespaceMappings(logger klog.Logger, pod *v1.Pod, runtimeHandler string) (*runtimeapi.UserNamespace, error)
 
-	// PrepareDynamicResources prepares resources for a pod.
+	// PrepareDynamicResources 为 pod 准备动态资源。
 	PrepareDynamicResources(ctx context.Context, pod *v1.Pod) error
 
-	// UnprepareDynamicResources unprepares resources for a a pod.
+	// UnprepareDynamicResources 取消 pod 的动态资源准备。
 	UnprepareDynamicResources(ctx context.Context, pod *v1.Pod) error
 
-	// RequestPodReinspect flags a pod to be inspected on the next relist.
+	// RequestPodReinspect 标记某个 pod 需要在下次 relist 时重新检查。
 	RequestPodReinspect(types.UID)
 
-	// PodCPUAndMemoryStats reads the latest CPU & memory usage stats.
+	// PodCPUAndMemoryStats 读取最新的 CPU 与内存用量统计。
 	PodCPUAndMemoryStats(context.Context, *v1.Pod, *PodStatus) (*statsapi.PodStats, error)
 
-	// OnPodSandboxReady callback is invoked after pod sandbox, networking, volume are ready.
-	// This is used to update the PodReadyToStartContainers condition.
+	// OnPodSandboxReady 在 pod sandbox、网络与卷就绪后回调，
+	// 用于更新 PodReadyToStartContainers 状况。
 	OnPodSandboxReady(ctx context.Context, pod *v1.Pod) error
 
-	// ResizeEphemeralVolume directly triggers a resize of the specified volume.
+	// ResizeEphemeralVolume 直接触发指定卷的扩容。
 	ResizeEphemeralVolume(pod *v1.Pod, volumeName string, newSize *resource.Quantity) error
 }
 
-// ShouldContainerBeRestarted checks whether a container needs to be restarted.
+// ShouldContainerBeRestarted 判断容器是否需要重启。
 // TODO(yifan): Think about how to refactor this.
 func ShouldContainerBeRestarted(logger klog.Logger, container *v1.Container, pod *v1.Pod, podStatus *PodStatus) bool {
-	// Once a pod has been marked deleted, it should not be restarted
+	// pod 一旦被标记删除，就不应再重启，避免删除过程中被重新拉起。
 	if pod.DeletionTimestamp != nil {
 		return false
 	}
-	// Get latest container status.
+	// 取容器当前状态作为判断依据。
 	status := podStatus.FindContainerStatusByName(container.Name)
-	// If the container was never started before, we should start it.
-	// NOTE(random-liu): If all historical containers were GC'd, we'll also return true here.
+	// 容器从未启动过时需要启动。
+	// NOTE(random-liu): 如果所有历史容器都被 GC 掉，这里同样会返回 true。
 	if status == nil {
 		return true
 	}
-	// Check whether container is running
+	// 运行中的容器无需重启。
 	if status.State == ContainerStateRunning {
 		return false
 	}
-	// Always restart container in the unknown, or in the created state.
+	// 状态未知或仅处于 created 的容器一律重启，确保最终收敛到期望状态。
 	if status.State == ContainerStateUnknown || status.State == ContainerStateCreated {
 		return true
 	}
-	// Check RestartPolicy for dead container
+	// 容器已退出时按重启策略判断；启用 ContainerRestartRules 特性时以容器重启规则为准。
 	if utilfeature.DefaultFeatureGate.Enabled(features.ContainerRestartRules) {
 		return podutil.ContainerShouldRestart(*container, pod.Spec, int32(status.ExitCode))
 	}
@@ -116,7 +114,7 @@ func ShouldContainerBeRestarted(logger klog.Logger, container *v1.Container, pod
 		return false
 	}
 	if pod.Spec.RestartPolicy == v1.RestartPolicyOnFailure {
-		// Check the exit code.
+		// 检查退出码。
 		if status.ExitCode == 0 {
 			logger.V(4).Info("Already successfully ran container, do nothing", "pod", klog.KObj(pod), "containerName", container.Name)
 			return false
@@ -125,11 +123,11 @@ func ShouldContainerBeRestarted(logger klog.Logger, container *v1.Container, pod
 	return true
 }
 
-// ShouldAllContainersRestart checks if the pod should be restarted.
-// First checks whether the apiPodStatus has the AllContainersRestarting condition.
-// Then checks if any container from podStatus are exited with matching rules,
-// or any containers from apiPodStatus are exited with matching rules.
+// ShouldAllContainersRestart 判断 pod 是否需要重启。
+// 先检查 apiPodStatus 中是否带 AllContainersRestarting 状况，再检查 podStatus 或
+// apiPodStatus 中是否有容器按匹配规则退出。
 func ShouldAllContainersRestart(pod *v1.Pod, podStatus *PodStatus, apiPodStatus *v1.PodStatus) bool {
+	// 优先采纳 API 侧整体重启结论，它已由 API 直接给出，无需重复推断。
 	if apiPodStatus != nil {
 		for _, cond := range apiPodStatus.Conditions {
 			if cond.Type == v1.AllContainersRestarting && cond.Status == v1.ConditionTrue {
@@ -138,6 +136,7 @@ func ShouldAllContainersRestart(pod *v1.Pod, podStatus *PodStatus, apiPodStatus 
 		}
 	}
 
+	// 把 API 容器状态按名称建索引，便于按容器名快速查找退出状态。
 	nameToAPIStatus := make(map[string]*v1.ContainerStatus)
 	if apiPodStatus != nil {
 		for i := range apiPodStatus.InitContainerStatuses {
@@ -148,6 +147,7 @@ func ShouldAllContainersRestart(pod *v1.Pod, podStatus *PodStatus, apiPodStatus 
 		}
 	}
 
+	// 遍历 pod 内所有容器，检查是否有退出的容器命中“重启全部容器”规则。
 	for c := range podutil.ContainerIter(&pod.Spec, podutil.InitContainers|podutil.Containers) {
 		if c == nil {
 			continue
@@ -179,8 +179,7 @@ func ShouldAllContainersRestart(pod *v1.Pod, podStatus *PodStatus, apiPodStatus 
 	return false
 }
 
-// AllContainersRestartCleanedUp returns true if all containers are removed
-// from the runtime and podStatus.
+// AllContainersRestartCleanedUp 判断所有容器是否都已从运行时和 podStatus 中移除。
 func AllContainersRestartCleanedUp(pod *v1.Pod, podStatus *PodStatus) bool {
 	for c := range podutil.ContainerIter(&pod.Spec, podutil.Containers|podutil.InitContainers) {
 		if podStatus.FindContainerStatusByName(c.Name) != nil {
@@ -190,19 +189,18 @@ func AllContainersRestartCleanedUp(pod *v1.Pod, podStatus *PodStatus) bool {
 	return true
 }
 
-// HashContainer returns the hash of the container. It is used to compare
-// the running container with its desired spec.
-// Note: remember to update hashValues in container_hash_test.go as well.
+// HashContainer 返回容器的哈希，用于比较运行中的容器与其期望 spec 是否一致。
+// 注意：修改哈希字段时，也要同步更新 container_hash_test.go 中的 hashValues。
 func HashContainer(container *v1.Container) uint64 {
 	hash := fnv.New32a()
+	// 只哈希影响运行状态的字段，使哈希能可靠反映容器是否需要重建。
 	containerJSON, _ := json.Marshal(pickFieldsToHash(container))
 	hashutil.DeepHashObject(hash, containerJSON)
 	return uint64(hash.Sum32())
 }
 
-// pickFieldsToHash pick fields that will affect the running status of the container for hash,
-// currently this field range only contains `image` and `name`.
-// Note: this list must be updated if ever kubelet wants to allow mutations to other fields.
+// pickFieldsToHash 挑选会影响容器运行状态的字段用于哈希，
+// 目前只包含 `image` 与 `name`。若 kubelet 将来允许变更其他字段，必须同步扩充此列表。
 func pickFieldsToHash(container *v1.Container) map[string]string {
 	retval := map[string]string{
 		"name":  container.Name,
@@ -211,8 +209,7 @@ func pickFieldsToHash(container *v1.Container) map[string]string {
 	return retval
 }
 
-// envVarsToMap constructs a map of environment name to value from a slice
-// of env vars.
+// envVarsToMap 把 EnvVar 切片转换为“环境变量名 -> 值”的映射。
 func envVarsToMap(envs []EnvVar) map[string]string {
 	result := map[string]string{}
 	for _, env := range envs {
@@ -221,8 +218,7 @@ func envVarsToMap(envs []EnvVar) map[string]string {
 	return result
 }
 
-// v1EnvVarsToMap constructs a map of environment name to value from a slice
-// of env vars.
+// v1EnvVarsToMap 把 v1.EnvVar 切片转换为“环境变量名 -> 值”的映射。
 func v1EnvVarsToMap(envs []v1.EnvVar) map[string]string {
 	result := map[string]string{}
 	for _, env := range envs {
@@ -232,12 +228,13 @@ func v1EnvVarsToMap(envs []v1.EnvVar) map[string]string {
 	return result
 }
 
-// ExpandContainerCommandOnlyStatic substitutes only static environment variable values from the
-// container environment definitions. This does *not* include valueFrom substitutions. Note any unbound
-// variables will not be expanded or empty substituted, i.e. "echo $(MISSING) => echo $(MISSING)".
+// ExpandContainerCommandOnlyStatic 仅用容器环境定义中的静态变量值做替换，
+// 不处理 valueFrom 引用。未绑定的变量既不会展开也不会被替换为空串，
+// 即 "echo $(MISSING) => echo $(MISSING)"。
 // TODO: callers should use ExpandContainerCommandAndArgs with a fully resolved list of environment.
 func ExpandContainerCommandOnlyStatic(containerCommand []string, envs []v1.EnvVar) (command []string) {
 	mapping := expansion.MappingFuncFor(v1EnvVarsToMap(envs))
+	// 逐个展开命令参数；空命令直接返回空切片。
 	if len(containerCommand) != 0 {
 		for _, cmd := range containerCommand {
 			command = append(command, expansion.Expand(cmd, mapping))
@@ -246,11 +243,12 @@ func ExpandContainerCommandOnlyStatic(containerCommand []string, envs []v1.EnvVa
 	return command
 }
 
-// ExpandContainerVolumeMounts expands the subpath of the given VolumeMount by replacing variable references with the values of given EnvVar.
+// ExpandContainerVolumeMounts 用给定 EnvVar 的值替换变量引用，展开 VolumeMount 的 subpath。
 func ExpandContainerVolumeMounts(mount v1.VolumeMount, envs []EnvVar) (string, error) {
 
 	envmap := envVarsToMap(envs)
 	missingKeys := sets.New[string]()
+	// 收集所有缺失的变量名，一次性报错，方便用户一次修正所有配置错误。
 	expanded := expansion.Expand(mount.SubPathExpr, func(key string) string {
 		value, ok := envmap[key]
 		if !ok || len(value) == 0 {
@@ -265,7 +263,7 @@ func ExpandContainerVolumeMounts(mount v1.VolumeMount, envs []EnvVar) (string, e
 	return expanded, nil
 }
 
-// ExpandContainerCommandAndArgs expands the given Container's command by replacing variable references `with the values of given EnvVar.
+// ExpandContainerCommandAndArgs 用给定 EnvVar 的值替换变量引用，展开 Container 的 command 与 args。
 func ExpandContainerCommandAndArgs(container *v1.Container, envs []EnvVar) (command []string, args []string) {
 	mapping := expansion.MappingFuncFor(envVarsToMap(envs))
 
@@ -284,26 +282,29 @@ func ExpandContainerCommandAndArgs(container *v1.Container, envs []EnvVar) (comm
 	return command, args
 }
 
-// FilterEventRecorder creates an event recorder to record object's event except implicitly required container's, like infra container.
+// FilterEventRecorder 包装事件记录器，过滤掉基础设施容器等隐式容器产生的事件。
 func FilterEventRecorder(recorder record.EventRecorderLogger) record.EventRecorderLogger {
 	return &innerEventRecorder{
 		recorder: recorder,
 	}
 }
 
+// innerEventRecorder 是可过滤事件对象的事件记录器包装。
 type innerEventRecorder struct {
 	recorder record.EventRecorderLogger
 }
 
+// WithLogger 返回绑定了指定 logger 的新事件记录器，底层记录器也同步切换 logger。
 func (irecorder *innerEventRecorder) WithLogger(logger klog.Logger) record.EventRecorderLogger {
 	return &innerEventRecorder{
 		recorder: irecorder.recorder.WithLogger(logger),
 	}
 }
 
+// shouldRecordEvent 判断事件对象是否需要记录，仅接受非隐式容器的 ObjectReference。
 func (irecorder *innerEventRecorder) shouldRecordEvent(object runtime.Object) (*v1.ObjectReference, bool) {
 	if ref, ok := object.(*v1.ObjectReference); ok {
-		// this check is needed AFTER the cast. See https://github.com/kubernetes/kubernetes/issues/95552
+		// 先断言再判 nil：类型化 nil 指针不会让断言失败，必须在断言后检查（见 issue 95552）。
 		if ref == nil {
 			return nil, false
 		}
@@ -314,12 +315,14 @@ func (irecorder *innerEventRecorder) shouldRecordEvent(object runtime.Object) (*
 	return nil, false
 }
 
+// Event 记录事件，隐式容器产生的事件会被丢弃。
 func (irecorder *innerEventRecorder) Event(object runtime.Object, eventtype, reason, message string) {
 	if ref, ok := irecorder.shouldRecordEvent(object); ok {
 		irecorder.recorder.Event(ref, eventtype, reason, message)
 	}
 }
 
+// Eventf 记录格式化事件，隐式容器产生的事件会被丢弃。
 func (irecorder *innerEventRecorder) Eventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{}) {
 	if ref, ok := irecorder.shouldRecordEvent(object); ok {
 		irecorder.recorder.Eventf(ref, eventtype, reason, messageFmt, args...)
@@ -327,6 +330,7 @@ func (irecorder *innerEventRecorder) Eventf(object runtime.Object, eventtype, re
 
 }
 
+// AnnotatedEventf 记录带注解的格式化事件，隐式容器产生的事件会被丢弃。
 func (irecorder *innerEventRecorder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
 	if ref, ok := irecorder.shouldRecordEvent(object); ok {
 		//nolint:forbidigo // Legacy usage
@@ -335,13 +339,12 @@ func (irecorder *innerEventRecorder) AnnotatedEventf(object runtime.Object, anno
 
 }
 
-// IsHostNetworkPod returns whether the host networking requested for the given Pod.
-// Pod must not be nil.
+// IsHostNetworkPod 返回给定 Pod 是否使用宿主网络。Pod 不能为 nil。
 func IsHostNetworkPod(pod *v1.Pod) bool {
 	return pod.Spec.HostNetwork
 }
 
-// ConvertPodStatusToRunningPod returns Pod given PodStatus and container runtime string.
+// ConvertPodStatusToRunningPod 根据 PodStatus 和容器运行时名称构造 Pod。
 // TODO(random-liu): Convert PodStatus to running Pod, should be deprecated soon
 func ConvertPodStatusToRunningPod(runtimeName string, podStatus *PodStatus) Pod {
 	runningPod := Pod{
@@ -349,6 +352,7 @@ func ConvertPodStatusToRunningPod(runtimeName string, podStatus *PodStatus) Pod 
 		Name:      podStatus.Name,
 		Namespace: podStatus.Namespace,
 	}
+	// 只把运行中的容器纳入结果，已退出的容器不属于“运行中的 pod”。
 	for _, containerStatus := range podStatus.ContainerStatuses {
 		if containerStatus.State != ContainerStateRunning {
 			continue
@@ -366,7 +370,7 @@ func ConvertPodStatusToRunningPod(runtimeName string, podStatus *PodStatus) Pod 
 		runningPod.Containers = append(runningPod.Containers, container)
 	}
 
-	// Populate sandboxes in kubecontainer.Pod
+	// 把 sandbox 也作为容器填入 kubecontainer.Pod，使 PLEG 能以统一形式处理。
 	for _, sandbox := range podStatus.SandboxStatuses {
 		runningPod.Sandboxes = append(runningPod.Sandboxes, &Container{
 			ID:    ContainerID{Type: runtimeName, ID: sandbox.Id},
@@ -376,10 +380,9 @@ func ConvertPodStatusToRunningPod(runtimeName string, podStatus *PodStatus) Pod 
 	return runningPod
 }
 
-// SandboxToContainerState converts runtimeapi.PodSandboxState to
-// kubecontainer.State.
-// This is only needed because we need to return sandboxes as if they were
-// kubecontainer.Containers to avoid substantial changes to PLEG.
+// SandboxToContainerState 把 runtimeapi.PodSandboxState 转换为 kubecontainer.State。
+// 之所以需要转换，是为了把 sandbox 当作 kubecontainer.Container 返回，
+// 避免对 PLEG 做大改动。
 // TODO: Remove this once it becomes obsolete.
 func SandboxToContainerState(state runtimeapi.PodSandboxState) State {
 	switch state {
@@ -391,9 +394,10 @@ func SandboxToContainerState(state runtimeapi.PodSandboxState) State {
 	return ContainerStateUnknown
 }
 
-// GetContainerSpec gets the container spec by containerName.
+// GetContainerSpec 按容器名从 pod 中查找容器 spec。
 func GetContainerSpec(pod *v1.Pod, containerName string) *v1.Container {
 	var containerSpec *v1.Container
+	// 命中即返回 false 提前终止遍历，无需检查其余容器。
 	podutil.VisitContainers(&pod.Spec, podutil.AllFeatureEnabledContainers(), func(c *v1.Container, containerType podutil.ContainerType) bool {
 		if containerName == c.Name {
 			containerSpec = c
@@ -404,9 +408,10 @@ func GetContainerSpec(pod *v1.Pod, containerName string) *v1.Container {
 	return containerSpec
 }
 
-// HasPrivilegedContainer returns true if any of the containers in the pod are privileged.
+// HasPrivilegedContainer 返回 pod 中是否有任一容器开启了特权模式。
 func HasPrivilegedContainer(pod *v1.Pod) bool {
 	var hasPrivileged bool
+	// 找到第一个特权容器即可提前返回，无需遍历全部容器。
 	podutil.VisitContainers(&pod.Spec, podutil.AllFeatureEnabledContainers(), func(c *v1.Container, containerType podutil.ContainerType) bool {
 		if c.SecurityContext != nil && c.SecurityContext.Privileged != nil && *c.SecurityContext.Privileged {
 			hasPrivileged = true
@@ -417,9 +422,10 @@ func HasPrivilegedContainer(pod *v1.Pod) bool {
 	return hasPrivileged
 }
 
-// HasWindowsHostProcessContainer returns true if any of the containers in a pod are HostProcess containers.
+// HasWindowsHostProcessContainer 返回 pod 中是否有任一容器是 HostProcess 容器。
 func HasWindowsHostProcessContainer(pod *v1.Pod) bool {
 	var hasHostProcess bool
+	// 找到第一个 HostProcess 容器即可提前终止遍历。
 	podutil.VisitContainers(&pod.Spec, podutil.AllFeatureEnabledContainers(), func(c *v1.Container, containerType podutil.ContainerType) bool {
 		if sc.HasWindowsHostProcessRequest(pod, c) {
 			hasHostProcess = true
@@ -431,9 +437,10 @@ func HasWindowsHostProcessContainer(pod *v1.Pod) bool {
 	return hasHostProcess
 }
 
-// AllContainersAreWindowsHostProcess returns true if all containers in a pod are HostProcess containers.
+// AllContainersAreWindowsHostProcess 返回 pod 中所有容器是否都是 HostProcess 容器。
 func AllContainersAreWindowsHostProcess(pod *v1.Pod) bool {
 	allHostProcess := true
+	// 只要发现一个非 HostProcess 容器即可提前终止并判定为 false。
 	podutil.VisitContainers(&pod.Spec, podutil.AllFeatureEnabledContainers(), func(c *v1.Container, containerType podutil.ContainerType) bool {
 		if !sc.HasWindowsHostProcessRequest(pod, c) {
 			allHostProcess = false
@@ -445,7 +452,7 @@ func AllContainersAreWindowsHostProcess(pod *v1.Pod) bool {
 	return allHostProcess
 }
 
-// MakePortMappings creates internal port mapping from api port mapping.
+// MakePortMappings 把 API 的端口定义转换为内部端口映射。
 func MakePortMappings(logger klog.Logger, container *v1.Container) (ports []PortMapping) {
 	names := make(map[string]struct{})
 	for _, p := range container.Ports {
@@ -456,9 +463,8 @@ func MakePortMappings(logger klog.Logger, container *v1.Container) (ports []Port
 			HostIP:        p.HostIP,
 		}
 
-		// We need to determine the address family this entry applies to. We do this to ensure
-		// duplicate containerPort / protocol rules work across different address families.
-		// https://github.com/kubernetes/kubernetes/issues/82373
+		// 需要确定该条目适用的地址族，确保不同地址族下重复的 containerPort/protocol
+		// 规则互不冲突（见 https://github.com/kubernetes/kubernetes/issues/82373）。
 		family := "any"
 		if p.HostIP != "" {
 			if utilsnet.IsIPv6String(p.HostIP) {
@@ -470,10 +476,11 @@ func MakePortMappings(logger klog.Logger, container *v1.Container) (ports []Port
 
 		var name = p.Name
 		if name == "" {
+			// 无显式名称时用地址族、协议与端口组合生成唯一名称，保证映射可唯一标识。
 			name = fmt.Sprintf("%s-%s-%s:%d:%d", family, p.Protocol, p.HostIP, p.ContainerPort, p.HostPort)
 		}
 
-		// Protect against a port name being used more than once in a container.
+		// 同名端口只保留第一个，防止重复定义造成运行时行为歧义，并记录日志提示用户。
 		if _, ok := names[name]; ok {
 			logger.Info("Port name conflicted, it is defined more than once", "portName", name)
 			continue
@@ -484,15 +491,14 @@ func MakePortMappings(logger klog.Logger, container *v1.Container) (ports []Port
 	return
 }
 
-// HasAnyRegularContainerStarted returns true if any regular container has
-// started, which indicates all init containers have been initialized.
-// Deprecated: This function is not accurate when its pod sandbox is recreated.
-// Use HasAnyActiveRegularContainerStarted instead.
+// HasAnyRegularContainerStarted 返回是否有普通容器已启动，这表示所有 init 容器均已完成初始化。
+// Deprecated: 该函数在 pod sandbox 重建后并不准确，请改用 HasAnyActiveRegularContainerStarted。
 func HasAnyRegularContainerStarted(spec *v1.PodSpec, statuses []v1.ContainerStatus) bool {
 	if len(statuses) == 0 {
 		return false
 	}
 
+	// 用容器名集合过滤，仅关注普通容器，跳过 init 容器。
 	containerNames := make(map[string]struct{})
 	for _, c := range spec.Containers {
 		containerNames[c.Name] = struct{}{}
@@ -510,19 +516,20 @@ func HasAnyRegularContainerStarted(spec *v1.PodSpec, statuses []v1.ContainerStat
 	return false
 }
 
-// HasAnyActiveRegularContainerStarted returns true if any regular container of
-// the current pod sandbox has started, which indicates all init containers
-// have been initialized.
+// HasAnyActiveRegularContainerStarted 返回当前 pod sandbox 中是否有普通容器已启动，
+// 这表示所有 init 容器均已完成初始化。
 func HasAnyActiveRegularContainerStarted(spec *v1.PodSpec, podStatus *PodStatus) bool {
 	if podStatus == nil {
 		return false
 	}
 
+	// 先收集普通容器名称，便于后续与活跃状态快速比对。
 	containerNames := sets.New[string]()
 	for _, c := range spec.Containers {
 		containerNames.Insert(c.Name)
 	}
 
+	// 只检查活跃容器的状态，避免把旧 sandbox 中遗留的容器误判为已启动。
 	for _, status := range podStatus.ActiveContainerStatuses {
 		if !containerNames.Has(status.Name) {
 			continue

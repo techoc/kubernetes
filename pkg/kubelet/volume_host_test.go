@@ -26,14 +26,21 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// recordingPodCertificateManager 记录最近一次凭据请求的参数，用于验证参数顺序。
 type recordingPodCertificateManager struct {
-	Namespace   string
-	PodName     string
-	PodUID      string
-	VolumeName  string
+	// Namespace 是记录的命名空间。
+	Namespace string
+	// PodName 是记录的 Pod 名称。
+	PodName string
+	// PodUID 是记录的 Pod UID。
+	PodUID string
+	// VolumeName 是记录的卷名称。
+	VolumeName string
+	// SourceIndex 是记录的卷源索引。
 	SourceIndex int
 }
 
+// GetPodCertificateCredentialBundle 记录参数并返回空结果。
 func (f *recordingPodCertificateManager) GetPodCertificateCredentialBundle(ctx context.Context, namespace, podName, podUID, volumeName string, sourceIndex int) ([]byte, []byte, error) {
 	f.Namespace = namespace
 	f.PodName = podName
@@ -44,19 +51,22 @@ func (f *recordingPodCertificateManager) GetPodCertificateCredentialBundle(ctx c
 	return nil, nil, nil
 }
 
+// TrackPod 是空实现。
 func (f *recordingPodCertificateManager) TrackPod(ctx context.Context, pod *corev1.Pod) {}
 
+// ForgetPod 是空实现。
 func (f *recordingPodCertificateManager) ForgetPod(ctx context.Context, pod *corev1.Pod) {}
 
+// MetricReport 返回空的指标报告。
 func (f *recordingPodCertificateManager) MetricReport() *podcertificate.MetricReport {
 	return &podcertificate.MetricReport{}
 }
 
-// Check that GetPodCertificateCredentialBundle forwards its arguments in the
-// correct order.  Seems excessive, but we got here because I put the arguments
-// in the wrong order...
+// 验证 GetPodCertificateCredentialBundle 按正确顺序转发参数。
+// 看似多余，但此前确实出现过参数顺序写反的问题。
 func TestGetPodCertificateCredentialBundle(t *testing.T) {
 	tCtx := ktesting.Init(t)
+	// 用记录参数的管理器验证参数传递顺序。
 	recorder := &recordingPodCertificateManager{}
 
 	kvh := &kubeletVolumeHost{
@@ -68,6 +78,7 @@ func TestGetPodCertificateCredentialBundle(t *testing.T) {
 		t.Fatalf("Unexpected error calling GetPodCertificateCredentialBundle: %v", err)
 	}
 
+	// 期望参数按 (namespace, podName, podUID, volumeName, sourceIndex) 顺序传入。
 	want := &recordingPodCertificateManager{
 		Namespace:   "namespace",
 		PodName:     "pod-name",

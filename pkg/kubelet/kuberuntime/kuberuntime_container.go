@@ -64,24 +64,24 @@ import (
 	"k8s.io/utils/buffer"
 )
 
+// 容器生命周期各阶段失败时使用的哨兵错误，便于把错误归类到具体步骤。
 var (
-	// ErrCreateContainerConfig - failed to create container config
+	// ErrCreateContainerConfig 表示创建容器配置失败。
 	ErrCreateContainerConfig = errors.New("CreateContainerConfigError")
-	// ErrPreCreateHook - failed to execute PreCreateHook
+	// ErrPreCreateHook 表示执行 PreCreateHook 失败。
 	ErrPreCreateHook = errors.New("PreCreateHookError")
-	// ErrCreateContainer - failed to create container
+	// ErrCreateContainer 表示创建容器失败。
 	ErrCreateContainer = errors.New("CreateContainerError")
-	// ErrPreStartHook - failed to execute PreStartHook
+	// ErrPreStartHook 表示执行 PreStartHook 失败。
 	ErrPreStartHook = errors.New("PreStartHookError")
-	// ErrPostStartHook - failed to execute PostStartHook
+	// ErrPostStartHook 表示执行 PostStartHook 失败。
 	ErrPostStartHook = errors.New("PostStartHookError")
 )
 
-// recordContainerEvent should be used by the runtime manager for all container related events.
-// it has sanity checks to ensure that we do not write events that can abuse our masters.
-// in particular, it ensures that a containerID never appears in an event message as that
-// is prone to causing a lot of distinct events that do not count well.
-// it replaces any reference to a containerID with the containerName which is stable, and is what users know.
+// recordContainerEvent 供运行时管理器记录所有容器相关事件。
+// 它做了一些健全性检查，避免写入可能压垮 apiserver 的事件：特别地，
+// 保证事件消息中不出现 containerID，因为 containerID 会导致大量难以聚合的
+// 独立事件。所有对 containerID 的引用都会被替换为稳定且用户熟悉的 containerName。
 func (m *kubeGenericRuntimeManager) recordContainerEvent(ctx context.Context, pod *v1.Pod, container *v1.Container, containerID, eventType, reason, message string, args ...interface{}) {
 	logger := klog.FromContext(ctx)
 	ref, err := kubecontainer.GenerateContainerRef(pod, container)
@@ -93,27 +93,27 @@ func (m *kubeGenericRuntimeManager) recordContainerEvent(ctx context.Context, po
 	if len(args) > 0 {
 		eventMessage = fmt.Sprintf(message, args...)
 	}
-	// this is a hack, but often the error from the runtime includes the containerID
-	// which kills our ability to deduplicate events.  this protection makes a huge
-	// difference in the number of unique events
+	// 这是一种变通：运行时返回的错误经常包含 containerID，
+	// 会破坏事件去重能力。该处理能显著减少独立事件数量。
 	if containerID != "" {
 		eventMessage = strings.Replace(eventMessage, containerID, container.Name, -1)
 	}
 	m.recorder.WithLogger(logger).Event(ref, eventType, reason, eventMessage)
 }
 
-// startSpec wraps the spec required to start a container, either a regular/init container
-// or an ephemeral container. Ephemeral containers contain all the fields of regular/init
-// containers, plus some additional fields. In both cases startSpec.container will be set.
+// startSpec 封装启动容器所需的 spec，既可以是普通/init 容器，也可以是临时容器。
+// 临时容器包含普通/init 容器的全部字段以及额外字段。两种情况下 startSpec.container 都会被设置。
 type startSpec struct {
 	container          *v1.Container
 	ephemeralContainer *v1.EphemeralContainer
 }
 
+// containerStartSpec 为普通/init 容器构造 startSpec。
 func containerStartSpec(c *v1.Container) *startSpec {
 	return &startSpec{container: c}
 }
 
+// ephemeralContainerStartSpec 为临时容器构造 startSpec。
 func ephemeralContainerStartSpec(ec *v1.EphemeralContainer) *startSpec {
 	return &startSpec{
 		container:          (*v1.Container)(&ec.EphemeralContainerCommon),
@@ -121,10 +121,9 @@ func ephemeralContainerStartSpec(ec *v1.EphemeralContainer) *startSpec {
 	}
 }
 
-// getTargetID returns the kubecontainer.ContainerID for ephemeral container namespace
-// targeting. The target is stored as EphemeralContainer.TargetContainerName, which must be
-// resolved to a ContainerID using podStatus. The target container must already exist, which
-// usually isn't a problem since ephemeral containers aren't allowed at pod creation time.
+// getTargetID 返回用于临时容器命名空间目标的 kubecontainer.ContainerID。
+// 目标保存在 EphemeralContainer.TargetContainerName 中，必须通过 podStatus 解析为
+// ContainerID。目标容器必须已经存在，这通常不是问题，因为 Pod 创建时不允许临时容器。
 func (s *startSpec) getTargetID(podStatus *kubecontainer.PodStatus) (*kubecontainer.ContainerID, error) {
 	if s.ephemeralContainer == nil || s.ephemeralContainer.TargetContainerName == "" {
 		return nil, nil
@@ -138,8 +137,11 @@ func (s *startSpec) getTargetID(podStatus *kubecontainer.PodStatus) (*kubecontai
 	return &targetStatus.ID, nil
 }
 
+// calcRestartCountByLogDir 通过日志目录中的日志文件名推断重启次数。
+// 节点重启后某些运行时会清空自身状态，导致重启计数归零并从 0.log 覆盖旧日志；
+// 这里以目录中最新的 {restartCount}.log 为准。
 func calcRestartCountByLogDir(path string) (int, error) {
-	// if the path doesn't exist then it's not an error
+	// 路径不存在不算错误
 	if _, err := os.Stat(path); err != nil {
 		return 0, nil
 	}
@@ -162,8 +164,8 @@ func calcRestartCountByLogDir(path string) (int, error) {
 		}
 		count, err := strconv.Atoi(matches[1])
 		if err != nil {
-			// unlikely kubelet created this file,
-			// likely custom file with random numbers as a name
+			// kubelet 不太可能创建这种文件，
+			// 更可能是以随机数字命名的自定义文件
 			continue
 		}
 		count++
@@ -174,10 +176,10 @@ func calcRestartCountByLogDir(path string) (int, error) {
 	return restartCount, nil
 }
 
+// getPodRuntimeHandler 返回 Pod 使用的 runtime handler 名称。
 func (m *kubeGenericRuntimeManager) getPodRuntimeHandler(pod *v1.Pod) (podRuntimeHandler string, err error) {
-	// If RuntimeClassInImageCriAPI feature gate is enabled, pass runtimehandler
-	// information for the runtime class specified. If not runtime class is
-	// specified, then pass ""
+	// RuntimeClassInImageCriAPI 特性门控开启时，传递指定 runtime class 的
+	// runtime handler 信息；未指定 runtime class 时传递空字符串。
 	if utilfeature.DefaultFeatureGate.Enabled(features.RuntimeClassInImageCriAPI) {
 		if pod.Spec.RuntimeClassName != nil && *pod.Spec.RuntimeClassName != "" {
 			podRuntimeHandler, err = m.runtimeClassManager.LookupRuntimeHandler(pod.Spec.RuntimeClassName)
@@ -191,17 +193,17 @@ func (m *kubeGenericRuntimeManager) getPodRuntimeHandler(pod *v1.Pod) (podRuntim
 	return podRuntimeHandler, nil
 }
 
-// startContainer starts a container and returns a message indicates why it is failed on error.
-// It starts the container through the following steps:
-// * pull the image
-// * create the container
-// * start the container
-// * run the post start lifecycle hooks (if applicable)
+// startContainer 启动容器，出错时返回说明失败原因的消息。
+// 启动流程如下：
+// * 拉取镜像
+// * 创建容器
+// * 启动容器
+// * 执行 post start 生命周期钩子（如适用）
 func (m *kubeGenericRuntimeManager) startContainer(ctx context.Context, podSandboxID string, podSandboxConfig *runtimeapi.PodSandboxConfig, spec *startSpec, pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, podIP string, podIPs []string, imageVolumes kubecontainer.ImageVolumes) (string, error) {
 	logger := klog.FromContext(ctx)
 	container := spec.container
 
-	// Step 1: pull the image.
+	// 步骤 1：拉取镜像。
 	podRuntimeHandler, err := m.getPodRuntimeHandler(pod)
 	if err != nil {
 		return "", err
@@ -219,23 +221,18 @@ func (m *kubeGenericRuntimeManager) startContainer(ctx context.Context, podSandb
 		return msg, err
 	}
 
-	// Step 2: create the container.
-	// For a new container, the RestartCount should be 0
+	// 步骤 2：创建容器。
+	// 新容器的 RestartCount 应为 0
 	restartCount := 0
 	containerStatus := podStatus.FindContainerStatusByName(container.Name)
 	if containerStatus != nil {
 		restartCount = containerStatus.RestartCount + 1
 	} else {
-		// The container runtime keeps state on container statuses and
-		// what the container restart count is. When nodes are rebooted
-		// some container runtimes clear their state which causes the
-		// restartCount to be reset to 0. This causes the logfile to
-		// start at 0.log, which either overwrites or appends to the
-		// already existing log.
+		// 容器运行时保存容器状态和重启计数。节点重启后某些运行时会清空状态，
+		// 导致 restartCount 归零，日志从 0.log 开始，从而覆盖或追加到已有日志。
 		//
-		// We are checking to see if the log directory exists, and find
-		// the latest restartCount by checking the log name -
-		// {restartCount}.log - and adding 1 to it.
+		// 因此检查日志目录是否存在，并通过日志文件名 {restartCount}.log
+		// 找到最新的 restartCount 再加 1。
 		logDir := BuildContainerLogsDirectory(m.podLogsDirectory, pod.Namespace, pod.Name, pod.UID, container.Name)
 		restartCount, err = calcRestartCountByLogDir(logDir)
 		if err != nil {
@@ -261,7 +258,7 @@ func (m *kubeGenericRuntimeManager) startContainer(ctx context.Context, podSandb
 		return s.Message(), ErrCreateContainerConfig
 	}
 
-	// When creating a container, mark the resources as actuated.
+	// 创建容器时将资源标记为已生效。
 	if err := m.setActuatedContainerResources(logger, pod, container); err != nil {
 		m.recordContainerEvent(ctx, pod, container, "", v1.EventTypeWarning, events.FailedToCreateContainer, "Error: %v", err)
 		return err.Error(), ErrCreateContainerConfig
@@ -288,7 +285,7 @@ func (m *kubeGenericRuntimeManager) startContainer(ctx context.Context, podSandb
 	}
 	m.recordContainerEvent(ctx, pod, container, containerID, v1.EventTypeNormal, events.CreatedContainer, "Container created")
 
-	// Step 3: start the container.
+	// 步骤 3：启动容器。
 	err = m.runtimeService.StartContainer(ctx, containerID)
 	if err != nil {
 		s, _ := grpcstatus.FromError(err)
@@ -297,18 +294,16 @@ func (m *kubeGenericRuntimeManager) startContainer(ctx context.Context, podSandb
 	}
 	m.recordContainerEvent(ctx, pod, container, containerID, v1.EventTypeNormal, events.StartedContainer, "Container started")
 
-	// Symlink container logs to the legacy container log location for cluster logging
-	// support.
-	// TODO(random-liu): Remove this after cluster logging supports CRI container log path.
+	// 为兼容集群日志，把容器日志软链接到旧版容器日志路径。
+	// TODO(random-liu): 集群日志支持 CRI 容器日志路径后移除此逻辑。
 	containerMeta := containerConfig.GetMetadata()
 	sandboxMeta := podSandboxConfig.GetMetadata()
 	legacySymlink := legacyLogSymlink(containerID, containerMeta.Name, sandboxMeta.Name,
 		sandboxMeta.Namespace)
 	containerLog := filepath.Join(podSandboxConfig.LogDirectory, containerConfig.LogPath)
-	// only create legacy symlink if containerLog path exists (or the error is not IsNotExist).
-	// Because if containerLog path does not exist, only dangling legacySymlink is created.
-	// This dangling legacySymlink is later removed by container gc, so it does not make sense
-	// to create it in the first place. it happens when journald logging driver is used with docker.
+	// 仅在 containerLog 路径存在（或错误不是 IsNotExist）时创建旧版软链接。
+	// 若 containerLog 不存在，只会生成悬空的 legacySymlink，稍后会被容器 GC 移除，
+	// 因此一开始就不应创建。使用 docker 的 journald 日志驱动时会出现这种情况。
 	if _, err := m.osInterface.Stat(containerLog); !os.IsNotExist(err) {
 		if err := m.osInterface.Symlink(containerLog, legacySymlink); err != nil {
 			logger.Error(err, "Failed to create legacy symbolic link", "path", legacySymlink,
@@ -316,7 +311,7 @@ func (m *kubeGenericRuntimeManager) startContainer(ctx context.Context, podSandb
 		}
 	}
 
-	// Step 4: execute the post start hook.
+	// 步骤 4：执行 post start 钩子。
 	if container.Lifecycle != nil && container.Lifecycle.PostStart != nil {
 		kubeContainerID := kubecontainer.ContainerID{
 			Type: m.runtimeName,
@@ -326,7 +321,7 @@ func (m *kubeGenericRuntimeManager) startContainer(ctx context.Context, podSandb
 		if handlerErr != nil {
 			logger.Error(handlerErr, "Failed to execute PostStartHook", "pod", klog.KObj(pod),
 				"podUID", pod.UID, "containerName", container.Name, "containerID", kubeContainerID.String())
-			// do not record the message in the event so that secrets won't leak from the server.
+			// 事件中不记录消息内容，避免泄露服务端 secret。
 			m.recordContainerEvent(ctx, pod, container, kubeContainerID.ID, v1.EventTypeWarning, events.FailedPostStartHook, "PostStartHook failed")
 			if err := m.killContainer(ctx, pod, kubeContainerID, container.Name, "FailedPostStartHook", reasonFailedPostStartHook, nil, nil); err != nil {
 				logger.Error(err, "Failed to kill container", "pod", klog.KObj(pod),
@@ -339,7 +334,7 @@ func (m *kubeGenericRuntimeManager) startContainer(ctx context.Context, podSandb
 	return "", nil
 }
 
-// generateContainerConfig generates container config for kubelet runtime v1.
+// generateContainerConfig 为 kubelet runtime v1 生成容器配置。
 func (m *kubeGenericRuntimeManager) generateContainerConfig(ctx context.Context, container *v1.Container, pod *v1.Pod, restartCount int, podIP, imageRef string, podIPs []string, nsTarget *kubecontainer.ContainerID, imageVolumes kubecontainer.ImageVolumes) (*runtimeapi.ContainerConfig, func(), error) {
 	opts, cleanupAction, err := m.runtimeHelper.GenerateRunContainerOptions(ctx, pod, container, podIP, podIPs, imageVolumes)
 	if err != nil {
@@ -351,7 +346,7 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(ctx context.Context,
 		return nil, cleanupAction, err
 	}
 
-	// Verify RunAsNonRoot. Non-root verification only supports numeric user.
+	// 校验 RunAsNonRoot。非 root 校验只支持数字用户。
 	if err := verifyRunAsNonRoot(ctx, pod, container, uid, username); err != nil {
 		return nil, cleanupAction, err
 	}
@@ -388,12 +383,12 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(ctx context.Context,
 	if stopsignal != nil {
 		config.StopSignal = *stopsignal
 	}
-	// set platform specific configurations.
+	// 设置平台相关的配置。
 	if err := m.applyPlatformSpecificContainerConfig(ctx, config, container, pod, uid, username, nsTarget); err != nil {
 		return nil, cleanupAction, err
 	}
 
-	// set environment variables
+	// 设置环境变量
 	envs := make([]*runtimeapi.KeyValue, len(opts.Envs))
 	for idx := range opts.Envs {
 		e := opts.Envs[idx]
@@ -407,6 +402,7 @@ func (m *kubeGenericRuntimeManager) generateContainerConfig(ctx context.Context,
 	return config, cleanupAction, nil
 }
 
+// updateContainerResources 把容器的资源变更下发给运行时，成功后记录为已生效。
 func (m *kubeGenericRuntimeManager) updateContainerResources(ctx context.Context, pod *v1.Pod, container *v1.Container, containerID kubecontainer.ContainerID) error {
 	logger := klog.FromContext(ctx)
 	containerResources := m.generateContainerResources(ctx, pod, container)
@@ -415,11 +411,14 @@ func (m *kubeGenericRuntimeManager) updateContainerResources(ctx context.Context
 	}
 	err := m.runtimeService.UpdateContainerResources(ctx, containerID.ID, containerResources)
 	if err == nil {
+		// 仅在运行时更新成功后才记录已生效资源，避免把未落地的配置当作实际状态。
 		err = m.setActuatedContainerResources(logger, pod, container)
 	}
 	return err
 }
 
+// setActuatedContainerResources 记录容器当前实际生效的资源。
+// 开启 Pod 级垂直扩缩容时，limit 需按 Pod 与容器资源的合并结果计算。
 func (m *kubeGenericRuntimeManager) setActuatedContainerResources(logger klog.Logger, pod *v1.Pod, container *v1.Container) error {
 	containerResources := container.Resources
 	if utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodLevelResourcesVerticalScaling) {
@@ -429,6 +428,7 @@ func (m *kubeGenericRuntimeManager) setActuatedContainerResources(logger klog.Lo
 	return m.actuatedState.SetContainerResources(logger, pod.UID, container.Name, containerResources)
 }
 
+// updatePodSandboxResources 更新 sandbox 的 Pod 级资源，属于尽力而为的操作。
 func (m *kubeGenericRuntimeManager) updatePodSandboxResources(ctx context.Context, sandboxID string, pod *v1.Pod, podResources *cm.ResourceConfig) error {
 	logger := klog.FromContext(ctx)
 	podResourcesRequest := m.generateUpdatePodSandboxResourcesRequest(sandboxID, pod, podResources)
@@ -439,10 +439,10 @@ func (m *kubeGenericRuntimeManager) updatePodSandboxResources(ctx context.Contex
 	_, err := m.runtimeService.UpdatePodSandboxResources(ctx, podResourcesRequest)
 	if err != nil {
 		stat, _ := grpcstatus.FromError(err)
-		// Containerd 2.2 returns an error with code 'Unknown' and message 'not implemented yet' instead of
-		// an error with code 'Unimplemented'.
-		// This is being fixed in https://github.com/containerd/containerd/pull/13023, so this hardcoded
-		// string check can be removed once containerd 2.2 is no longer supported.
+
+		// containerd 2.2 返回 code 为 'Unknown'、消息为 'not implemented yet' 的错误，
+		// 而不是 'Unimplemented'。该问题正在 https://github.com/containerd/containerd/pull/13023
+		// 修复，待 containerd 2.2 不再受支持后可移除这段硬编码字符串检查。
 		const unimplementedMsg = "not implemented"
 		if stat.Code() == codes.Unimplemented || (stat.Code() == codes.Unknown && strings.Contains(stat.Message(), unimplementedMsg)) {
 			logger.V(3).Info("updatePodSandboxResources failed: unimplemented; this call is best-effort: proceeding with resize", "sandboxID", sandboxID)
@@ -453,7 +453,7 @@ func (m *kubeGenericRuntimeManager) updatePodSandboxResources(ctx context.Contex
 	return nil
 }
 
-// makeDevices generates container devices for kubelet runtime v1.
+// makeDevices 为 kubelet runtime v1 生成容器设备列表。
 func makeDevices(opts *kubecontainer.RunContainerOptions) []*runtimeapi.Device {
 	devices := make([]*runtimeapi.Device, len(opts.Devices))
 
@@ -469,7 +469,7 @@ func makeDevices(opts *kubecontainer.RunContainerOptions) []*runtimeapi.Device {
 	return devices
 }
 
-// makeCDIDevices generates container CDIDevices for kubelet runtime v1.
+// makeCDIDevices 为 kubelet runtime v1 生成容器 CDI 设备列表。
 func makeCDIDevices(opts *kubecontainer.RunContainerOptions) []*runtimeapi.CDIDevice {
 	devices := make([]*runtimeapi.CDIDevice, len(opts.CDIDevices))
 
@@ -482,7 +482,7 @@ func makeCDIDevices(opts *kubecontainer.RunContainerOptions) []*runtimeapi.CDIDe
 	return devices
 }
 
-// makeMounts generates container volume mounts for kubelet runtime v1.
+// makeMounts 为 kubelet runtime v1 生成容器卷挂载列表。
 func (m *kubeGenericRuntimeManager) makeMounts(opts *kubecontainer.RunContainerOptions, container *v1.Container) []*runtimeapi.Mount {
 	volumeMounts := []*runtimeapi.Mount{}
 
@@ -504,13 +504,11 @@ func (m *kubeGenericRuntimeManager) makeMounts(opts *kubecontainer.RunContainerO
 		volumeMounts = append(volumeMounts, mount)
 	}
 
-	// The reason we create and mount the log file in here (not in kubelet) is because
-	// the file's location depends on the ID of the container, and we need to create and
-	// mount the file before actually starting the container.
+	// 在 kubelet 之外（此处）创建并挂载日志文件，是因为文件位置依赖容器 ID，
+	// 且必须在真正启动容器之前创建并挂载。
 	if opts.PodContainerDir != "" && len(container.TerminationMessagePath) != 0 {
-		// Because the PodContainerDir contains pod uid and container name which is unique enough,
-		// here we just add a random id to make the path unique for different instances
-		// of the same container.
+		// PodContainerDir 已包含 Pod UID 和容器名，足够唯一；
+		// 这里再加一个随机 id，使同一容器的不同实例路径也不同。
 		cid := makeUID()
 		containerLogPath := filepath.Join(opts.PodContainerDir, cid)
 		fs, err := m.osInterface.Create(containerLogPath)
@@ -519,15 +517,13 @@ func (m *kubeGenericRuntimeManager) makeMounts(opts *kubecontainer.RunContainerO
 		} else {
 			fs.Close()
 
-			// Chmod is needed because os.Create() ends up calling
-			// open(2) to create the file, so the final mode used is "mode &
-			// ~umask". But we want to make sure the specified mode is used
-			// in the file no matter what the umask is.
+			// 需要 Chmod，是因为 os.Create() 最终调用 open(2)，
+			// 实际模式为 "mode & ~umask"。这里确保无论 umask 如何都使用指定模式。
 			if err := m.osInterface.Chmod(containerLogPath, 0666); err != nil {
 				utilruntime.HandleError(fmt.Errorf("unable to set termination-log file permissions %q: %v", containerLogPath, err))
 			}
 
-			// Volume Mounts fail on Windows if it is not of the form C:/
+			// Windows 上卷挂载路径必须是 C:/ 形式，否则会失败
 			containerLogPath = volumeutil.MakeAbsolutePath(goruntime.GOOS, containerLogPath)
 			terminationMessagePath := volumeutil.MakeAbsolutePath(goruntime.GOOS, container.TerminationMessagePath)
 			selinuxRelabel := selinux.GetEnabled()
@@ -542,18 +538,18 @@ func (m *kubeGenericRuntimeManager) makeMounts(opts *kubecontainer.RunContainerO
 	return volumeMounts
 }
 
-// makeUID returns a randomly generated string.
+// makeUID 返回随机生成的字符串。
 func makeUID() string {
 	return fmt.Sprintf("%08x", rand.Uint32())
 }
 
-// getTerminationMessage looks on the filesystem for the provided termination message path, returning a limited
-// amount of those bytes, or returns true if the logs should be checked.
+// getTerminationMessage 在文件系统中查找给定的 termination message 路径，
+// 返回有限长度的内容；第二个返回值表示是否应回退到读取日志。
 func getTerminationMessage(status *runtimeapi.ContainerStatus, terminationMessagePath string, fallbackToLogs bool) (string, bool) {
 	if len(terminationMessagePath) == 0 {
 		return "", fallbackToLogs
 	}
-	// Volume Mounts fail on Windows if it is not of the form C:/
+	// Windows 上卷挂载路径必须是 C:/ 形式，否则会失败
 	terminationMessagePath = volumeutil.MakeAbsolutePath(goruntime.GOOS, terminationMessagePath)
 	for _, mount := range status.Mounts {
 		if mount.ContainerPath != terminationMessagePath {
@@ -572,8 +568,7 @@ func getTerminationMessage(status *runtimeapi.ContainerStatus, terminationMessag
 	return "", fallbackToLogs
 }
 
-// readLastStringFromContainerLogs attempts to read up to the max log length from the end of the CRI log represented
-// by path. It reads up to max log lines.
+// readLastStringFromContainerLogs 尝试从 path 对应的 CRI 日志末尾读取最多 max log 行。
 func (m *kubeGenericRuntimeManager) readLastStringFromContainerLogs(ctx context.Context, path string) string {
 	value := int64(kubecontainer.MaxContainerTerminationMessageLogLines)
 	buf, _ := buffer.NewTypedRingFixed[byte](kubecontainer.MaxContainerTerminationMessageLogLength)
@@ -583,19 +578,21 @@ func (m *kubeGenericRuntimeManager) readLastStringFromContainerLogs(ctx context.
 	return string(buf.Slice())
 }
 
+// convertToKubeContainerStatus 把 CRI 容器状态转换为 kubelet 内部状态，
+// 对已退出的容器补充 termination message。
 func (m *kubeGenericRuntimeManager) convertToKubeContainerStatus(ctx context.Context, podUID kubetypes.UID, status *runtimeapi.ContainerStatus) (cStatus *kubecontainer.Status) {
 	cStatus = m.toKubeContainerStatus(ctx, podUID, status, m.runtimeName)
 	if status.State == runtimeapi.ContainerState_CONTAINER_EXITED {
-		// Populate the termination message if needed.
+		// 按需填充 termination message。
 		annotatedInfo := getContainerInfoFromAnnotations(ctx, status.Annotations)
-		// If a container cannot even be started, it certainly does not have logs, so no need to fallbackToLogs.
+		// 容器连启动都没能完成时肯定没有日志，无需回退到日志。
 		fallbackToLogs := annotatedInfo.TerminationMessagePolicy == v1.TerminationMessageFallbackToLogsOnError &&
 			cStatus.ExitCode != 0 && cStatus.Reason != "ContainerCannotRun"
 		tMessage, checkLogs := getTerminationMessage(status, annotatedInfo.TerminationMessagePath, fallbackToLogs)
 		if checkLogs {
 			tMessage = m.readLastStringFromContainerLogs(ctx, status.GetLogPath())
 		}
-		// Enrich the termination message written by the application is not empty
+		// 应用写入的 termination message 非空时追加到消息中
 		if len(tMessage) != 0 {
 			if len(cStatus.Message) != 0 {
 				cStatus.Message += ": "
@@ -606,15 +603,15 @@ func (m *kubeGenericRuntimeManager) convertToKubeContainerStatus(ctx context.Con
 	return cStatus
 }
 
+// listOptions 定义容器/sandbox 列表查询的过滤条件。
 type listOptions struct {
-	// podUID of the pod to filter to.
-	// Optional.
+	// podUID 为要过滤的 Pod UID，可选。
 	podUID kubetypes.UID
-	// onlyRunningReady filters the results to only ready sandboxes or running containers.
-	// Optional.
+	// onlyRunningReady 为 true 时只返回就绪的 sandbox 或运行中的容器，可选。
 	onlyRunningReady bool
 }
 
+// containerFilter 根据 listOptions 构造 CRI 容器过滤条件。
 func (o *listOptions) containerFilter() *runtimeapi.ContainerFilter {
 	filter := &runtimeapi.ContainerFilter{}
 	if o.podUID != "" {
@@ -628,6 +625,7 @@ func (o *listOptions) containerFilter() *runtimeapi.ContainerFilter {
 	return filter
 }
 
+// sandboxFilter 根据 listOptions 构造 CRI sandbox 过滤条件。
 func (o *listOptions) sandboxFilter() *runtimeapi.PodSandboxFilter {
 	filter := &runtimeapi.PodSandboxFilter{}
 	if o.podUID != "" {
@@ -641,15 +639,17 @@ func (o *listOptions) sandboxFilter() *runtimeapi.PodSandboxFilter {
 	return filter
 }
 
+// getContainers 按过滤条件列出容器。
 func (m *kubeGenericRuntimeManager) getContainers(ctx context.Context, opts listOptions) ([]*runtimeapi.Container, error) {
 	return m.runtimeService.ListContainers(ctx, opts.containerFilter())
 }
 
+// getSandboxes 按过滤条件列出 Pod sandbox。
 func (m *kubeGenericRuntimeManager) getSandboxes(ctx context.Context, opts listOptions) ([]*runtimeapi.PodSandbox, error) {
 	return m.runtimeService.ListPodSandbox(ctx, opts.sandboxFilter())
 }
 
-// getPodContainerStatuses gets all containers' statuses for the pod.
+// getPodContainerStatuses 获取 Pod 中所有容器的状态。
 func (m *kubeGenericRuntimeManager) getPodContainerStatuses(ctx context.Context, pod *kubecontainer.Pod, activePodSandboxID string) ([]*kubecontainer.Status, []*kubecontainer.Status, error) {
 	logger := klog.FromContext(ctx)
 
@@ -658,15 +658,14 @@ func (m *kubeGenericRuntimeManager) getPodContainerStatuses(ctx context.Context,
 	// TODO: optimization: set maximum number of containers per container name to examine.
 	for _, c := range pod.Containers {
 		resp, err := m.runtimeService.ContainerStatus(ctx, c.ID.ID, false)
-		// Between List (ListContainers) and check (ContainerStatus) another thread might remove a container, and that is normal.
-		// The previous call (ListContainers) never fails due to a pod container not existing.
-		// Therefore, this method should not either, but instead act as if the previous call failed,
-		// which means the error should be ignored.
+		// List（ListContainers）与检查（ContainerStatus）之间，其他线程可能移除该容器，这是正常的。
+		// 上一次调用（ListContainers）不会因 Pod 容器不存在而失败，
+		// 因此本方法也不应失败，而应像上次调用失败一样忽略该错误。
 		if crierror.IsNotFound(err) {
 			continue
 		}
 		if err != nil {
-			// Merely log this here; GetPodStatus will actually report the error out.
+			// 这里只记录日志；错误会由 GetPodStatus 上报。
 			logger.V(4).Info("ContainerStatus return error", "containerID", c.ID.ID, "err", err)
 			return nil, nil, err
 		}
@@ -686,15 +685,16 @@ func (m *kubeGenericRuntimeManager) getPodContainerStatuses(ctx context.Context,
 	return statuses, activeContainerStatuses, nil
 }
 
+// toKubeContainerStatus 把 CRI 容器状态转换为 kubelet 内部容器状态。
 func (m *kubeGenericRuntimeManager) toKubeContainerStatus(ctx context.Context, podUID kubetypes.UID, status *runtimeapi.ContainerStatus, runtimeName string) *kubecontainer.Status {
 	annotatedInfo := getContainerInfoFromAnnotations(ctx, status.Annotations)
 	labeledInfo := getContainerInfoFromLabels(ctx, status.Labels)
 	var cStatusResources *kubecontainer.ContainerResources
 	if utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) {
-		// If runtime reports cpu & memory resources info, add it to container status
+		// 若运行时上报了 cpu 和内存资源信息，则加入容器状态
 		cStatusResources = toKubeContainerResources(status.Resources)
 
-		// Fill missing resource values from the actuated resources.
+		// 用已生效的资源补齐缺失的资源值。
 		if cStatusResources == nil || cStatusResources.MemoryRequest == nil {
 			if actuatedResources, ok := m.actuatedState.GetContainerResources(podUID, labeledInfo.ContainerName); ok {
 				if cStatusResources == nil {
@@ -713,7 +713,7 @@ func (m *kubeGenericRuntimeManager) toKubeContainerStatus(ctx context.Context, p
 		}
 	}
 
-	// Keep backwards compatibility to older runtimes, status.ImageId has been added in v1.30
+	// 为兼容旧版运行时：status.ImageId 在 v1.30 才加入
 	imageID := status.ImageRef
 	if status.ImageId != "" {
 		imageID = status.ImageId
@@ -727,8 +727,8 @@ func (m *kubeGenericRuntimeManager) toKubeContainerStatus(ctx context.Context, p
 	var cStatusStopSignal *v1.Signal
 	if utilfeature.DefaultFeatureGate.Enabled(features.ContainerStopSignals) {
 		signal := status.GetStopSignal().String()
-		// Here Signal_SIGNAL_RUNTIME_DEFAULT means that the runtime is not returning any StopSignal
-		// This happens only when the container runtime version doesn't support StopSignal yet
+		// Signal_SIGNAL_RUNTIME_DEFAULT 表示运行时未返回 StopSignal，
+		// 只会发生在容器运行时版本尚不支持 StopSignal 时
 		if signal != "" && signal != runtimeapi.Signal_SIGNAL_RUNTIME_DEFAULT.String() {
 			cStatusStopSignal = runtimeSignalToString(status.GetStopSignal())
 		}
@@ -754,8 +754,7 @@ func (m *kubeGenericRuntimeManager) toKubeContainerStatus(ctx context.Context, p
 	}
 
 	if status.State != runtimeapi.ContainerState_CONTAINER_CREATED {
-		// If container is not in the created state, we have tried and
-		// started the container. Set the StartedAt time.
+		// 容器不处于 created 状态，说明已尝试并启动过，设置 StartedAt 时间。
 		cStatus.StartedAt = time.Unix(0, status.StartedAt)
 	}
 	if status.State == runtimeapi.ContainerState_CONTAINER_EXITED {
@@ -780,7 +779,7 @@ func (m *kubeGenericRuntimeManager) toKubeContainerStatus(ctx context.Context, p
 	return cStatus
 }
 
-// executePreStopHook runs the pre-stop lifecycle hooks if applicable and returns the duration it takes.
+// executePreStopHook 在适用时执行 pre-stop 生命周期钩子，并返回其耗时。
 func (m *kubeGenericRuntimeManager) executePreStopHook(ctx context.Context, pod *v1.Pod, containerID kubecontainer.ContainerID, containerSpec *v1.Container, gracePeriod int64) int64 {
 	logger := klog.FromContext(ctx)
 	logger.V(3).Info("Running preStop hook", "pod", klog.KObj(pod), "podUID", pod.UID, "containerName", containerSpec.Name, "containerID", containerID.String())
@@ -793,7 +792,7 @@ func (m *kubeGenericRuntimeManager) executePreStopHook(ctx context.Context, pod 
 		if _, err := m.runner.Run(ctx, containerID, pod, containerSpec, containerSpec.Lifecycle.PreStop); err != nil {
 			logger.Error(err, "PreStop hook failed", "pod", klog.KObj(pod), "podUID", pod.UID,
 				"containerName", containerSpec.Name, "containerID", containerID.String())
-			// do not record the message in the event so that secrets won't leak from the server.
+			// 事件中不记录消息内容，避免泄露服务端 secret。
 			m.recordContainerEvent(ctx, pod, containerSpec, containerID.ID, v1.EventTypeWarning, events.FailedPreStopHook, "PreStopHook failed")
 		}
 	}()
@@ -810,14 +809,11 @@ func (m *kubeGenericRuntimeManager) executePreStopHook(ctx context.Context, pod 
 	return int64(metav1.Now().Sub(start.Time).Seconds())
 }
 
-// restoreSpecsFromContainerLabels restores all information needed for killing a container. In some
-// case we may not have pod and container spec when killing a container, e.g. pod is deleted during
-// kubelet restart.
-// To solve this problem, we've already written necessary information into container labels. Here we
-// just need to retrieve them from container labels and restore the specs.
-// TODO(random-liu): Add a node e2e test to test this behaviour.
-// TODO(random-liu): Change the lifecycle handler to just accept information needed, so that we can
-// just pass the needed function not create the fake object.
+// restoreSpecsFromContainerLabels 恢复 kill 容器所需的全部信息。
+// 某些情况下（例如 kubelet 重启期间 Pod 被删除）kill 容器时可能拿不到 Pod 和容器 spec。
+// 为此我们已把必要信息写入容器 label，这里从 label 中取出并还原 spec。
+// TODO(random-liu): 增加 node e2e 测试覆盖该行为。
+// TODO(random-liu): 把生命周期处理器改为只接收所需信息，从而无需构造假对象。
 func (m *kubeGenericRuntimeManager) restoreSpecsFromContainerLabels(ctx context.Context, containerID kubecontainer.ContainerID) (*v1.Pod, *v1.Container, error) {
 	var pod *v1.Pod
 	var container *v1.Container
@@ -832,8 +828,7 @@ func (m *kubeGenericRuntimeManager) restoreSpecsFromContainerLabels(ctx context.
 
 	l := getContainerInfoFromLabels(ctx, s.Labels)
 	a := getContainerInfoFromAnnotations(ctx, s.Annotations)
-	// Notice that the followings are not full spec. The container killing code should not use
-	// un-restored fields.
+	// 注意以下并非完整 spec，kill 容器相关代码不应使用未恢复的字段。
 	pod = &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:                        l.PodUID,
@@ -858,9 +853,9 @@ func (m *kubeGenericRuntimeManager) restoreSpecsFromContainerLabels(ctx context.
 	return pod, container, nil
 }
 
-// killContainer kills a container through the following steps:
-// * Run the pre-stop lifecycle hooks (if applicable).
-// * Stop the container.
+// killContainer 通过以下步骤 kill 容器：
+// * 执行 pre-stop 生命周期钩子（如适用）。
+// * 停止容器。
 func (m *kubeGenericRuntimeManager) killContainer(ctx context.Context, pod *v1.Pod, containerID kubecontainer.ContainerID, containerName string, message string, reason containerKillReason, gracePeriodOverride *int64, ordering *terminationOrdering) error {
 	logger := klog.FromContext(ctx)
 	var containerSpec *v1.Container
@@ -870,7 +865,7 @@ func (m *kubeGenericRuntimeManager) killContainer(ctx context.Context, pod *v1.P
 				containerName, containerID.String(), format.Pod(pod), message)
 		}
 	} else {
-		// Restore necessary information if one of the specs is nil.
+		// 任一 spec 为 nil 时恢复必要信息。
 		restoredPod, restoredContainer, err := m.restoreSpecsFromContainerLabels(ctx, containerID)
 		if err != nil {
 			return err
@@ -878,7 +873,7 @@ func (m *kubeGenericRuntimeManager) killContainer(ctx context.Context, pod *v1.P
 		pod, containerSpec = restoredPod, restoredContainer
 	}
 
-	// From this point, pod and container must be non-nil.
+	// 从这里开始，pod 和 container 一定非 nil。
 	gracePeriod := setTerminationGracePeriod(ctx, pod, containerSpec, containerName, containerID, reason)
 
 	if len(message) == 0 {
@@ -892,19 +887,18 @@ func (m *kubeGenericRuntimeManager) killContainer(ctx context.Context, pod *v1.P
 			"containerName", containerName, "containerID", containerID.String(), "gracePeriod", gracePeriod)
 	}
 
-	// Run the pre-stop lifecycle hooks if applicable and if there is enough time to run it
+	// 在适用且剩余时间足够时执行 pre-stop 生命周期钩子
 	if containerSpec.Lifecycle != nil && containerSpec.Lifecycle.PreStop != nil && gracePeriod > 0 {
 		gracePeriod = gracePeriod - m.executePreStopHook(ctx, pod, containerID, containerSpec, gracePeriod)
 	}
 
-	// if we care about termination ordering, then wait for this container's turn to exit if there is
-	// time remaining
+	// 若关心终止顺序，在剩余时间内等待该容器轮到退出
 	if ordering != nil && gracePeriod > 0 {
-		// grace period is only in seconds, so the time we've waited gets truncated downward
+		// grace period 以秒为单位，等待时间向下取整
 		gracePeriod -= int64(ordering.waitForTurn(containerName, gracePeriod))
 	}
 
-	// always give containers a minimal shutdown window to avoid unnecessary SIGKILLs
+	// 始终给容器一个最小关闭窗口，避免不必要的 SIGKILL
 	if gracePeriod < minimumGracePeriodInSeconds {
 		gracePeriod = minimumGracePeriodInSeconds
 	}
@@ -928,7 +922,7 @@ func (m *kubeGenericRuntimeManager) killContainer(ctx context.Context, pod *v1.P
 	return nil
 }
 
-// killContainersWithSyncResult kills all pod's containers with sync results.
+// killContainersWithSyncResult 并发 kill Pod 的所有容器，并汇总同步结果。
 func (m *kubeGenericRuntimeManager) killContainersWithSyncResult(ctx context.Context, pod *v1.Pod, runningPod kubecontainer.Pod, gracePeriodOverride *int64) (syncResults []*kubecontainer.SyncResult) {
 	logger := klog.FromContext(ctx)
 	containerResults := make(chan *kubecontainer.SyncResult, len(runningPod.Containers))
@@ -951,7 +945,7 @@ func (m *kubeGenericRuntimeManager) killContainersWithSyncResult(ctx context.Con
 			killContainerResult := kubecontainer.NewSyncResult(kubecontainer.KillContainer, container.Name)
 			if err := m.killContainer(ctx, pod, container.ID, container.Name, "", reasonUnknown, gracePeriodOverride, termOrdering); err != nil {
 				killContainerResult.Fail(kubecontainer.ErrKillContainer, err.Error())
-				// Use runningPod for logging as the pod passed in could be *nil*.
+				// 日志使用 runningPod，因为传入的 pod 可能为 nil。
 				logger.Error(err, "Kill container failed", "pod", klog.KRef(runningPod.Namespace, runningPod.Name), "podUID", runningPod.ID,
 					"containerName", container.Name, "containerID", container.ID)
 			}
@@ -967,14 +961,11 @@ func (m *kubeGenericRuntimeManager) killContainersWithSyncResult(ctx context.Con
 	return
 }
 
-// pruneInitContainersBeforeStart ensures that before we begin creating init
-// containers, we have reduced the number of outstanding init containers still
-// present. This reduces load on the container garbage collector by only
-// preserving the most recent terminated init container.
+// pruneInitContainersBeforeStart 确保在开始创建 init 容器之前，减少仍存在的
+// init 容器数量：每个名称只保留最近一次已终止的实例，以降低容器 GC 的负载。
 func (m *kubeGenericRuntimeManager) pruneInitContainersBeforeStart(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus) {
 	logger := klog.FromContext(ctx)
-	// only the last execution of each init container should be preserved, and only preserve it if it is in the
-	// list of init containers to keep.
+	// 每个 init 容器只应保留最后一次执行，且仅当它属于需要保留的 init 容器列表时才保留。
 	initContainerNames := sets.New[string]()
 	for _, container := range pod.Spec.InitContainers {
 		initContainerNames.Insert(container.Name)
@@ -987,15 +978,14 @@ func (m *kubeGenericRuntimeManager) pruneInitContainersBeforeStart(ctx context.C
 					status.State != kubecontainer.ContainerStateUnknown) {
 				continue
 			}
-			// Remove init containers in unknown state. It should have
-			// been stopped before pruneInitContainersBeforeStart is
-			// called.
+			// 移除处于 unknown 状态的 init 容器。调用 pruneInitContainersBeforeStart
+			// 之前它本应已被停止。
 			count++
-			// keep the first init container for this name
+			// 保留该名称的第一个 init 容器
 			if count == 1 {
 				continue
 			}
-			// prune all other init containers that match this container name
+			// 裁剪掉其他同名 init 容器
 			logger.V(4).Info("Removing init container", "containerName", status.Name, "containerID", status.ID.ID, "count", count)
 			if err := m.removeContainer(ctx, status.ID.ID, false); err != nil {
 				utilruntime.HandleError(fmt.Errorf("failed to remove pod init container %q: %v; Skipping pod %q", status.Name, err, format.Pod(pod)))
@@ -1005,9 +995,8 @@ func (m *kubeGenericRuntimeManager) pruneInitContainersBeforeStart(ctx context.C
 	}
 }
 
-// Remove all init containers. Note that this function does not check the state
-// of the container because it assumes all init containers have been stopped
-// before the call happens.
+// purgeInitContainers 移除所有 init 容器。该函数不检查容器状态，
+// 因为它假定调用前所有 init 容器都已被停止。
 func (m *kubeGenericRuntimeManager) purgeInitContainers(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus) {
 	logger := klog.FromContext(ctx)
 	initContainerNames := sets.New[string]()
@@ -1021,7 +1010,7 @@ func (m *kubeGenericRuntimeManager) purgeInitContainers(ctx context.Context, pod
 				continue
 			}
 			count++
-			// Purge all init containers that match this container name
+			// 清除所有同名 init 容器
 			logger.V(4).Info("Removing init container", "containerName", status.Name, "containerID", status.ID.ID, "count", count)
 			if err := m.removeContainer(ctx, status.ID.ID, false); err != nil {
 				utilruntime.HandleError(fmt.Errorf("failed to remove pod init container %q: %v; Skipping pod %q", status.Name, err, format.Pod(pod)))
@@ -1031,8 +1020,8 @@ func (m *kubeGenericRuntimeManager) purgeInitContainers(ctx context.Context, pod
 	}
 }
 
-// HasAnyRegularContainerCreated returns true if any regular container has been
-// created, which indicates all init containers have been initialized.
+// HasAnyRegularContainerCreated 判断是否已有普通容器被创建，
+// 这表示所有 init 容器都已完成初始化。
 func HasAnyRegularContainerCreated(pod *v1.Pod, podStatus *kubecontainer.PodStatus) bool {
 	for _, container := range pod.Spec.Containers {
 		status := podStatus.FindContainerStatusByName(container.Name)
@@ -1045,62 +1034,52 @@ func HasAnyRegularContainerCreated(pod *v1.Pod, podStatus *kubecontainer.PodStat
 			kubecontainer.ContainerStateExited:
 			return true
 		default:
-			// Ignore other states
+			// 忽略其他状态
 		}
 	}
 	return false
 }
 
-// computeInitContainerActions sets the actions on the given changes that need
-// to be taken for the init containers. This includes actions to initialize the
-// init containers and actions to keep restartable init containers running.
-// computeInitContainerActions returns true if pod has been initialized.
+// computeInitContainerActions 针对 init 容器在 changes 上设置所需动作，
+// 包括初始化 init 容器以及保持可重启 init 容器运行。
+// 返回值表示 Pod 是否已完成初始化。
 //
-// The actions include:
-// - Start the first init container that has not been started.
-// - Restart all restartable init containers that have started but are not running.
-// - Kill the restartable init containers that are not alive or started.
+// 动作包括：
+// - 启动第一个尚未启动的 init 容器。
+// - 重启所有已启动但未运行的可重启 init 容器。
+// - kill 所有不存活或未启动的可重启 init 容器。
 func (m *kubeGenericRuntimeManager) computeInitContainerActions(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus, changes *podActions) bool {
 	logger := klog.FromContext(ctx)
 	if len(pod.Spec.InitContainers) == 0 {
 		return true
 	}
 
-	// If ActiveContainerStatuses contains any main container (i.e. from pod.Spec.Containers),
-	// a main container has started on the current sandbox, which implies all init containers
-	// have already completed. Treating the pod as initialized here prevents non-restartable
-	// init containers — which the runtime may have already garbage-collected — from being
-	// improperly re-executed.
+	// 若 ActiveContainerStatuses 中包含主容器（即来自 pod.Spec.Containers），
+	// 说明当前 sandbox 上已有主容器启动，意味着所有 init 容器都已完成。
+	// 这里把 Pod 视为已初始化，可避免运行时可能已 GC 掉的不可重启 init 容器被错误地重新执行。
 	//
-	// Using ActiveContainerStatuses scopes the check to the current sandbox, so a stale main
-	// container left over from a previous sandbox (e.g. after a node reboot) cannot falsely
-	// mark the pod as initialized.
+	// 使用 ActiveContainerStatuses 把检查限定在当前 sandbox，这样上个 sandbox
+	// 遗留的主容器（例如节点重启后）不会错误地把 Pod 标记为已初始化。
 	podHasInitialized := kubecontainer.HasAnyActiveRegularContainerStarted(&pod.Spec, podStatus)
 
-	// isPreviouslyInitialized indicates if the current init container is
-	// previously initialized.
+	// isPreviouslyInitialized 表示当前 init 容器此前是否已初始化。
 	isPreviouslyInitialized := podHasInitialized
-	// Feature gate ContainerRestartRules makes it possible for individual init
-	// containers to restart even if pod-level restart policy is Never, which is
-	// checked at container-level. This `restartOnFailure` is overridden if feature
-	// gate ContainerRestartRules is enabled.
+	// ContainerRestartRules 特性门控允许单个 init 容器在 Pod 级重启策略为 Never 时
+	// 仍然重启（在容器级检查）。该 restartOnFailure 会在特性门控开启时被覆盖。
 	restartOnFailure := shouldRestartOnFailure(pod)
 
-	// Note that we iterate through the init containers in reverse order to find
-	// the next init container to run, as the completed init containers may get
-	// removed from container runtime for various reasons. Therefore the kubelet
-	// should rely on the minimal number of init containers - the last one.
+	// 注意这里逆序遍历 init 容器以找到下一个要运行的 init 容器：
+	// 已完成的 init 容器可能因各种原因被运行时移除，因此 kubelet 应依赖
+	// 最少数量的 init 容器——即最后一个。
 	//
-	// Once we find the next init container to run, iterate through the rest to
-	// find the restartable init containers to restart.
+	// 找到下一个要运行的 init 容器后，继续遍历其余容器以找出需要重启的可重启 init 容器。
 	for i := len(pod.Spec.InitContainers) - 1; i >= 0; i-- {
 		container := &pod.Spec.InitContainers[i]
 		status := podStatus.FindActiveContainerStatusByName(container.Name)
 		logger.V(4).Info("Computing init container action", "pod", klog.KObj(pod), "container", container.Name, "status", status)
 		if status == nil {
-			// If the container is previously initialized but its status is not
-			// found, it means its last status is removed for some reason.
-			// Restart it if it is a restartable init container.
+			// 若容器此前已初始化但找不到状态，说明其最后状态被移除；
+			// 若它是可重启 init 容器，则重启它。
 			if isPreviouslyInitialized && podutil.IsRestartableInitContainer(container) {
 				changes.InitContainersToStart = append(changes.InitContainersToStart, i)
 			}
@@ -1108,38 +1087,34 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(ctx context.Cont
 		}
 
 		if isPreviouslyInitialized && !podutil.IsRestartableInitContainer(container) {
-			// after initialization, only restartable init containers need to be kept
-			// running
+			// 初始化完成后，只需保持可重启 init 容器继续运行
 			continue
 		}
 
 		switch status.State {
 		case kubecontainer.ContainerStateCreated:
-			// The main sync loop should have created and started the container
-			// in one step. If the init container is in the 'created' state,
-			// it is likely that the container runtime failed to start it. To
-			// prevent the container from getting stuck in the 'created' state,
-			// restart it.
+			// 主同步循环本应一步完成容器的创建和启动。若 init 容器处于 created 状态，
+			// 很可能是运行时启动失败。为避免容器卡在 created 状态，重启它。
 			changes.InitContainersToStart = append(changes.InitContainersToStart, i)
 
 		case kubecontainer.ContainerStateRunning:
+			// 不可重启的 init 容器只可能因扩缩容而需要重启。
 			if !podutil.IsRestartableInitContainer(container) {
 				if utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScalingInitContainers) {
-					// computePodResizeAction updates 'changes' if resize policy requires restarting this container
+					// 若扩缩容策略要求重启该容器，computePodResizeAction 会更新 changes
 					_ = m.computePodResizeAction(ctx, pod, i, true, status, changes)
 				}
 				break
-			} else { // If container is restartable
+			} else {
 				if container.StartupProbe != nil {
 					startup, found := m.startupManager.Get(status.ID)
 					if !found {
-						// If the startup probe has not been run, wait for it.
+						// 启动探针尚未运行，等待
 						break
 					}
 					if startup != proberesults.Success {
 						if startup == proberesults.Failure {
-							// If the restartable init container failed the startup probe,
-							// restart it.
+							// 可重启 init 容器启动探针失败时重启它
 							changes.ContainersToKill[status.ID] = containerToKillInfo{
 								name:      container.Name,
 								container: container,
@@ -1156,11 +1131,11 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(ctx context.Cont
 				if i == (len(pod.Spec.InitContainers) - 1) {
 					podHasInitialized = true
 				} else if !isPreviouslyInitialized {
-					// this init container is initialized for the first time, start the next one
+					// 该 init 容器首次初始化完成，启动下一个
 					changes.InitContainersToStart = append(changes.InitContainersToStart, i+1)
 				}
 
-				// Restart running sidecar containers which have had their definition changed.
+				// 重启定义已发生变化的运行中 sidecar 容器。
 				if _, _, changed := containerChanged(container, status); changed {
 					changes.ContainersToKill[status.ID] = containerToKillInfo{
 						name:      container.Name,
@@ -1172,17 +1147,15 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(ctx context.Cont
 					break
 				}
 
-				// A restartable init container does not have to take into account its
-				// liveness probe when it determines to start the next init container.
+				// 可重启 init 容器在决定启动下一个 init 容器时无需考虑自身的 liveness 探针。
 				if container.LivenessProbe != nil {
 					liveness, found := m.livenessManager.Get(status.ID)
 					if !found {
-						// If the liveness probe has not been run, wait for it.
+						// liveness 探针尚未运行，等待
 						break
 					}
 					if liveness == proberesults.Failure {
-						// If the restartable init container failed the liveness probe,
-						// restart it.
+						// 可重启 init 容器 liveness 探针失败时重启它
 						changes.ContainersToKill[status.ID] = containerToKillInfo{
 							name:      container.Name,
 							container: container,
@@ -1190,23 +1163,23 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(ctx context.Cont
 							reason:    reasonLivenessProbe,
 						}
 						changes.InitContainersToStart = append(changes.InitContainersToStart, i)
-						// The container is restarting, so no other actions need to be taken.
+						// 容器正在重启，无需其他动作。
 						break
 					}
 				}
 
 				if !m.computePodResizeAction(ctx, pod, i, true, status, changes) {
-					// computePodResizeAction updates 'changes' if resize policy requires restarting this container
+					// 若扩缩容策略要求重启该容器，computePodResizeAction 会更新 changes
 					break
 				}
 			}
 
-		// If the init container failed and the restart policy is Never, the pod is terminal.
-		// Otherwise, restart the init container.
+		// 若 init 容器失败且重启策略为 Never，Pod 进入终态；否则重启该 init 容器。
 		case kubecontainer.ContainerStateExited:
 			if podutil.IsRestartableInitContainer(container) {
 				changes.InitContainersToStart = append(changes.InitContainersToStart, i)
-			} else { // init container
+			} else {
+				// 非可重启的 init 容器：失败时按重启策略决定是否终止 Pod。
 				if isInitContainerFailed(status) {
 					restartOnFailure := restartOnFailure
 					if utilfeature.DefaultFeatureGate.Enabled(features.ContainerRestartRules) {
@@ -1225,14 +1198,15 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(ctx context.Cont
 				if i == (len(pod.Spec.InitContainers) - 1) {
 					podHasInitialized = true
 				} else {
-					// this init container is initialized for the first time, start the next one
+					// 该 init 容器首次初始化完成，启动下一个
 					changes.InitContainersToStart = append(changes.InitContainersToStart, i+1)
 				}
 			}
 
-		default: // kubecontainer.ContainerStatusUnknown or other unknown states
+		// 未知状态：可重启的 init 容器先杀掉再重启；否则按失败处理。
+		default:
 			if podutil.IsRestartableInitContainer(container) {
-				// If the restartable init container is in unknown state, restart it.
+				// 可重启 init 容器处于未知状态时，重启它。
 				changes.ContainersToKill[status.ID] = containerToKillInfo{
 					name:      container.Name,
 					container: container,
@@ -1241,16 +1215,16 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(ctx context.Cont
 					reason: reasonUnknown,
 				}
 				changes.InitContainersToStart = append(changes.InitContainersToStart, i)
-			} else { // init container
+			} else {
+				// 非可重启的 init 容器处于未知状态，按失败路径处理。
 				if !isInitContainerFailed(status) {
 					logger.V(4).Info("This should not happen, init container is in unknown state but not failed", "pod", klog.KObj(pod), "containerStatus", status)
 				}
 
 				restartOnFailure := restartOnFailure
 				if utilfeature.DefaultFeatureGate.Enabled(features.ContainerRestartRules) {
-					// Only container-level restart policy is used. The container-level restart
-					// rules are not evaluated because the container might not have exited, so
-					// there is no exit code on which the rules can be used.
+					// 仅使用容器级重启策略。不评估容器级重启规则，
+					// 因为容器可能尚未退出，没有可用于规则的退出码。
 					if container.RestartPolicy != nil {
 						restartOnFailure = *container.RestartPolicy != v1.ContainerRestartPolicyNever
 					}
@@ -1261,7 +1235,7 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(ctx context.Cont
 					return false
 				}
 
-				// If the init container is in unknown state, restart it.
+				// init 容器处于未知状态时，重启它。
 				changes.ContainersToKill[status.ID] = containerToKillInfo{
 					name:      container.Name,
 					container: container,
@@ -1274,20 +1248,18 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(ctx context.Cont
 		}
 
 		if !isPreviouslyInitialized {
-			// the one before this init container has been initialized
+			// 当前 init 容器之前的那个已完成初始化
 			isPreviouslyInitialized = true
 		}
 	}
 
-	// this means no init containers have been started,
-	// start the first one
+	// 说明没有 init 容器被启动过，启动第一个
 	if !isPreviouslyInitialized {
 		changes.InitContainersToStart = append(changes.InitContainersToStart, 0)
 	}
 
-	// reverse the InitContainersToStart, as the above loop iterated through the
-	// init containers backwards, but we want to start them as per the order in
-	// the pod spec.
+	// 反转 InitContainersToStart：上面的循环是逆序遍历的，
+	// 但需要按 Pod spec 中的顺序启动。
 	l := len(changes.InitContainersToStart)
 	for i := 0; i < l/2; i++ {
 		changes.InitContainersToStart[i], changes.InitContainersToStart[l-1-i] =
@@ -1295,14 +1267,14 @@ func (m *kubeGenericRuntimeManager) computeInitContainerActions(ctx context.Cont
 	}
 
 	if !changes.UpdatePodLevelResources && !changes.UpdatePodResources {
-		// If any starting containers have resized, we need to resize the pod resources.
+		// 若有正在启动的容器已扩缩容，则需要调整 Pod 资源。
 		changes.UpdatePodResources = m.startingResizedContainer(logger, pod, pod.Spec.InitContainers, changes.InitContainersToStart)
 	}
 
 	return podHasInitialized
 }
 
-// GetContainerLogs returns logs of a specific container.
+// GetContainerLogs 返回指定容器的日志。
 func (m *kubeGenericRuntimeManager) GetContainerLogs(ctx context.Context, pod *v1.Pod, containerID kubecontainer.ContainerID, logOptions *v1.PodLogOptions, stdout, stderr io.Writer) (err error) {
 	logger := klog.FromContext(ctx)
 	resp, err := m.runtimeService.ContainerStatus(ctx, containerID.ID, false)
@@ -1317,7 +1289,7 @@ func (m *kubeGenericRuntimeManager) GetContainerLogs(ctx context.Context, pod *v
 	return m.ReadLogs(ctx, status.GetLogPath(), containerID.ID, logOptions, stdout, stderr)
 }
 
-// GetExec gets the endpoint the runtime will serve the exec request from.
+// GetExec 获取运行时提供 exec 请求的端点。
 func (m *kubeGenericRuntimeManager) GetExec(ctx context.Context, id kubecontainer.ContainerID, cmd []string, stdin, stdout, stderr, tty bool) (*url.URL, error) {
 	req := &runtimeapi.ExecRequest{
 		ContainerId: id.ID,
@@ -1335,7 +1307,7 @@ func (m *kubeGenericRuntimeManager) GetExec(ctx context.Context, id kubecontaine
 	return url.Parse(resp.Url)
 }
 
-// GetAttach gets the endpoint the runtime will serve the attach request from.
+// GetAttach 获取运行时提供 attach 请求的端点。
 func (m *kubeGenericRuntimeManager) GetAttach(ctx context.Context, id kubecontainer.ContainerID, stdin, stdout, stderr, tty bool) (*url.URL, error) {
 	req := &runtimeapi.AttachRequest{
 		ContainerId: id.ID,
@@ -1351,44 +1323,41 @@ func (m *kubeGenericRuntimeManager) GetAttach(ctx context.Context, id kubecontai
 	return url.Parse(resp.Url)
 }
 
-// RunInContainer synchronously executes the command in the container, and returns the output.
+// RunInContainer 在容器中同步执行命令并返回输出。
 func (m *kubeGenericRuntimeManager) RunInContainer(ctx context.Context, id kubecontainer.ContainerID, cmd []string, timeout time.Duration) ([]byte, error) {
 	stdout, stderr, err := m.runtimeService.ExecSync(ctx, id.ID, cmd, timeout)
-	// NOTE(tallclair): This does not correctly interleave stdout & stderr, but should be sufficient
-	// for logging purposes. A combined output option will need to be added to the ExecSyncRequest
-	// if more precise output ordering is ever required.
+	// NOTE(tallclair): 这里无法正确交错 stdout 和 stderr，但对日志用途已足够。
+	// 若将来需要更精确的输出顺序，需为 ExecSyncRequest 增加合并输出的选项。
 	return append(stdout, stderr...), err
 }
 
-// removeContainer removes the container and optionally the container logs.
-// Notice that we remove the container logs first, so that container will not be removed if
-// container logs are failed to be removed, and kubelet will retry this later. This guarantees
-// that container logs to be removed with the container if specified.
-// Notice that we assume that the container should only be removed in non-running state, and
-// it will not write container logs anymore in that state.
-// If the logs are kept, they will be preserved until the pod is removed and kubelet GC is triggered.
+// removeContainer 移除容器，并可选地移除容器日志。
+// 注意先移除日志再移除容器：若日志移除失败，容器不会被移除，kubelet 之后会重试，
+// 从而保证在指定移除日志时日志与容器一起被移除。
+// 这里假定容器只会在非运行状态下被移除，此时不会再写入日志。
+// 若保留日志，日志会一直保留到 Pod 被移除且 kubelet GC 触发。
 func (m *kubeGenericRuntimeManager) removeContainer(ctx context.Context, containerID string, keepLogs bool) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Removing container", "containerID", containerID)
-	// Call internal container post-stop lifecycle hook.
+	// 调用内部容器 post-stop 生命周期钩子。
 	if err := m.internalLifecycle.PostStopContainer(logger, containerID); err != nil {
 		return err
 	}
 
-	// Remove the container log.
-	// TODO: Separate log and container lifecycle management.
+	// 移除容器日志。
+	// TODO: 分离日志与容器生命周期管理。
 	if !keepLogs {
 		if err := m.removeContainerLog(ctx, containerID); err != nil {
 			return err
 		}
 	}
-	// Remove the container.
+	// 移除容器。
 	return m.runtimeService.RemoveContainer(ctx, containerID)
 }
 
-// removeContainerLog removes the container log.
+// removeContainerLog 移除容器日志。
 func (m *kubeGenericRuntimeManager) removeContainerLog(ctx context.Context, containerID string) error {
-	// Use log manager to remove rotated logs.
+	// 使用日志管理器移除轮转日志。
 	err := m.logManager.Clean(ctx, containerID)
 	if err != nil {
 		return err
@@ -1402,8 +1371,8 @@ func (m *kubeGenericRuntimeManager) removeContainerLog(ctx context.Context, cont
 	if status == nil {
 		return remote.ErrContainerStatusNil
 	}
-	// Remove the legacy container log symlink.
-	// TODO(random-liu): Remove this after cluster logging supports CRI container log path.
+	// 移除旧版容器日志软链接。
+	// TODO(random-liu): 集群日志支持 CRI 容器日志路径后移除此逻辑。
 	labeledInfo := getContainerInfoFromLabels(ctx, status.Labels)
 	legacySymlink := legacyLogSymlink(containerID, labeledInfo.ContainerName, labeledInfo.PodName,
 		labeledInfo.PodNamespace)
@@ -1414,12 +1383,12 @@ func (m *kubeGenericRuntimeManager) removeContainerLog(ctx context.Context, cont
 	return nil
 }
 
-// DeleteContainer removes a container.
+// DeleteContainer 移除容器。
 func (m *kubeGenericRuntimeManager) DeleteContainer(ctx context.Context, containerID kubecontainer.ContainerID) error {
 	return m.removeContainer(ctx, containerID.ID, false)
 }
 
-// setTerminationGracePeriod determines the grace period to use when killing a container
+// setTerminationGracePeriod 确定 kill 容器时使用的 grace period。
 func setTerminationGracePeriod(ctx context.Context, pod *v1.Pod, containerSpec *v1.Container, containerName string, containerID kubecontainer.ContainerID, reason containerKillReason) int64 {
 	gracePeriod := int64(minimumGracePeriodInSeconds)
 	switch {
@@ -1441,9 +1410,11 @@ func setTerminationGracePeriod(ctx context.Context, pod *v1.Pod, containerSpec *
 	return gracePeriod
 }
 
+// isProbeTerminationGracePeriodSecondsSet 判断探针级 grace period 是否已设置且有效。
 func isProbeTerminationGracePeriodSecondsSet(ctx context.Context, pod *v1.Pod, containerSpec *v1.Container, probe *v1.Probe, containerName string, containerID kubecontainer.ContainerID, probeType string) bool {
 	logger := klog.FromContext(ctx)
 	if probe != nil && probe.TerminationGracePeriodSeconds != nil {
+		// 探针级 grace period 大于 Pod 级时记录日志，便于排查终止时间超预期的问题。
 		if *probe.TerminationGracePeriodSeconds > *pod.Spec.TerminationGracePeriodSeconds {
 			logger.V(4).Info("Using probe-level grace period that is greater than the pod-level grace period", "pod", klog.KObj(pod), "podUID", pod.UID, "containerName", containerName, "containerID", containerID.String(), "probeType", probeType, "probeGracePeriod", *probe.TerminationGracePeriodSeconds, "podGracePeriod", *pod.Spec.TerminationGracePeriodSeconds)
 		}

@@ -18,11 +18,12 @@ package testing
 
 import v1 "k8s.io/api/core/v1"
 
-// FakePodDeletionSafetyProvider is a fake PodDeletionSafetyProvider for test.
+// FakePodDeletionSafetyProvider 是测试用的 PodDeletionSafetyProvider 假实现。
 type FakePodDeletionSafetyProvider struct {
 	HasRunning bool
 }
 
+// PodCouldHaveRunningContainers 直接返回预设的 HasRunning 值，供测试控制判定结果。
 func (f *FakePodDeletionSafetyProvider) PodCouldHaveRunningContainers(pod *v1.Pod) bool {
 	return f.HasRunning
 }

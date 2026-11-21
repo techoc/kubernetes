@@ -22,26 +22,28 @@ import (
 	"k8s.io/component-helpers/nodedeclaredfeatures"
 )
 
-// FeatureGateAdapter adapts a component-base FeatureGate to the nodedeclaredfeatures FeatureGate interface.
-// This is needed because we cannot use featuregate.Feature in the library code (forbidden import).
+// FeatureGateAdapter 把 component-base 的 FeatureGate 适配为 nodedeclaredfeatures 的 FeatureGate 接口。
+// 由于库代码中不能使用 featuregate.Feature（禁止的导入），需要这层适配。
 type FeatureGateAdapter struct {
 	featuregate.FeatureGate
 }
 
-// Enabled implements the nodedeclaredfeatures.FeatureGate interface
+// Enabled 实现 nodedeclaredfeatures.FeatureGate 接口。
 func (a FeatureGateAdapter) Enabled(key string) bool {
-	// Convert the string key to featuregate.Feature
+	// 把字符串 key 转换为 featuregate.Feature 后查询。
 	return a.FeatureGate.Enabled(featuregate.Feature(key))
 }
 
-// discoverNodeDeclaredFeatures determines the final set of node features to be declared by using the discovery library.
+// discoverNodeDeclaredFeatures 使用发现库计算最终要声明的节点特性集合。
 func (kl *Kubelet) discoverNodeDeclaredFeatures() []string {
+	// 适配默认特性门控，供 node declared features 库按字符串查询特性状态。
 	adaptedFG := FeatureGateAdapter{FeatureGate: utilfeature.DefaultFeatureGate}
 
 	runtimeFeatures := nodedeclaredfeatures.RuntimeFeatures{}
 	if features := kl.runtimeState.runtimeFeatures(); features != nil {
 		runtimeFeatures.UserNamespacesHostNetwork = features.UserNamespacesHostNetwork
 		runtimeFeatures.MountOptions = features.MountOptions
+		// 只传递运行时探测到的特性，避免把未探测项误报为支持。
 	}
 
 	cfg := &nodedeclaredfeatures.NodeConfiguration{

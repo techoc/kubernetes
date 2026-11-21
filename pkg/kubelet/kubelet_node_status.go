@@ -46,9 +46,8 @@ import (
 	volutil "k8s.io/kubernetes/pkg/volume/util"
 )
 
-// registerWithAPIServer registers the node with the cluster master. It is safe
-// to call multiple times, but not concurrently (kl.registrationCompleted is
-// not locked).
+// registerWithAPIServer 向集群控制面注册本节点。重复调用是安全的，
+// 但不可并发调用（kl.registrationCompleted 没有加锁保护）。
 func (kl *Kubelet) registerWithAPIServer(ctx context.Context) {
 	if kl.registrationCompleted {
 		return
@@ -82,11 +81,9 @@ func (kl *Kubelet) registerWithAPIServer(ctx context.Context) {
 	}
 }
 
-// tryRegisterWithAPIServer makes an attempt to register the given node with
-// the API server, returning a boolean indicating whether the attempt was
-// successful.  If a node with the same name already exists, it reconciles the
-// value of the annotation for controller-managed attach-detach of attachable
-// persistent volumes for the node.
+// tryRegisterWithAPIServer 尝试把给定节点注册到 API server，返回本次尝试是否成功。
+// 若同名节点已存在，则协调该节点上由控制器管理的卷 attach-detach 注解值，
+// 使 kubelet 当前配置与集群中的既有状态保持一致。
 func (kl *Kubelet) tryRegisterWithAPIServer(ctx context.Context, node *v1.Node) bool {
 	logger := klog.FromContext(ctx)
 	_, err := kl.kubeClient.CoreV1().Nodes().Create(ctx, node, metav1.CreateOptions{})
@@ -97,9 +94,9 @@ func (kl *Kubelet) tryRegisterWithAPIServer(ctx context.Context, node *v1.Node) 
 
 	switch {
 	case apierrors.IsAlreadyExists(err):
-		// Node already exists, proceed to reconcile node.
+		// 节点已存在，转为协调既有节点的状态字段。
 	case apierrors.IsForbidden(err):
-		// Creating nodes is forbidden, but node may still exist, attempt to get the node.
+		// 创建节点被拒绝，但节点可能已由其他途径创建；尝试读取以判断是否需要协调。
 		if utilfeature.DefaultFeatureGate.Enabled(features.KubeletRegistrationGetOnExistsOnly) {
 			logger.Error(err, "Unable to register node with API server, reason is forbidden", "node", klog.KObj(node))
 			return false
@@ -124,10 +121,10 @@ func (kl *Kubelet) tryRegisterWithAPIServer(ctx context.Context, node *v1.Node) 
 
 	logger.Info("Node was previously registered", "node", klog.KObj(node))
 
-	// Edge case: the node was previously registered; reconcile
-	// the value of the controller-managed attach-detach
-	// annotation.
+	// 边界情况：节点此前已注册；需要协调由控制器管理的
+	// attach-detach 注解，避免 kubelet 重启后挂载策略回退。
 	requiresUpdate := kl.reconcileCMADAnnotationWithExistingNode(logger, node, existingNode)
+	// 各项协调相互独立，用逻辑或累加：任一字段变化都需要一次 patch。
 	requiresUpdate = kl.updateDefaultLabels(node, existingNode) || requiresUpdate
 	requiresUpdate = kl.reconcileExtendedResource(logger, node, existingNode) || requiresUpdate
 	requiresUpdate = kl.reconcileHugePageResource(logger, node, existingNode) || requiresUpdate
@@ -141,7 +138,8 @@ func (kl *Kubelet) tryRegisterWithAPIServer(ctx context.Context, node *v1.Node) 
 	return true
 }
 
-// reconcileHugePageResource will update huge page capacity for each page size and remove huge page sizes no longer supported
+// reconcileHugePageResource 按页大小更新巨页 capacity/allocatable，
+// 并移除节点已不再支持的巨页规格。
 func (kl *Kubelet) reconcileHugePageResource(logger klog.Logger, initialNode, existingNode *v1.Node) bool {
 	requiresUpdate := updateDefaultResources(initialNode, existingNode)
 	supportedHugePageResources := sets.Set[string]{}
@@ -158,13 +156,13 @@ func (kl *Kubelet) reconcileHugePageResource(logger klog.Logger, initialNode, ex
 		capacity, resourceIsSupported := existingNode.Status.Capacity[resourceName]
 		allocatable := existingNode.Status.Allocatable[resourceName]
 
-		// Add or update capacity if it the size was previously unsupported or has changed
+		// 之前不支持该页大小或容量已变化时，写入新的 capacity。
 		if !resourceIsSupported || capacity.Cmp(initialCapacity) != 0 {
 			existingNode.Status.Capacity[resourceName] = initialCapacity.DeepCopy()
 			requiresUpdate = true
 		}
 
-		// Add or update allocatable if it the size was previously unsupported or has changed
+		// 之前不支持该页大小或可分配量已变化时，写入新的 allocatable。
 		if !resourceIsSupported || allocatable.Cmp(initialAllocatable) != 0 {
 			existingNode.Status.Allocatable[resourceName] = initialAllocatable.DeepCopy()
 			requiresUpdate = true
@@ -177,7 +175,7 @@ func (kl *Kubelet) reconcileHugePageResource(logger klog.Logger, initialNode, ex
 			continue
 		}
 
-		// If huge page size no longer is supported, we remove it from the node
+		// 已不再支持的巨页规格必须删除，否则调度器会按失效容量继续调度。
 		if !supportedHugePageResources.Has(string(resourceName)) {
 			delete(existingNode.Status.Capacity, resourceName)
 			delete(existingNode.Status.Allocatable, resourceName)
@@ -188,10 +186,11 @@ func (kl *Kubelet) reconcileHugePageResource(logger klog.Logger, initialNode, ex
 	return requiresUpdate
 }
 
-// Zeros out extended resource capacity during reconciliation.
+// reconcileExtendedResource 在协调期间清零扩展资源容量：设备插件尚未重新上报前，
+// 不能让调度器看到过期的可用容量。
 func (kl *Kubelet) reconcileExtendedResource(logger klog.Logger, initialNode, node *v1.Node) bool {
 	requiresUpdate := updateDefaultResources(initialNode, node)
-	// Check with the device manager to see if node has been recreated, in which case extended resources should be zeroed until they are available
+	// 询问设备管理器节点是否被重建；若是，则在设备重新可用前将扩展资源清零。
 	if kl.containerManager.ShouldResetExtendedResourceCapacity() {
 		for k := range node.Status.Capacity {
 			if v1helper.IsExtendedResourceName(k) {
@@ -205,7 +204,7 @@ func (kl *Kubelet) reconcileExtendedResource(logger klog.Logger, initialNode, no
 	return requiresUpdate
 }
 
-// updateDefaultResources will set the default resources on the existing node according to the initial node
+// updateDefaultResources 依据新构造的节点补齐既有节点缺失的 capacity/allocatable 映射。
 func updateDefaultResources(initialNode, existingNode *v1.Node) bool {
 	requiresUpdate := false
 	if existingNode.Status.Capacity == nil {
@@ -228,7 +227,7 @@ func updateDefaultResources(initialNode, existingNode *v1.Node) bool {
 	return requiresUpdate
 }
 
-// updateDefaultLabels will set the default labels on the node
+// updateDefaultLabels 用 kubelet 构造的默认标签更新既有节点上的对应标签。
 func (kl *Kubelet) updateDefaultLabels(initialNode, existingNode *v1.Node) bool {
 	defaultLabels := []string{
 		v1.LabelHostname,
@@ -249,7 +248,7 @@ func (kl *Kubelet) updateDefaultLabels(initialNode, existingNode *v1.Node) bool 
 	if existingNode.Labels == nil {
 		existingNode.Labels = make(map[string]string)
 	}
-	//Set default labels but make sure to not set labels with empty values
+	// 以新构造节点的值为准；空值标签直接删除，避免污染节点元数据。
 	for _, label := range defaultLabels {
 		if _, hasInitialValue := initialNode.Labels[label]; !hasInitialValue {
 			continue
@@ -268,9 +267,8 @@ func (kl *Kubelet) updateDefaultLabels(initialNode, existingNode *v1.Node) bool 
 	return needsUpdate
 }
 
-// reconcileCMADAnnotationWithExistingNode reconciles the controller-managed
-// attach-detach annotation on a new node and the existing node, returning
-// whether the existing node must be updated.
+// reconcileCMADAnnotationWithExistingNode 协调新构造节点与既有节点上
+// 由控制器管理的 attach-detach 注解，返回既有节点是否需要更新。
 func (kl *Kubelet) reconcileCMADAnnotationWithExistingNode(logger klog.Logger, node, existingNode *v1.Node) bool {
 	var (
 		existingCMAAnnotation    = existingNode.Annotations[volutil.ControllerManagedAttachAnnotation]
@@ -281,9 +279,7 @@ func (kl *Kubelet) reconcileCMADAnnotationWithExistingNode(logger klog.Logger, n
 		return false
 	}
 
-	// If the just-constructed node and the existing node do
-	// not have the same value, update the existing node with
-	// the correct value of the annotation.
+	// 两者注解值不一致时，以 kubelet 当前配置为准更新既有节点。
 	if !newSet {
 		logger.Info("Controller attach-detach setting changed to false; updating existing Node")
 		delete(existingNode.Annotations, volutil.ControllerManagedAttachAnnotation)
@@ -298,8 +294,7 @@ func (kl *Kubelet) reconcileCMADAnnotationWithExistingNode(logger klog.Logger, n
 	return true
 }
 
-// initialNode constructs the initial v1.Node for this Kubelet, incorporating node
-// labels, information from the cloud provider, and Kubelet configuration.
+// initialNode 构造 kubelet 的初始 v1.Node：合并节点标签、云厂商信息与 kubelet 配置。
 func (kl *Kubelet) initialNode(ctx context.Context) (*v1.Node, error) {
 	logger := klog.FromContext(ctx)
 	node := &v1.Node{
@@ -349,7 +344,8 @@ func (kl *Kubelet) initialNode(ctx context.Context) (*v1.Node, error) {
 		logger.V(2).Info("Controller attach/detach is disabled for this node; Kubelet will attach and detach volumes")
 	}
 
-	// @question: should this be place after the call to the cloud provider? which also applies labels
+	// @question: 这里是否应该放到调用云厂商之后？云厂商同样会应用标签。
+	// 用户显式配置的标签覆盖默认值，并记录日志以暴露覆盖行为。
 	for k, v := range kl.nodeLabels {
 		if cv, found := node.ObjectMeta.Labels[k]; found {
 			logger.Info("the node label will overwrite default setting", "labelKey", k, "labelValue", v, "default", cv)
@@ -366,11 +362,10 @@ func (kl *Kubelet) initialNode(ctx context.Context) (*v1.Node, error) {
 	return node, nil
 }
 
-// fastNodeStatusUpdate is a "lightweight" version of syncNodeStatus which doesn't hit the
-// apiserver except for the final run, to be called by fastStatusUpdateOnce in each loop.
-// It holds the same lock as syncNodeStatus and is thread-safe when called concurrently with
-// syncNodeStatus. Its return value indicates whether the loop running it should exit
-// (final run), and it also sets kl.containerRuntimeReadyExpected.
+// fastNodeStatusUpdate 是 syncNodeStatus 的“轻量”版本：除最后一轮外不访问 apiserver，
+// 由 fastStatusUpdateOnce 在每轮循环中调用。它与 syncNodeStatus 持有同一把锁，
+// 因而可与其并发调用；返回值表示调用方循环是否应退出（即最后一轮），
+// 同时会设置 kl.containerRuntimeReadyExpected。
 func (kl *Kubelet) fastNodeStatusUpdate(ctx context.Context, timeout bool) (completed bool) {
 	logger := klog.FromContext(ctx)
 	kl.syncNodeStatusMux.Lock()
@@ -378,8 +373,8 @@ func (kl *Kubelet) fastNodeStatusUpdate(ctx context.Context, timeout bool) (comp
 		kl.syncNodeStatusMux.Unlock()
 
 		if completed {
-			// containerRuntimeReadyExpected is read by updateRuntimeUp().
-			// Not going for a more granular mutex as this path runs only once.
+			// containerRuntimeReadyExpected 会被 updateRuntimeUp() 读取。
+			// 该路径只会执行一次，因此不值得为它引入更细粒度的锁。
 			kl.updateRuntimeMux.Lock()
 			defer kl.updateRuntimeMux.Unlock()
 			kl.containerRuntimeReadyExpected = true
@@ -407,14 +402,14 @@ func (kl *Kubelet) fastNodeStatusUpdate(ctx context.Context, timeout bool) (comp
 		return true
 	}
 
-	// This is in addition to the regular syncNodeStatus logic so we can get the container runtime status earlier.
-	// This function itself has a mutex and it doesn't recursively call fastNodeStatusUpdate or syncNodeStatus.
+	// 常规 syncNodeStatus 也会做这件事，这里提前执行是为了更早拿到容器运行时状态。
+	// updateRuntimeUp 自带互斥锁，且不会递归调用 fastNodeStatusUpdate 或 syncNodeStatus。
 	kl.updateRuntimeUp(ctx)
 
 	node, changed := kl.updateNode(ctx, originalNode)
 
 	if !changed {
-		// We don't do markVolumesFromNode(node) here and leave it to the regular syncNodeStatus().
+		// 这里不调用 markVolumesFromNode，留给常规 syncNodeStatus 统一处理。
 		return false
 	}
 
@@ -430,25 +425,23 @@ func (kl *Kubelet) fastNodeStatusUpdate(ctx context.Context, timeout bool) (comp
 
 	logger.Info("Fast updating node status as it just became ready")
 	if _, err := kl.patchNodeStatus(originalNode, node); err != nil {
-		// The originalNode is probably stale, but we know that the current state of kubelet would turn
-		// the node to be ready. Retry using syncNodeStatus() which fetches from the apiserver.
+		// originalNode 可能已过期，但 kubelet 当前状态足以让节点变为 Ready；
+		// 改用 syncNodeStatus() 从 apiserver 重新读取后再试。
 		logger.Error(err, "Error updating node status, will retry with syncNodeStatus")
 
-		// The reversed kl.syncNodeStatusMux.Unlock/Lock() below to allow kl.syncNodeStatus() execution.
+		// 下面先 Unlock 再 Lock 是为了允许 kl.syncNodeStatus() 获取同一把锁。
 		kl.syncNodeStatusMux.Unlock()
 		kl.syncNodeStatus(ctx)
-		// This lock action is unnecessary if we add a flag to check in the defer before unlocking it,
-		// but having it here makes the logic a bit easier to read.
+		// 若在 defer 解锁前加标志位判断，这次加锁本可省略；写在显式位置更易读。
 		kl.syncNodeStatusMux.Lock()
 	}
 
-	// We don't do markVolumesFromNode(node) here and leave it to the regular syncNodeStatus().
+	// 这里不调用 markVolumesFromNode，留给常规 syncNodeStatus 统一处理。
 	return true
 }
 
-// syncNodeStatus should be called periodically from a goroutine.
-// It synchronizes node status to master if there is any change or enough time
-// passed from the last sync, registering the kubelet first if necessary.
+// syncNodeStatus 应由后台 goroutine 周期性调用：在状态发生变化或距上次同步
+// 已超过上报周期时把节点状态同步到控制面，必要时先完成 kubelet 注册。
 func (kl *Kubelet) syncNodeStatus(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	kl.syncNodeStatusMux.Lock()
@@ -458,7 +451,7 @@ func (kl *Kubelet) syncNodeStatus(ctx context.Context) {
 		return
 	}
 	if kl.registerNode {
-		// This will exit immediately if it doesn't need to do anything.
+		// 已注册时该调用会立即返回，不会重复注册。
 		kl.registerWithAPIServer(ctx)
 	}
 	if err := kl.updateNodeStatus(ctx); err != nil {
@@ -466,13 +459,13 @@ func (kl *Kubelet) syncNodeStatus(ctx context.Context) {
 	}
 }
 
-// updateNodeStatus updates node status to master with retries if there is any
-// change or enough time passed from the last sync.
+// updateNodeStatus 在状态变化或到达上报周期时同步节点状态，失败则按固定次数重试。
 func (kl *Kubelet) updateNodeStatus(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	logger.V(5).Info("Updating node status")
 	for i := 0; i < nodeStatusUpdateRetry; i++ {
 		if err := kl.tryUpdateNodeStatus(ctx, i); err != nil {
+			// 重试计数大于 0 说明并非首次失败，触发重复心跳失败回调。
 			if i > 0 && kl.onRepeatedHeartbeatFailure != nil {
 				kl.onRepeatedHeartbeatFailure()
 			}
@@ -484,15 +477,12 @@ func (kl *Kubelet) updateNodeStatus(ctx context.Context) error {
 	return fmt.Errorf("update node status exceeds retry count")
 }
 
-// tryUpdateNodeStatus tries to update node status to master if there is any
-// change or enough time passed from the last sync.
+// tryUpdateNodeStatus 执行一次节点状态同步尝试；首次读取走本地 lister，
+// 后续重试直接访问 apiserver。
 func (kl *Kubelet) tryUpdateNodeStatus(ctx context.Context, tryNumber int) error {
-	// In large clusters, GET and PUT operations on Node objects coming
-	// from here are the majority of load on apiserver and etcd.
-	// To reduce the load on control-plane, we are serving GET operations from
-	// local lister (the data might be slightly delayed but it doesn't
-	// seem to cause more conflict - the delays are pretty small).
-	// If it result in a conflict, all retries are served directly from etcd.
+	// 在大规模集群中，这里对 Node 对象的 GET/PUT 是 apiserver 与 etcd 的主要负载来源。
+	// 为降低控制面压力，正常路径从本地 lister 读取（数据略有延迟，但延迟很小，
+	// 并不会显著增加冲突）；一旦出现冲突，后续重试都直接访问 etcd。
 	var originalNode *v1.Node
 	var err error
 
@@ -517,14 +507,12 @@ func (kl *Kubelet) tryUpdateNodeStatus(ctx context.Context, tryNumber int) error
 		return nil
 	}
 
-	// There are 3 possible conditions that make shouldPatchNodeStatus to be true:
-	// 1. node is changed
-	// 2. isUpdateStatusPeriodExpired returns true due to lastStatusReportTime has Zero value. This will happen when kubelet restarts.
-	// 3. isUpdateStatusPeriodExpired returns true due to lastStatusReportTime expires with non-zero value.
-	// We want to calculate a new random delay for condition 1 and 2, so that we can avoid all the periodic node status
-	// updates to reach the apiserver at the same time.
-	// When condition 3 happens, random interval has already been used, and we want to reset the random delay, so that
-	// the node updates its status with fixed interval going forward.
+	// shouldPatchNodeStatus 为真有三种可能：
+	// 1. 节点状态发生变化；
+	// 2. lastStatusReportTime 为零值导致上报周期判定为已过期（kubelet 刚重启）；
+	// 3. lastStatusReportTime 非零但已过期。
+	// 对情况 1、2 重新计算随机延迟，避免所有节点在同一时刻向 apiserver 上报；
+	// 情况 3 说明随机间隔已经用过一轮，此时把延迟归零，后续按固定周期上报。
 	if changed || kl.lastStatusReportTime.IsZero() {
 		kl.delayAfterNodeStatusChange = kl.calculateDelay()
 	} else {
@@ -537,25 +525,26 @@ func (kl *Kubelet) tryUpdateNodeStatus(ctx context.Context, tryNumber int) error
 	return err
 }
 
+// isUpdateStatusPeriodExpired 判断距上次上报是否已超过上报周期（含随机抖动延迟）。
 func (kl *Kubelet) isUpdateStatusPeriodExpired() bool {
 	return kl.clock.Since(kl.lastStatusReportTime) >= kl.nodeStatusReportFrequency+kl.delayAfterNodeStatusChange
 }
 
+// calculateDelay 返回 [-0.5, 0.5) 倍上报周期的随机抖动，用于打散各节点的心跳时间。
 func (kl *Kubelet) calculateDelay() time.Duration {
 	return time.Duration(float64(kl.nodeStatusReportFrequency) * (-0.5 + rand.Float64()))
 }
 
-// updateNode creates a copy of originalNode and runs update logic on it.
-// It returns the updated node object and a bool indicating if anything has been changed.
+// updateNode 复制 originalNode 并在副本上执行更新逻辑，
+// 返回更新后的节点以及是否有任何字段发生变化。
 func (kl *Kubelet) updateNode(ctx context.Context, originalNode *v1.Node) (*v1.Node, bool) {
 	logger := klog.FromContext(ctx)
 	node := originalNode.DeepCopy()
 
 	podCIDRChanged := false
 	if len(node.Spec.PodCIDRs) != 0 {
-		// Pod CIDR could have been updated before, so we cannot rely on
-		// node.Spec.PodCIDR being non-empty. We also need to know if pod CIDR is
-		// actually changed.
+		// PodCIDR 之前可能已被更新，因此不能只判断 node.Spec.PodCIDR 是否非空；
+		// 还需要确认 CIDR 是否真的发生变化，以决定是否触发同步。
 		var err error
 		podCIDRs := strings.Join(node.Spec.PodCIDRs, ",")
 		if podCIDRChanged, err = kl.updatePodCIDR(ctx, podCIDRs); err != nil {
@@ -563,6 +552,7 @@ func (kl *Kubelet) updateNode(ctx context.Context, originalNode *v1.Node) (*v1.N
 		}
 	}
 
+	// OS 标签与实际运行环境不一致时修正，防止节点被错误调度。
 	areRequiredLabelsNotPresent := false
 	osName, osLabelExists := node.Labels[v1.LabelOSStable]
 	if !osLabelExists || osName != goruntime.GOOS {
@@ -572,7 +562,7 @@ func (kl *Kubelet) updateNode(ctx context.Context, originalNode *v1.Node) (*v1.N
 		node.Labels[v1.LabelOSStable] = goruntime.GOOS
 		areRequiredLabelsNotPresent = true
 	}
-	// Set the arch if there is a mismatch
+	// arch 标签缺失或不匹配时补写，保证调度器能正确识别节点架构。
 	arch, archLabelExists := node.Labels[v1.LabelArchStable]
 	if !archLabelExists || arch != goruntime.GOARCH {
 		if len(node.Labels) == 0 {
@@ -582,16 +572,17 @@ func (kl *Kubelet) updateNode(ctx context.Context, originalNode *v1.Node) (*v1.N
 		areRequiredLabelsNotPresent = true
 	}
 
+	// 每次同步都重新计算全部状态字段，setNodeStatus 会覆盖旧值。
 	kl.setNodeStatus(ctx, node)
 
 	changed := podCIDRChanged || nodeStatusHasChanged(&originalNode.Status, &node.Status) || areRequiredLabelsNotPresent
 	return node, changed
 }
 
-// patchNodeStatus patches node on the API server based on originalNode.
-// It returns any potential error, or an updatedNode and refreshes the state of kubelet when successful.
+// patchNodeStatus 以 originalNode 为基线 patch API server 上的节点对象；
+// 成功时刷新 kubelet 的上报时间，并返回更新后的节点。
 func (kl *Kubelet) patchNodeStatus(originalNode, node *v1.Node) (*v1.Node, error) {
-	// Patch the current status on the API server
+	// 只有状态确有变化或到达上报周期时才会走到这里，以减少控制面写入。
 	updatedNode, _, err := nodeutil.PatchNodeStatus(kl.heartbeatClient.CoreV1(), types.NodeName(kl.nodeName), originalNode, node)
 	if err != nil {
 		return nil, err
@@ -606,98 +597,86 @@ func (kl *Kubelet) patchNodeStatus(originalNode, node *v1.Node) (*v1.Node, error
 	return updatedNode, nil
 }
 
-// markVolumesFromNode updates volumeManager with VolumesInUse status from node.
+// markVolumesFromNode 用节点上的 VolumesInUse 状态更新 volumeManager。
 //
-// In the case of node status update being unnecessary, call with the fetched node.
-// We must mark the volumes as ReportedInUse in volume manager's dsw even
-// if no changes were made to the node status (no volumes were added or removed
-// from the VolumesInUse list).
+// 在无需上报节点状态时，用读取到的节点对象调用本方法：即使 VolumesInUse
+// 列表没有增删，也必须把卷标记为 ReportedInUse，写入卷管理器的 dsw。
 //
-// The reason is that on a kubelet restart, the volume manager's dsw is
-// repopulated and the volume ReportedInUse is initialized to false, while the
-// VolumesInUse list from the Node object still contains the state from the
-// previous kubelet instantiation.
+// 原因是 kubelet 重启后 dsw 会重建，卷的 ReportedInUse 初始为 false，
+// 而 Node 对象中的 VolumesInUse 仍保留上一次 kubelet 实例写入的状态。
 //
-// Once the volumes are added to the dsw, the ReportedInUse field needs to be
-// synced from the VolumesInUse list in the Node.Status.
+// 卷重新加入 dsw 后，必须依据 Node.Status 的 VolumesInUse 同步 ReportedInUse 字段。
 //
-// The MarkVolumesAsReportedInUse() call cannot be performed in dsw directly
-// because it does not have access to the Node object.
-// This also cannot be populated on node status manager init because the volume
-// may not have been added to dsw at that time.
+// MarkVolumesAsReportedInUse() 不能直接在 dsw 内完成，因为 dsw 访问不到 Node 对象；
+// 也不能放在节点状态管理器初始化时，因为那时卷可能尚未加入 dsw。
 //
-// Or, after a successful node status update, call with updatedNode returned from
-// the patch call, to mark the volumeInUse as reportedInUse to indicate
-// those volumes are already updated in the node's status
+// 另一种调用时机是节点状态 patch 成功后，用其返回的 updatedNode 调用本方法，
+// 表明这些卷已经反映在节点状态中。
 func (kl *Kubelet) markVolumesFromNode(node *v1.Node) {
+	// 只更新“已上报”标记，不触发新的挂载或卸载动作。
 	kl.volumeManager.MarkVolumesAsReportedInUse(node.Status.VolumesInUse)
 }
 
-// nodeRefWithUID returns a copy of the Kubelet's static node ObjectReference with
-// the Node's UID populated on a best-effort basis.
+// nodeRefWithUID 返回 kubelet 静态节点 ObjectReference 的副本，并尽力填充 Node 的 UID。
 //
-// kl.nodeRef is constructed once at Kubelet startup (see NewMainKubelet), before
-// the Node object is guaranteed to exist in the apiserver, so it intentionally
-// carries only kind+name and no UID (see https://github.com/kubernetes/kubernetes/issues/42701).
-// As a result every event the kubelet records against the node has
-// involvedObject.uid unset, which prevents consumers such as `kubectl describe
-// node` from correlating those events with the Node by UID
-// (see https://github.com/kubernetes/kubernetes/issues/138524).
+// kl.nodeRef 在 kubelet 启动时（NewMainKubelet）构造一次，那时 Node 对象尚不保证
+// 已存在于 apiserver，因此它有意只带 kind+name、不带 UID
+// （见 https://github.com/kubernetes/kubernetes/issues/42701）。这导致 kubelet
+// 记录的所有节点事件都没有 involvedObject.uid，`kubectl describe node` 等消费方
+// 无法按 UID 把事件关联到节点（见 https://github.com/kubernetes/kubernetes/issues/138524）。
 //
-// Once the Node is visible in the local cache we resolve the UID once and cache
-// the resulting reference in kl.cachedNodeRef. It is not refreshed: if the Node
-// were deleted and recreated with a new UID while this kubelet keeps running,
-// events would keep using the original UID.
+// 一旦本地缓存中能看到 Node，就解析一次 UID 并把结果缓存到 kl.cachedNodeRef。
+// 该缓存不会刷新：若 Node 被删除并以新 UID 重建，而 kubelet 仍在运行，
+// 事件会继续使用最初的 UID。
 func (kl *Kubelet) nodeRefWithUID() *v1.ObjectReference {
-	// Fast path: a reference with the UID already resolved has been cached.
+	// 快路径：已缓存过带 UID 的引用，直接返回。
 	if ref := kl.cachedNodeRef.Load(); ref != nil {
 		return ref
 	}
 
-	// kl.nodeRef is written once at construction in NewMainKubelet and never
-	// reassigned, so there is no concurrent writer to guard against here. The nil
-	// check only matters for tests that do not set it.
+	// kl.nodeRef 在 NewMainKubelet 中写入一次且不再变更，因此这里无需防范并发写；
+	// nil 判断只用于没有设置该字段的测试。
 	if kl.nodeRef == nil {
 		return nil
 	}
 
 	ref := *kl.nodeRef
 	if ref.UID == "" {
-		// In standalone mode there is no apiserver, hence no Node UID to resolve.
+		// 单机模式没有 apiserver，也就没有可解析的 Node UID。
 		if kl.kubeClient == nil {
 			return kl.nodeRef
 		}
 		node, err := kl.nodeLister.Get(string(kl.nodeName))
 		if err != nil || node.UID == "" {
-			// UID not known yet; return the name-only reference and retry next time.
+			// 本地缓存中尚无 UID；先返回仅含名称的引用，下次调用再重试。
 			return kl.nodeRef
 		}
 		ref.UID = node.UID
 	}
 
-	// Cache the resolved reference. CompareAndSwap keeps the first winner if two
-	// goroutines resolve concurrently; Load then returns whichever won.
+	// 缓存已解析的引用。并发解析时 CompareAndSwap 只保留先写入者，
+	// 随后 Load 返回胜出的那份。
 	kl.cachedNodeRef.CompareAndSwap(nil, &ref)
 	return kl.cachedNodeRef.Load()
 }
 
-// recordNodeStatusEvent records an event of the given type with the given
-// message for the node.
+// recordNodeStatusEvent 为节点记录一条指定类型与消息的事件。
 func (kl *Kubelet) recordNodeStatusEvent(logger klog.Logger, eventType, event string) {
 	logger.V(2).Info("Recording event message for node", "node", klog.KRef("", string(kl.nodeName)), "event", event)
 	kl.recorder.Eventf(kl.nodeRefWithUID(), eventType, event, "Node %s status is now: %s", kl.nodeName, event)
 }
 
-// recordEvent records an event for this node, the Kubelet's nodeRef is passed to the recorder
+// recordEvent 为当前节点记录事件；记录器使用带 UID 的 nodeRef 作为事件对象。
 func (kl *Kubelet) recordEvent(eventType, event, message string) {
 	kl.recorder.Eventf(kl.nodeRefWithUID(), eventType, event, "%s", message)
 }
 
-// record if node schedulable change.
+// recordNodeSchedulableEvent 在节点可调度性发生变化时记录事件。
 func (kl *Kubelet) recordNodeSchedulableEvent(ctx context.Context, node *v1.Node) error {
 	logger := klog.FromContext(ctx)
 	kl.lastNodeUnschedulableLock.Lock()
 	defer kl.lastNodeUnschedulableLock.Unlock()
+	// 仅在可调度性翻转时记录，避免周期性心跳重复产生事件。
 	if kl.lastNodeUnschedulable != node.Spec.Unschedulable {
 		if node.Spec.Unschedulable {
 			kl.recordNodeStatusEvent(logger, v1.EventTypeNormal, events.NodeNotSchedulable)
@@ -709,25 +688,25 @@ func (kl *Kubelet) recordNodeSchedulableEvent(ctx context.Context, node *v1.Node
 	return nil
 }
 
-// setNodeStatus fills in the Status fields of the given Node, overwriting
-// any fields that are currently set.
+// setNodeStatus 填充给定 Node 的 Status 字段，已设置的值会被覆盖。
 // TODO(madhusudancs): Simplify the logic for setting node conditions and
 // refactor the node status condition code out to a different file.
 func (kl *Kubelet) setNodeStatus(ctx context.Context, node *v1.Node) {
 	logger := klog.FromContext(ctx)
+	// 单个 setter 失败只记录日志，不阻断其余字段，保证节点状态尽量可用。
 	for i, f := range kl.setNodeStatusFuncs {
 		logger.V(5).Info("Setting node status condition code", "position", i, "node", klog.KObj(node))
 		if err := f(ctx, node); err != nil {
 			logger.Error(err, "Failed to set some node status fields", "node", klog.KObj(node))
 		}
 	}
+	// 仅在特性门控开启且确有声明特性时上报，避免向旧 apiserver 写入未知字段。
 	if utilfeature.DefaultFeatureGate.Enabled(features.NodeDeclaredFeatures) && kl.nodeDeclaredFeatures != nil {
 		node.Status.DeclaredFeatures = kl.nodeDeclaredFeatures
 	}
 }
 
-// defaultNodeStatusFuncs is a factory that generates the default set of
-// setNodeStatus funcs
+// defaultNodeStatusFuncs 生成默认的 setNodeStatus 函数集合。
 func (kl *Kubelet) defaultNodeStatusFuncs() []func(context.Context, *v1.Node) error {
 	var setters []func(ctx context.Context, n *v1.Node) error
 	setters = append(setters,
@@ -742,6 +721,8 @@ func (kl *Kubelet) defaultNodeStatusFuncs() []func(context.Context, *v1.Node) er
 		nodestatus.NodeFeatures(kl.runtimeState.runtimeFeatures),
 	)
 
+	// 前半部分上报相对静态的信息（地址、容量、版本等），
+	// 后半部分上报随运行时变化的条件与事件回调。
 	setters = append(setters,
 		nodestatus.MemoryPressureCondition(kl.clock.Now, kl.evictionManager.IsUnderMemoryPressure, kl.recordNodeStatusEvent),
 		nodestatus.DiskPressureCondition(kl.clock.Now, kl.evictionManager.IsUnderDiskPressure, kl.recordNodeStatusEvent),
@@ -758,9 +739,9 @@ func (kl *Kubelet) defaultNodeStatusFuncs() []func(context.Context, *v1.Node) er
 	return setters
 }
 
-// Validate given node IP belongs to the current host
+// validateNodeIP 校验给定 IP 属于本机网卡，且不是回环、组播等不可用地址。
 func validateNodeIP(nodeIP net.IP) error {
-	// Honor IP limitations set in setNodeStatus()
+	// 这些限制与 setNodeStatus() 中允许的地址类型保持一致。
 	if nodeIP.To4() == nil && nodeIP.To16() == nil {
 		return fmt.Errorf("nodeIP must be a valid IP address")
 	}
@@ -796,8 +777,8 @@ func validateNodeIP(nodeIP net.IP) error {
 	return fmt.Errorf("node IP: %q not found in the host's network interfaces", nodeIP.String())
 }
 
-// nodeStatusHasChanged compares the original node and current node's status and
-// returns true if any change happens. The heartbeat timestamp is ignored.
+// nodeStatusHasChanged 比较原始节点与当前节点的 Status，有变化则返回 true；
+// 心跳时间戳不参与比较。
 func nodeStatusHasChanged(originalStatus *v1.NodeStatus, status *v1.NodeStatus) bool {
 	if originalStatus == nil && status == nil {
 		return false
@@ -806,12 +787,12 @@ func nodeStatusHasChanged(originalStatus *v1.NodeStatus, status *v1.NodeStatus) 
 		return true
 	}
 
-	// Compare node conditions here because we need to ignore the heartbeat timestamp.
+	// 条件需单独比较：心跳时间每次上报都会变，不能参与整体 DeepEqual。
 	if nodeConditionsHaveChanged(originalStatus.Conditions, status.Conditions) {
 		return true
 	}
 
-	// Compare other fields of NodeStatus.
+	// 其余字段直接做语义比较。
 	originalStatusCopy := originalStatus.DeepCopy()
 	statusCopy := status.DeepCopy()
 	originalStatusCopy.Conditions = nil
@@ -819,9 +800,8 @@ func nodeStatusHasChanged(originalStatus *v1.NodeStatus, status *v1.NodeStatus) 
 	return !apiequality.Semantic.DeepEqual(originalStatusCopy, statusCopy)
 }
 
-// nodeConditionsHaveChanged compares the original node and current node's
-// conditions and returns true if any change happens. The heartbeat timestamp is
-// ignored.
+// nodeConditionsHaveChanged 比较两组节点条件，有变化则返回 true；
+// 心跳时间戳不参与比较。
 func nodeConditionsHaveChanged(originalConditions []v1.NodeCondition, conditions []v1.NodeCondition) bool {
 	if len(originalConditions) != len(conditions) {
 		return true
@@ -832,9 +812,11 @@ func nodeConditionsHaveChanged(originalConditions []v1.NodeCondition, conditions
 	conditionsCopy := make([]v1.NodeCondition, 0, len(conditions))
 	conditionsCopy = append(conditionsCopy, conditions...)
 
+	// 条件顺序不保证稳定，先按类型排序再逐项比较。
 	sort.SliceStable(originalConditionsCopy, func(i, j int) bool { return originalConditionsCopy[i].Type < originalConditionsCopy[j].Type })
 	sort.SliceStable(conditionsCopy, func(i, j int) bool { return conditionsCopy[i].Type < conditionsCopy[j].Type })
 
+	// LastHeartbeatTime 每次上报都会更新，比较前统一清零。
 	replacedheartbeatTime := metav1.Time{}
 	for i := range conditionsCopy {
 		originalConditionsCopy[i].LastHeartbeatTime = replacedheartbeatTime

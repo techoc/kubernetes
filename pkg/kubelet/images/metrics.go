@@ -28,6 +28,7 @@ import (
 )
 
 var (
+	// ensureImageRequestsCounter 按拉取策略、本地是否存在、是否需要拉取三个维度计数。
 	ensureImageRequestsCounter = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      kubeletmetrics.KubeletSubsystem,
@@ -41,12 +42,14 @@ var (
 
 var once sync.Once
 
+// registerMetrics 确保指标只注册一次。
 func registerMetrics() {
 	once.Do(func() {
 		legacyregistry.MustRegister(ensureImageRequestsCounter)
 	})
 }
 
+// recordEnsureImageRequest 记录一次 ensure-image 请求；nil 参数记为 unknown。
 func recordEnsureImageRequest(pullPolicy v1.PullPolicy, imagePresentLocally, imagePullRequired *bool) {
 	presentLocally := "unknown"
 	if imagePresentLocally != nil {

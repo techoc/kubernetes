@@ -34,10 +34,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试使用的配置目录、相对路径与配置文件名。
 const configDir = "/test-config-dir"
 const relativePath = "relative/path/test"
 const kubeletFile = "kubelet"
 
+// TestLoad 验证配置加载器对缺失文件、空文件、非法格式与合法配置的处理。
 func TestLoad(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	cases := []struct {
@@ -48,18 +50,18 @@ func TestLoad(t *testing.T) {
 		strictErr     bool
 		skipOnWindows bool
 	}{
-		// missing file
+		// 文件缺失。
 		{
 			desc: "missing file",
 			err:  "failed to read",
 		},
-		// empty file
+		// 空文件。
 		{
 			desc: "empty file",
 			file: ptr.To(``),
 			err:  "was empty",
 		},
-		// invalid format
+		// 非法格式。
 		{
 			desc: "invalid yaml",
 			file: ptr.To(`*`),
@@ -70,7 +72,7 @@ func TestLoad(t *testing.T) {
 			file: ptr.To(`{*`),
 			err:  "failed to decode",
 		},
-		// invalid object
+		// 非法对象。
 		{
 			desc: "missing kind",
 			file: ptr.To(`{"apiVersion":"kubelet.config.k8s.io/v1beta1"}`),
@@ -92,7 +94,7 @@ func TestLoad(t *testing.T) {
 			err:  "failed to decode",
 		},
 
-		// empty object with correct kind and version should result in the defaults for that kind and version
+		// kind 与 version 正确但内容为空的对象应得到对应版本的默认配置。
 		{
 			desc: "default from yaml",
 			file: ptr.To(`kind: KubeletConfiguration
@@ -107,7 +109,7 @@ apiVersion: kubelet.config.k8s.io/v1beta1`),
 			skipOnWindows: true,
 		},
 
-		// relative path
+		// 相对路径。
 		{
 			desc: "yaml, relative path is resolved",
 			file: ptr.To(fmt.Sprintf(`kind: KubeletConfiguration
@@ -131,7 +133,7 @@ staticPodPath: %s`, relativePath)),
 			skipOnWindows: true,
 		},
 		{
-			// This should fail from v1beta2+
+			// 从 v1beta2 起这里应当失败。
 			desc: "duplicate field",
 			file: ptr.To(fmt.Sprintf(`kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
@@ -147,7 +149,7 @@ staticPodPath: %s/foo`, relativePath, relativePath)),
 			skipOnWindows: true,
 		},
 		{
-			// This should fail from v1beta2+
+			// 从 v1beta2 起这里应当失败。
 			desc: "unknown field",
 			file: ptr.To(`kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
@@ -159,9 +161,10 @@ foo: bar`),
 		},
 	}
 
+	// 逐个用例构造临时文件系统并加载配置。
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
-			// Skip tests that fail on Windows, as discussed during the SIG Testing meeting from January 10, 2023
+			// 跳过在 Windows 上会失败的测试（依据 2023 年 1 月 10 日 SIG Testing 会议的讨论）。
 			if c.skipOnWindows && goruntime.GOOS == "windows" {
 				t.Skip("Skipping test that fails on Windows")
 			}
@@ -169,6 +172,7 @@ foo: bar`),
 			fs := utilfs.NewTempFs()
 			fs.MkdirAll(configDir, 0777)
 			path := filepath.Join(configDir, kubeletFile)
+			// 未提供文件内容时不创建文件，用于验证缺失文件场景。
 			if c.file != nil {
 				if err := addFile(fs, path, *c.file); err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -193,6 +197,7 @@ foo: bar`),
 	}
 }
 
+// TestResolveRelativePaths 验证 KubeletConfiguration 中的相对路径会基于配置目录解析。
 func TestResolveRelativePaths(t *testing.T) {
 	absolutePath := filepath.Join(configDir, "absolute")
 	cases := []struct {
@@ -206,18 +211,19 @@ func TestResolveRelativePaths(t *testing.T) {
 		{"relative path", relativePath, filepath.Join(configDir, relativePath), false},
 	}
 
+	// 获取配置中所有路径字段的指针，至少应存在一个。
 	paths := kubeletconfig.KubeletConfigurationPathRefs(newConfig(t))
 	if len(paths) == 0 {
 		t.Fatalf("requires at least one path field to exist in the KubeletConfiguration type")
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
-			// Skip tests that fail on Windows, as discussed during the SIG Testing meeting from January 10, 2023
+			// 跳过在 Windows 上会失败的测试（依据 2023 年 1 月 10 日 SIG Testing 会议的讨论）。
 			if c.skipOnWindows && goruntime.GOOS == "windows" {
 				t.Skip("Skipping test that fails on Windows")
 			}
 
-			// set the path, resolve it, and check if it resolved as we would expect
+			// 设置路径、解析并校验结果。
 			*(paths[0]) = c.path
 			resolveRelativePaths(paths, configDir)
 			if *(paths[0]) != c.expect {
@@ -227,6 +233,7 @@ func TestResolveRelativePaths(t *testing.T) {
 	}
 }
 
+// addFile 通过临时文件加重命名的方式写入文件内容。
 func addFile(fs utilfs.Filesystem, path string, fileContent string) error {
 	dir := filepath.Dir(path)
 	tmpFile, err := fs.TempFile(dir, "tmp_"+filepath.Base(path))
@@ -235,6 +242,7 @@ func addFile(fs utilfs.Filesystem, path string, fileContent string) error {
 	}
 	tmpPath := tmpFile.Name()
 
+	// 写入或关闭失败时清理临时文件，避免残留。
 	if _, err = tmpFile.Write([]byte(fileContent)); err != nil {
 		_ = tmpFile.Close()
 		_ = fs.Remove(tmpPath)
@@ -245,15 +253,17 @@ func addFile(fs utilfs.Filesystem, path string, fileContent string) error {
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
+	// 重命名是原子操作，读者不会看到写了一半的文件。
 	return fs.Rename(tmpPath, path)
 }
 
+// newConfig 返回 v1beta1 默认配置转换后的内部配置对象。
 func newConfig(t *testing.T) *kubeletconfig.KubeletConfiguration {
 	kubeletScheme, _, err := kubeletscheme.NewSchemeAndCodecs()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// get the built-in default configuration
+	// 获取内置的默认配置并转换为内部类型。
 	external := &kubeletconfigv1beta1.KubeletConfiguration{}
 	kubeletScheme.Default(external)
 	kc := &kubeletconfig.KubeletConfiguration{}

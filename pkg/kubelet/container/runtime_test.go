@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestParseContainerID 校验 "type://id" 解析：带引号、无引号、缺少分隔符与空串。
 func TestParseContainerID(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -62,6 +63,7 @@ func TestParseContainerID(t *testing.T) {
 		},
 	}
 
+	// 解析失败只记录日志并返回零值，因此无效输入统一期望空 ContainerID。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ParseContainerID(logger, tt.input)
@@ -70,6 +72,7 @@ func TestParseContainerID(t *testing.T) {
 	}
 }
 
+// TestContainerIDString 校验 ContainerID 的字符串化结果。
 func TestContainerIDString(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -101,12 +104,13 @@ func TestContainerIDString(t *testing.T) {
 	}
 }
 
+// TestPodStatusFindContainerStatusByName 校验按名称查找容器状态，同名时返回第一个。
 func TestPodStatusFindContainerStatusByName(t *testing.T) {
 	podStatus := &PodStatus{
 		ContainerStatuses: []*Status{
 			{Name: "container1", State: ContainerStateRunning},
 			{Name: "container2", State: ContainerStateExited},
-			{Name: "container1", State: ContainerStateCreated}, // duplicate name
+			{Name: "container1", State: ContainerStateCreated}, // 同名条目，用于验证返回第一个匹配
 		},
 	}
 
@@ -118,7 +122,7 @@ func TestPodStatusFindContainerStatusByName(t *testing.T) {
 		{
 			name:           "find existing container",
 			containerName:  "container1",
-			expectedStatus: podStatus.ContainerStatuses[0], // should return first match
+			expectedStatus: podStatus.ContainerStatuses[0], // 应返回第一个匹配
 		},
 		{
 			name:           "find another existing container",
@@ -145,12 +149,13 @@ func TestPodStatusFindContainerStatusByName(t *testing.T) {
 	}
 }
 
+// TestPodStatusFindActiveContainerStatusByName 校验在活跃容器状态中按名称查找。
 func TestPodStatusFindActiveContainerStatusByName(t *testing.T) {
 	podStatus := &PodStatus{
 		ActiveContainerStatuses: []*Status{
 			{Name: "container1", State: ContainerStateRunning},
 			{Name: "container2", State: ContainerStateExited},
-			{Name: "container1", State: ContainerStateCreated}, // duplicate name
+			{Name: "container1", State: ContainerStateCreated}, // 同名条目，用于验证返回第一个匹配
 		},
 	}
 
@@ -162,7 +167,7 @@ func TestPodStatusFindActiveContainerStatusByName(t *testing.T) {
 		{
 			name:           "find existing container",
 			containerName:  "container1",
-			expectedStatus: podStatus.ActiveContainerStatuses[0], // should return first match
+			expectedStatus: podStatus.ActiveContainerStatuses[0], // 应返回第一个匹配
 		},
 		{
 			name:           "find another existing container",
@@ -189,6 +194,7 @@ func TestPodStatusFindActiveContainerStatusByName(t *testing.T) {
 	}
 }
 
+// TestPodStatusGetRunningContainerStatuses 校验只返回运行中的容器状态。
 func TestPodStatusGetRunningContainerStatuses(t *testing.T) {
 	podStatus := &PodStatus{
 		ContainerStatuses: []*Status{
@@ -200,14 +206,15 @@ func TestPodStatusGetRunningContainerStatuses(t *testing.T) {
 	}
 
 	expected := []*Status{
-		podStatus.ContainerStatuses[0], // container1 - running
-		podStatus.ContainerStatuses[2], // container3 - running
+		podStatus.ContainerStatuses[0], // container1，运行中
+		podStatus.ContainerStatuses[2], // container3，运行中
 	}
 
 	result := podStatus.GetRunningContainerStatuses()
 	assert.Equal(t, expected, result, "GetRunningContainerStatuses()")
 }
 
+// TestGetPodFullName 校验由 Pod 对象生成全名（name_namespace）。
 func TestGetPodFullName(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -244,6 +251,7 @@ func TestGetPodFullName(t *testing.T) {
 	}
 }
 
+// TestBuildPodFullName 校验由名称与命名空间拼接全名的边界情况。
 func TestBuildPodFullName(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -285,6 +293,7 @@ func TestBuildPodFullName(t *testing.T) {
 	}
 }
 
+// TestParsePodFullName 校验 Pod 全名解析，空段或多下划线均应报错。
 func TestParsePodFullName(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -352,12 +361,13 @@ func TestParsePodFullName(t *testing.T) {
 	}
 }
 
+// TestPodFindContainerByName 校验按名称查找容器，同名时返回第一个。
 func TestPodFindContainerByName(t *testing.T) {
 	pod := &Pod{
 		Containers: []*Container{
 			{Name: "container1", ID: ContainerID{Type: "docker", ID: "abc123"}},
 			{Name: "container2", ID: ContainerID{Type: "docker", ID: "def456"}},
-			{Name: "container1", ID: ContainerID{Type: "docker", ID: "ghi789"}}, // duplicate name
+			{Name: "container1", ID: ContainerID{Type: "docker", ID: "ghi789"}}, // 同名条目，用于验证返回第一个匹配
 		},
 	}
 
@@ -369,7 +379,7 @@ func TestPodFindContainerByName(t *testing.T) {
 		{
 			name:              "find existing container",
 			containerName:     "container1",
-			expectedContainer: pod.Containers[0], // should return first match
+			expectedContainer: pod.Containers[0], // 应返回第一个匹配
 		},
 		{
 			name:              "find another existing container",
@@ -396,6 +406,7 @@ func TestPodFindContainerByName(t *testing.T) {
 	}
 }
 
+// TestPodFindContainerByID 校验按 ContainerID（类型 + ID）精确查找容器。
 func TestPodFindContainerByID(t *testing.T) {
 	pod := &Pod{
 		Containers: []*Container{
@@ -439,6 +450,7 @@ func TestPodFindContainerByID(t *testing.T) {
 	}
 }
 
+// TestPodFindSandboxByID 校验按 ContainerID 查找 sandbox。
 func TestPodFindSandboxByID(t *testing.T) {
 	pod := &Pod{
 		Sandboxes: []*Container{
@@ -482,6 +494,7 @@ func TestPodFindSandboxByID(t *testing.T) {
 	}
 }
 
+// TestPodToAPIPod 校验运行时 Pod 到 v1.Pod 的最小字段转换。
 func TestPodToAPIPod(t *testing.T) {
 	pod := &Pod{
 		ID:        "test-uid",
@@ -511,6 +524,7 @@ func TestPodToAPIPod(t *testing.T) {
 	assert.Equal(t, expected, result, "ToAPIPod()")
 }
 
+// TestPodIsEmpty 校验空 Pod 判定：只有完全零值才视为空。
 func TestPodIsEmpty(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -555,6 +569,7 @@ func TestPodIsEmpty(t *testing.T) {
 	}
 }
 
+// TestPodsFindPod 校验全名优先、UID 兜底的 Pod 查找语义。
 func TestPodsFindPod(t *testing.T) {
 	pods := Pods{
 		{ID: "uid1", Name: "pod1", Namespace: "ns1"},
@@ -601,6 +616,7 @@ func TestPodsFindPod(t *testing.T) {
 	}
 }
 
+// TestRuntimeStatusGetRuntimeCondition 校验按类型获取运行时条件，未知类型返回 nil。
 func TestRuntimeStatusGetRuntimeCondition(t *testing.T) {
 	status := &RuntimeStatus{
 		Conditions: []RuntimeCondition{
@@ -639,6 +655,7 @@ func TestRuntimeStatusGetRuntimeCondition(t *testing.T) {
 	}
 }
 
+// TestRuntimeStatusString 校验运行时状态的字符串格式（条件、handler、特性）。
 func TestRuntimeStatusString(t *testing.T) {
 	status := &RuntimeStatus{
 		Conditions: []RuntimeCondition{
@@ -657,6 +674,7 @@ func TestRuntimeStatusString(t *testing.T) {
 	assert.Equal(t, expected, result, "String()")
 }
 
+// TestRuntimeHandlerString 校验 runtime handler 的字符串格式。
 func TestRuntimeHandlerString(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -691,6 +709,7 @@ func TestRuntimeHandlerString(t *testing.T) {
 	}
 }
 
+// TestRuntimeConditionString 校验运行时条件的字符串格式。
 func TestRuntimeConditionString(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -727,6 +746,7 @@ func TestRuntimeConditionString(t *testing.T) {
 	}
 }
 
+// TestRuntimeFeaturesString 校验运行时特性的字符串格式，nil 时返回 "nil"。
 func TestRuntimeFeaturesString(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -764,7 +784,9 @@ func TestRuntimeFeaturesString(t *testing.T) {
 	}
 }
 
+// TestSortContainerStatusesByCreationTime 逐一校验排序接口的 Len、Swap、Less。
 func TestSortContainerStatusesByCreationTime(t *testing.T) {
+	// 创建时间刻意乱序，Swap 后再用 Less 检查顺序关系。
 	now := time.Now()
 	statuses := SortContainerStatusesByCreationTime{
 		{CreatedAt: now.Add(2 * time.Hour)},
@@ -772,17 +794,17 @@ func TestSortContainerStatusesByCreationTime(t *testing.T) {
 		{CreatedAt: now.Add(1 * time.Hour)},
 	}
 
-	// Test Len
+	// 验证 Len。
 	assert.Len(t, statuses, 3, "Len()")
 
-	// Test Swap
+	// 验证 Swap。
 	original1 := statuses[1]
 	original2 := statuses[2]
 	statuses.Swap(1, 2)
 	assert.Equal(t, original1, statuses[2], "Swap(0, 1) did not work correctly (0)")
 	assert.Equal(t, original2, statuses[1], "Swap(0, 1) did not work correctly (1)")
 
-	// Test Less
+	// 验证 Less：按创建时间升序。
 	assert.True(t, statuses.Less(1, 0), "Less(1, 0) should be true")
 	assert.False(t, statuses.Less(0, 1), "Less(0, 1) should be false")
 }

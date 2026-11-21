@@ -24,11 +24,12 @@ import (
 	"testing"
 )
 
-// TestNewCgroupName tests confirms that #68416 is fixed
+// TestNewCgroupName 验证 #68416 已修复。
 func TestNewCgroupName(t *testing.T) {
 	a := ParseCgroupfsToCgroupName("/a/")
 	ab := NewCgroupName(a, "b")
 
+	// 从 "/a/" 解析出的名称包含一个空段，后续追加子组时不应丢失。
 	expectedAB := CgroupName([]string{"a", "", "b"})
 	if !reflect.DeepEqual(ab, expectedAB) {
 		t.Errorf("Expected %d%+v; got %d%+v", len(expectedAB), expectedAB, len(ab), ab)
@@ -48,6 +49,7 @@ func TestNewCgroupName(t *testing.T) {
 	}
 }
 
+// TestCgroupNameToSystemdBasename 验证 CgroupName 转换为 systemd slice 基名时的转义规则。
 func TestCgroupNameToSystemdBasename(t *testing.T) {
 	testCases := []struct {
 		input    CgroupName
@@ -86,6 +88,7 @@ func TestCgroupNameToSystemdBasename(t *testing.T) {
 			expected: "BestEffort-pod_6c1a4e95_6bb6_11e6_bc26_28d2444e470d.slice",
 		},
 	}
+	// 逐个用例比较转换结果：连字符与下划线等字符会被 systemd 转义。
 	for _, testCase := range testCases {
 		if actual := path.Base(testCase.input.ToSystemd()); actual != testCase.expected {
 			t.Errorf("Unexpected result, input: %v, expected: %v, actual: %v", testCase.input, testCase.expected, actual)
@@ -93,6 +96,7 @@ func TestCgroupNameToSystemdBasename(t *testing.T) {
 	}
 }
 
+// TestCgroupNameToSystemd 验证 CgroupName 转换为完整的 systemd 层级路径。
 func TestCgroupNameToSystemd(t *testing.T) {
 	testCases := []struct {
 		input    CgroupName
@@ -126,6 +130,7 @@ func TestCgroupNameToSystemd(t *testing.T) {
 	}
 }
 
+// TestCgroupNameToCgroupfs 验证 CgroupName 转换为 cgroupfs 路径。
 func TestCgroupNameToCgroupfs(t *testing.T) {
 	testCases := []struct {
 		input    CgroupName
@@ -147,6 +152,7 @@ func TestCgroupNameToCgroupfs(t *testing.T) {
 	}
 }
 
+// TestParseSystemdToCgroupName 验证 systemd 路径解析为 CgroupName 时去除 .slice 后缀。
 func TestParseSystemdToCgroupName(t *testing.T) {
 	testCases := []struct {
 		input    string
@@ -169,6 +175,7 @@ func TestParseSystemdToCgroupName(t *testing.T) {
 	}
 }
 
+// TestCpuWeightToCPUShares 验证 cgroup v2 cpu.weight 到 cgroup v1 cpu.shares 的换算。
 func TestCpuWeightToCPUShares(t *testing.T) {
 	testCases := []struct {
 		cpuWeight         uint64
@@ -200,6 +207,7 @@ func TestCpuWeightToCPUShares(t *testing.T) {
 		},
 	}
 
+	// 换算应把权重线性映射到 [2, 262144] 的 shares 区间。
 	for _, testCase := range testCases {
 		if actual := cpuWeightToCPUShares(testCase.cpuWeight); actual != testCase.expectedCpuShares {
 			t.Errorf("cpuWeight: %v, expectedCpuShares: %v, actualCpuShares: %v",

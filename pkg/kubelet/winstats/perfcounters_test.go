@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// TestPerfCounter 验证各 Windows 性能计数器可以初始化，并在可观测时读到非零数据。
 func TestPerfCounter(t *testing.T) {
 	testCases := map[string]struct {
 		counter        string
@@ -82,9 +83,11 @@ func TestPerfCounter(t *testing.T) {
 		},
 	}
 
+	// 逐项验证计数器：非法名称应报错，其余应能读取数据。
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			counter, err := newPerfCounter(tc.counter)
+			// 非法计数器名称应返回预期的错误消息。
 			if tc.expectErr {
 				if err == nil || err.Error() != tc.expectedErrMsg {
 					t.Fatalf("expected error message `%s` but got `%v`", tc.expectedErrMsg, err)
@@ -92,13 +95,13 @@ func TestPerfCounter(t *testing.T) {
 				return
 			}
 
-			// There are some counters that we can't expect to see any non-zero values, like the
-			// networking-related counters.
+			// 某些计数器（如网络类）不保证出现非零值，因此跳过数值检查。
+			// 网络类计数器不保证出现非零值，只验证初始化成功。
 			if tc.skipCheck {
 				return
 			}
 
-			// Wait until we get a non-zero perf counter data.
+			// 轮询直到读到非零的计数器数据。
 			if pollErr := wait.Poll(100*time.Millisecond, 5*perfCounterUpdatePeriod, func() (bool, error) {
 				data, err := counter.getData()
 				if err != nil {
@@ -115,7 +118,7 @@ func TestPerfCounter(t *testing.T) {
 				return
 			}
 
-			// Check that we have at least one non-zero value in the data list.
+			// 确认数据列表中至少有一个非零值。
 			if pollErr := wait.Poll(100*time.Millisecond, 5*perfCounterUpdatePeriod, func() (bool, error) {
 				dataList, err := counter.getDataList()
 				if err != nil {

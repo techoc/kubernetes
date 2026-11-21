@@ -29,48 +29,48 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// cgroupv1MemLimitFile 是 cgroup v1 中记录内存上限的控制文件。
 const cgroupv1MemLimitFile string = "memory.limit_in_bytes"
 
-// cgroupV1impl implements the CgroupManager interface
-// for cgroup v1.
-// It's a stateless object which can be used to
-// update, create or delete any number of cgroups
-// It relies on runc/libcontainer cgroup managers.
+// cgroupV1impl 实现 cgroup v1 的 CgroupManager 接口。
+// 它是无状态对象，可创建、更新或删除任意数量的 cgroup，
+// 底层依赖 runc/libcontainer 的 cgroup 管理器。
 type cgroupV1impl struct {
 	cgroupCommon
 }
 
+// NewCgroupV1Manager 基于 cgroup v1 子系统信息构造 CgroupManager。
 func NewCgroupV1Manager(logger klog.Logger, cs *CgroupSubsystems, cgroupDriver string) CgroupManager {
 	return &cgroupV1impl{
 		cgroupCommon: newCgroupCommon(logger, cs, cgroupDriver),
 	}
 }
 
-// Version of the cgroup implementation on the host
+// Version 返回宿主机上 cgroup 实现的版本号。
 func (c *cgroupV1impl) Version() int {
 	return 1
 }
 
-// Validate checks if all subsystem cgroups are valid
+// Validate 检查指定 cgroup 在所有关注的子系统下是否都已存在。
 func (c *cgroupV1impl) Validate(name CgroupName) error {
-	// Get map of all cgroup paths on the system for the particular cgroup
+	// 获取该 cgroup 在系统上的所有 cgroup 路径。
 	cgroupPaths := c.buildCgroupPaths(name)
 
-	// the presence of alternative control groups not known to runc confuses
-	// the kubelet existence checks.
-	// ideally, we would have a mechanism in runc to support Exists() logic
-	// scoped to the set control groups it understands.  this is being discussed
-	// in https://github.com/opencontainers/runc/issues/1440
-	// once resolved, we can remove this code.
+	// runc 不认识的额外控制组会干扰 kubelet 的存在性检查。
+	// 理想情况下 runc 应提供按已知控制组集合限定范围的 Exists() 逻辑，
+	// 相关讨论见 https://github.com/opencontainers/runc/issues/1440，
+	// 该问题解决后即可删除这段代码。
+	// 只检查 runc 认识的控制器，避免未知挂载点导致误判。
 	allowlistControllers := sets.New[string]("cpu", "cpuacct", "cpuset", "memory", "systemd", "pids")
 
+	// hugetlb 仅在宿主挂载了对应控制器时才纳入检查。
 	if _, ok := c.subsystems.MountPoints["hugetlb"]; ok {
 		allowlistControllers.Insert("hugetlb")
 	}
 	var missingPaths []string
-	// If even one cgroup path doesn't exist, then the cgroup doesn't exist.
+	// 任一关注子系统的路径缺失，就认为该 cgroup 不存在。
 	for controller, path := range cgroupPaths {
-		// ignore mounts we don't care about
+		// 忽略不关心的挂载点。
 		if !allowlistControllers.Has(controller) {
 			continue
 		}
@@ -86,15 +86,15 @@ func (c *cgroupV1impl) Validate(name CgroupName) error {
 	return nil
 }
 
-// Exists checks if all subsystem cgroups already exist
+// Exists 判断所有子系统 cgroup 是否都已存在。
 func (c *cgroupV1impl) Exists(name CgroupName) bool {
 	return c.Validate(name) == nil
 }
 
-// MemoryUsage returns the current memory usage of the specified cgroup,
-// as read from cgroupfs.
+// MemoryUsage 从 cgroupfs 读取指定 cgroup 的当前内存用量。
 func (c *cgroupV1impl) MemoryUsage(name CgroupName) (int64, error) {
 	var path, file string
+	// 内存用量只能从 memory 控制器的挂载点读取。
 	mp, ok := c.subsystems.MountPoints["memory"]
 	if !ok { // should not happen
 		return -1, errors.New("no cgroup v1 mountpoint for memory controller found")
@@ -105,13 +105,14 @@ func (c *cgroupV1impl) MemoryUsage(name CgroupName) (int64, error) {
 	return int64(val), err
 }
 
-// Get the resource config values applied to the cgroup for specified resource type
+// GetCgroupConfig 读取指定资源类型在 cgroup 上生效的配置值。
 func (c *cgroupV1impl) GetCgroupConfig(name CgroupName, resource v1.ResourceName) (*ResourceConfig, error) {
 	cgroupPaths := c.buildCgroupPaths(name)
 	cgroupResourcePath, found := cgroupPaths[string(resource)]
 	if !found {
 		return nil, fmt.Errorf("failed to build %v cgroup fs path for cgroup %v", resource, name)
 	}
+	// 目前只支持读取 CPU 与内存两类资源。
 	switch resource {
 	case v1.ResourceCPU:
 		return c.getCgroupCPUConfig(cgroupResourcePath)
@@ -121,11 +122,13 @@ func (c *cgroupV1impl) GetCgroupConfig(name CgroupName, resource v1.ResourceName
 	return nil, fmt.Errorf("unsupported resource %v for cgroup %v", resource, name)
 }
 
+// getCgroupCPUConfig 读取 cpu.cfs_quota_us、cpu.cfs_period_us 和 cpu.shares。
 func (c *cgroupV1impl) getCgroupCPUConfig(cgroupPath string) (*ResourceConfig, error) {
 	cpuQuotaStr, errQ := fscommon.GetCgroupParamString(cgroupPath, "cpu.cfs_quota_us")
 	if errQ != nil {
 		return nil, fmt.Errorf("failed to read CPU quota for cgroup %v: %w", cgroupPath, errQ)
 	}
+	// quota 可能为 -1（表示不限制），因此必须按有符号整数解析。
 	cpuQuota, errInt := strconv.ParseInt(cpuQuotaStr, 10, 64)
 	if errInt != nil {
 		return nil, fmt.Errorf("failed to convert CPU quota as integer for cgroup %v: %w", cgroupPath, errInt)
@@ -141,6 +144,7 @@ func (c *cgroupV1impl) getCgroupCPUConfig(cgroupPath string) (*ResourceConfig, e
 	return &ResourceConfig{CPUShares: &cpuShares, CPUQuota: &cpuQuota, CPUPeriod: &cpuPeriod}, nil
 }
 
+// getCgroupMemoryConfig 复用通用逻辑读取 cgroup v1 的内存上限。
 func (c *cgroupV1impl) getCgroupMemoryConfig(cgroupPath string) (*ResourceConfig, error) {
 	return readCgroupMemoryConfig(cgroupPath, cgroupv1MemLimitFile)
 }

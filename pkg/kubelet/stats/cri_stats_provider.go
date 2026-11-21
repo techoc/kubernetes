@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package stats 实现 kubelet 的 Summary API 数据采集，包括从 CRI 与 cAdvisor 获取容器/节点统计。
 package stats
 
 import (
@@ -48,50 +49,50 @@ import (
 )
 
 var (
-	// defaultCachePeriod is the default cache period for each cpuUsage.
+	// defaultCachePeriod 是 cpuUsage 缓存的默认有效期，超过后条目会被清理。
 	defaultCachePeriod = 10 * time.Minute
 )
 
-// cpuUsageRecord holds the cpu usage stats and the calculated usageNanoCores.
+// cpuUsageRecord 保存一次 CPU 统计快照及其计算出的 usageNanoCores。
 type cpuUsageRecord struct {
 	stats          *runtimeapi.CpuUsage
 	usageNanoCores *uint64
 }
 
-// criStatsProvider implements the containerStatsProvider interface by getting
-// the container stats from CRI.
+// criStatsProvider 通过 CRI 获取容器统计，实现 containerStatsProvider 接口。
+// 它是默认的统计提供者，cAdvisor 仅作为补充。
 type criStatsProvider struct {
-	// cadvisor is used to get the node root filesystem's stats (such as the
-	// capacity/available bytes/inodes) that will be populated in per container
-	// filesystem stats.
+	// cadvisor 用于获取节点根文件系统统计（容量、可用字节与 inode），
+	// 这些值会填充到每个容器的文件系统统计中。
+	// 注意：CRI 不提供节点级文件系统容量，因此必须依赖 cAdvisor。
 	cadvisor cadvisor.Interface
-	// resourceAnalyzer is used to get the volume stats of the pods.
+	// resourceAnalyzer 用于获取 Pod 的卷统计。
 	resourceAnalyzer stats.ResourceAnalyzer
-	// runtimeService is used to get the status and stats of the pods and its
-	// managed containers.
+	// runtimeService 用于获取 Pod 及其容器的状态与统计。
+	// 所有 CRI 调用都经由它完成。
 	runtimeService internalapi.RuntimeService
-	// imageService is used to get the stats of the image filesystem.
+	// imageService 用于获取镜像文件系统统计。
 	imageService internalapi.ImageManagerService
-	// hostStatsProvider is used to get the status of the host filesystem consumed by pods.
+	// hostStatsProvider 用于获取 Pod 消耗的宿主机文件系统统计（如容器日志）。
 	hostStatsProvider HostStatsProvider
-	// windowsNetworkStatsProvider is used by kubelet to gather networking stats on Windows
+	// windowsNetworkStatsProvider 在 Windows 上用于采集网络统计；
 	windowsNetworkStatsProvider interface{} //nolint:unused // U1000 We can't import hcsshim due to Build constraints in hcsshim
-	// clock is used report current time
+	// clock 用于报告当前时间，便于测试注入。
 	clock clock.Clock
-	// fallbackStatsProvider is a cadvisor-backed stats provider used when
-	// the CRI does not implement PodSandboxStats.
+	// fallbackStatsProvider 是 cAdvisor 实现的兜底提供者，
+	// 在 CRI 未实现 PodSandboxStats 时使用。
 	fallbackStatsProvider containerStatsProvider
-	// useCRIPodSandboxStats is true when PodAndContainerStatsFromCRI is
-	// enabled and the CRI implements PodSandboxStats.
+	// useCRIPodSandboxStats 表示是否完全依赖 CRI 的 PodSandboxStats。
+	// 仅在特性门控开启且 CRI 支持时才会为 true。
 	useCRIPodSandboxStats bool
 
-	// cpuUsageCache caches the cpu usage for containers.
+	// cpuUsageCache 按容器 ID 缓存 CPU 使用量，用于计算 usageNanoCores。
 	cpuUsageCache map[string]*cpuUsageRecord
 	mutex         sync.RWMutex
 }
 
-// newCRIStatsProvider returns a containerStatsProvider implementation that
-// provides container stats using CRI.
+// newCRIStatsProvider 创建一个基于 CRI 的 containerStatsProvider 实现。
+// useCRIPodSandboxStats 只有在特性开启且 CRI 支持时才为 true。
 func newCRIStatsProvider(
 	cadvisor cadvisor.Interface,
 	resourceAnalyzer stats.ResourceAnalyzer,
@@ -115,30 +116,31 @@ func newCRIStatsProvider(
 	}
 }
 
-// ListPodStats returns the stats of all the pod-managed containers.
+// ListPodStats 返回所有 Pod 管理容器的统计。
 func (p *criStatsProvider) ListPodStats(ctx context.Context) ([]statsapi.PodStats, error) {
-	// Don't update CPU nano core usage.
+	// 只读路径不更新缓存，避免与周期性调用者产生竞争。
 	return p.listPodStats(ctx, false)
 }
 
-// ListPodStatsAndUpdateCPUNanoCoreUsage updates the cpu nano core usage for
-// the containers and returns the stats for all the pod-managed containers.
-// This is a workaround because CRI runtimes do not supply nano core usages,
-// so this function calculate the difference between the current and the last
-// (cached) cpu stats to calculate this metrics. The implementation assumes a
-// single caller to periodically invoke this function to update the metrics. If
-// there exist multiple callers, the period used to compute the cpu usage may
-// vary and the usage could be incoherent (e.g., spiky). If no caller calls
-// this function, the cpu usage will stay nil. Right now, eviction manager is
-// the only caller, and it calls this function every 10s.
+// ListPodStatsAndUpdateCPUNanoCoreUsage 更新容器 CPU usageNanoCores 并返回全部 Pod 统计。
+// CRI 不提供该指标，因此用当前与上次（缓存）的 CPU 统计差值计算。
+// 实现假设只有一个调用者周期性调用，否则采样周期不一致会导致数值抖动。
+// 目前 eviction manager 是唯一调用者，每 10s 调用一次。
+// 若无人调用，usageNanoCores 保持为 nil。
+// 这是 CRI 能力不足的折中方案。
+// 多调用者场景下数值可能不连贯。
+// 因此必须保持单调用者约定。
+// 调用者应按固定周期调用以获得平滑结果。
+// 该函数只应由一个组件调用。
 func (p *criStatsProvider) ListPodStatsAndUpdateCPUNanoCoreUsage(ctx context.Context) ([]statsapi.PodStats, error) {
-	// Update CPU nano core usage.
+	// 更新路径会读写缓存，因此只允许周期性调用。
 	return p.listPodStats(ctx, true)
 }
 
+// listPodStats 是 ListPodStats 与 ListPodStatsAndUpdateCPUNanoCoreUsage 的共同实现。
 func (p *criStatsProvider) listPodStats(ctx context.Context, updateCPUNanoCoreUsage bool) ([]statsapi.PodStats, error) {
-	// Gets node root filesystem information, which will be used to populate
-	// the available and capacity bytes/inodes in container stats.
+	// 获取节点根文件系统信息，用于填充容器统计中的可用量与容量。
+	// 这一步失败则整个统计不可用，因此直接返回错误。
 	rootFsInfo, err := p.cadvisor.RootFsInfo()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rootFs info: %v", err)
@@ -149,19 +151,22 @@ func (p *criStatsProvider) listPodStats(ctx context.Context, updateCPUNanoCoreUs
 		return nil, fmt.Errorf("failed to get pod or container map: %v", err)
 	}
 
+	// 完全依赖 CRI 还是部分依赖 cAdvisor，取决于运行时能力与特性门控。
+	// CRI 支持时直接从 sandbox 统计读取 Pod 级 CPU/内存。
 	if p.useCRIPodSandboxStats {
 		return p.listPodStatsStrictlyFromCRI(ctx, updateCPUNanoCoreUsage, containerMap, podSandboxMap, &rootFsInfo)
 	}
 	return p.listPodStatsPartiallyFromCRI(ctx, updateCPUNanoCoreUsage, containerMap, podSandboxMap, &rootFsInfo)
 }
 
+// listPodStatsPartiallyFromCRI 以 CRI 统计为主、cAdvisor 统计为补充构建 Pod 统计。
 func (p *criStatsProvider) listPodStatsPartiallyFromCRI(ctx context.Context, updateCPUNanoCoreUsage bool, containerMap map[string]*runtimeapi.Container, podSandboxMap map[string]*runtimeapi.PodSandbox, rootFsInfo *cadvisorapi.FsInfo) ([]statsapi.PodStats, error) {
-	// fsIDtoInfo is a map from mountpoint to its stats. This will be used
-	// as a cache to avoid querying cAdvisor for the filesystem stats with the
-	// same filesystem id many times.
+	// fsIDtoInfo 按挂载点缓存文件系统统计，
+	// 避免对同一文件系统重复查询 cAdvisor。
+	// 同一 Pod 的多个容器通常共享文件系统，缓存收益明显。
 	fsIDtoInfo := make(map[string]*cadvisorapi.FsInfo)
 
-	// sandboxIDToPodStats is a temporary map from sandbox ID to its pod stats.
+	// 按 sandbox ID 聚合 Pod 统计，容器统计到达顺序不影响结果。
 	sandboxIDToPodStats := make(map[string]*statsapi.PodStats)
 
 	resp, err := p.runtimeService.ListContainerStats(ctx, &runtimeapi.ContainerStatsFilter{})
@@ -176,12 +181,13 @@ func (p *criStatsProvider) listPodStatsPartiallyFromCRI(ctx context.Context, upd
 	}
 	caInfos, allInfos := getCRICadvisorStats(logger, allInfos)
 
-	// get network stats for containers.
-	// This is only used on Windows. For other platforms, (nil, nil) should be returned.
+	// 获取容器网络统计：仅 Windows 有值，其他平台返回 (nil, nil)。
+	// 非 Windows 平台走 cAdvisor 的网络统计路径。
 	containerNetworkStats, err := p.listContainerNetworkStats(logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list container network stats: %v", err)
 	}
+	// 逐个容器补充统计；未知容器可能是已删除的残留记录。
 	for _, stats := range resp {
 		containerID := stats.Attributes.Id
 		container, found := containerMap[containerID]
@@ -195,15 +201,15 @@ func (p *criStatsProvider) listPodStatsPartiallyFromCRI(ctx context.Context, upd
 			continue
 		}
 
-		// Creates the stats of the pod (if not created yet) which the
-		// container belongs to.
+		// 首次遇到该 sandbox 的容器时创建 Pod 统计对象。
+		// 后续容器统计会追加到同一个对象。
 		ps, found := sandboxIDToPodStats[podSandboxID]
 		if !found {
 			ps = buildPodStats(podSandbox)
 			sandboxIDToPodStats[podSandboxID] = ps
 		}
 
-		// Fill available stats for full set of required pod stats
+		// 用 CRI 统计构造容器统计，并汇总 Pod 级网络、CPU/内存、swap 与 IO。
 		cs, err := p.makeContainerStats(logger, stats, container, rootFsInfo, fsIDtoInfo, podSandbox.GetMetadata(), updateCPUNanoCoreUsage)
 		if err != nil {
 			return nil, fmt.Errorf("make container stats: %w", err)
@@ -213,8 +219,8 @@ func (p *criStatsProvider) listPodStatsPartiallyFromCRI(ctx context.Context, upd
 		p.addSwapStats(ps, types.UID(podSandbox.Metadata.Uid), allInfos, cs)
 		p.addIOStats(ps, types.UID(podSandbox.Metadata.Uid), allInfos, cs)
 
-		// If cadvisor stats is available for the container, use it to populate
-		// container stats
+		// cAdvisor 能提供 CRI 缺失的进程数与自定义指标，因此有则补充。
+		// 找不到时仅记录日志，不阻断统计生成。
 		caStats, caFound := caInfos[containerID]
 		if !caFound {
 			logger.V(5).Info("Unable to find cadvisor stats for container", "containerID", containerID)
@@ -225,7 +231,7 @@ func (p *criStatsProvider) listPodStatsPartiallyFromCRI(ctx context.Context, upd
 
 		ps.Containers = append(ps.Containers, *cs)
 	}
-	// cleanup outdated caches.
+	// 清理过期 CPU 缓存，防止长期运行的节点内存持续增长。
 	p.cleanupOutdatedCaches()
 
 	result := make([]statsapi.PodStats, 0, len(sandboxIDToPodStats))
@@ -236,6 +242,7 @@ func (p *criStatsProvider) listPodStatsPartiallyFromCRI(ctx context.Context, upd
 	return result, nil
 }
 
+// listPodStatsStrictlyFromCRI 仅使用 CRI 的 PodSandboxStats 构建 Pod 统计。
 func (p *criStatsProvider) listPodStatsStrictlyFromCRI(ctx context.Context, updateCPUNanoCoreUsage bool, containerMap map[string]*runtimeapi.Container, podSandboxMap map[string]*runtimeapi.PodSandbox, rootFsInfo *cadvisorapi.FsInfo) ([]statsapi.PodStats, error) {
 	criSandboxStats, err := p.runtimeService.ListPodSandboxStats(ctx, &runtimeapi.PodSandboxStatsFilter{})
 	if err != nil {
@@ -246,6 +253,7 @@ func (p *criStatsProvider) listPodStatsStrictlyFromCRI(ctx context.Context, upda
 	fsIDtoInfo := make(map[string]*cadvisorapi.FsInfo)
 	summarySandboxStats := make([]statsapi.PodStats, 0, len(podSandboxMap))
 	for _, criSandboxStat := range criSandboxStats {
+		// 运行时可能返回不完整的统计，跳过而不是让整个请求失败。
 		if criSandboxStat == nil || criSandboxStat.Attributes == nil {
 			logger.V(5).Info("Unable to find CRI stats for sandbox")
 			continue
@@ -258,6 +266,7 @@ func (p *criStatsProvider) listPodStatsStrictlyFromCRI(ctx context.Context, upda
 		if err := p.addCRIPodContainerStats(logger, criSandboxStat, ps, fsIDtoInfo, containerMap, podSandbox, rootFsInfo, updateCPUNanoCoreUsage); err != nil {
 			return nil, fmt.Errorf("add CRI pod container stats: %w", err)
 		}
+		// 各 add* 函数只负责一个统计维度，便于按需扩展。
 		addCRIPodNetworkStats(ps, criSandboxStat)
 		addCRIPodCPUStats(ps, criSandboxStat)
 		addCRIPodMemoryStats(ps, criSandboxStat)
@@ -269,8 +278,10 @@ func (p *criStatsProvider) listPodStatsStrictlyFromCRI(ctx context.Context, upda
 	return summarySandboxStats, nil
 }
 
+// PodCPUAndMemoryStats 返回单个 Pod 的 CPU 与内存统计，用于 Pod 级资源管理。
 func (p *criStatsProvider) PodCPUAndMemoryStats(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus) (*statsapi.PodStats, error) {
 	logger := klog.FromContext(ctx)
+	// 没有 sandbox 状态就无法定位容器，直接报错。
 	if len(podStatus.SandboxStatuses) == 0 {
 		return nil, fmt.Errorf("missing sandbox for pod %s", format.Pod(pod))
 	}
@@ -281,7 +292,7 @@ func (p *criStatsProvider) PodCPUAndMemoryStats(ctx context.Context, pod *v1.Pod
 			UID:       podSandbox.Metadata.Uid,
 			Namespace: podSandbox.Metadata.Namespace,
 		},
-		// The StartTime in the summary API is the pod creation time.
+		// Summary API 中的 StartTime 取 Pod（sandbox）创建时间。
 		StartTime: metav1.NewTime(time.Unix(0, podSandbox.CreatedAt)),
 	}
 	if p.useCRIPodSandboxStats {
@@ -309,6 +320,7 @@ func (p *criStatsProvider) PodCPUAndMemoryStats(ctx context.Context, pod *v1.Pod
 		ps.Containers = append(ps.Containers, *cs)
 	}
 
+	// CRI 不提供 Pod 级统计时，用兜底提供者（cAdvisor）补齐，并合并到已有容器统计。
 	if !p.useCRIPodSandboxStats {
 		fallbackStats, err := p.fallbackStatsProvider.PodCPUAndMemoryStats(ctx, pod, podStatus)
 		if err != nil {
@@ -326,6 +338,7 @@ func (p *criStatsProvider) PodCPUAndMemoryStats(ctx context.Context, pod *v1.Pod
 				}
 			}
 			if container != nil {
+				// 只填补缺失字段，保留 CRI 已提供的值。
 				if container.CPU == nil {
 					container.CPU = fb.CPU
 				}
@@ -341,9 +354,9 @@ func (p *criStatsProvider) PodCPUAndMemoryStats(ctx context.Context, pod *v1.Pod
 	return ps, nil
 }
 
-// ListPodCPUAndMemoryStats returns the CPU and Memory stats of all the pod-managed containers.
+// ListPodCPUAndMemoryStats 返回所有 Pod 管理容器的 CPU 与内存统计。
 func (p *criStatsProvider) ListPodCPUAndMemoryStats(ctx context.Context) ([]statsapi.PodStats, error) {
-	// sandboxIDToPodStats is a temporary map from sandbox ID to its pod stats.
+	// 按 sandbox ID 聚合，避免依赖容器统计的返回顺序。
 	sandboxIDToPodStats := make(map[string]*statsapi.PodStats)
 	containerMap, podSandboxMap, err := p.getPodAndContainerMaps(ctx)
 	if err != nil {
@@ -396,21 +409,21 @@ func (p *criStatsProvider) ListPodCPUAndMemoryStats(ctx context.Context) ([]stat
 			continue
 		}
 
-		// Creates the stats of the pod (if not created yet) which the
-		// container belongs to.
+		// 首次遇到该 sandbox 的容器时创建 Pod 统计对象。
+		// 后续容器统计会追加到同一个对象。
 		ps, found := sandboxIDToPodStats[podSandboxID]
 		if !found {
 			ps = buildPodStats(podSandbox)
 			sandboxIDToPodStats[podSandboxID] = ps
 		}
 
-		// Fill available CPU and memory stats for full set of required pod stats
+		// 只填充 CPU/内存/swap，避免做无谓的磁盘统计。
 		cs := p.makeContainerCPUAndMemoryStats(stats, time.Unix(0, container.CreatedAt), true)
 		p.addPodCPUMemoryStats(ps, types.UID(podSandbox.Metadata.Uid), allInfos, cs)
 		p.addSwapStats(ps, types.UID(podSandbox.Metadata.Uid), allInfos, cs)
 
-		// If cadvisor stats is available for the container, use it to populate
-		// container stats
+		// cAdvisor 统计可补全 CRI 缺失的字段。
+		// 找不到时仅记录日志，不影响整体结果。
 		caStats, caFound := caInfos[containerID]
 		if !caFound {
 			logger.V(4).Info("Unable to find cadvisor stats for container", "containerID", containerID)
@@ -419,7 +432,7 @@ func (p *criStatsProvider) ListPodCPUAndMemoryStats(ctx context.Context) ([]stat
 		}
 		ps.Containers = append(ps.Containers, *cs)
 	}
-	// cleanup outdated caches.
+	// 清理过期缓存，避免长期运行内存增长。
 	p.cleanupOutdatedCaches()
 
 	for _, s := range sandboxIDToPodStats {
@@ -428,13 +441,14 @@ func (p *criStatsProvider) ListPodCPUAndMemoryStats(ctx context.Context) ([]stat
 	return result, nil
 }
 
+// getPodAndContainerMaps 构建容器 ID 与 sandbox ID 到 CRI 对象的映射。
 func (p *criStatsProvider) getPodAndContainerMaps(ctx context.Context) (map[string]*runtimeapi.Container, map[string]*runtimeapi.PodSandbox, error) {
 	containers, err := p.runtimeService.ListContainers(ctx, &runtimeapi.ContainerFilter{})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list all containers: %v", err)
 	}
 
-	// Creates pod sandbox map between the pod sandbox ID and the PodSandbox object.
+	// 先过滤已终止的 sandbox，避免已删除 Pod 的统计混入结果。
 	podSandboxMap := make(map[string]*runtimeapi.PodSandbox)
 	podSandboxes, err := p.runtimeService.ListPodSandbox(ctx, &runtimeapi.PodSandboxFilter{})
 	if err != nil {
@@ -446,7 +460,7 @@ func (p *criStatsProvider) getPodAndContainerMaps(ctx context.Context) (map[stri
 	}
 
 	containers = removeTerminatedContainers(containers)
-	// Creates container map between the container ID and the Container object.
+	// 已终止容器不参与用量计算，因此同样过滤掉。
 	containerMap := make(map[string]*runtimeapi.Container)
 	for _, c := range containers {
 		containerMap[c.Id] = c
@@ -454,17 +468,17 @@ func (p *criStatsProvider) getPodAndContainerMaps(ctx context.Context) (map[stri
 	return containerMap, podSandboxMap, nil
 }
 
-// ImageFsStats returns the stats of the image filesystem.
+// ImageFsStats 返回镜像文件系统统计；容器文件系统与镜像共用时返回同一份数据。
 func (p *criStatsProvider) ImageFsStats(ctx context.Context) (imageFsRet *statsapi.FsStats, containerFsRet *statsapi.FsStats, errRet error) {
 	resp, err := p.imageService.ImageFsInfo(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// CRI may return the stats of multiple image filesystems but we only
-	// return the first one.
+	// CRI 可能返回多个镜像文件系统，但目前只使用第一个。
+	// 多文件系统支持见下方 TODO。
 	//
-	// TODO(yguo0905): Support returning stats of multiple image filesystems.
+	// TODO(yguo0905): 支持返回多个镜像文件系统的统计。
 	if len(resp.GetImageFilesystems()) == 0 {
 		return nil, nil, fmt.Errorf("imageFs information is unavailable")
 	}
@@ -481,21 +495,21 @@ func (p *criStatsProvider) ImageFsStats(ctx context.Context) (imageFsRet *statsa
 		return nil, nil, fmt.Errorf("get filesystem info: %w", err)
 	}
 	if imageFsInfo != nil {
-		// The image filesystem id is unknown to the local node or there's
-		// an error on retrieving the stats. In these cases, we omit those
-		// stats and return the best-effort partial result. See
-		// https://github.com/kubernetes/heapster/issues/1793.
+		// 文件系统 ID 未知或查询出错时，省略容量信息，返回尽力而为的部分结果。
+		// 这与 heapster#1793 的处理方式保持一致。
+		// 只读统计不应因容量未知而整体失败。
+		// 参见 heapster#1793。
 		imageFsRet.AvailableBytes = &imageFsInfo.Available
 		imageFsRet.CapacityBytes = &imageFsInfo.Capacity
 		imageFsRet.InodesFree = imageFsInfo.InodesFree
 		imageFsRet.Inodes = imageFsInfo.Inodes
 	}
-	// TODO: For CRI Stats Provider we don't support separate disks yet.
+	// TODO: CRI 统计提供者尚不支持独立的容器文件系统，因此两者返回同一份数据。
 	return imageFsRet, imageFsRet, nil
 }
 
-// ImageFsDevice returns name of the device where the image filesystem locates,
-// e.g. /dev/sda1.
+// ImageFsDevice 返回镜像文件系统所在设备名，例如 /dev/sda1。
+// 多个镜像文件系统时返回第一个能查到设备信息的结果。
 func (p *criStatsProvider) ImageFsDevice(ctx context.Context) (string, error) {
 	resp, err := p.imageService.ImageFsInfo(ctx)
 	if err != nil {
@@ -513,9 +527,9 @@ func (p *criStatsProvider) ImageFsDevice(ctx context.Context) (string, error) {
 	return "", errors.New("imagefs device is not found")
 }
 
-// getFsInfo returns the information of the filesystem with the specified
-// fsID. If any error occurs, this function logs the error and returns
-// nil.
+// getFsInfo 返回指定 fsID 对应的文件系统信息；
+// 出错时记录日志并返回 nil，让调用方降级处理。
+// 只有非预期错误才返回 error。
 func (p *criStatsProvider) getFsInfo(logger klog.Logger, fsID *runtimeapi.FilesystemIdentifier) (*cadvisorapi.FsInfo, error) {
 	if fsID == nil {
 		logger.V(2).Info("Failed to get filesystem info: fsID is nil")
@@ -525,6 +539,7 @@ func (p *criStatsProvider) getFsInfo(logger klog.Logger, fsID *runtimeapi.Filesy
 	fsInfo, err := p.cadvisor.GetDirFsInfo(mountpoint)
 	if err != nil {
 		msg := "Failed to get the info of the filesystem with mountpoint"
+		// 这些错误表示设备已消失或数据缺失，属于可降级的正常情况。
 		if errors.Is(err, cadvisorfs.ErrNoSuchDevice) ||
 			errors.Is(err, cadvisorfs.ErrDeviceNotInPartitionsMap) ||
 			errors.Is(err, cadvisormemory.ErrDataNotFound) {
@@ -538,7 +553,7 @@ func (p *criStatsProvider) getFsInfo(logger klog.Logger, fsID *runtimeapi.Filesy
 	return &fsInfo, nil
 }
 
-// buildPodStats returns a PodStats that identifies the Pod managing cinfo
+// buildPodStats 根据 sandbox 元数据构造仅含 Pod 标识与启动时间的 PodStats。
 func buildPodStats(podSandbox *runtimeapi.PodSandbox) *statsapi.PodStats {
 	return &statsapi.PodStats{
 		PodRef: statsapi.PodReference{
@@ -546,11 +561,12 @@ func buildPodStats(podSandbox *runtimeapi.PodSandbox) *statsapi.PodStats {
 			UID:       podSandbox.Metadata.Uid,
 			Namespace: podSandbox.Metadata.Namespace,
 		},
-		// The StartTime in the summary API is the pod creation time.
+		// Summary API 中的 StartTime 取 Pod（sandbox）创建时间。
 		StartTime: metav1.NewTime(time.Unix(0, podSandbox.CreatedAt)),
 	}
 }
 
+// addPodNetworkStats 为 Pod 统计补充网络数据。
 func (p *criStatsProvider) addPodNetworkStats(
 	logger klog.Logger,
 	ps *statsapi.PodStats,
@@ -560,7 +576,7 @@ func (p *criStatsProvider) addPodNetworkStats(
 	netStats *statsapi.NetworkStats,
 ) {
 	caPodSandbox, found := caInfos[podSandboxID]
-	// try get network stats from cadvisor first.
+	// 优先使用 cAdvisor 的 sandbox 网络统计，它比 CRI 更完整。
 	if found {
 		networkStats := cadvisorInfoToNetworkStats(&caPodSandbox)
 		if networkStats != nil {
@@ -569,23 +585,24 @@ func (p *criStatsProvider) addPodNetworkStats(
 		}
 	}
 
-	// Not found from cadvisor, get from netStats.
+	// cAdvisor 无数据时退回运行时提供的网络统计（主要针对 Windows）。
 	if netStats != nil {
 		ps.Network = netStats
 		return
 	}
 
-	// TODO: sum Pod network stats from container stats.
+	// TODO: 从容器统计汇总 Pod 网络统计。
 	logger.V(4).Info("Unable to find network stats for sandbox", "sandboxID", podSandboxID)
 }
 
+// addPodCPUMemoryStats 汇总 Pod 级 CPU 与内存统计。
 func (p *criStatsProvider) addPodCPUMemoryStats(
 	ps *statsapi.PodStats,
 	podUID types.UID,
 	allInfos map[string]cadvisorapi.ContainerInfo,
 	cs *statsapi.ContainerStats,
 ) {
-	// try get cpu and memory stats from cadvisor first.
+	// cAdvisor 直接提供 Pod cgroup 统计，优先级高于按容器累加。
 	podCgroupInfo := getCadvisorPodInfoFromPodUID(podUID, allInfos)
 	if podCgroupInfo != nil {
 		cpu, memory := cadvisorInfoToCPUandMemoryStats(podCgroupInfo)
@@ -594,7 +611,7 @@ func (p *criStatsProvider) addPodCPUMemoryStats(
 		return
 	}
 
-	// Sum Pod cpu and memory stats from containers stats.
+	// 没有 Pod cgroup 数据时退化为容器统计求和。
 	if cs.CPU != nil {
 		if ps.CPU == nil {
 			ps.CPU = &statsapi.CPUStats{}
@@ -605,7 +622,7 @@ func (p *criStatsProvider) addPodCPUMemoryStats(
 		usageNanoCores := ptr.Deref(cs.CPU.UsageNanoCores, 0) + ptr.Deref(ps.CPU.UsageNanoCores, 0)
 		ps.CPU.UsageCoreNanoSeconds = &usageCoreNanoSeconds
 		ps.CPU.UsageNanoCores = &usageNanoCores
-		// Pod level PSI stats cannot be calculated from container level
+		// Pod 级 PSI 无法由容器级数据推导，因此留空。
 	}
 
 	if cs.Memory != nil {
@@ -626,24 +643,25 @@ func (p *criStatsProvider) addPodCPUMemoryStats(
 		ps.Memory.RSSBytes = &rSSBytes
 		ps.Memory.PageFaults = &pageFaults
 		ps.Memory.MajorPageFaults = &majorPageFaults
-		// Pod level PSI stats cannot be calculated from container level
+		// Pod 级 PSI 无法由容器级数据推导，因此仅保留时间戳。
 	}
 }
 
+// addSwapStats 汇总 Pod 级 swap 统计。
 func (p *criStatsProvider) addSwapStats(
 	ps *statsapi.PodStats,
 	podUID types.UID,
 	allInfos map[string]cadvisorapi.ContainerInfo,
 	cs *statsapi.ContainerStats,
 ) {
-	// try get swap stats from cadvisor first.
+	// 优先使用 cAdvisor 的 Pod cgroup swap 统计。
 	podCgroupInfo := getCadvisorPodInfoFromPodUID(podUID, allInfos)
 	if podCgroupInfo != nil {
 		ps.Swap = cadvisorInfoToSwapStats(podCgroupInfo)
 		return
 	}
 
-	// Sum Pod swap stats from containers stats.
+	// 没有 Pod 级数据时按容器累加。
 	if cs.Swap != nil {
 		if ps.Swap == nil {
 			ps.Swap = &statsapi.SwapStats{Time: cs.Swap.Time}
@@ -655,8 +673,8 @@ func (p *criStatsProvider) addSwapStats(
 	}
 }
 
-// aggregatePodSwapStats aggregates pod-level swap stats from container swap stats.
-// This is used when CRI doesn't provide pod-level swap stats (e.g., LinuxPodSandboxStats doesn't have a Swap field).
+// aggregatePodSwapStats 从容器 swap 统计聚合出 Pod 级 swap 统计，
+// 用于 CRI 未提供 Pod 级 swap 的场景（如 LinuxPodSandboxStats 没有 Swap 字段）。
 func aggregatePodSwapStats(ps *statsapi.PodStats) {
 	if len(ps.Containers) == 0 {
 		return
@@ -667,7 +685,7 @@ func aggregatePodSwapStats(ps *statsapi.PodStats) {
 	for _, cs := range ps.Containers {
 		if cs.Swap != nil {
 			hasSwapStats = true
-			// TODO: Consider picking the newest time across containers instead of just using the last one.
+			// TODO: 考虑取所有容器中最新时间，而不是直接使用最后一个容器的时间。
 			swapTime = cs.Swap.Time
 			swapAvailableBytes += ptr.Deref(cs.Swap.SwapAvailableBytes, 0)
 			swapUsageBytes += ptr.Deref(cs.Swap.SwapUsageBytes, 0)
@@ -682,16 +700,18 @@ func aggregatePodSwapStats(ps *statsapi.PodStats) {
 	}
 }
 
+// addIOStats 为 Pod 统计补充 IO/PSI 数据；特性门控关闭时直接跳过。
 func (p *criStatsProvider) addIOStats(
 	ps *statsapi.PodStats,
 	podUID types.UID,
 	allInfos map[string]cadvisorapi.ContainerInfo,
 	cs *statsapi.ContainerStats,
 ) {
+	// 特性关闭时返回 nil，保证 API 输出与旧版本一致。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.KubeletPSI) {
 		return
 	}
-	// try get IO stats from cadvisor first.
+	// 优先使用 cAdvisor 的 Pod cgroup IO 统计。
 	podCgroupInfo := getCadvisorPodInfoFromPodUID(podUID, allInfos)
 	if podCgroupInfo != nil {
 		ps.IO = cadvisorInfoToIOStats(podCgroupInfo)
@@ -702,19 +722,21 @@ func (p *criStatsProvider) addIOStats(
 		if ps.IO == nil {
 			ps.IO = &statsapi.IOStats{Time: cs.IO.Time}
 		}
-		// Pod level PSI stats cannot be calculated from container level
+		// Pod 级 PSI 无法由容器级数据推导，因此留空。
 	}
 }
 
+// addProcessStats 将容器进程数累加到 Pod 级进程统计。
 func (p *criStatsProvider) addProcessStats(
 	ps *statsapi.PodStats,
 	container *cadvisorapi.ContainerInfo,
 ) {
 	processStats := cadvisorInfoToProcessStats(container)
-	// Sum up all of the process stats for each of the containers to obtain the cumulative pod level process count
+	// 逐个容器累加，得到 Pod 级进程总数。
 	ps.ProcessStats = mergeProcessStats(ps.ProcessStats, processStats)
 }
 
+// makeContainerStats 由 CRI 容器统计构造 summary API 的 ContainerStats。
 func (p *criStatsProvider) makeContainerStats(
 	logger klog.Logger,
 	stats *runtimeapi.ContainerStats,
@@ -726,20 +748,22 @@ func (p *criStatsProvider) makeContainerStats(
 ) (*statsapi.ContainerStats, error) {
 	result := &statsapi.ContainerStats{
 		Name: stats.Attributes.Metadata.Name,
-		// The StartTime in the summary API is the container creation time.
+		// StartTime 取容器创建时间，而非统计采样时间。
 		StartTime: metav1.NewTime(time.Unix(0, container.CreatedAt)),
 		CPU:       &statsapi.CPUStats{},
 		Memory:    &statsapi.MemoryStats{},
 		Rootfs:    &statsapi.FsStats{},
 		Swap:      &statsapi.SwapStats{},
-		// UserDefinedMetrics is not supported by CRI.
+		// CRI 不支持自定义指标，只能由 cAdvisor 补充。
 	}
+	// 统计字段缺失时，只有在 zeroMissingValues 为真时才填充零值，
 	if stats.Cpu != nil {
 		result.CPU.Time = metav1.NewTime(time.Unix(0, stats.Cpu.Timestamp))
 		if stats.Cpu.UsageCoreNanoSeconds != nil {
 			result.CPU.UsageCoreNanoSeconds = &stats.Cpu.UsageCoreNanoSeconds.Value
 		}
 		var usageNanoCores *uint64
+		// 更新模式下顺便刷新缓存；只读模式直接读缓存。
 		if updateCPUNanoCoreUsage {
 			usageNanoCores = p.getAndUpdateContainerUsageNanoCores(logger, stats)
 		} else {
@@ -824,19 +848,19 @@ func (p *criStatsProvider) makeContainerStats(
 			fsIDtoInfo[fsID.Mountpoint] = imageFsInfo
 		}
 		if imageFsInfo != nil {
-			// The image filesystem id is unknown to the local node or there's
-			// an error on retrieving the stats. In these cases, we omit those stats
-			// and return the best-effort partial result. See
-			// https://github.com/kubernetes/heapster/issues/1793.
+			// 文件系统 ID 未知或查询出错时，省略容量信息，返回尽力而为的部分结果。
+			// 这与 heapster#1793 的处理方式保持一致。
+			// 只读统计不应因容量未知而整体失败。
+			// 参见 heapster#1793。
 			result.Rootfs.AvailableBytes = &imageFsInfo.Available
 			result.Rootfs.CapacityBytes = &imageFsInfo.Capacity
 			result.Rootfs.InodesFree = imageFsInfo.InodesFree
 			result.Rootfs.Inodes = imageFsInfo.Inodes
 		}
 	}
-	// NOTE: This doesn't support the old pod log path, `/var/log/pods/UID`. For containers
-	// using old log path, empty log stats are returned. This is fine, because we don't
-	// officially support in-place upgrade anyway.
+	// 注意：不支持旧的 Pod 日志路径 `/var/log/pods/UID`；
+	// 使用旧路径的容器会得到空的日志统计。
+	// 由于官方不支持原地升级，这一限制可以接受。
 	result.Logs, err = p.hostStatsProvider.getPodContainerLogStats(meta.GetNamespace(), meta.GetName(), types.UID(meta.GetUid()), container.GetMetadata().GetName(), rootFsInfo)
 	if err != nil {
 		logger.Error(err, "Unable to fetch container log stats", "containerName", container.GetMetadata().GetName())
@@ -844,6 +868,7 @@ func (p *criStatsProvider) makeContainerStats(
 	return result, nil
 }
 
+// makeContainerCPUAndMemoryStats 只构造容器 CPU/内存/swap 统计，用于轻量查询。
 func (p *criStatsProvider) makeContainerCPUAndMemoryStats(
 	stats *runtimeapi.ContainerStats,
 	startTime time.Time,
@@ -851,10 +876,11 @@ func (p *criStatsProvider) makeContainerCPUAndMemoryStats(
 ) *statsapi.ContainerStats {
 	result := &statsapi.ContainerStats{
 		Name: stats.Attributes.Metadata.Name,
-		// The StartTime in the summary API is the container creation time.
+		// StartTime 取容器创建时间，而非统计采样时间。
 		StartTime: metav1.NewTime(startTime),
-		// UserDefinedMetrics is not supported by CRI.
+		// CRI 不支持自定义指标，只能由 cAdvisor 补充。
 	}
+	// getUint64 统一处理可选字段：缺失时按调用方要求返回 nil 或 0。
 	getUint64 := func(val *runtimeapi.UInt64Value) *uint64 {
 		if val != nil {
 			return &val.Value
@@ -871,6 +897,7 @@ func (p *criStatsProvider) makeContainerCPUAndMemoryStats(
 			UsageCoreNanoSeconds: getUint64(stats.Cpu.UsageCoreNanoSeconds),
 			PSI:                  makePSIStats(stats.Cpu.Psi),
 		}
+		// 否则保持 nil，让调用方区分“没有数据”和“数据为零”。
 	} else if zeroMissingValues {
 		result.CPU = &statsapi.CPUStats{
 			Time:                 metav1.NewTime(time.Unix(0, time.Now().UnixNano())),
@@ -917,6 +944,7 @@ func (p *criStatsProvider) makeContainerCPUAndMemoryStats(
 	return result
 }
 
+// makePSIStats 将 CRI 的 PSI 统计转换为 summary API 结构。
 func makePSIStats(stats *runtimeapi.PsiStats) *statsapi.PSIStats {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.KubeletPSI) {
 		return nil
@@ -944,14 +972,14 @@ func makePSIStats(stats *runtimeapi.PsiStats) *statsapi.PSIStats {
 	return result
 }
 
-// getContainerUsageNanoCores first attempts to get the usage nano cores from the stats reported
-// by the CRI. If it is unable to, it gets the information from the cache instead.
+// getContainerUsageNanoCores 优先使用 CRI 上报的 usageNanoCores，
+// 否则从缓存读取上次计算的结果。
 func (p *criStatsProvider) getContainerUsageNanoCores(stats *runtimeapi.ContainerStats) *uint64 {
 	if stats == nil || stats.Attributes == nil {
 		return nil
 	}
 
-	// Bypass the cache if the CRI implementation specified the UsageNanoCores.
+	// CRI 已提供该指标时无需缓存，直接返回。
 	if stats.Cpu != nil && stats.Cpu.UsageNanoCores != nil {
 		return &stats.Cpu.UsageNanoCores.Value
 	}
@@ -963,23 +991,23 @@ func (p *criStatsProvider) getContainerUsageNanoCores(stats *runtimeapi.Containe
 	if !ok || cached.usageNanoCores == nil {
 		return nil
 	}
-	// return a copy of the usage
+	// 返回副本，避免调用方修改缓存内部数据。
 	latestUsage := *cached.usageNanoCores
 	return &latestUsage
 }
 
-// getAndUpdateContainerUsageNanoCores first attempts to get the usage nano cores from the stats reported
-// by the CRI. If it is unable to, it computes usageNanoCores based on the given and the cached usageCoreNanoSeconds,
-// updates the cache with the computed usageNanoCores, and returns the usageNanoCores.
+// getAndUpdateContainerUsageNanoCores 优先使用 CRI 上报的 usageNanoCores，
+// 否则用本次与缓存的 usageCoreNanoSeconds 差值计算，
+// 并更新缓存后返回。
 func (p *criStatsProvider) getAndUpdateContainerUsageNanoCores(logger klog.Logger, stats *runtimeapi.ContainerStats) *uint64 {
 	if stats == nil || stats.Attributes == nil || stats.Cpu == nil {
 		return nil
 	}
-	// Bypass the cache if the CRI implementation specified the UsageNanoCores.
+	// CRI 已提供该指标时无需缓存，直接返回。
 	if stats.Cpu.UsageNanoCores != nil {
 		return &stats.Cpu.UsageNanoCores.Value
 	}
-	// If there is no UsageNanoCores, nor UsageCoreNanoSeconds, there is no information to use
+	// 两个字段都缺失时无法计算，直接返回 nil。
 	if stats.Cpu.UsageCoreNanoSeconds == nil {
 		return nil
 	}
@@ -990,7 +1018,7 @@ func (p *criStatsProvider) getAndUpdateContainerUsageNanoCores(logger klog.Logge
 
 		cached, ok := p.cpuUsageCache[id]
 		if !ok || cached.stats.UsageCoreNanoSeconds == nil || stats.Cpu.UsageCoreNanoSeconds.Value < cached.stats.UsageCoreNanoSeconds.Value {
-			// Cannot compute the usage now, but update the cached stats anyway
+			// 首次采样或计数器回绕时无法计算，但仍需更新缓存作为下次的基准。
 			p.cpuUsageCache[id] = &cpuUsageRecord{stats: stats.Cpu, usageNanoCores: nil}
 			return nil, nil
 		}
@@ -1004,7 +1032,7 @@ func (p *criStatsProvider) getAndUpdateContainerUsageNanoCores(logger klog.Logge
 		usageNanoCores := uint64(float64(newStats.UsageCoreNanoSeconds.Value-cachedStats.UsageCoreNanoSeconds.Value) /
 			float64(nanoSeconds) * float64(time.Second/time.Nanosecond))
 
-		// Update cache with new value.
+		// 用最新采样覆盖缓存，供下次计算使用。
 		usageToUpdate := usageNanoCores
 		p.cpuUsageCache[id] = &cpuUsageRecord{stats: newStats, usageNanoCores: &usageToUpdate}
 
@@ -1012,12 +1040,13 @@ func (p *criStatsProvider) getAndUpdateContainerUsageNanoCores(logger klog.Logge
 	}()
 
 	if err != nil {
-		// This should not happen. Log now to raise visibility
+		// 正常情况下不应出错；记录日志以提高可见性。
 		logger.Error(err, "Failed updating cpu usage nano core")
 	}
 	return usage
 }
 
+// cleanupOutdatedCaches 删除过期或无效的 CPU 缓存条目。
 func (p *criStatsProvider) cleanupOutdatedCaches() {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -1028,21 +1057,22 @@ func (p *criStatsProvider) cleanupOutdatedCaches() {
 			continue
 		}
 
+		// 超过缓存有效期说明容器可能已消失，条目不再有用。
 		if time.Since(time.Unix(0, v.stats.Timestamp)) > defaultCachePeriod {
 			delete(p.cpuUsageCache, k)
 		}
 	}
 }
 
-// removeTerminatedPods returns pods with terminated ones removed.
-// It only removes a terminated pod when there is a running instance
-// of the pod with the same name and namespace.
-// This is needed because:
-// 1) PodSandbox may be recreated;
-// 2) Pod may be recreated with the same name and namespace.
+// removeTerminatedPods 返回去掉已终止实例后的 sandbox 列表。
+// 仅当存在同名同命名空间的运行实例时才移除已终止实例。
+// 这样做是因为：
+// 1) PodSandbox 可能被重建；
+// 2) Pod 可能以同名同命名空间被重建。
+// UID 为空表示按名称聚合，跨越了 UID 变化。
 func removeTerminatedPods(pods []*runtimeapi.PodSandbox) []*runtimeapi.PodSandbox {
 	podMap := make(map[statsapi.PodReference][]*runtimeapi.PodSandbox)
-	// Sort order by create time
+	// 按创建时间排序，保证结果稳定且优先保留较新的实例。
 	sort.Slice(pods, func(i, j int) bool {
 		return pods[i].CreatedAt < pods[j].CreatedAt
 	})
@@ -1050,7 +1080,7 @@ func removeTerminatedPods(pods []*runtimeapi.PodSandbox) []*runtimeapi.PodSandbo
 		refID := statsapi.PodReference{
 			Name:      pod.GetMetadata().GetName(),
 			Namespace: pod.GetMetadata().GetNamespace(),
-			// UID is intentionally left empty.
+			// 故意不填 UID：重建后的 Pod UID 会变，但名称与命名空间不变。
 		}
 		podMap[refID] = append(podMap[refID], pod)
 	}
@@ -1075,11 +1105,11 @@ func removeTerminatedPods(pods []*runtimeapi.PodSandbox) []*runtimeapi.PodSandbo
 	return result
 }
 
-// removeTerminatedContainers removes all terminated containers since they should
-// not be used for usage calculations.
+// removeTerminatedContainers 移除所有已终止容器，
+// 因为已终止容器不应计入用量统计。
 func removeTerminatedContainers(containers []*runtimeapi.Container) []*runtimeapi.Container {
 	containerMap := make(map[containerID][]*runtimeapi.Container)
-	// Sort order by create time
+	// 按创建时间排序，便于稳定地选择运行中的实例。
 	sort.Slice(containers, func(i, j int) bool {
 		return containers[i].CreatedAt < containers[j].CreatedAt
 	})
@@ -1102,11 +1132,13 @@ func removeTerminatedContainers(containers []*runtimeapi.Container) []*runtimeap
 	return result
 }
 
+// addCadvisorContainerStats 用 cAdvisor 数据补全容器统计（含 CPU、内存、swap 与 IO）。
 func (p *criStatsProvider) addCadvisorContainerStats(
 	logger klog.Logger,
 	cs *statsapi.ContainerStats,
 	caPodStats *cadvisorapi.ContainerInfo,
 ) {
+	// 只有声明了自定义指标时才需要解析，避免无谓开销。
 	if caPodStats.Spec.HasCustomMetrics {
 		cs.UserDefinedMetrics = cadvisorInfoToUserDefinedMetrics(logger, caPodStats)
 	}
@@ -1132,6 +1164,7 @@ func (p *criStatsProvider) addCadvisorContainerStats(
 	}
 }
 
+// addCadvisorContainerCPUAndMemoryStats 用 cAdvisor 数据补全容器 CPU/内存/swap 统计。
 func (p *criStatsProvider) addCadvisorContainerCPUAndMemoryStats(
 	logger klog.Logger,
 	cs *statsapi.ContainerStats,
@@ -1155,18 +1188,19 @@ func (p *criStatsProvider) addCadvisorContainerCPUAndMemoryStats(
 	}
 }
 
+// getCRICadvisorStats 从 cAdvisor 信息中提取按容器 ID 索引的统计，并返回按 Pod cgroup 聚合的信息。
 func getCRICadvisorStats(logger klog.Logger, infos map[string]cadvisorapi.ContainerInfo) (map[string]cadvisorapi.ContainerInfo, map[string]cadvisorapi.ContainerInfo) {
 	stats := make(map[string]cadvisorapi.ContainerInfo)
 	filteredInfos, cinfosByPodCgroupKey := filterTerminatedContainerInfoAndAssembleByPodCgroupKey(logger, infos)
 	for key, info := range filteredInfos {
-		// On systemd using devicemapper each mount into the container has an
-		// associated cgroup. We ignore them to ensure we do not get duplicate
-		// entries in our summary. For details on .mount units:
-		// http://man7.org/linux/man-pages/man5/systemd.mount.5.html
+		// systemd + devicemapper 下每个容器挂载点都有独立 cgroup，
+		// 忽略 .mount 单元，避免 summary 中出现重复条目。
+		// 参见 systemd.mount(5)。
+		// 否则统计会被重复累加。
 		if strings.HasSuffix(key, ".mount") {
 			continue
 		}
-		// Build the Pod key if this container is managed by a Pod
+		// 只保留由 Pod 管理的容器，其他容器不计入 summary。
 		if !isPodManagedContainer(logger, &info) {
 			continue
 		}
@@ -1175,12 +1209,13 @@ func getCRICadvisorStats(logger klog.Logger, infos map[string]cadvisorapi.Contai
 	return stats, cinfosByPodCgroupKey
 }
 
+// extractIDFromCgroupPath 从 cgroup 路径中提取容器 ID，兼容 cgroupfs 与 systemd 两种格式。
 func extractIDFromCgroupPath(cgroupPath string) string {
-	// case0 == cgroupfs: "/kubepods/burstable/pod2fc932ce-fdcc-454b-97bd-aadfdeb4c340/9be25294016e2dc0340dd605ce1f57b492039b267a6a618a7ad2a7a58a740f32"
+	// 格式 0（cgroupfs）：容器 ID 是路径最后一段。
 	id := filepath.Base(cgroupPath)
 
-	// case1 == systemd: "/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod2fc932ce_fdcc_454b_97bd_aadfdeb4c340.slice/cri-containerd-aaefb9d8feed2d453b543f6d928cede7a4dbefa6a0ae7c9b990dd234c56e93b9.scope"
-	// trim anything before the final '-' and suffix .scope
+	// 格式 1（systemd）：文件名形如 cri-containerd-<id>.scope。
+	// 去掉 .scope 后缀并取最后一个 '-' 之后的部分。
 	systemdSuffix := ".scope"
 	if strings.HasSuffix(id, systemdSuffix) {
 		id = strings.TrimSuffix(id, systemdSuffix)
@@ -1192,6 +1227,7 @@ func extractIDFromCgroupPath(cgroupPath string) string {
 	return id
 }
 
+// criInterfaceToSummary 将 CRI 网络接口统计转换为 summary API 结构。
 func criInterfaceToSummary(criIface *runtimeapi.NetworkInterfaceUsage) statsapi.InterfaceStats {
 	return statsapi.InterfaceStats{
 		Name:     criIface.Name,
@@ -1202,6 +1238,7 @@ func criInterfaceToSummary(criIface *runtimeapi.NetworkInterfaceUsage) statsapi.
 	}
 }
 
+// valueOfUInt64Value 解包 CRI 的可选 uint64 值，nil 时返回 nil。
 func valueOfUInt64Value(value *runtimeapi.UInt64Value) *uint64 {
 	if value == nil {
 		return nil

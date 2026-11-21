@@ -26,6 +26,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// TestStateMemory_EmptyDirVolumeLimits 验证内存 state 中 EmptyDir 卷大小限制的读写语义：
+// 隐式初始化 Pod、返回深拷贝、以及多卷互不影响。
 func TestStateMemory_EmptyDirVolumeLimits(t *testing.T) {
 	logger := klog.TODO()
 	state := NewStateMemory(logger, PodResourceInfoMap{})
@@ -33,40 +35,40 @@ func TestStateMemory_EmptyDirVolumeLimits(t *testing.T) {
 	podUID := types.UID("pod-1")
 	volName := "volume-1"
 
-	// Get on nonexistent pod should return (nil, false)
+	// 对不存在的 Pod 读取应返回 (nil, false)。
 	qty, exists := state.GetEmptyDirVolumeLimit(podUID, volName)
 	assert.Nil(t, qty)
 	assert.False(t, exists)
 
-	// Set volume limit on nonexistent pod should implicitly initialize the pod and insert it
+	// 对不存在的 Pod 设置限制应隐式初始化该 Pod 并插入。
 	targetLimit := resource.MustParse("256Mi")
 	err := state.SetEmptyDirVolumeLimit(podUID, volName, &targetLimit)
 	require.NoError(t, err)
 
-	// Get volume limit should return the parsed value and true
+	// 读取应返回已设置的值与 true。
 	qty, exists = state.GetEmptyDirVolumeLimit(podUID, volName)
 	require.True(t, exists)
 	require.NotNil(t, qty)
 	assert.True(t, targetLimit.Equal(*qty))
 
-	// Get on existing pod with nonexistent volume should return (nil, false)
+	// 已存在 Pod 上不存在的卷应返回 (nil, false)。
 	qtyNonexistent, existsNonexistent := state.GetEmptyDirVolumeLimit(podUID, "nonexistent-volume")
 	assert.Nil(t, qtyNonexistent)
 	assert.False(t, existsNonexistent)
 
-	// Returned quantity should be a deep copy (mutability check)
+	// 返回的 Quantity 必须是深拷贝，修改它不能影响内部状态。
 	qty.Set(1024 * 1024 * 512) // Modify the returned Quantity value to 512Mi
 	refreshedQty, exists := state.GetEmptyDirVolumeLimit(podUID, volName)
 	require.True(t, exists)
 	assert.True(t, targetLimit.Equal(*refreshedQty), "Modifying the returned Quantity pointer should not alter Kubelet's internal memory state")
 
-	// Set another volume on the same pod should keep existing limits intact
+	// 为同一 Pod 设置另一个卷时，已有卷的限制应保持不变。
 	anotherVolName := "volume-2"
 	anotherLimit := resource.MustParse("128Mi")
 	err = state.SetEmptyDirVolumeLimit(podUID, anotherVolName, &anotherLimit)
 	require.NoError(t, err)
 
-	// Verify both volumes are present and correct
+	// 确认两个卷的限制都存在且正确。
 	qty1, exists1 := state.GetEmptyDirVolumeLimit(podUID, volName)
 	assert.True(t, exists1)
 	assert.True(t, targetLimit.Equal(*qty1))

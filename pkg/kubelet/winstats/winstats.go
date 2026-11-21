@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package winstats provides a client to get node and pod level stats on windows
+// Package winstats 提供 Windows 上获取节点与 Pod 级统计的客户端。
 package winstats
 
 import (
@@ -29,31 +29,43 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// GetDiskFreeSpaceExW 的 kernel32 过程地址。
 var (
 	procGetDiskFreeSpaceEx = modkernel32.NewProc("GetDiskFreeSpaceExW")
 )
 
-// Client is an interface that is used to get stats information.
+// Client 是获取统计信息的接口。
 type Client interface {
+	// 返回节点与 Pod 级的容器信息映射。
 	WinContainerInfos() (map[string]cadvisorapi.ContainerInfo, error)
+	// 返回节点机器信息。
 	WinMachineInfo(logger klog.Logger) (*cadvisorapi.MachineInfo, error)
+	// 返回内核与运行时版本信息。
 	WinVersionInfo() (*cadvisorapi.VersionInfo, error)
+	// 返回指定目录所在文件系统的容量与使用情况。
 	GetDirFsInfo(path string) (cadvisorapi.FsInfo, error)
 }
 
-// StatsClient is a client that implements the Client interface
+// StatsClient 实现 Client 接口。
 type StatsClient struct {
 	client winNodeStatsClient
 }
 
+// winNodeStatsClient 是底层 Windows 统计采集接口，便于测试替换。
 type winNodeStatsClient interface {
+	// 开始监控节点指标。
 	startMonitoring(logger klog.Logger) error
+	// 返回当前节点指标。
 	getNodeMetrics() (nodeMetrics, error)
+	// 返回节点静态信息。
 	getNodeInfo() nodeInfo
+	// 返回节点机器信息。
 	getMachineInfo(logger klog.Logger) (*cadvisorapi.MachineInfo, error)
+	// 返回版本信息。
 	getVersionInfo() (*cadvisorapi.VersionInfo, error)
 }
 
+// nodeMetrics 保存一次采样的节点指标。
 type nodeMetrics struct {
 	cpuUsageCoreNanoSeconds   uint64
 	cpuUsageNanoCores         uint64
@@ -63,20 +75,22 @@ type nodeMetrics struct {
 	interfaceStats            []cadvisorapi.InterfaceStats
 }
 
+// nodeInfo 保存节点静态信息。
 type nodeInfo struct {
 	memoryPhysicalCapacityBytes uint64
 	kernelVersion               string
 	osImageVersion              string
-	// startTime is the time when the node was started
+	// startTime 是节点启动时间。
 	startTime time.Time
 }
 
+// cpuUsageCoreNanoSecondsCache 保存 CPU 累计使用量的前后值，用于计算瞬时用量。
 type cpuUsageCoreNanoSecondsCache struct {
 	latestValue   uint64
 	previousValue uint64
 }
 
-// newClient constructs a Client.
+// newClient 构造 Client 并启动监控。
 func newClient(logger klog.Logger, statsNodeClient winNodeStatsClient) (Client, error) {
 	statsClient := new(StatsClient)
 	statsClient.client = statsNodeClient
@@ -89,8 +103,8 @@ func newClient(logger klog.Logger, statsNodeClient winNodeStatsClient) (Client, 
 	return statsClient, nil
 }
 
-// WinContainerInfos returns a map of container infos. The map contains node and
-// pod level stats. Analogous to cadvisor GetContainerInfoV2 method.
+// WinContainerInfos 返回容器信息映射，包含节点与 Pod 级统计，
+// 对应 cadvisor 的 GetContainerInfoV2。
 func (c *StatsClient) WinContainerInfos() (map[string]cadvisorapi.ContainerInfo, error) {
 	infos := make(map[string]cadvisorapi.ContainerInfo)
 	rootContainerInfo, err := c.createRootContainerInfo()
@@ -103,24 +117,24 @@ func (c *StatsClient) WinContainerInfos() (map[string]cadvisorapi.ContainerInfo,
 	return infos, nil
 }
 
-// WinMachineInfo returns a cadvisorapi.MachineInfo with details about the
-// node machine. Analogous to cadvisor MachineInfo method.
+// WinMachineInfo 返回节点机器信息，对应 cadvisor 的 MachineInfo。
 func (c *StatsClient) WinMachineInfo(logger klog.Logger) (*cadvisorapi.MachineInfo, error) {
 	return c.client.getMachineInfo(logger)
 }
 
-// WinVersionInfo returns a  cadvisorapi.VersionInfo with version info of
-// the kernel and docker runtime. Analogous to cadvisor VersionInfo method.
+// WinVersionInfo 返回内核与 Docker 运行时版本，对应 cadvisor 的 VersionInfo。
 func (c *StatsClient) WinVersionInfo() (*cadvisorapi.VersionInfo, error) {
 	return c.client.getVersionInfo()
 }
 
+// createRootContainerInfo 用节点指标构造根容器信息。
 func (c *StatsClient) createRootContainerInfo() (*cadvisorapi.ContainerInfo, error) {
 	nodeMetrics, err := c.client.getNodeMetrics()
 	if err != nil {
 		return nil, err
 	}
 
+	// 把节点指标转换为 cadvisor 容器统计。
 	var stats []*cadvisorapi.ContainerStats
 	stats = append(stats, &cadvisorapi.ContainerStats{
 		Timestamp: nodeMetrics.timeStamp,
@@ -160,11 +174,12 @@ func (c *StatsClient) createRootContainerInfo() (*cadvisorapi.ContainerInfo, err
 	return &rootInfo, nil
 }
 
-// GetDirFsInfo returns filesystem capacity and usage information.
+// GetDirFsInfo 返回文件系统容量与使用信息。
 func (c *StatsClient) GetDirFsInfo(path string) (cadvisorapi.FsInfo, error) {
 	var freeBytesAvailable, totalNumberOfBytes, totalNumberOfFreeBytes int64
 	var err error
 
+	// 调用 GetDiskFreeSpaceExW 获取目录所在卷的容量。
 	ret, _, err := syscall.Syscall6(
 		procGetDiskFreeSpaceEx.Addr(),
 		4,
@@ -175,6 +190,7 @@ func (c *StatsClient) GetDirFsInfo(path string) (cadvisorapi.FsInfo, error) {
 		0,
 		0,
 	)
+	// 系统调用失败时返回错误。
 	if ret == 0 {
 		return cadvisorapi.FsInfo{}, err
 	}

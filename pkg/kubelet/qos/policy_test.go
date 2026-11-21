@@ -30,10 +30,12 @@ import (
 )
 
 const (
+	// standardMemoryAmount 是测试中模拟节点内存容量的基准值（8GB）。
 	standardMemoryAmount = 8000000000
 )
 
 var (
+	// 以下变量预置了不同资源 request/limit 组合的 Pod，用于 OOM 评分计算。
 	cpuLimit = v1.Pod{
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
@@ -150,6 +152,7 @@ var (
 
 	systemCritical = scheduling.SystemCriticalPriority
 
+	// 系统与节点关键 Pod 用于验证高优先级容器的 OOM 分值。
 	clusterCritical = v1.Pod{
 		Spec: v1.PodSpec{
 			PriorityClassName: scheduling.SystemClusterCritical,
@@ -194,6 +197,7 @@ var (
 		},
 	}
 
+	// Burstable Pod 及其使用的示例容器资源规格。
 	burstableUniqueContainerPod = v1.Pod{
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
@@ -303,10 +307,8 @@ var (
 		},
 	}
 
-	// Pod definitions with their resource specifications are defined in this section.
-	// TODO(ndixita): cleanup the tests to create a method that generates pod
-	// definitions based on input resource parameters, replacing the current
-	// approach of individual pod variables.
+	// 本节定义带有资源规格的 Pod。
+	// TODO(ndixita)：后续应改为按输入资源参数生成 Pod 的辅助方法，替代当前逐个定义 Pod 变量的做法。
 	guaranteedPodResourcesNoContainerResources = v1.Pod{
 		Spec: v1.PodSpec{
 			Resources: &v1.ResourceRequirements{
@@ -645,18 +647,22 @@ var (
 	}
 )
 
+// lowHighOOMScoreAdjTest 定义容器 oom_score_adj 的期望区间。
 type lowHighOOMScoreAdjTest struct {
 	lowOOMScoreAdj  int
 	highOOMScoreAdj int
 }
+
+// oomTest 描述一个 OOM 评分测试用例。
 type oomTest struct {
 	pod                               *v1.Pod
 	memoryCapacity                    int64
-	lowHighOOMScoreAdj                map[string]lowHighOOMScoreAdjTest // [container-name] : min and max oom_score_adj score the container should be assigned.
+	lowHighOOMScoreAdj                map[string]lowHighOOMScoreAdjTest // [容器名]：容器应被分配的 oom_score_adj 最小与最大值。
 	podLevelResourcesFeatureEnabled   bool
 	enableDRANodeAllocatableResources bool
 }
 
+// draMemAllocation 描述测试中注入的 DRA 资源分配及其 overhead。
 type draMemAllocation struct {
 	containers           []string
 	mapping              string
@@ -664,6 +670,7 @@ type draMemAllocation struct {
 	perPodOverhead       string
 }
 
+// podParams 描述构造 DRA 测试 Pod 的参数。
 type podParams struct {
 	c1Mem       string
 	c2Mem       string
@@ -672,7 +679,9 @@ type podParams struct {
 	draAlloc    draMemAllocation
 }
 
+// TestGetContainerOOMScoreAdjust 验证不同 Pod 优先级、资源形态、sidecar、Pod 级资源与 DRA 场景下的 OOM 分值。
 func TestGetContainerOOMScoreAdjust(t *testing.T) {
+	// makeTestPodForDRA 按参数构造带容器、sidecar、Pod 级资源与 DRA 状态的 Pod。
 	makeTestPodForDRA := func(p podParams) *v1.Pod {
 		pod := &v1.Pod{
 			Spec: v1.PodSpec{
@@ -753,6 +762,7 @@ func TestGetContainerOOMScoreAdjust(t *testing.T) {
 		return pod
 	}
 
+	// oomTests 覆盖各类资源形态与 DRA 场景的 OOM 分值期望。
 	oomTests := map[string]oomTest{
 		"cpu-limit": {
 			pod:            &cpuLimit,
@@ -982,7 +992,7 @@ func TestGetContainerOOMScoreAdjust(t *testing.T) {
 			}),
 			memoryCapacity: 4000000000,
 			lowHighOOMScoreAdj: map[string]lowHighOOMScoreAdjTest{
-				// OOMScoreAdj = 1000 - (1000 * (500Mi Spec + 1000Mi DRA / 2 references) / 4GB) = 738
+				// OOMScoreAdj = 1000 - (1000 * (500Mi Spec + 1000Mi DRA / 2 个引用) / 4GB) = 738
 				"c1": {lowOOMScoreAdj: 738, highOOMScoreAdj: 738},
 				"c2": {lowOOMScoreAdj: 738, highOOMScoreAdj: 738},
 			},
@@ -999,8 +1009,8 @@ func TestGetContainerOOMScoreAdjust(t *testing.T) {
 			}),
 			memoryCapacity: 8000000000,
 			lowHighOOMScoreAdj: map[string]lowHighOOMScoreAdjTest{
-				// PLR Remaining Request = (5Gi Pod - 1Gi c1 Spec - 2Gi c1 DRA) = 2Gi
-				// OOMScoreAdj = 1000 - (1000 * (1Gi Spec + 2Gi DRA + 2Gi PLR remaining) / 8GB) = 329
+				// PLR 剩余 request = (5Gi Pod - 1Gi c1 Spec - 2Gi c1 DRA) = 2Gi
+				// OOMScoreAdj = 1000 - (1000 * (1Gi Spec + 2Gi DRA + 2Gi PLR 剩余) / 8GB) = 329
 				"c1": {lowOOMScoreAdj: 329, highOOMScoreAdj: 329},
 			},
 			podLevelResourcesFeatureEnabled:   true,
@@ -1018,10 +1028,10 @@ func TestGetContainerOOMScoreAdjust(t *testing.T) {
 			}),
 			memoryCapacity: 8000000000,
 			lowHighOOMScoreAdj: map[string]lowHighOOMScoreAdjTest{
-				// c1, c2 effective request = 1Gi Spec + 2Gi DRA / 2 refs = 2Gi
-				// PLR Remaining Request = (6Gi Pod - 4Gi sum of effective requests) = 2Gi
-				// Per-container PLR share = 2Gi / 2 containers = 1Gi
-				// OOMScoreAdj = 1000 - (1000 * (2Gi effective + 1Gi PLR share) / 8GB) = 598
+				// c1、c2 的有效 request = 1Gi Spec + 2Gi DRA / 2 个引用 = 2Gi
+				// PLR 剩余 request = (6Gi Pod - 4Gi 有效 request 之和) = 2Gi
+				// 每个容器分摊的 PLR = 2Gi / 2 个容器 = 1Gi
+				// OOMScoreAdj = 1000 - (1000 * (2Gi 有效 request + 1Gi PLR 分摊) / 8GB) = 598
 				"c1": {lowOOMScoreAdj: 598, highOOMScoreAdj: 598},
 				"c2": {lowOOMScoreAdj: 598, highOOMScoreAdj: 598},
 			},
@@ -1038,7 +1048,7 @@ func TestGetContainerOOMScoreAdjust(t *testing.T) {
 			}),
 			memoryCapacity: 4000000000,
 			lowHighOOMScoreAdj: map[string]lowHighOOMScoreAdjTest{
-				// OOMScoreAdj = 1000 - (1000 * (500Mi Spec + 500Mi direct DRA) / 4GB) = 738
+				// OOMScoreAdj = 1000 - (1000 * (500Mi Spec + 500Mi 直接 DRA) / 4GB) = 738
 				"c1": {lowOOMScoreAdj: 738, highOOMScoreAdj: 738},
 			},
 			enableDRANodeAllocatableResources: true,
@@ -1073,7 +1083,7 @@ func TestGetContainerOOMScoreAdjust(t *testing.T) {
 			lowHighOOMScoreAdj: map[string]lowHighOOMScoreAdjTest{
 				// c1 OOMScoreAdj = 1000 - (1000 * (500Mi Spec + 500Mi DRA) / 4GB) = 738
 				"c1": {lowOOMScoreAdj: 738, highOOMScoreAdj: 738},
-				// s1 OOMScoreAdj = 1000 - (1000 * 200Mi Spec / 4GB) = 948 capped to min regular container score (738)
+				// s1 OOMScoreAdj = 1000 - (1000 * 200Mi Spec / 4GB) = 948，最终截断为普通容器的最小分值（738）
 				"s1": {lowOOMScoreAdj: 738, highOOMScoreAdj: 738},
 			},
 			enableDRANodeAllocatableResources: true,
@@ -1081,11 +1091,13 @@ func TestGetContainerOOMScoreAdjust(t *testing.T) {
 	}
 	for name, test := range oomTests {
 		t.Run(name, func(t *testing.T) {
+			// 按用例启用 PodLevelResources 与 DRANodeAllocatableResources 特性门控。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, test.podLevelResourcesFeatureEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRANodeAllocatableResources, test.enableDRANodeAllocatableResources)
 			listContainers := test.pod.Spec.InitContainers
 			listContainers = append(listContainers, test.pod.Spec.Containers...)
 			for _, container := range listContainers {
+				// 计算每个容器的 oom_score_adj，并校验落在期望区间内。
 				oomScoreAdj := GetContainerOOMScoreAdjust(test.pod, &container, test.memoryCapacity)
 				if oomScoreAdj < test.lowHighOOMScoreAdj[container.Name].lowOOMScoreAdj || oomScoreAdj > test.lowHighOOMScoreAdj[container.Name].highOOMScoreAdj {
 					t.Errorf("oom_score_adj %s should be between %d and %d, but was %d", container.Name, test.lowHighOOMScoreAdj[container.Name].lowOOMScoreAdj, test.lowHighOOMScoreAdj[container.Name].highOOMScoreAdj, oomScoreAdj)

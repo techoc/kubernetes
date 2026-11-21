@@ -67,6 +67,8 @@ const (
 	testResourceName = "fake-domain/resource"
 )
 
+// 在真实 ManagerImpl 外包一层 wrappedManagerImpl，
+// 把设备更新回调暴露给测试，并创建用于接收 ListAndWatch 的 gRPC server。
 func newWrappedManagerImpl(logger klog.Logger, socketPath string, manager *ManagerImpl) *wrappedManagerImpl {
 	w := &wrappedManagerImpl{
 		ManagerImpl: manager,
@@ -83,10 +85,13 @@ type wrappedManagerImpl struct {
 	callback  func(klog.Logger, string, []*pluginapi.Device)
 }
 
+// 把插件的 ListAndWatch 响应转交给内部回调，测试可借此拦截设备更新。
 func (m *wrappedManagerImpl) PluginListAndWatchReceiver(logger klog.Logger, r string, resp *pluginapi.ListAndWatchResponse) {
 	m.callback(logger, r, resp.Devices)
 }
 
+// 创建临时目录，并给出 manager 与插件各自的 socket 路径，
+// 测试结束后由调用方负责清理。
 func tmpSocketDir() (socketDir, socketName, pluginSocketName string, err error) {
 	socketDir, err = os.MkdirTemp("", "device_plugin")
 	if err != nil {
@@ -98,6 +103,7 @@ func tmpSocketDir() (socketDir, socketName, pluginSocketName string, err error) 
 	return
 }
 
+// 验证仅创建（未启动）device manager 时不会返回错误。
 func TestNewManagerImpl(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	socketDir, socketName, _, err := tmpSocketDir()
@@ -111,6 +117,7 @@ func TestNewManagerImpl(t *testing.T) {
 	os.RemoveAll(socketDir)
 }
 
+// 验证 manager 能正常启动与停止，且 Stop 可重复调用而不报错（幂等）。
 func TestNewManagerImplStart(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	socketDir, socketName, pluginSocketName, err := tmpSocketDir()
@@ -126,6 +133,7 @@ func TestNewManagerImplStart(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// 验证在 probe 模式下 manager 也能正常启动与停止。
 func TestNewManagerImplStartProbeMode(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	socketDir, socketName, pluginSocketName, err := tmpSocketDir()
@@ -138,9 +146,8 @@ func TestNewManagerImplStartProbeMode(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// Tests that the device plugin manager correctly handles registration and re-registration by
-// making sure that after registration, devices are correctly updated and if a re-registration
-// happens, we will NOT delete devices; and no orphaned devices left.
+// 验证插件注册、重复注册和换设备重新注册三种情况：
+// 注册后设备数正确；同一插件重复注册不会重复计数；换设备重新注册时旧设备被移除。
 func TestDevicePluginReRegistration(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	// TODO: Remove skip once https://github.com/kubernetes/kubernetes/pull/115269 merges.
@@ -193,6 +200,7 @@ func TestDevicePluginReRegistration(t *testing.T) {
 			require.Equal(t, resourceCapacity.Value(), resourceAllocatable.Value(), "capacity should equal to allocatable")
 			require.Equal(t, int64(2), resourceAllocatable.Value(), "Devices shouldn't change.")
 
+			// 场景：插件以不同的设备集合重新注册，旧插件设备应被移除。
 			// Test the scenario that a plugin re-registers with different devices.
 			p3 := plugin.NewDevicePluginStub(logger, devsForRegistration, pluginSocketName+".third", testResourceName, preStartContainerFlag, getPreferredAllocationFlag)
 			err = p3.Start(tCtx)
@@ -220,11 +228,8 @@ func TestDevicePluginReRegistration(t *testing.T) {
 	}
 }
 
-// Tests that the device plugin manager correctly handles registration and re-registration by
-// making sure that after registration, devices are correctly updated and if a re-registration
-// happens, we will NOT delete devices; and no orphaned devices left.
-// While testing above scenario, plugin discovery and registration will be done using
-// Kubelet probe based mechanism
+// 与 TestDevicePluginReRegistration 场景相同，但走 kubelet probe 发现机制，
+// 通过插件 manager 主动探测 socket 完成注册。
 func TestDevicePluginReRegistrationProbeMode(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	// TODO: Remove skip once https://github.com/kubernetes/kubernetes/pull/115269 merges.
@@ -246,6 +251,7 @@ func TestDevicePluginReRegistrationProbeMode(t *testing.T) {
 
 	m, ch, p1, _ := setupInProbeMode(tCtx, t, devs, nil, socketName, pluginSocketName)
 
+	// 等待插件完成首次注册并推送设备列表。
 	// Wait for the first callback to be issued.
 	select {
 	case <-ch:
@@ -261,6 +267,7 @@ func TestDevicePluginReRegistrationProbeMode(t *testing.T) {
 	p2 := plugin.NewDevicePluginStub(logger, devs, pluginSocketName+".new", testResourceName, false, false)
 	err = p2.Start(tCtx)
 	require.NoError(t, err)
+	// 等待第二个插件注册后的设备更新回调。
 	// Wait for the second callback to be issued.
 	select {
 	case <-ch:
@@ -278,6 +285,7 @@ func TestDevicePluginReRegistrationProbeMode(t *testing.T) {
 	p3 := plugin.NewDevicePluginStub(logger, devsForRegistration, pluginSocketName+".third", testResourceName, false, false)
 	err = p3.Start(tCtx)
 	require.NoError(t, err)
+	// 等待第三个插件注册后的设备更新回调。
 	// Wait for the third callback to be issued.
 	select {
 	case <-ch:
@@ -298,6 +306,8 @@ func TestDevicePluginReRegistrationProbeMode(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// 构造并启动一个 device manager，同时在每次设备更新回调后向 channel 发信号，
+// 方便测试同步等待。
 func setupDeviceManager(t *testing.T, devs []*pluginapi.Device, callback monitorCallback, socketName string,
 	topology []cadvisorapi.Node, logger klog.Logger) (Manager, <-chan interface{}) {
 	topologyStore := topologymanager.NewFakeManager(logger)
@@ -327,6 +337,7 @@ func setupDeviceManager(t *testing.T, devs []*pluginapi.Device, callback monitor
 	return w, updateChan
 }
 
+// 启动一个 fake device plugin stub，模拟插件端 ListAndWatch 服务。
 func setupDevicePlugin(ctx context.Context, t *testing.T, devs []*pluginapi.Device, pluginSocketName string) *plugin.Stub {
 	p := plugin.NewDevicePluginStub(klog.FromContext(ctx), devs, pluginSocketName, testResourceName, false, false)
 	err := p.Start(ctx)
@@ -334,6 +345,7 @@ func setupDevicePlugin(ctx context.Context, t *testing.T, devs []*pluginapi.Devi
 	return p
 }
 
+// 创建并启动 plugin manager，并把 device manager 的 watcher handler 注册进去。
 func setupPluginManager(t *testing.T, pluginSocketName string, m Manager) pluginmanager.PluginManager {
 	pluginManager := pluginmanager.NewPluginManager(
 		filepath.Dir(pluginSocketName), /* sockDir */
@@ -346,12 +358,14 @@ func setupPluginManager(t *testing.T, pluginSocketName string, m Manager) plugin
 	return pluginManager
 }
 
+// 在后台启动 plugin manager，sourcesReady 恒为 true 以跳过源就绪等待。
 func runPluginManager(ctx context.Context, pluginManager pluginmanager.PluginManager) {
 	// FIXME: Replace sets.Set[string] with sets.Set[string]
 	sourcesReady := config.NewSourcesReady(func(_ sets.Set[string]) bool { return true })
 	go pluginManager.Run(ctx, sourcesReady, wait.NeverStop)
 }
 
+// 一站式装配 device manager 与 fake 插件，供大多数测试复用。
 func setup(ctx context.Context, t *testing.T, devs []*pluginapi.Device, callback monitorCallback, socketName string, pluginSocketName string) (Manager, <-chan interface{}, *plugin.Stub) {
 	logger := klog.FromContext(ctx)
 	m, updateChan := setupDeviceManager(t, devs, callback, socketName, nil, logger)
@@ -359,6 +373,7 @@ func setup(ctx context.Context, t *testing.T, devs []*pluginapi.Device, callback
 	return m, updateChan, p
 }
 
+// 在 setup 的基础上额外启动 plugin manager，用于 probe 模式测试。
 func setupInProbeMode(ctx context.Context, t *testing.T, devs []*pluginapi.Device, callback monitorCallback, socketName string, pluginSocketName string) (Manager, <-chan interface{}, *plugin.Stub, pluginmanager.PluginManager) {
 	logger := klog.FromContext(ctx)
 	m, updateChan := setupDeviceManager(t, devs, callback, socketName, nil, logger)
@@ -367,6 +382,7 @@ func setupInProbeMode(ctx context.Context, t *testing.T, devs []*pluginapi.Devic
 	return m, updateChan, p, pm
 }
 
+// 先停插件再停 manager，避免 manager 在插件仍连接时退出。
 func cleanup(logger klog.Logger, m Manager, p *plugin.Stub) error {
 	if err := p.Stop(logger); err != nil {
 		return err
@@ -374,6 +390,10 @@ func cleanup(logger klog.Logger, m Manager, p *plugin.Stub) error {
 	return m.Stop(logger)
 }
 
+// 验证设备健康状态变化对 capacity/allocatable 的影响：
+// 不健康设备计入 capacity 但不计入 allocatable；删除设备两者同减；
+// 端点超过宽限期后资源被移除；写入 checkpoint 后重建管理器仍把该资源视为设备插件资源，
+// 从而让调度期间创建的 Pod 被正确拒绝。
 func TestUpdateCapacityAllocatable(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	socketDir, socketName, _, err := tmpSocketDir()
@@ -394,6 +414,7 @@ func TestUpdateCapacityAllocatable(t *testing.T) {
 	}
 	callback := testManager.genericDeviceUpdateCallback
 
+	// 为 resource1 加入三台设备（两健康一不健康）：capacity 计 3，allocatable 只计 2。
 	// Adds three devices for resource1, two healthy and one unhealthy.
 	// Expects capacity for resource1 to be 2.
 	resourceName1 := "domain1.com/resource1"
@@ -409,6 +430,7 @@ func TestUpdateCapacityAllocatable(t *testing.T) {
 	as.Equal(int64(2), resource1Allocatable.Value())
 	as.Empty(removedResources)
 
+	// 删除不健康设备只会降低 capacity，不影响 allocatable。
 	// Deletes an unhealthy device should NOT change allocatable but change capacity.
 	devs1 := devs[:len(devs)-1]
 	callback(logger, resourceName1, devs1)
@@ -421,6 +443,7 @@ func TestUpdateCapacityAllocatable(t *testing.T) {
 	as.Equal(int64(2), resource1Allocatable.Value())
 	as.Empty(removedResources)
 
+	// 健康设备转为不健康，allocatable 减少 1，capacity 不变。
 	// Updates a healthy device to unhealthy should reduce allocatable by 1.
 	devs[1].Health = pluginapi.Unhealthy
 	callback(logger, resourceName1, devs)
@@ -433,6 +456,7 @@ func TestUpdateCapacityAllocatable(t *testing.T) {
 	as.Equal(int64(1), resource1Allocatable.Value())
 	as.Empty(removedResources)
 
+	// 删除健康设备，capacity 与 allocatable 同时减少 1。
 	// Deletes a healthy device should reduce capacity and allocatable by 1.
 	devs2 := devs[1:]
 	callback(logger, resourceName1, devs2)
@@ -445,6 +469,7 @@ func TestUpdateCapacityAllocatable(t *testing.T) {
 	as.Equal(int64(2), resource1Capacity.Value())
 	as.Empty(removedResources)
 
+	// 验证新增第二个资源时两者互不影响。
 	// Tests adding another resource.
 	resourceName2 := "resource2"
 	e2 := &endpointImpl{socket: socketName}
@@ -463,6 +488,8 @@ func TestUpdateCapacityAllocatable(t *testing.T) {
 	as.Equal(int64(1), resource2Allocatable.Value())
 	as.Empty(removedResources)
 
+	// 让 resourceName1 的端点超过宽限期：GetCapacity 应报告该资源已被移除，
+	// 并从 healthyDevices/unhealthyDevices/endpoints 中清理。
 	// Expires resourceName1 endpoint. Verifies testManager.GetCapacity() reports that resourceName1
 	// is removed from capacity and it no longer exists in healthyDevices after the call.
 	e1.setStopTime(time.Now().Add(-1*endpointStopGracePeriod - time.Duration(10)*time.Second))
@@ -478,6 +505,7 @@ func TestUpdateCapacityAllocatable(t *testing.T) {
 	as.NotContains(testManager.endpoints, resourceName1)
 	as.Len(testManager.endpoints, 1)
 
+	// 断开 resourceName2 端点：stopTime 应被设置，allocate/preStartContainer 返回端点已停止错误。
 	// Stops resourceName2 endpoint. Verifies its stopTime is set, allocate and
 	// preStartContainer calls return errors.
 	err = e2.client.Disconnect(logger)
@@ -487,6 +515,7 @@ func TestUpdateCapacityAllocatable(t *testing.T) {
 	reflect.DeepEqual(err, fmt.Errorf(errEndpointStopped, e2))
 	_, err = e2.preStartContainer(tCtx, []string{"Device1"})
 	reflect.DeepEqual(err, fmt.Errorf(errEndpointStopped, e2))
+	// 把 resourceName2 标记为不健康，capacity 保持 3 而 allocatable 归零。
 	// Marks resourceName2 unhealthy and verifies its capacity/allocatable are
 	// correctly updated.
 	testManager.markResourceUnhealthy(logger, resourceName2)
@@ -498,6 +527,8 @@ func TestUpdateCapacityAllocatable(t *testing.T) {
 	as.True(ok)
 	as.Equal(int64(0), val.Value())
 	as.Empty(removed)
+	// 写入并重新读取 checkpoint：已停止的端点会被重建，capacity 置 0，
+	// 但仍被视为设备插件资源，从而拒绝调度期间按旧容量准入的 Pod。
 	// Writes and re-reads checkpoints. Verifies we create a stopped endpoint
 	// for resourceName2, its capacity is set to zero, and we still consider
 	// it as a DevicePlugin resource. This makes sure any pod that was scheduled
@@ -522,6 +553,7 @@ func TestUpdateCapacityAllocatable(t *testing.T) {
 	as.True(testManager.isDevicePluginResource(resourceName2))
 }
 
+// 验证多个资源各自的健康设备会被正确归类，且不健康设备被排除。
 func TestGetAllocatableDevicesMultipleResources(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	socketDir, socketName, _, err := tmpSocketDir()
@@ -566,6 +598,7 @@ func TestGetAllocatableDevicesMultipleResources(t *testing.T) {
 
 }
 
+// 验证设备由不健康转为健康后，会出现在 allocatable 设备列表中。
 func TestGetAllocatableDevicesHealthTransition(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	socketDir, socketName, _, err := tmpSocketDir()
@@ -614,6 +647,7 @@ func TestGetAllocatableDevicesHealthTransition(t *testing.T) {
 	checkAllocatableDevicesConsistsOf(as, devInstances, []string{"R1Device1", "R1Device2", "R1Device3"})
 }
 
+// 断言 allocatable 设备集合与期望的设备 ID 列表完全一致。
 func checkAllocatableDevicesConsistsOf(as *assert.Assertions, devInstances DeviceInstances, expectedDevs []string) {
 	as.Equal(len(expectedDevs), len(devInstances))
 	for _, deviceID := range expectedDevs {
@@ -622,6 +656,7 @@ func checkAllocatableDevicesConsistsOf(as *assert.Assertions, devInstances Devic
 	}
 }
 
+// 把设备 ID 列表包装成"无 NUMA 拓扑"的 checkpoint 结构。
 func constructDevices(devices []string) checkpoint.DevicesPerNUMA {
 	ret := checkpoint.DevicesPerNUMA{}
 	for _, dev := range devices {
@@ -630,7 +665,8 @@ func constructDevices(devices []string) checkpoint.DevicesPerNUMA {
 	return ret
 }
 
-// containerAllocateResponseBuilder is a helper to build a ContainerAllocateResponse
+// containerAllocateResponseBuilder 用于以链式选项构造 ContainerAllocateResponse，
+// 便于测试按需组合设备、挂载、环境变量与 CDI 设备。
 type containerAllocateResponseBuilder struct {
 	devices    map[string]string
 	mounts     map[string]string
@@ -638,38 +674,38 @@ type containerAllocateResponseBuilder struct {
 	cdiDevices []string
 }
 
-// containerAllocateResponseBuilderOption defines a functional option for a containerAllocateResponseBuilder
+// containerAllocateResponseBuilderOption 是 containerAllocateResponseBuilder 的函数式选项。
 type containerAllocateResponseBuilderOption func(*containerAllocateResponseBuilder)
 
-// withDevices sets the devices for the containerAllocateResponseBuilder
+// withDevices 设置 builder 要生成的设备映射（宿主机路径 -> 容器路径）。
 func withDevices(devices map[string]string) containerAllocateResponseBuilderOption {
 	return func(b *containerAllocateResponseBuilder) {
 		b.devices = devices
 	}
 }
 
-// withMounts sets the mounts for the containerAllocateResponseBuilder
+// withMounts 设置 builder 要生成的挂载映射（容器路径 -> 宿主机路径）。
 func withMounts(mounts map[string]string) containerAllocateResponseBuilderOption {
 	return func(b *containerAllocateResponseBuilder) {
 		b.mounts = mounts
 	}
 }
 
-// withEnvs sets the envs for the containerAllocateResponseBuilder
+// withEnvs 设置 builder 要注入的环境变量。
 func withEnvs(envs map[string]string) containerAllocateResponseBuilderOption {
 	return func(b *containerAllocateResponseBuilder) {
 		b.envs = envs
 	}
 }
 
-// withCDIDevices sets the cdiDevices for the containerAllocateResponseBuilder
+// withCDIDevices 设置 builder 要生成的 CDI 设备名称列表。
 func withCDIDevices(cdiDevices ...string) containerAllocateResponseBuilderOption {
 	return func(b *containerAllocateResponseBuilder) {
 		b.cdiDevices = cdiDevices
 	}
 }
 
-// newContainerAllocateResponse creates a ContainerAllocateResponse with the given options.
+// newContainerAllocateResponse 按给定选项构造一个 ContainerAllocateResponse。
 func newContainerAllocateResponse(opts ...containerAllocateResponseBuilderOption) *pluginapi.ContainerAllocateResponse {
 	b := &containerAllocateResponseBuilder{}
 	for _, opt := range opts {
@@ -679,7 +715,7 @@ func newContainerAllocateResponse(opts ...containerAllocateResponseBuilderOption
 	return b.Build()
 }
 
-// Build uses the configured builder to create a ContainerAllocateResponse.
+// Build 根据当前配置生成 ContainerAllocateResponse：设备权限固定为 mrw，挂载只读，CDI 设备逐个包装。
 func (b *containerAllocateResponseBuilder) Build() *pluginapi.ContainerAllocateResponse {
 	resp := &pluginapi.ContainerAllocateResponse{}
 	for k, v := range b.devices {
@@ -713,6 +749,8 @@ func (b *containerAllocateResponseBuilder) Build() *pluginapi.ContainerAllocateR
 	return resp
 }
 
+// 验证写 checkpoint 后清空内存状态再读取，能完整恢复 pod/container 的设备分配、
+// 环境变量与挂载信息，以及 allocated/healthy 设备集合。
 func TestCheckpoint(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	resourceName1 := "domain1.com/resource1"
@@ -819,10 +857,12 @@ type activePodsStub struct {
 	activePods []*v1.Pod
 }
 
+// 返回 stub 中记录的活跃 Pod 列表。
 func (a *activePodsStub) getActivePods() []*v1.Pod {
 	return a.activePods
 }
 
+// 替换 stub 中的活跃 Pod 列表。
 func (a *activePodsStub) updateActivePods(newPods []*v1.Pod) {
 	a.activePods = newPods
 }
@@ -834,11 +874,13 @@ type MockEndpoint struct {
 	socket                     string
 }
 
+// 记录本次 PreStartContainer 收到的设备列表，用于测试断言。
 func (m *MockEndpoint) preStartContainer(_ context.Context, devs []string) (*pluginapi.PreStartContainerResponse, error) {
 	m.initChan <- devs
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
 
+// 调用注入的 preferred allocation 函数；未注入时返回空结果。
 func (m *MockEndpoint) getPreferredAllocation(_ context.Context, available, mustInclude []string, size int) (*pluginapi.PreferredAllocationResponse, error) {
 	if m.getPreferredAllocationFunc != nil {
 		return m.getPreferredAllocationFunc(available, mustInclude, size)
@@ -846,6 +888,7 @@ func (m *MockEndpoint) getPreferredAllocation(_ context.Context, available, must
 	return nil, nil
 }
 
+// 调用注入的 allocate 函数；未注入时返回空结果。
 func (m *MockEndpoint) allocate(ctx context.Context, devs []string) (*pluginapi.AllocateResponse, error) {
 	if m.allocateFunc != nil {
 		return m.allocateFunc(devs)
@@ -853,16 +896,21 @@ func (m *MockEndpoint) allocate(ctx context.Context, devs []string) (*pluginapi.
 	return nil, nil
 }
 
+// MockEndpoint 忽略停止时间设置，测试中不需要模拟端点停止。
 func (m *MockEndpoint) setStopTime(t time.Time) {}
 
+// MockEndpoint 始终返回未停止。
 func (m *MockEndpoint) isStopped() bool { return false }
 
+// MockEndpoint 始终认为宽限期未过期。
 func (m *MockEndpoint) stopGracePeriodExpired() bool { return false }
 
+// 返回 MockEndpoint 的 socket 路径。
 func (m *MockEndpoint) socketPath() string {
 	return m.socket
 }
 
+// 构造只包含一个容器、并给定资源 Limits 的测试 Pod。
 func makePod(limits v1.ResourceList) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -880,6 +928,8 @@ func makePod(limits v1.ResourceList) *v1.Pod {
 	}
 }
 
+// 按测试资源描述构造一个带 checkpoint 管理器的 wrappedManagerImpl，
+// 为各资源挂上行为可控的 MockEndpoint，并生成对应的设备实例。
 func getTestManager(logger klog.Logger, tmpDir string, activePods ActivePodsFunc, testRes []TestResource) (*wrappedManagerImpl, error) {
 	monitorCallback := func(logger klog.Logger, resourceName string, devices []*pluginapi.Device) {}
 	ckm, err := checkpointmanager.NewCheckpointManager(tmpDir)
@@ -949,6 +999,8 @@ type TestResource struct {
 	topology         bool
 }
 
+// 验证 filterByAffinity 会把可用设备按 NUMA 亲和性分成三组：
+// 满足亲和性、不满足亲和性、无拓扑信息。
 func TestFilterByAffinity(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	as := require.New(t)
@@ -1041,6 +1093,8 @@ func TestFilterByAffinity(t *testing.T) {
 	}
 }
 
+// 验证连续为多个 Pod 分配设备时的成功与失败路径，
+// 并检查生成的 devices/mounts/envs 数量以及已分配设备计数。
 func TestPodContainerDeviceAllocation(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	res1 := TestResource{
@@ -1140,6 +1194,8 @@ func TestPodContainerDeviceAllocation(t *testing.T) {
 
 }
 
+// 验证 devicesToAllocate 的三种准入失败场景：
+// 无健康设备、资源未注册、此前分配的设备已不健康。
 func TestPodContainerDeviceToAllocate(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	resourceName1 := "domain1.com/resource1"
@@ -1185,11 +1241,14 @@ func TestPodContainerDeviceToAllocate(t *testing.T) {
 		),
 	)
 
+	// resourceName1 没有健康设备；resourceName2 完全不出现在 healthyDevices 中，
+	// 用以模拟该资源从未注册。
 	// no healthy devices for resourceName1 and devices corresponding to
 	// resource2 are intentionally omitted to simulate that the resource
 	// hasn't been registered.
 	testManager.healthyDevices[resourceName1] = sets.New[string]()
 	testManager.healthyDevices[resourceName3] = sets.New[string]()
+	// resourceName3 的 dev5 已不在健康列表中，模拟设备失效。
 	// dev5 is no longer in the list of healthy devices
 	testManager.healthyDevices[resourceName3].Insert("dev7")
 	testManager.healthyDevices[resourceName3].Insert("dev8")
@@ -1250,6 +1309,8 @@ func TestPodContainerDeviceToAllocate(t *testing.T) {
 
 }
 
+// 验证 devicesToAllocate 与 UpdateAllocatedDevices 并发执行时不会出现数据竞争，
+// 且仍能为新容器选出一台设备。
 func TestDevicesToAllocateConflictWithUpdateAllocatedDevices(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podToAllocate := "podToAllocate"
@@ -1311,6 +1372,8 @@ func TestDevicesToAllocateConflictWithUpdateAllocatedDevices(t *testing.T) {
 	assert.Equal(t, sets.New[string](deviceID), set)
 }
 
+// 验证 Pod 仍在活跃列表中时能返回容器运行选项，
+// 而 Pod 被移除后再次查询应返回空结果。
 func TestGetDeviceRunContainerOptions(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	res1 := TestResource{
@@ -1360,6 +1423,7 @@ func TestGetDeviceRunContainerOptions(t *testing.T) {
 	err = testManager.Allocate(tCtx, pod2, &pod2.Spec.Containers[0], lifecycle.AddOperation)
 	as.NoError(err)
 
+	// Pod 在 activePods 中时，GetDeviceRunContainerOptions 应返回已分配设备的选项。
 	// when pod is in activePods, GetDeviceRunContainerOptions should return
 	runContainerOpts, err := testManager.GetDeviceRunContainerOptions(tCtx, pod1, &pod1.Spec.Containers[0])
 	as.NoError(err)
@@ -1371,12 +1435,16 @@ func TestGetDeviceRunContainerOptions(t *testing.T) {
 	podsStub.updateActivePods(activePods)
 	testManager.UpdateAllocatedDevices(logger)
 
+	// Pod 从 activePods 移除后，UpdateAllocatedDevices 会释放其设备，
+	// 此时再查询运行选项应返回 nil。
 	// when pod is removed from activePods,G etDeviceRunContainerOptions should return error
 	runContainerOpts, err = testManager.GetDeviceRunContainerOptions(tCtx, pod1, &pod1.Spec.Containers[0])
 	as.NoError(err)
 	as.Nil(runContainerOpts)
 }
 
+// 验证普通 init 容器的设备会复用给后续容器，
+// 且各普通容器之间的设备互不重叠。
 func TestInitContainerDeviceAllocation(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	// Requesting to create a pod that requests resourceName1 in init containers and normal containers
@@ -1481,6 +1549,8 @@ func TestInitContainerDeviceAllocation(t *testing.T) {
 	as.Equal(0, normalCont1Devices.Intersection(normalCont2Devices).Len())
 }
 
+// 验证可重启 init 容器的设备不会复用给其他容器，
+// 而普通 init 容器的设备可被后续容器共享。
 func TestRestartableInitContainerDeviceAllocation(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	// Requesting to create a pod that requests resourceName1 in restartable
@@ -1611,6 +1681,8 @@ func TestRestartableInitContainerDeviceAllocation(t *testing.T) {
 	}
 }
 
+// 验证 UpdatePluginResources 只在节点可分配量不足时补充设备资源，
+// 足够时保持不变。
 func TestUpdatePluginResources(t *testing.T) {
 	pod := &v1.Pod{}
 	pod.UID = types.UID("testPod")
@@ -1663,12 +1735,16 @@ func TestUpdatePluginResources(t *testing.T) {
 	testManager.UpdatePluginResources(nodeInfo, &lifecycle.PodAdmitAttributes{Pod: pod})
 
 	allocatableScalarResources := nodeInfo.Allocatable.ScalarResources
+	// 节点可分配量不足需求，应把设备资源补入 ScalarResources。
 	// allocatable in nodeInfo is less than needed, should update
 	as.Equal(1, int(allocatableScalarResources[v1.ResourceName(resourceName1)]))
+	// 节点可分配量已满足需求，保持原值不更新。
 	// allocatable in nodeInfo is more than needed, should skip updating
 	as.Equal(2, int(allocatableScalarResources[v1.ResourceName(resourceName2)]))
 }
 
+// 验证插件声明 PreStartRequired 时会调用 PreStartContainer RPC，
+// 且请求数量为 0 时跳过该调用。
 func TestDevicePreStartContainer(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	// Ensures that if device manager is indicated to invoke `PreStartContainer` RPC
@@ -1746,6 +1822,8 @@ func TestDevicePreStartContainer(t *testing.T) {
 	}
 }
 
+// 验证存在 checkpoint 时不应重置扩展资源容量，
+// checkpoint 缺失（节点重建）时才应重置。
 func TestResetExtendedResource(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	as := assert.New(t)
@@ -1776,12 +1854,14 @@ func TestResetExtendedResource(t *testing.T) {
 
 	testManager.healthyDevices[extendedResourceName] = sets.New[string]()
 	testManager.healthyDevices[extendedResourceName].Insert("dev1")
+	// checkpoint 存在，说明节点未重建，不应重置扩展资源容量。
 	// checkpoint is present, indicating node hasn't been recreated
 	err = testManager.writeCheckpoint(logger)
 	require.NoError(t, err)
 
 	as.False(testManager.ShouldResetExtendedResourceCapacity())
 
+	// checkpoint 缺失，等价于节点重建，应重置扩展资源容量。
 	// checkpoint is absent, representing node recreation
 	ckpts, err := ckm.ListCheckpoints()
 	as.NoError(err)
@@ -1792,6 +1872,7 @@ func TestResetExtendedResource(t *testing.T) {
 	as.True(testManager.ShouldResetExtendedResourceCapacity())
 }
 
+// 返回一个确定性的 Allocate 桩：dev1/dev2 各自产生固定的设备、挂载与环境变量。
 func allocateStubFunc() func(devs []string) (*pluginapi.AllocateResponse, error) {
 	return func(devs []string) (*pluginapi.AllocateResponse, error) {
 		resp := new(pluginapi.ContainerAllocateResponse)
@@ -1839,6 +1920,7 @@ func allocateStubFunc() func(devs []string) (*pluginapi.AllocateResponse, error)
 	}
 }
 
+// 按 NUMA 分布构造设备 ID 到 pluginapi.Device 的映射，可选是否附带拓扑信息。
 func makeDevice(devOnNUMA checkpoint.DevicesPerNUMA, topology bool) map[string]*pluginapi.Device {
 	res := make(map[string]*pluginapi.Device)
 	var topologyInfo *pluginapi.TopologyInfo
@@ -1855,6 +1937,8 @@ func makeDevice(devOnNUMA checkpoint.DevicesPerNUMA, topology bool) map[string]*
 	return res
 }
 
+// 并发执行设备更新回调与拓扑 hint 计算，验证没有数据竞争；
+// 发生竞态时 Go 运行时会直接终止进程。
 func TestGetTopologyHintsWithUpdates(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	socketDir, socketName, _, err := tmpSocketDir()
@@ -1921,6 +2005,7 @@ func TestGetTopologyHintsWithUpdates(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for i := 0; i < test.count; i++ {
+					// 模拟设备插件持续推送设备更新，与拓扑 hint 计算并发执行。
 					// simulate the device plugin to send device updates
 					mimpl.genericDeviceUpdateCallback(logger, testResourceName, devs)
 				}
@@ -1929,6 +2014,9 @@ func TestGetTopologyHintsWithUpdates(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for !updated.Load() {
+					// 发生数据竞争时 Go 运行时会直接 throw 而无法 recover，
+					// 例如 "Concurrent map iteration and map writing"。
+					// 测试安静结束即表示无竞态；否则进程会自行退出并打印所有 goroutine 栈。
 					// When a data race occurs, golang will throw an error, and recover() cannot catch this error,
 					// Such as: `throw("Concurrent map iteration and map writing")`.
 					// When this test ends quietly, no data race error occurs.
@@ -1940,6 +2028,9 @@ func TestGetTopologyHintsWithUpdates(t *testing.T) {
 		})
 	}
 }
+
+// 验证 UpdateAllocatedResourcesStatus 会把每台已分配设备的健康状态
+// 写入容器状态中的 AllocatedResourcesStatus。
 func TestUpdateAllocatedResourcesStatus(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	podUID := "test-pod-uid"
@@ -2028,14 +2119,14 @@ func TestUpdateAllocatedResourcesStatus(t *testing.T) {
 	}
 }
 
-// Helper function to sort ResourceHealth slices
+// 按 ResourceID 对资源健康列表排序，便于比较。
 func sortResourceHealth(resources []v1.ResourceHealth) {
 	sort.SliceStable(resources, func(i, j int) bool {
 		return resources[i].ResourceID < resources[j].ResourceID
 	})
 }
 
-// Helper function to sort ContainerStatus slices
+// 对每个容器状态中的资源健康列表排序，便于比较。
 func sortContainerStatuses(statuses []v1.ContainerStatus) {
 	for i := range statuses {
 		for j := range statuses[i].AllocatedResourcesStatus {
@@ -2044,6 +2135,8 @@ func sortContainerStatuses(statuses []v1.ContainerStatus) {
 	}
 }
 
+// 验证 ResourceHealthStatus 特性门控下，设备健康变化会按 Pod 聚合后
+// 推送到 resource updates channel，且不重复推送。
 func TestFeatureGateResourceHealthStatus(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tmpDir, err := os.MkdirTemp("", "checkpoint")
@@ -2099,9 +2192,11 @@ func TestFeatureGateResourceHealthStatus(t *testing.T) {
 			{ID: "dev1", Health: pluginapi.Healthy},
 		})
 	}
+	// 健康状态未变化时不应推送任何更新。
 	// update chan no data
 	assert.Empty(t, testManager.update)
 
+	// 把所有设备置为不健康，应按 Pod 逐个推送资源更新。
 	// update device status, assume all device unhealthy.
 	for i := 0; i < deviceUpdateNumber; i++ {
 		testManager.genericDeviceUpdateCallback(logger, resourceName, []*pluginapi.Device{
@@ -2116,9 +2211,8 @@ func TestFeatureGateResourceHealthStatus(t *testing.T) {
 	}
 }
 
-// TestDeviceHealthUpdateWithDuplicateDeviceIDs verifies that a health change is
-// routed to the pod that owns the device under the reporting resource, even when
-// another pod owns a device with the same ID under a different resource.
+// 验证不同资源下存在同名设备 ID 时，健康变化只通知拥有该设备的 Pod，
+// 不会误伤同 ID 的其他资源。
 func TestDeviceHealthUpdateWithDuplicateDeviceIDs(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tmpDir, err := os.MkdirTemp("", "checkpoint")
@@ -2185,9 +2279,8 @@ func TestDeviceHealthUpdateWithDuplicateDeviceIDs(t *testing.T) {
 	assert.Empty(t, testManager.update)
 }
 
-// TestAdmitPodWithDRAResources verifies the behavior of admission
-// of the pods referring DRA extended resources depending on whether
-// the DRAExtendedResource feature gate is enabled or disabled.
+// 验证引用 DRA 扩展资源的 Pod 在 DRAExtendedResource 特性门控开启时准入通过，
+// 关闭时准入失败。
 func TestAdmitPodWithDRAResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	testCases := map[string]struct {
@@ -2260,10 +2353,8 @@ func TestAdmitPodWithDRAResources(t *testing.T) {
 	}
 }
 
-// TestEndpointSyncOnDisconnect verifies that when a device plugin disconnects,
-// the device manager correctly updates its internal state by marking all
-// devices from that endpoint as unhealthy. It ensures that the healthyDevices
-// and unhealthyDevices maps are in sync with the plugin endpoint info.
+// 验证插件断开后其设备全部转入不健康集合；
+// 端点超过宽限期被回收时，相关资源从所有内部 map 中清理干净。
 func TestEndpointSyncOnDisconnect(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	socketDir, socketName, _, err := tmpSocketDir()
@@ -2295,6 +2386,7 @@ func TestEndpointSyncOnDisconnect(t *testing.T) {
 	}
 	manager.genericDeviceUpdateCallback(logger, resourceName, devs)
 
+	// 断开连接后，该资源的所有设备都应移入不健康集合。
 	// Disconnect should result in all devices for this resource
 	// moved to the unhealthy set.
 	err = ep.client.Disconnect(logger)
@@ -2307,8 +2399,10 @@ func TestEndpointSyncOnDisconnect(t *testing.T) {
 	require.Empty(t, manager.healthyDevices[resourceName])
 	require.Equal(t, len(devs), manager.unhealthyDevices[resourceName].Len())
 
+	// 直接让端点宽限期过期，避免测试真正等待。
 	// Expire endpoint to shorten the test
 	ep.stopTime = time.Now().Add(-endpointStopGracePeriod * 2)
+	// 调用 GetCapacity 触发端点清理，回归 issue 133702。
 	// Call GetCapacity to trigger https://github.com/kubernetes/kubernetes/issues/133702
 	manager.GetCapacity(logger)
 
@@ -2330,6 +2424,7 @@ func TestEndpointSyncOnDisconnect(t *testing.T) {
 // allocation results, only whether the operation is processed or skipped for
 // a given lifecycle operation.
 
+// 验证容器级 Allocate 只处理 AddOperation，其他操作会记录跳过日志并静默返回。
 func TestLifecycleAllocate(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -2405,6 +2500,7 @@ func TestLifecycleAllocate(t *testing.T) {
 	}
 }
 
+// 验证 Pod 级 AllocatePod 对所有操作都不做实际分配，仅记录跳过日志。
 func TestLifecycleAllocatePod(t *testing.T) {
 	testCases := []struct {
 		description string

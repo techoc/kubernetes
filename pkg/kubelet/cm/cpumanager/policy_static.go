@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package cpumanager 实现 kubelet 的 CPU 管理器，包含 static 与 none 两种策略，负责独占 CPU 的分配与回收。
 package cpumanager
 
 import (
@@ -41,15 +42,15 @@ import (
 )
 
 const (
-	// PolicyStatic is the name of the static policy.
-	// Should options be given, these will be ignored and backward (up to 1.21 included)
-	// compatible behaviour will be enforced
+	// PolicyStatic 是 static 策略的名称。
+	// 在 1.21 及更早的兼容模式下，策略选项会被忽略，
+	// 以保持向后兼容行为。
 	PolicyStatic policyName = "static"
-	// ErrorSMTAlignment represents the type of an SMTAlignmentError
+	// ErrorSMTAlignment 是 SMTAlignmentError 的类型标识，用于准入失败原因。
 	ErrorSMTAlignment = "SMTAlignmentError"
 )
 
-// SMTAlignmentError represents an error due to SMT alignment
+// SMTAlignmentError 表示因 SMT（超线程）对齐要求无法满足而产生的错误。
 type SMTAlignmentError struct {
 	RequestedCPUs         int
 	CpusPerCore           int
@@ -57,6 +58,7 @@ type SMTAlignmentError struct {
 	CausedByPhysicalCPUs  bool
 }
 
+// Error 返回可读的 SMT 对齐错误信息。
 func (e SMTAlignmentError) Error() string {
 	if e.CausedByPhysicalCPUs {
 		return fmt.Sprintf("SMT Alignment Error: not enough free physical CPUs: available physical CPUs = %d, requested CPUs = %d, CPUs per core = %d", e.AvailablePhysicalCPUs, e.RequestedCPUs, e.CpusPerCore)
@@ -64,77 +66,55 @@ func (e SMTAlignmentError) Error() string {
 	return fmt.Sprintf("SMT Alignment Error: requested %d cpus not multiple cpus per core = %d", e.RequestedCPUs, e.CpusPerCore)
 }
 
-// Type returns human-readable type of this error. Used in the admission control to populate Admission Failure reason.
+// Type 返回该错误的类型名，供准入控制填充失败原因。
 func (e SMTAlignmentError) Type() string {
 	return ErrorSMTAlignment
 }
 
-// staticPolicy is a CPU manager policy that does not change CPU
-// assignments for exclusively pinned guaranteed containers after the main
-// container process starts.
+// staticPolicy 在容器主进程启动后不再改变其独占 CPU 分配。
 //
-// This policy allocates CPUs exclusively for a container if all the following
-// conditions are met:
+// 仅当 Pod 为 Guaranteed 且 CPU request 为正整数时，才会为容器分配独占 CPU。
 //
-// - The pod QoS class is Guaranteed.
-// - The CPU request is a positive integer.
+// 该策略维护以下逻辑 CPU 集合：
 //
-// The static policy maintains the following sets of logical CPUs:
+//   - SHARED：Burstable、BestEffort 以及非整数 Guaranteed 容器运行于此。
+//     初始为系统全部 CPU；独占分配创建/销毁时相应收缩与扩张。
+//     该集合以默认 CPU 集的形式存储在 state 中。
 //
-//   - SHARED: Burstable, BestEffort, and non-integral Guaranteed containers
-//     run here. Initially this contains all CPU IDs on the system. As
-//     exclusive allocations are created and destroyed, this CPU set shrinks
-//     and grows, accordingly. This is stored in the state as the default
-//     CPU set.
+//   - RESERVED：SHARED 的子集，不可用于独占分配。成员在 kubelet 生命周期内固定，
+//     大小为 ceil(systemreserved.cpu + kubereserved.cpu)。预留 CPU 按 cAdvisor 报告的拓扑，
+//     从编号最小的物理核开始选取。
 //
-//   - RESERVED: A subset of the shared pool which is not exclusively
-//     allocatable. The membership of this pool is static for the lifetime of
-//     the Kubelet. The size of the reserved pool is
-//     ceil(systemreserved.cpu + kubereserved.cpu).
-//     Reserved CPUs are taken topologically starting with lowest-indexed
-//     physical core, as reported by cAdvisor.
+//   - ASSIGNABLE：等于 SHARED - RESERVED，独占 CPU 从此池分配。
 //
-//   - ASSIGNABLE: Equal to SHARED - RESERVED. Exclusive CPUs are allocated
-//     from this pool.
+//   - EXCLUSIVE ALLOCATIONS：独占分配给单个容器的 CPU 集，以显式分配记录保存在 state 中。
 //
-//   - EXCLUSIVE ALLOCATIONS: CPU sets assigned exclusively to one container.
-//     These are stored as explicit assignments in the state.
-//
-// When an exclusive allocation is made, the static policy also updates the
-// default cpuset in the state abstraction. The CPU manager's periodic
-// reconcile loop takes care of rewriting the cpuset in cgroupfs for any
-// containers that may be running in the shared pool. For this reason,
-// applications running within exclusively-allocated containers must tolerate
-// potentially sharing their allocated CPUs for up to the CPU manager
-// reconcile period.
+// 独占分配创建后，默认 cpuset 也会同步更新；CPU 管理器的周期性对账会把最新 cpuset 写回 cgroupfs。
+// 因此独占容器中的应用需容忍最多一个对账周期内的 CPU 共享——这是 static 策略的已知权衡。
 type staticPolicy struct {
-	// cpu socket topology
+	// topology 是 CPU socket/NUMA 拓扑信息。
 	topology *topology.CPUTopology
-	// set of CPUs that is not available for exclusive assignment
+	// reservedCPUs 是不可用于独占分配的 CPU 集合。
 	reservedCPUs cpuset.CPUSet
-	// Superset of reservedCPUs. It includes not just the reservedCPUs themselves,
-	// but also any siblings of those reservedCPUs on the same physical die.
-	// NOTE: If the reserved set includes full physical CPUs from the beginning
-	// (e.g. only reserved pairs of core siblings) this set is expected to be
-	// identical to the reserved set.
+	// reservedPhysicalCPUs 是 reservedCPUs 的超集，还包括这些 CPU 在同一物理核上的兄弟线程。
+	// 注意：若预留集合一开始就包含完整物理核，该集合与 reservedCPUs 相同。
+	// 这是 FullPhysicalCPUsOnly 计算可用核数的基础。
 	reservedPhysicalCPUs cpuset.CPUSet
-	// topology manager reference to get container Topology affinity
+	// affinity 用于获取 TopologyManager 给出的容器亲和性提示。
 	affinity topologymanager.Store
-	// set of CPUs to reuse across allocations in a pod
+	// cpusToReuse 记录 Pod 内可跨分配复用的 CPU（主要来自 init 容器）。
 	cpusToReuse map[string]cpuset.CPUSet
-	// options allow to fine-tune the behaviour of the policy
+	// options 用于微调策略行为。
 	options StaticPolicyOptions
-	// we compute this value multiple time, and it's not supposed to change
-	// at runtime - the cpumanager can't deal with runtime topology changes anyway.
+	// cpuGroupSize 会被多次使用，且运行期不应变化；CPU 管理器本身也不支持运行时拓扑变化。
 	cpuGroupSize int
 }
 
-// Ensure staticPolicy implements Policy interface
+// 确保 staticPolicy 实现 Policy 接口。
 var _ Policy = &staticPolicy{}
 
-// NewStaticPolicy returns a CPU manager policy that does not change CPU
-// assignments for exclusively pinned guaranteed containers after the main
-// container process starts.
+// NewStaticPolicy 创建 static 策略：独占容器在启动后不再改变 CPU 分配。
+// 创建时会校验选项并计算预留 CPU 集合。
 func NewStaticPolicy(logger klog.Logger, topology *topology.CPUTopology, numReservedCPUs int, reservedCPUs cpuset.CPUSet, affinity topologymanager.Store, cpuPolicyOptions map[string]string) (Policy, error) {
 	opts, err := NewStaticPolicyOptions(cpuPolicyOptions)
 	if err != nil {
@@ -161,11 +141,11 @@ func NewStaticPolicy(logger klog.Logger, topology *topology.CPUTopology, numRese
 	if reservedCPUs.Size() > 0 {
 		reserved = reservedCPUs
 	} else {
-		// takeByTopology allocates CPUs associated with low-numbered cores from
-		// allCPUs.
+		// 未显式指定预留 CPU 时，按拓扑从编号较小的核开始选取，保证结果稳定可预测。
+		// takeByTopology 会返回与低编号核关联的 CPU。
 		//
-		// For example: Given a system with 8 CPUs available and HT enabled,
-		// if numReservedCPUs=2, then reserved={0,4}
+		// 例如 8 个 CPU 且开启超线程时，numReservedCPUs=2 会得到 {0,4}，
+		// 即同一物理核的两个线程。
 		reserved, _ = policy.takeByTopology(logger, allCPUs, numReservedCPUs)
 	}
 
@@ -174,6 +154,7 @@ func NewStaticPolicy(logger klog.Logger, topology *topology.CPUTopology, numRese
 		return nil, err
 	}
 
+	// 计算预留 CPU 的完整物理核集合，供 SMT 对齐判断使用。
 	var reservedPhysicalCPUs cpuset.CPUSet
 	for _, cpu := range reserved.UnsortedList() {
 		core, err := topology.CPUCoreID(cpu)
@@ -190,10 +171,12 @@ func NewStaticPolicy(logger klog.Logger, topology *topology.CPUTopology, numRese
 	return policy, nil
 }
 
+// Name 返回策略名。
 func (p *staticPolicy) Name() string {
 	return string(PolicyStatic)
 }
 
+// Start 校验并初始化策略状态，随后初始化指标。
 func (p *staticPolicy) Start(logger klog.Logger, s state.State) error {
 	if err := p.validateState(logger, s); err != nil {
 		logger.Error(err, "invalid state, please drain node and remove policy state file")
@@ -203,6 +186,7 @@ func (p *staticPolicy) Start(logger klog.Logger, s state.State) error {
 	return nil
 }
 
+// validateState 校验 checkpoint 中的状态与当前拓扑、预留配置是否一致。
 func (p *staticPolicy) validateState(logger klog.Logger, s state.State) error {
 	tmpAssignments := s.GetCPUAssignments()
 	tmpDefaultCPUset := s.GetDefaultCPUSet()
@@ -212,21 +196,20 @@ func (p *staticPolicy) validateState(logger klog.Logger, s state.State) error {
 		allCPUs = allCPUs.Difference(p.reservedCPUs)
 	}
 
-	// Default cpuset cannot be empty when assignments exist
+	// 存在分配时默认 cpuset 不能为空，否则状态不一致。
 	if tmpDefaultCPUset.IsEmpty() {
 		if len(tmpAssignments) != 0 {
 			return fmt.Errorf("default cpuset cannot be empty")
 		}
-		// state is empty initialize
+		// 空状态视为首次启动，用全部 CPU 初始化默认集合。
 		s.SetDefaultCPUSet(allCPUs)
 		logger.Info("Static policy initialized", "defaultCPUSet", allCPUs)
 		return nil
 	}
 
-	// State has already been initialized from file (is not empty)
-	// 1. Check if the reserved cpuset is not part of default cpuset because:
-	// - kube/system reserved have changed (increased) - may lead to some containers not being able to start
-	// - user tampered with file
+	// 状态已从文件恢复，需要校验其一致性。
+	// 1. 预留 CPU 与默认 cpuset 的关系必须符合当前配置：
+	//    - 系统预留量变化可能导致部分容器无法启动；也可能是用户手工修改了状态文件。
 	if p.options.StrictCPUReservation {
 		if !p.reservedCPUs.Intersection(tmpDefaultCPUset).IsEmpty() {
 			return fmt.Errorf("some of strictly reserved cpus: %q are present in defaultCpuSet: %q",
@@ -239,10 +222,10 @@ func (p *staticPolicy) validateState(logger klog.Logger, s state.State) error {
 		}
 	}
 
-	// 2. Check if state for static policy is consistent
+	// 2. 检查默认集合与各容器分配是否重叠。
 	for pod := range tmpAssignments {
 		for container, cset := range tmpAssignments[pod] {
-			// None of the cpu in DEFAULT cset should be in s.assignments
+			// 默认集合中的 CPU 不应出现在任何独占分配中。
 			if !tmpDefaultCPUset.Intersection(cset).IsEmpty() {
 				return fmt.Errorf("pod: %s, container: %s cpuset: %q overlaps with default cpuset %q",
 					pod, container, cset.String(), tmpDefaultCPUset.String())
@@ -250,13 +233,9 @@ func (p *staticPolicy) validateState(logger klog.Logger, s state.State) error {
 		}
 	}
 
-	// 3. It's possible that the set of available CPUs has changed since
-	// the state was written. This can be due to for example
-	// offlining a CPU when kubelet is not running. If this happens,
-	// CPU manager will run into trouble when later it tries to
-	// assign non-existent CPUs to containers. Validate that the
-	// topology that was received during CPU manager startup matches with
-	// the set of CPUs stored in the state.
+	// 3. 状态写入后可用 CPU 集合可能变化（例如离线 CPU），这会导致后续分配不存在的 CPU。
+	// 因此需要确认启动时拓扑与状态中记录的 CPU 完全一致；不一致时要求用户 drain 节点并删除状态文件。
+	// 校验范围包括默认集合、容器分配与 Pod 级分配，三者并集必须等于当前全部 CPU。
 	totalKnownCPUs := tmpDefaultCPUset.Clone()
 	tmpCPUSets := []cpuset.CPUSet{}
 	for pod := range tmpAssignments {
@@ -279,74 +258,68 @@ func (p *staticPolicy) validateState(logger klog.Logger, s state.State) error {
 	return nil
 }
 
-// GetAllocatableCPUs returns the total set of CPUs available for allocation.
+// GetAllocatableCPUs 返回可供分配的全部 CPU（已扣除预留）。
 func (p *staticPolicy) GetAllocatableCPUs(s state.State) cpuset.CPUSet {
 	return p.topology.CPUDetails.CPUs().Difference(p.reservedCPUs)
 }
 
-// GetAvailableCPUs returns the set of unassigned CPUs minus the reserved set.
+// GetAvailableCPUs 返回未分配且非预留的 CPU。
 func (p *staticPolicy) GetAvailableCPUs(s state.State) cpuset.CPUSet {
 	return s.GetDefaultCPUSet().Difference(p.reservedCPUs)
 }
 
+// updateCPUsToReuse 维护 Pod 内可复用的 CPU 集合。
 func (p *staticPolicy) updateCPUsToReuse(pod *v1.Pod, container *v1.Container, cset cpuset.CPUSet) {
-	// If pod entries to m.cpusToReuse other than the current pod exist, delete them.
+	// 只保留当前 Pod 的条目，避免旧 Pod 数据无限累积。
 	for podUID := range p.cpusToReuse {
 		if podUID != string(pod.UID) {
 			delete(p.cpusToReuse, podUID)
 		}
 	}
-	// If no cpuset exists for cpusToReuse by this pod yet, create one.
+	// 首次为该 Pod 分配时创建空集合。
 	if _, ok := p.cpusToReuse[string(pod.UID)]; !ok {
 		p.cpusToReuse[string(pod.UID)] = cpuset.New()
 	}
-	// Check if the container is an init container.
-	// If so, add its cpuset to the cpuset of reusable CPUs for any new allocations.
+	// init 容器的 CPU 在结束后可供后续容器复用。
+	// 因此把其 cpuset 并入复用集合。
 	for _, initContainer := range pod.Spec.InitContainers {
 		if container.Name == initContainer.Name {
 			if podutil.IsRestartableInitContainer(&initContainer) {
-				// If the container is a restartable init container, we should not
-				// reuse its cpuset, as a restartable init container can run with
-				// regular containers.
+				// 重启式 init 容器会与普通容器同时运行，其 CPU 不能复用，否则会冲突。
+				// 因此直接跳出，不加入复用集合。
 				break
 			}
 			p.cpusToReuse[string(pod.UID)] = p.cpusToReuse[string(pod.UID)].Union(cset)
 			return
 		}
 	}
-	// Otherwise it is an app container.
-	// Remove its cpuset from the cpuset of reusable CPUs for any new allocations.
+	// 普通容器会长期占用其 CPU，需从复用集合中移除。
+	// 这样后续容器不会拿到已被占用的 CPU。
 	p.cpusToReuse[string(pod.UID)] = p.cpusToReuse[string(pod.UID)].Difference(cset)
 }
 
-// validatePodScopeResources checks for the "empty shared pool" scenario. This occurs
-// when the sum of exclusive container CPU requests consumes the entire pod-level
-// budget, leaving no CPUs for containers that require a shared pool. Such a
-// configuration is invalid because it would lead to containers in the shared
-// pool having an empty cpuset, causing them to run on the node's shared pool
-// and breaking NUMA affinity.
+// validatePodScopeResources 检查“共享池为空”的非法配置：当独占容器的 CPU 请求耗尽整个 Pod 预算时，
+// 需要共享池的容器将没有可用 CPU，从而拿到空 cpuset，回落到节点共享池并破坏 NUMA 亲和性。
+// 因此必须在分配前显式拒绝。
 func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod) error {
 	podTotalCPUs := p.podGuaranteedCPUs(logger, pod)
 
 	hasSharedLongRunningContainers := false
-	// Sum CPU requests for all containers that run for the full pod lifetime
-	// (main containers and restartable init containers) to determine the
-	// total exclusive CPU usage that might impact the shared pool.
+	// 只统计与 Pod 同生命周期的容器（普通容器与重启式 init 容器），其独占 CPU 会持续占用 Pod 预算。
+	// 标准 init 容器只在启动阶段运行，不计入长期占用。
 	sumOfLongRunningExclusiveCPUs := 0
 
-	// Check for empty shared pool for standard init containers.
+	// 标准 init 容器需要共享池时，必须确保池非空。
 	for _, container := range pod.Spec.InitContainers {
 		guaranteedCPUs := p.guaranteedCPUs(logger, pod, &container)
 
 		if !podutil.IsRestartableInitContainer(&container) {
 			if guaranteedCPUs == 0 && sumOfLongRunningExclusiveCPUs >= podTotalCPUs {
-				// This check ensures that if there are any standard init containers that need a
-				// shared pool, that pool is not empty. An empty pool would occur if the pod
-				// budget is fully consumed by sidecars.
+				// 若 Pod 预算已被 sidecar 占满，标准 init 容器将无法启动；提前拒绝以避免非法 cgroup。
 				return fmt.Errorf("pod rejected, pod has shared init containers but no cpus available for them")
 			}
 		} else {
-			// If there are restartable init containers, keep track for the empty shared pool check.
+			// 重启式 init 容器与普通容器同等看待，参与长期占用统计。
 			if guaranteedCPUs == 0 {
 				hasSharedLongRunningContainers = true
 			} else {
@@ -355,7 +328,7 @@ func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod
 		}
 	}
 
-	// Check for empty shared pool for concurrently running containers (app and restartable init containers).
+	// 再检查并发运行的容器（普通容器与重启式 init 容器）。
 	for _, container := range pod.Spec.Containers {
 		guaranteedCPUs := p.guaranteedCPUs(logger, pod, &container)
 
@@ -366,9 +339,7 @@ func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod
 		}
 	}
 
-	// This check ensures that if there are any standard containers that need a shared
-	// pool, that pool is not empty. An empty pool would occur if the pod budget is
-	// fully consumed by sidecars and main containers with exclusive resources.
+	// 若存在需要共享池的容器，而独占请求已占满预算，则拒绝，否则共享容器会拿到空 cpuset。
 	if hasSharedLongRunningContainers && sumOfLongRunningExclusiveCPUs >= podTotalCPUs {
 		return fmt.Errorf("pod rejected, sum of exclusive container cpu requests equals pod budget, leaving no cpus for shared containers")
 	}
@@ -376,15 +347,13 @@ func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod
 	return nil
 }
 
-// This function is the entry point for pod-level resource allocation.
-// It's called once per pod by the Topology Manager's pod-scope admit handler.
-// The logic here allocates a single "bubble" of CPUs for the entire pod
-// and then partitions that bubble among the containers.
+// AllocatePod 是 Pod 级资源分配的入口，由 TopologyManager 的 Pod 级准入处理器对每个 Pod 调用一次。
+// 先为整个 Pod 分配一个 CPU “气泡”，再在容器之间划分该气泡。
 func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Pod, operation lifecycle.Operation) (rerr error) {
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod), "podUID", pod.UID, "operation", operation)
 	logger.V(4).Info("AllocatePod called for pod-level managed pod")
 
-	// Static policy supports only Add pod-level resource allocation operation.
+	// static 策略只支持 Add 操作，其他操作直接跳过。
 	switch operation {
 	case lifecycle.AddOperation:
 		return p.allocatePodForAdd(logger, s, pod)
@@ -394,12 +363,13 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 	}
 }
 
+// allocatePodForAdd 执行 Pod 级 CPU 分配：计算总量、校验、分配气泡并划分给容器。
 func (p *staticPolicy) allocatePodForAdd(logger klog.Logger, s state.State, pod *v1.Pod) (rerr error) {
 	podUID := string(pod.UID)
-	// 1. Calculate the total number of CPUs required for the pod, considering init container reuse.
+	// 1. 计算 Pod 需要的 CPU 总数，已考虑 init 容器复用。
 	totalPodCPUs := p.podGuaranteedCPUs(logger, pod)
 	if totalPodCPUs == 0 {
-		// pod belongs in the shared pool (nothing to do; use default cpuset)
+		// 无独占 CPU 需求，使用默认共享池即可。
 		return nil
 	}
 	logger.V(4).Info("Calculated total pod CPUs", "totalCPUs", totalPodCPUs)
@@ -411,22 +381,18 @@ func (p *staticPolicy) allocatePodForAdd(logger klog.Logger, s state.State, pod 
 		}
 	}()
 
-	// 2. Validate for the "empty shared pool" case.
-	// Even though this is checked during hint generation, we must re-evaluate it here.
-	// If the Topology Manager is running with the "best-effort" or "none" policies,
-	// it will still admit the pod even if GetPodTopologyHints returns an empty hint list.
-	// This ensures we explicitly reject the pod during allocation to prevent Kubelet
-	// from attempting to create invalid cgroups (e.g., an empty cpuset.cpus) for shared containers.
+	// 2. 再次校验共享池为空的情况。提示生成阶段已检查过，但这里必须重复检查：
+	// best-effort/none 策略下即使没有提示也会准入 Pod，只有在这里拒绝才能防止创建非法 cgroup。
 	if err := p.validatePodScopeResources(logger, pod); err != nil {
 		return admission.NewEmptyPodSharedPoolError(err)
 	}
 
-	// 3. Enforce SMT alignment policy if FullPhysicalCPUsOnly is enabled.
+	// 3. 开启 FullPhysicalCPUsOnly 时强制 SMT 对齐。
 	if err := p.enforceSMTAlignment(s, totalPodCPUs); err != nil {
 		return err
 	}
 
-	// 4. Allocate the entire CPU "bubble" for the pod using the hint from the Topology Manager.
+	// 4. 按 TopologyManager 提示为 Pod 分配整个 CPU 气泡。
 	hint := p.affinity.GetAffinity(logger, podUID, append(pod.Spec.InitContainers, pod.Spec.Containers...)[0].Name)
 	podAllocation, err := p.allocateCPUs(logger, s, totalPodCPUs, hint.NUMANodeAffinity, cpuset.New())
 	if err != nil {
@@ -436,19 +402,18 @@ func (p *staticPolicy) allocatePodForAdd(logger klog.Logger, s state.State, pod 
 	p.updateMetricsOnAllocate(logger, s, podAllocation)
 	logger.V(4).Info("Allocated pod-level CPU bubble", "allocation", podAllocation.CPUs)
 
-	// Store the pod-level allocation in the state.
+	// 先把 Pod 级分配写入状态，供容器划分使用。
 	s.SetPodCPUSet(podUID, podAllocation.CPUs)
 
-	// 5. Partition the pod's allocation, handling init container CPU reuse correctly.
+	// 5. 在容器间划分气泡，并正确处理 init 容器的 CPU 复用。
 	exclusiveCPUs := make(map[string]cpuset.CPUSet)
 	sidecarCPUs := cpuset.New()
 
-	// First, iterate through all init containers and allocate their CPUs from the initial pod bubble.
+	// 先处理 init 容器：可用池是整个气泡减去 sidecar 已占部分。
 	for _, c := range pod.Spec.InitContainers {
 		if numCPUs := p.guaranteedCPUs(logger, pod, &c); numCPUs > 0 {
 			metrics.CPUManagerPinningRequestsTotal.Inc()
-			// The pool available for this init container is the entire pod allocation
-			// minus what's already taken by sidecars.
+			// 标准 init 容器结束后其 CPU 可被后续容器复用。
 			runnablePool := podAllocation.CPUs.Difference(sidecarCPUs)
 			cset, err := p.takeByTopology(logger, runnablePool, numCPUs)
 			if err != nil {
@@ -457,29 +422,27 @@ func (p *staticPolicy) allocatePodForAdd(logger klog.Logger, s state.State, pod 
 			metrics.ResourceManagerContainerAssignments.WithLabelValues(metrics.ResourceManagerCPU, metrics.ResourceManagerExclusivePod).Inc()
 			exclusiveCPUs[c.Name] = cset
 
-			// If it's a restartable sidecar, its CPUs are permanently consumed.
+			// 重启式 init 容器与普通容器并发运行，因此永久占用。
 			if podutil.IsRestartableInitContainer(&c) {
 				sidecarCPUs = sidecarCPUs.Union(cset)
 			}
 		} else {
-			// Restartable init containers will access the main pod shared pool.
+			// 无独占需求的 sidecar 使用 Pod 共享池。
 			if podutil.IsRestartableInitContainer(&c) {
 				continue
 			}
 
-			// Non restartable init containers will have access to the whole pod pool
-			// amount minus the sidecar exclusive CPUs up to that point.
+			// 标准 init 容器可访问整个 Pod 池（扣除 sidecar），因为它们运行期间其他普通容器尚未启动。
 			runnablePool := podAllocation.CPUs.Difference(sidecarCPUs)
 			metrics.ResourceManagerContainerAssignments.WithLabelValues(metrics.ResourceManagerCPU, metrics.ResourceManagerSharedPod).Inc()
 			exclusiveCPUs[c.Name] = runnablePool
 		}
 	}
 
-	// Explicitly record that the full CPU bubble is available again, minus what sidecars are using.
-	// This avoids carrying forward complex accounting from standard init containers.
+	// 标准 init 容器结束后，整个气泡（扣除 sidecar）重新可用，无需继承 init 容器的复杂记账。
 	podSharedPool := podAllocation.CPUs.Difference(sidecarCPUs)
 
-	// Second, iterate through regular containers, allocating from the remaining pool.
+	// 再为普通容器从剩余池中分配，并逐个扣减。
 	for _, c := range pod.Spec.Containers {
 		if numCPUs := p.guaranteedCPUs(logger, pod, &c); numCPUs > 0 {
 			metrics.CPUManagerPinningRequestsTotal.Inc()
@@ -489,14 +452,14 @@ func (p *staticPolicy) allocatePodForAdd(logger klog.Logger, s state.State, pod 
 			}
 			metrics.ResourceManagerContainerAssignments.WithLabelValues(metrics.ResourceManagerCPU, metrics.ResourceManagerExclusivePod).Inc()
 			exclusiveCPUs[c.Name] = cset
-			// Consume CPUs from the app container pool.
+			// 已分配的 CPU 必须从共享池中扣除。
 			podSharedPool = podSharedPool.Difference(cset)
 		}
 	}
 
 	logger.V(4).Info("Partitioned pod-level CPU allocation", "exclusiveCPUs", podCPUAllocationToString(exclusiveCPUs), "podSharedPool", podSharedPool)
 
-	// 6. Save all container assignments to the state.
+	// 6. 保存所有容器分配；无独占需求的容器记录为共享池。
 	for _, c := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
 		if cset, isExclusive := exclusiveCPUs[c.Name]; isExclusive {
 			s.SetCPUSet(podUID, c.Name, cset)
@@ -511,6 +474,7 @@ func (p *staticPolicy) allocatePodForAdd(logger klog.Logger, s state.State, pod 
 	return nil
 }
 
+// podCPUAllocationToString 把容器到 CPU 集合的映射格式化为紧凑字符串，便于日志输出。
 func podCPUAllocationToString(alloc map[string]cpuset.CPUSet) string {
 	if len(alloc) == 0 {
 		return ""
@@ -519,26 +483,21 @@ func podCPUAllocationToString(alloc map[string]cpuset.CPUSet) string {
 	for name, cset := range alloc {
 		fmt.Fprintf(&sb, ",%s={%s}", name, cset)
 	}
-	// if we gone so far, it means we have at least 1 alloc, so the cut is safe
+	// 能走到这里说明至少有一个分配，去掉开头的逗号是安全的。
 	repr := sb.String()[1:]
 	return "<" + repr + ">"
 }
 
+// enforceSMTAlignment 校验 CPU 请求是否满足 FullPhysicalCPUsOnly 的 SMT 对齐要求。
 func (p *staticPolicy) enforceSMTAlignment(s state.State, numCPUs int) error {
 	if !p.options.FullPhysicalCPUsOnly {
 		return nil
 	}
 
 	if (numCPUs % p.cpuGroupSize) != 0 {
-		// Since CPU Manager has been enabled requesting strict SMT alignment, it means a guaranteed pod can only be admitted
-		// if the CPU requested is a multiple of the number of virtual cpus per physical cores.
-		// In case CPU request is not a multiple of the number of virtual cpus per physical cores the Pod will be put
-		// in Failed state, with SMTAlignmentError as reason. Since the allocation happens in terms of physical cores
-		// and the scheduler is responsible for ensuring that the workload goes to a node that has enough CPUs,
-		// the pod would be placed on a node where there are enough physical cores available to be allocated.
-		// Just like the behaviour in case of static policy, takeByTopology will try to first allocate CPUs from the same socket
-		// and only in case the request cannot be sattisfied on a single socket, CPU allocation is done for a workload to occupy all
-		// CPUs on a physical core. Allocation of individual threads would never have to occur.
+		// 开启严格 SMT 对齐后，Guaranteed Pod 的 CPU 请求必须是每物理核线程数的整数倍，
+		// 否则 Pod 会以 SMTAlignmentError 失败。分配以物理核为单位，因此不会出现只分配单个线程的情况；
+		// 调度器负责把工作负载放到物理核足够的节点上。
 		return SMTAlignmentError{
 			RequestedCPUs:        numCPUs,
 			CpusPerCore:          p.cpuGroupSize,
@@ -548,10 +507,8 @@ func (p *staticPolicy) enforceSMTAlignment(s state.State, numCPUs int) error {
 
 	availablePhysicalCPUs := s.GetDefaultCPUSet().Difference(p.reservedPhysicalCPUs).Size()
 
-	// It's legal to reserve CPUs which are not core siblings. In this case the CPU allocator can descend to single cores
-	// when picking CPUs. This will void the guarantee of FullPhysicalCPUsOnly. To prevent this, we need to additionally consider
-	// all the core siblings of the reserved CPUs as unavailable when computing the free CPUs, before to start the actual allocation.
-	// This way, by construction all possible CPUs allocation whose number is multiple of the SMT level are now correct again.
+	// 允许预留非兄弟线程的 CPU，但此时分配器可能退化到单核分配，破坏 FullPhysicalCPUsOnly 的保证。
+	// 因此计算可用 CPU 时把预留 CPU 的兄弟线程也视为不可用，使按 SMT 粒度计算的可用量正确。
 	if numCPUs > availablePhysicalCPUs {
 		return SMTAlignmentError{
 			RequestedCPUs:         numCPUs,
@@ -563,6 +520,7 @@ func (p *staticPolicy) enforceSMTAlignment(s state.State, numCPUs int) error {
 	return nil
 }
 
+// Allocate 为容器分配独占 CPU；只支持 Add 操作。
 func (p *staticPolicy) Allocate(logger klog.Logger, s state.State, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) (rerr error) {
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod), "podUID", pod.UID, "containerName", container.Name, "operation", operation)
 	logger.Info("Allocate start") // V=0 for backward compatibility
@@ -577,10 +535,11 @@ func (p *staticPolicy) Allocate(logger klog.Logger, s state.State, pod *v1.Pod, 
 	}
 }
 
+// allocateForAdd 执行容器级独占 CPU 分配。
 func (p *staticPolicy) allocateForAdd(logger klog.Logger, s state.State, pod *v1.Pod, container *v1.Container) (rerr error) {
 	numCPUs := p.guaranteedCPUs(logger, pod, container)
 	if numCPUs == 0 {
-		// container belongs in the shared pool (nothing to do; use default cpuset)
+		// 无独占需求，使用默认共享池。
 		return nil
 	}
 
@@ -589,7 +548,7 @@ func (p *staticPolicy) allocateForAdd(logger klog.Logger, s state.State, pod *v1
 		return nil
 	}
 
-	// container belongs in an exclusively allocated pool
+	// 容器需要独占 CPU，进入分配流程。
 	metrics.CPUManagerPinningRequestsTotal.Inc()
 	defer func() {
 		if rerr != nil {
@@ -600,18 +559,15 @@ func (p *staticPolicy) allocateForAdd(logger klog.Logger, s state.State, pod *v1
 			}
 			return
 		}
-		// TODO: move in updateMetricsOnAllocate
+		// TODO: 将该指标更新移入 updateMetricsOnAllocate。
 		if p.options.FullPhysicalCPUsOnly {
-			// increment only if we know we allocate aligned resources
+			// 只在确定分配了对齐资源时累加成功计数。
 			metrics.ContainerAlignedComputeResources.WithLabelValues(metrics.AlignScopeContainer, metrics.AlignedPhysicalCPU).Inc()
 		}
 	}()
 
-	// Checking the checkpoint state before SMT alignment validation means that
-	// existing allocations are preserved even if they violate the current policy.
-	// For example, if kubelet previously ran with full-pcpus-only=false and is
-	// restarted with full-pcpus-only=true, checkpointed allocations that don't
-	// satisfy SMT alignment are accepted to avoid disrupting running workloads.
+	// 先检查已有分配、再做 SMT 对齐校验，这样即使当前策略更严格，已运行的容器也不会被打断。
+	// 例如 kubelet 从 full-pcpus-only=false 重启为 true 时，已有的非对齐分配仍会被接受。
 	if cset, ok := s.GetCPUSet(string(pod.UID), container.Name); ok {
 		p.updateCPUsToReuse(pod, container, cset)
 		logger.Info("Static policy: container already present in state, skipping")
@@ -622,11 +578,11 @@ func (p *staticPolicy) allocateForAdd(logger klog.Logger, s state.State, pod *v1
 		return err
 	}
 
-	// Call Topology Manager to get the aligned socket affinity across all hint providers.
+	// 从 TopologyManager 获取所有提示提供者对齐后的亲和性。
 	hint := p.affinity.GetAffinity(logger, string(pod.UID), container.Name)
 	logger.Info("Topology Affinity", "affinity", hint)
 
-	// Allocate CPUs according to the NUMA affinity contained in the hint.
+	// 按提示中的 NUMA 亲和性分配 CPU。
 	cpuAllocation, err := p.allocateCPUs(logger, s, numCPUs, hint.NUMANodeAffinity, p.cpusToReuse[string(pod.UID)])
 	if err != nil {
 		logger.Error(err, "Unable to allocate CPUs", "numCPUs", numCPUs)
@@ -643,7 +599,7 @@ func (p *staticPolicy) allocateForAdd(logger klog.Logger, s state.State, pod *v1
 	return nil
 }
 
-// getAssignedCPUsOfSiblings returns assigned cpus of given container's siblings(all containers other than the given container) in the given pod `podUID`.
+// getAssignedCPUsOfSiblings 返回同一 Pod 内除指定容器外其他容器已分配的 CPU 集合。
 func getAssignedCPUsOfSiblings(s state.State, podUID string, containerName string) cpuset.CPUSet {
 	assignments := s.GetCPUAssignments()
 	cset := cpuset.New()
@@ -656,6 +612,7 @@ func getAssignedCPUsOfSiblings(s state.State, podUID string, containerName strin
 	return cset
 }
 
+// RemoveContainer 释放容器占用的 CPU；Pod 级分配在最后一个容器移除时整体释放。
 func (p *staticPolicy) RemoveContainer(logger klog.Logger, s state.State, podUID string, containerName string) error {
 	logger = klog.LoggerWithValues(logger, "podUID", podUID, "containerName", containerName)
 	logger.Info("RemoveContainer start") // backward compatibility
@@ -666,10 +623,10 @@ func (p *staticPolicy) RemoveContainer(logger klog.Logger, s state.State, podUID
 	}
 	s.Delete(podUID, containerName)
 
-	// Check if this pod is managed with pod-level CPUs.
+	// Pod 级分配模式下，CPU 属于整个 Pod，而非单个容器。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) {
 		if podCPUSet, isPodLevel := s.GetPodCPUSet(podUID); isPodLevel {
-			// If this was the last container for the pod, then release the entire pod-level CPU set.
+			// 最后一个容器移除时才释放整个 Pod 的 CPU 集合。
 			if len(s.GetCPUAssignments()[podUID]) == 0 {
 				updatedCPUSets := s.GetDefaultCPUSet().Union(podCPUSet)
 				s.SetDefaultCPUSet(updatedCPUSets)
@@ -677,14 +634,13 @@ func (p *staticPolicy) RemoveContainer(logger klog.Logger, s state.State, podUID
 				p.updateMetricsOnRelease(logger, s, podCPUSet)
 				logger.Info("Released pod-level CPUs", "defaultCPUSet", updatedCPUSets)
 			}
-			// If other containers still exist, do not release any CPUs yet.
-			// The pod-level CPUs will be released when the last container is removed.
+			// 还有其他容器时不能释放，否则会破坏仍在运行的容器；等最后一个容器移除时再整体释放。
 			return nil
 		}
 	}
 
 	cpusInUse := getAssignedCPUsOfSiblings(s, podUID, containerName)
-	// Mutate the shared pool, adding released cpus.
+	// 只释放未被同 Pod 其他容器占用的 CPU，避免重复归还。
 	toRelease = toRelease.Difference(cpusInUse)
 	updatedCPUs := s.GetDefaultCPUSet().Union(toRelease)
 	s.SetDefaultCPUSet(updatedCPUs)
@@ -693,12 +649,13 @@ func (p *staticPolicy) RemoveContainer(logger klog.Logger, s state.State, podUID
 	return nil
 }
 
+// allocateCPUs 在可用与可复用 CPU 中按亲和性分配指定数量的 CPU。
 func (p *staticPolicy) allocateCPUs(logger klog.Logger, s state.State, numCPUs int, numaAffinity bitmask.BitMask, reusableCPUs cpuset.CPUSet) (topology.Allocation, error) {
 	logger.Info("AllocateCPUs", "numCPUs", numCPUs, "socket", numaAffinity)
 
 	allocatableCPUs := p.GetAvailableCPUs(s).Union(reusableCPUs)
 
-	// If there are aligned CPUs in numaAffinity, attempt to take those first.
+	// 优先从亲和掩码覆盖的 CPU 中分配，以满足 NUMA 对齐。
 	result := topology.EmptyAllocation()
 	if numaAffinity != nil {
 		alignedCPUs := p.getAlignedCPUs(numaAffinity, allocatableCPUs)
@@ -716,7 +673,7 @@ func (p *staticPolicy) allocateCPUs(logger klog.Logger, s state.State, numCPUs i
 		result.CPUs = result.CPUs.Union(allocatedCPUs)
 	}
 
-	// Get any remaining CPUs from what's leftover after attempting to grab aligned ones.
+	// 对齐 CPU 不足时，从剩余可用 CPU 中补齐。
 	remainingCPUs, err := p.takeByTopology(logger, allocatableCPUs.Difference(result.CPUs), numCPUs-result.CPUs.Size())
 	if err != nil {
 		return topology.EmptyAllocation(), err
@@ -724,17 +681,19 @@ func (p *staticPolicy) allocateCPUs(logger klog.Logger, s state.State, numCPUs i
 	result.CPUs = result.CPUs.Union(remainingCPUs)
 	result.Aligned = p.topology.CheckAlignment(result.CPUs)
 
-	// Remove allocated CPUs from the shared CPUSet.
+	// 已分配的 CPU 必须从共享池中移除。
 	s.SetDefaultCPUSet(s.GetDefaultCPUSet().Difference(result.CPUs))
 
 	logger.Info("AllocateCPUs", "result", result.String())
 	return result, nil
 }
 
+// isIntegralCPUAmount 判断 CPU 数量是否为整数（不含毫核小数）。
 func isIntegralCPUAmount(cpuQuantity resource.Quantity) bool {
 	return cpuQuantity.Value()*1000 == cpuQuantity.MilliValue()
 }
 
+// guaranteedCPUs 返回容器可独占的 CPU 数；不满足条件时返回 0。
 func (p *staticPolicy) guaranteedCPUs(logger klog.Logger, pod *v1.Pod, container *v1.Container) int {
 	qos := v1qos.GetPodQOS(pod)
 	if qos != v1.PodQOSGuaranteed {
@@ -744,9 +703,8 @@ func (p *staticPolicy) guaranteedCPUs(logger klog.Logger, pod *v1.Pod, container
 
 	cpuQuantity := container.Resources.Requests[v1.ResourceCPU]
 
-	// For pod-level resource management, a container is only considered for exclusive
-	// CPUs if its request equals its limit for both the CPU and Memory. This
-	// aligns with the Guaranteed QoS requirement for container-level resources.
+	// Pod 级资源模式下，容器必须 request==limit（CPU 与内存）才视为 Guaranteed，否则不能分配独占 CPU。
+	// 这与容器级 QoS 的判定标准一致。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) && resourcehelper.IsPodLevelResourcesSet(pod) && !cmqos.IsContainerEquivalentQOSGuaranteed(container) {
 		logger.V(5).Info("Exclusive CPU allocation skipped, container is not eligible, request and limit are not equal", "pod", klog.KObj(pod), "containerName", container.Name)
 		return 0
@@ -757,16 +715,15 @@ func (p *staticPolicy) guaranteedCPUs(logger klog.Logger, pod *v1.Pod, container
 		logger.V(5).Info("Exclusive CPU allocation skipped, container requested non-integral CPUs", "pod", klog.KObj(pod), "containerName", container.Name, "cpu", cpuValue)
 		return 0
 	}
-	// Safe downcast to do for all systems with < 2.1 billion CPUs.
-	// Per the language spec, `int` is guaranteed to be at least 32 bits wide.
-	// https://golang.org/ref/spec#Numeric_types
+	// 对于 CPU 数小于 21 亿的系统，转为 int 是安全的：语言规范保证 int 至少 32 位。
+	// 参见 https://golang.org/ref/spec#Numeric_types。
 	return int(cpuValue)
 }
 
+// podGuaranteedCPUs 返回 Pod 级需要独占的 CPU 总数。
 func (p *staticPolicy) podGuaranteedCPUs(logger klog.Logger, pod *v1.Pod) int {
-	// If pod-level resources are set, use them directly.
-	// This check is important because this function is called from GetPodTopologyHints,
-	// which runs before the main feature gate check in AllocatePod.
+	// 设置了 Pod 级资源时直接使用 Pod 的请求值。
+	// 该检查很重要：GetPodTopologyHints 会在 AllocatePod 的特性门控检查之前调用，因此这里必须自行判断。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		qos := v1qos.GetPodQOS(pod)
 		if qos != v1.PodQOSGuaranteed {
@@ -774,7 +731,7 @@ func (p *staticPolicy) podGuaranteedCPUs(logger klog.Logger, pod *v1.Pod) int {
 		}
 
 		if cpuQuantity, ok := pod.Spec.Resources.Requests[v1.ResourceCPU]; ok {
-			// We only consider integer CPU requests for guaranteed CPUs at the pod level.
+			// 只有整数 CPU 请求才参与独占分配。
 			if isIntegralCPUAmount(cpuQuantity) {
 				return int(cpuQuantity.Value())
 			}
@@ -782,7 +739,7 @@ func (p *staticPolicy) podGuaranteedCPUs(logger klog.Logger, pod *v1.Pod) int {
 		return 0
 	}
 
-	// The maximum of requested CPUs by init containers.
+	// init 阶段所需 CPU 取“标准 init 最大值”与“重启式 init 累加”的较大者。
 	requestedByInitContainers := 0
 	requestedByRestartableInitContainers := 0
 	for _, container := range pod.Spec.InitContainers {
@@ -790,8 +747,7 @@ func (p *staticPolicy) podGuaranteedCPUs(logger klog.Logger, pod *v1.Pod) int {
 			continue
 		}
 		requestedCPU := p.guaranteedCPUs(logger, pod, &container)
-		// See https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/753-sidecar-containers#resources-calculation-for-scheduling-and-pod-admission
-		// for the detail.
+		// 计算规则见 KEP-753 sidecar 容器的资源计算说明：重启式 init 容器与普通容器并发运行，因此累加。
 		if podutil.IsRestartableInitContainer(&container) {
 			requestedByRestartableInitContainers += requestedCPU
 		} else if requestedByRestartableInitContainers+requestedCPU > requestedByInitContainers {
@@ -799,7 +755,7 @@ func (p *staticPolicy) podGuaranteedCPUs(logger klog.Logger, pod *v1.Pod) int {
 		}
 	}
 
-	// The sum of requested CPUs by app containers.
+	// 普通容器的 CPU 请求直接累加。
 	requestedByAppContainers := 0
 	for _, container := range pod.Spec.Containers {
 		if _, ok := container.Resources.Requests[v1.ResourceCPU]; !ok {
@@ -815,6 +771,7 @@ func (p *staticPolicy) podGuaranteedCPUs(logger klog.Logger, pod *v1.Pod) int {
 	return requestedByLongRunningContainers
 }
 
+// takeByTopology 按策略选项选择 NUMA 分布/紧凑算法分配 CPU。
 func (p *staticPolicy) takeByTopology(logger klog.Logger, availableCPUs cpuset.CPUSet, numCPUs int) (cpuset.CPUSet, error) {
 	cpuSortingStrategy := CPUSortingStrategyPacked
 	if p.options.DistributeCPUsAcrossCores {
@@ -832,6 +789,7 @@ func (p *staticPolicy) takeByTopology(logger klog.Logger, availableCPUs cpuset.C
 	return takeByTopologyNUMAPacked(logger, p.topology, availableCPUs, numCPUs, cpuSortingStrategy, p.options.PreferAlignByUncoreCacheOption)
 }
 
+// GetTopologyHints 为容器生成 CPU 拓扑提示。
 func (p *staticPolicy) GetTopologyHints(logger klog.Logger, s state.State, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint {
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod), "podUID", pod.UID, "containerName", container.Name, "operation", operation)
 	switch operation {
@@ -843,35 +801,29 @@ func (p *staticPolicy) GetTopologyHints(logger klog.Logger, s state.State, pod *
 	}
 }
 
+// getTopologyHintsForAdd 实现容器级提示生成。
 func (p *staticPolicy) getTopologyHintsForAdd(logger klog.Logger, s state.State, pod *v1.Pod, container *v1.Container) map[string][]topologymanager.TopologyHint {
 
-	// Get a count of how many guaranteed CPUs have been requested.
+	// 计算需要独占的 CPU 数量。
 	requested := p.guaranteedCPUs(logger, pod, container)
 
-	// Number of required CPUs is not an integer or a container is not part of the Guaranteed QoS class.
-	// It will be treated by the TopologyManager as having no preference and cause it to ignore this
-	// resource when considering pod alignment.
-	// In terms of hints, this is equal to: TopologyHints[NUMANodeAffinity: nil, Preferred: true].
+	// 数量非整数或容器不属于 Guaranteed 时返回 nil 提示，TopologyManager 会忽略该资源。
+	// 等价于 TopologyHints[NUMANodeAffinity: nil, Preferred: true]。
 	if requested == 0 {
 		return nil
 	}
 
-	// If the pod has pod-level resources but the feature gate is disabled,
-	// log it and return nil hints to admit the pod without alignment.
+	// Pod 级资源与门控不匹配时返回 nil，让 Pod 无需对齐即可准入，避免阻塞调度。
 	if (!utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) || !utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources)) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		logger.V(3).Info("CPU Manager hint generation skipped, pod is using pod-level resources but the PodLevelResourceManagers feature gate is not enabled")
 		return nil
 	}
 
-	// Short circuit to regenerate the same hints if there are already
-	// guaranteed CPUs allocated to the Container. This might happen after a
-	// kubelet restart, for example.
+	// 已有分配时（如 kubelet 重启后）重新生成相同的提示，保证重启不会改变已运行容器的亲和性。
 	if allocated, exists := s.GetCPUSet(string(pod.UID), container.Name); exists {
 		if allocated.Size() != requested {
 			logger.Info("CPUs already allocated to container with different number than request", "requestedSize", requested, "allocatedSize", allocated.Size())
-			// An empty list of hints will be treated as a preference that cannot be satisfied.
-			// In definition of hints this is equal to: TopologyHint[NUMANodeAffinity: nil, Preferred: false].
-			// For all but the best-effort policy, the Topology Manager will throw a pod-admission error.
+			// 空提示表示无法满足（Preferred: false），除 best-effort 外 TopologyManager 会拒绝该 Pod。
 			return map[string][]topologymanager.TopologyHint{
 				string(v1.ResourceCPU): {},
 			}
@@ -882,14 +834,14 @@ func (p *staticPolicy) getTopologyHintsForAdd(logger klog.Logger, s state.State,
 		}
 	}
 
-	// Get a list of available CPUs.
+	// 获取当前可用 CPU。
 	available := p.GetAvailableCPUs(s)
 
-	// Get a list of reusable CPUs (e.g. CPUs reused from initContainers).
-	// It should be an empty CPUSet for a newly created pod.
+	// 获取可复用 CPU（来自已结束的 init 容器）；新建 Pod 该集合为空。
+	// 复用集合只包含本 Pod 内可继承的 CPU。
 	reusable := p.cpusToReuse[string(pod.UID)]
 
-	// Generate hints.
+	// 生成提示并返回。
 	cpuHints := p.generateCPUTopologyHints(available, reusable, requested)
 	logger.Info("TopologyHints generated", "cpuHints", cpuHints)
 
@@ -898,6 +850,7 @@ func (p *staticPolicy) getTopologyHintsForAdd(logger klog.Logger, s state.State,
 	}
 }
 
+// GetPodTopologyHints 为 Pod 级分配生成 CPU 拓扑提示。
 func (p *staticPolicy) GetPodTopologyHints(logger klog.Logger, s state.State, pod *v1.Pod, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint {
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod), "podUID", pod.UID, "operation", operation)
 	switch operation {
@@ -909,32 +862,27 @@ func (p *staticPolicy) GetPodTopologyHints(logger klog.Logger, s state.State, po
 	}
 }
 
+// getPodTopologyHintsForAdd 实现 Pod 级提示生成。
 func (p *staticPolicy) getPodTopologyHintsForAdd(logger klog.Logger, s state.State, pod *v1.Pod) map[string][]topologymanager.TopologyHint {
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod), "podUID", pod.UID)
 
-	// Get a count of how many guaranteed CPUs have been requested by Pod.
+	// 计算 Pod 需要独占的 CPU 总数。
 	requested := p.podGuaranteedCPUs(logger, pod)
 
-	// Number of required CPUs is not an integer or a pod is not part of the Guaranteed QoS class.
-	// It will be treated by the TopologyManager as having no preference and cause it to ignore this
-	// resource when considering pod alignment.
-	// In terms of hints, this is equal to: TopologyHints[NUMANodeAffinity: nil, Preferred: true].
+	// 数量非整数或 Pod 非 Guaranteed 时无需对齐，TopologyManager 会忽略该资源。
+	// 等价于 TopologyHints[NUMANodeAffinity: nil, Preferred: true]。
 	if requested == 0 {
 		return nil
 	}
 
-	// If the pod has pod-level resources but the feature gate is disabled,
-	// log it and return nil hints to admit the pod without alignment.
+	// Pod 级资源与门控不匹配时返回 nil，让 Pod 无需对齐即可准入。
 	if (!utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) || !utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources)) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		logger.V(3).Info("CPU Manager pod hint generation skipped, pod is using pod-level resources but the PodLevelResourceManagers feature gate is not enabled", "podUID", pod.UID)
 		return nil
 	}
 
-	// Validate that if a pod has containers that will be placed in a shared pool,
-	// there are actually CPUs left over for that pool after accounting for all
-	// exclusive allocations. If the sum of exclusive CPU requests consumes the
-	// entire pod-level CPU budget, no hints will be generated, causing the pod
-	// to be rejected by the Topology Manager.
+	// 若 Pod 中存在需要共享池的容器，必须确保共享池非空；否则生成空提示，让 TopologyManager 拒绝该 Pod。
+	// 这样可以避免创建空 cpuset，提示生成与分配阶段都会做该检查。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		if err := p.validatePodScopeResources(logger, pod); err != nil {
 			logger.V(2).Info("Invalid pod spec. Sum of exclusive container requests equals pod budget, leaving no CPUs for shared containers")
@@ -949,20 +897,16 @@ func (p *staticPolicy) getPodTopologyHintsForAdd(logger klog.Logger, s state.Sta
 		logger_ := klog.LoggerWithValues(logger, "containerName", container.Name)
 
 		requestedByContainer := p.guaranteedCPUs(logger, pod, &container)
-		// Short circuit to regenerate the same hints if there are already
-		// guaranteed CPUs allocated to the Container. This might happen after a
-		// kubelet restart, for example.
+		// 已有分配时重新生成相同提示，保持重启前后一致；分配数不一致则返回空提示。
 		if allocated, exists := s.GetCPUSet(string(pod.UID), container.Name); exists {
 			if allocated.Size() != requestedByContainer {
 				logger_.Info("CPUs already allocated to container with different number than request", "allocatedSize", requested, "requestedByContainer", requestedByContainer, "allocatedSize", allocated.Size())
-				// An empty list of hints will be treated as a preference that cannot be satisfied.
-				// In definition of hints this is equal to: TopologyHint[NUMANodeAffinity: nil, Preferred: false].
-				// For all but the best-effort policy, the Topology Manager will throw a pod-admission error.
+				// 空提示表示无法满足（Preferred: false），除 best-effort 外会拒绝该 Pod。
 				return map[string][]topologymanager.TopologyHint{
 					string(v1.ResourceCPU): {},
 				}
 			}
-			// A set of CPUs already assigned to containers in this pod
+			// 汇总本 Pod 内已分配的 CPU，避免重复分配。
 			assignedCPUs = assignedCPUs.Union(allocated)
 		}
 	}
@@ -973,17 +917,17 @@ func (p *staticPolicy) getPodTopologyHintsForAdd(logger klog.Logger, s state.Sta
 		}
 	}
 
-	// Get a list of available CPUs.
+	// 获取当前可用 CPU。
 	available := p.GetAvailableCPUs(s)
 
-	// Get a list of reusable CPUs (e.g. CPUs reused from initContainers).
-	// It should be an empty CPUSet for a newly created pod.
+	// 获取可复用 CPU（来自已结束的 init 容器）；新建 Pod 该集合为空。
+	// 复用集合只包含本 Pod 内可继承的 CPU。
 	reusable := p.cpusToReuse[string(pod.UID)]
 
-	// Ensure any CPUs already assigned to containers in this pod are included as part of the hint generation.
+	// 已分配的 CPU 必须计入提示，保证结果包含它们。
 	reusable = reusable.Union(assignedCPUs)
 
-	// Generate hints.
+	// 生成提示并返回。
 	cpuHints := p.generateCPUTopologyHints(available, reusable, requested)
 	logger.Info("TopologyHints generated", "cpuHints", cpuHints)
 
@@ -992,62 +936,54 @@ func (p *staticPolicy) getPodTopologyHintsForAdd(logger klog.Logger, s state.Sta
 	}
 }
 
-// generateCPUTopologyHints generates a set of TopologyHints given the set of
-// available CPUs and the number of CPUs being requested.
+// generateCPUTopologyHints 根据可用 CPU 与请求数量生成拓扑提示。
 //
-// It follows the convention of marking all hints that have the same number of
-// bits set as the narrowest matching NUMANodeAffinity with 'Preferred: true', and
-// marking all others with 'Preferred: false'.
+// 提示覆盖所有 NUMA 节点组合，其中位数等于最小可满足组合的提示标记为 Preferred，其余为 false。
+// 这样 TopologyManager 能优先选择最紧凑的 NUMA 组合。
 func (p *staticPolicy) generateCPUTopologyHints(availableCPUs cpuset.CPUSet, reusableCPUs cpuset.CPUSet, request int) []topologymanager.TopologyHint {
-	// Initialize minAffinitySize to include all NUMA Nodes.
+	// 初始最小亲和性大小为全部 NUMA 节点数。
 	minAffinitySize := p.topology.CPUDetails.NUMANodes().Size()
 
-	// Iterate through all combinations of numa nodes bitmask and build hints from them.
+	// 遍历所有 NUMA 节点位掩码组合。
 	hints := []topologymanager.TopologyHint{}
 	bitmask.IterateBitMasks(p.topology.CPUDetails.NUMANodes().List(), func(mask bitmask.BitMask) {
-		// First, update minAffinitySize for the current request size.
+		// 先根据当前请求更新最小亲和性大小。
 		cpusInMask := p.topology.CPUDetails.CPUsInNUMANodes(mask.GetBits()...).Size()
 		if cpusInMask >= request && mask.Count() < minAffinitySize {
 			minAffinitySize = mask.Count()
 		}
 
-		// Then check to see if we have enough CPUs available on the current
-		// numa node bitmask to satisfy the CPU request.
+		// 再检查该掩码内是否有足够的可用与可复用 CPU；可复用 CPU 必须全部落在掩码内。
 		numMatching := 0
 		for _, c := range reusableCPUs.List() {
-			// Disregard this mask if its NUMANode isn't part of it.
+			// 可复用 CPU 不在掩码内时直接跳过该组合。
 			if !mask.IsSet(p.topology.CPUDetails[c].NUMANodeID) {
 				return
 			}
 			numMatching++
 		}
 
-		// Finally, check to see if enough available CPUs remain on the current
-		// NUMA node combination to satisfy the CPU request.
+		// 最后统计可用 CPU 是否足够；两者之和达到请求量才算可行。
 		for _, c := range availableCPUs.List() {
 			if mask.IsSet(p.topology.CPUDetails[c].NUMANodeID) {
 				numMatching++
 			}
 		}
 
-		// If they don't, then move onto the next combination.
+		// 不足则尝试下一个组合。
 		if numMatching < request {
 			return
 		}
 
-		// Otherwise, create a new hint from the numa node bitmask and add it to the
-		// list of hints.  We set all hint preferences to 'false' on the first
-		// pass through.
+		// 可行则先以 Preferred=false 加入，后续统一标记。
 		hints = append(hints, topologymanager.TopologyHint{
 			NUMANodeAffinity: mask,
 			Preferred:        false,
 		})
 	})
 
-	// Loop back through all hints and update the 'Preferred' field based on
-	// counting the number of bits sets in the affinity mask and comparing it
-	// to the minAffinitySize. Only those with an equal number of bits set (and
-	// with a minimal set of numa nodes) will be considered preferred.
+	// 第二轮按亲和性大小与 socket 对齐情况标记 Preferred：
+	// 只有位数等于最小亲和性大小的提示才优先；开启 AlignBySocket 时还要求 socket 对齐。
 	for i := range hints {
 		if p.options.AlignBySocket && p.isHintSocketAligned(hints[i], minAffinitySize) {
 			hints[i].Preferred = true
@@ -1061,27 +997,26 @@ func (p *staticPolicy) generateCPUTopologyHints(availableCPUs cpuset.CPUSet, reu
 	return hints
 }
 
-// isHintSocketAligned function return true if numa nodes in hint are socket aligned.
+// isHintSocketAligned 判断提示中的 NUMA 节点是否按 socket 对齐。
 func (p *staticPolicy) isHintSocketAligned(hint topologymanager.TopologyHint, minAffinitySize int) bool {
 	numaNodesBitMask := hint.NUMANodeAffinity.GetBits()
 	numaNodesPerSocket := p.topology.NumNUMANodes / p.topology.NumSockets
 	if numaNodesPerSocket == 0 {
 		return false
 	}
-	// minSockets refers to minimum number of socket required to satify allocation.
-	// A hint is considered socket aligned if sockets across which numa nodes span is equal to minSockets
+	// minSockets 是满足分配所需的最少 socket 数。
+	// 提示跨越的 socket 数等于该值时才认为对齐。
 	minSockets := (minAffinitySize + numaNodesPerSocket - 1) / numaNodesPerSocket
 	return p.topology.CPUDetails.SocketsInNUMANodes(numaNodesBitMask...).Size() == minSockets
 }
 
-// getAlignedCPUs return set of aligned CPUs based on numa affinity mask and configured policy options.
+// getAlignedCPUs 根据 NUMA 亲和掩码与策略选项返回对齐的 CPU 集合。
 func (p *staticPolicy) getAlignedCPUs(numaAffinity bitmask.BitMask, allocatableCPUs cpuset.CPUSet) cpuset.CPUSet {
 	alignedCPUs := cpuset.New()
 	numaBits := numaAffinity.GetBits()
 
-	// If align-by-socket policy option is enabled, NUMA based hint is expanded to
-	// socket aligned hint. It will ensure that first socket aligned available CPUs are
-	// allocated before we try to find CPUs across socket to satisfy allocation request.
+	// 开启 align-by-socket 时，把 NUMA 提示扩展为 socket 范围，
+	// 优先从整个 socket 中分配，避免过早跨 socket 拆分。
 	if p.options.AlignBySocket {
 		socketBits := p.topology.CPUDetails.SocketsInNUMANodes(numaBits...).UnsortedList()
 		for _, socketID := range socketBits {
@@ -1097,6 +1032,7 @@ func (p *staticPolicy) getAlignedCPUs(numaAffinity bitmask.BitMask, allocatableC
 	return alignedCPUs
 }
 
+// initializeMetrics 初始化 CPU 管理相关指标，确保标签值存在。
 func (p *staticPolicy) initializeMetrics(logger klog.Logger, s state.State) {
 	metrics.CPUManagerSharedPoolSizeMilliCores.Set(float64(p.GetAvailableCPUs(s).Size() * 1000))
 	metrics.ContainerAlignedComputeResourcesFailure.WithLabelValues(metrics.AlignScopeContainer, metrics.AlignedPhysicalCPU).Add(0) // ensure the value exists
@@ -1107,6 +1043,7 @@ func (p *staticPolicy) initializeMetrics(logger klog.Logger, s state.State) {
 	updateAllocationPerNUMAMetric(logger, p.topology, totalAssignedCPUs)
 }
 
+// updateMetricsOnAllocate 在分配后更新共享池、独占数与 NUMA 分布指标。
 func (p *staticPolicy) updateMetricsOnAllocate(logger klog.Logger, s state.State, cpuAlloc topology.Allocation) {
 	ncpus := cpuAlloc.CPUs.Size()
 	metrics.CPUManagerExclusiveCPUsAllocationCount.Add(float64(ncpus))
@@ -1118,6 +1055,7 @@ func (p *staticPolicy) updateMetricsOnAllocate(logger klog.Logger, s state.State
 	updateAllocationPerNUMAMetric(logger, p.topology, totalAssignedCPUs)
 }
 
+// updateMetricsOnRelease 在释放后更新共享池、独占数与 NUMA 分布指标。
 func (p *staticPolicy) updateMetricsOnRelease(logger klog.Logger, s state.State, cset cpuset.CPUSet) {
 	ncpus := cset.Size()
 	metrics.CPUManagerExclusiveCPUsAllocationCount.Add(float64(-ncpus))
@@ -1126,6 +1064,7 @@ func (p *staticPolicy) updateMetricsOnRelease(logger klog.Logger, s state.State,
 	updateAllocationPerNUMAMetric(logger, p.topology, totalAssignedCPUs.Difference(cset))
 }
 
+// getTotalAssignedExclusiveCPUs 汇总状态中所有容器已独占的 CPU。
 func getTotalAssignedExclusiveCPUs(s state.State) cpuset.CPUSet {
 	totalAssignedCPUs := cpuset.New()
 	for _, assignment := range s.GetCPUAssignments() {
@@ -1136,21 +1075,21 @@ func getTotalAssignedExclusiveCPUs(s state.State) cpuset.CPUSet {
 	return totalAssignedCPUs
 }
 
+// updateAllocationPerNUMAMetric 按 NUMA 节点统计已分配 CPU 数并写入指标。
 func updateAllocationPerNUMAMetric(logger klog.Logger, topo *topology.CPUTopology, allocatedCPUs cpuset.CPUSet) {
 	numaCount := make(map[int]int)
 
-	// Count CPUs allocated per NUMA node
+	// 按 NUMA 节点计数。
 	for _, cpuID := range allocatedCPUs.UnsortedList() {
 		numaNode, err := topo.CPUNUMANodeID(cpuID)
 		if err != nil {
-			//NOTE: We are logging the error but it is highly unlikely to happen as the CPUset
-			//      is already computed, evaluated and there is no room for user tampering.
+			// 注意：这里只记录错误。CPU 集合已预先计算校验过，用户无法篡改，因此该错误几乎不会发生。
 			logger.Error(err, "Unable to determine NUMA node", "cpuID", cpuID)
 		}
 		numaCount[numaNode]++
 	}
 
-	// Update metric
+	// 写入各 NUMA 节点的指标值。
 	for numaNode, count := range numaCount {
 		metrics.CPUManagerAllocationPerNUMA.WithLabelValues(strconv.Itoa(numaNode)).Set(float64(count))
 	}

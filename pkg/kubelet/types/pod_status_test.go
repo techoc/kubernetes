@@ -25,6 +25,8 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// TestPodConditionByKubelet 验证 kubelet 负责的 condition 类型判定，
+// 包括受特性门控控制的 PodReadyToStartContainers。
 func TestPodConditionByKubelet(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodReadyToStartContainersCondition, true)
 
@@ -54,6 +56,7 @@ func TestPodConditionByKubelet(t *testing.T) {
 	}
 }
 
+// TestPodConditionSharedByKubelet 验证仅 DisruptionTarget 被视为 kubelet 共享维护的 condition。
 func TestPodConditionSharedByKubelet(t *testing.T) {
 	trueCases := []v1.PodConditionType{
 		v1.DisruptionTarget,

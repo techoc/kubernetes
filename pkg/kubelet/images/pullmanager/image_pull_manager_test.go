@@ -36,6 +36,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// Test_pulledRecordMergeNewCreds 校验 pulledRecordMergeNewCreds 在合并新凭据时的行为：
+// 仅在凭据确有变化时更新时间戳，并正确合并/去重 secret 与 service account。
 func Test_pulledRecordMergeNewCreds(t *testing.T) {
 	testTime := metav1.Time{Time: time.Date(2022, 2, 22, 12, 00, 00, 00, time.Local)}
 	testRecord := &kubeletconfiginternal.ImagePulledRecord{
@@ -414,7 +416,7 @@ func Test_pulledRecordMergeNewCreds(t *testing.T) {
 			if origTime, newTime := tt.expectedRecord.LastUpdatedTime, gotRecord.LastUpdatedTime; tt.wantUpdate && !origTime.Before(&newTime) {
 				t.Errorf("expected the new update time to be after the original update time: %v > %v", origTime, newTime)
 			}
-			// make the new update time equal to the expected time for the below comparison now
+			// 将新的更新时间设为预期值，便于后续直接比较
 			gotRecord.LastUpdatedTime = tt.expectedRecord.LastUpdatedTime
 
 			if !reflect.DeepEqual(gotRecord, tt.expectedRecord) {
@@ -424,6 +426,8 @@ func Test_pulledRecordMergeNewCreds(t *testing.T) {
 	}
 }
 
+// TestFileBasedImagePullManager_MustAttemptImagePull 校验 MustAttemptImagePull 依据
+// 镜像拉取策略、记录文件与在途拉取状态判断是否应发起拉取，并验证凭据查询与缓存写入。
 func TestFileBasedImagePullManager_MustAttemptImagePull(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -813,17 +817,22 @@ func TestFileBasedImagePullManager_MustAttemptImagePull(t *testing.T) {
 	}
 }
 
+// testWriteCountingFSPullRecordsAccessor 包装真实访问器，统计拉取记录的写入次数，
+// 用于断言是否发生了缓存写入。
 type testWriteCountingFSPullRecordsAccessor struct {
 	imagePulledRecordsWrites int
 
 	fsPullRecordsAccessor
 }
 
+// WriteImagePulledRecord 累加写入计数后委托给内嵌的真实访问器。
 func (a *testWriteCountingFSPullRecordsAccessor) WriteImagePulledRecord(logger klog.Logger, pulledRecord *kubeletconfiginternal.ImagePulledRecord) error {
 	a.imagePulledRecordsWrites += 1
 	return a.fsPullRecordsAccessor.WriteImagePulledRecord(logger, pulledRecord)
 }
 
+// TestFileBasedImagePullManager_RecordPullIntent 校验 RecordPullIntent 正确写入
+// 拉取意图文件，并处理已存在意图与在途计数等情况。
 func TestFileBasedImagePullManager_RecordPullIntent(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -898,6 +907,8 @@ func TestFileBasedImagePullManager_RecordPullIntent(t *testing.T) {
 	}
 }
 
+// TestFileBasedImagePullManager_RecordImagePulled 校验 RecordImagePulled 写入拉取记录、
+// 清除拉取意图并维护在途计数。
 func TestFileBasedImagePullManager_RecordImagePulled(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -1266,6 +1277,8 @@ func TestFileBasedImagePullManager_RecordImagePulled(t *testing.T) {
 	}
 }
 
+// TestFileBasedImagePullManager_initialize 校验 initialize 能依据 runtime 的镜像列表
+// 与已有记录文件重建拉取记录，并丢弃无法对应镜像的记录。
 func TestFileBasedImagePullManager_initialize(t *testing.T) {
 	imageService := &ctesting.FakeRuntime{
 		ImageList: []container.Image{
@@ -1433,6 +1446,8 @@ func TestFileBasedImagePullManager_initialize(t *testing.T) {
 	}
 }
 
+// TestFileBasedImagePullManager_PruneUnknownRecords 校验 PruneUnknownRecords 只清理
+// 那些在 runtime 中已不存在、且早于 GC 起始时间的拉取记录。
 func TestFileBasedImagePullManager_PruneUnknownRecords(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -1541,6 +1556,7 @@ func TestFileBasedImagePullManager_PruneUnknownRecords(t *testing.T) {
 	}
 }
 
+// teeTestData 将测试数据目录中的指定文件复制到 dstDir，并返回文件名到内容的映射。
 func teeTestData(t *testing.T, dstDir string, testdataDir string, src []string) map[string]string {
 	t.Helper()
 	ret := make(map[string]string, len(src))
@@ -1557,11 +1573,14 @@ func teeTestData(t *testing.T, dstDir string, testdataDir string, src []string) 
 	return ret
 }
 
+// withImageRecord 向拉取记录中写入指定镜像的凭据映射，便于构造测试数据。
 func withImageRecord(r *kubeletconfiginternal.ImagePulledRecord, image string, record kubeletconfiginternal.ImagePullCredentials) *kubeletconfiginternal.ImagePulledRecord {
 	r.CredentialMapping[image] = record
 	return r
 }
 
+// Test_mergePullServiceAccounts 校验 mergePullServiceAccounts 的合并、去重与排序
+// （按 namespace、name、uid）行为，并返回是否发生变化。
 func Test_mergePullServiceAccounts(t *testing.T) {
 	tests := []struct {
 		name     string

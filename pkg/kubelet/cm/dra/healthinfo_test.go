@@ -30,6 +30,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// 测试中固定使用的驱动、资源池、设备以及命名空间/声明名称。
 const (
 	testDriver    = "test-driver"
 	testPool      = "test-pool"
@@ -38,6 +39,7 @@ const (
 	testClaim     = "test-claim"
 )
 
+// testDeviceHealth 是后续测试反复使用的健康设备状态。
 var (
 	testDeviceHealth = state.DeviceHealth{
 		PoolName:           testPool,
@@ -47,7 +49,7 @@ var (
 	}
 )
 
-// `TestNewHealthInfoCache tests cache creation and checkpoint loading.
+// TestNewHealthInfoCache 测试缓存的创建与检查点加载。
 func TestNewHealthInfoCache(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -85,13 +87,14 @@ func TestNewHealthInfoCache(t *testing.T) {
 	}
 }
 
-// Helper function to compare DeviceHealth slices ignoring LastUpdated time
+// assertDeviceHealthElementsMatchIgnoreTime 是辅助函数，用于比较 DeviceHealth 切片，
+// 比较时忽略 LastUpdated 时间。
 func assertDeviceHealthElementsMatchIgnoreTime(t *testing.T, expected, actual []state.DeviceHealth) {
 	require.Len(t, actual, len(expected), "Number of changed devices mismatch")
 
-	// Create comparable versions without LastUpdated
+	// 构造去掉 LastUpdated 的可比较版本
 	normalize := func(dh state.DeviceHealth) state.DeviceHealth {
-		// Zero out time for comparison
+		// 将时间清零后再比较
 		dh.LastUpdated = time.Time{}
 		return dh
 	}
@@ -109,7 +112,7 @@ func assertDeviceHealthElementsMatchIgnoreTime(t *testing.T, expected, actual []
 	assert.ElementsMatch(t, expectedNormalized, actualNormalized, "Changed device elements mismatch (ignoring time)")
 }
 
-// TestWithLock tests the withLock method’s behavior.
+// TestWithLock 测试 withLock 方法的行为。
 func TestWithLock(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	cache, err := newHealthInfoCache(logger, "")
@@ -149,7 +152,7 @@ func TestWithLock(t *testing.T) {
 	}
 }
 
-// TestWithRLock tests the withRLock method’s behavior.
+// TestWithRLock 测试 withRLock 方法的行为。
 func TestWithRLock(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	cache, err := newHealthInfoCache(logger, "")
@@ -194,21 +197,21 @@ func TestWithRLock(t *testing.T) {
 	}
 }
 
-// TestGetHealthInfo tests retrieving health status.
+// TestGetHealthInfo 测试健康状态的查询。
 func TestGetHealthInfo(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	cache, err := newHealthInfoCache(logger, "")
 	require.NoError(t, err)
 
-	// Initial state
+	// 初始状态
 	assert.Equal(t, state.DeviceHealthStatusUnknown, cache.getHealthInfo(testDriver, testPool, testDevice).Health)
 
-	// Add a device
+	// 添加一个设备
 	_, err = cache.updateHealthInfo(logger, testDriver, []state.DeviceHealth{testDeviceHealth})
 	require.NoError(t, err)
 	assert.Equal(t, state.DeviceHealthStatusHealthy, cache.getHealthInfo(testDriver, testPool, testDevice).Health)
 
-	// Test timeout (simulated with old LastUpdated)
+	// 测试超时场景（通过设置旧的 LastUpdated 模拟）
 	err = cache.withLock(func() error {
 		driverState := (*cache.HealthInfo)[testDriver]
 		deviceKey := testPool + "/" + testDevice
@@ -222,7 +225,7 @@ func TestGetHealthInfo(t *testing.T) {
 	assert.Equal(t, state.DeviceHealthStatusUnknown, cache.getHealthInfo(testDriver, testPool, testDevice).Health)
 }
 
-// TestGetHealthInfoRobust tests retrieving health status logic solely & against many cases.
+// TestGetHealthInfoRobust 针对大量边界场景单独测试健康状态的查询逻辑。
 func TestGetHealthInfoRobust(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -360,14 +363,14 @@ func TestGetHealthInfoRobust(t *testing.T) {
 	}
 }
 
-// TestUpdateHealthInfo tests adding, updating, and reconciling device health.
+// TestUpdateHealthInfo 测试设备健康状态的添加、更新与对账。
 func TestUpdateHealthInfo(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tmpFile := path.Join(t.TempDir(), "health_checkpoint_test")
 	cache, err := newHealthInfoCache(logger, tmpFile)
 	require.NoError(t, err)
 
-	// 1 -- Add new device
+	// 1 -- 新增设备
 	deviceToAdd := testDeviceHealth
 	expectedChanged1 := []state.DeviceHealth{deviceToAdd}
 	changedDevices, err := cache.updateHealthInfo(logger, testDriver, []state.DeviceHealth{testDeviceHealth})
@@ -375,12 +378,12 @@ func TestUpdateHealthInfo(t *testing.T) {
 	assertDeviceHealthElementsMatchIgnoreTime(t, expectedChanged1, changedDevices)
 	assert.Equal(t, state.DeviceHealthStatusHealthy, cache.getHealthInfo(testDriver, testPool, testDevice).Health)
 
-	// 2 -- Update with no change
+	// 2 -- 无变化的更新
 	changedDevices, err = cache.updateHealthInfo(logger, testDriver, []state.DeviceHealth{testDeviceHealth})
 	require.NoError(t, err)
 	assert.Empty(t, changedDevices, "Scenario 2: Changed devices list should be empty")
 
-	// 3 -- Update with new health
+	// 3 -- 以新的健康状态更新
 	newHealth := testDeviceHealth
 	newHealth.Health = state.DeviceHealthStatusUnhealthy
 	expectedChanged3 := []state.DeviceHealth{newHealth}
@@ -389,14 +392,13 @@ func TestUpdateHealthInfo(t *testing.T) {
 	assertDeviceHealthElementsMatchIgnoreTime(t, expectedChanged3, changedDevices)
 	assert.Equal(t, state.DeviceHealthStatusUnhealthy, cache.getHealthInfo(testDriver, testPool, testDevice).Health)
 
-	// 4 -- Add second device, omit first
+	// 4 -- 新增第二个设备，省略第一个
 	secondDevice := state.DeviceHealth{PoolName: testPool, DeviceName: "device2", Health: state.DeviceHealthStatusHealthy, HealthCheckTimeout: DefaultHealthTimeout}
-	// When the first device is omitted, it should be marked as "Unknown" after a timeout.
-	// For this test, we simulate the timeout by not reporting it.
+	// 第一个设备被省略后，应在超时后被标记为 "Unknown"。本测试通过不再上报它来模拟超时。
 	firstDeviceAsUnknown := newHealth
 	firstDeviceAsUnknown.Health = state.DeviceHealthStatusUnknown
 	expectedChanged4 := []state.DeviceHealth{secondDevice, firstDeviceAsUnknown}
-	// Manually set the time of the first device to be outside the timeout window
+	// 手动把第一个设备的最后更新时间设置到超时窗口之外
 	err = cache.withLock(func() error {
 		deviceKey := testPool + "/" + testDevice
 		device := (*cache.HealthInfo)[testDriver].Devices[deviceKey]
@@ -412,18 +414,18 @@ func TestUpdateHealthInfo(t *testing.T) {
 	assert.Equal(t, state.DeviceHealthStatusHealthy, cache.getHealthInfo(testDriver, testPool, "device2").Health)
 	assert.Equal(t, state.DeviceHealthStatusUnknown, cache.getHealthInfo(testDriver, testPool, testDevice).Health)
 
-	// 5 -- Test persistence
+	// 5 -- 测试持久化
 	cache2, err := newHealthInfoCache(logger, tmpFile)
 	require.NoError(t, err)
 	assert.Equal(t, state.DeviceHealthStatusHealthy, cache2.getHealthInfo(testDriver, testPool, "device2").Health)
 	assert.Equal(t, state.DeviceHealthStatusUnknown, cache2.getHealthInfo(testDriver, testPool, testDevice).Health)
 
-	// 6 -- Test how updateHealthInfo handles device timeouts
+	// 6 -- 测试 updateHealthInfo 如何处理设备超时
 	timeoutDevice := state.DeviceHealth{PoolName: testPool, DeviceName: "timeoutDevice", Health: "Unhealthy", HealthCheckTimeout: DefaultHealthTimeout}
 	_, err = cache.updateHealthInfo(logger, testDriver, []state.DeviceHealth{timeoutDevice})
 	require.NoError(t, err)
 
-	// Manually manipulate the last updated time of timeoutDevice to seem like it surpassed healthtimeout.
+	// 手动修改 timeoutDevice 的最后更新时间，使其看起来已超过健康检查超时。
 	err = cache.withLock(func() error {
 		driverState := (*cache.HealthInfo)[testDriver]
 		deviceKey := testPool + "/timeoutDevice"
@@ -447,9 +449,8 @@ func TestUpdateHealthInfo(t *testing.T) {
 	assert.Equal(t, state.DeviceHealthStatusUnknown, cache.getHealthInfo(testDriver, testPool, "timeoutDevice").Health, "removed device should still read as Unknown")
 }
 
-// TestUpdateHealthInfoStaleEntryRemoval verifies that entries which the driver
-// stopped reporting are removed from the cache once stale, so that the cache
-// stays bounded by what the driver keeps vouching for.
+// TestUpdateHealthInfoStaleEntryRemoval 验证驱动停止上报的条目在过期后会被移出缓存，
+// 从而让缓存大小始终以驱动持续担保的设备为界。
 func TestUpdateHealthInfoStaleEntryRemoval(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	cache, err := newHealthInfoCache(logger, "")
@@ -461,7 +462,7 @@ func TestUpdateHealthInfoStaleEntryRemoval(t *testing.T) {
 	_, err = cache.updateHealthInfo(logger, testDriver, []state.DeviceHealth{healthyDevice, unknownDevice, freshDevice})
 	require.NoError(t, err)
 
-	// Make two of the devices stale.
+	// 把其中两个设备置为过期状态。
 	err = cache.withLock(func() error {
 		for _, deviceName := range []string{"healthy-stale", "unknown-stale"} {
 			key := testPool + "/" + deviceName
@@ -473,12 +474,11 @@ func TestUpdateHealthInfoStaleEntryRemoval(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// A report which only covers the fresh device removes the stale ones.
+	// 仅覆盖未过期设备的上报会移除过期条目。
 	changedDevices, err := cache.updateHealthInfo(logger, testDriver, []state.DeviceHealth{freshDevice})
 	require.NoError(t, err)
 
-	// Only the previously healthy device produces an Unknown transition;
-	// removing an entry which already was Unknown changes nothing for readers.
+	// 只有此前健康的设备会产生到 Unknown 的状态转换；移除本来就为 Unknown 的条目对读者没有影响。
 	require.Len(t, changedDevices, 1)
 	assert.Equal(t, "healthy-stale", changedDevices[0].DeviceName)
 	assert.Equal(t, state.DeviceHealthStatusUnknown, changedDevices[0].Health)
@@ -489,15 +489,14 @@ func TestUpdateHealthInfoStaleEntryRemoval(t *testing.T) {
 	assert.Contains(t, devices, testPool+"/fresh")
 }
 
-// TestUpdateHealthInfoDeviceCap verifies that the cache does not grow beyond
-// maxDevicesPerDriver entries per driver even when a plugin keeps reporting
-// new device names, while updates for known devices are still accepted.
+// TestUpdateHealthInfoDeviceCap 验证即使插件持续上报新的设备名，每个驱动的缓存也不会
+// 超过 maxDevicesPerDriver 个条目，同时已知设备的更新仍会被接受。
 func TestUpdateHealthInfoDeviceCap(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	cache, err := newHealthInfoCache(logger, "")
 	require.NoError(t, err)
 
-	// Fill the cache up to the cap, plus one device which must be ignored.
+	// 把缓存填到上限，再多报一个必须被忽略的设备。
 	report := make([]state.DeviceHealth, 0, maxDevicesPerDriver+1)
 	for i := range maxDevicesPerDriver + 1 {
 		report = append(report, state.DeviceHealth{
@@ -512,14 +511,14 @@ func TestUpdateHealthInfoDeviceCap(t *testing.T) {
 	assert.Len(t, changedDevices, maxDevicesPerDriver)
 	assert.Len(t, (*cache.HealthInfo)[testDriver].Devices, maxDevicesPerDriver)
 
-	// New device names are ignored while the cache is full.
+	// 缓存已满时，新设备名会被忽略。
 	newDevice := state.DeviceHealth{PoolName: testPool, DeviceName: "one-too-many", Health: state.DeviceHealthStatusHealthy, HealthCheckTimeout: DefaultHealthTimeout}
 	changedDevices, err = cache.updateHealthInfo(logger, testDriver, []state.DeviceHealth{newDevice})
 	require.NoError(t, err)
 	assert.Empty(t, changedDevices)
 	assert.NotContains(t, (*cache.HealthInfo)[testDriver].Devices, testPool+"/one-too-many")
 
-	// Updates for known devices are still accepted while the cache is full.
+	// 缓存已满时，已知设备的更新仍会被接受。
 	updatedDevice := state.DeviceHealth{PoolName: testPool, DeviceName: "device-0", Health: state.DeviceHealthStatusUnhealthy, HealthCheckTimeout: DefaultHealthTimeout}
 	changedDevices, err = cache.updateHealthInfo(logger, testDriver, []state.DeviceHealth{updatedDevice})
 	require.NoError(t, err)
@@ -529,7 +528,7 @@ func TestUpdateHealthInfoDeviceCap(t *testing.T) {
 	assert.Len(t, (*cache.HealthInfo)[testDriver].Devices, maxDevicesPerDriver)
 }
 
-// TestClearDriver tests clearing a driver’s health data.
+// TestClearDriver 测试清除某个驱动的健康数据。
 func TestClearDriver(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	cache, err := newHealthInfoCache(logger, "")

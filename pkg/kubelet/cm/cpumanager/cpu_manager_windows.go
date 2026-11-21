@@ -20,6 +20,7 @@ package cpumanager
 
 import (
 	"context"
+
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	kubefeatures "k8s.io/kubernetes/pkg/features"
@@ -27,6 +28,8 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// updateContainerCPUSet 在启用 WindowsCPUAndMemoryAffinity 特性时，
+// 将 cpuset 转换为 Windows CPU 组亲和性并更新容器资源。
 func (m *manager) updateContainerCPUSet(ctx context.Context, containerID string, cpus cpuset.CPUSet) error {
 	if !utilfeature.DefaultFeatureGate.Enabled(kubefeatures.WindowsCPUAndMemoryAffinity) {
 		return nil

@@ -37,9 +37,11 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// init 预留初始化钩子；当前测试无需额外初始化。
 func init() {
 }
 
+// defaultProbe 是测试用探针模板：1 秒超时与周期，成功阈值 1，失败阈值 3。
 var defaultProbe = &v1.Probe{
 	ProbeHandler: v1.ProbeHandler{
 		Exec: &v1.ExecAction{},
@@ -50,10 +52,12 @@ var defaultProbe = &v1.Probe{
 	FailureThreshold: 3,
 }
 
+// TestAddRemovePods 校验添加、删除 Pod 时探针 worker 的注册与注销。
 func TestAddRemovePods(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testAddRemovePods)
 }
 
+// testAddRemovePods 是 TestAddRemovePods 的 synctest 主体，避免真实等待探针周期。
 func testAddRemovePods(tCtx ktesting.TContext) {
 	t := tCtx.TB()
 
@@ -96,19 +100,20 @@ func testAddRemovePods(tCtx ktesting.TContext) {
 		},
 	}
 
+	// 使用真实 manager 配 mock 探针，便于观察 worker 的生命周期。
 	m := newTestManager()
 	defer cleanup(t, m)
 	if err := expectProbes(m, nil); err != nil {
 		t.Error(err)
 	}
 
-	// Adding a pod with no probes should be a no-op.
+	// 不含探针的 Pod 不应注册任何 worker，添加操作应是空操作。
 	m.AddPod(tCtx, &noProbePod)
 	if err := expectProbes(m, nil); err != nil {
 		t.Error(err)
 	}
 
-	// Adding a pod with probes.
+	// 添加含探针的 Pod 应注册对应的 worker。
 	m.AddPod(tCtx, &probePod)
 	probePaths := []probeKey{
 		{"probe_pod", "readiness", readiness},
@@ -119,13 +124,13 @@ func testAddRemovePods(tCtx ktesting.TContext) {
 		t.Error(err)
 	}
 
-	// Removing un-probed pod.
+	// 删除未注册探针的 Pod 不应影响现有 worker。
 	m.RemovePod(&noProbePod)
 	if err := expectProbes(m, probePaths); err != nil {
 		t.Error(err)
 	}
 
-	// Removing probed pod.
+	// 删除含探针的 Pod 应注销对应 worker。
 	m.RemovePod(&probePod)
 	if err := waitForWorkerExit(t, m, probePaths); err != nil {
 		t.Fatal(err)
@@ -134,17 +139,20 @@ func testAddRemovePods(tCtx ktesting.TContext) {
 		t.Error(err)
 	}
 
-	// Removing already removed pods should be a no-op.
+	// 重复删除同一个 Pod 应是空操作。
 	m.RemovePod(&probePod)
 	if err := expectProbes(m, nil); err != nil {
 		t.Error(err)
 	}
 }
 
+// TestAddPodContinuesAfterExistingWorker 回归验证：某个容器已有 worker 时，
+// 再次 AddPod 仍会补齐其他缺失的 worker，而不是提前返回。
 func TestAddPodContinuesAfterExistingWorker(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testAddPodContinuesAfterExistingWorker)
 }
 
+// testAddPodContinuesAfterExistingWorker 在 synctest 中复现 worker 缺失场景。
 func testAddPodContinuesAfterExistingWorker(tCtx ktesting.TContext) {
 	defer tCtx.Cancel("test completed")
 	t := tCtx.TB()
@@ -171,7 +179,7 @@ func testAddPodContinuesAfterExistingWorker(tCtx ktesting.TContext) {
 	m := newTestManager()
 	defer cleanup(t, m)
 
-	// First AddPod: registers workers for both containers.
+	// 第一次 AddPod 为两个容器各注册一个 worker。
 	m.AddPod(ctx, &pod)
 	if err := expectProbes(m, []probeKey{
 		{"test_pod", "container_a", readiness},
@@ -180,13 +188,13 @@ func testAddPodContinuesAfterExistingWorker(tCtx ktesting.TContext) {
 		t.Fatalf("after first AddPod: %v", err)
 	}
 
-	// Simulate container_b's worker being removed while container_a's is still present.
+	// 模拟 container_b 的 worker 被移除，而 container_a 的 worker 仍在。
 	m.workers[probeKey{"test_pod", "container_b", readiness}].stop()
 	synctest.Wait()
 
-	// Second AddPod: should re-register container_b's missing worker.
-	// Previously, hitting container_a's existing worker caused an early return,
-	// so container_b was never re-registered.
+	// 第二次 AddPod 应重新注册 container_b 缺失的 worker。
+	// 旧实现遇到 container_a 已存在的 worker 就提前返回，
+	// 导致 container_b 永远不会被重新注册。
 	m.AddPod(ctx, &pod)
 
 	if err := expectProbes(m, []probeKey{
@@ -197,6 +205,8 @@ func testAddPodContinuesAfterExistingWorker(tCtx ktesting.TContext) {
 	}
 }
 
+// TestAddRemovePodsWithRestartableInitContainer 校验 restartable init 容器
+// （sidecar）的探针注册与注销行为。
 func TestAddRemovePodsWithRestartableInitContainer(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	m := newTestManager()
@@ -257,13 +267,13 @@ func TestAddRemovePodsWithRestartableInitContainer(t *testing.T) {
 				},
 			}
 
-			// Adding a pod with probes.
+			// 添加含探针的 Pod 应注册对应的 worker。
 			m.AddPod(tCtx, &probePod)
 			if err := expectProbes(m, tc.probePaths); err != nil {
 				t.Error(err)
 			}
 
-			// Removing probed pod.
+			// 删除含探针的 Pod 应注销对应 worker。
 			m.RemovePod(&probePod)
 			if err := waitForWorkerExit(t, m, tc.probePaths); err != nil {
 				t.Fatal(err)
@@ -272,7 +282,7 @@ func TestAddRemovePodsWithRestartableInitContainer(t *testing.T) {
 				t.Error(err)
 			}
 
-			// Removing already removed pods should be a no-op.
+			// 重复删除同一个 Pod 应是空操作。
 			m.RemovePod(&probePod)
 			if err := expectProbes(m, nil); err != nil {
 				t.Error(err)
@@ -281,10 +291,12 @@ func TestAddRemovePodsWithRestartableInitContainer(t *testing.T) {
 	}
 }
 
+// TestCleanupPods 校验 CleanupPods 只清理不在期望集合中的 Pod。
 func TestCleanupPods(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testCleanupPods)
 }
 
+// testCleanupPods 是 TestCleanupPods 的 synctest 主体。
 func testCleanupPods(tCtx ktesting.TContext) {
 	t := tCtx.TB()
 	m := newTestManager()
@@ -348,10 +360,12 @@ func testCleanupPods(tCtx ktesting.TContext) {
 	}
 }
 
+// TestCleanupRepeated 对大量 Pod 反复执行清理，验证清理逻辑的幂等性。
 func TestCleanupRepeated(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testCleanupRepeated)
 }
 
+// testCleanupRepeated 是 TestCleanupRepeated 的 synctest 主体。
 func testCleanupRepeated(tCtx ktesting.TContext) {
 	t := tCtx.TB()
 	m := newTestManager()
@@ -379,6 +393,7 @@ func testCleanupRepeated(tCtx ktesting.TContext) {
 	}
 }
 
+// TestUpdatePodStatus 校验 UpdatePodStatus 依据探针缓存结果回填容器 Ready 状态。
 func TestUpdatePodStatus(t *testing.T) {
 	ctx := ktesting.Init(t)
 	logger := ctx.Logger()
@@ -439,9 +454,9 @@ func TestUpdatePodStatus(t *testing.T) {
 	}
 
 	m := newTestManager()
-	// no cleanup: using fake workers.
+	// 这里使用伪 worker，不注册清理，避免启动真实 goroutine。
 
-	// Setup probe "workers" and cached results.
+	// 预置探针 worker 与缓存结果，用于驱动状态回填逻辑。
 	m.workers = map[probeKey]*worker{
 		{testPodUID, unprobed.Name, liveness}:             {},
 		{testPodUID, probedReady.Name, readiness}:         {},
@@ -494,6 +509,8 @@ func TestUpdatePodStatus(t *testing.T) {
 	}
 }
 
+// TestUpdatePodStatusWithInitContainers 校验 init 容器 Started/Ready 的回填，
+// 并覆盖 restartable init 容器（sidecar）的差异。
 func TestUpdatePodStatusWithInitContainers(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	notStarted := v1.ContainerStatus{
@@ -519,9 +536,9 @@ func TestUpdatePodStatusWithInitContainers(t *testing.T) {
 	}
 
 	m := newTestManager()
-	// no cleanup: using fake workers.
+	// 这里使用伪 worker，不注册清理，避免启动真实 goroutine。
 
-	// Setup probe "workers" and cached results.
+	// 预置探针 worker 与缓存结果，用于驱动状态回填逻辑。
 	m.workers = map[probeKey]*worker{
 		{testPodUID, notStarted.Name, startup}: {},
 		{testPodUID, started.Name, startup}:    {},
@@ -630,17 +647,21 @@ func TestUpdatePodStatusWithInitContainers(t *testing.T) {
 	}
 }
 
+// extractedReadinessHandling 从就绪结果通道取一条更新并写入状态管理器，
+// 对应 kubelet.syncLoopIteration 中的就绪结果处理片段。
 func (m *manager) extractedReadinessHandling(logger klog.Logger) {
 	update := <-m.readinessManager.Updates()
-	// This code corresponds to an extract from kubelet.syncLoopIteration()
+	// 这段逻辑摘自 kubelet.syncLoopIteration()，单独抽出来便于测试。
 	ready := update.Result == results.Success
 	m.statusManager.SetContainerReadiness(logger, update.PodUID, update.ContainerID, ready)
 }
 
+// TestUpdateReadiness 校验就绪探针的成功/失败结果能反映到 Pod 状态。
 func TestUpdateReadiness(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testUpdateReadiness)
 }
 
+// testUpdateReadiness 是 TestUpdateReadiness 的 synctest 主体。
 func testUpdateReadiness(tCtx ktesting.TContext) {
 	t := tCtx.TB()
 	logger := tCtx.Logger()
@@ -649,12 +670,12 @@ func testUpdateReadiness(tCtx ktesting.TContext) {
 	m := newTestManager()
 	defer cleanup(t, m)
 
-	// Start syncing readiness without leaking goroutine.
+	// 启动就绪结果同步循环，并在测试结束时确保 goroutine 退出。
 	stopCh := make(chan struct{})
 	go wait.Until(func() { m.extractedReadinessHandling(logger) }, 0, stopCh)
 	defer func() {
 		close(stopCh)
-		// Send an update to exit extractedReadinessHandling()
+		// 发送一条更新，让 extractedReadinessHandling() 从阻塞中退出。
 		m.readinessManager.Set(kubecontainer.ContainerID{}, results.Success, &v1.Pod{})
 	}()
 
@@ -670,21 +691,23 @@ func testUpdateReadiness(tCtx ktesting.TContext) {
 		t.Error(err)
 	}
 
-	// Wait for ready status.
+	// 等待就绪状态变为 true。
 	if err := waitForReadyStatus(t, m, true); err != nil {
 		t.Error(err)
 	}
 
-	// Prober fails.
+	// 让探针返回失败。
 	exec.set(probe.Failure, nil)
 
-	// Wait for failed status.
+	// 等待就绪状态变为 false。
 	if err := waitForReadyStatus(t, m, false); err != nil {
 		t.Error(err)
 	}
 }
 
+// expectProbes 比较 manager 中注册的 worker 与期望集合，返回缺失与多余的 worker。
 func expectProbes(m *manager, expectedProbes []probeKey) error {
+	// 持读锁遍历 worker 表，避免与 AddPod/RemovePod 并发修改冲突。
 	m.workerLock.RLock()
 	defer m.workerLock.RUnlock()
 
@@ -704,7 +727,7 @@ outer:
 	}
 
 	if len(missing) == 0 && len(unexpected) == 0 {
-		return nil // Yay!
+		return nil // 集合完全一致。
 	}
 
 	return fmt.Errorf("Unexpected probes: %v; Missing probes: %v;", unexpected, missing)
@@ -712,7 +735,7 @@ outer:
 
 const interval = 1 * time.Second
 
-// Wait for the given workers to exit & clean up.
+// 等待给定 worker 退出并完成清理。
 func waitForWorkerExit(t ktesting.TB, m *manager, workerPaths []probeKey) error {
 	for _, w := range workerPaths {
 		condition := func() (bool, error) {
@@ -720,7 +743,7 @@ func waitForWorkerExit(t ktesting.TB, m *manager, workerPaths []probeKey) error 
 			return !exists, nil
 		}
 		if exited, _ := condition(); exited {
-			continue // Already exited, no need to poll.
+			continue // 已经退出，无需轮询。
 		}
 		t.Logf("Polling %v", w)
 		if err := wait.Poll(interval, wait.ForeverTestTimeout, condition); err != nil {
@@ -731,7 +754,7 @@ func waitForWorkerExit(t ktesting.TB, m *manager, workerPaths []probeKey) error 
 	return nil
 }
 
-// Wait for the given workers to exit & clean up.
+// waitForReadyStatus 轮询等待 Pod 的就绪状态达到期望值。
 func waitForReadyStatus(t ktesting.TB, m *manager, ready bool) error {
 	condition := func() (bool, error) {
 		status, ok := m.statusManager.GetPodStatus(testPodUID)
@@ -755,8 +778,9 @@ func waitForReadyStatus(t ktesting.TB, m *manager, ready bool) error {
 	return nil
 }
 
-// cleanup running probes to avoid leaking goroutines.
+// 清理运行中的探针，避免 goroutine 泄漏。
 func cleanup(t ktesting.TB, m *manager) {
+	// 清理所有 Pod 后轮询等待 worker goroutine 退出，防止测试间泄漏。
 	m.CleanupPods(nil)
 
 	condition := func() (bool, error) {
@@ -767,17 +791,18 @@ func cleanup(t ktesting.TB, m *manager) {
 		return workerCount == 0, nil
 	}
 	if exited, _ := condition(); exited {
-		return // Already exited, no need to poll.
+		return // 已经退出，无需轮询。
 	}
 	if err := wait.Poll(interval, wait.ForeverTestTimeout, condition); err != nil {
 		t.Fatalf("Error during cleanup: %v", err)
 	}
 }
 
-// ctxAwareRunner implements kubecontainer.CommandRunner and fails once the
-// probe context is canceled, like a real CRI runtime client.
+// ctxAwareRunner 实现 kubecontainer.CommandRunner：
+// 探针上下文取消后立即失败，行为与真实 CRI 运行时客户端一致。
 type ctxAwareRunner struct{}
 
+// RunInContainer 在上下文已取消时立即返回错误，模拟 CRI ExecSync 的行为。
 func (r ctxAwareRunner) RunInContainer(ctx context.Context, id kubecontainer.ContainerID, cmd []string, timeout time.Duration) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -785,15 +810,16 @@ func (r ctxAwareRunner) RunInContainer(ctx context.Context, id kubecontainer.Con
 	return []byte("ok"), nil
 }
 
-// TestProbeWorkersSurviveSyncContextCancellation verifies that probe workers
-// keep probing after the context passed to AddPod is canceled. The pod worker
-// cancels its sync context when a pod begins terminating, and readiness probes
-// must keep executing through termination so a failing probe can mark the pod
-// NotReady. Regression test for https://github.com/kubernetes/kubernetes/issues/140881.
+// TestProbeWorkersSurviveSyncContextCancellation 验证 AddPod 传入的上下文被取消后，
+// 探针 worker 仍会继续探测。Pod worker 在 Pod 开始终止时会取消同步上下文，
+// 但就绪探针必须持续执行到终止结束，这样失败的探针才能把 Pod 标记为 NotReady。
+// 这是 https://github.com/kubernetes/kubernetes/issues/140881 的回归测试。
 func TestProbeWorkersSurviveSyncContextCancellation(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testProbeWorkersSurviveSyncContextCancellation)
 }
 
+// testProbeWorkersSurviveSyncContextCancellation 在 synctest 中验证取消同步上下文后
+// worker 仍能写入探测结果。
 func testProbeWorkersSurviveSyncContextCancellation(tCtx ktesting.TContext) {
 	t := tCtx.TB()
 	logger := tCtx.Logger()
@@ -802,21 +828,18 @@ func testProbeWorkersSurviveSyncContextCancellation(tCtx ktesting.TContext) {
 	m := newTestManager()
 	defer cleanup(t, m)
 
-	// Probe through the real exec prober backed by a runner that honors
-	// context cancellation, mirroring how CRI ExecSync fails once its
-	// context is canceled.
+	// 使用真实的 exec 探针与支持上下文取消的 runner，
+	// 模拟 CRI ExecSync 在上下文取消后立即失败的行为。
 	m.prober = newProber(ctxAwareRunner{}, &record.FakeRecorder{})
 
 	m.statusManager.SetPodStatus(logger, testPod, getTestRunningStatus())
 
 	ctx, cancel := context.WithCancel(tCtx)
 	m.AddPod(ctx, testPod)
-	// Simulate the pod worker canceling the sync context at the start of
-	// pod termination.
+	// 模拟 Pod worker 在 Pod 开始终止时取消同步上下文。
 	cancel()
 
-	// The readiness worker seeds the result cache with Failure for a new
-	// container, then must record Success from an actual probe execution.
+	// 新容器的 worker 会先向结果缓存写入 Failure，随后必须用真实探测结果写入 Success。
 	for {
 		select {
 		case update := <-m.readinessManager.Updates():

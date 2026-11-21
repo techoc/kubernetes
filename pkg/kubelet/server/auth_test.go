@@ -31,7 +31,9 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestIsSubPath 验证子路径判断：相等、根路径下、子路径与不匹配场景。
 func TestIsSubPath(t *testing.T) {
+	// 用表驱动覆盖相等、根路径、前缀相似但不匹配等情况。
 	testcases := map[string]struct {
 		subpath  string
 		path     string
@@ -57,6 +59,7 @@ func TestIsSubPath(t *testing.T) {
 		"mismatch 3": {subpath: "/foobar", path: "/foo", expected: false},
 	}
 
+	// 逐用例比较 isSubpath 的结果。
 	for k, tc := range testcases {
 		result := isSubpath(tc.subpath, tc.path)
 		if result != tc.expected {
@@ -65,15 +68,20 @@ func TestIsSubPath(t *testing.T) {
 	}
 }
 
+// TestGetRequestAttributes 验证节点请求属性的构建，分别在精细授权开关下运行。
 func TestGetRequestAttributes(t *testing.T) {
 	tCtx := ktesting.Init(t)
+	// 分别以关闭/开启精细授权运行同一组用例。
 	for _, fineGrained := range []bool{false, true} {
 		if !fineGrained {
+			// 关闭精细授权时模拟 1.35 版本，避免新版本默认值影响结果。
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 		}
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletFineGrainedAuthz, fineGrained)
+		// 用例来自 AuthzTestCases，期望值随精细授权开关变化。
 		for _, test := range AuthzTestCases(fineGrained) {
 			t.Run(test.Method+":"+test.Path, func(t *testing.T) {
+				// 构造属性获取器并生成请求。
 				getter := NewNodeAuthorizerAttributesGetter(authzTestNodeName)
 
 				req, err := http.NewRequest(test.Method, "https://localhost:1234"+test.Path, nil)
@@ -86,11 +94,13 @@ func TestGetRequestAttributes(t *testing.T) {
 	}
 }
 
+// 测试用节点名与用户名。
 const (
 	authzTestNodeName = "test"
 	authzTestUserName = "phibby"
 )
 
+// AuthzTestCase 描述一个授权测试用例：HTTP 方法、路径与期望的子资源。
 type AuthzTestCase struct {
 	Method, Path string
 
@@ -98,6 +108,7 @@ type AuthzTestCase struct {
 	ExpectedSubresources []string
 }
 
+// AssertAttributes 按期望子资源逐条比对属性。
 func (a *AuthzTestCase) AssertAttributes(t *testing.T, attrs []authorizer.Attributes) {
 	var expectedAttributes []authorizer.AttributesRecord
 	for _, subresource := range a.ExpectedSubresources {
@@ -120,12 +131,14 @@ func (a *AuthzTestCase) AssertAttributes(t *testing.T, attrs []authorizer.Attrib
 	}
 }
 
+// AuthzTestUser 返回测试用户。
 func AuthzTestUser() user.Info {
 	return &user.DefaultInfo{Name: authzTestUserName}
 }
 
+// AuthzTestCases 返回所有路径在各 HTTP 方法下的测试用例。
 func AuthzTestCases(fineGrained bool) []AuthzTestCase {
-	// Path -> ExpectedSubresource
+	// 路径 -> 期望子资源。
 	testPaths := map[string][]string{
 		"/attach/{podNamespace}/{podID}/{containerName}":       {"proxy"},
 		"/attach/{podNamespace}/{podID}/{uid}/{containerName}": {"proxy"},
@@ -159,6 +172,7 @@ func AuthzTestCases(fineGrained bool) []AuthzTestCase {
 		"/stats/summary": {"stats"},
 	}
 
+	// 精细授权开启时，部分路径额外要求 healthz/pods/configz 子资源。
 	if fineGrained {
 		testPaths["/healthz"] = append([]string{"healthz"}, testPaths["/healthz"]...)
 		testPaths["/healthz/log"] = append([]string{"healthz"}, testPaths["/healthz/log"]...)
@@ -169,6 +183,7 @@ func AuthzTestCases(fineGrained bool) []AuthzTestCase {
 		testPaths["/configz"] = append([]string{"configz"}, testPaths["/configz"]...)
 	}
 
+	// 每个路径与每种 HTTP 方法组合成一个用例。
 	testCases := []AuthzTestCase{}
 	for path, subresource := range testPaths {
 		testCases = append(testCases,

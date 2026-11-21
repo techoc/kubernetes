@@ -41,21 +41,25 @@ const (
 	DefaultVolumePluginDir         = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 	DefaultPodLogsDir              = "/var/log/pods"
 	DefaultMemoryReservationPolicy = kubeletconfigv1beta1.NoneMemoryReservationPolicy
-	// MaxContainerBackOff is the max backoff period for container restarts, exported for the e2e test
+	// MaxContainerBackOff 是容器重启的最大退避周期，导出给 e2e 测试使用。
 	MaxContainerBackOff = 300 * time.Second
 )
 
 var (
 	zeroDuration = metav1.Duration{}
 	// TODO: Move these constants to k8s.io/kubelet/config/v1beta1 instead?
-	// Refer to [Node Allocatable](https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/#node-allocatable) doc for more information.
+	// 默认只强制 pods 的节点可分配资源；详见 Node Allocatable 文档
+	// https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/#node-allocatable
 	DefaultNodeAllocatableEnforcement = []string{"pods"}
 )
 
+// addDefaultingFuncs 把默认值函数注册到 scheme。
 func addDefaultingFuncs(scheme *kruntime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_KubeletConfiguration 为 v1beta1 KubeletConfiguration 填充默认值。
+// nil 表示字段未显式设置；零值表示未配置，需要替换为默认值。
 func SetDefaults_KubeletConfiguration(obj *kubeletconfigv1beta1.KubeletConfiguration) {
 
 	// TODO(lauralorenz): Reasses conditional feature gating on defaults. Here
@@ -65,11 +69,14 @@ func SetDefaults_KubeletConfiguration(obj *kubeletconfigv1beta1.KubeletConfigura
 	// strategy does for gate-disabled fields. Meanwhile, KubeletConfiguration
 	// is increasingly dynamic and the configured gates may change depending on
 	// when this is called. See also validation.go.
+	// 做法是：先复制全局门控并合并配置中的门控，再据此决定默认值。
+	// 使用局部副本，避免默认化过程修改全局门控状态。
 	localFeatureGate := utilfeature.DefaultMutableFeatureGate.DeepCopy()
 	if err := localFeatureGate.SetFromMap(obj.FeatureGates); err != nil {
 		panic(fmt.Sprintf("failed to merge global and in-flight KubeletConfiguration while setting defaults, error: %v", err))
 	}
 
+	// 以下逐项填充默认值；大部分默认值与历史版本保持兼容。
 	if obj.EnableServer == nil {
 		obj.EnableServer = ptr.To(true)
 	}
@@ -134,9 +141,8 @@ func SetDefaults_KubeletConfiguration(obj *kubeletconfigv1beta1.KubeletConfigura
 		obj.StreamingConnectionIdleTimeout = metav1.Duration{Duration: 4 * time.Hour}
 	}
 	if obj.NodeStatusReportFrequency == zeroDuration {
-		// For backward compatibility, NodeStatusReportFrequency's default value is
-		// set to NodeStatusUpdateFrequency if NodeStatusUpdateFrequency is set
-		// explicitly.
+		// 兼容旧行为：显式设置了 NodeStatusUpdateFrequency 时，
+		// NodeStatusReportFrequency 沿用其值。
 		if obj.NodeStatusUpdateFrequency == zeroDuration {
 			obj.NodeStatusReportFrequency = metav1.Duration{Duration: 5 * time.Minute}
 		} else {
@@ -153,7 +159,7 @@ func SetDefaults_KubeletConfiguration(obj *kubeletconfigv1beta1.KubeletConfigura
 		obj.ImageMinimumGCAge = metav1.Duration{Duration: 2 * time.Minute}
 	}
 	if obj.ImageGCHighThresholdPercent == nil {
-		// default is below docker's default dm.min_free_space of 90%
+		// 默认值低于 docker 的 dm.min_free_space 默认值 90%，避免镜像 GC 与 docker 冲突。
 		obj.ImageGCHighThresholdPercent = ptr.To[int32](85)
 	}
 	if obj.ImageGCLowThresholdPercent == nil {
@@ -172,7 +178,7 @@ func SetDefaults_KubeletConfiguration(obj *kubeletconfigv1beta1.KubeletConfigura
 		obj.CPUManagerPolicy = "none"
 	}
 	if obj.CPUManagerReconcilePeriod == zeroDuration {
-		// Keep the same as default NodeStatusUpdateFrequency
+		// 与 NodeStatusUpdateFrequency 的默认值保持一致。
 		obj.CPUManagerReconcilePeriod = metav1.Duration{Duration: 10 * time.Second}
 	}
 	if obj.MemoryManagerPolicy == "" {
@@ -193,7 +199,7 @@ func SetDefaults_KubeletConfiguration(obj *kubeletconfigv1beta1.KubeletConfigura
 	if obj.MaxPods == 0 {
 		obj.MaxPods = 110
 	}
-	// default nil or negative value to -1 (implies node allocatable pid limit)
+	// nil 或负值统一默认成 -1，表示沿用节点可分配的 PID 上限。
 	if obj.PodPidsLimit == nil || *obj.PodPidsLimit < int64(0) {
 		obj.PodPidsLimit = ptr.To[int64](-1)
 	}
@@ -223,9 +229,8 @@ func SetDefaults_KubeletConfiguration(obj *kubeletconfigv1beta1.KubeletConfigura
 		obj.KubeAPIBurst = 100
 	}
 	if obj.SerializeImagePulls == nil {
-		// SerializeImagePulls is default to true when MaxParallelImagePulls
-		// is not set, and false when MaxParallelImagePulls is set.
-		// This is to save users from having to set both configs.
+		// 未设置 MaxParallelImagePulls 时 SerializeImagePulls 默认为 true；
+		// 设置了并行拉取数时默认为 false，避免用户必须同时配置两项。
 		if obj.MaxParallelImagePulls == nil || *obj.MaxParallelImagePulls < 2 {
 			obj.SerializeImagePulls = ptr.To(true)
 		} else {
@@ -274,7 +279,7 @@ func SetDefaults_KubeletConfiguration(obj *kubeletconfigv1beta1.KubeletConfigura
 	if obj.VolumePluginDir == "" {
 		obj.VolumePluginDir = DefaultVolumePluginDir
 	}
-	// Use the Default LoggingConfiguration option
+	// 日志配置使用推荐的默认值（格式、刷新频率等）。
 	logsapi.SetRecommendedLoggingConfiguration(&obj.Logging)
 	if obj.EnableSystemLogHandler == nil {
 		obj.EnableSystemLogHandler = ptr.To(true)
@@ -307,12 +312,14 @@ func SetDefaults_KubeletConfiguration(obj *kubeletconfigv1beta1.KubeletConfigura
 		obj.PodLogsDir = DefaultPodLogsDir
 	}
 
+	// 门控开启时才填充 CrashLoopBackOff 的最大重启周期。
 	if localFeatureGate.Enabled(features.KubeletCrashLoopBackOffMax) {
 		if obj.CrashLoopBackOff.MaxContainerRestartPeriod == nil {
 			obj.CrashLoopBackOff.MaxContainerRestartPeriod = &metav1.Duration{Duration: MaxContainerBackOff}
 		}
 	}
 
+	// 门控开启时才设置镜像拉取凭据校验策略的默认值。
 	if localFeatureGate.Enabled(features.KubeletEnsureSecretPulledImages) {
 		if obj.ImagePullCredentialsVerificationPolicy == "" {
 			obj.ImagePullCredentialsVerificationPolicy = kubeletconfigv1beta1.NeverVerifyPreloadedImages

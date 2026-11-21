@@ -34,16 +34,22 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestApplySandboxResources 验证 applySandboxResources 在不同输入下（Pod overhead、
+// DRA 直接资源声明、Pod 级资源、feature gate 开关、cgroup 版本）计算出的
+// sandbox 资源与 overhead 资源是否符合预期。
 func TestApplySandboxResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
+	// 开启 CFS quota，否则 CPU 配额不会被写入 LinuxContainerResources。
 	m.cpuCFSQuota = true
+	// 单进程 OOM kill 关闭时，cgroup v2 不应设置 memory.oom.group。
 	m.singleProcessOOMKill = ptr.To(false)
 
 	config := &runtimeapi.PodSandboxConfig{
 		Linux: &runtimeapi.LinuxPodSandboxConfig{},
 	}
 
+	// getPodWithOverhead 构造一个同时设置 requests/limits 与 Pod overhead 的测试 Pod。
 	getPodWithOverhead := func() *v1.Pod {
 		return &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -73,6 +79,7 @@ func TestApplySandboxResources(t *testing.T) {
 			},
 		}
 	}
+	// getPodWithoutOverhead 构造一个未设置 Pod overhead、仅含容器 requests/limits 的测试 Pod。
 	getPodWithoutOverhead := func() *v1.Pod {
 		return &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -413,6 +420,7 @@ func TestApplySandboxResources(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		// 每个用例按需切换 cgroup 版本并单独设置 feature gate，避免用例之间相互影响。
 		setCgroupVersionDuringTest(test.cgroupVersion)
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRANodeAllocatableResources, test.draEnabled)
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, test.podLevelResourcesEnabled)
@@ -424,6 +432,8 @@ func TestApplySandboxResources(t *testing.T) {
 	}
 }
 
+// TestGeneratePodSandboxConfigWithLinuxSecurityContext 验证生成的 sandbox 配置
+// 正确带上 Pod 安全上下文中的 SELinux、RunAsUser、RunAsGroup 设置。
 func TestGeneratePodSandboxConfigWithLinuxSecurityContext(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -447,6 +457,7 @@ func TestGeneratePodSandboxConfigWithLinuxSecurityContext(t *testing.T) {
 	assert.Equal(t, expectedLinuxPodSandboxConfig.SecurityContext.RunAsGroup, podSandboxConfig.Linux.SecurityContext.RunAsGroup)
 }
 
+// newTestPodWithLinuxSecurityContext 构造一个设置了 SELinux、RunAsUser、RunAsGroup 的测试 Pod。
 func newTestPodWithLinuxSecurityContext() *v1.Pod {
 	anyGroup := int64(10)
 	anyUser := int64(1000)
@@ -463,6 +474,7 @@ func newTestPodWithLinuxSecurityContext() *v1.Pod {
 	return pod
 }
 
+// newSupplementalGroupsPolicyPod 构造一个设置指定 supplementalGroupsPolicy 的测试 Pod。
 func newSupplementalGroupsPolicyPod(supplementalGroupsPolicy *v1.SupplementalGroupsPolicy) *v1.Pod {
 	pod := newTestPod()
 	if pod.Spec.SecurityContext == nil {
@@ -472,6 +484,8 @@ func newSupplementalGroupsPolicyPod(supplementalGroupsPolicy *v1.SupplementalGro
 	return pod
 }
 
+// TestGeneratePodSandboxLinuxConfigSupplementalGroupsPolicy 验证 supplementalGroupsPolicy
+// 到 CRI 枚举值的转换，包括 nil 默认转 Merge 以及不支持值返回错误。
 func TestGeneratePodSandboxLinuxConfigSupplementalGroupsPolicy(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -505,6 +519,7 @@ func TestGeneratePodSandboxLinuxConfigSupplementalGroupsPolicy(t *testing.T) {
 
 	for i, test := range tests {
 		config, err := m.generatePodSandboxLinuxConfig(tCtx, test.pod)
+		// 不支持的策略应返回错误且不生成配置；其余情况断言策略映射结果。
 		if test.expectedErr {
 			assert.NotEmptyf(t, err, "TestCase[%d]: %s", i, test.description)
 			assert.Emptyf(t, config, "TestCase[%d]: %s", i, test.description)

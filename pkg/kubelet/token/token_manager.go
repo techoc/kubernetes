@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package token implements a manager of serviceaccount tokens for pods running
-// on the node.
+// Package token 实现节点上 Pod 使用的 serviceaccount token 管理器。
 package token
 
 import (
@@ -37,17 +36,19 @@ import (
 )
 
 const (
+	// maxTTL 是 token 的最大有效期；gcPeriod 是清理周期；maxJitter 是刷新抖动上限。
 	maxTTL    = 24 * time.Hour
 	gcPeriod  = time.Minute
 	maxJitter = 10 * time.Second
 )
 
-// NewManager returns a new token manager.
+// NewManager 返回新的 token 管理器。
 func NewManager(c clientset.Interface) *Manager {
-	// check whether the server supports token requests so we can give a more helpful error message
+	// 检查服务端是否支持 token 请求，以便给出更友好的错误信息。
 	supported := false
 	once := &sync.Once{}
 	tokenRequestsSupported := func() bool {
+		// 只探测一次服务端能力，避免每次请求都执行 discovery。
 		once.Do(func() {
 			resources, err := c.Discovery().ServerResourcesForGroupVersionWithContext(context.TODO(), ("v1"))
 			if err != nil {
@@ -77,30 +78,31 @@ func NewManager(c clientset.Interface) *Manager {
 		cache: make(map[string]*authenticationv1.TokenRequest),
 		clock: clock.RealClock{},
 	}
+	// 后台周期性清理过期 token。
 	go wait.Forever(m.cleanup, gcPeriod)
 	return m
 }
 
-// Manager manages service account tokens for pods.
+// Manager 管理 Pod 的 service account token。
 type Manager struct {
 
-	// cacheMutex guards the cache
+	// cacheMutex 保护 cache。
 	cacheMutex sync.RWMutex
 	cache      map[string]*authenticationv1.TokenRequest
 
-	// mocked for testing
+	// getToken 与 clock 在测试中会被替换。
 	getToken func(name, namespace string, tr *authenticationv1.TokenRequest) (*authenticationv1.TokenRequest, error)
 	clock    clock.Clock
 }
 
-// GetServiceAccountToken gets a service account token for a pod from cache or
-// from the TokenRequest API. This process is as follows:
-// * Check the cache for the current token request.
-// * If the token exists and does not require a refresh, return the current token.
-// * Attempt to refresh the token.
-// * If the token is refreshed successfully, save it in the cache and return the token.
-// * If refresh fails and the old token is still valid, log an error and return the old token.
-// * If refresh fails and the old token is no longer valid, return an error
+// GetServiceAccountToken 从缓存或 TokenRequest API 为 Pod 获取 service account token，
+// 流程如下：
+// * 在缓存中查找当前的 token 请求。
+// * 若 token 存在且无需刷新，直接返回当前 token。
+// * 尝试刷新 token。
+// * 刷新成功时把 token 存入缓存并返回。
+// * 刷新失败但旧 token 仍有效时，记录错误并返回旧 token。
+// * 刷新失败且旧 token 已失效时，返回错误。
 func (m *Manager) GetServiceAccountToken(namespace, name string, tr *authenticationv1.TokenRequest) (*authenticationv1.TokenRequest, error) {
 	// TODO: pass ctx to GetServiceAccountToken after switching pkg/volume to contextual logging
 	ctx := context.TODO()
@@ -108,12 +110,14 @@ func (m *Manager) GetServiceAccountToken(namespace, name string, tr *authenticat
 
 	ctr, ok := m.get(key)
 
+	// 优先使用缓存中仍然新鲜、无需刷新的 token。
 	if ok && !m.requiresRefresh(ctx, ctr) {
 		return ctr, nil
 	}
 
 	tr, err := m.getToken(name, namespace, tr)
 	if err != nil {
+		// 刷新失败时根据缓存状态决定：无旧 token 或旧 token 已过期则报错，否则降级使用旧 token。
 		switch {
 		case !ok:
 			return nil, fmt.Errorf("failed to fetch token: %v", err)
@@ -130,18 +134,19 @@ func (m *Manager) GetServiceAccountToken(namespace, name string, tr *authenticat
 	return tr, nil
 }
 
-// DeleteServiceAccountToken should be invoked when pod got deleted. It simply
-// clean token manager cache.
+// DeleteServiceAccountToken 应在 Pod 被删除时调用，用于清理 token 管理器缓存。
 func (m *Manager) DeleteServiceAccountToken(podUID types.UID) {
 	m.cacheMutex.Lock()
 	defer m.cacheMutex.Unlock()
 	for k, tr := range m.cache {
+		// 按 BoundObjectRef 中的 Pod UID 精确删除，避免误删其他 Pod 的 token。
 		if tr.Spec.BoundObjectRef.UID == podUID {
 			delete(m.cache, k)
 		}
 	}
 }
 
+// cleanup 清理缓存中已过期的 token。
 func (m *Manager) cleanup() {
 	m.cacheMutex.Lock()
 	defer m.cacheMutex.Unlock()
@@ -152,6 +157,7 @@ func (m *Manager) cleanup() {
 	}
 }
 
+// get 从缓存读取 token。
 func (m *Manager) get(key string) (*authenticationv1.TokenRequest, bool) {
 	m.cacheMutex.RLock()
 	defer m.cacheMutex.RUnlock()
@@ -159,19 +165,21 @@ func (m *Manager) get(key string) (*authenticationv1.TokenRequest, bool) {
 	return ctr, ok
 }
 
+// set 将 token 写入缓存。
 func (m *Manager) set(key string, tr *authenticationv1.TokenRequest) {
 	m.cacheMutex.Lock()
 	defer m.cacheMutex.Unlock()
 	m.cache[key] = tr
 }
 
+// expired 判断 token 是否已过期。
 func (m *Manager) expired(t *authenticationv1.TokenRequest) bool {
 	return m.clock.Now().After(t.Status.ExpirationTimestamp.Time)
 }
 
-// requiresRefresh returns true if the token is older than 80% of its total
-// ttl, or if the token is older than 24 hours.
+// requiresRefresh 在 token 已超过总 TTL 的 80%，或已超过 24 小时时返回 true。
 func (m *Manager) requiresRefresh(ctx context.Context, tr *authenticationv1.TokenRequest) bool {
+	// ExpirationSeconds 缺失说明 token 请求异常，记录错误后不主动刷新。
 	if tr.Spec.ExpirationSeconds == nil {
 		cpy := tr.DeepCopy()
 		cpy.Status.Token = ""
@@ -181,20 +189,22 @@ func (m *Manager) requiresRefresh(ctx context.Context, tr *authenticationv1.Toke
 	}
 	now := m.clock.Now()
 	exp := tr.Status.ExpirationTimestamp.Time
+	// 由过期时间倒推签发时间。
 	iat := exp.Add(-1 * time.Duration(*tr.Spec.ExpirationSeconds) * time.Second)
 
+	// 加入随机抖动，避免大量 Pod 同时刷新。
 	jitter := time.Duration(rand.Float64()*maxJitter.Seconds()) * time.Second
 	if now.After(iat.Add(maxTTL - jitter)) {
 		return true
 	}
-	// Require a refresh if within 20% of the TTL plus a jitter from the expiration time.
+	// 距离过期不足 TTL 的 20%（含抖动）时要求刷新。
 	if now.After(exp.Add(-1*time.Duration((*tr.Spec.ExpirationSeconds*20)/100)*time.Second - jitter)) {
 		return true
 	}
 	return false
 }
 
-// keys should be nonconfidential and safe to log
+// 缓存键不包含机密信息，可以安全地记录日志。
 func keyFunc(name, namespace string, tr *authenticationv1.TokenRequest) string {
 	var exp int64
 	if tr.Spec.ExpirationSeconds != nil {
@@ -208,10 +218,9 @@ func keyFunc(name, namespace string, tr *authenticationv1.TokenRequest) string {
 
 	var uid types.UID
 	if len(tr.UID) > 0 {
-		// If UID is set in the token request it is used as a precondition
-		// to ensure that the token request is for the same service account.
-		// This is useful to prevent stale tokens from being returned after a service account
-		// is deleted and recreated with the same name.
+		// 若 token 请求中设置了 UID，它会作为前置条件，确保请求针对同一个
+		// service account。这可以防止 service account 被删除并以相同名称重建后
+		// 仍返回旧的 token。
 		uid = tr.UID
 	}
 

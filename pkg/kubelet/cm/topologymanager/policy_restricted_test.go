@@ -20,6 +20,7 @@ import (
 	"testing"
 )
 
+// TestPolicyRestrictedName 验证 restricted 策略的名称固定为 "restricted"。
 func TestPolicyRestrictedName(t *testing.T) {
 	tcases := []struct {
 		name     string
@@ -30,6 +31,7 @@ func TestPolicyRestrictedName(t *testing.T) {
 			expected: "restricted",
 		},
 	}
+	// 使用两节点 NUMA 拓扑构造策略。
 	numaInfo := commonNUMAInfoTwoNodes()
 	for _, tc := range tcases {
 		policy := &restrictedPolicy{bestEffortPolicy{numaInfo: numaInfo, opts: PolicyOptions{}}}
@@ -39,6 +41,7 @@ func TestPolicyRestrictedName(t *testing.T) {
 	}
 }
 
+// TestPolicyRestrictedCanAdmitPodResult 验证 restricted 策略仅在所有提示均为 Preferred 时准入。
 func TestPolicyRestrictedCanAdmitPodResult(t *testing.T) {
 	tcases := []struct {
 		name     string
@@ -58,6 +61,7 @@ func TestPolicyRestrictedCanAdmitPodResult(t *testing.T) {
 	}
 
 	for _, tc := range tcases {
+		// 使用两节点 NUMA 拓扑构造策略。
 		numaInfo := commonNUMAInfoTwoNodes()
 		policy := &restrictedPolicy{bestEffortPolicy{numaInfo: numaInfo}}
 		result := policy.canAdmitPodResult(&tc.hint)
@@ -68,10 +72,12 @@ func TestPolicyRestrictedCanAdmitPodResult(t *testing.T) {
 	}
 }
 
+// TestPolicyRestrictedMerge 验证 restricted 策略的提示合并逻辑。
 func TestPolicyRestrictedMerge(t *testing.T) {
 	numaInfo := commonNUMAInfoFourNodes()
 	policy := &restrictedPolicy{bestEffortPolicy{numaInfo: numaInfo}}
 
+	// 合并通用用例与 restricted 策略特有的用例。
 	tcases := commonPolicyMergeTestCases(numaInfo.Nodes)
 	tcases = append(tcases, policy.mergeTestCases(numaInfo.Nodes)...)
 	tcases = append(tcases, policy.mergeTestCasesNoPolicies(numaInfo.Nodes)...)
@@ -79,10 +85,12 @@ func TestPolicyRestrictedMerge(t *testing.T) {
 	testPolicyMerge(policy, tcases, t)
 }
 
+// TestPolicyRestrictedMergeClosestNUMA 验证启用 PreferClosestNUMA 时 restricted 策略的合并结果。
 func TestPolicyRestrictedMergeClosestNUMA(t *testing.T) {
 	numaInfo := commonNUMAInfoEightNodes()
 	policy := &restrictedPolicy{bestEffortPolicy{numaInfo: numaInfo, opts: PolicyOptions{PreferClosestNUMA: true}}}
 
+	// 合并通用用例与启用最近 NUMA 偏好时的专用用例。
 	tcases := commonPolicyMergeTestCases(numaInfo.Nodes)
 	tcases = append(tcases, policy.mergeTestCases(numaInfo.Nodes)...)
 	tcases = append(tcases, policy.mergeTestCasesClosestNUMA(numaInfo.Nodes)...)

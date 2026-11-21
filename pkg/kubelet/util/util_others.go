@@ -18,7 +18,7 @@ limitations under the License.
 
 package util
 
-// IsCgroup2UnifiedMode is a no-op for other OSes.
+// IsCgroup2UnifiedMode 在其他操作系统上为空操作，始终返回 false。
 func IsCgroup2UnifiedMode() bool {
 	return false
 }

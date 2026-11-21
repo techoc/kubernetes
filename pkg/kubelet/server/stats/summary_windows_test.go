@@ -32,6 +32,7 @@ import (
 	statstest "k8s.io/kubernetes/pkg/kubelet/server/stats/testing"
 )
 
+// TestSummaryProvider 验证 Windows 上 summary provider 汇总节点、系统容器与 Pod 统计的结果。
 func TestSummaryProvider(t *testing.T) {
 	var (
 		ctx            = t.Context()
@@ -50,8 +51,10 @@ func TestSummaryProvider(t *testing.T) {
 		}
 	)
 
+	// 使用带断言的 assert 实例简化后续校验。
 	assert := assert.New(t)
 
+	// 用 mock 提供者替代真实统计来源。
 	mockStatsProvider := statstest.NewMockProvider(t)
 	mockStatsProvider.EXPECT().GetNode(ctx).Return(node, nil).Maybe()
 	mockStatsProvider.EXPECT().GetNodeConfig().Return(nodeConfig).Maybe()
@@ -63,6 +66,7 @@ func TestSummaryProvider(t *testing.T) {
 	mockStatsProvider.EXPECT().RlimitStats().Return(nil, nil).Maybe()
 	mockStatsProvider.EXPECT().GetCgroupStats(ctx, "/", true).Return(cgroupStatsMap["/"].cs, cgroupStatsMap["/"].ns, nil).Maybe()
 
+	// 固定启动时间，便于验证汇总结果。
 	kubeletCreationTime := metav1.Now()
 	systemBootTime := metav1.Now()
 	provider := summaryProviderImpl{kubeletCreationTime: kubeletCreationTime, systemBootTime: systemBootTime, provider: mockStatsProvider}
@@ -78,6 +82,7 @@ func TestSummaryProvider(t *testing.T) {
 	assert.Equal(&statsapi.RuntimeStats{ContainerFs: imageFsStats, ImageFs: imageFsStats}, summary.Node.Runtime)
 
 	assert.NoError(err)
+	// Windows 上应包含 pods 汇总与全局提交内存两个系统容器。
 	assert.Len(summary.Node.SystemContainers, 2)
 	assert.Equal("pods", summary.Node.SystemContainers[0].Name)
 	assert.Equal(podStats[0].CPU.UsageCoreNanoSeconds, summary.Node.SystemContainers[0].CPU.UsageCoreNanoSeconds)
@@ -92,6 +97,7 @@ func TestSummaryProvider(t *testing.T) {
 	assert.Equal(summary.Pods, podStats)
 }
 
+// getFsStats 生成随机填充的文件系统统计，便于覆盖所有字段。
 func getFsStats() *statsapi.FsStats {
 	f := randfill.New().NilChance(0)
 	v := &statsapi.FsStats{}
@@ -99,6 +105,7 @@ func getFsStats() *statsapi.FsStats {
 	return v
 }
 
+// getContainerStats 生成随机填充的容器统计。
 func getContainerStats() *statsapi.ContainerStats {
 	f := randfill.New().NilChance(0)
 	v := &statsapi.ContainerStats{}
@@ -106,6 +113,7 @@ func getContainerStats() *statsapi.ContainerStats {
 	return v
 }
 
+// getPodStats 构造带有容器、CPU 与内存统计的测试 Pod。
 func getPodStats() *statsapi.PodStats {
 	containerStats := getContainerStats()
 	podStats := statsapi.PodStats{

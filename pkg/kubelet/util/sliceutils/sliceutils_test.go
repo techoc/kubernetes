@@ -25,6 +25,7 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
+// 构造三个创建时间依次递增一小时的 Pod，供排序接口测试复用。
 func buildPodsByCreationTime() PodsByCreationTime {
 	return []*v1.Pod{
 		{
@@ -57,6 +58,7 @@ func buildPodsByCreationTime() PodsByCreationTime {
 	}
 }
 
+// TestPodsByCreationTimeLen 验证 Len 返回底层切片长度，覆盖空切片、nil 与含 nil 元素的切片。
 func TestPodsByCreationTimeLen(t *testing.T) {
 	fooTests := []struct {
 		pods PodsByCreationTime
@@ -76,6 +78,7 @@ func TestPodsByCreationTimeLen(t *testing.T) {
 	}
 }
 
+// TestPodsByCreationTimeSwap 验证 Swap 会交换指定下标上的元素。
 func TestPodsByCreationTimeSwap(t *testing.T) {
 	fooTests := []struct {
 		pods PodsByCreationTime
@@ -87,6 +90,7 @@ func TestPodsByCreationTimeSwap(t *testing.T) {
 	}
 
 	for _, fooTest := range fooTests {
+		// 先记录交换前的元素，交换后再按名字确认两个位置确实对调。
 		fooi := fooTest.pods[fooTest.i]
 		fooj := fooTest.pods[fooTest.j]
 		fooTest.pods.Swap(fooTest.i, fooTest.j)
@@ -96,6 +100,7 @@ func TestPodsByCreationTimeSwap(t *testing.T) {
 	}
 }
 
+// TestPodsByCreationTimeLess 验证 Less 按创建时间升序比较，供排序使用。
 func TestPodsByCreationTimeLess(t *testing.T) {
 	fooTests := []struct {
 		pods PodsByCreationTime
@@ -103,7 +108,7 @@ func TestPodsByCreationTimeLess(t *testing.T) {
 		j    int
 		er   bool
 	}{
-		// ascending order
+		// 升序场景：foo1 早于 foo3，因此 Less 应为 true。
 		{buildPodsByCreationTime(), 0, 2, true},
 		{buildPodsByCreationTime(), 1, 0, false},
 	}
@@ -116,6 +121,7 @@ func TestPodsByCreationTimeLess(t *testing.T) {
 	}
 }
 
+// 构造四个镜像，Size 依次为 1/2/3/3；第 3、4 个大小相同，用于验证相等元素的比较。
 func buildByImageSize() ByImageSize {
 	return []kubecontainer.Image{
 		{
@@ -145,6 +151,7 @@ func buildByImageSize() ByImageSize {
 	}
 }
 
+// TestByImageSizeLen 验证 Len 返回镜像切片长度。
 func TestByImageSizeLen(t *testing.T) {
 	fooTests := []struct {
 		images ByImageSize
@@ -163,6 +170,7 @@ func TestByImageSizeLen(t *testing.T) {
 	}
 }
 
+// TestByImageSizeSwap 验证 Swap 会交换指定下标上的镜像。
 func TestByImageSizeSwap(t *testing.T) {
 	fooTests := []struct {
 		images ByImageSize
@@ -174,6 +182,7 @@ func TestByImageSizeSwap(t *testing.T) {
 	}
 
 	for _, fooTest := range fooTests {
+		// 先记录交换前的镜像，交换后按 ID 确认两个位置确实对调。
 		fooi := fooTest.images[fooTest.i]
 		fooj := fooTest.images[fooTest.j]
 		fooTest.images.Swap(fooTest.i, fooTest.j)
@@ -183,6 +192,7 @@ func TestByImageSizeSwap(t *testing.T) {
 	}
 }
 
+// TestByImageSizeLess 验证 Less 按镜像大小降序比较，使大镜像在 GC 时排在前面。
 func TestByImageSizeLess(t *testing.T) {
 	fooTests := []struct {
 		images ByImageSize
@@ -190,7 +200,7 @@ func TestByImageSizeLess(t *testing.T) {
 		j      int
 		er     bool
 	}{
-		// descending order
+		// 降序场景：大镜像应排在前面，因此 Less 对 (0,2) 为 false、对 (1,0) 为 true。
 		{buildByImageSize(), 0, 2, false},
 		{buildByImageSize(), 1, 0, true},
 		{buildByImageSize(), 3, 2, true},

@@ -25,8 +25,10 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
-// This file contains help function to kuberuntime types to CRI runtime API types, or vice versa.
+// 本文件包含 kuberuntime 类型与 CRI 运行时 API 类型之间互相转换的辅助函数。
 
+// ToKubeContainerImageSpec 把 CRI Image 转换为 kubelet 内部 ImageSpec，
+// 并按键排序注解，保证结果稳定。
 func ToKubeContainerImageSpec(image *runtimeapi.Image) kubecontainer.ImageSpec {
 	var annotations []kubecontainer.Annotation
 
@@ -48,7 +50,7 @@ func ToKubeContainerImageSpec(image *runtimeapi.Image) kubecontainer.ImageSpec {
 		Image:       image.Id,
 		Annotations: annotations,
 	}
-	// if RuntimeClassInImageCriAPI feature gate is enabled, set runtimeHandler CRI field
+	// 启用 RuntimeClassInImageCriAPI 特性时，设置 CRI 的 runtimeHandler 字段。
 	if utilfeature.DefaultFeatureGate.Enabled(features.RuntimeClassInImageCriAPI) {
 		runtimeHandler := ""
 		if image.Spec != nil {
@@ -60,6 +62,7 @@ func ToKubeContainerImageSpec(image *runtimeapi.Image) kubecontainer.ImageSpec {
 	return spec
 }
 
+// ToRuntimeAPIImageSpec 把内部 ImageSpec 转换为 CRI ImageSpec。
 func ToRuntimeAPIImageSpec(imageSpec kubecontainer.ImageSpec) *runtimeapi.ImageSpec {
 	var annotations = make(map[string]string)
 	if imageSpec.Annotations != nil {
@@ -72,7 +75,7 @@ func ToRuntimeAPIImageSpec(imageSpec kubecontainer.ImageSpec) *runtimeapi.ImageS
 		Image:       imageSpec.Image,
 		Annotations: annotations,
 	}
-	// if RuntimeClassInImageCriAPI feature gate is enabled, set runtimeHandler CRI field
+	// 启用 RuntimeClassInImageCriAPI 特性时，设置 CRI 的 runtimeHandler 字段。
 	if utilfeature.DefaultFeatureGate.Enabled(features.RuntimeClassInImageCriAPI) {
 		spec.RuntimeHandler = imageSpec.RuntimeHandler
 	}

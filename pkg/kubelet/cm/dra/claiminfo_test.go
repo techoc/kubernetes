@@ -38,15 +38,15 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// ClaimInfo test cases
+// ClaimInfo 相关测试用例
 
 const (
 	namespace     = "test-namespace"
 	className     = "test-class"
 	driverName    = "test-driver"
-	deviceName    = "test-device"                      // name inside ResourceSlice
-	cdiDeviceName = "cdi-test-device"                  // name inside CDI spec
-	cdiID         = "test-driver/test=cdi-test-device" // CDI device ID
+	deviceName    = "test-device"                      // ResourceSlice 内的名称
+	cdiDeviceName = "cdi-test-device"                  // CDI spec 中的名称
+	cdiID         = "test-driver/test=cdi-test-device" // CDI 设备 ID
 	poolName      = "test-pool"
 	requestName   = "test-request"
 	requestName2  = "test-request-2"
@@ -65,6 +65,7 @@ var (
 	devices = []state.Device{device}
 )
 
+// TestNewClaimInfoFromClaim 验证从 ResourceClaim 构造 ClaimInfo 时正确聚合分配结果与设备状态。
 func TestNewClaimInfoFromClaim(t *testing.T) {
 	for _, test := range []struct {
 		description    string
@@ -156,6 +157,7 @@ func TestNewClaimInfoFromClaim(t *testing.T) {
 	}
 }
 
+// TestNewClaimInfoFromState 验证从已持久化状态构造 ClaimInfo 时字段保持一致。
 func TestNewClaimInfoFromState(t *testing.T) {
 	for _, test := range []struct {
 		description    string
@@ -200,6 +202,7 @@ func TestNewClaimInfoFromState(t *testing.T) {
 	}
 }
 
+// TestClaimInfoAddDevice 验证向 DriverState 中新增设备记录。
 func TestClaimInfoAddDevice(t *testing.T) {
 	for _, test := range []struct {
 		description string
@@ -246,6 +249,7 @@ func TestClaimInfoAddDevice(t *testing.T) {
 	}
 }
 
+// TestClaimInfoAddPodReference 验证为 ClaimInfo 添加 Pod 引用。
 func TestClaimInfoAddPodReference(t *testing.T) {
 	for _, test := range []struct {
 		description string
@@ -288,6 +292,7 @@ func TestClaimInfoAddPodReference(t *testing.T) {
 	}
 }
 
+// TestClaimInfoHasPodReference 验证 ClaimInfo 是否引用了指定 Pod。
 func TestClaimInfoHasPodReference(t *testing.T) {
 	for _, test := range []struct {
 		description    string
@@ -322,6 +327,7 @@ func TestClaimInfoHasPodReference(t *testing.T) {
 	}
 }
 
+// TestClaimInfoDeletePodReference 验证从 ClaimInfo 中删除 Pod 引用。
 func TestClaimInfoDeletePodReference(t *testing.T) {
 	for _, test := range []struct {
 		description string
@@ -355,6 +361,7 @@ func TestClaimInfoDeletePodReference(t *testing.T) {
 	}
 }
 
+// TestClaimInfoSetPrepared 验证 setPrepared 会置位 prepared 标记。
 func TestClaimInfoSetPrepared(t *testing.T) {
 	for _, test := range []struct {
 		description string
@@ -384,6 +391,7 @@ func TestClaimInfoSetPrepared(t *testing.T) {
 	}
 }
 
+// TestClaimInfoIsPrepared 验证 isPrepared 的返回值与标记一致。
 func TestClaimInfoIsPrepared(t *testing.T) {
 	for _, test := range []struct {
 		description    string
@@ -416,7 +424,8 @@ func TestClaimInfoIsPrepared(t *testing.T) {
 	}
 }
 
-// claimInfoCache test cases
+// claimInfoCache 相关测试用例
+// TestNewClaimInfoCache 验证创建缓存时的参数校验与成功路径。
 func TestNewClaimInfoCache(t *testing.T) {
 	for _, test := range []struct {
 		description    string
@@ -456,6 +465,7 @@ func TestNewClaimInfoCache(t *testing.T) {
 	}
 }
 
+// TestClaimInfoCacheWithLock 验证 withLock 持有排他锁时其他锁获取会被阻塞。
 func TestClaimInfoCacheWithLock(t *testing.T) {
 	for _, test := range []struct {
 		description string
@@ -507,6 +517,7 @@ func TestClaimInfoCacheWithLock(t *testing.T) {
 			cache, err := newClaimInfoCache(t.TempDir(), "test-checkpoint")
 			require.NoError(t, err)
 			assert.NotNil(t, cache)
+			// withLock 在持锁状态下执行回调：回调内若能加锁，说明锁被正确持有。
 			err = cache.withLock(tCtx.Logger(), test.funcGen(cache))
 			if test.wantErr {
 				assert.Error(t, err)
@@ -517,6 +528,7 @@ func TestClaimInfoCacheWithLock(t *testing.T) {
 	}
 }
 
+// TestClaimInfoCacheWithRLock 验证 withRLock 持有读锁时仍可并发读取。
 func TestClaimInfoCacheWithRLock(t *testing.T) {
 	for _, test := range []struct {
 		description string
@@ -567,6 +579,7 @@ func TestClaimInfoCacheWithRLock(t *testing.T) {
 			cache, err := newClaimInfoCache(t.TempDir(), "test-checkpoint")
 			require.NoError(t, err)
 			assert.NotNil(t, cache)
+			// withRLock 在持读锁状态下执行回调：回调内应仍能获取读锁。
 			err = cache.withRLock(test.funcGen(cache))
 			if test.wantErr {
 				assert.Error(t, err)
@@ -577,6 +590,7 @@ func TestClaimInfoCacheWithRLock(t *testing.T) {
 	}
 }
 
+// TestClaimInfoCacheAdd 验证新增 ClaimInfo 后缓存内容与指标、日志的变化。
 func TestClaimInfoCacheAdd(t *testing.T) {
 	for _, test := range []struct {
 		description      string
@@ -668,11 +682,13 @@ dra_resource_claims_in_use{driver_name="test-driver"} 2
 				klogtesting.Verbosity(5),
 			))
 			cache, err := newClaimInfoCache(t.TempDir(), "test-checkpoint")
+			// 先写入初始缓存，再写入目标 ClaimInfo。
 			for _, claimInfo := range test.initialClaimInfo {
 				cache.add(claimInfo)
 			}
 			require.NoError(t, err)
 			assert.NotNil(t, cache)
+			// 持锁执行 add，模拟调用方加锁写入缓存。
 			_ = cache.withLock(logger, func() error {
 				cache.add(test.claimInfo)
 				return nil
@@ -685,6 +701,7 @@ dra_resource_claims_in_use{driver_name="test-driver"} 2
 	}
 }
 
+// TestClaimInfoCacheContains 验证按名称与命名空间查询缓存命中。
 func TestClaimInfoCacheContains(t *testing.T) {
 	for _, test := range []struct {
 		description    string
@@ -736,6 +753,7 @@ func TestClaimInfoCacheContains(t *testing.T) {
 	}
 }
 
+// TestClaimInfoCacheGet 验证从缓存按名称与命名空间获取 ClaimInfo。
 func TestClaimInfoCacheGet(t *testing.T) {
 	for _, test := range []struct {
 		description    string
@@ -771,6 +789,7 @@ func TestClaimInfoCacheGet(t *testing.T) {
 	}
 }
 
+// TestClaimInfoCacheDelete 验证删除缓存项后指标与日志的变化。
 func TestClaimInfoCacheDelete(t *testing.T) {
 	for _, test := range []struct {
 		description    string
@@ -833,6 +852,7 @@ dra_resource_claims_in_use{driver_name="<any>"} 0
 				klogtesting.BufferLogs(true),
 				klogtesting.Verbosity(5),
 			))
+			// 持锁执行 delete，模拟调用方加锁删除缓存。
 			_ = test.claimInfoCache.withLock(logger, func() error {
 				test.claimInfoCache.delete(claimName, namespace)
 				return nil
@@ -845,6 +865,7 @@ dra_resource_claims_in_use{driver_name="<any>"} 0
 	}
 }
 
+// TestClaimInfoCacheHasPodReference 验证缓存中是否引用了指定 Pod UID。
 func TestClaimInfoCacheHasPodReference(t *testing.T) {
 	for _, test := range []struct {
 		description    string
@@ -877,6 +898,7 @@ func TestClaimInfoCacheHasPodReference(t *testing.T) {
 	}
 }
 
+// TestSyncToCheckpoint 验证缓存能正确写入检查点快照。
 func TestSyncToCheckpoint(t *testing.T) {
 	for _, test := range []struct {
 		description    string
@@ -893,6 +915,7 @@ func TestSyncToCheckpoint(t *testing.T) {
 		t.Run(test.description, func(t *testing.T) {
 			cache, err := newClaimInfoCache(test.stateDir, test.checkpointName)
 			require.NoError(t, err)
+			// 写入快照以验证检查点落盘路径可用。
 			err = cache.syncToCheckpoint()
 			if test.wantErr {
 				assert.Error(t, err)
@@ -903,7 +926,9 @@ func TestSyncToCheckpoint(t *testing.T) {
 	}
 }
 
+// TestNewClaimInfoSkipNodeOperations 验证设备级 SkipNodeOperations 在驱动状态中的聚合规则。
 func TestNewClaimInfoSkipNodeOperations(t *testing.T) {
+	// 开启特性门控后，ClaimInfo 需要按设备聚合 SkipNodeOperations。
 	t.Run("feature gate enabled", func(t *testing.T) {
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRAOptionalNodeOperations, true)
 		claim := &resourceapi.ResourceClaim{
@@ -932,6 +957,7 @@ func TestNewClaimInfoSkipNodeOperations(t *testing.T) {
 			},
 		}
 
+		// 该用例覆盖 SkipNodeOperationAll 的聚合规则、未知操作的保留与各驱动状态。
 		info, err := newClaimInfoFromClaim(claim)
 		require.NoError(t, err)
 		assert.Equal(t, []resourceapi.SkipNodeOperation{resourceapi.SkipNodeOperationAll}, info.DriverState["driver-a"].SkipNodeOperations, "all devices specify SkipNodeOperationAll")
@@ -946,6 +972,7 @@ func TestNewClaimInfoSkipNodeOperations(t *testing.T) {
 		assert.Equal(t, []resourceapi.SkipNodeOperation{resourceapi.SkipNodeOperationNodeUnprepareResources}, info.DriverState["driver-h"].SkipNodeOperations, "result specifying NodeUnprepare combined with result specifying All+NodePrepare skips NodeUnprepare only")
 	})
 
+	// 关闭特性门控时，配置 SkipNodeOperations 必须报错。
 	t.Run("feature gate disabled", func(t *testing.T) {
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRAOptionalNodeOperations, false)
 		claim := &resourceapi.ResourceClaim{
@@ -966,6 +993,7 @@ func TestNewClaimInfoSkipNodeOperations(t *testing.T) {
 	})
 }
 
+// TestCheckpointVersionCompatibility 验证新旧版本检查点 JSON 的兼容性。
 func TestCheckpointVersionCompatibility(t *testing.T) {
 	checkpointVersionN := `[{"claimUID":"uid-1","claimName":"claim-1","namespace":"default","driverState":{"gpu.com":{"skipNodeOperations":["*"]}}}]`
 	var stateVersionN []state.ClaimInfoState

@@ -24,6 +24,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// IsInPlacePodVerticalScalingAllowed 依据 InPlacePodVerticalScaling 特性门控判断是否允许原地垂直扩缩容。
 func IsInPlacePodVerticalScalingAllowed(pod *v1.Pod) (allowed bool, msg, reason string) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) {
 		return false, "InPlacePodVerticalScaling is disabled", "feature_gate_off"
@@ -31,6 +32,8 @@ func IsInPlacePodVerticalScalingAllowed(pod *v1.Pod) (allowed bool, msg, reason 
 	return true, "", ""
 }
 
+// IsInPlacePodLevelResourcesVerticalScalingAllowed 依据 InPlacePodLevelResourcesVerticalScaling 特性门控
+// 判断是否允许 Pod 级资源的原地扩缩容。
 func IsInPlacePodLevelResourcesVerticalScalingAllowed(pod *v1.Pod) (allowed bool, msg, reason string) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodLevelResourcesVerticalScaling) {
 		return false, "InPlacePodLevelResourcesVerticalScaling is disabled", "plr_feature_gate_off"

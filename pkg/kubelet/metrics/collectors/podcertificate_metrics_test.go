@@ -27,20 +27,31 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/podcertificate"
 )
 
+// fakePodCertificateManager 是供测试使用的 PodCertificateManager。
 type fakePodCertificateManager struct {
+	// report 是预置的指标报告。
 	report *podcertificate.MetricReport
 }
 
-func (m *fakePodCertificateManager) TrackPod(ctx context.Context, pod *corev1.Pod)  {}
+// TrackPod 是空实现。
+func (m *fakePodCertificateManager) TrackPod(ctx context.Context, pod *corev1.Pod) {}
+
+// ForgetPod 是空实现。
 func (m *fakePodCertificateManager) ForgetPod(ctx context.Context, pod *corev1.Pod) {}
+
+// GetPodCertificateCredentialBundle 未实现，返回错误。
 func (m *fakePodCertificateManager) GetPodCertificateCredentialBundle(ctx context.Context, namespace, podName, podUID, volumeName string, sourceIndex int) (privKey []byte, certChain []byte, err error) {
 	return nil, nil, fmt.Errorf("unimplemented")
 }
+
+// MetricReport 返回预置的指标报告。
 func (m *fakePodCertificateManager) MetricReport() *podcertificate.MetricReport {
 	return m.report
 }
 
+// TestPodCertificateCollector 验证 Pod 证书指标采集器输出的指标内容。
 func TestPodCertificateCollector(t *testing.T) {
+	// 构造带有预置指标报告的 fake 管理器。
 	collector := &podCertificateCollector{
 		manager: &fakePodCertificateManager{
 			report: &podcertificate.MetricReport{
@@ -56,8 +67,8 @@ func TestPodCertificateCollector(t *testing.T) {
 		},
 	}
 
-	// Fixed metadata on type and help text. We prepend this to every expected
-	// output so we only have to modify a single place when doing adjustments.
+	// 固定的类型与 help 文本元数据。
+	// 把它前置到预期输出，后续调整只需改一处。
 	const metadata = `
 		# HELP kubelet_podcertificate_states [ALPHA] Gauge vector reporting the number of pod certificate projected volume sources, faceted by signer_name and state.
 		# TYPE kubelet_podcertificate_states gauge
@@ -76,6 +87,7 @@ func TestPodCertificateCollector(t *testing.T) {
 		"kubelet_podcertificate_states",
 	}
 
+	// 采集结果必须与预期指标文本完全一致。
 	if err := testutil.CustomCollectAndCompare(collector, strings.NewReader(want), metrics...); err != nil {
 		t.Errorf("unexpected collecting result:\n%s", err)
 	}

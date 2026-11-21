@@ -40,9 +40,11 @@ import (
 )
 
 const (
+	// TestSource 是测试中使用的配置源名称。
 	TestSource = "test"
 )
 
+// expectEmptyChannel 断言通道中没有任何待处理的更新。
 func expectEmptyChannel(t *testing.T, ch <-chan sourceUpdate) {
 	select {
 	case update := <-ch:
@@ -51,27 +53,36 @@ func expectEmptyChannel(t *testing.T, ch <-chan sourceUpdate) {
 	}
 }
 
+// sortedPods 为 Pod 切片实现排序接口，按命名空间排序以便稳定比较。
 type sortedPods []*v1.Pod
 
+// Len 返回 Pod 数量。
 func (s sortedPods) Len() int {
 	return len(s)
 }
+
+// Swap 交换两个 Pod 的位置。
 func (s sortedPods) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
+
+// Less 按命名空间字典序比较，保证排序结果稳定。
 func (s sortedPods) Less(i, j int) bool {
 	return s[i].Namespace < s[j].Namespace
 }
 
+// mockPodStartupSLIObserver 是 PodStartupSLIObserver 的空实现，仅用于测试构造。
 type mockPodStartupSLIObserver struct{}
 
+// ObservedPodOnWatch 不执行任何操作。
 func (m *mockPodStartupSLIObserver) ObservedPodOnWatch(logger klog.Logger, pod *v1.Pod, when time.Time) {
 }
 
+// CreateValidPod 构造一个通过基本校验的 Pod，用于配置更新测试。
 func CreateValidPod(name, namespace string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			UID:       types.UID(name + namespace), // for the purpose of testing, this is unique enough
+			UID:       types.UID(name + namespace), // 测试场景下该 UID 已足够唯一。
 			Name:      name,
 			Namespace: namespace,
 		},
@@ -91,14 +102,17 @@ func CreateValidPod(name, namespace string) *v1.Pod {
 	}
 }
 
+// CreatePodUpdate 构造期望的 PodUpdate，供断言使用。
 func CreatePodUpdate(op kubetypes.PodOperation, source string, pods ...*v1.Pod) kubetypes.PodUpdate {
 	return kubetypes.PodUpdate{Pods: pods, Op: op, Source: source}
 }
 
+// createSourceUpdate 构造配置源更新。
 func createSourceUpdate(pods ...*v1.Pod) sourceUpdate {
 	return sourceUpdate{pods}
 }
 
+// createPodConfigTester 创建带测试源的 PodConfig，并返回写入通道与更新输出通道。
 func createPodConfigTester(ctx context.Context) (chan<- sourceUpdate, <-chan kubetypes.PodUpdate, *PodConfig) {
 	eventBroadcaster := record.NewBroadcaster(record.WithContext(ctx))
 	config := NewPodConfig(eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "kubelet"}), &mockPodStartupSLIObserver{})
@@ -107,14 +121,15 @@ func createPodConfigTester(ctx context.Context) (chan<- sourceUpdate, <-chan kub
 	return channel, ch, config
 }
 
+// expectPodUpdate 依次校验期望的 PodUpdate，并确认之后没有多余更新。
 func expectPodUpdate(t *testing.T, ch <-chan kubetypes.PodUpdate, expected ...kubetypes.PodUpdate) {
 	t.Helper()
 	for i := range expected {
 		update := <-ch
 		sort.Sort(sortedPods(update.Pods))
 		sort.Sort(sortedPods(expected[i].Pods))
-		// Make copies of the expected/actual update to compare all fields
-		// except for "Pods", which are compared separately below.
+		// 复制期望值与实际值，先比较除 "Pods" 之外的所有字段，
+		// "Pods" 在下面单独比较。
 		expectedCopy, updateCopy := expected[i], update
 		expectedCopy.Pods, updateCopy.Pods = nil, nil
 		if !apiequality.Semantic.DeepEqual(expectedCopy, updateCopy) {
@@ -124,8 +139,7 @@ func expectPodUpdate(t *testing.T, ch <-chan kubetypes.PodUpdate, expected ...ku
 		if len(expected[i].Pods) != len(update.Pods) {
 			t.Fatalf("Expected %#v, Got %#v", expected[i], update)
 		}
-		// Compare pods one by one. This is necessary because we don't want to
-		// compare local annotations.
+		// 逐个比较 Pod，避免把本地注解等无关字段纳入比较。
 		for j := range expected[i].Pods {
 			if podsDifferSemantically(expected[i].Pods[j], update.Pods[j]) || !reflect.DeepEqual(expected[i].Pods[j].Status, update.Pods[j].Status) {
 				t.Fatalf("Expected %#v, Got %#v", expected[i].Pods[j], update.Pods[j])
@@ -135,6 +149,7 @@ func expectPodUpdate(t *testing.T, ch <-chan kubetypes.PodUpdate, expected ...ku
 	expectNoPodUpdate(t, ch)
 }
 
+// expectNoPodUpdate 断言通道中没有 Pod 更新。
 func expectNoPodUpdate(t *testing.T, ch <-chan kubetypes.PodUpdate) {
 	select {
 	case update := <-ch:
@@ -143,134 +158,143 @@ func expectNoPodUpdate(t *testing.T, ch <-chan kubetypes.PodUpdate) {
 	}
 }
 
+// TestNewPodAdded 验证新增 Pod 会产生 ADD 更新。
 func TestNewPodAdded(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	channel, ch, _ := createPodConfigTester(tCtx)
 
-	// see an update
+	// 预期收到一次更新。
 	podUpdate := createSourceUpdate(CreateValidPod("foo", "new"))
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new")))
 }
 
+// TestNewPodAddedInvalidNamespace 验证空命名空间的 Pod 仍会原样产生 ADD 更新。
 func TestNewPodAddedInvalidNamespace(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	channel, ch, _ := createPodConfigTester(tCtx)
 
-	// see an update
+	// 预期收到一次更新。
 	podUpdate := createSourceUpdate(CreateValidPod("foo", ""))
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "")))
 }
 
+// TestNewPodAddedDefaultNamespace 验证 default 命名空间的 Pod 会产生 ADD 更新。
 func TestNewPodAddedDefaultNamespace(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	channel, ch, _ := createPodConfigTester(tCtx)
 
-	// see an update
+	// 预期收到一次更新。
 	podUpdate := createSourceUpdate(CreateValidPod("foo", "default"))
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "default")))
 }
 
+// TestNewPodAddedDifferentNamespaces 验证不同命名空间下的同名 Pod 会被视为不同对象。
 func TestNewPodAddedDifferentNamespaces(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	channel, ch, _ := createPodConfigTester(tCtx)
 
-	// see an update
+	// 预期收到一次更新。
 	pod1 := CreateValidPod("foo", "default")
 	podUpdate := createSourceUpdate(pod1)
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "default")))
 
-	// see an update in another namespace
+	// 另一个命名空间中的同名 Pod 应产生新的 ADD 更新。
 	pod2 := CreateValidPod("foo", "new")
 	podUpdate = createSourceUpdate(pod1, pod2)
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new")))
 }
 
+// TestInvalidPodFiltered 验证与已有 Pod 完全相同的重复更新会被过滤，不产生新更新。
 func TestInvalidPodFiltered(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	channel, ch, _ := createPodConfigTester(tCtx)
 
-	// see an update
+	// 预期收到一次更新。
 	podUpdate := createSourceUpdate(CreateValidPod("foo", "new"))
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new")))
 
-	// add an invalid update, pod with the same name
+	// 提交一个同名且内容相同的 Pod，应被过滤掉。
 	podUpdate = createSourceUpdate(CreateValidPod("foo", "new"))
 	channel <- podUpdate
 	expectNoPodUpdate(t, ch)
 }
 
+// TestNewPodAddedUpdatedRemoved 验证同一 Pod 的 ADD、UPDATE 与 REMOVE 状态转换。
 func TestNewPodAddedUpdatedRemoved(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	channel, ch, _ := createPodConfigTester(tCtx)
 
-	// should register an add
+	// 应产生一个 ADD 更新。
 	podUpdate := createSourceUpdate(CreateValidPod("foo", "new"))
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new")))
 
-	// should ignore ADDs that are identical
+	// 内容相同的 ADD 应被忽略。
 	expectNoPodUpdate(t, ch)
 
-	// an kubetypes.ADD should be converted to kubetypes.UPDATE
+	// 内容变化的 ADD 应被转换为 UPDATE。
 	pod := CreateValidPod("foo", "new")
 	pod.Spec.Containers = []v1.Container{{Name: "bar", Image: "test", ImagePullPolicy: v1.PullIfNotPresent, TerminationMessagePolicy: v1.TerminationMessageReadFile}}
 	podUpdate = createSourceUpdate(pod)
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.UPDATE, TestSource, pod))
 
+	// 提交空集合应产生 REMOVE 更新。
 	podUpdate = createSourceUpdate()
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.REMOVE, TestSource, pod))
 }
 
+// TestNewPodAddedDelete 验证带删除时间戳的 Pod 会产生 DELETE 更新。
 func TestNewPodAddedDelete(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	channel, ch, _ := createPodConfigTester(tCtx)
 
-	// should register an add
+	// 应产生一个 ADD 更新。
 	addedPod := CreateValidPod("foo", "new")
 	podUpdate := createSourceUpdate(addedPod)
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, addedPod))
 
-	// mark this pod as deleted
+	// 将该 Pod 标记为已删除。
 	timestamp := metav1.NewTime(time.Now())
 	deletedPod := CreateValidPod("foo", "new")
 	deletedPod.ObjectMeta.DeletionTimestamp = &timestamp
 	podUpdate = createSourceUpdate(deletedPod)
 	channel <- podUpdate
-	// the existing pod should be gracefully deleted
+	// 已存在的 Pod 应被优雅删除。
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.DELETE, TestSource, addedPod))
 }
 
+// TestNewPodAddedUpdatedSet 验证一次提交多个 Pod 时，会按差异拆分为 ADD、REMOVE 与 UPDATE。
 func TestNewPodAddedUpdatedSet(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	channel, ch, _ := createPodConfigTester(tCtx)
 
-	// should register an add
+	// 应产生一个包含三个 Pod 的 ADD 更新。
 	podUpdate := createSourceUpdate(CreateValidPod("foo", "new"), CreateValidPod("foo2", "new"), CreateValidPod("foo3", "new"))
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new"), CreateValidPod("foo2", "new"), CreateValidPod("foo3", "new")))
 
-	// should ignore ADDs that are identical
+	// 内容相同的 ADD 应被忽略。
 	channel <- podUpdate
 	expectNoPodUpdate(t, ch)
 
-	// should be converted to an kubetypes.ADD, kubetypes.REMOVE, and kubetypes.UPDATE
+	// 差异应被拆分为 ADD、REMOVE 与 UPDATE 三种更新。
 	pod := CreateValidPod("foo2", "new")
 	pod.Spec.Containers = []v1.Container{{Name: "bar", Image: "test", ImagePullPolicy: v1.PullIfNotPresent, TerminationMessagePolicy: v1.TerminationMessageReadFile}}
 	podUpdate = createSourceUpdate(pod, CreateValidPod("foo3", "new"), CreateValidPod("foo4", "new"))
@@ -281,11 +305,13 @@ func TestNewPodAddedUpdatedSet(t *testing.T) {
 		CreatePodUpdate(kubetypes.UPDATE, TestSource, pod))
 }
 
+// TestNewPodAddedSetReconciled 验证仅状态变化的 Pod 会触发 RECONCILE，
+// 而 spec 也变化的 Pod 只产生 UPDATE。
 func TestNewPodAddedSetReconciled(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
-	// Create and touch new test pods, return the new pods and touched pod. We should create new pod list
-	// before touching to avoid data race.
+	// 创建并修改测试 Pod，返回新的 Pod 列表与被修改的 Pod。
+	// 必须先创建完整列表再修改，避免数据竞争。
 	newTestPods := func(touchStatus, touchSpec bool) ([]*v1.Pod, *v1.Pod) {
 		pods := []*v1.Pod{
 			CreateValidPod("changeable-pod-0", "new"),
@@ -304,36 +330,37 @@ func TestNewPodAddedSetReconciled(t *testing.T) {
 	pods, _ := newTestPods(false, false)
 	channel, ch, _ := createPodConfigTester(tCtx)
 
-	// Use SET to initialize the config, especially initialize the source set
+	// 用 SET 初始化配置，尤其是初始化源集合。
 	channel <- createSourceUpdate(pods...)
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, pods...))
 
-	// If status is not changed, no reconcile should be triggered
+	// 状态未变化时不应触发 reconcile。
 	channel <- createSourceUpdate(pods...)
 	expectNoPodUpdate(t, ch)
 
-	// If the pod status is changed and not updated, a reconcile should be triggered
+	// 仅状态变化且未更新 spec 时，应触发 RECONCILE。
 	pods, podWithStatusChange = newTestPods(true, false)
 	channel <- createSourceUpdate(pods...)
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.RECONCILE, TestSource, podWithStatusChange))
 
-	// If the pod status is changed, but the pod is also updated, no reconcile should be triggered
+	// 状态变化但 spec 同时更新时，只应产生 UPDATE，不触发 RECONCILE。
 	pods, podWithStatusChange = newTestPods(true, true)
 	channel <- createSourceUpdate(pods...)
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.UPDATE, TestSource, podWithStatusChange))
 }
 
+// TestInitialEmptySet 验证初始空集合会注册一次空 ADD，之后空集合被忽略。
 func TestInitialEmptySet(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	channel, ch, _ := createPodConfigTester(tCtx)
 
-	// should register an empty PodUpdate operation
+	// 应注册一次空的 PodUpdate 操作。
 	podUpdate := createSourceUpdate()
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource))
 
-	// should ignore following empty sets
+	// 后续的空集合应被忽略。
 	podUpdate = createSourceUpdate()
 	channel <- podUpdate
 	podUpdate = createSourceUpdate(CreateValidPod("foo", "new"))
@@ -341,6 +368,7 @@ func TestInitialEmptySet(t *testing.T) {
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.ADD, TestSource, CreateValidPod("foo", "new")))
 }
 
+// TestPodUpdateAnnotations 验证注解的增加、修改与删除都会触发 UPDATE。
 func TestPodUpdateAnnotations(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -372,6 +400,7 @@ func TestPodUpdateAnnotations(t *testing.T) {
 	expectPodUpdate(t, ch, CreatePodUpdate(kubetypes.UPDATE, TestSource, pod))
 }
 
+// TestPodUpdateLabels 验证标签变化会触发 UPDATE。
 func TestPodUpdateLabels(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -394,6 +423,7 @@ func TestPodUpdateLabels(t *testing.T) {
 
 }
 
+// TestPodConfigRace 通过并发创建源与调用 SeenAllSources 检测数据竞争。
 func TestPodConfigRace(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -404,6 +434,7 @@ func TestPodConfigRace(t *testing.T) {
 	const iterations = 100
 	wg.Add(2)
 
+	// 并发地创建新配置源。
 	go func() {
 		ctx, cancel := context.WithCancel(tCtx)
 		defer cancel()
@@ -412,6 +443,7 @@ func TestPodConfigRace(t *testing.T) {
 			config.Channel(ctx, strconv.Itoa(i))
 		}
 	}()
+	// 并发地检查所有源是否就绪，与上面的创建操作形成竞争条件。
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {

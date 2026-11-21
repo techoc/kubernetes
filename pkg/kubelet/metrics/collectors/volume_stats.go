@@ -26,6 +26,7 @@ import (
 	serverstats "k8s.io/kubernetes/pkg/kubelet/server/stats"
 )
 
+// 卷统计指标的 Prometheus 描述符。
 var (
 	volumeStatsCapacityBytesDesc = metrics.NewDesc(
 		metrics.BuildFQName("", kubeletmetrics.KubeletSubsystem, kubeletmetrics.VolumeStatsCapacityBytesKey),
@@ -65,21 +66,22 @@ var (
 	)
 )
 
+// volumeStatsCollector 从 kubelet 统计提供者采集 PVC 卷指标。
 type volumeStatsCollector struct {
 	metrics.BaseStableCollector
 
 	statsProvider serverstats.Provider
 }
 
-// Check if volumeStatsCollector implements necessary interface
+// 编译期断言：volumeStatsCollector 实现了 StableCollector 接口。
 var _ metrics.StableCollector = &volumeStatsCollector{}
 
-// NewVolumeStatsCollector creates a volume stats metrics.StableCollector.
+// NewVolumeStatsCollector 创建卷统计指标采集器。
 func NewVolumeStatsCollector(statsProvider serverstats.Provider) metrics.StableCollector {
 	return &volumeStatsCollector{statsProvider: statsProvider}
 }
 
-// DescribeWithStability implements the metrics.StableCollector interface.
+// DescribeWithStability 输出全部卷统计指标描述符。
 func (collector *volumeStatsCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
 	ch <- volumeStatsCapacityBytesDesc
 	ch <- volumeStatsAvailableBytesDesc
@@ -89,19 +91,21 @@ func (collector *volumeStatsCollector) DescribeWithStability(ch chan<- *metrics.
 	ch <- volumeStatsInodesUsedDesc
 }
 
-// CollectWithStability implements the metrics.StableCollector interface.
+// CollectWithStability 遍历 Pod 统计信息并输出 PVC 卷指标。
 func (collector *volumeStatsCollector) CollectWithStability(ch chan<- metrics.Metric) {
-	// Use context.TODO() because we currently do not have a proper context to pass in.
-	// Replace this with an appropriate context when refactoring this function to accept a context parameter.
+	// 当前没有可用的上下文，只能使用 context.TODO()；
+	// 后续重构为接收 context 参数时应替换为真实上下文。
 	ctx := context.TODO()
 	podStats, err := collector.statsProvider.ListPodStats(ctx)
 	if err != nil {
 		return
 	}
+	// addGauge 统一为指标追加 PVC 命名空间与名称标签。
 	addGauge := func(desc *metrics.Desc, pvcRef *stats.PVCReference, v float64, lv ...string) {
 		lv = append([]string{pvcRef.Namespace, pvcRef.Name}, lv...)
 		ch <- metrics.NewLazyConstMetric(desc, metrics.GaugeValue, v, lv...)
 	}
+	// 记录已上报的 PVC，避免同一 PVC 被多个 Pod 重复计数。
 	allPVCs := sets.Set[stats.PVCReference]{}
 	for _, podStat := range podStats {
 		if podStat.VolumeStats == nil {
@@ -110,11 +114,11 @@ func (collector *volumeStatsCollector) CollectWithStability(ch chan<- metrics.Me
 		for _, volumeStat := range podStat.VolumeStats {
 			pvcRef := volumeStat.PVCRef
 			if pvcRef == nil {
-				// ignore if no PVC reference
+				// 没有 PVC 引用的卷不产生指标。
 				continue
 			}
 			if allPVCs.Has(*pvcRef) {
-				// ignore if already collected
+				// 同一 PVC 只上报一次。
 				continue
 			}
 			addGauge(volumeStatsCapacityBytesDesc, pvcRef, float64(*volumeStat.CapacityBytes))

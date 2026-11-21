@@ -25,13 +25,15 @@ import (
 )
 
 const (
-	// Metric keys for Plugin Manager.
+	// Plugin Manager 的指标键。
 	pluginManagerTotalPlugins = "plugin_manager_total_plugins"
 )
 
 var (
+	// registerMetrics 保证指标只注册一次。
 	registerMetrics sync.Once
 
+	// totalPluginsDesc 描述插件总数指标。
 	totalPluginsDesc = metrics.NewDesc(
 		pluginManagerTotalPlugins,
 		"Number of plugins in Plugin Manager",
@@ -42,9 +44,10 @@ var (
 	)
 )
 
-// pluginCount is a map of maps used as a counter.
+// pluginCount 是用嵌套 map 实现的计数器。
 type pluginCount map[string]map[string]int64
 
+// add 把指定状态下的插件计数加一。
 func (pc pluginCount) add(state, pluginName string) {
 	count, ok := pc[state]
 	if !ok {
@@ -54,13 +57,17 @@ func (pc pluginCount) add(state, pluginName string) {
 	pc[state] = count
 }
 
-// Register registers Plugin Manager metrics.
+// Register 注册 Plugin Manager 指标。
+// asw 是实际状态缓存。
+// dsw 是期望状态缓存。
 func Register(asw cache.ActualStateOfWorld, dsw cache.DesiredStateOfWorld) {
+	// 使用 Once 避免重复注册。
 	registerMetrics.Do(func() {
 		legacyregistry.CustomMustRegister(&totalPluginsCollector{asw: asw, dsw: dsw})
 	})
 }
 
+// totalPluginsCollector 统计实际状态与期望状态中的插件数量。
 type totalPluginsCollector struct {
 	metrics.BaseStableCollector
 
@@ -68,15 +75,17 @@ type totalPluginsCollector struct {
 	dsw cache.DesiredStateOfWorld
 }
 
+// 编译期断言：totalPluginsCollector 实现了 StableCollector 接口。
 var _ metrics.StableCollector = &totalPluginsCollector{}
 
-// DescribeWithStability implements the metrics.StableCollector interface.
+// DescribeWithStability 输出插件总数指标描述符。
 func (c *totalPluginsCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
 	ch <- totalPluginsDesc
 }
 
-// CollectWithStability implements the metrics.StableCollector interface.
+// CollectWithStability 按 socket 路径与状态输出插件数量。
 func (c *totalPluginsCollector) CollectWithStability(ch chan<- metrics.Metric) {
+	// 分别输出实际状态与期望状态中的插件数量。
 	for stateName, pluginCount := range c.getPluginCount() {
 		for socketPath, count := range pluginCount {
 			ch <- metrics.NewLazyConstMetric(totalPluginsDesc,
@@ -88,13 +97,16 @@ func (c *totalPluginsCollector) CollectWithStability(ch chan<- metrics.Metric) {
 	}
 }
 
+// getPluginCount 汇总实际状态与期望状态中的插件数量。
 func (c *totalPluginsCollector) getPluginCount() pluginCount {
 	counter := make(pluginCount)
+	// 统计已注册插件。
 	for _, registeredPlugin := range c.asw.GetRegisteredPlugins() {
 		socketPath := registeredPlugin.SocketPath
 		counter.add("actual_state_of_world", socketPath)
 	}
 
+	// 统计待注册插件。
 	for _, pluginToRegister := range c.dsw.GetPluginsToRegister() {
 		socketPath := pluginToRegister.SocketPath
 		counter.add("desired_state_of_world", socketPath)

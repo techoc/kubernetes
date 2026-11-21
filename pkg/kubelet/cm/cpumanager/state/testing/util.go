@@ -20,22 +20,22 @@ import "k8s.io/kubernetes/pkg/kubelet/checkpointmanager"
 
 var _ checkpointmanager.Checkpoint = &MockCheckpoint{}
 
-// MockCheckpoint struct is used for mocking checkpoint values in testing
+// MockCheckpoint 用于在测试中模拟 checkpoint 内容。
 type MockCheckpoint struct {
 	Content string
 }
 
-// MarshalCheckpoint returns fake content
+// MarshalCheckpoint 返回预设的假内容。
 func (mc *MockCheckpoint) MarshalCheckpoint() ([]byte, error) {
 	return []byte(mc.Content), nil
 }
 
-// UnmarshalCheckpoint fakes unmarshaling
+// UnmarshalCheckpoint 为空实现，模拟反序列化成功。
 func (mc *MockCheckpoint) UnmarshalCheckpoint(blob []byte) error {
 	return nil
 }
 
-// VerifyChecksum fakes verifying checksum
+// VerifyChecksum 为空实现，模拟校验和验证通过。
 func (mc *MockCheckpoint) VerifyChecksum() error {
 	return nil
 }

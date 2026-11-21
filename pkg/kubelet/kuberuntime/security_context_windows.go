@@ -29,21 +29,22 @@ import (
 	"k8s.io/kubernetes/pkg/securitycontext"
 )
 
+// Windows 上被视为 root 的用户名；用户名比较不区分大小写。
 var (
 	windowsRootUserName = "ContainerAdministrator"
 )
 
-// verifyRunAsNonRoot verifies RunAsNonRoot on windows.
-// https://github.com/kubernetes/enhancements/tree/master/keps/sig-windows/116-windows-node-support#v1container
-// Windows does not have a root user, we cannot judge the root identity of the windows container by the way to judge the root(uid=0) of the linux container.
-// According to the discussion of sig-windows, at present, we assume that ContainerAdministrator is the windows container root user,
-// and then optimize this logic according to the best time.
+// verifyRunAsNonRoot 在 Windows 上校验 RunAsNonRoot。
+// 参见 https://github.com/kubernetes/enhancements/tree/master/keps/sig-windows/116-windows-node-support#v1container
+// Windows 没有 root 用户，无法像 Linux 那样用 uid=0 判断 root 身份。
+// 按 sig-windows 的讨论，目前把 ContainerAdministrator 视为 Windows 容器的 root 用户，
+// 后续再根据最佳实践优化该逻辑。
 // https://docs.google.com/document/d/1Tjxzjjuy4SQsFSUVXZbvqVb64hjNAG5CQX8bK7Yda9w
-// note: usernames on Windows are NOT case sensitive!
+// 注意：Windows 上的用户名不区分大小写！
 func verifyRunAsNonRoot(ctx context.Context, pod *v1.Pod, container *v1.Container, uid *int64, username string) error {
 	logger := klog.FromContext(ctx)
 	effectiveSc := securitycontext.DetermineEffectiveSecurityContext(pod, container)
-	// If the option is not set, or if running as root is allowed, return nil.
+	// 未设置该选项或允许以 root 运行时，直接通过。
 	if effectiveSc == nil || effectiveSc.RunAsNonRoot == nil || !*effectiveSc.RunAsNonRoot {
 		return nil
 	}
@@ -58,7 +59,7 @@ func verifyRunAsNonRoot(ctx context.Context, pod *v1.Pod, container *v1.Containe
 	if effectiveSc.RunAsGroup != nil {
 		logger.Info("Windows container does not support SecurityContext.RunAsGroup", "pod", klog.KObj(pod), "containerName", container.Name)
 	}
-	// Verify that if runAsUserName is set for the pod and/or container that it is not set to 'ContainerAdministrator'
+	// 若 Pod 或容器设置了 runAsUserName，确认它不是 ContainerAdministrator。
 	if effectiveSc.WindowsOptions != nil {
 		if effectiveSc.WindowsOptions.RunAsUserName != nil {
 			if strings.EqualFold(*effectiveSc.WindowsOptions.RunAsUserName, windowsRootUserName) {
@@ -67,7 +68,7 @@ func verifyRunAsNonRoot(ctx context.Context, pod *v1.Pod, container *v1.Containe
 			return nil
 		}
 	}
-	// Verify that if runAsUserName is NOT set for the pod and/or container that the default user for the container image is not set to 'ContainerAdministrator'
+	// 若未设置 runAsUserName，则确认镜像默认用户不是 ContainerAdministrator。
 	if len(username) > 0 && strings.EqualFold(username, windowsRootUserName) {
 		return fmt.Errorf("container's runAsUser (%s) which will be regarded as root identity and will break non-root policy (pod: %q, container: %s)", username, format.Pod(pod), container.Name)
 	}

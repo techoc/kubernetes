@@ -60,13 +60,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// mutablePodManager 是可修改 pod 集合的测试辅助接口。
 type mutablePodManager interface {
 	AddPod(*v1.Pod)
 	UpdatePod(*v1.Pod)
 	RemovePod(*v1.Pod)
 }
 
-// Generate new instance of test pod with the same initial value.
+// getTestPod 返回一个具有固定初始值的新测试 pod 实例。
 func getTestPod() *v1.Pod {
 	return &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -81,10 +82,10 @@ func getTestPod() *v1.Pod {
 	}
 }
 
-// After adding reconciliation, if status in pod manager is different from the cached status, a reconciliation
-// will be triggered, which will mess up all the old unit test.
-// To simplify the implementation of unit test, we add testSyncBatch() here, it will make sure the statuses in
-// pod manager the same with cached ones before syncBatch(true) so as to avoid reconciling.
+// testSyncBatch 在调用 syncBatch(true) 前，先把 pod manager 中的状态同步为缓存状态。
+//
+// 引入 reconciliation 后，若 pod manager 中的状态与缓存不一致会触发 reconcile，
+// 从而打乱旧单元测试。这里统一状态以避免 reconcile。
 func (m *manager) testSyncBatch(ctx context.Context) {
 	for uid, status := range m.podStatuses {
 		pod, ok := m.podManager.GetPodByUID(uid)
@@ -99,6 +100,7 @@ func (m *manager) testSyncBatch(ctx context.Context) {
 	m.syncBatch(ctx, true)
 }
 
+// newTestManager 创建状态管理器，并向 pod manager 加入默认测试 pod。
 func newTestManager(kubeClient clientset.Interface) *manager {
 	podManager := kubepod.NewBasicPodManager()
 	podManager.(mutablePodManager).AddPod(getTestPod())
@@ -106,16 +108,19 @@ func newTestManager(kubeClient clientset.Interface) *manager {
 	return NewManager(kubeClient, podManager, &statustest.FakePodDeletionSafetyProvider{}, podStartupLatencyTracker).(*manager)
 }
 
+// generateRandomMessage 生成随机字符串，作为测试状态中的 message。
 func generateRandomMessage() string {
 	return strconv.Itoa(rand.Int())
 }
 
+// getRandomPodStatus 返回仅带随机 message 的 pod 状态。
 func getRandomPodStatus() v1.PodStatus {
 	return v1.PodStatus{
 		Message: generateRandomMessage(),
 	}
 }
 
+// verifyActions 先消费所有待处理更新，再校验 fake client 记录的动作与期望一致。
 func verifyActions(t *testing.T, manager *manager, expectedActions []core.Action) {
 	_, ctx := ktesting.NewTestContext(t)
 	t.Helper()
@@ -134,16 +139,18 @@ func verifyActions(t *testing.T, manager *manager, expectedActions []core.Action
 	}
 }
 
+// verifyUpdates 校验状态管理器本轮消费的更新数量。
 func verifyUpdates(t *testing.T, manager *manager, expectedUpdates int) {
 	_, ctx := ktesting.NewTestContext(t)
 	t.Helper()
-	// Consume all updates in the channel.
+	// 消费 channel 中的所有更新。
 	numUpdates := manager.consumeUpdates(ctx)
 	if numUpdates != expectedUpdates {
 		t.Errorf("unexpected number of updates %d, expected %d", numUpdates, expectedUpdates)
 	}
 }
 
+// consumeUpdates 排空 podStatusChannel，返回本轮触发的更新总数。
 func (m *manager) consumeUpdates(ctx context.Context) int {
 	updates := 0
 	for {
@@ -156,6 +163,7 @@ func (m *manager) consumeUpdates(ctx context.Context) int {
 	}
 }
 
+// 验证首次 SetPodStatus 会设置非零 StartTime，并且只触发一次更新。
 func TestNewStatus(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -169,6 +177,7 @@ func TestNewStatus(t *testing.T) {
 	}
 }
 
+// 验证 SetPodStatus 不会覆盖 pod 中已有的 StartTime。
 func TestNewStatusPreservesPodStartTime(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -191,6 +200,7 @@ func TestNewStatusPreservesPodStartTime(t *testing.T) {
 	}
 }
 
+// getReadyPodStatus 返回仅包含 Ready=True 条件的 pod 状态。
 func getReadyPodStatus() v1.PodStatus {
 	return v1.PodStatus{
 		Conditions: []v1.PodCondition{
@@ -202,6 +212,7 @@ func getReadyPodStatus() v1.PodStatus {
 	}
 }
 
+// 验证首次写入带 Ready 条件的状态时，会设置 LastTransitionTime。
 func TestNewStatusSetsReadyTransitionTime(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -223,6 +234,7 @@ func TestNewStatusSetsReadyTransitionTime(t *testing.T) {
 	}
 }
 
+// 验证状态内容变化时会产生新的更新。
 func TestChangedStatus(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -233,6 +245,7 @@ func TestChangedStatus(t *testing.T) {
 	verifyUpdates(t, syncer, 1)
 }
 
+// 验证状态变化时仍保留原有的 StartTime。
 func TestChangedStatusKeepsStartTime(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -254,6 +267,7 @@ func TestChangedStatusKeepsStartTime(t *testing.T) {
 	}
 }
 
+// 验证 Ready 条件状态变化时，LastTransitionTime 会被更新为更晚的时间。
 func TestChangedStatusUpdatesLastTransitionTime(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -285,6 +299,7 @@ func TestChangedStatusUpdatesLastTransitionTime(t *testing.T) {
 	}
 }
 
+// 验证状态内容未变化时不会产生额外更新。
 func TestUnchangedStatus(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -295,6 +310,7 @@ func TestUnchangedStatus(t *testing.T) {
 	verifyUpdates(t, syncer, 1)
 }
 
+// 验证状态未变化时，Ready 条件的 LastTransitionTime 保持不变。
 func TestUnchangedStatusPreservesLastTransitionTime(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -312,7 +328,7 @@ func TestUnchangedStatusPreservesLastTransitionTime(t *testing.T) {
 	oldStatus := expectPodStatus(t, syncer, pod)
 	anotherStatus := getReadyPodStatus()
 	syncer.SetPodStatus(logger, pod, anotherStatus)
-	// No update.
+	// 无更新。
 	verifyUpdates(t, syncer, 0)
 	newStatus := expectPodStatus(t, syncer, pod)
 
@@ -326,6 +342,7 @@ func TestUnchangedStatusPreservesLastTransitionTime(t *testing.T) {
 	}
 }
 
+// 验证同步时若 API 返回 NotFound，则仅执行 GET，不产生 patch。
 func TestSyncPodIgnoresNotFound(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	client := fake.Clientset{}
@@ -337,6 +354,7 @@ func TestSyncPodIgnoresNotFound(t *testing.T) {
 	verifyActions(t, syncer, []core.Action{getAction()})
 }
 
+// 验证正常同步会对 pod 执行 GET 并 patch 其 status 子资源。
 func TestSyncPod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -346,6 +364,7 @@ func TestSyncPod(t *testing.T) {
 	verifyActions(t, syncer, []core.Action{getAction(), patchAction()})
 }
 
+// 验证 API 中 pod 与待同步 pod 的 UID 不一致时，不执行 patch。
 func TestSyncPodChecksMismatchedUID(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -360,13 +379,15 @@ func TestSyncPodChecksMismatchedUID(t *testing.T) {
 	verifyActions(t, syncer, []core.Action{getAction()})
 }
 
+// 覆盖同步过程中的多种状态（NotFound、pod 重建、终止中、终止完成、错误），
+// 验证不会死锁且动作符合预期。
 func TestSyncPodNoDeadlock(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	client := &fake.Clientset{}
 	m := newTestManager(client)
 	pod := getTestPod()
 
-	// Setup fake client.
+	// 初始化 fake client。
 	var ret *v1.Pod
 	var err error
 	client.AddReactor("*", "pods", func(action core.Action) (bool, runtime.Object, error) {
@@ -419,6 +440,7 @@ func TestSyncPodNoDeadlock(t *testing.T) {
 	verifyActions(t, m, []core.Action{getAction()})
 }
 
+// 验证过期状态版本不会产生重复更新，且必要时仍会触发一次同步。
 func TestStaleUpdates(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	pod := getTestPod()
@@ -455,7 +477,7 @@ func TestStaleUpdates(t *testing.T) {
 	verifyUpdates(t, m, 0)
 }
 
-// shuffle returns a new shuffled list of container statuses.
+// shuffle 返回容器状态的一个随机打乱副本。
 func shuffle(statuses []v1.ContainerStatus) []v1.ContainerStatus {
 	numStatuses := len(statuses)
 	randIndexes := rand.Perm(numStatuses)
@@ -466,6 +488,7 @@ func shuffle(statuses []v1.ContainerStatus) []v1.ContainerStatus {
 	return shuffled
 }
 
+// 验证容器状态顺序、非 kubelet 所有的条件与资源申领状态差异不影响规范化后的相等性。
 func TestStatusEquality(t *testing.T) {
 	getContainersAndStatuses := func() ([]v1.Container, []v1.ContainerStatus) {
 		var containers []v1.Container
@@ -548,11 +571,11 @@ func TestStatusEquality(t *testing.T) {
 	}
 }
 
-// TestIsPodStatusByKubeletEqualFutureProof tests that all fields in v1.PodStatus are
-// explicitly categorized as either kubelet-owned or ignored.
+// TestIsPodStatusByKubeletEqualFutureProof 验证 v1.PodStatus 的所有字段都被显式归类为
+// kubelet 所有或被忽略，防止新增字段时漏掉分类。
 func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
-	// kubeletOwnedFields are fields in v1.PodStatus owned by the kubelet.
-	// Changes to these fields should NOT be ignored by isPodStatusByKubeletEqual.
+	// kubeletOwnedFields 是 v1.PodStatus 中由 kubelet 所有的字段。
+	// 这些字段的变化不应被 isPodStatusByKubeletEqual 忽略。
 	kubeletOwnedFields := sets.NewString(
 		"Phase",
 		"Conditions", // Conditions are specially handled, but considered owned.
@@ -575,15 +598,15 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 		"VolumeHealth",
 	)
 
-	// kubeletIgnoredFields are fields in v1.PodStatus not owned by the kubelet.
-	// Changes to these fields SHOULD be ignored by isPodStatusByKubeletEqual.
+	// kubeletIgnoredFields 是 v1.PodStatus 中不属于 kubelet 的字段。
+	// 这些字段的变化应被 isPodStatusByKubeletEqual 忽略。
 	kubeletIgnoredFields := sets.NewString(
 		"ResourceClaimStatuses",
 		"ExtendedResourceClaimStatus",
 		"NodeAllocatableResourceClaimStatuses",
 	)
 
-	// Get all fields in v1.PodStatus.
+	// 获取 v1.PodStatus 的所有字段。
 	status := v1.PodStatus{}
 	allStructFields := sets.NewString()
 	typ := reflect.TypeOf(status)
@@ -591,7 +614,7 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 		allStructFields.Insert(typ.Field(i).Name)
 	}
 
-	// Check that all fields are explicitly categorized.
+	// 检查所有字段都被显式归类。
 	knownFields := kubeletOwnedFields.Union(kubeletIgnoredFields)
 	unknownFields := allStructFields.Difference(knownFields)
 	if unknownFields.Len() > 0 {
@@ -600,12 +623,12 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 			"and update isPodStatusByKubeletEqual logic if necessary.", unknownFields.List())
 	}
 
-	// Verify that changes to fields that are not owned by kubelet are ignored.
+	// 验证不属于 kubelet 的字段变化会被忽略。
 	t.Run("ignored fields are ignored", func(t *testing.T) {
 		pod := getTestPod()
 		base := pod.Status.DeepCopy()
 
-		// Test ResourceClaimStatuses
+		// 测试 ResourceClaimStatuses。
 		claimName := "test-claim-resource"
 		modified := base.DeepCopy()
 		modified.ResourceClaimStatuses = []v1.PodResourceClaimStatus{{
@@ -616,7 +639,7 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 			t.Error("ResourceClaimStatuses: change should be ignored but was detected")
 		}
 
-		// Test ExtendedResourceClaimStatus
+		// 测试 ExtendedResourceClaimStatus。
 		modified = base.DeepCopy()
 		modified.ExtendedResourceClaimStatus = &v1.PodExtendedResourceClaimStatus{
 			ResourceClaimName: "test-extended-claim",
@@ -625,7 +648,7 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 			t.Error("ExtendedResourceClaimStatus: change should be ignored but was detected")
 		}
 
-		// Test NodeAllocatableResourceClaimStatuses
+		// 测试 NodeAllocatableResourceClaimStatuses。
 		modified = base.DeepCopy()
 		modified.NodeAllocatableResourceClaimStatuses = []v1.NodeAllocatableResourceClaimStatus{{
 			ResourceClaimName: "test-node-claim",
@@ -636,19 +659,19 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 		}
 	})
 
-	// Verify that changes to fields that are owned by kubelet are not ignored.
+	// 验证属于 kubelet 的字段变化不会被忽略。
 	t.Run("owned fields are not ignored", func(t *testing.T) {
 		pod := getTestPod()
 		base := pod.Status.DeepCopy()
 
-		// Test Phase
+		// 测试 Phase。
 		modified := base.DeepCopy()
 		modified.Phase = v1.PodSucceeded
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("Phase: change should be detected but was ignored")
 		}
 
-		// Test Conditions
+		// 测试 Conditions。
 		modified = base.DeepCopy()
 		modified.Conditions = append(modified.Conditions, v1.PodCondition{
 			Type:   v1.PodReady,
@@ -658,63 +681,63 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 			t.Error("Conditions: change should be detected but was ignored")
 		}
 
-		// Test Message
+		// 测试 Message。
 		modified = base.DeepCopy()
 		modified.Message = "test message"
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("Message: change should be detected but was ignored")
 		}
 
-		// Test Reason
+		// 测试 Reason。
 		modified = base.DeepCopy()
 		modified.Reason = "TestReason"
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("Reason: change should be detected but was ignored")
 		}
 
-		// Test NominatedNodeName
+		// 测试 NominatedNodeName。
 		modified = base.DeepCopy()
 		modified.NominatedNodeName = "test-node"
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("NominatedNodeName: change should be detected but was ignored")
 		}
 
-		// Test HostIP
+		// 测试 HostIP。
 		modified = base.DeepCopy()
 		modified.HostIP = "192.168.1.1"
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("HostIP: change should be detected but was ignored")
 		}
 
-		// Test HostIPs — type is []v1.HostIP, not []v1.PodIP
+		// 测试 HostIPs——类型是 []v1.HostIP，而非 []v1.PodIP。
 		modified = base.DeepCopy()
 		modified.HostIPs = []v1.HostIP{{IP: "192.168.1.1"}}
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("HostIPs: change should be detected but was ignored")
 		}
 
-		// Test PodIP
+		// 测试 PodIP。
 		modified = base.DeepCopy()
 		modified.PodIP = "1.2.3.4"
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("PodIP: change should be detected but was ignored")
 		}
 
-		// Test PodIPs
+		// 测试 PodIPs。
 		modified = base.DeepCopy()
 		modified.PodIPs = []v1.PodIP{{IP: "1.2.3.5"}}
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("PodIPs: change should be detected but was ignored")
 		}
 
-		// Test StartTime
+		// 测试 StartTime。
 		modified = base.DeepCopy()
 		modified.StartTime = ptr.To(metav1.Now())
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("StartTime: change should be detected but was ignored")
 		}
 
-		// Test InitContainerStatuses
+		// 测试 InitContainerStatuses。
 		modified = base.DeepCopy()
 		modified.InitContainerStatuses = []v1.ContainerStatus{
 			{
@@ -726,7 +749,7 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 			t.Error("InitContainerStatuses: change should be detected but was ignored")
 		}
 
-		// Test ContainerStatuses
+		// 测试 ContainerStatuses。
 		modified = base.DeepCopy()
 		modified.ContainerStatuses = []v1.ContainerStatus{
 			{
@@ -738,14 +761,14 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 			t.Error("ContainerStatuses: change should be detected but was ignored")
 		}
 
-		// Test QOSClass
+		// 测试 QOSClass。
 		modified = base.DeepCopy()
 		modified.QOSClass = v1.PodQOSGuaranteed
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("QOSClass: change should be detected but was ignored")
 		}
 
-		// Test EphemeralContainerStatuses
+		// 测试 EphemeralContainerStatuses。
 		modified = base.DeepCopy()
 		modified.EphemeralContainerStatuses = []v1.ContainerStatus{
 			{
@@ -757,14 +780,14 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 			t.Error("EphemeralContainerStatuses: change should be detected but was ignored")
 		}
 
-		// Test Resize — PodResizeStatus is a non-pointer string alias
+		// 测试 Resize——PodResizeStatus 是非指针字符串别名。
 		modified = base.DeepCopy()
 		modified.Resize = v1.PodResizeStatus("InProgress")
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("Resize: change should be detected but was ignored")
 		}
 
-		// Test AllocatedResources
+		// 测试 AllocatedResources。
 		modified = base.DeepCopy()
 		modified.AllocatedResources = map[v1.ResourceName]resource.Quantity{
 			v1.ResourceCPU: resource.MustParse("100m"),
@@ -773,14 +796,14 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 			t.Error("AllocatedResources: change should be detected but was ignored")
 		}
 
-		// Test ObservedGeneration
+		// 测试 ObservedGeneration。
 		modified = base.DeepCopy()
 		modified.ObservedGeneration = 1
 		if isPodStatusByKubeletEqual(base, modified) {
 			t.Error("ObservedGeneration: change should be detected but was ignored")
 		}
 
-		// Test Resources
+		// 测试 Resources。
 		modified = base.DeepCopy()
 		modified.Resources = &v1.ResourceRequirements{
 			Requests: v1.ResourceList{
@@ -793,11 +816,13 @@ func TestIsPodStatusByKubeletEqualFutureProof(t *testing.T) {
 	})
 }
 
+// 验证 normalizestatus 会截断过长的容器终止消息，使总长度不超过上限。
 func TestStatusNormalizationEnforcesMaxBytes(t *testing.T) {
 	pod := v1.Pod{
 		Spec: v1.PodSpec{},
 	}
 	containerStatus := []v1.ContainerStatus{}
+	// 构造 48 个容器状态并把消息写长，确保总长度超过终止消息上限。
 	for i := 0; i < 48; i++ {
 		s := v1.ContainerStatus{
 			Name: fmt.Sprintf("container%d", i),
@@ -828,6 +853,7 @@ func TestStatusNormalizationEnforcesMaxBytes(t *testing.T) {
 	}
 }
 
+// 验证 normalizestatus 会把各类容器时间戳转换为 RFC3339 精度。
 func TestStatusNormalizeTimeStamp(t *testing.T) {
 	pod := v1.Pod{
 		Spec: v1.PodSpec{},
@@ -865,12 +891,14 @@ func TestStatusNormalizeTimeStamp(t *testing.T) {
 		},
 	}
 
+	// 规范化应把所有时间戳裁剪到 RFC3339 精度，便于与 API 侧状态比较。
 	normalizedStatus := normalizeStatus(&pod, &podStatus)
 	if !isPodStatusByKubeletEqual(&expectedPodStatus, normalizedStatus) {
 		t.Fatalf("The timestamp is not correctly converted to RFC3339 format.")
 	}
 }
 
+// 验证 static pod 在 mirror pod 创建前后的状态读取与同步行为，以及 mirror pod UID 变化时的处理。
 func TestStaticPod(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	staticPod := getTestPod()
@@ -903,6 +931,7 @@ func TestStaticPod(t *testing.T) {
 	assert.Empty(t, m.kubeClient.(*fake.Clientset).Actions(), "Expected no updates after syncBatch")
 
 	t.Logf("Create the mirror pod")
+	// mirror pod 使用 API 来源注释，kubelet 才能把它与 static pod 关联起来。
 	m.podManager.(mutablePodManager).AddPod(mirrorPod)
 	assert.True(t, kubetypes.IsMirrorPod(mirrorPod), "SetUp error: mirrorPod")
 	assert.Equal(t, m.podManager.TranslatePodUID(mirrorPod.UID), kubetypes.ResolvedPodUID(staticPod.UID))
@@ -930,6 +959,7 @@ func TestStaticPod(t *testing.T) {
 	verifyActions(t, m, []core.Action{getAction()})
 }
 
+// 验证 TerminatePod 会把仍显示为运行的容器状态改为终止，并保留已有终止状态与 pod 阶段。
 func TestTerminatePod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -951,9 +981,8 @@ func TestTerminatePod(t *testing.T) {
 		{Name: "init-test-1"},
 		{Name: "init-test-2", State: v1.ContainerState{Terminated: &v1.ContainerStateTerminated{Reason: "InitTest", ExitCode: 0}}},
 		{Name: "init-test-3", State: v1.ContainerState{Terminated: &v1.ContainerStateTerminated{Reason: "InitTest", ExitCode: 3}}},
-		// TODO: If the last init container had failed, the pod would not have been
-		// able to start any containers. Maybe, we have to separate this test case
-		// into two cases, one for init containers and one for containers.
+		// TODO: 若最后一个 init 容器失败，pod 无法启动任何容器。也许需要把该用例拆成
+		// init 容器与普通容器两个用例。
 	}
 	firstStatus.ContainerStatuses = []v1.ContainerStatus{
 		{Name: "test-1"},
@@ -963,6 +992,7 @@ func TestTerminatePod(t *testing.T) {
 	syncer.SetPodStatus(logger, testPod, firstStatus)
 
 	logger.Info("set the testPod to a pod with Phase running, to simulate a stale pod")
+	// 模拟 pod manager 中陈旧的 Running 状态，TerminatePod 应以已写入的 Failed 状态为准。
 	testPod.Status = getRandomPodStatus()
 	testPod.Status.Phase = v1.PodRunning
 	testPod.Status.InitContainerStatuses = []v1.ContainerStatus{
@@ -1012,6 +1042,7 @@ func TestTerminatePod(t *testing.T) {
 	assert.Equal(t, newStatus.Message, firstStatus.Message)
 }
 
+// 验证 TerminatePod 保留 waiting 状态的容器，同时把运行中的容器置为终止。
 func TestTerminatePodWaiting(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	syncer := newTestManager(&fake.Clientset{})
@@ -1033,10 +1064,8 @@ func TestTerminatePodWaiting(t *testing.T) {
 		{Name: "init-test-1"},
 		{Name: "init-test-2", State: v1.ContainerState{Terminated: &v1.ContainerStateTerminated{Reason: "InitTest", ExitCode: 0}}},
 		{Name: "init-test-3", State: v1.ContainerState{Waiting: &v1.ContainerStateWaiting{Reason: "InitTest"}}},
-		// TODO: If the last init container had been in a waiting state, it would
-		// not have been able to start any containers. Maybe, we have to separate
-		// this test case into two cases, one for init containers and one for
-		// containers.
+		// TODO: 若最后一个 init 容器处于 waiting 状态，pod 无法启动任何容器。也许需要把该用例
+		// 拆成 init 容器与普通容器两个用例。
 	}
 	firstStatus.ContainerStatuses = []v1.ContainerStatus{
 		{Name: "test-1"},
@@ -1046,6 +1075,7 @@ func TestTerminatePodWaiting(t *testing.T) {
 	syncer.SetPodStatus(logger, testPod, firstStatus)
 
 	logger.Info("set the testPod to a pod with Phase running, to simulate a stale pod")
+	// 模拟 pod manager 中陈旧的 Running 状态，TerminatePod 应以已写入的 Failed 状态为准。
 	testPod.Status = getRandomPodStatus()
 	testPod.Status.Phase = v1.PodRunning
 	testPod.Status.InitContainerStatuses = []v1.ContainerStatus{
@@ -1098,6 +1128,7 @@ func TestTerminatePodWaiting(t *testing.T) {
 	assert.Equal(t, newStatus.Message, firstStatus.Message)
 }
 
+// 验证 TerminatePod 对无法定位的容器填充默认的 Unknown 终止状态（退出码 137）。
 func TestTerminatePod_DefaultUnknownStatus(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	newPod := func(initContainers, containers int, fns ...func(*v1.Pod)) *v1.Pod {
@@ -1422,6 +1453,7 @@ func TestTerminatePod_DefaultUnknownStatus(t *testing.T) {
 	}
 }
 
+// 验证 TerminatePod 会把非终态（Pending/Running/Unknown）置为 Failed，终态保持不变。
 func TestTerminatePod_EnsurePodPhaseIsTerminal(t *testing.T) {
 	testCases := map[string]struct {
 		status     v1.PodStatus
@@ -1495,6 +1527,7 @@ func TestTerminatePod_EnsurePodPhaseIsTerminal(t *testing.T) {
 	}
 }
 
+// 验证 SetContainerReadiness 对容器就绪状态与 pod Ready 条件的影响。
 func TestSetContainerReadiness(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	cID1 := kubecontainer.ContainerID{Type: "test", ID: "1"}
@@ -1520,7 +1553,7 @@ func TestSetContainerReadiness(t *testing.T) {
 	pod := getTestPod()
 	pod.Spec.Containers = []v1.Container{{Name: "c1"}, {Name: "c2"}}
 
-	// Verify expected readiness of containers & pod.
+	// 校验各容器与 pod 的期望就绪状态。
 	verifyReadiness := func(step string, status *v1.PodStatus, c1Ready, c2Ready, podReady bool) {
 		for _, c := range status.ContainerStatuses {
 			switch c.ContainerID {
@@ -1544,7 +1577,7 @@ func TestSetContainerReadiness(t *testing.T) {
 	}
 
 	m := newTestManager(&fake.Clientset{})
-	// Add test pod because the container spec has been changed.
+	// 由于容器 spec 已改变，需要重新加入测试 pod。
 	m.podManager.(mutablePodManager).AddPod(pod)
 
 	t.Log("Setting readiness before status should fail.")
@@ -1585,6 +1618,7 @@ func TestSetContainerReadiness(t *testing.T) {
 	verifyReadiness("ignore non-existent", &status, true, true, true)
 }
 
+// 验证 SetPodVolumeHealth 的写入、无变化不更新、状态变化更新以及转换时间处理。
 func TestSetPodVolumeHealth(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIVolumeHealth, true)
@@ -1703,6 +1737,7 @@ func TestSetPodVolumeHealth(t *testing.T) {
 	}
 }
 
+// 验证后续 SetPodStatus 覆盖状态时，已有的 VolumeHealth 信息不会丢失。
 func TestVolumeHealthSurvivesPodStatusUpdate(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIVolumeHealth, true)
@@ -1729,8 +1764,7 @@ func TestVolumeHealthSurvivesPodStatusUpdate(t *testing.T) {
 		t.Fatalf("expected 1 VolumeHealth entry, got %d", len(status.VolumeHealth))
 	}
 
-	// Simulate what happens on the next pod sync: SetPodStatus is called
-	// with a freshly generated status that has no VolumeHealth.
+	// 模拟下一次 pod 同步：SetPodStatus 被调用，传入全新生成、不含 VolumeHealth 的状态。
 	m.SetPodStatus(logger, pod, v1.PodStatus{Phase: v1.PodRunning})
 
 	status = expectPodStatus(t, m, pod)
@@ -1745,6 +1779,7 @@ func TestVolumeHealthSurvivesPodStatusUpdate(t *testing.T) {
 	}
 }
 
+// 验证 SetContainerStartup 对容器 Started 标记与 pod 启动状态的影响。
 func TestSetContainerStartup(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	cID1 := kubecontainer.ContainerID{Type: "test", ID: "1"}
@@ -1770,7 +1805,7 @@ func TestSetContainerStartup(t *testing.T) {
 	pod := getTestPod()
 	pod.Spec.Containers = []v1.Container{{Name: "c1"}, {Name: "c2"}}
 
-	// Verify expected startup of containers & pod.
+	// 校验各容器与 pod 的期望启动状态。
 	verifyStartup := func(step string, status *v1.PodStatus, c1Started, c2Started, podStarted bool) {
 		for _, c := range status.ContainerStatuses {
 			switch c.ContainerID {
@@ -1790,7 +1825,7 @@ func TestSetContainerStartup(t *testing.T) {
 	}
 
 	m := newTestManager(&fake.Clientset{})
-	// Add test pod because the container spec has been changed
+	// 由于容器 spec 已改变，需要重新加入测试 pod。
 	m.podManager.(mutablePodManager).AddPod(pod)
 
 	logger.Info("Setting startup before status should fail")
@@ -1831,6 +1866,7 @@ func TestSetContainerStartup(t *testing.T) {
 	verifyStartup("ignore non-existent", &status, true, true, true)
 }
 
+// 验证 syncBatch 会清理孤立 pod 的 API 状态版本，但保留仍存在 pod 的版本。
 func TestSyncBatchCleanupVersions(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager(&fake.Clientset{})
@@ -1872,6 +1908,7 @@ func TestSyncBatchCleanupVersions(t *testing.T) {
 	}
 }
 
+// 验证 needsReconcile 仅在状态真实变化时返回 true，时间戳精度差异不触发 reconcile。
 func TestReconcilePodStatus(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	testPod := getTestPod()
@@ -1897,11 +1934,11 @@ func TestReconcilePodStatus(t *testing.T) {
 	syncer.syncBatch(ctx, true)
 	verifyActions(t, syncer, []core.Action{})
 
-	// If the pod status is the same, only the timestamp is in Rfc3339 format (lower precision without nanosecond),
-	// a reconciliation is not needed, syncBatch should do nothing.
-	// The StartTime should have been set in SetPodStatus().
-	// This test is done because the related issue #15262/PR #15263 to move apiserver to RFC339NANO is closed.
+	// 若 pod 状态相同、只有时间戳为 RFC3339 格式（精度较低、不含纳秒），则无需 reconcile，
+	// syncBatch 不应做任何事。StartTime 应已由 SetPodStatus() 设置。
+	// 该测试用于覆盖 issue #15262/PR #15263（将 apiserver 迁移到 RFC339NANO）关闭后的情形。
 	t.Logf("Syncbatch should do nothing, as a reconciliation is not required")
+	// 模拟 apiserver 以 RFC3339 精度返回 StartTime，精度差异不应触发 reconcile。
 	normalizedStartTime := testPod.Status.StartTime.Rfc3339Copy()
 	testPod.Status.StartTime = &normalizedStartTime
 	syncer.podManager.(mutablePodManager).UpdatePod(testPod)
@@ -1923,6 +1960,7 @@ func TestReconcilePodStatus(t *testing.T) {
 	verifyActions(t, syncer, []core.Action{getAction(), patchAction()})
 }
 
+// expectPodStatus 从状态管理器读取 pod 状态，不存在时直接失败。
 func expectPodStatus(t *testing.T, m *manager, pod *v1.Pod) v1.PodStatus {
 	status, ok := m.GetPodStatus(pod.UID)
 	if !ok {
@@ -1931,6 +1969,7 @@ func expectPodStatus(t *testing.T, m *manager, pod *v1.Pod) v1.PodStatus {
 	return status
 }
 
+// 验证 pod 已设置删除时间但尚未终止时，不会产生 delete 动作。
 func TestDeletePodBeforeFinished(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	pod := getTestPod()
@@ -1946,6 +1985,7 @@ func TestDeletePodBeforeFinished(t *testing.T) {
 	verifyActions(t, m, []core.Action{getAction(), patchAction()})
 }
 
+// 验证 pod 终止（TerminatePod 已调用）后会触发 delete 动作。
 func TestDeletePodFinished(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	pod := getTestPod()
@@ -1961,6 +2001,7 @@ func TestDeletePodFinished(t *testing.T) {
 	verifyActions(t, m, []core.Action{getAction(), patchAction(), deleteAction()})
 }
 
+// 验证 static pod 对应的 mirror pod 不会被 status manager 删除。
 func TestDoNotDeleteMirrorPods(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	staticPod := getTestPod()
@@ -1991,11 +2032,11 @@ func TestDoNotDeleteMirrorPods(t *testing.T) {
 	verifyActions(t, m, []core.Action{getAction(), patchAction()})
 }
 
+// 验证 updateLastTransitionTime 仅在条件状态变化时更新转换时间。
 func TestUpdateLastTransitionTime(t *testing.T) {
-	// On Windows, time.Now() is not as precise, which means that 2 consecutive calls may
-	// return the same timestamp. This test expects the old timestamp to be updated with a
-	// newer one, so we set the old timestamp to one second in the past.
-	// See: https://github.com/golang/go/issues/8687
+	// Windows 上 time.Now() 精度较低，连续两次调用可能返回相同时间戳。
+	// 本测试期望旧时间戳被更新为更新的时间，因此把旧时间戳设为 1 秒前。
+	// 参见：https://github.com/golang/go/issues/8687
 	old := metav1.NewTime(time.Now().Add(-time.Second))
 	for desc, test := range map[string]struct {
 		condition    *v1.PodCondition
@@ -2056,18 +2097,22 @@ func TestUpdateLastTransitionTime(t *testing.T) {
 	}
 }
 
+// getAction 返回用于断言 pods 资源 GET 动作的期望对象。
 func getAction() core.GetAction {
 	return core.GetActionImpl{ActionImpl: core.ActionImpl{Verb: "get", Resource: schema.GroupVersionResource{Resource: "pods"}}}
 }
 
+// patchAction 返回用于断言 pods/status PATCH 动作的期望对象。
 func patchAction() core.PatchAction {
 	return core.PatchActionImpl{ActionImpl: core.ActionImpl{Verb: "patch", Resource: schema.GroupVersionResource{Resource: "pods"}, Subresource: "status"}}
 }
 
+// deleteAction 返回用于断言 pods 资源 DELETE 动作的期望对象。
 func deleteAction() core.DeleteAction {
 	return core.DeleteActionImpl{ActionImpl: core.ActionImpl{Verb: "delete", Resource: schema.GroupVersionResource{Resource: "pods"}}}
 }
 
+// 验证 mergePodStatus 在不同旧/新状态组合下的条件合并与阶段处理。
 func TestMergePodStatus(t *testing.T) {
 	useCases := []struct {
 		desc                 string
@@ -2513,6 +2558,7 @@ func TestMergePodStatus(t *testing.T) {
 	}
 }
 
+// 验证容器终止指标按退出码与原因正确累加。
 func TestContainerTerminationMetric(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	metrics.Register()
@@ -2548,7 +2594,7 @@ func TestContainerTerminationMetric(t *testing.T) {
 
 	manager.testSyncBatch(tCtx)
 
-	// Test successful termination (exit code 0)
+	// 测试成功终止（退出码 0）。
 	successStatus := v1.PodStatus{
 		Phase: v1.PodSucceeded,
 		ContainerStatuses: []v1.ContainerStatus{
@@ -2570,7 +2616,7 @@ func TestContainerTerminationMetric(t *testing.T) {
 	require.NoError(t, err)
 	assert.InDelta(t, 1.0, count, 0)
 
-	// Test error termination (exit code 1) for a second container to verify cumulative behavior
+	// 测试第二个容器错误终止（退出码 1），以验证指标的累加行为。
 	errorPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "error-pod",
@@ -2607,6 +2653,7 @@ func TestContainerTerminationMetric(t *testing.T) {
 	assert.InDelta(t, 1.0, count, 0)
 }
 
+// 验证 resize 的 InProgress/Pending 条件的设置、覆盖、清除与 deferred/infeasible 判定。
 func TestPodResizeConditions(t *testing.T) {
 	m := NewManager(&fake.Clientset{}, kubepod.NewBasicPodManager(), &statustest.FakePodDeletionSafetyProvider{}, util.NewPodStartupLatencyTracker())
 	podUID := types.UID("12345")
@@ -2679,7 +2726,7 @@ func TestPodResizeConditions(t *testing.T) {
 			name: "clear the pod resize in progress condition and set a new one",
 			updateFunc: func(podUID types.UID) bool {
 				m.ClearPodResizeInProgressCondition(podUID)
-				// Set a new condition with a different observedGeneration
+				// 设置一个 observedGeneration 不同的新条件。
 				_, b := m.SetPodResizeInProgressCondition(podUID, "", "", 2)
 				return b
 			},
@@ -2795,7 +2842,7 @@ func TestPodResizeConditions(t *testing.T) {
 			if tc.expected == nil {
 				require.Nil(t, resizeConditions)
 			} else {
-				// ignore the last probe and transition times
+				// 忽略最近探测时间与转换时间。
 				for _, c := range resizeConditions {
 					c.LastProbeTime = metav1.Time{}
 					c.LastTransitionTime = metav1.Time{}
@@ -2808,6 +2855,7 @@ func TestPodResizeConditions(t *testing.T) {
 	}
 }
 
+// 验证 ClearPodResizeInProgressCondition 的返回值与条件清理行为。
 func TestClearPodResizeInProgressCondition(t *testing.T) {
 	m := NewManager(&fake.Clientset{}, kubepod.NewBasicPodManager(), &statustest.FakePodDeletionSafetyProvider{}, util.NewPodStartupLatencyTracker())
 	podUID := types.UID("12345")
@@ -2848,7 +2896,7 @@ func TestClearPodResizeInProgressCondition(t *testing.T) {
 			if tc.expectedConditions == nil {
 				require.Nil(t, resizeConditions)
 			} else {
-				// ignore the last probe and transition times
+				// 忽略最近探测时间与转换时间。
 				for _, c := range resizeConditions {
 					c.LastProbeTime = metav1.Time{}
 					c.LastTransitionTime = metav1.Time{}
@@ -2859,6 +2907,7 @@ func TestClearPodResizeInProgressCondition(t *testing.T) {
 	}
 }
 
+// 验证进行中 resize 数量指标的统计。
 func TestRecordInProgressResizeCount(t *testing.T) {
 	metrics.Register()
 
@@ -2938,6 +2987,7 @@ func TestRecordInProgressResizeCount(t *testing.T) {
 	}
 }
 
+// 验证 pending resize 数量指标按优先级分桶与原因统计。
 func TestRecordPendingResizesCount(t *testing.T) {
 	metrics.Register()
 	int32Ptr := func(val int32) *int32 { return &val }
@@ -3129,6 +3179,7 @@ func TestRecordPendingResizesCount(t *testing.T) {
 			for _, p := range tc.existingPods {
 				manager.podManager.(mutablePodManager).AddPod(p)
 			}
+			// 直接注入条件状态，验证指标按原因与优先级分桶统计。
 			manager.podResizeConditions = tc.existingConditions
 			manager.observePendingResizeCount()
 
@@ -3139,6 +3190,7 @@ func TestRecordPendingResizesCount(t *testing.T) {
 	}
 }
 
+// 验证启动时从 pod 状态回填 resize 条件，并同步更新相关指标。
 func TestBackfillPodResizeConditions(t *testing.T) {
 	metrics.Register()
 
@@ -3229,6 +3281,7 @@ func TestBackfillPodResizeConditions(t *testing.T) {
 	for _, p := range pods {
 		manager.podManager.(mutablePodManager).AddPod(p)
 	}
+	// 回填应只收集已存在的 resize 条件，并同步重建相关指标。
 	manager.BackfillPodResizeConditions(pods)
 	actualResizeConditions := manager.podResizeConditions
 	expectedResizeConditions := map[types.UID]podResizeConditions{
@@ -3274,7 +3327,7 @@ func TestBackfillPodResizeConditions(t *testing.T) {
 	}
 
 	for _, c := range actualResizeConditions {
-		// ignore lastProbeTime and lastTransitionTime
+		// 忽略 lastProbeTime 与 lastTransitionTime。
 		if c.PodResizeInProgress != nil {
 			c.PodResizeInProgress.LastProbeTime = metav1.Time{}
 			c.PodResizeInProgress.LastTransitionTime = metav1.Time{}
@@ -3308,12 +3361,14 @@ func TestBackfillPodResizeConditions(t *testing.T) {
 
 }
 
+// statusEqual 忽略条件后比较两个 pod 状态是否相等。
 func statusEqual(left, right v1.PodStatus) bool {
 	left.Conditions = nil
 	right.Conditions = nil
 	return reflect.DeepEqual(left, right)
 }
 
+// conditionsEqual 按条件类型比较状态与原因，忽略顺序与时间戳。
 func conditionsEqual(left, right []v1.PodCondition) bool {
 	if len(left) != len(right) {
 		return false
@@ -3336,6 +3391,7 @@ func conditionsEqual(left, right []v1.PodCondition) bool {
 	return true
 }
 
+// getPodStatus 返回 Running 且 Ready/Scheduled 的通用测试 pod 状态。
 func getPodStatus() v1.PodStatus {
 	return v1.PodStatus{
 		Phase: v1.PodRunning,
@@ -3353,6 +3409,7 @@ func getPodStatus() v1.PodStatus {
 	}
 }
 
+// 验证 deferred resize 持续时间指标在不同清理方式、优先级与 pod 缺失场景下的记录。
 func TestPodDeferredResizeDurationSeconds(t *testing.T) {
 	metrics.Register()
 	int32Ptr := func(val int32) *int32 { return &val }

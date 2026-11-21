@@ -29,6 +29,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestTokenCachingAndExpiration 验证 Token 临近过期时刷新，刷新失败时旧 Token 仍可使用。
 func TestTokenCachingAndExpiration(t *testing.T) {
 	type suite struct {
 		clock *testingclock.FakeClock
@@ -89,7 +90,7 @@ func TestTokenCachingAndExpiration(t *testing.T) {
 			name: "service account recreated - cache miss due to different UID",
 			exp:  time.Hour,
 			f: func(t *testing.T, s *suite) {
-				// First, get a token for service account with UID-1
+				// 先为 UID-1 的 ServiceAccount 获取 Token
 				tr1 := &authenticationv1.TokenRequest{
 					ObjectMeta: metav1.ObjectMeta{
 						UID: "service-account-uid-1",
@@ -108,11 +109,11 @@ func TestTokenCachingAndExpiration(t *testing.T) {
 				if _, err := s.mgr.GetServiceAccountToken("a", "b", tr1); err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
-				if s.tg.count != 2 { // First call from setup + this call
+				if s.tg.count != 2 { // 包含 setup 调用与本次调用
 					t.Fatalf("expected first token request: call count was %d", s.tg.count)
 				}
 
-				// Now request token for "recreated" service account with UID-2
+				// 再为“重建后”的 UID-2 ServiceAccount 请求 Token
 				tr2 := &authenticationv1.TokenRequest{
 					ObjectMeta: metav1.ObjectMeta{
 						UID: "service-account-uid-2",
@@ -131,7 +132,7 @@ func TestTokenCachingAndExpiration(t *testing.T) {
 				if _, err := s.mgr.GetServiceAccountToken("a", "b", tr2); err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
-				if s.tg.count != 3 { // Should be 3 calls total (no cache hit)
+				if s.tg.count != 3 { // 应为 3 次调用（未命中缓存）
 					t.Fatalf("expected cache miss due to different service account UID: call count was %d", s.tg.count)
 				}
 			},
@@ -140,7 +141,7 @@ func TestTokenCachingAndExpiration(t *testing.T) {
 			name: "service account UID consistent - cache hit",
 			exp:  time.Hour,
 			f: func(t *testing.T, s *suite) {
-				// Request token twice with same service account UID
+				// 使用相同的 ServiceAccount UID 请求两次
 				tr := &authenticationv1.TokenRequest{
 					ObjectMeta: metav1.ObjectMeta{
 						UID: "consistent-service-account-uid",
@@ -164,7 +165,7 @@ func TestTokenCachingAndExpiration(t *testing.T) {
 					t.Fatalf("unexpected error: %v", err)
 				}
 
-				if s.tg.count != 2 { // Setup call + first call, second should be cache hit
+				if s.tg.count != 2 { // setup 调用 + 首次调用，第二次应命中缓存
 					t.Fatalf("expected cache hit with same service account UID: call count was %d", s.tg.count)
 				}
 			},
@@ -211,6 +212,7 @@ func TestTokenCachingAndExpiration(t *testing.T) {
 	}
 }
 
+// TestRequiresRefresh 验证根据当前时间与过期时间判断是否需要刷新 Token。
 func TestRequiresRefresh(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	start := time.Now()
@@ -240,7 +242,7 @@ func TestRequiresRefresh(t *testing.T) {
 			expectRefresh: true,
 		},
 		{
-			// expiry will be overwritten by the tweak below.
+			// 过期时间会被下面的 tweak 覆盖。
 			now:           start.Add(0 * time.Minute),
 			exp:           start.Add(60 * time.Minute),
 			expectRefresh: false,
@@ -278,6 +280,7 @@ func TestRequiresRefresh(t *testing.T) {
 	}
 }
 
+// TestDeleteServiceAccountToken 验证按 Pod UID 删除 Token 缓存，失败请求不会被缓存。
 func TestDeleteServiceAccountToken(t *testing.T) {
 	type request struct {
 		name, namespace string
@@ -407,7 +410,7 @@ func TestDeleteServiceAccountToken(t *testing.T) {
 					shouldFail: true,
 				},
 				{
-					//exactly the same with last one, besides it will success
+					// 与上一条完全相同，但这次会成功
 					name:      "fake-name-4",
 					namespace: "fake-namespace-4",
 					tr: authenticationv1.TokenRequest{
@@ -461,17 +464,20 @@ func TestDeleteServiceAccountToken(t *testing.T) {
 	}
 }
 
+// fakeTokenGetter 统计调用次数并返回预置的 TokenRequest 或错误。
 type fakeTokenGetter struct {
 	count int
 	tr    *authenticationv1.TokenRequest
 	err   error
 }
 
+// getToken 递增调用计数并返回固定结果，用于验证缓存命中与失效。
 func (ftg *fakeTokenGetter) getToken(name, namespace string, tr *authenticationv1.TokenRequest) (*authenticationv1.TokenRequest, error) {
 	ftg.count++
 	return ftg.tr, ftg.err
 }
 
+// TestCleanup 验证 cleanup 只清理已过期的 Token。
 func TestCleanup(t *testing.T) {
 	cases := []struct {
 		name              string
@@ -508,6 +514,7 @@ func TestCleanup(t *testing.T) {
 	}
 }
 
+// TestKeyFunc 验证缓存键包含受众、过期时间、绑定对象以及 ServiceAccount UID。
 func TestKeyFunc(t *testing.T) {
 	type tokenRequestUnit struct {
 		name      string
@@ -601,7 +608,7 @@ func TestKeyFunc(t *testing.T) {
 				tr: &authenticationv1.TokenRequest{
 					Spec: authenticationv1.TokenRequestSpec{
 						Audiences: []string{"foo1", "foo2"},
-						//everthing is same besides ExpirationSeconds
+						// 除 ExpirationSeconds 外其余完全相同
 						ExpirationSeconds: ptr.To[int64](2001),
 						BoundObjectRef: &authenticationv1.BoundObjectReference{
 							Kind: "pod",
@@ -641,7 +648,7 @@ func TestKeyFunc(t *testing.T) {
 						ExpirationSeconds: ptr.To[int64](2000),
 						BoundObjectRef: &authenticationv1.BoundObjectReference{
 							Kind: "pod",
-							//everthing is same besides BoundObjectRef.Name
+							// 除 BoundObjectRef.Name 外其余完全相同
 							Name: "diff-pod",
 							UID:  "foo-uid",
 						},
@@ -677,7 +684,7 @@ func TestKeyFunc(t *testing.T) {
 				namespace: "foo-ns",
 				tr: &authenticationv1.TokenRequest{
 					ObjectMeta: metav1.ObjectMeta{
-						UID: "new-service-account-uid-456", // Different service account UID
+						UID: "new-service-account-uid-456", // 不同的 ServiceAccount UID
 					},
 					Spec: authenticationv1.TokenRequestSpec{
 						Audiences:         []string{"foo1", "foo2"},
@@ -719,7 +726,7 @@ func TestKeyFunc(t *testing.T) {
 				namespace: "foo-ns",
 				tr: &authenticationv1.TokenRequest{
 					ObjectMeta: metav1.ObjectMeta{
-						UID: "same-service-account-uid-123", // Same service account UID
+						UID: "same-service-account-uid-123", // 相同的 ServiceAccount UID
 					},
 					Spec: authenticationv1.TokenRequestSpec{
 						Audiences:         []string{"foo1", "foo2"},
@@ -741,7 +748,7 @@ func TestKeyFunc(t *testing.T) {
 					name:      "foo-sa",
 					namespace: "foo-ns",
 					tr: &authenticationv1.TokenRequest{
-						// No UID set
+						// 未设置 UID
 						Spec: authenticationv1.TokenRequestSpec{
 							Audiences:         []string{"foo1", "foo2"},
 							ExpirationSeconds: ptr.To[int64](2000),
@@ -758,7 +765,7 @@ func TestKeyFunc(t *testing.T) {
 				name:      "foo-sa",
 				namespace: "foo-ns",
 				tr: &authenticationv1.TokenRequest{
-					// No UID set
+					// 未设置 UID
 					Spec: authenticationv1.TokenRequestSpec{
 						Audiences:         []string{"foo1", "foo2"},
 						ExpirationSeconds: ptr.To[int64](2000),
@@ -798,7 +805,7 @@ func TestKeyFunc(t *testing.T) {
 				name:      "foo-sa",
 				namespace: "foo-ns",
 				tr: &authenticationv1.TokenRequest{
-					// No UID set - should not hit cached entry with UID
+					// 未设置 UID，不应命中带 UID 的缓存项
 					Spec: authenticationv1.TokenRequestSpec{
 						Audiences:         []string{"foo1", "foo2"},
 						ExpirationSeconds: ptr.To[int64](2000),
@@ -821,7 +828,7 @@ func TestKeyFunc(t *testing.T) {
 			for _, tru := range c.trus {
 				mgr.set(getKeyFunc(tru), &authenticationv1.TokenRequest{
 					Status: authenticationv1.TokenRequestStatus{
-						//make sure the token cache would not be cleaned by token manager clenaup func
+						// 确保 Token 缓存不会被 cleanup 清理
 						ExpirationTimestamp: metav1.Time{Time: mgr.clock.Now().Add(50 * time.Minute)},
 					},
 				})
@@ -835,6 +842,7 @@ func TestKeyFunc(t *testing.T) {
 	}
 }
 
+// TestServiceAccountRecreationCacheInvalidation 验证 ServiceAccount 重建（UID 变化）会导致缓存失效。
 func TestServiceAccountRecreationCacheInvalidation(t *testing.T) {
 	mgr := NewManager(nil)
 	mgr.clock = testingclock.NewFakeClock(time.Time{}.Add(30 * 24 * time.Hour))
@@ -844,7 +852,7 @@ func TestServiceAccountRecreationCacheInvalidation(t *testing.T) {
 		callCount++
 		expSecs := int64(3600)
 		return &authenticationv1.TokenRequest{
-			ObjectMeta: tr.ObjectMeta, // Preserve the UID from request
+			ObjectMeta: tr.ObjectMeta, // 保留请求中的 UID
 			Spec: authenticationv1.TokenRequestSpec{
 				ExpirationSeconds: &expSecs,
 			},
@@ -855,7 +863,7 @@ func TestServiceAccountRecreationCacheInvalidation(t *testing.T) {
 		}, nil
 	}
 
-	// 1. Get token for service account with original UID
+	// 1. 为原始 UID 的 ServiceAccount 获取 Token
 	originalTR := &authenticationv1.TokenRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			UID: "original-sa-uid-123",
@@ -877,7 +885,7 @@ func TestServiceAccountRecreationCacheInvalidation(t *testing.T) {
 		t.Fatalf("unexpected token: %s", token1.Status.Token)
 	}
 
-	// 2. Request same token again - should be cache hit
+	// 2. 再次请求相同 Token，应命中缓存
 	token2, err := mgr.GetServiceAccountToken("test-ns", "test-sa", originalTR)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -889,7 +897,7 @@ func TestServiceAccountRecreationCacheInvalidation(t *testing.T) {
 		t.Fatalf("unexpected token from cache: %s", token2.Status.Token)
 	}
 
-	// 3. Service account recreated with new UID - should be cache miss
+	// 3. ServiceAccount 以新 UID 重建，应缓存未命中
 	recreatedTR := &authenticationv1.TokenRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			UID: "recreated-sa-uid-456",
@@ -911,7 +919,7 @@ func TestServiceAccountRecreationCacheInvalidation(t *testing.T) {
 		t.Fatalf("unexpected token for recreated SA: %s", token3.Status.Token)
 	}
 
-	// 4. Request for recreated SA again - should be cache hit
+	// 4. 再次为重建后的 ServiceAccount 请求，应命中缓存
 	token4, err := mgr.GetServiceAccountToken("test-ns", "test-sa", recreatedTR)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -924,6 +932,7 @@ func TestServiceAccountRecreationCacheInvalidation(t *testing.T) {
 	}
 }
 
+// getTokenRequest 构造常用的 TokenRequest 测试输入。
 func getTokenRequest() *authenticationv1.TokenRequest {
 	return &authenticationv1.TokenRequest{
 		Spec: authenticationv1.TokenRequestSpec{

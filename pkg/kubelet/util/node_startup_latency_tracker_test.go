@@ -29,6 +29,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// 以下常量是各节点启动延迟指标的完整名称，用于按名筛选指标。
 const (
 	metricsNameNodeStartupPreKubelet       = "kubelet_node_startup_pre_kubelet_duration_seconds"
 	metricsNameNodeStartupPreRegistration  = "kubelet_node_startup_pre_registration_duration_seconds"
@@ -37,8 +38,10 @@ const (
 	metricsNameNodeStartup                 = "kubelet_node_startup_duration_seconds"
 )
 
+// TestNodeStartupLatencyNoEvents 验证没有任何事件时，所有启动延迟指标都保持为 0。
 func TestNodeStartupLatencyNoEvents(t *testing.T) {
 	t.Run("metrics registered; no incoming events", func(t *testing.T) {
+		// 注册指标并确保测试结束后清理，避免指标状态影响其他测试。
 		metrics.Register()
 		defer clearMetrics()
 
@@ -75,6 +78,7 @@ func TestNodeStartupLatencyNoEvents(t *testing.T) {
 			t.Error(err)
 		}
 
+		// 未记录任何时间戳时，tracker 中的各事件时间应保持零值。
 		assert.Equal(t, frozenTime.Add(-100*time.Millisecond), tracker.bootTime)
 		assert.Equal(t, frozenTime, tracker.kubeletStartTime)
 		assert.True(t, tracker.firstRegistrationAttemptTime.IsZero())
@@ -83,6 +87,7 @@ func TestNodeStartupLatencyNoEvents(t *testing.T) {
 	})
 }
 
+// TestRecordAllTimestamps 验证按顺序记录全部事件后，各阶段启动延迟指标计算正确。
 func TestRecordAllTimestamps(t *testing.T) {
 	t.Run("all timestamps are recorded", func(t *testing.T) {
 		metrics.Register()
@@ -95,6 +100,7 @@ func TestRecordAllTimestamps(t *testing.T) {
 			clock:            fakeClock,
 		}
 
+		// 依次推进假时钟并记录各启动阶段事件。
 		fakeClock.Step(800 * time.Millisecond)
 		tracker.RecordAttemptRegisterNode()
 
@@ -139,6 +145,7 @@ func TestRecordAllTimestamps(t *testing.T) {
 	})
 }
 
+// TestRecordAttemptRegister 验证只记录一次注册尝试时，仅注册尝试时间被写入。
 func TestRecordAttemptRegister(t *testing.T) {
 	t.Run("record attempt register node", func(t *testing.T) {
 		metrics.Register()
@@ -187,6 +194,7 @@ func TestRecordAttemptRegister(t *testing.T) {
 	})
 }
 
+// TestRecordAttemptRegisterTwice 验证重复记录注册尝试时只保留第一次的时间。
 func TestRecordAttemptRegisterTwice(t *testing.T) {
 	t.Run("record attempt register node twice", func(t *testing.T) {
 		metrics.Register()
@@ -211,6 +219,8 @@ func TestRecordAttemptRegisterTwice(t *testing.T) {
 	})
 }
 
+// TestSkippingRecordRegisteredNewNode 验证重复注册或缺少前置步骤时，
+// 注册完成时间不会被错误记录。
 func TestSkippingRecordRegisteredNewNode(t *testing.T) {
 	t.Run("record register new node twice", func(t *testing.T) {
 		metrics.Register()
@@ -307,6 +317,8 @@ func TestSkippingRecordRegisteredNewNode(t *testing.T) {
 	})
 }
 
+// TestSkippingRecordNodeReady 验证重复记录节点就绪或缺少前置步骤时，
+// 节点就绪时间不会被错误记录。
 func TestSkippingRecordNodeReady(t *testing.T) {
 	t.Run("record node ready twice", func(t *testing.T) {
 		metrics.Register()
@@ -409,6 +421,7 @@ func TestSkippingRecordNodeReady(t *testing.T) {
 	})
 }
 
+// clearMetrics 将所有节点启动延迟指标重置为 0，供测试之间隔离状态。
 func clearMetrics() {
 	metrics.NodeStartupPreKubeletDuration.Set(0)
 	metrics.NodeStartupPreRegistrationDuration.Set(0)

@@ -37,13 +37,14 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
+// emptyVolumeName 表示调用方未指定卷名，ASW 会自行生成唯一卷名。
 var emptyVolumeName = v1.UniqueVolumeName("")
 
-// Calls MarkVolumeAsAttached() once to add volume
-// Verifies newly added volume exists in GetUnmountedVolumes()
-// Verifies newly added volume doesn't exist in GetGloballyMountedVolumes()
+// 调用一次 MarkVolumeAsAttached() 添加卷。
+// 验证新卷出现在 GetUnmountedVolumes() 中。
+// 验证新卷不出现在 GetGloballyMountedVolumes() 中。
 func Test_MarkVolumeAsAttached_Positive_NewVolume(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
 	pod := &v1.Pod{
@@ -71,11 +72,11 @@ func Test_MarkVolumeAsAttached_Positive_NewVolume(t *testing.T) {
 		t.Fatalf("GetUniqueVolumeNameFromSpec failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
 	err = asw.MarkVolumeAsAttached(logger, emptyVolumeName, volumeSpec, "" /* nodeName */, devicePath)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("MarkVolumeAsAttached failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -85,13 +86,12 @@ func Test_MarkVolumeAsAttached_Positive_NewVolume(t *testing.T) {
 	verifyVolumeDoesntExistInGloballyMountedVolumes(t, generatedVolumeName, asw)
 }
 
-// Calls MarkVolumeAsAttached() once to add volume, specifying a name --
-// establishes that the supplied volume name is used to register the volume
-// rather than the generated one.
-// Verifies newly added volume exists in GetUnmountedVolumes()
-// Verifies newly added volume doesn't exist in GetGloballyMountedVolumes()
+// 调用一次 MarkVolumeAsAttached() 并显式指定卷名，用于验证 ASW 使用传入的卷名
+// 而不是自动生成的卷名来注册卷。
+// 验证新卷出现在 GetUnmountedVolumes() 中。
+// 验证新卷不出现在 GetGloballyMountedVolumes() 中。
 func Test_MarkVolumeAsAttached_SuppliedVolumeName_Positive_NewVolume(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
 	pod := &v1.Pod{
@@ -114,13 +114,14 @@ func Test_MarkVolumeAsAttached_SuppliedVolumeName_Positive_NewVolume(t *testing.
 	}
 	volumeSpec := &volume.Spec{Volume: &pod.Spec.Volumes[0]}
 	devicePath := "fake/device/path"
+	// 显式指定的卷名故意不符合正常命名规则，用来证明 ASW 不会替换它。
 	volumeName := v1.UniqueVolumeName("this-would-never-be-a-volume-name")
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
 	err := asw.MarkVolumeAsAttached(logger, volumeName, volumeSpec, "" /* nodeName */, devicePath)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("MarkVolumeAsAttached failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -130,12 +131,12 @@ func Test_MarkVolumeAsAttached_SuppliedVolumeName_Positive_NewVolume(t *testing.
 	verifyVolumeDoesntExistInGloballyMountedVolumes(t, volumeName, asw)
 }
 
-// Calls MarkVolumeAsAttached() twice to add the same volume
-// Verifies second call doesn't fail
-// Verifies newly added volume exists in GetUnmountedVolumes()
-// Verifies newly added volume doesn't exist in GetGloballyMountedVolumes()
+// 调用两次 MarkVolumeAsAttached() 添加同一个卷。
+// 验证第二次调用不失败（幂等）。
+// 验证卷出现在 GetUnmountedVolumes() 中。
+// 验证卷不出现在 GetGloballyMountedVolumes() 中。
 func Test_MarkVolumeAsAttached_Positive_ExistingVolume(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	devicePath := "fake/device/path"
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
@@ -168,10 +169,10 @@ func Test_MarkVolumeAsAttached_Positive_ExistingVolume(t *testing.T) {
 		t.Fatalf("MarkVolumeAsAttached failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	err = asw.MarkVolumeAsAttached(logger, emptyVolumeName, volumeSpec, "" /* nodeName */, devicePath)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("MarkVolumeAsAttached failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -181,11 +182,11 @@ func Test_MarkVolumeAsAttached_Positive_ExistingVolume(t *testing.T) {
 	verifyVolumeDoesntExistInGloballyMountedVolumes(t, generatedVolumeName, asw)
 }
 
-// Populates data struct with a volume
-// Calls AddPodToVolume() to add a pod to the volume
-// Verifies volume/pod combo exist using PodExistsInVolume()
+// 先向数据结构中填充一个卷。
+// 调用 AddPodToVolume() 把 pod 关联到该卷。
+// 通过 PodExistsInVolume() 验证卷/pod 组合存在。
 func Test_AddPodToVolume_Positive_ExistingVolumeNewNode(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
 	devicePath := "fake/device/path"
@@ -230,7 +231,7 @@ func Test_AddPodToVolume_Positive_ExistingVolumeNewNode(t *testing.T) {
 		t.Fatalf("NewBlockVolumeMapper failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	markVolumeOpts := operationexecutor.MarkVolumeOpts{
 		PodName:           podName,
 		PodUID:            pod.UID,
@@ -240,11 +241,12 @@ func Test_AddPodToVolume_Positive_ExistingVolumeNewNode(t *testing.T) {
 		VolumeSpec:        volumeSpec,
 	}
 	err = asw.AddPodToVolume(markVolumeOpts)
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
 
+	// 卷已被 pod 占用，因此不应再出现在 unmounted 或 globally mounted 列表中。
 	verifyVolumeExistsAsw(t, generatedVolumeName, true /* shouldExist */, asw)
 	verifyVolumeDoesntExistInUnmountedVolumes(t, generatedVolumeName, asw)
 	verifyVolumeDoesntExistInGloballyMountedVolumes(t, generatedVolumeName, asw)
@@ -253,12 +255,11 @@ func Test_AddPodToVolume_Positive_ExistingVolumeNewNode(t *testing.T) {
 	verifyVolumeMountedElsewhere(t, podName, generatedVolumeName, false /*expectedMountedElsewhere */, asw)
 }
 
-// Populates data struct with a volume
-// Calls AddPodToVolume() twice to add the same pod to the volume
-// Verifies volume/pod combo exist using PodExistsInVolume() and the second call
-// did not fail.
+// 先向数据结构中填充一个卷。
+// 调用两次 AddPodToVolume() 把同一个 pod 关联到该卷。
+// 通过 PodExistsInVolume() 验证卷/pod 组合存在，且第二次调用没有失败。
 func Test_AddPodToVolume_Positive_ExistingVolumeExistingNode(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
 	devicePath := "fake/device/path"
@@ -318,9 +319,9 @@ func Test_AddPodToVolume_Positive_ExistingVolumeExistingNode(t *testing.T) {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行：重复添加同一 pod 到同一卷必须幂等。
 	err = asw.AddPodToVolume(markVolumeOpts)
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -333,12 +334,10 @@ func Test_AddPodToVolume_Positive_ExistingVolumeExistingNode(t *testing.T) {
 	verifyVolumeMountedElsewhere(t, podName, generatedVolumeName, false /*expectedMountedElsewhere */, asw)
 }
 
-// Populates data struct with a volume
-// Calls AddPodToVolume() twice to add the same pod to the volume
-// Verifies volume/pod combo exist using PodExistsInVolume() and the second call
-// did not fail.
+// 把两个 pod 关联到同一个卷（两个 pod 的 spec 解析出相同唯一卷名）。
+// 验证两个 pod 都能看到该卷，并互相判定为 "mounted elsewhere"。
 func Test_AddTwoPodsToVolume_Positive(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
 	devicePath := "fake/device/path"
@@ -463,8 +462,9 @@ func Test_AddTwoPodsToVolume_Positive(t *testing.T) {
 	verifyVolumeMountedElsewhere(t, podName2, generatedVolumeName2, true /*expectedMountedElsewhere */, asw)
 }
 
-// Test if volumes that were recorded to be read from disk during reconstruction
-// are handled correctly by the ASOW.
+// 验证重建阶段从磁盘发现的卷能被 ASW 正确处理：
+// 挂载、卸载或彻底移除后都应从 "found during reconstruction" 记录中清除；
+// 不确定的可附加性一旦确定，就不允许再被改写。
 func TestActualStateOfWorld_FoundDuringReconstruction(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -548,7 +548,7 @@ func TestActualStateOfWorld_FoundDuringReconstruction(t *testing.T) {
 			name: "certain (false) attachability cannot be changed",
 			opCallback: func(asw ActualStateOfWorld, volumeOpts operationexecutor.MarkVolumeOpts) error {
 				asw.UpdateReconstructedVolumeAttachability(volumeOpts.VolumeName, false)
-				// This function should be NOOP:
+				// 已确定后再次更新应为空操作（NOOP）：
 				asw.UpdateReconstructedVolumeAttachability(volumeOpts.VolumeName, true)
 				return nil
 			},
@@ -561,7 +561,7 @@ func TestActualStateOfWorld_FoundDuringReconstruction(t *testing.T) {
 			name: "certain (true) attachability cannot be changed",
 			opCallback: func(asw ActualStateOfWorld, volumeOpts operationexecutor.MarkVolumeOpts) error {
 				asw.UpdateReconstructedVolumeAttachability(volumeOpts.VolumeName, true)
-				// This function should be NOOP:
+				// 已确定后再次更新应为空操作（NOOP）：
 				asw.UpdateReconstructedVolumeAttachability(volumeOpts.VolumeName, false)
 				return nil
 			},
@@ -582,6 +582,7 @@ func TestActualStateOfWorld_FoundDuringReconstruction(t *testing.T) {
 			generatedVolumeName1, err := util.GetUniqueVolumeNameFromSpec(
 				plugin, volumeSpec1)
 			require.NoError(t, err)
+			// 用"attachability 不确定"的重建卷构造前置状态，各用例只负责执行操作并校验结果。
 			err = asw.AddAttachUncertainReconstructedVolume(logger, generatedVolumeName1, volumeSpec1, "" /* nodeName */, devicePath)
 			if err != nil {
 				t.Fatalf("MarkVolumeAsAttached failed. Expected: <no error> Actual: <%v>", err)
@@ -611,7 +612,7 @@ func TestActualStateOfWorld_FoundDuringReconstruction(t *testing.T) {
 			if err != nil {
 				t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 			}
-			// make sure state is as we expect it to be
+			// 确认前置状态符合预期，否则后续用例的失败原因会难以定位。
 			verifyVolumeExistsAsw(t, generatedVolumeName1, true /* shouldExist */, asw)
 			verifyVolumeDoesntExistInUnmountedVolumes(t, generatedVolumeName1, asw)
 			verifyVolumeDoesntExistInGloballyMountedVolumes(t, generatedVolumeName1, asw)
@@ -634,9 +635,10 @@ func TestActualStateOfWorld_FoundDuringReconstruction(t *testing.T) {
 	}
 }
 
-// Call MarkVolumeAsDetached() on a volume which mounted by pod(s) should be skipped
+// 对仍被 pod 挂载的卷调用 MarkVolumeAsDetached() 应被跳过，
+// 保证 pod 与卷的关联不被意外破坏。
 func Test_MarkVolumeAsDetached_Negative_PodInVolume(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, plugin := volumetesting.GetTestVolumePluginMgr(t)
 	devicePath := "fake/device/path"
 	asw := NewActualStateOfWorld("mynode", volumePluginMgr)
@@ -694,13 +696,14 @@ func Test_MarkVolumeAsDetached_Negative_PodInVolume(t *testing.T) {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	asw.MarkVolumeAsDetached(generatedVolumeName, "" /* nodeName */)
 
-	// Assert
+	// 断言：pod 与卷的关联必须仍然存在。
 	verifyPodExistsInVolumeAsw(t, podName, generatedVolumeName, "fake/device/path" /* expectedDevicePath */, asw)
 }
 
+// getTestPod 构造一个挂载 GCEPersistentDisk 的最小 pod，供多个用例复用。
 func getTestPod(podName, podUID, outerVolumeName, pdName string) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -723,10 +726,10 @@ func getTestPod(podName, podUID, outerVolumeName, pdName string) *v1.Pod {
 	return pod
 }
 
-// Calls AddPodToVolume() to add pod to empty data struct
-// Verifies call fails with "volume does not exist" error.
+// 在空的 ASW 上调用 AddPodToVolume() 添加 pod。
+// 验证调用失败并返回 "volume does not exist" 错误。
 func Test_AddPodToVolume_Negative_VolumeDoesntExist(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
 
@@ -786,7 +789,7 @@ func Test_AddPodToVolume_Negative_VolumeDoesntExist(t *testing.T) {
 		t.Fatalf("NewBlockVolumeMapper failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	markVolumeOpts := operationexecutor.MarkVolumeOpts{
 		PodName:           podName,
 		PodUID:            pod.UID,
@@ -796,7 +799,7 @@ func Test_AddPodToVolume_Negative_VolumeDoesntExist(t *testing.T) {
 		VolumeSpec:        volumeSpec,
 	}
 	err = asw.AddPodToVolume(markVolumeOpts)
-	// Assert
+	// 断言：卷未附加时必须报错，否则后续挂载会作用在不存在的卷上。
 	if err == nil {
 		t.Fatalf("AddPodToVolume did not fail. Expected: <\"no volume with the name ... exists in the list of attached volumes\"> Actual: <no error>")
 	}
@@ -814,12 +817,11 @@ func Test_AddPodToVolume_Negative_VolumeDoesntExist(t *testing.T) {
 	verifyVolumeMountedElsewhere(t, podName, generatedVolumeName, false /*expectedMountedElsewhere */, asw)
 }
 
-// Calls MarkVolumeAsAttached() once to add volume
-// Calls MarkDeviceAsMounted() to mark volume as globally mounted.
-// Verifies newly added volume exists in GetUnmountedVolumes()
-// Verifies newly added volume exists in GetGloballyMountedVolumes()
+// 调用一次 MarkVolumeAsAttached() 添加卷。
+// 调用 MarkDeviceAsMounted() 把卷标记为全局挂载。
+// 验证卷同时出现在 GetUnmountedVolumes() 与 GetGloballyMountedVolumes() 中。
 func Test_MarkDeviceAsMounted_Positive_NewVolume(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
 	pod := &v1.Pod{
@@ -853,24 +855,25 @@ func Test_MarkDeviceAsMounted_Positive_NewVolume(t *testing.T) {
 		t.Fatalf("MarkVolumeAsAttached failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	err = asw.MarkDeviceAsMounted(generatedVolumeName, devicePath, deviceMountPath, "")
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("MarkDeviceAsMounted failed. Expected: <no error> Actual: <%v>", err)
 	}
 
+	// 全局挂载不会让卷从 unmounted 列表消失，两者是不同维度的状态。
 	verifyVolumeExistsAsw(t, generatedVolumeName, true /* shouldExist */, asw)
 	verifyVolumeExistsInUnmountedVolumes(t, generatedVolumeName, asw)
 	verifyVolumeExistsInGloballyMountedVolumes(t, generatedVolumeName, asw)
 }
 
-// Populates data struct with a volume with a SELinux context.
-// Calls AddPodToVolume() to add a pod to the volume
-// Verifies volume/pod combo exist using PodExistsInVolume()
+// 向数据结构中填充一个带 SELinux 上下文的卷。
+// 调用 AddPodToVolume() 把 pod 关联到该卷。
+// 通过 PodExistsInVolume() 验证卷/pod 组合存在且 SELinux 上下文正确。
 func Test_AddPodToVolume_Positive_SELinux(t *testing.T) {
-	// Arrange
+	// 准备
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SELinuxMountReadWriteOncePod, true)
 	volumePluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
@@ -916,7 +919,7 @@ func Test_AddPodToVolume_Positive_SELinux(t *testing.T) {
 		t.Fatalf("NewBlockVolumeMapper failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	markVolumeOpts := operationexecutor.MarkVolumeOpts{
 		PodName:             podName,
 		PodUID:              pod.UID,
@@ -928,11 +931,12 @@ func Test_AddPodToVolume_Positive_SELinux(t *testing.T) {
 		VolumeMountState:    operationexecutor.VolumeMounted,
 	}
 	err = asw.AddPodToVolume(markVolumeOpts)
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
 
+	// 除上下文匹配的断言外，还要验证不匹配的 SELinux 标签会被拒绝。
 	verifyVolumeExistsAswWithSELinux(t, generatedVolumeName, "system_u:object_r:container_file_t:s0:c0,c1", asw)
 	verifyVolumeDoesntExistInUnmountedVolumes(t, generatedVolumeName, asw)
 	verifyVolumeDoesntExistInGloballyMountedVolumes(t, generatedVolumeName, asw)
@@ -942,12 +946,11 @@ func Test_AddPodToVolume_Positive_SELinux(t *testing.T) {
 	verifyVolumeMountedElsewhere(t, podName, generatedVolumeName, false /*expectedMountedElsewhere */, asw)
 }
 
-// Calls MarkVolumeAsAttached() once to add volume
-// Calls MarkDeviceAsMounted() with SELinux to mark volume as globally mounted.
-// Verifies newly added volume exists in GetUnmountedVolumes()
-// Verifies newly added volume exists in GetGloballyMountedVolumes()
+// 调用一次 MarkVolumeAsAttached() 添加卷。
+// 调用带 SELinux 上下文的 MarkDeviceAsMounted() 把卷标记为全局挂载。
+// 验证卷出现在 GetUnmountedVolumes() 与 GetGloballyMountedVolumes() 中，且上下文一致。
 func Test_MarkDeviceAsMounted_Positive_SELinux(t *testing.T) {
-	// Arrange
+	// 准备
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SELinuxMountReadWriteOncePod, true)
 	volumePluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
@@ -982,10 +985,10 @@ func Test_MarkDeviceAsMounted_Positive_SELinux(t *testing.T) {
 		t.Fatalf("MarkVolumeAsAttached failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	err = asw.MarkDeviceAsMounted(generatedVolumeName, devicePath, deviceMountPath, "system_u:system_r:container_t:s0:c0,c1")
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("MarkDeviceAsMounted failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -995,8 +998,10 @@ func Test_MarkDeviceAsMounted_Positive_SELinux(t *testing.T) {
 	verifyVolumeExistsInGloballyMountedVolumesWithSELinux(t, generatedVolumeName, "system_u:system_r:container_t:s0:c0,c1", asw)
 }
 
+// 验证挂载状态不确定的卷：既不算已挂载也不算已卸载，但必须出现在 "possibly mounted" 列表中，
+// 且 PodExistsInVolume/PodRemovedFromVolume 对其返回 false，避免误判为已挂载。
 func TestUncertainVolumeMounts(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, plugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	asw := NewActualStateOfWorld("mynode" /* nodeName */, volumePluginMgr)
 	devicePath := "fake/device/path"
@@ -1047,6 +1052,7 @@ func TestUncertainVolumeMounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
+	// 不确定挂载的卷不能出现在"已挂载"列表里，否则会误判为可安全使用。
 	mountedVolumes := asw.GetMountedVolumesForPod(podName1)
 	volumeFound := false
 	for _, volume := range mountedVolumes {
@@ -1058,6 +1064,7 @@ func TestUncertainVolumeMounts(t *testing.T) {
 		t.Fatalf("expected volume %s to be not found in asw.GetMountedVolumesForPod", volumeSpec1.Name())
 	}
 
+	// 但它必须出现在"可能已挂载"列表中，供清理路径处理。
 	possiblyMountedVolumes := asw.GetPossiblyMountedVolumesForPod(podName1)
 	volumeFound = false
 	for _, volume := range possiblyMountedVolumes {
@@ -1069,6 +1076,7 @@ func TestUncertainVolumeMounts(t *testing.T) {
 		t.Fatalf("expected volume %s to be found in aws.GetPossiblyMountedVolumesForPod", volumeSpec1.Name())
 	}
 
+	// 状态不确定时不应宣称 pod 已存在该卷，也不应允许移除，交由重建流程裁决。
 	volExists, _, _ := asw.PodExistsInVolume(logger, podName1, generatedVolumeName1, resource.Quantity{}, "")
 	if volExists {
 		t.Fatalf("expected volume %s to not exist in asw", generatedVolumeName1)
@@ -1079,6 +1087,7 @@ func TestUncertainVolumeMounts(t *testing.T) {
 	}
 }
 
+// verifyVolumeExistsInGloballyMountedVolumes 断言卷出现在全局挂载列表中。
 func verifyVolumeExistsInGloballyMountedVolumes(
 	t *testing.T, expectedVolumeName v1.UniqueVolumeName, asw ActualStateOfWorld) {
 	globallyMountedVolumes := asw.GetGloballyMountedVolumes()
@@ -1094,6 +1103,7 @@ func verifyVolumeExistsInGloballyMountedVolumes(
 		globallyMountedVolumes)
 }
 
+// verifyVolumeExistsInGloballyMountedVolumesWithSELinux 断言卷在全局挂载列表中且 SELinux 上下文匹配。
 func verifyVolumeExistsInGloballyMountedVolumesWithSELinux(
 	t *testing.T, expectedVolumeName v1.UniqueVolumeName, expectedSELinuxContext string, asw ActualStateOfWorld) {
 	globallyMountedVolumes := asw.GetGloballyMountedVolumes()
@@ -1116,6 +1126,7 @@ func verifyVolumeExistsInGloballyMountedVolumesWithSELinux(
 		globallyMountedVolumes)
 }
 
+// verifyVolumeDoesntExistInGloballyMountedVolumes 断言卷不在全局挂载列表中。
 func verifyVolumeDoesntExistInGloballyMountedVolumes(
 	t *testing.T, volumeToCheck v1.UniqueVolumeName, asw ActualStateOfWorld) {
 	globallyMountedVolumes := asw.GetGloballyMountedVolumes()
@@ -1128,6 +1139,7 @@ func verifyVolumeDoesntExistInGloballyMountedVolumes(
 	}
 }
 
+// verifyVolumeExistsAsw 断言 VolumeExists 的返回值与期望一致。
 func verifyVolumeExistsAsw(
 	t *testing.T,
 	expectedVolumeName v1.UniqueVolumeName,
@@ -1143,6 +1155,7 @@ func verifyVolumeExistsAsw(
 	}
 }
 
+// verifyVolumeExistsAswWithSELinux 断言卷在已挂载列表中且 SELinux 上下文匹配。
 func verifyVolumeExistsAswWithSELinux(
 	t *testing.T,
 	expectedVolumeName v1.UniqueVolumeName,
@@ -1164,6 +1177,7 @@ func verifyVolumeExistsAswWithSELinux(
 	t.Errorf("Volume %q not found in ASW", expectedVolumeName)
 }
 
+// verifyVolumeExistsInUnmountedVolumes 断言卷出现在未挂载列表中。
 func verifyVolumeExistsInUnmountedVolumes(
 	t *testing.T, expectedVolumeName v1.UniqueVolumeName, asw ActualStateOfWorld) {
 	unmountedVolumes := asw.GetUnmountedVolumes()
@@ -1179,6 +1193,7 @@ func verifyVolumeExistsInUnmountedVolumes(
 		unmountedVolumes)
 }
 
+// verifyVolumeDoesntExistInUnmountedVolumes 断言卷不在未挂载列表中。
 func verifyVolumeDoesntExistInUnmountedVolumes(
 	t *testing.T, volumeToCheck v1.UniqueVolumeName, asw ActualStateOfWorld) {
 	unmountedVolumes := asw.GetUnmountedVolumes()
@@ -1191,6 +1206,7 @@ func verifyVolumeDoesntExistInUnmountedVolumes(
 	}
 }
 
+// verifyPodExistsInVolumeAsw 断言 pod/卷组合存在且 device path 正确（不校验 SELinux 上下文）。
 func verifyPodExistsInVolumeAsw(
 	t *testing.T,
 	expectedPodName volumetypes.UniquePodName,
@@ -1200,6 +1216,7 @@ func verifyPodExistsInVolumeAsw(
 	verifyPodExistsInVolumeAswWithSELinux(t, expectedPodName, expectedVolumeName, expectedDevicePath, "", asw)
 }
 
+// verifyPodExistsInVolumeAswWithSELinux 断言 pod/卷组合存在，并校验 device path 与 SELinux 标签。
 func verifyPodExistsInVolumeAswWithSELinux(
 	t *testing.T,
 	expectedPodName volumetypes.UniquePodName,
@@ -1229,6 +1246,7 @@ func verifyPodExistsInVolumeAswWithSELinux(
 	}
 }
 
+// verifyVolumeMountedElsewhere 断言卷是否被其它 pod 挂载的判定结果。
 func verifyVolumeMountedElsewhere(
 	t *testing.T,
 	expectedPodName volumetypes.UniquePodName,
@@ -1244,6 +1262,7 @@ func verifyVolumeMountedElsewhere(
 	}
 }
 
+// verifyPodDoesntExistInVolumeAsw 断言 pod/卷组合不存在；expectVolumeToExist 控制是否应返回错误。
 func verifyPodDoesntExistInVolumeAsw(
 	t *testing.T,
 	podToCheck volumetypes.UniquePodName,
@@ -1276,6 +1295,8 @@ func verifyPodDoesntExistInVolumeAsw(
 	}
 }
 
+// verifyPodExistsInVolumeSELinuxMismatch 断言 SELinux 标签不匹配时返回专门的 mismatch 错误，
+// 供调用方区分"卷不存在"和"卷存在但标签不符"。
 func verifyPodExistsInVolumeSELinuxMismatch(
 	t *testing.T,
 	podToCheck volumetypes.UniquePodName,
@@ -1296,6 +1317,7 @@ func verifyPodExistsInVolumeSELinuxMismatch(
 	}
 }
 
+// verifyVolumeExistsWithSpecNameInVolumeAsw 断言 pod 中存在指定 spec 名的卷。
 func verifyVolumeExistsWithSpecNameInVolumeAsw(
 	t *testing.T,
 	expectedPodName volumetypes.UniquePodName,
@@ -1311,6 +1333,7 @@ func verifyVolumeExistsWithSpecNameInVolumeAsw(
 	}
 }
 
+// verifyVolumeDoesntExistWithSpecNameInVolumeAsw 断言 pod 中不存在指定 spec 名的卷。
 func verifyVolumeDoesntExistWithSpecNameInVolumeAsw(
 	t *testing.T,
 	podToCheck volumetypes.UniquePodName,
@@ -1326,6 +1349,7 @@ func verifyVolumeDoesntExistWithSpecNameInVolumeAsw(
 	}
 }
 
+// verifyVolumeSpecNameInVolumeAsw 按位置逐项比较已挂载卷的 spec 名，因此调用方需保证顺序一致。
 func verifyVolumeSpecNameInVolumeAsw(
 	t *testing.T,
 	podToCheck volumetypes.UniquePodName,
@@ -1341,6 +1365,7 @@ func verifyVolumeSpecNameInVolumeAsw(
 	}
 }
 
+// verifyVolumeFoundInReconstruction 断言卷仍记录在重建发现列表中。
 func verifyVolumeFoundInReconstruction(t *testing.T, podToCheck volumetypes.UniquePodName, volumeToCheck v1.UniqueVolumeName, asw ActualStateOfWorld) {
 	isRecontructed := asw.IsVolumeReconstructed(volumeToCheck, podToCheck)
 	if !isRecontructed {
@@ -1348,6 +1373,8 @@ func verifyVolumeFoundInReconstruction(t *testing.T, podToCheck volumetypes.Uniq
 	}
 }
 
+// verifyVolumeAttachability 通过 GetAttachedVolumes 检查卷的可附加性；
+// 找不到卷时 attachable 保持 false，从而无法与"明确不可附加"区分。
 func verifyVolumeAttachability(t *testing.T, volumeToCheck v1.UniqueVolumeName, asw ActualStateOfWorld, expected volumeAttachability) {
 	attached := asw.GetAttachedVolumes()
 	attachable := false
@@ -1364,8 +1391,8 @@ func verifyVolumeAttachability(t *testing.T, volumeToCheck v1.UniqueVolumeName, 
 		if !attachable {
 			t.Errorf("ASW reports %s as not-attachable, when %s was expected", volumeToCheck, expected)
 		}
-	// ASW does not have any special difference between False and Uncertain.
-	// Uncertain only allows to be changed to True / False.
+	// ASW 不区分 False 与 Uncertain：
+	// Uncertain 只是允许后续被改为 True/False。
 	case volumeAttachabilityUncertain, volumeAttachabilityFalse:
 		if attachable {
 			t.Errorf("ASW reports %s as attachable, when %s was expected", volumeToCheck, expected)

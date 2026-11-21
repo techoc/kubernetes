@@ -36,6 +36,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestJournalServerMethodRestriction 验证 /logs 端点只允许 GET 和 POST，
+// 其他方法返回 405 并给出 Allow 响应头。
 func TestJournalServerMethodRestriction(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -63,8 +65,8 @@ func TestJournalServerMethodRestriction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// invalid sinceTime forces an early validation error (400), so we only
-			// validate method gating and avoid invoking external log commands.
+			// 非法的 sinceTime 会触发早期校验错误（400），这样只验证方法门控，
+			// 避免真正执行外部日志命令。
 			req := httptest.NewRequest(tt.method, "/logs?sinceTime=invalid", nil)
 			recorder := httptest.NewRecorder()
 
@@ -78,6 +80,8 @@ func TestJournalServerMethodRestriction(t *testing.T) {
 	}
 }
 
+// Test_getLoggingCmd 验证按平台生成 journalctl 或 PowerShell 命令参数，
+// 包括多 provider、空 provider 时的环境变量与过滤条件。
 func Test_getLoggingCmd(t *testing.T) {
 	var emptyCmdEnv []string
 	tests := []struct {
@@ -120,6 +124,7 @@ func Test_getLoggingCmd(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, got, gotCmdEnv, err := getLoggingCmd(&tt.args, tt.services)
+			// 按运行平台选择期望的命令参数；不支持的平台只要求返回错误。
 			switch os := runtime.GOOS; os {
 			case "linux":
 				if !reflect.DeepEqual(got, tt.wantLinux) {
@@ -144,6 +149,8 @@ func Test_getLoggingCmd(t *testing.T) {
 	}
 }
 
+// Test_newNodeLogQuery 验证 URL query 解析：时间只接受 RFC3339，
+// 数值参数拒绝非数字，query 参数区分服务名与文件路径。
 func Test_newNodeLogQuery(t *testing.T) {
 	validTimeValue := "2019-12-04T02:00:00Z"
 	validT, _ := time.Parse(time.RFC3339, validTimeValue)
@@ -194,6 +201,7 @@ func Test_newNodeLogQuery(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.query.Encode(), func(t *testing.T) {
+			// newNodeLogQuery 负责把 URL 参数解析为结构体并做初步校验。
 			got, err := newNodeLogQuery(tt.query)
 			if len(err) > 0 != tt.wantErr {
 				t.Errorf("newNodeLogQuery() error = %v, wantErr %v", err, tt.wantErr)
@@ -206,6 +214,7 @@ func Test_newNodeLogQuery(t *testing.T) {
 	}
 }
 
+// Test_validateServices 验证服务名的字符集、长度上限和数量上限。
 func Test_validateServices(t *testing.T) {
 	var (
 		service1                 = "svc1"
@@ -236,6 +245,7 @@ func Test_validateServices(t *testing.T) {
 		{name: "max number of services", services: []string{service1, service2, serviceDot, serviceUnderscore, serviceAt}, wantErr: true},
 	}
 	for _, tt := range tests {
+		// 换行、斜杠等字符会破坏命令行参数，必须被拒绝。
 		errs := validateServices(tt.services)
 		t.Run(tt.name, func(t *testing.T) {
 			if len(errs) > 0 != tt.wantErr {
@@ -246,6 +256,8 @@ func Test_validateServices(t *testing.T) {
 	}
 }
 
+// Test_nodeLogQuery_validate 验证查询必须至少指定服务或文件，并检查时间区间、
+// boot、tailLines 等选项的组合是否合法。
 func Test_nodeLogQuery_validate(t *testing.T) {
 	var (
 		service1 = "svc1"
@@ -279,7 +291,7 @@ func Test_nodeLogQuery_validate(t *testing.T) {
 		{name: "until", Services: []string{service1}, options: options{UntilTime: &until}},
 		{name: "since until", Services: []string{service1}, options: options{SinceTime: &until, UntilTime: &since},
 			wantErr: true},
-		// boot is not supported on Windows.
+		// boot 参数在 Windows 上不受支持。
 		{name: "boot", Services: []string{service1}, options: options{Boot: ptr.To(-1)}, wantErr: runtime.GOOS == "windows"},
 		{name: "boot out of range", Services: []string{service1}, options: options{Boot: ptr.To(1)}, wantErr: true},
 		{name: "tailLines", Services: []string{service1}, options: options{TailLines: ptr.To(100)}},
@@ -292,6 +304,7 @@ func Test_nodeLogQuery_validate(t *testing.T) {
 				Files:    tt.Files,
 				options:  tt.options,
 			}
+			// validate 是端点执行前的最后一道参数检查。
 			errs := n.validate()
 			if len(errs) > 0 != tt.wantErr {
 				t.Errorf("nodeLogQuery.validate() error = %v, wantErr %v", errs, tt.wantErr)
@@ -301,6 +314,8 @@ func Test_nodeLogQuery_validate(t *testing.T) {
 	}
 }
 
+// Test_heuristicsCopyFileLogs 验证文件日志启发式查找：
+// 支持显式文件名、服务名后缀匹配、目录忽略，以及缺失时输出提示。
 func Test_heuristicsCopyFileLogs(t *testing.T) {
 	ctx := context.TODO()
 	buf := &bytes.Buffer{}
@@ -311,21 +326,21 @@ func Test_heuristicsCopyFileLogs(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
-	// Check missing logs
+	// 文件不存在时应向输出写入可诊断的提示。
 	heuristicsCopyFileLogs(ctx, buf, dir, "service.log")
 	if !strings.Contains(buf.String(), "log not found for service.log") {
 		t.Fail()
 	}
 	buf.Reset()
 
-	// Check missing service logs
+	// 以服务名查询但对应日志不存在时，同样输出提示。
 	heuristicsCopyFileLogs(ctx, buf, dir, "service")
 	if !strings.Contains(buf.String(), "log not found for service") {
 		t.Fail()
 	}
 	buf.Reset()
 
-	// Check explicitly-named files
+	// 显式指定文件名时直接读取该文件。
 	if err := os.WriteFile(filepath.Join(dir, "service.log"), []byte("valid logs"), 0o444); err != nil {
 		t.Fatal(err)
 	}
@@ -335,14 +350,14 @@ func Test_heuristicsCopyFileLogs(t *testing.T) {
 	}
 	buf.Reset()
 
-	// Check service logs
+	// 以服务名查询时应匹配 service.log。
 	heuristicsCopyFileLogs(ctx, buf, dir, "service")
 	if buf.String() != "valid logs" {
 		t.Fail()
 	}
 	buf.Reset()
 
-	// Check that a directory doesn't cause errors
+	// 同名目录不应被当成日志文件，也不能导致错误。
 	if err := os.Mkdir(filepath.Join(dir, "service"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +367,7 @@ func Test_heuristicsCopyFileLogs(t *testing.T) {
 	}
 	buf.Reset()
 
-	// Check that service logs return the first matching file
+	// 多个候选文件时返回第一个匹配项，而不是目录下的其他文件。
 	if err := os.WriteFile(filepath.Join(dir, "service", "service.log"), []byte("error"), 0o444); err != nil {
 		t.Fatal(err)
 	}

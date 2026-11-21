@@ -37,8 +37,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// testPodLogsDirectory 是测试使用的 Pod 日志根目录。
 const testPodLogsDirectory = "/var/log/pods"
 
+// TestGeneratePodSandboxConfig 验证从 Pod 生成沙箱配置时，
+// 日志目录、标签、元数据与端口映射均符合预期。
 func TestGeneratePodSandboxConfig(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -63,6 +66,7 @@ func TestGeneratePodSandboxConfig(t *testing.T) {
 		},
 	}
 
+	// 生成配置并逐项比对关键字段。
 	podSandboxConfig, err := m.generatePodSandboxConfig(tCtx, pod, 1)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedLabels, podSandboxConfig.Labels)
@@ -71,7 +75,7 @@ func TestGeneratePodSandboxConfig(t *testing.T) {
 	assert.Equal(t, expectedPortMappings, podSandboxConfig.PortMappings)
 }
 
-// TestCreatePodSandbox tests creating sandbox and its corresponding pod log directory.
+// TestCreatePodSandbox 验证创建沙箱时会同时创建对应的 Pod 日志目录。
 func TestCreatePodSandbox(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeRuntime, _, m, err := createTestRuntimeManager(tCtx)
@@ -79,12 +83,14 @@ func TestCreatePodSandbox(t *testing.T) {
 	pod := newTestPod()
 
 	fakeOS := m.osInterface.(*containertest.FakeOS)
+	// 拦截目录创建调用，确认日志目录路径与权限正确。
 	fakeOS.MkdirAllFn = func(path string, perm os.FileMode) error {
-		// Check pod logs root directory is created.
+		// 检查 Pod 日志根目录已按要求创建。
 		assert.Equal(t, filepath.Join(testPodLogsDirectory, pod.Namespace+"_"+pod.Name+"_12345678"), path)
 		assert.Equal(t, os.FileMode(0755), perm)
 		return nil
 	}
+	// 创建沙箱后，运行时中应存在一个就绪状态的沙箱。
 	id, _, err := m.createPodSandbox(tCtx, pod, 1)
 	assert.NoError(t, err)
 	assert.Contains(t, fakeRuntime.Called, "RunPodSandbox")
@@ -95,6 +101,8 @@ func TestCreatePodSandbox(t *testing.T) {
 	assert.Equal(t, runtimeapi.PodSandboxState_SANDBOX_READY, sandboxes[0].State)
 }
 
+// TestGeneratePodSandboxLinuxConfigSeccomp 验证无论 Pod 或容器如何声明 seccomp，
+// 沙箱始终强制使用 runtime/default 配置。
 func TestGeneratePodSandboxLinuxConfigSeccomp(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -133,13 +141,15 @@ func TestGeneratePodSandboxLinuxConfigSeccomp(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		// 生成 Linux 沙箱配置并检查 seccomp 配置类型。
 		config, _ := m.generatePodSandboxLinuxConfig(tCtx, test.pod)
 		actualProfile := config.SecurityContext.Seccomp.ProfileType.String()
 		assert.EqualValues(t, test.expectedProfile, actualProfile, "TestCase[%d]: %s", i, test.description)
 	}
 }
 
-// TestCreatePodSandbox_RuntimeClass tests creating sandbox with RuntimeClasses enabled.
+// TestCreatePodSandbox_RuntimeClass 验证启用 RuntimeClass 时沙箱会使用正确的运行时处理器，
+// 且不存在的 RuntimeClass 会导致创建失败。
 func TestCreatePodSandbox_RuntimeClass(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	rcm := runtimeclass.NewManager(rctest.NewPopulatedClient())
@@ -160,6 +170,7 @@ func TestCreatePodSandbox_RuntimeClass(t *testing.T) {
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
+			// 每个子测试前清空调用记录，避免相互影响。
 			fakeRuntime.Called = []string{}
 			pod := newTestPod()
 			pod.Spec.RuntimeClassName = test.rcn
@@ -176,6 +187,7 @@ func TestCreatePodSandbox_RuntimeClass(t *testing.T) {
 	}
 }
 
+// newTestPod 构造一个用于沙箱测试的 Pod。
 func newTestPod() *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -200,7 +212,9 @@ func newTestPod() *v1.Pod {
 	}
 }
 
+// newSeccompPod 构造带有不同层级 seccomp 声明的 Pod，用于验证沙箱强制配置。
 func newSeccompPod(podFieldProfile, containerFieldProfile *v1.SeccompProfile, podAnnotationProfile, containerAnnotationProfile string) *v1.Pod {
+	// 分别填充 Pod 级与容器级的 seccomp 字段。
 	pod := newTestPod()
 	if podFieldProfile != nil {
 		pod.Spec.SecurityContext = &v1.PodSecurityContext{
@@ -215,6 +229,8 @@ func newSeccompPod(podFieldProfile, containerFieldProfile *v1.SeccompProfile, po
 	return pod
 }
 
+// TestGeneratePodSandboxWindowsConfig_HostProcess 验证 Windows 沙箱配置对 HostProcess、
+// GMSA 凭据与运行用户名的处理及相应错误场景。
 func TestGeneratePodSandboxWindowsConfig_HostProcess(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -384,10 +400,12 @@ func TestGeneratePodSandboxWindowsConfig_HostProcess(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// 关闭 WindowsHostNetwork 门控，保证测试覆盖默认路径。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.WindowsHostNetwork, false)
 			pod := &v1.Pod{}
 			pod.Spec = *testCase.podSpec
 
+			// 生成 Windows 沙箱配置，并同时校验配置内容与错误。
 			wc, err := m.generatePodSandboxWindowsConfig(pod)
 
 			assert.Equal(t, testCase.expectedWindowsConfig, wc)

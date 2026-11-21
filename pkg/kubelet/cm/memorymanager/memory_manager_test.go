@@ -43,13 +43,17 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// 测试用的 hugepages 资源名，需与 kubelet 配置中的写法保持一致。
 const (
 	hugepages2M = "hugepages-2Mi"
 	hugepages1G = "hugepages-1Gi"
 )
 
+// policyTypeMock 是注入可控错误的假 policy，用于验证 manager 的错误传播路径。
 const policyTypeMock policyType = "mock"
 
+// testMemoryManager 汇总各表驱动用例的输入与期望值。
+// 复用同一结构体让用例只需填充相关字段，避免为每个场景定义独立类型。
 type testMemoryManager struct {
 	description                string
 	machineInfo                cadvisorapi.MachineInfo
@@ -74,6 +78,8 @@ type testMemoryManager struct {
 	activePods                 []*v1.Pod
 }
 
+// returnPolicyByName 按用例的 policyName 构造对应 policy。
+// 用例只需声明策略名，省去重复的构造样板代码。
 func returnPolicyByName(logger klog.Logger, testCase testMemoryManager) Policy {
 	switch testCase.policyName {
 	case policyTypeMock:
@@ -89,59 +95,72 @@ func returnPolicyByName(logger klog.Logger, testCase testMemoryManager) Policy {
 	return nil
 }
 
+// mockPolicy 的所有方法都返回预设错误，用于模拟 policy 失败。
 type mockPolicy struct {
 	err error
 }
 
+// Name 返回 mock policy 的名称，便于断言 manager 选中的策略。
 func (p *mockPolicy) Name() string {
 	return string(policyTypeMock)
 }
 
+// Start 返回预设错误，模拟 policy 初始化失败。
 func (p *mockPolicy) Start(klog.Logger, state.State) error {
 	return p.err
 }
 
+// Allocate 返回预设错误，模拟内存分配失败。
 func (p *mockPolicy) Allocate(context.Context, state.State, *v1.Pod, *v1.Container, lifecycle.Operation) error {
 	return p.err
 }
 
+// RemoveContainer 为空实现，mock 场景无需真正释放状态。
 func (p *mockPolicy) RemoveContainer(klog.Logger, state.State, string, string) {
 }
 
+// GetTopologyHints 返回 nil，mock 场景不提供 NUMA hint。
 func (p *mockPolicy) GetTopologyHints(klog.Logger, state.State, *v1.Pod, *v1.Container, lifecycle.Operation) map[string][]topologymanager.TopologyHint {
 	return nil
 }
 
+// GetPodTopologyHints 返回 nil，mock 场景不提供 pod 级 hint。
 func (p *mockPolicy) GetPodTopologyHints(klog.Logger, state.State, *v1.Pod, lifecycle.Operation) map[string][]topologymanager.TopologyHint {
 	return nil
 }
 
+// AllocatePod 返回预设错误，模拟 pod 级分配失败。
 func (p *mockPolicy) AllocatePod(_ klog.Logger, s state.State, pod *v1.Pod, _ lifecycle.Operation) error {
 	return p.err
 }
 
-// GetAllocatableMemory returns the amount of allocatable memory for each NUMA node
+// GetAllocatableMemory 返回空切片：mock 场景不参与可分配内存计算。
 func (p *mockPolicy) GetAllocatableMemory(state.State) []state.Block {
 	return []state.Block{}
 }
 
+// mockRuntimeService 只实现 manager 用到的 UpdateContainerResources。
 type mockRuntimeService struct {
 	err error
 }
 
+// UpdateContainerResources 返回预设错误，用于验证 manager 对 CRI 调用失败的处理。
 func (rt mockRuntimeService) UpdateContainerResources(_ context.Context, id string, resources *runtimeapi.ContainerResources) error {
 	return rt.err
 }
 
+// mockPodStatusProvider 固定返回同一 pod 状态，避免测试依赖真实的 pod 缓存。
 type mockPodStatusProvider struct {
 	podStatus v1.PodStatus
 	found     bool
 }
 
+// GetPodStatus 忽略 uid，始终返回预置状态与 found 标志。
 func (psp mockPodStatusProvider) GetPodStatus(uid types.UID) (v1.PodStatus, bool) {
 	return psp.podStatus, psp.found
 }
 
+// getPod 构造仅含单个 container 的最小 pod，便于按 UID/名称定位。
 func getPod(podUID string, containerName string, requirements *v1.ResourceRequirements) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -158,6 +177,8 @@ func getPod(podUID string, containerName string, requirements *v1.ResourceRequir
 	}
 }
 
+// getPodWithPodLevelResources 在 getPod 基础上补充 pod 级 resources，
+// 用于覆盖 pod-level resources 特性下的内存分配。
 func getPodWithPodLevelResources(podUID string, podRequirements *v1.ResourceRequirements, containerName string, containerRequirements *v1.ResourceRequirements) *v1.Pod {
 	pod := getPod(podUID, containerName, containerRequirements)
 	pod.Spec.Resources = podRequirements
@@ -165,6 +186,8 @@ func getPodWithPodLevelResources(podUID string, podRequirements *v1.ResourceRequ
 	return pod
 }
 
+// getPodWithInitContainers 构造同时含 init container 与普通 container 的 pod，
+// 用于验证 init container 占用的内存在 app container 启动后被清理。
 func getPodWithInitContainers(podUID string, containers []v1.Container, initContainers []v1.Container) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -177,6 +200,8 @@ func getPodWithInitContainers(podUID string, containers []v1.Container, initCont
 	}
 }
 
+// TestValidateReservedMemory 校验预留内存与 Node Allocatable 的一致性检查：
+// 各 NUMA 节点的预留量之和必须等于 nodeAllocatableReservation 中对应资源的总量。
 func TestValidateReservedMemory(t *testing.T) {
 	machineInfo := &cadvisorapi.MachineInfo{
 		Topology: []cadvisorapi.Node{
@@ -184,6 +209,7 @@ func TestValidateReservedMemory(t *testing.T) {
 			{Id: 1},
 		},
 	}
+	// msgNotEqual 复用错误文案，避免各用例重复硬编码格式串。
 	const msgNotEqual = "the total amount %q of type %q is not equal to the value %q determined by Node Allocatable feature"
 	testCases := []struct {
 		description                string
@@ -332,6 +358,8 @@ func TestValidateReservedMemory(t *testing.T) {
 	}
 }
 
+// TestConvertPreReserved 验证将 kubelet 配置的 MemoryReservation 转换为
+// 以 NUMA 节点为键的内部 map，未配置的节点应得到空 map 而非 nil。
 func TestConvertPreReserved(t *testing.T) {
 	machineInfo := cadvisorapi.MachineInfo{
 		Topology: []cadvisorapi.Node{
@@ -413,6 +441,7 @@ func TestConvertPreReserved(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
+			// convertReserved 会按 machineInfo 的 NUMA 节点初始化结果，空配置也应得到 0/1 两个键。
 			reserved, _ := convertReserved(&machineInfo, tc.systemReserved)
 			if !reflect.DeepEqual(reserved, tc.systemReservedExpected) {
 				t.Errorf("got %v, expected %v", reserved, tc.systemReservedExpected)
@@ -421,6 +450,8 @@ func TestConvertPreReserved(t *testing.T) {
 	}
 }
 
+// TestGetSystemReservedMemory 验证 getSystemReservedMemory：预留量与 Node Allocatable
+// 不一致时返回错误，一致时返回按 NUMA 节点聚合的预留量。
 func TestGetSystemReservedMemory(t *testing.T) {
 	machineInfo := returnMachineInfo()
 	testCases := []testMemoryManager{
@@ -497,6 +528,8 @@ func TestGetSystemReservedMemory(t *testing.T) {
 	}
 }
 
+// TestRemoveStaleState 验证 kubelet 重启后清理状态文件中已不存在的容器分配：
+// 仍属于 activePods 的分配保留，其余分配被释放并把内存归还 NUMA 节点。
 func TestRemoveStaleState(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	machineInfo := returnMachineInfo()
@@ -919,6 +952,7 @@ func TestRemoveStaleState(t *testing.T) {
 				activePods:        func() []*v1.Pod { return nil },
 				podStatusProvider: mockPodStatusProvider{},
 			}
+			// sourcesReady 桩让 removeStaleState 认为 pod 源已就绪，否则它会提前返回、不做清理。
 			mgr.sourcesReady = &sourcesReadyStub{}
 			mgr.state.SetMemoryAssignments(testCase.assignments)
 			mgr.state.SetMachineState(testCase.machineState)
@@ -937,6 +971,8 @@ func TestRemoveStaleState(t *testing.T) {
 	}
 }
 
+// TestAddContainer 覆盖 Allocate + AddContainer 两条路径：分配成功时机器状态应扣减，
+// policy 报错时状态不变，需求超过单 NUMA 容量时应跨节点分配。
 func TestAddContainer(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	machineInfo := returnMachineInfo()
@@ -1402,6 +1438,7 @@ func TestAddContainer(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.description, func(t *testing.T) {
+			// activePods 由用例注入，静态策略据此判断哪些已分配内存可以回收。
 			mgr := &manager{
 				policy:       returnPolicyByName(logger, testCase),
 				state:        state.NewMemoryState(logger),
@@ -1415,11 +1452,13 @@ func TestAddContainer(t *testing.T) {
 			mgr.sourcesReady = &sourcesReadyStub{}
 			mgr.state.SetMachineState(testCase.machineState)
 			mgr.state.SetMemoryAssignments(testCase.assignments)
+			// 预先登记已有容器，模拟它正在运行并占用着机器状态中的内存。
 			if testCase.firstPod != nil {
 				mgr.containerMap.Add(testCase.firstPod.Name, testCase.firstPod.Spec.Containers[0].Name, "fakeID0")
 			}
 			pod := testCase.podAllocate
 			container := &pod.Spec.Containers[0]
+			// Allocate 只计算并预留内存，不写入 containerMap，故需随后单独调用 AddContainer。
 			err := mgr.Allocate(ctx, pod, container, lifecycle.AddOperation)
 			if !reflect.DeepEqual(err, testCase.expectedAllocateError) {
 				t.Errorf("Memory Manager Allocate() error (%v), expected error: %v, but got: %v",
@@ -1441,6 +1480,8 @@ func TestAddContainer(t *testing.T) {
 	}
 }
 
+// TestRemoveContainer 验证 RemoveContainer 释放分配并归还 NUMA 节点内存；
+// 容器不在 containerMap 中时应静默跳过，避免对未知容器报错。
 func TestRemoveContainer(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	machineInfo := returnMachineInfo()
@@ -1876,6 +1917,7 @@ func TestRemoveContainer(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.description, func(t *testing.T) {
+			// 预置两个容器映射，只有 removeContainerID 命中 fakeID2 时才会真正释放内存。
 			iniContainerMap := containermap.NewContainerMap()
 			iniContainerMap.Add("fakePod1", "fakeContainer1", "fakeID1")
 			iniContainerMap.Add("fakePod1", "fakeContainer2", "fakeID2")
@@ -1913,6 +1955,7 @@ func TestRemoveContainer(t *testing.T) {
 	}
 }
 
+// getPolicyNameForOs 返回当前平台可用的 policy：Windows 没有 static policy，只能用 best-effort。
 func getPolicyNameForOs() policyType {
 	if goruntime.GOOS == "windows" {
 		return policyTypeBestEffort
@@ -1920,9 +1963,8 @@ func getPolicyNameForOs() policyType {
 	return PolicyTypeStatic
 }
 
-// getAffinityForOs returns an affinity Store matching the policy selected by
-// getPolicyNameForOs. On Windows the BestEffort policy requires an
-// AuthoritativeStore, so a plain fake manager is not sufficient.
+// getAffinityForOs 返回与 getPolicyNameForOs 所选 policy 匹配的 affinity Store。
+// Windows 上 BestEffort policy 需要 AuthoritativeStore，普通 fake manager 不够用。
 func getAffinityForOs(logger klog.Logger) topologymanager.Store {
 	if goruntime.GOOS == "windows" {
 		return &fakeBestEffortAffinity{}
@@ -1930,6 +1972,8 @@ func getAffinityForOs(logger klog.Logger) topologymanager.Store {
 	return topologymanager.NewFakeManager(logger)
 }
 
+// TestNewManager 验证 NewManager 的构造逻辑：policy 选择、systemReserved 校验，
+// 以及静态策略下预留内存的转换结果。
 func TestNewManager(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	machineInfo := returnMachineInfo()
@@ -2017,6 +2061,7 @@ func TestNewManager(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.description, func(t *testing.T) {
+			// 每个用例使用独立临时目录存放状态文件，避免用例间状态串扰。
 			stateFileDirectory, err := os.MkdirTemp("", "memory_manager_tests")
 			if err != nil {
 				t.Errorf("Cannot create state file: %s", err.Error())
@@ -2054,6 +2099,8 @@ func TestNewManager(t *testing.T) {
 	}
 }
 
+// TestGetTopologyHints 验证静态策略生成的 NUMA hint：单节点 hint 为 preferred，
+// 跨节点 hint 为非 preferred。
 func TestGetTopologyHints(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []testMemoryManager{
@@ -2186,6 +2233,7 @@ func TestGetTopologyHints(t *testing.T) {
 				podStatusProvider: mockPodStatusProvider{},
 			}
 			mgr.sourcesReady = &sourcesReadyStub{}
+			// 使用 Clone 隔离状态，防止被测代码的改动污染用例数据、影响其他断言。
 			mgr.state.SetMachineState(testCase.machineState.Clone())
 			mgr.state.SetMemoryAssignments(testCase.assignments.Clone())
 
@@ -2200,6 +2248,8 @@ func TestGetTopologyHints(t *testing.T) {
 	}
 }
 
+// TestAllocateAndAddPodWithInitContainers 验证 init container 占用的内存在 app container
+// 启动后从状态文件中被移除，只保留 app container 的分配。
 func TestAllocateAndAddPodWithInitContainers(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	testCases := []testMemoryManager{
@@ -2367,7 +2417,7 @@ func TestAllocateAndAddPodWithInitContainers(t *testing.T) {
 			mgr.state.SetMachineState(testCase.machineState.Clone())
 			mgr.state.SetMemoryAssignments(testCase.assignments.Clone())
 
-			// Allocates memory for init containers
+			// 为 init container 分配内存，此时状态中应记录 init container 的占用。
 			for i := range testCase.podAllocate.Spec.InitContainers {
 				err := mgr.Allocate(ctx, testCase.podAllocate, &testCase.podAllocate.Spec.InitContainers[i], lifecycle.AddOperation)
 				if !reflect.DeepEqual(err, testCase.expectedError) {
@@ -2375,7 +2425,7 @@ func TestAllocateAndAddPodWithInitContainers(t *testing.T) {
 				}
 			}
 
-			// Allocates memory for apps containers
+			// 为 app container 分配内存，此步骤应触发 init container 分配的回收。
 			for i := range testCase.podAllocate.Spec.Containers {
 				err := mgr.Allocate(ctx, testCase.podAllocate, &testCase.podAllocate.Spec.Containers[i], lifecycle.AddOperation)
 				if !reflect.DeepEqual(err, testCase.expectedError) {
@@ -2383,12 +2433,12 @@ func TestAllocateAndAddPodWithInitContainers(t *testing.T) {
 				}
 			}
 
-			// Calls AddContainer for init containers
+			// 将 init container 登记到 containerMap。
 			for i, initContainer := range testCase.podAllocate.Spec.InitContainers {
 				mgr.AddContainer(logger, testCase.podAllocate, &testCase.podAllocate.Spec.InitContainers[i], initContainer.Name)
 			}
 
-			// Calls AddContainer for apps containers
+			// 将 app container 登记到 containerMap。
 			for i, appContainer := range testCase.podAllocate.Spec.Containers {
 				mgr.AddContainer(logger, testCase.podAllocate, &testCase.podAllocate.Spec.Containers[i], appContainer.Name)
 			}
@@ -2406,6 +2456,8 @@ func TestAllocateAndAddPodWithInitContainers(t *testing.T) {
 	}
 }
 
+// returnMachineInfo 构造两个 NUMA 节点的机器拓扑：每节点 10Gi 普通内存与 5 个 1Gi hugepage，
+// 作为大多数用例的固定基准。
 func returnMachineInfo() cadvisorapi.MachineInfo {
 	return cadvisorapi.MachineInfo{
 		Topology: []cadvisorapi.Node{

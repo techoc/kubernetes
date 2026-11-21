@@ -46,13 +46,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试中使用的 Pod 优先级取值：低、默认与高
 const (
 	lowPriority     = -1
 	defaultPriority = 0
 	highPriority    = 1
 )
 
-// mockPodKiller is used to testing which pod is killed
+// mockPodKiller 是一个 mock 实现，用于记录测试中被驱逐的是哪个 Pod
 type mockPodKiller struct {
 	pod                 *v1.Pod
 	evict               bool
@@ -60,7 +61,7 @@ type mockPodKiller struct {
 	gracePeriodOverride *int64
 }
 
-// killPodNow records the pod that was killed
+// killPodNow 记录被 kill 的 Pod
 func (m *mockPodKiller) killPodNow(pod *v1.Pod, evict bool, gracePeriodOverride *int64, statusFn func(*v1.PodStatus)) error {
 	m.pod = pod
 	m.statusFn = statusFn
@@ -69,23 +70,23 @@ func (m *mockPodKiller) killPodNow(pod *v1.Pod, evict bool, gracePeriodOverride 
 	return nil
 }
 
-// mockDiskInfoProvider is used to simulate testing.
+// mockDiskInfoProvider 用于模拟测试中的磁盘信息提供者
 type mockDiskInfoProvider struct {
 	dedicatedImageFs     *bool
 	dedicatedContainerFs *bool
 }
 
-// HasDedicatedImageFs returns the mocked value
+// HasDedicatedImageFs 返回 mock 的专用镜像文件系统标志
 func (m *mockDiskInfoProvider) HasDedicatedImageFs(_ context.Context) (bool, error) {
 	return ptr.Deref(m.dedicatedImageFs, false), nil
 }
 
-// HasDedicatedContainerFs returns the mocked value
+// HasDedicatedContainerFs 返回 mock 的专用容器文件系统标志
 func (m *mockDiskInfoProvider) HasDedicatedContainerFs(_ context.Context) (bool, error) {
 	return ptr.Deref(m.dedicatedContainerFs, false), nil
 }
 
-// mockDiskGC is used to simulate invoking image and container garbage collection.
+// mockDiskGC 用于模拟触发镜像和容器垃圾回收
 type mockDiskGC struct {
 	err                 error
 	imageGCInvoked      bool
@@ -94,7 +95,7 @@ type mockDiskGC struct {
 	summaryAfterGC      *statsapi.Summary
 }
 
-// DeleteUnusedImages returns the mocked values.
+// DeleteUnusedImages 返回 mock 的删除镜像结果
 func (m *mockDiskGC) DeleteUnusedImages(_ context.Context) error {
 	m.imageGCInvoked = true
 	if m.summaryAfterGC != nil && m.fakeSummaryProvider != nil {
@@ -103,7 +104,7 @@ func (m *mockDiskGC) DeleteUnusedImages(_ context.Context) error {
 	return m.err
 }
 
-// DeleteAllUnusedContainers returns the mocked value
+// DeleteAllUnusedContainers 返回 mock 的删除容器结果
 func (m *mockDiskGC) DeleteAllUnusedContainers(_ context.Context) error {
 	m.containerGCInvoked = true
 	if m.summaryAfterGC != nil && m.fakeSummaryProvider != nil {
@@ -112,6 +113,8 @@ func (m *mockDiskGC) DeleteAllUnusedContainers(_ context.Context) error {
 	return m.err
 }
 
+// makePodWithMemoryStats 构造一个带内存工作集统计的 Pod 及其统计信息
+// requests/limits 同时包含 CPU 与内存，memoryWorkingSet 为该 Pod 的内存工作集大小
 func makePodWithMemoryStats(name string, priority int32, requests v1.ResourceList, limits v1.ResourceList, memoryWorkingSet string) (*v1.Pod, statsapi.PodStats) {
 	pod := newPod(name, priority, []v1.Container{
 		newContainer(name, requests, limits),
@@ -120,6 +123,7 @@ func makePodWithMemoryStats(name string, priority int32, requests v1.ResourceLis
 	return pod, podStats
 }
 
+// makePodWithPIDStats 构造一个带进程数统计的 Pod 及其统计信息，processCount 为该 Pod 的进程数
 func makePodWithPIDStats(name string, priority int32, processCount uint64) (*v1.Pod, statsapi.PodStats) {
 	pod := newPod(name, priority, []v1.Container{
 		newContainer(name, nil, nil),
@@ -128,6 +132,8 @@ func makePodWithPIDStats(name string, priority int32, processCount uint64) (*v1.
 	return pod, podStats
 }
 
+// makePodWithDiskStats 构造一个带磁盘用量统计的 Pod 及其统计信息
+// 分别指定 rootfs、日志与本地卷的用量，并可附加卷列表
 func makePodWithDiskStats(name string, priority int32, requests v1.ResourceList, limits v1.ResourceList, rootFsUsed, logsUsed, perLocalVolumeUsed string, volumes []v1.Volume) (*v1.Pod, statsapi.PodStats) {
 	pod := newPod(name, priority, []v1.Container{
 		newContainer(name, requests, limits),
@@ -136,6 +142,8 @@ func makePodWithDiskStats(name string, priority int32, requests v1.ResourceList,
 	return pod, podStats
 }
 
+// makePodWithLocalStorageCapacityIsolationOpen 构造本地存储容量隔离场景的 Pod：
+// 为 emptyDir 卷设置 SizeLimit，并按用例名返回相应的内存或临时存储用量统计
 func makePodWithLocalStorageCapacityIsolationOpen(name string, priority int32, requests v1.ResourceList, limits v1.ResourceList, memoryWorkingSet string) (*v1.Pod, statsapi.PodStats) {
 	vol := newVolume("local-volume", v1.VolumeSource{
 		EmptyDir: &v1.EmptyDirVolumeSource{
@@ -162,6 +170,7 @@ func makePodWithLocalStorageCapacityIsolationOpen(name string, priority int32, r
 	return pod, podStats
 }
 
+// makePIDStats 根据节点可用 PID 数与运行中的进程数生成节点统计摘要，并附带各 Pod 的统计信息
 func makePIDStats(nodeAvailablePIDs string, numberOfRunningProcesses string, podStats map[*v1.Pod]statsapi.PodStats) *statsapi.Summary {
 	val := resource.MustParse(nodeAvailablePIDs)
 	availablePIDs := int64(val.Value())
@@ -183,6 +192,8 @@ func makePIDStats(nodeAvailablePIDs string, numberOfRunningProcesses string, pod
 	return result
 }
 
+// makeMemoryStats 根据节点可用内存与工作集生成节点统计摘要，
+// 同时注入 Linux 与 Windows 的系统容器统计以覆盖两条观测路径，并附带各 Pod 的统计信息
 func makeMemoryStats(nodeAvailableBytes string, podStats map[*v1.Pod]statsapi.PodStats) *statsapi.Summary {
 	val := resource.MustParse(nodeAvailableBytes)
 	availableBytes := uint64(val.Value())
@@ -194,7 +205,7 @@ func makeMemoryStats(nodeAvailableBytes string, podStats map[*v1.Pod]statsapi.Po
 				WorkingSetBytes: &WorkingSetBytes,
 			},
 			SystemContainers: []statsapi.ContainerStats{
-				// Used for memory signal observations on linux
+				// 用于观测 Linux 平台上的内存信号
 				{
 					Name: statsapi.SystemContainerPods,
 					Memory: &statsapi.MemoryStats{
@@ -202,7 +213,7 @@ func makeMemoryStats(nodeAvailableBytes string, podStats map[*v1.Pod]statsapi.Po
 						WorkingSetBytes: &WorkingSetBytes,
 					},
 				},
-				// Used for memory signal observations on windows
+				// 用于观测 Windows 平台上的内存信号
 				{
 					Name: statsapi.SystemContainerWindowsGlobalCommitMemory,
 					Memory: &statsapi.MemoryStats{
@@ -220,15 +231,18 @@ func makeMemoryStats(nodeAvailableBytes string, podStats map[*v1.Pod]statsapi.Po
 	return result
 }
 
+// diskStats 描述节点 rootfs、imagefs 与 containerfs 的可用字节数以及各 Pod 的磁盘用量统计
 type diskStats struct {
 	rootFsAvailableBytes  string
 	imageFsAvailableBytes string
-	// optional fs
-	// if not specified, than will assume imagefs=containerfs
+	// 可选的容器文件系统
+	// 若未指定，则假定 imagefs 与 containerfs 相同
 	containerFsAvailableBytes string
 	podStats                  map[*v1.Pod]statsapi.PodStats
 }
 
+// makeDiskStats 根据 diskStats 生成节点文件系统与镜像/容器文件系统的容量统计摘要
+// （容量按可用量的 2 倍模拟），并附带各 Pod 的统计信息
 func makeDiskStats(diskStats diskStats) *statsapi.Summary {
 	rootFsVal := resource.MustParse(diskStats.rootFsAvailableBytes)
 	rootFsBytes := uint64(rootFsVal.Value())
@@ -267,6 +281,7 @@ func makeDiskStats(diskStats diskStats) *statsapi.Summary {
 	return result
 }
 
+// podToMake 描述测试中需要构造的 Pod 在各维度上的用量，供不同测试用例复用
 type podToMake struct {
 	name                     string
 	priority                 int32
@@ -282,6 +297,8 @@ type podToMake struct {
 	perLocalVolumeInodesUsed string
 }
 
+// TestMemoryPressure_VerifyPodStatus 验证内存压力下被驱逐 Pod 的状态字段
+// （Phase、Reason、Message 与 DisruptionTarget 条件）是否正确
 func TestMemoryPressure_VerifyPodStatus(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	podMaker := makePodWithMemoryStats
@@ -333,18 +350,18 @@ func TestMemoryPressure_VerifyPodStatus(t *testing.T) {
 		thresholdsFirstObservedAt:    thresholdsObservedAt{},
 	}
 
-	// synchronize to detect the memory pressure
+	// 同步一次以检测内存压力
 	_, err := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager expects no error but got %v", err)
 	}
-	// verify memory pressure is detected
+	// 验证已检测到内存压力
 	if !manager.IsUnderMemoryPressure() {
 		t.Fatalf("Manager should have detected memory pressure")
 	}
 
-	// verify a pod is selected for eviction
+	// 验证已选中一个 Pod 用于驱逐
 	if podKiller.pod == nil {
 		t.Fatalf("Manager should have selected a pod for eviction")
 	}
@@ -361,13 +378,15 @@ func TestMemoryPressure_VerifyPodStatus(t *testing.T) {
 		}},
 	}
 
-	// verify the pod status after applying the status update function
+	// 应用状态更新函数后，验证被驱逐 Pod 的状态
 	podKiller.statusFn(&podKiller.pod.Status)
 	if diff := cmp.Diff(wantPodStatus, podKiller.pod.Status, cmpopts.IgnoreFields(v1.PodCondition{}, "LastProbeTime", "LastTransitionTime")); diff != "" {
 		t.Errorf("Unexpected pod status of the evicted pod (-want,+got):\n%s", diff)
 	}
 }
 
+// TestPIDPressure_VerifyPodStatus 验证 PID 压力下被驱逐 Pod 的状态字段是否正确；
+// Windows 不支持 PID 压力，直接跳过该测试
 func TestPIDPressure_VerifyPodStatus(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	if goruntime.GOOS == "windows" {
@@ -434,19 +453,19 @@ func TestPIDPressure_VerifyPodStatus(t *testing.T) {
 			thresholdsFirstObservedAt:    thresholdsObservedAt{},
 		}
 
-		// synchronize to detect the PID pressure
+		// 同步一次以检测 PID 压力
 		_, err := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 		if err != nil {
 			t.Fatalf("Manager expects no error but got %v", err)
 		}
 
-		// verify PID pressure is detected
+		// 验证已检测到 PID 压力
 		if !manager.IsUnderPIDPressure() {
 			t.Fatalf("Manager should have detected PID pressure")
 		}
 
-		// verify a pod is selected for eviction
+		// 验证已选中一个 Pod 用于驱逐
 		if podKiller.pod == nil {
 			t.Fatalf("Manager should have selected a pod for eviction")
 		}
@@ -459,7 +478,7 @@ func TestPIDPressure_VerifyPodStatus(t *testing.T) {
 			Message: "The node was low on resource: pids. Threshold quantity: 1200, available: 500. ",
 		})
 
-		// verify the pod status after applying the status update function
+		// 应用状态更新函数后，验证被驱逐 Pod 的状态
 		podKiller.statusFn(&podKiller.pod.Status)
 		if diff := cmp.Diff(*wantPodStatus, podKiller.pod.Status, cmpopts.IgnoreFields(v1.PodCondition{}, "LastProbeTime", "LastTransitionTime")); diff != "" {
 			t.Errorf("Unexpected pod status of the evicted pod (-want,+got):\n%s", diff)
@@ -467,6 +486,8 @@ func TestPIDPressure_VerifyPodStatus(t *testing.T) {
 	}
 }
 
+// TestDiskPressureNodeFs_VerifyPodStatus 验证磁盘压力下被驱逐 Pod 的状态字段，
+// 覆盖无独立 imagefs、独立 imagefs、独立 containerfs 以及特性开关关闭时报错等场景
 func TestDiskPressureNodeFs_VerifyPodStatus(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	testCases := map[string]struct {
@@ -611,7 +632,7 @@ func TestDiskPressureNodeFs_VerifyPodStatus(t *testing.T) {
 			thresholdsFirstObservedAt:    thresholdsObservedAt{},
 		}
 
-		// synchronize
+		// 同步
 		pods, synchErr := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 		if synchErr == nil && tc.expectErr != "" {
@@ -621,12 +642,12 @@ func TestDiskPressureNodeFs_VerifyPodStatus(t *testing.T) {
 				t.Errorf("Unexpected error (-want,+got):\n%s", diff)
 			}
 		} else {
-			// verify manager detected disk pressure
+			// 验证管理器已检测到磁盘压力
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report disk pressure")
 			}
 
-			// verify a pod is selected for eviction
+			// 验证已选中一个 Pod 用于驱逐
 			if podKiller.pod == nil {
 				t.Fatalf("Manager should have selected a pod for eviction")
 			}
@@ -638,7 +659,7 @@ func TestDiskPressureNodeFs_VerifyPodStatus(t *testing.T) {
 				Message: tc.evictionMessage,
 			})
 
-			// verify the pod status after applying the status update function
+			// 应用状态更新函数后，验证被驱逐 Pod 的状态
 			podKiller.statusFn(&podKiller.pod.Status)
 			if diff := cmp.Diff(wantPodStatus, podKiller.pod.Status, cmpopts.IgnoreFields(v1.PodCondition{}, "LastProbeTime", "LastTransitionTime")); diff != "" {
 				t.Errorf("Unexpected pod status of the evicted pod (-want,+got):\n%s", diff)
@@ -647,7 +668,9 @@ func TestDiskPressureNodeFs_VerifyPodStatus(t *testing.T) {
 	}
 }
 
-// TestMemoryPressure
+// TestMemoryPressure 验证内存压力下驱逐管理器的完整行为：
+// 软阈值在宽限期内只上报压力而不驱逐 Pod，超过宽限期后按优先级与用量选择目标 Pod 驱逐；
+// 压力解除后需经过转换期，节点上的内存压力条件才会被清除；期间准入控制随压力状态变化。
 func TestMemoryPressure(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	podMaker := makePodWithMemoryStats
@@ -712,23 +735,23 @@ func TestMemoryPressure(t *testing.T) {
 		thresholdsFirstObservedAt:    thresholdsObservedAt{},
 	}
 
-	// create a best effort pod to test admission
+	// 创建一个 best-effort Pod 用于测试准入
 	bestEffortPodToAdmit, _ := podMaker("best-admit", defaultPriority, newResourceList("", "", ""), newResourceList("", "", ""), "0Gi")
 	burstablePodToAdmit, _ := podMaker("burst-admit", defaultPriority, newResourceList("100m", "100Mi", ""), newResourceList("200m", "200Mi", ""), "0Gi")
 
-	// synchronize
+	// 同步
 	_, err := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager expects no error but got %v", err)
 	}
 
-	// we should not have memory pressure
+	// 此时不应有内存压力
 	if manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should not report memory pressure")
 	}
 
-	// try to admit our pods (they should succeed)
+	// 尝试准入两个 Pod（都应成功）
 	expected := []bool{true, true}
 	for i, pod := range []*v1.Pod{bestEffortPodToAdmit, burstablePodToAdmit} {
 		if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: pod}); expected[i] != result.Admit {
@@ -736,7 +759,7 @@ func TestMemoryPressure(t *testing.T) {
 		}
 	}
 
-	// induce soft threshold
+	// 触发软阈值
 	fakeClock.Step(1 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("1500Mi", podStats)
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -745,17 +768,17 @@ func TestMemoryPressure(t *testing.T) {
 		t.Fatalf("Manager expects no error but got %v", err)
 	}
 
-	// we should have memory pressure
+	// 此时应有内存压力
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure since soft threshold was met")
 	}
 
-	// verify no pod was yet killed because there has not yet been enough time passed.
+	// 时间尚未超过宽限期，验证尚无 Pod 被驱逐
 	if podKiller.pod != nil {
 		t.Errorf("Manager should not have killed a pod yet, but killed: %v", podKiller.pod.Name)
 	}
 
-	// step forward in time pass the grace period
+	// 将时钟拨过宽限期
 	fakeClock.Step(3 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("1500Mi", podStats)
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -764,12 +787,12 @@ func TestMemoryPressure(t *testing.T) {
 		t.Fatalf("Manager expects no error but got %v", err)
 	}
 
-	// we should have memory pressure
+	// 此时应有内存压力
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure since soft threshold was met")
 	}
 
-	// verify the right pod was killed with the right grace period.
+	// 验证被驱逐的 Pod 与宽限期覆盖值均正确
 	if podKiller.pod != podToEvict {
 		t.Errorf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 	}
@@ -780,11 +803,11 @@ func TestMemoryPressure(t *testing.T) {
 	if observedGracePeriod != manager.config.MaxPodGracePeriodSeconds {
 		t.Errorf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", manager.config.MaxPodGracePeriodSeconds, observedGracePeriod)
 	}
-	// reset state
+	// 重置状态
 	podKiller.pod = nil
 	podKiller.gracePeriodOverride = nil
 
-	// remove memory pressure
+	// 消除内存压力
 	fakeClock.Step(20 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("3Gi", podStats)
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -793,12 +816,12 @@ func TestMemoryPressure(t *testing.T) {
 		t.Fatalf("Manager expects no error but got %v", err)
 	}
 
-	// we should not have memory pressure
+	// 此时不应有内存压力
 	if manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should not report memory pressure")
 	}
 
-	// induce memory pressure!
+	// 诱发内存压力！
 	fakeClock.Step(1 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("500Mi", podStats)
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -807,12 +830,12 @@ func TestMemoryPressure(t *testing.T) {
 		t.Fatalf("Manager expects no error but got %v", err)
 	}
 
-	// we should have memory pressure
+	// 此时应有内存压力
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure")
 	}
 
-	// check the right pod was killed
+	// 验证被驱逐的是正确的 Pod
 	if podKiller.pod != podToEvict {
 		t.Errorf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 	}
@@ -821,7 +844,7 @@ func TestMemoryPressure(t *testing.T) {
 		t.Errorf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", 1, observedGracePeriod)
 	}
 
-	// the best-effort pod should not admit, burstable should
+	// best-effort Pod 不应被准入，burstable 应被准入
 	expected = []bool{false, true}
 	for i, pod := range []*v1.Pod{bestEffortPodToAdmit, burstablePodToAdmit} {
 		if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: pod}); expected[i] != result.Admit {
@@ -829,27 +852,27 @@ func TestMemoryPressure(t *testing.T) {
 		}
 	}
 
-	// reduce memory pressure
+	// 降低内存压力
 	fakeClock.Step(1 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("2Gi", podStats)
-	podKiller.pod = nil // reset state
+	podKiller.pod = nil // 重置状态
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager expects no error but got %v", err)
 	}
 
-	// we should have memory pressure (because transition period not yet met)
+	// 仍应有内存压力（转换期尚未结束）
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure")
 	}
 
-	// no pod should have been killed
+	// 不应有 Pod 被驱逐
 	if podKiller.pod != nil {
 		t.Errorf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 	}
 
-	// the best-effort pod should not admit, burstable should
+	// best-effort Pod 不应被准入，burstable 应被准入
 	expected = []bool{false, true}
 	for i, pod := range []*v1.Pod{bestEffortPodToAdmit, burstablePodToAdmit} {
 		if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: pod}); expected[i] != result.Admit {
@@ -857,27 +880,27 @@ func TestMemoryPressure(t *testing.T) {
 		}
 	}
 
-	// move the clock past transition period to ensure that we stop reporting pressure
+	// 将时钟拨过转换期，确保压力状态被清除
 	fakeClock.Step(5 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("2Gi", podStats)
-	podKiller.pod = nil // reset state
+	podKiller.pod = nil // 重置状态
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager expects no error but got %v", err)
 	}
 
-	// we should not have memory pressure (because transition period met)
+	// 不应再有内存压力（转换期已结束）
 	if manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should not report memory pressure")
 	}
 
-	// no pod should have been killed
+	// 不应有 Pod 被驱逐
 	if podKiller.pod != nil {
 		t.Errorf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 	}
 
-	// all pods should admit now
+	// 所有 Pod 现在都应被准入
 	expected = []bool{true, true}
 	for i, pod := range []*v1.Pod{bestEffortPodToAdmit, burstablePodToAdmit} {
 		if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: pod}); expected[i] != result.Admit {
@@ -886,6 +909,8 @@ func TestMemoryPressure(t *testing.T) {
 	}
 }
 
+// makeContainersByQOS 按 QoS 级别返回对应的容器列表：
+// Guaranteed 同时设置 requests 与 limits，Burstable 仅设置 requests，BestEffort 均不设置
 func makeContainersByQOS(class v1.PodQOSClass) []v1.Container {
 	resource := newResourceList("100m", "1Gi", "")
 	switch class {
@@ -900,6 +925,8 @@ func makeContainersByQOS(class v1.PodQOSClass) []v1.Container {
 	}
 }
 
+// TestPIDPressure 验证 PID 压力下的完整驱逐流程，与 TestMemoryPressure 结构一致：
+// 软阈值宽限期、驱逐目标选择、准入控制以及转换期后压力状态的清除
 func TestPIDPressure(t *testing.T) {
 	testCases := []struct {
 		name                               string
@@ -919,7 +946,7 @@ func TestPIDPressure(t *testing.T) {
 				{name: "low-priority-high-usage", priority: lowPriority, pidUsage: 600},
 				{name: "low-priority-low-usage", priority: lowPriority, pidUsage: 50},
 			},
-			evictPodIndex:                      3, // we expect the low-priority-high-usage pod to be evicted
+			evictPodIndex:                      3, // 预期被驱逐的是 low-priority-high-usage Pod
 			noPressurePIDUsage:                 "300",
 			pressurePIDUsageWithGracePeriod:    "700",
 			pressurePIDUsageWithoutGracePeriod: "1200",
@@ -984,27 +1011,27 @@ func TestPIDPressure(t *testing.T) {
 				thresholdsFirstObservedAt:    thresholdsObservedAt{},
 			}
 
-			// create a pod to test admission
+			// 创建一个 Pod 用于测试准入
 			podToAdmit, _ := podMaker("pod-to-admit", defaultPriority, 50)
 
-			// synchronize
+			// 同步
 			_, err := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// we should not have PID pressure
+			// 此时不应有 PID 压力
 			if manager.IsUnderPIDPressure() {
 				t.Fatalf("Manager should not report PID pressure")
 			}
 
-			// try to admit our pod (should succeed)
+			// 尝试准入该 Pod（应成功）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); !result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, true, result.Admit)
 			}
 
-			// induce soft threshold for PID pressure
+			// 触发 PID 软阈值
 			fakeClock.Step(1 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(tc.totalPID, tc.pressurePIDUsageWithGracePeriod, podStats)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -1013,31 +1040,31 @@ func TestPIDPressure(t *testing.T) {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// now, we should have PID pressure
+			// 现在应有 PID 压力
 			if !manager.IsUnderPIDPressure() {
 				t.Errorf("Manager should report PID pressure since soft threshold was met")
 			}
 
-			// verify no pod was yet killed because there has not yet been enough time passed
+			// 时间尚未超过宽限期，验证尚无 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Errorf("Manager should not have killed a pod yet, but killed: %v", podKiller.pod.Name)
 			}
 
-			// step forward in time past the grace period
+			// 将时钟拨过宽限期
 			fakeClock.Step(3 * time.Minute)
-			// no change in PID stats to simulate continued pressure
+			// PID 统计保持不变，模拟压力持续存在
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// verify PID pressure is still reported
+			// 验证仍报告 PID 压力
 			if !manager.IsUnderPIDPressure() {
 				t.Errorf("Manager should still report PID pressure")
 			}
 
-			// verify the right pod was killed with the right grace period.
+			// 验证被驱逐的 Pod 与宽限期覆盖值均正确
 			if podKiller.pod != podToEvict {
 				t.Errorf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 			}
@@ -1049,25 +1076,25 @@ func TestPIDPressure(t *testing.T) {
 				t.Errorf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", manager.config.MaxPodGracePeriodSeconds, observedGracePeriod)
 			}
 
-			// reset state
+			// 重置状态
 			podKiller.pod = nil
 			podKiller.gracePeriodOverride = nil
 
-			// remove PID pressure by simulating increased PID availability
+			// 模拟可用 PID 数量回升，消除 PID 压力
 			fakeClock.Step(20 * time.Minute)
-			summaryProvider.result = summaryStatsMaker(tc.totalPID, tc.noPressurePIDUsage, podStats) // Simulate increased PID availability
+			summaryProvider.result = summaryStatsMaker(tc.totalPID, tc.noPressurePIDUsage, podStats) // 模拟可用 PID 数量回升
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// verify PID pressure is resolved
+			// 验证 PID 压力已解除
 			if manager.IsUnderPIDPressure() {
 				t.Errorf("Manager should not report PID pressure")
 			}
 
-			// re-induce PID pressure
+			// 再次诱发 PID 压力
 			fakeClock.Step(1 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(tc.totalPID, tc.pressurePIDUsageWithoutGracePeriod, podStats)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -1076,12 +1103,12 @@ func TestPIDPressure(t *testing.T) {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// verify PID pressure is reported again
+			// 验证再次报告 PID 压力
 			if !manager.IsUnderPIDPressure() {
 				t.Errorf("Manager should report PID pressure")
 			}
 
-			// verify the right pod was killed with the right grace period.
+			// 验证被驱逐的 Pod 与宽限期覆盖值均正确
 			if podKiller.pod != podToEvict {
 				t.Errorf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 			}
@@ -1093,37 +1120,37 @@ func TestPIDPressure(t *testing.T) {
 				t.Errorf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", 1, observedGracePeriod)
 			}
 
-			// try to admit our pod (should fail)
+			// 尝试准入该 Pod（应失败）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, false, result.Admit)
 			}
 
-			// reduce PID pressure
+			// 降低 PID 压力
 			fakeClock.Step(1 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(tc.totalPID, tc.noPressurePIDUsage, podStats)
-			podKiller.pod = nil // reset state
+			podKiller.pod = nil // 重置状态
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// we should have PID pressure (because transition period not yet met)
+			// 仍应有 PID 压力（转换期尚未结束）
 			if !manager.IsUnderPIDPressure() {
 				t.Errorf("Manager should report PID pressure")
 			}
 
-			// no pod should have been killed
+			// 不应有 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Errorf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 			}
 
-			// try to admit our pod (should fail)
+			// 尝试准入该 Pod（应失败）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, false, result.Admit)
 			}
 
-			// move the clock past the transition period
+			// 将时钟拨过转换期
 			fakeClock.Step(5 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(tc.totalPID, tc.noPressurePIDUsage, podStats)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -1132,17 +1159,17 @@ func TestPIDPressure(t *testing.T) {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// we should not have PID pressure (because transition period met)
+			// 不应再有 PID 压力（转换期已结束）
 			if manager.IsUnderPIDPressure() {
 				t.Errorf("Manager should not report PID pressure")
 			}
 
-			// no pod should have been killed
+			// 不应有 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Errorf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 			}
 
-			// try to admit our pod (should succeed)
+			// 尝试准入该 Pod（应成功）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); !result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, true, result.Admit)
 			}
@@ -1150,6 +1177,8 @@ func TestPIDPressure(t *testing.T) {
 	}
 }
 
+// TestAdmitUnderNodeConditions 验证不同节点压力条件下各 QoS 级别 Pod 的准入结果：
+// 内存压力下仅拒绝 best-effort，磁盘压力下拒绝所有 Pod
 func TestAdmitUnderNodeConditions(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	manager := &managerImpl{}
@@ -1183,7 +1212,7 @@ func TestAdmitUnderNodeConditions(t *testing.T) {
 	}
 }
 
-// parseQuantity parses the specified value (if provided) otherwise returns 0 value
+// parseQuantity 解析给定的资源量字符串；若为空则返回 0 值
 func parseQuantity(value string) resource.Quantity {
 	if len(value) == 0 {
 		return resource.MustParse("0")
@@ -1191,6 +1220,8 @@ func parseQuantity(value string) resource.Quantity {
 	return resource.MustParse(value)
 }
 
+// TestDiskPressureNodeFs 验证磁盘压力下的完整驱逐与准入流程，
+// 覆盖 nodefs、imagefs 与 containerfs 三种压力来源的软/硬阈值场景
 func TestDiskPressureNodeFs(t *testing.T) {
 
 	testCases := map[string]struct {
@@ -1363,27 +1394,27 @@ func TestDiskPressureNodeFs(t *testing.T) {
 				thresholdsFirstObservedAt:    thresholdsObservedAt{},
 			}
 
-			// create a best effort pod to test admission
+			// 创建一个 best-effort Pod 用于测试准入
 			podToAdmit, _ := podMaker("pod-to-admit", defaultPriority, newResourceList("", "", ""), newResourceList("", "", ""), "0Gi", "0Gi", "0Gi", nil)
 
-			// synchronize
+			// 同步
 			_, err := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// we should not have disk pressure
+			// 此时不应有磁盘压力
 			if manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should not report disk pressure")
 			}
 
-			// try to admit our pod (should succeed)
+			// 尝试准入该 Pod（应成功）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); !result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, true, result.Admit)
 			}
 
-			// induce soft threshold
+			// 触发软阈值
 			fakeClock.Step(1 * time.Minute)
 
 			if tc.inducePressureOnWhichFs == "nodefs" {
@@ -1400,17 +1431,17 @@ func TestDiskPressureNodeFs(t *testing.T) {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// we should have disk pressure
+			// 此时应有磁盘压力
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report disk pressure since soft threshold was met")
 			}
 
-			// verify no pod was yet killed because there has not yet been enough time passed.
+			// 时间尚未超过宽限期，验证尚无 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Fatalf("Manager should not have killed a pod yet, but killed: %v", podKiller.pod.Name)
 			}
 
-			// step forward in time pass the grace period
+			// 将时钟拨过宽限期
 			fakeClock.Step(3 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(diskStatStart)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -1419,12 +1450,12 @@ func TestDiskPressureNodeFs(t *testing.T) {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// we should have disk pressure
+			// 此时应有磁盘压力
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report disk pressure since soft threshold was met")
 			}
 
-			// verify the right pod was killed with the right grace period.
+			// 验证被驱逐的 Pod 与宽限期覆盖值均正确
 			if podKiller.pod != podToEvict {
 				t.Fatalf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 			}
@@ -1435,11 +1466,11 @@ func TestDiskPressureNodeFs(t *testing.T) {
 			if observedGracePeriod != manager.config.MaxPodGracePeriodSeconds {
 				t.Fatalf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", manager.config.MaxPodGracePeriodSeconds, observedGracePeriod)
 			}
-			// reset state
+			// 重置状态
 			podKiller.pod = nil
 			podKiller.gracePeriodOverride = nil
 
-			// remove disk pressure
+			// 消除磁盘压力
 			fakeClock.Step(20 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(diskStatConst)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -1448,12 +1479,12 @@ func TestDiskPressureNodeFs(t *testing.T) {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// we should not have disk pressure
+			// 此时不应有磁盘压力
 			if manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should not report disk pressure")
 			}
 
-			// induce disk pressure!
+			// 诱发磁盘压力！
 			fakeClock.Step(1 * time.Minute)
 			if tc.inducePressureOnWhichFs == "nodefs" {
 				diskStatStart.rootFsAvailableBytes = tc.hardDiskPressure
@@ -1469,12 +1500,12 @@ func TestDiskPressureNodeFs(t *testing.T) {
 				t.Fatalf("Manager expects no error but got %v", err)
 			}
 
-			// we should have disk pressure
+			// 此时应有磁盘压力
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report disk pressure")
 			}
 
-			// check the right pod was killed
+			// 验证被驱逐的是正确的 Pod
 			if podKiller.pod != podToEvict {
 				t.Fatalf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 			}
@@ -1483,57 +1514,57 @@ func TestDiskPressureNodeFs(t *testing.T) {
 				t.Fatalf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", 1, observedGracePeriod)
 			}
 
-			// try to admit our pod (should fail)
+			// 尝试准入该 Pod（应失败）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, false, result.Admit)
 			}
 
-			// reduce disk pressure
+			// 降低磁盘压力
 			fakeClock.Step(1 * time.Minute)
 
 			summaryProvider.result = summaryStatsMaker(diskStatConst)
-			podKiller.pod = nil // reset state
+			podKiller.pod = nil // 重置状态
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
-			// we should have disk pressure (because transition period not yet met)
+			// 仍应有磁盘压力（转换期尚未结束）
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report disk pressure")
 			}
 
-			// no pod should have been killed
+			// 不应有 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Fatalf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 			}
 
-			// try to admit our pod (should fail)
+			// 尝试准入该 Pod（应失败）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, false, result.Admit)
 			}
 
-			// move the clock past transition period to ensure that we stop reporting pressure
+			// 将时钟拨过转换期，确保压力状态被清除
 			fakeClock.Step(5 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(diskStatConst)
-			podKiller.pod = nil // reset state
+			podKiller.pod = nil // 重置状态
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should not have disk pressure (because transition period met)
+			// 不应再有磁盘压力（转换期已结束）
 			if manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should not report disk pressure")
 			}
 
-			// no pod should have been killed
+			// 不应有 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Fatalf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 			}
 
-			// try to admit our pod (should succeed)
+			// 尝试准入该 Pod（应成功）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); !result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, true, result.Admit)
 			}
@@ -1541,7 +1572,9 @@ func TestDiskPressureNodeFs(t *testing.T) {
 	}
 }
 
-// TestMinReclaim verifies that min-reclaim works as desired.
+// TestMinReclaim 验证 min-reclaim 的语义：
+// 可用内存低于阈值时必须回收至少 min-reclaim 的量才算解除压力；
+// GC 无法独立完成回收时驱逐 Pod，满足回收量后压力解除并经过转换期才清除节点条件。
 func TestMinReclaim(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	podMaker := makePodWithMemoryStats
@@ -1601,17 +1634,17 @@ func TestMinReclaim(t *testing.T) {
 		thresholdsFirstObservedAt:    thresholdsObservedAt{},
 	}
 
-	// synchronize
+	// 同步
 	_, err := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 	if err != nil {
 		t.Errorf("Manager should not report any errors")
 	}
-	// we should not have memory pressure
+	// 此时不应有内存压力
 	if manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should not report memory pressure")
 	}
 
-	// induce memory pressure!
+	// 诱发内存压力！
 	fakeClock.Step(1 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("500Mi", podStats)
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -1620,12 +1653,12 @@ func TestMinReclaim(t *testing.T) {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should have memory pressure
+	// 此时应有内存压力
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure")
 	}
 
-	// check the right pod was killed
+	// 验证被驱逐的是正确的 Pod
 	if podKiller.pod != podToEvict {
 		t.Errorf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 	}
@@ -1634,22 +1667,22 @@ func TestMinReclaim(t *testing.T) {
 		t.Errorf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", 1, observedGracePeriod)
 	}
 
-	// reduce memory pressure, but not below the min-reclaim amount
+	// 降低内存压力，但仍不足 min-reclaim 要求的回收量
 	fakeClock.Step(1 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("1.2Gi", podStats)
-	podKiller.pod = nil // reset state
+	podKiller.pod = nil // 重置状态
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should have memory pressure (because transition period not yet met)
+	// 仍应有内存压力（转换期尚未结束）
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure")
 	}
 
-	// check the right pod was killed
+	// 验证被驱逐的是正确的 Pod
 	if podKiller.pod != podToEvict {
 		t.Errorf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 	}
@@ -1658,47 +1691,49 @@ func TestMinReclaim(t *testing.T) {
 		t.Errorf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", 1, observedGracePeriod)
 	}
 
-	// reduce memory pressure and ensure the min-reclaim amount
+	// 将可用内存恢复到满足 min-reclaim 的水平
 	fakeClock.Step(1 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("2Gi", podStats)
-	podKiller.pod = nil // reset state
+	podKiller.pod = nil // 重置状态
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should have memory pressure (because transition period not yet met)
+	// 仍应有内存压力（转换期尚未结束）
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure")
 	}
 
-	// no pod should have been killed
+	// 不应有 Pod 被驱逐
 	if podKiller.pod != nil {
 		t.Errorf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 	}
 
-	// move the clock past transition period to ensure that we stop reporting pressure
+	// 将时钟拨过转换期，确保压力状态被清除
 	fakeClock.Step(5 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("2Gi", podStats)
-	podKiller.pod = nil // reset state
+	podKiller.pod = nil // 重置状态
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should not have memory pressure (because transition period met)
+	// 不应再有内存压力（转换期已结束）
 	if manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should not report memory pressure")
 	}
 
-	// no pod should have been killed
+	// 不应有 Pod 被驱逐
 	if podKiller.pod != nil {
 		t.Errorf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 	}
 }
 
+// TestNodeReclaimFuncs 验证磁盘压力下节点回收函数（镜像/容器 GC）的调用时机：
+// 压力可被 GC 消化时只执行 GC 而不驱逐 Pod；GC 回收量不足或未回收时再驱逐 Pod
 func TestNodeReclaimFuncs(t *testing.T) {
 	testCases := map[string]struct {
 		nodeFsStats                   string
@@ -1870,7 +1905,7 @@ func TestNodeReclaimFuncs(t *testing.T) {
 				containerFsAvailableBytes: tc.containerFsStats,
 				podStats:                  podStats,
 			}
-			// This is a constant that we use to test that disk pressure is over. Don't change!
+			// 该常量用于验证磁盘压力已解除，请勿修改！
 			diskStatConst := diskStatStart
 			summaryProvider := &fakeSummaryProvider{result: summaryStatsMaker(diskStatStart)}
 			diskGC := &mockDiskGC{fakeSummaryProvider: summaryProvider, err: nil}
@@ -1887,19 +1922,19 @@ func TestNodeReclaimFuncs(t *testing.T) {
 				thresholdsFirstObservedAt:    thresholdsObservedAt{},
 			}
 
-			// synchronize
+			// 同步
 			_, err := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should not have disk pressure
+			// 此时不应有磁盘压力
 			if manager.IsUnderDiskPressure() {
 				t.Errorf("Manager should not report disk pressure")
 			}
 
-			// induce hard threshold
+			// 触发硬阈值
 			fakeClock.Step(1 * time.Minute)
 
 			setDiskStatsBasedOnFs := func(whichFs string, diskPressure string, diskStat diskStats) diskStats {
@@ -1914,7 +1949,7 @@ func TestNodeReclaimFuncs(t *testing.T) {
 			}
 			newDiskAfterHardEviction := setDiskStatsBasedOnFs(tc.inducePressureOnWhichFs, tc.hardDiskPressure, diskStatStart)
 			summaryProvider.result = summaryStatsMaker(newDiskAfterHardEviction)
-			// make GC successfully return disk usage to previous levels
+			// 让 GC 成功将磁盘用量恢复到原先水平
 			diskGC.summaryAfterGC = summaryStatsMaker(diskStatConst)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
@@ -1922,28 +1957,28 @@ func TestNodeReclaimFuncs(t *testing.T) {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should have disk pressure
+			// 此时应有磁盘压力
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report disk pressure since soft threshold was met")
 			}
 
-			// verify image, container or both gc were called.
-			// split filesystem can have container gc called without image.
-			// same filesystem should have both.
+			// 验证镜像 GC 或容器 GC（或两者）被调用
+			// 分离文件系统下可能只调用容器 GC 而不调用镜像 GC
+			// 同一文件系统下两者都应在 GC 时被调用
 			if diskGC.imageGCInvoked != tc.expectImageGcCall && diskGC.containerGCInvoked != tc.expectContainerGcCall {
 				t.Fatalf("Manager should have invoked image gc")
 			}
 
-			// verify no pod was killed because image gc was sufficient
+			// 镜像 GC 已足够回收，验证没有 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Fatalf("Manager should not have killed a pod, but killed: %v", podKiller.pod.Name)
 			}
 
-			// reset state
+			// 重置状态
 			diskGC.imageGCInvoked = false
 			diskGC.containerGCInvoked = false
 
-			// remove disk pressure
+			// 消除磁盘压力
 			fakeClock.Step(20 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(diskStatConst)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -1952,28 +1987,28 @@ func TestNodeReclaimFuncs(t *testing.T) {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should not have disk pressure
+			// 此时不应有磁盘压力
 			if manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should not report disk pressure")
 			}
 
-			// synchronize
+			// 同步
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should not have disk pressure
+			// 此时不应有磁盘压力
 			if manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should not report disk pressure")
 			}
 
-			// induce hard threshold
+			// 触发硬阈值
 			fakeClock.Step(1 * time.Minute)
 			newDiskAfterHardEviction = setDiskStatsBasedOnFs(tc.inducePressureOnWhichFs, tc.hardDiskPressure, diskStatStart)
 			summaryProvider.result = summaryStatsMaker(newDiskAfterHardEviction)
-			// make GC return disk usage bellow the threshold, but not satisfying minReclaim
+			// 让 GC 将磁盘用量降到阈值以下，但不满足 minReclaim 要求
 			gcBelowThreshold := setDiskStatsBasedOnFs(tc.inducePressureOnWhichFs, "1.1G", newDiskAfterHardEviction)
 			diskGC.summaryAfterGC = summaryStatsMaker(gcBelowThreshold)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -1982,29 +2017,29 @@ func TestNodeReclaimFuncs(t *testing.T) {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should have disk pressure
+			// 此时应有磁盘压力
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report disk pressure since soft threshold was met")
 			}
 
-			// verify image, container or both gc were called.
-			// split filesystem can have container gc called without image.
-			// same filesystem should have both.
+			// 验证镜像 GC 或容器 GC（或两者）被调用
+			// 分离文件系统下可能只调用容器 GC 而不调用镜像 GC
+			// 同一文件系统下两者都应在 GC 时被调用
 			if diskGC.imageGCInvoked != tc.expectImageGcCall && diskGC.containerGCInvoked != tc.expectContainerGcCall {
 				t.Fatalf("Manager should have invoked image gc")
 			}
 
-			// verify a pod was killed because image gc was not enough to satisfy minReclaim
+			// 镜像 GC 回收量不足以满足 minReclaim，验证 Pod 被驱逐
 			if podKiller.pod == nil {
 				t.Fatalf("Manager should have killed a pod, but didn't")
 			}
 
-			// reset state
+			// 重置状态
 			diskGC.imageGCInvoked = false
 			diskGC.containerGCInvoked = false
 			podKiller.pod = nil
 
-			// remove disk pressure
+			// 消除磁盘压力
 			fakeClock.Step(20 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(diskStatConst)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -2013,16 +2048,16 @@ func TestNodeReclaimFuncs(t *testing.T) {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should not have disk pressure
+			// 此时不应有磁盘压力
 			if manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should not report disk pressure")
 			}
 
-			// induce disk pressure!
+			// 诱发磁盘压力！
 			fakeClock.Step(1 * time.Minute)
 			softDiskPressure := setDiskStatsBasedOnFs(tc.inducePressureOnWhichFs, tc.hardDiskPressure, diskStatStart)
 			summaryProvider.result = summaryStatsMaker(softDiskPressure)
-			// Don't reclaim any disk
+			// GC 不回收任何磁盘
 			diskGC.summaryAfterGC = summaryStatsMaker(softDiskPressure)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
@@ -2030,19 +2065,19 @@ func TestNodeReclaimFuncs(t *testing.T) {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should have disk pressure
+			// 此时应有磁盘压力
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report disk pressure")
 			}
 
-			// verify image, container or both gc were called.
-			// split filesystem can have container gc called without image.
-			// same filesystem should have both.
+			// 验证镜像 GC 或容器 GC（或两者）被调用
+			// 分离文件系统下可能只调用容器 GC 而不调用镜像 GC
+			// 同一文件系统下两者都应在 GC 时被调用
 			if diskGC.imageGCInvoked != tc.expectImageGcCall && diskGC.containerGCInvoked != tc.expectContainerGcCall {
 				t.Fatalf("Manager should have invoked image gc")
 			}
 
-			// check the right pod was killed
+			// 验证被驱逐的是正确的 Pod
 			if podKiller.pod != podToEvict {
 				t.Fatalf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 			}
@@ -2051,19 +2086,19 @@ func TestNodeReclaimFuncs(t *testing.T) {
 				t.Fatalf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", 1, observedGracePeriod)
 			}
 
-			// reduce disk pressure
+			// 降低磁盘压力
 			fakeClock.Step(1 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(diskStatConst)
-			diskGC.imageGCInvoked = false     // reset state
-			diskGC.containerGCInvoked = false // reset state
-			podKiller.pod = nil               // reset state
+			diskGC.imageGCInvoked = false     // 重置状态
+			diskGC.containerGCInvoked = false // 重置状态
+			podKiller.pod = nil               // 重置状态
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should have disk pressure (because transition period not yet met)
+			// 仍应有磁盘压力（转换期尚未结束）
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report disk pressure")
 			}
@@ -2072,24 +2107,24 @@ func TestNodeReclaimFuncs(t *testing.T) {
 				t.Errorf("Manager chose to perform image gc when it was not needed")
 			}
 
-			// no pod should have been killed
+			// 不应有 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Fatalf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 			}
 
-			// move the clock past transition period to ensure that we stop reporting pressure
+			// 将时钟拨过转换期，确保压力状态被清除
 			fakeClock.Step(5 * time.Minute)
 			summaryProvider.result = summaryStatsMaker(diskStatConst)
-			diskGC.imageGCInvoked = false     // reset state
-			diskGC.containerGCInvoked = false // reset state
-			podKiller.pod = nil               // reset state
+			diskGC.imageGCInvoked = false     // 重置状态
+			diskGC.containerGCInvoked = false // 重置状态
+			podKiller.pod = nil               // 重置状态
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should not have disk pressure (because transition period met)
+			// 不应再有磁盘压力（转换期已结束）
 			if manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should not report disk pressure")
 			}
@@ -2098,7 +2133,7 @@ func TestNodeReclaimFuncs(t *testing.T) {
 				t.Errorf("Manager chose to perform image gc when it was not needed")
 			}
 
-			// no pod should have been killed
+			// 不应有 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Fatalf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 			}
@@ -2106,6 +2141,8 @@ func TestNodeReclaimFuncs(t *testing.T) {
 	}
 }
 
+// TestInodePressureFsInodes 验证基于 inode 可用数（SignalNodeFsInodesFree / SignalImageFsInodesFree）的驱逐流程，
+// 覆盖软/硬阈值、宽限期、准入控制与转换期
 func TestInodePressureFsInodes(t *testing.T) {
 	podMaker := func(name string, priority int32, requests v1.ResourceList, limits v1.ResourceList, rootInodes, logInodes, volumeInodes string) (*v1.Pod, statsapi.PodStats) {
 		pod := newPod(name, priority, []v1.Container{
@@ -2345,27 +2382,27 @@ func TestInodePressureFsInodes(t *testing.T) {
 				thresholdsFirstObservedAt:    thresholdsObservedAt{},
 			}
 
-			// create a best effort pod to test admission
+			// 创建一个 best-effort Pod 用于测试准入
 			podToAdmit, _ := podMaker("pod-to-admit", defaultPriority, newResourceList("", "", ""), newResourceList("", "", ""), "0", "0", "0")
 
-			// synchronize
+			// 同步
 			_, err := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should not have disk pressure
+			// 此时不应有磁盘压力
 			if manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should not report inode pressure")
 			}
 
-			// try to admit our pod (should succeed)
+			// 尝试准入该 Pod（应成功）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); !result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, true, result.Admit)
 			}
 
-			// induce soft threshold
+			// 触发软阈值
 			fakeClock.Step(1 * time.Minute)
 			summaryProvider.result = setINodesFreeBasedOnFs(tc.inducePressureOnWhichFs, tc.softINodePressure, startingStatsModified)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -2374,17 +2411,17 @@ func TestInodePressureFsInodes(t *testing.T) {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should have disk pressure
+			// 此时应有磁盘压力
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report inode pressure since soft threshold was met")
 			}
 
-			// verify no pod was yet killed because there has not yet been enough time passed.
+			// 时间尚未超过宽限期，验证尚无 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Fatalf("Manager should not have killed a pod yet, but killed: %v", podKiller.pod.Name)
 			}
 
-			// step forward in time pass the grace period
+			// 将时钟拨过宽限期
 			fakeClock.Step(3 * time.Minute)
 			summaryProvider.result = setINodesFreeBasedOnFs(tc.inducePressureOnWhichFs, tc.softINodePressure, startingStatsModified)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -2393,12 +2430,12 @@ func TestInodePressureFsInodes(t *testing.T) {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should have disk pressure
+			// 此时应有磁盘压力
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report inode pressure since soft threshold was met")
 			}
 
-			// verify the right pod was killed with the right grace period.
+			// 验证被驱逐的 Pod 与宽限期覆盖值均正确
 			if podKiller.pod != podToEvict {
 				t.Fatalf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 			}
@@ -2409,11 +2446,11 @@ func TestInodePressureFsInodes(t *testing.T) {
 			if observedGracePeriod != manager.config.MaxPodGracePeriodSeconds {
 				t.Fatalf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", manager.config.MaxPodGracePeriodSeconds, observedGracePeriod)
 			}
-			// reset state
+			// 重置状态
 			podKiller.pod = nil
 			podKiller.gracePeriodOverride = nil
 
-			// remove inode pressure
+			// 消除 inode 压力
 			fakeClock.Step(20 * time.Minute)
 			summaryProvider.result = startingStatsConst
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -2422,12 +2459,12 @@ func TestInodePressureFsInodes(t *testing.T) {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should not have disk pressure
+			// 此时不应有磁盘压力
 			if manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should not report inode pressure")
 			}
 
-			// induce inode pressure!
+			// 诱发 inode 压力！
 			fakeClock.Step(1 * time.Minute)
 			summaryProvider.result = setINodesFreeBasedOnFs(tc.inducePressureOnWhichFs, tc.hardINodePressure, startingStatsModified)
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -2436,12 +2473,12 @@ func TestInodePressureFsInodes(t *testing.T) {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should have disk pressure
+			// 此时应有磁盘压力
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report inode pressure")
 			}
 
-			// check the right pod was killed
+			// 验证被驱逐的是正确的 Pod
 			if podKiller.pod != podToEvict {
 				t.Fatalf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 			}
@@ -2450,57 +2487,57 @@ func TestInodePressureFsInodes(t *testing.T) {
 				t.Fatalf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", 1, observedGracePeriod)
 			}
 
-			// try to admit our pod (should fail)
+			// 尝试准入该 Pod（应失败）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, false, result.Admit)
 			}
 
-			// reduce inode pressure
+			// 降低 inode 压力
 			fakeClock.Step(1 * time.Minute)
 			summaryProvider.result = startingStatsConst
-			podKiller.pod = nil // reset state
+			podKiller.pod = nil // 重置状态
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should have disk pressure (because transition period not yet met)
+			// 仍应有磁盘压力（转换期尚未结束）
 			if !manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should report inode pressure")
 			}
 
-			// no pod should have been killed
+			// 不应有 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Fatalf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 			}
 
-			// try to admit our pod (should fail)
+			// 尝试准入该 Pod（应失败）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, false, result.Admit)
 			}
 
-			// move the clock past transition period to ensure that we stop reporting pressure
+			// 将时钟拨过转换期，确保压力状态被清除
 			fakeClock.Step(5 * time.Minute)
 			summaryProvider.result = startingStatsConst
-			podKiller.pod = nil // reset state
+			podKiller.pod = nil // 重置状态
 			_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 			if err != nil {
 				t.Fatalf("Manager should not have an error %v", err)
 			}
 
-			// we should not have disk pressure (because transition period met)
+			// 不应再有磁盘压力（转换期已结束）
 			if manager.IsUnderDiskPressure() {
 				t.Fatalf("Manager should not report inode pressure")
 			}
 
-			// no pod should have been killed
+			// 不应有 Pod 被驱逐
 			if podKiller.pod != nil {
 				t.Fatalf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 			}
 
-			// try to admit our pod (should succeed)
+			// 尝试准入该 Pod（应成功）
 			if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: podToAdmit}); !result.Admit {
 				t.Fatalf("Admit pod: %v, expected: %v, actual: %v", podToAdmit, true, result.Admit)
 			}
@@ -2508,7 +2545,9 @@ func TestInodePressureFsInodes(t *testing.T) {
 	}
 }
 
-// TestStaticCriticalPodsAreNotEvicted
+// TestStaticCriticalPodsAreNotEvicted 验证静态托管的 critical Pod 不会被驱逐：
+// Pod 具有 SystemCriticalPriority 且来自静态文件源时，即使内存压力持续也不被驱逐；
+// 去掉 critical 标记并再次诱发压力后，该 Pod 重新成为驱逐候选。
 func TestStaticCriticalPodsAreNotEvicted(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	podMaker := makePodWithMemoryStats
@@ -2527,7 +2566,7 @@ func TestStaticCriticalPodsAreNotEvicted(t *testing.T) {
 	pods[0].Annotations = map[string]string{
 		kubelettypes.ConfigSourceAnnotationKey: kubelettypes.FileSource,
 	}
-	// Mark the pod as critical
+	// 将 Pod 标记为 critical
 	podPriority := scheduling.SystemCriticalPriority
 	pods[0].Spec.Priority = &podPriority
 	pods[0].Namespace = kubeapi.NamespaceSystem
@@ -2588,17 +2627,17 @@ func TestStaticCriticalPodsAreNotEvicted(t *testing.T) {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should have memory pressure
+	// 此时应有内存压力
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure since soft threshold was met")
 	}
 
-	// verify no pod was yet killed because there has not yet been enough time passed.
+	// 时间尚未超过宽限期，验证尚无 Pod 被驱逐
 	if podKiller.pod != nil {
 		t.Errorf("Manager should not have killed a pod yet, but killed: %v", podKiller.pod.Name)
 	}
 
-	// step forward in time pass the grace period
+	// 将时钟拨过宽限期
 	fakeClock.Step(3 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("1500Mi", podStats)
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -2607,20 +2646,20 @@ func TestStaticCriticalPodsAreNotEvicted(t *testing.T) {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should have memory pressure
+	// 此时应有内存压力
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure since soft threshold was met")
 	}
 
-	// verify the right pod was killed with the right grace period.
+	// 验证被驱逐的 Pod 与宽限期覆盖值均正确
 	if podKiller.pod == podToEvict {
 		t.Errorf("Manager chose to kill critical pod: %v, but should have ignored it", podKiller.pod.Name)
 	}
-	// reset state
+	// 重置状态
 	podKiller.pod = nil
 	podKiller.gracePeriodOverride = nil
 
-	// remove memory pressure
+	// 消除内存压力
 	fakeClock.Step(20 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("3Gi", podStats)
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -2629,7 +2668,7 @@ func TestStaticCriticalPodsAreNotEvicted(t *testing.T) {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should not have memory pressure
+	// 此时不应有内存压力
 	if manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should not report memory pressure")
 	}
@@ -2640,7 +2679,7 @@ func TestStaticCriticalPodsAreNotEvicted(t *testing.T) {
 	pods[0].Spec.Priority = nil
 	pods[0].Namespace = kubeapi.NamespaceSystem
 
-	// induce memory pressure!
+	// 诱发内存压力！
 	fakeClock.Step(1 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("500Mi", podStats)
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
@@ -2649,12 +2688,14 @@ func TestStaticCriticalPodsAreNotEvicted(t *testing.T) {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should have memory pressure
+	// 此时应有内存压力
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure")
 	}
 }
 
+// TestStorageLimitEvictions 验证本地存储容量隔离开启时，
+// rootfs、日志或本地卷用量超过 limit 的 Pod 会被驱逐
 func TestStorageLimitEvictions(t *testing.T) {
 	volumeSizeLimit := resource.MustParse("1Gi")
 
@@ -2761,8 +2802,11 @@ func TestStorageLimitEvictions(t *testing.T) {
 	}
 }
 
+// TestEmptyDirLimitEviction 验证 emptyDir 卷的驱逐判定：
+// Memory 介质且 InPlacePodVerticalScalingMemoryBackedVolumes 特性开启时使用统计容量（容量缺失则跳过评估），
+// 其余情况回退到 spec 中的 sizeLimit
 func TestEmptyDirLimitEviction(t *testing.T) {
-	specLimit := resource.MustParse("1Gi") // 1Gi set as the 'desired' sizeLimit in the podspec.
+	specLimit := resource.MustParse("1Gi") // 1Gi 是 podspec 中设置的"期望" sizeLimit
 
 	tests := []struct {
 		testName            string
@@ -2776,8 +2820,8 @@ func TestEmptyDirLimitEviction(t *testing.T) {
 			testName:            "Memory medium, gate disabled: falls back to spec limit, used (2Gi) > spec (1Gi) -> evict",
 			medium:              v1.StorageMediumMemory,
 			enableGate:          false,
-			actualCapacityBytes: new(uint64(3 * 1024 * 1024 * 1024)), // 3Gi stat capacity (ignored)
-			usedBytes:           2 * 1024 * 1024 * 1024,              // 2Gi used (exceeds 'desired', but within 'allocated')
+			actualCapacityBytes: new(uint64(3 * 1024 * 1024 * 1024)), // 3Gi 的 stat 容量（被忽略）
+			usedBytes:           2 * 1024 * 1024 * 1024,              // 使用 2Gi（超过"期望"值，但在"分配"范围内）
 			expectEviction:      true,
 		},
 		{
@@ -2792,15 +2836,15 @@ func TestEmptyDirLimitEviction(t *testing.T) {
 			testName:            "Memory medium, gate enabled: uses stat capacity, identical usage (2Gi) < stat capacity (3Gi) -> NO evict",
 			medium:              v1.StorageMediumMemory,
 			enableGate:          true,
-			actualCapacityBytes: new(uint64(3 * 1024 * 1024 * 1024)), // 3Gi stat capacity (respected)
-			usedBytes:           2 * 1024 * 1024 * 1024,              // 2Gi used (identical to case 1, except the FG is enabled)
+			actualCapacityBytes: new(uint64(3 * 1024 * 1024 * 1024)), // 3Gi 的 stat 容量（生效）
+			usedBytes:           2 * 1024 * 1024 * 1024,              // 使用 2Gi（与用例 1 相同，只是开启了特性开关）
 			expectEviction:      false,
 		},
 		{
 			testName:            "Memory medium, gate enabled: missing stat capacity skips evaluation -> NO evict",
 			medium:              v1.StorageMediumMemory,
 			enableGate:          true,
-			actualCapacityBytes: nil, // transiently missing stat
+			actualCapacityBytes: nil, // 暂时缺失的 stat
 			usedBytes:           2 * 1024 * 1024 * 1024,
 			expectEviction:      false,
 		},
@@ -2808,9 +2852,9 @@ func TestEmptyDirLimitEviction(t *testing.T) {
 		{
 			testName:            "Default medium: ignores stat capacity entirely, used (2Gi) > spec (1Gi) -> evict",
 			medium:              v1.StorageMediumDefault,
-			enableGate:          true,                                // Gate status is irrelevant for default volumes
-			actualCapacityBytes: new(uint64(3 * 1024 * 1024 * 1024)), // 3Gi stat capacity (ignored)
-			usedBytes:           2 * 1024 * 1024 * 1024,              // 2Gi used (exceeds 'desired', but within 'allocated')
+			enableGate:          true,                                // 特性开关状态对默认介质卷无关紧要
+			actualCapacityBytes: new(uint64(3 * 1024 * 1024 * 1024)), // 3Gi 的 stat 容量（被忽略）
+			usedBytes:           2 * 1024 * 1024 * 1024,              // 使用 2Gi（超过"期望"值，但在"分配"范围内）
 			expectEviction:      true,
 		},
 		{
@@ -2883,7 +2927,9 @@ func TestEmptyDirLimitEviction(t *testing.T) {
 	}
 }
 
-// TestAllocatableMemoryPressure
+// TestAllocatableMemoryPressure 验证基于可分配内存（SignalAllocatableMemoryAvailable）的驱逐流程：
+// 压力基于节点可分配内存而非整机内存，新增高请求 Pod 压低可分配内存后触发驱逐与准入拒绝；
+// 压力解除后同样需经过转换期才恢复准入。
 func TestAllocatableMemoryPressure(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	podMaker := makePodWithMemoryStats
@@ -2940,23 +2986,23 @@ func TestAllocatableMemoryPressure(t *testing.T) {
 		thresholdsFirstObservedAt:    thresholdsObservedAt{},
 	}
 
-	// create a best effort pod to test admission
+	// 创建一个 best-effort Pod 用于测试准入
 	bestEffortPodToAdmit, _ := podMaker("best-admit", defaultPriority, newResourceList("", "", ""), newResourceList("", "", ""), "0Gi")
 	burstablePodToAdmit, _ := podMaker("burst-admit", defaultPriority, newResourceList("100m", "100Mi", ""), newResourceList("200m", "200Mi", ""), "0Gi")
 
-	// synchronize
+	// 同步
 	_, err := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should not have memory pressure
+	// 此时不应有内存压力
 	if manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should not report memory pressure")
 	}
 
-	// try to admit our pods (they should succeed)
+	// 尝试准入两个 Pod（都应成功）
 	expected := []bool{true, true}
 	for i, pod := range []*v1.Pod{bestEffortPodToAdmit, burstablePodToAdmit} {
 		if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: pod}); expected[i] != result.Admit {
@@ -2964,7 +3010,7 @@ func TestAllocatableMemoryPressure(t *testing.T) {
 		}
 	}
 
-	// induce memory pressure!
+	// 诱发内存压力！
 	fakeClock.Step(1 * time.Minute)
 	pod, podStat := podMaker("guaranteed-high-2", defaultPriority, newResourceList("100m", "1Gi", ""), newResourceList("100m", "1Gi", ""), "1Gi")
 	podStats[pod] = podStat
@@ -2975,12 +3021,12 @@ func TestAllocatableMemoryPressure(t *testing.T) {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should have memory pressure
+	// 此时应有内存压力
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure")
 	}
 
-	// check the right pod was killed
+	// 验证被驱逐的是正确的 Pod
 	if podKiller.pod != podToEvict {
 		t.Errorf("Manager chose to kill pod: %v, but should have chosen %v", podKiller.pod.Name, podToEvict.Name)
 	}
@@ -2988,11 +3034,11 @@ func TestAllocatableMemoryPressure(t *testing.T) {
 	if observedGracePeriod != int64(1) {
 		t.Errorf("Manager chose to kill pod with incorrect grace period.  Expected: %d, actual: %d", 1, observedGracePeriod)
 	}
-	// reset state
+	// 重置状态
 	podKiller.pod = nil
 	podKiller.gracePeriodOverride = nil
 
-	// the best-effort pod should not admit, burstable should
+	// best-effort Pod 不应被准入，burstable 应被准入
 	expected = []bool{false, true}
 	for i, pod := range []*v1.Pod{bestEffortPodToAdmit, burstablePodToAdmit} {
 		if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: pod}); expected[i] != result.Admit {
@@ -3000,7 +3046,7 @@ func TestAllocatableMemoryPressure(t *testing.T) {
 		}
 	}
 
-	// reduce memory pressure
+	// 降低内存压力
 	fakeClock.Step(1 * time.Minute)
 	for pod := range podStats {
 		if pod.Name == "guaranteed-high-2" {
@@ -3008,24 +3054,24 @@ func TestAllocatableMemoryPressure(t *testing.T) {
 		}
 	}
 	summaryProvider.result = summaryStatsMaker("2Gi", podStats)
-	podKiller.pod = nil // reset state
+	podKiller.pod = nil // 重置状态
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should have memory pressure (because transition period not yet met)
+	// 仍应有内存压力（转换期尚未结束）
 	if !manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should report memory pressure")
 	}
 
-	// no pod should have been killed
+	// 不应有 Pod 被驱逐
 	if podKiller.pod != nil {
 		t.Errorf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 	}
 
-	// the best-effort pod should not admit, burstable should
+	// best-effort Pod 不应被准入，burstable 应被准入
 	expected = []bool{false, true}
 	for i, pod := range []*v1.Pod{bestEffortPodToAdmit, burstablePodToAdmit} {
 		if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: pod}); expected[i] != result.Admit {
@@ -3033,27 +3079,27 @@ func TestAllocatableMemoryPressure(t *testing.T) {
 		}
 	}
 
-	// move the clock past transition period to ensure that we stop reporting pressure
+	// 将时钟拨过转换期，确保压力状态被清除
 	fakeClock.Step(5 * time.Minute)
 	summaryProvider.result = summaryStatsMaker("2Gi", podStats)
-	podKiller.pod = nil // reset state
+	podKiller.pod = nil // 重置状态
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// we should not have memory pressure (because transition period met)
+	// 不应再有内存压力（转换期已结束）
 	if manager.IsUnderMemoryPressure() {
 		t.Errorf("Manager should not report memory pressure")
 	}
 
-	// no pod should have been killed
+	// 不应有 Pod 被驱逐
 	if podKiller.pod != nil {
 		t.Errorf("Manager chose to kill pod: %v when no pod should have been killed", podKiller.pod.Name)
 	}
 
-	// all pods should admit now
+	// 所有 Pod 现在都应被准入
 	expected = []bool{true, true}
 	for i, pod := range []*v1.Pod{bestEffortPodToAdmit, burstablePodToAdmit} {
 		if result := manager.Admit(tCtx, &lifecycle.PodAdmitAttributes{Pod: pod}); expected[i] != result.Admit {
@@ -3062,6 +3108,9 @@ func TestAllocatableMemoryPressure(t *testing.T) {
 	}
 }
 
+// TestUpdateMemcgThreshold 验证 memcg 阈值 notifier 的刷新节奏：
+// 首次同步立即更新，未到 notifierRefreshInterval 不重复更新，刷新间隔后再次更新；
+// 更新失败时会调用 Description 记录错误信息
 func TestUpdateMemcgThreshold(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	activePodsFunc := func() []*v1.Pod {
@@ -3107,21 +3156,21 @@ func TestUpdateMemcgThreshold(t *testing.T) {
 		thresholdNotifiers:           []ThresholdNotifier{thresholdNotifier},
 	}
 
-	// The UpdateThreshold method should have been called once, since this is the first run.
+	// 首次运行时，UpdateThreshold 应被调用一次
 	_, err := manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// The UpdateThreshold method should not have been called again, since not enough time has passed
+	// 距上次调用时间不足，UpdateThreshold 不应再次被调用
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
 	if err != nil {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// The UpdateThreshold method should be called again since enough time has passed
+	// 距上次调用已足够久，UpdateThreshold 应再次被调用
 	fakeClock.Step(2 * notifierRefreshInterval)
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
@@ -3129,14 +3178,14 @@ func TestUpdateMemcgThreshold(t *testing.T) {
 		t.Fatalf("Manager should not have an error %v", err)
 	}
 
-	// new memory threshold notifier that returns an error
+	// 换用一个更新阈值时返回错误的 notifier
 	thresholdNotifier = NewMockThresholdNotifier(t)
 	thresholdNotifier.EXPECT().UpdateThreshold(mock.Anything, summaryProvider.result).Return(fmt.Errorf("error updating threshold")).Times(1)
 	thresholdNotifier.EXPECT().Description().Return("mock thresholdNotifier").Times(1)
 	manager.thresholdNotifiers = []ThresholdNotifier{thresholdNotifier}
 
-	// The UpdateThreshold method should be called because at least notifierRefreshInterval time has passed.
-	// The Description method should be called because UpdateThreshold returned an error
+	// 距上次调用已超过 notifierRefreshInterval，UpdateThreshold 应被调用
+	// UpdateThreshold 返回错误后，Description 应被调用（用于日志记录）
 	fakeClock.Step(2 * notifierRefreshInterval)
 	_, err = manager.synchronize(tCtx, diskInfoProvider, activePodsFunc)
 
@@ -3145,6 +3194,8 @@ func TestUpdateMemcgThreshold(t *testing.T) {
 	}
 }
 
+// TestManagerWithLocalStorageCapacityIsolationOpen 验证本地存储容量隔离开启时，
+// emptyDir 与临时存储超过限制的 Pod 被驱逐，且返回的被驱逐 Pod 列表正确
 func TestManagerWithLocalStorageCapacityIsolationOpen(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	podMaker := makePodWithLocalStorageCapacityIsolationOpen
@@ -3221,6 +3272,8 @@ func TestManagerWithLocalStorageCapacityIsolationOpen(t *testing.T) {
 	}
 }
 
+// TestContainerEphemeralStorageLimitEvictionForRestartableInitContainers 验证可重启 init 容器（sidecar）
+// 超过临时存储 limit 时 Pod 会被驱逐
 func TestContainerEphemeralStorageLimitEvictionForRestartableInitContainers(t *testing.T) {
 	tCtx := ktesting.Init(t)
 

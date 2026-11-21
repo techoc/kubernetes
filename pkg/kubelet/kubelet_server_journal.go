@@ -39,32 +39,35 @@ import (
 )
 
 const (
-	dateLayout       = "2006-1-2 15:4:5"
-	maxTailLines     = 100000
+	// dateLayout 是 Windows 事件日志查询使用的时间格式。
+	dateLayout = "2006-1-2 15:4:5"
+	// maxTailLines 限制单次查询返回的最大尾部行数，防止响应过大。
+	maxTailLines = 100000
+	// maxServiceLength 是服务名的最大长度（各受支持操作系统中的上限）。
 	maxServiceLength = 256
-	maxServices      = 4
-	nodeLogDir       = "/var/log/"
+	// maxServices 限制单次查询的服务数量，避免一次请求聚合过多日志源。
+	maxServices = 4
+	// nodeLogDir 是节点日志文件所在的根目录。
+	nodeLogDir = "/var/log/"
 )
 
 var (
 	journal = journalServer{}
-	// The set of known safe characters to pass to journalctl / GetWinEvent flags - only add to this list if the
-	// character cannot be used to create invalid sequences. This is intended as a broad defense against malformed
-	// input that could cause an escape.
+	// 允许传给 journalctl / Get-WinEvent 参数的安全字符集合。
+	// 只有确认无法用于构造非法序列的字符才能加入该列表；
+	// 这是对可能引发逃逸的畸形输入的一层广泛防御。
 	reServiceNameUnsafeCharacters = regexp.MustCompile(`[^a-zA-Z\-_.:0-9@]+`)
 )
 
-// journalServer returns text output from the OS specific service logger to view
-// from the client. It runs with the privileges of the calling  process
-// (the kubelet) and should only be allowed to be invoked by a root user.
+// journalServer 返回操作系统特定服务日志的文本输出，供客户端查看。
+// 它以调用进程（kubelet）的权限运行，因此只应允许 root 用户调用。
 type journalServer struct{}
 
-// ServeHTTP translates HTTP query parameters into arguments to be passed
-// to journalctl on the current system. It supports content-encoding of
-// gzip to reduce total content size.
+// ServeHTTP 将 HTTP 查询参数转换为当前系统上 journalctl 的参数并执行，
+// 支持 gzip 内容编码以减小响应体积。
 func (journalServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet && req.Method != http.MethodPost {
-		// Only GET and POST are supported for journal log queries.
+		// 日志查询仅支持 GET 与 POST 方法。
 		w.Header().Set("Allow", "GET, POST")
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -72,18 +75,21 @@ func (journalServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	var out io.Writer = w
 
+	// 先解析并校验查询参数，非法请求直接返回 400。
 	nlq, errs := newNodeLogQuery(req.URL.Query())
 	if len(errs) > 0 {
 		http.Error(w, errs.ToAggregate().Error(), http.StatusBadRequest)
 		return
 	}
 
-	// TODO: Also set a response header that indicates how the request's query was resolved,
-	// e.g. "kube-log-source: journal://foobar?arg1=value" or "kube-log-source: file:///var/log/foobar.log"
+	// TODO: 还应设置一个响应头说明查询最终被解析到哪种日志源，
+	// 例如 "kube-log-source: journal://foobar?arg1=value" 或
+	// "kube-log-source: file:///var/log/foobar.log"。
 	w.Header().Set("Content-Type", "text/plain;charset=UTF-8")
 	if req.Header.Get("Accept-Encoding") == "gzip" {
 		w.Header().Set("Content-Encoding", "gzip")
 
+		// 日志通常是大段文本，使用最高压缩速度在体积与 CPU 开销之间取得平衡。
 		gz, err := gzip.NewWriterLevel(out, gzip.BestSpeed)
 		if err != nil {
 			fmt.Fprintf(w, "\nfailed to get gzip writer: %v\n", err)
@@ -95,33 +101,33 @@ func (journalServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	nlq.Copy(req.Context(), out)
 }
 
-// nodeLogQuery encapsulates the log query request
+// nodeLogQuery 封装一次节点日志查询请求。
 type nodeLogQuery struct {
-	// Services are the list of services to be queried
+	// Services 是待查询的服务列表。
 	Services []string
-	// Files are the list of files
+	// Files 是待查询的文件列表。
 	Files []string
 	options
 }
 
-// options encapsulates the query options for services
+// options 封装服务日志查询的可选参数。
 type options struct {
-	// SinceTime is an RFC3339 timestamp from which to show logs.
+	// SinceTime 是只显示该 RFC3339 时间点之后日志的起点。
 	SinceTime *time.Time
-	// UntilTime is an RFC3339 timestamp until which to show logs.
+	// UntilTime 是只显示该 RFC3339 时间点之前日志的终点。
 	UntilTime *time.Time
-	// TailLines is used to retrieve the specified number of lines (not more than 100k) from the end of the log.
-	// Support for this is implementation specific and only available for service logs.
+	// TailLines 用于从日志末尾取指定行数（不超过 10 万行）。
+	// 是否支持取决于具体实现，目前仅对服务日志生效。
 	TailLines *int
-	// Boot show messages from a specific boot. Allowed values are less than 1. Passing an invalid boot offset will fail
-	// retrieving logs and return an error. Support for this is implementation specific
+	// Boot 用于显示特定启动轮次的日志，允许的取值小于 1。
+	// 传入非法的启动偏移量会导致日志获取失败并返回错误。是否支持取决于具体实现。
 	Boot *int
-	// Pattern filters log entries by the provided regex pattern. On Linux nodes, this pattern will be read as a
-	// PCRE2 regex, on Windows nodes it will be read as a PowerShell regex. Support for this is implementation specific.
+	// Pattern 使用正则表达式过滤日志条目。在 Linux 节点上按 PCRE2 正则解析，
+	// 在 Windows 节点上按 PowerShell 正则解析。是否支持取决于具体实现。
 	Pattern string
 }
 
-// newNodeLogQuery parses query values and converts all known options into nodeLogQuery
+// newNodeLogQuery 解析查询参数，把已知的选项转换为 nodeLogQuery。
 func newNodeLogQuery(query url.Values) (*nodeLogQuery, field.ErrorList) {
 	allErrs := field.ErrorList{}
 	var nlq nodeLogQuery
@@ -130,18 +136,18 @@ func newNodeLogQuery(query url.Values) (*nodeLogQuery, field.ErrorList) {
 	queries, ok := query["query"]
 	if len(queries) > 0 {
 		for _, q := range queries {
-			// The presence of / or \ is a hint that the query is for a log file. If the query is for foo.log without a
-			// slash prefix, the heuristics will still return the file contents.
+			// 查询值中出现 / 或 \ 时视为日志文件路径；即便像 foo.log 这样不带斜杠，
+			// 后续启发式逻辑仍会尝试按文件解析并返回文件内容。
 			if strings.ContainsAny(q, `/\`) {
 				nlq.Files = append(nlq.Files, q)
-			} else if strings.TrimSpace(q) != "" { // Prevent queries with just spaces
+			} else if strings.TrimSpace(q) != "" { // 过滤仅含空白的查询，避免无意义的查询。
 				nlq.Services = append(nlq.Services, q)
 			}
 		}
 	}
 
-	// Prevent specifying  an empty or blank space query.
-	// Example: kubectl get --raw /api/v1/nodes/$node/proxy/logs?query="   "
+	// 禁止空查询或仅含空白的查询。
+	// 例如：kubectl get --raw /api/v1/nodes/$node/proxy/logs?query="   "
 	if ok && (len(nlq.Files) == 0 && len(nlq.Services) == 0) {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("query"), queries, "may not be empty"))
 	}
@@ -199,6 +205,7 @@ func newNodeLogQuery(query url.Values) (*nodeLogQuery, field.ErrorList) {
 		return nil, allErrs
 	}
 
+	// 没有任何有效查询条件时返回空查询，交由上层决定如何处理。
 	if reflect.DeepEqual(nlq, nodeLogQuery{}) {
 		return nil, allErrs
 	}
@@ -206,6 +213,7 @@ func newNodeLogQuery(query url.Values) (*nodeLogQuery, field.ErrorList) {
 	return &nlq, allErrs
 }
 
+// validateServices 校验服务名是否安全以及服务数量是否超限。
 func validateServices(services []string) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -221,6 +229,8 @@ func validateServices(services []string) field.ErrorList {
 	return allErrs
 }
 
+// validate 对查询做完整校验：文件与服务互斥、时间区间有效、启动轮次与行数范围、
+// 以及正则表达式语法合法。
 func (n *nodeLogQuery) validate() field.ErrorList {
 	allErrs := validateServices(n.Services)
 	switch {
@@ -234,10 +244,11 @@ func (n *nodeLogQuery) validate() field.ErrorList {
 	case len(n.Files) == 1 && n.options != (options{}):
 		allErrs = append(allErrs, field.Invalid(field.NewPath("query"), n.Files, "cannot specify file with options"))
 	case len(n.Files) == 1:
+		// 通过 os.OpenRoot 将文件访问限制在 /var/log 下，防止路径逃逸。
 		if root, err := os.OpenRoot(nodeLogDir); err != nil {
 			allErrs = append(allErrs, field.Invalid(field.NewPath("query"), n.Files, err.Error()))
 		} else {
-			// root.Close() never returns errors
+			// root.Close() 不会返回错误。
 			defer func() { _ = root.Close() }()
 			if _, err := root.Stat(n.Files[0]); err != nil {
 				allErrs = append(allErrs, field.Invalid(field.NewPath("query"), n.Files, err.Error()))
@@ -249,6 +260,7 @@ func (n *nodeLogQuery) validate() field.ErrorList {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("untilTime"), n.UntilTime, "must be after `sinceTime`"))
 	}
 
+	// boot 偏移量仅对 journald 有意义，Windows 事件日志不支持。
 	if n.Boot != nil && runtime.GOOS == "windows" {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("boot"), *n.Boot, "not supported on Windows"))
 	}
@@ -263,6 +275,7 @@ func (n *nodeLogQuery) validate() field.ErrorList {
 		}
 	}
 
+	// 在服务端预先解析正则，尽早拒绝非法表达式，避免把错误留到命令执行阶段。
 	if _, err := syntax.Parse(n.Pattern, syntax.Perl); err != nil {
 		allErrs = append(allErrs, field.Invalid(field.NewPath("pattern"), n.Pattern, err.Error()))
 	}
@@ -270,10 +283,10 @@ func (n *nodeLogQuery) validate() field.ErrorList {
 	return allErrs
 }
 
-// Copy streams the contents of the OS specific logging command executed  with the current args to the provided
-// writer. If an error occurs a line is written to the output.
+// Copy 执行操作系统特定的日志命令，并把输出流式写入 w；
+// 出错时会在输出中写入一行错误信息。
 func (n *nodeLogQuery) Copy(ctx context.Context, w io.Writer) {
-	// set the deadline to the maximum across both runs
+	// 设置 30 秒截止时间，避免日志查询长时间占用请求处理资源。
 	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(30*time.Second))
 	defer cancel()
 	boot := 0
@@ -283,7 +296,7 @@ func (n *nodeLogQuery) Copy(ctx context.Context, w io.Writer) {
 	n.copyForBoot(ctx, w, boot)
 }
 
-// copyForBoot invokes the OS specific logging command with the  provided args
+// copyForBoot 使用给定参数调用操作系统特定的日志命令。
 func (n *nodeLogQuery) copyForBoot(ctx context.Context, w io.Writer, previousBoot int) {
 	if ctx.Err() != nil {
 		return
@@ -293,6 +306,7 @@ func (n *nodeLogQuery) copyForBoot(ctx context.Context, w io.Writer, previousBoo
 		n.copyServiceLogs(ctx, w, nativeLoggers, previousBoot)
 	}
 
+	// 文件日志不支持任何查询选项，明确提示用户去掉选项重试。
 	if len(fileLoggers) > 0 && n.options != (options{}) {
 		fmt.Fprintf(w, "\noptions present and query resolved to log files for %v\ntry without specifying options\n",
 			fileLoggers)
@@ -304,15 +318,15 @@ func (n *nodeLogQuery) copyForBoot(ctx context.Context, w io.Writer, previousBoo
 	}
 }
 
-// splitNativeVsFileLoggers checks if each service logs to native OS logs or to a file and returns a list of services
-// that log natively vs maybe to a file
+// splitNativeVsFileLoggers 判断每个服务是写入操作系统原生日志还是文件，
+// 并分别返回原生日志服务列表与可能写文件的服务列表。
 func (n *nodeLogQuery) splitNativeVsFileLoggers(ctx context.Context) ([]string, []string) {
 	var nativeLoggers []string
 	var fileLoggers []string
 
 	for _, service := range n.Services {
-		// Check the journalctl output to figure if the service is using journald or not. This is not needed in the
-		// Get-WinEvent case as the command returns an error if a service is not logging to the Application provider.
+		// 通过检查 journalctl 输出判断服务是否使用 journald。
+		// Get-WinEvent 场景无需此判断：服务未写入 Application provider 时命令会直接报错。
 		if checkForNativeLogger(ctx, service) {
 			nativeLoggers = append(nativeLoggers, service)
 		} else {
@@ -322,30 +336,33 @@ func (n *nodeLogQuery) splitNativeVsFileLoggers(ctx context.Context) ([]string, 
 	return nativeLoggers, fileLoggers
 }
 
-// copyServiceLogs invokes journalctl or Get-WinEvent with the provided args. Note that
-// services are explicitly passed here to account for the heuristics.
+// copyServiceLogs 使用给定参数调用 journalctl 或 Get-WinEvent。
+// 注意这里显式传入服务列表，以配合前面的启发式判定。
 func (n *nodeLogQuery) copyServiceLogs(ctx context.Context, w io.Writer, services []string, previousBoot int) {
 	cmdStr, args, cmdEnv, err := getLoggingCmd(n, services)
 	if err != nil {
 		fmt.Fprintf(w, "\nfailed to get logging cmd: %v\n", err)
 		return
 	}
+	// 标准输出与标准错误都写入同一个 writer，保证错误信息也能返回给客户端。
 	cmd := exec.CommandContext(ctx, cmdStr, args...)
 	cmd.Stdout = w
 	cmd.Stderr = w
 	cmd.Env = append(os.Environ(), cmdEnv...)
 
 	if err := cmd.Run(); err != nil {
+		// 命令正常退出码非零时输出已写入 w，无需额外提示。
 		if _, ok := err.(*exec.ExitError); ok {
 			return
 		}
+		// 仅在查询当前启动轮次时提示 journal 输出不可用，避免历史轮次查询刷屏。
 		if previousBoot == 0 {
 			fmt.Fprintf(w, "\nerror: journal output not available\n")
 		}
 	}
 }
 
-// copyFileLogs loops over all the services and attempts to collect the file logs of each service
+// copyFileLogs 遍历所有服务，尝试收集每个服务的文件日志。
 func copyFileLogs(ctx context.Context, w io.Writer, services []string) {
 	if ctx.Err() != nil {
 		fmt.Fprintf(w, "\ncontext error: %v\n", ctx.Err())
@@ -357,11 +374,10 @@ func copyFileLogs(ctx context.Context, w io.Writer, services []string) {
 	}
 }
 
-// heuristicsCopyFileLogs attempts to collect logs from either
+// heuristicsCopyFileLogs 依次尝试以下路径收集日志，命中即停止：
 // /var/log/service
-// /var/log/service.log or
-// /var/log/service/service.log or
-// in that order stopping on first success.
+// /var/log/service.log
+// /var/log/service/service.log
 func heuristicsCopyFileLogs(ctx context.Context, w io.Writer, logDir, service string) {
 	logFileNames := [3]string{
 		service,
@@ -375,14 +391,16 @@ func heuristicsCopyFileLogs(ctx context.Context, w io.Writer, logDir, service st
 		if err == nil {
 			break
 		} else if errors.Is(err, os.ErrNotExist) {
+			// 文件不存在时继续尝试下一个候选路径。
 			continue
 		} else {
+			// 其他错误（如权限问题）重试也无济于事，直接停止。
 			break
 		}
 	}
 
 	if err != nil {
-		// If the last error was file not found it implies that no log file was found for the service
+		// 若最后一个错误是文件不存在，说明所有候选路径都没有该服务的日志。
 		if errors.Is(err, os.ErrNotExist) {
 			fmt.Fprintf(w, "\nlog not found for %s\n", service)
 			return
@@ -391,12 +409,13 @@ func heuristicsCopyFileLogs(ctx context.Context, w io.Writer, logDir, service st
 	}
 }
 
-// readerCtx is the interface that wraps io.Reader with a context
+// readerCtx 将 io.Reader 与上下文绑定，使读取操作可以响应取消。
 type readerCtx struct {
 	ctx context.Context
 	io.Reader
 }
 
+// Read 在每次读取前检查上下文是否已取消，已取消则返回对应错误。
 func (r *readerCtx) Read(p []byte) (n int, err error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
@@ -404,7 +423,7 @@ func (r *readerCtx) Read(p []byte) (n int, err error) {
 	return r.Reader.Read(p)
 }
 
-// newReaderCtx gets a context-aware io.Reader
+// newReaderCtx 返回一个能感知上下文取消的 io.Reader。
 func newReaderCtx(ctx context.Context, r io.Reader) io.Reader {
 	return &readerCtx{
 		ctx:    ctx,
@@ -412,20 +431,20 @@ func newReaderCtx(ctx context.Context, r io.Reader) io.Reader {
 	}
 }
 
-// heuristicsCopyFileLog returns the contents of the given logFile
+// heuristicsCopyFileLog 将指定日志文件的内容复制到 w。
 func heuristicsCopyFileLog(ctx context.Context, w io.Writer, logDir, logFileName string) error {
 	f, err := os.OpenInRoot(logDir, logFileName)
 	if err != nil {
 		return err
 	}
-	// Ignoring errors when closing a file opened read-only doesn't cause data loss
+	// 只读打开的文件关闭出错不会造成数据丢失，可以安全忽略。
 	defer func() { _ = f.Close() }()
 	fInfo, err := f.Stat()
 	if err != nil {
 		return err
 	}
-	// This is to account for the heuristics where logs for service foo
-	// could be in /var/log/foo/
+	// 目录不是日志文件：服务 foo 的日志可能位于 /var/log/foo/ 目录下，
+	// 这种情况交由下一候选路径处理。
 	if fInfo.IsDir() {
 		return os.ErrNotExist
 	}
@@ -436,8 +455,9 @@ func heuristicsCopyFileLog(ctx context.Context, w io.Writer, logDir, logFileName
 	return nil
 }
 
+// safeServiceName 校验服务名长度与字符集，防止把恶意输入传给外部命令。
 func safeServiceName(s string) error {
-	// Max length of a service name is 256 across supported OSes
+	// 各受支持操作系统中服务名的最大长度为 256。
 	if len(s) > maxServiceLength {
 		return fmt.Errorf("length must be less than %d", maxServiceLength)
 	}

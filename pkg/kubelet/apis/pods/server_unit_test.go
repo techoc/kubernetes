@@ -58,6 +58,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestStartEventLoop 验证广播器事件循环：Pod 的添加、更新与删除事件按序投递给已注册客户端，
+// 删除事件携带完整 Pod 信息，且无多余事件。
 func TestStartEventLoop(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	broadcaster := podsapi.NewBroadcaster(tCtx)
@@ -100,12 +102,15 @@ func TestStartEventLoop(t *testing.T) {
 	}
 }
 
+// MockWatchPodsServer 是 gRPC Stream 的测试替身，将服务端发送的 WatchPodsEvent 投递到 EventCh，
+// 并通过 Ctx 感知流的取消。
 type MockWatchPodsServer struct {
 	grpc.ServerStream
 	Ctx     context.Context
 	EventCh chan *podsv1alpha1.WatchPodsEvent
 }
 
+// Send 将事件投递到事件通道；通道已满或上下文取消时返回错误。
 func (m *MockWatchPodsServer) Send(event *podsv1alpha1.WatchPodsEvent) error {
 	select {
 	case m.EventCh <- event:
@@ -115,10 +120,13 @@ func (m *MockWatchPodsServer) Send(event *podsv1alpha1.WatchPodsEvent) error {
 	}
 }
 
+// Context 返回流绑定的上下文，供取消检测使用。
 func (m *MockWatchPodsServer) Context() context.Context {
 	return m.Ctx
 }
 
+// TestWatchPods 验证 WatchPods 流的完整事件序列：初始 ADDED 与 INITIAL_SYNC_COMPLETE，
+// 以及更新、删除对应的 MODIFIED 与 DELETED 事件。
 func TestWatchPods(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodsAPI, true)
 	logger, tCtx := ktesting.NewTestContext(t)
@@ -144,7 +152,7 @@ func TestWatchPods(t *testing.T) {
 		_ = server.WatchPods(&podsv1alpha1.WatchPodsRequest{}, mockStream)
 	}()
 
-	// Verify initial ADDED event
+	// 验证初始 ADDED 事件
 	event := <-mockStream.EventCh
 	assert.Equal(t, podsv1alpha1.EventType_ADDED, event.Type)
 	podOut := &v1.Pod{}
@@ -152,15 +160,15 @@ func TestWatchPods(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "pod1", podOut.Name)
 
-	// Verify INITIAL_SYNC event
+	// 验证 INITIAL_SYNC_COMPLETE 事件
 	event = <-mockStream.EventCh
 	assert.Equal(t, podsv1alpha1.EventType_INITIAL_SYNC_COMPLETE, event.Type)
 	assert.Empty(t, event.Pod)
 
-	// Trigger an update
+	// 触发一次更新
 	server.OnPodUpdated(logger, pod1, pod1.Status, false)
 
-	// Verify MODIFIED event
+	// 验证 MODIFIED 事件
 	event = <-mockStream.EventCh
 	assert.Equal(t, podsv1alpha1.EventType_MODIFIED, event.Type)
 	podOut = &v1.Pod{}
@@ -168,10 +176,10 @@ func TestWatchPods(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "pod1", podOut.Name)
 
-	// Trigger a removal
+	// 触发一次删除
 	server.OnPodRemoved(logger, pod1)
 
-	// Verify DELETED event
+	// 验证 DELETED 事件
 	event = <-mockStream.EventCh
 	assert.Equal(t, podsv1alpha1.EventType_DELETED, event.Type)
 	podOut = &v1.Pod{}
@@ -183,6 +191,7 @@ func TestWatchPods(t *testing.T) {
 	assert.Empty(t, podOut.Spec.Containers)
 }
 
+// TestListPods 验证 ListPods 返回全部 Pod，且返回内容可正确反序列化。
 func TestListPods(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodsAPI, true)
 	tCtx := ktesting.Init(t)
@@ -208,6 +217,7 @@ func TestListPods(t *testing.T) {
 	assert.Equal(t, "pod2", pod2Out.Name)
 }
 
+// TestGetPod 验证 GetPod 返回单个 Pod，临时容器（ephemeral container）的完整配置也能正确还原。
 func TestGetPod(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodsAPI, true)
 	tCtx := ktesting.Init(t)
@@ -247,6 +257,7 @@ func TestGetPod(t *testing.T) {
 	assert.True(t, podOut.Spec.EphemeralContainers[0].TTY)
 }
 
+// TestStaticPod 验证 GetPod 对带 file 来源注解的静态 Pod 同样可用。
 func TestStaticPod(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodsAPI, true)
 	tCtx := ktesting.Init(t)
@@ -279,10 +290,12 @@ func TestStaticPod(t *testing.T) {
 	assert.Equal(t, "file", podOut.Annotations["kubernetes.io/config.source"])
 }
 
+// TestErrorsAndMetrics 验证客户端消费过慢导致事件被丢弃时，丢弃计数指标正确累加。
 func TestErrorsAndMetrics(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodsAPI, true)
 	metrics.Register()
 
+	// 子测试：缓冲区被填满后第二个事件被丢弃，指标应累加。
 	t.Run("DroppedWatchEventIncrementsMetric", func(t *testing.T) {
 		logger, tCtx := ktesting.NewTestContext(t)
 		broadcaster := podsapi.NewBroadcaster(tCtx)
@@ -293,18 +306,18 @@ func TestErrorsAndMetrics(t *testing.T) {
 		mockStatus.On("GetPodStatus", mock.Anything).Return(v1.PodStatus{}, false)
 		server.OnPodUpdated(logger, pod1, pod1.Status, true)
 
-		// Reset the metric before the test
+		// 测试前重置指标
 		metrics.PodWatchEventsDroppedTotal.Reset()
 		clientChannel := make(chan podsapi.PodWatchEvent, 1) // Buffered channel of size 1
 		broadcaster.Register(logger, clientChannel)
 		defer broadcaster.Unregister(logger, clientChannel)
 
-		// Send two events. The first one should fill the buffer.
+		// 发送两个事件：第一个应填满缓冲区
 		broadcaster.Broadcast(logger, podsapi.PodWatchEvent{UID: "1"})
-		// The second one should be dropped and increment the metric.
+		// 第二个应被丢弃并累加指标
 		broadcaster.Broadcast(logger, podsapi.PodWatchEvent{UID: "2"})
 
-		// Wait for the background goroutine to process the events and update metrics
+		// 等待后台协程处理事件并更新指标
 		err := wait.PollUntilContextTimeout(tCtx, 10*time.Millisecond, 2*time.Second, true, func(ctx context.Context) (bool, error) {
 			count, err := testutil.GetCounterMetricValue(metrics.PodWatchEventsDroppedTotal)
 			if err != nil {
@@ -323,6 +336,7 @@ func TestErrorsAndMetrics(t *testing.T) {
 	})
 }
 
+// TestSerialize 循环验证 Pod 经 protobuf 序列化与反序列化后内容保持一致（round-trip 一致性）。
 func TestSerialize(t *testing.T) {
 	apiObjectFuzzer := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, corefuzzer.Funcs), rand.NewSource(152), legacyscheme.Codecs)
 	for range 100 {
@@ -357,6 +371,8 @@ func TestSerialize(t *testing.T) {
 	}
 }
 
+// TestBroadcaster_SlowClient 验证广播器对慢客户端的容忍策略：慢客户端最终被丢弃并计入丢弃指标，
+// 快客户端不受影响。
 func TestBroadcaster_SlowClient(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	broadcaster := podsapi.NewBroadcaster(tCtx)
@@ -403,6 +419,7 @@ func TestBroadcaster_SlowClient(t *testing.T) {
 	assert.NoError(t, err, "Slow client should have been dropped")
 }
 
+// TestStatusOverlay 验证 GetPod、ListPods 与 WatchPods 初始同步均会用 statusManager 的状态覆盖 Pod 状态。
 func TestStatusOverlay(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodsAPI, true)
 	tCtx := ktesting.Init(t)
@@ -458,11 +475,13 @@ func TestStatusOverlay(t *testing.T) {
 	})
 }
 
+// TestInterceptorsAndMetrics 验证 gRPC 拦截器按请求类型与状态码统计指标，
+// 覆盖 ListPods、GetPod、WatchPods 的 OK/FailedPrecondition/NotFound/Canceled 等结果。
 func TestInterceptorsAndMetrics(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodsAPI, true)
 	metrics.Register()
 
-	// Reset metrics before test
+	// 测试前重置指标
 	metrics.PodRequestsTotal.Reset()
 	metrics.PodRequestsList.Reset()
 	metrics.PodRequestsGet.Reset()
@@ -475,14 +494,14 @@ func TestInterceptorsAndMetrics(t *testing.T) {
 	fakeSources := &FakeSourcesReady{ready: true}
 	server := podsapi.NewPodsServer(broadcaster, mockManager, mockStatus, fakeSources)
 
-	// Set up mock expectations
+	// 设置 mock 期望
 	pod1 := &v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: "pod1-uid", Name: "pod1", Namespace: "ns1"}}
 	mockManager.On("GetPods").Return([]*v1.Pod{pod1})
 	mockManager.On("GetPodByUID", types.UID("pod1-uid")).Return(pod1, true)
 	mockManager.On("GetPodByUID", types.UID("non-existent")).Return((*v1.Pod)(nil), false)
 	mockStatus.On("GetPodStatus", mock.Anything).Return(v1.PodStatus{}, false)
 
-	// Start gRPC server with interceptors
+	// 启动带拦截器的 gRPC 服务端
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer func() { _ = lis.Close() }()
@@ -500,52 +519,52 @@ func TestInterceptorsAndMetrics(t *testing.T) {
 	}()
 	defer s.GracefulStop()
 
-	// Connect client
+	// 建立客户端连接
 	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 	client := podsv1alpha1.NewPodsClient(conn)
 
-	// 1. Call ListPods (Success -> OK)
+	// 1. 调用 ListPods（成功 -> OK）
 	_, err = client.ListPods(tCtx, &podsv1alpha1.ListPodsRequest{})
 	require.NoError(t, err)
 
-	// 1b. Call ListPods (Failure -> FailedPrecondition)
+	// 1b. 调用 ListPods（失败 -> FailedPrecondition）
 	fakeSources.ready = false
 	_, err = client.ListPods(tCtx, &podsv1alpha1.ListPodsRequest{})
 	require.Error(t, err)
 	st, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.FailedPrecondition, st.Code())
-	// Restore ready state
+	// 恢复就绪状态
 	fakeSources.ready = true
 
-	// 2. Call GetPod (Success -> OK)
+	// 2. 调用 GetPod（成功 -> OK）
 	_, err = client.GetPod(tCtx, &podsv1alpha1.GetPodRequest{PodUID: "pod1-uid"})
 	require.NoError(t, err)
 
-	// 3. Call GetPod (Failure -> NotFound)
+	// 3. 调用 GetPod（失败 -> NotFound）
 	_, err = client.GetPod(tCtx, &podsv1alpha1.GetPodRequest{PodUID: "non-existent"})
 	require.Error(t, err)
 
-	// 4. Call WatchPods
+	// 4. 调用 WatchPods
 	watchCtx, watchCancel := context.WithCancel(tCtx)
 	watchClient, err := client.WatchPods(watchCtx, &podsv1alpha1.WatchPodsRequest{})
 	require.NoError(t, err)
-	// Receive first event (ADDED)
+	// 接收第一个事件（ADDED）
 	_, err = watchClient.Recv()
 	require.NoError(t, err)
-	// Receive second event (INITIAL_SYNC_COMPLETE)
+	// 接收第二个事件（INITIAL_SYNC_COMPLETE）
 	_, err = watchClient.Recv()
 	require.NoError(t, err)
 
-	// Cancel the watch context to trigger a WatchPods error (context.Canceled)
+	// 取消 watch 上下文以触发 WatchPods 错误（context.Canceled）
 	watchCancel()
-	// Wait for the stream to close
+	// 等待流关闭
 	_, err = watchClient.Recv()
 	require.Error(t, err)
 
-	// Verify metrics broken down by status_code
+	// 按状态码维度验证指标
 	assertCounterEventually(t, metrics.PodRequestsTotal, []string{"v1alpha1", "OK"}, 2)
 	assertCounterEventually(t, metrics.PodRequestsTotal, []string{"v1alpha1", "FailedPrecondition"}, 1)
 	assertCounterEventually(t, metrics.PodRequestsTotal, []string{"v1alpha1", "NotFound"}, 1)
@@ -560,6 +579,7 @@ func TestInterceptorsAndMetrics(t *testing.T) {
 	assertCounterEventually(t, metrics.PodRequestsWatch, []string{"v1alpha1", "Canceled"}, 1)
 }
 
+// assertCounterEventually 轮询等待带指定标签的计数器指标达到期望值。
 func assertCounterEventually(t *testing.T, vec *compmetrics.CounterVec, labelVals []string, expected float64) {
 	require.Eventually(t, func() bool {
 		metric, err := vec.GetMetricWithLabelValues(labelVals...)
@@ -574,6 +594,7 @@ func assertCounterEventually(t *testing.T, vec *compmetrics.CounterVec, labelVal
 	}, 2*time.Second, 10*time.Millisecond, "Metric %v with labels %v expected %f", vec, labelVals, expected)
 }
 
+// TestInitializationCheck 验证在 sources 未就绪时，ListPods、GetPod 与 WatchPods 均返回 FailedPrecondition。
 func TestInitializationCheck(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodsAPI, true)
 	tCtx := ktesting.Init(t)
@@ -581,26 +602,28 @@ func TestInitializationCheck(t *testing.T) {
 	mockManager := new(kubepodtest.MockManager)
 	mockStatus := new(statustest.MockPodStatusProvider)
 
-	// Create FakeSourcesReady that is NOT ready
+	// 创建未就绪的 FakeSourcesReady
 	fakeSources := &FakeSourcesReady{ready: false}
 
-	// Use NewPodsServer (not ForTest) to pass the fakeSources
+	// 使用 NewPodsServer（而非 ForTest）以传入 fakeSources
 	server := podsapi.NewPodsServer(broadcaster, mockManager, mockStatus, fakeSources)
 
-	// ListPods should return FAILED_PRECONDITION
+	// ListPods 应返回 FAILED_PRECONDITION
 	_, err := server.ListPods(tCtx, &podsv1alpha1.ListPodsRequest{})
 	assertErrorWithCode(t, err, codes.FailedPrecondition, "Kubelet is initializing")
 
-	// GetPod should return FAILED_PRECONDITION
+	// GetPod 应返回 FAILED_PRECONDITION
 	_, err = server.GetPod(tCtx, &podsv1alpha1.GetPodRequest{PodUID: "pod1-uid"})
 	assertErrorWithCode(t, err, codes.FailedPrecondition, "Kubelet is initializing")
 
-	// WatchPods should return FAILED_PRECONDITION
+	// WatchPods 应返回 FAILED_PRECONDITION
 	mockStream := &MockWatchPodsServer{Ctx: tCtx, EventCh: make(chan *podsv1alpha1.WatchPodsEvent)}
 	err = server.WatchPods(&podsv1alpha1.WatchPodsRequest{}, mockStream)
 	assertErrorWithCode(t, err, codes.FailedPrecondition, "Kubelet is initializing")
 }
 
+// TestUnverifiedReadyStatusOverride 验证当 statusManager 尚无该 Pod 的状态时，
+// GetPod 会把过期的 Ready=True 覆盖为 False（ContainersNotReady），避免过期状态泄漏给客户端。
 func TestUnverifiedReadyStatusOverride(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -609,7 +632,7 @@ func TestUnverifiedReadyStatusOverride(t *testing.T) {
 	mockStatus := new(statustest.MockPodStatusProvider)
 	server := podsapi.NewPodsServer(broadcaster, mockManager, mockStatus, nil)
 
-	// Pod in podManager has stale Ready=True from APIServer
+	// podManager 中的 Pod 持有来自 APIServer 的过期 Ready=True 状态
 	stalePod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "stale-pod",
@@ -628,7 +651,7 @@ func TestUnverifiedReadyStatusOverride(t *testing.T) {
 	}
 
 	mockManager.On("GetPodByUID", types.UID("stale-uid")).Return(stalePod, true)
-	// statusManager has not run yet for this pod
+	// statusManager 尚未对该 Pod 执行过状态更新
 	mockStatus.On("GetPodStatus", types.UID("stale-uid")).Return(v1.PodStatus{}, false)
 
 	resp, err := server.GetPod(tCtx, &podsv1alpha1.GetPodRequest{PodUID: "stale-uid"})
@@ -638,7 +661,7 @@ func TestUnverifiedReadyStatusOverride(t *testing.T) {
 	err = podOut.Unmarshal(resp.Pod)
 	require.NoError(t, err)
 
-	// Verify PodReady condition was overridden to False (ContainersNotReady)
+	// 验证 PodReady 条件被覆盖为 False（ContainersNotReady）
 	readyCondFound := false
 	for _, c := range podOut.Status.Conditions {
 		if c.Type == v1.PodReady {
@@ -650,16 +673,20 @@ func TestUnverifiedReadyStatusOverride(t *testing.T) {
 	assert.True(t, readyCondFound, "PodReady condition should be present")
 }
 
+// FakeSourcesReady 是 config.SourcesReady 的测试替身，用 ready 标志模拟就绪状态。
 type FakeSourcesReady struct {
 	ready bool
 }
 
+// AllReady 返回 fake 的就绪状态。
 func (f *FakeSourcesReady) AllReady() bool {
 	return f.ready
 }
 
+// AddSource 为空实现，fake 不跟踪具体来源。
 func (f *FakeSourcesReady) AddSource(source string) {}
 
+// assertErrorWithCode 断言错误存在、可解析为 gRPC 状态，且状态码与消息均符合预期。
 func assertErrorWithCode(t *testing.T, err error, expectedCode codes.Code, expectedMsg string) {
 	require.Error(t, err)
 	st, ok := status.FromError(err)

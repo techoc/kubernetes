@@ -20,6 +20,7 @@ import (
 	"testing"
 )
 
+// TestPolicyBestEffortCanAdmitPodResult 验证 best-effort 策略无论 hint 是否 preferred 都允许准入。
 func TestPolicyBestEffortCanAdmitPodResult(t *testing.T) {
 	tcases := []struct {
 		name     string
@@ -49,6 +50,7 @@ func TestPolicyBestEffortCanAdmitPodResult(t *testing.T) {
 	}
 }
 
+// TestPolicyBestEffortMerge 验证 best-effort 策略的 hint 合并结果。
 func TestPolicyBestEffortMerge(t *testing.T) {
 	numaInfo := commonNUMAInfoFourNodes()
 	policy := &bestEffortPolicy{numaInfo: numaInfo}
@@ -60,6 +62,7 @@ func TestPolicyBestEffortMerge(t *testing.T) {
 	testPolicyMerge(policy, tcases, t)
 }
 
+// TestPolicyBestEffortMergeClosestNUMA 验证开启 PreferClosestNUMA 后的合并结果。
 func TestPolicyBestEffortMergeClosestNUMA(t *testing.T) {
 	numaInfo := commonNUMAInfoEightNodes()
 	opts := PolicyOptions{

@@ -35,62 +35,61 @@ import (
 )
 
 const (
+	// podCgroupNamePrefix 是 Pod cgroup 名称的前缀，后接 Pod UID。
 	podCgroupNamePrefix = "pod"
 )
 
-// podContainerManagerImpl implements podContainerManager interface.
-// It is the general implementation which allows pod level container
-// management if qos Cgroup is enabled.
+// podContainerManagerImpl 实现 podContainerManager 接口。
+// 这是通用实现：当 QoS cgroup 层级启用时，可在 Pod 级别管理 cgroup。
 type podContainerManagerImpl struct {
-	// qosContainersInfo hold absolute paths of the top level qos containers
+	// qosContainersInfo 保存顶层 QoS 容器的绝对路径。
 	qosContainersInfo QOSContainersInfo
-	// Stores the mounted cgroup subsystems
+	// subsystems 保存已挂载的 cgroup 子系统。
 	subsystems *CgroupSubsystems
-	// cgroupManager is the cgroup Manager Object responsible for managing all
-	// pod cgroups.
+	// cgroupManager 是负责管理所有 Pod cgroup 的管理器。
 	cgroupManager CgroupManager
-	// Maximum number of pids in a pod
+	// podPidsLimit 是单个 Pod 中允许的最大 PID 数量。
 	podPidsLimit int64
-	// enforceCPULimits controls whether cfs quota is enforced or not
+	// enforceCPULimits 控制是否启用 CFS 配额。
 	enforceCPULimits bool
-	// cpuCFSQuotaPeriod is the cfs period value, cfs_period_us, setting per
-	// node for all containers in usec
+	// cpuCFSQuotaPeriod 是节点级别的 CFS 周期值（cfs_period_us，单位微秒）。
 	cpuCFSQuotaPeriod uint64
-	// podContainerManager is the ContainerManager running on the machine
+	// podContainerManager 是运行在节点上的 ContainerManager。
 	podContainerManager ContainerManager
-	// memoryReservationPolicy controls memory reservation protection behavior
+	// memoryReservationPolicy 控制内存预留的保护策略。
 	memoryReservationPolicy kubeletconfig.MemoryReservationPolicy
-	// memoryThrottlingFactor is used to compute pod-level memory.high
+	// memoryThrottlingFactor 用于计算 Pod 级别的 memory.high。
 	memoryThrottlingFactor *float64
 }
 
-// Make sure that podContainerManagerImpl implements the PodContainerManager interface
+// 确保 podContainerManagerImpl 实现了 PodContainerManager 接口。
 var _ PodContainerManager = &podContainerManagerImpl{}
 
-// Exists checks if the pod's cgroup already exists
+// Exists 检查 Pod 的 cgroup 是否已存在。
 func (m *podContainerManagerImpl) Exists(pod *v1.Pod) bool {
 	podContainerName, _ := m.GetPodContainerName(pod)
 	return m.cgroupManager.Exists(podContainerName)
 }
 
-// EnsureExists takes a pod as argument and makes sure that
-// pod cgroup exists if qos cgroup hierarchy flag is enabled.
-// If the pod level container doesn't already exist it is created.
+// EnsureExists 确保 Pod 的 cgroup 存在（在 QoS cgroup 层级启用时）；
+// 若 Pod 级别的容器尚不存在则创建它。
 func (m *podContainerManagerImpl) EnsureExists(logger klog.Logger, pod *v1.Pod) error {
-	// check if container already exist
+	// 先检查 cgroup 是否已存在，避免重复创建。
 	alreadyExists := m.Exists(pod)
 	if !alreadyExists {
 		enforceCPULimits := m.enforceCPULimits
+		// 使用独占 CPU 的 Pod 无需 CFS 配额限制，否则会与其独占语义冲突。
 		if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.DisableCPUQuotaWithExclusiveCPUs) && m.podContainerManager.PodHasExclusiveCPUs(logger, pod) {
 			logger.V(2).Info("Disabled CFS quota", "pod", klog.KObj(pod))
 			enforceCPULimits = false
 		}
+		// 仅当 MemoryQoS 门控开启且系统使用 cgroup v2 时才启用内存 QoS。
 		enforceMemoryQoS := false
 		if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.MemoryQoS) &&
 			libcontainercgroups.IsCgroup2UnifiedMode() {
 			enforceMemoryQoS = true
 		}
-		// Create the pod container
+		// 创建 Pod 级别的 cgroup。
 		podContainerName, _ := m.GetPodContainerName(pod)
 		containerConfig := &CgroupConfig{
 			Name:               podContainerName,
@@ -111,19 +110,19 @@ func (m *podContainerManagerImpl) EnsureExists(logger klog.Logger, pod *v1.Pod) 
 	return nil
 }
 
-// applyPodLevelMemoryHigh sets memory.high on the pod cgroup.
-// The kernel enforces memory.high hierarchically (try_charge_memcg walks ancestors),
-// so this throttles all containers in the pod without per-container memory.high.
+// applyPodLevelMemoryHigh 在 Pod cgroup 上设置 memory.high。
+// 内核会沿层级逐级执行 memory.high（try_charge_memcg 会遍历祖先节点），
+// 因此只需在 Pod 级别设置即可限制 Pod 内所有容器，无需为每个容器单独设置。
 func (m *podContainerManagerImpl) applyPodLevelMemoryHigh(pod *v1.Pod, rc *ResourceConfig) {
 	if m.memoryThrottlingFactor != nil {
 		ApplyPodLevelMemoryHigh(pod, rc, *m.memoryThrottlingFactor)
 	}
 }
 
-// GetPodContainerName returns the CgroupName identifier, and its literal cgroupfs form on the host.
+// GetPodContainerName 返回 Pod 的 CgroupName 标识及其在主机上的字面 cgroupfs 形式。
 func (m *podContainerManagerImpl) GetPodContainerName(pod *v1.Pod) (CgroupName, string) {
 	podQOS := v1qos.GetPodQOS(pod)
-	// Get the parent QOS container name
+	// 根据 Pod 的 QoS 等级选择对应的父级 QoS 容器。
 	var parentContainer CgroupName
 	switch podQOS {
 	case v1.PodQOSGuaranteed:
@@ -135,14 +134,15 @@ func (m *podContainerManagerImpl) GetPodContainerName(pod *v1.Pod) (CgroupName, 
 	}
 	podContainer := GetPodCgroupNameSuffix(pod.UID)
 
-	// Get the absolute path of the cgroup
+	// 计算 cgroup 的绝对路径。
 	cgroupName := NewCgroupName(parentContainer, podContainer)
-	// Get the literal cgroupfs name
+	// 获取字面 cgroupfs 名称。
 	cgroupfsName := m.cgroupManager.Name(cgroupName)
 
 	return cgroupName, cgroupfsName
 }
 
+// GetPodCgroupMemoryUsage 返回 Pod cgroup 的当前内存使用量（字节）。
 func (m *podContainerManagerImpl) GetPodCgroupMemoryUsage(pod *v1.Pod) (uint64, error) {
 	podCgroupName, _ := m.GetPodContainerName(pod)
 	memUsage, err := m.cgroupManager.MemoryUsage(podCgroupName)
@@ -152,23 +152,25 @@ func (m *podContainerManagerImpl) GetPodCgroupMemoryUsage(pod *v1.Pod) (uint64, 
 	return uint64(memUsage), nil
 }
 
+// GetPodCgroupConfig 返回 Pod cgroup 在指定资源上的当前配置。
 func (m *podContainerManagerImpl) GetPodCgroupConfig(pod *v1.Pod, resource v1.ResourceName) (*ResourceConfig, error) {
 	podCgroupName, _ := m.GetPodContainerName(pod)
 	return m.cgroupManager.GetCgroupConfig(podCgroupName, resource)
 }
 
+// SetPodCgroupConfig 更新 Pod cgroup 的资源限制配置。
 func (m *podContainerManagerImpl) SetPodCgroupConfig(logger klog.Logger, pod *v1.Pod, resourceConfig *ResourceConfig) error {
 	podCgroupName, _ := m.GetPodContainerName(pod)
 	return m.cgroupManager.SetCgroupConfig(logger, podCgroupName, resourceConfig)
 }
 
-// Kill one process ID
+// killOnePid 向指定 PID 发送 kill 信号。
 func (m *podContainerManagerImpl) killOnePid(logger klog.Logger, pid int) error {
-	// os.FindProcess never returns an error on POSIX
-	// https://go-review.googlesource.com/c/go/+/19093
+	// 在 POSIX 系统上 os.FindProcess 不会返回错误。
+	// 参考 https://go-review.googlesource.com/c/go/+/19093
 	p, _ := os.FindProcess(pid)
 	if err := p.Kill(); err != nil {
-		// If the process already exited, that's fine.
+		// 进程已经退出属于正常情况。
 		if errors.Is(err, os.ErrProcessDone) {
 			logger.V(3).Info("Process no longer exists", "pid", pid)
 			return nil
@@ -178,18 +180,17 @@ func (m *podContainerManagerImpl) killOnePid(logger klog.Logger, pid int) error 
 	return nil
 }
 
-// Scan through the whole cgroup directory and kill all processes either
-// attached to the pod cgroup or to a container cgroup under the pod cgroup
+// tryKillingCgroupProcesses 扫描整个 cgroup 目录，
+// 杀掉所有直接或间接挂在 Pod cgroup 下的进程。
 func (m *podContainerManagerImpl) tryKillingCgroupProcesses(logger klog.Logger, podCgroup CgroupName) error {
 	pidsToKill := m.cgroupManager.Pids(logger, podCgroup)
-	// No pids charged to the terminated pod cgroup return
+	// 已终止的 Pod cgroup 中没有 PID 时直接返回。
 	if len(pidsToKill) == 0 {
 		return nil
 	}
 
 	var errlist []error
-	// os.Kill often errors out,
-	// We try killing all the pids multiple times
+	// os.Kill 可能频繁出错，因此对全部 PID 重试多次。
 	removed := map[int]bool{}
 	for i := 0; i < 5; i++ {
 		if i != 0 {
@@ -216,15 +217,15 @@ func (m *podContainerManagerImpl) tryKillingCgroupProcesses(logger klog.Logger, 
 	return utilerrors.NewAggregate(errlist)
 }
 
-// Destroy destroys the pod container cgroup paths
+// Destroy 销毁 Pod 容器的 cgroup 路径。
 func (m *podContainerManagerImpl) Destroy(logger klog.Logger, podCgroup CgroupName) error {
-	// Try killing all the processes attached to the pod cgroup
+	// 先杀掉 Pod cgroup 下的所有进程，否则 cgroup 无法删除。
 	if err := m.tryKillingCgroupProcesses(logger, podCgroup); err != nil {
 		logger.Info("Failed to kill all the processes attached to cgroup", "cgroupName", podCgroup, "err", err)
 		return fmt.Errorf("failed to kill all the processes attached to the %v cgroups : %v", podCgroup, err)
 	}
 
-	// Now its safe to remove the pod's cgroup
+	// 进程清理完成后才能安全删除 Pod cgroup。
 	containerConfig := &CgroupConfig{
 		Name:               podCgroup,
 		ResourceParameters: &ResourceConfig{},
@@ -236,19 +237,19 @@ func (m *podContainerManagerImpl) Destroy(logger klog.Logger, podCgroup CgroupNa
 	return nil
 }
 
-// ReduceCPULimits reduces the CPU CFS values to the minimum amount of shares.
+// ReduceCPULimits 将 CPU CFS 配额降到最小份额。
 func (m *podContainerManagerImpl) ReduceCPULimits(logger klog.Logger, podCgroup CgroupName) error {
 	return m.cgroupManager.ReduceCPULimits(logger, podCgroup)
 }
 
-// IsPodCgroup returns true if the literal cgroupfs name corresponds to a pod
+// IsPodCgroup 判断字面 cgroupfs 名称是否对应一个 Pod，并返回其 UID。
 func (m *podContainerManagerImpl) IsPodCgroup(cgroupfs string) (bool, types.UID) {
-	// convert the literal cgroupfs form to the driver specific value
+	// 把字面 cgroupfs 形式转换为驱动内部使用的名称。
 	cgroupName := m.cgroupManager.CgroupName(cgroupfs)
 	qosContainersList := [3]CgroupName{m.qosContainersInfo.BestEffort, m.qosContainersInfo.Burstable, m.qosContainersInfo.Guaranteed}
 	basePath := ""
 	for _, qosContainerName := range qosContainersList {
-		// a pod cgroup is a direct child of a qos node, so check if its a match
+		// Pod cgroup 是 QoS 节点的直接子节点，据此判断是否匹配。
 		if len(cgroupName) == len(qosContainerName)+1 {
 			basePath = cgroupName[len(qosContainerName)]
 		}
@@ -266,19 +267,17 @@ func (m *podContainerManagerImpl) IsPodCgroup(cgroupfs string) (bool, types.UID)
 	return true, types.UID(parts[1])
 }
 
-// GetAllPodsFromCgroups scans through all the subsystems of pod cgroups
-// Get list of pods whose cgroup still exist on the cgroup mounts
+// GetAllPodsFromCgroups 扫描所有 Pod cgroup 子系统，
+// 返回 cgroup 挂载点上仍然存在的 Pod 列表。
 func (m *podContainerManagerImpl) GetAllPodsFromCgroups(logger klog.Logger) (map[types.UID]CgroupName, error) {
-	// Map for storing all the found pods on the disk
+	// 保存磁盘上发现的所有 Pod。
 	foundPods := make(map[types.UID]CgroupName)
 	qosContainersList := [3]CgroupName{m.qosContainersInfo.BestEffort, m.qosContainersInfo.Burstable, m.qosContainersInfo.Guaranteed}
-	// Scan through all the subsystem mounts
-	// and through each QoS cgroup directory for each subsystem mount
-	// If a pod cgroup exists in even a single subsystem mount
-	// we will attempt to delete it
+	// 遍历所有子系统挂载点及其下的各 QoS cgroup 目录。
+	// 只要 Pod cgroup 在任一子系统挂载中存在，就会尝试删除它。
 	for _, val := range m.subsystems.MountPoints {
 		for _, qosContainerName := range qosContainersList {
-			// get the subsystems QoS cgroup absolute name
+			// 获取子系统 QoS cgroup 的绝对名称。
 			qcConversion := m.cgroupManager.Name(qosContainerName)
 			qc := path.Join(val, qcConversion)
 			dirInfo, err := os.ReadDir(qc)
@@ -289,25 +288,24 @@ func (m *podContainerManagerImpl) GetAllPodsFromCgroups(logger klog.Logger) (map
 				return nil, fmt.Errorf("failed to read the cgroup directory %v : %v", qc, err)
 			}
 			for i := range dirInfo {
-				// its not a directory, so continue on...
+				// 不是目录则跳过。
 				if !dirInfo[i].IsDir() {
 					continue
 				}
-				// convert the concrete cgroupfs name back to an internal identifier
-				// this is needed to handle path conversion for systemd environments.
-				// we pass the fully qualified path so decoding can work as expected
-				// since systemd encodes the path in each segment.
+				// 把具体的 cgroupfs 名称转换回内部标识。
+				// 这是为了兼容 systemd 环境的路径编码：systemd 会在每一段中编码路径，
+				// 因此必须传入完整路径才能正确解码。
 				cgroupfsPath := path.Join(qcConversion, dirInfo[i].Name())
 				internalPath := m.cgroupManager.CgroupName(cgroupfsPath)
-				// we only care about base segment of the converted path since that
-				// is what we are reading currently to know if it is a pod or not.
+				// 这里只关心转换后路径的最后一段，因为正是当前读取的这一层
+				// 决定它是否是 Pod。
 				basePath := internalPath[len(internalPath)-1]
 				if !strings.Contains(basePath, podCgroupNamePrefix) {
 					continue
 				}
-				// we then split the name on the pod prefix to determine the uid
+				// 再按 pod 前缀切分名称以提取 UID。
 				parts := strings.Split(basePath, podCgroupNamePrefix)
-				// the uid is missing, so we log the unexpected cgroup not of form pod<uid>
+				// 缺少 UID 说明该 cgroup 不符合 pod<uid> 形式，记录日志并跳过。
 				if len(parts) != 2 {
 					logger.Info("Pod cgroup manager ignored unexpected cgroup because it is not a pod", "path", cgroupfsPath)
 					continue
@@ -320,59 +318,67 @@ func (m *podContainerManagerImpl) GetAllPodsFromCgroups(logger klog.Logger) (map
 	return foundPods, nil
 }
 
-// podContainerManagerNoop implements podContainerManager interface.
-// It is a no-op implementation and basically does nothing
-// podContainerManagerNoop is used in case the QoS cgroup Hierarchy is not
-// enabled, so Exists() returns true always as the cgroupRoot
-// is expected to always exist.
+// podContainerManagerNoop 实现 podContainerManager 接口，但几乎不做任何事。
+// 当 QoS cgroup 层级未启用时使用该实现：
+// 此时 Exists() 始终返回 true，因为 cgroupRoot 被假定总是存在。
 type podContainerManagerNoop struct {
 	cgroupRoot CgroupName
 }
 
-// Make sure that podContainerManagerStub implements the PodContainerManager interface
+// 确保 podContainerManagerNoop 实现了 PodContainerManager 接口。
 var _ PodContainerManager = &podContainerManagerNoop{}
 
+// Exists 在 no-op 实现中始终返回 true。
 func (m *podContainerManagerNoop) Exists(_ *v1.Pod) bool {
 	return true
 }
 
+// EnsureExists 在 no-op 实现中不执行任何操作。
 func (m *podContainerManagerNoop) EnsureExists(_ klog.Logger, _ *v1.Pod) error {
 	return nil
 }
 
+// GetPodContainerName 返回 cgroupRoot 作为 Pod 容器名。
 func (m *podContainerManagerNoop) GetPodContainerName(_ *v1.Pod) (CgroupName, string) {
 	return m.cgroupRoot, ""
 }
 
+// GetPodContainerNameForDriver 在 no-op 实现中返回空字符串。
 func (m *podContainerManagerNoop) GetPodContainerNameForDriver(_ *v1.Pod) string {
 	return ""
 }
 
-// Destroy destroys the pod container cgroup paths
+// Destroy 销毁 Pod 容器的 cgroup 路径。
 func (m *podContainerManagerNoop) Destroy(_ klog.Logger, _ CgroupName) error {
 	return nil
 }
 
+// ReduceCPULimits 在 no-op 实现中不执行任何操作。
 func (m *podContainerManagerNoop) ReduceCPULimits(_ klog.Logger, _ CgroupName) error {
 	return nil
 }
 
+// GetAllPodsFromCgroups 在 no-op 实现中返回 nil。
 func (m *podContainerManagerNoop) GetAllPodsFromCgroups(_ klog.Logger) (map[types.UID]CgroupName, error) {
 	return nil, nil
 }
 
+// IsPodCgroup 在 no-op 实现中始终返回 false。
 func (m *podContainerManagerNoop) IsPodCgroup(cgroupfs string) (bool, types.UID) {
 	return false, types.UID("")
 }
 
+// GetPodCgroupMemoryUsage 在 no-op 实现中返回 0。
 func (m *podContainerManagerNoop) GetPodCgroupMemoryUsage(_ *v1.Pod) (uint64, error) {
 	return 0, nil
 }
 
+// GetPodCgroupConfig 在 no-op 实现中返回 nil。
 func (m *podContainerManagerNoop) GetPodCgroupConfig(_ *v1.Pod, _ v1.ResourceName) (*ResourceConfig, error) {
 	return nil, nil
 }
 
+// SetPodCgroupConfig 在 no-op 实现中不执行任何操作。
 func (m *podContainerManagerNoop) SetPodCgroupConfig(_ klog.Logger, _ *v1.Pod, _ *ResourceConfig) error {
 	return nil
 }

@@ -18,22 +18,20 @@ package ioutils
 
 import "io"
 
-// LimitWriter is a copy of the standard library ioutils.LimitReader,
-// applied to the writer interface.
-// LimitWriter returns a Writer that writes to w
-// but stops with EOF after n bytes.
-// The underlying implementation is a *LimitedWriter.
+// LimitWriter 是标准库 ioutils.LimitReader 在 Writer 接口上的对应实现。
+// 返回的 Writer 会写入 w，但在写满 n 字节后停止并返回 EOF。
+// 底层实现是 *LimitedWriter。
 func LimitWriter(w io.Writer, n int64) io.Writer { return &LimitedWriter{w, n} }
 
-// A LimitedWriter writes to W but limits the amount of
-// data returned to just N bytes. Each call to Write
-// updates N to reflect the new amount remaining.
-// Write returns EOF when N <= 0 or when the underlying W returns EOF.
+// LimitedWriter 写入 W，但将写入的数据量限制为 N 字节。
+// 每次 Write 都会更新 N 以反映剩余额度；
+// 当 N <= 0 或底层 W 返回 EOF 时，Write 返回 EOF。
 type LimitedWriter struct {
 	W io.Writer // underlying writer
 	N int64     // max bytes remaining
 }
 
+// Write 写入数据并在达到上限时截断，同时返回 ErrShortWrite。
 func (l *LimitedWriter) Write(p []byte) (n int, err error) {
 	if l.N <= 0 {
 		return 0, io.ErrShortWrite

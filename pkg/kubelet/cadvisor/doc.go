@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cadvisor provides an interface for Kubelet interactions with cAdvisor.
+// Package cadvisor 提供 kubelet 与 cAdvisor 交互所需的接口。
 package cadvisor

@@ -37,7 +37,10 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestListPodResourcesV1 验证 v1 ListPodResources 在设备、CPU、内存、
+// 动态资源以及 pod-level resources 等组合下的返回结果。
 func TestListPodResourcesV1(t *testing.T) {
+	// 测试上下文携带 logger，Provider 打桩时需要同一个 logger 才能匹配调用。
 	logger, tCtx := ktesting.NewTestContext(t)
 	podName := "pod-name"
 	podNamespace := "pod-namespace"
@@ -149,6 +152,8 @@ func TestListPodResourcesV1(t *testing.T) {
 		},
 	}
 
+	// 表驱动用例：每个用例声明 mock 返回值与期望响应。
+	// 不变量：响应只包含当前 pod 及其容器的资源，pod-level 资源仅在特性门控开启时出现。
 	for _, tc := range []struct {
 		desc                     string
 		pods                     []*v1.Pod
@@ -437,6 +442,7 @@ func TestListPodResourcesV1(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
+			// 仅在 pod-level 资源用例中打开门控，避免影响其他用例的默认行为。
 			if tc.podLevelResourcesEnabled {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, kubefeatures.PodLevelResources, tc.podLevelResourcesEnabled)
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, kubefeatures.PodLevelResourceManagers, tc.podLevelResourcesEnabled)
@@ -450,7 +456,8 @@ func TestListPodResourcesV1(t *testing.T) {
 
 			mockPodsProvider.EXPECT().GetPods().Return(tc.pods).Maybe()
 			mockPodsProvider.EXPECT().GetActivePods().Return(tc.pods).Maybe()
-			// 1. Setup specific mock overrides based on test case specs
+			// 1. 按用例声明的值精确打桩，只覆盖该用例真正关心的资源类型。
+			// 未指定目标容器时默认使用普通容器名，覆盖大多数用例。
 			targetName := tc.targetContainerName
 			if targetName == "" {
 				targetName = containerName
@@ -473,7 +480,7 @@ func TestListPodResourcesV1(t *testing.T) {
 				mockDynamicResourcesProvider.EXPECT().GetDynamicResources(logger, mock.MatchedBy(func(p *v1.Pod) bool { return string(p.UID) == string(podUID) }), mock.MatchedBy(func(c *v1.Container) bool { return c.Name == targetName })).Return(tc.dynamicResources).Maybe()
 			}
 
-			// 2. Setup default mock behaviors (returning empty slices/no-ops by default)
+			// 2. 兜底打桩：未声明的调用返回空切片；testify 按注册顺序匹配，具体期望优先生效。
 			mockCPUsProvider.EXPECT().GetCPUs(mock.Anything, mock.Anything).Return([]int64{}).Maybe()
 			mockCPUsProvider.EXPECT().GetPodCPUs(mock.Anything).Return([]int64{}).Maybe()
 			mockCPUsProvider.EXPECT().GetAllocatableCPUs().Return([]int64{}).Maybe()
@@ -485,6 +492,7 @@ func TestListPodResourcesV1(t *testing.T) {
 			mockDevicesProvider.EXPECT().UpdateAllocatedDevices(logger).Return().Maybe()
 			mockDynamicResourcesProvider.EXPECT().GetDynamicResources(logger, mock.Anything, mock.Anything).Return([]*podresourcesapi.DynamicResource{}).Maybe()
 
+			// 组装 Provider 集合，模拟 kubelet 各资源管理器对外暴露的视图。
 			providers := PodResourcesProviders{
 				Pods:             mockPodsProvider,
 				Devices:          mockDevicesProvider,
@@ -492,11 +500,13 @@ func TestListPodResourcesV1(t *testing.T) {
 				Memory:           mockMemoryProvider,
 				DynamicResources: mockDynamicResourcesProvider,
 			}
+			// 构造 gRPC 服务实现；List 是 podresources v1 API 的查询入口。
 			server := NewV1PodResourcesServer(tCtx, providers)
 			resp, err := server.List(tCtx, &podresourcesapi.ListPodResourcesRequest{})
 			if err != nil {
 				t.Errorf("want err = %v, got %q", nil, err)
 			}
+			// 用 protobuf String() 比较，规避 nil 与空切片在内部表示上的差异。
 			if tc.expectedResponse.String() != resp.String() {
 				t.Fatalf("want: %+v; got: %+v", tc.expectedResponse, resp)
 			}
@@ -504,7 +514,9 @@ func TestListPodResourcesV1(t *testing.T) {
 	}
 }
 
+// makePod 构造第 idx 个测试 pod，名称与 UID 均带索引以便区分。
 func makePod(idx int) *v1.Pod {
+	// 带上索引保证每个 pod 唯一，便于按名字断言过滤结果。
 	podNamespace := "pod-namespace"
 	podName := fmt.Sprintf("pod-name-%d", idx)
 	podUID := types.UID(fmt.Sprintf("pod-uid-%d", idx))
@@ -526,15 +538,18 @@ func makePod(idx int) *v1.Pod {
 	}
 }
 
+// collectNamespacedNamesFromPods 提取 pod 的 namespace/name 并排序。
 func collectNamespacedNamesFromPods(pods []*v1.Pod) []string {
 	ret := make([]string, 0, len(pods))
 	for _, pod := range pods {
 		ret = append(ret, pod.Namespace+"/"+pod.Name)
 	}
+	// 排序后比较，消除 Provider 返回顺序对断言的影响。
 	sort.Strings(ret)
 	return ret
 }
 
+// collectNamespacedNamesFromPodResources 提取响应中 pod 的 namespace/name 并排序。
 func collectNamespacedNamesFromPodResources(prs []*podresourcesapi.PodResources) []string {
 	ret := make([]string, 0, len(prs))
 	for _, pr := range prs {
@@ -544,12 +559,14 @@ func collectNamespacedNamesFromPodResources(prs []*podresourcesapi.PodResources)
 	return ret
 }
 
+// TestListPodResourcesUsesOnlyActivePodsV1 验证 ListPodResources 只返回 active pod，
+// 已终止但仍被 GetPods 返回的 pod 必须被过滤掉。
 func TestListPodResourcesUsesOnlyActivePodsV1(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	numaID := int64(1)
 
-	// we abuse the fact that we don't care about the assignments,
-	// so we reuse the same for all pods which is actually wrong.
+	// 这里刻意对所有 pod 复用同一份分配结果：本测试只关心哪些 pod 出现在响应里，
+	// 不关心具体分配内容，所以这种复用并不符合真实语义。
 	devs := []*podresourcesapi.ContainerDevices{
 		{
 			ResourceName: "resource",
@@ -574,6 +591,7 @@ func TestListPodResourcesUsesOnlyActivePodsV1(t *testing.T) {
 		},
 	}
 
+	// 表驱动用例：GetPods 与 GetActivePods 返回不同集合，用于验证按 active pod 过滤。
 	for _, tc := range []struct {
 		desc                     string
 		pods                     []*v1.Pod
@@ -648,6 +666,7 @@ func TestListPodResourcesUsesOnlyActivePodsV1(t *testing.T) {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, kubefeatures.PodLevelResourceManagers, tc.podLevelResourcesEnabled)
 			}
 
+			// 每个用例单独创建 mock，避免调用期望在用例之间泄漏。
 			mockDevicesProvider := podresourcetest.NewMockDevicesProvider(t)
 			mockPodsProvider := podresourcetest.NewMockPodsProvider(t)
 			mockCPUsProvider := podresourcetest.NewMockCPUsProvider(t)
@@ -683,6 +702,7 @@ func TestListPodResourcesUsesOnlyActivePodsV1(t *testing.T) {
 			if err != nil {
 				t.Errorf("want err = %v, got %q", nil, err)
 			}
+			// 核心不变量：响应中的 pod 集合必须与 activePods 完全一致。
 			expectedNames := collectNamespacedNamesFromPods(tc.activePods)
 			gotNames := collectNamespacedNamesFromPodResources(resp.GetPodResources())
 			if diff := cmp.Diff(expectedNames, gotNames, cmpopts.EquateEmpty()); diff != "" {
@@ -692,6 +712,8 @@ func TestListPodResourcesUsesOnlyActivePodsV1(t *testing.T) {
 	}
 }
 
+// TestListPodResourcesWithInitContainersV1 验证普通 init container 与可重启 init container
+// 是否作为容器资源出现在 ListPodResources 响应中。
 func TestListPodResourcesWithInitContainersV1(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podName := "pod-name"
@@ -732,6 +754,7 @@ func TestListPodResourcesWithInitContainersV1(t *testing.T) {
 		},
 	}
 
+	// 表驱动用例：init container 仅在可重启（sidecar）时才会被当作长期运行的容器返回。
 	for _, tc := range []struct {
 		desc     string
 		pods     []*v1.Pod
@@ -1017,6 +1040,7 @@ func TestListPodResourcesWithInitContainersV1(t *testing.T) {
 
 			mockPodsProvider.EXPECT().GetPods().Return(tc.pods).Maybe()
 			mockPodsProvider.EXPECT().GetActivePods().Return(tc.pods).Maybe()
+			// 先注册用例自定义期望，再注册兜底；testify 按注册顺序匹配，具体期望优先生效。
 			tc.mockFunc(tc.pods, mockDevicesProvider, mockCPUsProvider, mockMemoryProvider, mockDynamicResourcesProvider)
 			mockCPUsProvider.EXPECT().GetPodCPUs(mock.Anything).Return([]int64{}).Maybe()
 			mockMemoryProvider.EXPECT().GetPodMemory(logger, mock.Anything).Return([]*podresourcesapi.ContainerMemory{}).Maybe()
@@ -1040,6 +1064,8 @@ func TestListPodResourcesWithInitContainersV1(t *testing.T) {
 	}
 }
 
+// TestAllocatableResources 验证 GetAllocatableResources 聚合设备、CPU 与内存的
+// 可分配总量，且结果与 pod 无关。
 func TestAllocatableResources(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	allDevs := []*podresourcesapi.ContainerDevices{
@@ -1145,6 +1171,7 @@ func TestAllocatableResources(t *testing.T) {
 		},
 	}
 
+	// 表驱动用例：分别验证仅 CPU、仅内存、仅设备以及组合场景下的聚合结果。
 	for _, tc := range []struct {
 		desc                                 string
 		allCPUs                              []int64
@@ -1298,12 +1325,14 @@ func TestAllocatableResources(t *testing.T) {
 			},
 		},
 	} {
+		// 每个用例独立创建 mock，避免期望跨用例累积。
 		t.Run(tc.desc, func(t *testing.T) {
 			mockDevicesProvider := podresourcetest.NewMockDevicesProvider(t)
 			mockPodsProvider := podresourcetest.NewMockPodsProvider(t)
 			mockCPUsProvider := podresourcetest.NewMockCPUsProvider(t)
 			mockMemoryProvider := podresourcetest.NewMockMemoryProvider(t)
 
+			// 可分配资源查询不针对具体 pod/容器，因此用空参数打桩以防误用。
 			mockDevicesProvider.EXPECT().GetDevices("", "").Return([]*podresourcesapi.ContainerDevices{}).Maybe()
 			mockCPUsProvider.EXPECT().GetCPUs(mock.MatchedBy(func(p *v1.Pod) bool { return string(p.UID) == "" }), mock.MatchedBy(func(c *v1.Container) bool { return c.Name == "" })).Return([]int64{}).Maybe()
 			mockMemoryProvider.EXPECT().GetMemory(logger, mock.MatchedBy(func(p *v1.Pod) bool { return string(p.UID) == "" }), mock.MatchedBy(func(c *v1.Container) bool { return c.Name == "" })).Return([]*podresourcesapi.ContainerMemory{}).Maybe()
@@ -1320,6 +1349,7 @@ func TestAllocatableResources(t *testing.T) {
 			}
 			server := NewV1PodResourcesServer(tCtx, providers)
 
+			// 直接查询设备、CPU、内存管理器的可分配状态，不经过 pod 列表。
 			resp, err := server.GetAllocatableResources(tCtx, &podresourcesapi.AllocatableResourcesRequest{})
 			if err != nil {
 				t.Errorf("want err = %v, got %q", nil, err)
@@ -1332,6 +1362,8 @@ func TestAllocatableResources(t *testing.T) {
 	}
 }
 
+// TestGetPodResourcesV1 验证 GetPodResources 按 namespace/name 查询单个 pod 的资源，
+// 覆盖 pod 不存在、pod-level 资源以及多容器等场景。
 func TestGetPodResourcesV1(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podName := "pod-name"
@@ -1440,6 +1472,7 @@ func TestGetPodResourcesV1(t *testing.T) {
 		},
 	}
 
+	// 表驱动用例：不变量是 pod 不存在时返回错误，存在时响应等价于 List 中该 pod 的子集。
 	for _, tc := range []struct {
 		desc                     string
 		err                      error
@@ -1694,8 +1727,10 @@ func TestGetPodResourcesV1(t *testing.T) {
 			mockMemoryProvider := podresourcetest.NewMockMemoryProvider(t)
 			mockDynamicResourcesProvider := podresourcetest.NewMockDynamicResourcesProvider(t)
 
+			// Get 按 namespace/name 精确查找 pod，与 List 遍历全部 pod 的路径不同。
 			mockPodsProvider.EXPECT().GetPodByName(podNamespace, podName).Return(tc.pod, tc.exist).Maybe()
-			// 1. Setup specific mock overrides based on test case specs
+			// 1. 按用例声明的值精确打桩，只覆盖该用例真正关心的资源类型。
+			// 未指定目标容器时默认使用普通容器名。
 			targetName := tc.targetContainerName
 			if targetName == "" {
 				targetName = containerName
@@ -1718,7 +1753,7 @@ func TestGetPodResourcesV1(t *testing.T) {
 				mockDynamicResourcesProvider.EXPECT().GetDynamicResources(logger, mock.MatchedBy(func(p *v1.Pod) bool { return string(p.UID) == string(podUID) }), mock.MatchedBy(func(c *v1.Container) bool { return c.Name == targetName })).Return(tc.dynamicResources).Maybe()
 			}
 
-			// 2. Setup default mock behaviors (returning empty slices/no-ops by default)
+			// 2. 兜底打桩：未声明的调用返回空切片；testify 按注册顺序匹配，具体期望优先生效。
 			mockCPUsProvider.EXPECT().GetCPUs(mock.Anything, mock.Anything).Return([]int64{}).Maybe()
 			mockCPUsProvider.EXPECT().GetPodCPUs(mock.Anything).Return([]int64{}).Maybe()
 			mockCPUsProvider.EXPECT().GetAllocatableCPUs().Return([]int64{}).Maybe()
@@ -1730,6 +1765,7 @@ func TestGetPodResourcesV1(t *testing.T) {
 			mockDevicesProvider.EXPECT().UpdateAllocatedDevices(logger).Return().Maybe()
 			mockDynamicResourcesProvider.EXPECT().GetDynamicResources(logger, mock.Anything, mock.Anything).Return([]*podresourcesapi.DynamicResource{}).Maybe()
 
+			// 组装 Provider 集合并构造 v1 服务。
 			providers := PodResourcesProviders{
 				Pods:             mockPodsProvider,
 				Devices:          mockDevicesProvider,
@@ -1738,9 +1774,11 @@ func TestGetPodResourcesV1(t *testing.T) {
 				DynamicResources: mockDynamicResourcesProvider,
 			}
 			server := NewV1PodResourcesServer(tCtx, providers)
+			// 请求携带 namespace/name，由服务内部转换为 pod 查找。
 			podReq := &podresourcesapi.GetPodResourcesRequest{PodName: podName, PodNamespace: podNamespace}
 			resp, err := server.Get(tCtx, podReq)
 
+			// pod 不存在时只比较错误文本；存在时比较完整响应。
 			if err != nil {
 				if err.Error() != tc.err.Error() {
 					t.Errorf("want exit = %v, got %v", tc.err, err)
@@ -1759,6 +1797,8 @@ func TestGetPodResourcesV1(t *testing.T) {
 
 }
 
+// TestGetPodResourcesWithInitContainersV1 验证单 pod 查询时 init container 的返回规则，
+// 与 List 路径保持一致。
 func TestGetPodResourcesWithInitContainersV1(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podName := "pod-name"
@@ -1799,6 +1839,7 @@ func TestGetPodResourcesWithInitContainersV1(t *testing.T) {
 		},
 	}
 
+	// 表驱动用例：可重启 init container 会与普通容器一起返回，普通 init container 不返回。
 	for _, tc := range []struct {
 		desc     string
 		pod      *v1.Pod
@@ -2065,7 +2106,9 @@ func TestGetPodResourcesWithInitContainersV1(t *testing.T) {
 			mockMemoryProvider := podresourcetest.NewMockMemoryProvider(t)
 			mockDynamicResourcesProvider := podresourcetest.NewMockDynamicResourcesProvider(t)
 
+			// 用例保证 pod 存在，因此固定返回 exist=true。
 			mockPodsProvider.EXPECT().GetPodByName(podNamespace, podName).Return(tc.pod, true).Maybe()
+			// 先注册用例期望、后注册兜底，testify 按注册顺序匹配，具体期望优先生效。
 			tc.mockFunc(tc.pod, mockDevicesProvider, mockCPUsProvider, mockMemoryProvider, mockDynamicResourcesProvider)
 			mockCPUsProvider.EXPECT().GetPodCPUs(mock.Anything).Return([]int64{}).Maybe()
 			mockMemoryProvider.EXPECT().GetPodMemory(logger, mock.Anything).Return([]*podresourcesapi.ContainerMemory{}).Maybe()

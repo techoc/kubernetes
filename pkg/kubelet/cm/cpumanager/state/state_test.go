@@ -24,6 +24,7 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// TestClone 验证 ContainerCPUAssignments 的克隆是深拷贝且内容相等。
 func TestClone(t *testing.T) {
 	expect := ContainerCPUAssignments{
 		"pod": map[string]cpuset.CPUSet{
@@ -31,12 +32,14 @@ func TestClone(t *testing.T) {
 			"container2": cpuset.New(1, 2, 3),
 		},
 	}
+	// 克隆结果必须是不同的 map，但内容相等。
 	actual := expect.Clone()
 	if &expect == &actual || !reflect.DeepEqual(expect, actual) {
 		t.Fail()
 	}
 }
 
+// TestString 验证 ContainerCPUAssignments 的 JSON 字符串输出。
 func TestString(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -89,6 +92,7 @@ func TestString(t *testing.T) {
 		},
 	}
 
+	// 逐个用例校验 JSON 序列化输出。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			if diff := cmp.Diff(tc.assignments.String(), tc.expectedOutput); diff != "" {
@@ -98,6 +102,7 @@ func TestString(t *testing.T) {
 	}
 }
 
+// TestCloneWithInPlacePodVerticalScalingExclusiveCPUs 验证 CPU 基线映射的克隆同样是深拷贝。
 func TestCloneWithInPlacePodVerticalScalingExclusiveCPUs(t *testing.T) {
 	expect := ContainerCPUBaselines{
 		"pod": map[string]ContainerCPUBaseline{
@@ -105,6 +110,7 @@ func TestCloneWithInPlacePodVerticalScalingExclusiveCPUs(t *testing.T) {
 			"container2": {Baseline: cpuset.New(1, 2, 3)},
 		},
 	}
+	// 克隆结果必须是不同的 map，但内容相等。
 	actual := expect.Clone()
 	if &expect == &actual || !reflect.DeepEqual(expect, actual) {
 		t.Fail()

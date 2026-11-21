@@ -28,6 +28,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestPodResizeCompletedMsg 验证 resize 完成事件消息的 JSON 内容：
+// 包含容器资源、generation，并区分普通容器与可重启 init 容器。
 func TestPodResizeCompletedMsg(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -73,7 +75,7 @@ func TestPodResizeCompletedMsg(t *testing.T) {
 			}
 
 			for i, c := range test.containers {
-				// Add the container to the pod
+				// sidecar 或 nonSidecarInit 都归入 InitContainers，其余为普通容器。
 				container := mkContainer(i, c.resources, c.sidecar)
 				if c.nonSidecarInit || c.sidecar {
 					pod.Spec.InitContainers = append(pod.Spec.InitContainers, container)
@@ -82,12 +84,15 @@ func TestPodResizeCompletedMsg(t *testing.T) {
 				}
 			}
 
+			// 消息由 Pod 规格与 observedGeneration 生成，用于事件上报。
 			msg := PodResizeCompletedMsg(logger, pod, test.observedGeneration)
 			assert.Equal(t, test.expected, msg)
 		})
 	}
 }
 
+// TestPodResizeStartedMsg 验证 resize 开始事件：消息应反映已分配（allocated）
+// 而非实际（actual）的资源，因为实际资源此时尚未生效。
 func TestPodResizeStartedMsg(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -153,12 +158,14 @@ func TestPodResizeStartedMsg(t *testing.T) {
 				}
 			}
 
+			// 开始事件使用 allocatedPod 的 Spec 资源构造消息；actual 仅写入 Status，不参与消息。
 			msg := PodResizeStartedMsg(logger, allocatedPod, test.observedGeneration)
 			assert.Equal(t, test.expected, msg)
 		})
 	}
 }
 
+// TestPodResizeErrorMsg 验证 resize 失败事件：消息包含已分配资源、generation 和错误文本。
 func TestPodResizeErrorMsg(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -227,12 +234,15 @@ func TestPodResizeErrorMsg(t *testing.T) {
 				}
 			}
 
+			// 错误文本原样写入消息的 error 字段，便于定位失败原因。
 			msg := PodResizeErrorMsg(logger, allocatedPod, test.observedGeneration, test.errMsg)
 			assert.Equal(t, test.expected, msg)
 		})
 	}
 }
 
+// TestPodResizePendingMsg 验证 resize 挂起事件：消息前缀使用具体原因（Deferred/Infeasible），
+// 资源取自期望规格，并附带说明文本。
 func TestPodResizePendingMsg(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -304,20 +314,25 @@ func TestPodResizePendingMsg(t *testing.T) {
 				}
 			}
 
+			// 挂起事件使用期望 Pod（pod）而非当前分配，reason 决定消息前缀。
 			msg := PodResizePendingMsg(logger, pod, test.reason, test.message, test.observedGeneration)
 			assert.Equal(t, test.expected, msg)
 		})
 	}
 }
 
+// testResources 用毫核/字节数值描述容器的 requests 和 limits，便于表驱动构造。
 type testResources struct {
 	cpuReq, cpuLim, memReq, memLim int64
 }
+
+// testContainer 描述测试容器：资源，以及是否为可重启 init 容器或普通 sidecar。
 type testContainer struct {
 	resources               testResources
 	nonSidecarInit, sidecar bool
 }
 
+// mkRequirements 把数值转换为 Kubernetes 资源量，零值表示不设置。
 func mkRequirements(r testResources) v1.ResourceRequirements {
 	res := v1.ResourceRequirements{
 		Requests: v1.ResourceList{},
@@ -338,6 +353,7 @@ func mkRequirements(r testResources) v1.ResourceRequirements {
 	return res
 }
 
+// mkContainer 按索引生成容器名；sidecar 容器设置 Always 重启策略。
 func mkContainer(index int, resources testResources, sidecar bool) v1.Container {
 	container := v1.Container{
 		Name:      fmt.Sprintf("c%d", index),

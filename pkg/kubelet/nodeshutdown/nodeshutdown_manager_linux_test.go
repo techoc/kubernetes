@@ -39,7 +39,7 @@ import (
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/klog/v2"
 	klogtesting "k8s.io/klog/v2/ktesting"
-	_ "k8s.io/klog/v2/ktesting/init" // activate ktesting command line flags
+	_ "k8s.io/klog/v2/ktesting/init" // 启用 ktesting 命令行标志。
 	"k8s.io/kubernetes/pkg/apis/scheduling"
 	pkgfeatures "k8s.io/kubernetes/pkg/features"
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
@@ -51,9 +51,10 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
-// lock is to prevent systemDbus from being modified in the case of concurrency.
+// lock 保护全局 systemDbus，避免并发场景下被同时修改。
 var lock sync.Mutex
 
+// fakeDbus 模拟 logind 的 inhibit/monitor 接口，供节点关停流程测试使用。
 type fakeDbus struct {
 	currentInhibitDelay        time.Duration
 	overrideSystemInhibitDelay time.Duration
@@ -62,11 +63,12 @@ type fakeDbus struct {
 	didInhibitShutdown      bool
 	didOverrideInhibitDelay bool
 	closed                  bool
-	onCloseChan             chan struct{} // if set, receives a signal when Close() is called
+	onCloseChan             chan struct{} // 若设置，Close() 被调用时会收到信号。
 
 	currentInhibitDelayErr error
 }
 
+// CurrentInhibitDelay 返回当前值或已覆盖的 inhibit 延迟。
 func (f *fakeDbus) CurrentInhibitDelay() (time.Duration, error) {
 	if f.currentInhibitDelayErr != nil {
 		return 0, f.currentInhibitDelayErr
@@ -77,6 +79,7 @@ func (f *fakeDbus) CurrentInhibitDelay() (time.Duration, error) {
 	return f.currentInhibitDelay, nil
 }
 
+// Close 标记连接已关闭，并通过 onCloseChan 通知等待方。
 func (f *fakeDbus) Close() error {
 	f.closed = true
 	if f.onCloseChan != nil {
@@ -88,28 +91,34 @@ func (f *fakeDbus) Close() error {
 	return nil
 }
 
+// InhibitShutdown 记录已调用并返回模拟的 inhibit 锁。
 func (f *fakeDbus) InhibitShutdown() (systemd.InhibitLock, error) {
 	f.didInhibitShutdown = true
 	return systemd.InhibitLock(0), nil
 }
 
+// ReleaseInhibitLock 为无操作实现。
 func (f *fakeDbus) ReleaseInhibitLock(lock systemd.InhibitLock) error {
 	return nil
 }
 
+// ReloadLogindConf 为无操作实现。
 func (f *fakeDbus) ReloadLogindConf() error {
 	return nil
 }
 
+// MonitorShutdown 返回测试注入的关停事件通道。
 func (f *fakeDbus) MonitorShutdown(_ klog.Logger) (<-chan bool, error) {
 	return f.shutdownChan, nil
 }
 
+// OverrideInhibitDelay 记录已尝试覆盖延迟。
 func (f *fakeDbus) OverrideInhibitDelay(inhibitDelayMax time.Duration) error {
 	f.didOverrideInhibitDelay = true
 	return nil
 }
 
+// TestManager 覆盖关停管理器在不同宽限期、inhibit 延迟与 Pod 优先级组合下的行为。
 func TestManager(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	systemDbusTmp := systemDbus
@@ -322,6 +331,7 @@ func TestManager(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		// 逐用例在独立同步上下文中运行，隔离全局 dbus 的替换。
 		tCtx.SyncTest(tc.desc, func(tCtx ktesting.TContext) {
 			defer tCtx.Cancel("test completed")
 			t := tCtx.TB()
@@ -336,6 +346,7 @@ func TestManager(t *testing.T) {
 				GracePeriod int64
 			}
 
+			// 通过 killPodsFunc 收集每个 Pod 实际使用的宽限期，验证覆盖逻辑。
 			podKillChan := make(chan PodKillInfo, 1)
 			killPodsFunc := func(pod *v1.Pod, evict bool, gracePeriodOverride *int64, fn func(podStatus *v1.PodStatus)) error {
 				var gracePeriod int64
@@ -388,14 +399,14 @@ func TestManager(t *testing.T) {
 				assert.NoError(t, manager.ShutdownStatus(), "expected that manager does not return error since shutdown is not active")
 				assert.True(t, manager.Admit(tCtx, nil).Admit)
 
-				// Send fake shutdown event
+				// 发送模拟的关停事件。
 				select {
 				case fakeShutdownChan <- true:
 				case <-time.After(1 * time.Second):
 					t.Fatal()
 				}
 
-				// Wait for all the pods to be killed
+				// 等待所有 Pod 被终止。
 				killedPodsToGracePeriods := map[string]int64{}
 				for i := 0; i < len(tc.activePods); i++ {
 					select {
@@ -423,6 +434,7 @@ func TestManager(t *testing.T) {
 	}
 }
 
+// TestFeatureEnabled 验证特性门控与宽限期共同决定关停管理器是否启用。
 func TestFeatureEnabled(t *testing.T) {
 	var tests = []struct {
 		desc                         string
@@ -481,10 +493,12 @@ func TestFeatureEnabled(t *testing.T) {
 	}
 }
 
+// TestRestart 验证 dbus 连接断开后管理器会持续重连。
 func TestRestart(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testRestart)
 }
 
+// testRestart 是 TestRestart 的实际测试体。
 func testRestart(tCtx ktesting.TContext) {
 	defer tCtx.Cancel("test completed")
 	logger := tCtx.Logger()
@@ -559,10 +573,12 @@ func testRestart(tCtx ktesting.TContext) {
 	}
 }
 
+// TestStartDoesNotReconnectAfterContextCancel 验证上下文取消后不再重连 dbus。
 func TestStartDoesNotReconnectAfterContextCancel(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testStartDoesNotReconnectAfterContextCancel)
 }
 
+// testStartDoesNotReconnectAfterContextCancel 是该测试的实际测试体。
 func testStartDoesNotReconnectAfterContextCancel(tCtx ktesting.TContext) {
 	defer tCtx.Cancel("test completed")
 	logger := tCtx.Logger()
@@ -626,6 +642,7 @@ func testStartDoesNotReconnectAfterContextCancel(tCtx ktesting.TContext) {
 	}
 }
 
+// Test_managerImpl_processShutdownEvent 验证关停事件处理在 Pod 终止耗时过长时会输出超时日志。
 func Test_managerImpl_processShutdownEvent(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -730,18 +747,20 @@ func Test_managerImpl_processShutdownEvent(t *testing.T) {
 
 			log := underlier.GetBuffer().String()
 			if !strings.Contains(log, tt.expectedOutputContains) {
-				// Log will be shown on failure. To see it
-				// during a successful run use "go test -v".
+				// 失败时日志会一并展示；若想在成功运行时查看，
+				// 可使用 "go test -v"。
 				t.Errorf("managerImpl.processShutdownEvent() should have logged %s, see actual output above.", tt.expectedOutputContains)
 			}
 		})
 	}
 }
 
+// Test_processShutdownEvent_VolumeUnmountTimeout 验证卷卸载超时不会阻塞关停流程超过宽限期。
 func Test_processShutdownEvent_VolumeUnmountTimeout(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testProcessShutdownEventVolumeUnmountTimeout)
 }
 
+// testProcessShutdownEventVolumeUnmountTimeout 是该测试的实际测试体。
 func testProcessShutdownEventVolumeUnmountTimeout(tCtx ktesting.TContext) {
 	t := tCtx.TB()
 	var (
@@ -754,11 +773,11 @@ func testProcessShutdownEventVolumeUnmountTimeout(tCtx ktesting.TContext) {
 
 	fakeVolumeManager := volumemanager.NewFakeVolumeManager(
 		[]v1.UniqueVolumeName{},
-		3*time.Second, // This value is intentionally longer than the shutdownGracePeriodSeconds (2s) to test the behavior
-		// for volume unmount operations that take longer than the allowed grace period.
+		3*time.Second, // 故意设置得比 shutdownGracePeriodSeconds（2 秒）更长，用于验证卷卸载超过允许宽限期的行为。
+		// 用于验证卷卸载操作超过允许宽限期时的情况。
 		fmt.Errorf("unmount timeout"), false,
 	)
-	// Use a buffered logger because this test asserts log output.
+	// 使用带缓冲的 logger，因为本测试要断言日志输出。
 	logger := klogtesting.NewLogger(t, klogtesting.NewConfig(klogtesting.BufferLogs(true)))
 	m := &managerImpl{
 		logger:   logger,
@@ -793,7 +812,7 @@ func testProcessShutdownEventVolumeUnmountTimeout(tCtx ktesting.TContext) {
 
 	require.NoError(t, err, "managerImpl.processShutdownEvent() should not return an error")
 
-	// Check if processShutdownEvent completed within the expected time
+	// 检查 processShutdownEvent 是否在期望时间内完成。
 	actualDuration := int(end.Sub(start).Seconds())
 	assert.LessOrEqual(t, actualDuration, shutdownGracePeriodSeconds, "processShutdownEvent took too long")
 
@@ -807,9 +826,9 @@ func testProcessShutdownEventVolumeUnmountTimeout(tCtx ktesting.TContext) {
 	assert.Contains(t, log, expectedLogMessage, "Expected log message not found")
 }
 
-// TestStartDbusConnectionClosedOnError verifies that when start() fails after
-// creating a dbus connection, the connection is properly closed to avoid
-// leaking goroutines and file descriptors. See #120613.
+// TestStartDbusConnectionClosedOnError 验证 start() 在创建 dbus 连接后失败时，
+// 连接会被正确关闭，避免 goroutine 与文件描述符泄漏。参见 #120613。
+// TestStartDbusConnectionClosedOnError 验证 start 失败时已创建的 dbus 连接会被关闭，避免泄漏 goroutine 与文件描述符。
 func TestStartDbusConnectionClosedOnError(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	systemDbusTmp := systemDbus
@@ -857,13 +876,14 @@ func TestStartDbusConnectionClosedOnError(t *testing.T) {
 	assert.True(t, createdConnections[0].closed, "expected the dbus connection to be closed after start() failure")
 }
 
-// TestRestartClosesOldConnection verifies that when the retry loop in Start()
-// reconnects, the old dbus connection is closed before a new one is created.
-// See #120613.
+// TestRestartClosesOldConnection 验证 Start() 的重试循环重连时，
+// 会先关闭旧的 dbus 连接再创建新连接。参见 #120613。
+// TestRestartClosesOldConnection 验证重连时旧的 dbus 连接会先被关闭。
 func TestRestartClosesOldConnection(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testRestartClosesOldConnection)
 }
 
+// testRestartClosesOldConnection 是该测试的实际测试体。
 func testRestartClosesOldConnection(tCtx ktesting.TContext) {
 	defer tCtx.Cancel("test completed")
 	logger := tCtx.Logger()
@@ -874,9 +894,8 @@ func testRestartClosesOldConnection(tCtx ktesting.TContext) {
 		systemDbus = systemDbusTmp
 	}()
 
-	// Use onCloseChan to get a reliable signal when Close() is called on
-	// the first connection. This avoids races with leaked goroutines from
-	// prior tests that share the global systemDbus.
+	// 用 onCloseChan 可靠地获知第一个连接的 Close() 调用，
+	// 避免与共享全局 systemDbus 的先前测试遗留 goroutine 产生竞态。
 	firstConnClosedChan := make(chan struct{}, 1)
 	var firstConn *fakeDbus
 
@@ -912,7 +931,7 @@ func testRestartClosesOldConnection(tCtx ktesting.TContext) {
 
 	err := manager.Start(tCtx)
 
-	// Grab a reference to the first connection and arm its close notification.
+	// 保存第一个连接的引用并启用其关闭通知。
 	m := manager.(*managerImpl)
 	firstConn = m.dbusCon.(*fakeDbus)
 	firstConn.onCloseChan = firstConnClosedChan
@@ -920,10 +939,10 @@ func testRestartClosesOldConnection(tCtx ktesting.TContext) {
 
 	require.NoError(t, err)
 
-	// Trigger reconnect by closing the shutdown channel (simulates dbus disconnect).
+	// 关闭 shutdown 通道以触发重连，模拟 dbus 断开。
 	close(firstConn.shutdownChan)
 
-	// Wait for Close() to be called on the first connection by start().
+	// 等待 start() 对第一个连接调用 Close()。
 	select {
 	case <-firstConnClosedChan:
 	case <-time.After(5 * time.Second):

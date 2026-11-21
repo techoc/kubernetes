@@ -25,24 +25,24 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
-// Policy implements logic for pod container to CPU assignment.
+// Policy 实现 Pod 容器到 CPU 的分配逻辑。
 type Policy interface {
+	// Name 返回策略名称。
 	Name() string
+	// Start 初始化策略并加载状态。
 	Start(logger klog.Logger, s state.State) error
-	// Allocate call is idempotent
+	// Allocate 调用是幂等的。
 	Allocate(logger klog.Logger, s state.State, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) error
-	// RemoveContainer call is idempotent
+	// RemoveContainer 调用是幂等的。
 	RemoveContainer(logger klog.Logger, s state.State, podUID string, containerName string) error
-	// GetTopologyHints implements the topologymanager.HintProvider Interface
-	// and is consulted to achieve NUMA aware resource alignment among this
-	// and other resource controllers.
+	// GetTopologyHints 实现 topologymanager.HintProvider 接口，
+	// 用于与其他资源控制器共同实现 NUMA 感知的资源对齐。
 	GetTopologyHints(logger klog.Logger, s state.State, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint
-	// GetPodTopologyHints implements the topologymanager.HintProvider Interface
-	// and is consulted to achieve NUMA aware resource alignment per Pod
-	// among this and other resource controllers.
+	// GetPodTopologyHints 实现 topologymanager.HintProvider 接口，
+	// 用于与其他资源控制器共同实现 Pod 级的 NUMA 感知资源对齐。
 	GetPodTopologyHints(logger klog.Logger, s state.State, pod *v1.Pod, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint
-	// AllocatePod is called to trigger the allocation of CPUs to a pod.
+	// AllocatePod 用于触发为 Pod 分配 CPU。
 	AllocatePod(logger klog.Logger, s state.State, pod *v1.Pod, operation lifecycle.Operation) error
-	// GetAllocatableCPUs returns the total set of CPUs available for allocation.
+	// GetAllocatableCPUs 返回可供分配的全部 CPU 集合。
 	GetAllocatableCPUs(m state.State) cpuset.CPUSet
 }

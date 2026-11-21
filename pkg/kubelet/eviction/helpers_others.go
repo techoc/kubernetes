@@ -24,6 +24,8 @@ import (
 	statsapi "k8s.io/kubelet/pkg/apis/stats/v1alpha1"
 )
 
+// makeMemoryAvailableSignalObservation 根据节点内存统计构造 memory.available 信号观测值；
+// 缺少可用内存或工作集数据时返回 nil。
 func makeMemoryAvailableSignalObservation(logger klog.Logger, summary *statsapi.Summary) *signalObservation {
 	if memory := summary.Node.Memory; memory != nil && memory.AvailableBytes != nil && memory.WorkingSetBytes != nil {
 		return &signalObservation{

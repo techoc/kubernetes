@@ -33,26 +33,30 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// windowsNetworkStatsProvider creates an interface that allows for testing the logic without needing to create a container
+// windowsNetworkStatsProvider 抽象 HNS 查询接口，便于在测试中替换实现，
+// 无需真正创建容器。
 type windowsNetworkStatsProvider interface {
 	HNSListEndpointRequest() ([]hnslib.HNSEndpoint, error)
 	GetHNSEndpointStats(endpointName string) (*hnslib.HNSEndpointStats, error)
 }
 
-// networkStats exposes the required functionality for hnslib in this scenario
+// networkStats 是 hnslib 的薄封装，暴露本场景所需的 HNS 查询能力。
 type networkStats struct{}
 
+// HNSListEndpointRequest 列出当前主机上的所有 HNS 网络端点。
 func (s networkStats) HNSListEndpointRequest() ([]hnslib.HNSEndpoint, error) {
 	return hnslib.HNSListEndpointRequest()
 }
 
+// GetHNSEndpointStats 读取指定 HNS 端点的收发统计。
 func (s networkStats) GetHNSEndpointStats(endpointName string) (*hnslib.HNSEndpointStats, error) {
 	return hnslib.GetHNSEndpointStats(endpointName)
 }
 
-// listContainerNetworkStats returns the network stats of all the running containers.
+// listContainerNetworkStats 返回所有运行中容器的网络统计，按容器 ID 索引。
 func (p *criStatsProvider) listContainerNetworkStats(logger klog.Logger) (map[string]*statsapi.NetworkStats, error) {
 	networkStatsProvider := newNetworkStatsProvider(p)
+	// 先列出所有 HNS 端点，再逐个读取统计。
 	endpoints, err := networkStatsProvider.HNSListEndpointRequest()
 	if err != nil {
 		logger.Error(err, "Failed to fetch current HNS endpoints")
@@ -61,13 +65,14 @@ func (p *criStatsProvider) listContainerNetworkStats(logger klog.Logger) (map[st
 
 	networkStats := make(map[string]*statsapi.NetworkStats)
 	for _, endpoint := range endpoints {
+		// 单个端点读取失败只跳过该端点，不影响其他容器的统计。
 		endpointStats, err := networkStatsProvider.GetHNSEndpointStats(endpoint.Id)
 		if err != nil {
 			logger.V(2).Info("Failed to fetch statistics for endpoint, continue to get stats for other endpoints", "endpointId", endpoint.Id, "containers", endpoint.SharedContainers)
 			continue
 		}
 
-		// only add the interface for each container if not already in the list
+		// 同一容器可能共享多个端点：已存在且端点名不同时追加为额外接口。
 		for _, cId := range endpoint.SharedContainers {
 			networkStat, found := networkStats[cId]
 			if found && networkStat.Name != endpoint.Name {
@@ -82,6 +87,7 @@ func (p *criStatsProvider) listContainerNetworkStats(logger klog.Logger) (map[st
 	return networkStats, nil
 }
 
+// addCRIPodContainerStats 把 CRI 沙箱统计中的容器数据补充到 PodStats。
 func (p *criStatsProvider) addCRIPodContainerStats(logger klog.Logger, criSandboxStat *runtimeapi.PodSandboxStats,
 	ps *statsapi.PodStats, fsIDtoInfo map[string]*cadvisorapi.FsInfo,
 	containerMap map[string]*runtimeapi.Container,
@@ -93,7 +99,7 @@ func (p *criStatsProvider) addCRIPodContainerStats(logger klog.Logger, criSandbo
 		if !found {
 			continue
 		}
-		// Fill available stats for full set of required pod stats
+		// 填充 summary API 所需的容器级统计。
 		cs, err := p.makeWinContainerStats(logger, criContainerStat, container, rootFsInfo, fsIDtoInfo, podSandbox.GetMetadata())
 		if err != nil {
 			return fmt.Errorf("make container stats: %w", err)
@@ -105,6 +111,8 @@ func (p *criStatsProvider) addCRIPodContainerStats(logger klog.Logger, criSandbo
 	return nil
 }
 
+// makeWinContainerStats 把 CRI 的 Windows 容器统计转换为 summary API 结构，
+// 包括 CPU、内存、可写层和日志。
 func (p *criStatsProvider) makeWinContainerStats(
 	logger klog.Logger,
 	stats *runtimeapi.WindowsContainerStats,
@@ -114,12 +122,12 @@ func (p *criStatsProvider) makeWinContainerStats(
 	meta *runtimeapi.PodSandboxMetadata) (*statsapi.ContainerStats, error) {
 	result := &statsapi.ContainerStats{
 		Name: stats.Attributes.Metadata.Name,
-		// The StartTime in the summary API is the container creation time.
+		// summary API 的 StartTime 取容器创建时间。
 		StartTime: metav1.NewTime(time.Unix(0, container.CreatedAt)),
 		CPU:       &statsapi.CPUStats{},
 		Memory:    &statsapi.MemoryStats{},
 		Rootfs:    &statsapi.FsStats{},
-		// UserDefinedMetrics is not supported by CRI.
+		// CRI 不支持用户自定义指标；CPU/内存缺失时下方会填零值，保证字段不为 nil。
 	}
 	if stats.Cpu != nil {
 		result.CPU.Time = metav1.NewTime(time.Unix(0, stats.Cpu.Timestamp))
@@ -173,17 +181,15 @@ func (p *criStatsProvider) makeWinContainerStats(
 			fsIDtoInfo[fsID.Mountpoint] = imageFsInfo
 		}
 		if imageFsInfo != nil {
-			// The image filesystem id is unknown to the local node or there's
-			// an error on retrieving the stats. In these cases, we omit those stats
-			// and return the best-effort partial result. See
-			// https://github.com/kubernetes/heapster/issues/1793.
+			// 镜像文件系统 ID 在本节点未知或读取统计出错时，省略该部分数据，
+			// 返回尽力而为的部分结果。参见
+			// https://github.com/kubernetes/heapster/issues/1793。
 			result.Rootfs.AvailableBytes = &imageFsInfo.Available
 			result.Rootfs.CapacityBytes = &imageFsInfo.Capacity
 		}
 	}
-	// NOTE: This doesn't support the old pod log path, `/var/log/pods/UID`. For containers
-	// using old log path, empty log stats are returned. This is fine, because we don't
-	// officially support in-place upgrade anyway.
+	// 注意：这里不支持旧的 Pod 日志路径 /var/log/pods/UID；使用旧路径的容器会得到
+	// 空的日志统计。由于官方本就不支持就地升级，这一行为可以接受。
 	result.Logs, err = p.hostStatsProvider.getPodContainerLogStats(meta.GetNamespace(), meta.GetName(), types.UID(meta.GetUid()), container.GetMetadata().GetName(), rootFsInfo)
 	if err != nil {
 		logger.Error(err, "Unable to fetch container log stats", "containerName", container.GetMetadata().GetName())
@@ -191,7 +197,7 @@ func (p *criStatsProvider) makeWinContainerStats(
 	return result, nil
 }
 
-// hcsStatsToNetworkStats converts hnslib.Statistics.Network to statsapi.NetworkStats
+// hcsStatsToNetworkStats 把 HNS 端点统计转换为 statsapi.NetworkStats。
 func hcsStatsToNetworkStats(timestamp time.Time, hcsStats *hnslib.HNSEndpointStats, endpointName string) *statsapi.NetworkStats {
 	result := &statsapi.NetworkStats{
 		Time:       metav1.NewTime(timestamp),
@@ -201,12 +207,14 @@ func hcsStatsToNetworkStats(timestamp time.Time, hcsStats *hnslib.HNSEndpointSta
 	iStat := hcsStatToInterfaceStat(hcsStats, endpointName)
 
 	// TODO: add support of multiple interfaces for getting default interface.
+	// 当前只能把单个接口同时作为默认接口和接口列表的唯一元素。
 	result.Interfaces = append(result.Interfaces, iStat)
 	result.InterfaceStats = iStat
 
 	return result
 }
 
+// hcsStatToInterfaceStat 把 HNS 端点统计转换为单个接口的收发字节数。
 func hcsStatToInterfaceStat(hcsStats *hnslib.HNSEndpointStats, endpointName string) statsapi.InterfaceStats {
 	iStat := statsapi.InterfaceStats{
 		Name:    endpointName,
@@ -216,6 +224,7 @@ func hcsStatToInterfaceStat(hcsStats *hnslib.HNSEndpointStats, endpointName stri
 	return iStat
 }
 
+// addCRIPodCPUStats 填充 Pod 级 CPU 统计，缺少数据时保持字段为空。
 func addCRIPodCPUStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 	if criPodStat == nil || criPodStat.Windows == nil || criPodStat.Windows.Cpu == nil {
 		return
@@ -228,6 +237,7 @@ func addCRIPodCPUStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxS
 	}
 }
 
+// addCRIPodMemoryStats 填充 Pod 级内存统计，提交内存映射为 UsageBytes。
 func addCRIPodMemoryStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 	if criPodStat == nil || criPodStat.Windows == nil || criPodStat.Windows.Memory == nil {
 		return
@@ -242,9 +252,11 @@ func addCRIPodMemoryStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandb
 	}
 }
 
+// addCRIPodIOStats 在 Windows 上暂不提供 IO 统计，保留空实现以对齐接口。
 func addCRIPodIOStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 }
 
+// addCRIPodProcessStats 填充 Pod 级进程数量统计。
 func addCRIPodProcessStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 	if criPodStat == nil || criPodStat.Windows == nil || criPodStat.Windows.Process == nil {
 		return
@@ -254,6 +266,7 @@ func addCRIPodProcessStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSand
 	}
 }
 
+// addCRIPodNetworkStats 填充 Pod 级网络统计：默认接口加全部接口列表。
 func addCRIPodNetworkStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 	if criPodStat == nil || criPodStat.Windows == nil || criPodStat.Windows.Network == nil {
 		return
@@ -270,6 +283,7 @@ func addCRIPodNetworkStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSand
 	ps.Network = &iStats
 }
 
+// criInterfaceToWinSummary 把 CRI 网络接口用量转换为 summary API 的接口统计。
 func criInterfaceToWinSummary(criIface *runtimeapi.WindowsNetworkInterfaceUsage) statsapi.InterfaceStats {
 	return statsapi.InterfaceStats{
 		Name:    criIface.Name,
@@ -278,7 +292,7 @@ func criInterfaceToWinSummary(criIface *runtimeapi.WindowsNetworkInterfaceUsage)
 	}
 }
 
-// addCRIPodContainerCPUAndMemoryStats adds container CPU and memory stats from CRI to the PodStats.
+// addCRIPodContainerCPUAndMemoryStats 只填充容器 CPU 和内存统计，供资源指标接口使用。
 func (p *criStatsProvider) addCRIPodContainerCPUAndMemoryStats(
 	criSandboxStat *runtimeapi.PodSandboxStats,
 	ps *statsapi.PodStats,
@@ -291,14 +305,14 @@ func (p *criStatsProvider) addCRIPodContainerCPUAndMemoryStats(
 		if !found {
 			continue
 		}
-		// Fill available CPU and memory stats for resource metrics
+		// 资源指标只需要 CPU/内存，避免做文件系统和日志等昂贵采集。
 		cs := p.makeWinContainerCPUAndMemoryStats(criContainerStat, time.Unix(0, container.CreatedAt))
 		ps.Containers = append(ps.Containers, *cs)
 	}
 }
 
-// makeWinContainerCPUAndMemoryStats creates container stats with only CPU and memory populated.
-// This is a lighter-weight version for the resource metrics endpoint.
+// makeWinContainerCPUAndMemoryStats 创建只含 CPU 和内存的容器统计，
+// 是资源指标接口的轻量实现。
 func (p *criStatsProvider) makeWinContainerCPUAndMemoryStats(
 	stats *runtimeapi.WindowsContainerStats,
 	startTime time.Time,
@@ -338,8 +352,8 @@ func (p *criStatsProvider) makeWinContainerCPUAndMemoryStats(
 	return result
 }
 
-// newNetworkStatsProvider uses the real windows hnslib if not provided otherwise if the interface is provided
-// by the cristatsprovider in testing scenarios it uses that one
+// newNetworkStatsProvider 默认使用真实的 Windows hnslib；
+// 测试场景下如果 criStatsProvider 注入了实现，则使用注入的版本。
 func newNetworkStatsProvider(p *criStatsProvider) windowsNetworkStatsProvider {
 	var statsProvider windowsNetworkStatsProvider
 	if p.windowsNetworkStatsProvider == nil {

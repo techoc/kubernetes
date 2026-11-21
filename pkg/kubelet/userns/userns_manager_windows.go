@@ -26,28 +26,31 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
+// UsernsManager 在 Windows 上不支持用户命名空间，仅为接口完整性保留空实现。
 type UsernsManager struct{}
 
+// MakeUserNsManager 在 Windows 上返回 nil，表示不支持用户命名空间管理。
 func MakeUserNsManager(klog.Logger, userNsPodsManager, *int64) (*UsernsManager, error) {
 	return nil, nil
 }
 
-// Release releases the user namespace allocated to the specified pod.
+// Release 释放分配给指定 Pod 的用户命名空间；Windows 上为空操作。
 func (m *UsernsManager) Release(klog.Logger, types.UID) {
 	return
 }
 
+// GetOrCreateUserNamespaceMappings 在 Windows 上始终返回 nil。
 func (m *UsernsManager) GetOrCreateUserNamespaceMappings(klog.Logger, *v1.Pod, string) (*runtimeapi.UserNamespace, error) {
 	return nil, nil
 }
 
-// CleanupOrphanedPodUsernsAllocations reconciliates the state of user namespace
-// allocations with the pods actually running. It frees any user namespace
-// allocation for orphaned pods.
+// CleanupOrphanedPodUsernsAllocations 对账用户命名空间分配与实际运行 Pod 的状态，
+// 释放孤儿 Pod 的分配；Windows 上为空操作。
 func (m *UsernsManager) CleanupOrphanedPodUsernsAllocations(context.Context, []*v1.Pod, []*kubecontainer.Pod) error {
 	return nil
 }
 
+// EnabledUserNamespacesSupport 在 Windows 上始终返回 false。
 func EnabledUserNamespacesSupport() bool {
 	return false
 }

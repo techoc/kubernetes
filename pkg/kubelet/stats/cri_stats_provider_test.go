@@ -59,7 +59,7 @@ const (
 )
 
 const (
-	// This offset offsetCRI is to distinguish it from Cadvisor stats
+	// offsetCRI 用于将 CRI 统计与 cadvisor 统计区分开
 	offsetCRI = 1000
 )
 
@@ -97,6 +97,8 @@ const (
 
 const testPodLogDirectory = "/var/log/kube/pods/" // Use non-default path to ensure stats are collected properly
 
+// TestCRIListPodStats 校验 ListPodStats 能合并 CRI 与 cadvisor 统计，
+// 覆盖运行中、已终止的 sandbox 与容器、日志统计以及 PSI 等场景。
 func TestCRIListPodStats(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletPSI, true)
 	tCtx := ktesting.Init(t)
@@ -129,7 +131,7 @@ func TestCRIListPodStats(t *testing.T) {
 		containerStats4    = makeFakeContainerStats(container4, imageFsMountpoint)
 		containerLogStats4 = makeFakeLogStats(4000)
 
-		// Running pod with a terminated container and a running container
+		// 运行中的 pod，含一个已终止容器和一个运行中容器
 		sandbox3           = makeFakePodSandbox("sandbox3-name", "sandbox3-uid", "sandbox3-ns", false)
 		sandbox3Cgroup     = "/" + cm.GetPodCgroupNameSuffix(types.UID(sandbox3.PodSandboxStatus.Metadata.Uid))
 		container5         = makeFakeContainer(sandbox3, cName5, 0, true)
@@ -139,12 +141,12 @@ func TestCRIListPodStats(t *testing.T) {
 		containerStats8    = makeFakeContainerStats(container8, imageFsMountpoint)
 		containerLogStats8 = makeFakeLogStats(6000)
 
-		// Terminated pod sandbox
+		// 已终止的 pod sandbox
 		sandbox4        = makeFakePodSandbox("sandbox1-name", "sandbox1-uid", "sandbox1-ns", true)
 		container6      = makeFakeContainer(sandbox4, cName6, 0, true)
 		containerStats6 = makeFakeContainerStats(container6, imageFsMountpoint)
 
-		// Terminated pod
+		// 已终止的 pod
 		sandbox5        = makeFakePodSandbox("sandbox1-name", "sandbox5-uid", "sandbox1-ns", true)
 		container7      = makeFakeContainer(sandbox5, cName7, 0, true)
 		containerStats7 = makeFakeContainerStats(container7, imageFsMountpoint)
@@ -350,11 +352,13 @@ func TestCRIListPodStats(t *testing.T) {
 	checkCRIPodIOStats(assert, p3, infos[sandbox3Cgroup].Stats[0])
 }
 
+// TestListPodStatsStrictlyFromCRI 校验在仅使用 CRI 统计的情况下，
+// ListPodStats 仍能正确返回 pod 统计。
 func TestListPodStatsStrictlyFromCRI(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletPSI, true)
 	if runtime.GOOS == "windows" {
-		// TODO: remove skip once the failing test has been fixed.
+		// TODO: 修复该测试失败后移除跳过逻辑。
 		t.Skip("Skip failing test on Windows.")
 	}
 	var (
@@ -363,8 +367,7 @@ func TestListPodStatsStrictlyFromCRI(t *testing.T) {
 		imageFsInfo       = getTestFsInfo(2000)
 		rootFsInfo        = getTestFsInfo(1000)
 
-		// A pod that CRI returns stats and cadvisor returns stats
-		// The pod stats from CRI stats
+		// CRI 与 cadvisor 都返回统计的 pod，其统计以 CRI 为准
 		sandbox0           = makeFakePodSandbox("sandbox0-name", "sandbox0-uid", "sandbox0-ns", false)
 		sandbox0Cgroup     = "/" + cm.GetPodCgroupNameSuffix(types.UID(sandbox0.PodSandboxStatus.Metadata.Uid))
 		container0         = makeFakeContainer(sandbox0, cName0, 0, false)
@@ -375,8 +378,7 @@ func TestListPodStatsStrictlyFromCRI(t *testing.T) {
 		containerLogStats1 = makeFakeLogStats(2000)
 		sandboxPodStats0   = makeFakePodSandboxStatsStrictlyFromCRI(seedSandbox0, sandbox0, containerStats0, containerStats1)
 
-		// A pod that CRI returns stats and cadvisor returns no stats
-		// The pod stats from CRI stats
+		// CRI 返回统计、cadvisor 不返回统计的 pod，其统计以 CRI 为准
 		sandbox1           = makeFakePodSandbox("sandbox1-name", "sandbox1-uid", "sandbox1-ns", false)
 		sandbox1Cgroup     = "/" + cm.GetPodCgroupNameSuffix(types.UID(sandbox1.PodSandboxStatus.Metadata.Uid))
 		container2         = makeFakeContainer(sandbox1, cName2, 0, false)
@@ -551,6 +553,9 @@ func TestListPodStatsStrictlyFromCRI(t *testing.T) {
 		}
 	}
 }
+
+// TestCRIListPodCPUAndMemoryStats 校验 ListPodCPUAndMemoryStats 的 CPU/内存统计
+// 合并行为，覆盖多种 sandbox 与容器状态。
 func TestCRIListPodCPUAndMemoryStats(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletPSI, true)
 	tCtx := ktesting.Init(t)
@@ -578,7 +583,7 @@ func TestCRIListPodCPUAndMemoryStats(t *testing.T) {
 		container4      = makeFakeContainer(sandbox2, cName3, 1, false)
 		containerStats4 = makeFakeContainerStats(container4, imageFsMountpoint)
 
-		// Running pod with a terminated container and a running container
+		// 运行中的 pod，含一个已终止容器和一个运行中容器
 		sandbox3        = makeFakePodSandbox("sandbox3-name", "sandbox3-uid", "sandbox3-ns", false)
 		sandbox3Cgroup  = "/" + cm.GetPodCgroupNameSuffix(types.UID(sandbox3.PodSandboxStatus.Metadata.Uid))
 		container5      = makeFakeContainer(sandbox3, cName5, 0, true)
@@ -586,17 +591,17 @@ func TestCRIListPodCPUAndMemoryStats(t *testing.T) {
 		container8      = makeFakeContainer(sandbox3, cName8, 0, false)
 		containerStats8 = makeFakeContainerStats(container8, imageFsMountpoint)
 
-		// Terminated pod sandbox
+		// 已终止的 pod sandbox
 		sandbox4        = makeFakePodSandbox("sandbox1-name", "sandbox1-uid", "sandbox1-ns", true)
 		container6      = makeFakeContainer(sandbox4, cName6, 0, true)
 		containerStats6 = makeFakeContainerStats(container6, imageFsMountpoint)
 
-		// Terminated pod
+		// 已终止的 pod
 		sandbox5        = makeFakePodSandbox("sandbox1-name", "sandbox5-uid", "sandbox1-ns", true)
 		container7      = makeFakeContainer(sandbox5, cName7, 0, true)
 		containerStats7 = makeFakeContainerStats(container7, imageFsMountpoint)
 
-		// A pod that cadvisor returns no stats
+		// cadvisor 不返回统计的 pod
 		sandbox6        = makeFakePodSandbox("sandbox6-name", "sandbox6-uid", "sandbox6-ns", false)
 		container9      = makeFakeContainer(sandbox6, cName9, 0, false)
 		containerStats9 = makeFakeContainerStats(container9, imageFsMountpoint)
@@ -770,6 +775,7 @@ func TestCRIListPodCPUAndMemoryStats(t *testing.T) {
 	assert.Equal(containerStats9.Memory.Timestamp, p6.Memory.Time.UnixNano())
 }
 
+// TestCRIPodCPUAndMemoryStats 校验单个 pod 的 CPU 与内存统计聚合结果。
 func TestCRIPodCPUAndMemoryStats(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -872,6 +878,7 @@ func TestCRIPodCPUAndMemoryStats(t *testing.T) {
 	assert.Nil(c1.IO)
 }
 
+// TestCRIImagesFsStats 校验 ImageFs 统计的正确转换。
 func TestCRIImagesFsStats(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	var (
@@ -926,6 +933,7 @@ func TestCRIImagesFsStats(t *testing.T) {
 
 }
 
+// makeFakePodSandbox 构造用于测试的 fake sandbox；terminated 为 true 时状态为未就绪。
 func makeFakePodSandbox(name, uid, namespace string, terminated bool) *critest.FakePodSandbox {
 	p := &critest.FakePodSandbox{
 		PodSandboxStatus: runtimeapi.PodSandboxStatus{
@@ -945,6 +953,7 @@ func makeFakePodSandbox(name, uid, namespace string, terminated bool) *critest.F
 	return p
 }
 
+// makeFakeContainer 构造属于指定 sandbox 的 fake 容器，并写入 pod/容器相关标签。
 func makeFakeContainer(sandbox *critest.FakePodSandbox, name string, attempt uint32, terminated bool) *critest.FakeContainer {
 	sandboxID := sandbox.PodSandboxStatus.Id
 	c := &critest.FakeContainer{
@@ -971,6 +980,7 @@ func makeFakeContainer(sandbox *critest.FakePodSandbox, name string, attempt uin
 	return c
 }
 
+// makeFakeContainerStats 构造 fake 容器的 CRI 统计；已终止容器不返回 CPU/内存数据。
 func makeFakeContainerStats(container *critest.FakeContainer, imageFsMountpoint string) *runtimeapi.ContainerStats {
 	containerStats := &runtimeapi.ContainerStats{
 		Attributes: &runtimeapi.ContainerAttributes{
@@ -1000,7 +1010,8 @@ func makeFakeContainerStats(container *critest.FakeContainer, imageFsMountpoint 
 	return containerStats
 }
 
-// makeFakeContainerStatsStrictlyFromCRI use CRI offset to fake CRI container stats to distinguish cadvisor stats.
+// makeFakeContainerStatsStrictlyFromCRI 使用 CRI 偏移量构造 CRI 容器统计，
+// 以便与 cadvisor 统计区分。
 func makeFakeContainerStatsStrictlyFromCRI(seed int, container *critest.FakeContainer, imageFsMountpoint string) *runtimeapi.ContainerStats {
 	containerStats := &runtimeapi.ContainerStats{
 		Attributes: &runtimeapi.ContainerAttributes{
@@ -1039,6 +1050,8 @@ func makeFakeContainerStatsStrictlyFromCRI(seed int, container *critest.FakeCont
 	return containerStats
 }
 
+// makeFakePodSandboxStatsStrictlyFromCRI 构造仅来自 CRI 的 sandbox 统计，
+// 包含 CPU、内存、网络、PSI 及给定容器统计。
 func makeFakePodSandboxStatsStrictlyFromCRI(seed int, podSandbox *critest.FakePodSandbox, podContainerStats ...*runtimeapi.ContainerStats) *runtimeapi.PodSandboxStats {
 	podSandboxStats := &runtimeapi.PodSandboxStats{
 		Attributes: &runtimeapi.PodSandboxAttributes{
@@ -1073,6 +1086,7 @@ func makeFakePodSandboxStatsStrictlyFromCRI(seed int, podSandbox *critest.FakePo
 	return podSandboxStats
 }
 
+// getCRITestPSIStats 构造包含 Full 与 Some 两部分的测试 PSI 统计。
 func getCRITestPSIStats(seed int) *runtimeapi.PsiStats {
 	return &runtimeapi.PsiStats{
 		Full: getCRITestPSIData(seed),
@@ -1080,6 +1094,7 @@ func getCRITestPSIStats(seed int) *runtimeapi.PsiStats {
 	}
 }
 
+// getCRITestPSIData 构造单组测试 PSI 数据，其总时长由 seed 偏移得到。
 func getCRITestPSIData(seed int) *runtimeapi.PsiData {
 	return &runtimeapi.PsiData{
 		Total:  uint64(seed + offsetPSIDataTotal),
@@ -1089,6 +1104,8 @@ func getCRITestPSIData(seed int) *runtimeapi.PsiData {
 	}
 }
 
+// getPodSandboxStatsStrictlyFromCRI 构造仅来自 CRI 的 summary API PodStats，
+// 用于与 provider 输出比较。
 func getPodSandboxStatsStrictlyFromCRI(seed int, podSandbox *critest.FakePodSandbox) statsapi.PodStats {
 	psi := getTestPSIStats(seed)
 	podStats := statsapi.PodStats{
@@ -1097,7 +1114,7 @@ func getPodSandboxStatsStrictlyFromCRI(seed int, podSandbox *critest.FakePodSand
 			UID:       podSandbox.Metadata.Uid,
 			Namespace: podSandbox.Metadata.Namespace,
 		},
-		// The StartTime in the summary API is the pod creation time.
+		// summary API 中的 StartTime 即 pod 创建时间。
 		StartTime: metav1.NewTime(time.Unix(0, podSandbox.CreatedAt)),
 	}
 	if podSandbox.State == runtimeapi.PodSandboxState_SANDBOX_NOTREADY {
@@ -1127,6 +1144,7 @@ func getPodSandboxStatsStrictlyFromCRI(seed int, podSandbox *critest.FakePodSand
 	return podStats
 }
 
+// makeFakeImageFsUsage 构造指定挂载点的镜像文件系统用量。
 func makeFakeImageFsUsage(fsMountpoint string) *runtimeapi.FilesystemUsage {
 	return &runtimeapi.FilesystemUsage{
 		Timestamp:  time.Now().UnixNano(),
@@ -1136,6 +1154,7 @@ func makeFakeImageFsUsage(fsMountpoint string) *runtimeapi.FilesystemUsage {
 	}
 }
 
+// makeFakeVolumeStats 为给定卷名批量构造共享同一组随机容量数据的 VolumeStats。
 func makeFakeVolumeStats(volumeNames []string) []statsapi.VolumeStats {
 	volumes := make([]statsapi.VolumeStats, len(volumeNames))
 	availableBytes := rand.Uint64()
@@ -1162,6 +1181,7 @@ func makeFakeVolumeStats(volumeNames []string) []statsapi.VolumeStats {
 	return volumes
 }
 
+// checkCRICPUAndMemoryStats 校验容器 CPU/内存统计与 cadvisor 数据一致，并在 PSI 开启时校验 PSI。
 func checkCRICPUAndMemoryStats(assert *assert.Assertions, actual statsapi.ContainerStats, cs *cadvisorapi.ContainerStats) {
 	assert.Equal(cs.Timestamp.UnixNano(), actual.CPU.Time.UnixNano())
 	assert.Equal(cs.Cpu.Usage.Total, *actual.CPU.UsageCoreNanoSeconds)
@@ -1179,12 +1199,14 @@ func checkCRICPUAndMemoryStats(assert *assert.Assertions, actual statsapi.Contai
 	}
 }
 
+// checkCRIIOStats 在 PSI 开启时校验磁盘 IO 的 PSI 统计。
 func checkCRIIOStats(assert *assert.Assertions, actual statsapi.ContainerStats, cs *cadvisorapi.ContainerStats) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.KubeletPSI) {
 		checkCRIPSIStats(assert, &cs.DiskIo.PSI, actual.IO.PSI)
 	}
 }
 
+// checkCRICPUAndMemoryStatsForStrictlyFromCRI 校验仅来自 CRI 的容器 CPU/内存统计与期望值一致。
 func checkCRICPUAndMemoryStatsForStrictlyFromCRI(assert *assert.Assertions, actual statsapi.ContainerStats, expected statsapi.ContainerStats) {
 	assert.Equal(expected.CPU.Time.UnixNano(), actual.CPU.Time.UnixNano())
 	assert.Equal(*expected.CPU.UsageCoreNanoSeconds, *actual.CPU.UsageCoreNanoSeconds)
@@ -1198,12 +1220,14 @@ func checkCRICPUAndMemoryStatsForStrictlyFromCRI(assert *assert.Assertions, actu
 	}
 }
 
+// checkCRIIOStatsForStrictlyFromCRI 在 PSI 开启时校验仅来自 CRI 的 IO PSI 统计。
 func checkCRIIOStatsForStrictlyFromCRI(assert *assert.Assertions, actual statsapi.ContainerStats, expected statsapi.ContainerStats) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.KubeletPSI) {
 		checkCRIPSIStatsStrictlyFromCRI(assert, expected.IO.PSI, actual.IO.PSI)
 	}
 }
 
+// checkCRIRootfsStats 校验容器 rootfs 统计：可写层用量来自 CRI，容量来自镜像文件系统信息。
 func checkCRIRootfsStats(assert *assert.Assertions, actual statsapi.ContainerStats, cs *runtimeapi.ContainerStats, imageFsInfo *cadvisorapi.FsInfo) {
 	assert.Equal(cs.WritableLayer.Timestamp, actual.Rootfs.Time.UnixNano())
 	if imageFsInfo != nil {
@@ -1221,6 +1245,7 @@ func checkCRIRootfsStats(assert *assert.Assertions, actual statsapi.ContainerSta
 	assert.Equal(cs.WritableLayer.InodesUsed.Value, *actual.Rootfs.InodesUsed)
 }
 
+// checkCRILogsStats 校验容器日志统计与 rootfs 信息及日志卷 Metrics 一致。
 func checkCRILogsStats(assert *assert.Assertions, actual statsapi.ContainerStats, rootFsInfo *cadvisorapi.FsInfo, logStats *volume.Metrics) {
 	assert.Equal(rootFsInfo.Timestamp, actual.Logs.Time.Time)
 	assert.Equal(rootFsInfo.Available, *actual.Logs.AvailableBytes)
@@ -1231,6 +1256,7 @@ func checkCRILogsStats(assert *assert.Assertions, actual statsapi.ContainerStats
 	assert.Equal(uint64(logStats.InodesUsed.Value()), *actual.Logs.InodesUsed)
 }
 
+// checkEphemeralStorageStats 校验 pod 的临时存储用量为容器可写层、容器日志与 pod 日志之和。
 func checkEphemeralStorageStats(assert *assert.Assertions,
 	actual statsapi.PodStats,
 	volumes []statsapi.VolumeStats,
@@ -1262,6 +1288,7 @@ func checkEphemeralStorageStats(assert *assert.Assertions,
 	assert.Equal(int(inodesUsed), int(*actual.EphemeralStorage.InodesUsed))
 }
 
+// checkCRINetworkStats 校验网络统计与 cadvisor 数据一致。
 func checkCRINetworkStats(assert *assert.Assertions, actual *statsapi.NetworkStats, expected *cadvisorapi.NetworkStats) {
 	assert.Equal(expected.Interfaces[0].RxBytes, *actual.RxBytes)
 	assert.Equal(expected.Interfaces[0].RxErrors, *actual.RxErrors)
@@ -1269,6 +1296,7 @@ func checkCRINetworkStats(assert *assert.Assertions, actual *statsapi.NetworkSta
 	assert.Equal(expected.Interfaces[0].TxErrors, *actual.TxErrors)
 }
 
+// checkCRIPodCPUAndMemoryStats 校验 pod 级 CPU/内存统计与 cadvisor 数据一致。
 func checkCRIPodCPUAndMemoryStats(assert *assert.Assertions, actual statsapi.PodStats, cs *cadvisorapi.ContainerStats) {
 	if runtime.GOOS != "linux" {
 		return
@@ -1289,6 +1317,7 @@ func checkCRIPodCPUAndMemoryStats(assert *assert.Assertions, actual statsapi.Pod
 	}
 }
 
+// checkCRIPodIOStats 在 PSI 开启时校验 pod 级 IO PSI 统计。
 func checkCRIPodIOStats(assert *assert.Assertions, actual statsapi.PodStats, cs *cadvisorapi.ContainerStats) {
 	if runtime.GOOS != "linux" {
 		return
@@ -1298,6 +1327,7 @@ func checkCRIPodIOStats(assert *assert.Assertions, actual statsapi.PodStats, cs 
 	}
 }
 
+// checkCRIPSIStats 校验 PSI 的 Full 与 Some 两部分与 cadvisor 数据一致。
 func checkCRIPSIStats(assert *assert.Assertions, want *cadvisorapi.PSIStats, got *statsapi.PSIStats) {
 	assert.NotNil(want)
 	assert.NotNil(got)
@@ -1305,6 +1335,7 @@ func checkCRIPSIStats(assert *assert.Assertions, want *cadvisorapi.PSIStats, got
 	checkCRIPSIData(assert, want.Some, got.Some)
 }
 
+// checkCRIPSIData 校验单组 PSI 数据的总时长与平均值。
 func checkCRIPSIData(assert *assert.Assertions, want cadvisorapi.PSIData, got statsapi.PSIData) {
 	assert.Equal(want.Total, got.Total)
 	assert.InDelta(want.Avg10, got.Avg10, 0.01)
@@ -1312,6 +1343,7 @@ func checkCRIPSIData(assert *assert.Assertions, want cadvisorapi.PSIData, got st
 	assert.InDelta(want.Avg300, got.Avg300, 0.01)
 }
 
+// checkCRIPSIStatsStrictlyFromCRI 校验仅来自 CRI 的 PSI Full/Some 数据与期望一致。
 func checkCRIPSIStatsStrictlyFromCRI(assert *assert.Assertions, want, got *statsapi.PSIStats) {
 	assert.NotNil(want)
 	assert.NotNil(got)
@@ -1319,6 +1351,7 @@ func checkCRIPSIStatsStrictlyFromCRI(assert *assert.Assertions, want, got *stats
 	checkCRIPSIDataStrictlyFromCRI(assert, want.Some, got.Some)
 }
 
+// checkCRIPSIDataStrictlyFromCRI 校验仅来自 CRI 的单组 PSI 数据与期望一致。
 func checkCRIPSIDataStrictlyFromCRI(assert *assert.Assertions, want, got statsapi.PSIData) {
 	assert.Equal(want.Total, got.Total)
 	assert.InDelta(want.Avg10, got.Avg10, 0.01)
@@ -1326,6 +1359,7 @@ func checkCRIPSIDataStrictlyFromCRI(assert *assert.Assertions, want, got statsap
 	assert.InDelta(want.Avg300, got.Avg300, 0.01)
 }
 
+// checkCRIPodSwapStats 校验 pod 交换分区统计与 cadvisor 数据一致。
 func checkCRIPodSwapStats(assert *assert.Assertions, actual statsapi.PodStats, cs *cadvisorapi.ContainerStats) {
 	if runtime.GOOS != "linux" {
 		return
@@ -1335,6 +1369,7 @@ func checkCRIPodSwapStats(assert *assert.Assertions, actual statsapi.PodStats, c
 	assert.Equal(cs.Memory.Swap, *actual.Swap.SwapUsageBytes)
 }
 
+// checkCRIPodCPUAndMemoryStatsStrictlyFromCRI 校验仅来自 CRI 的 pod 级 CPU/内存统计与期望一致。
 func checkCRIPodCPUAndMemoryStatsStrictlyFromCRI(assert *assert.Assertions, actual statsapi.PodStats, expected statsapi.PodStats) {
 	if runtime.GOOS != "linux" {
 		return
@@ -1349,6 +1384,7 @@ func checkCRIPodCPUAndMemoryStatsStrictlyFromCRI(assert *assert.Assertions, actu
 	}
 }
 
+// checkCRIPodIOStatsStrictlyFromCRI 在 PSI 开启时校验仅来自 CRI 的 pod 级 IO PSI 统计。
 func checkCRIPodIOStatsStrictlyFromCRI(assert *assert.Assertions, actual statsapi.PodStats, expected statsapi.PodStats) {
 	if runtime.GOOS != "linux" {
 		return
@@ -1358,6 +1394,7 @@ func checkCRIPodIOStatsStrictlyFromCRI(assert *assert.Assertions, actual statsap
 	}
 }
 
+// makeFakeLogStats 构造使用量由 seed 偏移得到的日志卷 Metrics。
 func makeFakeLogStats(seed int) *volume.Metrics {
 	m := &volume.Metrics{}
 	m.Used = resource.NewQuantity(int64(seed+offsetUsage), resource.BinarySI)
@@ -1365,11 +1402,13 @@ func makeFakeLogStats(seed int) *volume.Metrics {
 	return m
 }
 
+// TestGetContainerUsageNanoCores 校验 CPU 使用速率的缓存读写：首次读取为空，
+// 更新后返回最新值，并正确处理缺失统计、缺失 CPU 数据等情况。
 func TestGetContainerUsageNanoCores(t *testing.T) {
 	var value0 uint64
 	var value1 uint64 = 10000000000
 
-	// Test with a large container of 100+ CPUs
+	// 使用 100+ CPU 的大型容器进行测试
 	var value2 uint64 = 188427786383
 
 	tests := []struct {
@@ -1524,20 +1563,21 @@ func TestGetContainerUsageNanoCores(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	for _, test := range tests {
 		provider := &criStatsProvider{cpuUsageCache: test.cpuUsageCache}
-		// Before the update, the cached value should be nil
+		// 更新前，缓存值应为 nil
 		cached := provider.getContainerUsageNanoCores(test.stats)
 		assert.Nil(t, cached)
 
-		// Update the cache and get the latest value.
+		// 更新缓存并获取最新值。
 		real := provider.getAndUpdateContainerUsageNanoCores(logger, test.stats)
 		assert.Equal(t, test.expected, real, test.desc)
 
-		// After the update, the cached value should be up-to-date
+		// 更新后，缓存值应为最新值
 		cached = provider.getContainerUsageNanoCores(test.stats)
 		assert.Equal(t, test.expected, cached, test.desc)
 	}
 }
 
+// TestExtractIDFromCgroupPath 校验能从 cgroupfs 与 systemd 两种路径格式中提取容器 ID。
 func TestExtractIDFromCgroupPath(t *testing.T) {
 	tests := []struct {
 		cgroupPath string
@@ -1563,6 +1603,8 @@ func TestExtractIDFromCgroupPath(t *testing.T) {
 	}
 }
 
+// getCRIContainerStatsStrictlyFromCRI 构造仅来自 CRI 的容器统计，
+// 供严格 CRI 模式的断言使用。
 func getCRIContainerStatsStrictlyFromCRI(seed int, containerName string) statsapi.ContainerStats {
 	psi := getTestPSIStats(seed)
 	result := statsapi.ContainerStats{
@@ -1570,7 +1612,7 @@ func getCRIContainerStatsStrictlyFromCRI(seed int, containerName string) statsap
 		StartTime: metav1.NewTime(timestamp),
 		CPU:       &statsapi.CPUStats{},
 		Memory:    &statsapi.MemoryStats{},
-		// UserDefinedMetrics is not supported by CRI.
+		// CRI 不支持 UserDefinedMetrics。
 		Rootfs: &statsapi.FsStats{},
 		IO:     &statsapi.IOStats{},
 	}

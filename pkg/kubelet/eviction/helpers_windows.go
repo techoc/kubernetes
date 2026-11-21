@@ -25,8 +25,10 @@ import (
 	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
 )
 
+// makeMemoryAvailableSignalObservation 基于 Windows 全局提交内存系统容器构造 memory.available 信号观测值。
 func makeMemoryAvailableSignalObservation(logger klog.Logger, summary *statsapi.Summary) *signalObservation {
 	logger.V(4).Info("Eviction manager: building memory signal observations for windows")
+	// Windows 需从全局提交内存系统容器读取数据，而非节点级内存统计。
 	sysContainer, err := getSysContainer(summary.Node.SystemContainers, statsapi.SystemContainerWindowsGlobalCommitMemory)
 	if err != nil {
 		logger.Error(err, "Eviction manager: failed to construct signal", "signal", evictionapi.SignalMemoryAvailable)

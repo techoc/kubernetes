@@ -25,6 +25,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestContainerCalculateAffinity 验证容器级作用域在各类 HintProvider 组合下计算亲和性的结果。
 func TestContainerCalculateAffinity(t *testing.T) {
 	tcases := []struct {
 		name     string
@@ -126,6 +127,7 @@ func TestContainerCalculateAffinity(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
 	for _, tc := range tcases {
+		// 构造容器级作用域，注入 mock 策略以捕获策略收到的提示。
 		ctnScope := &containerScope{
 			scope{
 				hintProviders: tc.hp,
@@ -134,7 +136,9 @@ func TestContainerCalculateAffinity(t *testing.T) {
 			},
 		}
 
+		// 触发亲和性计算；提示会经 mock 策略记录到 ph 字段。
 		ctnScope.calculateAffinity(logger, &v1.Pod{}, &v1.Container{}, lifecycle.AddOperation)
+		// 从 mock 策略回读计算结果。
 		actual := ctnScope.policy.(*mockPolicy).ph
 		if !reflect.DeepEqual(tc.expected, actual) {
 			t.Errorf("Test Case: %s", tc.name)
@@ -143,6 +147,7 @@ func TestContainerCalculateAffinity(t *testing.T) {
 	}
 }
 
+// TestContainerAccumulateProvidersHints 验证容器级作用域收集并聚合各 HintProvider 提示的行为。
 func TestContainerAccumulateProvidersHints(t *testing.T) {
 	tcases := []struct {
 		name     string
@@ -261,11 +266,13 @@ func TestContainerAccumulateProvidersHints(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
 	for _, tc := range tcases {
+		// 构造只带提示提供者的容器级作用域，用于验证聚合逻辑。
 		ctnScope := containerScope{
 			scope{
 				hintProviders: tc.hp,
 			},
 		}
+		// 聚合结果应与各提供者返回的映射按顺序一一对应，包括 nil 与空映射。
 		actual := ctnScope.accumulateProvidersHints(logger, &v1.Pod{}, &v1.Container{}, lifecycle.AddOperation)
 		if !reflect.DeepEqual(actual, tc.expected) {
 			t.Errorf("Test Case %s: Expected NUMANodeAffinity in result to be %v, got %v", tc.name, tc.expected, actual)

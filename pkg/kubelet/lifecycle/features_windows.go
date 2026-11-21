@@ -23,6 +23,7 @@ import (
 	"k8s.io/component-helpers/resource"
 )
 
+// isPodLevelResourcesSupported 在 Windows 上拒绝设置了 Pod 级资源的 Pod。
 func isPodLevelResourcesSupported(pod *v1.Pod) PodAdmitResult {
 	if resource.IsPodLevelResourcesSet(pod) {
 		return PodAdmitResult{

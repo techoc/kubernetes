@@ -44,140 +44,139 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
-// ActivePodsFunc is a function that returns a list of pods to reconcile.
+// ActivePodsFunc 返回需要参与 CPU 调谐的 Pod 列表。
 type ActivePodsFunc func() []*v1.Pod
 
+// runtimeService 是 CPU manager 更新容器资源时依赖的运行时方法子集。
 type runtimeService interface {
 	UpdateContainerResources(ctx context.Context, id string, resources *runtimeapi.ContainerResources) error
 }
 
+// policyName 表示 CPU manager 所选策略的名称。
 type policyName string
 
-// cpuManagerStateFileName is the file name where cpu manager stores its state
+// cpuManagerStateFileName 是 cpu manager 持久化状态的检查点文件名。
 const cpuManagerStateFileName = "cpu_manager_state"
 
-// Manager interface provides methods for Kubelet to manage pod cpus.
+// Manager 接口提供 Kubelet 管理 Pod CPU 的方法。
 type Manager interface {
-	// Start is called during Kubelet initialization.
-	// Start takes a `Context` because it may possibly spin the reconcileState helper, which in turn
-	// needs to update container state, which takes a context.
+	// Start 在 Kubelet 初始化时调用。
+	// 接收 Context 是因为它可能启动 reconcileState 辅助流程，
+	// 而该流程更新容器状态时需要 Context。
 	Start(ctx context.Context, activePods ActivePodsFunc, sourcesReady config.SourcesReady, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService, initialContainers containermap.ContainerMap) error
 
-	// Called to trigger the allocation of CPUs to a container. This must be
-	// called at some point prior to the AddContainer() call for a container,
-	// e.g. at pod admission time.
+	// 触发为容器分配 CPU。必须在调用该容器的 AddContainer() 之前
+	// （例如 Pod 准入阶段）完成。
 	Allocate(ctx context.Context, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) error
 
-	// AddContainer adds the mapping between container ID to pod UID and the container name
-	// The mapping used to remove the CPU allocation during the container removal
+	// AddContainer 记录容器 ID 到 Pod UID 和容器名的映射，
+	// 删除容器时用该映射回收 CPU 分配。
 	AddContainer(logger klog.Logger, p *v1.Pod, c *v1.Container, containerID string)
 
-	// RemoveContainer is called after Kubelet decides to kill or delete a
-	// container. After this call, the CPU manager stops trying to reconcile
-	// that container and any CPUs dedicated to the container are freed.
+	// RemoveContainer 在 Kubelet 决定杀掉或删除容器后调用。
+	// 调用后 CPU manager 不再尝试调谐该容器，其独占 CPU 会被释放。
 	RemoveContainer(logger klog.Logger, containerID string) error
 
-	// State returns a read-only interface to the internal CPU manager state.
+	// State 返回内部 CPU manager 状态的只读视图。
 	State() state.Reader
 
-	// GetTopologyHints implements the topologymanager.HintProvider Interface
-	// and is consulted to achieve NUMA aware resource alignment among this
-	// and other resource controllers.
+	// GetTopologyHints 实现 topologymanager.HintProvider 接口，
+	// 用于在本控制器与其他资源控制器之间达成 NUMA 感知的资源对齐。
 	GetTopologyHints(logger klog.Logger, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint
 
-	// GetExclusiveCPUs implements the podresources.CPUsProvider interface to provide
-	// exclusively allocated cpus for the container
+	// GetExclusiveCPUs 实现 podresources.CPUsProvider 接口，
+	// 返回容器独占分配的 CPU。
 	GetExclusiveCPUs(podUID, containerName string) cpuset.CPUSet
 
-	// GetPodCPUs implements the podresources.CPUsProvider interface to provide
-	// the total cpuset allocated to the pod
+	// GetPodCPUs 实现 podresources.CPUsProvider 接口，
+	// 返回分配给整个 Pod 的 CPU 集合。
 	GetPodCPUs(podUID string) cpuset.CPUSet
 
-	// GetPodTopologyHints implements the topologymanager.HintProvider Interface
-	// and is consulted to achieve NUMA aware resource alignment per Pod
-	// among this and other resource controllers.
+	// GetPodTopologyHints 实现 topologymanager.HintProvider 接口，
+	// 用于按 Pod 在本控制器与其他资源控制器之间达成 NUMA 感知的资源对齐。
 	GetPodTopologyHints(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint
 
-	// AllocatePod is called to trigger the allocation of CPUs to a pod.
+	// AllocatePod 触发为整个 Pod 分配 CPU。
 	AllocatePod(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) error
 
-	// GetAllocatableCPUs returns the total set of CPUs available for allocation.
+	// GetAllocatableCPUs 返回可供分配的全部 CPU 集合。
 	GetAllocatableCPUs() cpuset.CPUSet
 
-	// GetCPUAffinity returns cpuset which includes cpus from shared pools
-	// as well as exclusively allocated cpus
+	// GetCPUAffinity 返回容器可用的 CPU 集合，既包含共享池中的 CPU，
+	// 也包含独占分配的 CPU。
 	GetCPUAffinity(podUID, containerName string) cpuset.CPUSet
 
-	// GetAllCPUs returns all the CPUs known by cpumanager, as reported by the
-	// hardware discovery. Maps to the CPU capacity.
+	// GetAllCPUs 返回 cpumanager 通过硬件发现获知的全部 CPU，
+	// 对应节点的 CPU 容量。
 	GetAllCPUs() cpuset.CPUSet
 
-	// GetResourceIsolationLevel returns the isolation level of the container.
+	// GetResourceIsolationLevel 返回容器的资源隔离级别。
 	GetResourceIsolationLevel(pod *v1.Pod, container *v1.Container) cmqos.ResourceIsolationLevel
 }
 
+// manager 是 Manager 接口的默认实现，用互斥锁保护策略与状态。
 type manager struct {
 	sync.Mutex
 	policy Policy
 
-	// reconcilePeriod is the duration between calls to reconcileState.
+	// reconcilePeriod 是两次 reconcileState 调用之间的间隔。
 	reconcilePeriod time.Duration
 
-	// state allows pluggable CPU assignment policies while sharing a common
-	// representation of state for the system to inspect and reconcile.
+	// state 让可插拔的 CPU 分配策略共享同一份状态表示，供系统检查与调谐。
 	state state.State
 
-	// lastUpdatedstate holds state for each container from the last time it was updated.
+	// lastUpdateState 保存每个容器最近一次更新时的状态。
 	lastUpdateState state.State
 
-	// containerRuntime is the container runtime service interface needed
-	// to make UpdateContainerResources() calls against the containers.
+	// containerRuntime 是调用 UpdateContainerResources() 所需的容器运行时服务接口。
 	containerRuntime runtimeService
 
-	// activePods is a method for listing active pods on the node
-	// so all the containers can be updated in the reconciliation loop.
+	// activePods 返回节点上的活跃 Pod，调谐循环据此更新所有容器。
 	activePods ActivePodsFunc
 
-	// podStatusProvider provides a method for obtaining pod statuses
-	// and the containerID of their containers
+	// podStatusProvider 提供 Pod 状态及其容器 ID。
 	podStatusProvider status.PodStatusProvider
 
-	// containerMap provides a mapping from (pod, container) -> containerID
-	// for all containers a pod
+	// containerMap 保存所有容器的 (pod, container) -> containerID 映射。
 	containerMap containermap.ContainerMap
 
 	topology *topology.CPUTopology
 
 	nodeAllocatableReservation v1.ResourceList
 
-	// sourcesReady provides the readiness of kubelet configuration sources such as apiserver update readiness.
-	// We use it to determine when we can purge inactive pods from checkpointed state.
+	// sourcesReady 表示 kubelet 配置源（如 apiserver 更新）是否就绪；
+	// 只有就绪后才能从检查点状态中清理非活跃 Pod。
 	sourcesReady config.SourcesReady
 
-	// stateFileDirectory holds the directory where the state file for checkpoints is held.
+	// stateFileDirectory 是检查点状态文件所在目录。
 	stateFileDirectory string
 
-	// allCPUs is the set of online CPUs as reported by the system
+	// allCPUs 是系统报告的在线 CPU 集合。
 	allCPUs cpuset.CPUSet
 
-	// allocatableCPUs is the set of online CPUs as reported by the system,
-	// and available for allocation, minus the reserved set
+	// allocatableCPUs 是系统报告的在线 CPU 中扣除预留后可分配的集合。
 	allocatableCPUs cpuset.CPUSet
 }
 
+// 编译期断言：manager 必须实现 Manager 接口。
 var _ Manager = &manager{}
 
+// sourcesReadyStub 是始终认为所有配置源已就绪的桩实现。
 type sourcesReadyStub struct{}
 
+// AddSource 忽略数据源注册，桩实现不需要跟踪来源。
 func (s *sourcesReadyStub) AddSource(source string) {}
-func (s *sourcesReadyStub) AllReady() bool          { return true }
 
-// NewManager creates new cpu manager based on provided policy
+// AllReady 恒返回 true，表示配置源已全部就绪。
+func (s *sourcesReadyStub) AllReady() bool { return true }
+
+// NewManager 根据给定策略创建新的 CPU manager。
 func NewManager(logger klog.Logger, cpuPolicyName string, cpuPolicyOptions map[string]string, reconcilePeriod time.Duration, machineInfo *cadvisorapi.MachineInfo, specificCPUs cpuset.CPUSet, nodeAllocatableReservation v1.ResourceList, stateFileDirectory string, affinity topologymanager.Store) (Manager, error) {
 	var topo *topology.CPUTopology
 	var policy Policy
 	var err error
 
+	// 先探测 CPU 拓扑，静态策略需要用它划分独占 CPU 池。
 	topo, err = topology.Discover(logger, machineInfo)
 	if err != nil {
 		return nil, err
@@ -185,31 +184,30 @@ func NewManager(logger klog.Logger, cpuPolicyName string, cpuPolicyOptions map[s
 
 	switch policyName(cpuPolicyName) {
 
+	// none 策略不分配独占 CPU，只维护共享池。
 	case PolicyNone:
 		policy, err = NewNonePolicy(cpuPolicyOptions)
 		if err != nil {
 			return nil, fmt.Errorf("new none policy error: %w", err)
 		}
 
+	// 静态策略要求显式预留 CPU，并据此计算可分配池。
 	case PolicyStatic:
 		logger.Info("Detected CPU topology", "topology", topo)
 
 		reservedCPUs, ok := nodeAllocatableReservation[v1.ResourceCPU]
 		if !ok {
-			// The static policy cannot initialize without this information.
+			// 缺少预留信息时静态策略无法初始化。
 			return nil, fmt.Errorf("[cpumanager] unable to determine reserved CPU resources for static policy")
 		}
 		if reservedCPUs.IsZero() {
-			// The static policy requires this to be nonzero. Zero CPU reservation
-			// would allow the shared pool to be completely exhausted. At that point
-			// either we would violate our guarantee of exclusivity or need to evict
-			// any pod that has at least one container that requires zero CPUs.
-			// See the comments in policy_static.go for more details.
+			// 静态策略要求预留量非零；预留为零会让共享池被完全占满，
+			// 届时要么破坏独占性保证，要么只能驱逐至少有一个零 CPU 容器的 Pod。
+			// 详见 policy_static.go 中的说明。
 			return nil, fmt.Errorf("[cpumanager] the static policy requires systemreserved.cpu + kubereserved.cpu to be greater than zero")
 		}
 
-		// Take the ceiling of the reservation, since fractional CPUs cannot be
-		// exclusively allocated.
+		// 预留量向上取整，因为小数 CPU 无法被独占分配。
 		reservedCPUsFloat := float64(reservedCPUs.MilliValue()) / 1000
 		numReservedCPUs := int(math.Ceil(reservedCPUsFloat))
 		policy, err = NewStaticPolicy(logger, topo, numReservedCPUs, specificCPUs, affinity, cpuPolicyOptions)
@@ -221,6 +219,7 @@ func NewManager(logger klog.Logger, cpuPolicyName string, cpuPolicyOptions map[s
 		return nil, fmt.Errorf("unknown policy: \"%s\"", cpuPolicyName)
 	}
 
+	// manager 的 state 在 Start() 中初始化，这里先填充其余依赖。
 	manager := &manager{
 		policy:                     policy,
 		reconcilePeriod:            reconcilePeriod,
@@ -230,10 +229,12 @@ func NewManager(logger klog.Logger, cpuPolicyName string, cpuPolicyOptions map[s
 		stateFileDirectory:         stateFileDirectory,
 		allCPUs:                    topo.CPUDetails.CPUs(),
 	}
+	// Start() 调用前先使用桩实现，避免访问未初始化的字段。
 	manager.sourcesReady = &sourcesReadyStub{}
 	return manager, nil
 }
 
+// Start 初始化状态检查点、启动策略，并在非 none 策略下启动周期性调谐循环。
 func (m *manager) Start(ctx context.Context, activePods ActivePodsFunc, sourcesReady config.SourcesReady, podStatusProvider status.PodStatusProvider, containerRuntime runtimeService, initialContainers containermap.ContainerMap) error {
 	logger := klog.FromContext(ctx)
 	logger.Info("Starting", "policy", m.policy.Name())
@@ -244,6 +245,7 @@ func (m *manager) Start(ctx context.Context, activePods ActivePodsFunc, sourcesR
 	m.containerRuntime = containerRuntime
 	m.containerMap = initialContainers
 
+	// 检查点状态是 CPU 分配的唯一持久化来源，加载失败必须中止启动。
 	stateImpl, err := state.NewCheckpointState(logger, m.stateFileDirectory, cpuManagerStateFileName, m.policy.Name(), m.containerMap)
 	if err != nil {
 		logger.Error(err, "Could not initialize checkpoint manager, please drain node and remove policy state file")
@@ -251,6 +253,7 @@ func (m *manager) Start(ctx context.Context, activePods ActivePodsFunc, sourcesR
 	}
 	m.state = stateImpl
 
+	// 由策略校验并预热状态，例如静态策略会核对 CPU 拓扑兼容性。
 	err = m.policy.Start(logger, m.state)
 	if err != nil {
 		logger.Error(err, "Policy start error")
@@ -259,27 +262,29 @@ func (m *manager) Start(ctx context.Context, activePods ActivePodsFunc, sourcesR
 
 	logger.V(4).Info("CPU manager started", "policy", m.policy.Name())
 
+	// 缓存可分配 CPU，后续查询无需重复计算。
 	m.allocatableCPUs = m.policy.GetAllocatableCPUs(m.state)
 
+	// none 策略没有独占分配，无需周期性调谐。
 	if m.policy.Name() == string(PolicyNone) {
 		return nil
 	}
-	// Periodically call m.reconcileState() to continue to keep the CPU sets of
-	// all pods in sync with and guaranteed CPUs handed out among them.
+	// 后台周期调谐，确保容器的实际 CPU 集合与已发放的独占 CPU 一致。
 	go wait.Until(func() { m.reconcileState(ctx) }, m.reconcilePeriod, wait.NeverStop)
 	return nil
 }
 
+// Allocate 先回收陈旧状态，再在锁内委托策略为容器分配 CPU。
 func (m *manager) Allocate(ctx context.Context, p *v1.Pod, c *v1.Container, operation lifecycle.Operation) error {
 	logger := klog.FromContext(ctx)
 
-	// Garbage collect any stranded resources before allocating CPUs.
+	// 分配前回收已失效的资源，避免把 CPU 分配给已删除的容器。
 	m.removeStaleState(logger)
 
 	m.Lock()
 	defer m.Unlock()
 
-	// Call down into the policy to assign this container CPUs if required.
+	// 交给具体策略决定该容器是否需要独占 CPU。
 	err := m.policy.Allocate(logger, m.state, p, c, operation)
 	if err != nil {
 		logger.Error(err, "policy error")
@@ -289,14 +294,15 @@ func (m *manager) Allocate(ctx context.Context, p *v1.Pod, c *v1.Container, oper
 	return nil
 }
 
+// AllocatePod 先回收陈旧状态，再委托策略为整个 Pod 分配 CPU。
 func (m *manager) AllocatePod(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) error {
-	// Garbage collect any stranded resources before allocating CPUs.
+	// 分配前回收已失效的资源，避免把 CPU 分配给已删除的容器。
 	m.removeStaleState(logger)
 
 	m.Lock()
 	defer m.Unlock()
 
-	// Call down into the policy to assign this container CPUs if required.
+	// 交给具体策略决定该 Pod 是否需要独占 CPU。
 	if err := m.policy.AllocatePod(logger, m.state, pod, operation); err != nil {
 		logger.Error(err, "AllocatePod error", "pod", klog.KObj(pod))
 		return err
@@ -304,16 +310,19 @@ func (m *manager) AllocatePod(logger klog.Logger, pod *v1.Pod, operation lifecyc
 	return nil
 }
 
+// AddContainer 把容器记录到 containerMap，并同步 lastUpdateState 中的 CPU 集合。
 func (m *manager) AddContainer(logger klog.Logger, pod *v1.Pod, container *v1.Container, containerID string) {
 	m.Lock()
 	defer m.Unlock()
 	if cset, exists := m.state.GetCPUSet(string(pod.UID), container.Name); exists {
+		// 同步当前集合，调谐时据此判断容器是否已是最新分配。
 		m.lastUpdateState.SetCPUSet(string(pod.UID), container.Name, cset)
 	}
 	m.containerMap.Add(string(pod.UID), container.Name, containerID)
 	logger.V(4).Info("Added Container", "pod", klog.KObj(pod), "podUID", pod.UID, "containerName", container.Name, "containerID", containerID)
 }
 
+// RemoveContainer 按容器 ID 查找并回收对应的 CPU 分配。
 func (m *manager) RemoveContainer(logger klog.Logger, containerID string) error {
 	m.Lock()
 	defer m.Unlock()
@@ -327,12 +336,15 @@ func (m *manager) RemoveContainer(logger klog.Logger, containerID string) error 
 	return nil
 }
 
+// policyRemoveContainerByID 通过 containerMap 找到容器引用并调用策略移除。
 func (m *manager) policyRemoveContainerByID(logger klog.Logger, containerID string) error {
 	podUID, containerName, err := m.containerMap.GetContainerRef(containerID)
+	// 查不到说明容器从未被记录或已清理，直接忽略即可。
 	if err != nil {
 		return nil
 	}
 
+	// 只有策略成功释放后，才清理本地簿记，避免状态不一致。
 	err = m.policy.RemoveContainer(logger, m.state, podUID, containerName)
 	if err == nil {
 		m.lastUpdateState.Delete(podUID, containerName)
@@ -342,7 +354,9 @@ func (m *manager) policyRemoveContainerByID(logger klog.Logger, containerID stri
 	return err
 }
 
+// policyRemoveContainerByRef 按 Pod UID 与容器名调用策略移除，并清理簿记。
 func (m *manager) policyRemoveContainerByRef(logger klog.Logger, podUID string, containerName string) error {
+	// 策略成功移除后同步删除 lastUpdateState 与 containerMap 中的记录。
 	err := m.policy.RemoveContainer(logger, m.state, podUID, containerName)
 	if err == nil {
 		m.lastUpdateState.Delete(podUID, containerName)
@@ -352,57 +366,64 @@ func (m *manager) policyRemoveContainerByRef(logger klog.Logger, podUID string, 
 	return err
 }
 
+// State 返回内部状态，调用方只能通过 state.Reader 读取。
 func (m *manager) State() state.Reader {
 	return m.state
 }
 
+// GetTopologyHints 先回收陈旧状态，再委托当前策略计算容器的拓扑提示。
 func (m *manager) GetTopologyHints(logger klog.Logger, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint {
-	// Garbage collect any stranded resources before providing TopologyHints
+	// 提供拓扑提示前先回收失效资源，避免把已释放的 CPU 算进可用池。
 	m.removeStaleState(logger)
-	// Delegate to active policy
+	// 具体提示由当前生效策略给出。
 	return m.policy.GetTopologyHints(logger, m.state, pod, container, operation)
 }
 
+// GetPodTopologyHints 先回收陈旧状态，再委托当前策略计算 Pod 级别的拓扑提示。
 func (m *manager) GetPodTopologyHints(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint {
-	// Garbage collect any stranded resources before providing TopologyHints
+	// 提供拓扑提示前先回收失效资源，避免把已释放的 CPU 算进可用池。
 	m.removeStaleState(logger)
-	// Delegate to active policy
+	// 具体提示由当前生效策略给出。
 	return m.policy.GetPodTopologyHints(logger, m.state, pod, operation)
 }
 
+// GetAllocatableCPUs 返回可分配 CPU 的副本，防止调用方修改内部状态。
 func (m *manager) GetAllocatableCPUs() cpuset.CPUSet {
 	return m.allocatableCPUs.Clone()
 }
 
+// GetAllCPUs 返回全部在线 CPU 的副本，防止调用方修改内部状态。
 func (m *manager) GetAllCPUs() cpuset.CPUSet {
 	return m.allCPUs.Clone()
 }
 
+// reconciledContainer 标识一次调谐中处理过的容器。
 type reconciledContainer struct {
-	podName       string
+	// podName 是 Pod 名称，仅用于日志与结果报告。
+	podName string
+	// containerName 是容器名。
 	containerName string
-	containerID   string
+	// containerID 是容器运行时 ID，未找到时为空。
+	containerID string
 }
 
+// removeStaleState 删除不属于任何活跃 Pod 的容器状态。
 func (m *manager) removeStaleState(rootLogger klog.Logger) {
-	// Only once all sources are ready do we attempt to remove any stale state.
-	// This ensures that the call to `m.activePods()` below will succeed with
-	// the actual active pods list.
+	// 只有所有配置源就绪后才清理陈旧状态，
+	// 否则下面 activePods() 返回的列表可能不完整，误删仍在运行的容器。
 	if !m.sourcesReady.AllReady() {
 		return
 	}
 
-	// We grab the lock to ensure that no new containers will grab CPUs while
-	// executing the code below. Without this lock, its possible that we end up
-	// removing state that is newly added by an asynchronous call to
-	// AddContainer() during the execution of this code.
+	// 加锁保证执行期间不会有新容器抢占 CPU，
+	// 否则可能误删 AddContainer() 异步新增的状态。
 	m.Lock()
 	defer m.Unlock()
 
-	// Get the list of active pods.
+	// 获取活跃 Pod 列表。
 	activePods := m.activePods()
 
-	// Build a list of (podUID, containerName) pairs for all containers in all active Pods.
+	// 汇总所有活跃 Pod 中容器的 (podUID, containerName) 对。
 	activeContainers := make(map[string]map[string]struct{})
 	for _, pod := range activePods {
 		activeContainers[string(pod.UID)] = make(map[string]struct{})
@@ -411,8 +432,8 @@ func (m *manager) removeStaleState(rootLogger klog.Logger) {
 		}
 	}
 
-	// Loop through the CPUManager state. Remove any state for containers not
-	// in the `activeContainers` list built above.
+	// 遍历状态，删除不在活跃容器集合中的记录。
+	// 这些记录对应的容器已不存在。
 	assignments := m.state.GetCPUAssignments()
 	for podUID := range assignments {
 		for containerName := range assignments[podUID] {
@@ -445,6 +466,8 @@ func (m *manager) removeStaleState(rootLogger klog.Logger) {
 	})
 }
 
+// reconcileState 让所有活跃容器的 CPU 集合与 CPU manager 状态保持一致，
+// 并返回成功与失败的容器列表。
 func (m *manager) reconcileState(ctx context.Context) (success []reconciledContainer, failure []reconciledContainer) {
 	success = []reconciledContainer{}
 	failure = []reconciledContainer{}
@@ -490,11 +513,9 @@ func (m *manager) reconcileState(ctx context.Context) (success []reconciledConta
 
 			m.Lock()
 			if cstatus.State.Terminated != nil {
-				// The container is terminated but we can't call m.RemoveContainer()
-				// here because it could remove the allocated cpuset for the container
-				// which may be in the process of being restarted.  That would result
-				// in the container losing any exclusively-allocated CPUs that it
-				// was allocated.
+				// 容器已终止，但不能在这里调用 RemoveContainer()，
+				// 否则可能删掉正等待重启的容器的独占 CPU 集合，
+				// 使其丢失此前获得的独占 CPU；因此这里只跳过并保留状态。
 				_, _, err := m.containerMap.GetContainerRef(containerID)
 				if err == nil {
 					logger.V(4).Info("ignoring terminated container", "containerID", containerID)
@@ -503,9 +524,8 @@ func (m *manager) reconcileState(ctx context.Context) (success []reconciledConta
 				continue
 			}
 
-			// Once we make it here we know we have a running container.
-			// Idempotently add it to the containerMap incase it is missing.
-			// This can happen after a kubelet restart, for example.
+			// 走到这里说明容器处于运行状态。
+			// 幂等地补写 containerMap，kubelet 重启后该映射可能缺失。
 			m.containerMap.Add(string(pod.UID), container.Name, containerID)
 
 			cset := m.state.GetCPUSetOrDefault(string(pod.UID), container.Name)
@@ -513,19 +533,18 @@ func (m *manager) reconcileState(ctx context.Context) (success []reconciledConta
 			m.Unlock()
 
 			if cset.IsEmpty() {
-				// NOTE: This should not happen outside of tests.
+				// 注意：测试之外不应出现空 CPU 集合。
 				logger.V(2).Info("ReconcileState: skipping container; empty cpuset assigned")
 				failure = append(failure, reconciledContainer{pod.Name, container.Name, containerID})
 				continue
 			}
 
 			if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.InPlacePodVerticalScalingExclusiveCPUs) {
-				// this is less clear than it should be because of the constraints of the GetCPUSetOrDefault API which should
-				// be revisited separately. A container can only have baseline CPUs set if it got an exclusive CPU assignment
-				// the first time it was admitted. Baseline CPUs reflects the CPUs promised at that time, which no following
-				// scaleup/down can ever mutate. In that case, we are also guaranteed that the `GetCPUSetOrDefault` will return
-				// _an_ exclusive CPUSet and never the default set. A clear improvement would be get rid of GetCPUSetOrDefault
-				// and make a new API which returns TWO cpusets: the exclusively allocated and the shared set.
+				// 这里的逻辑之所以不够直观，是因为 GetCPUSetOrDefault API 的约束，
+				// 该 API 后续应单独重构。容器只有在首次准入时就获得独占 CPU 分配，
+				// 才会有 baseline CPUs；baseline 反映当时承诺的 CPU，之后的扩缩容都不会改动它。
+				// 这种情况下 GetCPUSetOrDefault 必然返回独占集合而不是默认共享集合。
+				// 更清晰的方案是废弃 GetCPUSetOrDefault，改用同时返回独占集合与共享集合的新 API。
 				if hasBaselineCPUs && !baselineCPUs.Equals(cset) {
 					logger.V(4).Info("Current container CPU assignments differ from CPU assignments recorded at admission time",
 						"currentCPUSet", cset, "baselineCPUSet", baselineCPUs)
@@ -549,12 +568,14 @@ func (m *manager) reconcileState(ctx context.Context) (success []reconciledConta
 	return success, failure
 }
 
+// findContainerIDByName 在 Pod 状态中查找指定容器的运行时 ID。
 func findContainerIDByName(status *v1.PodStatus, name string) (string, error) {
 	allStatuses := status.InitContainerStatuses
 	allStatuses = append(allStatuses, status.ContainerStatuses...)
 	for _, container := range allStatuses {
 		if container.Name == name && container.ContainerID != "" {
 			cid := &kubecontainer.ContainerID{}
+			// 状态中的 ID 可能带运行时前缀（如 docker://），ParseString 会剥离它。
 			err := cid.ParseString(container.ContainerID)
 			if err != nil {
 				return "", err
@@ -565,6 +586,7 @@ func findContainerIDByName(status *v1.PodStatus, name string) (string, error) {
 	return "", fmt.Errorf("unable to find ID for container with name %v in pod status (it may not be running)", name)
 }
 
+// findContainerStatusByName 在 Pod 状态中查找指定容器的状态。
 func findContainerStatusByName(status *v1.PodStatus, name string) (*v1.ContainerStatus, error) {
 	for _, containerStatus := range append(status.InitContainerStatuses, status.ContainerStatuses...) {
 		if containerStatus.Name == name {
@@ -574,6 +596,7 @@ func findContainerStatusByName(status *v1.PodStatus, name string) (*v1.Container
 	return nil, fmt.Errorf("unable to find status for container with name %v in pod status (it may not be running)", name)
 }
 
+// GetExclusiveCPUs 返回容器独占的 CPU；不存在分配时返回空集合。
 func (m *manager) GetExclusiveCPUs(podUID, containerName string) cpuset.CPUSet {
 	if result, ok := m.state.GetCPUSet(podUID, containerName); ok {
 		return result
@@ -581,6 +604,7 @@ func (m *manager) GetExclusiveCPUs(podUID, containerName string) cpuset.CPUSet {
 	return cpuset.New()
 }
 
+// GetPodCPUs 返回 Pod 的 CPU 集合；不存在分配时返回空集合。
 func (m *manager) GetPodCPUs(podUID string) cpuset.CPUSet {
 	if result, ok := m.state.GetPodCPUSet(podUID); ok {
 		return result
@@ -588,24 +612,31 @@ func (m *manager) GetPodCPUs(podUID string) cpuset.CPUSet {
 	return cpuset.New()
 }
 
+// GetCPUAffinity 返回容器的 CPU 亲和集合，无独占分配时回退到默认集合。
 func (m *manager) GetCPUAffinity(podUID, containerName string) cpuset.CPUSet {
 	return m.state.GetCPUSetOrDefault(podUID, containerName)
 }
 
+// resourcesQualifyForExclusiveCPUs 判断容器是否满足独占 CPU 的条件：
+// 等价 Guaranteed QoS，且 CPU limit 为整数（不含毫核）。
 func resourcesQualifyForExclusiveCPUs(container *v1.Container) bool {
 	if !cmqos.IsContainerEquivalentQOSGuaranteed(container) {
 		return false
 	}
 
+	// Value()*1000 == MilliValue() 说明没有小数 CPU，可做整数独占分配。
 	cpuLimit := container.Resources.Limits[v1.ResourceCPU]
 	return cpuLimit.Value()*1000 == cpuLimit.MilliValue()
 }
 
+// GetResourceIsolationLevel 根据是否存在独占 CPU 分配以及 Pod 级资源特性
+// 判断隔离级别。
 func (m *manager) GetResourceIsolationLevel(pod *v1.Pod, container *v1.Container) cmqos.ResourceIsolationLevel {
 	if _, ok := m.state.GetCPUSet(string(pod.UID), container.Name); !ok {
 		return cmqos.ResourceIsolationHost
 	}
 
+	// 开启 Pod 级资源管理且容器自身不独占 CPU 时，隔离边界退到 Pod 级。
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.PodLevelResourceManagers) && resourcehelper.IsPodLevelResourcesSet(pod) && !resourcesQualifyForExclusiveCPUs(container) {
 		return cmqos.ResourceIsolationPod
 	}

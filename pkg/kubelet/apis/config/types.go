@@ -23,690 +23,612 @@ import (
 	tracingapi "k8s.io/component-base/tracing/api/v1"
 )
 
-// HairpinMode denotes how the kubelet should configure networking to handle
-// hairpin packets.
+// HairpinMode 表示 kubelet 应如何配置网络以处理 hairpin 数据包。
 type HairpinMode string
 
-// Enum settings for different ways to handle hairpin packets.
+// 处理 hairpin 数据包的不同方式枚举。
 const (
-	// Set the hairpin flag on the veth of containers in the respective
-	// container runtime.
+	// 在对应容器运行时的容器 veth 上设置 hairpin 标志。
 	HairpinVeth = "hairpin-veth"
-	// Make the container bridge promiscuous. This will force it to accept
-	// hairpin packets, even if the flag isn't set on ports of the bridge.
+	// 将容器网桥设为混杂模式，强制其接受 hairpin 数据包，
+	// 即使网桥端口未设置该标志。
 	PromiscuousBridge = "promiscuous-bridge"
-	// Neither of the above. If the kubelet is started in this hairpin mode
-	// and kube-proxy is running in iptables mode, hairpin packets will be
-	// dropped by the container bridge.
+	// 以上均不采用。若 kubelet 以此模式启动，且 kube-proxy 运行在 iptables 模式，
+	// 则 hairpin 数据包会被容器网桥丢弃。
 	HairpinNone = "none"
 )
 
-// ResourceChangeDetectionStrategy denotes a mode in which internal
-// managers (secret, configmap) are discovering object changes.
+// ResourceChangeDetectionStrategy 表示内部管理器（secret、configmap）
+// 发现对象变化的方式。
 type ResourceChangeDetectionStrategy string
 
-// Enum settings for different strategies of kubelet managers.
+// kubelet 各管理器发现变化的策略枚举。
 const (
-	// GetChangeDetectionStrategy is a mode in which kubelet fetches
-	// necessary objects directly from apiserver.
+	// GetChangeDetectionStrategy 表示 kubelet 直接从 apiserver 获取所需对象。
 	GetChangeDetectionStrategy ResourceChangeDetectionStrategy = "Get"
-	// TTLCacheChangeDetectionStrategy is a mode in which kubelet uses
-	// ttl cache for object directly fetched from apiserver.
+	// TTLCacheChangeDetectionStrategy 表示 kubelet 对直接从 apiserver 获取的对象使用 TTL 缓存。
 	TTLCacheChangeDetectionStrategy ResourceChangeDetectionStrategy = "Cache"
-	// WatchChangeDetectionStrategy is a mode in which kubelet uses
-	// watches to observe changes to objects that are in its interest.
+	// WatchChangeDetectionStrategy 表示 kubelet 使用 watch 观察其关注对象的变化。
 	WatchChangeDetectionStrategy ResourceChangeDetectionStrategy = "Watch"
-	// RestrictedTopologyManagerPolicy is a mode in which kubelet only allows
-	// pods with optimal NUMA node alignment for requested resources
+	// RestrictedTopologyManagerPolicy 表示 kubelet 只允许所请求资源在 NUMA 节点上
+	// 对齐最优的 Pod。
 	RestrictedTopologyManagerPolicy = "restricted"
-	// BestEffortTopologyManagerPolicy is a mode in which kubelet will favour
-	// pods with NUMA alignment of CPU and device resources.
+	// BestEffortTopologyManagerPolicy 表示 kubelet 优先选择 CPU 与设备资源
+	// 在 NUMA 上对齐的 Pod。
 	BestEffortTopologyManagerPolicy = "best-effort"
-	// NoneTopologyManagerPolicy is a mode in which kubelet has no knowledge
-	// of NUMA alignment of a pod's CPU and device resources.
+	// NoneTopologyManagerPolicy 表示 kubelet 不感知 Pod 的 CPU 与设备资源的 NUMA 对齐情况。
 	NoneTopologyManagerPolicy = "none"
-	// SingleNumaNodeTopologyManagerPolicy is a mode in which kubelet only allows
-	// pods with a single NUMA alignment of CPU and device resources.
+	// SingleNumaNodeTopologyManagerPolicy 表示 kubelet 只允许 CPU 与设备资源
+	// 对齐到单个 NUMA 节点的 Pod。
 	SingleNumaNodeTopologyManagerPolicy = "single-numa-node"
-	// ContainerTopologyManagerScope represents that
-	// topology policy is applied on a per-container basis.
+	// ContainerTopologyManagerScope 表示拓扑策略按容器维度应用。
 	ContainerTopologyManagerScope = "container"
-	// PodTopologyManagerScope represents that
-	// topology policy is applied on a per-pod basis.
+	// PodTopologyManagerScope 表示拓扑策略按 Pod 维度应用。
 	PodTopologyManagerScope = "pod"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// KubeletConfiguration contains the configuration for the Kubelet
+// KubeletConfiguration 保存 kubelet 的配置。
 type KubeletConfiguration struct {
 	metav1.TypeMeta
 
-	// enableServer enables Kubelet's secured server.
-	// Note: Kubelet's insecure port is controlled by the readOnlyPort option.
+	// enableServer 启用 kubelet 的安全服务器。
+	// 注意：kubelet 的非安全端口由 readOnlyPort 选项控制。
 	EnableServer bool
-	// staticPodPath is the path to the directory containing local (static) pods to
-	// run, or the path to a single static pod file.
+	// staticPodPath 是存放待运行本地（静态）Pod 的目录路径，
+	// 也可以指向单个静态 Pod 文件。
 	StaticPodPath string
-	// podLogsDir is a custom root directory path kubelet will use to place pod's log files.
-	// Default: "/var/log/pods/"
-	// Note: it is not recommended to use the temp folder as a log directory as it may cause
-	// unexpected behavior in many places.
+	// podLogsDir 是 kubelet 存放 Pod 日志文件的根目录。
+	// 默认值："/var/log/pods/"
+	// 注意：不建议使用临时目录作为日志目录，这可能在许多地方引发意外行为。
 	PodLogsDir string
-	// syncFrequency is the max period between synchronizing running
-	// containers and config
+	// syncFrequency 是同步运行中容器与配置的最大周期。
 	SyncFrequency metav1.Duration
-	// fileCheckFrequency is the duration between checking config files for
-	// new data
+	// fileCheckFrequency 是检查配置文件是否更新的间隔。
 	FileCheckFrequency metav1.Duration
-	// httpCheckFrequency is the duration between checking http for new data
+	// httpCheckFrequency 是通过 HTTP 检查新数据的间隔。
 	HTTPCheckFrequency metav1.Duration
-	// staticPodURL is the URL for accessing static pods to run
+	// staticPodURL 是获取待运行静态 Pod 的 URL。
 	StaticPodURL string
-	// staticPodURLHeader is a map of slices with HTTP headers to use when accessing the podURL
+	// staticPodURLHeader 是访问 staticPodURL 时使用的 HTTP 请求头。
 	StaticPodURLHeader map[string][]string `datapolicy:"token"`
-	// address is the IP address for the Kubelet to serve on (set to 0.0.0.0
-	// for all interfaces)
+	// address 是 kubelet 提供服务的 IP 地址（设为 0.0.0.0 表示所有网卡）。
 	Address string
-	// port is the port for the Kubelet to serve on.
+	// port 是 kubelet 提供服务的端口。
 	Port int32
-	// readOnlyPort is the read-only port for the Kubelet to serve on with
-	// no authentication/authorization (set to 0 to disable)
+	// readOnlyPort 是 kubelet 无需认证/鉴权即可访问的只读端口（设为 0 表示禁用）。
 	ReadOnlyPort int32
-	// volumePluginDir is the full path of the directory in which to search
-	// for additional third party volume plugins.
+	// volumePluginDir 是搜索第三方卷插件的目录完整路径。
 	VolumePluginDir string
-	// providerID, if set, sets the unique id of the instance that an external provider (i.e. cloudprovider)
-	// can use to identify a specific node
+	// providerID 若设置，表示外部提供方（如云厂商）用于识别特定节点的实例唯一 ID。
 	ProviderID string
-	// tlsCertFile is the file containing x509 Certificate for HTTPS.  (CA cert,
-	// if any, concatenated after server cert). If tlsCertFile and
-	// tlsPrivateKeyFile are not provided, a self-signed certificate
-	// and key are generated for the public address and saved to the directory
-	// passed to the Kubelet's --cert-dir flag.
+	// tlsCertFile 是包含 HTTPS x509 证书的文件（若存在 CA 证书，需拼接在服务器证书之后）。
+	// 如果未提供 tlsCertFile 与 tlsPrivateKeyFile，将为公网地址生成自签名证书与密钥，
+	// 并保存到 --cert-dir 指定的目录。
 	TLSCertFile string
-	// tlsPrivateKeyFile is the file containing x509 private key matching tlsCertFile
+	// tlsPrivateKeyFile 是包含与 tlsCertFile 匹配的 x509 私钥的文件。
 	TLSPrivateKeyFile string
-	// TLSCipherSuites is the list of allowed cipher suites for the server.
-	// Note that TLS 1.3 ciphersuites are not configurable.
-	// Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants).
+	// TLSCipherSuites 是服务器允许的密码套件列表。
+	// 注意 TLS 1.3 的密码套件不可配置。
+	// 取值来自 tls 包常量（https://golang.org/pkg/crypto/tls/#pkg-constants）。
 	TLSCipherSuites []string
-	// TLSCurvePreferences is the set of allowed key exchange mechanisms for the server,
-	// specified as numeric Go crypto/tls CurveID values.
-	// The supported values depend on the Go version used.
-	// See https://pkg.go.dev/crypto/tls#CurveID for values supported for each Go version.
-	// The order of the list is ignored, and key exchange mechanisms are
-	// chosen by Go from this list using an internal preference order.
-	// If empty, the default Go curves will be used.
+	// TLSCurvePreferences 是服务器允许的密钥交换机制集合，
+	// 使用 Go crypto/tls 的 CurveID 数值表示。
+	// 可用取值取决于所使用的 Go 版本。
+	// 各 Go 版本支持的取值参见 https://pkg.go.dev/crypto/tls#CurveID。
+	// 列表顺序会被忽略，Go 会按内部偏好顺序从中选择密钥交换机制。
+	// 若为空，则使用 Go 的默认曲线。
 	TLSCurvePreferences []int32
-	// TLSMinVersion is the minimum TLS version supported.
-	// Values are from tls package constants (https://golang.org/pkg/crypto/tls/#pkg-constants).
+	// TLSMinVersion 是支持的最低 TLS 版本。
+	// 取值来自 tls 包常量（https://golang.org/pkg/crypto/tls/#pkg-constants）。
 	TLSMinVersion string
-	// rotateCertificates enables client certificate rotation. The Kubelet will request a
-	// new certificate from the certificates.k8s.io API. This requires an approver to approve the
-	// certificate signing requests.
+	// rotateCertificates 启用客户端证书轮换。kubelet 会向 certificates.k8s.io API
+	// 请求新证书，这需要审批者批准对应的证书签名请求。
 	RotateCertificates bool
-	// serverTLSBootstrap enables server certificate bootstrap. Instead of self
-	// signing a serving certificate, the Kubelet will request a certificate from
-	// the certificates.k8s.io API. This requires an approver to approve the
-	// certificate signing requests. The RotateKubeletServerCertificate feature
-	// must be enabled.
+	// serverTLSBootstrap 启用服务器证书引导。kubelet 不再自签服务证书，
+	// 而是向 certificates.k8s.io API 请求证书；这需要审批者批准证书签名请求，
+	// 并且必须启用 RotateKubeletServerCertificate 特性门控。
 	ServerTLSBootstrap bool
-	// authentication specifies how requests to the Kubelet's server are authenticated
+	// authentication 指定 kubelet 服务器请求的认证方式。
 	Authentication KubeletAuthentication
-	// authorization specifies how requests to the Kubelet's server are authorized
+	// authorization 指定 kubelet 服务器请求的鉴权方式。
 	Authorization KubeletAuthorization
-	// registryPullQPS is the limit of registry pulls per second.
-	// Set to 0 for no limit.
+	// registryPullQPS 是每秒从镜像仓库拉取的次数上限；设为 0 表示不限制。
 	RegistryPullQPS int32
-	// registryBurst is the maximum size of bursty pulls, temporarily allows
-	// pulls to burst to this number, while still not exceeding registryPullQPS.
-	// Only used if registryPullQPS > 0.
+	// registryBurst 是突发拉取的最大数量，允许暂时突增到该值，
+	// 但仍不超过 registryPullQPS；仅在 registryPullQPS > 0 时生效。
 	RegistryBurst int32
-	// imagePullCredentialsVerificationPolicy determines how credentials should be
-	// verified when pod requests an image that is already present on the node:
+	// imagePullCredentialsVerificationPolicy 决定当 Pod 请求节点上已存在的镜像时
+	// 如何校验拉取凭据：
 	//   - NeverVerify
-	//       - anyone on a node can use any image present on the node
+	//       - 节点上的任何人都可以使用节点上已有的任意镜像
 	//   - NeverVerifyPreloadedImages
-	//       - images that were pulled to the node by something else than the kubelet
-	//         can be used without reverifying pull credentials
+	//       - 由 kubelet 之外的其他组件拉取到节点的镜像，
+	//         使用时无需重新校验拉取凭据
 	//   - NeverVerifyAllowlistedImages
-	//       - like "NeverVerifyPreloadedImages" but only node images from
-	//         `preloadedImagesVerificationAllowlist` don't require reverification
+	//       - 与 "NeverVerifyPreloadedImages" 类似，但只有
+	//         `preloadedImagesVerificationAllowlist` 中的节点镜像无需重新校验
 	//   - AlwaysVerify
-	//       - all images require credential reverification
+	//       - 所有镜像都需要重新校验凭据
 	ImagePullCredentialsVerificationPolicy string
-	// preloadedImagesVerificationAllowlist specifies a list of images that are
-	// exempted from credential reverification for the "NeverVerifyAllowlistedImages"
-	// `imagePullCredentialsVerificationPolicy`.
-	// The list accepts a full path segment wildcard suffix "/*".
-	// Only use image specs without an image tag or digest.
+	// preloadedImagesVerificationAllowlist 指定在
+	// "NeverVerifyAllowlistedImages" 策略下免于凭据重新校验的镜像列表。
+	// 列表项支持以 "/*" 结尾的完整路径段通配符。
+	// 仅应使用不带 tag 或 digest 的镜像 spec。
 	PreloadedImagesVerificationAllowlist []string
-	// eventRecordQPS is the maximum event creations per second. If 0, there
-	// is no limit enforced.
+	// eventRecordQPS 是每秒创建事件的上限；为 0 表示不限制。
 	EventRecordQPS int32
-	// eventBurst is the maximum size of a burst of event creations, temporarily
-	// allows event creations to burst to this number, while still not exceeding
-	// eventRecordQPS. Only used if eventRecordQPS > 0.
+	// eventBurst 是事件创建的突发上限，允许暂时突增到该值，
+	// 但仍不超过 eventRecordQPS；仅在 eventRecordQPS > 0 时生效。
 	EventBurst int32
-	// enableDebuggingHandlers enables server endpoints for log collection
-	// and local running of containers and commands
+	// enableDebuggingHandlers 启用用于日志收集以及在本地运行容器和命令的服务器端点。
 	EnableDebuggingHandlers bool
-	// enableContentionProfiling enables block profiling, if enableDebuggingHandlers is true.
+	// enableContentionProfiling 在 enableDebuggingHandlers 为 true 时启用阻塞分析。
 	EnableContentionProfiling bool
-	// healthzPort is the port of the localhost healthz endpoint (set to 0 to disable)
+	// healthzPort 是 localhost 上 healthz 端点的端口（设为 0 表示禁用）。
 	HealthzPort int32
-	// healthzBindAddress is the IP address for the healthz server to serve on
+	// healthzBindAddress 是 healthz 服务器监听的 IP 地址。
 	HealthzBindAddress string
-	// oomScoreAdj is The oom-score-adj value for kubelet process. Values
-	// must be within the range [-1000, 1000].
+	// oomScoreAdj 是 kubelet 进程的 oom-score-adj 值，取值范围为 [-1000, 1000]。
 	OOMScoreAdj int32
-	// clusterDomain is the DNS domain for this cluster. If set, kubelet will
-	// configure all containers to search this domain in addition to the
-	// host's search domains.
+	// clusterDomain 是集群的 DNS 域。若设置，kubelet 会让所有容器在宿主机
+	// 搜索域之外也搜索该域。
 	ClusterDomain string
-	// clusterDNS is a list of IP addresses for a cluster DNS server. If set,
-	// kubelet will configure all containers to use this for DNS resolution
-	// instead of the host's DNS servers.
+	// clusterDNS 是集群 DNS 服务器的 IP 地址列表。若设置，kubelet 会配置所有
+	// 容器使用它进行 DNS 解析，而不是宿主机的 DNS 服务器。
 	ClusterDNS []string
-	// streamingConnectionIdleTimeout is the maximum time a streaming connection
-	// can be idle before the connection is automatically closed.
-	// Deprecated: no longer has any effect.
+	// streamingConnectionIdleTimeout 是流式连接自动关闭前允许的最大空闲时间。
+	// 已废弃：不再有任何效果。
 	StreamingConnectionIdleTimeout metav1.Duration
-	// nodeStatusUpdateFrequency is the frequency that kubelet computes node
-	// status and checks if an update to the API server is necessary. Status
-	// is posted to the API server either when it changes or when
-	// nodeStatusReportFrequency has elapsed since the last report.
+	// nodeStatusUpdateFrequency 是 kubelet 计算节点状态并检查是否需要向 API server
+	// 更新的频率。状态会在发生变化时上报，或在距上次上报达到
+	// nodeStatusReportFrequency 时上报。
 	NodeStatusUpdateFrequency metav1.Duration
-	// nodeStatusReportFrequency is the frequency that kubelet posts node
-	// status to the API server if node status does not change. Kubelet will
-	// ignore this frequency and post node status immediately if any change
-	// is detected.
+	// nodeStatusReportFrequency 是节点状态未变化时 kubelet 向 API server 上报状态的频率。
+	// 若检测到任何变化，kubelet 会忽略该频率并立即上报。
 	NodeStatusReportFrequency metav1.Duration
-	// nodeLeaseDurationSeconds is the duration the Kubelet will set on its corresponding Lease.
+	// nodeLeaseDurationSeconds 是 kubelet 设置在其对应 Lease 上的时长。
 	NodeLeaseDurationSeconds int32
-	// ImageMinimumGCAge is the minimum age for an unused image before it is
-	// garbage collected.
-	// The field value must be greater than 0.
-	// If unset or 0, defaults to 2m.
+	// ImageMinimumGCAge 是未使用镜像被回收前的最小存活时间。
+	// 该字段值必须大于 0。
+	// 未设置或为 0 时默认 2m。
 	ImageMinimumGCAge metav1.Duration
-	// ImageMaximumGCAge is the maximum age an image can be unused before it is garbage collected.
-	// The default of this field is "0s", which disables this field--meaning images won't be garbage
-	// collected based on being unused for too long.
+	// ImageMaximumGCAge 是镜像未被使用的最长存活时间，超过后会被回收。
+	// 默认值为 "0s"，表示禁用该字段，即不会因长时间未使用而回收镜像。
 	ImageMaximumGCAge metav1.Duration
-	// imageGCHighThresholdPercent is the percent of disk usage after which
-	// image garbage collection is always run. The percent is calculated as
-	// this field value out of 100.
+	// imageGCHighThresholdPercent 是必定运行镜像回收的磁盘使用率百分比。
+	// 该百分比按此字段值相对 100 计算。
 	ImageGCHighThresholdPercent int32
-	// imageGCLowThresholdPercent is the percent of disk usage before which
-	// image garbage collection is never run. Lowest disk usage to garbage
-	// collect to. The percent is calculated as this field value out of 100.
+	// imageGCLowThresholdPercent 是绝不运行镜像回收的磁盘使用率百分比，
+	// 也是回收的目标下限。该百分比按此字段值相对 100 计算。
 	ImageGCLowThresholdPercent int32
-	// How frequently to calculate and cache volume disk usage for all pods
+	// 计算并缓存所有 Pod 卷磁盘使用情况的频率。
 	VolumeStatsAggPeriod metav1.Duration
-	// KubeletCgroups is the absolute name of cgroups to isolate the kubelet in
+	// KubeletCgroups 是用于隔离 kubelet 的 cgroups 绝对名称。
 	KubeletCgroups string
-	// SystemCgroups is absolute name of cgroups in which to place
-	// all non-kernel processes that are not already in a container. Empty
-	// for no container. Rolling back the flag requires a reboot.
+	// SystemCgroups 是放置所有尚未在容器中的非内核进程的 cgroups 绝对名称。
+	// 为空表示不放入容器；回滚该标志需要重启。
 	SystemCgroups string
-	// CgroupRoot is the root cgroup to use for pods.
-	// If CgroupsPerQOS is enabled, this is the root of the QoS cgroup hierarchy.
+	// CgroupRoot 是 Pod 使用的根 cgroup。
+	// 若启用 CgroupsPerQOS，则它是 QoS cgroup 层次的根。
 	CgroupRoot string
-	// Enable QoS based Cgroup hierarchy: top level cgroups for QoS Classes
-	// And all Burstable and BestEffort pods are brought up under their
-	// specific top level QoS cgroup.
+	// 启用基于 QoS 的 cgroup 层次：为各 QoS 类别建立顶层 cgroup，
+	// 所有 Burstable 与 BestEffort Pod 都运行在各自对应的顶层 QoS cgroup 下。
 	CgroupsPerQOS bool
-	// driver that the kubelet uses to manipulate cgroups on the host (cgroupfs or systemd)
+	// kubelet 在宿主机上操作 cgroup 使用的驱动（cgroupfs 或 systemd）。
 	CgroupDriver string
-	// SingleProcessOOMKill, if true, will prevent the `memory.oom.group` flag from being set for container
-	// cgroups in cgroups v2. This causes processes in the container to be OOM killed individually instead of as
-	// a group. It means that if true, the behavior aligns with the behavior of cgroups v1.
+	// SingleProcessOOMKill 为 true 时，在 cgroups v2 中不会为容器 cgroup 设置
+	// `memory.oom.group`，容器内的进程会被逐个 OOM kill 而非整组终止。
+	// 也就是说，为 true 时行为与 cgroups v1 保持一致。
 	SingleProcessOOMKill *bool
-	// CPUManagerPolicy is the name of the policy to use.
+	// CPUManagerPolicy 是使用的 CPU 管理器策略名称。
 	CPUManagerPolicy string
-	// CPUManagerPolicyOptions is a set of key=value which 	allows to set extra options
-	// to fine tune the behaviour of the cpu manager policies.
+	// CPUManagerPolicyOptions 是一组 key=value，用于设置额外选项以微调 CPU 管理器策略行为。
 	CPUManagerPolicyOptions map[string]string
-	// CPU Manager reconciliation period.
+	// CPU 管理器的调谐周期。
 	CPUManagerReconcilePeriod metav1.Duration
-	// MemoryManagerPolicy is the name of the policy to use.
-	// Requires the MemoryManager feature gate to be enabled.
+	// MemoryManagerPolicy 是使用的内存管理器策略名称；需要启用 MemoryManager 特性门控。
 	MemoryManagerPolicy string
-	// TopologyManagerPolicy is the name of the policy to use.
+	// TopologyManagerPolicy 是使用的拓扑管理器策略名称。
 	TopologyManagerPolicy string
-	// TopologyManagerScope represents the scope of topology hint generation
-	// that topology manager requests and hint providers generate.
-	// Default: "container"
+	// TopologyManagerScope 表示拓扑管理器请求与提示提供者生成拓扑提示的范围。
+	// 默认值："container"
 	// +optional
 	TopologyManagerScope string
-	// TopologyManagerPolicyOptions is a set of key=value which allows to set extra options
-	// to fine tune the behaviour of the topology manager policies.
-	// Requires  both the "TopologyManager" and "TopologyManagerPolicyOptions" feature gates to be enabled.
+	// TopologyManagerPolicyOptions 是一组 key=value，用于设置额外选项以微调
+	// 拓扑管理器策略行为；需要同时启用 "TopologyManager" 与
+	// "TopologyManagerPolicyOptions" 特性门控。
 	TopologyManagerPolicyOptions map[string]string
-	// Map of QoS resource reservation percentages (memory only for now).
-	// Requires the QOSReserved feature gate to be enabled.
+	// QoS 资源预留百分比映射（目前仅支持内存）；需要启用 QOSReserved 特性门控。
 	QOSReserved map[string]string
-	// runtimeRequestTimeout is the timeout for all runtime requests except long running
-	// requests - pull, logs, exec and attach.
+	// runtimeRequestTimeout 是所有运行时请求的超时时间，但拉取、日志、exec 与 attach
+	// 等长时请求除外。
 	RuntimeRequestTimeout metav1.Duration
-	// hairpinMode specifies how the Kubelet should configure the container
-	// bridge for hairpin packets.
-	// Setting this flag allows endpoints in a Service to loadbalance back to
-	// themselves if they should try to access their own Service. Values:
-	//   "promiscuous-bridge": make the container bridge promiscuous.
-	//   "hairpin-veth":       set the hairpin flag on container veth interfaces.
-	//   "none":               do nothing.
-	// Generally, one must set --hairpin-mode=hairpin-veth to achieve hairpin NAT,
-	// because promiscuous-bridge assumes the existence of a container bridge named cbr0.
+	// hairpinMode 指定 kubelet 应如何配置容器网桥以处理 hairpin 数据包。
+	// 设置该标志后，Service 中的端点访问自身 Service 时可以负载均衡回自己。取值：
+	//   "promiscuous-bridge"：将容器网桥设为混杂模式。
+	//   "hairpin-veth"：在容器 veth 接口上设置 hairpin 标志。
+	//   "none"：不做任何处理。
+	// 通常需要设置 --hairpin-mode=hairpin-veth 才能实现 hairpin NAT，
+	// 因为 promiscuous-bridge 依赖名为 cbr0 的容器网桥存在。
 	HairpinMode string
-	// maxPods is the number of pods that can run on this Kubelet.
+	// maxPods 是此 kubelet 上可运行的 Pod 数量上限。
 	MaxPods int32
-	// The CIDR to use for pod IP addresses, only used in standalone mode.
-	// In cluster mode, this is obtained from the master.
+	// 用于分配 Pod IP 的 CIDR，仅在独立模式下使用；集群模式下由 master 下发。
 	PodCIDR string
-	// The maximum number of processes per pod.  If -1, the kubelet defaults to the node allocatable pid capacity.
+	// 每个 Pod 的最大进程数。若为 -1，kubelet 默认使用节点可分配的 pid 容量。
 	PodPidsLimit int64
-	// ResolverConfig is the resolver configuration file used as the basis
-	// for the container DNS resolution configuration.
+	// ResolverConfig 是作为容器 DNS 解析配置基础的 resolver 配置文件。
 	ResolverConfig string
-	// RunOnce causes the Kubelet to check the API server once for pods,
-	// run those in addition to the pods specified by static pod files, and exit.
-	// Deprecated: no longer has any effect.
+	// RunOnce 使 kubelet 只向 API server 查询一次 Pod，运行这些 Pod 以及静态 Pod 文件
+	// 指定的 Pod 后退出。
+	// 已废弃：不再有任何效果。
 	RunOnce bool
-	// cpuCFSQuota enables CPU CFS quota enforcement for containers that
-	// specify CPU limits
+	// cpuCFSQuota 为设置了 CPU limit 的容器启用 CPU CFS 配额限制。
 	CPUCFSQuota bool
-	// CPUCFSQuotaPeriod sets the CPU CFS quota period value, cpu.cfs_period_us, defaults to 100ms
-	// Default: "100ms". Changing this value requires enabling the CustomCPUCFSQuotaPeriod feature gate.
+	// CPUCFSQuotaPeriod 设置 CPU CFS 配额周期，即 cpu.cfs_period_us，默认 100ms。
+	// 默认值："100ms"。修改该值需要启用 CustomCPUCFSQuotaPeriod 特性门控。
 	CPUCFSQuotaPeriod metav1.Duration
-	// maxOpenFiles is Number of files that can be opened by Kubelet process.
+	// maxOpenFiles 是 kubelet 进程可打开的文件数。
 	MaxOpenFiles int64
-	// nodeStatusMaxImages caps the number of images reported in Node.Status.Images.
+	// nodeStatusMaxImages 限制 Node.Status.Images 中上报的镜像数量。
 	NodeStatusMaxImages int32
-	// contentType is contentType of requests sent to apiserver.
+	// contentType 是发送给 apiserver 的请求内容类型。
 	ContentType string
-	// kubeAPIQPS is the QPS to use while talking with kubernetes apiserver
+	// kubeAPIQPS 是与 kubernetes apiserver 通信时使用的 QPS。
 	KubeAPIQPS int32
-	// kubeAPIBurst is the burst to allow while talking with kubernetes
-	// apiserver
+	// kubeAPIBurst 是与 kubernetes apiserver 通信时允许的突发量。
 	KubeAPIBurst int32
-	// serializeImagePulls when enabled, tells the Kubelet to pull images one at a time.
+	// serializeImagePulls 启用后要求 kubelet 逐个拉取镜像。
 	SerializeImagePulls bool
-	// MaxParallelImagePulls sets the maximum number of image pulls in parallel.
+	// MaxParallelImagePulls 设置并行拉取镜像的最大数量。
 	MaxParallelImagePulls *int32
-	// Map of signal names to quantities that defines hard eviction thresholds. For example: {"memory.available": "300Mi"}.
-	// Some default signals are Linux only: nodefs.inodesFree
+	// 硬驱逐阈值，将信号名映射到数量。例如：{"memory.available": "300Mi"}。
+	// 部分默认信号仅适用于 Linux：nodefs.inodesFree。
 	EvictionHard map[string]string
-	// Map of signal names to quantities that defines soft eviction thresholds.  For example: {"memory.available": "300Mi"}.
+	// 软驱逐阈值，将信号名映射到数量。例如：{"memory.available": "300Mi"}。
 	EvictionSoft map[string]string
-	// Map of signal names to quantities that defines grace periods for each soft eviction signal. For example: {"memory.available": "30s"}.
+	// 每个软驱逐信号的宽限期，将信号名映射到时长。例如：{"memory.available": "30s"}。
 	EvictionSoftGracePeriod map[string]string
-	// Duration for which the kubelet has to wait before transitioning out of an eviction pressure condition.
+	// kubelet 退出驱逐压力状态前需要等待的时长。
 	EvictionPressureTransitionPeriod metav1.Duration
-	// Maximum allowed grace period (in seconds) to use when terminating pods in response to a soft eviction threshold being met.
+	// 因触发软驱逐阈值而终止 Pod 时允许使用的最大宽限期（秒）。
 	EvictionMaxPodGracePeriod int32
-	// Map of signal names to quantities that defines minimum reclaims, which describe the minimum
-	// amount of a given resource the kubelet will reclaim when performing a pod eviction while
-	// that resource is under pressure. For example: {"imagefs.available": "2Gi"}
+	// 最小回收量，将信号名映射到数量，表示资源处于压力下时 kubelet 执行 Pod 驱逐
+	// 至少会回收的资源量。例如：{"imagefs.available": "2Gi"}。
 	EvictionMinimumReclaim map[string]string
-	// mergeDefaultEvictionSettings indicates that defaults for the evictionHard, evictionSoft, evictionSoftGracePeriod, and evictionMinimumReclaim
-	// fields should be merged into values specified for those fields in this configuration.
-	// Signals specified in this configuration take precedence.
-	// Signals not specified in this configuration inherit their defaults.
-	// If false, and if any signal is specified in this configuration then other signals that
-	// are not specified in this configuration will be set to 0.
-	// It applies to merging the fields for which the default exists, and currently only evictionHard has default values.
+	// mergeDefaultEvictionSettings 表示应将 evictionHard、evictionSoft、
+	// evictionSoftGracePeriod 与 evictionMinimumReclaim 的默认值与中配置值合并。
+	// 配置中显式指定的信号优先，未指定的信号继承默认值。
+	// 若为 false，只要配置中指定了任一信号，未指定的其他信号都会被置为 0。
+	// 该字段仅对存在默认值的字段生效，目前只有 evictionHard 有默认值。
 	MergeDefaultEvictionSettings bool
-	// podsPerCore is the maximum number of pods per core. Cannot exceed MaxPods.
-	// If 0, this field is ignored.
+	// podsPerCore 是每核最大 Pod 数，不能超过 MaxPods；为 0 时忽略该字段。
 	PodsPerCore int32
-	// enableControllerAttachDetach enables the Attach/Detach controller to
-	// manage attachment/detachment of volumes scheduled to this node, and
-	// disables kubelet from executing any attach/detach operations
+	// enableControllerAttachDetach 启用 Attach/Detach 控制器管理调度到本节点的卷
+	// 挂载/卸载，并禁止 kubelet 执行任何 attach/detach 操作。
 	EnableControllerAttachDetach bool
-	// protectKernelDefaults, if true, causes the Kubelet to error if kernel
-	// flags are not as it expects. Otherwise the Kubelet will attempt to modify
-	// kernel flags to match its expectation.
+	// protectKernelDefaults 为 true 时，若内核标志不符合预期，kubelet 会报错；
+	// 否则 kubelet 会尝试修改内核标志以符合预期。
 	ProtectKernelDefaults bool
-	// If true, Kubelet creates the KUBE-IPTABLES-HINT chain in iptables as a hint to
-	// other components about the configuration of iptables on the system.
+	// 为 true 时，kubelet 会在 iptables 中创建 KUBE-IPTABLES-HINT 链，
+	// 向其他组件提示系统 iptables 的配置情况。
 	MakeIPTablesUtilChains bool
-	// iptablesMasqueradeBit formerly controlled the creation of the KUBE-MARK-MASQ
-	// chain.
-	// Deprecated: no longer has any effect.
+	// iptablesMasqueradeBit 曾用于控制 KUBE-MARK-MASQ 链的创建。
+	// 已废弃：不再有任何效果。
 	IPTablesMasqueradeBit int32
-	// iptablesDropBit formerly controlled the creation of the KUBE-MARK-DROP chain.
-	// Deprecated: no longer has any effect.
+	// iptablesDropBit 曾用于控制 KUBE-MARK-DROP 链的创建。
+	// 已废弃：不再有任何效果。
 	IPTablesDropBit int32
-	// featureGates is a map of feature names to bools that enable or disable alpha/experimental
-	// features. This field modifies piecemeal the built-in default values from
-	// "k8s.io/kubernetes/pkg/features/kube_features.go".
+	// featureGates 将特性名映射到布尔值，用于启用或禁用 alpha/实验性特性。
+	// 该字段会逐项覆盖 "k8s.io/kubernetes/pkg/features/kube_features.go"
+	// 中的内置默认值。
 	FeatureGates map[string]bool
-	// Tells the Kubelet to fail to start if swap is enabled on the node.
+	// 若节点启用了 swap，则让 kubelet 启动失败。
 	FailSwapOn bool
-	// memorySwap configures swap memory available to container workloads.
+	// memorySwap 配置容器工作负载可用的 swap 内存。
 	// +featureGate=NodeSwap
 	// +optional
 	MemorySwap MemorySwapConfiguration
-	// A quantity defines the maximum size of the container log file before it is rotated. For example: "5Mi" or "256Ki".
+	// 容器日志文件轮转前的最大大小。例如："5Mi" 或 "256Ki"。
 	ContainerLogMaxSize string
-	// Maximum number of container log files that can be present for a container.
+	// 一个容器可保留的日志文件数量上限。
 	ContainerLogMaxFiles int32
-	// Maximum number of concurrent log rotation workers to spawn for processing the log rotation
-	// requests
+	// 处理日志轮转请求时可并发的日志轮转 worker 最大数量。
 	ContainerLogMaxWorkers int32
-	// Interval at which the container logs are monitored for rotation
+	// 检查容器日志是否需要轮转的间隔。
 	ContainerLogMonitorInterval metav1.Duration
-	// ConfigMapAndSecretChangeDetectionStrategy is a mode in which config map and secret managers are running.
+	// ConfigMapAndSecretChangeDetectionStrategy 是 configmap 与 secret 管理器的运行模式。
 	ConfigMapAndSecretChangeDetectionStrategy ResourceChangeDetectionStrategy
-	// A comma separated allowlist of unsafe sysctls or sysctl patterns (ending in `*`).
-	// Unsafe sysctl groups are `kernel.shm*`, `kernel.msg*`, `kernel.sem`, `fs.mqueue.*`, and `net.*`.
-	// These sysctls are namespaced but not allowed by default.
-	// For example: "`kernel.msg*,net.ipv4.route.min_pmtu`"
+	// 以逗号分隔的不安全 sysctl 或其模式（以 `*` 结尾）白名单。
+	// 不安全组包括 `kernel.shm*`、`kernel.msg*`、`kernel.sem`、`fs.mqueue.*` 与 `net.*`。
+	// 这些 sysctl 属于命名空间隔离，但默认不允许设置。
+	// 例如："`kernel.msg*,net.ipv4.route.min_pmtu`"。
 	// +optional
 	AllowedUnsafeSysctls []string
-	// DefaultPodSysctls is a set of default sysctls that will be applied to all pods.
-	// It can be overridden by sysctls set in pod spec.securityContext.sysctls.
-	// Support namespaced groups: `kernel.shm*`, `kernel.msg*`, `kernel.sem`, `fs.mqueue.*`, `net.*`, `kernel.domainname`, and `user.*`.
-	// For example: {"net.ipv4.ip_forward": "1", "kernel.shmall": "1048576"}
+	// DefaultPodSysctls 是将应用到所有 Pod 的默认 sysctl 集合，
+	// 可被 pod spec.securityContext.sysctls 中的设置覆盖。
+	// 支持命名空间隔离组：`kernel.shm*`、`kernel.msg*`、`kernel.sem`、`fs.mqueue.*`、
+	// `net.*`、`kernel.domainname` 与 `user.*`。
+	// 例如：{"net.ipv4.ip_forward": "1", "kernel.shmall": "1048576"}。
 	// +optional
 	DefaultPodSysctls map[string]string
-	// kernelMemcgNotification if enabled, the kubelet will integrate with the kernel memcg
-	// notification to determine if memory eviction thresholds are crossed rather than polling.
+	// kernelMemcgNotification 启用后，kubelet 会借助内核 memcg 通知判断是否跨越
+	// 内存驱逐阈值，而不再轮询。
 	KernelMemcgNotification bool
 
-	/* the following fields are meant for Node Allocatable */
+	/* 以下字段用于 Node Allocatable */
 
-	// A set of ResourceName=ResourceQuantity (e.g. cpu=200m,memory=150G,ephemeral-storage=1G,pid=100) pairs
-	// that describe resources reserved for non-kubernetes components.
-	// Currently only cpu, memory and local ephemeral storage for root file system are supported.
-	// See https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources for more detail.
+	// 一组 ResourceName=ResourceQuantity 对（如 cpu=200m,memory=150G,ephemeral-storage=1G,pid=100），
+	// 描述为非 kubernetes 组件预留的资源。
+	// 当前仅支持 cpu、memory 以及根文件系统的本地临时存储。
+	// 详情参见 https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources。
 	SystemReserved map[string]string
-	// A set of ResourceName=ResourceQuantity (e.g. cpu=200m,memory=150G,ephemeral-storage=1G,pid=100) pairs
-	// that describe resources reserved for kubernetes system components.
-	// Currently only cpu, memory and local ephemeral storage for root file system are supported.
-	// See https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources for more detail.
+	// 一组 ResourceName=ResourceQuantity 对（如 cpu=200m,memory=150G,ephemeral-storage=1G,pid=100），
+	// 描述为 kubernetes 系统组件预留的资源。
+	// 当前仅支持 cpu、memory 以及根文件系统的本地临时存储。
+	// 详情参见 https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources。
 	KubeReserved map[string]string
-	// This flag helps kubelet identify absolute name of top level cgroup used to enforce `SystemReserved` compute resource reservation for OS system daemons.
-	// Refer to [Node Allocatable](https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/#node-allocatable) doc for more information.
+	// 该标志帮助 kubelet 识别用于对操作系统守护进程强制执行 `SystemReserved` 资源预留的
+	// 顶层 cgroup 绝对名称。更多信息参见 [Node Allocatable] 文档。
 	SystemReservedCgroup string
-	// This flag helps kubelet identify absolute name of top level cgroup used to enforce `KubeReserved` compute resource reservation for Kubernetes node system daemons.
-	// Refer to [Node Allocatable](https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/#node-allocatable) doc for more information.
+	// 该标志帮助 kubelet 识别用于对 Kubernetes 节点系统守护进程强制执行 `KubeReserved`
+	// 资源预留的顶层 cgroup 绝对名称。更多信息参见 [Node Allocatable] 文档。
 	KubeReservedCgroup string
-	// This flag specifies the various Node Allocatable enforcements that Kubelet needs to perform.
-	// This flag accepts a list of options. Acceptable options are `pods`, `system-reserved`, `system-reserved-compressible`, `kube-reserved`, and `kube-reserved-compressible`.
-	// Refer to [Node Allocatable](https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/#node-allocatable) doc for more information.
+	// 该标志指定 kubelet 需要执行的各类 Node Allocatable 强制措施。
+	// 可接受的值包括 `pods`、`system-reserved`、`system-reserved-compressible`、
+	// `kube-reserved` 与 `kube-reserved-compressible`。更多信息参见 [Node Allocatable] 文档。
 	EnforceNodeAllocatable []string
-	// This option specifies the cpu list reserved for the host level system threads and kubernetes related threads.
-	// This provide a "static" CPU list rather than the "dynamic" list by system-reserved and kube-reserved.
-	// This option overwrites CPUs provided by system-reserved and kube-reserved.
+	// 该选项指定为宿主机级系统线程与 kubernetes 相关线程预留的 CPU 列表。
+	// 相比 system-reserved 与 kube-reserved 的动态列表，这里提供的是“静态”列表。
+	// 该选项会覆盖 system-reserved 与 kube-reserved 提供的 CPU。
 	ReservedSystemCPUs string
-	// The previous version for which you want to show hidden metrics.
-	// Only the previous minor version is meaningful, other values will not be allowed.
-	// The format is <major>.<minor>, e.g.: '1.16'.
-	// The purpose of this format is make sure you have the opportunity to notice if the next release hides additional metrics,
-	// rather than being surprised when they are permanently removed in the release after that.
+	// 希望显示隐藏指标的目标前一版本。
+	// 仅前一个次版本有意义，其他值不被允许。
+	// 格式为 <major>.<minor>，例如 '1.16'。
+	// 使用该格式是为了在下一版本隐藏更多指标时能提前察觉，
+	// 而不是在其后一个版本被永久移除时才感到意外。
 	ShowHiddenMetricsForVersion string
-	// Logging specifies the options of logging.
-	// Refer [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/options.go) for more information.
+	// Logging 指定日志相关选项。
+	// 更多信息参见 [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/options.go)。
 	Logging logsapi.LoggingConfiguration
-	// EnableSystemLogHandler enables /logs handler.
+	// EnableSystemLogHandler 启用 /logs 处理器。
 	EnableSystemLogHandler bool
-	// EnableSystemLogQuery enables the node log query feature on the /logs endpoint.
-	// EnableSystemLogHandler has to be enabled in addition for this feature to work.
-	// Enabling this feature has security implications. The recommendation is to enable it on a need basis for debugging
-	// purposes and disabling otherwise.
+	// EnableSystemLogQuery 在 /logs 端点上启用节点日志查询功能。
+	// 该功能生效还需同时启用 EnableSystemLogHandler。
+	// 启用该功能存在安全影响，建议仅在需要调试时开启，其余时间关闭。
 	// +optional
 	EnableSystemLogQuery bool
-	// ShutdownGracePeriod specifies the total duration that the node should delay the shutdown and total grace period for pod termination during a node shutdown.
-	// Defaults to 0 seconds.
+	// ShutdownGracePeriod 指定节点关停时延迟关机的总时长，也是 Pod 终止的总宽限期。
+	// 默认 0 秒。
 	// +featureGate=GracefulNodeShutdown
 	// +optional
 	ShutdownGracePeriod metav1.Duration
-	// ShutdownGracePeriodCriticalPods specifies the duration used to terminate critical pods during a node shutdown. This should be less than ShutdownGracePeriod.
-	// Defaults to 0 seconds.
-	// For example, if ShutdownGracePeriod=30s, and ShutdownGracePeriodCriticalPods=10s, during a node shutdown the first 20 seconds would be reserved for gracefully terminating normal pods, and the last 10 seconds would be reserved for terminating critical pods.
+	// ShutdownGracePeriodCriticalPods 指定节点关停时用于终止关键 Pod 的时长，
+	// 应小于 ShutdownGracePeriod。默认 0 秒。
+	// 例如 ShutdownGracePeriod=30s、ShutdownGracePeriodCriticalPods=10s 时，
+	// 关停期间前 20 秒用于优雅终止普通 Pod，最后 10 秒用于终止关键 Pod。
 	// +featureGate=GracefulNodeShutdown
 	// +optional
 	ShutdownGracePeriodCriticalPods metav1.Duration
-	// ShutdownGracePeriodByPodPriority specifies the shutdown grace period for Pods based
-	// on their associated priority class value.
-	// When a shutdown request is received, the Kubelet will initiate shutdown on all pods
-	// running on the node with a grace period that depends on the priority of the pod,
-	// and then wait for all pods to exit.
-	// Each entry in the array represents the graceful shutdown time a pod with a priority
-	// class value that lies in the range of that value and the next higher entry in the
-	// list when the node is shutting down.
+	// ShutdownGracePeriodByPodPriority 根据 Pod 关联的优先级类别值指定关停宽限期。
+	// 收到关停请求时，kubelet 会按 Pod 优先级决定宽限期并开始终止节点上所有 Pod，
+	// 然后等待所有 Pod 退出。
+	// 数组中的每一项表示优先级落在该项与列表中下一个更高项之间的 Pod，
+	// 在节点关停时的优雅关停时长。
 	ShutdownGracePeriodByPodPriority []ShutdownGracePeriodByPodPriority
-	// ReservedMemory specifies a comma-separated list of memory reservations for NUMA nodes.
-	// The parameter makes sense only in the context of the memory manager feature. The memory manager will not allocate reserved memory for container workloads.
-	// For example, if you have a NUMA0 with 10Gi of memory and the ReservedMemory was specified to reserve 1Gi of memory at NUMA0,
-	// the memory manager will assume that only 9Gi is available for allocation.
-	// You can specify a different amount of NUMA node and memory types.
-	// You can omit this parameter at all, but you should be aware that the amount of reserved memory from all NUMA nodes
-	// should be equal to the amount of memory specified by the node allocatable features(https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/#node-allocatable).
-	// If at least one node allocatable parameter has a non-zero value, you will need to specify at least one NUMA node.
-	// Also, avoid specifying:
-	// 1. Duplicates, the same NUMA node, and memory type, but with a different value.
-	// 2. zero limits for any memory type.
-	// 3. NUMAs nodes IDs that do not exist under the machine.
-	// 4. memory types except for memory and hugepages-<size>
+	// ReservedMemory 指定各 NUMA 节点的内存预留列表。
+	// 该参数仅在内存管理器特性上下文中有效；内存管理器不会把预留内存分配给容器。
+	// 例如，NUMA0 有 10Gi 内存且为其预留 1Gi，则内存管理器会认为只有 9Gi 可分配。
+	// 可以为不同 NUMA 节点与内存类型指定不同数量。
+	// 也可以完全省略该参数，但所有 NUMA 节点预留内存总量
+	// 应等于 node allocatable 特性所指定的内存量。
+	// 若至少一个 node allocatable 参数非零，则至少需要指定一个 NUMA 节点。
+	// 同时应避免：
+	// 1. 重复指定同一 NUMA 节点与内存类型但取值不同。
+	// 2. 为任何内存类型指定零 limit。
+	// 3. 指定机器上不存在的 NUMA 节点 ID。
+	// 4. 使用除 memory 与 hugepages-<size> 之外的内存类型。
 	ReservedMemory []MemoryReservation
-	// EnableProfiling enables /debug/pprof handler.
+	// EnableProfiling 启用 /debug/pprof 处理器。
 	EnableProfilingHandler bool
-	// EnableDebugFlagsHandler enables/debug/flags/v handler.
+	// EnableDebugFlagsHandler 启用 /debug/flags/v 处理器。
 	EnableDebugFlagsHandler bool
-	// SeccompDefault enables the use of `RuntimeDefault` as the default seccomp profile for all workloads.
+	// SeccompDefault 启用后将 `RuntimeDefault` 作为所有工作负载的默认 seccomp 配置。
 	SeccompDefault bool
-	// MemoryThrottlingFactor specifies the factor multiplied by the memory limit or node allocatable memory
-	// when setting the cgroupv2 memory.high value to enforce MemoryQoS.
-	// Decreasing this factor will set lower high limit for container cgroups and put heavier reclaim pressure
-	// while increasing will put less reclaim pressure. If nil, memory.high is not set.
-	// See https://kep.k8s.io/2570 for more details.
-	// Default: nil
+	// MemoryThrottlingFactor 指定设置 cgroupv2 memory.high 以实施 MemoryQoS 时，
+	// 与内存 limit 或节点可分配内存相乘的系数。
+	// 减小该系数会为容器 cgroup 设定更低的高水位并加大回收压力，
+	// 增大则回收压力更小。为 nil 时不设置 memory.high。
+	// 详情参见 https://kep.k8s.io/2570。
+	// 默认值：nil
 	// +featureGate=MemoryQoS
 	// +optional
 	MemoryThrottlingFactor *float64
-	// MemoryReservationPolicy controls how the kubelet applies cgroup v2 memory protection.
-	// "None" (default): The kubelet does not set memory.min for containers and pods,
-	// ensuring no hard memory is locked by the kernel.
-	// "TieredReservation": The kubelet sets cgroup v2 memory.min for Guaranteed pods and memory.low for Burstable pods based on memory requests.
-	// Guaranteed memory is never reclaimed by the kernel; Burstable memory is preferentially retained but may be reclaimed under extreme pressure.
-	// See https://kep.k8s.io/2570 for more details.
-	// Default: None
+	// MemoryReservationPolicy 控制 kubelet 如何应用 cgroup v2 内存保护。
+	// "None"（默认）：不为容器与 Pod 设置 memory.min，确保内核不会锁定硬内存。
+	// "TieredReservation"：根据内存 request，为 Guaranteed Pod 设置 memory.min，
+	// 为 Burstable Pod 设置 memory.low。Guaranteed 内存不会被内核回收；
+	// Burstable 内存会被优先保留，但在极端压力下仍可被回收。
+	// 详情参见 https://kep.k8s.io/2570。
+	// 默认值：None
 	// +featureGate=MemoryQoS
 	// +optional
 	MemoryReservationPolicy MemoryReservationPolicy
-	// registerWithTaints are an array of taints to add to a node object when
-	// the kubelet registers itself. This only takes effect when registerNode
-	// is true and upon the initial registration of the node.
+	// registerWithTaints 是 kubelet 注册自身时添加到 Node 对象上的污点数组。
+	// 仅在 registerNode 为 true 且节点首次注册时生效。
 	// +optional
 	RegisterWithTaints []v1.Taint
-	// registerNode enables automatic registration with the apiserver.
+	// registerNode 启用向 apiserver 自动注册节点。
 	// +optional
 	RegisterNode bool
 
-	// Tracing specifies the versioned configuration for OpenTelemetry tracing clients.
-	// See https://kep.k8s.io/2832 for more details.
+	// Tracing 指定 OpenTelemetry 追踪客户端的版本化配置。
+	// 详情参见 https://kep.k8s.io/2832。
 	// +optional
 	Tracing *tracingapi.TracingConfiguration
 
-	// LocalStorageCapacityIsolation enables local ephemeral storage isolation feature. The default setting is true.
-	// This feature allows users to set request/limit for container's ephemeral storage and manage it in a similar way
-	// as cpu and memory. It also allows setting sizeLimit for emptyDir volume, which will trigger pod eviction if disk
-	// usage from the volume exceeds the limit.
-	// This feature depends on the capability of detecting correct root file system disk usage. For certain systems,
-	// such as kind rootless, if this capability cannot be supported, the feature LocalStorageCapacityIsolation should be
-	// disabled. Once disabled, user should not set request/limit for container's ephemeral storage, or sizeLimit for emptyDir.
+	// LocalStorageCapacityIsolation 启用本地临时存储隔离特性，默认为 true。
+	// 该特性允许用户为容器的临时存储设置 request/limit，并像 CPU、内存一样管理；
+	// 也允许为 emptyDir 卷设置 sizeLimit，卷使用超过限制时会触发 Pod 驱逐。
+	// 该特性依赖正确检测根文件系统磁盘使用量的能力。对于 kind rootless 等
+	// 无法支持该能力的系统，应禁用 LocalStorageCapacityIsolation。
+	// 禁用后，不应为容器临时存储设置 request/limit，也不应为 emptyDir 设置 sizeLimit。
 	// +optional
 	LocalStorageCapacityIsolation bool
 
-	// ContainerRuntimeEndpoint is the endpoint of container runtime.
-	// unix domain sockets supported on Linux while npipes and tcp endpoints are supported for windows.
-	// Examples:'unix:///path/to/runtime.sock', 'npipe:////./pipe/runtime'
+	// ContainerRuntimeEndpoint 是容器运行时的端点。
+	// Linux 支持 unix domain socket，Windows 支持 npipes 与 tcp 端点。
+	// 示例：'unix:///path/to/runtime.sock'、'npipe:////./pipe/runtime'。
 	ContainerRuntimeEndpoint string
 
-	// ImageServiceEndpoint is the endpoint of container image service.
-	// If not specified the default value is ContainerRuntimeEndpoint
+	// ImageServiceEndpoint 是容器镜像服务的端点；未指定时默认使用 ContainerRuntimeEndpoint。
 	// +optional
 	ImageServiceEndpoint string
 
-	// FailCgroupV1 prevents the kubelet from starting on hosts
-	// that use cgroup v1. By default, this is set to 'false', meaning
-	// the kubelet is allowed to start on cgroup v1 hosts unless this
-	// option is explicitly enabled.
+	// FailCgroupV1 阻止 kubelet 在使用 cgroup v1 的宿主机上启动。
+	// 默认为 'false'，即除非显式启用该选项，kubelet 允许在 cgroup v1 宿主机上启动。
 	// +optional
 	FailCgroupV1 bool
 
-	// CrashLoopBackOff contains config to modify node-level parameters for
-	// container restart behavior
+	// CrashLoopBackOff 包含用于调整节点级容器重启行为参数的配置。
 	// +featureGate=KubeletCrashLoopBackoffMax
 	// +optional
 	CrashLoopBackOff CrashLoopBackOffConfig
 
-	// UserNamespaces contains User Namespace configurations.
+	// UserNamespaces 包含用户命名空间相关配置。
 	// +featureGate=UserNamespacesSupport
 	// +optional
 	UserNamespaces *UserNamespaces
 }
 
-// KubeletAuthorizationMode denotes the authorization mode for the kubelet
+// KubeletAuthorizationMode 表示 kubelet 的鉴权模式。
 type KubeletAuthorizationMode string
 
 const (
-	// KubeletAuthorizationModeAlwaysAllow authorizes all authenticated requests
+	// KubeletAuthorizationModeAlwaysAllow 允许所有已认证的请求。
 	KubeletAuthorizationModeAlwaysAllow KubeletAuthorizationMode = "AlwaysAllow"
-	// KubeletAuthorizationModeWebhook uses the SubjectAccessReview API to determine authorization
+	// KubeletAuthorizationModeWebhook 使用 SubjectAccessReview API 判定鉴权。
 	KubeletAuthorizationModeWebhook KubeletAuthorizationMode = "Webhook"
 )
 
-// KubeletAuthorization holds the state related to the authorization in the kublet.
+// KubeletAuthorization 保存 kubelet 鉴权相关配置。
 type KubeletAuthorization struct {
-	// mode is the authorization mode to apply to requests to the kubelet server.
-	// Valid values are AlwaysAllow and Webhook.
-	// Webhook mode uses the SubjectAccessReview API to determine authorization.
+	// mode 是应用于 kubelet 服务器请求的鉴权模式。
+	// 合法值为 AlwaysAllow 与 Webhook。
+	// Webhook 模式使用 SubjectAccessReview API 判定鉴权。
 	Mode KubeletAuthorizationMode
 
-	// webhook contains settings related to Webhook authorization.
+	// webhook 包含 Webhook 鉴权相关设置。
 	Webhook KubeletWebhookAuthorization
 }
 
-// KubeletWebhookAuthorization holds the state related to the Webhook
-// Authorization in the Kubelet.
+// KubeletWebhookAuthorization 保存 kubelet 中 Webhook 鉴权相关配置。
 type KubeletWebhookAuthorization struct {
-	// cacheAuthorizedTTL is the duration to cache 'authorized' responses from the webhook authorizer.
+	// cacheAuthorizedTTL 是缓存 webhook 鉴权器 'authorized' 响应的时长。
 	CacheAuthorizedTTL metav1.Duration
-	// cacheUnauthorizedTTL is the duration to cache 'unauthorized' responses from the webhook authorizer.
+	// cacheUnauthorizedTTL 是缓存 webhook 鉴权器 'unauthorized' 响应的时长。
 	CacheUnauthorizedTTL metav1.Duration
 }
 
-// KubeletAuthentication holds the Kubetlet Authentication setttings.
+// KubeletAuthentication 保存 kubelet 的认证设置。
 type KubeletAuthentication struct {
-	// x509 contains settings related to x509 client certificate authentication
+	// x509 包含 x509 客户端证书认证相关设置。
 	X509 KubeletX509Authentication
-	// webhook contains settings related to webhook bearer token authentication
+	// webhook 包含 webhook bearer token 认证相关设置。
 	Webhook KubeletWebhookAuthentication
-	// anonymous contains settings related to anonymous authentication
+	// anonymous 包含匿名认证相关设置。
 	Anonymous KubeletAnonymousAuthentication
 }
 
-// KubeletX509Authentication contains settings related to x509 client certificate authentication
+// KubeletX509Authentication 包含 x509 客户端证书认证相关设置。
 type KubeletX509Authentication struct {
-	// clientCAFile is the path to a PEM-encoded certificate bundle. If set, any request presenting a client certificate
-	// signed by one of the authorities in the bundle is authenticated with a username corresponding to the CommonName,
-	// and groups corresponding to the Organization in the client certificate.
+	// clientCAFile 是 PEM 编码证书包的路径。若设置，任何携带由包内某一 CA 签发的
+	// 客户端证书的请求都会通过认证，用户名取自证书的 CommonName，
+	// 组取自证书的 Organization。
 	ClientCAFile string
 }
 
-// KubeletWebhookAuthentication contains settings related to webhook authentication
+// KubeletWebhookAuthentication 包含 webhook 认证相关设置。
 type KubeletWebhookAuthentication struct {
-	// enabled allows bearer token authentication backed by the tokenreviews.authentication.k8s.io API
+	// enabled 允许使用由 tokenreviews.authentication.k8s.io API 支持的 bearer token 认证。
 	Enabled bool
-	// cacheTTL enables caching of authentication results
+	// cacheTTL 启用认证结果缓存。
 	CacheTTL metav1.Duration
 }
 
-// KubeletAnonymousAuthentication enables anonymous requests to the kubelet server.
+// KubeletAnonymousAuthentication 控制是否允许匿名请求访问 kubelet 服务器。
 type KubeletAnonymousAuthentication struct {
-	// enabled allows anonymous requests to the kubelet server.
-	// Requests that are not rejected by another authentication method are treated as anonymous requests.
-	// Anonymous requests have a username of system:anonymous, and a group name of system:unauthenticated.
+	// enabled 允许匿名请求访问 kubelet 服务器。
+	// 未被其他认证方式拒绝的请求会按匿名请求处理。
+	// 匿名请求的用户名为 system:anonymous，组名为 system:unauthenticated。
 	Enabled bool
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// SerializedNodeConfigSource allows us to serialize NodeConfigSource
-// This type is used internally by the Kubelet for tracking checkpointed dynamic configs.
-// It exists in the kubeletconfig API group because it is classified as a versioned input to the Kubelet.
+// SerializedNodeConfigSource 用于序列化 NodeConfigSource。
+// 该类型由 kubelet 内部使用，用于跟踪 checkpoint 的动态配置。
+// 它属于 kubeletconfig API 组，因为其被归类为 kubelet 的版本化输入。
 type SerializedNodeConfigSource struct {
 	metav1.TypeMeta
-	// Source is the source that we are serializing
+	// Source 是正在被序列化的来源。
 	// +optional
 	Source v1.NodeConfigSource
 }
 
-// ServiceAccountTokenCacheType is the type of cache key used for caching credentials returned by the plugin
-// when the service account token is used.
+// ServiceAccountTokenCacheType 是使用 ServiceAccount Token 时，缓存插件返回凭据所用的缓存键类型。
 type ServiceAccountTokenCacheType string
 
 const (
-	// TokenServiceAccountTokenCacheType means the kubelet will cache returned credentials
-	// on a per-token basis. This should be set if the returned credential's lifetime is limited
-	// to the input service account token's lifetime.
-	// For example, this must be used when returning the input service account token directly as a pull credential.
+	// TokenServiceAccountTokenCacheType 表示 kubelet 按 Token 维度缓存返回的凭据。
+	// 若返回凭据的生命周期受输入 ServiceAccount Token 生命周期限制，应使用该值。
+	// 例如，直接把输入 ServiceAccount Token 作为拉取凭据返回时必须使用该值。
 	TokenServiceAccountTokenCacheType ServiceAccountTokenCacheType = "Token"
-	// ServiceAccountServiceAccountTokenCacheType means the kubelet will cache returned credentials
-	// on a per-serviceaccount basis. This should be set if the plugin's credential retrieval logic
-	// depends only on the service account and not on pod-specific claims.
-	// Use this when the returned credential is valid for all pods using the same service account.
+	// ServiceAccountServiceAccountTokenCacheType 表示 kubelet 按 ServiceAccount 维度缓存返回的凭据。
+	// 若插件的凭据获取逻辑只依赖 ServiceAccount 而不依赖 Pod 特定声明，应使用该值。
+	// 返回凭据对使用同一 ServiceAccount 的所有 Pod 都有效时使用该值。
 	ServiceAccountServiceAccountTokenCacheType ServiceAccountTokenCacheType = "ServiceAccount"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CredentialProviderConfig is the configuration containing information about
-// each exec credential provider. Kubelet reads this configuration from disk and enables
-// each provider as specified by the CredentialProvider type.
+// CredentialProviderConfig 包含各 exec 凭据插件的信息。
+// kubelet 从磁盘读取该配置，并按 CredentialProvider 类型启用各插件。
 type CredentialProviderConfig struct {
 	metav1.TypeMeta
 
-	// providers is a list of credential provider plugins that will be enabled by the kubelet.
-	// Multiple providers may match against a single image, in which case credentials
-	// from all providers will be returned to the kubelet. If multiple providers are called
-	// for a single image, the results are combined. If providers return overlapping
-	// auth keys, the value from the provider earlier in this list is attempted first.
+	// providers 是 kubelet 将启用的凭据插件列表。
+	// 多个插件可能匹配同一镜像，此时所有插件的凭据都会返回给 kubelet；
+	// 若为同一镜像调用多个插件，结果会合并。若插件返回的认证键重叠，
+	// 则优先尝试列表中靠前插件的值。
 	Providers []CredentialProvider
 }
 
-// CredentialProvider represents an exec plugin to be invoked by the kubelet. The plugin is only
-// invoked when an image being pulled matches the images handled by the plugin (see matchImages).
+// CredentialProvider 表示由 kubelet 调用的 exec 插件。
+// 仅当拉取的镜像匹配插件处理的镜像时（见 matchImages）才会调用该插件。
 type CredentialProvider struct {
-	// name is the required name of the credential provider. It must match the name of the
-	// provider executable as seen by the kubelet. The executable must be in the kubelet's
-	// bin directory (set by the --credential-provider-bin-dir flag).
-	// Required to be unique across all providers.
+	// name 是凭据插件的必填名称，必须与 kubelet 看到的插件可执行文件名称一致。
+	// 可执行文件必须位于 kubelet 的 bin 目录（由 --credential-provider-bin-dir 指定），
+	// 且在所有插件中唯一。
 	Name string
 
-	// matchImages is a required list of strings used to match against images in order to
-	// determine if this provider should be invoked. If one of the strings matches the
-	// requested image from the kubelet, the plugin will be invoked and given a chance
-	// to provide credentials. Images are expected to contain the registry domain
-	// and URL path.
+	// matchImages 是用于匹配镜像的必填字符串列表，用于判断是否调用该插件。
+	// 若其中任一项匹配 kubelet 请求的镜像，插件会被调用并获得提供凭据的机会。
+	// 镜像应包含 registry 域与 URL 路径。
 	//
-	// Each entry in matchImages is a pattern which can optionally contain a port and a path.
-	// Globs can be used in the domain, but not in the port or the path. Globs are supported
-	// as subdomains like `*.k8s.io` or `k8s.*.io`, and top-level-domains such as `k8s.*`.
-	// Matching partial subdomains like `app*.k8s.io` is also supported. Each glob can only match
-	// a single subdomain segment, so `*.io` does not match *.k8s.io.
+	// matchImages 中的每一项是一个模式，可选地包含端口与路径。
+	// 域中可以使用通配符，端口与路径中不行。通配符支持子域形式如 `*.k8s.io`
+	// 或 `k8s.*.io`，以及顶级域形式如 `k8s.*`。也支持匹配部分子域，如 `app*.k8s.io`。
+	// 每个通配符只能匹配一个子域段，因此 `*.io` 不会匹配 *.k8s.io。
 	//
-	// A match exists between an image and a matchImage when all of the below are true:
-	// - Both contain the same number of domain parts and each part matches.
-	// - The URL path of an imageMatch must be a prefix of the target image URL path.
-	// - If the imageMatch contains a port, then the port must match in the image as well.
+	// 当以下条件全部满足时，镜像与 matchImage 视为匹配：
+	// - 两者的域段数量相同且各段匹配。
+	// - imageMatch 的 URL 路径必须是目标镜像 URL 路径的前缀。
+	// - 若 imageMatch 包含端口，则镜像中的端口也必须一致。
 	//
-	// Example values of matchImages:
+	// matchImages 示例：
 	//   - `123456789.dkr.ecr.us-east-1.amazonaws.com`
 	//   - `*.azurecr.io`
 	//   - `gcr.io`
@@ -714,264 +636,233 @@ type CredentialProvider struct {
 	//   - `registry.io:8080/path`
 	MatchImages []string
 
-	// defaultCacheDuration is the default duration the plugin will cache credentials in-memory
-	// if a cache duration is not provided in the plugin response. This field is required.
+	// defaultCacheDuration 是插件响应未提供缓存时长时，在内存中缓存凭据的默认时长。
+	// 该字段必填。
 	DefaultCacheDuration *metav1.Duration
 
-	// Required input version of the exec CredentialProviderRequest. The returned CredentialProviderResponse
-	// MUST use the same encoding version as the input. Current supported values are:
+	// exec CredentialProviderRequest 的必需输入版本。返回的 CredentialProviderResponse
+	// 必须使用与输入相同的编码版本。当前支持的取值：
 	// - credentialprovider.kubelet.k8s.io/v1alpha1
 	// - credentialprovider.kubelet.k8s.io/v1beta1
 	// - credentialprovider.kubelet.k8s.io/v1
 	APIVersion string
 
-	// Arguments to pass to the command when executing it.
+	// 执行命令时传入的参数。
 	// +optional
 	Args []string
 
-	// Env defines additional environment variables to expose to the process. These
-	// are unioned with the host's environment, as well as variables client-go uses
-	// to pass argument to the plugin.
+	// Env 定义暴露给进程的额外环境变量，会与宿主机环境以及 client-go
+	// 向插件传递参数所用的变量取并集。
 	// +optional
 	Env []ExecEnvVar
 
-	// tokenAttributes is the configuration for the service account token that will be passed to the plugin.
-	// The credential provider opts in to using service account tokens for image pull by setting this field.
-	// When this field is set, kubelet will generate a service account token bound to the pod for which the
-	// image is being pulled and pass to the plugin as part of CredentialProviderRequest along with other
-	// attributes required by the plugin.
+	// tokenAttributes 指定将传递给插件的 ServiceAccount Token 配置。
+	// 凭据插件通过设置该字段来选择使用 ServiceAccount Token 进行镜像拉取。
+	// 设置后，kubelet 会为拉取镜像的 Pod 生成绑定的 ServiceAccount Token，
+	// 并连同插件所需的其他属性通过 CredentialProviderRequest 传给插件。
 	//
-	// The service account metadata and token attributes will be used as a dimension to cache
-	// the credentials in kubelet. The cache key is generated by combining the service account metadata
-	// (namespace, name, UID, and annotations key+value for the keys defined in
-	// serviceAccountTokenAttribute.requiredServiceAccountAnnotationKeys and serviceAccountTokenAttribute.optionalServiceAccountAnnotationKeys).
-	// The pod metadata (namespace, name, UID) that are in the service account token are not used as a dimension
-	// to cache the credentials in kubelet. This means workloads that are using the same service account
-	// could end up using the same credentials for image pull. For plugins that don't want this behavior, or
-	// plugins that operate in pass-through mode; i.e., they return the service account token as-is, they
-	// can set the credentialProviderResponse.cacheDuration to 0. This will disable the caching of
-	// credentials in kubelet and the plugin will be invoked for every image pull. This does result in
-	// token generation overhead for every image pull, but it is the only way to ensure that the
-	// credentials are not shared across pods (even if they are using the same service account).
+	// ServiceAccount 元数据与 Token 属性会作为 kubelet 缓存凭据的维度。
+	// 缓存键由 ServiceAccount 元数据（namespace、name、UID，以及
+	// serviceAccountTokenAttribute.requiredServiceAccountAnnotationKeys 与
+	// optionalServiceAccountAnnotationKeys 中定义的注解 key+value）组合生成。
+	// ServiceAccount Token 中的 Pod 元数据（namespace、name、UID）不作为 kubelet
+	// 缓存凭据的维度。这意味着使用同一 ServiceAccount 的工作负载可能共用镜像拉取凭据。
+	// 不希望如此、或以透传模式运行的插件（即原样返回 ServiceAccount Token），
+	// 可将 credentialProviderResponse.cacheDuration 设为 0 以禁用 kubelet 内的凭据缓存，
+	// 此时每次镜像拉取都会调用插件。这样会增加每次拉取的 Token 生成开销，
+	// 但能确保凭据不在 Pod 之间共享（即使它们使用同一 ServiceAccount）。
 	// +optional
 	TokenAttributes *ServiceAccountTokenAttributes
 }
 
-// ServiceAccountTokenAttributes is the configuration for the service account token that will be passed to the plugin.
+// ServiceAccountTokenAttributes 指定将传递给插件的 ServiceAccount Token 配置。
 type ServiceAccountTokenAttributes struct {
-	// serviceAccountTokenAudience is the intended audience for the projected service account token.
+	// serviceAccountTokenAudience 是投影 ServiceAccount Token 的目标受众。
 	// +required
 	ServiceAccountTokenAudience string
 
-	// cacheType indicates the type of cache key use for caching the credentials returned by the plugin
-	// when the service account token is used.
-	// The most conservative option is to set this to "Token", which means the kubelet will cache returned credentials
-	// on a per-token basis. This should be set if the returned credential's lifetime is limited to the service account
-	// token's lifetime.
-	// If the plugin's credential retrieval logic depends only on the service account and not on pod-specific claims,
-	// then the plugin can set this to "ServiceAccount". In this case, the kubelet will cache returned credentials
-	// on a per-serviceaccount basis. Use this when the returned credential is valid for all pods using the same service account.
+	// cacheType 表示使用 ServiceAccount Token 时，缓存插件返回凭据所用的缓存键类型。
+	// 最保守的选项是 "Token"，即 kubelet 按 Token 维度缓存返回凭据；
+	// 若返回凭据的生命周期受 ServiceAccount Token 生命周期限制，应使用该值。
+	// 若插件的凭据获取逻辑只依赖 ServiceAccount 而不依赖 Pod 特定声明，
+	// 可设为 "ServiceAccount"，此时 kubelet 按 ServiceAccount 维度缓存返回凭据。
+	// 返回凭据对使用同一 ServiceAccount 的所有 Pod 都有效时使用该值。
 	// +required
 	CacheType ServiceAccountTokenCacheType
 
-	// requireServiceAccount indicates whether the plugin requires the pod to have a service account.
-	// If set to true, kubelet will only invoke the plugin if the pod has a service account.
-	// If set to false, kubelet will invoke the plugin even if the pod does not have a service account
-	// and will not include a token in the CredentialProviderRequest in that scenario. This is useful for plugins that
-	// are used to pull images for pods without service accounts (e.g., static pods).
+	// requireServiceAccount 表示插件是否要求 Pod 具有 ServiceAccount。
+	// 设为 true 时，仅当 Pod 有 ServiceAccount 才调用插件。
+	// 设为 false 时，即使 Pod 没有 ServiceAccount 也会调用插件，
+	// 且这种情况下 CredentialProviderRequest 中不包含 Token。
+	// 这适用于为无 ServiceAccount 的 Pod（如静态 Pod）拉取镜像的插件。
 	// +required
 	RequireServiceAccount *bool
 
-	// requiredServiceAccountAnnotationKeys is the list of annotation keys that the plugin is interested in
-	// and that are required to be present in the service account.
-	// The keys defined in this list will be extracted from the corresponding service account and passed
-	// to the plugin as part of the CredentialProviderRequest. If any of the keys defined in this list
-	// are not present in the service account, kubelet will not invoke the plugin and will return an error.
-	// This field is optional and may be empty. Plugins may use this field to extract
-	// additional information required to fetch credentials or allow workloads to opt in to
-	// using service account tokens for image pull.
-	// If non-empty, requireServiceAccount must be set to true.
-	// Keys in this list must be unique.
-	// This list needs to be mutually exclusive with optionalServiceAccountAnnotationKeys.
+	// requiredServiceAccountAnnotationKeys 是插件关注且要求 ServiceAccount 必须存在的注解键列表。
+	// 列表中定义的键会从对应 ServiceAccount 中提取，并作为 CredentialProviderRequest 的一部分传给插件。
+	// 若其中任一键在 ServiceAccount 中不存在，kubelet 不会调用插件并返回错误。
+	// 该字段可选，可以为空。插件可用它提取获取凭据所需的额外信息，
+	// 或允许工作负载选择使用 ServiceAccount Token 进行镜像拉取。
+	// 非空时 requireServiceAccount 必须为 true。
+	// 列表中的键必须唯一，且不能与 optionalServiceAccountAnnotationKeys 重叠。
 	// +optional
 	RequiredServiceAccountAnnotationKeys []string
 
-	// optionalServiceAccountAnnotationKeys is the list of annotation keys that the plugin is interested in
-	// and that are optional to be present in the service account.
-	// The keys defined in this list will be extracted from the corresponding service account and passed
-	// to the plugin as part of the CredentialProviderRequest. The plugin is responsible for validating
-	// the existence of annotations and their values.
-	// This field is optional and may be empty. Plugins may use this field to extract
-	// additional information required to fetch credentials.
-	// Keys in this list must be unique.
+	// optionalServiceAccountAnnotationKeys 是插件关注但不强制存在的注解键列表。
+	// 列表中定义的键会从对应 ServiceAccount 中提取并传给插件；
+	// 插件负责校验这些注解是否存在及其取值。
+	// 该字段可选，可以为空。插件可用它提取获取凭据所需的额外信息。
+	// 列表中的键必须唯一。
 	// +optional
 	OptionalServiceAccountAnnotationKeys []string
 }
 
-// ExecEnvVar is used for setting environment variables when executing an exec-based
-// credential plugin.
+// ExecEnvVar 用于在执行基于 exec 的凭据插件时设置环境变量。
 type ExecEnvVar struct {
 	Name  string
 	Value string
 }
 
-// MemoryReservation specifies the memory reservation of different types for each NUMA node
+// MemoryReservation 指定各 NUMA 节点上不同类型的内存预留。
 type MemoryReservation struct {
 	NumaNode int32
 	Limits   v1.ResourceList
 }
 
-// ShutdownGracePeriodByPodPriority specifies the shutdown grace period for Pods based on their associated priority class value
+// ShutdownGracePeriodByPodPriority 根据 Pod 关联的优先级类别值指定关停宽限期。
 type ShutdownGracePeriodByPodPriority struct {
-	// priority is the priority value associated with the shutdown grace period
+	// priority 是与此关停宽限期关联的优先级值。
 	Priority int32
-	// shutdownGracePeriodSeconds is the shutdown grace period in seconds
+	// shutdownGracePeriodSeconds 是以秒为单位的关停宽限期。
 	ShutdownGracePeriodSeconds int64
 }
 
 type MemorySwapConfiguration struct {
-	// swapBehavior configures swap memory available to container workloads. May be one of
-	// "", "NoSwap": workloads can not use swap, default option.
-	// "LimitedSwap": workload swap usage is limited. The swap limit is proportionate to the container's memory request.
+	// swapBehavior 配置容器工作负载可用的 swap 内存，取值可以是：
+	// ""、"NoSwap"：工作负载不能使用 swap，这是默认选项。
+	// "LimitedSwap"：限制工作负载的 swap 使用量，限制与容器内存 request 成比例。
 	// +featureGate=NodeSwap
 	// +optional
 	SwapBehavior string
 }
 
-// CrashLoopBackOffConfig is used for setting configuration for this kubelet's
-// container restart behavior
+// CrashLoopBackOffConfig 用于配置该 kubelet 的容器重启行为。
 type CrashLoopBackOffConfig struct {
-	// MaxContainerRestartPeriod is the maximum duration the backoff delay can accrue
-	// to for container restarts, minimum 1 second, maximum 300 seconds.
+	// MaxContainerRestartPeriod 是容器重启退避延迟可累积到的最大值，
+	// 最小 1 秒，最大 300 秒。
 	// +featureGate=KubeletCrashLoopBackOffMax
 	// +optional
 	MaxContainerRestartPeriod *metav1.Duration
 }
 
-// ImagePullCredentialsVerificationPolicy is an enum for the policy that is enforced
-// when pod is requesting an image that appears on the system
+// ImagePullCredentialsVerificationPolicy 是 Pod 请求系统中已有镜像时执行的策略枚举。
 type ImagePullCredentialsVerificationPolicy string
 
 const (
-	// NeverVerify will never require credential verification for images that
-	// already exist on the node
+	// NeverVerify 对节点上已存在的镜像从不要求凭据校验。
 	NeverVerify ImagePullCredentialsVerificationPolicy = "NeverVerify"
-	// NeverVerifyPreloadedImages does not require credential verification for images
-	// pulled outside the kubelet process
+	// NeverVerifyPreloadedImages 对 kubelet 进程之外拉取的镜像不要求凭据校验。
 	NeverVerifyPreloadedImages ImagePullCredentialsVerificationPolicy = "NeverVerifyPreloadedImages"
-	// NeverVerifyAllowlistedImages does not require credential verification for
-	// a list of images that were pulled outside the kubelet process
+	// NeverVerifyAllowlistedImages 对 kubelet 进程之外拉取的白名单镜像不要求凭据校验。
 	NeverVerifyAllowlistedImages ImagePullCredentialsVerificationPolicy = "NeverVerifyAllowlistedImages"
-	// AlwaysVerify requires credential verification for accessing any image on the
-	// node irregardless how it was pulled
+	// AlwaysVerify 对节点上任何镜像的访问都要求凭据校验，不论其如何被拉取。
 	AlwaysVerify ImagePullCredentialsVerificationPolicy = "AlwaysVerify"
 )
 
-// MemoryReservationPolicy defines how the kubelet applies cgroup v2 memory protection.
+// MemoryReservationPolicy 定义 kubelet 如何应用 cgroup v2 内存保护。
 type MemoryReservationPolicy string
 
 const (
-	// NoneMemoryReservationPolicy disables memory.min protection for containers and pods.
-	// This is the default to maintain node stability by preventing "locked" memory.
+	// NoneMemoryReservationPolicy 禁用容器与 Pod 的 memory.min 保护。
+	// 这是默认值，通过避免内存被“锁定”来维持节点稳定性。
 	NoneMemoryReservationPolicy MemoryReservationPolicy = "None"
-	// TieredReservationMemoryReservationPolicy enables tiered memory protection:
-	// memory.min for Guaranteed pods, memory.low for Burstable pods.
+	// TieredReservationMemoryReservationPolicy 启用分层内存保护：
+	// Guaranteed Pod 使用 memory.min，Burstable Pod 使用 memory.low。
 	TieredReservationMemoryReservationPolicy MemoryReservationPolicy = "TieredReservation"
 )
 
-// ImagePullIntent is a record of the kubelet attempting to pull an image.
+// ImagePullIntent 记录 kubelet 尝试拉取镜像的意图。
 //
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ImagePullIntent struct {
 	metav1.TypeMeta
 
-	// Image is the image spec from a Container's `image` field.
-	// The filename is a SHA-256 hash of this value. This is to avoid filename-unsafe
-	// characters like ':' and '/'.
+	// Image 来自容器 `image` 字段的镜像 spec。
+	// 文件名是该值的 SHA-256 哈希，以避免 ':'、'/' 等不适合作为文件名的字符。
 	Image string
 }
 
-// ImagePullRecord is a record of an image that was pulled by the kubelet.
+// ImagePullRecord 记录 kubelet 已拉取的镜像。
 //
-// If there are no records in the `kubernetesSecrets` field and both `nodeWideCredentials`
-// and `anonymous` are `false`, credentials must be re-checked the next time an
-// image represented by this record is being requested.
+// 若 `kubernetesSecrets` 字段没有记录，且 `nodeWideCredentials` 与 `anonymous`
+// 都为 `false`，则下次请求该记录对应的镜像时必须重新校验凭据。
 //
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ImagePulledRecord struct {
 	metav1.TypeMeta
 
-	// LastUpdatedTime is the time of the last update to this record
+	// LastUpdatedTime 是此记录最后一次更新的时间。
 	LastUpdatedTime metav1.Time
 
-	// ImageRef is a reference to the image represented by this file as received
-	// from the CRI.
-	// The filename is a SHA-256 hash of this value. This is to avoid filename-unsafe
-	// characters like ':' and '/'.
+	// ImageRef 是从 CRI 收到的、此文件所代表镜像的引用。
+	// 文件名是该值的 SHA-256 哈希，以避免 ':'、'/' 等不适合作为文件名的字符。
 	ImageRef string
 
-	// CredentialMapping maps `image` to the set of credentials that it was
-	// previously pulled with.
-	// `image` in this case is the content of a pod's container `image` field that's
-	// got its tag/digest removed.
+	// CredentialMapping 将 `image` 映射到其此前拉取时使用的凭据集合。
+	// 此处的 `image` 是 Pod 容器 `image` 字段去掉 tag/digest 后的内容。
 	//
-	// Example:
-	//   Container requests the `hello-world:latest@sha256:91fb4b041da273d5a3273b6d587d62d518300a6ad268b28628f74997b93171b2` image:
+	// 示例：
+	//   容器请求 `hello-world:latest@sha256:91fb4b041da273d5a3273b6d587d62d518300a6ad268b28628f74997b93171b2` 镜像：
 	//     "credentialMapping": {
 	//       "hello-world": { "nodePodsAccessible": true }
 	//     }
 	CredentialMapping map[string]ImagePullCredentials
 }
 
-// ImagePullCredentials describe credentials that can be used to pull an image.
+// ImagePullCredentials 描述可用于拉取镜像的凭据。
 type ImagePullCredentials struct {
-	// KubernetesSecretCoordinates is an index of coordinates of all the kubernetes
-	// secrets that were used to pull the image.
+	// KubernetesSecrets 是曾用于拉取该镜像的所有 kubernetes secret 的坐标索引。
 	// +optional
 	KubernetesSecrets []ImagePullSecret
 
-	// KubernetesServiceAccounts is an index of coordinates of all the kubernetes
-	// service accounts that were used to pull the image.
+	// KubernetesServiceAccounts 是曾用于拉取该镜像的所有 kubernetes ServiceAccount 的坐标索引。
 	// +optional
 	KubernetesServiceAccounts []ImagePullServiceAccount
 
-	// NodePodsAccessible is a flag denoting the pull credentials are accessible
-	// by all the pods on the node, or that no credentials are needed for the pull.
+	// NodePodsAccessible 表示拉取凭据对节点上所有 Pod 可访问，或拉取无需凭据。
 	//
-	// If true, it is mutually exclusive with the `kubernetesSecrets` and `kubernetesServiceAccounts` fields.
+	// 为 true 时，与 `kubernetesSecrets` 和 `kubernetesServiceAccounts` 字段互斥。
 	// +optional
 	NodePodsAccessible bool
 }
 
-// ImagePullSecret is a representation of a Kubernetes secret object coordinates along
-// with a credential hash of the pull secret credentials this object contains.
+// ImagePullSecret 表示 Kubernetes secret 对象坐标，以及该对象所含拉取凭据的哈希。
 type ImagePullSecret struct {
 	UID       string
 	Namespace string
 	Name      string
 
-	// CredentialHash is a SHA-256 retrieved by hashing the image pull credentials
-	// content of the secret specified by the UID/Namespace/Name coordinates.
+	// CredentialHash 是对 UID/Namespace/Name 指定 secret 的镜像拉取凭据内容做哈希得到的 SHA-256。
 	CredentialHash string
 }
 
-// ImagePullServiceAccount is a representation of a Kubernetes service account object coordinates
-// for which the kubelet sent service account token to the credential provider plugin for image pull credentials.
+// ImagePullServiceAccount 表示 Kubernetes ServiceAccount 对象坐标，
+// kubelet 曾向其对应的 ServiceAccount 发送 Token 给凭据插件以获取镜像拉取凭据。
 type ImagePullServiceAccount struct {
 	UID       string
 	Namespace string
 	Name      string
 }
 
-// UserNamespaces contains User Namespace configurations.
+// UserNamespaces 包含用户命名空间相关配置。
 type UserNamespaces struct {
-	// IDsPerPod is the mapping length of UIDs and GIDs.
-	// The length must be a multiple of 65536, and must be less than 1<<32.
-	// On non-linux such as windows, only null / absent is allowed.
+	// IDsPerPod 是 UID 与 GID 的映射长度。
+	// 长度必须是 65536 的倍数，且小于 1<<32。
+	// 在 Windows 等非 Linux 平台上只允许为 null 或缺省。
 	//
-	// Changing the value may require recreating all containers on the node.
+	// 修改该值可能需要重建节点上的所有容器。
 	//
-	// Default: 65536
+	// 默认值：65536
 	// +featureGate=UserNamespacesSupport
 	// +optional
 	IDsPerPod *int64

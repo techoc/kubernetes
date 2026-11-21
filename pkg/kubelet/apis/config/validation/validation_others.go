@@ -24,7 +24,8 @@ import (
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 )
 
-// validateKubeletOSConfiguration validates os specific kubelet configuration and returns an error if it is invalid.
+// validateKubeletOSConfiguration 校验操作系统相关的 kubelet 配置，非法时返回错误。
+// 非 Linux 平台不支持单进程 OOM kill、用户命名空间和默认 Pod sysctl。
 func validateKubeletOSConfiguration(kc *kubeletconfig.KubeletConfiguration) error {
 	if kc.SingleProcessOOMKill != nil {
 		return fmt.Errorf("invalid configuration: singleProcessOOMKill is only supported on linux")

@@ -25,21 +25,23 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestKubeletConfigurationPathFields 校验路径字段集合与非路径字段集合互斥，
+// 且两者并集覆盖 KubeletConfiguration 的所有原始字段。
 func TestKubeletConfigurationPathFields(t *testing.T) {
-	// ensure the intersection of kubeletConfigurationPathFieldPaths and KubeletConfigurationNonPathFields is empty
+	// 两个集合不能有交集：一个字段要么是路径，要么不是。
 	if i := kubeletConfigurationPathFieldPaths.Intersection(kubeletConfigurationNonPathFieldPaths); len(i) > 0 {
 		t.Fatalf("expect the intersection of kubeletConfigurationPathFieldPaths and "+
 			"KubeletConfigurationNonPathFields to be empty, got:\n%s",
 			strings.Join(sets.List(i), "\n"))
 	}
 
-	// ensure that kubeletConfigurationPathFields U kubeletConfigurationNonPathFields == allPrimitiveFieldPaths(KubeletConfiguration)
+	// 两个集合的并集必须等于 KubeletConfiguration 的全部原始字段路径。
 	expect := sets.New[string]().Union(kubeletConfigurationPathFieldPaths).Union(kubeletConfigurationNonPathFieldPaths)
 	result := allPrimitiveFieldPaths(t, expect, reflect.TypeOf(&KubeletConfiguration{}), nil)
 	if !expect.Equal(result) {
-		// expected fields missing from result
+		// 期望存在但结果中缺失的字段。
 		missing := expect.Difference(result)
-		// unexpected fields in result but not specified in expect
+		// 结果中出现但未在期望集合中声明的字段。
 		unexpected := result.Difference(expect)
 		if len(missing) > 0 {
 			t.Errorf("the following fields were expected, but missing from the result. "+
@@ -58,16 +60,16 @@ func TestKubeletConfigurationPathFields(t *testing.T) {
 	}
 }
 
-// allPrimitiveFieldPaths returns the set of field paths in type `tp`, rooted at `path`.
-// It recursively descends into the definition of type `tp` accumulating paths to primitive leaf fields or paths in `skipRecurseList`.
+// allPrimitiveFieldPaths 返回类型 tp 中以 path 为根的所有原始字段路径。
+// 递归下降结构体定义，遇到原始类型叶子或 skipRecurseList 中的路径时停止。
 func allPrimitiveFieldPaths(t *testing.T, skipRecurseList sets.Set[string], tp reflect.Type, path *field.Path) sets.Set[string] {
-	// if the current field path is in the list of paths we should not recurse into,
-	// return here rather than descending and accumulating child field paths
+	// 当前路径在“不递归”列表中时直接返回该路径，不再收集子字段。
 	if pathStr := path.String(); len(pathStr) > 0 && skipRecurseList.Has(pathStr) {
 		return sets.New[string](pathStr)
 	}
 
 	paths := sets.New[string]()
+	// 按类型递归：指针/结构体/映射/切片分别展开；interface 不支持。
 	switch tp.Kind() {
 	case reflect.Pointer:
 		paths.Insert(sets.List(allPrimitiveFieldPaths(t, skipRecurseList, tp.Elem(), path))...)
@@ -81,7 +83,7 @@ func allPrimitiveFieldPaths(t *testing.T, skipRecurseList sets.Set[string], tp r
 	case reflect.Interface:
 		t.Fatalf("unexpected interface{} field %s", path.String())
 	default:
-		// if we hit a primitive type, we're at a leaf
+		// 原始类型即叶子，记录其路径。
 		paths.Insert(path.String())
 	}
 	return paths
@@ -89,7 +91,7 @@ func allPrimitiveFieldPaths(t *testing.T, skipRecurseList sets.Set[string], tp r
 
 //lint:file-ignore U1000 Ignore dummy types, used by tests.
 
-// dummy helper types
+// 用于测试反射遍历的辅助类型。
 type foo struct {
 	foo int
 }
@@ -114,6 +116,8 @@ type bar struct {
 	skipRecurseMap2    map[string]foo
 }
 
+// TestAllPrimitiveFieldPaths 验证反射遍历能正确处理指针、切片、映射，
+// 并在 skipRecurseList 指定的位置停止递归。
 func TestAllPrimitiveFieldPaths(t *testing.T) {
 	expect := sets.New[string](
 		"str",
@@ -124,19 +128,19 @@ func TestAllPrimitiveFieldPaths(t *testing.T) {
 		"fooptr.foo",
 		"bars[*].foo",
 		"barMap[*].foo",
-		"skipRecurseStruct",   // skip recursing a struct
-		"skipRecursePointer",  // skip recursing a struct pointer
-		"skipRecurseList1",    // skip recursing a list
-		"skipRecurseList2[*]", // skip recursing list items
-		"skipRecurseMap1",     // skip recursing a map
-		"skipRecurseMap2[*]",  // skip recursing map items
+		"skipRecurseStruct",   // 不递归结构体
+		"skipRecursePointer",  // 不递归结构体指针
+		"skipRecurseList1",    // 不递归列表
+		"skipRecurseList2[*]", // 不递归列表元素
+		"skipRecurseMap1",     // 不递归映射
+		"skipRecurseMap2[*]",  // 不递归映射元素
 	)
 	result := allPrimitiveFieldPaths(t, expect, reflect.TypeOf(&bar{}), nil)
 	if !expect.Equal(result) {
-		// expected fields missing from result
+		// 期望存在但结果中缺失的字段。
 		missing := expect.Difference(result)
 
-		// unexpected fields in result but not specified in expect
+		// 结果中出现但未在期望集合中声明的字段。
 		unexpected := result.Difference(expect)
 
 		if len(missing) > 0 {
@@ -149,7 +153,7 @@ func TestAllPrimitiveFieldPaths(t *testing.T) {
 }
 
 var (
-	// KubeletConfiguration fields that contain file paths. If you update this, also update KubeletConfigurationPathRefs!
+	// 包含文件路径的 KubeletConfiguration 字段；修改时需同步更新 KubeletConfigurationPathRefs。
 	kubeletConfigurationPathFieldPaths = sets.New[string](
 		"StaticPodPath",
 		"Authentication.X509.ClientCAFile",
@@ -159,7 +163,7 @@ var (
 		"PodLogsDir",
 	)
 
-	// KubeletConfiguration fields that do not contain file paths.
+	// 不包含文件路径的 KubeletConfiguration 字段。
 	kubeletConfigurationNonPathFieldPaths = sets.New[string](
 		"Address",
 		"AllowedUnsafeSysctls[*]",

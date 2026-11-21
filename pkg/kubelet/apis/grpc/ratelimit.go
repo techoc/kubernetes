@@ -27,18 +27,19 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// ErrorLimitExceeded 是请求被限流时返回的 gRPC 错误。
 var (
 	ErrorLimitExceeded = status.Error(codes.ResourceExhausted, "rejected by rate limit")
 )
 
-// Limiter defines the interface to perform request rate limiting,
-// based on the interface exposed by https://pkg.go.dev/golang.org/x/time/rate#Limiter
+// Limiter 定义请求限流接口，参考 https://pkg.go.dev/golang.org/x/time/rate#Limiter 暴露的方法。
 type Limiter interface {
-	// Allow reports whether an event may happen now.
+
+	// Allow 报告当前是否允许发生一个事件。
 	Allow() bool
 }
 
-// LimiterUnaryServerInterceptor returns a new unary server interceptors that performs request rate limiting.
+// LimiterUnaryServerInterceptor 返回执行请求限流的 unary server 拦截器。
 func LimiterUnaryServerInterceptor(limiter Limiter) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		if !limiter.Allow() {
@@ -48,7 +49,7 @@ func LimiterUnaryServerInterceptor(limiter Limiter) grpc.UnaryServerInterceptor 
 	}
 }
 
-// WithRateLimiter creates new rate limiter with unary interceptor.
+// WithRateLimiter 创建带 unary 限流拦截器的 gRPC 服务端选项。
 func WithRateLimiter(ctx context.Context, serviceName string, qps, burstTokens int32) grpc.ServerOption {
 	logger := klog.FromContext(ctx)
 	qpsVal := gotimerate.Limit(qps)

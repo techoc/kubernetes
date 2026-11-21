@@ -18,31 +18,34 @@ package topologymanager
 
 import "k8s.io/klog/v2"
 
+// singleNumaNodePolicy 要求最终 hint 落在单个 NUMA 节点上。
 type singleNumaNodePolicy struct {
-	// numaInfo represents list of NUMA Nodes available on the underlying machine and distances between them
+	// numaInfo 描述底层机器上可用的 NUMA 节点列表及其相互距离。
 	numaInfo *NUMAInfo
 	opts     PolicyOptions
 }
 
 var _ Policy = &singleNumaNodePolicy{}
 
-// PolicySingleNumaNode policy name.
+// PolicySingleNumaNode 是 single-numa-node 策略的名称。
 const PolicySingleNumaNode string = "single-numa-node"
 
-// NewSingleNumaNodePolicy returns single-numa-node policy.
+// NewSingleNumaNodePolicy 返回 single-numa-node 策略实例。
 func NewSingleNumaNodePolicy(numaInfo *NUMAInfo, opts PolicyOptions) Policy {
 	return &singleNumaNodePolicy{numaInfo: numaInfo, opts: opts}
 }
 
+// Name 返回策略名称。
 func (p *singleNumaNodePolicy) Name() string {
 	return PolicySingleNumaNode
 }
 
+// canAdmitPodResult 仅在 hint 为 preferred 时允许准入。
 func (p *singleNumaNodePolicy) canAdmitPodResult(hint *TopologyHint) bool {
 	return hint.Preferred
 }
 
-// Return hints that have valid bitmasks with exactly one bit set.
+// filterSingleNumaHints 只保留 preferred 的 don't care hint 与恰好一个 NUMA 节点的 hint。
 func filterSingleNumaHints(allResourcesHints [][]TopologyHint) [][]TopologyHint {
 	var filteredResourcesHints [][]TopologyHint
 	for _, oneResourceHints := range allResourcesHints {
@@ -60,9 +63,10 @@ func filterSingleNumaHints(allResourcesHints [][]TopologyHint) [][]TopologyHint 
 	return filteredResourcesHints
 }
 
+// Merge 只保留单 NUMA 节点与 don't care 的 hint，再合并并决定是否准入。
 func (p *singleNumaNodePolicy) Merge(logger klog.Logger, providersHints []map[string][]TopologyHint) (TopologyHint, bool) {
 	filteredHints := filterProvidersHints(logger, providersHints)
-	// Filter to only include don't cares and hints with a single NUMA node.
+	// 只保留 don't care 与单 NUMA 节点的 hint。
 	singleNumaHints := filterSingleNumaHints(filteredHints)
 
 	merger := NewHintMerger(p.numaInfo, singleNumaHints, p.Name(), p.opts)

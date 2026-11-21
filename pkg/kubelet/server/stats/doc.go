@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package stats handles exporting Kubelet and container stats.
-// NOTE: We intend to move this functionality into a standalone pod, so this package should be very
-// loosely coupled to the rest of the Kubelet.
+// Package stats 负责导出 kubelet 与容器统计数据。
+// 注意：我们计划将该功能迁移到独立的 Pod 中，因此本包应与 kubelet 其余部分保持松散耦合。
 package stats

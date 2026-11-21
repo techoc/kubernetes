@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package eviction 实现 kubelet 的节点资源压力驱逐：解析阈值配置、采集信号观测、排序待驱逐 Pod 并执行资源回收。
 package eviction
 
 import (
@@ -40,49 +41,50 @@ import (
 
 const (
 	unsupportedEvictionSignal = "unsupported eviction signal %v"
-	// Reason is the reason reported back in status.
+	// Reason 是 Pod 因驱逐而失败时写入 status.reason 的原因字符串。
 	Reason = "Evicted"
-	// nodeLowMessageFmt is the message for evictions due to resource pressure.
+	// nodeLowMessageFmt 是资源压力驱逐消息的开头部分。
 	nodeLowMessageFmt = "The node was low on resource: %v. "
-	// nodeConditionMessageFmt is the message for evictions due to resource pressure.
+	// nodeConditionMessageFmt 是节点进入某种状态导致驱逐时的消息格式。
 	nodeConditionMessageFmt = "The node had condition: %v. "
-	// containerMessageFmt provides additional information for containers exceeding requests
+	// containerMessageFmt 在容器用量超过 request 时追加明细，便于事后定位问题容器。
 	containerMessageFmt = "Container %s was using %s, request is %s, has larger consumption of %v. "
-	// podMessageFmt provides additional information for pods exceeding requests
+	// podMessageFmt 在 Pod 级别用量超过 request 时追加明细。
 	podMessageFmt = "Pod %s was using %s, request is %s, has larger consumption of %v. "
-	// containerEphemeralStorageMessageFmt provides additional information for containers which have exceeded their ES limit
+	// containerEphemeralStorageMessageFmt 用于说明容器超出临时存储上限。
 	containerEphemeralStorageMessageFmt = "Container %s exceeded its local ephemeral storage limit %q. "
-	// podEphemeralStorageMessageFmt provides additional information for pods which have exceeded their ES limit
+	// podEphemeralStorageMessageFmt 用于说明 Pod 临时存储总用量超出容器限额之和。
 	podEphemeralStorageMessageFmt = "Pod ephemeral local storage usage exceeds the total limit of containers %s. "
-	// emptyDirMessageFmt provides additional information for empty-dir volumes which have exceeded their size limit
+	// emptyDirMessageFmt 用于说明 emptyDir 卷超出其 sizeLimit。
 	emptyDirMessageFmt = "Usage of EmptyDir volume %q exceeds the limit %q. "
-	// inodes, number. internal to this module, used to account for local disk inode consumption.
+	// resourceInodes 是模块内部使用的资源名，用于统计本地磁盘 inode 消耗。
 	resourceInodes v1.ResourceName = "inodes"
-	// resourcePids, number. internal to this module, used to account for local pid consumption.
+	// resourcePids 是模块内部使用的资源名，用于统计本地 PID 消耗。
 	resourcePids v1.ResourceName = "pids"
-	// OffendingContainersKey is the key in eviction event annotations for the list of container names which exceeded their requests
+	// OffendingContainersKey 是驱逐事件注解中记录超限容器名的键。
 	OffendingContainersKey = "offending_containers"
-	// OffendingContainersUsageKey is the key in eviction event annotations for the list of usage of containers which exceeded their requests
+	// OffendingContainersUsageKey 是驱逐事件注解中记录超限容器用量的键，与容器名顺序一一对应。
 	OffendingContainersUsageKey = "offending_containers_usage"
-	// OffendingPodKey is the key in eviction event annotations for the pod name which exceeded its requests
+	// OffendingPodKey 是驱逐事件注解中记录 Pod 级超限 Pod 名的键。
 	OffendingPodKey = "offending_pod"
-	// OffendingPodUsageKey is the key in eviction event annotations for the pod usage which exceeded its requests
+	// OffendingPodUsageKey 是驱逐事件注解中记录 Pod 级超限用量的键。
 	OffendingPodUsageKey = "offending_pod_usage"
-	// StarvedResourceKey is the key for the starved resource in eviction event annotations
+	// StarvedResourceKey 是驱逐事件注解中记录引发驱逐的资源名的键。
 	StarvedResourceKey = "starved_resource"
-	// thresholdMetMessageFmt is the message for evictions due to resource pressure.
+	// thresholdMetMessageFmt 在驱逐消息中给出阈值量和当前可用量。
 	thresholdMetMessageFmt = "Threshold quantity: %v, available: %v. "
 )
 
 var (
-	// signalToNodeCondition maps a signal to the node condition to report if threshold is met.
+	// signalToNodeCondition 将驱逐信号映射到阈值触发时需要上报的 NodeCondition。
 	signalToNodeCondition map[evictionapi.Signal]v1.NodeConditionType
-	// signalToResource maps a Signal to its associated Resource.
+	// signalToResource 将驱逐信号映射到对应的资源名，同时用作“信号是否受支持”的判定依据。
 	signalToResource map[evictionapi.Signal]v1.ResourceName
 )
 
+// init 建立驱逐信号到节点状态和资源名的静态映射表。
 func init() {
-	// map eviction signals to node conditions
+	// 每个信号对应一个 NodeCondition；同一资源上的多个信号会映射到同一状态。
 	signalToNodeCondition = map[evictionapi.Signal]v1.NodeConditionType{}
 	signalToNodeCondition[evictionapi.SignalMemoryAvailable] = v1.NodeMemoryPressure
 	signalToNodeCondition[evictionapi.SignalAllocatableMemoryAvailable] = v1.NodeMemoryPressure
@@ -94,7 +96,7 @@ func init() {
 	signalToNodeCondition[evictionapi.SignalContainerFsInodesFree] = v1.NodeDiskPressure
 	signalToNodeCondition[evictionapi.SignalPIDAvailable] = v1.NodePIDPressure
 
-	// map signals to resources (and vice-versa)
+	// 信号到资源的映射是驱逐决策的基础：没有对应资源即视为不支持该信号。
 	signalToResource = map[evictionapi.Signal]v1.ResourceName{}
 	signalToResource[evictionapi.SignalMemoryAvailable] = v1.ResourceMemory
 	signalToResource[evictionapi.SignalAllocatableMemoryAvailable] = v1.ResourceMemory
@@ -107,24 +109,25 @@ func init() {
 	signalToResource[evictionapi.SignalPIDAvailable] = resourcePids
 }
 
-// validSignal returns true if the signal is supported.
+// validSignal 判断信号是否受支持。
 func validSignal(signal evictionapi.Signal) bool {
 	_, found := signalToResource[signal]
 	return found
 }
 
-// getReclaimableThreshold finds the threshold and resource to reclaim
+// getReclaimableThreshold 在已越过的阈值中找出第一个具备回收能力的阈值及其资源。
 func getReclaimableThreshold(logger klog.Logger, thresholds []evictionapi.Threshold) (evictionapi.Threshold, v1.ResourceName, bool) {
 	for _, thresholdToReclaim := range thresholds {
 		if resourceToReclaim, ok := signalToResource[thresholdToReclaim.Signal]; ok {
 			return thresholdToReclaim, resourceToReclaim, true
 		}
+		// 已越过但无法回收的信号不触发驱逐，仅记录以便排查配置问题。
 		logger.V(3).Info("Eviction manager: threshold was crossed, but reclaim is not implemented for this threshold.", "threshold", thresholdToReclaim.Signal)
 	}
 	return evictionapi.Threshold{}, "", false
 }
 
-// ParseThresholdConfig parses the flags for thresholds.
+// ParseThresholdConfig 将命令行/配置中的硬阈值、软阈值、宽限期和最小回收量解析为 Threshold 列表。
 func ParseThresholdConfig(allocatableConfig []string, evictionHard, evictionSoft, evictionSoftGracePeriod, evictionMinimumReclaim map[string]string) ([]evictionapi.Threshold, error) {
 	results := []evictionapi.Threshold{}
 	hardThresholds, err := parseThresholdStatements(evictionHard)
@@ -132,6 +135,7 @@ func ParseThresholdConfig(allocatableConfig []string, evictionHard, evictionSoft
 		return nil, err
 	}
 	results = append(results, hardThresholds...)
+	// 硬阈值一旦越过立即驱逐，软阈值则需满足宽限期后才驱逐。
 	softThresholds, err := parseThresholdStatements(evictionSoft)
 	if err != nil {
 		return nil, err
@@ -144,6 +148,7 @@ func ParseThresholdConfig(allocatableConfig []string, evictionHard, evictionSoft
 	if err != nil {
 		return nil, err
 	}
+	// 软阈值必须显式配置宽限期，否则无法判断何时触发驱逐。
 	for i := range softThresholds {
 		signal := softThresholds[i].Signal
 		period, found := gracePeriods[signal]
@@ -158,6 +163,7 @@ func ParseThresholdConfig(allocatableConfig []string, evictionHard, evictionSoft
 			results[i].MinReclaim = &minReclaim
 		}
 	}
+	// 启用 NodeAllocatable 强制约束时，额外派生可分配内存阈值。
 	for _, key := range allocatableConfig {
 		if key == kubetypes.NodeAllocatableEnforcementKey {
 			results = addAllocatableThresholds(results)
@@ -167,10 +173,13 @@ func ParseThresholdConfig(allocatableConfig []string, evictionHard, evictionSoft
 	return results, nil
 }
 
+// addAllocatableThresholds 基于硬性 memory.available 阈值派生 memory.available<allocatable> 阈值。
 func addAllocatableThresholds(thresholds []evictionapi.Threshold) []evictionapi.Threshold {
 	additionalThresholds := []evictionapi.Threshold{}
 	for _, threshold := range thresholds {
+		// 只派生硬阈值：软阈值的宽限期语义无法直接复制到可分配内存信号上。
 		if threshold.Signal == evictionapi.SignalMemoryAvailable && isHardEvictionThreshold(threshold) {
+			// 复制操作符、取值和最小回收量，仅替换信号名。
 			// Copy the SignalMemoryAvailable to SignalAllocatableMemoryAvailable
 			additionalThresholds = append(additionalThresholds, evictionapi.Threshold{
 				Signal:     evictionapi.SignalAllocatableMemoryAvailable,
@@ -183,11 +192,11 @@ func addAllocatableThresholds(thresholds []evictionapi.Threshold) []evictionapi.
 	return append(append([]evictionapi.Threshold{}, thresholds...), additionalThresholds...)
 }
 
-// UpdateContainerFsThresholds will add containerfs eviction hard/soft
-// settings based on container runtime settings.
-// Thresholds are parsed from evictionHard and evictionSoft limits so we will override.
-// If there is a single filesystem, then containerfs settings are same as nodefs.
-// If there is a separate image filesystem for both containers and images then containerfs settings are same as imagefs.
+// UpdateContainerFsThresholds 依据容器运行时的文件系统布局补充 containerfs 的硬/软驱逐阈值。
+// 阈值从 evictionHard/evictionSoft 解析而来，因此对 containerfs 是覆盖式设置。
+// 若只有一个文件系统，containerfs 设置等同于 nodefs。
+// 若容器与镜像共用独立文件系统，containerfs 设置等同于 imagefs。
+// 收集 nodefs/imagefs 的硬软阈值以及 containerfs 阈值的下标，稍后统一覆盖。
 func UpdateContainerFsThresholds(thresholds []evictionapi.Threshold, imageFs, separateContainerImageFs bool) ([]evictionapi.Threshold, error) {
 	hardNodeFsDisk := evictionapi.Threshold{}
 	softNodeFsDisk := evictionapi.Threshold{}
@@ -202,6 +211,7 @@ func UpdateContainerFsThresholds(thresholds []evictionapi.Threshold, imageFs, se
 	softContainerFsDisk := -1
 	hardContainerFsINodes := -1
 	softContainerFsINodes := -1
+	// 记录各信号的阈值，后面按文件系统布局重新计算 containerfs 阈值。
 	// Find the imagefs and nodefs thresholds
 	var err error = nil
 	for idx, threshold := range thresholds {
@@ -229,9 +239,9 @@ func UpdateContainerFsThresholds(thresholds []evictionapi.Threshold, imageFs, se
 		if threshold.Signal == evictionapi.SignalNodeFsInodesFree && !isHardEvictionThreshold(threshold) {
 			softNodeINodeDisk = threshold
 		}
-		// We are logging a warning and we will override the settings.
-		// In this case this is safe because we do not support a separate container filesystem.
-		// So we want either limits to be same as nodefs or imagefs.
+		// 用户显式配置的 containerfs 阈值会被覆盖：我们只支持其与 nodefs 或 imagefs 保持一致。
+		// 因此记录告警并保存下标，而不是直接报错中断启动。
+		// 下面按布局选择容器文件系统阈值来源。
 		if threshold.Signal == evictionapi.SignalContainerFsAvailable && isHardEvictionThreshold(threshold) {
 			err = errors.Join(fmt.Errorf("found containerfs.available for hard eviction. ignoring"))
 			hardContainerFsDisk = idx
@@ -249,7 +259,7 @@ func UpdateContainerFsThresholds(thresholds []evictionapi.Threshold, imageFs, se
 			softContainerFsINodes = idx
 		}
 	}
-	// Either split disk case (containerfs=nodefs) or single filesystem
+	// 容器可写层与 nodefs 同盘，或整机只有一个文件系统：containerfs 复用 nodefs 阈值。
 	if (imageFs && separateContainerImageFs) || (!imageFs && !separateContainerImageFs) {
 		if hardContainerFsDisk != -1 {
 			thresholds[hardContainerFsDisk] = evictionapi.Threshold{
@@ -302,7 +312,7 @@ func UpdateContainerFsThresholds(thresholds []evictionapi.Threshold, imageFs, se
 			})
 		}
 	}
-	// Separate image filesystem case
+	// 镜像单独占盘：containerfs 复用 imagefs 阈值。
 	if imageFs && !separateContainerImageFs {
 		if hardContainerFsDisk != -1 {
 			thresholds[hardContainerFsDisk] = evictionapi.Threshold{
@@ -358,7 +368,7 @@ func UpdateContainerFsThresholds(thresholds []evictionapi.Threshold, imageFs, se
 	return thresholds, err
 }
 
-// parseThresholdStatements parses the input statements into a list of Threshold objects.
+// parseThresholdStatements 将“信号->取值”形式的配置解析为 Threshold 列表。
 func parseThresholdStatements(statements map[string]string) ([]evictionapi.Threshold, error) {
 	if len(statements) == 0 {
 		return nil, nil
@@ -376,15 +386,15 @@ func parseThresholdStatements(statements map[string]string) ([]evictionapi.Thres
 	return results, nil
 }
 
-// parseThresholdStatement parses a threshold statement and returns a threshold,
-// or nil if the threshold should be ignored.
+// parseThresholdStatement 解析单个阈值配置，返回 nil 表示该配置应被忽略（如 0% 和 100%）。
+// 取值支持百分比和 resource.Quantity 两种形式。
 func parseThresholdStatement(signal evictionapi.Signal, val string) (*evictionapi.Threshold, error) {
 	if !validSignal(signal) {
 		return nil, fmt.Errorf(unsupportedEvictionSignal, signal)
 	}
 	operator := evictionapi.OpForSignal[signal]
 	if strings.HasSuffix(val, "%") {
-		// ignore 0% and 100%
+		// 0% 表示禁用该信号，100% 永远无法触发，二者都直接忽略。
 		if val == "0%" || val == "100%" {
 			return nil, nil
 		}
@@ -395,7 +405,7 @@ func parseThresholdStatement(signal evictionapi.Signal, val string) (*evictionap
 		if percentage < 0 {
 			return nil, fmt.Errorf("eviction percentage threshold %v must be >= 0%%: %s", signal, val)
 		}
-		// percentage is a float and should not be greater than 1 (100%)
+		// parsePercentage 返回 0~1 的比例，超过 1 说明配置非法。
 		if percentage > 1 {
 			return nil, fmt.Errorf("eviction percentage threshold %v must be <= 100%%: %s", signal, val)
 		}
@@ -423,7 +433,7 @@ func parseThresholdStatement(signal evictionapi.Signal, val string) (*evictionap
 	}, nil
 }
 
-// parsePercentage parses a string representing a percentage value
+// parsePercentage 将 “12%” 之类的字符串解析为 0~1 的比例。
 func parsePercentage(input string) (float32, error) {
 	value, err := strconv.ParseFloat(strings.TrimRight(input, "%"), 32)
 	if err != nil {
@@ -432,7 +442,7 @@ func parsePercentage(input string) (float32, error) {
 	return float32(value) / 100, nil
 }
 
-// parseGracePeriods parses the grace period statements
+// parseGracePeriods 解析软阈值的宽限期配置。
 func parseGracePeriods(statements map[string]string) (map[evictionapi.Signal]time.Duration, error) {
 	if len(statements) == 0 {
 		return nil, nil
@@ -455,7 +465,7 @@ func parseGracePeriods(statements map[string]string) (map[evictionapi.Signal]tim
 	return results, nil
 }
 
-// parseMinimumReclaims parses the minimum reclaim statements
+// parseMinimumReclaims 解析最小回收量配置，用于避免刚触发阈值就立即再次驱逐。
 func parseMinimumReclaims(statements map[string]string) (map[evictionapi.Signal]evictionapi.ThresholdValue, error) {
 	if len(statements) == 0 {
 		return nil, nil
@@ -493,7 +503,7 @@ func parseMinimumReclaims(statements map[string]string) (map[evictionapi.Signal]
 	return results, nil
 }
 
-// diskUsage converts used bytes into a resource quantity.
+// diskUsage 将已用字节数转换为资源量；stats 缺失时返回零值。
 func diskUsage(fsStats *statsapi.FsStats) *resource.Quantity {
 	if fsStats == nil || fsStats.UsedBytes == nil {
 		return &resource.Quantity{Format: resource.BinarySI}
@@ -502,7 +512,7 @@ func diskUsage(fsStats *statsapi.FsStats) *resource.Quantity {
 	return resource.NewQuantity(usage, resource.BinarySI)
 }
 
-// inodeUsage converts inodes consumed into a resource quantity.
+// inodeUsage 将已用 inode 数转换为资源量；stats 缺失时返回零值。
 func inodeUsage(fsStats *statsapi.FsStats) *resource.Quantity {
 	if fsStats == nil || fsStats.InodesUsed == nil {
 		return &resource.Quantity{Format: resource.DecimalSI}
@@ -511,7 +521,7 @@ func inodeUsage(fsStats *statsapi.FsStats) *resource.Quantity {
 	return resource.NewQuantity(usage, resource.DecimalSI)
 }
 
-// memoryUsage converts working set into a resource quantity.
+// memoryUsage 将工作集（working set）字节数转换为资源量；stats 缺失时返回零值。
 func memoryUsage(memStats *statsapi.MemoryStats) *resource.Quantity {
 	if memStats == nil || memStats.WorkingSetBytes == nil {
 		return &resource.Quantity{Format: resource.BinarySI}
@@ -520,7 +530,7 @@ func memoryUsage(memStats *statsapi.MemoryStats) *resource.Quantity {
 	return resource.NewQuantity(usage, resource.BinarySI)
 }
 
-// processUsage converts working set into a process count.
+// processUsage 返回进程数；stats 缺失时返回 0。
 func processUsage(processStats *statsapi.ProcessStats) uint64 {
 	if processStats == nil || processStats.ProcessCount == nil {
 		return 0
@@ -529,7 +539,7 @@ func processUsage(processStats *statsapi.ProcessStats) uint64 {
 	return usage
 }
 
-// localVolumeNames returns the set of volumes for the pod that are local
+// localVolumeNames 返回 Pod 中会消耗本地存储的卷名，包括 hostPath 和本地临时卷。
 // TODO: summary API should report what volumes consume local storage rather than hard-code here.
 func localVolumeNames(pod *v1.Pod) []string {
 	result := []string{}
@@ -542,7 +552,7 @@ func localVolumeNames(pod *v1.Pod) []string {
 	return result
 }
 
-// containerUsage aggregates container disk usage and inode consumption for the specified stats to measure.
+// containerUsage 汇总 Pod 内所有容器在指定 stats 维度上的磁盘与 inode 消耗。
 func containerUsage(podStats statsapi.PodStats, statsToMeasure []fsStatsType) v1.ResourceList {
 	disk := resource.Quantity{Format: resource.BinarySI}
 	inodes := resource.Quantity{Format: resource.DecimalSI}
@@ -562,7 +572,7 @@ func containerUsage(podStats statsapi.PodStats, statsToMeasure []fsStatsType) v1
 	}
 }
 
-// podLocalVolumeUsage aggregates pod local volumes disk usage and inode consumption for the specified stats to measure.
+// podLocalVolumeUsage 汇总指定本地卷的磁盘与 inode 消耗。
 func podLocalVolumeUsage(volumeNames []string, podStats statsapi.PodStats) v1.ResourceList {
 	disk := resource.Quantity{Format: resource.BinarySI}
 	inodes := resource.Quantity{Format: resource.DecimalSI}
@@ -581,7 +591,7 @@ func podLocalVolumeUsage(volumeNames []string, podStats statsapi.PodStats) v1.Re
 	}
 }
 
-// podDiskUsage aggregates pod disk usage and inode consumption for the specified stats to measure.
+// podDiskUsage 汇总 Pod 的容器与本地卷磁盘、inode 消耗。
 func podDiskUsage(podStats statsapi.PodStats, pod *v1.Pod, statsToMeasure []fsStatsType) (v1.ResourceList, error) {
 	disk := resource.Quantity{Format: resource.BinarySI}
 	inodes := resource.Quantity{Format: resource.DecimalSI}
@@ -590,6 +600,7 @@ func podDiskUsage(podStats statsapi.PodStats, pod *v1.Pod, statsToMeasure []fsSt
 	disk.Add(containerUsageList[v1.ResourceEphemeralStorage])
 	inodes.Add(containerUsageList[resourceInodes])
 
+	// 仅当需要统计本地卷时才遍历卷，避免无谓开销。
 	if hasFsStatsType(statsToMeasure, fsStatsLocalVolumeSource) {
 		volumeNames := localVolumeNames(pod)
 		podLocalVolumeUsageList := podLocalVolumeUsage(volumeNames, podStats)
@@ -602,12 +613,12 @@ func podDiskUsage(podStats statsapi.PodStats, pod *v1.Pod, statsToMeasure []fsSt
 	}, nil
 }
 
-// formatThreshold formats a threshold for logging.
+// formatThreshold 将阈值格式化为便于日志阅读的字符串。
 func formatThreshold(threshold evictionapi.Threshold) string {
 	return fmt.Sprintf("threshold(signal=%v, operator=%v, value=%v, gracePeriod=%v)", threshold.Signal, threshold.Operator, evictionapi.ThresholdValue(threshold.Value), threshold.GracePeriod)
 }
 
-// cachedStatsFunc returns a statsFunc based on the provided pod stats.
+// cachedStatsFunc 按 Pod UID 建立统计缓存，返回可反复查询的 statsFunc。
 func cachedStatsFunc(podStats []statsapi.PodStats) statsFunc {
 	uid2PodStats := map[string]statsapi.PodStats{}
 	for i := range podStats {
@@ -619,44 +630,44 @@ func cachedStatsFunc(podStats []statsapi.PodStats) statsFunc {
 	}
 }
 
-// Cmp compares p1 and p2 and returns:
+// Cmp 比较 p1 与 p2，返回 -1/0/+1 表示小于/等于/大于。
 //
 //	-1 if p1 <  p2
 //	 0 if p1 == p2
 //	+1 if p1 >  p2
 type cmpFunc func(p1, p2 *v1.Pod) int
 
-// multiSorter implements the Sort interface, sorting changes within.
+// multiSorter 按给定的比较函数序列依次比较，实现多级排序。
 type multiSorter struct {
 	pods []*v1.Pod
 	cmp  []cmpFunc
 }
 
-// Sort sorts the argument slice according to the less functions passed to OrderedBy.
+// Sort 使用 OrderedBy 传入的比较函数对切片排序。
 func (ms *multiSorter) Sort(pods []*v1.Pod) {
 	ms.pods = pods
 	sort.Sort(ms)
 }
 
-// OrderedBy returns a Sorter that sorts using the cmp functions, in order.
-// Call its Sort method to sort the data.
+// orderedBy 构造按比较函数序列依次生效的多级排序器。
+// 调用其 Sort 方法即可完成排序。
 func orderedBy(cmp ...cmpFunc) *multiSorter {
 	return &multiSorter{
 		cmp: cmp,
 	}
 }
 
-// Len is part of sort.Interface.
+// Len 实现 sort.Interface。
 func (ms *multiSorter) Len() int {
 	return len(ms.pods)
 }
 
-// Swap is part of sort.Interface.
+// Swap 实现 sort.Interface。
 func (ms *multiSorter) Swap(i, j int) {
 	ms.pods[i], ms.pods[j] = ms.pods[j], ms.pods[i]
 }
 
-// Less is part of sort.Interface.
+// Less 实现 sort.Interface：前面的比较函数相等时才用后一个判定。
 func (ms *multiSorter) Less(i, j int) bool {
 	p1, p2 := ms.pods[i], ms.pods[j]
 	var k int
@@ -672,11 +683,11 @@ func (ms *multiSorter) Less(i, j int) bool {
 		}
 		// we don't know yet
 	}
-	// the last cmp func is the final decider
+	// 前面全部相等时，由最后一个比较函数决定顺序。
 	return ms.cmp[k](p1, p2) < 0
 }
 
-// priority compares pods by Priority, if priority is enabled.
+// priority 按 Pod 优先级比较；未设置时视为 0。
 func priority(p1, p2 *v1.Pod) int {
 	priority1 := corev1helpers.PodPriority(p1)
 	priority2 := corev1helpers.PodPriority(p2)
@@ -689,13 +700,13 @@ func priority(p1, p2 *v1.Pod) int {
 	return -1
 }
 
-// exceedMemoryRequests compares whether or not pods' memory usage exceeds their requests
+// exceedMemoryRequests 优先判定内存用量是否超过 request。
 func exceedMemoryRequests(stats statsFunc) cmpFunc {
 	return func(p1, p2 *v1.Pod) int {
 		p1Stats, p1Found := stats(p1)
 		p2Stats, p2Found := stats(p2)
 		if !p1Found || !p2Found {
-			// prioritize evicting the pod for which no stats were found
+			// 缺少统计数据的 Pod 优先驱逐，因为无法判断其真实用量。
 			return cmpBool(!p1Found, !p2Found)
 		}
 
@@ -703,12 +714,12 @@ func exceedMemoryRequests(stats statsFunc) cmpFunc {
 		p2Memory := memoryUsage(p2Stats.Memory)
 		p1ExceedsRequests := p1Memory.Cmp(v1resource.GetResourceRequestQuantity(p1, v1.ResourceMemory)) == 1
 		p2ExceedsRequests := p2Memory.Cmp(v1resource.GetResourceRequestQuantity(p2, v1.ResourceMemory)) == 1
-		// prioritize evicting the pod which exceeds its requests
+		// 超过 request 的 Pod 排在前面。
 		return cmpBool(p1ExceedsRequests, p2ExceedsRequests)
 	}
 }
 
-// memory compares pods by largest consumer of memory relative to request.
+// memory 按“内存用量减去 request”的差值从大到小排序。
 func memory(stats statsFunc) cmpFunc {
 	return func(p1, p2 *v1.Pod) int {
 		p1Stats, p1Found := stats(p1)
@@ -718,7 +729,7 @@ func memory(stats statsFunc) cmpFunc {
 			return cmpBool(!p1Found, !p2Found)
 		}
 
-		// adjust p1, p2 usage relative to the request (if any)
+		// 减去 request 后比较，突出超出申请量的部分。
 		p1Memory := memoryUsage(p1Stats.Memory)
 		p1Request := v1resource.GetResourceRequestQuantity(p1, v1.ResourceMemory)
 		p1Memory.Sub(p1Request)
@@ -727,12 +738,12 @@ func memory(stats statsFunc) cmpFunc {
 		p2Request := v1resource.GetResourceRequestQuantity(p2, v1.ResourceMemory)
 		p2Memory.Sub(p2Request)
 
-		// prioritize evicting the pod which has the larger consumption of memory
+		// 注意参数顺序反转：Cmp 结果使消耗更大者排在前面。
 		return p2Memory.Cmp(*p1Memory)
 	}
 }
 
-// process compares pods by largest consumer of process number relative to request.
+// process 按进程数从多到少排序。
 func process(stats statsFunc) cmpFunc {
 	return func(p1, p2 *v1.Pod) int {
 		p1Stats, p1Found := stats(p1)
@@ -748,7 +759,7 @@ func process(stats statsFunc) cmpFunc {
 	}
 }
 
-// exceedDiskRequests compares whether or not pods' disk usage exceeds their requests
+// exceedDiskRequests 优先判定磁盘/inode 用量是否超过 request。
 func exceedDiskRequests(stats statsFunc, fsStatsToMeasure []fsStatsType, diskResource v1.ResourceName) cmpFunc {
 	return func(p1, p2 *v1.Pod) int {
 		p1Stats, p1Found := stats(p1)
@@ -761,7 +772,7 @@ func exceedDiskRequests(stats statsFunc, fsStatsToMeasure []fsStatsType, diskRes
 		p1Usage, p1Err := podDiskUsage(p1Stats, p1, fsStatsToMeasure)
 		p2Usage, p2Err := podDiskUsage(p2Stats, p2, fsStatsToMeasure)
 		if p1Err != nil || p2Err != nil {
-			// prioritize evicting the pod which had an error getting stats
+			// 取统计失败者优先驱逐，避免因统计异常而无法决策。
 			return cmpBool(p1Err != nil, p2Err != nil)
 		}
 
@@ -774,7 +785,7 @@ func exceedDiskRequests(stats statsFunc, fsStatsToMeasure []fsStatsType, diskRes
 	}
 }
 
-// disk compares pods by largest consumer of disk relative to request for the specified disk resource.
+// disk 按“磁盘用量减去 request”的差值从大到小排序。
 func disk(stats statsFunc, fsStatsToMeasure []fsStatsType, diskResource v1.ResourceName) cmpFunc {
 	return func(p1, p2 *v1.Pod) int {
 		p1Stats, p1Found := stats(p1)
@@ -797,12 +808,12 @@ func disk(stats statsFunc, fsStatsToMeasure []fsStatsType, diskResource v1.Resou
 		p1Disk.Sub(p1Request)
 		p2Request := v1resource.GetResourceRequestQuantity(p2, v1.ResourceEphemeralStorage)
 		p2Disk.Sub(p2Request)
-		// prioritize evicting the pod which has the larger consumption of disk
+		// 参数顺序反转，使用量更大者排在前面。
 		return p2Disk.Cmp(p1Disk)
 	}
 }
 
-// cmpBool compares booleans, placing true before false
+// cmpBool 比较布尔值，true 排在 false 之前。
 func cmpBool(a, b bool) int {
 	if a == b {
 		return 0
@@ -813,42 +824,45 @@ func cmpBool(a, b bool) int {
 	return 1
 }
 
-// rankMemoryPressure orders the input pods for eviction in response to memory pressure.
-// It ranks by whether or not the pod's usage exceeds its requests, then by priority, and
-// finally by memory usage above requests.
+// rankMemoryPressure 在内存压力下排序待驱逐 Pod：先看是否超 request，再看优先级，最后看超出量。
+// 该顺序保证低优先级、超量大的 Pod 先被驱逐。
+// （多级排序的具体顺序由 orderedBy 参数顺序决定。）
 func rankMemoryPressure(pods []*v1.Pod, stats statsFunc) {
 	orderedBy(exceedMemoryRequests(stats), priority, memory(stats)).Sort(pods)
 }
 
-// rankPIDPressure orders the input pods by priority in response to PID pressure.
+// rankPIDPressure 在 PID 压力下先按优先级、再按进程数排序。
 func rankPIDPressure(pods []*v1.Pod, stats statsFunc) {
 	orderedBy(priority, process(stats)).Sort(pods)
 }
 
-// rankDiskPressureFunc returns a rankFunc that measures the specified fs stats.
+// rankDiskPressureFunc 返回针对指定 fs 统计维度和资源名的磁盘压力排序函数。
 func rankDiskPressureFunc(fsStatsToMeasure []fsStatsType, diskResource v1.ResourceName) rankFunc {
 	return func(pods []*v1.Pod, stats statsFunc) {
 		orderedBy(exceedDiskRequests(stats, fsStatsToMeasure, diskResource), priority, disk(stats, fsStatsToMeasure, diskResource)).Sort(pods)
 	}
 }
 
-// byEvictionPriority implements sort.Interface for []v1.ResourceName.
+// byEvictionPriority 实现 sort.Interface，用于对阈值按回收优先级排序。
 type byEvictionPriority []evictionapi.Threshold
 
-func (a byEvictionPriority) Len() int      { return len(a) }
+// Len 实现 sort.Interface。
+func (a byEvictionPriority) Len() int { return len(a) }
+
+// Swap 实现 sort.Interface。
 func (a byEvictionPriority) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
-// Less ranks memory before all other resources, and ranks thresholds with no resource to reclaim last
+// Less 将内存相关阈值排在最前，并将无法回收资源的阈值排在最后。
 func (a byEvictionPriority) Less(i, j int) bool {
 	_, jSignalHasResource := signalToResource[a[j].Signal]
 	return a[i].Signal == evictionapi.SignalMemoryAvailable || a[i].Signal == evictionapi.SignalAllocatableMemoryAvailable || !jSignalHasResource
 }
 
-// makeSignalObservations derives observations using the specified summary provider.
+// makeSignalObservations 从节点 summary 中提取各驱逐信号的当前可用量与容量。
 func makeSignalObservations(logger klog.Logger, summary *statsapi.Summary) (signalObservations, statsFunc) {
-	// build the function to work against for pod stats
+	// Pod 统计按 UID 缓存，供后续排序和生成驱逐消息复用。
 	statsFunc := cachedStatsFunc(summary.Pods)
-	// build an evaluation context for current eviction signals
+	// 逐类采集信号观测，任何字段缺失都跳过该信号而不是写入错误值。
 	result := signalObservations{}
 
 	memoryAvailableSignal := makeMemoryAvailableSignalObservation(logger, summary)
@@ -856,6 +870,7 @@ func makeSignalObservations(logger klog.Logger, summary *statsapi.Summary) (sign
 		result[evictionapi.SignalMemoryAvailable] = *memoryAvailableSignal
 	}
 
+	// 可分配内存信号来自 pods 系统容器：可用量 + 工作集近似为可分配上限。
 	if allocatableContainer, err := getSysContainer(summary.Node.SystemContainers, statsapi.SystemContainerPods); err != nil {
 		logger.Error(err, "Eviction manager: failed to construct signal", "signal", evictionapi.SignalAllocatableMemoryAvailable)
 	} else {
@@ -867,6 +882,7 @@ func makeSignalObservations(logger klog.Logger, summary *statsapi.Summary) (sign
 			}
 		}
 	}
+	// nodefs 信号：节点根文件系统的可用空间与 inode。
 	if nodeFs := summary.Node.Fs; nodeFs != nil {
 		if nodeFs.AvailableBytes != nil && nodeFs.CapacityBytes != nil {
 			result[evictionapi.SignalNodeFsAvailable] = signalObservation{
@@ -883,6 +899,7 @@ func makeSignalObservations(logger klog.Logger, summary *statsapi.Summary) (sign
 			}
 		}
 	}
+	// 运行时提供 imagefs 与 containerfs 的统计。
 	if summary.Node.Runtime != nil {
 		if imageFs := summary.Node.Runtime.ImageFs; imageFs != nil {
 			if imageFs.AvailableBytes != nil && imageFs.CapacityBytes != nil {
@@ -917,6 +934,7 @@ func makeSignalObservations(logger klog.Logger, summary *statsapi.Summary) (sign
 			}
 		}
 	}
+	// PID 可用量 = 最大 PID 数 - 当前运行进程数。
 	if rlimit := summary.Node.Rlimit; rlimit != nil {
 		if rlimit.NumOfRunningProcesses != nil && rlimit.MaxPID != nil {
 			available := int64(*rlimit.MaxPID) - int64(*rlimit.NumOfRunningProcesses)
@@ -930,6 +948,7 @@ func makeSignalObservations(logger klog.Logger, summary *statsapi.Summary) (sign
 	return result, statsFunc
 }
 
+// getSysContainer 按名称查找系统容器统计，找不到时报错。
 func getSysContainer(sysContainers []statsapi.ContainerStats, name string) (*statsapi.ContainerStats, error) {
 	for _, cont := range sysContainers {
 		if cont.Name == name {
@@ -939,7 +958,7 @@ func getSysContainer(sysContainers []statsapi.ContainerStats, name string) (*sta
 	return nil, fmt.Errorf("system container %q not found in metrics", name)
 }
 
-// thresholdsMet returns the set of thresholds that were met independent of grace period
+// thresholdsMet 返回已越过但尚未考虑宽限期的阈值集合。
 func thresholdsMet(logger klog.Logger, thresholds []evictionapi.Threshold, observations signalObservations, enforceMinReclaim bool) []evictionapi.Threshold {
 	results := []evictionapi.Threshold{}
 	for i := range thresholds {
@@ -949,14 +968,15 @@ func thresholdsMet(logger klog.Logger, thresholds []evictionapi.Threshold, obser
 			logger.Info("Eviction manager: no observation found for eviction signal", "signal", threshold.Signal)
 			continue
 		}
-		// determine if we have met the specified threshold
+		// 阈值量按容量换算为绝对值，再与当前可用量比较。
 		thresholdMet := false
 		quantity := evictionapi.GetThresholdQuantity(threshold.Value, observed.capacity)
-		// if enforceMinReclaim is specified, we compare relative to value - minreclaim
+		// 启用最小回收量时，按“阈值 + 最小回收量”比较，避免回收量不足导致反复触发。
 		if enforceMinReclaim && threshold.MinReclaim != nil {
 			quantity.Add(*evictionapi.GetThresholdQuantity(*threshold.MinReclaim, observed.capacity))
 		}
 		thresholdResult := quantity.Cmp(*observed.available)
+		// 目前只支持小于操作符：可用量低于阈值即视为越过。
 		switch threshold.Operator {
 		case evictionapi.OpLessThan:
 			thresholdMet = thresholdResult > 0
@@ -968,6 +988,7 @@ func thresholdsMet(logger klog.Logger, thresholds []evictionapi.Threshold, obser
 	return results
 }
 
+// debugLogObservations 在 V(3) 级别输出所有信号观测，便于排查驱逐决策。
 func debugLogObservations(logger klog.Logger, logPrefix string, observations signalObservations) {
 	if !logger.V(3).Enabled() {
 		return
@@ -981,6 +1002,7 @@ func debugLogObservations(logger klog.Logger, logPrefix string, observations sig
 	}
 }
 
+// debugLogThresholdsWithObservation 在 V(3) 级别输出阈值及其观测到的量。
 func debugLogThresholdsWithObservation(logger klog.Logger, logPrefix string, thresholds []evictionapi.Threshold, observations signalObservations) {
 	if !logger.V(3).Enabled() {
 		return
@@ -997,6 +1019,7 @@ func debugLogThresholdsWithObservation(logger klog.Logger, logPrefix string, thr
 	}
 }
 
+// thresholdsUpdatedStats 过滤出观测数据比上次更新的阈值，避免用陈旧统计做决策。
 func thresholdsUpdatedStats(logger klog.Logger, thresholds []evictionapi.Threshold, observations, lastObservations signalObservations) []evictionapi.Threshold {
 	results := []evictionapi.Threshold{}
 	for i := range thresholds {
@@ -1014,7 +1037,7 @@ func thresholdsUpdatedStats(logger klog.Logger, thresholds []evictionapi.Thresho
 	return results
 }
 
-// thresholdsFirstObservedAt merges the input set of thresholds with the previous observation to determine when active set of thresholds were initially met.
+// thresholdsFirstObservedAt 记录每个阈值首次被观测到越过的时刻，用于计算宽限期。
 func thresholdsFirstObservedAt(thresholds []evictionapi.Threshold, lastObservedAt thresholdsObservedAt, now time.Time) thresholdsObservedAt {
 	results := thresholdsObservedAt{}
 	for i := range thresholds {
@@ -1027,7 +1050,7 @@ func thresholdsFirstObservedAt(thresholds []evictionapi.Threshold, lastObservedA
 	return results
 }
 
-// thresholdsMetGracePeriod returns the set of thresholds that have satisfied associated grace period
+// thresholdsMetGracePeriod 返回已满足宽限期的阈值。
 func thresholdsMetGracePeriod(logger klog.Logger, observedAt thresholdsObservedAt, now time.Time) []evictionapi.Threshold {
 	results := []evictionapi.Threshold{}
 	for threshold, at := range observedAt {
@@ -1041,7 +1064,7 @@ func thresholdsMetGracePeriod(logger klog.Logger, observedAt thresholdsObservedA
 	return results
 }
 
-// nodeConditions returns the set of node conditions associated with a threshold
+// nodeConditions 返回这些阈值对应的 NodeCondition 集合（去重）。
 func nodeConditions(thresholds []evictionapi.Threshold) []v1.NodeConditionType {
 	results := []v1.NodeConditionType{}
 	for _, threshold := range thresholds {
@@ -1054,14 +1077,14 @@ func nodeConditions(thresholds []evictionapi.Threshold) []v1.NodeConditionType {
 	return results
 }
 
-// nodeConditionsLastObservedAt merges the input with the previous observation to determine when a condition was most recently met.
+// nodeConditionsLastObservedAt 合并新旧状态观测，记录每个状态最近一次被观测到的时间。
 func nodeConditionsLastObservedAt(nodeConditions []v1.NodeConditionType, lastObservedAt nodeConditionsObservedAt, now time.Time) nodeConditionsObservedAt {
 	results := nodeConditionsObservedAt{}
-	// the input conditions were observed "now"
+	// 本次观测到的状态时间记为当前时刻。
 	for i := range nodeConditions {
 		results[nodeConditions[i]] = now
 	}
-	// the conditions that were not observed now are merged in with their old time
+	// 本次未观测到的状态保留上次的时间，以便判断其是否仍在持续期内。
 	for key, value := range lastObservedAt {
 		_, found := results[key]
 		if !found {
@@ -1071,7 +1094,7 @@ func nodeConditionsLastObservedAt(nodeConditions []v1.NodeConditionType, lastObs
 	return results
 }
 
-// nodeConditionsObservedSince returns the set of conditions that have been observed within the specified period
+// nodeConditionsObservedSince 返回在指定时间段内被观测到过的状态。
 func nodeConditionsObservedSince(observedAt nodeConditionsObservedAt, period time.Duration, now time.Time) []v1.NodeConditionType {
 	results := []v1.NodeConditionType{}
 	for nodeCondition, at := range observedAt {
@@ -1083,7 +1106,7 @@ func nodeConditionsObservedSince(observedAt nodeConditionsObservedAt, period tim
 	return results
 }
 
-// hasFsStatsType returns true if the fsStat is in the input list
+// hasFsStatsType 判断 fsStatsType 是否在列表中。
 func hasFsStatsType(inputs []fsStatsType, item fsStatsType) bool {
 	for _, input := range inputs {
 		if input == item {
@@ -1093,7 +1116,7 @@ func hasFsStatsType(inputs []fsStatsType, item fsStatsType) bool {
 	return false
 }
 
-// hasNodeCondition returns true if the node condition is in the input list
+// hasNodeCondition 判断 NodeCondition 是否在列表中。
 func hasNodeCondition(inputs []v1.NodeConditionType, item v1.NodeConditionType) bool {
 	for _, input := range inputs {
 		if input == item {
@@ -1103,7 +1126,7 @@ func hasNodeCondition(inputs []v1.NodeConditionType, item v1.NodeConditionType) 
 	return false
 }
 
-// mergeThresholds will merge both threshold lists eliminating duplicates.
+// mergeThresholds 合并两个阈值列表并去重。
 func mergeThresholds(inputsA []evictionapi.Threshold, inputsB []evictionapi.Threshold) []evictionapi.Threshold {
 	results := inputsA
 	for _, threshold := range inputsB {
@@ -1114,7 +1137,7 @@ func mergeThresholds(inputsA []evictionapi.Threshold, inputsB []evictionapi.Thre
 	return results
 }
 
-// hasThreshold returns true if the threshold is in the input list
+// hasThreshold 判断阈值是否已存在（信号、操作符、取值、宽限期均相同）。
 func hasThreshold(inputs []evictionapi.Threshold, item evictionapi.Threshold) bool {
 	for _, input := range inputs {
 		if input.GracePeriod == item.GracePeriod && input.Operator == item.Operator && input.Signal == item.Signal && compareThresholdValue(input.Value, item.Value) {
@@ -1124,7 +1147,7 @@ func hasThreshold(inputs []evictionapi.Threshold, item evictionapi.Threshold) bo
 	return false
 }
 
-// compareThresholdValue returns true if the two thresholdValue objects are logically the same
+// compareThresholdValue 判断两个阈值取值是否等价（Quantity 或百分比）。
 func compareThresholdValue(a evictionapi.ThresholdValue, b evictionapi.ThresholdValue) bool {
 	if a.Quantity != nil {
 		if b.Quantity == nil {
@@ -1138,51 +1161,52 @@ func compareThresholdValue(a evictionapi.ThresholdValue, b evictionapi.Threshold
 	return a.Percentage == b.Percentage
 }
 
-// isHardEvictionThreshold returns true if eviction should immediately occur
+// isHardEvictionThreshold 判断是否为硬阈值：宽限期为 0 即立即驱逐。
 func isHardEvictionThreshold(threshold evictionapi.Threshold) bool {
 	return threshold.GracePeriod == time.Duration(0)
 }
 
+// isAllocatableEvictionThreshold 判断阈值是否针对可分配内存信号。
 func isAllocatableEvictionThreshold(threshold evictionapi.Threshold) bool {
 	return threshold.Signal == evictionapi.SignalAllocatableMemoryAvailable
 }
 
-// buildSignalToRankFunc returns ranking functions associated with resources
+// buildSignalToRankFunc 按文件系统布局为各信号选择排序函数。
 func buildSignalToRankFunc(withImageFs bool, imageContainerSplitFs bool) map[evictionapi.Signal]rankFunc {
 	signalToRankFunc := map[evictionapi.Signal]rankFunc{
 		evictionapi.SignalMemoryAvailable:            rankMemoryPressure,
 		evictionapi.SignalAllocatableMemoryAvailable: rankMemoryPressure,
 		evictionapi.SignalPIDAvailable:               rankPIDPressure,
 	}
-	// usage of an imagefs is optional
-	// We have a dedicated Image filesystem (images and containers are on same disk)
-	// then we assume it is just a separate imagefs
+	// 排序函数决定压力下先驱逐哪些 Pod，因此必须与回收函数覆盖的统计维度一致。
+	// 镜像与容器共用一块独立磁盘：imagefs 压力只统计 rootfs 与镜像层。
+	// nodefs 压力只统计日志和本地卷。
 	if withImageFs && !imageContainerSplitFs {
-		// with an imagefs, nodefs pod rank func for eviction only includes logs and local volumes
+		// 有独立 imagefs 时，nodefs 压力只统计日志与本地卷。
 		signalToRankFunc[evictionapi.SignalNodeFsAvailable] = rankDiskPressureFunc([]fsStatsType{fsStatsLogs, fsStatsLocalVolumeSource}, v1.ResourceEphemeralStorage)
 		signalToRankFunc[evictionapi.SignalNodeFsInodesFree] = rankDiskPressureFunc([]fsStatsType{fsStatsLogs, fsStatsLocalVolumeSource}, resourceInodes)
-		// with an imagefs, imagefs pod rank func for eviction only includes rootfs
+		// imagefs 压力统计容器可写层与镜像层。
 		signalToRankFunc[evictionapi.SignalImageFsAvailable] = rankDiskPressureFunc([]fsStatsType{fsStatsRoot, fsStatsImages}, v1.ResourceEphemeralStorage)
 		signalToRankFunc[evictionapi.SignalImageFsInodesFree] = rankDiskPressureFunc([]fsStatsType{fsStatsRoot, fsStatsImages}, resourceInodes)
 		signalToRankFunc[evictionapi.SignalContainerFsAvailable] = signalToRankFunc[evictionapi.SignalImageFsAvailable]
 		signalToRankFunc[evictionapi.SignalContainerFsInodesFree] = signalToRankFunc[evictionapi.SignalImageFsInodesFree]
 
-		// If both imagefs and container fs are on separate disks
-		// we want to track the writeable layer in containerfs signals.
+		// 镜像与容器可写层分处不同磁盘时，containerfs 只关心可写层。
+		// 因此 containerfs 信号复用 nodefs 的排序函数。
 	} else if withImageFs && imageContainerSplitFs {
-		// with an imagefs, nodefs pod rank func for eviction only includes logs and local volumes
+		// nodefs 压力统计日志、本地卷和可写层。
 		signalToRankFunc[evictionapi.SignalNodeFsAvailable] = rankDiskPressureFunc([]fsStatsType{fsStatsLogs, fsStatsLocalVolumeSource, fsStatsRoot}, v1.ResourceEphemeralStorage)
 		signalToRankFunc[evictionapi.SignalNodeFsInodesFree] = rankDiskPressureFunc([]fsStatsType{fsStatsLogs, fsStatsLocalVolumeSource, fsStatsRoot}, resourceInodes)
 		signalToRankFunc[evictionapi.SignalContainerFsAvailable] = signalToRankFunc[evictionapi.SignalNodeFsAvailable]
 		signalToRankFunc[evictionapi.SignalContainerFsInodesFree] = signalToRankFunc[evictionapi.SignalNodeFsInodesFree]
-		// with an imagefs, containerfs pod rank func for eviction only includes rootfs
+		// imagefs 压力只统计镜像层。
 
 		signalToRankFunc[evictionapi.SignalImageFsAvailable] = rankDiskPressureFunc([]fsStatsType{fsStatsImages}, v1.ResourceEphemeralStorage)
 		signalToRankFunc[evictionapi.SignalImageFsInodesFree] = rankDiskPressureFunc([]fsStatsType{fsStatsImages}, resourceInodes)
-		// If image fs is not on separate disk as root but container fs is
+		// 镜像与 nodefs 同盘：imagefs、nodefs 共用全部统计维度。
 	} else {
-		// without an imagefs, nodefs pod rank func for eviction looks at all fs stats.
-		// since imagefs and nodefs share a common device, they share common ranking functions.
+		// 所有文件系统同盘时，各信号排序函数完全一致。
+		// 这样任意信号触发都能正确评估 Pod 的总体磁盘占用。
 		signalToRankFunc[evictionapi.SignalNodeFsAvailable] = rankDiskPressureFunc([]fsStatsType{fsStatsImages, fsStatsRoot, fsStatsLogs, fsStatsLocalVolumeSource}, v1.ResourceEphemeralStorage)
 		signalToRankFunc[evictionapi.SignalNodeFsInodesFree] = rankDiskPressureFunc([]fsStatsType{fsStatsImages, fsStatsRoot, fsStatsLogs, fsStatsLocalVolumeSource}, resourceInodes)
 		signalToRankFunc[evictionapi.SignalImageFsAvailable] = rankDiskPressureFunc([]fsStatsType{fsStatsImages, fsStatsRoot, fsStatsLogs, fsStatsLocalVolumeSource}, v1.ResourceEphemeralStorage)
@@ -1193,39 +1217,39 @@ func buildSignalToRankFunc(withImageFs bool, imageContainerSplitFs bool) map[evi
 	return signalToRankFunc
 }
 
-// PodIsEvicted returns true if the reported pod status is due to an eviction.
+// PodIsEvicted 判断 Pod 是否因驱逐而失败。
 func PodIsEvicted(podStatus v1.PodStatus) bool {
 	return podStatus.Phase == v1.PodFailed && podStatus.Reason == Reason
 }
 
-// buildSignalToNodeReclaimFuncs returns reclaim functions associated with resources.
+// buildSignalToNodeReclaimFuncs 按文件系统布局为各信号选择节点级资源回收动作。
 func buildSignalToNodeReclaimFuncs(imageGC ImageGC, containerGC ContainerGC, withImageFs bool, splitContainerImageFs bool) map[evictionapi.Signal]nodeReclaimFuncs {
 	signalToReclaimFunc := map[evictionapi.Signal]nodeReclaimFuncs{}
-	// usage of an imagefs is optional
+	// 回收函数需要与排序函数覆盖的统计维度匹配，否则可能回收无效。
 	if withImageFs && !splitContainerImageFs {
-		// with an imagefs, nodefs pressure should just delete logs
+		// 有独立 imagefs 时，nodefs 压力无需删除镜像或容器。
 		signalToReclaimFunc[evictionapi.SignalNodeFsAvailable] = nodeReclaimFuncs{}
 		signalToReclaimFunc[evictionapi.SignalNodeFsInodesFree] = nodeReclaimFuncs{}
-		// with an imagefs, imagefs pressure should delete unused images
+		// imagefs 压力下删除未使用的容器和镜像。
 		signalToReclaimFunc[evictionapi.SignalImageFsAvailable] = nodeReclaimFuncs{containerGC.DeleteAllUnusedContainers, imageGC.DeleteUnusedImages}
 		signalToReclaimFunc[evictionapi.SignalImageFsInodesFree] = nodeReclaimFuncs{containerGC.DeleteAllUnusedContainers, imageGC.DeleteUnusedImages}
 		signalToReclaimFunc[evictionapi.SignalContainerFsAvailable] = signalToReclaimFunc[evictionapi.SignalImageFsAvailable]
 		signalToReclaimFunc[evictionapi.SignalContainerFsInodesFree] = signalToReclaimFunc[evictionapi.SignalImageFsInodesFree]
-		// usage of imagefs and container fs on separate disks
-		// containers gc on containerfs pressure
-		// image gc on imagefs pressure
+		// 镜像与容器可写层分盘：各自回收自己磁盘上的对象。
+		// containerfs/nodefs 压力下回收容器可写层。
+		// imagefs 压力下回收镜像。
 	} else if withImageFs && splitContainerImageFs {
-		// with an imagefs, imagefs pressure should delete unused images
+		// imagefs 压力下只回收未使用镜像。
 		signalToReclaimFunc[evictionapi.SignalImageFsAvailable] = nodeReclaimFuncs{imageGC.DeleteUnusedImages}
 		signalToReclaimFunc[evictionapi.SignalImageFsInodesFree] = nodeReclaimFuncs{imageGC.DeleteUnusedImages}
-		// with an split fs and imagefs, containerfs pressure should delete unused containers
+		// 分盘场景下 containerfs 压力回收未使用容器。
 		signalToReclaimFunc[evictionapi.SignalNodeFsAvailable] = nodeReclaimFuncs{containerGC.DeleteAllUnusedContainers}
 		signalToReclaimFunc[evictionapi.SignalNodeFsInodesFree] = nodeReclaimFuncs{containerGC.DeleteAllUnusedContainers}
 		signalToReclaimFunc[evictionapi.SignalContainerFsAvailable] = signalToReclaimFunc[evictionapi.SignalNodeFsAvailable]
 		signalToReclaimFunc[evictionapi.SignalContainerFsInodesFree] = signalToReclaimFunc[evictionapi.SignalNodeFsInodesFree]
 	} else {
-		// without an imagefs, nodefs pressure should delete logs, and unused images
-		// since imagefs, containerfs and nodefs share a common device, they share common reclaim functions
+		// 无独立 imagefs 时所有文件系统同盘，任意压力都回收容器和镜像。
+		// 因此各信号共用同一组回收函数。
 		signalToReclaimFunc[evictionapi.SignalNodeFsAvailable] = nodeReclaimFuncs{containerGC.DeleteAllUnusedContainers, imageGC.DeleteUnusedImages}
 		signalToReclaimFunc[evictionapi.SignalNodeFsInodesFree] = nodeReclaimFuncs{containerGC.DeleteAllUnusedContainers, imageGC.DeleteUnusedImages}
 		signalToReclaimFunc[evictionapi.SignalImageFsAvailable] = nodeReclaimFuncs{containerGC.DeleteAllUnusedContainers, imageGC.DeleteUnusedImages}
@@ -1236,11 +1260,12 @@ func buildSignalToNodeReclaimFuncs(imageGC ImageGC, containerGC ContainerGC, wit
 	return signalToReclaimFunc
 }
 
-// evictionMessage constructs a useful message about why an eviction occurred, and annotations to provide metadata about the eviction
+// evictionMessage 生成驱逐原因消息，并附带记录超限容器/Pod 的注解。
 func evictionMessage(resourceToReclaim v1.ResourceName, pod *v1.Pod, stats statsFunc, thresholds []evictionapi.Threshold, observations signalObservations) (message string, annotations map[string]string) {
 	annotations = make(map[string]string)
 	message = fmt.Sprintf(nodeLowMessageFmt, resourceToReclaim)
 	quantity, available := getThresholdMetInfo(resourceToReclaim, thresholds, observations)
+	// 阈值信息仅在能找到对应观测时追加。
 	if quantity != nil && available != nil {
 		message += fmt.Sprintf(thresholdMetMessageFmt, quantity, available)
 	}
@@ -1251,7 +1276,7 @@ func evictionMessage(resourceToReclaim v1.ResourceName, pod *v1.Pod, stats stats
 		return
 	}
 
-	// Pod level resources will be included in eviction message, along container resources
+	// 启用 Pod 级资源且已设置时，同时报告 Pod 级别的超限情况。
 	if resourceToReclaim == v1.ResourceMemory && utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		if podRequest, ok := pod.Spec.Resources.Requests[resourceToReclaim]; ok && podStats.Memory != nil {
 			podUsage := memoryUsage(podStats.Memory)
@@ -1262,10 +1287,10 @@ func evictionMessage(resourceToReclaim v1.ResourceName, pod *v1.Pod, stats stats
 		}
 	}
 
-	// Since the resources field cannot be specified for ephemeral containers,
-	// they will always be blamed for resource overuse when an eviction occurs.
-	// That’s why only regular, init and restartable init containers are considered
-	// for the eviction message.
+	// 临时容器无法声明 resources，若把它们算进来会导致误判超限，故只统计常规与 init 容器。
+	// 重启式 init 容器（restartable init）计入常规容器列表，因此一并参与统计。
+	// 遍历统计时按容器名匹配，保证只比较实际存在的容器。
+	// 用量按驱逐资源类型分别计算：临时存储取 rootfs+logs，内存取工作集。
 	containers := pod.Spec.Containers
 	if len(pod.Spec.InitContainers) != 0 {
 		containers = append(containers, pod.Spec.InitContainers...)
@@ -1290,8 +1315,8 @@ func evictionMessage(resourceToReclaim v1.ResourceName, pod *v1.Pod, stats stats
 					exceededContainers = append(exceededContainers, container.Name)
 					containerUsage = append(containerUsage, usage.String())
 				}
-				// Found the container to compare resource usage with,
-				// so it's safe to break out of the containers loop here.
+				// 已找到同名容器完成比较，跳出内层循环，避免重复统计。
+				// 每个统计项最多匹配一个容器，因此可安全跳出。
 				break
 			}
 		}
@@ -1302,7 +1327,7 @@ func evictionMessage(resourceToReclaim v1.ResourceName, pod *v1.Pod, stats stats
 	return
 }
 
-// getThresholdMetInfo get the threshold quantity and available for the resource resourceToReclaim
+// getThresholdMetInfo 返回触发驱逐的资源对应的阈值量和当前可用量。
 func getThresholdMetInfo(resourceToReclaim v1.ResourceName, thresholds []evictionapi.Threshold, observations signalObservations) (quantity *resource.Quantity, available *resource.Quantity) {
 	for i := range thresholds {
 		threshold := thresholds[i]

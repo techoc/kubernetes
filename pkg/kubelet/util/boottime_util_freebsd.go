@@ -22,13 +22,14 @@ import (
 	"fmt"
 	"time"
 
-	"golang.org/x/sys/unix"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 
 	"k8s.io/klog/v2"
 )
 
-// GetBootTime returns the time at which the machine was started, truncated to the nearest second
+// GetBootTime 返回机器启动时间，并截断到秒；通过 CLOCK_UPTIME 计算得出。
 func GetBootTime(klog.Logger) (time.Time, error) {
 	currentTime := time.Now()
 	ts := &unix.Timeval{}

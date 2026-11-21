@@ -25,6 +25,7 @@ import (
 )
 
 var (
+	// descLogSize 描述容器日志占用文件系统字节数的指标。
 	descLogSize = metrics.NewDesc(
 		"kubelet_container_log_filesystem_used_bytes",
 		"Bytes used by the container's logs on the filesystem.",
@@ -39,32 +40,34 @@ var (
 	)
 )
 
+// logMetricsCollector 采集容器日志占用的文件系统空间。
 type logMetricsCollector struct {
 	metrics.BaseStableCollector
 
+	// podStats 返回 Pod 统计信息。
 	podStats func(ctx context.Context) ([]statsapi.PodStats, error)
 }
 
-// Check if logMetricsCollector implements necessary interface
+// 编译期断言：logMetricsCollector 实现了 StableCollector 接口。
 var _ metrics.StableCollector = &logMetricsCollector{}
 
-// NewLogMetricsCollector implements the metrics.StableCollector interface and
-// exposes metrics about container's log volume size.
+// NewLogMetricsCollector 创建日志指标采集器，
+// 暴露容器日志占用空间大小的指标。
 func NewLogMetricsCollector(podStats func(ctx context.Context) ([]statsapi.PodStats, error)) metrics.StableCollector {
 	return &logMetricsCollector{
 		podStats: podStats,
 	}
 }
 
-// DescribeWithStability implements the metrics.StableCollector interface.
+// DescribeWithStability 输出日志大小指标描述符。
 func (c *logMetricsCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
 	ch <- descLogSize
 }
 
-// CollectWithStability implements the metrics.StableCollector interface.
+// CollectWithStability 遍历 Pod 统计并输出容器日志大小指标。
 func (c *logMetricsCollector) CollectWithStability(ch chan<- metrics.Metric) {
-	// Use context.TODO() because we currently do not have a proper context to pass in.
-	// Replace this with an appropriate context when refactoring this function to accept a context parameter.
+	// 当前没有可用的上下文，只能使用 context.TODO()；
+	// 后续重构为接收 context 参数时应替换为真实上下文。
 	ctx := context.TODO()
 	logger := klog.FromContext(ctx)
 	podStats, err := c.podStats(ctx)
@@ -73,6 +76,7 @@ func (c *logMetricsCollector) CollectWithStability(ch chan<- metrics.Metric) {
 		return
 	}
 
+	// 只为有日志统计的容器输出指标。
 	for _, ps := range podStats {
 		for _, c := range ps.Containers {
 			if c.Logs != nil && c.Logs.UsedBytes != nil {

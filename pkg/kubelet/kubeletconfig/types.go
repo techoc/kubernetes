@@ -16,24 +16,22 @@ limitations under the License.
 
 package kubeletconfig
 
-// ContainerRuntimeOptions defines options for the container runtime.
+// ContainerRuntimeOptions 定义容器运行时的选项。
 type ContainerRuntimeOptions struct {
-	// General Options.
+	// 通用选项。
 
-	// RuntimeCgroups that container runtime is expected to be isolated in.
+	// RuntimeCgroups 是容器运行时预期隔离到的 cgroup。
 	RuntimeCgroups string
-	// Image credential provider plugin options
+	// 镜像凭据提供者插件选项
 
-	// ImageCredentialProviderConfigPath is the path to the credential provider plugin config file or directory.
-	// If a directory is specified, all .json, .yaml, or .yml files in the directory are loaded and merged
-	// in lexicographical order. This config file(s) specify what credential providers are enabled
-	// and invoked by the kubelet. The plugin config should contain information about what plugin binary
-	// to execute and what container images the plugin should be called for.
+	// ImageCredentialProviderConfigPath 是凭据提供者插件配置文件或目录的路径。
+	// 若指定目录，则按字典序加载并合并目录下所有 .json、.yaml 或 .yml 文件。
+	// 配置文件说明 kubelet 启用并调用哪些凭据提供者，插件配置应包含要执行的插件二进制
+	// 以及该插件应处理哪些容器镜像。
 	// +optional
 	ImageCredentialProviderConfigPath string
-	// ImageCredentialProviderBinDir is the path to the directory where credential provider plugin
-	// binaries exist. The name of each plugin binary is expected to match the name of the plugin
-	// specified in imageCredentialProviderConfigFile.
+	// ImageCredentialProviderBinDir 是凭据提供者插件二进制所在目录的路径。
+	// 每个插件二进制的名称应与 imageCredentialProviderConfigFile 中指定的插件名称一致。
 	// +optional
 	ImageCredentialProviderBinDir string
 }

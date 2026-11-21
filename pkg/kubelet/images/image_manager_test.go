@@ -51,6 +51,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// pullerExpects 描述一次 EnsureImageExists 调用期望产生的 runtime 调用、错误与事件。
 type pullerExpects struct {
 	calls                           []string
 	err                             error
@@ -60,6 +61,7 @@ type pullerExpects struct {
 	msg                             string
 }
 
+// pullerTestCase 是镜像管理器测试用例：输入（镜像、策略、凭据）与期望行为。
 type pullerTestCase struct {
 	testName                   string
 	containerImage             string
@@ -77,13 +79,14 @@ type pullerTestCase struct {
 	enableFeatures             []featuregate.Feature
 }
 
-// mockImagePullManagerConfig configures what credentials the mock pull manager considers "allowed"
+// mockImagePullManagerConfig 配置 mock 拉取管理器认为“允许”的凭据。
 type mockImagePullManagerConfig struct {
 	allowAll               bool
 	allowedSecrets         map[string][]kubeletconfiginternal.ImagePullSecret         // image -> allowed secrets
 	allowedServiceAccounts map[string][]kubeletconfiginternal.ImagePullServiceAccount // image -> allowed service accounts
 }
 
+// pullerTestCases 汇总默认用例与 KubeletEnsureSecretPulledImages 特性门控用例。
 func pullerTestCases() []pullerTestCase {
 	return append(
 		noFGPullerTestCases(),
@@ -91,8 +94,7 @@ func pullerTestCases() []pullerTestCase {
 	)
 }
 
-// noFGPullerTestCases returns all test cases that test the default behavior without any
-// feature gate required
+// noFGPullerTestCases 返回无需开启任何特性门控即可验证默认行为的全部用例。
 func noFGPullerTestCases() []pullerTestCase {
 	return []pullerTestCase{
 		{ // pull missing image
@@ -137,7 +139,7 @@ func noFGPullerTestCases() []pullerTestCase {
 			},
 			expectedEnsureImageMetrics: ensureExistsMetricForLabels("ifnotpresent", "true", "false"),
 		},
-		// image present, pull it
+		// 镜像已存在，仍发起拉取
 		{containerImage: "present_image",
 			testName:   "image present, pull",
 			policy:     v1.PullAlways,
@@ -164,7 +166,7 @@ func noFGPullerTestCases() []pullerTestCase {
 			},
 			expectedEnsureImageMetrics: ensureExistsMetricForLabels("always", "unknown", "true"),
 		},
-		// missing image, error PullNever
+		// 镜像缺失，PullNever 报错
 		{containerImage: "missing_image",
 			testName:   "image missing, never pull",
 			policy:     v1.PullNever,
@@ -188,7 +190,7 @@ func noFGPullerTestCases() []pullerTestCase {
 			},
 			expectedEnsureImageMetrics: ensureExistsMetricForLabels("never", "false", "unknown"),
 		},
-		// missing image, unable to inspect
+		// 镜像缺失，无法 inspect
 		{containerImage: "missing_image",
 			testName:   "image missing, pull if not present, fail on image inspect",
 			policy:     v1.PullIfNotPresent,
@@ -212,7 +214,7 @@ func noFGPullerTestCases() []pullerTestCase {
 			},
 			expectedEnsureImageMetrics: ensureExistsMetricForLabels("ifnotpresent", "unknown", "unknown"),
 		},
-		// missing image, unable to fetch
+		// 镜像缺失，无法获取
 		{containerImage: "typo_image",
 			testName:   "image missing, unable to fetch",
 			policy:     v1.PullIfNotPresent,
@@ -251,7 +253,7 @@ func noFGPullerTestCases() []pullerTestCase {
 			},
 			expectedEnsureImageMetrics: ensureExistsMetricForLabels("ifnotpresent", "false", "true"),
 		},
-		// image present, non-zero qps, try to pull
+		// 镜像已存在，qps 非零，尝试拉取
 		{containerImage: "present_image",
 			testName:   "image present and qps>0, pull",
 			policy:     v1.PullAlways,
@@ -278,7 +280,7 @@ func noFGPullerTestCases() []pullerTestCase {
 			},
 			expectedEnsureImageMetrics: ensureExistsMetricForLabels("always", "unknown", "true"),
 		},
-		// image present, non-zero qps, try to pull when qps exceeded
+		// 镜像已存在，qps 非零，qps 超限时尝试拉取
 		{containerImage: "present_image",
 			testName:   "image present and excessive qps rate, pull",
 			policy:     v1.PullAlways,
@@ -304,7 +306,7 @@ func noFGPullerTestCases() []pullerTestCase {
 			},
 			expectedEnsureImageMetrics: ensureExistsMetricForLabels("always", "unknown", "true"),
 		},
-		// error case if image name fails validation due to invalid reference format
+		// 错误场景：镜像名因引用格式非法而校验失败
 		{containerImage: "FAILED_IMAGE",
 			testName:   "invalid image name, no pull",
 			policy:     v1.PullAlways,
@@ -320,7 +322,7 @@ func noFGPullerTestCases() []pullerTestCase {
 			},
 			expectedEnsureImageMetrics: ensureExistsMetricForLabels("always", "unknown", "unknown"),
 		},
-		// error case if image name contains http
+		// 错误场景：镜像名包含 http
 		{containerImage: "http://url",
 			testName:   "invalid image name with http, no pull",
 			policy:     v1.PullAlways,
@@ -336,7 +338,7 @@ func noFGPullerTestCases() []pullerTestCase {
 			},
 			expectedEnsureImageMetrics: ensureExistsMetricForLabels("always", "unknown", "unknown"),
 		},
-		// error case if image name contains sha256
+		// 错误场景：镜像名包含 sha256
 		{containerImage: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
 			testName:   "invalid image name with sha256, no pull",
 			policy:     v1.PullAlways,
@@ -389,9 +391,8 @@ func noFGPullerTestCases() []pullerTestCase {
 	}
 }
 
-// ensureSecretImages returns test cases specific for the KubeletEnsureSecretPulledImages
-// featuregate plus a copy of all non-featuregated tests, but it requests the featuregate
-// to be enabled there, too
+// ensureSecretImagesTestCases 返回 KubeletEnsureSecretPulledImages 特性门控专属用例，
+// 同时包含所有非门控用例的副本，但在副本中也要求开启该门控。
 func ensureSecretImagesTestCases() []pullerTestCase {
 	testCases := []pullerTestCase{
 		{
@@ -697,12 +698,14 @@ func ensureSecretImagesTestCases() []pullerTestCase {
 	return testCases
 }
 
+// mockPodPullingTimeRecorder 记录每个 pod 拉取开始/结束的打点状态，用于测试。
 type mockPodPullingTimeRecorder struct {
 	sync.Mutex
 	startedPullingRecorded  map[types.UID]bool
 	finishedPullingRecorded map[types.UID]bool
 }
 
+// RecordImageStartedPulling 标记指定 pod 已开始拉取镜像（幂等）。
 func (m *mockPodPullingTimeRecorder) RecordImageStartedPulling(podUID types.UID) {
 	m.Lock()
 	defer m.Unlock()
@@ -712,6 +715,7 @@ func (m *mockPodPullingTimeRecorder) RecordImageStartedPulling(podUID types.UID)
 	}
 }
 
+// RecordImageFinishedPulling 仅在已记录开始拉取后才标记结束，模拟真实语义。
 func (m *mockPodPullingTimeRecorder) RecordImageFinishedPulling(podUID types.UID) {
 	m.Lock()
 	defer m.Unlock()
@@ -721,6 +725,7 @@ func (m *mockPodPullingTimeRecorder) RecordImageFinishedPulling(podUID types.UID
 	}
 }
 
+// reset 清空所有记录，便于在同一测试中复用。
 func (m *mockPodPullingTimeRecorder) reset() {
 	m.Lock()
 	defer m.Unlock()
@@ -728,12 +733,14 @@ func (m *mockPodPullingTimeRecorder) reset() {
 	clear(m.finishedPullingRecorded)
 }
 
+// mockImagePullManager 是可配置的拉取管理器 mock，按允许列表决定是否拉取。
 type mockImagePullManager struct {
 	pullmanager.NoopImagePullManager
 
 	config *mockImagePullManagerConfig
 }
 
+// MustAttemptImagePull 依据配置的允许 secret/service account 列表，判断是否仍需拉取镜像。
 func (m *mockImagePullManager) MustAttemptImagePull(ctx context.Context, image, _ string, getPodCredentials pullmanager.GetPodCredentials) (bool, error) {
 	if m.config == nil || m.config.allowAll {
 		return false, nil
@@ -744,7 +751,7 @@ func (m *mockImagePullManager) MustAttemptImagePull(ctx context.Context, image, 
 		return true, err
 	}
 
-	// Check secrets
+	// 检查 secret
 	if allowedSecrets, ok := m.config.allowedSecrets[image]; ok {
 		for _, s := range podSecrets {
 			for _, allowed := range allowedSecrets {
@@ -755,7 +762,7 @@ func (m *mockImagePullManager) MustAttemptImagePull(ctx context.Context, image, 
 		}
 	}
 
-	// Check service accounts
+	// 检查 service account
 	if podServiceAccount != nil {
 		if allowedServiceAccounts, ok := m.config.allowedServiceAccounts[image]; ok {
 			if slices.Contains(allowedServiceAccounts, *podServiceAccount) {
@@ -767,7 +774,8 @@ func (m *mockImagePullManager) MustAttemptImagePull(ctx context.Context, image, 
 	return true, nil
 }
 
-// mockImagePullManagerWithTracking tracks calls to MustAttemptImagePull for service account testing
+// mockImagePullManagerWithTracking 跟踪 MustAttemptImagePull 的调用与入参，
+// 用于验证 service account 坐标是否正确传递。
 type mockImagePullManagerWithTracking struct {
 	pullmanager.NoopImagePullManager
 
@@ -781,6 +789,7 @@ type mockImagePullManagerWithTracking struct {
 	recordedCredentials *kubeletconfiginternal.ImagePullCredentials
 }
 
+// MustAttemptImagePull 记录入参并调用凭据回调，按配置返回是否允许拉取。
 func (m *mockImagePullManagerWithTracking) MustAttemptImagePull(ctx context.Context, image, imageRef string, getPodCredentials pullmanager.GetPodCredentials) (bool, error) {
 	m.mustAttemptCalled = true
 	m.lastImage = image
@@ -802,24 +811,27 @@ func (m *mockImagePullManagerWithTracking) MustAttemptImagePull(ctx context.Cont
 	return m.mustAttemptReturn, nil
 }
 
+// RecordImagePulled 记录最近一次上报的凭据，便于断言。
 func (m *mockImagePullManagerWithTracking) RecordImagePulled(ctx context.Context, image, imageRef string, credentials *kubeletconfiginternal.ImagePullCredentials) {
 	m.recordedCredentials = credentials
 }
 
-// mockDockerKeyringWithTrackedCreds provides tracked credentials for testing
+// mockDockerKeyringWithTrackedCreds 为测试提供带来源跟踪的凭据。
 type mockDockerKeyringWithTrackedCreds struct {
 	credentialprovider.BasicDockerKeyring
 	trackedCreds map[string][]credentialprovider.TrackedAuthConfig
 }
 
+// Lookup 优先返回预置的跟踪凭据，否则回退到基础 keyring 查询。
 func (m *mockDockerKeyringWithTrackedCreds) Lookup(image string) ([]credentialprovider.TrackedAuthConfig, bool) {
 	if creds, ok := m.trackedCreds[image]; ok {
 		return creds, true
 	}
-	// Fall back to basic keyring lookup - it already returns TrackedAuthConfig
+	// 回退到基础 keyring 查询 —— 它本身已返回 TrackedAuthConfig
 	return m.BasicDockerKeyring.Lookup(image)
 }
 
+// pullerTestEnv 按用例构造 ImageManager 及其依赖的 fake runtime、时钟与事件记录器。
 func pullerTestEnv(
 	t ktesting.TB,
 	c pullerTestCase,
@@ -866,15 +878,15 @@ func pullerTestEnv(
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, fg, true)
 	}
 
-	// Create appropriate keyring based on whether registry credentials are provided
+	// 根据是否提供 registry 凭据选择相应的 keyring
 	var keyring credentialprovider.DockerKeyring
 	if c.registryCredentials != nil {
-		// Use mock keyring with tracked credentials for service account testing
+		// service account 测试使用带跟踪凭据的 mock keyring
 		keyring = &mockDockerKeyringWithTrackedCreds{
 			trackedCreds: c.registryCredentials,
 		}
 	} else {
-		// Use basic keyring for non-service account tests
+		// 非 service account 测试使用基础 keyring
 		keyring = &credentialprovider.BasicDockerKeyring{}
 	}
 
@@ -882,6 +894,7 @@ func pullerTestEnv(
 	return
 }
 
+// TestParallelPuller 在非串行模式下逐用例校验镜像拉取行为、事件与错误。
 func TestParallelPuller(t *testing.T) {
 	cases := pullerTestCases()
 
@@ -928,6 +941,7 @@ func TestParallelPuller(t *testing.T) {
 	}
 }
 
+// TestSerializedPuller 在串行模式下校验镜像拉取行为，确保同一时刻只处理一个拉取。
 func TestSerializedPuller(t *testing.T) {
 	cases := pullerTestCases()
 
@@ -974,6 +988,7 @@ func TestSerializedPuller(t *testing.T) {
 	}
 }
 
+// TestApplyDefaultImageTag 校验镜像引用在缺少 tag 时补全默认 tag 的行为。
 func TestApplyDefaultImageTag(t *testing.T) {
 	for _, testCase := range []struct {
 		testName string
@@ -997,6 +1012,7 @@ func TestApplyDefaultImageTag(t *testing.T) {
 	}
 }
 
+// TestPullAndListImageWithPodAnnotations 校验镜像列表结果会带上 pod 注解派生的信息。
 func TestPullAndListImageWithPodAnnotations(t *testing.T) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1057,6 +1073,8 @@ func TestPullAndListImageWithPodAnnotations(t *testing.T) {
 	})
 }
 
+// TestPullAndListImageWithRuntimeHandlerInImageCriAPIFeatureGate 校验
+// RuntimeClassInImageCriAPI 门控开启时，镜像列表会携带 runtime handler 信息。
 func TestPullAndListImageWithRuntimeHandlerInImageCriAPIFeatureGate(t *testing.T) {
 	runtimeHandler := "handler_name"
 	pod := &v1.Pod{
@@ -1111,8 +1129,8 @@ func TestPullAndListImageWithRuntimeHandlerInImageCriAPIFeatureGate(t *testing.T
 		image := images[0]
 		assert.Equal(t, "missing_image:latest", image.ID, "Image ID")
 
-		// when RuntimeClassInImageCriAPI feature gate is enabled, check runtime
-		// handler information for every image in the ListImages() response
+		// RuntimeClassInImageCriAPI 门控开启时，检查 ListImages() 响应中每个镜像的
+		// runtime handler 信息
 		assert.Equal(t, runtimeHandler, image.Spec.RuntimeHandler, "runtime handler returned not as expected", "Image ID", image)
 
 		expectedAnnotations := []Annotation{
@@ -1124,12 +1142,14 @@ func TestPullAndListImageWithRuntimeHandlerInImageCriAPIFeatureGate(t *testing.T
 	})
 }
 
+// TestMaxParallelImagePullsLimit 校验 maxParallelImagePulls 限制并发拉取数量的行为。
 func TestMaxParallelImagePullsLimit(t *testing.T) {
 	ktesting.Init(t).SyncTest("", func(tCtx ktesting.TContext) {
 		testMaxParallelImagePullsLimit(tCtx)
 	})
 }
 
+// testMaxParallelImagePullsLimit 是 TestMaxParallelImagePullsLimit 的实现主体。
 func testMaxParallelImagePullsLimit(tCtx ktesting.TContext) {
 	t := tCtx.TB()
 	pod := &v1.Pod{
@@ -1167,7 +1187,7 @@ func testMaxParallelImagePullsLimit(tCtx ktesting.TContext) {
 	fakeRuntime.T = t
 	fakeClock.Step(time.Second)
 
-	// First 5 EnsureImageExists should result in runtime calls
+	// 前 5 个 EnsureImageExists 应触发 runtime 调用
 	for i := 0; i < maxParallelImagePulls; i++ {
 		wg.Add(1)
 		go func() {
@@ -1179,7 +1199,7 @@ func testMaxParallelImagePullsLimit(tCtx ktesting.TContext) {
 	time.Sleep(1 * time.Second)
 	fakeRuntime.AssertCallCounts("PullImage", 5)
 
-	// Next two EnsureImageExists should be blocked because maxParallelImagePulls is hit
+	// 接下来两个 EnsureImageExists 应被阻塞，因为已达到 maxParallelImagePulls
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
 		go func() {
@@ -1191,24 +1211,26 @@ func testMaxParallelImagePullsLimit(tCtx ktesting.TContext) {
 	time.Sleep(1 * time.Second)
 	fakeRuntime.AssertCallCounts("PullImage", 5)
 
-	// Unblock two image pulls from runtime, and two EnsureImageExists can go through
+	// 从 runtime 侧放行两个拉取，使两个 EnsureImageExists 得以继续
 	fakeRuntime.UnblockImagePulls(2)
 	time.Sleep(1 * time.Second)
 	fakeRuntime.AssertCallCounts("PullImage", 7)
 
-	// Unblock the remaining 5 image pulls from runtime, and all EnsureImageExists can go through
+	// 放行剩余 5 个拉取，所有 EnsureImageExists 都能继续
 	fakeRuntime.UnblockImagePulls(5)
 
 	wg.Wait()
 	fakeRuntime.AssertCallCounts("PullImage", 7)
 }
 
+// TestParallelPodPullingTimeRecorderWithErr 校验拉取失败时打点记录不会误标结束。
 func TestParallelPodPullingTimeRecorderWithErr(t *testing.T) {
 	ktesting.Init(t).SyncTest("", func(tCtx ktesting.TContext) {
 		testParallelPodPullingTimeRecorderWithErr(tCtx)
 	})
 }
 
+// testParallelPodPullingTimeRecorderWithErr 是 TestParallelPodPullingTimeRecorderWithErr 的实现主体。
 func testParallelPodPullingTimeRecorderWithErr(tCtx ktesting.TContext) {
 	t := tCtx.TB()
 	pod1 := &v1.Pod{
@@ -1264,7 +1286,7 @@ func testParallelPodPullingTimeRecorderWithErr(tCtx ktesting.TContext) {
 	fakeRuntime.T = t
 	fakeClock.Step(time.Second)
 
-	// First, each pod's puller calls EnsureImageExists
+	// 首先，每个 pod 的 puller 调用 EnsureImageExists
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -1274,25 +1296,25 @@ func testParallelPodPullingTimeRecorderWithErr(tCtx ktesting.TContext) {
 	}
 	time.Sleep(1 * time.Second)
 
-	// Assert the number of PullImage calls is 2
+	// 断言 PullImage 调用次数为 2
 	fakeRuntime.AssertCallCounts("PullImage", 2)
 
-	// Recording for both of the pods should be started but not finished
+	// 两个 pod 都应记录为已开始但未结束
 	assert.True(t, fakePodPullingTimeRecorder.startedPullingRecorded[pods[0].UID])
 	assert.True(t, fakePodPullingTimeRecorder.startedPullingRecorded[pods[1].UID])
 	assert.False(t, fakePodPullingTimeRecorder.finishedPullingRecorded[pods[0].UID])
 	assert.False(t, fakePodPullingTimeRecorder.finishedPullingRecorded[pods[1].UID])
 
-	// Unblock one of the pods to pull the image
+	// 放行其中一个 pod 拉取镜像
 	fakeRuntime.UnblockImagePulls(1)
 	time.Sleep(1 * time.Second)
 
-	// Introduce a pull error for the second pod and unblock it
+	// 为第二个 pod 注入拉取错误并放行
 	fakeRuntime.SendImagePullError(errors.New("pull image error"))
 
 	wg.Wait()
 
-	// This time EnsureImageExists will return without pulling
+	// 这次 EnsureImageExists 会直接返回而不拉取
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -1303,14 +1325,15 @@ func testParallelPodPullingTimeRecorderWithErr(tCtx ktesting.TContext) {
 	}
 	wg.Wait()
 
-	// Assert the number of PullImage calls is still 2
+	// 断言 PullImage 调用次数仍为 2
 	fakeRuntime.AssertCallCounts("PullImage", 2)
 
-	// Both recorders should be finished
+	// 两个打点记录都应为已结束
 	assert.True(t, fakePodPullingTimeRecorder.finishedPullingRecorded[pods[0].UID])
 	assert.True(t, fakePodPullingTimeRecorder.finishedPullingRecorded[pods[1].UID])
 }
 
+// TestEvalCRIPullErr 校验 evalCRIPullErr 对各类 CRI 拉取错误的分类与消息转换。
 func TestEvalCRIPullErr(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -1370,6 +1393,7 @@ func TestEvalCRIPullErr(t *testing.T) {
 	}
 }
 
+// TestImagePullPrecheck 在串行模式下校验 EnsureImageExists 的预检查逻辑与事件输出。
 func TestImagePullPrecheck(t *testing.T) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1416,6 +1440,7 @@ func TestImagePullPrecheck(t *testing.T) {
 	}
 }
 
+// makeDockercfgSecretForRepo 构造一个包含指定仓库凭据的 docker config 类型 Secret。
 func makeDockercfgSecretForRepo(sMeta metav1.ObjectMeta, repo string) v1.Secret {
 	return v1.Secret{
 		ObjectMeta: sMeta,
@@ -1426,6 +1451,8 @@ func makeDockercfgSecretForRepo(sMeta metav1.ObjectMeta, repo string) v1.Secret 
 	}
 }
 
+// TestEnsureImageExistsWithServiceAccountCoordinates 校验 service account 坐标
+// 被正确传递给拉取管理器，并影响凭据记录。
 func TestEnsureImageExistsWithServiceAccountCoordinates(t *testing.T) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1573,6 +1600,8 @@ func TestEnsureImageExistsWithServiceAccountCoordinates(t *testing.T) {
 	}
 }
 
+// TestEnsureImageExistsWithNodeCredentialsOnly 校验仅使用节点凭据时，
+// 不会向拉取管理器传递 secret 或 service account。
 func TestEnsureImageExistsWithNodeCredentialsOnly(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletEnsureSecretPulledImages, true)
@@ -1639,16 +1668,18 @@ func TestEnsureImageExistsWithNodeCredentialsOnly(t *testing.T) {
 	_, _, err := puller.EnsureImageExists(tCtx, nil, pod, container.Image, []v1.Secret{}, podSandboxConfig, "", container.ImagePullPolicy)
 	require.NoError(t, err)
 
-	// Verify that MustAttemptImagePull was called with empty secrets and service accounts
-	// since node credentials don't need to be tracked
+	// 验证调用 MustAttemptImagePull 时 secret 与 service account 为空，
+	// 因为节点凭据无需跟踪
 	assert.True(t, mockPullManager.mustAttemptCalled, "MustAttemptImagePull should have been called")
 	assert.Empty(t, mockPullManager.lastSecrets, "No secrets should be passed for node credentials")
 	assert.Empty(t, mockPullManager.lastServiceAccounts, "No service accounts should be passed for node credentials")
 
-	// Image should not be pulled since it's present and accessible
+	// 镜像已存在且可访问，因此不应发起拉取
 	fakeRuntime.AssertCalls([]string{"GetImageRef"})
 }
 
+// ensureExistsMetricForLabels 生成 kubelet_image_manager_ensure_image_requests_total
+// 指标在给定标签组合下的期望文本。
 func ensureExistsMetricForLabels(pullPolicy, imagePresentLocally, pullRequired string) string {
 	const desc = `
 # HELP kubelet_image_manager_ensure_image_requests_total [ALPHA] Number of ensure-image requests processed by the kubelet.

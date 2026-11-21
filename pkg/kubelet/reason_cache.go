@@ -18,20 +18,19 @@ package kubelet
 
 import (
 	"fmt"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/lru"
 
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
-// ReasonCache stores the failure reason of the latest container start
-// in a string, keyed by <pod_UID>_<container_name>. The goal is to
-// propagate this reason to the container status. This endeavor is
-// "best-effort" for two reasons:
-//  1. The cache is not persisted.
-//  2. We use an LRU cache to avoid extra garbage collection work. This
-//     means that some entries may be recycled before a pod has been
-//     deleted.
+// ReasonCache 以 <pod_UID>_<container_name> 为键，
+// 缓存最近一次容器启动失败的原因，用于传播到容器状态。
+// 该缓存是「尽力而为」的，原因有二：
+//  1. 缓存不持久化；
+//  2. 使用 LRU 缓存避免额外的垃圾回收工作，
+//     因此部分条目可能在 Pod 删除前就被回收。
 //
 // TODO(random-liu): Use more reliable cache which could collect garbage of failed pod.
 // TODO(random-liu): Move reason cache to somewhere better.
@@ -39,39 +38,45 @@ type ReasonCache struct {
 	cache *lru.Cache
 }
 
-// ReasonItem is the cached item in ReasonCache
+// ReasonItem 是 ReasonCache 中缓存的条目。
 type ReasonItem struct {
-	Err     error
+	// Err 是启动失败的错误。
+	Err error
+	// Message 是失败原因的描述。
 	Message string
 }
 
-// maxReasonCacheEntries is the cache entry number in lru cache. 1000 is a proper number
-// for our 100 pods per node target. If we support more pods per node in the future, we
-// may want to increase the number.
+// maxReasonCacheEntries 是 LRU 缓存的条目上限。
+// 以每节点 100 个 Pod 为目标时 1000 足够；
+// 若未来支持更多 Pod，可能需要调大该值。
 const maxReasonCacheEntries = 1000
 
-// NewReasonCache creates an instance of 'ReasonCache'.
+// NewReasonCache 创建 ReasonCache 实例。
 func NewReasonCache() *ReasonCache {
 	return &ReasonCache{cache: lru.New(maxReasonCacheEntries)}
 }
 
+// composeKey 拼接 Pod UID 与容器名作为缓存键。
 func (c *ReasonCache) composeKey(uid types.UID, name string) string {
 	return fmt.Sprintf("%s_%s", uid, name)
 }
 
-// add adds error reason into the cache
+// add 把失败原因写入缓存。
 func (c *ReasonCache) add(uid types.UID, name string, reason error, message string) {
 	c.cache.Add(c.composeKey(uid, name), ReasonItem{reason, message})
 }
 
-// Update updates the reason cache with the SyncPodResult. Only SyncResult with
-// StartContainer action will change the cache.
+// Update 根据 SyncPodResult 更新原因缓存。
+// 只有 StartContainer 动作的结果会影响缓存。
 func (c *ReasonCache) Update(uid types.UID, result kubecontainer.PodSyncResult) {
+	// 只关心 StartContainer 动作的结果。
 	for _, r := range result.SyncResults {
 		if r.Action != kubecontainer.StartContainer {
 			continue
 		}
+		// Target 是容器名，由调用方保证类型。
 		name := r.Target.(string)
+		// 启动失败记录原因，成功则清除旧记录。
 		if r.Error != nil {
 			c.add(uid, name, r.Error, r.Message)
 		} else {
@@ -80,14 +85,13 @@ func (c *ReasonCache) Update(uid types.UID, result kubecontainer.PodSyncResult) 
 	}
 }
 
-// Remove removes error reason from the cache
+// Remove 从缓存中删除失败原因。
 func (c *ReasonCache) Remove(uid types.UID, name string) {
 	c.cache.Remove(c.composeKey(uid, name))
 }
 
-// Get gets error reason from the cache. The return values are error reason, error message and
-// whether an error reason is found in the cache. If no error reason is found, empty string will
-// be returned for error reason and error message.
+// Get 从缓存读取失败原因。
+// 返回缓存条目以及是否命中；未命中时返回 nil 和 false。
 func (c *ReasonCache) Get(uid types.UID, name string) (*ReasonItem, bool) {
 	value, ok := c.cache.Get(c.composeKey(uid, name))
 	if !ok {

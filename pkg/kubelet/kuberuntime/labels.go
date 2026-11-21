@@ -30,6 +30,7 @@ import (
 
 const (
 	// TODO: change those label names to follow kubernetes's format
+	// 这些标签/注解键名由 kubelet 写入容器运行时，用于重启后重建 Pod 与容器状态。
 	podDeletionGracePeriodLabel    = "io.kubernetes.pod.deletionGracePeriod"
 	podTerminationGracePeriodLabel = "io.kubernetes.pod.terminationGracePeriod"
 
@@ -41,19 +42,22 @@ const (
 	containerPortsLabel                    = "io.kubernetes.container.ports"
 )
 
+// labeledPodSandboxInfo 是从 Pod sandbox 标签中解析出的信息。
 type labeledPodSandboxInfo struct {
-	// Labels from v1.Pod
+	// 来自 v1.Pod 的标签，不含 kubelet 自己的保留标签。
 	Labels       map[string]string
 	PodName      string
 	PodNamespace string
 	PodUID       kubetypes.UID
 }
 
+// annotatedPodSandboxInfo 是从 Pod sandbox 注解中解析出的信息。
 type annotatedPodSandboxInfo struct {
-	// Annotations from v1.Pod
+	// 来自 v1.Pod 的注解。
 	Annotations map[string]string
 }
 
+// labeledContainerInfo 是从容器标签中解析出的信息。
 type labeledContainerInfo struct {
 	ContainerName string
 	PodName       string
@@ -61,7 +65,10 @@ type labeledContainerInfo struct {
 	PodUID        kubetypes.UID
 }
 
+// annotatedContainerInfo 是从容器注解中解析出的运行时信息，
+// 这些字段在 kubelet 重启后用于恢复容器状态。
 type annotatedContainerInfo struct {
+	// Hash 是容器 spec 的哈希，用于判断容器是否需要重建。
 	Hash                      uint64
 	RestartCount              int
 	PodDeletionGracePeriod    *int64
@@ -72,11 +79,11 @@ type annotatedContainerInfo struct {
 	ContainerPorts            []v1.ContainerPort
 }
 
-// newPodLabels creates pod labels from v1.Pod.
+// newPodLabels 根据 v1.Pod 构造写入 Pod sandbox 的标签。
 func newPodLabels(pod *v1.Pod) map[string]string {
 	labels := map[string]string{}
 
-	// Get labels from v1.Pod
+	// 先复制 v1.Pod 自带的标签，再写入 kubelet 用于识别 Pod 的保留标签。
 	for k, v := range pod.Labels {
 		labels[k] = v
 	}
@@ -88,12 +95,12 @@ func newPodLabels(pod *v1.Pod) map[string]string {
 	return labels
 }
 
-// newPodAnnotations creates pod annotations from v1.Pod.
+// newPodAnnotations 根据 v1.Pod 构造写入 Pod sandbox 的注解。
 func newPodAnnotations(pod *v1.Pod) map[string]string {
 	return pod.Annotations
 }
 
-// newContainerLabels creates container labels from v1.Container and v1.Pod.
+// newContainerLabels 根据 v1.Container 和 v1.Pod 构造容器标签。
 func newContainerLabels(container *v1.Container, pod *v1.Pod) map[string]string {
 	labels := map[string]string{}
 	labels[types.KubernetesPodNameLabel] = pod.Name
@@ -104,12 +111,13 @@ func newContainerLabels(container *v1.Container, pod *v1.Pod) map[string]string 
 	return labels
 }
 
-// newContainerAnnotations creates container annotations from v1.Container and v1.Pod.
+// newContainerAnnotations 根据 v1.Container 和 v1.Pod 构造容器注解，
+// 记录容器哈希、重启次数、优雅终止参数以及 preStop 钩子和端口等信息。
 func newContainerAnnotations(ctx context.Context, container *v1.Container, pod *v1.Pod, restartCount int, opts *kubecontainer.RunContainerOptions) map[string]string {
 	logger := klog.FromContext(ctx)
 	annotations := map[string]string{}
 
-	// Kubelet always overrides device plugin annotations if they are conflicting
+	// 当设备插件注解与 kubelet 注解冲突时，kubelet 始终覆盖前者。
 	for _, a := range opts.Annotations {
 		annotations[a.Name] = a.Value
 	}
@@ -127,7 +135,7 @@ func newContainerAnnotations(ctx context.Context, container *v1.Container, pod *
 	}
 
 	if container.Lifecycle != nil && container.Lifecycle.PreStop != nil {
-		// Using json encoding so that the PreStop handler object is readable after writing as a label
+		// 使用 JSON 编码，写入注解后仍可还原出可读的 PreStop 处理器对象。
 		rawPreStop, err := json.Marshal(container.Lifecycle.PreStop)
 		if err != nil {
 			logger.Error(err, "Unable to marshal lifecycle PreStop handler for container", "containerName", container.Name, "pod", klog.KObj(pod))
@@ -136,6 +144,7 @@ func newContainerAnnotations(ctx context.Context, container *v1.Container, pod *
 		}
 	}
 
+	// 端口列表同样用 JSON 编码，便于运行时重启后重建端口映射。
 	if len(container.Ports) > 0 {
 		rawContainerPorts, err := json.Marshal(container.Ports)
 		if err != nil {
@@ -148,7 +157,7 @@ func newContainerAnnotations(ctx context.Context, container *v1.Container, pod *
 	return annotations
 }
 
-// getPodSandboxInfoFromLabels gets labeledPodSandboxInfo from labels.
+// getPodSandboxInfoFromLabels 从标签中解析出 labeledPodSandboxInfo。
 func getPodSandboxInfoFromLabels(ctx context.Context, labels map[string]string) *labeledPodSandboxInfo {
 	logger := klog.FromContext(ctx)
 	podSandboxInfo := &labeledPodSandboxInfo{
@@ -158,7 +167,7 @@ func getPodSandboxInfoFromLabels(ctx context.Context, labels map[string]string) 
 		PodUID:       kubetypes.UID(getStringValueFromLabel(logger, labels, types.KubernetesPodUIDLabel)),
 	}
 
-	// Remain only labels from v1.Pod
+	// 只保留来自 v1.Pod 的标签，过滤掉 kubelet 用于识别的保留标签。
 	for k, v := range labels {
 		if k != types.KubernetesPodNameLabel && k != types.KubernetesPodNamespaceLabel && k != types.KubernetesPodUIDLabel {
 			podSandboxInfo.Labels[k] = v
@@ -168,14 +177,14 @@ func getPodSandboxInfoFromLabels(ctx context.Context, labels map[string]string) 
 	return podSandboxInfo
 }
 
-// getPodSandboxInfoFromAnnotations gets annotatedPodSandboxInfo from annotations.
+// getPodSandboxInfoFromAnnotations 从注解中解析出 annotatedPodSandboxInfo。
 func getPodSandboxInfoFromAnnotations(annotations map[string]string) *annotatedPodSandboxInfo {
 	return &annotatedPodSandboxInfo{
 		Annotations: annotations,
 	}
 }
 
-// getContainerInfoFromLabels gets labeledContainerInfo from labels.
+// getContainerInfoFromLabels 从标签中解析出 labeledContainerInfo。
 func getContainerInfoFromLabels(ctx context.Context, labels map[string]string) *labeledContainerInfo {
 	logger := klog.FromContext(ctx)
 	return &labeledContainerInfo{
@@ -186,7 +195,7 @@ func getContainerInfoFromLabels(ctx context.Context, labels map[string]string) *
 	}
 }
 
-// getContainerInfoFromAnnotations gets annotatedContainerInfo from annotations.
+// getContainerInfoFromAnnotations 从注解中解析出 annotatedContainerInfo。
 func getContainerInfoFromAnnotations(ctx context.Context, annotations map[string]string) *annotatedContainerInfo {
 	logger := klog.FromContext(ctx)
 	var err error
@@ -195,9 +204,11 @@ func getContainerInfoFromAnnotations(ctx context.Context, annotations map[string
 		TerminationMessagePolicy: v1.TerminationMessagePolicy(getStringValueFromLabel(logger, annotations, containerTerminationMessagePolicyLabel)),
 	}
 
+	// 哈希以十六进制存储；解析失败只记录错误，不阻断容器信息重建。
 	if containerInfo.Hash, err = getUint64ValueFromLabel(ctx, annotations, containerHashLabel); err != nil {
 		logger.Error(err, "Unable to get label value from annotations", "label", containerHashLabel, "annotations", annotations)
 	}
+	// 重启次数以十进制存储。
 	if containerInfo.RestartCount, err = getIntValueFromLabel(logger, annotations, containerRestartCountLabel); err != nil {
 		logger.Error(err, "Unable to get label value from annotations", "label", containerRestartCountLabel, "annotations", annotations)
 	}
@@ -208,6 +219,7 @@ func getContainerInfoFromAnnotations(ctx context.Context, annotations map[string
 		logger.Error(err, "Unable to get label value from annotations", "label", podTerminationGracePeriodLabel, "annotations", annotations)
 	}
 
+	// preStop 处理器是可选信息，只有注解存在时才反序列化。
 	preStopHandler := &v1.LifecycleHandler{}
 	if found, err := getJSONObjectFromLabel(annotations, containerPreStopHandlerLabel, preStopHandler); err != nil {
 		logger.Error(err, "Unable to get label value from annotations", "label", containerPreStopHandlerLabel, "annotations", annotations)
@@ -215,6 +227,7 @@ func getContainerInfoFromAnnotations(ctx context.Context, annotations map[string
 		containerInfo.PreStopHandler = preStopHandler
 	}
 
+	// 端口列表同样是可选信息。
 	containerPorts := []v1.ContainerPort{}
 	if found, err := getJSONObjectFromLabel(annotations, containerPortsLabel, &containerPorts); err != nil {
 		logger.Error(err, "Unable to get label value from annotations", "label", containerPortsLabel, "annotations", annotations)
@@ -225,47 +238,53 @@ func getContainerInfoFromAnnotations(ctx context.Context, annotations map[string
 	return containerInfo
 }
 
+// getStringValueFromLabel 读取字符串标签值；标签缺失时返回空字符串而不是错误。
 func getStringValueFromLabel(logger klog.Logger, labels map[string]string, label string) string {
 	if value, found := labels[label]; found {
 		return value
 	}
-	// Do not report error, because there should be many old containers without label now.
+	// 不返回错误，因为现存大量旧容器没有该标签。
 	logger.V(3).Info("Container doesn't have requested label, it may be an old or invalid container", "label", label)
-	// Return empty string "" for these containers, the caller will get value by other ways.
+	// 对这类容器返回空字符串，调用方会通过其他途径获取值。
 	return ""
 }
 
+// getIntValueFromLabel 以十进制读取整型标签值；标签缺失时返回 0 而不是错误。
 func getIntValueFromLabel(logger klog.Logger, labels map[string]string, label string) (int, error) {
 	if strValue, found := labels[label]; found {
 		intValue, err := strconv.Atoi(strValue)
 		if err != nil {
-			// This really should not happen. Just set value to 0 to handle this abnormal case
+			// 这种情况理论上不应出现，用 0 兜底处理异常数据。
 			return 0, err
 		}
 		return intValue, nil
 	}
-	// Do not report error, because there should be many old containers without label now.
+	// 不返回错误，因为现存大量旧容器没有该标签。
 	logger.V(3).Info("Container doesn't have requested label, it may be an old or invalid container", "label", label)
-	// Just set the value to 0
+	// 对缺失标签统一按 0 处理。
 	return 0, nil
 }
 
+// getUint64ValueFromLabel 以十六进制读取 uint64 标签值；标签缺失时返回 0 而不是错误。
 func getUint64ValueFromLabel(ctx context.Context, labels map[string]string, label string) (uint64, error) {
 	logger := klog.FromContext(ctx)
 	if strValue, found := labels[label]; found {
+		// 容器哈希以十六进制字符串写入，因此这里按 16 进制解析。
 		intValue, err := strconv.ParseUint(strValue, 16, 64)
 		if err != nil {
-			// This really should not happen. Just set value to 0 to handle this abnormal case
+			// 这种情况理论上不应出现，用 0 兜底处理异常数据。
 			return 0, err
 		}
 		return intValue, nil
 	}
-	// Do not report error, because there should be many old containers without label now.
+	// 不返回错误，因为现存大量旧容器没有该标签。
 	logger.V(3).Info("Container doesn't have requested label, it may be an old or invalid container", "label", label)
-	// Just set the value to 0
+	// 对缺失标签统一按 0 处理。
 	return 0, nil
 }
 
+// getInt64PointerFromLabel 以十进制读取指向 int64 的标签值；
+// 标签缺失时返回 nil 指针，以区分 "未设置" 和 "值为 0"。
 func getInt64PointerFromLabel(labels map[string]string, label string) (*int64, error) {
 	if strValue, found := labels[label]; found {
 		int64Value, err := strconv.ParseInt(strValue, 10, 64)
@@ -274,16 +293,16 @@ func getInt64PointerFromLabel(labels map[string]string, label string) (*int64, e
 		}
 		return &int64Value, nil
 	}
-	// If the label is not found, return pointer nil.
+	// 标签不存在时返回 nil 指针，保留 "未设置" 的语义。
 	return nil, nil
 }
 
-// getJSONObjectFromLabel returns a bool value indicating whether an object is found.
+// getJSONObjectFromLabel 反序列化 JSON 标签值，返回的 bool 表示标签是否存在。
 func getJSONObjectFromLabel(labels map[string]string, label string, value interface{}) (bool, error) {
 	if strValue, found := labels[label]; found {
 		err := json.Unmarshal([]byte(strValue), value)
 		return found, err
 	}
-	// If the label is not found, return not found.
+	// 标签不存在时返回 false。
 	return false, nil
 }

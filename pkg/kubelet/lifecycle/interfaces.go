@@ -22,117 +22,116 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// PodAdmitAttributes is the context for a pod admission decision.
-// The member fields of this struct should never be mutated.
+// PodAdmitAttributes 是 Pod 准入决策的上下文。
+// 该结构的字段绝不应被修改。
 type PodAdmitAttributes struct {
-	// the pod to evaluate for admission
+	// 待评估准入的 Pod。
 	Pod *v1.Pod
-	// all pods bound to the kubelet excluding the pod being evaluated
+	// 已绑定到 kubelet 的所有其他 Pod（不含待评估 Pod）。
 	OtherPods []*v1.Pod
-	// the operation being performed; either "add" or "resize"
+	// 当前执行的操作，取值为 "add" 或 "resize"。
 	Operation Operation
 }
 
-// Operation represents the type of operation being performed on a pod.
+// Operation 表示对 Pod 执行的操作类型。
 type Operation string
 
 const (
-	// AddOperation indicates that the pod is being added to the kubelet.
+	// AddOperation 表示 Pod 正被添加到 kubelet。
 	AddOperation Operation = "add"
-	// ResizeOperation indicates that the pod is being resized.
+	// ResizeOperation 表示 Pod 正在调整资源。
 	ResizeOperation Operation = "resize"
 )
 
-// PodAdmitResult provides the result of a pod admission decision.
+// PodAdmitResult 是 Pod 准入决策的结果。
 type PodAdmitResult struct {
-	// if true, the pod should be admitted.
+	// 为 true 时表示应准入该 Pod。
 	Admit bool
-	// a brief single-word reason why the pod could not be admitted.
+	// 无法准入时的简短原因（单个词）。
 	Reason string
-	// a brief message explaining why the pod could not be admitted.
+	// 解释无法准入原因的简短消息。
 	Message string
 }
 
-// PodAdmitHandler is notified during pod admission.
+// PodAdmitHandler 在 Pod 准入过程中被调用。
 type PodAdmitHandler interface {
-	// Admit evaluates if a pod can be admitted.
+	// Admit 评估 Pod 是否可以准入。
 	Admit(ctx context.Context, attrs *PodAdmitAttributes) PodAdmitResult
 }
 
-// PodAdmitTarget maintains a list of handlers to invoke.
+// PodAdmitTarget 维护待调用的准入处理器列表。
 type PodAdmitTarget interface {
-	// AddPodAdmitHandler adds the specified handler.
+	// AddPodAdmitHandler 添加指定的准入处理器。
 	AddPodAdmitHandler(a PodAdmitHandler)
 }
 
-// PodSyncLoopHandler is invoked during each sync loop iteration.
+// PodSyncLoopHandler 在每次同步循环迭代时被调用。
 type PodSyncLoopHandler interface {
-	// ShouldSync returns true if the pod needs to be synced.
-	// This operation must return immediately as its called for each pod.
-	// The provided pod should never be modified.
+	// ShouldSync 返回 Pod 是否需要同步。
+	// 该操作对每个 Pod 都会调用，必须立即返回。
+	// 传入的 Pod 绝不应被修改。
 	ShouldSync(pod *v1.Pod) bool
 }
 
-// PodSyncLoopTarget maintains a list of handlers to pod sync loop.
+// PodSyncLoopTarget 维护同步循环使用的处理器列表。
 type PodSyncLoopTarget interface {
-	// AddPodSyncLoopHandler adds the specified handler.
+	// AddPodSyncLoopHandler 添加指定的同步循环处理器。
 	AddPodSyncLoopHandler(a PodSyncLoopHandler)
 }
 
-// ShouldEvictResponse provides the result of a should evict request.
+// ShouldEvictResponse 是是否驱逐判断的结果。
 type ShouldEvictResponse struct {
-	// if true, the pod should be evicted.
+	// 为 true 时表示应驱逐该 Pod。
 	Evict bool
-	// a brief CamelCase reason why the pod should be evicted.
+	// 应驱逐的简短 CamelCase 原因。
 	Reason string
-	// a brief message why the pod should be evicted.
+	// 解释应驱逐原因的简短消息。
 	Message string
 }
 
-// PodSyncHandler is invoked during each sync pod operation.
+// PodSyncHandler 在每次同步 Pod 时被调用。
 type PodSyncHandler interface {
-	// ShouldEvict is invoked during each sync pod operation to determine
-	// if the pod should be evicted from the kubelet.  If so, the pod status
-	// is updated to mark its phase as failed with the provided reason and message,
-	// and the pod is immediately killed.
-	// This operation must return immediately as its called for each sync pod.
-	// The provided pod should never be modified.
+	// ShouldEvict 在每次同步 Pod 时判断是否应将其从 kubelet 驱逐。
+	// 若应驱逐，Pod 状态会被标记为 Failed（携带给出的原因和消息），
+	// 并立即被杀死。
+	// 该操作对每个 Pod 都会调用，必须立即返回。
+	// 传入的 Pod 绝不应被修改。
 	ShouldEvict(pod *v1.Pod) ShouldEvictResponse
 }
 
-// PodSyncTarget maintains a list of handlers to pod sync.
+// PodSyncTarget 维护 Pod 同步使用的处理器列表。
 type PodSyncTarget interface {
-	// AddPodSyncHandler adds the specified handler
+	// AddPodSyncHandler 添加指定的同步处理器。
 	AddPodSyncHandler(a PodSyncHandler)
 }
 
-// PodLifecycleTarget groups a set of lifecycle interfaces for convenience.
+// PodLifecycleTarget 把一组生命周期接口聚合在一起，方便使用。
 type PodLifecycleTarget interface {
 	PodAdmitTarget
 	PodSyncLoopTarget
 	PodSyncTarget
 }
 
-// PodAdmitHandlers maintains a list of handlers to pod admission.
+// PodAdmitHandlers 是准入处理器列表。
 type PodAdmitHandlers []PodAdmitHandler
 
-// AddPodAdmitHandler adds the specified observer.
+// AddPodAdmitHandler 添加指定的处理器。
 func (handlers *PodAdmitHandlers) AddPodAdmitHandler(a PodAdmitHandler) {
 	*handlers = append(*handlers, a)
 }
 
-// PodSyncLoopHandlers maintains a list of handlers to pod sync loop.
+// PodSyncLoopHandlers 是同步循环处理器列表。
 type PodSyncLoopHandlers []PodSyncLoopHandler
 
-// AddPodSyncLoopHandler adds the specified observer.
+// AddPodSyncLoopHandler 添加指定的处理器。
 func (handlers *PodSyncLoopHandlers) AddPodSyncLoopHandler(a PodSyncLoopHandler) {
 	*handlers = append(*handlers, a)
 }
 
-// PodSyncHandlers maintains a list of handlers to pod sync.
+// PodSyncHandlers 是 Pod 同步处理器列表。
 type PodSyncHandlers []PodSyncHandler
 
-// AddPodSyncHandler adds the specified handler.
+// AddPodSyncHandler 添加指定的同步处理器。.
 func (handlers *PodSyncHandlers) AddPodSyncHandler(a PodSyncHandler) {
 	*handlers = append(*handlers, a)
 }

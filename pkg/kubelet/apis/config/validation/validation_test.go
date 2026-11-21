@@ -36,6 +36,7 @@ import (
 )
 
 var (
+	// successConfig 是一份能通过校验的基线配置，各用例在其副本上只做单项改动。
 	successConfig = kubeletconfig.KubeletConfiguration{
 		CgroupsPerQOS:                          cgroupsPerQOS,
 		EnforceNodeAllocatable:                 enforceNodeAllocatable,
@@ -98,10 +99,12 @@ var (
 	}
 )
 
+// TestValidateKubeletConfiguration 以表驱动方式验证 KubeletConfiguration 的字段约束、特性门控依赖与平台差异。
 func TestValidateKubeletConfiguration(t *testing.T) {
 	featureGate := utilfeature.DefaultFeatureGate.DeepCopy()
 	logsapi.AddFeatureGates(featureGate)
 
+	// Windows 与非 Linux 平台对 defaultPodSysctls 的支持不同，期望错误信息需按平台区分。
 	var defaultPodSysctlsUnsupportedErrMsg string
 	if goruntime.GOOS == "windows" {
 		defaultPodSysctlsUnsupportedErrMsg = "invalid configuration: defaultPodSysctls is not supported on Windows"
@@ -372,7 +375,7 @@ func TestValidateKubeletConfiguration(t *testing.T) {
 		configure: func(conf *kubeletconfig.KubeletConfiguration) *kubeletconfig.KubeletConfiguration {
 			conf.FeatureGates = map[string]bool{
 				"GracefulNodeShutdown": false,
-				// Disable dependents.
+				// 同时关闭依赖该门控的特性。
 				"GracefulNodeShutdownBasedOnPodPriority": false,
 				"WindowsGracefulNodeShutdown":            false,
 			}
@@ -385,7 +388,7 @@ func TestValidateKubeletConfiguration(t *testing.T) {
 		configure: func(conf *kubeletconfig.KubeletConfiguration) *kubeletconfig.KubeletConfiguration {
 			conf.FeatureGates = map[string]bool{
 				"GracefulNodeShutdown": false,
-				// Disable dependents.
+				// 同时关闭依赖该门控的特性。
 				"GracefulNodeShutdownBasedOnPodPriority": false,
 				"WindowsGracefulNodeShutdown":            false,
 			}
@@ -426,7 +429,7 @@ func TestValidateKubeletConfiguration(t *testing.T) {
 		configure: func(conf *kubeletconfig.KubeletConfiguration) *kubeletconfig.KubeletConfiguration {
 			conf.FeatureGates = map[string]bool{"KubeletCrashLoopBackOffMax": true}
 			conf.CrashLoopBackOff = kubeletconfig.CrashLoopBackOffConfig{
-				// 300.9 seconds
+				// 300.9 秒
 				MaxContainerRestartPeriod: &metav1.Duration{Duration: 300900 * time.Millisecond},
 			}
 			return conf
@@ -438,7 +441,7 @@ func TestValidateKubeletConfiguration(t *testing.T) {
 			configure: func(conf *kubeletconfig.KubeletConfiguration) *kubeletconfig.KubeletConfiguration {
 				conf.FeatureGates = map[string]bool{"KubeletCrashLoopBackOffMax": true}
 				conf.CrashLoopBackOff = kubeletconfig.CrashLoopBackOffConfig{
-					// 300.9 seconds
+					// 300.9 秒
 					MaxContainerRestartPeriod: &metav1.Duration{Duration: 999 * time.Millisecond},
 				}
 				return conf
@@ -801,7 +804,7 @@ func TestValidateKubeletConfiguration(t *testing.T) {
 		}, {
 			name: "valid ImageMinimumGCAge set to default 1ns",
 			configure: func(conf *kubeletconfig.KubeletConfiguration) *kubeletconfig.KubeletConfiguration {
-				// Verify that values other than the default are accepted.
+				// 验证非默认值同样会被接受。
 				conf.ImageMinimumGCAge = metav1.Duration{Duration: 1 * time.Nanosecond}
 				return conf
 			},
@@ -895,8 +898,10 @@ func TestValidateKubeletConfiguration(t *testing.T) {
 		},
 	}
 
+	// 逐项执行校验，并断言错误信息包含期望子串。
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 在基线配置副本上应用用例改动，避免用例之间相互影响。
 			errs := validation.ValidateKubeletConfiguration(tc.configure(successConfig.DeepCopy()), featureGate)
 
 			if len(tc.errMsg) == 0 {

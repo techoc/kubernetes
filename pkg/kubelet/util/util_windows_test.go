@@ -31,6 +31,7 @@ import (
 	"k8s.io/cri-client/pkg/util"
 )
 
+// TestNormalizePath 验证 Windows 路径归一化会补齐盘符并统一分隔符。
 func TestNormalizePath(t *testing.T) {
 	tests := []struct {
 		originalpath   string
@@ -66,11 +67,13 @@ func TestNormalizePath(t *testing.T) {
 		},
 	}
 
+	// 逐个用例校验路径归一化结果。
 	for _, test := range tests {
 		assert.Equal(t, test.normalizedPath, NormalizePath(test.originalpath))
 	}
 }
 
+// TestLocalEndpoint 验证本地 endpoint 会被转换为 Windows npipe 地址。
 func TestLocalEndpoint(t *testing.T) {
 	tests := []struct {
 		path             string
@@ -80,12 +83,14 @@ func TestLocalEndpoint(t *testing.T) {
 	}{
 		{
 			path:             "/var/lib/kubelet/pod-resources",
-			file:             "kube.sock", // this is not the default, but it's not relevant here
+			file:             "kube.sock", // 这不是默认文件名，但此处无关紧要。
 			expectError:      false,
 			expectedFullPath: `npipe://\\.\pipe\kubelet-pod-resources`,
 		},
 	}
+	// 逐个用例校验本地 endpoint 的解析结果。
 	for _, test := range tests {
+		// 先构造本地 endpoint，再解析回地址与 dialer。
 		fullPath, err := LocalEndpoint(test.path, test.file)
 		if test.expectError {
 			assert.NotNil(t, err, "expected error")
@@ -96,7 +101,9 @@ func TestLocalEndpoint(t *testing.T) {
 	}
 }
 
+// TestLocalEndpointRoundTrip 验证 endpoint 构造与解析的往返一致性。
 func TestLocalEndpointRoundTrip(t *testing.T) {
+	// 通过反射取得预期 dialer 的函数名。
 	functionPointer := reflect.ValueOf(util.GetAddressAndDialer).Pointer()
 	functionName := runtime.FuncForPC(functionPointer).Name()
 	expectedDialerName := fmt.Sprintf("%s.npipeDial", functionName[:strings.LastIndex(functionName, ".")])

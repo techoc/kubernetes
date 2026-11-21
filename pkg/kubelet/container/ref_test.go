@@ -24,6 +24,8 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 )
 
+// TestFieldPath 验证根据容器在 Pod spec 中的位置生成字段路径：
+// 有名容器用 {name}，无名容器回退到下标；找不到容器时应报错。
 func TestFieldPath(t *testing.T) {
 	pod := &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{
 		{Name: "foo"},
@@ -44,6 +46,7 @@ func TestFieldPath(t *testing.T) {
 		"missing":          {pod, &v1.Container{Name: "qux"}, "", false},
 	}
 
+	// 逐项验证：失败用例要求返回错误，成功用例要求路径完全一致。
 	for name, item := range table {
 		res, err := fieldPath(item.pod, item.container)
 		if !item.success {
@@ -62,6 +65,7 @@ func TestFieldPath(t *testing.T) {
 	}
 }
 
+// TestGenerateContainerRef 验证由 Pod 与容器生成 ObjectReference 的各字段。
 func TestGenerateContainerRef(t *testing.T) {
 	var (
 		okPod = v1.Pod{
@@ -86,6 +90,7 @@ func TestGenerateContainerRef(t *testing.T) {
 		}
 	)
 
+	// 覆盖按名字匹配、空名字回退下标，以及隐式必需容器三种情况。
 	cases := []struct {
 		name      string
 		pod       *v1.Pod
@@ -144,6 +149,7 @@ func TestGenerateContainerRef(t *testing.T) {
 		},
 	}
 
+	// 先校验成功/失败预期，再逐字段比对引用内容。
 	for _, tc := range cases {
 		actual, err := GenerateContainerRef(tc.pod, tc.container)
 		if err != nil {

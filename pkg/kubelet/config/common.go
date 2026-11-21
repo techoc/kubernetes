@@ -48,27 +48,31 @@ import (
 )
 
 const (
+	// maxConfigLength 限制单个静态 Pod 配置文件的最大长度（10MB）；
+	// nodeCriticalPriority 是静态 Pod 的节点关键优先级；
+	// maxStaticPodWarningMessages 是告警去重缓存容量。
 	maxConfigLength             = 10 * 1 << 20 // 10MB
 	nodeCriticalPriority        = schedulingapi.SystemCriticalPriority + 1000
 	maxStaticPodWarningMessages = 1000
 )
 
 var (
-	// staticPodWarningCache is used to deduplicate static pod priority warning messages
+	// staticPodWarningCache 用于对静态 Pod 优先级告警去重。
 	staticPodWarningCache = newWarningCache(maxStaticPodWarningMessages)
 )
 
-// Generate a pod name that is unique among nodes by appending the nodeName.
+// 在名称后附加小写的节点名，使 Pod 名在节点间唯一。
 func generatePodName(name string, nodeName types.NodeName) string {
 	return fmt.Sprintf("%s-%s", name, strings.ToLower(string(nodeName)))
 }
 
+// applyDefaults 为静态 Pod 补充 UID、名称、命名空间、节点名、注解与默认状态。
 func applyDefaults(logger klog.Logger, pod *api.Pod, source string, isFile bool, nodeName types.NodeName) error {
+	// UID 为空时基于 Pod 内容与来源计算哈希，保证同一配置在多次读取间保持稳定。
 	if len(pod.UID) == 0 {
 		hasher := fnv.New128a()
 		hash.DeepHashObject(hasher, pod)
-		// DeepHashObject resets the hash, so we should write the pod source
-		// information AFTER it.
+		// DeepHashObject 会重置哈希状态，因此必须在它之后再写入 Pod 来源信息。
 		if isFile {
 			fmt.Fprintf(hasher, "host:%s", nodeName)
 			fmt.Fprintf(hasher, "file:%s", source)
@@ -79,48 +83,50 @@ func applyDefaults(logger klog.Logger, pod *api.Pod, source string, isFile bool,
 		logger.V(5).Info("Generated UID", "pod", klog.KObj(pod), "podUID", pod.UID, "source", source)
 	}
 
+	// 名称附加节点名，避免同一静态 Pod 在不同节点上重名。
 	pod.Name = generatePodName(pod.Name, nodeName)
 	logger.V(5).Info("Generated pod name", "pod", klog.KObj(pod), "podUID", pod.UID, "source", source)
 
+	// 未指定命名空间时使用 default。
 	if pod.Namespace == "" {
 		pod.Namespace = metav1.NamespaceDefault
 	}
 	logger.V(5).Info("Set namespace for pod", "pod", klog.KObj(pod), "source", source)
 
-	// Set the Host field to indicate this pod is scheduled on the current node.
+	// 设置 NodeName 字段，表示该 Pod 已调度到当前节点。
 	pod.Spec.NodeName = string(nodeName)
 
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
-	// The generated UID is the hash of the file.
+	// 生成的 UID 实际是配置内容的哈希，用于检测配置变化。
 	pod.Annotations[kubetypes.ConfigHashAnnotationKey] = string(pod.UID)
 
 	if isFile {
-		// Applying the default Taint tolerations to static pods,
-		// so they are not evicted when there are node problems.
+		// 为静态 Pod 应用默认的污点容忍，使其在节点出现问题时不会被驱逐。
 		helper.AddOrUpdateTolerationInPod(pod, &api.Toleration{
 			Operator: "Exists",
 			Effect:   api.TaintEffectNoExecute,
 		})
 	}
 
-	// Set the default status to pending.
+	// 默认状态设为 Pending，等待容器运行时启动。
 	pod.Status.Phase = api.PodPending
 	return nil
 }
 
+// defaultFunc 是为 Pod 应用默认值的回调类型。
 type defaultFunc func(logger klog.Logger, pod *api.Pod) error
 
-// A static pod tried to use a ClusterTrustBundle projected volume source.
+// ErrStaticPodTriedToUseClusterTrustBundle 表示静态 Pod 试图使用 ClusterTrustBundle 投影卷。
 var ErrStaticPodTriedToUseClusterTrustBundle = errors.New("static pods may not use ClusterTrustBundle projected volume sources")
 
-// A static pod tried to use a resource claim.
+// ErrStaticPodTriedToUseResourceClaims 表示静态 Pod 试图使用 ResourceClaim。
 var ErrStaticPodTriedToUseResourceClaims = errors.New("static pods may not use ResourceClaims")
 
-// tryDecodeSinglePod takes data and tries to extract valid Pod config information from it.
+// tryDecodeSinglePod 从数据中解析并校验单个 Pod 配置。
 func tryDecodeSinglePod(logger klog.Logger, data []byte, defaultFn defaultFunc) (parsed bool, pod *v1.Pod, err error) {
-	// JSON is valid YAML, so this should work for everything.
+	// JSON 是合法的 YAML，因此该转换对所有输入都适用。
 	json, err := utilyaml.ToJSON(data)
 	if err != nil {
 		return false, nil, err
@@ -131,7 +137,7 @@ func tryDecodeSinglePod(logger klog.Logger, data []byte, defaultFn defaultFunc) 
 	}
 
 	newPod, ok := obj.(*api.Pod)
-	// Check whether the object could be converted to single pod.
+	// 检查解码结果是否为单个 Pod。
 	if !ok {
 		return false, pod, fmt.Errorf("invalid pod: %#v", obj)
 	}
@@ -140,7 +146,7 @@ func tryDecodeSinglePod(logger klog.Logger, data []byte, defaultFn defaultFunc) 
 		return true, pod, fmt.Errorf("invalid pod: name is needed for the pod")
 	}
 
-	// Apply default values and validate the pod.
+	// 应用默认值并校验 Pod。
 	if err = defaultFn(logger, newPod); err != nil {
 		return true, pod, err
 	}
@@ -154,7 +160,7 @@ func tryDecodeSinglePod(logger klog.Logger, data []byte, defaultFn defaultFunc) 
 		return true, nil, err
 	}
 
-	// Check if pod has references to API objects
+	// 静态 Pod 不允许引用其他 API 对象（如 ResourceClaim）。
 	_, resource, err := podutil.HasAPIObjectReference(newPod)
 	if err != nil {
 		return true, nil, err
@@ -163,6 +169,7 @@ func tryDecodeSinglePod(logger klog.Logger, data []byte, defaultFn defaultFunc) 
 		return true, nil, fmt.Errorf("static pods may not reference %s", resource)
 	}
 
+	// 优先级配置异常只产生告警，并通过缓存去重避免刷屏。
 	warning := getStaticPodPriorityWarning(newPod)
 	if warning != "" && staticPodWarningCache.addIfAbsent(warning) {
 		logger.Info(warning, "pod", klog.KObj(newPod))
@@ -171,6 +178,7 @@ func tryDecodeSinglePod(logger klog.Logger, data []byte, defaultFn defaultFunc) 
 	return true, v1Pod, nil
 }
 
+// tryDecodePodList 从数据中解析 Pod 列表，并逐个应用默认值与校验。
 func tryDecodePodList(logger klog.Logger, data []byte, defaultFn defaultFunc) (parsed bool, pods v1.PodList, err error) {
 	obj, err := runtime.Decode(legacyscheme.Codecs.UniversalDecoder(), data)
 	if err != nil {
@@ -178,13 +186,13 @@ func tryDecodePodList(logger klog.Logger, data []byte, defaultFn defaultFunc) (p
 	}
 
 	newPods, ok := obj.(*api.PodList)
-	// Check whether the object could be converted to list of pods.
+	// 检查解码结果是否为 Pod 列表。
 	if !ok {
 		err = fmt.Errorf("invalid pods list: %#v", obj)
 		return false, pods, err
 	}
 
-	// Apply default values and validate pods.
+	// 逐个应用默认值并校验 Pod。
 	for i := range newPods.Items {
 		newPod := &newPods.Items[i]
 		if newPod.Name == "" {
@@ -198,7 +206,7 @@ func tryDecodePodList(logger klog.Logger, data []byte, defaultFn defaultFunc) (p
 			err = fmt.Errorf("invalid pod: %v", errs)
 			return true, pods, err
 		}
-		// Check if pod has references to API objects
+		// 静态 Pod 不允许引用其他 API 对象。
 		_, resource, err := podutil.HasAPIObjectReference(newPod)
 		if err != nil {
 			return true, pods, err
@@ -214,16 +222,21 @@ func tryDecodePodList(logger klog.Logger, data []byte, defaultFn defaultFunc) (p
 	return true, *v1Pods, err
 }
 
+// getStaticPodPriorityWarning 检查静态 Pod 的优先级配置，返回需要提示给用户的告警信息。
 func getStaticPodPriorityWarning(pod *api.Pod) string {
 	podSpec := pod.Spec
 
+	// 只处理三种可能导致镜像 Pod 创建失败或被无效驱逐的配置。
 	switch {
+	// 有 priorityClassName 但没有 priority 时，kubelet 不会使用该优先级类。
 	case podSpec.Priority == nil && len(podSpec.PriorityClassName) > 0:
 		return "Static pod has priorityClassName and nil priority. Kubelet will not use priorityClassName, and mirror pod creation may fail."
 
+	// 有 priority 但没有 priorityClassName 时，默认优先级类可能不匹配。
 	case podSpec.Priority != nil && len(podSpec.PriorityClassName) == 0:
 		return "Static pod has priority without priorityClassName. Mirror pod creation may fail if the default priority class doesn't match the given priority."
 
+	// 优先级或优先级类与节点关键优先级不一致时，镜像 Pod 可能被无效驱逐。
 	case podSpec.Priority != nil && (*podSpec.Priority != nodeCriticalPriority || podSpec.PriorityClassName != schedulingapi.SystemNodeCritical):
 		return fmt.Sprintf("Static pod has a priority other than %d or a priorityClassName other than %s. Mirror pod may be attempted to be evicted from the node ineffectively.", nodeCriticalPriority, schedulingapi.SystemNodeCritical)
 	}

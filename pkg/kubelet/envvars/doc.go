@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package envvars is the package that build the environment variables that kubernetes provides
-// to the containers run by it.
+// Package envvars 负责构建 kubernetes 为其运行的容器所提供的环境变量。
 package envvars

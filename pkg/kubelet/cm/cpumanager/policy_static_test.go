@@ -46,10 +46,13 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// containerRestartPolicyAlways 是用于构造可重启 init 容器的便捷别名
 var (
 	containerRestartPolicyAlways = v1.ContainerRestartPolicyAlways
 )
 
+// newNUMAAffinity 根据给定的 NUMA 节点编号构造位掩码；构造失败直接 panic，
+// 因为它只用于测试中的固定输入
 func newNUMAAffinity(bits ...int) bitmask.BitMask {
 	affinity, err := bitmask.NewBitMask(bits...)
 	if err != nil {
@@ -58,6 +61,8 @@ func newNUMAAffinity(bits ...int) bitmask.BitMask {
 	return affinity
 }
 
+// staticPolicyTest 描述一个 static 策略测试用例：输入拓扑、预留 CPU、初始状态与 Pod，
+// 以及期望的错误、是否分配成功和期望的 CPU 集合
 type staticPolicyTest struct {
 	description     string
 	topo            *topology.CPUTopology
@@ -75,8 +80,8 @@ type staticPolicyTest struct {
 	expCSet         cpuset.CPUSet
 }
 
-// this is not a real Clone() - hence Pseudo- - because we don't clone some
-// objects which are accessed read-only
+// 这不是真正的 Clone()，因此称为 PseudoClone：部分对象仅被只读访问，无需深拷贝
+// 因而这里对它们直接复用引用
 func (spt staticPolicyTest) PseudoClone() staticPolicyTest {
 	return staticPolicyTest{
 		description:     spt.description,
@@ -94,6 +99,7 @@ func (spt staticPolicyTest) PseudoClone() staticPolicyTest {
 	}
 }
 
+// TestStaticPolicyName 验证 static 策略的名称固定为 "static"
 func TestStaticPolicyName(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	policy, err := NewStaticPolicy(logger, topoSingleSocketHT, 1, cpuset.New(), topologymanager.NewFakeManager(logger), nil)
@@ -108,6 +114,8 @@ func TestStaticPolicyName(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyStart 验证策略启动时对状态的校验：
+// 非空默认 cpuset 保持不变、空 cpuset 会按拓扑重建、预留 CPU 缺失或与已分配重叠时报错
 func TestStaticPolicyStart(t *testing.T) {
 	testCases := []staticPolicyTest{
 		{
@@ -232,6 +240,8 @@ func TestStaticPolicyStart(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyAdd 验证 Allocate 的 CPU 分配结果，覆盖单/双/四 Socket、
+// 超线程、完整物理核约束、预留 CPU 以及按 Socket 对齐等多种拓扑与选项组合
 func TestStaticPolicyAdd(t *testing.T) {
 	var largeTopoCPUids []int
 	var largeTopoSock0CPUids []int
@@ -249,8 +259,8 @@ func TestStaticPolicyAdd(t *testing.T) {
 	largeTopoSock0CPUSet := cpuset.New(largeTopoSock0CPUids...)
 	largeTopoSock1CPUSet := cpuset.New(largeTopoSock1CPUids...)
 
-	// these are the cases which must behave the same regardless the policy options.
-	// So we will permutate the options to ensure this holds true.
+	// 以下用例必须在任何策略选项下表现一致，
+	// 因此下面会对选项做排列组合来验证这一点
 
 	optionsInsensitiveTestCases := []staticPolicyTest{
 		{
@@ -366,9 +376,8 @@ func TestStaticPolicyAdd(t *testing.T) {
 			expCSet:         cpuset.New(),
 		},
 		{
-			// All the CPUs from Socket 0 are available. Some CPUs from each
-			// Socket have been already assigned.
-			// Expect all CPUs from Socket 0.
+			// Socket 0 的 CPU 全部可用，而每个 Socket 上都有部分 CPU 已被分配，
+			// 预期分配 Socket 0 的全部 CPU
 			description: "GuPodMultipleCores, topoQuadSocketFourWayHT, ExpectAllocSock0",
 			topo:        topoQuadSocketFourWayHT,
 			stAssignments: state.ContainerCPUAssignments{
@@ -383,8 +392,8 @@ func TestStaticPolicyAdd(t *testing.T) {
 			expCSet:         largeTopoSock0CPUSet,
 		},
 		{
-			// Only 2 full cores from three Sockets and some partial cores are available.
-			// Expect CPUs from the 2 full cores available from the three Sockets.
+			// 三个 Socket 上各只有 2 个完整核以及部分零散 CPU 可用，
+			// 预期分配这三个 Socket 上可用的 2 个完整核对应的 CPU
 			description: "GuPodMultipleCores, topoQuadSocketFourWayHT, ExpectAllocAllFullCoresFromThreeSockets",
 			topo:        topoQuadSocketFourWayHT,
 			stAssignments: state.ContainerCPUAssignments{
@@ -400,8 +409,8 @@ func TestStaticPolicyAdd(t *testing.T) {
 			expCSet:         cpuset.New(1, 25, 13, 38, 11, 35, 23, 48, 53, 173, 113, 233),
 		},
 		{
-			// All CPUs from Socket 1, 1 full core and some partial cores are available.
-			// Expect all CPUs from Socket 1 and the hyper-threads from the full core.
+			// Socket 1 的全部 CPU、1 个完整核以及部分零散 CPU 可用，
+			// 预期分配 Socket 1 的全部 CPU 以及该完整核的兄弟超线程
 			description: "GuPodMultipleCores, topoQuadSocketFourWayHT, ExpectAllocAllSock1+FullCore",
 			topo:        topoQuadSocketFourWayHT,
 			stAssignments: state.ContainerCPUAssignments{
@@ -419,7 +428,7 @@ func TestStaticPolicyAdd(t *testing.T) {
 		},
 	}
 
-	// testcases for the default behaviour of the policy.
+	// 策略默认行为下的测试用例
 	defaultOptionsTestCases := []staticPolicyTest{
 		{
 			description:     "GuPodSingleCore, SingleSocketHT, ExpectAllocOneCPU",
@@ -430,11 +439,11 @@ func TestStaticPolicyAdd(t *testing.T) {
 			pod:             makePod("fakePod", "fakeContainer2", "1000m", "1000m"),
 			expErr:          nil,
 			expCPUAlloc:     true,
-			expCSet:         cpuset.New(4), // expect sibling of partial core
+			expCSet:         cpuset.New(4), // 预期分配该不完整核的兄弟超线程
 		},
 		{
-			// Only partial cores are available in the entire system.
-			// Expect allocation of all the CPUs from the partial cores.
+			// 整个系统中仅剩不完整的核可用，
+			// 预期把这些不完整核的 CPU 全部分配出去
 			description: "GuPodMultipleCores, topoQuadSocketFourWayHT, ExpectAllocCPUs",
 			topo:        topoQuadSocketFourWayHT,
 			stAssignments: state.ContainerCPUAssignments{
@@ -505,9 +514,9 @@ func TestStaticPolicyAdd(t *testing.T) {
 			expCSet:         cpuset.New(),
 		},
 		{
-			// Only 7 CPUs are available.
-			// Pod requests 76 cores.
-			// Error is expected since available CPUs are less than the request.
+			// 当前仅有 7 个 CPU 可用，
+			// 而 Pod 请求 76 个核，
+			// 可用 CPU 少于请求量，因此预期报错
 			description: "GuPodMultipleCores, topoQuadSocketFourWayHT, NoAlloc",
 			topo:        topoQuadSocketFourWayHT,
 			stAssignments: state.ContainerCPUAssignments{
@@ -523,7 +532,7 @@ func TestStaticPolicyAdd(t *testing.T) {
 		},
 	}
 
-	// testcases for the FullPCPUsOnlyOption
+	// FullPCPUsOnlyOption 的测试用例
 	smtalignOptionTestCases := []staticPolicyTest{
 		{
 			description: "GuPodSingleCore, SingleSocketHT, ExpectAllocOneCPU",
@@ -537,10 +546,10 @@ func TestStaticPolicyAdd(t *testing.T) {
 			pod:             makePod("fakePod", "fakeContainer2", "1000m", "1000m"),
 			expErr:          SMTAlignmentError{RequestedCPUs: 1, CpusPerCore: 2},
 			expCPUAlloc:     false,
-			expCSet:         cpuset.New(), // reject allocation of sibling of partial core
+			expCSet:         cpuset.New(), // 拒绝分配该不完整核的兄弟超线程
 		},
 		{
-			// test SMT-level != 2 - which is the default on x86_64
+			// 测试 SMT 级别 != 2 的情况（x86_64 上通常为 2）
 			description: "GuPodMultipleCores, topoQuadSocketFourWayHT, ExpectAllocOneCPUs",
 			topo:        topoQuadSocketFourWayHT,
 			options: map[string]string{
@@ -599,9 +608,8 @@ func TestStaticPolicyAdd(t *testing.T) {
 			expCSet:         cpuset.New(1, 2, 3, 4, 5, 7, 8, 9, 10, 11),
 		},
 		{
-			// The purpose of this test is to verify that SMTAlignment consider
-			// pre-allocated CPUs assigned to the container.
-			// for example, in case of kubelet restart.
+			// 该用例用于验证 SMT 对齐检查会考虑已预分配给容器的 CPU，
+			// 例如 kubelet 重启后从状态中恢复的分配结果
 			description: "GuPodManyCores, DualSocketHT, ExpectReAllocCPUs",
 			topo:        topoDualSocketHT,
 			options: map[string]string{
@@ -693,6 +701,8 @@ func TestStaticPolicyAdd(t *testing.T) {
 	}
 }
 
+// runStaticPolicyTestCase 执行单个 staticPolicyTest 用例：构造策略与状态、
+// 调用 Allocate，并校验错误、分配结果与默认 cpuset 的一致性
 func runStaticPolicyTestCase(t *testing.T, testCase staticPolicyTest) {
 	logger, _ := ktesting.NewTestContext(t)
 	tm := topologymanager.NewFakeManager(logger)
@@ -748,17 +758,20 @@ func runStaticPolicyTestCase(t *testing.T, testCase staticPolicyTest) {
 	}
 }
 
+// runStaticPolicyTestCaseWithFeatureGate 在开启 CPUManagerPolicyAlphaOptions 特性后执行用例
 func runStaticPolicyTestCaseWithFeatureGate(t *testing.T, testCase staticPolicyTest) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.CPUManagerPolicyAlphaOptions, true)
 	runStaticPolicyTestCase(t, testCase)
 }
 
+// TestStaticPolicyAllocateRecordsBaseline 验证独占 CPU 分配时会同时记录 baseline cpuset，
+// 供原地垂直扩缩容判断当前容器是否仍持有原分配
 func TestStaticPolicyAllocateRecordsBaseline(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.InPlacePodVerticalScalingExclusiveCPUs, true)
 
 	logger, _ := ktesting.NewTestContext(t)
 	tm := topologymanager.NewFakeManager(logger)
-	topo := topoDualSocketHT // any topology suffice, pick a simple one
+	topo := topoDualSocketHT // 任意拓扑都可以，这里选一个简单的
 	opts := map[string]string{}
 	policy, err := NewStaticPolicy(logger, topo, 1, cpuset.New(), tm, opts)
 	if err != nil {
@@ -767,12 +780,12 @@ func TestStaticPolicyAllocateRecordsBaseline(t *testing.T) {
 
 	st := &mockState{
 		assignments:   state.ContainerCPUAssignments{},
-		defaultCPUSet: cpuset.New(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), // matches the topo we use
+		defaultCPUSet: cpuset.New(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), // 与所选拓扑匹配
 		baselines:     state.ContainerCPUBaselines{},
 	}
 
-	pod := makePod("testPod", "testContainer", "2000m", "2000m") // any allocation triggering exclusive CPU assignment is fine
-	container := &pod.Spec.Containers[0]                         // shortcut
+	pod := makePod("testPod", "testContainer", "2000m", "2000m") // 任意能触发独占 CPU 分配的请求均可
+	container := &pod.Spec.Containers[0]                         // 简写引用
 
 	if err := policy.Allocate(logger, st, pod, container, lifecycle.AddOperation); err != nil {
 		t.Fatalf("Allocate() failed: %v", err)
@@ -793,6 +806,7 @@ func TestStaticPolicyAllocateRecordsBaseline(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyReuseCPUs 验证普通 init 容器被移除后其 CPU 会归还默认池，可被复用
 func TestStaticPolicyReuseCPUs(t *testing.T) {
 	testCases := []struct {
 		staticPolicyTest
@@ -830,7 +844,7 @@ func TestStaticPolicyReuseCPUs(t *testing.T) {
 		}
 		pod := testCase.pod
 
-		// allocate
+		// 分配
 		for _, container := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
 			_ = policy.Allocate(logger, st, pod, &container, lifecycle.AddOperation)
 		}
@@ -839,7 +853,7 @@ func TestStaticPolicyReuseCPUs(t *testing.T) {
 				testCase.description, testCase.expCSetAfterAlloc, st.defaultCPUSet)
 		}
 
-		// remove
+		// 移除
 		_ = policy.RemoveContainer(logger, st, string(pod.UID), testCase.containerName)
 
 		if !st.defaultCPUSet.Equals(testCase.expCSetAfterRemove) {
@@ -853,6 +867,8 @@ func TestStaticPolicyReuseCPUs(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyDoNotReuseCPUs 验证可重启 init 容器（restartable sidecar）的 CPU 在分配后
+// 不会被后续容器复用
 func TestStaticPolicyDoNotReuseCPUs(t *testing.T) {
 	testCases := []struct {
 		staticPolicyTest
@@ -887,7 +903,7 @@ func TestStaticPolicyDoNotReuseCPUs(t *testing.T) {
 		}
 		pod := testCase.pod
 
-		// allocate
+		// 分配
 		for _, container := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
 			err := policy.Allocate(logger, st, pod, &container, lifecycle.AddOperation)
 			if err != nil {
@@ -902,6 +918,8 @@ func TestStaticPolicyDoNotReuseCPUs(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyRemove 验证 RemoveContainer 会把容器占用的 CPU 归还默认池，
+// 并清理状态中的分配记录；未知容器则不做任何变更
 func TestStaticPolicyRemove(t *testing.T) {
 	testCases := []staticPolicyTest{
 		{
@@ -986,6 +1004,8 @@ func TestStaticPolicyRemove(t *testing.T) {
 	}
 }
 
+// TestTopologyAwareAllocateCPUs 验证 allocateCPUs 在给定 Socket 位掩码时只在对应 Socket 内选核，
+// 且无位掩码时按默认顺序分配
 func TestTopologyAwareAllocateCPUs(t *testing.T) {
 	testCases := []struct {
 		description     string
@@ -1085,8 +1105,9 @@ func TestTopologyAwareAllocateCPUs(t *testing.T) {
 	}
 }
 
-// above test cases are without kubelet --reserved-cpus cmd option
-// the following tests are with --reserved-cpus configured
+// 以上测试用例未启用 kubelet 的 --reserved-cpus 选项，
+// 以下测试用例配置了 --reserved-cpus
+// staticPolicyTestWithResvList 是配置了显式预留 CPU 列表（--reserved-cpus）时的测试用例描述
 type staticPolicyTestWithResvList struct {
 	description      string
 	topo             *topology.CPUTopology
@@ -1103,6 +1124,8 @@ type staticPolicyTestWithResvList struct {
 	expUncoreCache   cpuset.CPUSet // represents the expected UncoreCacheIDs
 }
 
+// TestStaticPolicyStartWithResvList 验证配置预留 CPU 列表时策略启动的校验逻辑，
+// 包括严格预留（StrictCPUReservationOption）以及预留数量与列表不一致的错误
 func TestStaticPolicyStartWithResvList(t *testing.T) {
 	testCases := []staticPolicyTestWithResvList{
 		{
@@ -1188,6 +1211,7 @@ func TestStaticPolicyStartWithResvList(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyAddWithResvList 验证配置预留 CPU 列表时 Allocate 的分配结果
 func TestStaticPolicyAddWithResvList(t *testing.T) {
 
 	testCases := []staticPolicyTestWithResvList{
@@ -1213,7 +1237,7 @@ func TestStaticPolicyAddWithResvList(t *testing.T) {
 			pod:             makePod("fakePod", "fakeContainer2", "1000m", "1000m"),
 			expErr:          nil,
 			expCPUAlloc:     true,
-			expCSet:         cpuset.New(4), // expect sibling of partial core
+			expCSet:         cpuset.New(4), // 预期分配该不完整核的兄弟超线程
 		},
 		{
 			description:     "GuPodMultipleCores, SingleSocketHT, ExpectAllocOneCore",
@@ -1280,12 +1304,16 @@ func TestStaticPolicyAddWithResvList(t *testing.T) {
 	}
 }
 
+// WithPodUID 返回 Pod 的深拷贝并替换其 UID，便于在测试中区分不同 Pod
 func WithPodUID(pod *v1.Pod, podUID string) *v1.Pod {
 	ret := pod.DeepCopy()
 	ret.UID = types.UID(podUID)
 	return ret
 }
 
+// TestStaticPolicyAddWithUncoreAlignment 验证 PreferAlignByUnCoreCacheOption 下
+// 容器 CPU 尽可能对齐到同一 uncore cache 的分配行为，覆盖多种拓扑、
+// 奇偶 CPU 请求、预留 CPU 与严格预留等组合
 func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.CPUManagerPolicyAlphaOptions, true)
 
@@ -1294,13 +1322,13 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			description:     "GuPodSingleContainerSaturating, DualSocketHTUncore, ExpectAllocOneUncore, FullUncoreAvail",
 			topo:            topoDualSocketSingleNumaPerSocketSMTUncore,
 			numReservedCPUs: 8,
-			reserved:        cpuset.New(0, 1, 96, 97, 192, 193, 288, 289), // note 4 cpus taken from uncore 0, 4 from uncore 12
+			reserved:        cpuset.New(0, 1, 96, 97, 192, 193, 288, 289), // 注意：uncore 0 被占用 4 个 CPU，uncore 12 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// remove partially used uncores from the available CPUs to simulate fully clean slate
+			// 从可用 CPU 中剔除已被部分占用的 uncore，模拟一个完全干净的初始状态
 			stDefaultCPUSet: topoDualSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUs().Difference(
 				cpuset.New().Union(
 					topoDualSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUsInUncoreCaches(0),
@@ -1310,9 +1338,9 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
-						{"16000m", "16000m"}, // CpusPerUncore=16 with this topology
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
+						{"16000m", "16000m"}, // 该拓扑下每个 uncore 有 16 个 CPU
 					},
 				),
 				"with-app-container-saturating",
@@ -1323,13 +1351,13 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			description:     "GuPodMainAndSidecarContainer, DualSocketHTUncore, ExpectAllocOneUncore, FullUncoreAvail",
 			topo:            topoDualSocketSingleNumaPerSocketSMTUncore,
 			numReservedCPUs: 8,
-			reserved:        cpuset.New(0, 1, 96, 97, 192, 193, 288, 289), // note 4 cpus taken from uncore 0, 4 from uncore 12
+			reserved:        cpuset.New(0, 1, 96, 97, 192, 193, 288, 289), // 注意：uncore 0 被占用 4 个 CPU，uncore 12 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// remove partially used uncores from the available CPUs to simulate fully clean slate
+			// 从可用 CPU 中剔除已被部分占用的 uncore，模拟一个完全干净的初始状态
 			stDefaultCPUSet: topoDualSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUs().Difference(
 				cpuset.New().Union(
 					topoDualSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUsInUncoreCaches(0),
@@ -1339,8 +1367,8 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"12000m", "12000m"},
 						{"2000m", "2000m"},
 					},
@@ -1353,13 +1381,13 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			description:     "GuPodSidecarAndMainContainer, DualSocketHTUncore, ExpectAllocOneUncore, FullUncoreAvail",
 			topo:            topoDualSocketSingleNumaPerSocketSMTUncore,
 			numReservedCPUs: 8,
-			reserved:        cpuset.New(0, 1, 96, 97, 192, 193, 288, 289), // note 4 cpus taken from uncore 0, 4 from uncore 12
+			reserved:        cpuset.New(0, 1, 96, 97, 192, 193, 288, 289), // 注意：uncore 0 被占用 4 个 CPU，uncore 12 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// remove partially used uncores from the available CPUs to simulate fully clean slate
+			// 从可用 CPU 中剔除已被部分占用的 uncore，模拟一个完全干净的初始状态
 			stDefaultCPUSet: topoDualSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUs().Difference(
 				cpuset.New().Union(
 					topoDualSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUsInUncoreCaches(0),
@@ -1369,8 +1397,8 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"2000m", "2000m"},
 						{"12000m", "12000m"},
 					},
@@ -1383,13 +1411,13 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			description:     "GuPodMainAndManySidecarContainer, DualSocketHTUncore, ExpectAllocOneUncore, FullUncoreAvail",
 			topo:            topoDualSocketSingleNumaPerSocketSMTUncore,
 			numReservedCPUs: 8,
-			reserved:        cpuset.New(0, 1, 96, 97, 192, 193, 288, 289), // note 4 cpus taken from uncore 0, 4 from uncore 12
+			reserved:        cpuset.New(0, 1, 96, 97, 192, 193, 288, 289), // 注意：uncore 0 被占用 4 个 CPU，uncore 12 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// remove partially used uncores from the available CPUs to simulate fully clean slate
+			// 从可用 CPU 中剔除已被部分占用的 uncore，模拟一个完全干净的初始状态
 			stDefaultCPUSet: topoDualSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUs().Difference(
 				cpuset.New().Union(
 					topoDualSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUsInUncoreCaches(0),
@@ -1399,8 +1427,8 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"10000m", "10000m"},
 						{"2000m", "2000m"},
 						{"2000m", "2000m"},
@@ -1415,7 +1443,7 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			description:     "GuPodMainAndSidecarContainer, DualSocketHTUncore, ExpectAllocTwoUncore",
 			topo:            topoDualSocketSingleNumaPerSocketSMTUncore,
 			numReservedCPUs: 8,
-			reserved:        cpuset.New(0, 1, 96, 97, 192, 193, 288, 289), // note 4 cpus taken from uncore 0, 4 from uncore 12
+			reserved:        cpuset.New(0, 1, 96, 97, 192, 193, 288, 289), // 注意：uncore 0 被占用 4 个 CPU，uncore 12 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
@@ -1424,21 +1452,21 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoDualSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"12000m", "12000m"},
 						{"2000m", "2000m"},
 					},
 				),
 				"with-app-container-and-sidecar",
 			),
-			expUncoreCache: cpuset.New(0, 1), // expected CPU alignment to UncoreCacheIDs 0-1
+			expUncoreCache: cpuset.New(0, 1), // 预期对齐到 UncoreCacheIDs 0-1
 		},
 		{
 			description:     "GuPodSingleContainer, SingleSocketSMTSmallUncore, ExpectAllocOneUncore",
 			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore,
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 64, 65), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 64, 65), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
@@ -1447,8 +1475,8 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketSMTSmallUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"8000m", "8000m"},
 					},
 				),
@@ -1457,25 +1485,25 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expUncoreCache: cpuset.New(1),
 		},
 		{
-			// Best-effort policy allows larger containers to be scheduled using a packed method
+			// best-effort 策略允许用紧凑（packed）方式调度更大的容器
 			description:     "GuPodSingleContainer, SingleSocketSMTSmallUncore, ExpectAllocTwoUncore",
-			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore, // 8 cpus per uncore
+			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 64, 65), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 64, 65), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// Uncore 1 fully allocated
+			// Uncore 1 已被完全分配
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketSMTSmallUncore.CPUDetails.CPUs().Difference(
 				topoSingleSocketSingleNumaPerSocketSMTSmallUncore.CPUDetails.CPUsInUncoreCaches(1),
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
-						{"12000m", "12000m"}, // larger than topology's uncore cache
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
+						{"12000m", "12000m"}, // 超过该拓扑单个 uncore cache 的容量
 					},
 				),
 				"with-app-container-saturating",
@@ -1483,17 +1511,17 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expUncoreCache: cpuset.New(0, 2),
 		},
 		{
-			// Best-effort policy allows larger containers to be scheduled using a packed method
+			// best-effort 策略允许用紧凑（packed）方式调度更大的容器
 			description:     "GuPodSingleContainer, SingleSocketNoSMTSmallUncore, FragmentedUncore, ExpectAllocThreeUncore",
-			topo:            topoSingleSocketSingleNumaPerSocketNoSMTSmallUncore, // 4 cpus per uncore
+			topo:            topoSingleSocketSingleNumaPerSocketNoSMTSmallUncore, // 每个 uncore 4 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 2, 3), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 2, 3), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// Uncore 2, 3, and 5 fully allocated
+			// Uncore 2、3、5 已被完全分配
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketNoSMTSmallUncore.CPUDetails.CPUs().Difference(
 				cpuset.New().Union(
 					topoSingleSocketSingleNumaPerSocketNoSMTSmallUncore.CPUDetails.CPUsInUncoreCaches(2),
@@ -1505,9 +1533,9 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
-						{"12000m", "12000m"}, // 3 uncore cache's worth of CPUs
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
+						{"12000m", "12000m"}, // 相当于 3 个 uncore cache 的 CPU 数
 					},
 				),
 				"with-app-container-saturating",
@@ -1515,24 +1543,24 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expUncoreCache: cpuset.New(1, 4, 6),
 		},
 		{
-			// Uncore cache alignment following a packed methodology
+			// 按紧凑（packed）方式做 uncore cache 对齐
 			description:     "GuPodMultiContainer, DualSocketSMTUncore, FragmentedUncore, ExpectAllocOneUncore",
-			topo:            topoSmallDualSocketSingleNumaPerSocketNoSMTUncore, // 8 cpus per uncore
+			topo:            topoSmallDualSocketSingleNumaPerSocketNoSMTUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 32, 33), // note 2 cpus taken from uncore 0, 2 from uncore 4
+			reserved:        cpuset.New(0, 1, 32, 33), // 注意：uncore 0 被占用 2 个 CPU，uncore 4 被占用 2 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// uncore 1 fully allocated
+			// uncore 1 已被完全分配
 			stDefaultCPUSet: topoSmallDualSocketSingleNumaPerSocketNoSMTUncore.CPUDetails.CPUs().Difference(
 				topoSmallDualSocketSingleNumaPerSocketNoSMTUncore.CPUDetails.CPUsInUncoreCaches(1),
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"4000m", "4000m"},
 						{"2000m", "2000m"},
 					},
@@ -1542,24 +1570,24 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expUncoreCache: cpuset.New(0),
 		},
 		{
-			// Uncore cache alignment following a packed methodology
+			// 按紧凑（packed）方式做 uncore cache 对齐
 			description:     "GuPodMultiContainer, DualSocketSMTUncore, FragmentedUncore, ExpectAllocTwoUncore",
-			topo:            topoSmallDualSocketSingleNumaPerSocketNoSMTUncore, // 8 cpus per uncore
+			topo:            topoSmallDualSocketSingleNumaPerSocketNoSMTUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 32, 33), // note 2 cpus taken from uncore 0, 2 from uncore 4
+			reserved:        cpuset.New(0, 1, 32, 33), // 注意：uncore 0 被占用 2 个 CPU，uncore 4 被占用 2 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// uncore 1 fully allocated
+			// uncore 1 已被完全分配
 			stDefaultCPUSet: topoSmallDualSocketSingleNumaPerSocketNoSMTUncore.CPUDetails.CPUs().Difference(
 				topoSmallDualSocketSingleNumaPerSocketNoSMTUncore.CPUDetails.CPUsInUncoreCaches(1),
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"4000m", "4000m"},
 						{"4000m", "4000m"},
 					},
@@ -1569,24 +1597,24 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expUncoreCache: cpuset.New(0, 2),
 		},
 		{
-			// CPU assignments able to fit on partially available uncore cache
+			// CPU 分配能够放进一个部分可用的 uncore cache
 			description:     "GuPodMultiContainer, LargeSingleSocketSMTUncore, PartialUncoreFit, ExpectAllocTwoUncore",
-			topo:            topoLargeSingleSocketSingleNumaPerSocketSMTUncore, // 16 cpus per uncore
+			topo:            topoLargeSingleSocketSingleNumaPerSocketSMTUncore, // 每个 uncore 16 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 128, 129), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 128, 129), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// 4 cpus allocated from uncore 1
+			// 已从 uncore 1 分配了 4 个 CPU
 			stDefaultCPUSet: topoLargeSingleSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUs().Difference(
 				cpuset.New(8, 9, 136, 137),
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"12000m", "12000m"},
 						{"12000m", "12000m"},
 					},
@@ -1596,24 +1624,24 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expUncoreCache: cpuset.New(0, 1),
 		},
 		{
-			// CPU assignments unable to fit on partially available uncore cache
+			// CPU 分配无法放进一个部分可用的 uncore cache
 			description:     "GuPodMultiContainer, LargeSingleSocketSMTUncore, PartialUncoreNoFit, ExpectAllocTwoUncore",
-			topo:            topoLargeSingleSocketSingleNumaPerSocketSMTUncore, // 16 cpus per uncore
+			topo:            topoLargeSingleSocketSingleNumaPerSocketSMTUncore, // 每个 uncore 16 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 128, 129), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 128, 129), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// 4 cpus allocated from uncore 1
+			// 已从 uncore 1 分配了 4 个 CPU
 			stDefaultCPUSet: topoLargeSingleSocketSingleNumaPerSocketSMTUncore.CPUDetails.CPUs().Difference(
 				cpuset.New(8, 9, 136, 137),
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"14000m", "14000m"},
 						{"14000m", "14000m"},
 					},
@@ -1623,11 +1651,11 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expUncoreCache: cpuset.New(2, 3),
 		},
 		{
-			// Full NUMA allocation on split-cache architecture with NPS=2
+			// NPS=2 的分离缓存架构上的完整 NUMA 分配
 			description:     "GuPodLargeSingleContainer, DualSocketNoSMTUncore, FullNUMAsAvail, ExpectAllocFullNUMA",
-			topo:            topoDualSocketMultiNumaPerSocketUncore, // 8 cpus per uncore
+			topo:            topoDualSocketMultiNumaPerSocketUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 2, 3), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 2, 3), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
@@ -1636,21 +1664,21 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoDualSocketMultiNumaPerSocketUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
-						{"48000m", "48000m"}, // NUMA's worth of CPUs
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
+						{"48000m", "48000m"}, // 相当于一个 NUMA 节点的 CPU 数
 					},
 				),
 				"with-large-single-container",
 			),
-			expUncoreCache: cpuset.New(6, 7, 8, 9, 10, 11), // uncore caches of NUMA Node 1
+			expUncoreCache: cpuset.New(6, 7, 8, 9, 10, 11), // NUMA 节点 1 的 uncore cache
 		},
 		{
-			// PreferAlignByUnCoreCacheOption will not impact monolithic x86 architectures
+			// PreferAlignByUnCoreCacheOption 不会影响单块（monolithic）uncore 的 x86 架构
 			description:     "GuPodSingleContainer, MonoUncoreCacheHT, ExpectAllocCPUSet",
-			topo:            topoDualSocketSubNumaPerSocketHTMonolithicUncore, // Uncore cache CPUs = Socket CPUs
+			topo:            topoDualSocketSubNumaPerSocketHTMonolithicUncore, // Uncore cache 的 CPU = 整个 Socket 的 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 120, 121), // note 4 cpus taken from first 2 cores
+			reserved:        cpuset.New(0, 1, 120, 121), // 注意：前 2 个核被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
@@ -1659,8 +1687,8 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoDualSocketSubNumaPerSocketHTMonolithicUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"6000m", "6000m"},
 					},
 				),
@@ -1671,9 +1699,9 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expUncoreCache: cpuset.New(0),
 		},
 		{
-			// PreferAlignByUnCoreCacheOption on fragmented monolithic cache x86 architectures
+			// PreferAlignByUnCoreCacheOption 在碎片化的单块缓存 x86 架构上的行为
 			description:     "GuPodSingleContainer, MonoUncoreCacheHT, ExpectAllocCPUSet",
-			topo:            topoSingleSocketSingleNumaPerSocketPCoreHTMonolithicUncore, // Uncore cache CPUs = Socket CPUs
+			topo:            topoSingleSocketSingleNumaPerSocketPCoreHTMonolithicUncore, // Uncore cache 的 CPU = 整个 Socket 的 CPU
 			numReservedCPUs: 2,
 			reserved:        cpuset.New(0, 1),
 			cpuPolicyOptions: map[string]string{
@@ -1681,29 +1709,29 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// CPUs 4-7 allocated
+			// CPU 4-7 已被分配
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketPCoreHTMonolithicUncore.CPUDetails.CPUs().Difference(
 				cpuset.New(4, 5, 6, 7),
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"6000m", "6000m"},
 					},
 				),
 				"with-single-container",
 			),
 			expCPUAlloc:    true,
-			expCSet:        cpuset.New(2, 3, 8, 9, 16, 17), // identical to default packed assignment
+			expCSet:        cpuset.New(2, 3, 8, 9, 16, 17), // 与默认紧凑分配一致
 			expUncoreCache: cpuset.New(0),
 		},
 		{
-			// Compatibility with ARM-based split cache architectures
+			// 与基于 ARM 的分离缓存架构的兼容性
 			description:     "GuPodSingleContainer, LargeSingleSocketUncore, ExpectAllocOneUncore",
-			topo:            topoLargeSingleSocketSingleNumaPerSocketUncore, // 8 cpus per uncore
+			topo:            topoLargeSingleSocketSingleNumaPerSocketUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 2, 3), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 2, 3), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
@@ -1712,8 +1740,8 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoLargeSingleSocketSingleNumaPerSocketUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"8000m", "8000m"},
 					},
 				),
@@ -1722,9 +1750,9 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expUncoreCache: cpuset.New(1),
 		},
 		{
-			// PreferAlignByUnCoreCacheOption on fragmented monolithic cache ARM architectures
+			// PreferAlignByUnCoreCacheOption 在碎片化的单块缓存 ARM 架构上的行为
 			description:     "GuPodSingleContainer, MonoUncoreCacheHT, ExpectFragmentedAllocCPUSet",
-			topo:            topoSingleSocketSingleNumaPerSocketUncore, // Uncore cache CPUs = Socket CPUs
+			topo:            topoSingleSocketSingleNumaPerSocketUncore, // Uncore cache 的 CPU = 整个 Socket 的 CPU
 			numReservedCPUs: 2,
 			reserved:        cpuset.New(0, 1),
 			cpuPolicyOptions: map[string]string{
@@ -1732,7 +1760,7 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// CPUs 6-9, 12-15, 18-19 allocated
+			// CPU 6-9、12-15、18-19 已被分配
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketUncore.CPUDetails.CPUs().Difference(
 				cpuset.New().Union(
 					cpuset.New(6, 7, 8, 9),
@@ -1744,30 +1772,30 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"12000m", "12000m"},
 					},
 				),
 				"with-single-container",
 			),
 			expCPUAlloc:    true,
-			expCSet:        cpuset.New(2, 3, 4, 5, 10, 11, 16, 17, 20, 21, 22, 23), // identical to default packed assignment
+			expCSet:        cpuset.New(2, 3, 4, 5, 10, 11, 16, 17, 20, 21, 22, 23), // 与默认紧凑分配一致
 			expUncoreCache: cpuset.New(0),
 		},
 		{
-			// Best-effort policy can result in multiple uncore caches
-			// Every uncore cache is partially allocated
+			// best-effort 策略可能跨越多个 uncore cache，
+			// 每个 uncore cache 都只被部分分配
 			description:     "GuPodSingleContainer, SingleSocketUncore, PartialUncore, ExpectBestEffortAllocTwoUncore",
-			topo:            topoSmallSingleSocketSingleNumaPerSocketNoSMTUncore, // 8 cpus per uncore
+			topo:            topoSmallSingleSocketSingleNumaPerSocketNoSMTUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 2, 3), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 2, 3), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
 			},
 			stAssignments: state.ContainerCPUAssignments{},
-			// Every uncore has partially allocated 4 CPUs
+			// 每个 uncore 都已被部分分配了 4 个 CPU
 			stDefaultCPUSet: topoSmallSingleSocketSingleNumaPerSocketNoSMTUncore.CPUDetails.CPUs().Difference(
 				cpuset.New().Union(
 					cpuset.New(8, 9, 10, 11),
@@ -1779,21 +1807,21 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
-						{"8000m", "8000m"}, // full uncore cache worth of cpus
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
+						{"8000m", "8000m"}, // 相当于一个完整 uncore cache 的 CPU 数
 					},
 				),
 				"with-single-container",
 			),
-			expUncoreCache: cpuset.New(0, 1), // best-effort across uncore cache 0 and 1
+			expUncoreCache: cpuset.New(0, 1), // 在 uncore cache 0 和 1 之间按 best-effort 分配
 		},
 		{
-			// odd integer cpu required on smt-disabled processor
+			// 在关闭 SMT 的处理器上请求奇数个 CPU
 			description:     "odd integer cpu required on smt-disabled",
-			topo:            topoSmallSingleSocketSingleNumaPerSocketNoSMTUncore, // 8 cpus per uncore
+			topo:            topoSmallSingleSocketSingleNumaPerSocketNoSMTUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 2, 3), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 2, 3), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				FullPCPUsOnlyOption:            "true",
 				PreferAlignByUnCoreCacheOption: "true",
@@ -1802,9 +1830,9 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoSmallSingleSocketSingleNumaPerSocketNoSMTUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
-						{"5000m", "5000m"}, // full uncore cache worth of cpus
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
+						{"5000m", "5000m"}, // 相当于一个完整 uncore cache 的 CPU 数
 					},
 				),
 				"with-single-container",
@@ -1813,11 +1841,11 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expCSet:     cpuset.New(8, 9, 10, 11, 12),
 		},
 		{
-			// odd integer cpu requirement on smt-enabled
+			// 在开启 SMT 的处理器上请求奇数个 CPU
 			description:     "odd integer required on smt-enabled",
-			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore, // 8 cpus per uncore
+			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 64, 65), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 64, 65), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				PreferAlignByUnCoreCacheOption: "true",
 			},
@@ -1825,8 +1853,8 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketSMTSmallUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"3000m", "3000m"},
 					},
 				),
@@ -1836,11 +1864,11 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expCSet:     cpuset.New(2, 3, 66),
 		},
 		{
-			// odd integer cpu required on smt-enabled and odd integer free cpus available on uncore
+			// 在开启 SMT 的处理器上请求奇数个 CPU，且 uncore 上可用的也是奇数个 CPU
 			description:     "odd integer required on odd integer partial uncore",
-			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore, // 8 cpus per uncore
+			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 3,
-			reserved:        cpuset.New(0, 1, 64), // note 3 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 64), // 注意：uncore 0 被占用 3 个 CPU
 			cpuPolicyOptions: map[string]string{
 				PreferAlignByUnCoreCacheOption: "true",
 			},
@@ -1848,8 +1876,8 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketSMTSmallUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"3000m", "3000m"},
 					},
 				),
@@ -1859,12 +1887,12 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expCSet:     cpuset.New(2, 65, 66),
 		},
 		{
-			// even integer requested on smt-enabled processor with odd integer available cpus on uncore
-			// even integer cpu containers will not be placed on uncore caches with odd integer free cpus
+			// 在开启 SMT 的处理器上请求偶数个 CPU，而 uncore 上可用的是奇数个 CPU，
+			// 偶数 CPU 的容器不会放进可用 CPU 数为奇数的 uncore cache
 			description:     "even integer required on odd integer partial uncore",
-			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore, // 8 cpus per uncore
+			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 3,
-			reserved:        cpuset.New(0, 1, 64), // note 3 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 64), // 注意：uncore 0 被占用 3 个 CPU
 			cpuPolicyOptions: map[string]string{
 				PreferAlignByUnCoreCacheOption: "true",
 			},
@@ -1872,8 +1900,8 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketSMTSmallUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"4000m", "4000m"},
 					},
 				),
@@ -1883,11 +1911,11 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expCSet:     cpuset.New(4, 5, 68, 69),
 		},
 		{
-			// large odd integer cpu required on smt-enabled
+			// 在开启 SMT 的处理器上请求较大的奇数个 CPU
 			description:     "large odd integer required on smt-enabled",
-			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore, // 8 cpus per uncore
+			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore, // 每个 uncore 8 个 CPU
 			numReservedCPUs: 3,
-			reserved:        cpuset.New(0, 1, 64), // note 3 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 64), // 注意：uncore 0 被占用 3 个 CPU
 			cpuPolicyOptions: map[string]string{
 				PreferAlignByUnCoreCacheOption: "true",
 			},
@@ -1895,22 +1923,22 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketSMTSmallUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"11000m", "11000m"},
 					},
 				),
 				"with-single-container",
 			),
 			expCPUAlloc: true,
-			expCSet:     cpuset.New(2, 65, 66, 4, 5, 6, 7, 68, 69, 70, 71), // full uncore 1 and partial uncore 0
+			expCSet:     cpuset.New(2, 65, 66, 4, 5, 6, 7, 68, 69, 70, 71), // uncore 1 完整分配、uncore 0 部分分配
 		},
 		{
-			// odd integer cpu required on hyperthread-enabled and monolithic uncore cache
+			// 在开启超线程且为单块 uncore cache 的场景下请求奇数个 CPU
 			description:     "odd integer required on HT monolithic uncore",
 			topo:            topoDualSocketSubNumaPerSocketHTMonolithicUncore,
 			numReservedCPUs: 3,
-			reserved:        cpuset.New(0, 1, 120), // note 3 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 120), // 注意：uncore 0 被占用 3 个 CPU
 			cpuPolicyOptions: map[string]string{
 				PreferAlignByUnCoreCacheOption: "true",
 			},
@@ -1918,8 +1946,8 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketSMTSmallUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"5000m", "5000m"},
 					},
 				),
@@ -1929,11 +1957,11 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			expCSet:     cpuset.New(2, 3, 121, 122, 123),
 		},
 		{
-			// even integer cpu required on hyperthread-enabled and monolithic uncore cache
+			// 在开启超线程且为单块 uncore cache 的场景下请求偶数个 CPU
 			description:     "even integer required on HT monolithic uncore",
 			topo:            topoDualSocketSubNumaPerSocketHTMonolithicUncore,
 			numReservedCPUs: 3,
-			reserved:        cpuset.New(0, 1, 120), // note 3 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 120), // 注意：uncore 0 被占用 3 个 CPU
 			cpuPolicyOptions: map[string]string{
 				PreferAlignByUnCoreCacheOption: "true",
 			},
@@ -1941,22 +1969,22 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketSMTSmallUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"4000m", "4000m"},
 					},
 				),
 				"with-single-container",
 			),
 			expCPUAlloc: true,
-			expCSet:     cpuset.New(2, 3, 122, 123), // takeFullCores
+			expCSet:     cpuset.New(2, 3, 122, 123), // 取完整核
 		},
 		{
-			// test feature compatibility with strict-cpu-reservation on split cache architecture
+			// 验证与分离缓存架构下 strict-cpu-reservation 特性的兼容性
 			description:     "GuPodSingleContainer, SingleSocketSMTSmallUncore, StrictReserveCompatability",
 			topo:            topoSingleSocketSingleNumaPerSocketSMTSmallUncore,
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 64, 65), // note 4 cpus taken from uncore 0
+			reserved:        cpuset.New(0, 1, 64, 65), // 注意：uncore 0 被占用 4 个 CPU
 			cpuPolicyOptions: map[string]string{
 				StrictCPUReservationOption:     "true",
 				PreferAlignByUnCoreCacheOption: "true",
@@ -1965,22 +1993,22 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoSingleSocketSingleNumaPerSocketSMTSmallUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"2000m", "2000m"},
 					},
 				),
 				"with-single-container",
 			),
 			expCPUAlloc: true,
-			expCSet:     cpuset.New(2, 66), // should avoid reserved cpuset
+			expCSet:     cpuset.New(2, 66), // 应避开预留的 cpuset
 		},
 		{
-			// test feature compatibility with strict-cpu-reservation on monolithic uncore architecture
+			// 验证与单块 uncore 架构下 strict-cpu-reservation 特性的兼容性
 			description:     "GuPodSingleContainer, DualSocketHTMonoUncore, StrictReserveCompatability",
 			topo:            topoDualSocketSubNumaPerSocketHTMonolithicUncore,
 			numReservedCPUs: 4,
-			reserved:        cpuset.New(0, 1, 120, 121), // first two cores reserved
+			reserved:        cpuset.New(0, 1, 120, 121), // 前两个核已被预留
 			cpuPolicyOptions: map[string]string{
 				StrictCPUReservationOption:     "true",
 				PreferAlignByUnCoreCacheOption: "true",
@@ -1989,15 +2017,15 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 			stDefaultCPUSet: topoDualSocketSubNumaPerSocketHTMonolithicUncore.CPUDetails.CPUs(),
 			pod: WithPodUID(
 				makeMultiContainerPod(
-					[]struct{ request, limit string }{}, // init container
-					[]struct{ request, limit string }{ // app container
+					[]struct{ request, limit string }{}, // init 容器
+					[]struct{ request, limit string }{ // 应用容器
 						{"4000m", "4000m"},
 					},
 				),
 				"with-single-container",
 			),
 			expCPUAlloc: true,
-			expCSet:     cpuset.New(2, 3, 122, 123), // packed assignment avoid reserved cpuset
+			expCSet:     cpuset.New(2, 3, 122, 123), // 紧凑分配并避开预留的 cpuset
 		},
 	}
 
@@ -2011,7 +2039,7 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 
 			st := &mockState{
 				assignments:   testCase.stAssignments,
-				defaultCPUSet: testCase.stDefaultCPUSet.Difference(testCase.reserved), // ensure the cpumanager invariant
+				defaultCPUSet: testCase.stDefaultCPUSet.Difference(testCase.reserved), // 保证 cpumanager 的不变量成立
 			}
 
 			for idx := range testCase.pod.Spec.Containers {
@@ -2050,6 +2078,7 @@ func TestStaticPolicyAddWithUncoreAlignment(t *testing.T) {
 	}
 }
 
+// staticPolicyOptionTestCase 描述策略选项解析的测试用例
 type staticPolicyOptionTestCase struct {
 	description   string
 	policyOptions map[string]string
@@ -2057,6 +2086,7 @@ type staticPolicyOptionTestCase struct {
 	expectedValue StaticPolicyOptions
 }
 
+// TestStaticPolicyOptions 验证 NewStaticPolicyOptions 对合法/非法选项与取值的处理
 func TestStaticPolicyOptions(t *testing.T) {
 	testCases := []staticPolicyOptionTestCase{
 		{
@@ -2135,6 +2165,8 @@ func TestStaticPolicyOptions(t *testing.T) {
 	}
 }
 
+// TestPolicyWithAlignBySocketAndDistributeCPUsAcrossNUMAEnabled 验证 AlignBySocket 与
+// DistributeCPUsAcrossNUMA 同时开启时的优先级与分配结果
 func TestPolicyWithAlignBySocketAndDistributeCPUsAcrossNUMAEnabled(t *testing.T) {
 	testCases := []staticPolicyTest{
 		{
@@ -2207,6 +2239,7 @@ func TestPolicyWithAlignBySocketAndDistributeCPUsAcrossNUMAEnabled(t *testing.T)
 	}
 }
 
+// staticPolicyAllocatePodTest 描述 Pod 级分配（AllocatePod）的测试用例
 type staticPolicyAllocatePodTest struct {
 	description                     string
 	topo                            *topology.CPUTopology
@@ -2225,6 +2258,7 @@ type staticPolicyAllocatePodTest struct {
 	requiredMetrics                 requiredMetrics
 }
 
+// requiredMetrics 描述用例执行后期望的指标计数
 type requiredMetrics struct {
 	expTotalAllocs              int
 	expTotalErrors              int
@@ -2232,6 +2266,7 @@ type requiredMetrics struct {
 	expPodSharedPoolAssignments int
 }
 
+// containerSpec 是构造测试 Pod 时使用的容器规格简写
 type containerSpec struct {
 	name          string
 	request       string
@@ -2239,6 +2274,8 @@ type containerSpec struct {
 	restartPolicy *v1.ContainerRestartPolicy
 }
 
+// makePodWithContainersAndPodLevelResources 构造带有 Pod 级资源（Spec.Resources）的测试 Pod，
+// 并按 containerSpec 填充 init 容器与普通容器
 func makePodWithContainersAndPodLevelResources(podName, podRequest, podLimit string, initContainers, appContainers []containerSpec) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2320,6 +2357,8 @@ func makePodWithContainersAndPodLevelResources(podName, podRequest, podLimit str
 	return pod
 }
 
+// TestStaticPolicyAllocatePod 验证 Pod 级资源管理下的分配结果与指标：
+// 覆盖 Guaranteed/非 Guaranteed 容器、可重启 init 容器、共享池为空被拒绝以及 SMT 对齐错误等场景
 func TestStaticPolicyAllocatePod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -2686,6 +2725,7 @@ func TestStaticPolicyAllocatePod(t *testing.T) {
 	}
 }
 
+// TestSMTAlignmentErrorText 验证 SMTAlignmentError 的错误消息文本
 func TestSMTAlignmentErrorText(t *testing.T) {
 	type smtErrTestCase struct {
 		name     string
@@ -2700,9 +2740,9 @@ func TestSMTAlignmentErrorText(t *testing.T) {
 			expected: `SMT Alignment Error: requested 15 cpus not multiple cpus per core = 4`,
 		},
 		{
-			// Note the explicit 0. The intent is to signal the lack of physical CPUs, but
-			// in the corner case of no available physical CPUs at all, without the explicit
-			// flag we cannot distinguish the case, and before PR#127959 we printed the old message
+			// 注意这里显式写了 0。其本意是表示没有物理 CPU 可用，
+			// 但在完全没有可用物理 CPU 的极端情况下，若不带这个显式标志，
+			// 就无法区分这两种情况；PR#127959 之前打印的是旧消息
 			name:     "base SMT alignment error, no physical CPUs, missing flag",
 			err:      SMTAlignmentError{RequestedCPUs: 4, CpusPerCore: 2, AvailablePhysicalCPUs: 0},
 			expected: `SMT Alignment Error: requested 4 cpus not multiple cpus per core = 2`,
@@ -2724,6 +2764,8 @@ func TestSMTAlignmentErrorText(t *testing.T) {
 	}
 }
 
+// TestValidatePodScopeResources 验证 validatePodScopeResources 对 Pod 级资源与容器资源组合的合法性判断，
+// 特别是共享池（podSharedPool）是否会被耗尽
 func TestValidatePodScopeResources(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -2936,11 +2978,14 @@ func TestValidatePodScopeResources(t *testing.T) {
 	}
 }
 
+// newCPUSetPtr 构造 cpuset 并返回其指针，便于在测试用例字面量中直接使用
 func newCPUSetPtr(cpus ...int) *cpuset.CPUSet {
 	ret := cpuset.New(cpus...)
 	return &ret
 }
 
+// getPodUncoreCacheIDs 汇总 Pod 各容器已分配 CPU 所属的 uncore cache ID，
+// 用于校验分配是否落在预期的 uncore cache 上
 func getPodUncoreCacheIDs(s state.Reader, topo *topology.CPUTopology, pod *v1.Pod) ([]int, error) {
 	var uncoreCacheIDs []int
 	for idx := range pod.Spec.Containers {
@@ -2960,19 +3005,19 @@ func getPodUncoreCacheIDs(s state.Reader, topo *topology.CPUTopology, pod *v1.Po
 	return uncoreCacheIDs, nil
 }
 
-// The following lifecycle tests verify that the static CPU manager policy
-// processes or skips operations based on the given lifecycle.Operation.
-// Since Allocate* and GetTopologyHints* do not return an error when an
-// operation is unsupported (they silently return nil/empty hints to avoid
-// aborting the entire operation across all hint providers), the tests check
-// log output to confirm whether an operation was processed or skipped.
+// 以下 lifecycle 测试验证 static CPU manager 策略会根据给定的 lifecycle.Operation
+// 决定执行还是跳过相应操作。
+// 由于 Allocate* 与 GetTopologyHints* 在操作不受支持时不会返回错误
+// （它们静默返回 nil/空 hint，以免中断所有 hint provider 的整体流程），
+// 因此测试通过检查日志输出来确认操作是被执行还是被跳过。
 //
-// The test values used (e.g. cpusets, pod resource requests) are arbitrary
-// but correct values that let the code run the happy path; the exact values
-// have no special meaning. These tests do not validate the correctness of
-// the allocation or hint results, only whether the operation is processed
-// or skipped for a given lifecycle operation.
+// 测试中使用的数值（如 cpuset、Pod 资源请求）是任意的，
+// 但都是能让代码走通正常路径的合法值；具体数值没有特殊含义。
+// 这些测试不校验分配或 hint 结果是否正确，
+// 只校验给定 lifecycle 操作下该操作被执行还是被跳过。
 
+// TestStaticPolicyLifecycleAllocate 验证容器级 Allocate 对不同 lifecycle 操作的处理：
+// AddOperation 执行分配，其余操作跳过并记录日志
 func TestStaticPolicyLifecycleAllocate(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -3036,6 +3081,7 @@ func TestStaticPolicyLifecycleAllocate(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyLifecycleAllocatePod 验证 Pod 级 AllocatePod 对不同 lifecycle 操作的处理
 func TestStaticPolicyLifecycleAllocatePod(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -3098,6 +3144,7 @@ func TestStaticPolicyLifecycleAllocatePod(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyLifecycleGetTopologyHints 验证容器级 GetTopologyHints 对不同 lifecycle 操作的处理
 func TestStaticPolicyLifecycleGetTopologyHints(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -3163,6 +3210,7 @@ func TestStaticPolicyLifecycleGetTopologyHints(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyLifecycleGetPodTopologyHints 验证 Pod 级 GetPodTopologyHints 对不同 lifecycle 操作的处理
 func TestStaticPolicyLifecycleGetPodTopologyHints(t *testing.T) {
 	testCases := []struct {
 		description string

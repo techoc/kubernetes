@@ -28,33 +28,43 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 )
 
+// mockCPUManager 记录 CPU Manager 的 AddContainer 是否被调用。
 type mockCPUManager struct {
+	// called 表示 AddContainer 是否被调用。
 	called bool
 	cpumanager.Manager
 }
 
+// AddContainer 记录调用。
 func (cpuManager *mockCPUManager) AddContainer(klog.Logger, *v1.Pod, *v1.Container, string) {
 	cpuManager.called = true
 }
 
+// mockMemoryManager 记录 Memory Manager 的 AddContainer 是否被调用。
 type mockMemoryManager struct {
+	// called 表示 AddContainer 是否被调用。
 	called bool
 	memorymanager.Manager
 }
 
+// AddContainer 记录调用。
 func (memoryManager *mockMemoryManager) AddContainer(klog.Logger, *v1.Pod, *v1.Container, string) {
 	memoryManager.called = true
 }
 
+// mockTopologyManager 记录 Topology Manager 的 AddContainer 是否被调用。
 type mockTopologyManager struct {
+	// called 表示 AddContainer 是否被调用。
 	called bool
 	topologymanager.Manager
 }
 
+// AddContainer 记录调用。
 func (topologyManager *mockTopologyManager) AddContainer(klog.Logger, *v1.Pod, *v1.Container, string) {
 	topologyManager.called = true
 }
 
+// TestPreStartContainer 验证容器启动时会调用各 Manager 的 AddContainer。
 func TestPreStartContainer(t *testing.T) {
 	pod := &v1.Pod{}
 	container := &v1.Container{}
@@ -87,12 +97,14 @@ func TestPreStartContainer(t *testing.T) {
 		},
 	}
 
+	// 逐个用例验证各 Manager 的 AddContainer 调用情况。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			logger, _ := ktesting.NewTestContext(t)
 			_ = test.lifecycle.PreStartContainer(logger, pod, container, "42")
 		})
 
+		// 断言仅当对应 Manager 存在时其 AddContainer 才应被调用。
 		cManager := test.lifecycle.cpuManager
 		mManager := test.lifecycle.memoryManager
 		tManager := test.lifecycle.topologyManager

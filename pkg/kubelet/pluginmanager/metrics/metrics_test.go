@@ -24,6 +24,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestMetricCollection 验证 totalPluginsCollector 能按期望状态与实际状态分别统计插件数量。
 func TestMetricCollection(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	dsw := cache.NewDesiredStateOfWorld()
@@ -31,13 +32,13 @@ func TestMetricCollection(t *testing.T) {
 	fakePlugin := cache.PluginInfo{
 		SocketPath: fmt.Sprintf("fake/path/plugin.sock"),
 	}
-	// Add one plugin to DesiredStateOfWorld
+	// 向期望状态中添加一个插件。
 	err := dsw.AddOrUpdatePlugin(tCtx, fakePlugin.SocketPath)
 	if err != nil {
 		t.Fatalf("AddOrUpdatePlugin failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Add one plugin to ActualStateOfWorld
+	// 向实际状态中添加一个插件。
 	err = asw.AddPlugin(tCtx, fakePlugin)
 	if err != nil {
 		t.Fatalf("AddOrUpdatePlugin failed. Expected: <no error> Actual: <%v>", err)
@@ -45,7 +46,7 @@ func TestMetricCollection(t *testing.T) {
 
 	metricCollector := &totalPluginsCollector{asw: asw, dsw: dsw}
 
-	// Check if getPluginCount returns correct data
+	// 检查 getPluginCount 返回的数据是否正确。
 	count := metricCollector.getPluginCount()
 	if len(count) != 2 {
 		t.Errorf("getPluginCount failed. Expected <2> states, got <%d>", len(count))

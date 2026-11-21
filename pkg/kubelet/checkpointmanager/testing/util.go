@@ -21,18 +21,18 @@ import (
 	"sync"
 )
 
-// MemStore is an implementation of CheckpointStore interface which stores checkpoint in memory.
+// MemStore 是 CheckpointStore 接口的内存实现。
 type MemStore struct {
 	mem map[string][]byte
 	sync.Mutex
 }
 
-// NewMemStore returns an instance of MemStore
+// NewMemStore 返回 MemStore 实例。
 func NewMemStore() *MemStore {
 	return &MemStore{mem: make(map[string][]byte)}
 }
 
-// Write writes the data to the store
+// Write 把数据写入内存 store。
 func (mstore *MemStore) Write(key string, data []byte) error {
 	mstore.Lock()
 	defer mstore.Unlock()
@@ -40,7 +40,7 @@ func (mstore *MemStore) Write(key string, data []byte) error {
 	return nil
 }
 
-// Read returns data read from store
+// Read 从内存 store 读取数据，不存在时返回错误。
 func (mstore *MemStore) Read(key string) ([]byte, error) {
 	mstore.Lock()
 	defer mstore.Unlock()
@@ -51,7 +51,7 @@ func (mstore *MemStore) Read(key string) ([]byte, error) {
 	return data, nil
 }
 
-// Delete deletes data from the store
+// Delete 从内存 store 删除数据。
 func (mstore *MemStore) Delete(key string) error {
 	mstore.Lock()
 	defer mstore.Unlock()
@@ -59,7 +59,7 @@ func (mstore *MemStore) Delete(key string) error {
 	return nil
 }
 
-// List returns all the keys from the store
+// List 返回 store 中的所有 key。
 func (mstore *MemStore) List() ([]string, error) {
 	mstore.Lock()
 	defer mstore.Unlock()

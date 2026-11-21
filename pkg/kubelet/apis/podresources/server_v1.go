@@ -30,7 +30,7 @@ import (
 	podresourcesv1 "k8s.io/kubelet/pkg/apis/podresources/v1"
 )
 
-// v1PodResourcesServer implements PodResourcesListerServer
+// v1PodResourcesServer 实现 PodResourcesListerServer。
 type v1PodResourcesServer struct {
 	podsProvider             PodsProvider
 	devicesProvider          DevicesProvider
@@ -41,10 +41,11 @@ type v1PodResourcesServer struct {
 	podresourcesv1.UnsafePodResourcesListerServer
 }
 
-// NewV1PodResourcesServer returns a PodResourcesListerServer which lists pods provided by the PodsProvider
-// with device information provided by the DevicesProvider
+// NewV1PodResourcesServer 返回 PodResourcesListerServer；
+// Pod 列表来自 PodsProvider，设备信息来自 DevicesProvider。
 func NewV1PodResourcesServer(ctx context.Context, providers PodResourcesProviders) podresourcesv1.PodResourcesListerServer {
 	logger := klog.FromContext(ctx)
+	// 特性开启时只列出活跃 Pod，避免暴露已终止 Pod 的资源。
 	useActivePods := utilfeature.DefaultFeatureGate.Enabled(kubefeatures.KubeletPodResourcesListUseActivePods)
 	logger.Info("podresources", "method", "list", "useActivePods", useActivePods)
 	return &v1PodResourcesServer{
@@ -57,22 +58,25 @@ func NewV1PodResourcesServer(ctx context.Context, providers PodResourcesProvider
 	}
 }
 
-// List returns information about the resources assigned to pods on the node
+// List 返回节点上各 Pod 已分配的资源信息。
 func (p *v1PodResourcesServer) List(ctx context.Context, req *podresourcesv1.ListPodResourcesRequest) (*podresourcesv1.ListPodResourcesResponse, error) {
+	// 记录 v1 端点的请求指标。
 	metrics.PodResourcesEndpointRequestsTotalCount.WithLabelValues("v1").Inc()
 	metrics.PodResourcesEndpointRequestsListCount.WithLabelValues("v1").Inc()
 
 	logger := klog.FromContext(ctx)
 
+	// 根据特性开关选择活跃 Pod 或全部 Pod。
 	var pods []*v1.Pod
 	if p.useActivePods {
-		// GetActivePods already filters out terminal pods, so no need for additional filtering.
+		// GetActivePods 已过滤终止的 Pod，无需再次过滤。
 		pods = p.podsProvider.GetActivePods()
 	} else {
 		pods = p.podsProvider.GetPods()
 	}
 
 	podResources := make([]*podresourcesv1.PodResources, len(pods))
+	// 先刷新已分配设备，保证返回的设备信息是最新的。
 	p.devicesProvider.UpdateAllocatedDevices(logger)
 
 	for i, pod := range pods {
@@ -86,6 +90,7 @@ func (p *v1PodResourcesServer) List(ctx context.Context, req *podresourcesv1.Lis
 			pRes.Memory = p.memoryProvider.GetPodMemory(logger, string(pod.UID))
 		}
 
+		// 只为可重启 init 容器（边车）和普通容器上报资源。
 		pRes.Containers = make([]*podresourcesv1.ContainerResources, 0, len(pod.Spec.InitContainers)+len(pod.Spec.Containers))
 		for _, container := range pod.Spec.InitContainers {
 			if !podutil.IsRestartableInitContainer(&container) {
@@ -107,12 +112,14 @@ func (p *v1PodResourcesServer) List(ctx context.Context, req *podresourcesv1.Lis
 	return response, nil
 }
 
-// GetAllocatableResources returns information about all the resources known by the server - this more like the capacity, not like the current amount of free resources.
+// GetAllocatableResources 返回服务器已知的全部资源，
+// 更接近"容量"而非当前空闲量。
 func (p *v1PodResourcesServer) GetAllocatableResources(ctx context.Context, req *podresourcesv1.AllocatableResourcesRequest) (*podresourcesv1.AllocatableResourcesResponse, error) {
 	logger := klog.FromContext(ctx)
 	metrics.PodResourcesEndpointRequestsTotalCount.WithLabelValues("v1").Inc()
 	metrics.PodResourcesEndpointRequestsGetAllocatableCount.WithLabelValues("v1").Inc()
 
+	// 汇总设备、CPU 与内存的可分配总量。
 	response := &podresourcesv1.AllocatableResourcesResponse{
 		Devices: p.devicesProvider.GetAllocatableDevices(logger),
 		CpuIds:  p.cpusProvider.GetAllocatableCPUs(),
@@ -122,19 +129,21 @@ func (p *v1PodResourcesServer) GetAllocatableResources(ctx context.Context, req 
 	return response, nil
 }
 
-// Get returns information about the resources assigned to a specific pod
+// Get 返回指定 Pod 已分配的资源信息。
 func (p *v1PodResourcesServer) Get(ctx context.Context, req *podresourcesv1.GetPodResourcesRequest) (*podresourcesv1.GetPodResourcesResponse, error) {
 	metrics.PodResourcesEndpointRequestsTotalCount.WithLabelValues("v1").Inc()
 	metrics.PodResourcesEndpointRequestsGetCount.WithLabelValues("v1").Inc()
 
 	logger := klog.FromContext(ctx)
 
+	// Pod 不存在时记录错误指标并返回错误。
 	pod, exist := p.podsProvider.GetPodByName(req.PodNamespace, req.PodName)
 	if !exist {
 		metrics.PodResourcesEndpointErrorsGetCount.WithLabelValues("v1").Inc()
 		return nil, fmt.Errorf("pod %s in namespace %s not found", req.PodName, req.PodNamespace)
 	}
 
+	// 构造 Pod 级资源信息；启用 PodLevelResourceManagers 时补充 Pod 级 CPU/内存。
 	podResources := &podresourcesv1.PodResources{
 		Name:       pod.Name,
 		Namespace:  pod.Namespace,
@@ -164,6 +173,7 @@ func (p *v1PodResourcesServer) Get(ctx context.Context, req *podresourcesv1.GetP
 	return response, nil
 }
 
+// getContainerResources 汇总单个容器的设备、CPU、内存与动态资源分配。
 func (p *v1PodResourcesServer) getContainerResources(logger klog.Logger, pod *v1.Pod, container *v1.Container) *podresourcesv1.ContainerResources {
 	containerResources := &podresourcesv1.ContainerResources{
 		Name:             container.Name,

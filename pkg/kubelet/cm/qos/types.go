@@ -16,14 +16,14 @@ limitations under the License.
 
 package qos
 
-// ResourceIsolationLevel defines the level of isolation for a resource.
+// ResourceIsolationLevel 定义资源的隔离级别。
 type ResourceIsolationLevel string
 
 const (
-	// ResourceIsolationHost implies the resource is shared with other containers on the host.
+	// ResourceIsolationHost 表示资源与主机上的其他容器共享。
 	ResourceIsolationHost ResourceIsolationLevel = "host"
-	// ResourceIsolationPod implies the resource is isolated from other pods but shared within the pod.
+	// ResourceIsolationPod 表示资源与其他 Pod 隔离，但在 Pod 内共享。
 	ResourceIsolationPod ResourceIsolationLevel = "pod"
-	// ResourceIsolationContainer implies the resource is exclusive to the container.
+	// ResourceIsolationContainer 表示资源由容器独占。
 	ResourceIsolationContainer ResourceIsolationLevel = "container"
 )

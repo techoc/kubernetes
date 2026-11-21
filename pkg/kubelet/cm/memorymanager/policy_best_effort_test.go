@@ -33,26 +33,29 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
 
-// fakeBestEffortAffinity is a topologymanager.AuthoritativeStore that returns a
-// preset hint.
+// fakeBestEffortAffinity 是 topologymanager.AuthoritativeStore 的测试桩，返回预设 hint。
 type fakeBestEffortAffinity struct {
 	hint              topologymanager.TopologyHint
 	hintAuthoritative bool
 }
 
+// GetAffinity 返回预设 hint。
 func (f *fakeBestEffortAffinity) GetAffinity(_ klog.Logger, podUID, containerName string) topologymanager.TopologyHint {
 	return f.hint
 }
-func (f *fakeBestEffortAffinity) GetPolicy() topologymanager.Policy { return nil }
-func (f *fakeBestEffortAffinity) Name() string                      { return "fake" }
 
-// IsHintAuthoritative mirrors the Windows cpuFollowingStore: when the container
-// follows the CPU manager's NUMA decision, its hint is authoritative and the
-// memory manager must not extend it to additional NUMA nodes.
+// GetPolicy 返回 nil，测试不需要真实策略。
+func (f *fakeBestEffortAffinity) GetPolicy() topologymanager.Policy { return nil }
+
+// Name 返回桩名称。
+func (f *fakeBestEffortAffinity) Name() string { return "fake" }
+
+// IsHintAuthoritative 模拟 Windows cpuFollowingStore：容器跟随 CPU manager 的 NUMA 决策时，
+// hint 具有权威性，内存管理器不得再扩展到其他 NUMA 节点。
 func (f *fakeBestEffortAffinity) IsHintAuthoritative(_, _ string) bool { return f.hintAuthoritative }
 
-// bestEffortTestMachineState returns a fresh 2-NUMA-node state: node 0 has only
-// 1Gi free (too little for the 4Gi request), node 1 has 10Gi free.
+// bestEffortTestMachineState 返回一个全新的双 NUMA 节点状态：
+// 节点 0 仅剩 1Gi（不足以满足 4Gi 请求），节点 1 剩余 10Gi。
 func bestEffortTestMachineState() state.NUMANodeMap {
 	return state.NUMANodeMap{
 		0: &state.NUMANodeState{
@@ -82,25 +85,25 @@ func bestEffortTestMachineState() state.NUMANodeMap {
 	}
 }
 
-// TestBestEffortPolicyAllocateFollowsCPUManager verifies that the Windows
-// BestEffort policy skips hint extension when the container follows the CPU
-// manager's NUMA decision (it owns exclusive CPUs), and otherwise extends like
-// the static policy.
+// TestBestEffortPolicyAllocateFollowsCPUManager 验证 Windows BestEffort 策略：
+// 容器跟随 CPU manager 的 NUMA 决策（拥有独占 CPU）时跳过 hint 扩展；
+// 否则与 static 策略一样扩展节点。
 func TestBestEffortPolicyAllocateFollowsCPUManager(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
+	// 构造与状态一致的机器拓扑。
 	machineInfo := &cadvisorapi.MachineInfo{
 		Topology: []cadvisorapi.Node{
 			{Id: 0, Memory: 1*gb + 512*mb},
 			{Id: 1, Memory: 10 * gb},
 		},
 	}
+	// 节点 0 预留 512Mi，使可分配量只剩 1Gi。
 	systemReserved := systemReservedMemory{
 		0: map[v1.ResourceName]uint64{v1.ResourceMemory: 512 * mb},
 	}
-	// Guaranteed container requesting 4Gi; the affinity hint is node 0, which has
-	// only 1Gi free, so the hint does not satisfy the request and the extend
-	// branch is reachable.
+	// 请求 4Gi 的 Guaranteed 容器：affinity hint 指向只剩 1Gi 的节点 0，
+	// 无法满足请求，因此会走到扩展分支。
 	requirements := &v1.ResourceRequirements{
 		Requests: v1.ResourceList{
 			v1.ResourceCPU:    resource.MustParse("2"),
@@ -112,6 +115,7 @@ func TestBestEffortPolicyAllocateFollowsCPUManager(t *testing.T) {
 		},
 	}
 
+	// 两个用例分别覆盖"有独占 CPU"与"无独占 CPU"。
 	testCases := []struct {
 		name             string
 		hasExclusiveCPUs bool
@@ -131,6 +135,7 @@ func TestBestEffortPolicyAllocateFollowsCPUManager(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 构造 hint 为节点 0 的亲和性桩。
 			affinity := &fakeBestEffortAffinity{
 				hint:              topologymanager.TopologyHint{NUMANodeAffinity: newNUMAAffinity(0), Preferred: false},
 				hintAuthoritative: tc.hasExclusiveCPUs,
@@ -140,6 +145,7 @@ func TestBestEffortPolicyAllocateFollowsCPUManager(t *testing.T) {
 				t.Fatalf("NewPolicyBestEffort() failed: %v", err)
 			}
 
+			// 每次用例都使用全新的内存状态，避免分配结果相互影响。
 			s := state.NewMemoryState(logger)
 			s.SetMachineState(bestEffortTestMachineState())
 
@@ -148,6 +154,7 @@ func TestBestEffortPolicyAllocateFollowsCPUManager(t *testing.T) {
 				t.Fatalf("Allocate() failed: %v", err)
 			}
 
+			// 断言恰好生成一个内存块，并检查其 NUMA 亲和性与预期一致。
 			blocks := s.GetMemoryBlocks("pod1", "container1")
 			if len(blocks) != 1 {
 				t.Fatalf("expected exactly 1 memory block, got %d: %+v", len(blocks), blocks)

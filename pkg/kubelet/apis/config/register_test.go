@@ -27,6 +27,7 @@ import (
 	tracingapi "k8s.io/component-base/tracing/api/v1"
 )
 
+// TestComponentConfigSetup 校验 kubelet 组件配置包的类型注册与标签使用符合约定。
 func TestComponentConfigSetup(t *testing.T) {
 	pkginfo := &componentconfigtesting.ComponentConfigPackage{
 		ComponentName:      "kubelet",

@@ -26,13 +26,23 @@ import (
 
 var _ ImagePullManager = &NoopImagePullManager{}
 
+// NoopImagePullManager 是不做任何拉取记录管理的空实现，用于未启用相关特性时。
 type NoopImagePullManager struct{}
 
+// RecordPullIntent 为空实现，不记录拉取意图。
 func (m *NoopImagePullManager) RecordPullIntent(klog.Logger, string) error { return nil }
+
+// RecordImagePulled 为空实现，不记录镜像拉取成功。
 func (m *NoopImagePullManager) RecordImagePulled(context.Context, string, string, *kubeletconfiginternal.ImagePullCredentials) {
 }
+
+// RecordImagePullFailed 为空实现，不记录镜像拉取失败。
 func (m *NoopImagePullManager) RecordImagePullFailed(context.Context, string) {}
+
+// MustAttemptImagePull 始终返回 false，表示由调用方照常尝试拉取。
 func (m *NoopImagePullManager) MustAttemptImagePull(context.Context, string, string, GetPodCredentials) (bool, error) {
 	return false, nil
 }
+
+// PruneUnknownRecords 为空实现，不清理任何记录。
 func (m *NoopImagePullManager) PruneUnknownRecords(context.Context, []string, time.Time) {}

@@ -89,11 +89,14 @@ import (
 )
 
 const (
+	// 流式请求测试使用的固定 Pod UID、容器 ID 与 sandbox ID。
 	testUID          = "9b01b80f-8fb4-11e4-95ab-4200af06647"
 	testContainerID  = "container789"
 	testPodSandboxID = "pod0987"
 )
 
+// fakeKubelet 通过可替换的函数字段模拟 kubelet 的全部依赖行为，
+// 测试按需注入期望的返回值与断言逻辑。
 type fakeKubelet struct {
 	podByNameFunc          func(namespace, name string) (*v1.Pod, bool)
 	machineInfoFunc        func() (*cadvisorapi.MachineInfo, error)
@@ -114,34 +117,42 @@ type fakeKubelet struct {
 	streamingRuntime  streaming.Server
 }
 
+// 返回 fake kubelet 记录的最近一次 syncLoop 进入时间。
 func (fk *fakeKubelet) LatestLoopEntryTime() time.Time {
 	return fk.loopEntryTime
 }
 
+// 按 namespace/name 查询 Pod，实际逻辑委托给注入的 podByNameFunc。
 func (fk *fakeKubelet) GetPodByName(namespace, name string) (*v1.Pod, bool) {
 	return fk.podByNameFunc(namespace, name)
 }
 
+// 测试中不需要真实 cAdvisor 数据，返回空 map。
 func (fk *fakeKubelet) GetRequestedContainersInfo(containerName string, options cadvisorapi.RequestOptions) (map[string]*cadvisorapi.ContainerInfo, error) {
 	return map[string]*cadvisorapi.ContainerInfo{}, nil
 }
 
+// 返回注入的 machineInfoFunc 结果。
 func (fk *fakeKubelet) GetCachedMachineInfo() (*cadvisorapi.MachineInfo, error) {
 	return fk.machineInfoFunc()
 }
 
+// 测试中返回空的版本信息。
 func (*fakeKubelet) GetVersionInfo() (*cadvisorapi.VersionInfo, error) {
 	return &cadvisorapi.VersionInfo{}, nil
 }
 
+// 返回注入的 podsFunc 结果。
 func (fk *fakeKubelet) GetPods() []*v1.Pod {
 	return fk.podsFunc()
 }
 
+// 返回注入的 runningPodsFunc 结果。
 func (fk *fakeKubelet) GetRunningPods(ctx context.Context) ([]*v1.Pod, error) {
 	return fk.runningPodsFunc(ctx)
 }
 
+// 返回注入的 allocatedPodsFunc 结果；未注入时返回 nil。
 func (fk *fakeKubelet) GetAllocatedPods() ([]*v1.Pod, error) {
 	if fk.allocatedPodsFunc != nil {
 		return fk.allocatedPodsFunc(), nil
@@ -149,6 +160,7 @@ func (fk *fakeKubelet) GetAllocatedPods() ([]*v1.Pod, error) {
 	return nil, nil
 }
 
+// 按 namespace/name 返回已分配 Pod；未注入时返回 nil。
 func (fk *fakeKubelet) GetAllocatedPodByName(namespace, name string) (*v1.Pod, error) {
 	if fk.allocatedPodByNameFunc != nil {
 		return fk.allocatedPodByNameFunc(namespace, name), nil
@@ -156,18 +168,22 @@ func (fk *fakeKubelet) GetAllocatedPodByName(namespace, name string) (*v1.Pod, e
 	return nil, nil
 }
 
+// 把 /logs 请求转交给注入的 logFunc。
 func (fk *fakeKubelet) ServeLogs(w http.ResponseWriter, req *http.Request) {
 	fk.logFunc(w, req)
 }
 
+// 把容器日志请求转交给注入的 containerLogsFunc。
 func (fk *fakeKubelet) GetKubeletContainerLogs(ctx context.Context, podFullName, containerName string, logOptions *v1.PodLogOptions, stdout, stderr io.Writer) error {
 	return fk.containerLogsFunc(ctx, podFullName, containerName, logOptions, stdout, stderr)
 }
 
+// 把 /run 请求转交给注入的 runFunc。
 func (fk *fakeKubelet) RunInContainer(_ context.Context, podFullName string, uid types.UID, containerName string, cmd []string) ([]byte, error) {
 	return fk.runFunc(podFullName, uid, containerName, cmd)
 }
 
+// 容器名为 checkpointingFailure 时返回错误，用于覆盖 checkpoint 失败路径。
 func (fk *fakeKubelet) CheckpointContainer(_ context.Context, podUID types.UID, podFullName, containerName string, options *runtimeapi.CheckpointContainerRequest) error {
 	if containerName == "checkpointingFailure" {
 		return fmt.Errorf("Returning error for test")
@@ -175,14 +191,18 @@ func (fk *fakeKubelet) CheckpointContainer(_ context.Context, podUID types.UID, 
 	return nil
 }
 
+// 测试中不返回任何指标描述。
 func (fk *fakeKubelet) ListMetricDescriptors(ctx context.Context) ([]*runtimeapi.MetricDescriptor, error) {
 	return nil, nil
 }
 
+// 测试中不返回任何 Pod sandbox 指标。
 func (fk *fakeKubelet) ListPodSandboxMetrics(ctx context.Context) ([]*runtimeapi.PodSandboxMetrics, error) {
 	return nil, nil
 }
 
+// 模拟 syncLoop 健康检查：以 resyncInterval 的两倍与 5 分钟取较大者为超时，
+// 最近一次进入循环时间早于该阈值则判定不健康。
 func (fk *fakeKubelet) SyncLoopHealthCheck(req *http.Request) error {
 	duration := fk.resyncInterval * 2
 	minDuration := time.Minute * 5
@@ -196,30 +216,37 @@ func (fk *fakeKubelet) SyncLoopHealthCheck(req *http.Request) error {
 	return nil
 }
 
+// fakeRuntime 是流式服务端使用的运行时桩，把 exec/attach/portforward 转发给测试注入的函数。
 type fakeRuntime struct {
 	execFunc        func(string, []string, io.Reader, io.WriteCloser, io.WriteCloser, bool, <-chan remotecommandserver.TerminalSize) error
 	attachFunc      func(string, io.Reader, io.WriteCloser, io.WriteCloser, bool, <-chan remotecommandserver.TerminalSize) error
 	portForwardFunc func(string, int32, io.ReadWriteCloser) error
 }
 
+// 把 exec 请求转交给注入的 execFunc。
 func (f *fakeRuntime) Exec(_ context.Context, containerID string, cmd []string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommandserver.TerminalSize) error {
 	return f.execFunc(containerID, cmd, stdin, stdout, stderr, tty, resize)
 }
 
+// 把 attach 请求转交给注入的 attachFunc。
 func (f *fakeRuntime) Attach(_ context.Context, containerID string, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommandserver.TerminalSize) error {
 	return f.attachFunc(containerID, stdin, stdout, stderr, tty, resize)
 }
 
+// 把 port forward 请求转交给注入的 portForwardFunc。
 func (f *fakeRuntime) PortForward(_ context.Context, podSandboxID string, port int32, stream io.ReadWriteCloser) error {
 	return f.portForwardFunc(podSandboxID, port, stream)
 }
 
+// testStreamingServer 包装一个真实的 streaming.Server，并通过 httptest.Server 暴露 HTTP 入口。
 type testStreamingServer struct {
 	streaming.Server
 	fakeRuntime    *fakeRuntime
 	testHTTPServer *httptest.Server
 }
 
+// 启动一个监听本地端口的流式服务端，并把请求转发给内部 streaming.Server，
+// 用于在测试中直接拨号 exec/attach/portforward。
 func newTestStreamingServer(streamIdleTimeout time.Duration) (s *testStreamingServer, err error) {
 	s = &testStreamingServer{}
 	s.testHTTPServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -249,6 +276,7 @@ func newTestStreamingServer(streamIdleTimeout time.Duration) (s *testStreamingSe
 	return s, nil
 }
 
+// 先调用注入的 getExecCheck 做参数断言，再向流式服务端发起 exec，始终使用 testContainerID。
 func (fk *fakeKubelet) GetExec(_ context.Context, podFullName string, podUID types.UID, containerName string, cmd []string, streamOpts remotecommandserver.Options) (*url.URL, error) {
 	if fk.getExecCheck != nil {
 		fk.getExecCheck(podFullName, podUID, containerName, cmd, streamOpts)
@@ -268,6 +296,7 @@ func (fk *fakeKubelet) GetExec(_ context.Context, podFullName string, podUID typ
 	return url.Parse(resp.GetUrl())
 }
 
+// 先调用注入的 getAttachCheck 做参数断言，再向流式服务端发起 attach，始终使用 testContainerID。
 func (fk *fakeKubelet) GetAttach(_ context.Context, podFullName string, podUID types.UID, containerName string, streamOpts remotecommandserver.Options) (*url.URL, error) {
 	if fk.getAttachCheck != nil {
 		fk.getAttachCheck(podFullName, podUID, containerName, streamOpts)
@@ -286,6 +315,7 @@ func (fk *fakeKubelet) GetAttach(_ context.Context, podFullName string, podUID t
 	return url.Parse(resp.GetUrl())
 }
 
+// 先调用注入的 getPortForwardCheck 做参数断言，再向流式服务端发起 port forward，始终使用 testPodSandboxID。
 func (fk *fakeKubelet) GetPortForward(ctx context.Context, podName, podNamespace string, podUID types.UID, portForwardOpts portforward.V4Options) (*url.URL, error) {
 	if fk.getPortForwardCheck != nil {
 		fk.getPortForwardCheck(podName, podNamespace, podUID, portForwardOpts)
@@ -301,36 +331,64 @@ func (fk *fakeKubelet) GetPortForward(ctx context.Context, podName, podNamespace
 	return url.Parse(resp.GetUrl())
 }
 
-// Unused functions
-func (*fakeKubelet) GetNode(context.Context) (*v1.Node, error)        { return nil, nil }
-func (*fakeKubelet) GetNodeConfig() cm.NodeConfig                     { return cm.NodeConfig{} }
-func (*fakeKubelet) GetPodCgroupRoot() string                         { return "" }
+// 以下方法仅为满足接口而存在，测试中不会被调用，因此统一返回零值。
+// GetNode 返回空节点，测试不使用。
+func (*fakeKubelet) GetNode(context.Context) (*v1.Node, error) { return nil, nil }
+
+// GetNodeConfig 返回空的节点配置。
+func (*fakeKubelet) GetNodeConfig() cm.NodeConfig { return cm.NodeConfig{} }
+
+// GetPodCgroupRoot 返回空的 cgroup 根路径。
+func (*fakeKubelet) GetPodCgroupRoot() string { return "" }
+
+// GetPodByCgroupfs 始终返回未找到。
 func (*fakeKubelet) GetPodByCgroupfs(cgroupfs string) (*v1.Pod, bool) { return nil, false }
+
+// ListVolumesForPod 返回空卷列表但标记为已找到。
 func (fk *fakeKubelet) ListVolumesForPod(podUID types.UID) (map[string]volume.Volume, bool) {
 	return map[string]volume.Volume{}, true
 }
+
+// ListBlockVolumesForPod 返回空块卷列表但标记为已找到。
 func (*fakeKubelet) ListBlockVolumesForPod(podUID types.UID) (map[string]volume.BlockVolume, bool) {
 	return map[string]volume.BlockVolume{}, true
 }
-func (*fakeKubelet) RootFsStats() (*statsapi.FsStats, error)                   { return nil, nil }
+
+// RootFsStats 不提供根文件系统统计。
+func (*fakeKubelet) RootFsStats() (*statsapi.FsStats, error) { return nil, nil }
+
+// ListPodStats 不提供 Pod 统计。
 func (*fakeKubelet) ListPodStats(context.Context) ([]statsapi.PodStats, error) { return nil, nil }
+
+// ListPodStatsAndUpdateCPUNanoCoreUsage 不提供统计也不更新 CPU 用量。
 func (*fakeKubelet) ListPodStatsAndUpdateCPUNanoCoreUsage(context.Context) ([]statsapi.PodStats, error) {
 	return nil, nil
 }
+
+// ListPodCPUAndMemoryStats 不提供 Pod 的 CPU/内存统计。
 func (*fakeKubelet) ListPodCPUAndMemoryStats(context.Context) ([]statsapi.PodStats, error) {
 	return nil, nil
 }
+
+// ImageFsStats 不提供镜像文件系统统计。
 func (*fakeKubelet) ImageFsStats(context.Context) (*statsapi.FsStats, *statsapi.FsStats, error) {
 	return nil, nil, nil
 }
+
+// RlimitStats 不提供 rlimit 统计。
 func (*fakeKubelet) RlimitStats() (*statsapi.RlimitStats, error) { return nil, nil }
+
+// GetCgroupStats 不提供 cgroup 统计。
 func (*fakeKubelet) GetCgroupStats(context.Context, string, bool) (*statsapi.ContainerStats, *statsapi.NetworkStats, error) {
 	return nil, nil, nil
 }
+
+// GetCgroupCPUAndMemoryStats 不提供 cgroup 的 CPU/内存统计。
 func (*fakeKubelet) GetCgroupCPUAndMemoryStats(cgroupName string, updateStats bool) (*statsapi.ContainerStats, error) {
 	return nil, nil
 }
 
+// fakeAuth 同时实现认证、属性提取与授权接口，行为由测试注入的函数决定。
 type fakeAuth struct {
 	authenticateFunc       func(*http.Request) (*authenticator.Response, bool, error)
 	attributesFunc         func(user.Info, *http.Request) []authorizer.Attributes
@@ -340,26 +398,40 @@ type fakeAuth struct {
 	verifyOptions          func() (x509.VerifyOptions, bool)
 }
 
+// 委托给注入的 authenticateFunc，测试可据此控制认证结果。
 func (f *fakeAuth) AuthenticateRequest(req *http.Request) (*authenticator.Response, bool, error) {
 	return f.authenticateFunc(req)
 }
+
+// 委托给注入的 attributesFunc，测试可据此检查授权属性。
 func (f *fakeAuth) GetRequestAttributes(ctx context.Context, u user.Info, req *http.Request) []authorizer.Attributes {
 	return f.attributesFunc(u, req)
 }
+
+// 委托给注入的 authorizeFunc，测试可据此控制授权决策。
 func (f *fakeAuth) Authorize(ctx context.Context, a authorizer.Attributes) (authorized authorizer.Decision, reason string, err error) {
 	return f.authorizeFunc(a)
 }
+
+// fakeAuth 不维护监听器，空实现即可。
 func (f *fakeAuth) AddListener(listener dynamiccertificates.Listener) {}
+
+// 返回注入的 CA bundle 内容。
 func (f *fakeAuth) CurrentCABundleContent() []byte {
 	return f.currentCABundleContent()
 }
+
+// 返回注入的认证器名称。
 func (f *fakeAuth) Name() string {
 	return f.name
 }
+
+// 返回注入的 TLS 校验选项。
 func (f *fakeAuth) VerifyOptions() (x509.VerifyOptions, bool) {
 	return f.verifyOptions()
 }
 
+// serverTestFramework 汇总被测 Server、fake kubelet、fake 认证器与测试 HTTP 服务器。
 type serverTestFramework struct {
 	serverUnderTest *Server
 	fakeKubelet     *fakeKubelet
@@ -367,10 +439,12 @@ type serverTestFramework struct {
 	testHTTPServer  *httptest.Server
 }
 
+// 创建开启全部调试端点的测试服务框架，不注入流式服务端。
 func newServerTest(ctx context.Context) *serverTestFramework {
 	return newServerTestWithDebug(ctx, true, nil)
 }
 
+// 按开关构造调试相关的 kubelet 配置，再创建测试服务框架。
 func newServerTestWithDebug(ctx context.Context, enableDebugging bool, streamingServer streaming.Server) *serverTestFramework {
 	kubeCfg := &kubeletconfiginternal.KubeletConfiguration{
 		EnableDebuggingHandlers: enableDebugging,
@@ -381,6 +455,8 @@ func newServerTestWithDebug(ctx context.Context, enableDebugging bool, streaming
 	return newServerTestWithDebuggingHandlers(ctx, kubeCfg, streamingServer)
 }
 
+// 用给定 kubelet 配置装配 fake kubelet、fake 认证器与 HTTP 测试服务器，
+// 默认认证通过、授权放行。
 func newServerTestWithDebuggingHandlers(ctx context.Context, kubeCfg *kubeletconfiginternal.KubeletConfiguration, streamingServer streaming.Server) *serverTestFramework {
 
 	fw := &serverTestFramework{}
@@ -422,7 +498,7 @@ func newServerTestWithDebuggingHandlers(ctx context.Context, kubeCfg *kubeletcon
 	return fw
 }
 
-// A helper function to return the correct pod name.
+// 按 kubelet 约定拼接 Pod 全名；namespace 为空时使用 default。
 func getPodName(name, namespace string) string {
 	if namespace == "" {
 		namespace = metav1.NamespaceDefault
@@ -430,6 +506,7 @@ func getPodName(name, namespace string) string {
 	return name + "_" + namespace
 }
 
+// 验证 /logs/ 端点会把 kubelet 的日志目录列表原样透传。
 func TestServeLogs(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
@@ -459,6 +536,7 @@ func TestServeLogs(t *testing.T) {
 
 }
 
+// 验证仅支持 GET 的端点收到 POST 时返回 405，并带有 Allow: GET 头。
 func TestGETOnlyEndpointsRejectPostWithAllowHeader(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
@@ -490,6 +568,7 @@ func TestGETOnlyEndpointsRejectPostWithAllowHeader(t *testing.T) {
 	}
 }
 
+// 验证 /run 端点正确解析 Pod、容器与命令，并原样返回执行输出。
 func TestServeRunInContainer(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
@@ -532,6 +611,7 @@ func TestServeRunInContainer(t *testing.T) {
 	}
 }
 
+// 在 /run 路径中带上 Pod UID，验证 UID 被正确传给 kubelet。
 func TestServeRunInContainerWithUID(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
@@ -576,6 +656,7 @@ func TestServeRunInContainerWithUID(t *testing.T) {
 	}
 }
 
+// 验证 /healthz 在正常状态下返回 200 且响应体包含 ok。
 func TestHealthCheck(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
@@ -584,6 +665,7 @@ func TestHealthCheck(t *testing.T) {
 	assertHealthIsOk(t, fw.testHTTPServer.URL+"/healthz")
 }
 
+// 请求给定 URL，断言返回期望的错误状态码。
 func assertHealthFails(t *testing.T, httpURL string, expectedErrorCode int) {
 	resp, err := http.Get(httpURL)
 	if err != nil {
@@ -595,6 +677,7 @@ func assertHealthFails(t *testing.T, httpURL string, expectedErrorCode int) {
 	}
 }
 
+// 在 ComponentStatusz 特性门控开启时验证 /statusz 列出全部已注册路径。
 func TestStatusz(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, zpagesfeatures.ComponentStatusz, true)
@@ -631,6 +714,7 @@ func TestStatusz(t *testing.T) {
 	}
 }
 
+// 验证 /configz 返回注册的 kubeletconfig，且能反序列化为公开配置类型。
 func TestConfigz(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
@@ -694,7 +778,8 @@ func TestConfigz(t *testing.T) {
 	}
 }
 
-// Ensure all registered handlers & services have an associated testcase.
+// 确保所有注册的 handler 与 web service 路由都有对应的授权测试用例，
+// 避免新增端点时遗漏权限测试。
 func TestAuthzCoverage(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
@@ -706,6 +791,7 @@ func TestAuthzCoverage(t *testing.T) {
 		}
 		t.Run(fmt.Sprintf("fineGrained=%v", fineGrained), func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletFineGrainedAuthz, fineGrained)
+			// method:path -> 是否已有对应用例；先全部置 false，再由 AuthzTestCases 置 true。
 			// method:path -> has coverage
 			expectedCases := map[string]bool{}
 
@@ -722,6 +808,8 @@ func TestAuthzCoverage(t *testing.T) {
 				}
 			}
 
+			// 兜底检查 Handle->HandleWithFilter() 的委托仍然生效；
+			// 理想情况下这些端点会迁到注册的 web service，届时该列表可以缩短。
 			// This is a sanity check that the Handle->HandleWithFilter() delegation is working
 			// Ideally, these would move to registered web services and this list would get shorter
 			expectedPaths := []string{"/healthz", "/metrics", "/metrics/cadvisor"}
@@ -744,11 +832,14 @@ func TestAuthzCoverage(t *testing.T) {
 	}
 }
 
+// 验证免认证 handler 白名单未被扩大：任何新端点都必须要求认证，
+// 并确认调试端点被显式禁用后返回 405。
 func TestInstallAuthNotRequiredHandlers(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTestWithDebug(tCtx, false, nil)
 	defer fw.testHTTPServer.Close()
 
+	// 该白名单不应再扩大：新增端点必须要求认证。
 	// No new handlers should be added to this list.
 	allowedAuthNotRequiredHandlers := sets.NewString(
 		"/healthz",
@@ -765,6 +856,7 @@ func TestInstallAuthNotRequiredHandlers(t *testing.T) {
 		"/stats/summary",
 	)
 
+	// 这些调试端点在本测试配置中被显式关闭。
 	// These handlers are explicitly disabled.
 	debuggingDisabledHandlers := sets.NewString(
 		"/run/",
@@ -794,6 +886,7 @@ func TestInstallAuthNotRequiredHandlers(t *testing.T) {
 		}
 	}
 
+	// 确认被关闭的端点对所有 HTTP 方法都返回 405。
 	// Ensure the disabled handlers are in fact disabled.
 	for path := range debuggingDisabledHandlers {
 		for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
@@ -811,9 +904,11 @@ func TestInstallAuthNotRequiredHandlers(t *testing.T) {
 	}
 }
 
+// 对每个授权测试用例验证认证、属性提取、授权三步都会被调用，
+// 且授权拒绝时返回 403。
 func TestAuthFilters(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	// Enable features.ContainerCheckpoint during test
+	// 打开 checkpoint 与 zpages 相关特性，确保被测端点全部注册。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.ContainerCheckpoint:    true,
 		zpagesfeatures.ComponentStatusz: true,
@@ -872,6 +967,7 @@ func TestAuthFilters(t *testing.T) {
 	}
 }
 
+// 验证认证后授权函数返回错误时请求失败，且三步鉴权流程都执行了。
 func TestAuthenticationError(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	var (
@@ -911,6 +1007,7 @@ func TestAuthenticationError(t *testing.T) {
 	}
 }
 
+// 验证认证失败（未通过）时直接返回 401，不再继续提取属性或授权。
 func TestAuthenticationFailure(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	var (
@@ -950,6 +1047,7 @@ func TestAuthenticationFailure(t *testing.T) {
 	}
 }
 
+// 验证认证、属性提取、授权全部成功时 /healthz 返回 200。
 func TestAuthorizationSuccess(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	var (
@@ -989,6 +1087,7 @@ func TestAuthorizationSuccess(t *testing.T) {
 	}
 }
 
+// 验证 syncLoop 长时间未进入时 /healthz 返回 500。
 func TestSyncLoopCheck(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
@@ -1004,7 +1103,7 @@ func TestSyncLoopCheck(t *testing.T) {
 	assertHealthFails(t, fw.testHTTPServer.URL+"/healthz", http.StatusInternalServerError)
 }
 
-// returns http response status code from the HTTP GET
+// 请求给定 URL，断言返回 200 且响应体包含 ok。
 func assertHealthIsOk(t *testing.T, httpURL string) {
 	resp, err := http.Get(httpURL)
 	if err != nil {
@@ -1025,6 +1124,7 @@ func assertHealthIsOk(t *testing.T, httpURL string) {
 	}
 }
 
+// 让 fake kubelet 对任意查询都返回包含指定容器的 Pod。
 func setPodByNameFunc(fw *serverTestFramework, namespace, pod, container string) {
 	fw.fakeKubelet.podByNameFunc = func(namespace, name string) (*v1.Pod, bool) {
 		return &v1.Pod{
@@ -1043,6 +1143,7 @@ func setPodByNameFunc(fw *serverTestFramework, namespace, pod, container string)
 	}
 }
 
+// 替换容器日志函数，校验传入参数并写入固定输出。
 func setGetContainerLogsFunc(fw *serverTestFramework, t *testing.T, expectedPodName, expectedContainerName string, expectedLogOptions *v1.PodLogOptions, output string) {
 	fw.fakeKubelet.containerLogsFunc = func(_ context.Context, podFullName, containerName string, logOptions *v1.PodLogOptions, stdout, stderr io.Writer) error {
 		if podFullName != expectedPodName {
@@ -1060,6 +1161,8 @@ func setGetContainerLogsFunc(fw *serverTestFramework, t *testing.T, expectedPodN
 	}
 }
 
+// 验证 /containerLogs 对 tail、follow 等查询参数的处理，
+// 并在 PodLogsQuerySplitStreams 开关两种取值下保持原有行为。
 func TestContainerLogs(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
@@ -1083,6 +1186,7 @@ func TestContainerLogs(t *testing.T) {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLogsQuerySplitStreams, enablePodLogsQuerySplitStreams)
 				expectedLogOptions := test.podLogOption.DeepCopy()
 				if enablePodLogsQuerySplitStreams && expectedLogOptions.Stream == nil {
+					// 开启分流后，HTTP handler 会在内部把 stream 默认为 All。
 					// The HTTP handler will internally set the default stream value.
 					expectedLogOptions.Stream = ptr.To(v1.LogStreamAll)
 				}
@@ -1115,6 +1219,7 @@ func TestContainerLogs(t *testing.T) {
 	}
 }
 
+// 验证非法 tail 参数（-1）返回 422。
 func TestContainerLogsWithInvalidTail(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
@@ -1136,6 +1241,8 @@ func TestContainerLogsWithInvalidTail(t *testing.T) {
 	}
 }
 
+// 在 PodLogsQuerySplitStreams 开启时验证 stream 参数能正确筛选 stdout/stderr，
+// 并覆盖空查询、limitBytes、tailLines 及非法 stream 等情形。
 func TestContainerLogsWithSeparateStream(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLogsQuerySplitStreams, true)
@@ -1162,8 +1269,9 @@ func TestContainerLogsWithSeparateStream(t *testing.T) {
 		expectedLogOptions *v1.PodLogOptions
 	}{
 		{
-			// Defaulters don't work if the query is empty.
+			// 查询串为空时默认值填充不会生效，因此这里显式期望 stream=All。
 			// See also https://github.com/kubernetes/kubernetes/issues/128589
+			// Defaulters don't work if the query is empty.
 			name: "empty query should return all logs",
 			logs: []logEntry{
 				{stream: v1.LogStreamStdout, msg: "foo\n"},
@@ -1351,6 +1459,8 @@ func TestContainerLogsWithSeparateStream(t *testing.T) {
 	}
 }
 
+// 验证 /checkpoint 在 Pod 不存在、容器名错误、执行失败、成功以及特性关闭时
+// 分别返回预期的状态码与错误信息。
 func TestCheckpointContainer(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	podNamespace := "other"
@@ -1362,6 +1472,7 @@ func TestCheckpointContainer(t *testing.T) {
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ContainerCheckpoint, featureGate)
 
 		fw := newServerTest(tCtx)
+		// 初始状态下 Pod 查询一律失败，用于覆盖 404 分支。
 		// GetPodByName() should always fail
 		fw.fakeKubelet.podByNameFunc = func(namespace, name string) (*v1.Pod, bool) {
 			return nil, false
@@ -1381,6 +1492,7 @@ func TestCheckpointContainer(t *testing.T) {
 			t.Errorf("Unexpected non-error checkpointing container: %#v", resp)
 		}
 	})
+	// 让 Pod 查询成功，但请求的容器名不在该 Pod 中。
 	// let GetPodByName() return a result, but our container "wrongContainerName" is not part of the Pod
 	setPodByNameFunc(fw, podNamespace, podName, expectedContainerName)
 	t.Run("wrong container name", func(t *testing.T) {
@@ -1393,6 +1505,7 @@ func TestCheckpointContainer(t *testing.T) {
 			t.Errorf("Unexpected non-error checkpointing container: %#v", resp)
 		}
 	})
+	// 让容器名触发 fake kubelet 的 checkpoint 失败分支。
 	// Now the checkpointing of the container fails
 	fw.fakeKubelet.podByNameFunc = func(namespace, name string) (*v1.Pod, bool) {
 		return &v1.Pod{
@@ -1419,6 +1532,7 @@ func TestCheckpointContainer(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		assert.Equal(t, "checkpointing of other/foo/checkpointingFailure failed (Returning error for test)", string(body))
 	})
+	// 正常容器应返回 200。
 	// Now test a successful checkpoint succeeds
 	setPodByNameFunc(fw, podNamespace, podName, expectedContainerName)
 	t.Run("checkpointing succeeds", func(t *testing.T) {
@@ -1429,6 +1543,7 @@ func TestCheckpointContainer(t *testing.T) {
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
+	// 特性门控关闭时，checkpoint 端点应返回 404。
 	// Now test for 404 if checkpointing support is explicitly disabled.
 	fw.testHTTPServer.Close()
 	fw = setupTest(false)
@@ -1443,6 +1558,7 @@ func TestCheckpointContainer(t *testing.T) {
 	})
 }
 
+// 构造带指定流式协议版本头的 HTTP 请求。
 func makeReq(t *testing.T, method, url, clientProtocol string) *http.Request {
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
@@ -1453,6 +1569,7 @@ func makeReq(t *testing.T, method, url, clientProtocol string) *http.Request {
 	return req
 }
 
+// 验证 exec 连接在空闲超时后会被服务端主动关闭。
 func TestServeExecInContainerIdleTimeout(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	ss, err := newTestStreamingServer(100 * time.Millisecond)
@@ -1494,6 +1611,8 @@ func TestServeExecInContainerIdleTimeout(t *testing.T) {
 	<-conn.CloseChan()
 }
 
+// exec 与 attach 的共用测试：覆盖 stdin/stdout/stderr/tty 各组合，
+// 校验请求参数、流式数据与最终调用的处理函数。
 func testExecAttach(t *testing.T, verb string) {
 	tCtx := ktesting.Init(t)
 	tests := map[string]struct {
@@ -1692,6 +1811,7 @@ func testExecAttach(t *testing.T, verb string) {
 				assert.Equal(t, expectedStderr, string(output[0:n]), "stderr")
 			}
 
+			// 等待服务端处理完成，再确认调用的是 exec 还是 attach。
 			// wait for the server to finish before checking if the attach/exec funcs were invoked
 			<-done
 
@@ -1706,14 +1826,17 @@ func testExecAttach(t *testing.T, verb string) {
 	}
 }
 
+// 用 exec 动词运行 testExecAttach。
 func TestServeExecInContainer(t *testing.T) {
 	testExecAttach(t, "exec")
 }
 
+// 用 attach 动词运行 testExecAttach。
 func TestServeAttachContainer(t *testing.T) {
 	testExecAttach(t, "attach")
 }
 
+// 验证通过 WebSocket 客户端执行 attach 时数据能正确回传。
 func TestWebsocketExecAttach(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	ss, err := newTestStreamingServer(0)
@@ -1771,6 +1894,7 @@ func TestWebsocketExecAttach(t *testing.T) {
 	<-done
 }
 
+// 验证 port forward 连接在空闲超时后会被服务端关闭。
 func TestServePortForwardIdleTimeout(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	ss, err := newTestStreamingServer(100 * time.Millisecond)
@@ -1809,6 +1933,7 @@ func TestServePortForwardIdleTimeout(t *testing.T) {
 	<-conn.CloseChan()
 }
 
+// 表驱动验证 /portForward 对端口范围的校验以及双向数据转发。
 func TestServePortForward(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tests := map[string]struct {
@@ -1936,6 +2061,7 @@ func TestServePortForward(t *testing.T) {
 	}
 }
 
+// 验证各端点路径被归入正确的指标 bucket，未知路径归入 other。
 func TestMetricBuckets(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, zpagesfeatures.ComponentStatusz, true)
@@ -1987,6 +2113,7 @@ func TestMetricBuckets(t *testing.T) {
 	}
 }
 
+// 验证 HTTP 方法被归入正确的指标 bucket，未知方法归入 other。
 func TestMetricMethodBuckets(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tests := map[string]struct {
@@ -2008,8 +2135,12 @@ func TestMetricMethodBuckets(t *testing.T) {
 	}
 }
 
+// 验证 EnableDebuggingHandlers 关闭时，即使单独开启日志/性能分析开关，
+// 调试端点也不会被注册。
 func TestDebuggingDisabledHandlers(t *testing.T) {
 	tCtx := ktesting.Init(t)
+	// 兼容性要求：仅开启 systemLog/profiling/debugFlags 而不开启 debugging handlers 时，
+	// /logs、/pprof、/flags 都不应被注册。
 	// for backward compatibility even if enablesystemLogHandler or enableProfilingHandler is set but not
 	// enableDebuggingHandler then /logs, /pprof and /flags shouldn't be served.
 	kubeCfg := &kubeletconfiginternal.KubeletConfiguration{
@@ -2032,6 +2163,7 @@ func TestDebuggingDisabledHandlers(t *testing.T) {
 	}
 }
 
+// 验证调试端点开启但子开关关闭时，/logs、/debug/pprof、/debug/flags 返回禁用提示。
 func TestDisablingLogAndProfilingHandler(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	kubeCfg := &kubeletconfiginternal.KubeletConfiguration{
@@ -2040,12 +2172,14 @@ func TestDisablingLogAndProfilingHandler(t *testing.T) {
 	fw := newServerTestWithDebuggingHandlers(tCtx, kubeCfg, nil)
 	defer fw.testHTTPServer.Close()
 
+	// 调试总开关打开但子开关关闭，各端点应返回对应的禁用提示。
 	// verify debug endpoints are disabled
 	verifyEndpointResponse(t, fw, "/logs/kubelet.log", "logs endpoint is disabled.\n")
 	verifyEndpointResponse(t, fw, "/debug/pprof/profile?seconds=2", "profiling endpoint is disabled.\n")
 	verifyEndpointResponse(t, fw, "/debug/flags/v", "flags endpoint is disabled.\n")
 }
 
+// 验证 /stats/summary 在表单解析失败时返回 500 并包含错误信息。
 func TestFailedParseParamsSummaryHandler(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
@@ -2060,6 +2194,7 @@ func TestFailedParseParamsSummaryHandler(t *testing.T) {
 	assert.Contains(t, string(v), "parse form failed")
 }
 
+// 以 GET 和 POST 请求给定路径，断言返回 405 且响应体为期望的禁用提示。
 func verifyEndpointResponse(t *testing.T, fw *serverTestFramework, path string, expectedResponse string) {
 	resp, err := http.Get(fw.testHTTPServer.URL + path)
 	require.NoError(t, err)
@@ -2076,6 +2211,7 @@ func verifyEndpointResponse(t *testing.T, fw *serverTestFramework, path string, 
 	assert.Equal(t, expectedResponse, string(body))
 }
 
+// 验证 getURLRootPath 对路径的裁剪规则。
 func TestTrimURLPath(t *testing.T) {
 	tests := []struct {
 		path, expected string
@@ -2097,6 +2233,8 @@ func TestTrimURLPath(t *testing.T) {
 	}
 }
 
+// 验证细粒度授权开启时，子资源授权被拒会回退到 proxy 授权，
+// 并正确统计授权调用次数。
 func TestFineGrainedAuthz(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	// Enable features.ContainerCheckpoint during test
@@ -2202,6 +2340,7 @@ func TestFineGrainedAuthz(t *testing.T) {
 	}
 }
 
+// 验证两次创建 Server 不会因 /metrics/slis 重复注册而冲突。
 func TestNewServerRegistersMetricsSLIsEndpointTwice(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	host := &fakeKubelet{}
@@ -2210,22 +2349,25 @@ func TestNewServerRegistersMetricsSLIsEndpointTwice(t *testing.T) {
 	server1 := NewServer(tCtx, host, resourceAnalyzer, []healthz.HealthChecker{}, flagz.NamedFlagSetsReader{}, nil, nil)
 	server2 := NewServer(tCtx, host, resourceAnalyzer, []healthz.HealthChecker{}, flagz.NamedFlagSetsReader{}, nil, nil)
 
+	// 两个 Server 实例都应成功注册 /metrics/slis，不能因重复注册 panic。
 	// Check if both servers registered the /metrics/slis endpoint
 	assert.Contains(t, server1.restfulCont.RegisteredHandlePaths(), "/metrics/slis", "First server should register /metrics/slis")
 	assert.Contains(t, server2.restfulCont.RegisteredHandlePaths(), "/metrics/slis", "Second server should register /metrics/slis")
 }
 
-// This test verifies that the HTTP request duration metric captures the actual
-// request handling time.
+// 验证 HTTP 请求耗时指标记录的是真实处理时间，而非固定的小值。
 func TestServeHTTPRequestDurationMetric(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fw := newServerTest(tCtx)
 	defer fw.testHTTPServer.Close()
 
+	// 测试前注册并重置指标，避免历史样本干扰。
 	// Register and reset the metric before the test
 	servermetrics.Register()
 	servermetrics.HTTPRequestsDuration.Reset()
 
+	// 在 pods handler 中人为延迟以模拟真实处理耗时。
+	// 50ms 足以与约 2 微秒的错误值区分，同时不会明显拖慢测试。
 	// Add a delay to the pods handler to simulate request processing time.
 	// We use 50ms which is long enough to be clearly distinguishable from
 	// the ~2 microsecond bug, but short enough to not slow down tests.
@@ -2235,21 +2377,25 @@ func TestServeHTTPRequestDurationMetric(t *testing.T) {
 		return []*v1.Pod{}
 	}
 
+	// 请求 pods 端点以产生一次指标观测。
 	// Make a request to the pods endpoint
 	resp, err := http.Get(fw.testHTTPServer.URL + "/pods/")
 	require.NoError(t, err)
 	defer resp.Body.Close() //nolint:errcheck
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
+	// 读完响应体，确保请求已完整处理后再读取指标。
 	// Read the body to ensure the request is fully processed
 	_, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 
+	// 从指标中取出记录的耗时值。
 	// Get the recorded duration from the metric
 	observerMetric := servermetrics.HTTPRequestsDuration.WithLabelValues("GET", "pods", "readwrite", "false")
 	metricValue, err := testutil.GetHistogramMetricValue(observerMetric)
 	require.NoError(t, err)
 
+	// 以 handler 延迟作为耗时下界，避免基于百分比的时序敏感断言。
 	// Use the handler delay as the minimum expected duration. This avoids any
 	// timing-sensitive percentage-based checks.
 	minExpectedDuration := handlerDelay.Seconds()
@@ -2259,19 +2405,11 @@ func TestServeHTTPRequestDurationMetric(t *testing.T) {
 	)
 }
 
-// TestGetExecWebSocketHandlerSelection verifies that getExec selects the
-// translating handler (WebSocket v5 ↔ SPDY) when ExtendWebSocketsToKubelet
-// is enabled and a v5 request arrives, and the plain UpgradeAwareHandler
-// otherwise.
-//
-// Observable difference: the translating handler accepts v5 WebSocket directly
-// and echoes "v5.channel.k8s.io" back in the 101 response. Without it, the
-// kubelet proxies the v5 request to the streaming server whose wsstream layer
-// only lists v4/legacy subprotocols and rejects the v5 upgrade entirely
-// (gorilla receives a non-101 response → "bad handshake").
-// When the client uses v4, the UpgradeAwareHandler proxies the upgrade to the
-// streaming server which accepts v4, so the connection succeeds even when the
-// gate is enabled.
+// 验证 getExec 在 ExtendWebSocketsToKubelet 开启且收到 v5 请求时选用协议转换 handler，
+// 否则回退到普通 UpgradeAwareHandler。
+// 可观测差异：转换 handler 直接接受 v5 并在 101 响应中回显 v5.channel.k8s.io；
+// 否则 v5 升级会被仅支持 v4 的 wsstream 层拒绝（客户端表现为 bad handshake）。
+// 客户端使用 v4 时，普通 handler 也能把升级代理给流式服务端并成功。
 func TestGetExecWebSocketHandlerSelection(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -2359,9 +2497,7 @@ kubelet_websocket_streaming_requests_total{subresource="exec"} 1
 	}
 }
 
-// TestGetAttachWebSocketHandlerSelection verifies that getAttach selects the
-// translating handler when ExtendWebSocketsToKubelet is enabled and a v5
-// request arrives, analogous to TestGetExecWebSocketHandlerSelection.
+// 与 TestGetExecWebSocketHandlerSelection 类似，验证 getAttach 的 handler 选择。
 func TestGetAttachWebSocketHandlerSelection(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -2449,21 +2585,11 @@ kubelet_websocket_streaming_requests_total{subresource="attach"} 1
 	}
 }
 
-// TestGetPortForwardWebSocketHandlerSelection verifies that getPortForward
-// selects the tunneling handler when ExtendWebSocketsToKubelet is enabled and
-// the client sends the WebSocket tunneling subprotocol ("SPDY/3.1+portforward.k8s.io"),
-// and the plain UpgradeAwareHandler otherwise.
-//
-// When the gate is enabled, getPortForward skips portforward.NewV4Options (which
-// would reject a request with no port parameter) and wraps the proxy with a
-// TunnelingHandler that translates the WebSocket tunneling protocol to SPDY.
-// The streaming server speaks SPDY portforward and responds with 101; the
-// tunneling handler translates that back to a WebSocket 101 with the tunneling
-// subprotocol.
-//
-// When the gate is disabled, portforward.NewV4Options is called on the WebSocket
-// request, which has no port query parameter, causing a 400 Bad Request before
-// the WebSocket upgrade is attempted.
+// 验证 getPortForward 在 ExtendWebSocketsToKubelet 开启且客户端使用隧道子协议时
+// 选用 TunnelingHandler，否则回退到普通 UpgradeAwareHandler。
+// 开启时跳过 portforward.NewV4Options（WebSocket 请求没有 port 参数会被它拒绝），
+// 由 TunnelingHandler 完成 WebSocket 隧道协议到 SPDY 的转换。
+// 关闭时 NewV4Options 因缺少 port 参数直接返回 400。
 func TestGetPortForwardWebSocketHandlerSelection(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -2531,6 +2657,7 @@ kubelet_websocket_streaming_requests_total{subresource="portforward"} 1
 	}
 }
 
+// 在 NativeHistograms 特性门控开启时验证 kubelet 指标以原生直方图形式暴露。
 func TestKubeletNativeHistogramMetrics(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, metricsfeatures.NativeHistograms, true)
 	metricsfeatures.ApplyFeatureGates(utilfeature.DefaultFeatureGate)
@@ -2554,6 +2681,8 @@ func TestKubeletNativeHistogramMetrics(t *testing.T) {
 	testutil.AssertHasNativeHistogram(t, mf, nil)
 }
 
+// 在 KubeletAllocatedPodsEndpoint 特性门控开/关时，
+// 验证 /allocatedPods 列表与单个查询的状态码、返回内容以及 UID 匹配行为。
 func TestGetAllocatedPods(t *testing.T) {
 	pod1 := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

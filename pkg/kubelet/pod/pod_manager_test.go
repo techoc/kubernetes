@@ -30,6 +30,7 @@ import (
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 )
 
+// 测试共享的镜像 Pod、静态 Pod、普通 Pod 样本及其 UID/名称。
 var (
 	mirrorPodUID  = "mirror-pod-uid"
 	staticPodUID  = "static-pod-uid"
@@ -69,6 +70,8 @@ var (
 	sortOpt = cmpopts.SortSlices(func(a, b *v1.Pod) bool { return a.Name < b.Name })
 )
 
+// TestAddOrUpdatePod 验证镜像 Pod、静态 Pod 和普通 Pod 加入与更新后，
+// 都能写入对应的 UID/全名索引。
 func TestAddOrUpdatePod(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -101,9 +104,11 @@ func TestAddOrUpdatePod(t *testing.T) {
 				mirrorPodByFullName: make(map[string]*v1.Pod),
 				translationByUID:    make(map[kubetypes.MirrorPodUID]kubetypes.ResolvedPodUID),
 			}
+			// 加入后应出现在对应索引中。
 			pm.AddPod(test.pod)
 			verify(t, pm, test.isMirror, test.pod)
 			test.pod.Annotations["testLabel"] = "updated"
+			// 更新注解后再次校验，确认更新路径也维护索引。
 			pm.UpdatePod(test.pod)
 			verify(t, pm, test.isMirror, test.pod)
 		})
@@ -111,6 +116,7 @@ func TestAddOrUpdatePod(t *testing.T) {
 
 }
 
+// verify 按 Pod 类型检查 UID 索引与全名索引中的对象一致。
 func verify(t *testing.T, pm *basicManager, isMirror bool, expectedPod *v1.Pod) {
 	fullName := fmt.Sprintf("%s_%s", expectedPod.Name, expectedPod.Namespace)
 	if isMirror {
@@ -130,8 +136,8 @@ func verify(t *testing.T, pm *basicManager, isMirror bool, expectedPod *v1.Pod) 
 	}
 }
 
-// Tests that pods/maps are properly set after the pod update, and the basic
-// methods work correctly.
+// TestGetSetPods 验证 SetPods 后各索引正确建立，
+// 以及 GetPods、UID 翻译、按名/按 UID 查询等基本方法工作正常。
 func TestGetSetPods(t *testing.T) {
 	testCase := []struct {
 		name                 string
@@ -246,6 +252,8 @@ func TestGetSetPods(t *testing.T) {
 	}
 }
 
+// TestRemovePods 验证删除镜像 Pod、静态 Pod 和普通 Pod 后的索引状态，
+// 包括静态 Pod 删除后产生的孤儿镜像 Pod。
 func TestRemovePods(t *testing.T) {
 	testCase := []struct {
 		name                             string
@@ -283,10 +291,11 @@ func TestRemovePods(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			podManager := NewBasicPodManager()
 			podManager.SetPods(test.podList)
+			// 删除静态 Pod 后其镜像 Pod 成为孤儿，但仍保留在镜像索引中。
 			podManager.RemovePod(test.needToRemovePod)
 			actualPods1 := podManager.GetPods()
 			actualPods2, actualMirrorPods, orphanedMirrorPodFullnames := podManager.GetPodsAndMirrorPods()
-			// Check if the actual pods and mirror pods match the expected ones.
+			// 检查普通 Pod、镜像 Pod 和孤儿镜像 Pod 全名是否符合预期。
 			assert.Empty(t, cmp.Diff(actualPods1, actualPods2, sortOpt), "actualPods by GetPods() and GetPodsAndMirrorPods() differ")
 			assert.Empty(t, cmp.Diff(test.expectPods, actualPods1, sortOpt), "actualPods and expectPods differ")
 			assert.Empty(t, cmp.Diff(test.expectMirrorPods, actualMirrorPods, sortOpt), "actualMirrorPods and expectMirrorPods differ")
@@ -295,9 +304,12 @@ func TestRemovePods(t *testing.T) {
 	}
 }
 
+// TestGetStaticPodToMirrorPodMap 验证只有静态 Pod 会出现在映射中，
+// 且值为其对应的镜像 Pod。
 func TestGetStaticPodToMirrorPodMap(t *testing.T) {
 	podManager := NewBasicPodManager()
 	podManager.SetPods([]*v1.Pod{mirrorPod, staticPod, normalPod})
+	// 映射中应只有静态 Pod 一项。
 	m := podManager.GetStaticPodToMirrorPodMap()
 	if len(m) != 1 {
 		t.Fatalf("GetStaticPodToMirrorPodMap(): got %d static pods, wanted 1 static pod", len(m))

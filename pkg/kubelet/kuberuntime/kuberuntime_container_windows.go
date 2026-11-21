@@ -32,7 +32,7 @@ import (
 	"k8s.io/kubernetes/pkg/securitycontext"
 )
 
-// applyPlatformSpecificContainerConfig applies platform specific configurations to runtimeapi.ContainerConfig.
+// applyPlatformSpecificContainerConfig 为 ContainerConfig 填充 Windows 平台配置。
 func (m *kubeGenericRuntimeManager) applyPlatformSpecificContainerConfig(ctx context.Context, config *runtimeapi.ContainerConfig, container *v1.Container, pod *v1.Pod, uid *int64, username string, _ *kubecontainer.ContainerID) error {
 	windowsConfig, err := m.generateWindowsContainerConfig(ctx, container, pod, uid, username)
 	if err != nil {
@@ -44,6 +44,7 @@ func (m *kubeGenericRuntimeManager) applyPlatformSpecificContainerConfig(ctx con
 }
 
 // generateContainerResources generates platform specific (windows) container resources config for runtime
+// generateContainerResources 生成 Windows 平台的容器资源配置。
 func (m *kubeGenericRuntimeManager) generateContainerResources(ctx context.Context, pod *v1.Pod, container *v1.Container) *runtimeapi.ContainerResources {
 	return &runtimeapi.ContainerResources{
 		Windows: m.generateWindowsContainerResources(ctx, pod, container),
@@ -51,26 +52,41 @@ func (m *kubeGenericRuntimeManager) generateContainerResources(ctx context.Conte
 }
 
 // generateUpdatePodSandboxResourcesRequest generates platform specific podsandox resources config for runtime
+// generateUpdatePodSandboxResourcesRequest 在 Windows 上返回 nil（不支持该请求）。
 func (m *kubeGenericRuntimeManager) generateUpdatePodSandboxResourcesRequest(sandboxID string, pod *v1.Pod, podResources *cm.ResourceConfig) *runtimeapi.UpdatePodSandboxResourcesRequest {
 	return nil
 }
 
-// generateWindowsContainerResources generates windows container resources config for runtime
+// generateWindowsContainerResources 根据容器 limits 生成 Windows 容器资源配置。
 func (m *kubeGenericRuntimeManager) generateWindowsContainerResources(ctx context.Context, pod *v1.Pod, container *v1.Container) *runtimeapi.WindowsContainerResources {
 	wcr := m.calculateWindowsResources(ctx, container.Resources.Limits.Cpu(), container.Resources.Limits.Memory())
 
 	return wcr
 }
 
-// calculateWindowsResources will create the windowsContainerResources type based on the provided CPU and memory resource requests, limits
+// calculateWindowsResources 根据 CPU/内存 limits 构造 WindowsContainerResources。
 func (m *kubeGenericRuntimeManager) calculateWindowsResources(ctx context.Context, cpuLimit, memoryLimit *resource.Quantity) *runtimeapi.WindowsContainerResources {
 	resources := runtimeapi.WindowsContainerResources{}
 
+	// 内存限制直接使用 limit 的字节数。
 	memLimit := memoryLimit.Value()
 
+	// CPU 未设置时不生成 CpuMaximum，避免覆盖默认行为。
 	if !cpuLimit.IsZero() {
-		// Since Kubernetes doesn't have any notion of weight in the Pod/Container API, only limits/reserves, then applying CpuMaximum only
-		// will better follow the intent of the user. At one point CpuWeights were set, but this prevented limits from having any effect.
+		// 由于 Kubernetes API 只有 limits/reserves 而没有权重概念，只设置 CpuMaximum
+		// 更符合用户意图；早期曾设置 CpuWeights，结果导致 limits 失效。
+		//
+		// 该机制分三部分：
+		// 一、Windows 内核：cpuMaximum 的文档见
+		// https://docs.microsoft.com/en-us/virtualization/windowscontainers/manage-containers/resource-controls，
+		// 取值范围与 CPU 数的关系见
+		// https://docs.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_cpu_rate_control_information；
+		// 进程隔离开启 JOB_OBJECT_CPU_RATE_CONTROL_ENABLE，可设为 WEIGHT_BASED 或 HARD_CAP，二者互斥。
+		// 二、Docker：若同时传入 CpuWeight 与 CpuMaximum，Docker 会启用 WEIGHT_BASED 并忽略 CpuMaximum。
+		// 方案 a：设置 HostConfig.CpuPercent，单位为整百分比，分辨率随核数变化；
+		// 方案 b：设置 HostConfig.NanoCpus（10e-9 CPU 单位），Moby 会缩放到 1-10000，分辨率更高。
+		// 三、CRI 与 containerd：kubelet 在 Linux 直接写 cgroup，Windows 上需经 CRI 传递；
+		// cpu_maximum 字段范围为百分数*100（1-10000）；若同时设置 CpuWeight 与 CpuMaximum，containerd 会报错。
 
 		// There are 3 parts to how this works:
 		// Part one - Windows kernel
@@ -92,12 +108,12 @@ func (m *kubeGenericRuntimeManager) calculateWindowsResources(ctx context.Contex
 		//   https://github.com/kubernetes/kubernetes/blob/56d1c3b96d0a544130a82caad33dd57629b8a7f8/staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto#L681-L682
 		//   https://github.com/opencontainers/runtime-spec/blob/ad53dcdc39f1f7f7472b10aa0a45648fe4865496/config-windows.md#cpu
 		//   If both CpuWeight and CpuMaximum are set - ContainerD catches this invalid case and returns an error instead.
+		// 把 CPU limit 换算为 Windows 的 1-10000 范围。
 		resources.CpuMaximum = calculateCPUMaximum(cpuLimit, int64(winstats.ProcessorCount()))
 	}
 
-	// The processor resource controls are mutually exclusive on
-	// Windows Server Containers, the order of precedence is
-	// CPUCount first, then CPUMaximum.
+	// Windows Server 容器的处理器资源控制互斥，优先级为 CPUCount 高于 CPUMaximum。
+	// 两者同时存在时清空 CpuMaximum 并记录日志。
 	if resources.CpuCount > 0 {
 		if resources.CpuMaximum > 0 {
 			resources.CpuMaximum = 0
@@ -106,6 +122,7 @@ func (m *kubeGenericRuntimeManager) calculateWindowsResources(ctx context.Contex
 		}
 	}
 
+	// 内存限制非零时才设置。
 	if memLimit != 0 {
 		resources.MemoryLimitInBytes = memLimit
 	}
@@ -113,15 +130,15 @@ func (m *kubeGenericRuntimeManager) calculateWindowsResources(ctx context.Contex
 	return &resources
 }
 
-// generateWindowsContainerConfig generates windows container config for kubelet runtime v1.
-// Refer https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/cri-windows.md.
+// generateWindowsContainerConfig 生成 kubelet runtime v1 的 Windows 容器配置，
+// 参见 https://github.com/kubernetes/community/blob/master/contributors/design-proposals/node/cri-windows.md。
 func (m *kubeGenericRuntimeManager) generateWindowsContainerConfig(ctx context.Context, container *v1.Container, pod *v1.Pod, uid *int64, username string) (*runtimeapi.WindowsContainerConfig, error) {
 	wc := &runtimeapi.WindowsContainerConfig{
 		Resources:       m.generateWindowsContainerResources(ctx, pod, container),
 		SecurityContext: &runtimeapi.WindowsContainerSecurityContext{},
 	}
 
-	// setup security context
+	// 设置安全上下文。
 	effectiveSc := securitycontext.DetermineEffectiveSecurityContext(pod, container)
 
 	if username != "" {
@@ -132,7 +149,7 @@ func (m *kubeGenericRuntimeManager) generateWindowsContainerConfig(ctx context.C
 		wc.SecurityContext.CredentialSpec = *effectiveSc.WindowsOptions.GMSACredentialSpec
 	}
 
-	// override with Windows options if present
+	// WindowsOptions 中的用户名优先于传入的用户名。
 	if effectiveSc.WindowsOptions != nil && effectiveSc.WindowsOptions.RunAsUserName != nil {
 		wc.SecurityContext.RunAsUsername = *effectiveSc.WindowsOptions.RunAsUserName
 	}
@@ -144,11 +161,11 @@ func (m *kubeGenericRuntimeManager) generateWindowsContainerConfig(ctx context.C
 	return wc, nil
 }
 
-// calculateCPUMaximum calculates the maximum CPU given a limit and a number of cpus while ensuring it's in range [1,10000].
+// calculateCPUMaximum 根据 CPU 限制与 CPU 数计算最大值，并裁剪到 [1,10000]。
 func calculateCPUMaximum(cpuLimit *resource.Quantity, cpuCount int64) int64 {
 	cpuMaximum := 10 * cpuLimit.MilliValue() / cpuCount
 
-	// ensure cpuMaximum is in range [1, 10000].
+	// 保证 cpuMaximum 落在 [1, 10000]。
 	if cpuMaximum < 1 {
 		cpuMaximum = 1
 	} else if cpuMaximum > 10000 {
@@ -157,13 +174,14 @@ func calculateCPUMaximum(cpuLimit *resource.Quantity, cpuCount int64) int64 {
 	return cpuMaximum
 }
 
+// toKubeContainerResources 把运行时返回的 Windows 资源换算回 kubelet 的容器资源。
 func toKubeContainerResources(statusResources *runtimeapi.ContainerResources) *kubecontainer.ContainerResources {
 	var cStatusResources *kubecontainer.ContainerResources
 	runtimeStatusResources := statusResources.GetWindows()
 	if runtimeStatusResources != nil {
 		var memLimit, cpuLimit *resource.Quantity
 
-		// Used the reversed formula from the calculateCPUMaximum function
+		// 使用 calculateCPUMaximum 的逆公式。
 		if runtimeStatusResources.CpuMaximum > 0 {
 			cpuLimitValue := runtimeStatusResources.CpuMaximum * int64(winstats.ProcessorCount()) / 10
 			cpuLimit = resource.NewMilliQuantity(cpuLimitValue, resource.DecimalSI)
@@ -183,22 +201,26 @@ func toKubeContainerResources(statusResources *runtimeapi.ContainerResources) *k
 	return cStatusResources
 }
 
+// toKubeContainerUser 在 Windows 上返回 nil（不支持）。
 func toKubeContainerUser(statusUser *runtimeapi.ContainerUser) *kubecontainer.ContainerUser {
 	return nil
 }
 
+// GetContainerSwapBehavior 在 Windows 上始终返回 NoSwap。
 func (m *kubeGenericRuntimeManager) GetContainerSwapBehavior(pod *v1.Pod, container *v1.Container) types.SwapBehavior {
 	return types.NoSwap
 }
 
-// initSwapControllerAvailabilityCheck returns a function that always returns false on Windows
+// initSwapControllerAvailabilityCheck 返回始终为 false 的函数（Windows 不支持 swap 控制器）。
 func initSwapControllerAvailabilityCheck(ctx context.Context) func() bool {
 	return func() bool { return false }
 }
 
+// isMemoryQoSEnforced 在 Windows 上始终返回 false。
 func (m *kubeGenericRuntimeManager) isMemoryQoSEnforced() bool {
 	return false
 }
 
+// applyPodLevelMemoryHigh 在 Windows 上是空操作。
 func (m *kubeGenericRuntimeManager) applyPodLevelMemoryHigh(_ *v1.Pod, _ *cm.ResourceConfig) {
 }

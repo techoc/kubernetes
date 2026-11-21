@@ -16,7 +16,7 @@ limitations under the License.
 
 package events
 
-// Container event reason list
+// 容器事件原因列表。
 const (
 	CreatedContainer        = "Created"
 	StartedContainer        = "Started"
@@ -28,7 +28,7 @@ const (
 	ExceededGracePeriod     = "ExceededGracePeriod"
 )
 
-// Pod event reason list
+// Pod 事件原因列表。
 const (
 	FailedToKillPod                 = "FailedKillPod"
 	FailedToCreatePodContainer      = "FailedCreatePodContainer"
@@ -42,7 +42,7 @@ const (
 	FailedNodeDeclaredFeaturesCheck = "FailedNodeDeclaredFeaturesCheck"
 )
 
-// Image event reason list
+// 镜像事件原因列表。
 const (
 	PullingImage            = "Pulling"
 	PulledImage             = "Pulled"
@@ -52,7 +52,7 @@ const (
 	BackOffPullImage        = "BackOff"
 )
 
-// kubelet event reason list
+// kubelet 事件原因列表。
 const (
 	NodeReady                            = "NodeReady"
 	NodeNotReady                         = "NodeNotReady"
@@ -86,30 +86,30 @@ const (
 	CgroupV1                             = "CgroupV1"
 )
 
-// Image manager event reason list
+// 镜像管理器事件原因列表。
 const (
 	InvalidImageID      = "InvalidImageID"
 	InvalidDiskCapacity = "InvalidDiskCapacity"
 	FreeDiskSpaceFailed = "FreeDiskSpaceFailed"
 )
 
-// Probe event reason list
+// 探针事件原因列表。
 const (
 	ContainerUnhealthy    = "Unhealthy"
 	ContainerProbeWarning = "ProbeWarning"
 )
 
-// Pod worker event reason list
+// Pod worker 事件原因列表。
 const (
 	FailedSync = "FailedSync"
 )
 
-// Config event reason list
+// 配置事件原因列表。
 const (
 	FailedValidation = "FailedValidation"
 )
 
-// Lifecycle hooks
+// 生命周期钩子事件原因列表。
 const (
 	FailedPostStartHook = "FailedPostStartHook"
 	FailedPreStopHook   = "FailedPreStopHook"

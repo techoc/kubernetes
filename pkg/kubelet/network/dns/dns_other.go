@@ -18,5 +18,5 @@ limitations under the License.
 
 package dns
 
-// Read the DNS configuration from a resolv.conf file.
+// getHostDNSConfig 从 resolv.conf 文件读取主机 DNS 配置；非 Windows 平台直接复用 getDNSConfig。
 var getHostDNSConfig = getDNSConfig

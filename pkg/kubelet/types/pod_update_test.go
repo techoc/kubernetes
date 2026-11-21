@@ -27,11 +27,13 @@ import (
 )
 
 var (
-	systemPriority      = scheduling.SystemCriticalPriority
+	// systemPriority 是系统关键 Pod 的优先级基数。
+	systemPriority = scheduling.SystemCriticalPriority
+	// systemPriorityUpper 是比系统关键优先级更高的值，用于验证高优先级抢占。
 	systemPriorityUpper = systemPriority + 1000
 )
 
-// getTestPod generates a new instance of an empty test Pod
+// getTestPod 生成一个空的测试 Pod 实例，可按需附带注解、优先级和优先级类名。
 func getTestPod(annotations map[string]string, podPriority *int32, priorityClassName string) *v1.Pod {
 	pod := v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -57,14 +59,17 @@ func getTestPod(annotations map[string]string, podPriority *int32, priorityClass
 	return &pod
 }
 
+// configSourceAnnotation 构造只包含配置源注解的 map。
 func configSourceAnnotation(source string) map[string]string {
 	return map[string]string{ConfigSourceAnnotationKey: source}
 }
 
+// configMirrorAnnotation 构造只包含 mirror Pod 注解的 map。
 func configMirrorAnnotation() map[string]string {
 	return map[string]string{ConfigMirrorAnnotationKey: "true"}
 }
 
+// TestGetValidatedSources 验证配置源字符串的解析：未知源应报错，AllSource 应展开为全部源。
 func TestGetValidatedSources(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -101,6 +106,7 @@ func TestGetValidatedSources(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			sources, err := GetValidatedSources(test.sources)
+			// 出错时不应返回任何源；成功时返回的源数量必须与预期一致。
 			if test.errExpected {
 				assert.Error(t, err)
 			} else {
@@ -111,6 +117,7 @@ func TestGetValidatedSources(t *testing.T) {
 	}
 }
 
+// TestGetPodSource 验证 GetPodSource 能从配置源注解读取来源，缺失注解时返回错误。
 func TestGetPodSource(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -135,6 +142,7 @@ func TestGetPodSource(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			source, err := GetPodSource(test.pod)
+			// 缺少配置源注解时必须报错，避免把未知来源误判为静态 Pod。
 			if test.errExpected {
 				assert.Error(t, err)
 			} else {
@@ -145,6 +153,7 @@ func TestGetPodSource(t *testing.T) {
 	}
 }
 
+// TestString 验证 SyncPodType 各枚举值到字符串的映射，未知值返回 "unknown"。
 func TestString(t *testing.T) {
 	tests := []struct {
 		sp       SyncPodType
@@ -179,6 +188,7 @@ func TestString(t *testing.T) {
 	}
 }
 
+// TestIsMirrorPod 验证通过 mirror 注解识别 mirror Pod。
 func TestIsMirrorPod(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -204,6 +214,7 @@ func TestIsMirrorPod(t *testing.T) {
 	}
 }
 
+// TestIsStaticPod 验证只有 file/http 来源的 Pod 被视为 static Pod，apiserver 来源不属于静态 Pod。
 func TestIsStaticPod(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -235,6 +246,7 @@ func TestIsStaticPod(t *testing.T) {
 	}
 }
 
+// TestIsCriticalPod 验证 critical Pod 的判定：静态 Pod、mirror Pod 或优先级达到系统关键阈值。
 func TestIsCriticalPod(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -280,6 +292,7 @@ func TestIsCriticalPod(t *testing.T) {
 	}
 }
 
+// TestPreemptable 验证抢占判定规则：优先级更高方可抢占，同优先级或更低优先级不可。
 func TestPreemptable(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -332,6 +345,7 @@ func TestPreemptable(t *testing.T) {
 	}
 }
 
+// TestIsCriticalPodBasedOnPriority 验证仅依据优先级数值判断 Pod 是否 critical。
 func TestIsCriticalPodBasedOnPriority(t *testing.T) {
 	tests := []struct {
 		priority int32
@@ -359,6 +373,7 @@ func TestIsCriticalPodBasedOnPriority(t *testing.T) {
 	}
 }
 
+// TestIsNodeCriticalPod 验证节点级 critical Pod 的判定：需同时满足 critical 条件且优先级类名为 system-node-critical。
 func TestIsNodeCriticalPod(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -409,6 +424,7 @@ func TestIsNodeCriticalPod(t *testing.T) {
 	}
 }
 
+// TestHasRestartableInitContainer 验证能否正确识别包含可重启 init 容器的 Pod。
 func TestHasRestartableInitContainer(t *testing.T) {
 	containerRestartPolicyAlways := v1.ContainerRestartPolicyAlways
 	tests := []struct {
@@ -502,6 +518,7 @@ func TestHasRestartableInitContainer(t *testing.T) {
 			expected: false,
 		},
 	}
+	// HasRestartableInitContainer 只认 RestartPolicy=Always 的 init 容器；nil 视为普通 init 容器。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			hasRestartableInitContainer := HasRestartableInitContainer(test.pod)

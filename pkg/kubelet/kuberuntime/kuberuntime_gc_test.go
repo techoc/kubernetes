@@ -31,6 +31,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestSandboxGC 覆盖 evictSandboxes 在不同 sandbox 状态与 Pod 生命周期下的回收行为。
 func TestSandboxGC(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeRuntime, _, m, err := createTestRuntimeManager(tCtx)
@@ -62,10 +63,10 @@ func TestSandboxGC(t *testing.T) {
 	}
 
 	for _, test := range []struct {
-		description          string              // description of the test case
-		sandboxes            []sandboxTemplate   // templates of sandboxes
-		containers           []containerTemplate // templates of containers
-		remain               []int               // template indexes of remaining sandboxes
+		description          string              // 测试用例描述
+		sandboxes            []sandboxTemplate   // sandbox 模板列表
+		containers           []containerTemplate // 容器模板列表
+		remain               []int               // 剩余 sandbox 的模板索引
 		evictTerminatingPods bool
 	}{
 		{
@@ -142,15 +143,15 @@ func TestSandboxGC(t *testing.T) {
 		{
 			description: "multiple sandboxes should be handled properly.",
 			sandboxes: []sandboxTemplate{
-				// running sandbox.
+				// 运行中的 sandbox。
 				makeGCSandbox(pods[0], 1, runtimeapi.PodSandboxState_SANDBOX_READY, true, false, 1),
-				// exited sandbox without containers.
+				// 已退出且没有容器的 sandbox。
 				makeGCSandbox(pods[0], 0, runtimeapi.PodSandboxState_SANDBOX_NOTREADY, true, false, 0),
-				// exited sandbox with containers.
+				// 已退出但仍有容器的 sandbox。
 				makeGCSandbox(pods[1], 1, runtimeapi.PodSandboxState_SANDBOX_NOTREADY, true, false, 1),
-				// exited sandbox without containers.
+				// 已退出且没有容器的 sandbox。
 				makeGCSandbox(pods[1], 0, runtimeapi.PodSandboxState_SANDBOX_NOTREADY, true, false, 0),
-				// exited sandbox without containers for deleted pods.
+				// 已删除 Pod 的已退出且无容器的 sandbox。
 				makeGCSandbox(pods[2], 0, runtimeapi.PodSandboxState_SANDBOX_NOTREADY, false, true, 0),
 			},
 			containers: []containerTemplate{
@@ -162,10 +163,12 @@ func TestSandboxGC(t *testing.T) {
 	} {
 		t.Run(test.description, func(t *testing.T) {
 			tCtx := ktesting.Init(t)
+			// 每个子测试前重置 Pod 状态，避免用例之间相互影响。
 			podStateProvider.removed = make(map[types.UID]struct{})
 			podStateProvider.terminated = make(map[types.UID]struct{})
 			fakeSandboxes := makeFakePodSandboxes(tCtx, m, test.sandboxes)
 			fakeContainers := makeFakeContainers(tCtx, m, test.containers)
+			// 根据 sandbox 模板构造已删除或已终止 Pod 的状态集合。
 			for _, s := range test.sandboxes {
 				if !s.running && s.pod.Name == "deleted" {
 					podStateProvider.removed[s.pod.UID] = struct{}{}
@@ -191,6 +194,7 @@ func TestSandboxGC(t *testing.T) {
 	}
 }
 
+// makeGCContainer 构造用于 GC 测试的容器模板。
 func makeGCContainer(podName, containerName string, attempt int, createdAt int64, state runtimeapi.ContainerState) containerTemplate {
 	container := makeTestContainer(containerName, "test-image")
 	pod := makeTestPod(podName, "test-ns", podName, []v1.Container{container})
@@ -203,6 +207,7 @@ func makeGCContainer(podName, containerName string, attempt int, createdAt int64
 	}
 }
 
+// TestContainerGC 覆盖 evictContainers 在各类 GC 策略与 Pod 状态下的回收行为。
 func TestContainerGC(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeRuntime, _, m, err := createTestRuntimeManager(tCtx)
@@ -212,10 +217,10 @@ func TestContainerGC(t *testing.T) {
 	defaultGCPolicy := kubecontainer.GCPolicy{MinAge: time.Hour, MaxPerPodContainer: 2, MaxContainers: 6}
 
 	for _, test := range []struct {
-		description          string                  // description of the test case
-		containers           []containerTemplate     // templates of containers
-		policy               *kubecontainer.GCPolicy // container gc policy
-		remain               []int                   // template indexes of remaining containers
+		description          string                  // 测试用例描述
+		containers           []containerTemplate     // 容器模板列表
+		policy               *kubecontainer.GCPolicy // 容器 GC 策略
+		remain               []int                   // 剩余容器的模板索引
 		evictTerminatingPods bool
 		allSourcesReady      bool
 	}{
@@ -370,7 +375,7 @@ func TestContainerGC(t *testing.T) {
 			containers: []containerTemplate{
 				makeGCContainer("foo", "bar", 1, 1, runtimeapi.ContainerState_CONTAINER_EXITED),
 				makeGCContainer("foo", "bar", 0, 0, runtimeapi.ContainerState_CONTAINER_EXITED),
-				// deleted pods still respect MinAge.
+				// 已删除的 Pod 仍受 MinAge 约束。
 				makeGCContainer("deleted", "bar1", 2, time.Now().UnixNano(), runtimeapi.ContainerState_CONTAINER_EXITED),
 				makeGCContainer("deleted", "bar1", 1, 1, runtimeapi.ContainerState_CONTAINER_EXITED),
 				makeGCContainer("deleted", "bar1", 0, 0, runtimeapi.ContainerState_CONTAINER_EXITED),
@@ -391,6 +396,7 @@ func TestContainerGC(t *testing.T) {
 	} {
 		t.Run(test.description, func(t *testing.T) {
 			tCtx := ktesting.Init(t)
+			// 每个子测试前重置 Pod 状态，避免用例之间相互影响。
 			podStateProvider.removed = make(map[types.UID]struct{})
 			podStateProvider.terminated = make(map[types.UID]struct{})
 			fakeContainers := makeFakeContainers(tCtx, m, test.containers)
@@ -404,6 +410,7 @@ func TestContainerGC(t *testing.T) {
 			}
 			fakeRuntime.SetFakeContainers(fakeContainers)
 
+			// 未指定策略时使用默认 GC 策略。
 			if test.policy == nil {
 				test.policy = &defaultGCPolicy
 			}
@@ -421,7 +428,8 @@ func TestContainerGC(t *testing.T) {
 	}
 }
 
-// Notice that legacy container symlink is not tested since it may be deprecated soon.
+// TestPodLogDirectoryGC 验证 evictPodLogsDirectories 只删除没有对应 Pod 的日志目录。
+// 注意：旧版容器符号链接可能很快被废弃，因此未纳入测试。
 func TestPodLogDirectoryGC(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -429,7 +437,7 @@ func TestPodLogDirectoryGC(t *testing.T) {
 	fakeOS := m.osInterface.(*containertest.FakeOS)
 	podStateProvider := m.containerGC.podStateProvider.(*fakePodStateProvider)
 
-	// pod log directories without corresponding pods should be removed.
+	// 没有对应 Pod 的 Pod 日志目录应当被删除。
 	files := []string{"123", "456", "789", "012", "name_namespace_321", "name_namespace_654"}
 	podLogsDirectory := "/var/log/pods"
 	removed := []string{
@@ -437,10 +445,12 @@ func TestPodLogDirectoryGC(t *testing.T) {
 		filepath.Join(podLogsDirectory, "012"),
 		filepath.Join(podLogsDirectory, "name_namespace_654"),
 	}
+	// 标记部分目录对应的 Pod 已删除，它们应当被清理。
 	podStateProvider.removed["012"] = struct{}{}
 	podStateProvider.removed["789"] = struct{}{}
 	podStateProvider.removed["654"] = struct{}{}
 
+	// 模拟日志目录内容。
 	fakeOS.ReadDirFn = func(string) ([]os.DirEntry, error) {
 		var dirEntries []os.DirEntry
 		for _, file := range files {
@@ -451,18 +461,19 @@ func TestPodLogDirectoryGC(t *testing.T) {
 		return dirEntries, nil
 	}
 
-	// allSourcesReady == true, pod log directories without corresponding pod should be removed.
+	// allSourcesReady == true 时，没有对应 Pod 的日志目录应当被删除。
 	err = m.containerGC.evictPodLogsDirectories(tCtx, true)
 	assert.NoError(t, err)
 	assert.Equal(t, removed, fakeOS.Removes)
 
-	// allSourcesReady == false, pod log directories should not be removed.
+	// allSourcesReady == false 时，日志目录不应被删除。
 	fakeOS.Removes = []string{}
 	err = m.containerGC.evictPodLogsDirectories(tCtx, false)
 	assert.NoError(t, err)
 	assert.Empty(t, fakeOS.Removes)
 }
 
+// TestUnknownStateContainerGC 验证未知状态的容器会先被停止再被删除。
 func TestUnknownStateContainerGC(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeRuntime, _, m, err := createTestRuntimeManager(tCtx)
@@ -479,6 +490,7 @@ func TestUnknownStateContainerGC(t *testing.T) {
 	err = m.containerGC.evictContainers(tCtx, defaultGCPolicy, true, false)
 	assert.NoError(t, err)
 
+	// 未知状态的容器必须先停止再删除，避免残留进程。
 	assert.Contains(t, fakeRuntime.GetCalls(), "StopContainer", "RemoveContainer",
 		"container in unknown state should be stopped before being removed")
 

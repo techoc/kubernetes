@@ -30,10 +30,11 @@ import (
 	"k8s.io/kubernetes/pkg/securitycontext"
 )
 
-// verifyRunAsNonRoot verifies RunAsNonRoot.
+// verifyRunAsNonRoot 校验容器的 RunAsNonRoot 安全上下文：
+// 若要求非 root 运行，则拒绝 root 用户、无法确认的非数字用户以及非法 UID。
 func verifyRunAsNonRoot(ctx context.Context, pod *v1.Pod, container *v1.Container, uid *int64, username string) error {
 	effectiveSc := securitycontext.DetermineEffectiveSecurityContext(pod, container)
-	// If the option is not set, or if running as root is allowed, return nil.
+	// 未设置该选项或允许以 root 运行时，直接通过。
 	if effectiveSc == nil || effectiveSc.RunAsNonRoot == nil || !*effectiveSc.RunAsNonRoot {
 		return nil
 	}

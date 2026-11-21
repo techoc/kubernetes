@@ -26,6 +26,7 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// TestCPUAccumulatorFreeSockets 验证完全空闲 socket 的识别。
 func TestCPUAccumulatorFreeSockets(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -127,6 +128,7 @@ func TestCPUAccumulatorFreeSockets(t *testing.T) {
 	}
 }
 
+// TestCPUAccumulatorFreeNUMANodes 验证完全空闲 NUMA 节点的识别。
 func TestCPUAccumulatorFreeNUMANodes(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -226,6 +228,7 @@ func TestCPUAccumulatorFreeNUMANodes(t *testing.T) {
 	}
 }
 
+// TestCPUAccumulatorFreeSocketsAndNUMANodes 同时验证空闲 socket 与 NUMA 节点的识别。
 func TestCPUAccumulatorFreeSocketsAndNUMANodes(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -280,6 +283,7 @@ func TestCPUAccumulatorFreeSocketsAndNUMANodes(t *testing.T) {
 	}
 }
 
+// TestCPUAccumulatorFreeCores 验证完全空闲物理核的识别。
 func TestCPUAccumulatorFreeCores(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -349,6 +353,7 @@ func TestCPUAccumulatorFreeCores(t *testing.T) {
 	}
 }
 
+// TestCPUAccumulatorFreeCPUs 验证按拓扑排序返回空闲 CPU 列表。
 func TestCPUAccumulatorFreeCPUs(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -406,6 +411,7 @@ func TestCPUAccumulatorFreeCPUs(t *testing.T) {
 	}
 }
 
+// TestCPUAccumulatorTake 验证从累加器取走 CPU 后状态、剩余需求与结果集合的变化。
 func TestCPUAccumulatorTake(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -484,7 +490,9 @@ func TestCPUAccumulatorTake(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
+			// 构造累加器并调用对应方法，结果需与期望一致。
 			acc := newCPUAccumulator(logger, tc.topo, tc.availableCPUs, tc.numCPUs, CPUSortingStrategyPacked)
+			// 记录从累加器中取走的 CPU 总数，用于校验剩余需求。
 			totalTaken := 0
 			for _, cpus := range tc.takeCPUs {
 				acc.take(cpus)
@@ -513,6 +521,7 @@ func TestCPUAccumulatorTake(t *testing.T) {
 	}
 }
 
+// takeByTopologyTestCase 描述按拓扑分配 CPU 的基础测试用例。
 type takeByTopologyTestCase struct {
 	description   string
 	topo          *topology.CPUTopology
@@ -523,6 +532,7 @@ type takeByTopologyTestCase struct {
 	expResult     cpuset.CPUSet
 }
 
+// commonTakeByTopologyTestCases 返回 packed 与 distributed 两种策略共用的基础用例。
 func commonTakeByTopologyTestCases(t *testing.T) []takeByTopologyTestCase {
 	return []takeByTopologyTestCase{
 		{
@@ -637,7 +647,7 @@ func commonTakeByTopologyTestCases(t *testing.T) []takeByTopologyTestCase {
 			"take a socket and a NUMA node of cpus from dual socket with multi-numa-per-socket with HT, a core taken",
 			topoDualSocketMultiNumaPerSocketHT,
 			StaticPolicyOptions{},
-			mustParseCPUSet(t, "1-39,41-79"), // reserve the first (phys) core (0,40)
+			mustParseCPUSet(t, "1-39,41-79"), // 预留第一个物理核（0,40）
 			60,
 			"",
 			mustParseCPUSet(t, "10-39,50-79"),
@@ -645,6 +655,7 @@ func commonTakeByTopologyTestCases(t *testing.T) []takeByTopologyTestCase {
 	}
 }
 
+// TestTakeByTopologyNUMAPacked 验证按 NUMA 紧凑分配策略的结果。
 func TestTakeByTopologyNUMAPacked(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := commonTakeByTopologyTestCases(t)
@@ -676,7 +687,7 @@ func TestTakeByTopologyNUMAPacked(t *testing.T) {
 			"",
 			mustParseCPUSet(t, "0-29,40-69,30,31,70,71"),
 		},
-		// Test cases for PreferAlignByUncoreCache
+		// PreferAlignByUncoreCache 相关用例
 		{
 			"take cpus from two full UncoreCaches and partial from a single UncoreCache",
 			topoUncoreSingleSocketNoSMT,
@@ -769,6 +780,7 @@ func TestTakeByTopologyNUMAPacked(t *testing.T) {
 	}
 }
 
+// TestTakeByTopologyWithSpreadPhysicalCPUsPreferredOption 验证优先分散到物理核时的分配结果。
 func TestTakeByTopologyWithSpreadPhysicalCPUsPreferredOption(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -835,7 +847,7 @@ func TestTakeByTopologyWithSpreadPhysicalCPUsPreferredOption(t *testing.T) {
 			cpuset.New(0, 1),
 		},
 		{
-			// DistributeCPUsAcrossCores doesn't care socket and numa ranking. such setting in test is transparent.
+			// DistributeCPUsAcrossCores 不关心 socket 与 numa 排序，因此在测试中该设置是透明的。
 			"take a socket of cpus from dual socket with multi numa per socket and HT, 12 cpus",
 			topoDualSocketMultiNumaPerSocketHT,
 			StaticPolicyOptions{DistributeCPUsAcrossCores: true},
@@ -856,10 +868,12 @@ func TestTakeByTopologyWithSpreadPhysicalCPUsPreferredOption(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// 根据是否跨核分布选择 packed 或 spread 排序策略。
 		strategy := CPUSortingStrategyPacked
 		if tc.opts.DistributeCPUsAcrossCores {
 			strategy = CPUSortingStrategySpread
 		}
+		// 调用按拓扑分配函数并校验错误与结果集合。
 		result, err := takeByTopologyNUMAPacked(logger, tc.topo, tc.availableCPUs, tc.numCPUs, strategy, tc.opts.PreferAlignByUncoreCacheOption)
 		if tc.expErr != "" && err.Error() != tc.expErr {
 			t.Errorf("testCase %q failed, expected error to be [%v] but it was [%v]", tc.description, tc.expErr, err)
@@ -870,6 +884,7 @@ func TestTakeByTopologyWithSpreadPhysicalCPUsPreferredOption(t *testing.T) {
 	}
 }
 
+// takeByTopologyExtendedTestCase 描述带 cpuGroupSize 的分布式分配测试用例。
 type takeByTopologyExtendedTestCase struct {
 	description   string
 	topo          *topology.CPUTopology
@@ -880,9 +895,11 @@ type takeByTopologyExtendedTestCase struct {
 	expResult     cpuset.CPUSet
 }
 
+// commonTakeByTopologyExtendedTestCases 返回扩展后的分布式分配测试用例。
 func commonTakeByTopologyExtendedTestCases(t *testing.T) []takeByTopologyExtendedTestCase {
 	var extendedTestCases []takeByTopologyExtendedTestCase
 
+	// 复用基础用例并转为扩展用例结构。
 	testCases := commonTakeByTopologyTestCases(t)
 	for _, tc := range testCases {
 		extendedTestCases = append(extendedTestCases, takeByTopologyExtendedTestCase{
@@ -965,6 +982,7 @@ func commonTakeByTopologyExtendedTestCases(t *testing.T) []takeByTopologyExtende
 	return extendedTestCases
 }
 
+// TestTakeByTopologyNUMADistributed 验证按 NUMA 均匀分配策略的结果与边界情况。
 func TestTakeByTopologyNUMADistributed(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := commonTakeByTopologyExtendedTestCases(t)
@@ -1063,6 +1081,7 @@ func TestTakeByTopologyNUMADistributed(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
+			// 调用 NUMA 分布式分配并校验错误与结果集合。
 			result, err := takeByTopologyNUMADistributed(logger, tc.topo, tc.availableCPUs, tc.numCPUs, tc.cpuGroupSize, CPUSortingStrategyPacked, false)
 			if err != nil {
 				if tc.expErr == "" {
@@ -1080,6 +1099,7 @@ func TestTakeByTopologyNUMADistributed(t *testing.T) {
 	}
 }
 
+// mustParseCPUSet 解析 CPU 集合，失败时直接让测试报错。
 func mustParseCPUSet(t *testing.T, s string) cpuset.CPUSet {
 	cpus, err := cpuset.Parse(s)
 	if err != nil {

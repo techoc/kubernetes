@@ -31,12 +31,17 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// seccompLocalhostRef 把 seccomp 本地主机 profile 名称拼接为节点上的本地文件路径，
+// 供 getSeccompProfile 生成 Localhost 类型的 profile 引用。
 func seccompLocalhostRef(profileName string) string {
 	return filepath.Join(fakeSeccompProfileRoot, profileName)
 }
 
+// TestGetSeccompProfile 验证在未启用默认 seccomp 的情况下，getSeccompProfile
+// 按容器字段优先于 pod 字段的顺序，正确解析出预期的 seccomp profile 或错误。
 func TestGetSeccompProfile(t *testing.T) {
 	tCtx := ktesting.Init(t)
+	// 构造测试运行时管理器：被测方法依赖运行时上下文，没有它无法构造预期对象。
 	_, _, m, err := createTestRuntimeManager(tCtx)
 	require.NoError(t, err)
 
@@ -126,6 +131,7 @@ func TestGetSeccompProfile(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		// 期望出错的用例比对错误消息，其余用例比对返回的 profile，便于定位具体失败用例。
 		seccompProfile, err := m.getSeccompProfile(test.annotation, test.containerName, test.podSc, test.containerSc, false)
 		if test.expectedError != "" {
 			assert.EqualError(t, err, test.expectedError, "TestCase[%d]: %s", i, test.description)
@@ -136,8 +142,11 @@ func TestGetSeccompProfile(t *testing.T) {
 	}
 }
 
+// TestGetSeccompProfileDefaultSeccomp 验证启用默认 seccomp 后，getSeccompProfile
+// 在未显式配置时回落到 RuntimeDefault，其余解析规则与未启用时保持一致。
 func TestGetSeccompProfileDefaultSeccomp(t *testing.T) {
 	tCtx := ktesting.Init(t)
+	// 构造测试运行时管理器，为被测方法提供运行时上下文。
 	_, _, m, err := createTestRuntimeManager(tCtx)
 	require.NoError(t, err)
 
@@ -227,6 +236,7 @@ func TestGetSeccompProfileDefaultSeccomp(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		// 最后一个参数为 true，表示启用默认 seccomp，未显式配置时不应返回 unconfined。
 		seccompProfile, err := m.getSeccompProfile(test.annotation, test.containerName, test.podSc, test.containerSc, true)
 		if test.expectedError != "" {
 			assert.EqualError(t, err, test.expectedError, "TestCase[%d]: %s", i, test.description)
@@ -237,7 +247,10 @@ func TestGetSeccompProfileDefaultSeccomp(t *testing.T) {
 	}
 }
 
+// TestSharesToMilliCPU 验证 cm.MilliCPUToShares 与 cm.SharesToMilliCPU
+// 在 0~2000 毫核范围内的往返换算结果与已知样例一致。
 func TestSharesToMilliCPU(t *testing.T) {
+	// 已知样例覆盖低毫核与 256/1024 等整阈值，用于校验换算精度。
 	knownMilliCPUToShares := map[int64]int64{
 		0:    2,
 		1:    2,
@@ -258,6 +271,7 @@ func TestSharesToMilliCPU(t *testing.T) {
 		var testMilliCPU int64
 		for testMilliCPU = 0; testMilliCPU <= 2000; testMilliCPU++ {
 			shares := int64(cm.MilliCPUToShares(testMilliCPU))
+			// 样例只覆盖部分毫核值，未命中时跳过精确比对，但仍继续校验往返换算。
 			if expectedShares, found := knownMilliCPUToShares[testMilliCPU]; found {
 				if shares != expectedShares {
 					t.Errorf("Test milliCPIToShares: Input milliCPU %v, expected shares %v, but got %v", testMilliCPU, expectedShares, shares)
@@ -265,6 +279,7 @@ func TestSharesToMilliCPU(t *testing.T) {
 			}
 			expectedMilliCPU := testMilliCPU
 			if testMilliCPU < 2 {
+				// shares 至少为 2，换算回来会被抬回 2 毫核，因此以 2 作为往返换算的下界。
 				expectedMilliCPU = 2
 			}
 			milliCPU := cm.SharesToMilliCPU(shares)
@@ -275,6 +290,8 @@ func TestSharesToMilliCPU(t *testing.T) {
 	})
 }
 
+// TestQuotaToMilliCPU 验证 cm.QuotaToMilliCPU 能根据 cgroup 的 CPU quota/period
+// 正确换算出毫核数。
 func TestQuotaToMilliCPU(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -307,6 +324,7 @@ func TestQuotaToMilliCPU(t *testing.T) {
 			expected: int64(1500),
 		}} {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试独立校验换算结果，失败时输出 quota/period 便于定位。
 			milliCPU := cm.QuotaToMilliCPU(tc.quota, tc.period)
 			if milliCPU != tc.expected {
 				t.Errorf("Test %s: Input quota %v and period %v, expected milliCPU %v, but got %v", tc.name, tc.quota, tc.period, tc.expected, milliCPU)
@@ -315,12 +333,15 @@ func TestQuotaToMilliCPU(t *testing.T) {
 	}
 }
 
+// TestSubtractOverheadFromResourceConfig 验证 subtractOverheadFromResourceConfig
+// 在有/无 CPU、内存 overhead，以及 ResourceConfig 字段缺失时都能正确扣减。
 func TestSubtractOverheadFromResourceConfig(t *testing.T) {
 	podCPUMilli := resource.MustParse("200m")
 	podMemory := resource.MustParse("256Mi")
 	podOverheadCPUMilli := resource.MustParse("100m")
 	podOverheadMemory := resource.MustParse("64Mi")
 
+	// resCfg 是各用例共享的基准资源配置，CPU 与内存字段均被填充。
 	resCfg := &cm.ResourceConfig{
 		Memory:    ptr.To[int64](335544320),
 		CPUShares: ptr.To[uint64](306),
@@ -526,6 +547,7 @@ func TestSubtractOverheadFromResourceConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			gotCfg := subtractOverheadFromResourceConfig(tc.cfgInput, tc.pod)
 
+			// 逐字段比对：期望值为 nil 表示该配置未参与扣减，跳过比较。
 			if tc.expected.CPUPeriod != nil && *gotCfg.CPUPeriod != *tc.expected.CPUPeriod {
 				t.Errorf("Test %s: expected CPUPeriod %v, but got %v", tc.name, *tc.expected.CPUPeriod, *gotCfg.CPUPeriod)
 			}

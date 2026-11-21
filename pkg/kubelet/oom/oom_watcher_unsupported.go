@@ -25,15 +25,17 @@ import (
 	"k8s.io/client-go/tools/record"
 )
 
+// oomWatcherUnsupported 是不支持 OOM 监视的平台上的空实现。
 type oomWatcherUnsupported struct{}
 
 var _ Watcher = new(oomWatcherUnsupported)
 
-// NewWatcher creates a fake one here
+// NewWatcher 在不支持 OOM 监视的平台上返回空实现。
 func NewWatcher(_ record.EventRecorder) (Watcher, error) {
 	return &oomWatcherUnsupported{}, nil
 }
 
+// Start 为空实现，不监视 OOM 事件。
 func (ow *oomWatcherUnsupported) Start(_ context.Context, _ *v1.ObjectReference) error {
 	return nil
 }

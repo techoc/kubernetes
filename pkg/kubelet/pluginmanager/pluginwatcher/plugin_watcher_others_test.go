@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestGetStat 验证 getStat 返回的文件信息与 os.Stat 一致。
 func TestGetStat(t *testing.T) {
 	event := fsnotify.Event{Name: "name", Op: fsnotify.Create}
 	fi, err := getStat(event)
@@ -35,6 +36,7 @@ func TestGetStat(t *testing.T) {
 	assert.Equal(t, errExpected, err)
 }
 
+// TestGetSocketPath 验证非 Windows 平台下 socket 路径原样返回。
 func TestGetSocketPath(t *testing.T) {
 	socketPath := "/tmp/foo/lish.sock"
 	assert.Equal(t, socketPath, getSocketPath(socketPath))

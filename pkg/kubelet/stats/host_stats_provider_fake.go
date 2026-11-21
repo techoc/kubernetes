@@ -28,19 +28,22 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
+// fakeHostStatsProvider 是供测试使用的 HostStatsProvider 实现。
 type fakeHostStatsProvider struct {
-	fakeStats   map[string]*volume.Metrics
+	// fakeStats 是路径到预置卷指标的映射。
+	fakeStats map[string]*volume.Metrics
+	// osInterface 用于读取日志目录。
 	osInterface kubecontainer.OSInterface
 }
 
-// NewFakeHostStatsProvider provides a way to test with fake host statistics
+// NewFakeHostStatsProvider 创建不带预置数据的 fake 提供者。
 func NewFakeHostStatsProvider(osInterface kubecontainer.OSInterface) HostStatsProvider {
 	return &fakeHostStatsProvider{
 		osInterface: osInterface,
 	}
 }
 
-// NewFakeHostStatsProviderWithData provides a way to test with fake host statistics
+// NewFakeHostStatsProviderWithData 创建带预置数据的 fake 提供者。
 func NewFakeHostStatsProviderWithData(fakeStats map[string]*volume.Metrics, osInterface kubecontainer.OSInterface) HostStatsProvider {
 	return &fakeHostStatsProvider{
 		fakeStats:   fakeStats,
@@ -48,6 +51,7 @@ func NewFakeHostStatsProviderWithData(fakeStats map[string]*volume.Metrics, osIn
 	}
 }
 
+// getPodLogStats 汇总 Pod 日志目录下各文件的用量。
 func (f *fakeHostStatsProvider) getPodLogStats(podNamespace, podName string, podUID types.UID, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error) {
 	path := kuberuntime.BuildPodLogsDirectory("/var/log/kube/pods/", podNamespace, podName, podUID)
 	files, err := f.osInterface.ReadDir(path)
@@ -55,34 +59,40 @@ func (f *fakeHostStatsProvider) getPodLogStats(podNamespace, podName string, pod
 		return nil, err
 	}
 	var results []volume.MetricsProvider
+	// 跳过子目录，只处理文件。
 	for _, file := range files {
 		if file.IsDir() {
 			continue
 		}
-		// Only include *files* under pod log directory.
+		// 只统计 Pod 日志目录下的普通文件。
 		fpath := filepath.Join(path, file.Name())
 		results = append(results, NewFakeMetricsDu(fpath, f.fakeStats[fpath]))
 	}
 	return fakeMetricsProvidersToStats(results, rootFsInfo)
 }
 
+// getPodContainerLogStats 返回指定容器日志文件的用量。
 func (f *fakeHostStatsProvider) getPodContainerLogStats(podNamespace, podName string, podUID types.UID, containerName string, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error) {
 	path := kuberuntime.BuildContainerLogsDirectory("/var/log/kube/pods/", podNamespace, podName, podUID, containerName)
 	metricsProvider := NewFakeMetricsDu(path, f.fakeStats[path])
 	return fakeMetricsProvidersToStats([]volume.MetricsProvider{metricsProvider}, rootFsInfo)
 }
 
+// getPodEtcHostsStats 未实现，始终返回错误。
 func (f *fakeHostStatsProvider) getPodEtcHostsStats(podUID types.UID, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
+// fakeMetricsProvidersToStats 把多个路径的指标累加为一份 FsStats。
 func fakeMetricsProvidersToStats(metricsProviders []volume.MetricsProvider, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error) {
+	// 以 rootfs 统计为基准，累加各路径的用量。
 	result := rootFsInfoToFsStats(rootFsInfo)
 	for i, metricsProvider := range metricsProviders {
 		hostMetrics, err := metricsProvider.GetMetrics()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get stats for item %d: %v", i, err)
 		}
+		// 累加已用字节与 inode 数，并取最新时间戳。
 		usedBytes := uint64(hostMetrics.Used.Value())
 		inodesUsed := uint64(hostMetrics.InodesUsed.Value())
 		result.UsedBytes = addUsage(result.UsedBytes, &usedBytes)
@@ -92,15 +102,18 @@ func fakeMetricsProvidersToStats(metricsProviders []volume.MetricsProvider, root
 	return result, nil
 }
 
+// fakeMetricsDu 返回预置的卷指标。
 type fakeMetricsDu struct {
+	// fakeStats 是预置的卷指标。
 	fakeStats *volume.Metrics
 }
 
-// NewFakeMetricsDu inserts fake statistics when asked for metrics
+// NewFakeMetricsDu 创建返回预置指标的 MetricsProvider。
 func NewFakeMetricsDu(path string, stats *volume.Metrics) volume.MetricsProvider {
 	return &fakeMetricsDu{fakeStats: stats}
 }
 
+// GetMetrics 返回预置的卷指标。
 func (f *fakeMetricsDu) GetMetrics() (*volume.Metrics, error) {
 	if f.fakeStats == nil {
 		return nil, fmt.Errorf("no stats provided")

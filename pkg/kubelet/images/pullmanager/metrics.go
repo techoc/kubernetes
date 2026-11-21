@@ -24,8 +24,10 @@ import (
 	kubeletmetrics "k8s.io/kubernetes/pkg/kubelet/metrics"
 )
 
+// mustAttemptImagePullResult 表示 must-pull 检查的结果标签。
 type mustAttemptImagePullResult string
 
+// must-pull 检查的结果枚举，作为指标标签值。
 const (
 	checkResultCredentialPolicyAllowed mustAttemptImagePullResult = "credentialPolicyAllowed"
 	checkResultCredentialRecordFound   mustAttemptImagePullResult = "credentialRecordFound"
@@ -33,6 +35,7 @@ const (
 	checkResultError                   mustAttemptImagePullResult = "error"
 )
 
+// 指标定义：磁盘上的 intent/record 数量与内存缓存使用率。
 var (
 	fsPullIntentsSize = metrics.NewGauge(
 		&metrics.GaugeOpts{
@@ -77,6 +80,7 @@ var (
 	)
 )
 
+// init 把指标注册到 legacy registry。
 func init() {
 	legacyregistry.MustRegister(fsPullIntentsSize)
 	legacyregistry.MustRegister(fsPulledRecordsSize)
@@ -85,20 +89,24 @@ func init() {
 	legacyregistry.MustRegister(mustPullChecksTotal)
 }
 
-// meteringRecordsAccessor wraps a PullRecordsAccessor that's capable of reporting its size
-// and updates its record metrics on write operations.
+// meteringRecordsAccessor 包装 PullRecordsAccessor，使其能够报告记录数量，
+// 并在写操作后更新指标。
 type meteringRecordsAccessor struct {
 	sizeExposedPullRecordsAccessor
 	intentsSize       *metrics.Gauge
 	pulledRecordsSize *metrics.Gauge
 }
 
+// sizeExposedPullRecordsAccessor 在 PullRecordsAccessor 基础上暴露两类记录数量。
 type sizeExposedPullRecordsAccessor interface {
 	PullRecordsAccessor
+	// 返回磁盘上的 ImagePullIntents 数量。
 	intentsSize() (uint, error)
+	// 返回磁盘上的 ImagePulledRecords 数量。
 	pulledRecordsSize() (uint, error)
 }
 
+// NewMeteringRecordsAccessor 创建带指标上报的 accessor。
 func NewMeteringRecordsAccessor(pullRecordsAccessor sizeExposedPullRecordsAccessor, intentsSize, pulledRecordsSize *metrics.Gauge) *meteringRecordsAccessor {
 	return &meteringRecordsAccessor{
 		sizeExposedPullRecordsAccessor: pullRecordsAccessor,
@@ -107,6 +115,7 @@ func NewMeteringRecordsAccessor(pullRecordsAccessor sizeExposedPullRecordsAccess
 	}
 }
 
+// WriteImagePullIntent 写入 intent 后刷新磁盘 intent 数量指标。
 func (m *meteringRecordsAccessor) WriteImagePullIntent(logger klog.Logger, image string) error {
 	if err := m.sizeExposedPullRecordsAccessor.WriteImagePullIntent(logger, image); err != nil {
 		return err
@@ -115,6 +124,7 @@ func (m *meteringRecordsAccessor) WriteImagePullIntent(logger klog.Logger, image
 	return nil
 }
 
+// DeleteImagePullIntent 删除 intent 后刷新磁盘 intent 数量指标。
 func (m *meteringRecordsAccessor) DeleteImagePullIntent(logger klog.Logger, image string) error {
 	if err := m.sizeExposedPullRecordsAccessor.DeleteImagePullIntent(logger, image); err != nil {
 		return err
@@ -123,6 +133,7 @@ func (m *meteringRecordsAccessor) DeleteImagePullIntent(logger klog.Logger, imag
 	return nil
 }
 
+// WriteImagePulledRecord 写入记录后刷新磁盘记录数量指标。
 func (m *meteringRecordsAccessor) WriteImagePulledRecord(logger klog.Logger, record *kubeletconfiginternal.ImagePulledRecord) error {
 	if err := m.sizeExposedPullRecordsAccessor.WriteImagePulledRecord(logger, record); err != nil {
 		return err
@@ -131,6 +142,7 @@ func (m *meteringRecordsAccessor) WriteImagePulledRecord(logger klog.Logger, rec
 	return nil
 }
 
+// DeleteImagePulledRecord 删除记录后刷新磁盘记录数量指标。
 func (m *meteringRecordsAccessor) DeleteImagePulledRecord(logger klog.Logger, imageRef string) error {
 	if err := m.sizeExposedPullRecordsAccessor.DeleteImagePulledRecord(logger, imageRef); err != nil {
 		return err
@@ -139,6 +151,7 @@ func (m *meteringRecordsAccessor) DeleteImagePulledRecord(logger klog.Logger, im
 	return nil
 }
 
+// recordIntentsSize 读取 intent 数量并更新 gauge；读取失败只记日志，不影响主流程。
 func (m *meteringRecordsAccessor) recordIntentsSize(logger klog.Logger) {
 	intentsSize, err := m.sizeExposedPullRecordsAccessor.intentsSize()
 	if err != nil {
@@ -148,6 +161,7 @@ func (m *meteringRecordsAccessor) recordIntentsSize(logger klog.Logger) {
 	m.intentsSize.Set(float64(intentsSize))
 }
 
+// recordPulledRecordsSize 读取已拉取记录数量并更新 gauge。
 func (m *meteringRecordsAccessor) recordPulledRecordsSize(logger klog.Logger) {
 	pulledRecordsSize, err := m.sizeExposedPullRecordsAccessor.pulledRecordsSize()
 	if err != nil {
@@ -157,6 +171,7 @@ func (m *meteringRecordsAccessor) recordPulledRecordsSize(logger klog.Logger) {
 	m.pulledRecordsSize.Set(float64(pulledRecordsSize))
 }
 
+// recordMustAttemptImagePullResult 按结果标签累加 must-pull 检查计数。
 func recordMustAttemptImagePullResult(result mustAttemptImagePullResult) {
 	mustPullChecksTotal.WithLabelValues(string(result)).Inc()
 }

@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestEnsureImageRequestsMetrics 验证不同拉取场景下 ensure-image 请求指标及其标签值。
 func TestEnsureImageRequestsMetrics(t *testing.T) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -53,6 +54,7 @@ func TestEnsureImageRequestsMetrics(t *testing.T) {
 			ctx := ktesting.Init(t)
 			puller, _, _, container, _, _ := pullerTestEnv(t, tt, useSerializedEnv, nil)
 
+			// 重置计数器，避免其他测试留下的样本干扰本次比对。
 			ensureImageRequestsCounter.Reset()
 			_, _, _ = puller.EnsureImageExists(ctx, &v1.ObjectReference{}, pod, container.Image, tt.pullSecrets, podSandboxConfig, "", container.ImagePullPolicy)
 			if err := metricstestutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(tt.expectedEnsureImageMetrics), "kubelet_image_manager_ensure_image_requests_total"); err != nil {

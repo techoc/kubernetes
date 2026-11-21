@@ -31,18 +31,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// fakeStreamer 是向通道推送预设 OOM 实例的 OomStreamer 桩。
 type fakeStreamer struct {
 	oomInstancesToStream []*oomparser.OomInstance
 }
 
+// StreamOoms 依次把预设的 OOM 实例写入输出通道。
 func (fs *fakeStreamer) StreamOoms(_ context.Context, outStream chan<- *oomparser.OomInstance) {
 	for _, oi := range fs.oomInstancesToStream {
 		outStream <- oi
 	}
 }
 
-// TestWatcherRecordsEventsForOomEvents ensures that our OomInstances coming
-// from `StreamOoms` are translated into events in our recorder.
+// TestWatcherRecordsEventsForOomEvents 验证 StreamOoms 推送的 OomInstance
+// 会被转换为 recorder 事件。
 func TestWatcherRecordsEventsForOomEvents(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	oomInstancesToStream := []*oomparser.OomInstance{
@@ -67,12 +69,14 @@ func TestWatcherRecordsEventsForOomEvents(t *testing.T) {
 		recorder:    fakeRecorder,
 		oomStreamer: fakeStreamer,
 	}
+	// 启动 watcher；它在后台消费 OOM 流并记录事件。
 	require.NoError(t, oomWatcher.Start(tCtx, node))
 
 	eventsRecorded := getRecordedEvents(fakeRecorder, numExpectedOomEvents)
 	assert.Len(t, eventsRecorded, numExpectedOomEvents)
 }
 
+// getRecordedEvents 收集 recorder 中的事件，最多等待 10 秒。
 func getRecordedEvents(fakeRecorder *record.FakeRecorder, numExpectedOomEvents int) []string {
 	eventsRecorded := []string{}
 
@@ -83,6 +87,7 @@ func getRecordedEvents(fakeRecorder *record.FakeRecorder, numExpectedOomEvents i
 		if len(eventsRecorded) == numExpectedOomEvents {
 			break
 		}
+	// 超时后返回已收集的事件，由调用方断言数量。
 	case <-time.After(10 * time.Second):
 		break
 	}
@@ -90,13 +95,12 @@ func getRecordedEvents(fakeRecorder *record.FakeRecorder, numExpectedOomEvents i
 	return eventsRecorded
 }
 
-// TestWatcherRecordsEventsForOomEventsCorrectContainerName verifies that we
-// only record OOM events when the container name is the one for which we want
-// to record events (i.e. /).
+// TestWatcherRecordsEventsForOomEventsCorrectContainerName 验证
+// 只对容器名为 "/" 的 OOM 事件记录事件。
 func TestWatcherRecordsEventsForOomEventsCorrectContainerName(t *testing.T) {
-	// By "incorrect" container name, we mean a container name for which we
-	// don't want to record an oom event.
+	// 这里"错误的容器名"指不应触发事件记录的容器名。
 	tCtx := ktesting.Init(t)
+	// 两个实例中只有一个应产生事件。
 	numOomEventsWithIncorrectContainerName := 1
 	oomInstancesToStream := []*oomparser.OomInstance{
 		{
@@ -133,10 +137,10 @@ func TestWatcherRecordsEventsForOomEventsCorrectContainerName(t *testing.T) {
 	assert.Len(t, eventsRecorded, numExpectedOomEvents)
 }
 
-// TestWatcherRecordsEventsForOomEventsWithAdditionalInfo verifies that our the
-// emitted event has the proper pid/process data when appropriate.
+// TestWatcherRecordsEventsForOomEventsWithAdditionalInfo 验证
+// 事件消息中包含正确的 pid 与进程信息。
 func TestWatcherRecordsEventsForOomEventsWithAdditionalInfo(t *testing.T) {
-	// The process and event info should appear in the event message.
+	// 进程与事件信息应出现在事件消息中。
 	eventPid := 1000
 	processName := "fakeProcess"
 
@@ -169,6 +173,7 @@ func TestWatcherRecordsEventsForOomEventsWithAdditionalInfo(t *testing.T) {
 	eventsRecorded := getRecordedEvents(fakeRecorder, numExpectedOomEvents)
 
 	assert.Len(t, eventsRecorded, numExpectedOomEvents)
+	// 校验事件消息包含 OOM 类型、pid 与受害者进程名。
 	assert.Contains(t, eventsRecorded[0], systemOOMEvent)
 	assert.Contains(t, eventsRecorded[0], fmt.Sprintf("pid: %d", eventPid))
 	assert.Contains(t, eventsRecorded[0], fmt.Sprintf("victim process: %s", processName))

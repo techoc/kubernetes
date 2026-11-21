@@ -20,20 +20,24 @@ package winstats
 
 import (
 	"fmt"
+
 	"golang.org/x/sys/windows/registry"
 )
 
-// OSInfo is a convenience class for retrieving Windows OS information
+// OSInfo 保存 Windows 操作系统版本信息。
 type OSInfo struct {
-	BuildNumber, ProductName        string
+	// BuildNumber 是系统构建号，ProductName 是产品名称。
+	BuildNumber, ProductName string
+	// 主版本、次版本与更新构建修订号（UBR）。
 	MajorVersion, MinorVersion, UBR uint64
 }
 
-// GetOSInfo reads Windows version information from the registry
+// GetOSInfo 从注册表读取 Windows 版本信息。
 func GetOSInfo() (*OSInfo, error) {
-	// for log detail
+	// 用于日志中的注册表路径。
 	var keyPrefix string = `regedit:LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion`
 
+	// 从注册表读取 Windows 版本信息。
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows NT\CurrentVersion`, registry.QUERY_VALUE)
 	if err != nil {
 		return nil, fmt.Errorf("getOSInfo, open Windows %s failed: %w", keyPrefix, err)
@@ -74,12 +78,12 @@ func GetOSInfo() (*OSInfo, error) {
 	}, nil
 }
 
-// GetPatchVersion returns full OS version with patch
+// GetPatchVersion 返回包含补丁号的完整 OS 版本。
 func (o *OSInfo) GetPatchVersion() string {
 	return fmt.Sprintf("%d.%d.%s.%d", o.MajorVersion, o.MinorVersion, o.BuildNumber, o.UBR)
 }
 
-// GetBuild returns OS version upto build number
+// GetBuild 返回到构建号为止的 OS 版本。
 func (o *OSInfo) GetBuild() string {
 	return fmt.Sprintf("%d.%d.%s", o.MajorVersion, o.MinorVersion, o.BuildNumber)
 }

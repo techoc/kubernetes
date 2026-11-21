@@ -35,6 +35,7 @@ import (
 	statstest "k8s.io/kubernetes/pkg/kubelet/server/stats/testing"
 )
 
+// 测试共享的节点、cgroup 配置和随机统计样本，避免每个用例重复构造。
 var (
 	imageFsStats = getFsStats()
 	rootFsStats  = getFsStats()
@@ -48,6 +49,8 @@ var (
 	rlimitStats = getRlimitStats()
 )
 
+// TestSummaryProviderGetStatsNoSplitFileSystem 验证 root fs 与 image fs 未分离时，
+// Summary 的节点、系统容器、运行时和 Pod 统计都来自预期数据源。
 func TestSummaryProviderGetStatsNoSplitFileSystem(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletPSI, true)
 	ctx := t.Context()
@@ -81,6 +84,7 @@ func TestSummaryProviderGetStatsNoSplitFileSystem(t *testing.T) {
 	mockStatsProvider.EXPECT().ListPodStats(ctx).Return(podStats, nil).Maybe()
 	mockStatsProvider.EXPECT().ListPodStatsAndUpdateCPUNanoCoreUsage(ctx).Return(podStats, nil)
 	mockStatsProvider.EXPECT().ImageFsStats(ctx).Return(imageFsStats, imageFsStats, nil)
+	// 未分离文件系统：image fs 与 container fs 相同，RuntimeStats 两个字段都取 imageFsStats。
 	mockStatsProvider.EXPECT().RootFsStats().Return(rootFsStats, nil)
 	mockStatsProvider.EXPECT().RlimitStats().Return(rlimitStats, nil)
 	mockStatsProvider.EXPECT().GetCgroupStats(ctx, "/", true).Return(cgroupStatsMap["/"].cs, cgroupStatsMap["/"].ns, nil)
@@ -103,6 +107,7 @@ func TestSummaryProviderGetStatsNoSplitFileSystem(t *testing.T) {
 	assert.Equal(summary.Node.IO, cgroupStatsMap["/"].cs.IO)
 	assert.Equal(summary.Node.Network, cgroupStatsMap["/"].ns)
 	assert.Equal(summary.Node.Fs, rootFsStats)
+	// 节点运行时统计：未分离文件系统时 container fs 与 image fs 相同。
 	assert.Equal(&statsapi.RuntimeStats{ContainerFs: imageFsStats, ImageFs: imageFsStats}, summary.Node.Runtime)
 
 	assert.Len(summary.Node.SystemContainers, 4)
@@ -149,6 +154,8 @@ func TestSummaryProviderGetStatsNoSplitFileSystem(t *testing.T) {
 	assert.Equal(summary.Pods, podStats)
 }
 
+// TestSummaryProviderGetStatsSplitImageFs 验证 root fs 与 image fs 分离时，
+// RuntimeStats.ContainerFs 取 root fs，ImageFs 取镜像文件系统。
 func TestSummaryProviderGetStatsSplitImageFs(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletPSI, true)
 	ctx := t.Context()
@@ -190,6 +197,7 @@ func TestSummaryProviderGetStatsSplitImageFs(t *testing.T) {
 	mockStatsProvider.EXPECT().GetCgroupStats(ctx, "/kubepods", true).Return(cgroupStatsMap["/pods"].cs, cgroupStatsMap["/pods"].ns, nil)
 
 	mockStatsProvider.EXPECT().ImageFsStats(ctx).Return(imageFsStats, rootFsStats, nil)
+	// 分离文件系统场景：两个返回值分别代表镜像文件系统和容器文件系统。
 
 	kubeletCreationTime := metav1.Now()
 	systemBootTime := metav1.Now()
@@ -205,7 +213,8 @@ func TestSummaryProviderGetStatsSplitImageFs(t *testing.T) {
 	assert.Equal(summary.Node.IO, cgroupStatsMap["/"].cs.IO)
 	assert.Equal(summary.Node.Network, cgroupStatsMap["/"].ns)
 	assert.Equal(summary.Node.Fs, rootFsStats)
-	// Since we are a split filesystem we want root filesystem to be container fs and image to be image filesystem
+	// 文件系统分离时，容器文件系统取 root fs，镜像文件系统取 image fs。
+	// 节点运行时统计：分离场景下容器文件系统与镜像文件系统分别上报。
 	assert.Equal(&statsapi.RuntimeStats{ContainerFs: rootFsStats, ImageFs: imageFsStats}, summary.Node.Runtime)
 
 	assert.Len(summary.Node.SystemContainers, 4)
@@ -252,6 +261,8 @@ func TestSummaryProviderGetStatsSplitImageFs(t *testing.T) {
 	assert.Equal(summary.Pods, podStats)
 }
 
+// TestSummaryProviderGetCPUAndMemoryStats 验证只采集 CPU/内存的接口不会填充网络、文件系统、
+// 运行时和 IO 等无关字段，同时仍上报节点与四个系统容器。
 func TestSummaryProviderGetCPUAndMemoryStats(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletPSI, true)
 	ctx := t.Context()
@@ -286,6 +297,7 @@ func TestSummaryProviderGetCPUAndMemoryStats(t *testing.T) {
 	mockStatsProvider.EXPECT().GetCgroupCPUAndMemoryStats("/kubelet", false).Return(cgroupStatsMap["/kubelet"].cs, nil)
 	mockStatsProvider.EXPECT().GetCgroupCPUAndMemoryStats("/kubepods", false).Return(cgroupStatsMap["/pods"].cs, nil)
 
+	// 通过构造函数创建 provider，覆盖生产代码使用的初始化路径。
 	provider := NewSummaryProvider(ctx, mockStatsProvider)
 	summary, err := provider.GetCPUAndMemoryStats(ctx)
 	assert.NoError(err)
@@ -294,6 +306,7 @@ func TestSummaryProviderGetCPUAndMemoryStats(t *testing.T) {
 	assert.Equal(summary.Node.StartTime, cgroupStatsMap["/"].cs.StartTime)
 	assert.Equal(summary.Node.CPU, cgroupStatsMap["/"].cs.CPU)
 	assert.Equal(summary.Node.Memory, cgroupStatsMap["/"].cs.Memory)
+	// CPU/内存统计接口不采集网络、文件系统、运行时和 IO，这些字段必须保持 nil。
 	assert.Nil(summary.Node.Network)
 	assert.Nil(summary.Node.Fs)
 	assert.Nil(summary.Node.Runtime)
@@ -327,6 +340,7 @@ func TestSummaryProviderGetCPUAndMemoryStats(t *testing.T) {
 	assert.Equal(summary.Pods, podStats)
 }
 
+// getFsStats 用 randfill 生成随机的文件系统统计，避免测试依赖固定数值。
 func getFsStats() *statsapi.FsStats {
 	f := randfill.New().NilChance(0)
 	v := &statsapi.FsStats{}
@@ -334,12 +348,15 @@ func getFsStats() *statsapi.FsStats {
 	return v
 }
 
+// getContainerStats 生成随机容器统计；NilChance(0) 保证指针字段都被填充，便于逐字段比较。
 func getContainerStats() *statsapi.ContainerStats {
 	f := randfill.New().NilChance(0)
 	v := &statsapi.ContainerStats{}
 	f.Fill(v)
 	return v
 }
+
+// getVolumeCPUAndMemoryStats 只填充 CPU/内存接口关心的字段：名称、启动时间、CPU 和内存。
 func getVolumeCPUAndMemoryStats() *statsapi.ContainerStats {
 	f := randfill.New().NilChance(0)
 	v := &statsapi.ContainerStats{}
@@ -350,6 +367,7 @@ func getVolumeCPUAndMemoryStats() *statsapi.ContainerStats {
 	return v
 }
 
+// getVolumeStats 生成随机卷统计。
 func getVolumeStats() *statsapi.VolumeStats {
 	f := randfill.New().NilChance(0)
 	v := &statsapi.VolumeStats{}
@@ -357,6 +375,7 @@ func getVolumeStats() *statsapi.VolumeStats {
 	return v
 }
 
+// getNetworkStats 生成随机网络统计。
 func getNetworkStats() *statsapi.NetworkStats {
 	f := randfill.New().NilChance(0)
 	v := &statsapi.NetworkStats{}
@@ -364,6 +383,7 @@ func getNetworkStats() *statsapi.NetworkStats {
 	return v
 }
 
+// getRlimitStats 生成随机 rlimit 统计。
 func getRlimitStats() *statsapi.RlimitStats {
 	f := randfill.New().NilChance(0)
 	v := &statsapi.RlimitStats{}

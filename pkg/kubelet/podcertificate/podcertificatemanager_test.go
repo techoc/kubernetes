@@ -48,6 +48,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestTransitionInitialToWait 校验 IssuingManager 首次处理投影时创建
+// PodCertificateRequest，并正确设置 spec 与 OwnerReferences。
 func TestTransitionInitialToWait(t *testing.T) {
 	ctx, cancel := context.WithCancel(ktesting.Init(t))
 	defer cancel()
@@ -115,7 +117,7 @@ func TestTransitionInitialToWait(t *testing.T) {
 										SignerName:           signerName,
 										KeyType:              "ED25519",
 										CredentialBundlePath: "creds.pem",
-										MaxExpirationSeconds: ptr.To[int32](86400), // Defaulting doesn't work with a fake client.
+										MaxExpirationSeconds: ptr.To[int32](86400), // fake client 不会执行默认值填充。
 										UserAnnotations:      map[string]string{"test.domain/foo": "bar"},
 									},
 								},
@@ -139,6 +141,7 @@ func TestTransitionInitialToWait(t *testing.T) {
 		credStore:  map[projectionKey]*projectionRecord{},
 	}
 
+	// 手动推进一步状态机，避免依赖后台 Run 循环带来的时序不确定性。
 	if err := node1PodCertificateManager.handleProjection(ctx, projectionKey{workloadPod.ObjectMeta.Namespace, workloadPod.ObjectMeta.Name, string(workloadPod.ObjectMeta.UID), "certificate", 0}); err != nil {
 		t.Fatalf("Unexpected error while running handleProjection: %v", err)
 	}
@@ -154,8 +157,7 @@ func TestTransitionInitialToWait(t *testing.T) {
 
 	gotPCR := gotPCRs.Items[0]
 
-	// Check that the created PCR spec matches expectations.  Blank out fields on
-	// gotPCR that we don't care about.
+	// 校验创建的 PCR spec 是否符合预期；先清空不关心的字段再比较。
 	wantPCR := &certsv1.PodCertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "ns1",
@@ -181,7 +183,7 @@ func TestTransitionInitialToWait(t *testing.T) {
 		t.Fatalf("PodCertificateManager created a bad PCR; diff (-got +want)\n%s", diff)
 	}
 
-	// Verify OwnerReferences are set correctly for garbage collection.
+	// 校验 OwnerReferences 已正确设置，确保 PCR 能随 Pod 一起被回收。
 	wantOwnerRefs := []metav1.OwnerReference{
 		{
 			APIVersion: "v1",
@@ -195,6 +197,8 @@ func TestTransitionInitialToWait(t *testing.T) {
 	}
 }
 
+// TestPCRDeletedWhileWaiting 校验等待期间 PCR 被删除且超过 assumeDeletedThreshold 后，
+// handleProjection 返回错误而不是空指针 panic。
 func TestPCRDeletedWhileWaiting(t *testing.T) {
 	ctx, cancel := context.WithCancel(ktesting.Init(t))
 	defer cancel()
@@ -264,7 +268,7 @@ func TestPCRDeletedWhileWaiting(t *testing.T) {
 										SignerName:           signerName,
 										KeyType:              "ED25519",
 										CredentialBundlePath: "creds.pem",
-										MaxExpirationSeconds: ptr.To[int32](86400), // Defaulting doesn't work with a fake client.
+										MaxExpirationSeconds: ptr.To[int32](86400), // fake client 不会执行默认值填充。
 										UserAnnotations:      map[string]string{"test.domain/foo": "bar"},
 									},
 								},
@@ -288,24 +292,26 @@ func TestPCRDeletedWhileWaiting(t *testing.T) {
 		credStore:  map[projectionKey]*projectionRecord{},
 	}
 
-	// Step the handling state machine by one step.  We should now be in wait state.
+	// 推进状态机一步，此时应进入等待签发状态。
 	if err := node1PodCertificateManager.handleProjection(ctx, projectionKey{workloadPod.ObjectMeta.Namespace, workloadPod.ObjectMeta.Name, string(workloadPod.ObjectMeta.UID), "certificate", 0}); err != nil {
 		t.Fatalf("Unexpected error while running handleProjection: %v", err)
 	}
 
-	// Clear all PCRs and advance time past assumeDeletedThreshold.
+	// 删除全部 PCR 并把时间推进到 assumeDeletedThreshold 之后。
 	if err := kc.CertificatesV1().PodCertificateRequests("ns1").DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}); err != nil {
 		t.Fatalf("Unexpected error while deleting all PCRs in ns1: %v", err)
 	}
 	clock.Step(assumeDeletedThreshold + 1*time.Minute)
 
-	// Calling handleProjection again should return an error, *not* nil panic.
+	// 再次调用 handleProjection 应返回错误，而不是空指针 panic。
 	err = node1PodCertificateManager.handleProjection(ctx, projectionKey{workloadPod.ObjectMeta.Namespace, workloadPod.ObjectMeta.Name, string(workloadPod.ObjectMeta.UID), "certificate", 0})
-	if err == nil { // EQUALS nil
+	if err == nil { // 错误必须非 nil
 		t.Fatalf("Got no error from handleProjection, but wanted an error")
 	}
 }
 
+// TestFullFlow 端到端验证：创建 PCR、签名控制器签发、kubelet 读取凭证，
+// 以及到期前刷新并返回新证书的完整流程。
 func TestFullFlow(t *testing.T) {
 	ctx, cancel := context.WithCancel(ktesting.Init(t))
 	defer cancel()
@@ -313,32 +319,31 @@ func TestFullFlow(t *testing.T) {
 	clock := testclock.NewFakeClock(mustRFC3339(t, "2010-01-01T00:00:00Z"))
 	kc := fake.NewSimpleClientset()
 
-	// Assign PCR name and creationTimeStamp
+	// 为 PCR 分配名称与创建时间戳。
 	kc.Fake.PrependReactor("create", "podcertificaterequests",
 		func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 			obj := action.(k8stesting.CreateAction).GetObject().(*certsv1.PodCertificateRequest)
-			// Simulate server-side GenerateName behavior
+			// 模拟服务端 GenerateName 行为。
 			if obj.Name == "" {
 				obj.Name = fmt.Sprintf("%s-pcr-%d", obj.Spec.PodName, rand.Int63n(1_000_000))
 			}
 			obj.CreationTimestamp = metav1.NewTime(clock.Now())
 
-			return false, obj, nil // allow normal processing
+			return false, obj, nil // 返回 false 以继续执行默认处理。
 		})
 
-	// fake.Clientset suffers from a race condition related to informers:
-	// it does not implement resource version support in its Watch
-	// implementation and instead assumes that watches are set up
-	// before further changes are made.
+	// fake.Clientset 与 informer 配合时存在竞态：
+	// 它的 Watch 实现不支持 resource version，
+	// 而是假定所有 watch 都已建立后才会发生后续变更。
 	//
-	// If a test waits for caches to be synced and then immediately
-	// adds an object, that new object will never be seen by event handlers
-	// if the race goes wrong and the Watch call hadn't completed yet
+	// 若测试在缓存同步后立即添加对象，
+	// 一旦竞态发生、Watch 调用尚未完成，
+	// 事件处理器将永远看不到这个新对象。
 	//
-	// To work around this, we count all watches and only proceed when all of them are in place
+	// 规避方式：统计已建立的 watch，全部就位后再继续。
 	var numWatches atomic.Int32
 	kc.Fake.PrependWatchReactor("*", func(action k8stesting.Action) (handled bool, ret watch.Interface, err error) {
-		// Recreate the default fake-client watch behaviour, but count watches
+		// 复刻 fake client 默认的 watch 行为，同时计数。
 		var opts metav1.ListOptions
 		if wa, ok := action.(k8stesting.WatchActionImpl); ok {
 			opts = wa.ListOptions
@@ -357,7 +362,7 @@ func TestFullFlow(t *testing.T) {
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(kc, 0)
 
 	//
-	// Configure and boot up a fake podcertificaterequest signing controller.
+	// 配置并启动假的 PodCertificateRequest 签名控制器。
 	//
 
 	signerName := "foo.com/signer"
@@ -369,7 +374,7 @@ func TestFullFlow(t *testing.T) {
 	pcrSigner := hermeticpodcertificatesigner.New(clock, signerName, "", caKeys, caCerts, kc)
 	go pcrSigner.Run(ctx)
 	//
-	// Configure and boot up enough Kubelet subsystems to run an IssuingManager.
+	// 启动运行 IssuingManager 所需的最小子系统集合。
 	//
 
 	node1, err := kc.CoreV1().Nodes().Create(ctx, &corev1.Node{
@@ -394,11 +399,11 @@ func TestFullFlow(t *testing.T) {
 		types.NodeName(node1.ObjectMeta.Name),
 		clock,
 	)
-	// Start informers
+	// 启动 informer。
 	informerFactory.Start(ctx.Done())
 
-	// wait until the informers' watches are actually registered,
-	const expectedWatches = 4 // Manager: Pods, Nodes, PodCertificateRequests. Signer: PodCertificateRequests.
+	// 等待 informer 的 watch 真正注册完成，
+	const expectedWatches = 4 // Manager 监听 Pods、Nodes、PodCertificateRequests；Signer 监听 PodCertificateRequests。
 	if err := wait.PollUntilContextTimeout(
 		ctx,
 		100*time.Millisecond,
@@ -412,11 +417,11 @@ func TestFullFlow(t *testing.T) {
 			numWatches.Load(), expectedWatches, err)
 	}
 
-	// Now it's safe to run the manager – informers are watching.
+	// 此时 informer 已在监听，可以安全启动管理器。
 	go node1PodCertificateManager.Run(ctx)
 
 	//
-	// Make a pod that uses a podcertificate volume.
+	// 构造一个使用 PodCertificate 投影卷的 Pod。
 	//
 
 	workloadNS, err := kc.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
@@ -470,7 +475,7 @@ func TestFullFlow(t *testing.T) {
 										SignerName:           signerName,
 										KeyType:              "ED25519",
 										CredentialBundlePath: "creds.pem",
-										MaxExpirationSeconds: ptr.To[int32](86400), // Defaulting doesn't work with a fake client.
+										MaxExpirationSeconds: ptr.To[int32](86400), // fake client 不会执行默认值填充。
 										UserAnnotations:      map[string]string{hermeticpodcertificatesigner.SpiffePathKey: "workload"},
 									},
 								},
@@ -484,8 +489,7 @@ func TestFullFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error creating workload pod: %v", err)
 	}
-	// Because our fake podManager is based on an informer, we need to poll
-	// until workloadPod is reflected in the informer.
+	// fake podManager 基于 informer，需要轮询等待 workloadPod 出现在缓存中。
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		_, ok := node1PodManager.GetPodByUID(workloadPod.ObjectMeta.UID)
 		return ok, nil
@@ -494,10 +498,10 @@ func TestFullFlow(t *testing.T) {
 		t.Fatalf("Error while waiting for node1 podManager to know about workloadPod: %v", err)
 	}
 
+	// 只有被 Track 的 Pod 才会进入投影处理流程。
 	node1PodCertificateManager.TrackPod(ctx, workloadPod)
 
-	// Within a few seconds, we should see a PodCertificateRequest created for
-	// this pod.
+	// 预期几秒内会为该 Pod 创建 PodCertificateRequest。
 	var gotPCR *certsv1.PodCertificateRequest
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		pcrs, err := kc.CertificatesV1().PodCertificateRequests(workloadNS.ObjectMeta.Name).List(ctx, metav1.ListOptions{})
@@ -516,9 +520,8 @@ func TestFullFlow(t *testing.T) {
 		t.Fatalf("Error while waiting for PCR to be created: %v", err)
 	}
 
-	// Check that the created PCR spec matches expectations.  Blank out fields on
-	// gotPCR that we don't care about.  Blank out status, because the
-	// controller might have already signed it.
+	// 校验创建的 PCR spec 是否符合预期；先清空不关心的字段再比较。
+	// 先清空不关心的字段；状态也要清空，因为控制器可能已经完成签发。
 	wantPCR := &certsv1.PodCertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: workloadNS.ObjectMeta.Name,
@@ -544,7 +547,7 @@ func TestFullFlow(t *testing.T) {
 		t.Fatalf("PodCertificateManager created a bad PCR; diff (-got +want)\n%s", diff)
 	}
 
-	// Wait some more time for the PCR to be issued.
+	// 继续等待 PCR 完成签发。
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		pcrs, err := kc.CertificatesV1().PodCertificateRequests(workloadNS.ObjectMeta.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -578,7 +581,7 @@ func TestFullFlow(t *testing.T) {
 		t.Fatalf("The test signingController didn't issue the PCR:\n%+v", gotPCR)
 	}
 
-	// Check the spiffe path has been overridden with the UserAnnotations.
+	// 校验 SPIFFE 路径已被 UserAnnotations 覆盖。
 	issuedCertPem := []byte(gotPCR.Status.CertificateChain)
 	block, _ := pem.Decode(issuedCertPem)
 	cert, err := x509.ParseCertificate(block.Bytes)
@@ -591,8 +594,7 @@ func TestFullFlow(t *testing.T) {
 		t.Fatalf("Failed to override the spiffe path with the user annotations")
 	}
 
-	// Now we know that the PCR was issued, so we can wait for the
-	// podcertificate manager to return some valid credentials.
+	// 新 PCR 已签发，等待管理器开始返回新证书。
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		_, _, err := node1PodCertificateManager.GetPodCertificateCredentialBundle(ctx, workloadPod.ObjectMeta.Namespace, workloadPod.ObjectMeta.Name, string(workloadPod.ObjectMeta.UID), "certificate", 0)
 		if err != nil {
@@ -614,11 +616,10 @@ func TestFullFlow(t *testing.T) {
 		t.Fatalf("PodCertificate manager returned bad cert chain; diff (-got +want)\n%s", diff)
 	}
 
-	// Fast-forward time until it is past beginRefreshAt (including the possible 5-minute jitter).
+	// 快进时间越过 beginRefreshAt（包含最多 5 分钟的抖动）。
 	clock.Step(23*time.Hour + 37*time.Minute)
 
-	// Within a few seconds, we should see a new PodCertificateRequest created for
-	// this pod.
+	// 预期几秒内会为该 Pod 创建新的 PodCertificateRequest。
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		pcrs, err := kc.CertificatesV1().PodCertificateRequests(workloadNS.ObjectMeta.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -636,9 +637,9 @@ func TestFullFlow(t *testing.T) {
 		t.Fatalf("Error while waiting for PCR to be created: %v", err)
 	}
 
-	// We will assume that the created PCR matches our expectations.
+	// 这里假定新建 PCR 的内容符合预期。
 
-	// Wait some more time for the new PCR to be issued.
+	// 继续等待新 PCR 完成签发。
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		pcrs, err := kc.CertificatesV1().PodCertificateRequests(workloadNS.ObjectMeta.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -665,8 +666,7 @@ func TestFullFlow(t *testing.T) {
 		t.Fatalf("Error while waiting for PCR to be issued: %v", err)
 	}
 
-	// Now we know that the PCR was issued, so we can wait for the
-	// podcertificate manager to start returning the new certificate
+	// 新 PCR 已签发，等待管理器开始返回新证书。
 	err = wait.PollUntilContextTimeout(ctx, 1*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		_, certChain, err := node1PodCertificateManager.GetPodCertificateCredentialBundle(ctx, workloadPod.ObjectMeta.Namespace, workloadPod.ObjectMeta.Name, string(workloadPod.ObjectMeta.UID), "certificate", 0)
 		if err != nil {
@@ -694,14 +694,17 @@ func TestFullFlow(t *testing.T) {
 	}
 }
 
+// FakeSynchronousPodManager 是同步的 PodManager 桩，直接返回内存中的 Pod。
 type FakeSynchronousPodManager struct {
 	pods []*corev1.Pod
 }
 
+// GetPods 返回内存中的全部 Pod。
 func (f *FakeSynchronousPodManager) GetPods() []*corev1.Pod {
 	return f.pods
 }
 
+// GetPodByUID 按 UID 在内存中查找 Pod。
 func (f *FakeSynchronousPodManager) GetPodByUID(uid types.UID) (*corev1.Pod, bool) {
 	for _, pod := range f.pods {
 		if pod.ObjectMeta.UID == uid {
@@ -711,15 +714,18 @@ func (f *FakeSynchronousPodManager) GetPodByUID(uid types.UID) (*corev1.Pod, boo
 	return nil, false
 }
 
+// FakePodManager 是基于 informer lister 的 PodManager 桩。
 type FakePodManager struct {
 	podLister corelistersv1.PodLister
 }
 
+// GetPods 从 lister 缓存中列出全部 Pod。
 func (f *FakePodManager) GetPods() []*corev1.Pod {
 	ret, _ := f.podLister.List(labels.Everything())
 	return ret
 }
 
+// GetPodByUID 从 lister 缓存中按 UID 查找 Pod。
 func (f *FakePodManager) GetPodByUID(uid types.UID) (*corev1.Pod, bool) {
 	list, _ := f.podLister.List(labels.Everything())
 	for _, pod := range list {
@@ -730,6 +736,7 @@ func (f *FakePodManager) GetPodByUID(uid types.UID) (*corev1.Pod, bool) {
 	return nil, false
 }
 
+// mustRFC3339 解析 RFC3339 时间戳，失败时终止测试。
 func mustRFC3339(t *testing.T, stamp string) time.Time {
 	got, err := time.Parse(time.RFC3339, stamp)
 	if err != nil {

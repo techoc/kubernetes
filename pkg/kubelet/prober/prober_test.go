@@ -44,6 +44,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestGetURLParts 验证 HTTPGet 探针的主机、端口和路径解析：未指定 Host 时回退到 pod IP，
+// 端口需要能在容器端口列表中解析。
 func TestGetURLParts(t *testing.T) {
 	testCases := []struct {
 		probe *v1.HTTPGetAction
@@ -72,10 +74,12 @@ func TestGetURLParts(t *testing.T) {
 			},
 		}
 
+		// 探针未指定 Scheme 时按 HTTP 处理，与运行时默认行为保持一致。
 		scheme := test.probe.Scheme
 		if scheme == "" {
 			scheme = v1.URISchemeHTTP
 		}
+		// 探针未指定 Host 时回退到 pod IP，让容器内访问本机服务。
 		host := test.probe.Host
 		if host == "" {
 			host = state.PodIP
@@ -98,6 +102,8 @@ func TestGetURLParts(t *testing.T) {
 	}
 }
 
+// TestGetTCPAddrParts 验证 TCPSocket 探针的端口解析：端口必须能在容器端口列表中找到，
+// 否则视为解析失败。
 func TestGetTCPAddrParts(t *testing.T) {
 	testCases := []struct {
 		probe *v1.TCPSocketAction
@@ -138,6 +144,8 @@ func TestGetTCPAddrParts(t *testing.T) {
 	}
 }
 
+// TestProbe 覆盖 prober.probe 的核心行为：无探针、无处理器、探针成功/失败/告警/未知、
+// 不支持的探针类型，以及 exec 命令参数与环境变量展开。
 func TestProbe(t *testing.T) {
 	ctx := ktesting.Init(t)
 	containerID := kubecontainer.ContainerID{Type: "test", ID: "foobar"}
@@ -230,9 +238,11 @@ func TestProbe(t *testing.T) {
 		},
 	}
 
+	// 对三种探针类型逐一验证，保证 liveness、readiness、startup 的行为一致。
 	for i, test := range tests {
 		for _, pType := range [...]probeType{liveness, readiness, startup} {
 
+			// 不支持的探针类型用不存在的枚举值模拟，验证错误处理路径。
 			if test.unsupported {
 				pType = probeType(666)
 			}
@@ -266,6 +276,7 @@ func TestProbe(t *testing.T) {
 			require.Equal(t, test.expectedResult, result, "[%s] Expected result to be %v but was %v", testID, test.expectedResult, result)
 
 			if len(test.expectCommand) > 0 {
+				// 使用真实 exec probe 配合伪造的容器命令执行器，验证传给容器的命令参数。
 				prober.exec = execprobe.New()
 				prober.runner = &containertest.FakeContainerCommandRunner{}
 				_, err := prober.probe(ctx, pType, &v1.Pod{}, v1.PodStatus{}, testContainer, containerID)
@@ -279,6 +290,8 @@ func TestProbe(t *testing.T) {
 	}
 }
 
+// TestNewExecInContainer 验证 newExecInContainer 返回的执行器：命令与容器 ID 正确传递，
+// 且输出按限制长度截断、错误原样返回。
 func TestNewExecInContainer(t *testing.T) {
 	ctx := ktesting.Init(t)
 	limit := 1024
@@ -324,10 +337,12 @@ func TestNewExecInContainer(t *testing.T) {
 		cmd := []string{"/foo", "bar"}
 		exec := prober.newExecInContainer(ctx, &v1.Pod{}, container, containerID, cmd, 0)
 
+		// 用 LimitWriter 限制输出长度，验证探针输出不会无限占用内存。
 		var dataBuffer bytes.Buffer
 		writer := ioutils.LimitWriter(&dataBuffer, int64(limit))
 		exec.SetStderr(writer)
 		exec.SetStdout(writer)
+		// 先 Start 再 Wait：Start 失败时不调用 Wait，避免对未启动的执行器重复收尾。
 		err := exec.Start()
 		if err == nil {
 			err = exec.Wait()
@@ -340,7 +355,7 @@ func TestNewExecInContainer(t *testing.T) {
 		if e, a := cmd, runner.Cmd; !reflect.DeepEqual(e, a) {
 			t.Errorf("%s: cmd: expected %v, got %v", test.name, e, a)
 		}
-		// this isn't 100% foolproof as a bug in a real CommandRunner where it fails to copy to stdout/stderr wouldn't be caught by this test
+		// 该断言并非百分百可靠：真实 CommandRunner 若忘记把输出写入 stdout/stderr，本测试不会发现。
 		if e, a := test.expected, string(actualOutput); e != a {
 			t.Errorf("%s: output: expected %q, got %q", test.name, e, a)
 		}
@@ -350,6 +365,8 @@ func TestNewExecInContainer(t *testing.T) {
 	}
 }
 
+// TestNewProber 验证 newProber 返回的探针管理器，其命令执行器与四种探针（exec、http、tcp、grpc）
+// 均已正确初始化。
 func TestNewProber(t *testing.T) {
 	runner := &containertest.FakeContainerCommandRunner{}
 	recorder := &record.FakeRecorder{}
@@ -366,6 +383,8 @@ func TestNewProber(t *testing.T) {
 
 }
 
+// TestRunProbeHTTPGetHTTP2ProtocolFeatureGateDisabled 验证关闭 H2CContainerProbe 特性门控后，
+// HTTP/2 探针会静默回退到 HTTP/1.1，而不会因特性门控报错。
 func TestRunProbeHTTPGetHTTP2ProtocolFeatureGateDisabled(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.H2CContainerProbe, false)
 
@@ -389,9 +408,8 @@ func TestRunProbeHTTPGetHTTP2ProtocolFeatureGateDisabled(t *testing.T) {
 		},
 	}
 
-	// Gate off: kubelet silently falls back to HTTP/1.1 rather than
-	// failing with a gate error. The probe will fail with a connection
-	// error (no server), but must NOT fail due to the feature gate.
+	// 关闭门控后：kubelet 静默回退到 HTTP/1.1，而不是因门控报错。探针会因没有服务端而连接失败，
+	// 但绝不能因特性门控本身失败。
 	res, _, err := pb.runProbe(context.Background(), readiness, p, pod, status, container, containerID)
 	if res == probe.Unknown {
 		t.Errorf("gate-off probe should fall back to HTTP/1.1, not return Unknown")
@@ -401,8 +419,11 @@ func TestRunProbeHTTPGetHTTP2ProtocolFeatureGateDisabled(t *testing.T) {
 	}
 }
 
+// TestRecordContainerEventUnknownStatus 验证探针结果为 Unknown 时，会为 readiness、liveness、startup
+// 三类探针分别记录警告事件（探测告警与状态未知各一条）。
 func TestRecordContainerEventUnknownStatus(t *testing.T) {
 
+	// 事件记录需要把 pod 对象序列化，先注册 v1 类型到 scheme，否则事件构建会失败。
 	err := v1.AddToScheme(legacyscheme.Scheme)
 	require.NoError(t, err, "failed to add v1 to scheme")
 
@@ -457,9 +478,11 @@ func TestRecordContainerEventUnknownStatus(t *testing.T) {
 		},
 	}
 
+	// 按用例逐条校验事件内容和顺序。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tCtx := ktesting.Init(t)
+			// 缓冲区比预期事件数多 1，保证 FakeRecorder 的写入不会因通道满而阻塞。
 			bufferSize := len(tc.expected) + 1
 			fakeRecorder := record.NewFakeRecorder(bufferSize)
 

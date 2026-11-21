@@ -52,10 +52,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// testKubeletHostname 是测试中 kubelet 使用的固定主机名。
 const (
 	testKubeletHostname = "hostname"
 )
 
+// TestNodeAddress 验证 NodeAddress setter 在不同 nodeIP、云厂商、IPv4/IPv6
+// 与单双栈组合下生成的地址列表，以及 provided-node-ip 注解的写入/清理。
+//
 // TODO(mtaufen): below is ported from the old kubelet_node_status_test.go code, potentially add more test coverage for NodeAddress setter in future
 func TestNodeAddress(t *testing.T) {
 	existingNodeAddress := v1.NodeAddress{Address: "10.1.1.2"}
@@ -226,9 +230,9 @@ func TestNodeAddress(t *testing.T) {
 			shouldError: false,
 		},
 		{
-			// We don't have to test "legacy cloud provider with dual-stack
-			// IPs" etc because we won't have gotten this far with an invalid
-			// config like that.
+			// 无需测试“legacy 云厂商 + 双栈 IP”等组合：非法配置在更早阶段
+			// 就会被拒绝，根本走不到这里。
+			// 因此这些分支无需单独覆盖。
 			name:            "Dual-stack cloud, with dual-stack nodeIPs",
 			nodeIP:          netutils.ParseIPSloppy("2600:1f14:1d4:d101::ba3d"),
 			secondaryNodeIP: netutils.ParseIPSloppy("10.1.1.2"),
@@ -281,7 +285,7 @@ func TestNodeAddress(t *testing.T) {
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			ctx := ktesting.Init(t)
-			// testCase setup
+			// 构造测试用例的初始 node。
 			existingNode := &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        testKubeletHostname,
@@ -302,6 +306,7 @@ func TestNodeAddress(t *testing.T) {
 			}
 			hostname := testKubeletHostname
 
+			// 强制 DNS 解析失败，确保 setter 使用注入的 resolveAddressFunc 而非真实网络解析。
 			net.DefaultResolver = &net.Resolver{
 				PreferGo: true,
 				Dial: func(ctx context.Context, network string, address string) (net.Conn, error) {
@@ -316,12 +321,13 @@ func TestNodeAddress(t *testing.T) {
 				return testCase.resolvedIP, nil
 			}
 
+			// 存在第二个 --node-ip 时构成双栈配置。
 			nodeIPs := []net.IP{testCase.nodeIP}
 			if testCase.secondaryNodeIP != nil {
 				nodeIPs = append(nodeIPs, testCase.secondaryNodeIP)
 			}
 
-			// construct setter
+			// 构造待测 setter。
 			setter := NodeAddress(nodeIPs,
 				nodeIPValidator,
 				hostname,
@@ -329,7 +335,7 @@ func TestNodeAddress(t *testing.T) {
 				resolveAddressFunc,
 			)
 
-			// call setter on existing node
+			// 对已有 node 调用 setter。
 			err := setter(ctx, existingNode)
 			if err != nil && !testCase.shouldError {
 				t.Fatalf("unexpected error: %v", err)
@@ -348,7 +354,7 @@ func TestNodeAddress(t *testing.T) {
 	}
 }
 
-// We can't test failure or autodetection cases here because the relevant code isn't mockable
+// 失败与自动探测分支无法在此覆盖，因为相关代码不可 mock。
 func TestNodeAddress_NoCloudProvider(t *testing.T) {
 	cases := []struct {
 		name              string
@@ -387,7 +393,7 @@ func TestNodeAddress_NoCloudProvider(t *testing.T) {
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			ctx := ktesting.Init(t)
-			// testCase setup
+			// 构造测试用例的初始 node。
 			existingNode := &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{Name: testKubeletHostname, Annotations: make(map[string]string)},
 				Spec:       v1.NodeSpec{},
@@ -408,14 +414,14 @@ func TestNodeAddress_NoCloudProvider(t *testing.T) {
 				return nil, fmt.Errorf("not reached")
 			}
 
-			// construct setter
+			// 构造待测 setter。
 			setter := NodeAddress(testCase.nodeIPs,
 				nodeIPValidator,
 				testKubeletHostname,
 				false, // externalCloudProvider
 				resolvedAddressesFunc)
 
-			// call setter on existing node
+			// 对已有 node 调用 setter。
 			err := setter(ctx, existingNode)
 			if testCase.shouldError && err == nil {
 				t.Fatal("expected error but no error returned")
@@ -430,6 +436,8 @@ func TestNodeAddress_NoCloudProvider(t *testing.T) {
 	}
 }
 
+// TestMachineInfo 验证 MachineInfo setter 由 machine info 推导 capacity 与
+// allocatable，覆盖 device plugin、hugepages、ephemeral storage、swap 与重启事件。
 func TestMachineInfo(t *testing.T) {
 	const nodeName = "test-node"
 
@@ -540,7 +548,7 @@ func TestMachineInfo(t *testing.T) {
 				MemoryCapacity: 1024,
 			},
 			nodeAllocatableReservation: v1.ResourceList{
-				// reserve 1 unit for each resource
+				// 每个资源各预留 1 个单位，用于验证 allocatable = capacity - reservation
 				v1.ResourceCPU:              *resource.NewMilliQuantity(1, resource.DecimalSI),
 				v1.ResourceMemory:           *resource.NewQuantity(1, resource.BinarySI),
 				v1.ResourcePods:             *resource.NewQuantity(1, resource.DecimalSI),
@@ -566,8 +574,8 @@ func TestMachineInfo(t *testing.T) {
 			node: &v1.Node{
 				Status: v1.NodeStatus{
 					Capacity: v1.ResourceList{
-						// it's impossible on any real system to reserve 1 byte,
-						// but we just need to test that the setter does the math
+						// 真实系统中不可能只预留 1 字节，
+						// 这里只需要验证 setter 的算术逻辑。
 						v1.ResourceHugePagesPrefix + "test": *resource.NewQuantity(1, resource.BinarySI),
 					},
 				},
@@ -587,7 +595,7 @@ func TestMachineInfo(t *testing.T) {
 					},
 					Allocatable: v1.ResourceList{
 						v1.ResourceCPU: *resource.NewMilliQuantity(2000, resource.DecimalSI),
-						// memory has 1-unit difference for hugepages reservation
+						// 内存因 hugepages 预留少了 1 个单位
 						v1.ResourceMemory:                   *resource.NewQuantity(1023, resource.BinarySI),
 						v1.ResourceHugePagesPrefix + "test": *resource.NewQuantity(1, resource.BinarySI),
 						v1.ResourcePods:                     *resource.NewQuantity(110, resource.DecimalSI),
@@ -814,7 +822,7 @@ func TestMachineInfo(t *testing.T) {
 			desc:    "on failure to get machine info, allocatable and capacity for memory and cpu are set to 0, pods to maxPods",
 			node:    &v1.Node{},
 			maxPods: 110,
-			// podsPerCore is not accounted for when getting machine info fails
+			// 获取 machine info 失败时不考虑 podsPerCore，pods 直接取 maxPods
 			podsPerCore:      1,
 			machineInfoError: fmt.Errorf("foo"),
 			expectNode: &v1.Node{
@@ -910,6 +918,7 @@ func TestMachineInfo(t *testing.T) {
 			}
 		}
 
+		// 依赖的 feature gate 未开启时跳过该用例，避免不同构建配置下误报。
 		if featureGatesMissing {
 			continue
 		}
@@ -941,17 +950,17 @@ func TestMachineInfo(t *testing.T) {
 			runningInUserNSFunc := func() *bool {
 				return nil
 			}
-			// construct setter
+			// 构造待测 setter。
 			setter := MachineInfo(nodeName, tc.maxPods, tc.podsPerCore, machineInfoFunc, capacityFunc,
 				devicePluginResourceCapacityFunc, nodeAllocatableReservationFunc, recordEventFunc, runningInUserNSFunc, tc.disableLocalStorageCapacityIsolation)
-			// call setter on node
+			// 对 node 调用 setter。
 			if err := setter(ctx, tc.node); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// check expected node
+			// 校验 node 是否符合预期。
 			assert.True(t, apiequality.Semantic.DeepEqual(tc.expectNode, tc.node),
 				"Diff: %s", cmp.Diff(tc.expectNode, tc.node))
-			// check expected events
+			// 校验事件是否符合预期。
 			require.Equal(t, len(tc.expectEvents), len(events))
 			for i := range tc.expectEvents {
 				assert.Equal(t, tc.expectEvents[i], events[i])
@@ -961,6 +970,8 @@ func TestMachineInfo(t *testing.T) {
 
 }
 
+// TestVersionInfo 验证 VersionInfo setter 写入内核、OS image 与容器运行时版本；
+// 获取运行时版本失败时回退为 Unknown。
 func TestVersionInfo(t *testing.T) {
 	cases := []struct {
 		desc                string
@@ -1089,18 +1100,20 @@ func TestVersionInfo(t *testing.T) {
 			runtimeVersionFunc := func(_ context.Context) (kubecontainer.Version, error) {
 				return tc.runtimeVersion, tc.runtimeVersionError
 			}
-			// construct setter
+			// 构造待测 setter。
 			setter := VersionInfo(versionInfoFunc, runtimeTypeFunc, runtimeVersionFunc)
-			// call setter on node
+			// 对 node 调用 setter。
 			err := setter(ctx, tc.node)
 			require.Equal(t, tc.expectError, err)
-			// check expected node
+			// 校验 node 是否符合预期。
 			assert.True(t, apiequality.Semantic.DeepEqual(tc.expectNode, tc.node),
 				"Diff: %s", cmp.Diff(tc.expectNode, tc.node))
 		})
 	}
 }
 
+// TestImages 验证 Images setter 会限制镜像总数与每个镜像的 name 数、按大小降序排列，
+// 并在获取镜像列表失败时清空 node 上的镜像列表。
 func TestImages(t *testing.T) {
 	const (
 		minImageSize = 23 * 1024 * 1024
@@ -1132,13 +1145,13 @@ func TestImages(t *testing.T) {
 		{
 			desc:      "images are sorted by size, descending",
 			maxImages: -1,
-			// makeExpectedImageList will sort them for expectedNode when the test case is run
+			// 用例执行时 makeExpectedImageList 会为期望结果排序
 			imageList: []kubecontainer.Image{{Size: 3}, {Size: 1}, {Size: 4}, {Size: 2}},
 		},
 		{
 			desc:      "repo digests and tags both show up in image names",
 			maxImages: -1,
-			// makeExpectedImageList will use both digests and tags
+			// makeExpectedImageList 会同时使用 digest 与 tag
 			imageList: []kubecontainer.Image{
 				{
 					RepoDigests: []string{"foo", "bar"},
@@ -1158,19 +1171,19 @@ func TestImages(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := ktesting.Init(t)
 			imageListFunc := func() ([]kubecontainer.Image, error) {
-				// today, imageListFunc is expected to return a sorted list,
-				// but we may choose to sort in the setter at some future point
-				// (e.g. if the image cache stopped sorting for us)
+				// 目前约定 imageListFunc 返回已排序列表，
+				// 但未来也可能改在 setter 内排序
+				// （例如镜像缓存不再替我们排序时）。
 				sort.Sort(sliceutils.ByImageSize(tc.imageList))
 				return tc.imageList, tc.imageListError
 			}
-			// construct setter
+			// 构造待测 setter。
 			setter := Images(tc.maxImages, imageListFunc)
-			// call setter on node
+			// 对 node 调用 setter。
 			node := &v1.Node{}
 			err := setter(ctx, node)
 			require.Equal(t, tc.expectError, err)
-			// check expected node, image list should be reset to empty when there is an error
+			// 校验 node 是否符合预期；出错时镜像列表应被重置为空。
 			expectNode := &v1.Node{}
 			if err == nil {
 				expectNode.Status.Images = makeExpectedImageList(tc.imageList, tc.maxImages, MaxNamesPerImageInNodeStatus)
@@ -1182,6 +1195,8 @@ func TestImages(t *testing.T) {
 
 }
 
+// TestReadyCondition 验证 ReadyCondition setter 由 runtime/network/storage/shutdown
+// 错误推导 Ready condition，并只在状态翻转时更新时间戳与发送事件。
 func TestReadyCondition(t *testing.T) {
 	now := time.Now()
 	before := now.Add(-time.Second)
@@ -1266,7 +1281,7 @@ func TestReadyCondition(t *testing.T) {
 			disableLocalStorageCapacityIsolation: true,
 			expectConditions:                     []v1.NodeCondition{*makeReadyCondition(true, "kubelet is posting ready status", now, now)},
 		},
-		// the transition tests ensure timestamps are set correctly, no need to test the entire condition matrix in this section
+		// 下面的状态翻转用例只关心时间戳是否正确，无需在此穷举整个 condition 组合
 		{
 			desc: "transition to ready",
 			node: func() *v1.Node {
@@ -1345,16 +1360,16 @@ func TestReadyCondition(t *testing.T) {
 					event:     event,
 				})
 			}
-			// construct setter
+			// 构造待测 setter。
 			setter := ReadyCondition(nowFunc, runtimeErrorsFunc, networkErrorsFunc, storageErrorsFunc, cmStatusFunc, nodeShutdownErrorsFunc, recordEventFunc, !tc.disableLocalStorageCapacityIsolation)
-			// call setter on node
+			// 对 node 调用 setter。
 			if err := setter(ctx, tc.node); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// check expected condition
+			// 校验 condition 是否符合预期。
 			assert.True(t, apiequality.Semantic.DeepEqual(tc.expectConditions, tc.node.Status.Conditions),
 				"Diff: %s", cmp.Diff(tc.expectConditions, tc.node.Status.Conditions))
-			// check expected events
+			// 校验事件是否符合预期。
 			require.Equal(t, len(tc.expectEvents), len(events))
 			for i := range tc.expectEvents {
 				assert.Equal(t, tc.expectEvents[i], events[i])
@@ -1363,11 +1378,15 @@ func TestReadyCondition(t *testing.T) {
 	}
 }
 
+// TestMemoryPressureCondition 验证内存压力 condition 的状态推导与事件；
+// 无状态翻转时只刷新 heartbeat，保留原 transition time。
 func TestMemoryPressureCondition(t *testing.T) {
 	now := time.Now()
 	before := now.Add(-time.Second)
 	nowFunc := func() time.Time { return now }
 
+	// before 为上次记录时间：状态未翻转时 LastTransitionTime 保持 before，
+	// 只有 LastHeartbeatTime 更新为 now。
 	cases := []struct {
 		desc             string
 		node             *v1.Node
@@ -1467,16 +1486,16 @@ func TestMemoryPressureCondition(t *testing.T) {
 			pressureFunc := func() bool {
 				return tc.pressure
 			}
-			// construct setter
+			// 构造待测 setter。
 			setter := MemoryPressureCondition(nowFunc, pressureFunc, recordEventFunc)
-			// call setter on node
+			// 对 node 调用 setter。
 			if err := setter(ctx, tc.node); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// check expected condition
+			// 校验 condition 是否符合预期。
 			assert.True(t, apiequality.Semantic.DeepEqual(tc.expectConditions, tc.node.Status.Conditions),
 				"Diff: %s", cmp.Diff(tc.expectConditions, tc.node.Status.Conditions))
-			// check expected events
+			// 校验事件是否符合预期。
 			require.Equal(t, len(tc.expectEvents), len(events))
 			for i := range tc.expectEvents {
 				assert.Equal(t, tc.expectEvents[i], events[i])
@@ -1485,11 +1504,15 @@ func TestMemoryPressureCondition(t *testing.T) {
 	}
 }
 
+// TestPIDPressureCondition 验证 PID 压力 condition 的状态推导与事件；
+// 无状态翻转时只刷新 heartbeat，保留原 transition time。
 func TestPIDPressureCondition(t *testing.T) {
 	now := time.Now()
 	before := now.Add(-time.Second)
 	nowFunc := func() time.Time { return now }
 
+	// before 为上次记录时间：状态未翻转时 LastTransitionTime 保持 before，
+	// 只有 LastHeartbeatTime 更新为 now。
 	cases := []struct {
 		desc             string
 		node             *v1.Node
@@ -1589,16 +1612,16 @@ func TestPIDPressureCondition(t *testing.T) {
 			pressureFunc := func() bool {
 				return tc.pressure
 			}
-			// construct setter
+			// 构造待测 setter。
 			setter := PIDPressureCondition(nowFunc, pressureFunc, recordEventFunc)
-			// call setter on node
+			// 对 node 调用 setter。
 			if err := setter(ctx, tc.node); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// check expected condition
+			// 校验 condition 是否符合预期。
 			assert.True(t, apiequality.Semantic.DeepEqual(tc.expectConditions, tc.node.Status.Conditions),
 				"Diff: %s", cmp.Diff(tc.expectConditions, tc.node.Status.Conditions))
-			// check expected events
+			// 校验事件是否符合预期。
 			require.Equal(t, len(tc.expectEvents), len(events))
 			for i := range tc.expectEvents {
 				assert.Equal(t, tc.expectEvents[i], events[i])
@@ -1607,11 +1630,15 @@ func TestPIDPressureCondition(t *testing.T) {
 	}
 }
 
+// TestDiskPressureCondition 验证磁盘压力 condition 的状态推导与事件；
+// 无状态翻转时只刷新 heartbeat，保留原 transition time。
 func TestDiskPressureCondition(t *testing.T) {
 	now := time.Now()
 	before := now.Add(-time.Second)
 	nowFunc := func() time.Time { return now }
 
+	// before 为上次记录时间：状态未翻转时 LastTransitionTime 保持 before，
+	// 只有 LastHeartbeatTime 更新为 now。
 	cases := []struct {
 		desc             string
 		node             *v1.Node
@@ -1711,16 +1738,16 @@ func TestDiskPressureCondition(t *testing.T) {
 			pressureFunc := func() bool {
 				return tc.pressure
 			}
-			// construct setter
+			// 构造待测 setter。
 			setter := DiskPressureCondition(nowFunc, pressureFunc, recordEventFunc)
-			// call setter on node
+			// 对 node 调用 setter。
 			if err := setter(ctx, tc.node); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// check expected condition
+			// 校验 condition 是否符合预期。
 			assert.True(t, apiequality.Semantic.DeepEqual(tc.expectConditions, tc.node.Status.Conditions),
 				"Diff: %s", cmp.Diff(tc.expectConditions, tc.node.Status.Conditions))
-			// check expected events
+			// 校验事件是否符合预期。
 			require.Equal(t, len(tc.expectEvents), len(events))
 			for i := range tc.expectEvents {
 				assert.Equal(t, tc.expectEvents[i], events[i])
@@ -1729,6 +1756,8 @@ func TestDiskPressureCondition(t *testing.T) {
 	}
 }
 
+// TestVolumesInUse 验证仅在卷管理器完成 sync 后才用实际在用的卷覆盖 node 状态，
+// 否则保留旧列表，避免上报不完整数据。
 func TestVolumesInUse(t *testing.T) {
 	withVolumesInUse := &v1.Node{
 		Status: v1.NodeStatus{
@@ -1768,19 +1797,20 @@ func TestVolumesInUse(t *testing.T) {
 			volumesInUseFunc := func() []v1.UniqueVolumeName {
 				return tc.volumesInUse
 			}
-			// construct setter
+			// 构造待测 setter。
 			setter := VolumesInUse(syncedFunc, volumesInUseFunc)
-			// call setter on node
+			// 对 node 调用 setter。
 			if err := setter(ctx, tc.node); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// check expected volumes
+			// 校验 VolumesInUse 是否符合预期。
 			assert.True(t, apiequality.Semantic.DeepEqual(tc.expectVolumesInUse, tc.node.Status.VolumesInUse),
 				"Diff: %s", cmp.Diff(tc.expectVolumesInUse, tc.node.Status.VolumesInUse))
 		})
 	}
 }
 
+// TestDaemonEndpoints 验证 DaemonEndpoints setter 将 kubelet 端点端口写入 node status。
 func TestDaemonEndpoints(t *testing.T) {
 	for _, test := range []struct {
 		name      string
@@ -1822,14 +1852,14 @@ func TestDaemonEndpoints(t *testing.T) {
 
 // Test Helpers:
 
-// testEvent is used to record events for tests
+// testEvent 记录 setter 在测试中发出的事件，供断言事件类型与内容。
 type testEvent struct {
 	eventType string
 	event     string
 	message   string
 }
 
-// makeImageList randomly generates a list of images with the given count
+// makeImageList 随机生成指定数量的镜像，每个镜像带指定数量的 tag，大小落在给定区间内。
 func makeImageList(numImages, numTags, minSize, maxSize int32) []kubecontainer.Image {
 	images := make([]kubecontainer.Image, numImages)
 	for i := range images {
@@ -1841,13 +1871,15 @@ func makeImageList(numImages, numTags, minSize, maxSize int32) []kubecontainer.I
 	return images
 }
 
+// makeExpectedImageList 由输入镜像推导期望的 node status 镜像列表：
+// 按大小降序排序、截断每个镜像的 name 数量，并按 maxImages 截断整体列表。
 func makeExpectedImageList(imageList []kubecontainer.Image, maxImages, maxNames int32) []v1.ContainerImage {
-	// copy the imageList, we do not want to mutate it in-place and accidentally edit a test case
+	// 复制一份，避免原地修改而污染测试用例数据
 	images := make([]kubecontainer.Image, len(imageList))
 	copy(images, imageList)
-	// sort images by size
+	// 按镜像大小排序
 	sort.Sort(sliceutils.ByImageSize(images))
-	// convert to []v1.ContainerImage and truncate the list of names
+	// 转换为 []v1.ContainerImage 并截断每个镜像的 name 列表
 	expectedImages := make([]v1.ContainerImage, len(images))
 	for i := range images {
 		image := &images[i]
@@ -1859,7 +1891,7 @@ func makeExpectedImageList(imageList []kubecontainer.Image, maxImages, maxNames 
 		expectedImage.Names = names
 		expectedImage.SizeBytes = image.Size
 	}
-	// -1 means no limit, truncate result list if necessary.
+	// maxImages 为 -1 表示不限制，否则按上限截断结果列表
 	if maxImages > -1 &&
 		int(maxImages) < len(expectedImages) {
 		return expectedImages[0:maxImages]
@@ -1867,6 +1899,7 @@ func makeExpectedImageList(imageList []kubecontainer.Image, maxImages, maxNames 
 	return expectedImages
 }
 
+// makeImageTags 生成 num 个形如 registry.k8s.io:vN 的测试 tag。
 func makeImageTags(num int32) []string {
 	tags := make([]string, num)
 	for i := range tags {
@@ -1875,6 +1908,7 @@ func makeImageTags(num int32) []string {
 	return tags
 }
 
+// makeReadyCondition 构造期望的 NodeReady condition，让测试表能简洁表达状态与时间戳。
 func makeReadyCondition(ready bool, message string, transition, heartbeat time.Time) *v1.NodeCondition {
 	if ready {
 		return &v1.NodeCondition{
@@ -1896,6 +1930,7 @@ func makeReadyCondition(ready bool, message string, transition, heartbeat time.T
 	}
 }
 
+// makeMemoryPressureCondition 构造期望的 NodeMemoryPressure condition。
 func makeMemoryPressureCondition(pressure bool, transition, heartbeat time.Time) *v1.NodeCondition {
 	if pressure {
 		return &v1.NodeCondition{
@@ -1917,6 +1952,7 @@ func makeMemoryPressureCondition(pressure bool, transition, heartbeat time.Time)
 	}
 }
 
+// makePIDPressureCondition 构造期望的 NodePIDPressure condition。
 func makePIDPressureCondition(pressure bool, transition, heartbeat time.Time) *v1.NodeCondition {
 	if pressure {
 		return &v1.NodeCondition{
@@ -1938,6 +1974,7 @@ func makePIDPressureCondition(pressure bool, transition, heartbeat time.Time) *v
 	}
 }
 
+// makeDiskPressureCondition 构造期望的 NodeDiskPressure condition。
 func makeDiskPressureCondition(pressure bool, transition, heartbeat time.Time) *v1.NodeCondition {
 	if pressure {
 		return &v1.NodeCondition{

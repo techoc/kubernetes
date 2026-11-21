@@ -32,8 +32,10 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
 )
 
+// TestMetricCollection 验证卷指标采集器能从期望状态与实际状态缓存中正确统计各插件的卷数量。
 func TestMetricCollection(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 使用测试卷插件管理器，避免依赖真实卷插件。
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -59,7 +61,7 @@ func TestMetricCollection(t *testing.T) {
 	volumeSpec := &volume.Spec{Volume: &pod.Spec.Volumes[0]}
 	podName := util.GetUniquePodName(pod)
 
-	// Add one volume to DesiredStateOfWorld
+	// 向期望状态缓存加入一个卷。
 	generatedVolumeName, err := dsw.AddPodToVolume(logger, podName, pod, volumeSpec, volumeSpec.Name(), "", nil /* seLinuxOptions */)
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
@@ -75,13 +77,14 @@ func TestMetricCollection(t *testing.T) {
 		t.Fatalf("NewBlockVolumeMapper failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Add one volume to ActualStateOfWorld
+	// 向实际状态缓存加入一个卷。
 	devicePath := "fake/device/path"
 	err = asw.MarkVolumeAsAttached(logger, "", volumeSpec, "", devicePath)
 	if err != nil {
 		t.Fatalf("MarkVolumeAsAttached failed. Expected: <no error> Actual: <%v>", err)
 	}
 
+	// 构造已挂载卷的选项，写入实际状态缓存。
 	markVolumeOpts := operationexecutor.MarkVolumeOpts{
 		PodName:           podName,
 		PodUID:            pod.UID,
@@ -96,9 +99,10 @@ func TestMetricCollection(t *testing.T) {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
 
+	// 直接构造采集器，验证底层统计逻辑。
 	metricCollector := &totalVolumesCollector{asw: asw, dsw: dsw, pluginMgr: volumePluginMgr}
 
-	// Check if getVolumeCount returns correct data
+	// 校验 getVolumeCount 返回的统计数据。
 	count := metricCollector.getVolumeCount()
 	if len(count) != 2 {
 		t.Errorf("getVolumeCount failed. Expected <2> states, got <%d>", len(count))

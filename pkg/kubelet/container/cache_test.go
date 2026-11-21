@@ -27,18 +27,21 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// newTestCache 返回测试用的底层 cache 实现。
 func newTestCache() *cache {
 	c := NewCache()
 	return c.(*cache)
 }
 
+// TestCacheNotInitialized 验证全局时间戳未设置时查询总是返回 nil。
 func TestCacheNotInitialized(t *testing.T) {
 	cache := newTestCache()
-	// If the global timestamp is not set, always return nil.
+	// 全局时间戳未设置时，任何查询都返回 nil。
 	d := cache.getIfNewerThan(types.UID("1234"), time.Time{})
 	assert.Nil(t, d, "should return nil since cache is not initialized")
 }
 
+// getTestPodIDAndStatus 生成唯一 Pod ID 和指定容器数量的状态对象。
 func getTestPodIDAndStatus(numContainers int) (types.UID, *PodStatus) {
 	id := types.UID(strconv.FormatInt(time.Now().UnixNano(), 10))
 	name := fmt.Sprintf("cache-foo-%s", string(id))
@@ -55,6 +58,8 @@ func getTestPodIDAndStatus(numContainers int) (types.UID, *PodStatus) {
 	return id, status
 }
 
+// TestGetIfNewerThanWhenPodExists 验证 Pod 存在时 getIfNewerThan 的判定：
+// 全局时间戳或 Pod 条目修改时间任一更新即视为有新数据。
 func TestGetIfNewerThanWhenPodExists(t *testing.T) {
 	cache := newTestCache()
 	timestamp := time.Now()
@@ -66,32 +71,25 @@ func TestGetIfNewerThanWhenPodExists(t *testing.T) {
 		expected  bool
 	}{
 		{
-			// Both the global cache timestamp and the modified time are newer
-			// than the timestamp.
+			// 全局时间戳和 Pod 修改时间都晚于查询时间。
 			cacheTime: timestamp.Add(time.Second),
 			modified:  timestamp,
 			expected:  true,
 		},
 		{
-			// Global cache timestamp is newer, but the pod entry modified
-			// time is older than the given timestamp. This means that the
-			// entry is up-to-date even though it hasn't changed for a while.
+			// 全局时间戳较新、Pod 修改时间较旧：条目虽未变化，但整体缓存已更新，仍视为有新数据。
 			cacheTime: timestamp.Add(time.Second),
 			modified:  timestamp.Add(-time.Second * 10),
 			expected:  true,
 		},
 		{
-			// Global cache timestamp is older, but the pod entry modified
-			// time is newer than the given timestamp. This means that the
-			// entry is up-to-date but the rest of the cache are still being
-			// updated.
+			// 全局时间戳较旧、Pod 修改时间较新：该条目本身已更新，返回新数据。
 			cacheTime: timestamp.Add(-time.Second),
 			modified:  timestamp.Add(time.Second * 3),
 			expected:  true,
 		},
 		{
-			// Both the global cache timestamp and the modified time are older
-			// than the given timestamp.
+			// 全局时间戳和 Pod 修改时间都早于查询时间，没有新数据。
 			cacheTime: timestamp.Add(-time.Second),
 			modified:  timestamp.Add(-time.Second),
 			expected:  false,
@@ -106,6 +104,7 @@ func TestGetIfNewerThanWhenPodExists(t *testing.T) {
 	}
 }
 
+// TestGetPodNewerThanWhenPodDoesNotExist 验证 Pod 不存在时只看全局时间戳。
 func TestGetPodNewerThanWhenPodDoesNotExist(t *testing.T) {
 	cache := newTestCache()
 	cacheTime := time.Now()
@@ -131,6 +130,7 @@ func TestGetPodNewerThanWhenPodDoesNotExist(t *testing.T) {
 	}
 }
 
+// TestCacheSetAndGet 验证写入的状态和错误能原样读回。
 func TestCacheSetAndGet(t *testing.T) {
 	cache := NewCache()
 	cases := []struct {
@@ -144,33 +144,33 @@ func TestCacheSetAndGet(t *testing.T) {
 	for i, c := range cases {
 		podID, status := getTestPodIDAndStatus(c.numContainers)
 		cache.Set(podID, status, c.error, time.Time{})
-		// Read back the status and error stored in cache and make sure they
-		// match the original ones.
+		// 读回缓存中的状态和错误，确认与写入一致。
 		actualStatus, actualErr := cache.Get(podID)
 		assert.Equal(t, status, actualStatus, "test[%d]", i)
 		assert.Equal(t, c.error, actualErr, "test[%d]", i)
 	}
 }
 
+// TestCacheGetPodDoesNotExist 验证查询不存在的 Pod 时返回仅带 ID 的空状态。
 func TestCacheGetPodDoesNotExist(t *testing.T) {
 	cache := NewCache()
 	podID, status := getTestPodIDAndStatus(0)
-	// If the pod does not exist in cache, cache should return an status
-	// object with id filled.
+	// Pod 不在缓存中时，返回只填充了 ID 的状态对象。
 	actualStatus, actualErr := cache.Get(podID)
 	assert.Equal(t, status, actualStatus)
 	assert.NoError(t, actualErr)
 }
 
+// TestDelete 验证删除后查询返回空状态。
 func TestDelete(t *testing.T) {
 	cache := &cache{pods: map[types.UID]*data{}}
-	// Write a new pod status into the cache.
+	// 先写入一个 Pod 状态。
 	podID, status := getTestPodIDAndStatus(3)
 	cache.Set(podID, status, nil, time.Time{})
 	actualStatus, actualErr := cache.Get(podID)
 	assert.Equal(t, status, actualStatus)
 	assert.NoError(t, actualErr)
-	// Delete the pod from cache, and verify that we get an empty status.
+	// 删除后再次查询应得到空状态。
 	cache.Delete(podID)
 	expectedStatus := &PodStatus{ID: podID}
 	actualStatus, actualErr = cache.Get(podID)
@@ -178,18 +178,20 @@ func TestDelete(t *testing.T) {
 	assert.NoError(t, actualErr)
 }
 
+// verifyNotification 断言通知 channel 是否符合预期，并排空已收到的通知。
 func verifyNotification(t *testing.T, ch chan *data, expectNotification bool) {
 	if expectNotification {
 		assert.NotEmpty(t, ch, "Did not receive notification")
 	} else {
 		assert.Empty(t, ch, "Should not have triggered the notification")
 	}
-	// Drain the channel.
+	// 排空 channel，避免影响下一次断言。
 	for i := 0; i < len(ch); i++ {
 		<-ch
 	}
 }
 
+// TestRegisterNotification 验证订阅后 Set 与全局时间戳更新都会触发通知。
 func TestRegisterNotification(t *testing.T) {
 	cache := newTestCache()
 	cacheTime := time.Now()
@@ -199,7 +201,7 @@ func TestRegisterNotification(t *testing.T) {
 	ch := cache.subscribe(podID, cacheTime.Add(time.Second))
 	verifyNotification(t, ch, false)
 	cache.Set(podID, status, nil, cacheTime.Add(time.Second))
-	// The Set operation should've triggered the notification.
+	// Set 操作应触发通知。
 	verifyNotification(t, ch, true)
 
 	podID, _ = getTestPodIDAndStatus(1)
@@ -207,10 +209,12 @@ func TestRegisterNotification(t *testing.T) {
 	ch = cache.subscribe(podID, cacheTime.Add(time.Second))
 	verifyNotification(t, ch, false)
 	cache.UpdateTime(cacheTime.Add(time.Second * 2))
-	// The advance of cache timestamp should've triggered the notification.
+	// 全局时间戳推进也应触发通知。
 	verifyNotification(t, ch, true)
 }
 
+// TestGetNewerThan 验证 GetNewerThan 会阻塞到出现比 minTime 更新的数据，
+// 覆盖 Set、SetObservedTime、UpdateTime 以及 Pod 不存在等场景。
 func TestGetNewerThan(t *testing.T) {
 	podID := types.UID("test-pod")
 	status := &PodStatus{ID: podID}
@@ -262,7 +266,7 @@ func TestGetNewerThan(t *testing.T) {
 					c.SetObservedTime(podID, initial)
 				}
 
-				// First call to GetNewerThan - should block initially.
+				// 首次调用 GetNewerThan 应阻塞，直到出现更新。
 				resCh := make(chan *PodStatus, 1)
 				go func() {
 					s, err := c.GetNewerThan(podID, minTime)
@@ -272,16 +276,16 @@ func TestGetNewerThan(t *testing.T) {
 
 				requireBlocked(t, resCh, "Initial")
 
-				// Should still be blocked if the action is before minTime.
+				// 动作时间早于 minTime 时仍应阻塞。
 				tc.action(c, minTime.Add(-time.Second))
 				requireBlocked(t, resCh, "Before minTime")
 
-				// Should be unblocked if the action is after minTime.
+				// 动作时间晚于 minTime 时应解除阻塞。
 				tc.action(c, minTime.Add(time.Second))
 				r := requireUnblocked(t, resCh, "After minTime")
 				assert.Equal(t, podID, r.ID)
 
-				// Verify a subsequent call returns immediately.
+				// 后续调用应立即返回，不再阻塞。
 				resCh2 := make(chan *PodStatus, 1)
 				go func() {
 					s, err := c.GetNewerThan(podID, minTime)
@@ -295,6 +299,7 @@ func TestGetNewerThan(t *testing.T) {
 	}
 }
 
+// requireBlocked 断言在 synctest 时间推进前 channel 不会返回结果。
 func requireBlocked[T any](t *testing.T, ch <-chan T, msg string) {
 	t.Helper()
 	synctest.Wait()
@@ -302,10 +307,11 @@ func requireBlocked[T any](t *testing.T, ch <-chan T, msg string) {
 	case r := <-ch:
 		t.Fatalf("%s: receive should have blocked, but got: %v", msg, r)
 	default:
-		// OK.
+		// 没有收到数据，符合预期。
 	}
 }
 
+// requireUnblocked 断言 channel 已返回结果并返回该值。
 func requireUnblocked[T any](t *testing.T, ch <-chan T, msg string) (received T) {
 	t.Helper()
 	synctest.Wait()

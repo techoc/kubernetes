@@ -34,22 +34,26 @@ import (
 )
 
 var (
+	// supportedVersions 是测试插件声明支持的注册 API 版本。
 	supportedVersions = []string{"v1beta1", "v1beta2"}
 )
 
+// init 配置测试日志输出与详细级别。
 func init() {
 	var logLevel string
 
 	flags := &flag.FlagSet{}
+	// 打开 klog 到 stderr，并把 verbosity 设为 6。
 	klog.InitFlags(flags)
 	flag.Set("alsologtostderr", fmt.Sprintf("%t", true))
 	flag.StringVar(&logLevel, "logLevel", "6", "test")
 	flag.Lookup("v").Value.Set(logLevel)
 }
 
+// initTempDir 创建独立的临时目录。
 func initTempDir(t *testing.T) string {
-	// Creating a different directory. os.RemoveAll is not atomic enough;
-	// os.MkdirAll can get into an "Access Denied" error on Windows.
+	// 创建独立目录：os.RemoveAll 不够原子，
+	// 而 os.MkdirAll 在 Windows 上可能遇到 "Access Denied" 错误。
 	d, err := os.MkdirTemp("", "plugin_test")
 	if err != nil {
 		t.Fatalf("Could not create a temp directory %s: %v", d, err)
@@ -58,6 +62,7 @@ func initTempDir(t *testing.T) string {
 	return d
 }
 
+// waitForRegistration 轮询等待插件出现在期望状态缓存中。
 func waitForRegistration(
 	t *testing.T,
 	socketPath string,
@@ -76,6 +81,7 @@ func waitForRegistration(
 	}
 }
 
+// waitForUnregistration 轮询等待插件从期望状态缓存中移除。
 func waitForUnregistration(
 	t *testing.T,
 	socketPath string,
@@ -95,6 +101,7 @@ func waitForUnregistration(
 	}
 }
 
+// retryWithExponentialBackOff 以指数退避执行条件函数，最多 6 步。
 func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.ConditionFunc) error {
 	backoff := wait.Backoff{
 		Duration: initialDuration,
@@ -105,6 +112,7 @@ func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.Conditio
 	return wait.ExponentialBackoff(backoff, fn)
 }
 
+// TestPluginRegistration 验证插件的注册与注销会同步到期望状态缓存。
 func TestPluginRegistration(t *testing.T) {
 	socketDir := initTempDir(t)
 	defer os.RemoveAll(socketDir)
@@ -113,6 +121,7 @@ func TestPluginRegistration(t *testing.T) {
 	dsw := cache.NewDesiredStateOfWorld()
 	newWatcher(t, socketDir, dsw, wait.NeverStop)
 
+	// 循环创建 10 个不同 socket 的插件，逐一验证注册与注销。
 	for i := 0; i < 10; i++ {
 		socketPath := filepath.Join(socketDir, fmt.Sprintf("plugin-%d.sock", i))
 		pluginName := fmt.Sprintf("example-plugin-%d", i)
@@ -123,15 +132,15 @@ func TestPluginRegistration(t *testing.T) {
 		pluginInfo := GetPluginInfo(p)
 		waitForRegistration(t, pluginInfo.SocketPath, dsw)
 
-		// Check the desired state for plugins
+		// 校验期望状态缓存中的插件列表。
 		dswPlugins := dsw.GetPluginsToRegister()
 		if len(dswPlugins) != 1 {
 			t.Fatalf("TestPluginRegistration: desired state of world length should be 1 but it's %d", len(dswPlugins))
 		}
 
-		// Stop the plugin; the plugin should be removed from the desired state of world cache
+		// 停止插件；它应从期望状态缓存中移除。
 		require.NoError(t, p.Stop(tCtx))
-		// The following doesn't work when running the unit tests locally: event.Op of plugin watcher won't pick up the delete event
+		// 本地运行单元测试时，插件监听器可能无法捕获删除事件，因此依赖轮询等待。
 		waitForUnregistration(t, pluginInfo.SocketPath, dsw)
 		dswPlugins = dsw.GetPluginsToRegister()
 		if len(dswPlugins) != 0 {
@@ -140,6 +149,7 @@ func TestPluginRegistration(t *testing.T) {
 	}
 }
 
+// TestPluginRegistrationSameName 验证同名同类型但 socket 路径不同的插件可以共存。
 func TestPluginRegistrationSameName(t *testing.T) {
 	socketDir := initTempDir(t)
 	defer os.RemoveAll(socketDir)
@@ -148,8 +158,8 @@ func TestPluginRegistrationSameName(t *testing.T) {
 	dsw := cache.NewDesiredStateOfWorld()
 	newWatcher(t, socketDir, dsw, wait.NeverStop)
 
-	// Make 10 plugins with the same name and same type but different socket path;
-	// all 10 should be in desired state of world cache
+	// 创建 10 个名称和类型相同、socket 路径不同的插件；
+	// 它们都应存在于期望状态缓存中。
 	pluginName := "dep-example-plugin"
 	for i := 0; i < 10; i++ {
 		socketPath := filepath.Join(socketDir, fmt.Sprintf("plugin-%d.sock", i))
@@ -159,7 +169,7 @@ func TestPluginRegistrationSameName(t *testing.T) {
 		pluginInfo := GetPluginInfo(p)
 		waitForRegistration(t, pluginInfo.SocketPath, dsw)
 
-		// Check the desired state for plugins
+		// 校验缓存中插件数量随创建数量递增。
 		dswPlugins := dsw.GetPluginsToRegister()
 		if len(dswPlugins) != i+1 {
 			t.Fatalf("TestPluginRegistrationSameName: desired state of world length should be %d but it's %d", i+1, len(dswPlugins))
@@ -167,6 +177,7 @@ func TestPluginRegistrationSameName(t *testing.T) {
 	}
 }
 
+// TestPluginReRegistration 验证插件注销后以新名称重新注册时，缓存中的时间戳会更新。
 func TestPluginReRegistration(t *testing.T) {
 	socketDir := initTempDir(t)
 	defer os.RemoveAll(socketDir)
@@ -175,8 +186,7 @@ func TestPluginReRegistration(t *testing.T) {
 	dsw := cache.NewDesiredStateOfWorld()
 	newWatcher(t, socketDir, dsw, wait.NeverStop)
 
-	// Create a plugin first, we are then going to remove the plugin, update the plugin with a different name
-	// and recreate it.
+	// 先创建一个插件，随后删除它，再以不同的名称重新创建。
 	socketPath := filepath.Join(socketDir, "plugin-reregistration.sock")
 	pluginName := "reregister-plugin"
 	p := NewTestExamplePlugin(pluginName, registerapi.DevicePlugin, socketPath, supportedVersions...)
@@ -185,21 +195,21 @@ func TestPluginReRegistration(t *testing.T) {
 	lastTimestamp := time.Now()
 	waitForRegistration(t, pluginInfo.SocketPath, dsw)
 
-	// Remove this plugin, then recreate it again with a different name for 10 times
-	// The updated plugin should be in the desired state of world cache
+	// 重复 10 次：删除插件，再以不同的名称重新创建；
+	// 更新后的插件应存在于期望状态缓存中。
 	for i := 0; i < 10; i++ {
-		// Stop the plugin; the plugin should be removed from the desired state of world cache
-		// The plugin removal doesn't work when running the unit tests locally: event.Op of plugin watcher won't pick up the delete event
+		// 停止插件；它应从期望状态缓存中移除。
+		// 本地运行单元测试时删除事件可能无法被捕获。
 		require.NoError(t, p.Stop(tCtx))
 		waitForUnregistration(t, pluginInfo.SocketPath, dsw)
 
-		// Add the plugin again
+		// 以新名称重新创建插件。
 		pluginName := fmt.Sprintf("dep-example-plugin-%d", i)
 		p := NewTestExamplePlugin(pluginName, registerapi.DevicePlugin, socketPath, supportedVersions...)
 		require.NoError(t, p.Serve(tCtx, "v1beta1", "v1beta2"))
 		waitForRegistration(t, pluginInfo.SocketPath, dsw)
 
-		// Check the dsw cache. The updated plugin should be the only plugin in it
+		// 校验缓存中只剩更新后的这个插件。
 		dswPlugins := dsw.GetPluginsToRegister()
 		if len(dswPlugins) != 1 {
 			t.Fatalf("TestPluginReRegistration: desired state of world length should be 1 but it's %d", len(dswPlugins))
@@ -211,6 +221,7 @@ func TestPluginReRegistration(t *testing.T) {
 	}
 }
 
+// TestPluginRegistrationAtKubeletStart 验证 kubelet 启动时已存在的插件会被发现并注册。
 func TestPluginRegistrationAtKubeletStart(t *testing.T) {
 	socketDir := initTempDir(t)
 	defer os.RemoveAll(socketDir)
@@ -231,6 +242,7 @@ func TestPluginRegistrationAtKubeletStart(t *testing.T) {
 		plugins[i] = p
 	}
 
+	// 先在磁盘上创建 10 个插件 socket，然后启动监听器。
 	dsw := cache.NewDesiredStateOfWorld()
 	newWatcher(t, socketDir, dsw, wait.NeverStop)
 
@@ -241,7 +253,7 @@ func TestPluginRegistrationAtKubeletStart(t *testing.T) {
 			defer wg.Done()
 
 			pluginInfo := GetPluginInfo(p)
-			// Validate that the plugin is in the desired state cache
+			// 校验插件已进入期望状态缓存。
 			waitForRegistration(t, pluginInfo.SocketPath, dsw)
 		}(plugins[i])
 	}
@@ -260,6 +272,7 @@ func TestPluginRegistrationAtKubeletStart(t *testing.T) {
 	}
 }
 
+// newWatcher 创建并启动 Watcher，失败时终止测试。
 func newWatcher(t *testing.T, socketDir string, desiredStateOfWorldCache cache.DesiredStateOfWorld, stopCh <-chan struct{}) *Watcher {
 	tCtx := ktesting.Init(t)
 	w := NewWatcher(socketDir, desiredStateOfWorldCache)

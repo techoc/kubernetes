@@ -32,18 +32,19 @@ import (
 )
 
 const (
+	// Windows 注册表路径与 DNS 字段的最大长度限制。
 	netRegistry       = `System\CurrentControlSet\Services\TCPIP\Parameters`
 	netIfacesRegistry = `System\CurrentControlSet\Services\TCPIP\Parameters\Interfaces`
 	maxHostnameLen    = 128
 	maxDomainNameLen  = 128
 	maxScopeIDLen     = 256
 
-	// getHostDNSConfig will return the host's DNS configuration if the given resolverConfig argument
-	// is set to "Host".
+	// resolverConfig 为 "Host" 时，getHostDNSConfig 返回宿主机的 DNS 配置。
 	hostResolvConf = "Host"
 )
 
-// FixedInfo information: https://docs.microsoft.com/en-us/windows/win32/api/iptypes/ns-iptypes-fixed_info_w2ksp1
+// FixedInfo 对应 Windows 的 FIXED_INFO 结构。
+// https://docs.microsoft.com/en-us/windows/win32/api/iptypes/ns-iptypes-fixed_info_w2ksp1
 type FixedInfo struct {
 	HostName         [maxHostnameLen + 4]byte
 	DomainName       [maxDomainNameLen + 4]byte
@@ -57,12 +58,13 @@ type FixedInfo struct {
 }
 
 var (
-	// GetNetworkParams can be found in iphlpapi.dll
-	// see: https://docs.microsoft.com/windows/win32/api/iphlpapi/nf-iphlpapi-getnetworkparams
+	// GetNetworkParams 位于 iphlpapi.dll。
+	// 参见：https://docs.microsoft.com/windows/win32/api/iphlpapi/nf-iphlpapi-getnetworkparams
 	iphlpapidll          = windows.MustLoadDLL("iphlpapi.dll")
 	procGetNetworkParams = iphlpapidll.MustFindProc("GetNetworkParams")
 )
 
+// fileExists 判断路径是否存在且为普通文件。
 func fileExists(filename string) (bool, error) {
 	stat, err := os.Stat(filename)
 	if os.IsNotExist(err) {
@@ -75,9 +77,11 @@ func fileExists(filename string) (bool, error) {
 	return stat.Mode().IsRegular(), nil
 }
 
+// getHostDNSConfig 根据 resolverConfig 返回 DNS 配置：空值使用默认配置，
+// 文件路径读取文件，"Host" 读取宿主机设置。
 func getHostDNSConfig(logger klog.Logger, resolverConfig string) (*runtimeapi.DNSConfig, error) {
 	if resolverConfig == "" {
-		// This handles "" by returning defaults.
+		// 空值表示使用默认配置。
 		return getDNSConfig(logger, resolverConfig)
 	}
 
@@ -88,7 +92,7 @@ func getHostDNSConfig(logger klog.Logger, resolverConfig string) (*runtimeapi.DN
 		return nil, err
 	}
 	if isFile {
-		// Get the DNS config from a resolv.conf-like file.
+		// 从类似 resolv.conf 的文件读取 DNS 配置。
 		return getDNSConfig(logger, resolverConfig)
 	}
 
@@ -98,9 +102,8 @@ func getHostDNSConfig(logger klog.Logger, resolverConfig string) (*runtimeapi.DN
 		return nil, err
 	}
 
-	// If we get here, the resolverConfig == hostResolvConf and that is not actually a file, so
-	// it means to use the host settings.
-	// Get host DNS settings
+	// 走到这里说明 resolverConfig 等于 hostResolvConf 且它不是实际文件，
+	// 因此使用宿主机的 DNS 设置。
 	hostDNS, err := getDNSServerList()
 	if err != nil {
 		err = fmt.Errorf("Could not get the host's DNS Server List. Error: %w", err)
@@ -119,6 +122,7 @@ func getHostDNSConfig(logger klog.Logger, resolverConfig string) (*runtimeapi.DN
 	}, nil
 }
 
+// elemInList 判断元素是否存在于字符串列表中。
 func elemInList(elem string, list []string) bool {
 	for _, e := range list {
 		if e == elem {
@@ -128,6 +132,7 @@ func elemInList(elem string, list []string) bool {
 	return false
 }
 
+// getRegistryStringValue 读取注册表指定路径下的字符串值。
 func getRegistryStringValue(reg, key string) (string, error) {
 	regKey, err := registry.OpenKey(registry.LOCAL_MACHINE, reg, registry.QUERY_VALUE)
 	if err != nil {
@@ -139,9 +144,9 @@ func getRegistryStringValue(reg, key string) (string, error) {
 	return regValue, err
 }
 
-// getDNSSuffixList reads DNS config file and returns the list of configured DNS suffixes
+// getDNSSuffixList 读取 DNS 配置并返回已配置的 DNS 后缀列表。
 func getDNSSuffixList() ([]string, error) {
-	// We start with the general suffix list that apply to all network connections.
+	// 先收集适用于所有网络连接的全局后缀列表。
 	allSuffixes := []string{}
 	suffixes, err := getRegistryStringValue(netRegistry, "SearchList")
 	if err != nil {
@@ -149,7 +154,7 @@ func getDNSSuffixList() ([]string, error) {
 	}
 	allSuffixes = strings.Split(suffixes, ",")
 
-	// Then we append the network-specific DNS suffix lists.
+	// 再追加各网络接口专属的 DNS 后缀列表。
 	regKey, err := registry.OpenKey(registry.LOCAL_MACHINE, netIfacesRegistry, registry.ENUMERATE_SUB_KEYS)
 	if err != nil {
 		return nil, err
@@ -168,6 +173,7 @@ func getDNSSuffixList() ([]string, error) {
 		if suffixes == "" {
 			continue
 		}
+		// 去重后追加接口级后缀。
 		for _, suffix := range strings.Split(suffixes, ",") {
 			if !elemInList(suffix, allSuffixes) {
 				allSuffixes = append(allSuffixes, suffix)
@@ -178,20 +184,22 @@ func getDNSSuffixList() ([]string, error) {
 	return allSuffixes, nil
 }
 
+// getNetworkParams 调用 GetNetworkParams 获取 Windows 网络参数。
 func getNetworkParams() (*FixedInfo, error) {
-	// We don't know how big we should make the byte buffer, but the call will tell us by
-	// setting the size afterwards.
+	// 先传入极小缓冲区，调用会通过 size 返回所需的实际大小。
 	var size int = 1
 	buffer := make([]byte, 1)
 	ret, _, err := procGetNetworkParams.Call(
 		uintptr(unsafe.Pointer(&buffer[0])),
 		uintptr(unsafe.Pointer(&size)),
 	)
+	// 第一次调用预期返回 ERROR_BUFFER_OVERFLOW，并给出所需大小。
 	if ret != uintptr(syscall.ERROR_BUFFER_OVERFLOW) {
 		err = fmt.Errorf("Unexpected return value %d from GetNetworkParams. Expected: %d. Error: %w", ret, syscall.ERROR_BUFFER_OVERFLOW, err)
 		return nil, err
 	}
 
+	// 按所需大小重新分配缓冲区并再次调用。
 	buffer = make([]byte, size)
 	ret, _, err = procGetNetworkParams.Call(
 		uintptr(unsafe.Pointer(&buffer[0])),
@@ -206,6 +214,7 @@ func getNetworkParams() (*FixedInfo, error) {
 	return info, nil
 }
 
+// getDNSServerList 返回宿主机配置的 DNS 服务器列表。
 func getDNSServerList() ([]string, error) {
 	dnsServerList := []string{}
 	fixedInfo, err := getNetworkParams()
@@ -214,6 +223,7 @@ func getDNSServerList() ([]string, error) {
 	}
 
 	list := &(fixedInfo.DNSServerList)
+	// 沿链表遍历所有 DNS 服务器，并去除字符串末尾的 NUL 字节。
 	for list != nil {
 		dnsServer := strings.TrimRight(string(list.IpAddress.String[:]), "\x00")
 		dnsServerList = append(dnsServerList, dnsServer)

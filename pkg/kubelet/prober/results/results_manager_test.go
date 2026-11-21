@@ -28,6 +28,7 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
+// TestCacheOperations 验证缓存管理器 Set/Get/Remove 的基本行为。
 func TestCacheOperations(t *testing.T) {
 	m := NewManager()
 
@@ -37,16 +38,19 @@ func TestCacheOperations(t *testing.T) {
 	_, found := m.Get(unsetID)
 	assert.False(t, found, "unset result found")
 
+	// 设置结果后应能按容器 ID 读回。
 	m.Set(setID, Success, &corev1.Pod{})
 	result, found := m.Get(setID)
 	assert.Equal(t, Success, result, "set result")
 	assert.True(t, found, "set result found")
 
+	// 删除后查询应返回未找到。
 	m.Remove(setID)
 	_, found = m.Get(setID)
 	assert.False(t, found, "removed result found")
 }
 
+// TestUpdates 验证仅在结果发生变化时推送更新。
 func TestUpdates(t *testing.T) {
 	m := NewManager()
 
@@ -54,6 +58,7 @@ func TestUpdates(t *testing.T) {
 	fooID := kubecontainer.ContainerID{Type: "test", ID: "foo"}
 	barID := kubecontainer.ContainerID{Type: "test", ID: "bar"}
 
+	// expectUpdate 等待一次更新并校验内容，超时即失败。
 	expectUpdate := func(expected Update, msg string) {
 		select {
 		case u := <-m.Updates():
@@ -65,10 +70,10 @@ func TestUpdates(t *testing.T) {
 		}
 	}
 
+	// expectNoUpdate 断言当前没有待消费的更新。
 	expectNoUpdate := func(msg string) {
-		// NOTE: Since updates are accumulated asynchronously, this method is not guaranteed to fail
-		// when it should. In the event it misses a failure, the following calls to expectUpdate should
-		// still fail.
+		// 注意：更新是异步累积的，本方法不保证在应当失败时一定失败；
+		// 若漏报，后续 expectUpdate 仍会失败。
 		select {
 		case u := <-m.Updates():
 			t.Errorf("Unexpected update %v: %s", u, msg)
@@ -77,21 +82,21 @@ func TestUpdates(t *testing.T) {
 		}
 	}
 
-	// New result should always push an update.
+	// 新结果必须推送更新。
 	m.Set(fooID, Success, pod)
 	expectUpdate(Update{fooID, Success, pod.UID}, "new success")
 
 	m.Set(barID, Failure, pod)
 	expectUpdate(Update{barID, Failure, pod.UID}, "new failure")
 
-	// Unchanged results should not send an update.
+	// 结果未变化时不应推送更新。
 	m.Set(fooID, Success, pod)
 	expectNoUpdate("unchanged foo")
 
 	m.Set(barID, Failure, pod)
 	expectNoUpdate("unchanged bar")
 
-	// Changed results should send an update.
+	// 结果变化时必须推送更新。
 	m.Set(fooID, Failure, pod)
 	expectUpdate(Update{fooID, Failure, pod.UID}, "changed foo")
 
@@ -99,6 +104,8 @@ func TestUpdates(t *testing.T) {
 	expectUpdate(Update{barID, Success, pod.UID}, "changed bar")
 }
 
+// TestResult_ToPrometheusType 验证 Result 到 Prometheus 数值的映射：
+// Success=0、Failure=1、其他=-1。
 func TestResult_ToPrometheusType(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -121,6 +128,7 @@ func TestResult_ToPrometheusType(t *testing.T) {
 			expected: -1,
 		},
 	}
+	// 逐用例比较映射值。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if got := test.result.ToPrometheusType(); got != test.expected {
@@ -130,6 +138,7 @@ func TestResult_ToPrometheusType(t *testing.T) {
 	}
 }
 
+// TestResult_String 验证 Result 的字符串表示。
 func TestResult_String(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -152,6 +161,7 @@ func TestResult_String(t *testing.T) {
 			expected: "UNKNOWN",
 		},
 	}
+	// 逐用例比较字符串输出。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if got := test.result.String(); got != test.expected {

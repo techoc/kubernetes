@@ -25,7 +25,9 @@ import (
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 )
 
+// TestValidateReservedMemoryConfiguration 验证保留内存配置的合法性检查。
 func TestValidateReservedMemoryConfiguration(t *testing.T) {
+	// 覆盖未配置、合法配置、重复 NUMA 节点、非法资源类型和零值限制。
 	testCases := []struct {
 		description          string
 		kubeletConfiguration *kubeletconfig.KubeletConfiguration
@@ -100,6 +102,7 @@ func TestValidateReservedMemoryConfiguration(t *testing.T) {
 		},
 	}
 
+	// 逐个用例校验错误数量与首条错误消息。
 	for _, testCase := range testCases {
 		errors := validateReservedMemoryConfiguration(testCase.kubeletConfiguration)
 

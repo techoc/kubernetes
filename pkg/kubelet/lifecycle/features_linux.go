@@ -25,6 +25,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// isPodLevelResourcesSupported 在 Linux 上依据 PodLevelResources 特性门控决定是否准入 Pod 级资源。
 func isPodLevelResourcesSupported(pod *v1.Pod) PodAdmitResult {
 	podLevelResourcesEnabled := utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources)
 	if resource.IsPodLevelResourcesSet(pod) && !podLevelResourcesEnabled {

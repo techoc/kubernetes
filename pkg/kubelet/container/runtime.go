@@ -39,230 +39,219 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
-// Version interface allow to consume the runtime versions - compare and format to string.
+// Version 接口用于消费运行时版本信息：支持比较与字符串格式化。
 type Version interface {
-	// Compare compares two versions of the runtime. On success it returns -1
-	// if the version is less than the other, 1 if it is greater than the other,
-	// or 0 if they are equal.
+	// Compare 比较两个运行时版本：小于对方返回 -1，
+	// 大于对方返回 1，
+	// 相等返回 0。
 	Compare(other string) (int, error)
-	// String returns a string that represents the version.
+	// String 返回版本的字符串表示。
 	String() string
 }
 
-// ImageSpec is an internal representation of an image.  Currently, it wraps the
-// value of a Container's Image field, but in the future it will include more detailed
-// information about the different image types.
+// ImageSpec 是镜像的内部表示。目前它包装容器 Image 字段的值，
+// 未来还会包含不同镜像类型的更多详细信息。
 type ImageSpec struct {
-	// ID of the image.
+	// 镜像 ID。
 	Image string
-	// Runtime handler used to pull this image
+	// 拉取该镜像所使用的 runtime handler。
 	RuntimeHandler string
-	// The annotations for the image.
-	// This should be passed to CRI during image pulls and returned when images are listed.
+	// 镜像的注解。
+	// 拉取镜像时传给 CRI，列举镜像时由 CRI 返回。
 	Annotations []Annotation
 }
 
-// ImageStats contains statistics about all the images currently available.
+// ImageStats 包含当前可用镜像的统计信息。
 type ImageStats struct {
-	// Total amount of storage consumed by existing images.
+	// 现有镜像占用的存储总量。
 	TotalStorageBytes uint64
 }
 
-// Runtime interface defines the interfaces that should be implemented
-// by a container runtime.
-// Thread safety is required from implementations of this interface.
+// Runtime 接口定义容器运行时需要实现的能力。
+// 该接口的实现必须保证线程安全。
 type Runtime interface {
-	// Type returns the type of the container runtime.
+	// Type 返回容器运行时类型。
 	Type() string
 
-	// Version returns the version information of the container runtime.
+	// Version 返回容器运行时的版本信息。
 	Version(ctx context.Context) (Version, error)
 
-	// APIVersion returns the cached API version information of the container
-	// runtime. Implementation is expected to update this cache periodically.
-	// This may be different from the runtime engine's version.
+	// APIVersion 返回缓存的容器运行时 API 版本信息；实现应定期刷新缓存。
+	// 该版本可能与运行时引擎自身的版本不同。
 	// TODO(random-liu): We should fold this into Version()
 	APIVersion() (Version, error)
-	// Status returns the status of the runtime. An error is returned if the Status
-	// function itself fails, nil otherwise.
+	// Status 返回运行时状态；仅当状态查询本身失败时才返回 error。
 	Status(ctx context.Context) (*RuntimeStatus, error)
-	// GetPods returns a list of containers grouped by pods. The boolean parameter
-	// specifies whether the runtime returns all containers including those already
-	// exited and dead containers (used for garbage collection).
+	// GetPods 返回按 Pod 分组的容器列表；all 为 true 时包含已退出、已死亡的容器
+	// （供垃圾回收使用）。
 	GetPods(ctx context.Context, all bool) ([]*Pod, error)
-	// GetPod fetches the current sandboxes & containers for a pod.
-	// Returns ErrPodNotFound when no sandboxes are found for the requested pod.
+	// GetPod 获取指定 Pod 当前的 sandbox 与容器。
+	// 找不到任何 sandbox 时返回 ErrPodNotFound。
 	GetPod(ctx context.Context, podUID types.UID) (*Pod, error)
-	// GarbageCollect removes dead containers using the specified container gc policy
-	// If allSourcesReady is not true, it means that kubelet doesn't have the
-	// complete list of pods from all available sources (e.g., apiserver, http,
-	// file). In this case, garbage collector should refrain itself from aggressive
-	// behavior such as removing all containers of unrecognized pods (yet).
-	// If evictNonDeletedPods is set to true, containers and sandboxes belonging to pods
-	// that are terminated, but not deleted will be evicted.  Otherwise, only deleted pods
-	// will be GC'd.
+	// GarbageCollect 按给定 GC 策略清理已死亡的容器。
+	// allSourcesReady 为 false 表示 kubelet 尚未拿到所有来源（apiserver、http、
+	// 文件等）的完整 Pod 列表；此时 GC 应避免激进策略，
+	// 例如不要删除无法识别 Pod 的全部容器。
+	// evictNonDeletedPods 为 true 时，终止但尚未删除的 Pod 的容器与 sandbox
+	// 也会被清理；否则只清理已删除的 Pod。
 	// TODO: Revisit this method and make it cleaner.
 	GarbageCollect(ctx context.Context, gcPolicy GCPolicy, allSourcesReady bool, evictNonDeletedPods bool) error
-	// SyncPod syncs the running pod into the desired pod.
+	// SyncPod 把运行中的 Pod 同步到期望状态。
 	SyncPod(ctx context.Context, pod *v1.Pod, podStatus *PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff, restartAllContainers bool) PodSyncResult
-	// KillPod kills all the containers of a pod. Pod may be nil, running pod must not be.
+	// KillPod 终止 Pod 的所有容器；pod 可以为 nil，runningPod 不可以。
 	// TODO(random-liu): Return PodSyncResult in KillPod.
-	// gracePeriodOverride if specified allows the caller to override the pod default grace period.
-	// only hard kill paths are allowed to specify a gracePeriodOverride in the kubelet in order to not corrupt user data.
-	// it is useful when doing SIGKILL for hard eviction scenarios, or max grace period during soft eviction scenarios.
+	// gracePeriodOverride 非空时允许调用方覆盖 Pod 默认的优雅终止期。
+	// kubelet 中只有硬杀路径可以传入 gracePeriodOverride，避免破坏用户数据：
+	// 例如硬驱逐时发 SIGKILL，或软驱逐时使用最大宽限期。
 	KillPod(ctx context.Context, pod *v1.Pod, runningPod Pod, gracePeriodOverride *int64) error
-	// GetPodStatus retrieves the status of the pod, including the
-	// information of all containers in the pod that are visible in Runtime.
+	// GetPodStatus 获取 Pod 状态，包括运行时可见的全部容器信息。
 	GetPodStatus(ctx context.Context, pod *Pod) (*PodStatus, error)
 	// TODO(vmarmol): Unify pod and containerID args.
-	// GetContainerLogs returns logs of a specific container. By
-	// default, it returns a snapshot of the container log. Set 'follow' to true to
-	// stream the log. Set 'follow' to false and specify the number of lines (e.g.
-	// "100" or "all") to tail the log.
+	// GetContainerLogs 返回指定容器的日志。默认返回日志快照；
+	// follow 为 true 时流式读取；为 false 时按 tailLines 返回末尾若干行
+	// （如 "100" 或 "all"）。
 	GetContainerLogs(ctx context.Context, pod *v1.Pod, containerID ContainerID, logOptions *v1.PodLogOptions, stdout, stderr io.Writer) (err error)
-	// DeleteContainer deletes a container. If the container is still running, an error is returned.
+	// DeleteContainer 删除容器；容器仍在运行时返回错误。
 	DeleteContainer(ctx context.Context, containerID ContainerID) error
-	// ImageService provides methods to image-related methods.
+	// ImageService 提供与镜像相关的方法。
 	ImageService
-	// UpdatePodCIDR sends a new podCIDR to the runtime.
-	// This method just proxies a new runtimeConfig with the updated
-	// CIDR value down to the runtime shim.
+	// UpdatePodCIDR 把新的 podCIDR 下发给运行时。
+	// 该方法只是把更新后的 runtimeConfig 透传给运行时 shim。
 	UpdatePodCIDR(ctx context.Context, podCIDR string) error
-	// CheckpointContainer tells the runtime to checkpoint a container
-	// and store the resulting archive to the checkpoint directory.
+	// CheckpointContainer 通知运行时对容器做 checkpoint，
+	// 并把归档写入 checkpoint 目录。
 	CheckpointContainer(ctx context.Context, options *runtimeapi.CheckpointContainerRequest) error
-	// Generate pod status from the CRI event
+	// GeneratePodStatus 根据 CRI 容器事件生成 Pod 状态。
 	GeneratePodStatus(event *runtimeapi.ContainerEventResponse) *PodStatus
-	// ListMetricDescriptors gets the descriptors for the metrics that will be returned in ListPodSandboxMetrics.
-	// This list should be static at startup: either the client and server restart together when
-	// adding or removing metrics descriptors, or they should not change.
-	// Put differently, if ListPodSandboxMetrics references a name that is not described in the initial
-	// ListMetricDescriptors call, then the metric will not be broadcasted.
+	// ListMetricDescriptors 获取 ListPodSandboxMetrics 将要返回的指标描述符。
+	// 该列表在启动后应保持静态：增删指标描述符时必须让客户端与服务端一起重启，
+	// 否则不要改动它。
+	// 换言之，若 ListPodSandboxMetrics 返回了初始 ListMetricDescriptors 中
+	// 未描述的指标名，该指标将不会被广播。
 	ListMetricDescriptors(ctx context.Context) ([]*runtimeapi.MetricDescriptor, error)
-	// ListPodSandboxMetrics retrieves the metrics for all pod sandboxes.
+	// ListPodSandboxMetrics 获取所有 Pod sandbox 的指标。
 	ListPodSandboxMetrics(ctx context.Context) ([]*runtimeapi.PodSandboxMetrics, error)
-	// GetContainerStatus returns the status for the container.
+	// GetContainerStatus 返回指定容器的状态。
 	GetContainerStatus(ctx context.Context, podUID types.UID, id ContainerID) (*Status, error)
-	// GetContainerSwapBehavior reports whether a container could be swappable.
-	// This is used to decide whether to handle InPlacePodVerticalScaling for containers.
+	// GetContainerSwapBehavior 报告容器是否可被换出，
+	// 用于决定是否为容器处理 InPlacePodVerticalScaling。
 	GetContainerSwapBehavior(pod *v1.Pod, container *v1.Container) kubelettypes.SwapBehavior
-	// IsPodResizeInProgress checks whether the given pod is in the process of resizing
-	// (allocated resources != actuated resources).
+	// IsPodResizeInProgress 判断 Pod 是否正在调整资源
+	// （已分配资源与实际生效资源不一致）。
 	IsPodResizeInProgress(allocatedPod *v1.Pod, podStatus *PodStatus) bool
-	// UpdateActuatedPodLevelResources updates pod-level resources in actuatedState
+	// UpdateActuatedPodLevelResources 更新 actuatedState 中的 Pod 级资源。
 	UpdateActuatedPodLevelResources(logger klog.Logger, actuatedPod *v1.Pod) error
-	// InitializeActuatedPod initializes actuated container resources and emptyDir volume size limits for the given pod,
-	// if they are not already set.
+	// InitializeActuatedPod 为给定 Pod 初始化实际生效的容器资源与 emptyDir 大小限制，
+	// 已设置的值保持不变。
 	InitializeActuatedPod(logger klog.Logger, allocatedPod *v1.Pod)
 }
 
 var (
-	// ErrPodNotFound is returned by GetPod when no sandboxes are found for the requested pod.
+	// ErrPodNotFound 在 GetPod 找不到任何 sandbox 时返回。
 	ErrPodNotFound = errors.New("pod sandboxes not found")
 )
 
-// StreamingRuntime is the interface implemented by runtimes that handle the serving of the
-// streaming calls (exec/attach/port-forward) themselves. In this case, Kubelet should redirect to
-// the runtime server.
+// StreamingRuntime 由自行处理流式调用（exec/attach/port-forward）的运行时实现；
+// 此时 kubelet 应把请求重定向到该运行时服务端。
 type StreamingRuntime interface {
+	// GetExec 返回用于 exec 的流式 URL。
 	GetExec(ctx context.Context, id ContainerID, cmd []string, stdin, stdout, stderr, tty bool) (*url.URL, error)
+	// GetAttach 返回用于 attach 的流式 URL。
 	GetAttach(ctx context.Context, id ContainerID, stdin, stdout, stderr, tty bool) (*url.URL, error)
+	// GetPortForward 返回用于 port-forward 的流式 URL。
 	GetPortForward(ctx context.Context, podName, podNamespace string, podUID types.UID, ports []int32) (*url.URL, error)
 }
 
-// ImageService interfaces allows to work with image service.
+// ImageService 是与镜像服务交互的接口。
 type ImageService interface {
-	// PullImage pulls an image from the network to local storage using the supplied
-	// secrets if necessary.
-	// It returns a reference (digest or ID) to the pulled image and the credentials
-	// that were used to pull the image. If the returned credentials are nil, the
-	// pull was anonymous.
+	// PullImage 使用给定凭证把镜像从网络拉取到本地存储；
+	// 返回已拉取镜像的引用（digest 或 ID）以及实际使用的凭证；
+	// 凭证为 nil 表示匿名拉取。
 	PullImage(ctx context.Context, image ImageSpec, credentials []credentialprovider.TrackedAuthConfig, podSandboxConfig *runtimeapi.PodSandboxConfig) (string, *credentialprovider.TrackedAuthConfig, error)
-	// GetImageRef gets the reference (digest or ID) of the image which has already been in
-	// the local storage. It returns ("", nil) if the image isn't in the local storage.
+	// GetImageRef 获取本地已有镜像的引用（digest 或 ID）；
+	// 镜像不在本地时返回 ("", nil)。
 	GetImageRef(ctx context.Context, image ImageSpec) (string, error)
-	// ListImages gets all images currently on the machine.
+	// ListImages 获取本机当前的所有镜像。
 	ListImages(ctx context.Context) ([]Image, error)
-	// RemoveImage removes the specified image.
+	// RemoveImage 删除指定镜像。
 	RemoveImage(ctx context.Context, image ImageSpec) error
-	// ImageStats returns Image statistics.
+	// ImageStats 返回镜像统计信息。
 	ImageStats(ctx context.Context) (*ImageStats, error)
-	// ImageFsInfo returns a list of file systems for containers/images
+	// ImageFsInfo 返回容器/镜像使用的文件系统列表。
 	ImageFsInfo(ctx context.Context) (*runtimeapi.ImageFsInfoResponse, error)
-	// GetImageSize returns the size of the image
+	// GetImageSize 返回镜像大小。
 	GetImageSize(ctx context.Context, image ImageSpec) (uint64, error)
 }
 
-// Attacher interface allows to attach a container.
+// Attacher 接口用于 attach 到容器。
 type Attacher interface {
+	// AttachContainer 把 stdin/stdout/stderr 连接到指定容器，并处理终端尺寸变化。
 	AttachContainer(ctx context.Context, id ContainerID, stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan remotecommand.TerminalSize) (err error)
 }
 
-// CommandRunner interface allows to run command in a container.
+// CommandRunner 接口用于在容器内执行命令。
 type CommandRunner interface {
-	// RunInContainer synchronously executes the command in the container, and returns the output.
-	// If the command completes with a non-0 exit code, a k8s.io/utils/exec.ExitError will be returned.
+	// RunInContainer 在容器内同步执行命令并返回输出；
+	// 退出码非 0 时返回 k8s.io/utils/exec.ExitError。
 	RunInContainer(ctx context.Context, id ContainerID, cmd []string, timeout time.Duration) ([]byte, error)
 }
 
-// Pod is a group of containers.
+// Pod 是一组容器。
 type Pod struct {
-	// The ID of the pod, which can be used to retrieve a particular pod
-	// from the pod list returned by GetPods().
+	// Pod 的 ID，可用于从 GetPods() 返回的列表中定位具体 Pod。
 	ID types.UID
-	// The name and namespace of the pod, which is readable by human.
+	// Pod 的名称与命名空间，供人阅读。
 	Name      string
 	Namespace string
-	// Creation timestamps of the Pod in nanoseconds.
+	// Pod 的创建时间，单位纳秒。
 	CreatedAt uint64
-	// List of containers that belongs to this pod. It may contain only
-	// running containers, or mixed with dead ones (when GetPods(true)).
+	// 属于该 Pod 的容器列表：可能只含运行中的容器，
+	// 也可能混有已死亡的容器（GetPods(true)）。
 	Containers []*Container
-	// List of sandboxes associated with this pod. The sandboxes are converted
-	// to Container temporarily to avoid substantial changes to other
-	// components. This is only populated by kuberuntime.
-	// Sandboxes are sorted by creation time, newest -> oldest.
+	// 该 Pod 关联的 sandbox 列表。sandbox 被临时转换为 Container，
+	// 以避免对其他组件做大幅改动；该字段仅由 kuberuntime 填充，
+	// 并按创建时间从新到旧排序。
 	// TODO: use the runtimeApi.PodSandbox type directly.
 	Sandboxes []*Container
-	// Timestamp is the time that this Pod object was read from the runtime.
+	// Timestamp 是该 Pod 对象从运行时读取的时间。
 	Timestamp time.Time
 }
 
-// PodPair contains both runtime#Pod and api#Pod
+// PodPair 同时包含运行时侧 Pod 与 API 侧 v1.Pod。
 type PodPair struct {
-	// APIPod is the v1.Pod
+	// APIPod 是 API 侧的 v1.Pod。
 	APIPod *v1.Pod
-	// RunningPod is the pod defined in pkg/kubelet/container/runtime#Pod
+	// RunningPod 是运行时侧的 Pod（pkg/kubelet/container/runtime#Pod）。
 	RunningPod *Pod
 }
 
-// ContainerID is a type that identifies a container.
+// ContainerID 标识一个容器，由运行时类型与实例 ID 组成。
 type ContainerID struct {
-	// The type of the container runtime. e.g. 'docker'.
+	// 容器运行时类型，例如 'docker'。
 	Type string
-	// The identification of the container, this is comsumable by
-	// the underlying container runtime. (Note that the container
-	// runtime interface still takes the whole struct as input).
+	// 容器实例 ID，底层运行时可直接消费；
+	// 注意接口仍以整个结构体作为输入。
 	ID string
 }
 
-// BuildContainerID returns the ContainerID given type and id.
+// BuildContainerID 根据类型与 ID 构造 ContainerID。
 func BuildContainerID(typ, ID string) ContainerID {
 	return ContainerID{Type: typ, ID: ID}
 }
 
-// ParseContainerID is a convenience method for creating a ContainerID from an ID string.
+// ParseContainerID 从 "type://id" 字符串解析 ContainerID，解析失败仅记录日志。
 func ParseContainerID(logger klog.Logger, containerID string) ContainerID {
 	var id ContainerID
 	if err := id.ParseString(containerID); err != nil {
+		// 解析失败时保留零值 ContainerID，调用方可用 IsEmpty 判定。
 		logger.Error(err, "Parsing containerID failed")
 	}
 	return id
 }
 
-// ParseString converts given string into ContainerID
+// ParseString 把 "type://id" 字符串解析到 ContainerID。
 func (c *ContainerID) ParseString(data string) error {
-	// Trim the quotes and split the type and ID.
+	// 去掉外层引号后按 "://" 拆分类型与 ID。
 	parts := strings.Split(strings.Trim(data, "\""), "://")
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid container ID: %q", data)
@@ -271,174 +260,168 @@ func (c *ContainerID) ParseString(data string) error {
 	return nil
 }
 
+// String 返回 "type://id" 形式的字符串。
 func (c *ContainerID) String() string {
 	return fmt.Sprintf("%s://%s", c.Type, c.ID)
 }
 
-// IsEmpty returns whether given ContainerID is empty.
+// IsEmpty 判断 ContainerID 是否为零值。
 func (c *ContainerID) IsEmpty() bool {
 	return *c == ContainerID{}
 }
 
-// MarshalJSON formats a given ContainerID into a byte array.
+// MarshalJSON 把 ContainerID 序列化为 JSON 字符串。
 func (c *ContainerID) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("%q", c.String())), nil
 }
 
-// UnmarshalJSON parses ContainerID from a given array of bytes.
+// UnmarshalJSON 从 JSON 字节数组解析 ContainerID。
 func (c *ContainerID) UnmarshalJSON(data []byte) error {
 	return c.ParseString(string(data))
 }
 
-// State represents the state of a container
+// State 表示容器状态。
 type State string
 
 const (
-	// ContainerStateCreated indicates a container that has been created (e.g. with docker create) but not started.
+	// ContainerStateCreated 表示容器已创建（如 docker create）但尚未启动。
 	ContainerStateCreated State = "created"
-	// ContainerStateRunning indicates a currently running container.
+	// ContainerStateRunning 表示容器正在运行。
 	ContainerStateRunning State = "running"
-	// ContainerStateExited indicates a container that ran and completed ("stopped" in other contexts, although a created container is technically also "stopped").
+	// ContainerStateExited 表示容器已运行结束（其他语境称 stopped）。
 	ContainerStateExited State = "exited"
-	// ContainerStateUnknown encompasses all the states that we currently don't care about (like restarting, paused, dead).
+	// ContainerStateUnknown 覆盖当前不关心的状态（restarting、paused、dead 等）。
 	ContainerStateUnknown State = "unknown"
 )
 
-// ContainerReasonStatusUnknown indicates a container the status of the container cannot be determined.
+// ContainerReasonStatusUnknown 表示无法确定容器状态。
 const ContainerReasonStatusUnknown string = "ContainerStatusUnknown"
 
-// Container provides the runtime information for a container, such as ID, hash,
-// state of the container.
+// Container 提供容器的运行时信息，如 ID、hash、状态等。
 type Container struct {
-	// The ID of the container, used by the container runtime to identify
-	// a container.
+	// 容器 ID，容器运行时用它定位容器。
 	ID ContainerID
-	// The name of the container, which should be the same as specified by
-	// v1.Container.
+	// 容器名称，应与 v1.Container 中的名称一致。
 	Name string
-	// The image name of the container, this also includes the tag of the image,
-	// the expected form is "NAME:TAG".
+	// 容器镜像名（含 tag），期望格式为 "NAME:TAG"。
 	Image string
-	// The id of the image used by the container.
+	// 容器使用的镜像 ID。
 	ImageID string
-	// The digested reference of the image used by the container.
+	// 容器所用镜像的 digest 引用。
 	ImageRef string
-	// Runtime handler used to pull the image if any.
+	// 拉取该镜像时使用的 runtime handler（如有）。
 	ImageRuntimeHandler string
-	// Hash of the container, used for comparison. Optional for containers
-	// not managed by kubelet.
+	// 容器 hash，用于比较；非 kubelet 管理的容器可为空。
 	Hash uint64
-	// State is the state of the container.
+	// 容器状态。
 	State State
-	// ID of the sandbox to which this container belongs.
+	// 容器所属 sandbox 的 ID。
 	PodSandboxID string
-	// Creation time of the container in nanoseconds.
+	// 容器创建时间，单位纳秒。
 	CreatedAt int64
 }
 
-// PodStatus represents the status of the pod and its containers.
-// v1.PodStatus can be derived from examining PodStatus and v1.Pod.
+// PodStatus 表示 Pod 及其容器的状态，
+// v1.PodStatus 可结合 PodStatus 与 v1.Pod 推导得到。
 type PodStatus struct {
-	// ID of the pod.
+	// Pod ID。
 	ID types.UID
-	// Name of the pod.
+	// Pod 名称。
 	Name string
-	// Namespace of the pod.
+	// Pod 命名空间。
 	Namespace string
-	// All IPs assigned to this pod
+	// 分配给该 Pod 的全部 IP。
 	IPs []string
-	// Status of containers in the pod.
+	// Pod 中容器的状态。
 	ContainerStatuses []*Status
-	// Statuses of containers of the active sandbox in the pod.
+	// Pod 中活跃 sandbox 的容器状态。
 	ActiveContainerStatuses []*Status
-	// Status of the pod sandbox.
-	// Only for kuberuntime now, other runtime may keep it nil.
+	// Pod sandbox 的状态。
+	// 目前只有 kuberuntime 填充，其他运行时可能保持为 nil。
 	SandboxStatuses []*runtimeapi.PodSandboxStatus
-	// Timestamp at which container and pod statuses were recorded
+	// 记录容器与 Pod 状态的时间戳。
 	TimeStamp time.Time
 }
 
-// ContainerResources represents the Resources allocated to the running container.
+// ContainerResources 表示分配给运行中容器的资源。
 type ContainerResources struct {
-	// CPU capacity reserved for the container
+	// 为容器预留的 CPU 容量。
 	CPURequest *resource.Quantity
-	// CPU limit enforced on the container
+	// 施加在容器上的 CPU 上限。
 	CPULimit *resource.Quantity
-	// Memory capaacity reserved for the container
+	// 为容器预留的内存容量。
 	MemoryRequest *resource.Quantity
-	// Memory limit enforced on the container
+	// 施加在容器上的内存上限。
 	MemoryLimit *resource.Quantity
 }
 
-// Status represents the status of a container.
+// Status 表示容器状态。
 //
-// Status does not contain VolumeMap because CRI API is unaware of volume names.
+// Status 不包含 VolumeMap，因为 CRI API 不知道卷名称。
 type Status struct {
-	// ID of the container.
+	// 容器 ID。
 	ID ContainerID
-	// Name of the container.
+	// 容器名称。
 	Name string
-	// Status of the container.
+	// 容器状态。
 	State State
-	// Creation time of the container.
+	// 容器创建时间。
 	CreatedAt time.Time
-	// Start time of the container.
+	// 容器启动时间。
 	StartedAt time.Time
-	// Finish time of the container.
+	// 容器结束时间。
 	FinishedAt time.Time
-	// Exit code of the container.
+	// 容器退出码。
 	ExitCode int
-	// Name of the image, this also includes the tag of the image,
-	// the expected form is "NAME:TAG".
+	// 镜像名（含 tag），期望格式为 "NAME:TAG"。
 	Image string
-	// ID of the image.
+	// 镜像 ID。
 	ImageID string
-	// The digested reference of the image used by the container.
+	// 容器所用镜像的 digest 引用。
 	ImageRef string
-	// Runtime handler used to pull the image if any.
+	// 拉取该镜像时使用的 runtime handler（如有）。
 	ImageRuntimeHandler string
-	// Hash of the container, used for comparison.
+	// 容器 hash，用于比较。
 	Hash uint64
-	// Number of times that the container has been restarted.
+	// 容器重启次数。
 	RestartCount int
-	// A string explains why container is in such a status.
+	// 解释容器处于该状态的原因。
 	Reason string
-	// Message written by the container before exiting (stored in
-	// TerminationMessagePath).
+	// 容器退出前写入的消息（存放在 TerminationMessagePath）。
 	Message string
-	// CPU and memory resources for this container
+	// 该容器的 CPU 与内存资源。
 	Resources *ContainerResources
-	// User identity information of the first process of this container
+	// 容器首个进程的用户身份信息。
 	User *ContainerUser
-	// Mounts are the volume mounts of the container
+	// 容器的卷挂载列表。
 	Mounts []Mount
-	// StopSignal is used to show the container's effective stop signal in the Status
+	// StopSignal 表示容器实际生效的停止信号。
 	StopSignal *v1.Signal
 }
 
-// ContainerUser represents user identity information
+// ContainerUser 表示用户身份信息。
 type ContainerUser struct {
-	// Linux holds user identity information of the first process of the containers in Linux.
-	// Note that this field cannot be set when spec.os.name is windows.
+	// Linux 保存 Linux 容器首个进程的用户身份信息；
+	// spec.os.name 为 windows 时不能设置该字段。
 	Linux *LinuxContainerUser
 
-	// Windows holds user identity information of the first process of the containers in Windows
-	// This is just reserved for future use.
+	// Windows 保存 Windows 容器首个进程的用户身份信息，
+	// 目前仅为未来预留。
 	// Windows *WindowsContainerUser
 }
 
-// LinuxContainerUser represents user identity information in Linux containers
+// LinuxContainerUser 表示 Linux 容器的用户身份信息。
 type LinuxContainerUser struct {
-	// UID is the primary uid of the first process in the container
+	// UID 是容器首个进程的主 uid。
 	UID int64
-	// GID is the primary gid of the first process in the container
+	// GID 是容器首个进程的主 gid。
 	GID int64
-	// SupplementalGroups are the supplemental groups attached to the first process in the container
+	// SupplementalGroups 是附加到容器首个进程的附加组。
 	SupplementalGroups []int64
 }
 
-// FindContainerStatusByName returns container status in the pod status with the given name.
-// When there are multiple containers' statuses with the same name, the first match will be returned.
+// FindContainerStatusByName 返回 Pod 状态中指定名称的容器状态。
+// 存在同名状态时返回第一个匹配项。
 func (podStatus *PodStatus) FindContainerStatusByName(containerName string) *Status {
 	for _, containerStatus := range podStatus.ContainerStatuses {
 		if containerStatus.Name == containerName {
@@ -448,8 +431,8 @@ func (podStatus *PodStatus) FindContainerStatusByName(containerName string) *Sta
 	return nil
 }
 
-// FindActiveContainerStatusByName returns active container status in the pod status with the given name.
-// When there are multiple containers' statuses with the same name, the first match will be returned.
+// FindActiveContainerStatusByName 返回活跃容器状态中指定名称的项。
+// 存在同名状态时返回第一个匹配项。
 func (podStatus *PodStatus) FindActiveContainerStatusByName(containerName string) *Status {
 	for _, containerStatus := range podStatus.ActiveContainerStatuses {
 		if containerStatus.Name == containerName {
@@ -459,7 +442,7 @@ func (podStatus *PodStatus) FindActiveContainerStatusByName(containerName string
 	return nil
 }
 
-// GetRunningContainerStatuses returns container status of all the running containers in a pod
+// GetRunningContainerStatuses 返回 Pod 中所有运行中容器的状态。
 func (podStatus *PodStatus) GetRunningContainerStatuses() []*Status {
 	runningContainerStatuses := []*Status{}
 	for _, containerStatus := range podStatus.ContainerStatuses {
@@ -470,158 +453,156 @@ func (podStatus *PodStatus) GetRunningContainerStatuses() []*Status {
 	return runningContainerStatuses
 }
 
-// Image contains basic information about a container image.
+// Image 包含容器镜像的基本信息。
 type Image struct {
-	// ID of the image.
+	// 镜像 ID。
 	ID string
-	// Other names by which this image is known.
+	// 该镜像的其他已知名称。
 	RepoTags []string
-	// Digests by which this image is known.
+	// 该镜像的 digest 列表。
 	RepoDigests []string
-	// The size of the image in bytes.
+	// 镜像大小（字节）。
 	Size int64
-	// ImageSpec for the image which include annotations.
+	// 镜像的 ImageSpec，包含注解。
 	Spec ImageSpec
-	// Pin for preventing garbage collection
+	// Pinned 为 true 时阻止该镜像被垃圾回收。
 	Pinned bool
 }
 
-// EnvVar represents the environment variable.
+// EnvVar 表示环境变量。
 type EnvVar struct {
 	Name  string
 	Value string // TODO: switch to []byte
 }
 
-// Annotation represents an annotation.
+// Annotation 表示一条注解。
 type Annotation struct {
 	Name  string
 	Value string
 }
 
-// Mount represents a volume mount.
+// Mount 表示一次卷挂载。
 type Mount struct {
-	// Name of the volume mount.
+	// 卷挂载名称。
 	// TODO(yifan): Remove this field, as this is not representing the unique name of the mount,
 	// but the volume name only.
 	Name string
-	// Path of the mount within the container.
+	// 容器内的挂载路径。
 	ContainerPath string
-	// Path of the mount on the host.
+	// 宿主机上的挂载路径。
 	HostPath string
-	// Whether the mount is read-only.
+	// 是否只读挂载。
 	ReadOnly bool
-	// Whether the mount is recursive read-only.
-	// Must not be true if ReadOnly is false.
+	// 是否递归只读挂载；
+	// ReadOnly 为 false 时该字段不得为 true。
 	RecursiveReadOnly bool
-	// Whether the mount needs SELinux relabeling
+	// 是否需要 SELinux 重标记。
 	SELinuxRelabel bool
-	// Requested propagation mode
+	// 请求的挂载传播模式。
 	Propagation runtimeapi.MountPropagation
-	// Image is set if an OCI volume as image ID or digest should get mounted (special case).
+	// 需要挂载 OCI 镜像卷（按 image ID/digest）时设置该字段（特殊场景）。
 	Image *runtimeapi.ImageSpec
-	// ImageSubPath is set if an image volume sub path should get mounted. This
-	// field is only required if the above Image is set.
+	// 需要挂载镜像卷子路径时设置 ImageSubPath，
+	// 仅在 Image 已设置时有效。
 	ImageSubPath string
-	// BindMountOptions are additional bind mount options (noexec, nodev, nosuid)
-	// to apply when mounting this volume into the container.
+	// BindMountOptions 是挂载时附加的 bind 选项（noexec、nodev、nosuid），
+	// 用于限制卷在容器内的行为。
 	BindMountOptions []string
 }
 
-// ImageVolumes is a map of image specs by volume name.
+// ImageVolumes 按卷名索引镜像规格。
 type ImageVolumes = map[string]*runtimeapi.ImageSpec
 
-// PortMapping contains information about the port mapping.
+// PortMapping 包含端口映射信息。
 type PortMapping struct {
-	// Protocol of the port mapping.
+	// 端口映射的协议。
 	Protocol v1.Protocol
-	// The port number within the container.
+	// 容器内端口号。
 	ContainerPort int
-	// The port number on the host.
+	// 宿主机端口号。
 	HostPort int
-	// The host IP.
+	// 宿主机 IP。
 	HostIP string
 }
 
-// DeviceInfo contains information about the device.
+// DeviceInfo 包含设备信息。
 type DeviceInfo struct {
-	// Path on host for mapping
+	// 宿主机上用于映射的设备路径。
 	PathOnHost string
-	// Path in Container to map
+	// 映射到容器内的设备路径。
 	PathInContainer string
-	// Cgroup permissions
+	// cgroup 权限。
 	Permissions string
 }
 
-// CDIDevice contains information about CDI device
+// CDIDevice 包含 CDI 设备信息。
 type CDIDevice struct {
-	// Name is a fully qualified device name according to
+	// Name 是按 CDI 规范完全限定的设备名，规范见下方链接：
 	// https://github.com/cncf-tags/container-device-interface/blob/e66544063aa7760c4ea6330ce9e6c757f8e61df2/README.md?plain=1#L9-L15
 	Name string
 }
 
-// RunContainerOptions specify the options which are necessary for running containers
+// RunContainerOptions 指定运行容器所需的选项。
 type RunContainerOptions struct {
-	// The environment variables list.
+	// 环境变量列表。
 	Envs []EnvVar
-	// The mounts for the containers.
+	// 容器的挂载列表。
 	Mounts []Mount
-	// The host devices mapped into the containers.
+	// 映射进容器的宿主机设备。
 	Devices []DeviceInfo
-	// The CDI devices for the container
+	// 容器的 CDI 设备。
 	CDIDevices []CDIDevice
-	// The annotations for the container
-	// These annotations are generated by other components (i.e.,
-	// not users). Currently, only device plugins populate the annotations.
+	// 容器的注解。
+	// 这些注解由其他组件（而非用户）生成；
+	// 目前只有设备插件会填充它们。
 	Annotations []Annotation
-	// If the container has specified the TerminationMessagePath, then
-	// this directory will be used to create and mount the log file to
-	// container.TerminationMessagePath
+	// 容器指定了 TerminationMessagePath 时，用该目录创建并挂载日志文件到
+	// container.TerminationMessagePath。
 	PodContainerDir string
-	// The type of container rootfs
+	// 容器 rootfs 是否只读。
 	ReadOnly bool
 }
 
-// VolumeInfo contains information about the volume.
+// VolumeInfo 包含卷信息。
 type VolumeInfo struct {
-	// Mounter is the volume's mounter
+	// Mounter 是该卷的挂载器。
 	Mounter volume.Mounter
-	// BlockVolumeMapper is the Block volume's mapper
+	// BlockVolumeMapper 是块设备的映射器。
 	BlockVolumeMapper volume.BlockVolumeMapper
-	// SELinuxLabeled indicates whether this volume has had the
-	// pod's SELinux label applied to it or not
+	// SELinuxLabeled 表示该卷是否已应用 Pod 的 SELinux 标签。
 	SELinuxLabeled bool
-	// Whether the volume permission is set to read-only or not
-	// This value is passed from volume.spec
+	// 卷是否以只读权限挂载；
+	// 该值来自 volume.spec。
 	ReadOnly bool
-	// Inner volume spec name, which is the PV name if used, otherwise
-	// it is the same as the outer volume spec name.
+	// 内层卷规格名：使用 PV 时为 PV 名，
+	// 否则与外层卷规格名相同。
 	InnerVolumeSpecName string
 }
 
-// VolumeMap represents the map of volumes.
+// VolumeMap 是卷名到卷信息的映射。
 type VolumeMap map[string]VolumeInfo
 
-// RuntimeConditionType is the types of required runtime conditions.
+// RuntimeConditionType 表示运行时必需条件的类型。
 type RuntimeConditionType string
 
 const (
-	// RuntimeReady means the runtime is up and ready to accept basic containers.
+	// RuntimeReady 表示运行时已就绪，可以接受普通容器。
 	RuntimeReady RuntimeConditionType = "RuntimeReady"
-	// NetworkReady means the runtime network is up and ready to accept containers which require network.
+	// NetworkReady 表示运行时网络已就绪，可以接受需要网络的容器。
 	NetworkReady RuntimeConditionType = "NetworkReady"
 )
 
-// RuntimeStatus contains the status of the runtime.
+// RuntimeStatus 包含运行时状态。
 type RuntimeStatus struct {
-	// Conditions is an array of current observed runtime conditions.
+	// 当前观测到的运行时条件。
 	Conditions []RuntimeCondition
-	// Handlers is an array of current available handlers
+	// 当前可用的 runtime handler 列表。
 	Handlers []RuntimeHandler
-	// Features is the set of features implemented by the runtime
+	// 运行时实现的功能集合。
 	Features *RuntimeFeatures
 }
 
-// GetRuntimeCondition gets a specified runtime condition from the runtime status.
+// GetRuntimeCondition 从运行时状态中获取指定类型的条件。
 func (r *RuntimeStatus) GetRuntimeCondition(t RuntimeConditionType) *RuntimeCondition {
 	for i := range r.Conditions {
 		c := &r.Conditions[i]
@@ -632,7 +613,7 @@ func (r *RuntimeStatus) GetRuntimeCondition(t RuntimeConditionType) *RuntimeCond
 	return nil
 }
 
-// String formats the runtime status into human readable string.
+// String 把运行时状态格式化为人类可读字符串。
 func (r *RuntimeStatus) String() string {
 	var ss []string
 	var sh []string
@@ -645,61 +626,62 @@ func (r *RuntimeStatus) String() string {
 	return fmt.Sprintf("Runtime Conditions: %s; Handlers: %s, Features: %s", strings.Join(ss, ", "), strings.Join(sh, ", "), r.Features.String())
 }
 
-// RuntimeHandler contains condition information for the runtime handler.
+// RuntimeHandler 包含 runtime handler 的能力信息。
 type RuntimeHandler struct {
-	// Name is the handler name.
+	// handler 名称。
 	Name string
-	// SupportsRecursiveReadOnlyMounts is true if the handler has support for
-	// recursive read-only mounts.
+	// SupportsRecursiveReadOnlyMounts 表示该 handler 是否支持
+	// 递归只读挂载。
 	SupportsRecursiveReadOnlyMounts bool
-	// SupportsUserNamespaces is true if the handler has support for
-	// user namespaces.
+	// SupportsUserNamespaces 表示该 handler 是否支持
+	// 用户命名空间。
 	SupportsUserNamespaces bool
 }
 
-// String formats the runtime handler into human readable string.
+// String 把 runtime handler 格式化为人类可读字符串。
 func (h *RuntimeHandler) String() string {
 	return fmt.Sprintf("Name=%s SupportsRecursiveReadOnlyMounts: %v SupportsUserNamespaces: %v",
 		h.Name, h.SupportsRecursiveReadOnlyMounts, h.SupportsUserNamespaces)
 }
 
-// RuntimeCondition contains condition information for the runtime.
+// RuntimeCondition 包含运行时条件信息。
 type RuntimeCondition struct {
-	// Type of runtime condition.
+	// 运行时条件类型。
 	Type RuntimeConditionType
-	// Status of the condition, one of true/false.
+	// 条件状态，true 或 false。
 	Status bool
-	// Reason is brief reason for the condition's last transition.
+	// 条件最近一次翻转的简要原因。
 	Reason string
-	// Message is human readable message indicating details about last transition.
+	// 描述最近一次翻转细节的人类可读消息。
 	Message string
 }
 
-// String formats the runtime condition into human readable string.
+// String 把运行时条件格式化为人类可读字符串。
 func (c *RuntimeCondition) String() string {
 	return fmt.Sprintf("%s=%t reason:%s message:%s", c.Type, c.Status, c.Reason, c.Message)
 }
 
-// RuntimeFeatures contains the set of features implemented by the runtime
+// RuntimeFeatures 包含运行时实现的功能集合。
 type RuntimeFeatures struct {
 	SupplementalGroupsPolicy  bool
 	UserNamespacesHostNetwork bool
 	MountOptions              bool
 }
 
-// String formats the runtime condition into a human readable string.
+// String 把运行时特性格式化为人类可读字符串；f 为 nil 时返回 "nil"。
 func (f *RuntimeFeatures) String() string {
+	// 运行时可能尚未上报特性集合；nil 时返回固定字符串，避免调用方空指针。
 	if f == nil {
 		return "nil"
 	}
 	return fmt.Sprintf("SupplementalGroupsPolicy: %v UserNamespacesHostNetwork: %v MountOptions: %v", f.SupplementalGroupsPolicy, f.UserNamespacesHostNetwork, f.MountOptions)
 }
 
-// Pods represents the list of pods
+// Pods 是 Pod 列表。
 type Pods []*Pod
 
-// FindPodByID finds and returns a pod in the pod list by UID. It will return an empty pod
-// if not found.
+// FindPodByID 按 UID 查找 Pod；
+// 找不到时返回空 Pod。
 func (p Pods) FindPodByID(podUID types.UID) Pod {
 	for i := range p {
 		if p[i].ID == podUID {
@@ -709,8 +691,8 @@ func (p Pods) FindPodByID(podUID types.UID) Pod {
 	return Pod{}
 }
 
-// FindPodByFullName finds and returns a pod in the pod list by the full name.
-// It will return an empty pod if not found.
+// FindPodByFullName 按全名查找 Pod；
+// 找不到时返回空 Pod。
 func (p Pods) FindPodByFullName(podFullName string) Pod {
 	for i := range p {
 		if BuildPodFullName(p[i].Name, p[i].Namespace) == podFullName {
@@ -720,19 +702,19 @@ func (p Pods) FindPodByFullName(podFullName string) Pod {
 	return Pod{}
 }
 
-// FindPod combines FindPodByID and FindPodByFullName, it finds and returns a pod in the
-// pod list either by the full name or the pod ID. It will return an empty pod
-// if not found.
+// FindPod 在 FindPodByID 与 FindPodByFullName 之间做选择：
+// 全名非空时按全名查找，否则按 UID 查找；
+// 找不到时返回空 Pod。
 func (p Pods) FindPod(podFullName string, podUID types.UID) Pod {
+	// 全名包含命名空间，优先使用；仅在全名为空时退回 UID 查找。
 	if len(podFullName) > 0 {
 		return p.FindPodByFullName(podFullName)
 	}
 	return p.FindPodByID(podUID)
 }
 
-// FindContainerByName returns a container in the pod with the given name.
-// When there are multiple containers with the same name, the first match will
-// be returned.
+// FindContainerByName 返回 Pod 中指定名称的容器；
+// 存在同名容器时返回第一个匹配项。
 func (p *Pod) FindContainerByName(containerName string) *Container {
 	for _, c := range p.Containers {
 		if c.Name == containerName {
@@ -742,7 +724,7 @@ func (p *Pod) FindContainerByName(containerName string) *Container {
 	return nil
 }
 
-// FindContainerByID returns a container in the pod with the given ContainerID.
+// FindContainerByID 返回 Pod 中指定 ContainerID 的容器。
 func (p *Pod) FindContainerByID(id ContainerID) *Container {
 	for _, c := range p.Containers {
 		if c.ID == id {
@@ -752,7 +734,7 @@ func (p *Pod) FindContainerByID(id ContainerID) *Container {
 	return nil
 }
 
-// FindSandboxByID returns a sandbox in the pod with the given ContainerID.
+// FindSandboxByID 返回 Pod 中指定 ContainerID 的 sandbox。
 func (p *Pod) FindSandboxByID(id ContainerID) *Container {
 	for _, c := range p.Sandboxes {
 		if c.ID == id {
@@ -762,14 +744,15 @@ func (p *Pod) FindSandboxByID(id ContainerID) *Container {
 	return nil
 }
 
-// ToAPIPod converts Pod to v1.Pod. Note that if a field in v1.Pod has no
-// corresponding field in Pod, the field would not be populated.
+// ToAPIPod 把 Pod 转换为 v1.Pod；
+// v1.Pod 中没有对应来源的字段不会被填充。
 func (p *Pod) ToAPIPod() *v1.Pod {
 	var pod v1.Pod
 	pod.UID = p.ID
 	pod.Name = p.Name
 	pod.Namespace = p.Namespace
 
+	// 只填充名称、镜像等最小子集，其余字段保持零值。
 	for _, c := range p.Containers {
 		var container v1.Container
 		container.Name = c.Name
@@ -779,24 +762,24 @@ func (p *Pod) ToAPIPod() *v1.Pod {
 	return &pod
 }
 
-// IsEmpty returns true if the pod is empty.
+// IsEmpty 判断 Pod 是否为空。
 func (p *Pod) IsEmpty() bool {
 	return reflect.DeepEqual(p, &Pod{})
 }
 
-// GetPodFullName returns a name that uniquely identifies a pod.
+// GetPodFullName 返回能唯一标识 Pod 的名称。
 func GetPodFullName(pod *v1.Pod) string {
-	// Use underscore as the delimiter because it is not allowed in pod name
-	// (DNS subdomain format), while allowed in the container name format.
+	// 用下划线做分隔符：Pod 名（DNS 子域格式）不允许下划线，
+	// 而容器名格式允许。
 	return pod.Name + "_" + pod.Namespace
 }
 
-// BuildPodFullName builds the pod full name from pod name and namespace.
+// BuildPodFullName 由名称与命名空间构造 Pod 全名。
 func BuildPodFullName(name, namespace string) string {
 	return name + "_" + namespace
 }
 
-// ParsePodFullName parsed the pod full name.
+// ParsePodFullName 解析 Pod 全名，返回名称与命名空间。
 func ParsePodFullName(podFullName string) (string, string, error) {
 	parts := strings.Split(podFullName, "_")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
@@ -805,31 +788,35 @@ func ParsePodFullName(podFullName string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-// Option is a functional option type for Runtime, useful for
-// completely optional settings.
+// Option 是 Runtime 的函数式选项类型，
+// 用于完全可选的配置项。
 type Option func(Runtime)
 
-// SortContainerStatusesByCreationTime sorts the container statuses by creation time.
+// SortContainerStatusesByCreationTime 按创建时间排序容器状态。
 type SortContainerStatusesByCreationTime []*Status
 
-func (s SortContainerStatusesByCreationTime) Len() int      { return len(s) }
+// Len 实现 sort.Interface，返回元素个数。
+func (s SortContainerStatusesByCreationTime) Len() int { return len(s) }
+
+// Swap 实现 sort.Interface，交换两个元素。
 func (s SortContainerStatusesByCreationTime) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+// Less 实现 sort.Interface，按创建时间升序比较。
 func (s SortContainerStatusesByCreationTime) Less(i, j int) bool {
 	return s[i].CreatedAt.Before(s[j].CreatedAt)
 }
 
 const (
-	// MaxPodTerminationMessageLogLength is the maximum bytes any one pod may have written
-	// as termination message output across all containers. Containers will be evenly truncated
-	// until output is below this limit.
+	// MaxPodTerminationMessageLogLength 是单个 Pod 所有容器可写入终止消息的总字节上限，
+	// 超出时各容器的输出会被均摊截断。
 	MaxPodTerminationMessageLogLength = 1024 * 12
-	// MaxContainerTerminationMessageLength is the upper bound any one container may write to
-	// its termination message path. Contents above this length will be truncated.
+	// MaxContainerTerminationMessageLength 是单个容器可写入终止消息路径的字节上限，
+	// 超出部分会被截断。
 	MaxContainerTerminationMessageLength = 1024 * 4
-	// MaxContainerTerminationMessageLogLength is the maximum bytes any one container will
-	// have written to its termination message when the message is read from the logs.
+	// MaxContainerTerminationMessageLogLength 是从日志读取终止消息时，
+	// 单个容器允许的最大字节数。
 	MaxContainerTerminationMessageLogLength = 1024 * 2
-	// MaxContainerTerminationMessageLogLines is the maximum number of previous lines of
-	// log output that the termination message can contain.
+	// MaxContainerTerminationMessageLogLines 是终止消息可包含的
+	// 日志末尾行数上限。
 	MaxContainerTerminationMessageLogLines = 80
 )

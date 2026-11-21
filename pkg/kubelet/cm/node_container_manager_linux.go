@@ -41,10 +41,10 @@ const (
 	defaultNodeAllocatableCgroupName = "kubepods"
 )
 
-// createNodeAllocatableCgroups creates Node Allocatable Cgroup when CgroupsPerQOS flag is specified as true
+// createNodeAllocatableCgroups 在启用 CgroupsPerQOS 时创建节点可分配资源（kubepods）cgroup。
 func (cm *containerManagerImpl) createNodeAllocatableCgroups(logger klog.Logger) error {
 	nodeAllocatable := cm.internalCapacity
-	// Use Node Allocatable limits instead of capacity if the user requested enforcing node allocatable.
+	// 用户要求强制节点可分配资源时，用可分配上限而不是节点总容量作为 cgroup 限制。
 	nc := cm.NodeConfig.NodeAllocatableConfig
 	if cm.CgroupsPerQOS && nc.EnforceNodeAllocatable.Has(kubetypes.NodeAllocatableEnforcementKey) {
 		nodeAllocatable = cm.getNodeAllocatableInternalAbsolute()
@@ -52,9 +52,10 @@ func (cm *containerManagerImpl) createNodeAllocatableCgroups(logger klog.Logger)
 
 	cgroupConfig := &CgroupConfig{
 		Name: cm.cgroupRoot,
-		// The default limits for cpu shares can be very low which can lead to CPU starvation for pods.
+		// cgroup 默认 CPU shares 很低，可能导致 Pod 被 CPU 饥饿，因此显式设置。
 		ResourceParameters: cm.getCgroupConfig(nodeAllocatable, false),
 	}
+	// cgroup 已存在则无需重复创建。
 	if cm.cgroupManager.Exists(cgroupConfig.Name) {
 		return nil
 	}
@@ -65,14 +66,14 @@ func (cm *containerManagerImpl) createNodeAllocatableCgroups(logger klog.Logger)
 	return nil
 }
 
-// enforceNodeAllocatableCgroups enforce Node Allocatable Cgroup settings.
+// enforceNodeAllocatableCgroups 强制执行节点可分配资源的 cgroup 限制。
 func (cm *containerManagerImpl) enforceNodeAllocatableCgroups(logger klog.Logger) error {
 	nc := cm.NodeConfig.NodeAllocatableConfig
 
-	// We need to update limits on node allocatable cgroup no matter what because
-	// default cpu shares on cgroups are low and can cause cpu starvation.
+	// 无论是否强制节点可分配资源，都要更新 kubepods cgroup 的 CPU 限制：
+	// cgroup 默认 CPU shares 太低，可能造成 CPU 饥饿。
 	nodeAllocatable := cm.internalCapacity
-	// Use Node Allocatable limits instead of capacity if the user requested enforcing node allocatable.
+	// 用户要求强制节点可分配资源时，用可分配上限而不是节点总容量。
 	if cm.CgroupsPerQOS && nc.EnforceNodeAllocatable.Has(kubetypes.NodeAllocatableEnforcementKey) {
 		nodeAllocatable = cm.getNodeAllocatableInternalAbsolute()
 	}
@@ -84,8 +85,8 @@ func (cm *containerManagerImpl) enforceNodeAllocatableCgroups(logger klog.Logger
 		ResourceParameters: cm.getCgroupConfig(nodeAllocatable, false),
 	}
 
-	// Stale memory.min/memory.low from a previously enabled MemoryQoS state can
-	// persist across kubelet restarts. Reset to 0 so rollback takes effect.
+	// 之前启用 MemoryQoS 时写入的 memory.min/memory.low 可能跨 kubelet 重启残留，
+	// 这里重置为 0，确保回滚真正生效。
 	if !utilfeature.DefaultFeatureGate.Enabled(kubefeatures.MemoryQoS) && libcontainercgroups.IsCgroup2UnifiedMode() {
 		rp := cgroupConfig.ResourceParameters
 		if rp.Unified == nil {
@@ -95,19 +96,18 @@ func (cm *containerManagerImpl) enforceNodeAllocatableCgroups(logger klog.Logger
 		rp.Unified[Cgroup2MemoryLow] = "0"
 	}
 
-	// Using ObjectReference for events as the node maybe not cached; refer to #42701 for detail.
+	// 事件使用 ObjectReference：节点对象可能尚未缓存，详见 #42701。
 	nodeRef := nodeRefFromNode(cm.nodeInfo.Name)
 
-	// If Node Allocatable is enforced on a node that has not been drained or is updated on an existing node to a lower value,
-	// existing memory usage across pods might be higher than current Node Allocatable Memory Limits.
-	// Pod Evictions are expected to bring down memory usage to below Node Allocatable limits.
-	// Until evictions happen retry cgroup updates.
-	// Update limits on non root cgroup-root to be safe since the default limits for CPU can be too low.
-	// Check if cgroupRoot is set to a non-empty value (empty would be the root container)
+	// 如果节点尚未 drain 或将 Node Allocatable 调低，现有 Pod 的内存占用可能高于新限制；
+	// 预期通过 Pod 驱逐逐步降到限制以下，因此这里持续重试 cgroup 更新直到成功。
+	// 非根 cgroupRoot 也要更新：cgroup 默认 CPU 限制可能过低。
+	// cgroupRoot 为空表示根容器，此时跳过。
 	if len(cm.cgroupRoot) > 0 {
 		go func() {
 			for {
 				err := cm.cgroupManager.Update(logger, cgroupConfig)
+				// 更新成功后上报事件并退出重试循环。
 				if err == nil {
 					cm.recorder.Event(nodeRef, v1.EventTypeNormal, events.SuccessfulNodeAllocatableEnforcement, "Updated Node Allocatable limit across pods")
 					return
@@ -118,7 +118,7 @@ func (cm *containerManagerImpl) enforceNodeAllocatableCgroups(logger klog.Logger
 			}
 		}()
 	}
-	// Now apply kube reserved and system reserved limits if required.
+	// 按需应用 system-reserved 和 kube-reserved 的 cgroup 限制。
 	if nc.EnforceNodeAllocatable.Has(kubetypes.SystemReservedEnforcementKey) {
 		logger.V(2).Info("Enforcing system reserved on cgroup", "cgroupName", nc.SystemReservedCgroupName, "limits", nc.SystemReserved)
 		if err := cm.enforceExistingCgroup(logger, nc.SystemReservedCgroupName, nc.SystemReserved, false); err != nil {
@@ -160,7 +160,7 @@ func (cm *containerManagerImpl) enforceNodeAllocatableCgroups(logger klog.Logger
 	return nil
 }
 
-// enforceExistingCgroup updates the limits `rl` on existing cgroup `cName` using `cgroupManager` interface.
+// enforceExistingCgroup 通过 cgroupManager 更新已有 cgroup 的资源限制。
 func (cm *containerManagerImpl) enforceExistingCgroup(logger klog.Logger, cNameStr string, rl v1.ResourceList, compressibleResources bool) error {
 	cName := cm.cgroupManager.CgroupName(cNameStr)
 	rp := cm.getCgroupConfig(rl, compressibleResources)
@@ -168,8 +168,8 @@ func (cm *containerManagerImpl) enforceExistingCgroup(logger klog.Logger, cNameS
 		return fmt.Errorf("%q cgroup is not configured properly", cName)
 	}
 
-	// Enforce MemoryQoS for cgroups of kube-reserved/system-reserved. For more information,
-	// see https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/2570-memory-qos
+	// 为 kube-reserved/system-reserved 的 cgroup 启用 MemoryQoS，详见
+	// https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/2570-memory-qos
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.MemoryQoS) {
 		if rp.Memory != nil {
 			if rp.Unified == nil {
@@ -184,6 +184,7 @@ func (cm *containerManagerImpl) enforceExistingCgroup(logger klog.Logger, cNameS
 		ResourceParameters: rp,
 	}
 	logger.V(4).Info("Enforcing limits on cgroup", "cgroupName", cName, "cpuShares", cgroupConfig.ResourceParameters.CPUShares, "memory", cgroupConfig.ResourceParameters.Memory, "pidsLimit", cgroupConfig.ResourceParameters.PidsLimit)
+	// 先校验 cgroup 配置，再执行更新。
 	if err := cm.cgroupManager.Validate(cgroupConfig.Name); err != nil {
 		return err
 	}
@@ -193,21 +194,21 @@ func (cm *containerManagerImpl) enforceExistingCgroup(logger klog.Logger, cNameS
 	return nil
 }
 
-// getCgroupConfig returns a ResourceConfig object that can be used to create or update cgroups via CgroupManager interface.
+// getCgroupConfig 构造用于创建或更新 cgroup 的 ResourceConfig。
 func (cm *containerManagerImpl) getCgroupConfig(rl v1.ResourceList, compressibleResourcesOnly bool) *ResourceConfig {
 	rc := getCgroupConfigInternal(rl, compressibleResourcesOnly)
 	if rc == nil {
 		return nil
 	}
 
-	// In the case of a None policy, cgroupv2 and systemd cgroup manager, we must make sure systemd is aware of the cpuset cgroup.
-	// By default, systemd will not create it, as we've not chosen to delegate it, and we haven't included it in the Apply() request.
-	// However, this causes a bug where kubelet restarts unnecessarily (cpuset cgroup is created in the cgroupfs, but systemd
-	// doesn't know about it and deletes it, and then kubelet doesn't continue because the cgroup isn't configured as expected).
-	// An alternative is to delegate the `cpuset` cgroup to the kubelet, but that would require some plumbing in libcontainer,
-	// and this is sufficient.
-	// Only do so on None policy, as Static policy will do its own updating of the cpuset.
-	// Please see the comment on policy none's GetAllocatableCPUs
+	// None 策略配合 cgroupv2 + systemd 管理器时，必须让 systemd 感知 cpuset cgroup。
+	// systemd 默认不会创建它（未委托给 kubelet，Apply() 请求里也没有），
+	// 这会导致 kubelet 反复重启：cgroupfs 中创建的 cpuset 被 systemd 删除，
+	// kubelet 又因 cgroup 不符合预期而无法继续。
+	// 把 cpuset 委托给 kubelet 需要在 libcontainer 中做额外改造，当前做法已足够。
+	// 仅在 None 策略下这样做；Static 策略会自行更新 cpuset，
+	// 参见 policy none 的 GetAllocatableCPUs 注释。
+	// None 策略下把全部 CPU 写入 cpuset，确保 systemd 创建并管理该 cgroup。
 	if cm.cpuManager.GetAllocatableCPUs().IsEmpty() {
 		rc.CPUSet = cm.cpuManager.GetAllCPUs()
 	}
@@ -215,8 +216,8 @@ func (cm *containerManagerImpl) getCgroupConfig(rl v1.ResourceList, compressible
 	return rc
 }
 
-// getCgroupConfigInternal are the pieces of getCgroupConfig that don't require the cm object.
-// This is added to unit test without needing to create a full containerManager
+// getCgroupConfigInternal 是不依赖 containerManager 的部分，
+// 便于单元测试直接调用而无需构造完整的 containerManager。
 func getCgroupConfigInternal(rl v1.ResourceList, compressibleResourcesOnly bool) *ResourceConfig {
 	// TODO(vishh): Set CPU Quota if necessary.
 	if rl == nil {
@@ -226,18 +227,18 @@ func getCgroupConfigInternal(rl v1.ResourceList, compressibleResourcesOnly bool)
 
 	setCompressibleResources := func() {
 		if q, exists := rl[v1.ResourceCPU]; exists {
-			// CPU is defined in milli-cores.
+			// CPU 以毫核表示，换算为 shares。
 			val := MilliCPUToShares(q.MilliValue())
 			rc.CPUShares = &val
 		}
 	}
 
-	// Only return compressible resources
+	// 只处理可压缩资源（CPU），用于 compressible 类型的限制。
 	if compressibleResourcesOnly {
 		setCompressibleResources()
 	} else {
 		if q, exists := rl[v1.ResourceMemory]; exists {
-			// Memory is defined in bytes.
+			// 内存以字节表示，直接作为限制值。
 			val := q.Value()
 			rc.Memory = &val
 		}
@@ -253,15 +254,15 @@ func getCgroupConfigInternal(rl v1.ResourceList, compressibleResourcesOnly bool)
 	return &rc
 }
 
-// GetNodeAllocatableAbsolute returns the absolute value of Node Allocatable which is primarily useful for enforcement.
-// Note that not all resources that are available on the node are included in the returned list of resources.
-// Returns a ResourceList.
+// GetNodeAllocatableAbsolute 返回节点可分配资源的绝对值，主要用于强制执行。
+// 注意返回值不包含节点上所有可用资源，仅包含可分配的那部分。
 func (cm *containerManagerImpl) GetNodeAllocatableAbsolute() v1.ResourceList {
 	cm.RLock()
 	defer cm.RUnlock()
 	return cm.getNodeAllocatableAbsoluteImpl(cm.capacity)
 }
 
+// getNodeAllocatableAbsoluteImpl 从容量中扣除 system-reserved 和 kube-reserved。
 func (cm *containerManagerImpl) getNodeAllocatableAbsoluteImpl(capacity v1.ResourceList) v1.ResourceList {
 	result := make(v1.ResourceList)
 	for k, v := range capacity {
@@ -273,7 +274,7 @@ func (cm *containerManagerImpl) getNodeAllocatableAbsoluteImpl(capacity v1.Resou
 			value.Sub(cm.NodeConfig.KubeReserved[k])
 		}
 		if value.Sign() < 0 {
-			// Negative Allocatable resources don't make sense.
+			// 可分配资源为负没有意义，截断为 0。
 			value.Set(0)
 		}
 		result[k] = value
@@ -281,17 +282,17 @@ func (cm *containerManagerImpl) getNodeAllocatableAbsoluteImpl(capacity v1.Resou
 	return result
 }
 
-// getNodeAllocatableInternalAbsolute is similar to getNodeAllocatableAbsolute except that
-// it also includes internal resources (currently process IDs).  It is intended for setting
-// up top level cgroups only.
+// getNodeAllocatableInternalAbsolute 与 getNodeAllocatableAbsolute 类似，
+// 但使用包含内部资源（当前为进程 ID）的容量，仅用于设置顶层 cgroup。
 func (cm *containerManagerImpl) getNodeAllocatableInternalAbsolute() v1.ResourceList {
 	return cm.getNodeAllocatableAbsoluteImpl(cm.internalCapacity)
 }
 
-// GetNodeAllocatableReservation returns amount of compute or storage resource that have to be reserved on this node from scheduling.
+// GetNodeAllocatableReservation 返回调度时必须在该节点上预留的资源量。
 func (cm *containerManagerImpl) GetNodeAllocatableReservation() v1.ResourceList {
 	cm.RLock()
 	defer cm.RUnlock()
+	// 预留量 = system-reserved + kube-reserved + 硬驱逐阈值。
 	evictionReservation := hardEvictionReservation(cm.HardEvictionThresholds, cm.capacity)
 	result := make(v1.ResourceList)
 	for k := range cm.capacity {
@@ -312,8 +313,8 @@ func (cm *containerManagerImpl) GetNodeAllocatableReservation() v1.ResourceList 
 	return result
 }
 
-// validateNodeAllocatable ensures that the user specified Node Allocatable Configuration doesn't reserve more than the node capacity.
-// Returns error if the configuration is invalid, nil otherwise.
+// validateNodeAllocatable 校验用户配置的预留量不超过节点容量，
+// 配置非法时返回错误。
 func (cm *containerManagerImpl) validateNodeAllocatable() error {
 	cm.RLock()
 	defer cm.RUnlock()
@@ -324,6 +325,7 @@ func (cm *containerManagerImpl) validateNodeAllocatable() error {
 		value.Sub(v)
 
 		if value.Sign() < 0 {
+			// 容量减去预留后为负，说明预留量超过了节点容量。
 			errors = append(errors, fmt.Sprintf("Resource %q has a reservation of %v but capacity of %v. Expected capacity >= reservation.", k, v, cm.capacity[k]))
 		}
 	}
@@ -334,7 +336,7 @@ func (cm *containerManagerImpl) validateNodeAllocatable() error {
 	return nil
 }
 
-// Using ObjectReference for events as the node maybe not cached; refer to #42701 for detail.
+// 事件使用 ObjectReference：节点对象可能尚未缓存，详见 #42701。
 func nodeRefFromNode(nodeName string) *v1.ObjectReference {
 	return &v1.ObjectReference{
 		APIVersion: "v1",

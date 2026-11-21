@@ -24,6 +24,7 @@ import (
 )
 
 var (
+	// sampleContainer 是用于哈希一致性测试的容器 JSON。
 	sampleContainer = `
 {
   "name": "test_container",
@@ -68,15 +69,18 @@ var (
 }
 `
 
+	// sampleV131HashValue 是 v1.31 对该容器计算出的哈希值。
 	sampleV131HashValue = uint64(0x8e45cbd0)
 )
 
+// TestConsistentHashContainer 验证容器哈希算法与历史版本保持一致。
 func TestConsistentHashContainer(t *testing.T) {
 	container := &v1.Container{}
 	if err := json.Unmarshal([]byte(sampleContainer), container); err != nil {
 		t.Error(err)
 	}
 
+	// 哈希值必须与 v1.31 一致，否则升级会触发不必要的容器重建。
 	currentHash := HashContainer(container)
 	if currentHash != sampleV131HashValue {
 		t.Errorf("mismatched hash value with v1.31")

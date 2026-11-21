@@ -22,32 +22,33 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
-// Alignment is metadata about a cpuset allocation
+// Alignment 是 cpuset 分配的元数据。
 type Alignment struct {
-	// UncoreCache is true if all the CPUs are uncore-cache aligned,
-	// IOW if they all share the same Uncore cache block.
-	// If the allocated CPU count is greater than a Uncore Group size,
-	// CPUs can't be uncore-aligned; otherwise, they are.
-	// This flag tracks alignment, not interference or lack thereof.
+	// UncoreCache 表示所有 CPU 是否在 Uncore Cache 上对齐，
+	// 即是否共享同一个 Uncore cache 块。
+	// 若分配的 CPU 数量超过一个 Uncore Group 的大小，则无法对齐；否则可以对齐。
+	// 该标志只表示对齐情况，不代表是否存在干扰。
 	UncoreCache bool
 }
 
+// String 返回 Alignment 的可读字符串表示。
 func (ca Alignment) String() string {
 	return fmt.Sprintf("aligned=<uncore:%v>", ca.UncoreCache)
 }
 
-// Allocation represents a CPU set plus alignment metadata
+// Allocation 表示 CPU 集合及其对齐元数据。
 type Allocation struct {
 	CPUs    cpuset.CPUSet
 	Aligned Alignment
 }
 
+// String 返回 CPU 集合与对齐信息的可读字符串表示。
 func (ca Allocation) String() string {
 	return ca.CPUs.String() + " " + ca.Aligned.String()
 }
 
-// EmptyAllocation returns a new zero-valued CPU allocation. Please note that
-// a empty cpuset is aligned according to every possible way we can consider
+// EmptyAllocation 返回零值的 CPU 分配。注意：空 cpuset 在我们考虑的所有维度上
+// 都视为已对齐。
 func EmptyAllocation() Allocation {
 	return Allocation{
 		CPUs: cpuset.New(),
@@ -57,6 +58,8 @@ func EmptyAllocation() Allocation {
 	}
 }
 
+// isAlignedAtUncoreCache 判断给定 CPU 是否全部位于同一个 Uncore Cache 块内；
+// 单个 CPU 视为天然对齐。
 func isAlignedAtUncoreCache(topo *CPUTopology, cpuList ...int) bool {
 	if len(cpuList) <= 1 {
 		return true

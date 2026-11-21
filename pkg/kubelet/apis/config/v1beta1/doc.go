@@ -21,5 +21,6 @@ limitations under the License.
 // +k8s:defaulter-gen-input=k8s.io/kubelet/config/v1beta1
 // +k8s:validation-gen=false
 // +groupName=kubelet.config.k8s.io
+// Package v1beta1 包含 kubelet 配置 API v1beta1 版本的类型定义。
 
 package v1beta1

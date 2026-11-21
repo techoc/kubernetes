@@ -42,17 +42,18 @@ import (
 )
 
 const (
-	// Create a new map when we removed enough pods to avoid memory leaks
-	// since Go maps never free memory.
+	// 移除足够多的 Pod 后重建 map，避免内存泄漏，因为 Go 的 map 永远不会释放内存。
 	mapReInitializeThreshold = 1000
 
-	// userNsUnitLength is the unit length of UserNS
+	// userNsUnitLength 是用户命名空间的单位长度。
 	userNsUnitLength = 65536
 )
 
+// UsernsManager 管理节点上的用户命名空间分配：把 Pod 映射到互不重叠的 ID 范围，
+// 并负责映射的持久化、恢复与回收。
 type UsernsManager struct {
 	used    *allocator.AllocationBitmap
-	usedBy  map[types.UID]uint32 // Map pod.UID to range used
+	usedBy  map[types.UID]uint32 // 将 pod.UID 映射到其占用的范围
 	removed int
 
 	off int
@@ -61,33 +62,32 @@ type UsernsManager struct {
 	userNsLength uint32
 
 	kl userNsPodsManager
-	// This protects all members except for kl.anager
+	// 该锁保护除 kl 内部管理状态之外的所有成员。
 	lock sync.Mutex
 }
 
-// UserNamespace holds the configuration for the user namespace.
+// userNamespace 保存用户命名空间的配置。
 type userNamespace struct {
-	// UIDs mappings for the user namespace.
+	// 用户命名空间的 UID 映射。
 	UIDMappings []idMapping `json:"uidMappings"`
-	// GIDs mappings for the user namespace.
+	// 用户命名空间的 GID 映射。
 	GIDMappings []idMapping `json:"gidMappings"`
 }
 
-// Pod user namespace mapping
+// idMapping 描述 Pod 用户命名空间中的一条 ID 映射。
 type idMapping struct {
-	// Required.
+	// 必填。
 	HostId uint32 `json:"hostId"`
-	// Required.
+	// 必填。
 	ContainerId uint32 `json:"containerId"`
-	// Required.
+	// 必填。
 	Length uint32 `json:"length"`
 }
 
-// mappingsFile is the file where the user namespace mappings are persisted.
+// mappingsFile 是持久化用户命名空间映射的文件名。
 const mappingsFile = "userns"
 
-// writeMappingsToFile writes the specified user namespace configuration to the pod
-// directory.
+// writeMappingsToFile 把指定的用户命名空间配置写入 Pod 目录。
 func (m *UsernsManager) writeMappingsToFile(pod types.UID, userNs userNamespace) error {
 	dir := m.kl.GetPodDir(pod)
 
@@ -104,15 +104,14 @@ func (m *UsernsManager) writeMappingsToFile(pod types.UID, userNs userNamespace)
 		return err
 	}
 
-	// We need to fsync the parent dir so the file is guaranteed to be there.
-	// fstore guarantees an atomic write, we need durability too.
+	// 需要 fsync 父目录才能保证文件确实存在。fstore 只保证原子写入，这里还需要持久性。
 	parentDir, err := os.Open(dir)
 	if err != nil {
 		return err
 	}
 
 	if err = parentDir.Sync(); err != nil {
-		// Ignore return here, there is already an error reported.
+		// 这里忽略返回值，因为已经有一个错误需要上报。
 		parentDir.Close()
 		return err
 	}
@@ -120,7 +119,7 @@ func (m *UsernsManager) writeMappingsToFile(pod types.UID, userNs userNamespace)
 	return parentDir.Close()
 }
 
-// readMappingsFromFile reads the user namespace configuration from the pod directory.
+// readMappingsFromFile 从 Pod 目录读取用户命名空间配置。
 func (m *UsernsManager) readMappingsFromFile(pod types.UID) ([]byte, error) {
 	dir := m.kl.GetPodDir(pod)
 	fstore, err := utilstore.NewFileStore(dir, &utilfs.DefaultFs{})
@@ -130,6 +129,8 @@ func (m *UsernsManager) readMappingsFromFile(pod types.UID) ([]byte, error) {
 	return fstore.Read(mappingsFile)
 }
 
+// MakeUserNsManager 创建 UsernsManager：校验 kubelet 的 ID 映射配置，初始化分配位图，
+// 并从磁盘恢复已有 Pod 的用户命名空间映射。
 func MakeUserNsManager(logger klog.Logger, kl userNsPodsManager, idsPerPod *int64) (*UsernsManager, error) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.UserNamespacesSupport) {
 		return nil, nil
@@ -137,8 +138,7 @@ func MakeUserNsManager(logger klog.Logger, kl userNsPodsManager, idsPerPod *int6
 
 	userNsLength := uint32(kubeletconfig.DefaultKubeletUserNamespacesIDsPerPod)
 	if idsPerPod != nil {
-		// The value is already validated as part of kubelet config validation, so we can safely
-		// cast it.
+		// 该值已在 kubelet 配置校验阶段验证过，因此可以安全地转换。
 		userNsLength = uint32(*idsPerPod)
 	}
 	kubeletMappingID, kubeletMappingLen, err := kl.GetKubeletMappings(logger, userNsLength)
@@ -153,14 +153,12 @@ func MakeUserNsManager(logger klog.Logger, kl userNsPodsManager, idsPerPod *int6
 		return nil, fmt.Errorf("kubelet user assigned ID %v is not a multiple of %v", kubeletMappingID, userNsLength)
 	}
 	if kubeletMappingID < userNsLength {
-		// We don't allow to map 0, as security is circumvented.
+		// 不允许映射 0，否则安全机制会被绕过。
 		return nil, fmt.Errorf("kubelet user assigned ID %v must be greater or equal to %v", kubeletMappingID, userNsLength)
 	}
 	if uint64(kubeletMappingID)+uint64(kubeletMappingLen) > math.MaxUint32 {
-		// 2^32-1 is INVALID_UID in the kernel and can't be mapped, so it must be
-		// left out of the range. Going past it is even worse, as certain subranges
-		// (idsPerPod controlled) would overflow back around and unintentionally
-		// include lower uid users than intended.
+		// 2^32-1 在内核中是 INVALID_UID，无法被映射，必须排除在范围之外。
+		// 越过它更糟：某些子范围（由 idsPerPod 控制）会回绕，意外包含比预期更低的 uid。
 		return nil, fmt.Errorf("kubelet user assigned ID %v with assigned IDs length %v ends past the last mappable ID %v",
 			kubeletMappingID, kubeletMappingLen, uint64(math.MaxUint32)-1)
 	}
@@ -186,6 +184,7 @@ func MakeUserNsManager(logger klog.Logger, kl userNsPodsManager, idsPerPod *int6
 	found, err := kl.ListPodsFromDisk()
 	if err != nil {
 		if os.IsNotExist(err) {
+			// Pod 目录尚不存在，说明还没有任何 Pod，返回空的管理器即可。
 			return &m, nil
 		}
 		return nil, fmt.Errorf("read pods from disk: %w", err)
@@ -201,15 +200,14 @@ func MakeUserNsManager(logger klog.Logger, kl userNsPodsManager, idsPerPod *int6
 	return &m, nil
 }
 
-// recordPodMappings registers the range used for the user namespace if the
-// usernsConfFile exists in the pod directory.
+// recordPodMappings 在 Pod 目录中存在用户命名空间配置文件时，登记该文件使用的 ID 范围。
 func (m *UsernsManager) recordPodMappings(logger klog.Logger, pod types.UID) error {
 	content, err := m.readMappingsFromFile(pod)
 	if err != nil && err != utilstore.ErrKeyNotFound {
 		return err
 	}
 
-	// If no content, it means the pod doesn't have userns. Nothing else to do
+	// 内容为空说明该 Pod 没有用户命名空间，无需处理。
 	if len(content) == 0 {
 		return nil
 	}
@@ -218,7 +216,7 @@ func (m *UsernsManager) recordPodMappings(logger klog.Logger, pod types.UID) err
 	return err
 }
 
-// isSet checks if the specified index is already set.
+// isSet 检查指定索引是否已被占用。
 func (m *UsernsManager) isSet(v uint32) bool {
 	index := int(v/m.userNsLength) - m.off
 	if index < 0 || index >= m.len {
@@ -227,9 +225,8 @@ func (m *UsernsManager) isSet(v uint32) bool {
 	return m.used.Has(index)
 }
 
-// allocateOne finds a free user namespace and allocate it to the specified pod.
-// The first return value is the first ID in the user namespace, the second returns
-// the length for the user namespace range.
+// allocateOne 找到一段空闲的用户命名空间并分配给指定 Pod。
+// 第一个返回值是该用户命名空间的起始 ID，第二个返回值是范围长度。
 func (m *UsernsManager) allocateOne(logger klog.Logger, pod types.UID) (firstID uint32, length uint32, err error) {
 	firstZero, found, err := m.used.AllocateNext()
 	if err != nil {
@@ -246,7 +243,7 @@ func (m *UsernsManager) allocateOne(logger klog.Logger, pod types.UID) (firstID 
 	return firstID, m.userNsLength, nil
 }
 
-// record stores the user namespace [from; from+length] to the specified pod.
+// record 把用户命名空间范围 [from, from+length] 登记给指定 Pod。
 func (m *UsernsManager) record(logger klog.Logger, pod types.UID, from, length uint32) (err error) {
 	if length != m.userNsLength {
 		return fmt.Errorf("wrong user namespace length %v", length)
@@ -262,25 +259,24 @@ func (m *UsernsManager) record(logger klog.Logger, pod types.UID, from, length u
 	if index < 0 || index >= m.len {
 		return fmt.Errorf("id %v is out of range", from)
 	}
-	// if the pod wasn't found then verify the range is free.
+	// Pod 未登记时，需确认该范围尚未被占用。
 	if !found && m.used.Has(index) {
 		return fmt.Errorf("range picked for pod %q already taken", pod)
 	}
-	// The pod is already registered, nothing to do.
+	// Pod 已登记且范围一致，无需处理。
 	if found && prevFrom == from {
 		return nil
 	}
 
 	logger.V(5).Info("new pod user namespace allocation", "podUID", pod)
 
-	// "from" is a ID (UID/GID), set the corresponding userns of size
-	// userNsLength in the bit-array.
+	// from 是一个 ID（UID/GID），在位图中把对应的大小为 userNsLength 的 userns 标记为已占用。
 	m.used.Allocate(index)
 	m.usedBy[pod] = from
 	return nil
 }
 
-// Release releases the user namespace allocated to the specified pod.
+// Release 释放分配给指定 Pod 的用户命名空间。
 func (m *UsernsManager) Release(logger klog.Logger, podUID types.UID) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.UserNamespacesSupport) {
 		return
@@ -292,7 +288,7 @@ func (m *UsernsManager) Release(logger klog.Logger, podUID types.UID) {
 	m.releaseWithLock(logger, podUID)
 }
 
-// podAllocated returns true if the pod is allocated, false otherwise.
+// podAllocated 判断该 Pod 是否已分配用户命名空间。
 func (m *UsernsManager) podAllocated(podUID types.UID) bool {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.UserNamespacesSupport) {
 		return false
@@ -305,6 +301,7 @@ func (m *UsernsManager) podAllocated(podUID types.UID) bool {
 	return ok
 }
 
+// releaseWithLock 释放 Pod 的用户命名空间，调用方必须已持有 m.lock。
 func (m *UsernsManager) releaseWithLock(logger klog.Logger, pod types.UID) {
 	v, ok := m.usedBy[pod]
 	if !ok {
@@ -316,8 +313,10 @@ func (m *UsernsManager) releaseWithLock(logger klog.Logger, pod types.UID) {
 	logger.V(5).Info("releasing pod user namespace allocation", "podUID", pod)
 	m.removed++
 
+	// 删除落盘的映射文件，避免残留配置在下次启动时被误读。
 	_ = os.Remove(filepath.Join(m.kl.GetPodDir(pod), mappingsFile))
 
+	// Go 的 map 不会释放内存，累计移除足够多后重建一张新 map，避免内存持续增长。
 	if m.removed%mapReInitializeThreshold == 0 {
 		n := make(map[types.UID]uint32)
 		for k, v := range m.usedBy {
@@ -329,6 +328,7 @@ func (m *UsernsManager) releaseWithLock(logger klog.Logger, pod types.UID) {
 	_ = m.used.Release(int(v/m.userNsLength) - m.off)
 }
 
+// parseUserNsFileAndRecord 解析用户命名空间映射文件，校验格式后登记到分配状态中。
 func (m *UsernsManager) parseUserNsFileAndRecord(logger klog.Logger, pod types.UID, content []byte) (userNs userNamespace, err error) {
 	if err = json.Unmarshal([]byte(content), &userNs); err != nil {
 		err = fmt.Errorf("invalid user namespace mappings file: %w", err)
@@ -350,8 +350,8 @@ func (m *UsernsManager) parseUserNsFileAndRecord(logger klog.Logger, pod types.U
 		return
 	}
 
-	// We don't produce configs without root mapped and some runtimes assume it is mapped.
-	// Validate the file has something we produced and can digest.
+	// 我们不会生成未映射 root 的配置，且部分运行时假设 root 已被映射。
+	// 这里校验文件内容确实由我们生成、且可以安全解析。
 	if userNs.UIDMappings[0].ContainerId != 0 {
 		err = fmt.Errorf("invalid user namespace configuration: UID 0 must be mapped")
 		return
@@ -369,12 +369,14 @@ func (m *UsernsManager) parseUserNsFileAndRecord(logger klog.Logger, pod types.U
 	return
 }
 
+// createUserNs 为 Pod 分配一段用户命名空间，生成映射配置并持久化到 Pod 目录。
 func (m *UsernsManager) createUserNs(logger klog.Logger, pod *v1.Pod) (userNs userNamespace, err error) {
 	firstID, length, err := m.allocateOne(logger, pod.UID)
 	if err != nil {
 		return
 	}
 
+	// 分配成功但后续写入失败时回滚，避免命名空间范围泄漏。
 	defer func() {
 		if err != nil {
 			m.releaseWithLock(logger, pod.UID)
@@ -401,23 +403,23 @@ func (m *UsernsManager) createUserNs(logger klog.Logger, pod *v1.Pod) (userNs us
 	return userNs, m.writeMappingsToFile(pod.UID, userNs)
 }
 
-// GetOrCreateUserNamespaceMappings returns the configuration for the sandbox user namespace
+// GetOrCreateUserNamespaceMappings 返回 sandbox 用户命名空间的配置，必要时为 Pod 创建并持久化映射。
 func (m *UsernsManager) GetOrCreateUserNamespaceMappings(logger klog.Logger, pod *v1.Pod, runtimeHandler string) (*runtimeapi.UserNamespace, error) {
 	featureEnabled := utilfeature.DefaultFeatureGate.Enabled(features.UserNamespacesSupport)
 
 	// TODO: If the default value for hostUsers ever changes, change the default value of
 	// userNamespacesEnabled as well
 	if pod == nil || pod.Spec.HostUsers == nil {
-		// if the feature is enabled, specify to use the node mode...
+		// 特性开启时，显式指定使用 node 模式……
 		if featureEnabled {
 			return &runtimeapi.UserNamespace{
 				Mode: runtimeapi.NamespaceMode_NODE,
 			}, nil
 		}
-		// ...otherwise don't even specify it
+		// ……否则连该字段都不指定
 		return nil, nil
 	}
-	// pod.Spec.HostUsers is set to true/false
+	// 此时 pod.Spec.HostUsers 已被显式设置为 true/false
 	if !featureEnabled {
 		return nil, fmt.Errorf("the feature gate %q is disabled: can't set spec.HostUsers", features.UserNamespacesSupport)
 	}
@@ -427,9 +429,9 @@ func (m *UsernsManager) GetOrCreateUserNamespaceMappings(logger klog.Logger, pod
 		}, nil
 	}
 
-	// From here onwards, hostUsers=false and the feature gate is enabled.
+	// 从这里开始，hostUsers=false 且特性门控已开启。
 
-	// if the pod requested a user namespace and the runtime doesn't support user namespaces then return an error.
+	// Pod 请求了用户命名空间，但运行时不支持时，返回错误。
 	if handlerSupportsUserns, err := m.kl.HandlerSupportsUserNamespaces(runtimeHandler); err != nil || !handlerSupportsUserns {
 		msg := "can't set `spec.hostUsers: false`, runtime does not support user namespaces"
 		if runtimeHandler != "" {
@@ -487,9 +489,8 @@ func (m *UsernsManager) GetOrCreateUserNamespaceMappings(logger klog.Logger, pod
 	}, nil
 }
 
-// CleanupOrphanedPodUsernsAllocations reconciliates the state of user namespace
-// allocations with the pods actually running. It frees any user namespace
-// allocation for orphaned pods.
+// CleanupOrphanedPodUsernsAllocations 将用户命名空间分配状态与实际运行的 Pod 对账，
+// 释放所有孤立 Pod 的分配。
 func (m *UsernsManager) CleanupOrphanedPodUsernsAllocations(ctx context.Context, pods []*v1.Pod, runningPods []*kubecontainer.Pod) error {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.UserNamespacesSupport) {
 		return nil
@@ -517,7 +518,7 @@ func (m *UsernsManager) CleanupOrphanedPodUsernsAllocations(ctx context.Context,
 		allFound.Insert(string(podUID))
 	}
 
-	// Lets remove all the pods "found" that are not known.
+	// 释放磁盘上“发现”但已不存在的 Pod 的分配。
 	for _, podUID := range found {
 		if allPods.Has(string(podUID)) {
 			continue
@@ -527,7 +528,7 @@ func (m *UsernsManager) CleanupOrphanedPodUsernsAllocations(ctx context.Context,
 		m.releaseWithLock(logger, podUID)
 	}
 
-	// Lets remove any existing allocation for a pod that is not "found".
+	// 释放内存中仍登记、但磁盘上已不存在的 Pod 的分配。
 	for podUID := range m.usedBy {
 		if allFound.Has(string(podUID)) {
 			continue
@@ -540,6 +541,7 @@ func (m *UsernsManager) CleanupOrphanedPodUsernsAllocations(ctx context.Context,
 	return nil
 }
 
+// EnabledUserNamespacesSupport 返回 UserNamespacesSupport 特性门控是否开启。
 func EnabledUserNamespacesSupport() bool {
 	return utilfeature.DefaultFeatureGate.Enabled(features.UserNamespacesSupport)
 }

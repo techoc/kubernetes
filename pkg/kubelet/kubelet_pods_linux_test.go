@@ -41,6 +41,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestMakeMounts 覆盖容器挂载的生成：普通卷、镜像卷、挂载传播、只读沿用、子路径校验，
+// 以及特权/非特权容器下的差异。
 func TestMakeMounts(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	bTrue := true
@@ -50,6 +52,7 @@ func TestMakeMounts(t *testing.T) {
 	image1 := &runtimeapi.ImageSpec{Image: "image1"}
 	image2 := &runtimeapi.ImageSpec{Image: "image2"}
 
+	// 用例分为正常挂载、镜像卷挂载和各类非法输入（错误信息需精确匹配）。
 	testCases := map[string]struct {
 		container                 v1.Container
 		podVolumes                kubecontainer.VolumeMap
@@ -60,7 +63,7 @@ func TestMakeMounts(t *testing.T) {
 		expectedErrMsg            string
 		expectedMounts            []kubecontainer.Mount
 	}{
-		"valid mounts in unprivileged container": { // TODO: remove it once image volume feature is GA
+		"valid mounts in unprivileged container": { // TODO: 镜像卷特性 GA 后删除该用例。
 			imageVolumeFeatureEnabled: []bool{true, false},
 			podVolumes: kubecontainer.VolumeMap{
 				"disk":  kubecontainer.VolumeInfo{Mounter: &stubVolume{path: "/mnt/disk"}},
@@ -130,7 +133,7 @@ func TestMakeMounts(t *testing.T) {
 			},
 			expectErr: false,
 		},
-		"valid mounts in privileged container": { // TODO: remove it once image volume feature is GA
+		"valid mounts in privileged container": { // TODO: 镜像卷特性 GA 后删除该用例。
 			imageVolumeFeatureEnabled: []bool{true, false},
 			podVolumes: kubecontainer.VolumeMap{
 				"disk":  kubecontainer.VolumeInfo{Mounter: &stubVolume{path: "/mnt/disk"}},
@@ -449,12 +452,13 @@ func TestMakeMounts(t *testing.T) {
 		},
 	}
 
+	// 同一用例分别在 ImageVolume 特性开/关下执行，以兼容特性 GA 前后的行为。
 	for name, tc := range testCases {
 		for _, featureEnabled := range tc.imageVolumeFeatureEnabled {
 			name := fmt.Sprintf("features.ImageVolume is %v, %s", featureEnabled, name)
 			t.Run(name, func(t *testing.T) {
 				if !featureEnabled {
-					// Set emulation version to v1.35 (last version before GA) to allow disabling the feature gate
+					// 仿真版本设为 v1.35（GA 前的最后一个版本），否则 GA 后的特性开关无法被关闭。
 					featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 				}
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ImageVolume, featureEnabled)
@@ -468,7 +472,7 @@ func TestMakeMounts(t *testing.T) {
 
 				mounts, _, err := makeMounts(logger, &pod, "/pod", &tc.container, "fakepodname", "", []string{""}, tc.podVolumes, fhu, fsp, nil, tc.supportsRRO, tc.imageVolumes)
 
-				// validate only the error if we expect an error
+				// 预期出错时只比对错误信息，不再校验挂载结果。
 				if tc.expectErr {
 					if err == nil || err.Error() != tc.expectedErrMsg {
 						t.Fatalf("expected error message `%s` but got `%v`", tc.expectedErrMsg, err)
@@ -476,7 +480,7 @@ func TestMakeMounts(t *testing.T) {
 					return
 				}
 
-				// otherwise validate the mounts
+				// 无错误时逐一比对生成的挂载列表。
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -487,6 +491,8 @@ func TestMakeMounts(t *testing.T) {
 	}
 }
 
+// TestMakeMountsEtcHostsFile 校验 /etc/hosts 的注入条件：有 Pod IP 或 hostNetwork 时注入，
+// 容器已自行挂载 hosts 文件时不再重复注入。
 func TestMakeMountsEtcHostsFile(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testPod := &v1.Pod{
@@ -496,7 +502,7 @@ func TestMakeMountsEtcHostsFile(t *testing.T) {
 			Annotations: map[string]string{},
 		},
 		Spec: v1.PodSpec{
-			EnableServiceLinks: ptr.To(false), // to avoid errors with kl.makeEnvironmentVariables
+			EnableServiceLinks: ptr.To(false), // 关闭服务链接，避免 makeEnvironmentVariables 产生额外错误干扰断言。
 		},
 	}
 	testContainer := v1.Container{
@@ -509,7 +515,7 @@ func TestMakeMountsEtcHostsFile(t *testing.T) {
 		containerFn func(container *v1.Container)
 		podVolumes  kubecontainer.VolumeMap
 		podIPs      []string
-		want        bool // check if mounts the /etc/host file
+		want        bool // 是否期望挂载 /etc/hosts 文件
 		wantErr     bool
 	}{
 		{
@@ -553,6 +559,7 @@ func TestMakeMountsEtcHostsFile(t *testing.T) {
 			want:   false,
 		},
 	}
+	// 每个用例都从基础 Pod/Container 深拷贝后修改，避免用例之间相互影响。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fhu := hostutil.NewFakeHostUtil(nil)
@@ -571,6 +578,7 @@ func TestMakeMountsEtcHostsFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+			// 以挂载名判断 kubelet 是否注入了自己管理的 /etc/hosts。
 			got := false
 			for _, mount := range mounts {
 				if mount.Name == "k8s-managed-etc-hosts" {
@@ -586,6 +594,8 @@ func TestMakeMountsEtcHostsFile(t *testing.T) {
 	}
 }
 
+// TestMakeBlockVolumes 校验块设备卷映射：设备路径、只读权限，以及路径必须是绝对路径、
+// 卷必须存在且具备 BlockVolumeMapper。
 func TestMakeBlockVolumes(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
@@ -704,14 +714,14 @@ func TestMakeBlockVolumes(t *testing.T) {
 			}
 			blkutil := volumetest.NewBlockVolumePathHandler()
 			blkVolumes, err := kubelet.makeBlockVolumes(logger, &pod, &tc.container, tc.podVolumes, blkutil)
-			// validate only the error if we expect an error
+			// 预期出错时只比对错误信息。
 			if tc.expectErr {
 				if err == nil || err.Error() != tc.expectedErrMsg {
 					t.Fatalf("expected error message `%s` but got `%v`", tc.expectedErrMsg, err)
 				}
 				return
 			}
-			// otherwise validate the devices
+			// 无错误时校验设备映射结果。
 			if err != nil {
 				t.Fatal(err)
 			}

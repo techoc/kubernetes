@@ -20,7 +20,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// MemoryTable contains memory information
+// MemoryTable 保存内存信息。
 type MemoryTable struct {
 	TotalMemSize   uint64 `json:"total"`
 	SystemReserved uint64 `json:"systemReserved"`
@@ -29,24 +29,22 @@ type MemoryTable struct {
 	Free           uint64 `json:"free"`
 }
 
-// NUMANodeState contains NUMA node related information
+// NUMANodeState 保存 NUMA 节点的相关信息。
 type NUMANodeState struct {
-	// NumberOfAssignments contains a number memory assignments from this node
-	// When the container requires memory and hugepages it will increase number of assignments by two
+	// 记录来自该节点的分配次数；容器同时申请内存与大页时会增加两次。
 	NumberOfAssignments int `json:"numberOfAssignments"`
-	// MemoryTable contains NUMA node memory related information
+	// 保存 NUMA 节点的内存信息。
 	MemoryMap map[v1.ResourceName]*MemoryTable `json:"memoryMap"`
-	// Cells contains the current NUMA node and all other nodes that are in a group with current NUMA node
-	// This parameter indicates if the current node is used for the multiple NUMA node memory allocation
-	// For example if some container has pinning 0,1,2, NUMA nodes 0,1,2 under the state will have
-	// this parameter equals to [0, 1, 2]
+	// Cells 保存当前 NUMA 节点以及与其同组的其他节点；
+	// 该字段表示当前节点是否被用于跨 NUMA 节点的内存分配；
+	// 例如容器绑定 0,1,2 时，节点 0,1,2 的该字段都等于 [0, 1, 2]。
 	Cells []int `json:"cells"`
 }
 
-// NUMANodeMap contains memory information for each NUMA node.
+// NUMANodeMap 保存每个 NUMA 节点的内存信息。
 type NUMANodeMap map[int]*NUMANodeState
 
-// Clone returns a copy of NUMANodeMap
+// Clone 返回 NUMANodeMap 的深拷贝。
 func (nm NUMANodeMap) Clone() NUMANodeMap {
 	clone := make(NUMANodeMap)
 	for node, s := range nm {
@@ -57,8 +55,10 @@ func (nm NUMANodeMap) Clone() NUMANodeMap {
 
 		clone[node] = &NUMANodeState{}
 		clone[node].NumberOfAssignments = s.NumberOfAssignments
+		// 切片必须复制，避免副本与原状态共享底层数组。
 		clone[node].Cells = append([]int{}, s.Cells...)
 
+		// nil map 保持 nil，避免把"未初始化"变成"空 map"。
 		if s.MemoryMap == nil {
 			continue
 		}
@@ -77,7 +77,7 @@ func (nm NUMANodeMap) Clone() NUMANodeMap {
 	return clone
 }
 
-// Block is a data structure used to represent a certain amount of memory
+// Block 表示一段内存分配。
 type Block struct {
 	// NUMAAffinity contains the string that represents NUMA affinity bitmask
 	NUMAAffinity []int           `json:"numaAffinity"`
@@ -85,10 +85,10 @@ type Block struct {
 	Size         uint64          `json:"size"`
 }
 
-// ContainerMemoryAssignments stores memory assignments of containers
+// ContainerMemoryAssignments 保存容器的内存分配（Pod -> 容器 -> Block 列表）。
 type ContainerMemoryAssignments map[string]map[string][]Block
 
-// Clone returns a copy of ContainerMemoryAssignments
+// Clone 返回 ContainerMemoryAssignments 的深拷贝。
 func (as ContainerMemoryAssignments) Clone() ContainerMemoryAssignments {
 	clone := make(ContainerMemoryAssignments)
 	for pod := range as {
@@ -100,10 +100,10 @@ func (as ContainerMemoryAssignments) Clone() ContainerMemoryAssignments {
 	return clone
 }
 
-// PodMemoryAssignments stores memory assignments of pods
+// PodMemoryAssignments 保存 Pod 级内存分配。
 type PodMemoryAssignments map[string]PodEntry
 
-// Clone returns a copy of PodMemoryAssignments
+// Clone 返回 PodMemoryAssignments 的深拷贝。
 func (as PodMemoryAssignments) Clone() PodMemoryAssignments {
 	clone := make(PodMemoryAssignments)
 	for pod, entry := range as {
@@ -114,45 +114,46 @@ func (as PodMemoryAssignments) Clone() PodMemoryAssignments {
 	return clone
 }
 
-// PodEntry represents pod-level memory assignments for a pod
+// PodEntry 表示 Pod 级内存分配。
 type PodEntry struct {
 	MemoryBlocks []Block `json:"memoryBlocks,omitempty"`
 }
 
-// Reader interface used to read current memory/pod assignment state
+// Reader 接口用于读取当前内存/Pod 分配状态。
 type Reader interface {
-	// GetMachineState returns Memory Map stored in the State
+	// GetMachineState 返回状态中保存的内存映射。
 	GetMachineState() NUMANodeMap
-	// GetMemoryBlocks returns memory assignments of a container
+	// GetMemoryBlocks 返回容器的内存分配。
 	GetMemoryBlocks(podUID string, containerName string) []Block
-	// GetPodMemoryBlocks returns pod-level memory assignments of a pod
+	// GetPodMemoryBlocks 返回 Pod 级内存分配。
 	GetPodMemoryBlocks(podUID string) []Block
-	// GetMemoryAssignments returns ContainerMemoryAssignments
+	// GetMemoryAssignments 返回 ContainerMemoryAssignments。
 	GetMemoryAssignments() ContainerMemoryAssignments
-	// GetPodMemoryAssignments returns all pod-level memory assignments
+	// GetPodMemoryAssignments 返回所有 Pod 级内存分配。
 	GetPodMemoryAssignments() PodMemoryAssignments
 }
 
+// writer 接口定义状态写入操作（未导出，仅由 State 组合使用）。
 type writer interface {
-	// SetMachineState stores NUMANodeMap in State
+	// SetMachineState 保存 NUMANodeMap。
 	SetMachineState(memoryMap NUMANodeMap)
-	// SetMemoryBlocks stores memory assignments of a container
+	// SetMemoryBlocks 保存容器的内存分配。
 	SetMemoryBlocks(podUID string, containerName string, blocks []Block)
-	// SetPodMemoryBlocks stores pod-level memory assignments of a pod
+	// SetPodMemoryBlocks 保存 Pod 级内存分配。
 	SetPodMemoryBlocks(podUID string, blocks []Block)
-	// SetMemoryAssignments sets ContainerMemoryAssignments by using the passed parameter
+	// SetMemoryAssignments 用参数整体替换 ContainerMemoryAssignments。
 	SetMemoryAssignments(assignments ContainerMemoryAssignments)
-	// SetPodMemoryAssignments sets PodMemoryAssignments by using the passed parameter
+	// SetPodMemoryAssignments 用参数整体替换 PodMemoryAssignments。
 	SetPodMemoryAssignments(assignments PodMemoryAssignments)
-	// Delete deletes corresponding Blocks from ContainerMemoryAssignments
+	// Delete 从 ContainerMemoryAssignments 删除对应分配。
 	Delete(podUID string, containerName string)
-	// DeletePod deletes all pod-level memory assignments for specified pod
+	// DeletePod 删除指定 Pod 的全部 Pod 级分配。
 	DeletePod(podUID string)
-	// ClearState clears machineState and ContainerMemoryAssignments
+	// ClearState 清空 machineState 与 ContainerMemoryAssignments。
 	ClearState()
 }
 
-// State interface provides methods for tracking and setting memory/pod assignment
+// State 接口提供跟踪与设置内存/Pod 分配的方法。
 type State interface {
 	Reader
 	writer

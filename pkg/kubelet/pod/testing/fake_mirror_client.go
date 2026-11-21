@@ -26,15 +26,21 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
+// FakeMirrorClient 是供测试使用的 MirrorClient 实现，记录镜像 Pod 与调用次数。
 type FakeMirrorClient struct {
+	// mirrorPodLock 保护以下字段。
 	mirrorPodLock sync.RWMutex
-	// Note that a real mirror manager does not store the mirror pods in
-	// itself. This fake manager does this to track calls.
-	mirrorPods   sets.Set[string]
+	// 注意：真实的 mirror manager 不会保存镜像 Pod。
+	// 该 fake 实现保存它们只是为了跟踪调用。
+	// mirrorPods 是当前已知的镜像 Pod 全名集合。
+	mirrorPods sets.Set[string]
+	// createCounts 记录每个镜像 Pod 的创建次数。
 	createCounts map[string]int
+	// deleteCounts 记录每个镜像 Pod 的删除次数。
 	deleteCounts map[string]int
 }
 
+// NewFakeMirrorClient 创建并初始化 FakeMirrorClient。
 func NewFakeMirrorClient() *FakeMirrorClient {
 	m := FakeMirrorClient{}
 	m.mirrorPods = sets.New[string]()
@@ -43,6 +49,7 @@ func NewFakeMirrorClient() *FakeMirrorClient {
 	return &m
 }
 
+// CreateMirrorPod 记录镜像 Pod 名称与创建次数。
 func (fmc *FakeMirrorClient) CreateMirrorPod(_ context.Context, pod *v1.Pod) error {
 	fmc.mirrorPodLock.Lock()
 	defer fmc.mirrorPodLock.Unlock()
@@ -52,6 +59,7 @@ func (fmc *FakeMirrorClient) CreateMirrorPod(_ context.Context, pod *v1.Pod) err
 	return nil
 }
 
+// DeleteMirrorPod 删除镜像 Pod 记录并累加删除次数。
 // TODO (Robert Krawitz): Implement UID checking
 func (fmc *FakeMirrorClient) DeleteMirrorPod(_ context.Context, podFullName string, _ *types.UID) (bool, error) {
 	fmc.mirrorPodLock.Lock()
@@ -61,24 +69,28 @@ func (fmc *FakeMirrorClient) DeleteMirrorPod(_ context.Context, podFullName stri
 	return true, nil
 }
 
+// HasPod 返回指定镜像 Pod 是否存在。
 func (fmc *FakeMirrorClient) HasPod(podFullName string) bool {
 	fmc.mirrorPodLock.RLock()
 	defer fmc.mirrorPodLock.RUnlock()
 	return fmc.mirrorPods.Has(podFullName)
 }
 
+// NumOfPods 返回镜像 Pod 数量。
 func (fmc *FakeMirrorClient) NumOfPods() int {
 	fmc.mirrorPodLock.RLock()
 	defer fmc.mirrorPodLock.RUnlock()
 	return fmc.mirrorPods.Len()
 }
 
+// GetPods 返回所有镜像 Pod 的全名。
 func (fmc *FakeMirrorClient) GetPods() []string {
 	fmc.mirrorPodLock.RLock()
 	defer fmc.mirrorPodLock.RUnlock()
 	return sets.List(fmc.mirrorPods)
 }
 
+// GetCounts 返回指定镜像 Pod 的创建与删除次数。
 func (fmc *FakeMirrorClient) GetCounts(podFullName string) (int, int) {
 	fmc.mirrorPodLock.RLock()
 	defer fmc.mirrorPodLock.RUnlock()

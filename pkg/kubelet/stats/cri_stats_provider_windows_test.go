@@ -37,11 +37,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// fakeNetworkStatsProvider 是测试用的 HNS 网络统计提供者，数据来自内存中的容器列表。
 type fakeNetworkStatsProvider struct {
 	containers []containerStats
 }
 
-// NetworkStats holds the network statistics for a container
+// fakeNetworkStats 保存测试用容器的网络统计信息。
 type fakeNetworkStats struct {
 	BytesReceived          uint64
 	BytesSent              uint64
@@ -53,14 +54,18 @@ type fakeNetworkStats struct {
 	InstanceId             string
 }
 
+// fakeContainerProperties 是测试用容器的基本属性。
 type fakeContainerProperties struct {
 	ID string
 }
+
+// containerStats 把测试容器与其 HNS 网络统计关联起来。
 type containerStats struct {
 	container fakeContainerProperties
 	hcsStats  []fakeNetworkStats
 }
 
+// GetHNSEndpointStats 按 endpoint 名称查找对应的 HNS endpoint 统计；找不到时返回空结构。
 func (s fakeNetworkStatsProvider) GetHNSEndpointStats(endpointName string) (*hnslib.HNSEndpointStats, error) {
 	eps := hnslib.HNSEndpointStats{}
 	for _, c := range s.containers {
@@ -80,6 +85,7 @@ func (s fakeNetworkStatsProvider) GetHNSEndpointStats(endpointName string) (*hns
 	return &eps, nil
 }
 
+// HNSListEndpointRequest 返回去重后的 HNS endpoint 列表，并记录共享每个 endpoint 的容器。
 func (s fakeNetworkStatsProvider) HNSListEndpointRequest() ([]hnslib.HNSEndpoint, error) {
 	uniqueEndpoints := map[string]*hnslib.HNSEndpoint{}
 
@@ -87,7 +93,7 @@ func (s fakeNetworkStatsProvider) HNSListEndpointRequest() ([]hnslib.HNSEndpoint
 		for _, stat := range c.hcsStats {
 			e, found := uniqueEndpoints[stat.EndpointId]
 			if found {
-				// add the container
+				// 同一 endpoint 被多个容器共享，记录该容器
 				e.SharedContainers = append(e.SharedContainers, c.container.ID)
 				continue
 			}
@@ -108,6 +114,8 @@ func (s fakeNetworkStatsProvider) HNSListEndpointRequest() ([]hnslib.HNSEndpoint
 	return eps, nil
 }
 
+// Test_criStatsProvider_listContainerNetworkStats 测试按容器汇总 HNS 网络统计的行为，
+// 覆盖单容器、共享 endpoint、多 endpoint 等场景。
 func Test_criStatsProvider_listContainerNetworkStats(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Time{})
 	tests := []struct {
@@ -449,6 +457,8 @@ func Test_criStatsProvider_listContainerNetworkStats(t *testing.T) {
 	}
 }
 
+// Test_criStatsProvider_makeWinContainerStats 测试 Windows 容器统计的转换，
+// 校验 CPU、内存、Rootfs 与日志统计的映射结果。
 func Test_criStatsProvider_makeWinContainerStats(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Time{})
 	containerStartTime := fakeClock.Now()
@@ -464,7 +474,7 @@ func Test_criStatsProvider_makeWinContainerStats(t *testing.T) {
 	logStatsUsed := uint64(5000)
 	logStatsInodesUsed := uint64(5050)
 
-	// getPodContainerLogStats is called during makeWindowsContainerStats to populate ContainerStats.Logs
+	// makeWindowsContainerStats 会调用 getPodContainerLogStats 来填充 ContainerStats.Logs
 	c0LogStats := &volume.Metrics{
 		Used:       resource.NewQuantity(int64(logStatsUsed), resource.BinarySI),
 		InodesUsed: resource.NewQuantity(int64(logStatsInodesUsed), resource.BinarySI),
@@ -521,7 +531,7 @@ func Test_criStatsProvider_makeWinContainerStats(t *testing.T) {
 
 	inputRootFsInfo := &cadvisorapi.FsInfo{}
 
-	// Used by the getPodContainerLogStats() call in makeWinContainerStats()
+	// 供 makeWinContainerStats() 中的 getPodContainerLogStats() 调用使用
 	inputPodSandboxMetadata := &runtimeapi.PodSandboxMetadata{
 		Namespace: "sb0-ns",
 		Name:      "sb0-name",
@@ -570,7 +580,7 @@ func Test_criStatsProvider_makeWinContainerStats(t *testing.T) {
 		t.Errorf("makeWinContainerStats() Rootfs = %v, want %v", got.Rootfs, expected.Rootfs)
 	}
 
-	// Log stats contain pointers to calculated resource values so we cannot use DeepEqual here
+	// 日志统计包含指向计算所得 resource 值的指针，因此这里不能使用 DeepEqual
 	assert.Equal(t, *got.Logs.UsedBytes, logStatsUsed, "Logs.UsedBytes does not match expected value")
 	assert.Equal(t, *got.Logs.InodesUsed, logStatsInodesUsed, "Logs.InodesUsed does not match expected value")
 }

@@ -29,16 +29,25 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// fancyBetaOption 是测试用的 beta 级策略选项名。
 var fancyBetaOption = "fancy-new-option"
+
+// fancyAlphaOption 是测试用的 alpha 级策略选项名。
 var fancyAlphaOption = "fancy-alpha-option"
 
+// optionAvailTest 描述单个策略选项可用性检查的测试用例。
 type optionAvailTest struct {
-	option            string
-	featureGate       featuregate.Feature
+	// option 是待检查的策略选项名。
+	option string
+	// featureGate 是控制该选项是否可用的特性门控。
+	featureGate featuregate.Feature
+	// featureGateEnable 指定测试期间特性门控的开关状态。
 	featureGateEnable bool
+	// expectedAvailable 是期望的可用性结果。
 	expectedAvailable bool
 }
 
+// TestNewTopologyManagerOptions 验证 NewPolicyOptions 对各种选项组合的解析结果与错误处理。
 func TestNewTopologyManagerOptions(t *testing.T) {
 	testCases := []struct {
 		description       string
@@ -130,26 +139,33 @@ func TestNewTopologyManagerOptions(t *testing.T) {
 		},
 	}
 
+	// 注册测试专用的 beta/alpha 选项，避免依赖真实的选项列表。
 	setTopologyManagerOptionsDuringTest(t, betaOptions, fancyBetaOption)
 	setTopologyManagerOptionsDuringTest(t, alphaOptions, fancyAlphaOption)
 
+	// 创建带日志的测试上下文。
 	logger, _ := ktesting.NewTestContext(t)
 
 	for _, tcase := range testCases {
 		t.Run(tcase.description, func(t *testing.T) {
+			// 仅在用例指定了特性门控时才调整其开关状态。
 			if tcase.featureGate != "" {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, tcase.featureGate, tcase.featureGateEnable)
 			}
+			// 解析选项并校验错误或结果是否符合预期。
 			opts, err := NewPolicyOptions(logger, tcase.policyOptions)
 			if tcase.expectedErr != nil {
+				// 期望出错却成功返回，直接判定失败。
 				if err == nil {
 					t.Errorf("expected error %v, got no error", tcase.expectedErr)
+					// 错误文案只做包含匹配，避免耦合完整提示信息。
 				} else if !strings.Contains(err.Error(), tcase.expectedErr.Error()) {
 					t.Errorf("Unexpected error message. Have: %s, wants %s", err.Error(), tcase.expectedErr.Error())
 				}
 				return
 			}
 
+			// PolicyOptions 是值类型，可直接比较。
 			if opts != tcase.expectedOptions {
 				t.Errorf("Expected TopologyManagerOptions to equal %v, not %v", tcase.expectedOptions, opts)
 			}
@@ -157,14 +173,17 @@ func TestNewTopologyManagerOptions(t *testing.T) {
 	}
 }
 
+// setTopologyManagerOptionsDuringTest 在测试期间向选项组注册给定选项，并在测试结束后清理，避免污染其他用例。
 func setTopologyManagerOptionsDuringTest(t *testing.T, optionGroup sets.Set[string], opts ...string) {
 	t.Helper()
+	// 通过 t.Cleanup 保证测试结束（包括失败）后移除注册项。
 	t.Cleanup(func() {
 		optionGroup.Delete(opts...)
 	})
 	optionGroup.Insert(opts...)
 }
 
+// TestPolicyDefaultsAvailable 验证默认策略选项的可用性判断。
 func TestPolicyDefaultsAvailable(t *testing.T) {
 	testCases := []optionAvailTest{
 		{
@@ -184,6 +203,7 @@ func TestPolicyDefaultsAvailable(t *testing.T) {
 		t.Run(testCase.option, func(t *testing.T) {
 			err := CheckPolicyOptionAvailable(testCase.option)
 			isEnabled := (err == nil)
+			// 仅当选项检查不返回错误时才视为可用。
 			if isEnabled != testCase.expectedAvailable {
 				t.Errorf("option %q available got=%v expected=%v", testCase.option, isEnabled, testCase.expectedAvailable)
 			}
@@ -191,6 +211,7 @@ func TestPolicyDefaultsAvailable(t *testing.T) {
 	}
 }
 
+// TestPolicyOptionsAvailable 验证在特性门控不同开关组合下各策略选项的可用性。
 func TestPolicyOptionsAvailable(t *testing.T) {
 	testCases := []optionAvailTest{
 		{
@@ -258,13 +279,15 @@ func TestPolicyOptionsAvailable(t *testing.T) {
 	setTopologyManagerOptionsDuringTest(t, alphaOptions, fancyAlphaOption)
 	for _, testCase := range testCases {
 		t.Run(testCase.option, func(t *testing.T) {
+			// 按用例设置特性门控开关。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, testCase.featureGate, testCase.featureGateEnable)
 			defer func() {
-				// reset feature flag
+				// 恢复特性门控原状态，避免影响后续用例。
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, testCase.featureGate, !testCase.featureGateEnable)
 			}()
 			err := CheckPolicyOptionAvailable(testCase.option)
 			isEnabled := (err == nil)
+			// 仅当选项检查不返回错误时才视为可用。
 			if isEnabled != testCase.expectedAvailable {
 				t.Errorf("option %q available got=%v expected=%v", testCase.option, isEnabled, testCase.expectedAvailable)
 			}

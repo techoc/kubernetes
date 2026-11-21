@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestParsePercentage 验证百分比字符串解析的合法与非法输入。
 func TestParsePercentage(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -76,6 +77,7 @@ func TestParsePercentage(t *testing.T) {
 		},
 	}
 
+	// 逐个用例校验合法与非法百分比字符串。
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			result, err := parsePercentage(testCase.input)

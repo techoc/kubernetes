@@ -31,6 +31,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TestIsCgroupPod 验证 cgroup 路径判定：只有 QoS 层级下的 Pod 级 cgroup 返回 true，
+// 根、QoS 根、容器子 cgroup 和 system 层级都返回 false。
 func TestIsCgroupPod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	qosContainersInfo := QOSContainersInfo{
@@ -105,12 +107,13 @@ func TestIsCgroupPod(t *testing.T) {
 			expectedUID:    types.UID(""),
 		},
 		{
-			// contains reserved word "pod" in cgroup name
+			// 名称中包含保留字 pod，但不是真正的 Pod cgroup。
 			input:          NewCgroupName(RootCgroupName, GetPodCgroupNameSuffix("this-uid-contains-reserved-word-pod")),
 			expectedResult: false,
 			expectedUID:    types.UID(""),
 		},
 	}
+	// cgroupfs 与 systemd 两种驱动都要覆盖。
 	for _, cgroupDriver := range []string{"cgroupfs", "systemd"} {
 		pcm := &podContainerManagerImpl{
 			cgroupManager:     NewCgroupManager(logger, nil, cgroupDriver),
@@ -118,14 +121,14 @@ func TestIsCgroupPod(t *testing.T) {
 			qosContainersInfo: qosContainersInfo,
 		}
 		for _, testCase := range testCases {
-			// Give the right cgroup structure based on whether systemd is enabled.
+			// 按驱动把 cgroup 名转换为对应格式。
 			var name string
 			if cgroupDriver == "systemd" {
 				name = testCase.input.ToSystemd()
 			} else {
 				name = testCase.input.ToCgroupfs()
 			}
-			// check if this is a pod or not with the literal cgroupfs input
+			// 用实际路径格式检查是否识别为 Pod cgroup。
 			result, resultUID := pcm.IsPodCgroup(name)
 			if result != testCase.expectedResult {
 				t.Errorf("Unexpected result for driver: %v, input: %v, expected: %v, actual: %v", cgroupDriver, testCase.input, testCase.expectedResult, result)
@@ -138,6 +141,7 @@ func TestIsCgroupPod(t *testing.T) {
 	}
 }
 
+// TestGetPodContainerName 验证不同 QoS 与 cgroup 驱动下 Pod 容器 cgroup 名的生成。
 func TestGetPodContainerName(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	newGuaranteedPodWithUID := func(uid types.UID) *v1.Pod {
@@ -289,6 +293,7 @@ func TestGetPodContainerName(t *testing.T) {
 		}
 
 		t.Run(tt.name, func(t *testing.T) {
+			// 同时校验内部 CgroupName 与写入 cgroupfs 的字面路径。
 			actualCgroupName, actualLiteralCgroupfs := pcm.GetPodContainerName(tt.args.pod)
 			require.Equalf(t, tt.wantCgroupName, actualCgroupName, "Unexpected cgroup name for pod with UID %s, container resources: %v", tt.args.pod.UID, tt.args.pod.Spec.Containers[0].Resources)
 			require.Equalf(t, tt.wantLiteralCgroupfs, actualLiteralCgroupfs, "Unexpected literal cgroupfs for pod with UID %s, container resources: %v", tt.args.pod.UID, tt.args.pod.Spec.Containers[0].Resources)

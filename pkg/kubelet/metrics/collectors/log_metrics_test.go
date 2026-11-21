@@ -25,8 +25,9 @@ import (
 	statsapi "k8s.io/kubelet/pkg/apis/stats/v1alpha1"
 )
 
+// TestNoMetricsCollected 验证没有 Pod 统计时不输出任何日志指标。
 func TestNoMetricsCollected(t *testing.T) {
-	// Refresh Desc to share with different registry
+	// 刷新 Desc，以便与其他 registry 共享同一个指标描述。
 	descLogSize = descLogSize.GetRawDesc()
 
 	collector := &logMetricsCollector{
@@ -40,8 +41,9 @@ func TestNoMetricsCollected(t *testing.T) {
 	}
 }
 
+// TestMetricsCollected 验证容器日志使用字节数指标按 Pod/容器标签正确输出。
 func TestMetricsCollected(t *testing.T) {
-	// Refresh Desc to share with different registry
+	// 刷新 Desc，以便与其他 registry 共享同一个指标描述。
 	descLogSize = descLogSize.GetRawDesc()
 
 	size := uint64(18)

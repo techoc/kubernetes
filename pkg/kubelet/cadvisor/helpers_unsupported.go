@@ -20,19 +20,21 @@ package cadvisor
 
 import "errors"
 
+// unsupportedImageFsInfoProvider 是不支持 cAdvisor 的构建中的空实现。
 type unsupportedImageFsInfoProvider struct{}
 
-// ImageFsInfoLabel returns the image fs label for the configured runtime.
-// For remote runtimes, it handles additional runtimes natively understood by cAdvisor.
+// ImageFsInfoLabel 返回配置运行时的镜像文件系统标签；
+// 在不受支持的平台上始终返回错误。
 func (i *unsupportedImageFsInfoProvider) ImageFsInfoLabel() (string, error) {
 	return "", errors.New("unsupported")
 }
 
+// ContainerFsInfoLabel 在不受支持的平台上始终返回错误。
 func (i *unsupportedImageFsInfoProvider) ContainerFsInfoLabel() (string, error) {
 	return "", errors.New("unsupported")
 }
 
-// NewImageFsInfoProvider returns a provider for the specified runtime configuration.
+// NewImageFsInfoProvider 返回不受支持平台上的空 provider。
 func NewImageFsInfoProvider(runtimeEndpoint string) ImageFsInfoProvider {
 	return &unsupportedImageFsInfoProvider{}
 }

@@ -25,29 +25,26 @@ import (
 )
 
 var (
-	// ErrImagePullBackOff - Container image pull failed, kubelet is backing off image pull
+	// ErrImagePullBackOff 表示镜像拉取失败，kubelet 正在退避重试。
 	ErrImagePullBackOff = errors.New("ImagePullBackOff")
 
-	// ErrImageInspect - Unable to inspect image
+	// ErrImageInspect 表示无法检查镜像信息。
 	ErrImageInspect = errors.New("ImageInspectError")
 
-	// ErrImagePull - General image pull error
+	// ErrImagePull 是通用的镜像拉取错误。
 	ErrImagePull = errors.New("ErrImagePull")
 
-	// ErrImageNeverPull - Required Image is absent on host and PullPolicy is NeverPullImage
+	// ErrImageNeverPull 表示宿主机缺少所需镜像且拉取策略为 Never。
 	ErrImageNeverPull = errors.New("ErrImageNeverPull")
 
-	// ErrInvalidImageName - Unable to parse the image name.
+	// ErrInvalidImageName 表示无法解析镜像名称。
 	ErrInvalidImageName = errors.New("InvalidImageName")
 )
 
-// ImageManager provides an interface to manage the lifecycle of images.
-// Implementations of this interface are expected to deal with pulling (downloading),
-// managing, and deleting container images.
-// Implementations are expected to abstract the underlying runtimes.
-// Implementations are expected to be thread safe.
+// ImageManager 提供容器镜像生命周期管理的接口。
+// 实现需负责拉取（下载）、管理与删除镜像，抽象底层运行时，并保证并发安全。
 type ImageManager interface {
-	// EnsureImageExists ensures that image specified by `requestedImage` exists.
+	// EnsureImageExists 确保 requestedImage 指定的镜像存在，必要时触发拉取。
 	EnsureImageExists(ctx context.Context, objRef *v1.ObjectReference, pod *v1.Pod, requestedImage string, pullSecrets []v1.Secret, podSandboxConfig *runtimeapi.PodSandboxConfig, podRuntimeHandler string, pullPolicy v1.PullPolicy) (imageRef, message string, err error)
 
 	// TODO(ronl): consolidating image managing and deleting operation in this interface

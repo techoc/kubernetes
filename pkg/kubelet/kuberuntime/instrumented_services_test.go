@@ -30,8 +30,9 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestRecordOperation 验证记录一次运行时操作后指标可通过 HTTP 抓取到。
 func TestRecordOperation(t *testing.T) {
-	// Use local registry
+	// 使用独立的本地 registry，避免污染全局指标。
 	var registry = compbasemetrics.NewKubeRegistry()
 	var gather compbasemetrics.Gatherer = registry
 
@@ -41,6 +42,7 @@ func TestRecordOperation(t *testing.T) {
 
 	registry.Reset()
 
+	// 启动本地 HTTP 服务用于暴露指标。
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	assert.NoError(t, err)
 	defer l.Close()
@@ -57,6 +59,7 @@ func TestRecordOperation(t *testing.T) {
 		server.Serve(l)
 	}()
 
+	// 记录一次操作，随后通过 HTTP 抓取指标。
 	recordOperation("create_container", time.Now())
 	runtimeOperationsCounterExpected := "kubelet_runtime_operations_total{operation_type=\"create_container\"} 1"
 	runtimeOperationsDurationExpected := "kubelet_runtime_operations_duration_seconds_count{operation_type=\"create_container\"} 1"
@@ -70,6 +73,7 @@ func TestRecordOperation(t *testing.T) {
 	}), "GET", prometheusURL, nil, runtimeOperationsDurationExpected)
 }
 
+// TestInstrumentedVersion 验证 instrumented 包装层返回底层运行时的 API 版本。
 func TestInstrumentedVersion(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeRuntime, _, _, _ := createTestRuntimeManager(tCtx)
@@ -79,9 +83,11 @@ func TestInstrumentedVersion(t *testing.T) {
 	assert.Equal(t, kubeRuntimeAPIVersion, vr.Version)
 }
 
+// TestStatus 验证 instrumented 包装层原样返回运行时状态。
 func TestStatus(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeRuntime, _, _, _ := createTestRuntimeManager(tCtx)
+	// 构造运行时状态，验证包装层不会修改内容。
 	fakeRuntime.FakeStatus = &runtimeapi.RuntimeStatus{
 		Conditions: []*runtimeapi.RuntimeCondition{
 			{Type: runtimeapi.RuntimeReady, Status: false},

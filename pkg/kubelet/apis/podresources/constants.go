@@ -17,16 +17,14 @@ limitations under the License.
 package podresources
 
 const (
-	// Socket is the name of the podresources server socket
+	// Socket 是 podresources 服务端 socket 的名称。
 	Socket = "kubelet"
 
-	// DefaultQPS is determined by empirically reviewing known consumers of the API.
-	// It's at least unlikely that there is a legitimate need to query podresources
-	// more than 100 times per second, the other subsystems are not guaranteed to react
-	// so fast in the first place.
+	// DefaultQPS 基于对已知 API 使用方的经验评估确定。
+	// 合法需求不太可能超过每秒 100 次查询，毕竟其他子系统也未必能这么快响应。
 	DefaultQPS = 100
 
-	// DefaultBurstTokens is determined by empirically reviewing known consumers of the API.
-	// See the documentation of DefaultQPS, same caveats apply.
+	// DefaultBurstTokens 同样基于对已知 API 使用方的经验评估确定，
+	// 注意事项参见 DefaultQPS 的说明。
 	DefaultBurstTokens = 10
 )

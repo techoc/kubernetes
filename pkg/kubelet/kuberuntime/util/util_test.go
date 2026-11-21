@@ -33,6 +33,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestPodSandboxChanged 表驱动验证沙箱变更判定：无沙箱、多个就绪沙箱、
+// 沙箱未就绪、网络命名空间模式不匹配、缺少 IP，以及一切正常的情况。
 func TestPodSandboxChanged(t *testing.T) {
 	for desc, test := range map[string]struct {
 		pod               *v1.Pod
@@ -167,6 +169,7 @@ func TestPodSandboxChanged(t *testing.T) {
 		},
 	} {
 		t.Run(desc, func(t *testing.T) {
+			// 返回值依次为：是否需要新建沙箱、下一次尝试序号、选中的沙箱 ID、未就绪原因。
 			changed, attempt, id, reason := PodSandboxChanged(test.pod, test.status)
 			require.Equal(t, test.expectedChanged, changed)
 			require.Equal(t, test.expectedAttempt, attempt)
@@ -176,12 +179,16 @@ func TestPodSandboxChanged(t *testing.T) {
 	}
 }
 
+// fakeRuntimeHandlerResolver 是空实现的 runtime handler 解析器，测试中不需要真实 handler。
 type fakeRuntimeHandlerResolver struct{}
 
+// LookupRuntimeHandler 始终返回空 handler，满足接口即可。
 func (*fakeRuntimeHandlerResolver) LookupRuntimeHandler(s *string) (string, error) {
 	return "", nil
 }
 
+// TestNamespacesForPod 验证 Pod 规格到 CRI NamespaceOption 的映射：
+// 默认命名空间、host 命名空间、共享进程命名空间、user namespace，以及特性关闭时的报错。
 func TestNamespacesForPod(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	usernsIDs := &runtimeapi.IDMapping{
@@ -274,7 +281,7 @@ func TestNamespacesForPod(t *testing.T) {
 				},
 			},
 		},
-		// The hostUsers field can't be set to any value if the feature is disabled.
+		// 特性关闭时 hostUsers 不允许设置任何值，否则应报错。
 		"hostUsers: false and feature disabled --> error": {
 			input: &v1.Pod{
 				Spec: v1.PodSpec{
@@ -284,7 +291,7 @@ func TestNamespacesForPod(t *testing.T) {
 			usernsEnabled: false,
 			expErr:        true,
 		},
-		// The hostUsers field can't be set to any value if the feature is disabled.
+		// 特性关闭时 hostUsers 不允许设置任何值，否则应报错。
 		"hostUsers: true and feature disabled --> error": {
 			input: &v1.Pod{
 				Spec: v1.PodSpec{
@@ -318,14 +325,16 @@ func TestNamespacesForPod(t *testing.T) {
 	} {
 		t.Run(desc, func(t *testing.T) {
 			if !test.usernsEnabled {
-				// Set emulation version so that the feature gate can be disabled in the test
+				// 先把模拟版本固定到 1.35，才能在该测试中关闭已 GA 的特性门控。
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, false)
 			}
 
+			// fake runtime helper 提供测试所需的 runtime handler 集合。
 			fakeRuntimeHelper := kubecontainertest.FakeRuntimeHelper{
 				RuntimeHandlers: test.runtimeHandlers,
 			}
+			// 把 Pod 规格转换为 CRI 命名空间选项：Pod 级、节点级或容器级。
 			actual, err := NamespacesForPod(tCtx, test.input, &fakeRuntimeHelper, &fakeRuntimeHandlerResolver{})
 			if test.expErr {
 				require.Error(t, err)

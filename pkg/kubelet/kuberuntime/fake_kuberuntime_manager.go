@@ -44,6 +44,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试用常量：seccomp 根目录、节点可分配资源与 Pod 日志目录。
 const (
 	fakeSeccompProfileRoot = "/fakeSeccompProfileRoot"
 
@@ -53,21 +54,25 @@ const (
 	fakePodLogsDirectory = "/var/log/pods"
 )
 
+// fakeHTTP 是可注入错误的 HTTP 客户端桩。
 type fakeHTTP struct {
 	req *http.Request
 	err error
 }
 
+// Do 记录请求并返回预设错误，模拟下载失败。
 func (f *fakeHTTP) Do(req *http.Request) (*http.Response, error) {
 	f.req = req
 	return nil, f.err
 }
 
+// fakePodStateProvider 用集合模拟 Pod 终止/移除状态。
 type fakePodStateProvider struct {
 	terminated map[types.UID]struct{}
 	removed    map[types.UID]struct{}
 }
 
+// newFakePodStateProvider 创建空的 fake 状态提供器。
 func newFakePodStateProvider() *fakePodStateProvider {
 	return &fakePodStateProvider{
 		terminated: make(map[types.UID]struct{}),
@@ -75,29 +80,37 @@ func newFakePodStateProvider() *fakePodStateProvider {
 	}
 }
 
+// IsPodTerminationRequested 判断 Pod 是否已被移除。
 func (f *fakePodStateProvider) IsPodTerminationRequested(uid types.UID) bool {
 	_, found := f.removed[uid]
 	return found
 }
 
+// ShouldPodRuntimeBeRemoved 判断 Pod 是否已终止。
 func (f *fakePodStateProvider) ShouldPodRuntimeBeRemoved(uid types.UID) bool {
 	_, found := f.terminated[uid]
 	return found
 }
 
+// ShouldPodContentBeRemoved 判断 Pod 内容是否应被清理。
 func (f *fakePodStateProvider) ShouldPodContentBeRemoved(uid types.UID) bool {
 	_, found := f.removed[uid]
 	return found
 }
 
+// fakePodPullingTimeRecorder 是记录镜像拉取时间的空实现。
 type fakePodPullingTimeRecorder struct{}
 
+// RecordImageStartedPulling 空实现，测试中不记录时间。
 func (f *fakePodPullingTimeRecorder) RecordImageStartedPulling(podUID types.UID) {}
 
+// RecordImageFinishedPulling 空实现，测试中不记录时间。
 func (f *fakePodPullingTimeRecorder) RecordImageFinishedPulling(podUID types.UID) {}
 
+// newFakeKubeRuntimeManager 组装一个可用的 kubeGenericRuntimeManager 测试实例。
 func newFakeKubeRuntimeManager(ctx context.Context, runtimeService internalapi.RuntimeService, imageService internalapi.ImageManagerService, machineInfo *cadvisorapi.MachineInfo, osInterface kubecontainer.OSInterface, runtimeHelper kubecontainer.RuntimeHelper, tracer trace.Tracer, recorder *record.FakeRecorder) (*kubeGenericRuntimeManager, error) {
 	logger := klog.FromContext(ctx)
+	// 用 fake 组件填充所有必需依赖，避免触碰真实容器运行时。
 	kubeRuntimeManager := &kubeGenericRuntimeManager{
 		recorder:           recorder,
 		cpuCFSQuota:        false,
@@ -118,18 +131,21 @@ func newFakeKubeRuntimeManager(ctx context.Context, runtimeService internalapi.R
 		actuatedState:      state.NewStateMemory(logger, nil),
 	}
 
-	// Initialize swap controller availability check (always false for tests)
+	// 初始化 swap 控制器可用性检查；测试中始终为 false。
 	kubeRuntimeManager.getSwapControllerAvailable = func() bool { return false }
 
+	// 从运行时服务读取版本，确定 runtimeName。
 	typedVersion, err := runtimeService.Version(ctx, kubeRuntimeAPIVersion)
 	if err != nil {
 		return nil, err
 	}
 
+	// 注入 fake 状态提供器，让 GC 逻辑可预测。
 	podStateProvider := newFakePodStateProvider()
 	kubeRuntimeManager.containerGC = newContainerGC(runtimeService, podStateProvider, kubeRuntimeManager, tracer)
 	kubeRuntimeManager.podStateProvider = podStateProvider
 	kubeRuntimeManager.runtimeName = typedVersion.RuntimeName
+	// 使用 Noop pull manager 与宽松限流，避免测试中真实拉取镜像。
 	kubeRuntimeManager.imagePuller = images.NewImageManager(
 		kubecontainer.FilterEventRecorder(recorder),
 		&credentialprovider.BasicDockerKeyring{},
@@ -148,6 +164,7 @@ func newFakeKubeRuntimeManager(ctx context.Context, runtimeService internalapi.R
 		kubeRuntimeManager,
 		recorder)
 
+	// 固定节点可分配资源，保证驱逐/调度相关测试结果稳定。
 	kubeRuntimeManager.getNodeAllocatable = func() v1.ResourceList {
 		return v1.ResourceList{
 			v1.ResourceMemory: resource.MustParse(fakeNodeAllocatableMemory),

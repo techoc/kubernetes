@@ -45,22 +45,21 @@ var (
 	defaultCFSQuota = metav1.Duration{Duration: 100 * time.Millisecond}
 )
 
-// Allows existing kubelet config files with the former default (0.9)
-// to pass validation when MemoryQoS is disabled
+// previousDefaultMemoryThrottlingFactor 是旧版默认值（0.9）。
+// 允许沿用旧默认值的 kubelet 配置文件在 MemoryQoS 关闭时仍通过校验。
 const previousDefaultMemoryThrottlingFactor = 0.9
 
-// ValidateKubeletConfiguration validates `kc` and returns an error if it is invalid
+// ValidateKubeletConfiguration 校验 kubelet 配置 kc，返回聚合后的校验错误；
+// 配置合法时返回 nil。
 func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featureGate featuregate.FeatureGate) error {
 	allErrors := []error{}
 
-	// TODO(lauralorenz): Reasses / confirm interpretation of feature gates
-	// depending on where we are in merging dynamic KubeletConfiguration when
-	// this is called. Here we copy the gates to a local var, and unilaterally
-	// merge it with the current gate config to test. See also defaults.go which
-	// intersects with this assumption.
+	// TODO(lauralorenz): 需要结合动态 KubeletConfiguration 合并的进度，重新评估
+	// 此处对特性门控的解释。这里把门控复制到局部变量，并无条件地与当前门控配置
+	// 合并后再做测试。defaults.go 中的假设与此相关，需一并考虑。
 
-	// Make a local copy of the feature gates and combine it with the gates set by this configuration.
-	// This allows us to validate the config against the set of gates it will actually run against.
+	// 复制一份特性门控，并与配置中声明的门控合并，
+	// 从而按 kubelet 实际运行时的门控集合来校验配置。
 	localFeatureGate := featureGate.DeepCopy()
 	if err := localFeatureGate.SetFromMap(kc.FeatureGates); err != nil {
 		return err
@@ -69,6 +68,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		allErrors = append(allErrors, errs...)
 	}
 
+	// 以下逐项校验各配置字段的取值范围及其相互约束。
 	if kc.NodeLeaseDurationSeconds <= 0 {
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: nodeLeaseDurationSeconds must be greater than 0"))
 	}
@@ -102,6 +102,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 	if kc.ImageMaximumGCAge.Duration != 0 && !localFeatureGate.Enabled(features.ImageMaximumGCAge) {
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: ImageMaximumGCAge feature gate is required for Kubelet configuration option imageMaximumGCAge"))
 	}
+	// 默认 sysctl 需要特性门控支持；同时校验名称合法性、命名空间已知性并检测重复。
 	if len(kc.DefaultPodSysctls) > 0 {
 		if !localFeatureGate.Enabled(features.DefaultPodSysctls) {
 			allErrors = append(allErrors, fmt.Errorf("invalid configuration: DefaultPodSysctls feature gate is required for Kubelet configuration option defaultPodSysctls"))
@@ -185,6 +186,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: runOnce (--runOnce) %v, Runonce mode has been deprecated and should not be set", kc.RunOnce))
 	}
 
+	// 注册污点本身必须合法，且不允许携带 TimeAdded——该字段由节点生命周期逻辑维护。
 	for _, nodeTaint := range kc.RegisterWithTaints {
 		if err := utiltaints.CheckTaintValidation(nodeTaint); err != nil {
 			allErrors = append(allErrors, fmt.Errorf("invalid taint: %v", nodeTaint))
@@ -194,6 +196,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		}
 	}
 
+	// 拓扑管理器的策略与作用域必须是已知的枚举值。
 	switch kc.TopologyManagerPolicy {
 	case kubeletconfig.NoneTopologyManagerPolicy:
 	case kubeletconfig.BestEffortTopologyManagerPolicy:
@@ -210,6 +213,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: topologyManagerScope (--topology-manager-scope) %q must be one of: %q, or %q", kc.TopologyManagerScope, kubeletconfig.ContainerTopologyManagerScope, kubeletconfig.PodTopologyManagerScope))
 	}
 
+	// 优雅节点关机的宽限期配置需要满足彼此的大小关系与最小时间下限。
 	if localFeatureGate.Enabled(features.GracefulNodeShutdown) {
 		if kc.ShutdownGracePeriodCriticalPods.Duration > kc.ShutdownGracePeriod.Duration {
 			allErrors = append(allErrors, fmt.Errorf("invalid configuration: shutdownGracePeriodCriticalPods %v must be <= shutdownGracePeriod %v", kc.ShutdownGracePeriodCriticalPods, kc.ShutdownGracePeriod))
@@ -234,6 +238,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 			allErrors = append(allErrors, fmt.Errorf("invalid configuration: Specifying shutdownGracePeriodByPodPriority requires feature gate GracefulNodeShutdownBasedOnPodPriority"))
 		}
 	}
+	// NodeSwap 门控开启时 swapBehavior 只能是已知取值；门控关闭时则禁止设置交换配置。
 	if localFeatureGate.Enabled(features.NodeSwap) {
 		switch kc.MemorySwap.SwapBehavior {
 		case "":
@@ -247,6 +252,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: memorySwap.swapBehavior cannot be set when NodeSwap feature flag is disabled"))
 	}
 
+	// KubeletCrashLoopBackOffMax 门控开启时必须设置重启周期上限，且取值范围为 1s~300s。
 	if localFeatureGate.Enabled(features.KubeletCrashLoopBackOffMax) {
 		if kc.CrashLoopBackOff.MaxContainerRestartPeriod == nil {
 			allErrors = append(allErrors, fmt.Errorf("invalid configuration: FeatureGate KubeletCrashLoopBackOffMax is enabled, CrashLoopBackOff.MaxContainerRestartPeriod must be set"))
@@ -258,7 +264,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: FeatureGate KubeletCrashLoopBackOffMax not enabled, CrashLoopBackOff.MaxContainerRestartPeriod must not be set"))
 	}
 
-	// Check for mutually exclusive keys before the main validation loop
+	// 在主校验循环之前，先检查 enforceNodeAllocatable 中互斥的键。
 	reservedKeys := map[string]bool{
 		kubetypes.SystemReservedEnforcementKey:             false,
 		kubetypes.SystemReservedCompressibleEnforcementKey: false,
@@ -278,6 +284,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: both %q and %q cannot be specified together in enforceNodeAllocatable (--enforce-node-allocatable)", kubetypes.KubeReservedEnforcementKey, kubetypes.KubeReservedCompressibleEnforcementKey))
 	}
 
+	// enforceNodeAllocatable 中的各项必须唯一；部分选项还要求对应的 cgroup 已配置。
 	uniqueEnforcements := sets.Set[string]{}
 	for _, val := range kc.EnforceNodeAllocatable {
 		if uniqueEnforcements.Has(val) {
@@ -300,7 +307,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 			if len(kc.EnforceNodeAllocatable) > 1 {
 				allErrors = append(allErrors, fmt.Errorf("invalid configuration: enforceNodeAllocatable (--enforce-node-allocatable) may not contain additional enforcements when %q is specified", kubetypes.NodeAllocatableNoneKey))
 			}
-			// skip all further checks when this is explicitly "none"
+			// 显式指定 "none" 时跳过后续所有检查。
 			continue
 		default:
 			allErrors = append(allErrors, fmt.Errorf("invalid configuration: option %q specified for enforceNodeAllocatable (--enforce-node-allocatable). Valid options are %q, %q, %q, %q, %q or %q",
@@ -313,6 +320,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 			allErrors = append(allErrors, fmt.Errorf("invalid configuration: cgroupsPerQOS (--cgroups-per-qos) must be set to true when %q contained in enforceNodeAllocatable (--enforce-node-allocatable)", val))
 		}
 	}
+	// hairpinMode 必须是已知的取值之一。
 	switch kc.HairpinMode {
 	case kubeletconfig.HairpinNone:
 	case kubeletconfig.HairpinVeth:
@@ -322,6 +330,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 			kc.HairpinMode, kubeletconfig.HairpinNone, kubeletconfig.HairpinVeth, kubeletconfig.PromiscuousBridge))
 	}
 
+	// 镜像拉取凭证校验策略仅在对应特性门控开启时生效。
 	if localFeatureGate.Enabled(features.KubeletEnsureSecretPulledImages) {
 		switch kc.ImagePullCredentialsVerificationPolicy {
 		case string(kubeletconfig.NeverVerify),
@@ -348,7 +357,8 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 	}
 
 	if kc.ReservedSystemCPUs != "" {
-		// --reserved-cpus does not support --system-reserved-cgroup or --kube-reserved-cgroup
+		// --reserved-cpus 与 --system-reserved-cgroup/--kube-reserved-cgroup 互斥，
+		// 同时指定会导致 CPU 预留与 cgroup 预留语义冲突。
 		if kc.SystemReservedCgroup != "" || kc.KubeReservedCgroup != "" {
 			allErrors = append(allErrors, fmt.Errorf("invalid configuration: can't use reservedSystemCPUs (--reserved-cpus) with systemReservedCgroup (--system-reserved-cgroup) or kubeReservedCgroup (--kube-reserved-cgroup)"))
 		}
@@ -357,11 +367,13 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		}
 	}
 
+	// 委托子函数校验保留内存配置与操作系统相关的配置。
 	allErrors = append(allErrors, validateReservedMemoryConfiguration(kc)...)
 
 	if err := validateKubeletOSConfiguration(kc); err != nil {
 		allErrors = append(allErrors, err)
 	}
+	// 日志、追踪与指标相关配置复用组件库的校验逻辑，避免重复实现。
 	allErrors = append(allErrors, metrics.ValidateShowHiddenMetricsVersion(kc.ShowHiddenMetricsForVersion)...)
 
 	if errs := logsapi.Validate(&kc.Logging, localFeatureGate, field.NewPath("logging")); len(errs) > 0 {
@@ -372,6 +384,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		allErrors = append(allErrors, errs.ToAggregate().Errors()...)
 	}
 
+	// 内存 QoS 相关参数依赖 MemoryQoS 特性门控：关闭时只允许旧默认值。
 	if !localFeatureGate.Enabled(features.MemoryQoS) && kc.MemoryThrottlingFactor != nil && *kc.MemoryThrottlingFactor != previousDefaultMemoryThrottlingFactor {
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: memoryThrottlingFactor must not be set when MemoryQoS feature gate is disabled"))
 	}
@@ -391,10 +404,12 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: option %q specified for memoryReservationPolicy. Valid options are %q or %q", kc.MemoryReservationPolicy, kubeletconfig.NoneMemoryReservationPolicy, kubeletconfig.TieredReservationMemoryReservationPolicy))
 	}
 
+	// 容器运行时端点必填，否则 kubelet 无法与运行时通信。
 	if kc.ContainerRuntimeEndpoint == "" {
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: the containerRuntimeEndpoint was not specified or empty"))
 	}
 
+	// 系统日志查询需要 NodeLogQuery 门控，且依赖 system log handler 处于开启状态。
 	if kc.EnableSystemLogQuery && !localFeatureGate.Enabled(features.NodeLogQuery) {
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: NodeLogQuery feature gate is required for enableSystemLogQuery"))
 	}
@@ -403,6 +418,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 			fmt.Errorf("invalid configuration: enableSystemLogHandler is required for enableSystemLogQuery"))
 	}
 
+	// 容器日志相关的并发度、监控间隔与文件数量都有下限要求。
 	if kc.ContainerLogMaxWorkers < 1 {
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: containerLogMaxWorkers must be greater than or equal to 1"))
 	}
@@ -415,6 +431,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: containerLogMaxFiles must be greater than 1"))
 	}
 
+	// Pod 日志目录必须是绝对路径且已规范化，否则日志落盘行为不可预期。
 	if kc.PodLogsDir == "" {
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: podLogsDir was not specified"))
 	}
@@ -427,7 +444,7 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		allErrors = append(allErrors, fmt.Errorf("invalid configuration: pod logs path %q must be normalized", kc.PodLogsDir))
 	}
 
-	// Since pod logs path is used in metrics, make sure it contains only ASCII characters.
+	// Pod 日志路径会作为指标标签值使用，因此必须确保只包含 ASCII 字符。
 	for _, c := range kc.PodLogsDir {
 		if c > unicode.MaxASCII {
 			allErrors = append(allErrors, fmt.Errorf("invalid configuration: pod logs path %q mut contains ASCII characters only", kc.PodLogsDir))
@@ -435,10 +452,12 @@ func ValidateKubeletConfiguration(kc *kubeletconfig.KubeletConfiguration, featur
 		}
 	}
 
+	// 汇总所有校验错误一次性返回，便于使用者一次性修复全部问题。
 	return utilerrors.NewAggregate(allErrors)
 }
 
-// From https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/policy/validation/validation.go
+// 以下 sysctl 名称格式规则与 pkg/apis/policy/validation 中的定义保持一致。
+// 参考：https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/policy/validation/validation.go
 const (
 	sysctlSegmentFmt      string = "[a-z0-9]([-_a-z0-9]*[a-z0-9])?"
 	sysctlContainSlashFmt string = "(" + sysctlSegmentFmt + "[\\./])*" + sysctlSegmentFmt
@@ -447,8 +466,8 @@ const (
 
 var sysctlRegexp = regexp.MustCompile("^" + sysctlContainSlashFmt + "$")
 
-// We validate this at configuration time to prevent Kubelet from attempting to
-// apply invalid sysctls to sandbox containers, which would fail at runtime.
+// isValidSysctlName 在配置阶段校验 sysctl 名称是否合法，
+// 防止 kubelet 在运行时向沙箱容器应用非法 sysctl 而失败。
 func isValidSysctlName(name string) bool {
 	if len(name) > sysctlMaxLength {
 		return false

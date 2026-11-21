@@ -34,21 +34,26 @@ import (
 	"k8s.io/utils/exec"
 )
 
+// 测试用容器名与 Pod UID。
 const (
 	testContainerName = "cOnTaInEr_NaMe"
 	testPodUID        = "pOd_UiD"
 )
 
+// testContainerID 是测试用容器 ID。
 var testContainerID = kubecontainer.ContainerID{Type: "test", ID: "cOnTaInEr_Id"}
 
+// getTestRunningStatus 返回容器处于 Running 且 started=true 的 Pod 状态。
 func getTestRunningStatus() v1.PodStatus {
 	return getTestRunningStatusWithStarted(true)
 }
 
+// getTestNotRunningStatus 返回容器处于 Running 但 started=false 的 Pod 状态。
 func getTestNotRunningStatus() v1.PodStatus {
 	return getTestRunningStatusWithStarted(false)
 }
 
+// getTestRunningStatusWithStarted 构造指定 started 标志的运行中 Pod 状态。
 func getTestRunningStatusWithStarted(started bool) v1.PodStatus {
 	containerStatus := v1.ContainerStatus{
 		Name:        testContainerName,
@@ -63,6 +68,7 @@ func getTestRunningStatusWithStarted(started bool) v1.PodStatus {
 	return podStatus
 }
 
+// getTestRunningStatusWithFailedContainer 返回容器已终止且退出码为 1 的 Pod 状态。
 func getTestRunningStatusWithFailedContainer() v1.PodStatus {
 	return v1.PodStatus{
 		Phase: v1.PodRunning,
@@ -78,6 +84,7 @@ func getTestRunningStatusWithFailedContainer() v1.PodStatus {
 	}
 }
 
+// getTestRunningStatusWithSucceededContainer 返回容器已终止且退出码为 0 的 Pod 状态。
 func getTestRunningStatusWithSucceededContainer() v1.PodStatus {
 	return v1.PodStatus{
 		Phase: v1.PodRunning,
@@ -93,6 +100,7 @@ func getTestRunningStatusWithSucceededContainer() v1.PodStatus {
 	}
 }
 
+// getTestPendingStatus 返回容器处于 Waiting 的 Pending Pod 状态。
 func getTestPendingStatus() v1.PodStatus {
 	return v1.PodStatus{
 		Phase: v1.PodPending,
@@ -106,6 +114,7 @@ func getTestPendingStatus() v1.PodStatus {
 	}
 }
 
+// getTestPod 返回带有单个容器、RestartPolicyNever 的测试 Pod。
 func getTestPod() *v1.Pod {
 	container := v1.Container{
 		Name: testContainerName,
@@ -121,13 +130,14 @@ func getTestPod() *v1.Pod {
 	return &pod
 }
 
+// setTestProbe 把探针设置到对应容器字段，并填入加速测试的默认参数。
 func setTestProbe(pod *v1.Pod, probeType probeType, probeSpec v1.Probe) {
-	// All tests rely on the fake exec prober.
+	// 所有测试都依赖 fake exec prober。
 	probeSpec.ProbeHandler = v1.ProbeHandler{
 		Exec: &v1.ExecAction{},
 	}
 
-	// Apply test defaults, overwridden for test speed.
+	// 应用测试默认值并调小，以加快测试速度。
 	defaults := map[string]int64{
 		"TimeoutSeconds":   1,
 		"PeriodSeconds":    1,
@@ -151,10 +161,11 @@ func setTestProbe(pod *v1.Pod, probeType probeType, probeSpec v1.Probe) {
 	}
 }
 
+// newTestManager 构造使用 fake 组件与 fake exec prober 的 prober manager。
 func newTestManager() *manager {
 	podManager := kubepod.NewBasicPodManager()
 	podStartupLatencyTracker := kubeletutil.NewPodStartupLatencyTracker()
-	// Add test pod to pod manager, so that status manager can get the pod from pod manager if needed.
+	// 把测试 Pod 加入 pod manager，便于 status manager 按需获取。
 	podManager.AddPod(getTestPod())
 	m := NewManager(
 		status.NewManager(&fake.Clientset{}, podManager, &statustest.FakePodDeletionSafetyProvider{}, podStartupLatencyTracker),
@@ -164,31 +175,36 @@ func newTestManager() *manager {
 		nil, // runner
 		&record.FakeRecorder{},
 	).(*manager)
-	// Don't actually execute probes.
+	// 不真正执行探针。
 	m.prober.exec = fakeExecProber{probe.Success, nil}
 	return m
 }
 
+// newTestWorker 创建绑定测试 Pod 与探针的 worker。
 func newTestWorker(m *manager, probeType probeType, probeSpec v1.Probe) *worker {
 	pod := getTestPod()
 	setTestProbe(pod, probeType, probeSpec)
 	return newWorker(m, probeType, pod, pod.Spec.Containers[0])
 }
 
+// fakeExecProber 返回预设探针结果。
 type fakeExecProber struct {
 	result probe.Result
 	err    error
 }
 
+// Probe 返回预设结果与错误。
 func (p fakeExecProber) Probe(c exec.Cmd) (probe.Result, string, error) {
 	return p.result, "", p.err
 }
 
+// syncExecProber 是并发安全的 fakeExecProber。
 type syncExecProber struct {
 	sync.RWMutex
 	fakeExecProber
 }
 
+// set 在锁保护下更新预设结果。
 func (p *syncExecProber) set(result probe.Result, err error) {
 	p.Lock()
 	defer p.Unlock()
@@ -196,6 +212,7 @@ func (p *syncExecProber) set(result probe.Result, err error) {
 	p.err = err
 }
 
+// Probe 在读锁保护下返回结果。
 func (p *syncExecProber) Probe(cmd exec.Cmd) (probe.Result, string, error) {
 	p.RLock()
 	defer p.RUnlock()

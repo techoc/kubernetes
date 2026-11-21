@@ -23,6 +23,8 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm"
 )
 
+// subtractOverheadFromResourceConfig 从容器资源配额中扣除 Pod overhead，
+// 使运行时只看到容器自身可用的 CPU 与内存。
 func subtractOverheadFromResourceConfig(resCfg *cm.ResourceConfig, pod *v1.Pod) *cm.ResourceConfig {
 	if resCfg == nil {
 		return nil
@@ -30,6 +32,7 @@ func subtractOverheadFromResourceConfig(resCfg *cm.ResourceConfig, pod *v1.Pod) 
 
 	rc := *resCfg
 
+	// overhead 的 CPU 会同时影响 quota 与 shares，两者都要扣减。
 	if pod.Spec.Overhead != nil {
 		if cpu, found := pod.Spec.Overhead[v1.ResourceCPU]; found {
 			if rc.CPUPeriod != nil {
@@ -45,6 +48,7 @@ func subtractOverheadFromResourceConfig(resCfg *cm.ResourceConfig, pod *v1.Pod) 
 			}
 		}
 
+		// 内存 overhead 直接按字节从 limit 中扣除。
 		if memory, found := pod.Spec.Overhead[v1.ResourceMemory]; found {
 			if rc.Memory != nil {
 				currMemory := *rc.Memory

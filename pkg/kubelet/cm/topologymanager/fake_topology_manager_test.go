@@ -25,16 +25,19 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestNewFakeManager 验证 NewFakeManager 返回的对象实现了 Manager 接口。
 func TestNewFakeManager(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	fm := NewFakeManager(logger)
 
+	// 返回值应满足 Manager 接口。
 	if _, ok := fm.(Manager); !ok {
 		t.Errorf("Result is not Manager type")
 
 	}
 }
 
+// TestFakeGetAffinity 验证 fake manager 对任意容器返回空的拓扑提示。
 func TestFakeGetAffinity(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tcases := []struct {
@@ -59,6 +62,7 @@ func TestFakeGetAffinity(t *testing.T) {
 	}
 }
 
+// TestFakeRemoveContainer 验证 fake manager 的 RemoveContainer 始终返回成功。
 func TestFakeRemoveContainer(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -88,6 +92,7 @@ func TestFakeRemoveContainer(t *testing.T) {
 
 }
 
+// TestFakeAdmit 验证 fake manager 对三种 QoS 类别的 Pod 都返回准入。
 func TestFakeAdmit(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tcases := []struct {
@@ -116,9 +121,11 @@ func TestFakeAdmit(t *testing.T) {
 		},
 	}
 	fm := fakeManager{}
+	// fake manager 对所有 QoS 都返回准入，因此结果不应等于零值。
 	for _, tc := range tcases {
 		podAttr := lifecycle.PodAdmitAttributes{}
 		pod := v1.Pod{}
+		// 设置 Pod 的 QoS 类别后调用 Admit。
 		pod.Status.QOSClass = tc.qosClass
 		podAttr.Pod = &pod
 		actual := fm.Admit(tCtx, &podAttr)

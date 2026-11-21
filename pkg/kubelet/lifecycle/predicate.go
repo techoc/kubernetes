@@ -38,66 +38,58 @@ import (
 )
 
 const (
-	// PodOSSelectorNodeLabelDoesNotMatch is used to denote that the pod was
-	// rejected admission to the node because the pod's node selector
-	// corresponding to kubernetes.io/os label didn't match the node label.
+	// PodOSSelectorNodeLabelDoesNotMatch 表示 Pod 被节点拒绝准入，原因是 Pod 针对
+	// kubernetes.io/os 标签的节点选择器与节点标签不匹配。
 	PodOSSelectorNodeLabelDoesNotMatch = "PodOSSelectorNodeLabelDoesNotMatch"
 
-	// PodOSNotSupported is used to denote that the pod was rejected admission
-	// to the node because the pod's OS field didn't match the node OS.
+	// PodOSNotSupported 表示 Pod 被节点拒绝准入，原因是 Pod 的 OS 字段与节点操作系统不一致。
 	PodOSNotSupported = "PodOSNotSupported"
 
-	// InvalidNodeInfo is used to denote that the pod was rejected admission
-	// to the node because the kubelet was unable to retrieve the node info.
+	// InvalidNodeInfo 表示 Pod 被节点拒绝准入，原因是 kubelet 无法获取节点信息。
 	InvalidNodeInfo = "InvalidNodeInfo"
 
-	// InitContainerRestartPolicyForbidden is used to denote that the pod was
-	// rejected admission to the node because it uses a restart policy other
-	// than Always for some of its init containers.
+	// InitContainerRestartPolicyForbidden 表示 Pod 被节点拒绝准入，原因是其部分
+	// 初始化容器使用了 Always 之外的重启策略。
 	InitContainerRestartPolicyForbidden = "InitContainerRestartPolicyForbidden"
 
-	// SupplementalGroupsPolicyNotSupported is used to denote that the pod was
-	// rejected admission to the node because the node does not support
-	// the pod's SupplementalGroupsPolicy.
+	// SupplementalGroupsPolicyNotSupported 表示 Pod 被节点拒绝准入，原因是节点
+	// 不支持 Pod 声明的 SupplementalGroupsPolicy。
 	SupplementalGroupsPolicyNotSupported = "SupplementalGroupsPolicyNotSupported"
 
-	// UnexpectedAdmissionError is used to denote that the pod was rejected
-	// admission to the node because of an error during admission that could not
-	// be categorized.
+	// UnexpectedAdmissionError 表示 Pod 被节点拒绝准入，原因是准入过程中出现了
+	// 无法归类的错误。
 	UnexpectedAdmissionError = "UnexpectedAdmissionError"
 
-	// UnknownReason is used to denote that the pod was rejected admission to
-	// the node because a predicate failed for a reason that could not be
-	// determined.
+	// UnknownReason 表示 Pod 被节点拒绝准入，原因是某个断言失败但无法确定具体原因。
 	UnknownReason = "UnknownReason"
 
-	// UnexpectedPredicateFailureType is used to denote that the pod was
-	// rejected admission to the node because a predicate returned a reason
-	// object that was not an InsufficientResourceError or a PredicateFailureError.
+	// UnexpectedPredicateFailureType 表示 Pod 被节点拒绝准入，原因是断言返回了
+	// InsufficientResourceError 或 PredicateFailureError 之外的原因对象。
 	UnexpectedPredicateFailureType = "UnexpectedPredicateFailureType"
 
-	// Prefix for admission reason when kubelet rejects a pod due to insufficient
-	// resources available.
+	// InsufficientResourcePrefix 是 kubelet 因资源不足拒绝 Pod 时准入原因的前缀。
 	InsufficientResourcePrefix = "OutOf"
 
-	// These reasons are used to denote that the pod has reject admission
-	// to the node because there's not enough resources to run the pod.
+	// 以下原因表示节点因资源不足而拒绝 Pod 准入。
 	OutOfCPU              = "OutOfcpu"
 	OutOfMemory           = "OutOfmemory"
 	OutOfEphemeralStorage = "OutOfephemeral-storage"
 	OutOfPods             = "OutOfpods"
 )
 
+// getNodeAnyWayFuncType 是获取节点信息的函数类型；useCache 为 false 时需绕过缓存同步获取。
 type getNodeAnyWayFuncType func(ctx context.Context, useCache bool) (*v1.Node, error)
 
+// pluginResourceUpdateFuncType 负责把设备插件上报的资源更新到 NodeInfo 中。
 type pluginResourceUpdateFuncType func(*schedulerframework.NodeInfo, *PodAdmitAttributes) error
 
-// AdmissionFailureHandler is an interface which defines how to deal with a failure to admit a pod.
-// This allows for the graceful handling of pod admission failure.
+// AdmissionFailureHandler 定义 Pod 准入失败后的处理方式，
+// 以便在资源不足等场景下进行优雅的降级或抢占处理。
 type AdmissionFailureHandler interface {
 	HandleAdmissionFailure(ctx context.Context, admitPod *v1.Pod, failureReasons []PredicateFailureReason, operation Operation) ([]PredicateFailureReason, error)
 }
 
+// predicateAdmitHandler 通过调度器断言（predicate）判断 Pod 能否被本节点准入。
 type predicateAdmitHandler struct {
 	getNodeAnyWayFunc        getNodeAnyWayFuncType
 	pluginResourceUpdateFunc pluginResourceUpdateFuncType
@@ -106,8 +98,8 @@ type predicateAdmitHandler struct {
 
 var _ PodAdmitHandler = &predicateAdmitHandler{}
 
-// NewPredicateAdmitHandler returns a PodAdmitHandler which is used to evaluates
-// if a pod can be admitted from the perspective of predicates.
+// NewPredicateAdmitHandler 返回一个 PodAdmitHandler，从断言（predicate）的角度
+// 评估 Pod 是否可以被准入。
 func NewPredicateAdmitHandler(getNodeAnyWayFunc getNodeAnyWayFuncType, admissionFailureHandler AdmissionFailureHandler, pluginResourceUpdateFunc pluginResourceUpdateFuncType) PodAdmitHandler {
 	return &predicateAdmitHandler{
 		getNodeAnyWayFunc,
@@ -116,8 +108,10 @@ func NewPredicateAdmitHandler(getNodeAnyWayFunc getNodeAnyWayFuncType, admission
 	}
 }
 
+// Admit 判断 Pod 是否满足准入条件，包括 OS 匹配、资源充足与污点容忍等。
 func (w *predicateAdmitHandler) Admit(ctx context.Context, attrs *PodAdmitAttributes) PodAdmitResult {
 	logger := klog.FromContext(ctx)
+	// 优先使用缓存的节点信息，避免每次准入都产生 API 调用开销。
 	node, err := w.getNodeAnyWayFunc(ctx, true)
 	if err != nil {
 		logger.Error(err, "Cannot get Node info")
@@ -129,7 +123,7 @@ func (w *predicateAdmitHandler) Admit(ctx context.Context, attrs *PodAdmitAttrib
 	}
 	admitPod := attrs.Pod
 
-	// perform the checks that preemption will not help first to avoid meaningless pod eviction
+	// 先执行抢占也无济于事的检查，避免触发无意义的 Pod 驱逐。
 	if rejectPodAdmissionBasedOnOSSelector(admitPod, node) {
 		return PodAdmitResult{
 			Admit:   false,
@@ -155,11 +149,12 @@ func (w *predicateAdmitHandler) Admit(ctx context.Context, attrs *PodAdmitAttrib
 		}
 	}
 
+	// 构造包含节点上已有 Pod 的 NodeInfo，供后续资源与亲和性断言使用。
 	pods := attrs.OtherPods
 	nodeInfo := schedulerframework.NewNodeInfo(pods...)
 	nodeInfo.SetNode(node)
 
-	// ensure the node has enough plugin resources for that required in pods
+	// 确保节点上的插件资源（如设备插件上报的资源）足以满足 Pod 的请求。
 	if err = w.pluginResourceUpdateFunc(nodeInfo, attrs); err != nil {
 		message := fmt.Sprintf("Update plugin resources failed due to %v, which is unexpected.", err)
 		logger.Info("Failed to admit pod", "pod", klog.KObj(admitPod), "message", message)
@@ -170,20 +165,19 @@ func (w *predicateAdmitHandler) Admit(ctx context.Context, attrs *PodAdmitAttrib
 		}
 	}
 
-	// Remove the requests of the extended resources that are missing in the
-	// node info. This is required to support cluster-level resources, which
-	// are extended resources unknown to nodes, and also extended resources
-	// backed by DRA.
+	// 从 Pod 副本中移除节点信息里不存在的扩展资源请求。这样做是为了支持
+	// 集群级资源（节点并不知晓的扩展资源）以及由 DRA 支撑的扩展资源。
 	//
-	// Caveat: If a pod was manually bound to a node (e.g., static pod) where a
-	// node-level extended resource it requires is not found, then kubelet will
-	// not fail admission while it should. This issue will be addressed with
-	// the Resource Class API in the future.
+	// 注意：如果 Pod 被手动绑定到某节点（例如静态 Pod），而它要求的节点级
+	// 扩展资源在该节点上并不存在，kubelet 将不会按预期拒绝准入。该问题
+	// 后续将通过 Resource Class API 解决。
 	podWithoutMissingExtendedResources := removeMissingExtendedResources(admitPod, nodeInfo)
 
+	// 执行一组 kubelet 关心的过滤断言，无任何失败原因即视为可调度。
 	reasons := w.generalFilter(ctx, podWithoutMissingExtendedResources, nodeInfo)
 	fit := len(reasons) == 0
 	if !fit {
+		// 准入失败时交给失败处理器（如抢占逻辑）尝试恢复。
 		reasons, err = w.admissionFailureHandler.HandleAdmissionFailure(ctx, admitPod, reasons, attrs.Operation)
 		fit = len(reasons) == 0 && err == nil
 		if err != nil {
@@ -208,7 +202,7 @@ func (w *predicateAdmitHandler) Admit(ctx context.Context, attrs *PodAdmitAttrib
 				Message: message,
 			}
 		}
-		// If there are failed predicates, we only return the first one as a reason.
+		// 存在多个失败断言时只取第一个作为拒绝原因，避免信息过载。
 		r := reasons[0]
 		switch re := r.(type) {
 		case *PredicateFailureError:
@@ -246,7 +240,8 @@ func (w *predicateAdmitHandler) Admit(ctx context.Context, attrs *PodAdmitAttrib
 	}
 }
 
-// generalFilter checks a group of filterings that the kubelet cares about.
+// generalFilter 执行一组 kubelet 关心的过滤断言；若失败原因仅涉及节点亲和性，
+// 则绕过缓存重新获取节点信息后重试，以规避节点标签尚未同步带来的误判。
 func (w *predicateAdmitHandler) generalFilter(ctx context.Context, pod *v1.Pod, nodeInfo *schedulerframework.NodeInfo) []PredicateFailureReason {
 	logger := klog.FromContext(ctx)
 
@@ -257,9 +252,8 @@ func (w *predicateAdmitHandler) generalFilter(ctx context.Context, pod *v1.Pod, 
 		}
 	}
 	if len(reasons) > 0 {
-		// If the only reason for failure is the node affinity labels, fetch the node synchronously
-		// and try again.
-
+		// 若唯一失败原因是节点亲和性标签，则同步拉取最新节点信息后重试，
+		// 因为节点标签可能尚未通过周期性状态同步刷新到本地缓存。
 		node, err := w.getNodeAnyWayFunc(ctx, false)
 		if err != nil {
 			logger.Error(err, "Failed to synchronously fetch node info")
@@ -272,8 +266,8 @@ func (w *predicateAdmitHandler) generalFilter(ctx context.Context, pod *v1.Pod, 
 	return reasons
 }
 
-// rejectPodAdmissionBasedOnOSSelector rejects pod if it's nodeSelector doesn't match
-// We expect the kubelet status reconcile which happens every 10sec to update the node labels if there is a mismatch.
+// rejectPodAdmissionBasedOnOSSelector 在 Pod 的节点选择器与节点 OS 标签不匹配时拒绝准入。
+// 若发现不匹配，依赖每 10 秒一次的 kubelet 状态同步来更新节点标签。
 func rejectPodAdmissionBasedOnOSSelector(pod *v1.Pod, node *v1.Node) bool {
 	labels := node.Labels
 	osName, osLabelExists := labels[v1.LabelOSStable]
@@ -285,7 +279,7 @@ func rejectPodAdmissionBasedOnOSSelector(pod *v1.Pod, node *v1.Node) bool {
 	}
 	podLabelSelector, podOSLabelExists := pod.Labels[v1.LabelOSStable]
 	if !podOSLabelExists {
-		// If the labelselector didn't exist, let's keep the current behavior as is
+		// 未设置 OS 标签选择器时保持原有行为，不做拒绝。
 		return false
 	} else if podOSLabelExists && podLabelSelector != labels[v1.LabelOSStable] {
 		return true
@@ -293,23 +287,22 @@ func rejectPodAdmissionBasedOnOSSelector(pod *v1.Pod, node *v1.Node) bool {
 	return false
 }
 
-// rejectPodAdmissionBasedOnOSField rejects pods if their OS field doesn't match runtime.GOOS.
-// TODO: Relax this restriction when we start supporting LCOW in kubernetes where podOS may not match
-// node's OS.
+// rejectPodAdmissionBasedOnOSField 在 Pod 的 OS 字段与 runtime.GOOS 不一致时拒绝准入。
+// TODO: 当 Kubernetes 支持 LCOW（Pod OS 可能与节点 OS 不同）后，应放宽此限制。
 func rejectPodAdmissionBasedOnOSField(pod *v1.Pod) bool {
 	if pod.Spec.OS == nil {
 		return false
 	}
-	// If the pod OS doesn't match runtime.GOOS return false
+	// Pod OS 与 runtime.GOOS 不一致时拒绝准入。
 	return string(pod.Spec.OS.Name) != runtime.GOOS
 }
 
-// rejectPodAdmissionBasedOnSupplementalGroupsPolicy rejects pod only if
-// - the feature is beta or above, and SupplementalPolicy=Strict is set in the pod
-// - but, the node does not support the feature
+// rejectPodAdmissionBasedOnSupplementalGroupsPolicy 仅在以下条件同时满足时拒绝 Pod：
+// - 该特性处于 Beta 或更高阶段，且 Pod 中设置了 SupplementalPolicy=Strict；
+// - 但节点并不支持该特性。
 //
-// Note: During the feature is alpha or before(not yet released) in emulated version,
-// it should admit for backward compatibility
+// 注意：当该特性仍处于 Alpha 阶段（或尚未发布的模拟版本）时，出于向后兼容
+// 应允许准入。
 func rejectPodAdmissionBasedOnSupplementalGroupsPolicy(pod *v1.Pod, node *v1.Node) bool {
 	admit, reject := false, true // just for readability
 
@@ -343,7 +336,10 @@ func rejectPodAdmissionBasedOnSupplementalGroupsPolicy(pod *v1.Pod, node *v1.Nod
 	return admit
 }
 
+// removeMissingExtendedResources 返回 Pod 的副本，其中节点上不存在的扩展资源请求被剔除；
+// 由 DRA 支撑的扩展资源同样被剔除，避免调度器的资源断言误判。
 func removeMissingExtendedResources(pod *v1.Pod, nodeInfo *schedulerframework.NodeInfo) *v1.Pod {
+	// 判断某个扩展资源请求是否由 DRA（动态资源分配）支撑。
 	isResourceBackedByDRA := func(resourceName v1.ResourceName, containerName string) bool {
 		if !utilfeature.DefaultFeatureGate.Enabled(features.DRAExtendedResource) {
 			return false
@@ -360,9 +356,8 @@ func removeMissingExtendedResources(pod *v1.Pod, nodeInfo *schedulerframework.No
 	}
 	filterExtendedResources := func(containers []v1.Container) {
 		for i, c := range containers {
-			// We only handle requests in Requests but not Limits because the
-			// PodFitsResources predicate, to which the result pod will be passed,
-			// does not use Limits.
+			// 只处理 Requests 而不处理 Limits：结果 Pod 后续会传给
+			// PodFitsResources 断言，而该断言并不使用 Limits。
 			filteredResources := make(v1.ResourceList)
 			for rName, rQuant := range c.Resources.Requests {
 				if schedutil.IsDRAExtendedResourceName(rName) && isResourceBackedByDRA(rName, c.Name) {
@@ -378,14 +373,14 @@ func removeMissingExtendedResources(pod *v1.Pod, nodeInfo *schedulerframework.No
 			containers[i].Resources.Requests = filteredResources
 		}
 	}
+	// 深拷贝后再过滤，避免修改调用方持有的原始 Pod 对象。
 	podCopy := pod.DeepCopy()
 	filterExtendedResources(podCopy.Spec.Containers)
 	filterExtendedResources(podCopy.Spec.InitContainers)
 	return podCopy
 }
 
-// InsufficientResourceError is an error type that indicates what kind of resource limit is
-// hit and caused the unfitting failure.
+// InsufficientResourceError 描述因某类资源达到上限而导致的不适配失败。
 type InsufficientResourceError struct {
 	ResourceName v1.ResourceName
 	Requested    int64
@@ -393,43 +388,46 @@ type InsufficientResourceError struct {
 	Capacity     int64
 }
 
+// Error 返回资源不足错误的可读描述。
 func (e *InsufficientResourceError) Error() string {
 	return fmt.Sprintf("Node didn't have enough resource: %s, requested: %d, used: %d, capacity: %d",
 		e.ResourceName, e.Requested, e.Used, e.Capacity)
 }
 
-// PredicateFailureReason interface represents the failure reason of a predicate.
+// PredicateFailureReason 接口表示某个断言失败的原因。
 type PredicateFailureReason interface {
 	GetReason() string
 }
 
-// GetReason returns the reason of the InsufficientResourceError.
+// GetReason 返回资源不足错误的原因描述。
 func (e *InsufficientResourceError) GetReason() string {
 	return fmt.Sprintf("Insufficient %v", e.ResourceName)
 }
 
-// GetInsufficientAmount returns the amount of the insufficient resource of the error.
+// GetInsufficientAmount 返回该错误对应的资源缺口数量。
 func (e *InsufficientResourceError) GetInsufficientAmount() int64 {
 	return e.Requested - (e.Capacity - e.Used)
 }
 
-// PredicateFailureError describes a failure error of predicate.
+// PredicateFailureError 描述断言失败的错误。
 type PredicateFailureError struct {
 	PredicateName string
 	PredicateDesc string
 }
 
+// Error 返回断言失败错误的可读描述。
 func (e *PredicateFailureError) Error() string {
 	return fmt.Sprintf("Predicate %s failed: %s", e.PredicateName, e.PredicateDesc)
 }
 
-// GetReason returns the reason of the PredicateFailureError.
+// GetReason 返回断言失败错误的原因描述。
 func (e *PredicateFailureError) GetReason() string {
 	return e.PredicateDesc
 }
 
-// generalFilter checks a group of filterings that the kubelet cares about.
+// generalFilter 执行一组 kubelet 关心的过滤断言，汇总资源不足与断言失败两类原因。
 func generalFilter(logger klog.Logger, pod *v1.Pod, nodeInfo *schedulerframework.NodeInfo) []PredicateFailureReason {
+	// 复用调度器的准入检查逻辑，保证 kubelet 与调度器对可调度性的判断一致。
 	admissionResults := scheduler.AdmissionCheck(pod, nodeInfo, true)
 	var reasons []PredicateFailureReason
 	for _, r := range admissionResults {
@@ -445,10 +443,10 @@ func generalFilter(logger klog.Logger, pod *v1.Pod, nodeInfo *schedulerframework
 		}
 	}
 
-	// Check taint/toleration except for static pods
+	// 检查污点与容忍，静态 Pod 例外：它们由节点自身创建，不应被节点污点阻挡。
 	if !types.IsStaticPod(pod) {
 		_, isUntolerated := corev1.FindMatchingUntoleratedTaint(logger, nodeInfo.Node().Spec.Taints, pod.Spec.Tolerations, func(t *v1.Taint) bool {
-			// Kubelet is only interested in the NoExecute taint.
+			// kubelet 只关心 NoExecute 类型的污点，其他效果由调度器处理。
 			return t.Effect == v1.TaintEffectNoExecute
 		}, utilfeature.DefaultFeatureGate.Enabled(features.TaintTolerationComparisonOperators))
 		if isUntolerated {

@@ -24,7 +24,7 @@ import (
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 )
 
-// validateReservedMemory validates the reserved memory configuration and returns an error if it is invalid.
+// validateReservedMemoryConfiguration 校验预留内存配置，返回所有非法项的错误列表。
 func validateReservedMemoryConfiguration(kc *kubeletconfig.KubeletConfiguration) []error {
 	if len(kc.ReservedMemory) == 0 {
 		return nil
@@ -44,12 +44,12 @@ func validateReservedMemoryConfiguration(kc *kubeletconfig.KubeletConfiguration)
 				errors = append(errors, fmt.Errorf("invalid configuration: the limit type %q for NUMA node %d is not supported, only %v is accepted", resourceName, numaNode, []v1.ResourceName{v1.ResourceMemory, v1.ResourceHugePagesPrefix + "<HugePageSize>"}))
 			}
 
-			// validates that the limit has non-zero value
+			// 校验 limit 值不能为零。
 			if q.IsZero() {
 				errors = append(errors, fmt.Errorf("invalid configuration: reserved memory may not be zero for NUMA node %d and resource %q", numaNode, resourceName))
 			}
 
-			// validates that no duplication for NUMA node and limit type occurred
+			// 校验同一 NUMA 节点上同一资源类型不能重复配置。
 			if _, ok := numaTypeDuplicates[numaNode][resourceName]; ok {
 				errors = append(errors, fmt.Errorf("invalid configuration: the reserved memory has a duplicate value for NUMA node %d and resource %q", numaNode, resourceName))
 			}
@@ -59,6 +59,7 @@ func validateReservedMemoryConfiguration(kc *kubeletconfig.KubeletConfiguration)
 	return errors
 }
 
+// reservedMemorySupportedLimit 判断资源名是否为内存或 HugePage 资源。
 func reservedMemorySupportedLimit(resourceName v1.ResourceName) bool {
 	return corev1helper.IsHugePageResourceName(resourceName) || resourceName == v1.ResourceMemory
 }

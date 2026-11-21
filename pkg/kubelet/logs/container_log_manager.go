@@ -40,51 +40,51 @@ import (
 )
 
 const (
-	// timestampFormat is format of the timestamp suffix for rotated log.
-	// See https://golang.org/pkg/time/#Time.Format.
+	// timestampFormat 是轮转日志时间戳后缀的格式。
+	// 参考 https://golang.org/pkg/time/#Time.Format。
 	timestampFormat = "20060102-150405"
-	// compressSuffix is the suffix for compressed log.
+	// compressSuffix 是压缩日志文件的后缀。
 	compressSuffix = ".gz"
-	// tmpSuffix is the suffix for temporary file.
+	// tmpSuffix 是临时文件的后缀。
 	tmpSuffix = ".tmp"
 )
 
-// ContainerLogManager manages lifecycle of all container logs.
+// ContainerLogManager 管理所有容器日志的生命周期。
 //
-// Implementation is thread-safe.
+// 实现是线程安全的。
 type ContainerLogManager interface {
-	// Start container log manager.
+	// Start 启动容器日志管理器。
 	Start(ctx context.Context)
-	// Clean removes all logs of specified container.
+	// Clean 删除指定容器的所有日志。
 	Clean(ctx context.Context, containerID string) error
 }
 
-// LogRotatePolicy is a policy for container log rotation. The policy applies to all
-// containers managed by kubelet.
+// LogRotatePolicy 是容器日志轮转策略，适用于 kubelet 管理的所有容器。
 type LogRotatePolicy struct {
-	// MaxSize in bytes of the container log file before it is rotated. Negative
-	// number means to disable container log rotation.
+	// MaxSize 是容器日志文件触发轮转的大小上限（字节）。
+	// 取负值表示禁用容器日志轮转。
 	MaxSize int64
-	// MaxFiles is the maximum number of log files that can be present.
-	// If rotating the logs creates excess files, the oldest file is removed.
+	// MaxFiles 是允许保留的日志文件数量上限。
+	// 若轮转产生超额文件，则删除最旧的文件。
 	MaxFiles int
 }
 
-// GetAllLogs gets all inuse (rotated/compressed) logs for a specific container log.
-// Returned logs are sorted in oldest to newest order.
+// GetAllLogs 获取指定容器日志对应的全部在用（已轮转/已压缩）日志文件。
+// 返回结果按从旧到新的顺序排列。
 func GetAllLogs(log string) ([]string, error) {
-	// pattern is used to match all rotated files.
+	// 用通配模式匹配所有轮转文件。
 	pattern := fmt.Sprintf("%s.*", log)
 	logs, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list all log files with pattern %q: %w", pattern, err)
 	}
+	// 过滤掉不再使用的文件，并排序以保证返回顺序稳定。
 	inuse, _ := filterUnusedLogs(logs)
 	sort.Strings(inuse)
 	return append(inuse, log), nil
 }
 
-// parseMaxSize parses quantity string to int64 max size in bytes.
+// parseMaxSize 将带单位的数量字符串解析为以字节为单位的 int64 上限值。
 func parseMaxSize(size string) (int64, error) {
 	quantity, err := resource.ParseQuantity(size)
 	if err != nil {
@@ -97,6 +97,7 @@ func parseMaxSize(size string) (int64, error) {
 	return maxSize, nil
 }
 
+// containerLogManager 是 ContainerLogManager 的默认实现。
 type containerLogManager struct {
 	runtimeService   internalapi.RuntimeService
 	osInterface      kubecontainer.OSInterface
@@ -108,7 +109,7 @@ type containerLogManager struct {
 	monitoringPeriod metav1.Duration
 }
 
-// NewContainerLogManager creates a new container log manager.
+// NewContainerLogManager 创建一个新的容器日志管理器。
 func NewContainerLogManager(runtimeService internalapi.RuntimeService, osInterface kubecontainer.OSInterface, maxSize string, maxFiles int, maxWorkers int, monitorInterval metav1.Duration) (ContainerLogManager, error) {
 	if maxFiles <= 1 {
 		return nil, fmt.Errorf("invalid MaxFiles %d, must be > 1", maxFiles)
@@ -117,11 +118,11 @@ func NewContainerLogManager(runtimeService internalapi.RuntimeService, osInterfa
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse container log max size %q: %w", maxSize, err)
 	}
-	// Negative number means to disable container log rotation
+	// 负数表示禁用容器日志轮转，直接返回空实现的 stub。
 	if parsedMaxSize < 0 {
 		return NewStubContainerLogManager(), nil
 	}
-	// policy LogRotatePolicy
+	// 使用配置的轮转策略构造真正的日志管理器。
 	return &containerLogManager{
 		osInterface:    osInterface,
 		runtimeService: runtimeService,
@@ -140,15 +141,16 @@ func NewContainerLogManager(runtimeService internalapi.RuntimeService, osInterfa
 	}, nil
 }
 
-// Start the container log manager.
+// Start 启动容器日志管理器：拉起多个处理 worker 并周期性触发日志轮转。
 func (c *containerLogManager) Start(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	logger.Info("Initializing container log rotate workers", "workers", c.maxWorkers, "monitorPeriod", c.monitoringPeriod)
+	// 启动固定数量的 worker 并发消费轮转队列，提高多容器场景下的吞吐。
 	for i := 0; i < c.maxWorkers; i++ {
 		worker := i + 1
 		go c.processQueueItems(ctx, worker)
 	}
-	// Start a goroutine periodically does container log rotation.
+	// 启动一个 goroutine，周期性扫描并轮转容器日志。
 	go wait.Forever(func() {
 		if err := c.rotateLogs(ctx); err != nil {
 			logger.Error(err, "Failed to rotate container logs")
@@ -156,8 +158,9 @@ func (c *containerLogManager) Start(ctx context.Context) {
 	}, c.monitoringPeriod.Duration)
 }
 
-// Clean removes all logs of specified container (including rotated one).
+// Clean 删除指定容器的所有日志（包括已轮转的日志）。
 func (c *containerLogManager) Clean(ctx context.Context, containerID string) error {
+	// 与轮转流程共用互斥锁，避免清理与轮转同时操作同一批文件。
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	resp, err := c.runtimeService.ContainerStatus(ctx, containerID, false)
@@ -167,6 +170,7 @@ func (c *containerLogManager) Clean(ctx context.Context, containerID string) err
 	if resp.GetStatus() == nil {
 		return fmt.Errorf("container status is nil for %q", containerID)
 	}
+	// 以日志路径为前缀匹配主日志及所有轮转文件。
 	pattern := fmt.Sprintf("%s*", resp.GetStatus().GetLogPath())
 	logs, err := c.osInterface.Glob(pattern)
 	if err != nil {
@@ -182,6 +186,7 @@ func (c *containerLogManager) Clean(ctx context.Context, containerID string) err
 	return nil
 }
 
+// processQueueItems 循环消费轮转队列，直到队列关闭或上下文结束。
 func (c *containerLogManager) processQueueItems(ctx context.Context, worker int) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Starting container log rotation worker", "workerID", worker)
@@ -190,8 +195,10 @@ func (c *containerLogManager) processQueueItems(ctx context.Context, worker int)
 	logger.V(4).Info("Terminating container log rotation worker", "workerID", worker)
 }
 
+// rotateLogs 列出所有运行中的容器，并将其加入轮转队列。
 func (c *containerLogManager) rotateLogs(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
+	// 与 Clean 共用互斥锁，保证容器列表快照与清理操作不会互相干扰。
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	logger.V(4).Info("Starting container log rotation sequence")
@@ -201,12 +208,12 @@ func (c *containerLogManager) rotateLogs(ctx context.Context) error {
 		return fmt.Errorf("failed to list containers: %w", err)
 	}
 	for _, container := range containers {
-		// Only rotate logs for running containers. Non-running containers won't
-		// generate new output, it doesn't make sense to keep an empty latest log.
+		// 只轮转运行中容器的日志。非运行容器不会产生新输出，
+		// 保留一个空的“最新日志”没有意义。
 		if container.GetState() != runtimeapi.ContainerState_CONTAINER_RUNNING {
 			continue
 		}
-		// Doing this to avoid additional overhead with logging of label like arguments that can prove costly
+		// 先判断日志级别是否启用，避免在关闭时仍构造可能开销很大的标签参数。
 		if v := logger.V(4); v.Enabled() {
 			logger.V(4).Info("Adding new entry to the queue for processing", "id", container.GetId(), "name", container.Metadata.GetName(), "labels", container.GetLabels())
 		}
@@ -215,6 +222,7 @@ func (c *containerLogManager) rotateLogs(ctx context.Context) error {
 	return nil
 }
 
+// processContainer 处理队列中的单个容器：按需轮转其日志。
 func (c *containerLogManager) processContainer(ctx context.Context, worker int) (ok bool) {
 	key, quit := c.queue.Get()
 	if quit {
@@ -224,7 +232,7 @@ func (c *containerLogManager) processContainer(ctx context.Context, worker int) 
 		c.queue.Done(key)
 		c.queue.Forget(key)
 	}()
-	// Always default the return to true to keep the processing of Queue ongoing
+	// 返回值默认为 true，保证队列处理循环持续进行。
 	ok = true
 	id := key
 	logger := klog.FromContext(ctx)
@@ -237,6 +245,7 @@ func (c *containerLogManager) processContainer(ctx context.Context, worker int) 
 		logger.Error(err, "Container status is nil", "worker", worker, "containerID", id)
 		return
 	}
+	// 获取日志文件当前大小，判断是否达到轮转阈值。
 	path := resp.GetStatus().GetLogPath()
 	info, err := c.osInterface.Stat(path)
 
@@ -246,6 +255,7 @@ func (c *containerLogManager) processContainer(ctx context.Context, worker int) 
 			return
 		}
 
+		// 日志文件丢失时请求运行时重新打开日志，随后重新获取文件信息。
 		if err = c.runtimeService.ReopenContainerLog(ctx, id); err != nil {
 			logger.Error(err, "Container log doesn't exist, reopen container log failed", "worker", worker, "containerID", id, "path", path)
 			return
@@ -257,6 +267,7 @@ func (c *containerLogManager) processContainer(ctx context.Context, worker int) 
 			return
 		}
 	}
+	// 未达到大小阈值则跳过本轮轮转。
 	if info.Size() < c.policy.MaxSize {
 		logger.V(7).Info("log file doesn't need to be rotated", "worker", worker, "containerID", id, "path", path, "currentSize", info.Size(), "maxSize", c.policy.MaxSize)
 		return
@@ -269,8 +280,10 @@ func (c *containerLogManager) processContainer(ctx context.Context, worker int) 
 	return
 }
 
+// rotateLog 执行一次完整的轮转：清理废弃文件、删除超额文件、压缩旧日志，
+// 最后轮转当前日志文件。
 func (c *containerLogManager) rotateLog(ctx context.Context, id, log string) error {
-	// pattern is used to match all rotated files.
+	// 用通配模式匹配所有轮转文件。
 	pattern := fmt.Sprintf("%s.*", log)
 	logs, err := filepath.Glob(pattern)
 	if err != nil {
@@ -287,7 +300,7 @@ func (c *containerLogManager) rotateLog(ctx context.Context, id, log string) err
 		return fmt.Errorf("failed to remove excess logs: %w", err)
 	}
 
-	// Compress uncompressed log files.
+	// 压缩尚未压缩的旧日志文件。
 	for _, l := range logs {
 		if strings.HasSuffix(l, compressSuffix) {
 			continue
@@ -304,8 +317,7 @@ func (c *containerLogManager) rotateLog(ctx context.Context, id, log string) err
 	return nil
 }
 
-// cleanupUnusedLogs cleans up temporary or unused log files generated by previous log rotation
-// failure.
+// cleanupUnusedLogs 清理此前轮转失败遗留的临时文件或已废弃的日志文件。
 func (c *containerLogManager) cleanupUnusedLogs(logs []string) ([]string, error) {
 	inuse, unused := filterUnusedLogs(logs)
 	for _, l := range unused {
@@ -316,8 +328,7 @@ func (c *containerLogManager) cleanupUnusedLogs(logs []string) ([]string, error)
 	return inuse, nil
 }
 
-// filterUnusedLogs splits logs into 2 groups, the 1st group is in used logs,
-// the second group is unused logs.
+// filterUnusedLogs 将日志分为两组：第一组为在用日志，第二组为未使用日志。
 func filterUnusedLogs(logs []string) (inuse []string, unused []string) {
 	for _, l := range logs {
 		if isInUse(l, logs) {
@@ -329,17 +340,17 @@ func filterUnusedLogs(logs []string) (inuse []string, unused []string) {
 	return inuse, unused
 }
 
-// isInUse checks whether a container log file is still inuse.
+// isInUse 判断某个容器日志文件是否仍在使用。
 func isInUse(l string, logs []string) bool {
-	// All temporary files are not in use.
+	// 所有临时文件都不在使用。
 	if strings.HasSuffix(l, tmpSuffix) {
 		return false
 	}
-	// All compressed logs are in use.
+	// 所有压缩日志都在使用。
 	if strings.HasSuffix(l, compressSuffix) {
 		return true
 	}
-	// Files has already been compressed are not in use.
+	// 已经存在对应压缩文件的原始日志不再使用。
 	for _, another := range logs {
 		if l+compressSuffix == another {
 			return false
@@ -348,14 +359,14 @@ func isInUse(l string, logs []string) bool {
 	return true
 }
 
-// removeExcessLogs removes old logs to make sure there are only at most MaxFiles log files.
+// removeExcessLogs 删除旧日志，确保日志文件总数不超过 MaxFiles。
 func (c *containerLogManager) removeExcessLogs(logs []string) ([]string, error) {
-	// Sort log files in oldest to newest order.
+	// 按从旧到新的顺序排序日志文件。
 	sort.Strings(logs)
-	// Container will create a new log file, and we'll rotate the latest log file.
-	// Other than those 2 files, we can have at most MaxFiles-2 rotated log files.
-	// Keep MaxFiles-2 files by removing old files.
-	// We should remove from oldest to newest, so as not to break ongoing `kubectl logs`.
+	// 容器会创建新的日志文件，我们还会轮转最新的日志文件。
+	// 除这两个文件外，最多可保留 MaxFiles-2 个轮转日志。
+	// 通过删除旧文件保留 MaxFiles-2 个文件。
+	// 必须从旧到新删除，以免破坏正在进行的 `kubectl logs`。
 	maxRotatedFiles := c.policy.MaxFiles - 2
 	if maxRotatedFiles < 0 {
 		maxRotatedFiles = 0
@@ -370,7 +381,7 @@ func (c *containerLogManager) removeExcessLogs(logs []string) ([]string, error) 
 	return logs, nil
 }
 
-// compressLog compresses a log to log.gz with gzip.
+// compressLog 使用 gzip 将日志压缩为 log.gz。
 func (c *containerLogManager) compressLog(log string) error {
 	logInfo, err := os.Stat(log)
 	if err != nil {
@@ -381,13 +392,14 @@ func (c *containerLogManager) compressLog(log string) error {
 		return fmt.Errorf("failed to open log %q: %w", log, err)
 	}
 	defer r.Close()
+	// 先写入临时文件，成功后再重命名，避免产生不完整的 .gz 文件。
 	tmpLog := log + tmpSuffix
 	f, err := c.osInterface.OpenFile(tmpLog, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, logInfo.Mode())
 	if err != nil {
 		return fmt.Errorf("failed to create temporary log %q: %w", tmpLog, err)
 	}
 	defer func() {
-		// Best effort cleanup of tmpLog.
+		// 尽力清理临时文件，失败也不影响主流程。
 		c.osInterface.Remove(tmpLog)
 	}()
 	defer f.Close()
@@ -396,14 +408,14 @@ func (c *containerLogManager) compressLog(log string) error {
 	if _, err := io.Copy(w, r); err != nil {
 		return fmt.Errorf("failed to compress %q to %q: %w", log, tmpLog, err)
 	}
-	// The archive needs to be closed before renaming, otherwise an error will occur on Windows.
+	// 重命名前必须先关闭压缩归档，否则在 Windows 上会报错。
 	w.Close()
 	f.Close()
 	compressedLog := log + compressSuffix
 	if err := c.osInterface.Rename(tmpLog, compressedLog); err != nil {
 		return fmt.Errorf("failed to rename %q to %q: %w", tmpLog, compressedLog, err)
 	}
-	// Remove old log file.
+	// 删除旧的未压缩日志文件。
 	r.Close()
 	if err := c.osInterface.Remove(log); err != nil {
 		return fmt.Errorf("failed to remove log %q after compress: %w", log, err)
@@ -411,8 +423,8 @@ func (c *containerLogManager) compressLog(log string) error {
 	return nil
 }
 
-// rotateLatestLog rotates latest log without compression, so that container can still write
-// and fluentd can finish reading.
+// rotateLatestLog 轮转最新的日志文件但不做压缩，
+// 以便容器继续写入、日志采集器（如 fluentd）仍能读完旧内容。
 func (c *containerLogManager) rotateLatestLog(ctx context.Context, id, log string) error {
 	logger := klog.FromContext(ctx)
 	timestamp := c.clock.Now().Format(timestampFormat)
@@ -421,13 +433,11 @@ func (c *containerLogManager) rotateLatestLog(ctx context.Context, id, log strin
 		return fmt.Errorf("failed to rotate log %q to %q: %w", log, rotated, err)
 	}
 	if err := c.runtimeService.ReopenContainerLog(ctx, id); err != nil {
-		// Rename the rotated log back, so that we can try rotating it again
-		// next round.
-		// If kubelet gets restarted at this point, we'll lose original log.
+		// 将已轮转的日志改名回原路径，以便下一轮重新尝试轮转。
+		// 如果此时 kubelet 重启，原日志将会丢失。
 		if renameErr := c.osInterface.Rename(rotated, log); renameErr != nil {
-			// This shouldn't happen.
-			// Report an error if this happens, because we will lose original
-			// log.
+			// 这不应发生。
+			// 若发生则上报错误，因为原日志将丢失。
 			logger.Error(renameErr, "Failed to rename rotated log", "rotatedLog", rotated, "newLog", log, "containerID", id)
 		}
 		return fmt.Errorf("failed to reopen container log %q: %w", id, err)

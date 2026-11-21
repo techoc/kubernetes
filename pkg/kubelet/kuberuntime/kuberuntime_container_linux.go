@@ -52,10 +52,10 @@ import (
 
 var defaultPageSize = int64(os.Getpagesize())
 
-// applyPlatformSpecificContainerConfig applies platform specific configurations to runtimeapi.ContainerConfig.
+// applyPlatformSpecificContainerConfig 向 runtimeapi.ContainerConfig 应用平台相关的配置。
 func (m *kubeGenericRuntimeManager) applyPlatformSpecificContainerConfig(ctx context.Context, config *runtimeapi.ContainerConfig, container *v1.Container, pod *v1.Pod, uid *int64, username string, nsTarget *kubecontainer.ContainerID) error {
 	enforceMemoryQoS := false
-	// Set memory.min and memory.high if MemoryQoS enabled with cgroups v2
+	// 在 MemoryQoS 开启且使用 cgroups v2 时设置 memory.min 与 memory.high
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.MemoryQoS) &&
 		isCgroup2UnifiedMode() {
 		enforceMemoryQoS = true
@@ -77,7 +77,7 @@ func (m *kubeGenericRuntimeManager) applyPlatformSpecificContainerConfig(ctx con
 	return nil
 }
 
-// generateLinuxContainerConfig generates linux container config for kubelet runtime v1.
+// generateLinuxContainerConfig 为 kubelet runtime v1 生成 Linux 容器配置。
 func (m *kubeGenericRuntimeManager) generateLinuxContainerConfig(ctx context.Context, container *v1.Container, pod *v1.Pod, uid *int64, username string, nsTarget *kubecontainer.ContainerID, enforceMemoryQoS bool) (*runtimeapi.LinuxContainerConfig, error) {
 	sc, err := m.determineEffectiveSecurityContext(ctx, pod, container, uid, username)
 	if err != nil {
@@ -96,13 +96,10 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerConfig(ctx context.Con
 	return lc, nil
 }
 
-// getCPULimit returns the CPU limit for the container to be used to calculate
-// Linux Container Resources.
+// getCPULimit 返回用于计算 Linux 容器资源的容器 CPU 上限。
 func getCPULimit(pod *v1.Pod, container *v1.Container, draAllocations v1.ResourceList) *resource.Quantity {
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.PodLevelResources) && resourcehelper.IsPodLevelResourcesSet(pod) {
-		// When container-level CPU limit is not set, the pod-level
-		// limit is used in the calculation for components relying on linux resource limits
-		// to be set.
+		// 容器级 CPU 上限未设置时，依赖 Linux 资源上限配置的组件使用 Pod 级上限参与计算。
 		if container.Resources.Limits.Cpu().IsZero() {
 			return pod.Spec.Resources.Limits.Cpu()
 		}
@@ -112,8 +109,8 @@ func getCPULimit(pod *v1.Pod, container *v1.Container, draAllocations v1.Resourc
 	if limit.IsZero() || !exists || draCPU.IsZero() {
 		return limit
 	}
-	// Only add DRA values to limits if limits are explicitly specified in the container spec.
-	// If not, we retain the current defaults which is setting to pod-level limits if specified, or unlimited.
+	// 仅当容器 spec 中显式设置了上限时，才把 DRA 分配值累加进去；
+	// 否则保留现有默认行为：设置了 Pod 级上限则用之，否则为不限量。
 	if origContainer := getContainerSpec(pod, container.Name); origContainer != nil && origContainer.Resources.Limits.Cpu().IsZero() {
 		return limit
 	}
@@ -122,13 +119,10 @@ func getCPULimit(pod *v1.Pod, container *v1.Container, draAllocations v1.Resourc
 	return &q
 }
 
-// getMemoryLimit returns the memory limit for the container to be used to calculate
-// Linux Container Resources.
+// getMemoryLimit 返回用于计算 Linux 容器资源的容器内存上限。
 func getMemoryLimit(pod *v1.Pod, container *v1.Container, draAllocations v1.ResourceList) *resource.Quantity {
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.PodLevelResources) && resourcehelper.IsPodLevelResourcesSet(pod) {
-		// When container-level memory limit is not set, the pod-level
-		// limit is used in the calculation for components relying on linux resource limits
-		// to be set.
+		// 容器级内存上限未设置时，依赖 Linux 资源上限配置的组件使用 Pod 级上限参与计算。
 		if container.Resources.Limits.Memory().IsZero() {
 			return pod.Spec.Resources.Limits.Memory()
 		}
@@ -138,8 +132,8 @@ func getMemoryLimit(pod *v1.Pod, container *v1.Container, draAllocations v1.Reso
 	if limit.IsZero() || !exists || draMemory.IsZero() {
 		return limit
 	}
-	// Only add DRA values to limits if limits are explicitly specified in the container spec.
-	// If not, we retain the current defaults which is setting to pod-level limits if specified, or unlimited.
+	// 仅当容器 spec 中显式设置了上限时，才把 DRA 分配值累加进去；
+	// 否则保留现有默认行为：设置了 Pod 级上限则用之，否则为不限量。
 	if origContainer := getContainerSpec(pod, container.Name); origContainer != nil && origContainer.Resources.Limits.Memory().IsZero() {
 		return limit
 	}
@@ -148,7 +142,7 @@ func getMemoryLimit(pod *v1.Pod, container *v1.Container, draAllocations v1.Reso
 	return &q
 }
 
-// getContainerSpec returns the container spec with the given name from the pod spec.
+// getContainerSpec 返回 Pod spec 中指定名称的容器，依次查找普通容器与 init 容器。
 func getContainerSpec(pod *v1.Pod, containerName string) *v1.Container {
 	for i := range pod.Spec.Containers {
 		if pod.Spec.Containers[i].Name == containerName {
@@ -163,10 +157,10 @@ func getContainerSpec(pod *v1.Pod, containerName string) *v1.Container {
 	return nil
 }
 
-// generateLinuxContainerResources generates linux container resources config for runtime
+// generateLinuxContainerResources 生成运行时所需的 Linux 容器资源配置。
 func (m *kubeGenericRuntimeManager) generateLinuxContainerResources(ctx context.Context, pod *v1.Pod, container *v1.Container, enforceMemoryQoS bool) *runtimeapi.LinuxContainerResources {
 	logger := klog.FromContext(ctx)
-	// set linux container resources
+	// 设置 Linux 容器资源
 	var cpuRequest *resource.Quantity
 	if _, cpuRequestExists := container.Resources.Requests[v1.ResourceCPU]; cpuRequestExists {
 		cpuRequest = container.Resources.Requests.Cpu()
@@ -179,14 +173,13 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerResources(ctx context.
 	memoryLimit := getMemoryLimit(pod, container, draAllocations)
 	cpuLimit := getCPULimit(pod, container, draAllocations)
 
-	// If request is not specified, default it to CPU limit without DRA allocations to prevent
-	// calculateLinuxResources from falling back to the DRA-inflated cpuLimit.
+	// 未指定请求值时，默认取不含 DRA 分配的 CPU 上限，
+	// 避免 calculateLinuxResources 回退到被 DRA 放大后的 cpuLimit。
 	if cpuRequest == nil {
 		cpuRequest = getCPULimit(pod, container, nil)
 	}
 
-	// If pod has exclusive cpu and the container in question has integer cpu requests
-	// the cfs quota will not be enforced
+	// 若 Pod 独占 CPU 且该容器请求的是整数 CPU，则不启用 CFS quota
 	disableCPUQuota := utilfeature.DefaultFeatureGate.Enabled(kubefeatures.DisableCPUQuotaWithExclusiveCPUs) && m.containerManager.ContainerHasExclusiveCPUs(logger, pod, container)
 	logger.V(5).Info("Enforcing CFS quota", "pod", klog.KObj(pod), "unlimited", disableCPUQuota)
 	lcr := m.calculateLinuxResources(cpuRequest, cpuLimit, memoryLimit, disableCPUQuota)
@@ -196,17 +189,16 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerResources(ctx context.
 
 	lcr.HugepageLimits = GetHugepageLimitsFromResources(ctx, pod, container.Resources, draAllocations)
 
-	// Configure swap for the container
+	// 为容器配置 swap。
 	m.configureContainerSwapResources(ctx, lcr, pod, container)
 
-	// Set memory.min and memory.high to enforce MemoryQoS
+	// 设置 memory.min 与 memory.high 以启用 MemoryQoS
 	if enforceMemoryQoS {
 		unified := map[string]string{}
 		memoryRequest := container.Resources.Requests.Memory().Value()
 		memoryLimitSpec := container.Resources.Limits.Memory().Value()
 		if memoryRequest != 0 && m.memoryReservationPolicy == kubeletconfiginternal.TieredReservationMemoryReservationPolicy {
-			// Guaranteed pods get memory.min (hard protection).
-			// Burstable pods get memory.low (soft protection).
+			// Guaranteed Pod 设置 memory.min（硬性保护），Burstable Pod 设置 memory.low（软性保护）。
 			if kubeapiqos.GetPodQOS(pod) == v1.PodQOSGuaranteed {
 				unified[cm.Cgroup2MemoryMin] = strconv.FormatInt(memoryRequest, 10)
 			} else {
@@ -216,9 +208,8 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerResources(ctx context.
 			unified[cm.Cgroup2MemoryMin] = "0"
 			unified[cm.Cgroup2MemoryLow] = "0"
 		}
-		// When PodLevelResources is active and the container has no memory limit,
-		// skip container-level memory.high — the pod cgroup's memory.high handles
-		// throttling hierarchically (kernel walks ancestors in try_charge_memcg).
+		// PodLevelResources 生效且容器没有内存上限时，跳过容器级 memory.high：
+		// 节流由 Pod cgroup 的 memory.high 按层级处理（内核在 try_charge_memcg 中向上遍历祖先）。
 		skipContainerMemoryHigh := memoryLimitSpec == 0 &&
 			utilfeature.DefaultFeatureGate.Enabled(kubefeatures.PodLevelResources) &&
 			resourcehelper.IsPodLevelResourcesSet(pod) &&
@@ -226,19 +217,19 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerResources(ctx context.
 		if m.memoryThrottlingFactor != nil && !skipContainerMemoryHigh && (memoryRequest != memoryLimitSpec || memoryRequest == 0) {
 			memoryLimitVal := memoryLimitSpec
 			if _, exists := draAllocations[v1.ResourceMemory]; exists && memoryLimit != nil && memoryLimitSpec != 0 {
-				// memoryLimit computed above should include DRA already.
-				// We use the DRA-inflated memory limit to calculate the throttling threshold (memory.high)
-				// so that Burstable pods are not throttled early at their standard Spec limit.
-				// However, the QoS classification remains strictly based on the pure spec requests and limits
-				// and does not consider DRA. With DRA node allocatable claims, we continue to
-				// 1. Skip setting memory.high for guaranteed pods.
-				// 2. Set memory.high based on node memory capacity for besteffort pods.
+				// 上面计算出的 memoryLimit 已包含 DRA 分配。
+				// 用被 DRA 放大后的内存上限计算节流阈值（memory.high），
+				// 避免 Burstable Pod 在其标准 Spec 上限处被过早节流。
+				// 但 QoS 分类仍严格基于纯 spec 的请求与上限，不考虑 DRA。
+				// 对于 DRA 节点可分配资源，继续执行：
+				// 1. Guaranteed Pod 跳过设置 memory.high；
+				// 2. Besteffort Pod 基于节点内存容量设置 memory.high。
 				memoryLimitVal = memoryLimit.Value()
 			}
-			// The formula for memory.high for container cgroup is modified in Alpha stage of the feature in K8s v1.27.
-			// It will be set based on formula:
+			// K8s v1.27 该特性 Alpha 阶段起，容器 cgroup 的 memory.high 公式有所调整，
+			// 按如下公式设置：
 			// `memory.high=floor[(requests.memory + memory throttling factor * (limits.memory or node allocatable memory - requests.memory))/pageSize] * pageSize`
-			// More info: https://git.k8s.io/enhancements/keps/sig-node/2570-memory-qos
+			// 详见：https://git.k8s.io/enhancements/keps/sig-node/2570-memory-qos
 			memoryHigh := int64(0)
 			if memoryLimitVal != 0 {
 				memoryHigh = int64(math.Floor(
@@ -268,9 +259,8 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerResources(ctx context.
 			logger.V(4).Info("MemoryQoS config for container", "pod", klog.KObj(pod), "containerName", container.Name, "unified", unified)
 		}
 	} else if isCgroup2UnifiedMode() {
-		// When MemoryQoS is off, explicitly reset memory.high to "max" so
-		// that InPlacePodResize clears the stale throttle limit on containers
-		// that were created while MemoryQoS was enabled.
+		// MemoryQoS 关闭时，显式将 memory.high 重置为 "max"，
+		// 以便 InPlacePodResize 清除在开启 MemoryQoS 期间创建的容器上残留的节流上限。
 		if lcr.Unified == nil {
 			lcr.Unified = map[string]string{}
 		}
@@ -280,15 +270,15 @@ func (m *kubeGenericRuntimeManager) generateLinuxContainerResources(ctx context.
 	return lcr
 }
 
-// configureContainerSwapResources configures the swap resources for a specified (linux) container.
-// Swap is only configured if a swap cgroup controller is available and the NodeSwap feature gate is enabled.
+// configureContainerSwapResources 为指定的（Linux）容器配置 swap 资源。
+// 仅在 swap cgroup 控制器可用且 NodeSwap 特性门控开启时才进行配置。
 func (m *kubeGenericRuntimeManager) configureContainerSwapResources(ctx context.Context, lcr *runtimeapi.LinuxContainerResources, pod *v1.Pod, container *v1.Container) {
 	if !m.getSwapControllerAvailable() {
 		return
 	}
 
 	swapConfigurationHelper := newSwapConfigurationHelper(*m.machineInfo, m.getSwapControllerAvailable)
-	// NOTE(ehashman): Behavior is defined in the opencontainers runtime spec:
+	// NOTE(ehashman): 该行为由 opencontainers 运行时规范定义：
 	// https://github.com/opencontainers/runtime-spec/blob/1c3f411f041711bbeecf35ff7e93461ea6789220/config-linux.md#memory
 	switch m.GetContainerSwapBehavior(pod, container) {
 	case types.NoSwap:
@@ -300,8 +290,7 @@ func (m *kubeGenericRuntimeManager) configureContainerSwapResources(ctx context.
 	}
 }
 
-// GetContainerSwapBehavior checks what swap behavior should be configured for a container,
-// considering the requirements for enabling swap.
+// GetContainerSwapBehavior 结合启用 swap 的各项前提条件，判断容器应配置的 swap 行为。
 func (m *kubeGenericRuntimeManager) GetContainerSwapBehavior(pod *v1.Pod, container *v1.Container) types.SwapBehavior {
 	c := types.SwapBehavior(m.memorySwapBehavior)
 	if c == types.LimitedSwap {
@@ -327,10 +316,10 @@ func (m *kubeGenericRuntimeManager) GetContainerSwapBehavior(pod *v1.Pod, contai
 	return types.NoSwap
 }
 
-// generateContainerResources generates platform specific (linux) container resources config for runtime
+// generateContainerResources 生成平台相关的（Linux）容器资源配置。
 func (m *kubeGenericRuntimeManager) generateContainerResources(ctx context.Context, pod *v1.Pod, container *v1.Container) *runtimeapi.ContainerResources {
 	enforceMemoryQoS := false
-	// Set memory.min and memory.high if MemoryQoS enabled with cgroups v2
+	// 在 MemoryQoS 开启且使用 cgroups v2 时设置 memory.min 与 memory.high
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.MemoryQoS) &&
 		isCgroup2UnifiedMode() {
 		enforceMemoryQoS = true
@@ -340,7 +329,7 @@ func (m *kubeGenericRuntimeManager) generateContainerResources(ctx context.Conte
 	}
 }
 
-// generateUpdatePodSandboxResourcesRequest generates platform specific (linux) podsandox resources config for runtime
+// generateUpdatePodSandboxResourcesRequest 生成平台相关的（Linux）PodSandbox 资源更新请求。
 func (m *kubeGenericRuntimeManager) generateUpdatePodSandboxResourcesRequest(sandboxID string, pod *v1.Pod, podResources *cm.ResourceConfig) *runtimeapi.UpdatePodSandboxResourcesRequest {
 
 	podResourcesWithoutOverhead := subtractOverheadFromResourceConfig(podResources, pod)
@@ -351,21 +340,19 @@ func (m *kubeGenericRuntimeManager) generateUpdatePodSandboxResourcesRequest(san
 	}
 }
 
-// calculateLinuxResources will create the linuxContainerResources type based on the provided CPU and memory resource requests, limits
+// calculateLinuxResources 根据给定的 CPU 与内存资源请求、上限生成 linuxContainerResources。
 func (m *kubeGenericRuntimeManager) calculateLinuxResources(cpuRequest, cpuLimit, memoryLimit *resource.Quantity, disableCPUQuota bool) *runtimeapi.LinuxContainerResources {
 	resources := runtimeapi.LinuxContainerResources{}
 	var cpuShares int64
 
 	memLimit := memoryLimit.Value()
 
-	// If request is not specified, but limit is, we want request to default to limit.
-	// API server does this for new containers, but we repeat this logic in Kubelet
-	// for containers running on existing Kubernetes clusters.
+	// 请求未指定但上限已指定时，请求默认取上限。API server 对新容器已这样做，
+	// 此处在 Kubelet 重复该逻辑，以兼容已有集群中的存量容器。
 	if cpuRequest == nil && cpuLimit != nil {
 		cpuShares = int64(cm.MilliCPUToShares(cpuLimit.MilliValue()))
 	} else {
-		// if cpuRequest.Amount is nil, then MilliCPUToShares will return the minimal number
-		// of CPU shares.
+		// cpuRequest.Amount 为 nil 时，MilliCPUToShares 返回最小的 CPU shares 值。
 		cpuShares = int64(cm.MilliCPUToShares(cpuRequest.MilliValue()))
 	}
 	resources.CpuShares = cpuShares
@@ -374,12 +361,10 @@ func (m *kubeGenericRuntimeManager) calculateLinuxResources(cpuRequest, cpuLimit
 	}
 
 	if m.cpuCFSQuota {
-		// if cpuLimit.Amount is nil, then the appropriate default value is returned
-		// to allow full usage of cpu resource.
+		// cpuLimit.Amount 为 nil 时，返回允许充分使用 CPU 资源的合适默认值。
 		cpuPeriod := int64(cm.QuotaPeriod)
 		if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUCFSQuotaPeriod) {
-			// kubeGenericRuntimeManager.cpuCFSQuotaPeriod is provided in time.Duration,
-			// but we need to convert it to number of microseconds which is used by kernel.
+			// cpuCFSQuotaPeriod 以 time.Duration 提供，需要转换为内核使用的微秒数。
 			cpuPeriod = int64(m.cpuCFSQuotaPeriod.Duration / time.Microsecond)
 		}
 		cpuQuota := cm.MilliCPUToQuota(cpuLimit.MilliValue(), cpuPeriod)
@@ -390,23 +375,22 @@ func (m *kubeGenericRuntimeManager) calculateLinuxResources(cpuRequest, cpuLimit
 		resources.CpuPeriod = cpuPeriod
 	}
 
-	// runc requires cgroupv2 for unified mode
+	// runc 的 unified 模式依赖 cgroup v2
 	if isCgroup2UnifiedMode() && !ptr.Deref(m.singleProcessOOMKill, true) {
 		resources.Unified = map[string]string{
-			// Ask the kernel to kill all processes in the container cgroup in case of OOM.
-			// See memory.oom.group in https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html for
-			// more info.
+			// 请求内核在 OOM 时杀死容器 cgroup 内的所有进程；
+			// 详见 https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html 中 memory.oom.group 的说明。
 			"memory.oom.group": "1",
 		}
 	}
 	return &resources
 }
 
-// GetHugepageLimitsFromResources returns limits of each hugepages from resources.
+// GetHugepageLimitsFromResources 返回资源中各大页（hugepage）的上限。
 func GetHugepageLimitsFromResources(ctx context.Context, pod *v1.Pod, containerResources v1.ResourceRequirements, draAllocations v1.ResourceList) []*runtimeapi.HugepageLimit {
 	var hugepageLimits []*runtimeapi.HugepageLimit
 
-	// For each page size, limit to 0.
+	// 每种页大小先默认上限为 0。
 	for _, pageSize := range libcontainercgroups.HugePageSizes() {
 		hugepageLimits = append(hugepageLimits, &runtimeapi.HugepageLimit{
 			PageSize: pageSize,
@@ -416,26 +400,21 @@ func GetHugepageLimitsFromResources(ctx context.Context, pod *v1.Pod, containerR
 
 	requiredHugepageLimits := map[string]uint64{}
 
-	// When hugepage limits are specified at pod level and no hugepage limits are
-	// specified at container level, the container's cgroup will reflect the pod level limit.
+	// Pod 级设置了大页上限而容器级未设置时，容器 cgroup 沿用 Pod 级上限。
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.PodLevelResources) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		for limitName, limitAmount := range pod.Spec.Resources.Limits {
 			readAndDefineRequiredHugepageLimit(ctx, requiredHugepageLimits, limitName, limitAmount)
 		}
 	}
 
-	// If both the pod level and the container level specify hugepages, the container
-	// level will have precedence, so the container's hugepages limit will be reflected
-	// in the container's cgroup values.
+	// Pod 级与容器级都设置了大页时，容器级优先，容器 cgroup 反映容器级上限。
 	for resourceObj, amountObj := range containerResources.Limits {
 		readAndDefineRequiredHugepageLimit(ctx, requiredHugepageLimits, resourceObj, amountObj)
 	}
 
-	// Apply DRA hugepage allocations, even if container spec limits are omitted.
-	// Unlike CPU/Memory (which default to unlimited), hugepages default to 0 (disallowed)
-	// when its not specified in the spec.
-	// We must explicitly set the limit to the DRA allocation to allow container processes
-	// to allocate hugepages when pod-level limits are absent.
+	// 即使容器 spec 未设置大页上限，也要应用 DRA 的大页分配。
+	// 与 CPU/内存（默认不限量）不同，大页在 spec 未指定时默认为 0（禁止分配），
+	// 因此必须显式把上限设为 DRA 分配值，才能在缺少 Pod 级上限时允许容器进程分配大页。
 	for resourceObj, amountObj := range draAllocations {
 		if v1helper.IsHugePageResourceName(resourceObj) {
 			pageSize, err := v1helper.HugePageSizeFromResourceName(resourceObj)
@@ -447,7 +426,7 @@ func GetHugepageLimitsFromResources(ctx context.Context, pod *v1.Pod, containerR
 				continue
 			}
 
-			// Determine if a pod-level limit is set for this specific hugepage resource.
+			// 判断该大页资源是否设置了 Pod 级上限。
 			podLevelLimitsSet := false
 			if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.PodLevelResources) && pod.Spec.Resources != nil {
 				_, podLevelLimitsSet = pod.Spec.Resources.Limits[resourceObj]
@@ -455,13 +434,13 @@ func GetHugepageLimitsFromResources(ctx context.Context, pod *v1.Pod, containerR
 			_, containerSpecLimitsSet := containerResources.Limits[resourceObj]
 
 			if containerSpecLimitsSet {
-				// Case A: Container limit is explicitly specified -> inflate it with DRA.
+				// 情况 A：容器上限显式指定 -> 在其基础上叠加 DRA 值。
 				requiredHugepageLimits[sizeString] += uint64(amountObj.Value())
 			} else if !podLevelLimitsSet {
-				// Case B: No pod-level limit is set for this hugepage size, and container limit is omitted -> set limit to DRA allocation.
+				// 情况 B：该大页无 Pod 级上限且容器上限未设置 -> 上限取 DRA 分配值。
 				requiredHugepageLimits[sizeString] = uint64(amountObj.Value())
 			}
-			// Case C: Pod-level limit for this hugepage size is set, but container limit is omitted -> retain the inherited pod-level limit already set in requiredHugepageLimits.
+			// 情况 C：该大页设置了 Pod 级上限但容器上限未设置 -> 保留已写入 requiredHugepageLimits 的 Pod 级上限。
 		}
 	}
 
@@ -474,6 +453,7 @@ func GetHugepageLimitsFromResources(ctx context.Context, pod *v1.Pod, containerR
 	return hugepageLimits
 }
 
+// readAndDefineRequiredHugepageLimit 把资源中的大页项解析为页大小字符串并写入汇总表，非大页资源直接忽略。
 func readAndDefineRequiredHugepageLimit(ctx context.Context, requiredHugepageLimits map[string]uint64, resourceObj v1.ResourceName, amountObj resource.Quantity) {
 	logger := klog.FromContext(ctx)
 
@@ -495,6 +475,8 @@ func readAndDefineRequiredHugepageLimit(ctx context.Context, requiredHugepageLim
 	requiredHugepageLimits[sizeString] = uint64(amountObj.Value())
 }
 
+// toKubeContainerResources 将运行时状态中的容器资源转换为 kubecontainer.ContainerResources；
+// 无任何有效字段时返回 nil。
 func toKubeContainerResources(statusResources *runtimeapi.ContainerResources) *kubecontainer.ContainerResources {
 	var cStatusResources *kubecontainer.ContainerResources
 	runtimeStatusResources := statusResources.GetLinux()
@@ -526,41 +508,38 @@ func toKubeContainerResources(statusResources *runtimeapi.ContainerResources) *k
 	return cStatusResources
 }
 
-// Note: this function variable is being added here so it would be possible to mock
-// the cgroup version for unit tests by assigning a new mocked function into it. Without it,
-// the cgroup version would solely depend on the environment running the test.
+// 说明：这里将函数声明为变量，是为了在单元测试中替换为 mock 函数来模拟 cgroup 版本；
+// 否则 cgroup 版本将完全取决于测试运行的环境。
 var isCgroup2UnifiedMode = libcontainercgroups.IsCgroup2UnifiedMode
 
-// isMemoryQoSEnforced reports whether MemoryQoS is enabled on cgroup v2.
+// isMemoryQoSEnforced 报告 MemoryQoS 是否在 cgroup v2 上生效。
 func (m *kubeGenericRuntimeManager) isMemoryQoSEnforced() bool {
 	return utilfeature.DefaultFeatureGate.Enabled(kubefeatures.MemoryQoS) && isCgroup2UnifiedMode()
 }
 
-// applyPodLevelMemoryHigh sets pod-level memory.high; kernel enforces hierarchically.
+// applyPodLevelMemoryHigh 设置 Pod 级 memory.high，由内核按层级强制生效。
 func (m *kubeGenericRuntimeManager) applyPodLevelMemoryHigh(pod *v1.Pod, rc *cm.ResourceConfig) {
 	if m.memoryThrottlingFactor != nil {
 		cm.ApplyPodLevelMemoryHigh(pod, rc, *m.memoryThrottlingFactor)
 	}
 }
 
-// checkSwapControllerAvailability checks if swap controller is available.
-// It returns true if the swap controller is available, false otherwise.
+// checkSwapControllerAvailability 检查 swap 控制器是否可用，可用返回 true，否则返回 false。
 func checkSwapControllerAvailability(ctx context.Context) bool {
-	// See https://github.com/containerd/containerd/pull/7838/
+	// 参考 https://github.com/containerd/containerd/pull/7838/
 	logger := klog.FromContext(ctx)
 	const warn = "Failed to detect the availability of the swap controller, assuming not available"
 	p := "/sys/fs/cgroup/memory/memory.memsw.limit_in_bytes"
 	if isCgroup2UnifiedMode() {
-		// memory.swap.max does not exist in the cgroup root, so we check /sys/fs/cgroup/<SELF>/memory.swap.max
+		// cgroup 根目录下没有 memory.swap.max，因此检查 /sys/fs/cgroup/<SELF>/memory.swap.max
 		cm, err := libcontainercgroups.ParseCgroupFile("/proc/self/cgroup")
 		if err != nil {
 			logger.V(5).Info(warn, "err", fmt.Errorf("failed to parse /proc/self/cgroup: %w", err))
 			return false
 		}
-		// For cgroup v2 unified hierarchy, there are no per-controller
-		// cgroup paths, so the cm map returned by ParseCgroupFile above
-		// has a single element where the key is empty string ("") and
-		// the value is the cgroup path the <pid> is in.
+		// cgroup v2 统一层级下没有按控制器划分的 cgroup 路径，
+		// 因此上面 ParseCgroupFile 返回的 cm map 只有一个元素：
+		// key 为空字符串（""），value 是该 <pid> 所在的 cgroup 路径。
 		p = filepath.Join("/sys/fs/cgroup", cm[""], "memory.swap.max")
 	}
 	if _, err := os.Stat(p); err != nil {
@@ -573,19 +552,21 @@ func checkSwapControllerAvailability(ctx context.Context) bool {
 	return true
 }
 
-// initSwapControllerAvailabilityCheck returns a function that checks swap controller availability
-// with lazy initialization using sync.OnceValue
+// initSwapControllerAvailabilityCheck 返回一个基于 sync.OnceValue 惰性初始化的
+// swap 控制器可用性检查函数。
 func initSwapControllerAvailabilityCheck(ctx context.Context) func() bool {
 	return sync.OnceValue(func() bool {
 		return checkSwapControllerAvailability(ctx)
 	})
 }
 
+// swapConfigurationHelper 封装 swap 配置的计算与下发，依赖机器信息与控制器可用性检查。
 type swapConfigurationHelper struct {
 	machineInfo                cadvisorv1.MachineInfo
 	getSwapControllerAvailable func() bool
 }
 
+// newSwapConfigurationHelper 构造 swapConfigurationHelper。
 func newSwapConfigurationHelper(machineInfo cadvisorv1.MachineInfo, getSwapControllerAvailable func() bool) *swapConfigurationHelper {
 	return &swapConfigurationHelper{
 		machineInfo:                machineInfo,
@@ -593,6 +574,8 @@ func newSwapConfigurationHelper(machineInfo cadvisorv1.MachineInfo, getSwapContr
 	}
 }
 
+// ConfigureLimitedSwap 为 Burstable Pod 配置有限 swap：按比例计算 swap 上限，
+// 计算失败时降级为不启用 swap。
 func (m swapConfigurationHelper) ConfigureLimitedSwap(ctx context.Context, lcr *runtimeapi.LinuxContainerResources, pod *v1.Pod, container *v1.Container) {
 	logger := klog.FromContext(ctx)
 	containerMemoryRequest := container.Resources.Requests.Memory()
@@ -606,12 +589,12 @@ func (m swapConfigurationHelper) ConfigureLimitedSwap(ctx context.Context, lcr *
 	m.configureSwap(ctx, lcr, swapLimit)
 }
 
+// ConfigureNoSwap 配置为不启用 swap：cgroup v1 下把 swap 上限对齐内存上限，cgroup v2 下显式置 0。
 func (m swapConfigurationHelper) ConfigureNoSwap(ctx context.Context, lcr *runtimeapi.LinuxContainerResources) {
 	if !isCgroup2UnifiedMode() {
 		if m.getSwapControllerAvailable() {
-			// memorySwapLimit = total permitted memory+swap; if equal to memory limit, => 0 swap above memory limit
-			// Some swapping is still possible.
-			// Note that if memory limit is 0, memory swap limit is ignored.
+			// memorySwapLimit 是允许的内存+swap 总量；与内存上限相等意味着超出内存上限的 swap 配额为 0，
+			// 但仍可能发生部分 swap。注意内存上限为 0 时，内存 swap 上限会被忽略。
 			lcr.MemorySwapLimitInBytes = lcr.MemoryLimitInBytes
 		}
 		return
@@ -620,6 +603,7 @@ func (m swapConfigurationHelper) ConfigureNoSwap(ctx context.Context, lcr *runti
 	m.configureSwap(ctx, lcr, 0)
 }
 
+// configureSwap 在 cgroup v2 下把 swap 上限写入 lcr.Unified；cgroup v1 环境直接报错返回。
 func (m swapConfigurationHelper) configureSwap(ctx context.Context, lcr *runtimeapi.LinuxContainerResources, swapMemory int64) {
 	logger := klog.FromContext(ctx)
 	if !isCgroup2UnifiedMode() {
@@ -634,8 +618,8 @@ func (m swapConfigurationHelper) configureSwap(ctx context.Context, lcr *runtime
 	lcr.Unified[cm.Cgroup2MaxSwapFilename] = fmt.Sprintf("%d", swapMemory)
 }
 
-// The swap limit is calculated as (<containerMemoryRequest>/<nodeTotalMemory>)*<totalPodsSwapAvailable>.
-// For more info, please look at the following KEP: https://kep.k8s.io/2400
+// swap 上限按 (<容器内存请求>/<节点总内存>)*<Pod 可用 swap 总量> 计算。
+// 详见 KEP：https://kep.k8s.io/2400
 func calcSwapForBurstablePods(containerMemoryRequest, nodeTotalMemory, totalPodsSwapAvailable int64) (int64, error) {
 	if nodeTotalMemory <= 0 {
 		return 0, fmt.Errorf("total node memory is 0")
@@ -650,6 +634,7 @@ func calcSwapForBurstablePods(containerMemoryRequest, nodeTotalMemory, totalPods
 	return int64(swapAllocation), nil
 }
 
+// toKubeContainerUser 将运行时返回的容器用户信息转换为 kubecontainer.ContainerUser，nil 输入返回 nil。
 func toKubeContainerUser(statusUser *runtimeapi.ContainerUser) *kubecontainer.ContainerUser {
 	if statusUser == nil {
 		return nil

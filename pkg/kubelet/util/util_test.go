@@ -26,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+// TestGetNodenameForKernel 验证内核主机名计算：
+// setHostnameAsFQDN 为 true 时拼接域名，超过 64 字符应报错。
 func TestGetNodenameForKernel(t *testing.T) {
 	testcases := []struct {
 		description       string
@@ -80,6 +82,7 @@ func TestGetNodenameForKernel(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Logf("TestCase: %q", tc.description)
+		// 拼接后的 FQDN 超过 64 字符时返回错误和空主机名。
 		outputHostname, err := GetNodenameForKernel(tc.hostname, tc.hostDomain, &tc.setHostnameAsFQDN)
 		if tc.expectError {
 			assert.Error(t, err)
@@ -91,6 +94,7 @@ func TestGetNodenameForKernel(t *testing.T) {
 
 }
 
+// TestGetContainerByIndex 覆盖索引越界、容器与状态数量不一致、名称不匹配等场景。
 func TestGetContainerByIndex(t *testing.T) {
 	testCases := []struct {
 		title             string
@@ -139,6 +143,7 @@ func TestGetContainerByIndex(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// 索引非法或对应状态名称不匹配时返回空容器和 false。
 		container, ok := GetContainerByIndex(tc.containers, tc.statuses, tc.idx)
 		if container.Name != tc.expectedContainer.Name || ok != tc.expectedOK {
 			t.Errorf("%s - Expected container: %v, got container: %v, expected ok: %v, got ok: %v", tc.title, tc.expectedContainer, container, tc.expectedOK, ok)
@@ -146,6 +151,7 @@ func TestGetContainerByIndex(t *testing.T) {
 	}
 }
 
+// TestGetLimits 验证容器级 limits 优先、缺失键回退到 Pod 级 limits 的合并规则。
 func TestGetLimits(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -298,6 +304,7 @@ func TestGetLimits(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 合并结果应逐键比较：容器级覆盖 Pod 级。
 			gotLimits := GetLimits(&ResourceOpts{PodResources: tc.podResources, ContainerResources: tc.containerResources})
 			if !reflect.DeepEqual(tc.expectedLimits, gotLimits) {
 				t.Errorf("got limits: %v, expected limits: %v", gotLimits, tc.expectedLimits)

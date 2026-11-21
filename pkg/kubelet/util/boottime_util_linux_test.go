@@ -25,6 +25,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestGetBootTime 验证在 Linux 上能获取到有效的系统启动时间。
 func TestGetBootTime(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	boottime, err := GetBootTime(logger)
@@ -38,6 +39,8 @@ func TestGetBootTime(t *testing.T) {
 	}
 }
 
+// TestVariationBetweenGetBootTimeMethods 验证 /proc/uptime 与 Sysinfo 两种方式
+// 计算出的启动时间差异不超过一秒。
 func TestVariationBetweenGetBootTimeMethods(t *testing.T) {
 	boottime1, err := getBootTimeWithProcStat()
 	if err != nil {

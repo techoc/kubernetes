@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kuberuntime contains an implementation of kubecontainer.Runtime using
-// the interface in pkg/kubelet/v1.
+// Package kuberuntime 包含基于 pkg/kubelet/v1 中接口的 kubecontainer.Runtime 实现。
 package kuberuntime

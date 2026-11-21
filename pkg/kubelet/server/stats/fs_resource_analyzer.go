@@ -29,25 +29,33 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// statCache 是 Pod UID 到卷统计计算器的映射。
 type statCache map[types.UID]*volumeStatCalculator
 
-// fsResourceAnalyzerInterface is for embedding fs functions into ResourceAnalyzer
+// fsResourceAnalyzerInterface 用于把文件系统统计能力嵌入 ResourceAnalyzer。
 type fsResourceAnalyzerInterface interface {
+	// GetPodVolumeStats 返回指定 Pod 的卷统计。
 	GetPodVolumeStats(uid types.UID) (PodVolumeStats, bool)
 }
 
-// fsResourceAnalyzer provides stats about fs resource usage
+// fsResourceAnalyzer 提供文件系统资源使用统计。
 type fsResourceAnalyzer struct {
-	statsProvider     Provider
-	calcPeriod        time.Duration
+	// statsProvider 是 Pod 统计信息来源。
+	statsProvider Provider
+	// calcPeriod 是卷统计的计算周期。
+	calcPeriod time.Duration
+	// cachedVolumeStats 原子地保存 statCache。
 	cachedVolumeStats atomic.Value
-	startOnce         sync.Once
-	eventRecorder     record.EventRecorder
+	// startOnce 保证后台采集协程只启动一次。
+	startOnce sync.Once
+	// eventRecorder 用于记录卷统计相关事件。
+	eventRecorder record.EventRecorder
 }
 
+// 编译期断言：fsResourceAnalyzer 实现了 fsResourceAnalyzerInterface 接口。
 var _ fsResourceAnalyzerInterface = &fsResourceAnalyzer{}
 
-// newFsResourceAnalyzer returns a new fsResourceAnalyzer implementation
+// newFsResourceAnalyzer 创建 fsResourceAnalyzer 实例。
 func newFsResourceAnalyzer(statsProvider Provider, calcVolumePeriod time.Duration, eventRecorder record.EventRecorder) *fsResourceAnalyzer {
 	r := &fsResourceAnalyzer{
 		statsProvider: statsProvider,
@@ -58,25 +66,27 @@ func newFsResourceAnalyzer(statsProvider Provider, calcVolumePeriod time.Duratio
 	return r
 }
 
-// Start eager background caching of volume stats.
+// Start 启动卷统计的后台缓存。
 func (s *fsResourceAnalyzer) Start(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	s.startOnce.Do(func() {
+		// 计算周期非正数时禁用卷统计采集。
 		if s.calcPeriod <= 0 {
 			logger.Info("Volume stats collection disabled")
 			return
 		}
 		logger.Info("Starting FS ResourceAnalyzer")
+		// 后台按周期刷新缓存。
 		go wait.Forever(func() { s.updateCachedPodVolumeStats(logger) }, s.calcPeriod)
 	})
 }
 
-// updateCachedPodVolumeStats calculates and caches the PodVolumeStats for every Pod known to the kubelet.
+// updateCachedPodVolumeStats 计算并缓存 kubelet 已知所有 Pod 的卷统计。
 func (s *fsResourceAnalyzer) updateCachedPodVolumeStats(logger klog.Logger) {
 	oldCache := s.cachedVolumeStats.Load().(statCache)
 	newCache := make(statCache)
 
-	// Copy existing entries to new map, creating/starting new entries for pods missing from the cache
+	// 复制已有条目，并为缓存中缺失的 Pod 创建并启动新的计算器。
 	for _, pod := range s.statsProvider.GetPods() {
 		if value, found := oldCache[pod.GetUID()]; !found {
 			newCache[pod.GetUID()] = newVolumeStatCalculator(s.statsProvider, s.calcPeriod, pod, s.eventRecorder).StartOnce(logger)
@@ -85,20 +95,21 @@ func (s *fsResourceAnalyzer) updateCachedPodVolumeStats(logger klog.Logger) {
 		}
 	}
 
-	// Stop entries for pods that have been deleted
+	// 停止已删除 Pod 对应的计算器。
 	for uid, entry := range oldCache {
 		if _, found := newCache[uid]; !found {
 			entry.StopOnce()
 		}
 	}
 
-	// Update the cache reference
+	// 原子替换缓存引用。
 	s.cachedVolumeStats.Store(newCache)
 }
 
-// GetPodVolumeStats returns the PodVolumeStats for a given pod.  Results are looked up from a cache that
-// is eagerly populated in the background, and never calculated on the fly.
+// GetPodVolumeStats 返回指定 Pod 的卷统计。
+// 结果从后台预热的缓存读取，不会现场计算。
 func (s *fsResourceAnalyzer) GetPodVolumeStats(uid types.UID) (PodVolumeStats, bool) {
+	// 缓存只由后台协程替换，读取无需加锁。
 	cache := s.cachedVolumeStats.Load().(statCache)
 	statCalc, found := cache[uid]
 	if !found {

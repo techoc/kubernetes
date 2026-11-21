@@ -30,22 +30,23 @@ import (
 	"k8s.io/utils/dump"
 )
 
-// CPUManagerCheckpointV4 serializes checkpoint data to a string, following the
-// same approach used in the allocation manager (see pkg/kubelet/allocation/state/checkpoint.go).
-// The embedded V2 version is for keeping forward compatibility.
+// CPUManagerCheckpointV4 将 checkpoint 数据序列化为字符串，采用与 allocation manager
+// 相同的方案（见 pkg/kubelet/allocation/state/checkpoint.go）。
+// 内嵌的 V2 版本用于保持向前兼容。
+// 编译期断言：各版本的 checkpoint 都实现 checkpointmanager.Checkpoint 接口。
 var _ checkpointmanager.Checkpoint = &CPUManagerCheckpointV2{}
 var _ checkpointmanager.Checkpoint = &CPUManagerCheckpointV3{}
 var _ checkpointmanager.Checkpoint = &CPUManagerCheckpointV4{}
 var _ checkpointmanager.Checkpoint = &CPUManagerCheckpoint{}
 
-// ContainerCPUs struct is used in a checkpoint in v4 format,
-// to support In place update pod resources alongside Static CPU Manager policy
+// ContainerCPUs 是 v4 格式 checkpoint 中的结构，
+// 用于在静态 CPU Manager 策略下支持 Pod 资源的原地更新。
 type ContainerCPUs struct {
 	Baseline string `json:"baseline"`
 }
 
-// CPUManagerCheckpointData struct is used to store CPU/pod assignments, which is part of a checkpoint in v4 format
-// CPU assignments at admission time is required for in-place vertical scaling, and stored in Baselines.
+// CPUManagerCheckpointData 保存 CPU/Pod 分配信息，是 v4 格式 checkpoint 的一部分。
+// 准入时记录的 CPU 分配用于原地纵向扩缩容，保存在 Baselines 中。
 type CPUManagerCheckpointData struct {
 	PolicyName    string                              `json:"policyName"`
 	DefaultCPUSet string                              `json:"defaultCpuSet"`
@@ -54,27 +55,26 @@ type CPUManagerCheckpointData struct {
 	Baselines     map[string]map[string]ContainerCPUs `json:"baselines,omitempty"`
 }
 
-// CPUManagerCheckpoint represents a structure to store CPU manager checkpoint data.
-// Dual-checksum format for backward compatibility.
-// The Data string with DataChecksum is the authoritative V4 payload.
+// CPUManagerCheckpoint 是保存 CPU manager checkpoint 数据的结构。
+// 采用双校验和格式以保持向后兼容：Data 字符串与 DataChecksum 是权威的 V4 载荷。
 type CPUManagerCheckpoint struct {
-	// Backward compatibility
-	// The embedded V2 checkpoint must not be enhanced and should be removed as soon as the oldest supported version understands V4.
+	// 向后兼容：内嵌的 V2 checkpoint 不得再增强；当支持的最旧版本也能理解 V4 后，
+	// 应尽快移除该内嵌字段。
 	CPUManagerCheckpointV2 `json:",inline"`
 
-	// Data is a serialized CPUManagerCheckpointData
+	// Data 是序列化后的 CPUManagerCheckpointData。
 	Data string `json:"data"`
-	// DataChecksum is a checksum of Data string
+	// DataChecksum 是 Data 字符串的校验和。
 	DataChecksum checksum.Checksum `json:"dataChecksum"`
 
-	// CheckpointData holds actual data, not serialized directly
+	// CheckpointData 保存实际数据，不会被直接序列化。
 	CheckpointData CPUManagerCheckpointData `json:"-"`
 }
 
-// CPUManagerCheckpoint struct is used to store CPU/pod assignments in a checkpoint in v4 format
+// CPUManagerCheckpointV4 是 v4 格式 checkpoint 的类型别名，用于保存 CPU/Pod 分配。
 type CPUManagerCheckpointV4 = CPUManagerCheckpoint
 
-// CPUManagerCheckpointV3 struct is used to store CPU/pod assignments in a checkpoint in v3 format
+// CPUManagerCheckpointV3 是 v3 格式 checkpoint，用于保存 CPU/Pod 分配。
 type CPUManagerCheckpointV3 struct {
 	PolicyName    string                       `json:"policyName"`
 	DefaultCPUSet string                       `json:"defaultCpuSet"`
@@ -83,7 +83,7 @@ type CPUManagerCheckpointV3 struct {
 	Checksum      checksum.Checksum            `json:"checksum"`
 }
 
-// CPUManagerCheckpointV2 struct is used to store CPU/pod assignments in a checkpoint in v2 format
+// CPUManagerCheckpointV2 是 v2 格式 checkpoint，用于保存 CPU/Pod 分配。
 type CPUManagerCheckpointV2 struct {
 	PolicyName    string                       `json:"policyName"`
 	DefaultCPUSet string                       `json:"defaultCpuSet"`
@@ -91,18 +91,20 @@ type CPUManagerCheckpointV2 struct {
 	Checksum      checksum.Checksum            `json:"checksum"`
 }
 
-// NewCPUManagerCheckpoint returns an instance of Checkpoint
+// newCPUManagerCheckpoint 返回 Checkpoint 实例（当前为 v4 格式）。
 func newCPUManagerCheckpoint() *CPUManagerCheckpoint {
 	//nolint:staticcheck // unexported-type-in-api user-facing error message
 	return newCPUManagerCheckpointV4()
 }
 
+// newCPUManagerCheckpointV2 创建空的 v2 格式 checkpoint。
 func newCPUManagerCheckpointV2() *CPUManagerCheckpointV2 {
 	return &CPUManagerCheckpointV2{
 		Entries: make(map[string]map[string]string),
 	}
 }
 
+// newCPUManagerCheckpointV3 创建空的 v3 格式 checkpoint。
 func newCPUManagerCheckpointV3() *CPUManagerCheckpointV3 {
 	return &CPUManagerCheckpointV3{
 		Entries:    make(map[string]map[string]string),
@@ -110,6 +112,7 @@ func newCPUManagerCheckpointV3() *CPUManagerCheckpointV3 {
 	}
 }
 
+// newCPUManagerCheckpointV4 创建空的 v4 格式 checkpoint。
 func newCPUManagerCheckpointV4() *CPUManagerCheckpointV4 {
 	return &CPUManagerCheckpoint{
 		CPUManagerCheckpointV2: CPUManagerCheckpointV2{
@@ -123,15 +126,14 @@ func newCPUManagerCheckpointV4() *CPUManagerCheckpointV4 {
 	}
 }
 
-// MarshalCheckpoint returns marshalled checkpoint in v2 format
+// MarshalCheckpoint 以 v2 格式序列化 checkpoint。
 func (cp *CPUManagerCheckpointV2) MarshalCheckpoint() ([]byte, error) {
-	// make sure checksum wasn't set before so it doesn't affect output checksum
+	// 先清零校验和，避免旧值影响输出校验和的计算。
 	cp.Checksum = 0
 
-	// In order to preserve rollback compatibility when the feature gate is disabled,
-	// we must generate a checksum using the legacy struct name "CPUManagerCheckpoint"
-	// instead of "CPUManagerCheckpointV2". Older Kubelets do not have the string
-	// replacement logic and expect the original struct name.
+	// 为了在特性门控关闭时保持回滚兼容，必须使用旧结构名 "CPUManagerCheckpoint"
+	// （而不是 "CPUManagerCheckpointV2"）计算校验和。旧版本 kubelet 没有字符串替换逻辑，
+	// 只认原始结构名。
 	object := dump.ForHash(cp)
 	object = strings.Replace(object, "CPUManagerCheckpointV2", "CPUManagerCheckpoint", 1)
 	hash := fnv.New32a()
@@ -141,15 +143,14 @@ func (cp *CPUManagerCheckpointV2) MarshalCheckpoint() ([]byte, error) {
 	return json.Marshal(*cp)
 }
 
-// MarshalCheckpoint returns marshalled checkpoint in v3 format
+// MarshalCheckpoint 以 v3 格式序列化 checkpoint。
 func (cp *CPUManagerCheckpointV3) MarshalCheckpoint() ([]byte, error) {
 	// make sure checksum wasn't set before so it doesn't affect output checksum
 	cp.Checksum = 0
 
-	// In order to preserve rollback compatibility we must generate a checksum using
-	// the legacy struct name "CPUManagerCheckpoint" instead of "CPUManagerCheckpointV3".
-	// Older Kubelets do not have the string replacement logic
-	// and expect the original struct name.
+	// 为了保持回滚兼容，必须使用旧结构名 "CPUManagerCheckpoint"（而不是
+	// "CPUManagerCheckpointV3"）计算校验和。旧版本 kubelet 没有字符串替换逻辑，
+	// 只认原始结构名。
 	object := dump.ForHash(cp)
 	object = strings.Replace(object, "CPUManagerCheckpointV3", "CPUManagerCheckpoint", 1)
 	hash := fnv.New32a()
@@ -159,8 +160,9 @@ func (cp *CPUManagerCheckpointV3) MarshalCheckpoint() ([]byte, error) {
 	return json.Marshal(*cp)
 }
 
-// MarshalCheckpoint returns marshalled checkpoint in v4 format with dual checksum for backward compatibility.
+// MarshalCheckpoint 以 v4 格式序列化 checkpoint，并写入双校验和以保持向后兼容。
 func (cp *CPUManagerCheckpoint) MarshalCheckpoint() ([]byte, error) {
+	// 先把实际数据序列化到 Data，并计算其校验和（权威载荷）。
 	data, err := json.Marshal(cp.CheckpointData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize cpu manager checkpoint data: %w", err)
@@ -168,10 +170,12 @@ func (cp *CPUManagerCheckpoint) MarshalCheckpoint() ([]byte, error) {
 	cp.Data = string(data)
 	cp.DataChecksum = checksum.New(cp.Data)
 
+	// 同时回填 V2 内嵌字段，保证旧版本 kubelet 仍能读取该 checkpoint。
 	cp.PolicyName = cp.CheckpointData.PolicyName
 	cp.DefaultCPUSet = cp.CheckpointData.DefaultCPUSet
 	cp.Entries = cp.CheckpointData.Entries
 
+	// V2 校验和按旧结构名计算，以兼容不支持字符串替换逻辑的旧 kubelet。
 	cp.Checksum = 0
 	object := dump.ForHash(&cp.CPUManagerCheckpointV2)
 	object = strings.Replace(object, "CPUManagerCheckpointV2", "CPUManagerCheckpoint", 1)
@@ -182,31 +186,32 @@ func (cp *CPUManagerCheckpoint) MarshalCheckpoint() ([]byte, error) {
 	return json.Marshal(*cp)
 }
 
-// UnmarshalCheckpoint tries to unmarshal passed bytes to checkpoint in v2 format
+// UnmarshalCheckpoint 将给定字节反序列化为 v2 格式 checkpoint。
 func (cp *CPUManagerCheckpointV2) UnmarshalCheckpoint(blob []byte) error {
 	return json.Unmarshal(blob, cp)
 }
 
-// UnmarshalCheckpoint tries to unmarshal passed bytes to checkpoint in v3 format
+// UnmarshalCheckpoint 将给定字节反序列化为 v3 格式 checkpoint。
 func (cp *CPUManagerCheckpointV3) UnmarshalCheckpoint(blob []byte) error {
 	return json.Unmarshal(blob, cp)
 }
 
-// UnmarshalCheckpoint tries to unmarshal passed bytes to checkpoint in v4 format
+// UnmarshalCheckpoint 将给定字节反序列化为 v4 格式 checkpoint。
 func (cp *CPUManagerCheckpoint) UnmarshalCheckpoint(blob []byte) error {
 	if err := json.Unmarshal(blob, cp); err != nil {
 		return fmt.Errorf("failed to deserialize cpu manager checkpoint: %w", err)
 	}
+	// 先反序列化外层结构，再解析 Data 中的实际数据。
 	if err := json.Unmarshal([]byte(cp.Data), &cp.CheckpointData); err != nil {
 		return fmt.Errorf("failed to deserialize cpu manager checkpoint data: %w", err)
 	}
 	return nil
 }
 
-// VerifyChecksum verifies that current checksum of checkpoint is valid in v2 format
+// VerifyChecksum 校验 v2 格式 checkpoint 的校验和。
 func (cp *CPUManagerCheckpointV2) VerifyChecksum() error {
 	if cp.Checksum == 0 {
-		// accept empty checksum for compatibility with old file backend
+		// 兼容旧文件后端：校验和为零时视为通过。
 		return nil
 	}
 
@@ -219,8 +224,8 @@ func (cp *CPUManagerCheckpointV2) VerifyChecksum() error {
 			cp.Checksum = ck
 			return nil
 		}
-		// If the standard verification failed, it could be a legacy checkpoint.
-		// Fallback to the legacy verification method, when V3 is latest.
+		// 标准校验失败时，可能来自旧版 checkpoint，回退到旧版校验方式
+		// （V3 是当时的最新版本）。
 	}
 
 	object := dump.ForHash(cp)
@@ -239,10 +244,11 @@ func (cp *CPUManagerCheckpointV2) VerifyChecksum() error {
 	return nil
 }
 
-// VerifyChecksum verifies that current checksum of checkpoint is valid in v3 format
+// VerifyChecksum 校验 v3 格式 checkpoint 的校验和。
 func (cp *CPUManagerCheckpointV3) VerifyChecksum() error {
 	ck := cp.Checksum
 	cp.Checksum = 0
+	// 先按当前结构名做标准校验；失败再回退到旧结构名校验。
 	err := ck.Verify(cp)
 	if err == nil {
 		cp.Checksum = ck
@@ -265,8 +271,7 @@ func (cp *CPUManagerCheckpointV3) VerifyChecksum() error {
 	return nil
 }
 
-// VerifyChecksum verifies that current checksum of checkpoint is valid in v4 format.
-// DataChecksum is the authoritative checksum over Data.
+// VerifyChecksum 校验 v4 格式 checkpoint；DataChecksum 是 Data 的权威校验和。
 func (cp *CPUManagerCheckpoint) VerifyChecksum() error {
 	return cp.DataChecksum.Verify(cp.Data)
 }

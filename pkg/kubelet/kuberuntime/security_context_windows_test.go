@@ -27,6 +27,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestVerifyRunAsNonRoot 验证 Windows 下 RunAsNonRoot 的校验：
+// 用户名比较不区分大小写；容器级用户名优先于镜像用户。
 func TestVerifyRunAsNonRoot(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	pod := &v1.Pod{
@@ -47,12 +49,14 @@ func TestVerifyRunAsNonRoot(t *testing.T) {
 			},
 		},
 	}
+	// 构造 Windows 管理员用户名（含大小写变体）与普通用户名。
 	rootUser := "ContainerAdministrator"
 	rootUserUppercase := "CONTAINERADMINISTRATOR"
 	anyUser := "anyone"
 	runAsNonRootTrue := true
 	runAsNonRootFalse := false
 	uid := int64(0)
+	// 用例覆盖未设置安全上下文、显式/隐式 root 用户等场景。
 	for _, test := range []struct {
 		desc     string
 		sc       *v1.SecurityContext
@@ -142,7 +146,7 @@ func TestVerifyRunAsNonRoot(t *testing.T) {
 		{
 			desc: "Pass if container's user and image's user aren't set and RunAsNonRoot is true",
 			sc: &v1.SecurityContext{
-				// verifyRunAsNonRoot should ignore the RunAsUser, SELinuxOptions, and RunAsGroup options.
+				// verifyRunAsNonRoot 在 Windows 上应忽略 RunAsUser、SELinuxOptions 与 RunAsGroup。
 				RunAsUser:      &uid,
 				SELinuxOptions: &v1.SELinuxOptions{},
 				RunAsGroup:     &uid,
@@ -173,6 +177,7 @@ func TestVerifyRunAsNonRoot(t *testing.T) {
 			fail:     false,
 		},
 	} {
+		// 逐用例设置安全上下文并校验错误是否符合预期。
 		pod.Spec.Containers[0].SecurityContext = test.sc
 		err := verifyRunAsNonRoot(tCtx, pod, &pod.Spec.Containers[0], test.uid, test.username)
 		if test.fail {

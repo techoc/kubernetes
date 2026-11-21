@@ -24,59 +24,67 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager/checksum"
 )
 
-// DeviceManagerCheckpoint defines the operations to retrieve pod devices
+// DeviceManagerCheckpoint 定义读取 Pod 设备分配信息的操作。
 type DeviceManagerCheckpoint interface {
 	checkpointmanager.Checkpoint
+	// GetData 返回 Pod 设备条目与已注册设备。
 	GetData() ([]PodDevicesEntry, map[string][]string)
 }
 
-// DevicesPerNUMA represents device ids obtained from device plugin per NUMA node id
+// DevicesPerNUMA 表示设备插件按 NUMA 节点上报的设备 ID。
 type DevicesPerNUMA map[int64][]string
 
-// PodDevicesEntry connects pod information to devices
+// PodDevicesEntry 关联 Pod 信息与设备分配。
 type PodDevicesEntry struct {
-	PodUID        string
+	// PodUID 是 Pod 的 UID。
+	PodUID string
+	// ContainerName 是容器名称。
 	ContainerName string
-	ResourceName  string
-	DeviceIDs     DevicesPerNUMA
-	AllocResp     []byte
+	// ResourceName 是设备资源名称。
+	ResourceName string
+	// DeviceIDs 是各 NUMA 节点上的设备 ID。
+	DeviceIDs DevicesPerNUMA
+	// AllocResp 是设备插件返回的分配响应。
+	AllocResp []byte
 }
 
-// checkpointData struct is used to store pod to device allocation information
-// in a checkpoint file.
+// checkpointData 用于在 checkpoint 文件中保存 Pod 到设备的分配信息。
 // TODO: add version control when we need to change checkpoint format.
 type checkpointData struct {
 	PodDeviceEntries  []PodDevicesEntry
 	RegisteredDevices map[string][]string
 }
 
-// Data holds checkpoint data and its checksum
+// Data 保存 checkpoint 数据及其 checksum。
 type Data struct {
-	Data     checkpointData
+	// Data 是实际的 checkpoint 内容。
+	Data checkpointData
+	// Checksum 是 Data 的校验和。
 	Checksum checksum.Checksum
 }
 
-// NewDevicesPerNUMA is a function that creates DevicesPerNUMA map
+// NewDevicesPerNUMA 创建空的 DevicesPerNUMA 映射。
 func NewDevicesPerNUMA() DevicesPerNUMA {
 	return make(DevicesPerNUMA)
 }
 
-// Devices is a function that returns all device ids for all NUMA nodes
-// and represent it as sets.Set[string]
+// Devices 返回所有 NUMA 节点的设备 ID 集合。
 func (dev DevicesPerNUMA) Devices() sets.Set[string] {
 	result := sets.New[string]()
 
+	// 合并所有 NUMA 节点的设备 ID。
 	for _, devs := range dev {
 		result.Insert(devs...)
 	}
 	return result
 }
 
-// New returns an instance of Checkpoint - must be an alias for the most recent version
+// New 返回 Checkpoint 实例，始终指向最新版本。
 func New(devEntries []PodDevicesEntry, devices map[string][]string) DeviceManagerCheckpoint {
 	return newV2(devEntries, devices)
 }
 
+// newV2 创建 v2 版本的 checkpoint。
 func newV2(devEntries []PodDevicesEntry, devices map[string][]string) DeviceManagerCheckpoint {
 	return &Data{
 		Data: checkpointData{
@@ -86,24 +94,25 @@ func newV2(devEntries []PodDevicesEntry, devices map[string][]string) DeviceMana
 	}
 }
 
-// MarshalCheckpoint returns marshalled data
+// MarshalCheckpoint 序列化 checkpoint 数据。
 func (cp *Data) MarshalCheckpoint() ([]byte, error) {
+	// 序列化前重新计算 checksum，保证与 Data 一致。
 	cp.Checksum = checksum.New(cp.Data)
 	return json.Marshal(*cp)
 }
 
-// UnmarshalCheckpoint returns unmarshalled data
+// UnmarshalCheckpoint 反序列化 checkpoint 数据。
 func (cp *Data) UnmarshalCheckpoint(blob []byte) error {
 	return json.Unmarshal(blob, cp)
 }
 
-// VerifyChecksum verifies that passed checksum is same as calculated checksum
+// VerifyChecksum 校验存储的 checksum 与重新计算的结果是否一致。
 func (cp *Data) VerifyChecksum() error {
 	return cp.Checksum.Verify(cp.Data)
 }
 
-// GetData returns device entries and registered devices in the *most recent*
-// checkpoint format, *not* in the original format stored on disk.
+// GetData 以最新 checkpoint 格式返回设备条目与已注册设备，
+// 而不是磁盘上保存的原始格式。
 func (cp *Data) GetData() ([]PodDevicesEntry, map[string][]string) {
 	return cp.Data.PodDeviceEntries, cp.Data.RegisteredDevices
 }

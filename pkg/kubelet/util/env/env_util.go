@@ -23,19 +23,19 @@ import (
 	"strings"
 )
 
-// ParseEnv implements a strict parser for environment files using a subset of POSIX shell syntax.
-// The parser enforces that all variable values must be enclosed in single quotes.
+// ParseEnv 使用 POSIX shell 语法的一个子集严格解析环境变量文件。
+// 解析器要求所有变量值都必须用单引号包裹。
 //
-// Supported format:
-//   - VAR='value' - Values must be enclosed in single quotes
-//   - Content within single quotes is preserved literally (no escape sequences or expansions)
-//   - Multi-line values are supported (newlines within single quotes are preserved)
-//   - Inline comments after the closing quote are supported (e.g., VAR='value' # comment)
-//   - Leading whitespace before the variable name is ignored
-//   - Blank lines (including those with only whitespace) are ignored when not within quotes
-//   - Lines starting with '#' are treated as comments and ignored
-//   - Whitespace before '=' is invalid (e.g., VAR = 'value' is rejected)
-//   - Whitespace after '=' but before the quote results in empty assignment (e.g., VAR= 'value' assigns empty string)
+// 支持的格式：
+//   - VAR='value' - 值必须用单引号包裹
+//   - 单引号内的内容按字面保留（不处理转义或展开）
+//   - 支持多行值（保留单引号内的换行）
+//   - 支持闭合引号后的行内注释（如 VAR='value' # comment）
+//   - 忽略变量名前的空白
+//   - 忽略空行（包括仅含空白的行），引号内除外
+//   - 以 '#' 开头的行视为注释并忽略
+//   - '=' 前不允许空白（如 VAR = 'value' 会被拒绝）
+//   - '=' 后、引号前的空白会导致空赋值（如 VAR= 'value' 赋值为空字符串）
 func ParseEnv(envFilePath, key string) (string, error) {
 	file, err := os.Open(envFilePath)
 	if err != nil {
@@ -43,68 +43,73 @@ func ParseEnv(envFilePath, key string) (string, error) {
 	}
 	defer func() { _ = file.Close() }()
 
+	// 逐行扫描；单引号内的换行由内层循环继续读取。
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
 
 	for scanner.Scan() {
 		lineNum++
 		line := scanner.Text()
+		// 忽略变量名前的缩进。
 		line = strings.TrimLeft(line, " \t")
 
-		// Skip blank lines
+		// 跳过空行。
 		if line == "" {
 			continue
 		}
 
-		// Skip comments
+		// 跳过整行注释。
 		if strings.HasPrefix(line, "#") {
 			continue
 		}
 
+		// 缺少等号说明格式非法。
 		eqIdx := strings.Index(line, "=")
 		if eqIdx == -1 {
 			return "", fmt.Errorf("invalid environment variable format at line %d: missing '='", lineNum)
 		}
 
-		// Variable name must not contain whitespace or trailing whitespace before '='
+		// 变量名不能包含空白，且 '=' 前不能有尾随空白。
 		varNamePart := line[:eqIdx]
 		varName := strings.TrimRight(varNamePart, " \t")
 		if varName == "" {
 			return "", fmt.Errorf("invalid environment variable format at line %d: empty variable name", lineNum)
 		}
 
-		// If trimming removed whitespace, it means there was whitespace before '='
+		// 若右裁剪改变了内容，说明 '=' 前存在空白，应拒绝。
 		if varNamePart != varName {
 			return "", fmt.Errorf("invalid environment variable format at line %d: whitespace before '=' is not allowed", lineNum)
 		}
 		valuePart := line[eqIdx+1:]
 
-		// Check if there's whitespace before any non-whitespace character
+		// 检查等号后是否存在空白前缀。
 		trimmedValue := strings.TrimLeft(valuePart, " \t")
 		if valuePart != trimmedValue {
-			// There is whitespace between '=' and the value
-			// This matches bash behavior: KEY= 'val1' results in KEY being empty
+			// 等号与值之间存在空白，与 bash 行为一致：
+			// KEY= 'val1' 会使 KEY 的值为空。
 			if varName == key {
 				return "", nil
 			}
 			continue
 		}
 
-		// Value must start with single quote
+		// 值必须以单引号开头。
 		if !strings.HasPrefix(trimmedValue, "'") {
 			return "", fmt.Errorf("invalid environment variable format at line %d: value must be enclosed in single quotes", lineNum)
 		}
 
-		// Find the closing single quote (may span multiple lines)
+		// 查找闭合单引号（值可能跨多行）。
 		var valueBuilder strings.Builder
 		rest := trimmedValue[1:]
 		startLineNum := lineNum
 
+		// 单引号可能跨行，循环读取直到找到闭合引号。
 		for {
 			closingIdx := strings.Index(rest, "'")
 			if closingIdx != -1 {
 				valueBuilder.WriteString(rest[:closingIdx])
 				afterQuote := strings.TrimLeft(rest[closingIdx+1:], " \t")
+				// 闭合引号后只允许空白或行内注释。
 				if afterQuote != "" && !strings.HasPrefix(afterQuote, "#") {
 					return "", fmt.Errorf("invalid environment variable format at line %d: unexpected content after closing quote", lineNum)
 				}
@@ -117,6 +122,7 @@ func ParseEnv(envFilePath, key string) (string, error) {
 
 			valueBuilder.WriteString(rest)
 			valueBuilder.WriteString("\n")
+			// 文件结束仍未闭合，说明格式错误。
 			if !scanner.Scan() {
 				return "", fmt.Errorf("invalid environment variable format starting at line %d: unclosed single quote", startLineNum)
 			}

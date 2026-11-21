@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package types contains common types in the Kubelet.
+// Package types 包含 kubelet 中的公共类型。
 package types

@@ -29,18 +29,21 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/winstats"
 )
 
+// GetSystemContainersStats 返回 Windows 上系统容器的统计信息（Pod 汇总与全局提交内存）。
 func (sp *summaryProviderImpl) GetSystemContainersStats(_ context.Context, nodeConfig cm.NodeConfig, podStats []statsapi.PodStats, updateStats bool) (stats []statsapi.ContainerStats) {
 	stats = append(stats, sp.getSystemPodsCPUAndMemoryStats(nodeConfig, podStats, updateStats))
 	stats = append(stats, sp.getSystemWindowsGlobalmemoryStats())
 	return stats
 }
 
+// GetSystemContainersCPUAndMemoryStats 返回系统容器的 CPU 与内存统计信息。
 func (sp *summaryProviderImpl) GetSystemContainersCPUAndMemoryStats(_ context.Context, nodeConfig cm.NodeConfig, podStats []statsapi.PodStats, updateStats bool) (stats []statsapi.ContainerStats) {
 	stats = append(stats, sp.getSystemPodsCPUAndMemoryStats(nodeConfig, podStats, updateStats))
 	stats = append(stats, sp.getSystemWindowsGlobalmemoryStats())
 	return stats
 }
 
+// getSystemPodsCPUAndMemoryStats 汇总所有 Pod 的 CPU 与内存统计。
 func (sp *summaryProviderImpl) getSystemPodsCPUAndMemoryStats(nodeConfig cm.NodeConfig, podStats []statsapi.PodStats, updateStats bool) statsapi.ContainerStats {
 	now := metav1.NewTime(time.Now())
 	podsSummary := statsapi.ContainerStats{
@@ -50,12 +53,13 @@ func (sp *summaryProviderImpl) getSystemPodsCPUAndMemoryStats(nodeConfig cm.Node
 		Name:      statsapi.SystemContainerPods,
 	}
 
-	// Sum up all pod's stats.
+	// 累加所有 Pod 的统计信息。
 	var usageCoreNanoSeconds uint64
 	var usageNanoCores uint64
 	var availableBytes uint64
 	var usageBytes uint64
 	var workingSetBytes uint64
+	// 逐 Pod 累加 CPU 与内存用量。
 	for _, pod := range podStats {
 		if pod.CPU != nil {
 			podsSummary.CPU.Time = now
@@ -81,7 +85,7 @@ func (sp *summaryProviderImpl) getSystemPodsCPUAndMemoryStats(nodeConfig cm.Node
 		}
 	}
 
-	// Set results only if they are not zero.
+	// 仅在统计值非零时写入结果，避免上报无意义的零值。
 	if usageCoreNanoSeconds != 0 {
 		podsSummary.CPU.UsageCoreNanoSeconds = &usageCoreNanoSeconds
 	}
@@ -101,6 +105,7 @@ func (sp *summaryProviderImpl) getSystemPodsCPUAndMemoryStats(nodeConfig cm.Node
 	return podsSummary
 }
 
+// getSystemWindowsGlobalmemoryStats 读取 Windows 全局提交内存统计。
 func (sp *summaryProviderImpl) getSystemWindowsGlobalmemoryStats() statsapi.ContainerStats {
 	now := metav1.NewTime(time.Now())
 	globalMemorySummary := statsapi.ContainerStats{
@@ -109,6 +114,7 @@ func (sp *summaryProviderImpl) getSystemWindowsGlobalmemoryStats() statsapi.Cont
 		Name:      statsapi.SystemContainerWindowsGlobalCommitMemory,
 	}
 
+	// 全局提交内存来自 Windows 性能计数器。
 	perfInfo, err := winstats.GetPerformanceInfo()
 	if err != nil {
 		klog.Errorf("Failed to get Windows performance info: %v", err)
@@ -117,6 +123,7 @@ func (sp *summaryProviderImpl) getSystemWindowsGlobalmemoryStats() statsapi.Cont
 
 	commitLimitBytes := perfInfo.CommitLimitPages * perfInfo.PageSize
 	commitTotalBytes := perfInfo.CommitTotalPages * perfInfo.PageSize
+	// 可用提交内存 = 提交上限 - 已提交量。
 	commitAvailableBytes := commitLimitBytes - commitTotalBytes
 	globalMemorySummary.Memory.Time = now
 	globalMemorySummary.Memory.AvailableBytes = &commitAvailableBytes

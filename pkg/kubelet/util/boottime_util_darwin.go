@@ -29,7 +29,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// GetBootTime returns the time at which the machine was started, truncated to the nearest second
+// GetBootTime 返回机器启动时间并截断到秒，通过读取 kern.boottime sysctl 计算。
 func GetBootTime(klog.Logger) (time.Time, error) {
 	output, err := unix.SysctlRaw("kern.boottime")
 	if err != nil {

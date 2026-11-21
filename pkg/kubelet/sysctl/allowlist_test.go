@@ -26,12 +26,14 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestNewAllowlist 验证允许列表构造器会拒绝带空白、非法通配和未知 sysctl 的模式。
 func TestNewAllowlist(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	type Test struct {
 		sysctls []string
 		err     bool
 	}
+	// 前两个用例合法（含通配与前缀），其余覆盖各类非法输入。
 	for _, test := range []Test{
 		{sysctls: []string{"kernel.msg*", "kernel.sem"}},
 		{sysctls: []string{"kernel/msg*", "kernel/sem"}},
@@ -52,6 +54,7 @@ func TestNewAllowlist(t *testing.T) {
 	}
 }
 
+// TestAllowlist 验证 validateSysctl 与 Admit 对合法、非法 sysctl 及宿主命名空间共享场景的判定。
 func TestAllowlist(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	type Test struct {
@@ -82,11 +85,13 @@ func TestAllowlist(t *testing.T) {
 	pod.Spec.SecurityContext = &v1.PodSecurityContext{}
 	attrs := &lifecycle.PodAdmitAttributes{Pod: pod}
 
+	// 在默认安全列表基础上追加测试所需的模式。
 	w, err := NewAllowlist(append(SafeSysctlAllowlist(tCtx), "kernel.msg*", "kernel.sem", "net.b.*", "user.*"))
 	if err != nil {
 		t.Fatalf("failed to create allowlist: %v", err)
 	}
 
+	// 合法 sysctl 应同时通过 validateSysctl 与 Admit。
 	for _, test := range valid {
 		if err := w.validateSysctl(test.sysctl, test.hostNet, test.hostIPC, test.hostUsers); err != nil {
 			t.Errorf("expected to be allowlisted: %+v, got: %v", test, err)
@@ -104,6 +109,7 @@ func TestAllowlist(t *testing.T) {
 		}
 	}
 
+	// 非法 sysctl 必须被两层检查拒绝。
 	for _, test := range invalid {
 		if err := w.validateSysctl(test.sysctl, test.hostNet, test.hostIPC, test.hostUsers); err == nil {
 			t.Errorf("expected to be rejected: %+v", test)
@@ -123,7 +129,7 @@ func TestAllowlist(t *testing.T) {
 		}
 	}
 
-	// test for: len(pod.Spec.SecurityContext.Sysctls) == 0
+	// 未配置 sysctl 时 Admit 应直接放行。
 	pod.Spec.SecurityContext.Sysctls = []v1.Sysctl{}
 	status := w.Admit(tCtx, attrs)
 	if !status.Admit {

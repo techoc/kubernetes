@@ -26,9 +26,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestTerminationOrderingSidecarStopAfterMain 验证 sidecar 必须等待主容器退出后才终止。
 func TestTerminationOrderingSidecarStopAfterMain(t *testing.T) {
 	synctest.Test(t, testTerminationOrderingSidecarStopAfterMain)
 }
+
+// testTerminationOrderingSidecarStopAfterMain 用两个 goroutine 模拟主容器与 sidecar 的退出顺序。
 func testTerminationOrderingSidecarStopAfterMain(t *testing.T) {
 	restartPolicy := v1.ContainerRestartPolicyAlways
 	pod := &v1.Pod{
@@ -63,7 +66,7 @@ func testTerminationOrderingSidecarStopAfterMain(t *testing.T) {
 	syncChannel := make(chan struct{})
 
 	go func() {
-		close(syncChannel) // notifies other goroutine that this goroutine scheduled.
+		close(syncChannel) // 通知另一个 goroutine 本 goroutine 已启动。
 		sidecarWaitDelay = int64(to.waitForTurn("init", 30))
 		to.containerTerminated("init")
 		wg.Done()
@@ -71,13 +74,14 @@ func testTerminationOrderingSidecarStopAfterMain(t *testing.T) {
 
 	wg.Add(1)
 	go func() {
-		<-syncChannel // make sure the other goroutine is scheduled.
+		<-syncChannel // 确保 sidecar 的等待已经开始，再让主容器退出。
 		mainWaitDelay = int64(to.waitForTurn("main", 0))
 		time.Sleep(1 * time.Second)
 		to.containerTerminated("main")
 		wg.Done()
 	}()
 	wg.Wait()
+	// sidecar 等待一个“轮次”（主容器退出），主容器本身不等待。
 	if sidecarWaitDelay != 1 {
 		t.Errorf("expected sidecar to wait for main container to exit, got delay of %d", sidecarWaitDelay)
 	}
@@ -86,9 +90,13 @@ func testTerminationOrderingSidecarStopAfterMain(t *testing.T) {
 	}
 }
 
+// TestTerminationOrderingSidecarsInReverseOrder 验证多个 sidecar 按与启动相反的顺序终止。
 func TestTerminationOrderingSidecarsInReverseOrder(t *testing.T) {
 	synctest.Test(t, testTerminationOrderingSidecarsInReverseOrder)
 }
+
+// testTerminationOrderingSidecarsInReverseOrder 让三个 sidecar 和主容器并发等待轮次，
+// 并记录各自实际等待的轮次数。
 func testTerminationOrderingSidecarsInReverseOrder(t *testing.T) {
 	restartPolicy := v1.ContainerRestartPolicyAlways
 	pod := &v1.Pod{
@@ -148,7 +156,7 @@ func testTerminationOrderingSidecarsInReverseOrder(t *testing.T) {
 		go waitAndExit(c.Name)
 	}
 
-	// wait for our simulated containers to exit
+	// 等待所有模拟容器退出。
 	wg.Wait()
 
 	getDelay := func(name string) int64 {
@@ -163,23 +171,22 @@ func testTerminationOrderingSidecarsInReverseOrder(t *testing.T) {
 		containerName string
 		expectedDelay int64
 	}{
-		// sidecars should exit in reverse order, so
-		// sc1 = 3 (main container + sc3 + sc2)
+		// sidecar 应按逆序退出：sc1 需要等主容器、sc3、sc2 共 3 轮。
 		{
 			containerName: "sc1",
 			expectedDelay: 3,
 		},
-		// sc2 = 2 (main container + sc3)
+		// sc2 需要等主容器和 sc3 共 2 轮。
 		{
 			containerName: "sc2",
 			expectedDelay: 2,
 		},
-		// sc3 = 1 (main container)
+		// sc3 只需等主容器 1 轮。
 		{
 			containerName: "sc3",
 			expectedDelay: 1,
 		},
-		// main container = 0 delay, nothing to wait on
+		// 主容器无需等待，延迟为 0。
 		{
 			containerName: "main",
 			expectedDelay: 0,
@@ -191,9 +198,12 @@ func testTerminationOrderingSidecarsInReverseOrder(t *testing.T) {
 	}
 }
 
+// TestTerminationOrderingObeysGrace 验证等待时间受 Pod 宽限期上限约束。
 func TestTerminationOrderingObeysGrace(t *testing.T) {
 	synctest.Test(t, testTerminationOrderingObeysGrace)
 }
+
+// testTerminationOrderingObeysGrace 用 2 秒宽限期模拟无法等到所有轮次完成的情况。
 func testTerminationOrderingObeysGrace(t *testing.T) {
 	restartPolicy := v1.ContainerRestartPolicyAlways
 	pod := &v1.Pod{
@@ -238,7 +248,7 @@ func testTerminationOrderingObeysGrace(t *testing.T) {
 	var delays sync.Map
 
 	waitAndExit := func(name string) {
-		// just a two second grace period which is not long enough for all of the waits to finish
+		// 宽限期只有 2 秒，不足以让所有 sidecar 依次完成等待。
 		delay := int64(to.waitForTurn(name, 2))
 		delays.Store(name, delay)
 		time.Sleep(1 * time.Second)
@@ -254,7 +264,7 @@ func testTerminationOrderingObeysGrace(t *testing.T) {
 		go waitAndExit(c.Name)
 	}
 
-	// wait for our simulated containers to exit
+	// 等待所有模拟容器退出。
 	wg.Wait()
 
 	getDelay := func(name string) int64 {
@@ -271,7 +281,7 @@ func testTerminationOrderingObeysGrace(t *testing.T) {
 	}{
 		{
 			containerName: "sc1",
-			// overall grace period limits the amount of time waited here
+			// 整体宽限期限制了这里的等待时长。
 			expectedDelay: 2,
 		},
 		{
@@ -293,6 +303,7 @@ func testTerminationOrderingObeysGrace(t *testing.T) {
 	}
 }
 
+// getContainerNames 按启动顺序返回 init 容器与普通容器名称。
 func getContainerNames(p *v1.Pod) []string {
 	var running []string
 	for _, ic := range p.Spec.InitContainers {

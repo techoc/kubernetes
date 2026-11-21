@@ -21,23 +21,23 @@ import (
 	kubeletconfigv1beta1 "k8s.io/kubelet/config/v1beta1"
 )
 
-// GroupName is the group name used in this package
+// GroupName 是本包使用的 API 组名。
 const GroupName = "kubelet.config.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
 var (
-	// localSchemeBuilder extends the SchemeBuilder instance with the external types. In this package,
-	// defaulting and conversion init funcs are registered as well.
+	// localSchemeBuilder 在 SchemeBuilder 中扩展了外部类型；本包还会注册
+	// 默认值与转换的初始化函数。
 	localSchemeBuilder = &kubeletconfigv1beta1.SchemeBuilder
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是把该 API 组版本注册到 scheme 的全局函数。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
+// init 注册本包手写的默认值函数；生成函数的注册由生成文件完成。
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写函数；生成函数的注册放在生成文件中。
+	// 这种分离使得生成文件缺失时代码仍可编译。
 	localSchemeBuilder.Register(addDefaultingFuncs)
 }

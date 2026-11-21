@@ -23,13 +23,16 @@ import (
 	"k8s.io/apiserver/pkg/server/healthz"
 )
 
-// HealthChecker defines the interface of health checkers.
+// HealthChecker 定义健康检查器的接口。
 type HealthChecker interface {
+	// Start 启动健康检查器。
 	Start(ctx context.Context)
+	// SetHealthCheckers 注入 syncLoop 与需要聚合的健康检查器列表。
 	SetHealthCheckers(syncLoop syncLoopHealthChecker, checkers []healthz.HealthChecker)
 }
 
-// syncLoopHealthChecker contains the health check method for syncLoop.
+// syncLoopHealthChecker 包含 syncLoop 的健康检查方法。
 type syncLoopHealthChecker interface {
+	// SyncLoopHealthCheck 对 syncLoop 的健康状态执行检查。
 	SyncLoopHealthCheck(req *http.Request) error
 }

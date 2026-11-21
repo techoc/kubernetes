@@ -18,7 +18,7 @@ limitations under the License.
 
 package eviction
 
-// DefaultEvictionHard includes default options for hard eviction.
+// DefaultEvictionHard 是 Linux 上硬驱逐的默认阈值配置。
 var DefaultEvictionHard = map[string]string{
 	"memory.available":   "100Mi",
 	"nodefs.available":   "10%",

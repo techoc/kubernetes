@@ -16,5 +16,6 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 // +groupName=kubelet.config.k8s.io
+// Package config 包含 kubelet 配置 API 的内部类型定义。
 
 package config

@@ -25,6 +25,7 @@ import (
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
+// applySandboxResources 在不受支持的操作系统上不做任何处理，直接返回 nil。
 func (m *kubeGenericRuntimeManager) applySandboxResources(ctx context.Context, pod *v1.Pod, config *runtimeapi.PodSandboxConfig) error {
 	return nil
 }

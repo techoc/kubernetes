@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package nodeshutdown can watch for node level shutdown events and trigger graceful termination of pods running on the node prior to a system shutdown.
+// Package nodeshutdown 监听节点级关机事件，并在系统关机前触发节点上 Pod 的优雅终止。
 package nodeshutdown
 
 import (
@@ -43,21 +43,25 @@ import (
 )
 
 const (
-	// Kubelet service name
-	serviceKubelet           = "kubelet"
-	shutdownOrderRegPath     = `SYSTEM\CurrentControlSet\Control`
+	// serviceKubelet 是 kubelet 的 Windows 服务名。
+	serviceKubelet = "kubelet"
+	// shutdownOrderRegPath 是保存预关机顺序的注册表路径。
+	shutdownOrderRegPath = `SYSTEM\CurrentControlSet\Control`
+	// shutdownOrderStringValue 是注册表中预关机顺序的键名。
 	shutdownOrderStringValue = "PreshutdownOrder"
 )
 
-// managerImpl has functions that can be used to interact with the Node Shutdown Manager.
+// managerImpl 实现 Windows 上的 Node Shutdown Manager 核心逻辑。
 type managerImpl struct {
 	logger   klog.Logger
 	recorder record.EventRecorder
 	nodeRef  *v1.ObjectReference
 
+	// getPods 获取当前活跃 Pod，用于关机时逐个终止。
 	getPods        eviction.ActivePodsFunc
 	syncNodeStatus func(context.Context)
 
+	// nodeShuttingDownMutex 保护 nodeShuttingDownNow 的并发访问。
 	nodeShuttingDownMutex sync.Mutex
 	nodeShuttingDownNow   bool
 	podManager            *podManager
@@ -66,17 +70,20 @@ type managerImpl struct {
 	storage       storage
 }
 
+// preShutdownHandler 将 Windows 服务的预关机回调桥接到管理器实现。
 type preShutdownHandler struct {
 	manager *managerImpl
 }
 
+// ProcessShutdownEvent 响应 Windows SCM 的预关机回调。
 func (h *preShutdownHandler) ProcessShutdownEvent() error {
-	// Windows SCM preshutdown callback has no context, so start a root context at this callback boundary.
+	// Windows SCM 的 preshutdown 回调没有 context，因此在此回调边界创建根 context。
 	return h.manager.ProcessShutdownEvent(context.Background())
 }
 
-// NewManager returns a new node shutdown manager.
+// NewManager 返回一个新的节点关机管理器。
 func NewManager(conf *Config) Manager {
+	// WindowsGracefulNodeShutdown 门控关闭时返回空实现。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.WindowsGracefulNodeShutdown) {
 		m := managerStub{}
 		conf.Logger.Info("Node shutdown manager is disabled as the feature gate is not enabled")
@@ -85,7 +92,7 @@ func NewManager(conf *Config) Manager {
 
 	podManager := newPodManager(conf)
 
-	// Disable if the configuration is empty
+	// 未配置任何关机宽限期时同样返回空实现。
 	if len(podManager.shutdownGracePeriodByPodPriority) == 0 {
 		m := managerStub{}
 		conf.Logger.Info("Node shutdown manager is disabled as no shutdown grace period is configured")
@@ -112,7 +119,7 @@ func NewManager(conf *Config) Manager {
 	return manager
 }
 
-// Admit rejects all pods if node is shutting
+// Admit 在节点正在关机时拒绝所有 Pod 的准入。
 func (m *managerImpl) Admit(_ context.Context, attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
 	nodeShuttingDown := m.ShutdownStatus() != nil
 
@@ -126,7 +133,7 @@ func (m *managerImpl) Admit(_ context.Context, attrs *lifecycle.PodAdmitAttribut
 	return lifecycle.PodAdmitResult{Admit: true}
 }
 
-// setMetrics sets the metrics for the node shutdown manager.
+// setMetrics 从持久化状态中恢复并设置节点关机相关指标。
 func (m *managerImpl) setMetrics() {
 	if m.enableMetrics && m.storage != nil {
 		sta := state{}
@@ -144,7 +151,7 @@ func (m *managerImpl) setMetrics() {
 	}
 }
 
-// Start starts the node shutdown manager and will start watching the node for shutdown events.
+// Start 启动节点关机管理器，并注册 Windows 服务的预关机处理回调。
 func (m *managerImpl) Start(_ context.Context) error {
 	m.logger.V(1).Info("Shutdown manager get started")
 
@@ -154,6 +161,7 @@ func (m *managerImpl) Start(_ context.Context) error {
 		return err
 	}
 
+	// 注册预关机回调，Windows 进入关机流程时会调用该处理器。
 	service.SetPreShutdownHandler(&preShutdownHandler{manager: m})
 
 	m.setMetrics()
@@ -161,15 +169,15 @@ func (m *managerImpl) Start(_ context.Context) error {
 	return nil
 }
 
-// Check the return value, maybe return error only
+// start 初始化 Windows 服务与注册表配置，为预关机处理做好准备。
 func (m *managerImpl) start() (chan struct{}, error) {
-	// Process the shutdown only when it is running as a windows service
+	// 仅在以 Windows 服务方式运行时才处理关机事件。
 	isServiceInitialized := service.IsServiceInitialized()
 	if !isServiceInitialized {
 		return nil, fmt.Errorf("%s is NOT running as a Windows service", serviceKubelet)
 	}
 
-	// Update the registry key to add the kubelet dependencies to the existing order
+	// 更新注册表，把 kubelet 的依赖项加入现有的预关机顺序。
 	mgr, err := mgr.Connect()
 	if err != nil {
 		return nil, fmt.Errorf("Could not connect to service manager: %w", err)
@@ -193,28 +201,28 @@ func (m *managerImpl) start() (chan struct{}, error) {
 		return nil, fmt.Errorf("Could not access config of service %s: %w", serviceKubelet, err)
 	}
 
-	// Open the registry key
+	// 打开注册表键以读写预关机顺序。
 	key, err := registry.OpenKey(registry.LOCAL_MACHINE, shutdownOrderRegPath, registry.QUERY_VALUE|registry.SET_VALUE)
 	if err != nil {
 		return nil, fmt.Errorf("Could not access registry: %w", err)
 	}
 	defer key.Close()
 
-	// Read the existing values
+	// 读取现有的预关机顺序。
 	existingOrders, _, err := key.GetStringsValue(shutdownOrderStringValue)
 	if err != nil {
 		return nil, fmt.Errorf("Could not access registry value %s: %w", shutdownOrderStringValue, err)
 	}
 	m.logger.V(1).Info("Shutdown manager get current service preshutdown order", "Preshutdownorder", existingOrders)
 
-	// Add the kubelet dependencies to the existing order
+	// 将 kubelet 的依赖项合并进现有顺序。
 	newOrders := addToExistingOrder(config.Dependencies, existingOrders)
 	err = key.SetStringsValue("PreshutdownOrder", newOrders)
 	if err != nil {
 		return nil, fmt.Errorf("Could not set registry %s to be new value %s: %w", shutdownOrderStringValue, newOrders, err)
 	}
 
-	// If the preshutdown timeout is less than periodRequested, attempt to update the value to periodRequested.
+	// 若预关机超时小于请求的宽限期，则尝试将其调整为请求值。
 	if periodRequested := m.periodRequested().Milliseconds(); periodRequested > int64(preshutdownInfo.PreshutdownTimeout) {
 		m.logger.V(1).Info("Shutdown manager override preshutdown info", "ShutdownGracePeriod", periodRequested)
 		err := service.UpdatePreShutdownInfo(s.Handle, uint32(periodRequested))
@@ -222,7 +230,7 @@ func (m *managerImpl) start() (chan struct{}, error) {
 			return nil, fmt.Errorf("Unable to override preshoutdown config by shutdown manager: %v", err)
 		}
 
-		// Read the preshutdownInfo again, if the override was successful, preshutdownInfo will be equal to shutdownGracePeriodRequested.
+		// 再次读取预关机信息；若覆盖成功，该值应等于请求的关机宽限期。
 		preshutdownInfo, err := service.QueryPreShutdownInfo(s.Handle)
 		if err != nil {
 			return nil, fmt.Errorf("Unable to get preshoutdown info after overrided by shutdown manager: %v", err)
@@ -236,7 +244,7 @@ func (m *managerImpl) start() (chan struct{}, error) {
 	return nil, nil
 }
 
-// ShutdownStatus will return an error if the node is currently shutting down.
+// ShutdownStatus 在节点正在关机时返回错误，否则返回 nil。
 func (m *managerImpl) ShutdownStatus() error {
 	m.nodeShuttingDownMutex.Lock()
 	defer m.nodeShuttingDownMutex.Unlock()
@@ -247,6 +255,7 @@ func (m *managerImpl) ShutdownStatus() error {
 	return nil
 }
 
+// ProcessShutdownEvent 处理预关机事件：标记节点关机中、同步状态并终止所有 Pod。
 func (m *managerImpl) ProcessShutdownEvent(ctx context.Context) error {
 	m.logger.V(1).Info("Shutdown manager detected new preshutdown event", "event", "preshutdown")
 
@@ -256,6 +265,7 @@ func (m *managerImpl) ProcessShutdownEvent(ctx context.Context) error {
 	m.nodeShuttingDownNow = true
 	m.nodeShuttingDownMutex.Unlock()
 
+	// 异步同步节点状态与 Ready 条件，避免阻塞关机处理流程。
 	nodeStatusCtx := klog.NewContext(ctx, m.logger)
 	go m.syncNodeStatus(nodeStatusCtx)
 
@@ -266,6 +276,7 @@ func (m *managerImpl) ProcessShutdownEvent(ctx context.Context) error {
 		m.logger.V(1).Info("Shutdown manager completed processing preshutdown event, node will shutdown shortly")
 	}()
 
+	// 记录优雅关机的开始与结束时间，便于重启后恢复指标。
 	if m.enableMetrics && m.storage != nil {
 		startTime := time.Now()
 		err := m.storage.Store(state{
@@ -293,6 +304,7 @@ func (m *managerImpl) ProcessShutdownEvent(ctx context.Context) error {
 	return m.podManager.killPods(ctx, activePods)
 }
 
+// periodRequested 返回按 Pod 优先级配置的关机宽限期总和。
 func (m *managerImpl) periodRequested() time.Duration {
 	var sum int64
 	for _, period := range m.podManager.shutdownGracePeriodByPodPriority {
@@ -301,11 +313,11 @@ func (m *managerImpl) periodRequested() time.Duration {
 	return time.Duration(sum) * time.Second
 }
 
-// Helper function to remove all occurrences of a specific item from a string list
+// removeItemFromList 从字符串列表中删除指定项的所有出现（忽略大小写）。
 func removeItemFromList(stringlist []string, item string) []string {
 	writeIndex := 0
 
-	// Iterate through the list and only keep those don't match the item (case-insensitive)
+	// 遍历列表，只保留与目标项不匹配（忽略大小写）的元素。
 	for _, listItem := range stringlist {
 		if !strings.EqualFold(listItem, item) {
 			stringlist[writeIndex] = listItem
@@ -313,18 +325,18 @@ func removeItemFromList(stringlist []string, item string) []string {
 		}
 	}
 
-	// Return the modified slice, trimmed to the valid length
+	// 返回裁剪到有效长度的切片。
 	return stringlist[:writeIndex]
 }
 
-// Helper function to insert an element into a slice at a specified index
+// insertAt 在切片的指定索引处插入一个元素。
 func insertAt(slice []string, index int, value string) []string {
-	// If the index is greater than or equal to the length, append the element to the end
+	// 索引大于等于长度时直接追加到末尾。
 	if index >= len(slice) {
 		return append(slice, value)
 	}
 
-	// Ensure there's enough space in the slice by appending a zero-value element first
+	// 先追加一个零值元素以腾出空间，再整体后移插入位置之后的元素。
 	slice = append(slice, "")
 	copy(slice[index+1:], slice[index:])
 	slice[index] = value
@@ -332,33 +344,33 @@ func insertAt(slice []string, index int, value string) []string {
 	return slice
 }
 
+// addToExistingOrder 将 kubelet 及其依赖合并到现有的预关机顺序中：
 // Dependencies: ["a", "b", "c", "d"]
 // ExistingOrder: ["x", "b", "y", "c", "z"]
-// The output will be:
+// 输出结果为：
 // Modified List: ["x", "kubelet", "b", "y", "c", "z", "a", "d"]
 func addToExistingOrder(dependencies []string, existingOrder []string) []string {
-	// Do nothing if dependencies is empty
+	// 没有依赖项时无需修改。
 	if len(dependencies) == 0 {
 		return existingOrder
 	}
 
-	// Remove "Kubelet" from existing order if any
+	// 先从现有顺序中移除可能已存在的 kubelet 条目，避免重复。
 	existingOrder = removeItemFromList(existingOrder, serviceKubelet)
 
-	// Append items from dependencies to existingOrder if not already present
+	// 记录现有顺序中的项，用于去重。
 	existingOrderMap := make(map[string]bool)
 	for _, item := range existingOrder {
 		existingOrderMap[item] = true
 	}
-	// Append non-duplicate items from dependencies to existingOrder
+	// 把尚未出现在现有顺序中的依赖项追加到末尾。
 	for _, item := range dependencies {
 		if !existingOrderMap[item] {
 			existingOrder = append(existingOrder, item)
 		}
 	}
 
-	// Insert "kubelet" before the first common item
-	// Honor the order of existing order
+	// 在第一个公共项之前插入 kubelet，以尊重现有顺序。
 	firstCommonIndex := -1
 	for i, item := range existingOrder {
 		for _, item1 := range dependencies {
@@ -372,7 +384,7 @@ func addToExistingOrder(dependencies []string, existingOrder []string) []string 
 		}
 	}
 
-	// If a common item is found, insert "kubelet" before it
+	// 找到公共项时，在其之前插入 kubelet。
 	if firstCommonIndex != -1 {
 		existingOrder = insertAt(existingOrder, firstCommonIndex, serviceKubelet)
 	}

@@ -23,15 +23,17 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
+// TestReasonCache 验证 ReasonCache 只记录带错误的 StartContainer 同步结果，
+// 并在移除后不再返回缓存项。
 func TestReasonCache(t *testing.T) {
-	// Create test sync result
+	// 构造测试用的同步结果。
 	syncResult := kubecontainer.PodSyncResult{}
 	results := []*kubecontainer.SyncResult{
-		// reason cache should be set for SyncResult with StartContainer action and error
+		// StartContainer 且带错误的 SyncResult 应写入 reason 缓存。
 		kubecontainer.NewSyncResult(kubecontainer.StartContainer, "container_1"),
-		// reason cache should not be set for SyncResult with StartContainer action but without error
+		// StartContainer 但无错误的 SyncResult 不应写入缓存。
 		kubecontainer.NewSyncResult(kubecontainer.StartContainer, "container_2"),
-		// reason cache should not be set for SyncResult with other actions
+		// 其他动作的 SyncResult 不应写入缓存。
 		kubecontainer.NewSyncResult(kubecontainer.KillContainer, "container_3"),
 	}
 	results[0].Fail(kubecontainer.ErrRunContainer, "message_1")
@@ -49,6 +51,7 @@ func TestReasonCache(t *testing.T) {
 	assertReasonInfo(t, reasonCache, uid, results[0], false)
 }
 
+// assertReasonInfo 断言缓存中是否存在指定同步结果，并核对错误与消息内容。
 func assertReasonInfo(t *testing.T, cache *ReasonCache, uid types.UID, result *kubecontainer.SyncResult, found bool) {
 	name := result.Target.(string)
 	actualReason, ok := cache.Get(uid, name)

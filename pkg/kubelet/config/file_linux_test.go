@@ -42,6 +42,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestExtractFromNonExistentFile 验证从不存在文件对应的 sourceFile 执行 doWatch 会返回错误。
 func TestExtractFromNonExistentFile(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	ch := make(chan sourceUpdate, 1)
@@ -52,13 +53,14 @@ func TestExtractFromNonExistentFile(t *testing.T) {
 	}
 }
 
+// TestUpdateOnNonExistentFile 验证监听不存在的文件路径时会收到一个空的 Pod 更新。
 func TestUpdateOnNonExistentFile(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	ch := make(chan sourceUpdate)
 	NewSourceFile(logger, "random_non_existent_path", "localhost", time.Millisecond, ch)
 	select {
 	case update := <-ch:
-		expected := createSourceUpdate() // Expect empty update.
+		expected := createSourceUpdate() // 期望收到空更新。
 		if !apiequality.Semantic.DeepDerivative(expected, update) {
 			t.Fatalf("expected %#v, Got %#v", expected, update)
 		}
@@ -68,6 +70,8 @@ func TestUpdateOnNonExistentFile(t *testing.T) {
 	}
 }
 
+// TestReadPodsFromFileExistAlready 验证启动时已存在的 Pod 清单文件能被正确解析、
+// 通过合法性校验，并生成期望的 sourceUpdate。
 func TestReadPodsFromFileExistAlready(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	hostname := types.NodeName("random-test-hostname")
@@ -87,7 +91,7 @@ func TestReadPodsFromFileExistAlready(t *testing.T) {
 			select {
 			case update := <-ch:
 				for _, pod := range update.Pods {
-					// TODO: remove the conversion when validation is performed on versioned objects.
+					// TODO: 当校验直接支持版本化对象后，移除这里的转换。
 					internalPod := &api.Pod{}
 					if err := k8s_api_v1.Convert_v1_Pod_To_core_Pod(pod, internalPod, nil); err != nil {
 						t.Fatalf("%s: Cannot convert pod %#v, %#v", testCase.desc, pod, err)
@@ -96,6 +100,7 @@ func TestReadPodsFromFileExistAlready(t *testing.T) {
 						t.Fatalf("%s: Invalid pod %#v, %#v", testCase.desc, internalPod, errs)
 					}
 				}
+				// 解析结果必须与期望的更新完全一致。
 				if !apiequality.Semantic.DeepEqual(testCase.expected, update) {
 					t.Fatalf("%s: Expected %#v, Got %#v", testCase.desc, testCase.expected, update)
 				}
@@ -112,29 +117,32 @@ var (
 		symlink  bool
 		period   time.Duration
 	}{
-		// set the period to be long enough for the file to be changed
-		// and short enough to trigger the event
+		// 周期要足够长，以便文件内容被修改；又要足够短，以便能及时触发事件。
 		{true, true, 3 * time.Second},
 
-		// set the period to avoid periodic PodUpdate event
+		// 周期设置得足够长，避免周期性的 PodUpdate 事件干扰断言。
 		{true, false, 60 * time.Second},
 		{false, true, 60 * time.Second},
 		{false, false, 60 * time.Second},
 	}
 )
 
+// TestWatchFileAdded 验证在监听目录或文件、使用或不使用符号链接的各种组合下，
+// 新增清单文件都能触发 Pod 更新。
 func TestWatchFileAdded(t *testing.T) {
 	for _, testCase := range testCases {
 		watchFileAdded(testCase.watchDir, testCase.symlink, t)
 	}
 }
 
+// TestWatchFileChanged 验证清单文件内容修改与文件重命名都能触发相应的 Pod 更新事件。
 func TestWatchFileChanged(t *testing.T) {
 	for _, testCase := range testCases {
 		watchFileChanged(testCase.watchDir, testCase.symlink, testCase.period, t)
 	}
 }
 
+// testCase 描述单个 Pod 清单文件解析测试用例。
 type testCase struct {
 	lock     *sync.Mutex
 	desc     string
@@ -142,6 +150,7 @@ type testCase struct {
 	expected sourceUpdate
 }
 
+// getTestCases 构造以给定节点名解析 Pod 清单的测试用例集合。
 func getTestCases(hostname types.NodeName) []*testCase {
 	grace := int64(30)
 	enableServiceLinks := v1.DefaultEnableServiceLinks
@@ -204,6 +213,7 @@ func getTestCases(hostname types.NodeName) []*testCase {
 	}
 }
 
+// writeToFile 将测试用例中的 Pod 编码后写入指定目录下的文件，返回文件路径。
 func (tc *testCase) writeToFile(dir, name string, t *testing.T) string {
 	fileContents, err := runtime.Encode(clientscheme.Codecs.LegacyCodec(v1.SchemeGroupVersion), tc.pod)
 	if err != nil {
@@ -217,6 +227,7 @@ func (tc *testCase) writeToFile(dir, name string, t *testing.T) string {
 	return fileName
 }
 
+// createSymbolicLink 在 link 目录下创建指向 target 目录同名文件的符号链接。
 func createSymbolicLink(link, target, name string, t *testing.T) string {
 	linkName := filepath.Join(link, name)
 	linkedFile := filepath.Join(target, name)
@@ -228,6 +239,8 @@ func createSymbolicLink(link, target, name string, t *testing.T) string {
 	return linkName
 }
 
+// watchFileAdded 是 TestWatchFileAdded 的具体执行逻辑：
+// 启动文件监听后新增清单文件，并断言收到对应的更新。
 func watchFileAdded(watchDir bool, symlink bool, t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	hostname := types.NodeName("random-test-hostname")
@@ -250,6 +263,7 @@ func watchFileAdded(watchDir bool, symlink bool, t *testing.T) {
 					t.Fatalf("unable to create temp dir for linked files: %v", err)
 				}
 				defer removeAll(linkedDirName, t)
+				// 通过符号链接写入文件，验证监听逻辑能跟随链接找到真实文件。
 				createSymbolicLink(dirName, linkedDirName, fileName, t)
 			}
 
@@ -262,7 +276,7 @@ func watchFileAdded(watchDir bool, symlink bool, t *testing.T) {
 			expectEmptyUpdate(t, ch)
 
 			addFile := func() {
-				// Add a file
+				// 新增一个清单文件。
 				if symlink {
 					testCase.writeToFile(linkedDirName, fileName, t)
 					return
@@ -273,15 +287,17 @@ func watchFileAdded(watchDir bool, symlink bool, t *testing.T) {
 
 			go addFile()
 
-			// For !watchDir: expect an update by SourceFile.reloadConfig().
-			// For watchDir: expect at least one update from CREATE & MODIFY inotify event.
-			// Shouldn't expect two updates from CREATE & MODIFY because CREATE doesn't guarantee file written.
-			// In that case no update will be sent from CREATE event.
+			// 非目录监听：期望由 SourceFile.reloadConfig() 触发一次更新。
+			// 目录监听：期望至少收到一次来自 CREATE 与 MODIFY inotify 事件的更新。
+			// 不应期望 CREATE 与 MODIFY 各触发一次，因为 CREATE 时文件未必已写完，
+			// 那种情况下 CREATE 事件不会发出更新。
 			expectUpdate(t, ch, testCase)
 		}()
 	}
 }
 
+// watchFileChanged 是 TestWatchFileChanged 的具体执行逻辑：
+// 先写入初始清单文件，再修改内容并重命名，验证各类事件触发的更新。
 func watchFileChanged(watchDir bool, symlink bool, period time.Duration, t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	hostname := types.NodeName("random-test-hostname")
@@ -307,6 +323,7 @@ func watchFileChanged(watchDir bool, symlink bool, period time.Duration, t *test
 				createSymbolicLink(dirName, linkedDirName, fileName, t)
 			}
 
+			// 初始写入清单文件；加锁避免与监听协程并发读写同一文件。
 			var file string
 			ch := make(chan sourceUpdate)
 			func() {
@@ -327,10 +344,10 @@ func watchFileChanged(watchDir bool, symlink bool, period time.Duration, t *test
 				NewSourceFile(logger, file, hostname, period, ch)
 			}
 
-			// await fsnotify to be ready
+			// 等待 fsnotify 就绪，避免初始事件丢失导致测试不稳定。
 			time.Sleep(time.Second)
 
-			// expect an update by SourceFile.resetStoreFromPath()
+			// 期望由 SourceFile.resetStoreFromPath() 触发一次更新。
 			expectUpdate(t, ch, testCase)
 
 			pod := testCase.pod.(*v1.Pod)
@@ -338,7 +355,7 @@ func watchFileChanged(watchDir bool, symlink bool, period time.Duration, t *test
 
 			testCase.expected.Pods[0].Spec.Containers[0].Name = "image2"
 			changeFile := func() {
-				// Edit the file content
+				// 修改文件内容。
 				if symlink {
 					file = testCase.writeToFile(linkedDirName, fileName, t)
 					return
@@ -348,27 +365,28 @@ func watchFileChanged(watchDir bool, symlink bool, period time.Duration, t *test
 			}
 
 			go changeFile()
-			// expect an update by MODIFY inotify event
+			// 期望由 MODIFY inotify 事件触发一次更新。
 			expectUpdate(t, ch, testCase)
 
 			if watchDir {
 				go changeFileName(dirName, fileName, fileName+"_ch", t)
-				// expect an update by MOVED_FROM inotify event cause changing file name
+				// 文件重命名会产生 MOVED_FROM 事件，此时期望一个空更新。
 				expectEmptyUpdate(t, ch)
-				// expect an update by MOVED_TO inotify event cause changing file name
+				// 随后产生 MOVED_TO 事件，期望收到完整的 Pod 更新。
 				expectUpdate(t, ch, testCase)
 			}
 		}()
 	}
 }
 
+// expectUpdate 等待并校验一次非空的 Pod 更新，超时则判定测试失败。
 func expectUpdate(t *testing.T, ch chan sourceUpdate, testCase *testCase) {
 	timer := time.After(5 * time.Second)
 	for {
 		select {
 		case update := <-ch:
 			if len(update.Pods) == 0 {
-				// filter out the empty updates from reading a non-existing path
+				// 过滤掉读取不存在路径产生的空更新。
 				continue
 			}
 			for _, pod := range update.Pods {
@@ -392,6 +410,7 @@ func expectUpdate(t *testing.T, ch chan sourceUpdate, testCase *testCase) {
 	}
 }
 
+// expectEmptyUpdate 等待并校验一次空的 Pod 更新，超时则判定测试失败。
 func expectEmptyUpdate(t *testing.T, ch chan sourceUpdate) {
 	timer := time.After(5 * time.Second)
 	for {
@@ -407,6 +426,7 @@ func expectEmptyUpdate(t *testing.T, ch chan sourceUpdate) {
 	}
 }
 
+// writeFile 将数据写入文件，并检查短写与关闭错误。
 func writeFile(filename string, data []byte) error {
 	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
@@ -422,6 +442,7 @@ func writeFile(filename string, data []byte) error {
 	return err
 }
 
+// changeFileName 重命名目录下的文件，用于模拟文件变更事件。
 func changeFileName(dir, from, to string, t *testing.T) {
 	fromPath := filepath.Join(dir, from)
 	toPath := filepath.Join(dir, to)

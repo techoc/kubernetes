@@ -31,14 +31,14 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/bitmask"
 )
 
-// cpuFollowingFakeCPUManager implements cpumanager.Manager, but only GetExclusiveCPUs is
-// meaningful. The remaining methods are satisfied by the embedded (nil) interface
-// and must not be called by the code under test (they would panic).
+// cpuFollowingFakeCPUManager 实现 cpumanager.Manager，但只有 GetExclusiveCPUs 有意义；
+// 其余方法由内嵌的 nil 接口满足，被测代码不得调用（调用会 panic）。
 type cpuFollowingFakeCPUManager struct {
 	cpumanager.Manager
 	exclusive map[string]cpuset.CPUSet
 }
 
+// GetExclusiveCPUs 返回预设的独占 CPU 集合，未配置时返回空集合。
 func (f *cpuFollowingFakeCPUManager) GetExclusiveCPUs(podUID, containerName string) cpuset.CPUSet {
 	if cpus, ok := f.exclusive[podUID+"/"+containerName]; ok {
 		return cpus
@@ -46,17 +46,23 @@ func (f *cpuFollowingFakeCPUManager) GetExclusiveCPUs(podUID, containerName stri
 	return cpuset.New()
 }
 
-// cpuFollowingFakeStore is a minimal topologymanager.Store that always returns a preset hint.
+// cpuFollowingFakeStore 是最小的 topologymanager.Store 桩，总是返回预设 hint。
 type cpuFollowingFakeStore struct {
 	base topologymanager.TopologyHint
 }
 
+// GetAffinity 返回预设 hint。
 func (f *cpuFollowingFakeStore) GetAffinity(_ klog.Logger, podUID, containerName string) topologymanager.TopologyHint {
 	return f.base
 }
-func (f *cpuFollowingFakeStore) GetPolicy() topologymanager.Policy { return nil }
-func (f *cpuFollowingFakeStore) Name() string                      { return "fake" }
 
+// GetPolicy 返回 nil。
+func (f *cpuFollowingFakeStore) GetPolicy() topologymanager.Policy { return nil }
+
+// Name 返回桩名称。
+func (f *cpuFollowingFakeStore) Name() string { return "fake" }
+
+// cpuFollowingMustBitMask 构造位掩码，失败时终止测试。
 func cpuFollowingMustBitMask(t *testing.T, bits ...int) bitmask.BitMask {
 	t.Helper()
 	m, err := bitmask.NewBitMask(bits...)
@@ -66,7 +72,7 @@ func cpuFollowingMustBitMask(t *testing.T, bits ...int) bitmask.BitMask {
 	return m
 }
 
-// cpuFollowingTestMachineInfo describes 2 NUMA nodes: CPUs 0-3 on node 0, CPUs 4-7 on node 1.
+// cpuFollowingTestMachineInfo 描述两个 NUMA 节点：CPU 0-3 在节点 0，CPU 4-7 在节点 1。
 func cpuFollowingTestMachineInfo() *cadvisorapi.MachineInfo {
 	return &cadvisorapi.MachineInfo{
 		Topology: []cadvisorapi.Node{
@@ -82,12 +88,14 @@ func cpuFollowingTestMachineInfo() *cadvisorapi.MachineInfo {
 	}
 }
 
+// TestCPUFollowingStoreGetAffinity 验证 GetAffinity 在跟随 CPU manager
+// 与回退基础 hint 之间的行为。
 func TestCPUFollowingStoreGetAffinity(t *testing.T) {
-	// base is the Topology Manager's own hint; deliberately a different node ({1})
-	// than the exclusive-CPU-derived masks so "follow" and "fall back" are
-	// distinguishable.
+	// base 是 Topology Manager 自己的 hint，故意选在节点 {1}，
+	// 与独占 CPU 推导出的掩码不同，便于区分"跟随"与"回退"。
 	baseHint := topologymanager.TopologyHint{NUMANodeAffinity: cpuFollowingMustBitMask(t, 1), Preferred: true}
 
+	// 用例覆盖单节点、跨节点、部分映射、无独占 CPU、无法映射等场景。
 	testCases := []struct {
 		name          string
 		exclusiveCPUs cpuset.CPUSet
@@ -124,6 +132,7 @@ func TestCPUFollowingStoreGetAffinity(t *testing.T) {
 		},
 	}
 
+	// 逐用例构造 store 并校验返回的 NUMA 掩码与 Preferred。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			cpuMgr := &cpuFollowingFakeCPUManager{exclusive: map[string]cpuset.CPUSet{"pod/ctr": tc.exclusiveCPUs}}
@@ -149,6 +158,8 @@ func TestCPUFollowingStoreGetAffinity(t *testing.T) {
 	}
 }
 
+// TestCPUFollowingStoreIsHintAuthoritative 验证只有拥有独占 CPU 的容器
+// 才被视为权威 hint。
 func TestCPUFollowingStoreIsHintAuthoritative(t *testing.T) {
 	cpuMgr := &cpuFollowingFakeCPUManager{exclusive: map[string]cpuset.CPUSet{
 		"pod/with":    cpuset.New(0, 1),

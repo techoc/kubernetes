@@ -18,30 +18,34 @@ package topologymanager
 
 import "k8s.io/klog/v2"
 
+// bestEffortPolicy 不强制 preferred hint，任何合并结果都可准入。
 type bestEffortPolicy struct {
-	// numaInfo represents list of NUMA Nodes available on the underlying machine and distances between them
+	// numaInfo 描述底层机器上可用的 NUMA 节点列表及其相互距离。
 	numaInfo *NUMAInfo
 	opts     PolicyOptions
 }
 
 var _ Policy = &bestEffortPolicy{}
 
-// PolicyBestEffort policy name.
+// PolicyBestEffort 是 best-effort 策略的名称。
 const PolicyBestEffort string = "best-effort"
 
-// NewBestEffortPolicy returns best-effort policy.
+// NewBestEffortPolicy 返回 best-effort 策略实例。
 func NewBestEffortPolicy(numaInfo *NUMAInfo, opts PolicyOptions) Policy {
 	return &bestEffortPolicy{numaInfo: numaInfo, opts: opts}
 }
 
+// Name 返回策略名称。
 func (p *bestEffortPolicy) Name() string {
 	return PolicyBestEffort
 }
 
+// canAdmitPodResult 对 best-effort 策略始终返回 true。
 func (p *bestEffortPolicy) canAdmitPodResult(hint *TopologyHint) bool {
 	return true
 }
 
+// Merge 过滤各 provider 的 hint 并合并，best-effort 下总能准入。
 func (p *bestEffortPolicy) Merge(logger klog.Logger, providersHints []map[string][]TopologyHint) (TopologyHint, bool) {
 	filteredHints := filterProvidersHints(logger, providersHints)
 	merger := NewHintMerger(p.numaInfo, filteredHints, p.Name(), p.opts)

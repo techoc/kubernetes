@@ -37,16 +37,19 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// Manager interface provides methods for Kubelet to manage node shutdown.
+// Manager 接口提供 kubelet 管理节点关机的入口。
 type Manager interface {
 	lifecycle.PodAdmitHandler
 
+	// Admit 在节点关机期间拒绝新 Pod。
 	Admit(ctx context.Context, attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult
+	// Start 启动关机检测。
 	Start(ctx context.Context) error
+	// ShutdownStatus 返回当前关机状态。
 	ShutdownStatus() error
 }
 
-// Config represents Manager configuration
+// Config 是 Manager 的构造配置。
 type Config struct {
 	Logger                           klog.Logger
 	VolumeManager                    volumemanager.VolumeManager
@@ -62,24 +65,25 @@ type Config struct {
 	Clock                            clock.Clock
 }
 
-// managerStub is a fake node shutdown managerImpl .
+// managerStub 是用于不支持关机管理平台的空实现。
 type managerStub struct{}
 
-// Admit returns a fake Pod admission which always returns true
+// Admit 始终允许 Pod 准入。
 func (managerStub) Admit(_ context.Context, attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
 	return lifecycle.PodAdmitResult{Admit: true}
 }
 
-// Start is a no-op always returning nil for non linux platforms.
+// Start 在非 Linux 平台为空操作，始终返回 nil。
 func (managerStub) Start(context.Context) error {
 	return nil
 }
 
-// ShutdownStatus is a no-op always returning nil for non linux platforms.
+// ShutdownStatus 在非 Linux 平台为空操作，始终返回 nil。
 func (managerStub) ShutdownStatus() error {
 	return nil
 }
 
+// 关机事件使用的原因、消息与状态文件名。
 const (
 	NodeShutdownNotAdmittedReason  = "NodeShutdown"
 	nodeShutdownNotAdmittedMessage = "Pod was rejected as the node is shutting down."
@@ -89,7 +93,7 @@ const (
 	nodeShutdownMessage = "Pod was terminated in response to imminent node shutdown."
 )
 
-// podManager is responsible for killing active pods by priority.
+// podManager 按优先级分组终止活跃 Pod。
 type podManager struct {
 	logger                           klog.Logger
 	shutdownGracePeriodByPodPriority []kubeletconfig.ShutdownGracePeriodByPodPriority
@@ -98,16 +102,17 @@ type podManager struct {
 	volumeManager                    volumemanager.VolumeManager
 }
 
+// newPodManager 根据配置构造按优先级关机的管理器。
 func newPodManager(conf *Config) *podManager {
 	shutdownGracePeriodByPodPriority := conf.ShutdownGracePeriodByPodPriority
 
-	// Migration from the original configuration
+	// 特性未开启或未配置按优先级宽限期时，从旧的两个宽限期字段迁移。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.GracefulNodeShutdownBasedOnPodPriority) ||
 		len(shutdownGracePeriodByPodPriority) == 0 {
 		shutdownGracePeriodByPodPriority = migrateConfig(conf.ShutdownGracePeriodRequested, conf.ShutdownGracePeriodCriticalPods)
 	}
 
-	// Sort by priority from low to high
+	// 按优先级从低到高排序，低优先级先被终止。
 	sort.Slice(shutdownGracePeriodByPodPriority, func(i, j int) bool {
 		return shutdownGracePeriodByPodPriority[i].Priority < shutdownGracePeriodByPodPriority[j].Priority
 	})
@@ -125,7 +130,7 @@ func newPodManager(conf *Config) *podManager {
 	}
 }
 
-// killPods terminates pods by priority.
+// killPods 按优先级分组终止 Pod：低优先级组先处理，每组等待其宽限期。
 func (m *podManager) killPods(ctx context.Context, activePods []*v1.Pod) error {
 	groups := groupByPriority(m.shutdownGracePeriodByPodPriority, activePods)
 	for _, group := range groups {
@@ -135,8 +140,7 @@ func (m *podManager) killPods(ctx context.Context, activePods []*v1.Pod) error {
 		default:
 		}
 
-		// If there are no pods in a particular range,
-		// then do not wait for pods in that priority range.
+		// 该优先级区间没有 Pod 时直接跳过，不浪费宽限期。
 		if len(group.Pods) == 0 {
 			continue
 		}
@@ -149,7 +153,7 @@ func (m *podManager) killPods(ctx context.Context, activePods []*v1.Pod) error {
 
 				gracePeriodOverride := group.ShutdownGracePeriodSeconds
 
-				// If the pod's spec specifies a termination gracePeriod which is less than the gracePeriodOverride calculated, use the pod spec termination gracePeriod.
+				// Pod 自身指定的终止宽限期更短时，使用 Pod 的值。
 				if pod.Spec.TerminationGracePeriodSeconds != nil && *pod.Spec.TerminationGracePeriodSeconds <= gracePeriodOverride {
 					gracePeriodOverride = *pod.Spec.TerminationGracePeriodSeconds
 				}
@@ -157,7 +161,7 @@ func (m *podManager) killPods(ctx context.Context, activePods []*v1.Pod) error {
 				m.logger.V(1).Info("Shutdown manager killing pod with gracePeriod", "pod", klog.KObj(pod), "gracePeriod", gracePeriodOverride)
 
 				if err := m.killPodFunc(pod, false, &gracePeriodOverride, func(status *v1.PodStatus) {
-					// set the pod status to failed (unless it was already in a successful terminal phase)
+					// 把 Pod 状态置为 Failed（已成功终止的保持不变），并记录关机原因。
 					if status.Phase != v1.PodSucceeded {
 						status.Phase = v1.PodFailed
 					}
@@ -178,8 +182,7 @@ func (m *podManager) killPods(ctx context.Context, activePods []*v1.Pod) error {
 			}(pod, group)
 		}
 
-		// This duration determines how long the shutdown manager will wait for the pods in this group
-		// to terminate before proceeding to the next group.
+		// 该时长决定关机管理器等待本组 Pod 终止多久，然后进入下一组。
 		var groupTerminationWaitDuration = time.Duration(group.ShutdownGracePeriodSeconds) * time.Second
 		var (
 			doneCh              = make(chan struct{})
@@ -190,25 +193,18 @@ func (m *podManager) killPods(ctx context.Context, activePods []*v1.Pod) error {
 			defer close(doneCh)
 			defer ctxCancel()
 			wg.Wait()
-			// The signal to kill a Pod was sent successfully to all the pods,
-			// let's wait until all the volumes are unmounted from all the pods before
-			// continuing to the next group. This is done so that the CSI Driver (assuming
-			// that it's part of the highest group) has a chance to perform unmounts.
-			// The wait is derived from the kubelet context so it can stop early if the
-			// parent kubelet context is cancelled while shutdown processing is in progress.
+			// 终止信号已发送给所有 Pod，继续下一组前先等待卷卸载完成，
+			// 给 CSI 驱动（通常属于最高优先级组）执行卸载的机会。
+			// 等待基于 kubelet context，父 context 取消时可提前结束。
 			if err := m.volumeManager.WaitForAllPodsUnmount(groupCtx, group.Pods); err != nil {
 				var podIdentifiers []string
 				for _, pod := range group.Pods {
 					podIdentifiers = append(podIdentifiers, fmt.Sprintf("%s/%s", pod.Namespace, pod.Name))
 				}
 
-				// Waiting for volume teardown is done on a best basis effort,
-				// report an error and continue.
-				//
-				// Depending on the user provided kubelet configuration value
-				// either the `timer` will tick and we'll continue to shutdown the next group, or,
-				// WaitForAllPodsUnmount will timeout, therefore this goroutine
-				// will close doneCh and we'll continue to shutdown the next group.
+				// 卷卸载只是尽力而为：记录错误后继续。
+				// 根据配置，可能是 timer 到期后进入下一组，
+				// 也可能是 WaitForAllPodsUnmount 超时后关闭 doneCh 再继续。
 				m.logger.Error(err, "Failed while waiting for all the volumes belonging to Pods in this group to unmount", "pods", podIdentifiers)
 			}
 		}()
@@ -226,6 +222,7 @@ func (m *podManager) killPods(ctx context.Context, activePods []*v1.Pod) error {
 	return nil
 }
 
+// periodRequested 返回所有优先级组宽限期之和。
 func (m *podManager) periodRequested() time.Duration {
 	var sum int64
 	for _, period := range m.shutdownGracePeriodByPodPriority {
@@ -234,10 +231,12 @@ func (m *podManager) periodRequested() time.Duration {
 	return time.Duration(sum) * time.Second
 }
 
+// migrateConfig 把旧的“总宽限期 + 关键 Pod 宽限期”配置转换为按优先级的分组配置。
 func migrateConfig(shutdownGracePeriodRequested, shutdownGracePeriodCriticalPods time.Duration) []kubeletconfig.ShutdownGracePeriodByPodPriority {
 	if shutdownGracePeriodRequested == 0 {
 		return nil
 	}
+	// 默认优先级组获得总宽限期减去关键 Pod 宽限期的部分。
 	defaultPriority := shutdownGracePeriodRequested - shutdownGracePeriodCriticalPods
 	if defaultPriority < 0 {
 		return nil
@@ -258,11 +257,13 @@ func migrateConfig(shutdownGracePeriodRequested, shutdownGracePeriodCriticalPods
 	}
 }
 
+// podShutdownGroup 是同一优先级区间内的 Pod 集合。
 type podShutdownGroup struct {
 	kubeletconfig.ShutdownGracePeriodByPodPriority
 	Pods []*v1.Pod
 }
 
+// groupByPriority 按优先级把 Pod 分配到对应宽限期组。
 func groupByPriority(shutdownGracePeriodByPodPriority []kubeletconfig.ShutdownGracePeriodByPodPriority, pods []*v1.Pod) []podShutdownGroup {
 	groups := make([]podShutdownGroup, 0, len(shutdownGracePeriodByPodPriority))
 	for _, period := range shutdownGracePeriodByPodPriority {
@@ -277,17 +278,15 @@ func groupByPriority(shutdownGracePeriodByPodPriority []kubeletconfig.ShutdownGr
 			priority = *pod.Spec.Priority
 		}
 
-		// Find the group index according to the priority.
+		// 用二分查找定位优先级对应的组。
 		index := sort.Search(len(groups), func(i int) bool {
 			return groups[i].Priority >= priority
 		})
 
-		// 1. Those higher than the highest priority default to the highest priority
-		// 2. Those lower than the lowest priority default to the lowest priority
-		// 3. Those boundary priority default to the lower priority
-		// if priority of pod is:
-		//   groups[index-1].Priority <= pod priority < groups[index].Priority
-		// in which case we want to pick lower one (i.e index-1)
+		// 越界处理：高于最高优先级的归入最高组，低于最低优先级的归入最低组。
+		// 边界优先级归入较低组：当
+		// groups[index-1].Priority <= pod priority < groups[index].Priority
+		// 时选择 index-1。
 		if index == len(groups) {
 			index = len(groups) - 1
 		} else if index < 0 {

@@ -26,12 +26,13 @@ import (
 	statsapi "k8s.io/kubelet/pkg/apis/stats/v1alpha1"
 )
 
-// listContainerNetworkStats returns the network stats of all the running containers.
-// It should return (nil, nil) for platforms other than Windows.
+// listContainerNetworkStats 返回所有运行中容器的网络统计；
+// 非 Windows 平台应返回 (nil, nil)。
 func (p *criStatsProvider) listContainerNetworkStats(klog.Logger) (map[string]*statsapi.NetworkStats, error) {
 	return nil, nil
 }
 
+// addCRIPodContainerStats 在非 Windows 平台无需补充容器统计，为空实现。
 func (p *criStatsProvider) addCRIPodContainerStats(
 	klog.Logger,
 	*runtimeapi.PodSandboxStats,
@@ -44,21 +45,27 @@ func (p *criStatsProvider) addCRIPodContainerStats(
 	return nil
 }
 
+// addCRIPodNetworkStats 在非 Windows 平台为空实现。
 func addCRIPodNetworkStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 }
 
+// addCRIPodMemoryStats 在非 Windows 平台为空实现。
 func addCRIPodMemoryStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 }
 
+// addCRIPodCPUStats 在非 Windows 平台为空实现。
 func addCRIPodCPUStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 }
 
+// addCRIPodProcessStats 在非 Windows 平台为空实现。
 func addCRIPodProcessStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 }
 
+// addCRIPodIOStats 在非 Windows 平台为空实现。
 func addCRIPodIOStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 }
 
+// addCRIPodContainerCPUAndMemoryStats 在非 Windows 平台为空实现。
 func (p *criStatsProvider) addCRIPodContainerCPUAndMemoryStats(
 	*runtimeapi.PodSandboxStats,
 	*statsapi.PodStats,

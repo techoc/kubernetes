@@ -38,7 +38,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// createPodSandbox creates a pod sandbox and returns (podSandBoxID, message, error).
+// createPodSandbox 创建 Pod 沙箱，返回沙箱 ID、可读消息与错误。
 func (m *kubeGenericRuntimeManager) createPodSandbox(ctx context.Context, pod *v1.Pod, attempt uint32) (string, string, error) {
 	logger := klog.FromContext(ctx)
 	podSandboxConfig, err := m.generatePodSandboxConfig(ctx, pod, attempt)
@@ -48,7 +48,7 @@ func (m *kubeGenericRuntimeManager) createPodSandbox(ctx context.Context, pod *v
 		return "", message, err
 	}
 
-	// Create pod logs directory
+	// 提前创建 Pod 日志目录，容器运行时随后可直接写入日志。
 	err = m.osInterface.MkdirAll(podSandboxConfig.LogDirectory, 0755)
 	if err != nil {
 		message := fmt.Sprintf("Failed to create log directory for pod %q: %v", format.Pod(pod), err)
@@ -56,6 +56,7 @@ func (m *kubeGenericRuntimeManager) createPodSandbox(ctx context.Context, pod *v
 		return "", message, err
 	}
 
+	// 根据 RuntimeClass 解析出运行时处理器；未配置 RuntimeClass 时使用默认处理器。
 	runtimeHandler := ""
 	if m.runtimeClassManager != nil {
 		runtimeHandler, err = m.runtimeClassManager.LookupRuntimeHandler(pod.Spec.RuntimeClassName)
@@ -68,6 +69,7 @@ func (m *kubeGenericRuntimeManager) createPodSandbox(ctx context.Context, pod *v
 		}
 	}
 
+	// 由运行时服务实际创建沙箱。
 	podSandBoxID, err := m.runtimeService.RunPodSandbox(ctx, podSandboxConfig, runtimeHandler)
 	if err != nil {
 		message := fmt.Sprintf("Failed to create sandbox for pod %q: %v", format.Pod(pod), err)
@@ -78,10 +80,10 @@ func (m *kubeGenericRuntimeManager) createPodSandbox(ctx context.Context, pod *v
 	return podSandBoxID, "", nil
 }
 
-// generatePodSandboxConfig generates pod sandbox config from v1.Pod.
+// generatePodSandboxConfig 根据 v1.Pod 生成 Pod 沙箱配置。
 func (m *kubeGenericRuntimeManager) generatePodSandboxConfig(ctx context.Context, pod *v1.Pod, attempt uint32) (*runtimeapi.PodSandboxConfig, error) {
-	// TODO: deprecating podsandbox resource requirements in favor of the pod level cgroup
-	// Refer https://github.com/kubernetes/kubernetes/issues/29871
+	// TODO: 逐步弃用 podsandbox 级别的资源需求，改用 Pod 级 cgroup。
+	// 参考 https://github.com/kubernetes/kubernetes/issues/29871
 	logger := klog.FromContext(ctx)
 	podUID := string(pod.UID)
 	podSandboxConfig := &runtimeapi.PodSandboxConfig{
@@ -101,8 +103,9 @@ func (m *kubeGenericRuntimeManager) generatePodSandboxConfig(ctx context.Context
 	}
 	podSandboxConfig.DnsConfig = dnsConfig
 
+	// 使用主机网络的 Pod 不需要单独设置主机名。
 	if !kubecontainer.IsHostNetworkPod(pod) {
-		// TODO: Add domain support in new runtime interface
+		// TODO: 在新的运行时接口中加入域名支持。
 		podHostname, podDomain, err := m.runtimeHelper.GeneratePodHostNameAndDomain(logger, pod)
 		if err != nil {
 			return nil, err
@@ -117,6 +120,7 @@ func (m *kubeGenericRuntimeManager) generatePodSandboxConfig(ctx context.Context
 	logDir := BuildPodLogsDirectory(m.podLogsDirectory, pod.Namespace, pod.Name, pod.UID)
 	podSandboxConfig.LogDirectory = logDir
 
+	// 汇总所有容器的端口映射，交给沙箱网络统一配置。
 	portMappings := []*runtimeapi.PortMapping{}
 	for _, c := range pod.Spec.Containers {
 		containerPortMappings := kubecontainer.MakePortMappings(logger, &c)
@@ -153,17 +157,17 @@ func (m *kubeGenericRuntimeManager) generatePodSandboxConfig(ctx context.Context
 		podSandboxConfig.Windows = wc
 	}
 
-	// Update config to include overhead, sandbox level resources
+	// 把 Pod 开销与沙箱级资源写入配置。
 	if err := m.applySandboxResources(ctx, pod, podSandboxConfig); err != nil {
 		return nil, err
 	}
 	return podSandboxConfig, nil
 }
 
-// generatePodSandboxLinuxConfig generates LinuxPodSandboxConfig from v1.Pod.
-// We've to call PodSandboxLinuxConfig always irrespective of the underlying OS as securityContext is not part of
-// podSandboxConfig. It is currently part of LinuxPodSandboxConfig. In future, if we have securityContext pulled out
-// in podSandboxConfig we should be able to use it.
+// generatePodSandboxLinuxConfig 根据 v1.Pod 生成 LinuxPodSandboxConfig。
+// 无论底层操作系统是什么都必须调用该函数：securityContext 并不在
+// podSandboxConfig 中，而是位于 LinuxPodSandboxConfig 里。
+// 将来若 securityContext 被提升到 podSandboxConfig，便可按需调用。
 func (m *kubeGenericRuntimeManager) generatePodSandboxLinuxConfig(ctx context.Context, pod *v1.Pod) (*runtimeapi.LinuxPodSandboxConfig, error) {
 	cgroupParent := m.runtimeHelper.GetPodCgroupParent(pod)
 	lc := &runtimeapi.LinuxPodSandboxConfig{
@@ -171,14 +175,15 @@ func (m *kubeGenericRuntimeManager) generatePodSandboxLinuxConfig(ctx context.Co
 		SecurityContext: &runtimeapi.LinuxSandboxSecurityContext{
 			Privileged: kubecontainer.HasPrivilegedContainer(pod),
 
-			// Forcing sandbox to run as `runtime/default` allow users to
-			// use least privileged seccomp profiles at pod level. Issue #84623
+			// 强制沙箱以 `runtime/default` 运行，使用户能在 Pod 级别
+			// 使用最小权限的 seccomp 配置。参见 Issue #84623。
 			Seccomp: &runtimeapi.SecurityProfile{
 				ProfileType: runtimeapi.SecurityProfile_RuntimeDefault,
 			},
 		},
 	}
 
+	// 先应用默认 sysctl，再由 Pod 显式声明的 sysctl 覆盖。
 	sysctls := make(map[string]string)
 	if utilfeature.DefaultFeatureGate.Enabled(features.DefaultPodSysctls) {
 		applyPodSysctls(sysctls, m.defaultPodSysctls, pod)
@@ -237,19 +242,19 @@ func (m *kubeGenericRuntimeManager) generatePodSandboxLinuxConfig(ctx context.Co
 	return lc, nil
 }
 
-// generatePodSandboxWindowsConfig generates WindowsPodSandboxConfig from v1.Pod.
-// On Windows this will get called in addition to LinuxPodSandboxConfig because not all relevant fields have been added to
-// WindowsPodSandboxConfig at this time.
+// generatePodSandboxWindowsConfig 根据 v1.Pod 生成 WindowsPodSandboxConfig。
+// 在 Windows 上除 LinuxPodSandboxConfig 外还会调用该函数，
+// 因为目前并非所有相关字段都已加入 WindowsPodSandboxConfig。
 func (m *kubeGenericRuntimeManager) generatePodSandboxWindowsConfig(pod *v1.Pod) (*runtimeapi.WindowsPodSandboxConfig, error) {
 	wc := &runtimeapi.WindowsPodSandboxConfig{
 		SecurityContext: &runtimeapi.WindowsSandboxSecurityContext{},
 	}
 
-	// If all of the containers in a pod are HostProcess containers, set the pod's HostProcess field
-	// explicitly because the container runtime requires this information at sandbox creation time.
+	// 若 Pod 中包含 HostProcess 容器，必须在创建沙箱时显式设置 HostProcess 字段，
+	// 因为容器运行时需要在此时获得该信息。
 	if kubecontainer.HasWindowsHostProcessContainer(pod) {
-		// At present Windows all containers in a Windows pod must be HostProcess containers
-		// and HostNetwork is required to be set.
+		// 目前 Windows Pod 中的所有容器必须同为 HostProcess 容器，
+		// 且必须启用 HostNetwork。
 		if !kubecontainer.AllContainersAreWindowsHostProcess(pod) {
 			return nil, fmt.Errorf("pod must not contain both HostProcess and non-HostProcess containers")
 		}
@@ -285,7 +290,7 @@ func (m *kubeGenericRuntimeManager) generatePodSandboxWindowsConfig(pod *v1.Pod)
 	return wc, nil
 }
 
-// determinePodSandboxIP determines the IP addresses of the given pod sandbox.
+// determinePodSandboxIPs 解析给定 Pod 沙箱的 IP 地址列表。
 func (m *kubeGenericRuntimeManager) determinePodSandboxIPs(ctx context.Context, podNamespace, podName string, podSandbox *runtimeapi.PodSandboxStatus) []string {
 	logger := klog.FromContext(ctx)
 	podIPs := make([]string, 0)
@@ -294,10 +299,9 @@ func (m *kubeGenericRuntimeManager) determinePodSandboxIPs(ctx context.Context, 
 		return podIPs
 	}
 
-	// ip could be an empty string if runtime is not responsible for the
-	// IP (e.g., host networking).
+	// 若运行时并不负责分配 IP（例如主机网络），IP 可能为空字符串。
 
-	// pick primary IP
+	// 取主 IP。
 	if len(podSandbox.Network.Ip) != 0 {
 		if netutils.ParseIPSloppy(podSandbox.Network.Ip) == nil {
 			logger.Info("Pod Sandbox reported an unparseable primary IP", "pod", klog.KRef(podNamespace, podName), "IP", podSandbox.Network.Ip)
@@ -306,7 +310,7 @@ func (m *kubeGenericRuntimeManager) determinePodSandboxIPs(ctx context.Context, 
 		podIPs = append(podIPs, podSandbox.Network.Ip)
 	}
 
-	// pick additional ips, if cri reported them
+	// 若 CRI 上报了附加 IP，也一并收集。
 	for _, podIP := range podSandbox.Network.AdditionalIps {
 		if nil == netutils.ParseIPSloppy(podIP.Ip) {
 			logger.Info("Pod Sandbox reported an unparseable additional IP", "pod", klog.KRef(podNamespace, podName), "IP", podIP.Ip)
@@ -318,8 +322,7 @@ func (m *kubeGenericRuntimeManager) determinePodSandboxIPs(ctx context.Context, 
 	return podIPs
 }
 
-// getPodSandboxIDByPodUID gets the sandbox id by podUID and returns ([]sandboxID, error).
-// Param state could be nil in order to get all sandboxes belonging to same pod.
+// getSandboxIDByPodUID 按 podUID 获取其所有沙箱 ID 列表。
 func (m *kubeGenericRuntimeManager) getSandboxIDByPodUID(ctx context.Context, podUID kubetypes.UID) ([]string, error) {
 	logger := klog.FromContext(ctx)
 	sandboxes, err := m.getSandboxes(ctx, listOptions{podUID: podUID})
@@ -332,7 +335,7 @@ func (m *kubeGenericRuntimeManager) getSandboxIDByPodUID(ctx context.Context, po
 		return nil, nil
 	}
 
-	// Sort with newest first.
+	// 按创建时间从新到旧排序，调用方通常使用第一个（最新的）沙箱。
 	sandboxIDs := make([]string, len(sandboxes))
 	sort.Sort(podSandboxByCreatedThenID(sandboxes))
 	for i, s := range sandboxes {
@@ -342,7 +345,7 @@ func (m *kubeGenericRuntimeManager) getSandboxIDByPodUID(ctx context.Context, po
 	return sandboxIDs, nil
 }
 
-// GetPortForward gets the endpoint the runtime will serve the port-forward request from.
+// GetPortForward 获取运行时为端口转发请求提供服务所用的端点 URL。
 func (m *kubeGenericRuntimeManager) GetPortForward(ctx context.Context, podName, podNamespace string, podUID kubetypes.UID, ports []int32) (*url.URL, error) {
 	sandboxIDs, err := m.getSandboxIDByPodUID(ctx, podUID)
 	if err != nil {
@@ -351,6 +354,7 @@ func (m *kubeGenericRuntimeManager) GetPortForward(ctx context.Context, podName,
 	if len(sandboxIDs) == 0 {
 		return nil, fmt.Errorf("failed to find sandboxID for pod %s", format.PodDesc(podName, podNamespace, podUID))
 	}
+	// 使用最新的沙箱处理端口转发。
 	req := &runtimeapi.PortForwardRequest{
 		PodSandboxId: sandboxIDs[0],
 		Port:         ports,
@@ -362,6 +366,8 @@ func (m *kubeGenericRuntimeManager) GetPortForward(ctx context.Context, podName,
 	return url.Parse(resp.Url)
 }
 
+// validSysctlMap 记录无需额外判断即可安全设置的 sysctl 参数，
+// 其余参数需根据 Pod 的命名空间隔离情况决定是否设置。
 var validSysctlMap = map[string]bool{
 	"kernel.msgmax":          true,
 	"kernel.msgmnb":          true,
@@ -373,39 +379,37 @@ var validSysctlMap = map[string]bool{
 	"kernel.shm_rmid_forced": true,
 }
 
-// From https://github.com/opencontainers/runc/blob/master/libcontainer/configs/validate/validator.go
+// applyPodSysctls 将 Pod 级 sysctl 应用到沙箱配置中，
+// 并根据 Pod 是否共享主机命名空间决定是否真正设置。
+// 规则参考：https://github.com/opencontainers/runc/blob/master/libcontainer/configs/validate/validator.go
 func applyPodSysctls(sysctls, podSysctls map[string]string, pod *v1.Pod) {
 	for k, v := range podSysctls {
 		normalizedKey := utilsysctl.NormalizeName(k)
 		if validSysctlMap[normalizedKey] || strings.HasPrefix(normalizedKey, "fs.mqueue.") {
 			if !pod.Spec.HostIPC {
-				// Set the IPC parameters unless the pod runs in the host IPC
-				// namespace.
+				// 除非 Pod 运行在主机 IPC 命名空间，否则设置 IPC 参数。
 				sysctls[normalizedKey] = v
 			}
 			continue
 		}
 		if strings.HasPrefix(normalizedKey, "net.") {
 			if !pod.Spec.HostNetwork {
-				// Set the networking parameters unless the pod runs in the
-				// host network namespace.
+				// 除非 Pod 运行在主机网络命名空间，否则设置网络参数。
 				sysctls[normalizedKey] = v
 			}
 			continue
 		}
 		if strings.HasPrefix(normalizedKey, "user.") {
-			// The default for HostUsers is true, so a nil HostUsers means the
-			// pod runs in the host user namespace.
+			// HostUsers 默认为 true，因此 nil 表示 Pod 运行在主机用户命名空间。
 			if pod.Spec.HostUsers != nil && !*pod.Spec.HostUsers {
-				// Set the user parameters unless the pod runs in the host user
-				// namespace.
+				// 除非 Pod 运行在主机用户命名空间，否则设置用户参数。
 				sysctls[normalizedKey] = v
 			}
 			continue
 		}
 		if !pod.Spec.HostNetwork {
 			if normalizedKey == "kernel.domainname" {
-				// This is namespaced and there's no explicit OCI field for it.
+				// 该参数按命名空间隔离，且 OCI 中没有对应的显式字段。
 				sysctls[normalizedKey] = v
 			}
 			continue

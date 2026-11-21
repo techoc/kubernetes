@@ -27,6 +27,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestLookupRuntimeHandler 验证根据 RuntimeClass 名称解析运行时 handler，
+// 包括空值、未知 RuntimeClass 与错误场景。
 func TestLookupRuntimeHandler(t *testing.T) {
 	tests := []struct {
 		rcn         *string

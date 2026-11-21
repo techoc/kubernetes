@@ -25,7 +25,9 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/envvars"
 )
 
+// TestFromServices 验证由 Service 生成环境变量：命名、协议、多端口、IPv6 与 SCTP 等。
 func TestFromServices(t *testing.T) {
+	// 构造覆盖单端口、多端口、无名端口、IPv6、SCTP 与无 ClusterIP 的 Service。
 	sl := []*v1.Service{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: "foo-bar"},
@@ -101,7 +103,9 @@ func TestFromServices(t *testing.T) {
 			},
 		},
 	}
+	// 调用被测函数生成环境变量。
 	vars := envvars.FromServices(sl)
+	// 期望值的顺序与生成顺序一致，便于逐项比较。
 	expected := []v1.EnvVar{
 		{Name: "FOO_BAR_SERVICE_HOST", Value: "1.2.3.4"},
 		{Name: "FOO_BAR_SERVICE_PORT", Value: "8080"},
@@ -156,10 +160,12 @@ func TestFromServices(t *testing.T) {
 		{Name: "SCTP_1_PORT_777_SCTP_PORT", Value: "777"},
 		{Name: "SCTP_1_PORT_777_SCTP_ADDR", Value: "1.2.3.4"},
 	}
+	// 先比较数量，避免逐项比较时越界。
 	if len(vars) != len(expected) {
 		t.Errorf("Expected %d env vars, got: %+v", len(expected), vars)
 		return
 	}
+	// 逐项深比较名称与值。
 	for i := range expected {
 		if !reflect.DeepEqual(vars[i], expected[i]) {
 			t.Errorf("expected %#v, got %#v", vars[i], expected[i])

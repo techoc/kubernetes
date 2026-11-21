@@ -20,10 +20,12 @@ package allocation
 
 import v1 "k8s.io/api/core/v1"
 
+// IsInPlacePodVerticalScalingAllowed 在不支持的平台上始终拒绝原地 Pod 垂直扩缩容。
 func IsInPlacePodVerticalScalingAllowed(_ *v1.Pod) (allowed bool, msg, reason string) {
 	return false, "In-place pod resize is not supported on this node", "unsupported_platform"
 }
 
+// IsInPlacePodLevelResourcesVerticalScalingAllowed 在不支持的平台上始终拒绝 Pod 级资源的原地扩缩容。
 func IsInPlacePodLevelResourcesVerticalScalingAllowed(pod *v1.Pod) (allowed bool, msg, reason string) {
 	return false, "In-place pod-level resources resize is not supported on this node", "unsupported_platform"
 }

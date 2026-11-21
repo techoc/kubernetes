@@ -46,6 +46,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting/initoption"
 )
 
+// 测试统一使用二进制单位，避免 Mi/Gi 换算时出现精度差异。
 const (
 	mb           = 1024 * 1024
 	gb           = mb * 1024
@@ -53,6 +54,7 @@ const (
 	hugepages1Gi = v1.ResourceName(v1.ResourceHugePagesPrefix + "1Gi")
 )
 
+// 预置几组常用的资源配置，测试用例直接引用，避免重复构造。
 var (
 	containerRestartPolicyAlways = v1.ContainerRestartPolicyAlways
 
@@ -104,6 +106,8 @@ var (
 	}
 )
 
+// areMemoryBlocksEqual 以顺序无关的方式比较两组内存块：
+// 从副本中逐个摘除匹配项，最后看副本是否被清空。
 func areMemoryBlocksEqual(mb1, mb2 []state.Block) bool {
 	if len(mb1) != len(mb2) {
 		return false
@@ -114,9 +118,11 @@ func areMemoryBlocksEqual(mb1, mb2 []state.Block) bool {
 	for _, block := range mb1 {
 		for i, copyBlock := range copyMemoryBlocks {
 			if reflect.DeepEqual(block, copyBlock) {
+				// 用末尾元素覆盖已匹配项再截断，避免 O(n^2) 的切片删除开销。
 				// move the element that equals to the block to the end of the slice
 				copyMemoryBlocks[i] = copyMemoryBlocks[len(copyMemoryBlocks)-1]
 
+				// 截断末尾，副本长度即剩余未匹配数量。
 				// remove the last element from our slice
 				copyMemoryBlocks = copyMemoryBlocks[:len(copyMemoryBlocks)-1]
 
@@ -128,6 +134,8 @@ func areMemoryBlocksEqual(mb1, mb2 []state.Block) bool {
 	return len(copyMemoryBlocks) == 0
 }
 
+// areContainerMemoryAssignmentsEqual 比较两份 Pod/容器的内存分配记录，
+// 内存块内部顺序不敏感，但 Pod UID 与容器名必须完全对应。
 func areContainerMemoryAssignmentsEqual(t *testing.T, cma1, cma2 state.ContainerMemoryAssignments) bool {
 	if len(cma1) != len(cma2) {
 		return false
@@ -154,6 +162,7 @@ func areContainerMemoryAssignmentsEqual(t *testing.T, cma1, cma2 state.Container
 	return true
 }
 
+// testStaticPolicy 是 static policy 各测试共用的表驱动用例结构。
 type testStaticPolicy struct {
 	description                     string
 	assignments                     state.ContainerMemoryAssignments
@@ -172,6 +181,7 @@ type testStaticPolicy struct {
 	requiredMetrics                 requiredMetrics
 }
 
+// requiredMetrics 描述某个用例执行后各指标应有的增量。
 type requiredMetrics struct {
 	expTotalAllocs              int
 	expTotalErrors              int
@@ -179,6 +189,8 @@ type requiredMetrics struct {
 	expPodSharedPoolAssignments int
 }
 
+// initTests 按用例构造 policy 与 state，并注入 hint 和 init 容器可复用内存的实现。
+// hint 为空时使用默认 FakeManager，避免所有用例都依赖拓扑亲和性。
 func initTests(t *testing.T, testCase *testStaticPolicy, hint *topologymanager.TopologyHint, initContainersReusableMemory reusableMemory) (Policy, state.State, error) {
 	logger, _ := ktesting.NewTestContext(t)
 	manager := topologymanager.NewFakeManager(logger)
@@ -190,6 +202,7 @@ func initTests(t *testing.T, testCase *testStaticPolicy, hint *topologymanager.T
 	if err != nil {
 		return nil, nil, err
 	}
+	// 仅在需要时替换可复用内存实现，保持生产默认路径可被覆盖测试。
 	if initContainersReusableMemory != nil {
 		p.(*staticPolicy).initContainersReusableMemory = initContainersReusableMemory
 	}
@@ -199,6 +212,8 @@ func initTests(t *testing.T, testCase *testStaticPolicy, hint *topologymanager.T
 	return p, s, nil
 }
 
+// newNUMAAffinity 用位下标构造 NUMA 亲和掩码；下标非法时直接 panic，
+// 因为这只会在测试数据写错时发生。
 func newNUMAAffinity(bits ...int) bitmask.BitMask {
 	affinity, err := bitmask.NewBitMask(bits...)
 	if err != nil {
@@ -207,6 +222,7 @@ func newNUMAAffinity(bits ...int) bitmask.BitMask {
 	return affinity
 }
 
+// TestStaticPolicyNew 验证构造 static policy 时对系统预留内存的校验。
 func TestStaticPolicyNew(t *testing.T) {
 	testCases := []testStaticPolicy{
 		{
@@ -234,6 +250,7 @@ func TestStaticPolicyNew(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyName 验证策略名与 PolicyTypeStatic 一致。
 func TestStaticPolicyName(t *testing.T) {
 	testCases := []testStaticPolicy{
 		{
@@ -258,6 +275,8 @@ func TestStaticPolicyName(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyStart 验证启动时按系统预留重建各 NUMA 节点的内存表，
+// 并校验已有分配记录与机器状态的一致性。
 func TestStaticPolicyStart(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []testStaticPolicy{
@@ -1222,6 +1241,8 @@ func TestStaticPolicyStart(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyAllocate 验证容器级内存分配：guaranteed 容器按 NUMA 亲和性分配，
+// 非 guaranteed 容器不分配；同时校验分配失败时的错误与状态回滚。
 func TestStaticPolicyAllocate(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	testCases := []testStaticPolicy{
@@ -2146,6 +2167,8 @@ func TestStaticPolicyAllocate(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyAllocateWithInitContainers 验证 init 容器内存可被后续容器复用：
+// init 容器峰值用量与普通容器用量按取大者的规则计算。
 func TestStaticPolicyAllocateWithInitContainers(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	testCases := []testStaticPolicy{
@@ -2875,6 +2898,8 @@ func TestStaticPolicyAllocateWithInitContainers(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyAllocateWithRestartableInitContainers 验证可重启 init 容器
+// 与普通 init 容器的内存分配差异：前者需要常驻，不能与后续容器复用。
 func TestStaticPolicyAllocateWithRestartableInitContainers(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	testCases := []testStaticPolicy{
@@ -3213,6 +3238,7 @@ func TestStaticPolicyAllocateWithRestartableInitContainers(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyRemoveContainer 验证移除容器后，其占用的内存块会被归还到对应的 NUMA 节点。
 func TestStaticPolicyRemoveContainer(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []testStaticPolicy{
@@ -3471,6 +3497,8 @@ func TestStaticPolicyRemoveContainer(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyGetTopologyHints 验证容器级拓扑提示：guaranteed 容器给出候选 NUMA 掩码，
+// 非 guaranteed 或已有分配记录的容器按对应规则返回。
 func TestStaticPolicyGetTopologyHints(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []testStaticPolicy{
@@ -3974,6 +4002,7 @@ func TestStaticPolicyGetTopologyHints(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.description, func(t *testing.T) {
+			// 用例各自声明所需 feature gate 状态，避免用例之间相互影响。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, testCase.podLevelResourcesEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResourceManagers, testCase.podLevelResourceManagersEnabled)
 
@@ -3990,6 +4019,8 @@ func TestStaticPolicyGetTopologyHints(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyGetPodTopologyHints 验证 pod 级拓扑提示；只有启用
+// PodLevelResources 与 PodLevelResourceManagers 且 pod 级资源为 guaranteed 时才会给出提示。
 func TestStaticPolicyGetPodTopologyHints(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []testStaticPolicy{
@@ -4305,6 +4336,8 @@ func TestStaticPolicyGetPodTopologyHints(t *testing.T) {
 	}
 }
 
+// Test_getPodRequestedResources 验证 Pod 请求量的聚合规则：
+// init 容器取最大值（可重启 init 容器累加），再与普通容器总和取大者。
 func Test_getPodRequestedResources(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -4580,6 +4613,8 @@ func Test_getPodRequestedResources(t *testing.T) {
 	}
 }
 
+// Test_isAffinityViolatingNUMAAllocations 验证给定的 NUMA 亲和掩码是否会破坏
+// 已存在分配之间的 cell 一致性约束。
 func Test_isAffinityViolatingNUMAAllocations(t *testing.T) {
 	testsCases := []struct {
 		description         string
@@ -4656,6 +4691,7 @@ func Test_isAffinityViolatingNUMAAllocations(t *testing.T) {
 	}
 }
 
+// containerOptions 描述构造测试 Pod 时单个容器的资源与重启策略。
 type containerOptions struct {
 	name          string
 	request       string
@@ -4663,8 +4699,10 @@ type containerOptions struct {
 	restartPolicy *v1.ContainerRestartPolicy
 }
 
+// podOption 是构造 Pod 后追加修改的函数式选项。
 type podOption func(*v1.Pod)
 
+// withPodResources 给 Pod 设置 pod 级内存请求与限制。
 func withPodResources(memRequest, memLimit string) podOption {
 	return func(pod *v1.Pod) {
 		pod.Spec.Resources = &v1.ResourceRequirements{
@@ -4678,6 +4716,8 @@ func withPodResources(memRequest, memLimit string) podOption {
 	}
 }
 
+// makeMultiContainerPodWithOptions 按选项构造多容器 Pod；
+// 容器名按索引生成，保证同一用例内名称唯一。
 func makeMultiContainerPodWithOptions(initContainers, appContainers []*containerOptions, podOptions ...podOption) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4731,6 +4771,7 @@ func makeMultiContainerPodWithOptions(initContainers, appContainers []*container
 		pod.Spec.Containers = append(pod.Spec.Containers, container)
 	}
 
+	// pod 级选项最后应用，便于覆盖前面设置的字段。
 	for _, fn := range podOptions {
 		fn(pod)
 	}
@@ -4738,11 +4779,16 @@ func makeMultiContainerPodWithOptions(initContainers, appContainers []*container
 	return pod
 }
 
+// makeMultiContainerPodWithOptionsAndPodLevelResources 构造带 pod 级内存资源的 Pod，
+// 请求与限制取同一个值。
 func makeMultiContainerPodWithOptionsAndPodLevelResources(podLevelMemory string, initContainers, appContainers []*containerOptions) *v1.Pod {
 	return makeMultiContainerPodWithOptions(initContainers, appContainers, withPodResources(podLevelMemory, podLevelMemory))
 }
 
+// TestValidatePodScopeResources 验证 pod 级资源的作用域校验：
+// 容器级与 pod 级混用、guaranteed 判定等场景应返回对应错误。
 func TestValidatePodScopeResources(t *testing.T) {
+	// 该测试只关心作用域校验逻辑，因此默认开启 pod 级资源管理器。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResourceManagers, true)
 	testCases := []struct {
 		name        string
@@ -4930,6 +4976,7 @@ func TestValidatePodScopeResources(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 用例可以覆盖默认 gate 状态，例如临时关闭 PodLevelResources。
 			for feature, enabled := range tc.features {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, feature, enabled)
 			}
@@ -4967,6 +5014,7 @@ func TestValidatePodScopeResources(t *testing.T) {
 	}
 }
 
+// containerSpec 描述构造带 pod 级资源的 Pod 时单个容器的内存配置。
 type containerSpec struct {
 	name          string
 	memRequest    string
@@ -4974,6 +5022,8 @@ type containerSpec struct {
 	restartPolicy *v1.ContainerRestartPolicy
 }
 
+// getPodWithContainersAndPodLevelResources 构造同时含 init 容器、普通容器和
+// pod 级资源的 Pod；pod 级资源只在请求或限制非空时设置。
 func getPodWithContainersAndPodLevelResources(podName, podMemRequest, podMemLimit string, initContainers, appContainers []containerSpec) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4986,6 +5036,7 @@ func getPodWithContainersAndPodLevelResources(podName, podMemRequest, podMemLimi
 			RestartPolicy:  v1.RestartPolicyNever,
 		},
 	}
+	// 用 pod 名充当 UID，测试中 pod 名需唯一。
 	pod.ObjectMeta.UID = types.UID(podName)
 
 	for i, c := range initContainers {
@@ -5041,6 +5092,7 @@ func getPodWithContainersAndPodLevelResources(podName, podMemRequest, podMemLimi
 		pod.Spec.Containers = append(pod.Spec.Containers, container)
 	}
 
+	// 只有显式给出内存值时才有 pod 级资源，否则置 nil 以模拟未启用该特性。
 	if podMemRequest != "" || podMemLimit != "" {
 		pod.Spec.Resources = &v1.ResourceRequirements{
 			Requests: v1.ResourceList{
@@ -5062,6 +5114,8 @@ func getPodWithContainersAndPodLevelResources(podName, podMemRequest, podMemLimi
 	return pod
 }
 
+// TestStaticPolicyAllocatePod 验证 pod 级内存分配及相应指标：
+// 分配次数、错误数、独占/共享池分配数都要符合预期。
 func TestStaticPolicyAllocatePod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -5658,6 +5712,7 @@ func TestStaticPolicyAllocatePod(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, testCase.podLevelResourcesEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResourceManagers, testCase.podLevelResourceManagersEnabled)
 
+			// 指标是全局的，逐个用例重置，保证断言的是本用例产生的增量。
 			metrics.Register()
 			metrics.ResourceManagerAllocationsTotal.Reset()
 			metrics.ResourceManagerAllocationErrorsTotal.Reset()
@@ -5669,6 +5724,7 @@ func TestStaticPolicyAllocatePod(t *testing.T) {
 			}
 
 			err = p.AllocatePod(logger, s, testCase.pod, lifecycle.AddOperation)
+			// 出错时只校验错误与错误指标，不再比较分配状态。
 			if testCase.expectedError != nil {
 				require.Error(t, err)
 				require.Equal(t, testCase.expectedError.Error(), err.Error())
@@ -5706,19 +5762,16 @@ func TestStaticPolicyAllocatePod(t *testing.T) {
 	}
 }
 
-// The following lifecycle tests verify that the static memory manager policy
-// processes or skips operations based on the given lifecycle.Operation.
-// Since Allocate* and GetTopologyHints* do not return an error when an
-// operation is unsupported (they silently return nil/empty hints to avoid
-// aborting the entire operation across all hint providers), the tests check
-// log output to confirm whether an operation was processed or skipped.
+// 以下生命周期测试验证 static policy 是否按 lifecycle.Operation 处理或跳过操作。
+// Allocate* 与 GetTopologyHints* 遇到不支持的操作不会返回错误（而是静默返回
+// nil 或空提示，避免中断所有 hint provider 的整体流程），因此测试改为检查日志，
+// 以此判断操作是被处理还是被跳过。
 //
-// The test values used (e.g. memory sizes, cpusets, pod resource requests)
-// are arbitrary but correct values that let the code run the happy path; the
-// exact values have no special meaning. These tests do not validate the
-// correctness of the allocation or hint results, only whether the operation
-// is processed or skipped for a given lifecycle operation.
+// 用例中的内存大小、cpuset、Pod 资源请求等取值只为让代码走通正常路径，
+// 具体数值没有特殊含义；这些测试不校验分配结果或提示的正确性，
+// 只校验给定生命周期操作是否被处理。
 
+// TestStaticPolicyLifecycleAllocate 验证容器级分配只在 AddOperation 时执行。
 func TestStaticPolicyLifecycleAllocate(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -5744,6 +5797,7 @@ func TestStaticPolicyLifecycleAllocate(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.description, func(t *testing.T) {
+			// 缓冲日志后断言"跳过"提示是否出现，这是判断操作是否被处理的唯一可观测信号。
 			ktesting.SetDefaultVerbosity(2)
 			tCtx := ktesting.Init(t, initoption.BufferLogs(true))
 			logger := tCtx.Logger()
@@ -5779,6 +5833,7 @@ func TestStaticPolicyLifecycleAllocate(t *testing.T) {
 			err = policy.Allocate(tCtx, st, pod, &pod.Spec.Containers[0], testCase.operation)
 			require.NoError(t, err)
 
+			// 取出缓冲日志，检查是否出现"仅支持 add 操作"的跳过提示。
 			underlier, ok := logger.GetSink().(ktesting.Underlier)
 			if !ok {
 				t.Fatalf("Should have had a ktesting LogSink, got %T", logger.GetSink())
@@ -5798,6 +5853,7 @@ func TestStaticPolicyLifecycleAllocate(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyLifecycleAllocatePod 验证 pod 级分配只在 AddOperation 时执行。
 func TestStaticPolicyLifecycleAllocatePod(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -5877,6 +5933,7 @@ func TestStaticPolicyLifecycleAllocatePod(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyLifecycleGetTopologyHints 验证容器级拓扑提示只在 AddOperation 时计算。
 func TestStaticPolicyLifecycleGetTopologyHints(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -5959,6 +6016,7 @@ func TestStaticPolicyLifecycleGetTopologyHints(t *testing.T) {
 	}
 }
 
+// TestStaticPolicyLifecycleGetPodTopologyHints 验证 pod 级拓扑提示只在 AddOperation 时计算。
 func TestStaticPolicyLifecycleGetPodTopologyHints(t *testing.T) {
 	testCases := []struct {
 		description string

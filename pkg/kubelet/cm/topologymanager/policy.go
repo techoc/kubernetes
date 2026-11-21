@@ -21,67 +21,63 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/bitmask"
 )
 
-// Policy interface for Topology Manager Pod Admit Result
+// Policy 是 Topology Manager 的准入策略接口。
 type Policy interface {
-	// Returns Policy Name
+	// 返回策略名称。
 	Name() string
-	// Returns a merged TopologyHint based on input from hint providers
-	// and a Pod Admit Handler Response based on hints and policy type
+	// 根据各 hint provider 的输入合并出 TopologyHint，
+	// 并给出基于提示和策略类型的准入结果。
 	Merge(logger klog.Logger, providersHints []map[string][]TopologyHint) (TopologyHint, bool)
 }
 
-// IsAlignmentGuaranteed return true if the given policy guarantees that either
-// the compute resources will be allocated within a NUMA boundary, or the allocation will fail at all.
+// IsAlignmentGuaranteed 在策略保证“计算资源要么分配在同一 NUMA 边界内、要么直接失败”时返回 true。
 func IsAlignmentGuaranteed(p Policy) bool {
-	// We are abusing the name, but atm this matches almost 1:1 the policy name
-	// so we are not adding new fields for now.
+	// 目前该判断几乎与策略名一一对应，暂不新增字段，直接复用名称。
 	return p.Name() == PolicySingleNumaNode
 }
 
-// Merge a TopologyHints permutation to a single hint by performing a bitwise-AND
-// of their affinity masks. The hint shall be preferred if all hits in the permutation
-// are preferred.
+// mergePermutation 对一个提示排列做亲和性掩码按位与，合并成单个提示；
+// 排列中所有提示都为首选时，结果才是首选。
 func mergePermutation(defaultAffinity bitmask.BitMask, permutation []TopologyHint) TopologyHint {
-	// Get the NUMANodeAffinity from each hint in the permutation and see if any
-	// of them encode unpreferred allocations.
+	// 收集排列中每个提示的 NUMA 亲和性，同时判断是否存在非首选分配。
 	preferred := true
 	var numaAffinities []bitmask.BitMask
 	for _, hint := range permutation {
-		// Only consider hints that have an actual NUMANodeAffinity set.
+		// 只处理真正设置了 NUMA 亲和性的提示。
 		if hint.NUMANodeAffinity != nil {
 			numaAffinities = append(numaAffinities, hint.NUMANodeAffinity)
-			// Only mark preferred if all affinities are equal.
+			// 所有亲和性掩码一致时才算首选。
 			if !hint.NUMANodeAffinity.IsEqual(numaAffinities[0]) {
 				preferred = false
 			}
 		}
-		// Only mark preferred if all affinities are preferred.
+		// 任一提示非首选，合并结果就非首选。
 		if !hint.Preferred {
 			preferred = false
 		}
 	}
 
-	// Merge the affinities using a bitwise-and operation.
+	// 用按位与合并所有亲和性掩码，得到各 provider 的共同可用 NUMA 集合。
 	mergedAffinity := bitmask.And(defaultAffinity, numaAffinities...)
-	// Build a mergedHint from the merged affinity mask, setting preferred as
-	// appropriate based on the logic above.
+	// 用合并后的掩码和上面的首选判断构造结果。
 	return TopologyHint{mergedAffinity, preferred}
 }
 
+// filterProvidersHints 把各 provider 的提示整理成二维列表；
+// 没有拓扑偏好的 provider 用 (nil, true) 占位，表示任意 NUMA 均可。
 func filterProvidersHints(logger klog.Logger, providersHints []map[string][]TopologyHint) [][]TopologyHint {
-	// Loop through all hint providers and save an accumulated list of the
-	// hints returned by each hint provider. If no hints are provided, assume
-	// that provider has no preference for topology-aware allocation.
+	// 遍历所有 hint provider 并累积其提示；provider 未提供提示时，
+	// 视为对拓扑感知分配没有偏好。
 	var allProviderHints [][]TopologyHint
 	for _, hints := range providersHints {
-		// If hints is nil, insert a single, preferred any-numa hint into allProviderHints.
+		// hints 为 nil 时插入一个首选的“任意 NUMA”提示。
 		if len(hints) == 0 {
 			logger.Info("Hint Provider has no preference for NUMA affinity with any resource")
 			allProviderHints = append(allProviderHints, []TopologyHint{{nil, true}})
 			continue
 		}
 
-		// Otherwise, accumulate the hints for each resource type into allProviderHints.
+		// 否则按资源类型逐个累积提示。
 		for resource := range hints {
 			if hints[resource] == nil {
 				logger.Info("Hint Provider has no preference for NUMA affinity with resource", "resource", resource)
@@ -101,6 +97,7 @@ func filterProvidersHints(logger klog.Logger, providersHints []map[string][]Topo
 	return allProviderHints
 }
 
+// narrowestHint 返回亲和性掩码最窄（NUMA 数量最少）的非 nil 提示。
 func narrowestHint(hints []TopologyHint) *TopologyHint {
 	if len(hints) == 0 {
 		return nil
@@ -120,6 +117,8 @@ func narrowestHint(hints []TopologyHint) *TopologyHint {
 	return narrowestHint
 }
 
+// maxOfMinAffinityCounts 取各 provider 最窄提示中亲和性数量的最大值，
+// 作为比较非首选提示时的目标基准。
 func maxOfMinAffinityCounts(filteredHints [][]TopologyHint) int {
 	maxOfMinCount := 0
 	for _, resourceHints := range filteredHints {
@@ -134,27 +133,27 @@ func maxOfMinAffinityCounts(filteredHints [][]TopologyHint) int {
 	return maxOfMinCount
 }
 
+// HintMerger 把多个 provider 的拓扑提示合并为最终结果。
 type HintMerger struct {
 	NUMAInfo *NUMAInfo
 	Hints    [][]TopologyHint
-	// Set bestNonPreferredAffinityCount to help decide which affinity mask is
-	// preferred amongst all non-preferred hints. We calculate this value as
-	// the maximum of the minimum affinity counts supplied for any given hint
-	// provider. In other words, prefer a hint that has an affinity mask that
-	// includes all of the NUMA nodes from the provider that requires the most
-	// NUMA nodes to satisfy its allocation.
+	// BestNonPreferredAffinityCount 用于在非首选提示中做选择：取所有 provider
+	// 最窄亲和性数量的最大值。也就是说，优先选择覆盖“需求最宽的 provider”
+	// 所需全部 NUMA 节点的掩码。
 	BestNonPreferredAffinityCount int
 	CompareNUMAAffinityMasks      func(candidate *TopologyHint, current *TopologyHint) (best *TopologyHint)
 }
 
+// NewHintMerger 构造合并器，并注入按策略选择的亲和性比较函数。
 func NewHintMerger(numaInfo *NUMAInfo, hints [][]TopologyHint, policyName string, opts PolicyOptions) HintMerger {
 	compareNumaAffinityMasks := func(current, candidate *TopologyHint) *TopologyHint {
-		// If current and candidate bitmasks are the same, prefer current hint.
+		// 掩码相同时保留当前提示，避免无意义的替换。
 		if candidate.NUMANodeAffinity.IsEqual(current.NUMANodeAffinity) {
 			return current
 		}
 
-		// Otherwise compare the hints, based on the policy options provided
+		// 否则按策略选项比较：single-numa-node 必须取最窄；
+		// 其他策略在开启 PreferClosestNUMA 时优先取最近的 NUMA。
 		var best bitmask.BitMask
 		if (policyName != PolicySingleNumaNode) && opts.PreferClosestNUMA {
 			best = numaInfo.Closest(current.NUMANodeAffinity, candidate.NUMANodeAffinity)
@@ -167,6 +166,7 @@ func NewHintMerger(numaInfo *NUMAInfo, hints [][]TopologyHint, policyName string
 		return candidate
 	}
 
+	// 非首选提示的比较基准在构造时一次算好，避免每次比较重复计算。
 	merger := HintMerger{
 		NUMAInfo:                      numaInfo,
 		Hints:                         hints,
@@ -177,94 +177,41 @@ func NewHintMerger(numaInfo *NUMAInfo, hints [][]TopologyHint, policyName string
 	return merger
 }
 
+// compare 在当前最优提示和候选提示之间做选择，是合并逻辑的核心。
 func (m HintMerger) compare(current *TopologyHint, candidate *TopologyHint) *TopologyHint {
-	// Only consider candidates that result in a NUMANodeAffinity > 0 to
-	// replace the current bestHint.
+	// 只有亲和性数量大于 0 的候选才有资格替换当前最优提示。
 	if candidate.NUMANodeAffinity.Count() == 0 {
 		return current
 	}
 
-	// If no current bestHint is set, return the candidate as the bestHint.
+	// 还没有最优提示时，候选直接成为最优提示。
 	if current == nil {
 		return candidate
 	}
 
-	// If the current bestHint is non-preferred and the candidate hint is
-	// preferred, always choose the preferred hint over the non-preferred one.
+	// 首选提示永远优先于非首选提示。
 	if !current.Preferred && candidate.Preferred {
 		return candidate
 	}
 
-	// If the current bestHint is preferred and the candidate hint is
-	// non-preferred, never update the bestHint, regardless of how
-	// the candidate hint's affinity mask compares to the current
-	// hint's affinity mask.
+	// 当前提示已首选而候选非首选时，无论掩码如何都不替换。
 	if current.Preferred && !candidate.Preferred {
 		return current
 	}
 
-	// If the current bestHint and the candidate hint are both preferred,
-	// then only consider fitter NUMANodeAffinity
+	// 两者都是首选时，只比较亲和性掩码的优劣。
 	if current.Preferred && candidate.Preferred {
 		return m.CompareNUMAAffinityMasks(current, candidate)
 
 	}
 
-	// The only case left is if the current best bestHint and the candidate
-	// hint are both non-preferred. In this case, try and find a hint whose
-	// affinity count is as close to (but not higher than) the
-	// bestNonPreferredAffinityCount as possible. To do this we need to
-	// consider the following cases and react accordingly:
-	//
-	//   1. current.NUMANodeAffinity.Count() >  bestNonPreferredAffinityCount
-	//   2. current.NUMANodeAffinity.Count() == bestNonPreferredAffinityCount
-	//   3. current.NUMANodeAffinity.Count() <  bestNonPreferredAffinityCount
-	//
-	// For case (1), the current bestHint is larger than the
-	// bestNonPreferredAffinityCount, so updating to fitter mergeHint
-	// is preferred over staying where we are.
-	//
-	// For case (2), the current bestHint is equal to the
-	// bestNonPreferredAffinityCount, so we would like to stick with what
-	// we have *unless* the candidate hint is also equal to
-	// bestNonPreferredAffinityCount and it is fitter.
-	//
-	// For case (3), the current bestHint is less than
-	// bestNonPreferredAffinityCount, so we would like to creep back up to
-	// bestNonPreferredAffinityCount as close as we can. There are three
-	// cases to consider here:
-	//
-	//   3a. candidate.NUMANodeAffinity.Count() >  bestNonPreferredAffinityCount
-	//   3b. candidate.NUMANodeAffinity.Count() == bestNonPreferredAffinityCount
-	//   3c. candidate.NUMANodeAffinity.Count() <  bestNonPreferredAffinityCount
-	//
-	// For case (3a), we just want to stick with the current bestHint
-	// because choosing a new hint that is greater than
-	// bestNonPreferredAffinityCount would be counter-productive.
-	//
-	// For case (3b), we want to immediately update bestHint to the
-	// candidate hint, making it now equal to bestNonPreferredAffinityCount.
-	//
-	// For case (3c), we know that *both* the current bestHint and the
-	// candidate hint are less than bestNonPreferredAffinityCount, so we
-	// want to choose one that brings us back up as close to
-	// bestNonPreferredAffinityCount as possible. There are three cases to
-	// consider here:
-	//
-	//   3ca. candidate.NUMANodeAffinity.Count() >  current.NUMANodeAffinity.Count()
-	//   3cb. candidate.NUMANodeAffinity.Count() <  current.NUMANodeAffinity.Count()
-	//   3cc. candidate.NUMANodeAffinity.Count() == current.NUMANodeAffinity.Count()
-	//
-	// For case (3ca), we want to immediately update bestHint to the
-	// candidate hint because that will bring us closer to the (higher)
-	// value of bestNonPreferredAffinityCount.
-	//
-	// For case (3cb), we want to stick with the current bestHint because
-	// choosing the candidate hint would strictly move us further away from
-	// the bestNonPreferredAffinityCount.
-	//
-	// Finally, for case (3cc), we know that the current bestHint and the
-	// candidate hint are equal, so we simply choose the fitter of the 2.
+	// 剩余情况是两者都非首选：希望亲和性数量尽量接近但不大于
+	// BestNonPreferredAffinityCount，按当前值分三种情况：
+	// 1. 当前值大于目标值：换成更合适的候选（比较掩码）；
+	// 2. 当前值等于目标值：只有候选也等于目标值且更合适时才替换；
+	// 3. 当前值小于目标值：候选超过目标值则保留当前值；
+	//    候选等于目标值则立即采用；两者都低于目标值时选择更接近目标值的，
+	//    数量相等时再比较亲和性掩码。
 
 	// Case 1
 	if current.NUMANodeAffinity.Count() > m.BestNonPreferredAffinityCount {
@@ -300,20 +247,20 @@ func (m HintMerger) compare(current *TopologyHint, candidate *TopologyHint) *Top
 
 }
 
+// Merge 遍历所有提示排列，逐一合并并与当前最优结果比较。
 func (m HintMerger) Merge() TopologyHint {
 	defaultAffinity := m.NUMAInfo.DefaultAffinityMask()
 
 	var bestHint *TopologyHint
 	iterateAllProviderTopologyHints(m.Hints, func(permutation []TopologyHint) {
-		// Get the NUMANodeAffinity from each hint in the permutation and see if any
-		// of them encode unpreferred allocations.
+		// 把当前排列合并成一个提示，并判断是否为非首选分配。
 		mergedHint := mergePermutation(defaultAffinity, permutation)
 
-		// Compare the current bestHint with the candidate mergedHint and
-		// update bestHint if appropriate.
+		// 候选与当前最优比较，必要时更新最优提示。
 		bestHint = m.compare(bestHint, &mergedHint)
 	})
 
+	// 所有排列都无法产生有效提示时，退化为默认亲和性的非首选结果。
 	if bestHint == nil {
 		bestHint = &TopologyHint{defaultAffinity, false}
 	}
@@ -321,11 +268,9 @@ func (m HintMerger) Merge() TopologyHint {
 	return *bestHint
 }
 
-// Iterate over all permutations of hints in 'allProviderHints [][]TopologyHint'.
-//
-// This procedure is implemented as a recursive function over the set of hints
-// in 'allproviderHints[i]'. It applies the function 'callback' to each
-// permutation as it is found. It is the equivalent of:
+// 遍历 allProviderHints 中所有提示的组合。
+// 递归实现：对 allProviderHints[i] 的每个提示向下展开，
+// 每形成一个完整排列就调用一次 callback。等价于多重循环：
 //
 // for i := 0; i < len(providerHints[0]); i++
 //
@@ -342,17 +287,16 @@ func (m HintMerger) Merge() TopologyHint {
 //	            }
 //	            callback(permutation)
 func iterateAllProviderTopologyHints(allProviderHints [][]TopologyHint, callback func([]TopologyHint)) {
-	// Internal helper function to accumulate the permutation before calling the callback.
+	// 内部递归辅助函数，负责累积当前排列。
 	var iterate func(i int, accum []TopologyHint)
 	iterate = func(i int, accum []TopologyHint) {
-		// Base case: we have looped through all providers and have a full permutation.
+		// 递归终止：所有 provider 都已选择，得到一个完整排列。
 		if i == len(allProviderHints) {
 			callback(accum)
 			return
 		}
 
-		// Loop through all hints for provider 'i', and recurse to build the
-		// permutation of this hint with all hints from providers 'i++'.
+		// 遍历 provider i 的所有提示，递归拼接后续 provider 的提示。
 		for j := range allProviderHints[i] {
 			iterate(i+1, append(accum, allProviderHints[i][j]))
 		}

@@ -32,11 +32,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// defaultNetworkInterfaceName is used for collectng network stats.
-// This logic relies on knowledge of the container runtime implementation and
-// is not reliable.
+// defaultNetworkInterfaceName 用于采集网络统计时识别默认网卡。
+// 该逻辑依赖对容器运行时实现的既有认知，并不可靠。
 const defaultNetworkInterfaceName = "eth0"
 
+// cadvisorInfoToCPUandMemoryStats 把 cAdvisor 的容器信息转换为 CPU 与内存统计。
+// 没有最新统计时返回空值；对应资源未启用时只返回零值统计，交由调用方处理。
 func cadvisorInfoToCPUandMemoryStats(info *cadvisorapi.ContainerInfo) (*statsapi.CPUStats, *statsapi.MemoryStats) {
 	cstat, found := latestContainerStats(info)
 	if !found {
@@ -44,22 +45,28 @@ func cadvisorInfoToCPUandMemoryStats(info *cadvisorapi.ContainerInfo) (*statsapi
 	}
 	var cpuStats *statsapi.CPUStats
 	var memoryStats *statsapi.MemoryStats
+	// 先填充零值统计，保证即使 cAdvisor 未上报细项也有可展示的结构。
 	cpuStats = &statsapi.CPUStats{
 		Time:                 metav1.NewTime(cstat.Timestamp),
 		UsageNanoCores:       ptr.To[uint64](0),
 		UsageCoreNanoSeconds: ptr.To[uint64](0),
 	}
+	// 仅当容器声明了 CPU 资源时才读取 CPU 用量，避免取到不相关的数据。
 	if info.Spec.HasCpu {
 		if cstat.CpuInst != nil {
+			// 指令级统计给出瞬时 CPU 用量，存在时优先采用。
 			cpuStats.UsageNanoCores = &cstat.CpuInst.Usage.Total
 		}
 		if cstat.Cpu != nil {
+			// 累计用量与 PSI 来自周期采样。
 			cpuStats.UsageCoreNanoSeconds = &cstat.Cpu.Usage.Total
+			// PSI 仅在启用 KubeletPSI 特性门控时输出，避免为未启用的节点引入额外开销。
 			if utilfeature.DefaultFeatureGate.Enabled(features.KubeletPSI) {
 				cpuStats.PSI = cadvisorPSIToStatsPSI(&cstat.Cpu.PSI)
 			}
 		}
 	}
+	// 内存统计要求容器声明内存且 cAdvisor 上报了内存数据。
 	if info.Spec.HasMemory && cstat.Memory != nil {
 		pageFaults := cstat.Memory.ContainerData.Pgfault
 		majorPageFaults := cstat.Memory.ContainerData.Pgmajfault
@@ -71,7 +78,7 @@ func cadvisorInfoToCPUandMemoryStats(info *cadvisorapi.ContainerInfo) (*statsapi
 			PageFaults:      &pageFaults,
 			MajorPageFaults: &majorPageFaults,
 		}
-		// availableBytes = memory limit (if known) - workingset
+		// 可用内存 = 内存上限（已知时） - 工作集。
 		if !isMemoryUnlimited(info.Spec.Memory.Limit) {
 			availableBytes := info.Spec.Memory.Limit - cstat.Memory.WorkingSet
 			memoryStats.AvailableBytes = &availableBytes
@@ -88,8 +95,7 @@ func cadvisorInfoToCPUandMemoryStats(info *cadvisorapi.ContainerInfo) (*statsapi
 	return cpuStats, memoryStats
 }
 
-// cadvisorInfoToContainerStats returns the statsapi.ContainerStats converted
-// from the container and filesystem info.
+// cadvisorInfoToContainerStats 基于容器信息与文件系统信息，转换为 statsapi.ContainerStats。
 func cadvisorInfoToContainerStats(logger klog.Logger, name string, info *cadvisorapi.ContainerInfo, rootFs, imageFs *cadvisorapi.FsInfo) *statsapi.ContainerStats {
 	result := &statsapi.ContainerStats{
 		StartTime: metav1.NewTime(info.Spec.CreationTime),
@@ -97,6 +103,7 @@ func cadvisorInfoToContainerStats(logger klog.Logger, name string, info *cadviso
 	}
 	cstat, found := latestContainerStats(info)
 	if !found {
+		// 没有可用的 cAdvisor 统计时，只返回含基础元信息的空统计。
 		return result
 	}
 
@@ -104,24 +111,24 @@ func cadvisorInfoToContainerStats(logger klog.Logger, name string, info *cadviso
 	result.CPU = cpu
 	result.Memory = memory
 	result.Swap = cadvisorInfoToSwapStats(info)
+	// IO 统计依赖 PSI 特性门控，未启用时直接跳过，减少无谓的转换。
 	if utilfeature.DefaultFeatureGate.Enabled(features.KubeletPSI) {
 		result.IO = cadvisorInfoToIOStats(info)
 	}
 
-	// NOTE: if they can be found, log stats will be overwritten
-	// by the caller, as it knows more information about the pod,
-	// which is needed to determine log size.
+	// NOTE: 若能获取到更准确的日志统计，调用方会覆盖这里的值，
+	// 因为调用方掌握更多 pod 信息，可据此确定日志大小。
 	if rootFs != nil {
-		// The container logs live on the node rootfs device
+		// 容器日志存放在节点根文件系统上，因此从 rootFs 构建日志统计。
 		result.Logs = buildLogsStats(cstat, rootFs)
 	}
 
 	if imageFs != nil {
-		// The container rootFs lives on the imageFs devices (which may not be the node root fs)
+		// 容器根文件系统可能位于镜像文件系统设备上（未必是节点根文件系统），故从 imageFs 构建。
 		result.Rootfs = buildRootfsStats(cstat, imageFs)
 	}
 
-	// One filesystem device populates the rollup; multi-device containers are skipped.
+	// 只有单个文件系统设备时才填充汇总统计，多设备容器直接跳过。
 	var cfs *cadvisorapi.FilesystemSummary
 	if len(cstat.Filesystem) == 1 {
 		fsStat := cstat.Filesystem[0]
@@ -138,6 +145,7 @@ func cadvisorInfoToContainerStats(logger klog.Logger, name string, info *cadviso
 				result.Rootfs.UsedBytes = &rootfsUsage
 			}
 			if cfs.TotalUsageBytes != nil && result.Logs != nil {
+				// 单设备汇总中，总用量减去基础用量即日志用量。
 				logsUsage := *cfs.TotalUsageBytes - *cfs.BaseUsageBytes
 				result.Logs.UsedBytes = &logsUsage
 			}
@@ -164,8 +172,8 @@ func cadvisorInfoToContainerStats(logger klog.Logger, name string, info *cadviso
 	return result
 }
 
-// cadvisorInfoToContainerCPUAndMemoryStats returns the statsapi.ContainerStats converted
-// from the container and filesystem info.
+// cadvisorInfoToContainerCPUAndMemoryStats 基于容器信息转换为仅含 CPU、内存与 swap 的
+// statsapi.ContainerStats，用于只关心核心资源用量的统计场景。
 func cadvisorInfoToContainerCPUAndMemoryStats(name string, info *cadvisorapi.ContainerInfo) *statsapi.ContainerStats {
 	result := &statsapi.ContainerStats{
 		StartTime: metav1.NewTime(info.Spec.CreationTime),
@@ -180,6 +188,8 @@ func cadvisorInfoToContainerCPUAndMemoryStats(name string, info *cadvisorapi.Con
 	return result
 }
 
+// cadvisorInfoToProcessStats 提取 cAdvisor 容器信息中的进程数量统计。
+// 无最新统计或进程数据缺失时返回 nil，表示该容器没有可用的进程统计。
 func cadvisorInfoToProcessStats(info *cadvisorapi.ContainerInfo) *statsapi.ProcessStats {
 	cstat, found := latestContainerStats(info)
 	if !found || cstat.Processes == nil {
@@ -189,6 +199,8 @@ func cadvisorInfoToProcessStats(info *cadvisorapi.ContainerInfo) *statsapi.Proce
 	return &statsapi.ProcessStats{ProcessCount: ptr.To[uint64](num)}
 }
 
+// mergeProcessStats 合并两个进程统计，把各自的进程数相加。
+// 任一侧为 nil 时直接返回另一侧，两侧均为 nil 时返回 nil。
 func mergeProcessStats(first *statsapi.ProcessStats, second *statsapi.ProcessStats) *statsapi.ProcessStats {
 	if first == nil && second == nil {
 		return nil
@@ -202,6 +214,7 @@ func mergeProcessStats(first *statsapi.ProcessStats, second *statsapi.ProcessSta
 	}
 
 	firstProcessCount := uint64(0)
+	// 指针解引用前先判空，避免 nil 指针解引用。
 	if first.ProcessCount != nil {
 		firstProcessCount = *first.ProcessCount
 	}
@@ -214,9 +227,10 @@ func mergeProcessStats(first *statsapi.ProcessStats, second *statsapi.ProcessSta
 	return &statsapi.ProcessStats{ProcessCount: ptr.To[uint64](firstProcessCount + secondProcessCount)}
 }
 
-// cadvisorInfoToNetworkStats returns the statsapi.NetworkStats converted from
-// the container info from cadvisor.
+// cadvisorInfoToNetworkStats 把 cAdvisor 容器信息转换为 statsapi.NetworkStats。
+// 容器未启用网络、无统计或网络数据缺失时返回 nil。
 func cadvisorInfoToNetworkStats(info *cadvisorapi.ContainerInfo) *statsapi.NetworkStats {
+	// 容器未声明网络时直接返回 nil，避免构造无意义的空统计。
 	if !info.Spec.HasNetwork {
 		return nil
 	}
@@ -244,6 +258,7 @@ func cadvisorInfoToNetworkStats(info *cadvisorapi.ContainerInfo) *statsapi.Netwo
 		}
 
 		if inter.Name == defaultNetworkInterfaceName {
+			// 仅把默认网卡设为主接口统计，其余网卡仍保留在列表里供查询。
 			iStats.InterfaceStats = iStat
 		}
 
@@ -253,8 +268,8 @@ func cadvisorInfoToNetworkStats(info *cadvisorapi.ContainerInfo) *statsapi.Netwo
 	return &iStats
 }
 
-// cadvisorInfoToUserDefinedMetrics returns the statsapi.UserDefinedMetric
-// converted from the container info from cadvisor.
+// cadvisorInfoToUserDefinedMetrics 把 cAdvisor 容器信息中的自定义指标
+// 转换为 statsapi.UserDefinedMetric 列表。
 func cadvisorInfoToUserDefinedMetrics(logger klog.Logger, info *cadvisorapi.ContainerInfo) []statsapi.UserDefinedMetric {
 	type specVal struct {
 		ref     statsapi.UserDefinedMetricDescriptor
@@ -262,6 +277,7 @@ func cadvisorInfoToUserDefinedMetrics(logger klog.Logger, info *cadvisorapi.Cont
 		time    time.Time
 		value   float64
 	}
+	// 先用 spec 建立指标描述与取值类型的映射，后续按名称把采样值与之对齐。
 	udmMap := map[string]*specVal{}
 	for _, spec := range info.Spec.CustomMetrics {
 		udmMap[spec.Name] = &specVal{
@@ -277,16 +293,18 @@ func cadvisorInfoToUserDefinedMetrics(logger klog.Logger, info *cadvisorapi.Cont
 		for name, values := range stat.CustomMetrics {
 			specVal, ok := udmMap[name]
 			if !ok {
+				// cAdvisor 输出缺少该指标的 spec 时无法确认单位与类型，记录日志后跳过。
 				logger.Info("Spec for custom metric is missing from cAdvisor output", "metric", name, "spec", info.Spec, "metrics", stat.CustomMetrics)
 				continue
 			}
 			for _, value := range values {
-				// Pick the most recent value
+				// 同一指标可能有多个采样点，只保留时间戳最新的一个作为当前值。
 				if value.Timestamp.Before(specVal.time) {
 					continue
 				}
 				specVal.time = value.Timestamp
 				specVal.value = value.FloatValue
+				// 整数型指标用 IntValue 换算，避免浮点精度丢失。
 				if specVal.valType == cadvisorapi.IntType {
 					specVal.value = float64(value.IntValue)
 				}
@@ -304,6 +322,8 @@ func cadvisorInfoToUserDefinedMetrics(logger klog.Logger, info *cadvisorapi.Cont
 	return udm
 }
 
+// cadvisorInfoToSwapStats 把 cAdvisor 容器信息转换为 swap 统计。
+// 容器未启用内存或缺少内存统计时返回 nil。
 func cadvisorInfoToSwapStats(info *cadvisorapi.ContainerInfo) *statsapi.SwapStats {
 	cstat, found := latestContainerStats(info)
 	if !found {
@@ -319,6 +339,7 @@ func cadvisorInfoToSwapStats(info *cadvisorapi.ContainerInfo) *statsapi.SwapStat
 		}
 
 		if !isMemoryUnlimited(info.Spec.Memory.SwapLimit) {
+			// 仅在上限已知时才给出可用 swap 估算，否则没有意义。
 			swapAvailableBytes := info.Spec.Memory.SwapLimit - cstat.Memory.Swap
 			swapStats.SwapAvailableBytes = &swapAvailableBytes
 		}
@@ -327,6 +348,8 @@ func cadvisorInfoToSwapStats(info *cadvisorapi.ContainerInfo) *statsapi.SwapStat
 	return swapStats
 }
 
+// cadvisorInfoToIOStats 把 cAdvisor 容器信息转换为 IO 统计并附带 PSI 压力数据；
+// 容器未启用磁盘 IO 或缺少统计时返回 nil。
 func cadvisorInfoToIOStats(info *cadvisorapi.ContainerInfo) *statsapi.IOStats {
 	cstat, found := latestContainerStats(info)
 	if !found {
@@ -345,7 +368,8 @@ func cadvisorInfoToIOStats(info *cadvisorapi.ContainerInfo) *statsapi.IOStats {
 	return ioStats
 }
 
-// latestContainerStats returns the latest container stats from cadvisor, or nil if none exist
+// latestContainerStats 返回 cAdvisor 容器信息中最新的一条统计；
+// 没有任何统计或最新一条为空时返回 (nil, false)。
 func latestContainerStats(info *cadvisorapi.ContainerInfo) (*cadvisorapi.ContainerStats, bool) {
 	stats := info.Stats
 	if len(stats) < 1 {
@@ -358,32 +382,35 @@ func latestContainerStats(info *cadvisorapi.ContainerInfo) (*cadvisorapi.Contain
 	return latest, true
 }
 
+// isMemoryUnlimited 判断给定的内存/swap 大小是否应视为“无上限”。
 func isMemoryUnlimited(v uint64) bool {
-	// Size after which we consider memory to be "unlimited". This is not
-	// MaxInt64 due to rounding by the kernel.
+	// 超过该大小即视作“无上限”。未使用 MaxInt64，是因为内核换算时会做舍入。
 	// TODO: cadvisor should export this https://github.com/google/cadvisor/blob/master/metrics/prometheus.go#L596
 	const maxMemorySize = uint64(1 << 62)
 
 	return v > maxMemorySize
 }
 
-// getCgroupInfo returns the information of the container with the specified
-// containerName from cadvisor.
+// getCgroupInfo 从 cAdvisor 获取指定容器名的容器信息。
+// updateStats 为 true 时要求 cAdvisor 返回实时统计，以便得到最新的指标。
 func getCgroupInfo(cadvisor cadvisor.Interface, containerName string, updateStats bool) (*cadvisorapi.ContainerInfo, error) {
 	var maxAge *time.Duration
 	if updateStats {
+		// 把最大样本年龄设为 0，强制 cAdvisor 返回当前统计而非缓存值。
 		age := 0 * time.Second
 		maxAge = &age
 	}
+	// 需要两个样本才能计算出“瞬时”CPU 用量。
 	infoMap, err := cadvisor.ContainerInfoV2(containerName, cadvisorapi.RequestOptions{
 		IdType:    cadvisorapi.TypeName,
-		Count:     2, // 2 samples are needed to compute "instantaneous" CPU
+		Count:     2,
 		Recursive: false,
 		MaxAge:    maxAge,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container info for %q: %w", containerName, err)
 	}
+	// 期望按容器名恰好命中一个容器，数量不符说明查询条件或运行时行为异常。
 	if len(infoMap) != 1 {
 		return nil, fmt.Errorf("unexpected number of containers: %v", len(infoMap))
 	}
@@ -391,8 +418,7 @@ func getCgroupInfo(cadvisor cadvisor.Interface, containerName string, updateStat
 	return &info, nil
 }
 
-// getCgroupStats returns the latest stats of the container having the
-// specified containerName from cadvisor.
+// getCgroupStats 从 cAdvisor 获取指定容器的最新统计。
 func getCgroupStats(cadvisor cadvisor.Interface, containerName string, updateStats bool) (*cadvisorapi.ContainerStats, error) {
 	info, err := getCgroupInfo(cadvisor, containerName, updateStats)
 	if err != nil {
@@ -405,6 +431,7 @@ func getCgroupStats(cadvisor cadvisor.Interface, containerName string, updateSta
 	return stats, nil
 }
 
+// buildLogsStats 基于容器统计与节点根文件系统信息构建容器日志文件系统统计。
 func buildLogsStats(cstat *cadvisorapi.ContainerStats, rootFs *cadvisorapi.FsInfo) *statsapi.FsStats {
 	fsStats := &statsapi.FsStats{
 		Time:           metav1.NewTime(cstat.Timestamp),
@@ -415,12 +442,14 @@ func buildLogsStats(cstat *cadvisorapi.ContainerStats, rootFs *cadvisorapi.FsInf
 	}
 
 	if rootFs.Inodes != nil && rootFs.InodesFree != nil {
+		// inode 使用量 = 总 inode - 空闲 inode，两者都已知时才能计算。
 		logsInodesUsed := *rootFs.Inodes - *rootFs.InodesFree
 		fsStats.InodesUsed = &logsInodesUsed
 	}
 	return fsStats
 }
 
+// buildRootfsStats 基于容器统计与镜像文件系统信息构建容器根文件系统统计。
 func buildRootfsStats(cstat *cadvisorapi.ContainerStats, imageFs *cadvisorapi.FsInfo) *statsapi.FsStats {
 	return &statsapi.FsStats{
 		Time:           metav1.NewTime(cstat.Timestamp),
@@ -431,6 +460,8 @@ func buildRootfsStats(cstat *cadvisorapi.ContainerStats, imageFs *cadvisorapi.Fs
 	}
 }
 
+// calcEphemeralStorage 汇总容器、卷、pod 日志与 /etc/hosts 的用量，
+// 得到 pod 临时存储的整体文件系统统计。
 func calcEphemeralStorage(containers []statsapi.ContainerStats, volumes []statsapi.VolumeStats, rootFsInfo *cadvisorapi.FsInfo,
 	podLogStats *statsapi.FsStats, etcHostsStats *statsapi.FsStats, isCRIStatsProvider bool) *statsapi.FsStats {
 	result := &statsapi.FsStats{
@@ -443,6 +474,7 @@ func calcEphemeralStorage(containers []statsapi.ContainerStats, volumes []statsa
 	for _, container := range containers {
 		addContainerUsage(result, &container, isCRIStatsProvider)
 	}
+	// 卷用量按字段累加，时间戳取各来源中最晚的一次更新，保证结果反映最新状态。
 	for _, volume := range volumes {
 		result.UsedBytes = addUsage(result.UsedBytes, volume.FsStats.UsedBytes)
 		result.InodesUsed = addUsage(result.InodesUsed, volume.InodesUsed)
@@ -461,6 +493,7 @@ func calcEphemeralStorage(containers []statsapi.ContainerStats, volumes []statsa
 	return result
 }
 
+// addContainerUsage 把单个容器的根文件系统与日志用量累加进汇总统计。
 func addContainerUsage(stat *statsapi.FsStats, container *statsapi.ContainerStats, isCRIStatsProvider bool) {
 	if rootFs := container.Rootfs; rootFs != nil {
 		stat.Time = maxUpdateTime(&stat.Time, &rootFs.Time)
@@ -468,7 +501,7 @@ func addContainerUsage(stat *statsapi.FsStats, container *statsapi.ContainerStat
 		stat.UsedBytes = addUsage(stat.UsedBytes, rootFs.UsedBytes)
 		if logs := container.Logs; logs != nil {
 			stat.UsedBytes = addUsage(stat.UsedBytes, logs.UsedBytes)
-			// We have accurate container log inode usage for CRI stats provider.
+			// 日志的 inode 用量只在 CRI 统计提供方下可信，其他提供方不计入，以免重复计算。
 			if isCRIStatsProvider {
 				stat.InodesUsed = addUsage(stat.InodesUsed, logs.InodesUsed)
 			}
@@ -477,6 +510,7 @@ func addContainerUsage(stat *statsapi.FsStats, container *statsapi.ContainerStat
 	}
 }
 
+// maxUpdateTime 返回两个时间中较晚的一个，使统计结果反映最新采样时刻。
 func maxUpdateTime(first, second *metav1.Time) metav1.Time {
 	if first.Before(second) {
 		return *second
@@ -484,6 +518,8 @@ func maxUpdateTime(first, second *metav1.Time) metav1.Time {
 	return *first
 }
 
+// addUsage 累加两个可空的用量指针：任一侧为 nil 时返回另一侧，
+// 避免用 0 覆盖本来缺失的数据。
 func addUsage(first, second *uint64) *uint64 {
 	if first == nil {
 		return second
@@ -494,12 +530,15 @@ func addUsage(first, second *uint64) *uint64 {
 	return &total
 }
 
+// makePodStorageStats 填充 pod 的临时存储统计：合并卷用量，并基于日志与
+// /etc/hosts 统计计算整个 pod 的临时存储占用。
 func makePodStorageStats(logger klog.Logger, s *statsapi.PodStats, rootFsInfo *cadvisorapi.FsInfo, resourceAnalyzer stats.ResourceAnalyzer, hostStatsProvider HostStatsProvider, isCRIStatsProvider bool) {
 	podNs := s.PodRef.Namespace
 	podName := s.PodRef.Name
 	podUID := types.UID(s.PodRef.UID)
 	var ephemeralStats []statsapi.VolumeStats
 	if vstats, found := resourceAnalyzer.GetPodVolumeStats(podUID); found {
+		// 先拷贝一份临时卷统计，避免与资源分析器内部的切片共享底层数组。
 		ephemeralStats = make([]statsapi.VolumeStats, len(vstats.EphemeralVolumes))
 		copy(ephemeralStats, vstats.EphemeralVolumes)
 		s.VolumeStats = append(append([]statsapi.VolumeStats{}, vstats.EphemeralVolumes...), vstats.PersistentVolumes...)
@@ -508,10 +547,8 @@ func makePodStorageStats(logger klog.Logger, s *statsapi.PodStats, rootFsInfo *c
 	logStats, err := hostStatsProvider.getPodLogStats(podNs, podName, podUID, rootFsInfo)
 	if err != nil {
 		logger.V(6).Info("Unable to fetch pod log stats", "pod", klog.KRef(podNs, podName), "err", err)
-		// If people do in-place upgrade, there might be pods still using
-		// the old log path. For those pods, no pod log stats is returned.
-		// We should continue generating other stats in that case.
-		// calcEphemeralStorage tolerants logStats == nil.
+		// 原地升级后，部分 pod 可能仍在使用旧日志路径，此时取不到日志统计。
+		// 这种情况应继续生成其余统计，calcEphemeralStorage 能容忍 logStats 为 nil。
 	}
 	etcHostsStats, err := hostStatsProvider.getPodEtcHostsStats(podUID, rootFsInfo)
 	if err != nil {
@@ -520,6 +557,7 @@ func makePodStorageStats(logger klog.Logger, s *statsapi.PodStats, rootFsInfo *c
 	s.EphemeralStorage = calcEphemeralStorage(s.Containers, ephemeralStats, rootFsInfo, logStats, etcHostsStats, isCRIStatsProvider)
 }
 
+// cadvisorPSIToStatsPSI 把 cAdvisor 的 PSI 统计转换为 statsapi.PSIStats；入参为 nil 时返回 nil。
 func cadvisorPSIToStatsPSI(psi *cadvisorapi.PSIStats) *statsapi.PSIStats {
 	if psi == nil {
 		return nil

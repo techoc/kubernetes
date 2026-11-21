@@ -18,22 +18,24 @@ package configmap
 
 import v1 "k8s.io/api/core/v1"
 
-// fakeManager implements Manager interface for testing purposes.
-// simple operations to apiserver.
+// fakeManager 是测试用的 Manager 接口假实现，不访问 apiserver。
 type fakeManager struct {
 }
 
-// NewFakeManager creates empty/fake ConfigMap manager
+// NewFakeManager 创建一个空的 ConfigMap manager 假实现。
 func NewFakeManager() Manager {
 	return &fakeManager{}
 }
 
+// GetConfigMap 返回 nil，假实现不提供真实 ConfigMap 数据。
 func (s *fakeManager) GetConfigMap(namespace, name string) (*v1.ConfigMap, error) {
 	return nil, nil
 }
 
+// RegisterPod 为空实现，假实现不跟踪 Pod。
 func (s *fakeManager) RegisterPod(pod *v1.Pod) {
 }
 
+// UnregisterPod 为空实现，假实现不跟踪 Pod。
 func (s *fakeManager) UnregisterPod(pod *v1.Pod) {
 }

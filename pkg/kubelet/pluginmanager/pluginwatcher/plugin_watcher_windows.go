@@ -19,16 +19,18 @@ limitations under the License.
 package pluginwatcher
 
 import (
+	"os"
+
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/kubernetes/pkg/kubelet/util"
-	"os"
 )
 
+// getStat 获取事件对应路径的文件信息。
 func getStat(event fsnotify.Event) (os.FileInfo, error) {
 	fi, err := os.Stat(event.Name)
 	// TODO: This is a workaround for Windows 20H2 issue for os.Stat(). Please see
-	// microsoft/Windows-Containers#97 for details.
-	// Once the issue is resvolved, the following os.Lstat() is not needed.
+	// 这是针对 Windows 20H2 上 os.Stat() 问题的临时方案，详见 microsoft/Windows-Containers#97。
+	// 该问题修复后，就不需要再回退到 os.Lstat()。
 	if err != nil {
 		fi, err = os.Lstat(event.Name)
 	}
@@ -36,4 +38,5 @@ func getStat(event fsnotify.Event) (os.FileInfo, error) {
 	return fi, err
 }
 
+// getSocketPath 在 Windows 上对 socket 路径做规范化处理。
 var getSocketPath = util.NormalizePath

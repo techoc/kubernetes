@@ -39,17 +39,20 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
+// testStatusUpdater 记录所有 Pod 卷健康状态更新调用，便于断言。
 type testStatusUpdater struct {
 	mu    sync.Mutex
 	calls []statusCall
 }
 
+// statusCall 记录一次状态更新的参数。
 type statusCall struct {
 	podUID     types.UID
 	volumeName string
 	conditions []v1.VolumeHealthCondition
 }
 
+// SetPodVolumeHealth 记录一次卷健康状态更新并返回 true。
 func (t *testStatusUpdater) SetPodVolumeHealth(logger klog.Logger, podUID types.UID, volumeName string, conditions []v1.VolumeHealthCondition) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -61,12 +64,14 @@ func (t *testStatusUpdater) SetPodVolumeHealth(logger klog.Logger, podUID types.
 	return true
 }
 
+// callCount 返回已记录的更新调用次数。
 func (t *testStatusUpdater) callCount() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return len(t.calls)
 }
 
+// fakeHealthClient 是可编程的 CSI 健康检查客户端，用于模拟各种探测结果。
 type fakeHealthClient struct {
 	supportsVolumeHealth  bool
 	supportsStorageHealth bool
@@ -78,6 +83,7 @@ type fakeHealthClient struct {
 	storageCalls          int
 }
 
+// NodeGetVolumeHealth 返回预设的卷健康条件或错误。
 func (f *fakeHealthClient) NodeGetVolumeHealth(ctx context.Context, volID, stagingTargetPath, volumePublishPath string) ([]v1.VolumeHealthCondition, error) {
 	f.volumeCalls++
 	if f.volumeErr != nil {
@@ -86,6 +92,7 @@ func (f *fakeHealthClient) NodeGetVolumeHealth(ctx context.Context, volID, stagi
 	return f.volumeConditions, nil
 }
 
+// NodeGetStorageHealth 返回预设的存储健康条件或错误。
 func (f *fakeHealthClient) NodeGetStorageHealth(ctx context.Context, secrets map[string]string) ([]storagev1.StorageHealthCondition, error) {
 	f.storageCalls++
 	if f.storageErr != nil {
@@ -94,24 +101,29 @@ func (f *fakeHealthClient) NodeGetStorageHealth(ctx context.Context, secrets map
 	return f.storageConditions, nil
 }
 
+// NodeSupportsVolumeHealth 返回预设的卷健康能力支持标记。
 func (f *fakeHealthClient) NodeSupportsVolumeHealth(ctx context.Context) (bool, error) {
 	return f.supportsVolumeHealth, nil
 }
 
+// NodeSupportsStorageHealth 返回预设的存储健康能力支持标记。
 func (f *fakeHealthClient) NodeSupportsStorageHealth(ctx context.Context) (bool, error) {
 	return f.supportsStorageHealth, nil
 }
 
+// fakeCSINodeUpdater 记录对 CSINode 存储健康状态的更新调用。
 type fakeCSINodeUpdater struct {
 	mu    sync.Mutex
 	calls []storageCall
 }
 
+// storageCall 记录一次 CSINode 存储健康状态更新。
 type storageCall struct {
 	driverName string
 	conditions []storagev1.StorageHealthCondition
 }
 
+// UpdateCSINodeStorageHealth 记录一次更新调用并返回 nil。
 func (f *fakeCSINodeUpdater) UpdateCSINodeStorageHealth(driverName string, conditions []storagev1.StorageHealthCondition) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -122,9 +134,11 @@ func (f *fakeCSINodeUpdater) UpdateCSINodeStorageHealth(driverName string, condi
 	return nil
 }
 
+// newTestManager 构造一个带单个 Pod 卷的卷健康管理器，便于测试探测逻辑。
 func newTestManager(t *testing.T, statusUpdater StatusUpdater, client csi.HealthClient) *manager {
 	t.Helper()
 	logger, _ := ktesting.NewTestContext(t)
+	// 使用测试卷插件管理器构造期望状态与实际状态缓存。
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	dsw := cache.NewDesiredStateOfWorld(volumePluginMgr, util.NewFakeSELinuxLabelTranslator())
 	asw := cache.NewActualStateOfWorld("node1", volumePluginMgr)
@@ -153,6 +167,7 @@ func newTestManager(t *testing.T, statusUpdater StatusUpdater, client csi.Health
 		},
 	}
 	volumeSpec := volume.NewSpecFromPersistentVolume(pv, false)
+	// 将 Pod 卷加入期望状态，并标记为已尝试挂载，使健康探测能够发现它。
 	volumeName, err := dsw.AddPodToVolume(logger, util.GetUniquePodName(pod), pod, volumeSpec, "vol1", "", nil)
 	if err != nil {
 		t.Fatalf("AddPodToVolume: %v", err)
@@ -174,6 +189,8 @@ func newTestManager(t *testing.T, statusUpdater StatusUpdater, client csi.Health
 	}
 }
 
+// TestProbeVolumeHealth 验证卷健康探测在健康、恢复、重复、出错与能力不支持等场景下的
+// 状态更新行为。
 func TestProbeVolumeHealth(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIVolumeHealth, true)
 
@@ -208,7 +225,7 @@ func TestProbeVolumeHealth(t *testing.T) {
 			},
 		},
 		{
-			// Manager always forwards; status_manager suppresses no-op PATCHes.
+			// 管理器始终转发更新；无变化的 PATCH 由 status_manager 负责抑制。
 			name:                 "same condition twice still calls status updater",
 			supportsVolumeHealth: true,
 			steps: []step{
@@ -239,6 +256,7 @@ func TestProbeVolumeHealth(t *testing.T) {
 			client := &fakeHealthClient{supportsVolumeHealth: tc.supportsVolumeHealth}
 			m := newTestManager(t, status, client)
 
+			// 逐步模拟探测结果，并在每一步后校验状态更新次数与内容。
 			prevCalls := 0
 			for i, s := range tc.steps {
 				client.volumeConditions = s.volumeConditions
@@ -270,8 +288,11 @@ func TestProbeVolumeHealth(t *testing.T) {
 	}
 }
 
+// TestProbeStorageHealth 验证存储健康探测在健康、恢复、重复、出错与能力不支持等场景下的
+// CSINode 更新行为。
 func TestProbeStorageHealth(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIVolumeHealth, true)
+	// 注册健康指标，避免探测流程因指标未初始化而失败。
 	registerHealthMetrics()
 
 	degraded := []storagev1.StorageHealthCondition{{
@@ -305,7 +326,7 @@ func TestProbeStorageHealth(t *testing.T) {
 			},
 		},
 		{
-			// Manager always forwards; nodeinfomanager suppresses no-op UpdateStatus.
+			// 管理器始终转发更新；无变化的 UpdateStatus 由 nodeinfomanager 负责抑制。
 			name:                  "same condition twice still calls CSINode updater",
 			supportsStorageHealth: true,
 			steps: []step{
@@ -337,6 +358,7 @@ func TestProbeStorageHealth(t *testing.T) {
 			m := newTestManager(t, &testStatusUpdater{}, client)
 			m.csiNodeUpdater = func() CSINodeUpdater { return updater }
 
+			// 逐步模拟探测结果，并在每一步后校验 CSINode 更新次数与内容。
 			prevCalls := 0
 			for i, s := range tc.steps {
 				client.storageConditions = s.storageConditions
@@ -374,6 +396,8 @@ func TestProbeStorageHealth(t *testing.T) {
 	}
 }
 
+// TestConditionsEqual 验证卷健康条件集合比较只关注 (status, reason)，
+// 忽略 message 差异。
 func TestConditionsEqual(t *testing.T) {
 	a := []v1.VolumeHealthCondition{{Status: v1.VolumeHealthDegraded, Reason: "A", Message: "old"}}
 	b := []v1.VolumeHealthCondition{{Status: v1.VolumeHealthDegraded, Reason: "A", Message: "new"}}

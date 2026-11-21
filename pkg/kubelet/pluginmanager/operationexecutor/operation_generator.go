@@ -14,10 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package operationexecutor implements interfaces that enable execution of
-// register and unregister operations with a
-// goroutinemap so that more than one operation is never triggered
-// on the same plugin.
+// Package operationexecutor 实现插件注册与注销操作的执行接口，
+// 借助 goroutinemap 保证同一个插件上不会同时触发多个操作。
 package operationexecutor
 
 import (
@@ -38,19 +36,22 @@ import (
 )
 
 const (
+	// dialTimeoutDuration 是连接插件 socket 的超时；notifyTimeoutDuration 是通知插件注册状态的超时。
 	dialTimeoutDuration   = 10 * time.Second
 	notifyTimeoutDuration = 5 * time.Second
 )
 
+// 编译期断言：operationGenerator 必须实现 OperationGenerator 接口。
 var _ OperationGenerator = &operationGenerator{}
 
+// operationGenerator 生成注册/注销插件的操作函数。
 type operationGenerator struct {
 
-	// recorder is used to record events in the API server
+	// recorder 用于向 API server 记录事件。
 	recorder record.EventRecorder
 }
 
-// NewOperationGenerator is returns instance of operationGenerator
+// NewOperationGenerator 返回 operationGenerator 实例。
 func NewOperationGenerator(recorder record.EventRecorder) OperationGenerator {
 
 	return &operationGenerator{
@@ -58,9 +59,9 @@ func NewOperationGenerator(recorder record.EventRecorder) OperationGenerator {
 	}
 }
 
-// OperationGenerator interface that extracts out the functions from operation_executor to make it dependency injectable
+// OperationGenerator 接口把操作执行器的函数抽取出来，便于依赖注入。
 type OperationGenerator interface {
-	// Generates the RegisterPlugin function needed to perform the registration of a plugin
+	// GenerateRegisterPluginFunc 生成执行插件注册所需的函数。
 	GenerateRegisterPluginFunc(
 		ctx context.Context,
 		socketPath string,
@@ -68,13 +69,15 @@ type OperationGenerator interface {
 		pluginHandlers map[string]cache.PluginHandler,
 		actualStateOfWorldUpdater ActualStateOfWorldUpdater) func() error
 
-	// Generates the UnregisterPlugin function needed to perform the unregistration of a plugin
+	// GenerateUnregisterPluginFunc 生成执行插件注销所需的函数。
 	GenerateUnregisterPluginFunc(
 		ctx context.Context,
 		pluginInfo cache.PluginInfo,
 		actualStateOfWorldUpdater ActualStateOfWorldUpdater) func() error
 }
 
+// GenerateRegisterPluginFunc 返回闭包：连接插件 socket、校验插件、更新实际状态缓存，
+// 并通知插件注册结果。
 func (og *operationGenerator) GenerateRegisterPluginFunc(
 	ctx context.Context,
 	socketPath string,
@@ -91,7 +94,7 @@ func (og *operationGenerator) GenerateRegisterPluginFunc(
 		}
 		defer conn.Close()
 
-		// Create separate context from parent context
+		// 为 GetInfo 调用创建独立的超时上下文，避免阻塞注册流程。
 		ctxWithTimeout, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
 
@@ -100,6 +103,7 @@ func (og *operationGenerator) GenerateRegisterPluginFunc(
 			return fmt.Errorf("RegisterPlugin error -- failed to get plugin info using RPC GetInfo at socket %s, err: %v", socketPath, err)
 		}
 
+		// 没有对应类型的处理器时，通知插件失败并返回错误。
 		handler, ok := pluginHandlers[infoResp.Type]
 		if !ok {
 			if err := og.notifyPlugin(ctx, client, false, fmt.Sprintf("RegisterPlugin error -- no handler registered for plugin type: %s at socket %s", infoResp.Type, socketPath)); err != nil {
@@ -108,6 +112,7 @@ func (og *operationGenerator) GenerateRegisterPluginFunc(
 			return fmt.Errorf("RegisterPlugin error -- no handler registered for plugin type: %s at socket %s", infoResp.Type, socketPath)
 		}
 
+		// 插件未上报 endpoint 时，默认使用 socket 路径。
 		if infoResp.Endpoint == "" {
 			infoResp.Endpoint = socketPath
 		}
@@ -117,8 +122,8 @@ func (og *operationGenerator) GenerateRegisterPluginFunc(
 			}
 			return fmt.Errorf("RegisterPlugin error -- pluginHandler.ValidatePluginFunc failed")
 		}
-		// We add the plugin to the actual state of world cache before calling a plugin consumer's Register handle
-		// so that if we receive a delete event during Register Plugin, we can process it as a DeRegister call.
+		// 先写入实际状态缓存，再调用消费者的注册逻辑；这样注册过程中若收到删除事件，
+		// 也能按注销流程处理。
 		err = actualStateOfWorldUpdater.AddPlugin(ctx, cache.PluginInfo{
 			SocketPath: socketPath,
 			UUID:       pluginUUID,
@@ -130,12 +135,14 @@ func (og *operationGenerator) GenerateRegisterPluginFunc(
 			logger.Error(err, "RegisterPlugin error -- failed to add plugin", "path", socketPath)
 		}
 		if err := handler.RegisterPlugin(ctx, infoResp.Name, infoResp.Endpoint, infoResp.SupportedVersions, nil); err != nil {
+			// 注册失败时回滚实际状态缓存。
 			actualStateOfWorldUpdater.RemovePlugin(socketPath)
 			return og.notifyPlugin(ctx, client, false, fmt.Sprintf("RegisterPlugin error -- plugin registration failed with err: %v", err))
 		}
 
-		// Notify is called after register to guarantee that even if notify throws an error Register will always be called after validate
+		// 注册完成后才发送通知，确保即使通知失败，Register 也总是在校验之后被调用。
 		if err := og.notifyPlugin(ctx, client, true, ""); err != nil {
+			// 通知失败时同样回滚缓存并注销插件。
 			actualStateOfWorldUpdater.RemovePlugin(socketPath)
 			handler.DeRegisterPlugin(ctx, infoResp.Name, infoResp.Endpoint)
 			return fmt.Errorf("RegisterPlugin error -- failed to send registration status at socket %s, err: %v", socketPath, err)
@@ -145,6 +152,7 @@ func (og *operationGenerator) GenerateRegisterPluginFunc(
 	return registerPluginFunc
 }
 
+// GenerateUnregisterPluginFunc 返回闭包：从实际状态缓存移除插件，并调用消费者的注销逻辑。
 func (og *operationGenerator) GenerateUnregisterPluginFunc(
 	ctx context.Context,
 	pluginInfo cache.PluginInfo,
@@ -156,8 +164,8 @@ func (og *operationGenerator) GenerateUnregisterPluginFunc(
 		if pluginInfo.Handler == nil {
 			return fmt.Errorf("UnregisterPlugin error -- failed to get plugin handler for %s", pluginInfo.SocketPath)
 		}
-		// We remove the plugin to the actual state of world cache before calling a plugin consumer's Unregister handle
-		// so that if we receive a register event during Register Plugin, we can process it as a Register call.
+		// 先移除实际状态缓存中的插件，再调用消费者的注销逻辑；这样注销过程中若收到注册事件，
+		// 也能按注册流程处理。
 		actualStateOfWorldUpdater.RemovePlugin(pluginInfo.SocketPath)
 
 		pluginInfo.Handler.DeRegisterPlugin(ctx, pluginInfo.Name, pluginInfo.Endpoint)
@@ -168,6 +176,7 @@ func (og *operationGenerator) GenerateUnregisterPluginFunc(
 	return unregisterPluginFunc
 }
 
+// notifyPlugin 通过 gRPC 把注册状态通知给插件。
 func (og *operationGenerator) notifyPlugin(ctx context.Context, client registerapi.RegistrationClient, registered bool, errStr string) error {
 	ctx, cancel := context.WithTimeout(ctx, notifyTimeoutDuration)
 	defer cancel()
@@ -177,6 +186,7 @@ func (og *operationGenerator) notifyPlugin(ctx context.Context, client registera
 		Error:            errStr,
 	}
 
+	// 通知调用本身失败时返回包装后的错误；业务错误字符串则作为普通错误返回。
 	if _, err := client.NotifyRegistrationStatus(ctx, status); err != nil {
 		return fmt.Errorf("%s: %w", errStr, err)
 	}
@@ -188,11 +198,12 @@ func (og *operationGenerator) notifyPlugin(ctx context.Context, client registera
 	return nil
 }
 
-// Dial establishes the gRPC communication with the picked up plugin socket. https://godoc.org/google.golang.org/grpc#Dial
+// dial 与发现的插件 socket 建立 gRPC 连接（https://godoc.org/google.golang.org/grpc#Dial）。
 func dial(ctx context.Context, unixSocketPath string, timeout time.Duration) (registerapi.RegistrationClient, *grpc.ClientConn, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// 使用 unix domain socket 拨号，并等待连接建立（WithBlock）。
 	c, err := grpc.DialContext(ctx, unixSocketPath,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),

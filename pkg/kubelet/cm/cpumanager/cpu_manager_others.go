@@ -25,11 +25,11 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// updateContainerCPUSet 通过运行时更新容器的 CPU 亲和性；非 Linux/Windows 平台同样走通用运行时接口。
 func (m *manager) updateContainerCPUSet(ctx context.Context, containerID string, cpus cpuset.CPUSet) error {
 	// TODO: Consider adding a `ResourceConfigForContainer` helper in
-	// helpers_linux.go similar to what exists for pods.
-	// It would be better to pass the full container resources here instead of
-	// this patch-like partial resources.
+	// 建议在 helpers_linux.go 中新增类似 Pod 现有实现的 `ResourceConfigForContainer` 辅助函数；
+	// 传入完整容器资源比这里这种补丁式的部分资源更清晰。
 
 	return m.containerRuntime.UpdateContainerResources(
 		ctx,

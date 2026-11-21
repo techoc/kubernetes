@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	// Offsets from seed value in generated container stats.
+	// 生成容器统计时相对种子值的各项偏移。
 	offsetCPUUsageCores = iota
 	offsetCPUUsageCoreSeconds
 	offsetMemPageFaults
@@ -75,6 +75,7 @@ var (
 	creationTime = timestamp.Add(-5 * time.Minute)
 )
 
+// TestGetCgroupStats 验证 GetCgroupStats 汇总单个 cgroup 的 CPU、内存、网络与 swap 统计。
 func TestGetCgroupStats(t *testing.T) {
 	const (
 		cgroupName        = "test-cgroup-name"
@@ -109,6 +110,7 @@ func TestGetCgroupStats(t *testing.T) {
 	assert.Equal(metav1.NewTime(containerInfo.Spec.CreationTime), cs.StartTime)
 }
 
+// TestGetCgroupCPUAndMemoryStats 验证 GetCgroupCPUAndMemoryStats 仅返回 CPU 与内存统计。
 func TestGetCgroupCPUAndMemoryStats(t *testing.T) {
 	const (
 		cgroupName        = "test-cgroup-name"
@@ -140,6 +142,7 @@ func TestGetCgroupCPUAndMemoryStats(t *testing.T) {
 	assert.Equal(metav1.NewTime(containerInfo.Spec.CreationTime), cs.StartTime)
 }
 
+// TestRootFsStats 验证 RootFsStats 基于根文件系统信息与容器统计汇总出文件系统统计。
 func TestRootFsStats(t *testing.T) {
 	const (
 		rootFsInfoSeed    = 1000
@@ -172,6 +175,8 @@ func TestRootFsStats(t *testing.T) {
 	assert.Equal(*rootFsInfo.Inodes-*rootFsInfo.InodesFree, *stats.InodesUsed)
 }
 
+// TestHasDedicatedImageFs 表驱动验证 HasDedicatedImageFs 的判断：覆盖镜像文件系统与根文件系统
+// 设备独立、共享，以及镜像/容器文件系统分离等场景。
 func TestHasDedicatedImageFs(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	imageStatsExpected := &statsapi.FsStats{AvailableBytes: ptr.To[uint64](1)}
@@ -222,6 +227,7 @@ func TestHasDedicatedImageFs(t *testing.T) {
 	}
 }
 
+// getTerminatedContainerInfo 构造已终止容器的统计信息：内存 RSS、CPU 用量与网络流量全部归零。
 func getTerminatedContainerInfo(seed int, podName string, podNamespace string, containerName string) cadvisorapi.ContainerInfo {
 	cinfo := getTestContainerInfo(seed, podName, podNamespace, containerName)
 	cinfo.Stats[0].Memory.RSS = 0
@@ -244,6 +250,7 @@ func getTerminatedContainerInfo(seed int, podName string, podNamespace string, c
 	return cinfo
 }
 
+// getContainerInfoWithZeroCPUMem 构造 CPU 与内存用量均为零的容器统计信息。
 func getContainerInfoWithZeroCPUMem(seed int, podName string, podNamespace string, containerName string) cadvisorapi.ContainerInfo {
 	cinfo := getTestContainerInfo(seed, podName, podNamespace, containerName)
 	cinfo.Stats[0].Memory.RSS = 0
@@ -251,6 +258,7 @@ func getContainerInfoWithZeroCPUMem(seed int, podName string, podNamespace strin
 	return cinfo
 }
 
+// getTestContainerInfo 构造带确定种子值的测试容器信息：各统计字段按种子值加固定偏移生成，便于断言。
 func getTestContainerInfo(seed int, podName string, podNamespace string, containerName string) cadvisorapi.ContainerInfo {
 	labels := map[string]string{}
 	if podName != "" {
@@ -261,7 +269,7 @@ func getTestContainerInfo(seed int, podName string, podNamespace string, contain
 			"io.kubernetes.container.name": containerName,
 		}
 	}
-	// by default, kernel will set memory.limit_in_bytes to 1 << 63 if not bounded
+	// 默认情况下，内核在未设上限时会把 memory.limit_in_bytes 设为 1 << 63
 	unlimitedMemory := uint64(1 << 63)
 	spec := cadvisorapi.ContainerSpec{
 		CreationTime: testTime(creationTime, seed),
@@ -314,9 +322,9 @@ func getTestContainerInfo(seed int, podName string, podNamespace string, contain
 			}},
 		},
 		CustomMetrics: generateCustomMetrics(spec.CustomMetrics),
-		// model.ContainerStats.Filesystem is per-device ([]FsStats); the kubelet's
-		// single-filesystem rollup (helper.go) reads index 0: Rootfs.UsedBytes from
-		// BaseUsage, Logs.UsedBytes from Usage-BaseUsage, Rootfs.InodesUsed from Inodes.
+		// model.ContainerStats.Filesystem 按设备存放（[]FsStats）；kubelet 的单文件系统汇总
+		// （helper.go）读取下标 0：Rootfs.UsedBytes 取自 BaseUsage，Logs.UsedBytes 取自
+		// Usage-BaseUsage，Rootfs.InodesUsed 取自 Inodes。
 		Filesystem: []cadvisorapi.FsStats{
 			{
 				Usage:     totalUsageBytes,
@@ -346,6 +354,7 @@ func getTestContainerInfo(seed int, podName string, podNamespace string, contain
 	}
 }
 
+// getTestPSIStats 构造带种子值的 PSI 统计（Full 与 Some 使用相同的测试数据）。
 func getTestPSIStats(seed int) cadvisorapi.PSIStats {
 	return cadvisorapi.PSIStats{
 		Full: getTestPSIData(seed),
@@ -353,6 +362,7 @@ func getTestPSIStats(seed int) cadvisorapi.PSIStats {
 	}
 }
 
+// getTestPSIData 构造带种子值的 PSI 数据，平均值字段固定为 10。
 func getTestPSIData(seed int) cadvisorapi.PSIData {
 	return cadvisorapi.PSIData{
 		Total:  uint64(seed + offsetPSIDataTotal),
@@ -362,6 +372,7 @@ func getTestPSIData(seed int) cadvisorapi.PSIData {
 	}
 }
 
+// getTestFsInfo 构造带种子值的文件系统信息。
 func getTestFsInfo(seed int) cadvisorapi.FsInfo {
 	var (
 		inodes     = uint64(seed + offsetFsInodes)
@@ -379,6 +390,7 @@ func getTestFsInfo(seed int) cadvisorapi.FsInfo {
 	}
 }
 
+// getTestFsInfoWithDifferentMount 构造指定设备名的文件系统信息。
 func getTestFsInfoWithDifferentMount(seed int, device string) cadvisorapi.FsInfo {
 	var (
 		inodes     = uint64(seed + offsetFsInodes)
@@ -396,6 +408,7 @@ func getTestFsInfoWithDifferentMount(seed int, device string) cadvisorapi.FsInfo
 	}
 }
 
+// getPodVolumeStats 构造指定卷名的卷统计，各字段按种子值加偏移生成。
 func getPodVolumeStats(seed int, volumeName string) statsapi.VolumeStats {
 	availableBytes := uint64(seed + offsetFsAvailable)
 	capacityBytes := uint64(seed + offsetFsCapacity)
@@ -418,6 +431,7 @@ func getPodVolumeStats(seed int, volumeName string) statsapi.VolumeStats {
 	}
 }
 
+// generateCustomMetricSpec 随机生成自定义指标的规格列表，覆盖 gauge/cumulative/delta 类型与 int/float 格式。
 func generateCustomMetricSpec() []cadvisorapi.MetricSpec {
 	f := randfill.New().NilChance(0).Funcs(
 		func(e *cadvisorapi.MetricSpec, c randfill.Continue) {
@@ -443,6 +457,7 @@ func generateCustomMetricSpec() []cadvisorapi.MetricSpec {
 	return ret
 }
 
+// generateCustomMetrics 按给定规格随机生成每个指标的取值列表。
 func generateCustomMetrics(spec []cadvisorapi.MetricSpec) map[string][]cadvisorapi.MetricVal {
 	ret := map[string][]cadvisorapi.MetricVal{}
 	for _, metricSpec := range spec {
@@ -463,10 +478,12 @@ func generateCustomMetrics(spec []cadvisorapi.MetricSpec) map[string][]cadvisora
 	return ret
 }
 
+// testTime 基于基准时间与种子值生成测试用时间戳。
 func testTime(base time.Time, seed int) time.Time {
 	return base.Add(time.Duration(seed) * time.Second)
 }
 
+// checkNetworkStats 断言网络统计的时间戳、eth0 默认接口与 cbr0 接口的各项数值。
 func checkNetworkStats(t *testing.T, label string, seed int, stats *statsapi.NetworkStats) {
 	assert.NotNil(t, stats)
 	assert.EqualValues(t, testTime(timestamp, seed).Unix(), stats.Time.Time.Unix(), label+".Net.Time")
@@ -492,6 +509,7 @@ func checkNetworkStats(t *testing.T, label string, seed int, stats *statsapi.Net
 
 }
 
+// checkCPUStats 断言 CPU 统计的时间戳、用量与 PSI 指标。
 func checkCPUStats(t *testing.T, label string, seed int, stats *statsapi.CPUStats) {
 	require.NotNil(t, stats.Time, label+".CPU.Time")
 	require.NotNil(t, stats.UsageNanoCores, label+".CPU.UsageNanoCores")
@@ -502,6 +520,7 @@ func checkCPUStats(t *testing.T, label string, seed int, stats *statsapi.CPUStat
 	checkPSIStats(t, label+".CPU", seed, stats.PSI)
 }
 
+// checkMemoryStats 断言内存统计的各项数值；内存无上限时 AvailableBytes 应为 nil。
 func checkMemoryStats(t *testing.T, label string, seed int, info cadvisorapi.ContainerInfo, stats *statsapi.MemoryStats) {
 	assert.EqualValues(t, testTime(timestamp, seed).Unix(), stats.Time.Time.Unix(), label+".Mem.Time")
 	assert.EqualValues(t, seed+offsetMemUsageBytes, *stats.UsageBytes, label+".Mem.UsageBytes")
@@ -518,6 +537,7 @@ func checkMemoryStats(t *testing.T, label string, seed int, info cadvisorapi.Con
 	checkPSIStats(t, label+".Mem", seed, stats.PSI)
 }
 
+// checkIOStats 在 KubeletPSI 特性开启时，断言 IO 统计的时间戳与 PSI 指标。
 func checkIOStats(t *testing.T, label string, seed int, info cadvisorapi.ContainerInfo, stats *statsapi.IOStats) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.KubeletPSI) {
 		assert.EqualValues(t, testTime(timestamp, seed).Unix(), stats.Time.Time.Unix(), label+".Mem.Time")
@@ -525,6 +545,7 @@ func checkIOStats(t *testing.T, label string, seed int, info cadvisorapi.Contain
 	}
 }
 
+// checkPSIStats 在 KubeletPSI 特性开启时，断言 PSI 的 Full 与 Some 各字段。
 func checkPSIStats(t *testing.T, label string, seed int, stats *statsapi.PSIStats) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.KubeletPSI) {
 		require.NotNil(t, stats, label+".PSI")
@@ -539,6 +560,7 @@ func checkPSIStats(t *testing.T, label string, seed int, stats *statsapi.PSIStat
 	}
 }
 
+// checkSwapStats 断言 swap 用量统计；swap 无上限时 SwapAvailableBytes 应为 nil。
 func checkSwapStats(t *testing.T, label string, seed int, info cadvisorapi.ContainerInfo, stats *statsapi.SwapStats) {
 	label += ".Swap"
 
@@ -553,6 +575,7 @@ func checkSwapStats(t *testing.T, label string, seed int, info cadvisorapi.Conta
 	}
 }
 
+// checkFsStats 断言文件系统统计的各项容量与 inode 数值。
 func checkFsStats(t *testing.T, label string, seed int, stats *statsapi.FsStats) {
 	assert.EqualValues(t, seed+offsetFsCapacity, *stats.CapacityBytes, label+".CapacityBytes")
 	assert.EqualValues(t, seed+offsetFsAvailable, *stats.AvailableBytes, label+".AvailableBytes")
@@ -560,6 +583,8 @@ func checkFsStats(t *testing.T, label string, seed int, stats *statsapi.FsStats)
 	assert.EqualValues(t, seed+offsetFsInodesFree, *stats.InodesFree, label+".InodesFree")
 }
 
+// checkContainersSwapStats 校验各容器的 swap 用量已正确归入 Pod 统计，并核对容器集合无遗漏；
+// 非 Linux 平台直接跳过。
 func checkContainersSwapStats(t *testing.T, podStats statsapi.PodStats, containerStats ...cadvisorapi.ContainerInfo) {
 	if runtime.GOOS != "linux" {
 		return
@@ -593,15 +618,15 @@ func checkContainersSwapStats(t *testing.T, podStats statsapi.PodStats, containe
 	}
 }
 
+// checkEphemeralStats 汇总临时存储统计（容器基础用量、日志增量与卷用量），
+// 断言最终的 UsedBytes 与 InodesUsed。
 func checkEphemeralStats(t *testing.T, label string, containerSeeds []int, volumeSeeds []int, containerLogStats []*volume.Metrics, stats *statsapi.FsStats) {
 	var usedBytes, inodeUsage int
 	for _, cseed := range containerSeeds {
 		usedBytes += cseed + offsetFsBaseUsageBytes
 		inodeUsage += cseed + offsetFsInodeUsage
-		// If containerLogStats is nil, then the log stats calculated from cAdvisor
-		// information is used. Since it's Total - Base, and these values are
-		// set to the offset, we can use the calculated difference in the offset
-		// to account for this.
+		// containerLogStats 为 nil 时，使用按 cAdvisor 信息计算的日志统计；
+		// 由于它等于 Total-Base，而这两项都取偏移值，因此可直接用偏移差值来补偿。
 		if containerLogStats == nil {
 			usedBytes += offsetFsTotalUsageBytes - offsetFsBaseUsageBytes
 		}
@@ -618,19 +643,28 @@ func checkEphemeralStats(t *testing.T, label string, containerSeeds []int, volum
 	assert.EqualValues(t, inodeUsage, int(*stats.InodesUsed), label+".InodesUsed")
 }
 
+// fakeResourceAnalyzer 是资源分析器的测试替身，仅返回预设的卷统计。
 type fakeResourceAnalyzer struct {
 	podVolumeStats serverstats.PodVolumeStats
 }
 
-func (o *fakeResourceAnalyzer) Start(context.Context)                                {}
+// Start 空实现，fake 不启动后台任务。
+func (o *fakeResourceAnalyzer) Start(context.Context) {}
+
+// Get 返回空结果，模拟未实现。
 func (o *fakeResourceAnalyzer) Get(context.Context, bool) (*statsapi.Summary, error) { return nil, nil }
+
+// GetCPUAndMemoryStats 返回空结果，模拟未实现。
 func (o *fakeResourceAnalyzer) GetCPUAndMemoryStats(context.Context) (*statsapi.Summary, error) {
 	return nil, nil
 }
+
+// GetPodVolumeStats 返回预设的卷统计与存在标志。
 func (o *fakeResourceAnalyzer) GetPodVolumeStats(uid types.UID) (serverstats.PodVolumeStats, bool) {
 	return o.podVolumeStats, true
 }
 
+// fakeContainerStatsProvider 是容器统计提供者的测试替身，用预设的设备名与文件系统统计驱动各统计方法。
 type fakeContainerStatsProvider struct {
 	device      string
 	imageFs     *statsapi.FsStats
@@ -638,14 +672,17 @@ type fakeContainerStatsProvider struct {
 	podStats    *statsapi.PodStats
 }
 
+// ListPodStats 返回未实现错误，fake 不支持该接口。
 func (p fakeContainerStatsProvider) ListPodStats(context.Context) ([]statsapi.PodStats, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
+// ListPodStatsAndUpdateCPUNanoCoreUsage 返回未实现错误，fake 不支持该接口。
 func (p fakeContainerStatsProvider) ListPodStatsAndUpdateCPUNanoCoreUsage(context.Context) ([]statsapi.PodStats, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
+// PodCPUAndMemoryStats 返回预设的 Pod 统计；未设置时返回错误。
 func (p fakeContainerStatsProvider) PodCPUAndMemoryStats(context.Context, *v1.Pod, *kubecontainer.PodStatus) (*statsapi.PodStats, error) {
 	if p.podStats != nil {
 		return p.podStats, nil
@@ -653,14 +690,17 @@ func (p fakeContainerStatsProvider) PodCPUAndMemoryStats(context.Context, *v1.Po
 	return nil, fmt.Errorf("no podStats set")
 }
 
+// ListPodCPUAndMemoryStats 返回未实现错误，fake 不支持该接口。
 func (p fakeContainerStatsProvider) ListPodCPUAndMemoryStats(context.Context) ([]statsapi.PodStats, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
+// ImageFsStats 返回预设的镜像文件系统与容器文件系统统计。
 func (p fakeContainerStatsProvider) ImageFsStats(context.Context) (*statsapi.FsStats, *statsapi.FsStats, error) {
 	return p.imageFs, p.containerFs, nil
 }
 
+// ImageFsDevice 返回预设的镜像文件系统设备名。
 func (p fakeContainerStatsProvider) ImageFsDevice(context.Context) (string, error) {
 	return p.device, nil
 }

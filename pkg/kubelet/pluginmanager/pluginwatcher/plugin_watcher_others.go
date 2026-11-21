@@ -24,10 +24,12 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// getStat 获取事件对应路径的文件信息。
 func getStat(event fsnotify.Event) (os.FileInfo, error) {
 	return os.Stat(event.Name)
 }
 
+// getSocketPath 在非 Windows 平台直接返回原始 socket 路径。
 func getSocketPath(socketPath string) string {
 	return socketPath
 }

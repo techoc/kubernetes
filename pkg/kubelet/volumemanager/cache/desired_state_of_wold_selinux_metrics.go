@@ -23,8 +23,10 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// SELinux 卷挂载相关指标。
 var (
 	// TODO: add plugin name + access mode labels to all these metrics
+	// seLinuxContainerContextErrors 统计无法为容器计算 SELinux 上下文的错误数。
 	seLinuxContainerContextErrors = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Name:           "volume_manager_selinux_container_errors_total",
@@ -33,6 +35,7 @@ var (
 		},
 		[]string{"access_mode"},
 	)
+	// seLinuxContainerContextWarnings 统计被忽略的容器 SELinux 上下文错误数。
 	seLinuxContainerContextWarnings = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Name:           "volume_manager_selinux_container_warnings_total",
@@ -41,6 +44,7 @@ var (
 		},
 		[]string{"access_mode"},
 	)
+	// seLinuxPodContextMismatchErrors 统计同一卷在不同容器间 SELinux 上下文不一致的错误数。
 	seLinuxPodContextMismatchErrors = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Name:           "volume_manager_selinux_pod_context_mismatch_errors_total",
@@ -49,6 +53,7 @@ var (
 		},
 		[]string{"access_mode"},
 	)
+	// seLinuxPodContextMismatchWarnings 统计上述上下文不一致但暂被忽略的警告数。
 	seLinuxPodContextMismatchWarnings = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Name:           "volume_manager_selinux_pod_context_mismatch_warnings_total",
@@ -57,6 +62,7 @@ var (
 		},
 		[]string{"access_mode"},
 	)
+	// seLinuxVolumeContextMismatchErrors 统计卷已按不同 SELinux 上下文挂载的错误数。
 	seLinuxVolumeContextMismatchErrors = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Name:           "volume_manager_selinux_volume_context_mismatch_errors_total",
@@ -65,6 +71,7 @@ var (
 		},
 		[]string{"volume_plugin", "access_mode"},
 	)
+	// seLinuxVolumeContextMismatchWarnings 统计上述卷上下文不一致但暂被忽略的警告数。
 	seLinuxVolumeContextMismatchWarnings = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Name:           "volume_manager_selinux_volume_context_mismatch_warnings_total",
@@ -73,6 +80,7 @@ var (
 		},
 		[]string{"volume_plugin", "access_mode"},
 	)
+	// seLinuxVolumesAdmitted 统计 SELinux 上下文正常、可使用 mount -o context 挂载的卷数。
 	seLinuxVolumesAdmitted = compbasemetrics.NewGaugeVec(
 		&compbasemetrics.GaugeOpts{
 			Name:           "volume_manager_selinux_volumes_admitted_total",
@@ -82,9 +90,11 @@ var (
 		[]string{"volume_plugin", "access_mode"},
 	)
 
+	// registerMetrics 保证指标只注册一次。
 	registerMetrics sync.Once
 )
 
+// registerSELinuxMetrics 把 SELinux 相关指标注册到 legacy registry。
 func registerSELinuxMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(seLinuxContainerContextErrors)

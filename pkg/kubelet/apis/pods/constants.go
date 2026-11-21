@@ -17,10 +17,12 @@ limitations under the License.
 package pods
 
 const (
+	// Resource 是 pods API 的 HTTP 资源路径。
 	Resource = "/pods"
-	Socket   = "pods-api"
+	// Socket 是 pods API 使用的 unix socket 名称。
+	Socket = "pods-api"
 
-	// Duplicated from PodResources API
+	// 以下限流参数与 PodResources API 保持一致（复制而来）。
 	DefaultQPS         = 100
 	DefaultBurstTokens = 10
 )

@@ -23,8 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// Pod returns a string representing a pod in a consistent human readable format,
-// with pod UID as part of the string.
+// Pod 以一致的、便于阅读的格式返回 Pod 字符串表示，其中包含 Pod UID。
+// pod 为 nil 时返回 "<nil>"。
 func Pod(pod *v1.Pod) string {
 	if pod == nil {
 		return "<nil>"
@@ -32,10 +32,9 @@ func Pod(pod *v1.Pod) string {
 	return PodDesc(pod.Name, pod.Namespace, pod.UID)
 }
 
-// PodDesc returns a string representing a pod in a consistent human readable format,
-// with pod UID as part of the string.
+// PodDesc 以一致的、便于阅读的格式返回 Pod 字符串表示，其中包含 Pod UID。
 func PodDesc(podName, podNamespace string, podUID types.UID) string {
-	// Use underscore as the delimiter because it is not allowed in pod name
-	// (DNS subdomain format), while allowed in the container name format.
+	// 使用下划线作分隔符：Pod 名（DNS 子域格式）不允许下划线，而容器名格式允许，
+	// 因此可以保证结果无歧义。
 	return fmt.Sprintf("%s_%s(%s)", podName, podNamespace, podUID)
 }

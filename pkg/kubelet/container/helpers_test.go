@@ -35,6 +35,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestEnvVarsToMap 校验 envVarsToMap 按名称正确建立环境变量映射。
 func TestEnvVarsToMap(t *testing.T) {
 	vars := []EnvVar{
 		{
@@ -62,6 +63,8 @@ func TestEnvVarsToMap(t *testing.T) {
 	}
 }
 
+// TestExpandCommandAndArgs 校验 ExpandContainerCommandAndArgs 能对 command 与 args
+// 中的 $(VAR) 引用做环境变量展开，覆盖仅 command、仅 args 与两者同时展开的场景。
 func TestExpandCommandAndArgs(t *testing.T) {
 	cases := []struct {
 		name            string
@@ -147,6 +150,8 @@ func TestExpandCommandAndArgs(t *testing.T) {
 	}
 }
 
+// TestExpandVolumeMountsWithSubpath 校验 ExpandContainerVolumeMounts 对 SubPathExpr
+// 的展开行为，包括无变量、缺变量、空变量值、嵌套引用等边界情况。
 func TestExpandVolumeMountsWithSubpath(t *testing.T) {
 	cases := []struct {
 		name              string
@@ -316,7 +321,7 @@ func TestExpandVolumeMountsWithSubpath(t *testing.T) {
 			t.Errorf("%v: unexpected validation failure of subpath; expected %v, got %v", tc.name, e, a)
 		}
 		if !ok {
-			// if ExpandContainerVolumeMounts returns an error, we don't care what the actualSubPath value is
+			// 若 ExpandContainerVolumeMounts 返回错误，则不必关心 actualSubPath 的值
 			continue
 		}
 		if e, a := tc.expectedSubPath, actualSubPath; !reflect.DeepEqual(e, a) {
@@ -329,6 +334,8 @@ func TestExpandVolumeMountsWithSubpath(t *testing.T) {
 
 }
 
+// TestGetContainerSpec 校验 GetContainerSpec 能从普通容器、init 容器和临时容器中
+// 按名称找到对应的容器 spec。
 func TestGetContainerSpec(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
@@ -396,6 +403,8 @@ func TestGetContainerSpec(t *testing.T) {
 	}
 }
 
+// TestShouldContainerBeRestarted 校验在不同重启策略下 ShouldContainerBeRestarted
+// 的判定结果，并验证已删除 pod 的容器一律不再重启。
 func TestShouldContainerBeRestarted(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	pod := &v1.Pod{
@@ -455,7 +464,7 @@ func TestShouldContainerBeRestarted(t *testing.T) {
 		v1.RestartPolicyAlways,
 	}
 
-	// test policies
+	// 验证各重启策略下的预期结果
 	expected := map[string][]bool{
 		"no-history": {true, true, true},
 		"alive":      {false, false, false},
@@ -475,7 +484,7 @@ func TestShouldContainerBeRestarted(t *testing.T) {
 		}
 	}
 
-	// test deleted pod
+	// 验证已删除的 pod
 	pod.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	expected = map[string][]bool{
 		"no-history": {false, false, false},
@@ -497,6 +506,8 @@ func TestShouldContainerBeRestarted(t *testing.T) {
 	}
 }
 
+// TestHasPrivilegedContainer 校验 HasPrivilegedContainer 对普通容器与 init 容器
+// 中 privileged 标志的识别。
 func TestHasPrivilegedContainer(t *testing.T) {
 	tests := map[string]struct {
 		securityContext *v1.SecurityContext
@@ -533,7 +544,7 @@ func TestHasPrivilegedContainer(t *testing.T) {
 			t.Errorf("%s expected %t but got %t", k, v.expected, actual)
 		}
 	}
-	// Test init containers as well.
+	// 同时验证 init 容器。
 	for k, v := range tests {
 		pod := &v1.Pod{
 			Spec: v1.PodSpec{
@@ -549,6 +560,8 @@ func TestHasPrivilegedContainer(t *testing.T) {
 	}
 }
 
+// TestMakePortMappings 校验 MakePortMappings 生成端口映射时的去重规则：
+// 同名端口忽略、不同地址族保留、相同容器端口与主机端口视为重复。
 func TestMakePortMappings(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	port := func(name string, protocol v1.Protocol, containerPort, hostPort int32, ip string) v1.ContainerPort {
@@ -580,11 +593,11 @@ func TestMakePortMappings(t *testing.T) {
 					port("", v1.ProtocolTCP, 80, 8080, "127.0.0.1"),
 					port("", v1.ProtocolTCP, 443, 4343, "192.168.0.1"),
 					port("foo", v1.ProtocolUDP, 555, 5555, ""),
-					// Duplicated, should be ignored.
+					// 重复项，应被忽略。
 					port("foo", v1.ProtocolUDP, 888, 8888, ""),
-					// Duplicated with different address family, shouldn't be ignored
+					// 地址族不同的重复项，不应被忽略
 					port("", v1.ProtocolTCP, 80, 8080, "::"),
-					// No address family specified
+					// 未指定地址族
 					port("", v1.ProtocolTCP, 1234, 5678, ""),
 				},
 			},
@@ -597,7 +610,7 @@ func TestMakePortMappings(t *testing.T) {
 			},
 		},
 		{
-			// The same container port can be mapped to different host ports
+			// 同一个容器端口可以映射到不同的主机端口
 			&v1.Container{
 				Name: "fooContainer",
 				Ports: []v1.ContainerPort{
@@ -611,7 +624,7 @@ func TestMakePortMappings(t *testing.T) {
 			},
 		},
 		{
-			// The same container port AND same container host is not OK
+			// 容器端口与主机端口都相同时不允许
 			&v1.Container{
 				Name: "fooContainer",
 				Ports: []v1.ContainerPort{
@@ -624,7 +637,7 @@ func TestMakePortMappings(t *testing.T) {
 			},
 		},
 		{
-			// multihomed nodes - multiple IP scenario
+			// 多网卡节点 —— 多 IP 场景
 			&v1.Container{
 				Name: "fooContainer",
 				Ports: []v1.ContainerPort{
@@ -645,6 +658,8 @@ func TestMakePortMappings(t *testing.T) {
 	}
 }
 
+// TestHashContainer 校验 HashContainer 对固定输入产生稳定的哈希值 —— 该值一旦变化
+// 会导致已有容器被重建，因此不能被随意修改。
 func TestHashContainer(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -679,6 +694,8 @@ func TestHashContainer(t *testing.T) {
 	}
 }
 
+// TestShouldRecordEvent 校验 shouldRecordEvent 过滤隐式必需容器事件的逻辑，
+// 并验证 typed nil 不会引发 panic。
 func TestShouldRecordEvent(t *testing.T) {
 	var innerEventRecorder = &innerEventRecorder{
 		recorder: nil,
@@ -702,6 +719,8 @@ func TestShouldRecordEvent(t *testing.T) {
 	assert.False(t, actual, "should not panic if the typed nil was used, see https://github.com/kubernetes/kubernetes/issues/95552")
 }
 
+// TestHasWindowsHostProcessContainer 校验 HasWindowsHostProcessContainer 在 pod 级与
+// 容器级 HostProcess 设置组合下的判定结果。
 func TestHasWindowsHostProcessContainer(t *testing.T) {
 	trueVar := true
 	falseVar := false
@@ -915,6 +934,8 @@ func TestHasWindowsHostProcessContainer(t *testing.T) {
 	}
 }
 
+// TestHashContainerWithoutResources 校验 HashContainer 在忽略资源与 resize 策略时
+// 对同一 pod 不同资源组合产生相同哈希，且不修改原始容器对象。
 func TestHashContainerWithoutResources(t *testing.T) {
 	cpu100m := resource.MustParse("100m")
 	cpu200m := resource.MustParse("200m")
@@ -925,6 +946,7 @@ func TestHashContainerWithoutResources(t *testing.T) {
 	cpuPolicyRestartRequired := v1.ContainerResizePolicy{ResourceName: v1.ResourceCPU, RestartPolicy: v1.RestartContainer}
 	memPolicyRestartRequired := v1.ContainerResizePolicy{ResourceName: v1.ResourceMemory, RestartPolicy: v1.RestartContainer}
 
+	// testCase 描述容器的输入及其期望的哈希值。
 	type testCase struct {
 		name         string
 		container    *v1.Container
@@ -995,6 +1017,8 @@ func TestHashContainerWithoutResources(t *testing.T) {
 	}
 }
 
+// TestHasAnyActiveRegularContainerStarted 校验 HasAnyActiveRegularContainerStarted 能
+// 区分初始化中、已初始化、sandbox 重建等状态下是否存在活动普通容器。
 func TestHasAnyActiveRegularContainerStarted(t *testing.T) {
 	testCases := []struct {
 		desc      string
@@ -1134,6 +1158,8 @@ func TestHasAnyActiveRegularContainerStarted(t *testing.T) {
 	}
 }
 
+// TestExpandContainerCommandOnlyStatic 校验仅静态环境变量展开：
+// 缺失变量保持原样，不被替换。
 func TestExpandContainerCommandOnlyStatic(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -1174,40 +1200,46 @@ func TestExpandContainerCommandOnlyStatic(t *testing.T) {
 	}
 }
 
+// fakeRecorder 是记录事件内容的测试用 EventRecorder 实现。
 type fakeRecorder struct {
 	events  []string
 	fEvents []string
 	aEvents []string
 }
 
+// WithLogger 返回自身，fakeRecorder 不使用 logger。
 func (f *fakeRecorder) WithLogger(logger klog.Logger) record.EventRecorderLogger {
 	return f
 }
 
+// Event 按 "类型:原因:消息" 格式记录事件。
 func (f *fakeRecorder) Event(object runtime.Object, eventtype, reason, message string) {
 	f.events = append(f.events, eventtype+":"+reason+":"+message)
 }
 
+// Eventf 记录格式化事件（不展开参数，便于断言模板本身）。
 func (f *fakeRecorder) Eventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{}) {
 	f.fEvents = append(f.fEvents, eventtype+":"+reason+":"+messageFmt)
 }
 
+// AnnotatedEventf 记录带注解的格式化事件。
 func (f *fakeRecorder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
 	f.aEvents = append(f.aEvents, eventtype+":"+reason+":"+messageFmt)
 }
 
+// TestFilterEventRecorder 校验 FilterEventRecorder 只放行非隐式容器的相关事件。
 func TestFilterEventRecorder(t *testing.T) {
 	recorder := &fakeRecorder{}
 	filtered := FilterEventRecorder(recorder)
 
-	// record a normal event
+	// 记录一个正常事件
 	obj := &v1.ObjectReference{FieldPath: "foo"}
 	filtered.Event(obj, "Normal", "Reason", "Message")
 	filtered.Eventf(obj, "Normal", "Reason", "MessageFmt")
 	//nolint:forbidigo // Legacy usage
 	filtered.AnnotatedEventf(obj, map[string]string{"a": "b"}, "Normal", "Reason", "MessageFmt")
 
-	// don't record events for implicit container
+	// 隐式容器的事件不应被记录
 	implicit := &v1.ObjectReference{FieldPath: "implicitly required container foo"}
 	filtered.Event(implicit, "Normal", "Reason", "Message")
 	filtered.Eventf(implicit, "Normal", "Reason", "MessageFmt")
@@ -1219,6 +1251,7 @@ func TestFilterEventRecorder(t *testing.T) {
 	assert.Len(t, recorder.aEvents, 1, "Expected only one event of each type to be recorded, got aEvents: %v", recorder.aEvents)
 }
 
+// TestIsHostNetworkPod 校验 IsHostNetworkPod 能正确识别 HostNetwork 设置。
 func TestIsHostNetworkPod(t *testing.T) {
 	pod := &v1.Pod{Spec: v1.PodSpec{HostNetwork: true}}
 	assert.True(t, IsHostNetworkPod(pod), "expected true for HostNetwork pod")
@@ -1227,6 +1260,8 @@ func TestIsHostNetworkPod(t *testing.T) {
 	assert.False(t, IsHostNetworkPod(pod), "expected false for non-HostNetwork pod")
 }
 
+// TestConvertPodStatusToRunningPod 校验 ConvertPodStatusToRunningPod 只保留运行中的
+// 容器，并把 sandbox 状态映射为容器状态。
 func TestConvertPodStatusToRunningPod(t *testing.T) {
 	podStatus := &PodStatus{
 		ID:        "poduid",
@@ -1275,6 +1310,7 @@ func TestConvertPodStatusToRunningPod(t *testing.T) {
 	}
 }
 
+// TestSandboxToContainerState 校验 sandbox 状态到容器状态的映射，包括未知值。
 func TestSandboxToContainerState(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -1293,6 +1329,8 @@ func TestSandboxToContainerState(t *testing.T) {
 	}
 }
 
+// TestAllContainersAreWindowsHostProcess 校验 AllContainersAreWindowsHostProcess
+// 仅在全部容器均为 HostProcess 时返回 true。
 func TestAllContainersAreWindowsHostProcess(t *testing.T) {
 	trueVar := true
 	falseVar := false
@@ -1360,7 +1398,7 @@ func TestAllContainersAreWindowsHostProcess(t *testing.T) {
 			podSpec: &v1.PodSpec{
 				Containers: []v1.Container{},
 			},
-			expectedResult: true, // by definition true ?
+			expectedResult: true, // 按定义即为 true
 		},
 	}
 
@@ -1374,6 +1412,8 @@ func TestAllContainersAreWindowsHostProcess(t *testing.T) {
 	}
 }
 
+// TestHasAnyRegularContainerStarted 校验 HasAnyRegularContainerStarted 只统计普通容器
+// （不含 init 与临时容器），且已终止的普通容器也算已启动。
 func TestHasAnyRegularContainerStarted(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -1525,6 +1565,8 @@ func TestHasAnyRegularContainerStarted(t *testing.T) {
 	}
 }
 
+// TestShouldAllContainersRestart 校验 ShouldAllContainersRestart 在 pod 条件标记、
+// 退出码匹配重启规则等情形下的判定。
 func TestShouldAllContainersRestart(t *testing.T) {
 	restartPolicyNever := v1.ContainerRestartPolicyNever
 	restartPolicyAlways := v1.ContainerRestartPolicyAlways

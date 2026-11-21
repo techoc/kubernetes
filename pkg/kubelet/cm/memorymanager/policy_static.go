@@ -42,38 +42,38 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 )
 
+// PolicyTypeStatic 是静态内存管理策略的类型标识。
 const PolicyTypeStatic policyType = "Static"
 
+// systemReservedMemory 按 NUMA 节点记录为系统预留的内存量。
 type systemReservedMemory map[int]map[v1.ResourceName]uint64
+
+// reusableMemory 按 Pod UID -> NUMA 亲和性字符串 -> 资源名记录 init 容器可复用的内存。
 type reusableMemory map[string]map[string]map[v1.ResourceName]uint64
 
-// staticPolicy is implementation of the policy interface for the static policy
+// staticPolicy 是 policy 接口的静态策略实现。
 type staticPolicy struct {
-	// machineInfo contains machine memory related information
+	// machineInfo 保存机器内存相关信息。
 	machineInfo *cadvisorapi.MachineInfo
-	// reserved contains memory that reserved for kube
+	// systemReserved 保存为 kube 预留的内存。
 	systemReserved systemReservedMemory
-	// topology manager reference to get container Topology affinity
+	// affinity 是拓扑管理器引用，用于获取容器的拓扑亲和性。
 	affinity topologymanager.Store
-	// initContainersReusableMemory contains the memory allocated for init
-	// containers that can be reused.
-	// Note that the restartable init container memory is not included here,
-	// because it is not reusable.
+	// initContainersReusableMemory 保存 init 容器已分配、可被后续容器复用的内存。
+	// 可重启 init 容器的内存不计入此处，因为它不可复用。
 	initContainersReusableMemory reusableMemory
-	// skipExtend, when true, disables extending the Topology Manager hint to
-	// additional NUMA nodes even when the hint does not, by itself, satisfy the
-	// container's memory request. The Linux static policy always leaves it false.
-	// It is set per container by the Windows BestEffort policy (see
-	// policy_best_effort.go) when the container follows the CPU manager's NUMA
-	// decision: Windows has no cpuset.mems, so memory placement follows CPU
-	// affinity and the hint must not be widened beyond the CPU manager's
-	// exclusive-CPU nodes.
+	// skipExtend 为 true 时，即使提示本身不满足容器的内存请求，也不把
+	// 拓扑管理器提示扩展到额外的 NUMA 节点。Linux 静态策略始终保持 false。
+	// Windows BestEffort 策略会按容器设置它（见 policy_best_effort.go），
+	// 让内存放置跟随 CPU 管理器的 NUMA 决策：Windows 没有 cpuset.mems，
+	// 因此提示不能扩展到 CPU 管理器独占 CPU 的节点之外。
 	skipExtend bool
 }
 
+// 编译期断言 staticPolicy 实现了 Policy 接口。
 var _ Policy = &staticPolicy{}
 
-// NewPolicyStatic returns new static policy instance
+// NewPolicyStatic 返回新的静态策略实例。
 func NewPolicyStatic(logger klog.Logger, machineInfo *cadvisorapi.MachineInfo, reserved systemReservedMemory, affinity topologymanager.Store) (Policy, error) {
 	var totalSystemReserved uint64
 	for _, node := range reserved {
@@ -83,7 +83,7 @@ func NewPolicyStatic(logger klog.Logger, machineInfo *cadvisorapi.MachineInfo, r
 		totalSystemReserved += node[v1.ResourceMemory]
 	}
 
-	// check if we have some reserved memory for the system
+	// 静态策略按预留量切分可分配内存，没有系统预留就无法安全分配。
 	if totalSystemReserved <= 0 {
 		return nil, fmt.Errorf("[memorymanager] you should specify the system reserved memory")
 	}
@@ -96,10 +96,12 @@ func NewPolicyStatic(logger klog.Logger, machineInfo *cadvisorapi.MachineInfo, r
 	}, nil
 }
 
+// Name 返回策略名称。
 func (p *staticPolicy) Name() string {
 	return string(PolicyTypeStatic)
 }
 
+// Start 在 kubelet 启动时校验持久化状态是否仍与当前机器状态一致。
 func (p *staticPolicy) Start(logger klog.Logger, s state.State) error {
 	if err := p.validateState(logger, s); err != nil {
 		logger.Error(err, "Invalid state, please drain node and remove policy state file")
@@ -108,12 +110,9 @@ func (p *staticPolicy) Start(logger klog.Logger, s state.State) error {
 	return nil
 }
 
-// validatePodScopeResources checks for the "empty shared pool" scenario. This
-// occurs when the sum of exclusive container memory requests consumes the
-// entire pod-level budget, leaving no memory for containers that require a
-// shared pool. Such a configuration is invalid because it would lead to
-// containers in the shared pool having no memory allocated, causing them to
-// fail.
+// validatePodScopeResources 检查"共享池为空"的情况：当所有独占容器的内存请求
+// 之和耗尽整个 Pod 级预算时，需要共享池的容器将分不到任何内存并因此启动失败，
+// 这种配置必须被拒绝。
 func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod) error {
 	podTotalMemory, err := getPodRequestedResources(logger, pod)
 	if err != nil {
@@ -121,12 +120,11 @@ func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod
 	}
 
 	hasSharedLongRunningContainers := false
-	// Sum memory requests for all containers that run for the full pod lifetime
-	// (main containers and restartable init containers) to determine the
-	// total exclusive memory usage that might impact the shared pool.
+	// 汇总所有生命周期与 Pod 等长的容器（主容器和可重启 init 容器）的内存请求，
+	// 以判断可能挤占共享池的独占内存总量。
 	sumOfLongRunningExclusiveMemory := make(map[v1.ResourceName]uint64)
 
-	// Check for empty shared pool for standard init containers.
+	// 检查普通 init 容器是否还有共享池可用。
 	for _, container := range pod.Spec.InitContainers {
 		containerReqs, err := getContainerRequestedResources(logger, pod, &container)
 		if err != nil {
@@ -135,9 +133,8 @@ func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod
 
 		if !podutil.IsRestartableInitContainer(&container) {
 			if len(containerReqs) == 0 {
-				// This check ensures that if there are any standard init containers that need a
-				// shared pool, that pool is not empty. An empty pool would occur if the pod
-				// budget is fully consumed by sidecars.
+				// 若存在需要共享池的普通 init 容器，就必须确保该池非空；
+				// 当 Pod 预算已被 sidecar 占满时池会为空。
 				for resourceName, poolSize := range podTotalMemory {
 					if sumOfLongRunningExclusiveMemory[resourceName] >= poolSize {
 						return fmt.Errorf("pod rejected, pod has shared init containers but no %s available for them", resourceName)
@@ -145,7 +142,7 @@ func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod
 				}
 			}
 		} else {
-			// If there are restartable init containers, keep track for the empty shared pool check.
+			// 存在可重启 init 容器时，需记录其资源以参与共享池为空的判断。
 			if len(containerReqs) == 0 {
 				hasSharedLongRunningContainers = true
 			} else {
@@ -156,7 +153,7 @@ func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod
 		}
 	}
 
-	// Check for empty shared pool for concurrently running containers (app and restartable init containers).
+	// 检查并发运行的容器（应用容器和可重启 init 容器）是否还有共享池可用。
 	for _, container := range pod.Spec.Containers {
 		containerReqs, err := getContainerRequestedResources(logger, pod, &container)
 		if err != nil {
@@ -172,9 +169,8 @@ func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod
 		}
 	}
 
-	// This check ensures that if there are any standard containers that need a shared
-	// pool, that pool is not empty. An empty pool would occur if the pod budget is
-	// fully consumed by sidecars and main containers with exclusive resources.
+	// 若存在需要共享池的普通容器，则确保该池非空；
+	// 当 sidecar 和带独占资源的主容器耗尽 Pod 预算时池会为空。
 	if hasSharedLongRunningContainers {
 		for resourceName, totalPodResource := range podTotalMemory {
 			if sumOfLongRunningExclusiveMemory[resourceName] >= totalPodResource {
@@ -186,10 +182,9 @@ func (p *staticPolicy) validatePodScopeResources(logger klog.Logger, pod *v1.Pod
 	return nil
 }
 
-// AllocatePod is the entry point for pod-level resource allocation.
-// It's called once per pod by the Topology Manager's pod-scope admit handler.
-// The logic here allocates a single NUMA-aligned "bubble" of memory for the
-// entire pod. All containers within the pod will share this NUMA binding.
+// AllocatePod 是 Pod 级资源分配的入口。
+// 拓扑管理器的 pod 作用域准入处理器对每个 Pod 调用一次。
+// 这里为整个 Pod 分配一块 NUMA 对齐的内存"气泡"，Pod 内所有容器共享这一 NUMA 绑定。
 func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Pod, operation lifecycle.Operation) (rerr error) {
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod), "operation", operation)
 	logger.V(4).Info("AllocatePod called for pod-level managed pod")
@@ -203,7 +198,7 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 		return nil
 	}
 
-	// 1. Calculate memory resources.
+	// 1. 计算内存资源。
 	podTotalMemory, err := getPodRequestedResources(logger, pod)
 	if err != nil {
 		logger.Error(err, "Failed to get pod requested resources", "podUID", podUID)
@@ -219,18 +214,18 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 		}
 	}()
 
-	// 2. Validate for the "empty shared pool" case.
-	// Even though this is checked during hint generation, we must re-evaluate it here.
-	// If the Topology Manager is running with the "best-effort" or "none" policies,
-	// it will still admit the pod even if GetPodTopologyHints returns an empty hint list.
-	// This ensures we explicitly reject the pod during allocation to prevent Kubelet
-	// from attempting to create invalid cgroups (e.g., an empty cpuset.mems) for shared containers.
+	// 2. 校验"共享池为空"的情况。
+	// 即使提示生成阶段已检查过，这里也必须重新评估：当拓扑管理器运行在
+	// "best-effort" 或 "none" 策略下时，即使 GetPodTopologyHints 返回空提示列表
+	// 也仍会准入该 Pod。这里显式拒绝，避免 kubelet 为共享容器创建非法 cgroup
+	// （例如空的 cpuset.mems）。
 	if err := p.validatePodScopeResources(logger, pod); err != nil {
 		return admission.NewEmptyPodSharedPoolError(err)
 	}
 
-	// 3. Handle hints and NUMA alignment.
+	// 3. 处理提示与 NUMA 对齐。
 	machineState := s.GetMachineState()
+	// 所有容器共享同一份 Pod 级提示，取第一个容器的名称即可。
 	bestHint := p.affinity.GetAffinity(logger, podUID, append(pod.Spec.InitContainers, pod.Spec.Containers...)[0].Name)
 	if bestHint.NUMANodeAffinity == nil {
 		defaultHint, err := p.getDefaultHint(machineState, pod, podTotalMemory)
@@ -260,11 +255,11 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 
 	maskBits := bestHint.NUMANodeAffinity.GetBits()
 
-	// 4. Partition the pod's memory allocation, handling init container reuse correctly.
+	// 4. 切分 Pod 的内存分配，并正确处理 init 容器的复用。
 	exclusiveMemory := make(map[string][]state.Block)
 	sidecarMemory := make(map[v1.ResourceName]uint64)
 
-	// First, iterate through all init containers and allocate their memory.
+	// 先遍历所有 init 容器并分配其内存。
 	for _, c := range pod.Spec.InitContainers {
 		reqs, err := getContainerRequestedResources(logger, pod, &c)
 		if err != nil {
@@ -273,21 +268,19 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 
 		metrics.MemoryManagerPinningRequestTotal.Inc()
 
-		// The pool available for this init container is the entire pod allocation
-		// minus what's already taken by sidecars.
+		// 该 init 容器可用的池是整个 Pod 分配量减去 sidecar 已占用的部分。
 		runnablePool := make(map[v1.ResourceName]uint64)
 		for resourceName, total := range podTotalMemory {
 			runnablePool[resourceName] = total - sidecarMemory[resourceName]
 		}
 
 		if len(reqs) == 0 {
-			// Restartable init containers will access the main pod shared pool.
+			// 可重启 init 容器使用 Pod 的主共享池。
 			if podutil.IsRestartableInitContainer(&c) {
 				continue
 			}
 
-			// Non restartable init containers will have access to the whole pod pool
-			// amount minus the sidecar exclusive memory up to that point.
+			// 不可重启的 init 容器可使用整个 Pod 池减去此刻之前 sidecar 的独占内存。
 			blocks := []state.Block{}
 			for resourceName, req := range runnablePool {
 				if req > 0 {
@@ -303,7 +296,7 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 			continue
 		}
 
-		// Allocate blocks
+		// 分配内存块。
 		blocks := []state.Block{}
 		for resourceName, req := range reqs {
 			if req > 0 {
@@ -317,7 +310,7 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 		exclusiveMemory[c.Name] = blocks
 		metrics.ResourceManagerContainerAssignments.WithLabelValues(metrics.ResourceManagerMemory, metrics.ResourceManagerExclusivePod).Inc()
 
-		// If it's a restartable sidecar, its memory is permanently consumed from the pod's budget.
+		// 可重启 sidecar 的内存会从 Pod 预算中永久占用。
 		if podutil.IsRestartableInitContainer(&c) {
 			for resourceName, req := range reqs {
 				sidecarMemory[resourceName] += req
@@ -325,28 +318,27 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 		}
 	}
 
-	// Recalculate the pool available for app containers.
-	// This is the total pod budget minus what all sidecars are using.
+	// 重新计算应用容器可用的池：Pod 总预算减去所有 sidecar 占用的部分。
 	appContainerPool := make(map[v1.ResourceName]uint64)
 	for resourceName, total := range podTotalMemory {
 		appContainerPool[resourceName] = total - sidecarMemory[resourceName]
 	}
 
-	// Second, iterate through regular containers, allocating from the remaining pool.
+	// 再遍历普通容器，从剩余池中分配。
 	for _, c := range pod.Spec.Containers {
 		reqs, err := getContainerRequestedResources(logger, pod, &c)
 		if err != nil {
-			// This should not happen, as we have already validated the pod's resources.
+			// 理论上不会发生，Pod 资源此前已校验过。
 			return err
 		}
 
-		// A container with no memory requests will be part of the shared pool.
+		// 没有内存请求的容器属于共享池。
 		if len(reqs) == 0 {
 			continue
 		}
 		metrics.MemoryManagerPinningRequestTotal.Inc()
 
-		// Allocate blocks and consume from the pool
+		// 分配内存块并从池中扣减。
 		blocks := []state.Block{}
 		for resourceName, req := range reqs {
 			if req > 0 {
@@ -362,7 +354,7 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 		metrics.ResourceManagerContainerAssignments.WithLabelValues(metrics.ResourceManagerMemory, metrics.ResourceManagerExclusivePod).Inc()
 	}
 
-	// The final shared pool is what remains after all exclusive allocations.
+	// 最终共享池是所有独占分配之后剩余的部分。
 	podSharedPoolBlocks := []state.Block{}
 	for resourceName, val := range appContainerPool {
 		if val > 0 {
@@ -384,13 +376,13 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 	}
 	s.SetPodMemoryBlocks(podUID, podAllocation)
 
-	// 5. Now that partitioning is successful, update the global machine state.
+	// 5. 切分成功后，更新全局机器状态。
 	for resourceName, requestedSize := range podTotalMemory {
 		p.updateMachineState(machineState, maskBits, resourceName, requestedSize)
 	}
 	logger.V(4).Info("Partitioned pod-level memory allocation", "exclusiveMemory", podMemoryAllocationToString(exclusiveMemory), "podSharedPool", memoryBlocksToString(podSharedPoolBlocks))
 
-	// 6. Save all container assignments to the state.
+	// 6. 将所有容器分配结果保存到状态中。
 	for _, c := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
 		if blocks, isExclusive := exclusiveMemory[c.Name]; isExclusive {
 			s.SetMemoryBlocks(podUID, c.Name, blocks)
@@ -406,6 +398,7 @@ func (p *staticPolicy) AllocatePod(logger klog.Logger, s state.State, pod *v1.Po
 	return nil
 }
 
+// podMemoryAllocationToString 把容器到内存块的映射格式化为紧凑的日志字符串。
 func podMemoryAllocationToString(alloc map[string][]state.Block) string {
 	if len(alloc) == 0 {
 		return ""
@@ -414,28 +407,29 @@ func podMemoryAllocationToString(alloc map[string][]state.Block) string {
 	for name, blocks := range alloc {
 		fmt.Fprintf(&sb, ",%s=%s", name, memoryBlocksToString(blocks))
 	}
-	// if we have gone so far, it means we have at least 1 alloc, so the cut is safe
+	// 走到这里说明至少有一条分配，去掉前导逗号是安全的。
 	repr := sb.String()[1:]
 	return "<" + repr + ">"
 }
 
+// memoryBlocksToString 把内存块列表格式化为紧凑的日志字符串。
 func memoryBlocksToString(blocks []state.Block) string {
 	if len(blocks) == 0 {
 		return "[]"
 	}
 	var sb strings.Builder
 	for _, block := range blocks {
-		// Format: {Type:SizeMi @ [NUMA_Nodes]}
+		// 格式：{Type:SizeMi @ [NUMA_Nodes]}
 		fmt.Fprintf(&sb, ",{%s:%dMi @ %v}", block.Type, block.Size/(1024*1024), block.NUMAAffinity)
 	}
-	// Cut the leading comma
+	// 去掉前导逗号
 	repr := sb.String()[1:]
 	return "[" + repr + "]"
 }
 
-// Allocate call is idempotent
+// Allocate 是幂等的分配调用。
 func (p *staticPolicy) Allocate(ctx context.Context, s state.State, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) (rerr error) {
-	// allocate the memory only for guaranteed pods
+	// 只为 Guaranteed QoS 的 Pod 分配内存。
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "pod", klog.KObj(pod), "containerName", container.Name, "operation", operation)
 
 	if operation != lifecycle.AddOperation {
@@ -444,7 +438,7 @@ func (p *staticPolicy) Allocate(ctx context.Context, s state.State, pod *v1.Pod,
 	}
 
 	podUID := string(pod.UID)
-	// Allocate the memory only for guaranteed pods
+	// 只为 Guaranteed QoS 的 Pod 分配内存。
 	qos := v1qos.GetPodQOS(pod)
 	if qos != v1.PodQOSGuaranteed {
 		logger.V(5).Info("Exclusive memory allocation skipped, pod QoS is not guaranteed", "qos", qos)
@@ -466,7 +460,7 @@ func (p *staticPolicy) Allocate(ctx context.Context, s state.State, pod *v1.Pod,
 	}
 
 	logger.Info("Allocate")
-	// Container belongs in an exclusively allocated pool
+	// 容器属于独占分配池。
 	metrics.MemoryManagerPinningRequestTotal.Inc()
 	defer func() {
 		if rerr != nil {
@@ -481,14 +475,14 @@ func (p *staticPolicy) Allocate(ctx context.Context, s state.State, pod *v1.Pod,
 		return nil
 	}
 
-	// Call Topology Manager to get the aligned affinity across all hint providers.
+	// 调用拓扑管理器获取所有提示提供者对齐后的亲和性。
 	hint := p.affinity.GetAffinity(logger, podUID, container.Name)
 	logger.Info("Got topology affinity", "hint", hint)
 
 	machineState := s.GetMachineState()
 	bestHint := &hint
-	// topology manager returned the hint with NUMA affinity nil
-	// we should use the default NUMA affinity calculated the same way as for the topology manager
+	// 拓扑管理器返回的提示 NUMA 亲和性为 nil 时，
+	// 使用与拓扑管理器相同方式计算出的默认 NUMA 亲和性。
 	if hint.NUMANodeAffinity == nil {
 		defaultHint, err := p.getDefaultHint(machineState, pod, requestedResources)
 		if err != nil {
@@ -501,11 +495,10 @@ func (p *staticPolicy) Allocate(ctx context.Context, s state.State, pod *v1.Pod,
 		bestHint = defaultHint
 	}
 
-	// topology manager returns the hint that does not satisfy completely the container request
-	// we should extend this hint to the one who will satisfy the request and include the current hint,
-	// unless skipExtend is set. skipExtend is set per container by the Windows BestEffort policy when
-	// the container follows the CPU manager's NUMA decision (see policy_best_effort.go); the Linux
-	// static policy never sets it, so the hint is extended as usual.
+	// 拓扑管理器返回的提示可能无法完全满足容器请求，
+	// 此时应将其扩展为满足请求且包含当前提示的提示，除非 skipExtend 已设置。
+	// skipExtend 由 Windows BestEffort 策略按容器设置（见 policy_best_effort.go），
+	// 用于跟随 CPU 管理器的 NUMA 决策；Linux 静态策略从不设置它，提示照常扩展。
 	if !isAffinitySatisfyRequest(machineState, bestHint.NUMANodeAffinity, requestedResources) && !p.skipExtend {
 		extendedHint, err := p.extendTopologyManagerHint(machineState, pod, requestedResources, bestHint.NUMANodeAffinity)
 		if err != nil {
@@ -518,8 +511,7 @@ func (p *staticPolicy) Allocate(ctx context.Context, s state.State, pod *v1.Pod,
 		bestHint = extendedHint
 	}
 
-	// the best hint might violate the NUMA allocation rule on which
-	// NUMA node cannot have both single and cross NUMA node allocations
+	// 最佳提示可能违反 NUMA 分配规则：同一 NUMA 节点不能同时用于单节点和跨节点分配。
 	// https://kubernetes.io/blog/2021/08/11/kubernetes-1-22-feature-memory-manager-moves-to-beta/#single-vs-cross-numa-node-allocation
 	if isAffinityViolatingNUMAAllocations(machineState, bestHint.NUMANodeAffinity) {
 		return fmt.Errorf("[memorymanager] preferred hint violates NUMA node allocation")
@@ -528,7 +520,7 @@ func (p *staticPolicy) Allocate(ctx context.Context, s state.State, pod *v1.Pod,
 	var containerBlocks []state.Block
 	maskBits := bestHint.NUMANodeAffinity.GetBits()
 	for resourceName, requestedSize := range requestedResources {
-		// update memory blocks
+		// 更新内存块
 		containerBlocks = append(containerBlocks, state.Block{
 			NUMAAffinity: maskBits,
 			Size:         requestedSize,
@@ -542,7 +534,7 @@ func (p *staticPolicy) Allocate(ctx context.Context, s state.State, pod *v1.Pod,
 			requestedSize -= podReusableMemory
 		}
 
-		// Update nodes memory state
+		// 更新节点的内存状态
 		p.updateMachineState(machineState, maskBits, resourceName, requestedSize)
 		metrics.ResourceManagerAllocationsTotal.WithLabelValues(metrics.ResourceManagerMemory, metrics.ResourceManagerNode).Inc()
 	}
@@ -552,12 +544,11 @@ func (p *staticPolicy) Allocate(ctx context.Context, s state.State, pod *v1.Pod,
 	s.SetMachineState(machineState)
 	s.SetMemoryBlocks(podUID, container.Name, containerBlocks)
 
-	// update init containers memory blocks to reflect the fact that we re-used init containers memory
-	// it is possible that the size of the init container memory block will have 0 value, when all memory
-	// allocated for it was re-used
-	// we only do this so that the sum(memory_for_all_containers) == total amount of allocated memory to the pod, even
-	// though the final state here doesn't accurately reflect what was (in reality) allocated to each container
-	// TODO: we should refactor our state structs to reflect the amount of the re-used memory
+	// 更新 init 容器的内存块，以反映其内存已被复用的事实。
+	// 当 init 容器的内存全部被复用时，其内存块大小可能为 0。
+	// 这样做的唯一目的是保证 sum(所有容器的内存) == 分配给 Pod 的内存总量，
+	// 尽管最终状态并不精确反映每个容器实际分配到的内存。
+	// TODO: 应重构状态结构以反映被复用的内存量
 	p.updateInitContainersMemoryBlocks(logger, s, pod, container, containerBlocks)
 	metrics.ResourceManagerContainerAssignments.WithLabelValues(metrics.ResourceManagerMemory, metrics.ResourceManagerExclusiveNode).Inc()
 
@@ -565,23 +556,25 @@ func (p *staticPolicy) Allocate(ctx context.Context, s state.State, pod *v1.Pod,
 	return nil
 }
 
+// updateMachineState 在给定 NUMA 亲和性覆盖的节点上按顺序扣减内存，
+// 一个节点不够时自动向掩码内后续节点溢出。
 func (p *staticPolicy) updateMachineState(machineState state.NUMANodeMap, numaAffinity []int, resourceName v1.ResourceName, requestedSize uint64) {
 	for _, nodeID := range numaAffinity {
 		machineState[nodeID].NumberOfAssignments++
 		machineState[nodeID].Cells = numaAffinity
 
-		// we need to continue to update all affinity mask nodes
+		// 仍需遍历亲和掩码内的所有节点以更新分配计数
 		if requestedSize == 0 {
 			continue
 		}
 
-		// update the node memory state
+		// 更新节点的内存状态
 		nodeResourceMemoryState := machineState[nodeID].MemoryMap[resourceName]
 		if nodeResourceMemoryState.Free <= 0 {
 			continue
 		}
 
-		// the node has enough memory to satisfy the request
+		// 节点内存足以满足请求
 		if nodeResourceMemoryState.Free >= requestedSize {
 			nodeResourceMemoryState.Reserved += requestedSize
 			nodeResourceMemoryState.Free -= requestedSize
@@ -589,13 +582,14 @@ func (p *staticPolicy) updateMachineState(machineState state.NUMANodeMap, numaAf
 			continue
 		}
 
-		// the node does not have enough memory, use the node remaining memory and move to the next node
+		// 节点内存不足，用尽该节点剩余内存后转向下一个节点
 		requestedSize -= nodeResourceMemoryState.Free
 		nodeResourceMemoryState.Reserved += nodeResourceMemoryState.Free
 		nodeResourceMemoryState.Free = 0
 	}
 }
 
+// getPodReusableMemory 返回 Pod 在指定 NUMA 亲和性上某资源可复用的内存量。
 func (p *staticPolicy) getPodReusableMemory(pod *v1.Pod, numaAffinity bitmask.BitMask, resourceName v1.ResourceName) uint64 {
 	podReusableMemory, ok := p.initContainersReusableMemory[string(pod.UID)]
 	if !ok {
@@ -610,23 +604,24 @@ func (p *staticPolicy) getPodReusableMemory(pod *v1.Pod, numaAffinity bitmask.Bi
 	return numaReusableMemory[resourceName]
 }
 
-// RemoveContainer call is idempotent
+// RemoveContainer 是幂等的移除调用。
 func (p *staticPolicy) RemoveContainer(logger klog.Logger, s state.State, podUID string, containerName string) {
 	logger = klog.LoggerWithValues(logger, "podUID", podUID, "containerName", containerName)
 	logger.Info("RemoveContainer", "podUID", podUID, "containerName", containerName)
 
-	// Check if this pod is managed with pod-level memory.
+	// 检查该 Pod 是否按 Pod 级内存管理。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) {
 		if podMemory := s.GetPodMemoryBlocks(podUID); podMemory != nil {
 			s.Delete(podUID, containerName)
-			// If this was the last container for the pod, then release the entire pod-level memory.
+			// 若这是该 Pod 的最后一个容器，则释放整个 Pod 级内存。
 			if len(s.GetMemoryAssignments()[podUID]) == 0 {
 				p.releaseMemory(s, podMemory)
-				s.DeletePod(podUID) // Clean up all state for the pod.
+				// 容器已全部移除，连同 Pod 级状态一并清理，避免残留占用。
+				s.DeletePod(podUID)
 				logger.Info("Released pod-level memory")
 			}
-			// If other containers still exist, do not release any memory yet.
-			// The pod-level memory will be released when the last container is removed.
+			// 若还有其他容器存在则不释放内存，
+			// Pod 级内存会在最后一个容器移除时释放。
 			return
 		}
 	}
@@ -641,33 +636,33 @@ func (p *staticPolicy) RemoveContainer(logger klog.Logger, s state.State, podUID
 	logger.Info("Released container-level memory")
 }
 
+// releaseMemory 把内存块归还给机器状态，恢复其 free/reserved 计数。
 func (p *staticPolicy) releaseMemory(s state.State, blocks []state.Block) {
-	// Mutate machine memory state to update free and reserved memory
+	// 修改机器内存状态，更新空闲和预留内存
 	machineState := s.GetMachineState()
 	for _, b := range blocks {
 		releasedSize := b.Size
 		for _, nodeID := range b.NUMAAffinity {
 			machineState[nodeID].NumberOfAssignments--
 
-			// once we do not have any memory allocations on this node, clear node groups
+			// 该节点上不再有任何分配时，清除节点分组
 			if machineState[nodeID].NumberOfAssignments == 0 {
 				machineState[nodeID].Cells = []int{nodeID}
 			}
 
-			// we still need to pass over all NUMA node under the affinity mask to update them
+			// 仍需遍历亲和掩码内的所有节点以更新它们
 			if releasedSize == 0 {
 				continue
 			}
 
 			nodeResourceMemoryState := machineState[nodeID].MemoryMap[b.Type]
 
-			// if the node does not have reserved memory to free, continue to the next node
+			// 该节点没有可释放的预留内存时，转向下一个节点
 			if nodeResourceMemoryState.Reserved == 0 {
 				continue
 			}
 
-			// the reserved memory smaller than the amount of the memory that should be released
-			// release as much as possible and move to the next node
+			// 预留内存小于待释放量：尽量释放后转向下一个节点
 			if nodeResourceMemoryState.Reserved < releasedSize {
 				releasedSize -= nodeResourceMemoryState.Reserved
 				nodeResourceMemoryState.Free += nodeResourceMemoryState.Reserved
@@ -675,7 +670,7 @@ func (p *staticPolicy) releaseMemory(s state.State, blocks []state.Block) {
 				continue
 			}
 
-			// the reserved memory big enough to satisfy the released memory
+			// 预留内存足以满足待释放量
 			nodeResourceMemoryState.Free += releasedSize
 			nodeResourceMemoryState.Reserved -= releasedSize
 			releasedSize = 0
@@ -685,6 +680,8 @@ func (p *staticPolicy) releaseMemory(s state.State, blocks []state.Block) {
 	s.SetMachineState(machineState)
 }
 
+// regenerateHints 根据容器已分配的内存块重新生成拓扑提示，
+// 用于 kubelet 重启等场景下保持与既有分配一致的提示。
 func regenerateHints(logger klog.Logger, pod *v1.Pod, ctn *v1.Container, ctnBlocks []state.Block, reqRsrc map[v1.ResourceName]uint64) map[string][]topologymanager.TopologyHint {
 	hints := map[string][]topologymanager.TopologyHint{}
 	for resourceName := range reqRsrc {
@@ -722,8 +719,10 @@ func regenerateHints(logger klog.Logger, pod *v1.Pod, ctn *v1.Container, ctnBloc
 	return hints
 }
 
+// getPodRequestedResources 计算 Pod 需要的内存资源量。
+// 若设置了 Pod 级资源则直接采用；否则按 init 容器峰值与长期运行容器之和取较大值。
 func getPodRequestedResources(logger klog.Logger, pod *v1.Pod) (map[v1.ResourceName]uint64, error) {
-	// If pod-level resources are set, use them directly.
+	// 若设置了 Pod 级资源，直接使用。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		requestedResources := make(map[v1.ResourceName]uint64)
 		for resourceName, quantity := range pod.Spec.Resources.Requests {
@@ -742,9 +741,9 @@ func getPodRequestedResources(logger klog.Logger, pod *v1.Pod) (map[v1.ResourceN
 		return requestedResources, nil
 	}
 
-	// Maximun resources requested by init containers at any given time.
+	// init 容器在任意时刻请求的最大资源量。
 	reqRsrcsByInitCtrs := make(map[v1.ResourceName]uint64)
-	// Total resources requested by restartable init containers.
+	// 可重启 init 容器请求的资源总量。
 	reqRsrcsByRestartableInitCtrs := make(map[v1.ResourceName]uint64)
 	for _, ctr := range pod.Spec.InitContainers {
 		reqRsrcs, err := getContainerRequestedResources(logger, pod, &ctr)
@@ -757,8 +756,7 @@ func getPodRequestedResources(logger klog.Logger, pod *v1.Pod) (map[v1.ResourceN
 				reqRsrcsByInitCtrs[rsrcName] = uint64(0)
 			}
 
-			// See https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/753-sidecar-containers#resources-calculation-for-scheduling-and-pod-admission
-			// for the detail.
+			// 详见 https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/753-sidecar-containers#resources-calculation-for-scheduling-and-pod-admission
 			if podutil.IsRestartableInitContainer(&ctr) {
 				reqRsrcsByRestartableInitCtrs[rsrcName] += qty
 			} else if reqRsrcsByRestartableInitCtrs[rsrcName]+qty > reqRsrcsByInitCtrs[rsrcName] {
@@ -785,7 +783,7 @@ func getPodRequestedResources(logger klog.Logger, pod *v1.Pod) (map[v1.ResourceN
 
 	reqRsrcs := make(map[v1.ResourceName]uint64)
 	for rsrcName := range reqRsrcsByAppCtrs {
-		// Total resources requested by long-running containers.
+		// 长期运行容器请求的资源总量。
 		reqRsrcsByLongRunningCtrs := reqRsrcsByAppCtrs[rsrcName] + reqRsrcsByRestartableInitCtrs[rsrcName]
 		reqRsrcs[rsrcName] = reqRsrcsByLongRunningCtrs
 
@@ -796,6 +794,7 @@ func getPodRequestedResources(logger klog.Logger, pod *v1.Pod) (map[v1.ResourceN
 	return reqRsrcs, nil
 }
 
+// GetPodTopologyHints 返回整个 Pod 的拓扑提示，所有容器共用同一份提示。
 func (p *staticPolicy) GetPodTopologyHints(logger klog.Logger, s state.State, pod *v1.Pod, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint {
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod), "operation", operation)
 	if operation != lifecycle.AddOperation {
@@ -807,25 +806,22 @@ func (p *staticPolicy) GetPodTopologyHints(logger klog.Logger, s state.State, po
 		return nil
 	}
 
-	// Get a count of how much memory has been requested by Pod.
+	// 获取 Pod 请求的内存总量。
 	reqRsrcs, err := getPodRequestedResources(logger, pod)
 	if err != nil {
 		logger.Error(err, "Failed to get pod requested resources", "podUID", pod.UID)
 		return nil
 	}
 
-	// If the pod has pod-level resources but the feature gate is disabled,
-	// log it and return nil hints to admit the pod without alignment.
+	// 若 Pod 设置了 Pod 级资源但特性门控被禁用，记录日志并返回 nil 提示，
+	// 让 Pod 在不做对齐的情况下被准入。
 	if (!utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) || !utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources)) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		logger.V(3).Info("Memory Manager pod hint generation skipped, pod is using pod-level resources but the PodLevelResourceManagers feature gate is not enabled", "podUID", pod.UID)
 		return nil
 	}
 
-	// Validate that if a pod has containers that will be placed in a shared pool,
-	// there are actually memory left over for that pool after accounting for all
-	// exclusive allocations. If the sum of exclusive memory requests consumes the
-	// entire pod-level memory budget, no hints will be generated, causing the pod
-	// to be rejected by the Topology Manager.
+	// 校验：若 Pod 中有容器要放入共享池，则在扣除全部独占分配后共享池必须仍有内存。
+	// 若独占请求之和耗尽整个 Pod 级内存预算，则不生成任何提示，Pod 会被拓扑管理器拒绝。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		if err := p.validatePodScopeResources(logger, pod); err != nil {
 			logger.V(2).Info("Pod admission will fail", "error", err)
@@ -843,21 +839,19 @@ func (p *staticPolicy) GetPodTopologyHints(logger klog.Logger, s state.State, po
 
 	for _, ctn := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
 		containerBlocks := s.GetMemoryBlocks(string(pod.UID), ctn.Name)
-		// Short circuit to regenerate the same hints if there are already
-		// memory allocated for the container. This might happen after a
-		// kubelet restart, for example.
+		// 若容器已有内存分配，直接短路重新生成相同提示。
+		// 例如 kubelet 重启后会出现这种情况。
 		if containerBlocks != nil {
 			return regenerateHints(logger, pod, &ctn, containerBlocks, reqRsrcs)
 		}
 	}
 
-	// the pod topology hints calculated only once for all containers, so no need to pass re-usable state
+	// Pod 拓扑提示对所有容器只计算一次，因此无需传入可复用状态。
 	return p.calculateHints(s.GetMachineState(), pod, reqRsrcs)
 }
 
-// GetTopologyHints implements the topologymanager.HintProvider Interface
-// and is consulted to achieve NUMA aware resource alignment among this
-// and other resource controllers.
+// GetTopologyHints 实现 topologymanager.HintProvider 接口，
+// 与其他资源控制器共同协商实现 NUMA 感知的资源对齐。
 func (p *staticPolicy) GetTopologyHints(logger klog.Logger, s state.State, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint {
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod), "operation", operation)
 	if operation != lifecycle.AddOperation {
@@ -878,17 +872,16 @@ func (p *staticPolicy) GetTopologyHints(logger klog.Logger, s state.State, pod *
 		return nil
 	}
 
-	// If the pod has pod-level resources but the feature gate is disabled,
-	// log it and return nil hints to admit the pod without alignment.
+	// 若 Pod 设置了 Pod 级资源但特性门控被禁用，记录日志并返回 nil 提示，
+	// 让 Pod 在不做对齐的情况下被准入。
 	if (!utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) || !utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources)) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		logger.V(3).Info("Memory Manager pod hint generation skipped, pod is using pod-level resources but the PodLevelResourceManagers feature gate is not enabled", "podUID", pod.UID)
 		return nil
 	}
 
 	containerBlocks := s.GetMemoryBlocks(string(pod.UID), container.Name)
-	// Short circuit to regenerate the same hints if there are already
-	// memory allocated for the container. This might happen after a
-	// kubelet restart, for example.
+	// 若容器已有内存分配，直接短路重新生成相同提示。
+	// 例如 kubelet 重启后会出现这种情况。
 	if containerBlocks != nil {
 		return regenerateHints(logger, pod, container, containerBlocks, requestedResources)
 	}
@@ -896,11 +889,11 @@ func (p *staticPolicy) GetTopologyHints(logger klog.Logger, s state.State, pod *
 	return p.calculateHints(s.GetMachineState(), pod, requestedResources)
 }
 
+// getContainerRequestedResources 返回容器请求的内存与大页资源量。
 func getContainerRequestedResources(logger klog.Logger, pod *v1.Pod, container *v1.Container) (map[v1.ResourceName]uint64, error) {
 	requestedResources := map[v1.ResourceName]uint64{}
-	// For pod-level resource management, a container is only considered for exclusive
-	// memory if its request equals its limit for both the CPU and Memory. This
-	// aligns with the Guaranteed QoS requirement for container-level resources.
+	// 在 Pod 级资源管理下，只有 CPU 和内存的 request 等于 limit 的容器才参与独占内存分配，
+	// 这与容器级资源的 Guaranteed QoS 要求一致。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) && resourcehelper.IsPodLevelResourcesSet(pod) && !cmqos.IsContainerEquivalentQOSGuaranteed(container) {
 		logger.V(5).Info("Exclusive Memory allocation skipped, container is not eligible, request and limit are not equal", "pod", klog.KObj(pod), "containerName", container.Name)
 		return requestedResources, nil
@@ -920,6 +913,7 @@ func getContainerRequestedResources(logger klog.Logger, pod *v1.Pod, container *
 	return requestedResources, nil
 }
 
+// calculateHints 枚举所有 NUMA 掩码组合，为每种请求资源生成拓扑提示。
 func (p *staticPolicy) calculateHints(machineState state.NUMANodeMap, pod *v1.Pod, requestedResources map[v1.ResourceName]uint64) map[string][]topologymanager.TopologyHint {
 	var numaNodes []int
 	for n := range machineState {
@@ -927,7 +921,7 @@ func (p *staticPolicy) calculateHints(machineState state.NUMANodeMap, pod *v1.Po
 	}
 	sort.Ints(numaNodes)
 
-	// Initialize minAffinitySize to include all NUMA Cells.
+	// minAffinitySize 初始化为覆盖所有 NUMA 单元的数量。
 	minAffinitySize := len(numaNodes)
 
 	hints := map[string][]topologymanager.TopologyHint{}
@@ -937,7 +931,7 @@ func (p *staticPolicy) calculateHints(machineState state.NUMANodeMap, pod *v1.Po
 
 		totalFreeSize := map[v1.ResourceName]uint64{}
 		totalAllocatableSize := map[v1.ResourceName]uint64{}
-		// calculate total free and allocatable memory for the node mask
+		// 计算该掩码下总的空闲和可分配内存
 		for _, nodeID := range maskBits {
 			for resourceName := range requestedResources {
 				if _, ok := totalFreeSize[resourceName]; !ok {
@@ -952,39 +946,39 @@ func (p *staticPolicy) calculateHints(machineState state.NUMANodeMap, pod *v1.Po
 			}
 		}
 
-		// verify that for all memory types the node mask has enough allocatable resources
+		// 校验该掩码对所有内存类型的可分配量是否足够
 		for resourceName, requestedSize := range requestedResources {
 			if totalAllocatableSize[resourceName] < requestedSize {
 				return
 			}
 		}
 
-		// set the minimum amount of NUMA nodes that can satisfy the container resources requests
+		// 记录能满足容器资源请求的最少 NUMA 节点数
 		if mask.Count() < minAffinitySize {
 			minAffinitySize = mask.Count()
 		}
 
-		// the node already in group with another node, it can not be used for the single NUMA node allocation
+		// 该节点已与其他节点成组，不能再用于单 NUMA 节点分配
 		if singleNUMAHint && len(machineState[maskBits[0]].Cells) > 1 {
 			return
 		}
 
 		for _, nodeID := range maskBits {
-			// the node already used for the memory allocation
+			// 该节点已用于内存分配
 			if !singleNUMAHint && machineState[nodeID].NumberOfAssignments > 0 {
-				// the node used for the single NUMA memory allocation, it can not be used for the multi NUMA node allocation
+				// 节点已用于单 NUMA 内存分配，不能再用于多 NUMA 节点分配
 				if len(machineState[nodeID].Cells) == 1 {
 					return
 				}
 
-				// the node already used with different group of nodes, it can not be use with in the current hint
+				// 节点已用于不同的节点组，不能用于当前提示
 				if !areGroupsEqual(machineState[nodeID].Cells, maskBits) {
 					return
 				}
 			}
 		}
 
-		// verify that for all memory types the node mask has enough free resources
+		// 校验该掩码对所有内存类型的空闲量是否足够
 		for resourceName, requestedSize := range requestedResources {
 			podReusableMemory := p.getPodReusableMemory(pod, mask, resourceName)
 			if totalFreeSize[resourceName]+podReusableMemory < requestedSize {
@@ -992,7 +986,7 @@ func (p *staticPolicy) calculateHints(machineState state.NUMANodeMap, pod *v1.Po
 			}
 		}
 
-		// add the node mask as topology hint for all memory types
+		// 把该节点掩码作为所有内存类型的拓扑提示
 		for resourceName := range requestedResources {
 			if _, ok := hints[string(resourceName)]; !ok {
 				hints[string(resourceName)] = []topologymanager.TopologyHint{}
@@ -1004,8 +998,8 @@ func (p *staticPolicy) calculateHints(machineState state.NUMANodeMap, pod *v1.Po
 		}
 	})
 
-	// update hints preferred according to multiNUMAGroups, in case when it wasn't provided, the default
-	// behaviour to prefer the minimal amount of NUMA nodes will be used
+	// 根据 multiNUMAGroups 更新提示的 preferred 值；未提供时，
+	// 默认优先选择 NUMA 节点数最少的提示。
 	for resourceName := range requestedResources {
 		for i, hint := range hints[string(resourceName)] {
 			hints[string(resourceName)][i].Preferred = p.isHintPreferred(hint.NUMANodeAffinity.GetBits(), minAffinitySize)
@@ -1015,10 +1009,12 @@ func (p *staticPolicy) calculateHints(machineState state.NUMANodeMap, pod *v1.Po
 	return hints
 }
 
+// isHintPreferred 判断提示是否为优先提示：覆盖的 NUMA 节点数等于最小值。
 func (p *staticPolicy) isHintPreferred(maskBits []int, minAffinitySize int) bool {
 	return len(maskBits) == minAffinitySize
 }
 
+// areGroupsEqual 判断两个 NUMA 节点组是否相同（排序后逐项比较）。
 func areGroupsEqual(group1, group2 []int) bool {
 	sort.Ints(group1)
 	sort.Ints(group2)
@@ -1035,12 +1031,13 @@ func areGroupsEqual(group1, group2 []int) bool {
 	return true
 }
 
+// validateState 校验从磁盘恢复的状态与根据机器信息推导出的状态是否一致。
 func (p *staticPolicy) validateState(logger klog.Logger, s state.State) error {
 	machineState := s.GetMachineState()
 	memoryAssignments := s.GetMemoryAssignments()
 
 	if len(machineState) == 0 {
-		// Machine state cannot be empty when assignments exist
+		// 存在分配记录时机器状态不能为空
 		if len(memoryAssignments) != 0 {
 			return fmt.Errorf("[memorymanager] machine state can not be empty when it has memory assignments")
 		}
@@ -1051,7 +1048,7 @@ func (p *staticPolicy) validateState(logger klog.Logger, s state.State) error {
 		return nil
 	}
 
-	// calculate all memory assigned to containers
+	// 计算所有已分配给容器的内存
 	expectedMachineState := p.getDefaultMachineState()
 	for pod, container := range memoryAssignments {
 		if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) {
@@ -1070,10 +1067,10 @@ func (p *staticPolicy) validateState(logger klog.Logger, s state.State) error {
 		}
 	}
 
-	// State has already been initialized from file (is not empty)
-	// Validate that total size, system reserved and reserved memory not changed, it can happen, when:
-	// - adding or removing physical memory bank from the node
-	// - change of kubelet system-reserved, kube-reserved or pre-reserved-memory-zone parameters
+	// 状态已从文件初始化（非空），校验总量、系统预留和预留内存是否变化。
+	// 以下情况会导致变化：
+	// - 节点增删物理内存条
+	// - 修改 kubelet 的 system-reserved、kube-reserved 或 pre-reserved-memory-zone 参数
 	if !areMachineStatesEqual(logger, machineState, expectedMachineState) {
 		return fmt.Errorf("[memorymanager] the expected machine state is different from the real one")
 	}
@@ -1081,6 +1078,7 @@ func (p *staticPolicy) validateState(logger klog.Logger, s state.State) error {
 	return nil
 }
 
+// updateExpectedMachineState 在期望的机器状态上重放内存块分配，用于与真实状态比对。
 func (p *staticPolicy) updateExpectedMachineState(expectedMachineState state.NUMANodeMap, blocks []state.Block, podUID, containerName string) error {
 	for _, b := range blocks {
 		requestedSize := b.Size
@@ -1102,12 +1100,12 @@ func (p *staticPolicy) updateExpectedMachineState(expectedMachineState state.NUM
 				continue
 			}
 
-			// this node does not have enough memory continue to the next one
+			// 该节点内存不足，转向下一个节点
 			if memoryState.Free <= 0 {
 				continue
 			}
 
-			// the node has enough memory to satisfy the request
+			// 节点内存足以满足请求
 			if memoryState.Free >= requestedSize {
 				memoryState.Reserved += requestedSize
 				memoryState.Free -= requestedSize
@@ -1115,7 +1113,7 @@ func (p *staticPolicy) updateExpectedMachineState(expectedMachineState state.NUM
 				continue
 			}
 
-			// the node does not have enough memory, use the node remaining memory and move to the next node
+			// 节点内存不足，用尽该节点剩余内存后转向下一个节点
 			requestedSize -= memoryState.Free
 			memoryState.Reserved += memoryState.Free
 			memoryState.Free = 0
@@ -1124,6 +1122,7 @@ func (p *staticPolicy) updateExpectedMachineState(expectedMachineState state.NUM
 	return nil
 }
 
+// areMachineStatesEqual 比较两个机器状态是否等价，不等时输出差异日志。
 func areMachineStatesEqual(logger klog.Logger, ms1, ms2 state.NUMANodeMap) bool {
 	if len(ms1) != len(ms2) {
 		logger.Info("Node states were different", "lengthNode1", len(ms1), "lengthNode2", len(ms2))
@@ -1185,6 +1184,7 @@ func areMachineStatesEqual(logger klog.Logger, ms1, ms2 state.NUMANodeMap) bool 
 	return true
 }
 
+// areMemoryStatesEqual 比较单个 NUMA 节点上某资源的两个内存表是否等价。
 func areMemoryStatesEqual(logger klog.Logger, memoryState1, memoryState2 *state.MemoryTable, nodeID int, resourceName v1.ResourceName) bool {
 	loggerWithValues := klog.LoggerWithValues(logger, "node", nodeID, "resource", resourceName, "memoryState1", *memoryState1, "memoryState2", *memoryState2)
 	if memoryState1.TotalMemSize != memoryState2.TotalMemSize {
@@ -1204,6 +1204,7 @@ func areMemoryStatesEqual(logger klog.Logger, memoryState1, memoryState2 *state.
 	return true
 }
 
+// getDefaultMachineState 根据机器拓扑和系统预留量构造初始机器状态。
 func (p *staticPolicy) getDefaultMachineState() state.NUMANodeMap {
 	defaultMachineState := state.NUMANodeMap{}
 	nodeHugepages := map[int]uint64{}
@@ -1214,7 +1215,7 @@ func (p *staticPolicy) getDefaultMachineState() state.NUMANodeMap {
 			Cells:               []int{node.Id},
 		}
 
-		// fill memory table with huge pages values
+		// 用大页信息填充内存表
 		for _, hugepage := range node.HugePages {
 			hugepageQuantity := resource.NewQuantity(int64(hugepage.PageSize)*1024, resource.BinarySI)
 			resourceName := corehelper.HugePageResourceName(*hugepageQuantity)
@@ -1234,11 +1235,11 @@ func (p *staticPolicy) getDefaultMachineState() state.NUMANodeMap {
 			nodeHugepages[node.Id] += totalHugepagesSize
 		}
 
-		// fill memory table with regular memory values
+		// 用普通内存信息填充内存表
 		systemReserved := p.getResourceSystemReserved(node.Id, v1.ResourceMemory)
 
 		allocatable := node.Memory - systemReserved
-		// remove memory allocated by hugepages
+		// 扣除已被大页占用的内存
 		if allocatedByHugepages, ok := nodeHugepages[node.Id]; ok {
 			allocatable -= allocatedByHugepages
 		}
@@ -1253,6 +1254,7 @@ func (p *staticPolicy) getDefaultMachineState() state.NUMANodeMap {
 	return defaultMachineState
 }
 
+// getResourceSystemReserved 返回指定 NUMA 节点上某资源的系统预留量。
 func (p *staticPolicy) getResourceSystemReserved(nodeID int, resourceName v1.ResourceName) uint64 {
 	var systemReserved uint64
 	if nodeSystemReserved, ok := p.systemReserved[nodeID]; ok {
@@ -1263,16 +1265,18 @@ func (p *staticPolicy) getResourceSystemReserved(nodeID int, resourceName v1.Res
 	return systemReserved
 }
 
+// getDefaultHint 在拓扑管理器未给出亲和性时，计算默认的最佳提示。
 func (p *staticPolicy) getDefaultHint(machineState state.NUMANodeMap, pod *v1.Pod, requestedResources map[v1.ResourceName]uint64) (*topologymanager.TopologyHint, error) {
 	hints := p.calculateHints(machineState, pod, requestedResources)
 	if len(hints) < 1 {
 		return nil, fmt.Errorf("[memorymanager] failed to get the default NUMA affinity, no NUMA nodes with enough memory is available")
 	}
 
-	// hints for all memory types should be the same, so we will check hints only for regular memory type
+	// 所有内存类型的提示应一致，因此只检查普通内存类型的提示
 	return findBestHint(hints[string(v1.ResourceMemory)]), nil
 }
 
+// isAffinitySatisfyRequest 判断给定 NUMA 掩码的空闲内存是否满足所有资源请求。
 func isAffinitySatisfyRequest(machineState state.NUMANodeMap, mask bitmask.BitMask, requestedResources map[v1.ResourceName]uint64) bool {
 	totalFreeSize := map[v1.ResourceName]uint64{}
 	for _, nodeID := range mask.GetBits() {
@@ -1284,7 +1288,7 @@ func isAffinitySatisfyRequest(machineState state.NUMANodeMap, mask bitmask.BitMa
 		}
 	}
 
-	// verify that for all memory types the node mask has enough resources
+	// 校验该掩码对所有内存类型的资源是否足够
 	for resourceName, requestedSize := range requestedResources {
 		if totalFreeSize[resourceName] < requestedSize {
 			return false
@@ -1294,18 +1298,17 @@ func isAffinitySatisfyRequest(machineState state.NUMANodeMap, mask bitmask.BitMa
 	return true
 }
 
-// extendTopologyManagerHint extends the topology manager hint, in case when it does not satisfy to the container request
-// the topology manager uses bitwise AND to merge all topology hints into the best one, so in case of the restricted policy,
-// it possible that we will get the subset of hint that we provided to the topology manager, in this case we want to extend
-// it to the original one
+// extendTopologyManagerHint 在拓扑管理器提示不满足容器请求时进行扩展。
+// 拓扑管理器用按位与合并所有提示，因此 restricted 策略下可能只得到我们提供的
+// 提示的子集；此时需要将其扩展回原始提示。
 func (p *staticPolicy) extendTopologyManagerHint(machineState state.NUMANodeMap, pod *v1.Pod, requestedResources map[v1.ResourceName]uint64, mask bitmask.BitMask) (*topologymanager.TopologyHint, error) {
 	hints := p.calculateHints(machineState, pod, requestedResources)
 
 	var filteredHints []topologymanager.TopologyHint
-	// hints for all memory types should be the same, so we will check hints only for regular memory type
+	// 所有内存类型的提示应一致，因此只检查普通内存类型的提示
 	for _, hint := range hints[string(v1.ResourceMemory)] {
 		affinityBits := hint.NUMANodeAffinity.GetBits()
-		// filter all hints that does not include currentHint
+		// 过滤掉不包含当前提示的提示
 		if isHintInGroup(mask.GetBits(), affinityBits) {
 			filteredHints = append(filteredHints, hint)
 		}
@@ -1315,10 +1318,11 @@ func (p *staticPolicy) extendTopologyManagerHint(machineState state.NUMANodeMap,
 		return nil, fmt.Errorf("[memorymanager] failed to find NUMA nodes to extend the current topology hint")
 	}
 
-	// try to find the preferred hint with the minimal number of NUMA nodes, relevant for the restricted policy
+	// 尝试找到 NUMA 节点数最少的优先提示，适用于 restricted 策略
 	return findBestHint(filteredHints), nil
 }
 
+// isHintInGroup 判断 hint 是否为 group 的子集（两者排序后逐项匹配）。
 func isHintInGroup(hint []int, group []int) bool {
 	sort.Ints(hint)
 	sort.Ints(group)
@@ -1338,8 +1342,9 @@ func isHintInGroup(hint []int, group []int) bool {
 	return hintIndex == len(hint)
 }
 
+// findBestHint 从提示列表中选择最佳的提示：优先选择优先标记为 true 且 NUMA 节点数最少的。
 func findBestHint(hints []topologymanager.TopologyHint) *topologymanager.TopologyHint {
-	// try to find the preferred hint with the minimal number of NUMA nodes, relevant for the restricted policy
+	// 尝试找到 NUMA 节点数最少的优先提示，适用于 restricted 策略
 	bestHint := topologymanager.TopologyHint{}
 	for _, hint := range hints {
 		if bestHint.NUMANodeAffinity == nil {
@@ -1347,13 +1352,13 @@ func findBestHint(hints []topologymanager.TopologyHint) *topologymanager.Topolog
 			continue
 		}
 
-		// preferred of the current hint is true, when the extendedHint preferred is false
+		// 当前提示为 preferred 而 bestHint 不是时，优先选当前提示
 		if hint.Preferred && !bestHint.Preferred {
 			bestHint = hint
 			continue
 		}
 
-		// both hints has the same preferred value, but the current hint has less NUMA nodes than the extended one
+		// 两者 preferred 相同，但当前提示覆盖的 NUMA 节点更少
 		if hint.Preferred == bestHint.Preferred && hint.NUMANodeAffinity.IsNarrowerThan(bestHint.NUMANodeAffinity) {
 			bestHint = hint
 		}
@@ -1361,7 +1366,7 @@ func findBestHint(hints []topologymanager.TopologyHint) *topologymanager.Topolog
 	return &bestHint
 }
 
-// GetAllocatableMemory returns the amount of allocatable memory for each NUMA node
+// GetAllocatableMemory 返回每个 NUMA 节点的可分配内存量。
 func (p *staticPolicy) GetAllocatableMemory(s state.State) []state.Block {
 	var allocatableMemory []state.Block
 	machineState := s.GetMachineState()
@@ -1382,10 +1387,12 @@ func (p *staticPolicy) GetAllocatableMemory(s state.State) []state.Block {
 	return allocatableMemory
 }
 
+// updatePodReusableMemory 维护 init 容器的可复用内存记录：
+// 普通 init 容器分配时登记，应用容器使用后扣减。
 func (p *staticPolicy) updatePodReusableMemory(pod *v1.Pod, container *v1.Container, memoryBlocks []state.Block) {
 	podUID := string(pod.UID)
 
-	// If pod entries to m.initContainersReusableMemory other than the current pod exist, delete them.
+	// 若 initContainersReusableMemory 中存在非当前 Pod 的条目，将其删除。
 	for uid := range p.initContainersReusableMemory {
 		if podUID != uid {
 			delete(p.initContainersReusableMemory, uid)
@@ -1413,7 +1420,7 @@ func (p *staticPolicy) updatePodReusableMemory(pod *v1.Pod, container *v1.Contai
 		return
 	}
 
-	// update re-usable memory once it used by the app container
+	// 应用容器使用后更新可复用内存
 	for _, block := range memoryBlocks {
 		blockBitMask, _ := bitmask.NewBitMask(block.NUMAAffinity...)
 		if podReusableMemory := p.getPodReusableMemory(pod, blockBitMask, block.Type); podReusableMemory != 0 {
@@ -1426,13 +1433,15 @@ func (p *staticPolicy) updatePodReusableMemory(pod *v1.Pod, container *v1.Contai
 	}
 }
 
+// updateInitContainersMemoryBlocks 扣减被当前容器复用的 init 容器内存块，
+// 保证各容器内存块之和等于 Pod 分配总量。
 func (p *staticPolicy) updateInitContainersMemoryBlocks(logger klog.Logger, s state.State, pod *v1.Pod, container *v1.Container, containerMemoryBlocks []state.Block) {
 	podUID := string(pod.UID)
 
 	for _, containerBlock := range containerMemoryBlocks {
 		blockSize := containerBlock.Size
 		for _, initContainer := range pod.Spec.InitContainers {
-			// we do not want to continue updates once we reach the current container
+			// 到达当前容器后停止更新
 			if initContainer.Name == container.Name {
 				break
 			}
@@ -1442,8 +1451,7 @@ func (p *staticPolicy) updateInitContainersMemoryBlocks(logger klog.Logger, s st
 			}
 
 			if podutil.IsRestartableInitContainer(&initContainer) {
-				// we should not reuse the resource from any restartable init
-				// container
+				// 可重启 init 容器的资源不应被复用
 				continue
 			}
 
@@ -1480,6 +1488,7 @@ func (p *staticPolicy) updateInitContainersMemoryBlocks(logger klog.Logger, s st
 	}
 }
 
+// isRegularInitContainer 判断容器是否为非可重启的 init 容器。
 func isRegularInitContainer(pod *v1.Pod, container *v1.Container) bool {
 	for _, initContainer := range pod.Spec.InitContainers {
 		if initContainer.Name == container.Name {
@@ -1490,6 +1499,7 @@ func isRegularInitContainer(pod *v1.Pod, container *v1.Container) bool {
 	return false
 }
 
+// isNUMAAffinitiesEqual 判断两个 NUMA 亲和性切片是否等价。
 func isNUMAAffinitiesEqual(logger klog.Logger, numaAffinity1, numaAffinity2 []int) bool {
 	bitMask1, err := bitmask.NewBitMask(numaAffinity1...)
 	if err != nil {
@@ -1506,22 +1516,24 @@ func isNUMAAffinitiesEqual(logger klog.Logger, numaAffinity1, numaAffinity2 []in
 	return bitMask1.IsEqual(bitMask2)
 }
 
+// isAffinityViolatingNUMAAllocations 判断掩码是否违反 NUMA 分配规则：
+// 同一节点不能既用于单 NUMA 节点分配又用于多 NUMA 节点分配，且多节点分配必须使用相同节点组。
 func isAffinityViolatingNUMAAllocations(machineState state.NUMANodeMap, mask bitmask.BitMask) bool {
 	maskBits := mask.GetBits()
 	singleNUMAHint := len(maskBits) == 1
 	for _, nodeID := range mask.GetBits() {
-		// the node was never used for the memory allocation
+		// 该节点从未用于内存分配
 		if machineState[nodeID].NumberOfAssignments == 0 {
 			continue
 		}
 		if singleNUMAHint {
 			continue
 		}
-		// the node used for the single NUMA memory allocation, it cannot be used for the multi NUMA node allocation
+		// 节点已用于单 NUMA 内存分配，不能用于多 NUMA 节点分配
 		if len(machineState[nodeID].Cells) == 1 {
 			return true
 		}
-		// the node already used with a different group of nodes, it cannot be used within the current hint
+		// 节点已用于不同的节点组，不能用于当前提示
 		if !areGroupsEqual(machineState[nodeID].Cells, maskBits) {
 			return true
 		}

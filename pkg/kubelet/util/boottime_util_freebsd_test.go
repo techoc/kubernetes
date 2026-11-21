@@ -25,6 +25,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestGetBootTime 验证在 FreeBSD 上能获取到有效的系统启动时间。
 func TestGetBootTime(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	boottime, err := GetBootTime(logger)

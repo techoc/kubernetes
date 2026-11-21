@@ -30,7 +30,8 @@ import (
 	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
 )
 
-// for typecheck across platforms
+// 用于跨平台类型检查。
+// 编译期类型断言，确保各平台的实现签名一致。
 var _ func(int64, int64) int64 = MilliCPUToQuota
 var _ func(int64) uint64 = MilliCPUToShares
 var _ func(uint64, uint64) bool = CPUSharesEqualAfterV2RoundTrip
@@ -41,16 +42,18 @@ var _ func(types.UID) string = GetPodCgroupNameSuffix
 var _ func(string, bool, string) string = NodeAllocatableRoot
 var _ func(klog.Logger, string) (string, error) = GetKubeletContainer
 
-// hardEvictionReservation returns a resourcelist that includes reservation of resources based on hard eviction thresholds.
+// hardEvictionReservation 根据硬驱逐阈值计算需要预留的资源列表。
 func hardEvictionReservation(thresholds []evictionapi.Threshold, capacity v1.ResourceList) v1.ResourceList {
 	if len(thresholds) == 0 {
 		return nil
 	}
+	// 只处理 LessThan 类型的信号。
 	ret := v1.ResourceList{}
 	for _, threshold := range thresholds {
 		if threshold.Operator != evictionapi.OpLessThan {
 			continue
 		}
+		// 目前只支持内存与节点文件系统可用量两类阈值。
 		switch threshold.Signal {
 		case evictionapi.SignalMemoryAvailable:
 			memoryCapacity := capacity[v1.ResourceMemory]
@@ -65,9 +68,11 @@ func hardEvictionReservation(thresholds []evictionapi.Threshold, capacity v1.Res
 	return ret
 }
 
+// buildContainerMapAndRunningSetFromRuntime 从运行时恢复容器映射与运行中容器集合。
 func buildContainerMapAndRunningSetFromRuntime(ctx context.Context, runtimeService internalapi.RuntimeService) (containermap.ContainerMap, sets.Set[string]) {
 	logger := klog.FromContext(ctx)
 	podSandboxMap := make(map[string]string)
+	// 忽略错误：这里只要求尽力恢复状态。
 	podSandboxList, _ := runtimeService.ListPodSandbox(ctx, nil)
 	for _, p := range podSandboxList {
 		podSandboxMap[p.Id] = p.Metadata.Uid
@@ -76,6 +81,7 @@ func buildContainerMapAndRunningSetFromRuntime(ctx context.Context, runtimeServi
 	runningSet := sets.New[string]()
 	containerMap := containermap.NewContainerMap()
 	containerList, _ := runtimeService.ListContainers(ctx, nil)
+	// 只处理能找到所属 sandbox 的容器。
 	for _, c := range containerList {
 		if _, exists := podSandboxMap[c.PodSandboxId]; !exists {
 			logger.Info("No PodSandBox found for the container", "podSandboxId", c.PodSandboxId, "containerName", c.Metadata.Name, "containerId", c.Id)
@@ -83,6 +89,7 @@ func buildContainerMapAndRunningSetFromRuntime(ctx context.Context, runtimeServi
 		}
 		podUID := podSandboxMap[c.PodSandboxId]
 		containerMap.Add(podUID, c.Metadata.Name, c.Id)
+		// 记录运行中的容器 ID。
 		if c.State == runtimeapi.ContainerState_CONTAINER_RUNNING {
 			logger.V(4).Info("Container reported running", "podSandboxId", c.PodSandboxId, "podUID", podUID, "containerName", c.Metadata.Name, "containerId", c.Id)
 			runningSet.Insert(c.Id)

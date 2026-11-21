@@ -32,35 +32,35 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/util"
 )
 
-// SummaryProvider provides summaries of the stats from Kubelet.
+// SummaryProvider 提供来自 Kubelet 的统计摘要。
 type SummaryProvider interface {
-	// Get provides a new Summary with the stats from Kubelet,
-	// and will update some stats if updateStats is true
+	// Get 返回包含 Kubelet 统计的新 Summary；当 updateStats 为 true 时
+	// 会顺带更新部分统计。
 	Get(ctx context.Context, updateStats bool) (*statsapi.Summary, error)
-	// GetCPUAndMemoryStats provides a new Summary with the CPU and memory stats from Kubelet,
+	// GetCPUAndMemoryStats 返回只包含 CPU 与内存统计的新 Summary。
 	GetCPUAndMemoryStats(ctx context.Context) (*statsapi.Summary, error)
 }
 
-// summaryProviderImpl implements the SummaryProvider interface.
+// summaryProviderImpl 实现 SummaryProvider 接口。
 type summaryProviderImpl struct {
-	// kubeletCreationTime is the time at which the summaryProvider was created.
+	// kubeletCreationTime 是 summaryProvider 的创建时间。
 	kubeletCreationTime metav1.Time
-	// systemBootTime is the time at which the system was started
+	// systemBootTime 是系统启动时间。
 	systemBootTime metav1.Time
 
 	provider Provider
 }
 
+// 编译期断言：summaryProviderImpl 必须实现 SummaryProvider 接口。
 var _ SummaryProvider = &summaryProviderImpl{}
 
-// NewSummaryProvider returns a SummaryProvider using the stats provided by the
-// specified statsProvider.
+// NewSummaryProvider 使用指定 statsProvider 提供的统计数据返回 SummaryProvider。
 func NewSummaryProvider(ctx context.Context, statsProvider Provider) SummaryProvider {
 	logger := klog.FromContext(ctx)
 	kubeletCreationTime := metav1.Now()
 	bootTime, err := util.GetBootTime(logger)
 	if err != nil {
-		// bootTime will be zero if we encounter an error getting the boot time.
+		// 获取启动时间失败时 bootTime 为零值，节点指标的起始时间会不准确。
 		logger.Info("Error getting system boot time. Node metrics will have an incorrect start time", "err", err)
 	}
 
@@ -71,6 +71,7 @@ func NewSummaryProvider(ctx context.Context, statsProvider Provider) SummaryProv
 	}
 }
 
+// Get 汇总节点、根 cgroup、文件系统与各 Pod 的统计，生成完整的 Summary。
 func (sp *summaryProviderImpl) Get(ctx context.Context, updateStats bool) (*statsapi.Summary, error) {
 	// TODO(timstclair): Consider returning a best-effort response if any of
 	// the following errors occur.
@@ -92,6 +93,7 @@ func (sp *summaryProviderImpl) Get(ctx context.Context, updateStats bool) (*stat
 		return nil, fmt.Errorf("failed to get imageFs stats: %v", err)
 	}
 	var podStats []statsapi.PodStats
+	// updateStats 为 true 时，在列举 Pod 统计的同时刷新 CPU 使用量缓存。
 	if updateStats {
 		podStats, err = sp.provider.ListPodStatsAndUpdateCPUNanoCoreUsage(ctx)
 	} else {
@@ -106,6 +108,7 @@ func (sp *summaryProviderImpl) Get(ctx context.Context, updateStats bool) (*stat
 		return nil, fmt.Errorf("failed to get rlimit stats: %v", err)
 	}
 
+	// HugepageAwareEviction 开启时，从可用内存中扣除节点预留的大页容量。
 	memory := rootStats.Memory
 	if utilfeature.DefaultFeatureGate.Enabled(features.HugepageAwareEviction) {
 		memory = adjustForHugePages(memory, node)
@@ -122,6 +125,7 @@ func (sp *summaryProviderImpl) Get(ctx context.Context, updateStats bool) (*stat
 		Rlimit:           rlimit,
 		SystemContainers: sp.GetSystemContainersStats(ctx, nodeConfig, podStats, updateStats),
 	}
+	// PSI 指标受特性门控控制，未开启时不填充 IO 统计。
 	if utilfeature.DefaultFeatureGate.Enabled(features.KubeletPSI) {
 		nodeStats.IO = rootStats.IO
 	}
@@ -132,6 +136,7 @@ func (sp *summaryProviderImpl) Get(ctx context.Context, updateStats bool) (*stat
 	return &summary, nil
 }
 
+// GetCPUAndMemoryStats 只采集 CPU 与内存相关统计，避免触发文件系统等开销较大的采集。
 func (sp *summaryProviderImpl) GetCPUAndMemoryStats(ctx context.Context) (*statsapi.Summary, error) {
 	// TODO(timstclair): Consider returning a best-effort response if any of
 	// the following errors occur.
@@ -150,6 +155,7 @@ func (sp *summaryProviderImpl) GetCPUAndMemoryStats(ctx context.Context) (*stats
 		return nil, fmt.Errorf("failed to list pod stats: %v", err)
 	}
 
+	// 与 Get 一致，按特性门控修正大页对可用内存的影响。
 	memory := rootStats.Memory
 	if utilfeature.DefaultFeatureGate.Enabled(features.HugepageAwareEviction) {
 		memory = adjustForHugePages(memory, node)
@@ -169,26 +175,26 @@ func (sp *summaryProviderImpl) GetCPUAndMemoryStats(ctx context.Context) (*stats
 	return &summary, nil
 }
 
-// adjustForHugePages returns a copy of memoryStats with AvailableBytes reduced
-// by the node's total hugepage capacity.
+// adjustForHugePages 返回 memoryStats 的副本，并把 AvailableBytes 扣除节点的大页总容量。
 //
-// The root cgroup's memory limit is set to MemTotal (which includes
-// hugepage-reserved RAM), but the memory cgroup controller does not track
-// hugetlb allocations in WorkingSet. This causes AvailableBytes
-// (limit - WorkingSet) to overstate real available regular memory by the
-// hugepage reservation amount, delaying eviction until the node is under
-// severe memory pressure.
+// 根 cgroup 的内存上限被设置为 MemTotal（其中包含为大页预留的内存），但内存 cgroup
+// 控制器不会在 WorkingSet 中统计 hugetlb 分配。这导致 AvailableBytes
+// （limit - WorkingSet）比真实可用的普通内存多出大页预留量，从而推迟驱逐，
+// 直到节点陷入严重内存压力。
 func adjustForHugePages(memory *statsapi.MemoryStats, node *v1.Node) *statsapi.MemoryStats {
+	// 缺少可用内存信息或节点信息时无需修正。
 	if memory == nil || memory.AvailableBytes == nil || node == nil {
 		return memory
 	}
 
+	// 汇总节点上所有大页资源（不同页大小）的容量。
 	var totalHugePageBytes uint64
 	for name, quantity := range node.Status.Capacity {
 		if v1helper.IsHugePageResourceName(name) {
 			totalHugePageBytes += uint64(quantity.Value())
 		}
 	}
+	// 没有预留大页时直接返回原值。
 	if totalHugePageBytes == 0 {
 		return memory
 	}
@@ -198,9 +204,8 @@ func adjustForHugePages(memory *statsapi.MemoryStats, node *v1.Node) *statsapi.M
 		available := *adjusted.AvailableBytes - totalHugePageBytes
 		adjusted.AvailableBytes = &available
 	} else {
-		// The unadjusted AvailableBytes (limit - WorkingSet) still includes
-		// hugepage memory that is not usable as regular memory. If it is less
-		// than the hugepage reservation, regular memory is exhausted.
+		// 未修正的 AvailableBytes（limit - WorkingSet）仍包含无法作为普通内存使用的大页内存。
+		// 如果它小于大页预留量，说明普通内存已经耗尽。
 		available := uint64(0)
 		adjusted.AvailableBytes = &available
 	}

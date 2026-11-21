@@ -36,6 +36,7 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// testCase 描述一次拓扑提示测试的输入与期望结果。
 type testCase struct {
 	name                            string
 	pod                             v1.Pod
@@ -47,6 +48,8 @@ type testCase struct {
 	podLevelResourceManagersEnabled bool
 }
 
+// returnMachineInfo 返回测试用的 12 核双 socket 拓扑；每个 socket 有 3 个 core，
+// CPU 编号按 socket 交错，便于断言跨 socket 的掩码行为。
 func returnMachineInfo() cadvisorapi.MachineInfo {
 	return cadvisorapi.MachineInfo{
 		NumCores: 12,
@@ -69,6 +72,7 @@ func returnMachineInfo() cadvisorapi.MachineInfo {
 	}
 }
 
+// containerOptions 描述构造测试 Pod 时单个容器的资源与重启策略。
 type containerOptions struct {
 	name          string
 	request       string
@@ -76,6 +80,8 @@ type containerOptions struct {
 	restartPolicy v1.ContainerRestartPolicy
 }
 
+// TestPodGuaranteedCPUs 校验 podGuaranteedCPUs 的 CPU 计数规则：
+// Guaranteed Pod 取各容器请求之和，init 与 restartable init 容器按最大/累计语义计入。
 func TestPodGuaranteedCPUs(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	options := [][]*containerOptions{
@@ -93,19 +99,19 @@ func TestPodGuaranteedCPUs(t *testing.T) {
 			{request: "4", limit: "4"},
 		},
 	}
-	// tc for not guaranteed Pod
+	// 非 Guaranteed QoS 的测试 Pod：存在容器未设置 CPU 请求。
 	testPod1 := makeMultiContainerPodWithOptions(options[0], options[0])
 	testPod2 := makeMultiContainerPodWithOptions(options[0], options[1])
 	testPod3 := makeMultiContainerPodWithOptions(options[1], options[0])
-	// tc for guaranteed Pod
+	// Guaranteed QoS 的测试 Pod：所有容器的 requests 与 limits 相等。
 	testPod4 := makeMultiContainerPodWithOptions(options[1], options[1])
 	testPod5 := makeMultiContainerPodWithOptions(options[2], options[2])
-	// tc for comparing init containers and user containers
+	// 用于比较普通容器与 init 容器 CPU 请求取最大值的测试用例。
 	testPod6 := makeMultiContainerPodWithOptions(options[1], options[2])
 	testPod7 := makeMultiContainerPodWithOptions(options[2], options[1])
-	// tc for multi containers
+	// 单个 Pod 包含多个普通容器的测试用例。
 	testPod8 := makeMultiContainerPodWithOptions(options[3], options[3])
-	// tc for restartable init containers
+	// 含 restartable init 容器（sidecar）的测试用例。
 	testPod9 := makeMultiContainerPodWithOptions([]*containerOptions{
 		{request: "1", limit: "1", restartPolicy: v1.ContainerRestartPolicyAlways},
 	}, []*containerOptions{
@@ -216,9 +222,11 @@ func TestPodGuaranteedCPUs(t *testing.T) {
 	}
 	for _, tc := range tcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试单独设置特性门控，避免用例之间相互污染。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, tc.podLevelResourcesEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResourceManagers, tc.podLevelResourceManagersEnabled)
 
+			// 直接调用策略内部方法，避免为单个计数逻辑启动完整 CPU manager。
 			requestedCPU := p.podGuaranteedCPUs(logger, tc.pod)
 
 			if requestedCPU != tc.expectedCPU {
@@ -228,16 +236,20 @@ func TestPodGuaranteedCPUs(t *testing.T) {
 	}
 }
 
+// TestGetTopologyHints 遍历 returnTestCases 的固定矩阵，比较容器级拓扑提示。
 func TestGetTopologyHints(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	machineInfo := returnMachineInfo()
 
 	for _, tc := range returnTestCases() {
+		// 子测试不是通过 t.Run 声明的，这里无需额外隔离；门控只影响当前用例。
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, tc.podLevelResourcesEnabled)
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResourceManagers, tc.podLevelResourceManagersEnabled)
 
+		// 由固定 machineInfo 重新发现拓扑，保证掩码与 CPU 编号在用例间稳定。
 		topology, _ := topology.Discover(logger, &machineInfo)
 
+		// 从已有分配反推 activePod 列表，让策略能识别“正在运行”的 Pod 及其容器。
 		var activePods []*v1.Pod
 		for p := range tc.assignments {
 			pod := v1.Pod{}
@@ -268,6 +280,7 @@ func TestGetTopologyHints(t *testing.T) {
 		if len(tc.expectedHints) == 0 && len(hints) == 0 {
 			continue
 		}
+		// 提示的枚举顺序取决于实现细节，排序后再比较，避免无关顺序导致假失败。
 		sort.SliceStable(hints, func(i, j int) bool {
 			return hints[i].LessThan(hints[j])
 		})
@@ -280,6 +293,7 @@ func TestGetTopologyHints(t *testing.T) {
 	}
 }
 
+// TestGetPodTopologyHints 遍历 returnTestCases 的固定矩阵，比较 Pod 级拓扑提示。
 func TestGetPodTopologyHints(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	machineInfo := returnMachineInfo()
@@ -320,6 +334,7 @@ func TestGetPodTopologyHints(t *testing.T) {
 		if len(tc.expectedHints) == 0 && len(podHints) == 0 {
 			continue
 		}
+		// 提示的顺序不稳定，先排序再比较内容。
 		sort.SliceStable(podHints, func(i, j int) bool {
 			return podHints[i].LessThan(podHints[j])
 		})
@@ -332,6 +347,8 @@ func TestGetPodTopologyHints(t *testing.T) {
 	}
 }
 
+// TestGetPodTopologyHintsWithPolicyOptions 验证静态策略的 AlignBySocket 选项
+// 如何改变跨 NUMA 提示的 Preferred 标记。
 func TestGetPodTopologyHintsWithPolicyOptions(t *testing.T) {
 	testPod1 := makePod("fakePod", "fakeContainer", "2", "2")
 	testContainer1 := &testPod1.Spec.Containers[0]
@@ -361,7 +378,7 @@ func TestGetPodTopologyHintsWithPolicyOptions(t *testing.T) {
 		expectedHints []topologymanager.TopologyHint
 	}{
 		{
-			// CPU available on numa node[0 ,1]. CPU on numa node 0 can satisfy request of 2 CPU's
+			// NUMA 0/1 上均有可用 CPU；单个 NUMA 节点的掩码即可满足 2 个 CPU 的请求。
 			description:   "AlignBySocket:false, Preferred hints does not contains socket aligned hints",
 			pod:           *testPod1,
 			container:     *testContainer1,
@@ -404,7 +421,7 @@ func TestGetPodTopologyHintsWithPolicyOptions(t *testing.T) {
 			},
 		},
 		{
-			// CPU available on numa node[0 ,1]. CPU on numa node 0 can satisfy request of 2 CPU's
+			// NUMA 0/1 上均有可用 CPU；单个 NUMA 节点的掩码即可满足 2 个 CPU 的请求。
 			description:   "AlignBySocket:true Preferred hints contains socket aligned hints",
 			pod:           *testPod1,
 			container:     *testContainer1,
@@ -447,7 +464,7 @@ func TestGetPodTopologyHintsWithPolicyOptions(t *testing.T) {
 			},
 		},
 		{
-			// CPU available on numa node[0 ,1]. CPU on numa nodes across sockets can satisfy request of 2 CPU's
+			// 请求量超过单个 socket 的可用 CPU，只有跨 socket 的掩码才能满足。
 			description:   "AlignBySocket:true Preferred hints are spread across socket since 2 sockets are required",
 			pod:           *testPod2,
 			container:     *testContainer2,
@@ -483,6 +500,7 @@ func TestGetPodTopologyHintsWithPolicyOptions(t *testing.T) {
 				}
 				activePods = append(activePods, &pod)
 			}
+			// 解析策略选项；AlignBySocket 依赖 CPUManagerPolicyAlphaOptions 门控才会生效。
 			policyOpt, _ := NewStaticPolicyOptions(testCase.policyOptions)
 			m := manager{
 				policy: &staticPolicy{
@@ -500,6 +518,7 @@ func TestGetPodTopologyHintsWithPolicyOptions(t *testing.T) {
 			}
 
 			podHints := m.GetPodTopologyHints(tCtx.Logger(), &testCase.pod, lifecycle.AddOperation)[string(v1.ResourceCPU)]
+			// 排序后再比较，避免提示枚举顺序影响结果。
 			sort.SliceStable(podHints, func(i, j int) bool {
 				return podHints[i].LessThan(podHints[j])
 			})
@@ -513,6 +532,8 @@ func TestGetPodTopologyHintsWithPolicyOptions(t *testing.T) {
 	}
 }
 
+// TestTopologyHintsPodLevelResources 验证 Pod 级与容器级资源同时存在时，
+// 两个作用域分别生成、互不混淆的拓扑提示。
 func TestTopologyHintsPodLevelResources(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	machineInfo := returnMachineInfo()
@@ -623,7 +644,7 @@ func TestTopologyHintsPodLevelResources(t *testing.T) {
 				sourcesReady:      &sourcesReadyStub{},
 			}
 
-			// Test GetPodTopologyHints
+			// 校验 Pod 级别的拓扑提示（pod 级资源生效时由 kubelet 使用）。
 			podHints := m.GetPodTopologyHints(logger, &tc.pod, lifecycle.AddOperation)[string(v1.ResourceCPU)]
 			sort.SliceStable(podHints, func(i, j int) bool {
 				return podHints[i].LessThan(podHints[j])
@@ -635,7 +656,7 @@ func TestTopologyHintsPodLevelResources(t *testing.T) {
 				t.Errorf("Test case %q (GetPodTopologyHints): Expected in result to be %v , got %v", tc.name, tc.expectedPodLevelHints, podHints)
 			}
 
-			// Test GetTopologyHints
+			// 校验容器级别的拓扑提示。
 			containerHints := m.GetTopologyHints(logger, &tc.pod, &tc.container, lifecycle.AddOperation)[string(v1.ResourceCPU)]
 			sort.SliceStable(containerHints, func(i, j int) bool {
 				return containerHints[i].LessThan(containerHints[j])
@@ -650,6 +671,7 @@ func TestTopologyHintsPodLevelResources(t *testing.T) {
 	}
 }
 
+// returnTestCases 构造测试矩阵，覆盖不同请求量、剩余 CPU 与已分配 CPU 的组合。
 func returnTestCases() []testCase {
 	testPod1 := makePod("fakePod", "fakeContainer", "2", "2")
 	testContainer1 := &testPod1.Spec.Containers[0]

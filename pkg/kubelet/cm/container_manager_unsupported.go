@@ -33,16 +33,19 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
+// unsupportedContainerManager 是不支持容器管理的平台上的空实现。
 type unsupportedContainerManager struct {
 	containerManagerStub
 }
 
 var _ ContainerManager = &unsupportedContainerManager{}
 
+// Start 在不支持的平台上直接返回错误。
 func (unsupportedContainerManager) Start(_ context.Context, _ *v1.Node, _ ActivePodsFunc, _ GetNodeFunc, _ config.SourcesReady, _ status.PodStatusProvider, _ internalapi.RuntimeService, _ bool) error {
 	return fmt.Errorf("Container Manager is unsupported in this build")
 }
 
+// NewContainerManager 在不支持的平台上返回空实现的容器管理器。
 func NewContainerManager(_ context.Context, _ mount.Interface, _ cadvisor.Interface, _ NodeConfig, failSwapOn bool, recorder record.EventRecorder, kubeClient clientset.Interface) (ContainerManager, error) {
 	return &unsupportedContainerManager{}, nil
 }

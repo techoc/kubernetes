@@ -26,56 +26,58 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
 
+// policyTypeNone 是 none 策略的类型名。
 const policyTypeNone policyType = "None"
 
-// none is implementation of the policy interface for the none policy, using none
-// policy is the same as disable memory management
+// none 是 none 策略的实现：使用 none 策略等同于关闭内存管理。
 type none struct{}
 
 var _ Policy = &none{}
 
-// NewPolicyNone returns new none policy instance
+// NewPolicyNone 返回 none 策略实例。
 func NewPolicyNone(logger klog.Logger) Policy {
 	return &none{}
 }
 
+// Name 返回策略名称。
 func (p *none) Name() string {
 	return string(policyTypeNone)
 }
 
+// Start 对 none 策略为空操作。
 func (p *none) Start(logger klog.Logger, s state.State) error {
 	logger.Info("Start")
 	return nil
 }
 
-// Allocate call is idempotent
+// Allocate 调用是幂等的；none 策略不做任何分配。
 func (p *none) Allocate(_ context.Context, s state.State, pod *v1.Pod, container *v1.Container, _ lifecycle.Operation) error {
 	return nil
 }
 
-// RemoveContainer call is idempotent
+// RemoveContainer 调用是幂等的；none 策略无需清理。
 func (p *none) RemoveContainer(_ klog.Logger, s state.State, podUID string, containerName string) {
+	// AllocatePod 对 none 策略为空操作。
 }
 
-// GetTopologyHints implements the topologymanager.HintProvider Interface
-// and is consulted to achieve NUMA aware resource alignment among this
-// and other resource controllers.
+// GetTopologyHints 实现 topologymanager.HintProvider 接口；
+// none 策略不提供任何 hint。
 func (p *none) GetTopologyHints(_ klog.Logger, s state.State, pod *v1.Pod, container *v1.Container, _ lifecycle.Operation) map[string][]topologymanager.TopologyHint {
 	return nil
 }
 
-// GetPodTopologyHints implements the topologymanager.HintProvider Interface
-// and is consulted to achieve NUMA aware resource alignment among this
-// and other resource controllers.
+// GetPodTopologyHints 实现 topologymanager.HintProvider 接口；
+// none 策略不提供任何 Pod 级 hint。
 func (p *none) GetPodTopologyHints(_ klog.Logger, s state.State, pod *v1.Pod, _ lifecycle.Operation) map[string][]topologymanager.TopologyHint {
 	return nil
 }
 
+// AllocatePod 对 none 策略为空操作：不进行 Pod 级内存分配。
 func (p *none) AllocatePod(_ klog.Logger, s state.State, pod *v1.Pod, _ lifecycle.Operation) error {
 	return nil
 }
 
-// GetAllocatableMemory returns the amount of allocatable memory for each NUMA node
+// GetAllocatableMemory 对 none 策略返回空列表，表示不管理可分配内存。
 func (p *none) GetAllocatableMemory(s state.State) []state.Block {
 	return []state.Block{}
 }

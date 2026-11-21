@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1beta1 提供 kubelet 配置 v1beta1 版本的默认值填充逻辑及其测试。
 package v1beta1
 
 import (
@@ -33,6 +34,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestSetDefaultsKubeletConfiguration 验证 SetDefaults_KubeletConfiguration 对空配置及各字段的默认值填充结果。
 func TestSetDefaultsKubeletConfiguration(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -1107,6 +1109,8 @@ func TestSetDefaultsKubeletConfiguration(t *testing.T) {
 		},
 	}
 
+	// 对每个用例就地调用默认值填充，再用 cmp.Diff 比较完整配置，
+	// 确保任何字段的默认值变化都能被测试捕获。
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			SetDefaults_KubeletConfiguration(tc.config)

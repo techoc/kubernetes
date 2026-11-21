@@ -21,6 +21,7 @@ import (
 	"testing"
 )
 
+// TestStripedLockSetNormalizesSize 验证分片锁集合会把请求的大小归一化到合法范围。
 func TestStripedLockSetNormalizesSize(t *testing.T) {
 	tests := []struct {
 		name string
@@ -49,6 +50,7 @@ func TestStripedLockSetNormalizesSize(t *testing.T) {
 		},
 	}
 
+	// 覆盖负数、零、正常与超上限四种输入。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			lockSet := NewStripedLockSet(tt.size)
@@ -59,15 +61,18 @@ func TestStripedLockSetNormalizesSize(t *testing.T) {
 	}
 }
 
+// TestStripedLockSetLargeRequestedSizeDoesNotPanic 验证原始条带超出分配范围时加解锁不会 panic。
 func TestStripedLockSetLargeRequestedSizeDoesNotPanic(t *testing.T) {
 	const requestedSize int32 = 500
 	lockSet := NewStripedLockSet(requestedSize)
 	key := keyWithOriginalStripeOutsideAllocatedRange(t, requestedSize, len(lockSet.locks))
 
+	// 原始条带超出分配范围时也不应 panic。
 	lockSet.Lock(key)
 	lockSet.Unlock(key)
 }
 
+// keyWithOriginalStripeOutsideAllocatedRange 查找一个按原始大小取模后超出已分配条带范围的 key。
 func keyWithOriginalStripeOutsideAllocatedRange(t *testing.T, requestedSize int32, allocatedLocks int) string {
 	t.Helper()
 

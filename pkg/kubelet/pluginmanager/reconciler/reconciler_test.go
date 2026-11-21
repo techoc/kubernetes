@@ -36,8 +36,8 @@ import (
 )
 
 const (
-	// reconcilerLoopSleepDuration is the amount of time the reconciler loop
-	// waits between successive executions
+	// reconcilerLoopSleepDuration 是 reconciler 循环两次执行之间的等待时间。
+	// 测试里设得极短，以便快速观察到状态变化。
 	reconcilerLoopSleepDuration time.Duration = 1 * time.Nanosecond
 )
 
@@ -46,6 +46,7 @@ var (
 	supportedVersions = []string{"v1beta1", "v1beta2"}
 )
 
+// init 创建包级共享的 socket 临时目录。
 func init() {
 	d, err := os.MkdirTemp("", "reconciler_test")
 	if err != nil {
@@ -54,16 +55,19 @@ func init() {
 	socketDir = d
 }
 
+// cleanup 清空并重建 socket 目录，避免用例之间互相影响。
 func cleanup(t *testing.T) {
 	require.NoError(t, os.RemoveAll(socketDir))
 	os.MkdirAll(socketDir, 0755)
 }
 
+// runReconciler 在后台启动 reconciler 循环。
 func runReconciler(t *testing.T, reconciler Reconciler) {
 	tCtx := ktesting.Init(t)
 	go reconciler.Run(tCtx)
 }
 
+// waitForRegistration 轮询 ASW，直到出现 socket 与 UUID 都匹配的插件。
 func waitForRegistration(
 	t *testing.T,
 	socketPath string,
@@ -86,6 +90,7 @@ func waitForRegistration(
 	}
 }
 
+// waitForUnregistration 轮询 ASW，直到指定 socket 的插件消失。
 func waitForUnregistration(
 	t *testing.T,
 	socketPath string,
@@ -108,6 +113,7 @@ func waitForUnregistration(
 	}
 }
 
+// retryWithExponentialBackOff 以 3 倍因子最多重试 6 次。
 func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.ConditionFunc) error {
 	backoff := wait.Backoff{
 		Duration: initialDuration,
@@ -118,28 +124,30 @@ func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.Conditio
 	return wait.ExponentialBackoff(backoff, fn)
 }
 
+// DummyImpl 是 PluginHandler 的空实现，用于测试 reconciler 的注册流程。
 type DummyImpl struct{}
 
+// NewDummyImpl 创建空实现的 PluginHandler。
 func NewDummyImpl() *DummyImpl {
 	return &DummyImpl{}
 }
 
-// ValidatePlugin is a dummy implementation
+// ValidatePlugin 是空实现，始终返回 nil。
 func (d *DummyImpl) ValidatePlugin(_ context.Context, pluginName string, endpoint string, versions []string) error {
 	return nil
 }
 
-// RegisterPlugin is a dummy implementation
+// RegisterPlugin 是空实现，始终返回 nil。
 func (d *DummyImpl) RegisterPlugin(_ context.Context, pluginName string, endpoint string, versions []string, pluginClientTimeout *time.Duration) error {
 	return nil
 }
 
-// DeRegisterPlugin is a dummy implementation
+// DeRegisterPlugin 是空实现。
 func (d *DummyImpl) DeRegisterPlugin(_ context.Context, pluginName, endpoint string) {
 }
 
-// Calls Run()
-// Verifies that asw and dsw have no plugins
+// Test_Run_Positive_DoNothing 启动 Run()，验证没有插件时
+// ASW 与 DSW 都保持为空。
 func Test_Run_Positive_DoNothing(t *testing.T) {
 	defer cleanup(t)
 
@@ -155,10 +163,10 @@ func Test_Run_Positive_DoNothing(t *testing.T) {
 		dsw,
 		asw,
 	)
-	// Act
+	// 启动 reconciler 循环。
 	runReconciler(t, reconciler)
 
-	// Get dsw and asw plugins; they should both be empty
+	// 没有注册来源时，两个状态缓存都应保持为空。
 	if len(asw.GetRegisteredPlugins()) != 0 {
 		t.Fatalf("Test_Run_Positive_DoNothing: actual state of world should be empty but it's not")
 	}
@@ -167,9 +175,8 @@ func Test_Run_Positive_DoNothing(t *testing.T) {
 	}
 }
 
-// Populates desiredStateOfWorld cache with one plugin.
-// Calls Run()
-// Verifies the actual state of world contains that plugin
+// Test_Run_Positive_Register 向 DSW 加入一个插件并启动 Run()，
+// 验证该插件最终出现在 ASW 中。
 func Test_Run_Positive_Register(t *testing.T) {
 	defer cleanup(t)
 
@@ -189,7 +196,7 @@ func Test_Run_Positive_Register(t *testing.T) {
 	)
 	reconciler.AddHandler(registerapi.DevicePlugin, cache.PluginHandler(di))
 
-	// Start the reconciler to fill ASW.
+	// 启动 reconciler，把 DSW 中的插件同步到 ASW。
 	reconcilerCtx := tCtx.WithCancel()
 	defer reconcilerCtx.Cancel("stop reconciler")
 	go reconciler.Run(reconcilerCtx)
@@ -197,6 +204,7 @@ func Test_Run_Positive_Register(t *testing.T) {
 	pluginName := fmt.Sprintf("example-plugin")
 	p := pluginwatcher.NewTestExamplePlugin(pluginName, registerapi.DevicePlugin, socketPath, supportedVersions...)
 	require.NoError(t, p.Serve(tCtx, "v1beta1", "v1beta2"))
+	// 启动插件服务后把 socket 路径写入 DSW，触发注册流程。
 	defer func() {
 		require.NoError(t, p.Stop(tCtx))
 	}()
@@ -205,7 +213,7 @@ func Test_Run_Positive_Register(t *testing.T) {
 	plugins := dsw.GetPluginsToRegister()
 	waitForRegistration(t, socketPath, plugins[0].UUID, asw)
 
-	// Get asw plugins; it should contain the added plugin
+	// ASW 中应出现刚加入的插件。
 	aswPlugins := asw.GetRegisteredPlugins()
 	if len(aswPlugins) != 1 {
 		t.Fatalf("Test_Run_Positive_Register: actual state of world length should be one but it's %d", len(aswPlugins))
@@ -215,11 +223,8 @@ func Test_Run_Positive_Register(t *testing.T) {
 	}
 }
 
-// Populates desiredStateOfWorld cache with one plugin
-// Calls Run()
-// Verifies there is one plugin now in actual state of world.
-// Deletes plugin from desired state of world.
-// Verifies that plugin no longer exists in actual state of world.
+// Test_Run_Positive_RegisterThenUnregister 先注册一个插件，确认其进入 ASW；
+// 再从 DSW 删除并移除 socket，验证它最终从 ASW 中消失。
 func Test_Run_Positive_RegisterThenUnregister(t *testing.T) {
 	defer cleanup(t)
 
@@ -239,7 +244,7 @@ func Test_Run_Positive_RegisterThenUnregister(t *testing.T) {
 	)
 	reconciler.AddHandler(registerapi.DevicePlugin, cache.PluginHandler(di))
 
-	// Start the reconciler to fill ASW.
+	// 启动 reconciler，把 DSW 中的插件同步到 ASW。
 	reconcilerCtx := tCtx.WithCancel()
 	defer reconcilerCtx.Cancel("stop reconciler")
 	go reconciler.Run(reconcilerCtx)
@@ -252,7 +257,7 @@ func Test_Run_Positive_RegisterThenUnregister(t *testing.T) {
 	plugins := dsw.GetPluginsToRegister()
 	waitForRegistration(t, socketPath, plugins[0].UUID, asw)
 
-	// Get asw plugins; it should contain the added plugin
+	// ASW 中应出现刚加入的插件。
 	aswPlugins := asw.GetRegisteredPlugins()
 	if len(aswPlugins) != 1 {
 		t.Fatalf("Test_Run_Positive_RegisterThenUnregister: actual state of world length should be one but it's %d", len(aswPlugins))
@@ -261,22 +266,20 @@ func Test_Run_Positive_RegisterThenUnregister(t *testing.T) {
 		t.Fatalf("Test_Run_Positive_RegisterThenUnregister: expected\n%s\nin actual state of world, but got\n%v\n", socketPath, aswPlugins[0])
 	}
 
+	// 从 DSW 删除并移除 socket 文件，模拟插件退出。
 	dsw.RemovePlugin(socketPath)
 	os.Remove(socketPath)
 	waitForUnregistration(t, socketPath, asw)
 
-	// Get asw plugins; it should no longer contain the added plugin
+	// 注销后 ASW 中不应再包含该插件。
 	aswPlugins = asw.GetRegisteredPlugins()
 	if len(aswPlugins) != 0 {
 		t.Fatalf("Test_Run_Positive_RegisterThenUnregister: actual state of world length should be zero but it's %d", len(aswPlugins))
 	}
 }
 
-// Populates desiredStateOfWorld cache with one plugin
-// Calls Run()
-// Then update the timestamp of the plugin
-// Verifies that the plugin is reregistered.
-// Verifies the plugin with updated timestamp now in actual state of world.
+// Test_Run_Positive_ReRegister 注册插件后更新其时间戳，
+// 验证 reconciler 会触发重新注册，ASW 中保留更新后的插件。
 func Test_Run_Positive_ReRegister(t *testing.T) {
 	defer cleanup(t)
 
@@ -296,7 +299,7 @@ func Test_Run_Positive_ReRegister(t *testing.T) {
 	)
 	reconciler.AddHandler(registerapi.DevicePlugin, cache.PluginHandler(di))
 
-	// Start the reconciler to fill ASW.
+	// 启动 reconciler，把 DSW 中的插件同步到 ASW。
 	reconcilerCtx := tCtx.WithCancel()
 	defer reconcilerCtx.Cancel("stop reconciler")
 	go reconciler.Run(reconcilerCtx)
@@ -309,16 +312,14 @@ func Test_Run_Positive_ReRegister(t *testing.T) {
 	plugins := dsw.GetPluginsToRegister()
 	waitForRegistration(t, socketPath, plugins[0].UUID, asw)
 
-	// Add the plugin again to update the timestamp
+	// 再次加入同一插件以更新时间戳。
 	require.NoError(t, dsw.AddOrUpdatePlugin(tCtx, socketPath))
-	// This should trigger a deregistration and a regitration
-	// The process of unregistration and reregistration can happen so fast that
-	// we are not able to catch it with waitForUnregistration, so here we are checking
-	// the plugin has an updated timestamp.
+	// 时间戳变化会触发注销再注册；这一过程可能快到无法用 waitForUnregistration 捕捉，
+	// 因此改为验证 ASW 中插件的时间戳已更新。
 	plugins = dsw.GetPluginsToRegister()
 	waitForRegistration(t, socketPath, plugins[0].UUID, asw)
 
-	// Get asw plugins; it should contain the added plugin
+	// ASW 中应出现刚加入的插件。
 	aswPlugins := asw.GetRegisteredPlugins()
 	if len(aswPlugins) != 1 {
 		t.Fatalf("Test_Run_Positive_RegisterThenUnregister: actual state of world length should be one but it's %d", len(aswPlugins))

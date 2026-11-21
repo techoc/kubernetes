@@ -34,82 +34,66 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
-// Provider hosts methods required by stats handlers.
+// Provider 汇总 stats handler 所需的方法。
 type Provider interface {
-	// The following stats are provided by either CRI or cAdvisor.
-	//
-	// ListPodStats returns the stats of all the containers managed by pods.
+	// 返回所有 Pod 管理的容器统计。
 	ListPodStats(ctx context.Context) ([]statsapi.PodStats, error)
-	// ListPodStatsAndUpdateCPUNanoCoreUsage updates the cpu nano core usage for
-	// the containers and returns the stats for all the pod-managed containers.
+	// 返回所有 Pod 管理容器的 CPU 与内存统计。
 	ListPodCPUAndMemoryStats(ctx context.Context) ([]statsapi.PodStats, error)
-	// ListPodStatsAndUpdateCPUNanoCoreUsage returns the stats of all the
-	// containers managed by pods and force update the cpu usageNanoCores.
-	// This is a workaround for CRI runtimes that do not integrate with
-	// cadvisor. See https://github.com/kubernetes/kubernetes/issues/72788
-	// for more details.
+	// 返回所有 Pod 管理容器的统计，并强制刷新 cpu usageNanoCores；
+	// 这是为未集成 cadvisor 的 CRI 运行时提供的变通方案，
+	// 参见 https://github.com/kubernetes/kubernetes/issues/72788。
 	ListPodStatsAndUpdateCPUNanoCoreUsage(ctx context.Context) ([]statsapi.PodStats, error)
-	// ImageFsStats returns the stats of the image filesystem.
-	// Kubelet allows three options for container filesystems
-	// Everything is on node fs (so no image filesystem)
-	// Container storage is on a dedicated disk (imageFs is separate from root)
-	// Container Filesystem is on root and Images are stored on ImageFs
-	// First return parameter is the image filesystem and
-	// second parameter is the container filesystem
+	// 返回镜像文件系统的统计。
+	// kubelet 支持三种容器文件系统布局：全部在节点根文件系统上（无独立 imagefs）；
+	// 容器存储位于独立磁盘（imagefs 与 root 分离）；容器文件系统在 root 上而镜像存放在 imagefs。
+	// 第一个返回值是镜像文件系统，第二个是容器文件系统。
 	ImageFsStats(ctx context.Context) (imageFs *statsapi.FsStats, containerFs *statsapi.FsStats, callErr error)
-	// The following stats are provided by cAdvisor.
-	//
-	// GetCgroupStats returns the stats and the networking usage of the cgroup
-	// with the specified cgroupName.
+	// 返回指定 cgroup 的统计与网络使用量。
 	GetCgroupStats(ctx context.Context, cgroupName string, updateStats bool) (*statsapi.ContainerStats, *statsapi.NetworkStats, error)
-	// GetCgroupCPUAndMemoryStats returns the CPU and memory stats of the cgroup with the specified cgroupName.
+	// 返回指定 cgroup 的 CPU 与内存统计。
 	GetCgroupCPUAndMemoryStats(cgroupName string, updateStats bool) (*statsapi.ContainerStats, error)
 
-	// RootFsStats returns the stats of the node root filesystem.
+	// 返回节点根文件系统的统计。
 	RootFsStats() (*statsapi.FsStats, error)
 
-	// GetRequestedContainersInfo returns the information of the container with
-	// the containerName, and with the specified cAdvisor options.
+	// 返回指定容器及 cAdvisor 选项对应的容器信息。
 	GetRequestedContainersInfo(containerName string, options cadvisorapi.RequestOptions) (map[string]*cadvisorapi.ContainerInfo, error)
 
-	// The following information is provided by Kubelet.
-	//
-	// GetPodByName returns the spec of the pod with the name in the specified
-	// namespace.
+	// 返回指定命名空间中 Pod 的 spec。
 	GetPodByName(namespace, name string) (*v1.Pod, bool)
-	// GetNode returns the spec of the local node.
+	// 返回本地节点的 spec。
 	GetNode(context.Context) (*v1.Node, error)
-	// GetNodeConfig returns the configuration of the local node.
+	// 返回本地节点配置。
 	GetNodeConfig() cm.NodeConfig
-	// ListVolumesForPod returns the stats of the volume used by the pod with
-	// the podUID.
+	// 返回指定 Pod 使用的卷统计。
 	ListVolumesForPod(podUID types.UID) (map[string]volume.Volume, bool)
-	// ListBlockVolumesForPod returns the stats of the volume used by the
-	// pod with the podUID.
+	// 返回指定 Pod 使用的块设备卷统计。
 	ListBlockVolumesForPod(podUID types.UID) (map[string]volume.BlockVolume, bool)
-	// GetPods returns the specs of all the pods running on this node.
+	// 返回本节点上所有 Pod 的 spec。
 	GetPods() []*v1.Pod
 
-	// RlimitStats returns the rlimit stats of system.
+	// 返回系统 rlimit 统计。
 	RlimitStats() (*statsapi.RlimitStats, error)
 
-	// GetPodCgroupRoot returns the literal cgroupfs value for the cgroup containing all pods
+	// 返回包含所有 Pod 的 cgroupfs 字面值。
 	GetPodCgroupRoot() string
 
-	// GetPodByCgroupfs provides the pod that maps to the specified cgroup literal, as well
-	// as whether the pod was found.
+	// 返回映射到指定 cgroup 字面值的 Pod 及是否找到。
 	GetPodByCgroupfs(cgroupfs string) (*v1.Pod, bool)
 }
 
+// handler 是 stats 处理器，依赖 Provider 与 SummaryProvider。
 type handler struct {
 	provider        Provider
 	summaryProvider SummaryProvider
 }
 
-// CreateHandlers creates the REST handlers for the stats.
+// CreateHandlers 创建 stats 的 REST handler。
 func CreateHandlers(rootPath string, provider Provider, summaryProvider SummaryProvider) *restful.WebService {
 	h := &handler{provider, summaryProvider}
 
+	// 注册 /summary 端点，同时支持 GET 与 POST。
 	ws := &restful.WebService{}
 	ws.Path(rootPath).
 		Produces(restful.MIME_JSON)
@@ -133,11 +117,12 @@ func CreateHandlers(rootPath string, provider Provider, summaryProvider SummaryP
 	return ws
 }
 
-// Handles stats summary requests to /stats/summary
-// If "only_cpu_and_memory" GET param is true then only cpu and memory is returned in response.
+// 处理 /stats/summary 请求。
+// 若 GET 参数 only_cpu_and_memory 为 true，则响应只包含 CPU 与内存。
 func (h *handler) handleSummary(request *restful.Request, response *restful.Response) {
 	ctx := request.Request.Context()
 	logger := klog.FromContext(ctx)
+	// 解析 only_cpu_and_memory 参数，只有唯一值为 "true" 时才生效。
 	onlyCPUAndMemory := false
 	err := request.Request.ParseForm()
 	if err != nil {
@@ -152,7 +137,7 @@ func (h *handler) handleSummary(request *restful.Request, response *restful.Resp
 	if onlyCPUAndMemory {
 		summary, err = h.summaryProvider.GetCPUAndMemoryStats(ctx)
 	} else {
-		// external calls to the summary API use cached stats
+		// 外部调用 summary API 时使用缓存统计，避免频繁触发全量采集。
 		forceStatsUpdate := false
 		summary, err = h.summaryProvider.Get(ctx, forceStatsUpdate)
 	}
@@ -163,15 +148,16 @@ func (h *handler) handleSummary(request *restful.Request, response *restful.Resp
 	}
 }
 
+// writeResponse 把结果序列化为 JSON 写回响应。
 func writeResponse(logger klog.Logger, response *restful.Response, stats interface{}) {
 	if err := response.WriteAsJson(stats); err != nil {
 		logger.Error(err, "Error writing response")
 	}
 }
 
-// handleError serializes an error object into an HTTP response.
-// request is provided for logging.
+// handleError 把错误序列化为 HTTP 响应；request 仅用于日志。
 func handleError(logger klog.Logger, response *restful.Response, request string, err error) {
+	// 容器不存在映射为 404，其余错误统一为 500。
 	switch err {
 	case kubecontainer.ErrContainerNotFound:
 		response.WriteError(http.StatusNotFound, err)

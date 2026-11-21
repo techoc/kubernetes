@@ -59,6 +59,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestUpdatePodFromAllocation 覆盖 UpdatePodFromAllocation 的主要场景：分配与期望一致、无分配、
+// 容器分配缺失、容器 resize、pod 级资源 resize、overhead 以及 pod 级 resize 特性门控关闭。
 func TestUpdatePodFromAllocation(t *testing.T) {
 	containerRestartPolicyAlways := v1.ContainerRestartPolicyAlways
 	pod := &v1.Pod{
@@ -169,6 +171,7 @@ func TestUpdatePodFromAllocation(t *testing.T) {
 
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeDeclaredFeatures, true)
 
+	// 表驱动覆盖 steady state、缺失分配、容器/pod 级 resize 与特性门控关闭等场景。
 	tests := []struct {
 		name                         string
 		pod                          *v1.Pod
@@ -289,6 +292,7 @@ func TestUpdatePodFromAllocation(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			logger, _ := ktesting.NewTestContext(t)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodLevelResourcesVerticalScaling, test.inPlacePodLevelResizeEnabled)
+			// 本测试只验证分配状态到 pod 的映射，使用空 fake 运行时即可。
 			allocationManager := makeAllocationManager(t, &containertest.FakeRuntime{}, nil, nil)
 			pod := test.pod.DeepCopy()
 			allocationManager.(*manager).allocated.SetPodResourceInfo(logger, pod.UID, test.allocated)
@@ -306,6 +310,8 @@ func TestUpdatePodFromAllocation(t *testing.T) {
 	}
 }
 
+// TestRetryPendingResizes 验证待处理 resize 重试时，依据节点容量、当前分配和已有条件，
+// 决定进入 InProgress、Deferred 还是 Infeasible，并检查分配状态与 pod 同步触发。
 func TestRetryPendingResizes(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -536,8 +542,8 @@ func TestRetryPendingResizes(t *testing.T) {
 					Message: originalInProgressMsg, // Since the allocation didn't change, the condition isn't reset.
 				},
 			},
-			// Should trigger a sync since the conditions changed (to update status), even though
-			// the allocated resources are unchanged.
+			// 条件已变化（需要更新状态），因此应触发一次同步，
+			// 即使已分配资源并未改变。
 			expectPodSyncTriggered: "true",
 		},
 		{
@@ -782,6 +788,7 @@ func TestRetryPendingResizes(t *testing.T) {
 				for i, c := range originalPod.Spec.Containers {
 					setContainerStatus(podStatus, &c, i+len(originalPod.Spec.InitContainers))
 				}
+				// 注入包含原容器实际资源的运行时状态，使 resize 能比较 allocated 与 actual。
 				allocationManager := makeAllocationManager(t, &containertest.FakeRuntime{PodStatus: *podStatus}, []*v1.Pod{testPod1, testPod2, testPod3}, nil)
 
 				for _, p := range []*v1.Pod{testPod1, testPod2, testPod3} {
@@ -859,6 +866,8 @@ func TestRetryPendingResizes(t *testing.T) {
 	}
 }
 
+// TestRetryPendingResizesGuanteedQOSPods 验证 Guaranteed QoS pod 在 static CPU/内存管理器策略下，
+// resize 被判定为 Infeasible 的行为（含 sidecar 容器）。
 func TestRetryPendingResizesGuanteedQOSPods(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -907,10 +916,10 @@ func TestRetryPendingResizesGuanteedQOSPods(t *testing.T) {
 	mem1000M := resource.MustParse("1Gi")
 	mem2000M := resource.MustParse("2Gi")
 
-	// Set requests and limits to be the same for guaranteed QOS pods
+	// Guaranteed QoS pod 的 requests 与 limits 设为相同值。
 	guaranteedQOSPod := createTestPod("1111", "pod1", "ns1", v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, false)
 	guaranteedQOSPodWithSidecar := createTestPod("2222", "pod2", "ns2", v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, true)
-	// Set requests and limits to be different for best effort pods
+	// Best effort pod 的 requests 与 limits 设为不同值。
 	bestEffortPod := createTestPod("333", "pod3", "ns3", v1.ResourceList{v1.ResourceCPU: cpu500m, v1.ResourceMemory: mem500M}, v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, false)
 	bestEffortPodWithSidecar := createTestPod("444", "pod4", "ns4", v1.ResourceList{v1.ResourceCPU: cpu500m, v1.ResourceMemory: mem500M}, v1.ResourceList{v1.ResourceCPU: cpu1000m, v1.ResourceMemory: mem1000M}, true)
 
@@ -1060,6 +1069,7 @@ func TestRetryPendingResizesGuanteedQOSPods(t *testing.T) {
 				for i, c := range originalPod.Spec.Containers {
 					setContainerStatus(podStatus, &c, i+len(originalPod.Spec.InitContainers))
 				}
+				// 使用 static CPU/内存管理器策略，验证 Guaranteed pod 的 resize 被判定为 Infeasible。
 				allocationManager := makeAllocationManager(t, &containertest.FakeRuntime{PodStatus: *podStatus}, []*v1.Pod{guaranteedQOSPod, guaranteedQOSPodWithSidecar, bestEffortPod}, &nodeConfig)
 
 				require.NoError(t, allocationManager.SetAllocatedResources(logger, originalPod))
@@ -1099,6 +1109,8 @@ func TestRetryPendingResizesGuanteedQOSPods(t *testing.T) {
 	}
 }
 
+// TestRetryPendingResizesMemoryBackedVolumes 验证 memory-backed emptyDir 卷的 sizeLimit
+// 是否会随 resize 一起更新；失败时保持原值。
 func TestRetryPendingResizesMemoryBackedVolumes(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -1271,6 +1283,7 @@ func TestRetryPendingResizesMemoryBackedVolumes(t *testing.T) {
 				},
 			}
 
+			// 运行时状态中带上卷与容器的实际资源，用于验证卷限额与 CPU 请求的联动。
 			allocationManager := makeAllocationManager(t, &containertest.FakeRuntime{PodStatus: *podStatus}, []*v1.Pod{originalPod}, &nodeConfig)
 
 			require.NoError(t, allocationManager.SetAllocatedResources(logger, originalPod))
@@ -1301,6 +1314,8 @@ func TestRetryPendingResizesMemoryBackedVolumes(t *testing.T) {
 	}
 }
 
+// TestRetryPendingResizesWithSwap 验证启用 NodeSwap 时，带 swap 的容器 resize 限制
+// 以及 Infeasible 指标与条件。
 func TestRetryPendingResizesWithSwap(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -1469,6 +1484,8 @@ func TestRetryPendingResizesWithSwap(t *testing.T) {
 	}
 }
 
+// TestRetryPendingResizesMultipleConditions 验证一次 resize 可能同时产生多种条件
+// （Deferred、InProgress、Infeasible）时的条件合并与事件记录。
 func TestRetryPendingResizesMultipleConditions(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -1662,13 +1679,13 @@ func TestRetryPendingResizesMultipleConditions(t *testing.T) {
 	}
 }
 
-// testPodAdmitHandler is a lifecycle.PodAdmitHandler for testing.
+// testPodAdmitHandler 是用于测试的 lifecycle.PodAdmitHandler。
 type testPodAdmitHandler struct {
-	// admitFunc contains the custom logic for admitting or rejecting a pod.
+	// admitFunc 包含准入或拒绝 pod 的自定义逻辑。
 	admitFunc func(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult
 }
 
-// Admit rejects all pods in the podsToReject list with a matching UID.
+// Admit 执行自定义准入逻辑：未配置 admitFunc 时默认准入。
 func (a *testPodAdmitHandler) Admit(_ context.Context, attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
 	if a.admitFunc == nil {
 		return lifecycle.PodAdmitResult{Admit: true}
@@ -1676,6 +1693,8 @@ func (a *testPodAdmitHandler) Admit(_ context.Context, attrs *lifecycle.PodAdmit
 	return a.admitFunc(attrs)
 }
 
+// TestAllocationManagerAddPodWithPLR 验证启用 pod 级资源（PLR）时 AddPod 的准入判断与
+// 分配记录，包括 overhead 的处理。
 func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -1748,7 +1767,7 @@ func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 			podToAdd:                       pod1SmallWithPLR,
 			admitFunc:                      nil,
 			expectAdmit:                    true,
-			// allocated resources updated with pod1's resources
+			// 已分配资源已按 pod1 的资源更新。
 			expectedAllocatedResourcesState: map[types.UID]resourceState{pod1UID: {podResources: cpu1Mem1G, containerResources: cpu1Mem1G}},
 			ipprPLRFeatureGate:              true,
 		},
@@ -1759,7 +1778,7 @@ func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 			podToAdd:                       pod1SmallWithPLRAndOverhead,
 			admitFunc:                      nil,
 			expectAdmit:                    true,
-			// allocated resources updated with pod1's resources, excluding overhead
+			// 已分配资源已按 pod1 的资源更新（不含 overhead）。
 			expectedAllocatedResourcesState: map[types.UID]resourceState{pod1UID: {podResources: cpu1Mem1G, containerResources: cpu1Mem1G}},
 			ipprPLRFeatureGate:              true,
 		},
@@ -1791,7 +1810,7 @@ func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 			expectAdmit:             false,
 			admissionFailureReason:  "OutOfcpu",
 			admissionFailureMessage: "not enough CPUs available for pod ns2/pod2, requested: 2, available:1",
-			// allocated resources not modified
+			// 已分配资源未被修改。
 			expectedAllocatedResourcesState: map[types.UID]resourceState{pod1UID: {containerResources: cpu1Mem1G}},
 			ipprPLRFeatureGate:              true,
 		},
@@ -1814,7 +1833,7 @@ func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 			expectAdmit:             false,
 			admissionFailureReason:  "OutOfcpu",
 			admissionFailureMessage: "not enough CPUs available for pod ns2/pod2, requested: 2, available:1",
-			// allocated resources not modified
+			// 已分配资源未被修改。
 			expectedAllocatedResourcesState: map[types.UID]resourceState{pod1UID: {containerResources: cpu1Mem1G}},
 		},
 		{
@@ -1840,7 +1859,7 @@ func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 			podToAdd:                       pod1LargeWithPLR,
 			admitFunc:                      nil,
 			expectAdmit:                    true,
-			// pod2's resources added to allocated resources
+			// pod2 的资源已加入已分配资源。
 			expectedAllocatedResourcesState: map[types.UID]resourceState{pod1UID: {containerResources: cpu2Mem2G, podResources: cpu2Mem2G}},
 			ipprPLRFeatureGate:              true,
 		},
@@ -1863,9 +1882,9 @@ func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 				}
 				return lifecycle.PodAdmitResult{Admit: true}
 			},
-			// pod is still admitted as allocated resources are considered during admission.
+			// 准入时会计入已分配资源，因此该 pod 仍被准入。
 			expectAdmit: true,
-			//  allocated Resources state must not be updated.
+			// 已分配资源状态不得被更新。
 			expectedAllocatedResourcesState: map[types.UID]resourceState{
 				pod1UID: {containerResources: cpu1Mem1G, podResources: cpu1Mem1G},
 				pod2UID: {containerResources: cpu1Mem1G, podResources: cpu1Mem1G},
@@ -1888,11 +1907,11 @@ func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 				}
 				return lifecycle.PodAdmitResult{Admit: true}
 			},
-			// pod is still admitted as allocated resources are considered during admission.
+			// 准入时会计入已分配资源，因此该 pod 仍被准入。
 			expectAdmit:             false,
 			admissionFailureReason:  "OutOfcpu",
 			admissionFailureMessage: "not enough CPUs available for pod ns1/pod1, requested: 2, available:1",
-			// allocated Resources state must not be updated.
+			// 已分配资源状态不得被更新。
 			expectedAllocatedResourcesState: map[types.UID]resourceState{
 				pod1UID: {containerResources: cpu1Mem1G},
 			},
@@ -1948,7 +1967,7 @@ func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 						}
 						if !tc.expectAdmit && found {
 							initialResources := tc.initialAllocatedResourcesState[pod.UID]
-							// allocated resources should not be modified when the pod is not admitted
+							// pod 未被准入时不得修改已分配资源。
 							assert.Equal(t, initialResources.containerResources, allocatedResources.Requests, tc.name)
 						}
 					}
@@ -1961,8 +1980,7 @@ func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 					}
 					if !tc.expectAdmit && found {
 						initialResources := tc.initialAllocatedResourcesState[pod.UID]
-						// allocated resources should not be modified when the pod
-						// is not admitted
+						// pod 未被准入时不得修改已分配资源。
 						if initialResources.podResources == nil {
 							if allocatedPodResources != nil {
 								t.Fatalf("resource allocation should nil for pod: %s", tc.podToAdd.Name)
@@ -1981,6 +1999,8 @@ func TestAllocationManagerAddPodWithPLR(t *testing.T) {
 	}
 }
 
+// TestAllocationManagerAddPod 验证容器维度下 AddPod 的准入判断与分配状态更新
+// （含重复添加、拒绝准入等场景）。
 func TestAllocationManagerAddPod(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -2035,7 +2055,7 @@ func TestAllocationManagerAddPod(t *testing.T) {
 			podToAdd:                       pod1Small,
 			admitFunc:                      nil,
 			expectAdmit:                    true,
-			// allocated resources updated with pod1's resources
+			// 已分配资源已按 pod1 的资源更新。
 			expectedAllocatedResourcesState: map[types.UID]v1.ResourceList{pod1UID: cpu1Mem1G},
 		},
 		{
@@ -2068,7 +2088,7 @@ func TestAllocationManagerAddPod(t *testing.T) {
 			expectAdmit:             false,
 			admissionFailureReason:  "OutOfcpu",
 			admissionFailureMessage: "not enough CPUs available for pod ns2/pod2, requested: 2, available:1",
-			// allocated resources not modified
+			// 已分配资源未被修改。
 			expectedAllocatedResourcesState: map[types.UID]v1.ResourceList{pod1UID: cpu1Mem1G},
 		},
 		{
@@ -2091,7 +2111,7 @@ func TestAllocationManagerAddPod(t *testing.T) {
 			expectAdmit:             false,
 			admissionFailureReason:  "OutOfcpu",
 			admissionFailureMessage: "not enough CPUs available for pod ns2/pod2, requested: 2, available:1",
-			// allocated resources not modified
+			// 已分配资源未被修改。
 			expectedAllocatedResourcesState: map[types.UID]v1.ResourceList{pod1UID: cpu1Mem1G},
 		},
 		{
@@ -2112,7 +2132,7 @@ func TestAllocationManagerAddPod(t *testing.T) {
 			podToAdd:                       pod1Large,
 			admitFunc:                      nil,
 			expectAdmit:                    true,
-			// pod2's resources added to allocated resources
+			// pod2 的资源已加入已分配资源。
 			expectedAllocatedResourcesState: map[types.UID]v1.ResourceList{pod1UID: cpu2Mem2G},
 		},
 		{
@@ -2132,9 +2152,9 @@ func TestAllocationManagerAddPod(t *testing.T) {
 				}
 				return lifecycle.PodAdmitResult{Admit: true}
 			},
-			// pod is still admitted as allocated resources are considered during admission.
+			// 准入时会计入已分配资源，因此该 pod 仍被准入。
 			expectAdmit: true,
-			//  allocated Resources state must not be updated.
+			// 已分配资源状态不得被更新。
 			expectedAllocatedResourcesState: map[types.UID]v1.ResourceList{pod1UID: cpu1Mem1G, pod2UID: cpu1Mem1G},
 		},
 		{
@@ -2154,11 +2174,11 @@ func TestAllocationManagerAddPod(t *testing.T) {
 				}
 				return lifecycle.PodAdmitResult{Admit: true}
 			},
-			// pod is still admitted as allocated resources are considered during admission.
+			// 准入时会计入已分配资源，因此该 pod 仍被准入。
 			expectAdmit:             false,
 			admissionFailureReason:  "OutOfcpu",
 			admissionFailureMessage: "not enough CPUs available for pod ns1/pod1, requested: 2, available:1",
-			// allocated Resources state must not be updated.
+			// 已分配资源状态不得被更新。
 			expectedAllocatedResourcesState: map[types.UID]v1.ResourceList{pod1UID: cpu1Mem1G},
 		},
 	}
@@ -2207,7 +2227,7 @@ func TestAllocationManagerAddPod(t *testing.T) {
 						}
 						if !tc.expectAdmit && found {
 							initialResources := tc.initialAllocatedResourcesState[pod.UID]
-							// allocated resources should not be modified when the pod is not admitted
+							// pod 未被准入时不得修改已分配资源。
 							assert.Equal(t, initialResources, allocatedResources.Requests, tc.name)
 						}
 					}
@@ -2218,6 +2238,8 @@ func TestAllocationManagerAddPod(t *testing.T) {
 	}
 }
 
+// TestIsResizeIncreasingRequests 验证 isResizeIncreasingRequests 对容器与 pod 级请求量
+// 增加、减少以及相互抵消的判定。
 func TestIsResizeIncreasingRequests(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -2412,6 +2434,8 @@ func TestIsResizeIncreasingRequests(t *testing.T) {
 	}
 }
 
+// TestSortPendingResizes 验证待处理 resize 队列的排序优先级：不增加请求的 pod 优先，
+// 其次按 PriorityClass、QoS、等待时长和请求新旧排序。
 func TestSortPendingResizes(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -2447,12 +2471,12 @@ func TestSortPendingResizes(t *testing.T) {
 		require.NoError(t, allocationManager.SetAllocatedResources(logger, testPod))
 	}
 
-	// testPods[0] has the highest priority, as it doesn't increase resource requests (pod-level).
-	// testPods[1] has the next highest priority, as it doesn't increase resource requests (container-level).
-	// testPods[2] has the highest PriorityClass.
-	// testPods[3] is the only pod with QoS class "guaranteed" (all others are burstable).
-	// testPods[4] has been in a "deferred" state for longer than testPods[5].
-	// testPods[6] has no resize conditions yet, indicating it is a newer request than the other deferred resizes.
+	// testPods[0] 优先级最高：其 pod 级请求未增加。
+	// testPods[1] 次之：其容器级请求未增加。
+	// testPods[2] 拥有最高的 PriorityClass。
+	// testPods[3] 是唯一 QoS 为 "guaranteed" 的 pod（其余均为 burstable）。
+	// testPods[4] 处于 "deferred" 状态的时间比 testPods[5] 更长。
+	// testPods[6] 尚无 resize 条件，说明它比其他 deferred resize 请求更新。
 
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodLevelResourcesVerticalScaling, true)
 
@@ -2479,13 +2503,13 @@ func TestSortPendingResizes(t *testing.T) {
 
 	expected := []types.UID{testPods[0].UID, testPods[1].UID, testPods[2].UID, testPods[3].UID, testPods[4].UID, testPods[5].UID, testPods[6].UID}
 
-	// Push all the pods to the queue.
+	// 把所有 pod 推入队列。
 	for i := range testPods {
 		allocationManager.PushPendingResize(logger, testPods[i].UID)
 	}
 	require.Equal(t, expected, allocationManager.(*manager).podsWithPendingResizes)
 
-	// Clear the queue and push the pods in reverse order to spice things up.
+	// 清空队列后按相反顺序重新推入，增加测试随机性。
 	allocationManager.(*manager).podsWithPendingResizes = nil
 	for i := len(testPods) - 1; i >= 0; i-- {
 		allocationManager.PushPendingResize(logger, testPods[i].UID)
@@ -2493,6 +2517,7 @@ func TestSortPendingResizes(t *testing.T) {
 	require.Equal(t, expected, allocationManager.(*manager).podsWithPendingResizes)
 }
 
+// TestRecordPodDeferredAcceptedResizes 验证 deferred 与 accepted resize 数量指标的记录逻辑。
 func TestRecordPodDeferredAcceptedResizes(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -2604,6 +2629,8 @@ func TestRecordPodDeferredAcceptedResizes(t *testing.T) {
 	}
 }
 
+// TestAllocationManager_EmptyDirVolumeLimits_AddPod 验证 AddPod 时 memory-backed emptyDir
+// 卷限额的分配记录。
 func TestAllocationManager_EmptyDirVolumeLimits_AddPod(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -2771,11 +2798,11 @@ func TestAllocationManager_EmptyDirVolumeLimits_AddPod(t *testing.T) {
 
 			allocationManager := makeAllocationManager(t, &containertest.FakeRuntime{}, []*v1.Pod{test.pod}, nil)
 
-			// Admit the Pod
+			// 准入该 pod。
 			ok, reason, message := allocationManager.AddPod(tCtx, []*v1.Pod{test.pod}, test.pod)
 			require.True(t, ok, "admit should succeed: reason=%s, msg=%s", reason, message)
 
-			// Verify state memory has the correct emptyDir allocation
+			// 校验内存状态中的 emptyDir 分配正确。
 			memoryStore := allocationManager.(*manager).allocated
 
 			var volName string
@@ -2796,6 +2823,8 @@ func TestAllocationManager_EmptyDirVolumeLimits_AddPod(t *testing.T) {
 	}
 }
 
+// TestAllocationManager_EmptyDirVolumeLimits_UpdatePodFromAllocation 验证
+// UpdatePodFromAllocation 如何把 emptyDir 卷限额应用到 pod 并据此判断是否更新。
 func TestAllocationManager_EmptyDirVolumeLimits_UpdatePodFromAllocation(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -2970,11 +2999,11 @@ func TestAllocationManager_EmptyDirVolumeLimits_UpdatePodFromAllocation(t *testi
 
 			allocationManager := makeAllocationManager(t, &containertest.FakeRuntime{}, []*v1.Pod{test.pod}, nil)
 
-			// Pre-populate the local cache with the checkpoint limit
+			// 预先用 checkpoint 中的限额填充本地缓存。
 			err := allocationManager.(*manager).allocated.SetEmptyDirVolumeLimit(test.pod.UID, "mem-vol", test.checkpointLimit)
 			require.NoError(t, err)
 
-			// Actuate UpdatePodFromAllocation and check outcomes
+			// 执行 UpdatePodFromAllocation 并检查结果。
 			allocatedPod, updated := allocationManager.UpdatePodFromAllocation(test.pod)
 			require.Equal(t, test.expectedUpdated, updated)
 
@@ -2996,6 +3025,8 @@ func TestAllocationManager_EmptyDirVolumeLimits_UpdatePodFromAllocation(t *testi
 	}
 }
 
+// TestAllocationManager_EmptyDirVolumeLimits_RetryPendingResizes 验证待处理 resize 重试时
+// emptyDir 卷限额的更新、缓存与分配状态的一致性。
 func TestAllocationManager_EmptyDirVolumeLimits_RetryPendingResizes(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("InPlacePodVerticalScaling is not currently supported for Windows")
@@ -3397,11 +3428,11 @@ func TestAllocationManager_EmptyDirVolumeLimits_RetryPendingResizes(t *testing.T
 
 			allocationManager := makeAllocationManager(t, &containertest.FakeRuntime{}, []*v1.Pod{test.pod}, nil)
 
-			// Set the initial checkpoints
+			// 设置初始 checkpoint。
 			err := allocationManager.SetAllocatedResources(logger, test.pod)
 			require.NoError(t, err)
 
-			// Setup getPodByUID mock to return targetPod
+			// 让 getPodByUID mock 返回 targetPod。
 			allocationManager.(*manager).getPodByUID = func(uid types.UID) (*v1.Pod, bool) {
 				if uid == test.pod.UID {
 					return test.targetPod, true
@@ -3409,12 +3440,12 @@ func TestAllocationManager_EmptyDirVolumeLimits_RetryPendingResizes(t *testing.T
 				return nil, false
 			}
 
-			// Actuate
+			// 执行。
 			resizeAllocated, err := allocationManager.(*manager).handlePodResourcesResize(context.Background(), test.targetPod)
 			require.NoError(t, err)
 			assert.Equal(t, test.expectResizeAllocated, resizeAllocated)
 
-			// Verify the final checkpoint allocation
+			// 校验最终的 checkpoint 分配。
 			limit, exists := allocationManager.(*manager).allocated.GetEmptyDirVolumeLimit(test.pod.UID, "mem-vol")
 
 			if test.expectedAllocatedLimit != nil {
@@ -3424,13 +3455,15 @@ func TestAllocationManager_EmptyDirVolumeLimits_RetryPendingResizes(t *testing.T
 				assert.False(t, exists)
 			}
 
-			// Verify status manager conditions
+			// 校验状态管理器中的条件。
 			actualConditions := allocationManager.(*manager).statusManager.GetPodResizeConditions(test.pod.UID)
 			verifyResizeConditions(t, test.expectedResizeConditions, actualConditions)
 		})
 	}
 }
 
+// makeAllocationManager 构造使用内存状态存储的分配管理器，并注入 fake 状态管理器、
+// 容器管理器与准入 handler，供测试使用。
 func makeAllocationManager(t *testing.T, runtime *containertest.FakeRuntime, allocatedPods []*v1.Pod, nodeConfig *cm.NodeConfig) Manager {
 	t.Helper()
 	logger, _ := ktesting.NewTestContext(t)
@@ -3464,6 +3497,7 @@ func makeAllocationManager(t *testing.T, runtime *containertest.FakeRuntime, all
 		record.NewFakeRecorder(20),
 	)
 
+	// 节点容量固定为 4 CPU / 4Gi 可分配，便于精确断言容量边界。
 	getNode := func(context.Context, bool) (*v1.Node, error) {
 		return &v1.Node{
 			Status: v1.NodeStatus{
@@ -3480,12 +3514,14 @@ func makeAllocationManager(t *testing.T, runtime *containertest.FakeRuntime, all
 		}, nil
 	}
 
+	// 组合 resize 准入与通用 predicate 准入，模拟真实 kubelet 的准入链。
 	predicateHandler := lifecycle.NewPredicateAdmitHandler(getNode, lifecycle.NewAdmissionFailureHandlerStub(), containerManager.UpdatePluginResources)
 	resizeHandler := NewPodResizesAdmitHandler(containerManager, runtime, allocationManager)
 	allocationManager.AddPodAdmitHandlers(lifecycle.PodAdmitHandlers{resizeHandler, predicateHandler})
 	return allocationManager
 }
 
+// setContainerStatus 把容器写入 PodStatus：状态为 Running，并附带请求/限额对应的资源信息。
 func setContainerStatus(podStatus *kubecontainer.PodStatus, c *v1.Container, idx int) {
 	podStatus.ContainerStatuses[idx] = &kubecontainer.Status{
 		Name:  c.Name,
@@ -3498,17 +3534,18 @@ func setContainerStatus(podStatus *kubecontainer.PodStatus, c *v1.Container, idx
 	}
 }
 
+// verifyResizeConditions 比较期望与实际 resize 条件：忽略时间戳，并对 message 采用子串匹配。
 func verifyResizeConditions(t *testing.T, expected, actual []*v1.PodCondition) {
 	t.Helper()
 	if !assert.Len(t, actual, len(expected), "different number of resize conditions") {
 		return
 	}
 	for i := range actual {
-		// Ignore probe time and last transition time during comparison.
+		// 比较时忽略探测时间与最近转换时间。
 		actual[i].LastProbeTime = metav1.Time{}
 		actual[i].LastTransitionTime = metav1.Time{}
 
-		// Message is a substring assertion, since it can change slightly.
+		// message 使用子串断言，因为其内容可能有细微变化。
 		if expected[i].Message != "" {
 			assert.Contains(t, actual[i].Message, expected[i].Message)
 		} else {
@@ -3519,8 +3556,8 @@ func verifyResizeConditions(t *testing.T, expected, actual []*v1.PodCondition) {
 	assert.Equal(t, expected, actual)
 }
 
-// TestNonAllocatedPodsExcludedFromCapacity_Resize verifies that a pending pod
-// without an allocation does not block resize of an already-running pod.
+// TestNonAllocatedPodsExcludedFromCapacity_Resize 验证未分配资源的 pending pod
+// 不会阻塞已运行 pod 的 resize。
 func TestNonAllocatedPodsExcludedFromCapacity_Resize(t *testing.T) {
 	allocationManager, runningPod, pendingPod, logger := setupNonAllocatedCapacityTest(t)
 
@@ -3543,8 +3580,8 @@ func TestNonAllocatedPodsExcludedFromCapacity_Resize(t *testing.T) {
 	allocationManager.PushPendingResize(logger, runningPod.UID)
 	allocationManager.RetryPendingResizes(context.TODO(), TriggerReasonPodUpdated)
 
-	// If pendingPod was incorrectly included in capacity calculations, this
-	// resize would be deferred (1500m + 10000m > 4000m allocatable).
+	// 若 pendingPod 被错误计入容量计算，这次 resize 会被推迟
+	// （1500m + 10000m > 4000m 可分配量）。
 	resizeStatus := allocationManager.(*manager).statusManager.GetPodResizeConditions(runningPod.UID)
 	require.Len(t, resizeStatus, 1)
 	assert.Equal(t, v1.PodResizeInProgress, resizeStatus[0].Type)
@@ -3558,8 +3595,8 @@ func TestNonAllocatedPodsExcludedFromCapacity_Resize(t *testing.T) {
 	assert.False(t, foundPending)
 }
 
-// TestNonAllocatedPodsExcludedFromCapacity_AddPod verifies that a pending pod
-// without an allocation does not block admission of a new pod.
+// TestNonAllocatedPodsExcludedFromCapacity_AddPod 验证未分配资源的 pending pod
+// 不会阻塞新 pod 的准入。
 func TestNonAllocatedPodsExcludedFromCapacity_AddPod(t *testing.T) {
 	allocationManager, runningPod, pendingPod, _ := setupNonAllocatedCapacityTest(t)
 
@@ -3588,8 +3625,8 @@ func TestNonAllocatedPodsExcludedFromCapacity_AddPod(t *testing.T) {
 		},
 	}
 
-	// If pendingPod was incorrectly included in capacity calculations,
-	// AddPod would fail (500m + 1000m + 10000m > 4000m allocatable).
+	// 若 pendingPod 被错误计入容量计算，AddPod 会失败
+	// （500m + 1000m + 10000m > 4000m 可分配量）。
 	ok, reason, message := allocationManager.AddPod(context.TODO(), []*v1.Pod{runningPod, pendingPod}, newPod)
 	assert.True(t, ok, "AddPod should succeed: reason=%s message=%s", reason, message)
 
@@ -3601,13 +3638,13 @@ func TestNonAllocatedPodsExcludedFromCapacity_AddPod(t *testing.T) {
 	assert.False(t, foundPending)
 }
 
-// setupNonAllocatedCapacityTest creates a common test environment with:
-//   - A running pod allocated 1000m CPU and 1Gi memory
-//   - A pending pod requesting resources way beyond node capacity (not allocated)
-//   - An allocation manager with 4 CPU and 4Gi memory allocatable
+// setupNonAllocatedCapacityTest 构造通用测试环境：
+//   - 一个已分配 1000m CPU、1Gi 内存的运行中 pod
+//   - 一个请求量远超节点容量（未分配）的 pending pod
+//   - 可分配 4 CPU、4Gi 内存的分配管理器
 //
-// This setup is used to verify that the non-allocated pending pod is excluded
-// from capacity calculations and doesn't block legitimate operations.
+// 该环境用于验证未分配的 pending pod 被排除在容量计算之外，
+// 不会阻塞正常操作。
 func setupNonAllocatedCapacityTest(t *testing.T) (Manager, *v1.Pod, *v1.Pod, klog.Logger) {
 	t.Helper()
 	if goruntime.GOOS == "windows" {
@@ -3683,6 +3720,7 @@ func setupNonAllocatedCapacityTest(t *testing.T) (Manager, *v1.Pod, *v1.Pod, klo
 		setContainerStatus(podStatus, &c, i)
 	}
 
+	// 只把 runningPod 标记为已分配，pendingPod 未分配，用于验证容量计算排除未分配 pod。
 	allocationManager := makeAllocationManager(t, &containertest.FakeRuntime{PodStatus: *podStatus}, []*v1.Pod{runningPod, pendingPod}, nil)
 	require.NoError(t, allocationManager.SetAllocatedResources(logger, runningPod))
 	t.Cleanup(func() {

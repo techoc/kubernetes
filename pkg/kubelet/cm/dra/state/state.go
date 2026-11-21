@@ -25,95 +25,102 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// ClaimInfoStateList 是 ClaimInfoState 的列表。
 type ClaimInfoStateList []ClaimInfoState
 
+// ClaimInfoState 保存某个 ResourceClaim 在 kubelet 本地的状态。
 // +k8s:deepcopy-gen=true
 type ClaimInfoState struct {
-	// ClaimUID is the UID of a resource claim
+	// ClaimUID 是 ResourceClaim 的 UID。
 	ClaimUID types.UID
 
-	// ClaimName is the name of a resource claim
+	// ClaimName 是 ResourceClaim 的名称。
 	ClaimName string
 
-	// Namespace is a claim namespace
+	// Namespace 是 ResourceClaim 所在的命名空间。
 	Namespace string
 
-	// PodUIDs is a set of pod UIDs that reference a resource
+	// PodUIDs 是引用该资源的 Pod UID 集合。
 	PodUIDs sets.Set[string]
 
-	// DriverState contains information about all drivers which have allocation
-	// results in the claim, even if they don't provide devices for their results.
+	// DriverState 保存所有在该 Claim 中有分配结果的驱动信息，
+	// 即使驱动没有为其分配结果提供设备。
 	DriverState map[string]DriverState
 }
 
-// DriverState is used to store per-device claim info state in a checkpoint
+// DriverState 用于在 checkpoint 中保存按设备组织的 Claim 状态。
 // +k8s:deepcopy-gen=true
 type DriverState struct {
+	// Devices 是已分配的设备列表。
 	Devices []Device
-	// SkipNodeOperations allows kubelet to bypass node-local gRPC calls (NodePrepareResources
-	// and/or NodeUnprepareResources) when allocated devices do not require them.
+	// SkipNodeOperations 允许 kubelet 在已分配设备不需要时跳过
+	// 节点本地 gRPC 调用（NodePrepareResources 和/或 NodeUnprepareResources）。
 	SkipNodeOperations []resourceapi.SkipNodeOperation `json:"skipNodeOperations,omitempty"`
 }
 
-// Skips checks whether the given operation or wildcard '*' is present in SkipNodeOperations.
+// Skips 判断给定操作或通配符 '*' 是否出现在 SkipNodeOperations 中。
 func (s DriverState) Skips(op resourceapi.SkipNodeOperation) bool {
 	return slices.Contains(s.SkipNodeOperations, resourceapi.SkipNodeOperationAll) ||
 		slices.Contains(s.SkipNodeOperations, op)
 }
 
-// Device is how a DRA driver described an allocated device in a claim
-// to kubelet. RequestName, ShareID, and CDI device IDs are optional.
+// Device 描述 DRA 驱动向 kubelet 上报的 Claim 中已分配设备。
+// RequestName、ShareID 和 CDI 设备 ID 均为可选。
 // +k8s:deepcopy-gen=true
 type Device struct {
-	PoolName     string
-	DeviceName   string
-	ShareID      *types.UID
+	// PoolName 是设备所属的设备池名称。
+	PoolName string
+	// DeviceName 是设备名称。
+	DeviceName string
+	// ShareID 是共享设备的 ID，非共享设备为 nil。
+	ShareID *types.UID
+	// RequestNames 是请求该设备的 Request 名称列表。
 	RequestNames []string
+	// CDIDeviceIDs 是设备对应的 CDI 设备 ID 列表。
 	CDIDeviceIDs []string
 }
 
-// DevicesHealthMap is a map between driver names and the list of the device's health.
+// DevicesHealthMap 是驱动名称到其设备健康状态的映射。
 type DevicesHealthMap map[string]DriverHealthState
 
-// DriverHealthState is used to store health information of all devices of a driver.
+// DriverHealthState 保存某个驱动所有设备的健康信息。
 type DriverHealthState struct {
-	// Devices maps a device's unique key ("<pool>/<device>") to its health state.
+	// Devices 把设备的唯一键（"<pool>/<device>"）映射到其健康状态。
 	Devices map[string]DeviceHealth
 }
 
+// DeviceHealthStatus 表示设备健康状态。
 type DeviceHealthStatus string
 
 const (
-	// DeviceHealthStatusHealthy represents a healthy device.
+	// DeviceHealthStatusHealthy 表示设备健康。
 	DeviceHealthStatusHealthy DeviceHealthStatus = "Healthy"
-	// DeviceHealthStatusUnhealthy represents an unhealthy device.
+	// DeviceHealthStatusUnhealthy 表示设备不健康。
 	DeviceHealthStatusUnhealthy DeviceHealthStatus = "Unhealthy"
-	// DeviceHealthStatusUnknown represents a device with unknown health status.
+	// DeviceHealthStatusUnknown 表示设备健康状态未知。
 	DeviceHealthStatusUnknown DeviceHealthStatus = "Unknown"
 )
 
-// DeviceHealth is used to store health information of a device.
+// DeviceHealth 保存单个设备的健康信息。
 type DeviceHealth struct {
-	// PoolName is the name of the pool where the device is allocated.
+	// PoolName 是设备所属设备池的名称。
 	PoolName string
 
-	// DeviceName is the name of the device.
-	// The full identifier is '<driver name>/<pool name>/<device name>' across the system.
+	// DeviceName 是设备名称。
+	// 系统内的完整标识为 '<driver name>/<pool name>/<device name>'。
 	DeviceName string
 
-	// Health is the health status of the device.
-	// Statuses: "Healthy", "Unhealthy", "Unknown".
+	// Health 是设备的健康状态，取值为 "Healthy"、"Unhealthy" 或 "Unknown"。
 	Health DeviceHealthStatus
 
-	// LastUpdated keeps track of the last health status update of this device.
+	// LastUpdated 记录该设备健康状态最近一次更新的时间。
 	LastUpdated time.Time
 
-	// HealthCheckTimeout is the timeout for the health check of the device.
-	// Zero value means use the default timeout (DefaultHealthTimeout).
-	// This ensures backward compatibility with existing data.
+	// HealthCheckTimeout 是设备健康检查的超时时间。
+	// 零值表示使用默认超时（DefaultHealthTimeout），
+	// 以保证与已有数据的向后兼容。
 	HealthCheckTimeout time.Duration
 
-	// Message provides additional details about the device's health status.
-	// This field is optional and may be empty.
+	// Message 提供设备健康状态的附加说明，可选，可为空。
 	Message string
 }

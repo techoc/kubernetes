@@ -23,10 +23,10 @@ import (
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
 )
 
-// Checksum is the data to be stored as checkpoint
+// Checksum 是随 checkpoint 一起存储的校验和。
 type Checksum uint64
 
-// Verify verifies that passed checksum is same as calculated checksum
+// Verify 校验传入数据的计算校验和是否与本校验和一致，不一致时返回损坏错误。
 func (cs Checksum) Verify(data interface{}) error {
 	actualCS := New(data)
 	if cs != actualCS {
@@ -35,12 +35,12 @@ func (cs Checksum) Verify(data interface{}) error {
 	return nil
 }
 
-// New returns the Checksum of checkpoint data
+// New 计算并返回 checkpoint 数据的校验和。
 func New(data interface{}) Checksum {
 	return Checksum(getChecksum(data))
 }
 
-// Get returns calculated checksum of checkpoint data
+// getChecksum 计算数据的 FNV-1a 32 位哈希并转为 uint64。
 func getChecksum(data interface{}) uint64 {
 	hash := fnv.New32a()
 	hashutil.DeepHashObject(hash, data)

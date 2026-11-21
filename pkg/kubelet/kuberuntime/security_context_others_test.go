@@ -29,6 +29,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestVerifyRunAsNonRoot 验证非 Windows 平台下 RunAsNonRoot 的校验：
+// 容器或镜像用户为 root、用户名未知、UID 非法（超范围或负数）时应拒绝。
 func TestVerifyRunAsNonRoot(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	pod := &v1.Pod{
@@ -50,6 +52,7 @@ func TestVerifyRunAsNonRoot(t *testing.T) {
 		},
 	}
 
+	// 构造各种用户 ID 与 RunAsNonRoot 组合。
 	rootUser := int64(0)
 	anyUser := int64(1000)
 	invalidUser := int64(2147483648)
@@ -57,6 +60,7 @@ func TestVerifyRunAsNonRoot(t *testing.T) {
 	maxInt32User := int64(math.MaxInt32)
 	runAsNonRootTrue := true
 	runAsNonRootFalse := false
+	// 用例覆盖未设置安全上下文、显式/隐式 root、非法 UID 等场景。
 	for _, test := range []struct {
 		desc     string
 		sc       *v1.SecurityContext
@@ -168,6 +172,7 @@ func TestVerifyRunAsNonRoot(t *testing.T) {
 			fail: false,
 		},
 	} {
+		// 逐用例设置安全上下文并校验错误是否符合预期。
 		pod.Spec.Containers[0].SecurityContext = test.sc
 		err := verifyRunAsNonRoot(tCtx, pod, &pod.Spec.Containers[0], test.uid, test.username)
 		if test.fail {

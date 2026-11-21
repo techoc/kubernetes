@@ -29,7 +29,7 @@ import (
 const (
 	pluginNameNotAvailable = "N/A"
 
-	// Metric keys for Volume Manager.
+	// Volume Manager 的指标键。
 	volumeManagerTotalVolumes                     = "volume_manager_total_volumes"
 	reconstructVolumeOperationsTotal              = "reconstruct_volume_operations_total"
 	reconstructVolumeOperationsErrorsTotal        = "reconstruct_volume_operations_errors_total"
@@ -37,6 +37,7 @@ const (
 	forceCleanedFailedVolumeOperationsErrorsTotal = "force_cleaned_failed_volume_operation_errors_total"
 )
 
+// 指标在 Register 时注册；sync.Once 保证注册动作只执行一次。
 var (
 	registerMetrics sync.Once
 
@@ -79,9 +80,10 @@ var (
 	)
 )
 
-// volumeCount is a map of maps used as a counter.
+// volumeCount 是"状态 -> 插件名 -> 计数"的二级 map，用作计数器。
 type volumeCount map[string]map[string]int64
 
+// add 在指定状态与插件名下累加计数。
 func (v volumeCount) add(state, plugin string) {
 	count, ok := v[state]
 	if !ok {
@@ -91,8 +93,9 @@ func (v volumeCount) add(state, plugin string) {
 	v[state] = count
 }
 
-// Register registers Volume Manager metrics.
+// Register 注册 Volume Manager 指标。
 func Register(asw cache.ActualStateOfWorld, dsw cache.DesiredStateOfWorld, pluginMgr *volume.VolumePluginMgr) {
+	// 用 sync.Once 防止重复注册导致指标冲突 panic。
 	registerMetrics.Do(func() {
 		legacyregistry.CustomMustRegister(&totalVolumesCollector{asw: asw, dsw: dsw, pluginMgr: pluginMgr})
 		legacyregistry.MustRegister(ReconstructVolumeOperationsTotal)
@@ -102,6 +105,7 @@ func Register(asw cache.ActualStateOfWorld, dsw cache.DesiredStateOfWorld, plugi
 	})
 }
 
+// totalVolumesCollector 采集实际状态与期望状态中的卷数量。
 type totalVolumesCollector struct {
 	metrics.BaseStableCollector
 
@@ -110,14 +114,15 @@ type totalVolumesCollector struct {
 	pluginMgr *volume.VolumePluginMgr
 }
 
+// 编译期断言：totalVolumesCollector 实现 StableCollector 接口。
 var _ metrics.StableCollector = &totalVolumesCollector{}
 
-// DescribeWithStability implements the metrics.StableCollector interface.
+// DescribeWithStability 实现 metrics.StableCollector 接口，仅描述指标。
 func (c *totalVolumesCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
 	ch <- totalVolumesDesc
 }
 
-// CollectWithStability implements the metrics.StableCollector interface.
+// CollectWithStability 实现 metrics.StableCollector 接口，按状态与插件名上报卷数量。
 func (c *totalVolumesCollector) CollectWithStability(ch chan<- metrics.Metric) {
 	for stateName, pluginCount := range c.getVolumeCount() {
 		for pluginName, count := range pluginCount {
@@ -130,8 +135,10 @@ func (c *totalVolumesCollector) CollectWithStability(ch chan<- metrics.Metric) {
 	}
 }
 
+// getVolumeCount 汇总实际已挂载卷与期望挂载卷的数量。
 func (c *totalVolumesCollector) getVolumeCount() volumeCount {
 	counter := make(volumeCount)
+	// 实际状态按已挂载卷统计；插件名不可用时用 N/A 占位，保证指标标签完整。
 	for _, mountedVolume := range c.asw.GetMountedVolumes() {
 		pluginName := volumeutil.GetFullQualifiedPluginNameForVolume(mountedVolume.PluginName, mountedVolume.VolumeSpec)
 		if pluginName == "" {
@@ -140,6 +147,7 @@ func (c *totalVolumesCollector) getVolumeCount() volumeCount {
 		counter.add("actual_state_of_world", pluginName)
 	}
 
+	// 期望状态需要反查插件；查不到时同样用 N/A 占位。
 	for _, volumeToMount := range c.dsw.GetVolumesToMount() {
 		pluginName := pluginNameNotAvailable
 		if plugin, err := c.pluginMgr.FindPluginBySpec(volumeToMount.VolumeSpec); err == nil {

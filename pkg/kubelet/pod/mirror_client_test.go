@@ -32,18 +32,23 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestParsePodFullName 验证 Pod 全名（namespace_name）的解析：
+// 合法格式成功，缺分隔符或多余分隔符失败。
 func TestParsePodFullName(t *testing.T) {
 	type nameTuple struct {
 		Name      string
 		Namespace string
 	}
+	// 覆盖带点号、带连字符的名称，确认只按第一个下划线拆分。
 	successfulCases := map[string]nameTuple{
 		"bar_foo":         {Name: "bar", Namespace: "foo"},
 		"bar.org_foo.com": {Name: "bar.org", Namespace: "foo.com"},
 		"bar-bar_foo":     {Name: "bar-bar", Namespace: "foo"},
 	}
+	// 覆盖缺少分隔符、空字符串、多余分隔符等非法输入。
 	failedCases := []string{"barfoo", "bar_foo_foo", "", "bar_", "_foo"}
 
+	// 成功用例要求名称与命名空间都匹配。
 	for podFullName, expected := range successfulCases {
 		name, namespace, err := kubecontainer.ParsePodFullName(podFullName)
 		if err != nil {
@@ -55,6 +60,7 @@ func TestParsePodFullName(t *testing.T) {
 				expected.Name, expected.Namespace, name, namespace)
 		}
 	}
+	// 失败用例必须返回错误。
 	for _, podFullName := range failedCases {
 		_, _, err := kubecontainer.ParsePodFullName(podFullName)
 		if err == nil {
@@ -63,6 +69,8 @@ func TestParsePodFullName(t *testing.T) {
 	}
 }
 
+// TestCreateMirrorPod 验证创建镜像 Pod 时对节点查询结果的处理：
+// 节点缺失 UID 应失败，正常节点应成功并设置 Node ownerReference。
 func TestCreateMirrorPod(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	const (
@@ -72,6 +80,7 @@ func TestCreateMirrorPod(t *testing.T) {
 		testPodNS    = "test-pod-ns"
 		testPodHash  = "123456789"
 	)
+	// 用例覆盖节点查询失败、节点缺少 UID、节点正常三种情况。
 	testcases := []struct {
 		desc          string
 		node          *v1.Node
@@ -102,6 +111,7 @@ func TestCreateMirrorPod(t *testing.T) {
 
 	for _, test := range testcases {
 		t.Run(test.desc, func(t *testing.T) {
+			// 每个子测试使用独立 fake clientset，避免相互污染。
 			clientset := fake.NewSimpleClientset()
 			nodeGetter := &fakeNodeGetter{
 				t:              t,
@@ -121,6 +131,7 @@ func TestCreateMirrorPod(t *testing.T) {
 				},
 			}
 
+			// 失败用例只断言返回错误；成功用例继续校验创建结果。
 			err := mc.CreateMirrorPod(tCtx, pod)
 			if !test.expectSuccess {
 				assert.Error(t, err)
@@ -130,7 +141,7 @@ func TestCreateMirrorPod(t *testing.T) {
 			createdPod, err := clientset.CoreV1().Pods(testPodNS).Get(tCtx, testPodName, metav1.GetOptions{})
 			require.NoError(t, err)
 
-			// Validate created pod
+			// 校验创建的镜像 Pod：注解记录源 Pod 的 hash，ownerReference 指向节点。
 			assert.Equal(t, testPodHash, createdPod.Annotations[kubetypes.ConfigMirrorAnnotationKey])
 			assert.Len(t, createdPod.OwnerReferences, 1)
 			expectedOwnerRef := metav1.OwnerReference{
@@ -145,6 +156,7 @@ func TestCreateMirrorPod(t *testing.T) {
 	}
 }
 
+// fakeNodeGetter 是返回预设节点或错误的 NodeGetter 桩。
 type fakeNodeGetter struct {
 	t              *testing.T
 	expectNodeName string
@@ -153,6 +165,7 @@ type fakeNodeGetter struct {
 	err  error
 }
 
+// Get 校验传入的节点名并返回预设结果。
 func (f *fakeNodeGetter) Get(nodeName string) (*v1.Node, error) {
 	require.Equal(f.t, f.expectNodeName, nodeName)
 	return f.node, f.err

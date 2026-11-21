@@ -34,8 +34,8 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
-// ListVolumesForPod returns a map of the mounted volumes for the given pod.
-// The key in the map is the OuterVolumeSpecName (i.e. pod.Spec.Volumes[x].Name)
+// ListVolumesForPod 返回指定 Pod 已挂载卷的映射，
+// 键是 OuterVolumeSpecName（即 pod.Spec.Volumes[x].Name）。
 func (kl *Kubelet) ListVolumesForPod(podUID types.UID) (map[string]volume.Volume, bool) {
 	volumesToReturn := make(map[string]volume.Volume)
 	podVolumes := kl.volumeManager.GetMountedVolumesForPod(
@@ -44,6 +44,7 @@ func (kl *Kubelet) ListVolumesForPod(podUID types.UID) (map[string]volume.Volume
 		// TODO: volume.Mounter could be nil if volume object is recovered
 		// from reconciler's sync state process. PR 33616 will fix this problem
 		// to create Mounter object when recovering volume state.
+		// 从 reconciler 恢复状态得到的卷可能缺少 Mounter，跳过以避免空指针。
 		if volume.Mounter == nil {
 			continue
 		}
@@ -53,9 +54,8 @@ func (kl *Kubelet) ListVolumesForPod(podUID types.UID) (map[string]volume.Volume
 	return volumesToReturn, len(volumesToReturn) > 0
 }
 
-// ListBlockVolumesForPod returns a map of the mounted volumes for the given
-// pod. The key in the map is the OuterVolumeSpecName (i.e.
-// pod.Spec.Volumes[x].Name)
+// ListBlockVolumesForPod 返回指定 Pod 已挂载块设备卷的映射，
+// 键是 OuterVolumeSpecName（即 pod.Spec.Volumes[x].Name）。
 func (kl *Kubelet) ListBlockVolumesForPod(podUID types.UID) (map[string]volume.BlockVolume, bool) {
 	volumesToReturn := make(map[string]volume.BlockVolume)
 	podVolumes := kl.volumeManager.GetMountedVolumesForPod(
@@ -64,6 +64,7 @@ func (kl *Kubelet) ListBlockVolumesForPod(podUID types.UID) (map[string]volume.B
 		// TODO: volume.Mounter could be nil if volume object is recovered
 		// from reconciler's sync state process. PR 33616 will fix this problem
 		// to create Mounter object when recovering volume state.
+		// 块设备卷缺少 BlockVolumeMapper 时同样跳过。
 		if volume.BlockVolumeMapper == nil {
 			continue
 		}
@@ -73,9 +74,10 @@ func (kl *Kubelet) ListBlockVolumesForPod(podUID types.UID) (map[string]volume.B
 	return volumesToReturn, len(volumesToReturn) > 0
 }
 
-// podVolumesExist checks with the volume manager and returns true any of the
-// pods for the specified volume are mounted or are uncertain.
+// podVolumesExist 向卷管理器查询：只要指定 Pod 的任一卷仍处于挂载状态
+// 或状态不确定，就返回 true。
 func (kl *Kubelet) podVolumesExist(logger klog.Logger, podUID types.UID) bool {
+	// 卷管理器认为可能存在挂载时直接返回 true，采取保守策略。
 	if kl.volumeManager.HasPossiblyMountedVolumesForPod(volumetypes.UniquePodName(podUID)) {
 		return true
 	}
@@ -84,9 +86,11 @@ func (kl *Kubelet) podVolumesExist(logger klog.Logger, podUID types.UID) bool {
 	// There are some volume plugins such as flexvolume might not have mounts. See issue #61229
 	volumePaths, err := kl.getMountedVolumePathListFromDisk(logger, podUID)
 	if err != nil {
+		// 检查失败时宁可保留，避免误删仍在使用的卷。
 		logger.Error(err, "Pod found, but error occurred during checking mounted volumes from disk", "podUID", podUID)
 		return true
 	}
+	// 磁盘上仍有挂载路径，说明卷尚未清理干净。
 	if len(volumePaths) > 0 {
 		logger.V(4).Info("Pod found, but volumes are still mounted on disk", "podUID", podUID, "paths", volumePaths)
 		return true
@@ -95,9 +99,8 @@ func (kl *Kubelet) podVolumesExist(logger klog.Logger, podUID types.UID) bool {
 	return false
 }
 
-// newVolumeMounterFromPlugins attempts to find a plugin by volume spec, pod
-// and volume options and then creates a Mounter.
-// Returns a valid mounter or an error.
+// newVolumeMounterFromPlugins 根据卷规格、Pod 与卷选项查找插件并创建 Mounter，
+// 返回可用的 Mounter 或错误。
 func (kl *Kubelet) newVolumeMounterFromPlugins(logger klog.Logger, spec *volume.Spec, pod *v1.Pod) (volume.Mounter, error) {
 	plugin, err := kl.volumePluginMgr.FindPluginBySpec(spec)
 	if err != nil {
@@ -111,17 +114,16 @@ func (kl *Kubelet) newVolumeMounterFromPlugins(logger klog.Logger, spec *volume.
 	return physicalMounter, nil
 }
 
-// removeOrphanedPodVolumeDirs attempts to remove the pod volumes directory and
-// its subdirectories. There should be no files left under normal conditions
-// when this is called, so it effectively does a recursive rmdir instead of
-// RemoveAll to ensure it only removes empty directories and files that were
-// used as mount points, but not content of the mount points.
+// removeOrphanedPodVolumeDirs 尝试删除 Pod 的卷目录及其子目录。正常情况下调用时
+// 不应残留文件，因此这里实际执行的是递归 rmdir 而非 RemoveAll，确保只删除空目录
+// 和曾被用作挂载点的文件，而不删除挂载点里的内容。
 func (kl *Kubelet) removeOrphanedPodVolumeDirs(logger klog.Logger, uid types.UID) []error {
 	orphanVolumeErrors := []error{}
 
-	// If there are still volume directories, attempt to rmdir them
+	// 若仍有卷目录，逐个尝试 rmdir（仅删除空目录）。
 	volumePaths, err := kl.getPodVolumePathListFromDisk(logger, uid)
 	if err != nil {
+		// 读取目录失败时记录错误并停止后续清理。
 		orphanVolumeErrors = append(orphanVolumeErrors, fmt.Errorf("orphaned pod %q found, but error occurred during reading volume dir from disk: %v", uid, err))
 		return orphanVolumeErrors
 	}
@@ -135,7 +137,7 @@ func (kl *Kubelet) removeOrphanedPodVolumeDirs(logger klog.Logger, uid types.UID
 		}
 	}
 
-	// If there are any volume-subpaths, attempt to remove them
+	// 清理残留的 volume-subpath 挂载点。
 	subpathVolumePaths, err := kl.getPodVolumeSubpathListFromDisk(logger, uid)
 	if err != nil {
 		orphanVolumeErrors = append(orphanVolumeErrors, fmt.Errorf("orphaned pod %q found, but error occurred during reading of volume-subpaths dir from disk: %v", uid, err))
@@ -143,7 +145,7 @@ func (kl *Kubelet) removeOrphanedPodVolumeDirs(logger klog.Logger, uid types.UID
 	}
 	if len(subpathVolumePaths) > 0 {
 		for _, subpathVolumePath := range subpathVolumePaths {
-			// Remove both files and empty directories here, as the subpath may have been a bind-mount of a file or a directory.
+			// 这里同时删除文件和空目录，因为 subpath 可能是文件或目录的 bind mount。
 			if err := os.Remove(subpathVolumePath); err != nil {
 				orphanVolumeErrors = append(orphanVolumeErrors, fmt.Errorf("orphaned pod %q found, but failed to remove subpath at path %v: %w", uid, subpathVolumePath, err))
 			} else {
@@ -152,8 +154,7 @@ func (kl *Kubelet) removeOrphanedPodVolumeDirs(logger klog.Logger, uid types.UID
 		}
 	}
 
-	// Remove any remaining subdirectories along with the volumes directory itself.
-	// Fail if any regular files are encountered.
+	// 删除剩余子目录以及 volumes 目录本身；遇到普通文件则失败。
 	podVolDir := kl.getPodVolumesDir(uid)
 	if err := removeall.RemoveDirsOneFilesystem(kl.mounter, podVolDir); err != nil {
 		orphanVolumeErrors = append(orphanVolumeErrors, fmt.Errorf("orphaned pod %q found, but error occurred when trying to remove the volumes dir: %v", uid, err))
@@ -164,9 +165,10 @@ func (kl *Kubelet) removeOrphanedPodVolumeDirs(logger klog.Logger, uid types.UID
 	return orphanVolumeErrors
 }
 
-// cleanupOrphanedPodDirs removes the volumes of pods that should not be
-// running and that have no containers running.  Note that we roll up logs here since it runs in the main loop.
+// cleanupOrphanedPodDirs 删除不应再运行且没有容器的 Pod 的卷。
+// 该函数运行在主循环中，因此这里只汇总日志输出。
 func (kl *Kubelet) cleanupOrphanedPodDirs(logger klog.Logger, pods []*v1.Pod, runningPods []*kubecontainer.Pod) error {
+	// 汇总所有已知 Pod（包括正在运行的容器），用于识别磁盘上的孤儿目录。
 	allPods := sets.New[string]()
 	for _, pod := range pods {
 		allPods.Insert(string(pod.UID))
@@ -175,6 +177,7 @@ func (kl *Kubelet) cleanupOrphanedPodDirs(logger klog.Logger, pods []*v1.Pod, ru
 		allPods.Insert(string(pod.ID))
 	}
 
+	// 从磁盘枚举 kubelet 记录过的 Pod UID。
 	found, err := kl.listPodsFromDisk()
 	if err != nil {
 		return err
@@ -185,14 +188,14 @@ func (kl *Kubelet) cleanupOrphanedPodDirs(logger klog.Logger, pods []*v1.Pod, ru
 	var totalPods, errorPods int
 
 	for _, uid := range found {
+		// 跳过仍然存在的 Pod。
 		if allPods.Has(string(uid)) {
 			continue
 		}
 
 		totalPods++
 
-		// If volumes have not been unmounted/detached, do not delete directory.
-		// Doing so may result in corruption of data.
+		// 若卷尚未卸载/解挂，不要删除目录，否则可能导致数据损坏。
 		// TODO: getMountedVolumePathListFromDisk() call may be redundant with
 		// kl.getPodVolumePathListFromDisk(). Can this be cleaned up?
 		if podVolumesExist := kl.podVolumesExist(logger, uid); podVolumesExist {
@@ -201,20 +204,18 @@ func (kl *Kubelet) cleanupOrphanedPodDirs(logger klog.Logger, pods []*v1.Pod, ru
 			continue
 		}
 
-		// Attempt to remove the pod volumes directory and its subdirectories
+		// 尝试删除 Pod 的卷目录及其子目录。
 		podVolumeErrors := kl.removeOrphanedPodVolumeDirs(logger, uid)
 		if len(podVolumeErrors) > 0 {
 			errorPods++
 			orphanVolumeErrors = append(orphanVolumeErrors, podVolumeErrors...)
-			// Not all volumes were removed, so don't clean up the pod directory yet. It is likely
-			// that there are still mountpoints or files left which could cause removal of the pod
-			// directory to fail below.
-			// Errors for all removal operations have already been recorded, so don't add another
-			// one here.
+			// 并非所有卷都已删除，暂时不要清理 Pod 目录：可能仍有挂载点或文件残留，
+			// 会导致后面的 Pod 目录删除失败。所有删除操作的错误都已记录，
+			// 这里不再重复追加。
 			continue
 		}
 
-		// Call RemoveAllOneFilesystem for remaining subdirectories under the pod directory
+		// 对 Pod 目录下剩余的子目录调用 RemoveAllOneFilesystem。
 		podDir := kl.getPodDir(uid)
 		podSubdirs, err := os.ReadDir(podDir)
 		if err != nil {
@@ -228,9 +229,8 @@ func (kl *Kubelet) cleanupOrphanedPodDirs(logger klog.Logger, pods []*v1.Pod, ru
 		for _, podSubdir := range podSubdirs {
 			podSubdirName := podSubdir.Name()
 			podSubdirPath := filepath.Join(podDir, podSubdirName)
-			// Never attempt RemoveAllOneFilesystem on the volumes directory,
-			// as this could lead to data loss in some situations. The volumes
-			// directory should have been removed by removeOrphanedPodVolumeDirs.
+			// 绝不要对 volumes 目录调用 RemoveAllOneFilesystem，某些情况下会导致数据丢失；
+			// 该目录本应由 removeOrphanedPodVolumeDirs 删除。
 			if podSubdirName == "volumes" {
 				cleanupFailed = true
 				err := fmt.Errorf("volumes subdir was found after it was removed")
@@ -244,18 +244,20 @@ func (kl *Kubelet) cleanupOrphanedPodDirs(logger klog.Logger, pods []*v1.Pod, ru
 			}
 		}
 
-		// Rmdir the pod dir, which should be empty if everything above was successful
+		// 删除 Pod 目录；如果上面都成功，此时目录应为空。
 		logger.V(3).Info("Orphaned pod found, removing", "podUID", uid)
 		if err := syscall.Rmdir(podDir); err != nil {
 			cleanupFailed = true
 			logger.Error(err, "Failed to remove orphaned pod dir", "podUID", uid)
 			orphanRemovalErrors = append(orphanRemovalErrors, fmt.Errorf("orphaned pod %q found, but error occurred when trying to remove the pod directory: %v", uid, err))
 		}
+		// 任一子目录清理失败都标记为清理失败，最后据此统计错误 Pod 数。
 		if cleanupFailed {
 			errorPods++
 		}
 	}
 
+	// logSpew 汇总同类错误：只打印一条错误，详细错误在更高日志级别输出。
 	logSpew := func(errs []error) {
 		if len(errs) > 0 {
 			logger.Error(errs[0], "There were many similar errors. Turn up verbosity to see them.", "numErrs", len(errs))
@@ -266,6 +268,7 @@ func (kl *Kubelet) cleanupOrphanedPodDirs(logger klog.Logger, pods []*v1.Pod, ru
 	}
 	logSpew(orphanVolumeErrors)
 	logSpew(orphanRemovalErrors)
+	// 记录本次清理的孤儿 Pod 总数与失败数。
 	metrics.OrphanPodCleanedVolumes.Set(float64(totalPods))
 	metrics.OrphanPodCleanedVolumesErrors.Set(float64(errorPods))
 	return utilerrors.NewAggregate(orphanRemovalErrors)

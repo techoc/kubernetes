@@ -24,35 +24,35 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
-// Manager provides a probe results cache and channel of updates.
+// Manager 提供探测结果缓存与更新通道。
 type Manager interface {
-	// Get returns the cached result for the container with the given ID.
+	// Get 返回指定容器缓存的探测结果。
 	Get(kubecontainer.ContainerID) (Result, bool)
-	// Set sets the cached result for the container with the given ID.
-	// The pod is only included to be sent with the update.
+	// Set 更新指定容器的缓存结果。
+	// pod 仅用于随更新一起发送。
 	Set(kubecontainer.ContainerID, Result, *v1.Pod)
-	// Remove clears the cached result for the container with the given ID.
+	// Remove 清除指定容器的缓存结果。
 	Remove(kubecontainer.ContainerID)
-	// Updates creates a channel that receives an Update whenever its result changes (but not
-	// removed).
-	// NOTE: The current implementation only supports a single updates channel.
+	// Updates 返回结果变化（不含删除）时接收更新的通道。
+	// 注意：当前实现只支持单个更新通道。
 	Updates() <-chan Update
 }
 
-// Result is the type for probe results.
+// Result 是探测结果的类型。
 type Result int
 
 const (
-	// Unknown is encoded as -1 (type Result)
+	// Unknown 编码为 -1。
 	Unknown Result = iota - 1
 
-	// Success is encoded as 0 (type Result)
+	// Success 编码为 0。
 	Success
 
-	// Failure is encoded as 1 (type Result)
+	// Failure 编码为 1。
 	Failure
 )
 
+// String 返回探测结果的可读名称。
 func (r Result) String() string {
 	switch r {
 	case Success:
@@ -64,7 +64,7 @@ func (r Result) String() string {
 	}
 }
 
-// ToPrometheusType translates a Result to a form which is better understood by prometheus.
+// ToPrometheusType 把探测结果转换为便于 Prometheus 理解的数值。
 func (r Result) ToPrometheusType() float64 {
 	switch r {
 	case Success:
@@ -76,33 +76,39 @@ func (r Result) ToPrometheusType() float64 {
 	}
 }
 
-// Update is an enum of the types of updates sent over the Updates channel.
+// Update 是通过 Updates 通道发送的一次结果更新。
 type Update struct {
+	// ContainerID 是产生该更新的容器。
 	ContainerID kubecontainer.ContainerID
-	Result      Result
-	PodUID      types.UID
+	// Result 是新的探测结果。
+	Result Result
+	// PodUID 是容器所属 Pod 的 UID。
+	PodUID types.UID
 }
 
-// Manager implementation.
+// manager 是 Manager 接口的默认实现。
 type manager struct {
-	// guards the cache
+	// 保护 cache 的读写锁。
 	sync.RWMutex
-	// map of container ID -> probe Result
+	// 容器 ID 到探测结果的映射。
 	cache map[kubecontainer.ContainerID]Result
-	// channel of updates
+	// 结果更新通道。
 	updates chan Update
 }
 
+// 编译期断言：manager 实现了 Manager 接口。
 var _ Manager = &manager{}
 
-// NewManager creates and returns an empty results manager.
+// NewManager 创建并返回一个空的结果管理器。
 func NewManager() Manager {
+	// 更新通道带缓冲，避免探测循环因消费者短暂停顿而阻塞。
 	return &manager{
 		cache:   make(map[kubecontainer.ContainerID]Result),
 		updates: make(chan Update, 20),
 	}
 }
 
+// Get 返回容器缓存的探测结果，并报告其是否存在。
 func (m *manager) Get(id kubecontainer.ContainerID) (Result, bool) {
 	m.RLock()
 	defer m.RUnlock()
@@ -110,13 +116,15 @@ func (m *manager) Get(id kubecontainer.ContainerID) (Result, bool) {
 	return result, found
 }
 
+// Set 更新容器探测结果，仅在结果变化时发送更新。
 func (m *manager) Set(id kubecontainer.ContainerID, result Result, pod *v1.Pod) {
 	if m.setInternal(id, result) {
+		// 结果变化才通知消费者，避免无意义的重复事件。
 		m.updates <- Update{id, result, pod.UID}
 	}
 }
 
-// Internal helper for locked portion of set. Returns whether an update should be sent.
+// setInternal 在持锁状态下更新缓存，并返回是否需要发送更新。
 func (m *manager) setInternal(id kubecontainer.ContainerID, result Result) bool {
 	m.Lock()
 	defer m.Unlock()
@@ -128,12 +136,14 @@ func (m *manager) setInternal(id kubecontainer.ContainerID, result Result) bool 
 	return false
 }
 
+// Remove 删除容器的缓存结果。
 func (m *manager) Remove(id kubecontainer.ContainerID) {
 	m.Lock()
 	defer m.Unlock()
 	delete(m.cache, id)
 }
 
+// Updates 返回结果更新通道。
 func (m *manager) Updates() <-chan Update {
 	return m.updates
 }

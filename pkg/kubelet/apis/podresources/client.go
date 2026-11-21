@@ -29,19 +29,21 @@ import (
 	"k8s.io/kubelet/pkg/apis/podresources/v1alpha1"
 )
 
-// Note: Consumers of the pod resources API should not be importing this package.
-// They should copy paste the function in their project.
+// 注意：pod resources API 的使用方不应导入本包，
+// 而应把相关函数复制到自己的项目中。
 
-// GetV1alpha1Client returns a client for the PodResourcesLister grpc service
-// Note: This is deprecated
+// GetV1alpha1Client 返回 PodResourcesLister gRPC 服务的客户端。
+// 注意：该版本已废弃。
 func GetV1alpha1Client(ctx context.Context, socket string, connectionTimeout time.Duration, maxMsgSize int) (v1alpha1.PodResourcesListerClient, *grpc.ClientConn, error) {
 	addr, dialer, err := util.GetAddressAndDialer(socket)
 	if err != nil {
 		return nil, nil, err
 	}
+	// 为建立连接设置超时，避免 socket 不可用时无限阻塞。
 	ctxT, cancel := context.WithTimeout(ctx, connectionTimeout)
 	defer cancel()
 
+	// 通过 unix dialer 连接，并按需设置最大接收消息大小。
 	conn, err := grpc.DialContext(ctxT, addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(dialer),
@@ -52,15 +54,17 @@ func GetV1alpha1Client(ctx context.Context, socket string, connectionTimeout tim
 	return v1alpha1.NewPodResourcesListerClient(conn), conn, nil
 }
 
-// GetV1Client returns a client for the PodResourcesLister grpc service
+// GetV1Client 返回 PodResourcesLister gRPC 服务的 v1 客户端。
 func GetV1Client(ctx context.Context, socket string, connectionTimeout time.Duration, maxMsgSize int) (v1.PodResourcesListerClient, *grpc.ClientConn, error) {
 	addr, dialer, err := util.GetAddressAndDialer(socket)
 	if err != nil {
 		return nil, nil, err
 	}
+	// 为建立连接设置超时，避免 socket 不可用时无限阻塞。
 	ctxT, cancel := context.WithTimeout(ctx, connectionTimeout)
 	defer cancel()
 
+	// 通过 unix dialer 连接，并按需设置最大接收消息大小。
 	conn, err := grpc.DialContext(ctxT, addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(dialer),

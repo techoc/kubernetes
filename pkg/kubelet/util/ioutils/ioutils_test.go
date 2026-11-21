@@ -25,13 +25,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestLimitWriter 验证 LimitWriter 在各种写入大小与限制组合下的截断行为。
 func TestLimitWriter(t *testing.T) {
-	r := rand.New(rand.NewSource(1234)) // Fixed source to prevent flakes.
+	r := rand.New(rand.NewSource(1234)) // 固定随机源，避免测试抖动。
 
 	tests := []struct {
 		inputSize, limit, writeSize int64
 	}{
-		// Single write tests
+		// 单次写入用例。
 		{100, 101, 100},
 		{100, 100, 100},
 		{100, 99, 100},
@@ -39,7 +40,7 @@ func TestLimitWriter(t *testing.T) {
 		{100, 10, 100},
 		{100, 0, 100},
 		{100, -1, 100},
-		// Multi write tests
+		// 多次写入用例。
 		{100, 101, 10},
 		{100, 100, 10},
 		{100, 99, 10},
@@ -48,6 +49,7 @@ func TestLimitWriter(t *testing.T) {
 		{100, -1, 10},
 	}
 
+	// 覆盖单次写入与多次写入两种模式。
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("inputSize=%d limit=%d writes=%d", test.inputSize, test.limit, test.writeSize), func(t *testing.T) {
 			input := make([]byte, test.inputSize)
@@ -65,6 +67,7 @@ func TestLimitWriter(t *testing.T) {
 				written += int64(n)
 			}
 
+			// 实际写入量受 limit 与输入长度共同约束。
 			expectWritten := bounded(0, test.inputSize, test.limit)
 			assert.EqualValues(t, expectWritten, written)
 			if expectWritten <= 0 {
@@ -73,6 +76,7 @@ func TestLimitWriter(t *testing.T) {
 				assert.Equal(t, input[:expectWritten], output.Bytes())
 			}
 
+			// 被截断时应返回错误。
 			if test.limit < test.inputSize {
 				assert.Error(t, err)
 			} else {
@@ -82,6 +86,7 @@ func TestLimitWriter(t *testing.T) {
 	}
 }
 
+// bounded 把 val 限制在 [min, max] 区间内。
 func bounded(min, val, max int64) int64 {
 	if max < val {
 		val = max

@@ -35,24 +35,26 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// GetObjectTTLFunc defines a function to get value of TTL.
+// GetObjectTTLFunc 定义获取 TTL 值的函数类型。
 type GetObjectTTLFunc func() (time.Duration, bool)
 
-// GetObjectFunc defines a function to get object with a given namespace and name.
+// GetObjectFunc 定义按命名空间和名称获取对象的函数类型。
 type GetObjectFunc func(string, string, metav1.GetOptions) (runtime.Object, error)
 
+// objectKey 是对象缓存的键，包含命名空间、名称和 UID。
 type objectKey struct {
 	namespace string
 	name      string
 	uid       types.UID
 }
 
-// objectStoreItems is a single item stored in objectStore.
+// objectStoreItem 是 objectStore 中存储的单个条目。
 type objectStoreItem struct {
 	refCount int
 	data     *objectData
 }
 
+// objectData 缓存单个对象的数据、错误与最近一次更新时间，并内嵌互斥锁保护这些字段。
 type objectData struct {
 	sync.Mutex
 
@@ -61,7 +63,7 @@ type objectData struct {
 	lastUpdateTime time.Time
 }
 
-// objectStore is a local cache of objects.
+// objectStore 是对象的本地缓存。
 type objectStore struct {
 	getObject GetObjectFunc
 	clock     clock.Clock
@@ -73,7 +75,7 @@ type objectStore struct {
 	getTTL     GetObjectTTLFunc
 }
 
-// NewObjectStore returns a new ttl-based instance of Store interface.
+// NewObjectStore 返回基于 TTL 的 Store 接口实例。
 func NewObjectStore(getObject GetObjectFunc, clock clock.Clock, getTTL GetObjectTTLFunc, ttl time.Duration) Store {
 	return &objectStore{
 		getObject:  getObject,
@@ -84,6 +86,7 @@ func NewObjectStore(getObject GetObjectFunc, clock clock.Clock, getTTL GetObject
 	}
 }
 
+// isObjectOlder 判断 newObject 的资源版本是否比 oldObject 更旧；任一对象为 nil 时返回 false。
 func isObjectOlder(newObject, oldObject runtime.Object) bool {
 	if newObject == nil || oldObject == nil {
 		return false
@@ -93,12 +96,12 @@ func isObjectOlder(newObject, oldObject runtime.Object) bool {
 	return newVersion < oldVersion
 }
 
+// AddReference 为指定对象增加引用计数；实际拉取推迟到下一次 Get 调用。
 func (s *objectStore) AddReference(namespace, name string, _ types.UID) {
 	key := objectKey{namespace: namespace, name: name}
 
-	// AddReference is called from RegisterPod, thus it needs to be efficient.
-	// Thus Add() is only increasing refCount and generation of a given object.
-	// Then Get() is responsible for fetching if needed.
+	// AddReference 由 RegisterPod 调用，必须足够高效：这里只增加引用计数并
+	// 使对象失效，真正拉取对象交给 Get() 负责。
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	item, exists := s.items[key]
@@ -111,10 +114,11 @@ func (s *objectStore) AddReference(namespace, name string, _ types.UID) {
 	}
 
 	item.refCount++
-	// This will trigger fetch on the next Get() operation.
+	// 将缓存数据置空，使下一次 Get() 触发重新拉取。
 	item.data = nil
 }
 
+// DeleteReference 减少指定对象的引用计数，计数归零时从缓存中删除。
 func (s *objectStore) DeleteReference(namespace, name string, _ types.UID) {
 	key := objectKey{namespace: namespace, name: name}
 
@@ -122,21 +126,23 @@ func (s *objectStore) DeleteReference(namespace, name string, _ types.UID) {
 	defer s.lock.Unlock()
 	if item, ok := s.items[key]; ok {
 		item.refCount--
+		// 引用计数归零说明已无 Pod 使用该对象，可以安全移除。
 		if item.refCount == 0 {
 			delete(s.items, key)
 		}
 	}
 }
 
-// GetObjectTTLFromNodeFunc returns a function that returns TTL value
-// from a given Node object.
+// GetObjectTTLFromNodeFunc 返回一个从 Node 对象读取 TTL 值的函数。
 func GetObjectTTLFromNodeFunc(ctx context.Context, getNode func(context.Context) (*v1.Node, error)) GetObjectTTLFunc {
 	return func() (time.Duration, bool) {
 		node, err := getNode(ctx)
 		if err != nil {
 			return time.Duration(0), false
 		}
+		// 读取失败或未设置注解时返回 false，调用方会回退到默认 TTL。
 		if node != nil && node.Annotations != nil {
+			// TTL 注解以秒为单位的整数形式存储。
 			if value, ok := node.Annotations[v1.ObjectTTLAnnotationKey]; ok {
 				if intValue, err := strconv.Atoi(value); err == nil {
 					return time.Duration(intValue) * time.Second, true
@@ -147,14 +153,17 @@ func GetObjectTTLFromNodeFunc(ctx context.Context, getNode func(context.Context)
 	}
 }
 
+// isObjectFresh 判断缓存对象是否仍在 TTL 有效期内。
 func (s *objectStore) isObjectFresh(data *objectData) bool {
 	objectTTL := s.defaultTTL
+	// Node 注解中的 TTL 优先于默认 TTL。
 	if ttl, ok := s.getTTL(); ok {
 		objectTTL = ttl
 	}
 	return s.clock.Now().Before(data.lastUpdateTime.Add(objectTTL))
 }
 
+// Get 返回指定对象：优先使用未过期的缓存，否则从 apiserver 重新拉取。
 func (s *objectStore) Get(namespace, name string) (runtime.Object, error) {
 	key := objectKey{namespace: namespace, name: name}
 
@@ -170,33 +179,32 @@ func (s *objectStore) Get(namespace, name string) (runtime.Object, error) {
 		}
 		return item.data
 	}()
+	// 未注册的对象直接报错，避免对未知对象发起请求。
 	if data == nil {
 		return nil, fmt.Errorf("object %q/%q not registered", namespace, name)
 	}
 
-	// After updating data in objectStore, lock the data, fetch object if
-	// needed and return data.
+	// 取到对象数据后单独加锁：按需拉取并返回数据。
+	// 每个对象独立加锁，避免不同对象的拉取相互阻塞。
 	data.Lock()
 	defer data.Unlock()
+	// 缓存有错误或已过期时重新拉取。
 	if data.err != nil || !s.isObjectFresh(data) {
 		opts := metav1.GetOptions{}
 		if data.object != nil && data.err == nil {
-			// This is just a periodic refresh of an object we successfully fetched previously.
-			// In this case, server data from apiserver cache to reduce the load on both
-			// etcd and apiserver (the cache is eventually consistent).
+			// 这只是对之前成功拉取过的对象做周期性刷新。此时从 apiserver 缓存读取，
+			// 以降低 etcd 与 apiserver 的负载（该缓存是最终一致的）。
 			util.FromApiserverCache(&opts)
 		}
 
 		object, err := s.getObject(namespace, name, opts)
 		if err != nil && !apierrors.IsNotFound(err) && data.object == nil && data.err == nil {
-			// Couldn't fetch the latest object, but there is no cached data to return.
-			// Return the fetch result instead.
+			// 无法拉取最新对象，且没有可返回的缓存数据时，直接返回拉取结果。
 			return object, err
 		}
 		if (err == nil && !isObjectOlder(object, data.object)) || apierrors.IsNotFound(err) {
-			// If the fetch succeeded with a newer version of the object, or if the
-			// object could not be found in the apiserver, update the cached data to
-			// reflect the current status.
+			// 若成功拉到更新版本的对象，或对象在 apiserver 中已不存在，
+			// 则更新缓存数据以反映最新状态；更旧的响应不会覆盖缓存。
 			data.object = object
 			data.err = err
 			data.lastUpdateTime = s.clock.Now()
@@ -205,10 +213,8 @@ func (s *objectStore) Get(namespace, name string) (runtime.Object, error) {
 	return data.object, data.err
 }
 
-// cacheBasedManager keeps a store with objects necessary
-// for registered pods. Different implementations of the store
-// may result in different semantics for freshness of objects
-// (e.g. ttl-based implementation vs watch-based implementation).
+// cacheBasedManager 维护已注册 Pod 所需对象的存储。不同的 Store 实现
+// 对对象新鲜度有不同语义（例如基于 TTL 的实现与基于 watch 的实现）。
 type cacheBasedManager struct {
 	objectStore          Store
 	getReferencedObjects func(*v1.Pod) sets.Set[string]
@@ -217,10 +223,12 @@ type cacheBasedManager struct {
 	registeredPods map[objectKey]*v1.Pod
 }
 
+// GetObject 从底层对象存储中获取对象。
 func (c *cacheBasedManager) GetObject(namespace, name string) (runtime.Object, error) {
 	return c.objectStore.Get(namespace, name)
 }
 
+// RegisterPod 记录 Pod，并为其引用的对象增加引用计数。
 func (c *cacheBasedManager) RegisterPod(pod *v1.Pod) {
 	names := c.getReferencedObjects(pod)
 	c.lock.Lock()
@@ -229,21 +237,22 @@ func (c *cacheBasedManager) RegisterPod(pod *v1.Pod) {
 	key := objectKey{namespace: pod.Namespace, name: pod.Name, uid: pod.UID}
 	prev = c.registeredPods[key]
 	c.registeredPods[key] = pod
-	// To minimize unnecessary API requests to the API server for the configmap/secret get API
-	// only invoke AddReference the first time RegisterPod is called for a pod.
+	// 为了尽量减少对 apiserver 的 configmap/secret 请求，
+	// 只在首次为该 Pod 调用 RegisterPod 时增加引用。
+	// 首次注册时一次性增加全部引用。
 	if prev == nil {
 		for name := range names {
 			c.objectStore.AddReference(pod.Namespace, name, pod.UID)
 		}
 	} else {
 		prevNames := c.getReferencedObjects(prev)
-		// Add new references
+		// 为新增的引用增加计数。
 		for name := range names {
 			if !prevNames.Has(name) {
 				c.objectStore.AddReference(pod.Namespace, name, pod.UID)
 			}
 		}
-		// Remove dropped references
+		// 为不再被引用的对象减少计数。
 		for prevName := range prevNames {
 			if !names.Has(prevName) {
 				c.objectStore.DeleteReference(pod.Namespace, prevName, pod.UID)
@@ -252,6 +261,7 @@ func (c *cacheBasedManager) RegisterPod(pod *v1.Pod) {
 	}
 }
 
+// UnregisterPod 移除 Pod 记录，并释放其引用的全部对象。
 func (c *cacheBasedManager) UnregisterPod(pod *v1.Pod) {
 	var prev *v1.Pod
 	key := objectKey{namespace: pod.Namespace, name: pod.Name, uid: pod.UID}
@@ -259,6 +269,7 @@ func (c *cacheBasedManager) UnregisterPod(pod *v1.Pod) {
 	defer c.lock.Unlock()
 	prev = c.registeredPods[key]
 	delete(c.registeredPods, key)
+	// 只对已注册过的 Pod 释放引用，避免重复递减计数。
 	if prev != nil {
 		for name := range c.getReferencedObjects(prev) {
 			c.objectStore.DeleteReference(prev.Namespace, name, prev.UID)
@@ -266,14 +277,11 @@ func (c *cacheBasedManager) UnregisterPod(pod *v1.Pod) {
 	}
 }
 
-// NewCacheBasedManager creates a manager that keeps a cache of all objects
-// necessary for registered pods.
-// It implements the following logic:
-//   - whenever a pod is created or updated, the cached versions of all objects
-//     is referencing are invalidated
-//   - every GetObject() call tries to fetch the value from local cache; if it is
-//     not there, invalidated or too old, we fetch it from apiserver and refresh the
-//     value in cache; otherwise it is just fetched from cache
+// NewCacheBasedManager 创建一个管理器，缓存已注册 Pod 所需的所有对象。
+// 它实现以下逻辑：
+//   - 每当 Pod 被创建或更新时，使其引用的所有对象的缓存版本失效
+//   - 每次 GetObject() 调用都优先尝试从本地缓存获取；若不存在、已失效或过旧，
+//     则从 apiserver 拉取并刷新缓存；否则直接返回缓存值
 func NewCacheBasedManager(objectStore Store, getReferencedObjects func(*v1.Pod) sets.Set[string]) Manager {
 	return &cacheBasedManager{
 		objectStore:          objectStore,

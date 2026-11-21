@@ -30,13 +30,14 @@ import (
 	statsapi "k8s.io/kubelet/pkg/apis/stats/v1alpha1"
 )
 
-// Stats provides basic information about max and current process count
+// Stats 返回系统最大任务数与当前进程数等基本信息。
 func Stats() (*statsapi.RlimitStats, error) {
 	rlimit := &statsapi.RlimitStats{}
 
+	// -1 表示尚未读取到任何限制。
 	taskMax := int64(-1)
-	// Calculate the minimum of kernel.pid_max and kernel.threads-max as they both specify the
-	// system-wide limit on the number of tasks.
+	// 取 kernel.pid_max 与 kernel.threads-max 的较小值，
+	// 两者都表示系统级的任务数量上限。
 	for _, file := range []string{"/proc/sys/kernel/pid_max", "/proc/sys/kernel/threads-max"} {
 		if content, err := os.ReadFile(file); err == nil {
 			if limit, err := strconv.ParseInt(string(content[:len(content)-1]), 10, 64); err == nil {
@@ -46,14 +47,13 @@ func Stats() (*statsapi.RlimitStats, error) {
 			}
 		}
 	}
-	// Both reads did not fail.
+	// 两次读取都未失败时才设置上限。
 	if taskMax >= 0 {
 		rlimit.MaxPID = &taskMax
 	}
 
-	// Prefer to read "/proc/loadavg" when possible because sysinfo(2)
-	// returns truncated number when greater than 65538. See
-	// https://github.com/kubernetes/kubernetes/issues/107107
+	// 优先读取 /proc/loadavg，因为 sysinfo(2) 在进程数超过 65538 时会截断。
+	// 参见 https://github.com/kubernetes/kubernetes/issues/107107
 	if procs, err := runningTaskCount(); err == nil {
 		rlimit.NumOfRunningProcesses = &procs
 	} else {
@@ -68,12 +68,14 @@ func Stats() (*statsapi.RlimitStats, error) {
 	return rlimit, nil
 }
 
+// runningTaskCount 从 /proc/loadavg 读取系统任务总数。
 func runningTaskCount() (int64, error) {
-	// Example: 1.36 3.49 4.53 2/3518 3715089
+	// 示例：1.36 3.49 4.53 2/3518 3715089
 	bytes, err := os.ReadFile("/proc/loadavg")
 	if err != nil {
 		return 0, err
 	}
+	// 第 4 个字段形如 "running/total"。
 	fields := strings.Fields(string(bytes))
 	if len(fields) < 5 {
 		return 0, fmt.Errorf("not enough fields in /proc/loadavg")
@@ -82,5 +84,6 @@ func runningTaskCount() (int64, error) {
 	if len(subfields) != 2 {
 		return 0, fmt.Errorf("error parsing fourth field of /proc/loadavg")
 	}
+	// 取分母，即系统当前任务总数。
 	return strconv.ParseInt(subfields[1], 10, 64)
 }

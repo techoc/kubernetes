@@ -61,6 +61,7 @@ const (
 	testHostname = "test-hostname"
 )
 
+// TestGetMountedVolumesForPodAndGetVolumesInUse 验证卷模式匹配时会挂载并上报 in-use，不匹配时报错且不挂载。
 func TestGetMountedVolumesForPodAndGetVolumesInUse(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -117,7 +118,7 @@ func TestGetMountedVolumesForPodAndGetVolumesInUse(t *testing.T) {
 
 			podManager.SetPods([]*v1.Pod{pod})
 
-			// Fake node status update
+			// 模拟节点状态更新。
 			go simulateVolumeInUseUpdate(
 				v1.UniqueVolumeName(node.Status.VolumesAttached[0].Name),
 				tCtx.Done(),
@@ -155,6 +156,7 @@ func TestGetMountedVolumesForPodAndGetVolumesInUse(t *testing.T) {
 	}
 }
 
+// TestWaitForAttachAndMountError 验证存在无法挂载的卷时 WaitForAttachAndMount 返回聚合错误。
 func TestWaitForAttachAndMountError(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	tmpDir, err := utiltesting.MkTmpdir("volumeManagerTest")
@@ -254,6 +256,7 @@ func TestWaitForAttachAndMountError(t *testing.T) {
 	}
 }
 
+// TestWaitForAttachAndMountVolumeAttachLimitExceededError 验证卷挂载数量超过限制时返回 VolumeAttachLimitExceededError。
 func TestWaitForAttachAndMountVolumeAttachLimitExceededError(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.MutableCSINodeAllocatableCount, true)
 
@@ -331,6 +334,7 @@ func TestWaitForAttachAndMountVolumeAttachLimitExceededError(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	t.Cleanup(func() { tCtx.Cancel("test has completed") })
 	sourcesReady := config.NewSourcesReady(func(_ sets.Set[string]) bool { return true })
+	// 后台运行管理器以驱动挂载/卸载循环。
 	go manager.Run(tCtx, sourcesReady)
 	podManager.SetPods([]*v1.Pod{pod})
 
@@ -348,6 +352,7 @@ func TestWaitForAttachAndMountVolumeAttachLimitExceededError(t *testing.T) {
 	require.ErrorIs(t, attachErr.OriginalError, context.DeadlineExceeded, "OriginalError should be context.DeadlineExceeded")
 }
 
+// TestInitialPendingVolumesForPodAndGetVolumesInUse 验证 PVC 初始为 Pending 时，等待绑定后仍能完成挂载。
 func TestInitialPendingVolumesForPodAndGetVolumesInUse(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tmpDir, err := utiltesting.MkTmpdir("volumeManagerTest")
@@ -370,21 +375,23 @@ func TestInitialPendingVolumesForPodAndGetVolumesInUse(t *testing.T) {
 	sourcesReady := config.NewSourcesReady(func(_ sets.Set[string]) bool { return true })
 	go manager.Run(tCtx, sourcesReady)
 
+	// 把 Pod 加入 PodManager，供卷管理器发现。
 	podManager.SetPods([]*v1.Pod{pod})
 
-	// Fake node status update
+	// 模拟节点状态更新。
 	go simulateVolumeInUseUpdate(
 		v1.UniqueVolumeName(node.Status.VolumesAttached[0].Name),
 		tCtx.Done(),
 		manager)
 
-	// delayed claim binding
+	// 延迟绑定 claim。
+	// 异步延迟绑定，模拟 PVC 绑定耗时。
 	go delayClaimBecomesBound(t, kubeClient, claim.GetNamespace(), claim.Name)
 
 	err = wait.Poll(100*time.Millisecond, 1*time.Second, func() (bool, error) {
 		err = manager.WaitForAttachAndMount(tCtx, pod)
 		if err != nil {
-			// Few "PVC not bound" errors are expected
+			// 预期会出现少量 “PVC not bound” 错误
 			return false, nil
 		}
 		return true, nil
@@ -395,6 +402,7 @@ func TestInitialPendingVolumesForPodAndGetVolumesInUse(t *testing.T) {
 
 }
 
+// TestGetExtraSupplementalGroupsForPod 验证从 PV 注解解析额外补充组，并忽略无效或已存在的 gid。
 func TestGetExtraSupplementalGroupsForPod(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	tmpDir, err := utiltesting.MkTmpdir("volumeManagerTest")
@@ -463,7 +471,8 @@ func TestGetExtraSupplementalGroupsForPod(t *testing.T) {
 
 		podManager.SetPods([]*v1.Pod{pod})
 
-		// Fake node status update
+		// 模拟节点状态更新。
+		// 模拟节点已上报该卷在使用中，避免等待超时。
 		go simulateVolumeInUseUpdate(
 			v1.UniqueVolumeName(node.Status.VolumesAttached[0].Name),
 			tCtx.Done(),
@@ -487,16 +496,19 @@ type fakePodStateProvider struct {
 	terminating  map[kubetypes.UID]struct{}
 }
 
+// ShouldPodRuntimeBeRemoved 表示该 UID 的 Pod 运行时是否应被移除。
 func (p *fakePodStateProvider) ShouldPodRuntimeBeRemoved(uid kubetypes.UID) bool {
 	_, ok := p.shouldRemove[uid]
 	return ok
 }
 
+// ShouldPodContainersBeTerminating 表示该 UID 的 Pod 容器是否正在终止。
 func (p *fakePodStateProvider) ShouldPodContainersBeTerminating(uid kubetypes.UID) bool {
 	_, ok := p.terminating[uid]
 	return ok
 }
 
+// newTestVolumeManager 用假插件、假 mounter 与假客户端构造 VolumeManager。
 func newTestVolumeManager(t *testing.T, tmpDir string, podManager kubepod.Manager, kubeClient clientset.Interface, node *v1.Node) VolumeManager {
 	attachablePlug := &volumetest.FakeVolumePlugin{
 		PluginName: "fake",
@@ -541,8 +553,7 @@ func newTestVolumeManager(t *testing.T, tmpDir string, podManager kubepod.Manage
 	return vm
 }
 
-// createObjects returns objects for making a fake clientset. The pv is
-// already attached to the node and bound to the claim used by the pod.
+// createObjects 构造用于 fake clientset 的对象：PV 已挂载到节点并绑定到 Pod 使用的 claim。
 func createObjects(pvMode, podMode v1.PersistentVolumeMode) (*v1.Node, *v1.Pod, *v1.PersistentVolume, *v1.PersistentVolumeClaim) {
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: testHostname},
@@ -597,7 +608,7 @@ func createObjects(pvMode, podMode v1.PersistentVolumeMode) (*v1.Node, *v1.Pod, 
 			},
 		}
 	default:
-		// The volume is not mounted nor mapped
+		// 卷既未挂载也未映射。
 	}
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -632,6 +643,7 @@ func createObjects(pvMode, podMode v1.PersistentVolumeMode) (*v1.Node, *v1.Pod, 
 	return node, pod, pv, claim
 }
 
+// simulateVolumeInUseUpdate 周期性把卷标记为已在用，模拟 kubelet 的状态上报。
 func simulateVolumeInUseUpdate(volumeName v1.UniqueVolumeName, stopCh <-chan struct{}, volumeManager VolumeManager) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -646,6 +658,7 @@ func simulateVolumeInUseUpdate(volumeName v1.UniqueVolumeName, stopCh <-chan str
 	}
 }
 
+// delayClaimBecomesBound 延迟把 PVC 状态更新为 Bound，模拟绑定耗时。
 func delayClaimBecomesBound(
 	t *testing.T,
 	kubeClient clientset.Interface,
@@ -667,6 +680,7 @@ func delayClaimBecomesBound(
 	}
 }
 
+// TestWaitForAllPodsUnmount 验证并发等待所有 Pod 卷卸载，超时返回聚合错误。
 func TestWaitForAllPodsUnmount(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -734,6 +748,7 @@ func TestWaitForAllPodsUnmount(t *testing.T) {
 					go simulateVolumeInUseUpdate(volumeName, ctx.Done(), manager)
 				}
 
+				// 按 Pod 数量放宽等待卷标记的时间，避免并发场景下超时。
 				volumeMarkTimeout := 10*time.Second + time.Duration(test.numPods/10)*5*time.Second
 				err := wait.PollUntilContextTimeout(ctx, 50*time.Millisecond, volumeMarkTimeout, true, func(context.Context) (bool, error) {
 					inUseVolumes := manager.GetVolumesInUse()
@@ -765,6 +780,7 @@ func TestWaitForAllPodsUnmount(t *testing.T) {
 				}
 			}
 
+			// 统一用 1 秒超时触发卸载等待的边界。
 			unmountCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 			defer cancel()
 
@@ -772,14 +788,13 @@ func TestWaitForAllPodsUnmount(t *testing.T) {
 
 			if test.expectedError {
 				require.ErrorIs(t, err, context.DeadlineExceeded, "Expected error due to timeout")
-				// Verify that we get exactly numPods errors in the aggregate
+				// 验证聚合错误中恰好包含 numPods 个错误。
 				var aggErr utilerrors.Aggregate
 				require.ErrorAs(t, err, &aggErr, "Expected error to be an Aggregate error")
 				errs := aggErr.Errors()
 				require.Len(t, errs, test.numPods, "Expected %d errors but got %d", test.numPods, len(errs))
 
-				// Verify that each pod's volume name appears in the error messages,
-				// which proves different pods are being processed
+				// 验证每个 Pod 的卷名都出现在错误信息中，以证明不同 Pod 都在被处理。
 				errString := err.Error()
 				for i := 0; i < test.numPods; i++ {
 					volumeName := fmt.Sprintf("fake/fake-device-%d", i)
@@ -792,6 +807,7 @@ func TestWaitForAllPodsUnmount(t *testing.T) {
 	}
 }
 
+// createMultiplePodsWithVolumes 构造指定数量的 Pod、PV、PVC 及其挂载配置。
 func createMultiplePodsWithVolumes(numPods int, pvMode v1.PersistentVolumeMode) (*v1.Node, []*v1.Pod, []*v1.PersistentVolume, []*v1.PersistentVolumeClaim) {
 	attachedVolumes := make([]v1.AttachedVolume, numPods)
 	for i := 0; i < numPods; i++ {
@@ -901,6 +917,7 @@ func createMultiplePodsWithVolumes(numPods int, pvMode v1.PersistentVolumeMode) 
 	return node, pods, pvs, claims
 }
 
+// TestVolumeManager_ResizeEphemeralVolume 验证 memory-backed emptyDir 的直接扩容路径与各类错误。
 func TestVolumeManager_ResizeEphemeralVolume(t *testing.T) {
 	if goruntime.GOOS != "linux" {
 		t.Skip("in-place resize of memory-backed volumes is only supported on Linux")
@@ -1012,6 +1029,7 @@ func TestVolumeManager_ResizeEphemeralVolume(t *testing.T) {
 			volPath := filepath.Join(tmpDir, "pods/12345/volumes/kubernetes.io~empty-dir/vol1")
 
 			if tt.isMounted {
+				// 预置挂载点，模拟卷已挂载且带有旧 size。
 				physicalMounter.MountPoints = []mount.MountPoint{
 					{
 						Path: volPath,
@@ -1021,6 +1039,7 @@ func TestVolumeManager_ResizeEphemeralVolume(t *testing.T) {
 				err := os.MkdirAll(volPath, 0750)
 				require.NoError(t, err)
 			} else {
+				// 未挂载时移除目录，模拟延迟扩容路径。
 				os.RemoveAll(volPath) //nolint:errcheck
 			}
 
@@ -1042,7 +1061,7 @@ func TestVolumeManager_ResizeEphemeralVolume(t *testing.T) {
 				nil,
 				0)
 
-			// Test ResizeEphemeralVolume
+			// 测试 ResizeEphemeralVolume。
 			err = manager.ResizeEphemeralVolume(pod, "vol1", tt.newSize)
 			if tt.expectedErrSubstr != "" {
 				require.Error(t, err)
@@ -1051,8 +1070,9 @@ func TestVolumeManager_ResizeEphemeralVolume(t *testing.T) {
 			}
 			require.NoError(t, err)
 
-			// Check current mount points options for the success path
+			// 成功路径下检查当前挂载点的选项。
 			var targetMp *mount.MountPoint
+			// 从后往前查找最新的目标挂载点，因为重挂载会追加记录。
 			for i := len(physicalMounter.MountPoints) - 1; i >= 0; i-- {
 				if physicalMounter.MountPoints[i].Path == volPath {
 					targetMp = &physicalMounter.MountPoints[i]

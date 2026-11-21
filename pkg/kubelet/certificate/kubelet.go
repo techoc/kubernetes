@@ -44,18 +44,21 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// newGetTemplateFn 返回生成服务证书 CSR 模板的函数；
+// 没有可用地址时返回 nil，让证书管理器跳过请求。
 func newGetTemplateFn(nodeName types.NodeName, getAddresses func() []v1.NodeAddress) func() *x509.CertificateRequest {
 	return func() *x509.CertificateRequest {
+		// 把节点地址拆分为 DNS 名和 IP，去重并排序，保证 CSR 内容稳定。
 		hostnames, ips := addressesToHostnamesAndIPs(getAddresses())
-		// by default, require at least one IP before requesting a serving certificate
+		// 默认要求至少有一个 IP 才申请服务证书。
 		hasRequiredAddresses := len(ips) > 0
 
-		// optionally allow requesting a serving certificate with just a DNS name
+		// 特性开启时允许仅凭 DNS 名申请服务证书。
 		if utilfeature.DefaultFeatureGate.Enabled(features.AllowDNSOnlyNodeCSR) {
 			hasRequiredAddresses = hasRequiredAddresses || len(hostnames) > 0
 		}
 
-		// don't return a template if we have no addresses to request for
+		// 没有可用于申请的地址时返回 nil。
 		if !hasRequiredAddresses {
 			return nil
 		}
@@ -70,8 +73,7 @@ func newGetTemplateFn(nodeName types.NodeName, getAddresses func() []v1.NodeAddr
 	}
 }
 
-// NewKubeletServerCertificateManager creates a certificate manager for the kubelet when retrieving a server certificate
-// or returns an error.
+// NewKubeletServerCertificateManager 创建 kubelet 服务证书管理器。
 func NewKubeletServerCertificateManager(kubeClient clientset.Interface, kubeCfg *kubeletconfig.KubeletConfiguration, nodeName types.NodeName, getAddresses func() []v1.NodeAddress, certDirectory string) (certificate.Manager, error) {
 	var clientsetFn certificate.ClientsetFunc
 	if kubeClient != nil {
@@ -120,6 +122,7 @@ func NewKubeletServerCertificateManager(kubeClient clientset.Interface, kubeCfg 
 	)
 	legacyregistry.MustRegister(certificateRotationAge)
 
+	// 准备模板生成函数后交给 client-go 证书管理器，由它负责签发与轮换。
 	getTemplate := newGetTemplateFn(nodeName, getAddresses)
 
 	m, err := certificate.NewManager(&certificate.Config{
@@ -134,6 +137,7 @@ func NewKubeletServerCertificateManager(kubeClient clientset.Interface, kubeCfg 
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize server certificate manager: %v", err)
 	}
+	// 用 GaugeFunc 暴露服务证书的剩余 TTL；无有效证书时为 +INF。
 	legacyregistry.RawMustRegister(compbasemetrics.NewGaugeFunc(
 		&compbasemetrics.GaugeOpts{
 			Subsystem: metrics.KubeletSubsystem,
@@ -155,6 +159,7 @@ func NewKubeletServerCertificateManager(kubeClient clientset.Interface, kubeCfg 
 	return m, nil
 }
 
+// addressesToHostnamesAndIPs 把 NodeAddress 列表拆分为去重的 DNS 名和 IP。
 func addressesToHostnamesAndIPs(addresses []v1.NodeAddress) (dnsNames []string, ips []net.IP) {
 	seenDNSNames := map[string]bool{}
 	seenIPs := map[string]bool{}
@@ -163,6 +168,7 @@ func addressesToHostnamesAndIPs(addresses []v1.NodeAddress) (dnsNames []string, 
 			continue
 		}
 
+		// HostName 类型既可能是 DNS 也可能是 IP，需要实际解析后归类。
 		switch address.Type {
 		case v1.NodeHostName:
 			if ip := netutils.ParseIPSloppy(address.Address); ip != nil {
@@ -186,16 +192,15 @@ func addressesToHostnamesAndIPs(addresses []v1.NodeAddress) (dnsNames []string, 
 		ips = append(ips, netutils.ParseIPSloppy(ip))
 	}
 
-	// return in stable order
+	// map 遍历无序，排序后返回，避免每次 CSR 内容变化。
 	sort.Strings(dnsNames)
 	sort.Slice(ips, func(i, j int) bool { return ips[i].String() < ips[j].String() })
 
 	return dnsNames, ips
 }
 
-// NewKubeletClientCertificateManager sets up a certificate manager without a
-// client that can be used to sign new certificates (or rotate). If a CSR
-// client is set later, it may begin rotating/renewing the client cert.
+// NewKubeletClientCertificateManager 创建客户端证书管理器：
+// 初始可以没有用于签发/轮换的 client；之后注入 CSR client 即可开始轮换。
 func NewKubeletClientCertificateManager(
 	certDirectory string,
 	nodeName types.NodeName,
@@ -236,10 +241,8 @@ func NewKubeletClientCertificateManager(
 		},
 		SignerName: certificates.KubeAPIServerClientKubeletSignerName,
 		GetUsages:  certificate.DefaultKubeletClientGetUsages,
-		// For backwards compatibility, the kubelet supports the ability to
-		// provide a higher privileged certificate as initial data that will
-		// then be rotated immediately. This code path is used by kubeadm on
-		// the masters.
+		// 为兼容旧行为，kubelet 允许用高权限证书作为初始数据，随后立即轮换；
+		// kubeadm 在控制平面节点上使用该路径。
 		BootstrapCertificatePEM: bootstrapCertData,
 		BootstrapKeyPEM:         bootstrapKeyData,
 
@@ -253,9 +256,9 @@ func NewKubeletClientCertificateManager(
 	return m, nil
 }
 
-// NewKubeletServerCertificateDynamicFileManager creates a certificate manager based on reading and watching certificate and key files.
-// The returned struct implements certificate.Manager interface, enabling using it like other CertificateManager in this package.
-// But the struct doesn't communicate with API server to perform certificate request at all.
+// NewKubeletServerCertificateDynamicFileManager 创建基于文件读取与监听的服务证书管理器。
+// 返回值实现 certificate.Manager 接口，可像本包其他管理器一样使用，
+// 但完全不与 API server 通信，也不发起证书请求。
 func NewKubeletServerCertificateDynamicFileManager(certFile, keyFile string) (certificate.Manager, error) {
 	c, err := dynamiccertificates.NewDynamicServingContentFromFiles("kubelet-server-cert-files", certFile, keyFile)
 	if err != nil {
@@ -266,12 +269,13 @@ func NewKubeletServerCertificateDynamicFileManager(certFile, keyFile string) (ce
 		certFile:                  certFile,
 		keyFile:                   keyFile,
 	}
+	// 先同步一次文件内容，再注册监听以接收后续变化。
 	m.Enqueue()
 	c.AddListener(m)
 	return m, nil
 }
 
-// kubeletServerCertificateDynamicFileManager uses a dynamic CertKeyContentProvider based on cert and key files.
+// kubeletServerCertificateDynamicFileManager 基于证书/私钥文件提供动态内容。
 type kubeletServerCertificateDynamicFileManager struct {
 	cancelFn                  context.CancelFunc
 	certFile                  string
@@ -280,43 +284,46 @@ type kubeletServerCertificateDynamicFileManager struct {
 	currentTLSCertificate     atomic.Pointer[tls.Certificate]
 }
 
-// Enqueue implements the functions to be notified when the serving cert content changes.
+// Enqueue 在服务证书内容变化时被调用，重新加载证书对。
 func (m *kubeletServerCertificateDynamicFileManager) Enqueue() {
-	// Use klog.TODO() because we currently do not have a proper logger to pass in.
-	// Replace this with an appropriate logger when refactoring this function to accept a logger parameter.
+	// 暂时使用 klog.TODO()，因为当前没有合适的 logger 可传入；
+	// 后续重构该函数接收 logger 参数时应替换掉。
 	logger := klog.TODO()
+	// 读取当前文件内容并尝试组成 TLS 证书对。
 	certContent, keyContent := m.dynamicCertificateContent.CurrentCertKeyContent()
 	cert, err := tls.X509KeyPair(certContent, keyContent)
 	if err != nil {
 		logger.Error(err, "invalid certificate and key pair from file", "certFile", m.certFile, "keyFile", m.keyFile)
 		return
 	}
+	// 只有证书和私钥都有效时才替换当前证书，避免加载失败后丢失可用证书。
 	m.currentTLSCertificate.Store(&cert)
 	logger.V(4).Info("loaded certificate and key pair in kubelet server certificate manager", "certFile", m.certFile, "keyFile", m.keyFile)
 }
 
-// Current returns the last valid certificate key pair loaded from files.
+// Current 返回最近一次从文件成功加载的证书对。
 func (m *kubeletServerCertificateDynamicFileManager) Current() *tls.Certificate {
 	return m.currentTLSCertificate.Load()
 }
 
-// Start starts watching the certificate and key files
+// Start 开始监听证书和私钥文件的变化。
 func (m *kubeletServerCertificateDynamicFileManager) Start() {
 	var ctx context.Context
-	// Use context.TODO() because we currently do not have a proper context to pass in.
-	// This should be replaced with an appropriate context when refactoring this function to accept a context parameter.
+	// 暂时使用 context.TODO()，因为当前没有合适的 context 可传入；
+	// 后续重构该函数接收 context 参数时应替换掉。
 	ctx, m.cancelFn = context.WithCancel(context.TODO())
+	// 以 1 秒周期轮询文件变化，文件更新后回调 Enqueue。
 	go m.dynamicCertificateContent.Run(ctx, 1)
 }
 
-// Stop stops watching the certificate and key files
+// Stop 停止监听证书和私钥文件。
 func (m *kubeletServerCertificateDynamicFileManager) Stop() {
 	if m.cancelFn != nil {
 		m.cancelFn()
 	}
 }
 
-// ServerHealthy always returns true since the file manager doesn't communicate with any server
+// ServerHealthy 始终返回 true：文件管理器不与任何服务端通信。
 func (m *kubeletServerCertificateDynamicFileManager) ServerHealthy() bool {
 	return true
 }

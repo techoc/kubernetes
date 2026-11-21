@@ -38,15 +38,19 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/pluginmanager/cache"
 )
 
-// Server interface provides methods for Device plugin registration server.
+// Server 接口定义设备插件注册服务器的方法。
 type Server interface {
 	cache.PluginHandler
 	healthz.HealthChecker
+	// Start 启动注册服务器并开始监听 unix socket。
 	Start(klog.Logger) error
+	// Stop 停止注册服务器并断开所有插件客户端。
 	Stop(klog.Logger) error
+	// SocketPath 返回注册服务器的 socket 路径。
 	SocketPath() string
 }
 
+// server 实现设备插件注册服务器。
 type server struct {
 	socketName string
 	socketDir  string
@@ -57,14 +61,15 @@ type server struct {
 	chandler   ClientHandler
 	clients    map[string][]Client
 
-	// lastError records the last runtime error. A server is considered healthy till an actual error occurs.
+	// lastError 记录最近的运行时错误；在真正出错之前服务器被视为健康。
 	lastError error
 
 	api.UnsafeRegistrationServer
 }
 
-// NewServer returns an initialized device plugin registration server.
+// NewServer 返回初始化好的设备插件注册服务器。
 func NewServer(logger klog.Logger, socketPath string, rh RegistrationHandler, ch ClientHandler) (Server, error) {
+	// socket 路径必须是非空的绝对路径，否则无法可靠创建 socket。
 	if socketPath == "" || !filepath.IsAbs(socketPath) {
 		return nil, fmt.Errorf(errBadSocket+" %s", socketPath)
 	}
@@ -83,6 +88,7 @@ func NewServer(logger klog.Logger, socketPath string, rh RegistrationHandler, ch
 	return s, nil
 }
 
+// Start 创建 socket 目录、清理旧插件目录并启动 gRPC 注册服务器。
 func (s *server) Start(logger klog.Logger) error {
 	logger.V(2).Info("Starting device plugin registration server")
 
@@ -97,9 +103,8 @@ func (s *server) Start(logger klog.Logger) error {
 		}
 	}
 
-	// For now, we leave cleanup of the *entire* directory up to the Handler
-	// (even though we should in theory be able to just wipe the whole directory)
-	// because the Handler stores its checkpoint file (amongst others) in here.
+	// 目前把整个目录的清理工作交给 Handler（尽管理论上可以直接清空目录），
+	// 因为 Handler 也把 checkpoint 等文件存放在这里。
 	if err := s.rhandler.CleanupPluginDirectory(logger, s.socketDir); err != nil {
 		logger.Error(err, "Failed to cleanup the device plugin directory", "directory", s.socketDir)
 		return err
@@ -115,6 +120,7 @@ func (s *server) Start(logger klog.Logger) error {
 	s.grpc = grpc.NewServer([]grpc.ServerOption{}...)
 
 	api.RegisterRegistrationServer(s.grpc, s)
+	// 在后台运行 gRPC 服务；Serve 返回错误时把服务器标记为不健康。
 	go func() {
 		defer s.wg.Done()
 		s.setHealthy()
@@ -127,6 +133,7 @@ func (s *server) Start(logger klog.Logger) error {
 	return nil
 }
 
+// Stop 断开所有客户端并停止 gRPC 服务器。
 func (s *server) Stop(logger klog.Logger) error {
 	s.visitClients(func(r string, c Client) {
 		if err := s.disconnectClient(logger, r, c); err != nil {
@@ -144,21 +151,24 @@ func (s *server) Stop(logger klog.Logger) error {
 	s.grpc.Stop()
 	s.wg.Wait()
 	s.grpc = nil
-	// During kubelet termination, we do not need the registration server,
-	// and we consider the kubelet to be healthy even when it is down.
+	// kubelet 终止过程中不再需要注册服务器；即使它已停止，
+	// 也认为 kubelet 处于健康状态。
 	s.setHealthy()
 	logger.V(2).Info("Stopping device plugin registration server")
 
 	return nil
 }
 
+// SocketPath 返回注册服务器的 socket 完整路径。
 func (s *server) SocketPath() string {
 	return filepath.Join(s.socketDir, s.socketName)
 }
 
+// Register 处理设备插件注册请求：校验版本与资源名，并连接插件客户端。
 func (s *server) Register(ctx context.Context, r *api.RegisterRequest) (*api.Empty, error) {
 	logger := klog.FromContext(ctx)
 	logger.Info("Got registration request from device plugin with resource", "resourceName", r.ResourceName)
+	// 统计注册请求次数，便于观察插件注册行为。
 	metrics.DevicePluginRegistrationCount.WithLabelValues(r.ResourceName).Inc()
 
 	if !s.isVersionCompatibleWithPlugin(r.Version) {
@@ -167,6 +177,7 @@ func (s *server) Register(ctx context.Context, r *api.RegisterRequest) (*api.Emp
 		return &api.Empty{}, err
 	}
 
+	// 资源名必须是扩展资源（如 example.com/foo）。
 	if !v1helper.IsExtendedResourceName(core.ResourceName(r.ResourceName)) {
 		err := fmt.Errorf(errInvalidResourceName, r.ResourceName)
 		logger.Error(err, "Bad registration request from device plugin")
@@ -181,6 +192,7 @@ func (s *server) Register(ctx context.Context, r *api.RegisterRequest) (*api.Emp
 	return &api.Empty{}, nil
 }
 
+// isVersionCompatibleWithPlugin 判断插件声明的版本中是否有当前支持版本。
 func (s *server) isVersionCompatibleWithPlugin(versions ...string) bool {
 	// TODO(vikasc): Currently this is fine as we only have a single supported version. When we do need to support
 	// multiple versions in the future, we may need to extend this function to return a supported version.
@@ -196,10 +208,12 @@ func (s *server) isVersionCompatibleWithPlugin(versions ...string) bool {
 	return false
 }
 
+// visitClients 遍历所有客户端；遍历时临时释放锁，避免回调中死锁。
 func (s *server) visitClients(visit func(r string, c Client)) {
 	s.mutex.Lock()
 	for r, cs := range s.clients {
 		for _, c := range cs {
+			// 回调期间释放锁，允许回调再次访问服务器状态。
 			s.mutex.Unlock()
 			visit(r, c)
 			s.mutex.Lock()
@@ -208,20 +222,22 @@ func (s *server) visitClients(visit func(r string, c Client)) {
 	s.mutex.Unlock()
 }
 
+// Name 返回插件处理器的名称。
 func (s *server) Name() string {
 	return "device-plugin"
 }
 
+// Check 返回最近一次运行时错误，供健康检查使用。
 func (s *server) Check(_ *http.Request) error {
 	return s.lastError
 }
 
-// setHealthy sets the health status of the gRPC server.
+// setHealthy 把 gRPC 服务器的健康状态设为健康。
 func (s *server) setHealthy() {
 	s.lastError = nil
 }
 
-// setUnhealthy sets the health status of the gRPC server to unhealthy.
+// setUnhealthy 把 gRPC 服务器的健康状态设为不健康。
 func (s *server) setUnhealthy(err error) {
 	if err == nil {
 		s.lastError = fmt.Errorf("device registration error: device plugin registration gRPC server failed and no device plugins can register")

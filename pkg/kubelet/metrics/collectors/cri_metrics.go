@@ -26,22 +26,25 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// criMetricsCollector 从 CRI 运行时采集 Pod 与容器指标。
 type criMetricsCollector struct {
 	metrics.BaseStableCollector
-	// The descriptors structure will be populated by one call to ListMetricDescriptors from the runtime.
-	// They will be saved in this map, where the key is the Name and the value is the Desc.
+	// descriptors 在启动时通过一次 ListMetricDescriptors 调用填充，
+	// 键为指标名称，值为对应的 Desc。
 	descriptors             map[string]*metrics.Desc
 	listPodSandboxMetricsFn func(context.Context) ([]*runtimeapi.PodSandboxMetrics, error)
 }
 
-// Check if criMetricsCollector implements necessary interface
+// 编译期断言：criMetricsCollector 实现了 StableCollector 接口。
 var _ metrics.StableCollector = &criMetricsCollector{}
 
-// NewCRIMetricsCollector implements the metrics.Collector interface
+// NewCRIMetricsCollector 创建 CRI 指标采集器，并预取指标描述符。
 func NewCRIMetricsCollector(ctx context.Context, listPodSandboxMetricsFn func(context.Context) ([]*runtimeapi.PodSandboxMetrics, error), listMetricDescriptorsFn func(context.Context) ([]*runtimeapi.MetricDescriptor, error)) metrics.StableCollector {
+	// 描述符只获取一次；失败时降级为仅采集指标。
 	descs, err := listMetricDescriptorsFn(ctx)
 	if err != nil {
 		logger := klog.FromContext(ctx)
+		// 描述符读取失败不阻塞采集，仅记录错误。
 		logger.Error(err, "Error reading MetricDescriptors")
 		return &criMetricsCollector{
 			listPodSandboxMetricsFn: listPodSandboxMetricsFn,
@@ -59,18 +62,18 @@ func NewCRIMetricsCollector(ctx context.Context, listPodSandboxMetricsFn func(co
 	return c
 }
 
-// Describe implements the metrics.DescribeWithStability interface.
+// DescribeWithStability 输出所有预取的指标描述符。
 func (c *criMetricsCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
 	for _, desc := range c.descriptors {
 		ch <- desc
 	}
 }
 
-// Collect implements the metrics.CollectWithStability interface.
+// CollectWithStability 从运行时拉取 Pod 指标并转换为 Prometheus 指标。
 // TODO(haircommander): would it be better if these were processed async?
 func (c *criMetricsCollector) CollectWithStability(ch chan<- metrics.Metric) {
-	// Use context.TODO() because we currently do not have a proper context to pass in.
-	// Replace this with an appropriate context when refactoring this function to accept a context parameter.
+	// 当前没有可用的上下文，只能使用 context.TODO()；
+	// 后续重构为接收 context 参数时应替换为真实上下文。
 	ctx := context.TODO()
 	logger := klog.FromContext(ctx)
 	podMetrics, err := c.listPodSandboxMetricsFn(ctx)
@@ -79,6 +82,7 @@ func (c *criMetricsCollector) CollectWithStability(ch chan<- metrics.Metric) {
 		return
 	}
 
+	// 依次转换 Pod 级与容器级指标，转换失败的指标直接丢弃。
 	for _, podMetric := range podMetrics {
 		for _, metric := range podMetric.GetMetrics() {
 			promMetric, err := c.criMetricToProm(logger, metric)
@@ -97,13 +101,16 @@ func (c *criMetricsCollector) CollectWithStability(ch chan<- metrics.Metric) {
 	}
 }
 
+// criDescToProm 把 CRI 指标描述符转换为 Prometheus 描述符。
 func criDescToProm(m *runtimeapi.MetricDescriptor) *metrics.Desc {
-	// Labels in the translation are variableLabels, as opposed to constant labels.
-	// This is because the values of the labels will be different for each container.
+	// 标签按可变标签处理而非常量标签，
+	// 因为每个容器对应的标签值都不同。
 	return metrics.NewDesc(m.Name, m.Help, m.LabelKeys, nil, metrics.INTERNAL, "")
 }
 
+// criMetricToProm 把单个 CRI 指标转换为 Prometheus 指标。
 func (c *criMetricsCollector) criMetricToProm(logger klog.Logger, m *runtimeapi.Metric) (metrics.Metric, error) {
+	// 只接受启动时已声明过的指标，避免暴露未知指标。
 	desc, ok := c.descriptors[m.Name]
 	if !ok {
 		err := fmt.Errorf("error converting CRI Metric to prometheus format")
@@ -118,10 +125,8 @@ func (c *criMetricsCollector) criMetricToProm(logger klog.Logger, m *runtimeapi.
 		logger.Error(err, "Error getting CRI prometheus metric", "descriptor", desc.String())
 		return nil, err
 	}
-	// If Timestamp is 0, then the runtime did not cache the result.
-	// In this case, a cached result is a metric that was collected ahead of time,
-	// as opposed to on-demand.
-	// If the metric was requested as needed, then Timestamp==0.
+	// Timestamp 为 0 表示运行时未缓存结果：按需采集的指标没有时间戳。
+	// 非 0 则说明结果是提前缓存的，需要附带原始时间戳。
 	if m.Timestamp == 0 {
 		return pm, nil
 	}

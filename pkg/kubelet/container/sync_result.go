@@ -31,6 +31,7 @@ type BackoffError struct {
 	backoffTime time.Time
 }
 
+// NewBackoffError 包装一个错误，并携带 kubelet 应等待的重试时间。
 func NewBackoffError(err error, backoffTime time.Time) *BackoffError {
 	return &BackoffError{
 		error:       err,
@@ -38,20 +39,23 @@ func NewBackoffError(err error, backoffTime time.Time) *BackoffError {
 	}
 }
 
+// Error 透传底层错误的文本，使 BackoffError 对调用方保持透明。
 func (b *BackoffError) Error() string {
 	return b.error.Error()
 }
+
+// Unwrap 暴露底层错误，使 errors.Is/As 能穿透 BackoffError。
 func (b *BackoffError) Unwrap() error {
 	return b.error
 }
 
-// BackoffTime returns the expected expiration time of the backoff.
+// BackoffTime 返回退避到期时间，调用方据此安排下次重试。
 func (e *BackoffError) BackoffTime() time.Time {
 	return e.backoffTime
 }
 
-// MinBackoffExpiration recursively searches through err for BackoffErrors and returns
-// the minimum of all found backoff times.
+// MinBackoffExpiration 递归遍历错误树（包括 Aggregate 与 Unwrap 链），
+// 返回所有 BackoffError 中最早的退避到期时间；未找到时 ok 为 false。
 func MinBackoffExpiration(err error) (time.Time, bool) {
 	var ae utilerrors.Aggregate
 	var be *BackoffError
@@ -59,6 +63,7 @@ func MinBackoffExpiration(err error) (time.Time, bool) {
 	case errors.As(err, &be):
 		return be.BackoffTime(), true
 	case errors.As(err, &ae):
+		// 取最早的到期时间而非第一个遇到的：聚合错误中的多个退避应尽快重试。
 		var min time.Time
 		found := false
 		for _, e := range ae.Errors() {
@@ -80,105 +85,110 @@ func MinBackoffExpiration(err error) (time.Time, bool) {
 
 // TODO(random-liu): We need to better organize runtime errors for introspection.
 
-// ErrCrashLoopBackOff returned when a container Terminated and Kubelet is backing off the restart.
+// ErrCrashLoopBackOff 表示容器已终止且 kubelet 正在退避重启。
 var ErrCrashLoopBackOff = errors.New("CrashLoopBackOff")
 
 var (
-	// ErrContainerNotFound returned when a container in the given pod with the
-	// given container name was not found, amongst those managed by the kubelet.
+	// ErrContainerNotFound 表示 kubelet 管理的 Pod 中找不到指定名称的容器。
 	ErrContainerNotFound = errors.New("no matching container")
 )
 
 var (
-	// ErrRunContainer returned when runtime failed to start any of pod's container.
+	// ErrRunContainer 表示运行时未能启动 Pod 的任一容器。
 	ErrRunContainer = errors.New("RunContainerError")
-	// ErrKillContainer returned when runtime failed to kill any of pod's containers.
+	// ErrKillContainer 表示运行时未能停止 Pod 的任一容器。
 	ErrKillContainer = errors.New("KillContainerError")
-	// ErrCreatePodSandbox returned when runtime failed to create a sandbox for pod.
+	// ErrCreatePodSandbox 表示运行时未能为 Pod 创建 sandbox。
 	ErrCreatePodSandbox = errors.New("CreatePodSandboxError")
-	// ErrConfigPodSandbox returned when runetime failed to get pod sandbox config from pod.
+	// ErrConfigPodSandbox 表示运行时无法从 Pod 获取 sandbox 配置。
 	ErrConfigPodSandbox = errors.New("ConfigPodSandboxError")
-	// ErrKillPodSandbox returned when runtime failed to stop pod's sandbox.
+	// ErrKillPodSandbox 表示运行时未能停止 Pod 的 sandbox。
 	ErrKillPodSandbox = errors.New("KillPodSandboxError")
-	// ErrResizePodInPlace returned when runtime failed to resize a pod.
+	// ErrResizePodInPlace 表示运行时未能原地调整 Pod 资源。
 	ErrResizePodInPlace = errors.New("ResizePodInPlaceError")
-	// ErrRemoveContainer returned when runtime failed to remove a container.
+	// ErrRemoveContainer 表示运行时未能删除容器。
 	ErrRemoveContainer = errors.New("RemoveContainerError")
 )
 
-// SyncAction indicates different kind of actions in SyncPod() and KillPod(). Now there are only actions
-// about start/kill container and setup/teardown network.
+// SyncAction 表示 SyncPod()/KillPod() 中的动作类型，
+// 目前只涉及容器启停与网络配置/拆除。
 type SyncAction string
 
 const (
-	// StartContainer action
+	// StartContainer 动作。
 	StartContainer SyncAction = "StartContainer"
-	// KillContainer action
+	// KillContainer 动作。
 	KillContainer SyncAction = "KillContainer"
-	// InitContainer action
+	// InitContainer 动作。
 	InitContainer SyncAction = "InitContainer"
-	// CreatePodSandbox action
+	// CreatePodSandbox 动作。
 	CreatePodSandbox SyncAction = "CreatePodSandbox"
-	// ConfigPodSandbox action
+	// ConfigPodSandbox 动作。
 	ConfigPodSandbox SyncAction = "ConfigPodSandbox"
-	// KillPodSandbox action
+	// KillPodSandbox 动作。
 	KillPodSandbox SyncAction = "KillPodSandbox"
-	// ResizePodInPlace action is included whenever any containers in the pod are resized without restart
+	// ResizePodInPlace 表示 Pod 内任意容器被原地调整资源（不重启）。
 	ResizePodInPlace SyncAction = "ResizePodInPlace"
-	// RemoveContainer action
+	// RemoveContainer 动作。
 	RemoveContainer SyncAction = "RemoveContainer"
 )
 
-// SyncResult is the result of sync action.
+// SyncResult 记录单个同步动作的结果。
 type SyncResult struct {
-	// The associated action of the result
+	// 结果对应的动作。
 	Action SyncAction
-	// The target of the action, now the target can only be:
-	//  * Container: Target should be container name
-	//  * Network: Target is useless now, we just set it as pod full name now
+	// 动作目标，目前只可能是：
+	//  * Container：目标为容器名；
+	//  * Network：目标暂无意义，暂用 Pod 全名占位。
 	Target interface{}
-	// Brief error reason
+	// 简要错误原因。
 	Error error
-	// Human readable error reason
+	// 人类可读的错误信息。
 	Message string
 }
 
 // NewSyncResult generates new SyncResult with specific Action and Target
+// NewSyncResult 创建携带指定动作与目标的 SyncResult。
 func NewSyncResult(action SyncAction, target interface{}) *SyncResult {
 	return &SyncResult{Action: action, Target: target}
 }
 
 // Fail fails the SyncResult with specific error and message
+// Fail 标记该动作失败，并记录错误与可读信息。
 func (r *SyncResult) Fail(err error, msg string) {
 	r.Error, r.Message = err, msg
 }
 
-// PodSyncResult is the summary result of SyncPod() and KillPod()
+// PodSyncResult 汇总 SyncPod()/KillPod() 的全部动作结果。
 type PodSyncResult struct {
-	// Result of different sync actions
+	// 各同步动作的结果。
 	SyncResults []*SyncResult
-	// Error encountered in SyncPod() and KillPod() that is not already included in SyncResults
+	// SyncPod()/KillPod() 自身产生、且未包含在 SyncResults 中的错误。
 	SyncError error
 }
 
 // AddSyncResult adds multiple SyncResult to current PodSyncResult
+// AddSyncResult 追加若干动作结果。
 func (p *PodSyncResult) AddSyncResult(result ...*SyncResult) {
 	p.SyncResults = append(p.SyncResults, result...)
 }
 
 // AddPodSyncResult merges a PodSyncResult to current one
+// AddPodSyncResult 合并另一个 PodSyncResult：动作结果追加，SyncError 直接覆盖。
 func (p *PodSyncResult) AddPodSyncResult(result PodSyncResult) {
 	p.AddSyncResult(result.SyncResults...)
 	p.SyncError = result.SyncError
 }
 
 // Fail fails the PodSyncResult with an error occurred in SyncPod() and KillPod() itself
+// Fail 记录 SyncPod()/KillPod() 本身的错误。
 func (p *PodSyncResult) Fail(err error) {
 	p.SyncError = err
 }
 
-// Error returns an error summarizing all the errors in PodSyncResult
+// Error 把所有动作错误与 SyncError 聚合成一个错误，便于调用方一次性上报。
 func (p *PodSyncResult) Error() error {
+	// 聚合而非返回首个错误，避免后续动作的失败信息被丢弃。
 	errlist := []error{}
 	if p.SyncError != nil {
 		errlist = append(errlist, fmt.Errorf("failed to SyncPod: %w", p.SyncError))

@@ -23,9 +23,8 @@ import (
 	"time"
 )
 
-// FakeOS mocks out certain OS calls to avoid perturbing the filesystem
-// If a member of the form `*Fn` is set, that function will be called in place
-// of the real call.
+// FakeOS 模拟部分 OS 调用，避免测试扰动真实文件系统。
+// 若某个 `*Fn` 字段被设置，则用它替代真实调用。
 type FakeOS struct {
 	StatFn     func(string) (os.FileInfo, error)
 	ReadDirFn  func(string) ([]os.DirEntry, error)
@@ -33,12 +32,14 @@ type FakeOS struct {
 	SymlinkFn  func(string, string) error
 	GlobFn     func(string, string) bool
 	HostName   string
-	Removes    []string
-	Files      map[string][]*os.FileInfo
-	FilesLock  sync.RWMutex
+	// Removes 记录被删除的路径，便于测试断言。
+	Removes []string
+	// Files 记录 Create 创建过的虚拟文件，供 Glob 匹配。
+	Files     map[string][]*os.FileInfo
+	FilesLock sync.RWMutex
 }
 
-// Mkdir is a fake call that just returns nil.
+// MkdirAll 是伪实现，默认返回 nil；设置 MkdirAllFn 时转调它。
 func (f *FakeOS) MkdirAll(path string, perm os.FileMode) error {
 	if f.MkdirAllFn != nil {
 		return f.MkdirAllFn(path, perm)
@@ -46,7 +47,7 @@ func (f *FakeOS) MkdirAll(path string, perm os.FileMode) error {
 	return nil
 }
 
-// Symlink is a fake call that just returns nil.
+// Symlink 是伪实现，默认返回 nil；设置 SymlinkFn 时转调它。
 func (f *FakeOS) Symlink(oldname string, newname string) error {
 	if f.SymlinkFn != nil {
 		return f.SymlinkFn(oldname, newname)
@@ -54,7 +55,7 @@ func (f *FakeOS) Symlink(oldname string, newname string) error {
 	return nil
 }
 
-// Stat is a fake that returns an error
+// Stat 默认返回错误，除非设置了 StatFn。
 func (f *FakeOS) Stat(path string) (os.FileInfo, error) {
 	if f.StatFn != nil {
 		return f.StatFn(path)
@@ -62,22 +63,23 @@ func (f *FakeOS) Stat(path string) (os.FileInfo, error) {
 	return nil, errors.New("unimplemented testing mock")
 }
 
-// Remove is a fake call that returns nil.
+// Remove 记录删除路径并返回 nil。
 func (f *FakeOS) Remove(path string) error {
 	f.Removes = append(f.Removes, path)
 	return nil
 }
 
-// RemoveAll is a fake call that just returns nil.
+// RemoveAll 记录删除路径并返回 nil。
 func (f *FakeOS) RemoveAll(path string) error {
 	f.Removes = append(f.Removes, path)
 	return nil
 }
 
-// Create is a fake call that creates a virtual file and returns nil.
+// Create 登记一个虚拟文件并返回 nil 句柄。
 func (f *FakeOS) Create(path string) (*os.File, error) {
 	f.FilesLock.Lock()
 	defer f.FilesLock.Unlock()
+	// 惰性初始化虚拟文件表。
 	if f.Files == nil {
 		f.Files = make(map[string][]*os.FileInfo)
 	}
@@ -85,27 +87,27 @@ func (f *FakeOS) Create(path string) (*os.File, error) {
 	return nil, nil
 }
 
-// Chmod is a fake call that returns nil.
+// Chmod 是伪实现，直接返回 nil。
 func (*FakeOS) Chmod(path string, perm os.FileMode) error {
 	return nil
 }
 
-// Hostname is a fake call that returns nil.
+// Hostname 返回预置的主机名。
 func (f *FakeOS) Hostname() (name string, err error) {
 	return f.HostName, nil
 }
 
-// Chtimes is a fake call that returns nil.
+// Chtimes 是伪实现，直接返回 nil。
 func (*FakeOS) Chtimes(path string, atime time.Time, mtime time.Time) error {
 	return nil
 }
 
-// Pipe is a fake call that returns nil.
+// Pipe 是伪实现，返回空句柄。
 func (*FakeOS) Pipe() (r *os.File, w *os.File, err error) {
 	return nil, nil, nil
 }
 
-// ReadDir is a fake call that returns the files under the directory.
+// ReadDir 返回目录下的条目，默认返回空；设置 ReadDirFn 时转调它。
 func (f *FakeOS) ReadDir(dirname string) ([]os.DirEntry, error) {
 	if f.ReadDirFn != nil {
 		return f.ReadDirFn(dirname)
@@ -113,10 +115,11 @@ func (f *FakeOS) ReadDir(dirname string) ([]os.DirEntry, error) {
 	return nil, nil
 }
 
-// Glob is a fake call that returns list of virtual files matching a pattern.
+// Glob 按模式筛选虚拟文件表，返回匹配的路径。
 func (f *FakeOS) Glob(pattern string) ([]string, error) {
 	if f.GlobFn != nil {
 		var res []string
+		// 遍历虚拟文件表时加读锁，避免与 Create 的写入并发冲突。
 		f.FilesLock.RLock()
 		defer f.FilesLock.RUnlock()
 		for k := range f.Files {
@@ -129,17 +132,17 @@ func (f *FakeOS) Glob(pattern string) ([]string, error) {
 	return nil, nil
 }
 
-// Open is a fake call that returns nil.
+// Open 是伪实现，返回空句柄。
 func (*FakeOS) Open(name string) (*os.File, error) {
 	return nil, nil
 }
 
-// OpenFile is a fake call that return nil.
+// OpenFile 是伪实现，返回空句柄。
 func (*FakeOS) OpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
 	return nil, nil
 }
 
-// Rename is a fake call that return nil.
+// Rename 是伪实现，直接返回 nil。
 func (*FakeOS) Rename(oldpath, newpath string) error {
 	return nil
 }

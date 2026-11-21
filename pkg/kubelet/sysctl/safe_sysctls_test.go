@@ -25,8 +25,10 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// Test_getSafeSysctlAllowlist 验证安全 sysctl 允许列表会按内核版本过滤。
 func Test_getSafeSysctlAllowlist(t *testing.T) {
 	tCtx := ktesting.Init(t)
+	// 覆盖取版本失败、3.18 与 5.15 三种内核版本场景。
 	tests := []struct {
 		name       string
 		getVersion func() (*version.Version, error)
@@ -84,6 +86,7 @@ func Test_getSafeSysctlAllowlist(t *testing.T) {
 			},
 		},
 	}
+	// 逐个用例校验允许列表内容。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := getSafeSysctlAllowlist(tCtx, tt.getVersion); !reflect.DeepEqual(got, tt.want) {

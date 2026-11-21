@@ -38,21 +38,24 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// 测试共享的 socket 目录与插件支持版本。
 var (
 	socketDir         string
 	supportedVersions = []string{"v1beta1", "v1beta2"}
 )
 
+// fakePluginHandler 记录插件生命周期事件，便于断言。
 type fakePluginHandler struct {
 	events []string
 	sync.RWMutex
 }
 
+// newFakePluginHandler 创建 fake handler。
 func newFakePluginHandler() *fakePluginHandler {
 	return &fakePluginHandler{}
 }
 
-// ValidatePlugin is a fake method
+// ValidatePlugin 是 fake 方法，记录校验事件。
 func (f *fakePluginHandler) ValidatePlugin(_ context.Context, pluginName string, endpoint string, versions []string) error {
 	f.Lock()
 	defer f.Unlock()
@@ -60,7 +63,7 @@ func (f *fakePluginHandler) ValidatePlugin(_ context.Context, pluginName string,
 	return nil
 }
 
-// RegisterPlugin is a fake method
+// RegisterPlugin 是 fake 方法，记录注册事件。
 func (f *fakePluginHandler) RegisterPlugin(_ context.Context, pluginName, endpoint string, versions []string, pluginClientTimeout *time.Duration) error {
 	f.Lock()
 	defer f.Unlock()
@@ -68,19 +71,21 @@ func (f *fakePluginHandler) RegisterPlugin(_ context.Context, pluginName, endpoi
 	return nil
 }
 
-// DeRegisterPlugin is a fake method
+// DeRegisterPlugin 是 fake 方法，记录注销事件。
 func (f *fakePluginHandler) DeRegisterPlugin(_ context.Context, pluginName, endpoint string) {
 	f.Lock()
 	defer f.Unlock()
 	f.events = append(f.events, "deregister "+pluginName+" "+endpoint)
 }
 
+// Reset 清空已记录的事件。
 func (f *fakePluginHandler) Reset() {
 	f.Lock()
 	defer f.Unlock()
 	f.events = nil
 }
 
+// init 创建测试用临时 socket 目录。
 func init() {
 	d, err := os.MkdirTemp("", "plugin_manager_test")
 	if err != nil {
@@ -90,11 +95,13 @@ func init() {
 	socketDir = d
 }
 
+// cleanup 删除并重建 socket 目录，保证用例隔离。
 func cleanup(t *testing.T) {
 	require.NoError(t, os.RemoveAll(socketDir))
 	os.MkdirAll(socketDir, 0755)
 }
 
+// waitForRegistration 等待校验与注册事件按顺序出现。
 func waitForRegistration(t *testing.T, fakePluginHandler *fakePluginHandler, pluginName, endpoint string) {
 	t.Helper()
 	waitFor(t, fakePluginHandler,
@@ -103,6 +110,7 @@ func waitForRegistration(t *testing.T, fakePluginHandler *fakePluginHandler, plu
 	)
 }
 
+// waitForDeRegistration 等待注销事件出现。
 func waitForDeRegistration(t *testing.T, fakePluginHandler *fakePluginHandler, pluginName, endpoint string) {
 	t.Helper()
 	waitFor(t, fakePluginHandler,
@@ -111,8 +119,10 @@ func waitForDeRegistration(t *testing.T, fakePluginHandler *fakePluginHandler, p
 	)
 }
 
+// waitFor 用指数退避轮询，直到事件序列与期望一致。
 func waitFor(t *testing.T, fakePluginHandler *fakePluginHandler, expected []string, what string) {
 	t.Helper()
+	// 轮询期间持有锁读取事件，避免与写入竞争。
 	err := retryWithExponentialBackOff(
 		100*time.Millisecond,
 		func() (bool, error) {
@@ -125,11 +135,13 @@ func waitFor(t *testing.T, fakePluginHandler *fakePluginHandler, expected []stri
 			return false, nil
 		},
 	)
+	// 超时后按调用方提供的说明失败。
 	if err != nil {
 		t.Fatal(what)
 	}
 }
 
+// retryWithExponentialBackOff 以 3 倍因子退避重试，最多 6 步。
 func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.ConditionFunc) error {
 	backoff := wait.Backoff{
 		Duration: initialDuration,
@@ -140,13 +152,14 @@ func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.Conditio
 	return wait.ExponentialBackoff(backoff, fn)
 }
 
+// TestPluginManager 验证插件管理器在多层子目录中发现、注册并注销插件。
 func TestPluginManager(t *testing.T) {
 	defer cleanup(t)
 
 	tCtx := ktesting.Init(t)
 	pluginManager := newTestPluginManager(socketDir)
 
-	// Start the plugin manager
+	// 在后台启动插件管理器。
 	stopChan := make(chan struct{})
 	defer close(stopChan)
 	go func() {
@@ -154,12 +167,12 @@ func TestPluginManager(t *testing.T) {
 		pluginManager.Run(tCtx, sourcesReady, stopChan)
 	}()
 
-	// Add handler for device plugin
+	// 注册设备插件类型的 handler。
 	fakeHandler := newFakePluginHandler()
 	pluginManager.AddHandler(registerapi.DevicePlugin, fakeHandler)
 
 	const maxDepth = 3
-	// Make sure the plugin manager is aware of the socket in subdirectories
+	// 逐层加深子目录，验证管理器能发现子目录中的 socket。
 	for i := 0; i < maxDepth; i++ {
 		fakeHandler.Reset()
 		pluginDir := socketDir
@@ -170,21 +183,22 @@ func TestPluginManager(t *testing.T) {
 		require.NoError(t, os.MkdirAll(pluginDir, os.ModePerm))
 		socketPath := filepath.Join(pluginDir, fmt.Sprintf("plugin-%d.sock", i))
 
-		// Add a new plugin
+		// 启动一个新的示例插件。
 		pluginName := fmt.Sprintf("example-plugin-%d", i)
 		p := pluginwatcher.NewTestExamplePlugin(pluginName, registerapi.DevicePlugin, socketPath, supportedVersions...)
 		require.NoError(t, p.Serve(tCtx, "v1beta1", "v1beta2"))
 
-		// Verify that the plugin is registered
+		// 确认插件完成校验与注册。
 		waitForRegistration(t, fakeHandler, pluginName, socketPath)
 
-		// And unregister.
+		// 停止插件并确认注销事件。
 		fakeHandler.Reset()
 		require.NoError(t, p.Stop(tCtx))
 		waitForDeRegistration(t, fakeHandler, pluginName, socketPath)
 	}
 }
 
+// newTestPluginManager 创建使用 fake recorder 的插件管理器。
 func newTestPluginManager(sockDir string) PluginManager {
 	pm := NewPluginManager(
 		sockDir,

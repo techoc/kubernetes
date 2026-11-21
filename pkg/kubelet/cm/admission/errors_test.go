@@ -21,19 +21,25 @@ import (
 	"testing"
 )
 
+// TestAdmissionError 是测试用的准入错误类型。
 type TestAdmissionError struct {
+	// message 是错误消息。
 	message string
-	reason  string
+	// reason 是错误原因。
+	reason string
 }
 
+// Error 返回错误消息。
 func (e *TestAdmissionError) Error() string {
 	return e.message
 }
 
+// Type 返回错误原因。
 func (e *TestAdmissionError) Type() string {
 	return e.reason
 }
 
+// TestAdmissionErrors 验证 GetPodAdmitResult 对各类错误的转换结果。
 func TestAdmissionErrors(t *testing.T) {
 	testCases := []struct {
 		Error                  error
@@ -56,7 +62,9 @@ func TestAdmissionErrors(t *testing.T) {
 		},
 	}
 
+	// 覆盖 nil、普通错误与实现 AdmissionError 接口的错误。
 	for _, tc := range testCases {
+		// nil 错误应返回准入成功。
 		h := GetPodAdmitResult(tc.Error)
 		if tc.Error == nil {
 			if !h.Admit {

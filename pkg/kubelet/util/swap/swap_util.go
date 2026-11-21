@@ -32,6 +32,7 @@ import (
 	"k8s.io/mount-utils"
 )
 
+// 缓存探测结果：sync.Once 保证昂贵的内核能力探测只执行一次。
 var (
 	tmpfsNoswapOptionSupported        bool
 	tmpfsNoswapOptionAvailabilityOnce sync.Once
@@ -40,25 +41,29 @@ var (
 	swapOnOnce                        sync.Once
 )
 
+// TmpfsNoswapOption 是 tmpfs 的 noswap 挂载选项。
 const TmpfsNoswapOption = "noswap"
 
+// IsTmpfsNoswapOptionSupported 判断当前环境是否支持 tmpfs 的 noswap 选项。
 func IsTmpfsNoswapOptionSupported(mounter mount.Interface, mountPath string) bool {
 	// TODO: it needs to be replaced by a proper context in the future
 	ctx := context.TODO()
 	logger := klog.FromContext(ctx)
 	isTmpfsNoswapOptionSupportedHelper := func() bool {
+		// Windows 没有 tmpfs，直接判定不支持。
 		if sysruntime.GOOS == "windows" {
 			return false
 		}
 
 		if inuserns.RunningInUserNS() {
-			// Turning off swap in unprivileged tmpfs mounts unsupported
+			// 非特权 user namespace 中无法关闭 tmpfs 的 swap，参见：
 			// https://github.com/torvalds/linux/blob/v6.8/mm/shmem.c#L4004-L4011
 			// https://github.com/kubernetes/kubernetes/issues/125137
 			logger.Info("Running under a user namespace - tmpfs noswap is not supported")
 			return false
 		}
 
+		// 内核版本足够新时直接返回支持，无需实际挂载测试。
 		kernelVersion, err := utilkernel.GetVersion()
 		if err != nil {
 			logger.Error(err, "cannot determine kernel version, unable to determine is tmpfs noswap is supported")
@@ -69,16 +74,19 @@ func IsTmpfsNoswapOptionSupported(mounter mount.Interface, mountPath string) boo
 			return true
 		}
 
+		// 未指定挂载路径时回退到系统临时目录。
 		if mountPath == "" {
 			logger.Error(errors.New("mount path is empty, falling back to /tmp"), "")
 		}
 
+		// 创建临时目录实际挂载一次，验证内核是否接受 noswap 选项。
 		mountPath, err = os.MkdirTemp(mountPath, "tmpfs-noswap-test-")
 		if err != nil {
 			logger.Info("error creating dir to test if tmpfs noswap is enabled. Assuming not supported", "mount path", mountPath, "error", err)
 			return false
 		}
 
+		// 无论测试成败都清理临时目录，避免残留挂载点。
 		defer func() {
 			err = os.RemoveAll(mountPath)
 			if err != nil {
@@ -86,6 +94,7 @@ func IsTmpfsNoswapOptionSupported(mounter mount.Interface, mountPath string) boo
 			}
 		}()
 
+		// 绕过 systemd 直接测试内核行为，避免 systemd 对挂载选项的额外处理干扰结果。
 		err = mounter.MountSensitiveWithoutSystemd("tmpfs", mountPath, "tmpfs", []string{TmpfsNoswapOption}, nil)
 		if err != nil {
 			logger.Info("error mounting tmpfs with the noswap option. Assuming not supported", "error", err)
@@ -100,6 +109,7 @@ func IsTmpfsNoswapOptionSupported(mounter mount.Interface, mountPath string) boo
 		return true
 	}
 
+	// 探测结果缓存后复用，后续调用不再重复挂载测试。
 	tmpfsNoswapOptionAvailabilityOnce.Do(func() {
 		tmpfsNoswapOptionSupported = isTmpfsNoswapOptionSupportedHelper()
 	})
@@ -107,13 +117,14 @@ func IsTmpfsNoswapOptionSupported(mounter mount.Interface, mountPath string) boo
 	return tmpfsNoswapOptionSupported
 }
 
-// gets /proc/swaps's content as an input, returns true if swap is enabled.
+// isSwapOnAccordingToProcSwaps 接收 /proc/swaps 的内容，判断系统是否启用了 swap。
 func isSwapOnAccordingToProcSwaps(logger klog.Logger, procSwapsContent []byte) bool {
+	// 去掉末尾换行，避免把空行误判为 swap 条目。
 	procSwapsContent = bytes.TrimSpace(procSwapsContent) // extra trailing \n
 	procSwapsStr := string(procSwapsContent)
 	procSwapsLines := strings.Split(procSwapsStr, "\n")
 
-	// If there is more than one line (table headers) in /proc/swaps then swap is enabled
+	// /proc/swaps 只有表头时说明没有 swap；多于一行即存在 swap 设备。
 	isSwapOn := len(procSwapsLines) > 1
 	if isSwapOn {
 		logger.Info("Swap is on", "/proc/swaps contents", procSwapsStr)
@@ -122,11 +133,11 @@ func isSwapOnAccordingToProcSwaps(logger klog.Logger, procSwapsContent []byte) b
 	return isSwapOn
 }
 
-// IsSwapOn detects whether swap in enabled on the system by inspecting
-// /proc/swaps. If the file does not exist, an os.NotFound error will be returned.
-// If running on windows, swap is assumed to always be false.
+// IsSwapOn 通过读取 /proc/swaps 判断系统是否启用 swap。
+// 文件不存在时视为未启用；其他读取错误原样返回。Windows 上始终假定未启用 swap。
 func IsSwapOn() (bool, error) {
 	isSwapOnHelper := func() (bool, error) {
+		// Windows 没有 /proc/swaps，直接返回 false。
 		if sysruntime.GOOS == "windows" {
 			return false, nil
 		}
@@ -135,6 +146,7 @@ func IsSwapOn() (bool, error) {
 		ctx := context.TODO()
 		logger := klog.FromContext(ctx)
 
+		// Linux 下 swap 状态由 /proc/swaps 暴露。
 		const swapFilePath = "/proc/swaps"
 		procSwapsContent, err := os.ReadFile(swapFilePath)
 		if err != nil {
@@ -149,6 +161,7 @@ func IsSwapOn() (bool, error) {
 		return isSwapOnAccordingToProcSwaps(logger, procSwapsContent), nil
 	}
 
+	// 结果只探测一次并缓存，避免重复读取 proc 文件。
 	swapOnOnce.Do(func() {
 		swapOn, swapOnErr = isSwapOnHelper()
 	})

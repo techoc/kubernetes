@@ -34,7 +34,7 @@ import (
 	v1beta2 "k8s.io/kubernetes/pkg/kubelet/pluginmanager/pluginwatcher/example_plugin_apis/v1beta2"
 )
 
-// examplePlugin is a sample plugin to work with plugin watcher
+// examplePlugin 是配合 plugin watcher 使用的示例插件。
 type examplePlugin struct {
 	grpcServer         *grpc.Server
 	wg                 sync.WaitGroup
@@ -47,42 +47,48 @@ type examplePlugin struct {
 	registerapi.UnsafeRegistrationServer
 }
 
+// pluginServiceV1Beta1 是 v1beta1 示例服务的实现。
 type pluginServiceV1Beta1 struct {
 	server *examplePlugin
 	v1beta1.UnsafeExampleServer
 }
 
+// GetExampleInfo 返回空的 v1beta1 响应并记录请求字段。
 func (s *pluginServiceV1Beta1) GetExampleInfo(ctx context.Context, rqt *v1beta1.ExampleRequest) (*v1beta1.ExampleResponse, error) {
 	logger := klog.FromContext(ctx)
 	logger.Info("GetExampleInfo v1beta1field", "field", rqt.V1Beta1Field)
 	return &v1beta1.ExampleResponse{}, nil
 }
 
+// RegisterService 把 v1beta1 服务注册到 gRPC server。
 func (s *pluginServiceV1Beta1) RegisterService() {
 	v1beta1.RegisterExampleServer(s.server.grpcServer, s)
 }
 
+// pluginServiceV1Beta2 是 v1beta2 示例服务的实现。
 type pluginServiceV1Beta2 struct {
 	server *examplePlugin
 	v1beta2.UnsafeExampleServer
 }
 
+// GetExampleInfo 返回空的 v1beta2 响应并记录请求字段。
 func (s *pluginServiceV1Beta2) GetExampleInfo(ctx context.Context, rqt *v1beta2.ExampleRequest) (*v1beta2.ExampleResponse, error) {
 	logger := klog.FromContext(ctx)
 	logger.Info("GetExampleInfo v1beta2_field", "field", rqt.V1Beta2Field)
 	return &v1beta2.ExampleResponse{}, nil
 }
 
+// RegisterService 把 v1beta2 服务注册到 gRPC server。
 func (s *pluginServiceV1Beta2) RegisterService() {
 	v1beta2.RegisterExampleServer(s.server.grpcServer, s)
 }
 
-// NewExamplePlugin returns an initialized examplePlugin instance
+// NewExamplePlugin 返回已初始化的 examplePlugin 实例。
 func NewExamplePlugin() *examplePlugin {
 	return &examplePlugin{}
 }
 
-// NewTestExamplePlugin returns an initialized examplePlugin instance for testing
+// NewTestExamplePlugin 返回用于测试的 examplePlugin 实例。
 func NewTestExamplePlugin(pluginName string, pluginType string, endpoint string, advertisedVersions ...string) *examplePlugin {
 	return &examplePlugin{
 		pluginName:         pluginName,
@@ -93,14 +99,14 @@ func NewTestExamplePlugin(pluginName string, pluginType string, endpoint string,
 	}
 }
 
-// GetPluginInfo returns a PluginInfo object
+// GetPluginInfo 返回插件对应的 cache.PluginInfo。
 func GetPluginInfo(plugin *examplePlugin) cache.PluginInfo {
 	return cache.PluginInfo{
 		SocketPath: plugin.endpoint,
 	}
 }
 
-// GetInfo is the RPC invoked by plugin watcher
+// GetInfo 是 plugin watcher 调用的 RPC，返回插件类型、名称、端点与支持的版本。
 func (e *examplePlugin) GetInfo(ctx context.Context, req *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
 	return &registerapi.PluginInfo{
 		Type:              e.pluginType,
@@ -110,6 +116,7 @@ func (e *examplePlugin) GetInfo(ctx context.Context, req *registerapi.InfoReques
 	}, nil
 }
 
+// NotifyRegistrationStatus 接收注册结果并转发给测试通道。
 func (e *examplePlugin) NotifyRegistrationStatus(ctx context.Context, status *registerapi.RegistrationStatus) (*registerapi.RegistrationStatusResponse, error) {
 	logger := klog.FromContext(ctx)
 	logger.Info("Notify registration status", "status", status)
@@ -121,21 +128,24 @@ func (e *examplePlugin) NotifyRegistrationStatus(ctx context.Context, status *re
 	return &registerapi.RegistrationStatusResponse{}, nil
 }
 
-// Serve starts a pluginwatcher server and one or more of the plugin services
+// Serve 启动 plugin watcher 服务器与一个或多个插件服务。
 func (e *examplePlugin) Serve(ctx context.Context, services ...string) error {
 	logger := klog.FromContext(ctx)
 	logger.Info("Starting example server", "endpoint", e.endpoint)
+	// 在 unix socket 上监听；失败直接返回。
 	lis, err := net.Listen("unix", e.endpoint)
 	if err != nil {
 		return err
 	}
 
 	logger.Info("Example server started", "endpoint", e.endpoint)
+	// 创建 gRPC server 并注册插件注册服务。
 	e.grpcServer = grpc.NewServer()
 
-	// Registers kubelet plugin watcher api.
+	// 注册 kubelet plugin watcher API。
 	registerapi.RegisterRegistrationServer(e.grpcServer, e)
 
+	// 按名称注册请求的示例服务版本。
 	for _, service := range services {
 		switch service {
 		case "v1beta1":
@@ -149,7 +159,7 @@ func (e *examplePlugin) Serve(ctx context.Context, services ...string) error {
 		}
 	}
 
-	// Starts service
+	// 在后台启动服务，Stop 时通过 WaitGroup 等待退出。
 	e.wg.Add(1)
 	go func() {
 		defer e.wg.Done()
@@ -162,6 +172,7 @@ func (e *examplePlugin) Serve(ctx context.Context, services ...string) error {
 	return nil
 }
 
+// Stop 停止 gRPC server、等待服务退出并删除 socket 文件。
 func (e *examplePlugin) Stop(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	logger.Info("Stopping example server", "endpoint", e.endpoint)
@@ -173,6 +184,7 @@ func (e *examplePlugin) Stop(ctx context.Context) error {
 		e.wg.Wait()
 	}()
 
+	// 最多等待 1 秒，超时返回错误，避免 Stop 卡死。
 	select {
 	case <-c:
 		break
@@ -180,6 +192,7 @@ func (e *examplePlugin) Stop(ctx context.Context) error {
 		return errors.New("timed out on waiting for stop completion")
 	}
 
+	// socket 文件可能已被删除，忽略 IsNotExist。
 	if err := os.Remove(e.endpoint); err != nil && !os.IsNotExist(err) {
 		return err
 	}

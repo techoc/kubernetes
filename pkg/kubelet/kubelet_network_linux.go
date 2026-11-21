@@ -27,30 +27,32 @@ import (
 )
 
 const (
-	// KubeIPTablesHintChain is the chain whose existence in either iptables-legacy
-	// or iptables-nft indicates which version of iptables the system is using
+	// KubeIPTablesHintChain 该链存在于 iptables-legacy 还是 iptables-nft 中，
+	// 可用来判断系统正在使用哪个版本的 iptables。
 	KubeIPTablesHintChain utiliptables.Chain = "KUBE-IPTABLES-HINT"
 
-	// KubeFirewallChain is kubernetes firewall rules
+	// KubeFirewallChain 保存 Kubernetes 防火墙规则。
 	KubeFirewallChain utiliptables.Chain = "KUBE-FIREWALL"
 )
 
+// initNetworkUtil 初始化 kubelet 需要的 iptables 规则并启动变更监控。
 func (kl *Kubelet) initNetworkUtil(logger klog.Logger) {
 	iptClients := utiliptables.NewBestEffort()
 	if len(iptClients) == 0 {
-		// We don't log this as an error because kubelet itself doesn't need any
-		// of this (it sets up these rules for the benefit of *other* components),
-		// and because we *expect* this to fail on hosts where only nftables is
-		// supported (in which case there can't be any other components using
-		// iptables that would need these rules anyway).
+		// 这里不按错误记录：kubelet 自身并不需要这些规则（它们是为其他组件准备的），
+		// 而且在仅支持 nftables 的宿主上失败是预期行为
+		//（此时也不会有其他组件依赖 iptables 规则）。
 		logger.Info("No iptables support on this system; not creating the KUBE-IPTABLES-HINT chain")
 		return
 	}
 
+	// 分别处理每个 IP 族的 iptables 客户端。
 	for family := range iptClients {
 		iptClient := iptClients[family]
+		// 同步规则成功后才启动监控协程。
 		if kl.syncIPTablesRules(logger, iptClient) {
 			logger.Info("Initialized iptables rules.", "protocol", iptClient.Protocol())
+			// 监控链变化，检测到变更时重新同步规则。
 			go iptClient.Monitor(
 				utiliptables.Chain("KUBE-KUBELET-CANARY"),
 				[]utiliptables.Table{utiliptables.TableMangle, utiliptables.TableNAT, utiliptables.TableFilter},
@@ -63,24 +65,19 @@ func (kl *Kubelet) initNetworkUtil(logger klog.Logger) {
 	}
 }
 
-// syncIPTablesRules ensures the KUBE-IPTABLES-HINT chain exists, and the martian packet
-// protection rule is installed.
+// syncIPTablesRules 确保 KUBE-IPTABLES-HINT 链存在，并安装火星包保护规则。
 func (kl *Kubelet) syncIPTablesRules(logger klog.Logger, iptClient utiliptables.Interface) bool {
-	// Create hint chain so other components can see whether we are using iptables-legacy
-	// or iptables-nft.
+	// 创建提示链，让其他组件能判断我们使用的是 iptables-legacy 还是 iptables-nft。
 	if _, err := iptClient.EnsureChain(utiliptables.TableMangle, KubeIPTablesHintChain); err != nil {
 		logger.Error(err, "Failed to ensure that iptables hint chain exists")
 		return false
 	}
 
-	if !iptClient.IsIPv6() { // ipv6 doesn't have this issue
-		// Set up the KUBE-FIREWALL chain and martian packet protection rule.
-		// (See below.)
+	if !iptClient.IsIPv6() { // IPv6 不存在该问题
+		// 创建 KUBE-FIREWALL 链并安装火星包保护规则（见下文）。
 
-		// NOTE: kube-proxy (in iptables mode) creates an identical copy of this
-		// rule. If you want to change this rule in the future, you MUST do so in
-		// a way that will interoperate correctly with skewed versions of the rule
-		// created by kube-proxy.
+		// 注意：kube-proxy（iptables 模式）会创建完全相同的规则副本。
+		// 以后修改该规则时，必须保证与 kube-proxy 创建的旧版本规则能够正确互操作。
 
 		if _, err := iptClient.EnsureChain(utiliptables.TableFilter, KubeFirewallChain); err != nil {
 			logger.Error(err, "Failed to ensure that filter table KUBE-FIREWALL chain exists")
@@ -96,12 +93,10 @@ func (kl *Kubelet) syncIPTablesRules(logger klog.Logger, iptClient utiliptables.
 			return false
 		}
 
-		// Kube-proxy's use of `route_localnet` to enable NodePorts on localhost
-		// creates a security hole (https://issue.k8s.io/90259) which this
-		// iptables rule mitigates. This rule should have been added to
-		// kube-proxy, but it mistakenly ended up in kubelet instead, and we are
-		// keeping it in kubelet for now in case other third-party components
-		// depend on it.
+		// kube-proxy 通过 route_localnet 支持 localhost 上的 NodePort，
+		// 这会造成安全漏洞（https://issue.k8s.io/90259），本 iptables 规则用于缓解该问题。
+		// 该规则本应属于 kube-proxy，却误加到了 kubelet；
+		// 目前仍保留在 kubelet 中，以防其他第三方组件依赖它。
 		if _, err := iptClient.EnsureRule(utiliptables.Append, utiliptables.TableFilter, KubeFirewallChain,
 			"-m", "comment", "--comment", "block incoming localnet connections",
 			"--dst", "127.0.0.0/8",

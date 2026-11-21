@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package server contains functions related to serving Kubelet's external interface.
+// Package server 包含为 kubelet 提供外部接口服务的相关函数。
 package server

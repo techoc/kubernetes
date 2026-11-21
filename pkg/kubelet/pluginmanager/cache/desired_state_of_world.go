@@ -15,8 +15,7 @@ limitations under the License.
 */
 
 /*
-Package cache implements data structures used by the kubelet plugin manager to
-keep track of registered plugins.
+Package cache 实现 kubelet 插件管理器用于跟踪已注册插件的数据结构。
 */
 package cache
 
@@ -31,90 +30,79 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// DesiredStateOfWorld defines a set of thread-safe operations for the kubelet
-// plugin manager's desired state of the world cache.
-// This cache contains a map of socket file path to plugin information of
-// all plugins attached to this node.
+// DesiredStateOfWorld 定义 kubelet 插件管理器"期望世界"缓存的线程安全操作。
+// 该缓存维护从 socket 文件路径到插件信息的映射，记录节点上所有应存在的插件。
 type DesiredStateOfWorld interface {
-	// AddOrUpdatePlugin add the given plugin in the cache if it doesn't already exist.
-	// If it does exist in the cache, then the timestamp of the PluginInfo object in the cache will be updated.
-	// An error will be returned if socketPath is empty.
+	// 若缓存中不存在则添加插件；已存在则更新时间戳。socketPath 为空时返回错误。
 	AddOrUpdatePlugin(ctx context.Context, socketPath string) error
 
-	// RemovePlugin deletes the plugin with the given socket path from the desired
-	// state of world.
-	// If a plugin does not exist with the given socket path, this is a no-op.
+	// 删除指定 socket 路径的插件；不存在时为空操作。
 	RemovePlugin(socketPath string)
 
-	// GetPluginsToRegister generates and returns a list of plugins
-	// in the current desired state of world.
+	// 返回当前期望状态中需要注册的插件列表。
 	GetPluginsToRegister() []PluginInfo
 
-	// PluginExists checks if the given socket path exists in the current desired
-	// state of world cache
+	// 检查指定 socket 路径是否存在于当前期望状态缓存。
 	PluginExists(socketPath string) bool
 }
 
-// NewDesiredStateOfWorld returns a new instance of DesiredStateOfWorld.
+// NewDesiredStateOfWorld 创建 DesiredStateOfWorld 实例。
 func NewDesiredStateOfWorld() DesiredStateOfWorld {
 	return &desiredStateOfWorld{
 		socketFileToInfo: make(map[string]PluginInfo),
 	}
 }
 
+// desiredStateOfWorld 是 DesiredStateOfWorld 的实现。
 type desiredStateOfWorld struct {
 
-	// socketFileToInfo is a map containing the set of successfully registered plugins
-	// The keys are plugin socket file paths. The values are PluginInfo objects
+	// socketFileToInfo 保存应存在的插件：键为 socket 路径，值为 PluginInfo。
 	socketFileToInfo map[string]PluginInfo
 	sync.RWMutex
 }
 
+// 编译期断言：desiredStateOfWorld 实现 DesiredStateOfWorld 接口。
 var _ DesiredStateOfWorld = &desiredStateOfWorld{}
 
-// Generate a detailed error msg for logs
+// generatePluginMsgDetailed 生成用于日志的详细错误信息。
 func generatePluginMsgDetailed(prefixMsg, suffixMsg, socketPath, details string) (detailedMsg string) {
 	return fmt.Sprintf("%v for plugin at %q %v %v", prefixMsg, socketPath, details, suffixMsg)
 }
 
-// Generate a simplified error msg for events and a detailed error msg for logs
+// generatePluginMsg 生成面向事件/用户的简要信息与用于日志的详细信息。
 func generatePluginMsg(prefixMsg, suffixMsg, socketPath, details string) (simpleMsg, detailedMsg string) {
 	simpleMsg = fmt.Sprintf("%v for plugin at %q %v", prefixMsg, socketPath, suffixMsg)
 	return simpleMsg, generatePluginMsgDetailed(prefixMsg, suffixMsg, socketPath, details)
 }
 
-// GenerateMsgDetailed returns detailed msgs for plugins to register
-// that can be used in logs.
-// The msg format follows the pattern "<prefixMsg> <plugin details> <suffixMsg>"
+// GenerateMsgDetailed 返回用于日志的插件注册详细信息。
+// 格式为 "<prefixMsg> <plugin details> <suffixMsg>"。
 func (plugin *PluginInfo) GenerateMsgDetailed(prefixMsg, suffixMsg string) (detailedMsg string) {
 	detailedStr := fmt.Sprintf("(plugin details: %v)", plugin)
 	return generatePluginMsgDetailed(prefixMsg, suffixMsg, plugin.SocketPath, detailedStr)
 }
 
-// GenerateMsg returns simple and detailed msgs for plugins to register
-// that is user friendly and a detailed msg that can be used in logs.
-// The msg format follows the pattern "<prefixMsg> <plugin details> <suffixMsg>".
+// GenerateMsg 返回用户友好的简要信息与用于日志的详细信息。
+// 格式为 "<prefixMsg> <plugin details> <suffixMsg>"。
 func (plugin *PluginInfo) GenerateMsg(prefixMsg, suffixMsg string) (simpleMsg, detailedMsg string) {
 	detailedStr := fmt.Sprintf("(plugin details: %v)", plugin)
 	return generatePluginMsg(prefixMsg, suffixMsg, plugin.SocketPath, detailedStr)
 }
 
-// GenerateErrorDetailed returns detailed errors for plugins to register
-// that can be used in logs.
-// The msg format follows the pattern "<prefixMsg> <plugin details>: <err> ",
+// GenerateErrorDetailed 返回用于日志的插件注册详细错误。
+// 格式为 "<prefixMsg> <plugin details>: <err> "。
 func (plugin *PluginInfo) GenerateErrorDetailed(prefixMsg string, err error) (detailedErr error) {
 	return errors.New(plugin.GenerateMsgDetailed(prefixMsg, errSuffix(err)))
 }
 
-// GenerateError returns simple and detailed errors for plugins to register
-// that is user friendly and a detailed error that can be used in logs.
-// The msg format follows the pattern "<prefixMsg> <plugin details>: <err> ".
+// GenerateError 返回用户友好的简要错误与用于日志的详细错误。
+// 格式为 "<prefixMsg> <plugin details>: <err> "。
 func (plugin *PluginInfo) GenerateError(prefixMsg string, err error) (simpleErr, detailedErr error) {
 	simpleMsg, detailedMsg := plugin.GenerateMsg(prefixMsg, errSuffix(err))
 	return errors.New(simpleMsg), errors.New(detailedMsg)
 }
 
-// Generates an error string with the format ": <err>" if err exists
+// errSuffix 生成 ": <err>" 形式的后缀；err 为 nil 时返回空串。
 func errSuffix(err error) string {
 	errStr := ""
 	if err != nil {
@@ -123,12 +111,14 @@ func errSuffix(err error) string {
 	return errStr
 }
 
+// AddOrUpdatePlugin 在锁保护下新增或更新插件信息。
 func (dsw *desiredStateOfWorld) AddOrUpdatePlugin(ctx context.Context, socketPath string) error {
 	dsw.Lock()
 	defer dsw.Unlock()
 
 	logger := klog.FromContext(ctx)
 
+	// socket 路径是缓存键，为空说明调用方传参错误。
 	if socketPath == "" {
 		return fmt.Errorf("socket path is empty")
 	}
@@ -136,10 +126,9 @@ func (dsw *desiredStateOfWorld) AddOrUpdatePlugin(ctx context.Context, socketPat
 		logger.V(2).Info("Plugin exists in desired state cache, timestamp will be updated", "path", socketPath)
 	}
 
-	// Update the PluginInfo object.
-	// Note that we only update the timestamp and UUID in the desired state of world, not the actual state of world
-	// because in the reconciler, we need to check if the plugin in the actual state of world is the same
-	// version as the plugin in the desired state of world
+	// 只更新期望状态中的时间戳与 UUID，不更新实际状态；
+	// reconciler 需要比较实际状态与期望状态中的插件版本，以决定是否重新注册。
+	// 每次更新都生成新的 UUID，使 reconciler 能识别出插件已变化。
 	dsw.socketFileToInfo[socketPath] = PluginInfo{
 		SocketPath: socketPath,
 		Timestamp:  time.Now(),
@@ -148,6 +137,7 @@ func (dsw *desiredStateOfWorld) AddOrUpdatePlugin(ctx context.Context, socketPat
 	return nil
 }
 
+// RemovePlugin 删除指定 socket 路径的插件。
 func (dsw *desiredStateOfWorld) RemovePlugin(socketPath string) {
 	dsw.Lock()
 	defer dsw.Unlock()
@@ -155,6 +145,7 @@ func (dsw *desiredStateOfWorld) RemovePlugin(socketPath string) {
 	delete(dsw.socketFileToInfo, socketPath)
 }
 
+// GetPluginsToRegister 复制当前所有插件信息并返回。
 func (dsw *desiredStateOfWorld) GetPluginsToRegister() []PluginInfo {
 	dsw.RLock()
 	defer dsw.RUnlock()
@@ -166,6 +157,7 @@ func (dsw *desiredStateOfWorld) GetPluginsToRegister() []PluginInfo {
 	return pluginsToRegister
 }
 
+// PluginExists 检查指定 socket 路径是否存在。
 func (dsw *desiredStateOfWorld) PluginExists(socketPath string) bool {
 	dsw.RLock()
 	defer dsw.RUnlock()

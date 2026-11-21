@@ -18,8 +18,7 @@ limitations under the License.
 
 package kubelet
 
-// cgroupVersionCheck performs a version check for the cgroup.
-// This method is not applicable for non-Linux operating systems.
+// cgroupVersionCheck 检查 cgroup 版本；该方法仅适用于 Linux，其他平台直接返回 nil。
 func (kl *Kubelet) cgroupVersionCheck() error {
 	return nil
 }

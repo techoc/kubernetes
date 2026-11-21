@@ -26,13 +26,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestGetStatWindows 验证 Windows 上 getStat 与 os.Stat/os.Lstat 的结果一致。
 func TestGetStatWindows(t *testing.T) {
 	event := fsnotify.Event{Name: "name", Op: fsnotify.Create}
 	fi, err := getStat(event)
 	fiExpected, errExpected := os.Stat(event.Name)
 	// TODO: This is a workaround for Windows 20H2 issue for os.Stat(). Please see
-	// microsoft/Windows-Containers#97 for details.
-	// Once the issue is resvolved, the following os.Lstat() is not needed.
+	// 这是针对 Windows 20H2 上 os.Stat() 问题的临时方案，详见 microsoft/Windows-Containers#97。
+	// 该问题修复后，就不需要再回退到 os.Lstat()。
 	if errExpected != nil {
 		fiExpected, errExpected = os.Lstat(event.Name)
 	}

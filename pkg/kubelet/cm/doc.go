@@ -14,8 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cm (abbreviation of "container manager") and its subpackages contain all the kubelet code
-// to manage containers. For example, they contain functions to configure containers' cgroups,
-// ensure containers run with the desired QoS, and allocate compute resources like cpus, memory,
-// devices...
+// Package cm（container manager 的缩写）及其子包包含 kubelet 管理容器的全部代码。
+// 例如：配置容器 cgroup、确保容器以期望的 QoS 运行、分配 CPU、内存、设备等计算资源。
 package cm

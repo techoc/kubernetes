@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
+// TestCapacityFromMachineInfoWithHugePagesEnable 验证启用 huge pages 时资源容量的计算。
 func TestCapacityFromMachineInfoWithHugePagesEnable(t *testing.T) {
 	machineInfo := &info.MachineInfo{
 		NumCores:       2,
@@ -47,18 +48,19 @@ func TestCapacityFromMachineInfoWithHugePagesEnable(t *testing.T) {
 		v1.ResourceMemory: *resource.NewQuantity(int64(2048), resource.BinarySI),
 		"hugepages-5Ki":   *resource.NewQuantity(int64(51200), resource.BinarySI),
 	}
+	// 2 核换算为 2000m；hugepage 容量为页大小乘页数。
 	actual := CapacityFromMachineInfo(machineInfo)
 	if !reflect.DeepEqual(actual, expected) {
 		t.Errorf("when set hugepages true, got resource list %v, want %v", actual, expected)
 	}
 }
 
-// TestEphemeralStorageCapacityFromFsInfo verifies that capacity uses DecimalSI.
-// Allocatable inherits capacity's format via DeepCopy().Sub() in setters.go.
-// DecimalSI produces clean suffixed values for any byte count, while BinarySI
-// falls back to bare integers for non-1024-aligned sizes. See #133927.
+// TestEphemeralStorageCapacityFromFsInfo 验证容量使用 DecimalSI 格式。
+// setters.go 中通过 DeepCopy().Sub() 计算 allocatable，因此 allocatable 会继承容量格式。
+// DecimalSI 对任意字节数都能输出带单位的整洁值，而 BinarySI 在非 1024 对齐时
+// 会退化为裸整数。参见 #133927。
 func TestEphemeralStorageCapacityFromFsInfo(t *testing.T) {
-	// Use a non-1024-aligned capacity typical of real filesystem sizes.
+	// 使用真实文件系统中常见的非 1024 对齐容量。
 	fsInfo := info.FsInfo{Capacity: 97842800000}
 	capacity := EphemeralStorageCapacityFromFsInfo(fsInfo)
 	ephemeralCapacity := capacity[v1.ResourceEphemeralStorage]
@@ -67,8 +69,8 @@ func TestEphemeralStorageCapacityFromFsInfo(t *testing.T) {
 		t.Errorf("capacity format = %v, want DecimalSI", ephemeralCapacity.Format)
 	}
 
-	// Simulate allocatable derivation (setters.go): allocatable = capacity - reservation.
-	// DeepCopy preserves the format, so allocatable inherits DecimalSI from capacity.
+	// 模拟 allocatable 的推导（setters.go）：allocatable = capacity - reservation。
+	// DeepCopy 保留格式，因此 allocatable 会继承容量的 DecimalSI。
 	allocatable := ephemeralCapacity.DeepCopy()
 	reservation := resource.MustParse("1Gi")
 	allocatable.Sub(reservation)
@@ -78,6 +80,7 @@ func TestEphemeralStorageCapacityFromFsInfo(t *testing.T) {
 	}
 }
 
+// TestCrioSocket 验证本包的 CRI-O socket 后缀与上游 cadvisor 保持一致。
 func TestCrioSocket(t *testing.T) {
 	assert.True(t, strings.HasSuffix(crio.CrioSocket, CrioSocketSuffix), "CrioSocketSuffix in this package must be a suffix of the one in github.com/google/cadvisor/container/crio/client.go")
 }

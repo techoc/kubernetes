@@ -16,8 +16,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// containerManagerImpl implements container manager on Windows.
-// Only GetNodeAllocatableReservation() and GetCapacity() are implemented now.
+// containerManagerImpl 是 Windows 上的容器管理器实现。
+// 目前仅实现了 GetNodeAllocatableReservation() 与 GetCapacity() 等部分能力，
+// 其余方法多为空实现或直接返回零值。
 
 package cm
 
@@ -55,16 +56,17 @@ import (
 	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
+// containerManagerImpl 保存 Windows 容器管理器所需的状态与依赖。
 type containerManagerImpl struct {
-	// Capacity of this node.
+	// 本节点的资源容量。
 	capacity v1.ResourceList
-	// Interface for cadvisor.
+	// cAdvisor 接口。
 	cadvisorInterface cadvisor.Interface
-	// Config of this node.
+	// 本节点的配置。
 	nodeConfig NodeConfig
-	// Interface for exporting and allocating devices reported by device plugins.
+	// 用于导出与分配设备插件上报资源的接口。
 	deviceManager devicemanager.Manager
-	// Interface for Topology resource co-ordination
+	// 拓扑资源协调接口。
 	topologyManager topologymanager.Manager
 	cpuManager      cpumanager.Manager
 	memoryManager   memorymanager.Manager
@@ -72,6 +74,7 @@ type containerManagerImpl struct {
 	sync.RWMutex
 }
 
+// Start 启动 Windows 容器管理器：初始化容量信息并启动 CPU、内存与设备管理器。
 func (cm *containerManagerImpl) Start(ctx context.Context, node *v1.Node,
 	activePods ActivePodsFunc,
 	getNode GetNodeFunc,
@@ -84,6 +87,7 @@ func (cm *containerManagerImpl) Start(ctx context.Context, node *v1.Node,
 
 	cm.nodeInfo = node
 
+	// 启用本地存储容量隔离时，用根文件系统信息补充临时存储容量。
 	if localStorageCapacityIsolation {
 		rootfs, err := cm.cadvisorInterface.RootFsInfo()
 		if err != nil {
@@ -94,6 +98,7 @@ func (cm *containerManagerImpl) Start(ctx context.Context, node *v1.Node,
 		}
 	}
 
+	// 从运行时收集容器映射与运行中容器集合，供各管理器初始化使用。
 	containerMap, containerRunningSet := buildContainerMapAndRunningSetFromRuntime(ctx, runtimeService)
 
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.WindowsCPUAndMemoryAffinity) {
@@ -102,14 +107,14 @@ func (cm *containerManagerImpl) Start(ctx context.Context, node *v1.Node,
 			return fmt.Errorf("start cpu manager error: %v", err)
 		}
 
-		// Initialize memory manager
+		// 初始化内存管理器。
 		err = cm.memoryManager.Start(ctx, memorymanager.ActivePodsFunc(activePods), sourcesReady, podStatusProvider, runtimeService, containerMap.Clone())
 		if err != nil {
 			return fmt.Errorf("start memory manager error: %v", err)
 		}
 	}
 
-	// Starts device manager.
+	// 启动设备管理器。
 	if err := cm.deviceManager.Start(logger, devicemanager.ActivePodsFunc(activePods), sourcesReady, containerMap.Clone(), containerRunningSet); err != nil {
 		return err
 	}
@@ -117,12 +122,12 @@ func (cm *containerManagerImpl) Start(ctx context.Context, node *v1.Node,
 	return nil
 }
 
-// NewContainerManager creates windows container manager.
+// NewContainerManager 创建 Windows 容器管理器。
 func NewContainerManager(ctx context.Context, mountUtil mount.Interface, cadvisorInterface cadvisor.Interface, nodeConfig NodeConfig, failSwapOn bool, recorder record.EventRecorder, kubeClient clientset.Interface) (ContainerManager, error) {
 	logger := klog.FromContext(ctx)
-	// It is safe to invoke `MachineInfo` on cAdvisor before logically initializing cAdvisor here because
-	// machine info is computed and cached once as part of cAdvisor object creation.
-	// But `RootFsInfo` and `ImagesFsInfo` are not available at this moment so they will be called later during manager starts
+	// 在逻辑初始化 cAdvisor 之前调用 `MachineInfo` 是安全的，
+	// 因为机器信息在创建 cAdvisor 对象时就已计算并缓存。
+	// 但 `RootFsInfo` 与 `ImagesFsInfo` 此时不可用，需等管理器启动后再获取。
 	machineInfo, err := cadvisorInterface.MachineInfo(logger)
 	if err != nil {
 		return nil, err
@@ -135,6 +140,7 @@ func NewContainerManager(ctx context.Context, mountUtil mount.Interface, cadviso
 		cadvisorInterface: cadvisorInterface,
 	}
 
+	// 默认使用 fake 实现；仅当 WindowsCPUAndMemoryAffinity 门控开启时才替换为真实管理器。
 	cm.topologyManager = topologymanager.NewFakeManager(logger)
 	cm.cpuManager = cpumanager.NewFakeManager(logger)
 	cm.memoryManager = memorymanager.NewFakeManager(logger)
@@ -171,14 +177,11 @@ func NewContainerManager(ctx context.Context, mountUtil mount.Interface, cadviso
 		cm.topologyManager.AddHintProvider(logger, cm.cpuManager)
 
 		logger.Info("Creating memory manager")
-		// On Windows memory affinity is best-effort and there is no cpuset.mems
-		// equivalent to pin memory to a NUMA node directly. We choose to have
-		// memory placement follow the CPU manager's NUMA decision as a best-effort
-		// design. Wrap the topology manager store so the memory manager's
-		// GetAffinity returns the NUMA nodes of the container's exclusive CPUs.
-		// This relies on the CPU manager already being registered as a hint
-		// provider above, so its Allocate runs first and its CPUs are committed by
-		// the time the memory manager reads the affinity.
+		// Windows 上的内存亲和性是尽力而为的，没有类似 cpuset.mems 的机制
+		// 直接把内存绑定到 NUMA 节点。因此采用“内存跟随 CPU”的尽力而为设计：
+		// 包装拓扑管理器的存储，使内存管理器的 GetAffinity 返回容器独占 CPU
+		// 所属的 NUMA 节点。这依赖上面的 CPU 管理器已注册为提示提供者，
+		// 从而保证其 Allocate 先执行、CPU 已提交后再读取亲和性。
 		memoryAffinity := newCPUFollowingStore(cm.topologyManager, cm.cpuManager, machineInfo)
 		cm.memoryManager, err = memorymanager.NewManager(
 			logger,
@@ -196,6 +199,7 @@ func NewContainerManager(ctx context.Context, mountUtil mount.Interface, cadviso
 		cm.topologyManager.AddHintProvider(logger, cm.memoryManager)
 	}
 
+	// 创建设备插件管理器，并注册为拓扑提示提供者。
 	logger.Info("Creating device plugin manager")
 	cm.deviceManager, err = devicemanager.NewManagerImpl(logger, nil, cm.topologyManager)
 	if err != nil {
@@ -206,32 +210,39 @@ func NewContainerManager(ctx context.Context, mountUtil mount.Interface, cadviso
 	return cm, nil
 }
 
+// SystemCgroupsLimit 在 Windows 上返回空资源列表（不支持 system cgroups）。
 func (cm *containerManagerImpl) SystemCgroupsLimit() v1.ResourceList {
 	return v1.ResourceList{}
 }
 
+// GetNodeConfig 返回节点的容器管理器配置。
 func (cm *containerManagerImpl) GetNodeConfig() NodeConfig {
 	cm.RLock()
 	defer cm.RUnlock()
 	return cm.nodeConfig
 }
 
+// GetMountedSubsystems 在 Windows 上返回空的 cgroup 子系统信息。
 func (cm *containerManagerImpl) GetMountedSubsystems() *CgroupSubsystems {
 	return &CgroupSubsystems{}
 }
 
+// GetQOSContainersInfo 在 Windows 上返回空的 QoS 容器信息。
 func (cm *containerManagerImpl) GetQOSContainersInfo() QOSContainersInfo {
 	return QOSContainersInfo{}
 }
 
+// UpdateQOSCgroups 在 Windows 上为空操作。
 func (cm *containerManagerImpl) UpdateQOSCgroups(logger klog.Logger) error {
 	return nil
 }
 
+// Status 在 Windows 上返回空的管理器状态。
 func (cm *containerManagerImpl) Status() Status {
 	return Status{}
 }
 
+// GetNodeAllocatableReservation 返回节点为系统、Kubernetes 组件与驱逐预留的资源总量。
 func (cm *containerManagerImpl) GetNodeAllocatableReservation() v1.ResourceList {
 	evictionReservation := hardEvictionReservation(cm.nodeConfig.HardEvictionThresholds, cm.capacity)
 	result := make(v1.ResourceList)
@@ -253,31 +264,37 @@ func (cm *containerManagerImpl) GetNodeAllocatableReservation() v1.ResourceList 
 	return result
 }
 
+// GetCapacity 返回节点的资源容量。
 func (cm *containerManagerImpl) GetCapacity(_ klog.Logger, localStorageCapacityIsolation bool) v1.ResourceList {
 	return cm.capacity
 }
 
+// GetPluginRegistrationHandlers 返回设备插件注册处理器；Windows 不支持 DRA。
 func (cm *containerManagerImpl) GetPluginRegistrationHandlers() map[string]cache.PluginHandler {
-	// DRA is not supported on Windows, only device plugin is supported
+	// Windows 不支持 DRA，仅支持设备插件。
 	return map[string]cache.PluginHandler{pluginwatcherapi.DevicePlugin: cm.deviceManager.GetWatcherHandler()}
 }
 
+// GetHealthCheckers 返回设备管理器的健康检查器。
 func (cm *containerManagerImpl) GetHealthCheckers() []healthz.HealthChecker {
 	return []healthz.HealthChecker{cm.deviceManager.GetHealthChecker()}
 }
 
+// GetDevicePluginResourceCapacity 返回设备插件上报的资源容量与可分配量。
 func (cm *containerManagerImpl) GetDevicePluginResourceCapacity(logger klog.Logger) (v1.ResourceList, v1.ResourceList, []string) {
 	return cm.deviceManager.GetCapacity(logger)
 }
 
+// NewPodContainerManager 返回 Windows 上的 Pod 容器管理器空实现。
 func (cm *containerManagerImpl) NewPodContainerManager() PodContainerManager {
 	return &podContainerManagerStub{}
 }
 
+// GetResources 返回容器运行所需的设备、挂载、环境变量与注解。
 func (cm *containerManagerImpl) GetResources(ctx context.Context, pod *v1.Pod, container *v1.Container) (*kubecontainer.RunContainerOptions, error) {
 	opts := &kubecontainer.RunContainerOptions{}
-	// Allocate should already be called during predicateAdmitHandler.Admit(),
-	// just try to fetch device runtime information from cached state here
+	// Allocate 应已在 predicateAdmitHandler.Admit() 中调用过，
+	// 这里只需从缓存状态中读取设备运行时信息。
 	devOpts, err := cm.deviceManager.GetDeviceRunContainerOptions(ctx, pod, container)
 	if err != nil {
 		return nil, err
@@ -291,52 +308,64 @@ func (cm *containerManagerImpl) GetResources(ctx context.Context, pod *v1.Pod, c
 	return opts, nil
 }
 
+// UpdateAllocatedResourcesStatus 更新 Pod 中已分配资源的状态（Windows 目前仅支持设备插件）。
 func (cm *containerManagerImpl) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod, status *v1.PodStatus) {
-	// For now we only support Device Plugin
+	// 目前仅支持设备插件。
 
 	cm.deviceManager.UpdateAllocatedResourcesStatus(logger, pod, status)
 
-	// TODO(SergeyKanzhelev, https://kep.k8s.io/4680): add support for DRA resources when DRA supports Windows
+	// TODO(SergeyKanzhelev, https://kep.k8s.io/4680): DRA 支持 Windows 后补充 DRA 资源支持。
 }
 
+// Updates 返回资源更新事件通道；Windows 目前仅转发设备插件更新。
 func (cm *containerManagerImpl) Updates() <-chan resourceupdates.Update {
-	// TODO(SergeyKanzhelev, https://kep.k8s.io/4680): add support for DRA resources, for now only use device plugin updates
+	// TODO(SergeyKanzhelev, https://kep.k8s.io/4680): 补充 DRA 资源支持，目前仅转发设备插件更新。
 	return cm.deviceManager.Updates()
 }
 
+// UpdatePluginResources 将设备插件资源更新到 NodeInfo 中。
 func (cm *containerManagerImpl) UpdatePluginResources(node *schedulerframework.NodeInfo, attrs *lifecycle.PodAdmitAttributes) error {
 	return cm.deviceManager.UpdatePluginResources(node, attrs)
 }
 
+// InternalContainerLifecycle 返回内部容器生命周期实现。
 func (cm *containerManagerImpl) InternalContainerLifecycle(_ klog.Logger) InternalContainerLifecycle {
 	return &internalContainerLifecycleImpl{cm.cpuManager, cm.memoryManager, cm.topologyManager}
 }
 
+// GetPodCgroupRoot 在 Windows 上返回空字符串（无 cgroup 根路径）。
 func (cm *containerManagerImpl) GetPodCgroupRoot() string {
 	return ""
 }
 
+// GetDevices 返回指定容器分配到的设备。
 func (cm *containerManagerImpl) GetDevices(podUID, containerName string) []*podresourcesapi.ContainerDevices {
 	return containerDevicesFromResourceDeviceInstances(cm.deviceManager.GetDevices(podUID, containerName))
 }
 
+// GetAllocatableDevices 在 Windows 上暂不支持，返回 nil。
 func (cm *containerManagerImpl) GetAllocatableDevices(_ klog.Logger) []*podresourcesapi.ContainerDevices {
 	return nil
 }
 
+// ShouldResetExtendedResourceCapacity 返回是否需要重置扩展资源容量。
 func (cm *containerManagerImpl) ShouldResetExtendedResourceCapacity() bool {
 	return cm.deviceManager.ShouldResetExtendedResourceCapacity()
 }
 
+// GetAllocateResourcesPodAdmitHandler 返回资源分配准入处理器（拓扑管理器）。
 func (cm *containerManagerImpl) GetAllocateResourcesPodAdmitHandler(_ klog.Logger) lifecycle.PodAdmitHandler {
 	return cm.topologyManager
 }
 
+// UpdateAllocatedDevices 在 Windows 上为空操作。
 func (cm *containerManagerImpl) UpdateAllocatedDevices(_ klog.Logger) {
 	return
 }
 
+// GetCPUs 返回指定容器独占的 CPU 列表。
 func (cm *containerManagerImpl) GetCPUs(pod *v1.Pod, container *v1.Container) []int64 {
+	// 未开启 WindowsCPUAndMemoryAffinity 时不提供 CPU 亲和性信息。
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.WindowsCPUAndMemoryAffinity) {
 		if cm.cpuManager != nil {
 			return int64Slice(cm.cpuManager.GetExclusiveCPUs(string(pod.UID), container.Name).UnsortedList())
@@ -346,11 +375,15 @@ func (cm *containerManagerImpl) GetCPUs(pod *v1.Pod, container *v1.Container) []
 	return nil
 }
 
+// GetPodCPUs 在 Windows 上暂不支持，返回 nil。
 func (cm *containerManagerImpl) GetPodCPUs(podUID string) []int64 {
 	return nil
 }
 
+// GetAllocatableCPUs 返回节点可分配的 CPU 列表。
+// GetAllocatableCPUs 返回节点可分配的 CPU 列表。
 func (cm *containerManagerImpl) GetAllocatableCPUs() []int64 {
+	// 未开启 WindowsCPUAndMemoryAffinity 时不提供可分配 CPU 信息。
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.WindowsCPUAndMemoryAffinity) {
 		if cm.cpuManager != nil {
 			return int64Slice(cm.cpuManager.GetAllocatableCPUs().UnsortedList())
@@ -360,42 +393,52 @@ func (cm *containerManagerImpl) GetAllocatableCPUs() []int64 {
 	return nil
 }
 
+// GetMemory 在 Windows 上暂不支持，返回 nil。
 func (cm *containerManagerImpl) GetMemory(_ klog.Logger, pod *v1.Pod, container *v1.Container) []*podresourcesapi.ContainerMemory {
 	return nil
 }
 
+// GetPodMemory 在 Windows 上暂不支持，返回 nil。
 func (cm *containerManagerImpl) GetPodMemory(_ klog.Logger, _ string) []*podresourcesapi.ContainerMemory {
 	return nil
 }
 
+// GetAllocatableMemory 在 Windows 上暂不支持，返回 nil。
 func (cm *containerManagerImpl) GetAllocatableMemory(_ klog.Logger) []*podresourcesapi.ContainerMemory {
 	return nil
 }
 
+// GetNodeAllocatableAbsolute 在 Windows 上返回 nil。
 func (cm *containerManagerImpl) GetNodeAllocatableAbsolute() v1.ResourceList {
 	return nil
 }
 
+// GetDynamicResources 在 Windows 上暂不支持 DRA，返回 nil。
 func (cm *containerManagerImpl) GetDynamicResources(logger klog.Logger, pod *v1.Pod, container *v1.Container) []*podresourcesapi.DynamicResource {
 	return nil
 }
 
+// PrepareDynamicResources 在 Windows 上为空操作。
 func (cm *containerManagerImpl) PrepareDynamicResources(ctx context.Context, pod *v1.Pod) error {
 	return nil
 }
 
+// UnprepareDynamicResources 在 Windows 上为空操作。
 func (cm *containerManagerImpl) UnprepareDynamicResources(ctx context.Context, pod *v1.Pod) error {
 	return nil
 }
 
+// PodMightNeedToUnprepareResources 在 Windows 上始终返回 false。
 func (cm *containerManagerImpl) PodMightNeedToUnprepareResources(UID types.UID) bool {
 	return false
 }
 
+// PodHasExclusiveCPUs 判断 Pod 是否使用了独占 CPU。
 func (cm *containerManagerImpl) PodHasExclusiveCPUs(logger klog.Logger, pod *v1.Pod) bool {
 	return podHasExclusiveCPUs(logger, cm.cpuManager, pod)
 }
 
+// ContainerHasExclusiveCPUs 判断容器是否使用了独占 CPU。
 func (cm *containerManagerImpl) ContainerHasExclusiveCPUs(logger klog.Logger, pod *v1.Pod, container *v1.Container) bool {
 	return containerHasExclusiveCPUs(logger, cm.cpuManager, pod, container)
 }

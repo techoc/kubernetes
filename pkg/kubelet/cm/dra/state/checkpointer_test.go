@@ -31,10 +31,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// testingCheckpoint 是测试使用的 checkpoint 名称，避免与其他 checkpoint 冲突。
 const testingCheckpoint = "dramanager_checkpoint_test"
 
-// TODO (https://github.com/kubernetes/kubernetes/issues/123552): reconsider what data gets stored in checkpoints and whether that is really necessary.
+// TODO (https://github.com/kubernetes/kubernetes/issues/123552): 重新评估 checkpoint 中
+// 存储的数据以及这些数据是否确有必要。
 
+// TestCheckpointGetOrCreate 验证 Checkpointer.GetOrCreate 对新建、已有、损坏以及
+// 跨版本 checkpoint 的加载行为。
 func TestCheckpointGetOrCreate(t *testing.T) {
 	testCases := []struct {
 		description                string
@@ -176,8 +180,8 @@ func TestCheckpointGetOrCreate(t *testing.T) {
 			expectedError:     "unexpected end of JSON input",
 		},
 		{
-			// Emulate upgrade scenario by pretending that `Device.RequestNames` is a new field.
-			// The checkpoint content doesn't have it and that shouldn't prevent the checkpoint from being loaded.
+			// 模拟升级场景：假设 `Device.RequestNames` 是新字段。
+			// checkpoint 内容中不含该字段，但这不应妨碍 checkpoint 被正常加载。
 			description:       "upgraded-structure",
 			checkpointContent: `{"Data":"{\"kind\":\"DRACheckpoint\",\"apiVersion\":\"checkpoint.dra.kubelet.k8s.io/v1\",\"ClaimInfoStateList\":[{\"ClaimUID\":\"067798be-454e-4be4-9047-1aa06aea63f7\",\"ClaimName\":\"example\",\"Namespace\":\"default\",\"PodUIDs\":{\"139cdb46-f989-4f17-9561-ca10cfb509a6\":{}},\"DriverState\":{\"test-driver.cdi.k8s.io\":{\"Devices\":[{\"PoolName\":\"worker-1\",\"DeviceName\":\"dev-1\",\"CDIDeviceIDs\":[\"example.com/example=cdi-example\"]}]}}}]}","Checksum":1137250765}`,
 			expectedClaimInfoStateList: ClaimInfoStateList{
@@ -202,8 +206,8 @@ func TestCheckpointGetOrCreate(t *testing.T) {
 			},
 		},
 		{
-			// Emulate upgrade scenario by pretending that `Device.RequestNames` is a new field and API version has changed from v0 to v1.
-			// These changes shouldn't prevent the checkpoint from being loaded.
+			// 模拟升级场景：假设 `Device.RequestNames` 是新字段，且 API 版本从 v0 变为 v1。
+			// 这些变化不应妨碍 checkpoint 被正常加载。
 			description:       "upgraded-structure-and-version",
 			checkpointContent: `{"Data":"{\"kind\":\"DRACheckpoint\",\"apiVersion\":\"checkpoint.dra.kubelet.k8s.io/v0\",\"ClaimInfoStateList\":[{\"ClaimUID\":\"067798be-454e-4be4-9047-1aa06aea63f7\",\"ClaimName\":\"example\",\"Namespace\":\"default\",\"PodUIDs\":{\"139cdb46-f989-4f17-9561-ca10cfb509a6\":{}},\"DriverState\":{\"test-driver.cdi.k8s.io\":{\"Devices\":[{\"PoolName\":\"worker-1\",\"DeviceName\":\"dev-1\",\"CDIDeviceIDs\":[\"example.com/example=cdi-example\"]}]}}}]}","Checksum":1284376732}`,
 			expectedClaimInfoStateList: ClaimInfoStateList{
@@ -229,7 +233,7 @@ func TestCheckpointGetOrCreate(t *testing.T) {
 		},
 	}
 
-	// create temp dir
+	// 创建临时目录存放 checkpoint 文件。
 	testingDir, err := os.MkdirTemp("", "dramanager_state_test")
 	if err != nil {
 		t.Fatal(err)
@@ -240,24 +244,26 @@ func TestCheckpointGetOrCreate(t *testing.T) {
 		}
 	}()
 
-	// create checkpoint manager for testing
+	// 创建测试用的 checkpoint 管理器。
 	cpm, err := checkpointmanager.NewCheckpointManager(testingDir)
 	require.NoError(t, err, "could not create testing checkpoint manager")
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			// ensure there is no previous checkpoint
+			// 先清除上一个用例遗留的 checkpoint，保证每个用例从干净状态开始。
 			require.NoError(t, cpm.RemoveCheckpoint(testingCheckpoint), "could not remove testing checkpoint")
 
-			// prepare checkpoint for testing
+			// 若用例提供了 checkpoint 内容，则写入一个模拟 checkpoint。
 			if strings.TrimSpace(tc.checkpointContent) != "" {
 				mock := &testutil.MockCheckpoint{Content: tc.checkpointContent}
 				require.NoError(t, cpm.CreateCheckpoint(testingCheckpoint, mock), "could not create testing checkpoint")
 			}
 
+			// 基于测试目录构造 Checkpointer，后续验证其读取行为。
 			checkpointer, err := NewCheckpointer(testingDir, testingCheckpoint)
 			require.NoError(t, err, "could not create testing checkpointer")
 
+			// 期望出错时校验错误信息，否则比对解析出的 ClaimInfoStateList。
 			checkpoint, err := checkpointer.GetOrCreate()
 			if strings.TrimSpace(tc.expectedError) != "" {
 				assert.ErrorContains(t, err, tc.expectedError)
@@ -272,6 +278,8 @@ func TestCheckpointGetOrCreate(t *testing.T) {
 	}
 }
 
+// TestCheckpointStateStore 验证 Checkpointer.Store 写出的 checkpoint 内容
+// （含校验和）与预期一致，并覆盖非法构造参数的错误路径。
 func TestCheckpointStateStore(t *testing.T) {
 	testCases := []struct {
 		description               string
@@ -399,12 +407,12 @@ func TestCheckpointStateStore(t *testing.T) {
 		},
 	}
 
-	// Should return an error, stateDir cannot be an empty string
+	// 状态目录不能为空字符串，构造时应返回错误。
 	if _, err := NewCheckpointer("", testingCheckpoint); err == nil {
 		t.Fatal("expected error but got nil")
 	}
 
-	// create temp dir
+	// 创建临时目录存放 checkpoint 文件。
 	testingDir, err := os.MkdirTemp("", "dramanager_state_test")
 	if err != nil {
 		t.Fatal(err)
@@ -415,11 +423,12 @@ func TestCheckpointStateStore(t *testing.T) {
 		}
 	}()
 
-	// NewCheckpointState with an empty checkpointName should return an error
+	// checkpointName 为空时构造 Checkpointer 应返回错误。
 	if _, err = NewCheckpointer(testingDir, ""); err == nil {
 		t.Fatal("expected error but got nil")
 	}
 
+	// 清理可能存在的旧 checkpoint，确保测试从干净状态开始。
 	cpm, err := checkpointmanager.NewCheckpointManager(testingDir)
 	require.NoError(t, err, "could not create testing checkpoint manager")
 	require.NoError(t, cpm.RemoveCheckpoint(testingCheckpoint), "could not remove testing checkpoint")
@@ -429,6 +438,7 @@ func TestCheckpointStateStore(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
+			// 先由状态列表构造 checkpoint，再写入并从磁盘读回比对内容。
 			checkpoint, err := NewCheckpoint(tc.claimInfoStateList)
 			require.NoError(t, err, "could not create Checkpoint")
 

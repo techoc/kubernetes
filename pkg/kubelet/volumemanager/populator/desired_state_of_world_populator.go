@@ -14,10 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/*
-Package populator implements interfaces that monitor and keep the states of the
-caches in sync with the "ground truth".
-*/
+// Package populator 实现一组接口，负责让缓存状态与“真实状态”保持同步。
 package populator
 
 import (
@@ -47,52 +44,48 @@ import (
 	volumetypes "k8s.io/kubernetes/pkg/volume/util/types"
 )
 
-// DesiredStateOfWorldPopulator periodically loops through the list of active
-// pods and ensures that each one exists in the desired state of the world cache
-// if it has volumes. It also verifies that the pods in the desired state of the
-// world cache still exist, if not, it removes them.
+// DesiredStateOfWorldPopulator 周期性遍历活跃 Pod，确保带卷的 Pod
+// 都存在于期望状态缓存中；同时校验缓存中的 Pod 是否仍然存在，
+// 不存在则将其移除。
 type DesiredStateOfWorldPopulator interface {
+	// Run 启动填充循环：先等到配置源就绪并完成首轮填充，之后持续调谐。
 	Run(ctx context.Context, sourcesReady config.SourcesReady)
 
-	// ReprocessPod sets value for the specified pod in processedPods
-	// to false, forcing it to be reprocessed. This is required to enable
-	// remounting volumes on pod updates (volumes like Downward API volumes
-	// depend on this behavior to ensure volume content is updated).
+	// ReprocessPod 把指定 Pod 在 processedPods 中标记为未处理，强制重新处理。
+	// Pod 更新后需要重新挂载卷（例如 Downward API 卷依赖该行为刷新内容）。
 	ReprocessPod(podName volumetypes.UniquePodName)
 
-	// HasAddedPods returns whether the populator has looped through the list
-	// of active pods and added them to the desired state of the world cache,
-	// at a time after sources are all ready, at least once. It does not
-	// return true before sources are all ready because before then, there is
-	// a chance many or all pods are missing from the list of active pods and
-	// so few to none will have been added.
+	// HasAddedPods 表示在配置源全部就绪之后，填充器是否至少完整遍历过一次
+	// 活跃 Pod 列表并把它们加入期望状态缓存。就绪之前不会返回 true，
+	// 因为此时活跃 Pod 列表可能严重不完整。
 	HasAddedPods() bool
 }
 
-// PodStateProvider can determine if a pod is going to be terminated.
+// PodStateProvider 用于判断 Pod 是否即将终止。
 type PodStateProvider interface {
+	// ShouldPodContainersBeTerminating 判断 Pod 的容器是否正在终止。
 	ShouldPodContainersBeTerminating(types.UID) bool
+	// ShouldPodRuntimeBeRemoved 判断 Pod 的运行时是否已被彻底移除。
 	ShouldPodRuntimeBeRemoved(types.UID) bool
 }
 
-// PodManager is the subset of methods the manager needs to observe the actual state of the kubelet.
-// See pkg/k8s.io/kubernetes/pkg/kubelet/pod.Manager for method godoc.
+// PodManager 是填充器观察 kubelet 实际状态所需的方法子集。
+// 方法语义见 kubelet/pod.Manager。
 type PodManager interface {
+	// GetPodByUID 按 UID 返回 Pod；第二个返回值表示是否存在。
 	GetPodByUID(types.UID) (*v1.Pod, bool)
+	// GetPods 返回节点上已知的全部 Pod。
 	GetPods() []*v1.Pod
 }
 
-// NewDesiredStateOfWorldPopulator returns a new instance of
-// DesiredStateOfWorldPopulator.
+// NewDesiredStateOfWorldPopulator 返回新的 DesiredStateOfWorldPopulator。
 //
-// kubeClient - used to fetch PV and PVC objects from the API server
-// loopSleepDuration - the amount of time the populator loop sleeps between
-// successive executions
+// kubeClient - 用于从 API server 获取 PV 与 PVC 对象
+// loopSleepDuration - 填充循环相邻两次执行之间的休眠时间
 //
-// podManager - the kubelet podManager that is the source of truth for the pods
-// that exist on this host
+// podManager - kubelet 的 PodManager，是节点上 Pod 真实状态的来源
 //
-// desiredStateOfWorld - the cache to populate
+// desiredStateOfWorld - 待填充的缓存
 func NewDesiredStateOfWorldPopulator(
 	kubeClient clientset.Interface,
 	loopSleepDuration time.Duration,
@@ -120,74 +113,94 @@ func NewDesiredStateOfWorldPopulator(
 	}
 }
 
+// desiredStateOfWorldPopulator 是 DesiredStateOfWorldPopulator 的实现。
 type desiredStateOfWorldPopulator struct {
-	kubeClient               clientset.Interface
-	loopSleepDuration        time.Duration
-	podManager               PodManager
-	podStateProvider         PodStateProvider
-	desiredStateOfWorld      cache.DesiredStateOfWorld
-	actualStateOfWorld       cache.ActualStateOfWorld
-	pods                     processedPods
-	hasAddedPods             bool
-	hasAddedPodsLock         sync.RWMutex
+	// kubeClient 用于从 API server 获取 PV/PVC。
+	kubeClient clientset.Interface
+	// loopSleepDuration 是两次填充循环之间的休眠时间。
+	loopSleepDuration time.Duration
+	// podManager 提供节点上 Pod 的真实列表。
+	podManager PodManager
+	// podStateProvider 判断 Pod 是否正在终止或运行时已移除。
+	podStateProvider PodStateProvider
+	// desiredStateOfWorld 是本填充器要维护的期望状态缓存。
+	desiredStateOfWorld cache.DesiredStateOfWorld
+	// actualStateOfWorld 用于查询卷的实际挂载状态。
+	actualStateOfWorld cache.ActualStateOfWorld
+	// pods 记录每个 Pod 是否已被完整处理。
+	pods processedPods
+	// hasAddedPods 表示是否至少完成过一轮初始填充。
+	hasAddedPods bool
+	// hasAddedPodsLock 保护 hasAddedPods，读多写少。
+	hasAddedPodsLock sync.RWMutex
+	// csiMigratedPluginManager 判断卷插件是否可迁移到 CSI。
 	csiMigratedPluginManager csimigration.PluginManager
-	intreeToCSITranslator    csimigration.InTreeToCSITranslator
-	volumePluginMgr          *volume.VolumePluginMgr
+	// intreeToCSITranslator 把树内卷规格转换为 CSI 规格。
+	intreeToCSITranslator csimigration.InTreeToCSITranslator
+	// volumePluginMgr 用于查找卷插件。
+	volumePluginMgr *volume.VolumePluginMgr
 }
 
+// processedPods 并发安全地记录 Pod 是否已被填充器完整处理。
 type processedPods struct {
+	// processedPods 的 value 为 true 表示已处理，false 表示需要重新处理。
 	processedPods map[volumetypes.UniquePodName]bool
+	// RWMutex 保护 processedPods，填充循环与 Pod 同步会并发访问。
 	sync.RWMutex
 }
 
 func (dswp *desiredStateOfWorldPopulator) Run(ctx context.Context, sourcesReady config.SourcesReady) {
-	// Wait for the completion of a loop that started after sources are all ready, then set hasAddedPods accordingly
+	// 等待配置源全部就绪后启动的那一轮循环完成，再据此设置 hasAddedPods。
 	logger := klog.FromContext(ctx)
 	logger.Info("Desired state populator starts to run")
+	// 在配置源就绪前持续执行填充循环，就绪后完成当前轮再退出轮询。
 	_ = wait.PollUntilContextCancel(ctx, dswp.loopSleepDuration, false, func(ctx context.Context) (bool, error) {
 		done := sourcesReady.AllReady()
 		dswp.populatorLoop(ctx)
 		return done, nil
 	})
+	// 首轮完成后标记已添加 Pod，供卷管理器判断是否可以开始工作。
 	dswp.hasAddedPodsLock.Lock()
 	if !dswp.hasAddedPods {
 		logger.Info("Finished populating initial desired state of world")
 		dswp.hasAddedPods = true
 	}
 	dswp.hasAddedPodsLock.Unlock()
+	// 之后按固定间隔持续调谐。
 	wait.UntilWithContext(ctx, dswp.populatorLoop, dswp.loopSleepDuration)
 }
 
+// ReprocessPod 把 Pod 标记为未处理，使下一轮循环重新处理其卷。
 func (dswp *desiredStateOfWorldPopulator) ReprocessPod(
 	podName volumetypes.UniquePodName) {
 	dswp.markPodProcessingFailed(podName)
 }
 
+// HasAddedPods 返回是否已完成至少一轮初始填充。
 func (dswp *desiredStateOfWorldPopulator) HasAddedPods() bool {
 	dswp.hasAddedPodsLock.RLock()
 	defer dswp.hasAddedPodsLock.RUnlock()
 	return dswp.hasAddedPods
 }
 
+// populatorLoop 执行一轮填充：先添加新 Pod 的卷，再删除已消失 Pod 的卷。
 func (dswp *desiredStateOfWorldPopulator) populatorLoop(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	dswp.findAndAddNewPods(ctx)
 	dswp.findAndRemoveDeletedPods(logger)
 }
 
-// Iterate through all pods and add to desired state of world if they don't
-// exist but should
+// 遍历所有 Pod，把应当存在但尚未加入期望状态的卷添加进去。
 func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods(ctx context.Context) {
 	for _, pod := range dswp.podManager.GetPods() {
-		// Keep consistency of adding pod during reconstruction
+		// 调谐阶段不再为正在终止的 Pod 添加卷，避免与容器启动竞争。
 		if dswp.hasAddedPods && dswp.podStateProvider.ShouldPodContainersBeTerminating(pod.UID) {
-			// Do not (re)add volumes for pods that can't also be starting containers
+			// 不能启动容器的 Pod 也不应重新添加卷。
 			continue
 		}
 
 		if !dswp.hasAddedPods && dswp.podStateProvider.ShouldPodRuntimeBeRemoved(pod.UID) {
-			// When kubelet restarts, we need to add pods to dsw if there is a possibility
-			// that the container may still be running
+			// kubelet 重启后，只要运行时可能仍有容器在跑，就需要把 Pod 加回期望状态。
 			continue
 		}
 
@@ -195,8 +208,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndAddNewPods(ctx context.Context)
 	}
 }
 
-// Iterate through all pods in desired state of world, and remove if they no
-// longer exist
+// 遍历期望状态中的所有 Pod，不再存在的从缓存中移除。
 func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods(logger klog.Logger) {
 	podsFromCache := make(map[volumetypes.UniquePodName]struct{})
 	for _, volumeToMount := range dswp.desiredStateOfWorld.GetVolumesToMount() {
@@ -204,29 +216,27 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods(logger klog.L
 		pod, podExists := dswp.podManager.GetPodByUID(volumeToMount.Pod.UID)
 		if podExists {
 
-			// check if the attachability has changed for this volume
+			// 检查该卷的可挂载属性是否发生变化。
 			if volumeToMount.PluginIsAttachable {
 				attachableVolumePlugin, err := dswp.volumePluginMgr.FindAttachablePluginBySpec(volumeToMount.VolumeSpec)
-				// only this means the plugin is truly non-attachable
+				// 只有这种组合才说明插件确实不可挂载。
 				if err == nil && attachableVolumePlugin == nil {
-					// It is not possible right now for a CSI plugin to be both attachable and non-deviceMountable
-					// So the uniqueVolumeName should remain the same after the attachability change
+					// 目前 CSI 插件不会同时满足可挂载与不可设备挂载，
+					// 因此属性变化后 uniqueVolumeName 保持不变。
 					dswp.desiredStateOfWorld.MarkVolumeAttachability(volumeToMount.VolumeName, false)
 					logger.Info("Volume changes from attachable to non-attachable", "volumeName", volumeToMount.VolumeName)
 					continue
 				}
 			}
 
-			// Exclude known pods that we expect to be running
+			// 仍在运行且预期存在的 Pod 跳过删除。
 			if !dswp.podStateProvider.ShouldPodRuntimeBeRemoved(pod.UID) {
 				continue
 			}
 		}
 
-		// Once a pod has been deleted from kubelet pod manager, do not delete
-		// it immediately from volume manager. Instead, check the kubelet
-		// pod state provider to verify that all containers in the pod have been
-		// terminated.
+		// Pod 从 kubelet PodManager 删除后不要立刻从卷管理器删除，
+		// 必须先通过 podStateProvider 确认其中所有容器都已终止。
 		if !dswp.podStateProvider.ShouldPodRuntimeBeRemoved(volumeToMount.Pod.UID) {
 			logger.V(4).Info("Pod still has one or more containers in the non-exited state and will not be removed from desired state", "pod", klog.KObj(volumeToMount.Pod))
 			continue
@@ -246,7 +256,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods(logger klog.L
 		dswp.deleteProcessedPod(volumeToMount.PodName)
 	}
 
-	// Cleanup orphanded entries from processedPods
+	// 清理 processedPods 中没有对应期望状态的孤儿记录。
 	dswp.pods.Lock()
 	orphanedPods := make([]volumetypes.UniquePodName, 0, len(dswp.pods.processedPods))
 	for k := range dswp.pods.processedPods {
@@ -255,6 +265,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods(logger klog.L
 		}
 	}
 	dswp.pods.Unlock()
+	// 只有 Pod 已不存在且运行时确实移除后，才删除该记录。
 	for _, orphanedPod := range orphanedPods {
 		uid := types.UID(orphanedPod)
 		_, podExists := dswp.podManager.GetPodByUID(uid)
@@ -263,6 +274,7 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods(logger klog.L
 		}
 	}
 
+	// 清理已删除 Pod 上残留的卷处理错误。
 	podsWithError := dswp.desiredStateOfWorld.GetPodsWithErrors()
 	for _, podName := range podsWithError {
 		if _, podExists := dswp.podManager.GetPodByUID(types.UID(podName)); !podExists {
@@ -271,33 +283,36 @@ func (dswp *desiredStateOfWorldPopulator) findAndRemoveDeletedPods(logger klog.L
 	}
 }
 
-// processPodVolumes processes the volumes in the given pod and adds them to the
-// desired state of the world.
+// processPodVolumes 处理给定 Pod 的卷，并加入期望状态。
 func (dswp *desiredStateOfWorldPopulator) processPodVolumes(ctx context.Context, pod *v1.Pod) {
+	// 防御性检查：Pod 可能在入队后被删除。
 	if pod == nil {
 		return
 	}
 
 	logger := klog.FromContext(ctx)
 	uniquePodName := util.GetUniquePodName(pod)
+	// 已完整处理且未被要求重新处理时直接跳过。
 	if dswp.podPreviouslyProcessed(uniquePodName) {
 		return
 	}
 
+	// 只有所有卷都成功加入，才把 Pod 标记为已处理。
 	allVolumesAdded := true
 	collectSELinuxOptions := utilfeature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod)
 	mounts, devices, seLinuxContainerContexts := util.GetPodVolumeNames(pod, collectSELinuxOptions)
 
-	// Process volume spec for each volume defined in pod
+	// 逐个处理 Pod 中定义的卷。
 	for _, podVolume := range pod.Spec.Volumes {
 		if !mounts.Has(podVolume.Name) && !devices.Has(podVolume.Name) {
-			// Volume is not used in the pod, ignore it.
+			// 未在 mount/device 中出现的卷不参与挂载。
 			logger.V(4).Info("Skipping unused volume", "pod", klog.KObj(pod), "volumeName", podVolume.Name)
 			continue
 		}
 
 		pvc, volumeSpec, volumeGIDValue, err :=
 			dswp.createVolumeSpec(ctx, podVolume, pod, mounts, devices)
+		// 记录错误并继续处理其余卷，单卷失败不应阻断整个 Pod。
 		if err != nil {
 			logger.Error(err, "Error processing volume", "pod", klog.KObj(pod), "volumeName", podVolume.Name)
 			dswp.desiredStateOfWorld.AddErrorToPod(uniquePodName, err.Error())
@@ -305,7 +320,7 @@ func (dswp *desiredStateOfWorldPopulator) processPodVolumes(ctx context.Context,
 			continue
 		}
 
-		// Add volume to desired state of world
+		// 把卷加入期望状态。
 		uniqueVolumeName, err := dswp.desiredStateOfWorld.AddPodToVolume(
 			logger, uniquePodName, pod, volumeSpec, podVolume.Name, volumeGIDValue, seLinuxContainerContexts[podVolume.Name])
 		if err != nil {
@@ -319,27 +334,24 @@ func (dswp *desiredStateOfWorldPopulator) processPodVolumes(ctx context.Context,
 		dswp.checkVolumeFSResize(logger, pod, podVolume, pvc, volumeSpec, uniqueVolumeName)
 	}
 
-	// some of the volume additions may have failed, should not mark this pod as fully processed
+	// 部分卷添加失败时，不能把 Pod 标记为已完整处理。
 	if allVolumesAdded {
 		dswp.markPodProcessed(uniquePodName)
-		// New pod has been synced. Re-mount all volumes that need it
-		// (e.g. DownwardAPI)
+		// 新 Pod 已完成同步，重新挂载需要刷新的卷（例如 Downward API）。
 		dswp.actualStateOfWorld.MarkRemountRequired(logger, uniquePodName)
-		// Remove any stored errors for the pod, everything went well in this processPodVolumes
+		// 本轮全部成功，清除该 Pod 之前记录的错误。
 		dswp.desiredStateOfWorld.PopPodErrors(uniquePodName)
 	} else if dswp.podHasBeenSeenOnce(uniquePodName) {
-		// For the Pod which has been processed at least once, even though some volumes
-		// may not have been reprocessed successfully this round, we still mark it as processed to avoid
-		// processing it at a very high frequency. The pod will be reprocessed when volume manager calls
-		// ReprocessPod() which is triggered by SyncPod.
+		// 对至少处理过一次的 Pod，即使本轮有卷失败，也标记为已处理，
+		// 避免以极高频率反复重试；卷管理器会在 SyncPod 触发 ReprocessPod() 时
+		// 重新处理该 Pod。
 		dswp.markPodProcessed(uniquePodName)
 	}
 
 }
 
-// checkVolumeFSResize records desired PVC size for a volume mounted by the pod.
-// It is used for comparison with actual size(coming from pvc.Status.Capacity) and calling
-// volume expansion on the node if needed.
+// checkVolumeFSResize 记录 Pod 所挂载卷的期望 PVC 大小，
+// 用于与 pvc.Status.Capacity 中的实际大小比较，并在需要时触发节点侧扩容。
 func (dswp *desiredStateOfWorldPopulator) checkVolumeFSResize(
 	logger klog.Logger,
 	pod *v1.Pod,
@@ -348,33 +360,32 @@ func (dswp *desiredStateOfWorldPopulator) checkVolumeFSResize(
 	volumeSpec *volume.Spec,
 	uniqueVolumeName v1.UniqueVolumeName) {
 
-	// if a volumeSpec does not have PV or has InlineVolumeSpecForCSIMigration set or pvc is nil
-	// we can't resize the volume and hence resizing should be skipped.
+	// 卷规格没有 PV、启用了 InlineVolumeSpecForCSIMigration，或 PVC 为空时
+	// 无法扩容，直接跳过。
 	if volumeSpec.PersistentVolume == nil || volumeSpec.InlineVolumeSpecForCSIMigration || pvc == nil {
-		// Only PVC supports resize operation.
+		// 只有 PVC 支持扩容操作。
 		return
 	}
 
-	// volumeSpec.ReadOnly is the value that determines if volume could be formatted when being mounted.
-	// This is the same flag that determines filesystem resizing behaviour for offline resizing and hence
-	// we should use it here. This value comes from Pod.spec.volumes.persistentVolumeClaim.readOnly.
+	// volumeSpec.ReadOnly 决定卷挂载时能否格式化，也决定离线扩容行为，
+	// 因此这里必须使用同一标志；该值来自 Pod.spec.volumes.persistentVolumeClaim.readOnly。
 	if volumeSpec.ReadOnly {
-		// This volume is used as read only by this pod, we don't perform resize for read only volumes.
+		// 只读卷不做扩容。
 		logger.V(5).Info("Skip file system resize check for the volume, as the volume is mounted as readonly", "pod", klog.KObj(pod), "volumeName", podVolume.Name)
 		return
 	}
 
+	// 把 PV 期望容量与 PVC 实际状态容量都深拷贝，避免后续修改共享对象。
 	pvCap := volumeSpec.PersistentVolume.Spec.Capacity.Storage().DeepCopy()
 	pvcStatusCap := pvc.Status.Capacity.Storage().DeepCopy()
 	dswp.desiredStateOfWorld.UpdatePersistentVolumeSize(uniqueVolumeName, pvCap)
 	logger.V(5).Info("NodeExpandVolume updating size", "actualSize", pvcStatusCap.String(), "desiredSize", pvCap.String(), "volumeName", uniqueVolumeName)
-	// in case the actualStateOfWorld was rebuild after kubelet restart ensure that claimSize is set to accurate value
+	// kubelet 重启后实际状态可能被重建，这里确保 claimSize 被校正为准确值。
 	dswp.actualStateOfWorld.InitializeClaimSize(logger, uniqueVolumeName, pvcStatusCap)
 }
 
-// podPreviouslyProcessed returns true if the volumes for this pod have already
-// been processed/reprocessed by the populator. Otherwise, the volumes for this pod need to
-// be reprocessed.
+// podPreviouslyProcessed 返回该 Pod 的卷是否已被填充器处理/重新处理过；
+// 否则说明还需要重新处理。
 func (dswp *desiredStateOfWorldPopulator) podPreviouslyProcessed(
 	podName volumetypes.UniquePodName) bool {
 	dswp.pods.RLock()
@@ -383,7 +394,7 @@ func (dswp *desiredStateOfWorldPopulator) podPreviouslyProcessed(
 	return dswp.pods.processedPods[podName]
 }
 
-// markPodProcessingFailed marks the specified pod from processedPods as false to indicate that it failed processing
+// markPodProcessingFailed 把 Pod 标记为 false，表示处理失败、需要重试。
 func (dswp *desiredStateOfWorldPopulator) markPodProcessingFailed(
 	podName volumetypes.UniquePodName) {
 	dswp.pods.Lock()
@@ -391,8 +402,7 @@ func (dswp *desiredStateOfWorldPopulator) markPodProcessingFailed(
 	dswp.pods.Unlock()
 }
 
-// podHasBeenSeenOnce returns true if the pod has been seen by the popoulator
-// at least once.
+// podHasBeenSeenOnce 返回填充器是否至少见过该 Pod 一次。
 func (dswp *desiredStateOfWorldPopulator) podHasBeenSeenOnce(
 	podName volumetypes.UniquePodName) bool {
 	dswp.pods.RLock()
@@ -401,8 +411,7 @@ func (dswp *desiredStateOfWorldPopulator) podHasBeenSeenOnce(
 	return exist
 }
 
-// markPodProcessed records that the volumes for the specified pod have been
-// processed by the populator
+// markPodProcessed 记录该 Pod 的卷已被填充器完整处理。
 func (dswp *desiredStateOfWorldPopulator) markPodProcessed(
 	podName volumetypes.UniquePodName) {
 	dswp.pods.Lock()
@@ -411,7 +420,7 @@ func (dswp *desiredStateOfWorldPopulator) markPodProcessed(
 	dswp.pods.processedPods[podName] = true
 }
 
-// deleteProcessedPod removes the specified pod from processedPods
+// deleteProcessedPod 从 processedPods 中删除该 Pod 的记录。
 func (dswp *desiredStateOfWorldPopulator) deleteProcessedPod(
 	podName volumetypes.UniquePodName) {
 	dswp.pods.Lock()
@@ -420,26 +429,25 @@ func (dswp *desiredStateOfWorldPopulator) deleteProcessedPod(
 	delete(dswp.pods.processedPods, podName)
 }
 
-// createVolumeSpec creates and returns a mutable volume.Spec object for the
-// specified volume. It dereference any PVC to get PV objects, if needed.
-// Returns an error if unable to obtain the volume at this time.
+// createVolumeSpec 为指定卷创建并返回可变的 volume.Spec 对象；
+// 需要时会解引用 PVC 获取 PV。当前无法取得卷时返回错误。
 func (dswp *desiredStateOfWorldPopulator) createVolumeSpec(
 	ctx context.Context, podVolume v1.Volume, pod *v1.Pod, mounts, devices sets.Set[string]) (*v1.PersistentVolumeClaim, *volume.Spec, string, error) {
 	logger := klog.FromContext(ctx)
+	// PVC 显式引用与通用临时卷都按 PVC 处理。
 	pvcSource := podVolume.VolumeSource.PersistentVolumeClaim
 	isEphemeral := pvcSource == nil && podVolume.VolumeSource.Ephemeral != nil
 	if isEphemeral {
-		// Generic ephemeral inline volumes are handled the
-		// same way as a PVC reference. The only additional
-		// constraint (checked below) is that the PVC must be
-		// owned by the pod.
+		// 通用临时内联卷与 PVC 引用走同一条路径，
+		// 额外约束（下方检查）是 PVC 必须由该 Pod 拥有。
 		pvcSource = &v1.PersistentVolumeClaimVolumeSource{
 			ClaimName: ephemeral.VolumeClaimName(pod, &podVolume),
 		}
 	}
+	// PVC 路径需要先从 API server 取回 PVC 与绑定 PV。
 	if pvcSource != nil {
 		logger.V(5).Info("Found PVC", "PVC", klog.KRef(pod.Namespace, pvcSource.ClaimName))
-		// If podVolume is a PVC, fetch the real PV behind the claim
+		// 如果是 PVC，取回 claim 后面的真实 PV。
 		pvc, err := dswp.getPVCExtractPV(
 			ctx, pod.Namespace, pvcSource.ClaimName)
 		if err != nil {
@@ -449,6 +457,7 @@ func (dswp *desiredStateOfWorldPopulator) createVolumeSpec(
 				pvcSource.ClaimName,
 				err)
 		}
+		// 临时卷必须确认 PVC 确实属于该 Pod，防止误用其他 Pod 的卷。
 		if isEphemeral {
 			if err := ephemeral.VolumeIsForPod(pod, pvc); err != nil {
 				return nil, nil, "", err
@@ -456,7 +465,7 @@ func (dswp *desiredStateOfWorldPopulator) createVolumeSpec(
 		}
 		pvName, pvcUID := pvc.Spec.VolumeName, pvc.UID
 		logger.V(5).Info("Found bound PV for PVC", "PVC", klog.KRef(pod.Namespace, pvcSource.ClaimName), "PVCUID", pvcUID, "PVName", pvName)
-		// Fetch actual PV object
+		// 获取实际的 PV 对象。
 		volumeSpec, volumeGIDValue, err :=
 			dswp.getPVSpec(ctx, pvName, pvcSource.ReadOnly, pvcUID)
 		if err != nil {
@@ -482,14 +491,14 @@ func (dswp *desiredStateOfWorldPopulator) createVolumeSpec(
 		if err != nil {
 			return nil, nil, "", err
 		}
-		// Error if a container has volumeMounts but the volumeMode of PVC isn't Filesystem.
+		// 容器使用 volumeMounts 时，PVC 的 volumeMode 必须是 Filesystem。
 		if mounts.Has(podVolume.Name) && volumeMode != v1.PersistentVolumeFilesystem {
 			return nil, nil, "", fmt.Errorf(
 				"volume %s has volumeMode %s, but is specified in volumeMounts",
 				podVolume.Name,
 				volumeMode)
 		}
-		// Error if a container has volumeDevices but the volumeMode of PVC isn't Block
+		// 容器使用 volumeDevices 时，PVC 的 volumeMode 必须是 Block。
 		if devices.Has(podVolume.Name) && volumeMode != v1.PersistentVolumeBlock {
 			return nil, nil, "", fmt.Errorf(
 				"volume %s has volumeMode %s, but is specified in volumeDevices",
@@ -499,7 +508,7 @@ func (dswp *desiredStateOfWorldPopulator) createVolumeSpec(
 		return pvc, volumeSpec, volumeGIDValue, nil
 	}
 
-	// Do not return the original volume object, since the source could mutate it
+	// 不返回原始卷对象，避免源对象随后被修改而影响缓存。
 	clonedPodVolume := podVolume.DeepCopy()
 
 	spec := volume.NewSpecFromVolume(clonedPodVolume)
@@ -516,10 +525,9 @@ func (dswp *desiredStateOfWorldPopulator) createVolumeSpec(
 	return nil, spec, "", nil
 }
 
-// getPVCExtractPV fetches the PVC object with the given namespace and name from
-// the API server, checks whether PVC is being deleted, extracts the name of the PV
-// it is pointing to and returns it.
-// An error is returned if the PVC object's phase is not "Bound".
+// getPVCExtractPV 从 API server 获取指定 namespace/name 的 PVC，
+// 检查其是否正在删除，并提取其指向的 PV 名称。
+// PVC 的 phase 不是 Bound 时返回错误。
 func (dswp *desiredStateOfWorldPopulator) getPVCExtractPV(
 	ctx context.Context, namespace string, claimName string) (*v1.PersistentVolumeClaim, error) {
 	pvc, err :=
@@ -528,20 +536,15 @@ func (dswp *desiredStateOfWorldPopulator) getPVCExtractPV(
 		return nil, fmt.Errorf("failed to fetch PVC from API server: %v", err)
 	}
 
-	// Pods that uses a PVC that is being deleted and not protected by
-	// kubernetes.io/pvc-protection must not be started.
+	// 使用正在删除且未受 kubernetes.io/pvc-protection 保护的 PVC 的 Pod 不应启动。
 	//
-	// 1) In case an old kubelet is running without this check, the worst
-	// that can happen is that such pod is scheduled. This was the default
-	// behavior in 1.8 and earlier and users should not be that surprised.
-	// It should happen only in very rare case when scheduler schedules
-	// a pod and user deletes a PVC that's used by it at the same time.
+	// 1) 旧版本 kubelet 没有该检查时，最坏结果是这类 Pod 被调度；
+	//    1.8 及更早版本就是这种行为，用户对此不至于意外。
+	//    只有在调度器调度 Pod 的同时用户删除其 PVC 的罕见场景才会发生。
 	//
-	// 2) Adding a check for kubernetes.io/pvc-protection here to prevent
-	// the existing running pods from being affected during the rebuild of
-	// the desired state of the world cache when the kubelet is restarted.
-	// It is safe for kubelet to add this check here because the PVC will
-	// be stuck in Terminating state until the pod is deleted.
+	// 2) 在这里检查 kubernetes.io/pvc-protection，可以避免 kubelet 重启
+	//    重建期望状态缓存时影响已在运行的 Pod。
+	//    该检查是安全的：在 Pod 删除前，PVC 会一直停留在 Terminating 状态。
 	if pvc.ObjectMeta.DeletionTimestamp != nil && !slices.Contains(pvc.Finalizers, util.PVCProtectionFinalizer) {
 		return nil, errors.New("PVC is being deleted")
 	}
@@ -556,9 +559,8 @@ func (dswp *desiredStateOfWorldPopulator) getPVCExtractPV(
 	return pvc, nil
 }
 
-// getPVSpec fetches the PV object with the given name from the API server
-// and returns a volume.Spec representing it.
-// An error is returned if the call to fetch the PV object fails.
+// getPVSpec 从 API server 获取指定名称的 PV，并返回表示它的 volume.Spec。
+// 获取 PV 失败时返回错误。
 func (dswp *desiredStateOfWorldPopulator) getPVSpec(
 	ctx context.Context,
 	name string,
@@ -570,12 +572,14 @@ func (dswp *desiredStateOfWorldPopulator) getPVSpec(
 			"failed to fetch PV %s from API server: %v", name, err)
 	}
 
+	// 没有 ClaimRef 说明 PV 尚未绑定到任何 PVC。
 	if pv.Spec.ClaimRef == nil {
 		return nil, "", fmt.Errorf(
 			"found PV object %s but it has a nil pv.Spec.ClaimRef indicating it is not yet bound to the claim",
 			name)
 	}
 
+	// 校验绑定关系，防止使用已重新绑定到其他 PVC 的 PV。
 	if pv.Spec.ClaimRef.UID != expectedClaimUID {
 		return nil, "", fmt.Errorf(
 			"found PV object %s but its pv.Spec.ClaimRef.UID %s does not point to claim.UID %s",
@@ -588,6 +592,7 @@ func (dswp *desiredStateOfWorldPopulator) getPVSpec(
 	return volume.NewSpecFromPersistentVolume(pv, pvcReadOnly), volumeGIDValue, nil
 }
 
+// getPVVolumeGidAnnotationValue 读取 PV 上记录的卷 GID 注解值。
 func getPVVolumeGidAnnotationValue(pv *v1.PersistentVolume) string {
 	if volumeGid, ok := pv.Annotations[util.VolumeGidAnnotationKey]; ok {
 		return volumeGid

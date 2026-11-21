@@ -28,6 +28,7 @@ import (
 	statsapi "k8s.io/kubelet/pkg/apis/stats/v1alpha1"
 )
 
+// Test_hostStatsProvider_getPodEtcHostsStats 验证不支持 etc hosts 文件的运行时返回空统计。
 func Test_hostStatsProvider_getPodEtcHostsStats(t *testing.T) {
 	tests := []struct {
 		name                string

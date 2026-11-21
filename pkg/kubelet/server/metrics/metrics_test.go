@@ -24,6 +24,7 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestSetMetricsProvider 验证设置不同指标提供者后导出的 kubelet_metrics_provider 指标值。
 func TestSetMetricsProvider(t *testing.T) {
 	Register()
 	MetricsProvider.Reset()

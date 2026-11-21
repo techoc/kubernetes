@@ -37,6 +37,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestPullImage 验证匿名拉取镜像成功时返回镜像引用、凭证为空，且镜像出现在列表中。
 func TestPullImage(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -45,14 +46,16 @@ func TestPullImage(t *testing.T) {
 	imageRef, creds, err := fakeManager.PullImage(tCtx, kubecontainer.ImageSpec{Image: "busybox"}, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "busybox", imageRef)
-	assert.Nil(t, creds) // as this was an anonymous pull
+	assert.Nil(t, creds) // 此次为匿名拉取，不应返回凭证
 
+	// 拉取成功后，镜像应出现在本地镜像列表中。
 	images, err := fakeManager.ListImages(tCtx)
 	assert.NoError(t, err)
 	assert.Len(t, images, 1)
 	assert.Equal(t, []string{"busybox"}, images[0].RepoTags)
 }
 
+// TestPullImageWithError 验证底层镜像服务拉取失败时错误向上返回，且不会留下镜像记录。
 func TestPullImageWithError(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -69,6 +72,7 @@ func TestPullImageWithError(t *testing.T) {
 	assert.Empty(t, images)
 }
 
+// TestListImages 验证 ListImages 返回的镜像 ID 集合与镜像服务中设置的完全一致。
 func TestListImages(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -80,6 +84,7 @@ func TestListImages(t *testing.T) {
 
 	actualImages, err := fakeManager.ListImages(tCtx)
 	assert.NoError(t, err)
+	// 用集合比较，避免依赖镜像返回顺序。
 	actual := sets.New[string]()
 	for _, i := range actualImages {
 		actual.Insert(i.ID)
@@ -88,6 +93,7 @@ func TestListImages(t *testing.T) {
 	assert.Equal(t, sets.List(expected), sets.List(actual))
 }
 
+// TestListImagesPinnedField 验证 ListImages 正确透传每个镜像的 Pinned 标记。
 func TestListImagesPinnedField(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -112,6 +118,7 @@ func TestListImagesPinnedField(t *testing.T) {
 	}
 }
 
+// TestListImagesWithError 验证镜像服务列出镜像失败时返回错误且不返回镜像列表。
 func TestListImagesWithError(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -124,6 +131,7 @@ func TestListImagesWithError(t *testing.T) {
 	assert.Nil(t, actualImages)
 }
 
+// TestGetImageRef 验证本地已存在镜像时 GetImageRef 返回正确的镜像引用。
 func TestGetImageRef(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -136,18 +144,16 @@ func TestGetImageRef(t *testing.T) {
 	assert.Equal(t, image, imageRef)
 }
 
-// TestGetImageRefReturnsImageIdNotRepoDigest verifies that GetImageRef returns
-// Image.Id instead of RepoDigests to ensure content-based deduplication.
-// This prevents the same image pulled from different registries from being
-// treated as different images in pull record lookups.
+// TestGetImageRefReturnsImageIdNotRepoDigest 验证 GetImageRef 返回 Image.Id 而非 RepoDigests，
+// 以保证基于内容的去重：同一镜像从不同仓库拉取时应被视为同一镜像，
+// 避免在拉取记录查询中产生误判。
 func TestGetImageRefReturnsImageIdNotRepoDigest(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
 	require.NoError(t, err)
 
-	// Simulate an image with both Id and RepoDigests set
-	// In a real scenario, the same image content pulled from different registries
-	// would have the same Id but different RepoDigests
+	// 模拟同时设置了 Id 与 RepoDigests 的镜像。
+	// 现实场景中，同一镜像内容从不同仓库拉取会得到相同的 Id，但 RepoDigests 不同。
 	imageID := "sha256:abcd1234"
 	repoDigest1 := "registry1.io/myimage@sha256:abcd1234"
 	repoDigest2 := "registry2.io/myimage@sha256:abcd1234"
@@ -161,12 +167,13 @@ func TestGetImageRefReturnsImageIdNotRepoDigest(t *testing.T) {
 	}
 	fakeImageService.Unlock()
 
-	// GetImageRef should return the content-based Image.Id, not the location-based RepoDigest
+	// GetImageRef 应返回基于内容的 Image.Id，而不是基于位置的 RepoDigest。
 	imageRef, err := fakeManager.GetImageRef(tCtx, kubecontainer.ImageSpec{Image: "myimage"})
 	require.NoError(t, err)
 	assert.Equal(t, imageID, imageRef, "GetImageRef should return Image.Id for content-based deduplication")
 }
 
+// TestImageSize 验证 GetImageSize 返回镜像服务中设置的镜像大小。
 func TestImageSize(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -181,6 +188,7 @@ func TestImageSize(t *testing.T) {
 	assert.Equal(t, imageSize, actualSize)
 }
 
+// TestGetImageRefImageNotAvailableLocally 验证本地不存在镜像时 GetImageRef 返回空引用且不报错。
 func TestGetImageRefImageNotAvailableLocally(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -195,6 +203,7 @@ func TestGetImageRefImageNotAvailableLocally(t *testing.T) {
 	assert.Equal(t, imageNotAvailableLocallyRef, imageRef)
 }
 
+// TestGetImageRefWithError 验证查询镜像状态失败时 GetImageRef 返回错误与空引用。
 func TestGetImageRefWithError(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -209,6 +218,7 @@ func TestGetImageRefWithError(t *testing.T) {
 	assert.Equal(t, "", imageRef)
 }
 
+// TestRemoveImage 验证 RemoveImage 会真正删除本地镜像。
 func TestRemoveImage(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -223,6 +233,7 @@ func TestRemoveImage(t *testing.T) {
 	assert.Empty(t, fakeImageService.Images)
 }
 
+// TestRemoveImageNoOpIfImageNotLocal 验证删除本地不存在的镜像时应视为成功（空操作）。
 func TestRemoveImageNoOpIfImageNotLocal(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -232,6 +243,7 @@ func TestRemoveImageNoOpIfImageNotLocal(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestRemoveImageWithError 验证删除镜像失败时返回错误，且镜像仍保留在本地。
 func TestRemoveImageWithError(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -248,6 +260,7 @@ func TestRemoveImageWithError(t *testing.T) {
 	assert.Len(t, fakeImageService.Images, 1)
 }
 
+// TestImageStats 验证 ImageStats 汇总所有镜像大小得到总存储字节数。
 func TestImageStats(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -264,6 +277,7 @@ func TestImageStats(t *testing.T) {
 	assert.Equal(t, expectedStats, actualStats)
 }
 
+// TestImageStatsWithError 验证列出镜像失败时 ImageStats 返回错误且不返回统计结果。
 func TestImageStatsWithError(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
@@ -276,6 +290,8 @@ func TestImageStatsWithError(t *testing.T) {
 	assert.Nil(t, actualImageStats)
 }
 
+// TestPullWithSecrets 验证从 Pod Secret 与内置 keyring 中选择镜像拉取凭证的优先级：
+// Secret 中匹配的凭证应覆盖内置 keyring。
 func TestPullWithSecrets(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	logger := tCtx.Logger()
@@ -349,6 +365,7 @@ func TestPullWithSecrets(t *testing.T) {
 		builtInKeyRing := &credentialprovider.BasicDockerKeyring{}
 		builtInKeyRing.Add(nil, test.builtInDockerConfig)
 
+		// 每个用例重建 fake manager 与拉取记录，避免凭证和拉取状态在用例间串扰。
 		_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
 		require.NoError(t, err)
 
@@ -390,6 +407,7 @@ func TestPullWithSecrets(t *testing.T) {
 	}
 }
 
+// TestPullWithSecretsWithError 验证无效 Secret 或拉取失败时 EnsureImageExists 返回错误且不留下镜像。
 func TestPullWithSecretsWithError(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	logger := tCtx.Logger()
@@ -437,6 +455,7 @@ func TestPullWithSecretsWithError(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			// 每个用例重建 fake manager，避免错误注入与拉取记录状态相互影响。
 			_, fakeImageService, fakeManager, err := createTestRuntimeManager(tCtx)
 			assert.NoError(t, err)
 
@@ -487,11 +506,13 @@ func TestPullWithSecretsWithError(t *testing.T) {
 	}
 }
 
+// TestPullThenListWithAnnotations 验证拉取镜像时携带的注解在后续 ListImages 中原样保留。
 func TestPullThenListWithAnnotations(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, fakeManager, err := createTestRuntimeManager(tCtx)
 	assert.NoError(t, err)
 
+	// 注解是镜像 spec 的一部分，拉取后应在列表中原样读回。
 	imageSpec := kubecontainer.ImageSpec{
 		Image: "12345",
 		Annotations: []kubecontainer.Annotation{

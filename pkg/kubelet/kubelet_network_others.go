@@ -20,5 +20,5 @@ package kubelet
 
 import "k8s.io/klog/v2"
 
-// Do nothing.
+// initNetworkUtil 在非 Linux 平台无需初始化网络工具，故为空实现。
 func (kl *Kubelet) initNetworkUtil(logger klog.Logger) {}

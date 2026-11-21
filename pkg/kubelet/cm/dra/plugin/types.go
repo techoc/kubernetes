@@ -22,10 +22,9 @@ import (
 	drahealthv1 "k8s.io/kubelet/pkg/apis/dra-health/v1"
 )
 
-// StreamHandler defines the interface for handling DRA health streams.
-// This interface is implemented by the DRA Manager to decouple the plugin
-// package from the manager package, breaking the import cycle.
+// StreamHandler 定义处理 DRA 健康数据流的接口。
+// 该接口由 DRA Manager 实现，用于解耦 plugin 包与 manager 包，避免循环导入。
 type StreamHandler interface {
-	// HandleWatchResourcesStream processes health updates from a specific DRA plugin stream.
+	// HandleWatchResourcesStream 处理来自指定 DRA 插件数据流的健康状态更新。
 	HandleWatchResourcesStream(ctx context.Context, stream drahealthv1.DRAResourceHealth_NodeWatchResourcesClient, resourceName string) error
 }

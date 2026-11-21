@@ -28,7 +28,10 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestGetCachedNode 验证 GetCachedNode 在 informer 节点与缓存节点之间
+// 选择较新 ResourceVersion 的逻辑。
 func TestGetCachedNode(t *testing.T) {
+	// 用例覆盖版本比较、版本解析失败、缓存为 nil、lister 报错等边界。
 	tests := []struct {
 		name               string
 		informerNode       *v1.Node
@@ -108,6 +111,7 @@ func TestGetCachedNode(t *testing.T) {
 		},
 	}
 
+	// 逐用例构造 Kubelet 并比对返回节点与更新后的缓存。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			tCtx := ktesting.Init(t)
@@ -116,6 +120,7 @@ func TestGetCachedNode(t *testing.T) {
 				nodeLister: newFakeNodeLister(test.nodeListerErr, test.informerNode),
 				kubeClient: &fake.Clientset{},
 			}
+			// expectedNode 为 nil 时用 initialNode 的结果填充，模拟"无任何可用节点"的基线。
 			if test.expectedNode == nil {
 				var err error
 				test.expectedNode, err = kl.initialNode(tCtx)
@@ -124,6 +129,7 @@ func TestGetCachedNode(t *testing.T) {
 				}
 			}
 
+			// 调用被测方法，然后同时校验返回值与缓存状态。
 			actualNode, err := kl.GetCachedNode(tCtx, true)
 
 			if (err != nil) != test.expectedErr {
@@ -139,11 +145,13 @@ func TestGetCachedNode(t *testing.T) {
 	}
 }
 
+// fakeNodeLister 返回预设节点与错误。
 type fakeNodeLister struct {
 	node *v1.Node
 	err  error
 }
 
+// newFakeNodeLister 创建 fake 节点 lister。
 func newFakeNodeLister(err error, node *v1.Node) *fakeNodeLister {
 	ret := &fakeNodeLister{}
 	ret.node = node
@@ -151,10 +159,12 @@ func newFakeNodeLister(err error, node *v1.Node) *fakeNodeLister {
 	return ret
 }
 
+// List 返回包含预设节点的列表。
 func (l *fakeNodeLister) List(selector labels.Selector) (ret []*v1.Node, err error) {
 	return []*v1.Node{l.node}, l.err
 }
 
+// Get 返回预设节点与错误，忽略名称。
 func (l *fakeNodeLister) Get(name string) (*v1.Node, error) {
 	return l.node, l.err
 }

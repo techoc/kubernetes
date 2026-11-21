@@ -18,6 +18,7 @@ limitations under the License.
 
 package validation_test
 
+// 非 Linux 平台校验测试共用的基础配置：启用按 QoS 划分的 cgroup 与节点可分配资源预留。
 var (
 	cgroupsPerQOS          = true
 	enforceNodeAllocatable = []string{"pods", "system-reserved", "kube-reserved"}

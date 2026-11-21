@@ -30,6 +30,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestGetContainerDevices 验证按 Pod/容器查询设备时，返回结果包含正确的设备与 NUMA 拓扑。
 func TestGetContainerDevices(t *testing.T) {
 	podDevices := newPodDevices()
 	resourceName1 := "domain1.com/resource1"
@@ -45,6 +46,7 @@ func TestGetContainerDevices(t *testing.T) {
 		),
 	)
 
+	// 查询结果应以资源名为键，值为设备 ID 到插件信息的映射。
 	resContDevices := podDevices.getContainerDevices(podID, contID)
 	contDevices, ok := resContDevices[resourceName1]
 	require.True(t, ok, "resource %q not present", resourceName1)
@@ -61,6 +63,8 @@ func TestGetContainerDevices(t *testing.T) {
 	}
 }
 
+// TestResourceDeviceInstanceFilter 验证按资源/设备 ID 过滤设备实例：
+// 空条件、部分命中、全部命中、包含不存在 ID 等情况。
 func TestResourceDeviceInstanceFilter(t *testing.T) {
 	var expected string
 	var cond map[string]sets.Set[string]
@@ -101,6 +105,7 @@ func TestResourceDeviceInstanceFilter(t *testing.T) {
 		},
 	}
 
+	// 空过滤条件返回空集合。
 	resp = devs.Filter(map[string]sets.Set[string]{})
 	expected = `{}`
 	expectResourceDeviceInstances(t, resp, expected)
@@ -142,11 +147,10 @@ func TestResourceDeviceInstanceFilter(t *testing.T) {
 
 }
 
+// expectResourceDeviceInstances 把结果序列化为 JSON 并与期望字符串比较。
 func expectResourceDeviceInstances(t *testing.T, resp ResourceDeviceInstances, expected string) {
-	// per docs in https://pkg.go.dev/encoding/json#Marshal
-	// "Map values encode as JSON objects. The map's key type must either be a string, an integer type, or
-	// implement encoding.TextMarshaler. The map keys are sorted [...]"
-	// so this check is expected to be stable and not flaky
+	// encoding/json 保证 map 键按字典序输出（见 Marshal 文档），
+	// 因此这里的字符串比较是稳定的，不会偶发失败。
 	data, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatalf("unexpected JSON marshalling error: %v", err)
@@ -157,6 +161,8 @@ func expectResourceDeviceInstances(t *testing.T, resp ResourceDeviceInstances, e
 	}
 }
 
+// TestDeviceRunContainerOptions 验证把各资源的分配响应汇总为容器运行选项，
+// 包括 CDI 设备去重与多资源合并。
 func TestDeviceRunContainerOptions(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	const (
@@ -241,10 +247,10 @@ func TestDeviceRunContainerOptions(t *testing.T) {
 					response,
 				)
 			}
+			// 从各资源的分配响应汇总注解、CDI 设备、设备、环境变量和挂载。
 			opts := podDevices.deviceRunContainerOptions(logger, podUID, containerName)
 
-			// The exact ordering of the options depends on the order of the resources in the map.
-			// We therefore use `ElementsMatch` instead of `Equal` on the member slices.
+			// 选项顺序取决于 map 遍历顺序，因此成员切片用 ElementsMatch 而非 Equal。
 			as.ElementsMatch(tc.expected.Annotations, opts.Annotations)
 			as.ElementsMatch(tc.expected.CDIDevices, opts.CDIDevices)
 			as.ElementsMatch(tc.expected.Devices, opts.Devices)
@@ -254,6 +260,7 @@ func TestDeviceRunContainerOptions(t *testing.T) {
 	}
 }
 
+// TestGetPodAndContainerForDevice 验证按资源名和设备 ID 反查所属 Pod/容器。
 func TestGetPodAndContainerForDevice(t *testing.T) {
 	podDevices := newPodDevices()
 	resourceName1 := "domain1.com/resource1"
@@ -269,16 +276,15 @@ func TestGetPodAndContainerForDevice(t *testing.T) {
 		),
 	)
 
-	// dev2 is a new device
+	// dev2 是未分配的新设备，应查不到 Pod。
 	podUID, _ := podDevices.getPodAndContainerForDevice(resourceName1, "dev2")
 	assert.Equal(t, "", podUID)
 
-	// dev1 is a exist device
+	// dev1 已分配给 pod1，应能反查到。
 	podUID, _ = podDevices.getPodAndContainerForDevice(resourceName1, "dev1")
 	assert.Equal(t, "pod1", podUID)
 
-	// a device with the same ID allocated to another pod under a different
-	// resource name must not match: device IDs are only unique per resource.
+	// 设备 ID 只在资源内唯一：另一个资源下同名 ID 的设备属于不同 Pod，不能混淆。
 	resourceName2 := "domain2.com/resource2"
 	podDevices.insert("pod2", contID, resourceName2,
 		devices,

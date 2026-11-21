@@ -17,11 +17,11 @@ limitations under the License.
 package types
 
 const (
-	// ResolvConfDefault is the system default DNS resolver configuration.
+	// ResolvConfDefault 是系统默认的 DNS 解析器配置路径。
 	ResolvConfDefault = "/etc/resolv.conf"
 )
 
-// User visible keys for managing node allocatable enforcement on the node.
+// 用于管理节点可分配资源约束的、对用户可见的 key。
 const (
 	NodeAllocatableEnforcementKey            = "pods"
 	SystemReservedEnforcementKey             = "system-reserved"
@@ -31,20 +31,22 @@ const (
 	NodeAllocatableNoneKey                   = "none"
 )
 
-// SwapBehavior types
+// SwapBehavior 定义交换行为类型。
 type SwapBehavior string
 
 const (
+	// LimitedSwap 允许容器使用部分交换空间（受内存限制约束）。
 	LimitedSwap SwapBehavior = "LimitedSwap"
-	NoSwap      SwapBehavior = "NoSwap"
+	// NoSwap 表示容器不使用交换空间。
+	NoSwap SwapBehavior = "NoSwap"
 )
 
-// Pod status condition reasons and messages
+// Pod 状态 condition 的原因与消息。
 const (
-	// PodReadyToStartContainers condition reason
+	// PodReadyToStartContainers condition 的原因。
 	PodSandboxNotReadyReason = "PodSandboxNotReady"
 
-	// PodReadyToStartContainers condition messages
+	// PodReadyToStartContainers condition 的消息。
 	PodSandboxNotReadyMsgNoPodSandbox         = "no pod sandbox exists"
 	PodSandboxNotReadyMsgMultipleSandboxes    = "multiple pod sandboxes are ready and need to be reconciled"
 	PodSandboxNotReadyMsgSandboxNotReady      = "pod sandbox is not ready"

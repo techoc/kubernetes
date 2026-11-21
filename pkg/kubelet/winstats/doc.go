@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package winstats provides a client to get node and pod level stats on windows
+// Package winstats 提供在 Windows 上获取节点级与 Pod 级统计数据的客户端。
 package winstats

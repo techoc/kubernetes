@@ -30,8 +30,10 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm"
 )
 
+// GetSystemContainersStats 返回各系统容器的统计信息。
 func (sp *summaryProviderImpl) GetSystemContainersStats(ctx context.Context, nodeConfig cm.NodeConfig, podStats []statsapi.PodStats, updateStats bool) (stats []statsapi.ContainerStats) {
 	logger := klog.FromContext(ctx)
+	// 收集 kubelet、runtime、misc 与 pods 四类系统容器的 cgroup 名称。
 	systemContainers := map[string]struct {
 		name             string
 		forceStatsUpdate bool
@@ -43,7 +45,7 @@ func (sp *summaryProviderImpl) GetSystemContainersStats(ctx context.Context, nod
 		statsapi.SystemContainerPods:    {name: sp.provider.GetPodCgroupRoot(), forceStatsUpdate: updateStats},
 	}
 	for sys, cont := range systemContainers {
-		// skip if cgroup name is undefined (not all system containers are required)
+		// cgroup 名称未定义时跳过（并非所有系统容器都必需）。
 		if cont.name == "" {
 			continue
 		}
@@ -52,11 +54,11 @@ func (sp *summaryProviderImpl) GetSystemContainersStats(ctx context.Context, nod
 			logger.Error(err, "Failed to get system container stats", "containerName", cont.name)
 			continue
 		}
-		// System containers don't have a filesystem associated with them.
+		// 系统容器没有关联的文件系统，清空相关统计。
 		s.Logs, s.Rootfs = nil, nil
 		s.Name = sys
 
-		// if we know the start time of a system container, use that instead of the start time provided by cAdvisor
+		// 若已知系统容器的启动时间，优先使用它而不是 cAdvisor 提供的时间。
 		if !cont.startTime.IsZero() {
 			s.StartTime = cont.startTime
 		}
@@ -66,8 +68,10 @@ func (sp *summaryProviderImpl) GetSystemContainersStats(ctx context.Context, nod
 	return stats
 }
 
+// GetSystemContainersCPUAndMemoryStats 返回各系统容器的 CPU 与内存统计信息。
 func (sp *summaryProviderImpl) GetSystemContainersCPUAndMemoryStats(ctx context.Context, nodeConfig cm.NodeConfig, podStats []statsapi.PodStats, updateStats bool) (stats []statsapi.ContainerStats) {
 	logger := klog.FromContext(ctx)
+	// 与 GetSystemContainersStats 使用相同的系统容器集合。
 	systemContainers := map[string]struct {
 		name             string
 		forceStatsUpdate bool
@@ -79,12 +83,13 @@ func (sp *summaryProviderImpl) GetSystemContainersCPUAndMemoryStats(ctx context.
 		statsapi.SystemContainerPods:    {name: sp.provider.GetPodCgroupRoot(), forceStatsUpdate: updateStats},
 	}
 	for sys, cont := range systemContainers {
-		// skip if cgroup name is undefined (not all system containers are required)
+		// cgroup 名称未定义时跳过（并非所有系统容器都必需）。
 		if cont.name == "" {
 			continue
 		}
 		s, err := sp.provider.GetCgroupCPUAndMemoryStats(cont.name, cont.forceStatsUpdate)
 		if err != nil {
+			// 内存缓存中找不到统计信息属于正常情况，仅记录低级别日志。
 			if errors.Is(err, cadvisormemory.ErrDataNotFound) {
 				logger.V(4).Info("cgroup stats not found in memory cache", "containerName", cont.name)
 			} else {
@@ -94,7 +99,7 @@ func (sp *summaryProviderImpl) GetSystemContainersCPUAndMemoryStats(ctx context.
 		}
 		s.Name = sys
 
-		// if we know the start time of a system container, use that instead of the start time provided by cAdvisor
+		// 若已知系统容器的启动时间，优先使用它而不是 cAdvisor 提供的时间。
 		if !cont.startTime.IsZero() {
 			s.StartTime = cont.startTime
 		}

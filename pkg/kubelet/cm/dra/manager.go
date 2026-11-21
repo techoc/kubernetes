@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package dra 实现 kubelet 对动态资源分配（DRA）的节点侧管理：准备/释放 ResourceClaim、与 DRA 插件通信并维护健康状态。
 package dra
 
 import (
@@ -54,73 +55,66 @@ import (
 	schedutil "k8s.io/kubernetes/pkg/scheduler/util"
 )
 
-// draManagerStateFileName is the file name where dra manager stores its state
+// draManagerStateFileName 是 DRA 管理器持久化状态的文件名。
 const draManagerStateFileName = "dra_manager_state"
 
-// defaultReconcilePeriod is the default reconciliation period to keep all claim info state in sync.
+// defaultReconcilePeriod 是默认的对账周期，用于保持 claimInfo 状态与真实 Pod 一致。
 const defaultReconcilePeriod = 60 * time.Second
 
-// The time that DRA drivers have to come back after being unregistered
-// before the kubelet removes their ResourceSlices.
+// DRA 驱动被注销后必须在这段时间内重新注册，否则 kubelet 会删除其 ResourceSlice。
 //
-// This must be long enough to actually allow stopping a pod and
-// starting the replacement (otherwise ResourceSlices get deleted
-// unnecessarily) and not too long (otherwise the time window were
-// pods might still get scheduled to the node after removal of a
-// driver is too long).
-//
-// 30 seconds might be long enough for a simple container restart.
-// If a DRA driver wants to be sure that slices don't get wiped,
-// it should use rolling updates.
+// 这段时间既要足够长，以便停止 Pod 并启动替代实例（否则 ResourceSlice 会被误删），
+// 又不能太长，否则驱动被移除后仍可能有 Pod 被调度到该节点。
+// 30 秒大约够一次简单的容器重启；若 DRA 驱动希望确保 slice 不被清除，应使用滚动更新。
 const defaultWipingDelay = 30 * time.Second
 
-// ActivePodsFunc is a function that returns a list of pods to reconcile.
+// ActivePodsFunc 返回节点上当前活跃的 Pod 列表，供对账循环使用。
 type ActivePodsFunc func() []*v1.Pod
 
-// GetNodeFunc is a function that returns the node object using the kubelet's node lister.
+// GetNodeFunc 通过 kubelet 的 node lister 返回 Node 对象。
 type GetNodeFunc func(context.Context) (*v1.Node, error)
 
-// Manager is responsible for managing ResourceClaims.
-// It ensures that they are prepared before starting pods
-// and that they are unprepared before the last consuming
-// pod is declared as terminated.
+// Manager 负责管理 ResourceClaim：
+// 在 Pod 启动前完成资源准备，
+// 并在最后一个使用方 Pod 终止后释放资源。
+// 所有状态变化都会写入 checkpoint，以便 kubelet 重启后恢复。
 type Manager struct {
-	// draPlugins manages the registered plugins.
+	// draPlugins 管理已注册的 DRA 插件。
 	draPlugins *draplugin.DRAPluginManager
 
-	// cache contains cached claim info
+	// cache 缓存 ResourceClaim 的本地准备状态与设备信息。
 	cache *claimInfoCache
 
-	// reconcilePeriod is the duration between calls to reconcileLoop.
+	// reconcilePeriod 是两次对账之间的间隔。
 	reconcilePeriod time.Duration
 
-	// activePods is a method for listing active pods on the node
-	// so all claim info state can be updated in the reconciliation loop.
+	// activePods 用于列出节点上的活跃 Pod，
+	// 对账循环据此清理已消失 Pod 的 claim 引用。
 	activePods ActivePodsFunc
 
-	// sourcesReady provides the readiness of kubelet configuration sources such as apiserver update readiness.
-	// We use it to determine when we can treat pods as inactive and react appropriately.
+	// sourcesReady 表示 kubelet 配置源是否就绪（如 apiserver 同步完成）。
+	// 只有源就绪后才能安全地把 Pod 视为不活跃。
 	sourcesReady config.SourcesReady
 
-	// KubeClient reference
+	// kubeClient 用于从 API server 获取 ResourceClaim。
 	kubeClient clientset.Interface
 
-	// healthInfoCache contains cached health info
+	// healthInfoCache 缓存设备健康信息。
 	healthInfoCache *healthInfoCache
 
-	// update channel for resource updates
+	// update 是资源健康变更通知通道，容量 100 避免阻塞插件流。
 	update chan resourceupdates.Update
 }
 
-// NewManager creates a new DRA manager.
+// NewManager 创建一个新的 DRA 管理器。
 //
-// Most errors returned by the manager show up in the context of a pod.
-// They try to adhere to the following convention:
-// - Don't include the pod.
-// - Use terms that are familiar to users.
-// - Don't include the namespace, it can be inferred from the context.
-// - Avoid repeated "failed to ...: failed to ..." when wrapping errors.
-// - Avoid wrapping when it does not provide relevant additional information to keep the user-visible error short.
+// - 不重复包含 Pod 信息，调用方已知道是哪个 Pod；
+// - 使用用户熟悉的术语；
+// - 不包含命名空间，可从上下文推断；
+// - 避免 "failed to ...: failed to ..." 式的重复包装；
+// - 无额外信息时不要包装，保持错误简短。
+// 这样最终展示给用户的错误更易读。
+// 该约定同样适用于本文件其他错误返回。
 func NewManager(logger klog.Logger, kubeClient clientset.Interface, stateFileDirectory string) (*Manager, error) {
 	claimInfoCache, err := newClaimInfoCache(stateFileDirectory, draManagerStateFileName)
 	if err != nil {
@@ -132,8 +126,8 @@ func NewManager(logger klog.Logger, kubeClient clientset.Interface, stateFileDir
 		return nil, fmt.Errorf("failed to create healthInfo cache: %w", err)
 	}
 
-	// TODO: for now the reconcile period is not configurable.
-	// We should consider making it configurable in the future.
+	// TODO: 目前对账周期不可配置，后续可考虑开放。
+	// 在此之前统一使用默认值。
 	reconcilePeriod := defaultReconcilePeriod
 
 	manager := &Manager{
@@ -149,57 +143,59 @@ func NewManager(logger klog.Logger, kubeClient clientset.Interface, stateFileDir
 	return manager, nil
 }
 
+// NewMetricsCollector 返回基于 claimInfo 缓存的指标采集器。
 func (m *Manager) NewMetricsCollector() metrics.StableCollector {
 	return &claimInfoCollector{cache: m.cache}
 }
 
-// GetWatcherHandler must be called after Start, it indirectly depends
-// on parameters which only get passed to Start, for example the context.
+// GetWatcherHandler 必须在 Start 之后调用，
+// 因为它依赖只有 Start 才会传入的参数（例如 context）。
 func (m *Manager) GetWatcherHandler() cache.PluginHandler {
 	return m.draPlugins
 }
 
-// Stop shuts down the DRA plugin manager and waits for all background
-// goroutines to finish. It should be called when the manager is no longer
-// needed to avoid leaking goroutines and racing on state file cleanup.
+// Stop 关闭 DRA 插件管理器并等待所有后台 goroutine 退出。
+// 不再使用管理器时必须调用，
+// 以避免 goroutine 泄漏和状态文件清理时的竞态。
 func (m *Manager) Stop() {
 	if m.draPlugins != nil {
 		m.draPlugins.Stop()
 	}
 }
 
-// Start starts the reconcile loop of the manager.
+// Start 启动管理器的对账循环。
 func (m *Manager) Start(ctx context.Context, activePods ActivePodsFunc, getNode GetNodeFunc, sourcesReady config.SourcesReady) error {
 	m.initDRAPluginManager(ctx, getNode, defaultWipingDelay)
 	m.activePods = activePods
 	m.sourcesReady = sourcesReady
+	// 对账循环按固定周期运行，直到 context 被取消。
 	go wait.UntilWithContext(ctx, func(ctx context.Context) { m.reconcileLoop(ctx) }, m.reconcilePeriod)
 	return nil
 }
 
-// initPluginManager can be used instead of Start to make the manager useable
-// for calls to prepare/unprepare. It exists primarily for testing purposes.
+// initDRAPluginManager 可替代 Start 使用，
+// 使管理器可用于 prepare/unprepare 调用；主要供测试使用。
 func (m *Manager) initDRAPluginManager(ctx context.Context, getNode GetNodeFunc, wipingDelay time.Duration) {
 	m.draPlugins = draplugin.NewDRAPluginManager(ctx, m.kubeClient, getNode, m, wipingDelay)
 }
 
-// reconcileLoop ensures that any stale state in the manager's claimInfoCache gets periodically reconciled.
+// reconcileLoop 周期性清理 claimInfoCache 中已失效的 Pod 引用。
 func (m *Manager) reconcileLoop(ctx context.Context) {
 	logger := klog.FromContext(ctx).WithName("dra-manager")
-	// Only once all sources are ready do we attempt to reconcile.
-	// This ensures that the call to m.activePods() below will succeed with
-	// the actual active pods list.
+	// 所有配置源就绪后才开始对账，
+	// 否则 activePods 可能返回不完整列表，
+	// 从而误删仍在使用的 claim 引用。
 	if m.sourcesReady == nil || !m.sourcesReady.AllReady() {
 		return
 	}
 
-	// Get the full list of active pods.
+	// 收集活跃 Pod UID，用于判断哪些引用已失效。
 	activePods := sets.New[string]()
 	for _, p := range m.activePods() {
 		activePods.Insert(string(p.UID))
 	}
 
-	// Get the list of inactive pods still referenced by any claimInfos.
+	// 汇总所有仍被 claimInfo 引用但已不活跃的 Pod。
 	type podClaims struct {
 		uid        types.UID
 		namespace  string
@@ -224,7 +220,7 @@ func (m *Manager) reconcileLoop(ctx context.Context) {
 	}
 	m.cache.RUnlock()
 
-	// Loop through all inactive pods and call UnprepareResources on them.
+	// 逐个释放；失败只记录日志，下轮对账会重试。
 	for _, podClaims := range inactivePodClaims {
 		if err := m.unprepareResources(ctx, podClaims.uid, podClaims.namespace, podClaims.claimNames); err != nil {
 			logger.Info("Unpreparing pod resources in reconcile loop failed, will retry", "podUID", podClaims.uid, "err", err)
@@ -232,10 +228,10 @@ func (m *Manager) reconcileLoop(ctx context.Context) {
 	}
 }
 
-// PrepareResources attempts to prepare all of the required resources
-// for the input container, issue NodePrepareResources rpc requests
-// for each new resource requirement, process their responses and update the cached
-// containerResources on success.
+// PrepareResources 为 Pod 准备全部所需资源：
+// 对每个新资源需求发起 NodePrepareResources RPC，
+// 处理响应并更新缓存的容器资源信息。
+// 只有全部成功才会把 claim 标记为已准备。
 func (m *Manager) PrepareResources(ctx context.Context, pod *v1.Pod) error {
 	startTime := time.Now()
 	err := m.prepareResources(ctx, pod)
@@ -247,6 +243,7 @@ func (m *Manager) PrepareResources(ctx context.Context, pod *v1.Pod) error {
 	return nil
 }
 
+// prepareResources 是 PrepareResources 的主体实现。
 func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 	var err error
 	logger := klog.FromContext(ctx).WithName("dra-manager")
@@ -254,17 +251,12 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 	batches := make(map[*draplugin.DRAPlugin][]*drapb.Claim)
 	resourceClaims := make(map[types.UID]*resourceapi.ResourceClaim)
 
-	// Do a validation pass *without* changing the claim info cache.
-	// If anything goes wrong, we don't proceed. This has the advantage
-	// that the failing pod can be deleted without getting stuck.
-	//
-	// If we added the claim and pod to the cache, UnprepareResources
-	// would have to asssume that NodePrepareResources was called and
-	// try to call NodeUnprepareResources. This is particularly bad
-	// when the driver never has been installed on the node and
-	// remains unavailable.
+	// 先做一次只读校验，不修改 claimInfo 缓存：失败的 Pod 可以直接删除而不会卡住。
+	// 若提前写入缓存，释放流程会误以为已调用过准备接口，在驱动从未安装或长期不可用时
+	// 会导致释放持续失败。校验通过后再统一更新缓存，减少部分失败的影响。
 	podResourceClaims := pod.Spec.ResourceClaims
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.DRAExtendedResource) {
+		// DRA 扩展资源对应的 claim 由调度器生成，也要一并准备。
 		if pod.Status.ExtendedResourceClaimStatus != nil {
 			extendedResourceClaim := v1.PodResourceClaim{
 				ResourceClaimName: &pod.Status.ExtendedResourceClaimStatus.ResourceClaimName,
@@ -290,10 +282,10 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 		}
 
 		if claimName == nil {
-			// Nothing to do.
+			// 没有生成实际 claim，无需处理。
 			continue
 		}
-		// Query claim object from the API server
+		// 从 API server 获取最新 claim，避免使用过期缓存。
 		resourceClaim, err := m.kubeClient.ResourceV1().ResourceClaims(pod.Namespace).Get(
 			ctx,
 			*claimName,
@@ -304,21 +296,21 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 
 		if mustCheckOwner {
 			if err = resourceclaim.IsForPod(pod, resourceClaim, m.podGroupResourceClaimsEnabled()); err != nil {
-				// No wrapping, error is already informative.
+				// 错误信息已足够明确，不再包装。
 				return err
 			}
 		}
 
-		// Check if pod is in the ReservedFor for the claim
+		// 只有被 claim 预留的 Pod 才能使用该 claim。
 		if !resourceclaim.IsReservedForPod(pod, resourceClaim, m.podGroupResourceClaimsEnabled()) {
 			return fmt.Errorf("pod %s (%s) is not allowed to use ResourceClaim %s (%s)",
 				pod.Name, pod.UID, *claimName, resourceClaim.UID)
 		}
 
-		// At this point we assume that we have to prepare the claim and thus need
-		// the driver. If the driver is currently unavailable, it is better to fail
-		// even if the claim is already prepared because something is wrong with
-		// the node.
+		// 到此认为必须准备该 claim，因此需要驱动；
+		// 即使 claim 已准备，驱动不可用也视为节点异常并报错。
+		// 这样问题能尽早暴露，而不是带着不确定状态继续。
+		// 这是有意的严格行为。
 		infos[i].resourceClaim = resourceClaim
 		claimInfo, err := newClaimInfoFromClaim(resourceClaim)
 		if err != nil {
@@ -335,15 +327,15 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 			}
 			plugin, err := m.draPlugins.GetPlugin(driverName)
 			if err != nil {
-				// No wrapping, error includes driver name already.
+				// 错误已包含驱动名，不再包装。
 				return err
 			}
 			infos[i].plugins[driverName] = plugin
 		}
 	}
 
-	// Now that we have everything that we need, we can update the claim info cache.
-	// Almost nothing can go wrong anymore at this point.
+	// 所有信息就绪后，才在锁内更新 claimInfo 缓存。
+	// 此时除内部一致性错误外几乎不会失败。
 	err = m.cache.withLock(logger, func() error {
 		for i := range podResourceClaims {
 			resourceClaim := infos[i].resourceClaim
@@ -352,8 +344,8 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 				logger.V(5).Info("No need to prepare resources, no claim generated", "podClaim", podClaim.Name)
 				continue
 			}
-			// Get a reference to the claim info for this claim from the cache.
-			// If there isn't one yet, then add it to the cache.
+			// 从缓存取 claimInfo，不存在则新建。
+			// 新建条目会立即 checkpoint，确保后续失败可被对账发现。
 			claimInfo, exists := m.cache.get(resourceClaim.Name, resourceClaim.Namespace)
 			if !exists {
 				claimInfo = infos[i].claimInfo
@@ -363,37 +355,37 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 				if claimInfo.ClaimUID != resourceClaim.UID {
 					return fmt.Errorf("old ResourceClaim with same name %s and different UID %s still exists (previous pod force-deleted?!)", resourceClaim.Name, claimInfo.ClaimUID)
 				}
-				// Reject attaching a new pod to a claim if unprepareResources
-				// has already started as cache entry will be deleted when resources
-				// are fully unprepared.
+				// 正在释放的 claim 不允许再被新 Pod 绑定，
+				// 否则释放完成删除缓存条目时会把新 Pod 的引用一起丢掉。
+				// 因此这里直接拒绝。
 				if claimInfo.isUnpreparing() {
 					return fmt.Errorf("ResourceClaim %s is being unprepared", resourceClaim.Name)
 				}
 				logger.V(6).Info("Found existing claim info cache entry", "podClaim", podClaim.Name, "claim", klog.KObj(resourceClaim), "claimInfoEntry", claimInfo)
 			}
 
-			// Add a reference to the current pod in the claim info.
+			// 先记录 Pod 引用，再 checkpoint。
 			claimInfo.addPodReference(pod.UID)
 
-			// Checkpoint to ensure all claims we plan to prepare are tracked.
-			// If something goes wrong and the newly referenced pod gets
-			// deleted without a successful prepare call, we will catch
-			// that in the reconcile loop and take the appropriate action.
+			// 若准备失败且 Pod 被删除，对账循环能据此发现并清理。
+			// 这就是先写引用后调 RPC 的原因。
+			// 反过来则可能留下无法追踪的残留。
+			// checkpoint 失败直接中止，避免状态只在内存中。
 			if err := m.cache.syncToCheckpoint(); err != nil {
 				return fmt.Errorf("checkpoint ResourceClaim cache: %w", err)
 			}
 
-			// If this claim is already prepared, continue preparing for any remaining claims.
+			// 已准备的 claim 无需重复调用驱动，但同一 Pod 的其他 claim 仍需处理。
 			if claimInfo.isPrepared() {
 				logger.V(5).Info("Resources already prepared", "podClaim", podClaim.Name, "claim", klog.KObj(resourceClaim))
 				continue
 			}
 
-			// This saved claim will be used to update ClaimInfo cache
-			// after NodePrepareResources GRPC succeeds
+			// 保存 claim 对象，待 RPC 成功后更新 claimInfo。
+			// 失败时不会留下“已准备”的错误状态。
 			resourceClaims[claimInfo.ClaimUID] = resourceClaim
 
-			// Loop through all drivers and prepare for calling NodePrepareResources.
+			// 按驱动分组，随后每个驱动只发一次批量 RPC。
 			claim := &drapb.Claim{
 				Namespace: claimInfo.Namespace,
 				Uid:       string(claimInfo.ClaimUID),
@@ -412,19 +404,19 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 		return nil
 	})
 	if err != nil {
-		// No error wrapping because there is no additional context needed.
-		// What we get here are the errors from our own callback above.
+		// 无需包装错误：这里没有可补充的上下文。
+		// 返回的都是上面回调产生的错误。
 		return err
 	}
 
-	// Call NodePrepareResources for all claims in each batch.
-	// If there is any error, processing gets aborted.
-	// We could try to continue, but that would make the code more complex.
+	// 按驱动批量调用 NodePrepareResources。
+	// 任一错误都会中止整个流程，
+	// 继续处理会增加状态一致性复杂度，暂不做。
 	for plugin, claims := range batches {
-		// Call NodePrepareResources RPC for all resource handles.
+		// 每个驱动一次 RPC 处理该批次的所有 claim。
 		response, err := plugin.NodePrepareResources(ctx, &drapb.NodePrepareResourcesRequest{Claims: claims})
 		if err != nil {
-			// General error unrelated to any particular claim.
+			// 与具体 claim 无关的通用错误。
 			return fmt.Errorf("NodePrepareResources: %w", err)
 		}
 		for claimUID, result := range response.Claims {
@@ -438,13 +430,13 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 
 			claim := resourceClaims[types.UID(claimUID)]
 
-			// Add the prepared CDI devices to the claim info. The
-			// driver's response is authoritative for this (claim, driver)
-			// pair, so drop any previously appended devices before
-			// rebuilding the list. Otherwise a retry of a prepare that
-			// had partially succeeded (this driver appended devices,
-			// another driver in the batch failed, setPrepared was
-			// skipped) would end up with the devices duplicated.
+			// 驱动返回的结果对该 (claim, driver) 组合是权威的，
+			// 因此先清空旧设备再重建，
+			// 否则部分成功的重试会导致设备重复。
+			// 这是幂等性的关键。
+			// 重试时其他驱动可能已失败，
+			// 但本驱动的设备列表必须保持最新。
+			// 因此不能简单追加。
 			err := m.cache.withLock(logger, func() error {
 				info, exists := m.cache.get(claim.Name, claim.Namespace)
 				if !exists {
@@ -459,7 +451,7 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 				return nil
 			})
 			if err != nil {
-				// No wrapping, this is the error above.
+				// 这是上面回调返回的错误，无需包装。
 				return err
 			}
 		}
@@ -470,9 +462,9 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 		}
 	}
 
-	// Atomically perform some operations on the claimInfo cache.
+	// 在锁内原子地把所有 claim 标记为已准备并写 checkpoint。
 	err = m.cache.withLock(logger, func() error {
-		// Mark all pod claims as prepared.
+		// 全部 RPC 成功后才标记已准备，避免半成功状态。
 		for _, claim := range resourceClaims {
 			info, exists := m.cache.get(claim.Name, claim.Namespace)
 			if !exists {
@@ -481,8 +473,8 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 			info.setPrepared()
 		}
 
-		// Checkpoint to ensure all prepared claims are tracked with their list
-		// of CDI devices attached.
+		// 持久化设备列表，重启后才能恢复 CDI 设备信息。
+		// 否则容器可能无法拿到设备。
 		if err := m.cache.syncToCheckpoint(); err != nil {
 			return fmt.Errorf("checkpoint ResourceClaim state: %w", err)
 		}
@@ -490,13 +482,14 @@ func (m *Manager) prepareResources(ctx context.Context, pod *v1.Pod) error {
 		return nil
 	})
 	if err != nil {
-		// No wrapping, this is the error above.
+		// 这是上面回调返回的错误，无需包装。
 		return err
 	}
 
 	return nil
 }
 
+// lookupClaimRequest 按 UID 在请求列表中查找 claim，找不到返回 nil。
 func lookupClaimRequest(claims []*drapb.Claim, claimUID string) *drapb.Claim {
 	for _, claim := range claims {
 		if claim.Uid == claimUID {
@@ -506,9 +499,9 @@ func lookupClaimRequest(claims []*drapb.Claim, claimUID string) *drapb.Claim {
 	return nil
 }
 
-// truncateHealthMessage truncates a health message to the maximum allowed length.
-// If the message exceeds v1.ResourceHealthMessageMaxLength, it is truncated to
-// (maxLength - 3) characters and "..." is appended.
+// truncateHealthMessage 将健康消息截断到 API 允许的最大长度。
+// 超过上限时截断到 maxLength-3 并追加省略号，
+// 保证最终长度不超过上限。
 func truncateHealthMessage(message string) string {
 	if len(message) <= v1.ResourceHealthMessageMaxLength {
 		return message
@@ -516,15 +509,15 @@ func truncateHealthMessage(message string) string {
 	return message[:v1.ResourceHealthMessageMaxLength-3] + "..."
 }
 
-// GetResources gets a ContainerInfo object from the claimInfo cache.
-// This information is used by the caller to update a container config.
+// GetResources 从 claimInfo 缓存获取容器所需的 CDI 设备信息。
+// 调用方据此更新容器配置。
 func (m *Manager) GetResources(pod *v1.Pod, container *v1.Container) (*ContainerInfo, error) {
 	cdiDevices := []kubecontainer.CDIDevice{}
 
-	// claimRequests maps claimName -> []requestNames for this container
+	// claimRequests 记录本容器对每个 claim 的请求名，用于过滤设备。
 	claimRequests := make(map[string][]string)
 
-	// Collect regular ResourceClaims
+	// 先收集普通 ResourceClaims，按 claim 名聚合同一 claim 的多个请求。
 	containerClaimsMap := make(map[string][]string, len(container.Resources.Claims))
 	for _, claim := range container.Resources.Claims {
 		if _, ok := containerClaimsMap[claim.Name]; !ok {
@@ -542,12 +535,12 @@ func (m *Manager) GetResources(pod *v1.Pod, container *v1.Container) (*Container
 
 		claimName, _, err := resourceclaim.Name(pod, podClaim)
 		if err != nil {
-			// No wrapping, error is already informative.
+			// 错误信息已足够明确，不再包装。
 			return nil, err
 		}
-		// The claim name might be nil if no underlying resource claim
-		// was generated for the referenced claim. There are valid use
-		// cases when this might happen, so we simply skip it.
+		// claim 名为 nil 表示没有生成实际 claim，属于合法情况，直接跳过。
+		// 跳过不会影响其他 claim 的处理。
+		// 这是有意的宽松处理。
 		if claimName == nil {
 			continue
 		}
@@ -555,14 +548,14 @@ func (m *Manager) GetResources(pod *v1.Pod, container *v1.Container) (*Container
 		claimRequests[*claimName] = append(claimRequests[*claimName], requests...)
 	}
 
-	// Collect extended resource claims if feature is enabled
+	// 特性开启时，把 DRA 扩展资源对应的 claim 也纳入。
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.DRAExtendedResource) && pod.Status.ExtendedResourceClaimStatus != nil {
 		claimName := pod.Status.ExtendedResourceClaimStatus.ResourceClaimName
-		// if the container has requests for extended resources backed by DRA,
-		// they must have been allocated via the extendedResourceClaim created
-		// by the kube-scheduler.
+		// 容器对 DRA 扩展资源的请求必然通过调度器生成的 claim 分配。
+		// 因此只需把本容器的请求名映射到该 claim。
+		// 请求名由 RequestMappings 给出。
 
-		// Build map of this container's extended resource requests
+		// 收集本容器非零的 DRA 扩展资源请求。
 		extendedResourceRequests := make(map[string]bool)
 		for rName, rValue := range container.Resources.Requests {
 			if !rValue.IsZero() && schedutil.IsDRAExtendedResourceName(rName) {
@@ -570,16 +563,16 @@ func (m *Manager) GetResources(pod *v1.Pod, container *v1.Container) (*Container
 			}
 		}
 
-		// Collect request names matching this container's extended resources
+		// 只处理属于本容器的映射，且资源确实被请求。
 		for _, rm := range pod.Status.ExtendedResourceClaimStatus.RequestMappings {
-			// allow multiple device requests per container per resource.
+			// 同一容器对同一资源可以有多个请求。
 			if rm.ContainerName == container.Name && extendedResourceRequests[rm.ResourceName] {
 				claimRequests[claimName] = append(claimRequests[claimName], rm.RequestName)
 			}
 		}
 	}
 
-	// Process all collected claims
+	// 读取缓存中的 CDI 设备并汇总。
 	for claimName, requestNames := range claimRequests {
 		err := m.cache.withRLock(func() error {
 			claimInfo, exists := m.cache.get(claimName, pod.Namespace)
@@ -588,13 +581,13 @@ func (m *Manager) GetResources(pod *v1.Pod, container *v1.Container) (*Container
 			}
 
 			for _, requestName := range requestNames {
-				// As of Kubernetes 1.31, CDI device IDs are not passed via annotations anymore.
+				// 自 Kubernetes 1.31 起，CDI 设备 ID 不再通过注解传递。
 				cdiDevices = append(cdiDevices, claimInfo.cdiDevicesAsList(requestName)...)
 			}
 			return nil
 		})
 		if err != nil {
-			// No wrapping, this is the error above.
+			// 这是上面回调返回的错误，无需包装。
 			return nil, err
 		}
 	}
@@ -602,10 +595,10 @@ func (m *Manager) GetResources(pod *v1.Pod, container *v1.Container) (*Container
 	return &ContainerInfo{CDIDevices: cdiDevices}, nil
 }
 
-// UnprepareResources calls a driver's NodeUnprepareResource API for each resource claim owned by a pod.
-// This function is idempotent and may be called multiple times against the same pod.
-// As such, calls to the underlying NodeUnprepareResource API are skipped for claims that have
-// already been successfully unprepared.
+// UnprepareResources 对 Pod 拥有的每个 claim 调用驱动的 NodeUnprepareResources API。
+// 该函数幂等，可对同一 Pod 多次调用。
+// 已成功释放的 claim 会被跳过，
+// 因此重复调用不会产生额外 RPC。
 func (m *Manager) UnprepareResources(ctx context.Context, pod *v1.Pod) error {
 	startTime := time.Now()
 	err := m.unprepareResourcesForPod(ctx, pod)
@@ -617,29 +610,30 @@ func (m *Manager) UnprepareResources(ctx context.Context, pod *v1.Pod) error {
 	return nil
 }
 
+// unprepareResourcesForPod 收集 Pod 关联的 claim 名并执行释放。
 func (m *Manager) unprepareResourcesForPod(ctx context.Context, pod *v1.Pod) error {
-	// Try to get claim names from the cache first.
+	// 优先从缓存获取 claim 名，这是正常路径。
 	var claimNames []string
 	_ = m.cache.withRLock(func() error {
 		claimNames = m.cache.claimNamesForPod(pod.UID)
 		return nil
 	})
 
-	// If the cache doesn't have any claim names for this pod, it may be because Kubelet was
-	// restarted and claiminfo checkpoint was removed.
-	// We should try to get claim names from the pod spec and status to ensure that we
-	// unprepare all relevant claims.
+	// 缓存为空可能是 kubelet 重启且 checkpoint 丢失，
+	// 此时从 Pod spec/status 重新推导 claim 名。
+	// 保证所有相关 claim 都被释放。
+	// 这是兜底路径，不应频繁触发。
 	if len(claimNames) == 0 {
 		for i := range pod.Spec.ResourceClaims {
 			claimName, _, err := resourceclaim.Name(pod, &pod.Spec.ResourceClaims[i])
 			if err != nil {
-				// No wrapping, the error is already informative.
+				// 错误信息已足够明确，不再包装。
 				return err
 			}
 			if claimName == nil {
-				// The claim name might be nil if no underlying resource claim
-				// was generated for the referenced claim. There are valid use
-				// cases when this might happen, so we simply skip it.
+				// claim 名为 nil 表示没有生成实际 claim，合法地跳过。
+				// 例如 claim 模板未生成对象的情况。
+				// 跳过不影响其他 claim。
 				continue
 			}
 			claimNames = append(claimNames, *claimName)
@@ -654,56 +648,57 @@ func (m *Manager) unprepareResourcesForPod(ctx context.Context, pod *v1.Pod) err
 	return m.unprepareResources(ctx, pod.UID, pod.Namespace, claimNames)
 }
 
+// unprepareResources 对给定 Pod 的 claim 执行实际的释放流程。
 func (m *Manager) unprepareResources(ctx context.Context, podUID types.UID, namespace string, claimNames []string) error {
 	logger := klog.FromContext(ctx).WithName("dra-manager")
 	batches := make(map[string][]*drapb.Claim)
 	claimNamesMap := make(map[types.UID]string)
 	for _, claimName := range claimNames {
-		// Atomically perform some operations on the claimInfo cache.
+		// 在锁内更新引用计数，锁外调用驱动。
 		err := m.cache.withLock(logger, func() error {
-			// Get the claim info from the cache
+			// 缓存中没有说明该 claim 从未准备成功，无需释放。
 			claimInfo, exists := m.cache.get(claimName, namespace)
 
-			// Skip calling NodeUnprepareResource if claim info is not cached
+			// 跳过即可，避免无意义 RPC。
 			if !exists {
 				return nil
 			}
 
-			// Do nothing if the claimInfo doesn't reference this pod.
-			// PrepareResources adds the pod to PodUIDs before any driver work,
-			// so a missing reference means PrepareResources never got that far
-			// for this pod (e.g. the validation pass errored out) and there is
-			// nothing for us to unprepare. Without this check we could
-			// tear down a claim that is still in use by another pod.
+			// 若 claimInfo 未引用该 Pod，说明准备流程从未走到这里，
+			// 此时不能释放，否则可能拆掉其他 Pod 仍在使用的 claim。
+			// 这是防止误释放的关键检查。
+			// 校验阶段失败就会留下这种状态。
+			// 因此必须显式判断引用关系。
+			// 否则会破坏其他 Pod。
 			if !claimInfo.hasPodReference(podUID) {
 				return nil
 			}
 
-			// Skip calling NodeUnprepareResource if other pods are still referencing it
+			// 还有其他 Pod 引用时只减少引用计数，不调用驱动。
 			if len(claimInfo.PodUIDs) > 1 {
-				// We delay checkpointing of this change until
-				// UnprepareResources returns successfully. It is OK to do
-				// this because we will only return successfully from this call
-				// if the checkpoint has succeeded. That means if the kubelet
-				// is ever restarted before this checkpoint succeeds, we will
-				// simply call into this (idempotent) function again.
+				// 引用计数变化延迟到 UnprepareResources 成功后再 checkpoint。
+				// 因为函数只在 checkpoint 成功后返回，
+				// 若中途重启，重复调用该幂等函数即可恢复。
+				// 这样避免频繁写盘。
+				// 重复执行是安全的。
+				// 因此可以延迟。
 				claimInfo.deletePodReference(podUID)
 				return nil
 			}
 
-			// This claimInfo name will be used to update ClaimInfo cache
-			// after NodeUnprepareResources GRPC succeeds
+			// 记录 claim 名，RPC 成功后据此删除缓存条目。
+			// 失败时条目保留，便于重试。
 			claimNamesMap[claimInfo.ClaimUID] = claimInfo.ClaimName
 
-			// Mark the claim as being unprepared while we hold the cache
-			// lock. NodeUnprepareResources runs below without the lock
-			// held; any concurrent prepareResources for a different pod
-			// that finds this entry must refuse to attach itself, since
-			// the resources are being unprepared and the cache entry
-			// will be deleted on completion.
+			// 在持锁时标记为“释放中”，
+			// 这样并发的 prepareResources 会拒绝绑定该 claim。
+			// RPC 在锁外执行，避免阻塞其他操作。
+			// 标记与删除之间必须保持一致性。
+			// 否则会出现绑定到正在释放的资源。
+			// 因此需要 setUnpreparing。
 			claimInfo.setUnpreparing()
 
-			// Loop through all drivers and prepare for calling NodeUnprepareResources.
+			// 按驱动分组批量释放。
 			claim := &drapb.Claim{
 				Namespace: claimInfo.Namespace,
 				Uid:       string(claimInfo.ClaimUID),
@@ -720,24 +715,24 @@ func (m *Manager) unprepareResources(ctx context.Context, podUID types.UID, name
 			return nil
 		})
 		if err != nil {
-			// No wrapping, this is the error above.
+			// 这是上面回调返回的错误，无需包装。
 			return err
 		}
 	}
 
-	// Call NodeUnprepareResources for all claims in each batch.
-	// If there is any error, processing gets aborted.
-	// We could try to continue, but that would make the code more complex.
+	// 按驱动批量调用 NodeUnprepareResources。
+	// 任一错误都会中止，保持与准备流程一致。
+	// 继续处理会增加复杂度且收益有限。
 	for driverName, claims := range batches {
-		// Call NodeUnprepareResources RPC for all resource handles.
+		// 每个驱动一次 RPC 处理该批次。
 		plugin, err := m.draPlugins.GetPlugin(driverName)
 		if err != nil {
-			// No wrapping, error includes driver name already.
+			// 错误已包含驱动名，不再包装。
 			return err
 		}
 		response, err := plugin.NodeUnprepareResources(ctx, &drapb.NodeUnprepareResourcesRequest{Claims: claims})
 		if err != nil {
-			// General error unrelated to any particular claim.
+			// 与具体 claim 无关的通用错误。
 			return fmt.Errorf("NodeUnprepareResources: %w", err)
 		}
 
@@ -757,71 +752,71 @@ func (m *Manager) unprepareResources(ctx context.Context, podUID types.UID, name
 		}
 	}
 
-	// Atomically perform some operations on the claimInfo cache.
+	// 在锁内删除已释放的 claimInfo 并写 checkpoint。
 	err := m.cache.withLock(logger, func() error {
-		// TODO(#132978): Re-evaluate this logic to support post-mortem health updates.
-		// As of the initial implementation, we immediately delete the claim info upon
-		// unprepare. This means a late-arriving health update for a terminated pod
-		// will be missed. A future enhancement could be to "tombstone" this entry for
-		// a grace period instead of deleting it.
+		// TODO(#132978): 重新评估该逻辑以支持事后健康更新。
+		// 初始实现会立即删除条目，因此已终止 Pod 的迟到健康更新会被丢弃。
+		// 未来可考虑用带宽限期的“墓碑”条目替代直接删除。
+		// 当前行为已由 TODO(#132978) 跟踪。
+		// 删除是简单且安全的做法。
 
-		// Delete all claimInfos from the cache that have just been unprepared.
+		// 删除刚释放完成的条目。
 		for _, claimName := range claimNamesMap {
 			claimInfo, _ := m.cache.get(claimName, namespace)
 			m.cache.delete(claimName, namespace)
 			logger.V(6).Info("Deleted claim info cache entry", "claim", klog.KRef(namespace, claimName), "claimInfoEntry", claimInfo)
 		}
 
-		// Atomically sync the cache back to the checkpoint.
+		// 原子地把缓存同步到 checkpoint，保证重启后状态一致。
 		if err := m.cache.syncToCheckpoint(); err != nil {
 			return fmt.Errorf("checkpoint ResourceClaim state: %w", err)
 		}
 		return nil
 	})
 	if err != nil {
-		// No wrapping, this is the error above.
+		// 这是上面回调返回的错误，无需包装。
 		return err
 	}
 
 	return nil
 }
 
-// PodMightNeedToUnprepareResources returns true if the pod might need to
-// unprepare resources
+// PodMightNeedToUnprepareResources 判断 Pod 是否可能需要释放资源。
+// 有 claim 引用即返回 true，用于避免无谓的释放调用。
 func (m *Manager) PodMightNeedToUnprepareResources(uid types.UID) bool {
 	m.cache.Lock()
 	defer m.cache.Unlock()
 	return m.cache.hasPodReference(uid)
 }
 
-// GetContainerClaimInfos gets Container's ClaimInfo
+// GetContainerClaimInfos 返回容器使用的全部 ClaimInfo 副本。
 func (m *Manager) GetContainerClaimInfos(pod *v1.Pod, container *v1.Container) ([]*ClaimInfo, error) {
 	claimInfos := make([]*ClaimInfo, 0, len(pod.Spec.ResourceClaims))
 
-	// Build a map of container claims for O(1) lookup
+	// 先建索引，避免对每个 Pod claim 线性扫描。
 	containerClaimsMap := make(map[string]bool, len(container.Resources.Claims))
 	for _, claim := range container.Resources.Claims {
 		containerClaimsMap[claim.Name] = true
 	}
 
 	for i, podResourceClaim := range pod.Spec.ResourceClaims {
-		// Only process claims that this container actually uses
+		// 只处理本容器实际引用的 claim。
 		if !containerClaimsMap[podResourceClaim.Name] {
 			continue
 		}
 
 		claimName, _, err := resourceclaim.Name(pod, &pod.Spec.ResourceClaims[i])
 		if err != nil {
-			// No wrapping, the error is already informative.
+			// 错误信息已足够明确，不再包装。
 			return nil, err
 		}
 
 		if claimName == nil {
-			// No ResourceClaim needed.
+			// 无需 ResourceClaim，直接跳过。
 			continue
 		}
 
-		// Ownership doesn't get checked here, this should have been done before.
+		// 归属校验在准备阶段已完成，这里不再重复。
 
 		err = m.cache.withRLock(func() error {
 			claimInfo, exists := m.cache.get(*claimName, pod.Namespace)
@@ -832,13 +827,13 @@ func (m *Manager) GetContainerClaimInfos(pod *v1.Pod, container *v1.Container) (
 			return nil
 		})
 		if err != nil {
-			// No wrapping, this is the error above.
+			// 这是上面回调返回的错误，无需包装。
 			return nil, err
 		}
 	}
 
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.DRAExtendedResource) {
-		// Handle the special claim for extended resources backed by DRA in the pod
+		// 处理 Pod 中由 DRA 支持的扩展资源对应的特殊 claim。
 		if pod.Status.ExtendedResourceClaimStatus != nil {
 			var hasExtendedResourceClaim bool
 			for _, n := range pod.Status.ExtendedResourceClaimStatus.RequestMappings {
@@ -860,7 +855,7 @@ func (m *Manager) GetContainerClaimInfos(pod *v1.Pod, container *v1.Container) (
 				return nil
 			})
 			if err != nil {
-				// No wrapping, this is the error above.
+				// 这是上面回调返回的错误，无需包装。
 				return nil, err
 			}
 		}
@@ -868,7 +863,7 @@ func (m *Manager) GetContainerClaimInfos(pod *v1.Pod, container *v1.Container) (
 	return claimInfos, nil
 }
 
-// UpdateAllocatedResourcesStatus updates the health status of allocated DRA resources in the pod's container statuses.
+// UpdateAllocatedResourcesStatus 把已分配 DRA 设备的健康状态写入 Pod 的容器状态。
 func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod, status *v1.PodStatus) {
 	logger = logger.WithName("dra-manager")
 	logger = klog.LoggerWithValues(logger, "pod", klog.KObj(pod))
@@ -876,7 +871,7 @@ func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod
 	for i := range status.ContainerStatuses {
 		containerStatus := &status.ContainerStatuses[i]
 
-		// Find the corresponding container spec in the pod spec.
+		// 按名称找到容器 spec；找不到说明状态与 spec 不一致，跳过。
 		var containerSpec *v1.Container
 		for j := range pod.Spec.Containers {
 			if pod.Spec.Containers[j].Name == containerStatus.Name {
@@ -885,7 +880,7 @@ func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod
 			}
 		}
 
-		// Skip if there's no matching container spec or it has no resource claims.
+		// 未使用 claim 的容器无需更新。
 		if containerSpec == nil || len(containerSpec.Resources.Claims) == 0 {
 			continue
 		}
@@ -897,7 +892,7 @@ func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod
 			}
 		}
 
-		// Build a map of pod claim statuses for O(1) lookup
+		// 建立 Pod claim 名到实际 claim 名的映射，便于快速查找。
 		podClaimStatusMap := make(map[string]string, len(pod.Status.ResourceClaimStatuses))
 		for _, podClaimStatus := range pod.Status.ResourceClaimStatuses {
 			if podClaimStatus.ResourceClaimName != nil {
@@ -905,13 +900,13 @@ func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod
 			}
 		}
 
-		// Iterate through the claims requested by this specific container.
+		// 逐个处理本容器引用的 claim。
 		for _, claim := range containerSpec.Resources.Claims {
-			// Find the actual name of the ResourceClaim object.
-			// Try the O(1) map lookup first, then fall back to resolving
-			// from the pod spec. The fallback is needed because
-			// ResourceClaimStatuses may not be populated yet when a
-			// health update triggers an early status sync.
+			// 先查状态映射，
+			// 状态未填充时再从 Pod spec 解析，
+			// 因为健康更新可能早于状态同步触发。
+			// 这是保证早到更新不丢失的关键。
+			// 兜底路径只在状态缺失时执行。
 			actualClaimName := podClaimStatusMap[claim.Name]
 
 			if actualClaimName == "" {
@@ -935,7 +930,7 @@ func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod
 				m.cache.RLock()
 				defer m.cache.RUnlock()
 
-				// Use the actual claim name to look up claim info.
+				// 用实际 claim 名查缓存，查不到说明尚未准备完成。
 				claimInfo, exists := m.cache.get(actualClaimName, pod.Namespace)
 				if !exists {
 					logger.V(4).Info("Could not find claim info for resource claim", "container", containerSpec.Name, "claimName", actualClaimName)
@@ -953,7 +948,7 @@ func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod
 						Name:      resourceName,
 						Resources: []v1.ResourceHealth{},
 					}
-					// Append and get a pointer to the new element.
+					// 先 append 再取指针，避免 map 中保存指向临时变量的指针。
 					if containerStatus.AllocatedResourcesStatus == nil {
 						containerStatus.AllocatedResourcesStatus = []v1.ResourceStatus{}
 					}
@@ -962,19 +957,19 @@ func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod
 					resourceStatusMap[resourceName] = resStatus
 				}
 
-				// Clear previous health entries before adding current ones.
+				// 每次重建而非增量更新，保证过期设备不会残留。
 				resStatus.Resources = []v1.ResourceHealth{}
 
-				// Use a map to track resourceIDs we've already added to avoid duplicates.
-				// Multiple devices in claimInfo.DriverState may have the same resourceID
-				// (e.g., when using the same CDI device ID), so we need to deduplicate.
+				// 多个设备可能映射到同一 CDI 资源 ID，必须去重。
+				// 否则状态中会出现重复条目。
+				// 例如同一 CDI 设备被多个请求共享时。
 				seenResourceIDs := make(map[v1.ResourceID]bool)
 
 				for driverName, driverState := range claimInfo.DriverState {
 					for _, device := range driverState.Devices {
-						// Skip devices that don't match the request we're reporting for.
-						// Use BaseRequestRef to handle subrequests (e.g., "request/subrequest" -> "request")
-						// since device.RequestNames are stored with subrequest suffixes stripped.
+						// 只报告属于当前请求的设备。
+						// 子请求需归一到基础请求名后比较，
+						// 因为设备记录里存的是去掉子请求后缀的名字。
 						if claim.Request != "" && len(device.RequestNames) > 0 && !slices.Contains(device.RequestNames, resourceclaim.BaseRequestRef(claim.Request)) {
 							continue
 						}
@@ -987,7 +982,7 @@ func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod
 							enableHealthMessage,
 						)
 
-						// Skip if we've already added this resourceID
+						// 已加入的 resourceID 不再重复添加。
 						if seenResourceIDs[resourceHealth.ResourceID] {
 							continue
 						}
@@ -999,7 +994,7 @@ func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod
 			}()
 		}
 
-		// Rebuild the slice from map to ensure correctness and remove empty entries.
+		// 用 map 重建切片，顺带剔除没有健康条目的资源状态。
 		finalStatuses := make([]v1.ResourceStatus, 0, len(resourceStatusMap))
 		for _, rs := range resourceStatusMap {
 			if len(rs.Resources) > 0 {
@@ -1010,6 +1005,7 @@ func (m *Manager) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod
 	}
 }
 
+// toResourceHealthStatus 把内部健康状态转换为 API 枚举，未知值统一映射为 Unknown。
 func toResourceHealthStatus(health state.DeviceHealthStatus) v1.ResourceHealthStatus {
 	switch health {
 	case state.DeviceHealthStatusHealthy:
@@ -1021,15 +1017,16 @@ func toResourceHealthStatus(health state.DeviceHealthStatus) v1.ResourceHealthSt
 	}
 }
 
+// buildResourceHealth 构造单条 ResourceHealth，包含健康状态、消息和资源 ID。
 func buildResourceHealth(driverName string, device state.Device, healthInfo state.DeviceHealth, enableMessage bool) v1.ResourceHealth {
-	// Create the ResourceHealth entry
+	// 健康消息受特性门控控制，关闭时不暴露给用户。
 	resourceHealth := v1.ResourceHealth{
 		Health: toResourceHealthStatus(healthInfo.Health),
 	}
 	if enableMessage && len(healthInfo.Message) > 0 {
 		resourceHealth.Message = &healthInfo.Message
 	}
-	// Use first CDI device ID as ResourceID, with fallback
+	// 优先使用 CDI 设备 ID 作为资源 ID；
 	if len(device.CDIDeviceIDs) > 0 {
 		resourceHealth.ResourceID = v1.ResourceID(device.CDIDeviceIDs[0])
 	} else {
@@ -1038,6 +1035,7 @@ func buildResourceHealth(driverName string, device state.Device, healthInfo stat
 	return resourceHealth
 }
 
+// toDeviceHealthStatus 把插件上报的健康状态转换为内部枚举。
 func toDeviceHealthStatus(health drahealthv1.HealthStatus) state.DeviceHealthStatus {
 	switch health {
 	case drahealthv1.HealthStatus_HEALTHY:
@@ -1049,15 +1047,16 @@ func toDeviceHealthStatus(health drahealthv1.HealthStatus) state.DeviceHealthSta
 	}
 }
 
+// buildDeviceHealth 把插件上报的设备健康信息转换为内部结构。
 func buildDeviceHealth(logger klog.Logger, device *drahealthv1.DeviceHealth) state.DeviceHealth {
-	// Extract the health check timeout from the gRPC response
-	// If not specified, zero, or negative, use the default timeout
+	// 未指定、为零或为负时使用默认超时。
+	// 正数则按秒转换为 Duration。
 	timeout := DefaultHealthTimeout
 	timeoutSeconds := device.GetHealthCheckTimeoutSeconds()
 	if timeoutSeconds > 0 {
 		timeout = time.Duration(timeoutSeconds) * time.Second
 	} else if timeoutSeconds < 0 {
-		// Log warning for negative timeout values and use default
+		// 负值属于非法输入，记录日志并回退默认值。
 		logger.V(4).Info("Ignoring negative health check timeout, using default",
 			"poolName", device.GetDevice().GetPoolName(),
 			"deviceName", device.GetDevice().GetDeviceName(),
@@ -1074,14 +1073,15 @@ func buildDeviceHealth(logger klog.Logger, device *drahealthv1.DeviceHealth) sta
 	}
 }
 
-// HandleWatchResourcesStream processes health updates from the DRA plugin.
+// HandleWatchResourcesStream 持续接收 DRA 插件的健康更新流，并通知受影响的 Pod。
 func (m *Manager) HandleWatchResourcesStream(ctx context.Context, stream drahealthv1.DRAResourceHealth_NodeWatchResourcesClient, pluginName string) error {
 	logger := klog.FromContext(ctx).WithName("dra-manager")
 	logger = klog.LoggerWithValues(logger, "pluginName", pluginName)
 
+	// 流退出时清空该驱动的健康缓存，避免使用过期数据。
 	defer func() {
 		logger.V(4).Info("Clearing health cache for driver upon stream exit")
-		// Use a separate context for clearDriver if needed, though background should be fine.
+		// 清理使用独立 context，即使原 context 已取消也能完成。
 		if err := m.healthInfoCache.clearDriver(logger, pluginName); err != nil {
 			logger.Error(err, "Failed to clear health info cache for driver")
 		}
@@ -1090,28 +1090,28 @@ func (m *Manager) HandleWatchResourcesStream(ctx context.Context, stream draheal
 	for {
 		resp, err := stream.Recv()
 		if err != nil {
-			// Context canceled, normal shutdown.
+			// context 取消属于正常关闭。
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				logger.V(4).Info("Stopping health monitoring due to context cancellation", "reason", err)
 				return err
 			}
-			// Stream closed cleanly by the server, get normal EOF.
+			// 服务端正常关闭流会返回 EOF。
 			if errors.Is(err, io.EOF) {
 				logger.V(4).Info("Stream ended with EOF")
 				return nil
 			}
-			// The driver advertises the health service but does not support
-			// health reporting. Not an error, the caller stops watching.
+			// 驱动声明了健康服务但不支持该调用，
+			// 这不算错误，但调用方应停止监听。
 			if status.Code(err) == codes.Unimplemented {
 				logger.V(4).Info("Driver does not support WatchResources", "reason", err)
 				return err
 			}
-			// Other errors are unexpected, log & return.
+			// 其他错误视为异常，记录后返回。
 			logger.Error(err, "Error receiving from WatchResources stream")
 			return err
 		}
 
-		// Convert drahealthv1.DeviceHealth to state.DeviceHealth
+		// 先转换全部设备，再一次性更新缓存。
 		devices := make([]state.DeviceHealth, len(resp.GetDevices()))
 		for i, d := range resp.GetDevices() {
 			devices[i] = buildDeviceHealth(logger, d)
@@ -1124,11 +1124,11 @@ func (m *Manager) HandleWatchResourcesStream(ctx context.Context, stream draheal
 		if len(changedDevices) > 0 {
 			logger.V(4).Info("Health info changed, checking affected pods", "changedDevicesCount", len(changedDevices))
 
-			// Snapshot which pods use which of this plugin's devices. The
-			// claim info cache lock is then held once per report and only
-			// while building the index, independent of how many devices
-			// changed, so that a plugin sending large reports at a high
-			// rate cannot block DRA operations on the lock.
+			// 快照本插件设备被哪些 Pod 使用。
+			// 锁只在构建索引时持有一次，
+			// 与变化设备数量无关，
+			// 避免高频大报告阻塞 DRA 操作。
+			// 这是该设计的主要目的。
 			type deviceKey struct {
 				poolName   string
 				deviceName string
@@ -1154,6 +1154,7 @@ func (m *Manager) HandleWatchResourcesStream(ctx context.Context, stream draheal
 				podUIDs := podsToUpdate.UnsortedList()
 				logger.Info("Sending health update notification for pods", "pods", podUIDs)
 				select {
+				// 非阻塞发送：通道满时丢弃本次通知，避免阻塞插件流。
 				case m.update <- resourceupdates.Update{PodUIDs: podUIDs}:
 				default:
 					logger.Error(nil, "DRA health update channel is full, discarding pod update notification", "pods", podUIDs)
@@ -1166,12 +1167,13 @@ func (m *Manager) HandleWatchResourcesStream(ctx context.Context, stream draheal
 	}
 }
 
-// Updates returns the channel that provides resource updates.
+// Updates 返回资源更新通知通道。
 func (m *Manager) Updates() <-chan resourceupdates.Update {
-	// Return the internal channel that HandleWatchResourcesStream writes to.
+	// 该通道由 HandleWatchResourcesStream 写入，调用方只读。
 	return m.update
 }
 
+// podGroupResourceClaimsEnabled 判断是否启用 Pod 组级 ResourceClaim 特性。
 func (*Manager) podGroupResourceClaimsEnabled() bool {
 	return utilfeature.DefaultFeatureGate.Enabled(kubefeatures.DRAWorkloadResourceClaims)
 }

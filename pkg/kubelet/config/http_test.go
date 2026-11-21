@@ -37,6 +37,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestURLErrorNotExistNoUpdate 验证 URL 源返回 404 时不会向 channel 推送任何更新。
+// 轮询失败只应记录错误，不能把空结果当成有效配置下发，否则会误删已有 Pod。
 func TestURLErrorNotExistNoUpdate(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	ch := make(chan sourceUpdate)
@@ -48,16 +50,21 @@ func TestURLErrorNotExistNoUpdate(t *testing.T) {
 	}
 }
 
+// TestExtractFromHttpBadness 验证从不可达或返回 404 的 URL 提取 Pod 时返回错误，且 channel 保持为空。
 func TestExtractFromHttpBadness(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	ch := make(chan sourceUpdate, 1)
 	c := sourceURL{"http://localhost:49575/_not_found_", http.Header{}, "other", ch, nil, 0, http.DefaultClient}
+	// 非 2xx 响应必须向上返回错误，让调用方能区分“请求失败”与“没有 Pod”。
 	if err := c.extractFromURL(logger); err == nil {
 		t.Errorf("Expected error")
 	}
+	// 提取失败时 channel 必须为空，防止上层把失败当成一次合法的空更新。
 	expectEmptyChannel(t, ch)
 }
 
+// TestExtractInvalidPods 覆盖 API 版本缺失或非法、卷名非法或重复、容器名为空或非法等场景，
+// 确认这些 Pod 在提取阶段就被拒绝，而不是进入后续同步流程。
 func TestExtractInvalidPods(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	var testCases = []struct {
@@ -110,6 +117,7 @@ func TestExtractInvalidPods(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
+		// 把构造的 Pod 编码为 JSON，作为假 API server 的响应体。
 		data, err := json.Marshal(testCase.pod)
 		if err != nil {
 			t.Fatalf("%s: Some weird json problem: %v", testCase.desc, err)
@@ -122,16 +130,20 @@ func TestExtractInvalidPods(t *testing.T) {
 		defer testServer.Close()
 		ch := make(chan sourceUpdate, 1)
 		c := sourceURL{testServer.URL, http.Header{}, "localhost", ch, nil, 0, http.DefaultClient}
+		// 每个非法 Pod 都应导致提取失败。
 		if err := c.extractFromURL(logger); err == nil {
 			t.Errorf("%s: Expected error", testCase.desc)
 		}
 	}
 }
 
+// TestExtractPodsFromHTTP 验证从 HTTP 端点读取单个 Pod 和 PodList 后，
+// 能生成带默认值、节点名后缀和配置哈希注解的 sourceUpdate。
 func TestExtractPodsFromHTTP(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	nodeName := "different-value"
 
+	// 期望值反映 API 默认化结果：宽限期 30 秒、重启策略 Always、DNS 策略 ClusterFirst 等。
 	grace := int64(30)
 	enableServiceLinks := v1.DefaultEnableServiceLinks
 	var testCases = []struct {
@@ -292,6 +304,7 @@ func TestExtractPodsFromHTTP(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
+		// 用 legacy codec 编码，模拟真实 API server 返回的 v1 JSON。
 		data, err := runtime.Encode(clientscheme.Codecs.LegacyCodec(v1.SchemeGroupVersion), testCase.pods)
 		if err != nil {
 			t.Fatalf("%s: error in encoding the pod: %v", testCase.desc, err)
@@ -310,15 +323,18 @@ func TestExtractPodsFromHTTP(t *testing.T) {
 		}
 		update := <-ch
 
+		// 语义 DeepEqual 会忽略 nil 与零值之间的差异，适合比较 API 对象。
 		if !apiequality.Semantic.DeepEqual(testCase.expected, update) {
 			t.Errorf("%s: Expected: %#v, Got: %#v", testCase.desc, testCase.expected, update)
 		}
 		for _, pod := range update.Pods {
 			// TODO: remove the conversion when validation is performed on versioned objects.
+			// 当前校验器只接受内部类型，所以先把 v1 Pod 转成 core.Pod 再校验。
 			internalPod := &api.Pod{}
 			if err := k8s_api_v1.Convert_v1_Pod_To_core_Pod(pod, internalPod, nil); err != nil {
 				t.Fatalf("%s: Cannot convert pod %#v, %#v", testCase.desc, pod, err)
 			}
+			// 除了解析结果，还要确认默认化后的 Pod 能通过核心 API 校验。
 			if errs := validation.ValidatePodCreate(internalPod, validation.PodValidationOptions{}); len(errs) != 0 {
 				t.Errorf("%s: Expected no validation errors on %#v, Got %v", testCase.desc, pod, errs.ToAggregate())
 			}
@@ -326,6 +342,7 @@ func TestExtractPodsFromHTTP(t *testing.T) {
 	}
 }
 
+// TestURLWithHeader 验证请求会携带自定义 header（例如云厂商 metadata 服务要求的 Metadata-Flavor）。
 func TestURLWithHeader(t *testing.T) {
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -356,6 +373,7 @@ func TestURLWithHeader(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	ch := make(chan sourceUpdate, 1)
 	header := make(http.Header)
+	// 模拟 GCE metadata 服务要求请求方声明 Metadata-Flavor: Google。
 	header.Set("Metadata-Flavor", "Google")
 	c := sourceURL{testServer.URL, header, "localhost", ch, nil, 0, http.DefaultClient}
 	if err := c.extractFromURL(logger); err != nil {
@@ -363,6 +381,7 @@ func TestURLWithHeader(t *testing.T) {
 	}
 	update := <-ch
 
+	// 确认服务端确实收到了该 header，而不是只在客户端构造过。
 	headerVal := fakeHandler.RequestReceived.Header["Metadata-Flavor"]
 	if len(headerVal) != 1 || headerVal[0] != "Google" {
 		t.Errorf("Header missing expected entry %v. Got %v", header, fakeHandler.RequestReceived.Header)

@@ -26,16 +26,18 @@ import (
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 )
 
-// PodSandboxChanged checks whether the spec of the pod is changed and returns
-// (changed, new attempt, original sandboxID if exist, reason for change).
+// PodSandboxChanged 判断 Pod 的 sandbox 是否需要重建，
+// 返回（是否变化、新的 attempt 序号、原 sandboxID（若存在）、变化原因）。
 func PodSandboxChanged(pod *v1.Pod, podStatus *kubecontainer.PodStatus) (bool, uint32, string, string) {
-	ctx := context.TODO() // This context will be passed as parameter in the future
+	ctx := context.TODO() // 该上下文未来会作为参数传入。
 	logger := klog.FromContext(ctx)
+	// 找不到 sandbox 时必须新建。
 	if len(podStatus.SandboxStatuses) == 0 {
 		logger.V(2).Info("No sandbox for pod can be found. Need to start a new one", "pod", klog.KObj(pod))
 		return true, 0, "", kubetypes.PodSandboxNotReadyMsgNoPodSandbox
 	}
 
+	// 统计处于 Ready 状态的 sandbox 数量。
 	readySandboxCount := 0
 	for _, s := range podStatus.SandboxStatuses {
 		if s.State == runtimeapi.PodSandboxState_SANDBOX_READY {
@@ -43,7 +45,7 @@ func PodSandboxChanged(pod *v1.Pod, podStatus *kubecontainer.PodStatus) (bool, u
 		}
 	}
 
-	// Needs to create a new sandbox when readySandboxCount > 1 or the ready sandbox is not the latest one.
+	// 存在多个 Ready sandbox，或最新的 sandbox 未 Ready 时，需要重建。
 	sandboxStatus := podStatus.SandboxStatuses[0]
 	if readySandboxCount > 1 {
 		logger.V(2).Info("Multiple sandboxes are ready for Pod. Need to reconcile them", "pod", klog.KObj(pod))
@@ -54,13 +56,13 @@ func PodSandboxChanged(pod *v1.Pod, podStatus *kubecontainer.PodStatus) (bool, u
 		return true, sandboxStatus.Metadata.Attempt + 1, sandboxStatus.Id, kubetypes.PodSandboxNotReadyMsgSandboxNotReady
 	}
 
-	// Needs to create a new sandbox when network namespace changed.
+	// 网络命名空间模式变化时需要重建 sandbox。
 	if sandboxStatus.GetLinux().GetNamespaces().GetOptions().GetNetwork() != NetworkNamespaceForPod(pod) {
 		logger.V(2).Info("Sandbox for pod has changed. Need to start a new one", "pod", klog.KObj(pod))
 		return true, sandboxStatus.Metadata.Attempt + 1, "", kubetypes.PodSandboxNotReadyMsgNetworkNamespaceMode
 	}
 
-	// Needs to create a new sandbox when the sandbox does not have an IP address.
+	// sandbox 没有 IP 地址时需要重建。
 	if !kubecontainer.IsHostNetworkPod(pod) && sandboxStatus.Network != nil && sandboxStatus.Network.Ip == "" {
 		logger.V(2).Info("Sandbox for pod has no IP address. Need to start a new one", "pod", klog.KObj(pod))
 		return true, sandboxStatus.Metadata.Attempt + 1, sandboxStatus.Id, kubetypes.PodSandboxNotReadyMsgNoIPAddress
@@ -69,8 +71,7 @@ func PodSandboxChanged(pod *v1.Pod, podStatus *kubecontainer.PodStatus) (bool, u
 	return false, sandboxStatus.Metadata.Attempt, sandboxStatus.Id, ""
 }
 
-// IpcNamespaceForPod returns the runtimeapi.NamespaceMode
-// for the IPC namespace of a pod
+// IpcNamespaceForPod 返回 Pod 的 IPC 命名空间模式。
 func IpcNamespaceForPod(pod *v1.Pod) runtimeapi.NamespaceMode {
 	if pod != nil && pod.Spec.HostIPC {
 		return runtimeapi.NamespaceMode_NODE
@@ -78,8 +79,7 @@ func IpcNamespaceForPod(pod *v1.Pod) runtimeapi.NamespaceMode {
 	return runtimeapi.NamespaceMode_POD
 }
 
-// NetworkNamespaceForPod returns the runtimeapi.NamespaceMode
-// for the network namespace of a pod
+// NetworkNamespaceForPod 返回 Pod 的网络命名空间模式。
 func NetworkNamespaceForPod(pod *v1.Pod) runtimeapi.NamespaceMode {
 	if pod != nil && pod.Spec.HostNetwork {
 		return runtimeapi.NamespaceMode_NODE
@@ -87,8 +87,7 @@ func NetworkNamespaceForPod(pod *v1.Pod) runtimeapi.NamespaceMode {
 	return runtimeapi.NamespaceMode_POD
 }
 
-// PidNamespaceForPod returns the runtimeapi.NamespaceMode
-// for the PID namespace of a pod
+// PidNamespaceForPod 返回 Pod 的 PID 命名空间模式。
 func PidNamespaceForPod(pod *v1.Pod) runtimeapi.NamespaceMode {
 	if pod != nil {
 		if pod.Spec.HostPID {
@@ -98,20 +97,22 @@ func PidNamespaceForPod(pod *v1.Pod) runtimeapi.NamespaceMode {
 			return runtimeapi.NamespaceMode_POD
 		}
 	}
-	// Note that PID does not default to the zero value for v1.Pod
+	// 注意：v1.Pod 中 PID 的零值并非期望的默认模式。
 	return runtimeapi.NamespaceMode_CONTAINER
 }
 
-// LookupRuntimeHandler is implemented by *runtimeclass.Manager.
+// RuntimeHandlerResolver 由 *runtimeclass.Manager 实现。
 type RuntimeHandlerResolver interface {
+	// LookupRuntimeHandler 解析 RuntimeClass 名称对应的运行时处理器。
 	LookupRuntimeHandler(runtimeClassName *string) (string, error)
 }
 
-// namespacesForPod returns the runtimeapi.NamespaceOption for a given pod.
-// An empty or nil pod can be used to get the namespace defaults for v1.Pod.
+// NamespacesForPod 返回给定 Pod 的 runtimeapi.NamespaceOption。
+// 传入空或 nil 的 Pod 可获得 v1.Pod 的命名空间默认值。
 func NamespacesForPod(ctx context.Context, pod *v1.Pod, runtimeHelper kubecontainer.RuntimeHelper, rcManager RuntimeHandlerResolver) (*runtimeapi.NamespaceOption, error) {
 	logger := klog.FromContext(ctx)
 	runtimeHandler := ""
+	// RuntimeClass 可能指定不同的运行时处理器。
 	if pod != nil && rcManager != nil {
 		var err error
 		runtimeHandler, err = rcManager.LookupRuntimeHandler(pod.Spec.RuntimeClassName)
@@ -119,6 +120,7 @@ func NamespacesForPod(ctx context.Context, pod *v1.Pod, runtimeHelper kubecontai
 			return nil, err
 		}
 	}
+	// 由运行时助手决定是否需要创建用户命名空间映射。
 	userNs, err := runtimeHelper.GetOrCreateUserNamespaceMappings(logger, pod, runtimeHandler)
 	if err != nil {
 		return nil, err

@@ -41,7 +41,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
-// this interface satisfies what setupGRPCServerWithFake needs
+// fakeGRPCServerInterface 是 setupGRPCServerWithFake 所需的接口，聚合了三个 gRPC 服务端接口。
 type fakeGRPCServerInterface interface {
 	drapbv1.DRAPluginServer
 	drahealthv1.DRAResourceHealthServer
@@ -91,9 +91,11 @@ func (f *fakeGRPCServer) NodeWatchResources(in *drahealthv1.NodeWatchResourcesRe
 	return nil
 }
 
-// tearDown is an idempotent cleanup function.
+// tearDown 是一个幂等的清理函数。
 type tearDown func()
 
+// setupGRPCServerWithFake 在给定 unix 地址上用指定的 fake 服务端启动一个 gRPC 服务器，
+// 按 service 注册对应的 DRA 服务，返回用于停止服务器的 tearDown。
 func setupGRPCServerWithFake(ctx context.Context, service, addr string, fakeGRPCServer fakeGRPCServerInterface) (tearDown, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -146,10 +148,14 @@ func setupGRPCServerWithFake(ctx context.Context, service, addr string, fakeGRPC
 	return teardown, nil
 }
 
+// setupFakeGRPCServer 用默认的 fakeGRPCServer 启动一个 gRPC 测试服务器。
 func setupFakeGRPCServer(ctx context.Context, service, addr string) (tearDown, error) {
 	return setupGRPCServerWithFake(ctx, service, addr, &fakeGRPCServer{})
 }
 
+// TestGRPCConnIsReused 验证 DRA 插件的 gRPC 连接会被复用：
+// 并发两次调用 NodePrepareResources 以及后续健康检查与资源操作，
+// 都应使用同一个 ClientConn，不会新建连接。
 func TestGRPCConnIsReused(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	addr := path.Join(t.TempDir(), "dra.sock")
@@ -163,14 +169,14 @@ func TestGRPCConnIsReused(t *testing.T) {
 
 	driverName := "dummy-driver"
 
-	// ensure the plugin we are using is registered
+	// 确保所使用的插件已注册到管理器
 	draPlugins := NewDRAPluginManager(tCtx, nil, nil, &mockStreamHandler{}, 0)
 	tCtx.ExpectNoError(draPlugins.add(driverName, addr, drapbv1.DRAPluginService, drahealthv1.DRAResourceHealthService, defaultClientCallTimeout), "add plugin")
 	plugin, err := draPlugins.GetPlugin(driverName)
 	tCtx.ExpectNoError(err, "get plugin")
 	conn := plugin.conn
 
-	// we call `NodePrepareResource` 2 times and check whether a new connection is created or the same is reused
+	// 调用 NodePrepareResources 两次，检查是创建了新连接还是复用了同一个连接
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
 		go func() {
@@ -203,7 +209,7 @@ func TestGRPCConnIsReused(t *testing.T) {
 	}
 
 	wg.Wait()
-	// We should have only one entry otherwise it means another gRPC connection has been created
+	// 映射中只应有一个条目，否则说明创建了另一个 gRPC 连接
 	require.Len(t, reusedConns, 1, "expected length to be 1 but got %d", len(reusedConns))
 	require.Equal(t, 2, reusedConns[conn], "expected counter to be 2 but got %d", reusedConns[conn])
 
@@ -264,6 +270,8 @@ func TestGRPCConnIsReused(t *testing.T) {
 	})
 }
 
+// TestGRPCConnUsableAfterIdle 验证连接空闲超时之后，
+// NodePrepareResources 调用仍能成功（连接会被重新建立并保持可用）。
 func TestGRPCConnUsableAfterIdle(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	service := drapbv1.DRAPluginService
@@ -274,16 +282,15 @@ func TestGRPCConnUsableAfterIdle(t *testing.T) {
 
 	driverName := "dummy-driver"
 
-	// ensure the plugin we are using is registered
+	// 确保所使用的插件已注册到管理器
 	draPlugins := NewDRAPluginManager(tCtx, nil, nil, &mockStreamHandler{}, 0)
 	draPlugins.withIdleTimeout = 5 * time.Second
 	tCtx.ExpectNoError(draPlugins.add(driverName, addr, service, "", defaultClientCallTimeout), "add plugin")
 	plugin, err := draPlugins.GetPlugin(driverName)
 	tCtx.ExpectNoError(err, "get plugin")
 
-	// The connection doesn't really become idle because HandleConn
-	// kicks it back to ready by calling Connect. Just sleep long
-	// enough here, the code should be reached...
+	// 连接并不会真正进入空闲，因为 HandleConn 会调用 Connect
+	// 把它重新置为 ready。这里多睡一会儿，确保代码执行到空闲超时的逻辑。
 	tCtx.Log("Waiting for idle timeout...")
 	time.Sleep(2 * draPlugins.withIdleTimeout)
 
@@ -302,6 +309,8 @@ func TestGRPCConnUsableAfterIdle(t *testing.T) {
 	tCtx.ExpectNoError(err, "NodePrepareResources")
 }
 
+// TestGetDRAPlugin 表驱动测试 GetPlugin 的查找行为，覆盖三种场景：
+// driverName 为空、驱动不在列表中（均应报错），以及插件已注册（应成功取回）。
 func TestGetDRAPlugin(t *testing.T) {
 	for _, test := range []struct {
 		description string
@@ -344,6 +353,8 @@ func TestGetDRAPlugin(t *testing.T) {
 	}
 }
 
+// TestGRPCMethods 表驱动测试插件服务版本协商：覆盖 v1beta1、v1 服务匹配，
+// 以及插件与 kubelet 服务版本不匹配、选择不支持的服务这两种错误场景。
 func TestGRPCMethods(t *testing.T) {
 	for _, test := range []struct {
 		description   string
@@ -362,14 +373,14 @@ func TestGRPCMethods(t *testing.T) {
 			chosenService: drapbv1.DRAPluginService,
 		},
 		{
-			// In practice, such a mismatch between plugin and kubelet should not happen.
+			// 实际中，插件与 kubelet 之间出现这种版本不匹配不应发生。
 			description:   "mismatch",
 			service:       drapbv1.DRAPluginService,
 			chosenService: drapbv1beta1.DRAPluginService,
 			expectError:   "unknown service k8s.io.kubelet.pkg.apis.dra.v1beta1.DRAPlugin",
 		},
 		{
-			// In practice, kubelet wouldn't choose an invalid service.
+			// 实际中，kubelet 不会选择无效的服务。
 			description:   "internal-error",
 			service:       drapbv1.DRAPluginService,
 			chosenService: "some-other-service",
@@ -403,15 +414,17 @@ func TestGRPCMethods(t *testing.T) {
 	}
 }
 
+// TestGRPCWithTimeoutEnforced 验证客户端调用超时会被强制执行：
+// 服务端阻塞 NodePrepareResources，客户端应在超时后收到 DeadlineExceeded 错误，
+// 服务端随后被解阻塞并确认方法确实被调用。
 func TestGRPCWithTimeoutEnforced(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
 	service := drapbv1.DRAPluginService
 	addr := path.Join(t.TempDir(), "dra.sock")
 
-	// we force NodePrepareResources to block, this will cause the timeout
-	// to elapse, as a consequence the client should abort.
-	// once the client aborts, we unblock NodePrepareResources
+	// 强制 NodePrepareResources 阻塞，使超时时间耗尽，
+	// 客户端因此应中止请求。客户端一旦中止，再解除 NodePrepareResources 的阻塞。
 	blocked := make(chan struct{})
 	server := &timeoutFakeGRPCServer{
 		t:              t,
@@ -432,8 +445,7 @@ func TestGRPCWithTimeoutEnforced(t *testing.T) {
 	plugin, err := manager.GetPlugin(driverName)
 	require.NoError(t, err, "unexpected error while retrieving the plugin")
 
-	// we will invoke the method on a new gorouinte, in case there
-	// is no timeout enforced it might block forever
+	// 在新协程中调用该方法，以防超时未生效时调用无限阻塞
 	errCh := make(chan error, 1)
 	go func() {
 		defer close(errCh)
@@ -450,45 +462,41 @@ func TestGRPCWithTimeoutEnforced(t *testing.T) {
 		errCh <- err
 	}()
 
-	// wait for the grpc caller to timeout
+	// 等待 gRPC 调用方超时返回
 	select {
-	// not using wait.ForeverTestTimeout, we will wait at most
-	// 3*timeout to account for flakes in CI
+	// 不使用 wait.ForeverTestTimeout，最多等待 3*timeout，以容忍 CI 中的抖动
 	case <-time.After(3 * timeout):
 		t.Errorf("expected the grpc caller to return after the timeout had elapsed")
 	case err = <-errCh:
-		// the grpc call returned
+		// gRPC 调用已返回
 	}
 
-	// unblock the request handler on the server, and wait for it to
-	// return, this ensures that the server method was invoked.
-	// if the timeout is not enforced, we don't leak any goroutine
+	// 解除服务端请求处理的阻塞并等待其返回，确保服务端方法确实被调用。
+	// 若超时未生效，这里也不会遗留任何协程。
 	close(blocked)
 	select {
 	case <-server.done:
-	// not using wait.ForeverTestTimeout, we will wait at most
-	// 3*timeout to account for flakes in CI
+	// 不使用 wait.ForeverTestTimeout，最多等待 3*timeout，以容忍 CI 中的抖动
 	case <-time.After(3 * timeout):
 		t.Errorf("expected the grpc method to have been invoked")
 	}
 
 	require.Error(t, err, "expected the grpc method to return an error")
 	status, ok := grpcstatus.FromError(err)
-	// if it is not a gRPC error then the operation may have failed before
-	// the gRPC method was called, otherwise we would get gRPC error.
+	// 如果不是 gRPC 错误，说明操作可能在 gRPC 方法被调用之前就失败了，
+	// 否则我们本应得到 gRPC 错误。
 	require.True(t, ok, "expected an error of type: %T, but got: %T", &grpcstatus.Status{}, err)
 
-	// DeadlineExceeded means operation expired before completion. The gRPC
-	// framework will generate this error code when the deadline is exceeded.
-	// More here: https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+	// DeadlineExceeded 表示操作在完成前超时。当截止时间耗尽时，
+	// gRPC 框架会生成该错误码。
+	// 详见：https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
 	assert.Equal(t, grpccodes.DeadlineExceeded, status.Code(), "expected status code to match")
 }
 
-// it embeds a fakeGRPCServer instance and overrides the NodePrepareResources
-// method to simulate a timeout scenario.
-// NodePrepareResources will block until the test explicitly closes the blocked
-// channel to unblock it, and it will close the done channel when it completes
-// so the test can wait for it to finish.
+// timeoutFakeGRPCServer 内嵌一个 fakeGRPCServer，并覆盖 NodePrepareResources 方法
+// 来模拟超时场景。
+// NodePrepareResources 会一直阻塞，直到测试显式关闭 blocked 通道将其解除；
+// 完成时关闭 done 通道，便于测试等待其结束。
 type timeoutFakeGRPCServer struct {
 	*fakeGRPCServer
 
@@ -513,6 +521,8 @@ func (f *timeoutFakeGRPCServer) NodePrepareResources(ctx context.Context, in *dr
 	return &drapbv1.NodePrepareResourcesResponse{}, nil
 }
 
+// assertError 校验错误与预期是否一致：预期无错时 err 必须为 nil，
+// 预期报错时错误信息需包含期望的片段。
 func assertError(t *testing.T, expectError string, err error) {
 	t.Helper()
 	switch {
@@ -525,6 +535,8 @@ func assertError(t *testing.T, expectError string, err error) {
 	}
 }
 
+// TestPlugin_WatchResources 验证健康监控流：首个 Recv 应收到 fake 服务端发送的
+// 设备健康消息，服务端返回 nil 关闭流后，第二次 Recv 应得到 io.EOF。
 func TestPlugin_WatchResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	ctx, cancel := context.WithCancel(tCtx)
@@ -549,7 +561,7 @@ func TestPlugin_WatchResources(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, stream)
 
-	// 1. Receive the first message that our fake server sends.
+	// 1. 接收 fake 服务端发送的第一条消息。
 	resp, err := stream.Recv()
 	require.NoError(t, err, "The first Recv() should succeed with the message from the server")
 	require.NotNil(t, resp)
@@ -557,14 +569,14 @@ func TestPlugin_WatchResources(t *testing.T) {
 	assert.Equal(t, "pool1", resp.Devices[0].GetDevice().GetPoolName())
 	assert.Equal(t, drahealthv1.HealthStatus_HEALTHY, resp.Devices[0].GetHealth())
 
-	// 2. The second receive should fail with io.EOF because the server
-	//    closed the stream by returning nil. This confirms the stream ended cleanly.
+	// 2. 第二次接收应因服务端返回 nil 而关闭流、返回 io.EOF，
+	//    以此确认流被干净地结束。
 	_, err = stream.Recv()
 	require.ErrorIs(t, err, io.EOF, "The second Recv() should return an io.EOF error to signal a clean stream closure")
 }
 
-// fakeV1Alpha1HealthServer implements only the v1alpha1 DRAResourceHealth
-// service, like a driver which shipped before the v1 API existed.
+// fakeV1Alpha1HealthServer 只实现 v1alpha1 版本的 DRAResourceHealth 服务，
+// 模拟在 v1 API 出现之前发布的驱动。
 type fakeV1Alpha1HealthServer struct {
 	drahealthv1alpha1.UnimplementedDRAResourceHealthServer
 }
@@ -585,12 +597,11 @@ func (f *fakeV1Alpha1HealthServer) NodeWatchResources(in *drahealthv1alpha1.Node
 	return srv.Send(resp)
 }
 
-// TestPlugin_WatchResources_V1Alpha1 verifies the backward compatibility path:
-// when a plugin only provides the v1alpha1 health service, the kubelet
-// negotiates v1alpha1 and transparently converts the stream to v1.
+// TestPlugin_WatchResources_V1Alpha1 验证向后兼容路径：
+// 当插件只提供 v1alpha1 健康服务时，kubelet 协商出 v1alpha1，
+// 并把流透明地转换为 v1。
 //
-// TODO(harche): remove in 1.40 together with the kubelet's v1alpha1 client
-// support.
+// TODO(harche): 在 1.40 中连同 kubelet 的 v1alpha1 客户端支持一起移除。
 func TestPlugin_WatchResources_V1Alpha1(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	ctx, cancel := context.WithCancel(tCtx)
@@ -622,8 +633,7 @@ func TestPlugin_WatchResources_V1Alpha1(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, stream)
 
-	// The v1alpha1 message from the server must arrive as a converted
-	// v1 message.
+	// 服务端发来的 v1alpha1 消息必须以转换后的 v1 消息形式到达。
 	resp, err := stream.Recv()
 	require.NoError(t, err, "The first Recv() should succeed with the converted message from the v1alpha1 server")
 	require.NotNil(t, resp)

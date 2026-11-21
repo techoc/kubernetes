@@ -25,10 +25,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// updatePodCIDR updates the pod CIDR in the runtime state if it is different
-// from the current CIDR. Return true if pod CIDR is actually changed.
+// updatePodCIDR 在与当前 CIDR 不同时更新运行时状态中的 Pod CIDR。
+// 返回 Pod CIDR 是否实际发生变化。
 func (kl *Kubelet) updatePodCIDR(ctx context.Context, cidr string) (bool, error) {
 	logger := klog.FromContext(ctx)
+	// 串行化 CIDR 更新，避免并发更新导致运行时与状态不一致。
 	kl.updatePodCIDRMux.Lock()
 	defer kl.updatePodCIDRMux.Unlock()
 
@@ -38,11 +39,11 @@ func (kl *Kubelet) updatePodCIDR(ctx context.Context, cidr string) (bool, error)
 		return false, nil
 	}
 
-	// kubelet -> generic runtime -> runtime shim -> network plugin
-	// docker/non-cri implementations have a passthrough UpdatePodCIDR
+	// 调用链：kubelet -> 通用运行时 -> runtime shim -> 网络插件。
+	// docker/非 CRI 实现会透传 UpdatePodCIDR。
 	if err := kl.getRuntime().UpdatePodCIDR(ctx, cidr); err != nil {
-		// If updatePodCIDR would fail, theoretically pod CIDR could not change.
-		// But it is better to be on the safe side to still return true here.
+		// 更新失败时理论上 CIDR 不会改变，但为稳妥起见仍返回 true，
+		// 以便调用方触发后续同步。
 		return true, fmt.Errorf("failed to update pod CIDR: %v", err)
 	}
 	logger.Info("Updating Pod CIDR", "originalPodCIDR", podCIDR, "newPodCIDR", cidr)
@@ -50,9 +51,8 @@ func (kl *Kubelet) updatePodCIDR(ctx context.Context, cidr string) (bool, error)
 	return true, nil
 }
 
-// GetPodDNS returns DNS settings for the pod.
-// This function is defined in kubecontainer.RuntimeHelper interface so we
-// have to implement it.
+// GetPodDNS 返回 Pod 的 DNS 设置。
+// 该函数由 kubecontainer.RuntimeHelper 接口定义，因此必须实现。
 func (kl *Kubelet) GetPodDNS(ctx context.Context, pod *v1.Pod) (*runtimeapi.DNSConfig, error) {
 	return kl.dnsConfigurer.GetPodDNS(ctx, pod)
 }

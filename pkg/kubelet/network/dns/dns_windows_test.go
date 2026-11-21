@@ -23,10 +23,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// Windows 测试使用的默认 resolv.conf 路径。
 var (
 	defaultResolvConf = hostResolvConf
 )
 
+// fakeGetHostDNSConfigCustom 返回固定的测试用 DNS 配置。
 func fakeGetHostDNSConfigCustom(logger klog.Logger, resolverConfig string) (*runtimeapi.DNSConfig, error) {
 	return &runtimeapi.DNSConfig{
 		Servers:  []string{testHostNameserver},

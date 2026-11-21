@@ -23,119 +23,116 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
-// ResourceConfig holds information about all the supported cgroup resource parameters.
+// ResourceConfig 保存所有受支持的 cgroup 资源配置参数。
 type ResourceConfig struct {
-	// Memory limit (in bytes).
+	// 内存上限（字节）。
 	Memory *int64
-	// CPU set (number of CPUs the cgroup has access to).
+	// CPU 集合（该 cgroup 可使用的 CPU）。
 	CPUSet cpuset.CPUSet
-	// CPU shares (relative weight vs. other containers).
+	// CPU 权重（相对于其他容器的相对值）。
 	CPUShares *uint64
-	// CPU hardcap limit (in usecs). Allowed cpu time in a given period.
+	// CPU 硬上限（微秒），即一个周期内允许使用的 CPU 时间。
 	CPUQuota *int64
-	// CPU quota period.
+	// CPU 配额周期。
 	CPUPeriod *uint64
-	// HugePageLimit map from page size (in bytes) to limit (in bytes)
+	// HugePageLimit 记录页大小（字节）到上限（字节）的映射。
 	HugePageLimit map[int64]int64
-	// Maximum number of pids
+	// PID 数量上限。
 	PidsLimit *int64
-	// Unified for cgroup v2
+	// Unified 保存 cgroup v2 统一层级的参数。
 	Unified map[string]string
 }
 
-// CgroupName is the abstract name of a cgroup prior to any driver specific conversion.
-// It is specified as a list of strings from its individual components, such as:
+// CgroupName 是 cgroup 在驱动特定转换之前的抽象名称。
+// 它由各层级组件组成的字符串列表表示，例如：
 // {"kubepods", "burstable", "pod1234-abcd-5678-efgh"}
 type CgroupName []string
 
-// CgroupConfig holds the cgroup configuration information.
-// This is common object which is used to specify
-// cgroup information to both systemd and raw cgroup fs
-// implementation of the Cgroup Manager interface.
+// CgroupConfig 保存 cgroup 配置信息。
+// 该对象同时供 systemd 和原始 cgroupfs 两种
+// CgroupManager 实现使用。
 type CgroupConfig struct {
-	// Fully qualified name prior to any driver specific conversions.
+	// 驱动特定转换之前的完整名称。
 	Name CgroupName
-	// ResourceParameters contains various cgroups settings to apply.
+	// ResourceParameters 包含要应用的各类 cgroup 设置。
 	ResourceParameters *ResourceConfig
 }
 
-// CgroupManager allows for cgroup management.
-// Supports Cgroup Creation ,Deletion and Updates.
+// CgroupManager 提供 cgroup 管理能力，
+// 支持 cgroup 的创建、删除和更新。
 type CgroupManager interface {
-	// Create creates and applies the cgroup configurations on the cgroup.
-	// It just creates the leaf cgroups.
-	// It expects the parent cgroup to already exist.
+	// Create 创建 cgroup 并应用配置。
+	// 它只创建叶子 cgroup，并要求父 cgroup 已存在。
 	Create(klog.Logger, *CgroupConfig) error
-	// Destroy the cgroup.
+	// Destroy 销毁 cgroup。
 	Destroy(klog.Logger, *CgroupConfig) error
-	// Update cgroup configuration.
+	// Update 更新 cgroup 配置。
 	Update(klog.Logger, *CgroupConfig) error
-	// Validate checks if the cgroup is valid
+	// Validate 检查 cgroup 是否有效。
 	Validate(name CgroupName) error
-	// Exists checks if the cgroup already exists
+	// Exists 检查 cgroup 是否已存在。
 	Exists(name CgroupName) bool
-	// Name returns the literal cgroupfs name on the host after any driver specific conversions.
-	// We would expect systemd implementation to make appropriate name conversion.
-	// For example, if we pass {"foo", "bar"}
-	// then systemd should convert the name to something like
-	// foo.slice/foo-bar.slice
+	// Name 返回驱动特定转换之后宿主机上的字面 cgroupfs 名称。
+	// systemd 实现应完成相应转换：例如传入 {"foo", "bar"} 时，
+	// 应转换为类似 foo.slice/foo-bar.slice 的名称。
 	Name(name CgroupName) string
-	// CgroupName converts the literal cgroupfs name on the host to an internal identifier.
+	// CgroupName 把宿主机上的字面 cgroupfs 名称转换为内部标识。
 	CgroupName(name string) CgroupName
-	// Pids scans through all subsystems to find pids associated with specified cgroup.
+	// Pids 扫描所有子系统，找出属于指定 cgroup 的 PID。
 	Pids(logger klog.Logger, name CgroupName) []int
-	// ReduceCPULimits reduces the CPU CFS values to the minimum amount of shares.
+	// ReduceCPULimits 把 CPU CFS 配额降到最小份额。
 	ReduceCPULimits(logger klog.Logger, cgroupName CgroupName) error
-	// MemoryUsage returns current memory usage of the specified cgroup, as read from the cgroupfs.
+	// MemoryUsage 从 cgroupfs 读取指定 cgroup 的当前内存用量。
 	MemoryUsage(name CgroupName) (int64, error)
-	// Get the resource config values applied to the cgroup for specified resource type
+	// GetCgroupConfig 读取指定资源类型在 cgroup 上生效的配置值。
 	GetCgroupConfig(name CgroupName, resource v1.ResourceName) (*ResourceConfig, error)
-	// Set resource config for the specified resource type on the cgroup
+	// SetCgroupConfig 为 cgroup 设置指定资源类型的配置。
 	SetCgroupConfig(logger klog.Logger, name CgroupName, resourceConfig *ResourceConfig) error
-	// Version of the cgroup implementation on the host
+	// Version 返回宿主机上 cgroup 实现的版本号。
 	Version() int
 }
 
-// QOSContainersInfo stores the names of containers per qos
+// QOSContainersInfo 保存各 QoS 类别的父 cgroup 名称。
 type QOSContainersInfo struct {
+	// Guaranteed 是 Guaranteed QoS 类 Pod 的父 cgroup。
 	Guaranteed CgroupName
+	// BestEffort 是 BestEffort QoS 类 Pod 的父 cgroup。
 	BestEffort CgroupName
-	Burstable  CgroupName
+	// Burstable 是 Burstable QoS 类 Pod 的父 cgroup。
+	Burstable CgroupName
 }
 
-// PodContainerManager stores and manages pod level containers
-// The Pod workers interact with the PodContainerManager to create and destroy
-// containers for the pod.
+// PodContainerManager 存储并管理 Pod 级别的容器（cgroup）。
+// Pod worker 通过它创建和销毁 Pod 对应的容器。
 type PodContainerManager interface {
-	// GetPodContainerName returns the CgroupName identifier, and its literal cgroupfs form on the host.
+	// GetPodContainerName 返回 Pod 的 CgroupName 标识及其在宿主机上的字面 cgroupfs 名称。
 	GetPodContainerName(*v1.Pod) (CgroupName, string)
 
-	// EnsureExists takes a pod as argument and makes sure that
-	// pod cgroup exists if qos cgroup hierarchy flag is enabled.
-	// If the pod cgroup doesn't already exist this method creates it.
+	// EnsureExists 确保 Pod 的 cgroup 存在（在启用 QoS cgroup 层级时）。
+	// 若 Pod cgroup 尚不存在则创建它。
 	EnsureExists(logger klog.Logger, pod *v1.Pod) error
 
-	// Exists returns true if the pod cgroup exists.
+	// Exists 判断 Pod 的 cgroup 是否存在。
 	Exists(*v1.Pod) bool
 
-	// Destroy takes a pod Cgroup name as argument and destroys the pod's container.
+	// Destroy 销毁指定 cgroup 名称对应的 Pod 容器（cgroup）。
 	Destroy(logger klog.Logger, name CgroupName) error
 
-	// ReduceCPULimits reduces the CPU CFS values to the minimum amount of shares.
+	// ReduceCPULimits 把 CPU CFS 配额降到最小份额。
 	ReduceCPULimits(logger klog.Logger, name CgroupName) error
 
-	// GetAllPodsFromCgroups enumerates the set of pod uids to their associated cgroup based on state of cgroupfs system.
+	// GetAllPodsFromCgroups 依据 cgroupfs 的当前状态枚举 Pod UID 到其 cgroup 的映射。
 	GetAllPodsFromCgroups(logger klog.Logger) (map[types.UID]CgroupName, error)
 
-	// IsPodCgroup returns true if the literal cgroupfs name corresponds to a pod
+	// IsPodCgroup 判断字面 cgroupfs 名称是否对应某个 Pod，并返回其 UID。
 	IsPodCgroup(cgroupfs string) (bool, types.UID)
 
-	// Get value of memory usage for the pod Cgroup
+	// GetPodCgroupMemoryUsage 返回 Pod cgroup 的内存用量。
 	GetPodCgroupMemoryUsage(pod *v1.Pod) (uint64, error)
 
-	// Get the resource config values applied to the pod cgroup for specified resource type
+	// GetPodCgroupConfig 读取指定资源类型在 Pod cgroup 上生效的配置值。
 	GetPodCgroupConfig(pod *v1.Pod, resource v1.ResourceName) (*ResourceConfig, error)
 
-	// Set resource config values for the specified resource type on the pod cgroup
+	// SetPodCgroupConfig 为 Pod cgroup 设置指定资源类型的配置。
 	SetPodCgroupConfig(logger klog.Logger, pod *v1.Pod, resourceConfig *ResourceConfig) error
 }

@@ -24,51 +24,53 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// PodLifeCycleEventType define the event type of pod life cycle events.
+// PodLifeCycleEventType 定义 Pod 生命周期事件的类型。
 type PodLifeCycleEventType string
 
+// RelistDuration 定义 relist 的周期与健康判定阈值。
 type RelistDuration struct {
-	// The period for relisting.
+	// RelistPeriod 是 relist 的周期。
 	RelistPeriod time.Duration
-	// The relisting threshold needs to be greater than the relisting period +
-	// the relisting time, which can vary significantly. Set a conservative
-	// threshold to avoid flipping between healthy and unhealthy.
+	// RelistThreshold 需要大于 relist 周期加上 relist 耗时（后者波动可能很大）。
+	// 应设置保守的阈值，避免健康状态在正常与异常之间反复抖动。
 	RelistThreshold time.Duration
 }
 
 const (
-	// ContainerStarted - event type when the new state of container is running.
+	// ContainerStarted 表示容器新状态为 running。
 	ContainerStarted PodLifeCycleEventType = "ContainerStarted"
-	// ContainerDied - event type when the new state of container is exited.
+	// ContainerDied 表示容器新状态为 exited。
 	ContainerDied PodLifeCycleEventType = "ContainerDied"
-	// ContainerRemoved - event type when the old state of container is exited.
+	// ContainerRemoved 表示容器旧状态已 exited（容器被移除）。
 	ContainerRemoved PodLifeCycleEventType = "ContainerRemoved"
-	// PodSync is used to trigger syncing of a pod when the observed change of
-	// the state of the pod cannot be captured by any single event above.
+	// PodSync 用于在观察到的 Pod 状态变化无法由上述单个事件表达时触发 Pod 同步。
 	PodSync PodLifeCycleEventType = "PodSync"
-	// ContainerChanged - event type when the new state of container is unknown.
+	// ContainerChanged 表示容器新状态未知。
 	ContainerChanged PodLifeCycleEventType = "ContainerChanged"
 )
 
-// PodLifecycleEvent is an event that reflects the change of the pod state.
+// PodLifecycleEvent 表示 Pod 状态变化事件。
 type PodLifecycleEvent struct {
-	// The pod ID.
+	// ID 是 Pod 的 UID。
 	ID types.UID
-	// The type of the event.
+	// Type 是事件类型。
 	Type PodLifeCycleEventType
-	// The accompanied data which varies based on the event type.
-	//   - ContainerStarted/ContainerStopped: the container name (string).
-	//   - All other event types: unused.
+	// Data 是随事件类型变化的附带数据：
+	//   - ContainerStarted/ContainerStopped：容器名（string）。
+	//   - 其他事件类型：未使用。
 	Data interface{}
 }
 
-// PodLifecycleEventGenerator contains functions for generating pod life cycle events.
+// PodLifecycleEventGenerator 定义生成 Pod 生命周期事件的方法。
 type PodLifecycleEventGenerator interface {
+	// Start 启动事件生成循环。
 	Start(ctx context.Context)
+	// Watch 返回接收 Pod 生命周期事件的 channel。
 	Watch() chan *PodLifecycleEvent
+	// Healthy 返回 PLEG 是否健康。
 	Healthy() (bool, error)
-	// RequestReinspect flags the pod for reinspection on the next Relist iteration.
+	// RequestReinspect 标记该 Pod 在下一轮 Relist 时重新检查。
 	RequestReinspect(podUID types.UID)
-	// RequestRelist queues up the pod for an on-demand relist.
+	// RequestRelist 把该 Pod 加入按需 relist 队列。
 	RequestRelist(logger klog.Logger, podUID types.UID)
 }

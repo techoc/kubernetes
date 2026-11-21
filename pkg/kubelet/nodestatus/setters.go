@@ -48,29 +48,30 @@ import (
 )
 
 const (
-	// MaxNamesPerImageInNodeStatus is max number of names
-	// per image stored in the node status.
+	// MaxNamesPerImageInNodeStatus 是节点状态中每个镜像
+	// 最多记录的镜像名称数量。
 	MaxNamesPerImageInNodeStatus = 5
 )
 
-// Setter modifies the node in-place, and returns an error if the modification failed.
-// Setters may partially mutate the node before returning an error.
+// Setter 就地修改 Node，失败时返回错误。
+// 注意：返回错误前可能已部分修改节点。
 type Setter func(ctx context.Context, node *v1.Node) error
 
-// Only emit one reboot event
+// 确保重启事件只上报一次。
 var rebootEvent sync.Once
 
-// NodeAddress returns a Setter that updates address-related information on the node.
-func NodeAddress(nodeIPs []net.IP, // typically Kubelet.nodeIPs
-	validateNodeIPFunc func(net.IP) error, // typically Kubelet.nodeIPValidator
-	hostname string, // typically Kubelet.hostname
-	externalCloudProvider bool, // typically Kubelet.externalCloudProvider
-	resolveAddressFunc func(net.IP) (net.IP, error), // typically k8s.io/apimachinery/pkg/util/net.ResolveBindAddress
+// NodeAddress 返回一个更新节点地址信息的 Setter。
+func NodeAddress(nodeIPs []net.IP, // 通常为 Kubelet.nodeIPs
+	validateNodeIPFunc func(net.IP) error, // 通常为 Kubelet.nodeIPValidator
+	hostname string, // 通常为 Kubelet.hostname
+	externalCloudProvider bool, // 通常为 Kubelet.externalCloudProvider
+	resolveAddressFunc func(net.IP) (net.IP, error), // 通常为 k8s.io/apimachinery/pkg/util/net.ResolveBindAddress
 ) Setter {
 	var nodeIP, secondaryNodeIP net.IP
 	if len(nodeIPs) > 0 {
 		nodeIP = nodeIPs[0]
 	}
+	// 首个 nodeIP 决定首选 IP 族；未指定时默认 IPv4。
 	preferIPv4 := nodeIP == nil || nodeIP.To4() != nil
 	isPreferredIPFamily := func(ip net.IP) bool { return (ip.To4() != nil) == preferIPv4 }
 	nodeIPSpecified := nodeIP != nil && !nodeIP.IsUnspecified()
@@ -96,11 +97,9 @@ func NodeAddress(nodeIPs []net.IP, // typically Kubelet.nodeIPs
 		}
 
 		if externalCloudProvider && nodeIPSpecified {
-			// Annotate the Node object with nodeIP for external cloud provider.
+			// 外置云厂商模式下，把 nodeIP 写入节点注解。
 			//
-			// We do not add the annotation in the case where there is no cloud
-			// controller at all, as we don't expect to migrate these clusters to use an
-			// external CCM.
+			// 没有云控制器时不写该注解：此类集群不会迁移到外置 CCM。
 			if node.ObjectMeta.Annotations == nil {
 				node.ObjectMeta.Annotations = make(map[string]string)
 			}
@@ -110,27 +109,24 @@ func NodeAddress(nodeIPs []net.IP, // typically Kubelet.nodeIPs
 			}
 			node.ObjectMeta.Annotations[cloudproviderapi.AnnotationAlphaProvidedIPAddr] = annotation
 		} else if node.ObjectMeta.Annotations != nil {
-			// Clean up stale annotations if no longer using a cloud provider or
-			// no longer overriding node IP.
+			// 不再使用云厂商或不再覆盖节点 IP 时，清除过期注解。
 			delete(node.ObjectMeta.Annotations, cloudproviderapi.AnnotationAlphaProvidedIPAddr)
 		}
 
 		if externalCloudProvider {
-			// If --cloud-provider=external and node address is already set,
-			// then we return early because provider set addresses should take precedence.
-			// Otherwise, we try to use the node IP defined via flags and let the cloud provider override it later
-			// This should alleviate a lot of the bootstrapping issues with out-of-tree providers
+			// 若 --cloud-provider=external 且地址已由云厂商设置，则直接返回，
+			// 因为云厂商设置的地址优先级更高。
+			// 否则先用命令行指定的节点 IP，稍后由云厂商覆盖；
+			// 这能缓解树外 provider 的大量引导问题。
 			if len(node.Status.Addresses) > 0 {
 				return nil
 			}
-			// If nodeIPs are not set wait for the external cloud-provider to set the node addresses.
-			// If the nodeIP is the unspecified address 0.0.0.0 or ::, then use the IP of the default gateway of
-			// the corresponding IP family to bootstrap the node until the out-of-tree provider overrides it later.
-			// xref: https://github.com/kubernetes/kubernetes/issues/125348
-			// Otherwise uses them on the assumption that the installer/administrator has the previous knowledge
-			// required to ensure the external cloud provider will use the same addresses to avoid the issues explained
-			// in https://github.com/kubernetes/kubernetes/issues/120720.
-			// We are already hinting the external cloud provider via the annotation AnnotationAlphaProvidedIPAddr.
+			// 未设置 nodeIP 时等待外置云厂商写入节点地址。
+			// 若 nodeIP 是通配地址 0.0.0.0 或 ::，则用对应 IP 族默认网关的 IP 引导节点，
+			// 直到树外 provider 稍后覆盖它。
+			// 否则直接使用这些地址，前提是安装者/管理员事先知道外部云厂商会使用相同地址，
+			// 从而避免下面链接中描述的问题。
+			// 我们已经通过 AnnotationAlphaProvidedIPAddr 注解向外部云厂商提示了地址。
 			if nodeIP == nil {
 				node.Status.Addresses = []v1.NodeAddress{
 					{Type: v1.NodeHostName, Address: hostname},
@@ -148,13 +144,13 @@ func NodeAddress(nodeIPs []net.IP, // typically Kubelet.nodeIPs
 			var ipAddr net.IP
 			var err error
 
-			// 1) Use nodeIP if set (and not "0.0.0.0"/"::")
-			// 2) If the user has specified an IP to HostnameOverride, use it
-			// 3) Lookup the IP from node name by DNS
-			// 4) Try to get the IP from the network interface used as default gateway
+			// 1) nodeIP 已设置且不是通配地址时直接使用；
+			// 2) HostnameOverride 本身是 IP 时使用它；
+			// 3) 通过 DNS 按节点名解析 IP；
+			// 4) 从默认网关所在网卡获取 IP。
 			//
-			// For steps 3 and 4, IPv4 addresses are preferred to IPv6 addresses
-			// unless nodeIP is "::", in which case it is reversed.
+			// 步骤 3、4 中优先选择与 nodeIP 同族的地址；
+			// 例如 nodeIP 为 "::" 时优先 IPv6。
 			if nodeIPSpecified {
 				ipAddr = nodeIP
 			} else if addr := netutils.ParseIPSloppy(hostname); addr != nil {
@@ -179,7 +175,7 @@ func NodeAddress(nodeIPs []net.IP, // typically Kubelet.nodeIPs
 			}
 
 			if ipAddr == nil {
-				// We tried everything we could, but the IP address wasn't fetchable; error out
+				// 所有途径都失败，无法确定节点 IP，直接报错。
 				return fmt.Errorf("can't get ip address of node %s. error: %v", node.Name, err)
 			}
 			node.Status.Addresses = []v1.NodeAddress{
@@ -191,22 +187,21 @@ func NodeAddress(nodeIPs []net.IP, // typically Kubelet.nodeIPs
 	}
 }
 
-// MachineInfo returns a Setter that updates machine-related information on the node.
+// MachineInfo 返回一个更新节点机器信息（容量、NodeInfo 等）的 Setter。
 func MachineInfo(nodeName string,
 	maxPods int,
 	podsPerCore int,
-	machineInfoFunc func() (*cadvisorapi.MachineInfo, error), // typically Kubelet.GetCachedMachineInfo
-	capacityFunc func(logger klog.Logger, localStorageCapacityIsolation bool) v1.ResourceList, // typically Kubelet.containerManager.GetCapacity
-	devicePluginResourceCapacityFunc func(logger klog.Logger) (v1.ResourceList, v1.ResourceList, []string), // typically Kubelet.containerManager.GetDevicePluginResourceCapacity
-	nodeAllocatableReservationFunc func() v1.ResourceList, // typically Kubelet.containerManager.GetNodeAllocatableReservation
-	recordEventFunc func(eventType, event, message string), // typically Kubelet.recordEvent
-	runningInUserNSFunc func() *bool, // typically Kubelet.runningInUserNS
+	machineInfoFunc func() (*cadvisorapi.MachineInfo, error), // 通常为 Kubelet.GetCachedMachineInfo
+	capacityFunc func(logger klog.Logger, localStorageCapacityIsolation bool) v1.ResourceList, // 通常为 Kubelet.containerManager.GetCapacity
+	devicePluginResourceCapacityFunc func(logger klog.Logger) (v1.ResourceList, v1.ResourceList, []string), // 通常为 Kubelet.containerManager.GetDevicePluginResourceCapacity
+	nodeAllocatableReservationFunc func() v1.ResourceList, // 通常为 Kubelet.containerManager.GetNodeAllocatableReservation
+	recordEventFunc func(eventType, event, message string), // 通常为 Kubelet.recordEvent
+	runningInUserNSFunc func() *bool, // 通常为 Kubelet.runningInUserNS
 	localStorageCapacityIsolation bool,
 ) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
 		logger := klog.FromContext(ctx)
-		// Note: avoid blindly overwriting the capacity in case opaque
-		//       resources are being advertised.
+		// 注意：不要盲目覆盖 capacity，以免丢失 opaque 资源等外部声明的容量。
 		if node.Status.Capacity == nil {
 			node.Status.Capacity = v1.ResourceList{}
 		}
@@ -219,8 +214,6 @@ func MachineInfo(nodeName string,
 		// cAdvisor locally, e.g. for test-cmd.sh, and in integration test.
 		info, err := machineInfoFunc()
 		if err != nil {
-			// TODO(roberthbailey): This is required for test-cmd.sh to pass.
-			// See if the test should be updated instead.
 			node.Status.Capacity[v1.ResourceCPU] = *resource.NewMilliQuantity(0, resource.DecimalSI)
 			node.Status.Capacity[v1.ResourceMemory] = resource.MustParse("0Gi")
 			node.Status.Capacity[v1.ResourcePods] = *resource.NewQuantity(int64(maxPods), resource.DecimalSI)
@@ -233,6 +226,7 @@ func MachineInfo(nodeName string,
 				node.Status.Capacity[rName] = rCap
 			}
 
+			// podsPerCore 为正时 Pod 容量取 min(核数*podsPerCore, maxPods)。
 			if podsPerCore > 0 {
 				node.Status.Capacity[v1.ResourcePods] = *resource.NewQuantity(
 					int64(math.Min(float64(info.NumCores*podsPerCore), float64(maxPods))), resource.DecimalSI)
@@ -246,7 +240,7 @@ func MachineInfo(nodeName string,
 				// TODO: This requires a transaction, either both node status is updated
 				// and event is recorded or neither should happen, see issue #6055.
 				//
-				// Only emit one reboot event. recordEventFunc queues events and can emit many superfluous reboot events
+				// 只上报一次重启事件：recordEventFunc 会把事件入队，可能产生大量重复重启事件。
 				rebootEvent.Do(func() {
 					recordEventFunc(v1.EventTypeWarning, events.NodeRebooted,
 						fmt.Sprintf("Node %s has been rebooted, boot id: %s", nodeName, info.BootID))
@@ -273,14 +267,12 @@ func MachineInfo(nodeName string,
 
 			for _, removedResource := range removedDevicePlugins {
 				logger.V(2).Info("Set capacity for removed resource to 0 on device removal", "device", removedResource)
-				// Set the capacity of the removed resource to 0 instead of
-				// removing the resource from the node status. This is to indicate
-				// that the resource is managed by device plugin and had been
-				// registered before.
+				// 设备插件移除后把容量置 0 而不是删掉字段：
+				// 这样既表明该资源仍由设备插件管理，
+				// 又保留“曾经注册过”的信息。
 				//
-				// This is required to differentiate the device plugin managed
-				// resources and the cluster-level resources, which are absent in
-				// node status.
+				// 这也是区分设备插件资源与集群级资源所必需的：
+				// 后者在节点状态中通常不出现。
 				node.Status.Capacity[v1.ResourceName(removedResource)] = *resource.NewQuantity(int64(0), resource.DecimalSI)
 			}
 
@@ -295,12 +287,11 @@ func MachineInfo(nodeName string,
 			}
 		}
 
-		// Set Allocatable.
+		// 设置 Allocatable。
 		if node.Status.Allocatable == nil {
 			node.Status.Allocatable = make(v1.ResourceList)
 		}
-		// Remove extended resources from allocatable that are no longer
-		// present in capacity.
+		// 从 Allocatable 中移除 Capacity 里已不存在的扩展资源。
 		for k := range node.Status.Allocatable {
 			_, found := node.Status.Capacity[k]
 			if !found && v1helper.IsExtendedResourceName(k) {
@@ -314,7 +305,7 @@ func MachineInfo(nodeName string,
 				value.Sub(res)
 			}
 			if value.Sign() < 0 {
-				// Negative Allocatable resources don't make sense.
+				// Allocatable 为负数没有意义，归零。
 				value.Set(0)
 			}
 			node.Status.Allocatable[k] = value
@@ -326,14 +317,14 @@ func MachineInfo(nodeName string,
 			}
 			node.Status.Allocatable[k] = v
 		}
-		// for every huge page reservation, we need to remove it from allocatable memory
+		// 巨页预留需要从可分配内存中扣除，否则内存会被重复计算。
 		for k, v := range node.Status.Capacity {
 			if v1helper.IsHugePageResourceName(k) {
 				allocatableMemory := node.Status.Allocatable[v1.ResourceMemory]
 				value := v.DeepCopy()
 				allocatableMemory.Sub(value)
 				if allocatableMemory.Sign() < 0 {
-					// Negative Allocatable resources don't make sense.
+					// Allocatable 为负数没有意义，归零。
 					allocatableMemory.Set(0)
 				}
 				node.Status.Allocatable[v1.ResourceMemory] = allocatableMemory
@@ -343,10 +334,10 @@ func MachineInfo(nodeName string,
 	}
 }
 
-// VersionInfo returns a Setter that updates version-related information on the node.
-func VersionInfo(versionInfoFunc func() (*cadvisorapi.VersionInfo, error), // typically Kubelet.cadvisor.VersionInfo
-	runtimeTypeFunc func() string, // typically Kubelet.containerRuntime.Type
-	runtimeVersionFunc func(ctx context.Context) (kubecontainer.Version, error), // typically Kubelet.containerRuntime.Version
+// VersionInfo 返回一个更新节点版本信息的 Setter。
+func VersionInfo(versionInfoFunc func() (*cadvisorapi.VersionInfo, error), // 通常为 Kubelet.cadvisor.VersionInfo
+	runtimeTypeFunc func() string, // 通常为 Kubelet.containerRuntime.Type
+	runtimeVersionFunc func(ctx context.Context) (kubecontainer.Version, error), // 通常为 Kubelet.containerRuntime.Version
 ) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
 		verinfo, err := versionInfoFunc()
@@ -366,7 +357,7 @@ func VersionInfo(versionInfoFunc func() (*cadvisorapi.VersionInfo, error), // ty
 		node.Status.NodeInfo.KubeletVersion = version.Get().String()
 
 		if utilfeature.DefaultFeatureGate.Enabled(features.DisableNodeKubeProxyVersion) {
-			// This field is deprecated and should be cleared if it was previously set.
+			// 该字段已弃用；若此前被设置过，应主动清空。
 			node.Status.NodeInfo.KubeProxyVersion = ""
 		} else {
 			node.Status.NodeInfo.KubeProxyVersion = version.Get().String()
@@ -376,7 +367,7 @@ func VersionInfo(versionInfoFunc func() (*cadvisorapi.VersionInfo, error), // ty
 	}
 }
 
-// DaemonEndpoints returns a Setter that updates the daemon endpoints on the node.
+// DaemonEndpoints 返回一个更新节点 DaemonEndpoints 的 Setter。
 func DaemonEndpoints(daemonEndpoints *v1.NodeDaemonEndpoints) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
 		node.Status.DaemonEndpoints = *daemonEndpoints
@@ -384,31 +375,31 @@ func DaemonEndpoints(daemonEndpoints *v1.NodeDaemonEndpoints) Setter {
 	}
 }
 
-// Images returns a Setter that updates the images on the node.
-// imageListFunc is expected to return a list of images sorted in descending order by image size.
-// nodeStatusMaxImages is ignored if set to -1.
+// Images 返回一个更新节点镜像列表的 Setter。
+// imageListFunc 应返回按镜像大小降序排列的列表。
+// nodeStatusMaxImages 为 -1 时不限制上报数量。
 func Images(nodeStatusMaxImages int32,
-	imageListFunc func() ([]kubecontainer.Image, error), // typically Kubelet.imageManager.GetImageList
+	imageListFunc func() ([]kubecontainer.Image, error), // 通常为 Kubelet.imageManager.GetImageList
 ) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
-		// Update image list of this node
+		// 更新节点的镜像列表。
 		var imagesOnNode []v1.ContainerImage
 		containerImages, err := imageListFunc()
 		if err != nil {
 			node.Status.Images = imagesOnNode
 			return fmt.Errorf("error getting image list: %v", err)
 		}
-		// we expect imageListFunc to return a sorted list, so we just need to truncate
+		// imageListFunc 已按镜像大小降序返回，这里只需截断。
 		if int(nodeStatusMaxImages) > -1 &&
 			int(nodeStatusMaxImages) < len(containerImages) {
 			containerImages = containerImages[0:nodeStatusMaxImages]
 		}
 
 		for _, image := range containerImages {
-			// make a copy to avoid modifying slice members of the image items in the list
+			// 先复制名称切片，避免修改镜像列表元素本身。
 			names := append([]string{}, image.RepoDigests...)
 			names = append(names, image.RepoTags...)
-			// Report up to MaxNamesPerImageInNodeStatus names per image.
+			// 每个镜像最多上报 MaxNamesPerImageInNodeStatus 个名称。
 			if len(names) > MaxNamesPerImageInNodeStatus {
 				names = names[0:MaxNamesPerImageInNodeStatus]
 			}
@@ -423,7 +414,7 @@ func Images(nodeStatusMaxImages int32,
 	}
 }
 
-// GoRuntime returns a Setter that sets GOOS and GOARCH on the node.
+// GoRuntime 返回一个写入 GOOS/GOARCH 的 Setter。
 func GoRuntime() Setter {
 	return func(ctx context.Context, node *v1.Node) error {
 		node.Status.NodeInfo.OperatingSystem = goruntime.GOOS
@@ -432,7 +423,7 @@ func GoRuntime() Setter {
 	}
 }
 
-// NodeFeatures returns a Setter that sets NodeFeatures on the node.
+// NodeFeatures 返回一个写入节点特性（NodeFeatures）的 Setter。
 func NodeFeatures(featuresGetter func() *kubecontainer.RuntimeFeatures) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
 		if !utilfeature.DefaultFeatureGate.Enabled(features.SupplementalGroupsPolicy) {
@@ -449,7 +440,7 @@ func NodeFeatures(featuresGetter func() *kubecontainer.RuntimeFeatures) Setter {
 	}
 }
 
-// RuntimeHandlers returns a Setter that sets RuntimeHandlers on the node.
+// RuntimeHandlers 返回一个写入节点 runtime handler 信息的 Setter。
 func RuntimeHandlers(fn func() []kubecontainer.RuntimeHandler) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
 		if !utilfeature.DefaultFeatureGate.Enabled(features.RecursiveReadOnlyMounts) && !utilfeature.DefaultFeatureGate.Enabled(features.UserNamespacesSupport) {
@@ -470,22 +461,21 @@ func RuntimeHandlers(fn func() []kubecontainer.RuntimeHandler) Setter {
 	}
 }
 
-// ReadyCondition returns a Setter that updates the v1.NodeReady condition on the node.
+// ReadyCondition 返回一个更新节点 NodeReady 条件的 Setter。
 func ReadyCondition(
-	nowFunc func() time.Time, // typically Kubelet.clock.Now
-	runtimeErrorsFunc func() error, // typically Kubelet.runtimeState.runtimeErrors
-	networkErrorsFunc func() error, // typically Kubelet.runtimeState.networkErrors
-	storageErrorsFunc func() error, // typically Kubelet.runtimeState.storageErrors
-	cmStatusFunc func() cm.Status, // typically Kubelet.containerManager.Status
-	nodeShutdownManagerErrorsFunc func() error, // typically kubelet.shutdownManager.errors.
-	recordEventFunc func(logger klog.Logger, eventType, event string), // typically Kubelet.recordNodeStatusEvent
+	nowFunc func() time.Time, // 通常为 Kubelet.clock.Now
+	runtimeErrorsFunc func() error, // 通常为 Kubelet.runtimeState.runtimeErrors
+	networkErrorsFunc func() error, // 通常为 Kubelet.runtimeState.networkErrors
+	storageErrorsFunc func() error, // 通常为 Kubelet.runtimeState.storageErrors
+	cmStatusFunc func() cm.Status, // 通常为 Kubelet.containerManager.Status
+	nodeShutdownManagerErrorsFunc func() error, // 通常为 kubelet.shutdownManager.errors.
+	recordEventFunc func(logger klog.Logger, eventType, event string), // 通常为 Kubelet.recordNodeStatusEvent
 	localStorageCapacityIsolation bool,
 ) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
 		logger := klog.FromContext(ctx)
-		// NOTE(aaronlevy): NodeReady condition needs to be the last in the list of node conditions.
-		// This is due to an issue with version skewed kubelet and master components.
-		// ref: https://github.com/kubernetes/kubernetes/issues/16961
+		// NOTE(aaronlevy): NodeReady 必须位于节点条件列表的最后。
+		// 这是为了兼容 kubelet 与 master 版本不一致的情况。
 		currentTime := metav1.NewTime(nowFunc())
 		newNodeReadyCondition := v1.NodeCondition{
 			Type:              v1.NodeReady,
@@ -518,12 +508,13 @@ func ReadyCondition(
 			}
 		}
 
-		// Record any soft requirements that were not met in the container manager.
+		// 记录容器管理器未满足的软性要求。
 		status := cmStatusFunc()
 		if status.SoftRequirements != nil {
 			newNodeReadyCondition.Message = fmt.Sprintf("%s. WARNING: %s", newNodeReadyCondition.Message, status.SoftRequirements.Error())
 		}
 
+		// 状态未翻转时保留原 LastTransitionTime，避免无意义地刷新翻转时间。
 		readyConditionUpdated := false
 		needToRecordEvent := false
 		for i := range node.Status.Conditions {
@@ -556,17 +547,18 @@ func ReadyCondition(
 	}
 }
 
-// MemoryPressureCondition returns a Setter that updates the v1.NodeMemoryPressure condition on the node.
-func MemoryPressureCondition(nowFunc func() time.Time, // typically Kubelet.clock.Now
-	pressureFunc func() bool, // typically Kubelet.evictionManager.IsUnderMemoryPressure
-	recordEventFunc func(logger klog.Logger, eventType, event string), // typically Kubelet.recordNodeStatusEvent
+// MemoryPressureCondition 返回一个更新 NodeMemoryPressure 条件的 Setter。
+func MemoryPressureCondition(nowFunc func() time.Time, // 通常为 Kubelet.clock.Now
+	pressureFunc func() bool, // 通常为 Kubelet.evictionManager.IsUnderMemoryPressure
+	recordEventFunc func(logger klog.Logger, eventType, event string), // 通常为 Kubelet.recordNodeStatusEvent
 ) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
 		logger := klog.FromContext(ctx)
 		currentTime := metav1.NewTime(nowFunc())
 		var condition *v1.NodeCondition
 
-		// Check if NodeMemoryPressure condition already exists and if it does, just pick it up for update.
+		// 若 NodeMemoryPressure 条件已存在，直接复用其指针进行更新。
+		// 复用既有条件的指针，后续修改才能直接反映到 node.Status.Conditions。
 		for i := range node.Status.Conditions {
 			if node.Status.Conditions[i].Type == v1.NodeMemoryPressure {
 				condition = &node.Status.Conditions[i]
@@ -574,27 +566,24 @@ func MemoryPressureCondition(nowFunc func() time.Time, // typically Kubelet.cloc
 		}
 
 		newCondition := false
-		// If the NodeMemoryPressure condition doesn't exist, create one
+		// 条件不存在时先创建一个占位条件。
 		if condition == nil {
 			condition = &v1.NodeCondition{
 				Type:   v1.NodeMemoryPressure,
 				Status: v1.ConditionUnknown,
 			}
-			// cannot be appended to node.Status.Conditions here because it gets
-			// copied to the slice. So if we append to the slice here none of the
-			// updates we make below are reflected in the slice.
+			// 此处不能立即 append：condition 是局部副本，
+			// 立即 append 后，下面做的修改不会反映到切片中。
 			newCondition = true
 		}
 
-		// Update the heartbeat time
+		// 更新心跳时间。
 		condition.LastHeartbeatTime = currentTime
 
-		// Note: The conditions below take care of the case when a new NodeMemoryPressure condition is
-		// created and as well as the case when the condition already exists. When a new condition
-		// is created its status is set to v1.ConditionUnknown which matches either
-		// condition.Status != v1.ConditionTrue or
-		// condition.Status != v1.ConditionFalse in the conditions below depending on whether
-		// the kubelet is under memory pressure or not.
+		// 下面逻辑同时处理“新建条件”和“已有条件”两种情况。
+		// 新建条件的初始状态为 v1.ConditionUnknown，
+		// 因此必然与 True/False 都不相等，
+		// 从而会根据当前是否受压进入对应的分支。
 		if pressureFunc() {
 			if condition.Status != v1.ConditionTrue {
 				condition.Status = v1.ConditionTrue
@@ -618,17 +607,17 @@ func MemoryPressureCondition(nowFunc func() time.Time, // typically Kubelet.cloc
 	}
 }
 
-// PIDPressureCondition returns a Setter that updates the v1.NodePIDPressure condition on the node.
-func PIDPressureCondition(nowFunc func() time.Time, // typically Kubelet.clock.Now
-	pressureFunc func() bool, // typically Kubelet.evictionManager.IsUnderPIDPressure
-	recordEventFunc func(logger klog.Logger, eventType, event string), // typically Kubelet.recordNodeStatusEvent
+// PIDPressureCondition 返回一个更新 NodePIDPressure 条件的 Setter。
+func PIDPressureCondition(nowFunc func() time.Time, // 通常为 Kubelet.clock.Now
+	pressureFunc func() bool, // 通常为 Kubelet.evictionManager.IsUnderPIDPressure
+	recordEventFunc func(logger klog.Logger, eventType, event string), // 通常为 Kubelet.recordNodeStatusEvent
 ) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
 		logger := klog.FromContext(ctx)
 		currentTime := metav1.NewTime(nowFunc())
 		var condition *v1.NodeCondition
 
-		// Check if NodePIDPressure condition already exists and if it does, just pick it up for update.
+		// 若 NodePIDPressure 条件已存在，直接复用其指针进行更新。
 		for i := range node.Status.Conditions {
 			if node.Status.Conditions[i].Type == v1.NodePIDPressure {
 				condition = &node.Status.Conditions[i]
@@ -636,27 +625,24 @@ func PIDPressureCondition(nowFunc func() time.Time, // typically Kubelet.clock.N
 		}
 
 		newCondition := false
-		// If the NodePIDPressure condition doesn't exist, create one
+		// 条件不存在时先创建一个占位条件。
 		if condition == nil {
 			condition = &v1.NodeCondition{
 				Type:   v1.NodePIDPressure,
 				Status: v1.ConditionUnknown,
 			}
-			// cannot be appended to node.Status.Conditions here because it gets
-			// copied to the slice. So if we append to the slice here none of the
-			// updates we make below are reflected in the slice.
+			// 此处不能立即 append：condition 是局部副本，
+			// 立即 append 后，下面做的修改不会反映到切片中。
 			newCondition = true
 		}
 
-		// Update the heartbeat time
+		// 更新心跳时间。
 		condition.LastHeartbeatTime = currentTime
 
-		// Note: The conditions below take care of the case when a new NodePIDPressure condition is
-		// created and as well as the case when the condition already exists. When a new condition
-		// is created its status is set to v1.ConditionUnknown which matches either
-		// condition.Status != v1.ConditionTrue or
-		// condition.Status != v1.ConditionFalse in the conditions below depending on whether
-		// the kubelet is under PID pressure or not.
+		// 下面逻辑同时处理“新建条件”和“已有条件”两种情况。
+		// 新建条件的初始状态为 v1.ConditionUnknown，
+		// 因此必然与 True/False 都不相等，
+		// 从而会根据当前是否受压进入对应的分支。
 		if pressureFunc() {
 			if condition.Status != v1.ConditionTrue {
 				condition.Status = v1.ConditionTrue
@@ -680,17 +666,17 @@ func PIDPressureCondition(nowFunc func() time.Time, // typically Kubelet.clock.N
 	}
 }
 
-// DiskPressureCondition returns a Setter that updates the v1.NodeDiskPressure condition on the node.
-func DiskPressureCondition(nowFunc func() time.Time, // typically Kubelet.clock.Now
-	pressureFunc func() bool, // typically Kubelet.evictionManager.IsUnderDiskPressure
-	recordEventFunc func(logger klog.Logger, eventType, event string), // typically Kubelet.recordNodeStatusEvent
+// DiskPressureCondition 返回一个更新 NodeDiskPressure 条件的 Setter。
+func DiskPressureCondition(nowFunc func() time.Time, // 通常为 Kubelet.clock.Now
+	pressureFunc func() bool, // 通常为 Kubelet.evictionManager.IsUnderDiskPressure
+	recordEventFunc func(logger klog.Logger, eventType, event string), // 通常为 Kubelet.recordNodeStatusEvent
 ) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
 		logger := klog.FromContext(ctx)
 		currentTime := metav1.NewTime(nowFunc())
 		var condition *v1.NodeCondition
 
-		// Check if NodeDiskPressure condition already exists and if it does, just pick it up for update.
+		// 若 NodeDiskPressure 条件已存在，直接复用其指针进行更新。
 		for i := range node.Status.Conditions {
 			if node.Status.Conditions[i].Type == v1.NodeDiskPressure {
 				condition = &node.Status.Conditions[i]
@@ -698,27 +684,24 @@ func DiskPressureCondition(nowFunc func() time.Time, // typically Kubelet.clock.
 		}
 
 		newCondition := false
-		// If the NodeDiskPressure condition doesn't exist, create one
+		// 条件不存在时先创建一个占位条件。
 		if condition == nil {
 			condition = &v1.NodeCondition{
 				Type:   v1.NodeDiskPressure,
 				Status: v1.ConditionUnknown,
 			}
-			// cannot be appended to node.Status.Conditions here because it gets
-			// copied to the slice. So if we append to the slice here none of the
-			// updates we make below are reflected in the slice.
+			// 此处不能立即 append：condition 是局部副本，
+			// 立即 append 后，下面做的修改不会反映到切片中。
 			newCondition = true
 		}
 
-		// Update the heartbeat time
+		// 更新心跳时间。
 		condition.LastHeartbeatTime = currentTime
 
-		// Note: The conditions below take care of the case when a new NodeDiskPressure condition is
-		// created and as well as the case when the condition already exists. When a new condition
-		// is created its status is set to v1.ConditionUnknown which matches either
-		// condition.Status != v1.ConditionTrue or
-		// condition.Status != v1.ConditionFalse in the conditions below depending on whether
-		// the kubelet is under disk pressure or not.
+		// 下面逻辑同时处理“新建条件”和“已有条件”两种情况。
+		// 新建条件的初始状态为 v1.ConditionUnknown，
+		// 因此必然与 True/False 都不相等，
+		// 从而会根据当前是否受压进入对应的分支。
 		if pressureFunc() {
 			if condition.Status != v1.ConditionTrue {
 				condition.Status = v1.ConditionTrue
@@ -742,12 +725,12 @@ func DiskPressureCondition(nowFunc func() time.Time, // typically Kubelet.clock.
 	}
 }
 
-// VolumesInUse returns a Setter that updates the volumes in use on the node.
-func VolumesInUse(syncedFunc func() bool, // typically Kubelet.volumeManager.ReconcilerStatesHasBeenSynced
-	volumesInUseFunc func() []v1.UniqueVolumeName, // typically Kubelet.volumeManager.GetVolumesInUse
+// VolumesInUse 返回一个更新节点在用卷列表的 Setter。
+func VolumesInUse(syncedFunc func() bool, // 通常为 Kubelet.volumeManager.ReconcilerStatesHasBeenSynced
+	volumesInUseFunc func() []v1.UniqueVolumeName, // 通常为 Kubelet.volumeManager.GetVolumesInUse
 ) Setter {
 	return func(ctx context.Context, node *v1.Node) error {
-		// Make sure to only update node status after reconciler starts syncing up states
+		// 必须等 reconciler 完成状态同步后再写 VolumesInUse，否则可能写入不完整状态。
 		if syncedFunc() {
 			node.Status.VolumesInUse = volumesInUseFunc()
 		}

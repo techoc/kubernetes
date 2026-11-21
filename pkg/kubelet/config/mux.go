@@ -24,26 +24,26 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// merger 抽象把单个来源的配置更新合并进整体配置的能力。
 type merger interface {
-	// Invoked when a change from a source is received.  May also function as an incremental
-	// merger if you wish to consume changes incrementally.  Must be reentrant when more than
-	// one source is defined.
+	// Merge 在收到某个来源的变更时调用。
+	// 也可以实现为增量合并；定义多个来源时必须可重入。
 	Merge(ctx context.Context, source string, update sourceUpdate) error
 }
 
-// mux is a class for merging configuration from multiple sources.  Changes are
-// pushed via channels and sent to the merge function.
+// mux 负责合并多个来源的配置。
+// 变更通过通道推送，并交给 merger 合并。
 type mux struct {
-	// Invoked when an update is sent to a source.
+	// merger 在收到某个来源的更新时被调用。
 	merger merger
 
-	// Sources and their lock.
+	// sourceLock 保护 sources 映射。
 	sourceLock sync.RWMutex
-	// Maps source names to channels
+	// sources 把来源名称映射到对应通道。
 	sources map[string]chan sourceUpdate
 }
 
-// newMux creates a new mux that can merge changes from multiple sources.
+// newMux 创建可合并多个来源变更的 mux。
 func newMux(merger merger) *mux {
 	mux := &mux{
 		sources: make(map[string]chan sourceUpdate),
@@ -52,17 +52,17 @@ func newMux(merger merger) *mux {
 	return mux
 }
 
-// ChannelWithContext returns a channel where a configuration source
-// can send updates of new configurations. Multiple calls with the same
-// source will return the same channel. This allows change and state based sources
-// to use the same channel. Different source names however will be treated as a
-// union.
+// ChannelWithContext 返回配置来源发送更新的通道。
+// 相同来源多次调用会返回同一个通道，便于变更型与状态型来源共用；
+// 不同来源名称则视为并集。
 func (m *mux) ChannelWithContext(ctx context.Context, source string) chan sourceUpdate {
+	// 空名称无法区分来源，直接 panic。
 	if len(source) == 0 {
 		panic("Channel given an empty name")
 	}
 	m.sourceLock.Lock()
 	defer m.sourceLock.Unlock()
+	// 同名来源复用同一个通道。
 	channel, exists := m.sources[source]
 	if exists {
 		return channel
@@ -70,10 +70,12 @@ func (m *mux) ChannelWithContext(ctx context.Context, source string) chan source
 	newChannel := make(chan sourceUpdate)
 	m.sources[source] = newChannel
 
+	// 每个来源启动一个监听协程。
 	go wait.UntilWithContext(ctx, func(ctx context.Context) { m.listen(ctx, source, newChannel) }, 0)
 	return newChannel
 }
 
+// listen 持续消费来源通道中的更新并交给 merger。
 func (m *mux) listen(ctx context.Context, source string, listenChannel <-chan sourceUpdate) {
 	logger := klog.FromContext(ctx)
 	for update := range listenChannel {

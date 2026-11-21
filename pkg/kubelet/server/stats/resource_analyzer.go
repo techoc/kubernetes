@@ -23,15 +23,16 @@ import (
 	"k8s.io/client-go/tools/record"
 )
 
-// ResourceAnalyzer provides statistics on node resource consumption
+// ResourceAnalyzer 提供节点资源消耗统计。
 type ResourceAnalyzer interface {
+	// Start 启动资源分析所需的后台任务。
 	Start(context.Context)
 
 	fsResourceAnalyzerInterface
 	SummaryProvider
 }
 
-// resourceAnalyzer implements ResourceAnalyzer
+// resourceAnalyzer 是 ResourceAnalyzer 的实现。
 type resourceAnalyzer struct {
 	*fsResourceAnalyzer
 	SummaryProvider
@@ -39,14 +40,14 @@ type resourceAnalyzer struct {
 
 var _ ResourceAnalyzer = &resourceAnalyzer{}
 
-// NewResourceAnalyzer returns a new ResourceAnalyzer
+// NewResourceAnalyzer 创建新的 ResourceAnalyzer。
 func NewResourceAnalyzer(ctx context.Context, statsProvider Provider, calVolumeFrequency time.Duration, eventRecorder record.EventRecorder) ResourceAnalyzer {
 	fsAnalyzer := newFsResourceAnalyzer(statsProvider, calVolumeFrequency, eventRecorder)
 	summaryProvider := NewSummaryProvider(ctx, statsProvider)
 	return &resourceAnalyzer{fsAnalyzer, summaryProvider}
 }
 
-// Start starts background functions necessary for the ResourceAnalyzer to function
+// Start 启动 ResourceAnalyzer 运行所需的后台任务。
 func (ra *resourceAnalyzer) Start(ctx context.Context) {
 	ra.fsResourceAnalyzer.Start(ctx)
 }

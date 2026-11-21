@@ -14,12 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package qos contains helper functions for quality of service.
-// For each resource (memory, CPU) Kubelet supports three classes of containers.
-// Memory guaranteed containers will receive the highest priority and will get all the resources
-// they need.
-// Burstable containers will be guaranteed their request and can "burst" and use more resources
-// when available.
-// Best-Effort containers, which don't specify a request, can use resources only if not being used
-// by other pods.
+// Package qos 包含服务质量相关的辅助函数。
+// 对每种资源（内存、CPU），kubelet 支持三类容器：
+// Guaranteed 容器优先级最高，能获得其所需的全部资源；
+// Burstable 容器保证获得 request，并可在资源富余时突发使用更多资源；
+// Best-Effort 容器未指定 request，只能使用其他 Pod 未占用的资源。
 package qos

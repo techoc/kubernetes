@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package eviction is responsible for enforcing eviction thresholds to maintain
-// node stability.
+// Package eviction 负责执行驱逐阈值，以维持节点稳定。
 package eviction

@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package store hosts a Store interface and its implementations.
+// Package store 定义 Store 接口及其实现。
 package store

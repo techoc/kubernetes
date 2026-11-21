@@ -44,7 +44,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/status"
 )
 
-// podStatusManagerStateFile is the file name where status manager stores its state
+// podStatusManagerStateFile 是 status manager 保存其状态的文件名。
 const (
 	allocatedPodsStateFile = "allocated_pods_state"
 
@@ -60,60 +60,57 @@ const (
 	triggerReasonPeriodic = "periodic_retry"
 )
 
-// AllocationManager tracks pod resource allocations.
+// AllocationManager 跟踪 Pod 的资源分配。
 type Manager interface {
-	// GetContainerResourceAllocation returns the AllocatedResources value for the container
+	// GetContainerResourceAllocation 返回该容器对应的 AllocatedResources 值。
 	GetContainerResourceAllocation(podUID types.UID, containerName string) (v1.ResourceRequirements, bool)
 
-	// GetPodLevelResourceAllocation returns the AllocatedResources value for the container
+	// GetPodLevelResourceAllocation 返回该 Pod 级别的 AllocatedResources 值。
 	GetPodLevelResourceAllocation(podUID types.UID) (*v1.ResourceRequirements, bool)
 
-	// UpdatePodFromAllocation overwrites the pod spec with the allocation.
-	// This function does a deep copy only if updates are needed.
-	// Returns the updated (or original) pod, and whether there was an allocation stored.
+	// UpdatePodFromAllocation 用分配信息覆盖 Pod spec。
+	// 仅在确有更新需要时才执行深拷贝。
+	// 返回更新后（或原）的 Pod，以及是否存在已存储的分配。
 	UpdatePodFromAllocation(pod *v1.Pod) (*v1.Pod, bool)
 
-	// SetAllocatedResources checkpoints the resources allocated to a pod's containers.
+	// SetAllocatedResources 将 Pod 各容器已分配的资源写入检查点。
 	SetAllocatedResources(logger klog.Logger, allocatedPod *v1.Pod) error
 
-	// AddPodAdmitHandlers adds the admit handlers to the allocation manager.
-	// TODO: See if we can remove this and just add them in the allocation manager constructor.
+	// AddPodAdmitHandlers 向分配管理器注册准入处理器。
+	// TODO: 评估能否移除该方法，直接在分配管理器构造函数中添加这些处理器。
 	AddPodAdmitHandlers(handlers lifecycle.PodAdmitHandlers)
 
-	// AddPod checks if a pod can be admitted. If so, it admits the pod and updates the allocation.
-	// The function returns a boolean value indicating whether the pod
-	// can be admitted, a brief single-word reason and a message explaining why
-	// the pod cannot be admitted.
-	// allocatedPods should represent the pods that have already been admitted, along with their
-	// admitted (allocated) resources.
+	// AddPod 判断 Pod 能否准入；若能准入则更新分配。
+	// 返回值依次为：是否可准入、简短的原因词，以及 Pod 被拒绝时的原因说明。
+	// allocatedPods 表示已准入的 Pod 及其已分配（allocated）的资源。
 	AddPod(ctx context.Context, activePods []*v1.Pod, pod *v1.Pod) (ok bool, reason, message string)
 
-	// RemovePod removes any stored state for the given pod UID.
+	// RemovePod 移除指定 Pod UID 的所有已存状态。
 	RemovePod(logger klog.Logger, uid types.UID)
 
-	// RemoveOrphanedPods removes the stored state for any pods not included in the set of remaining pods.
+	// RemoveOrphanedPods 移除不在剩余 Pod 集合中的 Pod 的已存状态。
 	RemoveOrphanedPods(remainingPods sets.Set[types.UID])
 
-	// Run starts the allocation manager. This is currently only used to handle periodic retry of
-	// pending resizes.
+	// Run 启动分配管理器。当前仅用于周期性重试待处理的 resize。
 	Run(ctx context.Context)
 
-	// PushPendingResize queues a pod with a pending resize request for later reevaluation.
+	// PushPendingResize 将存在待处理 resize 请求的 Pod 加入队列，供后续重新评估。
 	PushPendingResize(logger klog.Logger, uid types.UID)
 
-	// HasPendingResizes returns whether there are currently any pending resizes.
+	// HasPendingResizes 返回当前是否存在待处理的 resize。
 	HasPendingResizes() bool
 
-	// RetryPendingResizes retries all pending resizes.
+	// RetryPendingResizes 重试所有待处理的 resize。
 	RetryPendingResizes(ctx context.Context, trigger string)
 
-	// HasPodAllocatedResources returns whether a pod has been allocated resources.
+	// HasPodAllocatedResources 返回 Pod 是否已分配资源。
 	HasPodAllocatedResources(podUID types.UID) bool
 
-	// GetAllocatedPods returns all active pods with their allocated resources.
+	// GetAllocatedPods 返回所有活跃 Pod 及其已分配的资源。
 	GetAllocatedPods() []*v1.Pod
 }
 
+// manager 是 AllocationManager 接口的实现，持有分配状态、准入处理器与待处理 resize 队列。
 type manager struct {
 	allocated state.State
 
@@ -132,6 +129,7 @@ type manager struct {
 	recorder record.EventRecorderLogger
 }
 
+// NewManager 创建将分配状态持久化到 checkpoint 目录的分配管理器。
 func NewManager(checkpointDirectory string,
 	statusManager status.Manager,
 	triggerPodSync func(context.Context, *v1.Pod),
@@ -156,6 +154,8 @@ func NewManager(checkpointDirectory string,
 	}
 }
 
+// newStateImpl 按 InPlacePodVerticalScaling 特性门控选择状态检查点实现；
+// 初始化失败属于致命且不可恢复的错误，直接 panic。
 func newStateImpl(logger klog.Logger, checkpointDirectory, checkpointName string) state.State {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) {
 		return state.NewNoopStateCheckpoint()
@@ -163,7 +163,7 @@ func newStateImpl(logger klog.Logger, checkpointDirectory, checkpointName string
 
 	stateImpl, err := state.NewStateCheckpoint(logger, checkpointDirectory, checkpointName)
 	if err != nil {
-		// This is a critical, non-recoverable failure.
+		// 这是致命且不可恢复的失败。
 		logger.Error(err, "Failed to initialize allocation checkpoint manager",
 			"checkpointPath", filepath.Join(checkpointDirectory, checkpointName))
 		panic(err)
@@ -172,8 +172,8 @@ func newStateImpl(logger klog.Logger, checkpointDirectory, checkpointName string
 	return stateImpl
 }
 
-// NewInMemoryManager returns an allocation manager that doesn't persist state.
-// For testing purposes only!
+// NewInMemoryManager 返回一个不持久化状态的分配管理器。
+// 仅供测试使用！
 func NewInMemoryManager(
 	logger klog.Logger,
 	statusManager status.Manager,
@@ -198,8 +198,9 @@ func NewInMemoryManager(
 	}
 }
 
+// Run 启动后台协程，周期性检查并处理待处理的 resize。
 func (m *manager) Run(ctx context.Context) {
-	// Start a goroutine to periodically check for pending resizes and process them if needed.
+	// 启动一个协程，周期性检查待处理 resize 并在需要时处理。
 	go func() {
 		logger := klog.FromContext(ctx)
 		for {
@@ -217,10 +218,13 @@ func (m *manager) Run(ctx context.Context) {
 	}()
 }
 
+// RetryPendingResizes 以指定触发原因重试所有待处理 resize（对外入口，实际逻辑在 retryPendingResizes）。
 func (m *manager) RetryPendingResizes(ctx context.Context, trigger string) {
 	m.retryPendingResizes(ctx, trigger)
 }
 
+// retryPendingResizes 在持有 allocationMutex 的情况下重试所有待处理 resize，
+// 返回本次成功完成 resize 的 Pod 列表；仍在等待或失败的 Pod 会重新入队。
 func (m *manager) retryPendingResizes(ctx context.Context, trigger string) []*v1.Pod {
 	logger := klog.FromContext(ctx)
 	m.allocationMutex.Lock()
@@ -237,7 +241,7 @@ func (m *manager) retryPendingResizes(ctx context.Context, trigger string) []*v1
 	var newPendingResizes []types.UID
 	var successfulResizes []*v1.Pod
 
-	// Retry all pending resizes.
+	// 逐一重试所有待处理的 resize。
 	for _, uid := range m.podsWithPendingResizes {
 		pod, found := m.getPodByUID(uid)
 		if !found {
@@ -266,7 +270,7 @@ func (m *manager) retryPendingResizes(ctx context.Context, trigger string) []*v1
 			}
 		}
 
-		// If the pod resize status has changed, we need to update the pod status.
+		// resize 状态发生变化时，需要触发 Pod 状态同步。
 		newResizeStatus := m.statusManager.GetPodResizeConditions(uid)
 		if resizeAllocated || !apiequality.Semantic.DeepEqual(oldResizeStatus, newResizeStatus) {
 			m.triggerPodSync(ctx, pod)
@@ -277,27 +281,28 @@ func (m *manager) retryPendingResizes(ctx context.Context, trigger string) []*v1
 	return successfulResizes
 }
 
+// PushPendingResize 将指定 Pod 加入待处理 resize 队列：队列内去重，并按优先级重新排序。
 func (m *manager) PushPendingResize(logger klog.Logger, uid types.UID) {
 	m.allocationMutex.Lock()
 	defer m.allocationMutex.Unlock()
 
 	for _, p := range m.podsWithPendingResizes {
 		if p == uid {
-			// Pod is already in the pending resizes queue.
+			// 该 Pod 已在待处理 resize 队列中，无需重复添加。
 			return
 		}
 	}
 
-	// Add the pod to the pending resizes list and sort by priority.
+	// 将 Pod 追加进队列并按优先级排序。
 	m.podsWithPendingResizes = append(m.podsWithPendingResizes, uid)
 	m.sortPendingResizes(logger)
 }
 
-// sortPendingResizes sorts the list of pending resizes:
-// - First, prioritizing resizes that do not increase requests.
-// - Second, based on the pod's PriorityClass.
-// - Third, based on the pod's QoS class.
-// - Last, prioritizing resizes that have been in the deferred state the longest.
+// sortPendingResizes 对待处理 resize 队列排序：
+// - 首先，优先不增加资源请求的 resize；
+// - 其次，按 Pod 的 PriorityClass 排序；
+// - 再次，按 Pod 的 QoS 等级排序；
+// - 最后，优先处于 deferred 状态时间最长的 resize。
 func (m *manager) sortPendingResizes(logger klog.Logger) {
 	var pendingPods []*v1.Pod
 	for _, uid := range m.podsWithPendingResizes {
@@ -310,8 +315,7 @@ func (m *manager) sortPendingResizes(logger klog.Logger) {
 	}
 
 	slices.SortFunc(pendingPods, func(firstPod, secondPod *v1.Pod) int {
-		// First, resizes that don't increase requests will be prioritized.
-		// These resizes are expected to always succeed.
+		// 第一优先级：不增加资源请求的 resize，这类 resize 预期总能成功。
 		firstPodIncreasing := m.isResizeIncreasingRequests(firstPod)
 		secondPodIncreasing := m.isResizeIncreasingRequests(secondPod)
 		if !firstPodIncreasing {
@@ -321,7 +325,7 @@ func (m *manager) sortPendingResizes(logger klog.Logger) {
 			return 1
 		}
 
-		// Second, pods with a higher PriorityClass will be prioritized.
+		// 第二优先级：PriorityClass 更高的 Pod 优先。
 		firstPodPriority := int32(0)
 		if firstPod.Spec.Priority != nil {
 			firstPodPriority = *firstPod.Spec.Priority
@@ -337,8 +341,8 @@ func (m *manager) sortPendingResizes(logger klog.Logger) {
 			return 1
 		}
 
-		// Third, pods with a higher QoS class will be prioritized, where guaranteed > burstable.
-		// Best effort pods don't have resource requests or limits, so we don't need to consider them here.
+		// 第三优先级：QoS 等级更高的 Pod 优先（Guaranteed > Burstable）。
+		// Best effort Pod 没有资源请求或限制，无需在此考虑。
 		firstPodQOS := v1qos.GetPodQOS(firstPod)
 		secondPodQOS := v1qos.GetPodQOS(secondPod)
 		if firstPodQOS == v1.PodQOSGuaranteed && secondPodQOS != v1.PodQOSGuaranteed {
@@ -348,8 +352,8 @@ func (m *manager) sortPendingResizes(logger klog.Logger) {
 			return 1
 		}
 
-		// If all else is the same, resize requests that have been pending longer will be
-		// evaluated first.
+		// 其余条件相同时，等待时间更长的 resize 优先评估。
+		// 以 PodResizePending 条件的最后切换时间作为等待时长的依据。
 		var firstPodLastTransitionTime *metav1.Time
 		firstPodResizeConditions := m.statusManager.GetPodResizeConditions(firstPod.UID)
 		for _, c := range firstPodResizeConditions {
@@ -382,7 +386,7 @@ func (m *manager) sortPendingResizes(logger klog.Logger) {
 	}
 }
 
-// isResizeIncreasingRequests returns true if any of the resource requests are increasing.
+// isResizeIncreasingRequests 返回资源请求是否出现增长（CPU 或内存任一增加即为 true）。
 func (m *manager) isResizeIncreasingRequests(pod *v1.Pod) bool {
 	allocatedPod, updated := m.UpdatePodFromAllocation(pod)
 	if !updated {
@@ -399,6 +403,7 @@ func (m *manager) isResizeIncreasingRequests(pod *v1.Pod) bool {
 		newRequest.Cpu().Cmp(*oldRequest.Cpu()) > 0
 }
 
+// HasPendingResizes 在锁保护下返回待处理 resize 队列是否非空。
 func (m *manager) HasPendingResizes() bool {
 	m.allocationMutex.Lock()
 	defer m.allocationMutex.Unlock()
@@ -406,20 +411,20 @@ func (m *manager) HasPendingResizes() bool {
 	return len(m.podsWithPendingResizes) > 0
 }
 
-// GetContainerResourceAllocation returns the last checkpointed AllocatedResources values
-// If checkpoint manager has not been initialized, it returns nil, false
+// GetContainerResourceAllocation 返回最近一次写入检查点的 AllocatedResources 值。
+// 若检查点管理器尚未初始化，返回 nil 与 false。
 func (m *manager) GetContainerResourceAllocation(podUID types.UID, containerName string) (v1.ResourceRequirements, bool) {
 	return m.allocated.GetContainerResources(podUID, containerName)
 }
 
-// GetPodLevelResourceAllocation returns the last checkpointed AllocatedResources values
-// If checkpoint manager has not been initialized, it returns nil, false
+// GetPodLevelResourceAllocation 返回最近一次写入检查点的 AllocatedResources 值。
+// 若检查点管理器尚未初始化，返回 nil 与 false。
 func (m *manager) GetPodLevelResourceAllocation(podUID types.UID) (*v1.ResourceRequirements, bool) {
 	return m.allocated.GetPodLevelResources(podUID)
 }
 
-// UpdatePodFromAllocation overwrites the pod spec with the allocation.
-// This function does a deep copy only if updates are needed.
+// UpdatePodFromAllocation 用分配信息覆盖 Pod spec。
+// 仅在确有更新需要时才执行深拷贝。
 func (m *manager) UpdatePodFromAllocation(pod *v1.Pod) (*v1.Pod, bool) {
 	if pod == nil {
 		return pod, false
@@ -433,6 +438,7 @@ func (m *manager) UpdatePodFromAllocation(pod *v1.Pod) (*v1.Pod, bool) {
 	return updatePodFromAllocation(pod, allocated)
 }
 
+// updatePodFromAllocation 按特性门控用分配信息覆写 Pod 的各类资源字段，返回是否发生了实际更新。
 func updatePodFromAllocation(pod *v1.Pod, allocated state.PodResourceInfo) (*v1.Pod, bool) {
 	if pod == nil {
 		return pod, false
@@ -450,14 +456,16 @@ func updatePodFromAllocation(pod *v1.Pod, allocated state.PodResourceInfo) (*v1.
 	return pod, updated
 }
 
+// updateContainerResourcesFromAllocation 用分配信息覆写普通容器与 init 容器的资源，
+// 仅在首次需要修改时才对 Pod 做一次深拷贝。
 func updateContainerResourcesFromAllocation(pod *v1.Pod, allocated state.PodResourceInfo, alreadyUpdated bool) (*v1.Pod, bool) {
 	updated := alreadyUpdated
 	containerAlloc := func(c v1.Container) (v1.ResourceRequirements, bool) {
 		if cAlloc, ok := allocated.ContainerResources[c.Name]; ok {
 			if !apiequality.Semantic.DeepEqual(c.Resources, cAlloc) {
-				// Allocation differs from pod spec, retrieve the allocation
+				// 分配与 Pod spec 不一致，取用分配值。
 				if !updated {
-					// If this is the first update to be performed, copy the pod
+					// 若这是首个待执行的更新，先深拷贝 Pod。
 					pod = pod.DeepCopy()
 					updated = true
 				}
@@ -469,23 +477,24 @@ func updateContainerResourcesFromAllocation(pod *v1.Pod, allocated state.PodReso
 
 	for i, c := range pod.Spec.Containers {
 		if cAlloc, found := containerAlloc(c); found {
-			// Allocation differs from pod spec, update
+			// 分配与 Pod spec 不一致，执行更新。
 			pod.Spec.Containers[i].Resources = cAlloc
 		}
 	}
 	for i, c := range pod.Spec.InitContainers {
 		if cAlloc, found := containerAlloc(c); found {
-			// Allocation differs from pod spec, update
+			// 分配与 Pod spec 不一致，执行更新。
 			pod.Spec.InitContainers[i].Resources = cAlloc
 		}
 	}
 	return pod, updated
 }
 
+// updatePodLevelResourcesFromAllocation 用分配信息覆写 Pod 级别的资源字段。
 func updatePodLevelResourcesFromAllocation(pod *v1.Pod, allocated state.PodResourceInfo) (*v1.Pod, bool) {
 	pAlloc := allocated.PodLevelResources
 	if !apiequality.Semantic.DeepEqual(pod.Spec.Resources, pAlloc) {
-		// Allocation differs from pod spec, retrieve the allocation
+		// 分配与 Pod spec 不一致，取用分配值并深拷贝 Pod。
 		pod = pod.DeepCopy()
 		pod.Spec.Resources = pAlloc
 		return pod, true
@@ -493,6 +502,7 @@ func updatePodLevelResourcesFromAllocation(pod *v1.Pod, allocated state.PodResou
 	return pod, false
 }
 
+// updateEmptyDirVolumeLimitsFromAllocation 用分配信息覆写内存型 emptyDir 卷的大小上限。
 func updateEmptyDirVolumeLimitsFromAllocation(pod *v1.Pod, allocated state.PodResourceInfo, alreadyUpdated bool) (*v1.Pod, bool) {
 	updated := alreadyUpdated
 	for i, vol := range pod.Spec.Volumes {
@@ -513,19 +523,19 @@ func updateEmptyDirVolumeLimitsFromAllocation(pod *v1.Pod, allocated state.PodRe
 	return pod, updated
 }
 
-// HasPodAllocatedResources returns whether a pod has been allocated resources.
+// HasPodAllocatedResources 返回 Pod 是否已分配资源。
 func (m *manager) HasPodAllocatedResources(podUID types.UID) bool {
 	_, allocated := m.allocated.GetPodResourceInfo(podUID)
 	return allocated
 }
 
-// SetAllocatedResources checkpoints the resources allocated to a pod's containers
+// SetAllocatedResources 将 Pod 各容器已分配的资源写入检查点。
 func (m *manager) SetAllocatedResources(logger klog.Logger, pod *v1.Pod) error {
 	return m.allocated.SetPodResourceInfo(logger, pod.UID, ResourceInfoForPod(pod))
 }
 
-// ResourceInfoForPod constructs a state.PodResourceInfo containing container resources,
-// memory-backed emptyDir volume limits, and pod-level resources for the given pod.
+// ResourceInfoForPod 构造给定 Pod 的 state.PodResourceInfo，包含容器资源、
+// 内存型 emptyDir 卷上限以及 Pod 级资源。
 func ResourceInfoForPod(pod *v1.Pod) state.PodResourceInfo {
 	var podAlloc state.PodResourceInfo
 	if utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodLevelResourcesVerticalScaling) && pod.Spec.Resources != nil {
@@ -556,31 +566,33 @@ func ResourceInfoForPod(pod *v1.Pod) state.PodResourceInfo {
 	return podAlloc
 }
 
+// AddPodAdmitHandlers 逐个注册传入的准入处理器。
 func (m *manager) AddPodAdmitHandlers(handlers lifecycle.PodAdmitHandlers) {
 	for _, a := range handlers {
 		m.admitHandlers.AddPodAdmitHandler(a)
 	}
 }
 
+// AddPod 在锁保护下判断 Pod 能否准入；准入成功后写入资源分配检查点。
 func (m *manager) AddPod(ctx context.Context, activePods []*v1.Pod, pod *v1.Pod) (bool, string, string) {
 	logger := klog.FromContext(ctx)
 	m.allocationMutex.Lock()
 	defer m.allocationMutex.Unlock()
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) {
-		// To handle kubelet restarts, test pod admissibility using AllocatedResources values
-		// (for cpu & memory) from checkpoint store. If found, that is the source of truth.
+		// 为处理 kubelet 重启场景，用检查点中存储的 AllocatedResources（cpu 与 memory）判断准入；
+		// 若检查点中已有数据，它即为权威来源。
 		pod, _ = m.UpdatePodFromAllocation(pod)
 	}
 
-	// Check if we can admit the pod; if so, update the allocation.
+	// 判断 Pod 是否可准入，可准入则更新分配。
 	allocatedPods := m.getAllocatedPods(activePods)
 	ok, reason, message := m.canAdmitPod(ctx, allocatedPods, pod, lifecycle.AddOperation)
 
 	if ok && utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) {
-		// Checkpoint the resource values at which the Pod has been admitted or resized.
+		// 将 Pod 准入或 resize 时的资源值写入检查点。
 		if err := m.SetAllocatedResources(logger, pod); err != nil {
-			// TODO(vinaykul,InPlacePodVerticalScaling): Can we recover from this in some way? Investigate
+			// TODO(vinaykul,InPlacePodVerticalScaling): 是否有办法从该失败中恢复？待调研。
 			logger.Error(err, "SetPodAllocation failed", "pod", klog.KObj(pod))
 		}
 	}
@@ -588,37 +600,40 @@ func (m *manager) AddPod(ctx context.Context, activePods []*v1.Pod, pod *v1.Pod)
 	return ok, reason, message
 }
 
+// RemovePod 移除指定 Pod 的分配状态。
 func (m *manager) RemovePod(logger klog.Logger, uid types.UID) {
 	if err := m.allocated.RemovePod(logger, uid); err != nil {
-		// If the deletion fails, it will be retried by RemoveOrphanedPods, so we can safely ignore the error.
+		// 删除失败会由 RemoveOrphanedPods 重试，因此可以安全忽略该错误。
 		logger.V(3).Info("Failed to delete pod allocation", "podUID", uid, "err", err)
 	}
 }
 
+// RemoveOrphanedPods 清理不属于剩余 Pod 集合的孤儿分配状态。
 func (m *manager) RemoveOrphanedPods(remainingPods sets.Set[types.UID]) {
 	m.allocated.RemoveOrphanedPods(remainingPods)
 }
 
+// handlePodResourcesResize 判断能否把分配更新为期望资源：无需更新时清除 pending 条件；
+// 可以更新时写入检查点并更新状态条件；不可行时记录 pending 条件并上报对应事件。
 func (m *manager) handlePodResourcesResize(ctx context.Context, pod *v1.Pod) (bool, error) {
 	logger := klog.FromContext(ctx)
 	_, updated := m.UpdatePodFromAllocation(pod)
 	if !updated {
-		// Desired resources == allocated resources. Pod allocation does not need to be updated.
+		// 期望资源等于已分配资源，无需更新分配。
 		m.statusManager.ClearPodResizePendingCondition(pod.UID, metrics.DeferredResizeResolutionReverted)
 		return false, nil
 	}
 
-	// Desired resources != allocated resources. Can we update the allocation to the desired resources?
+	// 期望资源与已分配资源不一致，尝试把分配更新为期望值。
 	fit, reason, message := m.canAdmitPod(ctx, m.getAllocatedPods(m.getActivePods()), pod, lifecycle.ResizeOperation)
 	if fit {
-		// Update pod resource allocation checkpoint
+		// 更新 Pod 资源分配检查点。
 		if err := m.SetAllocatedResources(logger, pod); err != nil {
 			return false, err
 		}
 		m.statusManager.ClearPodResizePendingCondition(pod.UID, metrics.DeferredResizeResolutionAccepted)
 
-		// Clear any errors that may have been surfaced from a previous resize and update the
-		// generation of the resize in-progress condition.
+		// 清除上一次 resize 可能残留的错误，并更新 resize in-progress 条件的 generation。
 		m.statusManager.ClearPodResizeInProgressCondition(pod.UID)
 		m.statusManager.SetPodResizeInProgressCondition(pod.UID, "", "", pod.Generation)
 
@@ -641,19 +656,15 @@ func (m *manager) handlePodResourcesResize(ctx context.Context, pod *v1.Pod) (bo
 	return false, nil
 }
 
-// canAdmitPod determines if a pod can be admitted, and gives a reason if it
-// cannot. "pod" is new pod, while "pods" are all admitted pods
-// The function returns a boolean value indicating whether the pod
-// can be admitted, a brief single-word reason and a message explaining why
-// the pod cannot be admitted.
-// allocatedPods should represent the pods that have already been admitted, along with their
-// admitted (allocated) resources.
+// canAdmitPod 判断 Pod 能否准入，不能准入时给出原因。其中 "pod" 是新 Pod，"pods" 是所有已准入的 Pod。
+// 返回值依次为：是否可准入、简短的原因词，以及 Pod 被拒绝时的原因说明。
+// allocatedPods 表示已准入的 Pod 及其已分配（allocated）的资源。
 func (m *manager) canAdmitPod(ctx context.Context, allocatedPods []*v1.Pod, pod *v1.Pod, operation lifecycle.Operation) (bool, string, string) {
 	logger := klog.FromContext(ctx)
-	// Filter out the pod being evaluated.
+	// 排除正在被评估的 Pod。
 	allocatedPods = slices.DeleteFunc(allocatedPods, func(p *v1.Pod) bool { return p.UID == pod.UID })
 
-	// If any handler rejects, the pod is rejected.
+	// 任一处理器拒绝，则该 Pod 被拒绝。
 	attrs := &lifecycle.PodAdmitAttributes{Pod: pod, OtherPods: allocatedPods, Operation: operation}
 	for _, podAdmitHandler := range m.admitHandlers {
 		if result := podAdmitHandler.Admit(ctx, attrs); !result.Admit {
@@ -665,6 +676,8 @@ func (m *manager) canAdmitPod(ctx context.Context, allocatedPods []*v1.Pod, pod 
 	return true, "", ""
 }
 
+// getAllocatedPods 过滤出已有分配记录的 Pod 并用分配值覆写其资源；
+// 未开启 InPlacePodVerticalScaling 时直接返回原始活跃 Pod 列表。
 func (m *manager) getAllocatedPods(activePods []*v1.Pod) []*v1.Pod {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) {
 		return activePods
@@ -672,8 +685,7 @@ func (m *manager) getAllocatedPods(activePods []*v1.Pod) []*v1.Pod {
 
 	allocatedPods := make([]*v1.Pod, 0, len(activePods))
 	for _, pod := range activePods {
-		// Filter out pods that don't yet have an allocation, which will filter pods that
-		// are potentially going to be denied at admission.
+		// 过滤掉尚无分配记录的 Pod，这些 Pod 在准入阶段大概率会被拒绝。
 		if m.HasPodAllocatedResources(pod.UID) {
 			allocatedPod, _ := m.UpdatePodFromAllocation(pod)
 			allocatedPods = append(allocatedPods, allocatedPod)
@@ -682,10 +694,12 @@ func (m *manager) getAllocatedPods(activePods []*v1.Pod) []*v1.Pod {
 	return allocatedPods
 }
 
+// GetAllocatedPods 返回所有已分配资源并完成覆写的活跃 Pod。
 func (m *manager) GetAllocatedPods() []*v1.Pod {
 	return m.getAllocatedPods(m.getActivePods())
 }
 
+// IsResizableContainer 判断指定类型的容器是否支持原地 resize。
 func IsResizableContainer(container *v1.Container, containerType podutil.ContainerType) bool {
 	switch containerType {
 	case podutil.InitContainers:
@@ -697,6 +711,7 @@ func IsResizableContainer(container *v1.Container, containerType podutil.Contain
 	}
 }
 
+// VolHasMemoryBackedEmptyDirSizeLimit 判断卷是否为设置了非零 SizeLimit 的内存型 emptyDir。
 func VolHasMemoryBackedEmptyDirSizeLimit(vol *v1.Volume) bool {
 	return vol != nil && vol.EmptyDir != nil && vol.EmptyDir.Medium == v1.StorageMediumMemory && vol.EmptyDir.SizeLimit != nil && !vol.EmptyDir.SizeLimit.IsZero()
 }

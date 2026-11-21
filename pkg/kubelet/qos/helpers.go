@@ -14,14 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package qos contains helper functions for quality of service.
-// For each resource (memory, CPU) Kubelet supports three classes of containers.
-// Memory guaranteed containers will receive the highest priority and will get all the resources
-// they need.
-// Burstable containers will be guaranteed their request and can "burst" and use more resources
-// when available.
-// Best-Effort containers, which don't specify a request, can use resources only if not being used
-// by other pods.
+// Package qos 包含服务质量相关的辅助函数。
+// 对每种资源（内存、CPU），kubelet 支持三类容器：
+// Guaranteed 容器优先级最高，能获得其所需的全部资源；
+// Burstable 容器保证获得 request，并可在资源富余时突发使用更多资源；
+// Best-Effort 容器未指定 request，只能使用其他 Pod 未占用的资源。
 
 package qos
 
@@ -32,9 +29,8 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// minRegularContainerMemory returns the minimum memory resource quantity
-// across all regular containers in pod.Spec.Containers.
-// It does not include initContainers (both restartable and non-restartable).
+// minRegularContainerMemory 返回 Pod.Spec.Containers 中所有普通容器的最小内存请求，
+// 不包含 init 容器（无论是否可重启）。
 func minRegularContainerMemory(pod *v1.Pod) int64 {
 	memoryValue := getEffectiveContainerMemoryRequest(pod, &pod.Spec.Containers[0])
 	for i := 1; i < len(pod.Spec.Containers); i++ {
@@ -46,27 +42,20 @@ func minRegularContainerMemory(pod *v1.Pod) int64 {
 	return memoryValue
 }
 
-// remainingPodMemReqPerContainer calculates the remaining pod memory request per
-// container by:
-// 1. Taking the total pod memory requests
-// 2. Subtracting total container memory requests and any DRA memory allocations from pod memory requests
-// 3. Dividing the remainder by the number of containers.
-// This gives us the additional memory request that is not allocated to any
-// containers in the pod. This value will be divided equally among all containers to
-// calculate oom score adjustment.
-// See https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/2837-pod-level-resource-spec/README.md#oom-score-adjustment
-// for more details.
+// remainingPodMemReqPerContainer 计算 Pod 级内存请求中未分配给容器、
+// 需要均摊到每个容器的额外内存，用于 OOM score 调整。
 func remainingPodMemReqPerContainer(pod *v1.Pod) int64 {
 	var remainingMemory int64
 	if pod.Spec.Resources.Requests.Memory().IsZero() {
 		return remainingMemory
 	}
 	numContainers := len(pod.Spec.Containers) + len(pod.Spec.InitContainers)
-	// Aggregated requests of all containers (including DRA if enabled).
+
 	opts := resourcehelper.PodResourcesOptions{
 		UseDRANodeAllocatableResourceClaimStatus: utilfeature.DefaultFeatureGate.Enabled(features.DRANodeAllocatableResources),
 	}
 	aggrContainerReqs := resourcehelper.AggregateContainerRequests(pod, opts)
+	// 统计所有容器（启用 DRA 时包含 DRA 分配）的聚合请求。
 	remainingMemory = pod.Spec.Resources.Requests.Memory().Value() - aggrContainerReqs.Memory().Value()
 	remainingMemory = max(remainingMemory, 0)
 	remainingMemoryPerContainer := remainingMemory / int64(numContainers)

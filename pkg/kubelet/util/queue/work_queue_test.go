@@ -27,6 +27,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// newTestBasicWorkQueue 创建使用假时钟的测试工作队列。
 func newTestBasicWorkQueue() (*basicWorkQueue, *testingclock.FakeClock) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	wq := &basicWorkQueue{
@@ -36,6 +37,7 @@ func newTestBasicWorkQueue() (*basicWorkQueue, *testingclock.FakeClock) {
 	return wq, fakeClock
 }
 
+// compareResults 以集合方式比较预期与实际的 UID 列表。
 func compareResults(t *testing.T, expected, actual []types.UID) {
 	expectedSet := sets.New[string]()
 	for _, u := range expected {
@@ -50,8 +52,10 @@ func compareResults(t *testing.T, expected, actual []types.UID) {
 	}
 }
 
+// TestGetWork 验证只有到达执行时间的条目才会被取出。
 func TestGetWork(t *testing.T) {
 	q, clock := newTestBasicWorkQueue()
+	// 前两个条目已到期，后两个尚未到期。
 	q.Enqueue(types.UID("foo1"), -1*time.Minute)
 	q.Enqueue(types.UID("foo2"), -1*time.Minute)
 	q.Enqueue(types.UID("foo3"), 1*time.Minute)
@@ -59,13 +63,14 @@ func TestGetWork(t *testing.T) {
 	expected := []types.UID{types.UID("foo1"), types.UID("foo2")}
 	compareResults(t, expected, q.GetWork())
 	compareResults(t, []types.UID{}, q.GetWork())
-	// Dial the time to 1 hour ahead.
+	// 把假时钟向前拨 1 小时。
 	clock.Step(time.Hour)
 	expected = []types.UID{types.UID("foo3"), types.UID("foo4")}
 	compareResults(t, expected, q.GetWork())
 	compareResults(t, []types.UID{}, q.GetWork())
 }
 
+// TestNewBasicWorkQueue 验证构造函数返回的工作队列字段符合预期。
 func TestNewBasicWorkQueue(t *testing.T) {
 	tests := []struct {
 		clock             clock.Clock

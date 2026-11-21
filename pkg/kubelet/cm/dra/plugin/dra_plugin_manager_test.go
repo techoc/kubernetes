@@ -27,6 +27,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestPickHealthService 验证在多个健康服务版本中选择 kubelet 支持的版本。
 func TestPickHealthService(t *testing.T) {
 	for name, tc := range map[string]struct {
 		supportedServices []string
@@ -40,9 +41,9 @@ func TestPickHealthService(t *testing.T) {
 			supportedServices: nil,
 			want:              "",
 		},
-		// Drivers which shipped before v1 existed only serve v1alpha1.
-		// The kubelet keeps consuming it for three releases of transition,
-		// see healthServicesSupportedByKubelet.
+		// v1 之前发布的驱动只提供 v1alpha1。
+		// kubelet 会在三个版本的过渡期内继续使用它，
+		// 参见 healthServicesSupportedByKubelet。
 		"only-v1alpha1": {
 			supportedServices: []string{"v1beta1.DRAPlugin", drahealthv1alpha1.DRAResourceHealthService},
 			want:              drahealthv1alpha1.DRAResourceHealthService,
@@ -64,18 +65,19 @@ func TestPickHealthService(t *testing.T) {
 	}
 }
 
+// TestAddSameName 验证同名插件的添加、替换与删除行为。
 func TestAddSameName(t *testing.T) {
 	tCtx := ktesting.Init(t)
-	// name will have a random value to avoid conflicts
+	// 随机驱动名用于避免与其他测试冲突。
 	driverName := fmt.Sprintf("dummy-driver-%d", rand.IntN(10000))
 
-	// ensure the plugin we are using is registered
+	// 确保测试使用的插件已注册。
 	draPlugins := NewDRAPluginManager(tCtx, nil, nil, nil, 0)
 	tCtx.ExpectNoError(draPlugins.add(driverName, "old.sock", "", "", defaultClientCallTimeout), "add first plugin")
 	p, err := draPlugins.GetPlugin(driverName)
 	tCtx.ExpectNoError(err, "get first plugin")
 
-	// Same name, same endpoint -> error.
+	// 同名且同 endpoint 的重复添加应报错。
 	require.Error(tCtx, draPlugins.add(driverName, "old.sock", "", "", defaultClientCallTimeout))
 
 	tCtx.ExpectNoError(draPlugins.add(driverName, "new.sock", "", "", defaultClientCallTimeout), "add second plugin")
@@ -85,23 +87,24 @@ func TestAddSameName(t *testing.T) {
 		tCtx.Fatal("expected to get second plugin, got first one again")
 	}
 
-	// Remove old plugin.
+	// 删除旧插件。
 	draPlugins.remove(p.driverName, p.endpoint)
 	plugin, err := draPlugins.GetPlugin(driverName)
 
-	// Now we should have p2 left.
+	// 此时应只剩下新插件 p2。
 	tCtx.ExpectNoError(err, "get plugin")
 	if p2 != plugin {
 		tCtx.Fatal("expected to get second plugin again, got something else")
 	}
 }
 
+// TestDelete 验证删除插件后无法再查询到它。
 func TestDelete(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	driverName := fmt.Sprintf("dummy-driver-%d", rand.IntN(10000))
 	socketFile := "dra.sock"
 
-	// ensure the plugin we are using is registered
+	// 确保测试使用的插件已注册。
 	draPlugins := NewDRAPluginManager(tCtx, nil, nil, &mockStreamHandler{}, 0)
 	tCtx.ExpectNoError(draPlugins.add(driverName, "dra.sock", "", "", defaultClientCallTimeout), "add plugin")
 

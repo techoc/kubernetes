@@ -26,12 +26,14 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// policyMergeTestCase 描述一个策略合并测试用例：若干提示提供者的输出及期望的合并结果。
 type policyMergeTestCase struct {
 	name     string
 	hp       []HintProvider
 	expected TopologyHint
 }
 
+// commonPolicyMergeTestCases 返回各策略共用的合并测试用例，NUMA 节点数由 numaNodes 决定。
 func commonPolicyMergeTestCases(numaNodes []int) []policyMergeTestCase {
 	return []policyMergeTestCase{
 		{
@@ -316,6 +318,7 @@ func commonPolicyMergeTestCases(numaNodes []int) []policyMergeTestCase {
 	}
 }
 
+// mergeTestCases 返回 best-effort 策略的合并测试用例。
 func (p *bestEffortPolicy) mergeTestCases(numaNodes []int) []policyMergeTestCase {
 	return []policyMergeTestCase{
 		{
@@ -753,6 +756,7 @@ func (p *bestEffortPolicy) mergeTestCases(numaNodes []int) []policyMergeTestCase
 	}
 }
 
+// mergeTestCasesNoPolicies 返回未提供任何提示时 best-effort 策略的合并测试用例。
 func (p *bestEffortPolicy) mergeTestCasesNoPolicies(numaNodes []int) []policyMergeTestCase {
 	return []policyMergeTestCase{
 		{
@@ -840,6 +844,7 @@ func (p *bestEffortPolicy) mergeTestCasesNoPolicies(numaNodes []int) []policyMer
 	}
 }
 
+// mergeTestCasesClosestNUMA 返回 best-effort 策略在 closest-NUMA 偏好下的合并测试用例。
 func (p *bestEffortPolicy) mergeTestCasesClosestNUMA(numaNodes []int) []policyMergeTestCase {
 	return []policyMergeTestCase{
 		{
@@ -1001,6 +1006,7 @@ func (p *bestEffortPolicy) mergeTestCasesClosestNUMA(numaNodes []int) []policyMe
 	}
 }
 
+// mergeTestCases 返回 single-NUMA-node 策略的合并测试用例。
 func (p *singleNumaNodePolicy) mergeTestCases(numaNodes []int) []policyMergeTestCase {
 	return []policyMergeTestCase{
 		{
@@ -1274,9 +1280,11 @@ func (p *singleNumaNodePolicy) mergeTestCases(numaNodes []int) []policyMergeTest
 	}
 }
 
+// testPolicyMerge 对给定策略逐一执行合并用例，并比对合并结果是否与期望一致。
 func testPolicyMerge(policy Policy, tcases []policyMergeTestCase, t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
+	// 收集每个提示提供者针对该 pod/容器产生的拓扑提示
 	for _, tc := range tcases {
 		var providersHints []map[string][]TopologyHint
 		for _, provider := range tc.hp {
@@ -1291,6 +1299,7 @@ func testPolicyMerge(policy Policy, tcases []policyMergeTestCase, t *testing.T) 
 	}
 }
 
+// TestMaxOfMinAffinityCounts 校验 maxOfMinAffinityCounts 对多组提示计算出的亲和度最小值。
 func TestMaxOfMinAffinityCounts(t *testing.T) {
 	tcases := []struct {
 		hints    [][]TopologyHint
@@ -1370,6 +1379,7 @@ func TestMaxOfMinAffinityCounts(t *testing.T) {
 	}
 }
 
+// TestCompareHintsNarrowest 校验 narrowest 比较函数在亲和度与 NUMA 距离上的排序规则。
 func TestCompareHintsNarrowest(t *testing.T) {
 	tcases := []struct {
 		description                   string
@@ -1575,6 +1585,7 @@ func TestCompareHintsNarrowest(t *testing.T) {
 	}
 }
 
+// commonNUMAInfoTwoNodes 构造两个 NUMA 节点的拓扑信息，供测试距离比较使用。
 func commonNUMAInfoTwoNodes() *NUMAInfo {
 	return &NUMAInfo{
 		Nodes: []int{0, 1},
@@ -1585,6 +1596,7 @@ func commonNUMAInfoTwoNodes() *NUMAInfo {
 	}
 }
 
+// commonNUMAInfoFourNodes 构造四个 NUMA 节点的拓扑信息，供测试距离比较使用。
 func commonNUMAInfoFourNodes() *NUMAInfo {
 	return &NUMAInfo{
 		Nodes: []int{0, 1, 2, 3},
@@ -1597,6 +1609,7 @@ func commonNUMAInfoFourNodes() *NUMAInfo {
 	}
 }
 
+// commonNUMAInfoEightNodes 构造八个 NUMA 节点的拓扑信息，包含两组相距较远的节点。
 func commonNUMAInfoEightNodes() *NUMAInfo {
 	return &NUMAInfo{
 		Nodes: []int{0, 1, 2, 3, 4, 5, 6, 7},

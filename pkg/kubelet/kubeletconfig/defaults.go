@@ -16,7 +16,7 @@ limitations under the License.
 
 package kubeletconfig
 
-// Defines sane defaults for the kubelet config.
+// 定义 kubelet 配置使用的合理默认值。
 const (
 	DefaultKubeletPodsDirName                = "pods"
 	DefaultKubeletVolumesDirName             = "volumes"
@@ -28,8 +28,10 @@ const (
 	DefaultKubeletPluginContainersDirName    = "plugin-containers"
 	DefaultKubeletPodResourcesDirName        = "pod-resources"
 	DefaultKubeletPodsAPIDirName             = "pods-api"
-	KubeletPluginsDirSELinuxLabel            = "system_u:object_r:container_file_t:s0"
-	KubeletContainersSharedSELinuxLabel      = "system_u:object_r:container_file_t:s0"
-	DefaultKubeletCheckpointsDirName         = "checkpoints"
-	DefaultKubeletUserNamespacesIDsPerPod    = 65536
+	// 以下为各插件目录使用的 SELinux 标签，插件与容器共享同一类型标签。
+	KubeletPluginsDirSELinuxLabel       = "system_u:object_r:container_file_t:s0"
+	KubeletContainersSharedSELinuxLabel = "system_u:object_r:container_file_t:s0"
+	DefaultKubeletCheckpointsDirName    = "checkpoints"
+	// 每个 Pod 默认分配的用户命名空间 ID 数量（65536 个 UID/GID）。
+	DefaultKubeletUserNamespacesIDsPerPod = 65536
 )

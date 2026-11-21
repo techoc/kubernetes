@@ -29,10 +29,12 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
+// TestKubeletDirs 验证 kubelet 各目录路径都以 rootDirectory 为根正确拼接。
 func TestKubeletDirs(t *testing.T) {
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
+	// 以下逐项检查 Pod、日志、插件、卷、设备等目录的拼接规则。
 	root := kubelet.rootDirectory
 
 	var exp, got string
@@ -109,11 +111,13 @@ func TestKubeletDirs(t *testing.T) {
 	assert.Equal(t, exp, got)
 }
 
+// TestHandlerSupportsUserNamespaces 验证按 runtime handler 名称查询 user namespace 支持能力。
 func TestHandlerSupportsUserNamespaces(t *testing.T) {
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
 
+	// 注入两个 handler：一个支持 user namespace，一个不支持。
 	kubelet.runtimeState.setRuntimeHandlers([]kubecontainer.RuntimeHandler{
 		{
 			Name:                   "has-support",
@@ -125,6 +129,7 @@ func TestHandlerSupportsUserNamespaces(t *testing.T) {
 		},
 	})
 
+	// 已知 handler 返回其能力；未知 handler 返回错误而不是静默 false。
 	got, err := kubelet.HandlerSupportsUserNamespaces("has-support")
 	assert.True(t, got)
 	assert.NoError(t, err)
@@ -138,6 +143,8 @@ func TestHandlerSupportsUserNamespaces(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// Test_getLastObservedNodeAddresses 验证节点地址读取：节点不存在、空地址、
+// 以及外部云厂商与 taint 组合下的行为。
 func Test_getLastObservedNodeAddresses(t *testing.T) {
 	testCases := []struct {
 		name                  string
@@ -296,11 +303,13 @@ func Test_getLastObservedNodeAddresses(t *testing.T) {
 			kl := testKubelet.kubelet
 			kl.nodeName = types.NodeName(tc.nodeName)
 			kl.externalCloudProvider = tc.externalCloudProvider
+			// 用 nodeLister 提供节点对象；tc.node 为 nil 表示节点不存在。
 			nodeLister := testNodeLister{}
 			if tc.node != nil {
 				nodeLister.nodes = append(nodeLister.nodes, tc.node)
 			}
 			kl.nodeLister = nodeLister
+			// 节点带 external-cloud-provider taint 且启用外部云厂商时，不返回任何地址。
 			addrs := kl.getLastObservedNodeAddresses(ctx)
 
 			if len(addrs) != len(tc.expectedAddrs) {

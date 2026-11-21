@@ -61,6 +61,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// 测试中使用的固定名称：驱动类、Pod、容器与 PodGroup
 const (
 	driverClassName = "test"
 	podName         = "test-pod"
@@ -68,12 +69,15 @@ const (
 	podGroupName    = "test-podgroup"
 )
 
+// shareID/shareUID 是测试中使用的 ShareID 及其 UID；testPodCounter 用于生成唯一的 Pod 名与 UID
 var (
 	shareID        = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 	shareUID       = types.UID(shareID)
 	testPodCounter atomic.Uint32
 )
 
+// fakeDRADriverGRPCServer 是实现了 DRA 插件与资源健康两个 gRPC 服务的伪造服务端，
+// 用于统计各 RPC 调用次数并模拟超时、自定义响应等行为
 type fakeDRADriverGRPCServer struct {
 	drapb.UnimplementedDRAPluginServer
 	drahealthv1.UnimplementedDRAResourceHealthServer
@@ -88,6 +92,8 @@ type fakeDRADriverGRPCServer struct {
 	watchResourcesError        error
 }
 
+// gatherWithoutDurations 在采集指标时剔除 histogram 中与时间相关的字段，
+// 使基于耗时直方图的断言不受实际执行时间影响
 var gatherWithoutDurations = metricstestutil.GathererFunc(func() ([]*metricstestutil.MetricFamily, error) {
 	got, err := kubeletmetrics.GetGather().Gather()
 	for _, mf := range got {
@@ -96,7 +102,7 @@ var gatherWithoutDurations = metricstestutil.GathererFunc(func() ([]*metricstest
 			if m.Histogram == nil {
 				continue
 			}
-			// Remove everything from a histogram that depends on timing.
+			// 去掉 histogram 中所有依赖时间的数据，便于结果比较
 			m.Histogram.SampleSum = nil
 			m.Histogram.Bucket = nil
 		}
@@ -104,6 +110,8 @@ var gatherWithoutDurations = metricstestutil.GathererFunc(func() ([]*metricstest
 	return got, err
 })
 
+// NodePrepareResources 实现伪造的节点资源准备 RPC：记录调用次数，
+// 按需模拟超时，并在未指定响应时返回一个默认的 CDI 设备
 func (s *fakeDRADriverGRPCServer) NodePrepareResources(ctx context.Context, req *drapb.NodePrepareResourcesRequest) (*drapb.NodePrepareResourcesResponse, error) {
 	s.prepareResourceCalls.Add(1)
 
@@ -133,6 +141,7 @@ func (s *fakeDRADriverGRPCServer) NodePrepareResources(ctx context.Context, req 
 	return s.prepareResourcesResponse, nil
 }
 
+// NodeUnprepareResources 实现伪造的节点资源释放 RPC，记录调用次数并可按需模拟超时
 func (s *fakeDRADriverGRPCServer) NodeUnprepareResources(ctx context.Context, req *drapb.NodeUnprepareResourcesRequest) (*drapb.NodeUnprepareResourcesResponse, error) {
 	s.unprepareResourceCalls.Add(1)
 
@@ -151,6 +160,8 @@ func (s *fakeDRADriverGRPCServer) NodeUnprepareResources(ctx context.Context, re
 	return s.unprepareResourcesResponse, nil
 }
 
+// NodeWatchResources 实现伪造的资源健康监听流：从响应通道读取消息并逐条发送，
+// 直到上下文取消、通道关闭或发送失败
 func (s *fakeDRADriverGRPCServer) NodeWatchResources(req *drahealthv1.NodeWatchResourcesRequest, stream drahealthv1.DRAResourceHealth_NodeWatchResourcesServer) error {
 	s.watchResourcesCalls.Add(1)
 	logger := klog.FromContext(stream.Context())
@@ -173,7 +184,7 @@ func (s *fakeDRADriverGRPCServer) NodeWatchResources(req *drahealthv1.NodeWatchR
 					return
 				}
 				logger.V(5).Info("Fake Server: Sending health response", "response", resp)
-				// Use the stream argument to send
+				// 通过 stream 参数发送响应
 				if err := stream.Send(resp); err != nil {
 					logger.Error(err, "Fake Server: Error sending response on stream")
 					return
@@ -186,6 +197,8 @@ func (s *fakeDRADriverGRPCServer) NodeWatchResources(req *drahealthv1.NodeWatchR
 	return nil
 }
 
+// mockWatchResourcesClient 是用于测试 HandleWatchResourcesStream 的健康流客户端 mock，
+// 通过 RecvChan 注入响应或错误
 type mockWatchResourcesClient struct {
 	mock.Mock
 	RecvChan chan struct {
@@ -195,6 +208,7 @@ type mockWatchResourcesClient struct {
 	Ctx context.Context
 }
 
+// Recv 从 RecvChan 读取下一条消息；上下文取消时返回其错误，通道关闭时返回 io.EOF
 func (m *mockWatchResourcesClient) Recv() (*drahealthv1.NodeWatchResourcesResponse, error) {
 	logger := klog.FromContext(m.Ctx)
 	select {
@@ -210,31 +224,45 @@ func (m *mockWatchResourcesClient) Recv() (*drahealthv1.NodeWatchResourcesRespon
 	}
 }
 
+// Context 返回该 mock 客户端关联的上下文
 func (m *mockWatchResourcesClient) Context() context.Context {
 	return m.Ctx
 }
 
+// Header 返回空的元数据（该 mock 不使用）
 func (m *mockWatchResourcesClient) Header() (metadata.MD, error) { return nil, nil }
-func (m *mockWatchResourcesClient) Trailer() metadata.MD         { return nil }
-func (m *mockWatchResourcesClient) CloseSend() error             { return nil }
+
+// Trailer 返回空的 trailer 元数据
+func (m *mockWatchResourcesClient) Trailer() metadata.MD { return nil }
+
+// CloseSend 关闭发送方向，mock 中为空操作
+func (m *mockWatchResourcesClient) CloseSend() error { return nil }
+
+// RecvMsg 未实现，仅用于满足 grpc.ClientStream 接口
 func (m *mockWatchResourcesClient) RecvMsg(v interface{}) error {
 	return fmt.Errorf("RecvMsg not implemented")
 }
+
+// SendMsg 未实现，仅用于满足 grpc.ClientStream 接口
 func (m *mockWatchResourcesClient) SendMsg(v interface{}) error {
 	return fmt.Errorf("SendMsg not implemented")
 }
 
+// tearDown 是清理函数类型，用于停止测试期间启动的资源
 type tearDown func()
 
+// fakeDRAServerInfo 汇总伪造 DRA 服务端的实例、socket 名称与清理函数
 type fakeDRAServerInfo struct {
-	// fake DRA server
+	// 伪造的 DRA 服务端
 	server *fakeDRADriverGRPCServer
-	// fake DRA plugin socket name
+	// 伪造的 DRA 插件 socket 名称
 	socketName string
-	// teardownFn stops fake gRPC server
+	// teardownFn 用于停止伪造的 gRPC 服务端
 	teardownFn tearDown
 }
 
+// setupFakeDRADriverGRPCServer 在临时目录创建 unix socket 并启动伪造的 DRA gRPC 服务端。
+// shouldTimeout 为 true 时，服务端会故意阻塞两倍 timeout 以触发客户端超时
 func setupFakeDRADriverGRPCServer(ctx context.Context, shouldTimeout bool, pluginClientTimeout *time.Duration, prepareResourcesResponse *drapb.NodePrepareResourcesResponse, unprepareResourcesResponse *drapb.NodeUnprepareResourcesResponse, watchResourcesError error) (fakeDRAServerInfo, error) {
 	socketDir, err := os.MkdirTemp("", "dra")
 	if err != nil {
@@ -305,6 +333,8 @@ func setupFakeDRADriverGRPCServer(ctx context.Context, shouldTimeout bool, plugi
 	}, nil
 }
 
+// genPrepareResourcesResponse 生成针对指定 claim 的 NodePrepareResources 响应，
+// 其中包含一个带 CDI 设备 ID 的设备
 func genPrepareResourcesResponse(claimUID types.UID) *drapb.NodePrepareResourcesResponse {
 	return &drapb.NodePrepareResourcesResponse{
 		Claims: map[string]*drapb.NodePrepareResourceResponse{
@@ -322,6 +352,7 @@ func genPrepareResourcesResponse(claimUID types.UID) *drapb.NodePrepareResources
 	}
 }
 
+// TestNewManagerImpl 验证 NewManager 对状态文件目录的校验：空路径报错，合法路径创建成功
 func TestNewManagerImpl(t *testing.T) {
 	kubeClient := fake.NewSimpleClientset()
 	for _, test := range []struct {
@@ -355,7 +386,7 @@ func TestNewManagerImpl(t *testing.T) {
 	}
 }
 
-// genTestPod generates pod object
+// genTestPod 生成一个引用 ResourceClaim 的测试 Pod
 func genTestPod() *v1.Pod {
 	claimName := claimName
 	return &v1.Pod{
@@ -386,12 +417,11 @@ func genTestPod() *v1.Pod {
 	}
 }
 
-// genTestPodWithClaimTemplateNoStatus generates a pod that references its claim
-// via a ResourceClaimTemplateName but whose Status.ResourceClaimStatuses is
-// empty. This mimics https://github.com/kubernetes/kubernetes/issues/139772, where an external component overwrote
-// the pod status and dropped the generated claim name. resourceclaim.Name API
-// returns ErrClaimNotFound for such a pod, so unprepare must rely on the claim
-// info cache.
+// genTestPodWithClaimTemplateNoStatus 生成一个通过 ResourceClaimTemplateName 引用 claim、
+// 但 Status.ResourceClaimStatuses 为空的 Pod。
+// 这模拟 kubernetes/kubernetes#139772：外部组件覆盖了 Pod 状态并丢弃了生成的 claim 名。
+// 对这类 Pod，resourceclaim.Name 会返回 ErrClaimNotFound，
+// 因此 unprepare 必须依赖 claim info 缓存来获取 claim 名。
 func genTestPodWithClaimTemplateNoStatus() *v1.Pod {
 	templateName := claimName + "-template"
 	return &v1.Pod{
@@ -419,10 +449,12 @@ func genTestPodWithClaimTemplateNoStatus() *v1.Pod {
 				},
 			},
 		},
-		// Status.ResourceClaimStatuses intentionally left empty.
+		// 故意不设置 Status.ResourceClaimStatuses
 	}
 }
 
+// genTestPodWithClaims 生成一个引用指定多个 ResourceClaim 的测试 Pod，
+// Pod 名与 UID 由全局计数器保证唯一
 func genTestPodWithClaims(claimNames ...string) *v1.Pod {
 	podCounter := testPodCounter.Add(1)
 
@@ -461,7 +493,7 @@ func genTestPodWithClaims(claimNames ...string) *v1.Pod {
 	}
 }
 
-// genTestPodWithExtendedResource generates pod object
+// genTestPodWithExtendedResource 生成一个通过扩展资源（example.com/gpu）映射到 DRA claim 的测试 Pod
 func genTestPodWithExtendedResource() *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -496,6 +528,7 @@ func genTestPodWithExtendedResource() *v1.Pod {
 	}
 }
 
+// genTestPodWithPodGroup 生成一个设置了 SchedulingGroup 并引用 PodGroup claim 的测试 Pod
 func genTestPodWithPodGroup() *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -528,7 +561,7 @@ func genTestPodWithPodGroup() *v1.Pod {
 	}
 }
 
-// genTestClaim generates resource claim object
+// genTestClaim 生成一个已分配指定设备并保留给指定 Pod 的 ResourceClaim
 func genTestClaim(name, driver, device, podUID string) *resourceapi.ResourceClaim {
 	return &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -568,7 +601,7 @@ func genTestClaim(name, driver, device, podUID string) *resourceapi.ResourceClai
 	}
 }
 
-// genTestClaimWithExtendedResource generates resource claim object
+// genTestClaimWithExtendedResource 生成一个由扩展资源转换而来的、已分配的 ResourceClaim
 func genTestClaimWithExtendedResource(name, driver, device, podUID string) *resourceapi.ResourceClaim {
 	return &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -608,6 +641,7 @@ func genTestClaimWithExtendedResource(name, driver, device, podUID string) *reso
 	}
 }
 
+// genTestPodGroupClaim 生成一个保留给 PodGroup（而非单个 Pod）的 ResourceClaim
 func genTestPodGroupClaim(name, driver, device, podGroupName string) *resourceapi.ResourceClaim {
 	return &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -651,7 +685,7 @@ func genTestPodGroupClaim(name, driver, device, podGroupName string) *resourceap
 	}
 }
 
-// genTestClaimInfo generates claim info object
+// genTestClaimInfo 生成一条 claim info 缓存记录，可指定 prepared 状态与 ShareID
 func genTestClaimInfo(claimUID types.UID, podUIDs []string, prepared bool, shareID *types.UID) *ClaimInfo {
 	return &ClaimInfo{
 		ClaimInfoState: state.ClaimInfoState{
@@ -675,7 +709,7 @@ func genTestClaimInfo(claimUID types.UID, podUIDs []string, prepared bool, share
 	}
 }
 
-// genTestClaimInfoWithExtendedResource generates claim info object
+// genTestClaimInfoWithExtendedResource 生成扩展资源场景的 claim info 缓存记录
 func genTestClaimInfoWithExtendedResource(podUIDs []string, prepared bool) *ClaimInfo {
 	return &ClaimInfo{
 		ClaimInfoState: state.ClaimInfoState{
@@ -698,7 +732,7 @@ func genTestClaimInfoWithExtendedResource(podUIDs []string, prepared bool) *Clai
 	}
 }
 
-// genClaimInfoState generates claim info state object
+// genClaimInfoState 生成 claim info 的持久化状态，cdiDeviceID 非空时附带设备信息
 func genClaimInfoState(cdiDeviceID string) state.ClaimInfoState {
 	s := state.ClaimInfoState{
 		ClaimUID:  claimUID,
@@ -715,6 +749,8 @@ func genClaimInfoState(cdiDeviceID string) state.ClaimInfoState {
 	return s
 }
 
+// genClaimInfoStateWithExtendedResource 生成扩展资源场景的 claim info 状态，
+// 设备请求名为扩展资源映射使用的 container-0-request-0
 func genClaimInfoStateWithExtendedResource(cdiDeviceID string) state.ClaimInfoState {
 	s := state.ClaimInfoState{
 		ClaimUID:  claimUID,
@@ -731,6 +767,7 @@ func genClaimInfoStateWithExtendedResource(cdiDeviceID string) state.ClaimInfoSt
 	return s
 }
 
+// genClaimInfoStateWithShareID 生成设备带 ShareID 的 claim info 状态
 func genClaimInfoStateWithShareID(cdiDeviceID string) state.ClaimInfoState {
 	s := state.ClaimInfoState{
 		ClaimUID:  claimUID,
@@ -749,6 +786,8 @@ func genClaimInfoStateWithShareID(cdiDeviceID string) state.ClaimInfoState {
 	return s
 }
 
+// TestGetResources 验证 GetResources 能从 claim info 中提取容器所需的 CDI 设备，
+// 覆盖普通 claim、扩展资源 claim、同一 claim 被多个 request 引用以及 claim 缺失等场景
 func TestGetResources(t *testing.T) {
 	kubeClient := fake.NewSimpleClientset()
 
@@ -866,10 +905,14 @@ func TestGetResources(t *testing.T) {
 	}
 }
 
+// getFakeNode 返回一个固定的节点对象，供插件管理器初始化使用
 func getFakeNode(context.Context) (*v1.Node, error) {
 	return &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "worker"}}, nil
 }
 
+// TestPrepareResources 验证 PrepareResources 在各种边界条件下的行为与指标：
+// claim 不存在、驱动未注册、驱动返回空响应、Pod 无权使用 claim、重试不重复追加设备、
+// 超时、扩展资源与 PodGroup claim、ShareID 等
 func TestPrepareResources(t *testing.T) {
 	claimName := claimName
 	fakeKubeClient := fake.NewSimpleClientset()
@@ -1037,14 +1080,12 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="PrepareRe
 `,
 		},
 		{
-			// Regression test: if a previous PrepareResources attempt
-			// appended devices to the cached ClaimInfo but returned before
-			// reaching setPrepared (e.g. a driver in the same batch failed),
-			// a retry must not duplicate those devices in the cache. The
-			// seeded ClaimInfo mimics that leftover state: prepared=false,
-			// DriverState already populated with the device the fake driver
-			// will return on retry. After the retry, DriverState must
-			// contain exactly one device, not two.
+			// 回归测试：若上一次 PrepareResources 已把设备追加到缓存的 ClaimInfo，
+			// 但在到达 setPrepared 之前就返回（例如同批次中某个驱动失败），
+			// 重试时不得重复追加这些设备。
+			// 预置的 ClaimInfo 模拟了这种遗留状态：prepared=false，
+			// 但 DriverState 已包含 fake driver 在重试时会返回的设备。
+			// 重试后 DriverState 必须恰好包含一个设备，而不是两个。
 			description:            "should not duplicate devices on prepare retry",
 			driverName:             driverName,
 			pod:                    genTestPod(),
@@ -1248,7 +1289,7 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="PrepareRe
 			manager, err := NewManager(tCtx.Logger(), fakeKubeClient, t.TempDir())
 			require.NoError(t, err, "create DRA manager")
 			defer manager.Stop()
-			manager.initDRAPluginManager(backgroundCtx, getFakeNode, time.Second /* very short wiping delay for testing */)
+			manager.initDRAPluginManager(backgroundCtx, getFakeNode, time.Second /* 测试中用极短的清理延迟 */)
 
 			if test.claim != nil {
 				if _, err := fakeKubeClient.ResourceV1().ResourceClaims(test.pod.Namespace).Create(tCtx, test.claim, metav1.CreateOptions{}); err != nil {
@@ -1303,7 +1344,7 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="PrepareRe
 				return // resource skipped so no need to continue
 			}
 
-			// check the cache contains the expected claim info
+			// 校验缓存中包含预期的 claim info
 			var podClaimName *string
 			if len(test.pod.Spec.ResourceClaims) > 0 {
 				podClaimName, _, err = resourceclaim.Name(test.pod, &test.pod.Spec.ResourceClaims[0])
@@ -1324,10 +1365,10 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="PrepareRe
 	}
 }
 
-// TestPrepareResourcesWithPreparedAndNewClaim verifies that PrepareResources
-// correctly handles a pod that references a mix of ResourceClaims:
-// - first claim already prepared by a previous pod
-// - second claim is new and needs to be prepared
+// TestPrepareResourcesWithPreparedAndNewClaim 验证 PrepareResources 能正确处理
+// 同时引用“已由其他 Pod 准备过”和“新 claim”的 Pod：
+// - 第一个 claim 已由之前的 Pod 准备过；
+// - 第二个 claim 是新 claim，需要准备
 func TestPrepareResourcesWithPreparedAndNewClaim(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	fakeKubeClient := fake.NewClientset()
@@ -1339,14 +1380,14 @@ func TestPrepareResourcesWithPreparedAndNewClaim(t *testing.T) {
 
 	secondClaimName := fmt.Sprintf("%s-second", claimName)
 
-	// Generate two pods where the second pod reuses an existing claim and adds a new one
+	// 构造两个 Pod：第二个 Pod 复用一个已有 claim，并新增一个 claim
 	firstPod := genTestPodWithClaims(claimName)
 	secondPod := genTestPodWithClaims(claimName, secondClaimName)
 
 	firstClaim := genTestClaim(claimName, driverName, deviceName, string(firstPod.ObjectMeta.UID))
 	secondClaim := genTestClaim(secondClaimName, driverName, deviceName, string(secondPod.ObjectMeta.UID))
 
-	// Make firstClaim reserved for first and second pod
+	// 将第一个 claim 同时保留给第一个和第二个 Pod
 	firstClaim.Status.ReservedFor = append(
 		firstClaim.Status.ReservedFor,
 		resourceapi.ResourceClaimConsumerReference{UID: secondPod.ObjectMeta.UID},
@@ -1380,7 +1421,7 @@ func TestPrepareResourcesWithPreparedAndNewClaim(t *testing.T) {
 	err = manager.PrepareResources(tCtx, secondPod)
 	require.NoError(t, err)
 
-	// second pod triggered exactly one prepare call (new claim only) + previous one call
+	// 第二个 Pod 只应对新 claim 触发一次 prepare 调用（加上之前的一次共 2 次）
 	assert.Equal(t, uint32(2),
 		draServerInfo.server.prepareResourceCalls.Load(),
 		"second pod should trigger one prepare call for the new claim",
@@ -1393,12 +1434,11 @@ func TestPrepareResourcesWithPreparedAndNewClaim(t *testing.T) {
 	}
 }
 
-// TestPrepareResourcesWithUnpreparingClaim is a regression test for the race
-// where reconcileLoop-initiated (or otherwise concurrent) unprepareResources
-// has committed to calling NodeUnprepareResources on a claim, released the
-// cache lock during the RPC, and prepareResources for a different pod would
-// otherwise attach itself to the still-cached-but-being-torn-down claim.
-// PrepareResources must refuse to touch a claim marked as unpreparing.
+// TestPrepareResourcesWithUnpreparingClaim 是针对如下竞态的回归测试：
+// reconcileLoop 发起（或其他并发路径）的 unprepareResources 已决定调用
+// NodeUnprepareResources 并在 RPC 期间释放了缓存锁，此时另一个 Pod 的
+// prepareResources 否则会挂到这条仍在缓存中、正在被拆除的 claim 上。
+// PrepareResources 必须拒绝操作标记为 unpreparing 的 claim。
 func TestPrepareResourcesWithUnpreparingClaim(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	fakeKubeClient := fake.NewClientset()
@@ -1419,11 +1459,10 @@ func TestPrepareResourcesWithUnpreparingClaim(t *testing.T) {
 	plg := manager.GetWatcherHandler()
 	require.NoError(t, plg.RegisterPlugin(tCtx, driverName, draServerInfo.socketName, []string{drapb.DRAPluginService}, nil))
 
-	// Seed the cache with a claimInfo that is fully prepared for another
-	// pod and marked as unpreparing (mimicking the state after
-	// unprepareResources has committed to calling NodeUnprepareResources
-	// but before the terminal cache delete). The other pod is still
-	// referenced so we can also check its reference survives.
+	// 预置一条 claimInfo：它已被另一个 Pod 完全准备，且标记为 unpreparing
+	// （模拟 unprepareResources 已决定调用 NodeUnprepareResources、
+	// 但尚未从缓存中删除的状态）。
+	// 由于仍保留对另一个 Pod 的引用，还可以验证该引用未被误删。
 	existing := genTestClaimInfo(claimUID, []string{"another-pod-uid"}, true, nil)
 	existing.setUnpreparing()
 	manager.cache.add(existing)
@@ -1434,8 +1473,8 @@ func TestPrepareResourcesWithUnpreparingClaim(t *testing.T) {
 	assert.Equal(t, uint32(0), draServerInfo.server.prepareResourceCalls.Load(),
 		"driver must not be called while the claim is being unprepared")
 
-	// The seeded claimInfo must be untouched: no new pod reference, still
-	// unpreparing, still prepared, other pod's reference intact.
+	// 预置的 claimInfo 必须保持不变：不新增 Pod 引用、仍处于 unpreparing、
+	// 仍为 prepared，且另一个 Pod 的引用完好
 	cached, ok := manager.cache.get(claimName, namespace)
 	require.True(t, ok, "claim info must still be in the cache")
 	assert.False(t, cached.PodUIDs.Has(string(pod.UID)),
@@ -1446,6 +1485,9 @@ func TestPrepareResourcesWithUnpreparingClaim(t *testing.T) {
 		"unpreparing flag must still be set")
 }
 
+// TestUnprepareResources 验证 UnprepareResources 的释放逻辑与指标：
+// 驱动未注册、claim 仍被其他 Pod 引用而跳过、超时、驱动返回空响应、
+// 扩展资源、缓存缺失 claim 名、Pod 引用保护等场景
 func TestUnprepareResources(t *testing.T) {
 	fakeKubeClient := fake.NewSimpleClientset()
 	for _, test := range []struct {
@@ -1586,11 +1628,10 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="Unprepare
 `,
 		},
 		{
-			// Regression test for https://github.com/kubernetes/kubernetes/issues/139772: the pod references its
-			// claim via a template, but Status.ResourceClaimStatuses is empty
-			// (an external component overwrote the status). resourceclaim.Name
-			// returns ErrClaimNotFound, so the claim name must come from the
-			// cache instead. Previously this wedged the pod in terminating.
+			// kubernetes/kubernetes#139772 的回归测试：Pod 通过 template 引用 claim，
+			// 但 Status.ResourceClaimStatuses 为空（被外部组件覆盖）。
+			// resourceclaim.Name 返回 ErrClaimNotFound，因此 claim 名必须从缓存获取。
+			// 此前这会让 Pod 卡在 terminating 状态
 			description:            "should unprepare using cache when ResourceClaimStatuses is missing",
 			driverName:             driverName,
 			pod:                    genTestPodWithClaimTemplateNoStatus(),
@@ -1610,12 +1651,11 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="Unprepare
 `,
 		},
 		{
-			// Regression test for the pod reference guard in unprepareResources:
-			// if the claimInfo does not reference this pod, NodeUnprepareResources
-			// must not be called.
+			// unprepareResources 中 Pod 引用保护的回归测试：
+			// 若 claimInfo 未引用该 Pod，则不得调用 NodeUnprepareResources。
 			description:            "should skip unprepare for pod that never prepared the claim",
 			driverName:             driverName,
-			pod:                    genTestPod(), // pod UID = podUID
+			pod:                    genTestPod(), // Pod UID 即 podUID
 			claim:                  genTestClaim(claimName, driverName, deviceName, podUID),
 			claimInfo:              genTestClaimInfo(claimUID, []string{"another-pod-uid"}, true, nil),
 			wantResourceSkipped:    true,
@@ -1678,7 +1718,7 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="Unprepare
 			manager, err := NewManager(tCtx.Logger(), fakeKubeClient, t.TempDir())
 			require.NoError(t, err, "create DRA manager")
 			defer manager.Stop()
-			manager.initDRAPluginManager(tCtx, getFakeNode, time.Second /* very short wiping delay for testing */)
+			manager.initDRAPluginManager(tCtx, getFakeNode, time.Second /* 测试中用极短的清理延迟 */)
 
 			plg := manager.GetWatcherHandler()
 			if err := plg.RegisterPlugin(tCtx, test.driverName, draServerInfo.socketName, []string{drapb.DRAPluginService}, pluginClientTimeout); err != nil {
@@ -1709,9 +1749,8 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="Unprepare
 					cachedClaim, exists := manager.cache.get(test.claimInfo.ClaimName, test.claimInfo.Namespace)
 					require.True(t, exists, "ClaimInfo should still exist if skipped")
 					assert.False(t, cachedClaim.PodUIDs.Has(string(test.pod.UID)), "Pod UID should not remain in skipped claim")
-					// Any pod UIDs that belonged to other pods must survive the
-					// no-op unprepare — this guards against wrongly tearing
-					// down a claim owned by another pod.
+					// 属于其他 Pod 的 UID 必须在这次空操作 unprepare 后保留下来，
+					// 以防错误地拆除其他 Pod 拥有的 claim。
 					for uid := range test.claimInfo.PodUIDs {
 						if uid == string(test.pod.UID) {
 							continue
@@ -1722,12 +1761,12 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="Unprepare
 				return // resource skipped so no need to continue
 			}
 
-			// Check cache was cleared only on successful unprepare
+			// 仅在 unprepare 成功时才应清理缓存
 			var podClaimName *string
 			if len(test.pod.Spec.ResourceClaims) > 0 {
-				// The claim name may not be derivable from the pod (e.g. when
-				// Status.ResourceClaimStatuses is missing, as in #139772). That
-				// is fine: we fall back to the known claimName constant below.
+				// claim 名可能无法从 Pod 推导出来（例如 #139772 中
+				// Status.ResourceClaimStatuses 缺失的情况），这不影响后续校验：
+				// 下面会回退到已知的 claimName 常量。
 				podClaimName, _, _ = resourceclaim.Name(test.pod, &test.pod.Spec.ResourceClaims[0])
 			}
 			claimName := claimName
@@ -1739,6 +1778,7 @@ dra_operations_duration_seconds_count{is_error="false",operation_name="Unprepare
 	}
 }
 
+// TestPodMightNeedToUnprepareResources 验证可通过 claim info 缓存判断某个 Pod 是否需要执行 unprepare
 func TestPodMightNeedToUnprepareResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeKubeClient := fake.NewSimpleClientset()
@@ -1758,6 +1798,8 @@ func TestPodMightNeedToUnprepareResources(t *testing.T) {
 	assert.True(t, needsUnprepare)
 }
 
+// TestGetContainerClaimInfos 验证 GetContainerClaimInfos 能为容器找到对应的 claim info，
+// 覆盖普通 claim、扩展资源 claim、缓存缺失以及既无 ResourceClaimName 也无模板名等错误场景
 func TestGetContainerClaimInfos(t *testing.T) {
 	for _, test := range []struct {
 		description string
@@ -1797,7 +1839,7 @@ func TestGetContainerClaimInfos(t *testing.T) {
 					ResourceClaims: []v1.PodResourceClaim{
 						{
 							Name: claimName,
-							// missing ResourceClaimName or ResourceClaimTemplateName
+							// 缺少 ResourceClaimName 或 ResourceClaimTemplateName
 						},
 					},
 					Containers: []v1.Container{
@@ -1850,31 +1892,31 @@ func TestGetContainerClaimInfos(t *testing.T) {
 	}
 }
 
-// TestParallelPrepareUnprepareResources calls PrepareResources and UnprepareResources APIs in parallel
-// to detect possible data races
+// TestParallelPrepareUnprepareResources 并行调用 PrepareResources 与 UnprepareResources，
+// 以检测可能的数据竞争
 func TestParallelPrepareUnprepareResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
-	// Setup and register fake DRA driver
+	// 启动并注册伪造的 DRA 驱动
 	draServerInfo, err := setupFakeDRADriverGRPCServer(tCtx, false, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer draServerInfo.teardownFn()
 
-	// Create fake Kube client and DRA manager
+	// 创建伪造的 Kube 客户端与 DRA manager
 	fakeKubeClient := fake.NewSimpleClientset()
 	manager, err := NewManager(tCtx.Logger(), fakeKubeClient, t.TempDir())
 	require.NoError(t, err, "create DRA manager")
 	defer manager.Stop()
-	manager.initDRAPluginManager(tCtx, getFakeNode, time.Second /* very short wiping delay for testing */)
+	manager.initDRAPluginManager(tCtx, getFakeNode, time.Second /* 测试中用极短的清理延迟 */)
 
 	plg := manager.GetWatcherHandler()
 	if err := plg.RegisterPlugin(tCtx, driverName, draServerInfo.socketName, []string{drapb.DRAPluginService}, nil); err != nil {
 		t.Fatalf("failed to register plugin %s, err: %v", driverName, err)
 	}
 
-	// Call PrepareResources in parallel
+	// 并行调用 PrepareResources
 	var wgSync, wgStart sync.WaitGroup // groups to sync goroutines
 	numGoroutines := 30
 	wgSync.Add(numGoroutines)
@@ -1944,17 +1986,16 @@ func TestParallelPrepareUnprepareResources(t *testing.T) {
 	wgSync.Wait()  // Wait for all goroutines to finish
 }
 
-// TestHandleWatchResourcesStream verifies the manager's ability to process health updates
-// received from a DRA plugin's WatchResources stream. It checks if the internal health cache
-// is updated correctly, if affected pods are identified, and if update notifications are sent
-// through the manager's update channel. It covers various scenarios including health changes, stream errors, and context cancellation.
+// TestHandleWatchResourcesStream 验证 manager 处理 DRA 插件 WatchResources 流
+// 中健康更新的能力：校验内部健康缓存是否被正确更新、受影响的 Pod 是否被识别，
+// 以及更新通知是否通过 manager 的 update 通道发出。覆盖健康变化、流错误与上下文取消等场景。
 func TestHandleWatchResourcesStream(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	logger := tCtx.Logger()
 	overallTestCtx, overallTestCancel := context.WithCancel(tCtx)
 	defer overallTestCancel()
 
-	// Helper to create and setup a new manager for each sub-test
+	// 为每个子测试创建并初始化一个新的 manager 的辅助函数
 	setupNewManagerAndRunStreamTest := func(
 		st *testing.T,
 		testSpecificCtx context.Context,
@@ -1967,7 +2008,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		}) (<-chan resourceupdates.Update, chan struct{}, chan error),
 	) {
 		tCtx := ktesting.Init(t)
-		// Fresh manager for each sub-test
+		// 每个子测试使用全新的 manager
 		manager, err := NewManager(tCtx.Logger(), nil, st.TempDir())
 		require.NoError(st, err)
 		defer manager.Stop()
@@ -1993,7 +2034,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 			errChan := make(chan error, 1)
 			go func() {
 				defer close(done)
-				// Use a logger that includes sub-test name for clarity
+				// 使用带子测试名的 logger，便于定位日志
 				logger := klog.FromContext(streamCtx).WithName(st.Name())
 				hdlCtx := klog.NewContext(streamCtx, logger)
 
@@ -2002,8 +2043,8 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) {
 						logger.V(4).Info("HandleWatchResourcesStream (test goroutine) exited as expected", "error", err)
 					} else {
-						// This is an application/stream error, not a standard exit.
-						// The sub-test ("StreamError") will assert this specific error.
+						// 这是应用/流错误，而非正常退出；
+						// 对应的 "StreamError" 子测试会断言这个具体错误
 						logger.V(2).Info("HandleWatchResourcesStream (test goroutine) exited with application/stream error", "error", err)
 					}
 				} else {
@@ -2017,12 +2058,12 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		return managerInstance, runTestStreamFunc
 	}
 
-	// Test Case 1: Health change for an allocated device
+	// 用例 1：已分配设备的健康状态变化
 	t.Run("HealthChangeForAllocatedDevice", func(t *testing.T) {
 		stCtx, stCancel := context.WithCancel(overallTestCtx)
 		defer stCancel()
 
-		// Setup: Create a manager with a relevant claim already in its cache.
+		// 准备：创建一个缓存中已有相关 claim 的 manager
 		initialClaim := genTestClaimInfo(claimUID, []string{string(podUID)}, true, nil)
 		manager, runStreamTest := setupNewManagerAndRunStreamTest(t, stCtx, initialClaim)
 
@@ -2034,7 +2075,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		}, 1)
 		updateChan, done, streamErrChan := runStreamTest(stCtx, responses)
 
-		// Send the health update message
+		// 发送健康更新消息
 		unhealthyDeviceMsg := &drahealthv1.DeviceHealth{
 			Device: &drahealthv1.DeviceIdentifier{
 				PoolName:   poolName,
@@ -2060,7 +2101,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 			t.Fatal("HealthChangeForAllocatedDevice: Timeout waiting for pod update on manager.update channel")
 		}
 
-		// Check cache state
+		// 检查缓存状态
 		cachedHealth := manager.healthInfoCache.getHealthInfo(driverName, poolName, deviceName).Health
 		assert.Equal(t, state.DeviceHealthStatus("Unhealthy"), cachedHealth, "Cache update check failed")
 
@@ -2076,16 +2117,16 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		case <-time.After(1 * time.Second):
 			t.Fatal("HealthChangeForAllocatedDevice: Timed out waiting for HandleWatchResourcesStream to finish after EOF signal")
 		}
-		// Expect nil (if HandleWatchResourcesStream returns nil on EOF) or io.EOF
+		// 预期返回 nil（若 EOF 时返回 nil）或 io.EOF
 		assert.True(t, finalErr == nil || errors.Is(finalErr, io.EOF), "Expected nil or io.EOF, got %v", finalErr)
 	})
 
-	// Test Case 2: Health change for a non-allocated device
+	// 用例 2：未分配设备的健康状态变化
 	t.Run("NonAllocatedDeviceChange", func(t *testing.T) {
 		stCtx, stCancel := context.WithCancel(overallTestCtx)
 		defer stCancel()
 
-		// Setup: Manager with no specific claims, or claims that don't use "other-device"
+		// 准备：manager 中没有相关 claim，或 claim 未使用 "other-device"
 		manager, runStreamTest := setupNewManagerAndRunStreamTest(t, stCtx)
 
 		t.Log("NonAllocatedDeviceChange: Test Case Started")
@@ -2113,12 +2154,12 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		select {
 		case upd := <-updateChan:
 			t.Fatalf("NonAllocatedDeviceChange: Unexpected update on manager.update channel: %+v", upd)
-			// OK, no update expected on manager.update for this device
+			// 该设备不应触发 manager.update，验证正确
 		case <-time.After(200 * time.Millisecond):
 			t.Log("NonAllocatedDeviceChange: Correctly received no update on manager channel.")
 		}
 
-		// Check health cache for the "other-device"
+		// 检查 "other-device" 的健康缓存
 		cachedHealthOther := manager.healthInfoCache.getHealthInfo(driverName, poolName, "other-device").Health
 		assert.Equal(t, state.DeviceHealthStatus("Unhealthy"), cachedHealthOther, "Cache update for other-device failed")
 
@@ -2134,17 +2175,17 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		assert.True(t, finalErr == nil || errors.Is(finalErr, io.EOF), "Expected nil or io.EOF, got %v", finalErr)
 	})
 
-	// Test Case 3: No actual health state change (idempotency)
+	// 用例 3：健康状态未实际变化（幂等性）
 	t.Run("NoActualStateChange", func(t *testing.T) {
 		stCtx, stCancel := context.WithCancel(overallTestCtx)
 		defer stCancel()
 
-		// Setup: Manager with a claim and the device already marked Unhealthy in health cache
+		// 准备：manager 中存在 claim，且健康缓存中该设备已标记为 Unhealthy
 		initialClaim := genTestClaimInfo(claimUID, []string{string(podUID)}, true, nil)
 		manager, runStreamTest := setupNewManagerAndRunStreamTest(t, stCtx, initialClaim)
 
-		// Pre-populate health cache
-		initialHealth := state.DeviceHealth{PoolName: poolName, DeviceName: deviceName, Health: "Unhealthy", LastUpdated: time.Now().Add(-5 * time.Millisecond), HealthCheckTimeout: DefaultHealthTimeout} // Ensure LastUpdated is slightly in past
+		// 预填充健康缓存
+		initialHealth := state.DeviceHealth{PoolName: poolName, DeviceName: deviceName, Health: "Unhealthy", LastUpdated: time.Now().Add(-5 * time.Millisecond), HealthCheckTimeout: DefaultHealthTimeout} // 保证 LastUpdated 略早于当前时间
 		_, err := manager.healthInfoCache.updateHealthInfo(logger, driverName, []state.DeviceHealth{initialHealth})
 		require.NoError(t, err, "Failed to pre-populate health cache")
 
@@ -2155,7 +2196,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		}, 1)
 		updateChan, done, streamErrChan := runStreamTest(stCtx, responses)
 
-		// Send the same "Unhealthy" state again
+		// 再次发送相同的 "Unhealthy" 状态
 		unhealthyDeviceMsg := &drahealthv1.DeviceHealth{
 			Device: &drahealthv1.DeviceIdentifier{
 				PoolName:   poolName,
@@ -2190,12 +2231,12 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		assert.True(t, finalErr == nil || errors.Is(finalErr, io.EOF), "Expected nil or io.EOF, got %v", finalErr)
 	})
 
-	// Test Case 4: Stream error
+	// 用例 4：流错误
 	t.Run("StreamError", func(t *testing.T) {
 		stCtx, stCancel := context.WithCancel(overallTestCtx)
 		defer stCancel()
 
-		// Get a new manager and the scoped runStreamTest helper
+		// 获取新的 manager 以及该子测试作用域的 runStreamTest 辅助函数
 		_, runStreamTest := setupNewManagerAndRunStreamTest(t, stCtx)
 		t.Log("StreamError: Test Case Started")
 
@@ -2215,7 +2256,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		var actualErr error
 		select {
 		case <-done:
-			// Read the error propagated from the HandleWatchResourcesStream goroutine
+			// 读取 HandleWatchResourcesStream goroutine 传播出来的错误
 			actualErr = <-streamErrChan
 			t.Logf("StreamError: done channel closed. Stream handler returned: %v", actualErr)
 		case <-time.After(2 * time.Second):
@@ -2226,10 +2267,10 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		assert.ErrorIs(t, actualErr, expectedStreamErr)
 	})
 
-	// Test Case 5: Context cancellation
+	// 用例 5：上下文取消
 	t.Run("ContextCanceled", func(t *testing.T) {
 		stCtx, stCancel := context.WithCancel(overallTestCtx)
-		// Deliberately do not `defer stCancel()` for this specific test case
+		// 该用例故意不 `defer stCancel()`
 
 		_, runStreamTest := setupNewManagerAndRunStreamTest(t, stCtx)
 		t.Log("ContextCanceled: Test Case Started")
@@ -2257,13 +2298,13 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		assert.True(t, errors.Is(finalErr, context.Canceled) || errors.Is(finalErr, context.DeadlineExceeded))
 	})
 
-	// Test Case 6: Health change for a device allocated with ShareID
-	// This test validates that ShareID does not interfere with health status reporting.
+	// 用例 6：带 ShareID 分配的设备的健康状态变化
+	// 验证 ShareID 不会干扰健康状态上报
 	t.Run("HealthChangeForDeviceWithShareID", func(t *testing.T) {
 		stCtx, stCancel := context.WithCancel(overallTestCtx)
 		defer stCancel()
 
-		// Setup: Create a manager with a claim that has ShareID set on the device
+		// 准备：manager 中存在一个设备带 ShareID 的 claim
 		testShareUID := types.UID("test-share-uid-for-health")
 		initialClaim := genTestClaimInfo(claimUID, []string{string(podUID)}, true, &testShareUID)
 		manager, runStreamTest := setupNewManagerAndRunStreamTest(t, stCtx, initialClaim)
@@ -2276,7 +2317,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		}, 1)
 		updateChan, done, streamErrChan := runStreamTest(stCtx, responses)
 
-		// Send health update for the device (same device that has ShareID in the claim)
+		// 为该设备发送健康更新（即 claim 中带 ShareID 的同一设备）
 		unhealthyDeviceMsg := &drahealthv1.DeviceHealth{
 			Device: &drahealthv1.DeviceIdentifier{
 				PoolName:   poolName,
@@ -2302,11 +2343,11 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 			t.Fatal("HealthChangeForDeviceWithShareID: Timeout waiting for pod update - ShareID may be interfering with health reporting")
 		}
 
-		// Verify health cache is updated correctly
+		// 验证健康缓存被正确更新
 		cachedHealth := manager.healthInfoCache.getHealthInfo(driverName, poolName, deviceName)
 		assert.Equal(t, state.DeviceHealthStatusUnhealthy, cachedHealth.Health, "Health cache should be updated for device with ShareID")
 
-		// Verify the claim still has the ShareID set (it shouldn't be lost during health updates)
+		// 验证 claim 中的 ShareID 仍存在（不应在健康更新过程中丢失）
 		claimFromCache, exists := manager.cache.get(claimName, namespace)
 		require.True(t, exists, "Claim should still exist in cache")
 		devices := claimFromCache.DriverState[driverName].Devices
@@ -2329,14 +2370,14 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		assert.True(t, finalErr == nil || errors.Is(finalErr, io.EOF), "Expected nil or io.EOF, got %v", finalErr)
 	})
 
-	// Test Case 7: Health change affects multiple pods sharing the same device via ShareID
-	// When two pods share the same physical device (identified by pool/device, but with different ShareIDs),
-	// a health change should notify both pods since they're using the same underlying hardware.
+	// 用例 7：健康变化影响通过 ShareID 共享同一设备的多个 Pod
+	// 当两个 Pod 共享同一物理设备（由 pool/device 标识、但 ShareID 不同）时，
+	// 健康变化应通知两个 Pod，因为它们使用同一底层硬件。
 	t.Run("HealthChangeForMultiplePodsWithSharedDevice", func(t *testing.T) {
 		stCtx, stCancel := context.WithCancel(overallTestCtx)
 		defer stCancel()
 
-		// Setup: Two claims from different pods, both using the same device with different ShareIDs
+		// 准备：来自不同 Pod 的两条 claim，使用同一设备但 ShareID 不同
 		pod1UID := types.UID("pod-1-sharing-device")
 		pod2UID := types.UID("pod-2-sharing-device")
 		claim1UID := types.UID("claim-1-shared")
@@ -2344,7 +2385,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		shareUID1 := types.UID("share-uid-1")
 		shareUID2 := types.UID("share-uid-2")
 
-		// Both claims reference the same physical device (same pool/device) but with different ShareIDs
+		// 两条 claim 都引用同一物理设备（相同 pool/device），但 ShareID 不同
 		claim1 := &ClaimInfo{
 			ClaimInfoState: state.ClaimInfoState{
 				ClaimUID:  claim1UID,
@@ -2355,7 +2396,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 					driverName: {
 						Devices: []state.Device{{
 							PoolName:     poolName,
-							DeviceName:   deviceName, // Same device as claim2
+							DeviceName:   deviceName, // 与 claim2 使用同一设备
 							ShareID:      &shareUID1,
 							RequestNames: []string{requestName},
 							CDIDeviceIDs: []string{cdiID},
@@ -2375,7 +2416,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 					driverName: {
 						Devices: []state.Device{{
 							PoolName:     poolName,
-							DeviceName:   deviceName, // Same device as claim1
+							DeviceName:   deviceName, // 与 claim1 使用同一设备
 							ShareID:      &shareUID2,
 							RequestNames: []string{requestName},
 							CDIDeviceIDs: []string{cdiID},
@@ -2396,7 +2437,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		}, 1)
 		updateChan, done, streamErrChan := runStreamTest(stCtx, responses)
 
-		// Send health update for the shared device
+		// 为共享设备发送健康更新
 		unhealthyDeviceMsg := &drahealthv1.DeviceHealth{
 			Device: &drahealthv1.DeviceIdentifier{
 				PoolName:   poolName,
@@ -2417,7 +2458,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 		select {
 		case upd := <-updateChan:
 			t.Logf("HealthChangeForMultiplePodsWithSharedDevice: Received update: %+v", upd)
-			// Both pods should be notified since they share the same device
+			// 两个 Pod 共享同一设备，都应收到通知
 			assert.Len(t, upd.PodUIDs, 2, "Both pods sharing the device should be notified")
 			assert.Contains(t, upd.PodUIDs, string(pod1UID), "Pod 1 should be notified")
 			assert.Contains(t, upd.PodUIDs, string(pod2UID), "Pod 2 should be notified")
@@ -2425,7 +2466,7 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 			t.Fatal("HealthChangeForMultiplePodsWithSharedDevice: Timeout waiting for pod update")
 		}
 
-		// Verify health cache is updated
+		// 验证健康缓存已更新
 		cachedHealth := manager.healthInfoCache.getHealthInfo(driverName, poolName, deviceName)
 		assert.Equal(t, state.DeviceHealthStatusUnhealthy, cachedHealth.Health, "Health cache should show Unhealthy for shared device")
 
@@ -2444,14 +2485,12 @@ func TestHandleWatchResourcesStream(t *testing.T) {
 	})
 }
 
-// TestUpdateAllocatedResourcesStatus verifies that the manager can correctly
-// update the PodStatus with health information for different types of DRA claims.
-// It covers the main scenarios that were difficult to test reliably in an e2e
-// environment due to timing issues:
-//  1. Direct claims: Where the pod's resource claim name directly matches the ResourceClaim object name.
-//  2. Renamed claims: Where the pod uses a local name for a ResourceClaim that has a different object name.
-//  3. Templated claims: Where the claim is generated from a template, and the pod status contains the
-//     dynamically generated claim name.
+// TestUpdateAllocatedResourcesStatus 验证 manager 能根据不同类型的 DRA claim
+// 正确地把健康信息写入 PodStatus。
+// 覆盖以下几类在 e2e 环境中因时序问题难以稳定测试的主要场景：
+//  1. 直接 claim：Pod 中的 resource claim 名与 ResourceClaim 对象名一致；
+//  2. 重命名 claim：Pod 使用本地名引用对象名不同的 ResourceClaim；
+//  3. 模板化 claim：claim 由模板生成，Pod 状态中保存动态生成的 claim 名。
 func TestUpdateAllocatedResourcesStatus(t *testing.T) {
 	directClaimName := "direct-claim-name"
 	renamedClaimObject := "renamed-claim-object"
@@ -2574,8 +2613,8 @@ func TestUpdateAllocatedResourcesStatus(t *testing.T) {
 				},
 			},
 		},
-		// Test case for ShareID: Verifies that health status is correctly reported for devices with ShareID set.
-		// This validates that KEP-4860 (ShareID) does not interfere with KEP-4680 (Resource Health Status).
+		// ShareID 用例：验证带 ShareID 的设备能正确上报健康状态，
+		// 即 KEP-4860（ShareID）不会干扰 KEP-4680（Resource Health Status）。
 		{
 			name: "Claim with ShareID",
 			pod: &v1.Pod{
@@ -2603,7 +2642,7 @@ func TestUpdateAllocatedResourcesStatus(t *testing.T) {
 							"test-driver": {Devices: []state.Device{{
 								PoolName:   "pool",
 								DeviceName: "dev-shared",
-								ShareID:    ptr.To(types.UID("test-share-id")), // Device has ShareID
+								ShareID:    ptr.To(types.UID("test-share-id")), // 该设备带 ShareID
 							}}},
 						},
 					},
@@ -2634,7 +2673,7 @@ func TestUpdateAllocatedResourcesStatus(t *testing.T) {
 				manager.cache.add(ci)
 			}
 
-			// Set all devices to be healthy for the test.
+			// 测试前把所有设备都设置为健康
 			devices := []state.DeviceHealth{}
 			for _, ci := range tc.claimInfos {
 				for driverName, ds := range ci.DriverState {
@@ -2660,6 +2699,8 @@ func TestUpdateAllocatedResourcesStatus(t *testing.T) {
 	}
 }
 
+// TestUpdateAllocatedResourcesStatus_Subrequest 验证请求子路径（subrequest）与设备请求名的匹配规则：
+// 子请求应匹配其基名，空请求匹配任意设备，不匹配时不上报健康状态
 func TestUpdateAllocatedResourcesStatus_Subrequest(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -2713,7 +2754,7 @@ func TestUpdateAllocatedResourcesStatus_Subrequest(t *testing.T) {
 			require.NoError(t, err)
 			defer manager.Stop()
 
-			// Setup claim info with device
+			// 准备包含设备的 claim info
 			claimInfo := &ClaimInfo{
 				ClaimInfoState: state.ClaimInfoState{
 					ClaimName: directClaimName,
@@ -2733,7 +2774,7 @@ func TestUpdateAllocatedResourcesStatus_Subrequest(t *testing.T) {
 			}
 			manager.cache.add(claimInfo)
 
-			// Setup health cache
+			// 准备健康缓存
 			devices := []state.DeviceHealth{
 				{
 					PoolName:   "test-pool",
@@ -2745,7 +2786,7 @@ func TestUpdateAllocatedResourcesStatus_Subrequest(t *testing.T) {
 			_, err = manager.healthInfoCache.updateHealthInfo(tCtx.Logger(), "test-driver", devices)
 			require.NoError(t, err)
 
-			// Create pod and status
+			// 创建 Pod 与初始状态
 			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-pod", UID: "test-pod-uid"},
 				Spec: v1.PodSpec{
@@ -2776,27 +2817,27 @@ func TestUpdateAllocatedResourcesStatus_Subrequest(t *testing.T) {
 				},
 			}
 
-			// Call UpdateAllocatedResourcesStatus
+			// 调用 UpdateAllocatedResourcesStatus
 			manager.UpdateAllocatedResourcesStatus(logger, pod, status)
 
-			// Assert results
+			// 断言结果
 			require.Len(t, status.ContainerStatuses, 1)
 
 			if tc.expectHealthReported {
-				// Should have one ResourceStatus entry
+				// 应有一条 ResourceStatus 记录
 				require.Len(t, status.ContainerStatuses[0].AllocatedResourcesStatus, 1)
 				resStatus := status.ContainerStatuses[0].AllocatedResourcesStatus[0]
 
-				// Should have one ResourceHealth entry
+				// 应有一条 ResourceHealth 记录
 				require.Len(t, resStatus.Resources, 1, "Expected exactly one ResourceHealth entry")
 				healthEntry := resStatus.Resources[0]
 
-				// Verify health matches what we put in the cache
+				// 验证健康状态与写入缓存的内容一致
 				assert.Equal(t, tc.expectedHealthStatus, healthEntry.Health)
 				assert.Equal(t, tc.expectedHealthMessage, ptr.Deref(healthEntry.Message, ""))
 				assert.Equal(t, v1.ResourceID("test-driver/test-pool/test-device"), healthEntry.ResourceID)
 			} else {
-				// Should have no ResourceStatus entries at all (empty statuses are pruned)
+				// 不应有任何 ResourceStatus 记录（空状态会被裁剪）
 				assert.Empty(t, status.ContainerStatuses[0].AllocatedResourcesStatus,
 					"Expected AllocatedResourcesStatus to be empty when device is filtered out")
 			}
@@ -2804,6 +2845,7 @@ func TestUpdateAllocatedResourcesStatus_Subrequest(t *testing.T) {
 	}
 }
 
+// TestTruncateHealthMessage 验证健康消息截断逻辑：超长消息截断到上限并以 "..." 结尾
 func TestTruncateHealthMessage(t *testing.T) {
 	testCases := map[string]struct {
 		input    string
@@ -2843,9 +2885,9 @@ func TestTruncateHealthMessage(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			result := truncateHealthMessage(tc.input)
 			assert.Equal(t, tc.expected, result)
-			// Verify the result is never longer than max length
+			// 验证结果长度不会超过上限
 			assert.LessOrEqual(t, len(result), v1.ResourceHealthMessageMaxLength)
-			// Verify that if truncation occurred, it ends with "..."
+			// 验证发生截断时结果以 "..." 结尾
 			if len(tc.input) > v1.ResourceHealthMessageMaxLength {
 				assert.Len(t, result, v1.ResourceHealthMessageMaxLength)
 				assert.Equal(t, "...", result[len(result)-3:])
@@ -2854,6 +2896,8 @@ func TestTruncateHealthMessage(t *testing.T) {
 	}
 }
 
+// TestBuildResourceHealth 验证 buildResourceHealth 构造的 ResourceHealth：
+// 健康状态映射、资源 ID（优先 CDI ID，缺失时回退为 driver/pool/device）与可选消息
 func TestBuildResourceHealth(t *testing.T) {
 	testCases := map[string]struct {
 		device        state.Device
@@ -2964,6 +3008,8 @@ func TestBuildResourceHealth(t *testing.T) {
 	}
 }
 
+// TestToResourceHealthStatus 验证内部设备健康状态到 API ResourceHealthStatus 的映射，
+// 未知或空值一律映射为 Unknown
 func TestToResourceHealthStatus(t *testing.T) {
 	testCases := map[string]struct {
 		input    state.DeviceHealthStatus
@@ -2998,6 +3044,7 @@ func TestToResourceHealthStatus(t *testing.T) {
 	}
 }
 
+// TestToDeviceHealthStatus 验证 gRPC 健康状态到内部设备健康状态的映射，未知值映射为 Unknown
 func TestToDeviceHealthStatus(t *testing.T) {
 	testCases := map[string]struct {
 		input    drahealthv1.HealthStatus
@@ -3028,6 +3075,8 @@ func TestToDeviceHealthStatus(t *testing.T) {
 	}
 }
 
+// TestBuildDeviceHealth 验证 buildDeviceHealth 对健康状态、超时与消息的转换：
+// 非正超时使用默认值，超长消息会被截断
 func TestBuildDeviceHealth(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	longMessage := strings.Repeat("a", v1.ResourceHealthMessageMaxLength+5)
@@ -3090,12 +3139,17 @@ func TestBuildDeviceHealth(t *testing.T) {
 	}
 }
 
+// genTestClaimWithSkip 生成一个设置了 SkipNodeOperations 的 ResourceClaim，
+// 用于验证跳过节点操作的场景
 func genTestClaimWithSkip(name, driver, device, podUID string, skip ...resourceapi.SkipNodeOperation) *resourceapi.ResourceClaim {
 	c := genTestClaim(name, driver, device, podUID)
 	c.Status.Allocation.Devices.Results[0].SkipNodeOperations = skip
 	return c
 }
 
+// TestPrepareUnprepareResourcesSkipNodeOperations 验证 claim 上的 SkipNodeOperations 语义：
+// SkipNodeOperationAll 跳过 prepare 与 unprepare；只跳过 unprepare 时 prepare 仍会调用；
+// 并在特性开关被关闭（回滚）时保证 unprepare 仍能成功完成
 func TestPrepareUnprepareResourcesSkipNodeOperations(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	fakeKubeClient := fake.NewClientset()

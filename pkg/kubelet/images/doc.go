@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package images is responsible for managing lifecycle of container images.
+// Package images 负责管理容器镜像的生命周期。
 package images

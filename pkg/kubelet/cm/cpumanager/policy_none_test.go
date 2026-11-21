@@ -26,6 +26,7 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// TestNonePolicyName 验证 none 策略的名称固定为 "none"。
 func TestNonePolicyName(t *testing.T) {
 	policy := &nonePolicy{}
 
@@ -35,6 +36,7 @@ func TestNonePolicyName(t *testing.T) {
 	}
 }
 
+// TestNonePolicyAllocate 验证 none 策略的 Allocate 不做任何分配且不报错。
 func TestNonePolicyAllocate(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	policy := &nonePolicy{}
@@ -53,6 +55,7 @@ func TestNonePolicyAllocate(t *testing.T) {
 	}
 }
 
+// TestNonePolicyRemove 验证 none 策略的 RemoveContainer 不做任何操作且不报错。
 func TestNonePolicyRemove(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	policy := &nonePolicy{}
@@ -71,9 +74,11 @@ func TestNonePolicyRemove(t *testing.T) {
 	}
 }
 
+// TestNonePolicyGetAllocatableCPUs 验证 none 策略不提供可分配 CPU。
 func TestNonePolicyGetAllocatableCPUs(t *testing.T) {
-	// any random topology is fine
+	// 任意拓扑均可。
 
+	// 收集所有 CPU ID 作为默认可分配集合。
 	var cpuIDs []int
 	for cpuID := range topoSingleSocketHT.CPUDetails {
 		cpuIDs = append(cpuIDs, cpuID)
@@ -92,9 +97,11 @@ func TestNonePolicyGetAllocatableCPUs(t *testing.T) {
 	}
 }
 
+// TestNonePolicyOptions 验证 none 策略接受 nil 选项但拒绝任何非空选项。
 func TestNonePolicyOptions(t *testing.T) {
 	var err error
 
+	// nil 选项应被接受。
 	_, err = NewNonePolicy(nil)
 	if err != nil {
 		t.Errorf("NewNonePolicy with nil options failure. expected no error but got: %v", err)
@@ -103,6 +110,7 @@ func TestNonePolicyOptions(t *testing.T) {
 	opts := map[string]string{
 		FullPCPUsOnlyOption: "true",
 	}
+	// none 策略不接受任何选项。
 	_, err = NewNonePolicy(opts)
 	if err == nil {
 		t.Errorf("NewNonePolicy with (any) options failure. expected error but got none")

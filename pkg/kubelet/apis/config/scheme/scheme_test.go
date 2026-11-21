@@ -24,6 +24,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/apis/config/fuzzer"
 )
 
+// TestRoundTripFuzzing 用 fuzz 数据验证 kubeletconfig 各版本的序列化往返一致性。
 func TestRoundTripFuzzing(t *testing.T) {
 	scheme, _, err := NewSchemeAndCodecs()
 	if err != nil {
@@ -32,6 +33,7 @@ func TestRoundTripFuzzing(t *testing.T) {
 	roundtrip.RoundTripTestForScheme(t, scheme, fuzzer.Funcs)
 }
 
+// TestRoundTripYAML 验证 YAML 编解码的往返一致性。
 func TestRoundTripYAML(t *testing.T) {
 	scheme, codec, err := NewSchemeAndCodecs()
 	if err != nil {
@@ -40,6 +42,7 @@ func TestRoundTripYAML(t *testing.T) {
 	componentconfigtesting.RoundTripTest(t, scheme, *codec)
 }
 
+// TestDefaultsYAML 验证默认值应用逻辑。
 func TestDefaultsYAML(t *testing.T) {
 	scheme, codec, err := NewSchemeAndCodecs()
 	if err != nil {

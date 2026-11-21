@@ -66,10 +66,12 @@ const (
 	reconcilerSyncWaitDuration   = 10 * time.Second
 )
 
+// hasAddedPods 恒定返回 true，模拟"节点上已有 Pod"的场景，
+// 让 reconciler 认为可以安全执行卷操作（无 Pod 时它可能会跳过某些清理）。
 func hasAddedPods() bool { return true }
 
-// Calls Run()
-// Verifies there are no calls to attach, detach, mount, unmount, etc.
+// 测试场景：DSW/ASW 均为空时运行 reconciler。
+// 验证 attach、detach、mount、unmount 等操作一次都不会被调用。
 func Test_Run_Positive_DoNothing(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	// Arrange
@@ -113,9 +115,8 @@ func Test_Run_Positive_DoNothing(t *testing.T) {
 	assert.NoError(t, volumetesting.VerifyZeroDetachCallCount(fakePlugin))
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Calls Run()
-// Verifies there is are attach/mount/etc calls and no detach/unmount calls.
+// 向 desiredStateOfWorld 中放入一个 volume/pod 组合，然后启动 Run()。
+// 验证会触发 attach/mount 等操作，且不会触发 detach/unmount。
 func Test_Run_Positive_VolumeAttachAndMount(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	// Arrange
@@ -190,9 +191,8 @@ func Test_Run_Positive_VolumeAttachAndMount(t *testing.T) {
 	assert.NoError(t, volumetesting.VerifyZeroDetachCallCount(fakePlugin))
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Calls Run()
-// Verifies there is are attach/mount/etc calls and no detach/unmount calls.
+// 与 VolumeAttachAndMount 相同，但开启 in-tree 到 CSI 的迁移。
+// 验证迁移后的卷仍能完成 attach/mount，且没有 detach/unmount。
 func Test_Run_Positive_VolumeAttachAndMountMigrationEnabled(t *testing.T) {
 	// Arrange
 	logger, ctx := ktesting.NewTestContext(t)
@@ -298,11 +298,8 @@ func Test_Run_Positive_VolumeAttachAndMountMigrationEnabled(t *testing.T) {
 	assert.NoError(t, volumetesting.VerifyZeroDetachCallCount(fakePlugin))
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Enables controllerAttachDetachEnabled.
-// Calls Run()
-// Verifies there is one mount call and no unmount calls.
-// Verifies there are no attach/detach calls.
+// 向 DSW 放入一个 volume/pod，并开启 controllerAttachDetachEnabled。
+// 验证只有 mount 调用、没有 unmount 调用，同时 attach/detach 由控制器负责，reconciler 不应发起。
 func Test_Run_Positive_VolumeMountControllerAttachEnabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	// Arrange
@@ -391,12 +388,8 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabled(t *testing.T) {
 	assert.NoError(t, volumetesting.VerifyZeroDetachCallCount(fakePlugin))
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Enables controllerAttachDetachEnabled.
-// volume is not reported-in-use
-// Calls Run()
-// Verifies that there is not wait-for-mount call
-// Verifies that there is no exponential-backoff triggered
+// 向 DSW 放入一个 volume/pod，开启 controllerAttachDetachEnabled，
+// 但卷未被报告为 in-use。验证不会进入 wait-for-mount，也不会触发指数退避重试。
 func Test_Run_Negative_VolumeMountControllerAttachEnabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	// Arrange
@@ -472,11 +465,8 @@ func Test_Run_Negative_VolumeMountControllerAttachEnabled(t *testing.T) {
 		0 /* expectedMountDeviceCallCount */, fakePlugin))
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Calls Run()
-// Verifies there is one attach/mount/etc call and no detach calls.
-// Deletes volume/pod from desired state of world.
-// Verifies detach/unmount calls are issued.
+// 向 DSW 放入 volume/pod 并运行 Run()，验证 attach/mount 各调用一次且无 detach。
+// 随后从 DSW 删除该 volume/pod，验证会发出 unmount/detach。
 func Test_Run_Positive_VolumeAttachMountUnmountDetach(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	// Arrange
@@ -561,13 +551,9 @@ func Test_Run_Positive_VolumeAttachMountUnmountDetach(t *testing.T) {
 		1 /* expectedDetachCallCount */, fakePlugin))
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Enables controllerAttachDetachEnabled.
-// Calls Run()
-// Verifies one mount call is made and no unmount calls.
-// Deletes volume/pod from desired state of world.
-// Verifies one unmount call is made.
-// Verifies there are no attach/detach calls made.
+// 开启 controllerAttachDetachEnabled，向 DSW 放入 volume/pod 并运行 Run()，
+// 验证只调用一次 mount 而无 unmount；从 DSW 删除后验证触发一次 unmount，
+// 且全程没有 attach/detach（由控制器负责）。
 func Test_Run_Positive_VolumeUnmountControllerAttachEnabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	// Arrange
@@ -666,10 +652,8 @@ func Test_Run_Positive_VolumeUnmountControllerAttachEnabled(t *testing.T) {
 	assert.NoError(t, volumetesting.VerifyZeroDetachCallCount(fakePlugin))
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Calls Run()
-// Verifies there are attach/get map paths/setupDevice calls and
-// no detach/teardownDevice calls.
+// 向 DSW 放入一个块设备卷并运行 Run()。
+// 验证会调用 attach、get map path、setupDevice，且不调用 detach/teardownDevice。
 func Test_Run_Positive_VolumeAttachAndMap(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	pod := &v1.Pod{
@@ -762,12 +746,9 @@ func Test_Run_Positive_VolumeAttachAndMap(t *testing.T) {
 	assert.NoError(t, volumetesting.VerifyZeroDetachCallCount(fakePlugin))
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Enables controllerAttachDetachEnabled.
-// Calls Run()
-// Verifies there are two get map path calls, a setupDevice call
-// and no teardownDevice call.
-// Verifies there are no attach/detach calls.
+// 开启 controllerAttachDetachEnabled，向 DSW 放入块设备卷并运行 Run()。
+// 验证调用两次 get map path 和一次 setupDevice，且不调用 teardownDevice；
+// attach/detach 由控制器负责，不应出现。
 func Test_Run_Positive_BlockVolumeMapControllerAttachEnabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	pod := &v1.Pod{
@@ -877,12 +858,8 @@ func Test_Run_Positive_BlockVolumeMapControllerAttachEnabled(t *testing.T) {
 	assert.NoError(t, volumetesting.VerifyZeroDetachCallCount(fakePlugin))
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Calls Run()
-// Verifies there is one attach call, two get map path calls,
-// setupDevice call and no detach calls.
-// Deletes volume/pod from desired state of world.
-// Verifies one detach/teardownDevice calls are issued.
+// 向 DSW 放入块设备卷并运行 Run()，验证 attach、两次 get map path、
+// setupDevice 被调用且无 detach；从 DSW 删除后验证触发 detach 与 teardownDevice。
 func Test_Run_Positive_BlockVolumeAttachMapUnmapDetach(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	pod := &v1.Pod{
@@ -985,13 +962,9 @@ func Test_Run_Positive_BlockVolumeAttachMapUnmapDetach(t *testing.T) {
 		1 /* expectedDetachCallCount */, fakePlugin))
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Enables controllerAttachDetachEnabled.
-// Calls Run()
-// Verifies two map path calls are made and no teardownDevice/detach calls.
-// Deletes volume/pod from desired state of world.
-// Verifies one teardownDevice call is made.
-// Verifies there are no attach/detach calls made.
+// 开启 controllerAttachDetachEnabled，向 DSW 放入块设备卷并运行 Run()。
+// 验证调用两次 map path 且无 teardownDevice/detach；从 DSW 删除后验证触发一次 teardownDevice，
+// 且全程没有 attach/detach。
 func Test_Run_Positive_VolumeUnmapControllerAttachEnabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	pod := &v1.Pod{
@@ -1112,6 +1085,8 @@ func Test_Run_Positive_VolumeUnmapControllerAttachEnabled(t *testing.T) {
 	assert.NoError(t, volumetesting.VerifyZeroDetachCallCount(fakePlugin))
 }
 
+// 验证 MapVolume 在找不到 BlockVolumeMapper 插件时返回可识别的错误，
+// 覆盖插件列表为空与插件类型不匹配两种情形。
 func Test_GenerateMapVolumeFunc_Plugin_Not_Found(t *testing.T) {
 	testCases := map[string]struct {
 		volumePlugins  []volume.VolumePlugin
@@ -1162,6 +1137,8 @@ func Test_GenerateMapVolumeFunc_Plugin_Not_Found(t *testing.T) {
 	}
 }
 
+// 验证 UnmapVolume 在找不到 BlockVolumeMapper 插件时返回可识别的错误，
+// 覆盖插件列表为空与插件类型不匹配两种情形。
 func Test_GenerateUnmapVolumeFunc_Plugin_Not_Found(t *testing.T) {
 	testCases := map[string]struct {
 		volumePlugins  []volume.VolumePlugin
@@ -1204,6 +1181,8 @@ func Test_GenerateUnmapVolumeFunc_Plugin_Not_Found(t *testing.T) {
 	}
 }
 
+// 验证 UnmapDevice 在找不到 BlockVolumeMapper 插件时返回可识别的错误，
+// 覆盖插件列表为空与插件类型不匹配两种情形。
 func Test_GenerateUnmapDeviceFunc_Plugin_Not_Found(t *testing.T) {
 	testCases := map[string]struct {
 		volumePlugins  []volume.VolumePlugin
@@ -1245,12 +1224,9 @@ func Test_GenerateUnmapDeviceFunc_Plugin_Not_Found(t *testing.T) {
 	}
 }
 
-// Populates desiredStateOfWorld cache with one volume/pod.
-// Enables controllerAttachDetachEnabled.
-// Calls Run()
-// Wait for volume mounted.
-// Mark volume as fsResizeRequired in ASW.
-// Verifies volume's fsResizeRequired flag is cleared later.
+// 开启 controllerAttachDetachEnabled，向 DSW 放入 volume/pod 并运行 Run()，
+// 等待卷完成挂载后，在 ASW 中把卷标记为 fsResizeRequired，
+// 验证该标记随后被 reconciler 清除（即文件系统扩容已完成）。
 func Test_Run_Positive_VolumeFSResizeControllerAttachEnabled(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	blockMode := v1.PersistentVolumeBlock
@@ -1417,6 +1393,7 @@ func Test_Run_Positive_VolumeFSResizeControllerAttachEnabled(t *testing.T) {
 	}
 }
 
+// 构造测试用 PVC，指定 PV 名称、卷模式和请求/状态容量。
 func getTestPVC(pvName string, volumeMode *v1.PersistentVolumeMode, specSize, statusSize resource.Quantity) *v1.PersistentVolumeClaim {
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1441,6 +1418,7 @@ func getTestPVC(pvName string, volumeMode *v1.PersistentVolumeMode, specSize, st
 	return pvc
 }
 
+// 构造测试用 PV，指定名称、卷模式与容量，并绑定到名为 pvc 的 Claim。
 func getTestPV(pvName string, volumeMode *v1.PersistentVolumeMode, pvSize resource.Quantity) *v1.PersistentVolume {
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1458,6 +1436,7 @@ func getTestPV(pvName string, volumeMode *v1.PersistentVolumeMode, pvSize resour
 	return pv
 }
 
+// 构造一个引用指定 PVC 的测试 Pod，用于驱动 DSW 中的卷需求。
 func getTestPod(claimName string) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1480,6 +1459,9 @@ func getTestPod(claimName string) *v1.Pod {
 	return pod
 }
 
+// 表驱动测试设备全局挂载的"不确定"状态转换：超时操作应标记为 uncertain，
+// 失败操作应回退为未挂载，成功后再超时/失败则保持已挂载。
+// 对块设备和文件系统两种模式分别验证卸载/teardown 调用次数。
 func Test_UncertainDeviceGlobalMounts(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	var tests = []struct {
@@ -1677,6 +1659,8 @@ func Test_UncertainDeviceGlobalMounts(t *testing.T) {
 	}
 }
 
+// 表驱动测试 Pod 级卷挂载的"不确定"状态转换，逻辑与设备全局挂载测试类似，
+// 验证超时、失败及成功后的重试/重新挂载行为。
 func Test_UncertainVolumeMountState(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	var tests = []struct {
@@ -1921,6 +1905,7 @@ func Test_UncertainVolumeMountState(t *testing.T) {
 	}
 }
 
+// 轮询等待卷在 ASW 中以 DeviceMountUncertain 状态全局挂载，超时则测试失败。
 func waitForUncertainGlobalMount(t *testing.T, volumeName v1.UniqueVolumeName, asw cache.ActualStateOfWorld) {
 	// check if volume is globally mounted in uncertain state
 	err := retryWithExponentialBackOff(
@@ -1941,6 +1926,7 @@ func waitForUncertainGlobalMount(t *testing.T, volumeName v1.UniqueVolumeName, a
 	}
 }
 
+// 轮询等待卷出现在 ASW 的全局已挂载卷列表中，超时则测试失败。
 func waitForGlobalMount(t *testing.T, volumeName v1.UniqueVolumeName, asw cache.ActualStateOfWorld) {
 	// check if volume is globally mounted
 	err := retryWithExponentialBackOff(
@@ -1961,6 +1947,7 @@ func waitForGlobalMount(t *testing.T, volumeName v1.UniqueVolumeName, asw cache.
 	}
 }
 
+// 轮询等待卷以"不确定"状态挂载到指定 Pod，超时则测试失败。
 func waitForUncertainPodMount(t *testing.T, volumeName v1.UniqueVolumeName, podName types.UniquePodName, asw cache.ActualStateOfWorld) {
 	logger, _ := ktesting.NewTestContext(t)
 	// check if volume is locally pod mounted in uncertain state
@@ -1986,6 +1973,7 @@ func waitForUncertainPodMount(t *testing.T, volumeName v1.UniqueVolumeName, podN
 	}
 }
 
+// 轮询等待卷出现在 ASW 的已挂载卷列表中，超时则测试失败。
 func waitForMount(
 	t *testing.T,
 	fakePlugin *volumetesting.FakeVolumePlugin,
@@ -2010,6 +1998,8 @@ func waitForMount(
 	}
 }
 
+// 轮询等待 Pod 对应的卷从 ASW 中消失（完成卸载），超时则测试失败。
+// GetAllMountedVolumes 同时包含已挂载与不确定状态，因此也能覆盖重建卷的卸载。
 func waitForUnmount(
 	t *testing.T,
 	volumeName v1.UniqueVolumeName,
@@ -2035,6 +2025,7 @@ func waitForUnmount(
 	}
 }
 
+// 轮询等待卷被加入 ASW，超时则测试失败。
 func waitForVolumeToExistInASW(t *testing.T, volumeName v1.UniqueVolumeName, asw cache.ActualStateOfWorld) {
 	err := retryWithExponentialBackOff(
 		testOperationBackOffDuration,
@@ -2050,6 +2041,7 @@ func waitForVolumeToExistInASW(t *testing.T, volumeName v1.UniqueVolumeName, asw
 	}
 }
 
+// 轮询等待卷从 ASW 中移除（完成 detach），超时则测试失败。
 func waitForDetach(
 	t *testing.T,
 	volumeName v1.UniqueVolumeName,
@@ -2070,6 +2062,8 @@ func waitForDetach(
 	}
 }
 
+// 以固定因子 3、最多 6 步的指数退避执行条件函数，
+// 用于吸收 reconciler 异步循环带来的时序抖动。
 func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.ConditionFunc) error {
 	backoff := wait.Backoff{
 		Duration: initialDuration,
@@ -2080,6 +2074,8 @@ func retryWithExponentialBackOff(initialDuration time.Duration, fn wait.Conditio
 	return wait.ExponentialBackoff(backoff, fn)
 }
 
+// 构造 fake clientset：对 node get 返回给定的已挂载卷列表，
+// 其余请求一律返回错误，从而尽早暴露未预期的 API 调用。
 func createTestClient(attachedVolumes ...v1.AttachedVolume) *fake.Clientset {
 	fakeClient := &fake.Clientset{}
 	if len(attachedVolumes) == 0 {
@@ -2105,10 +2101,13 @@ func createTestClient(attachedVolumes ...v1.AttachedVolume) *fake.Clientset {
 	return fakeClient
 }
 
+// 在后台 goroutine 中启动 reconciler，直到进程结束或 ctx 取消。
 func runReconciler(ctx context.Context, reconciler Reconciler) {
 	go reconciler.Run(ctx, wait.NeverStop)
 }
 
+// 构造 fake clientset：node get 返回已挂载卷，PV/PVC get 返回给定对象，
+// 并支持 PVC status 子资源 patch；其余请求返回错误以暴露意外调用。
 func createtestClientWithPVPVC(pv *v1.PersistentVolume, pvc *v1.PersistentVolumeClaim, attachedVolumes ...v1.AttachedVolume) *fake.Clientset {
 	fakeClient := &fake.Clientset{}
 	if len(attachedVolumes) == 0 {
@@ -2144,6 +2143,9 @@ func createtestClientWithPVPVC(pv *v1.PersistentVolume, pvc *v1.PersistentVolume
 	return fakeClient
 }
 
+// 回归测试：卷在 UnmountDevice 执行期间被重新加入 DSW，
+// 重新 attach 时必须沿用 Node.Status 中的 devicePath，不能被卸载流程清空。
+// 通过 fake 插件的 hook 精确控制步骤 1-4 的交错顺序。
 func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	// Arrange
@@ -2206,10 +2208,13 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 		},
 	}
 
+	// 本测试通过插件回调制造交错执行，步骤顺序与代码顺序不同，按注释中的编号阅读。
 	// Some steps are executes out of order in callbacks, follow the numbers.
 
+	// 1. 把卷加入 DSW 并等待其挂载完成，作为竞态测试的初始状态。
 	// 1. Add a volume to DSW and wait until it's mounted
 	volumeSpec := &volume.Spec{Volume: &pod.Spec.Volumes[0]}
+	// reconciler 会并发读取 volumeSpec，因此回调里必须使用独立副本以避免数据竞争。
 	// copy before reconciler runs to avoid data race.
 	volumeSpecCopy := &volume.Spec{Volume: &pod.Spec.Volumes[0]}
 	podName := util.GetUniquePodName(pod)
@@ -2237,6 +2242,7 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 	fakePlugin.Lock()
 	fakePlugin.UnmountDeviceHook = func(mountPath string) error {
 		// Act:
+		// 3. 卷正在卸载时把它重新加入 DSW，复现"卸载与重新挂载"的交错。
 		// 3. While a volume is being unmounted, add it back to the desired state of world
 		logger.Info("UnmountDevice called")
 		var generatedVolumeNameCopy v1.UniqueVolumeName
@@ -2251,6 +2257,7 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 			close(finished)
 		})
 		// Assert
+		// 4. 卷再次挂载时，UnmountDevice 不应清空 devicePath，否则重新 attach 会丢失设备路径。
 		// 4. When the volume is mounted again, expect that UnmountDevice operation did not clear devicePath
 		if devicePath == "" {
 			logger.Error(nil, "Expected WaitForAttach called with devicePath from Node.Status")
@@ -2260,9 +2267,11 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 	}
 	fakePlugin.Unlock()
 
+	// 重新启动 reconciler，让步骤 2 的删除操作触发卸载回调。
 	// Start the reconciler again.
 	go reconciler.Run(ctx, wait.NeverStop)
 
+	// 2. 从 DSW 删除卷，触发卸载，并等待回调中的步骤 3/4 完成。
 	// 2. Delete the volume from DSW (and wait for callbacks)
 	dsw.DeletePodFromVolume(podName, generatedVolumeName)
 
@@ -2270,6 +2279,7 @@ func Test_Run_Positive_VolumeMountControllerAttachEnabledRace(t *testing.T) {
 	waitForMount(t, fakePlugin, generatedVolumeName, asw)
 }
 
+// 构造一个带有 fake-device1 已挂载记录的 Node 对象。
 func getFakeNode() *v1.Node {
 	return &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2286,6 +2296,7 @@ func getFakeNode() *v1.Node {
 	}
 }
 
+// 构造一个使用内联 GCEPersistentDisk 卷的测试 Pod。
 func getInlineFakePod(podName, podUUID, outerName, innerName string) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2308,6 +2319,7 @@ func getInlineFakePod(podName, podUUID, outerName, innerName string) *v1.Pod {
 	return pod
 }
 
+// 按给定 kubelet 目录和挂载点构造一个启用了 controller attach/detach 的 reconciler 及 fake 插件。
 func getReconciler(kubeletDir string, t *testing.T, volumePaths []string, kubeClient *fake.Clientset) (Reconciler, *volumetesting.FakeVolumePlugin) {
 	node := getFakeNode()
 	volumePluginMgr, fakePlugin := volumetesting.GetTestKubeletVolumePluginMgrWithNodeAndRoot(t, node, kubeletDir)
@@ -2348,6 +2360,8 @@ func getReconciler(kubeletDir string, t *testing.T, volumePaths []string, kubeCl
 	return rc, fakePlugin
 }
 
+// 从重建卷启动 Run()，验证 devicePath 和可 attach 属性会依据 Node.Status 回填：
+// 一个卷在 Node.Status 中有记录，另一个没有，二者应分别得到不同的更新结果。
 func TestReconcileWithUpdateReconstructedFromAPIServer(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	// Calls Run() with two reconstructed volumes.
@@ -2436,6 +2450,8 @@ func TestReconcileWithUpdateReconstructedFromAPIServer(t *testing.T) {
 	assert.False(t, reconciler.StatesHasBeenSynced())
 
 	reconciler.volumesNeedUpdateFromNodeStatus = append(reconciler.volumesNeedUpdateFromNodeStatus, volumeName1, volumeName2)
+	// Act - 只运行一次 reconcile 循环。
+	// 由于 volumesNeedUpdateFromNodeStatus 非空，本次循环只做状态回填，不会触发卸载。
 	// Act - run reconcile loop just once.
 	// "volumesNeedUpdateFromNodeStatus" is not empty, so no unmount will be triggered.
 	reconciler.reconcile(ctx)
@@ -2460,6 +2476,8 @@ func TestReconcileWithUpdateReconstructedFromAPIServer(t *testing.T) {
 	}
 }
 
+// 验证重建卷在 Setup 失败后仍能成功卸载：
+// fake 插件在非重建卷时模拟卷数据文件丢失，确保卸载路径不依赖重新加载卷数据。
 func TestReconstructedVolumeShouldUnmountSucceedAfterSetupFailed(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	// Arrange

@@ -44,8 +44,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// noDefault 是一个不做任何默认值填充的默认函数，用于隔离解码逻辑本身的行为。
 func noDefault(klog.Logger, *core.Pod) error { return nil }
 
+// TestDecodeSinglePod 验证单 pod 文件经 JSON 与各优先版本 YAML 解码后，
+// 与原始 pod 完全一致（往返编解码）。
 func TestDecodeSinglePod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	grace := int64(30)
@@ -88,6 +91,7 @@ func TestDecodeSinglePod(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
+	// 先用默认编解码器把 pod 编码成 JSON，再走 tryDecodeSinglePod，验证单 pod 文件的解码往返一致。
 	parsed, podOut, err := tryDecodeSinglePod(logger, json, noDefault)
 	if !parsed {
 		t.Errorf("expected to have parsed file: (%s)", string(json))
@@ -99,6 +103,7 @@ func TestDecodeSinglePod(t *testing.T) {
 		t.Errorf("expected:\n%#v\ngot:\n%#v\n%s", pod, podOut, string(json))
 	}
 
+	// 对核心组的所有优先版本重复 YAML 编解码，覆盖多版本兼容路径。
 	for _, gv := range legacyscheme.Scheme.PrioritizedVersionsForGroup(v1.GroupName) {
 		info, _ := runtime.SerializerInfoForMediaType(legacyscheme.Codecs.SupportedMediaTypes(), "application/yaml")
 		encoder := legacyscheme.Codecs.EncoderForVersion(info.Serializer, gv)
@@ -119,6 +124,8 @@ func TestDecodeSinglePod(t *testing.T) {
 	}
 }
 
+// TestDecodeSinglePodRejectsClusterTrustBundleVolumes 验证静态 pod 解码时会拒绝引用
+// ClusterTrustBundle 投影卷的配置。
 func TestDecodeSinglePodRejectsClusterTrustBundleVolumes(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	grace := int64(30)
@@ -184,12 +191,14 @@ func TestDecodeSinglePodRejectsClusterTrustBundleVolumes(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
+	// 静态 pod 不得引用集群信任包这类 API 对象，解码时必须拒绝。
 	_, _, err = tryDecodeSinglePod(logger, json, noDefault)
 	if !strings.Contains(err.Error(), "may not reference clustertrustbundles") {
 		t.Errorf("Got error %q, want %q", err, fmt.Errorf("static pods may not reference clustertrustbundles API objects"))
 	}
 }
 
+// TestDecodeSinglePodRejectsResourceClaims 验证静态 pod 解码时会拒绝引用 ResourceClaim。
 func TestDecodeSinglePodRejectsResourceClaims(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	grace := int64(30)
@@ -241,13 +250,17 @@ func TestDecodeSinglePodRejectsResourceClaims(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
+	// 静态 pod 不得引用 ResourceClaim，解码阶段直接报错，避免运行时依赖动态资源分配。
 	_, _, err = tryDecodeSinglePod(logger, json, noDefault)
 	if !strings.Contains(err.Error(), "may not reference resourceclaims") {
 		t.Errorf("Got error %q, want %q", err, fmt.Errorf("static pods may not reference resourceclaims API objects"))
 	}
 }
 
+// TestDecodeSinglePodWithOptions 验证启用容器重启规则特性后，容器级 RestartPolicy 字段
+// 能通过单 pod 文件解码正确解析。
 func TestDecodeSinglePodWithOptions(t *testing.T) {
+	// 先启用容器重启规则特性门控，否则容器级重启策略在解码时不会生效。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ContainerRestartRules, true)
 	logger, _ := ktesting.NewTestContext(t)
 	restartPolicyAlways := v1.ContainerRestartPolicyAlways
@@ -286,6 +299,8 @@ func TestDecodeSinglePodWithOptions(t *testing.T) {
 	}
 }
 
+// TestDecodePodList 验证包含单个 pod 的 PodList 经 JSON 与各优先版本 YAML 解码后
+// 与原始列表一致。
 func TestDecodePodList(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	grace := int64(30)
@@ -332,6 +347,7 @@ func TestDecodePodList(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
+	// 构造包含单个 pod 的列表，验证 PodList 的 JSON 解码往返一致。
 	parsed, podListOut, err := tryDecodePodList(logger, json, noDefault)
 	if !parsed {
 		t.Errorf("expected to have parsed file: (%s)", string(json))
@@ -343,6 +359,7 @@ func TestDecodePodList(t *testing.T) {
 		t.Errorf("expected:\n%#v\ngot:\n%#v\n%s", podList, &podListOut, string(json))
 	}
 
+	// 对核心组的所有优先版本重复 YAML 编解码，覆盖 PodList 的多版本兼容路径。
 	for _, gv := range legacyscheme.Scheme.PrioritizedVersionsForGroup(v1.GroupName) {
 		info, _ := runtime.SerializerInfoForMediaType(legacyscheme.Codecs.SupportedMediaTypes(), "application/yaml")
 		encoder := legacyscheme.Codecs.EncoderForVersion(info.Serializer, gv)
@@ -366,6 +383,8 @@ func TestDecodePodList(t *testing.T) {
 	}
 }
 
+// TestStaticPodNameGenerate 验证静态 pod 名称生成会统一转为小写并附加节点名，
+// 以及非法名称会被校验器拦截。
 func TestStaticPodNameGenerate(t *testing.T) {
 	testCases := []struct {
 		nodeName  types.NodeName
@@ -396,6 +415,7 @@ func TestStaticPodNameGenerate(t *testing.T) {
 			true,
 		},
 	}
+	// 校验生成的 pod 名符合命名规范，并验证在节点名冲突时校验器会拦截非法名称。
 	for _, c := range testCases {
 		assert.Equal(t, c.expected, generatePodName(c.podName, c.nodeName), "wrong pod name generated")
 		pod := podtest.MakePod("")
@@ -422,8 +442,8 @@ func TestStaticPodNameGenerate(t *testing.T) {
 	}
 }
 
-// TestDecodeSinglePodTerminationGracePeriodSeconds ensures
-// a negative TerminationGracePeriodSeconds is clamped.
+// TestDecodeSinglePodTerminationGracePeriodSeconds 验证负数的
+// TerminationGracePeriodSeconds 会被收拢到合法值。
 func TestDecodeSinglePodTerminationGracePeriodSeconds(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	grace := int64(-1)
@@ -455,6 +475,8 @@ func TestDecodeSinglePodTerminationGracePeriodSeconds(t *testing.T) {
 	}
 }
 
+// TestGetStaticPodPriorityWarning 验证 getStaticPodPriorityWarning 在优先级与
+// priorityClassName 的各种组合下给出正确警告或保持静默。
 func TestGetStaticPodPriorityWarning(t *testing.T) {
 	testCases := []struct {
 		podName           string
@@ -521,6 +543,7 @@ func TestGetStaticPodPriorityWarning(t *testing.T) {
 			},
 		}
 		internalPod := &core.Pod{}
+		// 转为内部类型后再检查：静态 pod 的优先级警告逻辑针对内部类型实现。
 		if err := k8s_api_v1.Convert_v1_Pod_To_core_Pod(pod, internalPod, nil); err != nil {
 			t.Fatalf("%s: Cannot convert pod %#v, %#v", tc.podName, pod, err)
 		}

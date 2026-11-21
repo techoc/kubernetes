@@ -28,7 +28,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// PreCreateContainer 在创建容器前把 CPU manager 分配的 CPU 与 memory manager 分配的 NUMA 节点
+// 写入容器配置，确保容器创建时即绑定正确的 cpuset。
 func (i *internalContainerLifecycleImpl) PreCreateContainer(logger klog.Logger, pod *v1.Pod, container *v1.Container, containerConfig *runtimeapi.ContainerConfig) error {
+	// CPU 亲和性来自 cpu manager 的静态分配结果，为空表示未分配独占 CPU。
 	if i.cpuManager != nil {
 		allocatedCPUs := i.cpuManager.GetCPUAffinity(string(pod.UID), container.Name)
 		if !allocatedCPUs.IsEmpty() {
@@ -36,6 +39,7 @@ func (i *internalContainerLifecycleImpl) PreCreateContainer(logger klog.Logger, 
 		}
 	}
 
+	// 内存绑定使用 memory manager 计算出的 NUMA 节点集合。
 	if i.memoryManager != nil {
 		numaNodes := i.memoryManager.GetMemoryNUMANodes(logger, pod, container)
 		if numaNodes.Len() > 0 {

@@ -18,15 +18,18 @@ package logs
 
 import "context"
 
+// containerLogManagerStub 是不做任何日志管理的空实现。
 type containerLogManagerStub struct{}
 
+// Start 为空实现，stub 不启动任何后台清理循环。
 func (*containerLogManagerStub) Start(ctx context.Context) {}
 
+// Clean 为空实现，不对容器日志做任何清理。
 func (*containerLogManagerStub) Clean(ctx context.Context, containerID string) error {
 	return nil
 }
 
-// NewStubContainerLogManager returns an empty ContainerLogManager which does nothing.
+// NewStubContainerLogManager 返回一个什么都不做的 ContainerLogManager 空实现。
 func NewStubContainerLogManager() ContainerLogManager {
 	return &containerLogManagerStub{}
 }

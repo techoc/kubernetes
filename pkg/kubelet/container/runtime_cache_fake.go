@@ -18,29 +18,29 @@ package container
 
 import "context"
 
-// TestRuntimeCache embeds runtimeCache with some additional methods for testing.
-// It must be declared in the container package to have visibility to runtimeCache.
-// It cannot be in a "..._test.go" file in order for runtime_cache_test.go to have cross-package visibility to it.
-// (cross-package declarations in test files cannot be used from dot imports if this package is vendored)
+// TestRuntimeCache 内嵌 runtimeCache 并补充若干测试方法。
+// 它必须声明在 container 包中才能访问 runtimeCache；
+// 也不能放在 "..._test.go" 文件中，以便 runtime_cache_test.go 跨包引用
+// （本包被 vendor 时，测试文件中的跨包声明无法通过点导入使用）。
 type TestRuntimeCache struct {
 	runtimeCache
 }
 
-// UpdateCacheWithLock updates the cache with the lock.
+// UpdateCacheWithLock 在持锁状态下刷新缓存。
 func (r *TestRuntimeCache) UpdateCacheWithLock(ctx context.Context) error {
 	r.Lock()
 	defer r.Unlock()
 	return r.updateCache(ctx)
 }
 
-// GetCachedPods returns the cached pods.
+// GetCachedPods 返回当前缓存的 Pod 列表。
 func (r *TestRuntimeCache) GetCachedPods() []*Pod {
 	r.Lock()
 	defer r.Unlock()
 	return r.pods
 }
 
-// NewTestRuntimeCache creates a new instance of TestRuntimeCache.
+// NewTestRuntimeCache 创建 TestRuntimeCache 实例。
 func NewTestRuntimeCache(getter podsGetter) *TestRuntimeCache {
 	return &TestRuntimeCache{
 		runtimeCache: runtimeCache{

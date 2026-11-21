@@ -42,6 +42,7 @@ import (
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 )
 
+// activeTestPods 返回一组覆盖 Guaranteed 与 Burstable 的测试 Pod。
 func activeTestPods() []*v1.Pod {
 	return []*v1.Pod{
 		{
@@ -118,6 +119,8 @@ func activeTestPods() []*v1.Pod {
 	}
 }
 
+// createTestQOSContainerManager 构造基于真实 cgroup 子系统信息的测试管理器，
+// cgroupManager 可在用例中替换为 fake，避免写入 cgroupfs。
 func createTestQOSContainerManager(logger klog.Logger) (*qosContainerManagerImpl, error) {
 	subsystems, err := GetCgroupSubsystems()
 	if err != nil {
@@ -140,6 +143,8 @@ func createTestQOSContainerManager(logger klog.Logger) (*qosContainerManagerImpl
 	return qosContainerManager, nil
 }
 
+// TestQoSContainerCgroup 校验 setMemoryQoS 为 Guaranteed/Burstable cgroup
+// 写入的 memory.min/memory.low 聚合值，包括 DRA 与 Pod 级资源场景。
 func TestQoSContainerCgroup(t *testing.T) {
 	burstableMin := resource.MustParse("384Mi")
 	guaranteedMin := resource.MustParse("128Mi")
@@ -291,8 +296,8 @@ func TestQoSContainerCgroup(t *testing.T) {
 			draNodeAllocatableResourcesEnabled: true,
 			initialGuaranteed:                  "",
 			initialBurstable:                   "",
-			expectedGuaranteed:                 strconv.FormatInt(384*1024*1024, 10), // Guaranteed 128Mi + Burstable (128Mi spec + 128Mi DRA) = 384Mi
-			expectedBurstable:                  strconv.FormatInt(256*1024*1024, 10), // Burstable 128Mi spec + 128Mi DRA = 256Mi
+			expectedGuaranteed:                 strconv.FormatInt(384*1024*1024, 10), // Guaranteed 128Mi + Burstable（128Mi 请求 + 128Mi DRA）= 384Mi
+			expectedBurstable:                  strconv.FormatInt(256*1024*1024, 10), // Burstable 128Mi 请求 + 128Mi DRA = 256Mi
 		},
 		{
 			name: "writes memory min with pod-level resources",
@@ -360,8 +365,8 @@ func TestQoSContainerCgroup(t *testing.T) {
 			podLevelResourcesEnabled:           true,
 			initialGuaranteed:                  "",
 			initialBurstable:                   "",
-			expectedGuaranteed:                 strconv.FormatInt(640*1024*1024, 10), // Guaranteed 128Mi + Burstable pod-level 512Mi = 640Mi
-			expectedBurstable:                  strconv.FormatInt(512*1024*1024, 10), // Burstable pod-level 512Mi
+			expectedGuaranteed:                 strconv.FormatInt(640*1024*1024, 10), // Guaranteed 128Mi + Burstable Pod 级 512Mi = 640Mi
+			expectedBurstable:                  strconv.FormatInt(512*1024*1024, 10), // Burstable Pod 级请求 512Mi
 		},
 	}
 
@@ -369,10 +374,11 @@ func TestQoSContainerCgroup(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.DRANodeAllocatableResources, tc.draNodeAllocatableResourcesEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.PodLevelResources, tc.podLevelResourcesEnabled)
+			// 每个子测试独立开关特性门控，避免 DRA / Pod 级资源用例相互影响。
 			logger, _ := ktesting.NewTestContext(t)
 			m, err := createTestQOSContainerManager(logger)
 			require.NoError(t, err)
-			// Set memory reservation policy to TieredReservation to enable memory.min
+			// 只有 TieredReservation 策略才会写 memory.min。
 			m.memoryReservationPolicy = kubeletconfig.TieredReservationMemoryReservationPolicy
 			m.activePods = func() []*v1.Pod { return tc.pods }
 
@@ -412,6 +418,8 @@ func TestQoSContainerCgroup(t *testing.T) {
 	}
 }
 
+// TestQoSContainerCgroupWithMemoryReservationPolicyNone 校验 None 策略下
+// memory.min/memory.low 被显式归零。
 func TestQoSContainerCgroupWithMemoryReservationPolicyNone(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	fakeCM := &fakeCgroupManager{}
@@ -429,7 +437,7 @@ func TestQoSContainerCgroupWithMemoryReservationPolicyNone(t *testing.T) {
 		},
 	}
 
-	// memoryReservationPolicy defaults to NoneMemoryReservationPolicy, so memory.min should be explicitly reset.
+	// 策略为 None 时 memory.min 必须显式归零，清除之前可能残留的限制。
 	qosConfigs := map[v1.PodQOSClass]*CgroupConfig{
 		v1.PodQOSGuaranteed: {
 			Name:               m.qosContainersInfo.Guaranteed,
@@ -451,17 +459,16 @@ func TestQoSContainerCgroupWithMemoryReservationPolicyNone(t *testing.T) {
 	assert.Equal(t, "0", qosConfigs[v1.PodQOSBurstable].ResourceParameters.Unified[Cgroup2MemoryLow])
 }
 
-// fakeCgroupManager is used because Start() requires a functional
-// CgroupManager. All methods are stubbed so that Start() can
-// complete successfully without using real cgroups.
+// fakeCgroupManager 用于满足 Start() 对可用 CgroupManager 的要求：
+// 所有方法均为桩实现，使 Start() 能在不操作真实 cgroup 的情况下完成。
 type fakeCgroupManager struct {
 	mutex   sync.Mutex
 	created []*CgroupConfig
 	updates []*CgroupConfig
 }
 
-// Update() is the observation point for this test.
-// Capture the updated cgroup config so it can be validated.
+// Update() 是本测试的观察点：
+// 记录每次更新的 cgroup 配置，供后续断言。
 func (f *fakeCgroupManager) Update(logger klog.Logger, config *CgroupConfig) error {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -471,8 +478,8 @@ func (f *fakeCgroupManager) Update(logger klog.Logger, config *CgroupConfig) err
 	return nil
 }
 
-// Create() must succeed for Start() to construct QoS cgroups.
-// We do not assert on Create() behavior in this test.
+// Create() 必须成功，Start() 才能构造 QoS cgroup。
+// 本测试不对 Create() 的行为做断言。
 func (f *fakeCgroupManager) Create(l klog.Logger, config *CgroupConfig) error {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -482,39 +489,59 @@ func (f *fakeCgroupManager) Create(l klog.Logger, config *CgroupConfig) error {
 	return nil
 }
 
+// Destroy 为空实现：测试不关心 cgroup 销毁。
 func (f *fakeCgroupManager) Destroy(l klog.Logger, config *CgroupConfig) error { return nil }
-func (f *fakeCgroupManager) Validate(name CgroupName) error                    { return nil }
-func (f *fakeCgroupManager) Exists(name CgroupName) bool                       { return false }
-func (f *fakeCgroupManager) Name(name CgroupName) string                       { return name.ToCgroupfs() }
+
+// Validate 为空实现：跳过真实 cgroup 校验。
+func (f *fakeCgroupManager) Validate(name CgroupName) error { return nil }
+
+// Exists 固定返回 false，避免走真实 cgroup 查询路径。
+func (f *fakeCgroupManager) Exists(name CgroupName) bool { return false }
+
+// Name 返回 cgroup 的 cgroupfs 路径。
+func (f *fakeCgroupManager) Name(name CgroupName) string { return name.ToCgroupfs() }
+
+// CgroupName 把 cgroupfs 路径解析为 CgroupName。
 func (f *fakeCgroupManager) CgroupName(name string) CgroupName {
 	return ParseCgroupfsToCgroupName(name)
 }
+
+// Pids 固定返回 nil，测试不读取进程列表。
 func (f *fakeCgroupManager) Pids(logger klog.Logger, name CgroupName) []int { return nil }
+
+// ReduceCPULimits 为空实现。
 func (f *fakeCgroupManager) ReduceCPULimits(logger klog.Logger, cgroupName CgroupName) error {
 	return nil
 }
+
+// MemoryUsage 固定返回 0，模拟空 cgroup。
 func (f *fakeCgroupManager) MemoryUsage(name CgroupName) (int64, error) { return int64(0), nil }
+
+// GetCgroupConfig 返回 nil，测试不依赖读取真实配置。
 func (f *fakeCgroupManager) GetCgroupConfig(name CgroupName, resource v1.ResourceName) (*ResourceConfig, error) {
 	return nil, nil
 }
+
+// SetCgroupConfig 为空实现。
 func (f *fakeCgroupManager) SetCgroupConfig(logger klog.Logger, name CgroupName, resourceConfig *ResourceConfig) error {
 	return nil
 }
+
+// Version 固定返回 1，模拟 cgroup v1。
 func (f *fakeCgroupManager) Version() int { return 1 }
 
-// TestQOSCPUConfigUpdate verifies that UpdateCgroups() computes and
-// updates the correct CPU shares for each QoS class based on the
-// currently active pods.
+// TestQOSCPUConfigUpdate 验证 UpdateCgroups() 依据当前活跃 Pod
+// 为各 QoS 级别计算并更新正确的 CPU shares。
 func TestQOSCPUConfigUpdate(t *testing.T) {
 
-	// Guaranteed QoS uses fixed CPU shares (requests == limits), so they are not
-	// recalculated. BestEffort always uses MinShares, and only Burstable CPU shares
-	// depend on aggregate burstable CPU requests.
+	// Guaranteed QoS 的 shares 固定（requests == limits），不会重算；
+	// BestEffort 固定使用 MinShares，只有 Burstable 的 CPU shares
+	// 取决于 Burstable CPU 请求的聚合值。
 
 	tests := []struct {
 		name                       string
 		testPods                   ActivePodsFunc
-		expectedBurstableCPUShares uint64 // Recalculation will be done only for Burstable QoS class
+		expectedBurstableCPUShares uint64 // 只会重算 Burstable QoS 的 CPU shares
 	}{
 		{
 			name: "guaranteed-pods-only",
@@ -548,8 +575,8 @@ func TestQOSCPUConfigUpdate(t *testing.T) {
 					},
 				}
 			},
-			// MinShares will be given to the Burstable QoS class since kubelet
-			// creates all QoS cgroups regardless of whether pods of that class exist.
+			// kubelet 无论该类 Pod 是否存在都会创建 QoS cgroup，
+			// 因此 Burstable 类仍会得到 MinShares。
 			expectedBurstableCPUShares: MinShares,
 		},
 		{
@@ -583,7 +610,7 @@ func TestQOSCPUConfigUpdate(t *testing.T) {
 					},
 				}
 			},
-			// 1 CPU Resource = 1024 CPU Shares
+			// 1 个 CPU 请求对应 1024 CPU shares。
 			expectedBurstableCPUShares: 1024,
 		},
 		{
@@ -729,6 +756,7 @@ func TestQOSCPUConfigUpdate(t *testing.T) {
 				return
 			}
 
+			// 用 fake 替换真实 cgroupManager，隔离对宿主 cgroupfs 的写入。
 			fakecgroupManager := &fakeCgroupManager{}
 			testContainerManager.cgroupManager = fakecgroupManager
 
@@ -741,20 +769,19 @@ func TestQOSCPUConfigUpdate(t *testing.T) {
 				t.Fatalf("Start() failed: %s", err)
 			}
 
-			// UpdateCgroups() is expected to update all QoS cgroups on each call
-			// based on the current active pod set.
+			// UpdateCgroups() 每次调用都应更新全部 QoS cgroup，
+			// 依据当前活跃 Pod 集合重新计算。
 			err = testContainerManager.UpdateCgroups(logger)
 			if err != nil {
 				t.Fatalf("Error in UpdateCgroups(): %s", err)
 			}
 			cancel()
 
-			// UpdateCgroups() may also be running in the background reconciliation loop (because of Start()).
-			// Retry until a consistent snapshot containing all QoS cgroup updates is observed.
+			// UpdateCgroups() 也可能正由 Start() 启动的后台协调循环执行。
+			// 反复取快照，直到观察到包含全部 QoS cgroup 更新的一致状态。
 			//
-			// A small bounded retry count is sufficient here because UpdateCgroups()
-			// is synchronous and expected to complete quickly. This avoids test flakiness
-			// without risking an unbounded wait.
+			// UpdateCgroups() 是同步且很快完成的，有限次重试足够：
+			// 这样既避免测试抖动，又不会无限等待。
 			maxRetryAttempts := 5
 
 			var (
@@ -765,15 +792,14 @@ func TestQOSCPUConfigUpdate(t *testing.T) {
 
 			for i := 0; i < maxRetryAttempts; i++ {
 
-				// These flags will be used to check whether UpdateCgroups()
-				// is updating the CPU shares for all QoS classes (cgroups)
+				// 这些标志用于确认 UpdateCgroups() 是否更新了
+				// 所有 QoS 类（cgroup）的 CPU shares。
 				foundBurstable = false
 				foundBestEffort = false
 				foundGuaranteed = false
 
-				// Start() initiates a background UpdateCgroups() goroutine which may
-				// still be running. Take a snapshot to avoid observing updates from
-				// the background UpdateCgroups() instead of the explicit UpdateCgroups() call.
+				// Start() 会启动后台 UpdateCgroups() goroutine，它可能仍在运行；
+				// 先取快照，避免把后台更新误当成显式调用产生的更新。
 				fakecgroupManager.mutex.Lock()
 				updates := append([]*CgroupConfig(nil), fakecgroupManager.updates...)
 				fakecgroupManager.mutex.Unlock()

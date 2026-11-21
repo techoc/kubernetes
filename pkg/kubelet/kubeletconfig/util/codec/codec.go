@@ -23,7 +23,7 @@ import (
 
 	"k8s.io/klog/v2"
 
-	// ensure the core apis are installed
+	// 确保核心 API 已注册。
 	_ "k8s.io/kubernetes/pkg/apis/core/install"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -36,13 +36,13 @@ import (
 	kubeletconfigv1beta1 "k8s.io/kubernetes/pkg/kubelet/apis/config/v1beta1"
 )
 
-// EncodeKubeletConfig encodes an internal KubeletConfiguration to an external YAML representation.
+// EncodeKubeletConfig 把内部 KubeletConfiguration 编码为外部版本的 YAML。
 func EncodeKubeletConfig(internal *kubeletconfig.KubeletConfiguration, targetVersion schema.GroupVersion) ([]byte, error) {
 	encoder, err := NewKubeletconfigYAMLEncoder(targetVersion)
 	if err != nil {
 		return nil, err
 	}
-	// encoder will convert to external version
+	// 编码器会把内部类型转换为外部版本。
 	data, err := runtime.Encode(encoder, internal)
 	if err != nil {
 		return nil, err
@@ -50,13 +50,15 @@ func EncodeKubeletConfig(internal *kubeletconfig.KubeletConfiguration, targetVer
 	return data, nil
 }
 
-// NewKubeletconfigYAMLEncoder returns an encoder that can write objects in the kubeletconfig API group to YAML.
+// NewKubeletconfigYAMLEncoder 返回把 kubeletconfig API 对象编码为 YAML 的编码器。
 func NewKubeletconfigYAMLEncoder(targetVersion schema.GroupVersion) (runtime.Encoder, error) {
 	_, codecs, err := scheme.NewSchemeAndCodecs()
 	if err != nil {
 		return nil, err
 	}
+	// 仅支持 YAML 序列化。
 	mediaType := "application/yaml"
+	// 从 scheme 支持的序列化器中选出 YAML。
 	info, ok := runtime.SerializerInfoForMediaType(codecs.SupportedMediaTypes(), mediaType)
 	if !ok {
 		return nil, fmt.Errorf("unsupported media type %q", mediaType)
@@ -64,20 +66,19 @@ func NewKubeletconfigYAMLEncoder(targetVersion schema.GroupVersion) (runtime.Enc
 	return codecs.EncoderForVersion(info.Serializer, targetVersion), nil
 }
 
-// DecodeKubeletConfiguration decodes a serialized KubeletConfiguration to the internal type.
+// DecodeKubeletConfiguration 把序列化的 KubeletConfiguration 解码为内部类型。
 func DecodeKubeletConfiguration(ctx context.Context, kubeletCodecs *serializer.CodecFactory, data []byte) (*kubeletconfig.KubeletConfiguration, error) {
 	var (
 		obj runtime.Object
 		gvk *schema.GroupVersionKind
 	)
 
-	// The UniversalDecoder runs defaulting and returns the internal type by default.
+	// UniversalDecoder 会执行默认值填充，并默认返回内部类型。
 	obj, gvk, err := kubeletCodecs.UniversalDecoder().Decode(data, nil, nil)
 	if err != nil {
 		logger := klog.FromContext(ctx)
-		// Try strict decoding first. If that fails decode with a lenient
-		// decoder, which has only v1beta1 registered, and log a warning.
-		// The lenient path is to be dropped when support for v1beta1 is dropped.
+		// 先尝试严格解码；失败时改用仅注册了 v1beta1 的宽松解码器，
+		// 并记录警告。v1beta1 支持移除后，该宽松路径也应删除。
 		if !runtime.IsStrictDecodingError(err) {
 			return nil, fmt.Errorf("failed to decode: %w", err)
 		}
@@ -94,14 +95,14 @@ func DecodeKubeletConfiguration(ctx context.Context, kubeletCodecs *serializer.C
 
 		obj, gvk, lenientErr = lenientCodecs.UniversalDecoder().Decode(data, nil, nil)
 		if lenientErr != nil {
-			// Lenient decoding failed with the current version, return the
-			// original strict error.
+			// 宽松解码也失败，返回最初的严格解码错误。
 			return nil, fmt.Errorf("failed lenient decoding: %v", err)
 		}
-		// Continue with the v1beta1 object that was decoded leniently, but emit a warning.
+		// 继续使用宽松解码得到的 v1beta1 对象，但输出警告。
 		logger.Info("Using lenient decoding as strict decoding failed", "err", err)
 	}
 
+	// 解码结果必须是内部 KubeletConfiguration 类型。
 	internalKC, ok := obj.(*kubeletconfig.KubeletConfiguration)
 	if !ok {
 		return nil, fmt.Errorf("failed to cast object to KubeletConfiguration, unexpected type: %v", gvk)
@@ -110,9 +111,9 @@ func DecodeKubeletConfiguration(ctx context.Context, kubeletCodecs *serializer.C
 	return internalKC, nil
 }
 
-// DecodeKubeletConfigurationIntoJSON decodes a serialized KubeletConfiguration to the internal type.
+// DecodeKubeletConfigurationIntoJSON 把序列化的 KubeletConfiguration 解码并转换为 JSON。
 func DecodeKubeletConfigurationIntoJSON(kubeletCodecs *serializer.CodecFactory, data []byte) ([]byte, *schema.GroupVersionKind, error) {
-	// The UniversalDecoder runs defaulting and returns the internal type by default.
+	// UniversalDecoder 会执行默认值填充，并默认返回内部类型。
 	obj, gvk, err := kubeletCodecs.UniversalDecoder().Decode(data, nil, &unstructured.Unstructured{})
 	if err != nil {
 		return nil, nil, err
@@ -120,6 +121,7 @@ func DecodeKubeletConfigurationIntoJSON(kubeletCodecs *serializer.CodecFactory, 
 
 	objT := obj.(*unstructured.Unstructured)
 
+	// 把非结构化对象序列化为 JSON 返回。
 	jsonData, err := json.Marshal(objT.Object)
 	return jsonData, gvk, err
 }

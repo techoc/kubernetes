@@ -27,12 +27,16 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/bitmask"
 )
 
+// TestNUMAInfo 覆盖 NewNUMAInfo 对 cadvisor NUMA 拓扑的解析：节点 ID 列表与距离矩阵；
+// PreferClosestNUMA 关闭时清空距离，开启时保留距离；并覆盖 Windows 等无距离信息平台的错误。
 func TestNUMAInfo(t *testing.T) {
+	// Windows 上拿不到 NUMA 节点距离，预期错误文案与其他平台不同。
 	numaDistanceErr := "error getting NUMA distances from cadvisor"
 	if runtime.GOOS == "windows" {
 		numaDistanceErr = fmt.Sprintf("the %q policy option is not supported on Windows because NUMA node distances are not available", PreferClosestNUMANodes)
 	}
 
+	// 用例覆盖不同节点数、非连续节点 ID 以及 PreferClosestNUMA 开关的各种组合。
 	tcases := []struct {
 		name             string
 		topology         []cadvisorapi.Node
@@ -465,6 +469,7 @@ func TestNUMAInfo(t *testing.T) {
 			}
 		}
 
+		// 错误校验通过后，整体比较解析出的 NUMA 信息。
 		if !reflect.DeepEqual(topology, tcase.expectedNUMAInfo) {
 			t.Fatalf("Expected topology to equal %v, not %v", tcase.expectedNUMAInfo, topology)
 		}
@@ -472,6 +477,8 @@ func TestNUMAInfo(t *testing.T) {
 	}
 }
 
+// TestCalculateAvgDistanceFor 校验 NUMADistances.CalculateAverageFor：
+// 对位掩码选中节点两两距离求平均，空集合返回 0。
 func TestCalculateAvgDistanceFor(t *testing.T) {
 	tcases := []struct {
 		name        string
@@ -604,6 +611,7 @@ func TestCalculateAvgDistanceFor(t *testing.T) {
 	}
 
 	for _, tcase := range tcases {
+		// 每个用例构造位掩码后计算平均距离。
 		bm, err := bitmask.NewBitMask(tcase.bm...)
 		if err != nil {
 			t.Errorf("no error expected got %v", err)
@@ -622,6 +630,8 @@ func TestCalculateAvgDistanceFor(t *testing.T) {
 
 }
 
+// TestClosest 校验 Closest 的偏好规则：位宽不同时选更窄者；距离相同时选低位更集中者；
+// 否则选平均距离更小者。
 func TestClosest(t *testing.T) {
 	tcases := []struct {
 		description string
@@ -697,6 +707,7 @@ func TestClosest(t *testing.T) {
 	for _, tc := range tcases {
 		t.Run(tc.description, func(t *testing.T) {
 
+			// 返回值必须是 current 或 candidate 之一，再按期望选择校验。
 			result := tc.numaInfo.Closest(tc.candidate, tc.current)
 			if result != tc.current && result != tc.candidate {
 				t.Errorf("Expected result to be either 'current' or 'candidate' hint")

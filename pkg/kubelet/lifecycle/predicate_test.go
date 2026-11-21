@@ -46,6 +46,8 @@ var (
 	implicitDRAExtendedResource = v1.ResourceName("deviceclass.resource.kubernetes.io/bar")
 )
 
+// TestRemoveMissingExtendedResources 校验准入阶段对节点无法提供的扩展资源的过滤：
+// 只清理 Requests 中被节点 Allocatable 明确排除的资源，Limits 与 0 容量资源保持不变。
 func TestRemoveMissingExtendedResources(t *testing.T) {
 	for _, test := range []struct {
 		desc                      string
@@ -153,10 +155,12 @@ func TestRemoveMissingExtendedResources(t *testing.T) {
 		},
 	} {
 		t.Run(test.desc, func(t *testing.T) {
+			// 未启用 DRA 扩展资源时固定仿真版本，避免特性默认值随集群版本变化影响断言。
 			if !test.enableDRAExtendedResource {
 				featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, utilversion.MustParse("1.36"))
 			}
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRAExtendedResource, test.enableDRAExtendedResource)
+			// 被测函数只依据 NodeInfo 中节点的 Allocatable 判断资源是否可用。
 			nodeInfo := schedulerframework.NewNodeInfo()
 			nodeInfo.SetNode(test.node)
 			pod := removeMissingExtendedResources(test.pod, nodeInfo)
@@ -167,6 +171,7 @@ func TestRemoveMissingExtendedResources(t *testing.T) {
 	}
 }
 
+// makeTestPod 构造在普通容器与 init 容器中设置相同 requests/limits 的测试 Pod。
 func makeTestPod(requests, limits v1.ResourceList) *v1.Pod {
 	return &v1.Pod{
 		Spec: v1.PodSpec{
@@ -190,6 +195,8 @@ func makeTestPod(requests, limits v1.ResourceList) *v1.Pod {
 	}
 }
 
+// makeTestPodWithDRAResource 构造请求 DRA 扩展资源的 Pod，
+// 并预置 Status 中的请求映射，模拟已由 DRA 完成分配的状态。
 func makeTestPodWithDRAResource(resourceName v1.ResourceName, quantity resource.Quantity) *v1.Pod {
 	pod := &v1.Pod{
 		Spec: v1.PodSpec{
@@ -217,6 +224,7 @@ func makeTestPodWithDRAResource(resourceName v1.ResourceName, quantity resource.
 	return pod
 }
 
+// emptyRequests 返回所有容器 Requests 均已清空的 Pod 副本，用于构造期望值。
 func emptyRequests(pod *v1.Pod) *v1.Pod {
 	newPod := pod.DeepCopy()
 	for i := range newPod.Spec.Containers {
@@ -228,6 +236,7 @@ func emptyRequests(pod *v1.Pod) *v1.Pod {
 	return newPod
 }
 
+// makeTestNode 构造只设置 Allocatable 的测试节点。
 func makeTestNode(allocatable v1.ResourceList) *v1.Node {
 	return &v1.Node{
 		Status: v1.NodeStatus{
@@ -241,6 +250,7 @@ var (
 	hugePageResourceA = v1helper.HugePageResourceName(resource.MustParse("2Mi"))
 )
 
+// makeResources 生成节点 Capacity 测试数据；扩展资源或巨页参数为 0 表示节点不支持。
 func makeResources(milliCPU, memory, pods, extendedA, storage, hugePageA int64) v1.ResourceList {
 	return v1.ResourceList{
 		v1.ResourceCPU:              *resource.NewMilliQuantity(milliCPU, resource.DecimalSI),
@@ -252,6 +262,7 @@ func makeResources(milliCPU, memory, pods, extendedA, storage, hugePageA int64) 
 	}
 }
 
+// makeAllocatableResources 生成节点 Allocatable 测试数据。
 func makeAllocatableResources(milliCPU, memory, pods, extendedA, storage, hugePageA int64) v1.ResourceList {
 	return v1.ResourceList{
 		v1.ResourceCPU:              *resource.NewMilliQuantity(milliCPU, resource.DecimalSI),
@@ -263,6 +274,7 @@ func makeAllocatableResources(milliCPU, memory, pods, extendedA, storage, hugePa
 	}
 }
 
+// newResourcePod 按每个容器的资源请求列表构造 Pod。
 func newResourcePod(containerResources ...v1.ResourceList) *v1.Pod {
 	containers := []v1.Container{}
 	for _, rl := range containerResources {
@@ -277,6 +289,7 @@ func newResourcePod(containerResources ...v1.ResourceList) *v1.Pod {
 	}
 }
 
+// newPodWithPort 构造使用指定 hostPort 的 Pod，用于端口冲突判定。
 func newPodWithPort(hostPorts ...int) *v1.Pod {
 	networkPorts := []v1.ContainerPort{}
 	for _, port := range hostPorts {
@@ -293,6 +306,8 @@ func newPodWithPort(hostPorts ...int) *v1.Pod {
 	}
 }
 
+// TestGeneralPredicates 覆盖通用过滤器的各类失败原因：资源不足、节点名不匹配、
+// 端口冲突、污点不容忍以及节点亲和性失败。
 func TestGeneralPredicates(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	resourceTests := []struct {
@@ -532,7 +547,7 @@ func TestGeneralPredicates(t *testing.T) {
 				Status: v1.NodeStatus{Capacity: makeResources(10, 20, 32, 0, 0, 0), Allocatable: makeAllocatableResources(10, 20, 32, 0, 0, 0)},
 			},
 			name: "node affinity failure on cached node and node name doesn't match",
-			// Ensure that both reasons are returned, because we do not fetch the node synchronously on multiple failures.
+			// 多次失败时不会同步拉取节点，因此应同时返回两个原因。
 			reasons: []PredicateFailureReason{
 				&PredicateFailureError{nodeaffinity.Name, nodeaffinity.ErrReasonPod},
 				&PredicateFailureError{nodename.Name, nodename.ErrReason},
@@ -629,8 +644,10 @@ func TestGeneralPredicates(t *testing.T) {
 	}
 	for _, test := range resourceTests {
 		t.Run(test.name, func(t *testing.T) {
+			// 预先设置缓存节点；过滤器在失败时可能改用直连路径重新获取节点。
 			test.nodeInfo.SetNode(test.cachedNode)
 			w := &predicateAdmitHandler{getNodeAnyWayFunc: func(ctx context.Context, useCache bool) (*v1.Node, error) {
+				// 通过 useCache 区分本地缓存与 apiserver 直连两条取节点路径。
 				if useCache {
 					return test.cachedNode, nil
 				}
@@ -644,6 +661,8 @@ func TestGeneralPredicates(t *testing.T) {
 	}
 }
 
+// TestRejectPodAdmissionBasedOnOSSelector 校验基于 Pod 的 OS 标签选择器
+// 与节点 OS 标签的匹配结果是否导致拒绝准入。
 func TestRejectPodAdmissionBasedOnOSSelector(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -698,6 +717,8 @@ func TestRejectPodAdmissionBasedOnOSSelector(t *testing.T) {
 	}
 }
 
+// TestRejectPodAdmissionBasedOnOSField 校验 Pod 的 spec.os 字段与实际节点 OS 不一致时
+// 是否拒绝准入。
 func TestRejectPodAdmissionBasedOnOSField(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -730,6 +751,8 @@ func TestRejectPodAdmissionBasedOnOSField(t *testing.T) {
 	}
 }
 
+// TestPodAdmissionBasedOnSupplementalGroupsPolicy 验证节点特性与特性门控仿真版本
+// 共同决定是否拒绝使用 SupplementalGroupsPolicy 的 Pod，重点覆盖向后兼容语义。
 func TestPodAdmissionBasedOnSupplementalGroupsPolicy(t *testing.T) {
 	nodeWithFeature := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: "test"},
@@ -755,7 +778,7 @@ func TestPodAdmissionBasedOnSupplementalGroupsPolicy(t *testing.T) {
 		pod              *v1.Pod
 		expectRejection  bool
 	}{
-		// The feature is Beta in v1.33
+		// 该特性在 v1.33 为 Beta：节点不支持且 Pod 使用时必须拒绝。
 		{
 			name:             "feature=Beta, node=feature not supported, pod=in use: it should REJECT",
 			emulationVersion: utilversion.MustParse("1.33"),
@@ -784,8 +807,8 @@ func TestPodAdmissionBasedOnSupplementalGroupsPolicy(t *testing.T) {
 			pod:              podNotUsingFeature,
 			expectRejection:  false,
 		},
-		// The feature is Alpha(v1.31, v1.32) in emulated version
-		// Note: When the feature is alpha in emulated version, it should always admit for backward compatibility
+		// 仿真版本为 1.31/1.32 时该特性是 Alpha。
+		// 注意：仿真版本中特性仍为 Alpha 时必须放行，以保证向后兼容。
 		{
 			name:             "feature=Alpha, node=feature not supported, pod=feature used: it should ADMIT",
 			emulationVersion: utilversion.MustParse("1.32"),
@@ -814,8 +837,8 @@ func TestPodAdmissionBasedOnSupplementalGroupsPolicy(t *testing.T) {
 			pod:              podNotUsingFeature,
 			expectRejection:  false,
 		},
-		// The feature is not yet released (< v1.31) in emulated version (this can happen when only kubelet downgraded).
-		// Note: When the feature is not yet released in emulated version, it should always admit for backward compatibility
+		// 仿真版本低于 v1.31 时该特性尚未发布（例如仅 kubelet 被降级）。
+		// 注意：特性尚未发布时必须放行，以保证向后兼容。
 		{
 			name:             "feature=NotReleased, node=feature not supported, pod=feature used: it should ADMIT",
 			emulationVersion: utilversion.MustParse("1.30"),
@@ -833,6 +856,7 @@ func TestPodAdmissionBasedOnSupplementalGroupsPolicy(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 用仿真版本模拟特性处于 Alpha/Beta/未发布阶段，校验各阶段的放行策略。
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, test.emulationVersion)
 			actualResult := rejectPodAdmissionBasedOnSupplementalGroupsPolicy(test.pod, test.node)
 			if test.expectRejection != actualResult {

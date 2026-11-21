@@ -25,13 +25,15 @@ import (
 	utilkernel "k8s.io/kubernetes/pkg/util/kernel"
 )
 
+// sysctl 描述一个安全 sysctl 及其可用所需的最低内核版本。
 type sysctl struct {
-	// the name of sysctl
+	// sysctl 的名称。
 	name string
-	// the minimum kernel version where the sysctl is available
+	// 该 sysctl 可用的最低内核版本；为空表示无版本要求。
 	kernel string
 }
 
+// safeSysctls 是默认允许的安全 sysctl 列表。
 var safeSysctls = []sysctl{
 	{
 		name: "kernel.shm_rmid_forced",
@@ -79,12 +81,13 @@ var safeSysctls = []sysctl{
 	},
 }
 
-// SafeSysctlAllowlist returns the allowlist of safe sysctls and safe sysctl patterns (ending in *).
+// SafeSysctlAllowlist 返回安全 sysctl 及安全 sysctl 模式（以 * 结尾）的允许列表。
 //
-// A sysctl is called safe iff
-// - it is namespaced in the container or the pod
-// - it is isolated, i.e. has no influence on any other pod on the same node.
+// 满足以下条件的 sysctl 才被视为安全：
+// - 在容器或 Pod 内具有命名空间隔离；
+// - 与其他 Pod 隔离，即不影响同一节点上的其他 Pod。
 func SafeSysctlAllowlist(ctx context.Context) []string {
+	// 非 Linux 平台没有 sysctl 概念。
 	if goruntime.GOOS != "linux" {
 		return nil
 	}
@@ -92,6 +95,7 @@ func SafeSysctlAllowlist(ctx context.Context) []string {
 	return getSafeSysctlAllowlist(ctx, utilkernel.GetVersion)
 }
 
+// getSafeSysctlAllowlist 按内核版本过滤安全 sysctl 列表。
 func getSafeSysctlAllowlist(ctx context.Context, getVersion func() (*version.Version, error)) []string {
 	logger := klog.FromContext(ctx)
 	kernelVersion, err := getVersion()
@@ -100,6 +104,7 @@ func getSafeSysctlAllowlist(ctx context.Context, getVersion func() (*version.Ver
 	}
 
 	var safeSysctlAllowlist []string
+	// 无内核版本要求的条目直接加入；有要求的需满足最低版本。
 	for _, sc := range safeSysctls {
 		if sc.kernel == "" {
 			safeSysctlAllowlist = append(safeSysctlAllowlist, sc.name)
@@ -109,6 +114,7 @@ func getSafeSysctlAllowlist(ctx context.Context, getVersion func() (*version.Ver
 		if kernelVersion != nil && kernelVersion.AtLeast(version.MustParseGeneric(sc.kernel)) {
 			safeSysctlAllowlist = append(safeSysctlAllowlist, sc.name)
 		} else {
+			// 内核版本过低时丢弃该条目并记录日志。
 			logger.Info("kernel version is too old, dropping the sysctl from safe sysctl list", "kernelVersion", kernelVersion, "sysctl", sc.name)
 		}
 	}

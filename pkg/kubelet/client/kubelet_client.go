@@ -31,37 +31,38 @@ import (
 	nodeutil "k8s.io/kubernetes/pkg/util/node"
 )
 
-// KubeletClientConfig defines config parameters for the kubelet client
+// KubeletClientConfig 定义 kubelet 客户端的配置参数。
 type KubeletClientConfig struct {
-	// Port specifies the default port - used if no information about Kubelet port can be found in Node.NodeStatus.DaemonEndpoints.
+	// Port 指定默认端口：当 Node.NodeStatus.DaemonEndpoints 中没有 kubelet 端口信息时使用。
 	Port uint
 
-	// ReadOnlyPort specifies the Port for ReadOnly communications.
+	// ReadOnlyPort 指定只读通信使用的端口。
 	ReadOnlyPort uint
 
-	// PreferredAddressTypes - used to select an address from Node.NodeStatus.Addresses
+	// PreferredAddressTypes 用于从 Node.NodeStatus.Addresses 中选择地址。
 	PreferredAddressTypes []string
 
-	// TLSClientConfig contains settings to enable transport layer security
+	// TLSClientConfig 包含启用传输层安全所需的配置。
 	TLSClientConfig KubeletTLSConfig
 
-	// HTTPTimeout is used by the client to timeout http requests to Kubelet.
+	// HTTPTimeout 是客户端访问 kubelet 的 HTTP 请求超时时间。
 	HTTPTimeout time.Duration
 
-	// Lookup will give us a dialer if the egress selector is configured for it
+	// 配置了 egress selector 时，Lookup 会返回对应的拨号器。
 	Lookup egressselector.Lookup
 }
 
+// KubeletTLSConfig 保存访问 kubelet 所需的 TLS 客户端配置。
 type KubeletTLSConfig struct {
-	// Server requires TLS client certificate authentication
+	// CertFile 是客户端证书文件，服务端要求 TLS 客户端认证时使用。
 	CertFile string
-	// Server requires TLS client certificate authentication
+	// KeyFile 是客户端私钥文件，与 CertFile 配对使用。
 	KeyFile string
-	// Trusted root certificates for server
+	// CAFile 是用于校验服务端的受信任根证书。
 	CAFile string
 }
 
-// ConnectionInfo provides the information needed to connect to a kubelet
+// ConnectionInfo 提供连接 kubelet 所需的信息。
 type ConnectionInfo struct {
 	Scheme                         string
 	Hostname                       string
@@ -71,34 +72,36 @@ type ConnectionInfo struct {
 	NodeFeatures                   []string
 }
 
-// ConnectionInfoGetter provides ConnectionInfo for the kubelet running on a named node
+// ConnectionInfoGetter 为运行在指定节点上的 kubelet 提供 ConnectionInfo。
 type ConnectionInfoGetter interface {
 	GetConnectionInfo(ctx context.Context, nodeName types.NodeName) (*ConnectionInfo, error)
 }
 
-// MakeTransport creates a secure RoundTripper for HTTP Transport.
+// MakeTransport 创建安全的 HTTP RoundTripper。
 func MakeTransport(config *KubeletClientConfig) (http.RoundTripper, error) {
 	return makeTransport(config, false)
 }
 
-// MakeInsecureTransport creates an insecure RoundTripper for HTTP Transport.
+// MakeInsecureTransport 创建跳过 TLS 校验的 HTTP RoundTripper。
 func MakeInsecureTransport(config *KubeletClientConfig) (http.RoundTripper, error) {
 	return makeTransport(config, true)
 }
 
-// makeTransport creates a RoundTripper for HTTP Transport.
+// makeTransport 创建用于 HTTP 传输的 RoundTripper。
 func makeTransport(config *KubeletClientConfig, insecureSkipTLSVerify bool) (http.RoundTripper, error) {
-	// do the insecureSkipTLSVerify on the pre-transport *before* we go get a potentially cached connection.
-	// transportConfig always produces a new struct pointer.
+	// 在获取可能被缓存的连接之前，先对 transport 配置设置 insecureSkipTLSVerify；
+	// transportConfig 每次都会返回新的结构体指针。
 	transportConfig := config.transportConfig()
 	if insecureSkipTLSVerify {
+		// 忽略证书校验时清空 CA 文件，避免同时存在两种校验配置。
 		transportConfig.TLS.Insecure = true
 		transportConfig.TLS.CAFile = "" // we are only using files so we can ignore CAData
 	}
 
+	// 配置了 egress selector 时通过它获取拨号器（如 Konnectivity）。
 	if config.Lookup != nil {
-		// Assuming EgressSelector if SSHTunnel is not turned on.
-		// We will not get a dialer if egress selector is disabled.
+		// 假定使用 EgressSelector（而非 SSHTunnel）。
+		// egress selector 未启用时不会得到拨号器。
 		networkContext := egressselector.Cluster.AsNetworkContext()
 		dialer, err := config.Lookup(networkContext)
 		if err != nil {
@@ -111,64 +114,67 @@ func makeTransport(config *KubeletClientConfig, insecureSkipTLSVerify bool) (htt
 	return transport.New(transportConfig)
 }
 
-// transportConfig converts a client config to an appropriate transport config.
+// transportConfig 把客户端配置转换为合适的 transport 配置。
 func (c *KubeletClientConfig) transportConfig() *transport.Config {
 	cfg := &transport.Config{
 		TLS: transport.TLSConfig{
 			CAFile:   c.TLSClientConfig.CAFile,
 			CertFile: c.TLSClientConfig.CertFile,
 			KeyFile:  c.TLSClientConfig.KeyFile,
-			// transport.loadTLSFiles would set this to true because we are only using files
-			// it is clearer to set it explicitly here so we remember that this is happening
+			// transport.loadTLSFiles 会因为只使用文件而把它设为 true；
+			// 这里显式设置更清晰，也提醒读者存在这一行为。
 			ReloadTLSFiles: true,
 		},
 	}
+	// 没有配置 CA 时只能跳过服务端证书校验。
 	if !cfg.HasCA() {
 		cfg.TLS.Insecure = true
 	}
 	return cfg
 }
 
-// NodeGetter defines an interface for looking up a node by name
+// NodeGetter 定义按名称查询 Node 的接口。
 type NodeGetter interface {
 	Get(ctx context.Context, name string, options metav1.GetOptions) (*v1.Node, error)
 }
 
-// NodeGetterFunc allows implementing NodeGetter with a function
+// NodeGetterFunc 允许用函数实现 NodeGetter。
 type NodeGetterFunc func(ctx context.Context, name string, options metav1.GetOptions) (*v1.Node, error)
 
-// Get fetches information via NodeGetterFunc.
+// Get 通过 NodeGetterFunc 获取信息。
 func (f NodeGetterFunc) Get(ctx context.Context, name string, options metav1.GetOptions) (*v1.Node, error) {
 	return f(ctx, name, options)
 }
 
-// NodeConnectionInfoGetter obtains connection info from the status of a Node API object
+// NodeConnectionInfoGetter 从 Node API 对象的状态中获取连接信息。
 type NodeConnectionInfoGetter struct {
-	// nodes is used to look up Node objects
+	// nodes 用于查询 Node 对象。
 	nodes NodeGetter
-	// scheme is the scheme to use to connect to all kubelets
+	// scheme 是连接所有 kubelet 使用的协议。
 	scheme string
-	// defaultPort is the port to use if no Kubelet endpoint port is recorded in the node status
+	// defaultPort 是节点状态中未记录 kubelet 端口时使用的默认端口。
 	defaultPort int
-	// transport is the transport to use to send a request to all kubelets
+	// transport 是向所有 kubelet 发送请求时使用的传输层。
 	transport http.RoundTripper
-	// insecureSkipTLSVerifyTransport is the transport to use if the kube-apiserver wants to skip verifying the TLS certificate of the kubelet
+	// insecureSkipTLSVerifyTransport 是 kube-apiserver 需要跳过校验 kubelet TLS 证书时使用的传输层。
 	insecureSkipTLSVerifyTransport http.RoundTripper
-	// preferredAddressTypes specifies the preferred order to use to find a node address
+	// preferredAddressTypes 指定查找节点地址时使用的优先顺序。
 	preferredAddressTypes []v1.NodeAddressType
 }
 
-// NewNodeConnectionInfoGetter creates a new NodeConnectionInfoGetter.
+// NewNodeConnectionInfoGetter 创建新的 NodeConnectionInfoGetter。
 func NewNodeConnectionInfoGetter(nodes NodeGetter, config KubeletClientConfig) (ConnectionInfoGetter, error) {
 	transport, err := MakeTransport(&config)
 	if err != nil {
 		return nil, err
 	}
+	// 同时创建安全与跳过校验两种 transport，供调用方按需选择。
 	insecureSkipTLSVerifyTransport, err := MakeInsecureTransport(&config)
 	if err != nil {
 		return nil, err
 	}
 
+	// 把字符串形式的地址类型转换为 API 类型。
 	types := []v1.NodeAddressType{}
 	for _, t := range config.PreferredAddressTypes {
 		types = append(types, v1.NodeAddressType(t))
@@ -185,20 +191,20 @@ func NewNodeConnectionInfoGetter(nodes NodeGetter, config KubeletClientConfig) (
 	}, nil
 }
 
-// GetConnectionInfo retrieves connection info from the status of a Node API object.
+// GetConnectionInfo 从 Node API 对象的状态中获取连接信息。
 func (k *NodeConnectionInfoGetter) GetConnectionInfo(ctx context.Context, nodeName types.NodeName) (*ConnectionInfo, error) {
 	node, err := k.nodes.Get(ctx, string(nodeName), metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	// Find a kubelet-reported address, using preferred address type
+	// 按首选地址类型查找 kubelet 上报的地址。
 	host, err := nodeutil.GetPreferredNodeAddress(node, k.preferredAddressTypes)
 	if err != nil {
 		return nil, err
 	}
 
-	// Use the kubelet-reported port, if present
+	// 优先使用 kubelet 上报的端口；未上报时回退到默认端口。
 	port := int(node.Status.DaemonEndpoints.KubeletEndpoint.Port)
 	if port <= 0 {
 		port = k.defaultPort

@@ -21,31 +21,37 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
-// PodsByCreationTime makes an array of pods sortable by their creation
-// timestamps in ascending order.
+// PodsByCreationTime 使 Pod 数组可按创建时间升序排序。
 type PodsByCreationTime []*v1.Pod
 
+// Len 返回 Pod 数量。
 func (s PodsByCreationTime) Len() int {
 	return len(s)
 }
 
+// Swap 交换两个 Pod 的位置。
 func (s PodsByCreationTime) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
+// Less 按创建时间升序比较两个 Pod。
 func (s PodsByCreationTime) Less(i, j int) bool {
 	return s[i].CreationTimestamp.Before(&s[j].CreationTimestamp)
 }
 
-// ByImageSize makes an array of images sortable by their size in descending
-// order.
+// ByImageSize 使镜像数组可按大小降序排序。
 type ByImageSize []kubecontainer.Image
 
+// Less 按镜像大小降序比较；大小相同时按 ID 降序，保证排序稳定。
 func (a ByImageSize) Less(i, j int) bool {
 	if a[i].Size == a[j].Size {
 		return a[i].ID > a[j].ID
 	}
 	return a[i].Size > a[j].Size
 }
-func (a ByImageSize) Len() int      { return len(a) }
+
+// Len 返回镜像数量。
+func (a ByImageSize) Len() int { return len(a) }
+
+// Swap 交换两个镜像的位置。
 func (a ByImageSize) Swap(i, j int) { a[i], a[j] = a[j], a[i] }

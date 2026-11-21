@@ -30,9 +30,13 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm"
 )
 
+// TestDeclaredFeatureDiscovery 验证节点声明特性发现同时受特性门控状态和 kubelet 版本上限约束。
 func TestDeclaredFeatureDiscovery(t *testing.T) {
+	// 以 InPlacePodLevelResourcesVerticalScaling 作为被发现的示例特性。
 	podLevelResourcesIPPRFeatureGate := features.InPlacePodLevelResourcesVerticalScaling
+	// 固定特性的最大支持版本，便于构造低于和高于该版本的 kubelet 版本。
 	featureMaxVersion := version.MustParseSemantic("v1.36.0")
+	// createMockFeature 构造一个仅依据门控状态判断是否可发现的模拟特性。
 	createMockFeature := func(t *testing.T, name string, cfg *ndf.NodeConfiguration) *ndftesting.MockFeature {
 		mockFeature := ndftesting.NewMockFeature(t)
 		mockFeature.SetName(name)
@@ -41,6 +45,7 @@ func TestDeclaredFeatureDiscovery(t *testing.T) {
 		return mockFeature
 	}
 
+	// 覆盖门控开启/关闭以及 kubelet 版本高于特性最大版本三种组合。
 	testcases := []struct {
 		name                         string
 		podLevelResourcesIPPREnabled bool
@@ -68,6 +73,7 @@ func TestDeclaredFeatureDiscovery(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试独立设置门控，避免用例之间相互影响。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, podLevelResourcesIPPRFeatureGate, tc.podLevelResourcesIPPREnabled)
 
 			cfg := &ndf.NodeConfiguration{
@@ -80,11 +86,13 @@ func TestDeclaredFeatureDiscovery(t *testing.T) {
 				createMockFeature(t, string(podLevelResourcesIPPRFeatureGate), cfg),
 			}
 
+			// 使用真实 kubelet 结构，并替换容器管理器与特性发现框架。
 			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 			defer testKubelet.Cleanup()
 			kubelet := testKubelet.kubelet
 			fakeCM := cm.NewFakeContainerManagerWithNodeConfig(cm.NodeConfig{})
 			kubelet.containerManager = fakeCM
+			// 只注册模拟特性，确保发现结果只受该特性影响。
 			framework := ndf.New(registeredFeatures)
 			kubelet.nodeDeclaredFeaturesFramework = framework
 			kubelet.version = tc.kubeletVersion
@@ -99,7 +107,9 @@ func TestDeclaredFeatureDiscovery(t *testing.T) {
 	}
 }
 
+// TestExtendWebSocketsToKubeletFeatureDiscovery 验证 ExtendWebSocketsToKubelet 门控开启时该特性会被节点声明。
 func TestExtendWebSocketsToKubeletFeatureDiscovery(t *testing.T) {
+	// 门控开启与关闭两种场景。
 	testcases := []struct {
 		name                          string
 		extendWebSocketsToKubeletGate bool
@@ -118,12 +128,14 @@ func TestExtendWebSocketsToKubeletFeatureDiscovery(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 按用例设置门控状态。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ExtendWebSocketsToKubelet, tc.extendWebSocketsToKubeletGate)
 
 			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 			defer testKubelet.Cleanup()
 			kubelet := testKubelet.kubelet
 
+			// 注册全部真实特性，验证默认特性集合中的该项发现结果。
 			framework := ndf.New(ndffeatures.AllFeatures)
 			kubelet.nodeDeclaredFeaturesFramework = framework
 

@@ -44,35 +44,40 @@ import (
 	status "google.golang.org/grpc/status"
 )
 
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the grpc package it is being compiled against.
-// Requires gRPC-Go v1.64.0 or later.
+// 编译期断言：确保生成文件与所用 gRPC 包兼容；
+// 要求 gRPC-Go v1.64.0 及以上。
 const _ = grpc.SupportPackageIsVersion9
 
+// 服务方法的完整名称常量，供 gRPC 调用与拦截器使用。
 const (
 	Example_GetExampleInfo_FullMethodName = "/v1beta2.Example/GetExampleInfo"
 )
 
-// ExampleClient is the client API for Example service.
+// ExampleClient 是 Example 服务的客户端 API。
 //
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+// 关于 ctx 使用与流式 RPC 的关闭语义，请参考 https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream。
 //
-// Example is a simple example service for general reference on the recommended
-// kubelet plugin model and plugin watcher testing.
+// Example 是一个简单示例服务，用于说明推荐的 kubelet 插件模型以及 plugin watcher 测试。
 type ExampleClient interface {
+	// 调用 GetExampleInfo RPC。
 	GetExampleInfo(ctx context.Context, in *ExampleRequest, opts ...grpc.CallOption) (*ExampleResponse, error)
 }
 
+// exampleClient 是 ExampleClient 的默认实现，持有 gRPC 连接。
 type exampleClient struct {
 	cc grpc.ClientConnInterface
 }
 
+// NewExampleClient 基于给定连接创建 Example 客户端。
 func NewExampleClient(cc grpc.ClientConnInterface) ExampleClient {
 	return &exampleClient{cc}
 }
 
+// GetExampleInfo 调用 Example 服务的 GetExampleInfo 一元 RPC。
 func (c *exampleClient) GetExampleInfo(ctx context.Context, in *ExampleRequest, opts ...grpc.CallOption) (*ExampleResponse, error) {
+	// 追加 StaticMethod 选项，让负载均衡器能感知具体方法。
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	// 预分配响应对象，由 gRPC 反序列化填充。
 	out := new(ExampleResponse)
 	err := c.cc.Invoke(ctx, Example_GetExampleInfo_FullMethodName, in, out, cOpts...)
 	if err != nil {
@@ -81,56 +86,62 @@ func (c *exampleClient) GetExampleInfo(ctx context.Context, in *ExampleRequest, 
 	return out, nil
 }
 
-// ExampleServer is the server API for Example service.
-// All implementations must embed UnimplementedExampleServer
-// for forward compatibility.
+// ExampleServer 是 Example 服务的服务端 API。
+// 所有实现都必须内嵌 UnimplementedExampleServer 以保证向前兼容。
 //
-// Example is a simple example service for general reference on the recommended
-// kubelet plugin model and plugin watcher testing.
+// Example 是一个简单示例服务，用于说明推荐的 kubelet 插件模型以及 plugin watcher 测试。
 type ExampleServer interface {
+	// 服务端 GetExampleInfo 方法。
 	GetExampleInfo(context.Context, *ExampleRequest) (*ExampleResponse, error)
+	// 必须内嵌的标记方法，保证向前兼容。
 	mustEmbedUnimplementedExampleServer()
 }
 
-// UnimplementedExampleServer must be embedded to have
-// forward compatible implementations.
+// UnimplementedExampleServer 必须被内嵌，以获得向前兼容的实现。
 //
-// NOTE: this should be embedded by value instead of pointer to avoid a nil
-// pointer dereference when methods are called.
+// 注意：应按值内嵌而不是指针，避免方法被调用时解引用 nil 指针。
 type UnimplementedExampleServer struct{}
 
+// GetExampleInfo 返回 Unimplemented 错误，表示服务端未实现该方法。
 func (UnimplementedExampleServer) GetExampleInfo(context.Context, *ExampleRequest) (*ExampleResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetExampleInfo not implemented")
 }
-func (UnimplementedExampleServer) mustEmbedUnimplementedExampleServer() {}
-func (UnimplementedExampleServer) testEmbeddedByValue()                 {}
 
-// UnsafeExampleServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ExampleServer will
-// result in compilation errors.
+// mustEmbedUnimplementedExampleServer 是必须内嵌的标记方法，保证实现具备向前兼容性。
+func (UnimplementedExampleServer) mustEmbedUnimplementedExampleServer() {}
+
+// testEmbeddedByValue 用于检测 UnimplementedExampleServer 是否按值内嵌。
+func (UnimplementedExampleServer) testEmbeddedByValue() {}
+
+// UnsafeExampleServer 可被内嵌以放弃向前兼容性。
+// 不推荐使用：ExampleServer 新增方法时会导致编译错误。
 type UnsafeExampleServer interface {
+	// 必须内嵌的标记方法。
 	mustEmbedUnimplementedExampleServer()
 }
 
+// RegisterExampleServer 把服务实现注册到给定的 gRPC 服务注册器。
 func RegisterExampleServer(s grpc.ServiceRegistrar, srv ExampleServer) {
-	// If the following call panics, it indicates UnimplementedExampleServer was
-	// embedded by pointer and is nil.  This will cause panics if an
-	// unimplemented method is ever invoked, so we test this at initialization
-	// time to prevent it from happening at runtime later due to I/O.
+	// 如果这里 panic，说明 UnimplementedExampleServer 以指针方式内嵌且为 nil；
+	// 在初始化期尽早暴露问题，避免运行期调用未实现方法时才 panic。
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&Example_ServiceDesc, srv)
 }
 
+// _Example_GetExampleInfo_Handler 是 GetExampleInfo 的服务端处理函数，
+// 负责解码请求并调用实现。
 func _Example_GetExampleInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExampleRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
+	// 未配置拦截器时直接调用实现。
 	if interceptor == nil {
 		return srv.(ExampleServer).GetExampleInfo(ctx, in)
 	}
+	// 配置了拦截器时，把调用信息与处理函数交给拦截器。
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
 		FullMethod: Example_GetExampleInfo_FullMethodName,
@@ -141,9 +152,8 @@ func _Example_GetExampleInfo_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-// Example_ServiceDesc is the grpc.ServiceDesc for Example service.
-// It's only intended for direct use with grpc.RegisterService,
-// and not to be introspected or modified (even as a copy)
+// Example_ServiceDesc 是 Example 服务的 grpc.ServiceDesc。
+// 仅用于 grpc.RegisterService 直接注册，不应被反射或修改（即使是副本）。
 var Example_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "v1beta2.Example",
 	HandlerType: (*ExampleServer)(nil),

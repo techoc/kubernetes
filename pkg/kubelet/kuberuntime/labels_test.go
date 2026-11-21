@@ -30,12 +30,13 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestContainerLabels 验证从容器标签能还原出正确的 labeledContainerInfo。
 func TestContainerLabels(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	deletionGracePeriod := int64(10)
 	terminationGracePeriod := int64(10)
 	lifecycle := &v1.Lifecycle{
-		// Left PostStart as nil
+		// PostStart 故意保持 nil，以验证可选字段的处理。
 		PreStop: &v1.LifecycleHandler{
 			Exec: &v1.ExecAction{
 				Command: []string{"action1", "action2"},
@@ -84,7 +85,7 @@ func TestContainerLabels(t *testing.T) {
 		},
 	}
 
-	// Test whether we can get right information from label
+	// 验证能否从标签中还原出正确的信息。
 	for _, test := range tests {
 		labels := newContainerLabels(container, pod)
 		containerInfo := getContainerInfoFromLabels(tCtx, labels)
@@ -94,6 +95,8 @@ func TestContainerLabels(t *testing.T) {
 	}
 }
 
+// TestContainerAnnotations 验证容器注解的写入与读取往返一致，
+// 包括可选字段为 nil 以及特性门控开启时的哈希更新。
 func TestContainerAnnotations(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	restartCount := 5
@@ -105,7 +108,7 @@ func TestContainerAnnotations(t *testing.T) {
 		},
 	}
 	lifecycle := &v1.Lifecycle{
-		// Left PostStart as nil
+		// PostStart 故意保持 nil，以验证可选字段的处理。
 		PreStop: &v1.LifecycleHandler{
 			Exec: &v1.ExecAction{
 				Command: []string{"action1", "action2"},
@@ -164,7 +167,7 @@ func TestContainerAnnotations(t *testing.T) {
 	}
 
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.InPlacePodVerticalScaling, true)
-	// Test whether we can get right information from label
+	// 验证能否从注解中还原出正确的信息。
 	annotations := newContainerAnnotations(tCtx, container, pod, restartCount, opts)
 	containerInfo := getContainerInfoFromAnnotations(tCtx, annotations)
 	if !reflect.DeepEqual(containerInfo, expected) {
@@ -174,15 +177,15 @@ func TestContainerAnnotations(t *testing.T) {
 		t.Errorf("expected annotation %s to exist got %v, %v", opts.Annotations[0].Name, ok, v)
 	}
 
-	// Test when DeletionGracePeriodSeconds, TerminationGracePeriodSeconds and Lifecycle are nil,
-	// the information got from annotations should also be nil
+	// 当 DeletionGracePeriodSeconds、TerminationGracePeriodSeconds 和 Lifecycle 都为 nil 时，
+	// 从注解还原出的对应信息也应当为 nil。
 	container.Lifecycle = nil
 	pod.DeletionGracePeriodSeconds = nil
 	pod.Spec.TerminationGracePeriodSeconds = nil
 	expected.PodDeletionGracePeriod = nil
 	expected.PodTerminationGracePeriod = nil
 	expected.PreStopHandler = nil
-	// Because container is changed, the Hash should be updated
+	// 容器内容已改变，哈希也应随之更新。
 	expected.Hash = kubecontainer.HashContainer(container)
 	annotations = newContainerAnnotations(tCtx, container, pod, restartCount, opts)
 	containerInfo = getContainerInfoFromAnnotations(tCtx, annotations)
@@ -194,6 +197,7 @@ func TestContainerAnnotations(t *testing.T) {
 	}
 }
 
+// TestPodLabels 验证从 Pod sandbox 标签能还原出 Pod 的基本信息和自定义标签。
 func TestPodLabels(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	pod := &v1.Pod{
@@ -214,7 +218,7 @@ func TestPodLabels(t *testing.T) {
 		PodUID:       pod.UID,
 	}
 
-	// Test whether we can get right information from label
+	// 验证能否从标签中还原出正确的信息。
 	labels := newPodLabels(pod)
 	podSandboxInfo := getPodSandboxInfoFromLabels(tCtx, labels)
 	if !reflect.DeepEqual(podSandboxInfo, expected) {
@@ -222,6 +226,7 @@ func TestPodLabels(t *testing.T) {
 	}
 }
 
+// TestPodAnnotations 验证 Pod 注解能原样写入并从 sandbox 注解中还原。
 func TestPodAnnotations(t *testing.T) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -238,7 +243,7 @@ func TestPodAnnotations(t *testing.T) {
 		Annotations: map[string]string{"foo": "bar"},
 	}
 
-	// Test whether we can get right information from annotations
+	// 验证能否从注解中还原出正确的信息。
 	annotations := newPodAnnotations(pod)
 	podSandboxInfo := getPodSandboxInfoFromAnnotations(annotations)
 	if !reflect.DeepEqual(podSandboxInfo, expected) {

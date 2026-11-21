@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestPolicySingleNumaNodeCanAdmitPodResult 验证 Preferred=false 的 hint
+// 不能被单 NUMA 节点策略接纳。
 func TestPolicySingleNumaNodeCanAdmitPodResult(t *testing.T) {
 	tcases := []struct {
 		name     string
@@ -33,8 +35,10 @@ func TestPolicySingleNumaNodeCanAdmitPodResult(t *testing.T) {
 			expected: false,
 		},
 	}
+	// 使用双节点拓扑构造策略。
 	numaInfo := commonNUMAInfoTwoNodes()
 
+	// 逐用例构造策略并校验准入结果。
 	for _, tc := range tcases {
 		policy := singleNumaNodePolicy{numaInfo: numaInfo, opts: PolicyOptions{}}
 		result := policy.canAdmitPodResult(&tc.hint)
@@ -45,6 +49,8 @@ func TestPolicySingleNumaNodeCanAdmitPodResult(t *testing.T) {
 	}
 }
 
+// TestPolicySingleNumaNodeFilterHints 验证过滤规则：
+// 空资源与 nil 掩码 hint 会被剔除，保留可用 hint。
 func TestPolicySingleNumaNodeFilterHints(t *testing.T) {
 	tcases := []struct {
 		name              string
@@ -146,7 +152,9 @@ func TestPolicySingleNumaNodeFilterHints(t *testing.T) {
 		},
 	}
 
+	// 逐用例比较过滤结果。
 	for _, tc := range tcases {
+		// 调用被测过滤函数并深比较结果。
 		actual := filterSingleNumaHints(tc.allResources)
 		if !reflect.DeepEqual(tc.expectedResources, actual) {
 			t.Errorf("Test Case: %s", tc.name)
@@ -155,12 +163,15 @@ func TestPolicySingleNumaNodeFilterHints(t *testing.T) {
 	}
 }
 
+// TestPolicySingleNumaNodeMerge 验证单 NUMA 节点策略的 hint 合并逻辑。
 func TestPolicySingleNumaNodeMerge(t *testing.T) {
 	numaInfo := commonNUMAInfoFourNodes()
 	policy := singleNumaNodePolicy{numaInfo: numaInfo, opts: PolicyOptions{}}
 
+	// 合并通用用例与策略特有的用例后统一执行。
 	tcases := commonPolicyMergeTestCases(numaInfo.Nodes)
 	tcases = append(tcases, policy.mergeTestCases(numaInfo.Nodes)...)
 
+	// 复用通用合并测试框架。
 	testPolicyMerge(&policy, tcases, t)
 }

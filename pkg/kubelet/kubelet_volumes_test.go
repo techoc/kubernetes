@@ -35,7 +35,9 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestListVolumesForPod 校验 ListVolumesForPod 按 Pod 返回已挂载的卷。
 func TestListVolumesForPod(t *testing.T) {
+	// 卷管理器的挂载流程依赖异步 reconciler，短模式下跳过以节省时间。
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
@@ -82,6 +84,7 @@ func TestListVolumesForPod(t *testing.T) {
 
 	tCtx := ktesting.Init(t)
 	defer tCtx.Cancel("test has completed")
+	// 启动卷管理器主循环，模拟真实 kubelet 的异步挂载过程。
 	go kubelet.volumeManager.Run(tCtx, kubelet.sourcesReady)
 
 	kubelet.podManager.SetPods([]*v1.Pod{pod})
@@ -100,6 +103,7 @@ func TestListVolumesForPod(t *testing.T) {
 	assert.NotNil(t, volumesToReturn[outerVolumeSpecName2], "key %s", outerVolumeSpecName2)
 }
 
+// TestPodVolumesExist 校验 podVolumesExist 能识别多个 Pod 的卷是否均已挂载。
 func TestPodVolumesExist(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -216,6 +220,8 @@ func TestPodVolumesExist(t *testing.T) {
 	}
 }
 
+// TestPodVolumeDeadlineAttachAndMount 校验 WaitForAttachAndMount 会响应上下文超时，
+// 而不是一直等到内部默认超时。
 func TestPodVolumeDeadlineAttachAndMount(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -227,7 +233,7 @@ func TestPodVolumeDeadlineAttachAndMount(t *testing.T) {
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
 
-	// any test cases added here should have volumes that fail to mount
+	// 这里新增的用例必须使用无法完成挂载的卷，才能触发等待超时。
 	pods := []*v1.Pod{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -267,17 +273,18 @@ func TestPodVolumeDeadlineAttachAndMount(t *testing.T) {
 	kubelet.podManager.SetPods(pods)
 	for _, pod := range pods {
 		start := time.Now()
-		// ensure our context times out quickly
+		// 给上下文设置很短的截止时间，以便快速观察超时行为。
 		ctx, cancel := context.WithDeadline(tCtx, time.Now().Add(2*time.Second))
 		err := kubelet.volumeManager.WaitForAttachAndMount(ctx, pod)
 		delta := time.Since(start)
-		// the standard timeout is 2 minutes, so if it's just a few seconds we know that the context timeout was the cause
+		// 标准超时为 2 分钟；若几秒内就返回，说明是上下文超时而非内部默认超时导致。
 		assert.Lessf(t, delta, 10*time.Second, "WaitForAttachAndMount should timeout when the context is cancelled")
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 		cancel()
 	}
 }
 
+// TestPodVolumeDeadlineUnmount 校验 WaitForUnmount 会响应上下文超时。
 func TestPodVolumeDeadlineUnmount(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -289,7 +296,7 @@ func TestPodVolumeDeadlineUnmount(t *testing.T) {
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
 
-	// any test cases added here should have volumes that succeed at mounting
+	// 这里新增的用例必须使用能够成功挂载的卷，才能验证卸载超时。
 	pods := []*v1.Pod{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -332,17 +339,19 @@ func TestPodVolumeDeadlineUnmount(t *testing.T) {
 			t.Fatalf("pod %d failed: %v", i, err)
 		}
 		start := time.Now()
-		// ensure our context times out quickly
+		// 给上下文设置很短的截止时间，以便快速观察超时行为。
 		ctx, cancel := context.WithDeadline(tCtx, time.Now().Add(2*time.Second))
 		err := kubelet.volumeManager.WaitForUnmount(ctx, pod)
 		delta := time.Since(start)
-		// the standard timeout is 2 minutes, so if it's just a few seconds we know that the context timeout was the cause
+		// 标准超时为 2 分钟；若几秒内就返回，说明是上下文超时而非内部默认超时导致。
 		assert.Lessf(t, delta, 10*time.Second, "WaitForUnmount should timeout when the context is cancelled")
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 		cancel()
 	}
 }
 
+// TestVolumeAttachAndMountControllerDisabled 校验关闭控制器 attach/detach 时，
+// kubelet 自己完成 attach、mount device 与 setup。
 func TestVolumeAttachAndMountControllerDisabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -387,6 +396,7 @@ func TestVolumeAttachAndMountControllerDisabled(t *testing.T) {
 	podVolumes := kubelet.volumeManager.GetMountedVolumesForPod(
 		util.GetUniquePodName(pod))
 
+	// 只断言卷名集合，不依赖卷对象的具体实现。
 	expectedPodVolumes := []string{"vol1"}
 	assert.Len(t, podVolumes, len(expectedPodVolumes), "Volumes for pod %+v", pod)
 	for _, name := range expectedPodVolumes {
@@ -403,6 +413,8 @@ func TestVolumeAttachAndMountControllerDisabled(t *testing.T) {
 		1 /* expectedSetUpCallCount */, testKubelet.volumePlugin))
 }
 
+// TestVolumeUnmountAndDetachControllerDisabled 校验关闭控制器 attach/detach 时，
+// kubelet 自己完成 teardown、unmount 与 detach。
 func TestVolumeUnmountAndDetachControllerDisabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -440,10 +452,10 @@ func TestVolumeUnmountAndDetachControllerDisabled(t *testing.T) {
 	defer tCtx.Cancel("test has completed")
 	go kubelet.volumeManager.Run(tCtx, kubelet.sourcesReady)
 
-	// Add pod
+	// 加入 Pod。
 	kubelet.podManager.SetPods([]*v1.Pod{pod})
 
-	// Verify volumes attached
+	// 确认卷已完成 attach/mount。
 	err := kubelet.volumeManager.WaitForAttachAndMount(tCtx, pod)
 	assert.NoError(t, err)
 
@@ -466,14 +478,14 @@ func TestVolumeUnmountAndDetachControllerDisabled(t *testing.T) {
 	assert.NoError(t, volumetest.VerifySetUpCallCount(
 		1 /* expectedSetUpCallCount */, testKubelet.volumePlugin))
 
-	// Remove pod
+	// 移除 Pod。
 	// TODO: technically waitForVolumeUnmount
 	kubelet.podWorkers.(*fakePodWorkers).setPodRuntimeBeRemoved(pod.UID)
 	kubelet.podManager.SetPods([]*v1.Pod{})
 
 	require.NoError(t, kubelet.volumeManager.WaitForUnmount(tCtx, pod))
 
-	// Verify volumes unmounted
+	// 确认卷已卸载。
 	hasMountedVolumes := kubelet.volumeManager.HasPossiblyMountedVolumesForPod(
 		util.GetUniquePodName(pod))
 
@@ -482,13 +494,15 @@ func TestVolumeUnmountAndDetachControllerDisabled(t *testing.T) {
 	assert.NoError(t, volumetest.VerifyTearDownCallCount(
 		1 /* expectedTearDownCallCount */, testKubelet.volumePlugin))
 
-	// Verify volumes detached and no longer reported as in use
+	// 确认卷已 detach，且不再出现在“在用卷”列表中。
 	assert.NoError(t, waitForVolumeDetach(v1.UniqueVolumeName("fake/fake-device"), kubelet.volumeManager))
 	assert.GreaterOrEqual(t, testKubelet.volumePlugin.GetNewAttacherCallCount(), 1, "Expected plugin NewAttacher to be called at least once")
 	assert.NoError(t, volumetest.VerifyDetachCallCount(
 		1 /* expectedDetachCallCount */, testKubelet.volumePlugin))
 }
 
+// TestVolumeAttachAndMountControllerEnabled 校验开启控制器 attach/detach 时，
+// kubelet 只做 mount，不调用 attach。
 func TestVolumeAttachAndMountControllerEnabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -545,7 +559,7 @@ func TestVolumeAttachAndMountControllerEnabled(t *testing.T) {
 
 	kubelet.podManager.SetPods([]*v1.Pod{pod})
 
-	// Fake node status update
+	// 模拟节点状态中的 VolumesInUse 更新。
 	go simulateVolumeInUseUpdate(
 		v1.UniqueVolumeName("fake/fake-device"),
 		tCtx.Done(),
@@ -574,6 +588,8 @@ func TestVolumeAttachAndMountControllerEnabled(t *testing.T) {
 		1 /* expectedSetUpCallCount */, testKubelet.volumePlugin))
 }
 
+// TestVolumeUnmountAndDetachControllerEnabled 校验开启控制器 attach/detach 时，
+// kubelet 只做 unmount，不调用 detach。
 func TestVolumeUnmountAndDetachControllerEnabled(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -628,16 +644,16 @@ func TestVolumeUnmountAndDetachControllerEnabled(t *testing.T) {
 	defer tCtx.Cancel("test has completed")
 	go kubelet.volumeManager.Run(tCtx, kubelet.sourcesReady)
 
-	// Add pod
+	// 加入 Pod。
 	kubelet.podManager.SetPods([]*v1.Pod{pod})
 
-	// Fake node status update
+	// 模拟节点状态中的 VolumesInUse 更新。
 	go simulateVolumeInUseUpdate(
 		v1.UniqueVolumeName("fake/fake-device"),
 		tCtx.Done(),
 		kubelet.volumeManager)
 
-	// Verify volumes attached
+	// 确认卷已完成 attach/mount。
 	require.NoError(t, kubelet.volumeManager.WaitForAttachAndMount(tCtx, pod))
 
 	podVolumes := kubelet.volumeManager.GetMountedVolumesForPod(
@@ -661,13 +677,13 @@ func TestVolumeUnmountAndDetachControllerEnabled(t *testing.T) {
 	assert.NoError(t, volumetest.VerifySetUpCallCount(
 		1 /* expectedSetUpCallCount */, testKubelet.volumePlugin))
 
-	// Remove pod
+	// 移除 Pod。
 	kubelet.podWorkers.(*fakePodWorkers).setPodRuntimeBeRemoved(pod.UID)
 	kubelet.podManager.SetPods([]*v1.Pod{})
 
 	assert.NoError(t, waitForVolumeUnmount(kubelet.volumeManager, pod))
 
-	// Verify volumes unmounted
+	// 确认卷已卸载。
 	podVolumes = kubelet.volumeManager.GetMountedVolumesForPod(
 		util.GetUniquePodName(pod))
 	hasVolumes = kubelet.volumeManager.HasPossiblyMountedVolumesForPod(
@@ -680,67 +696,81 @@ func TestVolumeUnmountAndDetachControllerEnabled(t *testing.T) {
 	assert.NoError(t, volumetest.VerifyTearDownCallCount(
 		1 /* expectedTearDownCallCount */, testKubelet.volumePlugin))
 
-	// Verify volumes detached and no longer reported as in use
+	// 确认卷已 detach，且不再出现在“在用卷”列表中。
 	assert.NoError(t, waitForVolumeDetach(v1.UniqueVolumeName("fake/fake-device"), kubelet.volumeManager))
 	assert.GreaterOrEqual(t, testKubelet.volumePlugin.GetNewAttacherCallCount(), 1, "Expected plugin NewAttacher to be called at least once")
 	assert.NoError(t, volumetest.VerifyZeroDetachCallCount(testKubelet.volumePlugin))
 }
 
+// stubVolume 是 volume.Volume 的最小桩实现，用于直接驱动挂载/卸载逻辑。
 type stubVolume struct {
 	path       string
 	attributes volume.Attributes
 	volume.MetricsNil
 }
 
+// GetPath 返回桩卷的路径。
 func (f *stubVolume) GetPath() string {
 	return f.path
 }
 
+// GetAttributes 返回桩卷的属性。
 func (f *stubVolume) GetAttributes() volume.Attributes {
 	return f.attributes
 }
 
+// SetUp 为空实现，始终成功。
 func (f *stubVolume) SetUp(mounterArgs volume.MounterArgs) error {
 	return nil
 }
 
+// SetUpAt 为空实现，始终成功。
 func (f *stubVolume) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	return nil
 }
 
+// stubBlockVolume 是块设备卷映射器的最小桩实现。
 type stubBlockVolume struct {
 	dirPath string
 	volName string
 }
 
+// GetGlobalMapPath 返回空的全局映射路径。
 func (f *stubBlockVolume) GetGlobalMapPath(spec *volume.Spec) (string, error) {
 	return "", nil
 }
 
+// GetPodDeviceMapPath 返回预置的目录与卷名。
 func (f *stubBlockVolume) GetPodDeviceMapPath() (string, string) {
 	return f.dirPath, f.volName
 }
 
+// SetUpDevice 为空实现，始终成功。
 func (f *stubBlockVolume) SetUpDevice() (string, error) {
 	return "", nil
 }
 
+// MapPodDevice 为空实现，始终成功。
 func (f stubBlockVolume) MapPodDevice() error {
 	return nil
 }
 
+// TearDownDevice 为空实现，始终成功。
 func (f *stubBlockVolume) TearDownDevice(mapPath string, devicePath string) error {
 	return nil
 }
 
+// UnmapPodDevice 为空实现，始终成功。
 func (f *stubBlockVolume) UnmapPodDevice() error {
 	return nil
 }
 
+// SupportsMetrics 返回 false，表示桩卷不提供指标。
 func (f *stubBlockVolume) SupportsMetrics() bool {
 	return false
 }
 
+// GetMetrics 返回 nil，nil。
 func (f *stubBlockVolume) GetMetrics() (*volume.Metrics, error) {
 	return nil, nil
 }

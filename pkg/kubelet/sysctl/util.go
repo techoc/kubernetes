@@ -21,9 +21,9 @@ import (
 	utilsysctl "k8s.io/component-helpers/node/util/sysctl"
 )
 
-// ConvertPodSysctlsVariableToDotsSeparator converts sysctls variable in the Pod.Spec.SecurityContext.Sysctls slice into a dot as a separator
-// according to the linux sysctl conversion rules.
-// see https://man7.org/linux/man-pages/man5/sysctl.d.5.html for more details.
+// ConvertPodSysctlsVariableToDotsSeparator 按 Linux sysctl 转换规则，将
+// Pod.Spec.SecurityContext.Sysctls 中的 sysctl 名称分隔符统一为点号。
+// 详见 https://man7.org/linux/man-pages/man5/sysctl.d.5.html。
 func ConvertPodSysctlsVariableToDotsSeparator(securityContext *v1.PodSecurityContext) {
 	if securityContext == nil {
 		return

@@ -24,33 +24,37 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Interface is an abstract interface for testability.  It abstracts the interface to cAdvisor.
+// Interface 抽象 cAdvisor 的接口，便于测试替换。
 type Interface interface {
+	// Start 启动 cAdvisor。
 	Start() error
+	// ContainerInfoV2 返回指定容器的信息（cAdvisor v2 接口）。
 	ContainerInfoV2(name string, options cadvisorapi.RequestOptions) (map[string]cadvisorapi.ContainerInfo, error)
+	// GetRequestedContainersInfo 返回指定容器的详细信息。
 	GetRequestedContainersInfo(containerName string, options cadvisorapi.RequestOptions) (map[string]*cadvisorapi.ContainerInfo, error)
+	// MachineInfo 返回节点机器信息。
 	MachineInfo(logger klog.Logger) (*cadvisorapi.MachineInfo, error)
 
+	// VersionInfo 返回 cAdvisor 的版本信息。
 	VersionInfo() (*cadvisorapi.VersionInfo, error)
 
-	// Returns usage information about the filesystem holding container images.
+	// ImagesFsInfo 返回存放容器镜像的文件系统使用信息。
 	ImagesFsInfo(context.Context) (cadvisorapi.FsInfo, error)
 
-	// Returns usage information about the root filesystem.
+	// RootFsInfo 返回根文件系统的使用信息。
 	RootFsInfo() (cadvisorapi.FsInfo, error)
 
-	// Returns usage information about the writeable layer.
-	// KEP 4191 can separate the image filesystem
+	// ContainerFsInfo 返回可写层的使用信息；KEP 4191 支持把镜像文件系统独立出来。
 	ContainerFsInfo(context.Context) (cadvisorapi.FsInfo, error)
 
-	// Get filesystem information for the filesystem that contains the given file.
+	// GetDirFsInfo 返回包含指定文件的文件系统信息。
 	GetDirFsInfo(path string) (cadvisorapi.FsInfo, error)
 }
 
-// ImageFsInfoProvider informs cAdvisor how to find imagefs for container images.
+// ImageFsInfoProvider 告知 cAdvisor 如何定位容器镜像所在的文件系统。
 type ImageFsInfoProvider interface {
-	// ImageFsInfoLabel returns the label cAdvisor should use to find the filesystem holding container images.
+	// ImageFsInfoLabel 返回 cAdvisor 用于查找镜像文件系统的标签。
 	ImageFsInfoLabel() (string, error)
-	// In split image filesystem this will be different from ImageFsInfoLabel
+	// ContainerFsInfoLabel 在镜像文件系统拆分时与 ImageFsInfoLabel 不同，返回可写层文件系统的标签。
 	ContainerFsInfoLabel() (string, error)
 }

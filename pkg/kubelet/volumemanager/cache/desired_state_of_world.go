@@ -15,8 +15,7 @@ limitations under the License.
 */
 
 /*
-Package cache implements data structures used by the kubelet volume manager to
-keep track of attached volumes and the pods that mounted them.
+Package cache 保存 kubelet 卷管理器使用的数据结构，用于跟踪已挂载的卷以及挂载它们的 Pod。
 */
 package cache
 
@@ -42,112 +41,69 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/types"
 )
 
-// DesiredStateOfWorld defines a set of thread-safe operations for the kubelet
-// volume manager's desired state of the world cache.
-// This cache contains volumes->pods i.e. a set of all volumes that should be
-// attached to this node and the pods that reference them and should mount the
-// volume.
-// Note: This is distinct from the DesiredStateOfWorld implemented by the
-// attach/detach controller. They both keep track of different objects. This
-// contains kubelet volume manager specific state.
+// DesiredStateOfWorld 定义 kubelet 卷管理器期望状态缓存的线程安全操作。
+// 缓存内容为“卷 -> Pod”：本节点应挂载的所有卷及其引用该卷、需要执行挂载的 Pod。
+// 注意：它与 attach/detach 控制器的 DesiredStateOfWorld 不同，二者跟踪的对象并不相同，
+// 这里只保存 kubelet 卷管理器的状态。
 type DesiredStateOfWorld interface {
-	// AddPodToVolume adds the given pod to the given volume in the cache
-	// indicating the specified pod should mount the specified volume.
-	// A unique volumeName is generated from the volumeSpec and returned on
-	// success.
-	// If no volume plugin can support the given volumeSpec or more than one
-	// plugin can support it, an error is returned.
-	// If a volume with the name volumeName does not exist in the list of
-	// volumes that should be attached to this node, the volume is implicitly
-	// added.
-	// If a pod with the same unique name already exists under the specified
-	// volume, this is a no-op.
+	// AddPodToVolume 把指定 Pod 加入卷的挂载集合，表示该 Pod 应挂载该卷。
+	// 成功时返回由 volumeSpec 生成的唯一卷名；没有插件或多个插件都能支持该 spec 时返回错误。
+	// 若卷不在节点应挂载的卷列表中，会隐式创建；若同名 Pod 已在该卷下，则为空操作。
 	AddPodToVolume(logger klog.Logger, podName types.UniquePodName, pod *v1.Pod, volumeSpec *volume.Spec, outerVolumeSpecName string, volumeGIDValue string, seLinuxContainerContexts []*v1.SELinuxOptions) (v1.UniqueVolumeName, error)
 
-	// MarkVolumesReportedInUse sets the ReportedInUse value to true for the
-	// reportedVolumes. For volumes not in the reportedVolumes list, the
-	// ReportedInUse value is reset to false. The default ReportedInUse value
-	// for a newly created volume is false.
-	// When set to true this value indicates that the volume was successfully
-	// added to the VolumesInUse field in the node's status. Mount operation needs
-	// to check this value before issuing the operation.
-	// If a volume in the reportedVolumes list does not exist in the list of
-	// volumes that should be attached to this node, it is skipped without error.
+	// MarkVolumesReportedInUse 把 reportedVolumes 中卷的 ReportedInUse 置为 true，
+	// 其余卷重置为 false（新建卷默认 false）。
+	// 该值为 true 表示卷已成功写入节点状态的 VolumesInUse 字段；挂载操作发起前必须检查它。
+	// 列表中不存在于期望状态的卷会被跳过，不报错。
 	MarkVolumesReportedInUse(reportedVolumes []v1.UniqueVolumeName)
 
-	// DeletePodFromVolume removes the given pod from the given volume in the
-	// cache indicating the specified pod no longer requires the specified
-	// volume.
-	// If a pod with the same unique name does not exist under the specified
-	// volume, this is a no-op.
-	// If a volume with the name volumeName does not exist in the list of
-	// attached volumes, this is a no-op.
-	// If after deleting the pod, the specified volume contains no other child
-	// pods, the volume is also deleted.
+	// DeletePodFromVolume 从卷的挂载集合中移除 Pod，表示该 Pod 不再需要该卷。
+	// Pod 或卷不存在时为空操作；删除后卷若无其他 Pod 引用，则一并删除。
 	DeletePodFromVolume(podName types.UniquePodName, volumeName v1.UniqueVolumeName)
 
-	// VolumeExists returns true if the given volume exists in the list of
-	// volumes that should be attached to this node.
-	// If a pod with the same unique name does not exist under the specified
-	// volume, false is returned.
+	// VolumeExists 判断卷是否在节点应挂载的卷列表中。
+	// 开启 SELinuxMountReadWriteOncePod 时，SELinux 挂载上下文不同的同名卷被视为不同卷。
 	VolumeExists(volumeName v1.UniqueVolumeName, seLinuxMountContext string) bool
 
-	// PodExistsInVolume returns true if the given pod exists in the list of
-	// podsToMount for the given volume in the cache.
-	// If a pod with the same unique name does not exist under the specified
-	// volume, false is returned.
-	// If a volume with the name volumeName does not exist in the list of
-	// attached volumes, false is returned.
+	// PodExistsInVolume 判断 Pod 是否在指定卷的 podsToMount 中。
+	// Pod 或卷不存在，或 SELinux 挂载选项不匹配时返回 false。
 	PodExistsInVolume(podName types.UniquePodName, volumeName v1.UniqueVolumeName, seLinuxMountContext string) bool
 
-	// GetVolumeName returns the UniqueVolumeName for the given pod, indexed by outerVolumeSpecName.
+	// GetVolumeNamesForPod 返回该 Pod 使用的卷名映射，键为外层 volumeSpec 名。
 	GetVolumeNamesForPod(podName types.UniquePodName) map[string]v1.UniqueVolumeName
 
-	// GetVolumesToMount generates and returns a list of volumes that should be
-	// attached to this node and the pods they should be mounted to based on the
-	// current desired state of the world.
+	// GetVolumesToMount 依据当前期望状态生成应挂载到本节点的卷及其 Pod 列表。
 	GetVolumesToMount() []VolumeToMount
 
-	// GetPods generates and returns a map of pods in which map is indexed
-	// with pod's unique name. This map can be used to determine which pod is currently
-	// in desired state of world.
+	// GetPods 返回期望状态中的所有 Pod，键为 Pod 唯一名；
+	// 调用方可据此判断某 Pod 是否仍在期望状态中。
 	GetPods() map[types.UniquePodName]bool
 
-	// VolumeExistsWithSpecName returns true if the given volume specified with the
-	// volume spec name (a.k.a., InnerVolumeSpecName) exists in the list of
-	// volumes that should be attached to this node.
-	// If a pod with the same name does not exist under the specified
-	// volume, false is returned.
+	// VolumeExistsWithSpecName 判断指定 Pod 下是否存在给定 volumeSpec 名（内层卷名）的卷。
 	VolumeExistsWithSpecName(podName types.UniquePodName, volumeSpecName string) bool
 
-	// AddErrorToPod adds the given error to the given pod in the cache.
-	// It will be returned by subsequent GetPodErrors().
-	// Each error string is stored only once.
+	// AddErrorToPod 为 Pod 记录一条错误，后续由 PopPodErrors 取回；相同错误只保存一次。
 	AddErrorToPod(podName types.UniquePodName, err string)
 
-	// PopPodErrors returns accumulated errors on a given pod and clears
-	// them.
+	// PopPodErrors 返回并清除该 Pod 累积的错误。
 	PopPodErrors(podName types.UniquePodName) []string
 
-	// GetPodsWithErrors returns names of pods that have stored errors.
+	// GetPodsWithErrors 返回当前记录了错误的 Pod 名称列表。
 	GetPodsWithErrors() []types.UniquePodName
 
-	// MarkVolumeAttachability updates the volume's attachability for a given volume
+	// MarkVolumeAttachability 更新指定卷是否可附加（attachable）。
 	MarkVolumeAttachability(volumeName v1.UniqueVolumeName, attachable bool)
 
-	// UpdatePersistentVolumeSize updates persistentVolumeSize in desired state of the world
-	// so as it can be compared against actual size and volume expansion performed
-	// if necessary
+	// UpdatePersistentVolumeSize 更新期望的 PV 大小，用于与实际大小比较，必要时触发扩容。
 	UpdatePersistentVolumeSize(volumeName v1.UniqueVolumeName, size resource.Quantity)
 }
 
-// VolumeToMount represents a volume that is attached to this node and needs to
-// be mounted to PodName.
+// VolumeToMount 表示已附加到本节点、需要挂载到 PodName 的卷。
 type VolumeToMount struct {
 	operationexecutor.VolumeToMount
 }
 
-// NewDesiredStateOfWorld returns a new instance of DesiredStateOfWorld.
+// NewDesiredStateOfWorld 创建并返回 DesiredStateOfWorld 实例。
 func NewDesiredStateOfWorld(volumePluginMgr *volume.VolumePluginMgr, seLinuxTranslator util.SELinuxLabelTranslator) DesiredStateOfWorld {
 	if feature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
 		registerSELinuxMetrics()
@@ -160,104 +116,84 @@ func NewDesiredStateOfWorld(volumePluginMgr *volume.VolumePluginMgr, seLinuxTran
 	}
 }
 
+// desiredStateOfWorld 是 DesiredStateOfWorld 的线程安全实现。
 type desiredStateOfWorld struct {
-	// volumesToMount is a map containing the set of volumes that should be
-	// attached to this node and mounted to the pods referencing it. The key in
-	// the map is the name of the volume and the value is a volume object
-	// containing more information about the volume.
+	// volumesToMount 保存应附加到本节点并挂载到引用它的 Pod 的卷集合。
+	// 键为卷名，值为包含卷详细信息的对象。
 	volumesToMount map[v1.UniqueVolumeName]volumeToMount
-	// volumePluginMgr is the volume plugin manager used to create volume
-	// plugin objects.
+	// volumePluginMgr 用于创建卷插件对象。
 	volumePluginMgr *volume.VolumePluginMgr
-	// podErrors are errors caught by desiredStateOfWorldPopulator about volumes for a given pod.
+	// podErrors 保存 desiredStateOfWorldPopulator 在处理 Pod 卷时发现的错误。
 	podErrors map[types.UniquePodName]sets.Set[string]
-	// seLinuxTranslator translates v1.SELinuxOptions to a file SELinux label.
+	// seLinuxTranslator 把 v1.SELinuxOptions 翻译为文件 SELinux 标签。
 	seLinuxTranslator util.SELinuxLabelTranslator
 
 	sync.RWMutex
 }
 
-// The volume object represents a volume that should be attached to this node,
-// and mounted to podsToMount.
+// volumeToMount 表示应附加到本节点并挂载到 podsToMount 中 Pod 的卷。
 type volumeToMount struct {
-	// volumeName contains the unique identifier for this volume.
+	// volumeName 是该卷的唯一标识。
 	volumeName v1.UniqueVolumeName
 
-	// podsToMount is a map containing the set of pods that reference this
-	// volume and should mount it once it is attached. The key in the map is
-	// the name of the pod and the value is a pod object containing more
-	// information about the pod.
+	// podsToMount 保存引用该卷、待卷附加后需要挂载的 Pod 集合。
+	// 键为 Pod 名，值为 Pod 详细信息。
 	podsToMount map[types.UniquePodName]podToMount
 
-	// pluginIsAttachable indicates that the plugin for this volume implements
-	// the volume.Attacher interface
+	// pluginIsAttachable 表示该卷插件实现了 volume.Attacher 接口。
 	pluginIsAttachable bool
 
-	// pluginIsDeviceMountable indicates that the plugin for this volume implements
-	// the volume.DeviceMounter interface
+	// pluginIsDeviceMountable 表示该卷插件实现了 volume.DeviceMounter 接口。
 	pluginIsDeviceMountable bool
 
-	// volumeGIDValue contains the value of the GID annotation, if present.
+	// volumeGIDValue 保存 GID 注解的值（若存在）。
 	volumeGIDValue string
 
-	// reportedInUse indicates that the volume was successfully added to the
-	// VolumesInUse field in the node's status.
+	// reportedInUse 表示卷已成功写入节点状态的 VolumesInUse 字段。
 	reportedInUse bool
 
-	// desiredSizeLimit indicates the desired upper bound on the size of the volume
-	// (if so implemented)
+	// desiredSizeLimit 表示卷大小的期望上限（若该卷实现支持）。
 	desiredSizeLimit *resource.Quantity
 
-	// persistentVolumeSize records desired size of a persistent volume.
-	// Usually this value reflects size recorded in pv.Spec.Capacity
+	// persistentVolumeSize 记录 PV 的期望大小，通常来自 pv.Spec.Capacity。
 	persistentVolumeSize resource.Quantity
 
-	// effectiveSELinuxMountFileLabel is the SELinux label that will be applied to the volume using mount options.
-	// If empty, then:
-	// - either the context+label is unknown (assigned randomly by the container runtime)
-	// - or the volume plugin responsible for this volume does not support mounting with -o context
-	// - or the volume is not ReadWriteOncePod
-	// - or the OS does not support SELinux
-	// In all cases, the SELinux context does not matter when mounting the volume.
+	// effectiveSELinuxMountFileLabel 是通过挂载选项应用到卷上的 SELinux 标签。
+	// 为空表示以下之一：context+label 未知（由容器运行时随机分配）、插件不支持 -o context、
+	// 卷不是 ReadWriteOncePod、或操作系统不支持 SELinux。
+	// 这些情况下挂载卷时 SELinux 上下文无关紧要。
 	effectiveSELinuxMountFileLabel string
 
-	// originalSELinuxLabel is the SELinux label that would be used if SELinux mount was supported for all access modes.
-	// For RWOP volumes it's the same as effectiveSELinuxMountFileLabel.
-	// It is used only to report potential SELinux mismatch metrics.
-	// If empty, then:
-	// - either the context+label is unknown (assigned randomly by the container runtime)
-	// - or the volume plugin responsible for this volume does not support mounting with -o context
-	// - or the OS does not support SELinux
+	// originalSELinuxLabel 是在所有访问模式都支持 SELinux 挂载时会使用的标签。
+	// 对 RWOP 卷它与 effectiveSELinuxMountFileLabel 相同。
+	// 它仅用于上报潜在的 SELinux 不匹配指标；为空的原因与上同。
 	originalSELinuxLabel string
 }
 
-// The pod object represents a pod that references the underlying volume and
-// should mount it once it is attached.
+// podToMount 表示引用底层卷、待卷附加后执行挂载的 Pod。
 type podToMount struct {
-	// podName contains the name of this pod.
+	// podName 是该 Pod 的唯一名。
 	podName types.UniquePodName
 
-	// Pod to mount the volume to. Used to create NewMounter.
+	// pod 是待挂载卷的 Pod，用于创建 NewMounter。
 	pod *v1.Pod
 
-	// volume spec containing the specification for this volume. Used to
-	// generate the volume plugin object, and passed to plugin methods.
-	// For non-PVC volumes this is the same as defined in the pod object. For
-	// PVC volumes it is from the dereferenced PV object.
+	// volumeSpec 是该卷的规格，用于生成插件对象并传给插件方法。
+	// 非 PVC 卷与 Pod 中定义一致；PVC 卷则来自解引用后的 PV 对象。
 	volumeSpec *volume.Spec
 
-	// outerVolumeSpecNames are the podSpec.Volume[x].Name of the volume.
+	// outerVolumeSpecNames 是 podSpec.Volume[x].Name 中的外层卷名。
 	outerVolumeSpecNames []string
-	// mountRequestTime stores time at which mount was requested
+	// mountRequestTime 记录发起挂载请求的时间。
 	mountRequestTime time.Time
 }
 
 const (
-	// Maximum errors to be stored per pod in desiredStateOfWorld.podErrors to
-	// prevent unbound growth.
+	// 每个 Pod 最多保留的错误条数，防止 desiredStateOfWorld.podErrors 无界增长。
 	maxPodErrors = 10
 )
 
+// AddPodToVolume 将 Pod 加入卷的挂载集合并返回卷名；卷不存在时按需创建。
 func (dsw *desiredStateOfWorld) AddPodToVolume(
 	logger klog.Logger,
 	podName types.UniquePodName,
@@ -281,13 +217,11 @@ func (dsw *desiredStateOfWorld) AddPodToVolume(
 
 	var volumeName v1.UniqueVolumeName
 
-	// The unique volume name used depends on whether the volume is attachable/device-mountable
-	// or not.
+	// 唯一卷名的生成方式取决于卷是否可附加/可设备挂载。
 	attachable := util.IsAttachableVolume(volumeSpec, dsw.volumePluginMgr)
 	deviceMountable := util.IsDeviceMountableVolume(volumeSpec, dsw.volumePluginMgr)
 	if attachable || deviceMountable {
-		// For attachable/device-mountable volumes, use the unique volume name as reported by
-		// the plugin.
+		// 可附加/可设备挂载的卷直接采用插件给出的唯一卷名。
 		volumeName, err =
 			util.GetUniqueVolumeNameFromSpec(volumePlugin, volumeSpec)
 		if err != nil {
@@ -298,8 +232,7 @@ func (dsw *desiredStateOfWorld) AddPodToVolume(
 				err)
 		}
 	} else {
-		// For non-attachable and non-device-mountable volumes, generate a unique name based on the unique pod
-		// name (refer to podUID) and the name of the volume within the pod.
+		// 不可附加且不可设备挂载的卷，用 Pod 唯一名（podUID）与 Pod 内卷名组合生成唯一卷名。
 		volumeName = util.GetUniqueVolumeNameFromSpecWithPod(podName, volumePlugin, volumeSpec)
 	}
 
@@ -326,7 +259,7 @@ func (dsw *desiredStateOfWorld) AddPodToVolume(
 		}
 		effectiveSELinuxMountLabel := seLinuxFileLabel
 		if !util.VolumeSupportsSELinuxMount(volumeSpec) {
-			// Clear SELinux label for the volume with unsupported access modes.
+			// 访问模式不支持 SELinux 挂载时清空标签，避免误用 context 挂载。
 			logger.V(4).Info("volume does not support SELinux context mount, clearing the expected label", "volume", volumeSpec.Name())
 			effectiveSELinuxMountLabel = ""
 		}
@@ -344,7 +277,7 @@ func (dsw *desiredStateOfWorld) AddPodToVolume(
 			effectiveSELinuxMountFileLabel: effectiveSELinuxMountLabel,
 			originalSELinuxLabel:           seLinuxFileLabel,
 		}
-		// record desired size of the volume
+		// 记录卷的期望大小，卷扩容时用于比较。
 		if volumeSpec.PersistentVolume != nil {
 			pvCap := volumeSpec.PersistentVolume.Spec.Capacity.Storage()
 			if pvCap != nil {
@@ -355,6 +288,7 @@ func (dsw *desiredStateOfWorld) AddPodToVolume(
 		dsw.volumesToMount[volumeName] = vmt
 	}
 
+	// 已存在的 Pod 记录只刷新字段，避免对 Downward API 等卷产生无谓的重挂载。
 	oldPodMount, ok := dsw.volumesToMount[volumeName].podsToMount[podName]
 	mountRequestTime := time.Now()
 	var outerVolumeSpecNames []string
@@ -364,13 +298,13 @@ func (dsw *desiredStateOfWorld) AddPodToVolume(
 		}
 		outerVolumeSpecNames = oldPodMount.outerVolumeSpecNames
 	}
+	// 同一 Pod 可能通过多个 volumeSpec 名引用同一卷，这里去重后保留全部外层卷名。
 	if !slices.Contains(outerVolumeSpecNames, outerVolumeSpecName) {
 		outerVolumeSpecNames = append(outerVolumeSpecNames, outerVolumeSpecName)
 	}
 
 	if !ok {
-		// The volume exists, but not with this pod.
-		// It will be added below as podToMount, now just report SELinux metric.
+		// 卷已存在但尚未包含该 Pod：先检查 SELinux 标签冲突并上报指标，再在下方登记 podToMount。
 		if pluginSupportsSELinuxContextMount {
 			existingVolume := dsw.volumesToMount[volumeName]
 			if seLinuxFileLabel != existingVolume.originalSELinuxLabel {
@@ -389,9 +323,7 @@ func (dsw *desiredStateOfWorld) AddPodToVolume(
 		}
 	}
 
-	// Create new podToMount object. If it already exists, it is refreshed with
-	// updated values (this is required for volumes that require remounting on
-	// pod update, like Downward API volumes).
+	// 新建 podToMount；若已存在则用新值刷新，以支持 Pod 更新后需要重挂载的卷（如 Downward API）。
 	dsw.volumesToMount[volumeName].podsToMount[podName] = podToMount{
 		podName:              podName,
 		pod:                  pod,
@@ -402,10 +334,9 @@ func (dsw *desiredStateOfWorld) AddPodToVolume(
 	return volumeName, nil
 }
 
-// getSELinuxLabel returns the SELinux label for a given volume and combination of SELinux labels and bool indicating
-// if the plugin supports mounting the volume with SELinux context.
-// It returns error if the SELinux label cannot be constructed or when the volume is used with multiple SELinux
-// labels.
+// getSELinuxLabel 返回给定卷及 SELinux 标签组合对应的 SELinux 标签，
+// 并报告插件是否支持以 SELinux 上下文方式挂载。
+// 无法构造标签，或同一卷被多个 SELinux 标签使用时返回错误。
 func (dsw *desiredStateOfWorld) getSELinuxLabel(logger klog.Logger, volumeSpec *volume.Spec, seLinuxContainerContexts []*v1.SELinuxOptions, podSecurityContext *v1.PodSecurityContext) (seLinuxFileLabel string, pluginSupportsSELinuxContextMount bool, err error) {
 	labelInfo, err := util.GetMountSELinuxLabel(volumeSpec, seLinuxContainerContexts, podSecurityContext, dsw.volumePluginMgr, dsw.seLinuxTranslator)
 	if err != nil {
@@ -436,11 +367,13 @@ func (dsw *desiredStateOfWorld) getSELinuxLabel(logger klog.Logger, volumeSpec *
 	return labelInfo.SELinuxMountLabel, labelInfo.PluginSupportsSELinuxContextMount, nil
 }
 
+// MarkVolumesReportedInUse 以本次上报的卷集合整体覆盖所有卷的 reportedInUse 标记。
 func (dsw *desiredStateOfWorld) MarkVolumesReportedInUse(
 	reportedVolumes []v1.UniqueVolumeName) {
 	dsw.Lock()
 	defer dsw.Unlock()
 
+	// 以本次上报集合为准整体覆盖，未上报的卷视为尚未写入节点状态。
 	reportedVolumesMap := make(
 		map[v1.UniqueVolumeName]bool, len(reportedVolumes) /* capacity */)
 
@@ -455,11 +388,13 @@ func (dsw *desiredStateOfWorld) MarkVolumesReportedInUse(
 	}
 }
 
+// DeletePodFromVolume 从卷中移除 Pod，并清理该 Pod 的错误记录；卷无 Pod 引用时删除卷。
 func (dsw *desiredStateOfWorld) DeletePodFromVolume(
 	podName types.UniquePodName, volumeName v1.UniqueVolumeName) {
 	dsw.Lock()
 	defer dsw.Unlock()
 
+	// 一并丢弃该 Pod 的错误，避免 Pod 重建后误报旧错误。
 	delete(dsw.podErrors, podName)
 
 	volumeObj, volumeExists := dsw.volumesToMount[volumeName]
@@ -471,17 +406,16 @@ func (dsw *desiredStateOfWorld) DeletePodFromVolume(
 		return
 	}
 
-	// Delete pod if it exists
+	// Pod 存在时才删除其挂载记录。
 	delete(dsw.volumesToMount[volumeName].podsToMount, podName)
 
 	if len(dsw.volumesToMount[volumeName].podsToMount) == 0 {
-		// Delete volume if no child pods left
+		// 没有任何子 Pod 时一并删除卷记录。
 		delete(dsw.volumesToMount, volumeName)
 	}
 }
 
-// UpdatePersistentVolumeSize updates last known PV size. This is used for volume expansion and
-// should be only used for persistent volumes.
+// UpdatePersistentVolumeSize 更新最近已知的 PV 大小，供卷扩容使用；仅适用于 PV。
 func (dsw *desiredStateOfWorld) UpdatePersistentVolumeSize(volumeName v1.UniqueVolumeName, size resource.Quantity) {
 	dsw.Lock()
 	defer dsw.Unlock()
@@ -493,6 +427,7 @@ func (dsw *desiredStateOfWorld) UpdatePersistentVolumeSize(volumeName v1.UniqueV
 	}
 }
 
+// VolumeExists 判断卷是否存在于期望状态；启用 SELinux 特性时还需上下文匹配。
 func (dsw *desiredStateOfWorld) VolumeExists(
 	volumeName v1.UniqueVolumeName, seLinuxMountContext string) bool {
 	dsw.RLock()
@@ -503,24 +438,18 @@ func (dsw *desiredStateOfWorld) VolumeExists(
 		return false
 	}
 	if feature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
-		// Handling two volumes with the same name and different SELinux context
-		// as two *different* volumes here. Because if a volume is mounted with
-		// an old SELinux context, it must be unmounted first and then mounted again
-		// with the new context.
-		//
-		// This will happen when a pod A with context alpha_t runs and is being
-		// terminated by kubelet and its volumes are being torn down, while a
-		// pod B with context beta_t is already scheduled on the same node,
-		// using the same volumes
-		// The volumes from Pod A must be fully unmounted (incl. UnmountDevice)
-		// and mounted with new SELinux mount options for pod B.
-		// Without SELinux, kubelet can (and often does) reuse device mounted
-		// for A.
+		// 同名但 SELinux 上下文不同的卷按两个不同卷处理：
+		// 用旧上下文挂载过的卷必须先卸载，再用新上下文重新挂载。
+		// 典型场景：Pod A（alpha_t）正在被 kubelet 终止并拆除卷，
+		// 而同一节点上使用相同卷的 Pod B（beta_t）已被调度。
+		// 必须完整卸载 A 的卷（含 UnmountDevice），再以 B 的新 SELinux 挂载选项挂载。
+		// 未启用 SELinux 时，kubelet 可以（且经常）复用为 A 设备挂载的卷。
 		return vol.effectiveSELinuxMountFileLabel == seLinuxMountContext
 	}
 	return true
 }
 
+// PodExistsInVolume 判断 Pod 是否已登记在指定卷下，且 SELinux 挂载选项一致。
 func (dsw *desiredStateOfWorld) PodExistsInVolume(
 	podName types.UniquePodName, volumeName v1.UniqueVolumeName, seLinuxMountOption string) bool {
 	dsw.RLock()
@@ -533,9 +462,8 @@ func (dsw *desiredStateOfWorld) PodExistsInVolume(
 
 	if feature.DefaultFeatureGate.Enabled(features.SELinuxMountReadWriteOncePod) {
 		if volumeObj.effectiveSELinuxMountFileLabel != seLinuxMountOption {
-			// The volume is in DSW, but with a different SELinux mount option.
-			// Report it as unused, so the volume is unmounted and mounted back
-			// with the right SELinux option.
+			// 卷在期望状态中，但 SELinux 挂载选项不同。
+			// 视为未使用，使其先卸载再以正确选项重新挂载。
 			return false
 		}
 	}
@@ -544,6 +472,7 @@ func (dsw *desiredStateOfWorld) PodExistsInVolume(
 	return podExists
 }
 
+// VolumeExistsWithSpecName 遍历卷查找该 Pod 下指定内层卷名的卷。
 func (dsw *desiredStateOfWorld) VolumeExistsWithSpecName(podName types.UniquePodName, volumeSpecName string) bool {
 	dsw.RLock()
 	defer dsw.RUnlock()
@@ -557,6 +486,7 @@ func (dsw *desiredStateOfWorld) VolumeExistsWithSpecName(podName types.UniquePod
 	return false
 }
 
+// GetPods 汇总所有卷下登记的 Pod，返回集合形式的视图。
 func (dsw *desiredStateOfWorld) GetPods() map[types.UniquePodName]bool {
 	dsw.RLock()
 	defer dsw.RUnlock()
@@ -570,6 +500,7 @@ func (dsw *desiredStateOfWorld) GetPods() map[types.UniquePodName]bool {
 	return podList
 }
 
+// GetVolumeNamesForPod 建立该 Pod 外层卷名到唯一卷名的映射。
 func (dsw *desiredStateOfWorld) GetVolumeNamesForPod(podName types.UniquePodName) map[string]v1.UniqueVolumeName {
 	dsw.RLock()
 	defer dsw.RUnlock()
@@ -583,6 +514,7 @@ func (dsw *desiredStateOfWorld) GetVolumeNamesForPod(podName types.UniquePodName
 	return volumeNames
 }
 
+// GetVolumesToMount 把内部“卷 -> Pod”结构展开为逐 Pod 的挂载任务列表。
 func (dsw *desiredStateOfWorld) GetVolumesToMount() []VolumeToMount {
 	dsw.RLock()
 	defer dsw.RUnlock()
@@ -606,6 +538,7 @@ func (dsw *desiredStateOfWorld) GetVolumesToMount() []VolumeToMount {
 					SELinuxLabel:            volumeObj.effectiveSELinuxMountFileLabel,
 				},
 			}
+			// 深拷贝，避免调用方修改缓存中的 Quantity。
 			if !volumeObj.persistentVolumeSize.IsZero() {
 				vmt.DesiredPersistentVolumeSize = volumeObj.persistentVolumeSize.DeepCopy()
 			}
@@ -615,11 +548,13 @@ func (dsw *desiredStateOfWorld) GetVolumesToMount() []VolumeToMount {
 	return volumesToMount
 }
 
+// AddErrorToPod 为 Pod 追加错误，按集合去重并限制条数。
 func (dsw *desiredStateOfWorld) AddErrorToPod(podName types.UniquePodName, err string) {
 	dsw.Lock()
 	defer dsw.Unlock()
 
 	if errs, found := dsw.podErrors[podName]; found {
+		// 达到上限后不再追加，防止错误无限增长。
 		if errs.Len() <= maxPodErrors {
 			errs.Insert(err)
 		}
@@ -628,6 +563,7 @@ func (dsw *desiredStateOfWorld) AddErrorToPod(podName types.UniquePodName, err s
 	dsw.podErrors[podName] = sets.New[string](err)
 }
 
+// PopPodErrors 取出并清除 Pod 的错误集合。
 func (dsw *desiredStateOfWorld) PopPodErrors(podName types.UniquePodName) []string {
 	dsw.Lock()
 	defer dsw.Unlock()
@@ -639,6 +575,7 @@ func (dsw *desiredStateOfWorld) PopPodErrors(podName types.UniquePodName) []stri
 	return []string{}
 }
 
+// GetPodsWithErrors 收集存在错误的 Pod 名。
 func (dsw *desiredStateOfWorld) GetPodsWithErrors() []types.UniquePodName {
 	dsw.RLock()
 	defer dsw.RUnlock()
@@ -650,6 +587,7 @@ func (dsw *desiredStateOfWorld) GetPodsWithErrors() []types.UniquePodName {
 	return pods
 }
 
+// MarkVolumeAttachability 更新卷的可附加标志；卷不存在时忽略。
 func (dsw *desiredStateOfWorld) MarkVolumeAttachability(volumeName v1.UniqueVolumeName, attachable bool) {
 	dsw.Lock()
 	defer dsw.Unlock()
@@ -661,7 +599,7 @@ func (dsw *desiredStateOfWorld) MarkVolumeAttachability(volumeName v1.UniqueVolu
 	dsw.volumesToMount[volumeName] = volumeObj
 }
 
-// Based on isRWOP, bump the right warning / error metric and either consume the error or return it.
+// 根据卷是否支持 SELinux 挂载，递增警告或错误指标，并决定是否把错误返回给调用方。
 func handleSELinuxMetricError(logger klog.Logger, err error, seLinuxSupported bool, warningMetric, errorMetric metrics.GaugeMetric) error {
 	if seLinuxSupported {
 		errorMetric.Add(1.0)
@@ -674,30 +612,31 @@ func handleSELinuxMetricError(logger klog.Logger, err error, seLinuxSupported bo
 	return nil
 }
 
-// Return the volume plugin name, together with the CSI driver name if it's a CSI volume.
+// getVolumePluginNameWithDriver 返回卷插件名；若为 CSI 卷，再附加 CSI 驱动名。
 func getVolumePluginNameWithDriver(logger klog.Logger, plugin volume.VolumePlugin, spec *volume.Spec) string {
 	pluginName := plugin.GetPluginName()
 	if pluginName != csi.CSIPluginName {
 		return pluginName
 	}
 
-	// It's a CSI volume
+	// CSI 卷：插件名需拼接驱动名以便区分不同驱动。
 	driverName, err := csi.GetCSIDriverName(spec)
 	if err != nil {
-		// In theory this is unreachable - such volume would not pass validation.
+		// 理论上不可达——此类卷无法通过校验。
 		logger.V(4).Info("failed to get CSI driver name from volume spec", "err", err)
 		driverName = "unknown"
 	}
-	// `/` is used to separate plugin + CSI driver in util.GetUniqueVolumeName() too
+	// 与 util.GetUniqueVolumeName() 一致，用 "/" 分隔插件名与 CSI 驱动名。
 	return pluginName + "/" + driverName
 }
 
+// getVolumeAccessMode 返回用于指标维度的访问模式标签，内联卷标记为 inline。
 func getVolumeAccessMode(spec *volume.Spec) string {
 	if spec.PersistentVolume == nil {
-		// In-line volumes in pod do not have a specific access mode, using "inline".
+		// Pod 内联卷没有具体访问模式，统一标记为 "inline"。
 		return "inline"
 	}
-	// For purpose of this PR, report only the "highest" access mode in this order: RWX (highest priority), ROX, RWO, RWOP (lowest priority
+	// 指标只需一个维度，按优先级取最高的访问模式：RWX > ROX > RWO > RWOP。
 	pv := spec.PersistentVolume
 	if util.ContainsAccessMode(pv.Spec.AccessModes, v1.ReadWriteMany) {
 		return "RWX"
@@ -711,6 +650,6 @@ func getVolumeAccessMode(spec *volume.Spec) string {
 	if util.ContainsAccessMode(pv.Spec.AccessModes, v1.ReadWriteOncePod) {
 		return "RWOP"
 	}
-	// This should not happen, validation does not allow empty or unknown AccessModes.
+	// 不应发生：校验层不允许空的或未知的访问模式。
 	return ""
 }

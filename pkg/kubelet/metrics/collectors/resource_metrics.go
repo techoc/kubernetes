@@ -26,6 +26,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/server/stats"
 )
 
+// 资源指标的描述符：节点/容器/Pod 的 CPU、内存、swap 以及采集错误状态。
 var (
 	nodeCPUUsageDesc = metrics.NewDesc("node_cpu_usage_seconds_total",
 		"Cumulative cpu time consumed by the node in core-seconds",
@@ -119,23 +120,24 @@ var (
 		"")
 )
 
-// NewResourceMetricsCollector returns a metrics.StableCollector which exports resource metrics
+// NewResourceMetricsCollector 返回导出资源指标的 StableCollector。
 func NewResourceMetricsCollector(provider stats.SummaryProvider) metrics.StableCollector {
 	return &resourceMetricsCollector{
 		provider: provider,
 	}
 }
 
+// resourceMetricsCollector 从 SummaryProvider 采集节点与 Pod 的资源指标。
 type resourceMetricsCollector struct {
 	metrics.BaseStableCollector
 
 	provider stats.SummaryProvider
 }
 
-// Check if resourceMetricsCollector implements necessary interface
+// 编译期断言：resourceMetricsCollector 实现了 StableCollector。
 var _ metrics.StableCollector = &resourceMetricsCollector{}
 
-// DescribeWithStability implements metrics.StableCollector
+// DescribeWithStability 向 registry 描述本收集器导出的所有指标。
 func (rc *resourceMetricsCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
 	ch <- nodeCPUUsageDesc
 	ch <- nodeMemoryUsageDesc
@@ -152,19 +154,20 @@ func (rc *resourceMetricsCollector) DescribeWithStability(ch chan<- *metrics.Des
 	ch <- resourceScrapeErrorResultDesc
 }
 
-// CollectWithStability implements metrics.StableCollector
-// Since new containers are frequently created and removed, using the Gauge would
-// leak metric collectors for containers or pods that no longer exist.  Instead, implement
-// custom collector in a way that only collects metrics for active containers.
+// CollectWithStability 采集一次资源指标。
+// 容器频繁创建删除，使用 Gauge 会为已消失的容器泄漏收集器；
+// 因此自定义收集器只采集当前活跃容器。
 func (rc *resourceMetricsCollector) CollectWithStability(ch chan<- metrics.Metric) {
-	// Use context.TODO() because we currently do not have a proper context to pass in.
-	// Replace this with an appropriate context when refactoring this function to accept a context parameter.
+	// 暂时使用 context.TODO()，因为当前没有合适的 context 可传入；
+	// 后续重构该函数接收 context 参数时应替换掉。
 	ctx := context.TODO()
 	var errorCount float64
+	// 无论成功与否都上报 scrape 结果指标，便于告警与排查。
 	defer func() {
 		ch <- metrics.NewLazyConstMetric(resourceScrapeResultDesc, metrics.GaugeValue, errorCount)
 		ch <- metrics.NewLazyConstMetric(resourceScrapeErrorResultDesc, metrics.GaugeValue, errorCount)
 	}()
+	// 只采集 CPU/内存，避免触发文件系统等昂贵统计。
 	statsSummary, err := rc.provider.GetCPUAndMemoryStats(ctx)
 	if err != nil {
 		logger := klog.FromContext(ctx)
@@ -173,6 +176,7 @@ func (rc *resourceMetricsCollector) CollectWithStability(ch chan<- metrics.Metri
 		return
 	}
 
+	// 先上报节点级指标，再逐个 Pod/容器上报。
 	rc.collectNodeCPUMetrics(ch, statsSummary.Node)
 	rc.collectNodeMemoryMetrics(ch, statsSummary.Node)
 	rc.collectNodeSwapMetrics(ch, statsSummary.Node)
@@ -190,6 +194,7 @@ func (rc *resourceMetricsCollector) CollectWithStability(ch chan<- metrics.Metri
 	}
 }
 
+// collectNodeCPUMetrics 上报节点累计 CPU 时间（秒）。
 func (rc *resourceMetricsCollector) collectNodeCPUMetrics(ch chan<- metrics.Metric, s summary.NodeStats) {
 	if s.CPU == nil || s.CPU.UsageCoreNanoSeconds == nil {
 		return
@@ -199,6 +204,7 @@ func (rc *resourceMetricsCollector) collectNodeCPUMetrics(ch chan<- metrics.Metr
 		metrics.NewLazyConstMetric(nodeCPUUsageDesc, metrics.CounterValue, float64(*s.CPU.UsageCoreNanoSeconds)/float64(time.Second)))
 }
 
+// collectNodeMemoryMetrics 上报节点内存工作集。
 func (rc *resourceMetricsCollector) collectNodeMemoryMetrics(ch chan<- metrics.Metric, s summary.NodeStats) {
 	if s.Memory == nil || s.Memory.WorkingSetBytes == nil {
 		return
@@ -208,6 +214,7 @@ func (rc *resourceMetricsCollector) collectNodeMemoryMetrics(ch chan<- metrics.M
 		metrics.NewLazyConstMetric(nodeMemoryUsageDesc, metrics.GaugeValue, float64(*s.Memory.WorkingSetBytes)))
 }
 
+// collectNodeSwapMetrics 上报节点 swap 使用量（仅非 Windows）。
 func (rc *resourceMetricsCollector) collectNodeSwapMetrics(ch chan<- metrics.Metric, s summary.NodeStats) {
 	if s.Swap == nil || s.Swap.SwapUsageBytes == nil {
 		return
@@ -217,7 +224,9 @@ func (rc *resourceMetricsCollector) collectNodeSwapMetrics(ch chan<- metrics.Met
 		metrics.NewLazyConstMetric(nodeSwapUsageDesc, metrics.GaugeValue, float64(*s.Swap.SwapUsageBytes)))
 }
 
+// collectContainerStartTime 上报容器启动时间（Unix 秒）。
 func (rc *resourceMetricsCollector) collectContainerStartTime(ch chan<- metrics.Metric, pod summary.PodStats, s summary.ContainerStats) {
+	// 启动时间无效时跳过，避免上报 1970 年的时间戳。
 	if s.StartTime.Unix() <= 0 {
 		return
 	}
@@ -225,6 +234,7 @@ func (rc *resourceMetricsCollector) collectContainerStartTime(ch chan<- metrics.
 	ch <- metrics.NewLazyConstMetric(containerStartTimeDesc, metrics.GaugeValue, float64(s.StartTime.UnixNano())/float64(time.Second), s.Name, pod.PodRef.Name, pod.PodRef.Namespace)
 }
 
+// collectContainerCPUMetrics 上报容器累计 CPU 时间（秒）。
 func (rc *resourceMetricsCollector) collectContainerCPUMetrics(ch chan<- metrics.Metric, pod summary.PodStats, s summary.ContainerStats) {
 	if s.CPU == nil || s.CPU.UsageCoreNanoSeconds == nil {
 		return
@@ -235,6 +245,7 @@ func (rc *resourceMetricsCollector) collectContainerCPUMetrics(ch chan<- metrics
 			float64(*s.CPU.UsageCoreNanoSeconds)/float64(time.Second), s.Name, pod.PodRef.Name, pod.PodRef.Namespace))
 }
 
+// collectContainerMemoryMetrics 上报容器内存工作集。
 func (rc *resourceMetricsCollector) collectContainerMemoryMetrics(ch chan<- metrics.Metric, pod summary.PodStats, s summary.ContainerStats) {
 	if s.Memory == nil || s.Memory.WorkingSetBytes == nil {
 		return
@@ -245,6 +256,7 @@ func (rc *resourceMetricsCollector) collectContainerMemoryMetrics(ch chan<- metr
 			float64(*s.Memory.WorkingSetBytes), s.Name, pod.PodRef.Name, pod.PodRef.Namespace))
 }
 
+// collectContainerSwapMetrics 上报容器 swap 使用量与限额。
 func (rc *resourceMetricsCollector) collectContainerSwapMetrics(ch chan<- metrics.Metric, pod summary.PodStats, s summary.ContainerStats) {
 	if s.Swap == nil {
 		return
@@ -258,6 +270,7 @@ func (rc *resourceMetricsCollector) collectContainerSwapMetrics(ch chan<- metric
 				swapUsageBytes, s.Name, pod.PodRef.Name, pod.PodRef.Namespace))
 	}
 
+	// 限额 = 已用 swap + 可用 swap，两者取自同一统计时刻。
 	if s.Swap.SwapAvailableBytes != nil {
 		ch <- metrics.NewLazyMetricWithTimestamp(s.Swap.Time.Time,
 			metrics.NewLazyConstMetric(containerSwapLimitDesc, metrics.GaugeValue,
@@ -265,6 +278,7 @@ func (rc *resourceMetricsCollector) collectContainerSwapMetrics(ch chan<- metric
 	}
 }
 
+// collectPodCPUMetrics 上报 Pod 累计 CPU 时间（秒）。
 func (rc *resourceMetricsCollector) collectPodCPUMetrics(ch chan<- metrics.Metric, pod summary.PodStats) {
 	if pod.CPU == nil || pod.CPU.UsageCoreNanoSeconds == nil {
 		return
@@ -275,6 +289,7 @@ func (rc *resourceMetricsCollector) collectPodCPUMetrics(ch chan<- metrics.Metri
 			float64(*pod.CPU.UsageCoreNanoSeconds)/float64(time.Second), pod.PodRef.Name, pod.PodRef.Namespace))
 }
 
+// collectPodMemoryMetrics 上报 Pod 内存工作集。
 func (rc *resourceMetricsCollector) collectPodMemoryMetrics(ch chan<- metrics.Metric, pod summary.PodStats) {
 	if pod.Memory == nil || pod.Memory.WorkingSetBytes == nil {
 		return
@@ -285,6 +300,7 @@ func (rc *resourceMetricsCollector) collectPodMemoryMetrics(ch chan<- metrics.Me
 			float64(*pod.Memory.WorkingSetBytes), pod.PodRef.Name, pod.PodRef.Namespace))
 }
 
+// collectPodSwapMetrics 上报 Pod swap 使用量（仅非 Windows）。
 func (rc *resourceMetricsCollector) collectPodSwapMetrics(ch chan<- metrics.Metric, pod summary.PodStats) {
 	if pod.Swap == nil || pod.Swap.SwapUsageBytes == nil {
 		return

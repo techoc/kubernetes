@@ -15,8 +15,7 @@ limitations under the License.
 */
 
 /*
-Package cache implements data structures used by the kubelet plugin manager to
-keep track of registered plugins.
+Package cache 实现 kubelet 插件管理器用于跟踪已注册插件的数据结构。
 */
 package cache
 
@@ -30,60 +29,48 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// ActualStateOfWorld defines a set of thread-safe operations for the kubelet
-// plugin manager's actual state of the world cache.
-// This cache contains a map of socket file path to plugin information of
-// all plugins attached to this node.
+// ActualStateOfWorld 定义 kubelet 插件管理器"实际世界"缓存的一组线程安全操作。
+// 该缓存维护从 socket 文件路径到插件信息的映射，记录当前节点上所有已连接的插件。
 type ActualStateOfWorld interface {
 
-	// GetRegisteredPlugins generates and returns a list of plugins
-	// that are successfully registered plugins in the current actual state of world.
+	// GetRegisteredPlugins 返回当前实际状态中已成功注册的插件列表。
 	GetRegisteredPlugins() []PluginInfo
 
-	// AddPlugin add the given plugin in the cache.
-	// An error will be returned if socketPath of the PluginInfo object is empty.
-	// Note that this is different from desired world cache's AddOrUpdatePlugin
-	// because for the actual state of world cache, there won't be a scenario where
-	// we need to update an existing plugin if the timestamps don't match. This is
-	// because the plugin should have been unregistered in the reconciler and therefore
-	// removed from the actual state of world cache first before adding it back into
-	// the actual state of world cache again with the new timestamp
+	// AddPlugin 把给定插件加入缓存；SocketPath 为空时返回错误。
+	// 这里无需处理"时间戳不一致则更新"的情况：插件重新注册前一定已由 reconciler
+	// 注销并从实际状态缓存中删除，之后才会以新时间戳重新加入。
 	AddPlugin(ctx context.Context, pluginInfo PluginInfo) error
 
-	// RemovePlugin deletes the plugin with the given socket path from the actual
-	// state of world.
-	// If a plugin does not exist with the given socket path, this is a no-op.
+	// RemovePlugin 删除指定 socket 路径的插件；路径不存在时为空操作。
 	RemovePlugin(socketPath string)
 
-	// PluginExistsWithCorrectTimestamp checks if the given plugin exists in the current actual
-	// state of world cache with the correct timestamp.
-	// Deprecated: please use `PluginExistsWithCorrectUUID` instead as it provides a better
-	// cross-platform support
+	// PluginExistsWithCorrectTimestamp 检查实际状态中是否存在该插件且时间戳一致。
+	// Deprecated: 请改用 PluginExistsWithCorrectUUID，后者具备更好的跨平台支持。
 	PluginExistsWithCorrectTimestamp(pluginInfo PluginInfo) bool
 
-	// PluginExistsWithCorrectUUID checks if the given plugin exists in the current actual
-	// state of world cache with the correct UUID
+	// PluginExistsWithCorrectUUID 检查实际状态中是否存在该插件且 UUID 一致。
 	PluginExistsWithCorrectUUID(pluginInfo PluginInfo) bool
 }
 
-// NewActualStateOfWorld returns a new instance of ActualStateOfWorld
+// NewActualStateOfWorld 创建并返回 ActualStateOfWorld 实例。
 func NewActualStateOfWorld() ActualStateOfWorld {
 	return &actualStateOfWorld{
 		socketFileToInfo: make(map[string]PluginInfo),
 	}
 }
 
+// actualStateOfWorld 是 ActualStateOfWorld 的实现，map 读写由内嵌 RWMutex 保护。
 type actualStateOfWorld struct {
 
-	// socketFileToInfo is a map containing the set of successfully registered plugins
-	// The keys are plugin socket file paths. The values are PluginInfo objects
+	// socketFileToInfo 保存已成功注册的插件：键为插件 socket 文件路径，值为 PluginInfo。
 	socketFileToInfo map[string]PluginInfo
 	sync.RWMutex
 }
 
+// 编译期断言：actualStateOfWorld 实现 ActualStateOfWorld 接口。
 var _ ActualStateOfWorld = &actualStateOfWorld{}
 
-// PluginInfo holds information of a plugin
+// PluginInfo 保存插件信息。
 type PluginInfo struct {
 	SocketPath string
 	Timestamp  time.Time
@@ -93,22 +80,26 @@ type PluginInfo struct {
 	Endpoint   string
 }
 
+// AddPlugin 在持有写锁的情况下把插件写入缓存。
 func (asw *actualStateOfWorld) AddPlugin(ctx context.Context, pluginInfo PluginInfo) error {
 	asw.Lock()
 	defer asw.Unlock()
 
 	logger := klog.FromContext(ctx)
 
+	// socket 路径是缓存键，为空说明插件信息不完整，必须拒绝。
 	if pluginInfo.SocketPath == "" {
 		return fmt.Errorf("socket path is empty")
 	}
 	if _, ok := asw.socketFileToInfo[pluginInfo.SocketPath]; ok {
+		// 重复注册只记录日志并覆盖，最终状态以最新信息为准。
 		logger.V(2).Info("Plugin exists in actual state cache", "path", pluginInfo.SocketPath)
 	}
 	asw.socketFileToInfo[pluginInfo.SocketPath] = pluginInfo
 	return nil
 }
 
+// RemovePlugin 删除指定 socket 路径的插件。
 func (asw *actualStateOfWorld) RemovePlugin(socketPath string) {
 	asw.Lock()
 	defer asw.Unlock()
@@ -116,6 +107,7 @@ func (asw *actualStateOfWorld) RemovePlugin(socketPath string) {
 	delete(asw.socketFileToInfo, socketPath)
 }
 
+// GetRegisteredPlugins 复制当前所有插件信息后返回，避免调用方直接持有内部 map。
 func (asw *actualStateOfWorld) GetRegisteredPlugins() []PluginInfo {
 	asw.RLock()
 	defer asw.RUnlock()
@@ -127,22 +119,22 @@ func (asw *actualStateOfWorld) GetRegisteredPlugins() []PluginInfo {
 	return currentPlugins
 }
 
+// PluginExistsWithCorrectTimestamp 同时校验 socket 路径与时间戳是否匹配。
 func (asw *actualStateOfWorld) PluginExistsWithCorrectTimestamp(pluginInfo PluginInfo) bool {
 	asw.RLock()
 	defer asw.RUnlock()
 
-	// We need to check both if the socket file path exists, and the timestamp
-	// matches the given plugin (from the desired state cache) timestamp
+	// 必须同时满足路径存在且时间戳与期望状态一致，防止把旧实例误判为新实例。
 	actualStatePlugin, exists := asw.socketFileToInfo[pluginInfo.SocketPath]
 	return exists && (actualStatePlugin.Timestamp == pluginInfo.Timestamp)
 }
 
+// PluginExistsWithCorrectUUID 同时校验 socket 路径与 UUID 是否匹配。
 func (asw *actualStateOfWorld) PluginExistsWithCorrectUUID(pluginInfo PluginInfo) bool {
 	asw.RLock()
 	defer asw.RUnlock()
 
-	// We need to check both if the socket file path exists, and the UUID
-	// matches the given plugin (from the desired state cache) UUID
+	// 必须同时满足路径存在且 UUID 与期望状态一致；UUID 在跨平台上更可靠。
 	actualStatePlugin, exists := asw.socketFileToInfo[pluginInfo.SocketPath]
 	return exists && (actualStatePlugin.UUID == pluginInfo.UUID)
 }

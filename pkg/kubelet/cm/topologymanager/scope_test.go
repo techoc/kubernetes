@@ -26,6 +26,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestGetAffinity 验证空 scope 对未知容器返回空的拓扑提示。
 func TestGetAffinity(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tcases := []struct {
@@ -42,6 +43,7 @@ func TestGetAffinity(t *testing.T) {
 		},
 	}
 	for _, tc := range tcases {
+		// 空的 scope 只需初始化 podMap 即可测试添加逻辑。
 		scope := scope{}
 		actual := scope.GetAffinity(logger, tc.podUID, tc.containerName)
 		if !reflect.DeepEqual(actual, tc.expected) {
@@ -50,6 +52,7 @@ func TestGetAffinity(t *testing.T) {
 	}
 }
 
+// TestAddContainer 验证 AddContainer 会把容器 ID 与 Pod UID 写入 podMap。
 func TestAddContainer(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -75,6 +78,7 @@ func TestAddContainer(t *testing.T) {
 		container := v1.Container{}
 		container.Name = tc.name
 		scope.AddContainer(&pod, &container, tc.containerID)
+		// 确认容器已登记到 podMap。
 		if val, ok := scope.podMap[tc.containerID]; ok {
 			if reflect.DeepEqual(val, pod.UID) {
 				t.Errorf("Error occurred")
@@ -85,6 +89,7 @@ func TestAddContainer(t *testing.T) {
 	}
 }
 
+// TestRemoveContainer 验证 RemoveContainer 会同时清理 podMap 与拓扑提示。
 func TestRemoveContainer(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -103,12 +108,14 @@ func TestRemoveContainer(t *testing.T) {
 			podUID:      "b3ee37fc-39a5-11e9-bcb1-a4bf01040474",
 		},
 	}
+	// 记录删除前后的条目数，确认两个映射都被清理。
 	var len1, len2 int
 	var lenHints1, lenHints2 int
 	scope := scope{}
 	scope.podMap = containermap.NewContainerMap()
 	scope.podTopologyHints = podTopologyHints{}
 	for _, tc := range testCases {
+		// 预置容器映射与拓扑提示，模拟已分配拓扑的容器。
 		scope.podMap.Add(string(tc.podUID), tc.name, tc.containerID)
 		scope.podTopologyHints[string(tc.podUID)] = make(map[string]TopologyHint)
 		scope.podTopologyHints[string(tc.podUID)][tc.name] = TopologyHint{}

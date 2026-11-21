@@ -40,30 +40,25 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// TCP sockets goes through a TIME-WAIT state (default 60 sec) before being freed,
-// causing conntrack entries and ephemeral ports to be hold for 60 seconds
-// despite the probe may have finished in less than 1 second.
-// If the rate of probes is higher than the rate the OS recycles the ports used,
-// it can consume a considerable number of ephemeral ports or conntrack entries.
-// These tests verify that after certain period the probes keep working, if the probes
-// don't close the sockets faster, they will start to fail.
-// The test creates a TCP or HTTP server to fake a pod. It creates 1 pod with 600 fake
-// containers each and runs one probe for each of these containers (all the probes comes
-// from the same process, same as in the Kubelet, and targets the same IP:port to verify
-// that the ephemeral port is not exhausted.
+// TCP socket 释放前会经历 TIME-WAIT 状态（默认 60 秒），
+// 期间 conntrack 条目和临时端口会被占用 60 秒，即使探针可能不到 1 秒就完成。
+// 如果探针速率高于操作系统回收端口的速率，就会消耗大量临时端口或 conntrack 条目。
+// 这些测试验证经过一段时间后探针仍能正常工作；如果探针没有及时关闭 socket，就会开始失败。
+// 测试会创建一个 TCP 或 HTTP 服务器来模拟 Pod，创建 1 个 Pod、每个 Pod 600 个假容器，
+// 并为每个容器运行一个探针（所有探针与 kubelet 一样来自同一进程，且指向同一个 IP:port），
+// 以验证临时端口没有被耗尽。
+//
+// 普通 Linux 系统默认端口范围中，每个 (srcIP,srcPort:dstIP:dstPort:Proto) 元组有 28321 个可用临时端口：
+// /proc/sys/net/ipv4/ip_local_port_range 32768 60999
+// 1 个 Pod x 600 容器/Pod x 1 探针/容器 x 1 请求/秒 = 600 请求/秒
+// 600 请求/秒 x 59 秒 = 35400
+// 测试应在一分钟内耗尽临时端口并开始出现连接失败。
+// 参考：https://github.com/kubernetes/kubernetes/issues/89898#issuecomment-1383207322
 
-// The default port range on a normal Linux system has 28321 free ephemeral ports per
-// tuple srcIP,srcPort:dstIP:dstPort:Proto: /proc/sys/net/ipv4/ip_local_port_range 32768 60999
-// 1 pods x 600 containers/pod x 1 probes/container x 1 req/sec = 600 req/sec
-// 600 req/sec x 59 sec = 35400
-// The test should run out of ephemeral ports in less than one minute and start failing connections
-// Ref: https://github.com/kubernetes/kubernetes/issues/89898#issuecomment-1383207322
-
+// TestTCPPortExhaustion 验证持续探测不会耗尽临时端口或 conntrack 条目。
 func TestTCPPortExhaustion(t *testing.T) {
-	// This test creates a considereable number of connections in a short time
-	// and flakes on constrained environments, thus it is skipped by default.
-	// The test is left for manual verification or experimentation with new
-	// changes on the probes.
+	// 该测试会在短时间内建立大量连接，在资源受限环境中容易抖动，因此默认跳过；
+	// 保留它用于手动验证或对探针新改动进行实验。
 	t.Skip("skipping TCP port exhaustion tests")
 
 	const (
@@ -73,7 +68,7 @@ func TestTCPPortExhaustion(t *testing.T) {
 
 	tests := []struct {
 		name string
-		http bool // it can be tcp or http
+		http bool // 可以是 TCP 或 HTTP
 	}{
 		{"TCP", false},
 		{"HTTP", true},
@@ -117,7 +112,7 @@ func TestTCPPortExhaustion(t *testing.T) {
 					},
 				}
 				for j := 0; j < numContainers; j++ {
-					// use only liveness probes for simplicity, initial state is success for them
+					// 为简化测试只使用存活探针，它们的初始状态就是成功。
 					pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
 						Name:          fmt.Sprintf("container%d", j),
 						LivenessProbe: newProbe(handler),
@@ -160,7 +155,7 @@ func TestTCPPortExhaustion(t *testing.T) {
 						return
 					}
 					switch result.Result.String() {
-					// The test will fail if any of the probes fails
+					// 任何一个探针失败都说明临时端口耗尽，测试应失败。
 					case "Failure":
 						t.Errorf("Failure %s on contantinerID: %v Pod %v", probeType, result.ContainerID, result.PodUID)
 					case "UNKNOWN": // startup probes
@@ -171,7 +166,7 @@ func TestTCPPortExhaustion(t *testing.T) {
 			}()
 			wg.Wait()
 
-			// log the number of connections received in each pod for debugging test failures.
+			// 记录每个 Pod 接收到的连接数，便于调试测试失败。
 			for _, pod := range fakePods {
 				n := pod.connections()
 				t.Logf("Number of connections %d", n)
@@ -182,6 +177,7 @@ func TestTCPPortExhaustion(t *testing.T) {
 
 }
 
+// newProbe 构造一个 1 秒超时、1 秒周期、失败阈值 3 的探针。
 func newProbe(handler v1.ProbeHandler) *v1.Probe {
 	return &v1.Probe{
 		ProbeHandler:     handler,
@@ -192,7 +188,7 @@ func newProbe(handler v1.ProbeHandler) *v1.Probe {
 	}
 }
 
-// newFakePod runs a server (TCP or HTTP) in a random port
+// newFakePod 在随机端口上启动 TCP 或 HTTP 服务器来模拟 Pod。
 func newFakePod(httpServer bool) (*fakePod, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -200,7 +196,7 @@ func newFakePod(httpServer bool) (*fakePod, error) {
 	}
 	f := &fakePod{ln: ln, http: httpServer}
 
-	// spawn an http server or a TCP server that counts the number of connections received
+	// 启动 HTTP 或 TCP 服务器，并统计接收到的连接数。
 	if httpServer {
 		var mu sync.Mutex
 		visitors := map[string]struct{}{}
@@ -217,17 +213,17 @@ func newFakePod(httpServer bool) (*fakePod, error) {
 			for {
 				conn, err := ln.Accept()
 				if err != nil {
-					// exit when the listener is closed
+					// 监听器关闭时 Accept 返回错误，此时退出循环。
 					return
 				}
 				atomic.AddInt64(&f.numConnection, 1)
-				// handle request but not block
+				// 在处理连接的同时不阻塞 Accept 循环。
 				go func(c net.Conn) {
 					defer c.Close()
-					// read but swallow the errors since the probe doesn't send data
+					// 读取数据但忽略错误，因为探针不会发送数据。
 					buffer := make([]byte, 1024)
 					c.Read(buffer)
-					// respond
+					// 回写响应，让探针完成一次完整的连接。
 					conn.Write([]byte("Hi back!\n"))
 				}(conn)
 
@@ -238,12 +234,15 @@ func newFakePod(httpServer bool) (*fakePod, error) {
 
 }
 
+// fakePod 是测试用的假 Pod 服务器。
 type fakePod struct {
-	ln            net.Listener
+	ln net.Listener
+	// numConnection 通过原子操作累加，避免并发读写竞争。
 	numConnection int64
 	http          bool
 }
 
+// probeHandler 根据假 Pod 类型返回指向同一端口的 HTTP 或 TCP 探针处理器。
 func (f *fakePod) probeHandler() v1.ProbeHandler {
 	port := f.ln.Addr().(*net.TCPAddr).Port
 	var handler v1.ProbeHandler
@@ -265,10 +264,12 @@ func (f *fakePod) probeHandler() v1.ProbeHandler {
 	return handler
 }
 
+// stop 关闭监听器，结束假 Pod 服务器。
 func (f *fakePod) stop() {
 	f.ln.Close()
 }
 
+// connections 返回迄今接收到的连接数。
 func (f *fakePod) connections() int {
 	return int(atomic.LoadInt64(&f.numConnection))
 }

@@ -50,6 +50,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// makeExpectedConfig 构造与 generateContainerConfig 预期结果一致的 ContainerConfig，
+// 供容器配置相关测试做整体比较
 func makeExpectedConfig(_ *testing.T, tCtx context.Context, m *kubeGenericRuntimeManager, pod *v1.Pod, containerIndex int, enforceMemoryQoS bool) *runtimeapi.ContainerConfig {
 	container := &pod.Spec.Containers[containerIndex]
 	podIP := ""
@@ -89,6 +91,8 @@ func makeExpectedConfig(_ *testing.T, tCtx context.Context, m *kubeGenericRuntim
 	return expectedConfig
 }
 
+// TestGenerateContainerConfig 验证 generateContainerConfig 生成的容器配置，
+// 并校验 RunAsUser/RunAsGroup 以及 RunAsNonRoot 对非数字用户名的拒绝逻辑
 func TestGenerateContainerConfig(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, imageService, m, err := createTestRuntimeManager(tCtx)
@@ -168,6 +172,8 @@ func TestGenerateContainerConfig(t *testing.T) {
 	assert.Error(t, err, "RunAsNonRoot should fail for non-numeric username")
 }
 
+// TestGenerateLinuxContainerConfigResources 验证 Linux 容器资源配置的计算，
+// 覆盖容器级/Pod 级资源、PodLevelResourceManagers 开关以及独占 CPU 等场景
 func TestGenerateLinuxContainerConfigResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -241,10 +247,9 @@ func TestGenerateLinuxContainerConfigResources(t *testing.T) {
 				MemoryLimitInBytes: 256 * 1024 * 1024,
 			},
 		},
-		// The implementation of ContainerManager (containerManagerImpl) and its internal
-		// cpuManager field are not accessible from outside the cm package. Not possible
-		// to create a real containerManagerImpl and inject our mock CPU sets into it,
-		// so we are not able to test the disabled quota (-1). Only quota enabled tests were added.
+		// ContainerManager（containerManagerImpl）及其内部的 cpuManager 字段
+		// 在 cm 包外不可访问，无法构造真实的 containerManagerImpl 并注入 mock 的
+		// CPU 集合，因此无法测试禁用配额（-1）的情况，仅添加了启用配额的用例。
 		{
 			name: "No exclusive CPUs, cpu quota disabled",
 			containerResources: v1.ResourceRequirements{
@@ -383,6 +388,8 @@ func TestGenerateLinuxContainerConfigResources(t *testing.T) {
 	}
 }
 
+// TestCalculateLinuxResources 验证 calculateLinuxResources 对 CPU shares/quota、
+// 内存上限的换算，以及 cgroup v1/v2 与单进程 OOM kill 的差异
 func TestCalculateLinuxResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -533,6 +540,8 @@ func TestCalculateLinuxResources(t *testing.T) {
 	}
 }
 
+// TestGenerateContainerConfigWithMemoryQoSEnforced 验证启用 MemoryQoS 后
+// memory.low/memory.high 的计算，覆盖 Burstable、BestEffort、Guaranteed 与 DRA 内存场景
 func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -601,7 +610,7 @@ func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 		},
 	}
 
-	// BestEffort: no memory request or limit (kubernetes/kubernetes#137685).
+	// BestEffort：未设置内存请求与上限（kubernetes/kubernetes#137685）
 	pod3 := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       "87654321",
@@ -621,7 +630,7 @@ func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 		},
 	}
 
-	// Guaranteed pod (256Mi requests, 256Mi limits) - Non-DRA
+	// Guaranteed Pod（请求与上限均为 256Mi），非 DRA
 	pod4 := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       "12345678-guaranteed",
@@ -651,7 +660,7 @@ func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 		},
 	}
 
-	// Burstable + 256Mi DRA Memory (DRA version of pod1)
+	// Burstable + 256Mi DRA 内存（pod1 的 DRA 版本）
 	pod5 := pod1.DeepCopy()
 	pod5.Status = v1.PodStatus{
 		NodeAllocatableResourceClaimStatuses: []v1.NodeAllocatableResourceClaimStatus{
@@ -665,7 +674,7 @@ func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 		},
 	}
 
-	// BestEffort + 256Mi DRA Memory (DRA version of pod3)
+	// BestEffort + 256Mi DRA 内存（pod3 的 DRA 版本）
 	pod6 := pod3.DeepCopy()
 	pod6.Status = v1.PodStatus{
 		NodeAllocatableResourceClaimStatuses: []v1.NodeAllocatableResourceClaimStatus{
@@ -679,7 +688,7 @@ func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 		},
 	}
 
-	// Guaranteed + 256Mi DRA Memory (DRA version of pod4)
+	// Guaranteed + 256Mi DRA 内存（pod4 的 DRA 版本）
 	pod7 := pod4.DeepCopy()
 	pod7.Status = v1.PodStatus{
 		NodeAllocatableResourceClaimStatuses: []v1.NodeAllocatableResourceClaimStatus{
@@ -693,7 +702,7 @@ func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 		},
 	}
 
-	// Burstable with DRA and missing limits in spec (DRA version of pod2)
+	// Burstable + DRA 且 spec 中未设置上限（pod2 的 DRA 版本）
 	pod8 := pod2.DeepCopy()
 	pod8.Status = v1.PodStatus{
 		NodeAllocatableResourceClaimStatuses: []v1.NodeAllocatableResourceClaimStatus{
@@ -708,8 +717,8 @@ func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 	}
 
 	type expectedResult struct {
-		memoryLow  int64 // set to -1 if skipped for the pod
-		memoryHigh int64 // set to -1 if skipped for the pod
+		memoryLow  int64 // 跳过时为 -1
+		memoryHigh int64 // 跳过时为 -1
 	}
 
 	tests := []struct {
@@ -750,8 +759,8 @@ func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 			pod:                pod4,
 			draNodeAllocatable: false,
 			expected: &expectedResult{
-				memoryLow:  -1, // -1 is used to indicate that the setting is omitted
-				memoryHigh: -1, // -1 is used to indicate that the setting is omitted
+				memoryLow:  -1, // -1 表示该设置被省略
+				memoryHigh: -1, // -1 表示该设置被省略
 			},
 		},
 		{
@@ -777,8 +786,8 @@ func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 			pod:                pod7,
 			draNodeAllocatable: true,
 			expected: &expectedResult{
-				memoryLow:  -1, // -1 is used to indicate that the setting is omitted
-				memoryHigh: -1, // -1 is used to indicate that the setting is omitted
+				memoryLow:  -1, // -1 表示该设置被省略
+				memoryHigh: -1, // -1 表示该设置被省略
 			},
 		},
 		{
@@ -815,6 +824,8 @@ func TestGenerateContainerConfigWithMemoryQoSEnforced(t *testing.T) {
 	}
 }
 
+// TestGenerateContainerConfigMemoryHighNotSetWhenThrottlingFactorNil 验证
+// memoryThrottlingFactor 为 nil 时仍设置 memory.low，但不设置 memory.high
 func TestGenerateContainerConfigMemoryHighNotSetWhenThrottlingFactorNil(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -852,6 +863,8 @@ func TestGenerateContainerConfigMemoryHighNotSetWhenThrottlingFactorNil(t *testi
 	assert.False(t, hasMemoryHigh, "memory.high should not be set when memoryThrottlingFactor is nil")
 }
 
+// TestGenerateContainerConfigDefaultNilThrottlingFactor 验证 None 内存预留策略下
+// memory.min/memory.low 为 0，且无 throttling factor 时不设置 memory.high
 func TestGenerateContainerConfigDefaultNilThrottlingFactor(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -891,6 +904,8 @@ func TestGenerateContainerConfigDefaultNilThrottlingFactor(t *testing.T) {
 		"memory.high should not be set when memoryThrottlingFactor is nil")
 }
 
+// TestGenerateContainerConfigMemoryQoSPolicyNone 验证 None 内存预留策略下 memory.min 为 0，
+// 但 throttling factor 存在时仍会计算 memory.high
 func TestGenerateContainerConfigMemoryQoSPolicyNone(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -927,6 +942,8 @@ func TestGenerateContainerConfigMemoryQoSPolicyNone(t *testing.T) {
 	assert.NotEmpty(t, linuxConfig.GetResources().GetUnified()["memory.high"])
 }
 
+// TestMemoryHighClearedWhenMemoryQoSDisabled 验证 MemoryQoS 关闭或 throttling factor 为 nil 时
+// memory.high 的处理：关闭时为 "max"，factor 为 nil 时不设置
 func TestMemoryHighClearedWhenMemoryQoSDisabled(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -980,11 +997,13 @@ func TestMemoryHighClearedWhenMemoryQoSDisabled(t *testing.T) {
 		"memory.high should be 'max' when MemoryQoS is disabled on cgroup v2")
 }
 
+// TestGetHugepageLimitsFromResources 验证 GetHugepageLimitsFromResources 正确提取大页限制，
+// 覆盖 2MB/1GB、非法资源名（应跳过）以及 Pod 级大页资源的继承与叠加
 func TestGetHugepageLimitsFromResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	var baseHugepage []*runtimeapi.HugepageLimit
 
-	// For each page size, limit to 0.
+	// 每种页大小先置上限为 0
 	for _, pageSize := range libcontainercgroups.HugePageSizes() {
 		baseHugepage = append(baseHugepage, &runtimeapi.HugepageLimit{
 			PageSize: pageSize,
@@ -1093,7 +1112,7 @@ func TestGetHugepageLimitsFromResources(t *testing.T) {
 				},
 			},
 		},
-		// Pod level hugepage set 2MB, Container level hugepage unset
+		// Pod 级设置 2MB 大页，容器级未设置
 		{
 			name: "PodLevel2MB",
 			podResources: v1.ResourceRequirements{
@@ -1110,7 +1129,7 @@ func TestGetHugepageLimitsFromResources(t *testing.T) {
 			},
 			podLevelResourcesEnabled: true,
 		},
-		// Pod level hugepage set 1GB, Container level hugepage unset
+		// Pod 级设置 1GB 大页，容器级未设置
 		{
 			name: "PodLevel1GB",
 			podResources: v1.ResourceRequirements{
@@ -1127,7 +1146,7 @@ func TestGetHugepageLimitsFromResources(t *testing.T) {
 			},
 			podLevelResourcesEnabled: true,
 		},
-		// Pod level hugepage set 2MB 1GB, Container level hugepage unset
+		// Pod 级设置 2MB 与 1GB 大页，容器级未设置
 		{
 			name: "PodLevel2MBand1GB",
 			podResources: v1.ResourceRequirements{
@@ -1149,7 +1168,7 @@ func TestGetHugepageLimitsFromResources(t *testing.T) {
 			},
 			podLevelResourcesEnabled: true,
 		},
-		// Pod level hugepage set 2MB, Container level hugepage set
+		// Pod 级设置 2MB 大页，容器级也设置
 		{
 			name: "PodLevel2MBContainerLevel2MB",
 			podResources: v1.ResourceRequirements{
@@ -1170,7 +1189,7 @@ func TestGetHugepageLimitsFromResources(t *testing.T) {
 			},
 			podLevelResourcesEnabled: true,
 		},
-		// Pod level hugepage set 1GB, Container level hugepage set
+		// Pod 级设置 1GB 大页，容器级也设置
 		{
 			name: "PodLevel1GBContainerLevel1GB",
 			podResources: v1.ResourceRequirements{
@@ -1191,7 +1210,7 @@ func TestGetHugepageLimitsFromResources(t *testing.T) {
 			},
 			podLevelResourcesEnabled: true,
 		},
-		// Pod level hugepage set 2MB 1GB, Container level hugepage set
+		// Pod 级设置 2MB 与 1GB 大页，容器级也设置
 		{
 			name: "PodLevel2MBand1GBContainerLevel2MBand1GB",
 			podResources: v1.ResourceRequirements{
@@ -1221,7 +1240,7 @@ func TestGetHugepageLimitsFromResources(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// Validate if machine supports hugepage size that used in test case.
+		// 先确认本机支持用例中使用的页大小
 		machineHugepageSupport := true
 		for _, hugepageLimit := range test.expected {
 			hugepageSupport := false
@@ -1238,7 +1257,7 @@ func TestGetHugepageLimitsFromResources(t *testing.T) {
 			}
 		}
 
-		// Case of machine can't support hugepage size
+		// 本机不支持该页大小时跳过
 		if !machineHugepageSupport {
 			continue
 		}
@@ -1269,6 +1288,8 @@ func TestGetHugepageLimitsFromResources(t *testing.T) {
 	}
 }
 
+// TestGenerateLinuxContainerConfigNamespaces 验证 PID 命名空间模式的生成：
+// 默认容器级、Pod 共享以及 attach 到目标容器三种情况
 func TestGenerateLinuxContainerConfigNamespaces(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -1337,12 +1358,15 @@ func TestGenerateLinuxContainerConfigNamespaces(t *testing.T) {
 	}
 }
 
+// 测试用的 SupplementalGroupsPolicy 取值：不支持值、Merge 与 Strict
 var (
 	supplementalGroupsPolicyUnSupported = v1.SupplementalGroupsPolicy("UnSupported")
 	supplementalGroupsPolicyMerge       = v1.SupplementalGroupsPolicyMerge
 	supplementalGroupsPolicyStrict      = v1.SupplementalGroupsPolicyStrict
 )
 
+// TestGenerateLinuxConfigSupplementalGroupsPolicy 验证 SupplementalGroupsPolicy 到
+// CRI 枚举的转换：Merge/Strict/默认值以及不支持值报错
 func TestGenerateLinuxConfigSupplementalGroupsPolicy(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -1424,6 +1448,8 @@ func TestGenerateLinuxConfigSupplementalGroupsPolicy(t *testing.T) {
 	}
 }
 
+// TestGenerateLinuxContainerResources 验证 generateLinuxContainerResources 对
+// Guaranteed/Burstable/BestEffort QoS 的 CPU shares、内存上限、OOM 分数与 cgroup v1/v2 差异
 func TestGenerateLinuxContainerResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -1518,6 +1544,9 @@ func TestGenerateLinuxContainerResources(t *testing.T) {
 	}
 }
 
+// TestGenerateLinuxContainerResourcesWithDRA 验证 DRANodeAllocatableResources 下
+// DRA 分配（映射、overhead、大页）如何叠加到容器 cgroup 资源，
+// 并覆盖特性开关关闭、Pod 级资源回退、原地扩缩容等边界
 func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -1558,10 +1587,10 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 					},
 				},
 			},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(2 * 1000)),       // spec 2 CPUs (requests omitted defaults to limits)
-			expectedCPUQuota:    cm.MilliCPUToQuota(2*1000, cm.QuotaPeriod), // spec 2 CPUs
-			expectedMemoryLimit: 500 * Mi,                                   // spec 500Mi
-			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)},   // spec 2Mi
+			expectedCPUShares:   int64(cm.MilliCPUToShares(2 * 1000)),       // spec 为 2 CPU（未设置请求时默认取上限）
+			expectedCPUQuota:    cm.MilliCPUToQuota(2*1000, cm.QuotaPeriod), // spec 为 2 CPU
+			expectedMemoryLimit: 500 * Mi,                                   // spec 为 500Mi
+			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)},   // spec 为 2Mi
 		},
 		{
 			name:               "explicit container spec limits + DRA allocations",
@@ -1579,10 +1608,10 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 					},
 				},
 			},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(1 * 1000)),           // spec 1 CPU (does not include DRA)
-			expectedCPUQuota:    cm.MilliCPUToQuota((2+1)*1000, cm.QuotaPeriod), // spec 2 CPUs + DRA 1 CPU
-			expectedMemoryLimit: (500 + 300) * Mi,                               // spec 500Mi + DRA 300Mi
-			expectedHugepages:   map[string]uint64{"2MB": uint64((2 + 2) * Mi)}, // spec 2Mi + DRA 2Mi
+			expectedCPUShares:   int64(cm.MilliCPUToShares(1 * 1000)),           // spec 为 1 CPU（不含 DRA）
+			expectedCPUQuota:    cm.MilliCPUToQuota((2+1)*1000, cm.QuotaPeriod), // spec 为 2 CPU + DRA 1 CPU
+			expectedMemoryLimit: (500 + 300) * Mi,                               // spec 为 500Mi + DRA 300Mi
+			expectedHugepages:   map[string]uint64{"2MB": uint64((2 + 2) * Mi)}, // spec 为 2Mi + DRA 2Mi
 		},
 		{
 			name:               "container limits omitted + pod level resource limits set + DRA allocations",
@@ -1600,10 +1629,10 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 					},
 				},
 			},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(4 * 1000)),       // pod spec 4 CPUs (no container requests, fallbacks to pod level, DRA does not change the behavior)
-			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // pod spec 4 CPUs (no container limit, falls back to pod limit, DRA does not change the behavior)
-			expectedMemoryLimit: 1 * Gi,                                     // pod spec 1Gi
-			expectedHugepages:   map[string]uint64{"2MB": uint64(4 * Mi)},   // inherits pod spec 4Mi
+			expectedCPUShares:   int64(cm.MilliCPUToShares(4 * 1000)),       // Pod spec 4 CPU（容器未设请求，回退到 Pod 级；DRA 不改变该行为）
+			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // Pod spec 4 CPU（容器未设上限，回退到 Pod 级；DRA 不改变该行为）
+			expectedMemoryLimit: 1 * Gi,                                     // Pod spec 1Gi
+			expectedHugepages:   map[string]uint64{"2MB": uint64(4 * Mi)},   // 继承 Pod spec 的 4Mi
 		},
 		{
 			name:               "container limits omitted + pod level limits omitted + DRA allocations",
@@ -1619,37 +1648,37 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 					},
 				},
 			},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(0)),            // default, DRA does not change the behavior when spec values are omitted
-			expectedCPUQuota:    0,                                        // default, DRA does not change the behavior when spec values are omitted
-			expectedMemoryLimit: 0,                                        // default, DRA does not change the behavior when spec values are omitted
-			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)}, // with hugepages, we do not fallback to default and use DRA even when spec values are omitted
+			expectedCPUShares:   int64(cm.MilliCPUToShares(0)),            // 默认值；spec 未设置时 DRA 不改变行为
+			expectedCPUQuota:    0,                                        // 默认值；spec 未设置时 DRA 不改变行为
+			expectedMemoryLimit: 0,                                        // 默认值；spec 未设置时 DRA 不改变行为
+			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)}, // 大页场景不回退到默认值，即使 spec 未设置也使用 DRA
 		},
 		{
 			name:                "container limits specified + no DRA allocations",
 			draNodeAllocatable:  true,
 			containerLimits:     v1.ResourceList{v1.ResourceCPU: resource.MustParse("2"), v1.ResourceMemory: resource.MustParse("500Mi"), "hugepages-2Mi": resource.MustParse("2Mi")},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(2 * 1000)),       // spec 2 CPUs, requests omitted defaults to limits
-			expectedCPUQuota:    cm.MilliCPUToQuota(2*1000, cm.QuotaPeriod), // spec 2 CPUs
-			expectedMemoryLimit: 500 * Mi,                                   // spec 500Mi
-			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)},   // spec 2Mi
+			expectedCPUShares:   int64(cm.MilliCPUToShares(2 * 1000)),       // spec 为 2 CPU, requests omitted defaults to limits
+			expectedCPUQuota:    cm.MilliCPUToQuota(2*1000, cm.QuotaPeriod), // spec 为 2 CPU
+			expectedMemoryLimit: 500 * Mi,                                   // spec 为 500Mi
+			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)},   // spec 为 2Mi
 		},
 		{
 			name:                "container limits omitted + pod level resource limits set + no DRA allocations (no inflation fallback)",
 			draNodeAllocatable:  true,
 			podLevelResources:   true,
 			podLimits:           v1.ResourceList{v1.ResourceCPU: resource.MustParse("4"), v1.ResourceMemory: resource.MustParse("1Gi"), "hugepages-2Mi": resource.MustParse("4Mi")},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(4 * 1000)),       // pod spec 4 CPUs
-			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // pod spec 4 CPUs
-			expectedMemoryLimit: 1 * Gi,                                     // pod spec 1Gi
-			expectedHugepages:   map[string]uint64{"2MB": uint64(4 * Mi)},   // pod spec 4Mi
+			expectedCPUShares:   int64(cm.MilliCPUToShares(4 * 1000)),       // Pod spec 4 CPU
+			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // Pod spec 4 CPU
+			expectedMemoryLimit: 1 * Gi,                                     // Pod spec 1Gi
+			expectedHugepages:   map[string]uint64{"2MB": uint64(4 * Mi)},   // Pod spec 4Mi
 		},
 		{
 			name:                "container limits omitted + pod level limits omitted + no DRA allocations (default disallowed/unlimited)",
 			draNodeAllocatable:  true,
-			expectedCPUShares:   int64(cm.MilliCPUToShares(0)), // defaults to MinShares
+			expectedCPUShares:   int64(cm.MilliCPUToShares(0)), // 默认取 MinShares
 			expectedCPUQuota:    0,
 			expectedMemoryLimit: 0,
-			expectedHugepages:   map[string]uint64{"2MB": 0}, // defaults to 0
+			expectedHugepages:   map[string]uint64{"2MB": 0}, // 默认取 0
 		},
 		{
 			name:               "multiple claims for the same resource",
@@ -1671,8 +1700,8 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 					},
 				},
 			},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(2 * 1000)),             // since request is omitted in the spec, we fallback to setting it to spec limit (without DRA inflated values)
-			expectedCPUQuota:    cm.MilliCPUToQuota((2+1+2)*1000, cm.QuotaPeriod), // spec 2 CPUs + DRA claim1 1 CPU + DRA claim2 2 CPUs
+			expectedCPUShares:   int64(cm.MilliCPUToShares(2 * 1000)),             // spec 中未设置请求，因此回退为使用 spec 上限（不包含 DRA 膨胀值）
+			expectedCPUQuota:    cm.MilliCPUToQuota((2+1+2)*1000, cm.QuotaPeriod), // spec 为 2 CPU + DRA claim1 1 CPU + DRA claim2 2 CPUs
 			expectedMemoryLimit: 0,
 			expectedHugepages:   map[string]uint64{"2MB": 0},
 		},
@@ -1689,8 +1718,8 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 					},
 				},
 			},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(1 * 1000)),             // since request is omitted in the spec, we fallback to setting it to spec limit (without DRA inflated values)
-			expectedCPUQuota:    cm.MilliCPUToQuota((1+1+2)*1000, cm.QuotaPeriod), // spec 1 CPU + DRA per-pod 1 CPU + DRA per-container 2 CPUs
+			expectedCPUShares:   int64(cm.MilliCPUToShares(1 * 1000)),             // spec 中未设置请求，因此回退为使用 spec 上限（不包含 DRA 膨胀值）
+			expectedCPUQuota:    cm.MilliCPUToQuota((1+1+2)*1000, cm.QuotaPeriod), // spec 1 CPU + DRA 每 Pod 1 CPU + DRA 每容器 2 CPU
 			expectedMemoryLimit: 0,
 			expectedHugepages:   map[string]uint64{"2MB": 0},
 		},
@@ -1712,8 +1741,8 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 					},
 				},
 			},
-			expectedCPUShares:   int64(cm.MilliCPUToShares(2 * 1000)),               // since request is omitted in the spec, we fallback to setting it to spec limit (without DRA inflated values)
-			expectedCPUQuota:    cm.MilliCPUToQuota((2+1+1+2)*1000, cm.QuotaPeriod), // spec 2 CPU + DRA mapping 1 CPU + DRA per-pod 1 CPU + DRA per-container 2 CPU
+			expectedCPUShares:   int64(cm.MilliCPUToShares(2 * 1000)),               // spec 中未设置请求，因此回退为使用 spec 上限（不包含 DRA 膨胀值）
+			expectedCPUQuota:    cm.MilliCPUToQuota((2+1+1+2)*1000, cm.QuotaPeriod), // spec 2 CPU + DRA 映射 1 CPU + DRA 每 Pod 1 CPU + DRA 每容器 2 CPU
 			expectedMemoryLimit: (500 + 300 + 100 + 200) * Mi,
 			expectedHugepages:   map[string]uint64{"2MB": 0},
 		},
@@ -1734,7 +1763,7 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 			expectedCPUShares:   int64(cm.MilliCPUToShares(0)),
 			expectedCPUQuota:    0,
 			expectedMemoryLimit: 0,
-			expectedHugepages:   map[string]uint64{"2MB": uint64(4 * Mi)}, // inherits pod spec 4Mi
+			expectedHugepages:   map[string]uint64{"2MB": uint64(4 * Mi)}, // 继承 Pod spec 的 4Mi
 		},
 		{
 			name:               "hugepages omitted at pod and container level + pod level cpu/memory limits set + DRA allocations",
@@ -1753,7 +1782,7 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 			expectedCPUShares:   int64(cm.MilliCPUToShares(4 * 1000)),
 			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod),
 			expectedMemoryLimit: 1 * Gi,
-			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)}, // pod level has no hugepage limit to inherit, so the DRA allocation must be set to allow allocation
+			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)}, // Pod 级没有可继承的大页上限，因此必须写入 DRA 分配量以允许分配
 		},
 		{
 			name:               "hugepages at pod level + container level + DRA allocations",
@@ -1773,7 +1802,7 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 			expectedCPUShares:   int64(cm.MilliCPUToShares(0)),
 			expectedCPUQuota:    0,
 			expectedMemoryLimit: 0,
-			expectedHugepages:   map[string]uint64{"2MB": uint64((2 + 1) * Mi)}, // spec 2Mi + DRA 1Mi
+			expectedHugepages:   map[string]uint64{"2MB": uint64((2 + 1) * Mi)}, // spec 为 2Mi + DRA 1Mi
 		},
 		{
 			name:               "hugepages omitted at pod and container level + DRA allocations",
@@ -1790,15 +1819,15 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 			expectedCPUShares:   int64(cm.MilliCPUToShares(0)),
 			expectedCPUQuota:    0,
 			expectedMemoryLimit: 0,
-			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)}, // gets DRA 2Mi even though hugepage limit is missing in spec. This is to allow allocation.
+			expectedHugepages:   map[string]uint64{"2MB": uint64(2 * Mi)}, // 即使 spec 未设置大页上限也写入 DRA 的 2Mi，以允许分配
 		},
 		{
 			name:               "DRA allocations not added to container cgroup limits when container limits are omitted in the original spec, even when actuated values are different after resize",
 			draNodeAllocatable: true,
 			podLevelResources:  true,
 			podLimits:          v1.ResourceList{v1.ResourceCPU: resource.MustParse("4"), v1.ResourceMemory: resource.MustParse("1Gi")},
-			containerLimits:    nil, // Omitted in original spec
-			actuatedContainerLimits: v1.ResourceList{ // Set to pod level values in the actuated state
+			containerLimits:    nil, // 原始 spec 中省略
+			actuatedContainerLimits: v1.ResourceList{ // 实际生效状态中设为 Pod 级的值
 				v1.ResourceCPU:    resource.MustParse("4"),
 				v1.ResourceMemory: resource.MustParse("1Gi"),
 			},
@@ -1814,8 +1843,8 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 				},
 			},
 			expectedCPUShares:   int64(cm.MilliCPUToShares(4 * 1000)),
-			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // pod spec 4 CPUs (DRA is not added because limits were originally omitted in container spec)
-			expectedMemoryLimit: 1 * Gi,                                     // pod spec 1Gi (DRA is not added because limits were originally omitted in container spec)
+			expectedCPUQuota:    cm.MilliCPUToQuota(4*1000, cm.QuotaPeriod), // Pod spec 4 CPU (DRA is not added because limits were originally omitted in container spec)
+			expectedMemoryLimit: 1 * Gi,                                     // Pod spec 1Gi (DRA is not added because limits were originally omitted in container spec)
 		},
 	}
 
@@ -1900,6 +1929,8 @@ func TestGenerateLinuxContainerResourcesWithDRA(t *testing.T) {
 	}
 }
 
+// TestGetContainerSwapBehavior 验证不同换页配置与 QoS 下的 SwapBehavior 判定：
+// 仅 cgroup v2、Burstable 且启用 swap 控制器时才可能得到 LimitedSwap
 func TestGetContainerSwapBehavior(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -2024,6 +2055,8 @@ func TestGetContainerSwapBehavior(t *testing.T) {
 	}
 }
 
+// TestGenerateLinuxContainerResourcesWithSwap 验证各 QoS、cgroup 版本与限流/禁用 swap 场景下
+// 容器 cgroup 的 swap 配置，包括 critical Pod 禁止 swap
 func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -2104,7 +2137,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 		addGuaranteedContainer      bool
 		isCriticalPod               bool
 	}{
-		// With cgroup v1
+		// cgroup v1 场景
 		{
 			name:          "cgroups v1, LimitedSwap, Burstable QoS",
 			cgroupVersion: cgroupV1,
@@ -2118,7 +2151,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 			swapBehavior:  types.LimitedSwap,
 		},
 
-		// With no swapBehavior, NoSwap should be the default
+		// 未配置 swapBehavior 时默认应为 NoSwap
 		{
 			name:          "With no swapBehavior - NoSwap should be the default",
 			cgroupVersion: cgroupV2,
@@ -2126,7 +2159,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 			swapBehavior:  "",
 		},
 
-		// With Guaranteed and Best-effort QoS
+		// Guaranteed 与 Best-effort QoS 场景
 		{
 			name:          "Best-effort QoS, cgroups v2, NoSwap",
 			cgroupVersion: cgroupV2,
@@ -2146,7 +2179,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 			swapBehavior:  types.LimitedSwap,
 		},
 
-		// With a "guaranteed" container (when memory requests equal to limits)
+		// 含有“guaranteed”容器（内存请求等于上限）
 		{
 			name:                        "Burstable QoS, cgroups v2, LimitedSwap, with a guaranteed container",
 			cgroupVersion:               cgroupV2,
@@ -2156,7 +2189,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 			addGuaranteedContainer:      true,
 		},
 
-		// Swap is expected to be allocated
+		// 预期分配 swap
 		{
 			name:                        "Burstable QoS, cgroups v2, LimitedSwap",
 			cgroupVersion:               cgroupV2,
@@ -2173,7 +2206,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 			addContainerWithoutRequests: true,
 			addGuaranteedContainer:      false,
 		},
-		// All the above examples with Swap disabled on node
+		// 以上用例在节点禁用 swap 时的表现
 		{
 			name:               "Swap disabled on node, cgroups v1, LimitedSwap, Burstable QoS",
 			swapDisabledOnNode: true,
@@ -2189,7 +2222,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 			swapBehavior:       types.LimitedSwap,
 		},
 
-		// With no swapBehavior, NoSwap should be the default
+		// 未配置 swapBehavior 时默认应为 NoSwap
 		{
 			name:               "Swap disabled on node, With no swapBehavior - NoSwap should be the default",
 			swapDisabledOnNode: true,
@@ -2198,7 +2231,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 			swapBehavior:       "",
 		},
 
-		// With Guaranteed and Best-effort QoS
+		// Guaranteed 与 Best-effort QoS 场景
 		{
 			name:               "Swap disabled on node, Best-effort QoS, cgroups v2, LimitedSwap",
 			swapDisabledOnNode: true,
@@ -2214,7 +2247,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 			swapBehavior:       types.LimitedSwap,
 		},
 
-		// With a "guaranteed" container (when memory requests equal to limits)
+		// 含有“guaranteed”容器（内存请求等于上限）
 		{
 			name:                        "Swap disabled on node, Burstable QoS, cgroups v2, LimitedSwap, with a guaranteed container",
 			swapDisabledOnNode:          true,
@@ -2225,7 +2258,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 			addGuaranteedContainer:      true,
 		},
 
-		// Swap is expected to be allocated
+		// 预期分配 swap
 		{
 			name:                        "Swap disabled on node, Burstable QoS, cgroups v2, LimitedSwap",
 			swapDisabledOnNode:          true,
@@ -2245,7 +2278,7 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 			addGuaranteedContainer:      false,
 		},
 
-		// When the pod is considered critical, disallow swap access
+		// Pod 被视为 critical 时禁止使用 swap
 		{
 			name:          "Best-effort QoS, cgroups v2, LimitedSwap, critical pod",
 			cgroupVersion: cgroupV2,
@@ -2323,6 +2356,8 @@ func TestGenerateLinuxContainerResourcesWithSwap(t *testing.T) {
 	}
 }
 
+// TestGenerateUpdatePodSandboxResourcesRequest 验证 Pod sandbox 资源更新请求的生成，
+// 覆盖 BestEffort/Guaranteed/Burstable 以及带 overhead、init/sidecar 容器的场景
 func TestGenerateUpdatePodSandboxResourcesRequest(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -2344,7 +2379,7 @@ func TestGenerateUpdatePodSandboxResourcesRequest(t *testing.T) {
 		sandboxID        string
 		enforceCPULimits bool
 	}{
-		// Best effort pod (no resources defined)
+		// Best-effort Pod（未定义资源）
 		{
 			name:             "Best effort",
 			qosClass:         v1.PodQOSBestEffort,
@@ -2388,7 +2423,7 @@ func TestGenerateUpdatePodSandboxResourcesRequest(t *testing.T) {
 				},
 			},
 		},
-		// Guaranteed pod
+		// Guaranteed Pod（未设置 overhead）
 		{
 			name:             "Guaranteed",
 			qosClass:         v1.PodQOSGuaranteed,
@@ -2443,7 +2478,7 @@ func TestGenerateUpdatePodSandboxResourcesRequest(t *testing.T) {
 				},
 			},
 		},
-		// Burstable pods that leave some resources unspecified (e.g. only CPU/Mem requests)
+		// Burstable Pod，部分资源未指定（例如只设置 CPU/内存请求）
 		{
 			name:             "Burstable only cpu",
 			qosClass:         v1.PodQOSBurstable,
@@ -2542,7 +2577,7 @@ func TestGenerateUpdatePodSandboxResourcesRequest(t *testing.T) {
 				},
 			},
 		},
-		// With init container
+		// 含 init 容器
 		{
 			name:             "Pod with init container",
 			qosClass:         v1.PodQOSGuaranteed,
@@ -2627,7 +2662,7 @@ func TestGenerateUpdatePodSandboxResourcesRequest(t *testing.T) {
 				},
 			},
 		},
-		// With a sidecar container
+		// 含 sidecar 容器
 		{
 			name:             "Pod with sidecar container",
 			qosClass:         v1.PodQOSBurstable,
@@ -2729,6 +2764,7 @@ func TestGenerateUpdatePodSandboxResourcesRequest(t *testing.T) {
 	}
 }
 
+// TestUpdatePodSandboxResources 验证 updatePodSandboxResources 会调用运行时更新 sandbox 资源
 func TestUpdatePodSandboxResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	fakeRuntime, _, m, errCreate := createTestRuntimeManager(tCtx)
@@ -2750,7 +2786,7 @@ func TestUpdatePodSandboxResources(t *testing.T) {
 		},
 	}
 
-	// Create fake sandbox and container
+	// 创建伪造的 sandbox 与容器
 	fakeSandbox, fakeContainers := makeAndSetFakePod(tCtx, m, fakeRuntime, pod)
 	assert.Len(t, fakeContainers, 1)
 
@@ -2764,23 +2800,29 @@ func TestUpdatePodSandboxResources(t *testing.T) {
 	err = m.updatePodSandboxResources(tCtx, fakeSandbox.Id, pod, resourceConfig)
 	require.NoError(t, err)
 
-	// Verify sandbox is updated
+	// 验证 sandbox 已被更新
 	assert.Contains(t, fakeRuntime.Called, "UpdatePodSandboxResources")
 }
 
+// CgroupVersion 表示测试中模拟的 cgroup 版本
 type CgroupVersion string
 
+// 测试中使用的 cgroup 版本常量
 const (
 	cgroupV1 CgroupVersion = "v1"
 	cgroupV2 CgroupVersion = "v2"
 )
 
+// setCgroupVersionDuringTest 在测试中替换 cgroup v2 检测函数，模拟指定的 cgroup 版本
 func setCgroupVersionDuringTest(version CgroupVersion) {
 	isCgroup2UnifiedMode = func() bool {
 		return version == cgroupV2
 	}
 }
 
+// TestContainerMemoryHighSkippedWithPodLevelResources 验证启用 PodLevelResources 后
+// 容器 memory.high 的取舍：只有容器自身设置了内存上限时才按容器级计算，
+// 否则交由 Pod 级资源处理；纯 CPU 的 Pod 级资源不影响容器 memory.high
 func TestContainerMemoryHighSkippedWithPodLevelResources(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, m, err := createTestRuntimeManager(tCtx)
@@ -2877,8 +2919,8 @@ func TestContainerMemoryHighSkippedWithPodLevelResources(t *testing.T) {
 		assert.True(t, ok, "memory.high should be set via node-allocatable fallback when pod has CPU-only resources")
 	})
 
-	// Pod is Guaranteed via pod-level req==limit, but container req!=limit:
-	// memory.high is gated by the container's own req vs limit, not the pod's QoS class.
+	// Pod 通过 Pod 级请求==上限被判定为 Guaranteed，但容器自身请求!=上限：
+	// memory.high 由容器自身的请求与上限决定，与 Pod 的 QoS 级别无关。
 	t.Run("guaranteed pod with container req!=limit sets container memory.high", func(t *testing.T) {
 		guaranteedPod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -2923,7 +2965,7 @@ func TestContainerMemoryHighSkippedWithPodLevelResources(t *testing.T) {
 		assert.Equal(t, strconv.FormatInt(expectedHigh, 10), actualHigh)
 	})
 
-	// memory.high is skipped when container memory req==limit regardless of pod QoS class.
+	// 只要容器内存请求==上限，无论 Pod QoS 级别如何都会跳过 memory.high。
 	t.Run("burstable pod with container memory req==limit skips memory.high", func(t *testing.T) {
 		burstablePod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{

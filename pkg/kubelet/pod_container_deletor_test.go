@@ -25,8 +25,11 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestGetContainersToDeleteInPodWithFilter 验证按容器 ID 过滤时只保留指定容器，
+// 删除其余符合删除条件的容器。
 func TestGetContainersToDeleteInPodWithFilter(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 构造 5 个容器：4 个已退出、1 个运行中。
 	pod := kubecontainer.PodStatus{
 		ContainerStatuses: []*kubecontainer.Status{
 			{
@@ -62,6 +65,7 @@ func TestGetContainersToDeleteInPodWithFilter(t *testing.T) {
 		},
 	}
 
+	// 每个用例检查需要删除的容器集合。
 	testCases := []struct {
 		containersToKeep           int
 		expectedContainersToDelete containerStatusbyCreatedList
@@ -80,6 +84,7 @@ func TestGetContainersToDeleteInPodWithFilter(t *testing.T) {
 		},
 	}
 
+	// 过滤器为 "4" 时保留该容器，其余已退出容器按创建时间从新到旧删除。
 	for _, test := range testCases {
 		candidates := getContainersToDeleteInPod(logger, "4", &pod, test.containersToKeep)
 		if !reflect.DeepEqual(candidates, test.expectedContainersToDelete) {
@@ -88,8 +93,10 @@ func TestGetContainersToDeleteInPodWithFilter(t *testing.T) {
 	}
 }
 
+// TestGetContainersToDeleteInPod 验证不带过滤器时，按保留数量删除最旧的已退出容器。
 func TestGetContainersToDeleteInPod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 构造 5 个容器：4 个已退出、1 个运行中。
 	pod := kubecontainer.PodStatus{
 		ContainerStatuses: []*kubecontainer.Status{
 			{
@@ -125,6 +132,7 @@ func TestGetContainersToDeleteInPod(t *testing.T) {
 		},
 	}
 
+	// 每个用例检查需要删除的容器集合。
 	testCases := []struct {
 		containersToKeep           int
 		expectedContainersToDelete containerStatusbyCreatedList
@@ -143,6 +151,7 @@ func TestGetContainersToDeleteInPod(t *testing.T) {
 		},
 	}
 
+	// 保留数量越少，需要删除的旧容器越多。
 	for _, test := range testCases {
 		candidates := getContainersToDeleteInPod(logger, "", &pod, test.containersToKeep)
 		if !reflect.DeepEqual(candidates, test.expectedContainersToDelete) {
@@ -151,8 +160,10 @@ func TestGetContainersToDeleteInPod(t *testing.T) {
 	}
 }
 
+// TestGetContainersToDeleteInPodWithNoMatch 验证过滤器不匹配任何容器时不删除任何容器。
 func TestGetContainersToDeleteInPodWithNoMatch(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 构造 5 个容器：4 个已退出、1 个运行中。
 	pod := kubecontainer.PodStatus{
 		ContainerStatuses: []*kubecontainer.Status{
 			{
@@ -188,6 +199,7 @@ func TestGetContainersToDeleteInPodWithNoMatch(t *testing.T) {
 		},
 	}
 
+	// 过滤器 "abc" 不匹配任何容器，期望删除列表为空。
 	testCases := []struct {
 		filterID                   string
 		expectedContainersToDelete containerStatusbyCreatedList
@@ -198,6 +210,7 @@ func TestGetContainersToDeleteInPodWithNoMatch(t *testing.T) {
 		},
 	}
 
+	// 保留数量等于容器总数，因此只按过滤条件筛选。
 	for _, test := range testCases {
 		candidates := getContainersToDeleteInPod(logger, test.filterID, &pod, len(pod.ContainerStatuses))
 		if !reflect.DeepEqual(candidates, test.expectedContainersToDelete) {

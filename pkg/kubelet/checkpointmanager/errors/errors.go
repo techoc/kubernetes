@@ -18,8 +18,8 @@ package errors
 
 import "fmt"
 
-// ErrCorruptCheckpoint error is reported when checksum does not match.
-// Check for it with:
+// CorruptCheckpointError 在校验和不匹配时返回。
+// 可用如下方式判断：
 //
 //	var csErr *CorruptCheckpointError
 //	if errors.As(err, &csErr) { ... }
@@ -28,10 +28,12 @@ type CorruptCheckpointError struct {
 	ActualCS, ExpectedCS uint64
 }
 
+// Error 返回固定的损坏提示信息。
 func (err CorruptCheckpointError) Error() string {
 	return "checkpoint is corrupted"
 }
 
+// Is 使 CorruptCheckpointError 支持 errors.Is 的匹配。
 func (err CorruptCheckpointError) Is(target error) bool {
 	switch target.(type) {
 	case *CorruptCheckpointError, CorruptCheckpointError:
@@ -41,5 +43,5 @@ func (err CorruptCheckpointError) Is(target error) bool {
 	}
 }
 
-// ErrCheckpointNotFound is reported when checkpoint is not found for a given key
+// ErrCheckpointNotFound 在按 key 找不到 checkpoint 时返回。
 var ErrCheckpointNotFound = fmt.Errorf("checkpoint is not found")

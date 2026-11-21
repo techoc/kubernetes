@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package topology contains helpers for the CPU manager.
+// Package topology 包含 CPU manager 使用的拓扑辅助代码。
 package topology

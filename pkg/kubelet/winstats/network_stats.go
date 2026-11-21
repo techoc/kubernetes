@@ -27,6 +27,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// Windows 性能计数器路径：按网络适配器返回每秒包/字节数以及丢弃/错误计数。
 const (
 	packetsReceivedPerSecondQuery = "\\Network Adapter(*)\\Packets Received/sec"
 	packetsSentPerSecondQuery     = "\\Network Adapter(*)\\Packets Sent/sec"
@@ -38,7 +39,7 @@ const (
 	packetsOutboundErrorsQuery    = "\\Network Adapter(*)\\Packets Outbound Errors"
 )
 
-// networkCounter contains the counters for network adapters.
+// networkCounter 聚合各网络适配器的性能计数器与缓存结果。
 type networkCounter struct {
 	packetsReceivedPerSecondCounter perfCounter
 	packetsSentPerSecondCounter     perfCounter
@@ -53,6 +54,7 @@ type networkCounter struct {
 	adapterStats map[string]cadvisorapi.InterfaceStats
 }
 
+// newNetworkCounters 创建全部 8 个性能计数器，任一失败即返回错误。
 func newNetworkCounters() (*networkCounter, error) {
 	packetsReceivedPerSecondCounter, err := newPerfCounter(packetsReceivedPerSecondQuery)
 	if err != nil {
@@ -107,6 +109,7 @@ func newNetworkCounters() (*networkCounter, error) {
 	}, nil
 }
 
+// getData 读取所有计数器并合并成按适配器聚合的接口统计。
 func (n *networkCounter) getData(logger klog.Logger) ([]cadvisorapi.InterfaceStats, error) {
 	packetsReceivedPerSecondData, err := n.packetsReceivedPerSecondCounter.getDataList()
 	if err != nil {
@@ -156,6 +159,7 @@ func (n *networkCounter) getData(logger klog.Logger) ([]cadvisorapi.InterfaceSta
 		return nil, err
 	}
 
+	// 合并与列举都在锁内完成，保证返回一致快照。
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.mergeCollectedData(
@@ -171,7 +175,7 @@ func (n *networkCounter) getData(logger klog.Logger) ([]cadvisorapi.InterfaceSta
 	return n.listInterfaceStats(), nil
 }
 
-// mergeCollectedData merges the collected data into cache. It should be invoked under lock protected.
+// mergeCollectedData 把本轮采集的数据合并进缓存；调用方必须持有写锁。
 func (n *networkCounter) mergeCollectedData(packetsReceivedPerSecondData,
 	packetsSentPerSecondData,
 	bytesReceivedPerSecondData,
@@ -180,9 +184,10 @@ func (n *networkCounter) mergeCollectedData(packetsReceivedPerSecondData,
 	packetsReceivedErrorsData,
 	packetsOutboundDiscardedData,
 	packetsOutboundErrorsData map[string]uint64) {
+	// 收集本轮出现的所有适配器，用于清理已消失的缓存项。
 	adapters := sets.New[string]()
 
-	// merge the collected data and list of adapters.
+	// 逐类合并数据，并汇总出现的适配器名称。
 	adapters.Insert(n.mergePacketsReceivedPerSecondData(packetsReceivedPerSecondData)...)
 	adapters.Insert(n.mergePacketsSentPerSecondData(packetsSentPerSecondData)...)
 	adapters.Insert(n.mergeBytesReceivedPerSecondData(bytesReceivedPerSecondData)...)
@@ -192,7 +197,7 @@ func (n *networkCounter) mergeCollectedData(packetsReceivedPerSecondData,
 	adapters.Insert(n.mergePacketsOutboundDiscardedData(packetsOutboundDiscardedData)...)
 	adapters.Insert(n.mergePacketsOutboundErrorsData(packetsOutboundErrorsData)...)
 
-	// delete the cache for non-existing adapters.
+	// 删除本轮未出现的适配器缓存，避免上报已移除的网卡。
 	for adapter := range n.adapterStats {
 		if !adapters.Has(adapter) {
 			delete(n.adapterStats, adapter)
@@ -200,6 +205,7 @@ func (n *networkCounter) mergeCollectedData(packetsReceivedPerSecondData,
 	}
 }
 
+// mergePacketsReceivedPerSecondData 累加接收包速率并返回出现的适配器名。
 func (n *networkCounter) mergePacketsReceivedPerSecondData(packetsReceivedPerSecondData map[string]uint64) []string {
 	var adapters []string
 	for adapterName, value := range packetsReceivedPerSecondData {
@@ -213,6 +219,7 @@ func (n *networkCounter) mergePacketsReceivedPerSecondData(packetsReceivedPerSec
 	return adapters
 }
 
+// mergePacketsSentPerSecondData 累加发送包速率并返回出现的适配器名。
 func (n *networkCounter) mergePacketsSentPerSecondData(packetsSentPerSecondData map[string]uint64) []string {
 	var adapters []string
 	for adapterName, value := range packetsSentPerSecondData {
@@ -226,6 +233,7 @@ func (n *networkCounter) mergePacketsSentPerSecondData(packetsSentPerSecondData 
 	return adapters
 }
 
+// mergeBytesReceivedPerSecondData 累加接收字节速率并返回出现的适配器名。
 func (n *networkCounter) mergeBytesReceivedPerSecondData(bytesReceivedPerSecondData map[string]uint64) []string {
 	var adapters []string
 	for adapterName, value := range bytesReceivedPerSecondData {
@@ -239,6 +247,7 @@ func (n *networkCounter) mergeBytesReceivedPerSecondData(bytesReceivedPerSecondD
 	return adapters
 }
 
+// mergeBytesSentPerSecondData 累加发送字节速率并返回出现的适配器名。
 func (n *networkCounter) mergeBytesSentPerSecondData(bytesSentPerSecondData map[string]uint64) []string {
 	var adapters []string
 	for adapterName, value := range bytesSentPerSecondData {
@@ -252,6 +261,7 @@ func (n *networkCounter) mergeBytesSentPerSecondData(bytesSentPerSecondData map[
 	return adapters
 }
 
+// mergePacketsReceivedDiscardedData 写入接收丢包数：该计数器本身是累计值，直接覆盖。
 func (n *networkCounter) mergePacketsReceivedDiscardedData(packetsReceivedDiscardedData map[string]uint64) []string {
 	var adapters []string
 	for adapterName, value := range packetsReceivedDiscardedData {
@@ -265,6 +275,7 @@ func (n *networkCounter) mergePacketsReceivedDiscardedData(packetsReceivedDiscar
 	return adapters
 }
 
+// mergePacketsReceivedErrorsData 写入接收错误数：该计数器本身是累计值，直接覆盖。
 func (n *networkCounter) mergePacketsReceivedErrorsData(packetsReceivedErrorsData map[string]uint64) []string {
 	var adapters []string
 	for adapterName, value := range packetsReceivedErrorsData {
@@ -278,6 +289,7 @@ func (n *networkCounter) mergePacketsReceivedErrorsData(packetsReceivedErrorsDat
 	return adapters
 }
 
+// mergePacketsOutboundDiscardedData 写入发送丢包数：该计数器本身是累计值，直接覆盖。
 func (n *networkCounter) mergePacketsOutboundDiscardedData(packetsOutboundDiscardedData map[string]uint64) []string {
 	var adapters []string
 	for adapterName, value := range packetsOutboundDiscardedData {
@@ -291,6 +303,7 @@ func (n *networkCounter) mergePacketsOutboundDiscardedData(packetsOutboundDiscar
 	return adapters
 }
 
+// mergePacketsOutboundErrorsData 写入发送错误数：该计数器本身是累计值，直接覆盖。
 func (n *networkCounter) mergePacketsOutboundErrorsData(packetsOutboundErrorsData map[string]uint64) []string {
 	var adapters []string
 	for adapterName, value := range packetsOutboundErrorsData {
@@ -304,6 +317,7 @@ func (n *networkCounter) mergePacketsOutboundErrorsData(packetsOutboundErrorsDat
 	return adapters
 }
 
+// listInterfaceStats 把适配器统计 map 转为切片返回。
 func (n *networkCounter) listInterfaceStats() []cadvisorapi.InterfaceStats {
 	stats := make([]cadvisorapi.InterfaceStats, 0, len(n.adapterStats))
 	for _, stat := range n.adapterStats {

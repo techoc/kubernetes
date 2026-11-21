@@ -30,28 +30,35 @@ import (
 )
 
 const (
+	// logind 的 D-Bus 服务名、对象路径与接口名。
 	logindService   = "org.freedesktop.login1"
 	logindObject    = dbus.ObjectPath("/org/freedesktop/login1")
 	logindInterface = "org.freedesktop.login1.Manager"
 )
 
+// dBusConnector 抽象 D-Bus 连接所需的方法，便于测试替换。
 type dBusConnector interface {
+	// Object 返回指定服务与路径的 D-Bus 对象。
 	Object(dest string, path dbus.ObjectPath) dbus.BusObject
+	// AddMatchSignal 注册要接收的信号匹配规则。
 	AddMatchSignal(options ...dbus.MatchOption) error
+	// Signal 注册接收信号的通道。
 	Signal(ch chan<- *dbus.Signal)
+	// Close 关闭 D-Bus 连接。
 	Close() error
 }
 
-// DBusCon has functions that can be used to interact with systemd and logind over dbus.
+// DBusCon 提供通过 D-Bus 与 systemd、logind 交互的方法。
 type DBusCon struct {
 	SystemBus dBusConnector
 }
 
-// Close closes the underlying DBus connection.
+// Close 关闭底层 D-Bus 连接。
 func (bus *DBusCon) Close() error {
 	return bus.SystemBus.Close()
 }
 
+// NewDBusCon 连接系统 D-Bus 并返回 DBusCon。
 func NewDBusCon() (*DBusCon, error) {
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
@@ -63,11 +70,11 @@ func NewDBusCon() (*DBusCon, error) {
 	}, nil
 }
 
-// InhibitLock is a lock obtained after creating an systemd inhibitor by calling InhibitShutdown().
+// InhibitLock 是调用 InhibitShutdown() 创建 systemd inhibitor 后得到的锁。
 type InhibitLock uint32
 
-// CurrentInhibitDelay returns the current delay inhibitor timeout value as configured in logind.conf(5).
-// see https://www.freedesktop.org/software/systemd/man/logind.conf.html for more details.
+// CurrentInhibitDelay 返回 logind.conf(5) 中配置的延迟 inhibitor 超时值。
+// 详见 https://www.freedesktop.org/software/systemd/man/logind.conf.html。
 func (bus *DBusCon) CurrentInhibitDelay() (time.Duration, error) {
 	obj := bus.SystemBus.Object(logindService, logindObject)
 	res, err := obj.GetProperty(logindInterface + ".InhibitDelayMaxUSec")
@@ -76,17 +83,19 @@ func (bus *DBusCon) CurrentInhibitDelay() (time.Duration, error) {
 	}
 
 	delay, ok := res.Value().(uint64)
+	// 通道关闭说明 D-Bus 连接已断开，随之关闭输出通道。
 	if !ok {
 		return 0, fmt.Errorf("InhibitDelayMaxUSec from logind is not a uint64 as expected")
 	}
 
 	// InhibitDelayMaxUSec is in microseconds
+	// logind 以微秒为单位暴露 InhibitDelayMaxUSec。
 	duration := time.Duration(delay) * time.Microsecond
 	return duration, nil
 }
 
-// InhibitShutdown creates an systemd inhibitor by calling logind's Inhibt() and returns the inhibitor lock
-// see https://www.freedesktop.org/wiki/Software/systemd/inhibit/ for more details.
+// InhibitShutdown 调用 logind 的 Inhibit() 创建 systemd inhibitor 并返回锁。
+// 详见 https://www.freedesktop.org/wiki/Software/systemd/inhibit/。
 func (bus *DBusCon) InhibitShutdown() (InhibitLock, error) {
 	obj := bus.SystemBus.Object(logindService, logindObject)
 	what := "shutdown"
@@ -94,11 +103,13 @@ func (bus *DBusCon) InhibitShutdown() (InhibitLock, error) {
 	why := "Kubelet needs time to handle node shutdown"
 	mode := "delay"
 
+	// 以 delay 模式创建 inhibitor：kubelet 处理关机期间阻止关机开始。
 	call := obj.Call("org.freedesktop.login1.Manager.Inhibit", 0, what, who, why, mode)
 	if call.Err != nil {
 		return InhibitLock(0), fmt.Errorf("failed creating systemd inhibitor: %w", call.Err)
 	}
 
+	// 返回的文件描述符即锁；关闭它就会释放 inhibitor。
 	var fd uint32
 	err := call.Store(&fd)
 	if err != nil {
@@ -108,7 +119,7 @@ func (bus *DBusCon) InhibitShutdown() (InhibitLock, error) {
 	return InhibitLock(fd), nil
 }
 
-// ReleaseInhibitLock will release the underlying inhibit lock which will cause the shutdown to start.
+// ReleaseInhibitLock 释放底层 inhibitor 锁，随后关机流程会开始。
 func (bus *DBusCon) ReleaseInhibitLock(lock InhibitLock) error {
 	err := syscall.Close(int(lock))
 
@@ -119,7 +130,7 @@ func (bus *DBusCon) ReleaseInhibitLock(lock InhibitLock) error {
 	return nil
 }
 
-// ReloadLogindConf uses dbus to send a SIGHUP to the systemd-logind service causing logind to reload it's configuration.
+// ReloadLogindConf 通过 D-Bus 向 systemd-logind 发送 SIGHUP，使其重新加载配置。
 func (bus *DBusCon) ReloadLogindConf() error {
 	systemdService := "org.freedesktop.systemd1"
 	systemdObject := "/org/freedesktop/systemd1"
@@ -130,6 +141,7 @@ func (bus *DBusCon) ReloadLogindConf() error {
 	who := "all"
 	var signal int32 = 1 // SIGHUP
 
+	// 向 systemd-logind 发送 SIGHUP 使其重新加载配置。
 	call := obj.Call(systemdInterface+".KillUnit", 0, unit, who, signal)
 	if call.Err != nil {
 		return fmt.Errorf("unable to reload logind conf: %w", call.Err)
@@ -138,9 +150,10 @@ func (bus *DBusCon) ReloadLogindConf() error {
 	return nil
 }
 
-// MonitorShutdown detects the node shutdown by watching for "PrepareForShutdown" logind events.
-// see https://www.freedesktop.org/wiki/Software/systemd/inhibit/ for more details.
+// MonitorShutdown 通过监听 logind 的 "PrepareForShutdown" 事件检测节点关机。
+// 详见 https://www.freedesktop.org/wiki/Software/systemd/inhibit/。
 func (bus *DBusCon) MonitorShutdown(logger klog.Logger) (<-chan bool, error) {
+	// 订阅 logind 的 PrepareForShutdown 信号。
 	err := bus.SystemBus.AddMatchSignal(dbus.WithMatchInterface(logindInterface), dbus.WithMatchMember("PrepareForShutdown"), dbus.WithMatchObjectPath("/org/freedesktop/login1"))
 
 	if err != nil {
@@ -152,6 +165,7 @@ func (bus *DBusCon) MonitorShutdown(logger klog.Logger) (<-chan bool, error) {
 
 	shutdownChan := make(chan bool, 1)
 
+	// 在后台把 D-Bus 信号转换为布尔通道：true 表示即将关机。
 	go func() {
 		for {
 			event, ok := <-busChan
@@ -176,21 +190,23 @@ func (bus *DBusCon) MonitorShutdown(logger klog.Logger) (<-chan bool, error) {
 }
 
 const (
+	// logind 配置目录与 kubelet 覆盖配置文件名。
 	logindConfigDirectory = "/etc/systemd/logind.conf.d/"
 	kubeletLogindConf     = "99-kubelet.conf"
 )
 
-// OverrideInhibitDelay writes a config file to logind overriding InhibitDelayMaxSec to the value desired.
+// OverrideInhibitDelay 写入 logind 配置文件，把 InhibitDelayMaxSec 覆盖为期望值。
 func (bus *DBusCon) OverrideInhibitDelay(inhibitDelayMax time.Duration) error {
 	err := os.MkdirAll(logindConfigDirectory, 0755)
 	if err != nil {
 		return fmt.Errorf("failed creating %v directory: %w", logindConfigDirectory, err)
 	}
 
-	// This attempts to set the `InhibitDelayMaxUSec` dbus property of logind which is MaxInhibitDelay measured in microseconds.
-	// The corresponding logind config file property is named `InhibitDelayMaxSec` and is measured in seconds which is set via logind.conf config.
-	// Refer to https://www.freedesktop.org/software/systemd/man/logind.conf.html for more details.
+	// 这里设置 logind 的 `InhibitDelayMaxUSec` D-Bus 属性（以微秒计的最大 inhibitor 延迟）。
+	// 对应的配置文件属性名为 `InhibitDelayMaxSec`，以秒为单位，通过 logind.conf 设置。
+	// 详见 https://www.freedesktop.org/software/systemd/man/logind.conf.html。
 
+	// 配置文件以秒为单位，格式化时保留整数秒。
 	inhibitOverride := fmt.Sprintf(`# Kubelet logind override
 [Login]
 InhibitDelayMaxSec=%.0f

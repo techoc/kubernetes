@@ -30,14 +30,16 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/metrics"
 )
 
+// podScope 以整个 Pod 为粒度计算 NUMA 亲和性。
 type podScope struct {
 	scope
 }
 
 // Ensure podScope implements Scope interface
+// 编译期断言：podScope 实现 Scope 接口。
 var _ Scope = &podScope{}
 
-// NewPodScope returns a pod scope.
+// NewPodScope 创建 Pod 级拓扑管理器 scope。
 func NewPodScope(policy Policy) Scope {
 	return &podScope{
 		scope{
@@ -49,16 +51,18 @@ func NewPodScope(policy Policy) Scope {
 	}
 }
 
+// Admit 执行 Pod 准入：启用 PodLevelResourceManagers 时按 Pod 级资源分配，
+// 否则按容器逐个分配。
 func (s *podScope) Admit(ctx context.Context, pod *v1.Pod, operation lifecycle.Operation) lifecycle.PodAdmitResult {
-	// If the PodLevelResourceManagers feature is enabled, delegate the resource
-	// allocation to the hint providers (CPU and Memory managers) via the AllocatePod call.
-	// This is a one-time allocation for the entire pod.
+	// 启用 PodLevelResourceManagers 时，把资源分配交给 hint provider（CPU/Memory manager）
+	// 的 AllocatePod 一次性完成。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) && resourcehelper.IsPodLevelResourcesSet(pod) {
 		return s.admitUsingPodResources(ctx, pod, operation)
 	}
 	return s.admitUsingContainerResources(ctx, pod, operation)
 }
 
+// admitUsingContainerResources 按容器粒度计算亲和性并逐个分配资源。
 func (s *podScope) admitUsingContainerResources(ctx context.Context, pod *v1.Pod, operation lifecycle.Operation) lifecycle.PodAdmitResult {
 	logger := klog.FromContext(ctx)
 
@@ -67,10 +71,12 @@ func (s *podScope) admitUsingContainerResources(ctx context.Context, pod *v1.Pod
 		return admission.GetPodAdmitResult(NewTopologyAffinityError())
 	}
 
+	// init 容器与普通容器都要参与分配；init 容器先执行。
 	for _, container := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
 		logger.Info("Topology Affinity", "bestHint", bestHint, "pod", klog.KObj(pod), "containerName", container.Name)
 		s.setTopologyHints(string(pod.UID), container.Name, bestHint)
 
+		// 单个容器分配失败即拒绝整个 Pod，并记录准入错误。
 		err := s.allocateAlignedResources(ctx, pod, &container, operation)
 		if err != nil {
 			metrics.TopologyManagerAdmissionErrorsTotal.Inc()
@@ -82,6 +88,7 @@ func (s *podScope) admitUsingContainerResources(ctx context.Context, pod *v1.Pod
 	return admission.GetPodAdmitResult(nil)
 }
 
+// admitUsingPodResources 按 Pod 粒度计算亲和性并一次性分配资源。
 func (s *podScope) admitUsingPodResources(ctx context.Context, pod *v1.Pod, operation lifecycle.Operation) lifecycle.PodAdmitResult {
 	logger := klog.FromContext(ctx)
 
@@ -90,17 +97,18 @@ func (s *podScope) admitUsingPodResources(ctx context.Context, pod *v1.Pod, oper
 		return admission.GetPodAdmitResult(NewPodLevelTopologyAffinityError("pod with pod-level resources failed admission under pod-scope topology manager"))
 	}
 
-	// If the PodLevelResourceManagers feature is enabled, delegate the resource
-	// allocation to the hint providers (CPU and Memory managers) via the AllocatePod call.
-	// This is a one-time allocation for the entire pod.
+	// 启用 PodLevelResourceManagers 时，把资源分配交给 hint provider（CPU/Memory manager）
+	// 的 AllocatePod 一次性完成。
+	// 这里只调用一次 AllocatePod，代表整个 Pod 的一次性分配。
 	logger.V(4).Info("Calling AllocatePod on hint providers", "pod", klog.KObj(pod))
 
-	// Store the best hint for all containers.
+	// 为所有容器记录同一个最佳 hint，后续状态查询依赖该映射。
 	for _, container := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
 		logger.Info("Topology Affinity", "bestHint", bestHint, "pod", klog.KObj(pod), "containerName", container.Name)
 		s.setTopologyHints(string(pod.UID), container.Name, bestHint)
 	}
 
+	// Pod 级分配失败同样拒绝准入并计数。
 	err := s.allocatePodAlignedResources(logger, pod, operation)
 	if err != nil {
 		logger.Error(err, "Pod-level allocation failed", "pod", klog.KObj(pod))
@@ -112,13 +120,14 @@ func (s *podScope) admitUsingPodResources(ctx context.Context, pod *v1.Pod, oper
 	return admission.GetPodAdmitResult(nil)
 }
 
+// checkAffinity 计算 Pod 整体的最佳 NUMA 亲和性，并在失败时更新指标。
 func (s *podScope) checkAffinity(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) (TopologyHint, bool) {
-	// Calculate the best NUMA affinity for the pod as a whole.
+	// 以整个 Pod 为单位计算最佳 NUMA 亲和性。
 	bestHint, admit := s.calculateAffinity(logger, pod, operation)
 	logger.Info("Best TopologyHint", "bestHint", bestHint, "pod", klog.KObj(pod), "operation", operation)
 	if !admit {
 		if IsAlignmentGuaranteed(s.policy) {
-			// Increment failure metric only if alignment was guaranteed.
+			// 只有策略保证对齐时才计入失败指标，避免把尽力而为的失败误报为回归。
 			metrics.ContainerAlignedComputeResourcesFailure.WithLabelValues(metrics.AlignScopePod, metrics.AlignedNUMANode).Inc()
 		}
 		metrics.TopologyManagerAdmissionErrorsTotal.Inc()
@@ -128,19 +137,21 @@ func (s *podScope) checkAffinity(logger klog.Logger, pod *v1.Pod, operation life
 	return bestHint, true
 }
 
+// updateSuccessMetrics 在策略保证对齐时上报成功指标。
 func (s *podScope) updateSuccessMetrics(logger klog.Logger, pod *v1.Pod) {
 	if IsAlignmentGuaranteed(s.policy) {
-		// Increment success metric only if alignment was guaranteed.
+		// 只有保证对齐的策略才上报成功，保持指标口径一致。
 		logger.V(4).Info("Resource alignment at pod scope guaranteed", "pod", klog.KObj(pod))
 		metrics.ContainerAlignedComputeResources.WithLabelValues(metrics.AlignScopePod, metrics.AlignedNUMANode).Inc()
 	}
 }
 
+// accumulateProvidersHints 收集所有 hint provider 给出的 Pod 级拓扑提示。
 func (s *podScope) accumulateProvidersHints(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) []map[string][]TopologyHint {
 	var providersHints []map[string][]TopologyHint
 
 	for _, provider := range s.hintProviders {
-		// Get the TopologyHints for a Pod from a provider.
+		// 向每个 provider 索取 Pod 级 hint。
 		hints := provider.GetPodTopologyHints(logger, pod, operation)
 		providersHints = append(providersHints, hints)
 		logger.Info("TopologyHints", "hints", hints, "pod", klog.KObj(pod), "operation", operation)
@@ -148,6 +159,7 @@ func (s *podScope) accumulateProvidersHints(logger klog.Logger, pod *v1.Pod, ope
 	return providersHints
 }
 
+// calculateAffinity 汇总 provider 的 hint 并交给策略合并出最终结果。
 func (s *podScope) calculateAffinity(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) (TopologyHint, bool) {
 	providersHints := s.accumulateProvidersHints(logger, pod, operation)
 	bestHint, admit := s.policy.Merge(logger, providersHints)

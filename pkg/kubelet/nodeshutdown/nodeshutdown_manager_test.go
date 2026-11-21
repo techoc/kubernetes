@@ -28,6 +28,7 @@ import (
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 )
 
+// makePod 构造指定名称、优先级与优雅终止时间的测试 Pod。
 func makePod(name string, priority int32, terminationGracePeriod *int64) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -41,6 +42,7 @@ func makePod(name string, priority int32, terminationGracePeriod *int64) *v1.Pod
 	}
 }
 
+// Test_migrateConfig 验证旧版关停宽限期配置迁移为按优先级划分的配置。
 func Test_migrateConfig(t *testing.T) {
 	type shutdownConfig struct {
 		shutdownGracePeriodRequested    time.Duration
@@ -102,6 +104,7 @@ func Test_migrateConfig(t *testing.T) {
 			want: nil,
 		},
 	}
+	// 逐用例校验迁移结果。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := migrateConfig(tt.args.shutdownGracePeriodRequested, tt.args.shutdownGracePeriodCriticalPods); !assert.Equal(t, tt.want, got) {
@@ -111,6 +114,7 @@ func Test_migrateConfig(t *testing.T) {
 	}
 }
 
+// Test_groupByPriority 验证按优先级把 Pod 分组到对应的关停宽限组。
 func Test_groupByPriority(t *testing.T) {
 	type args struct {
 		shutdownGracePeriodByPodPriority []kubeletconfig.ShutdownGracePeriodByPodPriority
@@ -225,6 +229,7 @@ func Test_groupByPriority(t *testing.T) {
 			},
 		},
 	}
+	// 逐用例校验分组结果。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := groupByPriority(tt.args.shutdownGracePeriodByPodPriority, tt.args.pods); !assert.Equal(t, tt.want, got) {

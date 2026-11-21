@@ -28,6 +28,8 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// TestGROUP_AFFINITY_Processors 验证 GroupAffinity.Processors 能把掩码与处理器组
+// 转换为全局 CPU 编号，覆盖空掩码、跨组与满掩码等场景。
 func TestGROUP_AFFINITY_Processors(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -98,6 +100,7 @@ func TestGROUP_AFFINITY_Processors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 由掩码与组号构造亲和性，再断言其展开出的 CPU 列表。
 			a := GroupAffinity{
 				Mask:  tt.Mask,
 				Group: tt.Group,
@@ -107,7 +110,8 @@ func TestGROUP_AFFINITY_Processors(t *testing.T) {
 	}
 }
 
-// https://stackoverflow.com/a/39868255/697126
+// makeRange 返回 [min, max] 闭区间内的整数切片，便于构造连续的 CPU 编号。
+// 参考：https://stackoverflow.com/a/39868255/697126
 func makeRange(min, max int) []int {
 	a := make([]int, max-min+1)
 	for i := range a {
@@ -116,6 +120,8 @@ func makeRange(min, max int) []int {
 	return a
 }
 
+// TestCpusToGroupAffinity 验证 CpusToGroupAffinity 能把 CPU 编号列表按处理器组
+// 聚合为组号到亲和性掩码的映射。
 func TestCpusToGroupAffinity(t *testing.T) {
 	tests := []struct {
 		name string
@@ -161,7 +167,7 @@ func TestCpusToGroupAffinity(t *testing.T) {
 			cpus: []int{0, 1, 2},
 			want: map[int]*GroupAffinity{
 				0: {
-					Mask:  1 | 2 | 4, // Binary OR to combine the masks
+					Mask:  1 | 2 | 4, // 按位或合并多个 CPU 的掩码
 					Group: 0,
 				},
 			},
@@ -199,7 +205,7 @@ func TestCpusToGroupAffinity(t *testing.T) {
 			cpus: makeRange(0, 63),
 			want: map[int]*GroupAffinity{
 				0: {
-					Mask:  0xffffffffffffffff, // All 64 bits set
+					Mask:  0xffffffffffffffff, // 64 位全部置位
 					Group: 0,
 				},
 			},
@@ -209,7 +215,7 @@ func TestCpusToGroupAffinity(t *testing.T) {
 			cpus: makeRange(64, 127),
 			want: map[int]*GroupAffinity{
 				1: {
-					Mask:  0xffffffffffffffff, // All 64 bits set
+					Mask:  0xffffffffffffffff, // 64 位全部置位
 					Group: 1,
 				},
 			},
@@ -217,11 +223,14 @@ func TestCpusToGroupAffinity(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 直接比对聚合结果，用例覆盖单组、多组与整组满掩码。
 			assert.Equalf(t, tt.want, CpusToGroupAffinity(tt.cpus), "CpusToGroupAffinity(%v)", tt.cpus)
 		})
 	}
 }
 
+// Test_convertWinApiToCadvisorApi 验证 convertWinApiToCadvisorApi 能把 Windows 逻辑
+// 处理器信息缓冲区解析为 cadvisor 的 NUMA 节点、核心与线程结构。
 func Test_convertWinApiToCadvisorApi(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tests := []struct {
@@ -333,6 +342,7 @@ func Test_convertWinApiToCadvisorApi(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 缓冲区被截断时应返回错误，其余场景逐项比对解析结果。
 			numOfCores, numOfSockets, nodes, err := convertWinApiToCadvisorApi(logger, tt.buffer)
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -354,6 +364,7 @@ func Test_convertWinApiToCadvisorApi(t *testing.T) {
 	}
 }
 
+// containsThread 判断线程列表是否包含指定线程，用于断言线程集合而非顺序。
 func containsThread(threads []int, thread int) bool {
 	for _, t := range threads {
 		if t == thread {
@@ -363,6 +374,7 @@ func containsThread(threads []int, thread int) bool {
 	return false
 }
 
+// genBuffer 将多条逻辑处理器信息序列化拼接为一个字节缓冲区。
 func genBuffer(infos ...systemLogicalProcessorInformationEx) []byte {
 	var buffer []byte
 	for _, info := range infos {
@@ -371,6 +383,8 @@ func genBuffer(infos ...systemLogicalProcessorInformationEx) []byte {
 	return buffer
 }
 
+// createProcessorRelationships 按给定 CPU 列表构造模拟的 Windows 处理器关系缓冲区，
+// 包含处理器核心、NUMA 节点与处理器封装三类关系记录。
 func createProcessorRelationships(cpus []int) []byte {
 	groups := CpusToGroupAffinity(cpus)
 	grouplen := len(groups)
@@ -412,11 +426,16 @@ func createProcessorRelationships(cpus []int) []byte {
 const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX_SIZE = 8
 const PROCESSOR_RELATIONSHIP_SIZE = 24
 const NUMA_NODE_RELATIONSHIP_SIZE = 24
-const GROUP_AFFINITY_SIZE = int(unsafe.Sizeof(GroupAffinity{})) // this one is known at compile time
 
+// GROUP_AFFINITY_SIZE 在编译期即可确定，因此直接用 unsafe.Sizeof 计算。
+const GROUP_AFFINITY_SIZE = int(unsafe.Sizeof(GroupAffinity{}))
+
+// structToBytes 将单条逻辑处理器信息按 Windows API 的内存布局序列化为字节，
+// 以便构造供解析函数使用的测试缓冲区。
 func structToBytes(info systemLogicalProcessorInformationEx) []byte {
 	var pri []byte = (*(*[SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX_SIZE]byte)(unsafe.Pointer(&info)))[:SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX_SIZE]
 
+	// 根据 data 的具体类型追加对应的结构体字节与组亲和性数组。
 	switch info.data.(type) {
 	case processorRelationship:
 		rel := info.data.(processorRelationship)

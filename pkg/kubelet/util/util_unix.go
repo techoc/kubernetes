@@ -24,11 +24,11 @@ import (
 )
 
 const (
-	// unixProtocol is the network protocol of unix socket.
+	// unixProtocol 是 unix socket 的网络协议名。
 	unixProtocol = "unix"
 )
 
-// LocalEndpoint returns the full path to a unix socket at the given endpoint
+// LocalEndpoint 返回指定端点下 unix socket 的完整路径。
 func LocalEndpoint(path, file string) (string, error) {
 	u := url.URL{
 		Scheme: unixProtocol,
@@ -37,7 +37,7 @@ func LocalEndpoint(path, file string) (string, error) {
 	return filepath.Join(u.String(), file+".sock"), nil
 }
 
-// NormalizePath is a no-op for Linux for now
+// NormalizePath 在 Linux 上暂时是空操作，原样返回路径。
 func NormalizePath(path string) string {
 	return path
 }

@@ -29,13 +29,8 @@ import (
 	kubefeatures "k8s.io/kubernetes/pkg/features"
 )
 
-// defaultPodLimitsForDownwardAPI copies the input pod, and optional container,
-// and applies default resource limits. it returns a copy of the input pod,
-// and a copy of the input container (if specified) with default limits
-// applied.
-// If a container has no limits specified, it defaults to the pod-level resources.
-// If neither container-level nor pod-level resources limits are specified, it defaults
-// to the node's allocatable resources.
+// defaultPodLimitsForDownwardAPI 复制 Pod 与可选容器，并填充默认资源 limit，
+// 供 Downward API 暴露 limits 时使用。
 func (kl *Kubelet) defaultPodLimitsForDownwardAPI(ctx context.Context, pod *corev1.Pod, container *corev1.Container) (*corev1.Pod, *corev1.Container, error) {
 	logger := klog.FromContext(ctx)
 
@@ -50,9 +45,9 @@ func (kl *Kubelet) defaultPodLimitsForDownwardAPI(ctx context.Context, pod *core
 	allocatable := node.Status.Allocatable
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.PodLevelResources) && resourcehelper.IsPodLevelLimitsSet(pod) {
 		allocatable = allocatable.DeepCopy()
-		// Resources supported by the Downward API
+		// Downward API 支持的资源类型。
 		for _, resource := range []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory, corev1.ResourceEphemeralStorage} {
-			// Skip resources not supported by Pod Level Resources
+			// 跳过 Pod 级资源不支持的资源类型。
 			if !resourcehelper.IsSupportedPodLevelResource(resource) {
 				continue
 			}

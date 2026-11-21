@@ -14,8 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cm/qos includes the internal helper the Container Manager (cm) uses to perform
-// resource allocation based on Quality of Service.
-// The recommended import alias is `cmqos`.
+// Package cm/qos 包含 Container Manager（cm）按服务质量（QoS）进行资源分配时使用的内部辅助代码。
+// 推荐的导入别名是 `cmqos`。
 
 package qos

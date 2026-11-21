@@ -24,17 +24,15 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 )
 
-// ImplicitContainerPrefix is a container name prefix that will indicate that container was started implicitly (like the pod infra container).
+// ImplicitContainerPrefix 是容器名前缀，表示该容器是被隐式启动的（例如 Pod infra 容器）。
 var ImplicitContainerPrefix = "implicitly required container "
 
-// GenerateContainerRef returns an *v1.ObjectReference which references the given container
-// within the given pod. Returns an error if the reference can't be constructed or the
-// container doesn't actually belong to the pod.
+// GenerateContainerRef 生成指向 Pod 内指定容器的 ObjectReference；
+// 若无法定位容器在 Pod 中的字段路径，则使用隐式容器前缀。
 func GenerateContainerRef(pod *v1.Pod, container *v1.Container) (*v1.ObjectReference, error) {
 	fieldPath, err := fieldPath(pod, container)
 	if err != nil {
-		// TODO: figure out intelligent way to refer to containers that we implicitly
-		// start (like the pod infra container). This is not a good way, ugh.
+		// TODO: 需要更合理的方式引用隐式启动的容器（如 Pod infra 容器），当前做法并不理想。
 		fieldPath = ImplicitContainerPrefix + container.Name
 	}
 	ref, err := ref.GetPartialReference(legacyscheme.Scheme, pod, fieldPath)
@@ -44,8 +42,7 @@ func GenerateContainerRef(pod *v1.Pod, container *v1.Container) (*v1.ObjectRefer
 	return ref, nil
 }
 
-// fieldPath returns a fieldPath locating container within pod.
-// Returns an error if the container isn't part of the pod.
+// fieldPath 返回容器在 Pod 中的字段路径，依次查找普通、初始化与临时容器。
 func fieldPath(pod *v1.Pod, container *v1.Container) (string, error) {
 	for i := range pod.Spec.Containers {
 		here := &pod.Spec.Containers[i]

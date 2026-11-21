@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestLocalEndpoint 验证 LocalEndpoint 拼接出的 unix socket 完整路径。
 func TestLocalEndpoint(t *testing.T) {
 	tests := []struct {
 		path             string

@@ -31,10 +31,13 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestPodResourceLimitsDefaulting 验证 downward API 的 Pod 资源限制默认化逻辑：
+// 未设置限制的维度应回退到节点可分配量；启用 PodLevelResources 时优先使用 Pod 级限制。
 func TestPodResourceLimitsDefaulting(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	tk := newTestKubelet(t, true)
 	defer tk.Cleanup()
+	// 构造一个可分配 6 CPU / 4Gi 内存的节点，作为限制回退的上限。
 	tk.kubelet.nodeLister = &testNodeLister{
 		nodes: []*v1.Node{
 			{
@@ -50,6 +53,7 @@ func TestPodResourceLimitsDefaulting(t *testing.T) {
 			},
 		},
 	}
+	// 用例覆盖容器级限制为空/部分设置，以及 Pod 级限制与容器级限制的组合。
 	cases := []struct {
 		pod                      *v1.Pod
 		expected                 *v1.Pod
@@ -97,6 +101,7 @@ func TestPodResourceLimitsDefaulting(t *testing.T) {
 			podLevelResourcesEnabled: true,
 		},
 	}
+	// 逐用例切换特性门控后调用 defaultPodLimitsForDownwardAPI，并做语义深比较。
 	as := assert.New(t)
 	for idx, tc := range cases {
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, kubefeatures.PodLevelResources, tc.podLevelResourcesEnabled)
@@ -108,8 +113,10 @@ func TestPodResourceLimitsDefaulting(t *testing.T) {
 	}
 }
 
+// getPod 构造只设置容器级限制的 Pod；空字符串表示该维度不设置限制。
 func getPod(cpuLimit, memoryLimit string) *v1.Pod {
 	resources := v1.ResourceRequirements{}
+	// 至少一个维度有值时才创建 Limits map，避免空 map 影响默认化判断。
 	if cpuLimit != "" || memoryLimit != "" {
 		resources.Limits = make(v1.ResourceList)
 	}
@@ -131,6 +138,8 @@ func getPod(cpuLimit, memoryLimit string) *v1.Pod {
 	}
 }
 
+// getPodWithPodLevelResources 在 getPod 基础上补充 Pod 级限制，
+// 参数依次为 Pod 级与容器级的 CPU/内存限制。
 func getPodWithPodLevelResources(plCPULimit, plMemoryLimit, clCPULimit, clMemoryLimit string) *v1.Pod {
 	pod := getPod(clCPULimit, clMemoryLimit)
 	resources := v1.ResourceRequirements{}

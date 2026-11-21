@@ -37,11 +37,14 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// NewTestBitMask 构造测试用位掩码。
 func NewTestBitMask(sockets ...int) bitmask.BitMask {
 	s, _ := bitmask.NewBitMask(sockets...)
 	return s
 }
 
+// TestNewManager 校验策略名与策略选项解析，以及 NUMA 节点数上限、
+// 距离信息不可用等错误路径。
 func TestNewManager(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	numaDistanceErr := "error getting NUMA distances from cadvisor"
@@ -155,6 +158,7 @@ func TestNewManager(t *testing.T) {
 	for _, tc := range tcases {
 		topology := tc.topology
 
+		// 错误路径只比较错误消息子串；成功路径则解包 scope 检查策略名。
 		mngr, err := NewManager(logger, topology, tc.policyName, "container", tc.policyOptions)
 		if tc.expectedError != nil {
 			if !strings.Contains(err.Error(), tc.expectedError.Error()) {
@@ -175,6 +179,7 @@ func TestNewManager(t *testing.T) {
 	}
 }
 
+// TestManagerScope 校验 scope 名称（container/pod）的解析。
 func TestManagerScope(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tcases := []struct {
@@ -216,6 +221,7 @@ func TestManagerScope(t *testing.T) {
 	}
 }
 
+// mockHintProvider 是返回预置拓扑提示的 HintProvider 桩。
 type mockHintProvider struct {
 	th map[string][]TopologyHint
 	//TODO: Add this field and add some tests to make sure things error out
@@ -223,33 +229,40 @@ type mockHintProvider struct {
 	//allocateError error
 }
 
+// GetTopologyHints 固定返回预置的容器级提示。
 func (m *mockHintProvider) GetTopologyHints(logger klog.Logger, pod *v1.Pod, container *v1.Container, _ lifecycle.Operation) map[string][]TopologyHint {
 	return m.th
 }
 
+// GetPodTopologyHints 固定返回预置的 Pod 级提示。
 func (m *mockHintProvider) GetPodTopologyHints(logger klog.Logger, pod *v1.Pod, _ lifecycle.Operation) map[string][]TopologyHint {
 	return m.th
 }
 
+// AllocatePod 为空实现，始终成功。
 func (m *mockHintProvider) AllocatePod(logger klog.Logger, pod *v1.Pod, _ lifecycle.Operation) error {
 	return nil
 }
 
+// Allocate 为空实现，始终成功。
 func (m *mockHintProvider) Allocate(ctx context.Context, pod *v1.Pod, container *v1.Container, _ lifecycle.Operation) error {
 	//return allocateError
 	return nil
 }
 
+// mockPolicy 内嵌 nonePolicy，并记录 Merge 收到的提示。
 type mockPolicy struct {
 	nonePolicy
 	ph []map[string][]TopologyHint
 }
 
+// Merge 记录各 provider 的提示并返回一个可接受的空提示。
 func (p *mockPolicy) Merge(logger klog.Logger, providersHints []map[string][]TopologyHint) (TopologyHint, bool) {
 	p.ph = providersHints
 	return TopologyHint{}, true
 }
 
+// TestAddHintProvider 校验 HintProvider 被追加到 scope 的 provider 列表。
 func TestAddHintProvider(t *testing.T) {
 	tcases := []struct {
 		name string
@@ -277,6 +290,8 @@ func TestAddHintProvider(t *testing.T) {
 	}
 }
 
+// TestAdmit 表驱动校验容器 scope 与 Pod scope 的准入结果，
+// 覆盖 none/best-effort/restricted/single-numa-node 策略。
 func TestAdmit(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	numaInfo := &NUMAInfo{
@@ -558,6 +573,7 @@ func TestAdmit(t *testing.T) {
 		},
 	}
 	for _, tc := range tcases {
+		// 同一组用例分别在容器 scope 与 Pod scope 下执行，确保两种 scope 行为一致。
 		ctnScopeManager := manager{}
 		ctnScopeManager.scope = NewContainerScope(tc.policy)
 		ctnScopeManager.scope.(*containerScope).hintProviders = tc.hp
@@ -583,7 +599,7 @@ func TestAdmit(t *testing.T) {
 			Pod: pod,
 		}
 
-		// Container scope Admit
+		// 容器 scope 的准入结果。
 		ctnActual := ctnScopeManager.Admit(tCtx, &podAttr)
 		if ctnActual.Admit != tc.expected {
 			t.Errorf("Error occurred, expected Admit in result to be %v got %v", tc.expected, ctnActual.Admit)
@@ -592,7 +608,7 @@ func TestAdmit(t *testing.T) {
 			t.Errorf("Error occurred, expected Reason in result to be %v got %v", ErrorTopologyAffinity, ctnActual.Reason)
 		}
 
-		// Pod scope Admit
+		// Pod scope 的准入结果。
 		podActual := podScopeManager.Admit(tCtx, &podAttr)
 		if podActual.Admit != tc.expected {
 			t.Errorf("Error occurred, expected Admit in result to be %v got %v", tc.expected, podActual.Admit)
@@ -603,6 +619,8 @@ func TestAdmit(t *testing.T) {
 	}
 }
 
+// trackingHintProvider 记录各回调是否被调用，用于断言不同特性组合
+// 实际走的代码路径。
 type trackingHintProvider struct {
 	podHintsCalled          bool
 	containerHintsCalled    bool
@@ -611,26 +629,32 @@ type trackingHintProvider struct {
 	hints                   map[string][]TopologyHint
 }
 
+// GetTopologyHints 标记容器级提示查询被调用，并返回预置提示。
 func (m *trackingHintProvider) GetTopologyHints(logger klog.Logger, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) map[string][]TopologyHint {
 	m.containerHintsCalled = true
 	return m.hints
 }
 
+// GetPodTopologyHints 标记 Pod 级提示查询被调用，并返回预置提示。
 func (m *trackingHintProvider) GetPodTopologyHints(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) map[string][]TopologyHint {
 	m.podHintsCalled = true
 	return m.hints
 }
 
+// AllocatePod 标记 Pod 级分配被调用，并返回成功。
 func (m *trackingHintProvider) AllocatePod(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) error {
 	m.allocatePodCalled = true
 	return nil
 }
 
+// Allocate 标记容器级分配被调用，并返回成功。
 func (m *trackingHintProvider) Allocate(ctx context.Context, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) error {
 	m.allocateContainerCalled = true
 	return nil
 }
 
+// TestAdmitWithPodLevelResources 校验 PodLevelResources 与 PodLevelResourceManagers
+// 两个门控组合时，Pod scope 选择 Pod 级还是容器级流程。
 func TestAdmitWithPodLevelResources(t *testing.T) {
 	numaInfo := &NUMAInfo{
 		Nodes: []int{0, 1},
@@ -730,10 +754,12 @@ func TestAdmitWithPodLevelResources(t *testing.T) {
 
 	for _, tc := range tcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试独立设置门控，避免特性状态在用例之间泄漏。
 			tCtx := ktesting.Init(t)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, tc.podLevelResourcesEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResourceManagers, tc.podLevelResourceManagersEnabled)
 
+			// 每个子测试新建 tracker，避免调用标记在用例间复用。
 			tracker := &trackingHintProvider{
 				hints: map[string][]TopologyHint{
 					"resource": {

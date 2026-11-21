@@ -33,7 +33,7 @@ import (
 	utiltrace "k8s.io/utils/trace"
 )
 
-// volumeStatCalculator calculates volume metrics for a given pod periodically in the background and caches the result
+// volumeStatCalculator 在后台周期性计算指定 Pod 的卷指标并缓存结果。
 type volumeStatCalculator struct {
 	statsProvider Provider
 	jitterPeriod  time.Duration
@@ -45,14 +45,13 @@ type volumeStatCalculator struct {
 	eventRecorder record.EventRecorder
 }
 
-// PodVolumeStats encapsulates the VolumeStats for a pod.
-// It consists of two lists, for local ephemeral volumes, and for persistent volumes respectively.
+// PodVolumeStats 封装 Pod 的卷统计，分别包含本地临时卷与持久卷两个列表。
 type PodVolumeStats struct {
 	EphemeralVolumes  []stats.VolumeStats
 	PersistentVolumes []stats.VolumeStats
 }
 
-// newVolumeStatCalculator creates a new VolumeStatCalculator
+// newVolumeStatCalculator 创建新的卷统计计算器。
 func newVolumeStatCalculator(statsProvider Provider, jitterPeriod time.Duration, pod *v1.Pod, eventRecorder record.EventRecorder) *volumeStatCalculator {
 	return &volumeStatCalculator{
 		statsProvider: statsProvider,
@@ -63,8 +62,9 @@ func newVolumeStatCalculator(statsProvider Provider, jitterPeriod time.Duration,
 	}
 }
 
-// StartOnce starts pod volume calc that will occur periodically in the background until s.StopOnce is called
+// StartOnce 启动后台周期性卷统计，直到调用 StopOnce 才停止。
 func (s *volumeStatCalculator) StartOnce(logger klog.Logger) *volumeStatCalculator {
+	// 用 sync.Once 保证只启动一个后台 goroutine。
 	s.startO.Do(func() {
 		go wait.JitterUntil(func() {
 			s.calcAndStoreStats(logger)
@@ -73,34 +73,37 @@ func (s *volumeStatCalculator) StartOnce(logger klog.Logger) *volumeStatCalculat
 	return s
 }
 
-// StopOnce stops background pod volume calculation.  Will not stop a currently executing calculations until
-// they complete their current iteration.
+// StopOnce 停止后台卷统计；正在执行的一轮计算会先完成。
 func (s *volumeStatCalculator) StopOnce() *volumeStatCalculator {
 	s.stopO.Do(func() {
+		// 关闭停止通道，JitterUntil 循环随之退出。
 		close(s.stopChannel)
 	})
 	return s
 }
 
-// getLatest returns the most recent PodVolumeStats from the cache
+// GetLatest 从缓存返回最近的 PodVolumeStats。
 func (s *volumeStatCalculator) GetLatest() (PodVolumeStats, bool) {
 	result := s.latest.Load()
+	// 尚未计算过时返回 false，调用方据此区分“无数据”与“零值”。
 	if result == nil {
 		return PodVolumeStats{}, false
 	}
 	return result.(PodVolumeStats), true
 }
 
-// calcAndStoreStats calculates PodVolumeStats for a given pod and writes the result to the s.latest cache.
-// If the pod references PVCs, the prometheus metrics for those are updated with the result.
+// calcAndStoreStats 计算指定 Pod 的 PodVolumeStats 并写入 s.latest 缓存。
+// 若 Pod 引用了 PVC，同时更新这些 PVC 对应的 Prometheus 指标。
 func (s *volumeStatCalculator) calcAndStoreStats(logger klog.Logger) {
-	// Find all Volumes for the Pod
+	// 获取 Pod 的全部普通卷与块设备卷。
 	volumes, found := s.statsProvider.ListVolumesForPod(s.pod.UID)
 	blockVolumes, bvFound := s.statsProvider.ListBlockVolumesForPod(s.pod.UID)
+	// 两类卷都不存在时无需更新缓存。
 	if !found && !bvFound {
 		return
 	}
 
+	// 合并普通卷与支持指标采集的块设备卷。
 	metricVolumes := make(map[string]volume.MetricsProvider)
 
 	if found {
@@ -110,11 +113,10 @@ func (s *volumeStatCalculator) calcAndStoreStats(logger klog.Logger) {
 	}
 	if bvFound {
 		for name, v := range blockVolumes {
-			// Only add the blockVolume if it implements the MetricsProvider interface
+			// 只有实现 MetricsProvider 接口的块设备卷才纳入采集。
 			if _, ok := v.(volume.MetricsProvider); ok {
-				// Some drivers inherit the MetricsProvider interface from Filesystem
-				// mode volumes, but do not implement it for Block mode. Checking
-				// SupportsMetrics() will prevent panics in that case.
+				// 部分驱动从文件系统模式卷继承了 MetricsProvider 接口，但在块设备模式下并未实现；
+				// 检查 SupportsMetrics() 可以避免在这种情况下 panic。
 				if v.SupportsMetrics() {
 					metricVolumes[name] = v
 				}
@@ -122,29 +124,30 @@ func (s *volumeStatCalculator) calcAndStoreStats(logger klog.Logger) {
 		}
 	}
 
-	// Get volume specs for the pod - key'd by volume name
+	// 按卷名索引 Pod 的卷规格，供后续查找 PVC 引用。
 	volumesSpec := make(map[string]v1.Volume, len(s.pod.Spec.Volumes))
 	for _, v := range s.pod.Spec.Volumes {
 		volumesSpec[v.Name] = v
 	}
 
-	// Call GetMetrics on each Volume and copy the result to a new VolumeStats.FsStats
+	// 逐个卷调用 GetMetrics，并把结果转换为 VolumeStats.FsStats。
 	var ephemeralStats []stats.VolumeStats
 	var persistentStats []stats.VolumeStats
 	for name, v := range metricVolumes {
 		metric, err := func() (*volume.Metrics, error) {
+			// 单个卷的指标采集可能耗时较长，超过 1 秒时记录 trace 日志。
 			trace := utiltrace.New(fmt.Sprintf("Calculate volume metrics of %v for pod %v/%v", name, s.pod.Namespace, s.pod.Name))
 			defer trace.LogIfLong(1 * time.Second)
 			return v.GetMetrics()
 		}()
 		if err != nil {
-			// Expected for Volumes that don't support Metrics
+			// 不支持指标采集的卷属于预期情况，不记录错误日志。
 			if !volume.IsNotSupported(err) {
 				logger.V(4).Info("Failed to calculate volume metrics", "pod", klog.KObj(s.pod), "podUID", s.pod.UID, "volumeName", name, "err", err)
 			}
 			continue
 		}
-		// Lookup the volume spec and add a 'PVCReference' for volumes that reference a PVC
+		// 查找卷规格，为引用 PVC 的卷补充 PVCReference。
 		volSpec := volumesSpec[name]
 		var pvcRef *stats.PVCReference
 		if pvcSource := volSpec.PersistentVolumeClaim; pvcSource != nil {
@@ -152,6 +155,7 @@ func (s *volumeStatCalculator) calcAndStoreStats(logger klog.Logger) {
 				Name:      pvcSource.ClaimName,
 				Namespace: s.pod.GetNamespace(),
 			}
+			// 临时卷的 PVC 名称由 Pod 名与卷名自动生成。
 		} else if volSpec.Ephemeral != nil {
 			pvcRef = &stats.PVCReference{
 				Name:      ephemeral.VolumeClaimName(s.pod, &volSpec),
@@ -159,6 +163,7 @@ func (s *volumeStatCalculator) calcAndStoreStats(logger klog.Logger) {
 			}
 		}
 		volumeStats := s.parsePodVolumeStats(name, pvcRef, metric, volSpec)
+		// 本地临时卷归入临时卷列表，其余归入持久卷列表。
 		if util.IsLocalEphemeralVolume(volSpec) {
 			ephemeralStats = append(ephemeralStats, volumeStats)
 		} else {
@@ -167,18 +172,19 @@ func (s *volumeStatCalculator) calcAndStoreStats(logger klog.Logger) {
 
 	}
 
-	// Store the new stats
+	// 原子地更新缓存，读取方无需加锁。
 	s.latest.Store(PodVolumeStats{EphemeralVolumes: ephemeralStats,
 		PersistentVolumes: persistentStats})
 }
 
-// parsePodVolumeStats converts (internal) volume.Metrics to (external) stats.VolumeStats structures
+// parsePodVolumeStats 把内部的 volume.Metrics 转换为对外的 stats.VolumeStats 结构。
 func (s *volumeStatCalculator) parsePodVolumeStats(podName string, pvcRef *stats.PVCReference, metric *volume.Metrics, volSpec v1.Volume) stats.VolumeStats {
 
 	var (
 		available, capacity, used, inodes, inodesFree, inodesUsed uint64
 	)
 
+	// 指标字段可能为 nil，逐项判空后转换为零值。
 	if metric.Available != nil {
 		available = uint64(metric.Available.Value())
 	}

@@ -36,10 +36,17 @@ import (
 	"k8s.io/kubernetes/pkg/security/apparmor"
 )
 
+// containerByCreatedThenID 按创建时间倒序、创建时间相同时按 ID 升序排列容器，
+// 实现 sort.Interface。
 type containerByCreatedThenID []*runtimeapi.Container
 
-func (b containerByCreatedThenID) Len() int      { return len(b) }
+// Len 返回切片长度，实现 sort.Interface。
+func (b containerByCreatedThenID) Len() int { return len(b) }
+
+// Swap 交换索引 i 和 j 处的元素，实现 sort.Interface。
 func (b containerByCreatedThenID) Swap(i, j int) { b[i], b[j] = b[j], b[i] }
+
+// Less 比较两个容器：创建时间较新的排在前面，创建时间相同时 ID 较小的排在前面。
 func (b containerByCreatedThenID) Less(i, j int) bool {
 	if b[i].CreatedAt != b[j].CreatedAt {
 		return b[i].CreatedAt > (b[j].CreatedAt)
@@ -47,11 +54,17 @@ func (b containerByCreatedThenID) Less(i, j int) bool {
 	return b[i].Id < b[j].Id
 }
 
-// Newest first.
+// podSandboxByCreatedThenID 按 attempt 号与创建时间倒序排列 Pod sandbox，最新的排在前面，
+// 实现 sort.Interface。
 type podSandboxByCreatedThenID []*runtimeapi.PodSandbox
 
-func (p podSandboxByCreatedThenID) Len() int      { return len(p) }
+// Len 返回切片长度，实现 sort.Interface。
+func (p podSandboxByCreatedThenID) Len() int { return len(p) }
+
+// Swap 交换索引 i 和 j 处的元素，实现 sort.Interface。
 func (p podSandboxByCreatedThenID) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+
+// Less 优先比较 attempt 号，其次比较创建时间（倒序），最后按 ID 升序打破平局。
 func (p podSandboxByCreatedThenID) Less(i, j int) bool {
 	if p[i].Metadata == nil || p[j].Metadata == nil || (p[i].Metadata.Attempt == p[j].Metadata.Attempt) {
 		if p[i].CreatedAt != p[j].CreatedAt {
@@ -62,13 +75,19 @@ func (p podSandboxByCreatedThenID) Less(i, j int) bool {
 	return p[i].Metadata.Attempt > p[j].Metadata.Attempt
 }
 
+// containerStatusByCreated 按创建时间倒序排列容器状态，实现 sort.Interface。
 type containerStatusByCreated []*kubecontainer.Status
 
-func (c containerStatusByCreated) Len() int           { return len(c) }
-func (c containerStatusByCreated) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+// Len 返回切片长度，实现 sort.Interface。
+func (c containerStatusByCreated) Len() int { return len(c) }
+
+// Swap 交换索引 i 和 j 处的元素，实现 sort.Interface。
+func (c containerStatusByCreated) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
+
+// Less 按创建时间倒序比较，较新的状态排在前面。
 func (c containerStatusByCreated) Less(i, j int) bool { return c[i].CreatedAt.After(c[j].CreatedAt) }
 
-// toKubeContainerState converts runtimeapi.ContainerState to kubecontainer.State.
+// toKubeContainerState 把 runtimeapi.ContainerState 转换为 kubecontainer.State。
 func toKubeContainerState(state runtimeapi.ContainerState) kubecontainer.State {
 	switch state {
 	case runtimeapi.ContainerState_CONTAINER_CREATED:
@@ -84,7 +103,7 @@ func toKubeContainerState(state runtimeapi.ContainerState) kubecontainer.State {
 	return kubecontainer.ContainerStateUnknown
 }
 
-// toRuntimeProtocol converts v1.Protocol to runtimeapi.Protocol.
+// toRuntimeProtocol 把 v1.Protocol 转换为 runtimeapi.Protocol，未知协议默认按 TCP 处理。
 func toRuntimeProtocol(logger klog.Logger, protocol v1.Protocol) runtimeapi.Protocol {
 	switch protocol {
 	case v1.ProtocolTCP:
@@ -99,13 +118,13 @@ func toRuntimeProtocol(logger klog.Logger, protocol v1.Protocol) runtimeapi.Prot
 	return runtimeapi.Protocol_TCP
 }
 
-// toKubeContainer converts runtimeapi.Container to kubecontainer.Container.
+// toKubeContainer 把 runtimeapi.Container 转换为 kubecontainer.Container。
 func (m *kubeGenericRuntimeManager) toKubeContainer(ctx context.Context, c *runtimeapi.Container) (*kubecontainer.Container, error) {
 	if c == nil || c.Id == "" || c.Image == nil {
 		return nil, fmt.Errorf("unable to convert a nil pointer to a runtime container")
 	}
 
-	// Keep backwards compatibility to older runtimes, c.ImageId has been added in v1.30
+	// 兼容旧版运行时：c.ImageId 是 v1.30 才加入的字段，缺失时回退到 ImageRef。
 	imageID := c.ImageRef
 	if c.ImageId != "" {
 		imageID = c.ImageId
@@ -126,9 +145,8 @@ func (m *kubeGenericRuntimeManager) toKubeContainer(ctx context.Context, c *runt
 	}, nil
 }
 
-// sandboxToKubeContainer converts runtimeapi.PodSandbox to kubecontainer.Container.
-// This is only needed because we need to return sandboxes as if they were
-// kubecontainer.Containers to avoid substantial changes to PLEG.
+// sandboxToKubeContainer 把 runtimeapi.PodSandbox 转换为 kubecontainer.Container。
+// 这样做只是为了让 PLEG 把 sandbox 当作 kubecontainer.Container 处理，避免对 PLEG 做大改。
 // TODO: Remove this once it becomes obsolete.
 func (m *kubeGenericRuntimeManager) sandboxToKubeContainer(s *runtimeapi.PodSandbox) (*kubecontainer.Container, error) {
 	if s == nil || s.Id == "" {
@@ -143,8 +161,7 @@ func (m *kubeGenericRuntimeManager) sandboxToKubeContainer(s *runtimeapi.PodSand
 	}, nil
 }
 
-// getImageUser gets uid or user name that will run the command(s) from image. The function
-// guarantees that only one of them is set.
+// getImageUser 获取运行镜像命令所使用的 uid 或用户名，并保证两者最多只设置一个。
 func (m *kubeGenericRuntimeManager) getImageUser(ctx context.Context, image string) (*int64, string, error) {
 	resp, err := m.imageService.ImageStatus(ctx, &runtimeapi.ImageSpec{Image: image}, false)
 	if err != nil {
@@ -162,16 +179,16 @@ func (m *kubeGenericRuntimeManager) getImageUser(ctx context.Context, image stri
 		}
 	}
 
-	// If non of them is set, treat it as root.
+	// 两者都未设置时，按 root 处理。
 	return new(int64), "", nil
 }
 
-// isInitContainerFailed returns true under the following conditions:
-// 1. container has exited and exitcode is not zero.
-// 2. container is in unknown state.
-// 3. container gets OOMKilled.
+// isInitContainerFailed 在满足以下任一条件时返回 true：
+// 1. 容器已退出且退出码非零。
+// 2. 容器处于未知状态。
+// 3. 容器被 OOMKilled。
 func isInitContainerFailed(status *kubecontainer.Status) bool {
-	// When oomkilled occurs, init container should be considered as a failure.
+	// 发生 OOMKilled 时，init 容器应被视为失败。
 	if status.Reason == "OOMKilled" {
 		return true
 	}
@@ -187,12 +204,10 @@ func isInitContainerFailed(status *kubecontainer.Status) bool {
 	return false
 }
 
-// GetBackoffKey generates a key (string) to uniquely identify a (pod, container) tuple for tracking
-// container backoff. The key should include any content of the container that is tied to the
-// backoff, so that any change generates a new key.
+// GetBackoffKey 生成用于唯一标识 (pod, container) 的退避键，以便跟踪容器退避。
+// 该键应包含与退避相关的容器内容，使得任何变化都会生成新的键。
 func GetBackoffKey(pod *v1.Pod, container *v1.Container) string {
-	// Include stable identifiers (name, namespace, uid) as well as any
-	// fields that should reset the backoff when changed.
+	// 包含稳定标识（name、namespace、uid）以及变化时应重置退避的字段。
 	key := []string{
 		pod.Name,
 		pod.Namespace,
@@ -206,34 +221,33 @@ func GetBackoffKey(pod *v1.Pod, container *v1.Container) string {
 	return strconv.FormatUint(hash.Sum64(), 16)
 }
 
-// logPathDelimiter is the delimiter used in the log path.
+// logPathDelimiter 是日志路径中使用的分隔符。
 const logPathDelimiter = "_"
 
-// buildContainerLogsPath builds log path for container relative to pod logs directory.
+// buildContainerLogsPath 构建容器日志相对于 Pod 日志目录的路径。
 func buildContainerLogsPath(containerName string, restartCount int) string {
 	return filepath.Join(containerName, fmt.Sprintf("%d.log", restartCount))
 }
 
-// BuildContainerLogsDirectory builds absolute log directory path for a container in pod.
+// BuildContainerLogsDirectory 构建 Pod 内某容器日志目录的绝对路径。
 func BuildContainerLogsDirectory(podLogsDir, podNamespace, podName string, podUID types.UID, containerName string) string {
 	return filepath.Join(BuildPodLogsDirectory(podLogsDir, podNamespace, podName, podUID), containerName)
 }
 
-// BuildPodLogsDirectory builds absolute log directory path for a pod sandbox.
+// BuildPodLogsDirectory 构建 Pod sandbox 日志目录的绝对路径。
 func BuildPodLogsDirectory(podLogsDir, podNamespace, podName string, podUID types.UID) string {
 	return filepath.Join(podLogsDir, strings.Join([]string{podNamespace, podName,
 		string(podUID)}, logPathDelimiter))
 }
 
-// parsePodUIDFromLogsDirectory parses pod logs directory name and returns the pod UID.
-// It supports both the old pod log directory /var/log/pods/UID, and the new pod log
-// directory /var/log/pods/NAMESPACE_NAME_UID.
+// parsePodUIDFromLogsDirectory 解析 Pod 日志目录名并返回 Pod UID。
+// 同时支持旧的日志目录 /var/log/pods/UID 和新的日志目录 /var/log/pods/NAMESPACE_NAME_UID。
 func parsePodUIDFromLogsDirectory(name string) types.UID {
 	parts := strings.Split(name, logPathDelimiter)
 	return types.UID(parts[len(parts)-1])
 }
 
-// toKubeRuntimeStatus converts the runtimeapi.RuntimeStatus to kubecontainer.RuntimeStatus.
+// toKubeRuntimeStatus 把 runtimeapi.RuntimeStatus 转换为 kubecontainer.RuntimeStatus。
 func toKubeRuntimeStatus(status *runtimeapi.RuntimeStatus, handlers []*runtimeapi.RuntimeHandler, features *runtimeapi.RuntimeFeatures) *kubecontainer.RuntimeStatus {
 	conditions := []kubecontainer.RuntimeCondition{}
 	for _, c := range status.GetConditions() {
@@ -269,6 +283,8 @@ func toKubeRuntimeStatus(status *runtimeapi.RuntimeStatus, handlers []*runtimeap
 	return &kubecontainer.RuntimeStatus{Conditions: conditions, Handlers: retHandlers, Features: retFeatures}
 }
 
+// fieldSeccompProfile 把 v1.SeccompProfile 转换为 runtimeapi.SecurityProfile。
+// 未设置 profile 时，按 fallbackToRuntimeDefault 决定回退到 RuntimeDefault 还是 Unconfined。
 func fieldSeccompProfile(scmp *v1.SeccompProfile, profileRootPath string, fallbackToRuntimeDefault bool) (*runtimeapi.SecurityProfile, error) {
 	if scmp == nil {
 		if fallbackToRuntimeDefault {
@@ -301,14 +317,15 @@ func fieldSeccompProfile(scmp *v1.SeccompProfile, profileRootPath string, fallba
 	}, nil
 }
 
+// getSeccompProfile 按容器级、Pod 级的优先级解析 seccomp 配置，均未设置时使用回退策略。
 func (m *kubeGenericRuntimeManager) getSeccompProfile(annotations map[string]string, containerName string,
 	podSecContext *v1.PodSecurityContext, containerSecContext *v1.SecurityContext, fallbackToRuntimeDefault bool) (*runtimeapi.SecurityProfile, error) {
-	// container fields are applied first
+	// 容器级字段优先应用
 	if containerSecContext != nil && containerSecContext.SeccompProfile != nil {
 		return fieldSeccompProfile(containerSecContext.SeccompProfile, m.seccompProfileRoot, fallbackToRuntimeDefault)
 	}
 
-	// when container seccomp is not defined, try to apply from pod field
+	// 容器未定义 seccomp 时，尝试应用 Pod 级字段
 	if podSecContext != nil && podSecContext.SeccompProfile != nil {
 		return fieldSeccompProfile(podSecContext.SeccompProfile, m.seccompProfileRoot, fallbackToRuntimeDefault)
 	}
@@ -324,6 +341,8 @@ func (m *kubeGenericRuntimeManager) getSeccompProfile(annotations map[string]str
 	}, nil
 }
 
+// getAppArmorProfile 把 Pod/容器的 AppArmor 配置转换为 runtimeapi.SecurityProfile，
+// 同时返回兼容旧版运行时的废弃 profile 字符串。
 func getAppArmorProfile(pod *v1.Pod, container *v1.Container) (*runtimeapi.SecurityProfile, string, error) {
 	profile := apparmor.GetProfile(pod, container)
 	if profile == nil {
@@ -332,7 +351,7 @@ func getAppArmorProfile(pod *v1.Pod, container *v1.Container) (*runtimeapi.Secur
 
 	var (
 		securityProfile   *runtimeapi.SecurityProfile
-		deprecatedProfile string // Deprecated apparmor profile format, still provided for backwards compatibility with older runtimes.
+		deprecatedProfile string // 已废弃的 apparmor profile 格式，仍为兼容旧版运行时而提供。
 	)
 
 	switch profile.Type {
@@ -359,13 +378,15 @@ func getAppArmorProfile(pod *v1.Pod, container *v1.Container) (*runtimeapi.Secur
 		deprecatedProfile = v1.DeprecatedAppArmorBetaProfileNamePrefix + *profile.LocalhostProfile
 
 	default:
-		// Shouldn't happen.
+		// 不应发生。
 		return nil, "", fmt.Errorf("unknown apparmor profile type: %q", profile.Type)
 	}
 
 	return securityProfile, deprecatedProfile, nil
 }
 
+// mergeResourceConfig 把 update 中非零的字段合并到 source 上，返回新的 ResourceConfig。
+// source 或 update 为 nil 时直接返回另一方。
 func mergeResourceConfig(source, update *cm.ResourceConfig) *cm.ResourceConfig {
 	if source == nil {
 		return update
@@ -416,6 +437,8 @@ func mergeResourceConfig(source, update *cm.ResourceConfig) *cm.ResourceConfig {
 	return &merged
 }
 
+// convertResourceConfigToLinuxContainerResources 把 cm.ResourceConfig 转换为
+// runtimeapi.LinuxContainerResources。
 func convertResourceConfigToLinuxContainerResources(rc *cm.ResourceConfig) *runtimeapi.LinuxContainerResources {
 	if rc == nil {
 		return nil
@@ -449,6 +472,7 @@ func convertResourceConfigToLinuxContainerResources(rc *cm.ResourceConfig) *runt
 	return lcr
 }
 
+// signalNameToRuntimeEnum 建立信号名称到 CRI 信号枚举的映射。
 var signalNameToRuntimeEnum = map[string]runtimeapi.Signal{
 	"SIGABRT":     runtimeapi.Signal_SIGNAL_SIGABRT,
 	"SIGALRM":     runtimeapi.Signal_SIGNAL_SIGALRM,
@@ -517,6 +541,7 @@ var signalNameToRuntimeEnum = map[string]runtimeapi.Signal{
 	"SIGRTMAX":    runtimeapi.Signal_SIGNAL_SIGRTMAX,
 }
 
+// getContainerConfigStopSignal 返回容器配置中指定的停止信号；特性未开启或未设置时返回 nil。
 func getContainerConfigStopSignal(container *v1.Container) (stopsignal *runtimeapi.Signal) {
 	if utilfeature.DefaultFeatureGate.Enabled(features.ContainerStopSignals) {
 		if container.Lifecycle != nil && container.Lifecycle.StopSignal != nil {
@@ -532,6 +557,7 @@ func getContainerConfigStopSignal(container *v1.Container) (stopsignal *runtimea
 	return nil
 }
 
+// runtimeSignalToString 把 CRI 信号枚举转换为 v1.Signal 字符串；未知信号返回空字符串。
 func runtimeSignalToString(signal runtimeapi.Signal) *v1.Signal {
 	var convertedSignal v1.Signal
 	for key, value := range signalNameToRuntimeEnum {

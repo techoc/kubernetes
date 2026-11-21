@@ -30,14 +30,18 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// 固定时间戳，供 fake 指标与断言共用。
 var timeStamp = time.Now()
 
+// fakeWinNodeStatsClient 返回预设的 Windows 节点指标。
 type fakeWinNodeStatsClient struct{}
 
+// startMonitoring 空实现。
 func (f fakeWinNodeStatsClient) startMonitoring(logger klog.Logger) error {
 	return nil
 }
 
+// getNodeMetrics 返回固定的 CPU/内存指标。
 func (f fakeWinNodeStatsClient) getNodeMetrics() (nodeMetrics, error) {
 	return nodeMetrics{
 		cpuUsageCoreNanoSeconds:   123,
@@ -48,12 +52,15 @@ func (f fakeWinNodeStatsClient) getNodeMetrics() (nodeMetrics, error) {
 	}, nil
 }
 
+// getNodeInfo 返回固定的节点信息。
 func (f fakeWinNodeStatsClient) getNodeInfo() nodeInfo {
 	return nodeInfo{
 		kernelVersion:               "v42",
 		memoryPhysicalCapacityBytes: 1.6e+10,
 	}
 }
+
+// getMachineInfo 返回固定的 MachineInfo。
 func (f fakeWinNodeStatsClient) getMachineInfo(logger klog.Logger) (*cadvisorapi.MachineInfo, error) {
 	return &cadvisorapi.MachineInfo{
 		NumCores:       4,
@@ -63,18 +70,22 @@ func (f fakeWinNodeStatsClient) getMachineInfo(logger klog.Logger) (*cadvisorapi
 	}, nil
 }
 
+// getVersionInfo 返回固定的版本信息。
 func (f fakeWinNodeStatsClient) getVersionInfo() (*cadvisorapi.VersionInfo, error) {
 	return &cadvisorapi.VersionInfo{
 		KernelVersion: "v42",
 	}, nil
 }
 
+// TestWinContainerInfos 验证 WinContainerInfos 把节点指标转换为 cadvisor 容器信息。
 func TestWinContainerInfos(t *testing.T) {
 	c := getClient(t)
 
+	// 调用被测方法获取根容器信息。
 	actualRootInfos, err := c.WinContainerInfos()
 	assert.NoError(t, err)
 
+	// 构造期望的容器统计。
 	var stats []*cadvisorapi.ContainerStats
 	stats = append(stats, &cadvisorapi.ContainerStats{
 		Timestamp: timeStamp,
@@ -93,6 +104,7 @@ func TestWinContainerInfos(t *testing.T) {
 			Usage:      12345,
 		},
 	})
+	// 构造期望的根容器信息并逐字段比较。
 	infos := make(map[string]cadvisorapi.ContainerInfo)
 	infos["/"] = cadvisorapi.ContainerInfo{
 		Spec: cadvisorapi.ContainerSpec{
@@ -114,10 +126,12 @@ func TestWinContainerInfos(t *testing.T) {
 	assert.Equal(t, actualRootInfos["/"].Stats[0].Memory, infos["/"].Stats[0].Memory)
 }
 
+// TestWinMachineInfo 验证 WinMachineInfo 返回的机器信息。
 func TestWinMachineInfo(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	c := getClient(t)
 
+	// 调用并比对完整的 MachineInfo。
 	machineInfo, err := c.WinMachineInfo(logger)
 	assert.NoError(t, err)
 	assert.Equal(t, machineInfo, &cadvisorapi.MachineInfo{
@@ -127,6 +141,7 @@ func TestWinMachineInfo(t *testing.T) {
 		SystemUUID:     "E6C8AC43-582B-3575-4E1F-6DA170888906"})
 }
 
+// TestWinVersionInfo 验证 WinVersionInfo 返回的内核版本。
 func TestWinVersionInfo(t *testing.T) {
 	c := getClient(t)
 
@@ -136,16 +151,18 @@ func TestWinVersionInfo(t *testing.T) {
 		KernelVersion: "v42"})
 }
 
+// TestGetDirFsInfo 验证 GetDirFsInfo 对不存在路径返回错误、对真实目录返回容量信息。
 func TestGetDirFsInfo(t *testing.T) {
 	c := getClient(t)
 
-	// Try with a non-existent path.
+	// 先用不存在的路径验证错误信息。
 	_, err := c.GetDirFsInfo("foo/lish")
 	expectedErrMsg := "The system cannot find the path specified."
 	if err == nil || err.Error() != expectedErrMsg {
 		t.Fatalf("expected error message `%s` but got `%v`", expectedErrMsg, err)
 	}
 
+	// 再用真实临时目录验证容量与可用空间非零。
 	dir, err := os.MkdirTemp("", "fsinfo")
 	assert.NoError(t, err)
 	defer os.RemoveAll(dir)
@@ -156,6 +173,7 @@ func TestGetDirFsInfo(t *testing.T) {
 	assert.NotZero(t, fsInfo.Available)
 }
 
+// getClient 创建使用 fake 节点指标客户端的 Client。
 func getClient(t *testing.T) Client {
 	logger, _ := ktesting.NewTestContext(t)
 	f := fakeWinNodeStatsClient{}

@@ -58,136 +58,99 @@ import (
 )
 
 const (
-	// reconcilerLoopSleepPeriod is the amount of time the reconciler loop waits
-	// between successive executions
+	// reconciler 循环两次执行之间的等待时间。
 	reconcilerLoopSleepPeriod = 100 * time.Millisecond
 
-	// desiredStateOfWorldPopulatorLoopSleepPeriod is the amount of time the
-	// DesiredStateOfWorldPopulator loop waits between successive executions
+	// DesiredStateOfWorldPopulator 循环两次执行之间的等待时间。
 	desiredStateOfWorldPopulatorLoopSleepPeriod = 100 * time.Millisecond
 
-	// podAttachAndMountTimeout is the maximum amount of time the
-	// WaitForAttachAndMount call will wait for all volumes in the specified pod
-	// to be attached and mounted. Even though cloud operations can take several
-	// minutes to complete, we set the timeout to 2 minutes because kubelet
-	// will retry in the next sync iteration. This frees the associated
-	// goroutine of the pod to process newer updates if needed (e.g., a delete
-	// request to the pod).
-	// Value is slightly offset from 2 minutes to make timeouts due to this
-	// constant recognizable.
+	// podAttachAndMountTimeout 是 WaitForAttachAndMount 等待指定 Pod 全部卷附加并挂载的上限。
+	// 云操作可能耗时数分钟，但这里只等 2 分钟，因为 kubelet 会在下一轮同步时重试，
+	// 从而释放该 Pod 的 goroutine 去处理更新的请求（例如删除 Pod）。
+	// 取值刻意比 2 分钟多一点，便于从超时时间识别出是本常量触发的超时。
 	podAttachAndMountTimeout = 2*time.Minute + 3*time.Second
 
-	// podAttachAndMountRetryInterval is the amount of time the GetVolumesForPod
-	// call waits before retrying
+	// GetVolumesForPod 重试前的等待间隔。
 	podAttachAndMountRetryInterval = 300 * time.Millisecond
 
-	// waitForAttachTimeout is the maximum amount of time a
-	// operationexecutor.Mount call will wait for a volume to be attached.
-	// Set to 10 minutes because we've seen attach operations take several
-	// minutes to complete for some volume plugins in some cases. While this
-	// operation is waiting it only blocks other operations on the same device,
-	// other devices are not affected.
+	// waitForAttachTimeout 是 operationexecutor.Mount 等待卷附加的上限。
+	// 某些插件的附加操作可能耗时数分钟，因此设为 10 分钟；等待期间只阻塞同一设备上的操作，
+	// 不影响其他设备。
 	waitForAttachTimeout = 10 * time.Minute
 
-	// VolumeAttachmentLimitExceededReason is the reason for rejecting a pod
-	// when the node has reached its volume attachment limit.
+	// VolumeAttachmentLimitExceededReason 是节点卷附加数量达到上限时拒绝 Pod 的原因值。
 	VolumeAttachmentLimitExceededReason = "VolumeAttachmentLimitExceeded"
 )
 
-// VolumeManager runs a set of asynchronous loops that figure out which volumes
-// need to be attached/mounted/unmounted/detached based on the pods scheduled on
-// this node and makes it so.
+// VolumeManager 运行一组异步循环，依据调度到本节点的 Pod 计算需要
+// 附加/挂载/卸载/解附的卷，并执行相应操作。
 type VolumeManager interface {
-	// Starts the volume manager and all the asynchronous loops that it controls
+	// Run 启动卷管理器及其控制的所有异步循环。
 	Run(ctx context.Context, sourcesReady config.SourcesReady)
 
-	// WaitForAttachAndMount processes the volumes referenced in the specified
-	// pod and blocks until they are all attached and mounted (reflected in
-	// actual state of the world).
-	// An error is returned if all volumes are not attached and mounted within
-	// the duration defined in podAttachAndMountTimeout.
+	// WaitForAttachAndMount 处理 Pod 引用的卷，阻塞直到它们全部附加并挂载
+	// （即反映到实际状态中）；超过 podAttachAndMountTimeout 仍未完成则返回错误。
 	WaitForAttachAndMount(ctx context.Context, pod *v1.Pod) error
 
-	// WaitForUnmount processes the volumes referenced in the specified
-	// pod and blocks until they are all unmounted (reflected in the actual
-	// state of the world).
-	// An error is returned if all volumes are not unmounted within
-	// the duration defined in podAttachAndMountTimeout.
+	// WaitForUnmount 处理 Pod 引用的卷，阻塞直到它们全部卸载；超时返回错误。
 	WaitForUnmount(ctx context.Context, pod *v1.Pod) error
 
-	// WaitForAllPodsUnmount is a version of WaitForUnmount that blocks and
-	// waits until all the volumes belonging to all the pods are unmounted.
-	// An error is returned if there's at least one Pod with volumes not unmounted
-	// within the duration defined in podAttachAndMountTimeout.
+	// WaitForAllPodsUnmount 是 WaitForUnmount 的批量版本，等到所有 Pod 的卷都卸载完成；
+	// 只要有一个 Pod 超时未卸载即返回错误。
 	WaitForAllPodsUnmount(ctx context.Context, pods []*v1.Pod) error
 
-	// GetMountedVolumesForPod returns a VolumeMap containing the volumes
-	// referenced by the specified pod that are desired and actually attached and
-	// mounted. The key in the map is the OuterVolumeSpecName (i.e.
-	// pod.Spec.Volumes[x].Name). It returns an empty VolumeMap if pod has no
-	// volumes.
+	// GetMountedVolumesForPod 返回 Pod 引用、且处于期望状态并已实际附加挂载的卷。
+	// 键为外层卷名（pod.Spec.Volumes[x].Name）；Pod 没有卷时返回空映射。
 	GetMountedVolumesForPod(podName types.UniquePodName) container.VolumeMap
 
-	// HasPossiblyMountedVolumesForPod returns whether the pod has
-	// any volumes that are either successfully attached
-	// and mounted or are "uncertain", i.e. a volume plugin may be mounting
-	// them right now.
+	// HasPossiblyMountedVolumesForPod 判断 Pod 是否有已成功挂载或状态不确定
+	// （插件可能正在挂载）的卷。
 	HasPossiblyMountedVolumesForPod(podName types.UniquePodName) bool
 
-	// GetExtraSupplementalGroupsForPod returns a list of the extra
-	// supplemental groups for the Pod. These extra supplemental groups come
-	// from annotations on persistent volumes that the pod depends on.
+	// GetExtraSupplementalGroupsForPod 返回来自 PV 注解的额外补充组。
 	GetExtraSupplementalGroupsForPod(pod *v1.Pod) []int64
 
-	// GetVolumesInUse returns a list of all volumes that implement the volume.Attacher
-	// interface and are currently in use according to the actual and desired
-	// state of the world caches. A volume is considered "in use" as soon as it
-	// is added to the desired state of world, indicating it *should* be
-	// attached to this node and remains "in use" until it is removed from both
-	// the desired state of the world and the actual state of the world, or it
-	// has been unmounted (as indicated in actual state of world).
+	// GetVolumesInUse 返回实现 volume.Attacher 接口、且根据期望/实际状态仍在使用中的卷。
+	// 卷一旦进入期望状态即视为“使用中”（表示它*应*附加到本节点），
+	// 直到同时从期望状态和实际状态移除，或实际状态显示已卸载。
 	GetVolumesInUse() []v1.UniqueVolumeName
 
-	// ReconcilerStatesHasBeenSynced returns true only after the actual states in reconciler
-	// has been synced at least once after kubelet starts so that it is safe to update mounted
-	// volume list retrieved from actual state.
+	// ReconcilerStatesHasBeenSynced 仅在 kubelet 启动后 reconciler 的实际状态至少同步过一次后返回 true，
+	// 此时才可安全地用实际状态更新已挂载卷列表。
 	ReconcilerStatesHasBeenSynced() bool
 
-	// VolumeIsAttached returns true if the given volume is attached to this
-	// node.
+	// VolumeIsAttached 判断指定卷是否已附加到本节点。
 	VolumeIsAttached(volumeName v1.UniqueVolumeName) bool
 
-	// Marks the specified volume as having successfully been reported as "in
-	// use" in the nodes's volume status.
+	// MarkVolumesAsReportedInUse 标记指定卷已成功上报为节点状态中的“使用中”。
 	MarkVolumesAsReportedInUse(volumesReportedAsInUse []v1.UniqueVolumeName)
 
-	// ResizeEphemeralVolume directly triggers a resize of the specified volume.
-	// This is intended for volumes that support online resizing and require
-	// strict coordination with container runtime operations.
+	// ResizeEphemeralVolume 直接触发指定卷的扩容，
+	// 适用于支持在线扩容且需要与容器运行时操作严格协调的卷。
 	ResizeEphemeralVolume(pod *v1.Pod, volumeName string, newSize *resource.Quantity) error
 }
 
-// podStateProvider can determine if a pod is going to be terminated
+// PodStateProvider 用于判断 Pod 是否即将被终止。
 type PodStateProvider interface {
+	// ShouldPodContainersBeTerminating 判断该 Pod 的容器是否应进入终止流程。
 	ShouldPodContainersBeTerminating(k8stypes.UID) bool
+	// ShouldPodRuntimeBeRemoved 判断该 Pod 的运行时资源是否应被清理。
 	ShouldPodRuntimeBeRemoved(k8stypes.UID) bool
 }
 
-// PodManager is the subset of methods the manager needs to observe the actual state of the kubelet.
-// See pkg/k8s.io/kubernetes/pkg/kubelet/pod.Manager for method godoc.
+// PodManager 是卷管理器观察 kubelet 实际状态所需的方法子集。
+// 方法语义见 pkg/k8s.io/kubernetes/pkg/kubelet/pod.Manager。
 type PodManager interface {
+	// GetPodByUID 按 UID 查询 Pod。
 	GetPodByUID(k8stypes.UID) (*v1.Pod, bool)
+	// GetPods 返回当前已知的全部 Pod。
 	GetPods() []*v1.Pod
 }
 
-// NewVolumeManager returns a new concrete instance implementing the
-// VolumeManager interface.
+// NewVolumeManager 返回 VolumeManager 接口的具体实现。
 //
-// kubeClient - kubeClient is the kube API client used by DesiredStateOfWorldPopulator
-// to communicate with the API server to fetch PV and PVC objects
-//
-// volumePluginMgr - the volume plugin manager used to access volume plugins.
-// Must be pre-initialized.
+// kubeClient：DesiredStateOfWorldPopulator 用来访问 API server 获取 PV/PVC 的客户端。
+// volumePluginMgr：访问卷插件的管理器，必须已初始化。
 func NewVolumeManager(
 	controllerAttachDetachEnabled bool,
 	nodeName k8stypes.NodeName,
@@ -256,54 +219,45 @@ func NewVolumeManager(
 	return vm
 }
 
-// volumeManager implements the VolumeManager interface
+// volumeManager 实现 VolumeManager 接口。
 type volumeManager struct {
-	// kubeClient is the kube API client used by DesiredStateOfWorldPopulator to
-	// communicate with the API server to fetch PV and PVC objects
+	// kubeClient 是 DesiredStateOfWorldPopulator 访问 API server 获取 PV/PVC 的客户端。
 	kubeClient clientset.Interface
 
-	// volumePluginMgr is the volume plugin manager used to access volume
-	// plugins. It must be pre-initialized.
+	// volumePluginMgr 是访问卷插件的管理器，必须已初始化。
 	volumePluginMgr *volume.VolumePluginMgr
 
-	// desiredStateOfWorld is a data structure containing the desired state of
-	// the world according to the volume manager: i.e. what volumes should be
-	// attached and which pods are referencing the volumes).
-	// The data structure is populated by the desired state of the world
-	// populator using the kubelet pod manager.
+	// desiredStateOfWorld 保存卷管理器的期望状态：哪些卷应被附加、哪些 Pod 引用了它们。
+	// 该结构由 desired state of world populator 借助 kubelet PodManager 填充。
 	desiredStateOfWorld cache.DesiredStateOfWorld
 
-	// actualStateOfWorld is a data structure containing the actual state of
-	// the world according to the manager: i.e. which volumes are attached to
-	// this node and what pods the volumes are mounted to.
-	// The data structure is populated upon successful completion of attach,
-	// detach, mount, and unmount actions triggered by the reconciler.
+	// actualStateOfWorld 保存卷管理器的实际状态：本节点已附加哪些卷、卷已挂载给哪些 Pod。
+	// reconciler 触发的附加/解附/挂载/卸载操作成功后更新该结构。
 	actualStateOfWorld cache.ActualStateOfWorld
 
-	// operationExecutor is used to start asynchronous attach, detach, mount,
-	// and unmount operations.
+	// operationExecutor 用于发起异步的附加、解附、挂载和卸载操作。
 	operationExecutor operationexecutor.OperationExecutor
 
-	// reconciler runs an asynchronous periodic loop to reconcile the
-	// desiredStateOfWorld with the actualStateOfWorld by triggering attach,
-	// detach, mount, and unmount operations using the operationExecutor.
+	// reconciler 运行异步周期循环，通过 operationExecutor 触发附加/解附/挂载/卸载，
+	// 使实际状态逐步逼近期望状态。
 	reconciler reconciler.Reconciler
 
-	// desiredStateOfWorldPopulator runs an asynchronous periodic loop to
-	// populate the desiredStateOfWorld using the kubelet PodManager.
+	// desiredStateOfWorldPopulator 运行异步周期循环，利用 kubelet PodManager 填充期望状态。
 	desiredStateOfWorldPopulator populator.DesiredStateOfWorldPopulator
 
-	// volumeHealthManager periodically probes CSI volume/storage health and
-	// writes PodStatus.VolumeHealth / CSINode.Status.StorageHealth.
+	// volumeHealthManager 周期探测 CSI 卷/存储健康，并写入 PodStatus.VolumeHealth /
+	// CSINode.Status.StorageHealth。
 	volumeHealthManager volumehealth.Manager
 
-	// csiMigratedPluginManager keeps track of CSI migration status of plugins
+	// csiMigratedPluginManager 跟踪各插件的 CSI 迁移状态。
 	csiMigratedPluginManager csimigration.PluginManager
 
-	// intreeToCSITranslator translates in-tree volume specs to CSI
+	// intreeToCSITranslator 把 in-tree 卷 spec 转换为 CSI spec。
 	intreeToCSITranslator csimigration.InTreeToCSITranslator
 }
 
+// VolumeAttachLimitExceededError 表示节点卷附加数量已达上限而拒绝 Pod，
+// 并携带未挂载、未附加及未进入期望状态的卷，便于定位原因。
 type VolumeAttachLimitExceededError struct {
 	UnmountedVolumes  []string
 	UnattachedVolumes []string
@@ -311,17 +265,19 @@ type VolumeAttachLimitExceededError struct {
 	OriginalError     error
 }
 
+// Error 实现 error 接口，输出各类未完成卷与底层错误。
 func (e *VolumeAttachLimitExceededError) Error() string {
 	return fmt.Sprintf("Node has reached its volume attachment limit, rejecting pod. unmounted volumes=%v, unattached volumes=%v, failed to process volumes=%v: %v",
 		e.UnmountedVolumes, e.UnattachedVolumes, e.VolumesNotInDSW, e.OriginalError)
 }
 
+// Run 启动 populator、reconciler 及可选的卷健康管理器，并注册指标，直到 ctx 取消。
 func (vm *volumeManager) Run(ctx context.Context, sourcesReady config.SourcesReady) {
 	logger := klog.FromContext(ctx)
 	defer runtime.HandleCrashWithContext(ctx)
 
 	if vm.kubeClient != nil {
-		// start informer for CSIDriver
+		// kubeClient 可用时启动 CSIDriver informer，供卷插件感知驱动信息。
 		go vm.volumePluginMgr.Run(ctx.Done())
 	}
 
@@ -341,6 +297,7 @@ func (vm *volumeManager) Run(ctx context.Context, sourcesReady config.SourcesRea
 	logger.Info("Shutting down Kubelet Volume Manager")
 }
 
+// GetMountedVolumesForPod 把内部挂载卷转换为容器运行时使用的 VolumeMap。
 func (vm *volumeManager) GetMountedVolumesForPod(podName types.UniquePodName) container.VolumeMap {
 	podVolumes := make(container.VolumeMap)
 	for name, mountedVolume := range vm.getMountedVolumes(podName) {
@@ -354,14 +311,17 @@ func (vm *volumeManager) GetMountedVolumesForPod(podName types.UniquePodName) co
 	return podVolumes
 }
 
+// HasPossiblyMountedVolumesForPod 判断实际状态中是否存在该 Pod 可能已挂载的卷。
 func (vm *volumeManager) HasPossiblyMountedVolumesForPod(podName types.UniquePodName) bool {
 	return len(vm.actualStateOfWorld.GetPossiblyMountedVolumesForPod(podName)) > 0
 }
 
+// GetExtraSupplementalGroupsForPod 汇总卷 GID 注解带来的额外补充组，并剔除 Pod 已声明的组。
 func (vm *volumeManager) GetExtraSupplementalGroupsForPod(pod *v1.Pod) []int64 {
 	podName := util.GetUniquePodName(pod)
 	supplementalGroups := sets.New[string]()
 
+	// 卷 GID 注解可能带来 Pod 未显式声明的补充组。
 	for _, mountedVolume := range vm.actualStateOfWorld.GetMountedVolumesForPod(podName) {
 		if mountedVolume.VolumeGIDValue != "" {
 			supplementalGroups.Insert(mountedVolume.VolumeGIDValue)
@@ -381,10 +341,10 @@ func (vm *volumeManager) GetExtraSupplementalGroupsForPod(pod *v1.Pod) []int64 {
 	return result
 }
 
+// GetVolumesInUse 合并期望与实际状态中可附加的卷，排序去重后返回。
 func (vm *volumeManager) GetVolumesInUse() []v1.UniqueVolumeName {
-	// Report volumes in desired state of world and actual state of world so
-	// that volumes are marked in use as soon as the decision is made that the
-	// volume *should* be attached to this node until it is safely unmounted.
+	// 同时上报期望与实际状态中的卷：一旦决定卷*应*附加到本节点即标记为使用中，
+	// 直到其被安全卸载。
 	desiredVolumes := vm.desiredStateOfWorld.GetVolumesToMount()
 	allAttachedVolumes := vm.actualStateOfWorld.GetAttachedVolumes()
 	volumesToReportInUse := make([]v1.UniqueVolumeName, 0, len(desiredVolumes)+len(allAttachedVolumes))
@@ -405,20 +365,24 @@ func (vm *volumeManager) GetVolumesInUse() []v1.UniqueVolumeName {
 	return slices.Compact(volumesToReportInUse)
 }
 
+// ReconcilerStatesHasBeenSynced 转发 reconciler 的同步状态。
 func (vm *volumeManager) ReconcilerStatesHasBeenSynced() bool {
 	return vm.reconciler.StatesHasBeenSynced()
 }
 
+// VolumeIsAttached 查询实际状态中是否存在该卷。
 func (vm *volumeManager) VolumeIsAttached(
 	volumeName v1.UniqueVolumeName) bool {
 	return vm.actualStateOfWorld.VolumeExists(volumeName)
 }
 
+// MarkVolumesAsReportedInUse 把已上报的卷集合同步到期望状态。
 func (vm *volumeManager) MarkVolumesAsReportedInUse(
 	volumesReportedAsInUse []v1.UniqueVolumeName) {
 	vm.desiredStateOfWorld.MarkVolumesReportedInUse(volumesReportedAsInUse)
 }
 
+// WaitForAttachAndMount 轮询等待 Pod 的期望卷全部挂载，超时后汇总未完成项并返回错误。
 func (vm *volumeManager) WaitForAttachAndMount(ctx context.Context, pod *v1.Pod) error {
 	logger := klog.FromContext(ctx)
 	if pod == nil {
@@ -427,18 +391,18 @@ func (vm *volumeManager) WaitForAttachAndMount(ctx context.Context, pod *v1.Pod)
 
 	expectedVolumes := getExpectedVolumes(pod)
 	if len(expectedVolumes) == 0 {
-		// No volumes to verify
+		// Pod 没有卷，无需等待。
 		return nil
 	}
 
 	logger.V(3).Info("Waiting for volumes to attach and mount for pod", "pod", klog.KObj(pod))
 	uniquePodName := util.GetUniquePodName(pod)
 
-	// Some pods expect to have Setup called over and over again to update.
-	// Remount plugins for which this is true. (Atomically updating volumes,
-	// like Downward API, depend on this to update the contents of the volume).
+	// 某些 Pod 需要反复调用 Setup 才能更新内容：为这类插件重新处理 Pod
+	// （例如 Downward API 等原子更新卷依赖此机制刷新内容）。
 	vm.desiredStateOfWorldPopulator.ReprocessPod(uniquePodName)
 
+	// 轮询直到所有期望卷都完成挂载；超时后再分类汇总失败原因。
 	err := wait.PollUntilContextTimeout(
 		ctx,
 		podAttachAndMountRetryInterval,
@@ -449,7 +413,7 @@ func (vm *volumeManager) WaitForAttachAndMount(ctx context.Context, pod *v1.Pod)
 	if err != nil {
 		unmountedVolumes :=
 			vm.getUnmountedVolumes(uniquePodName, expectedVolumes)
-		// Also get unattached volumes and volumes not in dsw for error message
+		// 同时收集未附加的卷和未进入期望状态的卷，便于在错误信息中区分原因。
 		unattachedVolumeMounts :=
 			vm.getUnattachedVolumes(uniquePodName)
 		volumesNotInDSW :=
@@ -463,17 +427,18 @@ func (vm *volumeManager) WaitForAttachAndMount(ctx context.Context, pod *v1.Pod)
 		for _, volumeToMount := range unattachedVolumeMounts {
 			unattachedVolumes = append(unattachedVolumes, volumeToMount.OuterVolumeSpecNames...)
 		}
+		// 排序保证错误信息稳定，便于测试与排查。
 		slices.Sort(unattachedVolumes)
 
 		if utilfeature.DefaultFeatureGate.Enabled(features.MutableCSINodeAllocatableCount) {
 			for _, volumeToMount := range unattachedVolumeMounts {
 				attachablePlugin, findErr := vm.volumePluginMgr.FindAttachablePluginBySpec(volumeToMount.VolumeSpec)
 				if findErr != nil || attachablePlugin == nil {
-					// This volume type doesn't support the attachable interface, so we can skip our check.
+					// 该卷类型不支持 attachable 接口，跳过附加资源检查。
 					continue
 				}
 				if attachablePlugin.VerifyExhaustedResource(volumeToMount.VolumeSpec) {
-					// Return error to the kubelet, which will then trigger the pod termination logic.
+					// 返回该错误，让 kubelet 触发 Pod 终止逻辑。
 					return &VolumeAttachLimitExceededError{
 						UnmountedVolumes:  unmountedVolumes,
 						UnattachedVolumes: unattachedVolumes,
@@ -496,6 +461,7 @@ func (vm *volumeManager) WaitForAttachAndMount(ctx context.Context, pod *v1.Pod)
 	return nil
 }
 
+// WaitForUnmount 轮询等待 Pod 的卷全部卸载，超时后列出仍挂载的卷并返回错误。
 func (vm *volumeManager) WaitForUnmount(ctx context.Context, pod *v1.Pod) error {
 	logger := klog.FromContext(ctx)
 	if pod == nil {
@@ -534,11 +500,13 @@ func (vm *volumeManager) WaitForUnmount(ctx context.Context, pod *v1.Pod) error 
 	return nil
 }
 
+// WaitForAllPodsUnmount 并发等待所有 Pod 的卷卸载完成。
 func (vm *volumeManager) WaitForAllPodsUnmount(ctx context.Context, pods []*v1.Pod) error {
 	if len(pods) == 0 {
 		return nil
 	}
 
+	// 为每个 Pod 生成一个等待函数，由 AggregateGoroutines 并发执行。
 	funcs := make([]func() error, 0, len(pods))
 	for _, pod := range pods {
 		funcs = append(funcs, func() error {
@@ -549,6 +517,7 @@ func (vm *volumeManager) WaitForAllPodsUnmount(ctx context.Context, pods []*v1.P
 	return utilerrors.AggregateGoroutines(funcs...)
 }
 
+// getVolumesNotInDSW 返回 Pod 期望但尚未进入期望状态缓存的卷（外层卷名）。
 func (vm *volumeManager) getVolumesNotInDSW(uniquePodName types.UniquePodName, expectedVolumes []string) []string {
 	volumesNotInDSW := sets.New(expectedVolumes...)
 
@@ -561,8 +530,7 @@ func (vm *volumeManager) getVolumesNotInDSW(uniquePodName types.UniquePodName, e
 	return sets.List(volumesNotInDSW)
 }
 
-// getUnattachedVolumes returns a list of the volumes that are expected to be attached but
-// are not currently attached to the node
+// getUnattachedVolumes 返回 Pod 期望附加、但实际尚未附加到本节点的卷。
 func (vm *volumeManager) getUnattachedVolumes(uniquePodName types.UniquePodName) []cache.VolumeToMount {
 	unattachedVolumes := []cache.VolumeToMount{}
 	for _, volumeToMount := range vm.desiredStateOfWorld.GetVolumesToMount() {
@@ -575,8 +543,7 @@ func (vm *volumeManager) getUnattachedVolumes(uniquePodName types.UniquePodName)
 	return unattachedVolumes
 }
 
-// verifyVolumesMountedFunc returns a method that returns true when all expected
-// volumes are mounted.
+// verifyVolumesMountedFunc 返回一个条件函数：所有期望卷都挂载时返回 true。
 func (vm *volumeManager) verifyVolumesMountedFunc(podName types.UniquePodName, expectedVolumes []string) wait.ConditionWithContextFunc {
 	return func(_ context.Context) (done bool, err error) {
 		if errs := vm.desiredStateOfWorld.PopPodErrors(podName); len(errs) > 0 {
@@ -586,8 +553,7 @@ func (vm *volumeManager) verifyVolumesMountedFunc(podName types.UniquePodName, e
 	}
 }
 
-// verifyVolumesUnmountedFunc returns a method that is true when there are no mounted volumes for this
-// pod.
+// verifyVolumesUnmountedFunc 返回一个条件函数：该 Pod 没有已挂载卷时返回 true。
 func (vm *volumeManager) verifyVolumesUnmountedFunc(podName types.UniquePodName) wait.ConditionWithContextFunc {
 	return func(_ context.Context) (done bool, err error) {
 		if errs := vm.desiredStateOfWorld.PopPodErrors(podName); len(errs) > 0 {
@@ -597,10 +563,10 @@ func (vm *volumeManager) verifyVolumesUnmountedFunc(podName types.UniquePodName)
 	}
 }
 
-// getMountedVolumes returns volumes that are desired and actually mounted,
-// indexed by the outer volume spec name.
+// getMountedVolumes 返回既在期望状态、又已实际挂载的卷，按外层卷名索引。
 func (vm *volumeManager) getMountedVolumes(podName types.UniquePodName) map[string]*cache.MountedVolume {
 	volumes := vm.actualStateOfWorld.GetMountedVolumesForPod(podName)
+	// 先按唯一卷名建索引，再通过期望状态的外层卷名映射回 Pod 视角。
 	volumesByName := make(map[v1.UniqueVolumeName]*cache.MountedVolume, len(volumes))
 	for i, mountedVolume := range volumes {
 		volumesByName[mountedVolume.VolumeName] = &volumes[i]
@@ -618,9 +584,8 @@ func (vm *volumeManager) getMountedVolumes(podName types.UniquePodName) map[stri
 	return volumesByOuterName
 }
 
-// getUnmountedVolumes returns a list of unmounted volumes.
-// This includes the volumes in expectedVolumes, but not in one of DSW/ASW.
-// The list also includes volume that may be mounted in uncertain state.
+// getUnmountedVolumes 返回未挂载的卷，包括不在期望/实际状态中的期望卷，
+// 以及可能处于不确定挂载状态的卷。
 func (vm *volumeManager) getUnmountedVolumes(podName types.UniquePodName, expectedVolumes []string) []string {
 	unmountedVolumes := []string{}
 	volumeNames := vm.desiredStateOfWorld.GetVolumeNamesForPod(podName)
@@ -640,16 +605,14 @@ func (vm *volumeManager) getUnmountedVolumes(podName types.UniquePodName, expect
 	return unmountedVolumes
 }
 
-// getExpectedVolumes returns a list of volumes that must be mounted in order to
-// consider the volume setup step for this pod satisfied.
+// getExpectedVolumes 返回只有全部挂载后才算完成 Pod 卷准备工作的卷列表。
 func getExpectedVolumes(pod *v1.Pod) []string {
 	mounts, devices, _ := util.GetPodVolumeNames(pod, false /* collectSELinuxOptions */)
 	return mounts.Union(devices).UnsortedList()
 }
 
-// getExtraSupplementalGID returns the value of an extra supplemental GID as
-// defined by an annotation on a volume and a boolean indicating whether the
-// volume defined a GID that the pod doesn't already request.
+// getExtraSupplementalGID 返回卷注解中额外补充组的 GID，并报告该 GID
+// 是否未被 Pod 的补充组列表包含。
 func getExtraSupplementalGID(volumeGIDValue string, pod *v1.Pod) (int64, bool) {
 	if volumeGIDValue == "" {
 		return 0, false
@@ -671,8 +634,7 @@ func getExtraSupplementalGID(volumeGIDValue string, pod *v1.Pod) (int64, bool) {
 	return gid, true
 }
 
-// ResizeEphemeralVolume synchronously triggers a resize of the specified volume.
-// This returns an error if the volume is not supported for direct resizing.
+// ResizeEphemeralVolume 同步触发指定卷的扩容；卷不支持直接扩容时返回错误。
 func (vm *volumeManager) ResizeEphemeralVolume(pod *v1.Pod, volumeName string, newSize *resource.Quantity) error {
 	resizablePlugin, volumeSpec, err := vm.volumePluginSupportsDirectResize(pod, volumeName)
 	if err != nil {
@@ -681,13 +643,14 @@ func (vm *volumeManager) ResizeEphemeralVolume(pod *v1.Pod, volumeName string, n
 	return resizablePlugin.ResizeEphemeralVolume(volumeSpec, pod, newSize)
 }
 
+// volumePluginSupportsDirectResize 找到 Pod 中指定卷并判断其插件是否支持直接扩容。
 func (vm *volumeManager) volumePluginSupportsDirectResize(pod *v1.Pod, volumeName string) (volume.ResizableEphemeralVolumePlugin, *volume.Spec, error) {
 	vol := findVolumeInPodSpec(pod, volumeName)
 	if vol == nil {
 		return nil, nil, fmt.Errorf("volume %s not found in pod %s", volumeName, pod.Name)
 	}
 
-	// Only emptyDir volumes support resize through this mechanism.
+	// 该机制只支持 emptyDir 卷；其他卷类型直接返回不支持。
 	if vol.EmptyDir != nil {
 		plugin, err := vm.volumePluginMgr.FindPluginByName(emptydir.EmptyDirPluginName)
 		if err != nil {
@@ -703,6 +666,7 @@ func (vm *volumeManager) volumePluginSupportsDirectResize(pod *v1.Pod, volumeNam
 	return nil, nil, fmt.Errorf("volume %s does not support direct resizing", volumeName)
 }
 
+// findVolumeInPodSpec 按外层卷名在 Pod spec 中查找卷定义。
 func findVolumeInPodSpec(pod *v1.Pod, volumeName string) *v1.Volume {
 	for _, v := range pod.Spec.Volumes {
 		if v.Name == volumeName {

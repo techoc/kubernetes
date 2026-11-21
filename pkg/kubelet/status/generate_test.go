@@ -34,9 +34,11 @@ import (
 )
 
 var (
+	// containerRestartPolicyAlways 是 Always 重启策略的别名，供可重启 init 容器相关用例复用。
 	containerRestartPolicyAlways = v1.ContainerRestartPolicyAlways
 )
 
+// TestGenerateContainersReadyCondition 覆盖 ContainersReady 条件在不同容器状态、Pod 阶段及可重启 init 容器组合下的生成结果。
 func TestGenerateContainersReadyCondition(t *testing.T) {
 	tests := []struct {
 		spec              v1.PodSpec
@@ -198,6 +200,7 @@ func TestGenerateContainersReadyCondition(t *testing.T) {
 	}
 }
 
+// TestGeneratePodReadyCondition 验证 PodReady 条件如何受容器就绪状态、readiness gate 与 Pod 阶段影响。
 func TestGeneratePodReadyCondition(t *testing.T) {
 	tests := []struct {
 		spec              v1.PodSpec
@@ -396,6 +399,7 @@ func TestGeneratePodReadyCondition(t *testing.T) {
 	}
 }
 
+// TestGeneratePodInitializedCondition 验证 PodInitialized 条件对普通 init 容器、可重启（sidecar）init 容器的判定。
 func TestGeneratePodInitializedCondition(t *testing.T) {
 	noInitContainer := &v1.PodSpec{}
 	oneInitContainer := &v1.PodSpec{
@@ -564,6 +568,7 @@ func TestGeneratePodInitializedCondition(t *testing.T) {
 			},
 		},
 	}
+	// 启用容器重启规则相关特性门控，以覆盖可重启 init 容器的判定路径。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.ContainerRestartRules:                true,
 		features.NodeDeclaredFeatures:                 true,
@@ -580,6 +585,7 @@ func TestGeneratePodInitializedCondition(t *testing.T) {
 	}
 }
 
+// TestGeneratePodReadyToStartContainersCondition 验证在 sandbox、网络命名空间和 IP 就绪前，Pod 不满足 ReadyToStartContainers。
 func TestGeneratePodReadyToStartContainersCondition(t *testing.T) {
 	for desc, test := range map[string]struct {
 		pod      *v1.Pod
@@ -715,13 +721,16 @@ func TestGeneratePodReadyToStartContainersCondition(t *testing.T) {
 	}
 }
 
+// TestGenerateAllContainersRestartingCondition 验证 RestartAllContainers 规则触发后 AllContainersRestarting 条件的转换与清理。
 func TestGenerateAllContainersRestartingCondition(t *testing.T) {
+	// 启用 RestartAllContainers 相关特性门控，使条件生成逻辑按新行为执行。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.ContainerRestartRules:                true,
 		features.NodeDeclaredFeatures:                 true,
 		features.RestartAllContainersOnContainerExits: true,
 	})
 
+	// 触发容器必须声明 Never 重启策略，重启规则才会作用于整个 Pod。
 	restartPolicyNever := v1.ContainerRestartPolicyNever
 	defaultPod := &v1.Pod{
 		Spec: v1.PodSpec{
@@ -840,6 +849,7 @@ func TestGenerateAllContainersRestartingCondition(t *testing.T) {
 	}
 }
 
+// getPodCondition 构造期望的 PodCondition，减少测试用例中的重复字面量。
 func getPodCondition(conditionType v1.PodConditionType, status v1.ConditionStatus, reason, message string) v1.PodCondition {
 	return v1.PodCondition{
 		Type:    conditionType,
@@ -849,6 +859,7 @@ func getPodCondition(conditionType v1.PodConditionType, status v1.ConditionStatu
 	}
 }
 
+// getReadyStatus 返回指定名称且 Ready=true 的容器状态。
 func getReadyStatus(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name:  cName,
@@ -856,6 +867,7 @@ func getReadyStatus(cName string) v1.ContainerStatus {
 	}
 }
 
+// getNotReadyStatus 返回指定名称且 Ready=false 的容器状态。
 func getNotReadyStatus(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name:  cName,
@@ -863,6 +875,7 @@ func getNotReadyStatus(cName string) v1.ContainerStatus {
 	}
 }
 
+// getStartedStatus 返回已启动（Started=true）的容器状态。
 func getStartedStatus(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name:    cName,
@@ -870,6 +883,7 @@ func getStartedStatus(cName string) v1.ContainerStatus {
 	}
 }
 
+// getNotStartedStatus 返回未启动（Started=false）的容器状态。
 func getNotStartedStatus(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name:    cName,

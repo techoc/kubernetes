@@ -29,16 +29,16 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// WaitForAPIServerSyncPeriod is the period between checks for the node list/watch initial sync
+// WaitForAPIServerSyncPeriod 是检查节点 list/watch 初次同步是否完成的间隔。
 const WaitForAPIServerSyncPeriod = 1 * time.Second
 
-// NewSourceApiserver creates a config source that watches and pulls from the apiserver.
+// NewSourceApiserver 创建从 apiserver 监听并拉取 Pod 配置的数据源。
 func NewSourceApiserver(logger klog.Logger, c clientset.Interface, nodeName types.NodeName, nodeHasSynced func() bool, updates chan<- sourceUpdate) {
 	lw := cache.NewListWatchFromClient(c.CoreV1().RESTClient(), "pods", metav1.NamespaceAll, fields.OneTermEqualSelector("spec.nodeName", string(nodeName)))
 
-	// The Reflector responsible for watching pods at the apiserver should be run only after
-	// the node sync with the apiserver has completed.
+	// 负责监听 apiserver Pod 的 Reflector 只能在节点与 apiserver 同步完成后启动。
 	logger.Info("Waiting for node sync before watching apiserver pods")
+	// 必须先等节点与 apiserver 同步完成，否则 Reflector 可能拿不到完整 Pod 列表。
 	go func() {
 		for {
 			if nodeHasSynced() {
@@ -53,7 +53,7 @@ func NewSourceApiserver(logger klog.Logger, c clientset.Interface, nodeName type
 	}()
 }
 
-// newSourceApiserverFromLW holds creates a config source that watches and pulls from the apiserver.
+// newSourceApiserverFromLW 基于 ListerWatcher 创建从 apiserver 监听并拉取配置的数据源。
 func newSourceApiserverFromLW(lw cache.ListerWatcher, updates chan<- sourceUpdate) {
 	send := func(objs []interface{}) {
 		var pods []*v1.Pod

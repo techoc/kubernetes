@@ -26,8 +26,11 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestNewFSPullRecordsAccessor 验证文件系统 PullRecordsAccessor
+// 的初始化与 alpha->beta 版本转换。
 func TestNewFSPullRecordsAccessor(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 用例覆盖根目录缺失、仅 alpha、混合、仅 beta 以及 intent+record 组合。
 	tests := []struct {
 		name            string
 		initRoot        bool
@@ -136,13 +139,16 @@ func TestNewFSPullRecordsAccessor(t *testing.T) {
 			},
 		},
 	}
+	// 逐用例构造临时目录并写入初始数据。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// initRoot 为 false 时使用不存在的多级路径。
 			kubeletDir := t.TempDir()
 			if !tt.initRoot {
 				kubeletDir = filepath.Join(kubeletDir, "does-not-exist", "level2dir")
 			}
 
+			// 预先写入 intent 与 record 文件，并按需改写版本。
 			intentsDir := filepath.Join(kubeletDir, "image_manager", "pulling")
 			pulledRecordsDir := filepath.Join(kubeletDir, "image_manager", "pulled")
 
@@ -159,12 +165,14 @@ func TestNewFSPullRecordsAccessor(t *testing.T) {
 				}
 			}
 
+			// 构造 accessor，并校验目录被创建。
 			_, err := NewFSPullRecordsAccessor(logger, kubeletDir)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewFSPullRecordsAccessor() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
+			// 确认 image_manager 及其子目录都被创建。
 			for _, dir := range []string{
 				"image_manager",
 				filepath.Join("image_manager", "pulling"),
@@ -177,6 +185,7 @@ func TestNewFSPullRecordsAccessor(t *testing.T) {
 				}
 			}
 
+			// 逐个校验写入磁盘的内容与期望一致。
 			for intent, expectedContent := range expectedIntents {
 				filePath := filepath.Join(intentsDir, intent)
 				testFileContentMatch(t, filePath, expectedContent)
@@ -190,6 +199,7 @@ func TestNewFSPullRecordsAccessor(t *testing.T) {
 	}
 }
 
+// testFileContentMatch 断言文件内容与期望一致。
 func testFileContentMatch(t *testing.T, filePath string, expectedContent string) {
 	t.Helper()
 	fileContent, err := os.ReadFile(filePath)

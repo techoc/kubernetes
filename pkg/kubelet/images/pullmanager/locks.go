@@ -22,20 +22,20 @@ import (
 )
 
 const (
+	// minStripedLockSetSize 是分段锁集合的最小规模。
 	minStripedLockSetSize int32 = 1
+	// maxStripedLockSetSize 是分段锁集合的最大规模。
 	maxStripedLockSetSize int32 = 31
 )
 
-// StripedLockSet allows context locking based on string keys, where each key
-// is mapped to a an index in a size-limited slice of locks.
+// StripedLockSet 按字符串 key 映射到固定大小的锁数组，实现分段加锁。
 type StripedLockSet struct {
 	locks []sync.Mutex
 	size  int32
 }
 
-// NewStripedLockSet creates a StripedLockSet with `size` number of locks to be
-// used for locking context based on string keys.
-// The size will be normalized to stay in the <1, 31> interval.
+// NewStripedLockSet 创建包含 size 个锁的 StripedLockSet，用于按字符串 key 分段加锁。
+// size 会被归一化到 <1, 31> 区间。
 func NewStripedLockSet(size int32) *StripedLockSet {
 	size = min(maxStripedLockSetSize, max(minStripedLockSetSize, size))
 
@@ -45,26 +45,31 @@ func NewStripedLockSet(size int32) *StripedLockSet {
 	}
 }
 
+// Lock 获取 key 对应的分段锁。
 func (s *StripedLockSet) Lock(key string) {
 	s.locks[keyToID(key, s.size)].Lock()
 }
 
+// Unlock 释放 key 对应的分段锁。
 func (s *StripedLockSet) Unlock(key string) {
 	s.locks[keyToID(key, s.size)].Unlock()
 }
 
+// GlobalLock 依次获取所有分段锁，用于需要全局互斥的场景。
 func (s *StripedLockSet) GlobalLock() {
 	for i := range s.locks {
 		s.locks[i].Lock()
 	}
 }
 
+// GlobalUnlock 依次释放所有分段锁。
 func (s *StripedLockSet) GlobalUnlock() {
 	for i := range s.locks {
 		s.locks[i].Unlock()
 	}
 }
 
+// keyToID 用 FNV-1a 哈希把字符串 key 映射到 [0, sliceSize) 的锁下标。
 func keyToID(key string, sliceSize int32) uint32 {
 	h := fnv.New32()
 	h.Write([]byte(key))

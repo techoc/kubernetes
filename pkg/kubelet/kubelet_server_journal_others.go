@@ -23,12 +23,12 @@ import (
 	"errors"
 )
 
-// getLoggingCmd on unsupported operating systems returns the echo command and a warning message (as strings)
+// getLoggingCmd 在不支持的操作系统上返回错误，表示无法查询日志。
 func getLoggingCmd(_ *nodeLogQuery, _ []string) (cmd string, args []string, cmdEnv []string, err error) {
 	return "", args, cmdEnv, errors.New("Operating System Not Supported")
 }
 
-// checkForNativeLogger on unsupported operating systems returns false
+// checkForNativeLogger 在不支持的操作系统上始终返回 false。
 func checkForNativeLogger(_ context.Context, _ string) bool {
 	return false
 }

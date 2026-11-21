@@ -25,19 +25,27 @@ import (
 	checkpointerrors "k8s.io/kubernetes/pkg/kubelet/checkpointmanager/errors"
 )
 
+// Checkpointer 负责读取和保存 DRA 状态的 checkpoint。
 type Checkpointer interface {
+	// GetOrCreate 读取 checkpoint；不存在时创建空 checkpoint。
 	GetOrCreate() (*Checkpoint, error)
+	// Store 保存 checkpoint。
 	Store(*Checkpoint) error
 }
 
+// checkpointer 是基于 checkpointmanager 的 Checkpointer 实现。
 type checkpointer struct {
+	// RWMutex 保护 checkpoint 文件的读写。
 	sync.RWMutex
+	// checkpointManager 是底层的 checkpoint 管理器。
 	checkpointManager checkpointmanager.CheckpointManager
-	checkpointName    string
+	// checkpointName 是 checkpoint 文件名。
+	checkpointName string
 }
 
-// NewCheckpointer creates new checkpointer for keeping track of claim info  with checkpoint backend
+// NewCheckpointer 创建使用 checkpoint 持久化 Claim 信息的 Checkpointer。
 func NewCheckpointer(stateDir, checkpointName string) (Checkpointer, error) {
+	// checkpoint 名称为空时无法定位文件，直接报错。
 	if len(checkpointName) == 0 {
 		return nil, fmt.Errorf("received empty string instead of checkpointName")
 	}
@@ -55,9 +63,10 @@ func NewCheckpointer(stateDir, checkpointName string) (Checkpointer, error) {
 	return checkpointer, nil
 }
 
-// GetOrCreate gets list of claim info states from a checkpoint
-// or creates empty list if checkpoint doesn't exist
+// GetOrCreate 从 checkpoint 读取 Claim 状态列表；
+// checkpoint 不存在时创建空列表。
 func (sc *checkpointer) GetOrCreate() (*Checkpoint, error) {
+	// 加写锁，因为不存在时可能需要创建并写入 checkpoint。
 	sc.Lock()
 	defer sc.Unlock()
 
@@ -68,6 +77,7 @@ func (sc *checkpointer) GetOrCreate() (*Checkpoint, error) {
 
 	err = sc.checkpointManager.GetCheckpoint(sc.checkpointName, checkpoint)
 	if errors.Is(err, checkpointerrors.ErrCheckpointNotFound) {
+		// checkpoint 不存在时创建空 checkpoint 并落盘。
 		err = sc.store(checkpoint)
 		if err != nil {
 			return nil, fmt.Errorf("failed to store checkpoint %v: %w", sc.checkpointName, err)
@@ -81,7 +91,7 @@ func (sc *checkpointer) GetOrCreate() (*Checkpoint, error) {
 	return checkpoint, nil
 }
 
-// Store stores checkpoint to the file
+// Store 把 checkpoint 写入文件。
 func (sc *checkpointer) Store(checkpoint *Checkpoint) error {
 	sc.Lock()
 	defer sc.Unlock()
@@ -89,7 +99,7 @@ func (sc *checkpointer) Store(checkpoint *Checkpoint) error {
 	return sc.store(checkpoint)
 }
 
-// store saves state to a checkpoint, caller is responsible for locking
+// store 保存 checkpoint，调用方需自行加锁。
 func (sc *checkpointer) store(checkpoint *Checkpoint) error {
 	if err := sc.checkpointManager.CreateCheckpoint(sc.checkpointName, checkpoint); err != nil {
 		return fmt.Errorf("could not save checkpoint %s: %w", sc.checkpointName, err)

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package devicemanager 实现 kubelet 的 Device Plugin 管理：注册插件、跟踪设备健康、为容器分配设备并持久化分配状态。
 package devicemanager
 
 import (
@@ -53,12 +54,13 @@ import (
 	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
+// nodeWithoutTopology 是没有 NUMA 拓扑信息的设备所使用的伪 NUMA 节点编号。
 const nodeWithoutTopology = -1
 
-// ActivePodsFunc is a function that returns a list of pods to reconcile.
+// ActivePodsFunc 返回节点上当前活跃的 Pod 列表，用于识别已终止 Pod 的残留分配。
 type ActivePodsFunc func() []*v1.Pod
 
-// ManagerImpl is the structure in charge of managing Device Plugins.
+// ManagerImpl 负责管理 Device Plugin 的注册、健康状态与设备分配。
 type ManagerImpl struct {
 	checkpointdir string
 
@@ -69,68 +71,73 @@ type ManagerImpl struct {
 
 	server plugin.Server
 
-	// activePods is a method for listing active pods on the node
-	// so the amount of pluginResources requested by existing pods
-	// could be counted when updating allocated devices
+	// activePods 用于列出节点上活跃的 Pod，
+	// 以便在更新已分配设备时扣除存量 Pod 已申请的资源。
+	// 该函数在 Start 时被真实实现替换，之前是返回空列表的桩函数。
 	activePods ActivePodsFunc
 
-	// sourcesReady provides the readiness of kubelet configuration sources such as apiserver update readiness.
-	// We use it to determine when we can purge inactive pods from checkpointed state.
+	// sourcesReady 表示 kubelet 各配置源是否就绪（例如 apiserver 同步完成）。
+	// 只有所有源就绪后才能安全地从 checkpoint 中清理已消失的 Pod。
 	sourcesReady config.SourcesReady
 
-	// allDevices holds all the devices currently registered to the device manager
+	// allDevices 保存当前已注册的全部设备（含不健康设备）。
 	allDevices ResourceDeviceInstances
 
-	// healthyDevices contains all the registered healthy resourceNames and their exported device IDs.
+	// healthyDevices 记录各资源下健康设备的 ID 集合，是分配设备的主要来源。
 	healthyDevices map[string]sets.Set[string]
 
-	// unhealthyDevices contains all the unhealthy devices and their exported device IDs.
+	// unhealthyDevices 记录不健康设备；它们计入容量但不参与分配。
 	unhealthyDevices map[string]sets.Set[string]
 
-	// allocatedDevices contains allocated deviceIds, keyed by resourceName.
+	// allocatedDevices 是按资源名索引的已分配设备集合。
 	allocatedDevices map[string]sets.Set[string]
 
-	// podDevices contains pod to allocated device mapping.
+	// podDevices 记录 Pod/容器到设备的映射，并在重启后由 checkpoint 恢复。
 	podDevices        *podDevices
 	checkpointManager checkpointmanager.CheckpointManager
 
-	// List of NUMA Nodes available on the underlying machine
+	// numaNodes 是底层机器上可用的 NUMA 节点编号列表。
 	numaNodes []int
 
-	// Store of Topology Affinities that the Device Manager can query.
+	// topologyAffinityStore 提供 TopologyManager 计算出的 NUMA 亲和性提示。
 	topologyAffinityStore topologymanager.Store
 
-	// devicesToReuse contains devices that can be reused as they have been allocated to
-	// init containers.
+	// devicesToReuse 保存已分配给 init 容器、可被后续容器复用的设备。
+	// 普通 init 容器结束后释放，重启式 init 容器则保留分配。
 	devicesToReuse PodReusableDevices
 
-	// containerMap provides a mapping from (pod, container) -> containerID
-	// for all containers in a pod. Used to detect pods running across a restart
+	// containerMap 提供 (pod, container) -> containerID 的映射，
+	// 用于识别 kubelet 重启前就已运行的容器。
 	containerMap containermap.ContainerMap
 
-	// containerRunningSet identifies which container among those present in `containerMap`
-	// was reported running by the container runtime when `containerMap` was computed.
-	// Used to detect pods running across a restart
+	// containerRunningSet 标记 containerMap 中由运行时报告为运行态的容器，
+	// 用于区分“kubelet 重启”与“整机重启”两种场景。
+	// 整机重启后容器不会处于运行态，因此无需重复分配设备。
 	containerRunningSet sets.Set[string]
 
-	// update channel for device health updates
+	// update 是设备健康状态变更的通知通道，容量 100 以避免阻塞插件回调。
 	update chan resourceupdates.Update
 }
 
+// endpointInfo 组合一个设备插件端点及其能力选项。
 type endpointInfo struct {
 	e    endpoint
 	opts *pluginapi.DevicePluginOptions
 }
 
+// sourcesReadyStub 是配置源未就绪阶段的占位实现，始终认为已就绪。
 type sourcesReadyStub struct{}
 
-// PodReusableDevices is a map by pod name of devices to reuse.
+// PodReusableDevices 以 Pod UID 为键，记录可复用的设备（按资源名分组）。
 type PodReusableDevices map[string]map[string]sets.Set[string]
 
+// AddSource 为空实现，桩不跟踪任何配置源。
 func (s *sourcesReadyStub) AddSource(source string) {}
-func (s *sourcesReadyStub) AllReady() bool          { return true }
 
-// NewManagerImpl creates a new manager.
+// AllReady 始终返回 true，使初始化阶段不会因源未就绪而跳过分配。
+func (s *sourcesReadyStub) AllReady() bool { return true }
+
+// NewManagerImpl 创建 Device Plugin 管理器；Windows 上使用不同的 socket 路径。
 func NewManagerImpl(logger klog.Logger, topology []cadvisorapi.Node, topologyAffinityStore topologymanager.Store) (*ManagerImpl, error) {
 	socketPath := pluginapi.KubeletSocket
 	if runtime.GOOS == "windows" {
@@ -139,6 +146,7 @@ func NewManagerImpl(logger klog.Logger, topology []cadvisorapi.Node, topologyAff
 	return newManagerImpl(logger, socketPath, topology, topologyAffinityStore)
 }
 
+// newManagerImpl 是构造函数主体，便于测试注入自定义 socket 路径。
 func newManagerImpl(logger klog.Logger, socketPath string, topology []cadvisorapi.Node, topologyAffinityStore topologymanager.Store) (*ManagerImpl, error) {
 	logger.V(2).Info("Creating Device Plugin manager", "path", socketPath)
 
@@ -169,8 +177,8 @@ func newManagerImpl(logger klog.Logger, socketPath string, topology []cadvisorap
 	manager.server = server
 	manager.checkpointdir, _ = filepath.Split(server.SocketPath())
 
-	// The following structures are populated with real implementations in manager.Start()
-	// Before that, initializes them to perform no-op operations.
+	// 这些依赖在 Start 时才注入真实实现；在此之前用桩保证调用安全，
+	// 因此下面先初始化为空操作实现。
 	manager.activePods = func() []*v1.Pod { return []*v1.Pod{} }
 	manager.sourcesReady = &sourcesReadyStub{}
 	checkpointManager, err := checkpointmanager.NewCheckpointManager(manager.checkpointdir)
@@ -182,12 +190,13 @@ func newManagerImpl(logger klog.Logger, socketPath string, topology []cadvisorap
 	return manager, nil
 }
 
+// Updates 返回设备健康变更的通知通道，供上层（如 podresources）订阅。
 func (m *ManagerImpl) Updates() <-chan resourceupdates.Update {
 	return m.update
 }
 
-// CleanupPluginDirectory is to remove all existing unix sockets
-// from /var/lib/kubelet/device-plugins on Device Plugin Manager start
+// CleanupPluginDirectory 在启动时清理设备插件目录中残留的 unix socket，
+// 避免连接到已失效的旧插件端点。
 func (m *ManagerImpl) CleanupPluginDirectory(logger klog.Logger, dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
@@ -201,6 +210,7 @@ func (m *ManagerImpl) CleanupPluginDirectory(logger klog.Logger, dir string) err
 	var errs []error
 	for _, name := range names {
 		filePath := filepath.Join(dir, name)
+		// 绝不能删除 checkpoint 文件，否则会丢失设备分配状态。
 		if filePath == m.checkpointFile() {
 			continue
 		}
@@ -209,6 +219,7 @@ func (m *ManagerImpl) CleanupPluginDirectory(logger klog.Logger, dir string) err
 			logger.Error(err, "Failed to stat file", "path", filePath)
 			continue
 		}
+		// 只删除 socket 文件，其他文件可能是插件或运维人员放置的。
 		if stat.IsDir() || stat.Mode()&os.ModeSocket == 0 {
 			continue
 		}
@@ -222,8 +233,8 @@ func (m *ManagerImpl) CleanupPluginDirectory(logger klog.Logger, dir string) err
 	return errorsutil.NewAggregate(errs)
 }
 
-// PluginConnected is to connect a plugin to a new endpoint.
-// This is done as part of device plugin registration.
+// PluginConnected 在设备插件注册时连接新的端点。
+// 同一资源可以有多个端点，按 socket 路径分别保存。
 func (m *ManagerImpl) PluginConnected(ctx context.Context, resourceName string, p plugin.DevicePlugin) error {
 	logger := klog.FromContext(ctx)
 	options, err := p.API().GetDevicePluginOptions(ctx, &pluginapi.Empty{})
@@ -244,6 +255,7 @@ func (m *ManagerImpl) PluginConnected(ctx context.Context, resourceName string, 
 	if _, exists := m.endpointStore[resourceName][e.socketPath()]; exists {
 		return fmt.Errorf("device plugin already connected: %s", e.socketPath())
 	}
+	// endpoints 保存该资源当前主用端点，endpointStore 保存全部端点。
 	m.endpoints[resourceName] = endpointInfo{e, options}
 	m.endpointStore[resourceName][e.socketPath()] = &endpointInfo{e, options}
 
@@ -251,8 +263,8 @@ func (m *ManagerImpl) PluginConnected(ctx context.Context, resourceName string, 
 	return nil
 }
 
-// PluginDisconnected is to disconnect a plugin from an endpoint.
-// This is done as part of device plugin deregistration.
+// PluginDisconnected 在设备插件注销时移除对应端点。
+// 最后一个端点断开时把该资源整体标记为不健康。
 func (m *ManagerImpl) PluginDisconnected(logger klog.Logger, resourceName string, socketPath string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -267,6 +279,7 @@ func (m *ManagerImpl) PluginDisconnected(logger klog.Logger, resourceName string
 	}
 	ep.e.setStopTime(time.Now())
 
+	// 最后一个端点消失意味着该资源完全不可用，容量需要降为 0。
 	last := len(endpoints) == 1
 	if last {
 		delete(m.endpointStore, resourceName)
@@ -274,7 +287,7 @@ func (m *ManagerImpl) PluginDisconnected(logger klog.Logger, resourceName string
 		logger.V(2).Info("Last device plugin for this resource disconnected", "resource", resourceName)
 	} else {
 		delete(endpoints, socketPath)
-		// Promote an arbitrary remaining endpoint to the primary endpoints map
+		// 仍有其他端点时，任选一个提升为主用端点，保持 endpoints 映射有效。
 		for _, remainingEp := range endpoints {
 			m.endpoints[resourceName] = *remainingEp
 			break
@@ -282,14 +295,15 @@ func (m *ManagerImpl) PluginDisconnected(logger klog.Logger, resourceName string
 	}
 }
 
-// PluginListAndWatchReceiver receives ListAndWatchResponse from a device plugin
-// and ensures that an upto date state (e.g. number of devices and device health)
-// is captured. Also, registered device and device to container allocation
-// information is checkpointed to the disk.
+// PluginListAndWatchReceiver 接收插件的 ListAndWatch 响应，
+// 并据此更新设备数量与健康状态等最新信息，
+// 同时把已注册设备和设备到容器的分配信息写入 checkpoint。
+// 该方法由插件服务端在收到推送时调用。
 func (m *ManagerImpl) PluginListAndWatchReceiver(logger klog.Logger, resourceName string, resp *pluginapi.ListAndWatchResponse) {
 	m.genericDeviceUpdateCallback(logger, resourceName, resp.Devices)
 }
 
+// genericDeviceUpdateCallback 用最新的设备列表重建健康/不健康集合，并通知受影响 Pod。
 func (m *ManagerImpl) genericDeviceUpdateCallback(logger klog.Logger, resourceName string, devices []*pluginapi.Device) {
 	healthyCount := 0
 	m.mutex.Lock()
@@ -300,21 +314,23 @@ func (m *ManagerImpl) genericDeviceUpdateCallback(logger klog.Logger, resourceNa
 	m.allDevices[resourceName] = make(map[string]*pluginapi.Device)
 	for _, dev := range devices {
 
+		// 特性门控开启时，需要把设备健康变化同步到 Pod 状态。
 		if utilfeature.DefaultFeatureGate.Enabled(features.ResourceHealthStatus) {
-			// compare with old device's health and send update to the channel if needed
+			// 对比旧设备的健康状态，必要时把受影响 Pod 加入待更新集合。
 			updatePodUIDFn := func(deviceID string) {
 				podUID, _ := m.podDevices.getPodAndContainerForDevice(resourceName, deviceID)
 				if podUID != "" {
 					podsToUpdate.Insert(podUID)
 				}
 			}
+			// 仅当健康状态真正变化时才通知，避免无谓的状态刷新。
 			if oldDev, ok := oldDevices[dev.ID]; ok {
 				if oldDev.Health != dev.Health {
 					updatePodUIDFn(dev.ID)
 				}
 			} else {
-				// if this is a new device, it might have existed before and disappeared for a while
-				// but still be assigned to a Pod. In this case, we need to send an update to the channel
+				// 新出现的设备可能之前短暂消失过但仍分配给某个 Pod，
+				// 因此也需要发送更新，让 Pod 状态重新反映其健康情况。
 				updatePodUIDFn(dev.ID)
 			}
 		}
@@ -330,6 +346,7 @@ func (m *ManagerImpl) genericDeviceUpdateCallback(logger klog.Logger, resourceNa
 	m.mutex.Unlock()
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.ResourceHealthStatus) {
+		// 通道非阻塞写入：满时丢弃本次通知而不是阻塞插件回调。
 		if len(podsToUpdate) > 0 {
 			select {
 			case m.update <- resourceupdates.Update{PodUIDs: podsToUpdate.UnsortedList()}:
@@ -339,30 +356,31 @@ func (m *ManagerImpl) genericDeviceUpdateCallback(logger klog.Logger, resourceNa
 		}
 	}
 
+	// 设备列表变化后立即持久化，避免重启后容量与实际不一致。
 	if err := m.writeCheckpoint(logger); err != nil {
 		logger.Error(err, "Writing checkpoint encountered")
 	}
 	logger.V(2).Info("Processed device updates for resource", "resourceName", resourceName, "totalCount", len(devices), "healthyCount", healthyCount)
 }
 
-// GetWatcherHandler returns the plugin handler
+// GetWatcherHandler 返回插件注册的 watcher 处理器。
 func (m *ManagerImpl) GetWatcherHandler() cache.PluginHandler {
 	return m.server
 }
 
-// GetHealthChecker returns the plugin handler
+// GetHealthChecker 返回插件服务的健康检查器。
 func (m *ManagerImpl) GetHealthChecker() healthz.HealthChecker {
 	return m.server
 }
 
-// checkpointFile returns device plugin checkpoint file path.
+// checkpointFile 返回设备管理器 checkpoint 文件路径。
 func (m *ManagerImpl) checkpointFile() string {
 	return filepath.Join(m.checkpointdir, kubeletDeviceManagerCheckpoint)
 }
 
-// Start starts the Device Plugin Manager and start initialization of
-// podDevices and allocatedDevices information from checkpointed state and
-// starts device plugin registration service.
+// Start 启动设备插件管理器，
+// 从 checkpoint 恢复 podDevices 与 allocatedDevices，
+// 并启动设备插件注册服务。
 func (m *ManagerImpl) Start(logger klog.Logger, activePods ActivePodsFunc, sourcesReady config.SourcesReady, initialContainers containermap.ContainerMap, initialContainerRunningSet sets.Set[string]) error {
 	logger.V(2).Info("Starting Device Plugin manager")
 
@@ -371,7 +389,7 @@ func (m *ManagerImpl) Start(logger klog.Logger, activePods ActivePodsFunc, sourc
 	m.containerMap = initialContainers
 	m.containerRunningSet = initialContainerRunningSet
 
-	// Loads in allocatedDevices information from disk.
+	// 读取失败不阻断启动：容量会暂时为 0，待插件重新注册后恢复。
 	err := m.readCheckpoint(logger)
 	if err != nil {
 		logger.Error(err, "Continue after failing to read checkpoint file. Device allocation info may NOT be up-to-date")
@@ -380,15 +398,15 @@ func (m *ManagerImpl) Start(logger klog.Logger, activePods ActivePodsFunc, sourc
 	return m.server.Start(logger)
 }
 
-// Stop is the function that can stop the plugin server.
-// Can be called concurrently, more than once, and is safe to call
-// without a prior Start.
+// Stop 停止插件服务端。
+// 可并发、重复调用，且无需先调用 Start。
+// 因此必须保证幂等。
 func (m *ManagerImpl) Stop(logger klog.Logger) error {
 	return m.server.Stop(logger)
 }
 
-// Allocate is the call that you can use to allocate a set of devices
-// from the registered device plugins.
+// Allocate 从已注册的设备插件中为容器分配设备。
+// 目前只支持 Add 操作，其他操作直接忽略。
 func (m *ManagerImpl) Allocate(ctx context.Context, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "pod", klog.KObj(pod), "containerName", container.Name, "operation", operation)
 	if operation != lifecycle.AddOperation {
@@ -398,15 +416,15 @@ func (m *ManagerImpl) Allocate(ctx context.Context, pod *v1.Pod, container *v1.C
 	if _, ok := m.devicesToReuse[string(pod.UID)]; !ok {
 		m.devicesToReuse[string(pod.UID)] = make(map[string]sets.Set[string])
 	}
-	// If pod entries to m.devicesToReuse other than the current pod exist, delete them.
+	// 只保留当前 Pod 的复用表，防止旧 Pod 的条目无限累积。
 	for podUID := range m.devicesToReuse {
 		if podUID != string(pod.UID) {
 			delete(m.devicesToReuse, podUID)
 		}
 	}
-	// Allocate resources for init containers first as we know the caller always loops
-	// through init containers before looping through app containers. Should the caller
-	// ever change those semantics, this logic will need to be amended.
+	// 调用方保证先遍历 init 容器再遍历普通容器；
+	// 若该约定改变，这里的复用逻辑必须同步调整。
+	// 否则普通容器可能抢走本应留给 init 容器的设备。
 	for _, initContainer := range pod.Spec.InitContainers {
 		if container.Name == initContainer.Name {
 
@@ -416,9 +434,9 @@ func (m *ManagerImpl) Allocate(ctx context.Context, pod *v1.Pod, container *v1.C
 			if !podutil.IsRestartableInitContainer(&initContainer) {
 				m.podDevices.addContainerAllocatedResources(string(pod.UID), container.Name, m.devicesToReuse[string(pod.UID)])
 			} else {
-				// If the init container is restartable, we need to keep the
-				// devices allocated. In other words, we should remove them
-				// from the devicesToReuse.
+				// 重启式 init 容器会再次启动，因此必须保留其设备分配；
+				// 从复用表中移除，防止被后续容器复用。
+				// 普通 init 容器的设备则在结束后可复用。
 				m.podDevices.removeContainerAllocatedResources(string(pod.UID), container.Name, m.devicesToReuse[string(pod.UID)])
 			}
 			return nil
@@ -431,11 +449,11 @@ func (m *ManagerImpl) Allocate(ctx context.Context, pod *v1.Pod, container *v1.C
 	return nil
 }
 
-// UpdatePluginResources updates node resources based on devices already allocated to pods.
+// UpdatePluginResources 依据已分配设备修正 NodeInfo 的可分配资源，保证已调度 Pod 能通过准入检查。
 func (m *ManagerImpl) UpdatePluginResources(node *schedulerframework.NodeInfo, attrs *lifecycle.PodAdmitAttributes) error {
 	pod := attrs.Pod
 
-	// quick return if no pluginResources requested
+	// Pod 未使用任何设备插件资源时无需调整。
 	if !m.podDevices.hasPod(string(pod.UID)) {
 		return nil
 	}
@@ -444,6 +462,7 @@ func (m *ManagerImpl) UpdatePluginResources(node *schedulerframework.NodeInfo, a
 	return nil
 }
 
+// markResourceUnhealthy 把某资源的全部健康设备移入不健康集合。
 func (m *ManagerImpl) markResourceUnhealthy(logger klog.Logger, resourceName string) {
 	logger.V(2).Info("Mark all resources Unhealthy for resource", "resourceName", resourceName)
 	healthyDevices := sets.New[string]()
@@ -457,18 +476,10 @@ func (m *ManagerImpl) markResourceUnhealthy(logger klog.Logger, resourceName str
 	m.unhealthyDevices[resourceName] = m.unhealthyDevices[resourceName].Union(healthyDevices)
 }
 
-// GetCapacity is expected to be called when Kubelet updates its node status.
-// The first returned variable contains the registered device plugin resource capacity.
-// The second returned variable contains the registered device plugin resource allocatable.
-// The third returned variable contains previously registered resources that are no longer active.
-// Kubelet uses this information to update resource capacity/allocatable in its node status.
-// After the call, device plugin can remove the inactive resources from its internal list as the
-// change is already reflected in Kubelet node status.
-// Note in the special case after Kubelet restarts, device plugin resource capacities can
-// temporarily drop to zero till corresponding device plugins re-register. This is OK because
-// cm.UpdatePluginResource() run during predicate Admit guarantees we adjust nodeinfo
-// capacity for already allocated pods so that they can continue to run. However, new pods
-// requiring device plugin resources will not be scheduled till device plugin re-registers.
+// GetCapacity 在 kubelet 更新节点状态时调用，返回容量、可分配量和已失效资源列表。
+// 容量计入不健康设备（仍占硬件资源），可分配量只计健康设备。
+// kubelet 重启后容量会暂时为 0，直到插件重新注册；这不会影响已运行的 Pod，
+// 因为准入阶段 UpdatePluginResources 会为已分配 Pod 修正 nodeinfo 容量。
 func (m *ManagerImpl) GetCapacity(logger klog.Logger) (v1.ResourceList, v1.ResourceList, []string) {
 	var capacity = v1.ResourceList{}
 	var allocatable = v1.ResourceList{}
@@ -477,9 +488,9 @@ func (m *ManagerImpl) GetCapacity(logger klog.Logger) (v1.ResourceList, v1.Resou
 	for resourceName, devices := range m.healthyDevices {
 		eI, ok := m.endpoints[resourceName]
 		if (ok && eI.e.stopGracePeriodExpired()) || !ok {
-			// The resources contained in endpoints and (un)healthyDevices
-			// should always be consistent. Otherwise, we run with the risk
-			// of failing to garbage collect non-existing resources or devices.
+			// endpoints 与健康设备表必须保持一致，
+			// 否则可能无法正确回收已不存在的资源或设备。
+			// 停止宽限期已过或端点缺失的资源都视为已失效。
 			if !ok {
 				logger.Info("Unexpected: healthyDevices and endpoints are out of sync")
 			}
@@ -504,6 +515,7 @@ func (m *ManagerImpl) GetCapacity(logger klog.Logger) (v1.ResourceList, v1.Resou
 		}
 	}
 
+	// 从内部状态中彻底移除已失效资源，避免其容量被反复上报。
 	for resourceName := range deletedResources {
 		delete(m.endpoints, resourceName)
 		delete(m.healthyDevices, resourceName)
@@ -512,6 +524,7 @@ func (m *ManagerImpl) GetCapacity(logger klog.Logger) (v1.ResourceList, v1.Resou
 
 	m.mutex.Unlock()
 
+	// 状态有变化才写 checkpoint，减少磁盘 I/O。
 	if deletedResources.Len() > 0 {
 		if err := m.writeCheckpoint(logger); err != nil {
 			logger.Error(err, "Failed to write checkpoint file")
@@ -520,7 +533,7 @@ func (m *ManagerImpl) GetCapacity(logger klog.Logger) (v1.ResourceList, v1.Resou
 	return capacity, allocatable, deletedResources.UnsortedList()
 }
 
-// Checkpoints device to container allocation information to disk.
+// writeCheckpoint 将设备到容器的分配信息持久化到磁盘。
 func (m *ManagerImpl) writeCheckpoint(logger klog.Logger) error {
 	m.mutex.Lock()
 	registeredDevs := make(map[string][]string)
@@ -530,6 +543,7 @@ func (m *ManagerImpl) writeCheckpoint(logger klog.Logger) error {
 	data := checkpoint.New(m.podDevices.toCheckpointData(logger),
 		registeredDevs)
 	m.mutex.Unlock()
+	// 先释放锁再写盘：checkpoint 写入可能较慢，不应阻塞分配路径。
 	err := m.checkpointManager.CreateCheckpoint(kubeletDeviceManagerCheckpoint, data)
 	if err != nil {
 		err2 := fmt.Errorf("failed to write checkpoint file %q: %v", kubeletDeviceManagerCheckpoint, err)
@@ -540,13 +554,13 @@ func (m *ManagerImpl) writeCheckpoint(logger klog.Logger) error {
 	return nil
 }
 
-// Reads device to container allocation information from disk, and populates
-// m.allocatedDevices accordingly.
+// readCheckpoint 从磁盘读取设备分配信息并填充内部状态。
+// checkpoint 不存在属于正常情况（首次启动），直接返回。
 func (m *ManagerImpl) readCheckpoint(logger klog.Logger) error {
 	cp, err := m.getCheckpoint()
 	if err != nil {
 		if err == errors.ErrCheckpointNotFound {
-			// no point in trying anything else
+			// checkpoint 不存在时没有可恢复的数据，无需继续处理。
 			logger.Error(err, "Failed to read data from checkpoint", "checkpoint", kubeletDeviceManagerCheckpoint)
 			return nil
 		}
@@ -559,8 +573,8 @@ func (m *ManagerImpl) readCheckpoint(logger klog.Logger) error {
 	m.podDevices.fromCheckpointData(logger, podDevices)
 	m.allocatedDevices = m.podDevices.devices()
 	for resource := range registeredDevs {
-		// During start up, creates empty healthyDevices list so that the resource capacity
-		// will stay zero till the corresponding device plugin re-registers.
+		// 启动时先创建空的健康设备集合，容量保持为 0，
+		// 直到对应插件重新注册并上报设备。
 		m.healthyDevices[resource] = sets.New[string]()
 		m.unhealthyDevices[resource] = sets.New[string]()
 		m.endpoints[resource] = endpointInfo{e: newStoppedEndpointImpl(resource), opts: nil}
@@ -570,6 +584,7 @@ func (m *ManagerImpl) readCheckpoint(logger klog.Logger) error {
 	return nil
 }
 
+// getCheckpoint 读取并反序列化 checkpoint 文件。
 func (m *ManagerImpl) getCheckpoint() (checkpoint.DeviceManagerCheckpoint, error) {
 	registeredDevs := make(map[string][]string)
 	devEntries := make([]checkpoint.PodDevicesEntry, 0)
@@ -578,9 +593,10 @@ func (m *ManagerImpl) getCheckpoint() (checkpoint.DeviceManagerCheckpoint, error
 	return cp, err
 }
 
-// UpdateAllocatedDevices frees any Devices that are bound to terminated pods.
+// UpdateAllocatedDevices 释放绑定在已终止 Pod 上的设备。
 func (m *ManagerImpl) UpdateAllocatedDevices(logger klog.Logger) {
 	activePods := m.activePods()
+	// 配置源未就绪时活跃 Pod 列表不可信，贸然清理会释放仍在使用的设备。
 	if !m.sourcesReady.AllReady() {
 		return
 	}
@@ -595,88 +611,88 @@ func (m *ManagerImpl) UpdateAllocatedDevices(logger klog.Logger) {
 	}
 	logger.V(3).Info("Pods to be removed", "podUIDs", sets.List(podsToBeRemoved))
 	m.podDevices.delete(sets.List(podsToBeRemoved))
-	// Regenerated allocatedDevices after we update pod allocation information.
+	// 删除 Pod 记录后重新生成 allocatedDevices，保持两者一致。
 	m.allocatedDevices = m.podDevices.devices()
 }
 
-// Returns list of device Ids we need to allocate with Allocate rpc call.
-// Returns empty list in case we don't need to issue the Allocate rpc call.
+// devicesToAllocate 计算还需要通过 Allocate RPC 申请的设备 ID。
+// 无需调用 RPC 时返回空列表。
 func (m *ManagerImpl) devicesToAllocate(ctx context.Context, podUID, contName, resource string, required int, reusableDevices sets.Set[string]) (sets.Set[string], error) {
 	logger := klog.FromContext(ctx)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	needed := required
-	// Gets list of devices that have already been allocated.
-	// This can happen if a container restarts for example.
+	// 容器重启时可能已有分配，先扣除这部分。
+	// 若已有分配数与请求数不符，说明 Pod 规格被改动，直接报错。
 	devices := m.podDevices.containerDevices(podUID, contName, resource)
 	if devices != nil {
 		logger.V(3).Info("Found pre-allocated devices for resource on pod", "resourceName", resource, "containerName", contName, "podUID", podUID, "devices", sets.List(devices))
 		needed = needed - devices.Len()
-		// A pod's resource is not expected to change once admitted by the API server,
-		// so just fail loudly here. We can revisit this part if this no longer holds.
+		// Pod 通过 API server 准入后资源不应改变，因此这里失败即意味着状态异常。
+		// 如果将来允许变更，需要重新设计这部分逻辑。
 		if needed != 0 {
 			return nil, fmt.Errorf("pod %q container %q changed request for resource %q from %d to %d", podUID, contName, resource, devices.Len(), required)
 		}
 	}
 
-	// We have 3 major flows to handle:
-	// 1. kubelet running, normal allocation (needed > 0, container being  [re]created). Steady state and most common case by far and large.
-	// 2. kubelet restart. In this scenario every other component of the stack (device plugins, app container, runtime) is still running.
-	// 3. node reboot. In this scenario device plugins may not be running yet when we try to allocate devices.
-	//    note: if we get this far the runtime is surely running. This is usually enforced at OS level by startup system services dependencies.
+	// 三种主要场景需要区分处理：
+	// 1. kubelet 正常运行时的分配（最常见）。
+	// 2. kubelet 重启：插件、容器和运行时都还在运行。
+	// 3. 整机重启：插件可能尚未启动。
+	//    能走到这里说明运行时已启动（由系统服务依赖保证）。
 
-	// First we take care of the exceptional flow (scenarios 2 and 3). In both flows, kubelet is reinitializing, and while kubelet is initializing, sources are NOT all ready.
-	// Is this a simple kubelet restart (scenario 2)? To distinguish, we use the information we got for runtime. If we are asked to allocate devices for containers reported
-	// running, then it can only be a kubelet restart. On node reboot the runtime and the containers were also shut down. Then, if the container was running, it can only be
-	// because it already has access to all the required devices, so we got nothing to do and we can bail out.
+	// 先处理异常场景（2 和 3）：此时 kubelet 正在重新初始化，配置源尚未全部就绪。
+	// 借助运行时信息区分场景 2 与 3：
+	// 若容器被报告为运行中，则只可能是 kubelet 重启；整机重启时容器也已被关闭。
+	// 此时容器已持有全部所需设备，无需重复分配。
 	if !m.sourcesReady.AllReady() && m.isContainerAlreadyRunning(logger, podUID, contName) {
 		logger.V(3).Info("Container detected running, nothing to do", "deviceNumber", needed, "resourceName", resource, "podUID", podUID, "containerName", contName)
 		return nil, nil
 	}
 
-	// We dealt with scenario 2. If we got this far it's either scenario 3 (node reboot) or scenario 1 (steady state, normal flow).
+	// 场景 2 已排除，剩下场景 3 或场景 1，可走统一路径。
 	logger.V(3).Info("Need devices to allocate for pod", "deviceNumber", needed, "resourceName", resource, "podUID", podUID, "containerName", contName)
 	healthyDevices, hasRegistered := m.healthyDevices[resource]
 
-	// The following checks are expected to fail only happen on scenario 3 (node reboot).
-	// The kubelet is reinitializing and got a container from sources. But there's no ordering, so an app container may attempt allocation _before_ the device plugin was created,
-	// has registered and reported back to kubelet the devices.
-	// This can only happen on scenario 3 because at steady state (scenario 1) the scheduler prevents pod to be sent towards node which don't report enough devices.
-	// Note: we need to check the device health and registration status *before* we check how many devices are needed, doing otherwise caused issue #109595
-	// Note: if the scheduler is bypassed, we fall back in scenario 1, so we still need these checks.
+	// 以下检查只可能在场景 3 失败：
+	// kubelet 重新初始化时容器先于插件出现，分配请求可能早于插件注册。
+	// 这种情况下必须明确报错，等待插件就绪后重试。
+	// 稳态下调度器不会把 Pod 调度到设备不足的节点。
+	// 注意：必须先检查注册与健康状态再检查所需数量，否则会触发 #109595。
+	// 即使绕过调度器，也仍需这些检查兜底。
 	if !hasRegistered {
 		return nil, fmt.Errorf("cannot allocate unregistered device %s", resource)
 	}
 
-	// Check if registered resource has healthy devices
+	// 资源已注册但没有健康设备时无法分配。
 	if healthyDevices.Len() == 0 {
 		return nil, fmt.Errorf("no healthy devices present; cannot allocate unhealthy devices %s", resource)
 	}
 
-	// Check if all the previously allocated devices are healthy
+	// 已分配设备中有不健康的，也不能继续分配，避免部分容器不可用。
 	if !healthyDevices.IsSuperset(devices) {
 		return nil, fmt.Errorf("previously allocated devices are no longer healthy; cannot allocate unhealthy devices %s", resource)
 	}
 
-	// We handled the known error paths in scenario 3 (node reboot), so from now on we can fall back in a common path.
-	// We cover container restart on kubelet steady state with the same flow.
+	// 场景 3 的已知错误路径已处理完，后续走公共逻辑。
+	// kubelet 稳态下的容器重启也复用同一流程。
 	if needed == 0 {
 		logger.V(3).Info("No devices needed, nothing to do", "deviceNumber", needed, "resourceName", resource, "podUID", podUID, "containerName", contName)
-		// No change, no work.
+		// 无需分配，直接返回。
 		return nil, nil
 	}
 
-	// Declare the list of allocated devices.
-	// This will be populated and returned below.
+	// allocated 收集本次分配的设备，并在返回前同步到 allocatedDevices。
+	// 闭包按需填充该集合。
 	allocated := sets.New[string]()
 
-	// Create a closure to help with device allocation
-	// Returns 'true' once no more devices need to be allocated.
+	// allocateRemainingFrom 从给定集合中补充设备，直到满足所需数量。
+	// 返回 true 表示已分配足够，调用方可提前结束。
 	allocateRemainingFrom := func(devices sets.Set[string]) bool {
-		// When we call callGetPreferredAllocationIfAvailable below, we will release
-		// the lock and call the device plugin. If someone calls ListResource concurrently,
-		// device manager will recalculate the allocatedDevices map. Some entries with
-		// empty sets may be removed, so we reinit here.
+		// 调用 GetPreferredAllocation 时会释放锁，其他路径可能重建 allocatedDevices，
+		// 因此这里需要重新初始化，防止向 nil map 写入。
+		// 空集合条目可能已被清理。
+		// 该重建是安全的，因为设备分配信息以 podDevices 为准。
 		if m.allocatedDevices[resource] == nil {
 			m.allocatedDevices[resource] = sets.New[string]()
 		}
@@ -691,26 +707,26 @@ func (m *ManagerImpl) devicesToAllocate(ctx context.Context, podUID, contName, r
 		return false
 	}
 
-	// Allocates from reusableDevices list first.
+	// 优先使用可复用设备，避免已分配给 init 容器的设备被浪费。
 	if allocateRemainingFrom(reusableDevices) {
 		return allocated, nil
 	}
 
-	// Gets Devices in use.
+	// 从健康设备中排除已分配设备，得到可用设备。
 	devicesInUse := m.allocatedDevices[resource]
-	// Gets Available devices.
+	// 可用数量不足时立即报错，避免部分分配。
 	available := m.healthyDevices[resource].Difference(devicesInUse)
 	if available.Len() < needed {
 		return nil, fmt.Errorf("requested number of devices unavailable for %s. Requested: %d, Available: %d", resource, needed, available.Len())
 	}
 
-	// Filters available Devices based on NUMA affinity.
+	// 按 NUMA 亲和性把可用设备分为对齐、非对齐和无拓扑三类。
 	aligned, unaligned, noAffinity := m.filterByAffinity(logger, podUID, contName, resource, available)
 
-	// If we can allocate all remaining devices from the set of aligned ones, then
-	// give the plugin the chance to influence which ones to allocate from that set.
+	// 对齐设备足够时，让插件在候选集合中挑选具体设备。
+	// 插件只能在对齐集合内挑选，以保持 TopologyManager 的保证。
 	if needed < aligned.Len() {
-		// First allocate from the preferred devices list (if available).
+		// 优先使用插件推荐列表与对齐集合的交集。
 		preferred, err := m.callGetPreferredAllocationIfAvailable(ctx, podUID, contName, resource, aligned.Union(allocated), allocated, required)
 		if err != nil {
 			return nil, err
@@ -718,8 +734,8 @@ func (m *ManagerImpl) devicesToAllocate(ctx context.Context, podUID, contName, r
 		if allocateRemainingFrom(preferred.Intersection(aligned)) {
 			return allocated, nil
 		}
-		// Then fallback to allocate from the aligned set if no preferred list
-		// is returned (or not enough devices are returned in that list).
+		// 插件未返回推荐或数量不足时，退回直接使用对齐集合。
+		// 若对齐集合也不够，说明状态不一致，报错。
 		if allocateRemainingFrom(aligned) {
 			return allocated, nil
 		}
@@ -727,15 +743,15 @@ func (m *ManagerImpl) devicesToAllocate(ctx context.Context, podUID, contName, r
 		return nil, fmt.Errorf("unexpectedly allocated less resources than required. Requested: %d, Got: %d", required, required-needed)
 	}
 
-	// If we can't allocate all remaining devices from the set of aligned ones,
-	// then start by first allocating all the aligned devices (to ensure
-	// that the alignment guaranteed by the TopologyManager is honored).
+	// 对齐设备不够时，先尽量用完对齐设备，
+	// 以满足 TopologyManager 的 NUMA 对齐要求。
+	// 剩余设备再交给插件推荐。
 	if allocateRemainingFrom(aligned) {
 		return allocated, nil
 	}
 
-	// Then give the plugin the chance to influence the decision on any
-	// remaining devices to allocate.
+	// 在全部可用设备中让插件推荐剩余设备。
+	// 推荐结果仍需与可用集合求交，防止选到已占用设备。
 	preferred, err := m.callGetPreferredAllocationIfAvailable(ctx, podUID, contName, resource, available.Union(allocated), allocated, required)
 	if err != nil {
 		return nil, err
@@ -744,9 +760,9 @@ func (m *ManagerImpl) devicesToAllocate(ctx context.Context, podUID, contName, r
 		return allocated, nil
 	}
 
-	// Finally, if the plugin did not return a preferred allocation (or didn't
-	// return a large enough one), then fall back to allocating the remaining
-	// devices from the 'unaligned' and 'noAffinity' sets.
+	// 最后从非对齐和无拓扑设备中补齐。
+	// 这是尽力而为的兜底，不保证 NUMA 对齐。
+	// 若仍不足则返回错误，说明健康设备数量与容量不一致。
 	if allocateRemainingFrom(unaligned) {
 		return allocated, nil
 	}
@@ -757,17 +773,18 @@ func (m *ManagerImpl) devicesToAllocate(ctx context.Context, podUID, contName, r
 	return nil, fmt.Errorf("unexpectedly allocated less resources than required. Requested: %d, Got: %d", required, required-needed)
 }
 
+// filterByAffinity 按 TopologyManager 的亲和性提示把可用设备分为三类。
 func (m *ManagerImpl) filterByAffinity(logger klog.Logger, podUID, contName, resource string, available sets.Set[string]) (sets.Set[string], sets.Set[string], sets.Set[string]) {
-	// If alignment information is not available, just pass the available list back.
+	// 无亲和性信息时全部归入 noAffinity，不影响正常分配。
 	hint := m.topologyAffinityStore.GetAffinity(logger, podUID, contName)
 	if !m.deviceHasTopologyAlignment(resource) || hint.NUMANodeAffinity == nil {
 		return sets.New[string](), sets.New[string](), available
 	}
 
-	// Build a map of NUMA Nodes to the devices associated with them. A
-	// device may be associated to multiple NUMA nodes at the same time. If an
-	// available device does not have any NUMA Nodes associated with it, add it
-	// to a list of NUMA Nodes for the fake NUMANode -1.
+	// 一个设备可能关联多个 NUMA 节点；
+	// 没有拓扑信息的设备归入伪节点 -1。
+	// 这样后续排序时不会遗漏任何设备。
+	// perNodeDevices 的键是 NUMA 节点编号。
 	perNodeDevices := make(map[int]sets.Set[string])
 	for d := range available {
 		if m.allDevices[resource][d].Topology == nil || len(m.allDevices[resource][d].Topology.Nodes) == 0 {
@@ -786,19 +803,19 @@ func (m *ManagerImpl) filterByAffinity(logger klog.Logger, podUID, contName, res
 		}
 	}
 
-	// Get a flat list of all the nodes associated with available devices.
+	// 收集所有相关 NUMA 节点，便于后续排序。
 	var nodes []int
 	for node := range perNodeDevices {
 		nodes = append(nodes, node)
 	}
 
-	// Sort the list of nodes by:
-	// 1) Nodes contained in the 'hint's affinity set
-	// 2) Nodes not contained in the 'hint's affinity set
-	// 3) The fake NUMANode of -1 (assuming it is included in the list)
-	// Within each of the groups above, sort the nodes by how many devices they contain
+	// 排序规则：
+	// 1) 在亲和性集合内的节点优先；
+	// 2) 其次是不在亲和性集合内的节点；
+	// 3) 最后是无拓扑的伪节点 -1。
+	// 同组内按设备数量升序，尽量把设备集中到少数节点。
 	sort.Slice(nodes, func(i, j int) bool {
-		// If one or the other of nodes[i] or nodes[j] is in the 'hint's affinity set
+		// 两者都在亲和集合内时，按设备数升序。
 		if hint.NUMANodeAffinity.IsSet(nodes[i]) && hint.NUMANodeAffinity.IsSet(nodes[j]) {
 			return perNodeDevices[nodes[i]].Len() < perNodeDevices[nodes[j]].Len()
 		}
@@ -809,7 +826,7 @@ func (m *ManagerImpl) filterByAffinity(logger klog.Logger, podUID, contName, res
 			return false
 		}
 
-		// If one or the other of nodes[i] or nodes[j] is the fake NUMA node -1 (they can't both be)
+		// 伪节点 -1 排在真实节点之后（二者不可能同时为 -1）。
 		if nodes[i] == nodeWithoutTopology {
 			return false
 		}
@@ -817,25 +834,25 @@ func (m *ManagerImpl) filterByAffinity(logger klog.Logger, podUID, contName, res
 			return true
 		}
 
-		// Otherwise both nodes[i] and nodes[j] are real NUMA nodes that are not in the 'hint's' affinity list.
+		// 两者都是不在亲和集合内的真实节点，按设备数升序。
 		return perNodeDevices[nodes[i]].Len() < perNodeDevices[nodes[j]].Len()
 	})
 
-	// Generate three sorted lists of devices. Devices in the first list come
-	// from valid NUMA Nodes contained in the affinity mask. Devices in the
-	// second list come from valid NUMA Nodes not in the affinity mask. Devices
-	// in the third list come from devices with no NUMA Node association (i.e.
-	// those mapped to the fake NUMA Node -1). Because we loop through the
-	// sorted list of NUMA nodes in order, within each list, devices are sorted
-	// by their connection to NUMA Nodes with more devices on them.
+	// 生成三个有序设备列表：
+	// 第一个来自亲和掩码内的 NUMA 节点，
+	// 第二个来自亲和掩码外的节点，
+	// 第三个来自无 NUMA 关联的设备。
+	// 由于按排序后的节点顺序遍历，组内设备也按节点设备数有序。
+	// 这样优先填充设备较少的节点，有利于拓扑均衡。
+	// 循环顺序决定了这一性质。
 	var fromAffinity []string
 	var notFromAffinity []string
 	var withoutTopology []string
 	for d := range available {
-		// Since the same device may be associated with multiple NUMA Nodes. We
-		// need to be careful not to add each device to multiple lists. The
-		// logic below ensures this by breaking after the first NUMA node that
-		// has the device is encountered.
+		// 同一设备可能出现在多个 NUMA 节点下，
+		// 因此遇到第一个包含它的节点后即跳出，
+		// 保证每个设备只进入一个列表。
+		// 分组依据是该节点是否在亲和集合内。
 		for _, n := range nodes {
 			if perNodeDevices[n].Has(d) {
 				if n == nodeWithoutTopology {
@@ -850,38 +867,38 @@ func (m *ManagerImpl) filterByAffinity(logger klog.Logger, podUID, contName, res
 		}
 	}
 
-	// Return all three lists containing the full set of devices across them.
+	// 三个列表并集即为全部可用设备，不重不漏。
 	return sets.New[string](fromAffinity...), sets.New[string](notFromAffinity...), sets.New[string](withoutTopology...)
 }
 
-// allocateContainerResources attempts to allocate all of required device
-// plugin resources for the input container, issues an Allocate rpc request
-// for each new device resource requirement, processes their AllocateResponses,
-// and updates the cached containerDevices on success.
+// allocateContainerResources 为容器申请全部所需设备插件资源：
+// 对每个新资源发起 Allocate RPC，
+// 处理响应并更新缓存的容器设备映射。
+// 成功后统一写一次 checkpoint。
 func (m *ManagerImpl) allocateContainerResources(ctx context.Context, pod *v1.Pod, container *v1.Container, devicesToReuse map[string]sets.Set[string]) error {
 	logger := klog.FromContext(ctx)
 	podUID := string(pod.UID)
 	contName := container.Name
 	allocatedDevicesUpdated := false
 	needsUpdateCheckpoint := false
-	// Extended resources are not allowed to be overcommitted.
-	// Since device plugin advertises extended resources,
-	// therefore Requests must be equal to Limits and iterating
-	// over the Limits should be sufficient.
+	// 扩展资源不允许超卖，因此 Requests 必等于 Limits，遍历 Limits 即可。
+	// 这也是设备插件只能以扩展资源形式暴露的原因。
+	// 因此只需要检查 Limits。
+	// 资源名即为设备插件注册的资源名。
 	for k, v := range container.Resources.Limits {
 		resource := string(k)
 		needed := int(v.Value())
 		logger.V(3).Info("Looking for needed resources", "resourceName", resource, "pod", klog.KObj(pod), "containerName", container.Name, "needed", needed)
 		if utilfeature.DefaultFeatureGate.Enabled(features.DRAExtendedResource) && isDRAExtendedResource(pod, container.Name, resource) {
-			// Skip extended resources managed by DRA
+			// 由 DRA 管理的扩展资源不归设备管理器分配，避免重复处理。
 			logger.V(3).Info("Skipping allocation for DRA-backed extended resource", "resourceName", resource, "pod", klog.KObj(pod), "containerName", container.Name)
 			continue
 		}
 		if !m.isDevicePluginResource(resource) {
 			continue
 		}
-		// Updates allocatedDevices to garbage collect any stranded resources
-		// before doing the device plugin allocation.
+		// 分配前先回收已终止 Pod 的残留设备，
+		// 否则可用设备数量会被低估。
 		if !allocatedDevicesUpdated {
 			m.UpdateAllocatedDevices(logger)
 			allocatedDevicesUpdated = true
@@ -897,18 +914,11 @@ func (m *ManagerImpl) allocateContainerResources(ctx context.Context, pod *v1.Po
 		needsUpdateCheckpoint = true
 
 		startRPCTime := time.Now()
-		// Manager.Allocate involves RPC calls to device plugin, which
-		// could be heavy-weight. Therefore we want to perform this operation outside
-		// mutex lock. Note if Allocate call fails, we may leave container resources
-		// partially allocated for the failed container. We rely on UpdateAllocatedDevices()
-		// to garbage collect these resources later. Another side effect is that if
-		// we have X resource A and Y resource B in total, and two containers, container1
-		// and container2 both require X resource A and Y resource B. Both allocation
-		// requests may fail if we serve them in mixed order.
-		// TODO: may revisit this part later if we see inefficient resource allocation
-		// in real use as the result of this. Should also consider to parallelize device
-		// plugin Allocate grpc calls if it becomes common that a container may require
-		// resources from multiple device plugins.
+		// Allocate 涉及插件 RPC，可能较慢，必须在锁外执行。
+		// 失败时可能留下部分分配，由 UpdateAllocatedDevices 后续回收；
+		// 两个容器竞争同类资源且交错执行时，双方都可能失败，这是已知权衡。
+		// TODO: 如果实际出现分配效率问题，再重新审视这部分实现。
+		// 同时考虑并行化设备插件的 Allocate gRPC 调用。
 		m.mutex.Lock()
 		eI, ok := m.endpoints[resource]
 		m.mutex.Unlock()
@@ -920,14 +930,14 @@ func (m *ManagerImpl) allocateContainerResources(ctx context.Context, pod *v1.Po
 		}
 
 		devs := allocDevices.UnsortedList()
-		// TODO: refactor this part of code to just append a ContainerAllocationRequest
-		// in a passed in AllocateRequest pointer, and issues a single Allocate call per pod.
+		// TODO: 重构为按 Pod 聚合的单个 Allocate 请求。
+		// 这样可以减少 RPC 次数并简化失败回滚。
 		logger.V(4).Info("Making allocation request for device plugin", "devices", devs, "resourceName", resource, "pod", klog.KObj(pod), "containerName", container.Name)
 		resp, err := eI.e.allocate(ctx, devs)
 		metrics.DevicePluginAllocationDuration.WithLabelValues(resource).Observe(metrics.SinceInSeconds(startRPCTime))
 		if err != nil {
-			// In case of allocation failure, we want to restore m.allocatedDevices
-			// to the actual allocated state from m.podDevices.
+			// 分配失败时以 podDevices 为准重建 allocatedDevices，
+			// 丢弃本次可能的部分占用。
 			m.mutex.Lock()
 			m.allocatedDevices = m.podDevices.devices()
 			m.mutex.Unlock()
@@ -939,7 +949,7 @@ func (m *ManagerImpl) allocateContainerResources(ctx context.Context, pod *v1.Po
 		}
 
 		allocDevicesWithNUMA := checkpoint.NewDevicesPerNUMA()
-		// Update internal cached podDevices state.
+		// 按设备所属 NUMA 节点分组后写入 podDevices。
 		m.mutex.Lock()
 		for dev := range allocDevices {
 			if m.allDevices[resource][dev].Topology == nil || len(m.allDevices[resource][dev].Topology.Nodes) == 0 {
@@ -962,7 +972,7 @@ func (m *ManagerImpl) allocateContainerResources(ctx context.Context, pod *v1.Po
 	return nil
 }
 
-// checkPodActive checks if the given pod is still in activePods list
+// checkPodActive 判断 Pod 是否仍在活跃列表中。
 func (m *ManagerImpl) checkPodActive(pod *v1.Pod) bool {
 	activePods := m.activePods()
 	for _, activePod := range activePods {
@@ -974,9 +984,9 @@ func (m *ManagerImpl) checkPodActive(pod *v1.Pod) bool {
 	return false
 }
 
-// GetDeviceRunContainerOptions checks whether we have cached containerDevices
-// for the passed-in <pod, container> and returns its DeviceRunContainerOptions
-// for the found one. An empty struct is returned in case no cached state is found.
+// GetDeviceRunContainerOptions 返回容器运行所需的设备配置（设备节点、环境变量等）。
+// 若无缓存状态则返回空结构；
+// 必要时会重新分配设备以覆盖重启竞态。
 func (m *ManagerImpl) GetDeviceRunContainerOptions(ctx context.Context, pod *v1.Pod, container *v1.Container) (*DeviceRunContainerOptions, error) {
 	logger := klog.FromContext(ctx)
 	podUID := string(pod.UID)
@@ -997,16 +1007,16 @@ func (m *ManagerImpl) GetDeviceRunContainerOptions(ctx context.Context, pod *v1.
 			continue
 		}
 
-		// This is a device plugin resource yet we don't have cached
-		// resource state. This is likely due to a race during node
-		// restart. We re-issue allocate request to cover this race.
+		// 资源属于设备插件但缓存中没有分配记录，
+		// 通常是节点重启期间的竞态，需要重新发起分配。
+		// 重新分配走标准 Add 流程，因此无需特殊处理。
 		if m.podDevices.containerDevices(podUID, contName, resource) == nil {
 			needsReAllocate = true
 		}
 	}
 	if needsReAllocate {
 		logger.V(2).Info("Needs to re-allocate device plugin resources for pod", "pod", klog.KObj(pod), "containerName", container.Name)
-		// Device Manager support only Allocate(add)
+		// 设备管理器只支持 Add 操作。
 		if err := m.Allocate(ctx, pod, container, lifecycle.AddOperation); err != nil {
 			return nil, err
 		}
@@ -1014,8 +1024,8 @@ func (m *ManagerImpl) GetDeviceRunContainerOptions(ctx context.Context, pod *v1.
 	return m.podDevices.deviceRunContainerOptions(logger, string(pod.UID), container.Name), nil
 }
 
-// callPreStartContainerIfNeeded issues PreStartContainer grpc call for device plugin resource
-// with PreStartRequired option set.
+// callPreStartContainerIfNeeded 对声明了 PreStartRequired 的插件资源发起 PreStartContainer RPC。
+// 该调用用于让插件在容器启动前完成设备初始化。
 func (m *ManagerImpl) callPreStartContainerIfNeeded(ctx context.Context, podUID, contName, resource string) error {
 	logger := klog.FromContext(ctx)
 	m.mutex.Lock()
@@ -1027,6 +1037,7 @@ func (m *ManagerImpl) callPreStartContainerIfNeeded(ctx context.Context, podUID,
 
 	if eI.opts == nil || !eI.opts.PreStartRequired {
 		m.mutex.Unlock()
+		// 插件未要求 PreStart 时无需调用。
 		logger.V(5).Info("Plugin options indicate to skip PreStartContainer for resource", "podUID", podUID, "resourceName", resource, "containerName", contName)
 		return nil
 	}
@@ -1048,8 +1059,8 @@ func (m *ManagerImpl) callPreStartContainerIfNeeded(ctx context.Context, podUID,
 	return nil
 }
 
-// callGetPreferredAllocationIfAvailable issues GetPreferredAllocation grpc
-// call for device plugin resource with GetPreferredAllocationAvailable option set.
+// callGetPreferredAllocationIfAvailable 对支持推荐的插件发起 GetPreferredAllocation RPC。
+// 返回空集合表示插件未提供推荐。
 func (m *ManagerImpl) callGetPreferredAllocationIfAvailable(ctx context.Context, podUID, contName, resource string, available, mustInclude sets.Set[string], size int) (sets.Set[string], error) {
 	logger := klog.FromContext(ctx)
 	eI, ok := m.endpoints[resource]
@@ -1063,6 +1074,7 @@ func (m *ManagerImpl) callGetPreferredAllocationIfAvailable(ctx context.Context,
 	}
 
 	m.mutex.Unlock()
+	// 调用插件前必须释放锁，否则可能阻塞其他分配路径。
 	logger.V(4).Info("Issuing a GetPreferredAllocation call for container", "resourceName", resource, "containerName", contName, "podUID", podUID)
 	resp, err := eI.e.getPreferredAllocation(ctx, available.UnsortedList(), mustInclude.UnsortedList(), size)
 	m.mutex.Lock()
@@ -1075,10 +1087,10 @@ func (m *ManagerImpl) callGetPreferredAllocationIfAvailable(ctx context.Context,
 	return sets.New[string](), nil
 }
 
-// sanitizeNodeAllocatable scans through allocatedDevices in the device manager
-// and if necessary, updates allocatableResource in nodeInfo to at least equal to
-// the allocated capacity. This allows pods that have already been scheduled on
-// the node to pass GeneralPredicates admission checking even upon device plugin failure.
+// sanitizeNodeAllocatable 确保 NodeInfo 的可分配资源不少于已分配量，
+// 这样插件故障时已调度 Pod 仍能通过准入检查。
+// 只调高不调低：容量以 kubelet 上报为准。
+// 该调整只影响准入，不影响调度器的容量计算。
 func (m *ManagerImpl) sanitizeNodeAllocatable(node *schedulerframework.NodeInfo) {
 	var newAllocatableResource *schedulerframework.Resource
 	allocatableResource := node.Allocatable
@@ -1094,8 +1106,8 @@ func (m *ManagerImpl) sanitizeNodeAllocatable(node *schedulerframework.NodeInfo)
 		if ok && int(quant) >= needed {
 			continue
 		}
-		// Needs to update nodeInfo.AllocatableResource to make sure
-		// NodeInfo.allocatableResource at least equal to the capacity already allocated.
+		// 已分配量高于可分配量时上调，
+		// 使用 Clone 避免修改共享的 Resource 对象。
 		if newAllocatableResource == nil {
 			newAllocatableResource = allocatableResource.Clone()
 		}
@@ -1106,21 +1118,22 @@ func (m *ManagerImpl) sanitizeNodeAllocatable(node *schedulerframework.NodeInfo)
 	}
 }
 
+// isDevicePluginResource 判断资源是否由设备插件管理。
 func (m *ManagerImpl) isDevicePluginResource(resource string) bool {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	_, registeredResource := m.healthyDevices[resource]
 	_, allocatedResource := m.allocatedDevices[resource]
-	// Return true if this is either an active device plugin resource or
-	// a resource we have previously allocated.
+	// 已注册或曾分配过的资源都视为设备插件资源，
+	// 这样插件消失后仍能正确清理其设备。
 	if registeredResource || allocatedResource {
 		return true
 	}
 	return false
 }
 
-// isDRAExtendedResource checks if the specified resource for a given container
-// in the provided pod is an extended resource managed by DRA.
+// isDRAExtendedResource 判断某容器的扩展资源是否由 DRA 管理。
+// 依据 Pod 状态中的 ExtendedResourceClaimStatus 判断。
 func isDRAExtendedResource(pod *v1.Pod, containerName, resourceName string) bool {
 	claimStatus := pod.Status.ExtendedResourceClaimStatus
 	if claimStatus != nil {
@@ -1133,7 +1146,7 @@ func isDRAExtendedResource(pod *v1.Pod, containerName, resourceName string) bool
 	return false
 }
 
-// GetAllocatableDevices returns information about all the healthy devices known to the manager
+// GetAllocatableDevices 返回所有健康设备的信息。
 func (m *ManagerImpl) GetAllocatableDevices(logger klog.Logger) ResourceDeviceInstances {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -1142,32 +1155,33 @@ func (m *ManagerImpl) GetAllocatableDevices(logger klog.Logger) ResourceDeviceIn
 	return resp
 }
 
-// AllocatePod is called to trigger the allocation of resources to a pod.
+// AllocatePod 是 Pod 级资源分配入口，设备管理器不支持该能力。
 func (m *ManagerImpl) AllocatePod(logger klog.Logger, pod *v1.Pod, _ lifecycle.Operation) error {
-	// Device Manager does not support pod level resource allocation.
+	// 设备只能按容器分配，因此这里直接返回成功但不做任何事。
 	logger.V(2).Info("Device Manager does not support pod level resource allocation")
 	return nil
 }
 
-// GetDevices returns the devices used by the specified container
+// GetDevices 返回指定容器使用的设备。
 func (m *ManagerImpl) GetDevices(podUID, containerName string) ResourceDeviceInstances {
 	return m.podDevices.getContainerDevices(podUID, containerName)
 }
 
+// UpdateAllocatedResourcesStatus 把设备健康状态写入 Pod 状态的 AllocatedResourcesStatus。
 func (m *ManagerImpl) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod, status *v1.PodStatus) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	// Today we ignore edge cases that are not likely to happen:
-	//  - update statuses for containers that are in spec, but not in status
-	//  - update statuses for resources requested in spec, but with no information in podDevices
+	// 暂不处理以下低概率边界情况：
+	//  - spec 中存在但 status 中缺失的容器；
+	//  - spec 中申请了但 podDevices 无记录的资源。
 	for i, containerStatus := range status.ContainerStatuses {
 		devices := m.podDevices.getContainerDevices(string(pod.UID), containerStatus.Name)
 
 		for resourceName, deviceInstances := range devices {
 			for id, d := range deviceInstances {
 				health := pluginapi.Healthy
-				// this is unlikely, but check for existence here anyways
+				// 设备记录理论上一定存在，这里仍做防御性检查。
 				if r, ok := m.allDevices[resourceName]; ok {
 					if _, ok := r[id]; ok {
 						health = m.allDevices[resourceName][id].Health
@@ -1201,7 +1215,7 @@ func (m *ManagerImpl) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1
 				status.ContainerStatuses[i].AllocatedResourcesStatus = []v1.ResourceStatus{}
 			}
 
-			// look up the resource status by name and update it
+			// 按资源名更新已有状态，不存在则追加。
 			found := false
 			for j, rs := range status.ContainerStatuses[i].AllocatedResourcesStatus {
 				if rs.Name == resourceStatus.Name {
@@ -1218,9 +1232,9 @@ func (m *ManagerImpl) UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1
 	}
 }
 
-// ShouldResetExtendedResourceCapacity returns whether the extended resources should be zeroed or not,
-// depending on whether the node has been recreated. Absence of the checkpoint file strongly indicates the node
-// has been recreated.
+// ShouldResetExtendedResourceCapacity 判断是否需要把扩展资源容量清零。
+// 没有 checkpoint 文件说明节点是新创建的，
+// 此时旧的容量上报已失效，应重置为 0。
 func (m *ManagerImpl) ShouldResetExtendedResourceCapacity() bool {
 	checkpoints, err := m.checkpointManager.ListCheckpoints()
 	if err != nil {
@@ -1229,15 +1243,16 @@ func (m *ManagerImpl) ShouldResetExtendedResourceCapacity() bool {
 	return len(checkpoints) == 0
 }
 
+// isContainerAlreadyRunning 判断某容器是否在 kubelet 重启前就已在运行。
 func (m *ManagerImpl) isContainerAlreadyRunning(logger klog.Logger, podUID, cntName string) bool {
-	// Check if ANY container for this pod/container name is running.
-	// This handles the case where a container restarted before kubelet restart,
-	// so the containerMap might have multiple entries (old exited + new running).
-	// We need to check all of them to see if any are running.
-	//
-	// Note: if container runtime is down when kubelet restarts, containerRunningSet will be empty,
-	// so containers will fail admission, hitting https://github.com/kubernetes/kubernetes/issues/118559.
-	// This scenario should however be rare enough.
+	// 同一 Pod/容器名可能存在多条记录（旧容器已退出、新容器运行中），
+	// 因此需要遍历全部记录，只要有一条处于运行态即认为已运行。
+	// 这样可避免重复分配设备。
+	// 容器运行时不可用时 containerRunningSet 为空，可能导致准入失败（#118559），
+	// 注意：若 kubelet 重启时容器运行时不可用，containerRunningSet 会为空，
+	// 记录该已知限制，便于日后排查类似问题。
+	// 如需改进，可在运行时恢复后重新触发分配。
+	// 目前接受这一风险。
 	foundAnyContainer := false
 	foundRunningContainer := false
 

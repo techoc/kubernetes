@@ -25,19 +25,26 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 )
 
+// InternalContainerLifecycle 定义容器创建前后与停止后的内部钩子，
+// 供 CPU、内存、拓扑管理器介入容器生命周期。
 type InternalContainerLifecycle interface {
+	// PreCreateContainer 在容器创建前修改运行时容器配置（如 cpuset）。
 	PreCreateContainer(logger klog.Logger, pod *v1.Pod, container *v1.Container, containerConfig *runtimeapi.ContainerConfig) error
+	// PreStartContainer 在容器启动前把容器注册到各资源管理器。
 	PreStartContainer(logger klog.Logger, pod *v1.Pod, container *v1.Container, containerID string) error
+	// PostStopContainer 在容器停止后从各资源管理器清理状态。
 	PostStopContainer(logger klog.Logger, containerID string) error
 }
 
-// Implements InternalContainerLifecycle interface.
+// internalContainerLifecycleImpl 实现 InternalContainerLifecycle 接口。
 type internalContainerLifecycleImpl struct {
 	cpuManager      cpumanager.Manager
 	memoryManager   memorymanager.Manager
 	topologyManager topologymanager.Manager
 }
 
+// PreStartContainer 把容器注册到 CPU、内存与拓扑管理器，
+// 使后续资源分配能关联到具体容器 ID。
 func (i *internalContainerLifecycleImpl) PreStartContainer(logger klog.Logger, pod *v1.Pod, container *v1.Container, containerID string) error {
 	if i.cpuManager != nil {
 		i.cpuManager.AddContainer(logger, pod, container, containerID)
@@ -52,6 +59,7 @@ func (i *internalContainerLifecycleImpl) PreStartContainer(logger klog.Logger, p
 	return nil
 }
 
+// PostStopContainer 从拓扑管理器移除容器，释放其拓扑分配记录。
 func (i *internalContainerLifecycleImpl) PostStopContainer(logger klog.Logger, containerID string) error {
 	return i.topologyManager.RemoveContainer(logger, containerID)
 }

@@ -26,6 +26,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// comparePods 断言实际 Pod 列表与预期列表长度和内容一致。
 func comparePods(t *testing.T, expected []*ctest.FakePod, actual []*Pod) {
 	if len(expected) != len(actual) {
 		t.Errorf("expected %d pods, got %d instead", len(expected), len(actual))
@@ -37,10 +38,12 @@ func comparePods(t *testing.T, expected []*ctest.FakePod, actual []*Pod) {
 	}
 }
 
+// TestGetPods 验证缓存首次读取会从运行时拉取 Pod 列表。
 func TestGetPods(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	runtime := &ctest.FakeRuntime{}
 	expected := []*ctest.FakePod{{Pod: &Pod{ID: "1111"}}, {Pod: &Pod{ID: "2222"}}, {Pod: &Pod{ID: "3333"}}}
+	// 让 fake runtime 返回预置 Pod 列表。
 	runtime.PodList = expected
 	cache := NewTestRuntimeCache(runtime)
 	actual, err := cache.GetPods(tCtx)
@@ -51,30 +54,31 @@ func TestGetPods(t *testing.T) {
 	comparePods(t, expected, actual)
 }
 
+// TestForceUpdateIfOlder 验证只有缓存早于期望时间时才会强制刷新。
 func TestForceUpdateIfOlder(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	runtime := &ctest.FakeRuntime{}
 	cache := NewTestRuntimeCache(runtime)
 
-	// Cache old pods.
+	// 先缓存旧 Pod 列表。
 	oldpods := []*ctest.FakePod{{Pod: &Pod{ID: "1111"}}}
 	runtime.PodList = oldpods
 	if err := cache.UpdateCacheWithLock(tCtx); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
 
-	// Update the runtime to new pods.
+	// 把运行时数据更新为新 Pod 列表。
 	newpods := []*ctest.FakePod{{Pod: &Pod{ID: "1111"}}, {Pod: &Pod{ID: "2222"}}, {Pod: &Pod{ID: "3333"}}}
 	runtime.PodList = newpods
 
-	// An older timestamp should not force an update.
+	// 期望时间早于缓存时间，不应触发刷新。
 	if err := cache.ForceUpdateIfOlder(tCtx, time.Now().Add(-20*time.Minute)); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
 	actual := cache.GetCachedPods()
 	comparePods(t, oldpods, actual)
 
-	// A newer timestamp should force an update.
+	// 期望时间晚于缓存时间，应触发刷新。
 	if err := cache.ForceUpdateIfOlder(tCtx, time.Now().Add(20*time.Second)); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}

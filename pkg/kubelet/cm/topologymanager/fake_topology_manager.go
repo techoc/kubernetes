@@ -25,26 +25,30 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
 
+// fakeManager 是供测试使用的 Topology Manager 实现。
 type fakeManager struct {
-	hint   *TopologyHint
+	// hint 是构造时指定的固定拓扑提示。
+	hint *TopologyHint
+	// policy 是构造时指定的策略。
 	policy Policy
-	scope  string
+	// scope 是作用域名称。
+	scope string
 }
 
-// NewFakeManager returns an instance of FakeManager
+// NewFakeManager 创建空的 fake Topology Manager。
 func NewFakeManager(logger klog.Logger) Manager {
 	logger.Info("NewFakeManager")
 	return &fakeManager{}
 }
 
-// NewFakeManagerWithScope returns an instance of fake topology manager with specified scope
+// NewFakeManagerWithScope 创建指定作用域的 fake Topology Manager。
 func NewFakeManagerWithScope(scope string) Manager {
 	return &fakeManager{
 		scope: scope,
 	}
 }
 
-// NewFakeManagerWithHint returns an instance of fake topology manager with specified topology hints
+// NewFakeManagerWithHint 创建返回指定拓扑提示的 fake Topology Manager。
 func NewFakeManagerWithHint(logger klog.Logger, hint *TopologyHint) Manager {
 	logger.Info("NewFakeManagerWithHint")
 	return &fakeManager{
@@ -53,7 +57,7 @@ func NewFakeManagerWithHint(logger klog.Logger, hint *TopologyHint) Manager {
 	}
 }
 
-// NewFakeManagerWithPolicy returns an instance of fake topology manager with specified policy
+// NewFakeManagerWithPolicy 创建使用指定策略的 fake Topology Manager。
 func NewFakeManagerWithPolicy(logger klog.Logger, policy Policy) Manager {
 	logger.Info("NewFakeManagerWithPolicy", "policy", policy.Name())
 	return &fakeManager{
@@ -61,8 +65,10 @@ func NewFakeManagerWithPolicy(logger klog.Logger, policy Policy) Manager {
 	}
 }
 
+// GetAffinity 返回构造时指定的拓扑提示。
 func (m *fakeManager) GetAffinity(logger klog.Logger, podUID string, containerName string) TopologyHint {
 	logger.Info("GetAffinity", "podUID", podUID, "containerName", containerName)
+	// 未设置提示时返回空提示。
 	if m.hint == nil {
 		return TopologyHint{}
 	}
@@ -70,27 +76,33 @@ func (m *fakeManager) GetAffinity(logger klog.Logger, podUID string, containerNa
 	return *m.hint
 }
 
+// GetPolicy 返回构造时指定的策略。
 func (m *fakeManager) GetPolicy() Policy {
 	return m.policy
 }
 
+// Name 返回作用域名称。
 func (m *fakeManager) Name() string {
 	return m.scope
 }
 
+// AddHintProvider 记录调用，不实际注册提供者。
 func (m *fakeManager) AddHintProvider(logger klog.Logger, h HintProvider) {
 	logger.Info("AddHintProvider", "hintProvider", h)
 }
 
+// AddContainer 记录新增容器的调用。
 func (m *fakeManager) AddContainer(logger klog.Logger, pod *v1.Pod, container *v1.Container, containerID string) {
 	logger.Info("AddContainer", "pod", klog.KObj(pod), "containerName", container.Name, "containerID", containerID)
 }
 
+// RemoveContainer 记录删除容器的调用并返回成功。
 func (m *fakeManager) RemoveContainer(logger klog.Logger, containerID string) error {
 	logger.Info("RemoveContainer", "containerID", containerID)
 	return nil
 }
 
+// Admit 始终允许准入。
 func (m *fakeManager) Admit(ctx context.Context, attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
 	logger := klog.FromContext(ctx)
 	logger.Info("Topology Admit Handler")

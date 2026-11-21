@@ -18,7 +18,7 @@ limitations under the License.
 
 package nodeshutdown
 
-// NewManager returns a fake node shutdown manager for unsupported platforms.
+// NewManager 在不支持节点关机的平台上返回一个空实现的 manager。
 func NewManager(conf *Config) Manager {
 	m := managerStub{}
 	return m

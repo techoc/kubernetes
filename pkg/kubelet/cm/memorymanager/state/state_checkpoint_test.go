@@ -38,33 +38,34 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// testingCheckpoint 是测试专用的检查点名，避免与真实检查点相互干扰。
 const testingCheckpoint = "memorymanager_checkpoint_test"
 
+// FeatureGateCombination 表示一组特性门控的开关状态。
 type FeatureGateCombination map[featuregate.Feature]bool
 
-// allFeatureGateCombinations generates all combinations of provided feature gates.
-// Each combination is represented as a map of feature name to its state (enabled/disabled).
-// Combinations are constructed:
-//   - starting with single empty combination
-//   - then for each feature gate all combinations are appended twice to new slice
-//     (once with feature disabled and once with feature enabled)
-//   - combination list is replaced with new slice
+// allFeatureGateCombinations 生成给定特性门控的所有开关组合。
+// 每个组合用特性名到开关状态的映射表示。构造过程如下：
+//   - 从只含一个空组合的切片开始
+//   - 对每个特性门控，把现有组合各追加两次到新切片
+//     （一次该特性关闭，一次该特性开启）
+//   - 用新切片替换原组合列表
 //
-// For example, given two features A and B, allFeatureGateCombinations will build combinations:
-// * Initial: `[{}]`
-// * After A: `[{A: false}, {A: true}]`
-// * After B: `[{A: false, B: false}, {A: false, B: true}, {A: true, B: false}, {A: true, B: true}]`
+// 例如对特性 A 和 B，allFeatureGateCombinations 会依次构造：
+// * 初始: `[{}]`
+// * 处理 A 后: `[{A: false}, {A: true}]`
+// * 处理 B 后: `[{A: false, B: false}, {A: false, B: true}, {A: true, B: false}, {A: true, B: true}]`
 func allFeatureGateCombinations(gates []featuregate.Feature) []FeatureGateCombination {
 	combinations := []FeatureGateCombination{make(FeatureGateCombination)}
 	for _, gate := range gates {
 		var newCombinations []FeatureGateCombination
 		for _, combination := range combinations {
-			// Append combination copy with the feature disabled
+			// 追加该特性关闭时的组合副本
 			disabled := maps.Clone(combination)
 			disabled[gate] = false
 			newCombinations = append(newCombinations, disabled)
 
-			// Append combination with the feature enabled
+			// 追加该特性开启时的组合
 			combination[gate] = true
 			newCombinations = append(newCombinations, combination)
 		}
@@ -73,6 +74,7 @@ func allFeatureGateCombinations(gates []featuregate.Feature) []FeatureGateCombin
 	return combinations
 }
 
+// describe 以确定性的顺序把特性门控组合渲染成测试名。
 func describe(comb FeatureGateCombination) string {
 	keys := slices.Sorted(maps.Keys(comb))
 	if len(keys) == 0 {
@@ -86,7 +88,7 @@ func describe(comb FeatureGateCombination) string {
 	return sb.String()
 }
 
-// assertStateEqual marks provided test as failed if provided states differ
+// assertStateEqual 在状态不一致时把测试标记为失败。
 func assertStateEqual(t *testing.T, restoredState, expectedState State) {
 	expectedMachineState := expectedState.GetMachineState()
 	restoredMachineState := restoredState.GetMachineState()
@@ -101,6 +103,7 @@ func assertStateEqual(t *testing.T, restoredState, expectedState State) {
 	require.Equal(t, expectedPodMemoryAssignments, restoredPodMemoryAssignments, "state memory pod assignments mismatch")
 }
 
+// TestCheckpointStateRestore 验证从各种检查点内容恢复状态的行为，包括损坏数据、版本迁移与特性门控组合。
 func TestCheckpointStateRestore(t *testing.T) {
 	testCases := []struct {
 		description       string
@@ -146,7 +149,7 @@ func TestCheckpointStateRestore(t *testing.T) {
 			expectedError: "could not load v3 checkpoint: checkpoint is corrupted",
 			expectedState: &stateMemory{},
 		},
-		// In below testcase V2 part of checkpoint is intentionally corrupted to verify that it is not used.
+		// 下面的用例故意损坏检查点中的 V2 部分，以验证它不会被使用。
 		{
 			description:    "Restore valid checkpoint",
 			fgRequirements: nil,
@@ -225,7 +228,7 @@ func TestCheckpointStateRestore(t *testing.T) {
 			expectedError:     "unexpected end of JSON input",
 			expectedState:     &stateMemory{},
 		},
-		// In below testcase V2 part of checkpoint is intentionally corrupted to verify that it is not used.
+		// 下面的用例故意损坏检查点中的 V2 部分，以验证它不会被使用。
 		{
 			description:    "Fail to restore checkpoint with invalid policy name",
 			fgRequirements: nil,
@@ -241,7 +244,7 @@ func TestCheckpointStateRestore(t *testing.T) {
 			expectedError: `[memorymanager] configured policy "none" differs from state checkpoint policy "static"`,
 			expectedState: &stateMemory{},
 		},
-		// In below testcase V2 part of checkpoint is intentionally corrupted to verify that it is not used.
+		// 下面的用例故意损坏检查点中的 V2 部分，以验证它不会被使用。
 		{
 			description:    "Restore checkpoint ignoring unknown fields in data section",
 			fgRequirements: nil,
@@ -513,7 +516,7 @@ func TestCheckpointStateRestore(t *testing.T) {
 			expectedError: "checkpoint is corrupted",
 			expectedState: &stateMemory{},
 		},
-		// In below testcase V2 part of checkpoint is intentionally corrupted to verify that it is not used.
+		// 下面的用例故意损坏检查点中的 V2 部分，以验证它不会被使用。
 		{
 			description:    "Restore checkpoint from v3 with PodLevelResourceManagers enabled",
 			fgRequirements: FeatureGateCombination{features.PodLevelResourceManagers: true},
@@ -566,7 +569,7 @@ func TestCheckpointStateRestore(t *testing.T) {
 				},
 			},
 		},
-		// In below testcase V2 part of checkpoint is intentionally corrupted to verify that it is not used.
+		// 下面的用例故意损坏检查点中的 V2 部分，以验证它不会被使用。
 		{
 			description:    "Restore checkpoint from v3 with PodLevelResourceManagers disabled",
 			fgRequirements: FeatureGateCombination{features.PodLevelResourceManagers: false},
@@ -610,7 +613,7 @@ func TestCheckpointStateRestore(t *testing.T) {
 		},
 	}
 
-	// create temp dir
+	// 临时目录既存放检查点文件，也作为检查点管理器的根目录。
 	testingDir, err := os.MkdirTemp("", "memorymanager_state_test")
 	if err != nil {
 		t.Fatal(err)
@@ -619,24 +622,24 @@ func TestCheckpointStateRestore(t *testing.T) {
 		require.NoErrorf(t, os.RemoveAll(testingDir), "unable to remove dir %s", testingDir)
 	})
 
-	// create checkpoint manager for testing
+	// 创建测试用的检查点管理器。
 	cpm, err := checkpointmanager.NewCheckpointManager(testingDir)
 	require.NoError(t, err, "could not create testing checkpoint manager")
 
-	// list of all features verified in this test
+	// 本测试中需要遍历验证的特性列表。
 	featureGateList := []featuregate.Feature{
 		features.PodLevelResourceManagers,
 	}
-	// iterate over all possible enabled/disabled feature combinations
+	// 遍历所有可能的特性开关组合。
 	for _, fgComb := range allFeatureGateCombinations(featureGateList) {
-		// run all testcases for current feature combination
+		// 在当前特性组合下运行全部用例。
 		t.Run(describe(fgComb), func(t *testing.T) {
 			for _, key := range slices.Sorted(maps.Keys(fgComb)) {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, key, fgComb[key])
 			}
 
 			for _, tc := range testCases {
-				// verify feature gate requirements for testcase
+				// 校验用例声明的特性门控要求是否与当前组合一致，不一致则跳过。
 				skip := false
 				for fg, requiredState := range tc.fgRequirements {
 					state, exist := fgComb[fg]
@@ -649,10 +652,10 @@ func TestCheckpointStateRestore(t *testing.T) {
 				}
 
 				t.Run(tc.description, func(t *testing.T) {
-					// ensure there is no previous checkpoint
+					// 确保没有残留的旧检查点影响结果。
 					require.NoError(t, cpm.RemoveCheckpoint(testingCheckpoint), "could not remove testing checkpoint")
 
-					// prepare checkpoint for testing
+					// 按用例内容准备检查点文件。
 					if strings.TrimSpace(tc.checkpointContent) != "" {
 						checkpoint := &testutil.MockCheckpoint{Content: tc.checkpointContent}
 						require.NoError(t, cpm.CreateCheckpoint(testingCheckpoint, checkpoint), "could not create testing checkpoint")
@@ -661,11 +664,12 @@ func TestCheckpointStateRestore(t *testing.T) {
 					logger, _ := ktesting.NewTestContext(t)
 					restoredState, err := NewCheckpointState(logger, testingDir, testingCheckpoint, tc.policyName)
 					if strings.TrimSpace(tc.expectedError) != "" {
+						// 错误信息统一带此前缀，因此断言时拼接该前缀以校验具体原因。
 						require.Error(t, err)
 						require.ErrorContains(t, err, "could not restore state from checkpoint: "+tc.expectedError)
 					} else {
 						require.NoError(t, err, "unexpected error while creating checkpointState")
-						// compare state after restoration with the one expected
+						// 对比恢复后的状态与期望状态。
 						assertStateEqual(t, restoredState, tc.expectedState)
 					}
 				})
@@ -674,6 +678,7 @@ func TestCheckpointStateRestore(t *testing.T) {
 	}
 }
 
+// TestCheckpointStateStore 验证状态写入检查点后，由新实例读回时保持一致。
 func TestCheckpointStateStore(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	expectedState := &stateMemory{
@@ -703,7 +708,7 @@ func TestCheckpointStateStore(t *testing.T) {
 		},
 	}
 
-	// create temp dir
+	// 临时目录既存放检查点文件，也作为检查点管理器的根目录。
 	testingDir, err := os.MkdirTemp("", "memorymanager_state_test")
 	if err != nil {
 		t.Fatal(err)
@@ -720,19 +725,22 @@ func TestCheckpointStateStore(t *testing.T) {
 	cs1, err := NewCheckpointState(logger, testingDir, testingCheckpoint, "static")
 	require.NoError(t, err, "could not create testing checkpointState instance")
 
-	// set values of cs1 instance so they are stored in checkpoint and can be read by cs2
+	// 向 cs1 写入值，使其落盘到检查点并可由 cs2 读回。
 	cs1.SetMachineState(expectedState.machineState)
 	cs1.SetMemoryAssignments(expectedState.assignments)
 
-	// restore checkpoint with previously stored values
+	// 用之前写入的值恢复检查点。
 	cs2, err := NewCheckpointState(logger, testingDir, testingCheckpoint, "static")
 	require.NoError(t, err, "could not create testing checkpointState instance")
 
 	assertStateEqual(t, cs2, expectedState)
 }
 
+// TestCheckpointStateStore_WithPodLevelResourceManagersEnabled 在 PodLevelResourceManagers 开启时，
+// 验证 Pod 级内存分配也能持久化到检查点并正确恢复。
 func TestCheckpointStateStore_WithPodLevelResourceManagersEnabled(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 显式开启特性门控，确保 Pod 级条目被写入检查点。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResourceManagers, true)
 	expectedState := &stateMemory{
 		assignments: ContainerMemoryAssignments{
@@ -772,7 +780,7 @@ func TestCheckpointStateStore_WithPodLevelResourceManagersEnabled(t *testing.T) 
 		},
 	}
 
-	// create temp dir
+	// 临时目录既存放检查点文件，也作为检查点管理器的根目录。
 	testingDir, err := os.MkdirTemp("", "memorymanager_state_test")
 	if err != nil {
 		t.Fatal(err)
@@ -789,18 +797,19 @@ func TestCheckpointStateStore_WithPodLevelResourceManagersEnabled(t *testing.T) 
 	cs1, err := NewCheckpointState(logger, testingDir, testingCheckpoint, "static")
 	require.NoError(t, err, "could not create testing checkpointState instance")
 
-	// set values of cs1 instance so they are stored in checkpoint and can be read by cs2
+	// 向 cs1 写入值，使其落盘到检查点并可由 cs2 读回。
 	cs1.SetMachineState(expectedState.machineState)
 	cs1.SetMemoryAssignments(expectedState.assignments)
 	cs1.SetPodMemoryAssignments(expectedState.podAssignments)
 
-	// restore checkpoint with previously stored values
+	// 用之前写入的值恢复检查点。
 	cs2, err := NewCheckpointState(logger, testingDir, testingCheckpoint, "static")
 	require.NoError(t, err, "could not create testing checkpointState instance")
 
 	assertStateEqual(t, cs2, expectedState)
 }
 
+// TestCheckpointStateHelpers 验证检查点状态的 setter/getter/delete 行为，覆盖单容器、多容器与空分配三种情况。
 func TestCheckpointStateHelpers(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -895,7 +904,7 @@ func TestCheckpointStateHelpers(t *testing.T) {
 		},
 	}
 
-	// create temp dir
+	// 临时目录既存放检查点文件，也作为检查点管理器的根目录。
 	testingDir, err := os.MkdirTemp("", "memorymanager_state_test")
 	if err != nil {
 		t.Fatal(err)
@@ -909,7 +918,7 @@ func TestCheckpointStateHelpers(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			// ensure there is no previous checkpoint
+			// 确保没有残留的旧检查点影响结果。
 			require.NoError(t, cpm.RemoveCheckpoint(testingCheckpoint), "could not remove testing checkpoint")
 
 			state, err := NewCheckpointState(logger, testingDir, testingCheckpoint, "static")
@@ -923,6 +932,7 @@ func TestCheckpointStateHelpers(t *testing.T) {
 					state.SetMemoryBlocks(pod, container, blocks)
 					require.Equal(t, blocks, state.GetMemoryBlocks(pod, container), "memory block inconsistent")
 
+					// 删除后必须查不到该容器的任何内存块。
 					state.Delete(pod, container)
 					require.Nil(t, state.GetMemoryBlocks(pod, container), "deleted container still existing in state")
 				}
@@ -931,6 +941,7 @@ func TestCheckpointStateHelpers(t *testing.T) {
 	}
 }
 
+// TestCheckpointStateClear 验证 ClearState 后机器状态与内存分配都被清空。
 func TestCheckpointStateClear(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -967,7 +978,7 @@ func TestCheckpointStateClear(t *testing.T) {
 		},
 	}
 
-	// create temp dir
+	// 临时目录既存放检查点文件，也作为检查点管理器的根目录。
 	testingDir, err := os.MkdirTemp("", "memorymanager_state_test")
 	if err != nil {
 		t.Fatal(err)
@@ -984,6 +995,7 @@ func TestCheckpointStateClear(t *testing.T) {
 			state.SetMachineState(tc.machineState)
 			state.SetMemoryAssignments(tc.assignments)
 
+			// 清空后必须回到零值，而不是保留旧的映射。
 			state.ClearState()
 			require.Equal(t, NUMANodeMap{}, state.GetMachineState(), "cleared state with non-empty machine state")
 			require.Equal(t, ContainerMemoryAssignments{}, state.GetMemoryAssignments(), "cleared state with non-empty memory assignments")
@@ -991,6 +1003,8 @@ func TestCheckpointStateClear(t *testing.T) {
 	}
 }
 
+// TestMemoryManagerCheckpoint_MarshalCheckpoint_HashCompatibility 验证各版本检查点序列化后写出的 checksum
+// 与旧版 kubelet 的计算结果一致，从而保证向前兼容。
 func TestMemoryManagerCheckpoint_MarshalCheckpoint_HashCompatibility(t *testing.T) {
 	testCases := []struct {
 		name                   string
@@ -1161,13 +1175,13 @@ func TestMemoryManagerCheckpoint_MarshalCheckpoint_HashCompatibility(t *testing.
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// 1. Marshal the checkpoint using the logic that forces the "MemoryManagerCheckpoint" name
+			// 1. 用强制使用 "MemoryManagerCheckpoint" 类型名的逻辑序列化检查点。
 			data, err := tc.currentCheckpoint.(interface{ MarshalCheckpoint() ([]byte, error) }).MarshalCheckpoint()
 			if err != nil {
 				t.Fatalf("Failed to marshal checkpoint: %v", err)
 			}
 
-			// 2. Unmarshal the raw JSON to extract the checksum that was actually written to the file
+			// 2. 反序列化原始 JSON，取出真正写入文件的 checksum。
 			var result map[string]interface{}
 			if err := json.Unmarshal(data, &result); err != nil {
 				t.Fatalf("Failed to unmarshal JSON: %v", err)
@@ -1179,11 +1193,11 @@ func TestMemoryManagerCheckpoint_MarshalCheckpoint_HashCompatibility(t *testing.
 			}
 			writtenChecksum := checksum.Checksum(uint64(actualChecksumFloat))
 
-			// 3. Compute the expected legacy checksum
+			// 3. 计算旧版实现期望的 checksum。
 			expectedLegacyChecksum := tc.expectedLegacyChecksum()
 
-			// 4. Assert that the checksum written by our 1.37+ code matches
-			// what an older Kubelet would expect to see.
+			// 4. 断言 1.37+ 代码写出的 checksum 与旧版 kubelet 期望值一致，
+			// 否则回滚到旧版本后将无法读取新检查点。
 			if writtenChecksum != expectedLegacyChecksum {
 				t.Errorf("Written Checksum %d does not match legacy calculation %d. Forward compatibility broken.", writtenChecksum, expectedLegacyChecksum)
 			}
@@ -1191,6 +1205,8 @@ func TestMemoryManagerCheckpoint_MarshalCheckpoint_HashCompatibility(t *testing.
 	}
 }
 
+// TestMemoryManagerCheckpoint_RoundTrip 验证各版本检查点序列化后再反序列化能还原全部字段，
+// 且 checksum 校验通过。
 func TestMemoryManagerCheckpoint_RoundTrip(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -1359,11 +1375,11 @@ func TestMemoryManagerCheckpoint_RoundTrip(t *testing.T) {
 			verify: func(t *testing.T, original, restored checkpointmanager.Checkpoint) {
 				o := original.(*MemoryManagerCheckpointV3)
 				r := restored.(*MemoryManagerCheckpointV3)
-				// embedded V2 part
+				// 内嵌的 V2 部分
 				require.Equal(t, o.PolicyName, r.PolicyName)
 				require.Equal(t, o.MachineState, r.MachineState)
 				require.Equal(t, o.Entries, r.Entries)
-				// V4 part
+				// V4 数据部分
 				require.Equal(t, o.CheckpointData.PolicyName, r.CheckpointData.PolicyName)
 				require.Equal(t, o.CheckpointData.MachineState, r.CheckpointData.MachineState)
 				require.Equal(t, o.CheckpointData.Entries, r.CheckpointData.Entries)

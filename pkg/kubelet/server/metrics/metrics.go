@@ -27,12 +27,14 @@ import (
 const (
 	kubeletSubsystem = "kubelet"
 
+	// CAdvisorMetricsProvider 表示通过 cAdvisor 采集容器统计指标。
 	CAdvisorMetricsProvider MetricsProviderType = "cadvisor"
-	CRIMetricsProvider      MetricsProviderType = "cri"
+	// CRIMetricsProvider 表示通过 CRI 采集容器统计指标。
+	CRIMetricsProvider MetricsProviderType = "cri"
 )
 
 var (
-	// HTTPRequests tracks the number of the http requests received since the server started.
+	// HTTPRequests 统计服务器启动以来收到的 HTTP 请求数。
 	HTTPRequests = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      kubeletSubsystem,
@@ -40,24 +42,23 @@ var (
 			Help:           "Number of the http requests received since the server started",
 			StabilityLevel: metrics.ALPHA,
 		},
-		// server_type aims to differentiate the readonly server and the readwrite server.
-		// long_running marks whether the request is long-running or not.
-		// Currently, long-running requests include exec/attach/portforward/debug.
+		// server_type 区分只读服务器与读写服务器。
+		// long_running 标记请求是否为长连接，目前包括 exec/attach/portforward/debug。
 		[]string{"method", "path", "server_type", "long_running"},
 	)
-	// HTTPRequestsDuration tracks the duration in seconds to serve http requests.
+	// HTTPRequestsDuration 记录处理 HTTP 请求的耗时（秒）。
 	HTTPRequestsDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem: kubeletSubsystem,
 			Name:      "http_requests_duration_seconds",
 			Help:      "Duration in seconds to serve http requests",
-			// Use DefBuckets for now, will customize the buckets if necessary.
+			// 暂时使用默认桶；如有需要再定制。
 			Buckets:        metrics.DefBuckets,
 			StabilityLevel: metrics.ALPHA,
 		},
 		[]string{"method", "path", "server_type", "long_running"},
 	)
-	// HTTPInflightRequests tracks the number of the inflight http requests.
+	// HTTPInflightRequests 记录当前正在处理的 HTTP 请求数。
 	HTTPInflightRequests = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      kubeletSubsystem,
@@ -67,8 +68,8 @@ var (
 		},
 		[]string{"method", "path", "server_type", "long_running"},
 	)
-	// VolumeStatCalDuration tracks the duration in seconds to calculate volume stats.
-	// this metric is mainly for comparison between fsquota monitoring and `du` for disk usage.
+	// VolumeStatCalDuration 记录计算卷统计信息的耗时（秒），
+	// 主要用于比较 fsquota 监控与 `du` 统计磁盘用量的差异。
 	VolumeStatCalDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      kubeletSubsystem,
@@ -79,6 +80,7 @@ var (
 		},
 		[]string{"metric_source"},
 	)
+	// MetricsProvider 记录 kubelet 当前使用的容器统计指标来源（cadvisor 或 cri）。
 	MetricsProvider = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      kubeletSubsystem,
@@ -88,8 +90,7 @@ var (
 		},
 		[]string{"provider"},
 	)
-	// WebSocketStreamingRequests counts WebSocket streaming requests received by the kubelet,
-	// labeled by subresource.
+	// WebSocketStreamingRequests 按子资源统计 kubelet 收到的 WebSocket 流式请求数。
 	WebSocketStreamingRequests = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      kubeletSubsystem,
@@ -101,9 +102,10 @@ var (
 	)
 )
 
+// registerMetrics 保证指标只注册一次，避免重复注册触发 panic。
 var registerMetrics sync.Once
 
-// Register all metrics.
+// Register 将 kubelet 的全部指标注册到 legacy registry，且只执行一次。
 func Register() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(HTTPRequests)
@@ -115,31 +117,32 @@ func Register() {
 	})
 }
 
-// ResetForTest resets metrics that support reset, for use in unit tests.
+// ResetForTest 重置可重置的指标，仅供单元测试使用。
 func ResetForTest() {
 	WebSocketStreamingRequests.Reset()
 }
 
-// SinceInSeconds gets the time since the specified start in seconds.
+// SinceInSeconds 返回从 start 到现在的秒数。
 func SinceInSeconds(start time.Time) float64 {
 	return time.Since(start).Seconds()
 }
 
-// CollectVolumeStatCalDuration collects the duration in seconds to calculate volume stats.
+// CollectVolumeStatCalDuration 记录一次卷统计计算的耗时。
 func CollectVolumeStatCalDuration(metricSource string, start time.Time) {
 	VolumeStatCalDuration.WithLabelValues(metricSource).Observe(SinceInSeconds(start))
 }
 
+// MetricsProviderType 标识 kubelet 采集容器统计指标时使用的提供方。
 type MetricsProviderType string
 
-// SetMetricsProvider sets the metrics provider.
+// SetMetricsProvider 设置当前生效的指标提供方。
 func SetMetricsProvider(provider MetricsProviderType) {
+	// 先清空再设置，保证同一时刻只有一个 provider 处于激活状态。
 	MetricsProvider.Reset()
 	MetricsProvider.WithLabelValues(string(provider)).Set(1)
 }
 
-// IncWebSocketStreamingRequest increments the count of WebSocket streaming requests received
-// by the kubelet for the given subresource (exec/attach/portforward).
+// IncWebSocketStreamingRequest 将指定子资源（exec/attach/portforward）的 WebSocket 流式请求计数加一。
 func IncWebSocketStreamingRequest(subresource string) {
 	WebSocketStreamingRequests.WithLabelValues(subresource).Inc()
 }

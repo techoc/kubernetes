@@ -24,22 +24,29 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/bitmask"
 )
 
+// NUMADistances 是 NUMA 节点间的距离矩阵。
 type NUMADistances map[int][]uint64
 
+// NUMAInfo 保存 NUMA 节点列表及其距离信息。
 type NUMAInfo struct {
-	Nodes         []int
+	// Nodes 是 NUMA 节点 ID 列表。
+	Nodes []int
+	// NUMADistances 是节点 ID 到距离数组的映射。
 	NUMADistances NUMADistances
 }
 
+// NewNUMAInfo 根据 cAdvisor 拓扑构造 NUMAInfo。
 func NewNUMAInfo(topology []cadvisorapi.Node, opts PolicyOptions) (*NUMAInfo, error) {
 	var numaNodes []int
 	distances := map[int][]uint64{}
+	// 逐个节点收集 ID；启用 PreferClosestNUMA 时同时收集距离。
 	for _, node := range topology {
 		numaNodes = append(numaNodes, node.Id)
 
 		var nodeDistance []uint64
 		if opts.PreferClosestNUMA {
 			nodeDistance = node.Distances
+			// 缺少距离信息时无法按距离选择，直接报错。
 			if nodeDistance == nil {
 				if runtime.GOOS == "windows" {
 					return nil, fmt.Errorf("the %q policy option is not supported on Windows because NUMA node distances are not available", PreferClosestNUMANodes)
@@ -58,6 +65,7 @@ func NewNUMAInfo(topology []cadvisorapi.Node, opts PolicyOptions) (*NUMAInfo, er
 	return numaInfo, nil
 }
 
+// Narrowest 返回两个位掩码中更窄（置位更少）的一个。
 func (n *NUMAInfo) Narrowest(m1 bitmask.BitMask, m2 bitmask.BitMask) bitmask.BitMask {
 	if m1.IsNarrowerThan(m2) {
 		return m1
@@ -65,15 +73,16 @@ func (n *NUMAInfo) Narrowest(m1 bitmask.BitMask, m2 bitmask.BitMask) bitmask.Bit
 	return m2
 }
 
+// Closest 返回 NUMA 距离更近的位掩码。
 func (n *NUMAInfo) Closest(m1 bitmask.BitMask, m2 bitmask.BitMask) bitmask.BitMask {
-	// If the length of both bitmasks aren't the same, choose the one that is narrowest.
+	// 两个位掩码置位数不同时，选择更窄的那个。
 	if m1.Count() != m2.Count() {
 		return n.Narrowest(m1, m2)
 	}
 
 	m1Distance := n.NUMADistances.CalculateAverageFor(m1)
 	m2Distance := n.NUMADistances.CalculateAverageFor(m2)
-	// If average distance is the same, take bitmask with more lower-number bits set.
+	// 平均距离相同时，选择低位编号置位更多的位掩码。
 	if m1Distance == m2Distance {
 		if m1.IsLessThan(m2) {
 			return m1
@@ -81,7 +90,7 @@ func (n *NUMAInfo) Closest(m1 bitmask.BitMask, m2 bitmask.BitMask) bitmask.BitMa
 		return m2
 	}
 
-	// Otherwise, return the bitmask with the shortest average distance between NUMA nodes.
+	// 否则返回 NUMA 节点间平均距离更短的位掩码。
 	if m1Distance < m2Distance {
 		return m1
 	}
@@ -89,13 +98,15 @@ func (n *NUMAInfo) Closest(m1 bitmask.BitMask, m2 bitmask.BitMask) bitmask.BitMa
 	return m2
 }
 
+// DefaultAffinityMask 返回包含所有 NUMA 节点的位掩码。
 func (n NUMAInfo) DefaultAffinityMask() bitmask.BitMask {
 	defaultAffinity, _ := bitmask.NewBitMask(n.Nodes...)
 	return defaultAffinity
 }
 
+// CalculateAverageFor 计算位掩码中所有节点两两之间的平均距离。
 func (d NUMADistances) CalculateAverageFor(bm bitmask.BitMask) float64 {
-	// This should never happen, but just in case make sure we do not divide by zero.
+	// 正常情况下不会发生，但仍需防止除零。
 	if bm.Count() == 0 {
 		return 0
 	}

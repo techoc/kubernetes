@@ -33,8 +33,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// getResourceList returns a ResourceList with the
-// specified cpu and memory resource values
+// getResourceList 构造仅包含指定 CPU 与内存配额的 ResourceList。
 func getResourceList(cpu, memory string) v1.ResourceList {
 	res := v1.ResourceList{}
 	if cpu != "" {
@@ -46,7 +45,7 @@ func getResourceList(cpu, memory string) v1.ResourceList {
 	return res
 }
 
-// getResourceRequirements returns a ResourceRequirements object
+// getResourceRequirements 构造一个 ResourceRequirements 对象。
 func getResourceRequirements(requests, limits v1.ResourceList) v1.ResourceRequirements {
 	res := v1.ResourceRequirements{}
 	res.Requests = requests
@@ -54,9 +53,12 @@ func getResourceRequirements(requests, limits v1.ResourceList) v1.ResourceRequir
 	return res
 }
 
+// TestResourceConfigForPod 覆盖 BestEffort/Burstable/Guaranteed 三类 QoS 下的 CPU shares、quota 与内存计算，
+// 并验证 Pod 级资源、DRA 节点可分配资源等特性门控组合对结果的影响。
 func TestResourceConfigForPod(t *testing.T) {
 	const Mi = int64(1024 * 1024)
 	const Gi = int64(1024 * 1024 * 1024)
+	// quota period 在内部以微秒表示，因此这里把时间常量换算为微秒。
 	defaultQuotaPeriod := uint64(100 * time.Millisecond / time.Microsecond) // in microseconds
 	tunedQuotaPeriod := uint64(5 * time.Millisecond / time.Microsecond)     // in microseconds
 	tunedQuota := int64(1 * time.Millisecond / time.Microsecond)
@@ -70,9 +72,11 @@ func TestResourceConfigForPod(t *testing.T) {
 	guaranteedShares := MilliCPUToShares(100)
 	guaranteedQuota := MilliCPUToQuota(100, int64(defaultQuotaPeriod))
 	guaranteedTunedQuota := MilliCPUToQuota(100, int64(tunedQuotaPeriod))
+	// 复用变量名，此时 guaranteed 场景期望 100Mi 的内存值。
 	memoryQuantity = resource.MustParse("100Mi")
 	cpuNoLimit := int64(-1)
 	guaranteedMemory := memoryQuantity.Value()
+	// 每个用例描述一种 QoS 与资源组合，expected 是期望生成的 cgroup 配置。
 	testCases := []struct {
 		description                        string
 		pod                                *v1.Pod
@@ -510,8 +514,8 @@ func TestResourceConfigForPod(t *testing.T) {
 			draNodeAllocatableResourcesEnabled: true,
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
-			// CPUShares: c1 request (1) + direct claim (2)
-			// CPUQuota: c1 limit (3) + direct claim (2)
+			// CPUShares：c1 请求 (1) + direct claim (2)
+			// CPUQuota：c1 限制 (3) + direct claim (2)
 			expected: &ResourceConfig{CPUShares: new(MilliCPUToShares((1 + 2) * 1000)), CPUQuota: new(MilliCPUToQuota((3+2)*1000, int64(defaultQuotaPeriod))), CPUPeriod: &defaultQuotaPeriod, Memory: new(500 * Mi)},
 		},
 		{
@@ -546,7 +550,7 @@ func TestResourceConfigForPod(t *testing.T) {
 			draNodeAllocatableResourcesEnabled: true,
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
-			// Memory: c1 limit (500) + perPodRef overhead (300) + perContainerRef overhead * 1 container (100 * 1)
+			// Memory：c1 限制 (500) + perPodRef overhead (300) + perContainerRef overhead * 1 个容器 (100 * 1)
 			expected: &ResourceConfig{CPUShares: new(MilliCPUToShares(1 * 1000)), CPUQuota: new(MilliCPUToQuota(3*1000, int64(defaultQuotaPeriod))), CPUPeriod: &defaultQuotaPeriod, Memory: new((500 + 300 + 100) * Mi)},
 		},
 		{
@@ -590,9 +594,9 @@ func TestResourceConfigForPod(t *testing.T) {
 			draNodeAllocatableResourcesEnabled: true,
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
-			// CPUShares: c1 request (1) + mapping (2) + overhead PerPod (1) + overhead PerContainer (1.5) = 5.5 CPUs
-			// CPUQuota: c1 limit (3) + mapping (2) + overhead PerPod (1) + overhead PerContainer (1.5) = 7.5 CPUs
-			// Memory: c1 limit (500) + mapping (100) + overhead PerPod (300) + overhead PerContainer (100) = 1000 Mi
+			// CPUShares：c1 请求 (1) + mapping (2) + overhead PerPod (1) + overhead PerContainer (1.5) = 5.5 CPU
+			// CPUQuota：c1 限制 (3) + mapping (2) + overhead PerPod (1) + overhead PerContainer (1.5) = 7.5 CPU
+			// Memory：c1 限制 (500) + mapping (100) + overhead PerPod (300) + overhead PerContainer (100) = 1000 Mi
 			expected: &ResourceConfig{
 				CPUShares: new(MilliCPUToShares(5500)),
 				CPUQuota:  new(MilliCPUToQuota(7500, int64(defaultQuotaPeriod))),
@@ -628,7 +632,7 @@ func TestResourceConfigForPod(t *testing.T) {
 			draNodeAllocatableResourcesEnabled: false,
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
-			// DRA values not added
+			// 特性门控关闭，DRA 数值不计入
 			expected: &ResourceConfig{CPUShares: new(MilliCPUToShares(1 * 1000)), CPUQuota: new(MilliCPUToQuota(3*1000, int64(defaultQuotaPeriod))), CPUPeriod: &defaultQuotaPeriod, Memory: new(500 * Mi)},
 		},
 		{
@@ -665,7 +669,7 @@ func TestResourceConfigForPod(t *testing.T) {
 				CPUPeriod: &defaultQuotaPeriod,
 				Memory:    ptr.To(500 * Mi),
 				HugePageLimit: map[int64]int64{
-					// HugePageLimit: DRA claim hugepage allocation of 2 x 1Gi
+					// HugePageLimit：DRA 申请的 2 个 1Gi 大页
 					1 * Gi: 2 * Gi,
 				},
 			},
@@ -701,7 +705,7 @@ func TestResourceConfigForPod(t *testing.T) {
 			draNodeAllocatableResourcesEnabled: true,
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
-			// pod-level resources override DRA CPU/Memory
+			// Pod 级资源会覆盖 DRA 提供的 CPU/内存
 			expected: &ResourceConfig{
 				CPUShares: new(MilliCPUToShares(4 * 1000)),
 				CPUQuota:  new(MilliCPUToQuota(8*1000, int64(defaultQuotaPeriod))),
@@ -745,8 +749,8 @@ func TestResourceConfigForPod(t *testing.T) {
 			draNodeAllocatableResourcesEnabled: true,
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
-			// CPUShares: c1 request (100) + claim 1 CPU (100) + claim 2 CPU (200)
-			// CPUQuota: c1 limit (300) + claim 1 CPU (100) + claim 2 CPU (200)
+			// CPUShares：c1 请求 (100) + claim 1 CPU (100) + claim 2 CPU (200)
+			// CPUQuota：c1 限制 (300) + claim 1 CPU (100) + claim 2 CPU (200)
 			expected: &ResourceConfig{
 				CPUShares: new(MilliCPUToShares(100 + 100 + 200)),
 				CPUQuota:  new(MilliCPUToQuota(300+100+200, int64(defaultQuotaPeriod))),
@@ -798,7 +802,7 @@ func TestResourceConfigForPod(t *testing.T) {
 				CPUShares: new(MilliCPUToShares(100 + 200)),
 				CPUQuota:  new(MilliCPUToQuota(300+400, int64(defaultQuotaPeriod))),
 				CPUPeriod: &defaultQuotaPeriod,
-				// Memory: c1 limit (500) + c2 limit (600) + perPodRef (200) + perContainerRef * 2 containers (100 * 2)
+				// Memory：c1 限制 (500) + c2 限制 (600) + perPodRef (200) + perContainerRef * 2 个容器 (100 * 2)
 				Memory: ptr.To((500 + 600 + 200 + 100*2) * Mi),
 			},
 		},
@@ -840,12 +844,12 @@ func TestResourceConfigForPod(t *testing.T) {
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
 			expected: &ResourceConfig{
-				// CPUShares: c1 request (1) + c2 request (2) + direct claim CPU (2) (shared direct resources are not multiplied)
+				// CPUShares：c1 请求 (1) + c2 请求 (2) + direct claim CPU (2)（共享的 direct 资源不重复累加）
 				CPUShares: new(MilliCPUToShares((1 + 2 + 2) * 1000)),
-				// CPUQuota: c1 limit (3) + c2 limit (4) + direct claim CPU (2)
+				// CPUQuota：c1 限制 (3) + c2 限制 (4) + direct claim CPU (2)
 				CPUQuota:  new(MilliCPUToQuota((3+4+2)*1000, int64(defaultQuotaPeriod))),
 				CPUPeriod: &defaultQuotaPeriod,
-				// Memory: c1 limit (500) + c2 limit (600) + direct claim memory (400)
+				// Memory：c1 限制 (500) + c2 限制 (600) + direct claim memory (400)
 				Memory: ptr.To((500 + 600 + 400) * Mi),
 			},
 		},
@@ -875,7 +879,7 @@ func TestResourceConfigForPod(t *testing.T) {
 			draNodeAllocatableResourcesEnabled: true,
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
-			// set min shares with DRA and without spec requests
+			// 无 spec 请求时，DRA 场景同样使用最小 shares
 			expected: &ResourceConfig{
 				CPUShares: new(uint64(MinShares)),
 				Memory:    nil,
@@ -912,22 +916,24 @@ func TestResourceConfigForPod(t *testing.T) {
 			enforceCPULimits:                   true,
 			quotaPeriod:                        defaultQuotaPeriod,
 			expected: &ResourceConfig{
-				// CPUShares: c1 request (1) + direct claim CPU (2)
+				// CPUShares：c1 请求 (1) + direct claim CPU (2)
 				CPUShares: new(MilliCPUToShares((1 + 2) * 1000)),
-				// CPUQuota: c1 limit (1) + direct claim CPU (2)
+				// CPUQuota：c1 限制 (1) + direct claim CPU (2)
 				CPUQuota:  new(MilliCPUToQuota((1+2)*1000, int64(defaultQuotaPeriod))),
 				CPUPeriod: &defaultQuotaPeriod,
-				// Memory: c1 limit (300) + direct claim memory (400)
+				// Memory：c1 限制 (300) + direct claim memory (400)
 				Memory: ptr.To((300 + 400) * Mi),
 			},
 		},
 	}
 
+	// 特性门控按用例逐一开关，确保每个场景只受其声明的特性影响。
 	for _, testCase := range testCases {
 		t.Run(testCase.description, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.PodLevelResources, testCase.podLevelResourcesEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.DRANodeAllocatableResources, testCase.draNodeAllocatableResourcesEnabled)
 			actual := ResourceConfigForPod(testCase.pod, testCase.enforceCPULimits, testCase.quotaPeriod, false, kubeletconfig.NoneMemoryReservationPolicy)
+			// CPUPeriod 为 nil 时解引用会 panic，因此所有用例都显式给出期望周期。
 			if !reflect.DeepEqual(actual.CPUPeriod, testCase.expected.CPUPeriod) {
 				t.Errorf("cpu period not as expected. Expected: %v, Actual:%v", *testCase.expected.CPUPeriod, *actual.CPUPeriod)
 			}
@@ -949,6 +955,7 @@ func TestResourceConfigForPod(t *testing.T) {
 	}
 }
 
+// TestMilliCPUToQuota 验证毫核 CPU 到 cgroup quota 的换算，包含小数毫核向下取整的边界。
 func TestMilliCPUToQuota(t *testing.T) {
 	testCases := []struct {
 		input  int64
@@ -996,6 +1003,7 @@ func TestMilliCPUToQuota(t *testing.T) {
 			period: uint64(100000),
 		},
 	}
+	// 期望 quota 按 period 与毫核数线性换算，未满 1 毫核的部分被截断。
 	for _, testCase := range testCases {
 		quota := MilliCPUToQuota(testCase.input, int64(testCase.period))
 		if quota != testCase.quota {
@@ -1004,8 +1012,11 @@ func TestMilliCPUToQuota(t *testing.T) {
 	}
 }
 
+// TestHugePageLimits 验证 hugepages 资源名解析与聚合：仅识别带 hugepages- 前缀的键，
+// 并确认 ResourceConfigForPod 内部复用了同一逻辑。
 func TestHugePageLimits(t *testing.T) {
 	Mi := int64(1024 * 1024)
+	// inputStruct 表示一个资源名到数量的原始输入对。
 	type inputStruct struct {
 		key   string
 		input string
@@ -1016,6 +1027,7 @@ func TestHugePageLimits(t *testing.T) {
 		inputs   []inputStruct
 		expected map[int64]int64
 	}{
+		// 无 hugepages- 前缀的键应被忽略，结果为空映射而非 nil。
 		{
 			name: "no valid hugepages",
 			inputs: []inputStruct{
@@ -1037,6 +1049,7 @@ func TestHugePageLimits(t *testing.T) {
 			expected: map[int64]int64{2 * Mi: 128},
 		},
 		{
+			// 同时存在字节数与可读后缀两种写法时，应累加到同一页大小的桶中。
 			name: "2Mi and 4Mi",
 			inputs: []inputStruct{
 				{
@@ -1079,7 +1092,7 @@ func TestHugePageLimits(t *testing.T) {
 				t.Errorf("unexpected result for HugePageLimits(), expected: %v, actual: %v", testcase.expected, resultValue)
 			}
 
-			// ensure ResourceConfigForPod uses HugePageLimits correctly internally
+			// 确认 ResourceConfigForPod 内部正确复用了 HugePageLimits。
 			p := v1.Pod{
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
@@ -1099,7 +1112,10 @@ func TestHugePageLimits(t *testing.T) {
 	}
 }
 
+// TestResourceConfigForPodWithEnforceMemoryQoS 验证开启内存 QoS 强制后，cgroup v2 的 Unified 字段
+// 会按 QoS 类别写入 memory.min / memory.low。
 func TestResourceConfigForPodWithEnforceMemoryQoS(t *testing.T) {
+	// quota period 在内部以微秒表示，因此这里把时间常量换算为微秒。
 	defaultQuotaPeriod := uint64(100 * time.Millisecond / time.Microsecond) // in microseconds
 	tunedQuotaPeriod := uint64(5 * time.Millisecond / time.Microsecond)     // in microseconds
 
@@ -1115,6 +1131,7 @@ func TestResourceConfigForPodWithEnforceMemoryQoS(t *testing.T) {
 	memoryQuantity = resource.MustParse("100Mi")
 	cpuNoLimit := int64(-1)
 	guaranteedMemory := memoryQuantity.Value()
+	// Unified 期望值直接以字节数硬编码，便于暴露 memory.min/memory.low 取值错误。
 	testCases := map[string]struct {
 		pod              *v1.Pod
 		expected         *ResourceConfig
@@ -1301,15 +1318,19 @@ func TestResourceConfigForPodWithEnforceMemoryQoS(t *testing.T) {
 
 		actual := ResourceConfigForPod(testCase.pod, testCase.enforceCPULimits, testCase.quotaPeriod, true, kubeletconfig.TieredReservationMemoryReservationPolicy)
 
+		// 仅比较 Unified，其余字段已由 TestResourceConfigForPod 覆盖。
 		if !reflect.DeepEqual(actual.Unified, testCase.expected.Unified) {
 			t.Errorf("unexpected result, test: %v, unified not as expected", testName)
 		}
 	}
 }
 
+// TestApplyPodLevelMemoryHigh 验证只有全部容器都声明内存 limit 时才会设置 memory.high，
+// 并确认 Pod overhead 计入上限计算。
 func TestApplyPodLevelMemoryHigh(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.PodLevelResources, true)
 
+	// 仅 CPU 的 Pod 级资源不应产生内存限制。
 	t.Run("cpu-only pod-level resources does not set memory.high", func(t *testing.T) {
 		pod := &v1.Pod{
 			Spec: v1.PodSpec{
@@ -1330,7 +1351,7 @@ func TestApplyPodLevelMemoryHigh(t *testing.T) {
 		}
 	})
 
-	// Overhead is included via PodResourcesOptions{ExcludeOverhead: false} (the default).
+	// Overhead 通过默认的 PodResourcesOptions{ExcludeOverhead: false} 被计入。
 	t.Run("pod overhead is included in memory.high calculation", func(t *testing.T) {
 		pod := &v1.Pod{
 			Spec: v1.PodSpec{
@@ -1357,7 +1378,7 @@ func TestApplyPodLevelMemoryHigh(t *testing.T) {
 		if rc.Unified == nil {
 			t.Fatal("expected Unified map to be set")
 		}
-		// Without overhead: request=128Mi, limit=256Mi → memory.high based on 128Mi..256Mi
+		// 无 overhead 时：request=128Mi，limit=256Mi → memory.high 介于 128Mi 与 256Mi 之间。
 		rcNoOverhead := &ResourceConfig{}
 		podNoOverhead := pod.DeepCopy()
 		podNoOverhead.Spec.Overhead = nil
@@ -1374,6 +1395,7 @@ func TestApplyPodLevelMemoryHigh(t *testing.T) {
 	})
 
 	t.Run("mixed declared/undeclared memory limits does not set memory.high", func(t *testing.T) {
+		// 一个容器声明了内存 limit、另一个没有，无法推导出 Pod 级上限，因此不应设置 memory.high。
 		pod := &v1.Pod{
 			Spec: v1.PodSpec{
 				Resources: &v1.ResourceRequirements{
@@ -1395,6 +1417,8 @@ func TestApplyPodLevelMemoryHigh(t *testing.T) {
 	})
 }
 
+// TestCPUSharesEqualAfterV2RoundTrip 验证 cgroup v2 权重往返转换的比较逻辑：
+// 有损转换后读回的值与原分配值不相等，但应被判定为同一分配。
 func TestCPUSharesEqualAfterV2RoundTrip(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -1403,7 +1427,7 @@ func TestCPUSharesEqualAfterV2RoundTrip(t *testing.T) {
 		expected        bool
 	}{
 		{
-			// 50m -> shares=51 -> weight=2 -> shares=28
+			// 50m -> shares=51 -> weight=2 -> 读回 shares=28
 			name:            "matches lossy cgroup v2 readback for 50m",
 			allocatedShares: MilliCPUToShares(50),
 			readbackShares:  28,
@@ -1416,7 +1440,7 @@ func TestCPUSharesEqualAfterV2RoundTrip(t *testing.T) {
 			expected:        false,
 		},
 		{
-			// 100m -> shares=102 -> weight=4 -> shares=80
+			// 100m -> shares=102 -> weight=4 -> 读回 shares=80
 			name:            "matches lossy cgroup v2 readback for 100m",
 			allocatedShares: MilliCPUToShares(100),
 			readbackShares:  80,

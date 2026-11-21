@@ -30,26 +30,26 @@ import (
 )
 
 const (
-	// UnknownContainerStatuses says that all container statuses are unknown.
+	// UnknownContainerStatuses 表示所有容器状态未知。
 	UnknownContainerStatuses = "UnknownContainerStatuses"
-	// PodCompleted says that all related containers have succeeded.
+	// PodCompleted 表示所有相关容器都已成功结束。
 	PodCompleted = "PodCompleted"
-	// PodFailed says that the pod has failed and as such the containers have failed.
+	// PodFailed 表示 Pod 已失败，容器也随之失败。
 	PodFailed = "PodFailed"
-	// ContainersNotReady says that one or more containers are not ready.
+	// ContainersNotReady 表示一个或多个容器未就绪。
 	ContainersNotReady = "ContainersNotReady"
-	// ContainersNotInitialized says that one or more init containers have not succeeded.
+	// ContainersNotInitialized 表示一个或多个 init 容器尚未成功。
 	ContainersNotInitialized = "ContainersNotInitialized"
-	// ReadinessGatesNotReady says that one or more pod readiness gates are not ready.
+	// ReadinessGatesNotReady 表示一个或多个 Pod readiness gate 未满足。
 	ReadinessGatesNotReady = "ReadinessGatesNotReady"
-	// RestartAllContainersStarted says that a container exited and triggered RestartAllContainer action.
+	// RestartAllContainersStarted 表示有容器退出并触发了重启所有容器的动作。
 	RestartAllContainersStarted = "RestartAllContainersStarted"
 )
 
-// GenerateContainersReadyCondition returns the status of "ContainersReady" condition.
-// The status of "ContainersReady" condition is true when all containers are ready.
+// GenerateContainersReadyCondition 生成 ContainersReady 条件：
+// 所有容器（包括可重启的 init 容器）就绪时为 True。
 func GenerateContainersReadyCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, containerStatuses []v1.ContainerStatus, podPhase v1.PodPhase) v1.PodCondition {
-	// Find if all containers are ready or not.
+	// 先检查所有容器是否就绪。
 	if containerStatuses == nil {
 		return v1.PodCondition{
 			Type:               v1.ContainersReady,
@@ -60,6 +60,7 @@ func GenerateContainersReadyCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, c
 	}
 	unknownContainers := []string{}
 	unreadyContainers := []string{}
+	// 可重启的 init 容器在运行期间也参与就绪判断。
 
 	for _, container := range pod.Spec.InitContainers {
 		if !podutil.IsRestartableInitContainer(&container) {
@@ -75,6 +76,7 @@ func GenerateContainersReadyCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, c
 		}
 	}
 
+	// 普通容器同样必须全部就绪。
 	for _, container := range pod.Spec.Containers {
 		if containerStatus, ok := podutil.GetContainerStatus(containerStatuses, container.Name); ok {
 			if !containerStatus.Ready {
@@ -85,17 +87,17 @@ func GenerateContainersReadyCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, c
 		}
 	}
 
-	// If all containers are known and succeeded, just return PodCompleted.
+	// 所有容器状态已知且 Pod 已成功时，直接返回 PodCompleted。
 	if podPhase == v1.PodSucceeded && len(unknownContainers) == 0 {
 		return generateContainersReadyConditionForTerminalPhase(pod, oldPodStatus, podPhase)
 	}
 
-	// If the pod phase is failed, explicitly set the ready condition to false for containers since they may be in progress of terminating.
+	// Pod 失败时容器可能仍在终止过程中，显式把就绪条件置为 False。
 	if podPhase == v1.PodFailed {
 		return generateContainersReadyConditionForTerminalPhase(pod, oldPodStatus, podPhase)
 	}
 
-	// Generate message for containers in unknown condition.
+	// 汇总未知和未就绪容器，写入条件消息便于排查。
 	unreadyMessages := []string{}
 	if len(unknownContainers) > 0 {
 		unreadyMessages = append(unreadyMessages, fmt.Sprintf("containers with unknown status: %s", unknownContainers))
@@ -121,12 +123,11 @@ func GenerateContainersReadyCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, c
 	}
 }
 
-// GeneratePodReadyCondition returns "Ready" condition of a pod.
-// The status of "Ready" condition is "True", if all containers in a pod are ready
-// AND all matching conditions specified in the ReadinessGates have status equal to "True".
+// GeneratePodReadyCondition 生成 Pod 的 Ready 条件：
+// 所有容器就绪，且 ReadinessGates 指定的条件都为 True 时才为 True。
 func GeneratePodReadyCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, conditions []v1.PodCondition, containerStatuses []v1.ContainerStatus, podPhase v1.PodPhase) v1.PodCondition {
 	containersReady := GenerateContainersReadyCondition(pod, oldPodStatus, containerStatuses, podPhase)
-	// If the status of ContainersReady is not True, return the same status, reason and message as ContainersReady.
+	// ContainersReady 不为 True 时，Ready 直接复用其状态、原因和消息。
 	if containersReady.Status != v1.ConditionTrue {
 		return v1.PodCondition{
 			Type:               v1.PodReady,
@@ -137,9 +138,9 @@ func GeneratePodReadyCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, conditio
 		}
 	}
 
-	// Evaluate corresponding conditions specified in readiness gate
-	// Generate message if any readiness gate is not satisfied.
+	// 检查 readiness gate 指定的条件，未满足时生成对应的消息。
 	unreadyMessages := []string{}
+	// 条件不存在或不为 True 都视为未就绪。
 	for _, rg := range pod.Spec.ReadinessGates {
 		_, c := podutil.GetPodConditionFromList(conditions, rg.ConditionType)
 		if c == nil {
@@ -149,7 +150,7 @@ func GeneratePodReadyCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, conditio
 		}
 	}
 
-	// Set "Ready" condition to "False" if any readiness gate is not ready.
+	// 任一 readiness gate 未满足，Ready 即为 False。
 	if len(unreadyMessages) != 0 {
 		unreadyMessage := strings.Join(unreadyMessages, ", ")
 		return v1.PodCondition{
@@ -168,12 +169,14 @@ func GeneratePodReadyCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, conditio
 	}
 }
 
+// isInitContainerInitialized 判断 init 容器是否已完成：
+// 可重启 init 容器看 Started，普通 init 容器看 Ready。
 func isInitContainerInitialized(initContainer *v1.Container, containerStatus *v1.ContainerStatus) bool {
 	if podutil.IsRestartableInitContainer(initContainer) {
 		if containerStatus.Started == nil || !*containerStatus.Started {
 			return false
 		}
-	} else { // regular init container
+	} else { // 普通 init 容器
 		if !containerStatus.Ready {
 			return false
 		}
@@ -181,10 +184,10 @@ func isInitContainerInitialized(initContainer *v1.Container, containerStatus *v1
 	return true
 }
 
-// GeneratePodInitializedCondition returns initialized condition if all init containers in a pod are ready, else it
-// returns an uninitialized condition.
+// GeneratePodInitializedCondition 生成 PodInitialized 条件：
+// 所有 init 容器完成时为 True，否则为未初始化状态。
 func GeneratePodInitializedCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, containerStatuses []v1.ContainerStatus, podPhase v1.PodPhase) v1.PodCondition {
-	// Find if all containers are ready or not.
+	// 检查所有 init 容器是否完成。
 	if containerStatuses == nil && len(pod.Spec.InitContainers) > 0 {
 		return v1.PodCondition{
 			Type:               v1.PodInitialized,
@@ -207,7 +210,7 @@ func GeneratePodInitializedCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, co
 		}
 	}
 
-	// If all init containers are known and succeeded, just return PodCompleted.
+	// 所有 init 容器状态已知且 Pod 已成功时，直接返回 PodCompleted。
 	if podPhase == v1.PodSucceeded && len(unknownContainers) == 0 {
 		return v1.PodCondition{
 			Type:               v1.PodInitialized,
@@ -217,10 +220,8 @@ func GeneratePodInitializedCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, co
 		}
 	}
 
-	// If there is any regular container that has started, then the pod has
-	// been initialized before.
-	// This is needed to handle the case where the pod has been initialized but
-	// the restartable init containers are restarting.
+	// 只要已有普通容器启动过，就说明 Pod 曾经完成初始化；
+	// 这样可以处理“Pod 已初始化、但可重启 init 容器正在重启”的场景。
 	if kubecontainer.HasAnyRegularContainerStarted(&pod.Spec, containerStatuses) {
 		return v1.PodCondition{
 			Type:               v1.PodInitialized,
@@ -238,9 +239,8 @@ func GeneratePodInitializedCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, co
 	}
 	unreadyMessage := strings.Join(unreadyMessages, ", ")
 	if unreadyMessage != "" {
-		// During pod in-place restart, init container status can change from completed to waiting.
-		// However, it is assumed that once a pod is initialized, it cannot be uninitialized. If
-		// the pod is already initialized, the condition is kept.
+		// 就地重启期间 init 容器状态可能从 completed 变回 waiting，
+		// 但已初始化的 Pod 不应回退为未初始化；条件为 True 时保持不变。
 		if utilfeature.DefaultFeatureGate.Enabled(features.RestartAllContainersOnContainerExits) {
 			for _, cond := range oldPodStatus.Conditions {
 				if cond.Type == v1.PodInitialized && cond.Status == v1.ConditionTrue {
@@ -268,12 +268,12 @@ func GeneratePodInitializedCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, co
 	}
 }
 
+// GeneratePodReadyToStartContainersCondition 根据沙箱是否需要重建，
+// 生成 PodReadyToStartContainers 条件。
 func GeneratePodReadyToStartContainersCondition(pod *v1.Pod, oldPodStatus *v1.PodStatus, podStatus *kubecontainer.PodStatus) v1.PodCondition {
 	newSandboxNeeded, _, _, reason := runtimeutil.PodSandboxChanged(pod, podStatus)
-	// if a new sandbox does not need to be created for a pod, it indicates that
-	// a sandbox for the pod with networking configured already exists.
-	// Otherwise, the kubelet needs to invoke the container runtime to create a
-	// fresh sandbox and configure networking for the sandbox.
+	// 不需要新建沙箱，说明已存在配置好网络的沙箱，可以启动容器；
+	// 否则 kubelet 必须先让运行时创建新沙箱并配置网络。
 	if !newSandboxNeeded {
 		return v1.PodCondition{
 			Type:               v1.PodReadyToStartContainers,
@@ -290,6 +290,8 @@ func GeneratePodReadyToStartContainersCondition(pod *v1.Pod, oldPodStatus *v1.Po
 	}
 }
 
+// generateContainersReadyConditionForTerminalPhase 为已终止的 Pod 生成 ContainersReady=False，
+// 并按成功/失败标记原因。
 func generateContainersReadyConditionForTerminalPhase(pod *v1.Pod, oldPodStatus *v1.PodStatus, podPhase v1.PodPhase) v1.PodCondition {
 	condition := v1.PodCondition{
 		Type:               v1.ContainersReady,
@@ -306,6 +308,8 @@ func generateContainersReadyConditionForTerminalPhase(pod *v1.Pod, oldPodStatus 
 	return condition
 }
 
+// generatePodReadyConditionForTerminalPhase 为已终止的 Pod 生成 PodReady=False，
+// 并按成功/失败标记原因。
 func generatePodReadyConditionForTerminalPhase(pod *v1.Pod, oldPodStatus *v1.PodStatus, podPhase v1.PodPhase) v1.PodCondition {
 	condition := v1.PodCondition{
 		Type:               v1.PodReady,
@@ -322,6 +326,8 @@ func generatePodReadyConditionForTerminalPhase(pod *v1.Pod, oldPodStatus *v1.Pod
 	return condition
 }
 
+// GenerateAllContainersRestartingCondition 生成 AllContainersRestarting 条件：
+// 仅在容器退出触发整体重启且清理尚未完成时为 True。
 func GenerateAllContainersRestartingCondition(pod *v1.Pod, podStatus *kubecontainer.PodStatus, oldPodStatus *v1.PodStatus, podPhase v1.PodPhase) v1.PodCondition {
 	if podPhase == v1.PodSucceeded {
 		return v1.PodCondition{
@@ -338,12 +344,14 @@ func GenerateAllContainersRestartingCondition(pod *v1.Pod, podStatus *kubecontai
 		}
 	}
 
+	// 没有触发整体重启时，条件为 False。
 	if !kubecontainer.ShouldAllContainersRestart(pod, podStatus, oldPodStatus) {
 		return v1.PodCondition{
 			Type:   v1.AllContainersRestarting,
 			Status: v1.ConditionFalse,
 		}
 	}
+	// 清理完成说明重启流程已结束，条件回到 False。
 	if kubecontainer.AllContainersRestartCleanedUp(pod, podStatus) {
 		return v1.PodCondition{
 			Type:   v1.AllContainersRestarting,

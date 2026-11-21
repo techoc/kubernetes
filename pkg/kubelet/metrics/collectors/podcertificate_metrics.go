@@ -23,9 +23,8 @@ import (
 )
 
 var (
-	// A gauge vector (implemented by a custom collector) reporting the current
-	// number of pod certificate projected volume sources being maintained by
-	// this kubelet instance.
+	// podCertificateStatesDesc 是 gauge 向量的描述（由自定义 collector 实现），
+	// 报告当前 kubelet 实例维护的 Pod 证书投影卷源数量。
 	podCertificateStatesDesc = metrics.NewDesc(
 		metrics.BuildFQName("", kubeletmetrics.KubeletSubsystem, kubeletmetrics.PodCertificateStatesKey),
 		"Gauge vector reporting the number of pod certificate projected volume sources, faceted by signer_name and state.",
@@ -36,21 +35,25 @@ var (
 	)
 )
 
+// podCertificateCollector 根据 podcertificate.Manager 的统计生成指标。
 type podCertificateCollector struct {
 	metrics.BaseStableCollector
 	manager podcertificate.Manager
 }
 
+// PodCertificateCollectorFor 为给定 manager 创建指标采集器。
 func PodCertificateCollectorFor(m podcertificate.Manager) *podCertificateCollector {
 	return &podCertificateCollector{
 		manager: m,
 	}
 }
 
+// DescribeWithStability 向指标框架描述该 collector 输出的指标。
 func (c *podCertificateCollector) DescribeWithStability(ch chan<- *metrics.Desc) {
 	ch <- podCertificateStatesDesc
 }
 
+// CollectWithStability 按签名者与状态输出当前 Pod 证书投影卷源数量。
 func (c *podCertificateCollector) CollectWithStability(ch chan<- metrics.Metric) {
 	report := c.manager.MetricReport()
 

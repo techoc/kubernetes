@@ -43,12 +43,15 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// mockCPUAllocationReader 用预置 map 模拟 cpumanager.Manager 的独占 CPU
+// 与隔离级别查询。
 type mockCPUAllocationReader struct {
 	cpumanager.Manager
 	sets            map[string]cpuset.CPUSet
 	isolationLevels map[string]cmqos.ResourceIsolationLevel
 }
 
+// GetExclusiveCPUs 按 podUID/containerName 返回预置的独占 CPU 集合，未命中返回空集合。
 func (m *mockCPUAllocationReader) GetExclusiveCPUs(podUID, containerName string) cpuset.CPUSet {
 	key := podUID + "/" + containerName
 	if cset, ok := m.sets[key]; ok {
@@ -57,20 +60,21 @@ func (m *mockCPUAllocationReader) GetExclusiveCPUs(podUID, containerName string)
 	return cpuset.New()
 }
 
+// GetResourceIsolationLevel 返回预置的隔离级别；未显式设置时按是否存在独占 CPU 推断。
 func (m *mockCPUAllocationReader) GetResourceIsolationLevel(pod *v1.Pod, container *v1.Container) cmqos.ResourceIsolationLevel {
 	key := string(pod.UID) + "/" + container.Name
 	if level, ok := m.isolationLevels[key]; ok {
 		return level
 	}
-	// Fallback to behavior based on sets existence if isolation level not explicitly set,
-	// to maintain compatibility with other tests or provide a reasonable default.
-	// For TestContainerHasExclusiveCPUs, we set isolationLevels explicitly.
+	// 未显式设置隔离级别时，按是否存在独占 CPU 推断，作为合理默认值；
+	// TestContainerHasExclusiveCPUs 会显式设置 isolationLevels。
 	if _, ok := m.sets[key]; ok {
 		return cmqos.ResourceIsolationContainer
 	}
 	return cmqos.ResourceIsolationHost
 }
 
+// fakeContainerMgrMountInt 返回挂载了 cpuset/cpu/cpuacct/memory 子系统的 fake mounter。
 func fakeContainerMgrMountInt() mount.Interface {
 	return mount.NewFakeMounter(
 		[]mount.MountPoint{
@@ -97,10 +101,12 @@ func fakeContainerMgrMountInt() mount.Interface {
 		})
 }
 
+// TestCgroupMountValidationSuccess 校验合法 cgroup 挂载能通过系统要求检查。
 func TestCgroupMountValidationSuccess(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	f, err := validateSystemRequirements(logger, fakeContainerMgrMountInt())
 	assert.NoError(t, err)
+	// cgroup v2 统一层级默认支持硬限流；v1 则取决于 cpu 子系统的挂载选项。
 	if cgroups.IsCgroup2UnifiedMode() {
 		assert.True(t, f.cpuHardcapping, "cpu hardcapping is expected to be enabled")
 	} else {
@@ -108,6 +114,7 @@ func TestCgroupMountValidationSuccess(t *testing.T) {
 	}
 }
 
+// TestCgroupMountValidationMemoryMissing 校验缺少 memory 子系统时校验失败（仅 cgroup v1）。
 func TestCgroupMountValidationMemoryMissing(t *testing.T) {
 	if cgroups.IsCgroup2UnifiedMode() {
 		t.Skip("skipping cgroup v1 test on a cgroup v2 system")
@@ -135,6 +142,7 @@ func TestCgroupMountValidationMemoryMissing(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestCgroupMountValidationMultipleSubsystem 校验单个挂载点包含多个子系统时仍能正确解析。
 func TestCgroupMountValidationMultipleSubsystem(t *testing.T) {
 	if cgroups.IsCgroup2UnifiedMode() {
 		t.Skip("skipping cgroup v1 test on a cgroup v2 system")
@@ -162,6 +170,7 @@ func TestCgroupMountValidationMultipleSubsystem(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestGetCpuWeight 校验 cgroup v1 CPU shares 到 cgroup v2 cpu.weight 的换算与上限。
 func TestGetCpuWeight(t *testing.T) {
 	assert.Equal(t, uint64(0), getCPUWeight(nil))
 
@@ -175,6 +184,7 @@ func TestGetCpuWeight(t *testing.T) {
 	assert.Equal(t, uint64(10000), getCPUWeight(&v))
 }
 
+// TestSoftRequirementsValidationSuccess 校验 cpu.cfs_* 文件可写时 cpuHardcapping 为 true。
 func TestSoftRequirementsValidationSuccess(t *testing.T) {
 	if cgroups.IsCgroup2UnifiedMode() {
 		t.Skip("skipping cgroup v1 test on a cgroup v2 system")
@@ -212,6 +222,7 @@ func TestSoftRequirementsValidationSuccess(t *testing.T) {
 	assert.True(t, f.cpuHardcapping, "cpu hardcapping is expected to be enabled")
 }
 
+// TestGetCapacity 校验 ephemeral-storage 容量的来源优先级，以及 cAdvisor 异常时的回退。
 func TestGetCapacity(t *testing.T) {
 	ephemeralStorageFromCapacity := int64(2000)
 	ephemeralStorageFromCadvisor := int64(8000)
@@ -283,6 +294,7 @@ func TestGetCapacity(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			// 关闭 localStorageCapacityIsolation 时不应返回 ephemeral-storage。
 			ret := c.cm.GetCapacity(logger, !c.disablelocalStorageCapacityIsolation)
 			if v, exists := ret[v1.ResourceEphemeralStorage]; !exists {
 				if !c.expectedNoEphemeralStorage {
@@ -297,6 +309,8 @@ func TestGetCapacity(t *testing.T) {
 	}
 }
 
+// TestNewPodContainerManager 校验按 CgroupsPerQOS 与 cgroup 驱动选择
+// Pod 容器管理器实现。
 func TestNewPodContainerManager(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	info := QOSContainersInfo{
@@ -364,6 +378,7 @@ func TestNewPodContainerManager(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
+			// 通过具体类型断言区分 noop 与真实实现，再校验字段透传。
 			pcm := c.cm.NewPodContainerManager()
 			if c.cm.NodeConfig.CgroupsPerQOS {
 				assert.IsType(t, &podContainerManagerImpl{}, pcm)
@@ -383,6 +398,8 @@ func TestNewPodContainerManager(t *testing.T) {
 	}
 }
 
+// TestContainerHasExclusiveCPUs 校验容器独占 CPU 判定，
+// 覆盖 Pod 级资源与不同隔离级别的组合。
 func TestContainerHasExclusiveCPUs(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	guaranteedQOSResources := v1.ResourceRequirements{
@@ -543,6 +560,7 @@ func TestContainerHasExclusiveCPUs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Pod 级资源路径需要同时打开两个门控。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, kubefeatures.PodLevelResources, tc.podLevelResourceManagersEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, kubefeatures.PodLevelResourceManagers, tc.podLevelResourceManagersEnabled)
 
@@ -569,6 +587,8 @@ func TestContainerHasExclusiveCPUs(t *testing.T) {
 	}
 }
 
+// TestPodHasExclusiveCPUs 校验 Pod 是否存在独占 CPU，
+// 覆盖 init 容器与不同隔离级别的组合。
 func TestPodHasExclusiveCPUs(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -712,6 +732,7 @@ func TestPodHasExclusiveCPUs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Pod 级资源路径需要同时打开两个门控。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, kubefeatures.PodLevelResources, tc.podLevelResourceManagersEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, kubefeatures.PodLevelResourceManagers, tc.podLevelResourceManagersEnabled)
 

@@ -22,20 +22,25 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// NewFakeInternalContainerLifecycle 返回测试用的容器生命周期假实现。
 func NewFakeInternalContainerLifecycle() *fakeInternalContainerLifecycle {
 	return &fakeInternalContainerLifecycle{}
 }
 
+// fakeInternalContainerLifecycle 是所有生命周期钩子均为空实现的假对象。
 type fakeInternalContainerLifecycle struct{}
 
+// PreCreateContainer 为空实现，不修改容器配置。
 func (f *fakeInternalContainerLifecycle) PreCreateContainer(logger klog.Logger, pod *v1.Pod, container *v1.Container, containerConfig *runtimeapi.ContainerConfig) error {
 	return nil
 }
 
+// PreStartContainer 为空实现，不执行启动前操作。
 func (f *fakeInternalContainerLifecycle) PreStartContainer(logger klog.Logger, pod *v1.Pod, container *v1.Container, containerID string) error {
 	return nil
 }
 
+// PostStopContainer 为空实现，不执行停止后清理。
 func (f *fakeInternalContainerLifecycle) PostStopContainer(logger klog.Logger, containerID string) error {
 	return nil
 }

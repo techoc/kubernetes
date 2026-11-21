@@ -45,6 +45,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestFilterTerminatedContainerInfoAndAssembleByPodCgroupKey 验证过滤已终止容器并按 Pod cgroup 键聚合。
 func TestFilterTerminatedContainerInfoAndAssembleByPodCgroupKey(t *testing.T) {
 	const (
 		seedPastPod0Infra      = 1000
@@ -63,19 +64,16 @@ func TestFilterTerminatedContainerInfoAndAssembleByPodCgroupKey(t *testing.T) {
 		cName222  = "c222"
 	)
 	infos := map[string]cadvisorapi.ContainerInfo{
-		// ContainerInfo with past creation time and no CPU/memory usage for
-		// simulating uncleaned cgroups of already terminated containers, which
-		// should not be shown in the results.
+		// 创建时间较早且没有 CPU/内存用量的 ContainerInfo，
+		// 用于模拟已终止但未清理的 cgroup，不应出现在结果中。
 		"/pod0-i-terminated-1":  getTerminatedContainerInfo(seedPastPod0Infra, pName0, namespace, kubelettypes.PodInfraContainerName),
 		"/pod0-c0-terminated-1": getTerminatedContainerInfo(seedPastPod0Container0, pName0, namespace, cName00),
 
-		// Same as above but uses the same creation time as the latest
-		// containers. They are terminated containers, so they should not be in
-		// the results.
+		// 与上面类似，但创建时间与最新容器相同。它们已终止，因此不应出现在结果中。
 		"/pod0-i-terminated-2":  getTerminatedContainerInfo(seedPod0Infra, pName0, namespace, kubelettypes.PodInfraContainerName),
 		"/pod0-c0-terminated-2": getTerminatedContainerInfo(seedPod0Container0, pName0, namespace, cName00),
 
-		// The latest containers, which should be in the results.
+		// 最新容器，应出现在结果中。
 		"/pod0-i":  getTestContainerInfo(seedPod0Infra, pName0, namespace, kubelettypes.PodInfraContainerName),
 		"/pod0-c0": getTestContainerInfo(seedPod0Container0, pName0, namespace, cName00),
 
@@ -83,12 +81,11 @@ func TestFilterTerminatedContainerInfoAndAssembleByPodCgroupKey(t *testing.T) {
 		"/pod1-c1.slice": getTestContainerInfo(seedPod0Container0, pName1, namespace, cName11),
 
 		"/pod2-i-terminated-1": getTerminatedContainerInfo(seedPastPod0Infra, pName2, namespace, kubelettypes.PodInfraContainerName),
-		// ContainerInfo with past creation time and no CPU/memory usage for
-		// simulating uncleaned cgroups of already terminated containers, which
-		// should not be shown in the results.
+		// 创建时间较早且没有 CPU/内存用量的 ContainerInfo，
+		// 用于模拟已终止但未清理的 cgroup，不应出现在结果中。
 		"/pod2-c2-terminated-1": getTerminatedContainerInfo(seedPastPod0Container0, pName2, namespace, cName22),
 
-		//ContainerInfo with no CPU/memory usage but has network usage for uncleaned cgroups, should not be filtered out
+		// 未清理 cgroup 的 ContainerInfo 没有 CPU/内存用量但有网络用量，不应被过滤。
 		"/pod2-c222-zerocpumem-1": getContainerInfoWithZeroCPUMem(seedPastPod0Container0, pName2, namespace, cName222),
 	}
 	logger, _ := ktesting.NewTestContext(t)
@@ -102,8 +99,8 @@ func TestFilterTerminatedContainerInfoAndAssembleByPodCgroupKey(t *testing.T) {
 	}
 
 	expectedInfoKeys := []string{"pod0-i-terminated-1", "pod0-c0-terminated-1", "pod0-i-terminated-2", "pod0-c0-terminated-2", "pod0-i", "pod0-c0"}
-	// NOTE: on Windows, IsSystemdStyleName will return false, which means that the Container Info will
-	// not be assembled by cgroup key.
+	// 注意：在 Windows 上 IsSystemdStyleName 返回 false，
+	// 因此 ContainerInfo 不会按 cgroup 键聚合。
 	if runtime.GOOS != "windows" {
 		expectedInfoKeys = append(expectedInfoKeys, "c1")
 	} else {
@@ -116,6 +113,7 @@ func TestFilterTerminatedContainerInfoAndAssembleByPodCgroupKey(t *testing.T) {
 	}
 }
 
+// TestCadvisorListPodStats 验证从 cadvisor 容器信息生成完整 PodStats，包括 CPU、内存、网络、IO 与临时存储。
 func TestCadvisorListPodStats(t *testing.T) {
 	ctx := ktesting.Init(t).Context
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletPSI, true)
@@ -146,14 +144,14 @@ func TestCadvisorListPodStats(t *testing.T) {
 	const (
 		pName0 = "pod0"
 		pName1 = "pod1"
-		pName2 = "pod0" // ensure pName2 conflicts with pName0, but is in a different namespace
+		pName2 = "pod0" // pName2 与 pName0 同名，但位于不同命名空间
 		pName3 = "pod3"
 	)
 	const (
 		cName00 = "c0"
 		cName01 = "c1"
-		cName10 = "c0" // ensure cName10 conflicts with cName02, but is in a different pod
-		cName20 = "c1" // ensure cName20 conflicts with cName01, but is in a different pod + namespace
+		cName10 = "c0" // cName10 与 cName02 同名，但属于不同 Pod
+		cName20 = "c1" // cName20 与 cName01 同名，但属于不同 Pod 与命名空间
 		cName30 = "c0-init"
 		cName31 = "c1"
 	)
@@ -168,6 +166,7 @@ func TestCadvisorListPodStats(t *testing.T) {
 		imagefsInodes     = uint64(4000)
 	)
 
+	// 为每个 Pod 构造期望的 PodReference，便于按引用索引结果。
 	prf0 := statsapi.PodReference{Name: pName0, Namespace: namespace0, UID: "UID" + pName0}
 	prf1 := statsapi.PodReference{Name: pName1, Namespace: namespace0, UID: "UID" + pName1}
 	prf2 := statsapi.PodReference{Name: pName2, Namespace: namespace2, UID: "UID" + pName2}
@@ -177,19 +176,19 @@ func TestCadvisorListPodStats(t *testing.T) {
 		"/docker-daemon": getTestContainerInfo(seedRuntime, "", "", ""),
 		"/kubelet":       getTestContainerInfo(seedKubelet, "", "", ""),
 		"/system":        getTestContainerInfo(seedMisc, "", "", ""),
-		// Pod0 - Namespace0
+		// Pod0 - 命名空间0
 		"/pod0-i":  getTestContainerInfo(seedPod0Infra, pName0, namespace0, kubelettypes.PodInfraContainerName),
 		"/pod0-c0": getTestContainerInfo(seedPod0Container0, pName0, namespace0, cName00),
 		"/pod0-c1": getTestContainerInfo(seedPod0Container1, pName0, namespace0, cName01),
-		// Pod1 - Namespace0
+		// Pod1 - 命名空间0
 		"/pod1-i":  getTestContainerInfo(seedPod1Infra, pName1, namespace0, kubelettypes.PodInfraContainerName),
 		"/pod1-c0": getTestContainerInfo(seedPod1Container, pName1, namespace0, cName10),
-		// Pod2 - Namespace2
+		// Pod2 - 命名空间2
 		"/pod2-i":                        getTestContainerInfo(seedPod2Infra, pName2, namespace2, kubelettypes.PodInfraContainerName),
 		"/pod2-c0":                       getTestContainerInfo(seedPod2Container, pName2, namespace2, cName20),
 		"/kubepods/burstable/podUIDpod0": getTestContainerInfo(seedPod0Infra, pName0, namespace0, kubelettypes.PodInfraContainerName),
 		"/kubepods/podUIDpod1":           getTestContainerInfo(seedPod1Infra, pName1, namespace0, kubelettypes.PodInfraContainerName),
-		// Pod3 - Namespace0
+		// Pod3 - 命名空间0
 		"/pod3-i":       getTestContainerInfo(seedPod3Infra, pName3, namespace0, kubelettypes.PodInfraContainerName),
 		"/pod3-c0-init": getTestContainerInfo(seedPod3Container0, pName3, namespace0, cName30),
 		"/pod3-c1":      getTestContainerInfo(seedPod3Container1, pName3, namespace0, cName31),
@@ -213,7 +212,7 @@ func TestCadvisorListPodStats(t *testing.T) {
 		Inodes:     &totalImagefsInodes,
 	}
 
-	// memory limit overrides for each container (used to test available bytes if a memory limit is known)
+	// 覆盖各容器的内存 limit，用于测试已知 limit 时的 available bytes 计算。
 	memoryLimitOverrides := map[string]uint64{
 		"/":        uint64(1 << 30),
 		"/pod2-c0": uint64(1 << 15),
@@ -226,10 +225,11 @@ func TestCadvisorListPodStats(t *testing.T) {
 		info.Spec.Memory.Limit = memoryLimitOverride
 		infos[name] = info
 	}
-	// any container for which cadvisor should return no stats (as might be the case for an exited init container)
+	// 列出 cadvisor 不返回任何统计信息的容器（例如已退出的 init 容器）。
 	nostatsOverrides := []string{
 		"/pod3-c0-init",
 	}
+	// 清除这些容器的内存/CPU/网络统计能力，使 cadvisor 返回空数据。
 	for _, name := range nostatsOverrides {
 		info, found := infos[name]
 		if !found {
@@ -286,7 +286,7 @@ func TestCadvisorListPodStats(t *testing.T) {
 		indexPods[pod.PodRef] = pod
 	}
 
-	// Validate Pod0 Results
+	// 校验 Pod0 结果
 	ps, found := indexPods[prf0]
 	assert.True(t, found)
 	assert.Len(t, ps.Containers, 2)
@@ -325,7 +325,7 @@ func TestCadvisorListPodStats(t *testing.T) {
 		checkIOStats(t, "Pod0", seedPod0Infra, infos["/pod0-i"], ps.IO)
 	}
 
-	// Validate Pod1 Results
+	// 校验 Pod1 结果
 	ps, found = indexPods[prf1]
 	assert.True(t, found)
 	assert.Len(t, ps.Containers, 1)
@@ -338,7 +338,7 @@ func TestCadvisorListPodStats(t *testing.T) {
 	checkNetworkStats(t, "Pod1", seedPod1Infra, ps.Network)
 	checkContainersSwapStats(t, ps, infos["/pod1-c0"])
 
-	// Validate Pod2 Results
+	// 校验 Pod2 结果
 	ps, found = indexPods[prf2]
 	assert.True(t, found)
 	assert.Len(t, ps.Containers, 1)
@@ -351,11 +351,11 @@ func TestCadvisorListPodStats(t *testing.T) {
 	checkNetworkStats(t, "Pod2", seedPod2Infra, ps.Network)
 	checkContainersSwapStats(t, ps, infos["/pod2-c0"])
 
-	// Validate Pod3 Results
+	// 校验 Pod3 结果
 
 	ps, found = indexPods[prf3]
 	assert.True(t, found)
-	// /pod3-c0-init has no stats should be filtered
+	// /pod3-c0-init 没有统计信息，应被过滤
 	assert.Len(t, ps.Containers, 1)
 	indexCon = make(map[string]statsapi.ContainerStats, len(ps.Containers))
 	for _, con := range ps.Containers {
@@ -370,6 +370,7 @@ func TestCadvisorListPodStats(t *testing.T) {
 	checkContainersSwapStats(t, ps, infos["/pod3-c1"])
 }
 
+// TestCadvisorPodCPUAndMemoryStats 验证单 Pod 的 CPU 与内存统计生成。
 func TestCadvisorPodCPUAndMemoryStats(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	const (
@@ -398,7 +399,7 @@ func TestCadvisorPodCPUAndMemoryStats(t *testing.T) {
 		"/pods/pod0-c1": getTestContainerInfo(seedPod0Container1, podName, namespace, cName1),
 	}
 
-	// memory limit overrides for each container (used to test available bytes if a memory limit is known)
+	// 覆盖各容器的内存 limit，用于测试已知 limit 时的 available bytes 计算。
 	memoryLimitOverrides := map[string]uint64{
 		"/pods/pod0-c0": uint64(1 << 15),
 	}
@@ -463,8 +464,10 @@ func TestCadvisorPodCPUAndMemoryStats(t *testing.T) {
 	assert.Nil(t, con.IO)
 }
 
+// TestCadvisorListPodCPUAndMemoryStats 验证批量生成仅含 CPU 与内存的 PodStats。
 func TestCadvisorListPodCPUAndMemoryStats(t *testing.T) {
 	ctx := ktesting.Init(t)
+	// 启用 KubeletPSI 特性门控，以覆盖压力指标相关路径。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletPSI, true)
 	const (
 		namespace0 = "test0"
@@ -490,13 +493,13 @@ func TestCadvisorListPodCPUAndMemoryStats(t *testing.T) {
 	const (
 		pName0 = "pod0"
 		pName1 = "pod1"
-		pName2 = "pod0" // ensure pName2 conflicts with pName0, but is in a different namespace
+		pName2 = "pod0" // pName2 与 pName0 同名，但位于不同命名空间
 	)
 	const (
 		cName00 = "c0"
 		cName01 = "c1"
-		cName10 = "c0" // ensure cName10 conflicts with cName02, but is in a different pod
-		cName20 = "c1" // ensure cName20 conflicts with cName01, but is in a different pod + namespace
+		cName10 = "c0" // cName10 与 cName02 同名，但属于不同 Pod
+		cName20 = "c1" // cName20 与 cName01 同名，但属于不同 Pod 与命名空间
 	)
 
 	prf0 := statsapi.PodReference{Name: pName0, Namespace: namespace0, UID: "UID" + pName0}
@@ -507,25 +510,26 @@ func TestCadvisorListPodCPUAndMemoryStats(t *testing.T) {
 		"/docker-daemon": getTestContainerInfo(seedRuntime, "", "", ""),
 		"/kubelet":       getTestContainerInfo(seedKubelet, "", "", ""),
 		"/system":        getTestContainerInfo(seedMisc, "", "", ""),
-		// Pod0 - Namespace0
+		// Pod0 - 命名空间0
 		"/pod0-i":  getTestContainerInfo(seedPod0Infra, pName0, namespace0, kubelettypes.PodInfraContainerName),
 		"/pod0-c0": getTestContainerInfo(seedPod0Container0, pName0, namespace0, cName00),
 		"/pod0-c1": getTestContainerInfo(seedPod0Container1, pName0, namespace0, cName01),
-		// Pod1 - Namespace0
+		// Pod1 - 命名空间0
 		"/pod1-i":  getTestContainerInfo(seedPod1Infra, pName1, namespace0, kubelettypes.PodInfraContainerName),
 		"/pod1-c0": getTestContainerInfo(seedPod1Container, pName1, namespace0, cName10),
-		// Pod2 - Namespace2
+		// Pod2 - 命名空间2
 		"/pod2-i":                        getTestContainerInfo(seedPod2Infra, pName2, namespace2, kubelettypes.PodInfraContainerName),
 		"/pod2-c0":                       getTestContainerInfo(seedPod2Container, pName2, namespace2, cName20),
 		"/kubepods/burstable/podUIDpod0": getTestContainerInfo(seedPod0Infra, pName0, namespace0, kubelettypes.PodInfraContainerName),
 		"/kubepods/podUIDpod1":           getTestContainerInfo(seedPod1Infra, pName1, namespace0, kubelettypes.PodInfraContainerName),
 	}
 
-	// memory limit overrides for each container (used to test available bytes if a memory limit is known)
+	// 覆盖各容器的内存 limit，用于测试已知 limit 时的 available bytes 计算。
 	memoryLimitOverrides := map[string]uint64{
 		"/":        uint64(1 << 30),
 		"/pod2-c0": uint64(1 << 15),
 	}
+	// 按名称覆盖指定容器的内存 limit。
 	for name, memoryLimitOverride := range memoryLimitOverrides {
 		info, found := infos[name]
 		if !found {
@@ -565,7 +569,7 @@ func TestCadvisorListPodCPUAndMemoryStats(t *testing.T) {
 		indexPods[pod.PodRef] = pod
 	}
 
-	// Validate Pod0 Results
+	// 校验 Pod0 结果
 	ps, found := indexPods[prf0]
 	assert.True(t, found)
 	assert.Len(t, ps.Containers, 2)
@@ -611,7 +615,7 @@ func TestCadvisorListPodCPUAndMemoryStats(t *testing.T) {
 		checkContainersSwapStats(t, ps, infos["/pod0-c0"], infos["/pod0-c1"])
 	}
 
-	// Validate Pod1 Results
+	// 校验 Pod1 结果
 	ps, found = indexPods[prf1]
 	assert.True(t, found)
 	assert.Len(t, ps.Containers, 1)
@@ -626,7 +630,7 @@ func TestCadvisorListPodCPUAndMemoryStats(t *testing.T) {
 	assert.Nil(t, ps.Network)
 	assert.Nil(t, con.IO)
 
-	// Validate Pod2 Results
+	// 校验 Pod2 结果
 	ps, found = indexPods[prf2]
 	assert.True(t, found)
 	assert.Len(t, ps.Containers, 1)
@@ -642,6 +646,7 @@ func TestCadvisorListPodCPUAndMemoryStats(t *testing.T) {
 	assert.Nil(t, con.IO)
 }
 
+// TestCadvisorImagesFsStatsKubeletSeparateDiskOff 验证未分离镜像/容器磁盘时镜像文件系统统计来自 cadvisor。
 func TestCadvisorImagesFsStatsKubeletSeparateDiskOff(t *testing.T) {
 	ctx := ktesting.Init(t).Context
 	var (
@@ -672,6 +677,7 @@ func TestCadvisorImagesFsStatsKubeletSeparateDiskOff(t *testing.T) {
 	assert.Equal(*imageFsInfo.Inodes-*imageFsInfo.InodesFree, *stats.InodesUsed)
 }
 
+// TestImageFsStatsCustomResponse 验证镜像文件系统响应缺少必要字段时返回错误。
 func TestImageFsStatsCustomResponse(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.KubeletSeparateDiskGC, true)
 	for desc, tc := range map[string]struct {
@@ -752,6 +758,7 @@ func TestImageFsStatsCustomResponse(t *testing.T) {
 	}
 }
 
+// TestCadvisorImagesFsStats 验证镜像与容器文件系统位于同一磁盘时的统计透传。
 func TestCadvisorImagesFsStats(t *testing.T) {
 	ctx := ktesting.Init(t).Context
 	var (
@@ -797,6 +804,7 @@ func TestCadvisorImagesFsStats(t *testing.T) {
 
 }
 
+// TestCadvisorSplitImagesFsStats 验证镜像与容器使用不同挂载点时的独立统计。
 func TestCadvisorSplitImagesFsStats(t *testing.T) {
 	ctx := ktesting.Init(t).Context
 	var (
@@ -850,6 +858,7 @@ func TestCadvisorSplitImagesFsStats(t *testing.T) {
 	assert.Equal(*containerFsInfo.Inodes-*containerFsInfo.InodesFree, *containerfs.InodesUsed)
 }
 
+// TestCadvisorSameDiskDifferentLocations 验证同一磁盘不同位置时镜像与容器统计保持一致。
 func TestCadvisorSameDiskDifferentLocations(t *testing.T) {
 	ctx := ktesting.Init(t).Context
 	var (
@@ -903,6 +912,7 @@ func TestCadvisorSameDiskDifferentLocations(t *testing.T) {
 	assert.Equal(*imageFsInfo.Inodes-*imageFsInfo.InodesFree, *containerfs.InodesUsed)
 }
 
+// TestCadvisorListPodStatsWhenContainerLogFound 验证容器日志占用会计入临时存储统计。
 func TestCadvisorListPodStatsWhenContainerLogFound(t *testing.T) {
 	ctx := ktesting.Init(t).Context
 	const (
@@ -941,7 +951,7 @@ func TestCadvisorListPodStatsWhenContainerLogFound(t *testing.T) {
 		"/docker-daemon": getTestContainerInfo(seedRuntime, "", "", ""),
 		"/kubelet":       getTestContainerInfo(seedKubelet, "", "", ""),
 		"/system":        getTestContainerInfo(seedMisc, "", "", ""),
-		// Pod0 - Namespace0
+		// Pod0 - 命名空间0
 		"/pod0-i":  getTestContainerInfo(seedPod0Infra, pName0, namespace0, kubelettypes.PodInfraContainerName),
 		"/pod0-c0": getTestContainerInfo(seedPod0Container0, pName0, namespace0, cName00),
 		"/pod0-c1": getTestContainerInfo(seedPod0Container1, pName0, namespace0, cName01),
@@ -1000,15 +1010,14 @@ func TestCadvisorListPodStatsWhenContainerLogFound(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Len(t, pods, 1)
-	// Validate Pod0 Results
+	// 校验 Pod0 结果
 	checkEphemeralStats(t, "Pod0", []int{seedPod0Container0, seedPod0Container1}, nil, fakeStatsSlice, pods[0].EphemeralStorage)
 }
 
+// TestHasMemoryAndCPUInstUsageNilMemory 验证 Memory 采样缺失时 hasMemoryAndCPUInstUsage 返回 false 而非 panic。
 func TestHasMemoryAndCPUInstUsageNilMemory(t *testing.T) {
-	// With lib/model pointer sub-stats, Spec.HasMemory no longer guarantees a
-	// non-nil Memory sample. hasMemoryAndCPUInstUsage must return false instead
-	// of panicking when the memory sample is absent for a container that the
-	// spec says has memory.
+	// lib/model 改为指针子项后，Spec.HasMemory 不再保证 Memory 采样非空。
+	// 当声明有内存的容器缺少内存采样时，hasMemoryAndCPUInstUsage 必须返回 false 而非 panic。
 	info := getTestContainerInfo(4000, "pod0", "ns0", "c0")
 	if !hasMemoryAndCPUInstUsage(&info) {
 		t.Fatalf("precondition failed: baseline fixture should report memory and cpuinst usage")

@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// pullmanager package keeps the implementation of the image pull manager and
-// image credential verification policies
+// pullmanager 包包含镜像拉取管理器与镜像凭据校验策略的实现。
 package pullmanager

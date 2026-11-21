@@ -27,7 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 )
 
-// Names of the options, as part of the user interface.
+// 选项名称，属于用户接口的一部分。
 const (
 	FullPCPUsOnlyOption             string = "full-pcpus-only"
 	DistributeCPUsAcrossNUMAOption  string = "distribute-cpus-across-numa"
@@ -37,6 +37,7 @@ const (
 	PreferAlignByUnCoreCacheOption  string = "prefer-align-cpus-by-uncorecache"
 )
 
+// 按特性成熟度分组的选项集合，用于特性门控校验。
 var (
 	alphaOptions = sets.New[string](
 		AlignBySocketOption,
@@ -52,56 +53,52 @@ var (
 	)
 )
 
-// CheckPolicyOptionAvailable verifies if the given option can be used depending on the Feature Gate Settings.
-// returns nil on success, or an error describing the failure on error.
+// CheckPolicyOptionAvailable 根据特性门控设置校验给定选项是否可用；
+// 成功返回 nil，失败返回描述性错误。
 func CheckPolicyOptionAvailable(option string) error {
+	// 未知选项直接拒绝。
 	if !alphaOptions.Has(option) && !betaOptions.Has(option) && !stableOptions.Has(option) {
 		return fmt.Errorf("unknown CPU Manager Policy option: %q", option)
 	}
 
+	// alpha 选项需要 CPUManagerPolicyAlphaOptions 门控。
 	if alphaOptions.Has(option) && !utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUManagerPolicyAlphaOptions) {
 		return fmt.Errorf("CPU Manager Policy Alpha-level Options not enabled, but option %q provided", option)
 	}
 
+	// beta 选项需要 CPUManagerPolicyBetaOptions 门控。
 	if betaOptions.Has(option) && !utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUManagerPolicyBetaOptions) {
 		return fmt.Errorf("CPU Manager Policy Beta-level Options not enabled, but option %q provided", option)
 	}
 
-	// if the option is stable, we need no CPUManagerPolicy*Options feature gate check
+	// stable 选项无需特性门控检查。
 	return nil
 }
 
-// StaticPolicyOptions holds the parsed value of the policy options, ready to be consumed internally.
+// StaticPolicyOptions 保存解析后的策略选项，供内部使用。
 type StaticPolicyOptions struct {
-	// flag to enable extra allocation restrictions to avoid
-	// different containers to possibly end up on the same core.
-	// we consider "core" and "physical CPU" synonim here, leaning
-	// towards the terminoloy k8s hints. We acknowledge this is confusing.
-	//
-	// looking at https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/,
-	// any possible naming scheme will lead to ambiguity to some extent.
-	// We picked "pcpu" because it the established docs hints at vCPU already.
+	// 是否启用额外分配限制，避免不同容器落在同一个 core 上；
+	// 这里将 "core" 与 "physical CPU" 视为同义，沿用 k8s 的术语；
+	// 命名难免有歧义，选择 "pcpu" 是因为既有文档已暗示 vCPU。
 	FullPhysicalCPUsOnly bool
-	// Flag to evenly distribute CPUs across NUMA nodes in cases where more
-	// than one NUMA node is required to satisfy the allocation.
+	// 当需要多个 NUMA 节点才能满足分配时，是否将 CPU 均匀分布到各节点。
 	DistributeCPUsAcrossNUMA bool
-	// Flag to ensure CPUs are considered aligned at socket boundary rather than
-	// NUMA boundary
+	// 是否按 socket 边界而非 NUMA 边界对齐 CPU。
 	AlignBySocket bool
-	// flag to enable extra allocation restrictions to spread
-	// cpus (HT) on different physical core.
-	// This is a preferred policy so do not throw error if they have to packed in one physical core.
+	// 是否把超线程 CPU 分散到不同物理 core；
+	// 这是偏好型策略，无法满足时不应报错。
 	DistributeCPUsAcrossCores bool
-	// Flag to remove reserved cores from the list of available cores
+	// 是否从可用 CPU 列表中移除预留 core。
 	StrictCPUReservation bool
-	// Flag that makes best-effort to align CPUs to a uncorecache boundary
-	// As long as there are CPUs available, pods will be admitted if the condition is not met.
+	// 尽量把 CPU 对齐到 uncore cache 边界；
+	// 只要仍有 CPU 可用，条件不满足也允许 Pod 准入。
 	PreferAlignByUncoreCacheOption bool
 }
 
-// NewStaticPolicyOptions creates a StaticPolicyOptions struct from the user configuration.
+// NewStaticPolicyOptions 根据用户配置创建 StaticPolicyOptions。
 func NewStaticPolicyOptions(policyOptions map[string]string) (StaticPolicyOptions, error) {
 	opts := StaticPolicyOptions{}
+	// 逐项校验选项可用性并解析布尔值。
 	for name, value := range policyOptions {
 		if err := CheckPolicyOptionAvailable(name); err != nil {
 			return opts, err
@@ -151,19 +148,23 @@ func NewStaticPolicyOptions(policyOptions map[string]string) (StaticPolicyOption
 		}
 	}
 
+	// 这些选项组合语义冲突，必须拒绝。
 	if opts.FullPhysicalCPUsOnly && opts.DistributeCPUsAcrossCores {
 		return opts, fmt.Errorf("static policy options %s and %s can not be used at the same time", FullPCPUsOnlyOption, DistributeCPUsAcrossCoresOption)
 	}
 
 	// TODO(@Jeffwan): Remove this check after more compatibility tests are done.
+	// 两个选项同时启用会互相冲突。
 	if opts.DistributeCPUsAcrossNUMA && opts.DistributeCPUsAcrossCores {
 		return opts, fmt.Errorf("static policy options %s and %s can not be used at the same time", DistributeCPUsAcrossNUMAOption, DistributeCPUsAcrossCoresOption)
 	}
 
+	// uncorecache 对齐与跨 core 分散互斥。
 	if opts.PreferAlignByUncoreCacheOption && opts.DistributeCPUsAcrossCores {
 		return opts, fmt.Errorf("static policy options %s and %s can not be used at the same time", PreferAlignByUnCoreCacheOption, DistributeCPUsAcrossCoresOption)
 	}
 
+	// uncorecache 对齐与跨 NUMA 分散互斥。
 	if opts.PreferAlignByUncoreCacheOption && opts.DistributeCPUsAcrossNUMA {
 		return opts, fmt.Errorf("static policy options %s and %s can not be used at the same time", PreferAlignByUnCoreCacheOption, DistributeCPUsAcrossNUMAOption)
 	}
@@ -171,8 +172,9 @@ func NewStaticPolicyOptions(policyOptions map[string]string) (StaticPolicyOption
 	return opts, nil
 }
 
-// ValidateStaticPolicyOptions ensures that the requested policy options are compatible with the machine on which the CPUManager is running.
+// ValidateStaticPolicyOptions 确保请求的策略选项与 CPUManager 所在机器兼容。
 func ValidateStaticPolicyOptions(opts StaticPolicyOptions, topology *topology.CPUTopology, topologyManager topologymanager.Store) error {
+	// 按 socket 对齐与 single-numa-node 策略、以及 socket 多于 NUMA 的硬件不兼容。
 	if opts.AlignBySocket {
 		// Not compatible with topology manager single-numa-node policy option.
 		if topologyManager.GetPolicy().Name() == topologymanager.PolicySingleNumaNode {

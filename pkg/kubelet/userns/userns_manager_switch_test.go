@@ -33,71 +33,73 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestMakeUserNsManagerSwitch 验证特性门控从开启切到关闭后重建管理器时，不会沿用磁盘上已记录的用户命名空间分配。
 func TestMakeUserNsManagerSwitch(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// Create the manager with the feature gate enabled, to record some pods on disk.
+	// 开启特性门控创建管理器，以便把 Pod 的用户命名空间分配记录到磁盘。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, true)
 
 	pods := []types.UID{"pod-1", "pod-2"}
 
 	testUserNsPodsManager := &testUserNsPodsManager{
 		podDir: t.TempDir(),
-		// List the same pods we will record, so the second time we create the userns
-		// manager, it will find these pods on disk with userns data.
+		// 列出与稍后要记录的相同 Pod，这样第二次创建管理器时
+		// 能从磁盘上找到带 userns 数据的这些 Pod。
 		podList: pods,
 	}
 	m, err := MakeUserNsManager(logger, testUserNsPodsManager, nil)
 	require.NoError(t, err)
 
-	// Record the pods on disk.
+	// 把 Pod 的用户命名空间范围写入磁盘。
 	for _, podUID := range pods {
 		pod := v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: podUID}}
 		_, err := m.GetOrCreateUserNamespaceMappings(logger, &pod, "")
 		require.NoError(t, err, "failed to record userns range for pod %v", podUID)
 	}
 
-	// Test re-init works when the feature gate is disabled and there were some
-	// pods written on disk.
+	// 验证门控关闭且磁盘上已有 Pod 记录时，重新初始化仍能正常工作。
+	// 先把仿真版本设为 1.35，使该特性门控在测试中仍可被关闭。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, false)
 	m2, err := MakeUserNsManager(logger, testUserNsPodsManager, nil)
 	require.NoError(t, err)
 
-	// The feature gate is off, no pods should be allocated.
+	// 门控已关闭，不应有任何 Pod 被认为已分配。
 	for _, pod := range pods {
 		ok := m2.podAllocated(pod)
 		assert.False(t, ok, "pod %q should not be allocated", pod)
 	}
 }
 
+// TestGetOrCreateUserNamespaceMappingsSwitch 验证门控关闭后 GetOrCreateUserNamespaceMappings 变为空操作，返回 nil 映射。
 func TestGetOrCreateUserNamespaceMappingsSwitch(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// Enable the feature gate to create some pods on disk.
+	// 开启特性门控，以便在磁盘上创建一些 Pod 记录。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, true)
 
 	pods := []types.UID{"pod-1", "pod-2"}
 
 	testUserNsPodsManager := &testUserNsPodsManager{
 		podDir: t.TempDir(),
-		// List the same pods we will record, so the second time we create the userns
-		// manager, it will find these pods on disk with userns data.
+		// 列出与稍后要记录的相同 Pod，这样第二次创建管理器时
+		// 能从磁盘上找到带 userns 数据的这些 Pod。
 		podList: pods,
 	}
 	m, err := MakeUserNsManager(logger, testUserNsPodsManager, nil)
 	require.NoError(t, err)
 
-	// Record the pods on disk.
+	// 把 Pod 的用户命名空间范围写入磁盘。
 	for _, podUID := range pods {
 		pod := v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: podUID}}
 		_, err := m.GetOrCreateUserNamespaceMappings(logger, &pod, "")
 		require.NoError(t, err, "failed to record userns range for pod %v", podUID)
 	}
 
-	// Test no-op when the feature gate is disabled and there were some
-	// pods registered on disk.
+	// 验证门控关闭且磁盘上已有 Pod 注册时，调用应为空操作。
+	// 先把仿真版本设为 1.35，使该特性门控在测试中仍可被关闭。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, false)
-	// Create a new manager with the feature gate off and verify the userns range is nil.
+	// 在门控关闭的情况下重建管理器，并确认返回的 userns 映射为 nil。
 	m2, err := MakeUserNsManager(logger, testUserNsPodsManager, nil)
 	require.NoError(t, err)
 
@@ -110,11 +112,13 @@ func TestGetOrCreateUserNamespaceMappingsSwitch(t *testing.T) {
 	}
 }
 
+// TestCleanupOrphanedPodUsernsAllocationsSwitch 验证门控关闭后，清理孤儿 Pod 的 userns 分配仍可执行。
 func TestCleanupOrphanedPodUsernsAllocationsSwitch(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
-	// Enable the feature gate to create some pods on disk.
+	// 开启特性门控，以便在磁盘上创建一些 Pod 记录。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, true)
 
+	// listPods 模拟磁盘上仍存在的 Pod，pods 只写入分配、不出现在列表中，用于触发孤儿清理。
 	listPods := []types.UID{"pod-1", "pod-2"}
 	pods := []types.UID{"pod-3", "pod-4"}
 	testUserNsPodsManager := &testUserNsPodsManager{
@@ -125,21 +129,21 @@ func TestCleanupOrphanedPodUsernsAllocationsSwitch(t *testing.T) {
 	m, err := MakeUserNsManager(logger, testUserNsPodsManager, nil)
 	require.NoError(t, err)
 
-	// Record the pods on disk.
+	// 把 Pod 的用户命名空间范围写入磁盘。
 	for _, podUID := range pods {
 		pod := v1.Pod{ObjectMeta: metav1.ObjectMeta{UID: podUID}}
 		_, err := m.GetOrCreateUserNamespaceMappings(logger, &pod, "")
 		require.NoError(t, err, "failed to record userns range for pod %v", podUID)
 	}
 
-	// Test cleanup works when the feature gate is disabled and there were some
-	// pods registered.
+	// 验证门控关闭且已有 Pod 注册时，孤儿分配清理仍能正常工作。
+	// 先把仿真版本设为 1.35，使该特性门控在测试中仍可被关闭。
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.35"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.UserNamespacesSupport, false)
 	err = m.CleanupOrphanedPodUsernsAllocations(ctx, nil, nil)
 	require.NoError(t, err)
 
-	// The feature gate is off, no pods should be allocated.
+	// 门控已关闭，不应有任何 Pod 被认为已分配。
 	for _, pod := range append(listPods, pods...) {
 		ok := m.podAllocated(pod)
 		assert.False(t, ok, "pod %q should not be allocated", pod)

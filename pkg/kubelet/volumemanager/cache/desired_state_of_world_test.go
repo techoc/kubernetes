@@ -36,12 +36,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Calls AddPodToVolume() to add new pod to new volume
-// Verifies newly added pod/volume exists via
-// PodExistsInVolume() VolumeExists() and GetVolumesToMount()
+// 调用 AddPodToVolume() 把新 Pod 加入新卷
+// 通过 PodExistsInVolume()、VolumeExists() 和 GetVolumesToMount() 验证
+// 新加入的 Pod/卷存在
 func Test_AddPodToVolume_Positive_NewPodNewVolume(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备：使用测试用卷插件管理器与假 SELinux 标签翻译器，避免依赖真实节点环境
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -67,11 +67,11 @@ func Test_AddPodToVolume_Positive_NewPodNewVolume(t *testing.T) {
 	volumeSpec := &volume.Spec{Volume: &pod.Spec.Volumes[0]}
 	podName := util.GetUniquePodName(pod)
 
-	// Act
+	// 执行
 	generatedVolumeName, err := dsw.AddPodToVolume(
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxContainerContexts */)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -83,12 +83,11 @@ func Test_AddPodToVolume_Positive_NewPodNewVolume(t *testing.T) {
 	verifyVolumeExistsWithSpecNameInVolumeDsw(t, podName, volumeSpec.Name(), dsw)
 }
 
-// Calls AddPodToVolume() twice to add the same pod to the same volume
-// Verifies newly added pod/volume exists via
-// PodExistsInVolume() VolumeExists() and GetVolumesToMount() and no errors.
+// 两次调用 AddPodToVolume()，把同一个 Pod 加入同一个卷
+// 验证 Pod/卷存在、生成的卷名一致且无错误
 func Test_AddPodToVolume_Positive_ExistingPodExistingVolume(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -114,7 +113,7 @@ func Test_AddPodToVolume_Positive_ExistingPodExistingVolume(t *testing.T) {
 	volumeSpec := &volume.Spec{Volume: &pod.Spec.Volumes[0]}
 	podName := util.GetUniquePodName(pod)
 
-	// Act
+	// 执行
 	generatedVolumeName, err := dsw.AddPodToVolume(
 		logger, podName, pod, volumeSpec, volumeSpec.Name(), "" /* volumeGIDValue */, nil /* seLinuxContainerContexts */)
 	if err != nil {
@@ -126,7 +125,7 @@ func Test_AddPodToVolume_Positive_ExistingPodExistingVolume(t *testing.T) {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Assert
+	// 断言
 	if generatedVolumeName != generatedVolumeName2 {
 		t.Fatalf("AddPodToVolume should generate same names, but got %q != %q", generatedVolumeName, generatedVolumeName2)
 	}
@@ -137,12 +136,12 @@ func Test_AddPodToVolume_Positive_ExistingPodExistingVolume(t *testing.T) {
 	verifyVolumeExistsWithSpecNameInVolumeDsw(t, podName, volumeSpec.Name(), dsw)
 }
 
-// Call AddPodToVolume() on different pods for different kinds of volumes
-// Verifies generated names are same for different pods if volume is device mountable or attachable
-// Verifies generated names are different for different pods if volume is not device mountble and attachable
+// 对不同类型的卷、为不同 Pod 调用 AddPodToVolume()
+// 验证 device mountable 或 attachable 卷在不同 Pod 下生成相同卷名
+// 验证既不可 device mount 也不可 attach 的卷在不同 Pod 下生成不同卷名
 func Test_AddPodToVolume_Positive_NamesForDifferentPodsAndDifferentVolumes(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备：这里需要自建插件集合，以便同时覆盖 basic/device-mountable/attachable 三类插件
 	fakeVolumeHost := volumetesting.NewFakeVolumeHost(t,
 		"",  /* rootDir */
 		nil, /* kubeClient */
@@ -276,7 +275,7 @@ func Test_AddPodToVolume_Positive_NamesForDifferentPodsAndDifferentVolumes(t *te
 		},
 	}
 
-	// Act & Assert
+	// 遍历各用例：同一卷在可全局挂载场景下卷名应相同，否则应随 Pod 不同而不同
 	for name, v := range testcases {
 		volumeSpec1 := &volume.Spec{Volume: &v.pod1.Spec.Volumes[0]}
 		volumeSpec2 := &volume.Spec{Volume: &v.pod2.Spec.Volumes[0]}
@@ -301,9 +300,10 @@ func Test_AddPodToVolume_Positive_NamesForDifferentPodsAndDifferentVolumes(t *te
 
 }
 
+// 为同一 Pod 的多个外层卷名调用 AddPodToVolume()
 func Test_AddPodToVolume_Positive_MultiOuterNames(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -337,7 +337,7 @@ func Test_AddPodToVolume_Positive_MultiOuterNames(t *testing.T) {
 	volumeSpec2 := &volume.Spec{Volume: &pod.Spec.Volumes[1]}
 	podName := util.GetUniquePodName(pod)
 
-	// Act
+	// 执行
 	_, err := dsw.AddPodToVolume(
 		logger, podName, pod, volumeSpec1, volumeSpec1.Name(), "" /* volumeGIDValue */, nil /* seLinuxContainerContexts */)
 	if err != nil {
@@ -349,17 +349,16 @@ func Test_AddPodToVolume_Positive_MultiOuterNames(t *testing.T) {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Assert
+	// 断言
 	verifyVolumeExistsInVolumesToMount(
 		t, generatedVolumeName, []string{"volume-name-1", "volume-name-2"}, false /* expectReportedInUse */, dsw)
 }
 
-// Populates data struct with a new volume/pod
-// Calls DeletePodFromVolume() to removes the pod
-// Verifies newly added pod/volume are deleted
+// 先用新卷/Pod 填充数据，再调用 DeletePodFromVolume() 删除 Pod
+// 验证新加入的 Pod/卷均被删除
 func Test_DeletePodFromVolume_Positive_PodExistsVolumeExists(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -394,26 +393,23 @@ func Test_DeletePodFromVolume_Positive_PodExistsVolumeExists(t *testing.T) {
 		t, generatedVolumeName, []string{"volume-name"}, false /* expectReportedInUse */, dsw)
 	verifyPodExistsInVolumeDsw(t, podName, generatedVolumeName, "" /* SELinuxContext */, dsw)
 
-	// Act
+	// 执行
 	dsw.DeletePodFromVolume(podName, generatedVolumeName)
 
-	// Assert
+	// 断言
 	verifyVolumeDoesntExist(t, generatedVolumeName, "" /* SELinuxContext */, dsw)
 	verifyVolumeDoesntExistInVolumesToMount(t, generatedVolumeName, dsw)
 	verifyPodDoesntExistInVolumeDsw(t, podName, generatedVolumeName, "" /* SELinuxContext */, dsw)
 	verifyVolumeDoesntExistWithSpecNameInVolumeDsw(t, podName, volumeSpec.Name(), dsw)
 }
 
-// Calls AddPodToVolume() to add three new volumes to data struct
-// Verifies newly added pod/volume exists via PodExistsInVolume()
-// VolumeExists() and GetVolumesToMount()
-// Marks only second volume as reported in use.
-// Verifies only that volume is marked reported in use
-// Marks only first volume as reported in use.
-// Verifies only that volume is marked reported in use
+// 调用 AddPodToVolume() 把三个新卷加入数据结构
+// 验证 Pod/卷存在
+// 仅把第二个卷标记为 reported in use，验证只有它被标记
+// 再仅把第一个卷标记为 reported in use，验证只有它被标记
 func Test_MarkVolumesReportedInUse_Positive_NewPodNewVolume(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
 	seLinuxTranslator := util.NewFakeSELinuxLabelTranslator()
 	dsw := NewDesiredStateOfWorld(volumePluginMgr, seLinuxTranslator)
@@ -502,11 +498,11 @@ func Test_MarkVolumesReportedInUse_Positive_NewPodNewVolume(t *testing.T) {
 		t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 	}
 
-	// Act
+	// 执行
 	volumesReportedInUse := []v1.UniqueVolumeName{generatedVolume2Name}
 	dsw.MarkVolumesReportedInUse(volumesReportedInUse)
 
-	// Assert
+	// 断言
 	verifyVolumeExistsDsw(t, generatedVolume1Name, "" /* SELinuxContext */, dsw)
 	verifyVolumeExistsInVolumesToMount(
 		t, generatedVolume1Name, []string{"volume1-name"}, false /* expectReportedInUse */, dsw)
@@ -520,11 +516,11 @@ func Test_MarkVolumesReportedInUse_Positive_NewPodNewVolume(t *testing.T) {
 		t, generatedVolume3Name, []string{"volume3-name"}, false /* expectReportedInUse */, dsw)
 	verifyPodExistsInVolumeDsw(t, pod3Name, generatedVolume3Name, "" /* SELinuxContext */, dsw)
 
-	// Act
+	// 执行
 	volumesReportedInUse = []v1.UniqueVolumeName{generatedVolume3Name}
 	dsw.MarkVolumesReportedInUse(volumesReportedInUse)
 
-	// Assert
+	// 断言
 	verifyVolumeExistsDsw(t, generatedVolume1Name, "" /* SELinuxContext */, dsw)
 	verifyVolumeExistsInVolumesToMount(
 		t, generatedVolume1Name, []string{"volume1-name"}, false /* expectReportedInUse */, dsw)
@@ -539,6 +535,8 @@ func Test_MarkVolumesReportedInUse_Positive_NewPodNewVolume(t *testing.T) {
 	verifyPodExistsInVolumeDsw(t, pod3Name, generatedVolume3Name, "" /* SELinuxContext */, dsw)
 }
 
+// 验证 emptyDir 的期望大小限制：显式 SizeLimit 取声明值，未声明时回退到 Pod 的
+// ephemeral-storage limit；两个容器各 1Gi 时该 limit 为 2Gi。
 func Test_AddPodToVolume_WithEmptyDirSizeLimit(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
@@ -605,6 +603,8 @@ func Test_AddPodToVolume_WithEmptyDirSizeLimit(t *testing.T) {
 		},
 	}
 	pod1Name := util.GetUniquePodName(pod1)
+	// 注意 emptyDir3 声明了 3Gi，但期望值是 2Gi：SizeLimit 超过 Pod 的
+	// ephemeral-storage limit 时以 Pod limit 为准
 	pod1DesiredSizeLimitMap := map[string]*resource.Quantity{
 		"emptyDir1": &quantity1Gi,
 		"emptyDir2": &quantity2Gi,
@@ -676,7 +676,7 @@ func Test_AddPodToVolume_WithEmptyDirSizeLimit(t *testing.T) {
 	verifyDesiredSizeLimitInVolumeDsw(t, pod2Name, pod2DesiredSizeLimitMap, dsw)
 }
 
-// Calls AddPodToVolume() in an empty DSW with various SELinux settings / access modes.
+// 在空的 DSW 上以各种 SELinux 设置/访问模式调用 AddPodToVolume()，覆盖单 Pod 场景。
 func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	completeSELinuxOpts := v1.SELinuxOptions{
@@ -754,7 +754,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 		},
 		{
 			name: "RWOP+ChangePolicy: ReadWriteMany with the default policy",
-			// Enabled SELinuxChangePolicy does not change anything from when RWOP is enabled
+			// 开启 SELinuxChangePolicy 相比仅开启 RWOP 不会改变任何行为
 			featureGates:                []featuregate.Feature{features.SELinuxMountReadWriteOncePod, features.SELinuxChangePolicy},
 			volumePluginSupportsSELinux: true,
 			volumeAccessMode:            v1.ReadWriteMany,
@@ -766,7 +766,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 		},
 		{
 			name: "RWOP+ChangePolicy: ReadWriteMany with Recursive policy",
-			// Enabled SELinuxChangePolicy does not change anything from when RWOP is enabled
+			// 开启 SELinuxChangePolicy 相比仅开启 RWOP 不会改变任何行为
 			featureGates:                []featuregate.Feature{features.SELinuxMountReadWriteOncePod, features.SELinuxChangePolicy},
 			volumePluginSupportsSELinux: true,
 			volumeAccessMode:            v1.ReadWriteMany,
@@ -778,7 +778,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 		},
 		{
 			name: "RWOP+ChangePolicy: ReadWriteMany with MountOption policy",
-			// Enabled SELinuxChangePolicy does not change anything from when RWOP is enabled
+			// 开启 SELinuxChangePolicy 相比仅开启 RWOP 不会改变任何行为
 			featureGates:                []featuregate.Feature{features.SELinuxMountReadWriteOncePod, features.SELinuxChangePolicy},
 			volumePluginSupportsSELinux: true,
 			volumeAccessMode:            v1.ReadWriteMany,
@@ -805,7 +805,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 			volumePluginSupportsSELinux: true,
 			volumeAccessMode:            v1.ReadWriteOncePod,
 			podSELinuxOptions:           &completeSELinuxOpts,
-			// This can happen when there is a version skew between kubelet and the API server
+			// kubelet 与 API server 版本不一致时可能出现这种情况
 			podChangePolicy: ptr.To(v1.SELinuxChangePolicyMountOption),
 
 			expectError:          false,
@@ -870,13 +870,14 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个用例都显式关闭未列出的 gate，防止前一个用例遗留的开启状态污染结果
 			if !slices.Contains(tc.featureGates, features.SELinuxMount) {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SELinuxMount, false)
 			}
 			for _, feature := range tc.featureGates {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, feature, true)
 			}
-			// Arrange
+			// 准备
 			plugins := []volume.VolumePlugin{
 				&volumetesting.FakeDeviceMountableVolumePlugin{
 					FakeBasicVolumePlugin: volumetesting.FakeBasicVolumePlugin{
@@ -936,11 +937,11 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 			podName := util.GetUniquePodName(pod)
 			seLinuxContainerContexts := []*v1.SELinuxOptions{tc.podSELinuxOptions}
 
-			// Act
+			// 执行
 			generatedVolumeName, err := dsw.AddPodToVolume(
 				logger, podName, pod, volumeSpec, pod.Spec.Volumes[0].Name, "" /* volumeGIDValue */, seLinuxContainerContexts)
 
-			// Assert
+			// 断言
 			if tc.expectError {
 				if err == nil {
 					t.Errorf("Expected AddPodToVolume to return error, got nil")
@@ -960,7 +961,7 @@ func Test_AddPodToVolume_SELinuxSinglePod(t *testing.T) {
 	}
 }
 
-// Calls AddPodToVolume() twice to add two pods with various SELinux settings and access modes.
+// 两次调用 AddPodToVolume()，把两个 SELinux 设置和访问模式各异的 Pod 加入同一卷。
 func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	completeSELinuxOpts := v1.SELinuxOptions{
@@ -990,8 +991,8 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 		expectedSELinuxLabel string
 	}{
 		{
-			// Note: RWOP with two pods is not a realistic scenario.
-			// But from AddPodToVolume perspective, it tests how SELinux is handled even for RWO / RWX volumes.
+			// 注意：RWOP 卷挂两个 Pod 并不现实，
+			// 但从 AddPodToVolume 的角度看，它能验证 RWO/RWX 卷的 SELinux 处理。
 			name:                    "RWOP: ReadWriteOncePod with the same SELinux options",
 			featureGates:            []featuregate.Feature{features.SELinuxMountReadWriteOncePod},
 			volumeAccessMode:        v1.ReadWriteOncePod,
@@ -1073,7 +1074,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			volumeAccessMode:        v1.ReadWriteMany,
 			firstPodSELinuxOptions:  &completeSELinuxOpts,
 			secondPodSELinuxOptions: &completeSELinuxOpts,
-			firstChangePolicy:       ptr.To(v1.SELinuxChangePolicyMountOption), // This can happen when there is a version skew between kubelet and the API server
+			firstChangePolicy:       ptr.To(v1.SELinuxChangePolicyMountOption), // kubelet 与 API server 版本不一致时可能出现这种情况
 			secondChangePolicy:      ptr.To(v1.SELinuxChangePolicyMountOption),
 
 			expectError:          false,
@@ -1224,13 +1225,14 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个用例都显式关闭未列出的 gate，防止前一个用例遗留的开启状态污染结果
 			if !slices.Contains(tc.featureGates, features.SELinuxMount) {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SELinuxMount, false)
 			}
 			for _, feature := range tc.featureGates {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, feature, true)
 			}
-			// Arrange
+			// 准备：插件声明支持 SELinux，以便聚焦于 Pod 侧的设置
 			plugins := []volume.VolumePlugin{
 				&volumetesting.FakeDeviceMountableVolumePlugin{
 					FakeBasicVolumePlugin: volumetesting.FakeBasicVolumePlugin{
@@ -1289,11 +1291,11 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			podName := util.GetUniquePodName(pod)
 			seLinuxContainerContexts := []*v1.SELinuxOptions{tc.firstPodSELinuxOptions}
 
-			// Act
+			// 执行
 			generatedVolumeName, err := dsw.AddPodToVolume(
 				logger, podName, pod, volumeSpec, pod.Spec.Volumes[0].Name, "" /* volumeGIDValue */, seLinuxContainerContexts)
 
-			// Assert
+			// 断言
 			if err != nil {
 				t.Fatalf("AddPodToVolume failed. Expected: <no error> Actual: <%v>", err)
 			}
@@ -1304,7 +1306,7 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			verifyPodExistsInVolumeDsw(t, podName, generatedVolumeName, tc.expectedSELinuxLabel, dsw)
 			verifyVolumeExistsWithSpecNameInVolumeDsw(t, podName, volumeSpec.Name(), dsw)
 
-			// Arrange: prepare a different pod with the same context
+			// 准备：构造另一个使用相同卷的 Pod，以检验 SELinux 上下文冲突处理
 			pod2 := pod.DeepCopy()
 			pod2.Name = "pod2"
 			pod2.UID = "pod2uid"
@@ -1313,15 +1315,15 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 			pod2Name := util.GetUniquePodName(pod2)
 			seLinuxContainerContexts = []*v1.SELinuxOptions{tc.secondPodSELinuxOptions}
 
-			// Act
+			// 执行
 			generatedVolumeName2, err := dsw.AddPodToVolume(
 				logger, pod2Name, pod2, volumeSpec, pod2.Spec.Volumes[0].Name, "" /* volumeGIDValue */, seLinuxContainerContexts)
-			// Assert
+			// 断言
 			if tc.expectError {
 				if err == nil {
 					t.Errorf("Expected AddPodToVolume to return error, got nil")
 				}
-				// Verify the original SELinux context is still in DSW
+				// 验证原始的 SELinux 上下文仍保留在 DSW 中
 				verifyPodExistsInVolumeDsw(t, podName, generatedVolumeName, tc.expectedSELinuxLabel, dsw)
 				return
 			}
@@ -1336,6 +1338,8 @@ func Test_AddPodToVolume_SELinux_MultiplePods(t *testing.T) {
 	}
 }
 
+// 验证 GetVolumeNamesForPod 为每个 Pod 返回正确的 卷spec名 -> 唯一卷名 映射，
+// 且同一底层设备的不同外层卷名都映射到同一唯一卷名。
 func TestGetVolumeNamesForPod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	volumePluginMgr, _ := volumetesting.GetTestKubeletVolumePluginMgr(t)
@@ -1395,6 +1399,7 @@ func TestGetVolumeNamesForPod(t *testing.T) {
 		},
 	}
 
+	// 把 Pod 的第 index 个卷加入 DSW，简化多卷准备
 	addVolume := func(pod *v1.Pod, index int) {
 		volumeSpec := &volume.Spec{
 			Volume: &pod.Spec.Volumes[index],
@@ -1412,6 +1417,7 @@ func TestGetVolumeNamesForPod(t *testing.T) {
 	addVolume(pod1, 2)
 	addVolume(pod2, 0)
 
+	// 以子测试形式比较期望与实际的卷名映射
 	verifyVolumeNames := func(pod *v1.Pod, expectedVolumeNames map[string]v1.UniqueVolumeName) {
 		t.Run(pod.Name, func(t *testing.T) {
 			podName := util.GetUniquePodName(pod)
@@ -1432,6 +1438,7 @@ func TestGetVolumeNamesForPod(t *testing.T) {
 	})
 }
 
+// verifyVolumeExistsDsw 断言卷存在于 DSW 中。
 func verifyVolumeExistsDsw(
 	t *testing.T, expectedVolumeName v1.UniqueVolumeName, expectedSELinuxContext string, dsw DesiredStateOfWorld) {
 	volumeExists := dsw.VolumeExists(expectedVolumeName, expectedSELinuxContext)
@@ -1443,6 +1450,7 @@ func verifyVolumeExistsDsw(
 	}
 }
 
+// verifyVolumeDoesntExist 断言卷不存在于 DSW 中。
 func verifyVolumeDoesntExist(
 	t *testing.T, expectedVolumeName v1.UniqueVolumeName, expectedSELinuxContext string, dsw DesiredStateOfWorld) {
 	volumeExists := dsw.VolumeExists(expectedVolumeName, expectedSELinuxContext)
@@ -1454,6 +1462,8 @@ func verifyVolumeDoesntExist(
 	}
 }
 
+// verifyVolumeExistsInVolumesToMount 断言卷出现在待挂载列表中，并校验
+// ReportedInUse 标记与排序后的外层卷名集合。
 func verifyVolumeExistsInVolumesToMount(
 	t *testing.T,
 	expectedVolumeName v1.UniqueVolumeName,
@@ -1487,6 +1497,7 @@ func verifyVolumeExistsInVolumesToMount(
 		volumesToMount)
 }
 
+// verifyVolumeDoesntExistInVolumesToMount 断言卷不出现在待挂载列表中。
 func verifyVolumeDoesntExistInVolumesToMount(
 	t *testing.T, volumeToCheck v1.UniqueVolumeName, dsw DesiredStateOfWorld) {
 	volumesToMount := dsw.GetVolumesToMount()
@@ -1499,6 +1510,7 @@ func verifyVolumeDoesntExistInVolumesToMount(
 	}
 }
 
+// verifyPodExistsInVolumeDsw 断言 Pod 已存在于 DSW 中该卷下。
 func verifyPodExistsInVolumeDsw(
 	t *testing.T,
 	expectedPodName volumetypes.UniquePodName,
@@ -1513,6 +1525,7 @@ func verifyPodExistsInVolumeDsw(
 	}
 }
 
+// verifyPodDoesntExistInVolumeDsw 断言 Pod 已不存在于 DSW 中该卷下。
 func verifyPodDoesntExistInVolumeDsw(
 	t *testing.T,
 	expectedPodName volumetypes.UniquePodName,
@@ -1527,6 +1540,7 @@ func verifyPodDoesntExistInVolumeDsw(
 	}
 }
 
+// verifyVolumeExistsWithSpecNameInVolumeDsw 断言该 Pod 下存在指定卷 spec 名称的卷。
 func verifyVolumeExistsWithSpecNameInVolumeDsw(
 	t *testing.T,
 	expectedPodName volumetypes.UniquePodName,
@@ -1540,6 +1554,8 @@ func verifyVolumeExistsWithSpecNameInVolumeDsw(
 	}
 }
 
+// verifyVolumeDoesntExistWithSpecNameInVolumeDsw 断言该 Pod 下不存在指定卷 spec
+// 名称的卷。
 func verifyVolumeDoesntExistWithSpecNameInVolumeDsw(
 	t *testing.T,
 	expectedPodName volumetypes.UniquePodName,
@@ -1553,6 +1569,7 @@ func verifyVolumeDoesntExistWithSpecNameInVolumeDsw(
 	}
 }
 
+// verifyDesiredSizeLimitInVolumeDsw 断言待挂载列表中每个卷的期望大小限制正确。
 func verifyDesiredSizeLimitInVolumeDsw(
 	t *testing.T,
 	expectedPodName volumetypes.UniquePodName,

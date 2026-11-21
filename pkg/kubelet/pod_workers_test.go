@@ -45,8 +45,8 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
-// fakePodWorkers runs sync pod function in serial, so we can have
-// deterministic behaviour in testing.
+// fakePodWorkers 串行执行 sync pod 函数，使测试行为确定；
+// 同时记录删除与终端事件，并提供各类 Pod 状态查询。
 type fakePodWorkers struct {
 	lock      sync.Mutex
 	syncPodFn syncPodFnType
@@ -67,6 +67,8 @@ type fakePodWorkers struct {
 	terminatingStaticPods map[string]bool
 }
 
+// 串行执行一次 Pod 同步，保证测试行为确定。
+// 根据 UpdateType 决定记录为删除还是调用 syncPodFn；终端状态会被单独记录。
 func (f *fakePodWorkers) UpdatePod(ctx context.Context, options UpdatePodOptions) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -97,50 +99,68 @@ func (f *fakePodWorkers) UpdatePod(ctx context.Context, options UpdatePodOptions
 	}
 }
 
+// fake 实现不维护同步状态，直接返回空 map。
 func (f *fakePodWorkers) SyncKnownPods(_ klog.Logger, desiredPods []*v1.Pod) map[types.UID]PodWorkerSync {
 	return map[types.UID]PodWorkerSync{}
 }
 
+// 返回该 Pod 是否已被标记为终止。
 func (f *fakePodWorkers) IsPodKnownTerminated(uid types.UID) bool {
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
 	return f.terminated[uid]
 }
+
+// 返回该 Pod 是否可能仍有运行中的容器。
 func (f *fakePodWorkers) CouldHaveRunningContainers(uid types.UID) bool {
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
 	return f.running[uid]
 }
+
+// 返回该 Pod 是否已完成全部清理。
 func (f *fakePodWorkers) ShouldPodBeFinished(uid types.UID) bool {
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
 	return f.finished[uid]
 }
+
+// 返回该 Pod 是否已收到终止请求。
 func (f *fakePodWorkers) IsPodTerminationRequested(uid types.UID) bool {
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
 	return f.terminationRequested[uid]
 }
+
+// 返回该 Pod 的容器是否应进入终止流程。
 func (f *fakePodWorkers) ShouldPodContainersBeTerminating(uid types.UID) bool {
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
 	return f.terminating[uid]
 }
+
+// 返回该 Pod 的运行时资源是否应被移除。
 func (f *fakePodWorkers) ShouldPodRuntimeBeRemoved(uid types.UID) bool {
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
 	return f.removeRuntime[uid]
 }
+
+// 把指定 Pod 标记为运行时资源已移除。
 func (f *fakePodWorkers) setPodRuntimeBeRemoved(uid types.UID) {
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
 	f.removeRuntime = map[types.UID]bool{uid: true}
 }
+
+// 返回该 Pod 的内容（卷、cgroup 等）是否应被移除。
 func (f *fakePodWorkers) ShouldPodContentBeRemoved(uid types.UID) bool {
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
 	return f.removeContent[uid]
 }
+
+// 按 Pod 全名查询对应的 static/mirror Pod 是否正在终止。
 func (f *fakePodWorkers) IsPodForMirrorPodTerminatingByFullName(podFullname string) bool {
 	f.statusLock.Lock()
 	defer f.statusLock.Unlock()
@@ -151,12 +171,14 @@ type TestingInterface interface {
 	Errorf(format string, args ...interface{})
 }
 
+// 构造带指定名称与阶段的测试 Pod。
 func newPodWithPhase(uid, name string, phase v1.PodPhase) *v1.Pod {
 	pod := newNamedPod(uid, "ns", name, false)
 	pod.Status.Phase = phase
 	return pod
 }
 
+// 构造带 file source 注解的 static Pod，用于验证 static Pod 互斥逻辑。
 func newStaticPod(uid, name string) *v1.Pod {
 	thirty := int64(30)
 	return &v1.Pod{
@@ -173,6 +195,7 @@ func newStaticPod(uid, name string) *v1.Pod {
 	}
 }
 
+// 构造指定 UID/namespace/name 的测试 Pod，可选标记为 static。
 func newNamedPod(uid, namespace, name string, isStatic bool) *v1.Pod {
 	thirty := int64(30)
 	pod := &v1.Pod{
@@ -193,7 +216,8 @@ func newNamedPod(uid, namespace, name string, isStatic bool) *v1.Pod {
 	return pod
 }
 
-// syncPodRecord is a record of a sync pod call
+// syncPodRecord 记录一次 sync pod 调用，包括名称、更新类型、RuntimePod、
+// 是否已终止以及使用的优雅终止时间。
 type syncPodRecord struct {
 	name        string
 	updateType  kubetypes.SyncPodType
@@ -213,18 +237,21 @@ type fakeQueue struct {
 	currentStart int
 }
 
+// 判断队列中是否还有未取出的元素。
 func (q *fakeQueue) Empty() bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	return (len(q.queue) - q.currentStart) == 0
 }
 
+// 返回队列的完整快照，供测试断言延迟与顺序。
 func (q *fakeQueue) Items() []FakeQueueItem {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	return append(make([]FakeQueueItem, 0, len(q.queue)), q.queue...)
 }
 
+// 返回未取出元素对应的 UID 集合。
 func (q *fakeQueue) Set() sets.Set[string] {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -235,12 +262,14 @@ func (q *fakeQueue) Set() sets.Set[string] {
 	return work
 }
 
+// 把 UID 与延迟追加到队列尾部。
 func (q *fakeQueue) Enqueue(uid types.UID, delay time.Duration) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 	q.queue = append(q.queue, FakeQueueItem{UID: uid, Delay: delay})
 }
 
+// 取出当前全部待处理 UID，并把读取位置推进到队尾。
 func (q *fakeQueue) GetWork() []types.UID {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -259,9 +288,8 @@ type timeIncrementingWorkers struct {
 	holds   map[types.UID]chan struct{}
 }
 
-// UpdatePod increments the clock after UpdatePod is called, but before the workers
-// are invoked, and then drains all workers before returning. The provided functions
-// are invoked while holding the lock to prevent workers from receiving updates.
+// 持有锁调用 UpdatePod 并推进时钟，再执行 afterFns（用于在 worker 读取状态前断言），
+// 最后等待所有未暂停的 worker 完成，使一次调用内的状态变化可被确定性地观察。
 func (w *timeIncrementingWorkers) UpdatePod(ctx context.Context, options UpdatePodOptions, afterFns ...func()) {
 	func() {
 		w.lock.Lock()
@@ -275,8 +303,7 @@ func (w *timeIncrementingWorkers) UpdatePod(ctx context.Context, options UpdateP
 	w.drainUnpausedWorkers()
 }
 
-// SyncKnownPods increments the clock after SyncKnownPods is called, but before the workers
-// are invoked, and then drains all workers before returning.
+// fake 实现不维护同步状态，直接返回空 map。
 func (w *timeIncrementingWorkers) SyncKnownPods(logger klog.Logger, desiredPods []*v1.Pod) (knownPods map[types.UID]PodWorkerSync) {
 	func() {
 		w.lock.Lock()
@@ -288,6 +315,7 @@ func (w *timeIncrementingWorkers) SyncKnownPods(logger klog.Logger, desiredPods 
 	return
 }
 
+// 为指定 Pod 创建 hold channel，暂停其 worker 继续执行。
 func (w *timeIncrementingWorkers) PauseWorkers(uids ...types.UID) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
@@ -301,12 +329,14 @@ func (w *timeIncrementingWorkers) PauseWorkers(uids ...types.UID) {
 	}
 }
 
+// 释放指定 Pod 的 pause，允许其 worker 继续。
 func (w *timeIncrementingWorkers) ReleaseWorkers(uids ...types.UID) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	w.ReleaseWorkersUnderLock(uids...)
 }
 
+// 在已持有锁的前提下关闭并删除 hold channel。
 func (w *timeIncrementingWorkers) ReleaseWorkersUnderLock(uids ...types.UID) {
 	for _, uid := range uids {
 		if ch, ok := w.holds[uid]; ok {
@@ -316,6 +346,7 @@ func (w *timeIncrementingWorkers) ReleaseWorkersUnderLock(uids ...types.UID) {
 	}
 }
 
+// 阻塞直到指定 Pod 的 hold channel 被释放。
 func (w *timeIncrementingWorkers) waitForPod(uid types.UID) {
 	w.lock.Lock()
 	ch, ok := w.holds[uid]
@@ -326,6 +357,7 @@ func (w *timeIncrementingWorkers) waitForPod(uid types.UID) {
 	<-ch
 }
 
+// 轮询等待所有未被 pause 的 worker 完成当前工作。
 func (w *timeIncrementingWorkers) drainUnpausedWorkers() {
 	pausedWorkers := make(map[types.UID]struct{})
 	for {
@@ -361,15 +393,15 @@ func (w *timeIncrementingWorkers) drainUnpausedWorkers() {
 	}
 }
 
+// 将 fake 时钟推进一秒。
 func (w *timeIncrementingWorkers) tick() {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	w.w.clock.(*clocktesting.FakePassiveClock).SetTime(w.w.clock.Now().Add(time.Second))
 }
 
-// createTimeIncrementingPodWorkers will guarantee that each call to UpdatePod and each worker goroutine invocation advances the clock by one second,
-// although multiple workers will advance the clock in an unpredictable order. Use to observe
-// successive internal updates to each update pod state when only a single pod is being updated.
+// 包装真实的 podWorkers，使每次 UpdatePod 和 worker 调用都推进 fake 时钟一秒，
+// 便于观察单个 Pod 的连续状态变更。
 func createTimeIncrementingPodWorkers(logger klog.Logger) (*timeIncrementingWorkers, map[types.UID][]syncPodRecord) {
 	nested, runtime, processed := createPodWorkers(logger)
 	w := &timeIncrementingWorkers{
@@ -393,10 +425,13 @@ func createTimeIncrementingPodWorkers(logger klog.Logger) (*timeIncrementingWork
 	return w, processed
 }
 
+// 创建测试用 podWorkers，等价于使用默认 logger 的版本。
 func createPodWorkers(logger klog.Logger) (*podWorkers, *containertest.FakeRuntime, map[types.UID][]syncPodRecord) {
 	return createPodWorkersWithLogger(logger)
 }
 
+// 用 fake runtime/cache/queue 和可控时钟创建 podWorkers，
+// 并把各阶段同步调用记录到 processed 中供测试断言。
 func createPodWorkersWithLogger(logger klog.Logger) (*podWorkers, *containertest.FakeRuntime, map[types.UID][]syncPodRecord) {
 	lock := sync.Mutex{}
 	processed := make(map[types.UID][]syncPodRecord)
@@ -467,6 +502,7 @@ func createPodWorkersWithLogger(logger klog.Logger) (*podWorkers, *containertest
 	return workers, fakeRuntime, processed
 }
 
+// 等待编号 0..numPods-1 的 worker 全部完成当前工作。
 func drainWorkers(podWorkers *podWorkers, numPods int) {
 	for {
 		stillWorking := false
@@ -485,6 +521,7 @@ func drainWorkers(podWorkers *podWorkers, numPods int) {
 	}
 }
 
+// 等待除指定 UID 外的所有 worker 完成当前工作。
 func drainWorkersExcept(podWorkers *podWorkers, uids ...types.UID) {
 	set := sets.New[string]()
 	for _, uid := range uids {
@@ -510,6 +547,7 @@ func drainWorkersExcept(podWorkers *podWorkers, uids ...types.UID) {
 	}
 }
 
+// 等待所有 worker 完成当前工作。
 func drainAllWorkers(podWorkers *podWorkers) {
 	for {
 		stillWorking := false
@@ -528,6 +566,8 @@ func drainAllWorkers(podWorkers *podWorkers) {
 	}
 }
 
+// 并发更新同一批 Pod，验证每个 Pod 最终都被处理，
+// 且最后一次处理的总是最新版本。
 func TestUpdatePodParallel(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podWorkers, _, processed := createPodWorkers(logger)
@@ -554,6 +594,7 @@ func TestUpdatePodParallel(t *testing.T) {
 			continue
 		}
 
+		// PodWorker 保证最后一次更新一定会被处理，因此最后一条记录必须是最新版本。
 		// PodWorker guarantees the last event will be processed
 		last := len(events) - 1
 		if events[last].name != strconv.Itoa(i) {
@@ -562,6 +603,8 @@ func TestUpdatePodParallel(t *testing.T) {
 	}
 }
 
+// 表驱动覆盖 UpdatePod 的状态机：新建、终止中重复创建、删除时间戳、驱逐、
+// 终端 Pod、孤儿 RuntimePod 等场景下的 podSyncStatus 变化。
 func TestUpdatePod(t *testing.T) {
 	one := int64(1)
 	hasCancelFn := func(status *podSyncStatus) *podSyncStatus {
@@ -585,6 +628,7 @@ func TestUpdatePod(t *testing.T) {
 	}
 	expectPodSyncStatus := func(t *testing.T, expected, status *podSyncStatus) {
 		t.Helper()
+		// cancelFn 与 ctx 无法直接比较，先比较是否为 nil 再清零。
 		// handle special non-comparable fields
 		if status != nil {
 			clearLogger := func(opts *UpdatePodOptions) {
@@ -803,6 +847,7 @@ func TestUpdatePod(t *testing.T) {
 					Pod:        newPodWithPhase("1", "done-pod", v1.PodSucceeded),
 				},
 
+				// 之前从未见过该 Pod，因此不存在"重启"语义。
 				// if we have never seen the pod before, a restart makes no sense
 				restartRequested: false,
 			}),
@@ -828,6 +873,8 @@ func TestUpdatePod(t *testing.T) {
 				observedRuntime: true,
 				working:         true,
 			},
+			// 运行中的孤儿 Pod 终止后会被移出历史；由于它本来就不在期望 Pod 集合中，
+			// 因此这里特意期望外部查询返回"未知"。
 			// Once a running pod is fully terminated, we stop tracking it in history, and so it
 			// is deliberately expected not to be known outside the pod worker since the source of
 			// the pod is also not in the desired pod set.
@@ -870,6 +917,7 @@ func TestUpdatePod(t *testing.T) {
 				}
 			}
 
+			// 预先设置 UpdatePod 阶段可见的 runtime 状态；worker 实际调用 podCache 前会再清空。
 			// set up an initial pod status for the UpdatePod invocation which is
 			// reset before workers call the podCache
 			if tc.runtimeStatus != nil {
@@ -898,6 +946,9 @@ func TestUpdatePod(t *testing.T) {
 	}
 }
 
+// 验证 completeWork 根据同步结果选择不同的重新入队延迟：
+// 阶段转换立即重排、普通错误走默认退避、BackoffError 使用指定时间、
+// 网络未就绪使用瞬时错误退避，并限制最大延迟。
 func TestCompleteWork_Enqueue(t *testing.T) {
 	const noJitter = 0.0
 
@@ -1041,6 +1092,8 @@ func TestCompleteWork_Enqueue(t *testing.T) {
 	}
 }
 
+// 验证 completeWork 在无 pendingUpdate 时清除 working 状态，
+// 有 pendingUpdate 时向 podUpdates channel 投递唤醒信号。
 func TestCompleteWork_PendingUpdate(t *testing.T) {
 	podUID := types.UID("pod-with-pending-update-check")
 
@@ -1086,10 +1139,13 @@ func TestCompleteWork_PendingUpdate(t *testing.T) {
 	})
 }
 
+// 验证非 kill 类型的 RuntimePod 更新被忽略，
+// 而 kill 更新会合成 Pod 并触发终止同步。
 func TestUpdatePodForRuntimePod(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podWorkers, _, processed := createPodWorkers(logger)
 
+	// 非 kill 类型的 RuntimePod 更新应被忽略。
 	// ignores running pod of wrong sync type
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		UpdateType: kubetypes.SyncPodCreate,
@@ -1100,6 +1156,7 @@ func TestUpdatePodForRuntimePod(t *testing.T) {
 		t.Fatalf("Not all pods processed: %v", len(processed))
 	}
 
+	// kill 类型的 RuntimePod 会合成一个 Pod 并触发终止同步。
 	// creates synthetic pod
 	podWorkers.UpdatePod(tCtx, UpdatePodOptions{
 		UpdateType: kubetypes.SyncPodKill,
@@ -1118,6 +1175,7 @@ func TestUpdatePodForRuntimePod(t *testing.T) {
 	}
 }
 
+// 验证对已终止 RuntimePod 的 kill 更新不会重复触发同步。
 func TestUpdatePodForTerminatedRuntimePod(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podWorkers, _, processed := createPodWorkers(logger)
@@ -1145,6 +1203,7 @@ func TestUpdatePodForTerminatedRuntimePod(t *testing.T) {
 	}
 }
 
+// 验证 create、kill、update 连续到达后 kill 事件不会被后续 update 丢弃。
 func TestUpdatePodDoesNotForgetSyncPodKill(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podWorkers, _, processed := createPodWorkers(logger)
@@ -1171,6 +1230,8 @@ func TestUpdatePodDoesNotForgetSyncPodKill(t *testing.T) {
 	}
 	for i := 0; i < numPods; i++ {
 		uid := types.UID(strconv.Itoa(i))
+		// 每个 Pod 应被处理两到三次（kill,terminate 或 create,kill,terminate）：
+		// pending 更新会被缓冲，worker 可能把 create 与 kill 合并。
 		// each pod should be processed two or three times (kill,terminate or create,kill,terminate) because
 		// we buffer pending updates and the pod worker may compress the create and kill
 		syncPodRecords := processed[uid]
@@ -1191,6 +1252,7 @@ func TestUpdatePodDoesNotForgetSyncPodKill(t *testing.T) {
 	}
 }
 
+// 把 UID 列表转换为字符串集合，便于比较。
 func newUIDSet(uids ...types.UID) sets.Set[string] {
 	set := sets.New[string]()
 	for _, uid := range uids {
@@ -1205,6 +1267,8 @@ type terminalPhaseSync struct {
 	terminal sets.Set[string]
 }
 
+// SyncPod 调用底层同步函数，并在其未判定终端时叠加测试预设的终端标记，
+// 用于精确控制 Pod 进入终端阶段的时机。
 func (s *terminalPhaseSync) SyncPod(ctx context.Context, updateType kubetypes.SyncPodType, pod *v1.Pod, mirrorPod *v1.Pod, podStatus *kubecontainer.PodStatus) (bool, func(), error) {
 	isTerminal, _, err := s.fn(ctx, updateType, pod, mirrorPod, podStatus)
 	if err != nil {
@@ -1218,12 +1282,14 @@ func (s *terminalPhaseSync) SyncPod(ctx context.Context, updateType kubetypes.Sy
 	return isTerminal, nil, nil
 }
 
+// 把指定 UID 标记为终端阶段。
 func (s *terminalPhaseSync) SetTerminal(uid types.UID) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.terminal.Insert(string(uid))
 }
 
+// 创建带终端标记集合的包装同步器。
 func newTerminalPhaseSync(fn syncPodFnType) *terminalPhaseSync {
 	return &terminalPhaseSync{
 		fn:       fn,
@@ -1231,6 +1297,7 @@ func newTerminalPhaseSync(fn syncPodFnType) *terminalPhaseSync {
 	}
 }
 
+// 验证 Pod 从运行到终止请求、再到终止状态的阶段转换。
 func TestTerminalPhaseTransition(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podWorkers, _, _ := createPodWorkers(logger)
@@ -1280,6 +1347,8 @@ func TestTerminalPhaseTransition(t *testing.T) {
 	}
 }
 
+// 验证同名 static Pod 的互斥启动语义：同一时刻只允许一个 static Pod 启动，
+// 其余排队等待；删除、终止或 config 变化后的清理与重启也要符合预期。
 func TestStaticPodExclusion(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -1682,6 +1751,7 @@ type WorkChannelItem struct {
 	queue int
 }
 
+// 向 out channel 投递一次工作信号；暂停时先累计到队列。
 func (item *WorkChannelItem) Handle() {
 	item.lock.Lock()
 	defer item.lock.Unlock()
@@ -1692,12 +1762,14 @@ func (item *WorkChannelItem) Handle() {
 	item.out <- struct{}{}
 }
 
+// 暂停该 channel 的工作投递。
 func (item *WorkChannelItem) Hold() {
 	item.lock.Lock()
 	defer item.lock.Unlock()
 	item.pause = true
 }
 
+// 关闭 out channel 并清空引用。
 func (item *WorkChannelItem) Close() {
 	item.lock.Lock()
 	defer item.lock.Unlock()
@@ -1707,7 +1779,7 @@ func (item *WorkChannelItem) Close() {
 	}
 }
 
-// Release blocks until all work is passed on the chain
+// 恢复投递并一次性补发暂停期间累计的工作信号。
 func (item *WorkChannelItem) Release() {
 	item.lock.Lock()
 	defer item.lock.Unlock()
@@ -1718,14 +1790,14 @@ func (item *WorkChannelItem) Release() {
 	item.queue = 0
 }
 
-// WorkChannel intercepts podWork channels between the pod worker and its child
-// goroutines and allows tests to pause or release the flow of podWork to the
-// workers.
+// WorkChannel 拦截 pod worker 与其子 goroutine 之间的 podWork channel，
+// 让测试可以暂停或恢复工作信号，从而精确控制并发时序。
 type WorkChannel struct {
 	lock     sync.Mutex
 	channels map[types.UID]*WorkChannelItem
 }
 
+// 获取或创建指定 UID 的拦截 channel。
 func (w *WorkChannel) Channel(uid types.UID) *WorkChannelItem {
 	w.lock.Lock()
 	defer w.lock.Unlock()
@@ -1742,6 +1814,8 @@ func (w *WorkChannel) Channel(uid types.UID) *WorkChannelItem {
 	return channel
 }
 
+// 用可暂停的 WorkChannelItem 代理 worker 的输入 channel，
+// 并把底层 channel 的关闭同步到拦截器。
 func (w *WorkChannel) Intercept(uid types.UID, ch chan struct{}) (outCh <-chan struct{}) {
 	channel := w.Channel(uid)
 	w.lock.Lock()
@@ -1761,6 +1835,8 @@ func (w *WorkChannel) Intercept(uid types.UID, ch chan struct{}) (outCh <-chan s
 	return channel.out
 }
 
+// 验证 SyncKnownPods 会清理不再需要的 worker 与状态，
+// 同时保留仍有 Pod 引用的 worker，直到其正常终止。
 func TestSyncKnownPods(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	podWorkers, _, _ := createPodWorkers(logger)
@@ -1900,6 +1976,8 @@ func TestSyncKnownPods(t *testing.T) {
 	}
 }
 
+// 表驱动验证 removeTerminatedWorker 对已完成、等待启动、孤儿、终止中、
+// 已终止等状态是否删除 worker，以及 pendingUpdate 的保留规则。
 func Test_removeTerminatedWorker(t *testing.T) {
 	podUID := types.UID("pod-uid")
 
@@ -2126,31 +2204,35 @@ type simpleFakeKubelet struct {
 	wg        sync.WaitGroup
 }
 
+// 记录收到的 Pod、mirror Pod 与状态，供 fake/real worker 行为对比。
 func (kl *simpleFakeKubelet) SyncPod(ctx context.Context, updateType kubetypes.SyncPodType, pod, mirrorPod *v1.Pod, podStatus *kubecontainer.PodStatus) (bool, func(), error) {
 	kl.pod, kl.mirrorPod, kl.podStatus = pod, mirrorPod, podStatus
 	return false, nil, nil
 }
 
+// 记录参数后发出 WaitGroup 信号，让测试等待真实 worker 完成。
 func (kl *simpleFakeKubelet) SyncPodWithWaitGroup(ctx context.Context, updateType kubetypes.SyncPodType, pod, mirrorPod *v1.Pod, podStatus *kubecontainer.PodStatus) (bool, func(), error) {
 	kl.pod, kl.mirrorPod, kl.podStatus = pod, mirrorPod, podStatus
 	kl.wg.Done()
 	return false, nil, nil
 }
 
+// fake kubelet 不执行实际终止逻辑。
 func (kl *simpleFakeKubelet) SyncTerminatingPod(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus, gracePeriod *int64, podStatusFn func(*v1.PodStatus)) error {
 	return nil
 }
 
+// fake kubelet 不执行 RuntimePod 终止逻辑。
 func (kl *simpleFakeKubelet) SyncTerminatingRuntimePod(ctx context.Context, runningPod *kubecontainer.Pod) error {
 	return nil
 }
 
+// fake kubelet 不执行终止后的清理逻辑。
 func (kl *simpleFakeKubelet) SyncTerminatedPod(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus) error {
 	return nil
 }
 
-// TestFakePodWorkers verifies that the fakePodWorkers behaves the same way as the real podWorkers
-// for their invocation of the syncPodFn.
+// 验证 fakePodWorkers 与真实 podWorkers 调用 syncPodFn 时传入的参数完全一致。
 func TestFakePodWorkers(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	fakeRecorder := &record.FakeRecorder{}
@@ -2224,7 +2306,8 @@ func TestFakePodWorkers(t *testing.T) {
 	}
 }
 
-// TestKillPodNowFunc tests the blocking kill pod function works with pod workers as expected.
+// 验证 killPodNow 以阻塞方式完成 kill 并等待终止同步，
+// 事件顺序应为 kill 后跟 terminated。
 func TestKillPodNowFunc(t *testing.T) {
 	fakeRecorder := &record.FakeRecorder{}
 	logger, tCtx := ktesting.NewTestContext(t)
@@ -2256,6 +2339,8 @@ func TestKillPodNowFunc(t *testing.T) {
 	}
 }
 
+// 表驱动验证 allowPodStart 对普通 Pod、同名 static Pod、排队等待的 static Pod
+// 以及终端/未知状态的准入判断与队列维护。
 func Test_allowPodStart(t *testing.T) {
 	testCases := []struct {
 		desc                               string
@@ -2615,6 +2700,8 @@ func Test_allowPodStart(t *testing.T) {
 	}
 }
 
+// 验证优雅终止时间的选择优先级：显式覆盖 > 删除时间戳上的值 > Pod spec，
+// 零值会被提升为 1 秒。
 func Test_calculateEffectiveGracePeriod(t *testing.T) {
 	zero := int64(0)
 	two := int64(2)

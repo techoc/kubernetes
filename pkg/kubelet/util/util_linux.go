@@ -22,7 +22,7 @@ import (
 	libcontainercgroups "github.com/opencontainers/cgroups"
 )
 
-// IsCgroup2UnifiedMode returns true if the cgroup v2 unified mode is enabled
+// IsCgroup2UnifiedMode 在启用 cgroup v2 统一模式时返回 true。
 func IsCgroup2UnifiedMode() bool {
 	return libcontainercgroups.IsCgroup2UnifiedMode()
 }

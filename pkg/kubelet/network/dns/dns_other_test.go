@@ -20,6 +20,6 @@ package dns
 
 var (
 	defaultResolvConf = "/etc/resolv.conf"
-	// configurer.getHostDNSConfig is faked on Windows, while it is not faked on Linux.
+	// getHostDNSConfig 在 Windows 上会被替换为假实现，在 Linux 上则保持原样。
 	fakeGetHostDNSConfigCustom = getHostDNSConfig
 )

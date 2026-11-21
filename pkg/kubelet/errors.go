@@ -19,11 +19,11 @@ package kubelet
 import "errors"
 
 const (
-	// NetworkNotReadyErrorMsg is used to describe the error that network is not ready
+	// NetworkNotReadyErrorMsg 用于描述网络尚未就绪的错误。
 	NetworkNotReadyErrorMsg = "network is not ready"
 )
 
 var (
-	// ErrNetworkUnknown indicates the network state is unknown
+	// ErrNetworkUnknown 表示网络状态未知。
 	ErrNetworkUnknown = errors.New("network state unknown")
 )

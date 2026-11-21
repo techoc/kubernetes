@@ -22,7 +22,7 @@ import (
 	statsapi "k8s.io/kubelet/pkg/apis/stats/v1alpha1"
 )
 
-// Stats provides basic information about max and current process count
+// Stats 返回进程数上限与当前进程数；当前平台不支持，返回空结果。
 func Stats() (*statsapi.RlimitStats, error) {
 	return nil, nil
 }

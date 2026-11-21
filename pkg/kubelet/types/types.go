@@ -27,55 +27,59 @@ import (
 
 // TODO: Reconcile custom types in kubelet/types and this subpackage
 
-// HTTPDoer encapsulates http.Do functionality
+// HTTPDoer 抽象 http.Do 能力。
 type HTTPDoer interface {
+	// Do 发送 HTTP 请求并返回响应。
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// Timestamp wraps around time.Time and offers utilities to format and parse
-// the time using RFC3339Nano
+// Timestamp 封装 time.Time，并提供 RFC3339Nano 格式的格式化与解析工具。
 type Timestamp struct {
+	// time 是底层时间值。
 	time time.Time
 }
 
-// NewTimestamp returns a Timestamp object using the current time.
+// NewTimestamp 使用当前时间创建 Timestamp。
 func NewTimestamp() *Timestamp {
 	return &Timestamp{time.Now()}
 }
 
-// ConvertToTimestamp takes a string, parses it using the RFC3339NanoLenient layout,
-// and converts it to a Timestamp object.
+// ConvertToTimestamp 使用 RFC3339NanoLenient 布局解析字符串并转换为 Timestamp。
 func ConvertToTimestamp(timeString string) *Timestamp {
+	// 解析失败时返回零值时间，保持与调用方约定的宽松行为。
 	parsed, _ := time.Parse(logs.RFC3339NanoLenient, timeString)
 	return &Timestamp{parsed}
 }
 
-// Get returns the time as time.Time.
+// Get 返回底层的 time.Time。
 func (t *Timestamp) Get() time.Time {
 	return t.time
 }
 
-// GetString returns the time in the string format using the RFC3339NanoFixed
-// layout.
+// GetString 使用 RFC3339NanoFixed 布局返回时间字符串。
 func (t *Timestamp) GetString() string {
 	return t.time.Format(logs.RFC3339NanoFixed)
 }
 
-// SortedContainerStatuses is a type to help sort container statuses based on container names.
+// SortedContainerStatuses 用于按容器名称对容器状态排序。
 type SortedContainerStatuses []v1.ContainerStatus
 
-func (s SortedContainerStatuses) Len() int      { return len(s) }
+// Len 返回列表长度。
+func (s SortedContainerStatuses) Len() int { return len(s) }
+
+// Swap 交换两个元素。
 func (s SortedContainerStatuses) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
+// Less 按容器名称字典序比较。
 func (s SortedContainerStatuses) Less(i, j int) bool {
 	return s[i].Name < s[j].Name
 }
 
-// SortInitContainerStatuses ensures that statuses are in the order that their
-// init container appears in the pod spec. The function assumes there are no
-// duplicate names in the statuses.
+// SortInitContainerStatuses 把状态按 InitContainer 在 Pod 规格中的顺序排列。
+// 该函数假设状态列表中没有重名容器。
 func SortInitContainerStatuses(p *v1.Pod, statuses []v1.ContainerStatus) {
 	containers := p.Spec.InitContainers
+	// current 指向下一个待放置的位置，已匹配的状态保持稳定。
 	current := 0
 	for _, container := range containers {
 		for j := current; j < len(statuses); j++ {
@@ -88,8 +92,7 @@ func SortInitContainerStatuses(p *v1.Pod, statuses []v1.ContainerStatus) {
 	}
 }
 
-// SortStatusesOfInitContainers returns the statuses of InitContainers of pod p,
-// in the order that they appear in its spec.
+// SortStatusesOfInitContainers 按 Pod 规格中的顺序返回 InitContainer 的状态。
 func SortStatusesOfInitContainers(p *v1.Pod, statusMap map[string]*v1.ContainerStatus) []v1.ContainerStatus {
 	containers := p.Spec.InitContainers
 	statuses := []v1.ContainerStatus{}
@@ -101,16 +104,16 @@ func SortStatusesOfInitContainers(p *v1.Pod, statusMap map[string]*v1.ContainerS
 	return statuses
 }
 
-// Reservation represents reserved resources for non-pod components.
+// Reservation 表示为非 Pod 组件预留的资源。
 type Reservation struct {
-	// System represents resources reserved for non-kubernetes components.
+	// System 是预留给非 Kubernetes 组件的资源。
 	System v1.ResourceList
-	// Kubernetes represents resources reserved for kubernetes system components.
+	// Kubernetes 是预留给 Kubernetes 系统组件的资源。
 	Kubernetes v1.ResourceList
 }
 
-// ResolvedPodUID is a pod UID which has been translated/resolved to the representation known to kubelets.
+// ResolvedPodUID 是已转换为 kubelet 内部表示形式的 Pod UID。
 type ResolvedPodUID types.UID
 
-// MirrorPodUID is a pod UID for a mirror pod.
+// MirrorPodUID 是镜像 Pod 的 UID。
 type MirrorPodUID types.UID

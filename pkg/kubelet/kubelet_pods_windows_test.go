@@ -30,10 +30,13 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestMakeMountsWindows 验证 Windows 下容器挂载路径的规范化与 etc-hosts 挂载生成。
 func TestMakeMountsWindows(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	// TODO: remove skip once the failing test has been fixed.
+	// 已知失败用例，先跳过以免阻塞 CI。
 	t.Skip("Skip failing test on Windows.")
+	// 构造覆盖正斜杠、反斜杠、盘符与命名管道路径的挂载点。
 	container := v1.Container{
 		VolumeMounts: []v1.VolumeMount{
 			{
@@ -74,6 +77,7 @@ func TestMakeMountsWindows(t *testing.T) {
 		},
 	}
 
+	// 为每个挂载点提供对应的卷挂载器。
 	podVolumes := kubecontainer.VolumeMap{
 		"disk":  kubecontainer.VolumeInfo{Mounter: &stubVolume{path: "c:/mnt/disk"}},
 		"disk4": kubecontainer.VolumeInfo{Mounter: &stubVolume{path: "c:/mnt/host"}},
@@ -89,14 +93,18 @@ func TestMakeMountsWindows(t *testing.T) {
 		},
 	}
 
+	// 使用 fake 的 hostutil 与 subpath，避免测试依赖真实文件系统。
 	fhu := hostutil.NewFakeHostUtil(nil)
 	fsp := &subpath.FakeSubpath{}
+	// 创建临时 Pod 目录，用于生成 etc-hosts 文件。
 	podDir, err := os.MkdirTemp("", "test-rotate-logs")
 	require.NoError(t, err)
 	defer os.RemoveAll(podDir)
+	// 调用被测函数生成挂载列表。
 	mounts, _, err := makeMounts(logger, &pod, podDir, &container, "fakepodname", "", []string{""}, podVolumes, fhu, fsp, nil, false, nil)
 	require.NoError(t, err)
 
+	// 期望路径会被转换为 Windows 风格，同时应自动追加 etc-hosts 挂载。
 	expectedMounts := []kubecontainer.Mount{
 		{
 			Name:           "disk",
@@ -155,5 +163,6 @@ func TestMakeMountsWindows(t *testing.T) {
 			SELinuxRelabel: true,
 		},
 	}
+	// 整体比较，任何路径规范化差异都会暴露。
 	assert.Equal(t, expectedMounts, mounts, "mounts of container %+v", container)
 }

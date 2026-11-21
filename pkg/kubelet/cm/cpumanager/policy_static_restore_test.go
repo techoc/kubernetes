@@ -36,9 +36,11 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
-// For the scope of the test, any pod that has pod-level resources and the
-// PodLevelResourceManagers feature is enabled, will be processed by AllocatePod
+// 在本测试范围内，任何带有 Pod 级资源且开启 PodLevelResourceManagers 特性的 Pod
+// 都会由 AllocatePod 处理。
+// TestCPUManagerRestoreState 验证 CPU Manager 在 kubelet 重启后能恢复 Pod 级与容器级 CPU 分配。
 func TestCPUManagerRestoreState(t *testing.T) {
+	// CPU Manager 静态策略在 Windows 上不可用。
 	if runtime.GOOS == "windows" {
 		t.Skip("CPU Manager static policy is not available on Windows")
 	}
@@ -97,9 +99,11 @@ func TestCPUManagerRestoreState(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
+			// 切换特性门控到用例指定的组合。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.PodLevelResources, tc.podLevelResourcesEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.PodLevelResourceManagers, tc.podLevelResourceManagersEnabled)
 
+			// 使用临时目录保存 checkpoint，供重启后的管理器恢复。
 			sDir := t.TempDir()
 			logger, tCtx := ktesting.NewTestContext(t)
 			mgr, err := NewManager(
@@ -129,7 +133,7 @@ func TestCPUManagerRestoreState(t *testing.T) {
 				t.Fatalf("could not create manager: %v", err)
 			}
 
-			// Create a pod
+			// 按用例构造带或不带 Pod 级 CPU 请求的 Pod。
 			var pod *v1.Pod
 			if tc.podCPURequest != "" {
 				pod = makeMultiContainerPodWithOptionsAndPodLevelResources(tc.podCPURequest, nil, tc.containers)
@@ -139,20 +143,20 @@ func TestCPUManagerRestoreState(t *testing.T) {
 			pod.Name = "pod1"
 			pod.UID = types.UID("pod1")
 
-			// Start manager to initialize state and activePods
+			// 启动管理器以初始化状态与 activePods。
 			err = mgr.Start(tCtx, func() []*v1.Pod { return []*v1.Pod{pod} }, &sourcesReadyStub{}, mockPodStatusProvider{}, mockRuntimeService{}, containermap.NewContainerMap())
 			if err != nil {
 				t.Fatalf("could not start manager: %v", err)
 			}
 
-			// Allocate resources (Pod Scope)
+			// Pod 级分配路径：由 AllocatePod 统一分配。
 			if tc.podLevelResourceManagersEnabled && resourcehelper.IsPodLevelResourcesSet(pod) {
 				err = mgr.AllocatePod(logger, pod, lifecycle.AddOperation)
 				if err != nil {
 					t.Fatalf("could not allocate pod: %v", err)
 				}
 			} else {
-				// Allocate resources (Container Scope / Legacy)
+				// 容器级（旧路径）分配：逐个容器分配。
 				for i := range pod.Spec.Containers {
 					container := &pod.Spec.Containers[i]
 					err = mgr.Allocate(tCtx, pod, container, lifecycle.AddOperation)
@@ -162,13 +166,13 @@ func TestCPUManagerRestoreState(t *testing.T) {
 				}
 			}
 
-			// Add containers (simulate running)
+			// 把容器加入管理器，模拟容器正在运行。
 			for i := range pod.Spec.Containers {
 				container := &pod.Spec.Containers[i]
 				mgr.AddContainer(logger, pod, container, container.Name)
 			}
 
-			// Verify state before restart
+			// 重启前校验 Pod 级 CPU 集合是否符合预期。
 			podCPUSet, _ := mgr.State().GetPodCPUSet(string(pod.UID))
 			if tc.expectPodCPUSet && podCPUSet.IsEmpty() {
 				t.Errorf("expected pod cpu set to be present")
@@ -176,7 +180,7 @@ func TestCPUManagerRestoreState(t *testing.T) {
 				t.Errorf("expected no pod cpu set, but got some")
 			}
 
-			// Re-create manager to simulate restart
+			// 重新创建管理器，模拟 kubelet 重启。
 			mgr2, err := NewManager(
 				logger,
 				"static",
@@ -209,7 +213,7 @@ func TestCPUManagerRestoreState(t *testing.T) {
 				t.Fatalf("could not start manager 2: %v", err)
 			}
 
-			// Verify state restored
+			// 校验重启后 Pod 级 CPU 集合已恢复且大小一致。
 			podCPUSetRestored, _ := mgr2.State().GetPodCPUSet(string(pod.UID))
 			if tc.expectPodCPUSet {
 				if podCPUSetRestored.IsEmpty() {
@@ -225,7 +229,7 @@ func TestCPUManagerRestoreState(t *testing.T) {
 			for i := range pod.Spec.Containers {
 				container := &pod.Spec.Containers[i]
 				containerCPUSet, ok := mgr2.State().GetCPUSet(string(pod.UID), container.Name)
-				// If allocation was skipped (PLR enabled but Manager disabled), no cpuset.
+				// 若分配被跳过（开启 Pod 级资源但未开启 Pod 级管理器），则不应存在 CPU 集合。
 				allocationSkipped := tc.podLevelResourcesEnabled && !tc.podLevelResourceManagersEnabled && resourcehelper.IsPodLevelResourcesSet(pod)
 
 				if allocationSkipped {
@@ -236,7 +240,7 @@ func TestCPUManagerRestoreState(t *testing.T) {
 					if !ok {
 						t.Errorf("expected container cpu set to be present for %s after restore", container.Name)
 					}
-					// Only check size if we expect assignments (guaranteed)
+					// 只有 Guaranteed 容器才保证有分配，仅在此时校验集合非空。
 					if p := mgr2.(*manager).policy.(*staticPolicy); p.guaranteedCPUs(logger, pod, container) > 0 {
 						if containerCPUSet.IsEmpty() {
 							t.Errorf("expected container cpu set to be non-empty for guaranteed container %s", container.Name)

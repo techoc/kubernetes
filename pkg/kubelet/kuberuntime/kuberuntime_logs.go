@@ -25,11 +25,10 @@ import (
 	"k8s.io/cri-client/pkg/logs"
 )
 
-// ReadLogs read the container log and redirect into stdout and stderr.
-// Note that containerID is only needed when following the log, or else
-// just pass in empty string "".
+// ReadLogs 读取容器日志并写入 stdout 与 stderr。
+// 注意：只有在 follow 日志时才需要 containerID，否则传空字符串即可。
 func (m *kubeGenericRuntimeManager) ReadLogs(ctx context.Context, path, containerID string, apiOpts *v1.PodLogOptions, stdout, stderr io.Writer) error {
-	// Convert v1.PodLogOptions into internal log options.
+	// 将 v1.PodLogOptions 转换为内部日志选项。
 	now := time.Now()
 	opts := &logs.LogOptions{
 		TailLines:  apiOpts.TailLines,

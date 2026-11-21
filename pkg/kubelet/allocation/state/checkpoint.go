@@ -26,19 +26,20 @@ import (
 
 var _ checkpointmanager.Checkpoint = &Checkpoint{}
 
+// PodResourceCheckpointInfo 是写入 checkpoint 的 Pod 资源分配信息。
 type PodResourceCheckpointInfo struct {
 	Entries PodResourceInfoMap `json:"entries,omitempty"`
 }
 
-// Checkpoint represents a structure to store pod resource allocation checkpoint data
+// Checkpoint 用于存储 Pod 资源分配 checkpoint 数据。
 type Checkpoint struct {
-	// Data is a serialized PodResourceAllocationInfo
+	// Data 是序列化后的 PodResourceAllocationInfo。
 	Data string `json:"data"`
-	// Checksum is a checksum of Data
+	// Checksum 是 Data 的校验和。
 	Checksum checksum.Checksum `json:"checksum"`
 }
 
-// NewCheckpoint creates a new checkpoint from a list of claim info states
+// NewCheckpoint 根据 Pod 资源分配信息创建新的 checkpoint。
 func NewCheckpoint(allocations *PodResourceCheckpointInfo) (*Checkpoint, error) {
 
 	serializedAllocations, err := json.Marshal(allocations)
@@ -53,22 +54,22 @@ func NewCheckpoint(allocations *PodResourceCheckpointInfo) (*Checkpoint, error) 
 	return cp, nil
 }
 
+// MarshalCheckpoint 把 Checkpoint 序列化为 JSON。
 func (cp *Checkpoint) MarshalCheckpoint() ([]byte, error) {
 	return json.Marshal(cp)
 }
 
-// UnmarshalCheckpoint unmarshals checkpoint from JSON
+// UnmarshalCheckpoint 从 JSON 反序列化 checkpoint。
 func (cp *Checkpoint) UnmarshalCheckpoint(blob []byte) error {
 	return json.Unmarshal(blob, cp)
 }
 
-// VerifyChecksum verifies that current checksum
-// of checkpointed Data is valid
+// VerifyChecksum 校验 checkpoint 中 Data 的当前校验和是否有效。
 func (cp *Checkpoint) VerifyChecksum() error {
 	return cp.Checksum.Verify(cp.Data)
 }
 
-// GetPodResourceCheckpointInfo returns Pod Resource Allocation info states from checkpoint
+// GetPodResourceCheckpointInfo 从 checkpoint 中解析 Pod 资源分配信息。
 func (cp *Checkpoint) GetPodResourceCheckpointInfo() (*PodResourceCheckpointInfo, error) {
 	var data PodResourceCheckpointInfo
 	if err := json.Unmarshal([]byte(cp.Data), &data); err != nil {

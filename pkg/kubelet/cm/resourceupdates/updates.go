@@ -16,10 +16,9 @@ limitations under the License.
 
 package resourceupdates
 
-// Update is a struct that represents an update to a pod when
-// the resource changes it's status.
-// Later we may need to add fields like container name, resource name, and a new status.
+// Update 表示 Pod 资源状态发生变化时需要同步的一次更新。
+// 后续可能扩展容器名、资源名和新状态等字段。
 type Update struct {
-	// PodUID is the UID of the pod which status needs to be updated.
+	// PodUIDs 是状态需要更新的 Pod UID 列表。
 	PodUIDs []string
 }

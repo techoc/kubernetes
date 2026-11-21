@@ -25,6 +25,7 @@ import (
 	"k8s.io/api/core/v1"
 )
 
+// Test 验证 ParseQOSReserved 对合法/非法百分比、未知资源与 CPU 配置的处理。
 func Test(t *testing.T) {
 	tests := []struct {
 		input    map[string]string
@@ -59,7 +60,7 @@ func Test(t *testing.T) {
 			},
 		},
 		{
-			// need to change this when CPU is added as a supported resource
+			// CPU 目前不是受支持资源；将来支持 CPU 时需调整该用例。
 			input:    map[string]string{"memory": "100%", "cpu": "50%"},
 			expected: nil,
 		},

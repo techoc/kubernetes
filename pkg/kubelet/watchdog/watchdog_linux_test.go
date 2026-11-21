@@ -30,21 +30,23 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting/initoption"
 )
 
-// Some of these tests capture log output. Don't reduce the verbosity or they will fail!
+// 部分测试会捕获日志输出，不要降低详细度，否则会失败。
+// init 把默认详细度设为 5。
 func init() {
 	ktesting.SetDefaultVerbosity(5)
 }
 
-// Mock syncLoopHealthChecker
+// mockSyncLoopHealthChecker 是返回预设错误的同步循环健康检查桩。
 type mockSyncLoopHealthChecker struct {
 	healthCheckErr error
 }
 
+// SyncLoopHealthCheck 返回预设错误。
 func (m *mockSyncLoopHealthChecker) SyncLoopHealthCheck(req *http.Request) error {
 	return m.healthCheckErr
 }
 
-// Mock WatchdogClient
+// mockWatchdogClient 是返回预设结果的 watchdog 客户端桩。
 type mockWatchdogClient struct {
 	enabledVal time.Duration
 	enabledErr error
@@ -52,22 +54,25 @@ type mockWatchdogClient struct {
 	notifyErr  error
 }
 
+// SdWatchdogEnabled 返回预设的超时时间与错误。
 func (m *mockWatchdogClient) SdWatchdogEnabled(unsetEnvironment bool) (time.Duration, error) {
 	return m.enabledVal, m.enabledErr
 }
 
+// SdNotify 返回预设的 ack 与错误。
 func (m *mockWatchdogClient) SdNotify(unsetEnvironment bool) (bool, error) {
 	return m.notifyAck, m.notifyErr
 }
 
+// 测试用的正常与过小 watchdog 间隔。
 const (
 	interval      = 4 * time.Second
 	intervalSmall = 1 * time.Second
 )
 
-// TestNewHealthChecker tests the NewHealthChecker function.
+// TestNewHealthChecker 验证 NewHealthChecker 在不同 watchdog 配置下的行为。
 func TestNewHealthChecker(t *testing.T) {
-	// Test cases
+	// 用例覆盖启用、未启用、配置错误与超时过小。
 	tests := []struct {
 		name        string
 		mockEnabled time.Duration
@@ -80,6 +85,7 @@ func TestNewHealthChecker(t *testing.T) {
 		{"Watchdog timeout too small", intervalSmall, nil, true},
 	}
 
+	// 逐用例构造 mock 客户端并校验错误。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockClient := &mockWatchdogClient{
@@ -95,11 +101,11 @@ func TestNewHealthChecker(t *testing.T) {
 	}
 }
 
-// TestHealthCheckerStart tests the Start method of the healthChecker.
+// TestHealthCheckerStart 验证 Start 的健康检查与心跳通知行为。
 func TestHealthCheckerStart(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
-	// Test cases
+	// 用例覆盖通知成功、通知失败、健康检查失败与未注册检查器。
 	tests := []struct {
 		name           string
 		enabledVal     time.Duration
@@ -152,6 +158,7 @@ func TestHealthCheckerStart(t *testing.T) {
 		},
 	}
 
+	// 逐用例执行并检查日志。
 	for _, tt := range tests {
 		tCtx.SyncTest(tt.name, func(tCtx ktesting.TContext) {
 			tCtx = ktesting.Init(tCtx, initoption.BufferLogs(true))
@@ -160,33 +167,33 @@ func TestHealthCheckerStart(t *testing.T) {
 				tCtx.Cancel("test has completed")
 			}()
 
-			// Mock SdWatchdogEnabled to return a valid value
+			// 让 SdWatchdogEnabled 返回有效值。
 			mockClient := &mockWatchdogClient{
 				enabledVal: tt.enabledVal,
 				notifyAck:  tt.notifyAck,
 				notifyErr:  tt.notifyErr,
 			}
 
-			// Create a healthChecker
+			// 创建 healthChecker。
 			hc, err := NewHealthChecker(logger, WithWatchdogClient(mockClient))
 			if err != nil {
 				t.Fatalf("NewHealthChecker() failed: %v", err)
 			}
 			if !tt.noCheckers {
-				// Bypass SetHealthCheckers because it adds LogHealthz, which leaks a background
-				// goroutine that doesn't play well with SyncTest.
+				// 绕过 SetHealthCheckers，因为它会加入 LogHealthz 并泄漏后台 goroutine，
+				// 与 SyncTest 不兼容。
 				hc.(*healthChecker).checkers.Store([]healthz.HealthChecker{
 					healthz.NamedCheck("syncloop", (&mockSyncLoopHealthChecker{healthCheckErr: tt.healthCheckErr}).SyncLoopHealthCheck),
 				})
 			}
 
-			// Start the health checker
+			// 启动健康检查。
 			hc.Start(tCtx)
 
-			// Wait for a short period to allow the health check to run
+			// 等待足够时间让健康检查执行。
 			time.Sleep(2 * interval)
 
-			// Check logs to verify the health check ran
+			// 检查日志以确认健康检查确实运行。
 			underlier, ok := logger.GetSink().(ktesting.Underlier)
 			if !ok {
 				t.Fatalf("Should have had a ktesting LogSink, got %T", logger.GetSink())

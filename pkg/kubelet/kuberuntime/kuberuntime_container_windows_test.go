@@ -32,11 +32,13 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestApplyPlatformSpecificContainerConfig 验证 Windows 容器配置中的资源与安全上下文生成。
 func TestApplyPlatformSpecificContainerConfig(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	_, _, fakeRuntimeSvc, err := createTestRuntimeManager(tCtx)
 	require.NoError(t, err)
 
+	// 构造空容器配置作为被测输入。
 	containerConfig := &runtimeapi.ContainerConfig{}
 
 	resources := v1.ResourceRequirements{
@@ -50,6 +52,7 @@ func TestApplyPlatformSpecificContainerConfig(t *testing.T) {
 		},
 	}
 
+	// 构造 GMSA 凭据、运行用户与 HostProcess 配置。
 	gmsaCredSpecName := "gmsa spec name"
 	gmsaCredSpec := "credential spec"
 	username := "ContainerAdministrator"
@@ -82,13 +85,15 @@ func TestApplyPlatformSpecificContainerConfig(t *testing.T) {
 		},
 	}
 
+	// 调用被测方法生成 Windows 平台配置。
 	err = fakeRuntimeSvc.applyPlatformSpecificContainerConfig(tCtx, containerConfig, &pod.Spec.Containers[0], pod, new(int64), "foo", nil)
 	require.NoError(t, err)
 
 	limit := int64(3000)
 	expectedCpuMax := 10 * limit / int64(winstats.ProcessorCount())
-	// Above, we're setting the limit to 3 CPUs. But we can't expect more than 100% of the CPUs
-	// we have. (e.g.: if we only have 2 CPUs, we can't have 150% CPU max).
+	// 上面把限制设为 3 个 CPU，但 CPU 最大值不能超过 100%
+	// （例如只有 2 个 CPU 时不能达到 150%）。
+	// CPU 最大值上限为 10000，即 100%。
 	if expectedCpuMax > 10000 {
 		expectedCpuMax = 10000
 	}
@@ -106,6 +111,7 @@ func TestApplyPlatformSpecificContainerConfig(t *testing.T) {
 	assert.Equal(t, expectedWindowsConfig, containerConfig.Windows)
 }
 
+// TestCalculateCPUMaximum 验证 CPU 限制到 Windows CPU 最大值的换算与范围裁剪。
 func TestCalculateCPUMaximum(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -144,6 +150,7 @@ func TestCalculateCPUMaximum(t *testing.T) {
 			want:     1,
 		},
 	}
+	// 逐用例比较换算结果。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, calculateCPUMaximum(&tt.cpuLimit, tt.cpuCount))
@@ -151,14 +158,17 @@ func TestCalculateCPUMaximum(t *testing.T) {
 	}
 }
 
+// TestCalculateWindowsResources 验证 Windows 容器资源（CPU 最大值与内存限制）的计算。
 func TestCalculateWindowsResources(t *testing.T) {
 	// TODO: remove skip once the failing test has been fixed.
+	// 已知失败用例，先跳过以免阻塞 CI。
 	t.Skip("Skip failing test on Windows.")
 
 	tCtx := ktesting.Init(t)
 	_, _, fakeRuntimeSvc, err := createTestRuntimeManager(tCtx)
 	require.NoError(t, err)
 
+	// 用例覆盖正常限制、无内存限制与零 CPU 限制。
 	tests := []struct {
 		name     string
 		cpuLim   resource.Quantity
@@ -194,6 +204,7 @@ func TestCalculateWindowsResources(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		// 逐用例比较生成的 Windows 容器资源。
 		windowsContainerResources := fakeRuntimeSvc.calculateWindowsResources(tCtx, &test.cpuLim, &test.memLim)
 		assert.Equal(t, test.expected, windowsContainerResources)
 	}

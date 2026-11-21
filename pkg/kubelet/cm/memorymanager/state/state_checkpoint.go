@@ -31,6 +31,7 @@ import (
 
 var _ State = &stateCheckpoint{}
 
+// stateCheckpoint 在内存状态缓存之上增加 checkpoint 持久化能力。
 type stateCheckpoint struct {
 	sync.RWMutex
 	logger            klog.Logger
@@ -40,9 +41,10 @@ type stateCheckpoint struct {
 	checkpointName    string
 }
 
-// NewCheckpointState creates new State for keeping track of memory/pod assignment with checkpoint backend
+// NewCheckpointState 创建带 checkpoint 后端的状态对象，用于持久化内存与 Pod 的分配关系。
 func NewCheckpointState(logger klog.Logger, stateDir, checkpointName, policyName string) (State, error) {
 	logger = klog.LoggerWithName(logger, "Memory Manager state checkpoint")
+	// checkpoint 文件位于 stateDir 下，由 checkpointmanager 负责原子写入。
 	checkpointManager, err := checkpointmanager.NewCheckpointManager(stateDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize checkpoint manager: %v", err)
@@ -55,6 +57,8 @@ func NewCheckpointState(logger klog.Logger, stateDir, checkpointName, policyName
 		checkpointName:    checkpointName,
 	}
 
+	// 启动时恢复状态；失败时要求用户 drain 节点并删除损坏的 checkpoint，
+	// 避免带着不一致的分配状态继续运行。
 	if err := stateCheckpoint.restoreState(); err != nil {
 		//nolint:staticcheck // ST1005 user-facing error message
 		return nil, fmt.Errorf("could not restore state from checkpoint: %v, please drain this node and delete the memory manager checkpoint file %q before restarting Kubelet",
@@ -64,14 +68,14 @@ func NewCheckpointState(logger klog.Logger, stateDir, checkpointName, policyName
 	return stateCheckpoint, nil
 }
 
-// migrateV1CheckpointToV2Checkpoint converts checkpoints from the v1 format to the v2 format
+// migrateV1CheckpointToV2Checkpoint 把 v1 格式的 checkpoint 转换为 v2。
 func (sc *stateCheckpoint) migrateV1CheckpointToV2Checkpoint(src *MemoryManagerCheckpointV1, dst *MemoryManagerCheckpointV2) {
 	dst.PolicyName = src.PolicyName
 	dst.MachineState = src.MachineState.Clone()
 	dst.Entries = src.Entries.Clone()
 }
 
-// migrateV2CheckpointToV3Checkpoint converts checkpoints from the v2 format to the v3 format
+// migrateV2CheckpointToV3Checkpoint 把 v2 格式的 checkpoint 转换为 v3。
 func (sc *stateCheckpoint) migrateV2CheckpointToV3Checkpoint(src *MemoryManagerCheckpointV2, dst *MemoryManagerCheckpointV3) {
 	dst.CheckpointData.PolicyName = src.PolicyName
 	dst.CheckpointData.MachineState = src.MachineState.Clone()
@@ -79,7 +83,7 @@ func (sc *stateCheckpoint) migrateV2CheckpointToV3Checkpoint(src *MemoryManagerC
 	dst.CheckpointData.PodEntries = src.PodEntries.Clone()
 }
 
-// restores state from a checkpoint and creates it if it doesn't exist
+// restoreState 从 checkpoint 恢复状态；checkpoint 不存在时创建初始文件。
 func (sc *stateCheckpoint) restoreState() error {
 	sc.Lock()
 	defer sc.Unlock()
@@ -91,9 +95,11 @@ func (sc *stateCheckpoint) restoreState() error {
 		return err
 	}
 
+	// checkpoint 中的策略必须与当前配置一致，否则无法安全恢复。
 	if sc.policyName != cp.CheckpointData.PolicyName {
 		return fmt.Errorf("[memorymanager] configured policy %q differs from state checkpoint policy %q", sc.policyName, cp.CheckpointData.PolicyName)
 	}
+	// 恢复机器状态和容器级分配；Pod 级分配仅在特性开启时恢复。
 	sc.cache.SetMachineState(cp.CheckpointData.MachineState)
 	sc.cache.SetMemoryAssignments(cp.CheckpointData.Entries)
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResourceManagers) {
@@ -105,9 +111,9 @@ func (sc *stateCheckpoint) restoreState() error {
 	return nil
 }
 
-// loadAndMigrateCheckpointV3 loads the latest checkpoint and migrates it from older versions if needed.
+// loadAndMigrateCheckpointV3 加载最新格式的 checkpoint，必要时从旧版本迁移。
 func (sc *stateCheckpoint) loadAndMigrateCheckpointV3() (*MemoryManagerCheckpointV3, error) {
-	// Try to load as V3.
+	// 优先按 v3 加载。
 	checkpointV3 := newMemoryManagerCheckpointV3()
 	err := sc.checkpointManager.GetCheckpoint(sc.checkpointName, checkpointV3)
 	if err == nil {
@@ -118,32 +124,32 @@ func (sc *stateCheckpoint) loadAndMigrateCheckpointV3() (*MemoryManagerCheckpoin
 	}
 
 	if len(checkpointV3.Data) > 0 || checkpointV3.DataChecksum != 0 {
-		// This is a corrupted V3 checkpoint version. Don't fall back to previous versions, but return error.
+		// v3 数据已存在却读取失败，说明 checkpoint 损坏；此时不能回退旧版本，直接报错。
 		err = fmt.Errorf("could not load v3 checkpoint: %w", err)
 		sc.logger.Error(err, "not falling back to previous versions")
 		return nil, err
 	}
 
-	// Log the V3 load error and fall back to V2.
+	// 记录 v3 加载失败并回退到 v2。
 	sc.logger.Info("could not load v3 checkpoint for memory manager, falling back to v2", "err", err)
 
-	// Try to load as V2.
+	// 按 v2 加载。
 	checkpointV2, err := sc.loadAndMigrateCheckpointV2()
 	if err != nil {
 		return nil, err
 	}
 
-	// Reset V3 (as it might contain some remaining data from previous load attempt)
+	// 重置 v3 对象，清除上次加载尝试可能残留的数据。
 	checkpointV3 = newMemoryManagerCheckpointV3()
 
-	// Loaded V2, now migrate to V3.
+	// v2 加载成功，迁移为 v3 后返回。
 	sc.logger.Info("migrating memory manager checkpoint from v2 to v3")
 	sc.migrateV2CheckpointToV3Checkpoint(checkpointV2, checkpointV3)
 
 	return checkpointV3, nil
 }
 
-// loadAndMigrateCheckpointV2 loads the checkpoint in V2 and migrates it from older versions if needed.
+// loadAndMigrateCheckpointV2 加载 v2 checkpoint，必要时从 v1 迁移。
 func (sc *stateCheckpoint) loadAndMigrateCheckpointV2() (*MemoryManagerCheckpointV2, error) {
 	// Try to load as V2.
 	checkpointV2 := newMemoryManagerCheckpointV2()
@@ -152,30 +158,31 @@ func (sc *stateCheckpoint) loadAndMigrateCheckpointV2() (*MemoryManagerCheckpoin
 		return checkpointV2, nil
 	}
 
-	// Log the V2 load error and fall back to V1.
+	// 记录 v2 加载失败并回退到 v1。
 	if errors.Is(err, cperrors.CorruptCheckpointError{}) {
 		sc.logger.Error(err, "V2 checkpoint for memory manager is corrupt, falling back to V1")
 	} else {
 		sc.logger.Info("could not load V2 checkpoint for memory manager, falling back to V1", "err", err)
 	}
 
-	// Try to load as V1.
+	// 按 v1 加载。
 	checkpointV1, err := sc.loadCheckpointV1()
 	if err != nil {
-		// This will return ErrCheckpointNotFound if it's not found, or a corruption error.
+		// 找不到时返回 ErrCheckpointNotFound，否则返回损坏错误。
 		return nil, err
 	}
 
-	// Reset V2 (as it might contain some remaining data from previous load attempt)
+	// 重置 v2 对象，清除上次加载尝试可能残留的数据。
 	checkpointV2 = newMemoryManagerCheckpointV2()
 
-	// Loaded V1, now migrate to V2.
+	// v1 加载成功，迁移为 v2 后返回。
 	sc.logger.Info("migrating memory manager checkpoint from v1 to v2")
 	sc.migrateV1CheckpointToV2Checkpoint(checkpointV1, checkpointV2)
 
 	return checkpointV2, nil
 }
 
+// loadCheckpointV1 按最旧的 v1 格式读取 checkpoint。
 func (sc *stateCheckpoint) loadCheckpointV1() (*MemoryManagerCheckpointV1, error) {
 	checkpointV1 := newMemoryManagerCheckpointV1()
 	err := sc.checkpointManager.GetCheckpoint(sc.checkpointName, checkpointV1)
@@ -185,7 +192,7 @@ func (sc *stateCheckpoint) loadCheckpointV1() (*MemoryManagerCheckpointV1, error
 	return checkpointV1, nil
 }
 
-// saves state to a checkpoint, caller is responsible for locking
+// storeState 把当前状态写入 checkpoint；调用方负责加锁。
 func (sc *stateCheckpoint) storeState() error {
 	checkpoint := newMemoryManagerCheckpoint()
 	checkpoint.CheckpointData.PolicyName = sc.policyName
@@ -204,7 +211,7 @@ func (sc *stateCheckpoint) storeState() error {
 	return nil
 }
 
-// GetMemoryState returns Memory Map stored in the State
+// GetMachineState 返回状态中保存的 NUMA 节点内存映射。
 func (sc *stateCheckpoint) GetMachineState() NUMANodeMap {
 	sc.RLock()
 	defer sc.RUnlock()
@@ -212,7 +219,7 @@ func (sc *stateCheckpoint) GetMachineState() NUMANodeMap {
 	return sc.cache.GetMachineState()
 }
 
-// GetMemoryBlocks returns memory assignments of a container
+// GetMemoryBlocks 返回指定容器的内存块分配。
 func (sc *stateCheckpoint) GetMemoryBlocks(podUID string, containerName string) []Block {
 	sc.RLock()
 	defer sc.RUnlock()
@@ -220,7 +227,7 @@ func (sc *stateCheckpoint) GetMemoryBlocks(podUID string, containerName string) 
 	return sc.cache.GetMemoryBlocks(podUID, containerName)
 }
 
-// GetMemoryAssignments returns ContainerMemoryAssignments
+// GetMemoryAssignments 返回全部容器级内存分配。
 func (sc *stateCheckpoint) GetMemoryAssignments() ContainerMemoryAssignments {
 	sc.RLock()
 	defer sc.RUnlock()
@@ -228,7 +235,7 @@ func (sc *stateCheckpoint) GetMemoryAssignments() ContainerMemoryAssignments {
 	return sc.cache.GetMemoryAssignments()
 }
 
-// GetPodMemoryBlocks returns memory assignments of a pod
+// GetPodMemoryBlocks 返回指定 Pod 的内存块分配。
 func (sc *stateCheckpoint) GetPodMemoryBlocks(podUID string) []Block {
 	sc.RLock()
 	defer sc.RUnlock()
@@ -236,7 +243,7 @@ func (sc *stateCheckpoint) GetPodMemoryBlocks(podUID string) []Block {
 	return sc.cache.GetPodMemoryBlocks(podUID)
 }
 
-// GetPodMemoryAssignments returns all pod-level memory assignments
+// GetPodMemoryAssignments 返回全部 Pod 级内存分配。
 func (sc *stateCheckpoint) GetPodMemoryAssignments() PodMemoryAssignments {
 	sc.RLock()
 	defer sc.RUnlock()
@@ -244,7 +251,7 @@ func (sc *stateCheckpoint) GetPodMemoryAssignments() PodMemoryAssignments {
 	return sc.cache.GetPodMemoryAssignments()
 }
 
-// SetMachineState stores NUMANodeMap in State
+// SetMachineState 保存 NUMA 节点内存映射并持久化。
 func (sc *stateCheckpoint) SetMachineState(memoryMap NUMANodeMap) {
 	sc.Lock()
 	defer sc.Unlock()
@@ -256,7 +263,7 @@ func (sc *stateCheckpoint) SetMachineState(memoryMap NUMANodeMap) {
 	}
 }
 
-// SetMemoryBlocks stores memory assignments of container
+// SetMemoryBlocks 保存指定容器的内存块分配并持久化。
 func (sc *stateCheckpoint) SetMemoryBlocks(podUID string, containerName string, blocks []Block) {
 	sc.Lock()
 	defer sc.Unlock()
@@ -268,7 +275,7 @@ func (sc *stateCheckpoint) SetMemoryBlocks(podUID string, containerName string, 
 	}
 }
 
-// SetMemoryAssignments sets ContainerMemoryAssignments by using the passed parameter
+// SetMemoryAssignments 用给定参数整体替换容器级内存分配并持久化。
 func (sc *stateCheckpoint) SetMemoryAssignments(assignments ContainerMemoryAssignments) {
 	sc.Lock()
 	defer sc.Unlock()
@@ -280,6 +287,7 @@ func (sc *stateCheckpoint) SetMemoryAssignments(assignments ContainerMemoryAssig
 	}
 }
 
+// SetPodMemoryAssignments 整体替换 Pod 级内存分配并持久化。
 func (sc *stateCheckpoint) SetPodMemoryAssignments(assignments PodMemoryAssignments) {
 	sc.Lock()
 	defer sc.Unlock()
@@ -291,7 +299,7 @@ func (sc *stateCheckpoint) SetPodMemoryAssignments(assignments PodMemoryAssignme
 	}
 }
 
-// SetPodMemoryBlocks stores memory assignments of a pod
+// SetPodMemoryBlocks 保存指定 Pod 的内存块分配并持久化。
 func (sc *stateCheckpoint) SetPodMemoryBlocks(podUID string, blocks []Block) {
 	sc.Lock()
 	defer sc.Unlock()
@@ -303,7 +311,7 @@ func (sc *stateCheckpoint) SetPodMemoryBlocks(podUID string, blocks []Block) {
 	}
 }
 
-// Delete deletes corresponding Blocks from ContainerMemoryAssignments
+// Delete 从容器级分配中删除对应条目并持久化。
 func (sc *stateCheckpoint) Delete(podUID string, containerName string) {
 	sc.Lock()
 	defer sc.Unlock()
@@ -315,8 +323,7 @@ func (sc *stateCheckpoint) Delete(podUID string, containerName string) {
 	}
 }
 
-// DeletePod deletes pod-level CPU assignments for specified pod. It does not
-// affect container-level assignments.
+// DeletePod 删除指定 Pod 的 Pod 级分配，不影响容器级分配。
 func (sc *stateCheckpoint) DeletePod(podUID string) {
 	sc.Lock()
 	defer sc.Unlock()
@@ -328,7 +335,7 @@ func (sc *stateCheckpoint) DeletePod(podUID string) {
 	}
 }
 
-// ClearState clears machineState and ContainerMemoryAssignments
+// ClearState 清空机器状态和所有内存分配。
 func (sc *stateCheckpoint) ClearState() {
 	sc.Lock()
 	defer sc.Unlock()

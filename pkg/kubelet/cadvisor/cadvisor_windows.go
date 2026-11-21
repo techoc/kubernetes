@@ -26,15 +26,20 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/winstats"
 )
 
+// cadvisorClient 是 Windows 上的 cAdvisor 接口实现。
 type cadvisorClient struct {
-	rootPath       string
+	// rootPath 是根文件系统路径。
+	rootPath string
+	// winStatsClient 提供 Windows 性能统计。
 	winStatsClient winstats.Client
 }
 
+// 编译期断言：cadvisorClient 实现了 Interface 接口。
 var _ Interface = new(cadvisorClient)
 
-// New creates a cAdvisor and exports its API on the specified port if port > 0.
+// New 创建 Windows 上的 cAdvisor 实现。
 func New(logger klog.Logger, imageFsInfoProvider ImageFsInfoProvider, rootPath string, cgroupRoots []string, usingLegacyStats, localStorageCapacityIsolation, disableContainerDiscovery bool) (Interface, error) {
+	// 使用 Windows 性能计数器客户端采集统计。
 	client, err := winstats.NewPerfCounterClient(logger)
 	return &cadvisorClient{
 		rootPath:       rootPath,
@@ -42,43 +47,52 @@ func New(logger klog.Logger, imageFsInfoProvider ImageFsInfoProvider, rootPath s
 	}, err
 }
 
+// Start 是空实现。
 func (cu *cadvisorClient) Start() error {
 	return nil
 }
 
-// ContainerInfoV2 is only expected to be used for the root container. Returns info for all containers in the node.
+// ContainerInfoV2 预期只用于根容器，返回节点上所有容器的信息。
 func (cu *cadvisorClient) ContainerInfoV2(name string, options cadvisorapi.RequestOptions) (map[string]cadvisorapi.ContainerInfo, error) {
 	return cu.winStatsClient.WinContainerInfos()
 }
 
+// GetRequestedContainersInfo 未实现，返回 nil。
 func (cu *cadvisorClient) GetRequestedContainersInfo(containerName string, options cadvisorapi.RequestOptions) (map[string]*cadvisorapi.ContainerInfo, error) {
 	return nil, nil
 }
 
+// MachineInfo 返回 Windows 机器信息。
 func (cu *cadvisorClient) MachineInfo(logger klog.Logger) (*cadvisorapi.MachineInfo, error) {
 	return cu.winStatsClient.WinMachineInfo(logger)
 }
 
+// VersionInfo 返回 cAdvisor 版本信息。
 func (cu *cadvisorClient) VersionInfo() (*cadvisorapi.VersionInfo, error) {
 	return cu.winStatsClient.WinVersionInfo()
 }
 
+// ImagesFsInfo 在 Windows 上返回空统计。
 func (cu *cadvisorClient) ImagesFsInfo(context.Context) (cadvisorapi.FsInfo, error) {
 	return cadvisorapi.FsInfo{}, nil
 }
 
+// ContainerFsInfo 在 Windows 上返回空统计。
 func (cu *cadvisorClient) ContainerFsInfo(context.Context) (cadvisorapi.FsInfo, error) {
 	return cadvisorapi.FsInfo{}, nil
 }
 
+// RootFsInfo 返回根路径的文件系统统计。
 func (cu *cadvisorClient) RootFsInfo() (cadvisorapi.FsInfo, error) {
 	return cu.GetDirFsInfo(cu.rootPath)
 }
 
+// GetDirFsInfo 返回指定目录的文件系统统计。
 func (cu *cadvisorClient) GetDirFsInfo(path string) (cadvisorapi.FsInfo, error) {
 	return cu.winStatsClient.GetDirFsInfo(path)
 }
 
+// IsPsiEnabled 在 Windows 上始终返回 false。
 func IsPsiEnabled(_ klog.Logger) bool {
 	return false
 }

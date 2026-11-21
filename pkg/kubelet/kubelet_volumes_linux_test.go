@@ -33,6 +33,7 @@ import (
 	"k8s.io/mount-utils"
 )
 
+// validateDirExists 断言目录存在且可读。
 func validateDirExists(dir string) error {
 	_, err := os.ReadDir(dir)
 	if err != nil {
@@ -41,6 +42,7 @@ func validateDirExists(dir string) error {
 	return nil
 }
 
+// validateDirNotExists 断言目录不存在；其他读取错误照常返回。
 func validateDirNotExists(dir string) error {
 	_, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
@@ -52,6 +54,8 @@ func validateDirNotExists(dir string) error {
 	return fmt.Errorf("dir %q still exists", dir)
 }
 
+// TestCleanupOrphanedPodDirs 验证孤立 Pod 目录清理：无卷的目录应删除，
+// 仍含挂载卷或 volume-subpaths 的目录必须保留。
 func TestCleanupOrphanedPodDirs(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
@@ -182,6 +186,7 @@ func TestCleanupOrphanedPodDirs(t *testing.T) {
 				}
 			}
 
+			// 清理只针对不在已知 Pod 列表中的目录。
 			err := kubelet.cleanupOrphanedPodDirs(logger, tc.pods, nil)
 			if tc.expectErr && err == nil {
 				t.Errorf("%s failed: expected error, got success", name)
@@ -200,6 +205,8 @@ func TestCleanupOrphanedPodDirs(t *testing.T) {
 	}
 }
 
+// TestPodVolumesExistWithMount 验证 Pod 卷是否存在：普通卷看挂载点，
+// CSI 卷还要求 mount 子目录被挂载。
 func TestPodVolumesExistWithMount(t *testing.T) {
 	poduid := types.UID("poduid")
 	testCases := map[string]struct {
@@ -305,6 +312,7 @@ func TestPodVolumesExistWithMount(t *testing.T) {
 				}
 			}
 
+			// 有实际挂载点时才认为 Pod 卷存在。
 			exist := kubelet.podVolumesExist(logger, poduid)
 			if tc.expected != exist {
 				t.Errorf("%s failed: expected %t, got %t", name, tc.expected, exist)

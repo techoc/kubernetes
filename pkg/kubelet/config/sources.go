@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package config implements the pod configuration readers.
+// Package config 实现 Pod 配置读取器。
 package config
 
 import (
@@ -23,18 +23,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// SourcesReadyFn is function that returns true if the specified sources have been seen.
+// SourcesReadyFn 在指定数据源都已就绪时返回 true。
 type SourcesReadyFn func(sourcesSeen sets.Set[string]) bool
 
-// SourcesReady tracks the set of configured sources seen by the kubelet.
+// SourcesReady 跟踪 kubelet 已见到的配置数据源集合。
 type SourcesReady interface {
-	// AddSource adds the specified source to the set of sources managed.
+	// AddSource 把指定数据源加入受管集合。
 	AddSource(source string)
-	// AllReady returns true if the currently configured sources have all been seen.
+	// AllReady 在当前配置的数据源都已就绪时返回 true。
 	AllReady() bool
 }
 
-// NewSourcesReady returns a SourcesReady with the specified function.
+// NewSourcesReady 使用指定的就绪判定函数创建 SourcesReady。
 func NewSourcesReady(sourcesReadyFn SourcesReadyFn) SourcesReady {
 	return &sourcesImpl{
 		sourcesSeen:    sets.New[string](),
@@ -42,24 +42,24 @@ func NewSourcesReady(sourcesReadyFn SourcesReadyFn) SourcesReady {
 	}
 }
 
-// sourcesImpl implements SourcesReady.  It is thread-safe.
+// sourcesImpl 实现 SourcesReady，且是线程安全的。
 type sourcesImpl struct {
-	// lock protects access to sources seen.
+	// lock 保护 sourcesSeen 的并发访问。
 	lock sync.RWMutex
-	// set of sources seen.
+	// sourcesSeen 是已见数据源集合。
 	sourcesSeen sets.Set[string]
-	// sourcesReady is a function that evaluates if the sources are ready.
+	// sourcesReadyFn 判断数据源是否全部就绪。
 	sourcesReadyFn SourcesReadyFn
 }
 
-// Add adds the specified source to the set of sources managed.
+// AddSource 在写锁保护下记录已见的数据源。
 func (s *sourcesImpl) AddSource(source string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.sourcesSeen.Insert(source)
 }
 
-// AllReady returns true if each configured source is ready.
+// AllReady 在读锁保护下调用就绪判定函数。
 func (s *sourcesImpl) AllReady() bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()

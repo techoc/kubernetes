@@ -26,11 +26,11 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
-// ContainerCPUAssignments type used in cpu manager state
-// without in-place vertical scaling.
+// ContainerCPUAssignments 是 CPU manager 状态中使用的容器 CPU 分配
+// （未启用原地垂直扩缩容）。
 type ContainerCPUAssignments map[string]map[string]cpuset.CPUSet
 
-// Clone returns a copy of ContainerCPUAssignments
+// Clone 返回 ContainerCPUAssignments 的拷贝。
 func (as ContainerCPUAssignments) Clone() ContainerCPUAssignments {
 	ret := make(ContainerCPUAssignments, len(as))
 	for pod := range as {
@@ -40,9 +40,8 @@ func (as ContainerCPUAssignments) Clone() ContainerCPUAssignments {
 	return ret
 }
 
-// String returns a string representation of ContainerCPUAssignments.
-// Pod and container names are sorted alphabetically to ensure deterministic output.
-// The sorting overhead is acceptable since this method is used for logging and debugging only.
+// String 返回 ContainerCPUAssignments 的字符串表示。
+// Pod 与容器名按字母排序以保证输出确定；该方法只用于日志与调试，排序开销可接受。
 func (as ContainerCPUAssignments) String() string {
 	var sb strings.Builder
 	sb.WriteString("{")
@@ -66,35 +65,35 @@ func (as ContainerCPUAssignments) String() string {
 	return sb.String()
 }
 
-// PodCPUAssignments contains pod-level CPU assignments.
+// PodCPUAssignments 保存 Pod 级 CPU 分配。
 type PodCPUAssignments map[string]PodEntry
 
-// PodEntry represents pod-level CPU assignments for a pod
+// PodEntry 表示 Pod 级 CPU 分配。
 type PodEntry struct {
 	CPUSet cpuset.CPUSet `json:"cpuSet,omitempty"`
 }
 
+// podEntryJSON 是 PodEntry 的 JSON 序列化形态，CPUSet 以字符串存储。
 type podEntryJSON struct {
 	CPUSet string `json:"cpuSet,omitempty"`
 }
 
-// MarshalJSON implements the json.Marshaler interface.
-// It is required because CPUSet is stored as a string in the checkpoint JSON,
-// but used as a struct in the internal state.
+// MarshalJSON 实现 json.Marshaler。
+// 因为 CPUSet 在 checkpoint JSON 中是字符串，而内部状态中是结构体。
 func (p PodEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(podEntryJSON{
 		CPUSet: p.CPUSet.String(),
 	})
 }
 
-// UnmarshalJSON implements the json.Unmarshaler interface.
-// It is required because CPUSet is stored as a string in the checkpoint JSON,
-// but used as a struct in the internal state.
+// UnmarshalJSON 实现 json.Unmarshaler。
+// 因为 CPUSet 在 checkpoint JSON 中是字符串，而内部状态中是结构体。
 func (p *PodEntry) UnmarshalJSON(b []byte) error {
 	var entry podEntryJSON
 	if err := json.Unmarshal(b, &entry); err != nil {
 		return err
 	}
+	// 解析失败时返回带上下文的错误，避免状态静默损坏。
 	cset, err := cpuset.Parse(entry.CPUSet)
 	if err != nil {
 		return fmt.Errorf("failed to parse cpuset: %w", err)
@@ -103,26 +102,27 @@ func (p *PodEntry) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// Clone returns a copy of PodCPUAssignments
+// Clone 返回 PodCPUAssignments 的拷贝。
 func (a PodCPUAssignments) Clone() PodCPUAssignments {
 	clone := make(PodCPUAssignments, len(a))
 	maps.Copy(clone, a)
 	return clone
 }
 
-// ContainerCPUAllocation tracks the current allocation state
-// ContainerCPUBaselines tracks the allocation state at admission time.
-// If in-place vertical scaling is enabled, the allocation state at admission
-// time is required to proper resource accounting; otherwise the field is
-// unused and only the current state is relevant.
+// ContainerCPUAllocation 跟踪当前分配状态；
+// ContainerCPUBaselines 跟踪准入时的分配状态。
+// 启用原地垂直扩缩容时，需要准入时的状态才能正确记账；
+// 否则该字段未使用，只关心当前状态。
 
+// ContainerCPUBaseline 保存单个容器的准入时 CPU 基线。
 type ContainerCPUBaseline struct {
 	Baseline cpuset.CPUSet
 }
 
+// ContainerCPUBaselines 保存 Pod -> 容器 -> 基线的映射。
 type ContainerCPUBaselines map[string]map[string]ContainerCPUBaseline
 
-// Clone returns a deep copy of ContainerCPUBaselines
+// Clone 返回 ContainerCPUBaselines 的深拷贝。
 func (as ContainerCPUBaselines) Clone() ContainerCPUBaselines {
 	ret := make(ContainerCPUBaselines, len(as))
 	for pod := range as {
@@ -136,39 +136,49 @@ func (as ContainerCPUBaselines) Clone() ContainerCPUBaselines {
 	return ret
 }
 
-// Reader interface used to read current cpu/pod assignment state
+// Reader 接口用于读取当前 CPU/Pod 分配状态。
 type Reader interface {
+	// 返回指定容器的 CPU 分配及是否存在。
 	GetCPUSet(podUID string, containerName string) (cpuset.CPUSet, bool)
+	// 返回默认（共享池）CPU 集合。
 	GetDefaultCPUSet() cpuset.CPUSet
+	// 返回容器 CPU 分配，不存在时回退到默认集合。
 	GetCPUSetOrDefault(podUID string, containerName string) cpuset.CPUSet
+	// 返回所有容器的 CPU 分配。
 	GetCPUAssignments() ContainerCPUAssignments
-	// GetPodCPUSet returns the pod-level CPU assignments of a pod
+	// 返回 Pod 级 CPU 分配。
 	GetPodCPUSet(podUID string) (cpuset.CPUSet, bool)
-	// GetPodCPUAssignments returns all pod-level CPU assignments
+	// 返回所有 Pod 级 CPU 分配。
 	GetPodCPUAssignments() PodCPUAssignments
-	// GetCPUBaselines returns all container-level CPU assignments recorded at admission time, prior to any resize
+	// 返回所有容器在准入时（任何 resize 之前）记录的 CPU 分配。
 	GetCPUBaselines() ContainerCPUBaselines
-	// GetBaselineCPUSet returns container-level CPU assignments recorded at admission time, prior to any resize
+	// 返回指定容器在准入时（任何 resize 之前）记录的 CPU 分配。
 	GetBaselineCPUSet(podUID string, containerName string) (cpuset.CPUSet, bool)
 }
 
+// writer 接口定义状态写入操作（未导出，仅由 State 组合使用）。
 type writer interface {
+	// 保存指定容器的 CPU 分配。
 	SetCPUSet(podUID string, containerName string, cpuset cpuset.CPUSet)
+	// 保存默认（共享池）CPU 集合。
 	SetDefaultCPUSet(cpuset cpuset.CPUSet)
+	// 用参数整体替换 CPU 分配。
 	SetCPUAssignments(ContainerCPUAssignments)
+	// 删除指定容器的 CPU 分配。
 	Delete(podUID string, containerName string)
+	// 清空所有 CPU 分配状态。
 	ClearState()
-	// SetPodCPUSet stores pod-level CPU assignments of a pod
+	// 保存 Pod 级 CPU 分配。
 	SetPodCPUSet(podUID string, cpuset cpuset.CPUSet)
-	// SetPodCPUAssignments sets PodCPUAssignments by using the passed parameter
+	// 用参数整体替换 PodCPUAssignments。
 	SetPodCPUAssignments(PodCPUAssignments)
-	// DeletePod deletes pod-level CPU assignments for specified pod
+	// 删除指定 Pod 的 Pod 级 CPU 分配。
 	DeletePod(podUID string)
-	// SetCPUBaselines stores all container-level CPU assignments recorded at admission time, prior to any resize
+	// 保存所有容器在准入时（任何 resize 之前）记录的 CPU 分配。
 	SetCPUBaselines(ContainerCPUBaselines)
 }
 
-// State interface provides methods for tracking and setting cpu/pod assignment
+// State 接口提供跟踪与设置 CPU/Pod 分配的方法。
 type State interface {
 	Reader
 	writer

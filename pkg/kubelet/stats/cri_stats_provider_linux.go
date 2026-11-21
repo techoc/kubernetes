@@ -32,6 +32,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// addCRIPodContainerStats 把 sandbox 中每个容器的完整统计信息补充到 PodStats。
 func (p *criStatsProvider) addCRIPodContainerStats(
 	logger klog.Logger,
 	criSandboxStat *runtimeapi.PodSandboxStats,
@@ -41,11 +42,12 @@ func (p *criStatsProvider) addCRIPodContainerStats(
 	podSandbox *runtimeapi.PodSandbox,
 	rootFsInfo *cadvisorapi.FsInfo, updateCPUNanoCoreUsage bool) error {
 	for _, criContainerStat := range criSandboxStat.Linux.Containers {
+		// 忽略已不在 containerMap 中的容器（可能已被删除）。
 		container, found := containerMap[criContainerStat.Attributes.Id]
 		if !found {
 			continue
 		}
-		// Fill available stats for full set of required pod stats
+		// 填充 PodStats 所需的完整容器统计。
 		cs, err := p.makeContainerStats(logger, criContainerStat, container, rootFsInfo, fsIDtoInfo, podSandbox.GetMetadata(),
 			updateCPUNanoCoreUsage)
 		if err != nil {
@@ -56,13 +58,13 @@ func (p *criStatsProvider) addCRIPodContainerStats(
 	return nil
 }
 
-// addCRIPodContainerCPUAndMemoryStats adds container CPU and memory stats from CRI to the PodStats.
-// This is a lighter-weight version of addCRIPodContainerStats that only populates CPU and memory
-// stats needed for the resource metrics endpoint.
+// addCRIPodContainerCPUAndMemoryStats 把 CRI 中的容器 CPU/内存统计补充到 PodStats。
+// 这是 addCRIPodContainerStats 的轻量版本，只填充资源指标端点所需的 CPU 与内存数据。
 func (p *criStatsProvider) addCRIPodContainerCPUAndMemoryStats(
 	criSandboxStat *runtimeapi.PodSandboxStats,
 	ps *statsapi.PodStats,
 	containerMap map[string]*runtimeapi.Container) {
+	// Linux 字段为空说明运行时未提供对应数据，直接跳过。
 	if criSandboxStat == nil || criSandboxStat.Linux == nil {
 		return
 	}
@@ -71,13 +73,15 @@ func (p *criStatsProvider) addCRIPodContainerCPUAndMemoryStats(
 		if !found {
 			continue
 		}
-		// Fill available CPU and memory stats for resource metrics
+		// 只填充资源指标所需的 CPU 与内存统计。
 		cs := p.makeContainerCPUAndMemoryStats(criContainerStat, time.Unix(0, container.CreatedAt), true)
 		ps.Containers = append(ps.Containers, *cs)
 	}
 }
 
+// addCRIPodNetworkStats 把 sandbox 网络统计补充到 PodStats。
 func addCRIPodNetworkStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
+	// 任一层为空都说明运行时未提供网络统计，保持 PodStats 对应字段为 nil。
 	if criPodStat == nil || criPodStat.Linux == nil || criPodStat.Linux.Network == nil {
 		return
 	}
@@ -87,12 +91,14 @@ func addCRIPodNetworkStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSand
 		InterfaceStats: criInterfaceToSummary(criNetwork.DefaultInterface),
 		Interfaces:     make([]statsapi.InterfaceStats, 0, len(criNetwork.Interfaces)),
 	}
+	// 除默认接口外，还要记录所有附加接口。
 	for _, iface := range criNetwork.Interfaces {
 		iStats.Interfaces = append(iStats.Interfaces, criInterfaceToSummary(iface))
 	}
 	ps.Network = &iStats
 }
 
+// addCRIPodMemoryStats 把 sandbox 内存统计补充到 PodStats。
 func addCRIPodMemoryStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 	if criPodStat == nil || criPodStat.Linux == nil || criPodStat.Linux.Memory == nil {
 		return
@@ -110,6 +116,7 @@ func addCRIPodMemoryStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandb
 	}
 }
 
+// addCRIPodCPUStats 把 sandbox CPU 统计补充到 PodStats。
 func addCRIPodCPUStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 	if criPodStat == nil || criPodStat.Linux == nil || criPodStat.Linux.Cpu == nil {
 		return
@@ -123,7 +130,9 @@ func addCRIPodCPUStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxS
 	}
 }
 
+// addCRIPodIOStats 在启用 KubeletPSI 时补充 IO/PSI 统计。
 func addCRIPodIOStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
+	// PSI 特性未启用时不上报 IO 统计，避免暴露不稳定的指标。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.KubeletPSI) {
 		return
 	}
@@ -137,6 +146,7 @@ func addCRIPodIOStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxSt
 	}
 }
 
+// addCRIPodProcessStats 把 sandbox 进程数补充到 PodStats。
 func addCRIPodProcessStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSandboxStats) {
 	if criPodStat == nil || criPodStat.Linux == nil || criPodStat.Linux.Process == nil {
 		return
@@ -146,8 +156,8 @@ func addCRIPodProcessStats(ps *statsapi.PodStats, criPodStat *runtimeapi.PodSand
 	}
 }
 
-// listContainerNetworkStats returns the network stats of all the running containers.
-// It should return (nil, nil) for platforms other than Windows.
+// listContainerNetworkStats 返回所有运行中容器的网络统计；非 Windows 平台返回 (nil, nil)。
 func (p *criStatsProvider) listContainerNetworkStats(klog.Logger) (map[string]*statsapi.NetworkStats, error) {
+	// Linux 上网络统计由 cadvisor 提供，这里无需额外处理。
 	return nil, nil
 }

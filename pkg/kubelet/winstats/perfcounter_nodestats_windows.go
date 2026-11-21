@@ -43,7 +43,7 @@ const (
 	bootIdKey      = `BootId`
 )
 
-// MemoryStatusEx is the same as Windows structure MEMORYSTATUSEX
+// MemoryStatusEx 对应 Windows 的 MEMORYSTATUSEX 结构体。
 // https://msdn.microsoft.com/en-us/library/windows/desktop/aa366770(v=vs.85).aspx
 type MemoryStatusEx struct {
 	Length               uint32
@@ -57,7 +57,7 @@ type MemoryStatusEx struct {
 	AvailExtendedVirtual uint64
 }
 
-// PerformanceInfo is the same as Windows structure PERFORMANCE_INFORMATION
+// PerformanceInformation 对应 Windows 的 PERFORMANCE_INFORMATION 结构体。
 // https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-performance_information
 type PerformanceInformation struct {
 	cb                     uint32
@@ -77,36 +77,38 @@ type PerformanceInformation struct {
 }
 
 var (
-	// kernel32.dll system calls
+	// kernel32.dll 系统调用
 	modkernel32                 = windows.NewLazySystemDLL("kernel32.dll")
 	procGlobalMemoryStatusEx    = modkernel32.NewProc("GlobalMemoryStatusEx")
 	procGetActiveProcessorCount = modkernel32.NewProc("GetActiveProcessorCount")
-	// psapi.dll system calls
+	// psapi.dll 系统调用
 	modpsapi               = windows.NewLazySystemDLL("psapi.dll")
 	procGetPerformanceInfo = modpsapi.NewProc("GetPerformanceInfo")
 )
 
 const allProcessorGroups = 0xFFFF
 
-// NewPerfCounterClient creates a client using perf counters
+// NewPerfCounterClient 创建基于 Windows 性能计数器的节点统计客户端。
 func NewPerfCounterClient(logger klog.Logger) (Client, error) {
-	// Initialize the cache
+	// 初始化 CPU 用量缓存，首次采集后才有有效差分。
 	initCache := cpuUsageCoreNanoSecondsCache{0, 0}
 	return newClient(logger, &perfCounterNodeStatsClient{
 		cpuUsageCoreNanoSecondsCache: initCache,
 	})
 }
 
-// perfCounterNodeStatsClient is a client that provides Windows Stats via PerfCounters
+// perfCounterNodeStatsClient 通过性能计数器提供 Windows 节点统计。
 type perfCounterNodeStatsClient struct {
 	nodeMetrics
-	mu sync.RWMutex // mu protects nodeMetrics
+	mu sync.RWMutex // mu 保护 nodeMetrics
 	nodeInfo
-	// cpuUsageCoreNanoSecondsCache caches the cpu usage for nodes.
+	// cpuUsageCoreNanoSecondsCache 缓存节点 CPU 用量的前后两次采样值。
 	cpuUsageCoreNanoSecondsCache
 }
 
+// startMonitoring 初始化静态节点信息与性能计数器，并启动指标采集和 CPU 用量缓存两个周期任务。
 func (p *perfCounterNodeStatsClient) startMonitoring(logger klog.Logger) error {
+	// 启动时一次性读取内存容量和系统版本，后续不再变化。
 	memory, err := getPhysicallyInstalledSystemMemoryBytes()
 	if err != nil {
 		return err
@@ -145,11 +147,13 @@ func (p *perfCounterNodeStatsClient) startMonitoring(logger klog.Logger) error {
 	}
 
 	go wait.Forever(func() {
+		// 按 perfCounterUpdatePeriod 周期采集计数器数据。
 		p.collectMetricsData(logger, cpuCounter, memWorkingSetCounter, memCommittedBytesCounter, networkAdapterCounter)
 	}, perfCounterUpdatePeriod)
 
-	// Cache the CPU usage every defaultCachePeriod
+	// 按 defaultCachePeriod 缓存 CPU 用量，供瞬时速率差分使用。
 	go wait.Forever(func() {
+		// 滚动保存上一次与最新一次累计值，差值即一个缓存周期内的增量。
 		newValue := p.nodeMetrics.cpuUsageCoreNanoSeconds
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -162,7 +166,9 @@ func (p *perfCounterNodeStatsClient) startMonitoring(logger klog.Logger) error {
 	return nil
 }
 
+// getMachineInfo 汇总主机名、UUID、BootID、内存容量和 CPU 拓扑，供 cAdvisor 接口使用。
 func (p *perfCounterNodeStatsClient) getMachineInfo(logger klog.Logger) (*cadvisorapi.MachineInfo, error) {
+	// 主机名、系统 UUID 与 BootID 共同构成 MachineInfo 的稳定标识。
 	hostname, err := os.Hostname()
 	if err != nil {
 		return nil, err
@@ -186,14 +192,12 @@ func (p *perfCounterNodeStatsClient) getMachineInfo(logger klog.Logger) (*cadvis
 		BootID:         bootId,
 	}
 
-	// Topology must be populated unconditionally on Windows. It is consumed by
-	// kubelet startup validation (e.g. the ReservedSystemCPUs subset check in
-	// cmd/kubelet/app/server.go) and by the static CPU manager policy itself,
-	// neither of which is gated by WindowsCPUAndMemoryAffinity. The gate only
-	// controls whether kubelet pushes the resulting affinity to the runtime
-	// (see cpu_manager_windows.go and internal_container_lifecycle_windows.go),
-	// which is the actual feature surface — discovery of topology is not.
-	// This matches Linux, where cAdvisor always populates MachineInfo.Topology.
+	// Windows 上必须无条件填充拓扑：kubelet 启动校验（如 server.go 中
+	// ReservedSystemCPUs 子集检查）和 static CPU manager 策略都依赖它，
+	// 二者不受 WindowsCPUAndMemoryAffinity 门控。该门控只决定 kubelet 是否把
+	// 亲和性下发给运行时（见 cpu_manager_windows.go 与
+	// internal_container_lifecycle_windows.go），拓扑发现本身不在门控范围内。
+	// 这与 Linux 行为一致：cAdvisor 总会填充 MachineInfo.Topology。
 	numOfPhysicalCores, numOfSockets, topology, err := processorInfo(logger, relationAll)
 	if err != nil {
 		logger.Error(err, "failed to discover Windows CPU topology; continuing without topology data")
@@ -206,27 +210,26 @@ func (p *perfCounterNodeStatsClient) getMachineInfo(logger klog.Logger) (*cadvis
 	return mi, nil
 }
 
-// ProcessorCount returns the number of logical processors on the system.
-// runtime.NumCPU() will only return the information for a single Processor Group.
-// Since a single group can only hold 64 logical processors, this
-// means when there are more they will be divided into multiple groups.
-// For the above reason, procGetActiveProcessorCount is used to get the
-// cpu count for all processor groups of the windows node.
-// more notes for this issue:
-// same issue in moby: https://github.com/moby/moby/issues/38935#issuecomment-744638345
-// solution in hcsshim: https://github.com/microsoft/hcsshim/blob/master/internal/processorinfo/processor_count.go
+// ProcessorCount 返回系统逻辑处理器数量。
+// runtime.NumCPU() 只反映单个 Processor Group；一个组最多 64 个逻辑处理器，
+// 超过后会拆分为多个组，因此这里用 GetActiveProcessorCount 查询所有组的总数。
+// 参考：moby 中的同类问题 https://github.com/moby/moby/issues/38935#issuecomment-744638345
+// 以及 hcsshim 的解法 https://github.com/microsoft/hcsshim/blob/master/internal/processorinfo/processor_count.go
 func ProcessorCount() int {
+	// 查询所有处理器组；调用失败时退回 runtime.NumCPU()。
 	if amount := getActiveProcessorCount(allProcessorGroups); amount != 0 {
 		return int(amount)
 	}
 	return runtime.NumCPU()
 }
 
+// getActiveProcessorCount 通过系统调用查询指定处理器组的逻辑 CPU 数。
 func getActiveProcessorCount(groupNumber uint16) int {
 	r0, _, _ := syscall.Syscall(procGetActiveProcessorCount.Addr(), 1, uintptr(groupNumber), 0, 0)
 	return int(r0)
 }
 
+// getVersionInfo 返回启动时缓存的 Windows 内核版本与镜像版本。
 func (p *perfCounterNodeStatsClient) getVersionInfo() (*cadvisorapi.VersionInfo, error) {
 	return &cadvisorapi.VersionInfo{
 		KernelVersion:      p.nodeInfo.kernelVersion,
@@ -234,17 +237,22 @@ func (p *perfCounterNodeStatsClient) getVersionInfo() (*cadvisorapi.VersionInfo,
 	}, nil
 }
 
+// getNodeMetrics 在读锁保护下返回最近一次采集的节点指标快照。
 func (p *perfCounterNodeStatsClient) getNodeMetrics() (nodeMetrics, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.nodeMetrics, nil
 }
 
+// getNodeInfo 返回启动时采集的静态节点信息。
 func (p *perfCounterNodeStatsClient) getNodeInfo() nodeInfo {
 	return p.nodeInfo
 }
 
+// collectMetricsData 读取各性能计数器；任一读取失败就放弃本轮，
+// 避免发布部分字段陈旧、部分字段新鲜的混合快照。
 func (p *perfCounterNodeStatsClient) collectMetricsData(logger klog.Logger, cpuCounter, memWorkingSetCounter, memCommittedBytesCounter perfCounter, networkAdapterCounter *networkCounter) {
+	// 依次读取 CPU、内存工作集、提交内存和网络适配器计数器。
 	cpuValue, err := cpuCounter.getData()
 	cpuCores := ProcessorCount()
 	if err != nil {
@@ -270,6 +278,7 @@ func (p *perfCounterNodeStatsClient) collectMetricsData(logger klog.Logger, cpuC
 		return
 	}
 
+	// 整体替换 nodeMetrics，读侧只需短暂持锁即可拿到一致快照。
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.nodeMetrics = nodeMetrics{
@@ -282,22 +291,27 @@ func (p *perfCounterNodeStatsClient) collectMetricsData(logger klog.Logger, cpuC
 	}
 }
 
+// convertCPUValue 把性能计数器给出的全核 CPU 百分比换算为累计纳秒。
 func (p *perfCounterNodeStatsClient) convertCPUValue(cpuCores int, cpuValue uint64) uint64 {
-	// This converts perf counter data which is cpu percentage for all cores into nanoseconds.
-	// The formula is (cpuPercentage / 100.0) * #cores * 1e+9 (nano seconds). More info here:
+	// 把性能计数器给出的全核 CPU 百分比换算为累计纳秒：
+	// (cpuPercentage / 100.0) * 核数 * 1e9。背景见
 	// https://github.com/kubernetes/heapster/issues/650
 	newValue := p.nodeMetrics.cpuUsageCoreNanoSeconds + uint64((float64(cpuValue)/100.0)*float64(cpuCores)*1e9)
 	return newValue
 }
 
+// getCPUUsageNanoCores 用缓存的前后两次累计值差分估算瞬时 CPU 使用量（纳核心）。
 func (p *perfCounterNodeStatsClient) getCPUUsageNanoCores() uint64 {
+	// 按缓存周期归一化，避免周期长度变化影响速率含义。
 	cachePeriodSeconds := uint64(defaultCachePeriod / time.Second)
 	perfCounterUpdatePeriodSeconds := uint64(perfCounterUpdatePeriod / time.Second)
 	cpuUsageNanoCores := ((p.cpuUsageCoreNanoSecondsCache.latestValue - p.cpuUsageCoreNanoSecondsCache.previousValue) * perfCounterUpdatePeriodSeconds) / cachePeriodSeconds
 	return cpuUsageNanoCores
 }
 
+// getSystemUUID 从注册表读取并规范化系统 UUID。
 func getSystemUUID() (string, error) {
+	// HardwareConfig 下的 LastConfig 保存了主机/虚拟机的系统 UUID。
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\HardwareConfig`, registry.QUERY_VALUE)
 	if err != nil {
 		return "", fmt.Errorf("failed to open registry key HKLM\\SYSTEM\\HardwareConfig: %w", err)
@@ -309,24 +323,22 @@ func getSystemUUID() (string, error) {
 		return "", fmt.Errorf("failed to read registry value LastConfig from key HKLM\\SYSTEM\\HardwareConfig: %w", err)
 	}
 
+	// 注册表中的 UUID 带花括号且大小写不一，统一成无括号大写形式。
 	uuid = strings.Trim(uuid, "{")
 	uuid = strings.Trim(uuid, "}")
 	uuid = strings.ToUpper(uuid)
 	return uuid, nil
 }
 
+// getPhysicallyInstalledSystemMemoryBytes 通过 GlobalMemoryStatusEx 读取操作系统可用的物理内存。
 func getPhysicallyInstalledSystemMemoryBytes() (uint64, error) {
-	// We use GlobalMemoryStatusEx instead of GetPhysicallyInstalledSystemMemory
-	// on Windows node for the following reasons:
-	// 1. GetPhysicallyInstalledSystemMemory retrieves the amount of physically
-	// installed RAM from the computer's SMBIOS firmware tables.
+	// 这里用 GlobalMemoryStatusEx 而不是 GetPhysicallyInstalledSystemMemory：
+	// 后者从 SMBIOS 固件表读取物理内存，部分虚拟机读不到并返回 ERROR_INVALID_DATA。
 	// https://msdn.microsoft.com/en-us/library/windows/desktop/cc300158(v=vs.85).aspx
-	// On some VM, it is unable to read data from SMBIOS and fails with ERROR_INVALID_DATA.
-	// 2. On Linux node, total physical memory is read from MemTotal in /proc/meminfo.
-	// GlobalMemoryStatusEx returns the amount of physical memory that is available
-	// for the operating system to use. The amount returned by GlobalMemoryStatusEx
-	// is closer in parity with Linux
+	// 而 Linux 的 total memory 取自 /proc/meminfo 的 MemTotal；
+	// GlobalMemoryStatusEx 返回操作系统可用的物理内存，与 Linux 语义更接近。
 	// https://www.kernel.org/doc/Documentation/filesystems/proc.txt
+	// 调用前必须填写结构体长度，Windows API 依赖该字段做版本兼容。
 	var statex MemoryStatusEx
 	statex.Length = uint32(unsafe.Sizeof(statex))
 	ret, _, _ := procGlobalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&statex)))
@@ -338,7 +350,9 @@ func getPhysicallyInstalledSystemMemoryBytes() (uint64, error) {
 	return statex.TotalPhys, nil
 }
 
+// GetPerformanceInfo 调用 psapi 获取 Windows 性能信息结构体。
 func GetPerformanceInfo() (*PerformanceInformation, error) {
+	// 同样先填写 cb 长度字段再调用。
 	var pi PerformanceInformation
 	pi.cb = uint32(unsafe.Sizeof(pi))
 	ret, _, _ := procGetPerformanceInfo.Call(uintptr(unsafe.Pointer(&pi)), uintptr(pi.cb))
@@ -348,7 +362,9 @@ func GetPerformanceInfo() (*PerformanceInformation, error) {
 	return &pi, nil
 }
 
+// getBootID 从注册表读取本次启动标识，用于区分节点是否重启。
 func getBootID() (string, error) {
+	// BootId 由内核在每次启动时写入 PrefetchParameters。
 	regKey, err := registry.OpenKey(registry.LOCAL_MACHINE, bootIdRegistry, registry.READ)
 	if err != nil {
 		return "", err

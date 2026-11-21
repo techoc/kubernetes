@@ -34,11 +34,11 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// monitorCallback is the function called when a device's health state changes,
-// or new devices are reported, or old devices are deleted.
-// Updated contains the most recent state of the Device.
+// monitorCallback 在设备健康状态变化、上报新设备或删除旧设备时被调用，
+// devices 为设备的最新状态。
 type monitorCallback func(logger klog.Logger, resourceName string, devices []*pluginapi.Device)
 
+// newMockPluginManager 返回所有回调均为空实现的 mock 插件管理器。
 func newMockPluginManager() *mockPluginManager {
 	return &mockPluginManager{
 		func(string) error { return nil },
@@ -48,6 +48,7 @@ func newMockPluginManager() *mockPluginManager {
 	}
 }
 
+// mockPluginManager 通过可替换的函数字段模拟插件管理器。
 type mockPluginManager struct {
 	cleanupPluginDirectory     func(string) error
 	pluginConnected            func(string, plugin.DevicePlugin) error
@@ -55,26 +56,32 @@ type mockPluginManager struct {
 	pluginListAndWatchReceiver func(string, *pluginapi.ListAndWatchResponse)
 }
 
+// CleanupPluginDirectory 委托给注入的清理函数。
 func (m *mockPluginManager) CleanupPluginDirectory(r string) error {
 	return m.cleanupPluginDirectory(r)
 }
 
+// PluginConnected 委托给注入的连接回调。
 func (m *mockPluginManager) PluginConnected(_ context.Context, r string, p plugin.DevicePlugin) error {
 	return m.pluginConnected(r, p)
 }
 
+// PluginDisconnected 委托给注入的断连回调。
 func (m *mockPluginManager) PluginDisconnected(logger klog.Logger, r string, s string) {
 	m.pluginDisconnected(logger, r, s)
 }
 
+// PluginListAndWatchReceiver 委托给注入的 ListAndWatch 回调。
 func (m *mockPluginManager) PluginListAndWatchReceiver(_ klog.Logger, r string, lr *pluginapi.ListAndWatchResponse) {
 	m.pluginListAndWatchReceiver(r, lr)
 }
 
+// esocketName 生成带纳秒时间戳的唯一 socket 文件名，避免用例冲突。
 func esocketName() string {
 	return fmt.Sprintf("mock%d.sock", time.Now().UnixNano())
 }
 
+// TestNewEndpoint 验证 endpoint 能完成创建与清理流程。
 func TestNewEndpoint(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	socket := filepath.Join(os.TempDir(), esocketName())
@@ -90,6 +97,7 @@ func TestNewEndpoint(t *testing.T) {
 	}()
 }
 
+// TestRun 验证 endpoint 先上报注册设备，再上报更新后的设备列表。
 func TestRun(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	socket := filepath.Join(os.TempDir(), esocketName())
@@ -109,13 +117,12 @@ func TestRun(t *testing.T) {
 	callbackCount := 0
 	callbackChan := make(chan int)
 	callback := func(_ klog.Logger, n string, devices []*pluginapi.Device) {
-		// Should be called twice:
-		// one for plugin registration, one for plugin update.
+		// 回调应被调用两次：一次插件注册，一次插件更新。
 		if callbackCount > 2 {
 			t.FailNow()
 		}
 
-		// Check plugin registration
+		// 校验注册时上报的初始设备列表。
 		if callbackCount == 0 {
 			require.Len(t, devices, 3)
 			require.Equal(t, devices[0].ID, devs[0].ID)
@@ -126,7 +133,7 @@ func TestRun(t *testing.T) {
 			require.Equal(t, devices[2].Health, devs[2].Health)
 		}
 
-		// Check plugin update
+		// 校验更新后上报的设备列表。
 		if callbackCount == 1 {
 			require.Len(t, devices, 3)
 			require.Equal(t, devices[0].ID, updated[0].ID)
@@ -148,17 +155,18 @@ func TestRun(t *testing.T) {
 	}()
 
 	go e.client.Run(tCtx)
-	// Wait for the first callback to be issued.
+	// 等待第一次回调（注册）。
 	<-callbackChan
 
 	p.Update(updated)
 
-	// Wait for the second callback to be issued.
+	// 等待第二次回调（更新）。
 	<-callbackChan
 
 	require.Equal(t, 2, callbackCount)
 }
 
+// TestAllocate 验证 Allocate 请求会转发给插件并原样返回分配结果。
 func TestAllocate(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	socket := filepath.Join(os.TempDir(), esocketName())
@@ -203,7 +211,7 @@ func TestAllocate(t *testing.T) {
 	})
 
 	go e.client.Run(tCtx)
-	// Wait for the callback to be issued.
+	// 等待注册回调，确保 client 已连接。
 	select {
 	case <-callbackChan:
 		break
@@ -211,11 +219,13 @@ func TestAllocate(t *testing.T) {
 		t.FailNow()
 	}
 
+	// 分配结果应与插件返回的响应逐字段一致。
 	respOut, err := e.allocate(tCtx, []string{"ADeviceId"})
 	require.NoError(t, err)
 	require.True(t, proto.Equal(resp, respOut))
 }
 
+// TestGetPreferredAllocation 验证首选分配请求会转发给插件并原样返回结果。
 func TestGetPreferredAllocation(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
 	socket := filepath.Join(os.TempDir(), esocketName())
@@ -241,7 +251,7 @@ func TestGetPreferredAllocation(t *testing.T) {
 	})
 
 	go e.client.Run(tCtx)
-	// Wait for the callback to be issued.
+	// 等待注册回调，确保 client 已连接。
 	select {
 	case <-callbackChan:
 		break
@@ -249,15 +259,18 @@ func TestGetPreferredAllocation(t *testing.T) {
 		t.FailNow()
 	}
 
+	// 首选分配结果应与插件返回的响应一致。
 	respOut, err := e.getPreferredAllocation(tCtx, []string{}, []string{}, -1)
 	require.NoError(t, err)
 	require.True(t, proto.Equal(resp, respOut))
 }
 
+// esetup 启动测试插件 stub、连接 client 并构造 endpoint，供各用例复用。
 func esetup(ctx context.Context, t *testing.T, devs []*pluginapi.Device, socket, resourceName string, callback monitorCallback) (*plugin.Stub, *endpointImpl) {
 	logger := klog.FromContext(ctx)
 	m := newMockPluginManager()
 
+	// ListAndWatch 响应先拷贝设备列表，再交给用例回调。
 	m.pluginListAndWatchReceiver = func(r string, resp *pluginapi.ListAndWatchResponse) {
 		var newDevs []*pluginapi.Device
 		for _, d := range resp.Devices {
@@ -283,6 +296,7 @@ func esetup(ctx context.Context, t *testing.T, devs []*pluginapi.Device, socket,
 	err = c.Connect(ctx)
 	require.NoError(t, err)
 
+	// 等待 PluginConnected 回调拿到真正的 DevicePlugin 实现。
 	wg.Wait()
 
 	e := newEndpointImpl(dp)
@@ -295,6 +309,7 @@ func esetup(ctx context.Context, t *testing.T, devs []*pluginapi.Device, socket,
 	return p, e
 }
 
+// ecleanup 停止插件 stub 并断开 client。
 func ecleanup(logger klog.Logger, p *plugin.Stub, e *endpointImpl) error {
 	if err := p.Stop(logger); err != nil {
 		return err

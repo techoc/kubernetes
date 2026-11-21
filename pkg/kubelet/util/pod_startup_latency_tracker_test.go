@@ -31,17 +31,20 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// frozenTime 是测试统一的冻结时间，配合 fake clock 保证时间逻辑可重复。
 var frozenTime = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
 const (
+	// 测试固定使用的 Pod UID 与指标名称。
 	uid         = "3c1df8a9-11a8-4791-aeae-184c18cca686"
 	metricsName = "kubelet_pod_start_sli_duration_seconds"
 )
 
+// TestNoEvents 验证没有任何 Pod 事件时不会记录启动延迟指标。
 func TestNoEvents(t *testing.T) {
 	t.Run("metrics registered; no incoming events", func(t *testing.T) {
 
-		// expects no metrics in the output
+		// 期望指标输出为空
 		wants := ""
 
 		metrics.Register()
@@ -60,12 +63,13 @@ func TestNoEvents(t *testing.T) {
 	})
 }
 
+// TestPodsRunningBeforeKubeletStarted 验证 kubelet 启动前已在运行的 Pod 不会被计入启动延迟。
 func TestPodsRunningBeforeKubeletStarted(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
 	t.Run("pod was running for 10m before kubelet started", func(t *testing.T) {
 
-		// expects no metrics in the output
+		// 期望指标输出为空
 		wants := ""
 
 		metrics.Register()
@@ -91,6 +95,7 @@ func TestPodsRunningBeforeKubeletStarted(t *testing.T) {
 	})
 }
 
+// TestSinglePodOneImageDownloadRecorded 验证单 Pod、单次镜像拉取的 SLI 计算与直方图输出。
 func TestSinglePodOneImageDownloadRecorded(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -141,7 +146,7 @@ kubelet_pod_start_sli_duration_seconds_count 1
 		podInit := buildInitializingPod()
 		tracker.ObservedPodOnWatch(logger, podInit, frozenTime)
 
-		// image pulling took 100ms
+		// 模拟镜像拉取耗时 100ms
 		tracker.RecordImageStartedPulling(podInit.UID)
 		fakeClock.Step(time.Millisecond * 100)
 		tracker.RecordImageFinishedPulling(podInit.UID)
@@ -158,14 +163,14 @@ kubelet_pod_start_sli_duration_seconds_count 1
 		podStarted := buildRunningPod()
 		tracker.RecordStatusUpdated(logger, podStarted)
 
-		// 3s later, observe the same pod on watch
+		// 3 秒后在 watch 中再次观察到同一个 Pod
 		tracker.ObservedPodOnWatch(logger, podStarted, frozenTime.Add(time.Second*3))
 
 		if err := testutil.GatherAndCompare(metrics.GetGather(), strings.NewReader(wants), metricsName); err != nil {
 			t.Fatal(err)
 		}
 
-		// cleanup
+		// 清理测试状态
 		tracker.DeletePodStartupState(podStarted.UID)
 
 		assert.Empty(t, tracker.pods)
@@ -173,6 +178,7 @@ kubelet_pod_start_sli_duration_seconds_count 1
 	})
 }
 
+// TestSinglePodMultipleDownloadsAndRestartsRecorded 验证重叠镜像拉取按时间并集扣除，且重复观察不会重复记录指标。
 func TestSinglePodMultipleDownloadsAndRestartsRecorded(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -251,18 +257,18 @@ kubelet_pod_start_sli_duration_seconds_count 1
 			t.Errorf("expected total pulling time: %v but got %v", expectedTime, totalTime)
 		}
 
-		// pod started
+		// Pod 已启动
 		podStarted := buildRunningPod()
 		tracker.RecordStatusUpdated(logger, podStarted)
 
-		// at 30s observe the same pod on watch
+		// 在 30 秒时于 watch 中再次观察到同一个 Pod
 		tracker.ObservedPodOnWatch(logger, podStarted, frozenTime.Add(time.Second*30))
 
 		if err := testutil.GatherAndCompare(metrics.GetGather(), strings.NewReader(wants), metricsName); err != nil {
 			t.Fatal(err)
 		}
 
-		// any new pod observations should not impact the metrics, as the pod should be recorder only once
+		// 后续 Pod 观察不应改变指标，因为每个 Pod 只记录一次
 		tracker.ObservedPodOnWatch(logger, podStarted, frozenTime.Add(time.Second*150))
 		tracker.ObservedPodOnWatch(logger, podStarted, frozenTime.Add(time.Second*200))
 		tracker.ObservedPodOnWatch(logger, podStarted, frozenTime.Add(time.Second*250))
@@ -271,7 +277,7 @@ kubelet_pod_start_sli_duration_seconds_count 1
 			t.Fatal(err)
 		}
 
-		// cleanup
+		// 清理测试状态
 		tracker.DeletePodStartupState(podStarted.UID)
 
 		assert.Empty(t, tracker.pods)
@@ -279,6 +285,7 @@ kubelet_pod_start_sli_duration_seconds_count 1
 	})
 }
 
+// TestPodWithInitContainersAndMainContainers 验证 init 容器运行时长会从 Pod 启动 SLI 中扣除。
 func TestPodWithInitContainersAndMainContainers(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -329,40 +336,40 @@ kubelet_pod_start_sli_duration_seconds_count 1
 		podInit := buildInitializingPod("init-1", "init-2")
 		tracker.ObservedPodOnWatch(logger, podInit, frozenTime)
 
-		// Init container 1 image pull: 0.5s-1.5s
+		// init 容器 1 镜像拉取：0.5s-1.5s
 		fakeClock.SetTime(frozenTime.Add(time.Millisecond * 500))
 		tracker.RecordImageStartedPulling(podInit.UID)
 		fakeClock.SetTime(frozenTime.Add(time.Millisecond * 1500))
 		tracker.RecordImageFinishedPulling(podInit.UID)
-		// Init container 1 runtime: 2s-4s
+		// init 容器 1 运行时长：2s-4s
 		fakeClock.SetTime(frozenTime.Add(time.Second * 2))
 		tracker.RecordInitContainerStarted(types.UID(uid), fakeClock.Now())
 		fakeClock.SetTime(frozenTime.Add(time.Second * 4))
 		tracker.RecordInitContainerFinished(types.UID(uid), fakeClock.Now())
 
-		// Init container 2 image pull: 4.2s-5.2s
+		// init 容器 2 镜像拉取：4.2s-5.2s
 		fakeClock.SetTime(frozenTime.Add(time.Millisecond * 4200))
 		tracker.RecordImageStartedPulling(podInit.UID)
 		fakeClock.SetTime(frozenTime.Add(time.Millisecond * 5200))
 		tracker.RecordImageFinishedPulling(podInit.UID)
-		// Init container 2 runtime: 5.5s-7s
+		// init 容器 2 运行时长：5.5s-7s
 		fakeClock.SetTime(frozenTime.Add(time.Millisecond * 5500))
 		tracker.RecordInitContainerStarted(types.UID(uid), fakeClock.Now())
 		fakeClock.SetTime(frozenTime.Add(time.Second * 7))
 		tracker.RecordInitContainerFinished(types.UID(uid), fakeClock.Now())
 
-		// Main container 1 image pull: 7.2s-8.2s
+		// 主容器 1 镜像拉取：7.2s-8.2s
 		fakeClock.SetTime(frozenTime.Add(time.Millisecond * 7200))
 		tracker.RecordImageStartedPulling(podInit.UID)
 		fakeClock.SetTime(frozenTime.Add(time.Millisecond * 8200))
 		tracker.RecordImageFinishedPulling(podInit.UID)
-		// Main container 2 image pull: 7.3s-8.5s
+		// 主容器 2 镜像拉取：7.3s-8.5s
 		fakeClock.SetTime(frozenTime.Add(time.Millisecond * 7300))
 		tracker.RecordImageStartedPulling(podInit.UID)
 		fakeClock.SetTime(frozenTime.Add(time.Millisecond * 8500))
 		tracker.RecordImageFinishedPulling(podInit.UID)
 
-		// Pod becomes running at 11s
+		// Pod 在 11 秒时进入运行状态
 		podStarted := buildRunningPod()
 		tracker.RecordStatusUpdated(logger, podStarted)
 		tracker.ObservedPodOnWatch(logger, podStarted, frozenTime.Add(time.Second*11))
@@ -385,7 +392,7 @@ kubelet_pod_start_sli_duration_seconds_count 1
 
 		assert.Len(t, state.imagePullSessions, 4, "Should have 4 image pull sessions")
 
-		// cleanup
+		// 清理测试状态
 		tracker.DeletePodStartupState(podStarted.UID)
 
 		assert.Empty(t, tracker.pods)
@@ -393,6 +400,7 @@ kubelet_pod_start_sli_duration_seconds_count 1
 	})
 }
 
+// TestImmediatelySchedulablePods 验证不可立即调度的 Pod 会被排除在跟踪与指标之外。
 func TestImmediatelySchedulablePods(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -408,7 +416,7 @@ func TestImmediatelySchedulablePods(t *testing.T) {
 			clock:        fakeClock,
 		}
 
-		// pod that is not immediately schedulable (PodScheduled=False)
+		// PodScheduled=False 表示该 Pod 不可立即调度
 		podNotSchedulable := buildInitializingPod()
 		podNotSchedulable.UID = "not-schedulable-pod"
 		podNotSchedulable.Status.Conditions = []corev1.PodCondition{
@@ -421,7 +429,7 @@ func TestImmediatelySchedulablePods(t *testing.T) {
 		tracker.ObservedPodOnWatch(logger, podNotSchedulable, frozenTime)
 		assert.Empty(t, tracker.pods, "Pod with PodScheduled=False should not be tracked")
 
-		// pod that is immediately schedulable (PodScheduled=True)
+		// PodScheduled=True 表示该 Pod 可立即调度
 		podSchedulable := buildInitializingPod()
 		podSchedulable.UID = "schedulable-pod"
 		podSchedulable.Status.Conditions = []corev1.PodCondition{
@@ -434,18 +442,18 @@ func TestImmediatelySchedulablePods(t *testing.T) {
 		tracker.ObservedPodOnWatch(logger, podSchedulable, frozenTime)
 		assert.Len(t, tracker.pods, 1, "Pod with PodScheduled=True should be tracked")
 
-		// pod without PodScheduled condition
+		// 缺少 PodScheduled 条件时默认按可调度处理
 		podNoCondition := buildInitializingPod()
 		podNoCondition.UID = "no-condition-pod"
 		tracker.ObservedPodOnWatch(logger, podNoCondition, frozenTime)
 		assert.Len(t, tracker.pods, 2, "Pod without PodScheduled condition should be tracked by default")
 
-		// Verify metrics are empty
+		// 确认未产生指标
 		if err := testutil.GatherAndCompare(metrics.GetGather(), strings.NewReader(wants), metricsName); err != nil {
 			t.Fatal(err)
 		}
 
-		// cleanup
+		// 清理测试状态
 		tracker.DeletePodStartupState(podSchedulable.UID)
 		tracker.DeletePodStartupState(podNoCondition.UID)
 		assert.Empty(t, tracker.pods)
@@ -463,13 +471,13 @@ func TestImmediatelySchedulablePods(t *testing.T) {
 			clock: fakeClock,
 		}
 
-		// First observe pod as schedulable
+		// 先观察到 Pod 可调度
 		podSchedulable := buildInitializingPod()
 		podSchedulable.UID = "becomes-unschedulable"
 		tracker.ObservedPodOnWatch(logger, podSchedulable, frozenTime)
 		assert.Len(t, tracker.pods, 1, "Pod should be tracked initially")
 
-		// Later observe the same pod as unschedulable
+		// 之后观察到同一 Pod 变为不可调度
 		podUnschedulable := buildInitializingPod()
 		podUnschedulable.UID = "becomes-unschedulable"
 		podUnschedulable.Status.Conditions = []corev1.PodCondition{
@@ -483,7 +491,7 @@ func TestImmediatelySchedulablePods(t *testing.T) {
 		tracker.ObservedPodOnWatch(logger, podUnschedulable, frozenTime.Add(time.Second))
 		assert.Empty(t, tracker.pods, "Pod should be removed when it becomes unschedulable")
 
-		// Verify no metrics
+		// 确认没有产生指标
 		if err := testutil.GatherAndCompare(metrics.GetGather(), strings.NewReader(wants), metricsName); err != nil {
 			t.Fatal(err)
 		}
@@ -503,7 +511,7 @@ func TestImmediatelySchedulablePods(t *testing.T) {
 			clock:        fakeClock,
 		}
 
-		// First observe pod as unschedulable
+		// 先观察到 Pod 不可调度
 		podUnschedulable := buildInitializingPod()
 		podUnschedulable.UID = "unschedulable-first"
 		podUnschedulable.Status.Conditions = []corev1.PodCondition{
@@ -518,7 +526,7 @@ func TestImmediatelySchedulablePods(t *testing.T) {
 		assert.Empty(t, tracker.pods, "Pod should not be tracked when first observed as unschedulable")
 		assert.True(t, tracker.excludedPods[podUnschedulable.UID], "Pod should be in excludedPods map")
 
-		// Later observe the same pod as schedulable (e.g., after cluster autoscaling)
+		// 之后观察到同一 Pod 变为可调度（例如集群自动扩缩容后）
 		podSchedulable := buildInitializingPod()
 		podSchedulable.UID = "unschedulable-first"
 		podSchedulable.Status.Conditions = []corev1.PodCondition{
@@ -533,18 +541,18 @@ func TestImmediatelySchedulablePods(t *testing.T) {
 		assert.Empty(t, tracker.pods, "Pod should remain excluded even after becoming schedulable")
 		assert.True(t, tracker.excludedPods[podSchedulable.UID], "Pod should remain in excludedPods map")
 
-		// Complete the startup process - should not record metrics
+		// 完成启动流程，仍不应记录指标
 		podRunning := buildRunningPod()
 		podRunning.UID = "unschedulable-first"
 		tracker.RecordStatusUpdated(logger, podRunning)
 		tracker.ObservedPodOnWatch(logger, podRunning, frozenTime.Add(time.Second*10))
 
-		// Verify no SLI metrics recorded
+		// 确认没有记录 SLI 指标
 		if err := testutil.GatherAndCompare(metrics.GetGather(), strings.NewReader(wants), metricsName); err != nil {
 			t.Fatal(err)
 		}
 
-		// cleanup
+		// 清理测试状态
 		tracker.DeletePodStartupState(podRunning.UID)
 		assert.Empty(t, tracker.pods)
 		assert.False(t, tracker.excludedPods[podRunning.UID], "Pod should be removed from excludedPods on cleanup")
@@ -552,6 +560,7 @@ func TestImmediatelySchedulablePods(t *testing.T) {
 	})
 }
 
+// TestStatefulPodExclusion 验证使用持久化存储的有状态 Pod 不参与启动 SLI 统计。
 func TestStatefulPodExclusion(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -566,7 +575,7 @@ func TestStatefulPodExclusion(t *testing.T) {
 			clock: fakeClock,
 		}
 
-		// Create a stateful pod (with PVC volume)
+		// 创建使用 PVC 的有状态 Pod
 		statefulPod := buildInitializingPod()
 		statefulPod.UID = "stateful-pod"
 		statefulPod.Spec.Volumes = []corev1.Volume{
@@ -587,21 +596,22 @@ func TestStatefulPodExclusion(t *testing.T) {
 		statefulPodRunning.Spec.Volumes = statefulPod.Spec.Volumes
 		tracker.RecordStatusUpdated(logger, statefulPodRunning)
 
-		// Observe pod as running after 3 seconds
+		// 3 秒后观察到 Pod 已运行
 		tracker.ObservedPodOnWatch(logger, statefulPodRunning, frozenTime.Add(time.Second*3))
 
-		// Verify no SLI metrics for stateful pod (
+		// 确认有状态 Pod 没有 SLI 指标
 		if err := testutil.GatherAndCompare(metrics.GetGather(), strings.NewReader(wantsSLI), metricsName); err != nil {
 			t.Fatal(err)
 		}
 
-		// cleanup
+		// 清理测试状态
 		tracker.DeletePodStartupState(statefulPod.UID)
 		assert.Empty(t, tracker.pods)
 		metrics.PodStartSLIDuration.Reset()
 	})
 }
 
+// TestIsStatefulPod 验证按卷类型判定 Pod 是否为有状态（PVC 或 hostPath 视为有状态）。
 func TestIsStatefulPod(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -734,6 +744,7 @@ func TestIsStatefulPod(t *testing.T) {
 	}
 }
 
+// TestFirstNetworkPodMetrics 验证只记录节点上第一个非 hostNetwork Pod 的启动耗时。
 func TestFirstNetworkPodMetrics(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -754,7 +765,7 @@ kubelet_first_network_pod_start_sli_duration_seconds 30
 			clock: fakeClock,
 		}
 
-		// hostNetwork pods should not be tracked
+		// hostNetwork Pod 不应被跟踪
 		hostNetworkPodInitializing := buildInitializingPod()
 		hostNetworkPodInitializing.UID = "11111-22222"
 		hostNetworkPodInitializing.Spec.HostNetwork = true
@@ -765,22 +776,22 @@ kubelet_first_network_pod_start_sli_duration_seconds 30
 		hostNetworkPodStarted.Spec.HostNetwork = true
 		tracker.RecordStatusUpdated(logger, hostNetworkPodStarted)
 
-		// track only the first pod with network
+		// 只跟踪第一个使用网络命名空间的 Pod
 		podInitializing := buildInitializingPod()
 		tracker.ObservedPodOnWatch(logger, podInitializing, frozenTime)
 
-		// pod started
+		// Pod 已启动
 		podStarted := buildRunningPod()
 		tracker.RecordStatusUpdated(logger, podStarted)
 
-		// at 30s observe the same pod on watch
+		// 在 30 秒时于 watch 中再次观察到同一个 Pod
 		tracker.ObservedPodOnWatch(logger, podStarted, frozenTime.Add(time.Second*30))
 
 		if err := testutil.GatherAndCompare(metrics.GetGather(), strings.NewReader(wants), "kubelet_first_network_pod_start_sli_duration_seconds", "kubelet_first_network_pod_start_total_duration_seconds"); err != nil {
 			t.Fatal(err)
 		}
 
-		// any new pod observations should not impact the metrics, as the pod should be recorder only once
+		// 后续 Pod 观察不应改变指标，因为每个 Pod 只记录一次
 		tracker.ObservedPodOnWatch(logger, podStarted, frozenTime.Add(time.Second*150))
 		tracker.ObservedPodOnWatch(logger, podStarted, frozenTime.Add(time.Second*200))
 		tracker.ObservedPodOnWatch(logger, podStarted, frozenTime.Add(time.Second*250))
@@ -789,7 +800,7 @@ kubelet_first_network_pod_start_sli_duration_seconds 30
 			t.Fatal(err)
 		}
 
-		// cleanup
+		// 清理测试状态
 		tracker.DeletePodStartupState(hostNetworkPodStarted.UID)
 		tracker.DeletePodStartupState(podStarted.UID)
 
@@ -798,12 +809,13 @@ kubelet_first_network_pod_start_sli_duration_seconds 30
 	})
 }
 
+// buildInitializingPod 构造处于 PodInitializing 状态的 Pod，可选地附加 init 容器。
 func buildInitializingPod(initContainerNames ...string) *corev1.Pod {
 	pod := buildPodWithStatus([]corev1.ContainerStatus{
 		{State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "PodInitializing"}}},
 	})
 
-	// Add init containers if specified
+	// 按需添加 init 容器
 	if len(initContainerNames) > 0 {
 		pod.Spec.InitContainers = make([]corev1.Container, len(initContainerNames))
 		for i, name := range initContainerNames {
@@ -814,12 +826,14 @@ func buildInitializingPod(initContainerNames ...string) *corev1.Pod {
 	return pod
 }
 
+// buildRunningPod 构造容器已运行、时间戳固定在 frozenTime 的 Pod。
 func buildRunningPod() *corev1.Pod {
 	return buildPodWithStatus([]corev1.ContainerStatus{
 		{State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(frozenTime)}}},
 	})
 }
 
+// buildPodWithStatus 以固定 UID 和创建时间构造带容器状态的 Pod。
 func buildPodWithStatus(cs []corev1.ContainerStatus) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -832,6 +846,7 @@ func buildPodWithStatus(cs []corev1.ContainerStatus) *corev1.Pod {
 	}
 }
 
+// TestCalculateImagePullingTime 验证多次镜像拉取会话按时间区间并集计算总耗时。
 func TestCalculateImagePullingTime(t *testing.T) {
 	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 
@@ -892,7 +907,7 @@ func TestCalculateImagePullingTime(t *testing.T) {
 	})
 
 	t.Run("completely overlapped and partially overlapped sessions with gap", func(t *testing.T) {
-		// Test mixing completely overlapped sessions with separate sessions
+		// 混合完全重叠的会话与相互独立的会话
 		sessions := []imagePullSession{
 			{start: baseTime, end: baseTime.Add(8 * time.Second)},                        // 0-8s
 			{start: baseTime.Add(2 * time.Second), end: baseTime.Add(6 * time.Second)},   // 2-6s (completely inside first)
@@ -902,7 +917,7 @@ func TestCalculateImagePullingTime(t *testing.T) {
 			{start: baseTime.Add(17 * time.Second), end: baseTime.Add(21 * time.Second)}, // 17-21s (partially overlapping fourth and fifth)
 		}
 		result := calculateImagePullingTime(sessions)
-		// 8s (first group) + 6s (second group) = 14s
+		// 8s（第一组）+ 6s（第二组）= 14s
 		assert.Equal(t, 14*time.Second, result)
 	})
 }

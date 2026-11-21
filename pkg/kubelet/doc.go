@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package kubelet is the package that contains the libraries that drive the Kubelet binary.
-// The kubelet is responsible for node level pod management.  It runs on each worker in the cluster.
+// Package kubelet 包含驱动 kubelet 二进制程序的各个库。
+// kubelet 负责节点级 Pod 管理，运行在集群中的每个工作节点上。
 package kubelet

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// worker_test.go 覆盖探测 worker 的状态机：初始延迟、成功/失败阈值、hold 语义、重启规则与清理逻辑。
 package prober
 
 import (
@@ -38,20 +39,21 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// init 是测试包的初始化钩子；当前没有额外初始化逻辑。
 func init() {
 }
 
-// newTestWorkerWithRestartableInitContainer creates a test worker with an init container setup
+// newTestWorkerWithRestartableInitContainer 创建一个以重启式 init 容器（sidecar）为探测对象的测试 worker。
 func newTestWorkerWithRestartableInitContainer(m *manager, probeType probeType) *worker {
 	pod := getTestPod()
 
-	// Set up init container with restart policy
+	// 把首个容器改为 restartPolicy=Always 的 init 容器。
 	initContainer := pod.Spec.Containers[0]
 	initContainer.Name = testContainerName
 	restartPolicy := v1.ContainerRestartPolicyAlways
 	initContainer.RestartPolicy = &restartPolicy
 
-	// Move container to init containers and add a regular container
+	// 该容器移入 InitContainers，同时保留一个普通容器以模拟 sidecar 场景。
 	pod.Spec.InitContainers = []v1.Container{initContainer}
 	pod.Spec.Containers = []v1.Container{{
 		Name: "main-container",
@@ -60,12 +62,13 @@ func newTestWorkerWithRestartableInitContainer(m *manager, probeType probeType) 
 	return newWorker(m, probeType, pod, initContainer)
 }
 
+// TestDoProbe 验证三种探针在各种 Pod/容器状态下的 doProbe 返回值与结果写入行为。
 func TestDoProbe(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
 
 	for _, probeType := range [...]probeType{liveness, readiness, startup} {
-		// Test statuses.
+		// 构造运行中、等待中、已终止、容器名不匹配、Pod 失败等状态。
 		runningStatus := getTestRunningStatusWithStarted(probeType != startup)
 		pendingStatus := getTestRunningStatusWithStarted(probeType != startup)
 		pendingStatus.ContainerStatuses[0].State.Running = nil
@@ -180,6 +183,7 @@ func TestDoProbe(t *testing.T) {
 	}
 }
 
+// TestDoProbeWithContainerRestartRules 验证容器级 restartPolicy 与 restartPolicyRules 对探测是否继续的影响。
 func TestDoProbeWithContainerRestartRules(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.ContainerRestartRules: true,
@@ -299,6 +303,7 @@ func TestDoProbeWithContainerRestartRules(t *testing.T) {
 	}
 }
 
+// TestDoProbeWithContainerRestartAllContainers 验证 RestartAllContainers 规则下探测的继续/停止行为。
 func TestDoProbeWithContainerRestartAllContainers(t *testing.T) {
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.ContainerRestartRules:                true,
@@ -362,7 +367,7 @@ func TestDoProbeWithContainerRestartAllContainers(t *testing.T) {
 				},
 				podStatus: func() v1.PodStatus {
 					status := getTestRunningStatusWithFailedContainer()
-					// Mark the trigger container as terminated.
+					// 触发容器已终止，用于模拟 restartAllContainers 的触发条件。
 					status.ContainerStatuses = append(status.ContainerStatuses, v1.ContainerStatus{
 						Name: "trigger",
 						State: v1.ContainerState{
@@ -394,7 +399,7 @@ func TestDoProbeWithContainerRestartAllContainers(t *testing.T) {
 					pod.Spec.Containers = append(pod.Spec.Containers, triggerContainer)
 					return *pod
 				},
-				// After cleanup, the container will be in Waiting state, and pod in Pending state
+				// 清理后容器处于 Waiting、Pod 处于 Pending，探测应继续等待。
 				podStatus:      getTestPendingStatus,
 				expectContinue: true,
 			},
@@ -414,6 +419,7 @@ func TestDoProbeWithContainerRestartAllContainers(t *testing.T) {
 	}
 }
 
+// TestInitialDelay 验证初始延迟期间各探针的默认结果与延迟结束后的正常探测。
 func TestInitialDelay(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
@@ -425,7 +431,7 @@ func TestInitialDelay(t *testing.T) {
 		m.statusManager.SetPodStatus(logger, w.pod, getTestRunningStatusWithStarted(probeType != startup))
 
 		expectContinue(t, w, w.doProbe(ctx), "during initial delay")
-		// Default value depends on probe, Success for liveness, Failure for readiness, Unknown for startup
+		// 初始延迟内的默认结果因探针而异：liveness=Success，readiness=Failure，startup=Unknown。
 		switch probeType {
 		case liveness:
 			expectResult(t, w, results.Success, "during initial delay")
@@ -435,18 +441,19 @@ func TestInitialDelay(t *testing.T) {
 			expectResult(t, w, results.Unknown, "during initial delay")
 		}
 
-		// 100 seconds later...
+		// 把启动时间回拨 100 秒，模拟初始延迟已过。
 		laterStatus := getTestRunningStatusWithStarted(probeType != startup)
 		laterStatus.ContainerStatuses[0].State.Running.StartedAt.Time =
 			time.Now().Add(-100 * time.Second)
 		m.statusManager.SetPodStatus(logger, w.pod, laterStatus)
 
-		// Second call should succeed (already waited).
+		// 第二次探测应真正执行并成功。
 		expectContinue(t, w, w.doProbe(ctx), "after initial delay")
 		expectResult(t, w, results.Success, "after initial delay")
 	}
 }
 
+// TestFailureThreshold 验证连续失败达到 failureThreshold 后结果才转为 Failure。
 func TestFailureThreshold(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
@@ -454,7 +461,7 @@ func TestFailureThreshold(t *testing.T) {
 	m.statusManager.SetPodStatus(logger, w.pod, getTestRunningStatus())
 
 	for i := 0; i < 2; i++ {
-		// First probe should succeed.
+		// 先让探测成功，确保每轮从 Success 状态开始。
 		m.prober.exec = fakeExecProber{probe.Success, nil}
 
 		for j := 0; j < 3; j++ {
@@ -463,17 +470,17 @@ func TestFailureThreshold(t *testing.T) {
 			expectResult(t, w, results.Success, msg)
 		}
 
-		// Prober starts failing :(
+		// 让探测开始失败。
 		m.prober.exec = fakeExecProber{probe.Failure, nil}
 
-		// Next 2 probes should still be "success".
+		// 未达到阈值前结果仍保持 Success。
 		for j := 0; j < 2; j++ {
 			msg := fmt.Sprintf("%d failing (%d)", j+1, i)
 			expectContinue(t, w, w.doProbe(ctx), msg)
 			expectResult(t, w, results.Success, msg)
 		}
 
-		// Third & following fail.
+		// 达到阈值后结果变为 Failure。
 		for j := 0; j < 3; j++ {
 			msg := fmt.Sprintf("%d failure (%d)", j+3, i)
 			expectContinue(t, w, w.doProbe(ctx), msg)
@@ -482,41 +489,43 @@ func TestFailureThreshold(t *testing.T) {
 	}
 }
 
+// TestSuccessThreshold 验证连续成功达到 successThreshold 后结果才转为 Success。
 func TestSuccessThreshold(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
 	w := newTestWorker(m, readiness, v1.Probe{SuccessThreshold: 3, FailureThreshold: 1})
 	m.statusManager.SetPodStatus(logger, w.pod, getTestRunningStatus())
 
-	// Start out failure.
+	// 从 Failure 状态开始，确保成功计数从零累积。
 	w.resultsManager.Set(testContainerID, results.Failure, &v1.Pod{})
 
 	for i := 0; i < 2; i++ {
-		// Probe defaults to Failure.
+		// 默认探针失败，结果保持 Failure。
 		for j := 0; j < 2; j++ {
 			msg := fmt.Sprintf("%d success (%d)", j+1, i)
 			expectContinue(t, w, w.doProbe(ctx), msg)
 			expectResult(t, w, results.Failure, msg)
 		}
 
-		// Continuing success!
+		// 连续成功达到阈值后结果转为 Success。
 		for j := 0; j < 3; j++ {
 			msg := fmt.Sprintf("%d success (%d)", j+3, i)
 			expectContinue(t, w, w.doProbe(ctx), msg)
 			expectResult(t, w, results.Success, msg)
 		}
 
-		// Prober flakes :(
+		// 单次失败应立即把结果改回 Failure。
 		m.prober.exec = fakeExecProber{probe.Failure, nil}
 		msg := fmt.Sprintf("1 failure (%d)", i)
 		expectContinue(t, w, w.doProbe(ctx), msg)
 		expectResult(t, w, results.Failure, msg)
 
-		// Back to success.
+		// 恢复成功探测，进入下一轮。
 		m.prober.exec = fakeExecProber{probe.Success, nil}
 	}
 }
 
+// TestStartupProbeSuccessThreshold 验证 startup 探针达到成功阈值后进入 hold 状态且不再执行。
 func TestStartupProbeSuccessThreshold(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
@@ -528,8 +537,7 @@ func TestStartupProbeSuccessThreshold(t *testing.T) {
 
 	for i := 0; i < successThreshold+1; i++ {
 		if i < successThreshold {
-			// Probe should not be on hold and will continue to be excuted
-			// until successThreshold is met
+			// 未达到成功阈值前不 hold，探测持续执行。
 			if w.onHold {
 				t.Errorf("Prober should not be on hold")
 			}
@@ -537,12 +545,11 @@ func TestStartupProbeSuccessThreshold(t *testing.T) {
 			expectContinue(t, w, w.doProbe(ctx), msg)
 			expectResult(t, w, results.Success, msg)
 		} else {
-			// Probe should be on hold and will not be executed anymore
-			// when successThreshold is met
+			// 达到成功阈值后进入 hold，不再执行探测。
 			if !w.onHold {
 				t.Errorf("Prober should be on hold because successThreshold is exceeded")
 			}
-			// Meeting or exceeding successThreshold should cause resultRun to reset to 0
+			// 达到或超过成功阈值时 resultRun 必须归零。
 			if w.resultRun != 0 {
 				t.Errorf("Prober resultRun should be 0, but %d", w.resultRun)
 			}
@@ -550,6 +557,7 @@ func TestStartupProbeSuccessThreshold(t *testing.T) {
 	}
 }
 
+// TestStartupProbeFailureThreshold 验证 startup 探针在达到失败阈值前结果保持 Unknown，达到后转为 Failure 并 hold。
 func TestStartupProbeFailureThreshold(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
@@ -561,8 +569,7 @@ func TestStartupProbeFailureThreshold(t *testing.T) {
 
 	for i := 0; i < failureThreshold+1; i++ {
 		if i < failureThreshold {
-			// Probe should not be on hold and will continue to be excuted
-			// until failureThreshold is met
+			// 未达到失败阈值前不 hold，探测持续执行。
 			if w.onHold {
 				t.Errorf("Prober should not be on hold")
 			}
@@ -570,31 +577,26 @@ func TestStartupProbeFailureThreshold(t *testing.T) {
 			expectContinue(t, w, w.doProbe(ctx), msg)
 			switch i {
 			case 0, 1:
-				// At this point, the expected result is Unknown
-				// because w.resultsManager.Set() will be called after FailureThreshold is reached
+				// 此时结果仍为 Unknown：只有达到失败阈值才会写入 Failure。
 				expectResult(t, w, results.Unknown, msg)
-				// resultRun should be incremented until failureThreshold is met
+				// resultRun 随每次失败递增，直到达到阈值。
 				if w.resultRun != i+1 {
 					t.Errorf("Prober resultRun should be %d, but %d", i+1, w.resultRun)
 				}
 			case 2:
-				// The expected result is Failure
-				// because w.resultsManager.Set() will be called due to resultRun reaching failureThreshold,
-				// updating the cached result to Failure.
-				// After that, resultRun will be reset to 0.
+				// 达到失败阈值后结果写入 Failure，随后 resultRun 归零。
 				expectResult(t, w, results.Failure, msg)
-				// Meeting failureThreshold should cause resultRun to reset to 0
+				// 达到失败阈值时必须重置 resultRun。
 				if w.resultRun != 0 {
 					t.Errorf("Prober resultRun should be 0, but %d", w.resultRun)
 				}
 			}
 		} else {
-			// Probe should be on hold and will not be executed anymore
-			// when failureThreshold is met
+			// 达到失败阈值后进入 hold，不再执行探测。
 			if !w.onHold {
 				t.Errorf("Prober should be on hold because failureThreshold is exceeded")
 			}
-			// Exceeding failureThreshold should cause resultRun to reset to 0
+			// 超过失败阈值后 resultRun 保持为 0。
 			if w.resultRun != 0 {
 				t.Errorf("Prober resultRun should be 0, but %d", w.resultRun)
 			}
@@ -602,10 +604,12 @@ func TestStartupProbeFailureThreshold(t *testing.T) {
 	}
 }
 
+// TestCleanUp 验证 worker 停止后其探针结果与 worker 条目都会被清理。
 func TestCleanUp(t *testing.T) {
 	ktesting.Init(t).SyncTest("", testCleanUp)
 }
 
+// testCleanUp 是 TestCleanUp 的主体，逐个探针类型验证停止与清理。
 func testCleanUp(tCtx ktesting.TContext) {
 	t := tCtx.TB()
 	m := newTestManager()
@@ -617,7 +621,7 @@ func testCleanUp(tCtx ktesting.TContext) {
 		go w.run(tCtx)
 		m.workers[key] = w
 
-		// Wait for worker to run.
+		// 等待 worker 完成首次探测，确保其已进入运行状态。
 		condition := func() (bool, error) {
 			ready, _ := resultsManager(m, probeType).Get(testContainerID)
 			return ready == results.Success, nil
@@ -629,7 +633,7 @@ func testCleanUp(tCtx ktesting.TContext) {
 		}
 
 		for i := 0; i < 10; i++ {
-			w.stop() // Stop should be callable multiple times without consequence.
+			w.stop() // 重复调用 stop 必须幂等。
 		}
 		if err := waitForWorkerExit(t, m, []probeKey{key}); err != nil {
 			t.Fatalf("[%s] error waiting for worker exit: %v", probeType, err)
@@ -644,6 +648,7 @@ func testCleanUp(tCtx ktesting.TContext) {
 	}
 }
 
+// expectResult 断言 worker 当前记录的探针结果等于期望值。
 func expectResult(t *testing.T, w *worker, expectedResult results.Result, msg string) {
 	result, ok := resultsManager(w.probeManager, w.probeType).Get(w.containerID)
 	if !ok {
@@ -654,12 +659,14 @@ func expectResult(t *testing.T, w *worker, expectedResult results.Result, msg st
 	}
 }
 
+// expectContinue 断言 doProbe 返回 true（worker 应继续运行）。
 func expectContinue(t *testing.T, w *worker, c bool, msg string) {
 	if !c {
 		t.Errorf("[%s - %s] Expected to continue, but did not", w.probeType, msg)
 	}
 }
 
+// resultsManager 返回指定探针类型对应的结果管理器。
 func resultsManager(m *manager, probeType probeType) results.Manager {
 	switch probeType {
 	case readiness:
@@ -672,6 +679,7 @@ func resultsManager(m *manager, probeType probeType) results.Manager {
 	panic(fmt.Errorf("Unhandled case: %v", probeType))
 }
 
+// TestOnHoldOnLivenessOrStartupCheckFailure 验证 liveness/startup 失败后 worker 进入 hold，且容器 ID 变化可解除 hold。
 func TestOnHoldOnLivenessOrStartupCheckFailure(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
@@ -681,7 +689,7 @@ func TestOnHoldOnLivenessOrStartupCheckFailure(t *testing.T) {
 		status := getTestRunningStatusWithStarted(probeType != startup)
 		m.statusManager.SetPodStatus(logger, w.pod, status)
 
-		// First probe should fail.
+		// 首次探测失败，worker 应进入 hold。
 		m.prober.exec = fakeExecProber{probe.Failure, nil}
 		msg := "first probe"
 		expectContinue(t, w, w.doProbe(ctx), msg)
@@ -689,8 +697,7 @@ func TestOnHoldOnLivenessOrStartupCheckFailure(t *testing.T) {
 		if !w.onHold {
 			t.Errorf("Prober should be on hold due to %s check failure", probeType)
 		}
-		// Set fakeExecProber to return success. However, the result will remain
-		// failure because the worker is on hold and won't probe.
+		// 即使探测恢复成功，hold 期间也不会执行探测，结果保持 Failure。
 		m.prober.exec = fakeExecProber{probe.Success, nil}
 		msg = "while on hold"
 		expectContinue(t, w, w.doProbe(ctx), msg)
@@ -699,7 +706,7 @@ func TestOnHoldOnLivenessOrStartupCheckFailure(t *testing.T) {
 			t.Errorf("Prober should be on hold due to %s check failure", probeType)
 		}
 
-		// Set a new container ID to lift the hold. The next probe will succeed.
+		// 容器 ID 变化表示容器已重建，hold 被解除，下一次探测会成功。
 		status.ContainerStatuses[0].ContainerID = "test://newCont_ID"
 		m.statusManager.SetPodStatus(logger, w.pod, status)
 		msg = "hold lifted"
@@ -713,6 +720,7 @@ func TestOnHoldOnLivenessOrStartupCheckFailure(t *testing.T) {
 	}
 }
 
+// TestResultRunOnLivenessCheckFailure 验证 liveness 失败达到阈值后 resultRun 归零，使重建后的容器重新获得完整失败次数。
 func TestResultRunOnLivenessCheckFailure(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
@@ -743,9 +751,7 @@ func TestResultRunOnLivenessCheckFailure(t *testing.T) {
 		t.Errorf("Prober resultRun should be 2")
 	}
 
-	// Exceeding FailureThreshold should cause resultRun to
-	// reset to 0 so that the probe on the restarted pod
-	// also gets FailureThreshold attempts to succeed.
+	// 超过失败阈值后 resultRun 归零，保证重建后的 Pod 仍有完整的失败重试次数。
 	m.prober.exec = fakeExecProber{probe.Failure, nil}
 	msg = "3rd probe failure, result failure"
 	expectContinue(t, w, w.doProbe(ctx), msg)
@@ -755,6 +761,7 @@ func TestResultRunOnLivenessCheckFailure(t *testing.T) {
 	}
 }
 
+// TestResultRunOnStartupCheckFailure 验证 startup 探针失败达到阈值前结果保持 Unknown，达到后转为 Failure。
 func TestResultRunOnStartupCheckFailure(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
@@ -762,8 +769,7 @@ func TestResultRunOnStartupCheckFailure(t *testing.T) {
 	w := newTestWorker(m, startup, v1.Probe{SuccessThreshold: 1, FailureThreshold: 3})
 	m.statusManager.SetPodStatus(logger, w.pod, getTestRunningStatusWithStarted(false))
 
-	// Below FailureThreshold leaves probe state unchanged
-	// which is failed for startup at first.
+	// 未达到失败阈值时 startup 探针状态保持不变（初始为失败/Unknown）。
 	m.prober.exec = fakeExecProber{probe.Failure, nil}
 	msg := "probe failure, result unknown"
 	expectContinue(t, w, w.doProbe(ctx), msg)
@@ -780,9 +786,7 @@ func TestResultRunOnStartupCheckFailure(t *testing.T) {
 		t.Errorf("Prober resultRun should be 2")
 	}
 
-	// Exceeding FailureThreshold should cause resultRun to
-	// reset to 0 so that the probe on the restarted pod
-	// also gets FailureThreshold attempts to succeed.
+	// 超过失败阈值后 resultRun 归零，保证重启后的容器重新获得完整失败次数。
 	m.prober.exec = fakeExecProber{probe.Failure, nil}
 	msg = "3rd probe failure, result failure"
 	expectContinue(t, w, w.doProbe(ctx), msg)
@@ -792,17 +796,18 @@ func TestResultRunOnStartupCheckFailure(t *testing.T) {
 	}
 }
 
+// TestDoProbe_TerminatedRestartableInitContainerWithRestartPolicyNever 验证 Pod restartPolicy=Never 时，已终止的重启式 init 容器仍应继续探测。
 func TestDoProbe_TerminatedRestartableInitContainerWithRestartPolicyNever(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
 
-	// Test restartable init container (sidecar) behavior
+	// 构造以 sidecar 为探测对象的 worker。
 	w := newTestWorkerWithRestartableInitContainer(m, startup)
 
-	// Set pod restart policy to Never
+	// Pod 级重启策略设为 Never，但 sidecar 自身的 restartPolicy=Always。
 	w.pod.Spec.RestartPolicy = v1.RestartPolicyNever
 
-	// Create terminated status for init container
+	// 构造 init 容器已终止的状态。
 	terminatedStatus := getTestRunningStatus()
 	terminatedStatus.InitContainerStatuses = []v1.ContainerStatus{{
 		Name:        testContainerName,
@@ -817,30 +822,30 @@ func TestDoProbe_TerminatedRestartableInitContainerWithRestartPolicyNever(t *tes
 
 	m.statusManager.SetPodStatus(logger, w.pod, terminatedStatus)
 
-	// Test: Terminated restartable init container with restartPolicy=Always should continue probing
-	// even when pod has restartPolicy=Never
+	// 即使 Pod restartPolicy=Never，restartPolicy=Always 的 sidecar 终止后仍应继续探测。
 	if !w.doProbe(ctx) {
 		t.Error("Expected to continue probing for terminated restartable init container with pod restart policy Never")
 	}
 
-	// Verify result is set to Failure for terminated container
+	// 已终止容器的探测结果应记录为 Failure。
 	expectResult(t, w, results.Failure, "restartable init container with pod restart policy Never")
 }
 
+// TestDoProbe_TerminatedContainerWithRestartPolicyNever 验证普通容器在 Pod restartPolicy=Never 下终止后停止探测。
 func TestDoProbe_TerminatedContainerWithRestartPolicyNever(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
 
-	// Test that regular containers (without RestartPolicy) still work as before
+	// 普通容器没有独立 RestartPolicy，行为应与旧版本一致。
 	w := newTestWorker(m, startup, v1.Probe{})
 
-	// Regular container without explicit restart policy
+	// 显式清空容器级重启策略。
 	w.container.RestartPolicy = nil
 
-	// Set pod restart policy to Never
+	// Pod 级重启策略设为 Never。
 	w.pod.Spec.RestartPolicy = v1.RestartPolicyNever
 
-	// Create terminated status
+	// 构造容器已终止的状态。
 	terminatedStatus := getTestRunningStatus()
 	terminatedStatus.ContainerStatuses[0].State.Running = nil
 	terminatedStatus.ContainerStatuses[0].State.Terminated = &v1.ContainerStateTerminated{
@@ -849,59 +854,62 @@ func TestDoProbe_TerminatedContainerWithRestartPolicyNever(t *testing.T) {
 
 	m.statusManager.SetPodStatus(logger, w.pod, terminatedStatus)
 
-	// Should stop probing (existing behavior preserved)
+	// 容器不会重启，探测应停止。
 	if w.doProbe(ctx) {
 		t.Error("Expected to stop probing for regular container with pod RestartPolicy=Never")
 	}
 
-	// Verify result is set to Failure for terminated container
+	// 结果应记录为 Failure。
 	expectResult(t, w, results.Failure, "regular container with pod restart policy Never")
 }
 
+// TestLivenessProbeDisabledByStarted 验证容器未启动时 liveness 探测被禁用，启动后才真正生效。
 func TestLivenessProbeDisabledByStarted(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	m := newTestManager()
 	w := newTestWorker(m, liveness, v1.Probe{SuccessThreshold: 1, FailureThreshold: 1})
 	m.statusManager.SetPodStatus(logger, w.pod, getTestRunningStatusWithStarted(false))
-	// livenessProbe fails, but is disabled
+	// 容器尚未启动，liveness 探测失败也不生效。
 	m.prober.exec = fakeExecProber{probe.Failure, nil}
 	msg := "Not started, probe failure, result success"
 	expectContinue(t, w, w.doProbe(ctx), msg)
 	expectResult(t, w, results.Success, msg)
-	// setting started state
+	// 将容器标记为已启动。
 	m.statusManager.SetContainerStartup(logger, w.pod.UID, w.containerID, true)
-	// livenessProbe fails
+	// 此时探测失败应真正生效。
 	m.prober.exec = fakeExecProber{probe.Failure, nil}
 	msg = "Started, probe failure, result failure"
 	expectContinue(t, w, w.doProbe(ctx), msg)
 	expectResult(t, w, results.Failure, msg)
 }
 
+// TestStartupProbeDisabledByStarted 验证容器启动后 startup 探测被禁用。
 func TestStartupProbeDisabledByStarted(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
 	m := newTestManager()
 	w := newTestWorker(m, startup, v1.Probe{SuccessThreshold: 1, FailureThreshold: 2})
 	m.statusManager.SetPodStatus(logger, w.pod, getTestRunningStatusWithStarted(false))
-	// startupProbe fails < FailureThreshold, stays unknown
+	// 未达到失败阈值的 startup 探测失败，结果保持 Unknown。
 	m.prober.exec = fakeExecProber{probe.Failure, nil}
 	msg := "Not started, probe failure, result unknown"
 	expectContinue(t, w, w.doProbe(ctx), msg)
 	expectResult(t, w, results.Unknown, msg)
-	// startupProbe succeeds
+	// startup 探测成功，结果转为 Success。
 	m.prober.exec = fakeExecProber{probe.Success, nil}
 	msg = "Started, probe success, result success"
 	expectContinue(t, w, w.doProbe(ctx), msg)
 	expectResult(t, w, results.Success, msg)
-	// setting started state
+	// 将容器标记为已启动，startup 探测随之禁用。
 	m.statusManager.SetContainerStartup(logger, w.pod.UID, w.containerID, true)
-	// startupProbe fails, but is disabled
+	// 已启动后 startup 探测失败不再影响结果。
 	m.prober.exec = fakeExecProber{probe.Failure, nil}
 	msg = "Started, probe failure, result success"
 	expectContinue(t, w, w.doProbe(ctx), msg)
 	expectResult(t, w, results.Success, msg)
 }
 
+// TestChangeContainerStatusOnKubeletRestart 验证 kubelet 重启特性对探针初始结果的影响，覆盖普通容器与 sidecar。
 func TestChangeContainerStatusOnKubeletRestart(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
@@ -1029,7 +1037,7 @@ func TestChangeContainerStatusOnKubeletRestart(t *testing.T) {
 			isSidecar:      false,
 			expectedResult: results.Unknown,
 		},
-		// Sidecar tests - regression for https://github.com/kubernetes/kubernetes/issues/136910
+		// sidecar 用例用于回归 #136910：重启后 sidecar 的探针结果处理。
 		{
 			name:           "feature disabled, is restart, startup, sidecar",
 			featureEnabled: false,
@@ -1072,9 +1080,9 @@ func TestChangeContainerStatusOnKubeletRestart(t *testing.T) {
 			if tc.isSidecar {
 				w = newTestWorkerWithRestartableInitContainer(m, tc.probeType)
 				w.spec = &v1.Probe{InitialDelaySeconds: 1000}
-				// For sidecar, we need init container status
+				// sidecar 的状态记录在 InitContainerStatuses 中。
 				podStatus := getTestRunningStatus()
-				// Move container from regular to init containers (it's a sidecar)
+				// 把容器状态从普通容器移到 init 容器，模拟 sidecar。
 				podStatus.InitContainerStatuses = []v1.ContainerStatus{podStatus.ContainerStatuses[0]}
 				podStatus.ContainerStatuses = nil
 				podStatus.InitContainerStatuses[0].ContainerID = "test://container-id"

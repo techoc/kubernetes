@@ -25,17 +25,17 @@ import (
 )
 
 const (
-	// SandboxRuntimeClass is a valid RuntimeClass pre-populated in the populated dynamic client.
+	// SandboxRuntimeClass 是预置在 fake client 中的有效 RuntimeClass。
 	SandboxRuntimeClass = "sandbox"
-	// SandboxRuntimeHandler is the handler associated with the SandboxRuntimeClass.
+	// SandboxRuntimeHandler 是 SandboxRuntimeClass 关联的 handler。
 	SandboxRuntimeHandler = "kata-containers"
 
-	// EmptyRuntimeClass is a valid RuntimeClass without a handler pre-populated in the populated dynamic client.
+	// EmptyRuntimeClass 是预置在 fake client 中、没有 handler 的有效 RuntimeClass。
 	EmptyRuntimeClass = "native"
 )
 
-// NewPopulatedClient creates a fake client for use with the runtimeclass.Manager,
-// and populates it with a few test RuntimeClass objects.
+// NewPopulatedClient 创建供 runtimeclass.Manager 使用的 fake client，
+// 并预置若干测试 RuntimeClass 对象。
 func NewPopulatedClient() clientset.Interface {
 	return fake.NewSimpleClientset(
 		NewRuntimeClass(EmptyRuntimeClass, ""),
@@ -43,8 +43,8 @@ func NewPopulatedClient() clientset.Interface {
 	)
 }
 
-// StartManagerSync starts the manager, and waits for the informer cache to sync.
-// Returns a function to stop the manager, which should be called with a defer:
+// StartManagerSync 启动 manager 并等待 informer 缓存同步完成。
+// 返回停止 manager 的函数，应通过 defer 调用：
 //
 //	defer StartManagerSync(t, m)()
 func StartManagerSync(m *runtimeclass.Manager) func() {
@@ -56,8 +56,7 @@ func StartManagerSync(m *runtimeclass.Manager) func() {
 	}
 }
 
-// NewRuntimeClass is a helper to generate a RuntimeClass resource with
-// the given name & handler.
+// NewRuntimeClass 生成指定名称与 handler 的 RuntimeClass 资源，便于测试使用。
 func NewRuntimeClass(name, handler string) *nodev1.RuntimeClass {
 	return &nodev1.RuntimeClass{
 		ObjectMeta: metav1.ObjectMeta{

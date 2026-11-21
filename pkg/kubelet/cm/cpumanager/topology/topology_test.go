@@ -27,6 +27,8 @@ import (
 	"k8s.io/utils/cpuset"
 )
 
+// Test_Discover 校验 Discover 能从 cadvisor 的 MachineInfo 推导出 CPU 拓扑，
+// 覆盖无 uncore cache、超线程、多 socket/多 NUMA、非唯一 CoreID 以及非法拓扑等场景。
 func Test_Discover(t *testing.T) {
 
 	tests := []struct {
@@ -114,7 +116,7 @@ func Test_Discover(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// dual xeon gold 6230
+			// 双路 Xeon Gold 6230
 			name: "DualSocketMultiNumaPerSocketHT",
 			machineInfo: cadvisorapi.MachineInfo{
 				NumCores:   80,
@@ -271,16 +273,14 @@ func Test_Discover(t *testing.T) {
 		},
 		{
 
-			// FAKE Topology from dual xeon gold 6230
-			// (see: dual xeon gold 6230).
-			// We flip NUMA cells and Sockets to exercise the code.
-			// TODO(fromanirh): replace with a real-world topology
-			// once we find a suitable one.
-			// Note: this is a fake topology. Thus, there is not a "correct"
-			// representation. This one was created following the these concepts:
-			// 1. be internally consistent (most important rule)
-			// 2. be as close as possible as existing HW topologies
-			// 3. if possible, minimize chances wrt existing HW topologies.
+			// 基于双路 Xeon Gold 6230 构造的伪造拓扑
+			//（参见上面的双路 Xeon Gold 6230 用例）。
+			// 我们交换了 NUMA cell 与 Socket 的关系，以覆盖相关代码路径。
+			// TODO(fromanirh): 找到合适的真实拓扑后替换掉它。
+			// 注意：这是伪造拓扑，因此不存在“正确”的表示。它遵循以下原则构造：
+			// 1. 内部自洽（最重要）
+			// 2. 尽可能接近现有硬件拓扑
+			// 3. 若可能，尽量减少与现有硬件拓扑的相似性。
 			name: "DualNumaMultiSocketPerNumaHT",
 			machineInfo: cadvisorapi.MachineInfo{
 				NumCores:   80,
@@ -517,7 +517,7 @@ func Test_Discover(t *testing.T) {
 						Cores: []cadvisorapi.Core{
 							{SocketID: 0, Id: 0, Threads: []int{0, 4}, UncoreCaches: []cadvisorapi.Cache{{Id: 1}}},
 							{SocketID: 0, Id: 1, Threads: []int{1, 5}, UncoreCaches: []cadvisorapi.Cache{{Id: 1}}},
-							{SocketID: 0, Id: 2, Threads: []int{2, 2}, UncoreCaches: []cadvisorapi.Cache{{Id: 1}}}, // Wrong case - should fail here
+							{SocketID: 0, Id: 2, Threads: []int{2, 2}, UncoreCaches: []cadvisorapi.Cache{{Id: 1}}}, // 错误用例 —— 应在此处失败
 							{SocketID: 0, Id: 3, Threads: []int{3, 7}, UncoreCaches: []cadvisorapi.Cache{{Id: 1}}},
 						},
 					},
@@ -537,7 +537,7 @@ func Test_Discover(t *testing.T) {
 							{SocketID: 0, Id: 0, Threads: []int{0, 4}, UncoreCaches: []cadvisorapi.Cache{{Id: 1}}},
 							{SocketID: 0, Id: 1, Threads: []int{1, 5}, UncoreCaches: []cadvisorapi.Cache{{Id: 1}}},
 							{SocketID: 0, Id: 2, Threads: []int{2, 6}, UncoreCaches: []cadvisorapi.Cache{{Id: 1}}},
-							{SocketID: 0, Id: 3, Threads: []int{}, UncoreCaches: []cadvisorapi.Cache{{Id: 1}}}, // Wrong case - should fail here
+							{SocketID: 0, Id: 3, Threads: []int{}, UncoreCaches: []cadvisorapi.Cache{{Id: 1}}}, // 错误用例 —— 应在此处失败
 						},
 					},
 				},
@@ -546,9 +546,9 @@ func Test_Discover(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			// Topology from AMD EPYC 7452 (Rome) 32-Core Processor
-			// 4 cores per LLC
-			// Single-socket SMT-disabled
+			// 拓扑来自 AMD EPYC 7452 (Rome) 32 核处理器
+			// 每个 LLC 4 个核
+			// 单 socket，SMT 关闭
 			// NPS=1
 			name: "UncoreOneSocketNoSMT",
 			machineInfo: cadvisorapi.MachineInfo{
@@ -637,9 +637,9 @@ func Test_Discover(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// Topology from AMD EPYC 24-Core Processor
-			// 4 cores per LLC
-			// Dual-socket SMT-enabled
+			// 拓扑来自 AMD EPYC 24 核处理器
+			// 每个 LLC 4 个核
+			// 双 socket，SMT 开启
 			// NPS=2
 			name: "UncoreDualSocketSMT",
 			machineInfo: cadvisorapi.MachineInfo{
@@ -840,6 +840,7 @@ func Test_Discover(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsKeepOnly 校验 KeepOnly 只保留指定 CPU 集合中的条目。
 func TestCPUDetailsKeepOnly(t *testing.T) {
 
 	var details CPUDetails
@@ -876,6 +877,7 @@ func TestCPUDetailsKeepOnly(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsNUMANodes 校验 NUMANodes 返回去重后的 NUMA 节点 ID 集合。
 func TestCPUDetailsNUMANodes(t *testing.T) {
 
 	tests := []struct {
@@ -903,6 +905,8 @@ func TestCPUDetailsNUMANodes(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsNUMANodesInSockets 校验给定 socket 集合内的 NUMA 节点集合，
+// 并覆盖 NUMA 节点与 socket 映射不规整的主板场景。
 func TestCPUDetailsNUMANodesInSockets(t *testing.T) {
 
 	var details1 CPUDetails
@@ -913,7 +917,7 @@ func TestCPUDetailsNUMANodesInSockets(t *testing.T) {
 		3: {SocketID: 3, NUMANodeID: 1},
 	}
 
-	// poorly designed mainboards
+	// 设计不规整的主板
 	var details2 CPUDetails
 	details2 = map[int]CPUInfo{
 		0: {SocketID: 0, NUMANodeID: 0},
@@ -959,6 +963,7 @@ func TestCPUDetailsNUMANodesInSockets(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsSockets 校验 Sockets 返回去重后的 socket ID 集合。
 func TestCPUDetailsSockets(t *testing.T) {
 
 	tests := []struct {
@@ -986,6 +991,7 @@ func TestCPUDetailsSockets(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsCPUsInSockets 校验给定 socket 集合内的 CPU 集合。
 func TestCPUDetailsCPUsInSockets(t *testing.T) {
 
 	var details CPUDetails
@@ -1020,6 +1026,7 @@ func TestCPUDetailsCPUsInSockets(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsSocketsInNUMANodes 校验给定 NUMA 节点集合内的 socket 集合。
 func TestCPUDetailsSocketsInNUMANodes(t *testing.T) {
 
 	var details CPUDetails
@@ -1054,6 +1061,7 @@ func TestCPUDetailsSocketsInNUMANodes(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsCores 校验 Cores 返回去重后的 core ID 集合。
 func TestCPUDetailsCores(t *testing.T) {
 
 	tests := []struct {
@@ -1081,6 +1089,7 @@ func TestCPUDetailsCores(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsCoresInNUMANodes 校验给定 NUMA 节点集合内的 core 集合。
 func TestCPUDetailsCoresInNUMANodes(t *testing.T) {
 
 	var details CPUDetails
@@ -1115,6 +1124,7 @@ func TestCPUDetailsCoresInNUMANodes(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsCoresInSockets 校验给定 socket 集合内的 core 集合。
 func TestCPUDetailsCoresInSockets(t *testing.T) {
 
 	var details CPUDetails
@@ -1149,6 +1159,7 @@ func TestCPUDetailsCoresInSockets(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsCPUs 校验 CPUs 返回所有 CPU 的集合。
 func TestCPUDetailsCPUs(t *testing.T) {
 
 	tests := []struct {
@@ -1174,6 +1185,7 @@ func TestCPUDetailsCPUs(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsCPUsInNUMANodes 校验给定 NUMA 节点集合内的 CPU 集合。
 func TestCPUDetailsCPUsInNUMANodes(t *testing.T) {
 
 	var details CPUDetails
@@ -1208,6 +1220,7 @@ func TestCPUDetailsCPUsInNUMANodes(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsCPUsInCores 校验给定 core 集合内的 CPU 集合。
 func TestCPUDetailsCPUsInCores(t *testing.T) {
 
 	var details CPUDetails
@@ -1242,6 +1255,8 @@ func TestCPUDetailsCPUsInCores(t *testing.T) {
 	}
 }
 
+// TestCPUDetailsAreNUMANodesInSameSocket 校验多个 NUMA 节点是否位于同一 socket，
+// 覆盖空集合、重复节点和越界节点等边界情况。
 func TestCPUDetailsAreNUMANodesInSameSocket(t *testing.T) {
 
 	details := CPUDetails{
@@ -1306,6 +1321,8 @@ func TestCPUDetailsAreNUMANodesInSameSocket(t *testing.T) {
 	}
 }
 
+// TestCPUCoreID 校验 CPUCoreID 对已知 CPU（含超线程兄弟）返回正确 core ID，
+// 对未知 CPU 返回错误。
 func TestCPUCoreID(t *testing.T) {
 	topoDualSocketHT := &CPUTopology{
 		NumCPUs:    12,
@@ -1365,6 +1382,8 @@ func TestCPUCoreID(t *testing.T) {
 	}
 }
 
+// TestCPUSocketID 校验 CPUSocketID 对已知 CPU（含超线程兄弟）返回正确 socket ID，
+// 对未知 CPU 返回错误。
 func TestCPUSocketID(t *testing.T) {
 	topoDualSocketHT := &CPUTopology{
 		NumCPUs:    12,
@@ -1424,6 +1443,8 @@ func TestCPUSocketID(t *testing.T) {
 	}
 }
 
+// TestCPUNUMANodeID 校验 CPUNUMANodeID 对已知 CPU（含超线程兄弟）返回正确 NUMA 节点 ID，
+// 对未知 CPU 返回错误。
 func TestCPUNUMANodeID(t *testing.T) {
 	topoDualSocketHT := &CPUTopology{
 		NumCPUs:    12,
@@ -1483,6 +1504,7 @@ func TestCPUNUMANodeID(t *testing.T) {
 	}
 }
 
+// TestCPUsInUncoreCaches 校验给定 uncore cache 集合内的 CPU 集合。
 func TestCPUsInUncoreCaches(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1527,6 +1549,8 @@ func TestCPUsInUncoreCaches(t *testing.T) {
 		})
 	}
 }
+
+// TestUncoreInNUMANodes 校验给定 NUMA 节点集合内的 uncore cache 集合。
 func TestUncoreInNUMANodes(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1574,6 +1598,7 @@ func TestUncoreInNUMANodes(t *testing.T) {
 	}
 }
 
+// TestUncoreCaches 校验 UncoreCaches 返回去重后的 uncore cache ID 集合。
 func TestUncoreCaches(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1614,6 +1639,7 @@ func TestUncoreCaches(t *testing.T) {
 	}
 }
 
+// TestCPUsPerUncore 校验每个 uncore cache 的平均 CPU 数，包括 uncore cache 数为 0 的情况。
 func TestCPUsPerUncore(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1655,6 +1681,9 @@ func TestCPUsPerUncore(t *testing.T) {
 	}
 
 }
+
+// Test_getUncoreCacheID 校验 getUncoreCacheID 优先取第一个 uncore cache ID，
+// 在 uncore cache 列表为空或 nil 时回退到 socket ID。
 func Test_getUncoreCacheID(t *testing.T) {
 	tests := []struct {
 		name string

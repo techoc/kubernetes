@@ -22,7 +22,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// Watcher defines the interface of OOM watchers.
+// Watcher 定义 OOM 监视器的接口。
 type Watcher interface {
+	// Start 开始监视 ref 所指向对象的 OOM 事件。
 	Start(ctx context.Context, ref *v1.ObjectReference) error
 }

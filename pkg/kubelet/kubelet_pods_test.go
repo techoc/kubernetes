@@ -72,6 +72,7 @@ import (
 
 var containerRestartPolicyAlways = v1.ContainerRestartPolicyAlways
 
+// TestNodeHostsFileContent 验证已有 hosts 文件内容与 HostAliases 的合并结果。
 func TestNodeHostsFileContent(t *testing.T) {
 	testCases := []struct {
 		hostsFileName            string
@@ -185,8 +186,10 @@ fe00::2	ip6-allrouters
 		},
 	}
 
+	// 逐用例写入临时 hosts 文件并校验合并结果，避免共享临时目录造成串扰。
 	for _, testCase := range testCases {
 		t.Run(testCase.hostsFileName, func(t *testing.T) {
+			// 使用独立临时目录，测试之间互不影响。
 			tmpdir, err := writeHostsFile(testCase.hostsFileName, testCase.rawHostsFileContent)
 			require.NoError(t, err, "could not create a temp hosts file")
 			defer os.RemoveAll(tmpdir)
@@ -198,8 +201,8 @@ fe00::2	ip6-allrouters
 	}
 }
 
-// writeHostsFile will write a hosts file into a temporary dir, and return that dir.
-// Caller is responsible for deleting the dir and its contents.
+// writeHostsFile 在临时目录写入 hosts 文件并返回该目录。
+// 调用方负责删除该目录及其内容。
 func writeHostsFile(filename string, cfg string) (string, error) {
 	tmpdir, err := os.MkdirTemp("", "kubelet=kubelet_pods_test.go=")
 	if err != nil {
@@ -208,6 +211,8 @@ func writeHostsFile(filename string, cfg string) (string, error) {
 	return tmpdir, os.WriteFile(filepath.Join(tmpdir, filename), []byte(cfg), 0644)
 }
 
+// TestManagedHostsFileContent 验证 kubelet 生成的托管 hosts 文件内容
+// （含 hostIPs、域名与别名）。
 func TestManagedHostsFileContent(t *testing.T) {
 	testCases := []struct {
 		hostIPs         []string
@@ -305,14 +310,17 @@ fd00::6	podFoo.domainFoo	podFoo
 		},
 	}
 
+	// 用例相互独立，直接比较生成内容即可。
 	for _, testCase := range testCases {
 		actualContent := managedHostsFileContent(testCase.hostIPs, testCase.hostName, testCase.hostDomainName, testCase.hostAliases)
 		assert.Equal(t, testCase.expectedContent, string(actualContent), "hosts file content not expected")
 	}
 }
 
+// TestRunInContainerNoSuchPod 验证对不存在的 pod 执行命令时返回错误且无输出。
 func TestRunInContainerNoSuchPod(t *testing.T) {
 	tCtx := ktesting.Init(t)
+	// 使用 fake runtime 与 fake command runner，测试不依赖真实运行时。
 	testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
@@ -332,8 +340,11 @@ func TestRunInContainerNoSuchPod(t *testing.T) {
 	assert.Nil(t, output, "output should be nil")
 }
 
+// TestRunInContainer 验证 RunInContainer 把容器 ID、命令与输出正确传给
+// CommandRunner，并原样透传错误。
 func TestRunInContainer(t *testing.T) {
 	tCtx := ktesting.Init(t)
+	// nil 与 error 两种情况都要覆盖错误透传。
 	for _, testError := range []error{nil, errors.New("bar")} {
 		testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 		defer testKubelet.Cleanup()
@@ -368,24 +379,32 @@ func TestRunInContainer(t *testing.T) {
 	}
 }
 
+// testServiceLister 是只返回预置 Service 列表的 lister，供环境变量测试使用。
 type testServiceLister struct {
 	services []*v1.Service
 }
 
+// List 忽略 selector，始终返回预置的 service 列表。
 func (ls testServiceLister) List(labels.Selector) ([]*v1.Service, error) {
 	return ls.services, nil
 }
 
+// envs 让 []kubecontainer.EnvVar 实现 sort.Interface，便于按名称排序后断言。
 type envs []kubecontainer.EnvVar
 
+// Len 返回环境变量数量。
 func (e envs) Len() int {
 	return len(e)
 }
 
+// Swap 交换下标 i 与 j 的环境变量。
 func (e envs) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
+// Less 按变量名比较，保证排序结果稳定。
 func (e envs) Less(i, j int) bool { return e[i].Name < e[j].Name }
 
+// buildService 构造环境变量测试所需的 Service（名称、命名空间、ClusterIP、
+// 协议与端口）。
 func buildService(name, namespace, clusterIP, protocol string, port int) *v1.Service {
 	return &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -399,9 +418,12 @@ func buildService(name, namespace, clusterIP, protocol string, port int) *v1.Ser
 	}
 }
 
+// TestMakeEnvironmentVariables 表驱动验证环境变量生成：service links、
+// downward API、ConfigMap/Secret 引用、变量展开与错误路径。
 func TestMakeEnvironmentVariables(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	trueVal := true
+	// 预置不同命名空间与 ClusterIP 的 service，覆盖 master service 与普通 service 的差异。
 	services := []*v1.Service{
 		buildService("kubernetes", metav1.NamespaceDefault, "1.2.3.1", "TCP", 8081),
 		buildService("test", "test1", "1.2.3.3", "TCP", 8083),
@@ -1980,6 +2002,7 @@ func TestMakeEnvironmentVariables(t *testing.T) {
 		},
 	}
 
+	// 每个用例单独构造 kubelet，避免 service lister 与 reactor 状态泄漏。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeRecorder := record.NewFakeRecorder(1)
@@ -1987,6 +2010,7 @@ func TestMakeEnvironmentVariables(t *testing.T) {
 			testKubelet.kubelet.recorder = fakeRecorder
 			defer testKubelet.Cleanup()
 			kl := testKubelet.kubelet
+			// nilLister/unsyncedServices 用于模拟 service 未同步的场景。
 			if tc.nilLister {
 				kl.serviceLister = nil
 			} else if tc.unsyncedServices {
@@ -1997,6 +2021,7 @@ func TestMakeEnvironmentVariables(t *testing.T) {
 				kl.serviceHasSynced = func() bool { return true }
 			}
 
+			// 用 reactor 模拟 ConfigMap 查询，缺失时返回 NotFound。
 			testKubelet.fakeKubeClient.AddReactor("get", "configmaps", func(action core.Action) (bool, runtime.Object, error) {
 				var err error
 				if tc.configMap == nil {
@@ -2040,7 +2065,9 @@ func TestMakeEnvironmentVariables(t *testing.T) {
 				testPod.Annotations[kubetypes.ConfigSourceAnnotationKey] = "file"
 			}
 
+			// 传入 podIPs 以覆盖 downward API 的多 IP 行为。
 			result, err := kl.makeEnvironmentVariables(tCtx, testPod, tc.container, podIP, tc.podIPs, kubecontainer.VolumeMap{})
+			// 校验事件与错误期望，再排序比较环境变量集合。
 			select {
 			case e := <-fakeRecorder.Events:
 				assert.Equal(t, tc.expectedEvent, e)
@@ -2052,6 +2079,7 @@ func TestMakeEnvironmentVariables(t *testing.T) {
 			} else {
 				assert.NoError(t, err, "[%s]", tc.name)
 
+				// 排序后比较，避免生成顺序造成误报。
 				sort.Sort(envs(result))
 				sort.Sort(envs(tc.expectedEnvs))
 				assert.Equal(t, tc.expectedEnvs, result, "[%s] env entries", tc.name)
@@ -2061,9 +2089,12 @@ func TestMakeEnvironmentVariables(t *testing.T) {
 	}
 }
 
+// waitingState 返回仅含 Waiting 状态的容器状态。
 func waitingState(cName string) v1.ContainerStatus {
 	return waitingStateWithReason(cName, "")
 }
+
+// waitingStateWithReason 返回带指定 Waiting reason 的容器状态。
 func waitingStateWithReason(cName, reason string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2072,6 +2103,8 @@ func waitingStateWithReason(cName, reason string) v1.ContainerStatus {
 		},
 	}
 }
+
+// waitingStateWithLastTermination 返回 Waiting 且上次成功退出的状态。
 func waitingStateWithLastTermination(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2085,6 +2118,8 @@ func waitingStateWithLastTermination(cName string) v1.ContainerStatus {
 		},
 	}
 }
+
+// waitingStateWithNonZeroTermination 返回 Waiting 且上次非零退出的状态。
 func waitingStateWithNonZeroTermination(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2098,6 +2133,9 @@ func waitingStateWithNonZeroTermination(cName string) v1.ContainerStatus {
 		},
 	}
 }
+
+// waitingStateWithRestartingAllContainers 构造 RestartAllContainers 清理阶段
+// 的状态（Waiting 加上次 Terminated 记录）。
 func waitingStateWithRestartingAllContainers(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2116,6 +2154,8 @@ func waitingStateWithRestartingAllContainers(cName string) v1.ContainerStatus {
 		},
 	}
 }
+
+// runningState 返回 Running 容器状态。
 func runningState(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2124,6 +2164,8 @@ func runningState(cName string) v1.ContainerStatus {
 		},
 	}
 }
+
+// startedState 返回 Running 且 Started=true 的状态，用于 sidecar。
 func startedState(cName string) v1.ContainerStatus {
 	started := true
 	return v1.ContainerStatus{
@@ -2134,6 +2176,8 @@ func startedState(cName string) v1.ContainerStatus {
 		Started: &started,
 	}
 }
+
+// runningStateWithStartedAt 返回带指定启动时间的 Running 状态。
 func runningStateWithStartedAt(cName string, startedAt time.Time) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2142,6 +2186,8 @@ func runningStateWithStartedAt(cName string, startedAt time.Time) v1.ContainerSt
 		},
 	}
 }
+
+// stoppedState 返回仅含 Terminated 的状态。
 func stoppedState(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2150,6 +2196,8 @@ func stoppedState(cName string) v1.ContainerStatus {
 		},
 	}
 }
+
+// succeededState 返回退出码为 0 的 Terminated 状态。
 func succeededState(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2160,6 +2208,8 @@ func succeededState(cName string) v1.ContainerStatus {
 		},
 	}
 }
+
+// failedState 返回退出码为 -1 的 Terminated 状态。
 func failedState(cName string) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2170,6 +2220,8 @@ func failedState(cName string) v1.ContainerStatus {
 		},
 	}
 }
+
+// failedStateWithExitCode 返回指定退出码的 Terminated 状态。
 func failedStateWithExitCode(cName string, exitCode int32) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2180,6 +2232,8 @@ func failedStateWithExitCode(cName string, exitCode int32) v1.ContainerStatus {
 		},
 	}
 }
+
+// waitingWithLastTerminationUnknown 构造运行状态丢失后的 unknown 上次终止状态。
 func waitingWithLastTerminationUnknown(cName string, restartCount int32) v1.ContainerStatus {
 	return v1.ContainerStatus{
 		Name: cName,
@@ -2196,25 +2250,35 @@ func waitingWithLastTerminationUnknown(cName string, restartCount int32) v1.Cont
 		RestartCount: restartCount,
 	}
 }
+
+// ready 把容器状态标记为 Ready。
 func ready(status v1.ContainerStatus) v1.ContainerStatus {
 	status.Ready = true
 	return status
 }
+
+// withID 设置容器状态的 ContainerID。
 func withID(status v1.ContainerStatus, id string) v1.ContainerStatus {
 	status.ContainerID = id
 	return status
 }
+
+// withRestartCount 设置容器状态的 RestartCount。
 func withRestartCount(status v1.ContainerStatus, restartCount int32) v1.ContainerStatus {
 	status.RestartCount = restartCount
 	return status
 }
+
+// withLastTerminationState 设置容器状态的 LastTerminationState。
 func withLastTerminationState(status v1.ContainerStatus, lastState v1.ContainerState) v1.ContainerStatus {
 	status.LastTerminationState = lastState
 	return status
 }
 
+// TestPodPhaseWithRestartAlways 验证 RestartPolicy=Always 下各种容器状态组合的 pod phase。
 func TestPodPhaseWithRestartAlways(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 固定 NodeName，避免 phase 计算依赖真实调度结果。
 	desiredState := v1.PodSpec{
 		NodeName: "machine",
 		Containers: []v1.Container{
@@ -2354,6 +2418,7 @@ func TestPodPhaseWithRestartAlways(t *testing.T) {
 	}
 }
 
+// TestPodPhaseWithRestartAlwaysInitContainers 验证含普通 init 容器时 pod phase 的计算。
 func TestPodPhaseWithRestartAlwaysInitContainers(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	desiredState := v1.PodSpec{
@@ -2451,6 +2516,7 @@ func TestPodPhaseWithRestartAlwaysInitContainers(t *testing.T) {
 			"init container succeeded",
 		},
 	}
+	// 把 init 容器状态拼接到普通状态后再计算 phase。
 	for _, test := range tests {
 		statusInfo := test.pod.Status.InitContainerStatuses
 		statusInfo = append(statusInfo, test.pod.Status.ContainerStatuses...)
@@ -2459,6 +2525,8 @@ func TestPodPhaseWithRestartAlwaysInitContainers(t *testing.T) {
 	}
 }
 
+// TestPodPhaseWithRestartAlwaysRestartableInitContainers 验证 restartable init
+// （sidecar）在不同状态与 podHasInitialized 下的 phase。
 func TestPodPhaseWithRestartAlwaysRestartableInitContainers(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	desiredState := v1.PodSpec{
@@ -2695,6 +2763,7 @@ func TestPodPhaseWithRestartAlwaysRestartableInitContainers(t *testing.T) {
 			"re-initializing the pod after the sandbox is recreated",
 		},
 	}
+	// restartable init 的状态同样需要与普通容器状态合并。
 	for _, test := range tests {
 		statusInfo := test.pod.Status.InitContainerStatuses
 		statusInfo = append(statusInfo, test.pod.Status.ContainerStatuses...)
@@ -2703,6 +2772,8 @@ func TestPodPhaseWithRestartAlwaysRestartableInitContainers(t *testing.T) {
 	}
 }
 
+// TestPodPhaseWithRestartAlwaysAndPodHasRun 验证 pod 已经运行过（podHasInitialized）
+// 时 restartable init 与常规容器的 phase 组合。
 func TestPodPhaseWithRestartAlwaysAndPodHasRun(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	desiredState := v1.PodSpec{
@@ -2810,6 +2881,7 @@ func TestPodPhaseWithRestartAlwaysAndPodHasRun(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		// init 与普通容器的状态合并后再交给 getPhase。
 		statusInfo := test.pod.Status.InitContainerStatuses
 		statusInfo = append(statusInfo, test.pod.Status.ContainerStatuses...)
 		status := getPhase(logger, test.pod, statusInfo, false, test.podHasInitialized)
@@ -2817,6 +2889,7 @@ func TestPodPhaseWithRestartAlwaysAndPodHasRun(t *testing.T) {
 	}
 }
 
+// TestPodPhaseWithRestartNever 验证 RestartPolicy=Never 下各种容器状态组合的 pod phase。
 func TestPodPhaseWithRestartNever(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	desiredState := v1.PodSpec{
@@ -2918,6 +2991,7 @@ func TestPodPhaseWithRestartNever(t *testing.T) {
 	}
 }
 
+// TestPodPhaseWithRestartNeverInitContainers 验证含 init 容器且 RestartPolicy=Never 时的 phase。
 func TestPodPhaseWithRestartNeverInitContainers(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	desiredState := v1.PodSpec{
@@ -3016,6 +3090,7 @@ func TestPodPhaseWithRestartNeverInitContainers(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		// 同样先合并 init 与普通容器状态。
 		statusInfo := test.pod.Status.InitContainerStatuses
 		statusInfo = append(statusInfo, test.pod.Status.ContainerStatuses...)
 		status := getPhase(logger, test.pod, statusInfo, false, false)
@@ -3023,6 +3098,8 @@ func TestPodPhaseWithRestartNeverInitContainers(t *testing.T) {
 	}
 }
 
+// TestPodPhaseWithRestartNeverRestartableInitContainers 验证 RestartPolicy=Never 下
+// restartable init 容器的 phase 规则。
 func TestPodPhaseWithRestartNeverRestartableInitContainers(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	desiredState := v1.PodSpec{
@@ -3229,6 +3306,7 @@ func TestPodPhaseWithRestartNeverRestartableInitContainers(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		// 合并 init 与普通容器状态后计算 phase。
 		statusInfo := test.pod.Status.InitContainerStatuses
 		statusInfo = append(statusInfo, test.pod.Status.ContainerStatuses...)
 		status := getPhase(logger, test.pod, statusInfo, false, test.podHasInitialized)
@@ -3236,6 +3314,7 @@ func TestPodPhaseWithRestartNeverRestartableInitContainers(t *testing.T) {
 	}
 }
 
+// TestPodPhaseWithRestartOnFailure 验证 RestartPolicy=OnFailure 下各种容器状态组合的 phase。
 func TestPodPhaseWithRestartOnFailure(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	desiredState := v1.PodSpec{
@@ -3350,6 +3429,7 @@ func TestPodPhaseWithRestartOnFailure(t *testing.T) {
 	}
 }
 
+// TestPodPhaseWithContainerRestartPolicy 验证容器级 restartPolicy 对 pod phase 的影响。
 func TestPodPhaseWithContainerRestartPolicy(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	var (
@@ -3467,6 +3547,7 @@ func TestPodPhaseWithContainerRestartPolicy(t *testing.T) {
 		},
 	}
 
+	// 特性门控关闭时容器级 restartPolicy 不生效，这里显式开启。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ContainerRestartRules, true)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -3482,6 +3563,8 @@ func TestPodPhaseWithContainerRestartPolicy(t *testing.T) {
 	}
 }
 
+// TestPodPhaseWithContainerRestartPolicyInitContainers 验证容器级 restartPolicy
+// 作用在 init 容器上的 phase 规则。
 func TestPodPhaseWithContainerRestartPolicyInitContainers(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	var (
@@ -3556,6 +3639,8 @@ func TestPodPhaseWithContainerRestartPolicyInitContainers(t *testing.T) {
 	}
 }
 
+// TestPodPhaseWithRestartAllContainers 验证 RestartAllContainers 在触发、清理与
+// 启动阶段的 pod phase。
 func TestPodPhaseWithRestartAllContainers(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
@@ -3808,6 +3893,8 @@ func TestPodPhaseWithRestartAllContainers(t *testing.T) {
 	}
 }
 
+// TestConvertToAPIContainerStatuses 验证 kubecontainer 状态到 API ContainerStatus
+// 的转换（重启计数、删除、RestartAllContainers 等场景）。
 func TestConvertToAPIContainerStatuses(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	desiredState := v1.PodSpec{
@@ -3841,6 +3928,7 @@ func TestConvertToAPIContainerStatuses(t *testing.T) {
 		},
 		RestartPolicy: v1.RestartPolicyAlways,
 	}
+	// 固定删除时间，避免测试对时间敏感。
 	now := metav1.Now()
 
 	tests := []struct {
@@ -4193,12 +4281,14 @@ func TestConvertToAPIContainerStatuses(t *testing.T) {
 			isInitContainer:   true,
 		},
 	}
+	// 这些用例覆盖 RestartAllContainers，需要同时开启相关特性门控。
 	featuregatetesting.SetFeatureGatesDuringTest(t, utilfeature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 		features.ContainerRestartRules:                true,
 		features.NodeDeclaredFeatures:                 true,
 		features.RestartAllContainersOnContainerExits: true,
 	})
 
+	// 每个用例独立 kubelet；转换结果中的 ContainerID/Resources 会被清空以便比较。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
@@ -4216,6 +4306,7 @@ func TestConvertToAPIContainerStatuses(t *testing.T) {
 				test.podRestarting,
 			)
 			for i, status := range containerStatuses {
+				// 清理与用例无关的字段，聚焦被测转换逻辑。
 				// cleanup irrelevant fields
 				status.ContainerID = ""
 				status.Resources = nil
@@ -4228,16 +4319,19 @@ func TestConvertToAPIContainerStatuses(t *testing.T) {
 	}
 }
 
-// imageDigestRuntime is a simple wrapper that returns a fixed digest for image volumes
+// imageDigestRuntime 是一个简单包装，为镜像卷返回固定 digest。
 type imageDigestRuntime struct {
 	*containertest.FakeRuntime
 	digest string
 }
 
+// GetImageRef 始终返回预设的镜像 digest，供镜像卷测试使用。
 func (r *imageDigestRuntime) GetImageRef(ctx context.Context, image kubecontainer.ImageSpec) (string, error) {
 	return r.digest, nil
 }
 
+// TestConvertToAPIContainerStatusesWithImageVolumeDigest 验证镜像卷 digest 被写入
+// VolumeMountStatus。
 func TestConvertToAPIContainerStatusesWithImageVolumeDigest(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	const (
@@ -4378,9 +4472,11 @@ func TestConvertToAPIContainerStatusesWithImageVolumeDigest(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 镜像卷 digest 写入依赖两个特性门控。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ImageVolume, true)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ImageVolumeWithDigest, true)
 
+			// 用固定 digest 的 runtime 替换默认实现。
 			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
 			defer testKubelet.Cleanup()
 			kl := testKubelet.kubelet
@@ -4409,6 +4505,8 @@ func TestConvertToAPIContainerStatusesWithImageVolumeDigest(t *testing.T) {
 	}
 }
 
+// Test_generateAPIPodStatus 表驱动验证 generateAPIPodStatus 推导出的 phase、条件、
+// 资源与 DRA 分配聚合。
 func Test_generateAPIPodStatus(t *testing.T) {
 	desiredState := v1.PodSpec{
 		NodeName: "machine",
@@ -4437,6 +4535,7 @@ func Test_generateAPIPodStatus(t *testing.T) {
 	now := metav1.Now()
 	normalized_now := now.Rfc3339Copy()
 
+	// 构造 sandbox ready 的 CRI 状态，覆盖 phase 与条件推导。
 	tests := []struct {
 		name                                           string
 		pod                                            *v1.Pod
@@ -5809,6 +5908,7 @@ func Test_generateAPIPodStatus(t *testing.T) {
 			enableDRANodeAllocatableResources:              true,
 		},
 	}
+	// 通过 statusManager 预置上一轮状态，模拟 kubelet 的增量更新。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			logger, tCtx := ktesting.NewTestContext(t)
@@ -5822,12 +5922,14 @@ func Test_generateAPIPodStatus(t *testing.T) {
 			for _, name := range test.unreadyContainer {
 				kl.readinessManager.Set(kubecontainer.BuildContainerID("", findContainerStatusByName(test.expected, name).ContainerID), results.Failure, test.pod)
 			}
+			// 期望条件中预先补充 ReadyToStartContainers 与 DisruptionTarget。
 			expected := test.expected.DeepCopy()
 			actual := kl.generateAPIPodStatus(tCtx, test.pod, test.currentStatus, test.isPodTerminal)
 			expected.Conditions = append([]v1.PodCondition{test.expectedPodReadyToStartContainersCondition}, expected.Conditions...)
 			if test.expectedPodDisruptionCondition != nil {
 				expected.Conditions = append([]v1.PodCondition{*test.expectedPodDisruptionCondition}, expected.Conditions...)
 			}
+			// 语义比较避免无关字段顺序差异。
 			if !apiequality.Semantic.DeepEqual(*expected, actual) {
 				t.Fatalf("Unexpected status: %s", cmp.Diff(*expected, actual))
 			}
@@ -5835,7 +5937,9 @@ func Test_generateAPIPodStatus(t *testing.T) {
 	}
 }
 
+// Test_generateAPIPodStatusForInPlaceVPAEnabled 验证原地 VPA 场景不会错误暴露 resize 条件。
 func Test_generateAPIPodStatusForInPlaceVPAEnabled(t *testing.T) {
+	// 仅在 Linux 上校验 cgroup 资源统计。
 	if goruntime.GOOS != "linux" {
 		t.Skip("InPlacePodVerticalScaling cgroup resource reporting is only supported on Linux")
 	}
@@ -5930,6 +6034,7 @@ func Test_generateAPIPodStatusForInPlaceVPAEnabled(t *testing.T) {
 			},
 		},
 	}
+	// 原地 VPA 场景下不应出现 resize 条件。
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			logger, tCtx := ktesting.NewTestContext(t)
@@ -5949,7 +6054,9 @@ func Test_generateAPIPodStatusForInPlaceVPAEnabled(t *testing.T) {
 	}
 }
 
+// findContainerStatusByName 按名称在 init、regular、ephemeral 状态中查找容器状态。
 func findContainerStatusByName(status v1.PodStatus, name string) *v1.ContainerStatus {
+	// 依次查找 init、regular、ephemeral，首次命中即返回。
 	for i, c := range status.InitContainerStatuses {
 		if c.Name == name {
 			return &status.InitContainerStatuses[i]
@@ -5968,6 +6075,7 @@ func findContainerStatusByName(status v1.PodStatus, name string) *v1.ContainerSt
 	return nil
 }
 
+// TestGetExec 验证 GetExec 对 pod/容器存在性及命令参数的处理。
 func TestGetExec(t *testing.T) {
 	const (
 		podName                = "podFoo"
@@ -6017,6 +6125,7 @@ func TestGetExec(t *testing.T) {
 		expectError: false,
 	}}
 
+	// 用 FakeStreamingRuntime 同时提供 containerRuntime 与 streamingRuntime。
 	for _, tc := range testcases {
 		t.Run(tc.description, func(t *testing.T) {
 			tCtx := ktesting.Init(t)
@@ -6041,6 +6150,7 @@ func TestGetExec(t *testing.T) {
 			kubelet.containerRuntime = fakeRuntime
 			kubelet.streamingRuntime = fakeRuntime
 
+			// 成功时返回 fake host，失败时返回错误。
 			redirect, err := kubelet.GetExec(tCtx, tc.podFullName, podUID, tc.container, tc.command, remotecommand.Options{})
 			if tc.expectError {
 				assert.Error(t, err, description)
@@ -6052,6 +6162,7 @@ func TestGetExec(t *testing.T) {
 	}
 }
 
+// TestGetPortForward 验证 GetPortForward 返回的转发目标及 pod 不存在的错误。
 func TestGetPortForward(t *testing.T) {
 	const (
 		podName                = "podFoo"
@@ -6106,8 +6217,10 @@ func TestGetPortForward(t *testing.T) {
 	}
 }
 
+// TestTruncatePodHostname 验证超长或以 . / - 结尾的 pod hostname 截断规则。
 func TestTruncatePodHostname(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 覆盖合法、超长以及以 . 或 - 结尾的 hostname。
 	for c, test := range map[string]struct {
 		input  string
 		output string
@@ -6130,12 +6243,15 @@ func TestTruncatePodHostname(t *testing.T) {
 		},
 	} {
 		t.Logf("TestCase: %q", c)
+		// truncatePodHostnameIfNeeded 会再次校验长度并截断。
 		output, err := truncatePodHostnameIfNeeded(logger, "test-pod", test.input)
 		assert.NoError(t, err)
 		assert.Equal(t, test.output, output)
 	}
 }
 
+// TestGenerateAPIPodStatusHostNetworkPodIPs 验证 hostNetwork pod 的 PodIPs 从节点地址
+// 或 CRI 结果推导。
 func TestGenerateAPIPodStatusHostNetworkPodIPs(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	testcases := []struct {
@@ -6233,6 +6349,7 @@ func TestGenerateAPIPodStatusHostNetworkPodIPs(t *testing.T) {
 		},
 	}
 
+	// hostNetwork pod 的 PodIPs 优先采用 CRI 结果，否则回退到节点地址。
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
@@ -6248,6 +6365,7 @@ func TestGenerateAPIPodStatusHostNetworkPodIPs(t *testing.T) {
 				},
 			}}
 
+			// 用 hostNetwork pod 触发由节点地址推导 PodIPs 的分支。
 			pod := podWithUIDNameNs("12345", "test-pod", "test-namespace")
 			pod.Spec.HostNetwork = true
 
@@ -6269,6 +6387,8 @@ func TestGenerateAPIPodStatusHostNetworkPodIPs(t *testing.T) {
 	}
 }
 
+// TestNodeAddressUpdatesGenerateAPIPodStatusHostNetworkPodIPs 验证节点地址更新后
+// hostNetwork pod 的 PodIPs 保持不变。
 func TestNodeAddressUpdatesGenerateAPIPodStatusHostNetworkPodIPs(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	testcases := []struct {
@@ -6349,6 +6469,7 @@ func TestNodeAddressUpdatesGenerateAPIPodStatusHostNetworkPodIPs(t *testing.T) {
 		},
 	}
 
+	// 已存在的 PodIPs 在节点地址更新后必须保持不变。
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
@@ -6368,6 +6489,7 @@ func TestNodeAddressUpdatesGenerateAPIPodStatusHostNetworkPodIPs(t *testing.T) {
 
 			pod := podWithUIDNameNs("12345", "test-pod", "test-namespace")
 			pod.Spec.HostNetwork = true
+			// 用旧的 nodeIPs 填充 pod 状态，模拟节点地址发生变化。
 			for _, ip := range tc.nodeIPs {
 				pod.Status.PodIPs = append(pod.Status.PodIPs, v1.PodIP{IP: ip})
 			}
@@ -6394,6 +6516,7 @@ func TestNodeAddressUpdatesGenerateAPIPodStatusHostNetworkPodIPs(t *testing.T) {
 	}
 }
 
+// TestGenerateAPIPodStatusPodIPs 验证普通 pod 的 PodIPs 排序、去重与地址族偏好。
 func TestGenerateAPIPodStatusPodIPs(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	testcases := []struct {
@@ -6499,6 +6622,7 @@ func TestGenerateAPIPodStatusPodIPs(t *testing.T) {
 		},
 	}
 
+	// 覆盖 CRI 返回顺序、节点 IP 地址族以及重叠 IP 的排序。
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
@@ -6528,6 +6652,7 @@ func TestGenerateAPIPodStatusPodIPs(t *testing.T) {
 	}
 }
 
+// TestSortPodIPs 验证 sortPodIPs 的规范化、排序与地址族偏好。
 func TestSortPodIPs(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -6609,6 +6734,7 @@ func TestSortPodIPs(t *testing.T) {
 		},
 	}
 
+	// 排序逻辑应同时完成格式化（ParseIPSloppy）与地址族偏好排序。
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			testKubelet := newTestKubelet(t, false /* controllerAttachDetachEnabled */)
@@ -6626,6 +6752,8 @@ func TestSortPodIPs(t *testing.T) {
 	}
 }
 
+// TestConvertToAPIContainerStatusesDataRace 并发调用转换函数，配合 race detector
+// 检查数据竞争。
 func TestConvertToAPIContainerStatusesDataRace(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	pod := podWithUIDNameNs("12345", "test-pod", "test-namespace")
@@ -6650,6 +6778,7 @@ func TestConvertToAPIContainerStatusesDataRace(t *testing.T) {
 	// as there are no synchronisation events in that function (no locks, no channels, ...) each test routine
 	// should have its own vector clock increased independently. Golang race detector uses pure happens-before
 	// detection, so would catch a race condition consistently, despite only spawning 2 goroutines
+	// 两个 goroutine 访问同一输入，若存在数据竞争会被检测到。
 	for i := 0; i < 2; i++ {
 		go func() {
 			kl.convertToAPIContainerStatuses(tCtx, pod, criStatus, []v1.ContainerStatus{}, []v1.Container{}, nil, false, false, false)
@@ -6657,8 +6786,11 @@ func TestConvertToAPIContainerStatusesDataRace(t *testing.T) {
 	}
 }
 
+// TestConvertToAPIContainerStatusesForResources 验证容器资源与 AllocatedResources
+// 在不同 QoS/状态下的填充规则。
 func TestConvertToAPIContainerStatusesForResources(t *testing.T) {
 	logger, tCtx := ktesting.NewTestContext(t)
+	// 仅在 Linux 上验证 cgroup 报告的容器资源。
 	if goruntime.GOOS != "linux" {
 		t.Skip("InPlacePodVerticalScaling cgroup resource reporting is only supported on Linux")
 	}
@@ -6742,6 +6874,7 @@ func TestConvertToAPIContainerStatusesForResources(t *testing.T) {
 	defer testKubelet.Cleanup()
 	kubelet := testKubelet.kubelet
 
+	// 每个用例使用独立 pod 名称，避免 allocationManager 状态冲突。
 	idx := 0
 	for tdesc, tc := range map[string]struct {
 		State              kubecontainer.State // Defaults to Running
@@ -7097,6 +7230,7 @@ func TestConvertToAPIContainerStatusesForResources(t *testing.T) {
 			},
 		},
 	} {
+		// 先写入分配资源，再模拟 CRI 实际资源，最后比较转换结果。
 		t.Run(tdesc, func(t *testing.T) {
 			tPod := testPod.DeepCopy()
 			tPod.Name = fmt.Sprintf("%s-%d", testPod.Name, idx)
@@ -7125,6 +7259,7 @@ func TestConvertToAPIContainerStatusesForResources(t *testing.T) {
 			cStatuses := kubelet.convertToAPIContainerStatuses(tCtx, tPod, podStatus, []v1.ContainerStatus{tc.OldStatus}, tPod.Spec.Containers, nil, false, false, false)
 			actual := cStatuses[0]
 			// Explicitly test AllocatedResources and Resources separately for debuggability.
+			// 分开断言资源字段，失败时更易定位。
 			assert.Equal(t, tc.Expected.AllocatedResources, actual.AllocatedResources, "AllocatedResources")
 			assert.Equal(t, tc.Expected.Resources, actual.Resources, "Resources")
 			// Catch-all for any other status changes.
@@ -7133,6 +7268,8 @@ func TestConvertToAPIContainerStatusesForResources(t *testing.T) {
 	}
 }
 
+// TestConvertToAPIContainerStatusesForUser 验证 SupplementalGroupsPolicy 开关下
+// 容器 User 字段的填充。
 func TestConvertToAPIContainerStatusesForUser(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	nowTime := time.Now()
@@ -7245,18 +7382,23 @@ func TestConvertToAPIContainerStatusesForUser(t *testing.T) {
 		},
 	} {
 		// Set emulation version so that the feature gate can be disabled in the test
+		// 模拟 1.34 版本，以便关闭 SupplementalGroupsPolicy。
 		featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.34"))
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.SupplementalGroupsPolicy, tc.featureEnabled)
 		tPod := testPod.DeepCopy()
 		t.Logf("TestCase: %q", tdesc)
 
+		// 开关关闭时 User 字段必须保持为空。
 		cStatuses := kubelet.convertToAPIContainerStatuses(tCtx, tPod, tc.testPodStatus, tPod.Status.ContainerStatuses, tPod.Spec.Containers, nil, false, false, false)
 
 		assert.Equal(t, tc.expectedContainerStatus, cStatuses)
 	}
 }
 
+// TestKubelet_HandlePodCleanups 表驱动验证 HandlePodCleanups 对孤儿、终止与重启 pod
+// 的清理、pod worker 状态及指标。
 func TestKubelet_HandlePodCleanups(t *testing.T) {
+	// 局部构造测试用 pod 与 runtime pod，简化各场景差异。
 	tCtx := ktesting.Init(t)
 	one := int64(1)
 	two := int64(2)
@@ -8377,6 +8519,7 @@ func TestKubelet_HandlePodCleanups(t *testing.T) {
 			},
 		},
 	}
+	// 每个用例先重置指标，避免累计值互相干扰。
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// clear the metrics for testing
@@ -8392,6 +8535,7 @@ func TestKubelet_HandlePodCleanups(t *testing.T) {
 			}
 			metrics.MirrorPodCount.Set(0)
 
+			// 注入可失败的 podSyncer，模拟终止 pod 时的错误。
 			testKubelet := newTestKubelet(t, false)
 			defer testKubelet.Cleanup()
 			kl := testKubelet.kubelet
@@ -8421,6 +8565,7 @@ func TestKubelet_HandlePodCleanups(t *testing.T) {
 				tt.prepareWorker(t, podWorkers, processed)
 			}
 
+			// 只设置 podManager 与 runtime，其余依赖来自 newTestKubelet。
 			testKubelet.fakeRuntime.PodList = tt.runtimePods
 			kl.podManager.SetPods(tt.pods)
 
@@ -8432,6 +8577,7 @@ func TestKubelet_HandlePodCleanups(t *testing.T) {
 				kl.rejectPod(tCtx, pod, reject.reason, reject.message)
 			}
 
+			// 第一次清理：允许终止失败。
 			if err := kl.HandlePodCleanups(tCtx); (err != nil) != tt.wantErr {
 				t.Errorf("Kubelet.HandlePodCleanups() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -8445,6 +8591,7 @@ func TestKubelet_HandlePodCleanups(t *testing.T) {
 			}
 
 			// check after the terminating error clears
+			// 第二次清理：移除注入的错误，验证重试路径。
 			if tt.wantWorkerAfterRetry != nil {
 				podWorkers.podSyncer = originalPodSyncer
 				if err := kl.HandlePodCleanups(tCtx); (err != nil) != tt.wantErr {
@@ -8461,7 +8608,9 @@ func TestKubelet_HandlePodCleanups(t *testing.T) {
 	}
 }
 
+// testMetric 将采集到的指标文本与期望值进行比对。
 func testMetric(t *testing.T, metricName string, expectedMetric string) {
+	// 按指标名比对采集结果。
 	t.Helper()
 	err := testutil.GatherAndCompare(metrics.GetGather(), strings.NewReader(expectedMetric), metricName)
 	if err != nil {
@@ -8469,6 +8618,8 @@ func testMetric(t *testing.T, metricName string, expectedMetric string) {
 	}
 }
 
+// TestGetNonExistentImagePullSecret 验证缺失的 imagePullSecret 被单独报告，
+// 且不会产生空凭据。
 func TestGetNonExistentImagePullSecret(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	secrets := make([]*v1.Secret, 0)
@@ -8489,11 +8640,13 @@ func TestGetNonExistentImagePullSecret(t *testing.T) {
 		},
 	}
 
+	// 缺失的 imagePullSecret 应被单独报告，而不会变成空凭据。
 	pullSecrets, missingPullSecrets := testKubelet.kubelet.getPullSecretsForPod(logger, testPod)
 	assert.Empty(t, pullSecrets)
 	assert.Equal(t, []string{"secretFoo"}, missingPullSecrets)
 }
 
+// TestParseGetSubIdsOutput 验证解析 /proc/PID/uid_map 的单行输出。
 func TestParseGetSubIdsOutput(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -8551,6 +8704,7 @@ func TestParseGetSubIdsOutput(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 解析 uid_map 的单行输出，非法输入必须返回错误。
 			gotFirstID, gotRangeLen, err := parseGetSubIdsOutput(tc.input)
 			if tc.wantErr {
 				if err == nil {
@@ -8568,6 +8722,7 @@ func TestParseGetSubIdsOutput(t *testing.T) {
 	}
 }
 
+// TestDefaultKubeletMappings 验证默认 UID/GID 映射范围不会越过 2^32-1。
 func TestDefaultKubeletMappings(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -8591,6 +8746,7 @@ func TestDefaultKubeletMappings(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 默认映射从 idsPerPod 开始，并为内核保留的无效 ID 留出空间。
 			gotFirstID, gotRangeLen := defaultKubeletMappings(tc.idsPerPod)
 			assert.Equal(t, tc.wantFirstID, gotFirstID)
 			assert.Equal(t, tc.wantRangeLen, gotRangeLen)
@@ -8601,6 +8757,7 @@ func TestDefaultKubeletMappings(t *testing.T) {
 	}
 }
 
+// TestResolveRecursiveReadOnly 验证递归只读模式与挂载传播模式的兼容性。
 func TestResolveRecursiveReadOnly(t *testing.T) {
 	testCases := []struct {
 		m                  v1.VolumeMount
@@ -8713,6 +8870,7 @@ func TestResolveRecursiveReadOnly(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// 逐用例只校验错误是否存在，或错误信息是否包含关键片段。
 		got, err := resolveRecursiveReadOnly(tc.m, tc.runtimeSupportsRRO)
 		t.Logf("resolveRecursiveReadOnly(%+v, %v) = (%v, %v)", tc.m, tc.runtimeSupportsRRO, got, err)
 		if tc.expectedErr == "" {
@@ -8724,34 +8882,42 @@ func TestResolveRecursiveReadOnly(t *testing.T) {
 	}
 }
 
-// testVolumeMounter is a mock volume mounter for testing FileKeyRef functionality
+// testVolumeMounter 是用于测试 FileKeyRef 功能的 mock volume mounter。
 type testVolumeMounter struct {
 	path string
 }
 
+// GetMetrics 返回空的 volume 指标。
 func (tvm *testVolumeMounter) GetMetrics() (*volume.Metrics, error) {
 	return &volume.Metrics{}, nil
 }
 
+// SetUp 是空实现，仅满足 volume.Mounter 接口。
 func (tvm *testVolumeMounter) SetUp(mounterArgs volume.MounterArgs) error {
 	return nil
 }
 
+// SetUpAt 是空实现，仅满足 volume.Mounter 接口。
 func (tvm *testVolumeMounter) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	return nil
 }
 
+// GetAttributes 返回空的 volume 属性。
 func (tvm *testVolumeMounter) GetAttributes() volume.Attributes {
 	return volume.Attributes{}
 }
 
+// GetPath 返回 mock 的卷路径。
 func (tvm *testVolumeMounter) GetPath() string {
 	return tvm.path
 }
 
+// TestMakeEnvironmentVariablesWithFileKeyRef 验证 FileKeyRef 从卷中的 env 文件读取变量，
+// 并覆盖文件缺失、键缺失与可选键等错误路径。
 func TestMakeEnvironmentVariablesWithFileKeyRef(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	// Create a temporary directory for test files
+	// 使用临时目录承载 env 文件，避免污染工作区。
 	tmpDir, err := os.MkdirTemp("", "filekeyref-test")
 	require.NoError(t, err)
 	defer func() {
@@ -8759,6 +8925,7 @@ func TestMakeEnvironmentVariablesWithFileKeyRef(t *testing.T) {
 	}()
 
 	// Create test environment variable files
+	// 每个用例可自行决定 env 文件的内容以及文件是否存在。
 	createEnvFile := func(filename, content string) string {
 		filePath := filepath.Join(tmpDir, filename)
 		err := os.WriteFile(filePath, []byte(content), 0644)
@@ -9084,6 +9251,7 @@ func TestMakeEnvironmentVariablesWithFileKeyRef(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// FileKeyRef 依赖 EnvFiles 特性门控。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EnvFiles, true)
 
 			if tc.setupFiles != nil {
@@ -9106,6 +9274,7 @@ func TestMakeEnvironmentVariablesWithFileKeyRef(t *testing.T) {
 				},
 			}
 
+			// makeEnvironmentVariables 通过 VolumeMap 访问已挂载的卷。
 			envs, err := kl.makeEnvironmentVariables(tCtx, pod, tc.container, "192.168.1.1", []string{"192.168.1.1"}, tc.podVolumes)
 
 			if tc.expectedError {
@@ -9117,6 +9286,7 @@ func TestMakeEnvironmentVariablesWithFileKeyRef(t *testing.T) {
 				require.NoError(t, err)
 
 				// Sort both slices for comparison
+				// 排序后比较，忽略变量生成顺序。
 				sort.Sort(Envs(envs))
 				sort.Sort(Envs(tc.expectedEnvs))
 
@@ -9126,14 +9296,22 @@ func TestMakeEnvironmentVariablesWithFileKeyRef(t *testing.T) {
 	}
 }
 
+// Envs 让 []kubecontainer.EnvVar 实现 sort.Interface，便于测试排序。
 type Envs []kubecontainer.EnvVar
 
-func (e Envs) Len() int           { return len(e) }
-func (e Envs) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
+// Len 返回环境变量数量。
+func (e Envs) Len() int { return len(e) }
+
+// Swap 交换下标 i 与 j 的环境变量。
+func (e Envs) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
+
+// Less 按变量名比较，保证排序结果稳定。
 func (e Envs) Less(i, j int) bool { return e[i].Name < e[j].Name }
 
+// TestGeneratePodHostNameAndDomain 验证 pod hostname 与 domain 的推导、截断与校验。
 func TestGeneratePodHostNameAndDomain(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
+	// 构造带 clusterDomain 的 Kubelet，仅测试 hostname/domain 推导。
 	kubelet := &Kubelet{}
 	kubelet.dnsConfigurer = &dns.Configurer{
 		ClusterDomain: "cluster.local",
@@ -9238,6 +9416,7 @@ func TestGeneratePodHostNameAndDomain(t *testing.T) {
 		},
 	}
 
+	// 覆盖默认、自定义、覆盖与非法 hostname/subdomain 的组合。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			pod := &v1.Pod{
@@ -9278,17 +9457,19 @@ func TestGeneratePodHostNameAndDomain(t *testing.T) {
 	}
 }
 
-// trackingSubpath is a mock subpath.Interface that returns non-nil cleanup
-// functions from PrepareSafeSubpath and tracks which subpaths had cleanup
-// called. This is used to verify that makeMounts accumulates all
-// cleanup actions rather than overwriting them.
+// trackingSubpath 是 subpath.Interface 的 mock 实现：PrepareSafeSubpath
+// 返回非 nil 的 cleanup 函数，并记录哪些 subpath 执行过 cleanup。
+// 用于验证 makeMounts 累积全部 cleanup 动作，而不是覆盖前面的动作。
 type trackingSubpath struct {
 	cleanedSubPaths []string
 	errorOnSubPath  string // SubPath name to fail on; empty means no error
 	safeMakeDirErr  error
 }
 
+// PrepareSafeSubpath 返回 subpath 路径和一个记录清理动作的 cleanup 函数；
+// errorOnSubPath 命中时返回错误。
 func (ts *trackingSubpath) PrepareSafeSubpath(sub subpath.Subpath) (string, func(), error) {
+	// cleanup 被调用后才记录，模拟真实 subpath 的清理时机。
 	subPathName := filepath.Base(sub.Path)
 	if ts.errorOnSubPath != "" && subPathName == ts.errorOnSubPath {
 		return "", nil, fmt.Errorf("mock PrepareSafeSubpath error on subpath %s", subPathName)
@@ -9299,17 +9480,22 @@ func (ts *trackingSubpath) PrepareSafeSubpath(sub subpath.Subpath) (string, func
 	return sub.Path, cleanup, nil
 }
 
+// CleanSubPaths 是空实现，仅满足 subpath.Interface。
 func (ts *trackingSubpath) CleanSubPaths(podDir string, volumeName string) error {
 	return nil
 }
 
+// SafeMakeDir 返回预设的错误，用于测试创建目录失败路径。
 func (ts *trackingSubpath) SafeMakeDir(pathname string, base string, perm os.FileMode) error {
 	return ts.safeMakeDirErr
 }
 
+// TestMakemountsSubpathCleanupAccumulation 验证 makeMounts 累积所有 subpath 的
+// cleanup 动作，而不是只保留最后一个。
 func TestMakemountsSubpathCleanupAccumulation(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
+	// 预先创建三个子目录，使 PathExists 校验通过。
 	podDir := t.TempDir()
 	volPath := filepath.Join(podDir, "volumes", "disk")
 	require.NoError(t, os.MkdirAll(volPath, 0755))
@@ -9373,6 +9559,7 @@ func TestMakemountsSubpathCleanupAccumulation(t *testing.T) {
 		},
 	}
 
+	// 用 mock subpath 记录 cleanup 调用，验证累积行为。
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			tracker := &trackingSubpath{
@@ -9419,7 +9606,9 @@ func TestMakemountsSubpathCleanupAccumulation(t *testing.T) {
 	}
 }
 
+// TestRecordPodLevelResourcesAdmission 验证 pod 资源配置模式被正确记录到指标。
 func TestRecordPodLevelResourcesAdmission(t *testing.T) {
+	// 指标注册是进程级的，重复注册在测试中可忽略。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, true)
 	_ = legacyregistry.Register(metrics.PodLevelResourcesAdmissionTotal)
 
@@ -9506,6 +9695,7 @@ func TestRecordPodLevelResourcesAdmission(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		// 每次重置计数器，确保只观察当前 pod 的记录。
 		t.Run(tc.name, func(t *testing.T) {
 			metrics.PodLevelResourcesAdmissionTotal.Reset()
 			recordPodLevelResourcesAdmission(tc.pod)
@@ -9516,6 +9706,7 @@ func TestRecordPodLevelResourcesAdmission(t *testing.T) {
 	}
 }
 
+// TestMakeMountsBindMountOptions 验证 VolumeMount 的 BindMountOptions 被写入挂载项。
 func TestMakeMountsBindMountOptions(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 

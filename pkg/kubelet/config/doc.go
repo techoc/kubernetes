@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package config implements the pod configuration readers.
+// Package config 实现 Pod 配置读取器。
 package config

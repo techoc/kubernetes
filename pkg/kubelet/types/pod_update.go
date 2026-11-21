@@ -25,7 +25,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/scheduling"
 )
 
-// Annotation keys for annotations used in this package.
+// 本包使用的注解键。
 const (
 	ConfigSourceAnnotationKey    = "kubernetes.io/config.source"
 	ConfigMirrorAnnotationKey    = v1.MirrorPodAnnotationKey
@@ -33,55 +33,53 @@ const (
 	ConfigHashAnnotationKey      = "kubernetes.io/config.hash"
 )
 
-// PodOperation defines what changes will be made on a pod configuration.
+// PodOperation 表示将对 Pod 配置执行的操作类型。
 type PodOperation int
 
-// These constants identify the PodOperations that can be made on a pod configuration.
+// 以下常量标识可对 Pod 配置执行的操作。
 const (
-	// ADD signifies pods that are new to this source.
+	// ADD 表示该来源中新增的 Pod。
 	ADD PodOperation = iota
-	// DELETE signifies pods that are gracefully deleted from this source.
+	// DELETE 表示从该来源优雅删除的 Pod。
 	DELETE
-	// REMOVE signifies pods that have been removed from this source.
+	// REMOVE 表示已从该来源移除的 Pod。
 	REMOVE
-	// UPDATE signifies pods have been updated in this source.
+	// UPDATE 表示该来源中更新过的 Pod。
 	UPDATE
-	// RECONCILE signifies pods that have unexpected status in this source,
-	// kubelet should reconcile status with this source.
+	// RECONCILE 表示该来源中状态异常的 Pod，kubelet 应与其对齐状态。
 	RECONCILE
 )
 
-// These constants identify the sources of pods.
+// 以下常量标识 Pod 的来源。
 const (
-	// Filesource idenitified updates from a file.
+	// FileSource 表示来自配置文件的更新。
 	FileSource = "file"
-	// HTTPSource identifies updates from querying a web page.
+	// HTTPSource 表示来自网页轮询的更新。
 	HTTPSource = "http"
-	// ApiserverSource identifies updates from Kubernetes API Server.
+	// ApiserverSource 表示来自 Kubernetes API Server 的更新。
 	ApiserverSource = "api"
-	// AllSource identifies updates from all sources.
+	// AllSource 表示来自所有来源的更新。
 	AllSource = "*"
 )
 
-// NamespaceDefault is a string representing the default namespace.
+// NamespaceDefault 是默认命名空间的字符串表示。
 const NamespaceDefault = metav1.NamespaceDefault
 
-// PodUpdate defines an operation sent on the channel. You can add or remove single services by
-// sending an array of size one and Op == ADD|REMOVE (with REMOVE, only the ID is required).
-// For setting the state of the system to a given state for this source configuration, set
-// Pods as desired and Op to SET, which will reset the system state to that specified in this
-// operation for this source channel. To remove all pods, set Pods to empty object and Op to SET.
+// PodUpdate 定义在 channel 上传递的操作：可通过大小为 1 的数组增删单个 Pod；
+// 也可用 SET 语义把该来源的系统状态整体重置为 Pods 指定的集合，
+// 清空全部 Pod 则传入空集合。
 //
-// Additionally, Pods should never be nil - it should always point to an empty slice. While
-// functionally similar, this helps our unit tests properly check that the correct PodUpdates
-// are generated.
+// Pods 不应为 nil，而应指向空切片：两者功能相近，但空切片便于单元测试
+// 校验生成的 PodUpdate 是否正确。
 type PodUpdate struct {
 	Pods   []*v1.Pod
 	Op     PodOperation
 	Source string
 }
 
-// GetValidatedSources gets all validated sources from the specified sources.
+// GetValidatedSources 校验并规范化传入的 Pod 来源列表。
+// 通配来源 "*" 展开为 file/http/api 三种；空字符串被忽略；
+// 未知来源返回错误，避免配置错误被静默吞掉。
 func GetValidatedSources(sources []string) ([]string, error) {
 	validated := make([]string, 0, len(sources))
 	for _, source := range sources {
@@ -90,8 +88,9 @@ func GetValidatedSources(sources []string) ([]string, error) {
 			return []string{FileSource, HTTPSource, ApiserverSource}, nil
 		case FileSource, HTTPSource, ApiserverSource:
 			validated = append(validated, source)
+		// 空来源视为未配置，跳过而不是报错。
 		case "":
-			// Skip
+			// 空来源跳过即可。
 		default:
 			return []string{}, fmt.Errorf("unknown pod source %q", source)
 		}
@@ -99,7 +98,7 @@ func GetValidatedSources(sources []string) ([]string, error) {
 	return validated, nil
 }
 
-// GetPodSource returns the source of the pod based on the annotation.
+// GetPodSource 从 Pod 注解中读取来源；缺少注解时返回错误。
 func GetPodSource(pod *v1.Pod) (string, error) {
 	if pod.Annotations != nil {
 		if source, ok := pod.Annotations[ConfigSourceAnnotationKey]; ok {
@@ -109,21 +108,22 @@ func GetPodSource(pod *v1.Pod) (string, error) {
 	return "", fmt.Errorf("cannot get source of pod %q", pod.UID)
 }
 
-// SyncPodType classifies pod updates, eg: create, update.
+// SyncPodType 对 Pod 更新进行分类，例如创建、更新。
 type SyncPodType int
 
 const (
-	// SyncPodSync is when the pod is synced to ensure desired state
+	// SyncPodSync 表示同步 Pod 以确保其达到期望状态。
 	SyncPodSync SyncPodType = iota
-	// SyncPodUpdate is when the pod is updated from source
+	// SyncPodUpdate 表示 Pod 从来源侧被更新。
 	SyncPodUpdate
-	// SyncPodCreate is when the pod is created from source
+	// SyncPodCreate 表示 Pod 从来源侧被创建。
 	SyncPodCreate
-	// SyncPodKill is when the pod should have no running containers. A pod stopped in this way could be
-	// restarted in the future due config changes.
+	// SyncPodKill 表示 Pod 不应有运行中的容器；
+	// 如此停止的 Pod 可能因配置变更在未来被重新启动。
 	SyncPodKill
 )
 
+// String 返回 SyncPodType 的可读名称，用于日志与事件输出。
 func (sp SyncPodType) String() string {
 	switch sp {
 	case SyncPodCreate:
@@ -139,7 +139,7 @@ func (sp SyncPodType) String() string {
 	}
 }
 
-// IsMirrorPod returns true if the passed Pod is a Mirror Pod.
+// IsMirrorPod 判断 Pod 是否为镜像 Pod，即静态 Pod 在 API Server 中的投影。
 func IsMirrorPod(pod *v1.Pod) bool {
 	if pod.Annotations == nil {
 		return false
@@ -148,14 +148,17 @@ func IsMirrorPod(pod *v1.Pod) bool {
 	return ok
 }
 
-// IsStaticPod returns true if the pod is a static pod.
+// IsStaticPod 判断 Pod 是否来自非 API Server 的来源（文件或 HTTP），即静态 Pod。
 func IsStaticPod(pod *v1.Pod) bool {
+	// 只有能明确识别为 file/http 来源的 Pod 才算静态 Pod。
 	source, err := GetPodSource(pod)
 	return err == nil && source != ApiserverSource
 }
 
-// IsCriticalPod returns true if pod's priority is greater than or equal to SystemCriticalPriority.
+// IsCriticalPod 判断 Pod 是否为关键 Pod：静态 Pod、镜像 Pod，
+// 或优先级达到系统关键级别；关键 Pod 在资源紧张时最后被驱逐或抢占。
 func IsCriticalPod(pod *v1.Pod) bool {
+	// 静态 Pod 与镜像 Pod 承载节点核心组件，天然视为关键 Pod。
 	if IsStaticPod(pod) {
 		return true
 	}
@@ -168,32 +171,32 @@ func IsCriticalPod(pod *v1.Pod) bool {
 	return false
 }
 
-// Preemptable returns true if preemptor pod can preempt preemptee pod
-// if preemptee is not critical or if preemptor's priority is greater than preemptee's priority
+// Preemptable 判断 preemptor 能否抢占 preemptee：
+// 关键 Pod 可抢占非关键 Pod，否则比较两者优先级。
 func Preemptable(preemptor, preemptee *v1.Pod) bool {
 	if IsCriticalPod(preemptor) && !IsCriticalPod(preemptee) {
 		return true
 	}
 	if (preemptor != nil && preemptor.Spec.Priority != nil) &&
 		(preemptee != nil && preemptee.Spec.Priority != nil) {
+		// 双方都有显式优先级时，按数值大小决定。
 		return *(preemptor.Spec.Priority) > *(preemptee.Spec.Priority)
 	}
 
 	return false
 }
 
-// IsCriticalPodBasedOnPriority checks if the given pod is a critical pod based on priority resolved from pod Spec.
+// IsCriticalPodBasedOnPriority 根据优先级数值判断是否达到系统关键优先级。
 func IsCriticalPodBasedOnPriority(priority int32) bool {
 	return priority >= scheduling.SystemCriticalPriority
 }
 
-// IsNodeCriticalPod checks if the given pod is a system-node-critical
+// IsNodeCriticalPod 判断 Pod 是否为 system-node-critical 级别的节点关键 Pod。
 func IsNodeCriticalPod(pod *v1.Pod) bool {
 	return IsCriticalPod(pod) && (pod.Spec.PriorityClassName == scheduling.SystemNodeCritical)
 }
 
-// HasRestartableInitContainer returns true if the pod has any restartable init
-// container
+// HasRestartableInitContainer 判断 Pod 是否包含可重启的边车式 init 容器。
 func HasRestartableInitContainer(pod *v1.Pod) bool {
 	for _, container := range pod.Spec.InitContainers {
 		if podutil.IsRestartableInitContainer(&container) {

@@ -24,14 +24,15 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/lifecycle"
 )
 
+// noneScope 是不做拓扑约束的 scope，所有 Pod 均可准入。
 type noneScope struct {
 	scope
 }
 
-// Ensure noneScope implements Scope interface
+// 确保 noneScope 实现了 Scope 接口。
 var _ Scope = &noneScope{}
 
-// NewNoneScope returns a none scope.
+// NewNoneScope 返回 none scope 实例。
 func NewNoneScope() Scope {
 	return &noneScope{
 		scope{
@@ -43,6 +44,7 @@ func NewNoneScope() Scope {
 	}
 }
 
+// Admit 使用 none 策略处理准入，始终允许 Pod。
 func (s *noneScope) Admit(ctx context.Context, pod *v1.Pod, operation lifecycle.Operation) lifecycle.PodAdmitResult {
 	return s.admitPolicyNone(ctx, pod, operation)
 }

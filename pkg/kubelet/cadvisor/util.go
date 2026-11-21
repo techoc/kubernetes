@@ -28,15 +28,14 @@ import (
 )
 
 const (
-	// CrioSocketSuffix is the path to the CRI-O socket.
-	// Please keep this in sync with the one in:
-	// github.com/google/cadvisor/tree/master/container/crio/client.go
-	// Note that however we only match on the suffix, as /var/run is often a
-	// symlink to /run, so the user can specify either path.
+	// CrioSocketSuffix 是 CRI-O socket 的路径后缀。
+	// 请与 github.com/google/cadvisor/tree/master/container/crio/client.go 保持一致。
+	// 这里只匹配后缀，因为 /var/run 通常是 /run 的符号链接，
+	// 用户可能指定任意一种路径。
 	CrioSocketSuffix = "run/crio/crio.sock"
 )
 
-// CapacityFromMachineInfo returns the capacity of the resources from the machine info.
+// CapacityFromMachineInfo 根据机器信息返回节点资源容量。
 func CapacityFromMachineInfo(info *cadvisorapi.MachineInfo) v1.ResourceList {
 	c := v1.ResourceList{
 		v1.ResourceCPU: *resource.NewMilliQuantity(
@@ -47,7 +46,8 @@ func CapacityFromMachineInfo(info *cadvisorapi.MachineInfo) v1.ResourceList {
 			resource.BinarySI),
 	}
 
-	// if huge pages are enabled, we report them as a schedulable resource on the node
+	// 若启用了 huge pages，则把它们作为节点上的可调度资源上报。
+	// 把每种页大小的 hugepage 作为可调度资源上报。
 	for _, hugepagesInfo := range info.HugePages {
 		pageSizeBytes := int64(hugepagesInfo.PageSize * 1024)
 		hugePagesBytes := pageSizeBytes * int64(hugepagesInfo.NumPages)
@@ -58,7 +58,7 @@ func CapacityFromMachineInfo(info *cadvisorapi.MachineInfo) v1.ResourceList {
 	return c
 }
 
-// EphemeralStorageCapacityFromFsInfo returns the capacity of the ephemeral storage from the FsInfo.
+// EphemeralStorageCapacityFromFsInfo 根据文件系统信息返回临时存储容量。
 func EphemeralStorageCapacityFromFsInfo(info cadvisorapi.FsInfo) v1.ResourceList {
 	c := v1.ResourceList{
 		v1.ResourceEphemeralStorage: *resource.NewQuantity(
@@ -68,17 +68,17 @@ func EphemeralStorageCapacityFromFsInfo(info cadvisorapi.FsInfo) v1.ResourceList
 	return c
 }
 
-// UsingLegacyCadvisorStats returns true if container stats are provided by cadvisor instead of through the CRI.
-// CRI integrations should get container metrics via CRI.
+// UsingLegacyCadvisorStats 判断容器统计是否由 cAdvisor 而非 CRI 提供。
+// CRI 集成应通过 CRI 获取容器指标。
 // TODO: cri-o relies on cadvisor as a temporary workaround. The code should
 // be removed. Related issue:
 // https://github.com/kubernetes/kubernetes/issues/51798
 func UsingLegacyCadvisorStats(runtimeEndpoint string) bool {
-	// If PodAndContainerStatsFromCRI feature is enabled, then assume the user
-	// wants to use CRI stats, as the aforementioned workaround isn't needed
-	// when this feature is enabled.
+	// 若启用 PodAndContainerStatsFromCRI 特性，则认为用户希望使用 CRI 统计；
+	// 该特性开启后不再需要上述临时方案。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodAndContainerStatsFromCRI) {
 		return false
 	}
+	// 只有 CRI-O 仍依赖 cAdvisor 统计。
 	return strings.HasSuffix(runtimeEndpoint, CrioSocketSuffix)
 }

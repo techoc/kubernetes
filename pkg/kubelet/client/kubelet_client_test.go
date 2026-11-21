@@ -36,6 +36,8 @@ import (
 	"k8s.io/kubernetes/test/utils/client-go/ktesting"
 )
 
+// kubeletTestCertHelper 构造用于测试的 KubeletTLSConfig。
+// valid 为 true 时使用有效证书，否则使用无效证书，用于覆盖不同的证书校验路径。
 func kubeletTestCertHelper(valid bool) KubeletTLSConfig {
 	if valid {
 		return KubeletTLSConfig{
@@ -51,6 +53,8 @@ func kubeletTestCertHelper(valid bool) KubeletTLSConfig {
 	}
 }
 
+// kubeletTestRoundTripHelper 通过给定的 RoundTripper 向 addr 发起一次 GET 请求，
+// 校验请求成功且响应状态码为 200，否则令测试失败。
 func kubeletTestRoundTripHelper(t *testing.T, rt http.RoundTripper, addr string) {
 	req, err := http.NewRequest(http.MethodGet, addr, nil)
 	if err != nil {
@@ -69,9 +73,11 @@ func kubeletTestRoundTripHelper(t *testing.T, rt http.RoundTripper, addr string)
 	}
 }
 
+// TestMakeTransportInvalid 验证提供无效证书路径时 MakeTransport 返回错误，
+// 且不返回可用的 RoundTripper。
 func TestMakeTransportInvalid(t *testing.T) {
 	config := &KubeletClientConfig{
-		// Invalid certificate and key path
+		// 无效的证书与密钥路径
 		TLSClientConfig: kubeletTestCertHelper(false),
 	}
 	rt, err := MakeTransport(config)
@@ -83,6 +89,7 @@ func TestMakeTransportInvalid(t *testing.T) {
 	}
 }
 
+// TestMakeTransportValid 验证提供有效配置时 MakeTransport 成功创建非空的 RoundTripper。
 func TestMakeTransportValid(t *testing.T) {
 	config := &KubeletClientConfig{
 		Port:            1234,
@@ -98,6 +105,8 @@ func TestMakeTransportValid(t *testing.T) {
 	}
 }
 
+// TestMakeTransportWithLookUp 覆盖 Lookup 闭包正常与报错两种情况，
+// 验证 MakeInsecureTransport 在对应场景下分别成功或失败。
 func TestMakeTransportWithLookUp(t *testing.T) {
 	dialFunc := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		return net.Dial(network, addr)
@@ -143,6 +152,7 @@ func TestMakeTransportWithLookUp(t *testing.T) {
 			if rt == nil {
 				t.Fatalf("rt should not be nil")
 			}
+			// 启动 TLS 测试服务器，验证传输层能完成握手并返回 200。
 			testServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -152,6 +162,8 @@ func TestMakeTransportWithLookUp(t *testing.T) {
 	}
 }
 
+// TestMakeInsecureTransport 验证 MakeInsecureTransport 基于有效配置创建传输，
+// 并可对测试服务器完成一次成功的 RoundTrip。
 func TestMakeInsecureTransport(t *testing.T) {
 	testServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -162,6 +174,7 @@ func TestMakeInsecureTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 从测试服务器 URL 中提取端口，确保配置端口与测试服务器一致。
 	_, portStr, err := net.SplitHostPort(testURL.Host)
 	if err != nil {
 		t.Fatal(err)
@@ -186,16 +199,19 @@ func TestMakeInsecureTransport(t *testing.T) {
 	kubeletTestRoundTripHelper(t, rt, testServer.URL)
 }
 
-// Mock NodeGetter for testing
+// mockNodeGetter 是测试用的 NodeGetter 模拟实现，返回预设的节点或错误。
 type mockNodeGetter struct {
 	node *v1.Node
 	err  error
 }
 
+// Get 直接返回模拟实现中预设的节点与错误，不执行任何真实查询。
 func (m *mockNodeGetter) Get(ctx context.Context, name string, options metav1.GetOptions) (*v1.Node, error) {
 	return m.node, m.err
 }
 
+// TestNewNodeConnectionInfoGetter 验证 NewNodeConnectionInfoGetter 在有效配置下
+// 能正确初始化 NodeConnectionInfoGetter，在证书无效时返回错误。
 func TestNewNodeConnectionInfoGetter(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -255,7 +271,7 @@ func TestNewNodeConnectionInfoGetter(t *testing.T) {
 				t.Fatalf("expected non-nil getter")
 			}
 
-			// Verify the created getter has correct properties
+			// 校验创建出的 getter 各属性是否符合预期
 			ncig, ok := getter.(*NodeConnectionInfoGetter)
 			if !ok {
 				t.Fatalf("expected *NodeConnectionInfoGetter, got %T", getter)
@@ -281,6 +297,8 @@ func TestNewNodeConnectionInfoGetter(t *testing.T) {
 	}
 }
 
+// TestGetConnectionInfo 验证 GetConnectionInfo 能根据节点地址、端口与声明的特性
+// 返回正确的连接信息，并覆盖节点不存在、无地址等错误场景。
 func TestGetConnectionInfo(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -451,6 +469,7 @@ func TestGetConnectionInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			// 使用 ExternalIP 优先的配置，便于校验地址选择逻辑。
 			config := KubeletClientConfig{
 				Port:                  10250,
 				PreferredAddressTypes: []string{"ExternalIP", "InternalIP"},

@@ -18,7 +18,7 @@ limitations under the License.
 
 package util
 
-// GetPids gets pids of the desired cgroup
+// GetPids 返回指定 cgroup 中的进程 PID；非 Linux 平台不支持，直接返回空结果。
 func GetPids(cgroupPath string) ([]int, error) {
 	return nil, nil
 }

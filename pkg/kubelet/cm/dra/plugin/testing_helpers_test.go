@@ -22,12 +22,12 @@ import (
 	drahealthv1 "k8s.io/kubelet/pkg/apis/dra-health/v1"
 )
 
-// mockStreamHandler is a mock implementation of the StreamHandler interface,
-// shared across all tests in this package.
+// mockStreamHandler 是 StreamHandler 接口的 mock 实现，供本包所有测试共用。
 type mockStreamHandler struct{}
 
 var _ StreamHandler = &mockStreamHandler{}
 
+// HandleWatchResourcesStream 阻塞直到 ctx 结束，用于模拟持续接收健康数据流的插件。
 func (m *mockStreamHandler) HandleWatchResourcesStream(ctx context.Context, stream drahealthv1.DRAResourceHealth_NodeWatchResourcesClient, resourceName string) error {
 	<-ctx.Done()
 	return nil

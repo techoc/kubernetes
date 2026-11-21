@@ -24,49 +24,50 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// GCPolicy specifies a policy for garbage collecting containers.
+// GCPolicy 定义容器垃圾回收策略。
 type GCPolicy struct {
-	// Minimum age at which a container can be garbage collected, zero for no limit.
+	// MinAge 是容器可被回收的最小存活时长，零表示不限制。
 	MinAge time.Duration
 
-	// Max number of dead containers any single pod (UID, container name) pair is
-	// allowed to have, less than zero for no limit.
+	// MaxPerPodContainer 是每个 (Pod UID, 容器名) 允许保留的已死亡容器上限，
+	// 小于零表示不限制。
 	MaxPerPodContainer int
 
-	// Max number of total dead containers, less than zero for no limit.
+	// MaxContainers 是已死亡容器总数上限，小于零表示不限制。
 	MaxContainers int
 }
 
-// GC manages garbage collection of dead containers.
+// GC 管理已死亡容器的垃圾回收。
 //
-// Implementation is thread-compatible.
+// 实现是线程兼容的。
 type GC interface {
-	// Garbage collect containers.
+	// GarbageCollect 按策略回收容器。
 	GarbageCollect(ctx context.Context) error
-	// Deletes all unused containers, including containers belonging to pods that are terminated but not deleted
+	// DeleteAllUnusedContainers 删除所有未使用的容器，包括已终止但未删除的 Pod 的容器。
 	DeleteAllUnusedContainers(ctx context.Context) error
 }
 
-// SourcesReadyProvider knows how to determine if configuration sources are ready
+// SourcesReadyProvider 用于判断配置源是否已就绪。
 type SourcesReadyProvider interface {
-	// AllReady returns true if the currently configured sources have all been seen.
+	// AllReady 返回当前配置的源是否都已读取到。
 	AllReady() bool
 }
 
 // TODO(vmarmol): Preferentially remove pod infra containers.
 type realContainerGC struct {
-	// Container runtime
+	// runtime 是容器运行时。
 	runtime Runtime
 
-	// Policy for garbage collection.
+	// policy 是垃圾回收策略。
 	policy GCPolicy
 
-	// sourcesReadyProvider provides the readiness of kubelet configuration sources.
+	// sourcesReadyProvider 提供 kubelet 配置源的就绪状态。
 	sourcesReadyProvider SourcesReadyProvider
 }
 
-// NewContainerGC creates a new instance of GC with the specified policy.
+// NewContainerGC 按指定策略创建 GC 实例。
 func NewContainerGC(runtime Runtime, policy GCPolicy, sourcesReadyProvider SourcesReadyProvider) (GC, error) {
+	// 负的 MinAge 没有意义，直接拒绝。
 	if policy.MinAge < 0 {
 		return nil, fmt.Errorf("invalid minimum garbage collection age: %v", policy.MinAge)
 	}
@@ -78,11 +79,15 @@ func NewContainerGC(runtime Runtime, policy GCPolicy, sourcesReadyProvider Sourc
 	}, nil
 }
 
+// GarbageCollect 按策略回收容器。
 func (cgc *realContainerGC) GarbageCollect(ctx context.Context) error {
+	// false 表示只按策略回收，不删除全部未使用容器。
 	return cgc.runtime.GarbageCollect(ctx, cgc.policy, cgc.sourcesReadyProvider.AllReady(), false)
 }
 
+// DeleteAllUnusedContainers 删除所有未使用的容器。
 func (cgc *realContainerGC) DeleteAllUnusedContainers(ctx context.Context) error {
 	klog.FromContext(ctx).Info("Attempting to delete unused containers")
+	// true 表示删除所有未使用容器（含已终止 Pod 的容器）。
 	return cgc.runtime.GarbageCollect(ctx, cgc.policy, cgc.sourcesReadyProvider.AllReady(), true)
 }

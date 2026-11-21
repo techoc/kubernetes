@@ -33,9 +33,11 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
-// For the scope of the test, any pod that has pod-level resources and the
-// PodLevelResourceManagers feature is enabled, will be processed by AllocatePod
+// 在本测试范围内，任何带有 Pod 级资源且开启 PodLevelResourceManagers 特性的 Pod
+// 都会由 AllocatePod 处理。
+// TestMemoryManagerRestoreState 验证 Memory Manager 在 kubelet 重启后能恢复 Pod 级与容器级内存分配。
 func TestMemoryManagerRestoreState(t *testing.T) {
+	// Memory Manager 静态策略在 Windows 上不可用。
 	if runtime.GOOS == "windows" {
 		t.Skip("Memory Manager static policy is not available on Windows")
 	}
@@ -96,6 +98,7 @@ func TestMemoryManagerRestoreState(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
+			// 切换特性门控到用例指定的组合。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, tc.podLevelResourcesEnabled)
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResourceManagers, tc.podLevelResourceManagersEnabled)
 
@@ -120,30 +123,30 @@ func TestMemoryManagerRestoreState(t *testing.T) {
 			}
 			affinity := topologymanager.NewFakeManager(logger)
 
-			// Create new manager
+			// 创建内存管理器。
 			sDir := t.TempDir()
 			mgr, err := NewManager(logger, string(PolicyTypeStatic), &machineInfo, nodeAllocatableReservation, systemReservedMemory, sDir, affinity)
 			if err != nil {
 				t.Fatalf("could not create manager: %v", err)
 			}
 
-			// Create a pod with pod-level resources
+			// 构造带 Pod 级内存请求的 Pod。
 			pod := getPodWithContainersAndPodLevelResources("pod1", tc.podMemoryRequest, tc.podMemoryRequest, nil, tc.containers)
 
-			// Start manager to initialize state
+			// 启动管理器以初始化状态。
 			err = mgr.Start(tCtx, func() []*v1.Pod { return []*v1.Pod{pod} }, &sourcesReadyStub{}, mockPodStatusProvider{}, mockRuntimeService{}, containermap.NewContainerMap())
 			if err != nil {
 				t.Fatalf("could not start manager: %v", err)
 			}
 
-			// Allocate resources
+			// 按特性门控组合选择 Pod 级或容器级分配路径。
 			if tc.podLevelResourceManagersEnabled && resourcehelper.IsPodLevelResourcesSet(pod) {
 				err = mgr.AllocatePod(logger, pod, lifecycle.AddOperation)
 				if err != nil {
 					t.Fatalf("could not allocate pod: %v", err)
 				}
 			} else {
-				// Add containers (allocates exclusive resources from the pod pool)
+				// 容器级分配会从 Pod 池中划分独占内存。
 				for i := range pod.Spec.Containers {
 					container := &pod.Spec.Containers[i]
 					err = mgr.Allocate(ctx, pod, container, lifecycle.AddOperation)
@@ -154,7 +157,7 @@ func TestMemoryManagerRestoreState(t *testing.T) {
 				}
 			}
 
-			// Verify state before restart
+			// 重启前校验 Pod 级内存块是否符合预期。
 			podBlocks := mgr.State().GetPodMemoryBlocks(string(pod.UID))
 			if tc.expectPodBlocks && len(podBlocks) == 0 {
 				t.Errorf("expected pod memory blocks to be present")
@@ -162,7 +165,7 @@ func TestMemoryManagerRestoreState(t *testing.T) {
 				t.Errorf("expected no pod memory blocks, but got some")
 			}
 
-			// Re-create manager to simulate restart
+			// 重新创建管理器，模拟 kubelet 重启。
 			mgr2, err := NewManager(logger, string(PolicyTypeStatic), &machineInfo, nodeAllocatableReservation, systemReservedMemory, sDir, affinity)
 			if err != nil {
 				t.Fatalf("could not create manager 2: %v", err)
@@ -173,7 +176,7 @@ func TestMemoryManagerRestoreState(t *testing.T) {
 				t.Fatalf("could not start manager 2: %v", err)
 			}
 
-			// Verify state restored
+			// 校验重启后 Pod 级内存块已恢复且数量一致。
 			podBlocksRestored := mgr2.State().GetPodMemoryBlocks(string(pod.UID))
 			if tc.expectPodBlocks {
 				if len(podBlocksRestored) == 0 {
@@ -186,10 +189,10 @@ func TestMemoryManagerRestoreState(t *testing.T) {
 				t.Errorf("expected no pod memory blocks after restore, but got some")
 			}
 
-			// Verify containers restored
+			// 校验各容器的内存块已恢复。
 			for _, container := range pod.Spec.Containers {
 				containerBlocksRestored := mgr2.State().GetMemoryBlocks(string(pod.UID), container.Name)
-				// If pod-level resources are enabled but managers are disabled, allocation is skipped, so no blocks.
+				// 若开启 Pod 级资源但未开启 Pod 级管理器，则分配被跳过，不应存在内存块。
 				if tc.podLevelResourcesEnabled && !tc.podLevelResourceManagersEnabled {
 					if len(containerBlocksRestored) > 0 {
 						t.Errorf("expected no container memory blocks after restore (allocation skipped) for %s, but got some", container.Name)

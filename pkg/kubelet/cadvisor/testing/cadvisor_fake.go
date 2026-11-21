@@ -24,43 +24,46 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
 )
 
-// Fake cadvisor.Interface implementation.
+// Fake 是 cadvisor.Interface 的测试实现。
 type Fake struct {
+	// NodeName 是模拟节点名称。
 	NodeName string
 }
 
 const (
-	// FakeKernelVersion is a fake kernel version for testing.
+	// FakeKernelVersion 是测试用的内核版本。
 	FakeKernelVersion = "3.16.0-0.bpo.4-amd64"
-	// FakeContainerOSVersion is a fake OS version for testing.
+	// FakeContainerOSVersion 是测试用的操作系统版本。
 	FakeContainerOSVersion = "Debian GNU/Linux 7 (wheezy)"
 
+	// 以下为测试用的固定机器参数。
 	fakeNumCores       = 1
 	fakeMemoryCapacity = 4026531840
 	fakeDockerVersion  = "1.13.1"
 )
 
+// 编译期断言：Fake 实现了 cadvisor.Interface 接口。
 var _ cadvisor.Interface = new(Fake)
 
-// Start is a fake implementation of Interface.Start.
+// Start 是 Interface.Start 的伪实现。
 func (c *Fake) Start() error {
 	return nil
 }
 
-// ContainerInfoV2 is a fake implementation of Interface.ContainerInfoV2.
+// ContainerInfoV2 是 Interface.ContainerInfoV2 的伪实现，返回空映射。
 func (c *Fake) ContainerInfoV2(name string, options cadvisorapi.RequestOptions) (map[string]cadvisorapi.ContainerInfo, error) {
 	return map[string]cadvisorapi.ContainerInfo{}, nil
 }
 
-// GetRequestedContainersInfo is a fake implementation if Interface.GetRequestedContainersInfo
+// GetRequestedContainersInfo 是 Interface.GetRequestedContainersInfo 的伪实现。
 func (c *Fake) GetRequestedContainersInfo(containerName string, options cadvisorapi.RequestOptions) (map[string]*cadvisorapi.ContainerInfo, error) {
 	return map[string]*cadvisorapi.ContainerInfo{}, nil
 }
 
-// MachineInfo is a fake implementation of Interface.MachineInfo.
+// MachineInfo 是 Interface.MachineInfo 的伪实现。
 func (c *Fake) MachineInfo(logger klog.Logger) (*cadvisorapi.MachineInfo, error) {
-	// Simulate a machine with 1 core and 3.75GB of memory.
-	// We set it to non-zero values to make non-zero-capacity machines in Kubemark.
+	// 模拟 1 核、3.75GB 内存的机器。
+	// 使用非零值是为了让 Kubemark 中的机器容量也不为零。
 	return &cadvisorapi.MachineInfo{
 		NumCores:       fakeNumCores,
 		InstanceID:     cadvisorapi.InstanceID(c.NodeName),
@@ -68,7 +71,7 @@ func (c *Fake) MachineInfo(logger klog.Logger) (*cadvisorapi.MachineInfo, error)
 	}, nil
 }
 
-// VersionInfo is a fake implementation of Interface.VersionInfo.
+// VersionInfo 是 Interface.VersionInfo 的伪实现。
 func (c *Fake) VersionInfo() (*cadvisorapi.VersionInfo, error) {
 	return &cadvisorapi.VersionInfo{
 		KernelVersion:      FakeKernelVersion,
@@ -77,22 +80,22 @@ func (c *Fake) VersionInfo() (*cadvisorapi.VersionInfo, error) {
 	}, nil
 }
 
-// ImagesFsInfo is a fake implementation of Interface.ImagesFsInfo.
+// ImagesFsInfo 是 Interface.ImagesFsInfo 的伪实现。
 func (c *Fake) ImagesFsInfo(context.Context) (cadvisorapi.FsInfo, error) {
 	return cadvisorapi.FsInfo{}, nil
 }
 
-// RootFsInfo is a fake implementation of Interface.RootFsInfo.
+// RootFsInfo 是 Interface.RootFsInfo 的伪实现。
 func (c *Fake) RootFsInfo() (cadvisorapi.FsInfo, error) {
 	return cadvisorapi.FsInfo{}, nil
 }
 
-// ContainerFsInfo is a fake implementation of Interface.ContainerFsInfo.
+// ContainerFsInfo 是 Interface.ContainerFsInfo 的伪实现。
 func (c *Fake) ContainerFsInfo(context.Context) (cadvisorapi.FsInfo, error) {
 	return cadvisorapi.FsInfo{}, nil
 }
 
-// GetDirFsInfo is a fake implementation of Interface.GetDirFsInfo.
+// GetDirFsInfo 是 Interface.GetDirFsInfo 的伪实现。
 func (c *Fake) GetDirFsInfo(path string) (cadvisorapi.FsInfo, error) {
 	return cadvisorapi.FsInfo{}, nil
 }

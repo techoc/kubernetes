@@ -30,21 +30,29 @@ import (
 	api "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
-// DevicePlugin interface provides methods for accessing Device Plugin resources, API and unix socket.
+// DevicePlugin 接口提供访问设备插件资源、API 与 unix socket 的方法。
 type DevicePlugin interface {
+	// 返回插件的 gRPC 客户端。
 	API() api.DevicePluginClient
+	// 返回插件管理的资源名。
 	Resource() string
+	// 返回插件 socket 路径。
 	SocketPath() string
 }
 
-// Client interface provides methods for establishing/closing gRPC connection and running the device plugin gRPC client.
+// Client 接口提供建立/关闭 gRPC 连接以及运行设备插件 gRPC 客户端的方法。
 type Client interface {
+	// 建立 gRPC 连接。
 	Connect(context.Context) error
+	// 运行 gRPC 客户端。
 	Run(context.Context)
+	// 关闭 gRPC 连接。
 	Disconnect(klog.Logger) error
+	// 返回 socket 路径。
 	SocketPath() string
 }
 
+// client 是 Client 的实现；mutex 保护 grpc/client 字段的并发读写。
 type client struct {
 	mutex    sync.Mutex
 	resource string
@@ -54,7 +62,7 @@ type client struct {
 	client   api.DevicePluginClient
 }
 
-// NewPluginClient returns an initialized device plugin client.
+// NewPluginClient 返回已初始化的设备插件客户端。
 func NewPluginClient(r string, socketPath string, h ClientHandler) Client {
 	return &client{
 		resource: r,
@@ -63,7 +71,7 @@ func NewPluginClient(r string, socketPath string, h ClientHandler) Client {
 	}
 }
 
-// Connect is for establishing a gRPC connection between device manager and device plugin.
+// Connect 在设备管理器与设备插件之间建立 gRPC 连接。
 func (c *client) Connect(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 	client, conn, err := dial(ctx, c.socket)
@@ -71,18 +79,21 @@ func (c *client) Connect(ctx context.Context) error {
 		logger.Error(err, "Unable to connect to device plugin client with socket path", "path", c.socket)
 		return err
 	}
+	// 连接建立成功后才写入字段，避免 Run/Disconnect 看到半初始化状态。
 	c.mutex.Lock()
 	c.grpc = conn
 	c.client = client
 	c.mutex.Unlock()
+	// 通知 handler 插件已连接，由 handler 触发后续注册流程。
 	return c.handler.PluginConnected(ctx, c.resource, c)
 }
 
-// Run is for running the device plugin gRPC client.
+// Run 运行设备插件 gRPC 客户端，持续消费 ListAndWatch 流。
 func (c *client) Run(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	// FIXME: passing real context to ListAndWatch results in
 	// failing TestDevicePluginReRegistration with "context cancelled" error
+	// 启动 ListAndWatch；流结束即认为插件异常退出，记录错误后返回。
 	stream, err := c.client.ListAndWatch(context.TODO(), &api.Empty{})
 	if err != nil {
 		logger.Error(err, "ListAndWatch ended unexpectedly for device plugin", "resource", c.resource)
@@ -96,11 +107,12 @@ func (c *client) Run(ctx context.Context) {
 			return
 		}
 		logger.V(2).Info("State pushed for device plugin", "resource", c.resource, "resourceCapacity", len(response.Devices))
+		// 把插件推送的最新设备列表交给 handler，用于更新可分配设备状态。
 		c.handler.PluginListAndWatchReceiver(logger, c.resource, response)
 	}
 }
 
-// Disconnect is for closing gRPC connection between device manager and device plugin.
+// Disconnect 关闭设备管理器与设备插件之间的 gRPC 连接。
 func (c *client) Disconnect(logger klog.Logger) error {
 	c.mutex.Lock()
 	if c.grpc != nil {
@@ -110,29 +122,36 @@ func (c *client) Disconnect(logger klog.Logger) error {
 		c.grpc = nil
 	}
 	c.mutex.Unlock()
+	// 即使连接已为 nil 也要通知 handler，保持插件状态机一致。
 	c.handler.PluginDisconnected(logger, c.resource, c.socket)
 
 	logger.V(2).Info("Device plugin disconnected", "resource", c.resource)
 	return nil
 }
 
+// Resource 返回插件管理的资源名。
 func (c *client) Resource() string {
 	return c.resource
 }
 
+// API 返回底层 gRPC 客户端。
 func (c *client) API() api.DevicePluginClient {
 	return c.client
 }
 
+// SocketPath 返回插件 socket 路径。
 func (c *client) SocketPath() string {
 	return c.socket
 }
 
-// dial establishes the gRPC communication with the registered device plugin. https://godoc.org/google.golang.org/grpc#Dial
+// dial 与已注册的设备插件建立 gRPC 通信，
+// 参见 https://godoc.org/google.golang.org/grpc#Dial。
 func dial(ctx context.Context, unixSocketPath string) (api.DevicePluginClient, *grpc.ClientConn, error) {
+	// 设置 10 秒超时，避免拨号无限阻塞 kubelet 启动。
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	// 使用 unix socket 并阻塞拨号；Authority 固定为 localhost 以匹配服务端校验。
 	c, err := grpc.DialContext(ctx, unixSocketPath,
 		grpc.WithAuthority("localhost"),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -143,6 +162,7 @@ func dial(ctx context.Context, unixSocketPath string) (api.DevicePluginClient, *
 	)
 
 	if err != nil {
+		// 拨号失败时返回带上下文的错误，便于定位具体 socket。
 		return nil, nil, fmt.Errorf(errFailedToDialDevicePlugin+" %v", err)
 	}
 

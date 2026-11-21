@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// optionAvailTest 描述一个策略选项在指定特性门控下是否可用。
 type optionAvailTest struct {
 	option            string
 	featureGate       featuregate.Feature
@@ -35,6 +36,7 @@ type optionAvailTest struct {
 	expectedAvailable bool
 }
 
+// TestPolicyDefaultsAvailable 验证默认（不依赖特性门控）可用的选项集合。
 func TestPolicyDefaultsAvailable(t *testing.T) {
 	testCases := []optionAvailTest{
 		{
@@ -57,6 +59,7 @@ func TestPolicyDefaultsAvailable(t *testing.T) {
 	}
 }
 
+// TestPolicyOptionsAvailable 验证 alpha/beta 选项随特性门控开关的可用性。
 func TestPolicyOptionsAvailable(t *testing.T) {
 	testCases := []optionAvailTest{
 		{
@@ -120,6 +123,7 @@ func TestPolicyOptionsAvailable(t *testing.T) {
 	}
 }
 
+// TestPolicyOptionsAlwaysAvailableOnceGA 验证已 GA 的选项在关闭所有门控后仍然可用。
 func TestPolicyOptionsAlwaysAvailableOnceGA(t *testing.T) {
 	options := []string{
 		FullPCPUsOnlyOption,
@@ -139,6 +143,8 @@ func TestPolicyOptionsAlwaysAvailableOnceGA(t *testing.T) {
 	}
 }
 
+// TestValidateStaticPolicyOptions 验证 static 策略选项与拓扑管理器策略、
+// NUMA/插槽拓扑的兼容性校验。
 func TestValidateStaticPolicyOptions(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -197,9 +203,11 @@ func TestValidateStaticPolicyOptions(t *testing.T) {
 			if testCase.topoMgrPolicy == topologymanager.PolicySingleNumaNode {
 				topoMgrPolicy = topologymanager.NewSingleNumaNodePolicy(&topologymanager.NUMAInfo{}, topologymanager.PolicyOptions{})
 			}
+			// 根据表项构造对应策略的假拓扑管理器。
 			topoMgrStore := topologymanager.NewFakeManagerWithPolicy(logger, topoMgrPolicy)
 
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, pkgfeatures.CPUManagerPolicyAlphaOptions, true)
+			// 选项解析错误由 NewStaticPolicyOptions 的测试覆盖，这里只校验组合合法性。
 			policyOpt, _ := NewStaticPolicyOptions(testCase.policyOption)
 			err := ValidateStaticPolicyOptions(policyOpt, testCase.topology, topoMgrStore)
 			gotError := (err != nil)
@@ -210,8 +218,9 @@ func TestValidateStaticPolicyOptions(t *testing.T) {
 	}
 }
 
+// TestPolicyOptionsCompatibility 验证各选项组合是否互斥（如 FullPCPUsOnly 与 DistributeCPUsAcrossCores）。
 func TestPolicyOptionsCompatibility(t *testing.T) {
-	// take feature gate into the consideration
+	// 每个用例先开启对应特性门控，再校验选项组合。
 	testCases := []struct {
 		description   string
 		featureGate   featuregate.Feature

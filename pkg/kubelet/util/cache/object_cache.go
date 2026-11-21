@@ -22,23 +22,22 @@ import (
 	expirationcache "k8s.io/client-go/tools/cache"
 )
 
-// ObjectCache is a simple wrapper of expiration cache that
-// 1. use string type key
-// 2. has an updater to get value directly if it is expired
-// 3. then update the cache
+// ObjectCache 是过期缓存的简单封装：
+// 1. 使用字符串类型 key；
+// 2. 缓存过期时通过 updater 直接取值；
+// 3. 然后把新值写回缓存。
 type ObjectCache struct {
 	cache   expirationcache.Store
 	updater func() (interface{}, error)
 }
 
-// objectEntry is an object with string type key.
+// objectEntry 是带字符串 key 的缓存条目。
 type objectEntry struct {
 	key string
 	obj interface{}
 }
 
-// NewObjectCache creates ObjectCache with an updater.
-// updater returns an object to cache.
+// NewObjectCache 创建带 updater 的 ObjectCache；updater 返回需要缓存的对象。
 func NewObjectCache(f func() (interface{}, error), ttl time.Duration) *ObjectCache {
 	return &ObjectCache{
 		updater: f,
@@ -46,13 +45,13 @@ func NewObjectCache(f func() (interface{}, error), ttl time.Duration) *ObjectCac
 	}
 }
 
-// stringKeyFunc is a string as cache key function
+// stringKeyFunc 使用条目自身的字符串 key 作为缓存键。
 func stringKeyFunc(obj interface{}) (string, error) {
 	key := obj.(objectEntry).key
 	return key, nil
 }
 
-// Get gets cached objectEntry by using a unique string as the key.
+// Get 按字符串 key 获取缓存对象；缓存未命中时调用 updater 取值并写回缓存。
 func (c *ObjectCache) Get(key string) (interface{}, error) {
 	value, ok, err := c.cache.Get(objectEntry{key: key})
 	if err != nil {
@@ -63,6 +62,7 @@ func (c *ObjectCache) Get(key string) (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
+		// 未命中时把 updater 的结果写回缓存，供后续请求复用。
 		err = c.cache.Add(objectEntry{
 			key: key,
 			obj: obj,
@@ -75,7 +75,7 @@ func (c *ObjectCache) Get(key string) (interface{}, error) {
 	return value.(objectEntry).obj, nil
 }
 
-// Add adds objectEntry by using a unique string as the key.
+// Add 按字符串 key 写入缓存对象。
 func (c *ObjectCache) Add(key string, obj interface{}) error {
 	return c.cache.Add(objectEntry{key: key, obj: obj})
 }

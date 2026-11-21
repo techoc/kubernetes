@@ -30,23 +30,33 @@ import (
 )
 
 const (
+	// memoryUsageAttribute 是 cgroup v1 中记录内存用量的控制文件。
 	memoryUsageAttribute = "memory.usage_in_bytes"
 )
 
+// linuxMemoryThresholdNotifier 通过 cgroup 内存事件在越过阈值时通知驱逐管理器。
 type linuxMemoryThresholdNotifier struct {
-	threshold  evictionapi.Threshold
+	// threshold 是触发通知的驱逐阈值。
+	threshold evictionapi.Threshold
+	// cgroupPath 是设置阈值的 cgroup 路径。
 	cgroupPath string
-	events     chan struct{}
-	factory    NotifierFactory
-	handler    func(string)
-	notifier   CgroupNotifier
+	// events 在阈值被越过时收到信号。
+	events chan struct{}
+	// factory 用于创建底层的 cgroup 通知器。
+	factory NotifierFactory
+	// handler 在阈值被越过时被调用。
+	handler func(string)
+	// notifier 是当前生效的底层通知器。
+	notifier CgroupNotifier
 }
 
+// 编译期断言：linuxMemoryThresholdNotifier 实现了 ThresholdNotifier 接口。
 var _ ThresholdNotifier = &linuxMemoryThresholdNotifier{}
 
-// NewMemoryThresholdNotifier creates a ThresholdNotifier which is designed to respond to the given threshold.
-// UpdateThreshold must be called once before the threshold will be active.
+// NewMemoryThresholdNotifier 创建响应指定阈值的 ThresholdNotifier。
+// 在阈值生效前必须先调用一次 UpdateThreshold。
 func NewMemoryThresholdNotifier(logger klog.Logger, threshold evictionapi.Threshold, cgroupRoot string, factory NotifierFactory, handler func(string)) (ThresholdNotifier, error) {
+	// 需要 memory 控制器的挂载点才能设置 memcg 阈值。
 	cgroups, err := cm.GetCgroupSubsystems()
 	if err != nil {
 		return nil, err
@@ -56,7 +66,7 @@ func NewMemoryThresholdNotifier(logger klog.Logger, threshold evictionapi.Thresh
 		return nil, fmt.Errorf("memory cgroup mount point not found")
 	}
 	if isAllocatableEvictionThreshold(threshold) {
-		// for allocatable thresholds, point the cgroup notifier at the allocatable cgroup
+		// allocatable 阈值需要把通知器指向 allocatable cgroup。
 		cgpath += cgroupRoot
 	}
 	return &linuxMemoryThresholdNotifier{
@@ -68,8 +78,10 @@ func NewMemoryThresholdNotifier(logger klog.Logger, threshold evictionapi.Thresh
 	}, nil
 }
 
+// UpdateThreshold 根据最新统计信息重新计算并设置 cgroup 阈值。
 func (m *linuxMemoryThresholdNotifier) UpdateThreshold(ctx context.Context, summary *statsapi.Summary) error {
 	logger := klog.FromContext(ctx)
+	// 默认使用节点级内存统计。
 	memoryStats := summary.Node.Memory
 	if isAllocatableEvictionThreshold(m.threshold) {
 		allocatableContainer, err := getSysContainer(summary.Node.SystemContainers, statsapi.SystemContainerPods)
@@ -78,11 +90,13 @@ func (m *linuxMemoryThresholdNotifier) UpdateThreshold(ctx context.Context, summ
 		}
 		memoryStats = allocatableContainer.Memory
 	}
+	// 统计信息不完整时无法计算阈值。
 	if memoryStats == nil || memoryStats.UsageBytes == nil || memoryStats.WorkingSetBytes == nil || memoryStats.AvailableBytes == nil {
 		return fmt.Errorf("summary was incomplete.  Expected MemoryStats and all subfields to be non-nil, but got %+v", memoryStats)
 	}
-	// Set threshold on usage to capacity - eviction_hard + inactive_file,
-	// since we want to be notified when working_set = capacity - eviction_hard
+	// 把阈值换算到 usage 口径：capacity - eviction_hard + inactive_file，
+	// 因为内核在 working_set = capacity - eviction_hard 时才应触发通知。
+	// usage - working_set 即 inactive_file。
 	inactiveFile := resource.NewQuantity(int64(*memoryStats.UsageBytes-*memoryStats.WorkingSetBytes), resource.BinarySI)
 	capacity := resource.NewQuantity(int64(*memoryStats.AvailableBytes+*memoryStats.WorkingSetBytes), resource.BinarySI)
 	evictionThresholdQuantity := evictionapi.GetThresholdQuantity(m.threshold.Value, capacity)
@@ -90,6 +104,7 @@ func (m *linuxMemoryThresholdNotifier) UpdateThreshold(ctx context.Context, summ
 	memcgThreshold.Sub(*evictionThresholdQuantity)
 	memcgThreshold.Add(*inactiveFile)
 	logger.V(3).Info("Eviction manager: setting notifier to capacity", "notifier", m.Description(), "capacity", memcgThreshold.String())
+	// 更新阈值前先停掉旧通知器，避免重复监听。
 	if m.notifier != nil {
 		m.notifier.Stop()
 	}
@@ -98,10 +113,12 @@ func (m *linuxMemoryThresholdNotifier) UpdateThreshold(ctx context.Context, summ
 		return err
 	}
 	m.notifier = newNotifier
+	// 通知器在后台运行，越过阈值时向 events 发送信号。
 	go m.notifier.Start(ctx, m.events)
 	return nil
 }
 
+// Start 等待阈值事件并调用 handler 通知驱逐管理器。
 func (m *linuxMemoryThresholdNotifier) Start(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	logger.Info("Eviction manager: created memoryThresholdNotifier", "notifier", m.Description())
@@ -110,6 +127,7 @@ func (m *linuxMemoryThresholdNotifier) Start(ctx context.Context) {
 	}
 }
 
+// Description 返回阈值的可读描述，包含 hard/soft 与 allocatable 标记。
 func (m *linuxMemoryThresholdNotifier) Description() string {
 	var hard, allocatable string
 	if isHardEvictionThreshold(m.threshold) {

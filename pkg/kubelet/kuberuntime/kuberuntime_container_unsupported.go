@@ -28,41 +28,48 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/types"
 )
 
-// applyPlatformSpecificContainerConfig applies platform specific configurations to runtimeapi.ContainerConfig.
+// applyPlatformSpecificContainerConfig 对 runtimeapi.ContainerConfig 应用平台相关配置；
+// 不受支持的平台为空实现。
 func (m *kubeGenericRuntimeManager) applyPlatformSpecificContainerConfig(ctx context.Context, config *runtimeapi.ContainerConfig, container *v1.Container, pod *v1.Pod, uid *int64, username string, nsTarget *kubecontainer.ContainerID) error {
 	return nil
 }
 
-// generateContainerResources generates platform specific container resources config for runtime
+// generateContainerResources 生成平台相关的容器资源配置；不受支持的平台返回 nil。
 func (m *kubeGenericRuntimeManager) generateContainerResources(ctx context.Context, pod *v1.Pod, container *v1.Container) *runtimeapi.ContainerResources {
 	return nil
 }
 
-// generateUpdatePodSandboxResourcesRequest generates platform specific podsandox resources config for runtime
+// generateUpdatePodSandboxResourcesRequest 生成平台相关的 sandbox 资源更新请求；
+// 不受支持的平台返回 nil。
 func (m *kubeGenericRuntimeManager) generateUpdatePodSandboxResourcesRequest(sandboxID string, pod *v1.Pod, podResources *cm.ResourceConfig) *runtimeapi.UpdatePodSandboxResourcesRequest {
 	return nil
 }
 
+// toKubeContainerResources 在不受支持的平台上返回 nil。
 func toKubeContainerResources(statusResources *runtimeapi.ContainerResources) *kubecontainer.ContainerResources {
 	return nil
 }
 
+// toKubeContainerUser 在不受支持的平台上返回 nil。
 func toKubeContainerUser(statusUser *runtimeapi.ContainerUser) *kubecontainer.ContainerUser {
 	return nil
 }
 
+// GetContainerSwapBehavior 在不受支持的平台上始终返回 NoSwap。
 func (m *kubeGenericRuntimeManager) GetContainerSwapBehavior(pod *v1.Pod, container *v1.Container) types.SwapBehavior {
 	return types.NoSwap
 }
 
-// initSwapControllerAvailabilityCheck returns a function that always returns false on unsupported platforms
+// initSwapControllerAvailabilityCheck 返回在不受支持平台上始终为 false 的可用性检查函数。
 func initSwapControllerAvailabilityCheck(ctx context.Context) func() bool {
 	return func() bool { return false }
 }
 
+// isMemoryQoSEnforced 在不受支持的平台上始终返回 false。
 func (m *kubeGenericRuntimeManager) isMemoryQoSEnforced() bool {
 	return false
 }
 
+// applyPodLevelMemoryHigh 在不受支持的平台上为空实现。
 func (m *kubeGenericRuntimeManager) applyPodLevelMemoryHigh(_ *v1.Pod, _ *cm.ResourceConfig) {
 }

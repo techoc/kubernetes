@@ -30,32 +30,33 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
-// PodEtcHostsPathFunc is a function to fetch a etc hosts path by pod uid and whether etc host path is supported by the runtime
+// PodEtcHostsPathFunc 根据 Pod UID 获取 etc-hosts 路径。
 type PodEtcHostsPathFunc func(podUID types.UID) string
 
-// metricsProviderByPath maps a path to its metrics provider
+// metricsProviderByPath 把文件路径映射到对应的指标 provider。
 type metricsProviderByPath map[string]volume.MetricsProvider
 
-// HostStatsProvider defines an interface for providing host stats associated with pod.
+// HostStatsProvider 定义提供 Pod 相关宿主机统计的接口。
 type HostStatsProvider interface {
-	// getPodLogStats gets stats associated with pod log usage
+	// 获取 Pod 日志占用的统计。
 	getPodLogStats(podNamespace, podName string, podUID types.UID, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error)
-	// getPodContainerLogStats gets stats associated with container log usage
+	// 获取容器日志占用的统计。
 	getPodContainerLogStats(podNamespace, podName string, podUID types.UID, containerName string, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error)
-	// getPodEtcHostsStats gets stats associated with pod etc-hosts usage
+	// 获取 Pod etc-hosts 占用的统计。
 	getPodEtcHostsStats(podUID types.UID, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error)
 }
 
+// hostStatsProvider 是 HostStatsProvider 的默认实现。
 type hostStatsProvider struct {
-	// osInterface is the interface for syscalls.
+	// 系统调用接口。
 	osInterface kubecontainer.OSInterface
-	// podEtcHostsPathFunc fetches a pod etc hosts path by uid.
+	// 按 UID 获取 Pod etc-hosts 路径。
 	podEtcHostsPathFunc PodEtcHostsPathFunc
-	// podLogsDirectory is the root directory path for pod logs.
+	// Pod 日志根目录。
 	podLogsDirectory string
 }
 
-// NewHostStatsProvider returns a new HostStatsProvider type struct.
+// NewHostStatsProvider 创建 HostStatsProvider 实例。
 func NewHostStatsProvider(osInterface kubecontainer.OSInterface, podEtcHostsPathFunc PodEtcHostsPathFunc, podLogsDirectory string) HostStatsProvider {
 	return hostStatsProvider{
 		osInterface:         osInterface,
@@ -64,6 +65,7 @@ func NewHostStatsProvider(osInterface kubecontainer.OSInterface, podEtcHostsPath
 	}
 }
 
+// getPodLogStats 汇总 Pod 日志目录的磁盘占用。
 func (h hostStatsProvider) getPodLogStats(podNamespace, podName string, podUID types.UID, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error) {
 	metricsByPath, err := h.podLogMetrics(podNamespace, podName, podUID)
 	if err != nil {
@@ -72,7 +74,7 @@ func (h hostStatsProvider) getPodLogStats(podNamespace, podName string, podUID t
 	return metricsByPathToFsStats(metricsByPath, rootFsInfo)
 }
 
-// getPodContainerLogStats gets stats for container
+// getPodContainerLogStats 获取容器的日志统计。
 func (h hostStatsProvider) getPodContainerLogStats(podNamespace, podName string, podUID types.UID, containerName string, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error) {
 	metricsByPath, err := h.podContainerLogMetrics(podNamespace, podName, podUID, containerName)
 	if err != nil {
@@ -81,11 +83,12 @@ func (h hostStatsProvider) getPodContainerLogStats(podNamespace, podName string,
 	return metricsByPathToFsStats(metricsByPath, rootFsInfo)
 }
 
-// getPodEtcHostsStats gets status for pod etc hosts usage
+// getPodEtcHostsStats 获取 Pod etc-hosts 文件的统计。
 func (h hostStatsProvider) getPodEtcHostsStats(podUID types.UID, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error) {
-	// Runtimes may not support etc hosts file (Windows with docker)
+	// 某些运行时（Windows + Docker）不支持 etc-hosts 文件。
 	podEtcHostsPath := h.podEtcHostsPathFunc(podUID)
-	// Some pods have an explicit /etc/hosts mount and the Kubelet will not create an etc-hosts file for them
+	// 部分 Pod 显式挂载了 /etc/hosts，kubelet 不会为其创建 etc-hosts 文件；
+	// 文件不存在时返回 nil 而非报错。
 	if _, err := os.Stat(podEtcHostsPath); os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -104,17 +107,19 @@ func (h hostStatsProvider) getPodEtcHostsStats(podUID types.UID, rootFsInfo *cad
 	return result, nil
 }
 
+// podLogMetrics 返回 Pod 日志目录下各文件的指标 provider。
 func (h hostStatsProvider) podLogMetrics(podNamespace, podName string, podUID types.UID) (metricsProviderByPath, error) {
 	podLogsDirectoryPath := kuberuntime.BuildPodLogsDirectory(h.podLogsDirectory, podNamespace, podName, podUID)
 	return h.fileMetricsByDir(podLogsDirectoryPath)
 }
 
+// podContainerLogMetrics 返回容器日志目录下各文件的指标 provider。
 func (h hostStatsProvider) podContainerLogMetrics(podNamespace, podName string, podUID types.UID, containerName string) (metricsProviderByPath, error) {
 	podContainerLogsDirectoryPath := kuberuntime.BuildContainerLogsDirectory(h.podLogsDirectory, podNamespace, podName, podUID, containerName)
 	return h.fileMetricsByDir(podContainerLogsDirectoryPath)
 }
 
-// fileMetricsByDir returns metrics by path for each file under specified directory
+// fileMetricsByDir 返回指定目录下每个文件的指标 provider。
 func (h hostStatsProvider) fileMetricsByDir(dirname string) (metricsProviderByPath, error) {
 	files, err := h.osInterface.ReadDir(dirname)
 	if err != nil {
@@ -125,14 +130,14 @@ func (h hostStatsProvider) fileMetricsByDir(dirname string) (metricsProviderByPa
 		if f.IsDir() {
 			continue
 		}
-		// Only include *files* under pod log directory.
+		// 只统计目录下的普通文件，跳过子目录。
 		fpath := filepath.Join(dirname, f.Name())
 		results[fpath] = volume.NewMetricsDu(fpath)
 	}
 	return results, nil
 }
 
-// metricsByPathToFsStats converts a metrics provider by path to fs stats
+// metricsByPathToFsStats 把按路径组织的指标汇总为 fs stats。
 func metricsByPathToFsStats(metricsByPath metricsProviderByPath, rootFsInfo *cadvisorapi.FsInfo) (*statsapi.FsStats, error) {
 	result := rootFsInfoToFsStats(rootFsInfo)
 	for fpath, metrics := range metricsByPath {
@@ -149,7 +154,7 @@ func metricsByPathToFsStats(metricsByPath metricsProviderByPath, rootFsInfo *cad
 	return result, nil
 }
 
-// rootFsInfoToFsStats is a utility to convert rootFsInfo into statsapi.FsStats
+// rootFsInfoToFsStats 把 cadvisor 的 rootFsInfo 转换为 statsapi.FsStats。
 func rootFsInfoToFsStats(rootFsInfo *cadvisorapi.FsInfo) *statsapi.FsStats {
 	return &statsapi.FsStats{
 		Time:           metav1.NewTime(rootFsInfo.Timestamp),

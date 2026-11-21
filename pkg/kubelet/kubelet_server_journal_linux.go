@@ -25,18 +25,16 @@ import (
 	"strings"
 )
 
-// getLoggingCmd returns the journalctl cmd and arguments for the given nodeLogQuery and boot. Note that
-// services are explicitly passed here to account for the heuristics.
-// The return values are:
-// - cmd: the command to be executed
-// - args: arguments to the command
-// - cmdEnv: environment variables when the command will be executed
+// getLoggingCmd 根据 nodeLogQuery 与 boot 参数构造 journalctl 命令及参数。
+// services 由调用方传入，以便应用服务发现启发式。
 func getLoggingCmd(n *nodeLogQuery, services []string) (cmd string, args []string, cmdEnv []string, err error) {
+	// 固定使用 UTC、不分页、短精确时间格式，便于日志解析。
 	args = []string{
 		"--utc",
 		"--no-pager",
 		"--output=short-precise",
 	}
+	// 按查询条件追加时间范围与行数限制。
 	if n.SinceTime != nil {
 		args = append(args, fmt.Sprintf("--since=%s", n.SinceTime.Format(dateLayout)))
 	}
@@ -46,6 +44,7 @@ func getLoggingCmd(n *nodeLogQuery, services []string) (cmd string, args []strin
 	if n.TailLines != nil {
 		args = append(args, "--pager-end", fmt.Sprintf("--lines=%d", *n.TailLines))
 	}
+	// 只把非空服务名加入 --unit 过滤。
 	for _, service := range services {
 		if len(service) > 0 {
 			args = append(args, "--unit="+service)
@@ -62,17 +61,17 @@ func getLoggingCmd(n *nodeLogQuery, services []string) (cmd string, args []strin
 	return "journalctl", args, nil, nil
 }
 
-// checkForNativeLogger checks journalctl output for a service
+// checkForNativeLogger 检查 journalctl 是否认识该服务（即服务是否使用 journald 记录日志）。
 func checkForNativeLogger(ctx context.Context, service string) bool {
-	// This will return all the journald units
+	// 该命令会列出 journald 已知的所有 unit。
 	cmd := exec.CommandContext(ctx, "journalctl", []string{"--field", "_SYSTEMD_UNIT"}...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		// Returning false to allow checking if the service is logging to a file
+		// 返回 false，以便调用方继续检查服务是否把日志写入文件。
 		return false
 	}
 
-	// journalctl won't return an error if we try to fetch logs for a non-existent service,
-	// hence we search for it in the list of services known to journalctl
+	// journalctl 查询不存在的服务也不会报错，
+	// 因此需要在它已知的服务列表中搜索该服务。
 	return strings.Contains(string(output), service+".service")
 }

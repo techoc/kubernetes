@@ -38,14 +38,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// PodManager is the subset of methods the manager needs to observe the actual state of the kubelet.
-// See pkg/k8s.io/kubernetes/pkg/kubelet/pod.Manager for method godoc.
+// PodManager 是统计管理器观察 kubelet 实际状态所需的方法子集。
+// 各方法的文档见 pkg/k8s.io/kubernetes/pkg/kubelet/pod.Manager。
 type PodManager interface {
 	TranslatePodUID(uid types.UID) kubetypes.ResolvedPodUID
 }
 
-// NewCRIStatsProvider returns a Provider that provides the node stats
-// from cAdvisor and the container stats from CRI.
+// NewCRIStatsProvider 返回 Provider：节点统计来自 cAdvisor，
+// 容器统计来自 CRI。
 func NewCRIStatsProvider(
 	cadvisor cadvisor.Interface,
 	resourceAnalyzer stats.ResourceAnalyzer,
@@ -61,8 +61,7 @@ func NewCRIStatsProvider(
 		runtimeService, imageService, hostStatsProvider, podAndContainerStatsFromCRI, podSandboxStatsUnimplemented, fallbackStatsProvider))
 }
 
-// NewCadvisorStatsProvider returns a containerStatsProvider that provides both
-// the node and the container stats from cAdvisor.
+// NewCadvisorStatsProvider 返回 Provider：节点与容器统计都来自 cAdvisor。
 func NewCadvisorStatsProvider(
 	cadvisor cadvisor.Interface,
 	resourceAnalyzer stats.ResourceAnalyzer,
@@ -75,8 +74,8 @@ func NewCadvisorStatsProvider(
 	return newStatsProvider(cadvisor, podManager, newCadvisorStatsProvider(cadvisor, resourceAnalyzer, imageService, statusProvider, hostStatsProvider, containerManager))
 }
 
-// newStatsProvider returns a new Provider that provides node stats from
-// cAdvisor and the container stats using the containerStatsProvider.
+// newStatsProvider 返回新的 Provider：节点统计来自 cAdvisor，
+// 容器统计由 containerStatsProvider 提供。
 func newStatsProvider(
 	cadvisor cadvisor.Interface,
 	podManager PodManager,
@@ -89,63 +88,68 @@ func newStatsProvider(
 	}
 }
 
-// Provider provides the stats of the node and the pod-managed containers.
+// Provider 提供节点与 Pod 所管理容器的统计。
 type Provider struct {
 	cadvisor   cadvisor.Interface
 	podManager PodManager
 	containerStatsProvider
 }
 
-// containerStatsProvider is an interface that provides the stats of the
-// containers managed by pods.
+// containerStatsProvider 是提供 Pod 所管理容器统计的接口。
 type containerStatsProvider interface {
-	// PodCPUAndMemoryStats gets the latest CPU & Memory stats for the pod and all its running containers.
+	// PodCPUAndMemoryStats 返回 Pod 及其所有运行中容器的最新 CPU 与内存统计。
 	PodCPUAndMemoryStats(context.Context, *v1.Pod, *kubecontainer.PodStatus) (*statsapi.PodStats, error)
+	// ListPodStats 返回所有 Pod 的统计。
 	ListPodStats(ctx context.Context) ([]statsapi.PodStats, error)
+	// ListPodStatsAndUpdateCPUNanoCoreUsage 返回所有 Pod 的统计，并刷新 CPU 使用量缓存。
 	ListPodStatsAndUpdateCPUNanoCoreUsage(ctx context.Context) ([]statsapi.PodStats, error)
+	// ListPodCPUAndMemoryStats 只返回所有 Pod 的 CPU 与内存统计。
 	ListPodCPUAndMemoryStats(ctx context.Context) ([]statsapi.PodStats, error)
+	// ImageFsStats 返回镜像文件系统与容器文件系统的统计。
 	ImageFsStats(ctx context.Context) (*statsapi.FsStats, *statsapi.FsStats, error)
+	// ImageFsDevice 返回镜像文件系统所在的设备。
 	ImageFsDevice(ctx context.Context) (string, error)
 }
 
-// RlimitStats returns base information about process count
+// RlimitStats 返回进程数量相关的基础信息。
 func (p *Provider) RlimitStats() (*statsapi.RlimitStats, error) {
 	return pidlimit.Stats()
 }
 
-// GetCgroupStats returns the stats of the cgroup with the cgroupName. Note that
-// this function doesn't generate filesystem stats.
+// GetCgroupStats 返回指定 cgroup 的统计；该函数不生成文件系统统计。
 func (p *Provider) GetCgroupStats(ctx context.Context, cgroupName string, updateStats bool) (*statsapi.ContainerStats, *statsapi.NetworkStats, error) {
 	info, err := getCgroupInfo(p.cadvisor, cgroupName, updateStats)
 	if err != nil {
+		// cAdvisor 尚未采集到该 cgroup 数据时返回可识别的错误。
 		if errors.Is(err, cadvisormemory.ErrDataNotFound) {
 			return nil, nil, fmt.Errorf("cgroup stats not found for %q: %w", cgroupName, cadvisormemory.ErrDataNotFound)
 		}
 		return nil, nil, fmt.Errorf("failed to get cgroup stats for %q: %v", cgroupName, err)
 	}
 	logger := klog.FromContext(ctx)
-	// Rootfs and imagefs doesn't make sense for raw cgroup.
+	// 对裸 cgroup 而言，rootfs 与 imagefs 没有意义。
 	s := cadvisorInfoToContainerStats(logger, cgroupName, info, nil, nil)
 	n := cadvisorInfoToNetworkStats(info)
 	return s, n, nil
 }
 
-// GetCgroupCPUAndMemoryStats returns the CPU and memory stats of the cgroup with the cgroupName. Note that
-// this function doesn't generate filesystem stats.
+// GetCgroupCPUAndMemoryStats 返回指定 cgroup 的 CPU 与内存统计；
+// 该函数不生成文件系统统计。
 func (p *Provider) GetCgroupCPUAndMemoryStats(cgroupName string, updateStats bool) (*statsapi.ContainerStats, error) {
 	info, err := getCgroupInfo(p.cadvisor, cgroupName, updateStats)
 	if err != nil {
+		// cAdvisor 尚未采集到该 cgroup 数据时返回可识别的错误。
 		if errors.Is(err, cadvisormemory.ErrDataNotFound) {
 			return nil, fmt.Errorf("cgroup stats not found for %q: %w", cgroupName, cadvisormemory.ErrDataNotFound)
 		}
 		return nil, fmt.Errorf("failed to get cgroup stats for %q: %v", cgroupName, err)
 	}
-	// Rootfs and imagefs doesn't make sense for raw cgroup.
+	// 对裸 cgroup 而言，rootfs 与 imagefs 没有意义。
 	s := cadvisorInfoToContainerCPUAndMemoryStats(cgroupName, info)
 	return s, nil
 }
 
-// RootFsStats returns the stats of the node root filesystem.
+// RootFsStats 返回节点根文件系统的统计。
 func (p *Provider) RootFsStats() (*statsapi.FsStats, error) {
 	rootFsInfo, err := p.cadvisor.RootFsInfo()
 	if err != nil {
@@ -153,13 +157,14 @@ func (p *Provider) RootFsStats() (*statsapi.FsStats, error) {
 	}
 
 	var nodeFsInodesUsed *uint64
+	// inode 总数与空闲数都存在时才能计算已用 inode 数。
 	if rootFsInfo.Inodes != nil && rootFsInfo.InodesFree != nil {
 		nodeFsIU := *rootFsInfo.Inodes - *rootFsInfo.InodesFree
 		nodeFsInodesUsed = &nodeFsIU
 	}
 
-	// Get the root container stats's timestamp, which will be used as the
-	// imageFs stats timestamp.  Don't force a stats update, as we only want the timestamp.
+	// 获取根容器统计的时间戳，用作 imageFs 统计的时间戳；
+	// 这里不强制刷新统计，只需要时间戳。
 	rootStats, err := getCgroupStats(p.cadvisor, "/", false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get root container stats: %v", err)
@@ -176,8 +181,8 @@ func (p *Provider) RootFsStats() (*statsapi.FsStats, error) {
 	}, nil
 }
 
-// HasDedicatedImageFs returns true if a dedicated image filesystem exists for storing images.
-// KEP Issue Number 4191: Enhanced this to allow for the containers to be separate from images.
+// HasDedicatedImageFs 返回 true 表示存在用于存放镜像的独立文件系统。
+// KEP Issue 4191：扩展为允许容器与镜像使用不同的文件系统。
 func (p *Provider) HasDedicatedImageFs(ctx context.Context) (bool, error) {
 	device, err := p.containerStatsProvider.ImageFsDevice(ctx)
 	if err != nil {
@@ -187,8 +192,8 @@ func (p *Provider) HasDedicatedImageFs(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// KEP Enhancement: DedicatedImageFs can mean either container or image fs are separate from root
-	// CAdvisor reports this a bit differently than Container runtimes
+	// KEP 增强：DedicatedImageFs 可能指容器文件系统或镜像文件系统与根文件系统分离。
+	// cAdvisor 与容器运行时对此的报告方式略有不同。
 	if device == rootFsInfo.Device {
 		imageFs, containerFs, err := p.ImageFsStats(ctx)
 		if err != nil {
@@ -201,8 +206,8 @@ func (p *Provider) HasDedicatedImageFs(ctx context.Context) (bool, error) {
 	return device != rootFsInfo.Device, nil
 }
 
-// HasDedicatedImageFs returns true if a dedicated image filesystem exists for storing images.
-// KEP Issue Number 4191: Enhanced this to allow for the containers to be separate from images.
+// HasDedicatedContainerFs 返回 true 表示容器文件系统与镜像文件系统分离。
+// KEP Issue 4191：扩展为允许容器与镜像使用不同的文件系统。
 func (p *Provider) HasDedicatedContainerFs(ctx context.Context) (bool, error) {
 	imageFs, err := p.cadvisor.ImagesFsInfo(ctx)
 	if err != nil {
@@ -215,6 +220,7 @@ func (p *Provider) HasDedicatedContainerFs(ctx context.Context) (bool, error) {
 	return imageFs.Device != containerFs.Device, nil
 }
 
+// equalFileSystems 比较两个文件系统统计的关键字段是否一致。
 func equalFileSystems(a, b *statsapi.FsStats) bool {
 	if a == nil || b == nil {
 		return false

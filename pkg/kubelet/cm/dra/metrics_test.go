@@ -23,9 +23,10 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// testClaimsInUseMetric 将 collector 采集到的 dra_resource_claims_in_use 指标与期望文本比较。
 func testClaimsInUseMetric(tCtx ktesting.TContext, claimInfoCache *claimInfoCache, expectedMetric string) {
 	tCtx.Helper()
-	// Must simulate registration which calls Create, otherwise collection crashes.
+	// 必须模拟注册流程调用 Create，否则采集时会崩溃。
 	collector := &claimInfoCollector{cache: claimInfoCache}
 	collector.Create(nil, collector)
 	err := testutil.CollectAndCompare(collector, strings.NewReader(expectedMetric), "dra_resource_claims_in_use")

@@ -34,95 +34,89 @@ import (
 	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
-// Manager manages all the Device Plugins running on a node.
+// Manager 管理节点上运行的所有设备插件。
 type Manager interface {
-	// Start starts device plugin registration service.
+	// Start 启动设备插件注册服务。
 	Start(logger klog.Logger, activePods ActivePodsFunc, sourcesReady config.SourcesReady, initialContainers containermap.ContainerMap, initialContainerRunningSet sets.Set[string]) error
 
-	// Allocate configures and assigns devices to a container in a pod. From
-	// the requested device resources, Allocate will communicate with the
-	// owning device plugin to allow setup procedures to take place, and for
-	// the device plugin to provide runtime settings to use the device
-	// (environment variables, mount points and device files).
+	// Allocate 为 Pod 中的容器配置并分配设备。
+	// 根据请求的设备资源，Allocate 会与设备插件通信完成准备工作，
+	// 并取得使用设备所需的运行时设置（环境变量、挂载点和设备文件）。
 	Allocate(ctx context.Context, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) error
 
-	// UpdatePluginResources updates node resources based on devices already
-	// allocated to pods. The node object is provided for the device manager to
-	// update the node capacity to reflect the currently available devices.
+	// UpdatePluginResources 根据已分配给 Pod 的设备更新节点资源。
+	// 传入的节点对象用于让设备管理器更新节点容量，反映当前可用设备。
 	UpdatePluginResources(node *schedulerframework.NodeInfo, attrs *lifecycle.PodAdmitAttributes) error
 
-	// Stop stops the manager.
+	// Stop 停止设备管理器。
 	Stop(logger klog.Logger) error
 
-	// GetDeviceRunContainerOptions checks whether we have cached containerDevices
-	// for the passed-in <pod, container> and returns its DeviceRunContainerOptions
-	// for the found one. An empty struct is returned in case no cached state is found.
+	// GetDeviceRunContainerOptions 检查是否缓存了传入 <pod, container> 的设备信息，
+	// 找到时返回其 DeviceRunContainerOptions；没有缓存时返回空结构。
 	GetDeviceRunContainerOptions(ctx context.Context, pod *v1.Pod, container *v1.Container) (*DeviceRunContainerOptions, error)
 
-	// GetCapacity returns the amount of available device plugin resource capacity, resource allocatable
-	// and inactive device plugin resources previously registered on the node.
+	// GetCapacity 返回节点上已注册设备插件的可用容量、可分配资源以及未激活的资源。
 	GetCapacity(logger klog.Logger) (v1.ResourceList, v1.ResourceList, []string)
 
-	// GetWatcherHandler returns the plugin handler for the device manager.
+	// GetWatcherHandler 返回设备管理器使用的插件处理器。
 	GetWatcherHandler() cache.PluginHandler
+	// GetHealthChecker 返回设备管理器的健康检查器。
 	GetHealthChecker() healthz.HealthChecker
 
-	// GetDevices returns information about the devices assigned to pods and containers
+	// GetDevices 返回已分配给 Pod 与容器的设备信息。
 	GetDevices(podUID, containerName string) ResourceDeviceInstances
 
-	// UpdateAllocatedResourcesStatus updates the status of allocated resources for the pod.
+	// UpdateAllocatedResourcesStatus 更新 Pod 已分配资源的状态。
 	UpdateAllocatedResourcesStatus(logger klog.Logger, pod *v1.Pod, status *v1.PodStatus)
 
-	// GetAllocatableDevices returns information about all the devices known to the manager
+	// GetAllocatableDevices 返回管理器已知的所有设备信息。
 	GetAllocatableDevices(logger klog.Logger) ResourceDeviceInstances
 
-	// ShouldResetExtendedResourceCapacity returns whether the extended resources should be reset or not,
-	// depending on the checkpoint file availability. Absence of the checkpoint file strongly indicates
-	// the node has been recreated.
+	// ShouldResetExtendedResourceCapacity 根据 checkpoint 文件是否存在决定是否重置扩展资源。
+	// checkpoint 文件缺失通常说明节点已被重建。
 	ShouldResetExtendedResourceCapacity() bool
 
-	// TopologyManager HintProvider provider indicates the Device Manager implements the Topology Manager Interface
-	// and is consulted to make Topology aware resource alignments
+	// GetTopologyHints 表明设备管理器实现了 TopologyManager 的 HintProvider 接口，
+	// 参与拓扑感知的资源对齐决策。
 	GetTopologyHints(logger klog.Logger, pod *v1.Pod, container *v1.Container, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint
 
-	// TopologyManager HintProvider provider indicates the Device Manager implements the Topology Manager Interface
-	// and is consulted to make Topology aware resource alignments per Pod
+	// GetTopologyHints 表明设备管理器实现了 TopologyManager 的 HintProvider 接口，
+	// 参与 Pod 级别的拓扑感知资源对齐决策。
 	GetPodTopologyHints(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) map[string][]topologymanager.TopologyHint
 
-	// AllocatePod is called to trigger the allocation of resources to a pod.
+	// AllocatePod 触发向 Pod 分配资源。
 	AllocatePod(logger klog.Logger, pod *v1.Pod, operation lifecycle.Operation) error
 
-	// UpdateAllocatedDevices frees any Devices that are bound to terminated pods.
+	// UpdateAllocatedDevices 释放绑定到已终止 Pod 的设备。
 	UpdateAllocatedDevices(logger klog.Logger)
 
-	// Updates returns a channel that receives an Update when the device changed its status.
+	// Updates 返回设备状态变化时接收更新的通道。
 	Updates() <-chan resourceupdates.Update
 }
 
-// DeviceRunContainerOptions contains the combined container runtime settings to consume its allocated devices.
+// DeviceRunContainerOptions 保存容器使用已分配设备所需的运行时设置。
 type DeviceRunContainerOptions struct {
-	// The environment variables list.
+	// 环境变量列表。
 	Envs []kubecontainer.EnvVar
-	// The mounts for the container.
+	// 容器需要挂载的路径。
 	Mounts []kubecontainer.Mount
-	// The host devices mapped into the container.
+	// 映射到容器内的宿主设备。
 	Devices []kubecontainer.DeviceInfo
-	// The Annotations for the container
+	// 容器的注解。
 	Annotations []kubecontainer.Annotation
-	// CDI Devices for the container
+	// 容器使用的 CDI 设备。
 	CDIDevices []kubecontainer.CDIDevice
 }
 
 // TODO: evaluate whether we need this error definition.
 const (
+	// errEndpointStopped 是插件 endpoint 已停止时的错误格式。
 	errEndpointStopped = "endpoint %v has been stopped"
 )
 
-// endpointStopGracePeriod indicates the grace period after an endpoint is stopped
-// because its device plugin fails. DeviceManager keeps the stopped endpoint in its
-// cache during this grace period to cover the time gap for the capacity change to
-// take effect.
+// endpointStopGracePeriod 是插件故障导致 endpoint 停止后的宽限期。
+// 在此期间设备管理器会保留已停止的 endpoint，以覆盖容量变更生效前的时间差。
 const endpointStopGracePeriod = time.Duration(5) * time.Minute
 
-// kubeletDeviceManagerCheckpoint is the file name of device plugin checkpoint
+// kubeletDeviceManagerCheckpoint 是设备插件 checkpoint 的文件名。
 const kubeletDeviceManagerCheckpoint = "kubelet_internal_checkpoint"

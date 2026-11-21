@@ -35,6 +35,7 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// 测试使用的两套客户端证书与私钥数据。
 var (
 	client1CertData = newCertificateData(`-----BEGIN CERTIFICATE-----
 MIICBDCCAW2gAwIBAgIJAPgVBh+4xbGoMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV
@@ -92,17 +93,20 @@ uC6Jo2eLcSV1sSdzTjaaWdM6XeYj6yHOAm8ZBIQs7m6V
 -----END RSA PRIVATE KEY-----`)
 )
 
+// certificateData 保存测试证书的 PEM 数据与解析后的 tls.Certificate。
 type certificateData struct {
 	keyPEM         []byte
 	certificatePEM []byte
 	certificate    *tls.Certificate
 }
 
+// newCertificateData 解析证书与私钥，失败时 panic（测试数据应始终有效）。
 func newCertificateData(certificatePEM string, keyPEM string) *certificateData {
 	certificate, err := tls.X509KeyPair([]byte(certificatePEM), []byte(keyPEM))
 	if err != nil {
 		panic(fmt.Sprintf("Unable to initialize certificate: %v", err))
 	}
+	// 解析叶子证书，供后续比较序列号使用。
 	certs, err := x509.ParseCertificates(certificate.Certificate[0])
 	if err != nil {
 		panic(fmt.Sprintf("Unable to initialize certificate leaf: %v", err))
@@ -115,21 +119,30 @@ func newCertificateData(certificatePEM string, keyPEM string) *certificateData {
 	}
 }
 
+// fakeManager 是证书管理器的测试替身，可原子地替换当前证书。
 type fakeManager struct {
-	cert    atomic.Value // Always a *tls.Certificate
+	cert    atomic.Value // cert 始终存放 *tls.Certificate。
 	healthy bool
 }
 
+// SetCertificateSigningRequestClient 是空实现。
 func (f *fakeManager) SetCertificateSigningRequestClient(certificatesclient.CertificateSigningRequestInterface) error {
 	return nil
 }
 
+// ServerHealthy 返回预设的健康状态。
 func (f *fakeManager) ServerHealthy() bool { return f.healthy }
 
-func (f *fakeManager) Start()                     {}
-func (f *fakeManager) Stop()                      {}
+// Start 是空操作。
+func (f *fakeManager) Start() {}
+
+// Stop 是空操作。
+func (f *fakeManager) Stop() {}
+
+// RotateCerts 是空操作，始终返回 (false, nil)。
 func (f *fakeManager) RotateCerts() (bool, error) { return false, nil }
 
+// Current 返回当前证书。
 func (f *fakeManager) Current() *tls.Certificate {
 	if val := f.cert.Load(); val != nil {
 		return val.(*tls.Certificate)
@@ -137,14 +150,17 @@ func (f *fakeManager) Current() *tls.Certificate {
 	return nil
 }
 
+// setCurrent 原子地替换当前证书。
 func (f *fakeManager) setCurrent(cert *tls.Certificate) {
 	f.cert.Store(cert)
 }
 
+// TestRotateShutsDownConnections 验证证书轮换后客户端会断开旧连接，
+// 并使用新证书重新连接。
 func TestRotateShutsDownConnections(t *testing.T) {
 
-	// This test fails if you comment out the t.closeAllConns() call in
-	// transport.go and don't close connections on a rotate.
+	// 如果注释掉 transport.go 中的 t.closeAllConns() 调用（轮换时不关闭连接），
+	// 该测试会失败。
 
 	logger, tCtx := ktesting.NewTestContext(t)
 
@@ -154,9 +170,10 @@ func TestRotateShutsDownConnections(t *testing.T) {
 	m := new(fakeManager)
 	m.setCurrent(client1CertData.certificate)
 
-	// The last certificate we've seen.
+	// lastSeenLeafCert 保存服务端最后一次看到的客户端证书。
 	lastSeenLeafCert := new(atomic.Value) // Always *x509.Certificate
 
+	// 用最后证书的序列号判断客户端是否换用了新证书。
 	lastSerialNumber := func() *big.Int {
 		if cert := lastSeenLeafCert.Load(); cert != nil {
 			return cert.(*x509.Certificate).SerialNumber
@@ -166,7 +183,7 @@ func TestRotateShutsDownConnections(t *testing.T) {
 
 	h := func(w http.ResponseWriter, r *http.Request) {
 		if r.TLS != nil && len(r.TLS.PeerCertificates) != 0 {
-			// Record the last TLS certificate the client sent.
+			// 记录客户端最近一次发送的 TLS 证书。
 			lastSeenLeafCert.Store(r.TLS.PeerCertificates[0])
 		}
 		w.Write([]byte(`{}`))
@@ -174,7 +191,7 @@ func TestRotateShutsDownConnections(t *testing.T) {
 
 	s := httptest.NewUnstartedServer(http.HandlerFunc(h))
 	s.TLS = &tls.Config{
-		// Just request a cert, we don't need to verify it.
+		// 只请求客户端证书，不做校验。
 		ClientAuth: tls.RequestClientCert,
 	}
 	s.StartTLS()
@@ -183,16 +200,16 @@ func TestRotateShutsDownConnections(t *testing.T) {
 	c := &rest.Config{
 		Host: s.URL,
 		TLSClientConfig: rest.TLSClientConfig{
-			// We don't care about the server's cert.
+			// 不校验服务端证书。
 			Insecure: true,
 		},
 		ContentConfig: rest.ContentConfig{
-			// This is a hack. We don't actually care about the serializer.
+			// 这里只是占位，测试并不关心序列化器。
 			NegotiatedSerializer: serializer.NegotiatedSerializerWrapper(runtime.SerializerInfo{}),
 		},
 	}
 
-	// Check for a new cert every 10 milliseconds
+	// 每 10 毫秒检查一次是否有新证书。
 	if _, err := updateTransport(logger, stop, 10*time.Millisecond, c, m, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -207,14 +224,14 @@ func TestRotateShutsDownConnections(t *testing.T) {
 	}
 	firstCertSerial := lastSerialNumber()
 
-	// Change the manager's certificate. This should cause the client to shut down
-	// its connections to the server.
+	// 更换管理器中的证书；客户端应断开与服务器的旧连接。
 	m.setCurrent(client2CertData.certificate)
 
+	// 等待客户端用新证书重新连接，直到测试超时。
 	err = wait.PollImmediate(time.Millisecond*50, wait.ForeverTestTimeout, func() (done bool, err error) {
 		client.Get().Do(tCtx)
 		if firstCertSerial.Cmp(lastSerialNumber()) != 0 {
-			// The certificate changed!
+			// 证书已变化，停止轮询。
 			return true, nil
 		}
 		t.Logf("Certificate not changed, will retry.")

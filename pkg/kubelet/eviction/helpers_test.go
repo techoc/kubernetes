@@ -41,11 +41,15 @@ import (
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 )
 
+// quantityMustParse 把资源量字符串解析成指针形式，便于在 ThresholdValue 里复用。
+// resource.Quantity 的零值不能直接取地址，测试统一走这个辅助函数。
 func quantityMustParse(value string) *resource.Quantity {
 	q := resource.MustParse(value)
 	return &q
 }
 
+// TestGetReclaimableThreshold 验证按驱逐优先级排序后，getReclaimableThreshold
+// 会挑出最优先且仍被触发的阈值，并给出其对应的资源名称。
 func TestGetReclaimableThreshold(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := map[string]struct {
@@ -133,6 +137,7 @@ func TestGetReclaimableThreshold(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
+		// 先排序，保证"第一个可回收"阈值就是优先级最高的那个信号。
 		sort.Sort(byEvictionPriority(testCase.thresholds))
 		threshold, ressourceName, found := getReclaimableThreshold(logger, testCase.thresholds)
 		assert.Equal(t, testCase.expectedReclaimableToBeFound, found)
@@ -144,6 +149,8 @@ func TestGetReclaimableThreshold(t *testing.T) {
 	}
 }
 
+// TestParseThresholdConfig 覆盖 hard/soft 阈值、宽限期和最小回收量的解析，
+// 既覆盖量与百分比两种写法，也覆盖各类非法输入必须报错的分支。
 func TestParseThresholdConfig(t *testing.T) {
 	gracePeriod, _ := time.ParseDuration("30s")
 	testCases := map[string]struct {
@@ -561,6 +568,7 @@ func TestParseThresholdConfig(t *testing.T) {
 		},
 	}
 	for testName, testCase := range testCases {
+		// 用 thresholdsEqual 做无序比较：map 遍历顺序会影响阈值生成顺序，不能依赖切片顺序。
 		thresholds, err := ParseThresholdConfig(testCase.allocatableConfig, testCase.evictionHard, testCase.evictionSoft, testCase.evictionSoftGracePeriod, testCase.evictionMinReclaim)
 		if testCase.expectErr != (err != nil) {
 			t.Errorf("Err not as expected, test: %v, error expected: %v, actual: %v", testName, testCase.expectErr, err)
@@ -571,9 +579,11 @@ func TestParseThresholdConfig(t *testing.T) {
 	}
 }
 
+// TestAddAllocatableThresholds 验证 addAllocatableThresholds 只为无宽限期的
+// memory.available 阈值追加对应的 allocatableMemory.available 阈值。
 func TestAddAllocatableThresholds(t *testing.T) {
-	// About func addAllocatableThresholds, only someone threshold that "Signal" is "memory.available" and "GracePeriod" is 0,
-	// append this threshold(changed "Signal" to "allocatableMemory.available") to thresholds
+	// 对每个 Signal 为 memory.available 且 GracePeriod 为 0 的阈值，额外追加一份
+	// Signal 改为 allocatableMemory.available 的副本；其余阈值保持不动。
 	testCases := map[string]struct {
 		thresholds []evictionapi.Threshold
 		expected   []evictionapi.Threshold
@@ -745,6 +755,7 @@ func TestAddAllocatableThresholds(t *testing.T) {
 	}
 	for testName, testCase := range testCases {
 		t.Run(testName, func(t *testing.T) {
+			// 结果可能是"原阈值 + 追加副本"，顺序不确定，因此用无序比较。
 			if !thresholdsEqual(testCase.expected, addAllocatableThresholds(testCase.thresholds)) {
 				t.Errorf("Err not as expected, test: %v, Unexpected data: %s", testName, cmp.Diff(testCase.expected, addAllocatableThresholds(testCase.thresholds)))
 			}
@@ -752,6 +763,8 @@ func TestAddAllocatableThresholds(t *testing.T) {
 	}
 }
 
+// TestFallbackResourcesUsage 验证 stats 字段缺失时各 usage 函数返回非零兜底值，
+// 否则百分比阈值会除以 0，或把"没有数据"误判成资源耗尽。
 func TestFallbackResourcesUsage(t *testing.T) {
 	for _, test := range []struct {
 		description   string
@@ -793,6 +806,8 @@ func TestFallbackResourcesUsage(t *testing.T) {
 	}
 }
 
+// thresholdsEqual 以顺序无关的方式比较两组阈值，双向各查一次，
+// 避免某一侧存在重复元素时被长度相等掩盖。
 func thresholdsEqual(expected []evictionapi.Threshold, actual []evictionapi.Threshold) bool {
 	if len(expected) != len(actual) {
 		return false
@@ -822,6 +837,7 @@ func thresholdsEqual(expected []evictionapi.Threshold, actual []evictionapi.Thre
 	return true
 }
 
+// thresholdEqual 逐字段比较阈值；数量与百分比会在同一量纲上统一折算后再比较。
 func thresholdEqual(a evictionapi.Threshold, b evictionapi.Threshold) bool {
 	return a.GracePeriod == b.GracePeriod &&
 		a.Operator == b.Operator &&
@@ -830,6 +846,7 @@ func thresholdEqual(a evictionapi.Threshold, b evictionapi.Threshold) bool {
 		compareThresholdValue(a.Value, b.Value)
 }
 
+// TestOrderedByExceedsRequestMemory 验证"超出内存请求"的比较器会把超额使用的 Pod 排在前面。
 func TestOrderedByExceedsRequestMemory(t *testing.T) {
 	below := newPod("below-requests", -1, []v1.Container{
 		newContainer("below-requests", newResourceList("", "200Mi", ""), newResourceList("", "", "")),
@@ -837,6 +854,7 @@ func TestOrderedByExceedsRequestMemory(t *testing.T) {
 	exceeds := newPod("exceeds-requests", 1, []v1.Container{
 		newContainer("exceeds-requests", newResourceList("", "100Mi", ""), newResourceList("", "", "")),
 	}, nil)
+	// below 比请求少 1Mi（-1），exceeds 比请求多 1Mi（+1）；超出者应优先被驱逐。
 	stats := map[*v1.Pod]statsapi.PodStats{
 		below:   newPodMemoryStats(below, resource.MustParse("199Mi")),   // -1 relative to request
 		exceeds: newPodMemoryStats(exceeds, resource.MustParse("101Mi")), // 1 relative to request
@@ -856,6 +874,7 @@ func TestOrderedByExceedsRequestMemory(t *testing.T) {
 	}
 }
 
+// TestOrderedByExceedsRequestDisk 验证按临时存储请求计算超额使用时，超出者排在前面。
 func TestOrderedByExceedsRequestDisk(t *testing.T) {
 	below := newPod("below-requests", -1, []v1.Container{
 		newContainer("below-requests", v1.ResourceList{v1.ResourceEphemeralStorage: resource.MustParse("200Mi")}, newResourceList("", "", "")),
@@ -882,6 +901,7 @@ func TestOrderedByExceedsRequestDisk(t *testing.T) {
 	}
 }
 
+// TestOrderedByPriority 验证优先级升序排序：低优先级的 Pod 先被驱逐。
 func TestOrderedByPriority(t *testing.T) {
 	low := newPod("low-priority", -134, []v1.Container{
 		newContainer("low-priority", newResourceList("", "", ""), newResourceList("", "", "")),
@@ -893,6 +913,7 @@ func TestOrderedByPriority(t *testing.T) {
 		newContainer("high-priority", newResourceList("200m", "200Mi", ""), newResourceList("200m", "200Mi", "")),
 	}, nil)
 
+	// 输入顺序故意打乱，排序结果应为 low -> medium -> high。
 	pods := []*v1.Pod{high, medium, low}
 	orderedBy(priority).Sort(pods)
 
@@ -904,6 +925,8 @@ func TestOrderedByPriority(t *testing.T) {
 	}
 }
 
+// TestOrderedbyDisk 验证磁盘比较器按 Pod 用量从大到小排序；
+// best-effort Pod 请求为 0，相对用量就是绝对用量。
 func TestOrderedbyDisk(t *testing.T) {
 	pod1 := newPod("best-effort-high", defaultPriority, []v1.Container{
 		newContainer("best-effort-high", newResourceList("", "", ""), newResourceList("", "", "")),
@@ -969,6 +992,7 @@ func TestOrderedbyDisk(t *testing.T) {
 	}
 }
 
+// TestOrderedbyInodes 验证 inode 比较器按 Pod 的 inode 用量从大到小排序。
 func TestOrderedbyInodes(t *testing.T) {
 	low := newPod("low", defaultPriority, []v1.Container{
 		newContainer("low", newResourceList("", "", ""), newResourceList("", "", "")),
@@ -1010,7 +1034,7 @@ func TestOrderedbyInodes(t *testing.T) {
 	}
 }
 
-// TestOrderedByPriorityDisk ensures we order pods by priority and then greediest resource consumer
+// TestOrderedByPriorityDisk 验证综合排序：先按优先级分组，同优先级内再按磁盘超额用量降序。
 func TestOrderedByPriorityDisk(t *testing.T) {
 	pod1 := newPod("above-requests-low-priority-high-usage", lowPriority, []v1.Container{
 		newContainer("above-requests-low-priority-high-usage", newResourceList("", "", ""), newResourceList("", "", "")),
@@ -1093,7 +1117,7 @@ func TestOrderedByPriorityDisk(t *testing.T) {
 	}
 }
 
-// TestOrderedByPriorityInodes ensures we order pods by priority and then greediest resource consumer
+// TestOrderedByPriorityInodes 验证综合排序：先按优先级分组，同优先级内再按 inode 用量降序。
 func TestOrderedByPriorityInodes(t *testing.T) {
 	pod1 := newPod("low-priority-high-usage", lowPriority, []v1.Container{
 		newContainer("low-priority-high-usage", newResourceList("", "", ""), newResourceList("", "", "")),
@@ -1143,7 +1167,7 @@ func TestOrderedByPriorityInodes(t *testing.T) {
 	}
 }
 
-// TestOrderedByMemory ensures we order pods by greediest memory consumer relative to request.
+// TestOrderedByMemory 验证按相对内存请求的超出量从大到小排序。
 func TestOrderedByMemory(t *testing.T) {
 	pod1 := newPod("best-effort-high", defaultPriority, []v1.Container{
 		newContainer("best-effort-high", newResourceList("", "", ""), newResourceList("", "", "")),
@@ -1185,7 +1209,7 @@ func TestOrderedByMemory(t *testing.T) {
 	}
 }
 
-// TestOrderedByPriorityMemory ensures we order by priority and then memory consumption relative to request.
+// TestOrderedByPriorityMemory 验证先按优先级分组，再按相对内存请求的超出量降序排序。
 func TestOrderedByPriorityMemory(t *testing.T) {
 	pod1 := newPod("above-requests-low-priority-high-usage", lowPriority, []v1.Container{
 		newContainer("above-requests-low-priority-high-usage", newResourceList("", "", ""), newResourceList("", "", "")),
@@ -1235,7 +1259,7 @@ func TestOrderedByPriorityMemory(t *testing.T) {
 	}
 }
 
-// TestOrderedByPriorityProcess ensures we order by priority and then process consumption relative to request.
+// TestOrderedByPriorityProcess 验证先按优先级分组，再按进程数从多到少排序。
 func TestOrderedByPriorityProcess(t *testing.T) {
 	pod1 := newPod("low-priority-high-usage", lowPriority, nil, nil)
 	pod2 := newPod("low-priority-low-usage", lowPriority, nil, nil)
@@ -1261,6 +1285,8 @@ func TestOrderedByPriorityProcess(t *testing.T) {
 	}
 }
 
+// TestSortByEvictionPriority 验证阈值按信号优先级排序：内存类信号排在磁盘、PID 信号之前，
+// 因为内存压力恢复最慢、对节点影响最大。
 func TestSortByEvictionPriority(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -1335,20 +1361,23 @@ func TestSortByEvictionPriority(t *testing.T) {
 	}
 }
 
+// fakeSummaryProvider 始终返回同一份 Summary，用于把统计采集逻辑从被测逻辑中隔离出去。
 type fakeSummaryProvider struct {
 	result *statsapi.Summary
 }
 
+// Get 实现 summaryProvider 接口，忽略 updateStats，直接返回预置结果。
 func (f *fakeSummaryProvider) Get(ctx context.Context, updateStats bool) (*statsapi.Summary, error) {
 	return f.result, nil
 }
 
+// GetCPUAndMemoryStats 让假实现同时满足只需 CPU/内存统计的调用方。
 func (f *fakeSummaryProvider) GetCPUAndMemoryStats(ctx context.Context) (*statsapi.Summary, error) {
 	return f.result, nil
 }
 
-// newPodStats returns a pod stat where each container is using the specified working set
-// each pod must have a Name, UID, Namespace
+// newPodStats 构造只含工作集内存统计的 PodStats。
+// Pod 必须有 Name、UID、Namespace，statsFunc 才能按 PodRef 正确匹配。
 func newPodStats(pod *v1.Pod, podWorkingSetBytes uint64) statsapi.PodStats {
 	return statsapi.PodStats{
 		PodRef: statsapi.PodReference{
@@ -1362,6 +1391,8 @@ func newPodStats(pod *v1.Pod, podWorkingSetBytes uint64) statsapi.PodStats {
 	}
 }
 
+// TestMakeSignalObservations 校验从 Summary 各字段提取信号观测值：可用量与容量都要正确，
+// 同时覆盖 Linux（pods 系统容器）与 Windows（GlobalCommitMemory）两种内存来源。
 func TestMakeSignalObservations(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	podMaker := func(name, namespace, uid string, numContainers int) *v1.Pod {
@@ -1455,6 +1486,7 @@ func TestMakeSignalObservations(t *testing.T) {
 		fakeStats.Pods = append(fakeStats.Pods, newPodStats(pod, podWorkingSetBytes))
 	}
 	res := quantityMustParse("5Gi")
+	// 可分配内存的阈值恒为 100%，因此其容量必须等于 allocatable 容量。
 	// Allocatable thresholds are always 100%.  Verify that Threshold == Capacity.
 	if res.CmpInt64(int64(allocatableMemoryCapacity)) != 0 {
 		t.Errorf("Expected Threshold %v to be equal to value %v", res.Value(), allocatableMemoryCapacity)
@@ -1551,6 +1583,7 @@ func TestMakeSignalObservations(t *testing.T) {
 	if expectedBytes := int64(maxPID - numberOfRunningProcesses); pidQuantity.available.Value() != expectedBytes {
 		t.Errorf("Expected %v, actual: %v", expectedBytes, pidQuantity.available.Value())
 	}
+	// 返回的 statsFunc 必须能按 Pod 取回各自的统计，供后续按 Pod 排序使用。
 	for _, pod := range pods {
 		podStats, found := statsFunc(pod)
 		if !found {
@@ -1562,6 +1595,8 @@ func TestMakeSignalObservations(t *testing.T) {
 	}
 }
 
+// TestThresholdsMet 验证阈值是否被触发；开启 enforceMinReclaim 后，
+// 还要求当前可回收量满足 MinReclaim 才算触发。
 func TestThresholdsMet(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	hardThreshold := evictionapi.Threshold{
@@ -1635,6 +1670,8 @@ func TestThresholdsMet(t *testing.T) {
 	}
 }
 
+// TestThresholdsUpdatedStats 验证只保留观测时间晚于上次的阈值：
+// 同一时刻或时间倒退的观测视为过期，避免重复触发驱逐。
 func TestThresholdsUpdatedStats(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	updatedThreshold := evictionapi.Threshold{
@@ -1726,6 +1763,8 @@ func TestThresholdsUpdatedStats(t *testing.T) {
 	}
 }
 
+// TestPercentageThresholdsMet 验证百分比阈值按 available/capacity 计算，
+// 且 MinReclaim 为百分比时同样按容量折算。
 func TestPercentageThresholdsMet(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	specificThresholds := []evictionapi.Threshold{
@@ -1845,6 +1884,8 @@ func TestPercentageThresholdsMet(t *testing.T) {
 	}
 }
 
+// TestThresholdsFirstObservedAt 验证首次观测时间只记录一次：
+// 已有记录时保留旧时间，宽限期从这一刻开始累计。
 func TestThresholdsFirstObservedAt(t *testing.T) {
 	hardThreshold := evictionapi.Threshold{
 		Signal:   evictionapi.SignalMemoryAvailable,
@@ -1894,6 +1935,7 @@ func TestThresholdsFirstObservedAt(t *testing.T) {
 	}
 }
 
+// TestThresholdsMetGracePeriod 验证硬阈值立即生效，软阈值必须持续超过 GracePeriod 才生效。
 func TestThresholdsMetGracePeriod(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	now := metav1.Now()
@@ -1953,6 +1995,7 @@ func TestThresholdsMetGracePeriod(t *testing.T) {
 	}
 }
 
+// TestNodeConditions 验证阈值信号到 NodeCondition 的映射，例如 memory.available 对应 MemoryPressure。
 func TestNodeConditions(t *testing.T) {
 	testCases := map[string]struct {
 		inputs []evictionapi.Threshold
@@ -1977,6 +2020,8 @@ func TestNodeConditions(t *testing.T) {
 	}
 }
 
+// TestNodeConditionsLastObservedAt 验证条件仍存在时刷新观测时间，条件消失时保留旧时间，
+// 供条件退出时的宽限判断使用。
 func TestNodeConditionsLastObservedAt(t *testing.T) {
 	now := metav1.Now()
 	oldTime := metav1.NewTime(now.Time.Add(-1 * time.Minute))
@@ -2023,6 +2068,7 @@ func TestNodeConditionsLastObservedAt(t *testing.T) {
 	}
 }
 
+// TestNodeConditionsObservedSince 验证只返回在给定周期内被观测到的条件。
 func TestNodeConditionsObservedSince(t *testing.T) {
 	now := metav1.Now()
 	observedTime := metav1.NewTime(now.Time.Add(-1 * time.Minute))
@@ -2057,6 +2103,7 @@ func TestNodeConditionsObservedSince(t *testing.T) {
 	}
 }
 
+// TestHasNodeConditions 验证节点条件列表的成员查找。
 func TestHasNodeConditions(t *testing.T) {
 	testCases := map[string]struct {
 		inputs []v1.NodeConditionType
@@ -2081,6 +2128,7 @@ func TestHasNodeConditions(t *testing.T) {
 	}
 }
 
+// TestParsePercentage 验证 parsePercentage 只接受"数字%"形式，其余输入一律报错。
 func TestParsePercentage(t *testing.T) {
 	testCases := map[string]struct {
 		hasError bool
@@ -2110,6 +2158,8 @@ func TestParsePercentage(t *testing.T) {
 	}
 }
 
+// TestCompareThresholdValue 验证阈值比较只认同一种表示形式：
+// 数量与百分比即使折算后相等也算不同，且比较必须对称。
 func TestCompareThresholdValue(t *testing.T) {
 	testCases := []struct {
 		a, b  evictionapi.ThresholdValue
@@ -2169,6 +2219,9 @@ func TestCompareThresholdValue(t *testing.T) {
 		}
 	}
 }
+
+// TestAddContainerFsThresholds 验证 UpdateContainerFsThresholds 根据 imagefs/containerfs
+// 是否独立决定是否生成 containerfs 阈值；已存在 containerfs 阈值时再次添加应报错。
 func TestAddContainerFsThresholds(t *testing.T) {
 	gracePeriod := time.Duration(1)
 	testCases := []struct {
@@ -3124,6 +3177,7 @@ func TestAddContainerFsThresholds(t *testing.T) {
 			if err != nil && !testCase.expectErr {
 				t.Fatalf("got error but did not expect any")
 			}
+			// 逐个记录四类 containerfs 阈值的下标，-1 表示缺失；最后统一断言四者都能找到。
 			hardContainerFsMatch := -1
 			softContainerFsMatch := -1
 			hardContainerFsINodesMatch := -1
@@ -3170,7 +3224,8 @@ func TestAddContainerFsThresholds(t *testing.T) {
 	}
 }
 
-// newPodInodeStats returns stats with specified usage amounts.
+// newPodInodeStats 按给定用量构造 inode 统计：每个容器都带 rootfs 与 logs，
+// 每个本地卷带一份卷统计，便于比较器累加。
 func newPodInodeStats(pod *v1.Pod, rootFsInodesUsed, logsInodesUsed, perLocalVolumeInodesUsed resource.Quantity) statsapi.PodStats {
 	result := statsapi.PodStats{
 		PodRef: statsapi.PodReference{
@@ -3202,7 +3257,8 @@ func newPodInodeStats(pod *v1.Pod, rootFsInodesUsed, logsInodesUsed, perLocalVol
 	return result
 }
 
-// newPodDiskStats returns stats with specified usage amounts.
+// newPodDiskStats 按给定用量构造磁盘统计：每个容器都带 rootfs 与 logs，
+// 每个本地卷带一份卷统计，便于比较器累加。
 func newPodDiskStats(pod *v1.Pod, rootFsUsed, logsUsed, perLocalVolumeUsed resource.Quantity) statsapi.PodStats {
 	result := statsapi.PodStats{
 		PodRef: statsapi.PodReference{
@@ -3237,6 +3293,8 @@ func newPodDiskStats(pod *v1.Pod, rootFsUsed, logsUsed, perLocalVolumeUsed resou
 	return result
 }
 
+// newPodMemoryStats 构造内存统计；同时填上卷、容器和临时存储字段，
+// 让同一份统计也能被磁盘类比较器使用。
 func newPodMemoryStats(pod *v1.Pod, workingSet resource.Quantity) statsapi.PodStats {
 	workingSetBytes := uint64(workingSet.Value())
 	return statsapi.PodStats{
@@ -3267,6 +3325,7 @@ func newPodMemoryStats(pod *v1.Pod, workingSet resource.Quantity) statsapi.PodSt
 	}
 }
 
+// newPodProcessStats 构造只含进程数的统计，用于进程数比较器。
 func newPodProcessStats(pod *v1.Pod, num uint64) statsapi.PodStats {
 	return statsapi.PodStats{
 		PodRef: statsapi.PodReference{
@@ -3278,6 +3337,7 @@ func newPodProcessStats(pod *v1.Pod, num uint64) statsapi.PodStats {
 	}
 }
 
+// newResourceList 按非空参数拼出 ResourceList，空字符串表示该资源不设置。
 func newResourceList(cpu, memory, disk string) v1.ResourceList {
 	res := v1.ResourceList{}
 	if cpu != "" {
@@ -3292,6 +3352,7 @@ func newResourceList(cpu, memory, disk string) v1.ResourceList {
 	return res
 }
 
+// newResourceRequirements 把请求与限制组装成 ResourceRequirements。
 func newResourceRequirements(requests, limits v1.ResourceList) v1.ResourceRequirements {
 	res := v1.ResourceRequirements{}
 	res.Requests = requests
@@ -3299,6 +3360,7 @@ func newResourceRequirements(requests, limits v1.ResourceList) v1.ResourceRequir
 	return res
 }
 
+// newContainer 构造带资源声明的容器。
 func newContainer(name string, requests v1.ResourceList, limits v1.ResourceList) v1.Container {
 	return v1.Container{
 		Name:      name,
@@ -3306,6 +3368,8 @@ func newContainer(name string, requests v1.ResourceList, limits v1.ResourceList)
 	}
 }
 
+// newRestartableInitContainer 构造可重启 init 容器（RestartPolicy=Always），
+// 这类容器会参与常规容器的资源计算。
 func newRestartableInitContainer(name string, requests v1.ResourceList, limits v1.ResourceList) v1.Container {
 	restartAlways := v1.ContainerRestartPolicyAlways
 	container := newContainer(name, requests, limits)
@@ -3313,6 +3377,7 @@ func newRestartableInitContainer(name string, requests v1.ResourceList, limits v
 	return container
 }
 
+// newVolume 构造卷声明。
 func newVolume(name string, volumeSource v1.VolumeSource) v1.Volume {
 	return v1.Volume{
 		Name:         name,
@@ -3320,7 +3385,7 @@ func newVolume(name string, volumeSource v1.VolumeSource) v1.Volume {
 	}
 }
 
-// newPod uses the name as the uid.  Make names unique for testing.
+// newPod 用名字充当 UID，因此测试中名字必须唯一；否则 statsFunc 的 map 查找会串到别的 Pod。
 func newPod(name string, priority int32, containers []v1.Container, volumes []v1.Volume) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -3335,6 +3400,7 @@ func newPod(name string, priority int32, containers []v1.Container, volumes []v1
 	}
 }
 
+// newPodWithInitContainers 在 newPod 基础上补充 init 容器和 pod 级资源。
 func newPodWithInitContainers(name string, priority int32, resources v1.ResourceRequirements, initContainers []v1.Container, containers []v1.Container, volumes []v1.Volume) *v1.Pod {
 	pod := newPod(name, priority, containers, volumes)
 
@@ -3344,10 +3410,10 @@ func newPodWithInitContainers(name string, priority int32, resources v1.Resource
 	return pod
 }
 
-// nodeConditionList is a simple alias to support equality checking independent of order
+// nodeConditionList 是节点条件切片的别名，提供与顺序无关的相等判断。
 type nodeConditionList []v1.NodeConditionType
 
-// Equal adds the ability to check equality between two lists of node conditions.
+// Equal 以不区分顺序的方式比较两组节点条件。
 func (s1 nodeConditionList) Equal(s2 nodeConditionList) bool {
 	if len(s1) != len(s2) {
 		return false
@@ -3360,10 +3426,10 @@ func (s1 nodeConditionList) Equal(s2 nodeConditionList) bool {
 	return true
 }
 
-// thresholdList is a simple alias to support equality checking independent of order
+// thresholdList 是阈值切片的别名，提供与顺序无关的相等判断。
 type thresholdList []evictionapi.Threshold
 
-// Equal adds the ability to check equality between two lists of node conditions.
+// Equal 以不区分顺序的方式比较两组阈值。
 func (s1 thresholdList) Equal(s2 thresholdList) bool {
 	if len(s1) != len(s2) {
 		return false
@@ -3376,6 +3442,8 @@ func (s1 thresholdList) Equal(s2 thresholdList) bool {
 	return true
 }
 
+// TestStatsNotFoundForPod 验证 statsFunc 查不到 Pod 统计时，所有比较器都返回 0，
+// 保证排序稳定且不会 panic。
 func TestStatsNotFoundForPod(t *testing.T) {
 	pod1 := newPod("fake-pod1", defaultPriority, []v1.Container{
 		newContainer("fake-container1", newResourceList("", "", ""), newResourceList("", "", "")),
@@ -3422,6 +3490,8 @@ func TestStatsNotFoundForPod(t *testing.T) {
 	}
 }
 
+// TestEvictionMessage 验证驱逐消息和注解只列出超出请求的容器（普通容器、可重启 init 容器）
+// 或 pod 级资源，并带上对应请求值与实际用量。
 func TestEvictionMessage(t *testing.T) {
 	type containerMemoryStat struct {
 		name  string
@@ -3432,6 +3502,7 @@ func TestEvictionMessage(t *testing.T) {
 		request string
 		usage   string
 	}
+	// 按被测代码的格式拼出期望消息，避免在测试里硬编码整段字符串。
 	memoryExceededEvictionMessage := func(podMessage string, containers []memoryExceededContainer) string {
 		resourceToReclaim := v1.ResourceMemory
 		containersMessage := ""
@@ -3665,6 +3736,7 @@ func TestEvictionMessage(t *testing.T) {
 	threshold := []evictionapi.Threshold{}
 	observations := signalObservations{}
 	for _, tc := range testcase {
+		// 自定义写法的容器列表里包含可重启 init 容器，这里保留其 RestartPolicy 供被测逻辑区分。
 		pod := newPodWithInitContainers(podName, 1, tc.podResources, tc.initContainers, tc.containers, nil)
 		if len(tc.ephemeralContainers) > 0 {
 			pod.Spec.EphemeralContainers = tc.ephemeralContainers
@@ -3697,6 +3769,7 @@ func TestEvictionMessage(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			podMessage := ""
+			// 默认只校验容器维度的两个注解；启用 pod 级资源后再追加 pod 维度注解。
 			annotationsKeys := []string{OffendingContainersKey, OffendingContainersUsageKey}
 			if tc.podLevelResourcesEnabled {
 				featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, true)

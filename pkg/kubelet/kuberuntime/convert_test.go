@@ -28,6 +28,8 @@ import (
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
 
+// TestConvertToKubeContainerImageSpec 验证 CRI Image 到 kubecontainer.ImageSpec 的转换：
+// nil/空注解都应归一为空注解切片，非空注解按名称和值保留。
 func TestConvertToKubeContainerImageSpec(t *testing.T) {
 	testCases := []struct {
 		input    *runtimeapi.Image
@@ -99,6 +101,7 @@ func TestConvertToKubeContainerImageSpec(t *testing.T) {
 	}
 }
 
+// TestConvertToRuntimeAPIImageSpec 验证反向转换：注解切片转为 map，空注解转为空 map。
 func TestConvertToRuntimeAPIImageSpec(t *testing.T) {
 	testCases := []struct {
 		input    kubecontainer.ImageSpec
@@ -160,6 +163,8 @@ func TestConvertToRuntimeAPIImageSpec(t *testing.T) {
 	}
 }
 
+// TestConvertToKubeContainerImageSpecWithRuntimeHandlerInImageSpecCri 验证
+// RuntimeClassInImageCriAPI 门控开启时，CRI ImageSpec 的 RuntimeHandler 会被保留。
 func TestConvertToKubeContainerImageSpecWithRuntimeHandlerInImageSpecCri(t *testing.T) {
 	testCases := []struct {
 		input    *runtimeapi.Image
@@ -237,6 +242,8 @@ func TestConvertToKubeContainerImageSpecWithRuntimeHandlerInImageSpecCri(t *test
 	}
 }
 
+// TestConvertToRuntimeAPIImageSpecWithRuntimeHandlerInImageSpecCri 验证反向转换时
+// RuntimeHandler 同样会写入 CRI ImageSpec。
 func TestConvertToRuntimeAPIImageSpecWithRuntimeHandlerInImageSpecCri(t *testing.T) {
 	testCases := []struct {
 		input    kubecontainer.ImageSpec

@@ -22,6 +22,7 @@ import (
 )
 
 const (
+	// keyMaxLength 是 key 允许的最大长度。
 	keyMaxLength = 250
 
 	keyCharFmt      string = "[A-Za-z0-9]"
@@ -30,32 +31,26 @@ const (
 )
 
 var (
-	// Key must consist of alphanumeric characters, '-', '_' or '.', and must start
-	// and end with an alphanumeric character.
+	// key 只能由字母数字以及 '-'、'_'、'.' 组成，且必须以字母数字开头和结尾。
 	keyRegex = regexp.MustCompile("^" + qualifiedKeyFmt + "$")
 
-	// ErrKeyNotFound is the error returned if key is not found in Store.
+	// ErrKeyNotFound 在 Store 中找不到 key 时返回。
 	ErrKeyNotFound = fmt.Errorf("key is not found")
 )
 
-// Store provides the interface for storing keyed data.
-// Store must be thread-safe
+// Store 定义按键存储数据的接口，实现必须是线程安全的。
 type Store interface {
-	// key must contain one or more characters in [A-Za-z0-9]
-	// Write writes data with key.
+	// Write 使用 key 写入数据；key 必须至少包含一个 [A-Za-z0-9] 字符。
 	Write(key string, data []byte) error
-	// Read retrieves data with key
-	// Read must return ErrKeyNotFound if key is not found.
+	// Read 按键读取数据；key 不存在时必须返回 ErrKeyNotFound。
 	Read(key string) ([]byte, error)
-	// Delete deletes data by key
-	// Delete must not return error if key does not exist
+	// Delete 按键删除数据；key 不存在时不得返回错误。
 	Delete(key string) error
-	// List lists all existing keys.
+	// List 列出所有已存在的 key。
 	List() ([]string, error)
 }
 
-// ValidateKey returns an error if the given key does not meet the requirement
-// of the key format and length.
+// ValidateKey 在 key 不满足格式与长度要求时返回错误。
 func ValidateKey(key string) error {
 	if len(key) <= keyMaxLength && keyRegex.MatchString(key) {
 		return nil

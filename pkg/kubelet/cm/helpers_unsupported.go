@@ -27,6 +27,7 @@ import (
 )
 
 const (
+	// 非 Linux 平台没有 cgroup 配额/份额概念，以下常量全部返回 0。
 	MinShares = 0
 	MaxShares = 0
 
@@ -38,57 +39,62 @@ const (
 	MinMilliCPULimit = 0
 )
 
-// MilliCPUToQuota converts milliCPU and period to CFS quota values.
+// MilliCPUToQuota 在非 Linux 平台返回 0。
 func MilliCPUToQuota(milliCPU, period int64) int64 {
 	return 0
 }
 
-// MilliCPUToShares converts the milliCPU to CFS shares.
+// MilliCPUToShares 在非 Linux 平台返回 0。
 func MilliCPUToShares(milliCPU int64) uint64 {
 	return 0
 }
 
-// ResourceConfigForPod takes the input pod and outputs the cgroup resource config.
+// ResourceConfigForPod 在非 Linux 平台返回 nil。
 func ResourceConfigForPod(pod *v1.Pod, enforceCPULimit bool, cpuPeriod uint64, enforceMemoryQoS bool, memoryReservationPolicy kubeletconfig.MemoryReservationPolicy) *ResourceConfig {
 	return nil
 }
 
-// GetCgroupSubsystems returns information about the mounted cgroup subsystems
+// GetCgroupSubsystems 在非 Linux 平台返回 nil。
 func GetCgroupSubsystems() (*CgroupSubsystems, error) {
 	return nil, nil
 }
 
+// getCgroupProcs 在非 Linux 平台返回 nil。
 func getCgroupProcs(dir string) ([]int, error) {
 	return nil, nil
 }
 
-// GetPodCgroupNameSuffix returns the last element of the pod CgroupName identifier
+// GetPodCgroupNameSuffix 在非 Linux 平台返回空字符串。
 func GetPodCgroupNameSuffix(podUID types.UID) string {
 	return ""
 }
 
-// NodeAllocatableRoot returns the literal cgroup path for the node allocatable cgroup
+// NodeAllocatableRoot 在非 Linux 平台返回空字符串。
 func NodeAllocatableRoot(cgroupRoot string, cgroupsPerQOS bool, cgroupDriver string) string {
 	return ""
 }
 
-// GetKubeletContainer returns the cgroup the kubelet will use
+// GetKubeletContainer 在非 Linux 平台返回空字符串。
 func GetKubeletContainer(logger klog.Logger, kubeletCgroups string) (string, error) {
 	return "", nil
 }
 
+// CPURequestsFromConfig 在非 Linux 平台返回 nil。
 func CPURequestsFromConfig(podConfig *ResourceConfig) *resource.Quantity {
 	return nil
 }
 
+// CPUSharesEqualAfterV2RoundTrip 在非 Linux 平台始终返回 false。
 func CPUSharesEqualAfterV2RoundTrip(allocatedShares, readbackShares uint64) bool {
 	return false
 }
 
+// CPULimitsFromConfig 在非 Linux 平台返回 nil。
 func CPULimitsFromConfig(podConfig *ResourceConfig) *resource.Quantity {
 	return nil
 }
 
+// MemoryLimitsFromConfig 在非 Linux 平台返回 nil。
 func MemoryLimitsFromConfig(podConfig *ResourceConfig) *resource.Quantity {
 	return nil
 }

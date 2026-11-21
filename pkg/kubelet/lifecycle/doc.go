@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package lifecycle contains handlers for pod lifecycle events and interfaces
-// to integrate with kubelet admission, synchronization, and eviction of pods.
+// Package lifecycle 包含 Pod 生命周期事件处理器，以及与 kubelet 准入、同步和 Pod 驱逐集成的接口。
 package lifecycle

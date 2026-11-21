@@ -31,20 +31,23 @@ import (
 	resourcehelper "k8s.io/component-helpers/resource"
 )
 
+// convertOverheadToLinuxResources 把 Pod overhead 转换为 Linux 容器资源；
+// overhead 视为 guaranteed 资源（requests == limits）。
 func (m *kubeGenericRuntimeManager) convertOverheadToLinuxResources(pod *v1.Pod) *runtimeapi.LinuxContainerResources {
 	resources := &runtimeapi.LinuxContainerResources{}
 	if pod.Spec.Overhead != nil {
 		cpu := pod.Spec.Overhead.Cpu()
 		memory := pod.Spec.Overhead.Memory()
 
-		// For overhead, we do not differentiate between requests and limits. Treat this overhead
-		// as "guaranteed", with requests == limits
+		// overhead 不区分 requests 与 limits，按 guaranteed 处理，即 requests == limits。
 		resources = m.calculateLinuxResources(cpu, cpu, memory, false)
 	}
 
 	return resources
 }
 
+// calculateSandboxResources 计算 sandbox 需要的 Linux 资源；
+// 计算时排除 overhead，并按特性门控决定是否纳入 Pod 级资源。
 func (m *kubeGenericRuntimeManager) calculateSandboxResources(ctx context.Context, pod *v1.Pod) *runtimeapi.LinuxContainerResources {
 	logger := klog.FromContext(ctx)
 	opts := resourcehelper.PodResourcesOptions{
@@ -59,15 +62,17 @@ func (m *kubeGenericRuntimeManager) calculateSandboxResources(ctx context.Contex
 		cpuRequest = req.Cpu()
 	}
 
-	// If pod has exclusive cpu the sandbox will not have cfs quote enforced
+	// Pod 独占 CPU 时，sandbox 不再强制 CFS quota。
 	disableCPUQuota := utilfeature.DefaultFeatureGate.Enabled(features.DisableCPUQuotaWithExclusiveCPUs) && m.containerManager.PodHasExclusiveCPUs(logger, pod)
 
 	logger.V(5).Info("Enforcing CFS quota", "pod", klog.KObj(pod), "unlimited", disableCPUQuota)
 	return m.calculateLinuxResources(cpuRequest, lim.Cpu(), lim.Memory(), disableCPUQuota)
 }
 
+// applySandboxResources 把计算出的资源与 overhead 写入 PodSandboxConfig。
 func (m *kubeGenericRuntimeManager) applySandboxResources(ctx context.Context, pod *v1.Pod, config *runtimeapi.PodSandboxConfig) error {
 
+	// 非 Linux 运行时没有 Linux 资源字段，直接返回。
 	if config.Linux == nil {
 		return nil
 	}

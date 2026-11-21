@@ -18,10 +18,9 @@ limitations under the License.
 
 package eviction
 
-// DefaultEvictionHard includes default options for hard eviction for Windows.
-// Note: On Linux, the default eviction hard threshold is 100Mi for memory.available
-// but Windows generally requires more memory reserved for system processes so we'll
-// set the default threshold to 500Mi.
+// DefaultEvictionHard 是 Windows 上硬驱逐的默认阈值配置。
+// 注意：Linux 上 memory.available 的默认硬驱逐阈值是 100Mi，但 Windows 通常需要为系统进程
+// 预留更多内存，因此这里将默认阈值设为 500Mi。
 var DefaultEvictionHard = map[string]string{
 	"memory.available":  "500Mi",
 	"nodefs.available":  "10%",

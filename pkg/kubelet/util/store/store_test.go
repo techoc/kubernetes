@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestIsValidKey 覆盖 key 校验的正反例：空白、路径分隔符、点号开头与结尾非法字符等。
 func TestIsValidKey(t *testing.T) {
 	testcases := []struct {
 		key   string

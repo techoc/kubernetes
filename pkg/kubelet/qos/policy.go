@@ -36,46 +36,35 @@ const (
 	besteffortOOMScoreAdj int = 1000
 )
 
-// GetContainerOOMScoreAdjust returns the amount by which the OOM score of all processes in the
-// container should be adjusted.
-// The OOM score of a process is the percentage of memory it consumes
-// multiplied by 10 (barring exceptional cases) + a configurable quantity which is between -1000
-// and 1000. Containers with higher OOM scores are killed if the system runs out of memory.
-// See https://lwn.net/Articles/391222/ for more information.
-// OOMScoreAdjust should be calculated based on the allocated resources, so the pod argument should
-// contain the allocated resources in the spec.
+// GetContainerOOMScoreAdjust 计算容器内所有进程应设置的 OOM 分数调整值。
+// OOM 分数约为进程内存占比乘以 10 再加一个 -1000 到 1000 的可调值；
+// 分数越高越先被 OOM killer 杀死。参见 https://lwn.net/Articles/391222/。
+// pod 参数必须包含已分配资源，因为分数基于分配量而非实际使用量计算。
 func GetContainerOOMScoreAdjust(pod *v1.Pod, container *v1.Container, memoryCapacity int64) int {
 	if types.IsNodeCriticalPod(pod) {
-		// Only node critical pod should be the last to get killed.
+		// 节点关键 Pod 必须最后被杀，直接使用保证型分数。
 		return guaranteedOOMScoreAdj
 	}
 
 	switch v1qos.GetPodQOS(pod) {
 	case v1.PodQOSGuaranteed:
-		// Guaranteed containers should be the last to get killed.
+		// 保证型（Guaranteed）容器应最后被杀。
 		return guaranteedOOMScoreAdj
 	case v1.PodQOSBestEffort:
 		return besteffortOOMScoreAdj
 	}
 
-	// Burstable containers are a middle tier, between Guaranteed and Best-Effort. Ideally,
-	// we want to protect Burstable containers that consume less memory than requested.
-	// The formula below is a heuristic. A container requesting for 10% of a system's
-	// memory will have an OOM score adjust of 900. If a process in container Y
-	// uses over 10% of memory, its OOM score will be 1000. The idea is that containers
-	// which use more than their request will have an OOM score of 1000 and will be prime
-	// targets for OOM kills.
-	// Note that this is a heuristic, it won't work if a container has many small processes.
+	// 可突发容器介于 Guaranteed 与 Best-Effort 之间：希望保护实际用量低于请求量的容器。
+	// 下面的公式是启发式：请求 10% 系统内存的容器 OOM 分数约为 900；
+	// 若进程用量超过 10%，分数为 1000，会成为 OOM killer 的首选目标。
+	// 注意：该启发式对"单容器内含大量小进程"的场景不成立。
 	containerMemReq := getEffectiveContainerMemoryRequest(pod, container)
 
 	var oomScoreAdjust, remainingReqPerContainer int64
-	// When PodLevelResources feature is enabled, the OOM score adjustment formula is modified
-	// to account for pod-level memory requests. Any extra pod memory request that's
-	// not allocated to the containers is divided equally among all containers and
-	// added to their individual memory requests when calculating the OOM score
-	// adjustment. Otherwise, only container-level memory requests are used. See
+	// 启用 Pod 级资源（PodLevelResources）时，OOM 分数公式会纳入 Pod 级内存请求：
+	// 未分配给容器的 Pod 级额外内存请求会平均分摊到每个容器，再计入各自的内存请求；
+	// 未启用时仅使用容器级内存请求。详见
 	// https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/2837-pod-level-resource-spec/README.md#oom-score-adjustment
-	// for more details.
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources) &&
 		resourcehelper.IsPodLevelRequestsSet(pod) {
 		// TODO(ndixita): Refactor to use this formula in all cases, as
@@ -86,10 +75,10 @@ func GetContainerOOMScoreAdjust(pod *v1.Pod, container *v1.Container, memoryCapa
 		oomScoreAdjust = 1000 - (1000*containerMemReq)/memoryCapacity
 	}
 
-	// adapt the sidecarContainer memoryRequest for OOM ADJ calculation
-	// calculate the oom score adjustment based on: max-memory( currentSideCarContainer , min-memory(regular containers) ) .
+	// 边车容器按 max(当前边车内存, 普通容器最小内存) 计算 OOM 分数调整，
+	// 避免边车比分摊后的普通容器更早被杀。
 	if isSidecarContainer(pod, container) {
-		// check min memory quantity in regular containers
+		// 先找出普通容器中最小的内存请求。
 		minMemoryRequest := minRegularContainerMemory(pod)
 
 		// When calculating minMemoryOomScoreAdjust for sidecar containers with PodLevelResources enabled,
@@ -99,33 +88,33 @@ func GetContainerOOMScoreAdjust(pod *v1.Pod, container *v1.Container, memoryCapa
 		//  with how we handle pod-level memory requests for regular containers.
 		if utilfeature.DefaultFeatureGate.Enabled(features.PodLevelResources) &&
 			resourcehelper.IsPodLevelRequestsSet(pod) {
+			// 启用 PodLevelResources 时，计算边车的 minMemoryOomScoreAdjust 也要加上
+			// 未分配 Pod 内存的每容器分摊份额，保持与普通容器处理方式一致。
 			minMemoryRequest += remainingReqPerContainer
 		}
+		// 边车容器的 OOM 分数不得高于普通容器中的最低者。
 		minMemoryOomScoreAdjust := 1000 - (1000*minMemoryRequest)/memoryCapacity
-		// the OOM adjustment for sidecar container will match
-		// or fall below the OOM score adjustment of regular containers in the Pod.
+		// 边车容器的 OOM 分数应与 Pod 内普通容器的最低分数持平或更低。
 		if oomScoreAdjust > minMemoryOomScoreAdjust {
 			oomScoreAdjust = minMemoryOomScoreAdjust
 		}
 	}
 
-	// A guaranteed pod using 100% of memory can have an OOM score of 10. Ensure
-	// that burstable pods have a higher OOM score adjustment.
+	// 保证型 Pod 用满内存时分数可能低至 10，需确保可突发容器的分数高于此值。
 	if int(oomScoreAdjust) < (1000 + guaranteedOOMScoreAdj) {
 		return (1000 + guaranteedOOMScoreAdj)
 	}
-	// Give burstable pods a higher chance of survival over besteffort pods.
+	// 让可突发容器始终比 Best-Effort 容器略占优势。
 	if int(oomScoreAdjust) == besteffortOOMScoreAdj {
 		return int(oomScoreAdjust - 1)
 	}
 	return int(oomScoreAdjust)
 }
 
-// isSidecarContainer returns a boolean indicating whether a container is a sidecar or not.
-// Since v1.Container does not directly specify whether a container is a sidecar,
-// this function uses available indicators (container.RestartPolicy == v1.ContainerRestartPolicyAlways)
-// to make that determination.
+// isSidecarContainer 判断容器是否为边车容器。
+// v1.Container 没有直接的边车标记，只能借助 RestartPolicy==Always 且位于 InitContainers 中推断。
 func isSidecarContainer(pod *v1.Pod, container *v1.Container) bool {
+	// 只有重启策略为 Always 的 init 容器才具备边车语义。
 	if container.RestartPolicy != nil && *container.RestartPolicy == v1.ContainerRestartPolicyAlways {
 		for _, initContainer := range pod.Spec.InitContainers {
 			if initContainer.Name == container.Name {
@@ -136,17 +125,17 @@ func isSidecarContainer(pod *v1.Pod, container *v1.Container) bool {
 	return false
 }
 
-// getEffectiveContainerMemoryRequest returns the effective container memory request,
-// including DRA memory allocations if the feature is enabled.
-// If multiple containers share a single DRA memory claim, the claim's memory quantity
-// is divided equally among the sharing containers.
+// getEffectiveContainerMemoryRequest 返回容器有效内存请求，包括启用 DRA 时的 DRA 内存分配。
+// 若多个容器共享同一个 DRA 内存 claim，则按容器数均分。
 func getEffectiveContainerMemoryRequest(pod *v1.Pod, container *v1.Container) int64 {
 	memReq := container.Resources.Requests.Memory().Value()
+	// 特性未启用时直接使用普通资源请求。
 	if !utilfeature.DefaultFeatureGate.Enabled(features.DRANodeAllocatableResources) {
 		return memReq
 	}
 
 	var draMemoryShare int64
+	// 只统计引用了该容器的 claim。
 	for _, claimStatus := range pod.Status.NodeAllocatableResourceClaimStatuses {
 		// Check if this container references the claim
 		if !slices.Contains(claimStatus.Containers, container.Name) {
@@ -155,24 +144,21 @@ func getEffectiveContainerMemoryRequest(pod *v1.Pod, container *v1.Container) in
 
 		numRefs := int64(len(claimStatus.Containers))
 
-		// Add Mapping memory resources share. Since mapping resources represent a fixed allocation
-		// shared by all referencing containers in the pod, we divide it equally.
+		// Mapping 资源是 Pod 内引用容器共享的固定分配，按容器数均分。
 		for _, mapping := range claimStatus.Mapping {
 			if mapping.Name == v1.ResourceMemory && mapping.Quantity != nil {
 				draMemoryShare += mapping.Quantity.Value() / numRefs
 			}
 		}
 
-		// Add Overhead memory resources share.
+		// Overhead 中的 PerPod 部分按引用容器均分，PerContainer 部分全额计入。
 		for _, overhead := range claimStatus.Overhead {
 			if overhead.Name == v1.ResourceMemory {
-				// PerPod overhead is applied once per pod. We split it equally among the
-				// referencing containers.
+				// PerPod overhead 每个 Pod 只计一次，在引用容器间均分。
 				if overhead.PerPod != nil {
 					draMemoryShare += overhead.PerPod.Value() / numRefs
 				}
-				// PerContainer overhead is applied per container
-				// reference. Therefore, each container gets its full share without division.
+				// PerContainer overhead 按容器引用计，每个容器获得全额。
 				if overhead.PerContainer != nil {
 					draMemoryShare += overhead.PerContainer.Value()
 				}

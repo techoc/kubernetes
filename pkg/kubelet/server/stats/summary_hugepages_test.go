@@ -25,7 +25,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestAdjustForHugePages 验证从可用内存中扣除大页容量：
+// 覆盖 nil 输入、无大页、单种/多种大页以及扣除后为负的情况。
 func TestAdjustForHugePages(t *testing.T) {
+	// 每个用例给出内存统计、节点容量与期望的可用字节。
 	tests := []struct {
 		name              string
 		memory            *statsapi.MemoryStats
@@ -121,9 +124,11 @@ func TestAdjustForHugePages(t *testing.T) {
 		},
 	}
 
+	// 逐用例调用 adjustForHugePages 并断言结果。
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			result := adjustForHugePages(tc.memory, tc.node)
+			// 期望为 nil 时，只有在输入本身为 nil 的情况下才允许返回 nil。
 			if tc.expectedAvailable == nil {
 				if result != nil && result.AvailableBytes != nil {
 					if tc.memory == nil || tc.memory.AvailableBytes == nil {
@@ -132,6 +137,7 @@ func TestAdjustForHugePages(t *testing.T) {
 				}
 				return
 			}
+			// 期望非 nil 时结果缺失即失败。
 			if result == nil || result.AvailableBytes == nil {
 				t.Fatalf("expected AvailableBytes=%d, got nil", *tc.expectedAvailable)
 			}
@@ -142,6 +148,8 @@ func TestAdjustForHugePages(t *testing.T) {
 	}
 }
 
+// TestAdjustForHugePagesDoesNotMutateOriginal 验证 adjustForHugePages
+// 返回副本，不修改原始内存统计。
 func TestAdjustForHugePagesDoesNotMutateOriginal(t *testing.T) {
 	original := &statsapi.MemoryStats{
 		AvailableBytes:  ptr.To[uint64](10 * 1024 * 1024 * 1024),
@@ -157,6 +165,7 @@ func TestAdjustForHugePagesDoesNotMutateOriginal(t *testing.T) {
 		},
 	}
 
+	// 调用后同时检查原对象未被修改且返回值不是同一个指针。
 	result := adjustForHugePages(original, node)
 
 	if *original.AvailableBytes != originalAvailable {

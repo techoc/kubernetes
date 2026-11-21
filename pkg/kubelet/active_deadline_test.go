@@ -31,12 +31,12 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
-// mockPodStatusProvider returns the status on the specified pod
+// mockPodStatusProvider 按 UID 返回指定 Pod 的状态。
 type mockPodStatusProvider struct {
 	pods []*v1.Pod
 }
 
-// GetPodStatus returns the status on the associated pod with matching uid (if found)
+// GetPodStatus 返回 UID 匹配的 Pod 状态；找不到时返回 false。
 func (m *mockPodStatusProvider) GetPodStatus(uid types.UID) (v1.PodStatus, bool) {
 	for _, pod := range m.pods {
 		if pod.UID == uid {
@@ -46,12 +46,14 @@ func (m *mockPodStatusProvider) GetPodStatus(uid types.UID) (v1.PodStatus, bool)
 	return v1.PodStatus{}, false
 }
 
+// TestNewActiveDeadlineHandler 验证构造器只有在 statusProvider、recorder 和 clock 三者齐全时才能成功。
 func TestNewActiveDeadlineHandler(t *testing.T) {
 	pods := newTestPods(1)
 	podStatusProvider := &mockPodStatusProvider{pods: pods}
 	fakeRecorder := &record.FakeRecorder{}
 	fakeClock := testingclock.NewFakeClock(time.Now())
 
+	// 逐一组合三个依赖的有无，覆盖全部缺失路径。
 	testCases := []struct {
 		podStatusProvider status.PodStatusProvider
 		recorder          record.EventRecorder
@@ -70,7 +72,7 @@ func TestNewActiveDeadlineHandler(t *testing.T) {
 	for i, testCase := range testCases {
 		actual, err := newActiveDeadlineHandler(testCase.podStatusProvider, testCase.recorder, testCase.clock)
 
-		// 0th case is the only one expected to pass, and is kept for coverage and confidence check
+		// 只有第 0 个用例依赖齐全，其余用例都应返回错误。
 		if i == 0 {
 			expected := &activeDeadlineHandler{
 				clock:             fakeClock,
@@ -89,7 +91,7 @@ func TestNewActiveDeadlineHandler(t *testing.T) {
 	}
 }
 
-// TestActiveDeadlineHandler verifies the active deadline handler functions as expected.
+// TestActiveDeadlineHandler 验证活动截止时间处理器对各类 Pod 的同步与驱逐判定。
 func TestActiveDeadlineHandler(t *testing.T) {
 	pods := newTestPods(5)
 	fakeClock := testingclock.NewFakeClock(time.Now())
@@ -100,27 +102,29 @@ func TestActiveDeadlineHandler(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	// 统一以当前时间构造启动时间，便于精确控制是否超期。
 	now := metav1.Now()
 	startTime := metav1.NewTime(now.Time.Add(-1 * time.Minute))
 
-	// this pod has exceeded its active deadline
+	// 该 Pod 已运行 1 分钟而截止时间为 30 秒，属于已超期。
 	exceededActiveDeadlineSeconds := int64(30)
 	pods[0].Status.StartTime = &startTime
 	pods[0].Spec.ActiveDeadlineSeconds = &exceededActiveDeadlineSeconds
 
-	// this pod has not exceeded its active deadline
+	// 该 Pod 截止时间为 120 秒，尚未超期。
 	notYetActiveDeadlineSeconds := int64(120)
 	pods[1].Status.StartTime = &startTime
 	pods[1].Spec.ActiveDeadlineSeconds = &notYetActiveDeadlineSeconds
 
-	// this pod has no deadline
+	// 该 Pod 未设置截止时间。
 	pods[2].Status.StartTime = &startTime
 	pods[2].Spec.ActiveDeadlineSeconds = nil
 
-	// this pod has no start time
+	// 该 Pod 没有启动时间，无法判断是否超期。
 	pods[3].Status.StartTime = nil
 	pods[3].Spec.ActiveDeadlineSeconds = &notYetActiveDeadlineSeconds
 
+	// 期望值依次为：已超期、未超期、无截止时间、无启动时间、未做任何配置。
 	testCases := []struct {
 		pod      *v1.Pod
 		expected bool
