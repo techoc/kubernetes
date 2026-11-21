@@ -27,47 +27,44 @@ import (
 )
 
 const (
-	// NodeHealthUpdateRetry controls the number of retries of writing
-	// node health update.
+	// NodeHealthUpdateRetry 控制写入节点健康状态更新时的重试次数。
 	NodeHealthUpdateRetry = 5
-	// NodeEvictionPeriod controls how often NodeController will try to
-	// evict Pods from non-responsive Nodes.
+	// NodeEvictionPeriod 控制 NodeController 尝试从无响应节点驱逐 Pod 的频率。
 	NodeEvictionPeriod = 100 * time.Millisecond
-	// EvictionRateLimiterBurst is the burst value for all eviction rate
-	// limiters
+	// EvictionRateLimiterBurst 是所有驱逐速率限制器的突发值。
 	EvictionRateLimiterBurst = 1
 )
 
-// TimedValue is a value that should be processed at a designated time.
+// TimedValue 表示应在指定时间处理的值。
 type TimedValue struct {
 	Value string
-	// UID could be anything that helps identify the value
+	// UID 可以是任何有助于识别该值的标识。
 	UID       interface{}
 	AddedAt   time.Time
 	ProcessAt time.Time
 }
 
-// now is used to test time
+// now 便于在测试中替换时间来源。
 var now = time.Now
 
-// TimedQueue is a priority heap where the lowest ProcessAt is at the front of the queue
+// TimedQueue 是一个优先堆，ProcessAt 最小的元素位于队首。
 type TimedQueue []*TimedValue
 
-// Len is the length of the queue.
+// Len 返回队列长度。
 func (h TimedQueue) Len() int { return len(h) }
 
-// Less returns true if queue[i] < queue[j].
+// Less 在 queue[i] 的处理时间早于 queue[j] 时返回 true。
 func (h TimedQueue) Less(i, j int) bool { return h[i].ProcessAt.Before(h[j].ProcessAt) }
 
-// Swap swaps index i and j.
+// Swap 交换下标 i 与 j 处的元素。
 func (h TimedQueue) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
-// Push a new TimedValue on to the queue.
+// Push 向队列添加一个 TimedValue。
 func (h *TimedQueue) Push(x interface{}) {
 	*h = append(*h, x.(*TimedValue))
 }
 
-// Pop the lowest ProcessAt item.
+// Pop 移除并返回 ProcessAt 最小的元素。
 func (h *TimedQueue) Pop() interface{} {
 	old := *h
 	n := len(old)
@@ -76,21 +73,19 @@ func (h *TimedQueue) Pop() interface{} {
 	return x
 }
 
-// UniqueQueue is a FIFO queue which additionally guarantees that any
-// element can be added only once until it is removed.
+// UniqueQueue 是 FIFO 队列，额外保证任一元素被移除之前不会重复入队。
 type UniqueQueue struct {
 	lock  sync.Mutex
 	queue TimedQueue
 	set   sets.Set[string]
 }
 
-// Add a new value to the queue if it wasn't added before, or was
-// explicitly removed by the Remove call. Returns true if new value
-// was added.
+// Add 在值未被添加过、或已被 Remove 显式移除后，将其加入队列；返回是否真的新增。
 func (q *UniqueQueue) Add(value TimedValue) bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
+	// set 记录了队列中所有尚未被 Get/Remove 取出的值，避免重复入队。
 	if q.set.Has(value.Value) {
 		return false
 	}
@@ -99,9 +94,7 @@ func (q *UniqueQueue) Add(value TimedValue) bool {
 	return true
 }
 
-// Replace replaces an existing value in the queue if it already
-// exists, otherwise it does nothing. Returns true if the item was
-// found.
+// Replace 在值已存在时替换队列中的元素，否则不做任何操作；返回是否找到并替换。
 func (q *UniqueQueue) Replace(value TimedValue) bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -117,9 +110,7 @@ func (q *UniqueQueue) Replace(value TimedValue) bool {
 	return false
 }
 
-// RemoveFromQueue the value from the queue, but keeps it in the set,
-// so it won't be added second time. Returns true if something was
-// removed.
+// RemoveFromQueue 从队列中移除值，但保留在 set 中，因此不会被再次添加；返回是否有元素被移除。
 func (q *UniqueQueue) RemoveFromQueue(value string) bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -136,9 +127,8 @@ func (q *UniqueQueue) RemoveFromQueue(value string) bool {
 	return false
 }
 
-// Remove the value from the queue, so Get() call won't return it, and
-// allow subsequent addition of the given value. If the value is not
-// present does nothing and returns false.
+// Remove 从队列中移除值，使 Get() 不再返回它，并允许该值后续再次添加。
+// 值不存在时不做事并返回 false。
 func (q *UniqueQueue) Remove(value string) bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -156,7 +146,7 @@ func (q *UniqueQueue) Remove(value string) bool {
 	return true
 }
 
-// Get returns the oldest added value that wasn't returned yet.
+// Get 返回最早添加且尚未被取出的值。
 func (q *UniqueQueue) Get() (TimedValue, bool) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -168,8 +158,7 @@ func (q *UniqueQueue) Get() (TimedValue, bool) {
 	return *result, true
 }
 
-// Head returns the oldest added value that wasn't returned yet
-// without removing it.
+// Head 返回最早添加且尚未被取出的值，但不将其从队列移除。
 func (q *UniqueQueue) Head() (TimedValue, bool) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -180,8 +169,7 @@ func (q *UniqueQueue) Head() (TimedValue, bool) {
 	return *result, true
 }
 
-// Clear removes all items from the queue and duplication preventing
-// set.
+// Clear 清空队列中的所有元素以及用于去重的 set。
 func (q *UniqueQueue) Clear() {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -193,16 +181,14 @@ func (q *UniqueQueue) Clear() {
 	}
 }
 
-// RateLimitedTimedQueue is a unique item priority queue ordered by
-// the expected next time of execution. It is also rate limited.
+// RateLimitedTimedQueue 是按预期下次执行时间排序的唯一元素优先队列，并带有速率限制。
 type RateLimitedTimedQueue struct {
 	queue       UniqueQueue
 	limiterLock sync.Mutex
 	limiter     flowcontrol.RateLimiter
 }
 
-// NewRateLimitedTimedQueue creates new queue which will use given
-// RateLimiter to oversee execution.
+// NewRateLimitedTimedQueue 创建一个使用给定 RateLimiter 控制执行速率的队列。
 func NewRateLimitedTimedQueue(limiter flowcontrol.RateLimiter) *RateLimitedTimedQueue {
 	return &RateLimitedTimedQueue{
 		queue: UniqueQueue{
@@ -213,21 +199,15 @@ func NewRateLimitedTimedQueue(limiter flowcontrol.RateLimiter) *RateLimitedTimed
 	}
 }
 
-// ActionFunc takes a timed value and returns false if the item must
-// be retried, with an optional time.Duration if some minimum wait
-// interval should be used.
+// ActionFunc 处理一个 TimedValue：返回 false 表示该项需要重试，
+// 同时可给出重试前的最小等待时间。
 type ActionFunc func(TimedValue) (bool, time.Duration)
 
-// Try processes the queue.Ends prematurely if RateLimiter forbids an
-// action and leak is true. Otherwise, requeues the item to be
-// processed. Each value is processed once if fn returns true,
-// otherwise it is added back to the queue. The returned remaining is
-// used to identify the minimum time to execute the next item in the
-// queue. The same value is processed only once unless Remove is
-// explicitly called on it (it's done by the cancelPodEviction
-// function in NodeController when Node becomes Ready again) TODO:
-// figure out a good way to do garbage collection for all Nodes that
-// were removed from the cluster.
+// Try 按速率限制处理队列：当 RateLimiter 拒绝动作时提前结束本轮，
+// 否则将处理失败（fn 返回 false）的元素按等待时间重新入队。
+// 每个值在 fn 返回 true 时只处理一次，否则按指定间隔重试。
+// 除非显式调用 Remove（NodeController 在节点恢复 Ready 时通过 cancelPodEviction 完成），
+// 同一个值不会被重复处理。TODO: 为已从集群移除的所有节点设计合理的垃圾回收机制。
 func (q *RateLimitedTimedQueue) Try(logger klog.Logger, fn ActionFunc) {
 	val, ok := q.queue.Head()
 	q.limiterLock.Lock()
@@ -236,7 +216,7 @@ func (q *RateLimitedTimedQueue) Try(logger klog.Logger, fn ActionFunc) {
 		// rate limit the queue checking
 		if !q.limiter.TryAccept() {
 			logger.V(10).Info("Try rate limited", "value", val)
-			// Try again later
+			// 速率受限，留到下一轮 Try 再处理。
 			break
 		}
 
@@ -246,6 +226,7 @@ func (q *RateLimitedTimedQueue) Try(logger klog.Logger, fn ActionFunc) {
 		}
 
 		if ok, wait := fn(val); !ok {
+			// 加 1ns 保证下次处理时间严格晚于当前时刻，避免同一轮无限重试。
 			val.ProcessAt = now.Add(wait + 1)
 			q.queue.Replace(val)
 		} else {
@@ -255,9 +236,7 @@ func (q *RateLimitedTimedQueue) Try(logger klog.Logger, fn ActionFunc) {
 	}
 }
 
-// Add value to the queue to be processed. Won't add the same
-// value(comparison by value) a second time if it was already added
-// and not removed.
+// Add 将值加入队列等待处理。若相同值（按值比较）已存在且未被移除，不会重复添加。
 func (q *RateLimitedTimedQueue) Add(value string, uid interface{}) bool {
 	now := now()
 	return q.queue.Add(TimedValue{
@@ -268,19 +247,17 @@ func (q *RateLimitedTimedQueue) Add(value string, uid interface{}) bool {
 	})
 }
 
-// Remove Node from the Evictor. The Node won't be processed until
-// added again.
+// Remove 从驱逐器中移除节点，在再次添加之前不会处理该节点。
 func (q *RateLimitedTimedQueue) Remove(value string) bool {
 	return q.queue.Remove(value)
 }
 
-// Clear removes all items from the queue
+// Clear 清空队列中的所有元素。
 func (q *RateLimitedTimedQueue) Clear() {
 	q.queue.Clear()
 }
 
-// SwapLimiter safely swaps current limiter for this queue with the
-// passed one if capacities or qps's differ.
+// SwapLimiter 在 QPS 变化时安全地替换当前速率限制器。
 func (q *RateLimitedTimedQueue) SwapLimiter(newQPS float32) {
 	q.limiterLock.Lock()
 	defer q.limiterLock.Unlock()
@@ -293,12 +270,12 @@ func (q *RateLimitedTimedQueue) SwapLimiter(newQPS float32) {
 	} else {
 		newLimiter = flowcontrol.NewTokenBucketRateLimiter(newQPS, EvictionRateLimiterBurst)
 
-		// If we're currently waiting on limiter, we drain the new one - this is a good approach when Burst value is 1
-		// TODO: figure out if we need to support higher Burst values and decide on the drain logic, should we keep:
-		// - saturation (percentage of used tokens)
-		// - number of used tokens
-		// - number of available tokens
-		// - something else
+		// 若当前限制器处于等待状态，则消耗掉新限制器的一个令牌，使 Burst 为 1 时行为平滑。
+		// TODO: 确定是否需要支持更高的 Burst 值，并据此设计令牌转移逻辑：保留
+		// - 饱和度（已用令牌百分比）
+		// - 已用令牌数
+		// - 可用令牌数
+		// - 其他指标
 		if q.limiter.TryAccept() == false {
 			newLimiter.TryAccept()
 		}

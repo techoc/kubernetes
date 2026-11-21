@@ -23,16 +23,20 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// controllerSubsystem must be kept in sync with the controller name in cmd/kube-controller-manager/names.
+// controllerSubsystem 必须与 cmd/kube-controller-manager/names 中的控制器名称保持一致，
+// 否则指标名与控制器注册表不匹配会导致命名冲突或指标缺失。
 const controllerSubsystem = "device_taint_eviction_controller"
 
 var (
+	// Global 是全局默认指标实例，供控制器运行时使用；
+	// 测试应使用 New 创建独立实例，避免并行测试间共享状态。
 	Global = New()
 )
 
+// registerMetrics 保证指标只注册一次，重复注册会导致 panic。
 var registerMetrics sync.Once
 
-// Register registers TaintEvictionController metrics.
+// Register 注册设备污点驱逐控制器的指标。
 func Register() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(Global.PodDeletionsTotal)
@@ -40,8 +44,8 @@ func Register() {
 	})
 }
 
-// New returns new instances of all metrics for testing in parallel.
-// Optionally, buckets for the histograms can be specified.
+// New 创建该控制器的全套新指标实例，供并行测试各自持有独立状态。
+// 可选地指定直方图的桶边界；不指定时使用默认边界。
 func New(buckets ...float64) Metrics {
 	if len(buckets) == 0 {
 		buckets = []float64{0.005, 0.025, 0.1, 0.5, 1, 2.5, 10, 30, 60, 120, 180, 240} // 5ms to 4m
@@ -67,8 +71,8 @@ func New(buckets ...float64) Metrics {
 		),
 	}
 
-	// This has to be done after construction, otherwise ./hack/update-generated-stable-metrics.sh
-	// fails to find the default buckets.
+	// 必须在构造完成后再覆盖桶边界，否则 ./hack/update-generated-stable-metrics.sh
+	// 无法找到默认的桶定义。
 	if len(buckets) > 0 {
 		m.PodDeletionsLatency.HistogramOpts.Buckets = buckets
 	}
@@ -77,8 +81,8 @@ func New(buckets ...float64) Metrics {
 	return m
 }
 
-// Metrics contains all metrics supported by the device taint eviction controller.
-// It implements [metrics.Gatherer].
+// Metrics 包含设备污点驱逐控制器支持的所有指标。
+// 它实现了 [metrics.Gatherer]，便于测试直接采集指标值。
 type Metrics struct {
 	metrics.KubeRegistry
 	PodDeletionsTotal   *metrics.Counter

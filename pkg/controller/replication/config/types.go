@@ -16,10 +16,9 @@ limitations under the License.
 
 package config
 
-// ReplicationControllerConfiguration contains elements describing ReplicationController.
+// ReplicationControllerConfiguration 包含 ReplicationController 的配置参数。
 type ReplicationControllerConfiguration struct {
-	// concurrentRCSyncs is the number of replication controllers that are
-	// allowed to sync concurrently. Larger number = more responsive replica
-	// management, but more CPU (and network) load.
+	// ConcurrentRCSyncs 是允许并发同步的 ReplicationController 数量。
+	// 数值越大，副本管理响应越快，但会增加 CPU 与网络负载。
 	ConcurrentRCSyncs int32
 }

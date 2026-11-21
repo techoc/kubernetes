@@ -50,13 +50,18 @@ import (
 	persistentvolumeconfigv1alpha1 "k8s.io/kubernetes/pkg/controller/volume/persistentvolume/config/v1alpha1"
 )
 
+// addDefaultingFuncs 将本包的默认值注册函数挂入 scheme，
+// 由代码生成的 RegisterDefaults 完成具体注册。
 func addDefaultingFuncs(scheme *kruntime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_KubeControllerManagerConfiguration 为 kube-controller-manager 的全部配置项设置默认值。
+// 除了通用的推荐默认值，还集中覆盖各控制器的默认值；
+// 集中设置可以让显式指定的非零值保持不变，仅填补未配置的字段。
 func SetDefaults_KubeControllerManagerConfiguration(obj *kubectrlmgrconfigv1alpha1.KubeControllerManagerConfiguration) {
-	// These defaults override the recommended defaults from the componentbaseconfigv1alpha1 package that are applied automatically
-	// These client-connection defaults are specific to the kube-controller-manager
+	// 这里的客户端连接默认值会覆盖 componentbaseconfigv1alpha1 自动应用的推荐值，
+	// 因为它们是 kube-controller-manager 特有的，需要考虑同时运行大量控制器的负载。
 	if obj.Generic.ClientConnection.QPS == 0.0 {
 		obj.Generic.ClientConnection.QPS = 20.0
 	}
@@ -64,64 +69,64 @@ func SetDefaults_KubeControllerManagerConfiguration(obj *kubectrlmgrconfigv1alph
 		obj.Generic.ClientConnection.Burst = 30
 	}
 
-	// Use the default RecommendedDefaultGenericControllerManagerConfiguration options
+	// 应用 RecommendedDefaultGenericControllerManagerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	cmconfigv1alpha1.RecommendedDefaultGenericControllerManagerConfiguration(&obj.Generic)
-	// Use the default RecommendedDefaultHPAControllerConfiguration options
+	// 应用 RecommendedDefaultHPAControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	attachdetachconfigv1alpha1.RecommendedDefaultAttachDetachControllerConfiguration(&obj.AttachDetachController)
-	// Use the default RecommendedDefaultCSRSigningControllerConfiguration options
+	// 应用 RecommendedDefaultCSRSigningControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	csrsigningconfigv1alpha1.RecommendedDefaultCSRSigningControllerConfiguration(&obj.CSRSigningController)
-	// Use the default RecommendedDefaultDaemonSetControllerConfiguration options
+	// 应用 RecommendedDefaultDaemonSetControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	daemonconfigv1alpha1.RecommendedDefaultDaemonSetControllerConfiguration(&obj.DaemonSetController)
-	// Use the default RecommendedDefaultDeploymentControllerConfiguration options
+	// 应用 RecommendedDefaultDeploymentControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	deploymentconfigv1alpha1.RecommendedDefaultDeploymentControllerConfiguration(&obj.DeploymentController)
-	// Use the default RecommendedDefaultDisruptionControllerConfiguration options
+	// 应用 RecommendedDefaultDisruptionControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	disruptionconfigv1alpha1.RecommendedDefaultDisruptionControllerConfiguration(&obj.DisruptionController)
-	// Use the default RecommendedDefaultDeviceTaintEvictionControllerConfiguration options
+	// 应用 RecommendedDefaultDeviceTaintEvictionControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	devicetaintevictionconfigv1alpha1.RecommendedDefaultDeviceTaintEvictionControllerConfiguration(&obj.DeviceTaintEvictionController)
-	// Use the default RecommendedDefaultResourceClaimControllerConfiguration options
+	// 应用 RecommendedDefaultResourceClaimControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	resourceclaimconfigv1alpha1.RecommendedDefaultResourceClaimControllerConfiguration(&obj.ResourceClaimController)
-	// Use the default RecommendedDefaultStatefulSetControllerConfiguration options
+	// 应用 RecommendedDefaultStatefulSetControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	statefulsetconfigv1alpha1.RecommendedDefaultStatefulSetControllerConfiguration(&obj.StatefulSetController)
-	// Use the default RecommendedDefaultEndpointControllerConfiguration options
+	// 应用 RecommendedDefaultEndpointControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	endpointconfigv1alpha1.RecommendedDefaultEndpointControllerConfiguration(&obj.EndpointController)
-	// Use the default RecommendedDefaultEndpointSliceControllerConfiguration options
+	// 应用 RecommendedDefaultEndpointSliceControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	endpointsliceconfigv1alpha1.RecommendedDefaultEndpointSliceControllerConfiguration(&obj.EndpointSliceController)
-	// Use the default RecommendedDefaultEndpointSliceMirroringControllerConfiguration options
+	// 应用 RecommendedDefaultEndpointSliceMirroringControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	endpointslicemirroringconfigv1alpha1.RecommendedDefaultEndpointSliceMirroringControllerConfiguration(&obj.EndpointSliceMirroringController)
-	// Use the default RecommendedDefaultEphemeralVolumeControllerConfiguration options
+	// 应用 RecommendedDefaultEphemeralVolumeControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	ephemeralvolumeconfigv1alpha1.RecommendedDefaultEphemeralVolumeControllerConfiguration(&obj.EphemeralVolumeController)
-	// Use the default RecommendedDefaultGarbageCollectorControllerConfiguration options
+	// 应用 RecommendedDefaultGarbageCollectorControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	garbagecollectorconfigv1alpha1.RecommendedDefaultGarbageCollectorControllerConfiguration(&obj.GarbageCollectorController)
-	// Use the default RecommendedDefaultJobControllerConfiguration options
+	// 应用 RecommendedDefaultJobControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	jobconfigv1alpha1.RecommendedDefaultJobControllerConfiguration(&obj.JobController)
-	// Use the default RecommendedDefaultCronJobControllerConfiguration options
+	// 应用 RecommendedDefaultCronJobControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	cronjobconfigv1alpha1.RecommendedDefaultCronJobControllerConfiguration(&obj.CronJobController)
-	// Use the default RecommendedDefaultNamespaceControllerConfiguration options
+	// 应用 RecommendedDefaultNamespaceControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	namespaceconfigv1alpha1.RecommendedDefaultNamespaceControllerConfiguration(&obj.NamespaceController)
-	// Use the default RecommendedDefaultNodeIPAMControllerConfiguration options
+	// 应用 RecommendedDefaultNodeIPAMControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	nodeipamconfigv1alpha1.RecommendedDefaultNodeIPAMControllerConfiguration(&obj.NodeIPAMController)
-	// Use the default RecommendedDefaultHPAControllerConfiguration options
+	// 应用 RecommendedDefaultHPAControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	poautosclerconfigv1alpha1.RecommendedDefaultHPAControllerConfiguration(&obj.HPAController)
-	// Use the default RecommendedDefaultNodeLifecycleControllerConfiguration options
+	// 应用 RecommendedDefaultNodeLifecycleControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	nodelifecycleconfigv1alpha1.RecommendedDefaultNodeLifecycleControllerConfiguration(&obj.NodeLifecycleController)
-	// Use the default RecommendedDefaultPodGCControllerConfiguration options
+	// 应用 RecommendedDefaultPodGCControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	podgcconfigv1alpha1.RecommendedDefaultPodGCControllerConfiguration(&obj.PodGCController)
-	// Use the default RecommendedDefaultReplicaSetControllerConfiguration options
+	// 应用 RecommendedDefaultReplicaSetControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	replicasetconfigv1alpha1.RecommendedDefaultReplicaSetControllerConfiguration(&obj.ReplicaSetController)
-	// Use the default RecommendedDefaultReplicationControllerConfiguration options
+	// 应用 RecommendedDefaultReplicationControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	replicationconfigv1alpha1.RecommendedDefaultReplicationControllerConfiguration(&obj.ReplicationController)
-	// Use the default RecommendedDefaultResourceQuotaControllerConfiguration options
+	// 应用 RecommendedDefaultResourceQuotaControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	resourcequotaconfigv1alpha1.RecommendedDefaultResourceQuotaControllerConfiguration(&obj.ResourceQuotaController)
-	// Use the default RecommendedDefaultServiceControllerConfiguration options
+	// 应用 RecommendedDefaultServiceControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	serviceconfigv1alpha1.RecommendedDefaultServiceControllerConfiguration(&obj.ServiceController)
-	// Use the default RecommendedDefaultLegacySATokenCleanerConfiguration options
+	// 应用 RecommendedDefaultLegacySATokenCleanerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	serviceaccountconfigv1alpha1.RecommendedDefaultLegacySATokenCleanerConfiguration(&obj.LegacySATokenCleaner)
-	// Use the default RecommendedDefaultSAControllerConfiguration options
+	// 应用 RecommendedDefaultSAControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	serviceaccountconfigv1alpha1.RecommendedDefaultSAControllerConfiguration(&obj.SAController)
-	// Use the default RecommendedDefaultTTLAfterFinishedControllerConfiguration options
+	// 应用 RecommendedDefaultTTLAfterFinishedControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	ttlafterfinishedconfigv1alpha1.RecommendedDefaultTTLAfterFinishedControllerConfiguration(&obj.TTLAfterFinishedController)
-	// Use the default RecommendedDefaultPersistentVolumeBinderControllerConfiguration options
+	// 应用 RecommendedDefaultPersistentVolumeBinderControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	persistentvolumeconfigv1alpha1.RecommendedDefaultPersistentVolumeBinderControllerConfiguration(&obj.PersistentVolumeBinderController)
-	// Use the default RecommendedDefaultValidatingAdmissionPolicyStatusControllerConfiguration options
+	// 应用 RecommendedDefaultValidatingAdmissionPolicyStatusControllerConfiguration 提供的推荐默认值，保证各控制器有合理的开箱即用配置。
 	validatingadmissionpolicystatusv1alpha1.RecommendedDefaultValidatingAdmissionPolicyStatusControllerConfiguration(&obj.ValidatingAdmissionPolicyStatusController)
 }

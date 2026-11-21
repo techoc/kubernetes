@@ -25,6 +25,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestStaleEndpointsTracker 验证 StaleEndpointsTracker 的生命周期语义：
+// 标记过期后 IsStale 应该返回 true；Endpoints 的 ResourceVersion 更新后
+// 说明控制器已重新处理，过期标记应当失效；删除后相关状态应被清理。
 func TestStaleEndpointsTracker(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	tracker := newStaleEndpointsTracker()
@@ -41,14 +44,18 @@ func TestStaleEndpointsTracker(t *testing.T) {
 		}},
 	}
 
+	// 初始状态不应被判定为过期。
 	assert.False(t, tracker.IsStale(endpoints), "IsStale should return false before the endpoint is staled")
 
+	// 标记过期后应能被识别，防止控制器基于陈旧 Endpoints 做出错误决策。
 	tracker.Stale(endpoints)
 	assert.True(t, tracker.IsStale(endpoints), "IsStale should return true after the endpoint is staled")
 
+	// 更新 ResourceVersion 模拟 Endpoints 变化，旧的过期标记必须自动失效。
 	endpoints.ResourceVersion = "2"
 	assert.False(t, tracker.IsStale(endpoints), "IsStale should return false after the endpoint is updated")
 
+	// 删除操作应彻底移除内部记录，避免长期运行下状态泄漏。
 	tracker.Delete(endpoints.Namespace, endpoints.Name)
 	assert.Empty(t, tracker.staleResourceVersionByEndpoints)
 }

@@ -33,6 +33,8 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
+// TestConfigMapCreation 验证 Publisher 在命名空间及根证书 ConfigMap 各类事件下的行为，
+// 包括创建、删除后重建以及字段被篡改时恢复。
 func TestConfigMapCreation(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	fakeRootCA := []byte("fake-root-ca")
@@ -133,6 +135,7 @@ func TestConfigMapCreation(t *testing.T) {
 
 			cmStore := cmInformer.Informer().GetStore()
 
+			// 测试直接把 syncHandler 设为 syncNamespace，模拟命名空间事件触发同步。
 			controller.syncHandler = controller.syncNamespace
 
 			for _, s := range tc.ExistingConfigMaps {
@@ -156,11 +159,13 @@ func TestConfigMapCreation(t *testing.T) {
 				controller.configMapUpdated(nil, tc.UpdatedConfigMap)
 			}
 			ctx := context.TODO()
+			// 排空工作队列，确保所有入队事件都已被处理后再断言客户端动作。
 			for controller.queue.Len() != 0 {
 				controller.processNextWorkItem(ctx)
 			}
 
 			actions := client.Actions()
+			// 只有预期动作与实际动作不同才报错；此处用 cmp.Diff 输出差异便于定位。
 			if reflect.DeepEqual(actions, tc.ExpectActions) {
 				t.Errorf("Unexpected actions:\n%s", cmp.Diff(actions, tc.ExpectActions))
 			}
@@ -168,6 +173,7 @@ func TestConfigMapCreation(t *testing.T) {
 	}
 }
 
+// defaultCrtConfigMapPtr 构造一个位于默认命名空间、包含指定根证书的 ConfigMap。
 func defaultCrtConfigMapPtr(rootCA []byte) *v1.ConfigMap {
 	tmp := v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -181,6 +187,8 @@ func defaultCrtConfigMapPtr(rootCA []byte) *v1.ConfigMap {
 	return &tmp
 }
 
+// TestConfigMapUpdateNoHotLoop 验证带描述注解的 ConfigMap 不会被反复更新，
+// 防止自身更新触发事件再次入队形成无限热循环。
 func TestConfigMapUpdateNoHotLoop(t *testing.T) {
 	testcases := map[string]struct {
 		ExistingConfigMaps []runtime.Object
@@ -257,6 +265,7 @@ func TestConfigMapUpdateNoHotLoop(t *testing.T) {
 			}
 
 			// Publisher manages certificate ConfigMap objects inside Namespaces
+			// 手动构造 Publisher 而非走 informer，便于精确控制缓存内容与客户端动作。
 			controller := Publisher{
 				client:         client,
 				rootCA:         []byte("fake"),

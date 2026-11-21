@@ -35,7 +35,10 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
+// TestSyncClusterRole 验证聚合 ClusterRole 的规则同步：只保留当前匹配选择器的源角色规则，
+// 并按名称排序、去重，无变化时不发出 patch 请求。
 func TestSyncClusterRole(t *testing.T) {
+	// hammerRules / chiselRules / sawRules 提供不同名称与内容的规则集合，便于验证筛选与排序。
 	hammerRules := func() []rbacv1.PolicyRule {
 		return []rbacv1.PolicyRule{
 			{Verbs: []string{"hammer"}, Resources: []string{"nails"}},
@@ -52,12 +55,14 @@ func TestSyncClusterRole(t *testing.T) {
 			{Verbs: []string{"saw"}, Resources: []string{"boards"}},
 		}
 	}
+	// role 构造一个普通的源 ClusterRole。
 	role := func(name string, labels map[string]string, rules []rbacv1.PolicyRule) *rbacv1.ClusterRole {
 		return &rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
 			Rules:      rules,
 		}
 	}
+	// combinedRole 构造带 AggregationRule 的聚合 ClusterRole。
 	combinedRole := func(selectors []map[string]string, rules ...[]rbacv1.PolicyRule) *rbacv1.ClusterRole {
 		ret := &rbacv1.ClusterRole{
 			ObjectMeta:      metav1.ObjectMeta{Name: "combined"},
@@ -73,6 +78,7 @@ func TestSyncClusterRole(t *testing.T) {
 		return ret
 	}
 
+	// combinedApplyRole 构造期望的 apply 请求体，用于与 patch 动作的内容比对。
 	combinedApplyRole := func(selectors []map[string]string, rules ...[]rbacv1.PolicyRule) *rbacv1ac.ClusterRoleApplyConfiguration {
 		ret := rbacv1ac.ClusterRole("combined")
 
@@ -85,6 +91,9 @@ func TestSyncClusterRole(t *testing.T) {
 	}
 
 	tests := []struct {
+		// name 是用例名称；startingClusterRoles 是初始存在的 ClusterRole 集合；
+		// clusterRoleToSync 是待同步的聚合角色名；expectedClusterRole 是期望的聚合结果（仅供参考）；
+		// expectedClusterRoleApply 是期望的 apply 请求体，nil 表示不应发出请求。
 		name                     string
 		startingClusterRoles     []*rbacv1.ClusterRole
 		clusterRoleToSync        string
@@ -170,9 +179,10 @@ func TestSyncClusterRole(t *testing.T) {
 			}
 			fakeClient := fakeclient.NewClientset(objs...)
 
-			// The default reactor doesn't support apply, so we need our own (trivial) reactor
+			// 默认 reactor 不支持 apply，这里注册一个简单 reactor 使 patch 动作成功返回。
 			fakeClient.PrependReactor("patch", "clusterroles", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
-				return true, nil, nil // clusterroleaggregator drops returned objects so no point in constructing them
+				// 聚合控制器不关心 patch 返回的对象，无需构造返回值。
+				return true, nil, nil
 			})
 			c := ClusterRoleAggregationController{
 				clusterRoleClient: fakeClient.RbacV1(),
@@ -183,6 +193,7 @@ func TestSyncClusterRole(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// 期望无变更时，不应产生任何 API 操作。
 			if test.expectedClusterRoleApply == nil {
 				if len(fakeClient.Actions()) != 0 {
 					t.Fatalf("unexpected actions %#v", fakeClient.Actions())
@@ -195,6 +206,7 @@ func TestSyncClusterRole(t *testing.T) {
 				t.Fatalf("unexpected actions %#v", fakeClient.Actions())
 			}
 
+			// 有变更时应恰好发出一个 patch（apply）动作。
 			action := fakeClient.Actions()[0]
 			if !action.Matches("patch", "clusterroles") {
 				t.Fatalf("unexpected action %#v", action)
@@ -203,6 +215,7 @@ func TestSyncClusterRole(t *testing.T) {
 			if !ok {
 				t.Fatalf("unexpected action %#v", action)
 			}
+			// apply 请求体以 YAML 编码在 patch 中，反序列化后做语义比较。
 			ac := &rbacv1ac.ClusterRoleApplyConfiguration{}
 			if err := yaml.Unmarshal(applyAction.GetPatch(), ac); err != nil {
 				t.Fatalf("error unmarshalling apply request: %v", err)

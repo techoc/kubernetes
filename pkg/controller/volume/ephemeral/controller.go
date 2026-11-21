@@ -43,39 +43,44 @@ import (
 	"k8s.io/kubernetes/pkg/controller/volume/events"
 )
 
-// Controller creates PVCs for ephemeral inline volumes in a pod spec.
+// Controller 为 Pod 规格中的临时内联卷（ephemeral inline volume）创建 PVC。
 type Controller interface {
+	// Run 启动控制器，使用 workers 个 worker 并发处理队列，直至 ctx 被取消。
 	Run(ctx context.Context, workers int)
 }
 
+// ephemeralController 是 Controller 的实现，通过 Pod 与 PVC 的 informer
+// 维护临时卷对应的 PVC 生命周期。
+// ephemeralController 是 Controller 的实现，通过 Pod 与 PVC 的 informer
+// 维护临时卷对应的 PVC 生命周期。
 type ephemeralController struct {
-	// kubeClient is the kube API client used by volumehost to communicate with
-	// the API server.
+	// kubeClient 供 volumehost 与 API 服务器通信，用于创建 PVC。
 	kubeClient clientset.Interface
 
-	// pvcLister is the shared PVC lister used to fetch and store PVC
-	// objects from the API server. It is shared with other controllers and
-	// therefore the PVC objects in its store should be treated as immutable.
-	pvcLister  corelisters.PersistentVolumeClaimLister
+	// pvcLister 是共享的 PVC lister，与其他控制器共用，
+	// 因此缓存中的 PVC 对象必须视为不可变，不得就地修改。
+	pvcLister corelisters.PersistentVolumeClaimLister
+	// pvcsSynced 用于等待 PVC informer 缓存同步完成。
 	pvcsSynced cache.InformerSynced
 
-	// podLister is the shared Pod lister used to fetch Pod
-	// objects from the API server. It is shared with other controllers and
-	// therefore the Pod objects in its store should be treated as immutable.
+	// podLister 是共享的 Pod lister，与其他控制器共用，
+	// 因此缓存中的 Pod 对象必须视为不可变。
 	podLister corelisters.PodLister
+	// podSynced 用于等待 Pod informer 缓存同步完成。
 	podSynced cache.InformerSynced
 
-	// podIndexer has the common PodPVC indexer indexer installed To
-	// limit iteration over pods to those of interest.
+	// podIndexer 安装了通用的 PodPVC 索引，删除 PVC 时可直接定位引用它的 Pod，
+	// 避免遍历全部 Pod。
 	podIndexer cache.Indexer
 
-	// recorder is used to record events in the API server
+	// recorder 用于把卷处理失败记录为 API 事件。
 	recorder record.EventRecorder
 
+	// queue 保存待处理 Pod 的命名空间/名称键，失败后按速率限制重试。
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// NewController creates an ephemeral volume controller.
+// NewController 创建临时卷控制器，注册 Pod 与 PVC 事件处理器并安装 PVC 索引。
 func NewController(
 	ctx context.Context,
 	kubeClient clientset.Interface,
@@ -105,11 +110,8 @@ func NewController(
 	logger := klog.FromContext(ctx)
 	_, err := podInformer.Informer().AddEventHandlerWithOptions(cache.ResourceEventHandlerFuncs{
 		AddFunc: ec.enqueuePod,
-		// The pod spec is immutable. Therefore the controller can ignore pod updates
-		// because there cannot be any changes that have to be copied into the generated
-		// PVC.
-		// Deletion of the PVC is handled through the owner reference and garbage collection.
-		// Therefore pod deletions also can be ignored.
+		// Pod 规格不可变，更新事件不会带来需要同步到 PVC 的变化，可忽略；
+		// Pod 删除后 PVC 会由属主引用触发垃圾回收自动清理，也无需处理。
 	}, cache.HandlerOptions{Logger: &logger})
 	if err != nil {
 		return nil, fmt.Errorf("could not add pod event handler: %w", err)
@@ -127,20 +129,24 @@ func NewController(
 	return ec, nil
 }
 
+// enqueuePod 在 Pod 包含临时内联卷且尚未进入删除流程时，把它加入工作队列。
+// 没有临时卷的 Pod 无需处理，避免无谓占用 worker。
+// enqueuePod 在 Pod 包含临时内联卷且尚未进入删除流程时，把它加入工作队列。
+// 没有临时卷的 Pod 无需处理，避免无谓占用 worker。
 func (ec *ephemeralController) enqueuePod(obj interface{}) {
 	pod, ok := obj.(*v1.Pod)
 	if !ok {
 		return
 	}
 
-	// Ignore pods which are already getting deleted.
+	// 已进入删除流程的 Pod 不再为其创建 PVC，否则新建资源会被立即回收。
 	if pod.DeletionTimestamp != nil {
 		return
 	}
 
 	for _, vol := range pod.Spec.Volumes {
 		if vol.Ephemeral != nil {
-			// It has at least one ephemeral inline volume, work on it.
+			// 只要有一个临时卷就需要处理该 Pod。
 			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(pod)
 			if err != nil {
 				runtime.HandleError(fmt.Errorf("couldn't get key for object %#v: %v", pod, err))
@@ -152,18 +158,18 @@ func (ec *ephemeralController) enqueuePod(obj interface{}) {
 	}
 }
 
+// onPVCDelete 在 PVC 被删除后重新入队引用它的 Pod，以便重建临时卷 PVC。
+// 索引器已把范围限定为引用该 PVC 的 Pod，无需遍历全部 Pod。
+// onPVCDelete 在 PVC 被删除后重新入队引用它的 Pod，以便重建临时卷 PVC。
+// 索引器已把范围限定为引用该 PVC 的 Pod，无需遍历全部 Pod。
 func (ec *ephemeralController) onPVCDelete(obj interface{}) {
 	pvc, ok := obj.(*v1.PersistentVolumeClaim)
 	if !ok {
 		return
 	}
 
-	// Someone deleted a PVC, either intentionally or
-	// accidentally. If there is a pod referencing it because of
-	// an ephemeral volume, then we should re-create the PVC.
-	// The common indexer does some prefiltering for us by
-	// limiting the list to those pods which reference
-	// the PVC.
+	// 无论有意还是误删，只要仍有 Pod 通过临时卷引用该 PVC，就需要重建。
+	// 通用索引器已预先过滤出引用它的 Pod。
 	objs, err := ec.podIndexer.ByIndex(common.PodPVCIndex, fmt.Sprintf("%s/%s", pvc.Namespace, pvc.Name))
 	if err != nil {
 		runtime.HandleError(fmt.Errorf("listing pods from cache: %v", err))
@@ -174,6 +180,10 @@ func (ec *ephemeralController) onPVCDelete(obj interface{}) {
 	}
 }
 
+// Run 等待 informer 缓存同步后启动 workers 个 worker 处理队列，
+// 并在 ctx 取消时关闭队列、等待 worker 退出。
+// Run 等待 informer 缓存同步后启动 workers 个 worker 处理队列，
+// 并在 ctx 取消时关闭队列、等待 worker 退出。
 func (ec *ephemeralController) Run(ctx context.Context, workers int) {
 	defer runtime.HandleCrash()
 
@@ -187,6 +197,8 @@ func (ec *ephemeralController) Run(ctx context.Context, workers int) {
 		wg.Wait()
 	}()
 
+	// 缓存未同步前不能处理事件，否则 lister 返回的数据不完整会导致误判。
+	// 缓存未同步前不能处理事件，否则 lister 返回的数据不完整会导致误判。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, ec.podSynced, ec.pvcsSynced) {
 		return
 	}
@@ -199,41 +211,52 @@ func (ec *ephemeralController) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// runWorker 持续处理队列，直到队列关闭。
+// runWorker 持续处理队列，直到队列关闭。
 func (ec *ephemeralController) runWorker(ctx context.Context) {
 	for ec.processNextWorkItem(ctx) {
 	}
 }
 
+// processNextWorkItem 处理一个队列元素：成功时清除重试计数，失败时限速重试。
+// 返回 false 表示队列已关闭，worker 应退出。
+// processNextWorkItem 处理一个队列元素：成功时清除重试计数，失败时限速重试。
+// 返回 false 表示队列已关闭，worker 应退出。
 func (ec *ephemeralController) processNextWorkItem(ctx context.Context) bool {
 	key, shutdown := ec.queue.Get()
 	if shutdown {
+		// 队列已关闭，通知 worker 退出，避免继续空转。
 		return false
 	}
 	defer ec.queue.Done(key)
 
 	err := ec.syncHandler(ctx, key)
 	if err == nil {
+		// 成功后清除失败历史，防止后续失败继承过长的退避间隔。
 		ec.queue.Forget(key)
 		return true
 	}
 
+	// 失败时限速重试，避免冲突等暂时性错误导致忙等。
 	runtime.HandleError(fmt.Errorf("%v failed with: %v", key, err))
 	ec.queue.AddRateLimited(key)
 
 	return true
 }
 
-// syncHandler is invoked for each pod which might need to be processed.
-// If an error is returned from this function, the pod will be requeued.
+// syncHandler 处理一个可能需要创建临时卷 PVC 的 Pod。
+// 返回错误会导致该 Pod 重新入队重试。
 func (ec *ephemeralController) syncHandler(ctx context.Context, key string) error {
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
+		// 键格式非法无法通过重试修复，直接返回错误交由上层记录。
 		return err
 	}
 	pod, err := ec.podLister.Pods(namespace).Get(name)
 	logger := klog.FromContext(ctx)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			// Pod 已消失，无需重试；队列中的旧事件自然过期即可。
 			logger.V(5).Info("Ephemeral: nothing to do for pod, it is gone", "podKey", key)
 			return nil
 		}
@@ -241,7 +264,7 @@ func (ec *ephemeralController) syncHandler(ctx context.Context, key string) erro
 		return err
 	}
 
-	// Ignore pods which are already getting deleted.
+	// 正在删除的 Pod 无需再创建 PVC，返回 nil 避免无意义重试。
 	if pod.DeletionTimestamp != nil {
 		logger.V(5).Info("Ephemeral: nothing to do for pod, it is marked for deletion", "podKey", key)
 		return nil
@@ -249,6 +272,7 @@ func (ec *ephemeralController) syncHandler(ctx context.Context, key string) erro
 
 	for _, vol := range pod.Spec.Volumes {
 		if err := ec.handleVolume(ctx, pod, vol); err != nil {
+			// 卷处理失败时记录 Pod 事件，方便用户从 Pod 描述中看到原因。
 			ec.recorder.Event(pod, v1.EventTypeWarning, events.FailedBinding, fmt.Sprintf("ephemeral volume %s: %v", vol.Name, err))
 			return fmt.Errorf("pod %s, ephemeral volume %s: %v", key, vol.Name, err)
 		}
@@ -257,10 +281,13 @@ func (ec *ephemeralController) syncHandler(ctx context.Context, key string) erro
 	return nil
 }
 
-// handleEphemeralVolume is invoked for each volume of a pod.
+// handleVolume 处理 Pod 的单个卷：仅临时内联卷需要创建 PVC。
+// 已存在但属主不匹配的 PVC 视为冲突，返回错误以触发重试。
 func (ec *ephemeralController) handleVolume(ctx context.Context, pod *v1.Pod, vol v1.Volume) error {
 	logger := klog.FromContext(ctx)
 	logger.V(5).Info("Ephemeral: checking volume", "volumeName", vol.Name)
+	// 普通卷不归本控制器管理，直接跳过。
+	// 普通卷不归本控制器管理，直接跳过。
 	if vol.Ephemeral == nil {
 		return nil
 	}
@@ -268,9 +295,12 @@ func (ec *ephemeralController) handleVolume(ctx context.Context, pod *v1.Pod, vo
 	pvcName := ephemeral.VolumeClaimName(pod, &vol)
 	pvc, err := ec.pvcLister.PersistentVolumeClaims(pod.Namespace).Get(pvcName)
 	if err != nil && !errors.IsNotFound(err) {
+		// 非 NotFound 的读取错误无法判断 PVC 是否已经存在，
+		// 必须重试，避免误建重复资源。
 		return err
 	}
 	if pvc != nil {
+		// 同名 PVC 若不属于该 Pod，属于命名冲突，不能复用也不能覆盖。
 		if err := ephemeral.VolumeIsForPod(pod, pvc); err != nil {
 			return err
 		}
@@ -279,7 +309,7 @@ func (ec *ephemeralController) handleVolume(ctx context.Context, pod *v1.Pod, vo
 		return nil
 	}
 
-	// Create the PVC with pod as owner.
+	// 以 Pod 为属主创建 PVC：属主引用使 Pod 删除时 PVC 能被垃圾回收。
 	isTrue := true
 	pvc = &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -302,6 +332,7 @@ func (ec *ephemeralController) handleVolume(ctx context.Context, pod *v1.Pod, vo
 	ephemeralvolumemetrics.EphemeralVolumeCreateAttempts.Inc()
 	_, err = ec.kubeClient.CoreV1().PersistentVolumeClaims(pod.Namespace).Create(ctx, pvc, metav1.CreateOptions{})
 	if err != nil {
+		// 创建失败（如冲突）通过返回错误进入限速重试；指标单独计数便于告警。
 		ephemeralvolumemetrics.EphemeralVolumeCreateFailures.Inc()
 		return fmt.Errorf("create PVC %s: %v", pvcName, err)
 	}

@@ -33,6 +33,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// BaseControllerRefManager 封装控制器认领/释放对象所需的基础状态：控制器对象、
+// 标签选择器，以及只会执行一次的 CanAdopt 前置检查。
 type BaseControllerRefManager struct {
 	Controller metav1.Object
 	Selector   labels.Selector
@@ -42,6 +44,7 @@ type BaseControllerRefManager struct {
 	CanAdoptFunc func(ctx context.Context) error
 }
 
+// CanAdopt 执行（至多一次）是否可以认领对象的前置检查，失败错误会被缓存复用。
 func (m *BaseControllerRefManager) CanAdopt(ctx context.Context) error {
 	m.canAdoptOnce.Do(func() {
 		if m.CanAdoptFunc != nil {
@@ -51,33 +54,24 @@ func (m *BaseControllerRefManager) CanAdopt(ctx context.Context) error {
 	return m.canAdoptErr
 }
 
-// ClaimObject tries to take ownership of an object for this controller.
+// ClaimObject 尝试让本控制器取得对象的所有权：match 返回 true 时认领孤儿对象，
+// 返回 false 时释放已拥有的对象。
 //
-// It will reconcile the following:
-//   - Adopt orphans if the match function returns true.
-//   - Release owned objects if the match function returns false.
+// 若尝试了调和但失败，返回非 nil 错误，调用方通常应稍后重试。若返回 nil，
+// 表示调和成功或无需调和；布尔返回值表示当前是否拥有该对象。
 //
-// A non-nil error is returned if some form of reconciliation was attempted and
-// failed. Usually, controllers should try again later in case reconciliation
-// is still needed.
-//
-// If the error is nil, either the reconciliation succeeded, or no
-// reconciliation was necessary. The returned boolean indicates whether you now
-// own the object.
-//
-// No reconciliation will be attempted if the controller is being deleted.
+// 控制器正在被删除时不会执行任何认领/释放操作（已拥有且仍匹配的对象除外：
+// 确认所有权本身不需要写操作）。
 func (m *BaseControllerRefManager) ClaimObject(ctx context.Context, obj metav1.Object, match func(metav1.Object) bool, adopt, release func(context.Context, metav1.Object) error) (bool, error) {
 	controllerRef := metav1.GetControllerOfNoCopy(obj)
 	if controllerRef != nil {
 		if controllerRef.UID != m.Controller.GetUID() {
-			// Owned by someone else. Ignore.
+			// 属主是其他控制器，直接忽略。
 			return false, nil
 		}
 		if match(obj) {
-			// We already own it and the selector matches.
-			// Return true (successfully claimed) before checking deletion timestamp.
-			// We're still allowed to claim things we already own while being deleted
-			// because doing so requires taking no actions.
+			// 已拥有且选择器匹配：无需任何写操作，即使控制器正在删除也仍可确认所有权，
+			// 因此先返回 true，不再检查删除时间戳。
 			return true, nil
 		}
 		// Owned by us but selector doesn't match.
@@ -86,47 +80,46 @@ func (m *BaseControllerRefManager) ClaimObject(ctx context.Context, obj metav1.O
 			return false, nil
 		}
 		if err := release(ctx, obj); err != nil {
-			// If the pod no longer exists, ignore the error.
+			// 对象已被删除时忽略认领错误。
 			if errors.IsNotFound(err) {
 				return false, nil
 			}
-			// Either someone else released it, or there was a transient error.
-			// The controller should requeue and try again if it's still stale.
+			// 可能是其他控制器抢先释放，也可能是瞬时错误；调用方应重新入队稍后重试。
 			return false, err
 		}
-		// Successfully released.
+		// 释放成功，当前不再拥有该对象。
 		return false, nil
 	}
 
-	// It's an orphan.
+	// 对象没有控制器属主，是孤儿对象。
 	if m.Controller.GetDeletionTimestamp() != nil || !match(obj) {
-		// Ignore if we're being deleted or selector doesn't match.
+		// 控制器正在删除或选择器不匹配时，忽略该孤儿对象。
 		return false, nil
 	}
 	if obj.GetDeletionTimestamp() != nil {
-		// Ignore if the object is being deleted
+		// 对象自身正在删除时，认领没有意义。
 		return false, nil
 	}
 
 	if len(m.Controller.GetNamespace()) > 0 && m.Controller.GetNamespace() != obj.GetNamespace() {
-		// Ignore if namespace not match
+		// 命名空间作用域控制器不能跨命名空间认领对象。
 		return false, nil
 	}
 
-	// Selector matches. Try to adopt.
+	// 各项检查通过，尝试认领该孤儿对象。
 	if err := adopt(ctx, obj); err != nil {
-		// If the pod no longer exists, ignore the error.
+		// 对象已被删除时忽略认领错误。
 		if errors.IsNotFound(err) {
 			return false, nil
 		}
-		// Either someone else claimed it first, or there was a transient error.
-		// The controller should requeue and try again if it's still orphaned.
+		// 可能被其他控制器抢先认领，也可能是瞬时错误；调用方应重新入队稍后重试。
 		return false, err
 	}
-	// Successfully adopted.
+	// 认领成功。
 	return true, nil
 }
 
+// PodControllerRefManager 管理 Pod 的 controllerRef，通过 PodControlInterface 打补丁完成认领与释放。
 type PodControllerRefManager struct {
 	BaseControllerRefManager
 	controllerKind schema.GroupVersionKind
@@ -134,17 +127,13 @@ type PodControllerRefManager struct {
 	finalizers     []string
 }
 
-// NewPodControllerRefManager returns a PodControllerRefManager that exposes
-// methods to manage the controllerRef of pods.
+// NewPodControllerRefManager 构造管理 Pod controllerRef 的 PodControllerRefManager。
 //
-// The CanAdopt() function can be used to perform a potentially expensive check
-// (such as a live GET from the API server) prior to the first adoption.
-// It will only be called (at most once) if an adoption is actually attempted.
-// If CanAdopt() returns a non-nil error, all adoptions will fail.
+// canAdopt 可用于在首次认领前执行开销较大的检查（例如向 API Server 实时 GET），
+// 仅在实际尝试认领时调用（至多一次）；返回非 nil 错误时所有认领都会失败。
 //
-// NOTE: Once CanAdopt() is called, it will not be called again by the same
-// PodControllerRefManager instance. Create a new instance if it makes
-// sense to check CanAdopt() again (e.g. in a different sync pass).
+// 注意：同一个 manager 实例调用过 CanAdopt() 后不会再次调用。若需要在新一轮同步中
+// 重新检查（例如控制器状态已变化），应创建新的实例。
 func NewPodControllerRefManager(
 	podControl PodControlInterface,
 	controller metav1.Object,
@@ -165,28 +154,16 @@ func NewPodControllerRefManager(
 	}
 }
 
-// ClaimPods tries to take ownership of a list of Pods.
-//
-// It will reconcile the following:
-//   - Adopt orphans if the selector matches.
-//   - Release owned objects if the selector no longer matches.
-//
-// Optional: If one or more filters are specified, a Pod will only be claimed if
-// all filters return true.
-//
-// A non-nil error is returned if some form of reconciliation was attempted and
-// failed. Usually, controllers should try again later in case reconciliation
-// is still needed.
-//
-// If the error is nil, either the reconciliation succeeded, or no
-// reconciliation was necessary. The list of Pods that you now own is returned.
+// ClaimPods 尝试认领一组 Pod：选择器匹配时认领孤儿 Pod，不再匹配时释放已拥有的 Pod。
+// 若提供了 filters，只有所有过滤器都返回 true 的 Pod 才会被认领。
+// 返回当前由本控制器拥有的 Pod 列表；若调和过程出现失败，返回聚合错误，调用方应稍后重试。
 func (m *PodControllerRefManager) ClaimPods(ctx context.Context, pods []*v1.Pod, filters ...func(*v1.Pod) bool) ([]*v1.Pod, error) {
 	var claimed []*v1.Pod
 	var errlist []error
 
 	match := func(obj metav1.Object) bool {
 		pod := obj.(*v1.Pod)
-		// Check selector first so filters only run on potentially matching Pods.
+		// 先做开销较低的选择器匹配，过滤器只对可能匹配的 Pod 执行。
 		if !m.Selector.Matches(labels.Set(pod.Labels)) {
 			return false
 		}
@@ -217,14 +194,13 @@ func (m *PodControllerRefManager) ClaimPods(ctx context.Context, pods []*v1.Pod,
 	return claimed, utilerrors.NewAggregate(errlist)
 }
 
-// AdoptPod sends a patch to take control of the pod. It returns the error if
-// the patching fails.
+// AdoptPod 发送补丁，将本控制器设置为 Pod 的控制器属主。
 func (m *PodControllerRefManager) AdoptPod(ctx context.Context, pod *v1.Pod) error {
 	if err := m.CanAdopt(ctx); err != nil {
 		return fmt.Errorf("can't adopt Pod %v/%v (%v): %v", pod.Namespace, pod.Name, pod.UID, err)
 	}
-	// Note that ValidateOwnerReferences() will reject this patch if another
-	// OwnerReference exists with controller=true.
+	// 注意：若 Pod 上已有 controller=true 的属主，ValidateOwnerReferences() 会拒绝该补丁，
+	// 因此无需在客户端再做竞态检查。
 
 	patchBytes, err := ownerRefControllerPatch(m.Controller, m.controllerKind, pod.UID, m.finalizers...)
 	if err != nil {
@@ -233,8 +209,7 @@ func (m *PodControllerRefManager) AdoptPod(ctx context.Context, pod *v1.Pod) err
 	return m.podControl.PatchPod(ctx, pod.Namespace, pod.Name, patchBytes)
 }
 
-// ReleasePod sends a patch to free the pod from the control of the controller.
-// It returns the error if the patching fails. 404 and 422 errors are ignored.
+// ReleasePod 发送补丁，移除 Pod 上指向本控制器的 controllerRef。404 与 422 错误会被忽略。
 func (m *PodControllerRefManager) ReleasePod(ctx context.Context, pod *v1.Pod) error {
 	logger := klog.FromContext(ctx)
 	logger.V(2).Info("Patching pod to remove its controllerRef", "pod", klog.KObj(pod), "gvk", m.controllerKind, "controller", m.Controller.GetName())
@@ -245,14 +220,12 @@ func (m *PodControllerRefManager) ReleasePod(ctx context.Context, pod *v1.Pod) e
 	err = m.podControl.PatchPod(ctx, pod.Namespace, pod.Name, patchBytes)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// If the pod no longer exists, ignore it.
+			// Pod 已被删除，无需释放。
 			return nil
 		}
 		if errors.IsInvalid(err) {
-			// Invalid error will be returned in two cases: 1. the pod
-			// has no owner reference, 2. the uid of the pod doesn't
-			// match, which means the pod is deleted and then recreated.
-			// In both cases, the error can be ignored.
+			// 422 在两种情况下出现：Pod 已无属主，或 Pod 的 UID 不匹配（即被删除后重建）；
+			// 两种情况都说明目标状态已达成，可以忽略。
 
 			// TODO: If the pod has owner references, but none of them
 			// has the owner.UID, server will silently ignore the patch.
@@ -263,28 +236,16 @@ func (m *PodControllerRefManager) ReleasePod(ctx context.Context, pod *v1.Pod) e
 	return err
 }
 
-// ReplicaSetControllerRefManager is used to manage controllerRef of ReplicaSets.
-// Three methods are defined on this object 1: Classify 2: AdoptReplicaSet and
-// 3: ReleaseReplicaSet which are used to classify the ReplicaSets into appropriate
-// categories and accordingly adopt or release them. See comments on these functions
-// for more details.
+// ReplicaSetControllerRefManager 管理 ReplicaSet 的 controllerRef，提供分类、认领与释放方法。
 type ReplicaSetControllerRefManager struct {
 	BaseControllerRefManager
 	controllerKind schema.GroupVersionKind
 	rsControl      RSControlInterface
 }
 
-// NewReplicaSetControllerRefManager returns a ReplicaSetControllerRefManager that exposes
-// methods to manage the controllerRef of ReplicaSets.
-//
-// The CanAdopt() function can be used to perform a potentially expensive check
-// (such as a live GET from the API server) prior to the first adoption.
-// It will only be called (at most once) if an adoption is actually attempted.
-// If CanAdopt() returns a non-nil error, all adoptions will fail.
-//
-// NOTE: Once CanAdopt() is called, it will not be called again by the same
-// ReplicaSetControllerRefManager instance. Create a new instance if it
-// makes sense to check CanAdopt() again (e.g. in a different sync pass).
+// NewReplicaSetControllerRefManager 构造管理 ReplicaSet controllerRef 的管理器。
+// canAdopt 仅在首次实际认领时调用（至多一次），可用来做实时 GET 等开销较大的检查；
+// 返回错误则所有认领失败。同一实例不会重复调用 CanAdopt()，需要重新检查时请新建实例。
 func NewReplicaSetControllerRefManager(
 	rsControl RSControlInterface,
 	controller metav1.Object,
@@ -303,19 +264,8 @@ func NewReplicaSetControllerRefManager(
 	}
 }
 
-// ClaimReplicaSets tries to take ownership of a list of ReplicaSets.
-//
-// It will reconcile the following:
-//   - Adopt orphans if the selector matches.
-//   - Release owned objects if the selector no longer matches.
-//
-// A non-nil error is returned if some form of reconciliation was attempted and
-// failed. Usually, controllers should try again later in case reconciliation
-// is still needed.
-//
-// If the error is nil, either the reconciliation succeeded, or no
-// reconciliation was necessary. The list of ReplicaSets that you now own is
-// returned.
+// ClaimReplicaSets 认领选择器匹配的孤儿 ReplicaSet，释放已拥有但不再匹配的 ReplicaSet，
+// 返回当前拥有的 ReplicaSet 列表及调和过程中出现的聚合错误。
 func (m *ReplicaSetControllerRefManager) ClaimReplicaSets(ctx context.Context, sets []*apps.ReplicaSet) ([]*apps.ReplicaSet, error) {
 	var claimed []*apps.ReplicaSet
 	var errlist []error
@@ -343,14 +293,13 @@ func (m *ReplicaSetControllerRefManager) ClaimReplicaSets(ctx context.Context, s
 	return claimed, utilerrors.NewAggregate(errlist)
 }
 
-// AdoptReplicaSet sends a patch to take control of the ReplicaSet. It returns
-// the error if the patching fails.
+// AdoptReplicaSet 发送补丁，将本控制器设置为 ReplicaSet 的控制器属主。
 func (m *ReplicaSetControllerRefManager) AdoptReplicaSet(ctx context.Context, rs *apps.ReplicaSet) error {
 	if err := m.CanAdopt(ctx); err != nil {
 		return fmt.Errorf("can't adopt ReplicaSet %v/%v (%v): %v", rs.Namespace, rs.Name, rs.UID, err)
 	}
-	// Note that ValidateOwnerReferences() will reject this patch if another
-	// OwnerReference exists with controller=true.
+	// 注意：若 Pod 上已有 controller=true 的属主，ValidateOwnerReferences() 会拒绝该补丁，
+	// 因此无需在客户端再做竞态检查。
 	patchBytes, err := ownerRefControllerPatch(m.Controller, m.controllerKind, rs.UID)
 	if err != nil {
 		return err
@@ -358,8 +307,7 @@ func (m *ReplicaSetControllerRefManager) AdoptReplicaSet(ctx context.Context, rs
 	return m.rsControl.PatchReplicaSet(ctx, rs.Namespace, rs.Name, patchBytes)
 }
 
-// ReleaseReplicaSet sends a patch to free the ReplicaSet from the control of the Deployment controller.
-// It returns the error if the patching fails. 404 and 422 errors are ignored.
+// ReleaseReplicaSet 发送补丁，移除 ReplicaSet 上指向本控制器的属主引用；404 与 422 错误会被忽略。
 func (m *ReplicaSetControllerRefManager) ReleaseReplicaSet(ctx context.Context, replicaSet *apps.ReplicaSet) error {
 	logger := klog.FromContext(ctx)
 	logger.V(2).Info("Patching ReplicaSet to remove its controllerRef", "replicaSet", klog.KObj(replicaSet), "gvk", m.controllerKind, "controller", m.Controller.GetName())
@@ -370,24 +318,19 @@ func (m *ReplicaSetControllerRefManager) ReleaseReplicaSet(ctx context.Context, 
 	err = m.rsControl.PatchReplicaSet(ctx, replicaSet.Namespace, replicaSet.Name, patchBytes)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// If the ReplicaSet no longer exists, ignore it.
+			// ReplicaSet 已被删除，无需释放。
 			return nil
 		}
 		if errors.IsInvalid(err) {
-			// Invalid error will be returned in two cases: 1. the ReplicaSet
-			// has no owner reference, 2. the uid of the ReplicaSet doesn't
-			// match, which means the ReplicaSet is deleted and then recreated.
-			// In both cases, the error can be ignored.
+			// 422 表示 ReplicaSet 已无属主或 UID 不匹配（删除后重建），两种情况均可忽略。
 			return nil
 		}
 	}
 	return err
 }
 
-// RecheckDeletionTimestamp returns a CanAdopt() function to recheck deletion.
-//
-// The CanAdopt() function calls getObject() to fetch the latest value,
-// and denies adoption attempts if that object has a non-nil DeletionTimestamp.
+// RecheckDeletionTimestamp 返回一个 CanAdopt 函数：通过 getObject 获取控制器最新状态，
+// 若其已进入删除流程（DeletionTimestamp 非空）则拒绝认领，避免为即将消失的控制器绑定对象。
 func RecheckDeletionTimestamp(getObject func(context.Context) (metav1.Object, error)) func(context.Context) error {
 	return func(ctx context.Context) error {
 		obj, err := getObject(ctx)
@@ -401,28 +344,16 @@ func RecheckDeletionTimestamp(getObject func(context.Context) (metav1.Object, er
 	}
 }
 
-// ControllerRevisionControllerRefManager is used to manage controllerRef of ControllerRevisions.
-// Three methods are defined on this object 1: Classify 2: AdoptControllerRevision and
-// 3: ReleaseControllerRevision which are used to classify the ControllerRevisions into appropriate
-// categories and accordingly adopt or release them. See comments on these functions
-// for more details.
+// ControllerRevisionControllerRefManager 管理 ControllerRevision 的 controllerRef，提供分类、认领与释放方法。
 type ControllerRevisionControllerRefManager struct {
 	BaseControllerRefManager
 	controllerKind schema.GroupVersionKind
 	crControl      ControllerRevisionControlInterface
 }
 
-// NewControllerRevisionControllerRefManager returns a ControllerRevisionControllerRefManager that exposes
-// methods to manage the controllerRef of ControllerRevisions.
-//
-// The canAdopt() function can be used to perform a potentially expensive check
-// (such as a live GET from the API server) prior to the first adoption.
-// It will only be called (at most once) if an adoption is actually attempted.
-// If canAdopt() returns a non-nil error, all adoptions will fail.
-//
-// NOTE: Once canAdopt() is called, it will not be called again by the same
-// ControllerRevisionControllerRefManager instance. Create a new instance if it
-// makes sense to check canAdopt() again (e.g. in a different sync pass).
+// NewControllerRevisionControllerRefManager 构造管理 ControllerRevision controllerRef 的管理器。
+// canAdopt 仅在首次实际认领时调用（至多一次），可用于实时 GET 等开销较大的检查；
+// 返回错误则所有认领失败。同一实例不会重复调用，需重新检查时请新建实例。
 func NewControllerRevisionControllerRefManager(
 	crControl ControllerRevisionControlInterface,
 	controller metav1.Object,
@@ -441,19 +372,8 @@ func NewControllerRevisionControllerRefManager(
 	}
 }
 
-// ClaimControllerRevisions tries to take ownership of a list of ControllerRevisions.
-//
-// It will reconcile the following:
-//   - Adopt orphans if the selector matches.
-//   - Release owned objects if the selector no longer matches.
-//
-// A non-nil error is returned if some form of reconciliation was attempted and
-// failed. Usually, controllers should try again later in case reconciliation
-// is still needed.
-//
-// If the error is nil, either the reconciliation succeeded, or no
-// reconciliation was necessary. The list of ControllerRevisions that you now own is
-// returned.
+// ClaimControllerRevisions 认领选择器匹配的孤儿 ControllerRevision，释放已拥有但不再匹配的对象，
+// 返回当前拥有的 ControllerRevision 列表及聚合错误。
 func (m *ControllerRevisionControllerRefManager) ClaimControllerRevisions(ctx context.Context, histories []*apps.ControllerRevision) ([]*apps.ControllerRevision, error) {
 	var claimed []*apps.ControllerRevision
 	var errlist []error
@@ -481,14 +401,13 @@ func (m *ControllerRevisionControllerRefManager) ClaimControllerRevisions(ctx co
 	return claimed, utilerrors.NewAggregate(errlist)
 }
 
-// AdoptControllerRevision sends a patch to take control of the ControllerRevision. It returns the error if
-// the patching fails.
+// AdoptControllerRevision 发送补丁，将本控制器设置为 ControllerRevision 的控制器属主。
 func (m *ControllerRevisionControllerRefManager) AdoptControllerRevision(ctx context.Context, history *apps.ControllerRevision) error {
 	if err := m.CanAdopt(ctx); err != nil {
 		return fmt.Errorf("can't adopt ControllerRevision %v/%v (%v): %v", history.Namespace, history.Name, history.UID, err)
 	}
-	// Note that ValidateOwnerReferences() will reject this patch if another
-	// OwnerReference exists with controller=true.
+	// 注意：若 Pod 上已有 controller=true 的属主，ValidateOwnerReferences() 会拒绝该补丁，
+	// 因此无需在客户端再做竞态检查。
 	patchBytes, err := ownerRefControllerPatch(m.Controller, m.controllerKind, history.UID)
 	if err != nil {
 		return err
@@ -496,8 +415,7 @@ func (m *ControllerRevisionControllerRefManager) AdoptControllerRevision(ctx con
 	return m.crControl.PatchControllerRevision(ctx, history.Namespace, history.Name, patchBytes)
 }
 
-// ReleaseControllerRevision sends a patch to free the ControllerRevision from the control of its controller.
-// It returns the error if the patching fails. 404 and 422 errors are ignored.
+// ReleaseControllerRevision 发送补丁，移除 ControllerRevision 上指向本控制器的属主引用；404 与 422 错误会被忽略。
 func (m *ControllerRevisionControllerRefManager) ReleaseControllerRevision(ctx context.Context, history *apps.ControllerRevision) error {
 	logger := klog.FromContext(ctx)
 	logger.V(2).Info("Patching ControllerRevision to remove its controllerRef", "controllerRevision", klog.KObj(history), "gvk", m.controllerKind, "controller", m.Controller.GetName())
@@ -509,20 +427,18 @@ func (m *ControllerRevisionControllerRefManager) ReleaseControllerRevision(ctx c
 	err = m.crControl.PatchControllerRevision(ctx, history.Namespace, history.Name, patchBytes)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// If the ControllerRevision no longer exists, ignore it.
+			// ControllerRevision 已被删除，无需释放。
 			return nil
 		}
 		if errors.IsInvalid(err) {
-			// Invalid error will be returned in two cases: 1. the ControllerRevision
-			// has no owner reference, 2. the uid of the ControllerRevision doesn't
-			// match, which means the ControllerRevision is deleted and then recreated.
-			// In both cases, the error can be ignored.
+			// 422 表示对象已无属主或 UID 不匹配（删除后重建），两种情况均可忽略。
 			return nil
 		}
 	}
 	return err
 }
 
+// objectForAddOwnerRefPatch 及 objectMetaForPatch 描述认领时使用的 strategic-merge 补丁结构。
 type objectForAddOwnerRefPatch struct {
 	Metadata objectMetaForPatch `json:"metadata"`
 }
@@ -533,6 +449,8 @@ type objectMetaForPatch struct {
 	Finalizers      []string                `json:"finalizers,omitempty"`
 }
 
+// ownerRefControllerPatch 生成添加控制器属主引用（controller=true、blockOwnerDeletion=true）的补丁；
+// uid 字段作为乐观并发校验，对象在读取后被替换时补丁会被拒绝。
 func ownerRefControllerPatch(controller metav1.Object, controllerKind schema.GroupVersionKind, uid types.UID, finalizers ...string) ([]byte, error) {
 	blockOwnerDeletion := true
 	isController := true
@@ -559,6 +477,7 @@ func ownerRefControllerPatch(controller metav1.Object, controllerKind schema.Gro
 	return patchBytes, nil
 }
 
+// 以下类型描述释放属主引用时使用的 strategic-merge 补丁结构。
 type objectForDeleteOwnerRefStrategicMergePatch struct {
 	Metadata objectMetaForMergePatch `json:"metadata"`
 }
@@ -569,6 +488,8 @@ type objectMetaForMergePatch struct {
 	DeleteFinalizers []string            `json:"$deleteFromPrimitiveList/finalizers,omitempty"`
 }
 
+// GenerateDeleteOwnerRefStrategicMergeBytes 生成删除指定属主引用的 strategic-merge 补丁，
+// 并可通过 $deleteFromPrimitiveList 一并移除 finalizers；dependentUID 用于并发校验。
 func GenerateDeleteOwnerRefStrategicMergeBytes(dependentUID types.UID, ownerUIDs []types.UID, finalizers ...string) ([]byte, error) {
 	var ownerReferences []map[string]string
 	for _, ownerUID := range ownerUIDs {
@@ -588,6 +509,7 @@ func GenerateDeleteOwnerRefStrategicMergeBytes(dependentUID types.UID, ownerUIDs
 	return patchBytes, nil
 }
 
+// ownerReference 构造 strategic-merge 补丁中的单个属主引用操作项，按 UID 定位要删除的引用。
 func ownerReference(uid types.UID, patchType string) map[string]string {
 	return map[string]string{
 		"$patch": patchType,

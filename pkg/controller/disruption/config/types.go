@@ -16,10 +16,9 @@ limitations under the License.
 
 package config
 
-// DisruptionControllerConfiguration contains elements describing DisruptionController.
+// DisruptionControllerConfiguration 描述 DisruptionController（中断控制器）的配置参数。
 type DisruptionControllerConfiguration struct {
-	// concurrentDisruptionSyncs is the number of PodDisruptionBudget objects that
-	// are allowed to sync concurrently. Larger number = more responsive PDB
-	// updates, but more CPU (and network) load.
+	// concurrentDisruptionSyncs 是允许并发同步的 PodDisruptionBudget（PDB）对象数量。
+	// 值越大，PDB 更新越及时，但 CPU 与网络负载也越高。
 	ConcurrentDisruptionSyncs int32
 }

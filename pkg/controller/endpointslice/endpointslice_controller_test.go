@@ -48,11 +48,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Most of the tests related to EndpointSlice allocation can be found in reconciler_test.go
-// Tests here primarily focus on unique controller functionality before the reconciler begins
+// 与 EndpointSlice 分配相关的大多数测试位于 reconciler_test.go。
+// 本文件的测试主要聚焦于 reconciler 开始工作之前的控制器独有功能。
 
 var alwaysReady = func() bool { return true }
 
+// endpointSliceController 是测试用的控制器包装结构，嵌入真实 Controller 以访问其字段。
 type endpointSliceController struct {
 	*Controller
 	endpointSliceStore cache.Store
@@ -61,6 +62,7 @@ type endpointSliceController struct {
 	serviceStore       cache.Store
 }
 
+// newController 构造并返回测试或控制器所需的对象。
 func newController(t *testing.T, nodeNames []string, batchPeriod time.Duration) (*fake.Clientset, *endpointSliceController) {
 	client := fake.NewSimpleClientset()
 
@@ -74,8 +76,7 @@ func newController(t *testing.T, nodeNames []string, batchPeriod time.Duration) 
 	esInformer := informerFactory.Discovery().V1().EndpointSlices()
 	esIndexer := esInformer.Informer().GetIndexer()
 
-	// These reactors are required to mock functionality that would be covered
-	// automatically if we weren't using the fake client.
+	// 这些 reactor 用来模拟真实客户端会自动完成、但 fake client 未覆盖的行为。
 	client.PrependReactor("create", "endpointslices", k8stesting.ReactionFunc(func(action k8stesting.Action) (bool, runtime.Object, error) {
 		endpointSlice := action.(k8stesting.CreateAction).GetObject().(*discovery.EndpointSlice)
 
@@ -121,6 +122,7 @@ func newController(t *testing.T, nodeNames []string, batchPeriod time.Duration) 
 	}
 }
 
+// newPod 构造并返回测试或控制器所需的对象。
 func newPod(n int, namespace string, ready bool, nPorts int, terminating bool) *v1.Pod {
 	status := v1.ConditionTrue
 	if !ready {
@@ -166,9 +168,10 @@ func newPod(n int, namespace string, ready bool, nPorts int, terminating bool) *
 	return p
 }
 
+// expectActions 校验预期动作与实际动作是否一致。
 func expectActions(t *testing.T, actions []k8stesting.Action, num int, verb, resource string) {
 	t.Helper()
-	// if actions are less the below logic will panic
+	// 若 action 数量不足，下面的索引访问会 panic，先做断言保证安全。
 	if num > len(actions) {
 		t.Fatalf("len of actions %v is unexpected. Expected to be at least %v", len(actions), num+1)
 	}
@@ -180,7 +183,7 @@ func expectActions(t *testing.T, actions []k8stesting.Action, num int, verb, res
 	}
 }
 
-// Ensure SyncService for service with no selector results in no action
+// TestSyncServiceNoSelector 确保对没有 selector 的 Service 执行 SyncService 不会产生任何动作。
 func TestSyncServiceNoSelector(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	serviceName := "testing-1"
@@ -198,6 +201,7 @@ func TestSyncServiceNoSelector(t *testing.T) {
 	assert.Empty(t, client.Actions())
 }
 
+// TestServiceExternalNameTypeSync 测试 ServiceExternalNameTypeSync 的相关行为。
 func TestServiceExternalNameTypeSync(t *testing.T) {
 	serviceName := "testing-1"
 	namespace := metav1.NamespaceDefault
@@ -271,7 +275,7 @@ func TestServiceExternalNameTypeSync(t *testing.T) {
 	}
 }
 
-// Ensure SyncService for service with pending deletion results in no action
+// TestSyncServiceWithDeletionTimestamp 确保对处于删除中的 Service 执行 SyncService 不会产生任何动作。
 func TestSyncServicePendingDeletion(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	serviceName := "testing-1"
@@ -291,7 +295,7 @@ func TestSyncServicePendingDeletion(t *testing.T) {
 	assert.Empty(t, client.Actions())
 }
 
-// Ensure SyncService for service with selector but no pods results in placeholder EndpointSlice
+// TestSyncServiceEmptySelector 确保有 selector 但无匹配 Pod 的 Service 会生成占位 EndpointSlice。
 func TestSyncServiceWithSelector(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	serviceName := "testing-1"
@@ -310,14 +314,13 @@ func TestSyncServiceWithSelector(t *testing.T) {
 	assert.NotEmpty(t, slice.Annotations["endpoints.kubernetes.io/last-change-trigger-time"])
 }
 
-// Ensure SyncService gracefully handles a missing service. This test also
-// populates another existing service to ensure a clean up process doesn't
-// remove too much.
+// TestSyncServiceMissingService 确保 SyncService 能优雅处理 Service 缺失的情况。
+// 测试中还放入了另一个存在的 Service，以验证清理过程不会删得过多。
 func TestSyncServiceMissing(t *testing.T) {
 	namespace := metav1.NamespaceDefault
 	client, esController := newController(t, []string{"node-1"}, time.Duration(0))
 
-	// Build up existing service
+	// 构造一个已存在的 Service 作为干扰项。
 	existingServiceName := "stillthere"
 	existingServiceKey := endpointsliceutil.ServiceKey{Name: existingServiceName, Namespace: namespace}
 	esController.triggerTimeTracker.ServiceStates[existingServiceKey] = endpointsliceutil.ServiceState{}
@@ -329,7 +332,7 @@ func TestSyncServiceMissing(t *testing.T) {
 		},
 	})
 
-	// Add missing service to triggerTimeTracker to ensure the reference is cleaned up
+	// 把已缺失的 Service 加入 triggerTimeTracker，以验证其引用会被清理。
 	missingServiceName := "notthere"
 	missingServiceKey := endpointsliceutil.ServiceKey{Name: missingServiceName, Namespace: namespace}
 	esController.triggerTimeTracker.ServiceStates[missingServiceKey] = endpointsliceutil.ServiceState{}
@@ -337,20 +340,20 @@ func TestSyncServiceMissing(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	err := esController.syncService(logger, fmt.Sprintf("%s/%s", namespace, missingServiceName))
 
-	// nil should be returned when the service doesn't exist
+	// Service 不存在时应返回 nil。
 	require.NoError(t, err, "Expected no error syncing service")
 
-	// That should mean no client actions were performed
+	// 这意味着不应产生任何客户端动作。
 	assert.Empty(t, client.Actions())
 
-	// TriggerTimeTracker should have removed the reference to the missing service
+	// triggerTimeTracker 应已移除对缺失 Service 的引用。
 	assert.NotContains(t, esController.triggerTimeTracker.ServiceStates, missingServiceKey)
 
-	// TriggerTimeTracker should have left the reference to the missing service
+	// triggerTimeTracker 应仍保留对缺失 Service 的引用。
 	assert.Contains(t, esController.triggerTimeTracker.ServiceStates, existingServiceKey)
 }
 
-// Ensure SyncService correctly selects Pods.
+// TestSyncServiceSelectedPods 确保 SyncService 正确挑选匹配的 Pod。
 func TestSyncServicePodSelection(t *testing.T) {
 	client, esController := newController(t, []string{"node-1"}, time.Duration(0))
 	ns := metav1.NamespaceDefault
@@ -358,7 +361,7 @@ func TestSyncServicePodSelection(t *testing.T) {
 	pod1 := newPod(1, ns, true, 0, false)
 	esController.podStore.Add(pod1)
 
-	// ensure this pod will not match the selector
+	// 该 Pod 不匹配 selector，应被排除。
 	pod2 := newPod(2, ns, true, 0, false)
 	pod2.Labels["foo"] = "boo"
 	esController.podStore.Add(pod2)
@@ -366,7 +369,7 @@ func TestSyncServicePodSelection(t *testing.T) {
 	standardSyncService(t, esController, ns, "testing-1")
 	expectActions(t, client.Actions(), 1, "create", "endpointslices")
 
-	// an endpoint slice should be created, it should only reference pod1 (not pod2)
+	// 应创建一个 EndpointSlice，且只引用 pod1，不引用 pod2。
 	slices, err := client.DiscoveryV1().EndpointSlices(ns).List(context.TODO(), metav1.ListOptions{})
 	require.NoError(t, err, "Expected no error fetching endpoint slices")
 	assert.Len(t, slices.Items, 1, "Expected 1 endpoint slices")
@@ -377,6 +380,7 @@ func TestSyncServicePodSelection(t *testing.T) {
 	assert.EqualValues(t, &v1.ObjectReference{Kind: "Pod", Namespace: ns, Name: pod1.Name}, endpoint.TargetRef)
 }
 
+// TestSyncServiceEndpointSlicePendingDeletion 测试 SyncServiceEndpointSlicePendingDeletion 的相关行为。
 func TestSyncServiceEndpointSlicePendingDeletion(t *testing.T) {
 	client, esController := newController(t, []string{"node-1"}, time.Duration(0))
 	ns := metav1.NamespaceDefault
@@ -417,14 +421,13 @@ func TestSyncServiceEndpointSlicePendingDeletion(t *testing.T) {
 	err = esController.syncService(logger, fmt.Sprintf("%s/%s", ns, serviceName))
 	require.NoError(t, err, "Expected no error syncing service")
 
-	// The EndpointSlice marked for deletion should be ignored by the controller, and thus
-	// should not result in any action.
+	// 标记为删除的 EndpointSlice 应被控制器忽略，因此不应产生任何动作。
 	if len(client.Actions()) != numActionsBefore {
 		t.Errorf("Expected 0 more actions, got %d", len(client.Actions())-numActionsBefore)
 	}
 }
 
-// Ensure SyncService correctly selects and labels EndpointSlices.
+// TestSyncServiceEndpointSlices 确保 SyncService 正确筛选并标注 EndpointSlice。
 func TestSyncServiceEndpointSliceLabelSelection(t *testing.T) {
 	client, esController := newController(t, []string{"node-1"}, time.Duration(0))
 	ns := metav1.NamespaceDefault
@@ -490,7 +493,7 @@ func TestSyncServiceEndpointSliceLabelSelection(t *testing.T) {
 
 	cmc := newCacheMutationCheck(endpointSlices)
 
-	// need to add them to both store and fake clientset
+	// 需同时加入 store 与 fake clientset，保证缓存与 API 视图一致。
 	for _, endpointSlice := range endpointSlices {
 		err := esController.endpointSliceStore.Add(endpointSlice)
 		if err != nil {
@@ -511,14 +514,15 @@ func TestSyncServiceEndpointSliceLabelSelection(t *testing.T) {
 		t.Errorf("Expected 2 more actions, got %d", len(client.Actions())-numActionsBefore)
 	}
 
-	// only 2 slices should match, 2 should be deleted, 1 should be updated as a placeholder
+	// 应有 2 个切片匹配，2 个被删除，1 个被更新为占位切片。
 	expectAction(t, client.Actions(), numActionsBefore, "update", "endpointslices")
 	expectAction(t, client.Actions(), numActionsBefore+1, "delete", "endpointslices")
 
-	// ensure cache mutation has not occurred
+	// 验证缓存对象未被原地修改。
 	cmc.Check(t)
 }
 
+// TestOnEndpointSliceUpdate 测试 OnEndpointSliceUpdate 的相关行为。
 func TestOnEndpointSliceUpdate(t *testing.T) {
 	_, esController := newController(t, []string{"node-1"}, time.Duration(0))
 	ns := metav1.NamespaceDefault
@@ -553,6 +557,7 @@ func TestOnEndpointSliceUpdate(t *testing.T) {
 	assert.Equal(t, 1, esController.serviceQueue.Len())
 }
 
+// TestSyncService 测试 SyncService 的相关行为。
 func TestSyncService(t *testing.T) {
 	creationTimestamp := metav1.Now()
 	deletionTimestamp := metav1.Now()
@@ -808,7 +813,7 @@ func TestSyncService(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				{
-					// one ready pod for comparison
+					// 准备一个就绪的 Pod 作为比较基准。
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace:         "default",
 						Name:              "pod0",
@@ -923,7 +928,7 @@ func TestSyncService(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				{
-					// one ready pod for comparison
+					// 准备一个就绪的 Pod 作为比较基准。
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace:         "default",
 						Name:              "pod0",
@@ -1149,8 +1154,8 @@ func TestSyncService(t *testing.T) {
 			},
 		},
 		{
-			// Any client reading EndpointSlices already has to handle deduplicating endpoints by IP address.
-			// If 2 pods are ready, something has gone wrong further up the stack, we shouldn't try to hide that.
+			// 读取 EndpointSlice 的客户端本来就必须按 IP 地址对端点去重。
+			// 若出现 2 个 ready Pod，说明上层链路已有问题，不应在此掩盖。hat.
 			name: "Two Ready pods with same IPs",
 			service: &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1298,13 +1303,13 @@ func TestSyncService(t *testing.T) {
 			err = esController.syncService(logger, fmt.Sprintf("%s/%s", testcase.service.Namespace, testcase.service.Name))
 			require.NoError(t, err)
 
-			// last action should be to create endpoint slice
+			// 最后一个动作应是创建 EndpointSlice。
 			expectActions(t, client.Actions(), 1, "create", "endpointslices")
 			sliceList, err := client.DiscoveryV1().EndpointSlices(testcase.service.Namespace).List(context.TODO(), metav1.ListOptions{})
 			require.NoError(t, err, "Expected no error fetching endpoint slices")
 			assert.Len(t, sliceList.Items, 1, "Expected 1 endpoint slices")
 
-			// ensure all attributes of endpoint slice match expected state
+			// 验证 EndpointSlice 的所有属性均符合预期状态。
 			slice := sliceList.Items[0]
 			assert.Equal(t, slice.Annotations[v1.EndpointsLastChangeTriggerTime], creationTimestamp.UTC().Format(time.RFC3339Nano))
 			assert.ElementsMatch(t, testcase.expectedEndpointPorts, slice.Ports)
@@ -1313,9 +1318,9 @@ func TestSyncService(t *testing.T) {
 	}
 }
 
-// TestPodAddsBatching verifies that endpoint updates caused by pod addition are batched together.
-// This test uses real time.Sleep, as there is no easy way to mock time in endpoints controller now.
-// TODO(mborsz): Migrate this test to mock clock when possible.
+// TestPodAddsBatching 验证由 Pod 添加引起的端点更新会被合并批处理。
+// 该测试使用真实的 time.Sleep：目前 endpoints 控制器没有便捷的模拟时钟方式。
+// TODO(mborsz): 具备条件后把该测试迁移到模拟时钟。
 func TestPodAddsBatching(t *testing.T) {
 	t.Parallel()
 
@@ -1335,7 +1340,7 @@ func TestPodAddsBatching(t *testing.T) {
 			batchPeriod: 0 * time.Second,
 			adds: []podAdd{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 大约需要 100ms 才开始处理更新，等待期间不能立即断言。
 					delay: 200 * time.Millisecond,
 				},
 				{
@@ -1353,7 +1358,7 @@ func TestPodAddsBatching(t *testing.T) {
 			batchPeriod: 1 * time.Second,
 			adds: []podAdd{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 大约需要 100ms 才开始处理更新，等待期间不能立即断言。
 					delay: 200 * time.Millisecond,
 				},
 				{
@@ -1371,7 +1376,7 @@ func TestPodAddsBatching(t *testing.T) {
 			batchPeriod: 1 * time.Second,
 			adds: []podAdd{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 大约需要 100ms 才开始处理更新，等待期间不能立即断言。
 					delay: 200 * time.Millisecond,
 				},
 				{
@@ -1415,7 +1420,7 @@ func TestPodAddsBatching(t *testing.T) {
 
 			time.Sleep(tc.finalDelay)
 			assert.Len(t, client.Actions(), tc.wantRequestCount)
-			// In case of error, make debugging easier.
+			// 出错时便于调试定位。
 			for _, action := range client.Actions() {
 				t.Logf("action: %v %v", action.GetVerb(), action.GetResource())
 			}
@@ -1423,9 +1428,9 @@ func TestPodAddsBatching(t *testing.T) {
 	}
 }
 
-// TestPodUpdatesBatching verifies that endpoint updates caused by pod updates are batched together.
-// This test uses real time.Sleep, as there is no easy way to mock time in endpoints controller now.
-// TODO(mborsz): Migrate this test to mock clock when possible.
+// TestPodUpdatesBatching 验证由 Pod 更新引起的端点更新会被合并批处理。
+// 该测试使用真实的 time.Sleep：目前 endpoints 控制器没有便捷的模拟时钟方式。
+// TODO(mborsz): 具备条件后把该测试迁移到模拟时钟。
 func TestPodUpdatesBatching(t *testing.T) {
 	t.Parallel()
 
@@ -1450,7 +1455,7 @@ func TestPodUpdatesBatching(t *testing.T) {
 			podsCount:   10,
 			updates: []podUpdate{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 大约需要 100ms 才开始处理更新，等待期间不能立即断言。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 					podIP:   "10.0.0.0",
@@ -1475,7 +1480,7 @@ func TestPodUpdatesBatching(t *testing.T) {
 			podsCount:   10,
 			updates: []podUpdate{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 大约需要 100ms 才开始处理更新，等待期间不能立即断言。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 					podIP:   "10.0.0.0",
@@ -1500,7 +1505,7 @@ func TestPodUpdatesBatching(t *testing.T) {
 			podsCount:   10,
 			updates: []podUpdate{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 大约需要 100ms 才开始处理更新，等待期间不能立即断言。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 					podIP:   "10.0.0.0",
@@ -1564,7 +1569,7 @@ func TestPodUpdatesBatching(t *testing.T) {
 
 			time.Sleep(tc.finalDelay)
 			assert.Len(t, client.Actions(), tc.wantRequestCount)
-			// In case of error, make debugging easier.
+			// 出错时便于调试定位。
 			for _, action := range client.Actions() {
 				t.Logf("action: %v %v", action.GetVerb(), action.GetResource())
 			}
@@ -1572,9 +1577,9 @@ func TestPodUpdatesBatching(t *testing.T) {
 	}
 }
 
-// TestPodDeleteBatching verifies that endpoint updates caused by pod deletion are batched together.
-// This test uses real time.Sleep, as there is no easy way to mock time in endpoints controller now.
-// TODO(mborsz): Migrate this test to mock clock when possible.
+// TestPodDeleteBatching 验证由 Pod 删除引起的端点更新会被合并批处理。
+// 该测试使用真实的 time.Sleep：目前 endpoints 控制器没有便捷的模拟时钟方式。
+// TODO(mborsz): 具备条件后把该测试迁移到模拟时钟。
 func TestPodDeleteBatching(t *testing.T) {
 	t.Parallel()
 
@@ -1597,7 +1602,7 @@ func TestPodDeleteBatching(t *testing.T) {
 			podsCount:   10,
 			deletes: []podDelete{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 大约需要 100ms 才开始处理更新，等待期间不能立即断言。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 				},
@@ -1619,7 +1624,7 @@ func TestPodDeleteBatching(t *testing.T) {
 			podsCount:   10,
 			deletes: []podDelete{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 大约需要 100ms 才开始处理更新，等待期间不能立即断言。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 				},
@@ -1641,7 +1646,7 @@ func TestPodDeleteBatching(t *testing.T) {
 			podsCount:   10,
 			deletes: []podDelete{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 大约需要 100ms 才开始处理更新，等待期间不能立即断言。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 				},
@@ -1692,7 +1697,7 @@ func TestPodDeleteBatching(t *testing.T) {
 
 			time.Sleep(tc.finalDelay)
 			assert.Len(t, client.Actions(), tc.wantRequestCount)
-			// In case of error, make debugging easier.
+			// 出错时便于调试定位。
 			for _, action := range client.Actions() {
 				t.Logf("action: %v %v", action.GetVerb(), action.GetResource())
 			}
@@ -1700,6 +1705,7 @@ func TestPodDeleteBatching(t *testing.T) {
 	}
 }
 
+// TestSyncServiceStaleInformer 测试 SyncServiceStaleInformer 的相关行为。
 func TestSyncServiceStaleInformer(t *testing.T) {
 	testcases := []struct {
 		name                     string
@@ -1733,7 +1739,7 @@ func TestSyncServiceStaleInformer(t *testing.T) {
 			ns := metav1.NamespaceDefault
 			serviceName := "testing-1"
 
-			// Store Service in the cache
+			// 把 Service 存入缓存。
 			esController.serviceStore.Add(&v1.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: serviceName, Namespace: ns},
 				Spec: v1.ServiceSpec{
@@ -1742,7 +1748,7 @@ func TestSyncServiceStaleInformer(t *testing.T) {
 				},
 			})
 
-			// Create EndpointSlice in the informer cache with informerGenerationNumber
+			// 在 informer 缓存中创建带有 informerGenerationNumber 的 EndpointSlice。
 			epSlice1 := &discovery.EndpointSlice{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "matching-1",
@@ -1760,14 +1766,14 @@ func TestSyncServiceStaleInformer(t *testing.T) {
 				t.Fatalf("Expected no error adding EndpointSlice: %v", err)
 			}
 
-			// Create EndpointSlice in the tracker with trackerGenerationNumber
+			// 在 tracker 中创建带有 trackerGenerationNumber 的 EndpointSlice。
 			epSlice2 := epSlice1.DeepCopy()
 			epSlice2.Generation = testcase.trackerGenerationNumber
 			esController.endpointSliceTracker.Update(epSlice2)
 
 			logger, _ := ktesting.NewTestContext(t)
 			err = esController.syncService(logger, fmt.Sprintf("%s/%s", ns, serviceName))
-			// Check if we got a StaleInformerCache error
+			// 验证是否收到了 StaleInformerCache 错误。
 			if endpointslicepkg.IsStaleInformerCacheErr(err) != testcase.expectError {
 				t.Fatalf("Expected error because informer cache is outdated")
 			}
@@ -1776,6 +1782,7 @@ func TestSyncServiceStaleInformer(t *testing.T) {
 	}
 }
 
+// Test_checkNodeTopologyDistribution 测试 _checkNodeTopologyDistribution 的相关行为。
 func Test_checkNodeTopologyDistribution(t *testing.T) {
 	zoneA := "zone-a"
 	zoneB := "zone-b"
@@ -1954,6 +1961,7 @@ func Test_checkNodeTopologyDistribution(t *testing.T) {
 	}
 }
 
+// TestUpdateNode 测试 UpdateNode 的相关行为。
 func TestUpdateNode(t *testing.T) {
 	nodeReadyStatus := v1.NodeStatus{
 		Allocatable: map[v1.ResourceName]resource.Quantity{
@@ -2012,7 +2020,7 @@ func TestUpdateNode(t *testing.T) {
 	assert.Equal(t, 1, esController.topologyQueue.Len())
 	esController.processNextTopologyWorkItem(logger)
 	assert.Equal(t, 0, esController.topologyQueue.Len())
-	// The Nodes don't have the zone label, AddHints should fail.
+	// Node 没有 zone 标签，AddHints 应失败。
 	_, _, eventsBuilders := esController.topologyCache.AddHints(logger, sliceInfo)
 	require.Len(t, eventsBuilders, 1)
 	assert.Contains(t, eventsBuilders[0].Message, topologycache.InsufficientNodeInfo)
@@ -2022,7 +2030,7 @@ func TestUpdateNode(t *testing.T) {
 	updateNode2 := node2.DeepCopy()
 	updateNode2.Labels = map[string]string{v1.LabelTopologyZone: "zone-b"}
 
-	// After adding the zone label to the Nodes and calling the event handler updateNode, AddHints should succeed.
+	// 给 Node 加上 zone 标签并调用事件处理器 updateNode 后，AddHints 应成功。ld succeed.
 	esController.nodeStore.Update(updateNode1)
 	esController.nodeStore.Update(updateNode2)
 	esController.updateNode(node1, updateNode1)
@@ -2035,7 +2043,7 @@ func TestUpdateNode(t *testing.T) {
 	assert.Contains(t, eventsBuilders[0].Message, topologycache.TopologyAwareHintsEnabled)
 }
 
-// Test helpers
+// 测试辅助工具。
 func addPods(t *testing.T, esController *endpointSliceController, namespace string, podsCount int) {
 	t.Helper()
 	for i := 0; i < podsCount; i++ {
@@ -2044,6 +2052,8 @@ func addPods(t *testing.T, esController *endpointSliceController, namespace stri
 	}
 }
 
+// standardSyncService 创建 Service 并触发一次同步，断言同步成功；
+// 多个用例复用它来构造“已有 Service”的初始状态。
 func standardSyncService(t *testing.T, esController *endpointSliceController, namespace, serviceName string) {
 	t.Helper()
 	createService(t, esController, namespace, serviceName)
@@ -2053,6 +2063,8 @@ func standardSyncService(t *testing.T, esController *endpointSliceController, na
 	require.NoError(t, err, "Expected no error syncing service")
 }
 
+// createService 同时把 Service 写入 informer 缓存和 API 客户端，
+// 保证控制器从任一侧读取都能看到该 Service。
 func createService(t *testing.T, esController *endpointSliceController, namespace, serviceName string) *v1.Service {
 	t.Helper()
 	service := &v1.Service{
@@ -2074,6 +2086,7 @@ func createService(t *testing.T, esController *endpointSliceController, namespac
 	return service
 }
 
+// expectAction 校验预期动作与实际动作是否一致。
 func expectAction(t *testing.T, actions []k8stesting.Action, index int, verb, resource string) {
 	t.Helper()
 	if len(actions) <= index {
@@ -2090,20 +2103,18 @@ func expectAction(t *testing.T, actions []k8stesting.Action, index int, verb, re
 	}
 }
 
-// cacheMutationCheck helps ensure that cached objects have not been changed
-// in any way throughout a test run.
+// cacheMutationCheck 用于确保缓存对象在整个测试过程中没有被任何方式修改。
 type cacheMutationCheck struct {
 	objects []cacheObject
 }
 
-// cacheObject stores a reference to an original object as well as a deep copy
-// of that object to track any mutations in the original object.
+// cacheObject 保存原对象引用及其深拷贝，用于追踪原对象是否被修改。
 type cacheObject struct {
 	original runtime.Object
 	deepCopy runtime.Object
 }
 
-// newCacheMutationCheck initializes a cacheMutationCheck with EndpointSlices.
+// newCacheMutationCheck 用若干 EndpointSlice 初始化一个 cacheMutationCheck。
 func newCacheMutationCheck(endpointSlices []*discovery.EndpointSlice) cacheMutationCheck {
 	cmc := cacheMutationCheck{}
 	for _, endpointSlice := range endpointSlices {
@@ -2112,8 +2123,7 @@ func newCacheMutationCheck(endpointSlices []*discovery.EndpointSlice) cacheMutat
 	return cmc
 }
 
-// Add appends a runtime.Object and a deep copy of that object into the
-// cacheMutationCheck.
+// Add 把一个 runtime.Object 及其深拷贝加入 cacheMutationCheck 以纳入监控。
 func (cmc *cacheMutationCheck) Add(o runtime.Object) {
 	cmc.objects = append(cmc.objects, cacheObject{
 		original: o,
@@ -2121,17 +2131,17 @@ func (cmc *cacheMutationCheck) Add(o runtime.Object) {
 	})
 }
 
-// Check verifies that no objects in the cacheMutationCheck have been mutated.
+// Check 验证 cacheMutationCheck 中所有对象均未被修改。
 func (cmc *cacheMutationCheck) Check(t *testing.T) {
 	for _, o := range cmc.objects {
 		if !reflect.DeepEqual(o.original, o.deepCopy) {
-			// Cached objects can't be safely mutated and instead should be deep
-			// copied before changed in any way.
+			// 缓存对象不能被安全地原地修改，任何修改前都必须先深拷贝。
 			t.Errorf("Cached object was unexpectedly mutated. Original: %+v, Mutated: %+v", o.deepCopy, o.original)
 		}
 	}
 }
 
+// Test_dropEndpointSlicesPendingDeletion 测试 _dropEndpointSlicesPendingDeletion 的相关行为。
 func Test_dropEndpointSlicesPendingDeletion(t *testing.T) {
 	now := metav1.Now()
 	endpointSlices := []*discovery.EndpointSlice{
@@ -2177,10 +2187,9 @@ func Test_dropEndpointSlicesPendingDeletion(t *testing.T) {
 		}
 	}
 
-	// We don't use endpointSlices and instead check manually for equality, because
-	// `dropEndpointSlicesPendingDeletion` mutates the slice it receives, so it's easy
-	// to break this test later. This way, we can be absolutely sure that the result
-	// has exactly what we expect it to.
+	// 这里没有直接比较 endpointSlices，而是逐项手工校验，因为
+	// `dropEndpointSlicesPendingDeletion` 会修改传入的切片，直接比较容易在将来被破坏。
+	// 这样可以绝对确保结果与预期完全一致。
 	if !reflect.DeepEqual(epSlice2, result[0]) {
 		t.Errorf("EndpointSlice was unexpectedly mutated. Expected: %+v, Mutated: %+v", epSlice2, result[0])
 	}

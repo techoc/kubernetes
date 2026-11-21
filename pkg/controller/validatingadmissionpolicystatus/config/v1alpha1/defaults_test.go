@@ -22,7 +22,10 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
+// TestRecommendedDefaultValidatingAdmissionPolicyStatusControllerConfiguration 验证默认值函数
+// 能把并发同步数设置为推荐的 5。
 func TestRecommendedDefaultValidatingAdmissionPolicyStatusControllerConfiguration(t *testing.T) {
+	// 从零值配置出发，确保断言的是默认值而非调用方残留的设置。
 	config := new(kubectrlmgrconfigv1alpha1.ValidatingAdmissionPolicyStatusControllerConfiguration)
 	RecommendedDefaultValidatingAdmissionPolicyStatusControllerConfiguration(config)
 	if config.ConcurrentPolicySyncs != 5 {

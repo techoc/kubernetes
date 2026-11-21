@@ -39,40 +39,45 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
-// TokenCleanerOptions contains options for the TokenCleaner
+// TokenCleanerOptions 包含创建 TokenCleaner 所需的配置项。
 type TokenCleanerOptions struct {
-	// TokenSecretNamespace string is the namespace for token Secrets.
+	// TokenSecretNamespace 是引导令牌 Secret 所在的命名空间。
 	TokenSecretNamespace string
 
-	// SecretResync is the time.Duration at which to fully re-list secrets.
-	// If zero, re-list will be delayed as long as possible
+	// SecretResync 是完整重新列举 Secret 的周期。
+	// 若为零，则尽可能延迟重新列举，依赖 watch 事件即可。
 	SecretResync time.Duration
 }
 
-// DefaultTokenCleanerOptions returns a set of default options for creating a
-// TokenCleaner
+// DefaultTokenCleanerOptions 返回创建 TokenCleaner 的默认配置，
+// 默认只清理 kube-system 命名空间下的令牌 Secret。
 func DefaultTokenCleanerOptions() TokenCleanerOptions {
 	return TokenCleanerOptions{
 		TokenSecretNamespace: api.NamespaceSystem,
 	}
 }
 
-// TokenCleaner is a controller that deletes expired tokens
+// TokenCleaner 是负责删除过期引导令牌的控制器。
+// 它监听 Secret 事件，并通过延迟队列在令牌到期时刻精确触发清理。
 type TokenCleaner struct {
 	tokenSecretNamespace string
 
 	client clientset.Interface
 
-	// secretLister is able to list/get secrets and is populated by the shared informer passed to NewTokenCleaner.
+	// secretLister 用于列举/获取 Secret，其数据由传给 NewTokenCleaner 的共享 informer 填充，
+	// 这样同步逻辑无需直接访问 API 服务器。
 	secretLister corelisters.SecretLister
 
-	// secretSynced returns true if the secret shared informer has been synced at least once.
+	// secretSynced 在 Secret 共享 informer 至少完成一次同步后返回 true。
+	// 启动 worker 前必须等待它就绪，避免基于空缓存误判令牌状态。
 	secretSynced cache.InformerSynced
 
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// NewTokenCleaner returns a new *NewTokenCleaner.
+// NewTokenCleaner 创建一个新的 TokenCleaner。
+// 事件处理器通过 FilterFunc 只接收目标命名空间中的引导令牌 Secret，
+// 从而避免其他 Secret 的变更无谓地进入工作队列。
 func NewTokenCleaner(cl clientset.Interface, secrets coreinformers.SecretInformer, options TokenCleanerOptions) (*TokenCleaner, error) {
 	e := &TokenCleaner{
 		client:               cl,
@@ -87,6 +92,8 @@ func NewTokenCleaner(cl clientset.Interface, secrets coreinformers.SecretInforme
 		),
 	}
 
+	// 使用带过滤能力的事件处理器，仅把引导令牌 Secret 加入队列；
+	// 定时重新列举（resync）也可兜底处理 watch 事件丢失的情况。
 	secrets.Informer().AddEventHandlerWithResyncPeriod(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
@@ -109,7 +116,7 @@ func NewTokenCleaner(cl clientset.Interface, secrets coreinformers.SecretInforme
 	return e, nil
 }
 
-// Run runs controller loops and returns when they are done
+// Run 启动控制器的工作循环，直到上下文结束才返回。
 func (tc *TokenCleaner) Run(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 
@@ -133,6 +140,7 @@ func (tc *TokenCleaner) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// enqueueSecrets 从对象中计算出命名空间/名称键并放入工作队列。
 func (tc *TokenCleaner) enqueueSecrets(obj interface{}) {
 	key, err := controller.KeyFunc(obj)
 	if err != nil {
@@ -142,13 +150,14 @@ func (tc *TokenCleaner) enqueueSecrets(obj interface{}) {
 	tc.queue.Add(key)
 }
 
-// worker runs a thread that dequeues secrets, handles them, and marks them done.
+// worker 持续从队列中取出 Secret 并处理，直到队列关闭。
 func (tc *TokenCleaner) worker(ctx context.Context) {
 	for tc.processNextWorkItem(ctx) {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个键；队列关闭时返回 false 表示应当退出。
+// 同步失败时通过限速重新入队，避免错误导致该键被永久丢弃或无限快速重试。
 func (tc *TokenCleaner) processNextWorkItem(ctx context.Context) bool {
 	key, quit := tc.queue.Get()
 	if quit {
@@ -166,6 +175,8 @@ func (tc *TokenCleaner) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// syncFunc 同步单个 Secret 键：从 lister 获取对象，若存在且是引导令牌则评估是否清理。
+// 对象已被删除不是错误——这正是清理期望达成的结果。
 func (tc *TokenCleaner) syncFunc(ctx context.Context, key string) error {
 	logger := klog.FromContext(ctx)
 	startTime := time.Now()
@@ -194,6 +205,8 @@ func (tc *TokenCleaner) syncFunc(ctx context.Context, key string) error {
 	return nil
 }
 
+// evalSecret 判断令牌是否到期：到期则删除，未到期但有余生时间则按 TTL 延迟重新入队。
+// 延迟入队使清理发生在到期时刻，而无需高频轮询每个 Secret。
 func (tc *TokenCleaner) evalSecret(ctx context.Context, o interface{}) {
 	logger := klog.FromContext(ctx)
 	secret := o.(*v1.Secret)
@@ -201,12 +214,13 @@ func (tc *TokenCleaner) evalSecret(ctx context.Context, o interface{}) {
 	if alreadyExpired {
 		logger.V(3).Info("Deleting expired secret", "secret", klog.KObj(secret))
 		var options metav1.DeleteOptions
+		// 携带 UID 前置条件，防止删除期间令牌被重建后误删同名的新 Secret。
 		if len(secret.UID) > 0 {
 			options.Preconditions = &metav1.Preconditions{UID: &secret.UID}
 		}
 		err := tc.client.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, options)
-		// NotFound isn't a real error (it's already been deleted)
-		// Conflict isn't a real error (the UID precondition failed)
+		// NotFound 不是真正的错误（已被删除）；
+		// Conflict 也不是（UID 前置条件失败，说明同名对象已被替换）。
 		if err != nil && !apierrors.IsConflict(err) && !apierrors.IsNotFound(err) {
 			logger.V(3).Info("Error deleting secret", "err", err)
 		}

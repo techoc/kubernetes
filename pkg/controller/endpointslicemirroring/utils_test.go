@@ -32,6 +32,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestNewEndpointSlice 验证 newEndpointSlice 能从 Endpoints 构造出带正确标签、注解、
+// 属主引用和端口信息的 EndpointSlice，且不会修改作为输入源的 Endpoints 对象。
 func TestNewEndpointSlice(t *testing.T) {
 	portName := "foo"
 	protocol := v1.ProtocolTCP
@@ -77,6 +79,7 @@ func TestNewEndpointSlice(t *testing.T) {
 			},
 		},
 		{
+			// 自定义注解必须原样透传到 EndpointSlice，否则用户通过 Endpoints 携带的元数据会丢失。
 			name: "create slice from endpoints with annotations",
 			tweakEndpoint: func(ep *v1.Endpoints) {
 				annotations := map[string]string{"foo": "bar"}
@@ -99,6 +102,7 @@ func TestNewEndpointSlice(t *testing.T) {
 			},
 		},
 		{
+			// 自定义标签会被保留，但控制器专用标签仍由控制器生成，避免用户覆盖。
 			name: "create slice from endpoints with labels",
 			tweakEndpoint: func(ep *v1.Endpoints) {
 				labels := map[string]string{"foo": "bar"}
@@ -147,6 +151,7 @@ func TestNewEndpointSlice(t *testing.T) {
 			},
 		},
 		{
+			// EndpointsLastChangeTriggerTime 是内部追踪注解，不应暴露到 EndpointSlice 上。
 			name: "create slice from endpoints with labels and annotations triggertime",
 			tweakEndpoint: func(ep *v1.Endpoints) {
 				labels := map[string]string{"foo": "bar"}
@@ -177,10 +182,13 @@ func TestNewEndpointSlice(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 深拷贝后再修改，保证原对象不被污染，下面才能检查输入未被改动。
 			ep := endpoints.DeepCopy()
 			tc.tweakEndpoint(ep)
 			generatedSlice := newEndpointSlice(ep, ports, addrType, "")
+			// 逐字段比较整个结果，防止遗漏标签或属主引用等关键字段。
 			assert.EqualValues(t, tc.expectedSlice, *generatedSlice)
+			// 构造过程若就地修改输入标签，会影响同一 Endpoints 上的其他切片生成。
 			if len(endpoints.Labels) > 1 {
 				t.Errorf("Expected Endpoints labels to not be modified, got %+v", endpoints.Labels)
 			}
@@ -188,6 +196,8 @@ func TestNewEndpointSlice(t *testing.T) {
 	}
 }
 
+// TestAddressToEndpoint 验证地址转换会保留 IP、主机名、节点名和 TargetRef，
+// 正确设置 Ready 条件，并依据 IP 家族推导出地址类型。
 func TestAddressToEndpoint(t *testing.T) {
 	//name: "simple + gate enabled",
 	epAddress := v1.EndpointAddress{
@@ -218,12 +228,17 @@ func TestAddressToEndpoint(t *testing.T) {
 	}
 
 	ep, addrType := addressToEndpoint(epAddress, ready)
+	// 逐字段比对，确保 TargetRef 等容易被遗漏的字段也被正确复制。
 	assert.EqualValues(t, expectedEndpoint, *ep)
+	// 地址类型决定 EndpointSlice 的 AddressType，错误的推导会导致切片不可用。
 	assert.EqualValues(t, discovery.AddressTypeIPv4, *addrType)
 }
 
-// Test helpers
+// 测试辅助函数
 
+// newClientset 创建带 EndpointSlice 反应器的 fake 客户端。
+// fake 客户端不会自动处理 GenerateName，也不会递增 Generation，
+// 因此这里手动模拟这两个行为，使镜像控制器的更新流程可被测试。
 func newClientset() *fake.Clientset {
 	client := fake.NewSimpleClientset()
 

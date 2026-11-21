@@ -18,14 +18,16 @@ package parse
 
 import "strings"
 
-// ParseSELinuxLabel parses a SELinux label string into its components.
-// Format: "user:role:type:level" -> [user, role, type, level]
-// Missing components are represented as empty strings.
+// ParseSELinuxLabel 把 SELinux 标签字符串拆分为各组成部分。
+// 格式为 "user:role:type:level"，依次对应 [user, role, type, level]。
+// 缺失的组成部分以空字符串表示。
 func ParseSELinuxLabel(label string) [4]string {
+	// 固定长度数组保证即使标签缺字段，调用方也能按下标安全访问。
 	var parts [4]string
 	if label == "" {
 		return parts
 	}
+	// 最多切四段：level 本身可能含冒号（如 s0:c123,c456），必须保留在原段中。
 	split := strings.SplitN(label, ":", 4)
 	copy(parts[:], split)
 	return parts

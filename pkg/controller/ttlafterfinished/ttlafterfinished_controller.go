@@ -43,33 +43,31 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// Controller watches for changes of Jobs API objects. Triggered by Job creation
-// and updates, it enqueues Jobs that have non-nil `.spec.ttlSecondsAfterFinished`
-// to the `queue`. The Controller has workers who consume `queue`, check whether
-// the Job TTL has expired or not; if the Job TTL hasn't expired, it will add the
-// Job to the queue after the TTL is expected to expire; if the TTL has expired, the
-// worker will send requests to the API server to delete the Jobs accordingly.
-// This is implemented outside of Job controller for separation of concerns, and
-// because it will be extended to handle other finishable resource types.
+// Controller 监听 Job API 对象的变更。当 Job 被创建或更新时，
+// 若其设置了 `.spec.ttlSecondsAfterFinished`，就将其放入 `queue`。
+// Controller 的 worker 消费 `queue` 并检查 TTL 是否到期：未到期则按预期到期时间
+// 延迟重新入队；已到期则向 API Server 发起删除请求。
+// 该逻辑独立于 Job 控制器实现，既出于关注点分离，
+// 也因为后续会扩展以支持其他可结束的资源类型。
 type Controller struct {
 	client   clientset.Interface
 	recorder record.EventRecorder
 
-	// jLister can list/get Jobs from the shared informer's store
+	// jLister 可从共享 informer 的存储中 list/get Job。
 	jLister batchlisters.JobLister
 
-	// jStoreSynced returns true if the Job store has been synced at least once.
-	// Added as a member to the struct to allow injection for testing.
+	// jListerSynced 在 Job 存储至少同步过一次后返回 true。
+	// 将其作为结构体成员，便于测试时注入。
 	jListerSynced cache.InformerSynced
 
-	// Jobs that the controller will check its TTL and attempt to delete when the TTL expires.
+	// 存放待检查 TTL 的 Job，到期后会尝试删除。
 	queue workqueue.TypedRateLimitingInterface[string]
 
-	// The clock for tracking time
+	// 用于计时与判断到期的时钟。
 	clock clock.Clock
 }
 
-// New creates an instance of Controller
+// New 创建 Controller 实例。
 func New(ctx context.Context, jobInformer batchinformers.JobInformer, client clientset.Interface) *Controller {
 	eventBroadcaster := record.NewBroadcaster(record.WithContext(ctx))
 	eventBroadcaster.StartStructuredLogging(3)
@@ -104,7 +102,7 @@ func New(ctx context.Context, jobInformer batchinformers.JobInformer, client cli
 	return tc
 }
 
-// Run starts the workers to clean up Jobs.
+// Run 启动用于清理 Job 的 worker。
 func (tc *Controller) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
@@ -114,6 +112,7 @@ func (tc *Controller) Run(ctx context.Context, workers int) {
 	var wg sync.WaitGroup
 	defer func() {
 		logger.Info("Shutting down TTL after finished controller")
+		// 先关闭队列，再等待 worker 退出，确保没有任务在关闭后继续处理。
 		tc.queue.ShutDown()
 		wg.Wait()
 	}()
@@ -130,6 +129,7 @@ func (tc *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// addJob 处理 Job 的新增事件：只对未进入删除流程且需要清理的 Job 入队。
 func (tc *Controller) addJob(logger klog.Logger, obj interface{}) {
 	job := obj.(*batch.Job)
 	logger.V(4).Info("Adding job", "job", klog.KObj(job))
@@ -140,6 +140,8 @@ func (tc *Controller) addJob(logger klog.Logger, obj interface{}) {
 
 }
 
+// updateJob 处理 Job 的更新事件：状态变化可能使 Job 变为已完成，
+// 因此同样检查是否需要清理并入队。
 func (tc *Controller) updateJob(logger klog.Logger, old, cur interface{}) {
 	job := cur.(*batch.Job)
 	logger.V(4).Info("Updating job", "job", klog.KObj(job))
@@ -149,6 +151,7 @@ func (tc *Controller) updateJob(logger klog.Logger, old, cur interface{}) {
 	}
 }
 
+// enqueue 将 Job 的命名空间键加入工作队列，供 worker 后续处理。
 func (tc *Controller) enqueue(logger klog.Logger, job *batch.Job) {
 	logger.V(4).Info("Add job to cleanup", "job", klog.KObj(job))
 	key, err := controller.KeyFunc(job)
@@ -160,6 +163,7 @@ func (tc *Controller) enqueue(logger klog.Logger, job *batch.Job) {
 	tc.queue.Add(key)
 }
 
+// enqueueAfter 在指定延迟后将 Job 重新入队，避免为未到期的 Job 反复轮询。
 func (tc *Controller) enqueueAfter(logger klog.Logger, job *batch.Job, after time.Duration) {
 	key, err := controller.KeyFunc(job)
 	if err != nil {
@@ -170,11 +174,14 @@ func (tc *Controller) enqueueAfter(logger klog.Logger, job *batch.Job, after tim
 	tc.queue.AddAfter(key, after)
 }
 
+// worker 持续处理工作队列，直到队列关闭。
 func (tc *Controller) worker(ctx context.Context) {
 	for tc.processNextWorkItem(ctx) {
 	}
 }
 
+// processNextWorkItem 取出并处理一个工作项；返回 false 表示队列已关闭，应停止 worker。
+// 无论成功与否都会调用 Done，并通过 handleErr 决定重试还是 Forget。
 func (tc *Controller) processNextWorkItem(ctx context.Context) bool {
 	key, quit := tc.queue.Get()
 	if quit {
@@ -188,6 +195,7 @@ func (tc *Controller) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// handleErr 根据处理结果更新队列状态：成功则 Forget，失败则限速重试。
 func (tc *Controller) handleErr(ctx context.Context, err error, key string) {
 	if err == nil {
 		tc.queue.Forget(key)
@@ -198,18 +206,16 @@ func (tc *Controller) handleErr(ctx context.Context, err error, key string) {
 	tc.queue.AddRateLimited(key)
 }
 
-// processJob will check the Job's state and TTL and delete the Job when it
-// finishes and its TTL after finished has expired. If the Job hasn't finished or
-// its TTL hasn't expired, it will be added to the queue after the TTL is expected
-// to expire.
-// This function is not meant to be invoked concurrently with the same key.
+// processJob 检查 Job 的状态与 TTL：当 Job 已完成且 TTL 到期时将其删除；
+// 若尚未完成或 TTL 未到期，则按预期到期时间重新入队。
+// 同一 key 不应并发调用该函数。
 func (tc *Controller) processJob(ctx context.Context, key string) error {
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		return err
 	}
 
-	// Ignore the Jobs that are already deleted or being deleted, or the ones that don't need clean up.
+	// 从 lister 读取缓存中的 Job；已删除或无需清理的 Job 会在后续判断中忽略。
 	job, err := tc.jLister.Jobs(namespace).Get(name)
 
 	logger := klog.FromContext(ctx)
@@ -228,10 +234,9 @@ func (tc *Controller) processJob(ctx context.Context, key string) error {
 		return nil
 	}
 
-	// The Job's TTL is assumed to have expired, but the Job TTL might be stale.
-	// Before deleting the Job, do a final sanity check.
-	// If TTL is modified before we do this check, we cannot be sure if the TTL truly expires.
-	// The latest Job may have a different UID, but it's fine because the checks will be run again.
+	// 缓存中的 TTL 可能已过期，删除前再次从 API Server 读取最新 Job 做最终校验。
+	// 若校验前 TTL 被修改，就无法确认是否真的到期；此时以最新对象为准重新判断。
+	// 最新 Job 的 UID 可能不同，但无妨——后续事件会让检查再次执行。
 	fresh, err := tc.client.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return nil
@@ -239,14 +244,14 @@ func (tc *Controller) processJob(ctx context.Context, key string) error {
 	if err != nil {
 		return err
 	}
-	// Use the latest Job TTL to see if the TTL truly expires.
+	// 用最新 Job 的 TTL 再判一次，避免依据陈旧缓存误删。
 	expiredAt, err := tc.processTTL(logger, fresh)
 	if err != nil {
 		return err
 	} else if expiredAt == nil {
 		return nil
 	}
-	// Cascade deletes the Jobs if TTL truly expires.
+	// 确认到期后以前台级联方式删除 Job，并带上 UID 前置条件防止误删重建的同名对象。
 	policy := metav1.DeletePropagationForeground
 	options := metav1.DeleteOptions{
 		PropagationPolicy: &policy,
@@ -260,11 +265,11 @@ func (tc *Controller) processJob(ctx context.Context, key string) error {
 	return nil
 }
 
-// processTTL checks whether a given Job's TTL has expired, and add it to the queue after the TTL is expected to expire
-// if the TTL will expire later.
+// processTTL 检查 Job 的 TTL 是否到期；若尚未到期，
+// 则按预期到期时间延迟重新入队。
 func (tc *Controller) processTTL(logger klog.Logger, job *batch.Job) (expiredAt *time.Time, err error) {
 
-	// We don't care about the Jobs that are going to be deleted, or the ones that don't need clean up.
+	// 正在删除或无需清理的 Job 直接忽略。
 	if job.DeletionTimestamp != nil || !needsCleanup(job) {
 		return nil, nil
 	}
@@ -275,7 +280,7 @@ func (tc *Controller) processTTL(logger klog.Logger, job *batch.Job) (expiredAt 
 		return nil, err
 	}
 
-	// TTL has expired
+	// TTL 已到期，返回到期时刻供删除和指标统计使用。
 	if *t <= 0 {
 		return e, nil
 	}
@@ -284,11 +289,12 @@ func (tc *Controller) processTTL(logger klog.Logger, job *batch.Job) (expiredAt 
 	return nil, nil
 }
 
-// needsCleanup checks whether a Job has finished and has a TTL set.
+// needsCleanup 判断 Job 是否已完成且设置了 TTL。
 func needsCleanup(j *batch.Job) bool {
 	return j.Spec.TTLSecondsAfterFinished != nil && jobutil.IsJobFinished(j)
 }
 
+// getFinishAndExpireTime 计算已完成 Job 的结束时刻与 TTL 到期时刻。
 func getFinishAndExpireTime(j *batch.Job) (*time.Time, *time.Time, error) {
 	if !needsCleanup(j) {
 		return nil, nil, fmt.Errorf("job %s/%s should not be cleaned up", j.Namespace, j.Name)
@@ -302,6 +308,8 @@ func getFinishAndExpireTime(j *batch.Job) (*time.Time, *time.Time, error) {
 	return &finishAt, &expireAt, nil
 }
 
+// timeLeft 计算从 since 到 TTL 到期的剩余时长，并返回到期时刻。
+// 若 Job 的结束时间晚于 since，说明集群可能存在时钟偏差，此时记录警告并延后清理。
 func timeLeft(logger klog.Logger, j *batch.Job, since *time.Time) (*time.Duration, *time.Time, error) {
 	finishAt, expireAt, err := getFinishAndExpireTime(j)
 	if err != nil {
@@ -316,7 +324,7 @@ func timeLeft(logger klog.Logger, j *batch.Job, since *time.Time) (*time.Duratio
 	return &remaining, expireAt, nil
 }
 
-// jobFinishTime takes an already finished Job and returns the time it finishes.
+// jobFinishTime 从已完成 Job 的状态条件中提取其结束时刻。
 func jobFinishTime(finishedJob *batch.Job) (metav1.Time, error) {
 	for _, c := range finishedJob.Status.Conditions {
 		if (c.Type == batch.JobComplete || c.Type == batch.JobFailed) && c.Status == v1.ConditionTrue {
@@ -328,6 +336,6 @@ func jobFinishTime(finishedJob *batch.Job) (metav1.Time, error) {
 		}
 	}
 
-	// This should never happen if the Jobs has finished
+	// 若 Job 确实已完成，理论上不会走到这里。
 	return metav1.Time{}, fmt.Errorf("unable to find the status of the finished Job %s/%s", finishedJob.Namespace, finishedJob.Name)
 }

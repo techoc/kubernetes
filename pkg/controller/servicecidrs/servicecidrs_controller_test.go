@@ -38,12 +38,16 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// testController 在真正的 Controller 之外暴露 informer 的存储对象，
+// 方便测试直接预置 ServiceCIDR/IPAddress 并观察事件效果。
 type testController struct {
 	*Controller
 	servicecidrsStore cache.Store
 	ipaddressesStore  cache.Store
 }
 
+// newController 用 fake client 构造控制器，并把传入对象直接塞进 informer 存储；
+// 由于 informer 未真正运行，这里把同步判断替换成永远就绪，确保 sync 不被缓存状态阻塞。
 func newController(ctx context.Context, t *testing.T, cidrs []*networkingapiv1.ServiceCIDR, ips []*networkingapiv1.IPAddress) (*fake.Clientset, *testController) {
 	client := fake.NewSimpleClientset()
 
@@ -82,15 +86,17 @@ func newController(ctx context.Context, t *testing.T, cidrs []*networkingapiv1.S
 	}
 }
 
+// TestControllerSync 覆盖 sync 在删除宽限期、finalizer 增删、IP 占用与 CIDR 重叠等组合下的行为。
+// 断言只检查 API 动作序列，因为 fake client 的 server-side apply 行为不可靠（见注释中的 issue）。
 func TestControllerSync(t *testing.T) {
 	now := time.Now()
 
-	// ServiceCIDR that is just being deleted
+	// 刚进入删除流程、仍在宽限期内的 CIDR：此时不应移除 finalizer。
 	deletingServiceCIDR := makeServiceCIDR("deleting-cidr", "192.168.0.0/24", "2001:db2::/64")
 	deletingServiceCIDR.Finalizers = []string{ServiceCIDRProtectionFinalizer}
 	deletingServiceCIDR.DeletionTimestamp = ptr.To[metav1.Time](metav1.Now())
 
-	// ServiceCIDR that has been deleted for longer than the deletionGracePeriod
+	// 删除时间已超过宽限期的 CIDR：允许推进 finalizer 移除流程。
 	deletedServiceCIDR := makeServiceCIDR("deleted-cidr", "192.168.0.0/24", "2001:db2::/64")
 	deletedServiceCIDR.Finalizers = []string{ServiceCIDRProtectionFinalizer}
 	deletedServiceCIDR.DeletionTimestamp = ptr.To[metav1.Time](metav1.NewTime(now.Add(-deletionGracePeriod - 1*time.Second)))
@@ -237,9 +243,8 @@ func TestControllerSync(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tCtx := ktesting.Init(t)
 			client, controller := newController(tCtx, t, tc.cidrs, tc.ips)
-			// server side apply does not play well with fake client go
-			// so we skup the errors and only assert on the actions
-			// https://github.com/kubernetes/kubernetes/issues/99953
+			// fake client 对 server-side apply 支持不佳（见 issue 99953），
+			// 因此忽略 sync 返回的错误，只断言实际发出的 API 动作。
 			_ = controller.sync(tCtx, tc.cidrSynced)
 			expectAction(t, client.Actions(), tc.actions)
 
@@ -247,6 +252,7 @@ func TestControllerSync(t *testing.T) {
 	}
 }
 
+// makeServiceCIDR 构造带可选主/辅 CIDR 的测试对象；secondary 为空时只设置主 CIDR。
 func makeServiceCIDR(name, primary, secondary string) *networkingapiv1.ServiceCIDR {
 	serviceCIDR := &networkingapiv1.ServiceCIDR{
 		ObjectMeta: metav1.ObjectMeta{
@@ -261,6 +267,8 @@ func makeServiceCIDR(name, primary, secondary string) *networkingapiv1.ServiceCI
 	return serviceCIDR
 }
 
+// makeIPAddress 按地址字面量推断地址族标签，并打上由本控制器管理的标记，
+// 使构造出的对象与真实分配记录一致。
 func makeIPAddress(name string) *networkingapiv1.IPAddress {
 	family := string(v1.IPv4Protocol)
 	if netutils.IsIPv6String(name) {
@@ -277,6 +285,8 @@ func makeIPAddress(name string) *networkingapiv1.IPAddress {
 	}
 }
 
+// expectAction 按顺序比对 API 动作的动词、资源和子资源；数量必须完全一致，
+// 因为多一次 patch（比如误改 status）本身就是需要捕获的行为错误。
 func expectAction(t *testing.T, actions []k8stesting.Action, expected [][]string) {
 	t.Helper()
 	if len(actions) != len(expected) {
@@ -299,6 +309,8 @@ func expectAction(t *testing.T, actions []k8stesting.Action, expected [][]string
 	}
 }
 
+// TestController_canDeleteCIDR 验证删除安全性：只有没有任何 IP 仍由待删 CIDR 独占、
+// 且其他 CIDR 能接手这些 IP 时，才允许移除 finalizer。覆盖子网/广播地址与重叠 CIDR 场景。
 func TestController_canDeleteCIDR(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -439,6 +451,8 @@ func TestController_canDeleteCIDR(t *testing.T) {
 	}
 }
 
+// TestController_ipToCidrs 验证 IP 到所属 CIDR 的反向映射：
+// 用排序后比较消除集合顺序影响，并验证子网/广播地址不被误判为占用。
 func TestController_ipToCidrs(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -500,6 +514,7 @@ func TestController_ipToCidrs(t *testing.T) {
 				makeServiceCIDR("unrelated", "10.0.0.0/24", ""),
 				makeServiceCIDR("unrelated2", "10.0.0.0/16", ""),
 			},
+			// 192.168.0.63 是 /26 的广播地址，不应算作 /26 内的可用 IP。
 			ip:   makeIPAddress("192.168.0.63"), // broadcast for 192.168.0.0/26
 			want: []string{defaultservicecidr.DefaultServiceCIDRName, "overlapping"},
 		}, {
@@ -536,6 +551,8 @@ func TestController_ipToCidrs(t *testing.T) {
 	}
 }
 
+// TestController_cidrToCidrs 验证 CIDR 之间的重叠查询，确保只返回真正重叠的 CIDR；
+// 同样以排序比较抵消实现返回顺序的不确定性。
 func TestController_cidrToCidrs(t *testing.T) {
 	tests := []struct {
 		name  string

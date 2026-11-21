@@ -27,16 +27,16 @@ import (
 	pvtesting "k8s.io/kubernetes/pkg/controller/volume/persistentvolume/testing"
 )
 
-// Test single call to syncVolume, expecting recycling to happen.
-// 1. Fill in the controller with initial data
-// 2. Call the syncVolume *once*.
-// 3. Compare resulting volumes with expected volumes.
+// TestDeleteSync 测试单次调用 syncVolume，预期触发删除回收流程。
+// 1. 用初始数据填充控制器。
+// 2. 只调用一次 syncVolume。
+// 3. 将最终得到的卷与预期卷进行比较。
 func TestDeleteSync(t *testing.T) {
 	const gceDriver = "pd.csi.storage.gke.io"
 	_, ctx := ktesting.NewTestContext(t)
 	tests := []controllerTest{
 		{
-			// delete volume bound by controller
+			// 删除由控制器绑定的卷
 			name:            "8-1 - successful delete",
 			initialVolumes:  newVolumeArray("volume8-1", "1Gi", "uid8-1", "claim8-1", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, volume.AnnBoundByController),
 			expectedVolumes: novolumes,
@@ -44,12 +44,11 @@ func TestDeleteSync(t *testing.T) {
 			expectedClaims:  noclaims,
 			expectedEvents:  noevents,
 			errors:          noerrors,
-			// Inject deleter into the controller and call syncVolume. The
-			// deleter simulates one delete() call that succeeds.
+			// 向控制器注入删除器并调用 syncVolume；删除器模拟一次成功的 delete() 调用。
 			test: wrapTestWithReclaimCalls(operationDelete, []error{nil}, testSyncVolume),
 		},
 		{
-			// delete volume bound by user
+			// 删除由用户预绑定的卷
 			name:            "8-2 - successful delete with prebound volume",
 			initialVolumes:  newVolumeArray("volume8-2", "1Gi", "uid8-2", "claim8-2", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty),
 			expectedVolumes: novolumes,
@@ -57,12 +56,11 @@ func TestDeleteSync(t *testing.T) {
 			expectedClaims:  noclaims,
 			expectedEvents:  noevents,
 			errors:          noerrors,
-			// Inject deleter into the controller and call syncVolume. The
-			// deleter simulates one delete() call that succeeds.
+			// 向控制器注入删除器并调用 syncVolume；删除器模拟一次成功的 delete() 调用。
 			test: wrapTestWithReclaimCalls(operationDelete, []error{nil}, testSyncVolume),
 		},
 		{
-			// delete failure - plugin not found
+			// 删除失败：找不到匹配的卷插件
 			name:            "8-3 - plugin not found",
 			initialVolumes:  newVolumeArray("volume8-3", "1Gi", "uid8-3", "claim8-3", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty),
 			expectedVolumes: withMessage("error getting deleter volume plugin for volume \"volume8-3\": no volume plugin matched", newVolumeArray("volume8-3", "1Gi", "uid8-3", "claim8-3", v1.VolumeFailed, v1.PersistentVolumeReclaimDelete, classEmpty)),
@@ -73,7 +71,7 @@ func TestDeleteSync(t *testing.T) {
 			test:            testSyncVolume,
 		},
 		{
-			// delete failure - newDeleter returns error
+			// 删除失败：newDeleter 返回错误
 			name:            "8-4 - newDeleter returns error",
 			initialVolumes:  newVolumeArray("volume8-4", "1Gi", "uid8-4", "claim8-4", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty),
 			expectedVolumes: withMessage("failed to create deleter for volume \"volume8-4\": Mock plugin error: no deleteCalls configured", newVolumeArray("volume8-4", "1Gi", "uid8-4", "claim8-4", v1.VolumeFailed, v1.PersistentVolumeReclaimDelete, classEmpty)),
@@ -84,7 +82,7 @@ func TestDeleteSync(t *testing.T) {
 			test:            wrapTestWithReclaimCalls(operationDelete, []error{}, testSyncVolume),
 		},
 		{
-			// delete failure - delete() returns error
+			// 删除失败：delete() 返回错误
 			name:            "8-5 - delete returns error",
 			initialVolumes:  newVolumeArray("volume8-5", "1Gi", "uid8-5", "claim8-5", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty),
 			expectedVolumes: withMessage("Mock delete error", newVolumeArray("volume8-5", "1Gi", "uid8-5", "claim8-5", v1.VolumeFailed, v1.PersistentVolumeReclaimDelete, classEmpty)),
@@ -95,7 +93,7 @@ func TestDeleteSync(t *testing.T) {
 			test:            wrapTestWithReclaimCalls(operationDelete, []error{errors.New("Mock delete error")}, testSyncVolume),
 		},
 		{
-			// delete success(?) - volume is deleted before doDelete() starts
+			// 删除“成功”：doDelete() 开始前卷已被删除
 			name:            "8-6 - volume is deleted before deleting",
 			initialVolumes:  newVolumeArray("volume8-6", "1Gi", "uid8-6", "claim8-6", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty),
 			expectedVolumes: novolumes,
@@ -104,14 +102,12 @@ func TestDeleteSync(t *testing.T) {
 			expectedEvents:  noevents,
 			errors:          noerrors,
 			test: wrapTestWithInjectedOperation(ctx, wrapTestWithReclaimCalls(operationDelete, []error{}, testSyncVolume), func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor) {
-				// Delete the volume before delete operation starts
+				// 在删除操作开始前先移除卷，验证同步时能处理卷已消失的情况。
 				reactor.DeleteVolume("volume8-6")
 			}),
 		},
 		{
-			// delete success(?) - volume is bound just at the time doDelete()
-			// starts. This simulates "volume no longer needs recycling,
-			// skipping".
+			// 删除"成功"：恰在 doDelete() 开始时卷被重新绑定，模拟"卷已不再需要回收，跳过删除"的场景。
 			name:            "8-7 - volume is bound before deleting",
 			initialVolumes:  newVolumeArray("volume8-7", "1Gi", "uid8-7", "claim8-7", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, volume.AnnBoundByController),
 			expectedVolumes: newVolumeArray("volume8-7", "1Gi", "uid8-7", "claim8-7", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, volume.AnnBoundByController),
@@ -120,16 +116,14 @@ func TestDeleteSync(t *testing.T) {
 			expectedEvents:  noevents,
 			errors:          noerrors,
 			test: wrapTestWithInjectedOperation(ctx, wrapTestWithReclaimCalls(operationDelete, []error{}, testSyncVolume), func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor) {
-				// Bind the volume to resurrected claim (this should never
-				// happen)
+				// 将卷绑定到"复活"的 PVC（现实中不应发生），验证同步时的竞争处理。
 				claim := newClaim("claim8-7", "uid8-7", "10Gi", "volume8-7", v1.ClaimBound, nil)
 				reactor.AddClaimBoundToVolume(claim)
 				ctrl.claims.Add(claim)
 			}),
 		},
 		{
-			// delete success - volume bound by user is deleted, while a new
-			// claim is created with another UID.
+			// 删除成功：用户预绑定的卷被删除，同时存在 UID 不同的新 PVC。
 			name:            "8-9 - prebound volume is deleted while the claim exists",
 			initialVolumes:  newVolumeArray("volume8-9", "1Gi", "uid8-9", "claim8-9", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty),
 			expectedVolumes: novolumes,
@@ -137,12 +131,11 @@ func TestDeleteSync(t *testing.T) {
 			expectedClaims:  newClaimArray("claim8-9", "uid8-9-x", "10Gi", "", v1.ClaimPending, nil),
 			expectedEvents:  noevents,
 			errors:          noerrors,
-			// Inject deleter into the controller and call syncVolume. The
-			// deleter simulates one delete() call that succeeds.
+			// 向控制器注入删除器并调用 syncVolume；删除器模拟一次成功的 delete() 调用。
 			test: wrapTestWithReclaimCalls(operationDelete, []error{nil}, testSyncVolume),
 		},
 		{
-			// PV requires external deleter
+			// PV 需要外部删除器
 			name:            "8-10-1 - external deleter when volume is dynamic provisioning",
 			initialVolumes:  []*v1.PersistentVolume{newExternalProvisionedVolume("volume8-10-1", "1Gi", "uid10-1-1", "claim10-1-1", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, gceDriver, nil, volume.AnnBoundByController)},
 			expectedVolumes: []*v1.PersistentVolume{newExternalProvisionedVolume("volume8-10-1", "1Gi", "uid10-1-1", "claim10-1-1", v1.VolumeReleased, v1.PersistentVolumeReclaimDelete, classEmpty, gceDriver, nil, volume.AnnBoundByController)},
@@ -151,14 +144,14 @@ func TestDeleteSync(t *testing.T) {
 			expectedEvents:  noevents,
 			errors:          noerrors,
 			test: func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
-				// Inject external deleter annotation
+				// 注入外部制备器注解，使控制器走外部删除路径，PV 应被标记为 Released。
 				test.initialVolumes[0].Annotations[volume.AnnDynamicallyProvisioned] = "external.io/test"
 				test.expectedVolumes[0].Annotations[volume.AnnDynamicallyProvisioned] = "external.io/test"
 				return testSyncVolume(ctrl, reactor, test)
 			},
 		},
 		{
-			// PV requires external deleter
+			// PV 需要外部删除器
 			name:            "8-10-2 - external deleter when volume is static provisioning",
 			initialVolumes:  []*v1.PersistentVolume{newExternalProvisionedVolume("volume8-10-2", "1Gi", "uid10-1-2", "claim10-1-2", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, gceDriver, nil, volume.AnnBoundByController)},
 			expectedVolumes: []*v1.PersistentVolume{newExternalProvisionedVolume("volume8-10-2", "1Gi", "uid10-1-2", "claim10-1-2", v1.VolumeReleased, v1.PersistentVolumeReclaimDelete, classEmpty, gceDriver, nil, volume.AnnBoundByController)},
@@ -169,7 +162,7 @@ func TestDeleteSync(t *testing.T) {
 			test:            testSyncVolume,
 		},
 		{
-			// PV requires external deleter
+			// PV 需要外部删除器
 			name:            "8-10-3 - external deleter when volume is migrated",
 			initialVolumes:  []*v1.PersistentVolume{volumeWithAnnotation(volume.AnnMigratedTo, "pd.csi.storage.gke.io", volumeWithAnnotation(volume.AnnDynamicallyProvisioned, "kubernetes.io/gce-pd", newVolume("volume8-10-3", "1Gi", "uid10-1-3", "claim10-1-3", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, volume.AnnDynamicallyProvisioned)))},
 			expectedVolumes: []*v1.PersistentVolume{volumeWithAnnotation(volume.AnnMigratedTo, "pd.csi.storage.gke.io", volumeWithAnnotation(volume.AnnDynamicallyProvisioned, "kubernetes.io/gce-pd", newVolume("volume8-10-3", "1Gi", "uid10-1-3", "claim10-1-3", v1.VolumeReleased, v1.PersistentVolumeReclaimDelete, classEmpty, volume.AnnDynamicallyProvisioned)))},
@@ -180,8 +173,7 @@ func TestDeleteSync(t *testing.T) {
 			test:            testSyncVolume,
 		},
 		{
-			// delete success - two PVs are provisioned for a single claim.
-			// One of the PVs is deleted.
+			// 删除成功：同一个 PVC 被制备了两个 PV，其中一个会被删除。
 			name: "8-11 - two PVs provisioned for a single claim",
 			initialVolumes: []*v1.PersistentVolume{
 				newVolume("volume8-11-1", "1Gi", "uid8-11", "claim8-11", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, volume.AnnDynamicallyProvisioned),
@@ -190,19 +182,16 @@ func TestDeleteSync(t *testing.T) {
 			expectedVolumes: []*v1.PersistentVolume{
 				newVolume("volume8-11-2", "1Gi", "uid8-11", "claim8-11", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, volume.AnnDynamicallyProvisioned),
 			},
-			// the claim is bound to volume8-11-2 -> volume8-11-1 has lost the race and will be deleted
+			// PVC 绑定到了 volume8-11-2，volume8-11-1 在竞争中落败，应被删除
 			initialClaims:  newClaimArray("claim8-11", "uid8-11", "10Gi", "volume8-11-2", v1.ClaimBound, nil),
 			expectedClaims: newClaimArray("claim8-11", "uid8-11", "10Gi", "volume8-11-2", v1.ClaimBound, nil),
 			expectedEvents: noevents,
 			errors:         noerrors,
-			// Inject deleter into the controller and call syncVolume. The
-			// deleter simulates one delete() call that succeeds.
+			// 向控制器注入删除器并调用 syncVolume；删除器模拟一次成功的 delete() 调用。
 			test: wrapTestWithReclaimCalls(operationDelete, []error{nil}, testSyncVolume),
 		},
 		{
-			// delete success - two PVs are externally provisioned for a single
-			// claim. One of the PVs is marked as Released to be deleted by the
-			// external provisioner.
+			// 删除成功：同一个 PVC 被外部制备了两个 PV，其中一个被标记为 Released，交由外部制备器删除。
 			name: "8-12 - two PVs externally provisioned for a single claim",
 			initialVolumes: []*v1.PersistentVolume{
 				newExternalProvisionedVolume("volume8-12-1", "1Gi", "uid8-12", "claim8-12", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, gceDriver, nil, volume.AnnDynamicallyProvisioned),
@@ -212,20 +201,20 @@ func TestDeleteSync(t *testing.T) {
 				newExternalProvisionedVolume("volume8-12-1", "1Gi", "uid8-12", "claim8-12", v1.VolumeReleased, v1.PersistentVolumeReclaimDelete, classEmpty, gceDriver, nil, volume.AnnDynamicallyProvisioned),
 				newExternalProvisionedVolume("volume8-12-2", "1Gi", "uid8-12", "claim8-12", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, gceDriver, nil, volume.AnnDynamicallyProvisioned),
 			},
-			// the claim is bound to volume8-12-2 -> volume8-12-1 has lost the race and will be "Released"
+			// PVC 绑定到了 volume8-12-2，volume8-12-1 在竞争中落败，应被标记为 "Released"
 			initialClaims:  newClaimArray("claim8-12", "uid8-12", "10Gi", "volume8-12-2", v1.ClaimBound, nil),
 			expectedClaims: newClaimArray("claim8-12", "uid8-12", "10Gi", "volume8-12-2", v1.ClaimBound, nil),
 			expectedEvents: noevents,
 			errors:         noerrors,
 			test: func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
-				// Inject external deleter annotation
+				// 注入外部制备器注解，使控制器走外部删除路径，PV 应被标记为 Released。
 				test.initialVolumes[0].Annotations[volume.AnnDynamicallyProvisioned] = "external.io/test"
 				test.expectedVolumes[0].Annotations[volume.AnnDynamicallyProvisioned] = "external.io/test"
 				return testSyncVolume(ctrl, reactor, test)
 			},
 		},
 		{
-			// delete success - volume has deletion timestamp before doDelete() starts
+			// 删除成功：doDelete() 开始前卷已带有删除时间戳
 			name:            "8-13 - volume has deletion timestamp and processed",
 			initialVolumes:  volumesWithFinalizers(withVolumeDeletionTimestamp(newVolumeArray("volume8-13", "1Gi", "uid8-13", "claim8-13", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty, volume.AnnBoundByController)), []string{volume.PVDeletionInTreeProtectionFinalizer}),
 			expectedVolumes: novolumes,
@@ -239,26 +228,22 @@ func TestDeleteSync(t *testing.T) {
 	runSyncTests(t, ctx, tests, []*storage.StorageClass{}, []*v1.Pod{})
 }
 
-// Test multiple calls to syncClaim/syncVolume and periodic sync of all
-// volume/claims. The test follows this pattern:
-//  0. Load the controller with initial data.
-//  1. Call controllerTest.testCall() once as in TestSync()
-//  2. For all volumes/claims changed by previous syncVolume/syncClaim calls,
-//     call appropriate syncVolume/syncClaim (simulating "volume/claim changed"
-//     events). Go to 2. if these calls change anything.
-//  3. When all changes are processed and no new changes were made, call
-//     syncVolume/syncClaim on all volumes/claims (simulating "periodic sync").
-//  4. If some changes were done by step 3., go to 2. (simulation of
-//     "volume/claim updated" events, eventually performing step 3. again)
-//  5. When 3. does not do any changes, finish the tests and compare final set
-//     of volumes/claims with expected claims/volumes and report differences.
+// TestDeleteMultiSync 测试多次调用 syncClaim/syncVolume，以及对全部卷/PVC 的周期性同步。
+// 测试遵循如下模式：
+//  0. 用初始数据加载控制器。
+//  1. 像 TestSync() 一样调用一次 controllerTest.testCall()。
+//  2. 对上一次 syncVolume/syncClaim 调用改变过的所有卷/PVC，调用相应的
+//     syncVolume/syncClaim（模拟"卷/PVC 发生变化"事件）；若又产生了变化，则回到步骤 2.。
+//  3. 当所有变化都处理完且没有新变化时，对所有卷/PVC 调用 syncVolume/syncClaim
+//     （模拟"周期性同步"）。
+//  4. 若步骤 3. 产生了变化，回到步骤 2.（模拟"卷/PVC 更新"事件，最终再次执行步骤 3.）。
+//  5. 当步骤 3. 不再产生任何变化时结束测试，比较最终的卷/PVC 集合与预期值并报告差异。
 //
-// Some limit of calls in enforced to prevent endless loops.
+// 强制限制调用次数，防止陷入死循环。
 func TestDeleteMultiSync(t *testing.T) {
 	tests := []controllerTest{
 		{
-			// delete failure - delete returns error. The controller should
-			// try again.
+			// 删除失败：delete() 返回错误，控制器应在下一次同步时重试。
 			name:            "9-1 - delete returns error",
 			initialVolumes:  volumesWithFinalizers(newVolumeArray("volume9-1", "1Gi", "uid9-1", "claim9-1", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classEmpty), []string{volume.PVDeletionInTreeProtectionFinalizer}),
 			expectedVolumes: novolumes,
@@ -266,7 +251,8 @@ func TestDeleteMultiSync(t *testing.T) {
 			expectedClaims:  noclaims,
 			expectedEvents:  []string{"Warning VolumeFailedDelete"},
 			errors:          noerrors,
-			test:            wrapTestWithReclaimCalls(operationDelete, []error{errors.New("Mock delete error"), nil}, testSyncVolume),
+			// 第一次删除失败、第二次成功，验证重试后最终能完成删除。
+			test: wrapTestWithReclaimCalls(operationDelete, []error{errors.New("Mock delete error"), nil}, testSyncVolume),
 		},
 	}
 	_, ctx := ktesting.NewTestContext(t)

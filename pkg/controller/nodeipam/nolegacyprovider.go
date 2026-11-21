@@ -26,13 +26,19 @@ import (
 	cloudprovider "k8s.io/cloud-provider"
 )
 
+// fakeController 是 legacy 云厂商支持被禁用时的占位控制器。
+// 它只等待 ctx 结束，不执行任何实际分配逻辑。
 type fakeController struct {
 }
 
+// Run 阻塞直到 ctx 被取消，使上层启动流程在“禁用 legacy 支持”的构建中仍能正常退出。
 func (f *fakeController) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// createLegacyIPAM 构建 legacy IPAM 控制器的桩实现。
+// 在本构建（未启用 legacy cloud provider 支持）中它总是返回错误，
+// 提示用户当前二进制不支持从集群/云获取 podCIDR 的旧模式。
 func createLegacyIPAM(
 	ctx context.Context,
 	ic *Controller,

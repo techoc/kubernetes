@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1alpha1 定义 EndpointSlice 控制器配置的 v1alpha1 外部版本类型。
+// 这些类型用于对外暴露配置，并通过自动生成的转换函数与内部配置类型互转。
+
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/kubernetes/pkg/controller/endpointslice/config
 // +k8s:conversion-gen-external-types=k8s.io/kube-controller-manager/config/v1alpha1

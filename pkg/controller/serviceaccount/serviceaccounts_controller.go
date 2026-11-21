@@ -36,23 +36,24 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// ServiceAccountsControllerOptions contains options for running a ServiceAccountsController
+// ServiceAccountsControllerOptions 包含创建 ServiceAccountsController 所需的选项。
 type ServiceAccountsControllerOptions struct {
-	// ServiceAccounts is the list of service accounts to ensure exist in every namespace
+	// ServiceAccounts 是必须保证在每个命名空间中都存在的 ServiceAccount 列表。
 	ServiceAccounts []v1.ServiceAccount
 
-	// ServiceAccountResync is the interval between full resyncs of ServiceAccounts.
-	// If non-zero, all service accounts will be re-listed this often.
-	// Otherwise, re-list will be delayed as long as possible (until the watch is closed or times out).
+	// ServiceAccountResync 是 ServiceAccount 全量重新同步的间隔。
+	// 非零时按该频率重新列出所有 ServiceAccount；为零时尽量推迟重列，
+	// 直到 watch 关闭或超时才触发。
 	ServiceAccountResync time.Duration
 
-	// NamespaceResync is the interval between full resyncs of Namespaces.
-	// If non-zero, all namespaces will be re-listed this often.
-	// Otherwise, re-list will be delayed as long as possible (until the watch is closed or times out).
+	// NamespaceResync 是 Namespace 全量重新同步的间隔。
+	// 非零时按该频率重新列出所有命名空间；为零时尽量推迟重列，
+	// 直到 watch 关闭或超时才触发。
 	NamespaceResync time.Duration
 }
 
-// DefaultServiceAccountsControllerOptions returns the default options for creating a ServiceAccountsController.
+// DefaultServiceAccountsControllerOptions 返回创建控制器的默认选项：
+// 只保证每个命名空间存在名为 default 的 ServiceAccount。
 func DefaultServiceAccountsControllerOptions() ServiceAccountsControllerOptions {
 	return ServiceAccountsControllerOptions{
 		ServiceAccounts: []v1.ServiceAccount{
@@ -61,7 +62,8 @@ func DefaultServiceAccountsControllerOptions() ServiceAccountsControllerOptions 
 	}
 }
 
-// NewServiceAccountsController returns a new *ServiceAccountsController.
+// NewServiceAccountsController 创建控制器实例，注册 ServiceAccount 删除以及
+// Namespace 增删事件的处理函数，并设置同步处理器。
 func NewServiceAccountsController(logger klog.Logger, saInformer coreinformers.ServiceAccountInformer, nsInformer coreinformers.NamespaceInformer, cl clientset.Interface, options ServiceAccountsControllerOptions) (*ServiceAccountsController, error) {
 	e := &ServiceAccountsController{
 		client:                  cl,
@@ -92,12 +94,12 @@ func NewServiceAccountsController(logger klog.Logger, saInformer coreinformers.S
 	return e, nil
 }
 
-// ServiceAccountsController manages ServiceAccount objects inside Namespaces
+// ServiceAccountsController 负责保证每个活跃命名空间中存在指定的 ServiceAccount。
 type ServiceAccountsController struct {
 	client                  clientset.Interface
 	serviceAccountsToEnsure []v1.ServiceAccount
 
-	// To allow injection for testing.
+	// 可在测试中注入自定义同步逻辑，避免依赖真实 informer。
 	syncHandler func(ctx context.Context, key string) error
 
 	saLister       corelisters.ServiceAccountLister
@@ -109,7 +111,7 @@ type ServiceAccountsController struct {
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// Run runs the ServiceAccountsController blocks until receiving signal from stopCh.
+// Run 启动控制器并阻塞，直到 ctx 被取消。
 func (c *ServiceAccountsController) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 
@@ -123,6 +125,7 @@ func (c *ServiceAccountsController) Run(ctx context.Context, workers int) {
 		wg.Wait()
 	}()
 
+	// lister 未同步完成前不能处理工作项，否则可能因缓存为空而重复创建。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, c.saListerSynced, c.nsListerSynced) {
 		return
 	}
@@ -135,8 +138,9 @@ func (c *ServiceAccountsController) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
-// serviceAccountDeleted reacts to a ServiceAccount deletion by recreating a default ServiceAccount in the namespace if needed
+// serviceAccountDeleted 在 ServiceAccount 被删除时把其命名空间入队，以便重建。
 func (c *ServiceAccountsController) serviceAccountDeleted(logger klog.Logger, obj interface{}) {
+	// informer 可能只给出墓碑事件，需要先解出原始对象才能拿到命名空间。
 	sa, ok := obj.(*v1.ServiceAccount)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
@@ -153,24 +157,26 @@ func (c *ServiceAccountsController) serviceAccountDeleted(logger klog.Logger, ob
 	c.queue.Add(sa.Namespace)
 }
 
-// namespaceAdded reacts to a Namespace creation by creating a default ServiceAccount object
+// namespaceAdded 在新命名空间创建时把其名称入队。
 func (c *ServiceAccountsController) namespaceAdded(obj interface{}) {
 	namespace := obj.(*v1.Namespace)
 	c.queue.Add(namespace.Name)
 }
 
-// namespaceUpdated reacts to a Namespace update (or re-list) by creating a default ServiceAccount in the namespace if needed
+// namespaceUpdated 在命名空间更新或重新列出时把其名称入队。
+// 这里入队是幂等的，因此无需区分具体变更字段。
 func (c *ServiceAccountsController) namespaceUpdated(oldObj interface{}, newObj interface{}) {
 	newNamespace := newObj.(*v1.Namespace)
 	c.queue.Add(newNamespace.Name)
 }
 
+// runWorker 持续处理队列中的工作项，直到 processNextWorkItem 返回 false。
 func (c *ServiceAccountsController) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个键；队列关闭时返回 false。
 func (c *ServiceAccountsController) processNextWorkItem(ctx context.Context) bool {
 	key, quit := c.queue.Get()
 	if quit {
@@ -178,6 +184,7 @@ func (c *ServiceAccountsController) processNextWorkItem(ctx context.Context) boo
 	}
 	defer c.queue.Done(key)
 
+	// 同步成功后清除该键的失败计数，避免后续重试被限速。
 	err := c.syncHandler(ctx, key)
 	if err == nil {
 		c.queue.Forget(key)
@@ -189,6 +196,8 @@ func (c *ServiceAccountsController) processNextWorkItem(ctx context.Context) boo
 
 	return true
 }
+
+// syncNamespace 保证指定活跃命名空间中存在所有配置的 ServiceAccount。
 func (c *ServiceAccountsController) syncNamespace(ctx context.Context, key string) error {
 	startTime := time.Now()
 	defer func() {
@@ -203,7 +212,7 @@ func (c *ServiceAccountsController) syncNamespace(ctx context.Context, key strin
 		return err
 	}
 	if ns.Status.Phase != v1.NamespaceActive {
-		// If namespace is not active, we shouldn't try to create anything
+		// 非活跃命名空间即将删除，不应在里面创建对象。
 		return nil
 	}
 
@@ -216,12 +225,12 @@ func (c *ServiceAccountsController) syncNamespace(ctx context.Context, key strin
 		case err != nil:
 			return err
 		}
-		// this is only safe because we never read it and we always write it
-		// TODO eliminate this once the fake client can handle creation without NS
+		// 这里直接修改循环变量是安全的：该字段只写不读。
+		// TODO 等 fake client 支持无命名空间创建后去掉这段赋值。
 		sa.Namespace = ns.Name
 
 		if _, err := c.client.CoreV1().ServiceAccounts(ns.Name).Create(ctx, &sa, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
-			// we can safely ignore terminating namespace errors
+			// 命名空间正在终止时的创建失败无需计入，控制器会在下次同步时重新评估。
 			if !apierrors.HasStatusCause(err, v1.NamespaceTerminatingCause) {
 				createFailures = append(createFailures, err)
 			}

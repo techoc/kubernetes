@@ -37,27 +37,20 @@ import (
 	core "k8s.io/client-go/testing"
 )
 
-// ErrVersionConflict is the error returned when resource version of requested
-// object conflicts with the object in storage.
+// ErrVersionConflict 在请求对象的资源版本与存储中对象冲突时返回。
 var ErrVersionConflict = errors.New("VersionError")
 
-// VolumeReactor is a core.Reactor that simulates etcd and API server. It
-// stores:
-//   - Latest version of claims volumes saved by the controller.
-//   - Queue of all saves (to simulate "volume/claim updated" events). This queue
-//     contains all intermediate state of an object - e.g. a claim.VolumeName
-//     is updated first and claim.Phase second. This queue will then contain both
-//     updates as separate entries.
-//   - Number of changes since the last call to VolumeReactor.syncAll().
-//   - Optionally, volume and claim fake watchers which should be the same ones
-//     used by the controller. Any time an event function like deleteVolumeEvent
-//     is called to simulate an event, the reactor's stores are updated and the
-//     controller is sent the event via the fake watcher.
-//   - Optionally, list of error that should be returned by reactor, simulating
-//     etcd / API server failures. These errors are evaluated in order and every
-//     error is returned only once. I.e. when the reactor finds matching
-//     ReactorError, it return appropriate error and removes the ReactorError from
-//     the list.
+// VolumeReactor 是模拟 etcd 和 API Server 的 core.Reactor。它保存：
+//   - 控制器保存的卷/声明的最新版本。
+//   - 所有保存操作的队列（用于模拟“卷/声明更新”事件）。队列包含对象的所有中间状态，
+//     例如先更新 claim.VolumeName、再更新 claim.Phase，两个更新会作为独立条目入队。
+//   - 自上次调用 VolumeReactor.syncAll() 以来的变更数。
+//   - 可选的卷/声明 fake watcher，应与控制器使用的是同一批。
+//     每当调用 deleteVolumeEvent 等事件函数模拟事件时，reactor 的存储会更新，
+//     并通过 fake watcher 将事件发送给控制器。
+//   - 可选的、由 reactor 返回的错误列表，用于模拟 etcd / API Server 故障。
+//     这些错误按顺序匹配，每个只返回一次：匹配到 ReactorError 后返回相应错误，
+//     并将其从列表中移除。
 type VolumeReactor struct {
 	volumes              map[string]*v1.PersistentVolume
 	claims               map[string]*v1.PersistentVolumeClaim
@@ -70,56 +63,52 @@ type VolumeReactor struct {
 	watchers             map[schema.GroupVersionResource]map[string][]*watch.RaceFreeFakeWatcher
 }
 
-// ReactorError is an error that is returned by test reactor (=simulated
-// etcd+/API server) when an action performed by the reactor matches given verb
-// ("get", "update", "create", "delete" or "*"") on given resource
-// ("persistentvolumes", "persistentvolumeclaims" or "*").
+// ReactorError 定义测试 reactor（即模拟的 etcd/API Server）要返回的错误：
+// 当 reactor 执行的动作在给定资源（"persistentvolumes"、"persistentvolumeclaims" 或 "*"）
+// 上匹配给定动词（"get"、"update"、"create"、"delete" 或 "*"）时返回该错误。
 type ReactorError struct {
 	Verb     string
 	Resource string
 	Error    error
 }
 
-// React is a callback called by fake kubeClient from the controller.
-// In other words, every claim/volume change performed by the controller ends
-// here.
-// This callback checks versions of the updated objects and refuse those that
-// are too old (simulating real etcd).
-// All updated objects are stored locally to keep track of object versions and
-// to evaluate test results.
-// All updated objects are also inserted into changedObjects queue and
-// optionally sent back to the controller via its watchers.
+// React 是控制器通过 fake kubeClient 调用的回调，
+// 即控制器对声明/卷的所有修改最终都会汇集到这里。
+// 回调会检查被更新对象的版本，拒绝过旧的更新以模拟真实 etcd 的并发控制。
+// 所有更新对象都会保存在本地，用于跟踪对象版本和校验测试结果；
+// 同时进入 changedObjects 队列，并可选择通过 watcher 回传给控制器。
 func (r *VolumeReactor) React(ctx context.Context, action core.Action) (handled bool, ret runtime.Object, err error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Reactor got operation", "resource", action.GetResource(), "verb", action.GetVerb())
 
-	// Inject error when requested
+	// 测试若要求注入错误，则优先返回，不再模拟实际的对象变更。
 	err = r.injectReactError(ctx, action)
 	if err != nil {
 		return true, nil, err
 	}
 
-	// Test did not request to inject an error, continue simulating API server.
+	// 未注入错误时继续模拟 API Server 的正常处理。
 	switch {
 	case action.Matches("create", "persistentvolumes"):
 		obj := action.(core.UpdateAction).GetObject()
 		volume := obj.(*v1.PersistentVolume)
 
-		// check the volume does not exist
+		// 创建前先确认卷不存在，模拟 API Server 的唯一性约束。
 		_, found := r.volumes[volume.Name]
 		if found {
 			return true, nil, fmt.Errorf("cannot create volume %s: volume already exists", volume.Name)
 		}
 
-		// mimic apiserver defaulting
+		// 模拟 API Server 的默认值填充。
 		if volume.Spec.VolumeMode == nil {
 			volume.Spec.VolumeMode = new(v1.PersistentVolumeMode)
 			*volume.Spec.VolumeMode = v1.PersistentVolumeFilesystem
 		}
 
-		// Store the updated object to appropriate places.
+		// 将更新后的对象保存到存储、watcher 和变更队列，
+		// 让控制器能观察到变更，测试也能据此断言。
 		r.volumes[volume.Name] = volume
 		for _, w := range r.getWatches(action.GetResource(), action.GetNamespace()) {
 			w.Add(volume)
@@ -133,13 +122,14 @@ func (r *VolumeReactor) React(ctx context.Context, action core.Action) (handled 
 		obj := action.(core.UpdateAction).GetObject()
 		claim := obj.(*v1.PersistentVolumeClaim)
 
-		// check the claim does not exist
+		// 创建前先确认声明不存在，模拟 API Server 的唯一性约束。
 		_, found := r.claims[claim.Name]
 		if found {
 			return true, nil, fmt.Errorf("cannot create claim %s: claim already exists", claim.Name)
 		}
 
-		// Store the updated object to appropriate places.
+		// 将更新后的对象保存到存储、watcher 和变更队列，
+		// 让控制器能观察到变更，测试也能据此断言。
 		r.claims[claim.Name] = claim
 		for _, w := range r.getWatches(action.GetResource(), action.GetNamespace()) {
 			w.Add(claim)
@@ -153,7 +143,7 @@ func (r *VolumeReactor) React(ctx context.Context, action core.Action) (handled 
 		obj := action.(core.UpdateAction).GetObject()
 		volume := obj.(*v1.PersistentVolume)
 
-		// Check and bump object version
+		// 校验版本号后递增，模拟 etcd 的乐观并发控制。
 		storedVolume, found := r.volumes[volume.Name]
 		if found {
 			storedVer, _ := strconv.Atoi(storedVolume.ResourceVersion)
@@ -161,18 +151,20 @@ func (r *VolumeReactor) React(ctx context.Context, action core.Action) (handled 
 			if storedVer != requestedVer {
 				return true, obj, ErrVersionConflict
 			}
+			// 内容未变则直接返回，避免产生无意义的更新事件。
 			if reflect.DeepEqual(storedVolume, volume) {
 				logger.V(4).Info("Nothing updated volume", "volumeName", volume.Name)
 				return true, volume, nil
 			}
-			// Don't modify the existing object
+			// 深拷贝后再改版本号，避免修改调用方持有的对象。
 			volume = volume.DeepCopy()
 			volume.ResourceVersion = strconv.Itoa(storedVer + 1)
 		} else {
 			return true, nil, fmt.Errorf("cannot update volume %s: volume not found", volume.Name)
 		}
 
-		// Store the updated object to appropriate places.
+		// 将更新后的对象保存到存储、watcher 和变更队列，
+		// 让控制器能观察到变更，测试也能据此断言。
 		for _, w := range r.getWatches(action.GetResource(), action.GetNamespace()) {
 			w.Modify(volume)
 		}
@@ -186,7 +178,7 @@ func (r *VolumeReactor) React(ctx context.Context, action core.Action) (handled 
 		obj := action.(core.UpdateAction).GetObject()
 		claim := obj.(*v1.PersistentVolumeClaim)
 
-		// Check and bump object version
+		// 校验版本号后递增，模拟 etcd 的乐观并发控制。
 		storedClaim, found := r.claims[claim.Name]
 		if found {
 			storedVer, _ := strconv.Atoi(storedClaim.ResourceVersion)
@@ -194,18 +186,20 @@ func (r *VolumeReactor) React(ctx context.Context, action core.Action) (handled 
 			if storedVer != requestedVer {
 				return true, obj, ErrVersionConflict
 			}
+			// 内容未变则直接返回，避免产生无意义的更新事件。
 			if reflect.DeepEqual(storedClaim, claim) {
 				logger.V(4).Info("Nothing updated claim", "PVC", klog.KObj(claim))
 				return true, claim, nil
 			}
-			// Don't modify the existing object
+			// 深拷贝后再改版本号，避免修改调用方持有的对象。
 			claim = claim.DeepCopy()
 			claim.ResourceVersion = strconv.Itoa(storedVer + 1)
 		} else {
 			return true, nil, fmt.Errorf("cannot update claim %s: claim not found", claim.Name)
 		}
 
-		// Store the updated object to appropriate places.
+		// 将更新后的对象保存到存储、watcher 和变更队列，
+		// 让控制器能观察到变更，测试也能据此断言。
 		for _, w := range r.getWatches(action.GetResource(), action.GetNamespace()) {
 			w.Modify(claim)
 		}
@@ -269,8 +263,7 @@ func (r *VolumeReactor) React(ctx context.Context, action core.Action) (handled 
 	return false, nil, nil
 }
 
-// Watch watches objects from the VolumeReactor. Watch returns a channel which
-// will push added / modified / deleted object.
+// Watch 监听 VolumeReactor 中的对象，返回的 watcher 会推送新增/修改/删除事件。
 func (r *VolumeReactor) Watch(gvr schema.GroupVersionResource, ns string) (watch.Interface, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -284,12 +277,15 @@ func (r *VolumeReactor) Watch(gvr schema.GroupVersionResource, ns string) (watch
 	return fakewatcher, nil
 }
 
+// getWatches 返回指定命名空间以及全命名空间范围内的所有 watcher，
+// 与 API Server 的跨命名空间监听语义一致。
 func (r *VolumeReactor) getWatches(gvr schema.GroupVersionResource, ns string) []*watch.RaceFreeFakeWatcher {
 	watches := []*watch.RaceFreeFakeWatcher{}
 	if r.watchers[gvr] != nil {
 		if w := r.watchers[gvr][ns]; w != nil {
 			watches = append(watches, w...)
 		}
+		// 全命名空间 watcher 也能收到带命名空间的变更，避免事件漏发。
 		if ns != metav1.NamespaceAll {
 			if w := r.watchers[gvr][metav1.NamespaceAll]; w != nil {
 				watches = append(watches, w...)
@@ -299,18 +295,18 @@ func (r *VolumeReactor) getWatches(gvr schema.GroupVersionResource, ns string) [
 	return watches
 }
 
-// injectReactError returns an error when the test requested given action to
-// fail. nil is returned otherwise.
+// injectReactError 在测试要求指定动作失败时返回相应错误，否则返回 nil；
+// 每个注入错误只生效一次，匹配后即从列表中移除。
 func (r *VolumeReactor) injectReactError(ctx context.Context, action core.Action) error {
 	if len(r.errors) == 0 {
-		// No more errors to inject, everything should succeed.
+		// 没有待注入的错误，后续操作应全部成功。
 		return nil
 	}
 	logger := klog.FromContext(ctx)
 	for i, expected := range r.errors {
 		logger.V(4).Info("Trying to match resource verb", "resource", action.GetResource(), "verb", action.GetVerb(), "expectedResource", expected.Resource, "expectedVerb", expected.Verb)
 		if action.Matches(expected.Verb, expected.Resource) {
-			// That's the action we're waiting for, remove it from injectedErrors
+			// 匹配到目标动作后将其移除，保证该错误只注入一次。
 			r.errors = append(r.errors[:i], r.errors[i+1:]...)
 			logger.V(4).Info("Reactor found matching error", "index", i, "expectedResource", expected.Resource, "expectedVerb", expected.Verb, "err", expected.Error)
 			return expected.Error
@@ -319,17 +315,16 @@ func (r *VolumeReactor) injectReactError(ctx context.Context, action core.Action
 	return nil
 }
 
-// CheckVolumes compares all expectedVolumes with set of volumes at the end of
-// the test and reports differences.
+// CheckVolumes 比较测试结束时的实际卷集合与期望卷集合，并报告差异。
 func (r *VolumeReactor) CheckVolumes(expectedVolumes []*v1.PersistentVolume) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	expectedMap := make(map[string]*v1.PersistentVolume)
 	gotMap := make(map[string]*v1.PersistentVolume)
-	// Clear any ResourceVersion from both sets
+	// 版本号由 reactor 自动生成，比较前清除以聚焦业务字段。
 	for _, v := range expectedVolumes {
-		// Don't modify the existing object
+		// 深拷贝以免修改测试持有的期望对象。
 		v := v.DeepCopy()
 		v.ResourceVersion = ""
 		if v.Spec.ClaimRef != nil {
@@ -338,8 +333,7 @@ func (r *VolumeReactor) CheckVolumes(expectedVolumes []*v1.PersistentVolume) err
 		expectedMap[v.Name] = v
 	}
 	for _, v := range r.volumes {
-		// We must clone the volume because of golang race check - it was
-		// written by the controller without any locks on it.
+		// 控制器可能无锁写入这些对象；深拷贝以避免竞态检测报警。
 		v := v.DeepCopy()
 		v.ResourceVersion = ""
 		if v.Spec.ClaimRef != nil {
@@ -348,15 +342,13 @@ func (r *VolumeReactor) CheckVolumes(expectedVolumes []*v1.PersistentVolume) err
 		gotMap[v.Name] = v
 	}
 	if !reflect.DeepEqual(expectedMap, gotMap) {
-		// Print ugly but useful diff of expected and received objects for
-		// easier debugging.
+		// 输出详细 diff，便于定位不一致的字段。
 		return fmt.Errorf("Volume check failed [A-expected, B-got]: %s", cmp.Diff(expectedMap, gotMap))
 	}
 	return nil
 }
 
-// CheckClaims compares all expectedClaims with set of claims at the end of the
-// test and reports differences.
+// CheckClaims 比较测试结束时的实际声明集合与期望声明集合，并报告差异。
 func (r *VolumeReactor) CheckClaims(expectedClaims []*v1.PersistentVolumeClaim) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -364,28 +356,26 @@ func (r *VolumeReactor) CheckClaims(expectedClaims []*v1.PersistentVolumeClaim) 
 	expectedMap := make(map[string]*v1.PersistentVolumeClaim)
 	gotMap := make(map[string]*v1.PersistentVolumeClaim)
 	for _, c := range expectedClaims {
-		// Don't modify the existing object
+		// 深拷贝以免修改测试持有的期望对象。
 		c = c.DeepCopy()
 		c.ResourceVersion = ""
 		expectedMap[c.Name] = c
 	}
 	for _, c := range r.claims {
-		// We must clone the claim because of golang race check - it was
-		// written by the controller without any locks on it.
+		// 控制器可能无锁写入这些对象；深拷贝以避免竞态检测报警。
 		c = c.DeepCopy()
 		c.ResourceVersion = ""
 		gotMap[c.Name] = c
 	}
 	if !reflect.DeepEqual(expectedMap, gotMap) {
-		// Print ugly but useful diff of expected and received objects for
-		// easier debugging.
+		// 输出详细 diff，便于定位不一致的字段。
 		return fmt.Errorf("Claim check failed [A-expected, B-got result]: %s", cmp.Diff(expectedMap, gotMap))
 	}
 	return nil
 }
 
-// PopChange returns one recorded updated object, either *v1.PersistentVolume
-// or *v1.PersistentVolumeClaim. Returns nil when there are no changes.
+// PopChange 取出一个记录的更新对象（*v1.PersistentVolume 或 *v1.PersistentVolumeClaim），
+// 没有变更时返回 nil。
 func (r *VolumeReactor) PopChange(ctx context.Context) interface{} {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -394,7 +384,7 @@ func (r *VolumeReactor) PopChange(ctx context.Context) interface{} {
 		return nil
 	}
 
-	// For debugging purposes, print the queue
+	// 打印队列内容，便于调试事件顺序。
 	logger := klog.FromContext(ctx)
 	for _, obj := range r.changedObjects {
 		switch obj.(type) {
@@ -407,16 +397,15 @@ func (r *VolumeReactor) PopChange(ctx context.Context) interface{} {
 		}
 	}
 
-	// Pop the first item from the queue and return it
+	// 按入队顺序取出最早的变更，保证事件顺序可预测。
 	obj := r.changedObjects[0]
 	r.changedObjects = r.changedObjects[1:]
 	return obj
 }
 
-// SyncAll simulates the controller periodic sync of volumes and claim. It
-// simply adds all these objects to the internal queue of updates. This method
-// should be used when the test manually calls syncClaim/syncVolume. Test that
-// use real controller loop (ctrl.Run()) will get periodic sync automatically.
+// SyncAll 模拟控制器的周期性同步：把所有卷和声明加入内部更新队列。
+// 测试手动调用 syncClaim/syncVolume 时应使用该方法；
+// 使用真实控制器循环（ctrl.Run()）的测试会自动获得周期同步。
 func (r *VolumeReactor) SyncAll() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -427,63 +416,58 @@ func (r *VolumeReactor) SyncAll() {
 	for _, v := range r.volumes {
 		r.changedObjects = append(r.changedObjects, v)
 	}
+	// 同步后重置计数，便于统计下一周期的变更数。
 	r.changedSinceLastSync = 0
 }
 
-// GetChangeCount returns changes since last sync.
+// GetChangeCount 返回自上次同步以来的变更数。
 func (r *VolumeReactor) GetChangeCount() int {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	return r.changedSinceLastSync
 }
 
-// DeleteVolumeEvent simulates that a volume has been deleted in etcd and
-// the controller receives 'volume deleted' event.
+// DeleteVolumeEvent 模拟卷在 etcd 中被删除，并向控制器发送“卷已删除”事件。
 func (r *VolumeReactor) DeleteVolumeEvent(volume *v1.PersistentVolume) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	// Remove the volume from list of resulting volumes.
+	// 从最终卷列表中移除。
 	delete(r.volumes, volume.Name)
 
-	// Generate deletion event. Cloned volume is needed to prevent races (and we
-	// would get a clone from etcd too).
+	// 发送删除事件时传入深拷贝，避免竞态（从 etcd 拿到的也会是副本）。
 	if r.fakeVolumeWatch != nil {
 		r.fakeVolumeWatch.Delete(volume.DeepCopy())
 	}
 }
 
-// DeleteClaimEvent simulates that a claim has been deleted in etcd and the
-// controller receives 'claim deleted' event.
+// DeleteClaimEvent 模拟声明在 etcd 中被删除，并向控制器发送“声明已删除”事件。
 func (r *VolumeReactor) DeleteClaimEvent(claim *v1.PersistentVolumeClaim) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	// Remove the claim from list of resulting claims.
+	// 从最终声明列表中移除。
 	delete(r.claims, claim.Name)
 
-	// Generate deletion event. Cloned volume is needed to prevent races (and we
-	// would get a clone from etcd too).
+	// 发送删除事件时传入深拷贝，避免竞态（从 etcd 拿到的也会是副本）。
 	if r.fakeClaimWatch != nil {
 		r.fakeClaimWatch.Delete(claim.DeepCopy())
 	}
 }
 
-// AddClaimEvent simulates that a claim has been deleted in etcd and the
-// controller receives 'claim added' event.
+// AddClaimEvent 模拟新声明写入 etcd，并向控制器发送“声明已添加”事件。
 func (r *VolumeReactor) AddClaimEvent(claim *v1.PersistentVolumeClaim) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	r.claims[claim.Name] = claim
-	// Generate event. No cloning is needed, this claim is not stored in the
-	// controller cache yet.
+	// 该声明还未进入控制器缓存，不存在共享写入，无需深拷贝。
 	if r.fakeClaimWatch != nil {
 		r.fakeClaimWatch.Add(claim)
 	}
 }
 
-// AddClaims adds PVCs into VolumeReactor.
+// AddClaims 将一组 PVC 加入 VolumeReactor。
 func (r *VolumeReactor) AddClaims(claims []*v1.PersistentVolumeClaim) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -492,7 +476,7 @@ func (r *VolumeReactor) AddClaims(claims []*v1.PersistentVolumeClaim) {
 	}
 }
 
-// AddVolumes adds PVs into VolumeReactor.
+// AddVolumes 将一组 PV 加入 VolumeReactor。
 func (r *VolumeReactor) AddVolumes(volumes []*v1.PersistentVolume) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -501,49 +485,51 @@ func (r *VolumeReactor) AddVolumes(volumes []*v1.PersistentVolume) {
 	}
 }
 
-// AddClaim adds a PVC into VolumeReactor.
+// AddClaim 将一个 PVC 加入 VolumeReactor。
 func (r *VolumeReactor) AddClaim(claim *v1.PersistentVolumeClaim) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.claims[claim.Name] = claim
 }
 
-// AddVolume adds a PV into VolumeReactor.
+// AddVolume 将一个 PV 加入 VolumeReactor。
 func (r *VolumeReactor) AddVolume(volume *v1.PersistentVolume) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.volumes[volume.Name] = volume
 }
 
-// DeleteVolume deletes a PV by name.
+// DeleteVolume 按名称删除一个 PV。
 func (r *VolumeReactor) DeleteVolume(name string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	delete(r.volumes, name)
 }
 
-// AddClaimBoundToVolume adds a PVC and binds it to corresponding PV.
+// AddClaimBoundToVolume 加入一个 PVC，并将其绑定的 PV 状态置为 Bound。
 func (r *VolumeReactor) AddClaimBoundToVolume(claim *v1.PersistentVolumeClaim) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.claims[claim.Name] = claim
+	// PV 存在时同步更新其状态为 Bound，保持与 PVC 的绑定关系一致。
 	if volume, ok := r.volumes[claim.Spec.VolumeName]; ok {
 		volume.Status.Phase = v1.VolumeBound
 	}
 }
 
-// MarkVolumeAvailable marks a PV available by name.
+// MarkVolumeAvailable 按名称将 PV 标记为 Available，清除绑定引用和注解。
 func (r *VolumeReactor) MarkVolumeAvailable(name string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	if volume, ok := r.volumes[name]; ok {
+		// 释放卷需清除声明引用与注解，避免残留信息影响绑定判断。
 		volume.Spec.ClaimRef = nil
 		volume.Status.Phase = v1.VolumeAvailable
 		volume.Annotations = nil
 	}
 }
 
-// NewVolumeReactor creates a volume reactor.
+// NewVolumeReactor 创建 VolumeReactor，并向 fake client 注册所有卷/声明动作的回调。
 func NewVolumeReactor(ctx context.Context, client *fake.Clientset, fakeVolumeWatch, fakeClaimWatch *watch.FakeWatcher, errors []ReactorError) *VolumeReactor {
 	reactor := &VolumeReactor{
 		volumes:         make(map[string]*v1.PersistentVolume),

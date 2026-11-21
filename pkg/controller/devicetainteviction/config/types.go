@@ -16,11 +16,9 @@ limitations under the License.
 
 package config
 
-// DeviceTaintEvictionControllerConfiguration contains elements configuring the device taint eviction controller.
+// DeviceTaintEvictionControllerConfiguration 包含设备污点驱逐控制器的配置项。
 type DeviceTaintEvictionControllerConfiguration struct {
-	// ConcurrentSyncs is the number of operations (deleting a pod, updating a ResourcClaim status, etc.)
-	// that will be done concurrently. Larger number = processing, but more CPU (and network) load.
-	//
-	// The default is 10.
+	// ConcurrentSyncs 是可并发执行的操作数（删除 Pod、更新 ResourceClaim 状态等）。
+	// 数值越大吞吐越高，但会增加 CPU 与网络负载，因此默认取 10 作为折中。
 	ConcurrentSyncs int32
 }

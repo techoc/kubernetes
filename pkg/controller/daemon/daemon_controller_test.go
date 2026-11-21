@@ -71,6 +71,7 @@ var (
 	noExecuteTaints       = []v1.Taint{{Key: "dedicated", Value: "user1", Effect: "NoExecute"}}
 )
 
+// nowPointer 返回当前时间的时间戳指针，用于构造带时间的污点。
 func nowPointer() *metav1.Time {
 	now := metav1.Now()
 	return &now
@@ -90,6 +91,7 @@ var (
 	}}
 )
 
+// newDaemonSet 构造测试用 DaemonSet，默认使用 OnDelete 策略和固定标签。
 func newDaemonSet(name string) *apps.DaemonSet {
 	two := int32(2)
 	return &apps.DaemonSet{
@@ -124,6 +126,7 @@ func newDaemonSet(name string) *apps.DaemonSet {
 	}
 }
 
+// newRollingUpdateStrategy 构造 MaxUnavailable=1 的滚动更新策略。
 func newRollingUpdateStrategy() *apps.DaemonSetUpdateStrategy {
 	one := intstr.FromInt32(1)
 	return &apps.DaemonSetUpdateStrategy{
@@ -132,16 +135,19 @@ func newRollingUpdateStrategy() *apps.DaemonSetUpdateStrategy {
 	}
 }
 
+// newOnDeleteStrategy 构造 OnDelete 更新策略。
 func newOnDeleteStrategy() *apps.DaemonSetUpdateStrategy {
 	return &apps.DaemonSetUpdateStrategy{
 		Type: apps.OnDeleteDaemonSetStrategyType,
 	}
 }
 
+// updateStrategies 返回所有更新策略，供测试逐一覆盖两种策略的行为。
 func updateStrategies() []*apps.DaemonSetUpdateStrategy {
 	return []*apps.DaemonSetUpdateStrategy{newOnDeleteStrategy(), newRollingUpdateStrategy()}
 }
 
+// newNode 构造 Ready 且可分配 100 个 Pod 的测试节点。
 func newNode(name string, label map[string]string) *v1.Node {
 	return &v1.Node{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -161,17 +167,19 @@ func newNode(name string, label map[string]string) *v1.Node {
 	}
 }
 
+// addNodes 批量向节点存储写入带相同标签的节点。
 func addNodes(nodeStore cache.Store, startIndex, numNodes int, label map[string]string) {
 	for i := startIndex; i < startIndex+numNodes; i++ {
 		nodeStore.Add(newNode(fmt.Sprintf("node-%d", i), label))
 	}
 }
 
+// newPod 构造测试 Pod；传入 DaemonSet 时会带上控制器引用和模板哈希标签。
 func newPod(podName string, nodeName string, label map[string]string, ds *apps.DaemonSet) *v1.Pod {
-	// Add hash unique label to the pod
+	// 加入模板哈希标签，便于区分不同版本的 Pod。
 	newLabels := label
 	var podSpec v1.PodSpec
-	// Copy pod spec from DaemonSet template, or use a default one if DaemonSet is nil
+	// 有 DaemonSet 时复用其模板，否则用默认规格，便于测试通用 Pod。
 	if ds != nil {
 		hash := controller.ComputeHash(&ds.Spec.Template, ds.Status.CollisionCount)
 		newLabels = labelsutil.CloneAndAddLabel(label, apps.DefaultDaemonSetUniqueLabelKey, hash)
@@ -188,7 +196,7 @@ func newPod(podName string, nodeName string, label map[string]string, ds *apps.D
 			},
 		}
 	}
-	// Add node name to the pod
+	// 指定节点名以模拟已调度的 Pod。
 	if len(nodeName) > 0 {
 		podSpec.NodeName = nodeName
 	}
@@ -209,6 +217,7 @@ func newPod(podName string, nodeName string, label map[string]string, ds *apps.D
 	return pod
 }
 
+// addPods 批量向 Pod 存储写入指定节点上的 Pod。
 func addPods(podStore cache.Store, nodeName string, label map[string]string, ds *apps.DaemonSet, number int) {
 	for i := 0; i < number; i++ {
 		pod := newPod(fmt.Sprintf("%s-", nodeName), nodeName, label, ds)
@@ -216,6 +225,7 @@ func addPods(podStore cache.Store, nodeName string, label map[string]string, ds 
 	}
 }
 
+// addFailedPods 批量写入失败状态的 Pod，用于验证失败 Pod 的处理逻辑。
 func addFailedPods(podStore cache.Store, nodeName string, label map[string]string, ds *apps.DaemonSet, number int) {
 	for i := 0; i < number; i++ {
 		pod := newPod(fmt.Sprintf("%s-", nodeName), nodeName, label, ds)
@@ -224,6 +234,7 @@ func addFailedPods(podStore cache.Store, nodeName string, label map[string]strin
 	}
 }
 
+// newControllerRevision 构造测试用 ControllerRevision。
 func newControllerRevision(name string, namespace string, label map[string]string,
 	ownerReferences []metav1.OwnerReference) *apps.ControllerRevision {
 	return &apps.ControllerRevision{
@@ -245,6 +256,7 @@ type fakePodControl struct {
 	expectations controller.ControllerExpectationsInterface
 }
 
+// newFakePodControl 构造带 Pod 索引的假 PodControl，便于模拟创建与删除后的存储变更。
 func newFakePodControl() *fakePodControl {
 	podIDMap := make(map[string]*v1.Pod)
 	return &fakePodControl{
@@ -253,6 +265,7 @@ func newFakePodControl() *fakePodControl {
 	}
 }
 
+// CreatePods 在创建 Pod 后同步更新假存储并消费创建预期，使后续同步行为贴近真实控制器。
 func (f *fakePodControl) CreatePods(ctx context.Context, namespace string, template *v1.PodTemplateSpec, object runtime.Object, controllerRef *metav1.OwnerReference) error {
 	f.Lock()
 	defer f.Unlock()
@@ -281,6 +294,7 @@ func (f *fakePodControl) CreatePods(ctx context.Context, namespace string, templ
 	return nil
 }
 
+// DeletePod 在删除 Pod 后同步更新假存储并消费删除预期，使后续同步行为贴近真实控制器。
 func (f *fakePodControl) DeletePod(ctx context.Context, namespace string, podID string, object runtime.Object) error {
 	f.Lock()
 	defer f.Unlock()
@@ -311,6 +325,7 @@ type daemonSetsController struct {
 	fakeRecorder *record.FakeRecorder
 }
 
+// newTestController 搭建带 informer 存储的测试控制器，并让同步检查始终通过。
 func newTestController(ctx context.Context, initialObjects ...runtime.Object) (*daemonSetsController, *fakePodControl, *fake.Clientset, error) {
 	clientset := fake.NewSimpleClientset(initialObjects...)
 	informerFactory := informers.NewSharedInformerFactory(clientset, controller.NoResyncPeriodFunc())
@@ -353,6 +368,7 @@ func newTestController(ctx context.Context, initialObjects ...runtime.Object) (*
 	return newDsc, podControl, clientset, nil
 }
 
+// resetCounters 清空调用计数与事件记录，便于在同一控制器上连续断言多轮同步。
 func resetCounters(manager *daemonSetsController) {
 	manager.podControl.(*fakePodControl).Clear()
 	fakeRecorder := record.NewFakeRecorder(100)
@@ -360,6 +376,7 @@ func resetCounters(manager *daemonSetsController) {
 	manager.fakeRecorder = fakeRecorder
 }
 
+// validateSyncDaemonSets 校验同步结果中的创建、删除、事件数量及 ControllerRef 是否正确。
 func validateSyncDaemonSets(manager *daemonSetsController, fakePodControl *fakePodControl, expectedCreates, expectedDeletes int, expectedEvents int) error {
 	if len(fakePodControl.Templates) != expectedCreates {
 		return fmt.Errorf("Unexpected number of creates.  Expected %d, saw %d\n", expectedCreates, len(fakePodControl.Templates))
@@ -370,11 +387,11 @@ func validateSyncDaemonSets(manager *daemonSetsController, fakePodControl *fakeP
 	if len(manager.fakeRecorder.Events) != expectedEvents {
 		return fmt.Errorf("Unexpected number of events.  Expected %d, saw %d\n", expectedEvents, len(manager.fakeRecorder.Events))
 	}
-	// Every Pod created should have a ControllerRef.
+	// 每个创建的 Pod 都必须带 ControllerRef，否则会被 GC 误删。
 	if got, want := len(fakePodControl.ControllerRefs), expectedCreates; got != want {
 		return fmt.Errorf("len(ControllerRefs) = %v, want %v", got, want)
 	}
-	// Make sure the ControllerRefs are correct.
+	// 校验 ControllerRef 指向正确的 DaemonSet。
 	for _, controllerRef := range fakePodControl.ControllerRefs {
 		if got, want := controllerRef.APIVersion, "apps/v1"; got != want {
 			return fmt.Errorf("controllerRef.APIVersion = %q, want %q", got, want)
@@ -389,11 +406,13 @@ func validateSyncDaemonSets(manager *daemonSetsController, fakePodControl *fakeP
 	return nil
 }
 
+// expectSyncDaemonSets 执行一次同步并断言没有预期错误。
 func expectSyncDaemonSets(t *testing.T, manager *daemonSetsController, ds *apps.DaemonSet, podControl *fakePodControl, expectedCreates, expectedDeletes int, expectedEvents int) {
 	t.Helper()
 	expectSyncDaemonSetsWithError(t, manager, ds, podControl, expectedCreates, expectedDeletes, expectedEvents, nil)
 }
 
+// expectSyncDaemonSetsWithError 执行一次同步并断言返回指定错误。
 func expectSyncDaemonSetsWithError(t *testing.T, manager *daemonSetsController, ds *apps.DaemonSet, podControl *fakePodControl, expectedCreates, expectedDeletes int, expectedEvents int, expectedError error) {
 	t.Helper()
 	key, err := controller.KeyFunc(ds)
@@ -416,7 +435,7 @@ func expectSyncDaemonSetsWithError(t *testing.T, manager *daemonSetsController, 
 	}
 }
 
-// clearExpectations copies the FakePodControl to PodStore and clears the create and delete expectations.
+// clearExpectations 清空 FakePodControl 记录并移除 DaemonSet 的创建与删除预期。
 func clearExpectations(t *testing.T, manager *daemonSetsController, ds *apps.DaemonSet, fakePodControl *fakePodControl) {
 	fakePodControl.Clear()
 	logger, _ := ktesting.NewTestContext(t)
@@ -429,7 +448,7 @@ func clearExpectations(t *testing.T, manager *daemonSetsController, ds *apps.Dae
 
 	now := manager.failedPodsBackoff.Clock.Now()
 	hash, _ := currentDSHash(manager, ds)
-	// log all the pods in the store
+	// 输出 Pod 状态便于断言失败时定位问题。
 	var lines []string
 	for _, obj := range manager.podStore.List() {
 		pod := obj.(*v1.Pod)
@@ -461,6 +480,7 @@ func clearExpectations(t *testing.T, manager *daemonSetsController, ds *apps.Dae
 	}
 }
 
+// TestDeleteFinalStateUnknown 验证删除事件中的 DeletedFinalStateUnknown 会被解包并入队。
 func TestDeleteFinalStateUnknown(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		logger, ctx := ktesting.NewTestContext(t)
@@ -471,7 +491,7 @@ func TestDeleteFinalStateUnknown(t *testing.T) {
 		addNodes(manager.nodeStore, 0, 1, nil)
 		ds := newDaemonSet("foo")
 		ds.Spec.UpdateStrategy = *strategy
-		// DeletedFinalStateUnknown should queue the embedded DS if found.
+		// 缓存删除事件携带的对象应被解包并入队。
 		manager.deleteDaemonset(logger, cache.DeletedFinalStateUnknown{Key: "foo", Obj: ds})
 		enqueuedKey, _ := manager.queue.Get()
 		if enqueuedKey != "default/foo" {
@@ -480,6 +500,7 @@ func TestDeleteFinalStateUnknown(t *testing.T) {
 	}
 }
 
+// TestExpectationsOnRecreate 验证 DaemonSet 重建后预期被重置、删除后预期被清理。
 func TestExpectationsOnRecreate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -538,8 +559,8 @@ func TestExpectationsOnRecreate(t *testing.T) {
 	dsc.eventRecorder = fakeRecorder
 
 	fakePodControl := newFakePodControl()
-	fakePodControl.podStore = cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc) // fake store that we don't use
-	fakePodControl.expectations = controller.NewControllerExpectations()                 // fake expectations that we don't use
+	fakePodControl.podStore = cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc) // 占位存储，测试中不实际读取
+	fakePodControl.expectations = controller.NewControllerExpectations()                 // 占位预期，测试中不实际校验
 	dsc.podControl = fakePodControl
 
 	manager := &daemonSetsController{
@@ -567,7 +588,7 @@ func TestExpectationsOnRecreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// create of DS adds to queue, processes
+	// 创建 DaemonSet 会入队，这里处理该事件。
 	waitForQueueLength(1, "created DS")
 	ok := dsc.processNextWorkItem(context.TODO())
 	if !ok {
@@ -596,14 +617,14 @@ func TestExpectationsOnRecreate(t *testing.T) {
 		t.Errorf("There should be unfulfilled expectation for creating new pods for DaemonSet %q", oldDSKey)
 	}
 
-	// process updates DS, update adds to queue
+	// DaemonSet 更新事件同样会入队。
 	waitForQueueLength(1, "updated DS")
 	ok = dsc.processNextWorkItem(context.TODO())
 	if !ok {
 		t.Fatal("queue is shutting down")
 	}
 
-	// process does not re-update the DS
+	// 处理更新事件不应再次触发 DaemonSet 更新。
 	expectStableQueueLength(0)
 
 	err = client.AppsV1().DaemonSets(oldDS.Namespace).Delete(context.Background(), oldDS.Name, metav1.DeleteOptions{})
@@ -621,7 +642,7 @@ func TestExpectationsOnRecreate(t *testing.T) {
 		t.Errorf("There should be no expectations for DaemonSet %q after it was deleted", oldDSKey)
 	}
 
-	// skip sync for the delete event so we only see the new RS in sync
+	// 消费删除事件但不处理，避免干扰后续对重建对象的断言。
 	key, quit := dsc.queue.Get()
 	if quit {
 		t.Fatal("Queue is shutting down!")
@@ -640,7 +661,7 @@ func TestExpectationsOnRecreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Sanity check
+	// 基本校验：重建对象必须有不同的 UID。
 	if newDS.UID == oldDS.UID {
 		t.Fatal("New DS has the same UID as the old one!")
 	}
@@ -673,20 +694,22 @@ func TestExpectationsOnRecreate(t *testing.T) {
 	fakePodControl.Clear()
 }
 
+// markPodsReady 将存储中所有 Pod 标为 Ready，便于验证就绪相关逻辑。
 func markPodsReady(store cache.Store) {
-	// mark pods as ready
+	// 将存储中的 Pod 标记为 Ready。
 	for _, obj := range store.List() {
 		pod := obj.(*v1.Pod)
 		markPodReady(pod)
 	}
 }
 
+// markPodReady 为 Pod 添加 Ready=True 条件。
 func markPodReady(pod *v1.Pod) {
 	condition := v1.PodCondition{Type: v1.PodReady, Status: v1.ConditionTrue}
 	podutil.UpdatePodCondition(&pod.Status, &condition)
 }
 
-// DaemonSets without node selectors should launch pods on every node.
+// TestSimpleDaemonSetLaunchesPods 验证无节点选择器的 DaemonSet 会在每个节点上创建 Pod。
 func TestSimpleDaemonSetLaunchesPods(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -706,7 +729,7 @@ func TestSimpleDaemonSetLaunchesPods(t *testing.T) {
 	}
 }
 
-// DaemonSets without node selectors should launch pods on every node by NodeAffinity.
+// TestSimpleDaemonSetScheduleDaemonSetPodsLaunchesPods 验证调度模式下通过 NodeAffinity 在所有节点创建 Pod。
 func TestSimpleDaemonSetScheduleDaemonSetPodsLaunchesPods(t *testing.T) {
 	nodeNum := 5
 	for _, strategy := range updateStrategies() {
@@ -783,8 +806,8 @@ func TestSimpleDaemonSetScheduleDaemonSetPodsLaunchesPods(t *testing.T) {
 	}
 }
 
-// Simulate a cluster with 100 nodes, but simulate a limit (like a quota limit)
-// of 10 pods, and verify that the ds doesn't make 100 create calls per sync pass
+// TestSimpleDaemonSetPodCreateErrors 模拟 100 节点集群受配额限制只能创建 10 个 Pod，
+// 验证单轮同步不会因创建失败而发出远超限制的创建请求。
 func TestSimpleDaemonSetPodCreateErrors(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -836,6 +859,7 @@ func TestSimpleDaemonSetPodCreateErrors(t *testing.T) {
 	}
 }
 
+// TestDaemonSetPodCreateExpectationsError 验证 Pod 创建失败后预期保留，阻止同一轮内无限重试。
 func TestDaemonSetPodCreateExpectationsError(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	strategies := updateStrategies()
@@ -868,6 +892,7 @@ func TestDaemonSetPodCreateExpectationsError(t *testing.T) {
 	}
 }
 
+// TestSimpleDaemonSetUpdatesStatusAfterLaunchingPods 验证创建 Pod 后状态中的调度与就绪数量被更新。
 func TestSimpleDaemonSetUpdatesStatusAfterLaunchingPods(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -893,14 +918,14 @@ func TestSimpleDaemonSetUpdatesStatusAfterLaunchingPods(t *testing.T) {
 		addNodes(manager.nodeStore, 0, 5, nil)
 		expectSyncDaemonSets(t, manager, ds, podControl, 5, 0, 0)
 
-		// Make sure the single sync() updated Status already for the change made
-		// during the manage() phase.
+		// 确认单次同步就提交了 manage 阶段产生的状态变更。
 		if got, want := updated.Status.CurrentNumberScheduled, int32(5); got != want {
 			t.Errorf("Status.CurrentNumberScheduled = %v, want %v", got, want)
 		}
 	}
 }
 
+// TestSimpleDaemonSetUpdatesStatusError 验证状态更新失败时错误向上传播。
 func TestSimpleDaemonSetUpdatesStatusError(t *testing.T) {
 	var (
 		syncErr   = fmt.Errorf("sync error")
@@ -970,7 +995,7 @@ func TestSimpleDaemonSetUpdatesStatusError(t *testing.T) {
 	}
 }
 
-// DaemonSets should do nothing if there aren't any nodes
+// TestNoNodesDoesNothing 验证没有节点时 DaemonSet 不执行任何操作。
 func TestNoNodesDoesNothing(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		_, ctx := ktesting.NewTestContext(t)
@@ -989,8 +1014,7 @@ func TestNoNodesDoesNothing(t *testing.T) {
 	}
 }
 
-// DaemonSets without node selectors should launch on a single node in a
-// single node cluster.
+// TestOneNodeDaemonLaunchesPod 验证单节点集群中 DaemonSet 会在该节点创建 Pod。
 func TestOneNodeDaemonLaunchesPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1013,7 +1037,7 @@ func TestOneNodeDaemonLaunchesPod(t *testing.T) {
 	}
 }
 
-// DaemonSets should place onto NotReady nodes
+// TestNotReadyNodeDaemonLaunchesPod 验证 DaemonSet 会在 NotReady 节点上创建 Pod。
 func TestNotReadyNodeDaemonDoesLaunchPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1041,6 +1065,7 @@ func TestNotReadyNodeDaemonDoesLaunchPod(t *testing.T) {
 	}
 }
 
+// resourcePodSpec 构造带指定节点与资源请求的 PodSpec。
 func resourcePodSpec(nodeName, memory, cpu string) v1.PodSpec {
 	return v1.PodSpec{
 		NodeName: nodeName,
@@ -1052,12 +1077,14 @@ func resourcePodSpec(nodeName, memory, cpu string) v1.PodSpec {
 	}
 }
 
+// resourceContainerSpec 构造带指定内存和 CPU 需求的容器资源配置。
 func resourceContainerSpec(memory, cpu string) v1.ResourceRequirements {
 	return v1.ResourceRequirements{
 		Requests: allocatableResources(memory, cpu),
 	}
 }
 
+// resourcePodSpecWithoutNodeName 构造未绑定节点的 PodSpec，用于测试节点选择逻辑。
 func resourcePodSpecWithoutNodeName(memory, cpu string) v1.PodSpec {
 	return v1.PodSpec{
 		Containers: []v1.Container{{
@@ -1068,6 +1095,7 @@ func resourcePodSpecWithoutNodeName(memory, cpu string) v1.PodSpec {
 	}
 }
 
+// allocatableResources 构造节点可分配资源列表。
 func allocatableResources(memory, cpu string) v1.ResourceList {
 	return v1.ResourceList{
 		v1.ResourceMemory: resource.MustParse(memory),
@@ -1076,7 +1104,7 @@ func allocatableResources(memory, cpu string) v1.ResourceList {
 	}
 }
 
-// DaemonSets should not unschedule a daemonset pod from a node with insufficient free resource
+// TestInsufficientCapacityNodeDaemonDoesNotUnscheduleRunningPod 验证资源不足时不会驱逐已运行的 Pod。
 func TestInsufficientCapacityNodeDaemonDoesNotUnscheduleRunningPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		podSpec := resourcePodSpec("too-much-mem", "75M", "75m")
@@ -1116,7 +1144,7 @@ func TestInsufficientCapacityNodeDaemonDoesNotUnscheduleRunningPod(t *testing.T)
 	}
 }
 
-// DaemonSets should only place onto nodes with sufficient free resource and matched node selector
+// TestInsufficientCapacityNodeSufficientCapacityWithNodeLabelDaemonLaunchPod 验证仅在资源充足且标签匹配的节点创建 Pod。
 func TestInsufficientCapacityNodeSufficientCapacityWithNodeLabelDaemonLaunchPod(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	podSpec := resourcePodSpecWithoutNodeName("50M", "75m")
@@ -1144,13 +1172,13 @@ func TestInsufficientCapacityNodeSufficientCapacityWithNodeLabelDaemonLaunchPod(
 		t.Fatal(err)
 	}
 	expectSyncDaemonSets(t, manager, ds, podControl, 1, 0, 0)
-	// we do not expect any event for insufficient free resource
+	// 资源不足属于正常筛选，不应产生事件。
 	if len(manager.fakeRecorder.Events) != 0 {
 		t.Fatalf("unexpected events, got %v, expected %v: %+v", len(manager.fakeRecorder.Events), 0, manager.fakeRecorder.Events)
 	}
 }
 
-// DaemonSet should launch a pod on a node with taint NetworkUnavailable condition.
+// TestNetworkUnavailableNodeDaemonLaunchesPod 验证带 NetworkUnavailable 污点的节点仍会创建 Pod。
 func TestNetworkUnavailableNodeDaemonLaunchesPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("simple")
@@ -1178,7 +1206,7 @@ func TestNetworkUnavailableNodeDaemonLaunchesPod(t *testing.T) {
 	}
 }
 
-// DaemonSets not take any actions when being deleted
+// TestDontDoAnythingIfBeingDeleted 验证删除中的 DaemonSet 不再执行任何同步操作。
 func TestDontDoAnythingIfBeingDeleted(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		podSpec := resourcePodSpec("not-too-much-mem", "75M", "75m")
@@ -1212,9 +1240,10 @@ func TestDontDoAnythingIfBeingDeleted(t *testing.T) {
 	}
 }
 
+// TestDontDoAnythingIfBeingDeletedRace 验证删除中的 DaemonSet 在删除事件竞态下也不被重新入队。
 func TestDontDoAnythingIfBeingDeletedRace(t *testing.T) {
 	for _, strategy := range updateStrategies() {
-		// Bare client says it IS deleted.
+		// 客户端视角：DaemonSet 已被删除。
 		ds := newDaemonSet("foo")
 		ds.Spec.UpdateStrategy = *strategy
 		now := metav1.Now()
@@ -1226,7 +1255,7 @@ func TestDontDoAnythingIfBeingDeletedRace(t *testing.T) {
 		}
 		addNodes(manager.nodeStore, 0, 5, nil)
 
-		// Lister (cache) says it's NOT deleted.
+		// 缓存视角：DaemonSet 尚未删除，模拟竞态窗口。
 		ds2 := *ds
 		ds2.DeletionTimestamp = nil
 		err = manager.dsStore.Add(&ds2)
@@ -1234,7 +1263,7 @@ func TestDontDoAnythingIfBeingDeletedRace(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// The existence of a matching orphan should block all actions in this state.
+		// 该状态下匹配的孤儿 Pod 应阻止所有操作。
 		pod := newPod("pod1-", "node-0", simpleDaemonSetLabel, nil)
 		err = manager.podStore.Add(pod)
 		if err != nil {
@@ -1245,10 +1274,7 @@ func TestDontDoAnythingIfBeingDeletedRace(t *testing.T) {
 	}
 }
 
-// Test that if the node is already scheduled with a pod using a host port
-// but belonging to the same daemonset, we don't delete that pod
-//
-// Issue: https://github.com/kubernetes/kubernetes/issues/22309
+// TestPortConflictWithSameDaemonPodDoesNotDeletePod 验证同 DaemonSet 的 Pod 占用 hostPort 不算端口冲突。
 func TestPortConflictWithSameDaemonPodDoesNotDeletePod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		podSpec := v1.PodSpec{
@@ -1285,7 +1311,7 @@ func TestPortConflictWithSameDaemonPodDoesNotDeletePod(t *testing.T) {
 	}
 }
 
-// DaemonSets should place onto nodes that would not cause port conflicts
+// TestNoPortConflictNodeDaemonLaunchesPod 验证 DaemonSet 会避开端口冲突的节点。
 func TestNoPortConflictNodeDaemonLaunchesPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		podSpec1 := v1.PodSpec{
@@ -1331,19 +1357,14 @@ func TestNoPortConflictNodeDaemonLaunchesPod(t *testing.T) {
 	}
 }
 
-// DaemonSetController should not sync DaemonSets with empty pod selectors.
-//
-// issue https://github.com/kubernetes/kubernetes/pull/23223
+// TestPodIsNotDeletedByDaemonsetWithEmptyLabelSelector 验证空标签选择器不会误删 Pod。
 func TestPodIsNotDeletedByDaemonsetWithEmptyLabelSelector(t *testing.T) {
-	// Create a misconfigured DaemonSet. An empty pod selector is invalid but could happen
-	// if we upgrade and make a backwards incompatible change.
+	// 构造错误配置的 DaemonSet：空选择器非法但升级兼容场景可能出现。
 	//
-	// The node selector matches no nodes which mimics the behavior of kubectl delete.
+	// 节点选择器不匹配任何节点，模拟 kubectl delete 的行为。
 	//
-	// The DaemonSet should not schedule pods and should not delete scheduled pods in
-	// this case even though it's empty pod selector matches all pods. The DaemonSetController
-	// should detect this misconfiguration and choose not to sync the DaemonSet. We should
-	// not observe a deletion of the pod on node1.
+	// 这种情况下既不应调度也不应删除已有 Pod，尽管空选择器匹配所有 Pod。
+	// 控制器应识别错误配置并跳过同步，不应观察到 node1 上的 Pod 被删除。
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
 		ds.Spec.UpdateStrategy = *strategy
@@ -1360,7 +1381,7 @@ func TestPodIsNotDeletedByDaemonsetWithEmptyLabelSelector(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Create pod not controlled by a daemonset.
+		// 创建不受 DaemonSet 控制的 Pod。
 		err = manager.podStore.Add(&v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels:    map[string]string{"bang": "boom"},
@@ -1382,7 +1403,7 @@ func TestPodIsNotDeletedByDaemonsetWithEmptyLabelSelector(t *testing.T) {
 	}
 }
 
-// Controller should not create pods on nodes which have daemon pods, and should remove excess pods from nodes that have extra pods.
+// TestSurgeDealsWithExistingPods 验证滚动更新中已有 Pod 的节点不重复创建，多余 Pod 会被清理。
 func TestDealsWithExistingPods(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1405,7 +1426,7 @@ func TestDealsWithExistingPods(t *testing.T) {
 	}
 }
 
-// Daemon with node selector should launch pods on nodes matching selector.
+// TestSelectorDaemonLaunchesPods 验证带节点选择器的 DaemonSet 仅在匹配节点创建 Pod。
 func TestSelectorDaemonLaunchesPods(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		daemon := newDaemonSet("foo")
@@ -1426,7 +1447,7 @@ func TestSelectorDaemonLaunchesPods(t *testing.T) {
 	}
 }
 
-// Daemon with node selector should delete pods from nodes that do not satisfy selector.
+// TestSelectorDaemonDeletesUnselectedPods 验证节点不再匹配选择器时会删除其上的 Pod。
 func TestSelectorDaemonDeletesUnselectedPods(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1451,7 +1472,7 @@ func TestSelectorDaemonDeletesUnselectedPods(t *testing.T) {
 	}
 }
 
-// DaemonSet with node selector should launch pods on nodes matching selector, but also deal with existing pods on nodes.
+// TestSelectorDaemonDealsWithExistingPods 验证节点选择器匹配时也能正确处理已有的多余 Pod。
 func TestSelectorDaemonDealsWithExistingPods(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1480,7 +1501,7 @@ func TestSelectorDaemonDealsWithExistingPods(t *testing.T) {
 	}
 }
 
-// DaemonSet with node selector which does not match any node labels should not launch pods.
+// TestBadSelectorDaemonDoesNothing 验证选择器不匹配任何节点时不创建 Pod。
 func TestBadSelectorDaemonDoesNothing(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		_, ctx := ktesting.NewTestContext(t)
@@ -1501,7 +1522,7 @@ func TestBadSelectorDaemonDoesNothing(t *testing.T) {
 	}
 }
 
-// DaemonSet with node name should launch pod on node with corresponding name.
+// TestNameDaemonSetLaunchesPods 验证指定节点名的 DaemonSet 仅在对应节点创建 Pod。
 func TestNameDaemonSetLaunchesPods(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1521,7 +1542,7 @@ func TestNameDaemonSetLaunchesPods(t *testing.T) {
 	}
 }
 
-// DaemonSet with node name that does not exist should not launch pods.
+// TestBadNameDaemonSetDoesNothing 验证指定节点不存在时不创建 Pod。
 func TestBadNameDaemonSetDoesNothing(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1541,7 +1562,7 @@ func TestBadNameDaemonSetDoesNothing(t *testing.T) {
 	}
 }
 
-// DaemonSet with node selector, and node name, matching a node, should launch a pod on the node.
+// TestNameAndSelectorDaemonSetLaunchesPods 验证节点名与选择器同时匹配时在对应节点创建 Pod。
 func TestNameAndSelectorDaemonSetLaunchesPods(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1563,7 +1584,7 @@ func TestNameAndSelectorDaemonSetLaunchesPods(t *testing.T) {
 	}
 }
 
-// DaemonSet with node selector that matches some nodes, and node name that matches a different node, should do nothing.
+// TestInconsistentNameSelectorDaemonSetDoesNothing 验证节点名与选择器指向不同节点时不创建 Pod。
 func TestInconsistentNameSelectorDaemonSetDoesNothing(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1585,7 +1606,7 @@ func TestInconsistentNameSelectorDaemonSetDoesNothing(t *testing.T) {
 	}
 }
 
-// DaemonSet with node selector, matching some nodes, should launch pods on all the nodes.
+// TestSelectorDaemonSetLaunchesPods 验证选择器匹配多个节点时在每个匹配节点创建 Pod。
 func TestSelectorDaemonSetLaunchesPods(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ds := newDaemonSet("foo")
@@ -1603,7 +1624,7 @@ func TestSelectorDaemonSetLaunchesPods(t *testing.T) {
 	expectSyncDaemonSets(t, manager, ds, podControl, 3, 0, 0)
 }
 
-// Daemon with node affinity should launch pods on nodes matching affinity.
+// TestNodeAffinityDaemonLaunchesPods 验证 DaemonSet 依据节点亲和性选择节点创建 Pod。
 func TestNodeAffinityDaemonLaunchesPods(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		daemon := newDaemonSet("foo")
@@ -1640,6 +1661,7 @@ func TestNodeAffinityDaemonLaunchesPods(t *testing.T) {
 	}
 }
 
+// TestNumberReadyStatus 验证状态中各就绪相关计数的统计结果。
 func TestNumberReadyStatus(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1686,6 +1708,7 @@ func TestNumberReadyStatus(t *testing.T) {
 	}
 }
 
+// TestObservedGeneration 验证状态中的 observedGeneration 随 DaemonSet 更新而变化。
 func TestObservedGeneration(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -1721,7 +1744,7 @@ func TestObservedGeneration(t *testing.T) {
 	}
 }
 
-// DaemonSet controller should kill all failed pods and create at most 1 pod on every node.
+// TestDaemonKillFailedPods 验证控制器删除失败 Pod 且每个节点最多补建一个。
 func TestDaemonKillFailedPods(t *testing.T) {
 	tests := []struct {
 		numFailedPods, numNormalPods, expectedCreates, expectedDeletes, expectedEvents int
@@ -1756,7 +1779,7 @@ func TestDaemonKillFailedPods(t *testing.T) {
 	}
 }
 
-// DaemonSet controller needs to backoff when killing failed pods to avoid hot looping and fighting with kubelet.
+// TestDaemonKillFailedPodsBackoff 验证删除失败 Pod 时采用退避，避免与 kubelet 争抢导致热循环。
 func TestDaemonKillFailedPodsBackoff(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		t.Run(string(strategy.Type), func(t *testing.T) {
@@ -1778,7 +1801,7 @@ func TestDaemonKillFailedPodsBackoff(t *testing.T) {
 			nodeName := "node-0"
 			pod := newPod(fmt.Sprintf("%s-", nodeName), nodeName, simpleDaemonSetLabel, ds)
 
-			// Add a failed Pod
+			// 加入失败 Pod 触发删除与退避逻辑。
 			pod.Status.Phase = v1.PodFailed
 			err = manager.podStore.Add(pod)
 			if err != nil {
@@ -1787,7 +1810,7 @@ func TestDaemonKillFailedPodsBackoff(t *testing.T) {
 
 			backoffKey := failedPodsBackoffKey(ds, nodeName)
 
-			// First sync will delete the pod, initializing backoff
+			// 首次同步删除 Pod 并初始化退避计时。
 			expectSyncDaemonSets(t, manager, ds, podControl, 0, 1, 1)
 			initialDelay := manager.failedPodsBackoff.Get(backoffKey)
 			if initialDelay <= 0 {
@@ -1796,7 +1819,7 @@ func TestDaemonKillFailedPodsBackoff(t *testing.T) {
 
 			resetCounters(manager)
 
-			// Immediate (second) sync gets limited by the backoff
+			// 紧接着的同步应被退避限制。
 			expectSyncDaemonSets(t, manager, ds, podControl, 0, 0, 0)
 			delay := manager.failedPodsBackoff.Get(backoffKey)
 			if delay != initialDelay {
@@ -1805,29 +1828,28 @@ func TestDaemonKillFailedPodsBackoff(t *testing.T) {
 
 			resetCounters(manager)
 
-			// Sleep to wait out backoff
+			// 等待退避时间结束。
 			fakeClock := manager.failedPodsBackoff.Clock
 
-			// Move just before the backoff end time
+			// 将时钟拨到退避结束前。
 			fakeClock.Sleep(delay - 1*time.Nanosecond)
 			if !manager.failedPodsBackoff.IsInBackOffSinceUpdate(backoffKey, fakeClock.Now()) {
 				t.Errorf("Backoff delay didn't last the whole waitout period.")
 			}
 
-			// Move to the backoff end time
+			// 将时钟拨到退避结束点。
 			fakeClock.Sleep(1 * time.Nanosecond)
 			if manager.failedPodsBackoff.IsInBackOffSinceUpdate(backoffKey, fakeClock.Now()) {
 				t.Fatal("Backoff delay hasn't been reset after the period has passed.")
 			}
 
-			// After backoff time, it will delete the failed pod
+			// 退避结束后才会删除失败 Pod。
 			expectSyncDaemonSets(t, manager, ds, podControl, 0, 1, 1)
 		})
 	}
 }
 
-// Daemonset should not remove a running pod from a node if the pod doesn't
-// tolerate the nodes NoSchedule taint
+// TestNoScheduleTaintedDoesntEvicitRunningIntolerantPod 验证 NoSchedule 污点节点上不耐受的运行中 Pod 不会被驱逐。
 func TestNoScheduleTaintedDoesntEvicitRunningIntolerantPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("intolerant")
@@ -1857,8 +1879,7 @@ func TestNoScheduleTaintedDoesntEvicitRunningIntolerantPod(t *testing.T) {
 	}
 }
 
-// Daemonset should remove a running pod from a node if the pod doesn't
-// tolerate the nodes NoExecute taint
+// TestNoExecuteTaintedDoesEvicitRunningIntolerantPod 验证 NoExecute 污点节点上不耐受的运行中 Pod 会被驱逐。
 func TestNoExecuteTaintedDoesEvicitRunningIntolerantPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("intolerant")
@@ -1888,7 +1909,7 @@ func TestNoExecuteTaintedDoesEvicitRunningIntolerantPod(t *testing.T) {
 	}
 }
 
-// DaemonSet should not launch a pod on a tainted node when the pod doesn't tolerate that taint.
+// TestTaintedNodeDaemonDoesNotLaunchIntolerantPod 验证 Pod 不耐受污点时不在该节点创建。
 func TestTaintedNodeDaemonDoesNotLaunchIntolerantPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("intolerant")
@@ -1914,7 +1935,7 @@ func TestTaintedNodeDaemonDoesNotLaunchIntolerantPod(t *testing.T) {
 	}
 }
 
-// DaemonSet should launch a pod on a tainted node when the pod can tolerate that taint.
+// TestTaintedNodeDaemonLaunchesToleratePod 验证 Pod 耐受污点时仍在该节点创建。
 func TestTaintedNodeDaemonLaunchesToleratePod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("tolerate")
@@ -1941,7 +1962,7 @@ func TestTaintedNodeDaemonLaunchesToleratePod(t *testing.T) {
 	}
 }
 
-// DaemonSet should launch a pod on a not ready node with taint notReady:NoExecute.
+// TestNotReadyNodeDaemonLaunchesPod 验证带 notReady:NoExecute 污点的节点仍会创建 Pod。
 func TestNotReadyNodeDaemonLaunchesPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("simple")
@@ -1970,7 +1991,7 @@ func TestNotReadyNodeDaemonLaunchesPod(t *testing.T) {
 	}
 }
 
-// DaemonSet should launch a pod on an unreachable node with taint unreachable:NoExecute.
+// TestUnreachableNodeDaemonLaunchesPod 验证节点不可达且带对应污点时仍会创建 Pod。
 func TestUnreachableNodeDaemonLaunchesPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("simple")
@@ -1999,7 +2020,7 @@ func TestUnreachableNodeDaemonLaunchesPod(t *testing.T) {
 	}
 }
 
-// DaemonSet should launch a pod on an untainted node when the pod has tolerations.
+// TestNodeDaemonLaunchesToleratePod 验证带容忍度的 Pod 可在无污点节点上创建。
 func TestNodeDaemonLaunchesToleratePod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("tolerate")
@@ -2020,7 +2041,7 @@ func TestNodeDaemonLaunchesToleratePod(t *testing.T) {
 	}
 }
 
-// DaemonSet should launch a pod on a not ready node with taint notReady:NoExecute.
+// TestDaemonSetRespectsTermination 验证删除中的 Pod 不会被替代。
 func TestDaemonSetRespectsTermination(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -2047,15 +2068,17 @@ func TestDaemonSetRespectsTermination(t *testing.T) {
 	}
 }
 
+// setNodeTaint 设置节点污点，用于验证容忍度相关行为。
 func setNodeTaint(node *v1.Node, taints []v1.Taint) {
 	node.Spec.Taints = taints
 }
 
+// setDaemonSetToleration 设置 DaemonSet 模板的容忍度。
 func setDaemonSetToleration(ds *apps.DaemonSet, tolerations []v1.Toleration) {
 	ds.Spec.Template.Spec.Tolerations = tolerations
 }
 
-// DaemonSet should launch a pod even when the node with MemoryPressure/DiskPressure/PIDPressure taints.
+// TestTaintPressureNodeDaemonLaunchesPod 验证系统关键 DaemonSet 在节点压力污点下仍创建 Pod。
 func TestTaintPressureNodeDaemonLaunchesPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("critical")
@@ -2090,6 +2113,7 @@ func TestTaintPressureNodeDaemonLaunchesPod(t *testing.T) {
 	}
 }
 
+// setDaemonSetCritical 把 DaemonSet 标记为系统关键，使其容忍节点压力污点。
 func setDaemonSetCritical(ds *apps.DaemonSet) {
 	ds.Namespace = api.NamespaceSystem
 	if ds.Spec.Template.ObjectMeta.Annotations == nil {
@@ -2099,6 +2123,7 @@ func setDaemonSetCritical(ds *apps.DaemonSet) {
 	ds.Spec.Template.Spec.Priority = &podPriority
 }
 
+// TestNodeShouldRunDaemonPod 覆盖节点是否应运行 Daemon Pod 的各类判定场景。
 func TestNodeShouldRunDaemonPod(t *testing.T) {
 	shouldRun := true
 	shouldContinueRunning := true
@@ -2216,7 +2241,7 @@ func TestNodeShouldRunDaemonPod(t *testing.T) {
 					},
 				},
 			},
-			shouldRun:             shouldRun, // This is because we don't care about the resource constraints any more and let default scheduler handle it.
+			shouldRun:             shouldRun, // 资源约束交由默认调度器处理，此处只验证节点判定
 			shouldContinueRunning: true,
 		},
 		{
@@ -2399,7 +2424,7 @@ func TestNodeShouldRunDaemonPod(t *testing.T) {
 	}
 }
 
-// DaemonSets should be resynced when node labels or taints changed
+// TestUpdateNode 验证节点标签或污点变化会触发 DaemonSet 重新同步。
 func TestUpdateNode(t *testing.T) {
 	var enqueued bool
 	cases := []struct {
@@ -2410,8 +2435,7 @@ func TestUpdateNode(t *testing.T) {
 		expectedEventsFunc func(strategyType apps.DaemonSetUpdateStrategyType) int
 		shouldEnqueue      bool
 		expectedCreates    func() int
-		// Indicates whether a DaemonSet pod was already present on the node before the node transitioned to Ready and schedulable state.
-		// (In other words, was the DaemonSet pod scheduled before the node lost its readiness / was tainted?)
+		// 标记节点变为 Ready 前其上是否已有 Daemon Pod，用于验证节点恢复后的处理
 		preExistingPod bool
 	}{
 		{
@@ -2561,7 +2585,7 @@ func TestUpdateNode(t *testing.T) {
 	}
 }
 
-// DaemonSets should be resynced when non-daemon pods was deleted.
+// TestDeleteNoDaemonPod 验证非 Daemon Pod 删除不会触发 DaemonSet 同步。
 func TestDeleteNoDaemonPod(t *testing.T) {
 	var enqueued bool
 
@@ -2739,6 +2763,7 @@ func TestDeleteNoDaemonPod(t *testing.T) {
 	}
 }
 
+// TestDeleteUnscheduledPodForNotExistingNode 验证节点不存在时未调度 Pod 能被正确入队处理。
 func TestDeleteUnscheduledPodForNotExistingNode(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -2782,6 +2807,7 @@ func TestDeleteUnscheduledPodForNotExistingNode(t *testing.T) {
 	}
 }
 
+// TestGetNodesToDaemonPods 验证节点到 Daemon Pod 映射能按 Pod 变更及时更新。
 func TestGetNodesToDaemonPods(t *testing.T) {
 	ds := newDaemonSet("foo")
 	ds2 := newDaemonSet("foo2")
@@ -2908,6 +2934,7 @@ func TestGetNodesToDaemonPods(t *testing.T) {
 	}
 }
 
+// TestAddNode 验证节点添加事件会触发相关 DaemonSet 入队。
 func TestAddNode(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	manager, _, _, err := newTestController(ctx)
@@ -2948,6 +2975,7 @@ func TestAddNode(t *testing.T) {
 	}
 }
 
+// TestAddPod 验证 Daemon Pod 添加事件会触发所属 DaemonSet 入队。
 func TestAddPod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		logger, ctx := ktesting.NewTestContext(t)
@@ -2997,6 +3025,7 @@ func TestAddPod(t *testing.T) {
 	}
 }
 
+// TestAddPodOrphan 验证无主 Pod 的添加事件不会入队 DaemonSet。
 func TestAddPodOrphan(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		logger, ctx := ktesting.NewTestContext(t)
@@ -3024,7 +3053,7 @@ func TestAddPodOrphan(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Make pod an orphan. Expect matching sets to be queued.
+		// 移除 ControllerRef 使 Pod 成为孤儿，应入队匹配的 DaemonSet。
 		pod := newPod("pod1-", "node-0", simpleDaemonSetLabel, nil)
 		manager.addPod(logger, pod)
 		if got, want := manager.queue.Len(), 2; got != want {
@@ -3036,6 +3065,7 @@ func TestAddPodOrphan(t *testing.T) {
 	}
 }
 
+// TestUpdatePod 验证 Daemon Pod 更新事件会触发所属 DaemonSet 入队。
 func TestUpdatePod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		logger, ctx := ktesting.NewTestContext(t)
@@ -3090,6 +3120,7 @@ func TestUpdatePod(t *testing.T) {
 	}
 }
 
+// TestUpdatePodOrphanSameLabels 验证标签不变的无主 Pod 更新不会入队 DaemonSet。
 func TestUpdatePodOrphanSameLabels(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		logger, ctx := ktesting.NewTestContext(t)
@@ -3120,6 +3151,7 @@ func TestUpdatePodOrphanSameLabels(t *testing.T) {
 	}
 }
 
+// TestUpdatePodOrphanWithNewLabels 验证标签变为匹配的无主 Pod 更新会入队 DaemonSet。
 func TestUpdatePodOrphanWithNewLabels(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		logger, ctx := ktesting.NewTestContext(t)
@@ -3154,6 +3186,7 @@ func TestUpdatePodOrphanWithNewLabels(t *testing.T) {
 	}
 }
 
+// TestUpdatePodChangeControllerRef 验证 ControllerRef 变更后会同时入队新旧 DaemonSet。
 func TestUpdatePodChangeControllerRef(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		ds := newDaemonSet("foo")
@@ -3185,6 +3218,7 @@ func TestUpdatePodChangeControllerRef(t *testing.T) {
 	}
 }
 
+// TestUpdatePodControllerRefRemoved 验证 ControllerRef 被移除后会入队原 DaemonSet。
 func TestUpdatePodControllerRefRemoved(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		logger, ctx := ktesting.NewTestContext(t)
@@ -3216,6 +3250,7 @@ func TestUpdatePodControllerRefRemoved(t *testing.T) {
 	}
 }
 
+// TestDeletePod 验证 Daemon Pod 删除事件会触发所属 DaemonSet 入队。
 func TestDeletePod(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		logger, ctx := ktesting.NewTestContext(t)
@@ -3266,6 +3301,7 @@ func TestDeletePod(t *testing.T) {
 	}
 }
 
+// TestDeletePodOrphan 验证无主 Pod 的删除事件不会入队 DaemonSet。
 func TestDeletePodOrphan(t *testing.T) {
 	for _, strategy := range updateStrategies() {
 		logger, ctx := ktesting.NewTestContext(t)
@@ -3301,13 +3337,13 @@ func TestDeletePodOrphan(t *testing.T) {
 	}
 }
 
+// bumpResourceVersion 递增对象版本号，使更新事件被 informer 识别。
 func bumpResourceVersion(obj metav1.Object) {
 	ver, _ := strconv.ParseInt(obj.GetResourceVersion(), 10, 32)
 	obj.SetResourceVersion(strconv.FormatInt(ver+1, 10))
 }
 
-// getQueuedKeys returns a sorted list of keys in the queue.
-// It can be used to quickly check that multiple keys are in there.
+// getQueuedKeys 返回队列中键的有序列表。
 func getQueuedKeys(queue workqueue.TypedRateLimitingInterface[string]) []string {
 	var keys []string
 	count := queue.Len()
@@ -3322,7 +3358,7 @@ func getQueuedKeys(queue workqueue.TypedRateLimitingInterface[string]) []string 
 	return keys
 }
 
-// Controller should not create pods on nodes which have daemon pods, and should remove excess pods from nodes that have extra pods.
+// TestSurgeDealsWithExistingPods 验证滚动更新中已有 Pod 的节点不重复创建，多余 Pod 会被清理。
 func TestSurgeDealsWithExistingPods(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ds := newDaemonSet("foo")
@@ -3340,6 +3376,7 @@ func TestSurgeDealsWithExistingPods(t *testing.T) {
 	expectSyncDaemonSets(t, manager, ds, podControl, 2, 5, 0)
 }
 
+// TestSurgePreservesReadyOldPods 验证滚动更新中就绪的旧 Pod 在超出 maxSurge 后才会被删除。
 func TestSurgePreservesReadyOldPods(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ds := newDaemonSet("foo")
@@ -3351,19 +3388,19 @@ func TestSurgePreservesReadyOldPods(t *testing.T) {
 	manager.dsStore.Add(ds)
 	addNodes(manager.nodeStore, 0, 5, nil)
 
-	// will be preserved because it's the current hash
+	// 当前哈希的 Pod 必须保留。
 	pod := newPod("node-1-", "node-1", simpleDaemonSetLabel, ds)
 	pod.CreationTimestamp.Time = time.Unix(100, 0)
 	manager.podStore.Add(pod)
 
-	// will be preserved because it's the oldest AND it is ready
+	// 最旧且就绪的 Pod 应保留。
 	pod = newPod("node-1-old-", "node-1", simpleDaemonSetLabel, ds)
 	delete(pod.Labels, apps.ControllerRevisionHashLabelKey)
 	pod.CreationTimestamp.Time = time.Unix(50, 0)
 	pod.Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue}}
 	manager.podStore.Add(pod)
 
-	// will be deleted because it's not the oldest, even though it is ready
+	// 非最旧的 Pod 即使就绪也应删除。
 	oldReadyPod := newPod("node-1-delete-", "node-1", simpleDaemonSetLabel, ds)
 	delete(oldReadyPod.Labels, apps.ControllerRevisionHashLabelKey)
 	oldReadyPod.CreationTimestamp.Time = time.Unix(60, 0)
@@ -3380,6 +3417,7 @@ func TestSurgePreservesReadyOldPods(t *testing.T) {
 	}
 }
 
+// TestSurgeCreatesNewPodWhenAtMaxSurgeAndOldPodDeleted 验证旧 Pod 被删除后即使已达 maxSurge 仍会补建新 Pod。
 func TestSurgeCreatesNewPodWhenAtMaxSurgeAndOldPodDeleted(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ds := newDaemonSet("foo")
@@ -3391,20 +3429,20 @@ func TestSurgeCreatesNewPodWhenAtMaxSurgeAndOldPodDeleted(t *testing.T) {
 	manager.dsStore.Add(ds)
 	addNodes(manager.nodeStore, 0, 5, nil)
 
-	// will be preserved because it has the newest hash, and is also consuming the surge budget
+	// 最新哈希且占用 surge 配额的 Pod 应保留。
 	pod := newPod("node-0-", "node-0", simpleDaemonSetLabel, ds)
 	pod.CreationTimestamp.Time = time.Unix(100, 0)
 	pod.Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionFalse}}
 	manager.podStore.Add(pod)
 
-	// will be preserved because it is ready
+	// 就绪的旧 Pod 应保留。
 	oldPodReady := newPod("node-0-old-ready-", "node-0", simpleDaemonSetLabel, ds)
 	delete(oldPodReady.Labels, apps.ControllerRevisionHashLabelKey)
 	oldPodReady.CreationTimestamp.Time = time.Unix(50, 0)
 	oldPodReady.Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue}}
 	manager.podStore.Add(oldPodReady)
 
-	// create old ready pods on all other nodes
+	// 在其他节点创建旧的就绪 Pod。
 	for i := 1; i < 5; i++ {
 		oldPod := newPod(fmt.Sprintf("node-%d-preserve-", i), fmt.Sprintf("node-%d", i), simpleDaemonSetLabel, ds)
 		delete(oldPod.Labels, apps.ControllerRevisionHashLabelKey)
@@ -3412,7 +3450,7 @@ func TestSurgeCreatesNewPodWhenAtMaxSurgeAndOldPodDeleted(t *testing.T) {
 		oldPod.Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue}}
 		manager.podStore.Add(oldPod)
 
-		// mark the last old pod as deleted, which should trigger a creation above surge
+		// 标记最后一个旧 Pod 为删除中，应触发超出 surge 的补建。
 		if i == 4 {
 			thirty := int64(30)
 			timestamp := metav1.Time{Time: time.Unix(1+thirty, 0)}
@@ -3421,12 +3459,13 @@ func TestSurgeCreatesNewPodWhenAtMaxSurgeAndOldPodDeleted(t *testing.T) {
 		}
 	}
 
-	// controller should detect that node-4 has only a deleted pod
+	// 控制器应识别 node-4 只剩一个删除中的 Pod。
 	clearExpectations(t, manager, ds, podControl)
 	expectSyncDaemonSets(t, manager, ds, podControl, 1, 0, 0)
 	clearExpectations(t, manager, ds, podControl)
 }
 
+// TestSurgeDeletesUnreadyOldPods 验证未就绪的旧 Pod 会被优先删除以尽快完成更新。
 func TestSurgeDeletesUnreadyOldPods(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ds := newDaemonSet("foo")
@@ -3438,19 +3477,19 @@ func TestSurgeDeletesUnreadyOldPods(t *testing.T) {
 	manager.dsStore.Add(ds)
 	addNodes(manager.nodeStore, 0, 5, nil)
 
-	// will be preserved because it has the newest hash
+	// 最新哈希的 Pod 应保留。
 	pod := newPod("node-1-", "node-1", simpleDaemonSetLabel, ds)
 	pod.CreationTimestamp.Time = time.Unix(100, 0)
 	manager.podStore.Add(pod)
 
-	// will be deleted because it is unready
+	// 未就绪的 Pod 应被优先删除。
 	oldUnreadyPod := newPod("node-1-old-unready-", "node-1", simpleDaemonSetLabel, ds)
 	delete(oldUnreadyPod.Labels, apps.ControllerRevisionHashLabelKey)
 	oldUnreadyPod.CreationTimestamp.Time = time.Unix(50, 0)
 	oldUnreadyPod.Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionFalse}}
 	manager.podStore.Add(oldUnreadyPod)
 
-	// will be deleted because it is not the oldest
+	// 非最旧的 Pod 应被删除。
 	oldReadyPod := newPod("node-1-delete-", "node-1", simpleDaemonSetLabel, ds)
 	delete(oldReadyPod.Labels, apps.ControllerRevisionHashLabelKey)
 	oldReadyPod.CreationTimestamp.Time = time.Unix(60, 0)
@@ -3467,6 +3506,7 @@ func TestSurgeDeletesUnreadyOldPods(t *testing.T) {
 	}
 }
 
+// TestSurgePreservesOldReadyWithUnsatisfiedMinReady 验证 minReadySeconds 未满足时旧 Pod 不会被提前删除。
 func TestSurgePreservesOldReadyWithUnsatisfiedMinReady(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ds := newDaemonSet("foo")
@@ -3479,23 +3519,23 @@ func TestSurgePreservesOldReadyWithUnsatisfiedMinReady(t *testing.T) {
 	manager.dsStore.Add(ds)
 	addNodes(manager.nodeStore, 0, 5, nil)
 
-	// the clock will be set 10s after the newest pod on node-1 went ready, which is not long enough to be available
+	// 时钟设为 node-1 最新 Pod 就绪后 10 秒，尚未满足 minReadySeconds。
 	manager.DaemonSetsController.failedPodsBackoff.Clock = testingclock.NewFakeClock(time.Unix(50+10, 0))
 
-	// will be preserved because it has the newest hash
+	// 最新哈希的 Pod 应保留。
 	pod := newPod("node-1-", "node-1", simpleDaemonSetLabel, ds)
 	pod.CreationTimestamp.Time = time.Unix(100, 0)
 	pod.Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue, LastTransitionTime: metav1.Time{Time: time.Unix(50, 0)}}}
 	manager.podStore.Add(pod)
 
-	// will be preserved because it is ready AND the newest pod is not yet available for long enough
+	// 最新 Pod 就绪时间不足时，就绪的旧 Pod 应保留。
 	oldReadyPod := newPod("node-1-old-ready-", "node-1", simpleDaemonSetLabel, ds)
 	delete(oldReadyPod.Labels, apps.ControllerRevisionHashLabelKey)
 	oldReadyPod.CreationTimestamp.Time = time.Unix(50, 0)
 	oldReadyPod.Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue}}
 	manager.podStore.Add(oldReadyPod)
 
-	// will be deleted because it is not the oldest
+	// 非最旧的 Pod 应被删除。
 	oldExcessReadyPod := newPod("node-1-delete-", "node-1", simpleDaemonSetLabel, ds)
 	delete(oldExcessReadyPod.Labels, apps.ControllerRevisionHashLabelKey)
 	oldExcessReadyPod.CreationTimestamp.Time = time.Unix(60, 0)
@@ -3512,6 +3552,7 @@ func TestSurgePreservesOldReadyWithUnsatisfiedMinReady(t *testing.T) {
 	}
 }
 
+// TestSurgeDeletesOldReadyWithUnsatisfiedMinReady 验证 minReadySeconds 已满足时旧 Pod 会被滚动删除。
 func TestSurgeDeletesOldReadyWithUnsatisfiedMinReady(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ds := newDaemonSet("foo")
@@ -3524,23 +3565,23 @@ func TestSurgeDeletesOldReadyWithUnsatisfiedMinReady(t *testing.T) {
 	manager.dsStore.Add(ds)
 	addNodes(manager.nodeStore, 0, 5, nil)
 
-	// the clock will be set 20s after the newest pod on node-1 went ready, which is not long enough to be available
+	// 时钟设为 node-1 最新 Pod 就绪后 20 秒，已满足 minReadySeconds。
 	manager.DaemonSetsController.failedPodsBackoff.Clock = testingclock.NewFakeClock(time.Unix(50+20, 0))
 
-	// will be preserved because it has the newest hash
+	// 最新哈希的 Pod 应保留。
 	pod := newPod("node-1-", "node-1", simpleDaemonSetLabel, ds)
 	pod.CreationTimestamp.Time = time.Unix(100, 0)
 	pod.Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue, LastTransitionTime: metav1.Time{Time: time.Unix(50, 0)}}}
 	manager.podStore.Add(pod)
 
-	// will be preserved because it is ready AND the newest pod is not yet available for long enough
+	// 最新 Pod 就绪时间不足时，就绪的旧 Pod 应保留。
 	oldReadyPod := newPod("node-1-old-ready-", "node-1", simpleDaemonSetLabel, ds)
 	delete(oldReadyPod.Labels, apps.ControllerRevisionHashLabelKey)
 	oldReadyPod.CreationTimestamp.Time = time.Unix(50, 0)
 	oldReadyPod.Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue}}
 	manager.podStore.Add(oldReadyPod)
 
-	// will be deleted because it is not the oldest
+	// 非最旧的 Pod 应被删除。
 	oldExcessReadyPod := newPod("node-1-delete-", "node-1", simpleDaemonSetLabel, ds)
 	delete(oldExcessReadyPod.Labels, apps.ControllerRevisionHashLabelKey)
 	oldExcessReadyPod.CreationTimestamp.Time = time.Unix(60, 0)
@@ -3557,6 +3598,7 @@ func TestSurgeDeletesOldReadyWithUnsatisfiedMinReady(t *testing.T) {
 	}
 }
 
+// TestStoreDaemonSetStatus 验证状态更新请求仅在状态变化时发出。
 func TestStoreDaemonSetStatus(t *testing.T) {
 	getError := fmt.Errorf("fake get error")
 	updateError := fmt.Errorf("fake update error")
@@ -3634,6 +3676,7 @@ func TestStoreDaemonSetStatus(t *testing.T) {
 	}
 }
 
+// TestShouldIgnoreNodeUpdate 验证无关的节点字段变更不会触发 DaemonSet 同步。
 func TestShouldIgnoreNodeUpdate(t *testing.T) {
 	cases := []struct {
 		name           string

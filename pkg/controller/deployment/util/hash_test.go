@@ -28,6 +28,7 @@ import (
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
 )
 
+// podSpec 是用于哈希测试的 PodTemplateSpec JSON 模板，@@VERSION@@ 为可替换的版本占位符。
 var podSpec = `
 {
     "metadata": {
@@ -103,10 +104,13 @@ var podSpec = `
 }
 `
 
+// TestPodTemplateSpecHash 测试：仅改变镜像版本时，ComputeHash 能为每个模板生成唯一哈希，
+// 确保 Deployment 控制器可以用哈希区分不同版本的 Pod 模板。
 func TestPodTemplateSpecHash(t *testing.T) {
 	seenHashes := make(map[string]int)
 
 	for i := 0; i < 1000; i++ {
+		// 每次替换版本占位符生成不同的模板，验证哈希不会冲突。
 		specJSON := strings.Replace(podSpec, "@@VERSION@@", strconv.Itoa(i), 1)
 		spec := v1.PodTemplateSpec{}
 		json.Unmarshal([]byte(specJSON), &spec)
@@ -119,6 +123,7 @@ func TestPodTemplateSpecHash(t *testing.T) {
 	}
 }
 
+// BenchmarkAdler 测量旧的 adler32 深度哈希实现的性能，作为与 FNV 实现对比的基准。
 func BenchmarkAdler(b *testing.B) {
 	spec := v1.PodTemplateSpec{}
 	json.Unmarshal([]byte(podSpec), &spec)
@@ -128,12 +133,14 @@ func BenchmarkAdler(b *testing.B) {
 	}
 }
 
+// getPodTemplateSpecOldHash 复现旧的哈希计算方式：adler32 配合 DeepHashObject。
 func getPodTemplateSpecOldHash(template v1.PodTemplateSpec) uint32 {
 	podTemplateSpecHasher := adler32.New()
 	hashutil.DeepHashObject(podTemplateSpecHasher, template)
 	return podTemplateSpecHasher.Sum32()
 }
 
+// BenchmarkFnv 测量当前 ComputeHash（FNV）实现的性能，用于与旧实现对比。
 func BenchmarkFnv(b *testing.B) {
 	spec := v1.PodTemplateSpec{}
 	json.Unmarshal([]byte(podSpec), &spec)

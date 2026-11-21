@@ -20,16 +20,13 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultPodGCControllerConfiguration defaults a pointer to a
-// PodGCControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultPodGCControllerConfiguration 为 PodGCControllerConfiguration 指针设置推荐默认值，
+// 默认值可能随 API 版本变化。该函数刻意没有以常规 `SetDefaults_Foo` 形式注册到 scheme，
+// 以免强制使用者接受这套默认值：scheme 中的默认化是转换的一部分，无法便捷退出。
+// 需要这套默认值时，请在外层包装结构体的 `SetDefaults_` 方法中调用它。
 func RecommendedDefaultPodGCControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.PodGCControllerConfiguration) {
+	// 零值表示未配置；12500 是历史沿用的默认阈值，
+	// 表示最多保留这么多已终止 Pod，超出后由 GC 清理。
 	if obj.TerminatedPodGCThreshold == 0 {
 		obj.TerminatedPodGCThreshold = 12500
 	}

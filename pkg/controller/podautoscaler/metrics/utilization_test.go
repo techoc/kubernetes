@@ -24,18 +24,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// resourceUtilizationRatioTestCase 描述 GetResourceUtilizationRatio 的一个测试场景。
 type resourceUtilizationRatioTestCase struct {
-	name              string
-	metrics           PodMetricsInfo
-	requests          map[string]int64
-	targetUtilization int32
+	name              string           // 用例名称
+	metrics           PodMetricsInfo   // 各 Pod 上报的指标值
+	requests          map[string]int64 // 各 Pod 的资源请求量
+	targetUtilization int32            // 目标利用率百分比
 
-	expectedUtilizationRatio   float64
-	expectedCurrentUtilization int32
-	expectedRawAverageValue    int64
-	expectedErr                error
+	expectedUtilizationRatio   float64 // 预期的利用率比值
+	expectedCurrentUtilization int32   // 预期的当前利用率百分比
+	expectedRawAverageValue    int64   // 预期的原始平均值
+	expectedErr                error   // 预期的错误，nil 表示不应出错
 }
 
+// TestResourceUtilizationRatio 测试：根据 Pod 指标、请求量和目标利用率，
+// 计算利用率比值、当前利用率和原始平均值，并验证异常输入（如无匹配 Pod）会报错。
 func TestResourceUtilizationRatio(t *testing.T) {
 	testCases := []resourceUtilizationRatioTestCase{
 		{
@@ -53,6 +56,7 @@ func TestResourceUtilizationRatio(t *testing.T) {
 			expectedErr:                nil,
 		},
 		{
+			// 没有请求量的 Pod 应被忽略，不参与利用率计算。
 			name: "ignore pods with no request",
 			metrics: PodMetricsInfo{
 				"test-pod-0": {Value: 50}, "test-pod-1": {Value: 76}, "test-pod-no-request": {Value: 100},
@@ -67,6 +71,7 @@ func TestResourceUtilizationRatio(t *testing.T) {
 			expectedErr:                nil,
 		},
 		{
+			// 请求量中存在指标里没有的 Pod，应被忽略。
 			name: "extra request",
 			metrics: PodMetricsInfo{
 				"test-pod-0": {Value: 50}, "test-pod-1": {Value: 76},
@@ -81,6 +86,7 @@ func TestResourceUtilizationRatio(t *testing.T) {
 			expectedErr:                nil,
 		},
 		{
+			// 所有 Pod 都没有请求量时，应返回错误。
 			name: "no request",
 			metrics: PodMetricsInfo{
 				"test-pod-0": {Value: 50}, "test-pod-1": {Value: 76},
@@ -96,6 +102,7 @@ func TestResourceUtilizationRatio(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 先按预期错误分支校验错误信息；无错误时再逐项比较计算结果。
 			actualUtilizationRatio, actualCurrentUtilization, actualRawAverageValue, actualErr := GetResourceUtilizationRatio(tc.metrics, tc.requests, tc.targetUtilization)
 			if tc.expectedErr != nil {
 				require.Error(t, actualErr, "there should be an error getting the utilization ratio")
@@ -110,15 +117,17 @@ func TestResourceUtilizationRatio(t *testing.T) {
 	}
 }
 
+// metricUsageRatioTestCase 描述 GetMetricUsageRatio 的一个测试场景。
 type metricUsageRatioTestCase struct {
-	name        string
-	metrics     PodMetricsInfo
-	targetUsage int64
+	name        string         // 用例名称
+	metrics     PodMetricsInfo // 各 Pod 上报的指标值
+	targetUsage int64          // 目标使用量
 
-	expectedUsageRatio   float64
-	expectedCurrentUsage int64
+	expectedUsageRatio   float64 // 预期的使用量比值
+	expectedCurrentUsage int64   // 预期的当前使用量
 }
 
+// TestMetricUsageRatio 测试：根据 Pod 指标和目标使用量，计算使用量比值及当前使用量。
 func TestMetricUsageRatio(t *testing.T) {
 	// TODO: add more unit tests
 	testCases := []metricUsageRatioTestCase{

@@ -20,24 +20,27 @@ import (
 	"k8s.io/utils/lru"
 )
 
-// ReferenceCache is an LRU cache for uid.
+// ReferenceCache 是针对 uid（以 objectReference 表示）的 LRU 缓存。
+// 垃圾回收器用它记住已处理过的属主引用：缓存命中即说明该属主此前已入图，
+// 无需重复构建节点，从而避免依赖图中的重复处理。
 type ReferenceCache struct {
 	cache *lru.Cache
 }
 
-// NewReferenceCache returns a ReferenceCache.
+// NewReferenceCache 创建一个最多缓存 maxCacheEntries 个引用的 ReferenceCache。
+// 设置容量上限是为了防止随集群对象增长而无限占用内存。
 func NewReferenceCache(maxCacheEntries int) *ReferenceCache {
 	return &ReferenceCache{
 		cache: lru.New(maxCacheEntries),
 	}
 }
 
-// Add adds a uid to the cache.
+// Add 将一个 uid（以 objectReference 表示）加入缓存。
 func (c *ReferenceCache) Add(reference objectReference) {
 	c.cache.Add(reference, nil)
 }
 
-// Has returns if a uid is in the cache.
+// Has 判断某个 uid（以 objectReference 表示）是否在缓存中。
 func (c *ReferenceCache) Has(reference objectReference) bool {
 	_, found := c.cache.Get(reference)
 	return found

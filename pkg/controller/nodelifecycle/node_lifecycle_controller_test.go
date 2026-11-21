@@ -55,16 +55,26 @@ import (
 )
 
 const (
+	// testNodeMonitorGracePeriod 是测试中节点心跳超时判定为不健康所容忍的时长。
 	testNodeMonitorGracePeriod = 50 * time.Second
+	// testNodeStartupGracePeriod 是测试中刚创建的节点在建立状态前的启动宽限期。
 	testNodeStartupGracePeriod = 60 * time.Second
-	testNodeMonitorPeriod      = 5 * time.Second
-	testRateLimiterQPS         = float32(100000)
-	testLargeClusterThreshold  = 20
-	testUnhealthyThreshold     = float32(0.55)
+	// testNodeMonitorPeriod 是测试中节点健康监控的轮询周期。
+	testNodeMonitorPeriod = 5 * time.Second
+	// testRateLimiterQPS 设置足够高的驱逐速率，避免测试因限流而出现不确定的等待。
+	testRateLimiterQPS = float32(100000)
+	// testLargeClusterThreshold 是判断是否启用大规模集群限流策略的节点数阈值。
+	testLargeClusterThreshold = 20
+	// testUnhealthyThreshold 是 zone 中不健康节点比例超过该值时进入部分中断状态。
+	testUnhealthyThreshold = float32(0.55)
 )
 
+// alwaysReady 作为 informer 的 sync 判定函数，测试中不依赖真实的缓存同步，
+// 直接返回 true 让控制器认为所有 informer 均已就绪。
 func alwaysReady() bool { return true }
 
+// fakeGetPodsAssignedToNode 返回一个按节点名查询 Pod 的回调，
+// 用于替代控制器中依赖 list-watch 缓存的实现，直接走 fake clientset 查询。
 func fakeGetPodsAssignedToNode(c *fake.Clientset) func(string) ([]*v1.Pod, error) {
 	return func(nodeName string) ([]*v1.Pod, error) {
 		selector := fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName})
@@ -75,6 +85,7 @@ func fakeGetPodsAssignedToNode(c *fake.Clientset) func(string) ([]*v1.Pod, error
 		if err != nil {
 			return nil, fmt.Errorf("failed to get Pods assigned to node %v", nodeName)
 		}
+		// 返回指针切片而非值拷贝，保证调用方拿到的是 fake clientset 中的对象引用。
 		rPods := make([]*v1.Pod, len(pods.Items))
 		for i := range pods.Items {
 			rPods[i] = &pods.Items[i]
@@ -83,14 +94,22 @@ func fakeGetPodsAssignedToNode(c *fake.Clientset) func(string) ([]*v1.Pod, error
 	}
 }
 
+// nodeLifecycleController 在真实控制器之上保存测试所需的 informer 引用，
+// 便于测试直接向各 informer 的本地 store 写入/同步对象。
 type nodeLifecycleController struct {
 	*Controller
-	leaseInformer     coordinformers.LeaseInformer
-	nodeInformer      coreinformers.NodeInformer
+	// leaseInformer 保存节点租约（node lease）的 informer。
+	leaseInformer coordinformers.LeaseInformer
+	// nodeInformer 保存节点对象的 informer。
+	nodeInformer coreinformers.NodeInformer
+	// daemonSetInformer 保存 DaemonSet 的 informer，用于判定 DaemonSet Pod。
 	daemonSetInformer appsinformers.DaemonSetInformer
-	podInformer       coreinformers.PodInformer
+	// podInformer 保存 Pod 的 informer。
+	podInformer coreinformers.PodInformer
 }
 
+// createNodeLease 构造一个持有者为 nodeName、续约时间为 renewTime 的租约对象，
+// 模拟 kubelet 定期上报的心跳。
 func createNodeLease(nodeName string, renewTime metav1.MicroTime) *coordv1.Lease {
 	return &coordv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
@@ -104,15 +123,20 @@ func createNodeLease(nodeName string, renewTime metav1.MicroTime) *coordv1.Lease
 	}
 }
 
+// syncLeaseStore 将指定租约写入租约 informer 的本地 store，
+// 模拟 informer 从 API Server 收到租约更新事件。
 func (nc *nodeLifecycleController) syncLeaseStore(lease *coordv1.Lease) error {
 	if lease == nil {
 		return nil
 	}
+	// Replace 会整体替换 store 内容；测试场景下只需放入单个租约即可。
 	newElems := make([]interface{}, 0, 1)
 	newElems = append(newElems, lease)
 	return nc.leaseInformer.Informer().GetStore().Replace(newElems, "newRV")
 }
 
+// syncNodeStore 从 FakeNodeHandler 读取全部节点并写入节点 informer 的本地 store，
+// 使控制器通过缓存看到测试设置的节点列表。
 func (nc *nodeLifecycleController) syncNodeStore(fakeNodeHandler *testutil.FakeNodeHandler) error {
 	nodes, err := fakeNodeHandler.List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
@@ -125,6 +149,8 @@ func (nc *nodeLifecycleController) syncNodeStore(fakeNodeHandler *testutil.FakeN
 	return nc.nodeInformer.Informer().GetStore().Replace(newElems, "newRV")
 }
 
+// syncPodStore 将指定 Pod 写入 Pod informer 的本地 store，
+// 用于模拟 Pod 被调度到节点后 informer 收到通知。
 func (nc *nodeLifecycleController) syncPodStore(pod *v1.Pod) error {
 	if pod == nil {
 		return nil
@@ -134,6 +160,8 @@ func (nc *nodeLifecycleController) syncPodStore(pod *v1.Pod) error {
 	return nc.podInformer.Informer().GetStore().Replace(newElems, "newRV")
 }
 
+// newNodeLifecycleControllerFromClient 基于 fake clientset 构建节点生命周期控制器及其 informer。
+// 所有 informer 的同步判定都被替换为 alwaysReady，避免测试等待缓存同步。
 func newNodeLifecycleControllerFromClient(
 	ctx context.Context,
 	kubeClient clientset.Interface,
@@ -172,6 +200,7 @@ func newNodeLifecycleControllerFromClient(
 		return nil, err
 	}
 
+	// fake informer 不会真正启动，直接把同步判定置为 ready，跳过等待逻辑。
 	nc.leaseInformerSynced = alwaysReady
 	nc.podInformerSynced = alwaysReady
 	nc.nodeInformerSynced = alwaysReady
@@ -180,7 +209,9 @@ func newNodeLifecycleControllerFromClient(
 	return &nodeLifecycleController{nc, leaseInformer, nodeInformer, daemonSetInformer, podInformer}, nil
 }
 
+// TestMonitorNodeHealth 验证 monitorNodeHealth 在节点心跳变化时对各 zone 状态（正常/部分中断/完全中断）的推导是否正确。
 func TestMonitorNodeHealth(t *testing.T) {
+	// 固定“当前时间”，避免真实时钟导致断言不稳定；timeToPass 模拟心跳间隔后的一次观察。
 	fakeNow := metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC)
 	timeToPass := 60 * time.Minute
 	healthyNodeNewStatus := v1.NodeStatus{
@@ -198,7 +229,7 @@ func TestMonitorNodeHealth(t *testing.T) {
 			{
 				Type:   v1.NodeReady,
 				Status: v1.ConditionUnknown,
-				// Node status was updated by nodecontroller timeToPass ago
+				// 心跳停留在 fakeNow，经过 timeToPass 后即被视为陈旧状态。
 				LastHeartbeatTime:  fakeNow,
 				LastTransitionTime: fakeNow,
 			},
@@ -206,9 +237,13 @@ func TestMonitorNodeHealth(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		nodeList                []*v1.Node
-		updatedNodeStatuses     []v1.NodeStatus
-		expectedInitialStates   map[string]ZoneState
+		// nodeList 是首次监控时的初始节点集合。
+		nodeList []*v1.Node
+		// updatedNodeStatuses 是第二次监控时依次写入各节点的新状态。
+		updatedNodeStatuses []v1.NodeStatus
+		// expectedInitialStates 是第一次监控后期望的 zone 状态。
+		expectedInitialStates map[string]ZoneState
+		// expectedFollowingStates 是心跳推进并更新状态后期望的 zone 状态。
 		expectedFollowingStates map[string]ZoneState
 	}{
 		"No Disruption: Node created recently without failure domain labels (happens only at cluster startup)": {
@@ -358,8 +393,7 @@ func TestMonitorNodeHealth(t *testing.T) {
 				healthyNodeNewStatus,
 			},
 			expectedInitialStates: map[string]ZoneState{
-				// we've not received any status for the nodes yet
-				// so the controller assumes the zones is fully disrupted
+				// 尚未收到任何节点状态，控制器保守地假定该 zone 完全中断。
 				testutil.CreateZoneID("region1", "zone1"): stateFullDisruption,
 			},
 			expectedFollowingStates: map[string]ZoneState{
@@ -568,9 +602,7 @@ func TestMonitorNodeHealth(t *testing.T) {
 				unhealthyNodeNewStatus,
 			},
 			expectedInitialStates: map[string]ZoneState{
-				// if a zone has a number of unhealthy nodes less or equal to 2
-				// the controller will consider it normal regardless on
-				// the ration of healthy vs unhealthy nodes
+				// 不健康节点数不超过 2 时，控制器忽略健康/不健康比例，仍视该 zone 为正常。
 				testutil.CreateZoneID("region1", "zone1"): stateNormal,
 			},
 			expectedFollowingStates: map[string]ZoneState{
@@ -800,6 +832,7 @@ func TestMonitorNodeHealth(t *testing.T) {
 	for testName, tt := range tests {
 		t.Run(testName, func(t *testing.T) {
 			tCtx := ktesting.Init(t)
+			// 用 FakeNodeHandler 提供节点列表，控制器仍通过 informer store 读取节点。
 			fakeNodeHandler := &testutil.FakeNodeHandler{
 				Existing:  tt.nodeList,
 				Clientset: fake.NewSimpleClientset(),
@@ -814,6 +847,7 @@ func TestMonitorNodeHealth(t *testing.T) {
 				testNodeMonitorGracePeriod,
 				testNodeStartupGracePeriod,
 				testNodeMonitorPeriod)
+			// 替换事件记录器与限流函数，避免测试依赖真实事件管道和动态限流计算。
 			nodeController.recorder = testutil.NewFakeRecorder()
 			nodeController.enterPartialDisruptionFunc = func(nodeNum int) float32 {
 				return testRateLimiterQPS
@@ -822,6 +856,7 @@ func TestMonitorNodeHealth(t *testing.T) {
 				return testRateLimiterQPS
 			}
 
+			// syncAndDiffZoneState 把 fake 节点同步到 informer store 后运行一次监控并校验 zone 状态。
 			syncAndDiffZoneState := func(wanted map[string]ZoneState) {
 				if err := nodeController.syncNodeStore(fakeNodeHandler); err != nil {
 					t.Errorf("unexpected error: %v", err)
@@ -834,11 +869,11 @@ func TestMonitorNodeHealth(t *testing.T) {
 				}
 			}
 
-			// initial zone state
+			// 第一次监控：此时“当前时间”与心跳时间一致，节点被视为健康。
 			nodeController.now = func() metav1.Time { return fakeNow }
 			syncAndDiffZoneState(tt.expectedInitialStates)
 
-			// following zone state
+			// 第二次监控：把时钟推进 timeToPass，使未按新心跳时间更新的节点变为陈旧。
 			nodeController.now = func() metav1.Time { return metav1.Time{Time: fakeNow.Add(timeToPass)} }
 			for i := range tt.updatedNodeStatuses {
 				fakeNodeHandler.Existing[i].Status = tt.updatedNodeStatuses[i]
@@ -848,33 +883,41 @@ func TestMonitorNodeHealth(t *testing.T) {
 	}
 }
 
+// TestPodStatusChange 验证节点被判定不可达后，节点控制器为 Pod 写入的终止原因
+// 是否包含 NodeUnreachablePodReason；同时覆盖只有一个 NotReady 节点时不驱逐的保护逻辑。
 func TestPodStatusChange(t *testing.T) {
 	fakeNow := metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	// Because of the logic that prevents NC from evicting anything when all Nodes are NotReady
-	// we need second healthy node in tests. Because of how the tests are written we need to update
-	// the status of this Node.
+	// 全部节点 NotReady 时控制器不会驱逐 Pod，因此用例中额外放置一个健康节点，
+	// 并在第二次监控时更新它的状态以模拟其恢复心跳。
 	healthyNodeNewStatus := v1.NodeStatus{
 		Conditions: []v1.NodeCondition{
 			{
 				Type:   v1.NodeReady,
 				Status: v1.ConditionTrue,
-				// Node status has just been updated, and is NotReady for 10min.
+				// 心跳刚更新且已连续 10 分钟处于 NotReady，触发污点替换。
 				LastHeartbeatTime:  metav1.Date(2015, 1, 1, 12, 9, 0, 0, time.UTC),
 				LastTransitionTime: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 			},
 		},
 	}
 
-	// Node created long time ago, node controller posted Unknown for a long period of time.
+	// 节点创建时间很早且长期上报 Unknown，测试期望控制器将其上的 Pod 状态标记为终止。
 	table := []struct {
-		fakeNodeHandler     *testutil.FakeNodeHandler
-		timeToPass          time.Duration
-		newNodeStatus       v1.NodeStatus
+		// fakeNodeHandler 持有初始节点、Pod 列表并记录客户端动作。
+		fakeNodeHandler *testutil.FakeNodeHandler
+		// timeToPass 是推进到第二次监控前经过的时长，0 表示不推进。
+		timeToPass time.Duration
+		// newNodeStatus 是第二次监控时写入首个节点的状态。
+		newNodeStatus v1.NodeStatus
+		// secondNodeNewStatus 是第二次监控时写入健康节点的状态。
 		secondNodeNewStatus v1.NodeStatus
-		expectedPodUpdate   bool
-		expectedReason      string
-		description         string
+		// expectedPodUpdate 表示是否期望出现 Pod 更新动作。
+		expectedPodUpdate bool
+		// expectedReason 是期望写入 Pod 状态的终止原因。
+		expectedReason string
+		// description 描述用例场景，用于错误信息。
+		description string
 	}{
 		{
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -930,7 +973,7 @@ func TestPodStatusChange(t *testing.T) {
 					{
 						Type:   v1.NodeReady,
 						Status: v1.ConditionUnknown,
-						// Node status was updated by nodecontroller 1hr ago
+						// 心跳时间停留在 1 小时前，使节点在推进时钟后被判定为不可达。
 						LastHeartbeatTime:  metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 						LastTransitionTime: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 					},
@@ -946,6 +989,7 @@ func TestPodStatusChange(t *testing.T) {
 
 	tCtx := ktesting.Init(t)
 	for _, item := range table {
+		// 替换 Pod 查询实现，让 tainter 的回调能通过 fake client 找到节点上的 Pod。
 		nodeController, _ := newNodeLifecycleControllerFromClient(
 			tCtx,
 			item.fakeNodeHandler,
@@ -966,6 +1010,8 @@ func TestPodStatusChange(t *testing.T) {
 		if err := nodeController.monitorNodeHealth(tCtx); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+		// 推进时钟并更新两个节点的状态：首个节点保持陈旧心跳，健康节点恢复心跳。
+		// 推进时钟并更新节点状态，触发第二次监控以覆盖心跳超时场景。
 		if item.timeToPass > 0 {
 			nodeController.now = func() metav1.Time { return metav1.Time{Time: fakeNow.Add(item.timeToPass)} }
 			item.fakeNodeHandler.Existing[0].Status = item.newNodeStatus
@@ -977,6 +1023,7 @@ func TestPodStatusChange(t *testing.T) {
 		if err := nodeController.monitorNodeHealth(tCtx); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+		// 直接触发每个 zone 的 tainter 回调，驱动 Pod 删除流程，无需等待限速队列的真实定时器。
 		zones := testutil.GetZones(item.fakeNodeHandler)
 		for _, zone := range zones {
 			nodeController.zoneNoExecuteTainter[zone].Try(tCtx.Logger(), func(value scheduler.TimedValue) (bool, time.Duration) {
@@ -993,6 +1040,7 @@ func TestPodStatusChange(t *testing.T) {
 			})
 		}
 
+		// 检查 fake client 是否记录到了带正确 reason 的 Pod 更新动作。
 		podReasonUpdate := false
 		for _, action := range item.fakeNodeHandler.Actions() {
 			if action.GetVerb() == "update" && action.GetResource().Resource == "pods" {
@@ -1010,18 +1058,26 @@ func TestPodStatusChange(t *testing.T) {
 	}
 }
 
+// TestMonitorNodeHealthUpdateStatus 验证不同节点创建/心跳时间下，控制器是否
+// 正确地给节点写入 Unknown 状态、更新 Pod 状态，以及是否产生多余的请求。
 func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
+	// 固定当前时间，使宽限期判断和期望时间戳可预测。
 	fakeNow := metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC)
 	table := []struct {
-		fakeNodeHandler         *testutil.FakeNodeHandler
-		timeToPass              time.Duration
-		newNodeStatus           v1.NodeStatus
-		expectedRequestCount    int
-		expectedNodes           []*v1.Node
+		// fakeNodeHandler 提供初始节点和 Pod，并记录客户端请求。
+		fakeNodeHandler *testutil.FakeNodeHandler
+		// timeToPass 是第二次监控前推进的时钟时长。
+		timeToPass time.Duration
+		// newNodeStatus 是推进时钟后写入节点的新状态。
+		newNodeStatus v1.NodeStatus
+		// expectedRequestCount 是期望的 fake 客户端请求总数。
+		expectedRequestCount int
+		// expectedNodes 是期望写入的节点状态（nil 表示不应更新节点）。
+		expectedNodes []*v1.Node
+		// expectedPodStatusUpdate 表示是否期望更新 Pod 的 status 子资源。
 		expectedPodStatusUpdate bool
 	}{
-		// Node created long time ago, without status:
-		// Expect Unknown status posted from node controller.
+		// 节点创建时间久远且没有任何状态：期望控制器上报 Unknown。
 		{
 			fakeNodeHandler: &testutil.FakeNodeHandler{
 				Existing: []*v1.Node{
@@ -1034,7 +1090,7 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 				},
 				Clientset: fake.NewSimpleClientset(&v1.PodList{Items: []v1.Pod{*testutil.NewPod("pod0", "node0")}}),
 			},
-			expectedRequestCount: 2, // List+Update
+			expectedRequestCount: 2, // List 加 Update 两次请求
 			expectedNodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1079,10 +1135,9 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 					},
 				},
 			},
-			expectedPodStatusUpdate: false, // Pod was never scheduled
+			expectedPodStatusUpdate: false, // Pod 从未被调度过
 		},
-		// Node created recently, without status.
-		// Expect no action from node controller (within startup grace period).
+		// 节点刚创建且没有状态：处于启动宽限期内，期望控制器不采取任何动作。
 		{
 			fakeNodeHandler: &testutil.FakeNodeHandler{
 				Existing: []*v1.Node{
@@ -1095,12 +1150,11 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 				},
 				Clientset: fake.NewSimpleClientset(&v1.PodList{Items: []v1.Pod{*testutil.NewPod("pod0", "node0")}}),
 			},
-			expectedRequestCount:    1, // List
+			expectedRequestCount:    1, // List 一次请求
 			expectedNodes:           nil,
 			expectedPodStatusUpdate: false,
 		},
-		// Node created long time ago, with status updated by kubelet exceeds grace period.
-		// Expect Unknown status posted from node controller.
+		// 节点创建时间久远且 kubelet 心跳已超过监控宽限期：期望上报 Unknown。
 		{
 			fakeNodeHandler: &testutil.FakeNodeHandler{
 				Existing: []*v1.Node{
@@ -1114,7 +1168,7 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 								{
 									Type:   v1.NodeReady,
 									Status: v1.ConditionTrue,
-									// Node status hasn't been updated for 1hr.
+									// 心跳时间停留在 1 小时前，推进时钟后即超过监控宽限期。
 									LastHeartbeatTime:  metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 									LastTransitionTime: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 								},
@@ -1128,14 +1182,14 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 				},
 				Clientset: fake.NewSimpleClientset(&v1.PodList{Items: []v1.Pod{*testutil.NewPod("pod0", "node0")}}),
 			},
-			expectedRequestCount: 3, // (List+)List+Update
+			expectedRequestCount: 3, // （List+）List 加 Update
 			timeToPass:           time.Hour,
 			newNodeStatus: v1.NodeStatus{
 				Conditions: []v1.NodeCondition{
 					{
 						Type:   v1.NodeReady,
 						Status: v1.ConditionTrue,
-						// Node status hasn't been updated for 1hr.
+						// 心跳时间停留在 1 小时前，推进时钟后即超过监控宽限期。
 						LastHeartbeatTime:  metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 						LastTransitionTime: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 					},
@@ -1162,27 +1216,30 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 								LastTransitionTime: metav1.Time{Time: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC).Add(time.Hour)},
 							},
 							{
-								Type:               v1.NodeMemoryPressure,
-								Status:             v1.ConditionUnknown,
-								Reason:             "NodeStatusNeverUpdated",
-								Message:            "Kubelet never posted node status.",
-								LastHeartbeatTime:  metav1.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC), // should default to node creation time if condition was never updated
+								Type:    v1.NodeMemoryPressure,
+								Status:  v1.ConditionUnknown,
+								Reason:  "NodeStatusNeverUpdated",
+								Message: "Kubelet never posted node status.",
+								// 条件从未更新过，心跳时间默认回退到节点创建时间。
+								LastHeartbeatTime:  metav1.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC),
 								LastTransitionTime: metav1.Time{Time: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC).Add(time.Hour)},
 							},
 							{
-								Type:               v1.NodeDiskPressure,
-								Status:             v1.ConditionUnknown,
-								Reason:             "NodeStatusNeverUpdated",
-								Message:            "Kubelet never posted node status.",
-								LastHeartbeatTime:  metav1.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC), // should default to node creation time if condition was never updated
+								Type:    v1.NodeDiskPressure,
+								Status:  v1.ConditionUnknown,
+								Reason:  "NodeStatusNeverUpdated",
+								Message: "Kubelet never posted node status.",
+								// 条件从未更新过，心跳时间默认回退到节点创建时间。
+								LastHeartbeatTime:  metav1.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC),
 								LastTransitionTime: metav1.Time{Time: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC).Add(time.Hour)},
 							},
 							{
-								Type:               v1.NodePIDPressure,
-								Status:             v1.ConditionUnknown,
-								Reason:             "NodeStatusNeverUpdated",
-								Message:            "Kubelet never posted node status.",
-								LastHeartbeatTime:  metav1.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC), // should default to node creation time if condition was never updated
+								Type:    v1.NodePIDPressure,
+								Status:  v1.ConditionUnknown,
+								Reason:  "NodeStatusNeverUpdated",
+								Message: "Kubelet never posted node status.",
+								// 条件从未更新过，心跳时间默认回退到节点创建时间。
+								LastHeartbeatTime:  metav1.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC),
 								LastTransitionTime: metav1.Time{Time: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC).Add(time.Hour)},
 							},
 						},
@@ -1195,8 +1252,7 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 			},
 			expectedPodStatusUpdate: true,
 		},
-		// Node created long time ago, with status updated recently.
-		// Expect no action from node controller (within monitor grace period).
+		// 节点创建时间久远但心跳新鲜：处于监控宽限期内，期望控制器不采取任何动作。
 		{
 			fakeNodeHandler: &testutil.FakeNodeHandler{
 				Existing: []*v1.Node{
@@ -1210,7 +1266,7 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 								{
 									Type:   v1.NodeReady,
 									Status: v1.ConditionTrue,
-									// Node status has just been updated.
+									// 心跳刚更新过，处于监控宽限期内，不应被判定为不健康。
 									LastHeartbeatTime:  fakeNow,
 									LastTransitionTime: fakeNow,
 								},
@@ -1224,13 +1280,14 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 				},
 				Clientset: fake.NewSimpleClientset(&v1.PodList{Items: []v1.Pod{*testutil.NewPod("pod0", "node0")}}),
 			},
-			expectedRequestCount:    1, // List
+			expectedRequestCount:    1, // List 一次请求
 			expectedNodes:           nil,
 			expectedPodStatusUpdate: false,
 		},
 	}
 	tCtx := ktesting.Init(t)
 	for i, item := range table {
+		// 用 fake 客户端查询节点上的 Pod，避免依赖真实 informer 缓存。
 		nodeController, _ := newNodeLifecycleControllerFromClient(
 			tCtx,
 			item.fakeNodeHandler,
@@ -1251,6 +1308,7 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 		if err := nodeController.monitorNodeHealth(tCtx); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
+		// 推进时钟并更新节点状态，触发第二次监控以覆盖心跳超时场景。
 		if item.timeToPass > 0 {
 			nodeController.now = func() metav1.Time { return metav1.Time{Time: fakeNow.Add(item.timeToPass)} }
 			item.fakeNodeHandler.Existing[0].Status = item.newNodeStatus
@@ -1271,6 +1329,7 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 			t.Errorf("Case[%d] unexpected nodes: %s", i, cmp.Diff(item.expectedNodes[0], item.fakeNodeHandler.UpdatedNodeStatuses[0]))
 		}
 
+		// 检查是否产生了 Pod status 子资源更新动作。
 		podStatusUpdated := false
 		for _, action := range item.fakeNodeHandler.Actions() {
 			if action.GetVerb() == "update" && action.GetResource().Resource == "pods" && action.GetSubresource() == "status" {
@@ -1283,27 +1342,41 @@ func TestMonitorNodeHealthUpdateStatus(t *testing.T) {
 	}
 }
 
+// TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease 在启用 NodeControllerLeaseCircuitBreaker 特性门控的前提下，
+// 验证节点 Lease 的续约/过期（含缓存与 API Server 不一致的双检场景）如何影响节点状态上报与 Pod 状态更新。
 func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 	nodeCreationTime := metav1.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC)
 	fakeNow := metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC)
 
+	// 必须显式打开特性门控，才能覆盖 Lease 断路器（先查缓存再回源 API Server 双检）的逻辑。
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NodeControllerLeaseCircuitBreaker, true)
 
 	testcases := []struct {
-		description             string
-		fakeNodeHandler         *testutil.FakeNodeHandler
-		lease                   *coordv1.Lease
-		timeToPass              time.Duration
-		newNodeStatus           v1.NodeStatus
-		newLease                *coordv1.Lease
-		apiServerLease          *coordv1.Lease
-		newAPIServerLease       *coordv1.Lease
-		expectedRequestCount    int
-		expectedNodes           []*v1.Node
+		// description 描述用例场景，同时作为子测试名称。
+		description string
+		// fakeNodeHandler 提供节点与 Pod 列表，并记录客户端请求。
+		fakeNodeHandler *testutil.FakeNodeHandler
+		// lease 是初始写入 lease informer 缓存的租约。
+		lease *coordv1.Lease
+		// timeToPass 是第二次监控前推进的时钟时长。
+		timeToPass time.Duration
+		// newNodeStatus 是推进时钟后写入节点的新状态。
+		newNodeStatus v1.NodeStatus
+		// newLease 是推进时钟后写入缓存的新租约，用于模拟续约或过期。
+		newLease *coordv1.Lease
+		// apiServerLease 是首次监控时 API Server 侧（fake client）持有的租约。
+		apiServerLease *coordv1.Lease
+		// newAPIServerLease 是推进时钟后 API Server 侧的新租约，用于构造缓存与服务端不一致的双检场景。
+		newAPIServerLease *coordv1.Lease
+		// expectedRequestCount 是期望的客户端请求总数。
+		expectedRequestCount int
+		// expectedNodes 是期望写入的节点对象（nil 表示不应更新节点）。
+		expectedNodes []*v1.Node
+		// expectedPodStatusUpdate 表示是否期望更新 Pod 的 status 子资源。
 		expectedPodStatusUpdate bool
 	}{
-		// Node created recently, without status. Node lease is missing.
-		// Expect no action from node controller (within startup grace period).
+		// 节点刚创建且无状态，同时缺少租约：处于启动宽限期内，期望控制器不采取任何动作。
+		// 处于启动宽限期内，期望控制器不采取任何动作。
 		{
 			description: "Node created recently, without status. Node lease is missing.",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -1317,12 +1390,12 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 				},
 				Clientset: fake.NewSimpleClientset(&v1.PodList{Items: []v1.Pod{*testutil.NewPod("pod0", "node0")}}),
 			},
-			expectedRequestCount:    1, // List
+			expectedRequestCount:    1, // List 一次请求
 			expectedNodes:           nil,
 			expectedPodStatusUpdate: false,
 		},
-		// Node created recently, without status. Node lease is renewed recently.
-		// Expect no action from node controller (within startup grace period).
+		// 节点刚创建且无状态，但租约最近续约过：仍处于启动宽限期内，期望不采取任何动作。
+		// 处于启动宽限期内，期望控制器不采取任何动作。
 		{
 			description: "Node created recently, without status. Node lease is renewed recently.",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -1337,12 +1410,12 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 				Clientset: fake.NewSimpleClientset(&v1.PodList{Items: []v1.Pod{*testutil.NewPod("pod0", "node0")}}),
 			},
 			lease:                   createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)),
-			expectedRequestCount:    1, // List
+			expectedRequestCount:    1, // List 一次请求
 			expectedNodes:           nil,
 			expectedPodStatusUpdate: false,
 		},
-		// Node created long time ago, without status. Node lease is missing.
-		// Expect Unknown status posted from node controller.
+		// 节点创建时间久远且无状态，也没有租约：期望控制器上报 Unknown。
+		// 期望控制器上报 Unknown 状态。
 		{
 			description: "Node created long time ago, without status. Node lease is missing.",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -1356,7 +1429,7 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 				},
 				Clientset: fake.NewSimpleClientset(&v1.PodList{Items: []v1.Pod{*testutil.NewPod("pod0", "node0")}}),
 			},
-			expectedRequestCount: 2, // List+Update
+			expectedRequestCount: 2, // List 加 Update 两次请求
 			expectedNodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1401,10 +1474,10 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 					},
 				},
 			},
-			expectedPodStatusUpdate: false, // Pod was never scheduled because the node was never ready.
+			expectedPodStatusUpdate: false, // 节点从未就绪，Pod 也就从未被调度，因此不应有 Pod 状态更新。
 		},
-		// Node created long time ago, without status. Node lease is renewed recently.
-		// Expect no action from node controller (within monitor grace period).
+		// 节点创建时间久远且无状态，但租约最近续约过：处于监控宽限期内，期望不采取动作。
+		// 处于监控宽限期内，期望控制器不采取任何动作。
 		{
 			description: "Node created long time ago, without status. Node lease is renewed recently.",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -1420,8 +1493,8 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 			},
 			lease:                createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)),
 			timeToPass:           time.Hour,
-			newLease:             createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time.Add(time.Hour))), // Lease is renewed after 1 hour.
-			expectedRequestCount: 2,                                                                          // List+List
+			newLease:             createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time.Add(time.Hour))), // 1 小时后租约续约。
+			expectedRequestCount: 2,                                                                          // 两次 List 请求
 			expectedNodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1432,8 +1505,8 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 			},
 			expectedPodStatusUpdate: false,
 		},
-		// Node created long time ago, without status. Node lease is expired.
-		// Expect Unknown status posted from node controller.
+		// 节点创建时间久远且无状态，租约已过期：期望控制器上报 Unknown。
+		// 期望控制器上报 Unknown 状态。
 		{
 			description: "Node created long time ago, without status. Node lease is expired.",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -1449,8 +1522,8 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 			},
 			lease:                createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)),
 			timeToPass:           time.Hour,
-			newLease:             createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)), // Lease is not renewed after 1 hour.
-			expectedRequestCount: 3,                                                           // List+List+Update
+			newLease:             createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)), // 1 小时后租约未续约。
+			expectedRequestCount: 3,                                                           // 两次 List 加一次 Update 请求
 			expectedNodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1497,8 +1570,8 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 			},
 			expectedPodStatusUpdate: false,
 		},
-		// Node created long time ago, with status updated by kubelet exceeds grace period. Node lease is renewed.
-		// Expect no action from node controller (within monitor grace period).
+		// kubelet 心跳已超过宽限期，但租约仍在续约：期望控制器不采取动作。
+		// 处于监控宽限期内，期望控制器不采取任何动作。
 		{
 			description: "Node created long time ago, with status updated by kubelet exceeds grace period. Node lease is renewed.",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -1533,10 +1606,10 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 				Clientset: fake.NewSimpleClientset(&v1.PodList{Items: []v1.Pod{*testutil.NewPod("pod0", "node0")}}),
 			},
 			lease:                createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)),
-			expectedRequestCount: 2, // List+List
+			expectedRequestCount: 2, // 两次 List 请求
 			timeToPass:           time.Hour,
 			newNodeStatus: v1.NodeStatus{
-				// Node status hasn't been updated for 1 hour.
+				// 节点状态停留在 1 小时前，用于构造心跳超时场景。
 				Conditions: []v1.NodeCondition{
 					{
 						Type:               v1.NodeReady,
@@ -1556,7 +1629,7 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 					v1.ResourceName(v1.ResourceMemory): resource.MustParse("10G"),
 				},
 			},
-			newLease: createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time.Add(time.Hour))), // Lease is renewed after 1 hour.
+			newLease: createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time.Add(time.Hour))), // 1 小时后租约续约。
 			expectedNodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1587,8 +1660,8 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 			},
 			expectedPodStatusUpdate: false,
 		},
-		// Node created long time ago, with status updated by kubelet recently. Node lease is expired.
-		// Expect no action from node controller (within monitor grace period).
+		// kubelet 心跳新鲜但租约已过期：处于监控宽限期内，期望控制器不采取动作。
+		// 处于监控宽限期内，期望控制器不采取任何动作。
 		{
 			description: "Node created long time ago, with status updated by kubelet recently. Node lease is expired.",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -1623,10 +1696,10 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 				Clientset: fake.NewSimpleClientset(&v1.PodList{Items: []v1.Pod{*testutil.NewPod("pod0", "node0")}}),
 			},
 			lease:                createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)),
-			expectedRequestCount: 2, // List+List
+			expectedRequestCount: 2, // 两次 List 请求
 			timeToPass:           time.Hour,
 			newNodeStatus: v1.NodeStatus{
-				// Node status is updated after 1 hour.
+				// 1 小时后节点状态被更新，心跳时间随之推进。
 				Conditions: []v1.NodeCondition{
 					{
 						Type:               v1.NodeReady,
@@ -1646,7 +1719,7 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 					v1.ResourceName(v1.ResourceMemory): resource.MustParse("10G"),
 				},
 			},
-			newLease: createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)), // Lease is not renewed after 1 hour.
+			newLease: createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)), // 1 小时后租约未续约。
 			expectedNodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1677,8 +1750,8 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 			},
 			expectedPodStatusUpdate: false,
 		},
-		// Node created long time ago, with status updated by kubelet exceeds grace period. Node lease is also expired.
-		// Expect Unknown status posted from node controller.
+		// kubelet 心跳与租约均已超过宽限期：期望控制器上报 Unknown 并更新 Pod 状态。
+		// 期望控制器上报 Unknown 状态。
 		{
 			description: "Node created long time ago, with status updated by kubelet exceeds grace period. Node lease is also expired.",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -1707,10 +1780,10 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 				Clientset: fake.NewSimpleClientset(&v1.PodList{Items: []v1.Pod{*testutil.NewPod("pod0", "node0")}}),
 			},
 			lease:                createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)),
-			expectedRequestCount: 3, // List+List+Update
+			expectedRequestCount: 3, // 两次 List 加一次 Update 请求
 			timeToPass:           time.Hour,
 			newNodeStatus: v1.NodeStatus{
-				// Node status hasn't been updated for 1 hour.
+				// 节点状态停留在 1 小时前，用于构造心跳超时场景。
 				Conditions: []v1.NodeCondition{
 					{
 						Type:               v1.NodeReady,
@@ -1724,7 +1797,7 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 					v1.ResourceName(v1.ResourceMemory): resource.MustParse("10G"),
 				},
 			},
-			newLease: createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)), // Lease is not renewed after 1 hour.
+			newLease: createNodeLease("node0", metav1.NewMicroTime(fakeNow.Time)), // 1 小时后租约未续约。
 			expectedNodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1746,7 +1819,7 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 								Status:             v1.ConditionUnknown,
 								Reason:             "NodeStatusNeverUpdated",
 								Message:            "Kubelet never posted node status.",
-								LastHeartbeatTime:  nodeCreationTime, // should default to node creation time if condition was never updated
+								LastHeartbeatTime:  nodeCreationTime, // 条件从未更新时默认取节点创建时间
 								LastTransitionTime: metav1.Time{Time: fakeNow.Add(time.Hour)},
 							},
 							{
@@ -1754,7 +1827,7 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 								Status:             v1.ConditionUnknown,
 								Reason:             "NodeStatusNeverUpdated",
 								Message:            "Kubelet never posted node status.",
-								LastHeartbeatTime:  nodeCreationTime, // should default to node creation time if condition was never updated
+								LastHeartbeatTime:  nodeCreationTime, // 条件从未更新时默认取节点创建时间
 								LastTransitionTime: metav1.Time{Time: fakeNow.Add(time.Hour)},
 							},
 							{
@@ -1762,7 +1835,7 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 								Status:             v1.ConditionUnknown,
 								Reason:             "NodeStatusNeverUpdated",
 								Message:            "Kubelet never posted node status.",
-								LastHeartbeatTime:  nodeCreationTime, // should default to node creation time if condition was never updated
+								LastHeartbeatTime:  nodeCreationTime, // 条件从未更新时默认取节点创建时间
 								LastTransitionTime: metav1.Time{Time: fakeNow.Add(time.Hour)},
 							},
 						},
@@ -1775,9 +1848,9 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 			},
 			expectedPodStatusUpdate: true,
 		},
-		// Node created long time ago, with status updated by kubelet exceeds grace period.
-		// Node lease is expired in cache, but fresh in API server.
-		// Expect no action from node controller (within monitor grace period) because of double check.
+		// kubelet 心跳已超过监控宽限期。
+		// 租约在缓存中已过期，但 API Server 侧仍然新鲜。
+		// 由于控制器会回源 API Server 二次确认，期望不采取任何动作。
 		{
 			description: "Node created long time ago, with status updated by kubelet exceeds grace period. Node lease is expired in cache, but fresh in API server.",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -1836,7 +1909,7 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 				l.ResourceVersion = "100"
 				return l
 			}(),
-			expectedRequestCount: 2, // List nodes + List nodes + GET lease (GET not counted)
+			expectedRequestCount: 2, // 两次 List 节点；GET lease 不计入 FakeNodeHandler.RequestCount。
 			expectedNodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1861,7 +1934,7 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 			},
 			expectedPodStatusUpdate: false,
 		},
-		// Node lease expired in cache but fresh in API server. EnsureReady should skip on second run.
+		// 缓存中的租约过期但 API Server 侧新鲜：EnsureReady 在第二次检查时应跳过节点状态更新。
 		{
 			description: "Node lease expired in cache but fresh in API server. EnsureReady should skip on second run.",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -1924,7 +1997,7 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 				l.ResourceVersion = "100"
 				return l
 			}(),
-			expectedRequestCount: 2, // List nodes + List nodes (GET lease not counted)
+			expectedRequestCount: 2, // 两次 List 节点；回源 GET lease 不计入 RequestCount。
 			expectedNodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1965,15 +2038,18 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 				testNodeStartupGracePeriod,
 				testNodeMonitorPeriod,
 			)
+			// 固定当前时间，让心跳新旧判断完全由 timeToPass 控制。
 			nodeController.now = func() metav1.Time { return fakeNow }
 			nodeController.recorder = testutil.NewFakeRecorder()
 			nodeController.getPodsAssignedToNode = fakeGetPodsAssignedToNode(item.fakeNodeHandler.Clientset)
 			if err := nodeController.syncNodeStore(item.fakeNodeHandler); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+			// 把租约写入 informer 缓存；断路器会先查这里判断心跳是否新鲜。
 			if err := nodeController.syncLeaseStore(item.lease); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+			// 在 fake client 中创建租约，供控制器缓存未命中时回源二次确认。
 			if item.apiServerLease != nil {
 				_, err := item.fakeNodeHandler.CoordinationV1().Leases(v1.NamespaceNodeLease).Create(tCtx, item.apiServerLease, metav1.CreateOptions{})
 				if err != nil {
@@ -1983,15 +2059,18 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 			if err := nodeController.monitorNodeHealth(tCtx); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+			// 推进时钟后同时更新节点状态、缓存租约和服务端租约，模拟一次心跳周期后的变化。
 			if item.timeToPass > 0 {
 				nodeController.now = func() metav1.Time { return metav1.Time{Time: fakeNow.Add(item.timeToPass)} }
 				item.fakeNodeHandler.Existing[0].Status = item.newNodeStatus
 				if err := nodeController.syncNodeStore(item.fakeNodeHandler); err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
+				// 更新缓存中的租约，构造续约或过期的差异。
 				if err := nodeController.syncLeaseStore(item.newLease); err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
+				// 同步更新 API Server 侧租约，使双检结果可与缓存不同。
 				if item.newAPIServerLease != nil {
 					_, err := item.fakeNodeHandler.CoordinationV1().Leases(v1.NamespaceNodeLease).Update(tCtx, item.newAPIServerLease, metav1.UpdateOptions{})
 					if err != nil {
@@ -2025,16 +2104,20 @@ func TestMonitorNodeHealthUpdateNodeAndPodStatusWithLease(t *testing.T) {
 	}
 }
 
+// TestMonitorNodeHealthMarkPodsNotReady 验证节点心跳超时后，控制器是否把节点上的 Pod 标记为 NotReady。
 func TestMonitorNodeHealthMarkPodsNotReady(t *testing.T) {
 	fakeNow := metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC)
 	table := []struct {
-		fakeNodeHandler         *testutil.FakeNodeHandler
-		timeToPass              time.Duration
-		newNodeStatus           v1.NodeStatus
+		// fakeNodeHandler 提供节点与 Pod 列表，并记录客户端请求。
+		fakeNodeHandler *testutil.FakeNodeHandler
+		// timeToPass 是第二次监控前推进的时钟时长。
+		timeToPass time.Duration
+		// newNodeStatus 是推进时钟后写入节点的新状态。
+		newNodeStatus v1.NodeStatus
+		// expectedPodStatusUpdate 表示是否期望更新 Pod 的 status 子资源。
 		expectedPodStatusUpdate bool
 	}{
-		// Node created recently, without status.
-		// Expect no action from node controller (within startup grace period).
+		// 节点刚创建且没有状态：处于启动宽限期内，期望控制器不采取任何动作。
 		{
 			fakeNodeHandler: &testutil.FakeNodeHandler{
 				Existing: []*v1.Node{
@@ -2049,8 +2132,7 @@ func TestMonitorNodeHealthMarkPodsNotReady(t *testing.T) {
 			},
 			expectedPodStatusUpdate: false,
 		},
-		// Node created long time ago, with status updated recently.
-		// Expect no action from node controller (within monitor grace period).
+		// 节点创建时间久远但心跳新鲜：处于监控宽限期内，期望控制器不采取任何动作。
 		{
 			fakeNodeHandler: &testutil.FakeNodeHandler{
 				Existing: []*v1.Node{
@@ -2064,7 +2146,7 @@ func TestMonitorNodeHealthMarkPodsNotReady(t *testing.T) {
 								{
 									Type:   v1.NodeReady,
 									Status: v1.ConditionTrue,
-									// Node status has just been updated.
+									// 心跳刚更新过，处于监控宽限期内，不应被判定为不健康。
 									LastHeartbeatTime:  fakeNow,
 									LastTransitionTime: fakeNow,
 								},
@@ -2080,8 +2162,8 @@ func TestMonitorNodeHealthMarkPodsNotReady(t *testing.T) {
 			},
 			expectedPodStatusUpdate: false,
 		},
-		// Node created long time ago, with status updated by kubelet exceeds grace period.
-		// Expect pods status updated and Unknown node status posted from node controller
+		// 节点心跳已超过宽限期：期望控制器更新 Pod 状态并把节点标记为 Unknown。
+		// 节点心跳已超过宽限期：期望控制器更新 Pod 状态并将节点状态置为 Unknown。
 		{
 			fakeNodeHandler: &testutil.FakeNodeHandler{
 				Existing: []*v1.Node{
@@ -2095,7 +2177,7 @@ func TestMonitorNodeHealthMarkPodsNotReady(t *testing.T) {
 								{
 									Type:   v1.NodeReady,
 									Status: v1.ConditionTrue,
-									// Node status hasn't been updated for 1hr.
+									// 心跳时间停留在 1 小时前，推进时钟后即超过监控宽限期。
 									LastHeartbeatTime:  metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 									LastTransitionTime: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 								},
@@ -2115,7 +2197,7 @@ func TestMonitorNodeHealthMarkPodsNotReady(t *testing.T) {
 					{
 						Type:   v1.NodeReady,
 						Status: v1.ConditionTrue,
-						// Node status hasn't been updated for 1hr.
+						// 心跳时间停留在 1 小时前，推进时钟后即超过监控宽限期。
 						LastHeartbeatTime:  metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 						LastTransitionTime: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 					},
@@ -2131,6 +2213,7 @@ func TestMonitorNodeHealthMarkPodsNotReady(t *testing.T) {
 
 	tCtx := ktesting.Init(t)
 	for i, item := range table {
+		// 用 fake 客户端查询节点上的 Pod，避免依赖真实 informer 缓存。
 		nodeController, _ := newNodeLifecycleControllerFromClient(
 			tCtx,
 			item.fakeNodeHandler,
@@ -2151,6 +2234,7 @@ func TestMonitorNodeHealthMarkPodsNotReady(t *testing.T) {
 		if err := nodeController.monitorNodeHealth(tCtx); err != nil {
 			t.Errorf("Case[%d] unexpected error: %v", i, err)
 		}
+		// 推进时钟并更新节点状态，触发第二次监控以覆盖心跳超时场景。
 		if item.timeToPass > 0 {
 			nodeController.now = func() metav1.Time { return metav1.Time{Time: fakeNow.Add(item.timeToPass)} }
 			item.fakeNodeHandler.Existing[0].Status = item.newNodeStatus
@@ -2162,6 +2246,7 @@ func TestMonitorNodeHealthMarkPodsNotReady(t *testing.T) {
 			}
 		}
 
+		// 检查是否产生了 Pod status 子资源更新动作。
 		podStatusUpdated := false
 		for _, action := range item.fakeNodeHandler.Actions() {
 			if action.GetVerb() == "update" && action.GetResource().Resource == "pods" && action.GetSubresource() == "status" {
@@ -2174,16 +2259,15 @@ func TestMonitorNodeHealthMarkPodsNotReady(t *testing.T) {
 	}
 }
 
-// TestMonitorNodeHealthMarkPodsNotReadyWithWorkerSize tests the happy path of
-// TestMonitorNodeHealthMarkPodsNotReady with a large number of nodes/pods and
-// varying numbers of workers.
+// TestMonitorNodeHealthMarkPodsNotReadyWithWorkerSize 在大量节点/Pod（50 节点、每节点 100 Pod）下，
+// 使用不同数量的 worker 验证标记 Pod NotReady 的正常路径，确保结果不依赖并发度。
 func TestMonitorNodeHealthMarkPodsNotReadyWithWorkerSize(t *testing.T) {
 	const numNodes = 50
 	const podsPerNode = 100
+	// makeNodes 构造心跳已超时的节点集合，用于触发 NotReady 标记。
 	makeNodes := func() []*v1.Node {
 		nodes := make([]*v1.Node, numNodes)
-		// Node created long time ago, with status updated by kubelet exceeds grace period.
-		// Expect pods status updated and Unknown node status posted from node controller
+		// 节点心跳已超过宽限期：期望控制器更新 Pod 状态并将节点状态置为 Unknown。
 		for i := 0; i < numNodes; i++ {
 			nodes[i] = &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2195,7 +2279,7 @@ func TestMonitorNodeHealthMarkPodsNotReadyWithWorkerSize(t *testing.T) {
 						{
 							Type:   v1.NodeReady,
 							Status: v1.ConditionTrue,
-							// Node status hasn't been updated for 1hr.
+							// 心跳时间停留在 1 小时前，推进时钟后即超过监控宽限期。
 							LastHeartbeatTime:  metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 							LastTransitionTime: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 						},
@@ -2209,6 +2293,7 @@ func TestMonitorNodeHealthMarkPodsNotReadyWithWorkerSize(t *testing.T) {
 		}
 		return nodes
 	}
+	// makePods 为每个节点生成 podsPerNode 个 Pod，使总数量足以覆盖并发处理路径。
 	makePods := func() []v1.Pod {
 		pods := make([]v1.Pod, numNodes*podsPerNode)
 		for i := 0; i < numNodes*podsPerNode; i++ {
@@ -2218,9 +2303,10 @@ func TestMonitorNodeHealthMarkPodsNotReadyWithWorkerSize(t *testing.T) {
 	}
 
 	table := []struct {
+		// 用 0 表示采用默认 worker 数，1 表示显式单 worker，覆盖两种并发配置。
 		workers int
 	}{
-		{workers: 0}, // will default to scheduler.UpdateWorkerSize
+		{workers: 0}, // 0 表示使用默认的 scheduler.UpdateWorkerSize
 		{workers: 1},
 	}
 
@@ -2246,6 +2332,7 @@ func TestMonitorNodeHealthMarkPodsNotReadyWithWorkerSize(t *testing.T) {
 		nodeController.now = func() metav1.Time { return fakeNow }
 		nodeController.recorder = testutil.NewFakeRecorder()
 		nodeController.getPodsAssignedToNode = fakeGetPodsAssignedToNode(fakeNodeHandler.Clientset)
+		// 仅在显式指定时覆盖默认 worker 数量。
 		if item.workers != 0 {
 			nodeController.nodeUpdateWorkerSize = item.workers
 		}
@@ -2263,7 +2350,7 @@ func TestMonitorNodeHealthMarkPodsNotReadyWithWorkerSize(t *testing.T) {
 					{
 						Type:   v1.NodeReady,
 						Status: v1.ConditionTrue,
-						// Node status hasn't been updated for 1hr.
+						// 心跳时间停留在 1 小时前，推进时钟后即超过监控宽限期。
 						LastHeartbeatTime:  metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 						LastTransitionTime: metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC),
 					},
@@ -2295,10 +2382,15 @@ func TestMonitorNodeHealthMarkPodsNotReadyWithWorkerSize(t *testing.T) {
 	}
 }
 
+// TestMonitorNodeHealthMarkPodsNotReadyRetry 验证当 Pod 状态更新或 Pod 列表查询失败时，
+// 控制器能否在下一轮监控中重试并最终把 Pod 标记为 NotReady。
 func TestMonitorNodeHealthMarkPodsNotReadyRetry(t *testing.T) {
+	// nodeIteration 描述一轮监控所采用的时钟偏移与节点状态。
 	type nodeIteration struct {
+		// timeToPass 是第二次监控前推进的时钟时长。
 		timeToPass time.Duration
-		newNodes   []*v1.Node
+		// newNodes 是本轮监控写入 fake 处理器的节点状态。
+		newNodes []*v1.Node
 	}
 	timeNow := metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC)
 	timePlusTwoMinutes := metav1.Date(2015, 1, 1, 12, 0, 2, 0, time.UTC)
@@ -2323,16 +2415,20 @@ func TestMonitorNodeHealthMarkPodsNotReadyRetry(t *testing.T) {
 		}
 	}
 	table := []struct {
-		desc                      string
-		fakeNodeHandler           *testutil.FakeNodeHandler
-		updateReactor             func(action testcore.Action) (bool, runtime.Object, error)
+		// desc 描述用例场景，同时作为子测试名称。
+		desc string
+		// fakeNodeHandler 提供节点与 Pod 列表，并记录客户端请求。
+		fakeNodeHandler *testutil.FakeNodeHandler
+		// updateReactor 注入到 fake client，用于模拟 Pod 状态更新失败。
+		updateReactor func(action testcore.Action) (bool, runtime.Object, error)
+		// fakeGetPodsAssignedToNode 可被用例替换，以模拟查询 Pod 列表失败。
 		fakeGetPodsAssignedToNode func(c *fake.Clientset) func(string) ([]*v1.Pod, error)
-		nodeIterations            []nodeIteration
-		expectedPodStatusUpdates  int
+		// nodeIterations 定义多轮监控的时钟推进与节点状态变化。
+		nodeIterations []nodeIteration
+		// expectedPodStatusUpdates 是期望的 Pod 状态更新次数（含失败重试）。
+		expectedPodStatusUpdates int
 	}{
-		// Node created long time ago, with status updated by kubelet exceeds grace period.
-		// First monitorNodeHealth check will update pod status to NotReady.
-		// Second monitorNodeHealth check will do no updates (no retry).
+		// 节点心跳已超过宽限期：第一次监控会成功将 Pod 标记为 NotReady，第二次监控不应重复更新（无需重试）。
 		{
 			desc: "successful pod status update, no retry required",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -2355,9 +2451,7 @@ func TestMonitorNodeHealthMarkPodsNotReadyRetry(t *testing.T) {
 			},
 			expectedPodStatusUpdates: 1,
 		},
-		// Node created long time ago, with status updated by kubelet exceeds grace period.
-		// First monitorNodeHealth check will fail to update pod status to NotReady.
-		// Second monitorNodeHealth check will update pod status to NotReady (retry).
+		// 第一次监控更新 Pod 状态失败，期望第二次监控重试并成功。
 		{
 			desc: "unsuccessful pod status update, retry required",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -2394,11 +2488,9 @@ func TestMonitorNodeHealthMarkPodsNotReadyRetry(t *testing.T) {
 					newNodes:   makeNodes(v1.ConditionFalse, timePlusTwoMinutes, timePlusTwoMinutes),
 				},
 			},
-			expectedPodStatusUpdates: 2, // One failed and one retry.
+			expectedPodStatusUpdates: 2, // 一次失败加一次重试。
 		},
-		// Node created long time ago, with status updated by kubelet exceeds grace period.
-		// First monitorNodeHealth check will fail to list pods.
-		// Second monitorNodeHealth check will update pod status to NotReady (retry).
+		// 第一次监控查询 Pod 列表失败，期望第二次监控重试并成功更新状态。
 		{
 			desc: "unsuccessful pod list, retry required",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -2447,12 +2539,14 @@ func TestMonitorNodeHealthMarkPodsNotReadyRetry(t *testing.T) {
 				testNodeStartupGracePeriod,
 				testNodeMonitorPeriod,
 			)
+			// 注入 reactor 以模拟更新 Pod 状态时的 API 错误。
 			if item.updateReactor != nil {
 				item.fakeNodeHandler.Clientset.PrependReactor("update", "pods", item.updateReactor)
 			}
 			nodeController.now = func() metav1.Time { return timeNow }
 			nodeController.recorder = testutil.NewFakeRecorder()
 			nodeController.getPodsAssignedToNode = item.fakeGetPodsAssignedToNode(item.fakeNodeHandler.Clientset)
+			// 逐轮推进时钟并更新节点状态，观察重试行为。
 			for _, itertion := range item.nodeIterations {
 				nodeController.now = func() metav1.Time { return metav1.Time{Time: timeNow.Add(itertion.timeToPass)} }
 				item.fakeNodeHandler.Existing = itertion.newNodes
@@ -2477,9 +2571,8 @@ func TestMonitorNodeHealthMarkPodsNotReadyRetry(t *testing.T) {
 	}
 }
 
-// TestApplyNoExecuteTaints, ensures we just have a NoExecute taint applied to node.
-// NodeController is just responsible for enqueuing the node to tainting queue from which taint manager picks up
-// and evicts the pods on the node.
+// TestApplyNoExecuteTaints 验证 NoExecute 污点能正确施加到节点上。
+// 节点控制器只负责把节点放入污点队列，真正驱逐 Pod 的工作由 taint manager 完成。
 func TestApplyNoExecuteTaints(t *testing.T) {
 	// TODO: Remove skip once https://github.com/kubernetes/kubernetes/pull/114607 merges.
 	if goruntime.GOOS == "windows" {
@@ -2489,7 +2582,7 @@ func TestApplyNoExecuteTaints(t *testing.T) {
 
 	fakeNodeHandler := &testutil.FakeNodeHandler{
 		Existing: []*v1.Node{
-			// Unreachable Taint with effect 'NoExecute' should be applied to this node.
+			// 该节点应被施加 NoExecute 效果的 Unreachable 污点。
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "node0",
@@ -2512,8 +2605,7 @@ func TestApplyNoExecuteTaints(t *testing.T) {
 					},
 				},
 			},
-			// Because of the logic that prevents NC from evicting anything when all Nodes are NotReady
-			// we need second healthy node in tests.
+			// 全部节点 NotReady 时控制器不会驱逐 Pod，因此需要一个健康节点作为对照。
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "node1",
@@ -2536,7 +2628,7 @@ func TestApplyNoExecuteTaints(t *testing.T) {
 					},
 				},
 			},
-			// NotReady Taint with NoExecute effect should be applied to this node.
+			// 该节点应被施加 NoExecute 效果的 NotReady 污点。
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "node2",
@@ -2559,7 +2651,7 @@ func TestApplyNoExecuteTaints(t *testing.T) {
 					},
 				},
 			},
-			// NotReady Taint with NoExecute effect should not be applied to a node if the NodeCondition Type NodeReady has been set to nil in the interval between the NodeController enqueuing the node and the taint manager picking up.
+			// 若节点在控制器入队与 taint manager 处理之间将 NodeReady 条件移除，则不应施加 NotReady 污点。
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "node3",
@@ -2653,7 +2745,7 @@ func TestApplyNoExecuteTaints(t *testing.T) {
 		t.Errorf("Can't find taint %v in %v", NotReadyTaintTemplate, node2.Spec.Taints)
 	}
 
-	// Make node3 healthy again.
+	// 将 node2 恢复为健康状态，验证污点应被移除。
 	node2.Status = healthyNodeNewStatus
 	_, err = fakeNodeHandler.UpdateStatus(tCtx, node2, metav1.UpdateOptions{})
 	if err != nil {
@@ -2673,7 +2765,7 @@ func TestApplyNoExecuteTaints(t *testing.T) {
 		t.Errorf("Can't get current node2...")
 		return
 	}
-	// We should not see any taint on the node(especially the Not-Ready taint with NoExecute effect).
+	// 节点不应残留任何污点，尤其是带有 NoExecute 效果的 NotReady 污点。
 	if taintutils.TaintExists(node2.Spec.Taints, NotReadyTaintTemplate) || len(node2.Spec.Taints) > 0 {
 		t.Errorf("Found taint %v in %v, which should not be present", NotReadyTaintTemplate, node2.Spec.Taints)
 	}
@@ -2695,7 +2787,7 @@ func TestApplyNoExecuteTaints(t *testing.T) {
 	if err := nodeController.monitorNodeHealth(tCtx); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	// Before taint manager work, the status has been replaced(maybe merge-patch replace).
+	// 在 taint manager 处理前，用其他条件覆盖节点状态，验证污点判断基于当前条件而非入队时的快照。
 	node3.Status.Conditions = overrideNodeNewStatusConditions
 	_, err = fakeNodeHandler.UpdateStatus(tCtx, node3, metav1.UpdateOptions{})
 	if err != nil {
@@ -2711,26 +2803,26 @@ func TestApplyNoExecuteTaints(t *testing.T) {
 		t.Errorf("Can't get current node3...")
 		return
 	}
-	// We should not see any taint on the node(especially the Not-Ready taint with NoExecute effect).
+	// 节点不应残留任何污点，尤其是带有 NoExecute 效果的 NotReady 污点。
 	if taintutils.TaintExists(node3.Spec.Taints, NotReadyTaintTemplate) || len(node3.Spec.Taints) > 0 {
 		t.Errorf("Found taint %v in %v, which should not be present", NotReadyTaintTemplate, node3.Spec.Taints)
 	}
 }
 
-// TestApplyNoExecuteTaintsToUnreachableNode ensures a NoExecute taint is applied to node that hasn't posted the
-// node status for a period greater than nodeMonitorGracePeriod.
+// TestApplyNoExecuteTaintsToUnreachableNode 验证超过 nodeMonitorGracePeriod 未上报状态的节点会被加上 NoExecute 污点，
+// 并在恢复心跳后污点被移除。
 func TestApplyNoExecuteTaintsToUnreachableNode(t *testing.T) {
 	// TODO: Remove skip once https://github.com/kubernetes/kubernetes/pull/114607 merges.
 	if goruntime.GOOS == "windows" {
 		t.Skip("Skipping test on Windows.")
 	}
 	time1 := metav1.Date(2017, 1, 1, 12, 0, 0, 0, time.UTC)
-	// time2 is set to NodeMonitorGracePeriod plus 1 second after time1.
+	// time2 恰好超过监控宽限期 1 秒，用于触发污点判定。
 	time2 := metav1.Time{Time: time1.Add(testNodeMonitorGracePeriod + time.Second)}
 
 	fakeNodeHandler := &testutil.FakeNodeHandler{
 		Existing: []*v1.Node{
-			// Unreachable Taint with effect 'NoExecute' should be applied to this node after 2015-01-01 12:00:40.
+			// 超过宽限期后，该节点应被加上 NoExecute 效果的 Unreachable 污点。
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "node0",
@@ -2753,8 +2845,7 @@ func TestApplyNoExecuteTaintsToUnreachableNode(t *testing.T) {
 					},
 				},
 			},
-			// Because of the logic that prevents NC from evicting anything when all Nodes are NotReady
-			// we need second healthy node in tests.
+			// 全部节点 NotReady 时控制器不会驱逐 Pod，因此需要一个健康节点作为对照。
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "node1",
@@ -2792,7 +2883,7 @@ func TestApplyNoExecuteTaintsToUnreachableNode(t *testing.T) {
 		testNodeStartupGracePeriod,
 		testNodeMonitorPeriod,
 	)
-	// No taint should be added when the NodeReady conditions were not set longer ago than NodeMonitorGracePeriod.
+	// NodeReady 条件尚未超过宽限期时，不应施加任何污点。
 	nodeController.now = func() metav1.Time { return time1 }
 	nodeController.recorder = testutil.NewFakeRecorder()
 	nodeController.getPodsAssignedToNode = fakeGetPodsAssignedToNode(fakeNodeHandler.Clientset)
@@ -2820,9 +2911,9 @@ func TestApplyNoExecuteTaintsToUnreachableNode(t *testing.T) {
 		t.Errorf("Got unexpected taints %v", node1.Spec.Taints)
 	}
 
-	// Advance the clock to time2 to expire the previous NodeReady condition.
+	// 将时钟推进到 time2，使先前的 NodeReady 心跳过期。
 	nodeController.now = func() metav1.Time { return time2 }
-	// Only node1 sends a new heartbeat at time2.
+	// 仅 node1 在 time2 上报新心跳，作为未超时节点的对照。
 	node1.Status = v1.NodeStatus{
 		Conditions: []v1.NodeCondition{
 			{
@@ -2838,7 +2929,7 @@ func TestApplyNoExecuteTaintsToUnreachableNode(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 		return
 	}
-	// Unreachable taint should be added to node0 and not node1 because the former's NodeReadyCondition was set longer ago than NodeMonitorGracePeriod.
+	// node0 的心跳已超过宽限期应被污点化；node1 心跳新鲜则不应被污点化。
 	if err := nodeController.syncNodeStore(fakeNodeHandler); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -2867,7 +2958,7 @@ func TestApplyNoExecuteTaintsToUnreachableNode(t *testing.T) {
 		t.Errorf("Got unexpected taints %v", node1.Spec.Taints)
 	}
 
-	// Unreachable taint should be deleted from node0 after it sends a new heartbeat.
+	// node0 恢复心跳后，Unreachable 污点应被移除。
 	node0.Status = v1.NodeStatus{
 		Conditions: []v1.NodeCondition{
 			{
@@ -2896,13 +2987,13 @@ func TestApplyNoExecuteTaintsToUnreachableNode(t *testing.T) {
 		t.Errorf("Can't get current node0...")
 		return
 	}
-	// We should not see any taint on the node.
+	// 节点不应残留任何污点。
 	if len(node0.Spec.Taints) > 0 {
 		t.Errorf("Got unexpected taints %v", node0.Spec.Taints)
 	}
 }
 
-// TestApplyNoExecuteTaintsToNodesEnqueueTwice ensures we taint every node with NoExecute even if enqueued twice
+// TestApplyNoExecuteTaintsToNodesEnqueueTwice 验证节点即使被重复入队，仍能保证每个应被污点化的节点都带上 NoExecute 污点。
 func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 	// TODO: Remove skip once https://github.com/kubernetes/kubernetes/pull/114607 merges.
 	if goruntime.GOOS == "windows" {
@@ -2912,7 +3003,7 @@ func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 
 	fakeNodeHandler := &testutil.FakeNodeHandler{
 		Existing: []*v1.Node{
-			// Unreachable Taint with effect 'NoExecute' should be applied to this node.
+			// 该节点应被施加 NoExecute 效果的 Unreachable 污点。
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "node0",
@@ -2935,8 +3026,7 @@ func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 					},
 				},
 			},
-			// Because of the logic that prevents NC from evicting anything when all Nodes are NotReady
-			// we need second healthy node in tests.
+			// 全部节点 NotReady 时控制器不会驱逐 Pod，因此需要一个健康节点作为对照。
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "node1",
@@ -2959,7 +3049,7 @@ func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 					},
 				},
 			},
-			// NotReady Taint with NoExecute effect should be applied to this node.
+			// 该节点应被施加 NoExecute 效果的 NotReady 污点。
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "node2",
@@ -3013,7 +3103,7 @@ func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 	if err := nodeController.syncNodeStore(fakeNodeHandler); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	// 1. monitor node health twice, add untainted node once
+	// 1. 连续两次监控，验证节点只被加入队列一次。
 	if err := nodeController.monitorNodeHealth(tCtx); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -3021,7 +3111,7 @@ func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// 2. mark node0 healthy
+	// 2. 将 node0 标记为健康。
 	node0, err := fakeNodeHandler.Get(tCtx, "node0", metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Can't get current node0...")
@@ -3034,9 +3124,9 @@ func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 		return
 	}
 
-	// add other notReady nodes
+	// 追加其他不健康节点，扩大重复入队的规模。
 	fakeNodeHandler.Existing = append(fakeNodeHandler.Existing, []*v1.Node{
-		// Unreachable Taint with effect 'NoExecute' should be applied to this node.
+		// 该节点应被施加 NoExecute 效果的 Unreachable 污点。
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              "node3",
@@ -3059,8 +3149,7 @@ func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 				},
 			},
 		},
-		// Because of the logic that prevents NC from evicting anything when all Nodes are NotReady
-		// we need second healthy node in tests.
+		// 全部节点 NotReady 时控制器不会驱逐 Pod，因此需要一个健康节点作为对照。
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              "node4",
@@ -3083,7 +3172,7 @@ func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 				},
 			},
 		},
-		// NotReady Taint with NoExecute effect should be applied to this node.
+		// 该节点应被施加 NoExecute 效果的 NotReady 污点。
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              "node5",
@@ -3110,17 +3199,15 @@ func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 	if err := nodeController.syncNodeStore(fakeNodeHandler); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	// 3. start monitor node health again, add untainted node twice, construct UniqueQueue with duplicated node cache
+	// 3. 再次监控，构造 UniqueQueue 中出现重复节点的情况。
 	if err := nodeController.monitorNodeHealth(tCtx); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	// 4. do NoExecute taint pass
-	// when processing with node0, condition.Status is NodeReady, and return true with default case
-	// then remove the set value and queue value both, the taint job never stuck
+	// 4. 执行 NoExecute 污点处理：node0 已恢复 Ready，应在默认分支返回并同时清理集合与队列中的值，避免任务卡住。
 	nodeController.doNoExecuteTaintingPass(tCtx)
 
-	// 5. get node3 and node5, see if it has ready got NoExecute taint
+	// 5. 检查 node3 和 node5 是否都已正确获得 NoExecute 污点。
 	node3, err := fakeNodeHandler.Get(tCtx, "node3", metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Can't get current node3...")
@@ -3139,6 +3226,8 @@ func TestApplyNoExecuteTaintsToNodesEnqueueTwice(t *testing.T) {
 	}
 }
 
+// TestSwapUnreachableNotReadyTaints 验证节点从未上报状态（Unreachable）转为明确 NotReady 时，
+// 污点会从 UnreachableTaintTemplate 替换为 NotReadyTaintTemplate。
 func TestSwapUnreachableNotReadyTaints(t *testing.T) {
 	fakeNow := metav1.Date(2017, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -3166,9 +3255,7 @@ func TestSwapUnreachableNotReadyTaints(t *testing.T) {
 					},
 				},
 			},
-			// Because of the logic that prevents NC from evicting anything when all Nodes are NotReady
-			// we need second healthy node in tests. Because of how the tests are written we need to update
-			// the status of this Node.
+			// 全部节点 NotReady 时控制器不会驱逐 Pod，因此需要一个健康节点作为对照，并在后续更新它的状态。
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "node1",
@@ -3199,7 +3286,7 @@ func TestSwapUnreachableNotReadyTaints(t *testing.T) {
 			{
 				Type:   v1.NodeReady,
 				Status: v1.ConditionFalse,
-				// Node status has just been updated, and is NotReady for 10min.
+				// 心跳刚更新且已连续 10 分钟处于 NotReady，触发污点替换。
 				LastHeartbeatTime:  metav1.Date(2017, 1, 1, 12, 9, 0, 0, time.UTC),
 				LastTransitionTime: metav1.Date(2017, 1, 1, 12, 0, 0, 0, time.UTC),
 			},
@@ -3291,6 +3378,8 @@ func TestSwapUnreachableNotReadyTaints(t *testing.T) {
 	}
 }
 
+// TestTaintsNodeByCondition 验证根据节点条件（NetworkUnavailable/Ready=False/Ready=Unknown）
+// 施加对应 NoSchedule 污点的逻辑。
 func TestTaintsNodeByCondition(t *testing.T) {
 	fakeNow := metav1.Date(2017, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -3352,8 +3441,11 @@ func TestTaintsNodeByCondition(t *testing.T) {
 	}
 
 	tests := []struct {
-		Name           string
-		Node           *v1.Node
+		// Name 描述用例场景。
+		Name string
+		// Node 是待处理的节点及其条件。
+		Node *v1.Node
+		// ExpectedTaints 是期望施加到节点上的污点集合。
 		ExpectedTaints []*v1.Taint
 	}{
 		{
@@ -3474,6 +3566,7 @@ func TestTaintsNodeByCondition(t *testing.T) {
 		},
 	}
 
+	// 逐用例更新节点、执行污点处理并校验结果。
 	for _, test := range tests {
 		if _, err := fakeNodeHandler.Update(tCtx, test.Node, metav1.UpdateOptions{}); err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -3504,6 +3597,8 @@ func TestTaintsNodeByCondition(t *testing.T) {
 	}
 }
 
+// TestNodeEventGeneration 验证新节点注册时生成的 RegisteredNode 事件，
+// 且事件的 InvolvedObject 携带正确的节点 UID。
 func TestNodeEventGeneration(t *testing.T) {
 	fakeNow := metav1.Date(2016, 9, 10, 12, 0, 0, 0, time.UTC)
 	fakeNodeHandler := &testutil.FakeNodeHandler{
@@ -3542,6 +3637,7 @@ func TestNodeEventGeneration(t *testing.T) {
 		testNodeMonitorPeriod,
 	)
 	nodeController.now = func() metav1.Time { return fakeNow }
+	// 用 FakeRecorder 捕获控制器产生的事件，便于断言事件原因与对象 UID。
 	fakeRecorder := testutil.NewFakeRecorder()
 	nodeController.recorder = fakeRecorder
 	nodeController.getPodsAssignedToNode = fakeGetPodsAssignedToNode(fakeNodeHandler.Clientset)
@@ -3571,6 +3667,8 @@ func TestNodeEventGeneration(t *testing.T) {
 	}
 }
 
+// TestReconcileNodeLabels 验证稳定标签（stable）与 beta 标签（OS/arch）之间的一致性调和：
+// 缺失时补齐，冲突时以稳定标签为准。
 func TestReconcileNodeLabels(t *testing.T) {
 	fakeNow := metav1.Date(2017, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -3619,8 +3717,11 @@ func TestReconcileNodeLabels(t *testing.T) {
 	nodeController.getPodsAssignedToNode = fakeGetPodsAssignedToNode(fakeNodeHandler.Clientset)
 
 	tests := []struct {
-		Name           string
-		Node           *v1.Node
+		// Name 描述用例场景。
+		Name string
+		// Node 是待处理的节点及其条件。
+		Node *v1.Node
+		// ExpectedLabels 是调和后期望的节点标签。
 		ExpectedLabels map[string]string
 	}{
 		{
@@ -3723,6 +3824,8 @@ func TestReconcileNodeLabels(t *testing.T) {
 	}
 }
 
+// TestTryUpdateNodeHealth 验证在节点心跳新鲜或超过宽限期时，tryUpdateNodeHealth 对 NodeReady 状态的推导，
+// 并保证返回的状态与 nodeHealthMap 中保存的一致。
 func TestTryUpdateNodeHealth(t *testing.T) {
 	fakeNow := metav1.Date(2017, 1, 1, 12, 0, 0, 0, time.UTC)
 	fakeOld := metav1.Date(2016, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -3765,6 +3868,7 @@ func TestTryUpdateNodeHealth(t *testing.T) {
 	nodeController.recorder = testutil.NewFakeRecorder()
 	nodeController.getPodsAssignedToNode = fakeGetPodsAssignedToNode(fakeNodeHandler.Clientset)
 
+	// getStatus 安全地从条件指针中取出状态值，条件不存在时返回 nil。
 	getStatus := func(cond *v1.NodeCondition) *v1.ConditionStatus {
 		if cond == nil {
 			return nil
@@ -3773,7 +3877,9 @@ func TestTryUpdateNodeHealth(t *testing.T) {
 	}
 
 	tests := []struct {
+		// name 描述用例场景，同时作为子测试名称。
 		name string
+		// node 是包含初始状态与时间戳的测试节点。
 		node *v1.Node
 	}{
 		{
@@ -3918,6 +4024,7 @@ func TestTryUpdateNodeHealth(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 直接将节点状态写入健康缓存，跳过 monitorNodeHealth 的前置流程。
 			nodeController.nodeHealthMap.set(test.node.Name, &nodeHealthData{
 				status:                   &test.node.Status,
 				probeTimestamp:           test.node.CreationTimestamp,
@@ -3927,6 +4034,7 @@ func TestTryUpdateNodeHealth(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+			// 校验返回状态与缓存中保存的状态一致，防止两者出现偏差。
 			_, savedReadyCondition := controllerutil.GetNodeCondition(nodeController.nodeHealthMap.getDeepCopy(test.node.Name).status, v1.NodeReady)
 			savedStatus := getStatus(savedReadyCondition)
 			currentStatus := getStatus(currentReadyCondition)
@@ -3937,13 +4045,18 @@ func TestTryUpdateNodeHealth(t *testing.T) {
 	}
 }
 
+// Test_isNodeExcludedFromDisruptionChecks 验证带有排除中断标签的节点会被识别，
+// 普通节点（包括名字以 master 开头的节点）不会被误判。
 func Test_isNodeExcludedFromDisruptionChecks(t *testing.T) {
 	validNodeStatus := v1.NodeStatus{Conditions: []v1.NodeCondition{{Type: "Test"}}}
 	tests := []struct {
+		// name 描述用例场景，同时作为子测试名称。
 		name string
 
+		// input 是待判定的节点。
 		input *v1.Node
-		want  bool
+		// want 是期望的判定结果。
+		want bool
 	}{
 		{want: false, input: &v1.Node{Status: validNodeStatus, ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{}}}},
 		{want: false, input: &v1.Node{Status: validNodeStatus, ObjectMeta: metav1.ObjectMeta{Name: "master-abc"}}},
@@ -3958,15 +4071,22 @@ func Test_isNodeExcludedFromDisruptionChecks(t *testing.T) {
 	}
 }
 
+// TestProcessPodMarkPodNotReady 验证 processPod 仅在节点健康状态已收集且节点不健康时，
+// 才把 Pod 标记为 NotReady。
 func TestProcessPodMarkPodNotReady(t *testing.T) {
 	fakeNow := metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	table := []struct {
-		desc                    string
-		fakeNodeHandler         *testutil.FakeNodeHandler
-		pod                     *v1.Pod
+		// desc 描述用例场景，同时作为子测试名称。
+		desc string
+		// fakeNodeHandler 提供节点与 Pod 列表，并记录客户端请求。
+		fakeNodeHandler *testutil.FakeNodeHandler
+		// pod 是待处理的 Pod。
+		pod *v1.Pod
+		// expectedPodStatusUpdate 表示是否期望更新 Pod 的 status 子资源。
 		expectedPodStatusUpdate bool
-		monitorNodeHealth       bool
+		// monitorNodeHealth 表示是否先执行一次监控以收集节点健康状态。
+		monitorNodeHealth bool
 	}{
 		{
 			desc: "Do not mark pod as NotReady when the scheduled node's healthy is not gathered yet",
@@ -4071,6 +4191,7 @@ func TestProcessPodMarkPodNotReady(t *testing.T) {
 			if err := nodeController.syncNodeStore(item.fakeNodeHandler); err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
+			// 某些场景需要先收集节点健康状态，否则 processPod 不应做标记。
 			if item.monitorNodeHealth {
 				if err := nodeController.monitorNodeHealth(tCtx); err != nil {
 					t.Errorf("unexpected error: %v", err)
@@ -4080,7 +4201,9 @@ func TestProcessPodMarkPodNotReady(t *testing.T) {
 			if err := nodeController.syncPodStore(item.pod); err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
+			// 模拟 Pod 更新事件进入队列。
 			nodeController.podUpdated(nil, item.pod)
+			// 执行待测试的 Pod 处理逻辑。
 			nodeController.processPod(tCtx, podUpdateItem{name: item.pod.Name, namespace: item.pod.Namespace})
 
 			podStatusUpdated := false

@@ -20,17 +20,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// AttachDetachControllerConfiguration contains elements describing AttachDetachController.
+// AttachDetachControllerConfiguration 描述挂载/卸载控制器的配置项。
 type AttachDetachControllerConfiguration struct {
-	// Reconciler runs a periodic loop to reconcile the desired state of the with
-	// the actual state of the world by triggering attach detach operations.
-	// This flag enables or disables reconcile.  Is false by default, and thus enabled.
+	// Reconciler 周期性运行，通过触发挂载/卸载操作来协调期望状态与实际状态。
+	// 该标志用于启用或停止协调；默认为 false，即协调功能启用。
 	DisableAttachDetachReconcilerSync bool
-	// ReconcilerSyncLoopPeriod is the amount of time the reconciler sync states loop
-	// wait between successive executions. Is set to 60 sec by default.
+	// ReconcilerSyncLoopPeriod 是协调循环两次执行之间的等待时长，默认 60 秒。
 	ReconcilerSyncLoopPeriod metav1.Duration
-	// DisableForceDetachOnTimeout disables force detach when the maximum unmount
-	// time is exceeded. Is false by default, and thus force detach on unmount is
-	// enabled.
+	// DisableForceDetachOnTimeout 控制在超过最大卸载时间时是否禁用强制卸载。
+	// 默认为 false，即超时后仍会强制卸载。
 	DisableForceDetachOnTimeout bool
 }

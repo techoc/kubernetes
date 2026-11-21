@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package resourcequota contains a controller that makes resource quota usage observations
+// Package resourcequota 包含一个用于观测资源配额使用情况的控制器。
 package resourcequota

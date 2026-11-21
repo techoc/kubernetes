@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package podautoscaler contains logic for autoscaling number of
-// pods based on metrics observed.
+// Package podautoscaler 包含根据观测到的指标自动扩缩 Pod 数量的逻辑。
 package podautoscaler

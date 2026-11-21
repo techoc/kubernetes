@@ -16,10 +16,10 @@ limitations under the License.
 
 package config
 
-// EphemeralVolumeControllerConfiguration contains elements describing EphemeralVolumeController.
+// EphemeralVolumeControllerConfiguration 描述 EphemeralVolumeController 的配置项。
 type EphemeralVolumeControllerConfiguration struct {
-	// ConcurrentEphemeralVolumeSyncs is the number of ephemeral volume syncing operations
-	// that will be done concurrently. Larger number = faster ephemeral volume updating,
-	// but more CPU (and network) load.
+	// ConcurrentEphemeralVolumeSyncs 是并发执行的临时卷同步操作数量。
+	// 数值越大，临时卷更新越快，但 CPU 和网络负载也越高；
+	// 需要在收敛速度和 API 服务器压力之间权衡。
 	ConcurrentEphemeralVolumeSyncs int32
 }

@@ -23,6 +23,10 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+// TestFinishedCondition 验证 FinishedCondition 的判定语义：
+// 只有 Complete 或 Failed 条件为 True 时 Job 才算结束；
+// 条件为 False/Unknown 或不存在都不应误判为结束。
+// 多条件场景下需忽略其他无关条件（如 Suspended），只关注终结性条件。
 func TestFinishedCondition(t *testing.T) {
 	tests := map[string]struct {
 		conditions        []batch.JobCondition
@@ -139,6 +143,7 @@ func TestFinishedCondition(t *testing.T) {
 				},
 			}
 
+			// 同时校验结束标记与具体条件类型：类型正确但标记错误同样代表判定失败。
 			isJobFinished, conditionType := FinishedCondition(job)
 			if isJobFinished != test.wantJobFinished {
 				if test.wantJobFinished {
@@ -155,6 +160,8 @@ func TestFinishedCondition(t *testing.T) {
 	}
 }
 
+// TestIsJobSucceeded 验证 IsJobSucceeded 只认 Complete=True 为成功：
+// 即使同时存在 Failed=True，只要 Complete=False 就不应判定成功。
 func TestIsJobSucceeded(t *testing.T) {
 	tests := map[string]struct {
 		job        batch.Job

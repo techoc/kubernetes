@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package namespace contains a controller that handles namespace lifecycle
+// Package namespace 包含处理 Namespace 生命周期的控制器。
 package namespace

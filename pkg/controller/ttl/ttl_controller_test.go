@@ -32,6 +32,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestPatchNode 验证 patchNodeWithAnnotation 生成的 JSON patch：
+// 仅当注解值确实变化时才产生 patch，且不影响已有其他注解。
 func TestPatchNode(t *testing.T) {
 	testCases := []struct {
 		node       *v1.Node
@@ -39,11 +41,13 @@ func TestPatchNode(t *testing.T) {
 		patch      string
 	}{
 		{
+			// 空节点设置 TTL=0：注解不存在，仍需新增。
 			node:       &v1.Node{},
 			ttlSeconds: 0,
 			patch:      "{\"metadata\":{\"annotations\":{\"node.alpha.kubernetes.io/ttl\":\"0\"}}}",
 		},
 		{
+			// 空节点设置非零 TTL。
 			node:       &v1.Node{},
 			ttlSeconds: 10,
 			patch:      "{\"metadata\":{\"annotations\":{\"node.alpha.kubernetes.io/ttl\":\"10\"}}}",
@@ -64,11 +68,13 @@ func TestPatchNode(t *testing.T) {
 			patch:      "{\"metadata\":{\"annotations\":{\"node.alpha.kubernetes.io/ttl\":\"10\"}}}",
 		},
 		{
+			// 同时存在其他注解时，patch 只覆盖 TTL 键。
 			node:       &v1.Node{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{"node.alpha.kubernetes.io/ttl": "0", "a": "b"}}},
 			ttlSeconds: 10,
 			patch:      "{\"metadata\":{\"annotations\":{\"node.alpha.kubernetes.io/ttl\":\"10\"}}}",
 		},
 		{
+			// TTL 已是目标值，不应产生任何修改（空 patch）。
 			node:       &v1.Node{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{"node.alpha.kubernetes.io/ttl": "10", "a": "b"}}},
 			ttlSeconds: 10,
 			patch:      "{}",
@@ -80,18 +86,22 @@ func TestPatchNode(t *testing.T) {
 		ttlController := &Controller{
 			kubeClient: fakeClient,
 		}
+		// 调用后检查 fake client 收到的 patch action 内容与预期完全一致。
 		err := ttlController.patchNodeWithAnnotation(context.TODO(), testCase.node, v1.ObjectTTLAnnotationKey, testCase.ttlSeconds)
 		if err != nil {
 			t.Errorf("%d: unexpected error: %v", i, err)
 			continue
 		}
 		actions := fakeClient.Actions()
+		// 每次调用应恰好产生一个 patch action；断言其 payload 与预期字符串一致。
 		assert.Len(t, actions, 1, "unexpected actions: %#v", actions)
 		patchAction := actions[0].(core.PatchActionImpl)
 		assert.Equal(t, testCase.patch, string(patchAction.Patch), "%d: unexpected patch: %s", i, string(patchAction.Patch))
 	}
 }
 
+// TestUpdateNodeIfNeeded 验证 updateNodeIfNeeded 仅在 TTL 注解需要变化时才打 patch：
+// 目标值与当前值相同则不产生任何 action。
 func TestUpdateNodeIfNeeded(t *testing.T) {
 	testCases := []struct {
 		node       *v1.Node
@@ -119,6 +129,7 @@ func TestUpdateNodeIfNeeded(t *testing.T) {
 			patch:      "{\"metadata\":{\"annotations\":{\"node.alpha.kubernetes.io/ttl\":\"60\"}}}",
 		},
 		{
+			// 当前 TTL 已等于目标值：不产生 patch。
 			node:       &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "name", Annotations: map[string]string{"node.alpha.kubernetes.io/ttl": "60"}}},
 			desiredTTL: 60,
 			patch:      "",
@@ -144,6 +155,7 @@ func TestUpdateNodeIfNeeded(t *testing.T) {
 			continue
 		}
 		actions := fakeClient.Actions()
+		// patch 为空表示期望无动作，否则断言恰好一次 patch 且内容匹配。
 		if testCase.patch == "" {
 			assert.Empty(t, actions, "unexpected actions")
 		} else {
@@ -154,6 +166,8 @@ func TestUpdateNodeIfNeeded(t *testing.T) {
 	}
 }
 
+// TestDesiredTTL 验证节点数跨过阈值时 getDesiredTTLSeconds 的 TTL 计算结果：
+// 覆盖新增/删除节点以及多个 boundaryStep 下的边界行为。
 func TestDesiredTTL(t *testing.T) {
 	testCases := []struct {
 		addNode      bool
@@ -178,6 +192,7 @@ func TestDesiredTTL(t *testing.T) {
 			expectedTTL:  0,
 		},
 		{
+			// 节点数达到 100 的阈值：TTL 从 0 升到 15。
 			addNode:      true,
 			nodeCount:    100,
 			desiredTTL:   0,
@@ -206,6 +221,7 @@ func TestDesiredTTL(t *testing.T) {
 			expectedTTL:  15,
 		},
 		{
+			// 节点数跌破 90：TTL 应回落到 0。
 			deleteNode:   true,
 			nodeCount:    90,
 			desiredTTL:   15,
@@ -242,6 +258,7 @@ func TestDesiredTTL(t *testing.T) {
 		if testCase.deleteNode {
 			ttlController.deleteNode(logger, &v1.Node{})
 		}
+		// 触发一次增删节点后，断言重新计算出的 TTL 符合预期。
 		assert.Equal(t, testCase.expectedTTL, ttlController.getDesiredTTLSeconds(),
 			"%d: unexpected ttl: %d", i, ttlController.getDesiredTTLSeconds())
 	}

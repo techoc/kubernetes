@@ -20,8 +20,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// MetadataOnlyObject allows decoding only the apiVersion, kind, and metadata fields of
-// JSON data.
+// MetadataOnlyObject 只允许解码 JSON 数据中的 apiVersion、kind 和 metadata 字段。
+// 垃圾回收器只需资源的身份与属主信息，跳过 spec/status 可大幅降低反序列化和内存开销。
 // TODO: enable meta-only decoding for protobuf.
 //
 // +k8s:deepcopy-gen=true
@@ -32,8 +32,9 @@ type MetadataOnlyObject struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 }
 
-// MetadataOnlyObjectList allows decoding from JSON data only the typemeta and metadata of
-// a list, and those of the enclosing objects.
+// MetadataOnlyObjectList 只允许解码 JSON 数据中的列表 typemeta、metadata，
+// 以及列表中各对象的 typemeta 和 metadata。
+// 列表操作同样只关心对象身份，避免解析完整对象带来的开销。
 // TODO: enable meta-only decoding for protobuf.
 //
 // +k8s:deepcopy-gen=true

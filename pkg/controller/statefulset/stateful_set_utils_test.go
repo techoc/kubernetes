@@ -46,20 +46,25 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// noopRecorder is an EventRecorder that does nothing. record.FakeRecorder has a fixed
-// buffer size, which causes tests to hang if that buffer's exceeded.
+// noopRecorder 是空实现的 EventRecorder。FakeRecorder 的缓冲区大小固定，事件超出缓冲区时测试会挂起。
 type noopRecorder struct{}
 
+// Event 丢弃普通事件。
 func (r *noopRecorder) Event(object runtime.Object, eventtype, reason, message string) {}
+
+// Eventf 丢弃格式化事件。
 func (r *noopRecorder) Eventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{}) {
 }
+
+// AnnotatedEventf 丢弃带注解的事件。
 func (r *noopRecorder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
 }
 
-// getClaimPodName gets the name of the Pod associated with the Claim, or an empty string if this doesn't look matching.
+// getClaimPodName 从 PVC 名称中提取关联的 Pod 名称；名称不匹配时返回空字符串。
 func getClaimPodName(set *apps.StatefulSet, claim *v1.PersistentVolumeClaim) string {
 	podName := ""
 
+	// PVC 名称由卷名加 "-<set 名>-<序号>" 构成，只需匹配末尾的 Pod 名部分。
 	statefulClaimRegex := regexp.MustCompile(fmt.Sprintf(".*-(%s-[0-9]+)$", set.Name))
 	matches := statefulClaimRegex.FindStringSubmatch(claim.Name)
 	if len(matches) != 2 {
@@ -68,11 +73,12 @@ func getClaimPodName(set *apps.StatefulSet, claim *v1.PersistentVolumeClaim) str
 	return matches[1]
 }
 
-// ownerRefsChanged returns true if newRefs does not match originalRefs.
+// ownerRefsChanged 比较两组 ownerReference 是否不同（忽略顺序）。
 func ownerRefsChanged(originalRefs, newRefs []metav1.OwnerReference) bool {
 	if len(originalRefs) != len(newRefs) {
 		return true
 	}
+	// 用 APIVersion/Kind/Name 三元组作为身份标识；UID 不匹配属于过期引用，由其他测试覆盖。
 	key := func(ref *metav1.OwnerReference) string {
 		return fmt.Sprintf("%s-%s-%s", ref.APIVersion, ref.Kind, ref.Name)
 	}
@@ -82,6 +88,7 @@ func ownerRefsChanged(originalRefs, newRefs []metav1.OwnerReference) bool {
 	}
 	for i := range newRefs {
 		k := key(&newRefs[i])
+		// 布尔标记同时防止重复引用被当成同一条旧引用匹配两次。
 		if val, found := refs[k]; !found || !val {
 			return true
 		}
@@ -90,6 +97,7 @@ func ownerRefsChanged(originalRefs, newRefs []metav1.OwnerReference) bool {
 	return false
 }
 
+// TestOwnerRefsChanged 验证 ownerReference 比较能识别增删与改名，忽略顺序但不忽略重复。
 func TestOwnerRefsChanged(t *testing.T) {
 	toRefs := func(strs []string) []metav1.OwnerReference {
 		refs := []metav1.OwnerReference{}
@@ -150,6 +158,7 @@ func TestOwnerRefsChanged(t *testing.T) {
 	}
 }
 
+// TestGetParentNameAndOrdinal 验证从 Pod 名称中提取父对象名与序号，以及非法名称的返回值。
 func TestGetParentNameAndOrdinal(t *testing.T) {
 	set := newStatefulSet(3)
 	pod := newStatefulSetPod(set, 1)
@@ -166,6 +175,7 @@ func TestGetParentNameAndOrdinal(t *testing.T) {
 	}
 }
 
+// TestGetClaimPodName 验证 PVC 名称到 Pod 名称的提取，包括多段前缀和不匹配的情形。
 func TestGetClaimPodName(t *testing.T) {
 	set := apps.StatefulSet{}
 	set.Name = "my-set"
@@ -188,6 +198,7 @@ func TestGetClaimPodName(t *testing.T) {
 	}
 }
 
+// TestIsMemberOf 验证成员判定不会把同名序号的 Pod 归到另一个 StatefulSet。
 func TestIsMemberOf(t *testing.T) {
 	set := newStatefulSet(3)
 	set2 := newStatefulSet(3)
@@ -201,6 +212,7 @@ func TestIsMemberOf(t *testing.T) {
 	}
 }
 
+// TestIdentityMatches 验证身份校验覆盖名称、命名空间和 statefulSetPodName 标签。
 func TestIdentityMatches(t *testing.T) {
 	set := newStatefulSet(3)
 	pod := newStatefulSetPod(set, 1)
@@ -223,6 +235,7 @@ func TestIdentityMatches(t *testing.T) {
 	}
 }
 
+// TestStorageMatches 验证存储校验覆盖卷、PVC 声明名和序号对应的名称。
 func TestStorageMatches(t *testing.T) {
 	set := newStatefulSet(3)
 	pod := newStatefulSetPod(set, 1)
@@ -256,6 +269,7 @@ func TestStorageMatches(t *testing.T) {
 	}
 }
 
+// TestUpdateIdentity 验证 updateIdentity 能修复被破坏的命名空间和 Pod 名称标签。
 func TestUpdateIdentity(t *testing.T) {
 	set := newStatefulSet(3)
 	pod := newStatefulSetPod(set, 1)
@@ -277,6 +291,7 @@ func TestUpdateIdentity(t *testing.T) {
 	}
 }
 
+// TestUpdateStorage 验证 updateStorage 能重建缺失的卷、PVC 声明及错误的声明名。
 func TestUpdateStorage(t *testing.T) {
 	set := newStatefulSet(3)
 	pod := newStatefulSetPod(set, 1)
@@ -317,6 +332,7 @@ func TestUpdateStorage(t *testing.T) {
 	}
 }
 
+// TestGetPersistentVolumeClaimRetentionPolicy 验证保留策略读取，以及未配置时的默认行为。
 func TestGetPersistentVolumeClaimRetentionPolicy(t *testing.T) {
 	retainPolicy := apps.StatefulSetPersistentVolumeClaimRetentionPolicy{
 		WhenScaled:  apps.RetainPersistentVolumeClaimRetentionPolicyType,
@@ -340,6 +356,7 @@ func TestGetPersistentVolumeClaimRetentionPolicy(t *testing.T) {
 	}
 }
 
+// TestMatchesRef 验证引用匹配要求 API 版本、Kind 和名称一致，UID 不参与匹配。
 func TestMatchesRef(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -417,6 +434,7 @@ func TestMatchesRef(t *testing.T) {
 	}
 }
 
+// TestIsClaimOwnerUpToDate 验证 PVC ownerReference 判定与保留策略一致，且不依赖引用的排列顺序。
 func TestIsClaimOwnerUpToDate(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -499,6 +517,7 @@ func TestIsClaimOwnerUpToDate(t *testing.T) {
 					}
 					set.Spec.Replicas = &tc.replicas
 					claimRefs := claim.GetOwnerReferences()
+					// 遍历 Pod/Set 引用有无及其组合，确保判定只看策略要求的引用是否存在。
 					if setPodRef {
 						claimRefs = addControllerRef(claimRefs, &pod, podKind)
 					}
@@ -506,6 +525,7 @@ func TestIsClaimOwnerUpToDate(t *testing.T) {
 						claimRefs = addControllerRef(claimRefs, &set, controllerKind)
 					}
 					if useOtherRefs {
+						// 无关的非控制器引用不应干扰策略判定。
 						claimRefs = append(
 							claimRefs,
 							metav1.OwnerReference{
@@ -532,6 +552,7 @@ func TestIsClaimOwnerUpToDate(t *testing.T) {
 	}
 }
 
+// TestClaimOwnerUpToDateEdgeCases 验证非控制器标记、过期 UID 和额外控制器对 owner 判定的影响。
 func TestClaimOwnerUpToDateEdgeCases(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	logger := klog.FromContext(ctx)
@@ -711,6 +732,7 @@ func TestClaimOwnerUpToDateEdgeCases(t *testing.T) {
 	}
 }
 
+// TestUpdateClaimOwnerRefForSetAndPod 验证更新后只保留策略要求的控制器引用，并清除多余控制器。
 func TestUpdateClaimOwnerRefForSetAndPod(t *testing.T) {
 	testCases := []struct {
 		name                 string
@@ -811,7 +833,7 @@ func TestUpdateClaimOwnerRefForSetAndPod(t *testing.T) {
 				claimRefs = addControllerRef(claimRefs, &set, controllerKind)
 			}
 			if extraOwner {
-				// Note the extra owner should not affect our owner references.
+				// 非控制器 owner 不属于本控制器的管理范围，应原样保留。
 				claimRefs = append(claimRefs, metav1.OwnerReference{
 					APIVersion: "custom/v1",
 					Kind:       "random",
@@ -830,8 +852,7 @@ func TestUpdateClaimOwnerRefForSetAndPod(t *testing.T) {
 			}
 			claim.SetOwnerReferences(claimRefs)
 			updateClaimOwnerRefForSetAndPod(logger, &claim, &set, &pod)
-			// Confirm that after the update, the specified owner is set as the only controller.
-			// Any other controllers will be cleaned update by the update.
+			// 更新后应只有策略指定的 owner 带 controller 标记；其他控制器会被清除。
 			check := func(target, owner metav1.Object) bool {
 				for _, ref := range target.GetOwnerReferences() {
 					if ref.UID == owner.GetUID() {
@@ -850,6 +871,7 @@ func TestUpdateClaimOwnerRefForSetAndPod(t *testing.T) {
 	}
 }
 
+// TestUpdateClaimControllerRef 验证控制器引用缺失或过期时的增删行为，保留非控制器引用。
 func TestUpdateClaimControllerRef(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -956,7 +978,7 @@ func TestUpdateClaimControllerRef(t *testing.T) {
 					Controller: ptr.To(true),
 				},
 			},
-			// The missing UID is interpreted as an unexpected stale reference.
+			// UID 缺失的引用视为过期的意外控制器，会被清理。
 			expectedRefs: []metav1.OwnerReference{},
 		},
 		{
@@ -968,7 +990,7 @@ func TestUpdateClaimControllerRef(t *testing.T) {
 					Name:       "sts",
 				},
 			},
-			// The missing UID is interpreted as an unexpected stale reference.
+			// UID 缺失的引用视为过期的意外控制器，会被清理。
 			expectedRefs: []metav1.OwnerReference{},
 		},
 	}
@@ -995,6 +1017,7 @@ func TestUpdateClaimControllerRef(t *testing.T) {
 	}
 }
 
+// TestHasOwnerRef 验证只要存在对应 UID 的引用即算命中，不要求它是控制器。
 func TestHasOwnerRef(t *testing.T) {
 	target := v1.Pod{}
 	target.SetOwnerReferences([]metav1.OwnerReference{
@@ -1033,8 +1056,9 @@ func TestHasOwnerRef(t *testing.T) {
 	}
 }
 
+// TestHasUnexpectedController 验证第三方控制器及过期 UID 的识别，并确认 Retain 策略下不报异常。
 func TestHasUnexpectedController(t *testing.T) {
-	// Each test case will be tested against a StatefulSet named "set" and a Pod named "pod" with UIDs "123".
+	// 所有用例共用名为 "set" 和 "pod" 的对象；UID 由下方分别设置。
 	testCases := []struct {
 		name                             string
 		refs                             []metav1.OwnerReference
@@ -1157,8 +1181,7 @@ func TestHasUnexpectedController(t *testing.T) {
 			shouldReportUnexpectedController: true,
 		},
 		{
-			// API validation should prevent two controllers from being set,
-			// but for completeness it is still tested.
+			// API 校验本应阻止两个控制器同时存在，这里仍覆盖该场景以保证逻辑完备。
 			name: "own controller and another",
 			refs: []metav1.OwnerReference{
 				{
@@ -1212,6 +1235,7 @@ func TestHasUnexpectedController(t *testing.T) {
 		if hasUnexpectedController(target, set, pod) {
 			t.Errorf("Any controller should be allowed when no retention policy (retain behavior) is specified. Incorrectly identified unexpected controller at %s", tc.name)
 		}
+		// 任意删除策略组合都应遵循同一套控制器判定规则。
 		for _, policy := range []apps.StatefulSetPersistentVolumeClaimRetentionPolicy{
 			{WhenDeleted: "Retain", WhenScaled: "Delete"},
 			{WhenDeleted: "Delete", WhenScaled: "Retain"},
@@ -1226,18 +1250,18 @@ func TestHasUnexpectedController(t *testing.T) {
 	}
 }
 
+// TestNonController 验证 set 或 Pod 作为 owner 但非 controller 时的识别，以及无关引用不触发。
 func TestNonController(t *testing.T) {
 	testCases := []struct {
 		name string
 		refs []metav1.OwnerReference
-		// The set and pod objets will be created with names "set" and "pod", respectively.
+		// set 和 Pod 对象分别以 "set" 和 "pod" 命名；只有 UID 参与匹配。
 		setUID        types.UID
 		podUID        types.UID
 		nonController bool
 	}{
 		{
-			// API validation should prevent two controllers from being set,
-			// but for completeness the semantics here are tested.
+			// API 校验本应阻止两个控制器同时存在，这里仍覆盖该场景以保证语义完备。
 			name: "set and pod controller",
 			refs: []metav1.OwnerReference{
 				{
@@ -1413,6 +1437,7 @@ func TestNonController(t *testing.T) {
 	}
 }
 
+// TestHasStaleOwnerRef 验证 UID 变化视为过期引用，未关联的对象不算过期。
 func TestHasStaleOwnerRef(t *testing.T) {
 	target := v1.PersistentVolumeClaim{}
 	target.SetOwnerReferences([]metav1.OwnerReference{
@@ -1439,6 +1464,7 @@ func TestHasStaleOwnerRef(t *testing.T) {
 	}
 }
 
+// TestIsRunningAndReady 验证 Pod 必须同时处于 Running 阶段且 Ready 条件为真。
 func TestIsRunningAndReady(t *testing.T) {
 	set := newStatefulSet(3)
 	pod := newStatefulSetPod(set, 1)
@@ -1456,6 +1482,7 @@ func TestIsRunningAndReady(t *testing.T) {
 	}
 }
 
+// TestAscendingOrdinal 验证排序器能把乱序 Pod 按序号排列。
 func TestAscendingOrdinal(t *testing.T) {
 	set := newStatefulSet(10)
 	pods := make([]*v1.Pod, 10)
@@ -1469,6 +1496,7 @@ func TestAscendingOrdinal(t *testing.T) {
 	}
 }
 
+// TestOverlappingStatefulSets 验证重叠 StatefulSet 按创建时间、再按名称排序以保证顺序稳定。
 func TestOverlappingStatefulSets(t *testing.T) {
 	sets := make([]*apps.StatefulSet, 10)
 	perm := rand.Perm(10)
@@ -1490,6 +1518,7 @@ func TestOverlappingStatefulSets(t *testing.T) {
 	}
 }
 
+// TestNewPodControllerRef 验证新建 Pod 上的 controller 引用指向所属 StatefulSet。
 func TestNewPodControllerRef(t *testing.T) {
 	set := newStatefulSet(1)
 	pod := newStatefulSetPod(set, 0)
@@ -1514,6 +1543,7 @@ func TestNewPodControllerRef(t *testing.T) {
 	}
 }
 
+// TestApplyRevision 验证修订版本只恢复 spec，忽略元数据、状态和类型信息。
 func TestApplyRevision(t *testing.T) {
 	set := newStatefulSet(1)
 
@@ -1548,6 +1578,7 @@ func TestApplyRevision(t *testing.T) {
 			name: "malformed revision data",
 			sts:  set,
 			revisionFn: func() *apps.ControllerRevision {
+				// 用数组代替 StatefulSet 对象，解码应失败。
 				return &apps.ControllerRevision{
 					Data: runtime.RawExtension{Raw: []byte(`[]`)},
 				}
@@ -1578,6 +1609,7 @@ func TestApplyRevision(t *testing.T) {
 			name: "metadata changes are ignored",
 			sts:  set,
 			revisionFn: func() *apps.ControllerRevision {
+				// 元数据不属于 spec，恢复后应保留原对象的值。
 				copy := set.DeepCopy()
 				copy.ObjectMeta.Namespace = "non-default-namespace"
 				copy.ObjectMeta.UID = "non-default-uid"
@@ -1664,6 +1696,7 @@ func TestApplyRevision(t *testing.T) {
 	}
 }
 
+// TestCreateApplyRevision 验证修订版本经过恢复再创建后保持一致，且注解能够保留。
 func TestCreateApplyRevision(t *testing.T) {
 	set := newStatefulSet(1)
 	set.Status.CollisionCount = new(int32)
@@ -1698,9 +1731,10 @@ func TestCreateApplyRevision(t *testing.T) {
 	}
 }
 
+// TestGetPersistentVolumeClaims 验证 PVC 从模板生成，且标签按 StatefulSet 优先的规则合并。
 func TestGetPersistentVolumeClaims(t *testing.T) {
 
-	// nil inherits statefulset labels
+	// 模板未设标签时继承 StatefulSet 标签（此处 selector 也为 nil）。
 	pod := newPod()
 	statefulSet := newStatefulSet(1)
 	statefulSet.Spec.Selector.MatchLabels = nil
@@ -1712,7 +1746,7 @@ func TestGetPersistentVolumeClaims(t *testing.T) {
 		t.Fatalf("Unexpected pvc:\n %+v\n, desired pvc:\n %+v", claims, resultClaims)
 	}
 
-	// nil inherits statefulset labels
+	// 模板未设标签时继承 StatefulSet selector 的标签。
 	statefulSet.Spec.Selector.MatchLabels = map[string]string{"test": "test"}
 	claims = getPersistentVolumeClaims(statefulSet, pod)
 	pvc.SetLabels(map[string]string{"test": "test"})
@@ -1721,7 +1755,7 @@ func TestGetPersistentVolumeClaims(t *testing.T) {
 		t.Fatalf("Unexpected pvc:\n %+v\n, desired pvc:\n %+v", claims, resultClaims)
 	}
 
-	// non-nil with non-overlapping labels merge pvc and statefulset labels
+	// 标签不冲突时，模板标签与 selector 标签合并。
 	statefulSet.Spec.Selector.MatchLabels = map[string]string{"name": "foo"}
 	statefulSet.Spec.VolumeClaimTemplates[0].ObjectMeta.Labels = map[string]string{"test": "test"}
 	claims = getPersistentVolumeClaims(statefulSet, pod)
@@ -1731,7 +1765,7 @@ func TestGetPersistentVolumeClaims(t *testing.T) {
 		t.Fatalf("Unexpected pvc:\n %+v\n, desired pvc:\n %+v", claims, resultClaims)
 	}
 
-	// non-nil with overlapping labels merge pvc and statefulset labels and prefer statefulset labels
+	// 标签冲突时以 StatefulSet selector 的值为准。
 	statefulSet.Spec.Selector.MatchLabels = map[string]string{"test": "foo"}
 	statefulSet.Spec.VolumeClaimTemplates[0].ObjectMeta.Labels = map[string]string{"test": "test"}
 	claims = getPersistentVolumeClaims(statefulSet, pod)
@@ -1742,6 +1776,7 @@ func TestGetPersistentVolumeClaims(t *testing.T) {
 	}
 }
 
+// newPod 构造一个 name 为 foo-0 的最小测试 Pod。
 func newPod() *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1759,6 +1794,7 @@ func newPod() *v1.Pod {
 	}
 }
 
+// newPVC 构造一个请求 1 单位存储的测试 PVC。
 func newPVC(name string) v1.PersistentVolumeClaim {
 	return v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1775,7 +1811,9 @@ func newPVC(name string) v1.PersistentVolumeClaim {
 	}
 }
 
+// newStatefulSetWithVolumes 构造带 PVC 卷和普通卷挂载的测试 StatefulSet。
 func newStatefulSetWithVolumes(replicas int32, name string, petMounts []v1.VolumeMount, podMounts []v1.VolumeMount) *apps.StatefulSet {
+	// petMounts 对应 PVC 模板，podMounts 对应 HostPath 普通卷。
 	mounts := append(petMounts, podMounts...)
 	claims := []v1.PersistentVolumeClaim{}
 	for _, m := range petMounts {
@@ -1840,6 +1878,7 @@ func newStatefulSetWithVolumes(replicas int32, name string, petMounts []v1.Volum
 	}
 }
 
+// newStatefulSet 构造名为 foo、带 datadir PVC 和 home 普通卷的测试 StatefulSet。
 func newStatefulSet(replicas int32) *apps.StatefulSet {
 	petMounts := []v1.VolumeMount{
 		{Name: "datadir", MountPath: "/tmp/zookeeper"},
@@ -1850,8 +1889,9 @@ func newStatefulSet(replicas int32) *apps.StatefulSet {
 	return newStatefulSetWithVolumes(replicas, "foo", petMounts, podMounts)
 }
 
+// newStatefulSetWithLabels 构造使用集合型 selector 的测试 StatefulSet。
 func newStatefulSetWithLabels(replicas int32, name string, uid types.UID, labels map[string]string) *apps.StatefulSet {
-	// Converting all the map-only selectors to set-based selectors.
+	// 把 map 形式的选择条件转换为 set-based 表达式。
 	var testMatchExpressions []metav1.LabelSelectorRequirement
 	for key, value := range labels {
 		sel := metav1.LabelSelectorRequirement{
@@ -1873,8 +1913,7 @@ func newStatefulSetWithLabels(replicas int32, name string, uid types.UID, labels
 		},
 		Spec: apps.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
-				// Purposely leaving MatchLabels nil, so to ensure it will break if any link
-				// in the chain ignores the set-based MatchExpressions.
+				// 故意不设 MatchLabels：若调用链中任一环节忽略 MatchExpressions，测试就会失败。
 				MatchLabels:      nil,
 				MatchExpressions: testMatchExpressions,
 			},
@@ -1924,13 +1963,14 @@ func newStatefulSetWithLabels(replicas int32, name string, uid types.UID, labels
 	}
 }
 
+// TestGetStatefulSetMaxUnavailable 验证整数和百分比形式的最大不可用副本数计算及下限。
 func TestGetStatefulSetMaxUnavailable(t *testing.T) {
 	testCases := []struct {
 		maxUnavailable         *intstr.IntOrString
 		replicaCount           int
 		expectedMaxUnavailable int
 	}{
-		// it wouldn't hurt to also test 0 and 0%, even if they should have been forbidden by API validation.
+		// 0 和 0% 虽被 API 校验禁止，仍覆盖以确认下限行为。
 		{maxUnavailable: nil, replicaCount: 10, expectedMaxUnavailable: 1},
 		{maxUnavailable: ptr.To(intstr.FromInt32(3)), replicaCount: 10, expectedMaxUnavailable: 3},
 		{maxUnavailable: ptr.To(intstr.FromInt32(3)), replicaCount: 0, expectedMaxUnavailable: 3},
@@ -1956,6 +1996,7 @@ func TestGetStatefulSetMaxUnavailable(t *testing.T) {
 	}
 }
 
+// TestCompleteUpdate 验证全部副本更新且就绪时才推进 currentRevision。
 func TestCompleteUpdate(t *testing.T) {
 	tests := []struct {
 		name            string

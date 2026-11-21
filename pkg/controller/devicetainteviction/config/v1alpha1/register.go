@@ -21,11 +21,12 @@ import (
 )
 
 var (
-	// SchemeBuilder is the scheme builder with scheme init functions to run for this API package
+	// SchemeBuilder 保存本 API 包需要在 scheme 上执行的初始化函数。
 	SchemeBuilder runtime.SchemeBuilder
-	// localSchemeBuilder extends the SchemeBuilder instance with the external types. In this package,
+	// localSchemeBuilder 在 SchemeBuilder 上扩展外部类型，
+	// 本包还会在此注册默认化与转换的初始化函数。
 	// defaulting and conversion init funcs are registered as well.
 	localSchemeBuilder = &SchemeBuilder
-	// AddToScheme is a global function that registers this API group & version to a scheme
+	// AddToScheme 是把本 API 组版本注册到 scheme 的全局入口。
 	AddToScheme = localSchemeBuilder.AddToScheme
 )

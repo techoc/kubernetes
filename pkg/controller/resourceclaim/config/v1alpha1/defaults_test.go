@@ -22,9 +22,13 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
+// TestRecommendedDefaultResourceClaimControllerConfiguration 验证推荐默认值生效：
+// 传入零值配置后，并发同步数应被设置为 50。
 func TestRecommendedDefaultResourceClaimControllerConfiguration(t *testing.T) {
+	// 从零值开始，确保被测函数确实写入了默认值，而不是保留了输入值。
 	config := new(kubectrlmgrconfigv1alpha1.ResourceClaimControllerConfiguration)
 	RecommendedDefaultResourceClaimControllerConfiguration(config)
+	// 断言默认值精确为 50；默认值变更时须同步更新此测试。
 	if config.ConcurrentSyncs != 50 {
 		t.Errorf("incorrect default value, expected 50 but got %v", config.ConcurrentSyncs)
 	}

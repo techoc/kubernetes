@@ -23,9 +23,11 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// nodeIpamSubsystem 是本包所有指标使用的 Prometheus 子系统前缀。
 const nodeIpamSubsystem = "node_ipam_controller"
 
 var (
+	// cidrSetAllocations 统计 CIDR 分配的总次数，按集群 CIDR 区分。
 	cidrSetAllocations = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      nodeIpamSubsystem,
@@ -35,6 +37,7 @@ var (
 		},
 		[]string{"clusterCIDR"},
 	)
+	// cidrSetReleases 统计 CIDR 释放的总次数，按集群 CIDR 区分。
 	cidrSetReleases = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      nodeIpamSubsystem,
@@ -44,7 +47,7 @@ var (
 		},
 		[]string{"clusterCIDR"},
 	)
-	// This is a gauge, as in theory, a limit can increase or decrease.
+	// 使用 Gauge 而非 Counter：理论上 CIDR 上限可以增加或减少。
 	cidrSetMaxCidrs = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      nodeIpamSubsystem,
@@ -54,6 +57,7 @@ var (
 		},
 		[]string{"clusterCIDR"},
 	)
+	// cidrSetUsage 记录已分配 CIDR 占总量的百分比。
 	cidrSetUsage = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      nodeIpamSubsystem,
@@ -63,6 +67,7 @@ var (
 		},
 		[]string{"clusterCIDR"},
 	)
+	// cidrSetAllocationTriesPerRequest 记录单次分配请求的尝试次数分布，便于发现 CIDR 碎片化问题。
 	cidrSetAllocationTriesPerRequest = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      nodeIpamSubsystem,
@@ -75,9 +80,10 @@ var (
 	)
 )
 
+// registerMetrics 保证指标只注册一次；重复注册会导致 panic。
 var registerMetrics sync.Once
 
-// registerCidrsetMetrics the metrics that are to be monitored.
+// registerCidrsetMetrics 将 CIDR 集合相关的指标注册到 legacy registry。
 func registerCidrsetMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(cidrSetAllocations)

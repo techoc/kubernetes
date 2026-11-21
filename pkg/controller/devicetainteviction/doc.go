@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package devicetainteviction contains the logic implementing taint-based eviction
-// for Pods using tainted devices (https://github.com/kubernetes/enhancements/issues/5055).
+// Package devicetainteviction 实现基于污点的驱逐逻辑，
+// 针对使用被污点设备（tainted device）的 Pod。
+// 相关设计见 https://github.com/kubernetes/enhancements/issues/5055。
 package devicetainteviction

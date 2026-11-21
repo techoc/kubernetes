@@ -32,9 +32,11 @@ const (
 
 	updateNodeHealthKey     = "update_node_health_duration_seconds"
 	updateAllNodesHealthKey = "update_all_nodes_health_duration_seconds"
+	// 以上键名同时用于指标名称与 legacy registry 的注册，命名变更会影响监控查询。
 )
 
 var (
+	// zoneHealth 表示每个可用区中健康节点的百分比。
 	zoneHealth = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      nodeControllerSubsystem,
@@ -44,6 +46,7 @@ var (
 		},
 		[]string{"zone"},
 	)
+	// zoneSize 表示每个可用区中已注册的节点数。
 	zoneSize = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      nodeControllerSubsystem,
@@ -53,6 +56,7 @@ var (
 		},
 		[]string{"zone"},
 	)
+	// unhealthyNodes 表示每个可用区中非 Ready 状态的节点数。
 	unhealthyNodes = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      nodeControllerSubsystem,
@@ -62,6 +66,7 @@ var (
 		},
 		[]string{"zone"},
 	)
+	// evictionsTotal 记录节点生命周期控制器启动以来发生的节点驱逐次数。
 	evictionsTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      nodeControllerSubsystem,
@@ -72,6 +77,7 @@ var (
 		[]string{"zone"},
 	)
 
+	// updateNodeHealthDuration 统计更新单个节点健康状态所需的时间。
 	updateNodeHealthDuration = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      nodeControllerSubsystem,
@@ -81,6 +87,7 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
+	// updateAllNodesHealthDuration 统计更新全部节点健康状态所需的时间。
 	updateAllNodesHealthDuration = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      nodeControllerSubsystem,
@@ -94,7 +101,8 @@ var (
 
 var registerMetrics sync.Once
 
-// Register the metrics that are to be monitored.
+// Register 将需要监控的指标注册到 legacy registry。
+// sync.Once 确保即使多个调用方触发注册，也不会出现重复注册导致的 panic。
 func Register() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(zoneHealth)

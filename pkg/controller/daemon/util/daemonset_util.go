@@ -28,10 +28,9 @@ import (
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 )
 
-// GetTemplateGeneration gets the template generation associated with a v1.DaemonSet by extracting it from the
-// deprecated annotation. If no annotation is found nil is returned. If the annotation is found and fails to parse
-// nil is returned with an error. If the generation can be parsed from the annotation, a pointer to the parsed int64
-// value is returned.
+// GetTemplateGeneration 从已废弃的注解中提取 v1.DaemonSet 关联的模板版本号。
+// 注解不存在时返回 nil；注解存在但解析失败时返回 nil 及错误；
+// 解析成功则返回指向该 int64 值的指针。
 func GetTemplateGeneration(ds *apps.DaemonSet) (*int64, error) {
 	annotation, found := ds.Annotations[apps.DeprecatedTemplateGeneration]
 	if !found {
@@ -44,30 +43,26 @@ func GetTemplateGeneration(ds *apps.DaemonSet) (*int64, error) {
 	return &generation, nil
 }
 
-// AddOrUpdateDaemonPodTolerations apply necessary tolerations to DaemonSet Pods, e.g. node.kubernetes.io/not-ready:NoExecute.
+// AddOrUpdateDaemonPodTolerations 为 DaemonSet 的 Pod 添加或更新必要的容忍规则，
+// 例如 node.kubernetes.io/not-ready:NoExecute。
 func AddOrUpdateDaemonPodTolerations(spec *v1.PodSpec) {
-	// DaemonSet pods shouldn't be deleted by NodeController in case of node problems.
-	// Add infinite toleration for taint notReady:NoExecute here
-	// to survive taint-based eviction enforced by NodeController
-	// when node turns not ready.
+	// 无限期容忍 not-ready 污点，避免节点变为 NotReady 时
+	// DaemonSet 的 Pod 被 NodeController 基于污点的驱逐机制删除。
 	v1helper.AddOrUpdateTolerationInPodSpec(spec, &v1.Toleration{
 		Key:      v1.TaintNodeNotReady,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoExecute,
 	})
 
-	// DaemonSet pods shouldn't be deleted by NodeController in case of node problems.
-	// Add infinite toleration for taint unreachable:NoExecute here
-	// to survive taint-based eviction enforced by NodeController
-	// when node turns unreachable.
+	// 同理，无限期容忍 unreachable 污点，应对节点变为不可达的情况。
 	v1helper.AddOrUpdateTolerationInPodSpec(spec, &v1.Toleration{
 		Key:      v1.TaintNodeUnreachable,
 		Operator: v1.TolerationOpExists,
 		Effect:   v1.TaintEffectNoExecute,
 	})
 
-	// According to TaintNodesByCondition feature, all DaemonSet pods should tolerate
-	// MemoryPressure, DiskPressure, PIDPressure, Unschedulable and NetworkUnavailable taints.
+	// TaintNodesByCondition 特性会根据节点状况自动打污点，
+	// 所有 DaemonSet Pod 都必须容忍这些 NoSchedule 污点，否则无法在受影响节点上运行。
 	v1helper.AddOrUpdateTolerationInPodSpec(spec, &v1.Toleration{
 		Key:      v1.TaintNodeDiskPressure,
 		Operator: v1.TolerationOpExists,
@@ -101,10 +96,10 @@ func AddOrUpdateDaemonPodTolerations(spec *v1.PodSpec) {
 	}
 }
 
-// CreatePodTemplate returns copy of provided template with additional
-// label which contains templateGeneration (for backward compatibility),
-// hash of provided template and sets default daemon tolerations.
+// CreatePodTemplate 返回给定模板的副本，并添加模板版本号标签（向后兼容）、
+// 模板哈希标签，以及 DaemonSet 默认的容忍规则。
 func CreatePodTemplate(template v1.PodTemplateSpec, generation *int64, hash string) v1.PodTemplateSpec {
+	// 深拷贝后再修改，避免改动调用方传入的原始模板。
 	newTemplate := *template.DeepCopy()
 
 	AddOrUpdateDaemonPodTolerations(&newTemplate.Spec)
@@ -112,6 +107,7 @@ func CreatePodTemplate(template v1.PodTemplateSpec, generation *int64, hash stri
 	if newTemplate.ObjectMeta.Labels == nil {
 		newTemplate.ObjectMeta.Labels = make(map[string]string)
 	}
+	// 保留基于版本号的标签以兼容旧版本的更新判定逻辑。
 	if generation != nil {
 		newTemplate.ObjectMeta.Labels[extensions.DaemonSetTemplateGenerationKey] = fmt.Sprint(*generation)
 	}
@@ -122,15 +118,15 @@ func CreatePodTemplate(template v1.PodTemplateSpec, generation *int64, hash stri
 	return newTemplate
 }
 
-// AllowsSurge returns true if the daemonset allows more than a single pod on any node.
+// AllowsSurge 判断 DaemonSet 是否允许在单个节点上运行多个 Pod（即滚动更新时超量创建）。
 func AllowsSurge(ds *apps.DaemonSet) bool {
+	// 单个 Pod 场景下计算出的 maxSurge 大于 0，即表示允许 surge。
 	maxSurge, err := SurgeCount(ds, 1)
 	return err == nil && maxSurge > 0
 }
 
-// SurgeCount returns 0 if surge is not requested, the expected surge number to allow
-// out of numberToSchedule if surge is configured, or an error if the surge percentage
-// requested is invalid.
+// SurgeCount 返回滚动更新允许超量创建的 Pod 数：未配置 surge 时返回 0；
+// 已配置时按 numberToSchedule 计算允许的数量；百分比非法时返回错误。
 func SurgeCount(ds *apps.DaemonSet, numberToSchedule int) (int, error) {
 	if ds.Spec.UpdateStrategy.Type != apps.RollingUpdateDaemonSetStrategyType {
 		return 0, nil
@@ -140,16 +136,15 @@ func SurgeCount(ds *apps.DaemonSet, numberToSchedule int) (int, error) {
 	if r == nil {
 		return 0, nil
 	}
-	// If surge is not requested, we should default to 0.
+	// 未配置 maxSurge 时默认不允许超量创建，即 surge 数量为 0。
 	if r.MaxSurge == nil {
 		return 0, nil
 	}
 	return intstrutil.GetScaledValueFromIntOrPercent(r.MaxSurge, numberToSchedule, true)
 }
 
-// UnavailableCount returns 0 if unavailability is not requested, the expected
-// unavailability number to allow out of numberToSchedule if requested, or an error if
-// the unavailability percentage requested is invalid.
+// UnavailableCount 返回滚动更新允许不可用的 Pod 数：未配置时返回 0；
+// 已配置时按 numberToSchedule 计算允许的数量；百分比非法时返回错误。
 func UnavailableCount(ds *apps.DaemonSet, numberToSchedule int) (int, error) {
 	if ds.Spec.UpdateStrategy.Type != apps.RollingUpdateDaemonSetStrategyType {
 		return 0, nil
@@ -161,19 +156,21 @@ func UnavailableCount(ds *apps.DaemonSet, numberToSchedule int) (int, error) {
 	return intstrutil.GetScaledValueFromIntOrPercent(r.MaxUnavailable, numberToSchedule, true)
 }
 
-// IsPodUpdated checks if pod contains label value that either matches templateGeneration or hash
+// IsPodUpdated 判断 Pod 的标签是否匹配模板版本号或模板哈希，二者任一匹配即视为已更新。
 func IsPodUpdated(pod *v1.Pod, hash string, dsTemplateGeneration *int64) bool {
-	// Compare with hash to see if the pod is updated, need to maintain backward compatibility of templateGeneration
+	// 同时支持按版本号和按哈希判断，是为了兼容旧版本 DaemonSet 创建的 Pod。
 	templateMatches := dsTemplateGeneration != nil &&
 		pod.Labels[extensions.DaemonSetTemplateGenerationKey] == fmt.Sprint(*dsTemplateGeneration)
 	hashMatches := len(hash) > 0 && pod.Labels[extensions.DefaultDaemonSetUniqueLabelKey] == hash
 	return hashMatches || templateMatches
 }
 
-// ReplaceDaemonSetPodNodeNameNodeAffinity replaces the RequiredDuringSchedulingIgnoredDuringExecution
-// NodeAffinity of the given affinity with a new NodeAffinity that selects the given nodeName.
-// Note that this function assumes that no NodeAffinity conflicts with the selected nodeName.
+// ReplaceDaemonSetPodNodeNameNodeAffinity 用选中给定 nodeName 的新 NodeAffinity
+// 替换给定 affinity 中的 RequiredDuringSchedulingIgnoredDuringExecution 字段。
+// 注意：本函数假定原有 NodeAffinity 与所选 nodeName 不存在冲突。
 func ReplaceDaemonSetPodNodeNameNodeAffinity(affinity *v1.Affinity, nodename string) *v1.Affinity {
+	// 通过 matchFields 按对象名（metadata.name）精确选中目标节点，
+	// 这是调度器将 DaemonSet Pod 固定到指定节点的依据。
 	nodeSelReq := v1.NodeSelectorRequirement{
 		Key:      metav1.ObjectNameField,
 		Operator: v1.NodeSelectorOpIn,
@@ -210,7 +207,7 @@ func ReplaceDaemonSetPodNodeNameNodeAffinity(affinity *v1.Affinity, nodename str
 		return affinity
 	}
 
-	// Replace node selector with the new one.
+	// 直接整体替换节点选择器条款，确保旧的其他选择条件不会把目标节点排除在外。
 	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = []v1.NodeSelectorTerm{
 		{
 			MatchFields: []v1.NodeSelectorRequirement{nodeSelReq},
@@ -220,15 +217,15 @@ func ReplaceDaemonSetPodNodeNameNodeAffinity(affinity *v1.Affinity, nodename str
 	return affinity
 }
 
-// GetTargetNodeName get the target node name of DaemonSet pods. If `.spec.NodeName` is not empty (nil),
-// return `.spec.NodeName`; otherwise, retrieve node name of pending pods from NodeAffinity. Return error
-// if failed to retrieve node name from `.spec.NodeName` and NodeAffinity.
+// GetTargetNodeName 获取 DaemonSet Pod 的目标节点名称：若 .spec.NodeName 非空则直接返回；
+// 否则从 NodeAffinity 中提取待调度 Pod 的目标节点；两者都无法获取时返回错误。
 func GetTargetNodeName(pod *v1.Pod) (string, error) {
+	// 已调度的 Pod 其 NodeName 由调度器填写，是最直接的目标节点来源。
 	if len(pod.Spec.NodeName) != 0 {
 		return pod.Spec.NodeName, nil
 	}
 
-	// Retrieve node name of unscheduled pods from NodeAffinity
+	// 未调度的 Pod 目标节点记录在 NodeAffinity 中，由控制器预先写入。
 	if pod.Spec.Affinity == nil ||
 		pod.Spec.Affinity.NodeAffinity == nil ||
 		pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {

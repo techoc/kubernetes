@@ -16,10 +16,9 @@ limitations under the License.
 
 package config
 
-// DaemonSetControllerConfiguration contains elements describing DaemonSetController.
+// DaemonSetControllerConfiguration 包含 DaemonSet 控制器的配置参数。
 type DaemonSetControllerConfiguration struct {
-	// concurrentDaemonSetSyncs is the number of daemonset objects that are
-	// allowed to sync concurrently. Larger number = more responsive daemonset,
-	// but more CPU (and network) load.
+	// ConcurrentDaemonSetSyncs 是允许并发同步的 DaemonSet 对象数量。
+	// 数值越大，DaemonSet 响应越快，但会增加 CPU 与网络负载。
 	ConcurrentDaemonSetSyncs int32
 }

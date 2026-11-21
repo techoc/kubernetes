@@ -45,8 +45,10 @@ import (
 	"k8s.io/kubernetes/pkg/controller/garbagecollector/metaonly"
 )
 
+// eventType 表示图变更事件的类型。
 type eventType int
 
+// String 返回事件类型的可读名称。
 func (e eventType) String() string {
 	switch e {
 	case addEvent:
@@ -60,84 +62,77 @@ func (e eventType) String() string {
 	}
 }
 
+// 图变更事件类型的枚举值。
 const (
 	addEvent eventType = iota
 	updateEvent
 	deleteEvent
 )
 
+// event 封装 informer 传来或人工构造的图变更事件。
 type event struct {
-	// virtual indicates this event did not come from an informer, but was constructed artificially
+	// virtual 表示该事件并非来自 informer，而是人工构造的（如虚拟删除事件）。
 	virtual   bool
 	eventType eventType
 	obj       interface{}
-	// the update event comes with an old object, but it's not used by the garbage collector.
+	// 更新事件会带上旧对象，但垃圾回收器并不使用它。
 	oldObj interface{}
 	gvk    schema.GroupVersionKind
 }
 
-// GraphBuilder processes events supplied by the informers, updates uidToNode,
-// a graph that caches the dependencies as we know, and enqueues
-// items to the attemptToDelete and attemptToOrphan.
+// GraphBuilder 处理 informer 提供的事件，更新缓存已知依赖关系的 uidToNode 图，
+// 并把需要处理的节点放入 attemptToDelete 和 attemptToOrphan 队列。
 type GraphBuilder struct {
 	restMapper meta.RESTMapper
 
-	// each monitor list/watches a resource, the results are funneled to the
-	// dependencyGraphBuilder
+	// 每个 monitor 负责 list/watch 一种资源，结果统一汇入依赖图构建器。
 	monitors    monitors
 	monitorLock sync.RWMutex
 	monitorWG   sync.WaitGroup
-	// informersStarted is closed after all of the controllers have been initialized and are running.
-	// After that it is safe to start them here, before that it is not.
+	// informersStarted 在所有控制器初始化并运行后关闭；只有在这之后才能在此启动 monitor。
 	informersStarted <-chan struct{}
 
-	// stopCh drives shutdown. When a receive from it unblocks, monitors will shut down.
-	// This channel is also protected by monitorLock.
+	// stopCh 用于驱动关闭：从其读取被解除阻塞时 monitor 将停止。该 channel 也受 monitorLock 保护。
 	stopCh <-chan struct{}
 
-	// running is set to true when the Run() function has been called.
-	// It will revert to false when the Run() function receives a cancellation.
-	// It is protected by monitorLock.
+	// running 在 Run() 被调用时置为 true，在 Run() 收到取消信号后恢复为 false。受 monitorLock 保护。
 	running bool
 
 	eventRecorder    record.EventRecorder
 	eventBroadcaster record.EventBroadcaster
 
 	metadataClient metadata.Interface
-	// monitors are the producer of the graphChanges queue, graphBuilder alters
-	// the in-memory graph according to the changes.
+	// monitor 是 graphChanges 队列的生产者，graphBuilder 根据变更更新内存中的图。
 	graphChanges workqueue.TypedRateLimitingInterface[*event]
-	// uidToNode doesn't require a lock to protect, because only the
-	// single-threaded GraphBuilder.processGraphChanges() reads/writes it.
+	// uidToNode 无需加锁，因为只有单线程的 processGraphChanges() 读写它。
 	uidToNode *concurrentUIDToNode
-	// GraphBuilder is the producer of attemptToDelete and attemptToOrphan, GC is the consumer.
+	// GraphBuilder 是 attemptToDelete 和 attemptToOrphan 的生产者，GC 是消费者。
 	attemptToDelete workqueue.TypedRateLimitingInterface[*node]
 	attemptToOrphan workqueue.TypedRateLimitingInterface[*node]
-	// GraphBuilder and GC share the absentOwnerCache. Objects that are known to
-	// be non-existent are added to the cached.
+	// GraphBuilder 与 GC 共享 absentOwnerCache，已确认不存在的对象会被缓存其中。
 	absentOwnerCache *ReferenceCache
 	sharedInformers  informerfactory.InformerFactory
 	ignoredResources map[schema.GroupResource]struct{}
 }
 
-// monitor runs a Controller with a local stop channel.
+// monitor 用一个局部 stop channel 管理 Controller 的运行。
 type monitor struct {
 	controller cache.Controller
 	store      cache.Store
 
-	// stopCh stops Controller. If stopCh is nil, the monitor is considered to be
-	// not yet started.
+	// stopCh 用于停止 Controller；若为 nil，表示该 monitor 尚未启动。
 	stopCh chan struct{}
 }
 
-// Run is intended to be called in a goroutine. Multiple calls of this is an
-// error.
+// Run 应在独立 goroutine 中调用；重复调用是错误的。
 func (m *monitor) Run() {
 	m.controller.Run(m.stopCh)
 }
 
+// monitors 按资源 GVR 映射到对应的 monitor。
 type monitors map[schema.GroupVersionResource]*monitor
 
+// // NewDependencyGraphBuilder 创建依赖图构建器，初始化各类工作队列、事件记录器和 uidToNode 映射。
 func NewDependencyGraphBuilder(
 	ctx context.Context,
 	metadataClient metadata.Interface,
@@ -186,9 +181,11 @@ func NewDependencyGraphBuilder(
 	return graphBuilder
 }
 
+// // controllerFor 为指定资源创建（或复用共享）informer，并注册把 add/update/delete
+// // 事件转换为 graphChanges 事件的处理函数。
 func (gb *GraphBuilder) controllerFor(logger klog.Logger, resource schema.GroupVersionResource, kind schema.GroupVersionKind) (cache.Controller, cache.Store, error) {
 	handlers := cache.ResourceEventHandlerFuncs{
-		// add the event to the dependencyGraphBuilder's graphChanges.
+		// 将事件包装后加入 graphChanges 队列，交由图构建器异步处理。
 		AddFunc: func(obj interface{}) {
 			event := &event{
 				eventType: addEvent,
@@ -209,7 +206,7 @@ func (gb *GraphBuilder) controllerFor(logger klog.Logger, resource schema.GroupV
 			gb.graphChanges.Add(event)
 		},
 		DeleteFunc: func(obj interface{}) {
-			// delta fifo may wrap the object in a cache.DeletedFinalStateUnknown, unwrap it
+			// DeltaFIFO 可能把对象包装成 DeletedFinalStateUnknown，这里先解包取回真实对象。
 			if deletedFinalStateUnknown, ok := obj.(cache.DeletedFinalStateUnknown); ok {
 				obj = deletedFinalStateUnknown.Obj
 			}
@@ -228,17 +225,14 @@ func (gb *GraphBuilder) controllerFor(logger klog.Logger, resource schema.GroupV
 		return nil, nil, err
 	}
 	logger.V(4).Info("using a shared informer", "resource", resource, "kind", kind)
-	// need to clone because it's from a shared cache
+	// 事件处理函数来自共享缓存，注册时需克隆以避免相互影响。
 	shared.Informer().AddEventHandlerWithResyncPeriod(handlers, ResourceResyncTime)
 	return shared.Informer().GetController(), shared.Informer().GetStore(), nil
 }
 
-// syncMonitors rebuilds the monitor set according to the supplied resources,
-// creating or deleting monitors as necessary. It will return any error
-// encountered, but will make an attempt to create a monitor for each resource
-// instead of immediately exiting on an error. It may be called before or after
-// Run. Monitors are NOT started as part of the sync. To ensure all existing
-// monitors are started, call startMonitors.
+// syncMonitors 按给定资源集合重建 monitor 集合，按需创建或删除 monitor。
+// 遇到错误时会记录并继续为其余资源创建 monitor，而非立即退出。
+// 该方法可在 Run 前后调用；同步过程不会启动 monitor，需另行调用 startMonitors。
 func (gb *GraphBuilder) syncMonitors(logger klog.Logger, resources map[schema.GroupVersionResource]struct{}) error {
 	gb.monitorLock.Lock()
 	defer gb.monitorLock.Unlock()
@@ -283,15 +277,12 @@ func (gb *GraphBuilder) syncMonitors(logger klog.Logger, resources map[schema.Gr
 	}
 
 	logger.V(4).Info("synced monitors", "added", added, "kept", kept, "removed", len(toRemove))
-	// NewAggregate returns nil if errs is 0-length
+	// NewAggregate 在 errs 为空时返回 nil，无需额外判空。
 	return utilerrors.NewAggregate(errs)
 }
 
-// startMonitors ensures the current set of monitors are running. Any newly
-// started monitors will also cause shared informers to be started.
-//
-// If called before Run, startMonitors does nothing (as there is no stop channel
-// to support monitor/informer execution).
+// startMonitors 确保当前 monitor 集合处于运行状态；新启动的 monitor 还会触发共享 informer 的启动。
+// 在 Run 之前调用时不做任何事（此时尚无 stop channel 支撑 monitor/informer 运行）。
 func (gb *GraphBuilder) startMonitors(logger klog.Logger) {
 	gb.monitorLock.Lock()
 	defer gb.monitorLock.Unlock()
@@ -300,8 +291,7 @@ func (gb *GraphBuilder) startMonitors(logger klog.Logger) {
 		return
 	}
 
-	// we're waiting until after the informer start that happens once all the controllers are initialized.  This ensures
-	// that they don't get unexpected events on their work queues.
+	// 等待所有控制器初始化完成、informer 启动之后再继续，避免 monitor 的工作队列收到预期外的事件。
 	<-gb.informersStarted
 
 	monitors := gb.monitors
@@ -317,10 +307,8 @@ func (gb *GraphBuilder) startMonitors(logger klog.Logger) {
 	logger.V(4).Info("started new monitors", "new", started, "current", len(monitors))
 }
 
-// stopMonitors terminates all running monitors.
-// stopMonitors should be called after startMonitors to do cleanup.
-//
-// This function panics unless the running flag is set to false.
+// stopMonitors 终止所有运行中的 monitor，应在 startMonitors 之后调用以完成清理。
+// 若 running 标志未置为 false，本函数会 panic。
 func (gb *GraphBuilder) stopMonitors(logger klog.Logger) {
 	var total, stopped int
 
@@ -340,7 +328,7 @@ func (gb *GraphBuilder) stopMonitors(logger klog.Logger) {
 			}
 		}
 
-		// reset monitors so that the graph builder can be safely re-run/synced.
+		// 清空 monitor 集合，使图构建器可以安全地重新运行或重新同步。
 		gb.monitors = nil
 	}()
 
@@ -348,7 +336,7 @@ func (gb *GraphBuilder) stopMonitors(logger klog.Logger) {
 	logger.Info("stopped monitors", "stopped", stopped, "total", total)
 }
 
-// IsResourceSynced returns true if a monitor exists for the given resource and has synced
+// IsResourceSynced 在给定资源存在对应 monitor 且已完成同步时返回 true。
 func (gb *GraphBuilder) IsResourceSynced(resource schema.GroupVersionResource) bool {
 	gb.monitorLock.Lock()
 	defer gb.monitorLock.Unlock()
@@ -356,10 +344,8 @@ func (gb *GraphBuilder) IsResourceSynced(resource schema.GroupVersionResource) b
 	return ok && monitor.controller.HasSynced()
 }
 
-// IsSynced returns true if any monitors exist AND all those monitors'
-// controllers HasSynced functions return true. This means IsSynced could return
-// true at one time, and then later return false if all monitors were
-// reconstructed.
+// IsSynced 在存在至少一个 monitor 且所有 monitor 的 controller 均已同步时返回 true。
+// 这意味着若所有 monitor 被重建，IsSynced 可能先返回 true 之后又变回 false。
 func (gb *GraphBuilder) IsSynced(logger klog.Logger) bool {
 	gb.monitorLock.Lock()
 	defer gb.monitorLock.Unlock()
@@ -378,8 +364,8 @@ func (gb *GraphBuilder) IsSynced(logger klog.Logger) bool {
 	return true
 }
 
-// Run sets the stop channel and starts monitor execution until stopCh is
-// closed. Any running monitors will be stopped before Run returns.
+// Run 设置 stop channel 并启动 monitor 运行，直到 stopCh 关闭。
+// Run 返回前会停止所有仍在运行的 monitor。
 func (gb *GraphBuilder) Run(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 
@@ -387,41 +373,40 @@ func (gb *GraphBuilder) Run(ctx context.Context) {
 	logger.Info("Running", "component", "GraphBuilder")
 	defer logger.Info("Stopping", "component", "GraphBuilder")
 
-	// Set up the stop channel.
+	// 设置 stop channel，供 monitor 与 informer 感知关闭信号。
 	gb.monitorLock.Lock()
 	gb.stopCh = ctx.Done()
 	gb.running = true
 	gb.monitorLock.Unlock()
 
-	// Start monitors and begin change processing until the stop channel is closed.
+	// 启动 monitor 并持续处理图变更，直到 stop channel 关闭。
 	gb.startMonitors(logger)
 	wait.Until(func() { gb.runProcessGraphChanges(logger) }, 1*time.Second, ctx.Done())
 
-	// Mark as not running so that no new monitors can be started.
-	// Not doing this here could cause goroutine leaks and deadlocks since it would make it possible for startMonitors
-	// to proceed and start new monitors after stopMonitors has been called.
+	// 先标记为未运行，防止再启动新 monitor。
+	// 否则 startMonitors 可能在 stopMonitors 之后又启动新 monitor，导致 goroutine 泄漏或死锁。
 	gb.monitorLock.Lock()
 	gb.running = false
 	gb.monitorLock.Unlock()
 
-	// Stop the currently running monitors.
+	// 停止当前运行中的 monitor。
 	gb.stopMonitors(logger)
 }
 
+// ignoredResources 是垃圾回收器默认忽略的资源集合（当前为 events）。
 var ignoredResources = map[schema.GroupResource]struct{}{
 	{Group: "", Resource: "events"}:                {},
 	{Group: eventv1.GroupName, Resource: "events"}: {},
 }
 
-// DefaultIgnoredResources returns the default set of resources that the garbage collector controller
-// should ignore. This is exposed so downstream integrators can have access to the defaults, and add
-// to them as necessary when constructing the controller.
+// DefaultIgnoredResources 返回垃圾回收器默认忽略的资源集合。
+// 对外暴露是为了让下游集成方获取默认集合，并在构造控制器时按需添加。
 func DefaultIgnoredResources() map[schema.GroupResource]struct{} {
 	return ignoredResources
 }
 
-// enqueueVirtualDeleteEvent is used to add a virtual delete event to be processed for virtual nodes
-// once it is determined they do not have backing objects in storage
+// enqueueVirtualDeleteEvent 在确认虚拟节点没有对应的真实存储对象后，
+// 构造并加入一个虚拟删除事件以便后续处理。
 func (gb *GraphBuilder) enqueueVirtualDeleteEvent(ref objectReference) {
 	gv, _ := schema.ParseGroupVersion(ref.APIVersion)
 	gb.graphChanges.Add(&event{
@@ -435,20 +420,18 @@ func (gb *GraphBuilder) enqueueVirtualDeleteEvent(ref objectReference) {
 	})
 }
 
-// addDependentToOwners adds n to owners' dependents list. If the owner does not
-// exist in the gb.uidToNode yet, a "virtual" node will be created to represent
-// the owner. The "virtual" node will be enqueued to the attemptToDelete, so that
-// attemptToDeleteItem() will verify if the owner exists according to the API server.
+// addDependentToOwners 把 n 加入各 owner 的 dependents 列表。
+// 若某 owner 尚不在 uidToNode 中，会创建一个“虚拟”节点代表它，并加入 attemptToDelete
+// 队列，以便 attemptToDeleteItem() 向 API Server 核实该 owner 是否真实存在。
 func (gb *GraphBuilder) addDependentToOwners(logger klog.Logger, n *node, owners []metav1.OwnerReference) {
-	// track if some of the referenced owners already exist in the graph and have been observed,
-	// and the dependent's ownerRef does not match their observed coordinates
+	// 跟踪是否存在这样的 owner：图中已有且已被 informer 观测到，
+	// 但 dependent 的 ownerRef 与其观测到的坐标不一致。
 	hasPotentiallyInvalidOwnerReference := false
 
 	for _, owner := range owners {
 		ownerNode, ok := gb.uidToNode.Read(owner.UID)
 		if !ok {
-			// Create a "virtual" node in the graph for the owner if it doesn't
-			// exist in the graph yet.
+			// owner 尚未出现在图中时，先创建一个虚拟节点占位。
 			ownerNode = &node{
 				identity: objectReference{
 					OwnerReference: ownerReferenceCoordinates(owner),
@@ -462,46 +445,42 @@ func (gb *GraphBuilder) addDependentToOwners(logger klog.Logger, n *node, owners
 		}
 		ownerNode.addDependent(n)
 		if !ok {
-			// Enqueue the virtual node into attemptToDelete.
-			// The garbage processor will enqueue a virtual delete
-			// event to delete it from the graph if API server confirms this
-			// owner doesn't exist.
+			// 把虚拟节点加入 attemptToDelete：若 API Server 确认 owner 不存在，
+			// GC 会生成虚拟删除事件将其从图中移除。
 			gb.attemptToDelete.Add(ownerNode)
 		} else if !hasPotentiallyInvalidOwnerReference {
 			ownerIsNamespaced := len(ownerNode.identity.Namespace) > 0
 			if ownerIsNamespaced && ownerNode.identity.Namespace != n.identity.Namespace {
 				if ownerNode.isObserved() {
-					// The owner node has been observed via an informer
-					// the dependent's namespace doesn't match the observed owner's namespace, this is definitely wrong.
-					// cluster-scoped owners can be referenced as an owner from any namespace or cluster-scoped object.
+					// owner 已被 informer 观测到，而 dependent 的命名空间与之不符，这必然是错误的。
+					// 集群级 owner 可被任意命名空间或集群级对象引用，因此此处仅针对命名空间级 owner。
 					logger.V(2).Info("item references an owner but does not match namespaces", "item", n.identity, "owner", ownerNode.identity)
 					gb.reportInvalidNamespaceOwnerRef(n, owner.UID)
 				}
 				hasPotentiallyInvalidOwnerReference = true
 			} else if !ownerReferenceMatchesCoordinates(owner, ownerNode.identity.OwnerReference) {
 				if ownerNode.isObserved() {
-					// The owner node has been observed via an informer
-					// n's owner reference doesn't match the observed identity, this might be wrong.
+					// owner 已被 informer 观测到，而 n 的 ownerRef 与之不符，可能存在问题。
 					logger.V(2).Info("item references an owner with coordinates that do not match the observed identity", "item", n.identity, "owner", ownerNode.identity)
 				}
 				hasPotentiallyInvalidOwnerReference = true
 			} else if !ownerIsNamespaced && ownerNode.identity.Namespace != n.identity.Namespace && !ownerNode.isObserved() {
-				// the ownerNode is cluster-scoped and virtual, and does not match the child node's namespace.
-				// the owner could be a missing instance of a namespaced type incorrectly referenced by a cluster-scoped child (issue #98040).
-				// enqueue this child to attemptToDelete to verify parent references.
+				// ownerNode 是集群级虚拟节点，且与子节点命名空间不符。
+				// 它可能是一个被集群级子节点错误引用的、实际缺失的命名空间级对象（issue #98040）。
+				// 把该子节点加入 attemptToDelete 以核实父引用。
 				hasPotentiallyInvalidOwnerReference = true
 			}
 		}
 	}
 
 	if hasPotentiallyInvalidOwnerReference {
-		// Enqueue the potentially invalid dependent node into attemptToDelete.
-		// The garbage processor will verify whether the owner references are dangling
-		// and delete the dependent if all owner references are confirmed absent.
+		// 把可能无效的 dependent 加入 attemptToDelete：
+		// GC 会核实 ownerRef 是否为悬空引用，若全部 owner 确认不存在则删除该 dependent。
 		gb.attemptToDelete.Add(n)
 	}
 }
 
+// // reportInvalidNamespaceOwnerRef 为跨命名空间引用 owner 的情况发出 Warning 事件。
 func (gb *GraphBuilder) reportInvalidNamespaceOwnerRef(n *node, invalidOwnerUID types.UID) {
 	var invalidOwnerRef metav1.OwnerReference
 	var found = false
@@ -534,14 +513,13 @@ func (gb *GraphBuilder) reportInvalidNamespaceOwnerRef(n *node, invalidOwnerUID 
 	gb.eventRecorder.Eventf(ref, v1.EventTypeWarning, "OwnerRefInvalidNamespace", "ownerRef %s does not exist in namespace %q", invalidIdentity, n.identity.Namespace)
 }
 
-// insertNode insert the node to gb.uidToNode; then it finds all owners as listed
-// in n.owners, and adds the node to their dependents list.
+// insertNode 把节点写入 uidToNode，并把 n 加入 n.owners 中所有 owner 的 dependents 列表。
 func (gb *GraphBuilder) insertNode(logger klog.Logger, n *node) {
 	gb.uidToNode.Write(n)
 	gb.addDependentToOwners(logger, n, n.owners)
 }
 
-// removeDependentFromOwners remove n from owners' dependents list.
+// removeDependentFromOwners 把 n 从各 owner 的 dependents 列表中移除。
 func (gb *GraphBuilder) removeDependentFromOwners(n *node, owners []metav1.OwnerReference) {
 	for _, owner := range owners {
 		ownerNode, ok := gb.uidToNode.Read(owner.UID)
@@ -552,20 +530,21 @@ func (gb *GraphBuilder) removeDependentFromOwners(n *node, owners []metav1.Owner
 	}
 }
 
-// removeNode removes the node from gb.uidToNode, then finds all
-// owners as listed in n.owners, and removes n from their dependents list.
+// removeNode 从 uidToNode 中删除节点，并把 n 从 n.owners 中所有 owner 的 dependents 列表移除。
 func (gb *GraphBuilder) removeNode(n *node) {
 	gb.uidToNode.Delete(n.identity.UID)
 	gb.removeDependentFromOwners(n, n.owners)
 }
 
+// ownerRefPair 保存同一 ownerRef 更新前后的值。
 type ownerRefPair struct {
 	oldRef metav1.OwnerReference
 	newRef metav1.OwnerReference
 }
 
 // TODO: profile this function to see if a naive N^2 algorithm performs better
-// when the number of references is small.
+// 当引用数量较小时。
+// referencesDiffs 比较新旧 ownerRef 列表，返回新增、删除和变更（同 UID 但内容不同）的引用。
 func referencesDiffs(old []metav1.OwnerReference, new []metav1.OwnerReference) (added []metav1.OwnerReference, removed []metav1.OwnerReference, changed []ownerRefPair) {
 	oldUIDToRef := make(map[string]metav1.OwnerReference)
 	for _, value := range old {
@@ -590,13 +569,15 @@ func referencesDiffs(old []metav1.OwnerReference, new []metav1.OwnerReference) (
 	return added, removed, changed
 }
 
+// deletionStartsWithFinalizer 判断对象是否在本次更新中“开始”删除并带有指定 finalizer，
+// 即新对象满足条件而旧对象不满足（或旧对象为空）。
 func deletionStartsWithFinalizer(oldObj interface{}, newAccessor metav1.Object, matchingFinalizer string) bool {
-	// if the new object isn't being deleted, or doesn't have the finalizer we're interested in, return false
+	// 新对象未进入删除流程或不含目标 finalizer，直接返回 false。
 	if !beingDeleted(newAccessor) || !hasFinalizer(newAccessor, matchingFinalizer) {
 		return false
 	}
 
-	// if the old object is nil, or wasn't being deleted, or didn't have the finalizer, return true
+	// 旧对象为空、未进入删除流程或不含目标 finalizer，说明本次更新才开始，返回 true。
 	if oldObj == nil {
 		return true
 	}
@@ -608,37 +589,41 @@ func deletionStartsWithFinalizer(oldObj interface{}, newAccessor metav1.Object, 
 	return !beingDeleted(oldAccessor) || !hasFinalizer(oldAccessor, matchingFinalizer)
 }
 
+// // beingDeleted 判断对象是否带有删除时间戳，即已进入删除流程。
 func beingDeleted(accessor metav1.Object) bool {
 	return accessor.GetDeletionTimestamp() != nil
 }
 
+// // hasDeleteDependentsFinalizer 判断对象是否带有 foreground 删除 finalizer。
 func hasDeleteDependentsFinalizer(accessor metav1.Object) bool {
 	return hasFinalizer(accessor, metav1.FinalizerDeleteDependents)
 }
 
+// // hasOrphanFinalizer 判断对象是否带有 orphan 删除 finalizer。
 func hasOrphanFinalizer(accessor metav1.Object) bool {
 	return hasFinalizer(accessor, metav1.FinalizerOrphanDependents)
 }
 
+// // hasFinalizer 判断对象的 finalizer 列表中是否包含指定项。
 func hasFinalizer(accessor metav1.Object, matchingFinalizer string) bool {
 	finalizers := accessor.GetFinalizers()
 	return slices.Contains(finalizers, matchingFinalizer)
 }
 
-// this function takes newAccessor directly because the caller already
-// instantiates an accessor for the newObj.
+// 直接传入 newAccessor 是因为调用方已经为 newObj 创建过 accessor。
+// startsWaitingForDependentsDeleted 判断对象是否开始等待 dependents 被删除（foreground 删除）。
 func startsWaitingForDependentsDeleted(oldObj interface{}, newAccessor metav1.Object) bool {
 	return deletionStartsWithFinalizer(oldObj, newAccessor, metav1.FinalizerDeleteDependents)
 }
 
-// this function takes newAccessor directly because the caller already
-// instantiates an accessor for the newObj.
+// 直接传入 newAccessor 是因为调用方已经为 newObj 创建过 accessor。
+// startsWaitingForDependentsOrphaned 判断对象是否开始等待 dependents 被孤立（orphan 删除）。
 func startsWaitingForDependentsOrphaned(oldObj interface{}, newAccessor metav1.Object) bool {
 	return deletionStartsWithFinalizer(oldObj, newAccessor, metav1.FinalizerOrphanDependents)
 }
 
-// if an blocking ownerReference points to an object gets removed, or gets set to
-// "BlockOwnerDeletion=false", add the object to the attemptToDelete queue.
+// 当一个阻塞删除的 ownerRef 被移除，或被改为 "BlockOwnerDeletion=false" 时，
+// 对应的 owner 不再阻塞 dependent 删除，需把相关节点加入 attemptToDelete 队列重新检查。
 func (gb *GraphBuilder) addUnblockedOwnersToDeleteQueue(logger klog.Logger, removed []metav1.OwnerReference, changed []ownerRefPair) {
 	for _, ref := range removed {
 		if ref.BlockOwnerDeletion != nil && *ref.BlockOwnerDeletion {
@@ -664,6 +649,8 @@ func (gb *GraphBuilder) addUnblockedOwnersToDeleteQueue(logger klog.Logger, remo
 	}
 }
 
+// // processTransitions 处理对象的状态转换（如开始 orphan/foreground 删除），
+// // 把需要处理的节点加入对应队列。
 func (gb *GraphBuilder) processTransitions(logger klog.Logger, oldObj interface{}, newAccessor metav1.Object, n *node) {
 	if startsWaitingForDependentsOrphaned(oldObj, newAccessor) {
 		logger.V(5).Info("add item to attemptToOrphan", "item", n.identity)
@@ -672,7 +659,7 @@ func (gb *GraphBuilder) processTransitions(logger klog.Logger, oldObj interface{
 	}
 	if startsWaitingForDependentsDeleted(oldObj, newAccessor) {
 		logger.V(2).Info("add item to attemptToDelete, because it's waiting for its dependents to be deleted", "item", n.identity)
-		// if the n is added as a "virtual" node, its deletingDependents field is not properly set, so always set it here.
+		// 若 n 是作为虚拟节点加入的，其 deletingDependents 字段未正确设置，这里总是显式设置一次。
 		n.markDeletingDependents()
 		for dep := range n.dependents {
 			gb.attemptToDelete.Add(dep)
@@ -681,11 +668,13 @@ func (gb *GraphBuilder) processTransitions(logger klog.Logger, oldObj interface{
 	}
 }
 
+// // runProcessGraphChanges 持续处理 graphChanges 队列，直到队列关闭。
 func (gb *GraphBuilder) runProcessGraphChanges(logger klog.Logger) {
 	for gb.processGraphChanges(logger) {
 	}
 }
 
+// // identityFromEvent 根据事件中的 GVK 和对象元数据构造对象引用标识。
 func identityFromEvent(event *event, accessor metav1.Object) objectReference {
 	return objectReference{
 		OwnerReference: metav1.OwnerReference{
@@ -698,7 +687,7 @@ func identityFromEvent(event *event, accessor metav1.Object) objectReference {
 	}
 }
 
-// Dequeueing an event from graphChanges, updating graph, populating dirty_queue.
+// processGraphChanges 从 graphChanges 取出事件、更新内存图，并填充待处理队列。
 func (gb *GraphBuilder) processGraphChanges(logger klog.Logger) bool {
 	item, quit := gb.graphChanges.Get()
 	if quit {
@@ -722,23 +711,22 @@ func (gb *GraphBuilder) processGraphChanges(logger klog.Logger) bool {
 		"virtual", event.virtual,
 	)
 
-	// Check if the node already exists
+	// 先检查图中是否已存在该 UID 对应的节点。
 	existingNode, found := gb.uidToNode.Read(accessor.GetUID())
 	if found && !event.virtual && !existingNode.isObserved() {
-		// this marks the node as having been observed via an informer event
-		// 1. this depends on graphChanges only containing add/update events from the actual informer
-		// 2. this allows things tracking virtual nodes' existence to stop polling and rely on informer events
+		// 将节点标记为已通过 informer 观测到：
+		// 1. 这依赖 graphChanges 只包含真实 informer 的 add/update 事件；
+		// 2. 使跟踪虚拟节点存在的逻辑可停止轮询，改为依赖 informer 事件。
 		observedIdentity := identityFromEvent(event, accessor)
 		if observedIdentity != existingNode.identity {
-			// find dependents that don't match the identity we observed
+			// 找出 ownerRef 与观测到的身份不符的 dependents。
 			_, potentiallyInvalidDependents := partitionDependents(existingNode.getDependents(), observedIdentity)
-			// add those potentially invalid dependents to the attemptToDelete queue.
-			// if their owners are still solid the attemptToDelete will be a no-op.
-			// this covers the bad child -> good parent observation sequence.
-			// the good parent -> bad child observation sequence is handled in addDependentToOwners
+			// 把这些可能无效的 dependent 加入 attemptToDelete；若其 owner 依然有效则该操作为空操作。
+			// 这覆盖了“先观测到错误子节点、后观测到正确父节点”的顺序；
+			// 相反的“先父后子”顺序由 addDependentToOwners 处理。
 			for _, dep := range potentiallyInvalidDependents {
 				if len(observedIdentity.Namespace) > 0 && dep.identity.Namespace != observedIdentity.Namespace {
-					// Namespace mismatch, this is definitely wrong
+					// 命名空间不匹配，必然是错误引用。
 					logger.V(2).Info("item references an owner but does not match namespaces",
 						"item", dep.identity,
 						"owner", observedIdentity,
@@ -748,7 +736,7 @@ func (gb *GraphBuilder) processGraphChanges(logger klog.Logger) bool {
 				gb.attemptToDelete.Add(dep)
 			}
 
-			// make a copy (so we don't modify the existing node in place), store the observed identity, and replace the virtual node
+			// 先克隆节点以免原地修改，再写入观测到的身份并替换虚拟节点。
 			logger.V(2).Info("replacing virtual item with observed item",
 				"virtual", existingNode.identity,
 				"observed", observedIdentity,
@@ -769,22 +757,19 @@ func (gb *GraphBuilder) processGraphChanges(logger klog.Logger) bool {
 			beingDeleted:       beingDeleted(accessor),
 		}
 		gb.insertNode(logger, newNode)
-		// the underlying delta_fifo may combine a creation and a deletion into
-		// one event, so we need to further process the event.
+		// 底层 DeltaFIFO 可能把创建与删除合并为一个事件，因此还需进一步处理状态转换。
 		gb.processTransitions(logger, event.oldObj, accessor, newNode)
 	case (event.eventType == addEvent || event.eventType == updateEvent) && found:
-		// handle changes in ownerReferences
+		// 处理 ownerReferences 的变化。
 		added, removed, changed := referencesDiffs(existingNode.owners, accessor.GetOwnerReferences())
 		if len(added) != 0 || len(removed) != 0 || len(changed) != 0 {
-			// check if the changed dependency graph unblock owners that are
-			// waiting for the deletion of their dependents.
+			// 检查依赖图变化是否解除了某些 owner 对其 dependent 删除的阻塞。
 			gb.addUnblockedOwnersToDeleteQueue(logger, removed, changed)
-			// update the node itself
+			// 更新节点自身的 owner 列表。
 			existingNode.setOwners(accessor.GetOwnerReferences())
-			// Add the node to its new owners' dependent lists.
+			// 把节点加入新 owner 的 dependents 列表。
 			gb.addDependentToOwners(logger, existingNode, added)
-			// remove the node from the dependent list of node that are no longer in
-			// the node's owners list.
+			// 把节点从已不再是其 owner 的节点 dependents 列表中移除。
 			gb.removeDependentFromOwners(existingNode, removed)
 		}
 
@@ -803,52 +788,52 @@ func (gb *GraphBuilder) processGraphChanges(logger klog.Logger) bool {
 		removeExistingNode := true
 
 		if event.virtual {
-			// this is a virtual delete event, not one observed from an informer
+			// 这是虚拟删除事件，并非来自 informer 的真实观测。
 			deletedIdentity := identityFromEvent(event, accessor)
 			if existingNode.virtual {
 
-				// our existing node is also virtual, we're not sure of its coordinates.
-				// see if any dependents reference this owner with coordinates other than the one we got a virtual delete event for.
+				// 图中现有节点也是虚拟节点，其坐标尚不确定。
+				// 检查是否有 dependents 用与本次虚拟删除事件不同的坐标引用该 owner。
 				if matchingDependents, nonmatchingDependents := partitionDependents(existingNode.getDependents(), deletedIdentity); len(nonmatchingDependents) > 0 {
 
-					// some of our dependents disagree on our coordinates, so do not remove the existing virtual node from the graph
+					// 部分 dependent 的坐标与本次事件不一致，不能据此删除现有虚拟节点。
 					removeExistingNode = false
 
 					if len(matchingDependents) > 0 {
-						// mark the observed deleted identity as absent
+						// 把观测到的已删除身份记入 absentOwnerCache。
 						gb.absentOwnerCache.Add(deletedIdentity)
-						// attempt to delete dependents that do match the verified deleted identity
+						// 尝试删除那些确实引用了已确认消失身份的 dependents。
 						for _, dep := range matchingDependents {
 							gb.attemptToDelete.Add(dep)
 						}
 					}
 
-					// if the delete event verified existingNode.identity doesn't exist...
+					// 若该删除事件已证实 existingNode.identity 确实不存在……
 					if existingNode.identity == deletedIdentity {
-						// find an alternative identity our nonmatching dependents refer to us by
+						// 为那些坐标不匹配的 dependents 寻找一个替代的 owner 身份。
 						replacementIdentity := getAlternateOwnerIdentity(nonmatchingDependents, deletedIdentity)
 						if replacementIdentity != nil {
-							// replace the existing virtual node with a new one with one of our other potential identities
+							// 用其中一个候选身份构造新节点替换现有虚拟节点。
 							replacementNode := existingNode.clone()
 							replacementNode.identity = *replacementIdentity
 							gb.uidToNode.Write(replacementNode)
-							// and add the new virtual node back to the attemptToDelete queue
+							// 再把新虚拟节点放回 attemptToDelete 队列继续核实。
 							gb.attemptToDelete.AddRateLimited(replacementNode)
 						}
 					}
 				}
 
 			} else if existingNode.identity != deletedIdentity {
-				// do not remove the existing real node from the graph based on a virtual delete event
+				// 不能仅凭虚拟删除事件就移除图中已通过 informer 观测到的真实节点。
 				removeExistingNode = false
 
-				// our existing node which was observed via informer disagrees with the virtual delete event's coordinates
+				// 已观测到的真实节点坐标与虚拟删除事件不符。
 				matchingDependents, _ := partitionDependents(existingNode.getDependents(), deletedIdentity)
 
 				if len(matchingDependents) > 0 {
-					// mark the observed deleted identity as absent
+					// 把观测到的已删除身份记入 absentOwnerCache。
 					gb.absentOwnerCache.Add(deletedIdentity)
-					// attempt to delete dependents that do match the verified deleted identity
+					// 尝试删除确实引用已确认消失身份的 dependents。
 					for _, dep := range matchingDependents {
 						gb.attemptToDelete.Add(dep)
 					}
@@ -857,7 +842,7 @@ func (gb *GraphBuilder) processGraphChanges(logger klog.Logger) bool {
 		}
 
 		if removeExistingNode {
-			// removeNode updates the graph
+			// removeNode 负责更新图结构。
 			gb.removeNode(existingNode)
 			existingNode.dependentsLock.RLock()
 			defer existingNode.dependentsLock.RUnlock()
@@ -872,8 +857,7 @@ func (gb *GraphBuilder) processGraphChanges(logger klog.Logger) bool {
 				if !found || !ownerNode.isDeletingDependents() {
 					continue
 				}
-				// this is to let attempToDeleteItem check if all the owner's
-				// dependents are deleted, if so, the owner will be deleted.
+				// 让 attemptToDeleteItem 检查该 owner 的所有 dependents 是否已被删除，若是则删除该 owner。
 				gb.attemptToDelete.Add(ownerNode)
 			}
 		}
@@ -881,24 +865,23 @@ func (gb *GraphBuilder) processGraphChanges(logger klog.Logger) bool {
 	return true
 }
 
-// partitionDependents divides the provided dependents into a list which have an ownerReference matching the provided identity,
-// and ones which have an ownerReference for the given uid that do not match the provided identity.
-// Note that a dependent with multiple ownerReferences for the target uid can end up in both lists.
+// partitionDependents 将 dependents 按 ownerRef 是否与给定身份匹配分成两组。
+// 注意：若一个 dependent 对同一 UID 有多个 ownerRef，它可能同时出现在两个列表中。
 func partitionDependents(dependents []*node, matchOwnerIdentity objectReference) (matching, nonmatching []*node) {
 	ownerIsNamespaced := len(matchOwnerIdentity.Namespace) > 0
 	for i := range dependents {
 		dep := dependents[i]
 		foundMatch := false
 		foundMismatch := false
-		// if the dep namespace matches or the owner is cluster scoped ...
+		// 若 dependent 命名空间与 owner 匹配，或 owner 是集群级对象……
 		if ownerIsNamespaced && matchOwnerIdentity.Namespace != dep.identity.Namespace {
-			// all references to the parent do not match, since the dependent namespace does not match the owner
+			// dependent 命名空间与 owner 不符，所有对该父对象的引用都不匹配。
 			foundMismatch = true
 		} else {
 			for _, ownerRef := range dep.owners {
-				// ... find the ownerRef with a matching uid ...
+				// ……找到 UID 匹配的 ownerRef……
 				if ownerRef.UID == matchOwnerIdentity.UID {
-					// ... and check if it matches all coordinates
+					// ……再检查其所有坐标是否都匹配。
 					if ownerReferenceMatchesCoordinates(ownerRef, matchOwnerIdentity.OwnerReference) {
 						foundMatch = true
 					} else {
@@ -918,93 +901,93 @@ func partitionDependents(dependents []*node, matchOwnerIdentity objectReference)
 	return matching, nonmatching
 }
 
+// // referenceLessThan 为对象引用定义稳定的字典序：Kind > APIVersion > Namespace > Name > UID，
+// // 以便在多个候选身份中选出确定的替代者。
 func referenceLessThan(a, b objectReference) bool {
-	// kind/apiVersion are more significant than namespace,
-	// so that we get coherent ordering between kinds
-	// regardless of whether they are cluster-scoped or namespaced
+	// Kind/APIVersion 比 Namespace 更重要，这样无论对象是集群级还是命名空间级，
+	// 不同 Kind 之间都能保持一致的排序。
 	if a.Kind != b.Kind {
 		return a.Kind < b.Kind
 	}
 	if a.APIVersion != b.APIVersion {
 		return a.APIVersion < b.APIVersion
 	}
-	// namespace is more significant than name
+	// Namespace 比 Name 更重要。
 	if a.Namespace != b.Namespace {
 		return a.Namespace < b.Namespace
 	}
-	// name is more significant than uid
+	// Name 比 UID 更重要。
 	if a.Name != b.Name {
 		return a.Name < b.Name
 	}
-	// uid is included for completeness, but is expected to be identical
-	// when getting alternate identities for an owner since they are keyed by uid
+	// UID 仅为完整性而参与比较；按 UID 查找 owner 的替代身份时，UID 应始终相同。
 	if a.UID != b.UID {
 		return a.UID < b.UID
 	}
 	return false
 }
 
-// getAlternateOwnerIdentity searches deps for owner references which match
-// verifiedAbsentIdentity.UID but differ in apiVersion/kind/name or namespace.
-// The first that follows verifiedAbsentIdentity (according to referenceLessThan) is returned.
-// If none follow verifiedAbsentIdentity, the first (according to referenceLessThan) is returned.
-// If no alternate identities are found, nil is returned.
+// getAlternateOwnerIdentity 在 deps 中查找 UID 与 verifiedAbsentIdentity 相同、
+// 但 apiVersion/kind/name 或 namespace 不同的 ownerRef。
+// 返回按 referenceLessThan 排序后紧跟在 verifiedAbsentIdentity 之后的第一个候选；
+// 若没有排在其后的，则返回排序最靠前的候选；若无任何候选则返回 nil。
 func getAlternateOwnerIdentity(deps []*node, verifiedAbsentIdentity objectReference) *objectReference {
 	absentIdentityIsClusterScoped := len(verifiedAbsentIdentity.Namespace) == 0
 
 	seenAlternates := map[objectReference]bool{verifiedAbsentIdentity: true}
 
-	// keep track of the first alternate reference (according to referenceLessThan)
+	// 记录排序最靠前的替代引用。
 	var first *objectReference
-	// keep track of the first reference following verifiedAbsentIdentity (according to referenceLessThan)
+	// 记录排序紧跟在 verifiedAbsentIdentity 之后的第一个引用。
 	var firstFollowing *objectReference
 
 	for _, dep := range deps {
 		for _, ownerRef := range dep.owners {
 			if ownerRef.UID != verifiedAbsentIdentity.UID {
-				// skip references that aren't the uid we care about
+				// 跳过 UID 不同的引用。
 				continue
 			}
 
 			if ownerReferenceMatchesCoordinates(ownerRef, verifiedAbsentIdentity.OwnerReference) {
 				if absentIdentityIsClusterScoped || verifiedAbsentIdentity.Namespace == dep.identity.Namespace {
-					// skip references that exactly match verifiedAbsentIdentity
+					// 跳过与 verifiedAbsentIdentity 完全一致的引用。
 					continue
 				}
 			}
 
 			ref := objectReference{OwnerReference: ownerReferenceCoordinates(ownerRef), Namespace: dep.identity.Namespace}
 			if absentIdentityIsClusterScoped && ref.APIVersion == verifiedAbsentIdentity.APIVersion && ref.Kind == verifiedAbsentIdentity.Kind {
-				// we know this apiVersion/kind is cluster-scoped because of verifiedAbsentIdentity,
-				// so clear the namespace from the alternate identity
+				// 由 verifiedAbsentIdentity 可知该 apiVersion/kind 是集群级的，
+				// 因此清除替代身份中的命名空间。
 				ref.Namespace = ""
 			}
 
 			if seenAlternates[ref] {
-				// skip references we've already seen
+				// 跳过已处理过的引用。
 				continue
 			}
 			seenAlternates[ref] = true
 
 			if first == nil || referenceLessThan(ref, *first) {
-				// this alternate comes first lexically
+				// 该候选按字典序排在最前。
 				first = &ref
 			}
 			if referenceLessThan(verifiedAbsentIdentity, ref) && (firstFollowing == nil || referenceLessThan(ref, *firstFollowing)) {
-				// this alternate is the first following verifiedAbsentIdentity lexically
+				// 该候选是字典序中紧跟在 verifiedAbsentIdentity 之后的第一个。
 				firstFollowing = &ref
 			}
 		}
 	}
 
-	// return the first alternate identity following the verified absent identity, if there is one
+	// 优先返回字典序紧随已确认消失身份之后的候选。
 	if firstFollowing != nil {
 		return firstFollowing
 	}
-	// otherwise return the first alternate identity
+	// 否则返回字典序最靠前的候选。
 	return first
 }
 
+// // GetGraphResources 返回图构建器持有的删除/孤立队列及缺失 owner 缓存，供 GC 使用。
 func (gb *GraphBuilder) GetGraphResources() (
 	attemptToDelete workqueue.TypedRateLimitingInterface[*node],
 	attemptToOrphan workqueue.TypedRateLimitingInterface[*node],
@@ -1013,13 +996,13 @@ func (gb *GraphBuilder) GetGraphResources() (
 	return gb.attemptToDelete, gb.attemptToOrphan, gb.absentOwnerCache
 }
 
+// Monitor 暴露 monitor 持有的 store 与 controller，供状态查询使用。
 type Monitor struct {
 	Store      cache.Store
 	Controller cache.Controller
 }
 
-// GetMonitor returns a monitor for the given resource. It will return the
-// monitor and whether or not the monitor has been synced yet.
+// GetMonitor 返回给定资源对应的 monitor 及其是否已完成同步。
 func (gb *GraphBuilder) GetMonitor(ctx context.Context, resource schema.GroupVersionResource) (*Monitor, bool, error) {
 	gb.monitorLock.RLock()
 	defer gb.monitorLock.RUnlock()
@@ -1046,6 +1029,7 @@ func (gb *GraphBuilder) GetMonitor(ctx context.Context, resource schema.GroupVer
 	return resourceMonitor, true, nil
 }
 
+// // Name 返回图构建器的组件名称。
 func (gb *GraphBuilder) Name() string {
 	return "dependencygraphbuilder"
 }

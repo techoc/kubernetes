@@ -22,31 +22,31 @@ import (
 	endpointsliceutil "k8s.io/endpointslice/util"
 )
 
-// slicesByAction includes lists of slices to create, update, or delete.
+// slicesByAction 按操作类型分组保存待创建、待更新和待删除的 EndpointSlice 列表。
 type slicesByAction struct {
 	toCreate, toUpdate, toDelete []*discovery.EndpointSlice
 }
 
-// append appends slices from another slicesByAction struct.
+// append 将另一个 slicesByAction 中的各类切片合并到当前结构中。
 func (s *slicesByAction) append(slices slicesByAction) {
 	s.toCreate = append(s.toCreate, slices.toCreate...)
 	s.toUpdate = append(s.toUpdate, slices.toUpdate...)
 	s.toDelete = append(s.toDelete, slices.toDelete...)
 }
 
-// totalsByAction includes total numbers for added and removed.
+// totalsByAction 统计新增、更新和删除的数量。
 type totalsByAction struct {
 	added, updated, removed int
 }
 
-// add adds totals from another totalsByAction struct.
+// add 将另一个 totalsByAction 中的计数累加到当前结构中。
 func (t *totalsByAction) add(totals totalsByAction) {
 	t.added += totals.added
 	t.updated += totals.updated
 	t.removed += totals.removed
 }
 
-// newDesiredCalc initializes and returns a new desiredCalc.
+// newDesiredCalc 初始化并返回一个新的 desiredCalc。
 func newDesiredCalc() *desiredCalc {
 	return &desiredCalc{
 		portsByKey:          map[addrTypePortMapKey][]discovery.EndpointPort{},
@@ -55,19 +55,18 @@ func newDesiredCalc() *desiredCalc {
 	}
 }
 
-// desiredCalc helps calculate desired endpoints and ports.
+// desiredCalc 辅助计算期望的 Endpoint 和端口，按地址类型与端口组合分别归组。
 type desiredCalc struct {
 	portsByKey          map[addrTypePortMapKey][]discovery.EndpointPort
 	endpointsByKey      map[addrTypePortMapKey]endpointsliceutil.EndpointSet
 	numDesiredEndpoints int
 }
 
-// multiAddrTypePortMapKey stores addrTypePortMapKey for different address
-// types.
+// multiAddrTypePortMapKey 为不同地址类型分别保存对应的 addrTypePortMapKey。
 type multiAddrTypePortMapKey map[discovery.AddressType]addrTypePortMapKey
 
-// initPorts initializes ports for a subset and address type and returns the
-// corresponding addrTypePortMapKey.
+// initPorts 为某个子集和地址类型初始化端口，并返回对应的 multiAddrTypePortMapKey。
+// 同一组端口会同时为 IPv4 和 IPv6 建立映射，便于后续按地址类型查找。
 func (d *desiredCalc) initPorts(subsetPorts []v1.EndpointPort) multiAddrTypePortMapKey {
 	endpointPorts := epPortsToEpsPorts(subsetPorts)
 	addrTypes := []discovery.AddressType{discovery.AddressTypeIPv4, discovery.AddressTypeIPv6}
@@ -84,8 +83,7 @@ func (d *desiredCalc) initPorts(subsetPorts []v1.EndpointPort) multiAddrTypePort
 	return multiKey
 }
 
-// addAddress adds an EndpointAddress to the desired state if it is valid. It
-// returns false if the address was invalid.
+// addAddress 在地址有效时将其加入期望状态，地址无效时返回 false。
 func (d *desiredCalc) addAddress(address v1.EndpointAddress, multiKey multiAddrTypePortMapKey, ready bool) bool {
 	endpoint, addrType := addressToEndpoint(address, ready)
 	if addrType == nil {
@@ -97,10 +95,11 @@ func (d *desiredCalc) addAddress(address v1.EndpointAddress, multiKey multiAddrT
 	return true
 }
 
+// slicesByAddrType 按地址类型分组保存 EndpointSlice 列表。
 type slicesByAddrType map[discovery.AddressType][]*discovery.EndpointSlice
 
-// recycleSlices will recycle the slices marked for deletion by replacing
-// creates with updates of slices that would otherwise be deleted.
+// recycleSlices 回收待删除的切片，用待创建切片替换它们，从而把删除改为更新。
+// 相同地址类型下配对复用已有切片名称，避免删除后再创建带来的额外开销与抖动。
 func recycleSlices(slices *slicesByAction) {
 	toCreateByAddrType := toSlicesByAddrType(slices.toCreate)
 	toDeleteByAddrType := toSlicesByAddrType(slices.toDelete)
@@ -117,7 +116,7 @@ func recycleSlices(slices *slicesByAction) {
 	}
 }
 
-// removeSlice removes an EndpointSlice from a list of EndpointSlices.
+// removeSlice 从 EndpointSlice 列表中移除名称匹配的切片。
 func removeSlice(slices []*discovery.EndpointSlice, sliceToRemove *discovery.EndpointSlice) []*discovery.EndpointSlice {
 	for i, slice := range slices {
 		if slice.Name == sliceToRemove.Name {
@@ -127,7 +126,7 @@ func removeSlice(slices []*discovery.EndpointSlice, sliceToRemove *discovery.End
 	return slices
 }
 
-// toSliceByAddrType returns lists of EndpointSlices grouped by address.
+// toSlicesByAddrType 按地址类型对 EndpointSlice 列表进行分组。
 func toSlicesByAddrType(slices []*discovery.EndpointSlice) slicesByAddrType {
 	byAddrType := slicesByAddrType{}
 	for _, slice := range slices {

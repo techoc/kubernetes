@@ -20,23 +20,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EndpointSliceMirroringControllerConfiguration contains elements describing
-// EndpointSliceMirroringController.
+// EndpointSliceMirroringControllerConfiguration 描述 EndpointSliceMirroringController 的配置项。
 type EndpointSliceMirroringControllerConfiguration struct {
-	// mirroringConcurrentServiceEndpointSyncs is the number of service endpoint
-	// syncing operations that will be done concurrently. Larger number = faster
-	// endpoint slice updating, but more CPU (and network) load.
+	// MirroringConcurrentServiceEndpointSyncs 是并发执行的 Service Endpoint 同步操作数。
+	// 数值越大，EndpointSlice 更新越快，但 CPU 与网络负载也越高。
 	MirroringConcurrentServiceEndpointSyncs int32
 
-	// mirroringMaxEndpointsPerSubset is the maximum number of endpoints that
-	// will be mirrored to an EndpointSlice for an EndpointSubset.
+	// MirroringMaxEndpointsPerSubset 是每个 EndpointSubset 镜像到单个 EndpointSlice 时的端点数量上限。
 	MirroringMaxEndpointsPerSubset int32
 
-	// mirroringEndpointUpdatesBatchPeriod can be used to batch EndpointSlice
-	// updates. All updates triggered by EndpointSlice changes will be delayed
-	// by up to 'mirroringEndpointUpdatesBatchPeriod'. If other addresses in the
-	// same Endpoints resource change in that period, they will be batched to a
-	// single EndpointSlice update. Default 0 value means that each Endpoints
-	// update triggers an EndpointSlice update.
+	// MirroringEndpointUpdatesBatchPeriod 用于批量合并 EndpointSlice 更新：由端点变更触发的
+	// 更新最多延迟该时长。若同一 Endpoints 资源内的其他地址在此期间发生变化，
+	// 它们会被合并为一次 EndpointSlice 更新。默认值为 0，表示每次 Endpoints 更新都
+	// 立即触发一次 EndpointSlice 更新。
 	MirroringEndpointUpdatesBatchPeriod metav1.Duration
 }

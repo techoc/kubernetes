@@ -24,21 +24,21 @@ import (
 	pkglabels "k8s.io/apimachinery/pkg/labels"
 )
 
-// BiMultimap is an efficient, bi-directional mapping of object
-// keys. Associations are created by putting keys with a selector.
+// BiMultimap 维护对象 key 之间的高效双向映射：附带标签的对象与带有选择器的对象
+// 通过标签匹配自动建立关联，可同时按选择器正向查询和被选择对象反向查询。
 type BiMultimap struct {
 	mux sync.RWMutex
 
-	// Objects.
+	// 按 key 索引的对象表。
 	labeledObjects   map[Key]*labeledObject
 	selectingObjects map[Key]*selectingObject
 
-	// Associations.
+	// 按选择器/标签序列化值缓存的关联表，通过引用计数管理生命周期。
 	labeledBySelecting map[selectorKey]*labeledObjects
 	selectingByLabeled map[labelsKey]*selectingObjects
 }
 
-// NewBiMultimap creates a map.
+// NewBiMultimap 创建一个空的双向映射。
 func NewBiMultimap() *BiMultimap {
 	return &BiMultimap{
 		labeledObjects:     make(map[Key]*labeledObject),
@@ -48,13 +48,13 @@ func NewBiMultimap() *BiMultimap {
 	}
 }
 
-// Key is a tuple of name and namespace.
+// Key 是命名空间与名称组成的对象标识。
 type Key struct {
 	Name      string
 	Namespace string
 }
 
-// Parse turns a string in the format namespace/name into a Key.
+// Parse 将 "namespace/name" 格式的字符串解析为 Key；没有斜杠时视为无命名空间的名称。
 func Parse(s string) (key Key) {
 	ns := strings.SplitN(s, "/", 2)
 	if len(ns) == 2 {
@@ -66,6 +66,7 @@ func Parse(s string) (key Key) {
 	return key
 }
 
+// String 返回 "namespace/name" 形式的字符串表示。
 func (k Key) String() string {
 	return fmt.Sprintf("%v/%v", k.Namespace, k.Name)
 }
@@ -106,8 +107,7 @@ type labeledObjects struct {
 	refCount int
 }
 
-// Put inserts or updates an object and the incoming associations
-// based on the object labels.
+// Put 插入或更新带标签的对象，并根据其标签重建与选择器对象的关联（持写锁）。
 func (m *BiMultimap) Put(key Key, labels map[string]string) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
@@ -119,10 +119,10 @@ func (m *BiMultimap) Put(key Key, labels map[string]string) {
 	if l, ok := m.labeledObjects[key]; ok {
 		// Update labeled object.
 		if labelsKey == l.labelsKey {
-			// No change to labels.
+			// 标签未变化则关联无需更新，直接返回。
 			return
 		}
-		// Delete before readding.
+		// 标签变化会改变匹配关系，先清理旧关联再重建。
 		m.delete(key)
 	}
 	// Add labeled object.
@@ -135,7 +135,7 @@ func (m *BiMultimap) Put(key Key, labels map[string]string) {
 	m.labeledObjects[key] = labeledObject
 	// Add associations.
 	if _, ok := m.selectingByLabeled[labelsKey]; !ok {
-		// Cache miss. Scan selecting objects.
+		// 缓存未命中：需扫描全部同命名空间的选择器对象，计算匹配集合并缓存。
 		selecting := &selectingObjects{
 			objects: make(map[Key]*selectingObject),
 		}
@@ -167,16 +167,17 @@ func (m *BiMultimap) Delete(key Key) {
 	m.delete(key)
 }
 
+// delete 是 Delete 的无锁内部实现，供持锁的批量操作复用。
 func (m *BiMultimap) delete(key Key) {
 	if _, ok := m.labeledObjects[key]; !ok {
-		// Does not exist.
+		// 对象不存在，无需处理。
 		return
 	}
 	labeledObject := m.labeledObjects[key]
 	labelsKey := labeledObject.labelsKey
 	defer delete(m.labeledObjects, key)
 	if _, ok := m.selectingByLabeled[labelsKey]; !ok {
-		// No associations.
+		// 该标签值没有关联缓存，直接返回。
 		return
 	}
 	// Remove associations.
@@ -186,13 +187,13 @@ func (m *BiMultimap) delete(key Key) {
 		delete(m.labeledBySelecting[selectorKey].objects, key)
 	}
 	m.selectingByLabeled[labelsKey].refCount--
-	// Garbage collect labeledObject to selectingObject associations.
+	// 引用计数归零时回收关联缓存，避免无效条目长期占用内存。
 	if m.selectingByLabeled[labelsKey].refCount == 0 {
 		delete(m.selectingByLabeled, labelsKey)
 	}
 }
 
-// Exists returns true if the labeled object is present in the map.
+// Exists 判断带标签的对象是否存在于映射中。
 func (m *BiMultimap) Exists(key Key) bool {
 	m.mux.RLock()
 	defer m.mux.RUnlock()
@@ -201,8 +202,7 @@ func (m *BiMultimap) Exists(key Key) bool {
 	return exists
 }
 
-// PutSelector inserts or updates an object with a selector. Associations
-// are created or updated based on the selector.
+// PutSelector 插入或更新带选择器的对象，并依据选择器重建与带标签对象的关联（持写锁）。
 func (m *BiMultimap) PutSelector(key Key, selector pkglabels.Selector) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
@@ -214,7 +214,7 @@ func (m *BiMultimap) PutSelector(key Key, selector pkglabels.Selector) {
 	if s, ok := m.selectingObjects[key]; ok {
 		// Update selecting object.
 		if selectorKey == s.selectorKey {
-			// No change to selector.
+			// 选择器未变化则关联无需更新，直接返回。
 			return
 		}
 		// Delete before readding.
@@ -229,7 +229,7 @@ func (m *BiMultimap) PutSelector(key Key, selector pkglabels.Selector) {
 	m.selectingObjects[key] = selectingObject
 	// Add associations.
 	if _, ok := m.labeledBySelecting[selectorKey]; !ok {
-		// Cache miss. Scan labeled objects.
+		// 缓存未命中：需扫描全部同命名空间的带标签对象，计算匹配集合并缓存。
 		labeled := &labeledObjects{
 			objects: make(map[Key]*labeledObject),
 		}
@@ -254,24 +254,24 @@ func (m *BiMultimap) PutSelector(key Key, selector pkglabels.Selector) {
 	}
 }
 
-// DeleteSelector deletes a selecting object and associations created by its
-// selector.
+// DeleteSelector 删除带选择器的对象及其创建的所有关联（持写锁）。
 func (m *BiMultimap) DeleteSelector(key Key) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 	m.deleteSelector(key)
 }
 
+// deleteSelector 是 DeleteSelector 的无锁内部实现，供持锁的批量操作复用。
 func (m *BiMultimap) deleteSelector(key Key) {
 	if _, ok := m.selectingObjects[key]; !ok {
-		// Does not exist.
+		// 对象不存在，无需处理。
 		return
 	}
 	selectingObject := m.selectingObjects[key]
 	selectorKey := selectingObject.selectorKey
 	defer delete(m.selectingObjects, key)
 	if _, ok := m.labeledBySelecting[selectorKey]; !ok {
-		// No associations.
+		// 该标签值没有关联缓存，直接返回。
 		return
 	}
 	// Remove associations.
@@ -281,13 +281,13 @@ func (m *BiMultimap) deleteSelector(key Key) {
 		delete(m.selectingByLabeled[labelsKey].objects, key)
 	}
 	m.labeledBySelecting[selectorKey].refCount--
-	// Garbage collect selectingObjects to labeledObject associations.
+	// 引用计数归零时回收关联缓存。
 	if m.labeledBySelecting[selectorKey].refCount == 0 {
 		delete(m.labeledBySelecting, selectorKey)
 	}
 }
 
-// SelectorExists returns true if the selecting object is present in the map.
+// SelectorExists 判断带选择器的对象是否存在于映射中。
 func (m *BiMultimap) SelectorExists(key Key) bool {
 	m.mux.RLock()
 	defer m.mux.RUnlock()
@@ -296,8 +296,7 @@ func (m *BiMultimap) SelectorExists(key Key) bool {
 	return exists
 }
 
-// KeepOnly retains only the specified labeled objects and deletes the
-// rest. Like calling Delete for all keys not specified.
+// KeepOnly 仅保留指定的带标签对象，删除其余对象；等价于对未列出的 key 逐个调用 Delete，但在同一把锁内完成。
 func (m *BiMultimap) KeepOnly(keys []Key) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
@@ -313,9 +312,7 @@ func (m *BiMultimap) KeepOnly(keys []Key) {
 	}
 }
 
-// KeepOnlySelectors retains only the specified selecting objects and
-// deletes the rest. Like calling DeleteSelector for all keys not
-// specified.
+// KeepOnlySelectors 仅保留指定的带选择器对象，删除其余对象；等价于对未列出的 key 逐个调用 DeleteSelector。
 func (m *BiMultimap) KeepOnlySelectors(keys []Key) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
@@ -331,15 +328,14 @@ func (m *BiMultimap) KeepOnlySelectors(keys []Key) {
 	}
 }
 
-// Select finds objects associated with a selecting object. If the
-// given key was found in the map `ok` will be true. Otherwise false.
+// Select 返回与给定选择器对象关联的带标签对象列表；对象存在时 ok 为 true。
 func (m *BiMultimap) Select(key Key) (keys []Key, ok bool) {
 	m.mux.RLock()
 	defer m.mux.RUnlock()
 
 	selectingObject, ok := m.selectingObjects[key]
 	if !ok {
-		// Does not exist.
+		// 对象不存在，无需处理。
 		return nil, false
 	}
 	keys = make([]Key, 0)
@@ -351,15 +347,14 @@ func (m *BiMultimap) Select(key Key) (keys []Key, ok bool) {
 	return keys, true
 }
 
-// ReverseSelect finds objects selecting the given object. If the
-// given key was found in the map `ok` will be true. Otherwise false.
+// ReverseSelect 返回选择了给定带标签对象的选择器对象列表；对象存在时 ok 为 true。
 func (m *BiMultimap) ReverseSelect(key Key) (keys []Key, ok bool) {
 	m.mux.RLock()
 	defer m.mux.RUnlock()
 
 	labeledObject, ok := m.labeledObjects[key]
 	if !ok {
-		// Does not exist.
+		// 对象不存在，无需处理。
 		return []Key{}, false
 	}
 	keys = make([]Key, 0)
@@ -371,6 +366,7 @@ func (m *BiMultimap) ReverseSelect(key Key) (keys []Key, ok bool) {
 	return keys, true
 }
 
+// copyLabels 复制标签映射，防止调用方后续修改原 map 影响内部缓存的一致性。
 func copyLabels(labels map[string]string) map[string]string {
 	l := make(map[string]string)
 	for k, v := range labels {

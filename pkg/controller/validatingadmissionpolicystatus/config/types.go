@@ -16,11 +16,10 @@ limitations under the License.
 
 package config
 
-// ValidatingAdmissionPolicyStatusControllerConfiguration contains elements describing ValidatingAdmissionPolicyStatusController.
+// ValidatingAdmissionPolicyStatusControllerConfiguration 包含描述 ValidatingAdmissionPolicyStatusController 的各项配置。
 type ValidatingAdmissionPolicyStatusControllerConfiguration struct {
-	// ConcurrentPolicySyncs is the number of policy objects that are
-	// allowed to sync concurrently. Larger number = quicker type checking,
-	// but more CPU (and network) load.
-	// The default value is 5.
+	// ConcurrentPolicySyncs 是允许并发同步的策略对象数量。
+	// 数值越大，类型检查越快，但 CPU（及网络）负载也越高。
+	// 默认值为 5。
 	ConcurrentPolicySyncs int32
 }

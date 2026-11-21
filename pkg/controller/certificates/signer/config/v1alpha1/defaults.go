@@ -23,17 +23,15 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultCSRSigningControllerConfiguration defaults a pointer to a
-// CSRSigningControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultCSRSigningControllerConfiguration 为 CSRSigningControllerConfiguration
+// 填充推荐默认值（可能会随 API 版本演进而变化）：集群签名有效期默认 1 年。
+//
+// 该函数刻意不注册为 scheme 中普通的 `SetDefaults_Foo`：scheme 的默认值设置是
+// 转换的一部分，一旦强制使用便无法退出。这样使用方可以在自己的包装类型
+// `SetDefaults_` 方法中按需调用或改用自己的默认值。
 func RecommendedDefaultCSRSigningControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.CSRSigningControllerConfiguration) {
 	zero := metav1.Duration{}
+	// 仅补齐零值，避免覆盖调用方显式配置的签名有效期。
 	if obj.ClusterSigningDuration == zero {
 		obj.ClusterSigningDuration = metav1.Duration{Duration: 365 * 24 * time.Hour}
 	}

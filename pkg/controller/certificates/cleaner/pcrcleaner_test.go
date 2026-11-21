@@ -33,6 +33,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestPCRCleaner 验证 PCRCleanerController.handle 只清理超过时间阈值的请求，
+// 且无论请求处于 Pending 还是终态（Denied）都遵循同一阈值规则。
 func TestPCRCleaner(t *testing.T) {
 	now := mustParseRFC3339(t, "2025-01-01T00:30:00Z")
 	clock := testclock.NewFakePassiveClock(now)
@@ -166,8 +168,7 @@ func TestPCRCleaner(t *testing.T) {
 				pollingInterval: 1 * time.Minute,
 			}
 
-			// Simulate a pass of the cleaner worker by listing all PCRs and
-			// calling handle() on them.
+			// 模拟 cleaner worker 的一轮执行：列出所有 PCR 并逐一调用 handle() 处理。
 
 			pcrList, err := kc.CertificatesV1().PodCertificateRequests(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 			if err != nil {
@@ -179,8 +180,7 @@ func TestPCRCleaner(t *testing.T) {
 				}
 			}
 
-			// Now check on the test case's PCR, to see if it was deleted or not
-			// according to our expectation.
+			// 最后检查目标 PCR 是否按预期被删除。
 			_, err = kc.CertificatesV1().PodCertificateRequests(tc.pcr.ObjectMeta.Namespace).Get(ctx, tc.pcr.ObjectMeta.Name, metav1.GetOptions{})
 			if !tc.wantErrRecognizer(err) {
 				t.Errorf("Bad error output: %v", err)
@@ -190,10 +190,12 @@ func TestPCRCleaner(t *testing.T) {
 
 }
 
+// errorIsNil 是用于断言“未发生错误”的错误判定函数。
 func errorIsNil(err error) bool {
 	return err == nil
 }
 
+// mustParseRFC3339 解析 RFC3339 格式的时间字符串，解析失败时直接使测试失败。
 func mustParseRFC3339(t *testing.T, stamp string) time.Time {
 	parsed, err := time.Parse(time.RFC3339, stamp)
 	if err != nil {
@@ -202,6 +204,7 @@ func mustParseRFC3339(t *testing.T, stamp string) time.Time {
 	return parsed
 }
 
+// mustMakeStubPKCS10Request 生成一个临时的 ed25519 密钥并创建用于测试的 PKCS#10 请求，失败时终止测试。
 func mustMakeStubPKCS10Request(t *testing.T) []byte {
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

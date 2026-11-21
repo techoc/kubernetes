@@ -36,8 +36,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// RootCACertConfigMapName is name of the configmap which stores certificates
-// to access api-server
+// RootCACertConfigMapName 是存放用于访问 api-server 证书的 ConfigMap 的名称。
 const (
 	RootCACertConfigMapName = "kube-root-ca.crt"
 	DescriptionAnnotation   = "kubernetes.io/description"
@@ -45,13 +44,15 @@ const (
 		"No other usage is guaranteed across distributions of Kubernetes clusters."
 )
 
+// init 注册控制器指标，必须在控制器启动前完成。
 func init() {
 	registerMetrics()
 }
 
-// NewPublisher construct a new controller which would manage the configmap
-// which stores certificates in each namespace. It will make sure certificate
-// configmap exists in each namespace.
+// NewPublisher 构造用于管理各命名空间证书 ConfigMap 的控制器，
+// 保证每个命名空间中都存在存放根 CA 的 ConfigMap。
+// 它监听 ConfigMap 的删除/更新与命名空间的添加/更新事件，
+// 将受影响的命名空间加入工作队列。
 func NewPublisher(cmInformer coreinformers.ConfigMapInformer, nsInformer coreinformers.NamespaceInformer, cl clientset.Interface, rootCA []byte) (*Publisher, error) {
 	e := &Publisher{
 		client: cl,
@@ -83,12 +84,12 @@ func NewPublisher(cmInformer coreinformers.ConfigMapInformer, nsInformer coreinf
 
 }
 
-// Publisher manages certificate ConfigMap objects inside Namespaces
+// Publisher 管理各命名空间内的证书 ConfigMap 对象。
 type Publisher struct {
 	client clientset.Interface
 	rootCA []byte
 
-	// To allow injection for testing.
+	// 同步函数可在测试中替换，便于注入假的同步逻辑。
 	syncHandler func(ctx context.Context, key string) error
 
 	cmLister       corelisters.ConfigMapLister
@@ -99,7 +100,7 @@ type Publisher struct {
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// Run starts process
+// Run 启动控制器：等待 ConfigMap informer 同步后，开启多个 worker 持续处理队列，直到 ctx 被取消。
 func (c *Publisher) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
@@ -125,6 +126,7 @@ func (c *Publisher) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// configMapDeleted 处理 ConfigMap 删除事件：只有根 CA ConfigMap 被删除时，才把其命名空间重新入队以触发重建。
 func (c *Publisher) configMapDeleted(obj interface{}) {
 	cm, err := convertToCM(obj)
 	if err != nil {
@@ -137,6 +139,7 @@ func (c *Publisher) configMapDeleted(obj interface{}) {
 	c.queue.Add(cm.Namespace)
 }
 
+// configMapUpdated 处理 ConfigMap 更新事件：根 CA ConfigMap 被改动时把命名空间入队，以便校正内容。
 func (c *Publisher) configMapUpdated(_, newObj interface{}) {
 	cm, err := convertToCM(newObj)
 	if err != nil {
@@ -149,11 +152,14 @@ func (c *Publisher) configMapUpdated(_, newObj interface{}) {
 	c.queue.Add(cm.Namespace)
 }
 
+// namespaceAdded 处理命名空间添加事件：新命名空间可能需要根 CA ConfigMap，因此将其入队。
 func (c *Publisher) namespaceAdded(obj interface{}) {
 	namespace := obj.(*v1.Namespace)
 	c.queue.Add(namespace.Name)
 }
 
+// namespaceUpdated 处理命名空间更新事件：只有进入 Active 状态时才入队，
+// 因为只有活跃命名空间才需要确保根 CA ConfigMap 存在。
 func (c *Publisher) namespaceUpdated(oldObj interface{}, newObj interface{}) {
 	newNamespace := newObj.(*v1.Namespace)
 	if newNamespace.Status.Phase != v1.NamespaceActive {
@@ -162,13 +168,14 @@ func (c *Publisher) namespaceUpdated(oldObj interface{}, newObj interface{}) {
 	c.queue.Add(newNamespace.Name)
 }
 
+// runWorker 持续从队列中取出条目处理，直到 processNextWorkItem 返回 false（队列关闭）。
 func (c *Publisher) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue. It returns false when
-// it's time to quit.
+// processNextWorkItem 处理队列中的一个键（命名空间）：同步失败时记录错误并限速重试，
+// 成功后清除该键的重试计数；队列关闭时返回 false 表示应退出。
 func (c *Publisher) processNextWorkItem(ctx context.Context) bool {
 	key, quit := c.queue.Get()
 	if quit {
@@ -186,6 +193,8 @@ func (c *Publisher) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// syncNamespace 同步单个命名空间：若根 CA ConfigMap 不存在则创建，
+// 若其数据与说明注解不符则更新，使命名空间始终持有最新的根 CA 证书。
 func (c *Publisher) syncNamespace(ctx context.Context, ns string) (err error) {
 	startTime := time.Now()
 	defer func() {
@@ -205,7 +214,7 @@ func (c *Publisher) syncNamespace(ctx context.Context, ns string) (err error) {
 				"ca.crt": string(c.rootCA),
 			},
 		}, metav1.CreateOptions{})
-		// don't retry a create if the namespace doesn't exist or is terminating
+		// 命名空间不存在或正在终止时创建必然失败，重试也无意义，故直接吞掉该错误。
 		if apierrors.IsNotFound(err) || apierrors.HasStatusCause(err, v1.NamespaceTerminatingCause) {
 			return nil
 		}
@@ -218,12 +227,12 @@ func (c *Publisher) syncNamespace(ctx context.Context, ns string) (err error) {
 		"ca.crt": string(c.rootCA),
 	}
 
-	// ensure the data and the one annotation describing usage of this configmap match.
+	// 数据与用途注解都正确时无需更新，避免无意义的写操作。
 	if reflect.DeepEqual(cm.Data, data) && len(cm.Annotations[DescriptionAnnotation]) > 0 {
 		return nil
 	}
 
-	// copy so we don't modify the cache's instance of the configmap
+	// lister 返回的是缓存中的对象，必须深拷贝后再改，避免污染 informer 缓存。
 	cm = cm.DeepCopy()
 	cm.Data = data
 	if cm.Annotations == nil {
@@ -235,6 +244,8 @@ func (c *Publisher) syncNamespace(ctx context.Context, ns string) (err error) {
 	return err
 }
 
+// convertToCM 将 informer 回调中的对象转换为 ConfigMap：
+// 删除事件可能传来 DeletedFinalStateUnknown 墓碑，需从中取出原始对象。
 func convertToCM(obj interface{}) (*v1.ConfigMap, error) {
 	cm, ok := obj.(*v1.ConfigMap)
 	if !ok {

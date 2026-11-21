@@ -24,33 +24,29 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// RecommendedDefaultPersistentVolumeBinderControllerConfiguration defaults a pointer to a
-// PersistentVolumeBinderControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultPersistentVolumeBinderControllerConfiguration 为
+// PersistentVolumeBinderControllerConfiguration 结构体指针设置推荐默认值。
+// 默认值可能随 API 版本变化。该函数有意不注册到 scheme 中作为普通的
+// `SetDefaults_Foo` 函数，以便该类型的使用者可以为嵌入的配置设置自己的默认值。
+// 强制使用者采用这些默认值会带来问题：scheme 中的默认化是转换过程的一部分，
+// 使用者没有便捷的退出方式。因此若需要使用此默认化逻辑，
+// 请在包装该类型的结构的 `SetDefaults_` 方法中调用它。
 func RecommendedDefaultPersistentVolumeBinderControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.PersistentVolumeBinderControllerConfiguration) {
 	zero := metav1.Duration{}
 	if obj.PVClaimBinderSyncPeriod == zero {
 		obj.PVClaimBinderSyncPeriod = metav1.Duration{Duration: 15 * time.Second}
 	}
 
-	// Use the default VolumeConfiguration options.
+	// 使用 VolumeConfiguration 的默认选项。
 	RecommendedDefaultVolumeConfiguration(&obj.VolumeConfiguration)
 }
 
-// RecommendedDefaultVolumeConfiguration defaults a pointer to a VolumeConfiguration
-// struct. This will set the recommended default values, but they may be subject to
-// change between API versions. This function is intentionally not registered in the
-// scheme as a "normal" `SetDefaults_Foo` function to allow consumers of this type to
-// set whatever defaults for their embedded configs. Forcing consumers to use these
-// defaults would be problematic as defaulting in the scheme is done as part of the
-// conversion, and there would be no easy way to opt-out. Instead, if you want to use
-// this defaulting method run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultVolumeConfiguration 为 VolumeConfiguration 结构体指针设置推荐默认值。
+// 默认值可能随 API 版本变化。该函数有意不注册到 scheme 中作为普通的
+// `SetDefaults_Foo` 函数，以便该类型的使用者可以为嵌入的配置设置自己的默认值。
+// 强制使用者采用这些默认值会带来问题：scheme 中的默认化是转换过程的一部分，
+// 使用者没有便捷的退出方式。因此若需要使用此默认化逻辑，
+// 请在包装该类型的结构的 `SetDefaults_` 方法中调用它。
 func RecommendedDefaultVolumeConfiguration(obj *kubectrlmgrconfigv1alpha1.VolumeConfiguration) {
 	if obj.EnableHostPathProvisioning == nil {
 		obj.EnableHostPathProvisioning = ptr.To(false)
@@ -61,19 +57,17 @@ func RecommendedDefaultVolumeConfiguration(obj *kubectrlmgrconfigv1alpha1.Volume
 	if obj.FlexVolumePluginDir == "" {
 		obj.FlexVolumePluginDir = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 	}
-	// Use the default PersistentVolumeRecyclerConfiguration options.
+	// 使用 PersistentVolumeRecyclerConfiguration 的默认选项。
 	RecommendedDefaultPersistentVolumeRecyclerConfiguration(&obj.PersistentVolumeRecyclerConfiguration)
 }
 
-// RecommendedDefaultPersistentVolumeRecyclerConfiguration defaults a pointer to a
-// PersistentVolumeRecyclerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultPersistentVolumeRecyclerConfiguration 为
+// PersistentVolumeRecyclerConfiguration 结构体指针设置推荐默认值。
+// 默认值可能随 API 版本变化。该函数有意不注册到 scheme 中作为普通的
+// `SetDefaults_Foo` 函数，以便该类型的使用者可以为嵌入的配置设置自己的默认值。
+// 强制使用者采用这些默认值会带来问题：scheme 中的默认化是转换过程的一部分，
+// 使用者没有便捷的退出方式。因此若需要使用此默认化逻辑，
+// 请在包装该类型的结构的 `SetDefaults_` 方法中调用它。
 func RecommendedDefaultPersistentVolumeRecyclerConfiguration(obj *kubectrlmgrconfigv1alpha1.PersistentVolumeRecyclerConfiguration) {
 	if obj.MaximumRetry == 0 {
 		obj.MaximumRetry = 3

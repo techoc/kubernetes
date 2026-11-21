@@ -35,25 +35,25 @@ import (
 	"k8s.io/client-go/util/workqueue"
 )
 
-// ControllerName has "Status" in it to differentiate this controller with the other that runs in API server.
+// ControllerName 中的 "Status" 用于区分本控制器与 API Server 中运行的同名类型检查控制器。
 const ControllerName = "validatingadmissionpolicy-status"
 
-// Controller is the ValidatingAdmissionPolicy Status controller that reconciles the Status field of each policy object.
-// This controller runs type checks against referred types for each policy definition.
+// Controller 是 ValidatingAdmissionPolicy 的状态控制器，负责调和每个策略对象的 Status 字段。
+// 它对每条策略定义中引用的类型执行类型检查，并将表达式告警写回状态。
 type Controller struct {
 	policyInformer informerv1.ValidatingAdmissionPolicyInformer
 	policyQueue    workqueue.TypedRateLimitingInterface[string]
 	policySynced   cache.InformerSynced
 	policyClient   admissionregistrationv1.ValidatingAdmissionPolicyInterface
 
-	// typeChecker checks the policy's expressions for type errors.
-	// Type of params is defined in policy.Spec.ParamsKind
-	// Types of object are calculated from policy.Spec.MatchingConstraints
+	// typeChecker 检查策略表达式中的类型错误：参数类型来自 policy.Spec.ParamsKind，
+	// 对象类型根据 policy.Spec.MatchingConstraints 推导。
 	typeChecker *validatingadmissionpolicy.TypeChecker
 }
 
+// Run 等待 informer 缓存同步后启动 worker，持续处理队列中的策略，直到 ctx 结束。
 func (c *Controller) Run(ctx context.Context, workers int) {
-	defer utilruntime.HandleCrash()
+	defer utilruntime.HandleCrash() // worker 中的 panic 不能让整个控制器进程退出。
 
 	var wg sync.WaitGroup
 	defer func() {
@@ -61,6 +61,7 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 		wg.Wait()
 	}()
 
+	// 必须先等缓存同步，否则 lister 查不到对象会导致已入队的 key 被当作删除处理。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, c.policySynced) {
 		return
 	}
@@ -73,6 +74,7 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// NewController 构造状态控制器：创建限速队列、注册 Add/Update 事件处理器，并记录缓存同步状态。
 func NewController(policyInformer informerv1.ValidatingAdmissionPolicyInformer, policyClient admissionregistrationv1.ValidatingAdmissionPolicyInterface, typeChecker *validatingadmissionpolicy.TypeChecker) (*Controller, error) {
 	c := &Controller{
 		policyInformer: policyInformer,
@@ -98,6 +100,7 @@ func NewController(policyInformer informerv1.ValidatingAdmissionPolicyInformer, 
 	return c, nil
 }
 
+// enqueuePolicy 将策略对象名加入工作队列。
 func (c *Controller) enqueuePolicy(policy any) {
 	if policy, ok := policy.(*v1.ValidatingAdmissionPolicy); ok {
 		// policy objects are cluster-scoped, no point include its namespace.
@@ -109,23 +112,25 @@ func (c *Controller) enqueuePolicy(policy any) {
 	}
 }
 
+// runWorker 循环调用 processNextWorkItem，直到队列关闭。
 func (c *Controller) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
+// processNextWorkItem 取出一个 key 并执行调和；成功则清除限速计数，失败则限速率重新入队。
 func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	key, shutdown := c.policyQueue.Get()
 	if shutdown {
 		return false
 	}
-	defer c.policyQueue.Done(key)
+	defer c.policyQueue.Done(key) // 必须配对 Done，否则相同 key 无法再次入队。
 
 	err := func() error {
 		policy, err := c.policyInformer.Lister().Get(key)
 		if err != nil {
 			if kerrors.IsNotFound(err) {
-				// If not found, the policy is being deleting, do nothing.
+				// lister 中查不到说明策略已被删除，无需处理其状态。
 				return nil
 			}
 			return err
@@ -133,6 +138,7 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 		return c.reconcile(ctx, policy)
 	}()
 
+	// 成功调和后重置退避，避免后续失败沿用旧的限频间隔。
 	if err == nil {
 		c.policyQueue.Forget(key)
 		return true
@@ -144,10 +150,12 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// reconcile 对策略表达式执行类型检查，并用 server-side apply 将告警与 ObservedGeneration 写回状态。
 func (c *Controller) reconcile(ctx context.Context, policy *v1.ValidatingAdmissionPolicy) error {
 	if policy == nil {
 		return nil
 	}
+	// Generation 未变化说明状态已是最新，跳过重复的类型检查与写入。
 	if policy.Generation <= policy.Status.ObservedGeneration {
 		return nil
 	}
@@ -158,6 +166,7 @@ func (c *Controller) reconcile(ctx context.Context, policy *v1.ValidatingAdmissi
 			WithFieldRef(warning.FieldRef).
 			WithWarning(warning.Warning))
 	}
+	// 使用 Force apply 接管 status 子资源字段，避免与其他字段管理器冲突。
 	applyConfig := admissionregistrationv1apply.ValidatingAdmissionPolicy(policy.Name).
 		WithStatus(admissionregistrationv1apply.ValidatingAdmissionPolicyStatus().
 			WithObservedGeneration(policy.Generation).

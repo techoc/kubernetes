@@ -25,46 +25,44 @@ import (
 	capi "k8s.io/api/certificates/v1"
 )
 
-// SigningPolicy validates a CertificateRequest before it's signed by the
-// CertificateAuthority. It may default or otherwise mutate a certificate
-// template.
+// SigningPolicy 在 CertificateAuthority 签发证书之前校验 CertificateRequest，
+// 可以对证书模板做默认值填充或其他修改。
 type SigningPolicy interface {
-	// not-exporting apply forces signing policy implementations to be internal
-	// to this package.
+	// apply 未导出，强制签名策略的实现只能位于本包内部。
 	apply(template *x509.Certificate, signerNotAfter time.Time) error
 }
 
-// PermissiveSigningPolicy is the signing policy historically used by the local
-// signer.
+// PermissiveSigningPolicy 是本地签名器历史上一直使用的签名策略。
 //
-//   - It forwards all SANs from the original signing request.
-//   - It sets allowed usages as configured in the policy.
-//   - It zeros all extensions.
-//   - It sets BasicConstraints to true.
-//   - It sets IsCA to false.
-//   - It validates that the signer has not expired.
-//   - It sets NotBefore and NotAfter:
-//     All certificates set NotBefore = Now() - Backdate.
-//     Long-lived certificates set NotAfter = Now() + TTL - Backdate.
-//     Short-lived certificates set NotAfter = Now() + TTL.
-//     All certificates truncate NotAfter to the expiration date of the signer.
+//   - 透传原始签名请求中的所有 SAN。
+//   - 按策略配置设置允许的用途。
+//   - 清空所有扩展。
+//   - 将 BasicConstraints 设为 true。
+//   - 将 IsCA 设为 false。
+//   - 校验签名者尚未过期。
+//   - 设置 NotBefore 与 NotAfter：
+//     所有证书 NotBefore = Now() - Backdate。
+//     长有效期证书 NotAfter = Now() + TTL - Backdate。
+//     短有效期证书 NotAfter = Now() + TTL。
+//     所有证书的 NotAfter 都会被截断到签名者的到期时间。
 type PermissiveSigningPolicy struct {
-	// TTL is used in certificate NotAfter calculation as described above.
+	// TTL 用于按上述规则计算证书的 NotAfter。
 	TTL time.Duration
 
-	// Usages are the allowed usages of a certificate.
+	// Usages 是证书被允许使用的用途列表。
 	Usages []capi.KeyUsage
 
-	// Backdate is used in certificate NotBefore calculation as described above.
+	// Backdate 用于按上述规则回拨证书的 NotBefore。
 	Backdate time.Duration
 
-	// Short is the duration used to determine if the lifetime of a certificate should be considered short.
+	// Short 是用于判断证书有效期是否算“短”的阈值。
 	Short time.Duration
 
-	// Now defaults to time.Now but can be stubbed for testing
+	// Now 默认为 time.Now，测试中可替换为桩函数以固定时间。
 	Now func() time.Time
 }
 
+// apply 按 PermissiveSigningPolicy 的规则修改证书模板，并在签名者已过期时返回错误。
 func (p PermissiveSigningPolicy) apply(tmpl *x509.Certificate, signerNotAfter time.Time) error {
 	var now time.Time
 	if p.Now != nil {
@@ -82,20 +80,23 @@ func (p PermissiveSigningPolicy) apply(tmpl *x509.Certificate, signerNotAfter ti
 	tmpl.KeyUsage = usage
 	tmpl.ExtKeyUsage = extUsages
 
+	// 清空请求自带的扩展，避免请求方注入不受控的扩展内容。
 	tmpl.ExtraExtensions = nil
 	tmpl.Extensions = nil
 	tmpl.BasicConstraintsValid = true
 	tmpl.IsCA = false
 
+	// 回拨 NotBefore 以容忍时钟偏差。
 	tmpl.NotBefore = now.Add(-p.Backdate)
 
 	if ttl < p.Short {
-		// do not backdate the end time if we consider this to be a short lived certificate
+		// 对短有效期证书不回拨结束时间，否则会不必要地缩短本就不长的有效期。
 		tmpl.NotAfter = now.Add(ttl)
 	} else {
 		tmpl.NotAfter = now.Add(ttl - p.Backdate)
 	}
 
+	// 证书有效期不能超过签名者自身的有效期。
 	if !tmpl.NotAfter.Before(signerNotAfter) {
 		tmpl.NotAfter = signerNotAfter
 	}
@@ -111,6 +112,7 @@ func (p PermissiveSigningPolicy) apply(tmpl *x509.Certificate, signerNotAfter ti
 	return nil
 }
 
+// keyUsageDict 将 certificates API 中的用途值映射到 x509 的普通 KeyUsage。
 var keyUsageDict = map[capi.KeyUsage]x509.KeyUsage{
 	capi.UsageSigning:           x509.KeyUsageDigitalSignature,
 	capi.UsageDigitalSignature:  x509.KeyUsageDigitalSignature,
@@ -124,6 +126,7 @@ var keyUsageDict = map[capi.KeyUsage]x509.KeyUsage{
 	capi.UsageDecipherOnly:      x509.KeyUsageDecipherOnly,
 }
 
+// extKeyUsageDict 将 certificates API 中的用途值映射到 x509 的扩展用途 ExtKeyUsage。
 var extKeyUsageDict = map[capi.KeyUsage]x509.ExtKeyUsage{
 	capi.UsageAny:             x509.ExtKeyUsageAny,
 	capi.UsageServerAuth:      x509.ExtKeyUsageServerAuth,
@@ -140,9 +143,9 @@ var extKeyUsageDict = map[capi.KeyUsage]x509.ExtKeyUsage{
 	capi.UsageNetscapeSGC:     x509.ExtKeyUsageNetscapeServerGatedCrypto,
 }
 
-// keyUsagesFromStrings will translate a slice of usage strings from the
-// certificates API ("pkg/apis/certificates".KeyUsage) to x509.KeyUsage and
-// x509.ExtKeyUsage types.
+// keyUsagesFromStrings 把 certificates API 中的用途字符串切片
+// （"pkg/apis/certificates".KeyUsage）转换为 x509.KeyUsage 与 x509.ExtKeyUsage。
+// 无法识别的用途会汇总成一个错误返回。
 func keyUsagesFromStrings(usages []capi.KeyUsage) (x509.KeyUsage, []x509.ExtKeyUsage, error) {
 	var keyUsage x509.KeyUsage
 	var unrecognized []capi.KeyUsage
@@ -157,6 +160,7 @@ func keyUsagesFromStrings(usages []capi.KeyUsage) (x509.KeyUsage, []x509.ExtKeyU
 		}
 	}
 
+	// map 遍历顺序不确定，先转成切片再排序，保证输出稳定可测试。
 	var sorted sortedExtKeyUsage
 	for eku := range extKeyUsages {
 		sorted = append(sorted, eku)
@@ -170,16 +174,20 @@ func keyUsagesFromStrings(usages []capi.KeyUsage) (x509.KeyUsage, []x509.ExtKeyU
 	return keyUsage, sorted, nil
 }
 
+// sortedExtKeyUsage 是可排序的 x509.ExtKeyUsage 切片，实现 sort.Interface。
 type sortedExtKeyUsage []x509.ExtKeyUsage
 
+// Len 返回扩展用途切片的长度。
 func (s sortedExtKeyUsage) Len() int {
 	return len(s)
 }
 
+// Swap 交换切片中两个位置的扩展用途。
 func (s sortedExtKeyUsage) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
+// Less 按枚举值比较两个扩展用途的大小。
 func (s sortedExtKeyUsage) Less(i, j int) bool {
 	return s[i] < s[j]
 }

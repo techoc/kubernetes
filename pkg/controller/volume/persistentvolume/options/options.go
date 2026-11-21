@@ -22,10 +22,10 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// VolumeConfigFlags is used to bind CLI flags to variables.  This top-level struct contains *all* enumerated
-// CLI flags meant to configure all volume plugins.  From this config, the binary will create many instances
-// of volume.VolumeConfig which are then passed to the appropriate plugin. The ControllerManager binary is the only
-// part of the code which knows what plugins are supported and which CLI flags correspond to each plugin.
+// VolumeConfigFlags 用于将命令行参数绑定到变量。这个顶层结构体包含用于配置
+// 所有卷插件的全部命令行参数。二进制程序会基于该配置创建多个 volume.VolumeConfig
+// 实例，再分别传给对应的插件。只有 ControllerManager 二进制知道支持哪些插件，
+// 以及每个参数对应哪个插件。
 type VolumeConfigFlags struct {
 	PersistentVolumeRecyclerMaximumRetry                int
 	PersistentVolumeRecyclerMinimumTimeoutNFS           int
@@ -38,19 +38,18 @@ type VolumeConfigFlags struct {
 	EnableDynamicProvisioning                           bool
 }
 
-// PersistentVolumeControllerOptions holds the PersistentVolumeController options.
+// PersistentVolumeControllerOptions 保存 PersistentVolumeController 的配置选项。
 type PersistentVolumeControllerOptions struct {
 	PVClaimBinderSyncPeriod time.Duration
 	VolumeConfigFlags       VolumeConfigFlags
 }
 
-// NewPersistentVolumeControllerOptions creates a new PersistentVolumeControllerOptions with
-// default values.
+// NewPersistentVolumeControllerOptions 创建带有默认值的 PersistentVolumeControllerOptions。
 func NewPersistentVolumeControllerOptions() PersistentVolumeControllerOptions {
 	return PersistentVolumeControllerOptions{
 		PVClaimBinderSyncPeriod: 15 * time.Second,
 		VolumeConfigFlags: VolumeConfigFlags{
-			// default values here
+			// 默认值集中在这里声明，便于命令行参数覆盖前的单一来源维护。
 			PersistentVolumeRecyclerMaximumRetry:             3,
 			PersistentVolumeRecyclerMinimumTimeoutNFS:        300,
 			PersistentVolumeRecyclerIncrementTimeoutNFS:      30,
@@ -62,7 +61,7 @@ func NewPersistentVolumeControllerOptions() PersistentVolumeControllerOptions {
 	}
 }
 
-// AddFlags adds flags related to PersistentVolumeControllerOptions to the specified FlagSet.
+// AddFlags 将与 PersistentVolumeControllerOptions 相关的参数注册到给定的 FlagSet。
 func (o *PersistentVolumeControllerOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&o.PVClaimBinderSyncPeriod, "pvclaimbinder-sync-period", o.PVClaimBinderSyncPeriod,
 		"The period for syncing persistent volumes and persistent volume claims")

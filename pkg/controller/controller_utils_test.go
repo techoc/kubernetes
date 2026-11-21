@@ -62,7 +62,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// NewFakeControllerExpectationsLookup creates a fake store for PodExpectations.
+// NewFakeControllerExpectationsLookup 创建带假时钟的期望 store，便于在测试中推进时间触发过期。
 func NewFakeControllerExpectationsLookup(ttl time.Duration) (*ControllerExpectations, *testingclock.FakeClock) {
 	fakeTime := time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC)
 	fakeClock := testingclock.NewFakeClock(fakeTime)
@@ -72,6 +72,7 @@ func NewFakeControllerExpectationsLookup(ttl time.Duration) (*ControllerExpectat
 	return &ControllerExpectations{ttlStore}, fakeClock
 }
 
+// newReplicationController 构造测试用 RC，标签和选择器与 newPodList 生成的 Pod 对齐。
 func newReplicationController(replicas int) *v1.ReplicationController {
 	rc := &v1.ReplicationController{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -112,7 +113,7 @@ func newReplicationController(replicas int) *v1.ReplicationController {
 	return rc
 }
 
-// create count pods with the given phase for the given rc (same selectors and namespace), and add them to the store.
+// newPodList 为给定 RC 创建 count 个同标签、同命名空间、指定阶段的 Pod，并可加入 store。
 func newPodList(store cache.Store, count int, status v1.PodPhase, rc *v1.ReplicationController) *v1.PodList {
 	pods := []v1.Pod{}
 	for i := 0; i < count; i++ {
@@ -134,6 +135,7 @@ func newPodList(store cache.Store, count int, status v1.PodPhase, rc *v1.Replica
 	}
 }
 
+// newReplicaSet 构造测试用副本集，标签与 newPodList 生成的 Pod 对齐。
 func newReplicaSet(name string, replicas int, rsUuid types.UID) *apps.ReplicaSet {
 	return &apps.ReplicaSet{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -173,34 +175,32 @@ func newReplicaSet(name string, replicas int, rsUuid types.UID) *apps.ReplicaSet
 	}
 }
 
+// TestControllerExpectations 验证期望计数可被并发递减、满足或过期后控制器可同步。
 func TestControllerExpectations(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	ttl := 30 * time.Second
 	e, fakeClock := NewFakeControllerExpectationsLookup(ttl)
-	// In practice we can't really have add and delete expectations since we only either create or
-	// delete replicas in one rc pass, and the rc goes to sleep soon after until the expectations are
-	// either fulfilled or timeout.
+	// 实际 RC 单次同步只会创建或删除副本，这里同时设置增/删期望是为了覆盖并发递减逻辑。
 	adds, dels := 10, 30
 	rc := newReplicationController(1)
 
-	// RC fires off adds and deletes at apiserver, then sets expectations
+	// 先按 RC 的对象键登记期望，模拟向 apiserver 发出创建/删除请求。
 	rcKey, err := KeyFunc(rc)
 	require.NoError(t, err, "Couldn't get key for object %#v: %v", rc, err)
 
 	e.SetExpectations(logger, rcKey, adds, dels)
 	var wg sync.WaitGroup
+	// 多观察一次以覆盖计数降到负数的情况：生产中失败创建或 informer 重复事件都会如此。
 	for i := 0; i < adds+1; i++ {
 		wg.Add(1)
 		go func() {
-			// In prod this can happen either because of a failed create by the rc
-			// or after having observed a create via informer
 			e.CreationObserved(logger, rcKey)
 			wg.Done()
 		}()
 	}
 	wg.Wait()
 
-	// There are still delete expectations
+	// 新增期望已满足，但删除期望仍未满足，控制器不应同步。
 	assert.False(t, e.SatisfiedExpectations(logger, rcKey), "Rc will sync before expectations are met")
 
 	for i := 0; i < dels+1; i++ {
@@ -249,6 +249,7 @@ func TestControllerExpectations(t *testing.T) {
 			assert.Equal(t, test.wantExpectationsSatisfied, e.SatisfiedExpectations(logger, rcKey), "Expectations are met but the rc will not sync")
 
 			if test.expireExpectations {
+				// 推进假时钟越过 TTL，验证过期后期望被视为满足。
 				fakeClock.Step(ttl + 1)
 				assert.True(t, e.SatisfiedExpectations(logger, rcKey), "Expectations should have expired but didn't")
 			}
@@ -256,6 +257,7 @@ func TestControllerExpectations(t *testing.T) {
 	}
 }
 
+// TestUIDExpectations 验证按 UID 跟踪的删除期望不会重复计数，且清理后不留残余 UID。
 func TestUIDExpectations(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	uidExp := NewUIDTrackingControllerExpectations(NewControllerExpectations())
@@ -264,6 +266,7 @@ func TestUIDExpectations(t *testing.T) {
 		numReplicas int
 	}
 
+	// 打乱用例顺序，避免测试依赖先前 RC 的残留状态。
 	shuffleTests := func(tests []test) {
 		for i := range tests {
 			j := rand.Intn(i + 1)
@@ -271,9 +274,11 @@ func TestUIDExpectations(t *testing.T) {
 		}
 	}
 
+	// 为用例构造 RC 和 Pod，并登记对应 UID 的删除期望。
 	getRcDataFrom := func(test test) (string, []string) {
 		rc := newReplicationController(test.numReplicas)
 
+		// 选择器加入唯一 rcName，避免不同用例的键相互冲突。
 		rcName := fmt.Sprintf("rc-%v", test.numReplicas)
 		rc.Name = rcName
 		rc.Spec.Selector[rcName] = rcName
@@ -325,6 +330,7 @@ func TestUIDExpectations(t *testing.T) {
 	}
 }
 
+// TestCreatePodsWithGenerateName 验证两种创建路径均以 POST 提交正确 Pod，并触发 OnWrite 回调。
 func TestCreatePodsWithGenerateName(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	generateName := "hello-"
@@ -353,7 +359,7 @@ func TestCreatePodsWithGenerateName(t *testing.T) {
 		{
 			name: "Create pod with generate name",
 			podCreationFunc: func(podControl RealPodControl) error {
-				// Make sure createReplica sends a POST to the apiserver with a pod from the controllers pod template
+				// 断言创建请求以控制器模板中的 Pod 作为 POST 请求体。
 				return podControl.CreatePodsWithGenerateName(context.TODO(), ns, controllerSpec.Spec.Template, controllerSpec, controllerRef, generateName)
 			},
 			wantPod: &v1.Pod{
@@ -369,6 +375,7 @@ func TestCreatePodsWithGenerateName(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 假服务端返回占位 Pod，真正的校验对象是它收到的请求体。
 			body := runtime.EncodeOrDie(clientscheme.Codecs.LegacyCodec(v1.SchemeGroupVersion), &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "empty_pod"}})
 			fakeHandler := utiltesting.FakeHandler{
 				StatusCode:   200,
@@ -401,6 +408,7 @@ func TestCreatePodsWithGenerateName(t *testing.T) {
 	}
 }
 
+// TestPatchPodCallbacks 验证 OnWrite 仅在补丁成功时触发，失败（如 Pod 不存在）时不触发。
 func TestPatchPodCallbacks(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset(
 		&v1.Pod{
@@ -427,6 +435,7 @@ func TestPatchPodCallbacks(t *testing.T) {
 	assert.NoError(t, err, "Expected no error")
 }
 
+// TestDeletePodsAllowsMissing 验证删除不存在的 Pod 会返回 NotFound 错误。
 func TestDeletePodsAllowsMissing(t *testing.T) {
 	fakeClient := fake.NewSimpleClientset()
 	podControl := RealPodControl{
@@ -440,10 +449,11 @@ func TestDeletePodsAllowsMissing(t *testing.T) {
 	assert.True(t, apierrors.IsNotFound(err))
 }
 
+// TestCountTerminatingPods 验证 CountTerminatingPods 与 FilterTerminatingPods 都只计入已设删除时间戳的 Pod。
 func TestCountTerminatingPods(t *testing.T) {
 	now := metav1.Now()
 
-	// This rc is not needed by the test, only the newPodList to give the pods labels/a namespace.
+	// 这个 RC 本身无用，只是借 newPodList 给 Pod 加上标签和命名空间。
 	rc := newReplicationController(0)
 	podList := newPodList(nil, 7, v1.PodRunning, rc)
 	podList.Items[0].Status.Phase = v1.PodSucceeded
@@ -465,6 +475,7 @@ func TestCountTerminatingPods(t *testing.T) {
 	assert.Len(t, terminatingList, int(2))
 }
 
+// TestClaimedPodFiltering 验证只返回受目标控制器掌控且匹配选择器的 Pod。
 func TestClaimedPodFiltering(t *testing.T) {
 	rsUUID := uuid.NewUUID()
 
@@ -484,7 +495,7 @@ func TestClaimedPodFiltering(t *testing.T) {
 		{
 			name: "Filters claimed pods",
 			pods: []podData{
-				// single owner reference
+				// 仅有一个所属者引用的场景。
 				{podName: "claimed-1", labels: map[string]string{"foo": "bar"}, ownerReferences: []metav1.OwnerReference{
 					{UID: rsUUID, Controller: ptr.To(true)},
 				}},
@@ -501,7 +512,7 @@ func TestClaimedPodFiltering(t *testing.T) {
 					{UID: uuid.NewUUID(), Controller: ptr.To(true)},
 				}},
 				{podName: "standalone-pod-1", labels: map[string]string{"foo": "beetle"}, ownerReferences: []metav1.OwnerReference{}},
-				// additional controller owner reference set to controller=false
+				// 额外所属者引用中 controller=false，不应影响真正控制器的判定。
 				{podName: "claimed-2", labels: map[string]string{"foo": "bar"}, ownerReferences: []metav1.OwnerReference{
 					{UID: uuid.NewUUID(), Controller: ptr.To(false)},
 					{UID: rsUUID, Controller: ptr.To(true)},
@@ -525,7 +536,7 @@ func TestClaimedPodFiltering(t *testing.T) {
 				{podName: "standalone-pod-1", labels: map[string]string{"foo": "beetle"}, ownerReferences: []metav1.OwnerReference{
 					{UID: uuid.NewUUID(), Controller: ptr.To(false)},
 				}},
-				// additional controller owner reference set to controller=nil
+				// 额外所属者引用的 controller 为 nil，同样不应干扰判定。
 				{podName: "claimed-3", labels: map[string]string{"foo": "bar"}, ownerReferences: []metav1.OwnerReference{
 					{UID: uuid.NewUUID()},
 					{UID: rsUUID, Controller: ptr.To(true)},
@@ -555,7 +566,7 @@ func TestClaimedPodFiltering(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// This rc is not needed by the test, only the newPodList to give the pods labels/a namespace.
+			// 这个 RS 本身无用，只是借 newPodList 给 Pod 加上标签和命名空间。
 			rs := newReplicaSet("test-claim", 3, rsUUID)
 			var pods []*v1.Pod
 			for _, p := range test.pods {
@@ -587,6 +598,7 @@ func TestClaimedPodFiltering(t *testing.T) {
 	}
 }
 
+// TestActivePodFiltering 验证只返回未终止且未进入删除的 Pod。
 func TestActivePodFiltering(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	type podData struct {
@@ -616,7 +628,7 @@ func TestActivePodFiltering(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// This rc is not needed by the test, only the newPodList to give the pods labels/a namespace.
+			// 这个 RC 本身无用，只是借 newPodList 给 Pod 加上标签和命名空间。
 			rc := newReplicationController(0)
 			podList := newPodList(nil, 5, v1.PodRunning, rc)
 			for idx, testPod := range test.pods {
@@ -641,6 +653,7 @@ func TestActivePodFiltering(t *testing.T) {
 	}
 }
 
+// TestSortingActivePods 验证 ActivePods 的删除优先级排序，并通过随机打乱输入消除顺序依赖。
 func TestSortingActivePods(t *testing.T) {
 	now := metav1.Now()
 	then := metav1.Time{Time: now.AddDate(0, -1, 0)}
@@ -755,6 +768,7 @@ func TestSortingActivePods(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			numPods := len(test.pods)
 
+			// 多次随机排列后排序，确认结果不依赖输入顺序。
 			for i := 0; i < 20; i++ {
 				idx := rand.Perm(numPods)
 				randomizedPods := make([]*v1.Pod, numPods)
@@ -776,6 +790,7 @@ func TestSortingActivePods(t *testing.T) {
 	}
 }
 
+// TestSortingActivePodsWithRanks 验证带 rank 的 Pod 排序：等价判定、各优先级规则及特性开关行为。
 func TestSortingActivePodsWithRanks(t *testing.T) {
 	now := metav1.Now()
 	then1Month := metav1.Time{Time: now.AddDate(0, -1, 0)}
@@ -784,6 +799,7 @@ func TestSortingActivePodsWithRanks(t *testing.T) {
 	then8Hours := metav1.Time{Time: now.Add(-8 * time.Hour)}
 	zeroTime := metav1.Time{}
 	restartAlways := v1.ContainerRestartPolicyAlways
+	// 构造带 sidecar、就绪时间和重启计数的 Pod，覆盖排序用到的全部字段。
 	pod := func(podName, nodeName string, phase v1.PodPhase, ready bool, restarts int32, sideRestarts int32, readySince metav1.Time, created metav1.Time, annotations map[string]string) *v1.Pod {
 		var conditions []v1.PodCondition
 		var containerStatuses []v1.ContainerStatus
@@ -848,6 +864,7 @@ func TestSortingActivePodsWithRanks(t *testing.T) {
 	}
 	for i, test := range equalityTests {
 		t.Run(fmt.Sprintf("Equality tests %d", i), func(t *testing.T) {
+			// 未指定 p2 时用自身对比，验证同一 Pod 不被判定为小于自己。
 			if test.p2 == nil {
 				test.p2 = test.p1
 			}
@@ -910,7 +927,9 @@ func TestSortingActivePodsWithRanks(t *testing.T) {
 	}
 }
 
+// TestNextPodAvailabilityCheck 验证距 Pod 变为可用所需时间的计算，覆盖未就绪、时间缺失和已可用等场景。
 func TestNextPodAvailabilityCheck(t *testing.T) {
+	// 构造在 now 前 beforeSec 秒发生就绪跳转的 Pod。
 	newPodWithReadyCond := func(now metav1.Time, ready bool, beforeSec int) *v1.Pod {
 		conditionStatus := v1.ConditionFalse
 		if ready {
@@ -988,9 +1007,11 @@ func TestNextPodAvailabilityCheck(t *testing.T) {
 	}
 }
 
+// TestFindMinNextPodAvailabilitySimpleCheck 验证能找出最早需重新检查可用性的 Pod，并比对两种入口的结果一致性。
 func TestFindMinNextPodAvailabilitySimpleCheck(t *testing.T) {
 	now := metav1.Now()
 
+	// 构造指定就绪时长的 Pod，未就绪时直接把 Ready 条件置为 False。
 	pod := func(name string, ready bool, beforeSec int) *v1.Pod {
 		p := testutil.NewPod(name, "node0")
 		if ready {
@@ -1048,8 +1069,9 @@ func TestFindMinNextPodAvailabilitySimpleCheck(t *testing.T) {
 			expected:        ptr.To(6 * time.Second),
 			expectedPod:     ptr.To("pod4"),
 		},
+		// 只有 Pod 就绪后才需要安排可用性检查，已可用的 Pod 和无序的 Pod 都不产生检查。
 		{
-			name: "unready and available pods do not require min next availability check", // only after pods become ready we can schedule one
+			name: "unready and available pods do not require min next availability check",
 			pods: []*v1.Pod{
 				pod("pod1", false, 0),
 				pod("pod2", true, 15),
@@ -1077,7 +1099,7 @@ func TestFindMinNextPodAvailabilitySimpleCheck(t *testing.T) {
 				t.Errorf("expected next min pod availability check for pod: %v, got: %v", test.expectedPod, checkPodName)
 			}
 
-			// using the same now for status evaluation and the clock should return the same result as findMinNextPodAvailabilitySimpleCheck
+			// 状态评估与时钟使用同一时刻时，结果应与简单检查函数一致。
 			nextAvailable = FindMinNextPodAvailabilityCheck(test.pods, test.minReadySeconds, now.Time, testingclock.NewFakeClock(now.Time))
 
 			if !ptr.Equal(nextAvailable, test.expected) {
@@ -1087,9 +1109,11 @@ func TestFindMinNextPodAvailabilitySimpleCheck(t *testing.T) {
 	}
 }
 
+// TestFindMinNextPodAvailability 验证状态评估与当前时刻存在延迟时，下次可用性检查时间的计算。
 func TestFindMinNextPodAvailability(t *testing.T) {
 	now := metav1.Now()
 
+	// 构造指定就绪时长的 Pod，未就绪时把 Ready 条件置为 False。
 	pod := func(name string, ready bool, beforeSec int) *v1.Pod {
 		p := testutil.NewPod(name, "node0")
 		if ready {
@@ -1107,6 +1131,7 @@ func TestFindMinNextPodAvailability(t *testing.T) {
 		statusEvaluationDelaySeconds int
 		expected                     *time.Duration
 	}{
+		// 延迟计入后 pod4 就绪共经过 4+2 秒，因此还需等待 10-6=4 秒。
 		{
 			name: "unready and ready pods should find min next availability check considering status evaluation/update delay",
 			pods: []*v1.Pod{
@@ -1117,9 +1142,10 @@ func TestFindMinNextPodAvailability(t *testing.T) {
 				pod("pod5", false, 0),
 			},
 			minReadySeconds:              10,
-			statusEvaluationDelaySeconds: 2, // total is 4+2 since the pod4 became ready
+			statusEvaluationDelaySeconds: 2,
 			expected:                     ptr.To(4 * time.Second),
 		},
+		// 4+7 秒已超过 minReadySeconds，此时期望的剩余等待时间为零。
 		{
 			name: "unready and ready pods should find min next availability check even if the status evaluation delay is longer than minReadySeconds",
 			pods: []*v1.Pod{
@@ -1130,7 +1156,7 @@ func TestFindMinNextPodAvailability(t *testing.T) {
 				pod("pod5", false, 0),
 			},
 			minReadySeconds:              10,
-			statusEvaluationDelaySeconds: 7, // total is 4+7 since the pod4 became ready
+			statusEvaluationDelaySeconds: 7,
 			expected:                     ptr.To(0 * time.Second),
 		},
 	}
@@ -1148,6 +1174,7 @@ func TestFindMinNextPodAvailability(t *testing.T) {
 	}
 }
 
+// TestActiveReplicaSetsFiltering 验证只返回副本数大于零的非空副本集。
 func TestActiveReplicaSetsFiltering(t *testing.T) {
 
 	rsUuid := uuid.NewUUID()
@@ -1182,6 +1209,7 @@ func TestActiveReplicaSetsFiltering(t *testing.T) {
 	}
 }
 
+// TestComputeHash 验证不同 collisionCount 会产生不同哈希，用于碰撞后重新生成名称。
 func TestComputeHash(t *testing.T) {
 	collisionCount := int32(1)
 	otherCollisionCount := int32(2)
@@ -1214,6 +1242,7 @@ func TestComputeHash(t *testing.T) {
 	}
 }
 
+// TestRemoveTaintOffNode 验证删除节点污点的结果及 API 请求次数，覆盖污点不存在等短路场景。
 func TestRemoveTaintOffNode(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1373,6 +1402,7 @@ func TestRemoveTaintOffNode(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		// 先取回节点传入被测函数，以便其做本地短路判断。
 		node, _ := test.nodeHandler.Get(context.TODO(), test.nodeName, metav1.GetOptions{})
 		err := RemoveTaintOffNode(context.TODO(), test.nodeHandler, test.nodeName, node, test.taintsToRemove...)
 		require.NoError(t, err, "%s: RemoveTaintOffNode() error = %v", test.name, err)
@@ -1388,6 +1418,7 @@ func TestRemoveTaintOffNode(t *testing.T) {
 	}
 }
 
+// TestAddOrUpdateTaintOnNode 验证新增、更新和幂等添加污点的结果及冲突重试行为。
 func TestAddOrUpdateTaintOnNode(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -1611,6 +1642,7 @@ func TestAddOrUpdateTaintOnNode(t *testing.T) {
 	for _, test := range tests {
 		err := AddOrUpdateTaintOnNode(context.TODO(), test.nodeHandler, test.nodeName, test.taintsToAdd...)
 		if test.expectedErr != nil {
+			// 预期出错时无需再校验污点状态。
 			assert.Equal(t, test.expectedErr, err, "AddOrUpdateTaintOnNode get unexpected error")
 			continue
 		}
@@ -1627,7 +1659,9 @@ func TestAddOrUpdateTaintOnNode(t *testing.T) {
 	}
 }
 
+// TestFilterPodsByOwner 验证按所属者索引筛选 Pod，覆盖孤儿 Pod 包含/排除及字段不匹配等场景。
 func TestFilterPodsByOwner(t *testing.T) {
+	// 构造可选是否带所属者引用的 Pod。
 	newPod := func(name, ns string, owner *metav1.OwnerReference) *v1.Pod {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{

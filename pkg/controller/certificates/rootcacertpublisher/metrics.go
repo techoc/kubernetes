@@ -26,9 +26,10 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// RootCACertPublisher - subsystem name used by root_ca_cert_publisher
+// RootCACertPublisher 是本控制器指标的子系统名前缀。
 const RootCACertPublisher = "root_ca_cert_publisher"
 
+// 同步次数与同步耗时按结果为标签分别统计，便于区分成功与各类失败。
 var (
 	syncCounter = metrics.NewCounterVec(
 		&metrics.CounterOpts{
@@ -51,7 +52,10 @@ var (
 	)
 )
 
+// recordMetrics 按同步结果记录耗时与计数：无错误记为 200；
+// 带状态码的 API 错误沿用其原始状态码，其余错误统一记为 500。
 func recordMetrics(start time.Time, err error) {
+	// 默认按服务端错误处理，只有明确成功的场景才改成 200。
 	code := "500"
 	if err == nil {
 		code = "200"
@@ -59,11 +63,14 @@ func recordMetrics(start time.Time, err error) {
 		code = strconv.Itoa(int(se.Status().Code))
 	}
 	syncLatency.WithLabelValues(code).Observe(time.Since(start).Seconds())
+	// 耗时与计数使用同一个状态码标签，保证两类指标的语义一致。
 	syncCounter.WithLabelValues(code).Inc()
 }
 
+// once 保证指标只注册一次，避免控制器重启或重复初始化时 panic。
 var once sync.Once
 
+// registerMetrics 将本控制器的指标注册到旧版全局注册表。
 func registerMetrics() {
 	once.Do(func() {
 		legacyregistry.MustRegister(syncCounter)

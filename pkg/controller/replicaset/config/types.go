@@ -16,10 +16,10 @@ limitations under the License.
 
 package config
 
-// ReplicaSetControllerConfiguration contains elements describing ReplicaSetController.
+// ReplicaSetControllerConfiguration 描述副本集控制器（ReplicaSetController）的配置参数。
 type ReplicaSetControllerConfiguration struct {
-	// concurrentRSSyncs is the number of replica sets that are  allowed to sync
-	// concurrently. Larger number = more responsive replica  management, but more
-	// CPU (and network) load.
+	// ConcurrentRSSyncs 是允许并发同步的副本集数量。
+	// 增大该值可以更快响应副本数变化，但会增加 CPU 与网络负载；
+	// 这是吞吐与资源开销之间的权衡。
 	ConcurrentRSSyncs int32
 }

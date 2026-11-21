@@ -52,10 +52,13 @@ import (
 )
 
 var (
+	// alwaysReady 作为同步检查的桩，让测试跳过 informer 缓存同步等待。
 	alwaysReady = func() bool { return true }
+	// noTimestamp 表示未设置创建时间，避免影响按时间排序的断言。
 	noTimestamp = metav1.Time{}
 )
 
+// rs 构造一个指定名称、副本数、选择器和创建时间的 ReplicaSet。
 func rs(name string, replicas int32, selector map[string]string, timestamp metav1.Time) *apps.ReplicaSet {
 	return &apps.ReplicaSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -71,6 +74,8 @@ func rs(name string, replicas int32, selector map[string]string, timestamp metav
 	}
 }
 
+// newRSWithStatus 构造一个同时设置了 spec 与 status 副本数的 ReplicaSet，
+// 用于制造期望副本数与就绪副本数不一致的场景。
 func newRSWithStatus(name string, specReplicas, statusReplicas int32, selector map[string]string) *apps.ReplicaSet {
 	rs := rs(name, specReplicas, selector, noTimestamp)
 	rs.Status = apps.ReplicaSetStatus{
@@ -79,6 +84,8 @@ func newRSWithStatus(name string, specReplicas, statusReplicas int32, selector m
 	return rs
 }
 
+// newDeployment 构造一个使用 RollingUpdate 策略的测试 Deployment；
+// maxSurge 与 maxUnavailable 为 nil 时保留默认的 0 值。
 func newDeployment(name string, replicas int32, revisionHistoryLimit *int32, maxSurge, maxUnavailable *intstr.IntOrString, selector map[string]string) *apps.Deployment {
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"},
@@ -122,6 +129,7 @@ func newDeployment(name string, replicas int32, revisionHistoryLimit *int32, max
 	return &d
 }
 
+// newReplicaSet 基于 Deployment 的选择器与模板构造一个归属该 Deployment 的 ReplicaSet。
 func newReplicaSet(d *apps.Deployment, name string, replicas int32) *apps.ReplicaSet {
 	return &apps.ReplicaSet{
 		TypeMeta: metav1.TypeMeta{Kind: "ReplicaSet"},
@@ -140,41 +148,46 @@ func newReplicaSet(d *apps.Deployment, name string, replicas int32) *apps.Replic
 	}
 }
 
+// fixture 封装单元测试所需的假客户端、informer 存储数据与期望的客户端动作。
 type fixture struct {
 	t testing.TB
 
 	client *fake.Clientset
-	// Objects to put in the store.
+	// 放入 informer 存储（lister）中的对象。
 	dLister   []*apps.Deployment
 	rsLister  []*apps.ReplicaSet
 	podLister []*v1.Pod
 
-	// Actions expected to happen on the client. Objects from here are also
-	// preloaded into NewSimpleFake.
+	// 期望客户端产生的动作；objects 中的对象会预加载到 NewSimpleFake。
 	actions []core.Action
 	objects []runtime.Object
 }
 
+// expectGetDeploymentAction 记录一次对指定 Deployment 的 get 动作期望。
 func (f *fixture) expectGetDeploymentAction(d *apps.Deployment) {
 	action := core.NewGetAction(schema.GroupVersionResource{Resource: "deployments"}, d.Namespace, d.Name)
 	f.actions = append(f.actions, action)
 }
 
+// expectUpdateDeploymentStatusAction 记录一次对 Deployment status 子资源的 update 动作期望。
 func (f *fixture) expectUpdateDeploymentStatusAction(d *apps.Deployment) {
 	action := core.NewUpdateAction(schema.GroupVersionResource{Resource: "deployments"}, d.Namespace, d)
 	action.Subresource = "status"
 	f.actions = append(f.actions, action)
 }
 
+// expectUpdateDeploymentAction 记录一次对 Deployment 本体的 update 动作期望。
 func (f *fixture) expectUpdateDeploymentAction(d *apps.Deployment) {
 	action := core.NewUpdateAction(schema.GroupVersionResource{Resource: "deployments"}, d.Namespace, d)
 	f.actions = append(f.actions, action)
 }
 
+// expectCreateRSAction 记录一次创建 ReplicaSet 的动作期望。
 func (f *fixture) expectCreateRSAction(rs *apps.ReplicaSet) {
 	f.actions = append(f.actions, core.NewCreateAction(schema.GroupVersionResource{Resource: "replicasets"}, rs.Namespace, rs))
 }
 
+// newFixture 创建一个空的测试夹具。
 func newFixture(t testing.TB) *fixture {
 	f := &fixture{}
 	f.t = t
@@ -182,6 +195,8 @@ func newFixture(t testing.TB) *fixture {
 	return f
 }
 
+// newController 构造 DeploymentController 并把夹具中的对象灌入各 informer 索引。
+// 同步检查被替换为 alwaysReady，以便测试无需真正等待缓存同步。
 func (f *fixture) newController(ctx context.Context) (*DeploymentController, informers.SharedInformerFactory, error) {
 	f.client = fake.NewSimpleClientset(f.objects...)
 	informers := informers.NewSharedInformerFactory(f.client, controller.NoResyncPeriodFunc())
@@ -205,14 +220,18 @@ func (f *fixture) newController(ctx context.Context) (*DeploymentController, inf
 	return c, informers, nil
 }
 
+// runExpectError 运行同步并断言返回错误。
 func (f *fixture) runExpectError(ctx context.Context, deploymentName string, startInformers bool) {
 	f.run_(ctx, deploymentName, startInformers, true)
 }
 
+// run 启动 informer 后同步指定 Deployment，并断言无错误、动作符合预期。
 func (f *fixture) run(ctx context.Context, deploymentName string) {
 	f.run_(ctx, deploymentName, true, false)
 }
 
+// run_ 是 run/runExpectError 的公共实现，可选择是否启动 informer，
+// 并逐条比对客户端实际动作与期望动作。
 func (f *fixture) run_(ctx context.Context, deploymentName string, startInformers bool, expectError bool) {
 	c, informers, err := f.newController(ctx)
 	if err != nil {
@@ -250,6 +269,8 @@ func (f *fixture) run_(ctx context.Context, deploymentName string, startInformer
 	}
 }
 
+// filterInformerActions 过滤掉 informer 启动时的 list/watch 动作，
+// 只保留业务同步产生的动作供断言使用。
 func filterInformerActions(actions []core.Action) []core.Action {
 	ret := []core.Action{}
 	for _, action := range actions {
@@ -268,6 +289,7 @@ func filterInformerActions(actions []core.Action) []core.Action {
 	return ret
 }
 
+// TestSyncDeploymentCreatesReplicaSet 验证首次同步 Deployment 时会创建 ReplicaSet 并更新状态。
 func TestSyncDeploymentCreatesReplicaSet(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -286,6 +308,8 @@ func TestSyncDeploymentCreatesReplicaSet(t *testing.T) {
 	f.run(ctx, testutil.GetKey(d, t))
 }
 
+// TestSyncDeploymentDontDoAnythingDuringDeletion 验证处于删除中的 Deployment 只更新状态，
+// 不会创建新的 ReplicaSet。
 func TestSyncDeploymentDontDoAnythingDuringDeletion(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -301,6 +325,8 @@ func TestSyncDeploymentDontDoAnythingDuringDeletion(t *testing.T) {
 	f.run(ctx, testutil.GetKey(d, t))
 }
 
+// TestSyncDeploymentDeletionRace 验证缓存与直连读结果不一致时的竞态：
+// 直连读显示对象已删除时必须重新检查，并让同步失败以等待缓存追上。
 func TestSyncDeploymentDeletionRace(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -308,27 +334,29 @@ func TestSyncDeploymentDeletionRace(t *testing.T) {
 
 	d := newDeployment("foo", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 	d2 := *d
-	// Lister (cache) says NOT deleted.
+	// lister（缓存）认为对象未被删除。
 	f.dLister = append(f.dLister, d)
-	// Bare client says it IS deleted. This should be presumed more up-to-date.
+	// 直连客户端认为对象已删除，应视为更新的状态。
 	now := metav1.Now()
 	d2.DeletionTimestamp = &now
 	f.objects = append(f.objects, &d2)
 
-	// The recheck is only triggered if a matching orphan exists.
+	// 只有存在匹配的孤立 ReplicaSet 时才会触发删除时间戳的重新检查。
 	rs := newReplicaSet(d, "rs1", 1)
 	rs.OwnerReferences = nil
 	f.objects = append(f.objects, rs)
 	f.rsLister = append(f.rsLister, rs)
 
-	// Expect to only recheck DeletionTimestamp.
+	// 期望只发生一次 get，用于重新检查 DeletionTimestamp。
 	f.expectGetDeploymentAction(d)
-	// Sync should fail and requeue to let cache catch up.
-	// Don't start informers, since we don't want cache to catch up for this test.
+	// 同步应失败并重入队，让缓存有机会追上。
+	// 不启动 informer，避免缓存在本测试中追上直连读。
 	f.runExpectError(ctx, testutil.GetKey(d, t), false)
 }
 
 // issue: https://github.com/kubernetes/kubernetes/issues/23218
+// TestDontSyncDeploymentsWithEmptyPodSelector 验证 Pod 选择器为空的 Deployment 不会被同步，
+// 以免误选集群中所有 Pod。
 func TestDontSyncDeploymentsWithEmptyPodSelector(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -341,11 +369,13 @@ func TestDontSyncDeploymentsWithEmptyPodSelector(t *testing.T) {
 	f.dLister = append(f.dLister, d)
 	f.objects = append(f.objects, d)
 
-	// Normally there should be a status update to sync observedGeneration but the fake
-	// deployment has no generation set so there is no action happening here.
+	// 正常应有一次状态更新以同步 observedGeneration，但这里的假 Deployment
+	// 未设置 generation，因此预期不产生任何动作。
 	f.run(ctx, testutil.GetKey(d, t))
 }
 
+// TestReentrantRollback 验证重复回滚（可重入）场景下只更新 Deployment，
+// 不会反复更新 ReplicaSet。
 func TestReentrantRollback(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -369,18 +399,18 @@ func TestReentrantRollback(t *testing.T) {
 	f.rsLister = append(f.rsLister, rs1, rs2)
 	f.objects = append(f.objects, d, rs1, rs2)
 
-	// Rollback is done here
+	// 此处完成回滚，预期更新 Deployment。
 	f.expectUpdateDeploymentAction(d)
-	// Expect no update on replica sets though
+	// 但不应更新任何 ReplicaSet。
 	f.run(ctx, testutil.GetKey(d, t))
 }
 
-// TestPodDeletionEnqueuesRecreateDeployment ensures that the deletion of a pod
-// will requeue a Recreate deployment regardless of whether other pods exist.
+// TestPodDeletionEnqueuesRecreateDeployment 确保无论是否还存在其他 Pod，
+// Pod 删除事件都会让 Recreate 策略的 Deployment 重新入队。
 func TestPodDeletionEnqueuesRecreateDeployment(t *testing.T) {
 	tests := []struct {
-		name      string
-		otherPods bool
+		name      string // 用例名称
+		otherPods bool   // 是否还有其他同类 Pod 存活
 	}{
 		{
 			name:      "last pod deleted",
@@ -408,7 +438,7 @@ func TestPodDeletionEnqueuesRecreateDeployment(t *testing.T) {
 			f.podLister = append(f.podLister, pod)
 
 			if tc.otherPods {
-				// Add a sibling pod
+				// 添加一个同属该 ReplicaSet 的兄弟 Pod。
 				pod2 := generatePodFromRS(rs)
 				pod2.Name = "foo-2"
 				f.podLister = append(f.podLister, pod2)
@@ -434,10 +464,9 @@ func TestPodDeletionEnqueuesRecreateDeployment(t *testing.T) {
 	}
 }
 
-// TestPodDeletionPartialReplicaSetOwnershipEnqueueRecreateDeployment ensures that
-// the deletion of a pod will requeue a Recreate deployment iff there is no other
-// pod returned from the client in the case where a deployment has multiple replica
-// sets, some of which have empty owner references.
+// TestPodDeletionPartialReplicaSetOwnershipEnqueueRecreateDeployment 验证在
+// Deployment 拥有多个 ReplicaSet（部分 ReplicaSet 没有 OwnerReference）时，
+// 只有当客户端再无其他 Pod 返回时，Pod 删除才会让 Recreate Deployment 入队。
 func TestPodDeletionPartialReplicaSetOwnershipEnqueueRecreateDeployment(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
@@ -472,17 +501,19 @@ func TestPodDeletionPartialReplicaSetOwnershipEnqueueRecreateDeployment(t *testi
 	}
 }
 
+// TestGetReplicaSetsForDeployment 验证通过 ControllerRef 能正确区分标签相同但
+// 归属不同 Deployment 的 ReplicaSet。
 func TestGetReplicaSetsForDeployment(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
 	f := newFixture(t)
 
-	// Two Deployments with same labels.
+	// 两个标签完全相同的 Deployment。
 	d1 := newDeployment("foo", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 	d2 := newDeployment("bar", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 
-	// Two ReplicaSets that match labels for both Deployments,
-	// but have ControllerRefs to make ownership explicit.
+	// 两个 ReplicaSet 的标签同时匹配两个 Deployment，
+	// 但通过 ControllerRef 明确区分归属。
 	rs1 := newReplicaSet(d1, "rs1", 1)
 	rs2 := newReplicaSet(d2, "rs2", 1)
 
@@ -490,7 +521,7 @@ func TestGetReplicaSetsForDeployment(t *testing.T) {
 	f.rsLister = append(f.rsLister, rs1, rs2)
 	f.objects = append(f.objects, d1, d2, rs1, rs2)
 
-	// Start the fixture.
+	// 启动夹具。
 	c, informers, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
@@ -524,6 +555,8 @@ func TestGetReplicaSetsForDeployment(t *testing.T) {
 	}
 }
 
+// TestGetReplicaSetsForDeploymentAdoptRelease 验证标签匹配但无主的 ReplicaSet 会被认领，
+// 而 ControllerRef 匹配但标签不符的 ReplicaSet 会被释放。
 func TestGetReplicaSetsForDeploymentAdoptRelease(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -531,10 +564,10 @@ func TestGetReplicaSetsForDeploymentAdoptRelease(t *testing.T) {
 
 	d := newDeployment("foo", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 
-	// RS with matching labels, but orphaned. Should be adopted and returned.
+	// 标签匹配但无主的 ReplicaSet，应被认领并返回。
 	rsAdopt := newReplicaSet(d, "rsAdopt", 1)
 	rsAdopt.OwnerReferences = nil
-	// RS with matching ControllerRef, but wrong labels. Should be released.
+	// ControllerRef 匹配但标签不符的 ReplicaSet，应被释放（不再管理）。
 	rsRelease := newReplicaSet(d, "rsRelease", 1)
 	rsRelease.Labels = map[string]string{"foo": "notbar"}
 
@@ -542,7 +575,7 @@ func TestGetReplicaSetsForDeploymentAdoptRelease(t *testing.T) {
 	f.rsLister = append(f.rsLister, rsAdopt, rsRelease)
 	f.objects = append(f.objects, d, rsAdopt, rsRelease)
 
-	// Start the fixture.
+	// 启动夹具。
 	c, informers, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
@@ -564,6 +597,8 @@ func TestGetReplicaSetsForDeploymentAdoptRelease(t *testing.T) {
 	}
 }
 
+// TestGetPodMapForReplicaSets 验证 Pod 按 ControllerRef 正确归入各 ReplicaSet，
+// 无主 Pod 不会被计入。
 func TestGetPodMapForReplicaSets(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -574,14 +609,14 @@ func TestGetPodMapForReplicaSets(t *testing.T) {
 	rs1 := newReplicaSet(d, "rs1", 1)
 	rs2 := newReplicaSet(d, "rs2", 1)
 
-	// Add a Pod for each ReplicaSet.
+	// 为每个 ReplicaSet 添加一个 Pod。
 	pod1 := generatePodFromRS(rs1)
 	pod2 := generatePodFromRS(rs2)
-	// Add a Pod that has matching labels, but no ControllerRef.
+	// 标签匹配但没有 ControllerRef 的 Pod，应被忽略。
 	pod3 := generatePodFromRS(rs1)
 	pod3.Name = "pod3"
 	pod3.OwnerReferences = nil
-	// Add a Pod that has matching labels and ControllerRef, but is inactive.
+	// 标签与 ControllerRef 都匹配、但已处于失败状态的 Pod，仍会被索引纳入。
 	pod4 := generatePodFromRS(rs1)
 	pod4.Name = "pod4"
 	pod4.Status.Phase = v1.PodFailed
@@ -591,7 +626,7 @@ func TestGetPodMapForReplicaSets(t *testing.T) {
 	f.podLister = append(f.podLister, pod1, pod2, pod3, pod4)
 	f.objects = append(f.objects, d, rs1, rs2, pod1, pod2, pod3, pod4)
 
-	// Start the fixture.
+	// 启动夹具。
 	c, informers, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
@@ -632,6 +667,7 @@ func TestGetPodMapForReplicaSets(t *testing.T) {
 	}
 }
 
+// TestAddReplicaSet 验证 ReplicaSet 创建事件会把其所属 Deployment 加入队列。
 func TestAddReplicaSet(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
@@ -640,16 +676,15 @@ func TestAddReplicaSet(t *testing.T) {
 	d1 := newDeployment("d1", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 	d2 := newDeployment("d2", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 
-	// Two ReplicaSets that match labels for both Deployments,
-	// but have ControllerRefs to make ownership explicit.
+	// 两个 ReplicaSet 的标签同时匹配两个 Deployment，
+	// 但通过 ControllerRef 明确区分归属。
 	rs1 := newReplicaSet(d1, "rs1", 1)
 	rs2 := newReplicaSet(d2, "rs2", 1)
 
 	f.dLister = append(f.dLister, d1, d2)
 	f.objects = append(f.objects, d1, d2, rs1, rs2)
 
-	// Create the fixture but don't start it,
-	// so nothing happens in the background.
+	// 只创建夹具而不启动，避免后台产生额外动作。
 	dc, _, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
@@ -682,26 +717,26 @@ func TestAddReplicaSet(t *testing.T) {
 	}
 }
 
+// TestAddReplicaSetOrphan 验证孤儿 ReplicaSet 创建时所有标签匹配的 Deployment 都会入队。
 func TestAddReplicaSetOrphan(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
 	f := newFixture(t)
 
-	// 2 will match the RS, 1 won't.
+	// 其中两个 Deployment 会匹配该 RS，一个不会。
 	d1 := newDeployment("d1", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 	d2 := newDeployment("d2", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 	d3 := newDeployment("d3", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 	d3.Spec.Selector.MatchLabels = map[string]string{"foo": "notbar"}
 
-	// Make the RS an orphan. Expect matching Deployments to be queued.
+	// 将该 RS 变为孤儿，期望所有匹配的 Deployment 都会入队。
 	rs := newReplicaSet(d1, "rs1", 1)
 	rs.OwnerReferences = nil
 
 	f.dLister = append(f.dLister, d1, d2, d3)
 	f.objects = append(f.objects, d1, d2, d3)
 
-	// Create the fixture but don't start it,
-	// so nothing happens in the background.
+	// 只创建夹具而不启动，避免后台产生额外动作。
 	dc, _, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
@@ -713,6 +748,7 @@ func TestAddReplicaSetOrphan(t *testing.T) {
 	}
 }
 
+// TestUpdateReplicaSet 验证 ReplicaSet 更新事件会把新归属的 Deployment 加入队列。
 func TestUpdateReplicaSet(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
@@ -721,8 +757,8 @@ func TestUpdateReplicaSet(t *testing.T) {
 	d1 := newDeployment("d1", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 	d2 := newDeployment("d2", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 
-	// Two ReplicaSets that match labels for both Deployments,
-	// but have ControllerRefs to make ownership explicit.
+	// 两个 ReplicaSet 的标签同时匹配两个 Deployment，
+	// 但通过 ControllerRef 明确区分归属。
 	rs1 := newReplicaSet(d1, "rs1", 1)
 	rs2 := newReplicaSet(d2, "rs2", 1)
 
@@ -730,8 +766,7 @@ func TestUpdateReplicaSet(t *testing.T) {
 	f.rsLister = append(f.rsLister, rs1, rs2)
 	f.objects = append(f.objects, d1, d2, rs1, rs2)
 
-	// Create the fixture but don't start it,
-	// so nothing happens in the background.
+	// 只创建夹具而不启动，避免后台产生额外动作。
 	dc, _, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
@@ -770,6 +805,8 @@ func TestUpdateReplicaSet(t *testing.T) {
 	}
 }
 
+// TestUpdateReplicaSetOrphanWithNewLabels 验证孤儿 ReplicaSet 标签变化时，
+// 所有新匹配的 Deployment 都会入队，以便有机会认领它。
 func TestUpdateReplicaSetOrphanWithNewLabels(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
@@ -778,7 +815,7 @@ func TestUpdateReplicaSetOrphanWithNewLabels(t *testing.T) {
 	d1 := newDeployment("d1", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 	d2 := newDeployment("d2", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 
-	// RS matches both, but is an orphan.
+	// 该 RS 同时匹配两个 Deployment，但处于无主状态。
 	rs := newReplicaSet(d1, "rs1", 1)
 	rs.OwnerReferences = nil
 
@@ -786,14 +823,13 @@ func TestUpdateReplicaSetOrphanWithNewLabels(t *testing.T) {
 	f.rsLister = append(f.rsLister, rs)
 	f.objects = append(f.objects, d1, d2, rs)
 
-	// Create the fixture but don't start it,
-	// so nothing happens in the background.
+	// 只创建夹具而不启动，避免后台产生额外动作。
 	dc, _, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
 	}
 
-	// Change labels and expect all matching controllers to queue.
+	// 修改标签，期望所有匹配的控制器都入队。
 	prev := *rs
 	prev.Labels = map[string]string{"foo": "notbar"}
 	next := *rs
@@ -804,6 +840,8 @@ func TestUpdateReplicaSetOrphanWithNewLabels(t *testing.T) {
 	}
 }
 
+// TestUpdateReplicaSetChangeControllerRef 验证 ControllerRef 变更时新旧两个
+// Deployment 都会入队，以便旧控制器释放、新控制器认领。
 func TestUpdateReplicaSetChangeControllerRef(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
@@ -818,14 +856,13 @@ func TestUpdateReplicaSetChangeControllerRef(t *testing.T) {
 	f.rsLister = append(f.rsLister, rs)
 	f.objects = append(f.objects, d1, d2, rs)
 
-	// Create the fixture but don't start it,
-	// so nothing happens in the background.
+	// 只创建夹具而不启动，避免后台产生额外动作。
 	dc, _, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
 	}
 
-	// Change ControllerRef and expect both old and new to queue.
+	// 修改 ControllerRef，期望新旧两个控制器都入队。
 	prev := *rs
 	prev.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(d2, controllerKind)}
 	next := *rs
@@ -836,6 +873,8 @@ func TestUpdateReplicaSetChangeControllerRef(t *testing.T) {
 	}
 }
 
+// TestUpdateReplicaSetRelease 验证移除 ControllerRef 后，所有匹配的 Deployment
+// 都会入队以同步该孤儿 ReplicaSet。
 func TestUpdateReplicaSetRelease(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
@@ -850,14 +889,13 @@ func TestUpdateReplicaSetRelease(t *testing.T) {
 	f.rsLister = append(f.rsLister, rs)
 	f.objects = append(f.objects, d1, d2, rs)
 
-	// Create the fixture but don't start it,
-	// so nothing happens in the background.
+	// 只创建夹具而不启动，避免后台产生额外动作。
 	dc, _, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
 	}
 
-	// Remove ControllerRef and expect all matching controller to sync orphan.
+	// 移除 ControllerRef，期望所有匹配的控制器都同步该孤儿对象。
 	prev := *rs
 	next := *rs
 	next.OwnerReferences = nil
@@ -868,6 +906,7 @@ func TestUpdateReplicaSetRelease(t *testing.T) {
 	}
 }
 
+// TestDeleteReplicaSet 验证 ReplicaSet 删除事件会把其所属 Deployment 加入队列。
 func TestDeleteReplicaSet(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
@@ -876,8 +915,8 @@ func TestDeleteReplicaSet(t *testing.T) {
 	d1 := newDeployment("d1", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 	d2 := newDeployment("d2", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 
-	// Two ReplicaSets that match labels for both Deployments,
-	// but have ControllerRefs to make ownership explicit.
+	// 两个 ReplicaSet 的标签同时匹配两个 Deployment，
+	// 但通过 ControllerRef 明确区分归属。
 	rs1 := newReplicaSet(d1, "rs1", 1)
 	rs2 := newReplicaSet(d2, "rs2", 1)
 
@@ -885,8 +924,7 @@ func TestDeleteReplicaSet(t *testing.T) {
 	f.rsLister = append(f.rsLister, rs1, rs2)
 	f.objects = append(f.objects, d1, d2, rs1, rs2)
 
-	// Create the fixture but don't start it,
-	// so nothing happens in the background.
+	// 只创建夹具而不启动，避免后台产生额外动作。
 	dc, _, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
@@ -919,6 +957,7 @@ func TestDeleteReplicaSet(t *testing.T) {
 	}
 }
 
+// TestDeleteReplicaSetOrphan 验证孤儿 ReplicaSet 被删除时不会让任何 Deployment 入队。
 func TestDeleteReplicaSetOrphan(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 
@@ -927,7 +966,7 @@ func TestDeleteReplicaSetOrphan(t *testing.T) {
 	d1 := newDeployment("d1", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 	d2 := newDeployment("d2", 1, nil, nil, nil, map[string]string{"foo": "bar"})
 
-	// Make the RS an orphan. Expect matching Deployments to be queued.
+	// 将该 RS 变为孤儿，期望所有匹配的 Deployment 都会入队。
 	rs := newReplicaSet(d1, "rs1", 1)
 	rs.OwnerReferences = nil
 
@@ -935,8 +974,7 @@ func TestDeleteReplicaSetOrphan(t *testing.T) {
 	f.rsLister = append(f.rsLister, rs)
 	f.objects = append(f.objects, d1, d2, rs)
 
-	// Create the fixture but don't start it,
-	// so nothing happens in the background.
+	// 只创建夹具而不启动，避免后台产生额外动作。
 	dc, _, err := f.newController(ctx)
 	if err != nil {
 		t.Fatalf("error creating Deployment controller: %v", err)
@@ -948,11 +986,13 @@ func TestDeleteReplicaSetOrphan(t *testing.T) {
 	}
 }
 
+// BenchmarkGetPodMapForDeployment 测量不同 Pod 规模与噪声量下，
+// 构建 Deployment 的 Pod 索引映射的性能。
 func BenchmarkGetPodMapForDeployment(b *testing.B) {
 	cases := []struct {
 		name      string
 		numPods   int
-		extraPods int // Pods in namespace not owned by this deployment
+		extraPods int // 同命名空间下不属于该 Deployment 的 Pod 数量
 	}{
 		{name: "10-Pods-No-Noise", numPods: 10, extraPods: 0},
 		{name: "10-Pods-With-Noise", numPods: 10, extraPods: 100},
@@ -980,11 +1020,11 @@ func BenchmarkGetPodMapForDeployment(b *testing.B) {
 				objects = append(objects, p1, p2)
 			}
 
-			// Add extra pods that don't belong to the deployment
+			// 添加不属于该 Deployment 的噪声 Pod。
 			for i := 0; i < tc.extraPods; i++ {
 				p := generatePodFromRS(rs1)
 				p.Name = fmt.Sprintf("extra-pod-%d", i)
-				p.OwnerReferences = nil // Orphaned/unrelated
+				p.OwnerReferences = nil // 无主/无关
 				p.Labels = map[string]string{"foo": "notbar"}
 				pods = append(pods, p)
 				objects = append(objects, p)
@@ -996,7 +1036,7 @@ func BenchmarkGetPodMapForDeployment(b *testing.B) {
 			f.objects = append(f.objects, d, rs1, rs2)
 			f.objects = append(f.objects, objects...)
 
-			// Start the fixture.
+			// 启动夹具。
 			c, informers, err := f.newController(ctx)
 			if err != nil {
 				b.Fatalf("error creating Deployment controller: %v", err)
@@ -1020,12 +1060,14 @@ func BenchmarkGetPodMapForDeployment(b *testing.B) {
 	}
 }
 
+// bumpResourceVersion 把对象的 ResourceVersion 加一，
+// 用于模拟一次真实更新，避免被 resync 的相同版本号判断忽略。
 func bumpResourceVersion(obj metav1.Object) {
 	ver, _ := strconv.ParseInt(obj.GetResourceVersion(), 10, 32)
 	obj.SetResourceVersion(strconv.FormatInt(ver+1, 10))
 }
 
-// generatePodFromRS creates a pod, with the input ReplicaSet's selector and its template
+// generatePodFromRS 根据给定 ReplicaSet 的选择器、模板和归属关系构造一个 Pod。
 func generatePodFromRS(rs *apps.ReplicaSet) *v1.Pod {
 	trueVar := true
 	return &v1.Pod{

@@ -54,6 +54,8 @@ type mockGraphBuilder struct {
 	err      error
 }
 
+// GetMonitor 按测试构造返回预置的 monitor，以及资源是否存在和错误，
+// 用于模拟依赖图中 GC 监听器的不同状态。
 func (m *mockGraphBuilder) GetMonitor(_ context.Context, _ schema.GroupVersionResource) (*garbagecollector.Monitor, bool, error) {
 	if m.monitor != nil {
 		return &m.monitor.Monitor, !m.notFound, m.err
@@ -70,6 +72,8 @@ type mockResourceSyncer struct {
 	lastSyncRV string
 }
 
+// LastSyncResourceVersion 返回测试设定的 GC 缓存 resourceVersion，
+// 用它模拟 GC informer 领先或落后于迁移对象的情况。
 func (m *mockResourceSyncer) LastSyncResourceVersion() string {
 	return m.lastSyncRV
 }
@@ -78,6 +82,8 @@ type sortedStore struct {
 	cache.Store
 }
 
+// List 按命名空间和名称排序后返回对象列表。迁移必须对对象施加确定的顺序，
+// 测试才能稳定断言 patch 动作的顺序，避免 map 遍历的随机性造成偶发失败。
 func (s *sortedStore) List() []interface{} {
 	list := s.Store.List()
 	sort.Slice(list, func(i, j int) bool {
@@ -91,6 +97,8 @@ func (s *sortedStore) List() []interface{} {
 	return list
 }
 
+// newMockMonitor 构造带指定 resourceVersion 和对象集合的假 GC monitor，
+// 使测试能精确控制“GC 缓存是否已追上迁移版本”这一关键前置条件。
 func newMockMonitor(lastSyncRV string, items []runtime.Object) *mockMonitor {
 	store := cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc)
 	for _, item := range items {
@@ -107,6 +115,8 @@ func newMockMonitor(lastSyncRV string, items []runtime.Object) *mockMonitor {
 	}
 }
 
+// newTestSVMController 组装一个使用 fake 客户端、动态客户端和 RESTMapper 的控制器，
+// RESTMapper 只认识 apps/deployments，便于构造资源存在或不存在的测试场景。
 func newTestSVMController(
 	kubeClient kubernetes.Interface,
 	svmInformer svminformers.StorageVersionMigrationInformer,
@@ -127,6 +137,7 @@ func newTestSVMController(
 	}
 }
 
+// newSVM 构造一个指向测试用 GroupResource、处于指定 resourceVersion 和条件的迁移对象。
 func newSVM(name, resourceVersion string, conditions ...metav1.Condition) *svmv1.StorageVersionMigration {
 	return &svmv1.StorageVersionMigration{
 		ObjectMeta: metav1.ObjectMeta{
@@ -146,12 +157,17 @@ func newSVM(name, resourceVersion string, conditions ...metav1.Condition) *svmv1
 	}
 }
 
+// newSVMWithConditions 基于 newSVM 覆盖状态条件，方便断言迁移结束后的状态更新。
 func newSVMWithConditions(name, resourceVersion string, conditions []metav1.Condition) *svmv1.StorageVersionMigration {
 	svm := newSVM(name, resourceVersion)
 	svm.Status.Conditions = conditions
 	return svm
 }
 
+// TestSync 以表驱动方式覆盖 sync 的主要路径：迁移成功、对象不存在、已完成、
+// GC 缓存落后、资源不在 GC 中、API 与动态客户端错误等，并校验对 SVM 状态的
+// 更新动作和对各对象的 patch 动作。RV 大于迁移对象 RV 的资源会被跳过，
+// 因为它们是在迁移开始后新建的，不属于本次重写范围。
 func TestSync(t *testing.T) {
 	newResource := func(name, namespace, rv, uid string) *unstructured.Unstructured {
 		return &unstructured.Unstructured{
@@ -191,7 +207,7 @@ func TestSync(t *testing.T) {
 				monitor: newMockMonitor("100", []runtime.Object{
 					newResource("res1", "ns1", "90", "uid1"),
 					newResource("res2", "ns1", "100", "uid2"),
-					newResource("res3", "ns2", "101", "uid3"), // Should be skipped
+					newResource("res3", "ns2", "101", "uid3"), // RV 超过迁移版本，应跳过
 				}),
 			},
 			expectErr: false,
@@ -242,7 +258,7 @@ func TestSync(t *testing.T) {
 			key:  "stale-gc-svm",
 			svm:  newSVM("stale-gc-svm", "100"),
 			graphBuilder: &mockGraphBuilder{
-				monitor: newMockMonitor("99", []runtime.Object{}), // GC RV is less than SVM RV
+				monitor: newMockMonitor("99", []runtime.Object{}), // GC 版本落后，sync 必须报错重试
 			},
 			expectErr: true,
 		},
@@ -495,12 +511,16 @@ func TestSync(t *testing.T) {
 	}
 }
 
+// mustMarshal 把期望的 patch 负载序列化为 JSON；序列化失败直接让测试终止，
+// 因为负载构造错误会让后续比较失去意义。
 func mustMarshal(t *testing.T, obj interface{}) []byte {
 	data, err := json.Marshal(obj)
 	require.NoError(t, err)
 	return data
 }
 
+// filterActions 只保留 update 和 patch 动作，过滤掉 list/get 等无关调用，
+// 让断言集中在控制器真正产生的状态变更上。
 func filterActions(actions []k8stesting.Action) []k8stesting.Action {
 	var relevantActions []k8stesting.Action
 	for _, action := range actions {
@@ -511,6 +531,8 @@ func filterActions(actions []k8stesting.Action) []k8stesting.Action {
 	return relevantActions
 }
 
+// sortPatchActions 按命名空间和名称给 patch 动作排序，
+// 消除批次处理中并发或 map 迭代顺序带来的不确定性。
 func sortPatchActions(actions []k8stesting.Action) {
 	sort.Slice(actions, func(i, j int) bool {
 		actionI := actions[i].(k8stesting.PatchAction)
@@ -522,6 +544,9 @@ func sortPatchActions(actions []k8stesting.Action) {
 	})
 }
 
+// TestSVMConditions 验证不同失败类型下迁移条件（Condition）的取值：
+// 全部成功置 MigrationSucceeded；可重试的限流错误保持 MigrationRunning 并报告剩余数量；
+// 不可恢复错误置 MigrationFailed。这样控制器能区分暂时性失败与终态失败。
 func TestSVMConditions(t *testing.T) {
 	newResource := func(name, namespace, rv, uid string) *unstructured.Unstructured {
 		return &unstructured.Unstructured{
@@ -551,7 +576,7 @@ func TestSVMConditions(t *testing.T) {
 			items: []runtime.Object{
 				newResource("res1", "ns1", "90", "uid1"),
 				newResource("res2", "ns1", "100", "uid2"),
-				newResource("res3", "ns2", "101", "uid3"), // Should be skipped
+				newResource("res3", "ns2", "101", "uid3"), // RV 超过迁移版本，应跳过
 			},
 			expectErr:              false,
 			expectConditionType:    svmv1.MigrationSucceeded,
@@ -631,16 +656,16 @@ func TestSVMConditions(t *testing.T) {
 	}
 }
 
-// TestSyncDoesNotPanicWhenResourceNotInMapper is a regression test: an SVM
-// targeting a resource absent from the RESTMapper must not panic. Before the
-// fix, sync() dereferenced a nil *schema.GroupVersionResource via gvr.String()
-// (resourceFor returns (nil, false, nil) when the resource is unknown),
-// crashing the kube-controller-manager.
+// TestSyncDoesNotPanicWhenResourceNotInMapper 是一个回归测试：
+// 当迁移目标资源不在 RESTMapper 中时 sync 不得 panic。
+// 修复前，resourceFor 对未知资源返回 (nil, false, nil)，sync 又对 nil GVR
+// 调用 String()，导致 kube-controller-manager 崩溃。
 func TestSyncDoesNotPanicWhenResourceNotInMapper(t *testing.T) {
 	ctx := context.Background()
 
-	// Non-terminal SVM with a resourceVersion set (passes the guards), targeting a
-	// resource that is NOT in the test RESTMapper (which only knows apps/deployments).
+	// 构造一个已设置 resourceVersion、尚未进入终态的 SVM，
+	// 其目标资源不在只认识 apps/deployments 的测试 RESTMapper 中，
+	// 从而进入修复前会触发 nil 解引用的代码路径。
 	svm := newSVM("svm-nomap", "100")
 	svm.Spec.Resource = metav1.GroupResource{
 		Group:    "nonexistent.example.com",
@@ -653,15 +678,15 @@ func TestSyncDoesNotPanicWhenResourceNotInMapper(t *testing.T) {
 	require.NoError(t, svmInformer.Informer().GetStore().Add(svm))
 	ctrl := newTestSVMController(kubeClient, svmInformer, &mockGraphBuilder{})
 
-	// Before the fix this call panicked (nil pointer dereference on gvr.String()),
-	// which crashes the whole kube-controller-manager.
+	// 捕获 panic 并转为测试失败：修复前这里会因 gvr.String() 的 nil 解引用
+	// 直接崩溃整个 kube-controller-manager。
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("sync panicked for a resource absent from the RESTMapper: %v", r)
 		}
 	}()
 
-	// CreationTimestamp is recent, so sync should requeue with an error (not panic).
+	// 创建时间很近，因此 sync 应返回错误以触发重新入队，而不是 panic。
 	err := ctrl.sync(ctx, "svm-nomap")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "resource does not exist in rest mapper")

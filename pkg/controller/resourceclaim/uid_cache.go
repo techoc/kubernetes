@@ -22,24 +22,27 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// uidCache is an LRU cache for uid.
+// uidCache 是 ResourceClaim UID 的 LRU 缓存。
+// 用于记住已经处理过的 UID，避免对同一对象重复执行昂贵操作；
+// LRU 淘汰保证内存占用有上限。
 type uidCache struct {
 	cache *lru.Cache
 }
 
-// newUIDCache returns a uidCache.
+// newUIDCache 创建一个最大容量为 maxCacheEntries 的 uidCache。
 func newUIDCache(maxCacheEntries int) *uidCache {
 	return &uidCache{
 		cache: lru.New(maxCacheEntries),
 	}
 }
 
-// Add adds a uid to the cache.
+// Add 将 UID 写入缓存；超过容量时由 LRU 策略淘汰最久未使用的条目。
 func (c *uidCache) Add(uid types.UID) {
 	c.cache.Add(uid, nil)
 }
 
-// Has returns if a uid is in the cache.
+// Has 判断 UID 是否在缓存中，用于识别此前已处理过的对象。
+// 注意 Get 会刷新条目的使用时间，因此查询也会改变 LRU 顺序。
 func (c *uidCache) Has(uid types.UID) bool {
 	_, found := c.cache.Get(uid)
 	return found

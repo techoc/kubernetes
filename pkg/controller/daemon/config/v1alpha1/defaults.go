@@ -20,16 +20,13 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultDaemonSetControllerConfiguration defaults a pointer to a
-// DaemonSetControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultDaemonSetControllerConfiguration 为 DaemonSetControllerConfiguration
+// 设置推荐的默认值（这些值可能随 API 版本变化）。该函数有意不注册为 scheme 中普通的
+// `SetDefaults_Foo` 函数，以便使用方为嵌入的配置自行设定默认值：scheme 中的默认值
+// 处理是转换过程的一部分，强制使用这些默认值会让使用方难以退出。若需要应用此默认值，
+// 请在使用方包装结构体的 `SetDefaults_` 方法中调用本函数。
 func RecommendedDefaultDaemonSetControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.DaemonSetControllerConfiguration) {
+	// 仅在未配置时填默认值，避免覆盖使用方显式传入的 0 以外的值。
 	if obj.ConcurrentDaemonSetSyncs == 0 {
 		obj.ConcurrentDaemonSetSyncs = 2
 	}

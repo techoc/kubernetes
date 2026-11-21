@@ -16,10 +16,9 @@ limitations under the License.
 
 package config
 
-// StatefulSetControllerConfiguration contains elements describing StatefulSetController.
+// StatefulSetControllerConfiguration 包含描述 StatefulSetController（StatefulSet 控制器）的各项配置。
 type StatefulSetControllerConfiguration struct {
-	// concurrentStatefulSetSyncs is the number of statefulset objects that are
-	// allowed to sync concurrently. Larger number = more responsive statefulsets,
-	// but more CPU (and network) load.
+	// concurrentStatefulSetSyncs 表示允许并行同步的 StatefulSet 对象数量。
+	// 该值越大，StatefulSet 的响应越及时，但 CPU（及网络）负载也越高。
 	ConcurrentStatefulSetSyncs int32
 }

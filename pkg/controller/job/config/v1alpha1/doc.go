@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1alpha1 提供 Job 控制器配置的外部版本类型。
+// 生成指令为这些类型生成深拷贝函数，以及到内部配置包
+// k8s.io/kubernetes/pkg/controller/job/config 的双向转换函数；
+// external-types 指令用于排除同时注册在 kube-controller-manager 外部配置中的类型。
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/kubernetes/pkg/controller/job/config
 // +k8s:conversion-gen-external-types=k8s.io/kube-controller-manager/config/v1alpha1

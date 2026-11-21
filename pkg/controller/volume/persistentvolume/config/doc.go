@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// +k8s:deepcopy-gen=package
+// Package config 定义 PersistentVolume 控制器的配置类型。
+//
+// 下面的指令要求生成器为整个包生成深拷贝方法。
 
 package config

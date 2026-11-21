@@ -23,21 +23,23 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// staleEndpointsTracker tracks Endpoints and their stale resource versions to
-// help determine if an Endpoints is stale.
+// staleEndpointsTracker 记录 Endpoints 及其过期资源版本，
+// 用于判断某个 Endpoints 是否已过期。
 type staleEndpointsTracker struct {
-	// lock protects staleResourceVersionByEndpoints.
+	// lock 保护 staleResourceVersionByEndpoints 的并发访问。
 	lock sync.RWMutex
-	// staleResourceVersionByEndpoints tracks the stale resource version of Endpoints.
+	// staleResourceVersionByEndpoints 记录各 Endpoints 的过期资源版本。
 	staleResourceVersionByEndpoints map[types.NamespacedName]string
 }
 
+// newStaleEndpointsTracker 创建一个空的 staleEndpointsTracker。
 func newStaleEndpointsTracker() *staleEndpointsTracker {
 	return &staleEndpointsTracker{
 		staleResourceVersionByEndpoints: map[types.NamespacedName]string{},
 	}
 }
 
+// Stale 将指定 Endpoints 的当前资源版本标记为过期版本。
 func (t *staleEndpointsTracker) Stale(endpoints *v1.Endpoints) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -45,6 +47,7 @@ func (t *staleEndpointsTracker) Stale(endpoints *v1.Endpoints) {
 	t.staleResourceVersionByEndpoints[nn] = endpoints.ResourceVersion
 }
 
+// IsStale 判断 Endpoints 的资源版本是否与记录的过期版本一致。
 func (t *staleEndpointsTracker) IsStale(endpoints *v1.Endpoints) bool {
 	t.lock.RLock()
 	defer t.lock.RUnlock()
@@ -56,6 +59,7 @@ func (t *staleEndpointsTracker) IsStale(endpoints *v1.Endpoints) bool {
 	return false
 }
 
+// Delete 删除指定命名空间下 Endpoints 的过期版本记录。
 func (t *staleEndpointsTracker) Delete(namespace, name string) {
 	t.lock.Lock()
 	defer t.lock.Unlock()

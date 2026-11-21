@@ -24,12 +24,14 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
+// 测试用的固定命名空间、PVC 与 PV 名称。
 const (
 	defaultNS      = "default"
 	defaultPVCName = "pvc1"
 	defaultPVName  = "pv1"
 )
 
+// TestCase 描述一组 IsDeletionCandidate / NeedToAddFinalizer 的测试输入与期望结果。
 type TestCase struct {
 	name      string
 	obj       metav1.Object
@@ -37,6 +39,7 @@ type TestCase struct {
 	result    bool
 }
 
+// pvc 构造一个没有删除时间戳、没有 finalizer 的 PVC。
 func pvc() *v1.PersistentVolumeClaim {
 	return &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -46,6 +49,7 @@ func pvc() *v1.PersistentVolumeClaim {
 	}
 }
 
+// pv 构造一个没有删除时间戳、没有 finalizer 的 PV。
 func pv() *v1.PersistentVolume {
 	return &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -54,6 +58,7 @@ func pv() *v1.PersistentVolume {
 	}
 }
 
+// TestIsDeletionCandidateLackDeleteTimeAndFinalizer 验证对象既无删除时间戳也无 finalizer 时不是删除候选。
 func TestIsDeletionCandidateLackDeleteTimeAndFinalizer(t *testing.T) {
 
 	tests := []TestCase{
@@ -78,6 +83,7 @@ func TestIsDeletionCandidateLackDeleteTimeAndFinalizer(t *testing.T) {
 	}
 }
 
+// TestIsDeletionCandidateLackDeleteTime 验证仅有 finalizer、无删除时间戳时不是删除候选。
 func TestIsDeletionCandidateLackDeleteTime(t *testing.T) {
 	pv := pv()
 	pv.SetFinalizers([]string{util.PVProtectionFinalizer})
@@ -105,6 +111,7 @@ func TestIsDeletionCandidateLackDeleteTime(t *testing.T) {
 	}
 }
 
+// TestIsDeletionCandidateLackFinalizer 验证仅有删除时间戳、无 finalizer 时不是删除候选。
 func TestIsDeletionCandidateLackFinalizer(t *testing.T) {
 
 	pv := pv()
@@ -132,6 +139,7 @@ func TestIsDeletionCandidateLackFinalizer(t *testing.T) {
 	}
 }
 
+// TestIsDeletionCandidateSuccess 验证同时具备删除时间戳与 finalizer 的对象是删除候选。
 func TestIsDeletionCandidateSuccess(t *testing.T) {
 
 	pv := pv()
@@ -162,6 +170,7 @@ func TestIsDeletionCandidateSuccess(t *testing.T) {
 	}
 }
 
+// TestNeedToAddFinalizerHasDeleteTimeAndFinalizer 验证已有删除时间戳和 finalizer 的对象无需再添加 finalizer。
 func TestNeedToAddFinalizerHasDeleteTimeAndFinalizer(t *testing.T) {
 	pv := pv()
 	pv.SetDeletionTimestamp(&metav1.Time{})
@@ -191,6 +200,7 @@ func TestNeedToAddFinalizerHasDeleteTimeAndFinalizer(t *testing.T) {
 	}
 }
 
+// TestNeedToAddFinalizerHasDeleteTime 验证已进入删除流程的对象不应再添加 finalizer。
 func TestNeedToAddFinalizerHasDeleteTime(t *testing.T) {
 	pv := pv()
 	pv.SetDeletionTimestamp(&metav1.Time{})
@@ -217,6 +227,7 @@ func TestNeedToAddFinalizerHasDeleteTime(t *testing.T) {
 	}
 }
 
+// TestNeedToAddFinalizerHasFinalizer 验证已有 finalizer 的对象无需重复添加。
 func TestNeedToAddFinalizerHasFinalizer(t *testing.T) {
 	pv := pv()
 	pv.SetFinalizers([]string{util.PVProtectionFinalizer})
@@ -244,6 +255,7 @@ func TestNeedToAddFinalizerHasFinalizer(t *testing.T) {
 	}
 }
 
+// TestNeedToAddFinalizerSuccess 验证既无删除时间戳也无 finalizer 的活跃对象需要添加 finalizer。
 func TestNeedToAddFinalizerSuccess(t *testing.T) {
 	tests := []TestCase{
 		{

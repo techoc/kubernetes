@@ -72,15 +72,20 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// testRESTMapper 包装 meta.RESTMapper，仅为了覆盖 Reset 方法，
+// 让测试可以在多个用例之间重置静态映射器的缓存。
 type testRESTMapper struct {
 	meta.RESTMapper
 }
 
+// Reset 重置底层 RESTMapper 的缓存，避免测试间的发现结果相互污染。
 func (m *testRESTMapper) Reset() {
 	//nolint:logcheck // Context-awareness not important for existing tests.
 	meta.MaybeResetRESTMapper(m.RESTMapper)
 }
 
+// TestGarbageCollectorConstruction 验证 GC 构造时不会为未知（非核心）资源创建监视器，
+// 并且 resyncMonitors 在 Run 前后都能按目标资源集合正确增删监视器。
 func TestGarbageCollectorConstruction(t *testing.T) {
 	config := &restclient.Config{}
 	tweakableRM := meta.NewDefaultRESTMapper(nil)
@@ -101,8 +106,7 @@ func TestGarbageCollectorConstruction(t *testing.T) {
 
 	sharedInformers := informers.NewSharedInformerFactory(client, 0)
 	metadataInformers := metadatainformer.NewSharedInformerFactory(metadataClient, 0)
-	// No monitor will be constructed for the non-core resource, but the GC
-	// construction will not fail.
+	// 非核心资源没有对应的监视器实现，GC 构造应当跳过它而不是失败。
 	alwaysStarted := make(chan struct{})
 	close(alwaysStarted)
 	logger, tCtx := ktesting.NewTestContext(t)
@@ -113,7 +117,7 @@ func TestGarbageCollectorConstruction(t *testing.T) {
 	}
 	assert.Empty(t, gc.dependencyGraphBuilder.monitors)
 
-	// Make sure resource monitor syncing creates and stops resource monitors.
+	// 确认监视器同步会按当前资源集合创建并停止相应的监视器。
 	tweakableRM.Add(schema.GroupVersionKind{Group: "tpr.io", Version: "v1", Kind: "unknown"}, nil)
 	err = gc.resyncMonitors(logger, twoResources)
 	if err != nil {
@@ -142,39 +146,42 @@ func TestGarbageCollectorConstruction(t *testing.T) {
 	assert.Len(t, gc.dependencyGraphBuilder.monitors, 1)
 }
 
-// fakeAction records information about requests to aid in testing.
+// fakeAction 记录一次 HTTP 请求的关键信息，便于测试断言请求是否符合预期。
 type fakeAction struct {
 	method string
 	path   string
 	query  string
 }
 
-// String returns method=path to aid in testing
+// String 返回 method=path，用于和期望的动作集合做比较。
 func (f *fakeAction) String() string {
 	return strings.Join([]string{f.method, f.path}, "=")
 }
 
+// FakeResponse 描述某个 method+path 应返回的 HTTP 状态码与响应体。
 type FakeResponse struct {
 	statusCode int
 	content    []byte
 }
 
-// fakeActionHandler holds a list of fakeActions received
+// fakeActionHandler 按 method+path 返回预先配置的响应，同时记录收到的所有请求。
 type fakeActionHandler struct {
-	// statusCode and content returned by this handler for different method + path.
+	// response 保存不同 method + path 对应的状态码与响应内容。
 	response map[string]FakeResponse
 
 	lock    sync.Mutex
 	actions []fakeAction
 }
 
-// ServeHTTP logs the action that occurred and always returns the associated status code
+// ServeHTTP 记录请求并返回对应的状态码；对 watch 请求还会劫持连接并保持打开，
+// 以模拟一个长期存在的 watch 流。
 func (f *fakeActionHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	func() {
 		f.lock.Lock()
 		defer f.lock.Unlock()
 
 		f.actions = append(f.actions, fakeAction{method: request.Method, path: request.URL.Path, query: request.URL.RawQuery})
+		// 若没有为该请求配置响应，则返回一个空的 List，让依赖列表接口的调用方继续运行。
 		fakeResponse, ok := f.response[request.Method+request.URL.Path]
 		if !ok {
 			fakeResponse.statusCode = 200
@@ -185,7 +192,8 @@ func (f *fakeActionHandler) ServeHTTP(response http.ResponseWriter, request *htt
 		response.Write(fakeResponse.content)
 	}()
 
-	// This is to allow the fakeActionHandler to simulate a watch being opened
+	// 对 watch 请求劫持连接并保持打开，模拟一个长期存在的 watch 流；
+	// 这样监视器不会因为连接立即关闭而不断重连，干扰对请求动作的断言。
 	if strings.Contains(request.URL.RawQuery, "watch=true") {
 		hijacker, ok := response.(http.Hijacker)
 		if !ok {
@@ -200,7 +208,8 @@ func (f *fakeActionHandler) ServeHTTP(response http.ResponseWriter, request *htt
 	}
 }
 
-// testServerAndClientConfig returns a server that listens and a config that can reference it
+// testServerAndClientConfig 启动一个使用给定 handler 的测试服务器，
+// 并返回指向它的客户端配置。
 func testServerAndClientConfig(handler func(http.ResponseWriter, *http.Request)) (*httptest.Server, *restclient.Config) {
 	srv := httptest.NewServer(http.HandlerFunc(handler))
 	config := &restclient.Config{
@@ -209,11 +218,14 @@ func testServerAndClientConfig(handler func(http.ResponseWriter, *http.Request))
 	return srv, config
 }
 
+// garbageCollector 将 GC 实例与停止 informer 的通道打包，便于测试统一释放资源。
 type garbageCollector struct {
 	*GarbageCollector
 	stop chan struct{}
 }
 
+// setupGC 用给定的客户端配置构造一个 GC，并启动其 informer；
+// 调用方负责在结束时关闭返回的 stop 通道。
 func setupGC(t *testing.T, config *restclient.Config) garbageCollector {
 	_, ctx := ktesting.NewTestContext(t)
 	metadataClient, err := metadata.NewForConfig(config)
@@ -234,6 +246,7 @@ func setupGC(t *testing.T, config *restclient.Config) garbageCollector {
 	return garbageCollector{gc, stop}
 }
 
+// getPod 构造一个属于 ns1、UID 固定的 Pod，供各测试作为待删除对象使用。
 func getPod(podName string, ownerReferences []metav1.OwnerReference) *v1.Pod {
 	return &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -249,6 +262,7 @@ func getPod(podName string, ownerReferences []metav1.OwnerReference) *v1.Pod {
 	}
 }
 
+// serilizeOrDie 把对象序列化为 JSON；测试数据中序列化失败属于编程错误，直接终止测试。
 func serilizeOrDie(t *testing.T, object interface{}) []byte {
 	data, err := json.Marshal(object)
 	if err != nil {
@@ -257,6 +271,9 @@ func serilizeOrDie(t *testing.T, object interface{}) []byte {
 	return data
 }
 
+// TestAttemptToDeleteItemDeleteObjectNotFound 验证待删除对象已从 API 服务器消失时，
+// attemptToDeleteItem 会返回 enqueuedVirtualDeleteEventErr，并向 graphChanges 入队
+// 一个虚拟删除事件，让依赖图能够清理残留的节点。
 func TestAttemptToDeleteItemDeleteObjectNotFound(t *testing.T) {
 	pod := getPod("ExternallyDeletedPod", []metav1.OwnerReference{
 		{
@@ -310,6 +327,9 @@ func TestAttemptToDeleteItemDeleteObjectNotFound(t *testing.T) {
 	}
 }
 
+// TestAttemptToDeleteItemDeleteObjectNotFoundWaitingForDependents 验证当对象的属主
+// 正在等待依赖者删除（带 foreground finalizer）时，即便对象已不存在，
+// 仍会入队虚拟删除事件以推动依赖图收敛。
 func TestAttemptToDeleteItemDeleteObjectNotFoundWaitingForDependents(t *testing.T) {
 	pod := getPod("ExternallyDeletedPodFG", []metav1.OwnerReference{
 		{
@@ -377,7 +397,8 @@ func TestAttemptToDeleteItemDeleteObjectNotFoundWaitingForDependents(t *testing.
 	}
 }
 
-// test the attemptToDeleteItem function making the expected actions.
+// TestAttemptToDeleteItem 验证 attemptToDeleteItem 会先从服务器获取最新对象，
+// 随后对其发起删除，并产生预期的请求序列。
 func TestAttemptToDeleteItem(t *testing.T) {
 	pod := getPod("ToBeDeletedPod", []metav1.OwnerReference{
 		{
@@ -415,7 +436,7 @@ func TestAttemptToDeleteItem(t *testing.T) {
 			},
 			Namespace: pod.Namespace,
 		},
-		// owners are intentionally left empty. The attemptToDeleteItem routine should get the latest item from the server.
+		// 故意不填 owners，以验证 attemptToDeleteItem 会从服务器重新获取最新对象。
 		owners:  nil,
 		virtual: true,
 	}
@@ -441,8 +462,8 @@ func TestAttemptToDeleteItem(t *testing.T) {
 	}
 }
 
-// verifyGraphInvariants verifies that all of a node's owners list the node as a
-// dependent and vice versa. uidToNode has all the nodes in the graph.
+// verifyGraphInvariants 校验依赖图的一致性：节点的每个属主都把它列为 dependents，
+// 反过来节点的每个 dependent 也把它列为属主。uidToNode 包含图中所有节点。
 func verifyGraphInvariants(scenario string, uidToNode map[types.UID]*node, t *testing.T) {
 	for myUID, node := range uidToNode {
 		for dependentNode := range node.dependents {
@@ -461,7 +482,7 @@ func verifyGraphInvariants(scenario string, uidToNode map[types.UID]*node, t *te
 		for _, owner := range node.owners {
 			ownerNode, ok := uidToNode[owner.UID]
 			if !ok {
-				// It's possible that the owner node doesn't exist
+				// 属主节点可能尚未被加入图中，这种情况是允许的。
 				continue
 			}
 			if _, ok := ownerNode.dependents[node]; !ok {
@@ -471,6 +492,7 @@ func verifyGraphInvariants(scenario string, uidToNode map[types.UID]*node, t *te
 	}
 }
 
+// createEvent 构造一个只带 UID 与属主引用的 Pod 事件，供事件处理测试使用。
 func createEvent(eventType eventType, selfUID string, owners []string) event {
 	var ownerReferences []metav1.OwnerReference
 	for i := 0; i < len(owners); i++ {
@@ -487,11 +509,12 @@ func createEvent(eventType eventType, selfUID string, owners []string) event {
 	}
 }
 
+// TestProcessEvent 验证 GraphBuilder 处理增删、更新事件后依赖图的不变性，
+// 包括乱序事件、删除中间节点以及属主引用变更的场景。
 func TestProcessEvent(t *testing.T) {
 	var testScenarios = []struct {
 		name string
-		// a series of events that will be supplied to the
-		// GraphBuilder.graphChanges.
+		// 依次送入 GraphBuilder.graphChanges 的事件序列。
 		events []event
 	}{
 		{
@@ -552,11 +575,13 @@ func TestProcessEvent(t *testing.T) {
 		for i := 0; i < len(scenario.events); i++ {
 			dependencyGraphBuilder.graphChanges.Add(&scenario.events[i])
 			dependencyGraphBuilder.processGraphChanges(logger)
+			// 每处理一个事件都校验一次，便于定位是哪一步破坏了图的一致性。
 			verifyGraphInvariants(scenario.name, dependencyGraphBuilder.uidToNode.uidToNode, t)
 		}
 	}
 }
 
+// BenchmarkReferencesDiffs 测量 referencesDiffs 计算属主引用增删改差异的开销。
 func BenchmarkReferencesDiffs(t *testing.B) {
 	t.ReportAllocs()
 	t.ResetTimer()
@@ -567,8 +592,8 @@ func BenchmarkReferencesDiffs(t *testing.B) {
 	}
 }
 
-// TestDependentsRace relies on golang's data race detector to check if there is
-// data race among in the dependents field.
+// TestDependentsRace 借助 Go 的竞态检测器检查 dependents 字段上的并发访问安全：
+// 一个 goroutine 反复添加/移除 dependent，另一个并发处理 orphan 操作。
 func TestDependentsRace(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -599,6 +624,8 @@ func TestDependentsRace(t *testing.T) {
 	wg.Wait()
 }
 
+// podToGCNode 把 Pod 转换成 GC 图中的节点表示，只保留身份信息；
+// owners 留空以触发从服务器获取最新对象。
 func podToGCNode(pod *v1.Pod) *node {
 	return &node{
 		identity: objectReference{
@@ -610,11 +637,13 @@ func podToGCNode(pod *v1.Pod) *node {
 			},
 			Namespace: pod.Namespace,
 		},
-		// owners are intentionally left empty. The attemptToDeleteItem routine should get the latest item from the server.
+		// 故意不填 owners，以验证 attemptToDeleteItem 会从服务器重新获取最新对象。
 		owners: nil,
 	}
 }
 
+// TestAbsentOwnerCache 验证不存在的属主会被缓存，命中缓存时不会再向服务器发请求，
+// 并确认容量为 2 的 LRU 缓存会淘汰最久未使用的条目。
 func TestAbsentOwnerCache(t *testing.T) {
 	rc1Pod1 := getPod("rc1Pod1", []metav1.OwnerReference{
 		{
@@ -689,11 +718,11 @@ func TestAbsentOwnerCache(t *testing.T) {
 	gc.absentOwnerCache = NewReferenceCache(2)
 	gc.attemptToDeleteItem(context.TODO(), podToGCNode(rc1Pod1))
 	gc.attemptToDeleteItem(context.TODO(), podToGCNode(rc2Pod1))
-	// rc1 should already be in the cache, no request should be sent. rc1 should be promoted in the UIDCache
+	// rc1 已在缓存中，这次不应再发请求；同时 rc1 会在 LRU 中被提升到最近使用。
 	gc.attemptToDeleteItem(context.TODO(), podToGCNode(rc1Pod2))
-	// after this call, rc2 should be evicted from the UIDCache
+	// 这次之后，最久未使用的 rc2 应当被淘汰。
 	gc.attemptToDeleteItem(context.TODO(), podToGCNode(rc3Pod1))
-	// check cache
+	// 校验缓存内容。
 	if !gc.absentOwnerCache.Has(objectReference{Namespace: "ns1", OwnerReference: metav1.OwnerReference{Kind: "ReplicationController", Name: "rc1", UID: "1", APIVersion: "v1"}}) {
 		t.Errorf("expected rc1 to be in the cache")
 	}
@@ -703,7 +732,7 @@ func TestAbsentOwnerCache(t *testing.T) {
 	if !gc.absentOwnerCache.Has(objectReference{Namespace: "ns1", OwnerReference: metav1.OwnerReference{Kind: "ReplicationController", Name: "rc3", UID: "3", APIVersion: "v1"}}) {
 		t.Errorf("expected rc3 to be in the cache")
 	}
-	// check the request sent to the server
+	// 校验实际发出的请求数：rc1 只应被请求一次。
 	count := 0
 	for _, action := range testHandler.actions {
 		if action.String() == "GET=/api/v1/namespaces/ns1/replicationcontrollers/rc1" {
@@ -715,6 +744,8 @@ func TestAbsentOwnerCache(t *testing.T) {
 	}
 }
 
+// TestDeleteOwnerRefPatch 验证 GenerateDeleteOwnerRefStrategicMergeBytes 生成的
+// strategic merge patch 能够正确移除指定的属主引用，同时保留其余引用。
 func TestDeleteOwnerRefPatch(t *testing.T) {
 	original := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -752,6 +783,8 @@ func TestDeleteOwnerRefPatch(t *testing.T) {
 	}
 }
 
+// TestUnblockOwnerReference 验证解除属主删除阻塞的 patch 会把 BlockOwnerDeletion
+// 为 true 的引用改为 false，而不改动其他引用。
 func TestUnblockOwnerReference(t *testing.T) {
 	trueVar := true
 	falseVar := false
@@ -804,6 +837,8 @@ func TestUnblockOwnerReference(t *testing.T) {
 	}
 }
 
+// TestOrphanDependentsFailure 验证服务器返回 409 冲突时，orphanDependents
+// 会把错误向上传播，调用方据此决定是否重试。
 func TestOrphanDependentsFailure(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 
@@ -844,8 +879,9 @@ func TestOrphanDependentsFailure(t *testing.T) {
 	}
 }
 
-// TestGetDeletableResources ensures GetDeletableResources always returns
-// something usable regardless of discovery output.
+// TestGetDeletableResources 确保无论 discovery 返回什么结果，
+// GetDeletableResources 都能返回可用的资源集合：过滤掉非法 GroupVersion
+// 和缺少 delete/list/watch 动词的资源，并在部分发现失败时保留可用结果。
 func TestGetDeletableResources(t *testing.T) {
 	tests := map[string]struct {
 		serverResources    []*metav1.APIResourceList
@@ -855,7 +891,7 @@ func TestGetDeletableResources(t *testing.T) {
 		"no error": {
 			serverResources: []*metav1.APIResourceList{
 				{
-					// Valid GroupVersion
+					// 合法的 GroupVersion。
 					GroupVersion: "apps/v1",
 					APIResources: []metav1.APIResource{
 						{Name: "pods", Namespaced: true, Kind: "Pod", Verbs: metav1.Verbs{"delete", "list", "watch"}},
@@ -863,14 +899,14 @@ func TestGetDeletableResources(t *testing.T) {
 					},
 				},
 				{
-					// Invalid GroupVersion, should be ignored
+					// 非法的 GroupVersion，应当被忽略。
 					GroupVersion: "foo//whatever",
 					APIResources: []metav1.APIResource{
 						{Name: "bars", Namespaced: true, Kind: "Bar", Verbs: metav1.Verbs{"delete", "list", "watch"}},
 					},
 				},
 				{
-					// Valid GroupVersion, missing required verbs, should be ignored
+					// GroupVersion 合法但缺少必需的动词，应当被忽略。
 					GroupVersion: "acme/v1",
 					APIResources: []metav1.APIResource{
 						{Name: "widgets", Namespaced: true, Kind: "Widget", Verbs: metav1.Verbs{"delete"}},
@@ -940,17 +976,19 @@ func TestGetDeletableResources(t *testing.T) {
 	}
 }
 
+// wrappedKubeClientWithUnsupportedWatchListSemantics 包装客户端并声明不支持
+// watch-list 语义，迫使 GC 走逐资源 list+watch 的旧路径。
 type wrappedKubeClientWithUnsupportedWatchListSemantics struct {
 	kubernetes.Interface
 }
 
+// IsWatchListSemanticsUnSupported 返回 true，表示客户端不支持 watch-list。
 func (c *wrappedKubeClientWithUnsupportedWatchListSemantics) IsWatchListSemanticsUnSupported() bool {
 	return true
 }
 
-// TestGarbageCollectorSync ensures that a discovery client error
-// or an informer sync error will not cause the garbage collector
-// to block infinitely.
+// TestGarbageCollectorSync 确保 discovery 客户端报错或 informer 同步失败时，
+// GC 的 Sync 不会永久阻塞，并能在故障恢复后重建正确的监视器集合。
 func TestGarbageCollectorSync(t *testing.T) {
 	serverResources := []*metav1.APIResourceList{
 		{
@@ -1024,6 +1062,7 @@ func TestGarbageCollectorSync(t *testing.T) {
 		t.Fatal(err)
 	}
 	// TODO(#115478): migrate this test to use fakeClient instead of the real client.
+	// 这里用真实客户端配合测试服务器，通过 handler 切换来模拟 informer 同步失败。
 	client := &wrappedKubeClientWithUnsupportedWatchListSemantics{kubeClient}
 
 	tweakableRM := meta.NewDefaultRESTMapper(nil)
@@ -1057,25 +1096,25 @@ func TestGarbageCollectorSync(t *testing.T) {
 	wg.Go(func() {
 		gc.Run(tCtx, 1, syncPeriod)
 	})
-	// The pseudo-code of GarbageCollector.Sync():
+	// GarbageCollector.Sync() 的伪代码：
 	// GarbageCollector.Sync(client, period, stopCh):
-	//    wait.Until() loops with `period` until the `stopCh` is closed :
-	//        wait.PollImmediateUntil() loops with 100ms (hardcode) util the `stopCh` is closed:
+	//    wait.Until() 以 period 为周期循环，直到 stopCh 关闭：
+	//        wait.PollImmediateUntil() 以 100ms（硬编码）为周期循环，直到 stopCh 关闭：
 	//            GetDeletableResources()
 	//            gc.resyncMonitors()
-	//            cache.WaitForNamedCacheSync() loops with `syncedPollPeriod` (hardcoded to 100ms), until either its stop channel is closed after `period`, or all caches synced.
+	//            cache.WaitForNamedCacheSync() 以 syncedPollPeriod（硬编码 100ms）为周期循环，
+	//            直到 period 后其停止通道关闭，或所有缓存完成同步。
 	//
-	// Setting the period to 200ms allows the WaitForCacheSync() to check
-	// for cache sync ~2 times in every wait.PollImmediateUntil() loop.
+	// 把 period 设为 200ms，可让 WaitForCacheSync() 在每个
+	// wait.PollImmediateUntil() 周期内检查约 2 次缓存同步状态。
 	//
-	// The 1s sleep in the test allows GetDeletableResources and
-	// gc.resyncMonitors to run ~5 times to ensure the changes to the
-	// fakeDiscoveryClient are picked up.
+	// 测试中每次 sleep 1s，可让 GetDeletableResources 与 gc.resyncMonitors
+	// 运行约 5 次，确保 fakeDiscoveryClient 的变更被感知到。
 	wg.Go(func() {
 		gc.Sync(tCtx, fakeDiscoveryClient, syncPeriod)
 	})
 
-	// Wait until the sync discovers the initial resources
+	// 等待 Sync 发现初始资源集合。
 	time.Sleep(1 * time.Second)
 
 	err = expectSyncNotBlocked(fakeDiscoveryClient)
@@ -1084,15 +1123,15 @@ func TestGarbageCollectorSync(t *testing.T) {
 	}
 	assertMonitors(t, gc, "pods", "deployments")
 
-	// Simulate the discovery client returning an error
+	// 模拟 discovery 客户端返回错误。
 	fakeDiscoveryClient.setPreferredResources(nil, fmt.Errorf("error calling discoveryClient.ServerPreferredResources()"))
 
-	// Wait until sync discovers the change
+	// 等待 Sync 感知到变更。
 	time.Sleep(1 * time.Second)
-	// No monitor changes
+	// 此时监视器不应发生变化。
 	assertMonitors(t, gc, "pods", "deployments")
 
-	// Remove the error from being returned and see if the garbage collector sync is still working
+	// 移除错误，确认 GC 的 Sync 仍能继续工作。
 	fakeDiscoveryClient.setPreferredResources(serverResources, nil)
 
 	err = expectSyncNotBlocked(fakeDiscoveryClient)
@@ -1101,14 +1140,14 @@ func TestGarbageCollectorSync(t *testing.T) {
 	}
 	assertMonitors(t, gc, "pods", "deployments")
 
-	// Simulate the discovery client returning a resource the restmapper can resolve, but will not sync caches
+	// 模拟 discovery 返回一个 RESTMapper 可解析、但缓存始终无法同步的资源。
 	fakeDiscoveryClient.setPreferredResources(unsyncableServerResources, nil)
 
-	// Wait until sync discovers the change
+	// 等待 Sync 感知到变更。
 	time.Sleep(1 * time.Second)
 	assertMonitors(t, gc, "pods", "secrets")
 
-	// Put the resources back to normal and ensure garbage collector sync recovers
+	// 恢复正常资源集合，确认 GC 的 Sync 能恢复。
 	fakeDiscoveryClient.setPreferredResources(serverResources, nil)
 
 	err = expectSyncNotBlocked(fakeDiscoveryClient)
@@ -1117,25 +1156,25 @@ func TestGarbageCollectorSync(t *testing.T) {
 	}
 	assertMonitors(t, gc, "pods", "deployments")
 
-	// Partial discovery failure
+	// 部分 discovery 失败。
 	fakeDiscoveryClient.setPreferredResources(unsyncableServerResources, appsV1Error)
-	// Wait until sync discovers the change
+	// 等待 Sync 感知到变更。
 	time.Sleep(1 * time.Second)
-	// Deployments monitor kept
+	// deployments 的监视器仍然保留。
 	assertMonitors(t, gc, "pods", "deployments", "secrets")
 
-	// Put the resources back to normal and ensure garbage collector sync recovers
+	// 恢复正常资源集合，确认 GC 的 Sync 能恢复。
 	fakeDiscoveryClient.setPreferredResources(serverResources, nil)
-	// Wait until sync discovers the change
+	// 等待 Sync 感知到变更。
 	time.Sleep(1 * time.Second)
 	err = expectSyncNotBlocked(fakeDiscoveryClient)
 	if err != nil {
 		t.Fatalf("Expected garbagecollector.Sync to still be running but it is blocked: %v", err)
 	}
-	// Unsyncable monitor removed
+	// 无法同步的监视器已被移除。
 	assertMonitors(t, gc, "pods", "deployments")
 
-	// Simulate initial not-synced informer which will be synced at the end.
+	// 模拟初始未同步的 informer，稍后再让它完成同步。
 	metrics.GarbageCollectorResourcesSyncError.Reset()
 	fakeDiscoveryClient.setPreferredResources(unsyncableServerResources, nil)
 	time.Sleep(1 * time.Second)
@@ -1148,7 +1187,7 @@ func TestGarbageCollectorSync(t *testing.T) {
 		t.Fatalf("expect sync error metric > 0")
 	}
 
-	// The informer is synced now.
+	// 此时 informer 已完成同步。
 	secretSyncOK.Store(true)
 	if err := wait.PollUntilContextTimeout(tCtx, time.Second, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
 		return gc.IsSynced(logger), nil
@@ -1157,6 +1196,7 @@ func TestGarbageCollectorSync(t *testing.T) {
 	}
 }
 
+// assertMonitors 断言 GC 当前监视的资源集合与期望一致。
 func assertMonitors(t *testing.T, gc *GarbageCollector, resources ...string) {
 	t.Helper()
 	expected := sets.NewString(resources...)
@@ -1169,6 +1209,8 @@ func assertMonitors(t *testing.T, gc *GarbageCollector, resources ...string) {
 	}
 }
 
+// expectSyncNotBlocked 在一段时间内检查 discovery 接口是否仍被调用，
+// 借此判断 Sync 循环没有卡死。
 func expectSyncNotBlocked(fakeDiscoveryClient *fakeServerResources) error {
 	before := fakeDiscoveryClient.getInterfaceUsedCount()
 	t := 1 * time.Second
@@ -1180,6 +1222,8 @@ func expectSyncNotBlocked(fakeDiscoveryClient *fakeServerResources) error {
 	return nil
 }
 
+// fakeServerResources 是可控的 discovery 接口实现：返回指定的资源列表或错误，
+// 并统计 ServerPreferredResources 的调用次数以便检测 Sync 是否阻塞。
 type fakeServerResources struct {
 	PreferredResources []*metav1.APIResourceList
 	Error              error
@@ -1187,14 +1231,17 @@ type fakeServerResources struct {
 	InterfaceUsedCount int
 }
 
+// ServerResourcesForGroupVersion 在本测试中不会被使用，返回空结果。
 func (*fakeServerResources) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	return nil, nil
 }
 
+// ServerGroupsAndResources 在本测试中不会被使用，返回空结果。
 func (*fakeServerResources) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	return nil, nil, nil
 }
 
+// ServerPreferredResources 返回预设的资源与错误，并统计调用次数。
 func (f *fakeServerResources) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
 	f.Lock.Lock()
 	defer f.Lock.Unlock()
@@ -1202,6 +1249,7 @@ func (f *fakeServerResources) ServerPreferredResources() ([]*metav1.APIResourceL
 	return f.PreferredResources, f.Error
 }
 
+// setPreferredResources 更新 discovery 返回的资源与错误。
 func (f *fakeServerResources) setPreferredResources(resources []*metav1.APIResourceList, err error) {
 	f.Lock.Lock()
 	defer f.Lock.Unlock()
@@ -1209,16 +1257,21 @@ func (f *fakeServerResources) setPreferredResources(resources []*metav1.APIResou
 	f.Error = err
 }
 
+// getInterfaceUsedCount 返回 ServerPreferredResources 被调用的次数。
 func (f *fakeServerResources) getInterfaceUsedCount() int {
 	f.Lock.Lock()
 	defer f.Lock.Unlock()
 	return f.InterfaceUsedCount
 }
 
+// ServerPreferredNamespacedResources 在本测试中不会被使用，返回空结果。
 func (*fakeServerResources) ServerPreferredNamespacedResources() ([]*metav1.APIResourceList, error) {
 	return nil, nil
 }
 
+// TestConflictingData 通过表驱动的场景验证依赖图如何处理各种“冲突”数据：
+// 虚拟节点的命名空间归一化、跨命名空间属主引用、集群作用域与命名空间作用域
+// 对象之间的引用等。
 func TestConflictingData(t *testing.T) {
 	pod1ns1 := makeID("v1", "Pod", "ns1", "podname1", "poduid1")
 	pod2ns1 := makeID("v1", "Pod", "ns1", "podname2", "poduid2")
@@ -1229,12 +1282,12 @@ func TestConflictingData(t *testing.T) {
 	role1v1 := makeID("rbac.authorization.k8s.io/v1", "Role", "ns1", "role1", "roleuid1")
 
 	deployment1apps := makeID("apps/v1", "Deployment", "ns1", "deployment1", "deploymentuid1")
-	deployment1extensions := makeID("extensions/v1beta1", "Deployment", "ns1", "deployment1", "deploymentuid1") // not served, still referenced
+	deployment1extensions := makeID("extensions/v1beta1", "Deployment", "ns1", "deployment1", "deploymentuid1") // 该版本不再提供服务，但仍被引用
 
-	// when a reference is made to node1 from a namespaced resource, the virtual node inserted has namespace coordinates
+	// 当命名空间级资源引用 node1 时，插入的虚拟节点会带上该命名空间坐标
 	node1WithNamespace := makeID("v1", "Node", "ns1", "nodename", "nodeuid1")
 
-	// when a reference is made to pod1 from a cluster-scoped resource, the virtual node inserted has no namespace
+	// 当集群级资源引用 pod1 时，插入的虚拟节点不带命名空间
 	pod1nonamespace := makeID("v1", "Pod", "", "podname1", "poduid1")
 
 	badSecretReferenceWithDeploymentUID := makeID("v1", "Secret", "ns1", "secretname", string(deployment1apps.UID))
@@ -1249,157 +1302,157 @@ func TestConflictingData(t *testing.T) {
 		{
 			name: "good child in ns1 -> cluster-scoped owner",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("", "v1", "nodes", "", makeMetadataObj(node1)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1, node1)),
-				// observe namespaced child with not-yet-observed cluster-scoped parent
+				// 先观察到命名空间级子节点，其集群级属主尚未被观察到
 				processEvent(makeAddEvent(pod1ns1, node1)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(node1)), makeNode(node1WithNamespace, virtual)}, // virtual node1 (matching child namespace)
-					pendingAttemptToDelete: []*node{makeNode(node1WithNamespace, virtual)},                                       // virtual node1 queued for attempted delete
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(node1)), makeNode(node1WithNamespace, virtual)}, // 虚拟节点 node1（命名空间与子节点一致）
+					pendingAttemptToDelete: []*node{makeNode(node1WithNamespace, virtual)},                                       // 虚拟节点 node1 仍在删除队列中
 				}),
-				// handle queued delete of virtual node
+				// 处理队列中虚拟节点的删除
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions:          []string{"get /v1, Resource=nodes name=nodename"},
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(node1)), makeNode(node1WithNamespace, virtual)}, // virtual node1 (matching child namespace)
-					pendingAttemptToDelete: []*node{makeNode(node1WithNamespace, virtual)},                                       // virtual node1 still not observed, got requeued
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(node1)), makeNode(node1WithNamespace, virtual)}, // 虚拟节点 node1（命名空间与子节点一致）
+					pendingAttemptToDelete: []*node{makeNode(node1WithNamespace, virtual)},                                       // 仍未观察到 node1，因此重新入队
 				}),
-				// observe cluster-scoped parent
+				// 观察到集群级属主
 				processEvent(makeAddEvent(node1)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(node1)), makeNode(node1)}, // node1 switched to observed, fixed namespace coordinate
-					pendingAttemptToDelete: []*node{makeNode(node1WithNamespace, virtual)},                 // virtual node1 queued for attempted delete
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(node1)), makeNode(node1)}, // node1 已变为真实节点，命名空间坐标得到修正
+					pendingAttemptToDelete: []*node{makeNode(node1WithNamespace, virtual)},                 // 虚拟节点 node1 仍在删除队列中
 				}),
-				// handle queued delete of virtual node
-				// final state: child and parent present in graph, no queued actions
+				// 处理队列中虚拟节点的删除
+				// 最终状态：子节点与属主都在图中，队列为空
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes: []*node{makeNode(pod1ns1, withOwners(node1)), makeNode(node1)},
 				}),
 			},
 		},
-		// child in namespace A with owner reference to namespaced type in namespace B
-		// * should be deleted immediately
-		// * event should be logged in namespace A with involvedObject of bad-child indicating the error
+		// 命名空间 A 中的子节点引用了命名空间 B 中的命名空间级属主：
+		// * 应当被立即删除
+		// * 应在命名空间 A 中记录事件，involvedObject 指向问题子节点以表明错误
 		{
 			name: "bad child in ns1 -> owner in ns2 (child first)",
 			steps: []step{
-				// 0,1: setup
+				// 0,1：准备
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1, pod2ns1)),
 				createObjectInClient("", "v1", "pods", "ns2", makeMetadataObj(pod2ns2)),
-				// 2,3: observe namespaced child with not-yet-observed namespace-scoped parent
+				// 2,3：观察命名空间级子节点，其属主尚未被观察到
 				processEvent(makeAddEvent(pod1ns1, pod2ns2)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(pod2ns2)), makeNode(pod2ns1, virtual)}, // virtual pod2 (matching child namespace)
-					pendingAttemptToDelete: []*node{makeNode(pod2ns1, virtual)},                                         // virtual pod2 queued for attempted delete
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(pod2ns2)), makeNode(pod2ns1, virtual)}, // 虚拟 pod2（命名空间与子节点一致）
+					pendingAttemptToDelete: []*node{makeNode(pod2ns1, virtual)},                                         // 虚拟 pod2 已入队等待尝试删除
 				}),
-				// 4,5: observe parent
+				// 4,5：观察到属主
 				processEvent(makeAddEvent(pod2ns2)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(pod2ns2)), makeNode(pod2ns2)}, // pod2 is no longer virtual, namespace coordinate is corrected
-					pendingAttemptToDelete: []*node{makeNode(pod2ns1, virtual), makeNode(pod1ns1)},             // virtual pod2 still queued for attempted delete, bad child pod1 queued because it disagreed with observed parent
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(pod2ns2)), makeNode(pod2ns2)}, // pod2 不再是虚拟节点，命名空间已修正
+					pendingAttemptToDelete: []*node{makeNode(pod2ns1, virtual), makeNode(pod1ns1)},             // 虚拟 pod2 仍在队列中；问题子节点 pod1 因与实际属主不符也入队
 					events:                 []string{`Warning OwnerRefInvalidNamespace ownerRef [v1/Pod, namespace: ns1, name: podname2, uid: poduid2] does not exist in namespace "ns1" involvedObject{kind=Pod,apiVersion=v1}`},
 				}),
-				// 6,7: handle queued delete of virtual parent
+				// 6,7：处理队列中虚拟属主的删除
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(pod2ns2)), makeNode(pod2ns2)},
-					pendingAttemptToDelete: []*node{makeNode(pod1ns1)}, // bad child pod1 queued because it disagreed with observed parent
+					pendingAttemptToDelete: []*node{makeNode(pod1ns1)}, // 问题子节点 pod1 因与实际属主不符而入队
 				}),
-				// 8,9: handle queued delete of bad child
+				// 8,9：处理问题子节点的删除
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1",    // lookup of pod1 pre-delete
-						"get /v1, Resource=pods ns=ns1 name=podname2",    // verification bad parent reference is absent
-						"delete /v1, Resource=pods ns=ns1 name=podname1", // pod1 delete
+						"get /v1, Resource=pods ns=ns1 name=podname1",    // 删除前查找 pod1
+						"get /v1, Resource=pods ns=ns1 name=podname2",    // 验证错误的属主引用确实不存在
+						"delete /v1, Resource=pods ns=ns1 name=podname1", // 删除 pod1
 					},
 					graphNodes:       []*node{makeNode(pod1ns1, withOwners(pod2ns2)), makeNode(pod2ns2)},
-					absentOwnerCache: []objectReference{pod2ns1}, // cached absence of bad parent
+					absentOwnerCache: []objectReference{pod2ns1}, // 缓存错误属主的不存在状态
 				}),
-				// 10,11: observe delete issued in step 8
-				// final state: parent present in graph, no queued actions
+				// 10,11：观察第 8 步发出的删除
+				// 最终状态：属主在图中，队列为空
 				processEvent(makeDeleteEvent(pod1ns1)),
 				assertState(state{
-					graphNodes:       []*node{makeNode(pod2ns2)}, // only good parent remains
-					absentOwnerCache: []objectReference{pod2ns1}, // cached absence of bad parent
+					graphNodes:       []*node{makeNode(pod2ns2)}, // 仅剩下合法的属主
+					absentOwnerCache: []objectReference{pod2ns1}, // 缓存错误属主的不存在状态
 				}),
 			},
 		},
 		{
 			name: "bad child in ns1 -> owner in ns2 (owner first)",
 			steps: []step{
-				// 0,1: setup
+				// 0,1：准备
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1, pod2ns1)),
 				createObjectInClient("", "v1", "pods", "ns2", makeMetadataObj(pod2ns2)),
-				// 2,3: observe parent
+				// 2,3：观察到属主
 				processEvent(makeAddEvent(pod2ns2)),
 				assertState(state{
 					graphNodes: []*node{makeNode(pod2ns2)},
 				}),
-				// 4,5: observe namespaced child with invalid cross-namespace reference to parent
+				// 4,5：观察到带有跨命名空间非法属主引用的子节点
 				processEvent(makeAddEvent(pod1ns1, pod2ns1)),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(pod2ns1)), makeNode(pod2ns2)},
-					pendingAttemptToDelete: []*node{makeNode(pod1ns1)}, // bad child queued for attempted delete
+					pendingAttemptToDelete: []*node{makeNode(pod1ns1)}, // 问题子节点已入队等待尝试删除
 					events:                 []string{`Warning OwnerRefInvalidNamespace ownerRef [v1/Pod, namespace: ns1, name: podname2, uid: poduid2] does not exist in namespace "ns1" involvedObject{kind=Pod,apiVersion=v1}`},
 				}),
-				// 6,7: handle queued delete of bad child
+				// 6,7：处理问题子节点的删除
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1",    // lookup of pod1 pre-delete
-						"get /v1, Resource=pods ns=ns1 name=podname2",    // verification bad parent reference is absent
-						"delete /v1, Resource=pods ns=ns1 name=podname1", // pod1 delete
+						"get /v1, Resource=pods ns=ns1 name=podname1",    // 删除前查找 pod1
+						"get /v1, Resource=pods ns=ns1 name=podname2",    // 验证错误的属主引用确实不存在
+						"delete /v1, Resource=pods ns=ns1 name=podname1", // 删除 pod1
 					},
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(pod2ns1)), makeNode(pod2ns2)},
 					pendingAttemptToDelete: []*node{},
-					absentOwnerCache:       []objectReference{pod2ns1}, // cached absence of bad parent
+					absentOwnerCache:       []objectReference{pod2ns1}, // 缓存错误属主的不存在状态
 				}),
-				// 8,9: observe delete issued in step 6
-				// final state: parent present in graph, no queued actions
+				// 8,9：观察第 6 步发出的删除
+				// 最终状态：属主在图中，队列为空
 				processEvent(makeDeleteEvent(pod1ns1)),
 				assertState(state{
-					graphNodes:       []*node{makeNode(pod2ns2)}, // only good parent remains
-					absentOwnerCache: []objectReference{pod2ns1}, // cached absence of bad parent
+					graphNodes:       []*node{makeNode(pod2ns2)}, // 仅剩下合法的属主
+					absentOwnerCache: []objectReference{pod2ns1}, // 缓存错误属主的不存在状态
 				}),
 			},
 		},
-		// child that is cluster-scoped with owner reference to namespaced type in namespace B
-		// * should not be deleted
-		// * event should be logged in namespace kube-system with involvedObject of bad-child indicating the error
+		// 集群级子节点引用命名空间 B 中的命名空间级属主：
+		// * 不应被删除
+		// * 应在 kube-system 命名空间中记录事件，involvedObject 指向问题子节点以表明错误
 		{
 			name: "bad cluster-scoped child -> owner in ns1 (child first)",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("", "v1", "nodes", "", makeMetadataObj(node1, pod1ns1)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1)),
-				// 2,3: observe cluster-scoped child with not-yet-observed namespaced parent
+				// 2,3：观察集群级子节点，其命名空间级属主尚未被观察到
 				processEvent(makeAddEvent(node1, pod1ns1)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(node1, withOwners(pod1nonamespace)), makeNode(pod1nonamespace, virtual)}, // virtual pod1 (with no namespace)
-					pendingAttemptToDelete: []*node{makeNode(pod1nonamespace, virtual)},                                               // virtual pod1 queued for attempted delete
+					graphNodes:             []*node{makeNode(node1, withOwners(pod1nonamespace)), makeNode(pod1nonamespace, virtual)}, // 虚拟 pod1（不带命名空间）
+					pendingAttemptToDelete: []*node{makeNode(pod1nonamespace, virtual)},                                               // 虚拟 pod1 已入队等待尝试删除
 				}),
-				// 4,5: handle queued delete of virtual pod1
+				// 4,5：处理虚拟 pod1 的删除
 				processAttemptToDelete(1),
 				assertState(state{
-					graphNodes:             []*node{makeNode(node1, withOwners(pod1nonamespace)), makeNode(pod1nonamespace, virtual)}, // virtual pod1 (with no namespace)
-					pendingAttemptToDelete: []*node{},                                                                                 // namespace-scoped virtual object without a namespace coordinate not re-queued
+					graphNodes:             []*node{makeNode(node1, withOwners(pod1nonamespace)), makeNode(pod1nonamespace, virtual)}, // 虚拟 pod1（不带命名空间）
+					pendingAttemptToDelete: []*node{},                                                                                 // 没有命名空间坐标的命名空间级虚拟对象不会重新入队
 				}),
-				// 6,7: observe namespace-scoped parent
+				// 6,7：观察到命名空间级属主
 				processEvent(makeAddEvent(pod1ns1)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(node1, withOwners(pod1nonamespace)), makeNode(pod1ns1)}, // pod1 namespace coordinate corrected, made non-virtual
+					graphNodes:             []*node{makeNode(node1, withOwners(pod1nonamespace)), makeNode(pod1ns1)}, // pod1 的命名空间得到修正并变为真实节点
 					events:                 []string{`Warning OwnerRefInvalidNamespace ownerRef [v1/Pod, namespace: , name: podname1, uid: poduid1] does not exist in namespace "" involvedObject{kind=Node,apiVersion=v1}`},
-					pendingAttemptToDelete: []*node{makeNode(node1, withOwners(pod1ns1))}, // bad cluster-scoped child added to attemptToDelete queue
+					pendingAttemptToDelete: []*node{makeNode(node1, withOwners(pod1ns1))}, // 有问题的集群级子节点被加入 attemptToDelete 队列
 				}),
-				// 8,9: handle queued attempted delete of bad cluster-scoped child
-				// final state: parent and child present in graph, no queued actions
+				// 8,9：处理队列中问题集群级子节点的删除尝试
+				// 最终状态：属主与子节点都在图中，队列为空
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=nodes name=nodename", // lookup of node pre-delete
+						"get /v1, Resource=nodes name=nodename", // 删除前查找属主
 					},
 					graphNodes: []*node{makeNode(node1, withOwners(pod1nonamespace)), makeNode(pod1ns1)},
 				}),
@@ -1408,269 +1461,269 @@ func TestConflictingData(t *testing.T) {
 		{
 			name: "bad cluster-scoped child -> owner in ns1 (owner first)",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("", "v1", "nodes", "", makeMetadataObj(node1, pod1ns1)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1)),
-				// 2,3: observe namespace-scoped parent
+				// 2,3：观察到命名空间级属主
 				processEvent(makeAddEvent(pod1ns1)),
 				assertState(state{
 					graphNodes: []*node{makeNode(pod1ns1)},
 				}),
-				// 4,5: observe cluster-scoped child
+				// 4,5：观察到集群级子节点
 				processEvent(makeAddEvent(node1, pod1ns1)),
 				assertState(state{
 					graphNodes:             []*node{makeNode(node1, withOwners(pod1nonamespace)), makeNode(pod1ns1)},
 					events:                 []string{`Warning OwnerRefInvalidNamespace ownerRef [v1/Pod, namespace: , name: podname1, uid: poduid1] does not exist in namespace "" involvedObject{kind=Node,apiVersion=v1}`},
-					pendingAttemptToDelete: []*node{makeNode(node1, withOwners(pod1ns1))}, // bad cluster-scoped child added to attemptToDelete queue
+					pendingAttemptToDelete: []*node{makeNode(node1, withOwners(pod1ns1))}, // 有问题的集群级子节点被加入 attemptToDelete 队列
 				}),
-				// 6,7: handle queued attempted delete of bad cluster-scoped child
-				// final state: parent and child present in graph, no queued actions
+				// 6,7：处理队列中问题集群级子节点的删除尝试
+				// 最终状态：属主与子节点都在图中，队列为空
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=nodes name=nodename", // lookup of node pre-delete
+						"get /v1, Resource=nodes name=nodename", // 删除前查找属主
 					},
 					graphNodes: []*node{makeNode(node1, withOwners(pod1nonamespace)), makeNode(pod1ns1)},
 				}),
 			},
 		},
-		// child pointing at non-preferred still-served apiVersion of parent object (e.g. rbac/v1beta1)
-		// * should not be deleted prematurely
-		// * should not repeatedly poll attemptToDelete while waiting
-		// * should be deleted when the actual parent is deleted
+		// 子节点指向属主对象非首选、但仍在服务的 API 版本（如 rbac/v1beta1）：
+		// * 不应被删除 prematurely
+		// * 等待期间不应反复轮询 attemptToDelete
+		// * 当真正的属主被删除时，子节点应当被删除
 		{
 			name: "good child -> existing owner with non-preferred accessible API version",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("rbac.authorization.k8s.io", "v1", "roles", "ns1", makeMetadataObj(role1v1)),
 				createObjectInClient("rbac.authorization.k8s.io", "v1beta1", "roles", "ns1", makeMetadataObj(role1v1beta1)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1, role1v1beta1)),
-				// 3,4: observe child
+				// 3,4：观察到子节点
 				processEvent(makeAddEvent(pod1ns1, role1v1beta1)),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(role1v1beta1)), makeNode(role1v1beta1, virtual)},
-					pendingAttemptToDelete: []*node{makeNode(role1v1beta1, virtual)}, // virtual parent enqueued for delete attempt
+					pendingAttemptToDelete: []*node{makeNode(role1v1beta1, virtual)}, // 虚拟属主已入队等待删除尝试
 				}),
-				// 5,6: handle queued attempted delete of virtual parent
+				// 5,6：处理队列中虚拟属主的删除尝试
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get rbac.authorization.k8s.io/v1beta1, Resource=roles ns=ns1 name=role1", // lookup of node pre-delete
+						"get rbac.authorization.k8s.io/v1beta1, Resource=roles ns=ns1 name=role1", // 删除前查找属主
 					},
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(role1v1beta1)), makeNode(role1v1beta1, virtual)},
-					pendingAttemptToDelete: []*node{makeNode(role1v1beta1, virtual)}, // not yet observed, still in the attemptToDelete queue
+					pendingAttemptToDelete: []*node{makeNode(role1v1beta1, virtual)}, // 尚未观察到属主，仍在 attemptToDelete 队列中
 				}),
-				// 7,8: observe parent via v1
+				// 7,8：通过 v1 观察到属主
 				processEvent(makeAddEvent(role1v1)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(role1v1beta1)), makeNode(role1v1)},               // parent version/virtual state gets corrected
-					pendingAttemptToDelete: []*node{makeNode(role1v1beta1, virtual), makeNode(pod1ns1, withOwners(role1v1beta1))}, // virtual parent and mismatched child enqueued for delete attempt
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(role1v1beta1)), makeNode(role1v1)},               // 属主版本与虚拟状态得到修正
+					pendingAttemptToDelete: []*node{makeNode(role1v1beta1, virtual), makeNode(pod1ns1, withOwners(role1v1beta1))}, // 虚拟属主与不匹配的子节点都已入队等待删除尝试
 				}),
-				// 9,10: process attemptToDelete
-				// virtual node dropped from attemptToDelete with no further action because the real node has been observed now
+				// 9,10：处理 attemptToDelete
+				// 真实节点已被观察到，虚拟节点从 attemptToDelete 中移除且不再有后续动作
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(role1v1beta1)), makeNode(role1v1)},
-					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(role1v1beta1))}, // mismatched child enqueued for delete attempt
+					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(role1v1beta1))}, // 不匹配的子节点已入队等待删除尝试
 				}),
-				// 11,12: process attemptToDelete for mismatched parent
+				// 11,12：处理不匹配属主的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1",                             // lookup of child pre-delete
-						"get rbac.authorization.k8s.io/v1beta1, Resource=roles ns=ns1 name=role1", // verifying parent is solid
+						"get /v1, Resource=pods ns=ns1 name=podname1",                             // 删除前查找子节点
+						"get rbac.authorization.k8s.io/v1beta1, Resource=roles ns=ns1 name=role1", // 确认属主确实存在
 					},
 					graphNodes: []*node{makeNode(pod1ns1, withOwners(role1v1beta1)), makeNode(role1v1)},
 				}),
-				// 13,14: teardown
+				// 13,14：清理
 				deleteObjectFromClient("rbac.authorization.k8s.io", "v1", "roles", "ns1", "role1"),
 				deleteObjectFromClient("rbac.authorization.k8s.io", "v1beta1", "roles", "ns1", "role1"),
-				// 15,16: observe delete via v1
+				// 15,16：通过 v1 观察到删除
 				processEvent(makeDeleteEvent(role1v1)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(role1v1beta1))}, // only child remains
-					absentOwnerCache:       []objectReference{role1v1},                           // cached absence of parent via v1
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(role1v1beta1))}, // 仅剩下子节点
+					absentOwnerCache:       []objectReference{role1v1},                           // 缓存通过 v1 观察到的属主不存在
 					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(role1v1beta1))},
 				}),
-				// 17,18: process attemptToDelete for child
+				// 17,18：处理子节点的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1",                             // lookup of child pre-delete
-						"get rbac.authorization.k8s.io/v1beta1, Resource=roles ns=ns1 name=role1", // verifying parent is solid
+						"get /v1, Resource=pods ns=ns1 name=podname1",                             // 删除前查找子节点
+						"get rbac.authorization.k8s.io/v1beta1, Resource=roles ns=ns1 name=role1", // 确认属主确实存在
 						"delete /v1, Resource=pods ns=ns1 name=podname1",
 					},
-					absentOwnerCache: []objectReference{role1v1, role1v1beta1}, // cached absence of v1beta1 role
+					absentOwnerCache: []objectReference{role1v1, role1v1beta1}, // 缓存 v1beta1 role 的不存在状态
 					graphNodes:       []*node{makeNode(pod1ns1, withOwners(role1v1beta1))},
 				}),
-				// 19,20: observe delete issued in step 17
-				// final state: empty graph, no queued actions
+				// 19,20：观察第 17 步发出的删除
+				// 最终状态：图为空，队列为空
 				processEvent(makeDeleteEvent(pod1ns1)),
 				assertState(state{
 					absentOwnerCache: []objectReference{role1v1, role1v1beta1},
 				}),
 			},
 		},
-		// child pointing at no-longer-served apiVersion of still-existing parent object (e.g. extensions/v1beta1 deployment)
-		// * should not be deleted (this is indistinguishable from referencing an unknown kind/version)
-		// * virtual parent should not repeatedly poll attemptToDelete once real parent is observed
+		// 子节点指向仍存在属主的、已不再服务的 API 版本（如 extensions/v1beta1 deployment）：
+		// * 不应被删除 (this is indistinguishable from referencing an unknown kind/version)
+		// * 一旦观察到真实属主，虚拟属主不应反复轮询 attemptToDelete
 		{
 			name: "child -> existing owner with inaccessible API version (child first)",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("apps", "v1", "deployments", "ns1", makeMetadataObj(deployment1apps)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1, deployment1extensions)),
-				// 2,3: observe child
+				// 2,3：观察到子节点
 				processEvent(makeAddEvent(pod1ns1, deployment1extensions)),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1extensions, virtual)},
-					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual)}, // virtual parent enqueued for delete attempt
+					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual)}, // 虚拟属主已入队等待删除尝试
 				}),
-				// 4,5: handle queued attempted delete of virtual parent
+				// 4,5：处理队列中虚拟属主的删除尝试
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1extensions, virtual)},
-					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual)}, // requeued on restmapper error
+					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual)}, // RESTMapper 报错，重新入队
 				}),
-				// 6,7: observe parent via v1
+				// 6,7：通过 v1 观察到属主
 				processEvent(makeAddEvent(deployment1apps)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1apps)},                // parent version/virtual state gets corrected
-					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual), makeNode(pod1ns1, withOwners(deployment1extensions))}, // virtual parent and mismatched child enqueued for delete attempt
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1apps)},                // 属主版本与虚拟状态得到修正
+					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual), makeNode(pod1ns1, withOwners(deployment1extensions))}, // 虚拟属主与不匹配的子节点都已入队等待删除尝试
 				}),
-				// 8,9: process attemptToDelete
-				// virtual node dropped from attemptToDelete with no further action because the real node has been observed now
+				// 8,9：处理 attemptToDelete
+				// 真实节点已被观察到，虚拟节点从 attemptToDelete 中移除且不再有后续动作
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1apps)},
-					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // mismatched child enqueued for delete attempt
+					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 不匹配的子节点已入队等待删除尝试
 				}),
-				// 10,11: process attemptToDelete for mismatched child
+				// 10,11：处理不匹配子节点的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1", // lookup of child pre-delete
+						"get /v1, Resource=pods ns=ns1 name=podname1", // 删除前查找子节点
 					},
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1apps)},
-					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // mismatched child still enqueued - restmapper error
+					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 不匹配子节点仍在队列中——RESTMapper 报错
 				}),
-				// 12: teardown
+				// 12：清理
 				deleteObjectFromClient("apps", "v1", "deployments", "ns1", "deployment1"),
-				// 13,14: observe delete via v1
+				// 13,14：通过 v1 观察到删除
 				processEvent(makeDeleteEvent(deployment1apps)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // only child remains
-					absentOwnerCache:       []objectReference{deployment1apps},                            // cached absence of parent via v1
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 仅剩下子节点
+					absentOwnerCache:       []objectReference{deployment1apps},                            // 缓存通过 v1 观察到的属主不存在
 					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))},
 				}),
-				// 17,18: process attemptToDelete for child
+				// 17,18：处理子节点的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1", // lookup of child pre-delete
+						"get /v1, Resource=pods ns=ns1 name=podname1", // 删除前查找子节点
 					},
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // only child remains
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 仅剩下子节点
 					absentOwnerCache:       []objectReference{deployment1apps},
-					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // mismatched child still enqueued - restmapper error
+					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 不匹配子节点仍在队列中——RESTMapper 报错
 				}),
 			},
 		},
 		{
 			name: "child -> existing owner with inaccessible API version (owner first)",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("apps", "v1", "deployments", "ns1", makeMetadataObj(deployment1apps)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1, deployment1extensions)),
-				// 2,3: observe parent via v1
+				// 2,3：观察到属主 via v1
 				processEvent(makeAddEvent(deployment1apps)),
 				assertState(state{
 					graphNodes: []*node{makeNode(deployment1apps)},
 				}),
-				// 4,5: observe child
+				// 4,5：观察到子节点
 				processEvent(makeAddEvent(pod1ns1, deployment1extensions)),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1apps)},
-					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // mismatched child enqueued for delete attempt
+					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 不匹配的子节点已入队等待删除尝试
 				}),
-				// 6,7: process attemptToDelete for mismatched child
+				// 6,7：处理不匹配子节点的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1", // lookup of child pre-delete
+						"get /v1, Resource=pods ns=ns1 name=podname1", // 删除前查找子节点
 					},
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1apps)},
-					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // mismatched child still enqueued - restmapper error
+					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 不匹配子节点仍在队列中——RESTMapper 报错
 				}),
-				// 8: teardown
+				// 8：清理
 				deleteObjectFromClient("apps", "v1", "deployments", "ns1", "deployment1"),
-				// 9,10: observe delete via v1
+				// 9,10：通过 v1 观察到删除
 				processEvent(makeDeleteEvent(deployment1apps)),
 				assertState(state{
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // only child remains
-					absentOwnerCache:       []objectReference{deployment1apps},                            // cached absence of parent via v1
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 仅剩下子节点
+					absentOwnerCache:       []objectReference{deployment1apps},                            // 缓存通过 v1 观察到的属主不存在
 					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))},
 				}),
-				// 11,12: process attemptToDelete for child
-				// final state: child with unresolveable ownerRef remains, queued in pendingAttemptToDelete
+				// 11,12：处理子节点的 attemptToDelete
+				// 最终状态：带有无法解析 ownerRef 的子节点保留在图中，仍在 pendingAttemptToDelete 队列里
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1", // lookup of child pre-delete
+						"get /v1, Resource=pods ns=ns1 name=podname1", // 删除前查找子节点
 					},
-					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // only child remains
+					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 仅剩下子节点
 					absentOwnerCache:       []objectReference{deployment1apps},
-					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // mismatched child still enqueued - restmapper error
+					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 不匹配子节点仍在队列中——RESTMapper 报错
 				}),
 			},
 		},
-		// child pointing at no-longer-served apiVersion of no-longer-existing parent object (e.g. extensions/v1beta1 deployment)
-		// * should not be deleted (this is indistinguishable from referencing an unknown kind/version)
-		// * should repeatedly poll attemptToDelete
-		// * should not block deletion of legitimate children of missing deployment
+		// 子节点指向已不存在属主的、不再服务的 API 版本（如 extensions/v1beta1 deployment）：
+		// * 不应被删除 (this is indistinguishable from referencing an unknown kind/version)
+		// * 应反复轮询 attemptToDelete
+		// * 不应阻塞缺失 deployment 的合法子节点的删除
 		{
 			name: "child -> non-existent owner with inaccessible API version (inaccessible parent apiVersion first)",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1, deployment1extensions)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod2ns1, deployment1apps)),
-				// 2,3: observe child pointing at no-longer-served apiVersion
+				// 2,3：观察到指向不再服务的 API 版本的子节点
 				processEvent(makeAddEvent(pod1ns1, deployment1extensions)),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1extensions, virtual)},
-					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual)}, // virtual parent enqueued for delete attempt
+					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual)}, // 虚拟属主已入队等待删除尝试
 				}),
-				// 4,5: observe child pointing at served apiVersion where owner does not exist
+				// 4,5：观察到子节点 pointing at served apiVersion where owner does not exist
 				processEvent(makeAddEvent(pod2ns1, deployment1apps)),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1extensions, virtual), makeNode(pod2ns1, withOwners(deployment1apps))},
-					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual), makeNode(pod2ns1, withOwners(deployment1apps))}, // mismatched child enqueued for delete attempt
+					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual), makeNode(pod2ns1, withOwners(deployment1apps))}, // 不匹配的子节点已入队等待删除尝试
 				}),
-				// 6,7: handle attempt to delete virtual parent for inaccessible apiVersion
+				// 6,7：处理不可访问 API 版本的虚拟属主的删除尝试
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1extensions, virtual), makeNode(pod2ns1, withOwners(deployment1apps))},
-					pendingAttemptToDelete: []*node{makeNode(pod2ns1, withOwners(deployment1apps)), makeNode(deployment1extensions, virtual)}, // inaccessible parent requeued to end
+					pendingAttemptToDelete: []*node{makeNode(pod2ns1, withOwners(deployment1apps)), makeNode(deployment1extensions, virtual)}, // 不可访问的属主被重新排到队尾
 				}),
-				// 8,9: handle attempt to delete mismatched child
+				// 8,9：处理不匹配子节点的删除尝试
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname2",               // lookup of child pre-delete
-						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // lookup of parent
-						"delete /v1, Resource=pods ns=ns1 name=podname2",            // delete child
+						"get /v1, Resource=pods ns=ns1 name=podname2",               // 删除前查找子节点
+						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // 查找属主
+						"delete /v1, Resource=pods ns=ns1 name=podname2",            // 删除子节点
 					},
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1extensions, virtual), makeNode(pod2ns1, withOwners(deployment1apps))},
-					absentOwnerCache:       []objectReference{deployment1apps},                // verifiably absent parent remembered
-					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual)}, // mismatched child with verifiably absent parent deleted
+					absentOwnerCache:       []objectReference{deployment1apps},                // 已确认不存在的属主被缓存
+					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual)}, // 属主已确认不存在，不匹配子节点被删除
 				}),
-				// 10,11: observe delete issued in step 8
+				// 10,11：观察第 8 步发出的删除
 				processEvent(makeDeleteEvent(pod2ns1)),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1extensions, virtual)},
 					absentOwnerCache:       []objectReference{deployment1apps},
 					pendingAttemptToDelete: []*node{makeNode(deployment1extensions, virtual)},
 				}),
-				// 12,13: final state: inaccessible parent requeued in attemptToDelete
+				// 12,13：最终状态：不可访问的属主在 attemptToDelete 中重新排队
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes:             []*node{makeNode(pod1ns1, withOwners(deployment1extensions)), makeNode(deployment1extensions, virtual)},
@@ -1683,19 +1736,19 @@ func TestConflictingData(t *testing.T) {
 		{
 			name: "child -> non-existent owner with inaccessible API version (accessible parent apiVersion first)",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1, deployment1extensions)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod2ns1, deployment1apps)),
-				// 2,3: observe child pointing at served apiVersion where owner does not exist
+				// 2,3：观察到指向仍在服务、但属主不存在的 API 版本的子节点
 				processEvent(makeAddEvent(pod2ns1, deployment1apps)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(pod2ns1, withOwners(deployment1apps)),
 						makeNode(deployment1apps, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1apps, virtual)}, // virtual parent enqueued for delete attempt
+						makeNode(deployment1apps, virtual)}, // 虚拟属主已入队等待删除尝试
 				}),
-				// 4,5: observe child pointing at no-longer-served apiVersion
+				// 4,5：观察到子节点 pointing at no-longer-served apiVersion
 				processEvent(makeAddEvent(pod1ns1, deployment1extensions)),
 				assertState(state{
 					graphNodes: []*node{
@@ -1704,55 +1757,55 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod1ns1, withOwners(deployment1extensions))},
 					pendingAttemptToDelete: []*node{
 						makeNode(deployment1apps, virtual),
-						makeNode(pod1ns1, withOwners(deployment1extensions))}, // mismatched child enqueued for delete attempt
+						makeNode(pod1ns1, withOwners(deployment1extensions))}, // 不匹配的子节点已入队等待删除尝试
 				}),
-				// 6,7: handle attempt to delete virtual parent for accessible apiVersion
+				// 6,7：处理可访问 API 版本的虚拟属主的删除尝试
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // lookup of parent, gets 404
+						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // 查找属主, gets 404
 					},
-					pendingGraphChanges: []*event{makeVirtualDeleteEvent(deployment1apps)}, // virtual parent not found, queued virtual delete event
+					pendingGraphChanges: []*event{makeVirtualDeleteEvent(deployment1apps)}, // 虚拟属主未找到，入队虚拟删除事件
 					graphNodes: []*node{
 						makeNode(pod2ns1, withOwners(deployment1apps)),
 						makeNode(deployment1apps, virtual),
 						makeNode(pod1ns1, withOwners(deployment1extensions))},
 					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))},
 				}),
-				// 8,9: handle attempt to delete mismatched child
+				// 8,9：处理不匹配子节点的删除尝试
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1", // lookup of child pre-delete
+						"get /v1, Resource=pods ns=ns1 name=podname1", // 删除前查找子节点
 					},
 					pendingGraphChanges: []*event{makeVirtualDeleteEvent(deployment1apps)},
 					graphNodes: []*node{
 						makeNode(pod2ns1, withOwners(deployment1apps)),
 						makeNode(deployment1apps, virtual),
 						makeNode(pod1ns1, withOwners(deployment1extensions))},
-					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // restmapper on inaccessible parent, requeued
+					pendingAttemptToDelete: []*node{makeNode(pod1ns1, withOwners(deployment1extensions))}, // 不可访问属主触发 RESTMapper 错误，重新入队
 				}),
-				// 10,11: handle queued virtual delete event
+				// 10,11：处理队列中的虚拟删除事件
 				processPendingGraphChanges(1),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(pod2ns1, withOwners(deployment1apps)),
-						makeNode(deployment1extensions, virtual), // deployment node changed identity to alternative virtual identity
+						makeNode(deployment1extensions, virtual), // deployment 节点变为另一种虚拟身份
 						makeNode(pod1ns1, withOwners(deployment1extensions)),
 					},
-					absentOwnerCache: []objectReference{deployment1apps}, // absent apps/v1 parent remembered
+					absentOwnerCache: []objectReference{deployment1apps}, // 缓存 apps/v1 属主的不存在状态
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1ns1, withOwners(deployment1extensions)), // child referencing inaccessible apiVersion
-						makeNode(pod2ns1, withOwners(deployment1apps)),       // children of absent apps/v1 parent queued for delete attempt
-						makeNode(deployment1extensions, virtual),             // new virtual parent queued for delete attempt
+						makeNode(pod1ns1, withOwners(deployment1extensions)), // 引用不可访问 API 版本的子节点
+						makeNode(pod2ns1, withOwners(deployment1apps)),       // 缺失 apps/v1 属主的子节点已入队等待删除尝试
+						makeNode(deployment1extensions, virtual),             // 新的虚拟属主已入队等待删除尝试
 					},
 				}),
 
-				// 12,13: handle attempt to delete child referencing inaccessible apiVersion
+				// 12,13：处理引用不可访问 API 版本的子节点的删除尝试
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1", // lookup of child pre-delete
+						"get /v1, Resource=pods ns=ns1 name=podname1", // 删除前查找子节点
 					},
 					graphNodes: []*node{
 						makeNode(pod2ns1, withOwners(deployment1apps)),
@@ -1760,18 +1813,18 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod1ns1, withOwners(deployment1extensions))},
 					absentOwnerCache: []objectReference{deployment1apps},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod2ns1, withOwners(deployment1apps)),       // children of absent apps/v1 parent queued for delete attempt
-						makeNode(deployment1extensions, virtual),             // new virtual parent queued for delete attempt
-						makeNode(pod1ns1, withOwners(deployment1extensions)), // child referencing inaccessible apiVersion - requeued to end
+						makeNode(pod2ns1, withOwners(deployment1apps)),       // 缺失 apps/v1 属主的子节点已入队等待删除尝试
+						makeNode(deployment1extensions, virtual),             // 新的虚拟属主已入队等待删除尝试
+						makeNode(pod1ns1, withOwners(deployment1extensions)), // 引用不可访问 API 版本的子节点 - requeued to end
 					},
 				}),
 
-				// 14,15: handle attempt to delete child referencing accessible apiVersion
+				// 14,15：处理引用可访问 API 版本的子节点的删除尝试
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname2",    // lookup of child pre-delete
-						"delete /v1, Resource=pods ns=ns1 name=podname2", // parent absent, delete
+						"get /v1, Resource=pods ns=ns1 name=podname2",    // 删除前查找子节点
+						"delete /v1, Resource=pods ns=ns1 name=podname2", // 属主不存在，删除子节点
 					},
 					graphNodes: []*node{
 						makeNode(pod2ns1, withOwners(deployment1apps)),
@@ -1779,12 +1832,12 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod1ns1, withOwners(deployment1extensions))},
 					absentOwnerCache: []objectReference{deployment1apps},
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1extensions, virtual),             // new virtual parent queued for delete attempt
-						makeNode(pod1ns1, withOwners(deployment1extensions)), // child referencing inaccessible apiVersion
+						makeNode(deployment1extensions, virtual),             // 新的虚拟属主已入队等待删除尝试
+						makeNode(pod1ns1, withOwners(deployment1extensions)), // 引用不可访问 API 版本的子节点
 					},
 				}),
 
-				// 16,17: handle attempt to delete virtual parent in inaccessible apiVersion
+				// 16,17：处理不可访问 API 版本的虚拟属主的删除尝试
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes: []*node{
@@ -1793,13 +1846,13 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod1ns1, withOwners(deployment1extensions))},
 					absentOwnerCache: []objectReference{deployment1apps},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1ns1, withOwners(deployment1extensions)), // child referencing inaccessible apiVersion
-						makeNode(deployment1extensions, virtual),             // virtual parent with inaccessible apiVersion - requeued to end
+						makeNode(pod1ns1, withOwners(deployment1extensions)), // 引用不可访问 API 版本的子节点
+						makeNode(deployment1extensions, virtual),             // 不可访问 API 版本的虚拟属主被重新排到队尾
 					},
 				}),
 
-				// 18,19: observe delete of pod2 from step 14
-				// final state: virtual parent for inaccessible apiVersion and child of that parent remain in graph, queued for delete attempts with backoff
+				// 18,19：观察第 14 步发出的 pod2 删除
+				// 最终状态：不可访问 API 版本的虚拟属主及其子节点仍留在图中，并以退避方式排队等待删除尝试
 				processEvent(makeDeleteEvent(pod2ns1)),
 				assertState(state{
 					graphNodes: []*node{
@@ -1807,154 +1860,154 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod1ns1, withOwners(deployment1extensions))},
 					absentOwnerCache: []objectReference{deployment1apps},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1ns1, withOwners(deployment1extensions)), // child referencing inaccessible apiVersion
-						makeNode(deployment1extensions, virtual),             // virtual parent with inaccessible apiVersion
+						makeNode(pod1ns1, withOwners(deployment1extensions)), // 引用不可访问 API 版本的子节点
+						makeNode(deployment1extensions, virtual),             // 不可访问 API 版本的虚拟属主
 					},
 				}),
 			},
 		},
-		// child pointing at incorrect apiVersion/kind of still-existing parent object (e.g. core/v1 Secret with uid=123, where an apps/v1 Deployment with uid=123 exists)
-		// * should be deleted immediately
-		// * should not trigger deletion of legitimate children of parent
+		// 子节点指向仍存在属主的错误 API 版本/类型（如 UID 为 123 的 core/v1 Secret，而实际存在的是 UID 为 123 的 apps/v1 Deployment）：
+		// * 应当被立即删除
+		// * 不应触发属主合法子节点的删除
 		{
 			name: "bad child -> existing owner with incorrect API version (bad child, good child, bad parent delete, good parent)",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("apps", "v1", "deployments", "ns1", makeMetadataObj(deployment1apps)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(badChildPod, badSecretReferenceWithDeploymentUID)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(goodChildPod, deployment1apps)),
-				// 3,4: observe bad child
+				// 3,4：观察到问题子节点
 				processEvent(makeAddEvent(badChildPod, badSecretReferenceWithDeploymentUID)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
 						makeNode(badSecretReferenceWithDeploymentUID, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(badSecretReferenceWithDeploymentUID, virtual)}, // virtual parent enqueued for delete attempt
+						makeNode(badSecretReferenceWithDeploymentUID, virtual)}, // 虚拟属主已入队等待删除尝试
 				}),
 
-				// 5,6: observe good child
+				// 5,6：观察到合法子节点
 				processEvent(makeAddEvent(goodChildPod, deployment1apps)),
 				assertState(state{
 					graphNodes: []*node{
-						makeNode(goodChildPod, withOwners(deployment1apps)), // good child added
+						makeNode(goodChildPod, withOwners(deployment1apps)), // 合法子节点已加入
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
 						makeNode(badSecretReferenceWithDeploymentUID, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(badSecretReferenceWithDeploymentUID, virtual), // virtual parent enqueued for delete attempt
-						makeNode(goodChildPod, withOwners(deployment1apps)),    // good child enqueued for delete attempt
+						makeNode(badSecretReferenceWithDeploymentUID, virtual), // 虚拟属主已入队等待删除尝试
+						makeNode(goodChildPod, withOwners(deployment1apps)),    // 合法子节点已入队等待删除尝试
 					},
 				}),
 
-				// 7,8: process pending delete of virtual parent
+				// 7,8：处理虚拟属主的待删除项
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=secrets ns=ns1 name=secretname", // lookup of bad parent reference
+						"get /v1, Resource=secrets ns=ns1 name=secretname", // 查找错误的属主引用
 					},
-					pendingGraphChanges: []*event{makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // bad virtual parent not found, queued virtual delete event
+					pendingGraphChanges: []*event{makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // 未找到错误虚拟属主，入队虚拟删除事件
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
 						makeNode(badSecretReferenceWithDeploymentUID, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(goodChildPod, withOwners(deployment1apps)), // good child enqueued for delete attempt
+						makeNode(goodChildPod, withOwners(deployment1apps)), // 合法子节点已入队等待删除尝试
 					},
 				}),
 
-				// 9,10: process pending delete of good child, gets 200, remains
+				// 9,10：处理合法子节点的待删除项，返回 200，节点保留
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=goodpod",                // lookup of child pre-delete
-						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // lookup of good parent reference, returns 200
+						"get /v1, Resource=pods ns=ns1 name=goodpod",                // 删除前查找子节点
+						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // 查找合法属主引用，返回 200
 					},
-					pendingGraphChanges: []*event{makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // bad virtual parent not found, queued virtual delete event
+					pendingGraphChanges: []*event{makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // 未找到错误虚拟属主，入队虚拟删除事件
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
 						makeNode(badSecretReferenceWithDeploymentUID, virtual)},
 				}),
 
-				// 11,12: process virtual delete event of bad parent reference
+				// 11,12：处理错误属主引用的虚拟删除事件
 				processPendingGraphChanges(1),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
-						makeNode(deployment1apps, virtual)}, // parent node switched to alternate identity, still virtual
-					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID}, // remember absence of bad parent coordinates
+						makeNode(deployment1apps, virtual)}, // 属主节点切换为另一种身份，仍是虚拟节点
+					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID}, // 记住错误属主坐标的不存在状态
 					pendingAttemptToDelete: []*node{
-						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)), // child of bad parent coordinates enqueued for delete attempt
-						makeNode(deployment1apps, virtual),                                     // new alternate virtual parent identity queued for delete attempt
+						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)), // 错误属主坐标的子节点已入队等待删除尝试
+						makeNode(deployment1apps, virtual),                                     // 新的备用虚拟属主身份已入队等待删除尝试
 					},
 				}),
 
-				// 13,14: process pending delete of bad child
+				// 13,14：处理问题子节点的待删除项
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=badpod",    // lookup of child pre-delete
-						"delete /v1, Resource=pods ns=ns1 name=badpod", // delete of bad child (absence of bad parent is cached)
+						"get /v1, Resource=pods ns=ns1 name=badpod",    // 删除前查找子节点
+						"delete /v1, Resource=pods ns=ns1 name=badpod", // 删除问题子节点（错误属主的不存在已被缓存）
 					},
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
-						makeNode(deployment1apps, virtual)}, // parent node switched to alternate identity, still virtual
+						makeNode(deployment1apps, virtual)}, // 属主节点切换为另一种身份，仍是虚拟节点
 					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID},
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1apps, virtual), // new alternate virtual parent identity queued for delete attempt
+						makeNode(deployment1apps, virtual), // 新的备用虚拟属主身份已入队等待删除尝试
 					},
 				}),
 
-				// 15,16: process pending delete of new virtual parent
+				// 15,16：处理新虚拟属主的待删除项
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // lookup of virtual parent, returns 200
+						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // 查找虚拟属主，返回 200
 					},
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
-						makeNode(deployment1apps, virtual)}, // parent node switched to alternate identity, still virtual
+						makeNode(deployment1apps, virtual)}, // 属主节点切换为另一种身份，仍是虚拟节点
 					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID},
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1apps, virtual), // requeued, not yet observed
+						makeNode(deployment1apps, virtual), // 重新入队，尚未被观察到
 					},
 				}),
 
-				// 17,18: observe good parent
+				// 17,18：观察到合法属主
 				processEvent(makeAddEvent(deployment1apps)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
-						makeNode(deployment1apps)}, // parent node made non-virtual
+						makeNode(deployment1apps)}, // 属主节点变为真实节点
 					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID},
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1apps), // still queued, no longer virtual
+						makeNode(deployment1apps), // 仍在队列中，但不再是虚拟节点
 					},
 				}),
 
-				// 19,20: observe delete of bad child from step 13
+				// 19,20：观察第 13 步发出的错误子节点删除
 				processEvent(makeDeleteEvent(badChildPod, badSecretReferenceWithDeploymentUID)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
-						// bad child node removed
+						// 问题子节点已从图中移除
 						makeNode(deployment1apps)},
 					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID},
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1apps), // still queued, no longer virtual
+						makeNode(deployment1apps), // 仍在队列中，但不再是虚拟节点
 					},
 				}),
 
-				// 21,22: process pending delete of good parent
-				// final state: good parent in graph with correct coordinates, good children remain, no pending deletions
+				// 21,22：处理合法属主的待删除项
+				// 最终状态：合法属主以正确坐标留在图中，合法子节点保留，无待删除项
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // lookup of good parent, returns 200
+						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // 查找合法属主，返回 200
 					},
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
@@ -1966,107 +2019,107 @@ func TestConflictingData(t *testing.T) {
 		{
 			name: "bad child -> existing owner with incorrect API version (bad child, good child, good parent, bad parent delete)",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("apps", "v1", "deployments", "ns1", makeMetadataObj(deployment1apps)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(badChildPod, badSecretReferenceWithDeploymentUID)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(goodChildPod, deployment1apps)),
-				// 3,4: observe bad child
+				// 3,4：观察到问题子节点
 				processEvent(makeAddEvent(badChildPod, badSecretReferenceWithDeploymentUID)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
 						makeNode(badSecretReferenceWithDeploymentUID, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(badSecretReferenceWithDeploymentUID, virtual)}, // virtual parent enqueued for delete attempt
+						makeNode(badSecretReferenceWithDeploymentUID, virtual)}, // 虚拟属主已入队等待删除尝试
 				}),
 
-				// 5,6: observe good child
+				// 5,6：观察到合法子节点
 				processEvent(makeAddEvent(goodChildPod, deployment1apps)),
 				assertState(state{
 					graphNodes: []*node{
-						makeNode(goodChildPod, withOwners(deployment1apps)), // good child added
+						makeNode(goodChildPod, withOwners(deployment1apps)), // 合法子节点已加入
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
 						makeNode(badSecretReferenceWithDeploymentUID, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(badSecretReferenceWithDeploymentUID, virtual), // virtual parent enqueued for delete attempt
-						makeNode(goodChildPod, withOwners(deployment1apps)),    // good child enqueued for delete attempt
+						makeNode(badSecretReferenceWithDeploymentUID, virtual), // 虚拟属主已入队等待删除尝试
+						makeNode(goodChildPod, withOwners(deployment1apps)),    // 合法子节点已入队等待删除尝试
 					},
 				}),
 
-				// 7,8: process pending delete of virtual parent
+				// 7,8：处理虚拟属主的待删除项
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=secrets ns=ns1 name=secretname", // lookup of bad parent reference
+						"get /v1, Resource=secrets ns=ns1 name=secretname", // 查找错误的属主引用
 					},
-					pendingGraphChanges: []*event{makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // bad virtual parent not found, queued virtual delete event
+					pendingGraphChanges: []*event{makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // 未找到错误虚拟属主，入队虚拟删除事件
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
 						makeNode(badSecretReferenceWithDeploymentUID, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(goodChildPod, withOwners(deployment1apps)), // good child enqueued for delete attempt
+						makeNode(goodChildPod, withOwners(deployment1apps)), // 合法子节点已入队等待删除尝试
 					},
 				}),
 
-				// 9,10: process pending delete of good child, gets 200, remains
+				// 9,10：处理合法子节点的待删除项，返回 200，节点保留
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=goodpod",                // lookup of child pre-delete
-						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // lookup of good parent reference, returns 200
+						"get /v1, Resource=pods ns=ns1 name=goodpod",                // 删除前查找子节点
+						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // 查找合法属主引用，返回 200
 					},
-					pendingGraphChanges: []*event{makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // bad virtual parent not found, queued virtual delete event
+					pendingGraphChanges: []*event{makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // 未找到错误虚拟属主，入队虚拟删除事件
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
 						makeNode(badSecretReferenceWithDeploymentUID, virtual)},
 				}),
 
-				// 11,12: good parent add event
+				// 11,12：合法属主的添加事件
 				insertEvent(makeAddEvent(deployment1apps)),
 				assertState(state{
 					pendingGraphChanges: []*event{
-						makeAddEvent(deployment1apps),                                // good parent observation sneaked in
-						makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // bad virtual parent not found, queued virtual delete event
+						makeAddEvent(deployment1apps),                                // 合法属主的观察插队进入
+						makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // 未找到错误虚拟属主，入队虚拟删除事件
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
 						makeNode(badSecretReferenceWithDeploymentUID, virtual)},
 				}),
 
-				// 13,14: process good parent add
+				// 13,14：处理合法属主的添加
 				processPendingGraphChanges(1),
 				assertState(state{
 					pendingGraphChanges: []*event{
-						makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // bad virtual parent still queued virtual delete event
+						makeVirtualDeleteEvent(badSecretReferenceWithDeploymentUID)}, // 错误虚拟属主的虚拟删除事件仍在队列中
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
-						makeNode(deployment1apps)}, // parent node gets fixed, no longer virtual
+						makeNode(deployment1apps)}, // 属主节点得到修正，不再是虚拟节点
 					pendingAttemptToDelete: []*node{
-						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID))}, // child of bad parent coordinates enqueued for delete attempt
+						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID))}, // 错误属主坐标的子节点已入队等待删除尝试
 				}),
 
-				// 15,16: process virtual delete event of bad parent reference
+				// 15,16：处理错误属主引用的虚拟删除事件
 				processPendingGraphChanges(1),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)),
 						makeNode(deployment1apps)},
-					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID}, // remember absence of bad parent coordinates
+					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID}, // 记住错误属主坐标的不存在状态
 					pendingAttemptToDelete: []*node{
-						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)), // child of bad parent coordinates enqueued for delete attempt
+						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)), // 错误属主坐标的子节点已入队等待删除尝试
 					},
 				}),
 
-				// 17,18: process pending delete of bad child
+				// 17,18：处理问题子节点的待删除项
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=badpod",    // lookup of child pre-delete
-						"delete /v1, Resource=pods ns=ns1 name=badpod", // delete of bad child (absence of bad parent is cached)
+						"get /v1, Resource=pods ns=ns1 name=badpod",    // 删除前查找子节点
+						"delete /v1, Resource=pods ns=ns1 name=badpod", // 删除问题子节点（错误属主的不存在已被缓存）
 					},
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
@@ -2075,13 +2128,13 @@ func TestConflictingData(t *testing.T) {
 					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID},
 				}),
 
-				// 19,20: observe delete of bad child from step 17
-				// final state: good parent in graph with correct coordinates, good children remain, no pending deletions
+				// 19,20：观察第 17 步发出的错误子节点删除
+				// 最终状态：合法属主以正确坐标留在图中，合法子节点保留，无待删除项
 				processEvent(makeDeleteEvent(badChildPod, badSecretReferenceWithDeploymentUID)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
-						// bad child node removed
+						// 问题子节点已从图中移除
 						makeNode(deployment1apps)},
 					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID},
 				}),
@@ -2090,100 +2143,100 @@ func TestConflictingData(t *testing.T) {
 		{
 			name: "bad child -> existing owner with incorrect API version (good child, bad child, good parent)",
 			steps: []step{
-				// setup
+				// 准备阶段
 				createObjectInClient("apps", "v1", "deployments", "ns1", makeMetadataObj(deployment1apps)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(badChildPod, badSecretReferenceWithDeploymentUID)),
 				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(goodChildPod, deployment1apps)),
-				// 3,4: observe good child
+				// 3,4：观察到合法子节点
 				processEvent(makeAddEvent(goodChildPod, deployment1apps)),
 				assertState(state{
 					graphNodes: []*node{
-						makeNode(goodChildPod, withOwners(deployment1apps)), // good child added
-						makeNode(deployment1apps, virtual)},                 // virtual parent added
+						makeNode(goodChildPod, withOwners(deployment1apps)), // 合法子节点已加入
+						makeNode(deployment1apps, virtual)},                 // 虚拟属主已加入
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1apps, virtual), // virtual parent enqueued for delete attempt
+						makeNode(deployment1apps, virtual), // 虚拟属主已入队等待删除尝试
 					},
 				}),
 
-				// 5,6: observe bad child
+				// 5,6：观察到问题子节点
 				processEvent(makeAddEvent(badChildPod, badSecretReferenceWithDeploymentUID)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(deployment1apps, virtual),
-						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID))}, // bad child added
+						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID))}, // 问题子节点已加入
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1apps, virtual),                                     // virtual parent enqueued for delete attempt
-						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)), // bad child enqueued for delete attempt
+						makeNode(deployment1apps, virtual),                                     // 虚拟属主已入队等待删除尝试
+						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)), // 问题子节点已入队等待删除尝试
 					},
 				}),
 
-				// 7,8: process pending delete of virtual parent
+				// 7,8：处理虚拟属主的待删除项
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // lookup of good parent reference, returns 200
+						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // 查找合法属主引用，返回 200
 					},
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(deployment1apps, virtual),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID))},
 					pendingAttemptToDelete: []*node{
-						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)), // bad child enqueued for delete attempt
-						makeNode(deployment1apps, virtual),                                     // virtual parent requeued to end, still virtual
+						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID)), // 问题子节点已入队等待删除尝试
+						makeNode(deployment1apps, virtual),                                     // 虚拟属主被重新排到队尾，仍为虚拟节点
 					},
 				}),
 
-				// 9,10: process pending delete of bad child
+				// 9,10：处理问题子节点的待删除项
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=badpod",        // lookup of child pre-delete
-						"get /v1, Resource=secrets ns=ns1 name=secretname", // lookup of bad parent reference, returns 404
-						"delete /v1, Resource=pods ns=ns1 name=badpod",     // delete of bad child
+						"get /v1, Resource=pods ns=ns1 name=badpod",        // 删除前查找子节点
+						"get /v1, Resource=secrets ns=ns1 name=secretname", // 查找错误的属主引用, returns 404
+						"delete /v1, Resource=pods ns=ns1 name=badpod",     // 删除问题子节点
 					},
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
 						makeNode(deployment1apps, virtual),
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID))},
-					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID}, // remember absence of bad parent
+					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID}, // 记住错误属主的不存在状态
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1apps, virtual), // virtual parent requeued to end, still virtual
+						makeNode(deployment1apps, virtual), // 虚拟属主被重新排到队尾，仍为虚拟节点
 					},
 				}),
 
-				// 11,12: observe good parent
+				// 11,12：观察到合法属主
 				processEvent(makeAddEvent(deployment1apps)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
-						makeNode(deployment1apps), // good parent no longer virtual
+						makeNode(deployment1apps), // 合法属主不再是虚拟节点
 						makeNode(badChildPod, withOwners(badSecretReferenceWithDeploymentUID))},
 					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID},
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1apps), // parent requeued to end, no longer virtual
+						makeNode(deployment1apps), // 属主被重新排到队尾，不再是虚拟节点
 					},
 				}),
 
-				// 13,14: observe delete of bad child from step 9
+				// 13,14：观察第 9 步发出的错误子节点删除
 				processEvent(makeDeleteEvent(badChildPod, badSecretReferenceWithDeploymentUID)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
-						// bad child node removed
+						// 问题子节点已从图中移除
 						makeNode(deployment1apps)},
 					absentOwnerCache: []objectReference{badSecretReferenceWithDeploymentUID},
 					pendingAttemptToDelete: []*node{
-						makeNode(deployment1apps), // parent requeued to end, no longer virtual
+						makeNode(deployment1apps), // 属主被重新排到队尾，不再是虚拟节点
 					},
 				}),
 
-				// 15,16: process pending delete of good parent
-				// final state: good parent in graph with correct coordinates, good children remain, no pending deletions
+				// 15,16：处理合法属主的待删除项
+				// 最终状态：合法属主以正确坐标留在图中，合法子节点保留，无待删除项
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // lookup of good parent, returns 200
+						"get apps/v1, Resource=deployments ns=ns1 name=deployment1", // 查找合法属主，返回 200
 					},
 					graphNodes: []*node{
 						makeNode(goodChildPod, withOwners(deployment1apps)),
@@ -2196,21 +2249,21 @@ func TestConflictingData(t *testing.T) {
 			// https://github.com/kubernetes/kubernetes/issues/98040
 			name: "cluster-scoped bad child, namespaced good child, missing parent",
 			steps: []step{
-				// setup
-				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod2ns1, pod1ns1)),     // good child
-				createObjectInClient("", "v1", "nodes", "", makeMetadataObj(node1, pod1nonamespace)), // bad child
+				// 准备阶段
+				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod2ns1, pod1ns1)),     // 合法子节点
+				createObjectInClient("", "v1", "nodes", "", makeMetadataObj(node1, pod1nonamespace)), // 问题子节点
 
-				// 2,3: observe bad child
+				// 2,3：观察到问题子节点
 				processEvent(makeAddEvent(node1, pod1nonamespace)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(node1, withOwners(pod1nonamespace)),
 						makeNode(pod1nonamespace, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1nonamespace, virtual)}, // virtual parent queued for deletion
+						makeNode(pod1nonamespace, virtual)}, // 虚拟属主已入队等待删除
 				}),
 
-				// 4,5: observe good child
+				// 4,5：观察到合法子节点
 				processEvent(makeAddEvent(pod2ns1, pod1ns1)),
 				assertState(state{
 					graphNodes: []*node{
@@ -2218,12 +2271,12 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod2ns1, withOwners(pod1ns1)),
 						makeNode(pod1nonamespace, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1nonamespace, virtual),     // virtual parent queued for deletion
-						makeNode(pod2ns1, withOwners(pod1ns1)), // mismatched child queued for deletion
+						makeNode(pod1nonamespace, virtual),     // 虚拟属主已入队等待删除
+						makeNode(pod2ns1, withOwners(pod1ns1)), // 不匹配的子节点已入队等待删除
 					},
 				}),
 
-				// 6,7: process attemptToDelete of bad virtual parent coordinates
+				// 6,7：处理错误虚拟属主坐标的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes: []*node{
@@ -2231,26 +2284,26 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod2ns1, withOwners(pod1ns1)),
 						makeNode(pod1nonamespace, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod2ns1, withOwners(pod1ns1))}, // mismatched child queued for deletion
+						makeNode(pod2ns1, withOwners(pod1ns1))}, // 不匹配的子节点已入队等待删除
 				}),
 
-				// 8,9: process attemptToDelete of good child
+				// 8,9：处理 attemptToDelete of good child
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname2",    // get good child, returns 200
-						"get /v1, Resource=pods ns=ns1 name=podname1",    // get missing parent, returns 404
-						"delete /v1, Resource=pods ns=ns1 name=podname2", // delete good child
+						"get /v1, Resource=pods ns=ns1 name=podname2",    // 获取合法子节点，返回 200
+						"get /v1, Resource=pods ns=ns1 name=podname1",    // 获取缺失的属主，返回 404
+						"delete /v1, Resource=pods ns=ns1 name=podname2", // 删除合法子节点
 					},
 					graphNodes: []*node{
 						makeNode(node1, withOwners(pod1nonamespace)),
 						makeNode(pod2ns1, withOwners(pod1ns1)),
 						makeNode(pod1nonamespace, virtual)},
-					absentOwnerCache: []objectReference{pod1ns1}, // missing parent cached
+					absentOwnerCache: []objectReference{pod1ns1}, // 缓存缺失的属主
 				}),
 
-				// 10,11: observe deletion of good child
-				// steady-state is bad cluster child and bad virtual parent coordinates, with no retries
+				// 10,11：观察合法子节点的删除
+				// 稳态为问题集群子节点与错误虚拟属主坐标，且不再重试
 				processEvent(makeDeleteEvent(pod2ns1, pod1ns1)),
 				assertState(state{
 					graphNodes: []*node{
@@ -2264,22 +2317,22 @@ func TestConflictingData(t *testing.T) {
 			// https://github.com/kubernetes/kubernetes/issues/98040
 			name: "cluster-scoped bad child, namespaced good child, late observed parent",
 			steps: []step{
-				// setup
-				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1)),              // good parent
-				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod2ns1, pod1ns1)),     // good child
-				createObjectInClient("", "v1", "nodes", "", makeMetadataObj(node1, pod1nonamespace)), // bad child
+				// 准备阶段
+				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1)),              // 合法属主
+				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod2ns1, pod1ns1)),     // 合法子节点
+				createObjectInClient("", "v1", "nodes", "", makeMetadataObj(node1, pod1nonamespace)), // 问题子节点
 
-				// 3,4: observe bad child
+				// 3,4：观察到问题子节点
 				processEvent(makeAddEvent(node1, pod1nonamespace)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(node1, withOwners(pod1nonamespace)),
 						makeNode(pod1nonamespace, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1nonamespace, virtual)}, // virtual parent queued for deletion
+						makeNode(pod1nonamespace, virtual)}, // 虚拟属主已入队等待删除
 				}),
 
-				// 5,6: observe good child
+				// 5,6：观察到合法子节点
 				processEvent(makeAddEvent(pod2ns1, pod1ns1)),
 				assertState(state{
 					graphNodes: []*node{
@@ -2287,11 +2340,11 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod2ns1, withOwners(pod1ns1)),
 						makeNode(pod1nonamespace, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1nonamespace, virtual),      // virtual parent queued for deletion
-						makeNode(pod2ns1, withOwners(pod1ns1))}, // mismatched child queued for deletion
+						makeNode(pod1nonamespace, virtual),      // 虚拟属主已入队等待删除
+						makeNode(pod2ns1, withOwners(pod1ns1))}, // 不匹配的子节点已入队等待删除
 				}),
 
-				// 7,8: process attemptToDelete of bad virtual parent coordinates
+				// 7,8：处理错误虚拟属主坐标的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes: []*node{
@@ -2299,15 +2352,15 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod2ns1, withOwners(pod1ns1)),
 						makeNode(pod1nonamespace, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod2ns1, withOwners(pod1ns1))}, // mismatched child queued for deletion
+						makeNode(pod2ns1, withOwners(pod1ns1))}, // 不匹配的子节点已入队等待删除
 				}),
 
-				// 9,10: process attemptToDelete of good child
+				// 9,10：处理 attemptToDelete of good child
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname2", // get good child, returns 200
-						"get /v1, Resource=pods ns=ns1 name=podname1", // get late-observed parent, returns 200
+						"get /v1, Resource=pods ns=ns1 name=podname2", // 获取合法子节点，返回 200
+						"get /v1, Resource=pods ns=ns1 name=podname1", // 获取稍后才被观察到的属主，返回 200
 					},
 					graphNodes: []*node{
 						makeNode(node1, withOwners(pod1nonamespace)),
@@ -2315,25 +2368,25 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod1nonamespace, virtual)},
 				}),
 
-				// 11,12: late observe good parent
+				// 11,12：稍后观察到合法属主
 				processEvent(makeAddEvent(pod1ns1)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(node1, withOwners(pod1nonamespace)),
 						makeNode(pod2ns1, withOwners(pod1ns1)),
 						makeNode(pod1ns1)},
-					// warn about bad node reference
+					// 对错误节点引用发出告警
 					events: []string{`Warning OwnerRefInvalidNamespace ownerRef [v1/Pod, namespace: , name: podname1, uid: poduid1] does not exist in namespace "" involvedObject{kind=Node,apiVersion=v1}`},
 					pendingAttemptToDelete: []*node{
-						makeNode(node1, withOwners(pod1nonamespace))}, // queue bad cluster-scoped child for delete attempt
+						makeNode(node1, withOwners(pod1nonamespace))}, // 将问题集群级子节点入队以尝试删除
 				}),
 
-				// 13,14: process attemptToDelete of bad child
-				// steady state is bad cluster-scoped child remaining with no retries, good parent and good child in graph
+				// 13,14：处理问题子节点的 attemptToDelete
+				// 稳态为问题集群级子节点保留且不再重试，合法属主与合法子节点留在图中
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=nodes name=nodename", // get bad child, returns 200
+						"get /v1, Resource=nodes name=nodename", // 获取问题子节点，返回 200
 					},
 					graphNodes: []*node{
 						makeNode(node1, withOwners(pod1nonamespace)),
@@ -2346,21 +2399,21 @@ func TestConflictingData(t *testing.T) {
 			// https://github.com/kubernetes/kubernetes/issues/98040
 			name: "namespaced good child, cluster-scoped bad child, missing parent",
 			steps: []step{
-				// setup
-				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod2ns1, pod1ns1)),     // good child
-				createObjectInClient("", "v1", "nodes", "", makeMetadataObj(node1, pod1nonamespace)), // bad child
+				// 准备阶段
+				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod2ns1, pod1ns1)),     // 合法子节点
+				createObjectInClient("", "v1", "nodes", "", makeMetadataObj(node1, pod1nonamespace)), // 问题子节点
 
-				// 2,3: observe good child
+				// 2,3：观察到合法子节点
 				processEvent(makeAddEvent(pod2ns1, pod1ns1)),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(pod2ns1, withOwners(pod1ns1)),
 						makeNode(pod1ns1, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1ns1, virtual)}, // virtual parent queued for deletion
+						makeNode(pod1ns1, virtual)}, // 虚拟属主已入队等待删除
 				}),
 
-				// 4,5: observe bad child
+				// 4,5：观察到问题子节点
 				processEvent(makeAddEvent(node1, pod1nonamespace)),
 				assertState(state{
 					graphNodes: []*node{
@@ -2368,60 +2421,60 @@ func TestConflictingData(t *testing.T) {
 						makeNode(node1, withOwners(pod1nonamespace)),
 						makeNode(pod1ns1, virtual)},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1ns1, virtual),                   // virtual parent queued for deletion
-						makeNode(node1, withOwners(pod1nonamespace)), // mismatched child queued for deletion
+						makeNode(pod1ns1, virtual),                   // 虚拟属主已入队等待删除
+						makeNode(node1, withOwners(pod1nonamespace)), // 不匹配的子节点已入队等待删除
 					},
 				}),
 
-				// 6,7: process attemptToDelete of good virtual parent coordinates
+				// 6,7：处理合法虚拟属主坐标的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname1", // lookup of missing parent, returns 404
+						"get /v1, Resource=pods ns=ns1 name=podname1", // 查找缺失的属主，返回 404
 					},
 					graphNodes: []*node{
 						makeNode(node1, withOwners(pod1nonamespace)),
 						makeNode(pod2ns1, withOwners(pod1ns1)),
 						makeNode(pod1ns1, virtual)},
-					pendingGraphChanges: []*event{makeVirtualDeleteEvent(pod1ns1)}, // virtual parent not found, queued virtual delete event
+					pendingGraphChanges: []*event{makeVirtualDeleteEvent(pod1ns1)}, // 虚拟属主未找到，入队虚拟删除事件
 					pendingAttemptToDelete: []*node{
-						makeNode(node1, withOwners(pod1nonamespace)), // mismatched child still queued for deletion
+						makeNode(node1, withOwners(pod1nonamespace)), // 不匹配的子节点仍在删除队列中
 					},
 				}),
 
-				// 8,9: process attemptToDelete of bad cluster child
+				// 8,9：处理 attemptToDelete of bad cluster child
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=nodes name=nodename", // lookup of existing node
+						"get /v1, Resource=nodes name=nodename", // 查找已存在的节点
 					},
 					graphNodes: []*node{
 						makeNode(node1, withOwners(pod1nonamespace)),
 						makeNode(pod2ns1, withOwners(pod1ns1)),
 						makeNode(pod1ns1, virtual)},
-					pendingGraphChanges: []*event{makeVirtualDeleteEvent(pod1ns1)}, // virtual parent virtual delete event still enqueued
+					pendingGraphChanges: []*event{makeVirtualDeleteEvent(pod1ns1)}, // 虚拟属主的虚拟删除事件仍在队列中
 				}),
 
-				// 10,11: process virtual delete event for good virtual parent coordinates
+				// 10,11：处理合法虚拟属主坐标的虚拟删除事件
 				processPendingGraphChanges(1),
 				assertState(state{
 					graphNodes: []*node{
 						makeNode(node1, withOwners(pod1nonamespace)),
 						makeNode(pod2ns1, withOwners(pod1ns1)),
-						makeNode(pod1nonamespace, virtual)}, // missing virtual parent replaced with alternate coordinates, still virtual
-					absentOwnerCache: []objectReference{pod1ns1}, // cached absence of missing parent
+						makeNode(pod1nonamespace, virtual)}, // 缺失的虚拟属主被替换为备用坐标，仍为虚拟节点
+					absentOwnerCache: []objectReference{pod1ns1}, // 缓存缺失属主的不存在状态
 					pendingAttemptToDelete: []*node{
-						makeNode(pod2ns1, withOwners(pod1ns1)), // good child of missing parent enqueued for deletion
-						makeNode(pod1nonamespace, virtual),     // new virtual parent coordinates enqueued for deletion
+						makeNode(pod2ns1, withOwners(pod1ns1)), // 合法子节点 of missing parent enqueued for deletion
+						makeNode(pod1nonamespace, virtual),     // 新的虚拟属主坐标已入队等待删除
 					},
 				}),
 
-				// 12,13: process attemptToDelete of good child
+				// 12,13：处理合法子节点的 attemptToDelete
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname2",    // lookup of good child
-						"delete /v1, Resource=pods ns=ns1 name=podname2", // delete of good child
+						"get /v1, Resource=pods ns=ns1 name=podname2",    // 查找合法子节点
+						"delete /v1, Resource=pods ns=ns1 name=podname2", // 删除合法子节点
 					},
 					graphNodes: []*node{
 						makeNode(node1, withOwners(pod1nonamespace)),
@@ -2429,11 +2482,11 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod1nonamespace, virtual)},
 					absentOwnerCache: []objectReference{pod1ns1},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1nonamespace, virtual), // new virtual parent coordinates enqueued for deletion
+						makeNode(pod1nonamespace, virtual), // 新的虚拟属主坐标已入队等待删除
 					},
 				}),
 
-				// 14,15: observe deletion of good child
+				// 14,15：观察合法子节点的删除
 				processEvent(makeDeleteEvent(pod2ns1, pod1ns1)),
 				assertState(state{
 					graphNodes: []*node{
@@ -2441,12 +2494,12 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod1nonamespace, virtual)},
 					absentOwnerCache: []objectReference{pod1ns1},
 					pendingAttemptToDelete: []*node{
-						makeNode(pod1nonamespace, virtual), // new virtual parent coordinates enqueued for deletion
+						makeNode(pod1nonamespace, virtual), // 新的虚拟属主坐标已入队等待删除
 					},
 				}),
 
-				// 16,17: process attemptToDelete of bad virtual parent coordinates
-				// steady-state is bad cluster child and bad virtual parent coordinates, with no retries
+				// 16,17：处理错误虚拟属主坐标的 attemptToDelete
+				// 稳态为问题集群子节点与错误虚拟属主坐标，且不再重试
 				processAttemptToDelete(1),
 				assertState(state{
 					graphNodes: []*node{
@@ -2460,13 +2513,13 @@ func TestConflictingData(t *testing.T) {
 			// https://github.com/kubernetes/kubernetes/issues/114603
 			name: "resourceVersion conflict between Get/Delete while processing object deletion",
 			steps: []step{
-				// setup, 0,1
-				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1)),                        // good parent
-				createObjectInClient("", "v1", "pods", "ns1", withRV(makeMetadataObj(pod2ns1, pod1ns1), "42")), // good child
-				// events, 2,3
+				// 准备阶段, 0,1
+				createObjectInClient("", "v1", "pods", "ns1", makeMetadataObj(pod1ns1)),                        // 合法属主
+				createObjectInClient("", "v1", "pods", "ns1", withRV(makeMetadataObj(pod2ns1, pod1ns1), "42")), // 合法子节点
+				// 事件，步骤 2,3
 				processEvent(makeAddEvent(pod1ns1)),
 				processEvent(withRV(makeAddEvent(pod2ns1, pod1ns1), "42")),
-				// delete parent, 4,5,6
+				// 删除属主，步骤 4,5,6
 				deleteObjectFromClient("", "v1", "pods", "ns1", pod1ns1.Name),
 				processEvent(makeDeleteEvent(pod1ns1)),
 				assertState(state{
@@ -2478,7 +2531,7 @@ func TestConflictingData(t *testing.T) {
 					},
 				}),
 
-				// add reactor to enforce RV precondition, 7
+				// 添加 reactor 以强制校验 RV 前置条件，步骤 7
 				prependReactor("delete", "pods", (func() func(ctx stepContext) clientgotesting.ReactionFunc {
 					call := 0
 					return func(ctx stepContext) clientgotesting.ReactionFunc {
@@ -2507,7 +2560,7 @@ func TestConflictingData(t *testing.T) {
 							switch call {
 							case 1:
 								if preconditionRV == "42" && objectRV == "42" {
-									// simulate a concurrent change that modifies the owner references
+									// 模拟并发变更，修改了属主引用
 									ctx.t.Log("changing rv 42 --> 43 concurrently")
 									metadataObj.OwnerReferences = []metav1.OwnerReference{role1v1.OwnerReference}
 									metadataObj.ResourceVersion = "43"
@@ -2520,7 +2573,7 @@ func TestConflictingData(t *testing.T) {
 								}
 							case 2:
 								if preconditionRV == "43" && objectRV == "43" {
-									// simulate a concurrent change that *does not* modify the owner references
+									// 模拟并发变更，但*没有*修改属主引用
 									ctx.t.Log("changing rv 43 --> 44 concurrently")
 									metadataObj.ResourceVersion = "44"
 									if err := ctx.metadataClient.Tracker().Update(deleteAction.GetResource(), metadataObj, deleteAction.GetNamespace()); err != nil {
@@ -2546,9 +2599,9 @@ func TestConflictingData(t *testing.T) {
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname2",    // first get sees rv=42, pod1ns1 owner
-						"delete /v1, Resource=pods ns=ns1 name=podname2", // first delete with rv=42 precondition gets confict, triggers a live get
-						"get /v1, Resource=pods ns=ns1 name=podname2",    // get has new ownerReferences, exits attemptToDelete
+						"get /v1, Resource=pods ns=ns1 name=podname2",    // 第一次 get 看到 rv=42，属主为 pod1ns1
+						"delete /v1, Resource=pods ns=ns1 name=podname2", // 第一次带 rv=42 前置条件的删除遇到冲突，触发一次实时 get
+						"get /v1, Resource=pods ns=ns1 name=podname2",    // get 得到新的 ownerReferences，退出 attemptToDelete
 					},
 					absentOwnerCache: []objectReference{pod1ns1},
 					graphNodes: []*node{
@@ -2557,15 +2610,15 @@ func TestConflictingData(t *testing.T) {
 						makeNode(pod2ns1, withOwners(pod1ns1))},
 				}),
 
-				// reattempt delete, 10,11
+				// 重新尝试删除，步骤 10,11
 				processAttemptToDelete(1),
 				assertState(state{
 					clientActions: []string{
-						"get /v1, Resource=pods ns=ns1 name=podname2",                        // first get sees rv=43, role1v1 owner
-						"get rbac.authorization.k8s.io/v1, Resource=roles ns=ns1 name=role1", // verify missing owner
-						"delete /v1, Resource=pods ns=ns1 name=podname2",                     // first delete RV precondition triggers a live Get
-						"get /v1, Resource=pods ns=ns1 name=podname2",                        // the object has same ownerReferences, causing unconditional Delete
-						"delete /v1, Resource=pods ns=ns1 name=podname2",                     // unconditional Delete
+						"get /v1, Resource=pods ns=ns1 name=podname2",                        // 第一次 get 看到 rv=43，属主为 role1v1
+						"get rbac.authorization.k8s.io/v1, Resource=roles ns=ns1 name=role1", // 验证属主确实不存在
+						"delete /v1, Resource=pods ns=ns1 name=podname2",                     // 第一次删除时 RV 前置条件触发实时 Get
+						"get /v1, Resource=pods ns=ns1 name=podname2",                        // 对象的 ownerReferences 未变，从而执行无条件 Delete
+						"delete /v1, Resource=pods ns=ns1 name=podname2",                     // 无条件 Delete
 					},
 					absentOwnerCache: []objectReference{pod1ns1, role1v1},
 					graphNodes: []*node{
@@ -2608,7 +2661,7 @@ func TestConflictingData(t *testing.T) {
 			)
 			restMapper := &testRESTMapper{meta.MultiRESTMapper{tweakableRM, testrestmapper.TestOnlyStaticRESTMapper(legacyscheme.Scheme)}}
 
-			// set up our workqueues
+			// 准备工作队列
 			attemptToDelete := newTrackingWorkqueue[*node]()
 			attemptToOrphan := newTrackingWorkqueue[*node]()
 			graphChanges := newTrackingWorkqueue[*event]()
@@ -2661,6 +2714,7 @@ func TestConflictingData(t *testing.T) {
 	}
 }
 
+// makeID 根据各字段构造对象引用，供场景中的节点与事件使用。
 func makeID(groupVersion string, kind string, namespace, name, uid string) objectReference {
 	return objectReference{
 		OwnerReference: metav1.OwnerReference{APIVersion: groupVersion, Kind: kind, Name: name, UID: types.UID(uid)},
@@ -2668,12 +2722,16 @@ func makeID(groupVersion string, kind string, namespace, name, uid string) objec
 	}
 }
 
+// nodeTweak 用于在构造期望节点时按需修改节点字段。
 type nodeTweak func(*node) *node
 
+// virtual 把节点标记为虚拟节点，表示属主尚未被真正观察到。
 func virtual(n *node) *node {
 	n.virtual = true
 	return n
 }
+
+// withOwners 返回一个 nodeTweak，用于设置节点的属主引用列表。
 func withOwners(ownerReferences ...objectReference) nodeTweak {
 	return func(n *node) *node {
 		var owners []metav1.OwnerReference
@@ -2685,6 +2743,7 @@ func withOwners(ownerReferences ...objectReference) nodeTweak {
 	}
 }
 
+// makeNode 构造期望的节点，并依次应用给定的 tweak。
 func makeNode(identity objectReference, tweaks ...nodeTweak) *node {
 	n := &node{identity: identity}
 	for _, tweak := range tweaks {
@@ -2693,6 +2752,7 @@ func makeNode(identity objectReference, tweaks ...nodeTweak) *node {
 	return n
 }
 
+// makeAddEvent 构造添加事件；解析 APIVersion 失败属于编程错误，直接 panic。
 func makeAddEvent(identity objectReference, owners ...objectReference) *event {
 	gv, err := schema.ParseGroupVersion(identity.APIVersion)
 	if err != nil {
@@ -2705,12 +2765,14 @@ func makeAddEvent(identity objectReference, owners ...objectReference) *event {
 	}
 }
 
+// makeVirtualDeleteEvent 构造虚拟删除事件，用于通知图清理虚拟属主节点。
 func makeVirtualDeleteEvent(identity objectReference, owners ...objectReference) *event {
 	e := makeDeleteEvent(identity, owners...)
 	e.virtual = true
 	return e
 }
 
+// makeDeleteEvent 构造删除事件。
 func makeDeleteEvent(identity objectReference, owners ...objectReference) *event {
 	gv, err := schema.ParseGroupVersion(identity.APIVersion)
 	if err != nil {
@@ -2723,6 +2785,7 @@ func makeDeleteEvent(identity objectReference, owners ...objectReference) *event
 	}
 }
 
+// makeObj 构造只包含元数据的对象，携带身份与属主引用。
 func makeObj(identity objectReference, owners ...objectReference) *metaonly.MetadataOnlyObject {
 	obj := &metaonly.MetadataOnlyObject{
 		TypeMeta:   metav1.TypeMeta{APIVersion: identity.APIVersion, Kind: identity.Kind},
@@ -2734,6 +2797,7 @@ func makeObj(identity objectReference, owners ...objectReference) *metaonly.Meta
 	return obj
 }
 
+// withRV 给对象设置 ResourceVersion，用于模拟删除时的并发冲突。
 func withRV[T any](obj T, rv string) T {
 	switch t := any(obj).(type) {
 	case *metav1.PartialObjectMetadata:
@@ -2744,6 +2808,7 @@ func withRV[T any](obj T, rv string) T {
 	return obj
 }
 
+// makeMetadataObj 构造 PartialObjectMetadata，供 fake 元数据客户端创建/断言对象使用。
 func makeMetadataObj(identity objectReference, owners ...objectReference) *metav1.PartialObjectMetadata {
 	obj := &metav1.PartialObjectMetadata{
 		TypeMeta:   metav1.TypeMeta{APIVersion: identity.APIVersion, Kind: identity.Kind},
@@ -2755,6 +2820,8 @@ func makeMetadataObj(identity objectReference, owners ...objectReference) *metav
 	return obj
 }
 
+// stepContext 汇总场景执行过程中需要访问的测试上下文：GC 实例、 recorder、
+// 元数据客户端以及各工作队列。
 type stepContext struct {
 	t               *testing.T
 	logger          klog.Logger
@@ -2766,18 +2833,20 @@ type stepContext struct {
 	graphChanges    *trackingWorkqueue[*event]
 }
 
+// step 表示场景中的一个步骤，check 会在一步执行完后校验状态。
 type step struct {
 	name  string
 	check func(stepContext)
 }
 
+// processPendingGraphChanges 构造一个步骤，处理指定数量的图变更；count<=0 表示处理全部。
 func processPendingGraphChanges(count int) step {
 	return step{
 		name: "processPendingGraphChanges",
 		check: func(ctx stepContext) {
 			ctx.t.Helper()
 			if count <= 0 {
-				// process all
+				// 处理全部
 				for ctx.gc.dependencyGraphBuilder.graphChanges.Len() != 0 {
 					ctx.gc.dependencyGraphBuilder.processGraphChanges(ctx.logger)
 				}
@@ -2794,8 +2863,10 @@ func processPendingGraphChanges(count int) step {
 	}
 }
 
+// reactionFuncFactory 根据步骤上下文生成 fake 客户端的 reaction 函数。
 type reactionFuncFactory func(ctx stepContext) clientgotesting.ReactionFunc
 
+// prependReactor 向 fake 元数据客户端前置一个 reactor，用于模拟服务器对特定请求的行为。
 func prependReactor(verb, resource string, reaction reactionFuncFactory) step {
 	return step{
 		name: "prependReactor",
@@ -2806,13 +2877,14 @@ func prependReactor(verb, resource string, reaction reactionFuncFactory) step {
 	}
 }
 
+// processAttemptToDelete 构造一个步骤，处理指定数量的待删除项；count<=0 表示处理全部。
 func processAttemptToDelete(count int) step {
 	return step{
 		name: "processAttemptToDelete",
 		check: func(ctx stepContext) {
 			ctx.t.Helper()
 			if count <= 0 {
-				// process all
+				// 处理全部
 				for ctx.gc.dependencyGraphBuilder.attemptToDelete.Len() != 0 {
 					ctx.gc.processAttemptToDeleteWorker(context.TODO())
 				}
@@ -2829,12 +2901,14 @@ func processAttemptToDelete(count int) step {
 	}
 }
 
+// insertEvent 把新事件插到队列最前面：先取出队列中的事件，加入新事件后再放回，
+// 用于验证事件处理顺序对结果的影响。
 func insertEvent(e *event) step {
 	return step{
 		name: "insertEvent",
 		check: func(ctx stepContext) {
 			ctx.t.Helper()
-			// drain queue into items
+			// 先把队列中的事件全部取出。
 			var items []*event
 			for ctx.gc.dependencyGraphBuilder.graphChanges.Len() > 0 {
 				item, _ := ctx.gc.dependencyGraphBuilder.graphChanges.Get()
@@ -2842,10 +2916,10 @@ func insertEvent(e *event) step {
 				items = append(items, item)
 			}
 
-			// add the new event
+			// 加入新事件。
 			ctx.gc.dependencyGraphBuilder.graphChanges.Add(e)
 
-			// reappend the items
+			// 再把原来的事件追加回去，使新事件排在队首。
 			for _, item := range items {
 				ctx.gc.dependencyGraphBuilder.graphChanges.Add(item)
 			}
@@ -2853,6 +2927,7 @@ func insertEvent(e *event) step {
 	}
 }
 
+// processEvent 构造一个步骤，向图中加入并处理一个事件；要求此时没有未处理的图变更。
 func processEvent(e *event) step {
 	return step{
 		name: "processEvent",
@@ -2867,6 +2942,8 @@ func processEvent(e *event) step {
 	}
 }
 
+// createObjectInClient 通过 fake 元数据客户端创建对象，并清除该操作产生的 action
+// 记录，避免干扰后续对客户端动作的断言。
 func createObjectInClient(group, version, resource, namespace string, obj *metav1.PartialObjectMetadata) step {
 	return step{
 		name: "createObjectInClient",
@@ -2890,6 +2967,7 @@ func createObjectInClient(group, version, resource, namespace string, obj *metav
 	}
 }
 
+// deleteObjectFromClient 通过 fake 元数据客户端删除对象，同样清除 action 记录。
 func deleteObjectFromClient(group, version, resource, namespace, name string) step {
 	return step{
 		name: "deleteObjectFromClient",
@@ -2913,6 +2991,8 @@ func deleteObjectFromClient(group, version, resource, namespace, name string) st
 	}
 }
 
+// state 描述一个步骤执行完后期望的全局状态，包括事件、客户端动作、
+// 图中的节点以及各队列和缓存中的内容。
 type state struct {
 	events                 []string
 	clientActions          []string
@@ -2923,6 +3003,8 @@ type state struct {
 	absentOwnerCache       []objectReference
 }
 
+// assertState 构造一个步骤，对事件、客户端动作、图节点、各队列及 absent owner 缓存
+// 做全面断言。
 func assertState(s state) step {
 	return step{
 		name: "assertState",
@@ -2936,7 +3018,7 @@ func assertState(s state) step {
 					}
 				}
 				if len(s.absentOwnerCache) != ctx.gc.absentOwnerCache.cache.Len() {
-					// only way to inspect is to drain them all, but that's ok because we're failing the test anyway
+					// 检查缓存内容的唯一方式是清空它；反正这里已判定测试失败，清空无妨。
 					err := ctx.gc.absentOwnerCache.cache.SetEvictionFunc(func(key lru.Key, item interface{}) {
 						found := false
 						for _, absent := range s.absentOwnerCache {
@@ -2959,7 +3041,7 @@ func assertState(s state) step {
 
 			{
 				var actualEvents []string
-				// drain sent events
+				// 取走已发送的事件，避免影响后续步骤。
 			loop:
 				for {
 					select {
@@ -3095,10 +3177,9 @@ func assertState(s state) step {
 
 }
 
-// trackingWorkqueue implements RateLimitingInterface,
-// allows introspection of the items in the queue,
-// and treats AddAfter and AddRateLimited the same as Add
-// so they are always synchronous.
+// trackingWorkqueue 实现了 RateLimitingInterface，额外维护队列内容的快照以便断言。
+// 它把 AddAfter 和 AddRateLimited 都当成 Add 处理，使入队总是同步的，
+// 避免测试因延迟入队而变得不确定。
 type trackingWorkqueue[T comparable] struct {
 	limiter     workqueue.TypedRateLimitingInterface[T]
 	pendingList []T
@@ -3107,6 +3188,8 @@ type trackingWorkqueue[T comparable] struct {
 
 var _ = workqueue.TypedRateLimitingInterface[string](&trackingWorkqueue[string]{})
 
+// newTrackingWorkqueue 构造一个使用无限速限制器的 trackingWorkqueue，
+// 保证入队操作立即生效。
 func newTrackingWorkqueue[T comparable]() *trackingWorkqueue[T] {
 	return &trackingWorkqueue[T]{
 		limiter:    workqueue.NewTypedRateLimitingQueue[T](&workqueue.TypedBucketRateLimiter[T]{Limiter: rate.NewLimiter(rate.Inf, 100)}),
@@ -3114,30 +3197,45 @@ func newTrackingWorkqueue[T comparable]() *trackingWorkqueue[T] {
 	}
 }
 
+// Add 把元素记录到快照并加入底层限速队列。
 func (t *trackingWorkqueue[T]) Add(item T) {
 	t.queue(item)
 	t.limiter.Add(item)
 }
+
+// AddAfter 忽略延迟，直接当作 Add 入队。
 func (t *trackingWorkqueue[T]) AddAfter(item T, duration time.Duration) {
 	t.Add(item)
 }
+
+// AddRateLimited 忽略限速，直接当作 Add 入队。
 func (t *trackingWorkqueue[T]) AddRateLimited(item T) {
 	t.Add(item)
 }
+
+// Get 从底层队列取出元素，并同步更新快照。
 func (t *trackingWorkqueue[T]) Get() (T, bool) {
 	item, shutdown := t.limiter.Get()
 	t.dequeue(item)
 	return item, shutdown
 }
+
+// Done 通知底层队列元素已处理完成。
 func (t *trackingWorkqueue[T]) Done(item T) {
 	t.limiter.Done(item)
 }
+
+// Forget 通知底层队列忘记该元素的失败次数。
 func (t *trackingWorkqueue[T]) Forget(item T) {
 	t.limiter.Forget(item)
 }
+
+// NumRequeues 本实现不做实际限速，因此始终返回 0。
 func (t *trackingWorkqueue[T]) NumRequeues(item T) int {
 	return 0
 }
+
+// Len 返回队列长度，并同时校验快照与底层队列长度一致，防止断言基于错误状态。
 func (t *trackingWorkqueue[T]) Len() int {
 	if e, a := len(t.pendingList), len(t.pendingMap); e != a {
 		panic(fmt.Errorf("pendingList != pendingMap: %d / %d", e, a))
@@ -3147,16 +3245,23 @@ func (t *trackingWorkqueue[T]) Len() int {
 	}
 	return len(t.pendingList)
 }
+
+// ShutDown 关闭底层队列。
 func (t *trackingWorkqueue[T]) ShutDown() {
 	t.limiter.ShutDown()
 }
+
+// ShutDownWithDrain 关闭底层队列并等待排空。
 func (t *trackingWorkqueue[T]) ShutDownWithDrain() {
 	t.limiter.ShutDownWithDrain()
 }
+
+// ShuttingDown 返回底层队列是否正在关闭。
 func (t *trackingWorkqueue[T]) ShuttingDown() bool {
 	return t.limiter.ShuttingDown()
 }
 
+// queue 把元素记录到有序快照与去重集合中；重复入队会被忽略。
 func (t *trackingWorkqueue[T]) queue(item T) {
 	if _, queued := t.pendingMap[item]; queued {
 		// fmt.Printf("already queued: %#v\n", item)
@@ -3165,6 +3270,8 @@ func (t *trackingWorkqueue[T]) queue(item T) {
 	t.pendingMap[item] = struct{}{}
 	t.pendingList = append(t.pendingList, item)
 }
+
+// dequeue 从快照中移除元素，保持 pendingList 与 pendingMap 一致。
 func (t *trackingWorkqueue[T]) dequeue(item T) {
 	if _, queued := t.pendingMap[item]; !queued {
 		// fmt.Printf("not queued: %#v\n", item)

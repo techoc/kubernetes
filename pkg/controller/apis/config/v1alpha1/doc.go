@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1alpha1 聚合各控制器的配置类型，作为 kube-controller-manager 配置的外部版本。
+// 下面的指令驱动 deepcopy、conversion 与 defaulter 代码生成；每个 conversion-gen
+// 条目对应一个内部配置包，生成器会为其产出双向转换函数。
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/kubernetes/pkg/controller/apis/config
 // +k8s:conversion-gen=k8s.io/component-base/config/v1alpha1

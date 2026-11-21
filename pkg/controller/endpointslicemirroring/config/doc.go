@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package config 定义 EndpointSliceMirror 控制器内部使用的配置类型。
 // +k8s:deepcopy-gen=package
 
 package config

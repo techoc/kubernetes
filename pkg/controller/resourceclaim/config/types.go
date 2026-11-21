@@ -16,11 +16,9 @@ limitations under the License.
 
 package config
 
-// ResourceClaimControllerConfiguration contains elements configuring the resource claim controller.
+// ResourceClaimControllerConfiguration 包含 resource claim 控制器的配置项。
 type ResourceClaimControllerConfiguration struct {
-	// ConcurrentSyncs is the number of operations (deleting a pod, updating a ResourcClaim status, etc.)
-	// that will be done concurrently. Larger number = processing, but more CPU (and network) load.
-	//
-	// The default is 50.
+	// ConcurrentSyncs 是可并发执行的操作数（删除 Pod、更新 ResourceClaim 状态等）。
+	// 数值越大处理越快，但 CPU（和网络）负载也越高。默认值为 50。
 	ConcurrentSyncs int32
 }

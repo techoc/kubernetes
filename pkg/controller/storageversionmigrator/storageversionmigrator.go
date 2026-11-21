@@ -52,10 +52,12 @@ const (
 	migrationFailedStatusReason  = "StorageVersionMigrationFailed"
 )
 
+// graphBuilder 提供按资源获取 GC 监控器的能力，便于在测试中替换该依赖。
 type graphBuilder interface {
 	GetMonitor(ctx context.Context, gvr schema.GroupVersionResource) (*garbagecollector.Monitor, bool, error)
 }
 
+// SVMController 负责驱动存储版本迁移，并回写迁移状态。
 type SVMController struct {
 	controllerName         string
 	kubeClient             kubernetes.Interface
@@ -68,6 +70,7 @@ type SVMController struct {
 	dependencyGraphBuilder graphBuilder
 }
 
+// NewSVMController 创建 SVM 控制器，并订阅 SVM 资源的增改事件。
 func NewSVMController(
 	ctx context.Context,
 	kubeClient kubernetes.Interface,
@@ -108,16 +111,19 @@ func NewSVMController(
 	return svmController
 }
 
+// Name 返回控制器名称。
 func (svmc *SVMController) Name() string {
 	return svmc.controllerName
 }
 
+// addSVM 将新增的 SVM 入队。
 func (svmc *SVMController) addSVM(logger klog.Logger, obj interface{}) {
 	svm := obj.(*svmv1.StorageVersionMigration)
 	logger.V(4).Info("Adding", "svm", klog.KObj(svm))
 	svmc.enqueue(svm)
 }
 
+// updateSVM 将更新的 SVM 入队，迁移开始后仍需靠新对象驱动状态同步。
 func (svmc *SVMController) updateSVM(logger klog.Logger, oldObj, newObj interface{}) {
 	oldSVM := oldObj.(*svmv1.StorageVersionMigration)
 	newSVM := newObj.(*svmv1.StorageVersionMigration)
@@ -125,6 +131,7 @@ func (svmc *SVMController) updateSVM(logger klog.Logger, oldObj, newObj interfac
 	svmc.enqueue(newSVM)
 }
 
+// enqueue 按对象的命名空间/名称生成键并加入工作队列。
 func (svmc *SVMController) enqueue(svm *svmv1.StorageVersionMigration) {
 	key, err := controller.KeyFunc(svm)
 	if err != nil {
@@ -135,6 +142,7 @@ func (svmc *SVMController) enqueue(svm *svmv1.StorageVersionMigration) {
 	svmc.queue.Add(key)
 }
 
+// Run 启动控制器，等待缓存同步后处理队列直到上下文结束。
 func (svmc *SVMController) Run(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 
@@ -160,11 +168,13 @@ func (svmc *SVMController) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// worker 持续消费队列，直到 processNext 返回 false。
 func (svmc *SVMController) worker(ctx context.Context) {
 	for svmc.processNext(ctx) {
 	}
 }
 
+// processNext 同步一个队首元素，失败时按退避或服务端建议延迟重试。
 func (svmc *SVMController) processNext(ctx context.Context) bool {
 	key, quit := svmc.queue.Get()
 	if quit {
@@ -188,11 +198,12 @@ func (svmc *SVMController) processNext(ctx context.Context) bool {
 	return true
 }
 
+// sync 校验迁移前提（GVR、GC 缓存、resourceVersion）后执行一次迁移。
 func (svmc *SVMController) sync(ctx context.Context, key string) error {
 	logger := klog.FromContext(ctx)
 	startTime := time.Now()
 
-	// SVM is a cluster scoped resource so we don't care about the namespace
+	// SVM 是集群级资源，键中没有命名空间。
 	_, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
 		return err
@@ -200,13 +211,13 @@ func (svmc *SVMController) sync(ctx context.Context, key string) error {
 
 	svm, err := svmc.svmListers.Get(name)
 	if apierrors.IsNotFound(err) {
-		// no work to do, don't fail and requeue
+		// 对象已删除，无需迁移，不能报错重入队。
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	// working with a copy to avoid race condition between this and resource version controller
+	// 使用副本处理，避免与其他控制器共同修改缓存中的对象。
 	toBeProcessedSVM := svm.DeepCopy()
 
 	if meta.IsStatusConditionTrue(toBeProcessedSVM.Status.Conditions, string(svmv1.MigrationSucceeded)) ||
@@ -231,8 +242,7 @@ func (svmc *SVMController) sync(ctx context.Context, key string) error {
 		return svmc.failMigration(ctx, toBeProcessedSVM, fmt.Errorf("unable to obtain GVR from discovery"))
 	}
 
-	// prevent unsynced monitor from blocking forever
-	// use a short timeout so that we can fail quickly and possibly handle other migrations while this monitor gets ready.
+	// 监控器未同步时会阻塞，短超时便于尽早失败并让其他迁移继续推进。
 	monCtx, monCtxCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer monCtxCancel()
 
@@ -243,8 +253,7 @@ func (svmc *SVMController) sync(ctx context.Context, key string) error {
 	if !hasSynced {
 		logger.V(4).Info("resource does not exist in GC", "gvr", gvr.String())
 
-		// our mapper could be missing a recently created custom resource, so give it some time to catch up
-		// we resync discovery every 30 seconds so twice that should be sufficient
+		// 新建的自定义资源可能尚未进入 mapper/discovery，给其一个同步窗口。
 		if toBeProcessedSVM.CreationTimestamp.Add(time.Minute).After(time.Now()) {
 			return fmt.Errorf("resource does not exist in GC, requeuing to attempt again: %w", errMonitor)
 		}
@@ -274,6 +283,7 @@ func (svmc *SVMController) sync(ctx context.Context, key string) error {
 	return nil
 }
 
+// runMigration 逐个 patch 候选对象完成迁移，返回错误及是否属于不可重试的迁移失败。
 func (svmc *SVMController) runMigration(ctx context.Context, gvr schema.GroupVersionResource, resourceMonitor *garbagecollector.Monitor, toBeProcessedSVM *svmv1.StorageVersionMigration, listResourceVersion string) (err error, failed bool) {
 	gvk, err := svmc.restMapper.KindFor(gvr)
 	if err != nil {
@@ -284,7 +294,7 @@ func (svmc *SVMController) runMigration(ctx context.Context, gvr schema.GroupVer
 	allObjects := resourceMonitor.Store.List()
 	totalObjects := len(allObjects)
 
-	// Filter out objects that resource versions are greater than the list resource version.
+	// 跳过版本高于检查点的对象，避免迁移之后才写入的新对象。
 	var candidateObjects []metav1.Object
 	for _, obj := range allObjects {
 		accessor, err := meta.Accessor(obj)
@@ -325,17 +335,14 @@ func (svmc *SVMController) runMigration(ctx context.Context, gvr schema.GroupVer
 				},
 			)
 
-		// in case of conflict or not found error, we can stop processing migration for that resource because it has either been
-		// - updated, meaning that migration has already been performed
-		// - deleted, meaning that migration is not needed
-		// - deleted and recreated, meaning that migration has already been performed
+		// 冲突/不存在说明对象已被更新、删除或重建，无需再迁移。
 		if apierrors.IsConflict(errPatch) || apierrors.IsNotFound(errPatch) {
 			logger.V(6).Info("Resource ignored due to conflict", "namespace", accessor.GetNamespace(), "name", accessor.GetName(), "gvr", gvr.String(), "err", errPatch)
 			candidatesToPatch--
 			continue
 		}
 
-		// in case of retriable errors like server throttling, we can return an error since that will cause the migration to be reattempted.
+		// 限流等临时错误通过返回错误触发整次重试。
 		if isRetriableError(errPatch) {
 			logger.V(6).Info("Resource patch failed due to an error that can be retried", "namespace", accessor.GetNamespace(), "name", accessor.GetName(), "gvr", gvr.String(), "err", errPatch)
 			_ = svmc.updateRunningCondition(ctx, toBeProcessedSVM, candidatesToPatch, totalObjects, errPatch)
@@ -384,6 +391,7 @@ func (svmc *SVMController) runMigration(ctx context.Context, gvr schema.GroupVer
 	return nil, false
 }
 
+// updateRunningCondition 更新迁移进度；条件未变化时不写 API，避免无谓更新。
 func (svmc *SVMController) updateRunningCondition(ctx context.Context, svm *svmv1.StorageVersionMigration, candidatesToPatch, totalObjects int, err error) error {
 	cond := &metav1.Condition{
 		Type:               string(svmv1.MigrationRunning),
@@ -407,6 +415,7 @@ func (svmc *SVMController) updateRunningCondition(ctx context.Context, svm *svmv
 	return updateErr
 }
 
+// isRetriableError 判断错误是否可通过重试恢复（连接中断、限流、服务端超时等）。
 func isRetriableError(k8sError error) bool {
 	return utilnet.IsConnectionReset(k8sError) ||
 		utilnet.IsHTTP2ConnectionLost(k8sError) ||
@@ -418,6 +427,7 @@ func isRetriableError(k8sError error) bool {
 		apierrors.IsTimeout(k8sError)
 }
 
+// failMigration 将迁移标记为失败并回写状态。
 func (svmc *SVMController) failMigration(ctx context.Context, toBeProcessedSVM *svmv1.StorageVersionMigration, err error) error {
 	errMsg := fmt.Sprintf("migration encountered unhandled error: %s", err)
 
@@ -442,6 +452,7 @@ func (svmc *SVMController) failMigration(ctx context.Context, toBeProcessedSVM *
 	return errStatus
 }
 
+// failMigrationWithObjectsMigrated 标记失败时保留已迁移对象的进度。
 func (svmc *SVMController) failMigrationWithObjectsMigrated(ctx context.Context, toBeProcessedSVM *svmv1.StorageVersionMigration, err error, candidatesToPatch, totalObjects int) error {
 	errMsg := fmt.Sprintf("%d/%d not yet migrated. migration encountered unhandled error: %s", candidatesToPatch, totalObjects, err)
 
@@ -475,11 +486,13 @@ func (svmc *SVMController) failMigrationWithObjectsMigrated(ctx context.Context,
 	return errStatus
 }
 
+// typeMetaUIDRV 是 patch 请求体的最小结构，只需携带类型与版本信息。
 type typeMetaUIDRV struct {
 	metav1.TypeMeta `json:""`
 	objectRV        `json:"metadata,omitempty"`
 }
 
+// objectRV 用于序列化 resourceVersion，作为 patch 的并发控制条件。
 type objectRV struct {
 	ResourceVersion string `json:"resourceVersion,omitempty"`
 }

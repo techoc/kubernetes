@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package daemon contains logic for watching and synchronizing
-// daemons.
+// Package daemon 包含监听并同步 DaemonSet（守护进程集）的逻辑。
 package daemon

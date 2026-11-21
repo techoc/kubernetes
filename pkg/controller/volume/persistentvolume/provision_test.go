@@ -33,14 +33,25 @@ import (
 	pvtesting "k8s.io/kubernetes/pkg/controller/volume/persistentvolume/testing"
 )
 
+// class1Parameters 与 class2Parameters 对应两个 StorageClass 的不同参数，
+// 用于断言 provision 调用是否拿到了正确的参数。
 var class1Parameters = map[string]string{
 	"param1": "value1",
 }
+
+// class2Parameters 是第二类 StorageClass 的测试参数。
 var class2Parameters = map[string]string{
 	"param2": "value2",
 }
+
+// deleteReclaimPolicy 是测试用 StorageClass 的默认回收策略。
 var deleteReclaimPolicy = v1.PersistentVolumeReclaimDelete
+
+// modeImmediate 是测试用 StorageClass 的即时绑定模式。
 var modeImmediate = storage.VolumeBindingImmediate
+
+// storageClasses 覆盖内部/外部/未知 provisioner、即时绑定与 WaitForFirstConsumer，
+// 以及不支持 mountOptions 的 StorageClass 场景。
 var storageClasses = []*storage.StorageClass{
 	{
 		TypeMeta: metav1.TypeMeta{
@@ -145,37 +156,37 @@ var storageClasses = []*storage.StorageClass{
 	},
 }
 
-// call to storageClass 1, returning an error
+// 调用 storageClass 1 对应的 provisioner，返回错误。
 var provision1Error = provisionCall{
 	ret:                errors.New("Mock provisioner error"),
 	expectedParameters: class1Parameters,
 }
 
-// call to storageClass 1, returning a valid PV
+// 调用 storageClass 1 对应的 provisioner，成功返回 PV。
 var provision1Success = provisionCall{
 	ret:                nil,
 	expectedParameters: class1Parameters,
 }
 
-// call to storageClass 2, returning a valid PV
+// 调用 storageClass 2 对应的 provisioner，成功返回 PV。
 var provision2Success = provisionCall{
 	ret:                nil,
 	expectedParameters: class2Parameters,
 }
 
-// Test single call to syncVolume, expecting provisioning to happen.
-// 1. Fill in the controller with initial data
-// 2. Call the syncVolume *once*.
-// 3. Compare resulting volumes with expected volumes.
+// TestProvisionSync 只调用一次 syncClaim，验证动态创建行为：
+// 1. 用初始数据填充控制器；
+// 2. 调用一次 syncVolume/syncClaim；
+// 3. 将最终卷状态与期望值比对。
 func TestProvisionSync(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	tests := []controllerTest{
 		{
-			// Provision a volume (with a default class)
+			// 使用默认 StorageClass 成功创建卷。
 			name:            "11-1 - successful provision with storage class 1",
 			initialVolumes:  novolumes,
 			expectedVolumes: volumesWithFinalizers(newVolumeArray("pvc-uid11-1", "1Gi", "uid11-1", "claim11-1", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classGold, volume.AnnBoundByController, volume.AnnDynamicallyProvisioned), []string{volume.PVDeletionInTreeProtectionFinalizer}),
-			// Binding will be completed in the next syncClaim
+			// 绑定将在下一次 syncClaim 中完成。
 			initialClaims:  newClaimArray("claim11-1", "uid11-1", "1Gi", "", v1.ClaimPending, &classGold),
 			expectedClaims: newClaimArray("claim11-1", "uid11-1", "1Gi", "", v1.ClaimPending, &classGold, volume.AnnStorageProvisioner, volume.AnnBetaStorageProvisioner),
 			expectedEvents: []string{"Normal ProvisioningSucceeded"},
@@ -183,7 +194,7 @@ func TestProvisionSync(t *testing.T) {
 			test:           wrapTestWithProvisionCalls([]provisionCall{provision1Success}, testSyncClaim),
 		},
 		{
-			// Provision failure - plugin not found
+			// 创建失败：找不到对应的 provisioner 插件。
 			name:            "11-2 - plugin not found",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -194,7 +205,7 @@ func TestProvisionSync(t *testing.T) {
 			test:            testSyncClaim,
 		},
 		{
-			// Provision failure - newProvisioner returns error
+			// 创建失败：newProvisioner 返回错误。
 			name:            "11-3 - newProvisioner failure",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -205,7 +216,7 @@ func TestProvisionSync(t *testing.T) {
 			test:            wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim),
 		},
 		{
-			// Provision failure - Provision returns error
+			// 创建失败：Provision 返回错误。
 			name:            "11-4 - provision failure",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -216,7 +227,7 @@ func TestProvisionSync(t *testing.T) {
 			test:            wrapTestWithProvisionCalls([]provisionCall{provision1Error}, testSyncClaim),
 		},
 		{
-			// No provisioning if there is a matching volume available
+			// 已有可用卷时不执行动态创建，而是直接绑定该卷。
 			name:            "11-6 - provisioning when there is a volume available",
 			initialVolumes:  newVolumeArray("volume11-6", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimRetain, classGold),
 			expectedVolumes: newVolumeArray("volume11-6", "1Gi", "uid11-6", "claim11-6", v1.VolumeBound, v1.PersistentVolumeReclaimRetain, classGold, volume.AnnBoundByController),
@@ -224,49 +235,44 @@ func TestProvisionSync(t *testing.T) {
 			expectedClaims:  newClaimArray("claim11-6", "uid11-6", "1Gi", "volume11-6", v1.ClaimBound, &classGold, volume.AnnBoundByController, volume.AnnBindCompleted),
 			expectedEvents:  noevents,
 			errors:          noerrors,
-			// No provisioning plugin confingure - makes the test fail when
-			// the controller erroneously tries to provision something
+			// 这里未配置任何创建插件：若控制器错误地尝试创建卷，测试就会失败。
 			test: wrapTestWithProvisionCalls([]provisionCall{provision1Success}, testSyncClaim),
 		},
 		{
-			// Provision success? - claim is bound before provisioner creates
-			// a volume.
+			// 模拟竞态：provisioner 创建卷之前，claim 已被其他控制器绑定。
 			name:            "11-7 - claim is bound before provisioning",
 			initialVolumes:  novolumes,
 			expectedVolumes: newVolumeArray("pvc-uid11-7", "1Gi", "uid11-7", "claim11-7", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classGold, volume.AnnBoundByController, volume.AnnDynamicallyProvisioned),
 			initialClaims:   newClaimArray("claim11-7", "uid11-7", "1Gi", "", v1.ClaimPending, &classGold),
-			// The claim would be bound in next syncClaim
+			// claim 将在下一次 syncClaim 中完成绑定。
 			expectedClaims: newClaimArray("claim11-7", "uid11-7", "1Gi", "", v1.ClaimPending, &classGold, volume.AnnStorageProvisioner, volume.AnnBetaStorageProvisioner),
 			expectedEvents: noevents,
 			errors:         noerrors,
 			test: wrapTestWithInjectedOperation(ctx, wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim), func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor) {
-				// Create a volume before provisionClaimOperation starts.
-				// This similates a parallel controller provisioning the volume.
+				// 在 provisionClaimOperation 开始前创建卷，
+				// 模拟另一个控制器并行创建了同一个卷。
 				volume := newVolume("pvc-uid11-7", "1Gi", "uid11-7", "claim11-7", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classGold, volume.AnnBoundByController, volume.AnnDynamicallyProvisioned)
 				reactor.AddVolume(volume)
 			}),
 		},
 		{
-			// Provision success - cannot save provisioned PV once,
-			// second retry succeeds
+			// 首次保存 PV 失败、重试成功：验证创建流程具备重试能力。
 			name:            "11-8 - cannot save provisioned volume",
 			initialVolumes:  novolumes,
 			expectedVolumes: volumesWithFinalizers(newVolumeArray("pvc-uid11-8", "1Gi", "uid11-8", "claim11-8", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classGold, volume.AnnBoundByController, volume.AnnDynamicallyProvisioned), []string{volume.PVDeletionInTreeProtectionFinalizer}),
 			initialClaims:   newClaimArray("claim11-8", "uid11-8", "1Gi", "", v1.ClaimPending, &classGold),
-			// Binding will be completed in the next syncClaim
+			// 绑定将在下一次 syncClaim 中完成。
 			expectedClaims: newClaimArray("claim11-8", "uid11-8", "1Gi", "", v1.ClaimPending, &classGold, volume.AnnStorageProvisioner, volume.AnnBetaStorageProvisioner),
 			expectedEvents: []string{"Normal ProvisioningSucceeded"},
 			errors: []pvtesting.ReactorError{
-				// Inject error to the first
-				// kubeclient.PersistentVolumes.Create() call. All other calls
-				// will succeed.
+				// 仅在第一次 PersistentVolumes.Create() 调用时注入错误，
+				// 后续调用均成功。
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error")},
 			},
 			test: wrapTestWithProvisionCalls([]provisionCall{provision1Success}, testSyncClaim),
 		},
 		{
-			// Provision success? - cannot save provisioned PV five times,
-			// volume is deleted and delete succeeds
+			// 五次保存 PV 均失败后，控制器清理已创建的卷，且清理成功。
 			name:            "11-9 - cannot save provisioned volume, delete succeeds",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -274,8 +280,7 @@ func TestProvisionSync(t *testing.T) {
 			expectedClaims:  newClaimArray("claim11-9", "uid11-9", "1Gi", "", v1.ClaimPending, &classGold, volume.AnnStorageProvisioner, volume.AnnBetaStorageProvisioner),
 			expectedEvents:  []string{"Warning ProvisioningFailed"},
 			errors: []pvtesting.ReactorError{
-				// Inject error to five kubeclient.PersistentVolumes.Create()
-				// calls
+				// 连续五次在 PersistentVolumes.Create() 调用中注入错误。
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error1")},
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error2")},
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error3")},
@@ -283,15 +288,14 @@ func TestProvisionSync(t *testing.T) {
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error5")},
 			},
 			test: wrapTestWithPluginCalls(
-				nil,                                // recycle calls
+				nil,                                // 回收调用（本场景无）
 				[]error{nil},                       // delete calls
-				[]provisionCall{provision1Success}, // provision calls
+				[]provisionCall{provision1Success}, // 创建调用
 				testSyncClaim,
 			),
 		},
 		{
-			// Provision failure - cannot save provisioned PV five times,
-			// volume delete failed - no plugin found
+			// 五次保存 PV 均失败，且找不到删除插件：清理失败也应上报事件。
 			name:            "11-10 - cannot save provisioned volume, no delete plugin found",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -299,20 +303,18 @@ func TestProvisionSync(t *testing.T) {
 			expectedClaims:  newClaimArray("claim11-10", "uid11-10", "1Gi", "", v1.ClaimPending, &classGold, volume.AnnStorageProvisioner, volume.AnnBetaStorageProvisioner),
 			expectedEvents:  []string{"Warning ProvisioningFailed", "Warning ProvisioningCleanupFailed"},
 			errors: []pvtesting.ReactorError{
-				// Inject error to five kubeclient.PersistentVolumes.Create()
-				// calls
+				// 连续五次在 PersistentVolumes.Create() 调用中注入错误。
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error1")},
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error2")},
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error3")},
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error4")},
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error5")},
 			},
-			// No deleteCalls are configured, which results into no deleter plugin available for the volume
+			// 未配置删除调用，等价于没有可用于该卷的删除插件。
 			test: wrapTestWithProvisionCalls([]provisionCall{provision1Success}, testSyncClaim),
 		},
 		{
-			// Provision failure - cannot save provisioned PV five times,
-			// volume delete failed - deleter returns error five times
+			// 五次保存 PV 均失败，删除插件也连续五次返回错误。
 			name:            "11-11 - cannot save provisioned volume, deleter fails",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -320,8 +322,7 @@ func TestProvisionSync(t *testing.T) {
 			expectedClaims:  newClaimArray("claim11-11", "uid11-11", "1Gi", "", v1.ClaimPending, &classGold, volume.AnnStorageProvisioner, volume.AnnBetaStorageProvisioner),
 			expectedEvents:  []string{"Warning ProvisioningFailed", "Warning ProvisioningCleanupFailed"},
 			errors: []pvtesting.ReactorError{
-				// Inject error to five kubeclient.PersistentVolumes.Create()
-				// calls
+				// 连续五次在 PersistentVolumes.Create() 调用中注入错误。
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error1")},
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error2")},
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error3")},
@@ -329,20 +330,19 @@ func TestProvisionSync(t *testing.T) {
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error5")},
 			},
 			test: wrapTestWithPluginCalls(
-				nil, // recycle calls
-				[]error{ // delete calls
+				nil, // 回收调用（本场景无）
+				[]error{ // 删除调用
 					errors.New("Mock deletion error1"),
 					errors.New("Mock deletion error2"),
 					errors.New("Mock deletion error3"),
 					errors.New("Mock deletion error4"),
 					errors.New("Mock deletion error5"),
 				},
-				[]provisionCall{provision1Success}, // provision calls
+				[]provisionCall{provision1Success}, // 创建调用
 				testSyncClaim),
 		},
 		{
-			// Provision failure - cannot save provisioned PV five times,
-			// volume delete succeeds 2nd time
+			// 五次保存 PV 均失败，删除操作第一次失败、第二次成功。
 			name:            "11-12 - cannot save provisioned volume, delete succeeds 2nd time",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -350,8 +350,7 @@ func TestProvisionSync(t *testing.T) {
 			expectedClaims:  newClaimArray("claim11-12", "uid11-12", "1Gi", "", v1.ClaimPending, &classGold, volume.AnnStorageProvisioner, volume.AnnBetaStorageProvisioner),
 			expectedEvents:  []string{"Warning ProvisioningFailed"},
 			errors: []pvtesting.ReactorError{
-				// Inject error to five kubeclient.PersistentVolumes.Create()
-				// calls
+				// 连续五次在 PersistentVolumes.Create() 调用中注入错误。
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error1")},
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error2")},
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error3")},
@@ -359,29 +358,29 @@ func TestProvisionSync(t *testing.T) {
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error5")},
 			},
 			test: wrapTestWithPluginCalls(
-				nil, // recycle calls
-				[]error{ // delete calls
+				nil, // 回收调用（本场景无）
+				[]error{ // 删除调用
 					errors.New("Mock deletion error1"),
 					nil,
-				}, //  provison calls
+				}, // 创建调用
 				[]provisionCall{provision1Success},
 				testSyncClaim,
 			),
 		},
 		{
-			// Provision a volume (with non-default class)
+			// 使用非默认 StorageClass 成功创建卷。
 			name:            "11-13 - successful provision with storage class 2",
 			initialVolumes:  novolumes,
 			expectedVolumes: volumesWithFinalizers(newVolumeArray("pvc-uid11-13", "1Gi", "uid11-13", "claim11-13", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classSilver, volume.AnnBoundByController, volume.AnnDynamicallyProvisioned), []string{volume.PVDeletionInTreeProtectionFinalizer}),
 			initialClaims:   newClaimArray("claim11-13", "uid11-13", "1Gi", "", v1.ClaimPending, &classSilver),
-			// Binding will be completed in the next syncClaim
+			// 绑定将在下一次 syncClaim 中完成。
 			expectedClaims: newClaimArray("claim11-13", "uid11-13", "1Gi", "", v1.ClaimPending, &classSilver, volume.AnnStorageProvisioner, volume.AnnBetaStorageProvisioner),
 			expectedEvents: []string{"Normal ProvisioningSucceeded"},
 			errors:         noerrors,
 			test:           wrapTestWithProvisionCalls([]provisionCall{provision2Success}, testSyncClaim),
 		},
 		{
-			// Provision error - non existing class
+			// StorageClass 不存在，无法创建卷。
 			name:            "11-14 - fail due to non-existing class",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -392,7 +391,7 @@ func TestProvisionSync(t *testing.T) {
 			test:            wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim),
 		},
 		{
-			// No provisioning with class=""
+			// class 为空字符串时不执行动态创建。
 			name:            "11-15 - no provisioning with class=''",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -403,7 +402,7 @@ func TestProvisionSync(t *testing.T) {
 			test:            wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim),
 		},
 		{
-			// No provisioning with class=nil
+			// class 为 nil 时不执行动态创建。
 			name:            "11-16 - no provisioning with class=nil",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -414,7 +413,7 @@ func TestProvisionSync(t *testing.T) {
 			test:            wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim),
 		},
 		{
-			// No provisioning + normal event with external provisioner
+			// 外部 provisioner 场景下不自行创建，只发出正常事件。
 			name:            "11-17 - external provisioner",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -427,7 +426,7 @@ func TestProvisionSync(t *testing.T) {
 			test:           wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim),
 		},
 		{
-			// No provisioning + warning event with unknown internal provisioner
+			// 未知的内部 provisioner 无法处理，发出警告事件。
 			name:            "11-18 - unknown internal provisioner",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -438,49 +437,44 @@ func TestProvisionSync(t *testing.T) {
 			test:            wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim),
 		},
 		{
-			// Provision success - first save of a PV to API server fails (API
-			// server has written the object to etcd, but crashed before sending
-			// 200 OK response to the controller). Controller retries and the
-			// second save of the PV returns "AlreadyExists" because the PV
-			// object already is in the API server.
+			// 模拟 API server 在第一次保存 PV 时崩溃：对象已写入 etcd，
+			// 但还没来得及返回 200 OK。控制器重试时收到 AlreadyExists，
+			// 说明 PV 实际上已创建成功。
 			//
 			"11-19 - provisioned volume saved but API server crashed",
 			novolumes,
-			// We don't actually simulate API server saving the object and
-			// crashing afterwards, Create() just returns error without saving
-			// the volume in this test. So the set of expected volumes at the
-			// end of the test is empty.
+			// 测试并未真的让 API server 先保存对象再崩溃，Create() 直接返回错误且未保存卷，
+			// 因此测试结束时期望的卷集合为空。
 			novolumes,
 			newClaimArray("claim11-19", "uid11-19", "1Gi", "", v1.ClaimPending, &classGold),
 			newClaimArray("claim11-19", "uid11-19", "1Gi", "", v1.ClaimPending, &classGold, volume.AnnStorageProvisioner, volume.AnnBetaStorageProvisioner),
 			noevents,
 			[]pvtesting.ReactorError{
-				// Inject errors to simulate crashed API server during
-				// kubeclient.PersistentVolumes.Create()
+				// 注入错误以模拟 PersistentVolumes.Create() 期间 API server 崩溃。
 				{Verb: "create", Resource: "persistentvolumes", Error: errors.New("Mock creation error1")},
 				{Verb: "create", Resource: "persistentvolumes", Error: apierrors.NewAlreadyExists(api.Resource("persistentvolumes"), "")},
 			},
 			wrapTestWithPluginCalls(
-				nil, // recycle calls
-				nil, // delete calls - if Delete was called the test would fail
+				nil, // 回收调用（本场景无）
+				nil, // 删除调用；若发生删除，测试即失败
 				[]provisionCall{provision1Success},
 				testSyncClaim,
 			),
 		},
 		{
-			// No provisioning + warning event with unsupported storageClass.mountOptions
+			// StorageClass 的 mountOptions 不受支持，发出警告事件。
 			name:            "11-20 - unsupported storageClass.mountOptions",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
 			initialClaims:   newClaimArray("claim11-20", "uid11-20", "1Gi", "", v1.ClaimPending, &classUnsupportedMountOptions),
 			expectedClaims:  newClaimArray("claim11-20", "uid11-20", "1Gi", "", v1.ClaimPending, &classUnsupportedMountOptions, volume.AnnStorageProvisioner, volume.AnnBetaStorageProvisioner),
-			// Expect event to be prefixed with "Mount options" because saving PV will fail anyway
+			// 保存 PV 必然失败，因此事件消息以 "Mount options" 开头。
 			expectedEvents: []string{"Warning ProvisioningFailed Mount options"},
 			errors:         noerrors,
 			test:           wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim),
 		},
 		{
-			// No provisioning due to CSI migration + normal event with external provisioner
+			// CSI 迁移场景下不自行创建，交由外部 provisioner 处理并发出正常事件。
 			name:            "11-21 - external provisioner for CSI migration",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -499,8 +493,7 @@ func TestProvisionSync(t *testing.T) {
 			test:           wrapTestWithCSIMigrationProvisionCalls(testSyncClaim),
 		},
 		{
-			// volume provisioned and available
-			// in this case, NO normal event with external provisioner should be issued
+			// 已有可用的已创建卷，此时不应发出外部 provisioner 的正常事件。
 			name:            "11-22 - external provisioner with volume available",
 			initialVolumes:  newVolumeArray("volume11-22", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimRetain, classExternal),
 			expectedVolumes: newVolumeArray("volume11-22", "1Gi", "uid11-22", "claim11-22", v1.VolumeBound, v1.PersistentVolumeReclaimRetain, classExternal, volume.AnnBoundByController),
@@ -511,11 +504,11 @@ func TestProvisionSync(t *testing.T) {
 			test:            wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim),
 		},
 		{
-			// volume provision for PVC scheduled
+			// 为已调度到节点的 PVC 创建卷，此时跳过寻找已有 PV。
 			"11-23 - skip finding PV and provision for PVC annotated with AnnSelectedNode",
 			newVolumeArray("volume11-23", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimDelete, classCopper),
 			[]*v1.PersistentVolume{
-				newVolumeWithFinalizers("volume11-23", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimDelete, classCopper, nil /*No Finalizer is added here since the test doesn't trigger syncVolume, instead just syncClaim*/),
+				newVolumeWithFinalizers("volume11-23", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimDelete, classCopper, nil /*此处不添加 finalizer：该测试只触发 syncClaim，不触发 syncVolume*/),
 				newVolumeWithFinalizers("pvc-uid11-23", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classCopper, []string{volume.PVDeletionInTreeProtectionFinalizer}, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			},
 			claimWithAnnotation(volume.AnnSelectedNode, "node1",
@@ -548,8 +541,7 @@ func TestProvisionSync(t *testing.T) {
 			test:           testSyncClaim,
 		},
 		{
-			// Provision a volume with a data source will fail
-			// for in-tree plugins
+			// in-tree 插件不支持从数据源创建卷，预期失败。
 			name:            "11-25 - failed in-tree provision with data source",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -560,8 +552,7 @@ func TestProvisionSync(t *testing.T) {
 			test:            testSyncClaim,
 		},
 		{
-			// Provision a volume with a data source will proceed
-			// for CSI plugins
+			// CSI 插件支持从数据源创建卷，流程继续并交由外部 provisioner 处理。
 			"11-26 - csi with data source",
 			novolumes,
 			novolumes,
@@ -577,26 +568,22 @@ func TestProvisionSync(t *testing.T) {
 	runSyncTests(t, ctx, tests, storageClasses, []*v1.Pod{})
 }
 
-// Test multiple calls to syncClaim/syncVolume and periodic sync of all
-// volume/claims. The test follows this pattern:
-//  0. Load the controller with initial data.
-//  1. Call controllerTest.testCall() once as in TestSync()
-//  2. For all volumes/claims changed by previous syncVolume/syncClaim calls,
-//     call appropriate syncVolume/syncClaim (simulating "volume/claim changed"
-//     events). Go to 2. if these calls change anything.
-//  3. When all changes are processed and no new changes were made, call
-//     syncVolume/syncClaim on all volumes/claims (simulating "periodic sync").
-//  4. If some changes were done by step 3., go to 2. (simulation of
-//     "volume/claim updated" events, eventually performing step 3. again)
-//  5. When 3. does not do any changes, finish the tests and compare final set
-//     of volumes/claims with expected claims/volumes and report differences.
+// TestProvisionMultiSync 多次调用 syncClaim/syncVolume 并执行周期性同步，
+// 模拟控制器在事件驱动下的收敛过程：
+//  0. 用初始数据填充控制器；
+//  1. 先调用一次 controllerTest.testCall()，与 TestSync 一致；
+//  2. 对上一步发生变化的卷/claim 调用相应的 syncVolume/syncClaim，
+//     模拟 "volume/claim changed" 事件；若仍有变化则重复该步骤；
+//  3. 没有新变化时，对所有卷/claim 调用一次同步，模拟 "周期性同步"；
+//  4. 若周期性同步产生变化，回到步骤 2 继续处理，最终再次执行步骤 3；
+//  5. 周期性同步不再产生变化时，比对最终的卷/claim 集合与期望值。
 //
-// Some limit of calls in enforced to prevent endless loops.
+// 调用次数设有上限，防止死循环。
 func TestProvisionMultiSync(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	tests := []controllerTest{
 		{
-			// Provision a volume with binding
+			// 创建卷并完成绑定。
 			name:            "12-1 - successful provision",
 			initialVolumes:  novolumes,
 			expectedVolumes: volumesWithFinalizers(newVolumeArray("pvc-uid12-1", "1Gi", "uid12-1", "claim12-1", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classGold, volume.AnnBoundByController, volume.AnnDynamicallyProvisioned), []string{volume.PVDeletionInTreeProtectionFinalizer}),
@@ -607,7 +594,7 @@ func TestProvisionMultiSync(t *testing.T) {
 			test:            wrapTestWithProvisionCalls([]provisionCall{provision1Success}, testSyncClaim),
 		},
 		{
-			// provision a volume (external provisioner) and binding + normal event with external provisioner
+			// 外部 provisioner 创建卷并绑定，同时发出正常事件。
 			name:            "12-2 - external provisioner with volume provisioned success",
 			initialVolumes:  novolumes,
 			expectedVolumes: newVolumeArray("pvc-uid12-2", "1Gi", "uid12-2", "claim12-2", v1.VolumeBound, v1.PersistentVolumeReclaimRetain, classExternal, volume.AnnBoundByController),
@@ -618,22 +605,20 @@ func TestProvisionMultiSync(t *testing.T) {
 			expectedEvents: []string{"Normal ExternalProvisioning"},
 			errors:         noerrors,
 			test: wrapTestWithInjectedOperation(ctx, wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim), func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor) {
-				// Create a volume before syncClaim tries to bind a PV to PVC
-				// This simulates external provisioner creating a volume while the controller
-				// is waiting for a volume to bind to the existed claim
-				// the external provisioner workflow implemented in "provisionClaimOperationCSI"
-				// should issue an ExternalProvisioning event to signal that some external provisioner
-				// is working on provisioning the PV, also add the operation start timestamp into local cache
-				// operationTimestamps. Rely on the existences of the start time stamp to create a PV for binding
+				// 在 syncClaim 尝试绑定 PV 之前创建卷，
+				// 模拟控制器等待绑定期间外部 provisioner 已创建卷。
+				// provisionClaimOperationCSI 会发出 ExternalProvisioning 事件，
+				// 并把操作开始时间写入本地缓存 operationTimestamps；
+				// 这里以该时间戳是否存在作为创建可绑定 PV 的触发条件。
 				if ctrl.operationTimestamps.Has("default/claim12-2") {
 					volume := newVolume("pvc-uid12-2", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimRetain, classExternal)
-					ctrl.volumes.store.Add(volume) // add the volume to controller
+					ctrl.volumes.store.Add(volume) // 把卷加入控制器缓存
 					reactor.AddVolume(volume)
 				}
 			}),
 		},
 		{
-			// provision a volume (external provisioner) but binding will not happen + normal event with external provisioner
+			// 外部 provisioner 尚未创建卷，绑定不会发生，仅发出正常事件。
 			name:            "12-3 - external provisioner with volume to be provisioned",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -646,7 +631,7 @@ func TestProvisionMultiSync(t *testing.T) {
 			test:           wrapTestWithProvisionCalls([]provisionCall{provision1Success}, testSyncClaim),
 		},
 		{
-			// provision a volume (external provisioner) and binding + normal event with external provisioner
+			// 外部 provisioner 创建卷并绑定，同时发出正常事件。
 			name:            "12-4 - external provisioner with volume provisioned/bound success",
 			initialVolumes:  novolumes,
 			expectedVolumes: newVolumeArray("pvc-uid12-4", "1Gi", "uid12-4", "claim12-4", v1.VolumeBound, v1.PersistentVolumeReclaimRetain, classExternal, volume.AnnBoundByController),
@@ -657,16 +642,14 @@ func TestProvisionMultiSync(t *testing.T) {
 			expectedEvents: []string{"Normal ExternalProvisioning"},
 			errors:         noerrors,
 			test: wrapTestWithInjectedOperation(ctx, wrapTestWithProvisionCalls([]provisionCall{}, testSyncClaim), func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor) {
-				// Create a volume before syncClaim tries to bind a PV to PVC
-				// This simulates external provisioner creating a volume while the controller
-				// is waiting for a volume to bind to the existed claim
-				// the external provisioner workflow implemented in "provisionClaimOperationCSI"
-				// should issue an ExternalProvisioning event to signal that some external provisioner
-				// is working on provisioning the PV, also add the operation start timestamp into local cache
-				// operationTimestamps. Rely on the existences of the start time stamp to create a PV for binding
+				// 在 syncClaim 尝试绑定 PV 之前创建卷，
+				// 模拟控制器等待绑定期间外部 provisioner 已创建卷。
+				// provisionClaimOperationCSI 会发出 ExternalProvisioning 事件，
+				// 并把操作开始时间写入本地缓存 operationTimestamps；
+				// 这里以该时间戳是否存在作为创建可绑定 PV 的触发条件。
 				if ctrl.operationTimestamps.Has("default/claim12-4") {
 					volume := newVolume("pvc-uid12-4", "1Gi", "uid12-4", "claim12-4", v1.VolumeBound, v1.PersistentVolumeReclaimRetain, classExternal, volume.AnnBoundByController)
-					ctrl.volumes.store.Add(volume) // add the volume to controller
+					ctrl.volumes.store.Add(volume) // 把卷加入控制器缓存
 					reactor.AddVolume(volume)
 				}
 			}),
@@ -676,7 +659,7 @@ func TestProvisionMultiSync(t *testing.T) {
 	runMultisyncTests(t, ctx, tests, storageClasses, storageClasses[0].Name)
 }
 
-// When provisioning is disabled, provisioning a claim should instantly return nil
+// TestDisablingDynamicProvisioner 验证关闭动态创建后，处理 claim 会立即返回 nil。
 func TestDisablingDynamicProvisioner(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctrl, err := newTestController(ctx, nil, nil, false)

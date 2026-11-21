@@ -36,23 +36,32 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestCalculatePoolStatus 验证不同输入下的池状态计算：过滤、合并、截断与不完整池判定。
 func TestCalculatePoolStatus(t *testing.T) {
 	testCases := []struct {
-		name               string
-		request            *resourcev1alpha3.ResourcePoolStatusRequest
-		slices             []*resourcev1.ResourceSlice
-		claims             []*resourcev1.ResourceClaim
-		expectedPools      int
-		expectedTotal      int32
+		// name 用例名称，用于定位失败场景。
+		name string
+		// request 待计算状态的请求，携带驱动与池名等过滤条件。
+		request *resourcev1alpha3.ResourcePoolStatusRequest
+		// slices 注入 informer 的 ResourceSlice 列表。
+		slices []*resourcev1.ResourceSlice
+		// claims 注入 informer 的 ResourceClaim 列表，用于统计已分配设备。
+		claims []*resourcev1.ResourceClaim
+		// expectedPools 期望返回的池数量。
+		expectedPools int
+		// expectedTotal 期望的设备总数。
+		expectedTotal int32
+		// expectedAlloc 期望的已分配设备数。
 		expectedAlloc      int32
-		expectedPoolCount  int32   // expected PoolCount value (total matching pools before limit)
-		expectedTruncated  bool    // true when len(Pools) < PoolCount
-		checkNodeName      bool    // when true, verify first pool's NodeName matches expectedNodeName
-		expectedNodeName   *string // expected NodeName for the first pool (nil means no NodeName)
-		checkIncomplete    bool    // when true, verify incomplete pool behavior
-		expectedIncomplete int     // number of pools expected to have ValidationError set
+		expectedPoolCount  int32   // 期望的 PoolCount 值（限制前的匹配池总数）
+		expectedTruncated  bool    // 为 true 时表示列表被截断，即 len(Pools) < PoolCount
+		checkNodeName      bool    // 为 true 时校验首个池的 NodeName 与期望值一致
+		expectedNodeName   *string // 首个池期望的 NodeName，nil 表示不应设置
+		checkIncomplete    bool    // 为 true 时校验不完整池的行为
+		expectedIncomplete int     // 期望设置了 ValidationError 的池数量
 	}{
 		{
+			// 基线用例：单个完整池、无 claim，校验总数与零分配。
 			name: "single-pool-no-allocations",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -69,6 +78,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedAlloc: 0,
 		},
 		{
+			// 两个 claim 分别占用不同设备，分配数应为 2。
 			name: "single-pool-with-allocations",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -88,6 +98,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedAlloc: 2,
 		},
 		{
+			// 不同池的设备数应合并统计，池数按池去重。
 			name: "multiple-pools",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -105,6 +116,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedAlloc: 0,
 		},
 		{
+			// 请求只关心指定驱动，另一个驱动的池必须被过滤掉。
 			name: "filter-by-driver",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -122,6 +134,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedAlloc: 0,
 		},
 		{
+			// 指定 PoolName 后只应返回同名池。
 			name: "filter-by-pool-name",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -140,6 +153,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedAlloc: 0,
 		},
 		{
+			// 同一池的多个 slice 应合并为一个池条目，计数相加。
 			name: "multiple-slices-same-pool",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -157,6 +171,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedAlloc: 0,
 		},
 		{
+			// Limit=1 时只返回一个池，但 PoolCount 保留匹配总数以告知调用方被截断。
 			name: "limit-pools",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -175,6 +190,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedTruncated: true,
 		},
 		{
+			// 没有匹配 slice 时返回空列表而非报错。
 			name: "no-matching-pools",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -191,6 +207,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedAlloc: 0,
 		},
 		{
+			// 同一池存在多代 slice 时只取最新代，旧代必须丢弃。
 			name: "older-generation-slices-ignored",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -199,18 +216,19 @@ func TestCalculatePoolStatus(t *testing.T) {
 				},
 			},
 			slices: []*resourcev1.ResourceSlice{
-				// Old generation slice (should be ignored)
+				// 旧代 slice，应当被忽略
 				makeSliceWithGeneration("slice-old", "test.example.com", "pool-1", "node-1", 8, 1),
-				// New generation slices (should be counted)
+				// 新一代 slice，应当被计入
 				makeSliceWithGeneration("slice-new-1", "test.example.com", "pool-1", "node-1", 4, 2),
 				makeSliceWithGeneration("slice-new-2", "test.example.com", "pool-1", "node-1", 4, 2),
 			},
 			claims:        []*resourcev1.ResourceClaim{},
 			expectedPools: 1,
-			expectedTotal: 8, // 4+4 from gen 2 only, not 8 from gen 1
+			expectedTotal: 8, // 只计入第 2 代的 4+4，而非第 1 代的 8
 			expectedAlloc: 0,
 		},
 		{
+			// slice 数量不足时池被标记为不完整，携带 ValidationError 且不计设备。
 			name: "incomplete-pool-has-validation-error",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -219,7 +237,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 				},
 			},
 			slices: []*resourcev1.ResourceSlice{
-				// Pool expects 5 slices but only 3 are published
+				// 池期望 5 个 slice，但只发布了 3 个
 				makeSliceWithExpectedCount("slice-1", "test.example.com", "pool-1", "node-1", 4, 1, 5),
 				makeSliceWithExpectedCount("slice-2", "test.example.com", "pool-1", "node-1", 4, 1, 5),
 				makeSliceWithExpectedCount("slice-3", "test.example.com", "pool-1", "node-1", 4, 1, 5),
@@ -230,6 +248,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedIncomplete: 1,
 		},
 		{
+			// 完整池与不完整池共存，只有完整池计入设备总数。
 			name: "mix-of-complete-and-incomplete-pools",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -238,20 +257,21 @@ func TestCalculatePoolStatus(t *testing.T) {
 				},
 			},
 			slices: []*resourcev1.ResourceSlice{
-				// pool-1: complete (1/1 slices)
+				// pool-1：完整（1/1 个 slice）
 				makeSliceWithExpectedCount("slice-1", "test.example.com", "pool-1", "node-1", 4, 1, 1),
-				// pool-2: incomplete (2/3 slices)
+				// pool-2：不完整（2/3 个 slice）
 				makeSliceWithExpectedCount("slice-2a", "test.example.com", "pool-2", "node-2", 4, 1, 3),
 				makeSliceWithExpectedCount("slice-2b", "test.example.com", "pool-2", "node-2", 4, 1, 3),
 			},
 			claims:             []*resourcev1.ResourceClaim{},
 			expectedPools:      2,
-			expectedTotal:      4, // only pool-1 (complete) contributes to total
+			expectedTotal:      4, // 只有完整的 pool-1 计入设备总数
 			expectedAlloc:      0,
 			checkIncomplete:    true,
 			expectedIncomplete: 1,
 		},
 		{
+			// 池内所有 slice 同属一个节点时，PoolStatus 应带上 NodeName。
 			name: "same-node-pool-sets-nodename",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -271,6 +291,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedNodeName: new("node-1"),
 		},
 		{
+			// 池跨多个节点时 NodeName 必须清空，避免误导调用方。
 			name: "mixed-node-pool-clears-nodename",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -290,6 +311,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedNodeName: nil,
 		},
 		{
+			// slice 未指定节点时也不应推断出 NodeName。
 			name: "nil-nodename-slices-no-nodename",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -309,6 +331,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 			expectedNodeName: nil,
 		},
 		{
+			// 所有 slice 都发布齐全时不产生 ValidationError。
 			name: "all-pools-complete-no-validation-errors",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -317,7 +340,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 				},
 			},
 			slices: []*resourcev1.ResourceSlice{
-				// pool-1: complete (2/2 slices)
+				// pool-1 的 slice 已全部就绪（2/2）。
 				makeSliceWithExpectedCount("slice-1a", "test.example.com", "pool-1", "node-1", 4, 1, 2),
 				makeSliceWithExpectedCount("slice-1b", "test.example.com", "pool-1", "node-1", 4, 1, 2),
 			},
@@ -330,15 +353,16 @@ func TestCalculatePoolStatus(t *testing.T) {
 		},
 	}
 
+	// 直接调用计算方法而非启动控制器循环，避免异步处理干扰断言。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
 
-			// Create fake client and informers
+			// 创建 fake 客户端与 informer
 			fakeClient := fake.NewClientset()
 			informerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 
-			// Create controller
+			// 创建控制器
 			controller, err := NewController(ctx, fakeClient,
 				informerFactory.Resource().V1alpha3().ResourcePoolStatusRequests(),
 				informerFactory.Resource().V1().ResourceSlices(),
@@ -349,7 +373,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 				t.Fatalf("Failed to create controller: %v", err)
 			}
 
-			// Add slices to the informer store
+			// 将 slice 加入 informer store
 			for _, slice := range tc.slices {
 				err := informerFactory.Resource().V1().ResourceSlices().Informer().GetStore().Add(slice)
 				if err != nil {
@@ -357,7 +381,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 				}
 			}
 
-			// Add claims to the informer store
+			// 将 claim 加入 informer store
 			for _, claim := range tc.claims {
 				err := informerFactory.Resource().V1().ResourceClaims().Informer().GetStore().Add(claim)
 				if err != nil {
@@ -365,15 +389,15 @@ func TestCalculatePoolStatus(t *testing.T) {
 				}
 			}
 
-			// Calculate pool status (reads directly from listers)
+			// 直接通过 lister 计算池状态
 			status := controller.calculatePoolStatus(ctx, tc.request)
 
-			// Verify pool count
+			// 校验池数量
 			if len(status.Pools) != tc.expectedPools {
 				t.Errorf("Expected %d pools, got %d", tc.expectedPools, len(status.Pools))
 			}
 
-			// Verify PoolCount field
+			// 校验 PoolCount 字段
 			if tc.expectedPoolCount > 0 {
 				if status.PoolCount == nil {
 					t.Errorf("Expected PoolCount to be %d, got nil", tc.expectedPoolCount)
@@ -382,14 +406,14 @@ func TestCalculatePoolStatus(t *testing.T) {
 				}
 			}
 
-			// Verify truncation: len(Pools) < PoolCount means truncated
+			// 校验截断：len(Pools) < PoolCount 即表示结果被截断
 			if tc.expectedTruncated {
 				if status.PoolCount == nil || int32(len(status.Pools)) >= *status.PoolCount {
 					t.Errorf("Expected truncation (len(Pools)=%d < PoolCount), but PoolCount=%v", len(status.Pools), status.PoolCount)
 				}
 			}
 
-			// Count device totals from complete pools only (those without ValidationError)
+			// 只统计完整池的设备数（即没有 ValidationError 的池）
 			if tc.expectedPools > 0 && !tc.expectedTruncated {
 				var totalDevices, allocatedDevices int32
 				for _, pool := range status.Pools {
@@ -408,7 +432,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 				}
 			}
 
-			// Verify NodeName when test specifies expected value
+			// 用例指定期望值时校验 NodeName
 			if tc.checkNodeName && len(status.Pools) == 1 {
 				pool := status.Pools[0]
 				if tc.expectedNodeName != nil {
@@ -422,13 +446,13 @@ func TestCalculatePoolStatus(t *testing.T) {
 				}
 			}
 
-			// Verify incomplete pool counts (pools with ValidationError set)
+			// 校验不完整池数量（设置了 ValidationError 的池）
 			if tc.checkIncomplete {
 				incompleteCount := 0
 				for _, pool := range status.Pools {
 					if pool.ValidationError != nil {
 						incompleteCount++
-						// Incomplete pools should have nil device counts and nil ResourceSliceCount
+						// 不完整池不应填写设备计数和 ResourceSliceCount
 						if pool.TotalDevices != nil {
 							t.Errorf("Incomplete pool %s/%s should have nil TotalDevices, got %d", pool.Driver, pool.PoolName, *pool.TotalDevices)
 						}
@@ -445,7 +469,7 @@ func TestCalculatePoolStatus(t *testing.T) {
 				}
 			}
 
-			// Verify conditions are set
+			// 校验 Conditions 已设置
 			if len(status.Conditions) == 0 {
 				t.Error("Expected Conditions to be set")
 			}
@@ -453,10 +477,11 @@ func TestCalculatePoolStatus(t *testing.T) {
 	}
 }
 
+// TestSyncRequest 验证同步请求后会通过 status 子资源写回状态。
 func TestSyncRequest(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
-	// Create fake client and informers
+	// 创建 fake 客户端与 informer
 	request := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
 		Spec: resourcev1alpha3.ResourcePoolStatusRequestSpec{
@@ -467,7 +492,7 @@ func TestSyncRequest(t *testing.T) {
 	fakeClient := fake.NewClientset(request)
 	informerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 
-	// Create controller
+	// 创建控制器
 	controller, err := NewController(ctx, fakeClient,
 		informerFactory.Resource().V1alpha3().ResourcePoolStatusRequests(),
 		informerFactory.Resource().V1().ResourceSlices(),
@@ -478,26 +503,26 @@ func TestSyncRequest(t *testing.T) {
 		t.Fatalf("Failed to create controller: %v", err)
 	}
 
-	// Add request to informer
+	// 将请求加入 informer
 	err = informerFactory.Resource().V1alpha3().ResourcePoolStatusRequests().Informer().GetStore().Add(request)
 	if err != nil {
 		t.Fatalf("Failed to add request to informer: %v", err)
 	}
 
-	// Add a slice
+	// 添加一个 slice
 	slice := makeSlice("slice-1", "test.example.com", "pool-1", "node-1", 4)
 	err = informerFactory.Resource().V1().ResourceSlices().Informer().GetStore().Add(slice)
 	if err != nil {
 		t.Fatalf("Failed to add slice to informer: %v", err)
 	}
 
-	// Sync the request
+	// 同步该请求
 	err = controller.syncRequest(ctx, "test-request")
 	if err != nil {
 		t.Fatalf("syncRequest failed: %v", err)
 	}
 
-	// Verify the status was updated (fake client should have received UpdateStatus call)
+	// 校验状态已更新（fake 客户端应收到 status 子资源更新）
 	actions := fakeClient.Actions()
 	var foundUpdate bool
 	for _, action := range actions {
@@ -511,6 +536,7 @@ func TestSyncRequest(t *testing.T) {
 	}
 }
 
+// TestSyncRequestRequeuesIncompletePool 验证不完整池通过返回错误触发重新入队，且重试耗尽后仍不写状态。
 func TestSyncRequestRequeuesIncompletePool(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -534,35 +560,35 @@ func TestSyncRequestRequeuesIncompletePool(t *testing.T) {
 		t.Fatalf("Failed to create controller: %v", err)
 	}
 
-	// Add request to informer
+	// 将请求加入 informer
 	err = informerFactory.Resource().V1alpha3().ResourcePoolStatusRequests().Informer().GetStore().Add(request)
 	if err != nil {
 		t.Fatalf("Failed to add request to informer: %v", err)
 	}
 
-	// Add an incomplete pool (expects 3 slices, only 1 published)
+	// 添加一个不完整池（期望 3 个 slice，只发布了 1 个）
 	slice := makeSliceWithExpectedCount("slice-1", "test.example.com", "pool-1", "node-1", 4, 1, 3)
 	err = informerFactory.Resource().V1().ResourceSlices().Informer().GetStore().Add(slice)
 	if err != nil {
 		t.Fatalf("Failed to add slice to informer: %v", err)
 	}
 
-	// syncRequest should always return an error for incomplete pools,
-	// letting processNextWorkItem handle retry counting and drop logic.
+	// 不完整池必须始终由 syncRequest 返回错误，
+	// 重试计数与丢弃由 processNextWorkItem 负责。
 	err = controller.syncRequest(ctx, "test-request")
 	if err == nil {
 		t.Fatal("Expected syncRequest to return error for incomplete pool requeue, got nil")
 	}
 
-	// Verify no status update was made
+	// 校验没有更新状态
 	for _, action := range fakeClient.Actions() {
 		if action.GetVerb() == "update" && action.GetSubresource() == "status" {
 			t.Error("Should not update status when requeueing for incomplete pools")
 		}
 	}
 
-	// Even after retries are exhausted, syncRequest still returns an error;
-	// it is processNextWorkItem that decides to drop the key.
+	// 即使重试耗尽，syncRequest 仍返回错误；
+	// 是否丢弃键由 processNextWorkItem 决定。
 	for range maxRetries {
 		controller.workqueue.AddRateLimited("test-request")
 		key, _ := controller.workqueue.Get()
@@ -576,6 +602,7 @@ func TestSyncRequestRequeuesIncompletePool(t *testing.T) {
 	}
 }
 
+// TestSyncRequestWritesStructuralViewError 验证结构性错误直接写入状态，且不再入队重试。
 func TestSyncRequestWritesStructuralViewError(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -603,8 +630,8 @@ func TestSyncRequestWritesStructuralViewError(t *testing.T) {
 		t.Fatalf("Failed to add request to informer: %v", err)
 	}
 
-	// A complete pool (1/1 slices) with a permanent structural view error: it
-	// declares a partitionTypeAttribute but publishes no sharedCounters.
+	// 构造一个完整池（1/1 个 slice）并注入永久结构性错误：
+	// 它声明了 partitionTypeAttribute 却没有发布 sharedCounters。
 	slice := makeSlice("slice-1", "test.example.com", "pool-1", "node-1", 2)
 	attr := resourcev1.FullyQualifiedName("test.example.com/profile")
 	slice.Spec.PartitionTypeAttribute = &attr
@@ -612,8 +639,8 @@ func TestSyncRequestWritesStructuralViewError(t *testing.T) {
 		t.Fatalf("Failed to add slice to informer: %v", err)
 	}
 
-	// Structural errors are permanent: syncRequest must not requeue, and must
-	// write the status so the error reaches the user.
+	// 结构性错误是永久的：syncRequest 不得重新入队，而必须
+	// 写入状态，让错误对用户可见。
 	if err := controller.syncRequest(ctx, "test-request"); err != nil {
 		t.Fatalf("syncRequest requeued on a permanent structural error: %v", err)
 	}
@@ -637,11 +664,12 @@ func TestSyncRequestWritesStructuralViewError(t *testing.T) {
 	}
 }
 
+// TestSkipProcessedRequest 验证已处理过的请求被跳过，不会再次更新状态。
 func TestSkipProcessedRequest(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
 	now := metav1.Now()
-	// Create a request that's already been processed (Status is non-nil with conditions)
+	// 构造已处理过的请求（Status 非空且带有 Conditions）
 	request := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
 		Spec: resourcev1alpha3.ResourcePoolStatusRequestSpec{
@@ -679,13 +707,13 @@ func TestSkipProcessedRequest(t *testing.T) {
 		t.Fatalf("Failed to add request to informer: %v", err)
 	}
 
-	// Sync should skip the already-processed request
+	// 同步应跳过已处理的请求
 	err = controller.syncRequest(ctx, "test-request")
 	if err != nil {
 		t.Fatalf("syncRequest failed: %v", err)
 	}
 
-	// Verify no update was made
+	// 校验没有执行更新
 	actions := fakeClient.Actions()
 	for _, action := range actions {
 		if action.GetVerb() == "update" && action.GetSubresource() == "status" {
@@ -694,20 +722,24 @@ func TestSkipProcessedRequest(t *testing.T) {
 	}
 }
 
-// Helper functions
+// 辅助函数
 
+// makeSlice 构造单个 slice，默认第 1 代且资源计数为 1。
 func makeSlice(name, driver, pool, node string, deviceCount int) *resourcev1.ResourceSlice {
 	return makeSliceWithGenerationAndCount(name, driver, pool, node, deviceCount, 1, 1)
 }
 
+// makeSliceWithExpectedCount 构造声明了预期 slice 数量的 slice，用于不完整池场景。
 func makeSliceWithExpectedCount(name, driver, pool, node string, deviceCount int, generation int64, resourceSliceCount int64) *resourcev1.ResourceSlice {
 	return makeSliceWithGenerationAndCount(name, driver, pool, node, deviceCount, generation, resourceSliceCount)
 }
 
+// makeSliceWithGeneration 构造指定代际的 slice。
 func makeSliceWithGeneration(name, driver, pool, node string, deviceCount int, generation int64) *resourcev1.ResourceSlice {
 	return makeSliceWithGenerationAndCount(name, driver, pool, node, deviceCount, generation, 1)
 }
 
+// makeSliceWithGenerationAndCount 构造指定代际、设备数和资源计数的 slice。
 func makeSliceWithGenerationAndCount(name, driver, pool, node string, deviceCount int, generation int64, resourceSliceCount int64) *resourcev1.ResourceSlice {
 	devices := make([]resourcev1.Device, deviceCount)
 	for i := range deviceCount {
@@ -733,6 +765,7 @@ func makeSliceWithGenerationAndCount(name, driver, pool, node string, deviceCoun
 	}
 }
 
+// makeAllocatedClaim 构造指向指定设备的一次普通分配。
 func makeAllocatedClaim(name, namespace, driver, pool, device string) *resourcev1.ResourceClaim {
 	return &resourcev1.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -756,6 +789,7 @@ func makeAllocatedClaim(name, namespace, driver, pool, device string) *resourcev
 	}
 }
 
+// makeAdminAccessClaim 构造 AdminAccess 分配，用于验证观察者不计入分配统计。
 func makeAdminAccessClaim(name, namespace, driver, pool, device string) *resourcev1.ResourceClaim {
 	claim := makeAllocatedClaim(name, namespace, driver, pool, device)
 	adminAccess := true
@@ -763,7 +797,7 @@ func makeAdminAccessClaim(name, namespace, driver, pool, device string) *resourc
 	return claim
 }
 
-// makeSliceWithTaintedDevices taints the first taintedCount devices with effect.
+// makeSliceWithTaintedDevices 给前 taintedCount 个设备打上指定 effect 的污点。
 func makeSliceWithTaintedDevices(name, driver, pool, node string, deviceCount, taintedCount int, effect resourcev1.DeviceTaintEffect) *resourcev1.ResourceSlice {
 	slice := makeSlice(name, driver, pool, node, deviceCount)
 	for i := 0; i < taintedCount && i < deviceCount; i++ {
@@ -775,6 +809,7 @@ func makeSliceWithTaintedDevices(name, driver, pool, node string, deviceCount, t
 	return slice
 }
 
+// makeRequest 构造指定驱动的 ResourcePoolStatusRequest。
 func makeRequest(driver string) *resourcev1alpha3.ResourcePoolStatusRequest {
 	return &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-request"},
@@ -782,7 +817,7 @@ func makeRequest(driver string) *resourcev1alpha3.ResourcePoolStatusRequest {
 	}
 }
 
-// runCalculatePoolStatus seeds the informer stores and runs the computation.
+// runCalculatePoolStatus 填充 informer store 后执行池状态计算。
 func runCalculatePoolStatus(t *testing.T, request *resourcev1alpha3.ResourcePoolStatusRequest, slices []*resourcev1.ResourceSlice, claims []*resourcev1.ResourceClaim, rules ...*resourcev1.DeviceTaintRule) resourcev1alpha3.ResourcePoolStatusRequestStatus {
 	t.Helper()
 	_, ctx := ktesting.NewTestContext(t)
@@ -815,7 +850,7 @@ func runCalculatePoolStatus(t *testing.T, request *resourcev1alpha3.ResourcePool
 	return controller.calculatePoolStatus(ctx, request)
 }
 
-// makeDeviceTaintRule taints the named device in a pool via an external rule.
+// makeDeviceTaintRule 通过外部规则给池中指定设备打污点。
 func makeDeviceTaintRule(name, driver, pool, device string, effect resourcev1.DeviceTaintEffect) *resourcev1.DeviceTaintRule {
 	return &resourcev1.DeviceTaintRule{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
@@ -833,6 +868,7 @@ func makeDeviceTaintRule(name, driver, pool, device string, effect resourcev1.De
 	}
 }
 
+// requireSinglePool 断言状态中恰好有一个池并返回它。
 func requireSinglePool(t *testing.T, status resourcev1alpha3.ResourcePoolStatusRequestStatus) resourcev1alpha3.PoolStatus {
 	t.Helper()
 	if len(status.Pools) != 1 {
@@ -841,7 +877,7 @@ func requireSinglePool(t *testing.T, status resourcev1alpha3.ResourcePoolStatusR
 	return status.Pools[0]
 }
 
-// derefInt32 returns -1 for nil so an unexpectedly unset count fails loudly.
+// derefInt32 对 nil 返回 -1，以便未设置的计数在断言时明显失败。
 func derefInt32(p *int32) int32 {
 	if p == nil {
 		return -1
@@ -849,9 +885,10 @@ func derefInt32(p *int32) int32 {
 	return *p
 }
 
-// Device tallies: repeated claims, AdminAccess observers, taints and taint rules.
+// TestCalculatePoolStatus_DeviceCounts 验证设备计数：重复分配、AdminAccess、污点与污点规则。
 func TestCalculatePoolStatus_DeviceCounts(t *testing.T) {
 	driver := "test.example.com"
+	// 按指定污点效果构造含两个被污染设备的 slice。
 	plainSlices := []*resourcev1.ResourceSlice{makeSlice("slice-1", driver, "pool-1", "node-1", 4)}
 	taintedSlices := func(effect resourcev1.DeviceTaintEffect) []*resourcev1.ResourceSlice {
 		return []*resourcev1.ResourceSlice{makeSliceWithTaintedDevices("slice-1", driver, "pool-1", "node-1", 5, 2, effect)}
@@ -859,16 +896,24 @@ func TestCalculatePoolStatus_DeviceCounts(t *testing.T) {
 	taintRule := makeDeviceTaintRule("rule-1", driver, "pool-1", "device-0", resourcev1.DeviceTaintEffectNoSchedule)
 
 	testCases := map[string]struct {
-		slices           []*resourcev1.ResourceSlice
-		claims           []*resourcev1.ResourceClaim
-		rules            []*resourcev1.DeviceTaintRule
+		// slices 注入的 ResourceSlice 列表。
+		slices []*resourcev1.ResourceSlice
+		// claims 注入的 ResourceClaim 列表。
+		claims []*resourcev1.ResourceClaim
+		// rules 注入的 DeviceTaintRule 列表。
+		rules []*resourcev1.DeviceTaintRule
+		// enableTaintRules 是否开启设备污点规则特性门控。
 		enableTaintRules bool
-		wantTotal        int32
-		wantAllocated    int32
-		wantAvailable    int32
-		wantUnavailable  int32
+		// wantTotal 期望的设备总数。
+		wantTotal int32
+		// wantAllocated 期望的已分配设备数。
+		wantAllocated int32
+		// wantAvailable 期望的可用设备数。
+		wantAvailable int32
+		// wantUnavailable 期望的不可用设备数。
+		wantUnavailable int32
 	}{
-		// Three claims reference the same physical device; it must count once.
+		// 三个 claim 指向同一物理设备，只能计为一次分配。
 		"repeated claims on one device count once": {
 			slices: plainSlices,
 			claims: []*resourcev1.ResourceClaim{
@@ -878,7 +923,7 @@ func TestCalculatePoolStatus_DeviceCounts(t *testing.T) {
 			},
 			wantTotal: 4, wantAllocated: 1, wantAvailable: 3,
 		},
-		// AdminAccess allocations are observers and must not move any tally.
+		// AdminAccess 分配只是观察者，不应改变任何计数。
 		"adminAccess claim is not an allocation": {
 			slices: plainSlices,
 			claims: []*resourcev1.ResourceClaim{
@@ -887,27 +932,30 @@ func TestCalculatePoolStatus_DeviceCounts(t *testing.T) {
 			},
 			wantTotal: 4, wantAllocated: 1, wantAvailable: 3,
 		},
+		// NoSchedule 污点使设备不可用，总数不变但可用数减少。
 		"noSchedule taint is unavailable": {
 			slices:    taintedSlices(resourcev1.DeviceTaintEffectNoSchedule),
 			wantTotal: 5, wantAvailable: 3, wantUnavailable: 2,
 		},
+		// NoExecute 与 NoSchedule 一样计入不可用。
 		"noExecute taint is unavailable": {
 			slices:    taintedSlices(resourcev1.DeviceTaintEffectNoExecute),
 			wantTotal: 5, wantAvailable: 3, wantUnavailable: 2,
 		},
-		// A None-effect taint does not make a device unavailable; it counts the
-		// same as an untainted device. Unknown effects are treated like None.
+		// None 效果的污点不会让设备不可用，其计数
+		// 与未打污点的设备相同；未知效果也按 None 处理。
 		"none taint is available": {
 			slices:    taintedSlices(resourcev1.DeviceTaintEffectNone),
 			wantTotal: 5, wantAvailable: 5, wantUnavailable: 0,
 		},
-		// A matching DeviceTaintRule applies only when its gate is enabled.
+		// 匹配的 DeviceTaintRule 仅在特性门控开启时生效。
 		"taint rule applies when gate is enabled": {
 			slices:           plainSlices,
 			rules:            []*resourcev1.DeviceTaintRule{taintRule},
 			enableTaintRules: true,
 			wantTotal:        4, wantAvailable: 3, wantUnavailable: 1,
 		},
+		// 门控关闭时规则必须被忽略，否则会改变设备可用性统计。
 		"taint rule ignored when gate is disabled": {
 			slices:    plainSlices,
 			rules:     []*resourcev1.DeviceTaintRule{taintRule},
@@ -915,6 +963,7 @@ func TestCalculatePoolStatus_DeviceCounts(t *testing.T) {
 		},
 	}
 
+	// 每个子用例单独设置门控，避免开关状态残留影响其他场景。
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.DRADeviceTaintRules, tc.enableTaintRules)
@@ -935,32 +984,41 @@ func TestCalculatePoolStatus_DeviceCounts(t *testing.T) {
 	}
 }
 
+// TestIsOlderThan 验证给定时间是否早于持续时间窗口的起点。
 func TestIsOlderThan(t *testing.T) {
 	testCases := []struct {
-		name     string
-		time     time.Time
+		// name 用例名称。
+		name string
+		// time 待判断的时间，零值表示从未更新。
+		time time.Time
+		// duration 判断窗口。
 		duration time.Duration
+		// expected 是否应判定为过期。
 		expected bool
 	}{
 		{
+			// 零值表示时间未初始化，不能误判为过期。
 			name:     "zero-time-is-not-older",
 			time:     time.Time{},
 			duration: time.Hour,
 			expected: false,
 		},
 		{
+			// 窗口内的时间不应过期。
 			name:     "recent-time-is-not-older",
 			time:     time.Now().Add(-30 * time.Minute),
 			duration: time.Hour,
 			expected: false,
 		},
 		{
+			// 超出窗口的时间应判定为过期。
 			name:     "old-time-is-older",
 			time:     time.Now().Add(-2 * time.Hour),
 			duration: time.Hour,
 			expected: true,
 		},
 		{
+			// 恰好还差一分钟才到边界，不能提前判定过期。
 			name:     "just-under-boundary-is-not-older",
 			time:     time.Now().Add(-time.Hour + time.Minute),
 			duration: time.Hour,
@@ -970,6 +1028,7 @@ func TestIsOlderThan(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 直接调用纯函数，不需要控制器或客户端。
 			result := isOlderThan(tc.time, tc.duration)
 			if result != tc.expected {
 				t.Errorf("isOlderThan(%v, %v) = %v, expected %v", tc.time, tc.duration, result, tc.expected)
@@ -978,6 +1037,7 @@ func TestIsOlderThan(t *testing.T) {
 	}
 }
 
+// TestShouldDeleteRequest 验证已完成与待处理请求在不同过期时间下的删除判定。
 func TestShouldDeleteRequest(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -995,11 +1055,15 @@ func TestShouldDeleteRequest(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name           string
-		request        *resourcev1alpha3.ResourcePoolStatusRequest
+		// name 用例名称。
+		name string
+		// request 待判定的资源池状态请求。
+		request *resourcev1alpha3.ResourcePoolStatusRequest
+		// expectedDelete 是否应被删除。
 		expectedDelete bool
 	}{
 		{
+			// 已完成请求以 Complete 条件时间为准，未超过 1 小时不删除。
 			name: "completed-request-not-expired",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1025,6 +1089,7 @@ func TestShouldDeleteRequest(t *testing.T) {
 			expectedDelete: false,
 		},
 		{
+			// 条件时间超过 completedRequestTTL，应删除。
 			name: "completed-request-expired",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1050,6 +1115,7 @@ func TestShouldDeleteRequest(t *testing.T) {
 			expectedDelete: true,
 		},
 		{
+			// 未完成请求按创建时间算，短 TTL 内保留。
 			name: "pending-request-not-expired",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1059,11 +1125,12 @@ func TestShouldDeleteRequest(t *testing.T) {
 				Spec: resourcev1alpha3.ResourcePoolStatusRequestSpec{
 					Driver: "test.example.com",
 				},
-				// No status - request is pending
+				// 无 Status：请求仍在等待处理
 			},
 			expectedDelete: false,
 		},
 		{
+			// 未完成且创建时间超过 pendingRequestTTL，兜底删除。
 			name: "pending-request-expired",
 			request: &resourcev1alpha3.ResourcePoolStatusRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1073,7 +1140,7 @@ func TestShouldDeleteRequest(t *testing.T) {
 				Spec: resourcev1alpha3.ResourcePoolStatusRequestSpec{
 					Driver: "test.example.com",
 				},
-				// No status - pending request expired
+				// 无 Status：待处理请求已过期
 			},
 			expectedDelete: true,
 		},
@@ -1089,10 +1156,11 @@ func TestShouldDeleteRequest(t *testing.T) {
 	}
 }
 
+// TestCleanupExpiredRequests 验证清理只删除过期请求，保留未过期请求。
 func TestCleanupExpiredRequests(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
-	// Create requests: one expired, one not expired
+	// 构造两个请求：一个已过期，一个未过期
 	expiredRequest := &resourcev1alpha3.ResourcePoolStatusRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "expired-request",
@@ -1150,7 +1218,7 @@ func TestCleanupExpiredRequests(t *testing.T) {
 		t.Fatalf("Failed to create controller: %v", err)
 	}
 
-	// Add requests to informer store
+	// 将请求加入 informer store
 	err = informerFactory.Resource().V1alpha3().ResourcePoolStatusRequests().Informer().GetStore().Add(expiredRequest)
 	if err != nil {
 		t.Fatalf("Failed to add expired request to informer: %v", err)
@@ -1160,10 +1228,10 @@ func TestCleanupExpiredRequests(t *testing.T) {
 		t.Fatalf("Failed to add active request to informer: %v", err)
 	}
 
-	// Run cleanup
+	// 执行清理
 	controller.cleanupExpiredRequests(ctx)
 
-	// Verify that delete was called for expired request
+	// 断言删除动作只针对过期请求；未过期请求必须保留，否则会误删活跃状态。
 	actions := fakeClient.Actions()
 	var deletedExpired, deletedActive bool
 	for _, action := range actions {
@@ -1188,6 +1256,7 @@ func TestCleanupExpiredRequests(t *testing.T) {
 	}
 }
 
+// makeSliceWithoutNode 构造未设置 NodeName 的 slice。
 func makeSliceWithoutNode(name, driver, pool string, deviceCount int) *resourcev1.ResourceSlice {
 	devices := make([]resourcev1.Device, deviceCount)
 	for i := range deviceCount {
@@ -1212,13 +1281,13 @@ func makeSliceWithoutNode(name, driver, pool string, deviceCount int) *resourcev
 	}
 }
 
-// new is a generic helper to create a pointer to a value.
+// new 是创建任意值指针的泛型辅助函数。
 func new[T any](v T) *T {
 	return &v
 }
 
-// makePartitionCounterSlice is the counter-only slice of a partitionable pool:
-// it publishes a shared counter set and declares the pool's partition attribute.
+// makePartitionCounterSlice 构造可分区池中只含计数器的 slice：
+// 它发布共享计数器集合并声明池的分区属性。
 func makePartitionCounterSlice(name, driver, pool, node string, sliceCount int64) *resourcev1.ResourceSlice {
 	s := makeSliceWithGenerationAndCount(name, driver, pool, node, 0, 1, sliceCount)
 	s.Spec.Devices = nil
@@ -1227,9 +1296,9 @@ func makePartitionCounterSlice(name, driver, pool, node string, sliceCount int64
 	return s
 }
 
-// makePartitionDeviceSlice is the device-bearing slice of a partitionable pool:
-// one Full (80Gi) and two Half (40Gi) partitions drawing from the sibling's
-// counter set.
+// makePartitionDeviceSlice 构造可分区池中承载设备的 slice：
+// 包含一个 Full（80Gi）和两个 Half（40Gi）分区，
+// 均引用同一计数器集合。
 func makePartitionDeviceSlice(name, driver, pool, node string, sliceCount int64) *resourcev1.ResourceSlice {
 	s := makeSliceWithGenerationAndCount(name, driver, pool, node, 0, 1, sliceCount)
 	s.Spec.PartitionTypeAttribute = ptr.To(resourcev1.FullyQualifiedName(driver + "/profile"))
@@ -1241,6 +1310,7 @@ func makePartitionDeviceSlice(name, driver, pool, node string, sliceCount int64)
 	return s
 }
 
+// partitionSliceDevice 构造带分区属性与计数器消耗的设备。
 func partitionSliceDevice(name, profile, cost string) resourcev1.Device {
 	return resourcev1.Device{
 		Name: name,
@@ -1251,9 +1321,9 @@ func partitionSliceDevice(name, profile, cost string) resourcev1.Device {
 	}
 }
 
-// makePartitionClassSlice is a second device slice for the same pool that groups
-// its partitions by a different attribute (driver/class), drawing from the same
-// sibling counter set. It models a pool that mixes multiple partition attributes.
+// makePartitionClassSlice 为同一池构造第二个设备 slice，按另一属性
+// （driver/class）分组，并复用同一计数器集合；
+// 用于模拟混合多种分区属性的池。
 func makePartitionClassSlice(name, driver, pool, node string, sliceCount int64) *resourcev1.ResourceSlice {
 	s := makeSliceWithGenerationAndCount(name, driver, pool, node, 0, 1, sliceCount)
 	s.Spec.PartitionTypeAttribute = ptr.To(resourcev1.FullyQualifiedName(driver + "/class"))
@@ -1267,43 +1337,47 @@ func makePartitionClassSlice(name, driver, pool, node string, sliceCount int64) 
 	return s
 }
 
-// End-to-end partition attribute resolution over a two-slice partitionable pool,
-// exercising slice collection and the pool-beats-request precedence.
+// 端到端验证双 slice 可分区池的属性解析，
+// 覆盖 slice 聚合与池声明优先于请求默认值的规则。
 func TestCalculatePoolStatus_PartitionSummary(t *testing.T) {
 	driver := "gpu.example.com"
 
 	profileAttr := driver + "/profile"
 	classAttr := driver + "/class"
-	// key names a summary entry by its attribute and type, so the assertion
-	// covers the reported Attribute as well as the counts.
+	// key 用属性与类型标识汇总项，
+	// 使断言同时覆盖上报的 Attribute 和计数。
 	key := func(attr, typ string) string { return attr + "\t" + typ }
 
 	testCases := map[string]struct {
-		// declarePoolAttr keeps the driver's own attribute on the slices.
+		// declarePoolAttr 为 true 时保留 slice 上驱动自身的属性。
 		declarePoolAttr bool
-		requestAttr     *string
-		// mixedClass adds a second device slice grouped by a different attribute.
+		// requestAttr 请求侧指定的默认分区属性。
+		requestAttr *string
+		// mixedClass 增加一个按不同属性分组的设备 slice。
 		mixedClass bool
-		want       map[string][2]int32
+		// want 期望的 {属性, 类型} 到 {总数, 可分配数} 的映射。
+		want map[string][2]int32
 	}{
+		// 池自身声明的分区属性应直接用于汇总。
 		"pool declares the attribute": {
 			declarePoolAttr: true,
 			want:            map[string][2]int32{key(profileAttr, "Full"): {1, 1}, key(profileAttr, "Half"): {2, 2}},
 		},
-		// The slices declare driver/profile. The request names a different
-		// attribute that no device carries: if it won, every device would look
-		// untyped, so the pool's own declaration must take precedence.
+		// slice 声明的是 driver/profile；请求指定了不同的属性，
+		// 但没有任何设备携带该属性：若请求优先，所有设备都会
+		// 显示为无类型，因此池自身的声明必须优先。
 		"pool declaration beats the request default": {
 			declarePoolAttr: true,
 			requestAttr:     ptr.To(driver + "/other"),
 			want:            map[string][2]int32{key(profileAttr, "Full"): {1, 1}, key(profileAttr, "Half"): {2, 2}},
 		},
+		// 池没有声明时，才回退到请求指定的默认属性。
 		"request default applies when the pool declares none": {
 			requestAttr: ptr.To(profileAttr),
 			want:        map[string][2]int32{key(profileAttr, "Full"): {1, 1}, key(profileAttr, "Half"): {2, 2}},
 		},
-		// Slices declaring different attributes are not a conflict: each group
-		// is reported independently under its own attribute.
+		// 声明不同属性的 slice 并不冲突：每组
+		// 都在各自属性下独立上报。
 		"pool mixes two grouping attributes": {
 			declarePoolAttr: true,
 			mixedClass:      true,
@@ -1315,6 +1389,7 @@ func TestCalculatePoolStatus_PartitionSummary(t *testing.T) {
 		},
 	}
 
+	// 逐用例校验分区汇总，确认属性优先级不影响计数。
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			sliceCount := int64(2)
@@ -1349,25 +1424,31 @@ func TestCalculatePoolStatus_PartitionSummary(t *testing.T) {
 	}
 }
 
-// End-to-end: shareable devices aggregate consumed capacity from claim results
-// and report each capacity key independently, sorted by name.
+// 端到端验证可共享设备聚合 claim 中的已消耗容量，
+// 并按名称独立上报每个容量键。
 func TestCalculatePoolStatus_ShareableSummary(t *testing.T) {
 	driver := "gpu.example.com"
 
 	testCases := map[string]struct {
-		capacity      map[resourcev1.QualifiedName]resourcev1.DeviceCapacity
-		consumed      map[resourcev1.QualifiedName]resource.Quantity
-		wantFully     int32
+		// capacity 设备上声明的容量。
+		capacity map[resourcev1.QualifiedName]resourcev1.DeviceCapacity
+		// consumed 分配结果中声明的已消耗容量。
+		consumed map[resourcev1.QualifiedName]resource.Quantity
+		// wantFully 期望的完全可用设备数。
+		wantFully int32
+		// wantPartially 期望的部分可用设备数。
 		wantPartially int32
-		// want maps each capacity name to {total, consumed, available}.
+		// want 按容量名称映射 {总量, 已消耗, 可用}。
 		want map[string][3]string
 	}{
+		// 单一容量：total - consumed = available。
 		"single capacity": {
 			capacity:      map[resourcev1.QualifiedName]resourcev1.DeviceCapacity{"memory": {Value: qty("40Gi")}},
 			consumed:      map[resourcev1.QualifiedName]resource.Quantity{"memory": qty("10Gi")},
 			wantPartially: 1,
 			want:          map[string][3]string{"memory": {"40Gi", "10Gi", "30Gi"}},
 		},
+		// 多个容量键应各自独立汇总，互不影响。
 		"multiple capacities": {
 			capacity: map[resourcev1.QualifiedName]resourcev1.DeviceCapacity{
 				"memory": {Value: qty("40Gi")},
@@ -1387,6 +1468,7 @@ func TestCalculatePoolStatus_ShareableSummary(t *testing.T) {
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
+			// 构造允许重复分配的设备，使 claim 消耗容量而非独占设备。
 			slice := makeSlice("shareable", driver, "pool-0", "node-0", 1)
 			slice.Spec.Devices[0].AllowMultipleAllocations = ptr.To(true)
 			slice.Spec.Devices[0].Capacity = tc.capacity

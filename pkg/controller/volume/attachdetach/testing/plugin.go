@@ -26,26 +26,31 @@ import (
 	"k8s.io/kubernetes/pkg/volume"
 )
 
+// TestPluginName 是测试插件注册到卷插件管理器时使用的唯一名称。
 const TestPluginName = "kubernetes.io/testPlugin"
 
+// TestPlugin 是一个最小化的卷插件假实现，可记录挂载/卸载调用供测试断言。
 type TestPlugin struct {
-	// SupportCSIVolume allows the plugin to support CSI volumes.
-	// It does not mock the actual CSI volume operations.
-	SupportCSIVolume  bool
+	// SupportCSIVolume 控制是否声明支持 CSI 卷；只模拟能力声明，不模拟真实 CSI 操作。
+	SupportCSIVolume bool
+	// ErrorEncountered 记录是否出现非法调用，测试结束后可统一断言。
 	ErrorEncountered  bool
 	attachedVolumeMap map[string][]string
 	detachedVolumeMap map[string][]string
 	pluginLock        *sync.RWMutex
 }
 
+// Init 满足 VolumePlugin 接口；测试插件无需初始化。
 func (plugin *TestPlugin) Init(host volume.VolumeHost) error {
 	return nil
 }
 
+// GetPluginName 返回测试插件的固定名称。
 func (plugin *TestPlugin) GetPluginName() string {
 	return TestPluginName
 }
 
+// GetVolumeName 根据 spec 类型提取卷名；遇到未知来源时记录错误并返回错误。
 func (plugin *TestPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	plugin.pluginLock.Lock()
 	defer plugin.pluginLock.Unlock()
@@ -72,6 +77,7 @@ func (plugin *TestPlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	}
 }
 
+// CanSupport 报告插件是否支持给定卷；CSI 卷的支持与否由 SupportCSIVolume 开关决定。
 func (plugin *TestPlugin) CanSupport(spec *volume.Spec) bool {
 	plugin.pluginLock.Lock()
 	defer plugin.pluginLock.Unlock()
@@ -88,10 +94,12 @@ func (plugin *TestPlugin) CanSupport(spec *volume.Spec) bool {
 	return true
 }
 
+// RequiresRemount 表示测试插件从不要求重挂。
 func (plugin *TestPlugin) RequiresRemount(spec *volume.Spec) bool {
 	return false
 }
 
+// NewMounter 返回空挂载器；传入 nil spec 时记录错误，以便测试验证调用方参数。
 func (plugin *TestPlugin) NewMounter(spec *volume.Spec, podRef *v1.Pod) (volume.Mounter, error) {
 	plugin.pluginLock.Lock()
 	defer plugin.pluginLock.Unlock()
@@ -101,14 +109,17 @@ func (plugin *TestPlugin) NewMounter(spec *volume.Spec, podRef *v1.Pod) (volume.
 	return nil, nil
 }
 
+// NewUnmounter 返回空卸载器。
 func (plugin *TestPlugin) NewUnmounter(name string, podUID types.UID) (volume.Unmounter, error) {
 	return nil, nil
 }
 
+// VerifyExhaustedResource 表示测试插件不检查资源耗尽。
 func (plugin *TestPlugin) VerifyExhaustedResource(spec *volume.Spec) bool {
 	return false
 }
 
+// ConstructVolumeSpec 构造一个带有 GCE PD 来源的重建卷 spec，供挂载路径相关测试使用。
 func (plugin *TestPlugin) ConstructVolumeSpec(volumeName, mountPath string) (volume.ReconstructedVolume, error) {
 	fakeVolume := &v1.Volume{
 		Name: volumeName,
@@ -125,6 +136,7 @@ func (plugin *TestPlugin) ConstructVolumeSpec(volumeName, mountPath string) (vol
 	}, nil
 }
 
+// NewAttacher 创建共享插件状态的 attacher，使挂载记录与错误标志对测试可见。
 func (plugin *TestPlugin) NewAttacher() (volume.Attacher, error) {
 	attacher := testPluginAttacher{
 		ErrorEncountered:  &plugin.ErrorEncountered,
@@ -134,10 +146,12 @@ func (plugin *TestPlugin) NewAttacher() (volume.Attacher, error) {
 	return &attacher, nil
 }
 
+// NewDeviceMounter 复用 attacher 实现设备挂载接口。
 func (plugin *TestPlugin) NewDeviceMounter() (volume.DeviceMounter, error) {
 	return plugin.NewAttacher()
 }
 
+// NewDetacher 创建共享插件状态的 detacher。
 func (plugin *TestPlugin) NewDetacher() (volume.Detacher, error) {
 	detacher := testPluginDetacher{
 		detachedVolumeMap: plugin.detachedVolumeMap,
@@ -146,40 +160,49 @@ func (plugin *TestPlugin) NewDetacher() (volume.Detacher, error) {
 	return &detacher, nil
 }
 
+// CanAttach 表示测试插件始终允许挂载。
 func (plugin *TestPlugin) CanAttach(spec *volume.Spec) (bool, error) {
 	return true, nil
 }
 
+// CanDeviceMount 表示测试插件始终允许设备挂载。
 func (plugin *TestPlugin) CanDeviceMount(spec *volume.Spec) (bool, error) {
 	return true, nil
 }
 
+// NewDeviceUnmounter 复用 detacher 实现设备卸载接口。
 func (plugin *TestPlugin) NewDeviceUnmounter() (volume.DeviceUnmounter, error) {
 	return plugin.NewDetacher()
 }
 
+// GetDeviceMountRefs 返回空引用列表，模拟无其他引用者。
 func (plugin *TestPlugin) GetDeviceMountRefs(deviceMountPath string) ([]string, error) {
 	return []string{}, nil
 }
 
+// SupportsMountOption 表示测试插件不支持挂载选项。
 func (plugin *TestPlugin) SupportsMountOption() bool {
 	return false
 }
 
+// SupportsBulkVolumeVerification 表示不支持批量卷校验。
 func (plugin *TestPlugin) SupportsBulkVolumeVerification() bool {
 	return false
 }
 
+// SupportsSELinuxContextMount 表示不支持 SELinux 上下文挂载。
 func (plugin *TestPlugin) SupportsSELinuxContextMount(spec *volume.Spec) (bool, error) {
 	return false, nil
 }
 
+// GetErrorEncountered 返回测试期间是否发生过非法调用；读取受锁保护。
 func (plugin *TestPlugin) GetErrorEncountered() bool {
 	plugin.pluginLock.RLock()
 	defer plugin.pluginLock.RUnlock()
 	return plugin.ErrorEncountered
 }
 
+// GetAttachedVolumes 返回已挂载卷的快照；复制切片避免调用方修改内部状态。
 func (plugin *TestPlugin) GetAttachedVolumes() map[string][]string {
 	plugin.pluginLock.RLock()
 	defer plugin.pluginLock.RUnlock()
@@ -191,6 +214,7 @@ func (plugin *TestPlugin) GetAttachedVolumes() map[string][]string {
 	return ret
 }
 
+// GetDetachedVolumes 返回已卸载卷的快照；复制切片避免数据竞争。
 func (plugin *TestPlugin) GetDetachedVolumes() map[string][]string {
 	plugin.pluginLock.RLock()
 	defer plugin.pluginLock.RUnlock()
@@ -202,7 +226,9 @@ func (plugin *TestPlugin) GetDetachedVolumes() map[string][]string {
 	return ret
 }
 
+// CreateTestPlugin 创建一个配置好 CSI 支持开关的测试插件实例。
 func CreateTestPlugin(supportCSIVolume bool) []volume.VolumePlugin {
+	// 多个方法共享这些 map 和锁，因此必须在构造时初始化，不能留零值。
 	attachedVolumes := make(map[string][]string)
 	detachedVolumes := make(map[string][]string)
 	return []volume.VolumePlugin{&TestPlugin{
@@ -214,13 +240,14 @@ func CreateTestPlugin(supportCSIVolume bool) []volume.VolumePlugin {
 	}}
 }
 
-// Attacher
+// testPluginAttacher 记录挂载调用并通过指针共享插件的错误标志。
 type testPluginAttacher struct {
 	ErrorEncountered  *bool
 	attachedVolumeMap map[string][]string
 	pluginLock        *sync.RWMutex
 }
 
+// Attach 记录一次挂载调用；nil spec 会被标记以便测试断言。
 func (attacher *testPluginAttacher) Attach(spec *volume.Spec, nodeName types.NodeName) (string, error) {
 	attacher.pluginLock.Lock()
 	defer attacher.pluginLock.Unlock()
@@ -232,10 +259,12 @@ func (attacher *testPluginAttacher) Attach(spec *volume.Spec, nodeName types.Nod
 	return spec.Name(), nil
 }
 
+// VolumesAreAttached 返回 nil，表示测试中不进行实际挂载状态校验。
 func (attacher *testPluginAttacher) VolumesAreAttached(specs []*volume.Spec, nodeName types.NodeName) (map[*volume.Spec]bool, error) {
 	return nil, nil
 }
 
+// WaitForAttach 返回一个由设备路径和卷名拼接的假设备路径。
 func (attacher *testPluginAttacher) WaitForAttach(spec *volume.Spec, devicePath string, pod *v1.Pod, timeout time.Duration) (string, error) {
 	attacher.pluginLock.Lock()
 	defer attacher.pluginLock.Unlock()
@@ -247,6 +276,7 @@ func (attacher *testPluginAttacher) WaitForAttach(spec *volume.Spec, devicePath 
 	return fakePath, nil
 }
 
+// GetDeviceMountPath 返回空路径；测试只关心调用是否发生。
 func (attacher *testPluginAttacher) GetDeviceMountPath(spec *volume.Spec) (string, error) {
 	attacher.pluginLock.Lock()
 	defer attacher.pluginLock.Unlock()
@@ -257,6 +287,7 @@ func (attacher *testPluginAttacher) GetDeviceMountPath(spec *volume.Spec) (strin
 	return "", nil
 }
 
+// MountDevice 记录设备挂载调用，nil spec 时标记错误。
 func (attacher *testPluginAttacher) MountDevice(spec *volume.Spec, devicePath string, deviceMountPath string, _ volume.DeviceMounterArgs) error {
 	attacher.pluginLock.Lock()
 	defer attacher.pluginLock.Unlock()
@@ -267,12 +298,13 @@ func (attacher *testPluginAttacher) MountDevice(spec *volume.Spec, devicePath st
 	return nil
 }
 
-// Detacher
+// testPluginDetacher 记录卸载调用，供测试验证控制器发出的卸载操作。
 type testPluginDetacher struct {
 	detachedVolumeMap map[string][]string
 	pluginLock        *sync.RWMutex
 }
 
+// Detach 记录一次卸载调用。
 func (detacher *testPluginDetacher) Detach(volumeName string, nodeName types.NodeName) error {
 	detacher.pluginLock.Lock()
 	defer detacher.pluginLock.Unlock()
@@ -280,6 +312,7 @@ func (detacher *testPluginDetacher) Detach(volumeName string, nodeName types.Nod
 	return nil
 }
 
+// UnmountDevice 为空实现。
 func (detacher *testPluginDetacher) UnmountDevice(deviceMountPath string) error {
 	return nil
 }

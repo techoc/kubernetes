@@ -41,27 +41,29 @@ import (
 )
 
 const (
-	// Reasons for the Progressing condition:
+	// Progressing 条件的取值原因。
 
-	// RecreateInProgressReason is set on the Progressing condition when old revision
-	// pods are being deleted or are still terminating, or when new revision pods
-	// are being created as part of the Recreate update strategy.
+	// RecreateInProgressReason 用于 Recreate 更新策略下旧版本 Pod 正在删除或仍处于终止中，
+	// 或新版本 Pod 正在创建（即重建尚未完成）的场景。
 	RecreateInProgressReason = "RecreateInProgress"
-	// RecreateCompletedReason is set on the Progressing condition when all pods
-	// have been recreated with the update revision and are ready.
+	// RecreateCompletedReason 用于所有 Pod 都已用更新版本重建且就绪的场景。
 	RecreateCompletedReason = "RecreateCompleted"
 )
 
+// patchCodec 负责将 StatefulSet 编码为 JSON，供后续生成 revision patch 使用。
 var patchCodec = scheme.Codecs.LegacyCodec(apps.SchemeGroupVersion)
 
-// overlappingStatefulSets sorts a list of StatefulSets by creation timestamp, using their names as a tie breaker.
-// Generally used to tie break between StatefulSets that have overlapping selectors.
+// overlappingStatefulSets 按创建时间对 StatefulSet 列表排序，创建时间相同则以名称作为决胜条件。
+// 通常用于在 selector 重叠的多个 StatefulSet 之间确定稳定的处理顺序。
 type overlappingStatefulSets []*apps.StatefulSet
 
+// Len 返回待排序的 StatefulSet 数量。
 func (o overlappingStatefulSets) Len() int { return len(o) }
 
+// Swap 交换两个 StatefulSet 的位置。
 func (o overlappingStatefulSets) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
 
+// Less 按创建时间升序比较；创建时间相同时按名称字典序，保证顺序稳定可预测。
 func (o overlappingStatefulSets) Less(i, j int) bool {
 	if o[i].CreationTimestamp.Equal(&o[j].CreationTimestamp) {
 		return o[i].Name < o[j].Name
@@ -69,16 +71,18 @@ func (o overlappingStatefulSets) Less(i, j int) bool {
 	return o[i].CreationTimestamp.Before(&o[j].CreationTimestamp)
 }
 
-// statefulPodRegex is a regular expression that extracts the parent StatefulSet and ordinal from the Name of a Pod
+// statefulPodRegex 从 Pod 名称中提取所属 StatefulSet 名称与序号（ordinal）。
 var statefulPodRegex = regexp.MustCompile("(.*)-([0-9]+)$")
 
-// getParentNameAndOrdinal gets the name of pod's parent StatefulSet and pod's ordinal as extracted from its Name. If
-// the Pod was not created by a StatefulSet, its parent is considered to be empty string, and its ordinal is considered
-// to be -1.
+// getParentNameAndOrdinal 从 Pod 名称中解析出所属 StatefulSet 名称与序号。
+//   - 若 Pod 名称不符合 "<父名>-<序号>" 格式（如非 StatefulSet 创建），返回空父名与 -1；
+//   - 序号解析失败时同样视为无有效序号。
 func getParentNameAndOrdinal(pod *v1.Pod) (string, int) {
+	// 默认值表示“非 StatefulSet Pod”，解析失败时直接返回。
 	parent := ""
 	ordinal := -1
 	subMatches := statefulPodRegex.FindStringSubmatch(pod.Name)
+	// 名称不匹配正则，说明不是 StatefulSet 格式的 Pod。
 	if len(subMatches) < 3 {
 		return parent, ordinal
 	}
@@ -89,14 +93,14 @@ func getParentNameAndOrdinal(pod *v1.Pod) (string, int) {
 	return parent, ordinal
 }
 
-// getOrdinal gets pod's ordinal. If pod has no ordinal, -1 is returned.
+// getOrdinal 返回 Pod 的序号；无有效序号时返回 -1。
 func getOrdinal(pod *v1.Pod) int {
 	_, ordinal := getParentNameAndOrdinal(pod)
 	return ordinal
 }
 
-// getStartOrdinal gets the first possible ordinal (inclusive).
-// Returns spec.ordinals.start if spec.ordinals is set, otherwise returns 0.
+// getStartOrdinal 返回允许的最小序号（含）。
+// 未设置 spec.ordinals 时使用默认起点 0。
 func getStartOrdinal(set *apps.StatefulSet) int {
 	if set.Spec.Ordinals != nil {
 		return int(set.Spec.Ordinals.Start)
@@ -104,37 +108,37 @@ func getStartOrdinal(set *apps.StatefulSet) int {
 	return 0
 }
 
-// getEndOrdinal gets the last possible ordinal (inclusive).
+// getEndOrdinal 返回允许的最大序号（含），由起点加副本数减一得到。
 func getEndOrdinal(set *apps.StatefulSet) int {
 	return getStartOrdinal(set) + int(*set.Spec.Replicas) - 1
 }
 
-// podInOrdinalRange returns true if the pod ordinal is within the allowed
-// range of ordinals that this StatefulSet is set to control.
+// podInOrdinalRange 判断 Pod 序号是否落在该 StatefulSet 当前允许的范围内。
 func podInOrdinalRange(pod *v1.Pod, set *apps.StatefulSet) bool {
 	ordinal := getOrdinal(pod)
 	return ordinal >= getStartOrdinal(set) && ordinal <= getEndOrdinal(set)
 }
 
-// getPodName gets the name of set's child Pod with an ordinal index of ordinal
+// getPodName 按 "<set 名>-<序号>" 格式生成子 Pod 名称。
 func getPodName(set *apps.StatefulSet, ordinal int) string {
 	return fmt.Sprintf("%s-%d", set.Name, ordinal)
 }
 
-// getPersistentVolumeClaimName gets the name of PersistentVolumeClaim for a Pod with an ordinal index of ordinal. claim
-// must be a PersistentVolumeClaim from set's VolumeClaims template.
+// getPersistentVolumeClaimName 生成指定序号 Pod 所使用的 PVC 名称。
+// claim 必须是 set 的 VolumeClaimTemplates 中声明的模板。
 func getPersistentVolumeClaimName(set *apps.StatefulSet, claim *v1.PersistentVolumeClaim, ordinal int) string {
+	// 名称格式被卷可用区打散启发式（ChooseZoneForVolume）依赖，不要随意更改。
 	// NOTE: This name format is used by the heuristics for zone spreading in ChooseZoneForVolume
 	return fmt.Sprintf("%s-%s-%d", claim.Name, set.Name, ordinal)
 }
 
-// isMemberOf tests if pod is a member of set.
+// isMemberOf 判断 Pod 是否属于该 StatefulSet（仅比较父名称，不检查序号范围）。
 func isMemberOf(set *apps.StatefulSet, pod *v1.Pod) bool {
 	parent, _ := getParentNameAndOrdinal(pod)
 	return parent == set.Name
 }
 
-// identityMatches returns true if pod has a valid identity and network identity for a member of set.
+// identityMatches 判断 Pod 是否具有作为 set 成员所需的合法身份与网络身份。
 func identityMatches(set *apps.StatefulSet, pod *v1.Pod) bool {
 	parent, ordinal := getParentNameAndOrdinal(pod)
 	return ordinal >= 0 &&
@@ -144,9 +148,11 @@ func identityMatches(set *apps.StatefulSet, pod *v1.Pod) bool {
 		pod.Labels[apps.StatefulSetPodNameLabel] == pod.Name
 }
 
-// storageMatches returns true if pod's Volumes cover the set of PersistentVolumeClaims
+// storageMatches 判断 Pod 的卷是否覆盖了 set 模板所要求的全部 PVC。
+// 无有效序号时直接返回 false。
 func storageMatches(set *apps.StatefulSet, pod *v1.Pod) bool {
 	ordinal := getOrdinal(pod)
+	// 无有效序号时无法推导 PVC 名称，必然不匹配。
 	if ordinal < 0 {
 		return false
 	}
@@ -166,7 +172,7 @@ func storageMatches(set *apps.StatefulSet, pod *v1.Pod) bool {
 	return true
 }
 
-// getPersistentVolumeClaimPolicy returns the PVC policy for a StatefulSet, returning a retain policy if the set policy is nil.
+// getPersistentVolumeClaimRetentionPolicy 返回 PVC 保留策略；set 未配置时默认全部保留（Retain）。
 func getPersistentVolumeClaimRetentionPolicy(set *apps.StatefulSet) apps.StatefulSetPersistentVolumeClaimRetentionPolicy {
 	policy := apps.StatefulSetPersistentVolumeClaimRetentionPolicy{
 		WhenDeleted: apps.RetainPersistentVolumeClaimRetentionPolicyType,
@@ -178,47 +184,49 @@ func getPersistentVolumeClaimRetentionPolicy(set *apps.StatefulSet) apps.Statefu
 	return policy
 }
 
-// matchesRef returns true when the object matches the owner reference, that is the name and GVK are the same.
+// matchesRef 判断对象是否与 ownerReference 匹配（名称、APIVersion、Kind 均一致）。
 func matchesRef(ref *metav1.OwnerReference, obj metav1.Object, gvk schema.GroupVersionKind) bool {
 	return gvk.GroupVersion().String() == ref.APIVersion && gvk.Kind == ref.Kind && ref.Name == obj.GetName()
 }
 
-// hasUnexpectedController returns true if the set has a retention policy and there is a controller
-// for the claim that's not the set or pod. Since the retention policy may have been changed, it is
-// always valid for the set or pod to be a controller.
+// hasUnexpectedController 判断是否存在既非 set 也非 Pod 的第三方控制器占用该 PVC。
+//   - Retain/Retain 策略下允许任意控制器，直接返回 false；
+//   - set 与 Pod 作为控制器始终合法（策略可能已变更）；UID 不一致则视为异常，
+//     以免误操作已被错误孤立的 PVC。
 func hasUnexpectedController(claim *v1.PersistentVolumeClaim, set *apps.StatefulSet, pod *v1.Pod) bool {
 	policy := getPersistentVolumeClaimRetentionPolicy(set)
 	const retain = apps.RetainPersistentVolumeClaimRetentionPolicyType
 	if policy.WhenScaled == retain && policy.WhenDeleted == retain {
-		// On a retain policy, it's not a problem for different controller to be managing the claims.
+		// Retain 策略下由其他控制器管理 PVC 并无问题。
 		return false
 	}
 	for _, ownerRef := range claim.GetOwnerReferences() {
 		if matchesRef(&ownerRef, set, controllerKind) {
 			if ownerRef.UID != set.GetUID() {
-				// A UID mismatch means that pods were incorrectly orphaned. Treating this as an unexpected
-				// controller means we won't touch the PVCs (eg, leave it to the garbage collector to clean
-				// up if appropriate).
+				// UID 不匹配意味着 Pod 曾被错误孤立；视作异常控制器以避免触碰相关 PVC。
 				return true
 			}
-			continue // This is us.
+			// 这是我们自己，无需处理。
+			continue
 		}
 
 		if matchesRef(&ownerRef, pod, podKind) {
 			if ownerRef.UID != pod.GetUID() {
-				// This is the same situation as the set UID mismatch, above.
+				// 与上面 set UID 不匹配同理，Pod UID 不匹配也视为异常。
 				return true
 			}
-			continue // This is us.
+			// 这是我们自己，无需处理。
+			continue
 		}
 		if ownerRef.Controller != nil && *ownerRef.Controller {
-			return true // This is another controller.
+			// 这是其他控制器。
+			return true
 		}
 	}
 	return false
 }
 
-// hasNonControllerOwner returns true if the pod or set is an owner but not controller of the claim.
+// hasNonControllerOwner 判断 set 或 Pod 是否为 PVC 的 owner 但不是 controller。
 func hasNonControllerOwner(claim *v1.PersistentVolumeClaim, set *apps.StatefulSet, pod *v1.Pod) bool {
 	for _, ownerRef := range claim.GetOwnerReferences() {
 		if ownerRef.UID == set.GetUID() || ownerRef.UID == pod.GetUID() {
@@ -230,8 +238,7 @@ func hasNonControllerOwner(claim *v1.PersistentVolumeClaim, set *apps.StatefulSe
 	return false
 }
 
-// removeRefs removes any owner refs from the list matching predicate. Returns true if the list was changed and
-// the new (or unchanged list).
+// removeRefs 移除所有满足 predicate 的 ownerReference，返回过滤后的新列表。
 func removeRefs(refs []metav1.OwnerReference, predicate func(ref *metav1.OwnerReference) bool) []metav1.OwnerReference {
 	newRefs := []metav1.OwnerReference{}
 	for _, ownerRef := range refs {
@@ -242,33 +249,30 @@ func removeRefs(refs []metav1.OwnerReference, predicate func(ref *metav1.OwnerRe
 	return newRefs
 }
 
-// isClaimOwnerUpToDate returns false if the ownerRefs of the claim are not set consistently with the
-// PVC deletion policy for the StatefulSet.
-//
-// If there are stale references or unexpected controllers, this returns true in order to not touch
-// PVCs that have gotten into this unknown state. Otherwise the ownerships are checked to match the
-// PVC retention policy:
-//
-//	Retain on scaling and set deletion: no owner ref
-//	Retain on scaling and delete on set deletion: owner ref on the set only
-//	Delete on scaling and retain on set deletion: owner ref on the pod only
-//	Delete on scaling and set deletion: owner refs on both set and pod.
+// isClaimOwnerUpToDate 判断 PVC 的 ownerReference 是否与 StatefulSet 的 PVC 删除策略一致。
+//   - 存在过期引用或意外控制器时返回 true，以避免触碰状态未知的 PVC；
+//   - 否则按以下四种保留/删除组合校验 set 与 Pod 的引用：
+//   - 扩容与 set 删除均保留：无 owner 引用；
+//   - 扩容保留、set 删除时删除：仅 set 上有 owner 引用；
+//   - 扩容删除、set 删除时保留：仅 Pod 上有 owner 引用；
+//   - 扩容与 set 删除均删除：set 与 Pod 上均有 owner 引用。
 func isClaimOwnerUpToDate(logger klog.Logger, claim *v1.PersistentVolumeClaim, set *apps.StatefulSet, pod *v1.Pod) bool {
 	if hasStaleOwnerRef(claim, set, controllerKind) || hasStaleOwnerRef(claim, pod, podKind) {
-		// The claim is being managed by previous, presumably deleted, version of the controller. It should not be touched.
+		// 该 PVC 由旧版本控制器管理，不应触碰。
 		return true
 	}
 
 	if hasUnexpectedController(claim, set, pod) {
 		if hasOwnerRef(claim, set) || hasOwnerRef(claim, pod) {
-			return false // Need to clean up the conflicting controllers
+			// 需要清理冲突的控制器引用。
+			return false
 		}
-		// The claim refs are good, we don't want to add any controllers on top of the unexpected one.
+		// 引用本身无问题，但不要在意外控制器之上再添加新的控制器。
 		return true
 	}
 
 	if hasNonControllerOwner(claim, set, pod) {
-		// Some resource has an owner ref, but there is no controller. This needs to be updated.
+		// 存在 owner 但无 controller，需要更新。
 		return false
 	}
 
@@ -278,6 +282,7 @@ func isClaimOwnerUpToDate(logger klog.Logger, claim *v1.PersistentVolumeClaim, s
 	switch {
 	default:
 		logger.Error(nil, "Unknown policy, treating as Retain", "policy", set.Spec.PersistentVolumeClaimRetentionPolicy)
+		// 未知策略按 Retain 处理，fallthrough 到 Retain/Retain 分支。
 		fallthrough
 	case policy.WhenScaled == retain && policy.WhenDeleted == retain:
 		if hasOwnerRef(claim, set) ||
@@ -299,8 +304,7 @@ func isClaimOwnerUpToDate(logger klog.Logger, claim *v1.PersistentVolumeClaim, s
 		}
 	case policy.WhenScaled == delete && policy.WhenDeleted == delete:
 		podScaledDown := !podInOrdinalRange(pod, set)
-		// If a pod is scaled down, there should be no set ref and a pod ref;
-		// if the pod is not scaled down it's the other way around.
+		// Pod 被缩容时不应保留 set 引用、应保留 Pod 引用；未被缩容时相反。
 		if podScaledDown == hasOwnerRef(claim, set) {
 			return false
 		}
@@ -311,21 +315,20 @@ func isClaimOwnerUpToDate(logger klog.Logger, claim *v1.PersistentVolumeClaim, s
 	return true
 }
 
-// updateClaimOwnerRefForSetAndPod updates the ownerRefs for the claim according to the deletion policy of
-// the StatefulSet. Returns true if the claim was changed and should be updated and false otherwise.
-// isClaimOwnerUpToDate should be called before this to avoid an expensive update operation.
+// updateClaimOwnerRefForSetAndPod 根据 StatefulSet 的删除策略更新 PVC 的 ownerReference。
+// 调用前应先通过 isClaimOwnerUpToDate 判断，以避免昂贵的更新操作。
 func updateClaimOwnerRefForSetAndPod(logger klog.Logger, claim *v1.PersistentVolumeClaim, set *apps.StatefulSet, pod *v1.Pod) {
 	refs := claim.GetOwnerReferences()
 
 	unexpectedController := hasUnexpectedController(claim, set, pod)
 
-	// Scrub any ownerRefs to our set & pod.
+	// 先清除指向本 set 与 Pod 的旧引用，再根据策略重新添加。
 	refs = removeRefs(refs, func(ref *metav1.OwnerReference) bool {
 		return matchesRef(ref, set, controllerKind) || matchesRef(ref, pod, podKind)
 	})
 
 	if unexpectedController {
-		// Leave ownerRefs to our set & pod scrubed and return without creating new ones.
+		// 存在意外控制器时只清除自身引用，不再创建新的。
 		claim.SetOwnerReferences(refs)
 		return
 	}
@@ -336,21 +339,22 @@ func updateClaimOwnerRefForSetAndPod(logger klog.Logger, claim *v1.PersistentVol
 	switch {
 	default:
 		logger.Error(nil, "Unknown policy, treating as Retain", "policy", set.Spec.PersistentVolumeClaimRetentionPolicy)
-		// Nothing to do
 	case policy.WhenScaled == retain && policy.WhenDeleted == retain:
-		// Nothing to do
 	case policy.WhenScaled == retain && policy.WhenDeleted == delete:
 		refs = addControllerRef(refs, set, controllerKind)
 	case policy.WhenScaled == delete && policy.WhenDeleted == retain:
+		// Pod 被缩容时才添加 Pod 作为 owner。
 		podScaledDown := !podInOrdinalRange(pod, set)
 		if podScaledDown {
 			refs = addControllerRef(refs, pod, podKind)
 		}
 	case policy.WhenScaled == delete && policy.WhenDeleted == delete:
 		podScaledDown := !podInOrdinalRange(pod, set)
+		// Pod 被缩容时添加 Pod 引用。
 		if podScaledDown {
 			refs = addControllerRef(refs, pod, podKind)
 		}
+		// Pod 未被缩容时添加 set 引用。
 		if !podScaledDown {
 			refs = addControllerRef(refs, set, controllerKind)
 		}
@@ -358,8 +362,8 @@ func updateClaimOwnerRefForSetAndPod(logger klog.Logger, claim *v1.PersistentVol
 	claim.SetOwnerReferences(refs)
 }
 
-// hasOwnerRef returns true if target has an ownerRef to owner (as its UID).
-// This does not check if the owner is a controller.
+// hasOwnerRef 判断 target 是否含有指向 owner（按 UID）的 ownerReference。
+// 不检查 owner 是否为 controller。
 func hasOwnerRef(target, owner metav1.Object) bool {
 	ownerUID := owner.GetUID()
 	for _, ownerRef := range target.GetOwnerReferences() {
@@ -370,8 +374,7 @@ func hasOwnerRef(target, owner metav1.Object) bool {
 	return false
 }
 
-// hasStaleOwnerRef returns true if target has a ref to owner that appears to be stale, that is,
-// the ref matches the object but not the UID.
+// hasStaleOwnerRef 判断 target 中指向 obj 的引用是否过期，即名称/类型匹配但 UID 不一致。
 func hasStaleOwnerRef(target *v1.PersistentVolumeClaim, obj metav1.Object, gvk schema.GroupVersionKind) bool {
 	for _, ownerRef := range target.GetOwnerReferences() {
 		if matchesRef(&ownerRef, obj, gvk) {
@@ -381,12 +384,11 @@ func hasStaleOwnerRef(target *v1.PersistentVolumeClaim, obj metav1.Object, gvk s
 	return false
 }
 
-// addControllerRef returns refs with owner added as a controller, if necessary.
+// addControllerRef 在必要时把 owner 作为 controller 加入引用列表。
 func addControllerRef(refs []metav1.OwnerReference, owner metav1.Object, gvk schema.GroupVersionKind) []metav1.OwnerReference {
 	for _, ref := range refs {
 		if ref.UID == owner.GetUID() {
-			// Already added. Since we scrub our refs before making any changes, we know it's already
-			// a controller if appropriate.
+			// 引用已存在；由于修改前已清理过自身引用，此时它已是合适的 controller。
 			return refs
 		}
 	}
@@ -394,9 +396,8 @@ func addControllerRef(refs []metav1.OwnerReference, owner metav1.Object, gvk sch
 	return append(refs, *metav1.NewControllerRef(owner, gvk))
 }
 
-// getPersistentVolumeClaims gets a map of PersistentVolumeClaims to their template names, as defined in set. The
-// returned PersistentVolumeClaims are each constructed with a the name specific to the Pod. This name is determined
-// by getPersistentVolumeClaimName.
+// getPersistentVolumeClaims 按 set 的模板构造 PVC 映射（模板名 -> PVC），
+// 每个 PVC 的名称由 getPersistentVolumeClaimName 结合 Pod 序号生成。
 func getPersistentVolumeClaims(set *apps.StatefulSet, pod *v1.Pod) map[string]v1.PersistentVolumeClaim {
 	ordinal := getOrdinal(pod)
 	templates := set.Spec.VolumeClaimTemplates
@@ -417,8 +418,8 @@ func getPersistentVolumeClaims(set *apps.StatefulSet, pod *v1.Pod) map[string]v1
 	return claims
 }
 
-// updateStorage updates pod's Volumes to conform with the PersistentVolumeClaim of set's templates. If pod has
-// conflicting local Volumes these are replaced with Volumes that conform to the set's templates.
+// updateStorage 将 Pod 的卷更新为与 set 的 PVC 模板一致；
+// 与模板冲突的本地卷会被替换为符合模板的卷。
 func updateStorage(set *apps.StatefulSet, pod *v1.Pod) {
 	currentVolumes := pod.Spec.Volumes
 	claims := getPersistentVolumeClaims(set, pod)
@@ -443,15 +444,17 @@ func updateStorage(set *apps.StatefulSet, pod *v1.Pod) {
 	pod.Spec.Volumes = newVolumes
 }
 
+// initIdentity 初始化 Pod 身份。Hostname 与 Subdomain 属于不可变字段，
+// 仅在 Pod 首次创建时设置，更新时不能修改。
 func initIdentity(set *apps.StatefulSet, pod *v1.Pod) {
 	updateIdentity(set, pod)
-	// Set these immutable fields only on initial Pod creation, not updates.
+	// 不可变字段仅在创建时设置，更新时不修改。
 	pod.Spec.Hostname = pod.Name
 	pod.Spec.Subdomain = set.Spec.ServiceName
 }
 
-// updateIdentity updates pod's name, hostname, and subdomain, and StatefulSetPodNameLabel to conform to set's name
-// and headless service.
+// updateIdentity 按 set 名称与 headless service 更新 Pod 的名称、命名空间、
+// hostname 相关标签以及序号标签。
 func updateIdentity(set *apps.StatefulSet, pod *v1.Pod) {
 	ordinal := getOrdinal(pod)
 	pod.Name = getPodName(set, ordinal)
@@ -463,46 +466,47 @@ func updateIdentity(set *apps.StatefulSet, pod *v1.Pod) {
 	pod.Labels[apps.PodIndexLabel] = strconv.Itoa(ordinal)
 }
 
-// isRunningAndReady returns true if pod is in the PodRunning Phase, if it has a condition of PodReady.
+// isRunningAndReady 判断 Pod 是否处于 Running 且已 Ready。
 func isRunningAndReady(pod *v1.Pod) bool {
 	return pod.Status.Phase == v1.PodRunning && podutil.IsPodReady(pod)
 }
 
+// isRunningAndAvailable 判断 Pod 是否可用至少 minReadySeconds（用于就绪门槛）。
 func isRunningAndAvailable(pod *v1.Pod, minReadySeconds int32, now time.Time) bool {
 	return podutil.IsPodAvailable(pod, minReadySeconds, metav1.Time{Time: now})
 }
 
-// isCreated returns true if pod has been created and is maintained by the API server
+// isCreated 判断 Pod 是否已被 API server 创建并维护（Phase 非空）。
 func isCreated(pod *v1.Pod) bool {
 	return pod.Status.Phase != ""
 }
 
-// isPending returns true if pod has a Phase of PodPending
+// isPending 判断 Pod 是否处于 Pending。
 func isPending(pod *v1.Pod) bool {
 	return pod.Status.Phase == v1.PodPending
 }
 
-// isTerminalPhase returns true if pod has a Phase of PodFailed or PodSucceeded.
+// isTerminalPhase 判断 Pod 是否处于 Failed 或 Succeeded 终态。
 func isTerminalPhase(pod *v1.Pod) bool {
 	return pod.Status.Phase == v1.PodFailed || pod.Status.Phase == v1.PodSucceeded
 }
 
-// isTerminating returns true if pod's DeletionTimestamp has been set
+// isTerminating 判断 Pod 是否处于终止中（DeletionTimestamp 已设置）。
 func isTerminating(pod *v1.Pod) bool {
 	return pod.DeletionTimestamp != nil
 }
 
-// isUnavailable returns true if pod is not available or if it is terminating
+// isUnavailable 判断 Pod 不可用或正处于终止中。
 func isUnavailable(pod *v1.Pod, minReadySeconds int32, now time.Time) bool {
 	return !podutil.IsPodAvailable(pod, minReadySeconds, metav1.Time{Time: now}) || isTerminating(pod)
 }
 
-// allowsBurst is true if the alpha burst annotation is set.
+// allowsBurst 判断是否允许并行创建 Pod（alpha burst 注解或 Parallel 策略）。
 func allowsBurst(set *apps.StatefulSet) bool {
 	return set.Spec.PodManagementPolicy == apps.ParallelPodManagement
 }
 
-// setPodRevision sets the revision of Pod to revision by adding the StatefulSetRevisionLabel
+// setPodRevision 通过 StatefulSetRevisionLabel 标签设置 Pod 的 revision。
 func setPodRevision(pod *v1.Pod, revision string) {
 	if pod.Labels == nil {
 		pod.Labels = make(map[string]string)
@@ -510,8 +514,7 @@ func setPodRevision(pod *v1.Pod, revision string) {
 	pod.Labels[apps.StatefulSetRevisionLabel] = revision
 }
 
-// getPodRevision gets the revision of Pod by inspecting the StatefulSetRevisionLabel. If pod has no revision the empty
-// string is returned.
+// getPodRevision 读取 Pod 的 revision 标签；无标签时返回空字符串。
 func getPodRevision(pod *v1.Pod) string {
 	if pod.Labels == nil {
 		return ""
@@ -519,7 +522,7 @@ func getPodRevision(pod *v1.Pod) string {
 	return pod.Labels[apps.StatefulSetRevisionLabel]
 }
 
-// newStatefulSetPod returns a new Pod conforming to the set's Spec with an identity generated from ordinal.
+// newStatefulSetPod 根据 set 的模板创建一个新 Pod，并按序号生成其身份。
 func newStatefulSetPod(set *apps.StatefulSet, ordinal int) *v1.Pod {
 	pod, _ := controller.GetPodFromTemplate(&set.Spec.Template, set, metav1.NewControllerRef(set, controllerKind))
 	pod.Name = getPodName(set, ordinal)
@@ -528,11 +531,11 @@ func newStatefulSetPod(set *apps.StatefulSet, ordinal int) *v1.Pod {
 	return pod
 }
 
-// newVersionedStatefulSetPod creates a new Pod for a StatefulSet. currentSet is the representation of the set at the
-// current revision. updateSet is the representation of the set at the updateRevision. currentRevision is the name of
-// the current revision. updateRevision is the name of the update revision. ordinal is the ordinal of the Pod. If the
-// returned error is nil, the returned Pod is valid.
+// newVersionedStatefulSetPod 为指定序号创建 Pod，并按更新策略决定使用当前版本还是更新版本模板：
+//   - RollingUpdate 下序号小于 partition（或 currentReplicas）的 Pod 使用 currentSet/currentRevision；
+//   - 其余 Pod 使用 updateSet/updateRevision。
 func newVersionedStatefulSetPod(currentSet, updateSet *apps.StatefulSet, currentRevision, updateRevision string, ordinal int) *v1.Pod {
+	// 位于 partition 之前的 Pod 维持当前版本，保证滚动更新按顺序推进。
 	if currentSet.Spec.UpdateStrategy.Type == apps.RollingUpdateStatefulSetStrategyType &&
 		(currentSet.Spec.UpdateStrategy.RollingUpdate == nil && ordinal < (getStartOrdinal(currentSet)+int(currentSet.Status.CurrentReplicas))) ||
 		(currentSet.Spec.UpdateStrategy.RollingUpdate != nil && ordinal < (getStartOrdinal(currentSet)+int(*currentSet.Spec.UpdateStrategy.RollingUpdate.Partition))) {
@@ -545,10 +548,8 @@ func newVersionedStatefulSetPod(currentSet, updateSet *apps.StatefulSet, current
 	return pod
 }
 
-// getPatch returns a strategic merge patch that can be applied to restore a StatefulSet to a
-// previous version. If the returned error is nil the patch is valid. The current state that we save is just the
-// PodSpecTemplate. We can modify this later to encompass more state (or less) and remain compatible with previously
-// recorded patches.
+// getPatch 生成可将 StatefulSet 恢复到旧版本的 strategic merge patch。
+// 当前仅保存 PodSpecTemplate；将 $patch 设为 replace 以确保整个模板被替换。
 func getPatch(set *apps.StatefulSet) ([]byte, error) {
 	data, err := runtime.Encode(patchCodec, set)
 	if err != nil {
@@ -564,16 +565,15 @@ func getPatch(set *apps.StatefulSet) ([]byte, error) {
 	spec := raw["spec"].(map[string]interface{})
 	template := spec["template"].(map[string]interface{})
 	specCopy["template"] = template
+	// 使用 replace 指令确保恢复时整个模板被覆盖，而非按字段合并。
 	template["$patch"] = "replace"
 	objCopy["spec"] = specCopy
 	patch, err := json.Marshal(objCopy)
 	return patch, err
 }
 
-// newRevision creates a new ControllerRevision containing a patch that reapplies the target state of set.
-// The Revision of the returned ControllerRevision is set to revision. If the returned error is nil, the returned
-// ControllerRevision is valid. StatefulSet revisions are stored as patches that re-apply the current state of set
-// to a new StatefulSet using a strategic merge patch to replace the saved state of the new StatefulSet.
+// newRevision 创建一个 ControllerRevision，其中保存能重新应用 set 目标状态的 patch。
+// set 的注解会被复制到 revision 上，便于追溯。
 func newRevision(set *apps.StatefulSet, revision int64, collisionCount *int32) (*apps.ControllerRevision, error) {
 	patch, err := getPatch(set)
 	if err != nil {
@@ -588,6 +588,7 @@ func newRevision(set *apps.StatefulSet, revision int64, collisionCount *int32) (
 	if err != nil {
 		return nil, err
 	}
+	// 复制 set 的注解，保证 revision 携带完整元信息。
 	if cr.ObjectMeta.Annotations == nil {
 		cr.ObjectMeta.Annotations = make(map[string]string)
 	}
@@ -597,8 +598,7 @@ func newRevision(set *apps.StatefulSet, revision int64, collisionCount *int32) (
 	return cr, nil
 }
 
-// ApplyRevision returns a new StatefulSet constructed by restoring only the .Spec from revision to set.
-// If the returned error is nil, the returned StatefulSet is valid.
+// ApplyRevision 将 revision 中保存的 .Spec 恢复到 set 上，返回一个新的 StatefulSet。
 func ApplyRevision(set *apps.StatefulSet, revision *apps.ControllerRevision) (*apps.StatefulSet, error) {
 	clone := set.DeepCopy()
 	patched, err := strategicpatch.StrategicMergePatch([]byte(runtime.EncodeOrDie(patchCodec, clone)), revision.Data.Raw, clone)
@@ -610,13 +610,13 @@ func ApplyRevision(set *apps.StatefulSet, revision *apps.ControllerRevision) (*a
 	if err != nil {
 		return nil, err
 	}
+	// 仅恢复 Spec，其余字段沿用原 set。
 	clone.Spec = restoredSet.Spec
 	return clone, nil
 }
 
-// nextRevision finds the next valid revision number based on revisions. If the length of revisions
-// is 0 this is 1. Otherwise, it is 1 greater than the largest revision's Revision. This method
-// assumes that revisions has been sorted by Revision.
+// nextRevision 返回下一个可用的 revision 号：无历史 revision 时为 1，
+// 否则为最大 revision 加 1。调用方需保证 revisions 已按 Revision 排序。
 func nextRevision(revisions []*apps.ControllerRevision) int64 {
 	count := len(revisions)
 	if count <= 0 {
@@ -625,8 +625,8 @@ func nextRevision(revisions []*apps.ControllerRevision) int64 {
 	return revisions[count-1].Revision + 1
 }
 
-// inconsistentStatus returns true if the ObservedGeneration of status is greater than set's
-// Generation or if any of the status's fields do not match those of set's status.
+// inconsistentStatus 判断期望状态与当前状态是否不一致，
+// 包括 ObservedGeneration 及各副本计数、revision、Conditions 的差异。
 func inconsistentStatus(set *apps.StatefulSet, status *apps.StatefulSetStatus) bool {
 	return status.ObservedGeneration > set.Status.ObservedGeneration ||
 		status.Replicas != set.Status.Replicas ||
@@ -639,17 +639,18 @@ func inconsistentStatus(set *apps.StatefulSet, status *apps.StatefulSetStatus) b
 		!reflect.DeepEqual(set.Status.Conditions, status.Conditions)
 }
 
-// completeUpdate completes an update when all of set's replica Pods have been updated
-// to the updateRevision. status's currentRevision is set to updateRevision and status's
-// currentReplicas is set to updateReplicas.
+// completeUpdate 在所有副本都已更新到 updateRevision 时完成更新：
+// 将 currentRevision/currentReplicas 推进到更新版本；
+// Recreate 策略下还会将 Progressing 条件置为 Completed。
 func completeUpdate(set *apps.StatefulSet, status *apps.StatefulSetStatus) {
+	// 只有副本数、就绪数、总数全部达到期望值时更新才算完成。
 	if status.UpdatedReplicas == *set.Spec.Replicas &&
 		status.ReadyReplicas == *set.Spec.Replicas &&
 		status.Replicas == *set.Spec.Replicas {
 		status.CurrentReplicas = status.UpdatedReplicas
 		status.CurrentRevision = status.UpdateRevision
 
-		// Update statefulset progressing condition upon completion
+		// Recreate 策略更新完成后同步 Progressing 条件。
 		if getStatefulSetCondition(*status, apps.StatefulSetProgressing) != nil &&
 			set.Spec.UpdateStrategy.Type == apps.RecreateStatefulSetStrategyType &&
 			utilfeature.DefaultFeatureGate.Enabled(features.StatefulSetRecreateStrategy) {
@@ -658,65 +659,64 @@ func completeUpdate(set *apps.StatefulSet, status *apps.StatefulSetStatus) {
 	}
 }
 
-// ascendingOrdinal is a sort.Interface that Sorts a list of Pods based on the ordinals extracted
-// from the Pod. Pod's that have not been constructed by StatefulSet's have an ordinal of -1, and are therefore pushed
-// to the front of the list.
+// ascendingOrdinal 按序号升序排列 Pod；非 StatefulSet 创建的 Pod 序号为 -1，会被排到最前。
 type ascendingOrdinal []*v1.Pod
 
+// Len 返回待排序 Pod 数量。
 func (ao ascendingOrdinal) Len() int {
 	return len(ao)
 }
 
+// Swap 交换两个 Pod 的位置。
 func (ao ascendingOrdinal) Swap(i, j int) {
 	ao[i], ao[j] = ao[j], ao[i]
 }
 
+// Less 按序号升序比较。
 func (ao ascendingOrdinal) Less(i, j int) bool {
 	return getOrdinal(ao[i]) < getOrdinal(ao[j])
 }
 
-// descendingOrdinal is a sort.Interface that Sorts a list of Pods based on the ordinals extracted
-// from the Pod. Pod's that have not been constructed by StatefulSet's have an ordinal of -1, and are therefore pushed
-// to the end of the list.
+// descendingOrdinal 按序号降序排列 Pod；非 StatefulSet 创建的 Pod 序号为 -1，会被排到最后。
 type descendingOrdinal []*v1.Pod
 
+// Len 返回待排序 Pod 数量。
 func (do descendingOrdinal) Len() int {
 	return len(do)
 }
 
+// Swap 交换两个 Pod 的位置。
 func (do descendingOrdinal) Swap(i, j int) {
 	do[i], do[j] = do[j], do[i]
 }
 
+// Less 按序号降序比较。
 func (do descendingOrdinal) Less(i, j int) bool {
 	return getOrdinal(do[i]) > getOrdinal(do[j])
 }
 
-// getStatefulSetMaxUnavailable calculates the real maxUnavailable number according to the replica count
-// and maxUnavailable from rollingUpdateStrategy. The number defaults to 1 if the maxUnavailable field is
-// not set, and it will be round down to at least 1 if the maxUnavailable value is a percentage.
-// Note that API validation has already guaranteed the maxUnavailable field to be >1 if it is an integer
-// or 0% < value <= 100% if it is a percentage, so we don't have to consider other cases.
+// getStatefulSetMaxUnavailable 根据副本数与 maxUnavailable 配置计算实际不可用副本上限。
+//   - 未配置时默认 1；百分比向下取整后至少保证 1；
+//   - API 校验已保证整数 >1 或百分比在 (0%,100%]，故无需处理其他情况。
 func getStatefulSetMaxUnavailable(maxUnavailable *intstr.IntOrString, replicaCount int) (int, error) {
 	maxUnavailableNum, err := intstr.GetScaledValueFromIntOrPercent(intstr.ValueOrDefault(maxUnavailable, intstr.FromInt32(1)), replicaCount, false)
 	if err != nil {
 		return 0, err
 	}
-	// maxUnavailable might be zero for small percentage with round down.
-	// So we have to enforce it not to be less than 1.
+	// 小副本数配合百分比可能向下取整为 0，这里强制至少为 1。
 	if maxUnavailableNum < 1 {
 		maxUnavailableNum = 1
 	}
 	return maxUnavailableNum, nil
 }
 
-// setProgressingCondition sets the Progressing condition on the status.
+// setProgressingCondition 设置 StatefulSet 状态的 Progressing 条件。
 func setProgressingCondition(status *apps.StatefulSetStatus, conditionStatus v1.ConditionStatus, reason, message string) {
 	condition := newStatefulSetCondition(apps.StatefulSetProgressing, conditionStatus, reason, message)
 	setStatefulSetCondition(status, *condition)
 }
 
-// newStatefulSetCondition creates a new statefulset condition.
+// newStatefulSetCondition 创建一个新的 StatefulSet 条件。
 func newStatefulSetCondition(condType apps.StatefulSetConditionType, status v1.ConditionStatus, reason, message string) *apps.StatefulSetCondition {
 	return &apps.StatefulSetCondition{
 		Type:               condType,
@@ -727,7 +727,7 @@ func newStatefulSetCondition(condType apps.StatefulSetConditionType, status v1.C
 	}
 }
 
-// getStatefulSetCondition returns the condition with the provided type.
+// getStatefulSetCondition 返回指定类型的条件；不存在时返回 nil。
 func getStatefulSetCondition(status apps.StatefulSetStatus, condType apps.StatefulSetConditionType) *apps.StatefulSetCondition {
 	for i := range status.Conditions {
 		c := status.Conditions[i]
@@ -738,8 +738,8 @@ func getStatefulSetCondition(status apps.StatefulSetStatus, condType apps.Statef
 	return nil
 }
 
-// setStatefulSetCondition updates the statefulset to include the provided condition. If the condition that
-// we are about to add already exists and has the same status, reason, and message then we are not going to update.
+// setStatefulSetCondition 更新状态中的条件；若状态、原因与消息均未变化则不更新，
+// 避免无意义的 LastTransitionTime 变更。
 func setStatefulSetCondition(status *apps.StatefulSetStatus, condition apps.StatefulSetCondition) {
 	currentCond := getStatefulSetCondition(*status, condition.Type)
 	if currentCond == nil {
@@ -747,12 +747,13 @@ func setStatefulSetCondition(status *apps.StatefulSetStatus, condition apps.Stat
 		return
 	}
 
+	// 内容完全相同则无需更新，避免触发无意义的状态写入。
 	if currentCond.Status == condition.Status &&
 		currentCond.Reason == condition.Reason &&
 		currentCond.Message == condition.Message {
 		return
 	}
-	// Do not update lastTransitionTime if the status of the condition doesn't change.
+	// 状态未变化时保留原有 LastTransitionTime，只更新原因/消息。
 	if currentCond.Status == condition.Status {
 		condition.LastTransitionTime = currentCond.LastTransitionTime
 	}

@@ -23,12 +23,11 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// JobControllerSubsystem - subsystem name used for this controller.
+// JobControllerSubsystem 是本控制器使用的指标子系统名称。
 const JobControllerSubsystem = "job_controller"
 
 var (
-	// JobSyncDurationSeconds tracks the latency of Job syncs. Possible label
-	// values:
+	// JobSyncDurationSeconds 记录 Job 同步的耗时。可能的标签值：
 	//   completion_mode: Indexed, NonIndexed
 	//   result:          success, error
 	//   action:          reconciling, tracking, pods_created, pods_deleted
@@ -42,7 +41,7 @@ var (
 		},
 		[]string{"completion_mode", "result", "action"},
 	)
-	// JobSyncNum tracks the number of Job syncs. Possible label values:
+	// JobSyncNum 记录 Job 同步的次数。可能的标签值：
 	//   completion_mode: Indexed, NonIndexed
 	//   result:          success, error
 	//   action:          reconciling, tracking, pods_created, pods_deleted
@@ -55,9 +54,9 @@ var (
 		},
 		[]string{"completion_mode", "result", "action"},
 	)
-	// JobFinishedNum tracks the number of Jobs that finish.
-	// "CompletionsReached" reason label is used to count successful jobs.
-	// Possible label values:
+	// JobFinishedNum 记录已结束的 Job 数量。
+	// "CompletionsReached" 这个 reason 标签用于统计成功完成的 Job。
+	// 可能的标签值：
 	//   completion_mode: Indexed, NonIndexed
 	//   result:          failed, succeeded
 	//   reason:          "BackoffLimitExceeded", "DeadlineExceeded", "PodFailurePolicy", "FailedIndexes", "MaxFailedIndexesExceeded", "SuccessPolicy", "CompletionsReached"
@@ -71,10 +70,8 @@ var (
 		[]string{"completion_mode", "result", "reason"},
 	)
 
-	// JobByExternalControllerTotal tracks the number of Jobs that were created
-	// as managed by an external controller.
-	// The value of the label controller_name corresponds to the value of the
-	// managedBy field.
+	// JobByExternalControllerTotal 记录由外部控制器创建并管理的 Job 数量。
+	// controller_name 标签的取值对应 managedBy 字段的值。
 	JobByExternalControllerTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      JobControllerSubsystem,
@@ -85,11 +82,9 @@ var (
 		[]string{"controller_name"},
 	)
 
-	// JobPodsFinished records the number of finished Pods that the job controller
-	// finished tracking.
-	// It only applies to Jobs that were created while the feature gate
-	// JobTrackingWithFinalizers was enabled.
-	// Possible label values:
+	// JobPodsFinished 记录 Job 控制器完成跟踪的已结束 Pod 数量。
+	// 仅适用于在 JobTrackingWithFinalizers 特性门控开启时创建的 Job。
+	// 可能的标签值：
 	//   completion_mode: Indexed, NonIndexed
 	//   result:          failed, succeeded
 	JobPodsFinished = metrics.NewCounterVec(
@@ -101,9 +96,8 @@ var (
 		},
 		[]string{"completion_mode", "result"})
 
-	// PodFailuresHandledByFailurePolicy records the number of finished Pods
-	// handled by pod failure policy.
-	// Possible label values:
+	// PodFailuresHandledByFailurePolicy 记录由 Pod 失败策略处理的已结束 Pod 数量。
+	// 可能的标签值：
 	//   action: FailJob, Ignore, Count
 	PodFailuresHandledByFailurePolicy = metrics.NewCounterVec(
 		&metrics.CounterOpts{
@@ -118,9 +112,8 @@ var (
 		},
 		[]string{"action"})
 
-	// TerminatedPodsTrackingFinalizerTotal records the addition and removal of
-	// terminated pods that have the finalizer batch.kubernetes.io/job-tracking,
-	// regardless of whether they are owned by a Job.
+	// TerminatedPodsTrackingFinalizerTotal 记录带有 batch.kubernetes.io/job-tracking
+	// finalizer 的已终止 Pod 的增加与移除次数，无论其是否归属于某个 Job。
 	TerminatedPodsTrackingFinalizerTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem: JobControllerSubsystem,
@@ -131,7 +124,7 @@ The event label can be "add" or "delete".`,
 			StabilityLevel: metrics.BETA,
 		}, []string{"event"})
 
-	// JobFinishedIndexesTotal records the number of finished indexes.
+	// JobFinishedIndexesTotal 记录已完成的索引（index）数量。
 	JobFinishedIndexesTotal = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem: JobControllerSubsystem,
@@ -142,10 +135,9 @@ The event label can be "add" or "delete".`,
 		},
 		[]string{"status", "backoffLimit"})
 
-	// JobPodsCreationTotal records the number of pods created by the job controller
-	// based on the reason for their creation (i.e. if PodReplacementPolicy was specified)
-	// and the status of the creation (i.e. if the Pod creation succeeded or failed).
-	// Possible label values:
+	// JobPodsCreationTotal 记录 Job 控制器创建的 Pod 数量，按创建原因
+	// （例如是否指定了 PodReplacementPolicy）和创建结果（成功或失败）分类。
+	// 可能的标签值：
 	//   reason: new, recreate_terminating_or_failed, recreate_failed
 	//   status: succeeded, failed
 	JobPodsCreationTotal = metrics.NewCounterVec(
@@ -160,8 +152,7 @@ Possible values of the "status" label are:
 "succeeded", "failed".`,
 		}, []string{"reason", "status"})
 
-	// JobRequeueSkips track the number of job syncs skipped due to a stale
-	// watch cache.
+	// JobRequeueSkips 记录因 watch 缓存过期而跳过的 Job 同步次数。
 	JobRequeueSkips = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      JobControllerSubsystem,
@@ -169,51 +160,50 @@ Possible values of the "status" label are:
 			Help:           "Total number of Job syncs skipped due to a stale watch cache.",
 			StabilityLevel: metrics.ALPHA,
 		},
-		// These are the labels (dimensions)
+		// 这些是指标的标签（维度）。
 		[]string{"group", "resource"},
 	)
 )
 
 const (
-	// Possible values for the "action" label in the above metrics.
+	// 以下是上述指标中 "action" 标签的可能取值。
 
-	// JobSyncActionReconciling when the Job's pod creation/deletion expectations
-	// are unsatisfied and the controller is waiting for issued Pod
-	// creation/deletions to complete.
+	// JobSyncActionReconciling 表示 Job 的 Pod 创建/删除预期尚未满足，
+	// 控制器正在等待已发出的 Pod 创建/删除操作完成。
 	JobSyncActionReconciling = "reconciling"
-	// JobSyncActionTracking when the Job's pod creation/deletion expectations
-	// are satisfied and the number of active Pods matches expectations (i.e. no
-	// pod creation/deletions issued in this sync). This is expected to be the
-	// action in most of the syncs.
+	// JobSyncActionTracking 表示 Job 的 Pod 创建/删除预期已满足，且活跃
+	// Pod 数量与预期一致（即本次同步未发出创建/删除操作）。这是大多数同步
+	// 中的常见动作。
 	JobSyncActionTracking = "tracking"
-	// JobSyncActionPodsCreated when the controller creates Pods. This can happen
-	// when the number of active Pods is less than the wanted Job parallelism.
+	// JobSyncActionPodsCreated 表示控制器创建了 Pod。这发生在活跃 Pod 数量
+	// 少于 Job 期望并行度时。
 	JobSyncActionPodsCreated = "pods_created"
-	// JobSyncActionPodsDeleted when the controller deletes Pods. This can happen
-	// if a Job is suspended or if the number of active Pods is more than
-	// parallelism.
+	// JobSyncActionPodsDeleted 表示控制器删除了 Pod。这发生在 Job 被挂起，
+	// 或活跃 Pod 数量超过并行度时。
 	JobSyncActionPodsDeleted = "pods_deleted"
 
-	// Possible values for "result" and "status" (job_pods_creation_total) labels in the above metrics.
+	// 以下是上述指标中 "result" 以及 "status"（job_pods_creation_total）
+	// 标签的可能取值。
 
 	Succeeded = "succeeded"
 	Failed    = "failed"
 
-	// Possible values for "event"  label in the terminated_pods_tracking_finalizer
-	// metric.
+	// 以下是 terminated_pods_tracking_finalizer 指标中 "event" 标签的可能
+	// 取值。
 	Add    = "add"
 	Delete = "delete"
 
-	// Possible values for "reason" label in the job_pods_creation_total metric.
+	// 以下是 job_pods_creation_total 指标中 "reason" 标签的可能取值。
 
 	PodCreateNew                   = "new"
 	PodRecreateTerminatingOrFailed = "recreate_terminating_or_failed"
 	PodRecreateFailed              = "recreate_failed"
 )
 
+// registerMetrics 保证指标只注册一次。
 var registerMetrics sync.Once
 
-// Register registers Job controller metrics.
+// Register 注册 Job 控制器的所有指标。
 func Register() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(JobSyncDurationSeconds)

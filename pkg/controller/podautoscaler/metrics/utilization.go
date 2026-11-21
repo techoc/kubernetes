@@ -20,9 +20,8 @@ import (
 	"fmt"
 )
 
-// GetResourceUtilizationRatio takes in a set of metrics, a set of matching requests,
-// and a target utilization percentage, and calculates the ratio of
-// desired to actual utilization (returning that, the actual utilization, and the raw average value)
+// GetResourceUtilizationRatio 根据指标集合、对应的 request 集合和目标利用率百分比，
+// 计算期望利用率与实际利用率的比值，并返回该比值、当前利用率和原始平均值。
 func GetResourceUtilizationRatio(metrics PodMetricsInfo, requests map[string]int64, targetUtilization int32) (utilizationRatio float64, currentUtilization int32, rawAverageValue int64, err error) {
 	metricsTotal := int64(0)
 	requestsTotal := int64(0)
@@ -31,7 +30,7 @@ func GetResourceUtilizationRatio(metrics PodMetricsInfo, requests map[string]int
 	for podName, metric := range metrics {
 		request, hasRequest := requests[podName]
 		if !hasRequest {
-			// we check for missing requests elsewhere, so assuming missing requests == extraneous metrics
+			// 缺失 request 的情况会在其他地方检查；这里将没有对应 request 的指标视为多余指标直接跳过。
 			continue
 		}
 
@@ -40,8 +39,7 @@ func GetResourceUtilizationRatio(metrics PodMetricsInfo, requests map[string]int
 		numEntries++
 	}
 
-	// if the set of requests is completely disjoint from the set of metrics,
-	// then we could have an issue where the requests total is zero
+	// 若指标集合与 request 集合完全不相交，request 总量会为 0，此时无法计算利用率，必须报错。
 	if requestsTotal == 0 {
 		return 0, 0, 0, fmt.Errorf("no metrics returned matched known pods")
 	}
@@ -51,9 +49,8 @@ func GetResourceUtilizationRatio(metrics PodMetricsInfo, requests map[string]int
 	return float64(currentUtilization) / float64(targetUtilization), currentUtilization, metricsTotal / int64(numEntries), nil
 }
 
-// GetMetricUsageRatio takes in a set of metrics and a target usage value,
-// and calculates the ratio of desired to actual usage
-// (returning that and the actual usage)
+// GetMetricUsageRatio 根据指标集合与目标使用量，计算期望使用量与实际使用量的比值，
+// 并返回该比值和当前使用量。
 func GetMetricUsageRatio(metrics PodMetricsInfo, targetUsage int64) (usageRatio float64, currentUsage int64) {
 	metricsTotal := int64(0)
 	for _, metric := range metrics {

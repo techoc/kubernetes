@@ -15,9 +15,8 @@ limitations under the License.
 */
 
 /*
-Package cache implements data structures used by the attach/detach controller
-to keep track of volumes, the nodes they are attached to, and the pods that
-reference them.
+Package cache 实现 attach/detach 控制器使用的数据结构，
+用于跟踪卷、卷挂接到的节点以及引用这些卷的 Pod。
 */
 package cache
 
@@ -37,154 +36,115 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util/operationexecutor"
 )
 
-// ActualStateOfWorld defines a set of thread-safe operations supported on
-// the attach/detach controller's actual state of the world cache.
-// This cache contains volumes->nodes i.e. a set of all volumes and the nodes
-// the attach/detach controller believes are successfully attached.
-// Note: This is distinct from the ActualStateOfWorld implemented by the kubelet
-// volume manager. They both keep track of different objects. This contains
-// attach/detach controller specific state.
+// ActualStateOfWorld 定义 attach/detach 控制器“实际世界状态”缓存支持的线程安全操作集合。
+// 该缓存保存 卷->节点 映射，即控制器认为已成功挂接的所有卷及挂接节点。
+// 注意：这与 kubelet 卷管理器实现的 ActualStateOfWorld 不同，两者跟踪的对象不同；
+// 这里只保存 attach/detach 控制器特有的状态。
 type ActualStateOfWorld interface {
-	// ActualStateOfWorld must implement the methods required to allow
-	// operationexecutor to interact with it.
+	// 必须实现 operationexecutor 交互所需的方法。
 	operationexecutor.ActualStateOfWorldAttacherUpdater
 
-	// AddVolumeNode adds the given volume and node to the underlying store.
-	// If attached is set to true, it indicates the specified volume is already
-	// attached to the specified node. If attached set to false, it means that
-	// the volume is not confirmed to be attached to the node yet.
-	// A unique volume name is generated from the volumeSpec and returned on
-	// success.
-	// If volumeSpec is not an attachable volume plugin, an error is returned.
-	// If no volume with the name volumeName exists in the store, the volume is
-	// added.
-	// If no node with the name nodeName exists in list of attached nodes for
-	// the specified volume, the node is added.
+	// AddVolumeNode 将给定卷和节点加入底层存储。
+	// attached 为 true 表示卷已确认挂接到该节点；为 false 表示尚未确认挂接。
+	// 成功时返回由 volumeSpec 生成的唯一卷名。
+	// 若 volumeSpec 不是可挂接卷插件，返回错误。
+	// 若存储中不存在该卷则新增；若该卷的已挂接节点列表中不存在该节点则加入。
 	AddVolumeNode(logger klog.Logger, uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName, devicePath string, attached bool) (v1.UniqueVolumeName, error)
 
-	// SetVolumesMountedByNode sets all the volumes mounted by the given node.
-	// These volumes should include attached volumes, not-yet-attached volumes,
-	// and may also include non-attachable volumes.
-	// When present in the volumeNames parameter, the volume
-	// is mounted by the given node, indicating it may not be safe to detach.
-	// Otherwise, the volume is not mounted by the given node.
+	// SetVolumesMountedByNode 设置指定节点挂载的所有卷。
+	// 这些卷包括已挂接、尚未挂接的卷，也可能包括不可挂接的卷。
+	// 出现在 volumeNames 中表示该节点已挂载该卷，因而卸载可能不安全；否则表示未挂载。
 	SetVolumesMountedByNode(logger klog.Logger, volumeNames []v1.UniqueVolumeName, nodeName types.NodeName)
 
-	// SetNodeStatusUpdateNeeded sets statusUpdateNeeded for the specified
-	// node to true indicating the AttachedVolume field in the Node's Status
-	// object needs to be updated by the node updater again.
-	// If the specified node does not exist in the nodesToUpdateStatusFor list,
-	// log the error and return
+	// SetNodeStatusUpdateNeeded 将指定节点的 statusUpdateNeeded 置为 true，
+	// 表示节点状态对象中的 AttachedVolume 字段需要由节点状态更新器再次更新。
+	// 若指定节点不在 nodesToUpdateStatusFor 列表中，记录错误并返回。
 	SetNodeStatusUpdateNeeded(logger klog.Logger, nodeName types.NodeName)
 
-	// ResetDetachRequestTime resets the detachRequestTime to 0 which indicates there is no detach
-	// request any more for the volume
+	// ResetDetachRequestTime 将 detachRequestTime 重置为 0，表示该卷已无卸载请求。
 	ResetDetachRequestTime(logger klog.Logger, volumeName v1.UniqueVolumeName, nodeName types.NodeName)
 
-	// SetDetachRequestTime sets the detachRequestedTime to current time if this is no
-	// previous request (the previous detachRequestedTime is zero) and return the time elapsed
-	// since last request
+	// SetDetachRequestTime 在尚无卸载请求（上次请求时间为零）时，
+	// 将 detachRequestedTime 设为当前时间，并返回距上次请求已过去的时间。
 	SetDetachRequestTime(logger klog.Logger, volumeName v1.UniqueVolumeName, nodeName types.NodeName) (time.Duration, error)
 
-	// DeleteVolumeNode removes the given volume and node from the underlying
-	// store indicating the specified volume is no longer attached to the
-	// specified node.
-	// If the volume/node combo does not exist, this is a no-op.
-	// If after deleting the node, the specified volume contains no other child
-	// nodes, the volume is also deleted.
+	// DeleteVolumeNode 从底层存储移除给定卷和节点，表示该卷不再挂接到该节点。
+	// 若该卷/节点组合不存在，则为空操作。
+	// 若删除该节点后卷不再挂接任何节点，则同时删除该卷。
 	DeleteVolumeNode(volumeName v1.UniqueVolumeName, nodeName types.NodeName)
 
-	// GetAttachState returns the attach state for the given volume-node
-	// combination.
-	// Returns AttachStateAttached if the specified volume/node combo exists in
-	// the underlying store indicating the specified volume is attached to the
-	// specified node, AttachStateDetached if the combo does not exist, or
-	// AttachStateUncertain if the attached state is marked as uncertain.
+	// GetAttachState 返回给定卷/节点组合的挂接状态。
+	// 组合存在且已确认挂接时返回 AttachStateAttached；不存在时返回 AttachStateDetached；
+	// 挂接状态不确定时返回 AttachStateUncertain。
 	GetAttachState(volumeName v1.UniqueVolumeName, nodeName types.NodeName) AttachState
 
-	// GetAttachedVolumes generates and returns a list of volumes/node pairs
-	// reflecting which volumes might attached to which nodes based on the
-	// current actual state of the world. This list includes all the volumes which return successful
-	// attach and also the volumes which return errors during attach.
+	// GetAttachedVolumes 生成并返回卷/节点对列表，反映当前实际状态中哪些卷可能挂接到了哪些节点。
+	// 列表包含挂接成功的卷，也包含挂接过程中报错的卷。
 	GetAttachedVolumes() []AttachedVolume
 
-	// GetAttachedVolumesForNode generates and returns a list of volumes that added to
-	// the specified node reflecting which volumes are/or might be attached to that node
-	// based on the current actual state of the world. This function is currently used by
-	// attach_detach_controller to process VolumeInUse
+	// GetAttachedVolumesForNode 生成并返回加入指定节点的卷列表，
+	// 反映当前实际状态中哪些卷已挂接或可能挂接到该节点。
+	// 当前由 attach_detach_controller 用于处理 VolumeInUse。
 	GetAttachedVolumesForNode(nodeName types.NodeName) []AttachedVolume
 
-	// GetAttachedVolumesPerNode generates and returns a map of nodes and volumes that added to
-	// the specified node reflecting which volumes are attached to that node
-	// based on the current actual state of the world. This function is currently used by
-	// reconciler to verify whether the volume is still attached to the node.
+	// GetAttachedVolumesPerNode 生成并返回节点到卷的映射，
+	// 反映当前实际状态中哪些卷已挂接到对应节点。
+	// 当前由 reconciler 用于校验卷是否仍挂接在节点上。
 	GetAttachedVolumesPerNode() map[types.NodeName][]operationexecutor.AttachedVolume
 
-	// GetNodesForAttachedVolume returns the nodes on which the volume is attached.
-	// This function is used by reconciler for multi-attach check.
+	// GetNodesForAttachedVolume 返回卷已挂接到的节点列表，供 reconciler 做多重挂接检查。
 	GetNodesForAttachedVolume(volumeName v1.UniqueVolumeName) []types.NodeName
 
-	// GetVolumesToReportAttached returns a map containing the set of nodes for
-	// which the VolumesAttached Status field in the Node API object should be
-	// updated. The key in this map is the name of the node to update and the
-	// value is list of volumes that should be reported as attached (note that
-	// this may differ from the actual list of attached volumes for the node
-	// since volumes should be removed from this list as soon a detach operation
-	// is considered, before the detach operation is triggered).
+	// GetVolumesToReportAttached 返回一个映射，包含需要更新 Node API 对象
+	// VolumesAttached 状态字段的节点集合。键为节点名，值为应上报为已挂接的卷列表。
+	// 注意：由于一旦决定卸载就会（在触发卸载前）把卷从列表中移除，
+	// 该列表可能与节点上实际挂接的卷列表不同。
 	GetVolumesToReportAttached(logger klog.Logger) map[types.NodeName][]v1.AttachedVolume
 
-	// GetVolumesToReportAttachedForNode returns the list of volumes that should be reported as
-	// attached for the given node. It reports a boolean indicating if there is an update for that
-	// node and the corresponding attachedVolumes list.
+	// GetVolumesToReportAttachedForNode 返回指定节点应上报为已挂接的卷列表，
+	// 并给出该节点是否有更新以及相应的 attachedVolumes 列表。
 	GetVolumesToReportAttachedForNode(logger klog.Logger, name types.NodeName) (bool, []v1.AttachedVolume)
 
-	// GetNodesToUpdateStatusFor returns the map of nodeNames to nodeToUpdateStatusFor
+	// GetNodesToUpdateStatusFor 返回节点名到 nodeToUpdateStatusFor 的映射。
 	GetNodesToUpdateStatusFor() map[types.NodeName]nodeToUpdateStatusFor
 }
 
-// AttachedVolume represents a volume that is attached to a node.
+// AttachedVolume 表示已挂接到某节点的卷。
 type AttachedVolume struct {
 	operationexecutor.AttachedVolume
 
-	// MountedByNode indicates that this volume has been mounted by the node and
-	// is unsafe to detach.
-	// The value is set and unset by SetVolumesMountedByNode(...).
+	// MountedByNode 表示该卷已被节点挂载，因此卸载不安全。
+	// 由 SetVolumesMountedByNode(...) 设置和清除。
 	MountedByNode bool
 
-	// DetachRequestedTime is used to capture the desire to detach this volume.
-	// When the volume is newly created this value is set to time zero.
-	// It is set to current time, when SetDetachRequestTime(...) is called, if it
-	// was previously set to zero (other wise its value remains the same).
-	// It is reset to zero on ResetDetachRequestTime(...) calls.
+	// DetachRequestedTime 记录卸载该卷的诉求。
+	// 卷新建时该值为零；若此前为零，SetDetachRequestTime(...) 会将其设为当前时间
+	// （否则保持不变）；ResetDetachRequestTime(...) 会将其重置为零。
 	DetachRequestedTime time.Time
 }
 
-// AttachState represents the attach state of a volume to a node known to the
-// Actual State of World.
-// This type is used as external representation of attach state (specifically
-// as the return type of GetAttachState only); the state is represented
-// differently in the internal cache implementation.
+// AttachState 表示“实际世界状态”所知的卷到节点的挂接状态。
+// 该类型仅作为挂接状态的外部表示（具体用作 GetAttachState 的返回值）；
+// 内部缓存实现中状态的表示方式不同。
 type AttachState int
 
 const (
-	// AttachStateAttached represents the state in which the volume is attached to
-	// the node.
+	// AttachStateAttached 表示卷已挂接到节点。
 	AttachStateAttached AttachState = iota
 
-	// AttachStateUncertain represents the state in which the Actual State of World
-	// does not know whether the volume is attached to the node.
+	// AttachStateUncertain 表示“实际世界状态”无法确定卷是否已挂接到节点。
 	AttachStateUncertain
 
-	// AttachStateDetached represents the state in which the volume is not
-	// attached to the node.
+	// AttachStateDetached 表示卷未挂接到节点。
 	AttachStateDetached
 )
 
+// String 返回挂接状态的可读名称。
 func (s AttachState) String() string {
 	return []string{"Attached", "Uncertain", "Detached"}[s]
 }
 
-// NewActualStateOfWorld returns a new instance of ActualStateOfWorld.
+// NewActualStateOfWorld 创建并返回一个 ActualStateOfWorld 实例。
 func NewActualStateOfWorld(volumePluginMgr *volume.VolumePluginMgr) ActualStateOfWorld {
 	return &actualStateOfWorld{
 		attachedVolumes:        make(map[v1.UniqueVolumeName]attachedVolume),
@@ -194,87 +154,71 @@ func NewActualStateOfWorld(volumePluginMgr *volume.VolumePluginMgr) ActualStateO
 	}
 }
 
+// actualStateOfWorld 是 ActualStateOfWorld 接口的具体实现。
 type actualStateOfWorld struct {
-	// attachedVolumes is a map containing the set of volumes the attach/detach
-	// controller believes to be successfully attached to the nodes it is
-	// managing. The key in this map is the name of the volume and the value is
-	// an object containing more information about the attached volume.
+	// attachedVolumes 保存控制器认为已成功挂接到其管理节点的卷集合。
+	// 键为卷名，值为包含已挂接卷详细信息的对象。
 	attachedVolumes map[v1.UniqueVolumeName]attachedVolume
 
-	// nodesToUpdateStatusFor is a map containing the set of nodes for which to
-	// update the VolumesAttached Status field. The key in this map is the name
-	// of the node and the value is an object containing more information about
-	// the node (including the list of volumes to report attached).
+	// nodesToUpdateStatusFor 保存需要更新 VolumesAttached 状态字段的节点集合。
+	// 键为节点名，值为节点详细信息（包括应上报为已挂接的卷列表）。
 	nodesToUpdateStatusFor map[types.NodeName]nodeToUpdateStatusFor
 
-	// inUseVolumes is a map containing the set of volumes that are reported as
-	// in use by the kubelet.
+	// inUseVolumes 保存 kubelet 上报为正在使用的卷集合。
 	inUseVolumes map[types.NodeName]sets.Set[v1.UniqueVolumeName]
 
-	// volumePluginMgr is the volume plugin manager used to create volume
-	// plugin objects.
+	// volumePluginMgr 用于创建卷插件对象。
 	volumePluginMgr *volume.VolumePluginMgr
 
 	sync.RWMutex
 }
 
-// The volume object represents a volume the attach/detach controller
-// believes to be successfully attached to a node it is managing.
+// attachedVolume 表示控制器认为已成功挂接到其所管理节点的卷。
 type attachedVolume struct {
-	// volumeName contains the unique identifier for this volume.
+	// volumeName 是该卷的唯一标识。
 	volumeName v1.UniqueVolumeName
 
-	// spec is the volume spec containing the specification for this volume.
-	// Used to generate the volume plugin object, and passed to attach/detach
-	// methods.
+	// spec 是卷的规格说明，用于生成卷插件对象并传给挂接/卸载方法。
 	spec *volume.Spec
 
-	// nodesAttachedTo is a map containing the set of nodes this volume has
-	// been attached to. The key in this map is the name of the
-	// node and the value is a node object containing more information about
-	// the node.
+	// nodesAttachedTo 保存该卷已挂接到的节点集合。
+	// 键为节点名，值为包含节点详细信息的对象。
 	nodesAttachedTo map[types.NodeName]nodeAttachedTo
 
-	// devicePath contains the path on the node where the volume is attached
+	// devicePath 是卷在节点上的挂接路径。
 	devicePath string
 }
 
-// The nodeAttachedTo object represents a node that has volumes attached to it
-// or trying to attach to it.
+// nodeAttachedTo 表示已挂接卷或正在尝试挂接卷的节点。
 type nodeAttachedTo struct {
-	// nodeName contains the name of this node.
+	// nodeName 是节点名。
 	nodeName types.NodeName
 
-	// attachConfirmed indicates that the storage system verified the volume has been attached to this node.
-	// This value is set to false when an attach  operation fails and the volume may be attached or not.
+	// attachedConfirmed 表示存储系统已确认卷挂接到该节点。
+	// 挂接操作失败但卷可能已挂接时，该值为 false。
 	attachedConfirmed bool
 
-	// detachRequestedTime used to capture the desire to detach this volume
+	// detachRequestedTime 记录卸载该卷的诉求。
 	detachRequestedTime time.Time
 }
 
-// nodeToUpdateStatusFor is an object that reflects a node that has one or more
-// volume attached. It keeps track of the volumes that should be reported as
-// attached in the Node's Status API object.
+// nodeToUpdateStatusFor 反映有一个或多个卷挂接的节点，
+// 记录需要在 Node Status API 对象中上报为已挂接的卷。
 type nodeToUpdateStatusFor struct {
-	// nodeName contains the name of this node.
+	// nodeName 是节点名。
 	nodeName types.NodeName
 
-	// statusUpdateNeeded indicates that the value of the VolumesAttached field
-	// in the Node's Status API object should be updated. This should be set to
-	// true whenever a volume is added or deleted from
-	// volumesToReportAsAttached. It should be reset whenever the status is
-	// updated.
+	// statusUpdateNeeded 表示 Node Status API 对象中的 VolumesAttached 字段需要更新。
+	// 每当 volumesToReportAsAttached 增删卷时应置为 true，状态更新后重置。
 	statusUpdateNeeded bool
 
-	// volumesToReportAsAttached is the list of volumes that should be reported
-	// as attached in the Node's status (note that this may differ from the
-	// actual list of attached volumes since volumes should be removed from this
-	// list as soon a detach operation is considered, before the detach
-	// operation is triggered).
+	// volumesToReportAsAttached 是应在节点状态中上报为已挂接的卷列表。
+	// 注意：由于一旦决定卸载就会（在触发卸载前）把卷从列表中移除，
+	// 该列表可能与节点上实际挂接的卷列表不同。
 	volumesToReportAsAttached map[v1.UniqueVolumeName]v1.UniqueVolumeName
 }
 
+// MarkVolumeAsUncertain 将卷标记为不确定挂接：加入缓存但不确认挂接成功，等待后续核实。
 func (asw *actualStateOfWorld) MarkVolumeAsUncertain(
 	logger klog.Logger,
 	uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName) error {
@@ -283,6 +227,7 @@ func (asw *actualStateOfWorld) MarkVolumeAsUncertain(
 	return err
 }
 
+// MarkVolumeAsAttached 将卷标记为已确认挂接到指定节点。
 func (asw *actualStateOfWorld) MarkVolumeAsAttached(
 	logger klog.Logger,
 	uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName, devicePath string) error {
@@ -290,11 +235,13 @@ func (asw *actualStateOfWorld) MarkVolumeAsAttached(
 	return err
 }
 
+// MarkVolumeAsDetached 将卷标记为已从指定节点卸载。
 func (asw *actualStateOfWorld) MarkVolumeAsDetached(
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
 	asw.DeleteVolumeNode(volumeName, nodeName)
 }
 
+// RemoveVolumeFromReportAsAttached 将卷从需上报为已挂接的列表中移除。
 func (asw *actualStateOfWorld) RemoveVolumeFromReportAsAttached(
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) error {
 	asw.Lock()
@@ -302,6 +249,7 @@ func (asw *actualStateOfWorld) RemoveVolumeFromReportAsAttached(
 	return asw.removeVolumeFromReportAsAttached(volumeName, nodeName)
 }
 
+// AddVolumeToReportAsAttached 将卷加入需上报为已挂接的列表。
 func (asw *actualStateOfWorld) AddVolumeToReportAsAttached(
 	logger klog.Logger,
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
@@ -310,10 +258,12 @@ func (asw *actualStateOfWorld) AddVolumeToReportAsAttached(
 	asw.addVolumeToReportAsAttached(logger, volumeName, nodeName)
 }
 
+// AddVolumeNode 将卷/节点加入“实际世界状态”，必要时由 volumeSpec 生成唯一卷名。
 func (asw *actualStateOfWorld) AddVolumeNode(
 	logger klog.Logger,
 	uniqueName v1.UniqueVolumeName, volumeSpec *volume.Spec, nodeName types.NodeName, devicePath string, isAttached bool) (v1.UniqueVolumeName, error) {
 	volumeName := uniqueName
+	// 调用方未提供唯一卷名时，从卷规格推导，避免同名卷在不同插件下冲突。
 	if volumeName == "" {
 		if volumeSpec == nil {
 			return volumeName, fmt.Errorf("volumeSpec cannot be nil if volumeName is empty")
@@ -351,8 +301,8 @@ func (asw *actualStateOfWorld) AddVolumeNode(
 			devicePath:      devicePath,
 		}
 	} else {
-		// If volume object already exists, it indicates that the information would be out of date.
-		// Update the fields for volume object except the nodes attached to the volumes.
+		// 卷对象已存在说明其信息可能过期；只刷新设备路径和规格，
+		// 避免覆盖已有的挂接节点状态。
 		volumeObj.devicePath = devicePath
 		volumeObj.spec = volumeSpec
 		logger.V(2).Info("Volume is already added to attachedVolume list to node, update device path",
@@ -362,13 +312,14 @@ func (asw *actualStateOfWorld) AddVolumeNode(
 	}
 	node, nodeExists := volumeObj.nodesAttachedTo[nodeName]
 	if !nodeExists {
-		// Create object if it doesn't exist.
+		// 节点记录不存在时新建。
 		node = nodeAttachedTo{
 			nodeName:            nodeName,
 			attachedConfirmed:   isAttached,
 			detachRequestedTime: time.Time{},
 		}
-		// Assume mounted, until proven otherwise
+		// 默认假定卷已被节点挂载，直到收到明确的反证；
+		// 这样可避免在状态未明确前误判为可安全卸载。
 		if asw.inUseVolumes[nodeName] == nil {
 			asw.inUseVolumes[nodeName] = sets.New(volumeName)
 		} else {
@@ -385,12 +336,15 @@ func (asw *actualStateOfWorld) AddVolumeNode(
 	volumeObj.nodesAttachedTo[nodeName] = node
 	asw.attachedVolumes[volumeName] = volumeObj
 
+	// 只有确认挂接后才需上报到节点状态，避免把不确定状态的卷误报为已挂接。
 	if isAttached {
 		asw.addVolumeToReportAsAttached(logger, volumeName, nodeName)
 	}
 	return volumeName, nil
 }
 
+// SetVolumesMountedByNode 用给定列表覆盖节点已挂载卷的集合，
+// 以便判断哪些卷当前不可安全卸载。
 func (asw *actualStateOfWorld) SetVolumesMountedByNode(
 	logger klog.Logger, volumeNames []v1.UniqueVolumeName, nodeName types.NodeName) {
 	asw.Lock()
@@ -402,6 +356,7 @@ func (asw *actualStateOfWorld) SetVolumesMountedByNode(
 		"volumeNames", volumeNames)
 }
 
+// ResetDetachRequestTime 清除卷在该节点上的卸载请求时间。
 func (asw *actualStateOfWorld) ResetDetachRequestTime(
 	logger klog.Logger,
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
@@ -417,6 +372,8 @@ func (asw *actualStateOfWorld) ResetDetachRequestTime(
 	volumeObj.nodesAttachedTo[nodeName] = nodeObj
 }
 
+// SetDetachRequestTime 记录首次卸载请求的时间，并返回自该请求以来的时长；
+// 已有请求时不重置，以免反复请求导致等待时间被无限推迟。
 func (asw *actualStateOfWorld) SetDetachRequestTime(
 	logger klog.Logger,
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) (time.Duration, error) {
@@ -427,7 +384,7 @@ func (asw *actualStateOfWorld) SetDetachRequestTime(
 	if err != nil {
 		return 0, fmt.Errorf("failed to set detach request time with error: %v", err)
 	}
-	// If there is no previous detach request, set it to the current time
+	// 首次卸载请求才记录时间；后续重复请求沿用原时间，保证限速计时不被重置。
 	if nodeObj.detachRequestedTime.IsZero() {
 		nodeObj.detachRequestedTime = time.Now()
 		volumeObj.nodesAttachedTo[nodeName] = nodeObj
@@ -438,15 +395,15 @@ func (asw *actualStateOfWorld) SetDetachRequestTime(
 	return time.Since(nodeObj.detachRequestedTime), nil
 }
 
-// Get the volume and node object from actual state of world
-// This is an internal function and caller should acquire and release the lock
+// getNodeAndVolume 从“实际世界状态”中取出卷和节点对象；
+// 内部函数，调用方需自行加锁和解锁。
 //
-// Note that this returns disconnected objects, so if you change the volume object you must set it back with
-// `asw.attachedVolumes[volumeName]=volumeObj`.
+// 注意：返回的是脱离原 map 的副本，修改卷对象后必须写回
+// `asw.attachedVolumes[volumeName]=volumeObj`。
 //
-// If you change the node object you must use `volumeObj.nodesAttachedTo[nodeName] = nodeObj`
-// This is correct, because if volumeObj is empty this function returns an error, and nodesAttachedTo
-// map is a reference type, and thus mutating the copy changes the original map.
+// 修改节点对象时必须写回 `volumeObj.nodesAttachedTo[nodeName] = nodeObj`。
+// 这样做是正确的：卷对象为空时本函数会返回错误，且 nodesAttachedTo 是引用类型，
+// 修改副本中的 map 即修改原 map。
 func (asw *actualStateOfWorld) getNodeAndVolume(
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) (attachedVolume, nodeAttachedTo, error) {
 
@@ -463,8 +420,8 @@ func (asw *actualStateOfWorld) getNodeAndVolume(
 		nodeName)
 }
 
-// Remove the volumeName from the node's volumesToReportAsAttached list
-// This is an internal function and caller should acquire and release the lock
+// removeVolumeFromReportAsAttached 将卷从节点的 volumesToReportAsAttached 列表移除；
+// 内部函数，调用方需自行加锁和解锁。
 func (asw *actualStateOfWorld) removeVolumeFromReportAsAttached(
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) error {
 
@@ -473,6 +430,7 @@ func (asw *actualStateOfWorld) removeVolumeFromReportAsAttached(
 		_, nodeToUpdateVolumeExists :=
 			nodeToUpdate.volumesToReportAsAttached[volumeName]
 		if nodeToUpdateVolumeExists {
+			// 列表变化后必须标记待更新，节点状态更新器才会推送新状态。
 			nodeToUpdate.statusUpdateNeeded = true
 			delete(nodeToUpdate.volumesToReportAsAttached, volumeName)
 			asw.nodesToUpdateStatusFor[nodeName] = nodeToUpdate
@@ -485,18 +443,18 @@ func (asw *actualStateOfWorld) removeVolumeFromReportAsAttached(
 
 }
 
-// Add the volumeName to the node's volumesToReportAsAttached list
-// This is an internal function and caller should acquire and release the lock
+// addVolumeToReportAsAttached 将卷加入节点的 volumesToReportAsAttached 列表；
+// 内部函数，调用方需自行加锁和解锁。
 func (asw *actualStateOfWorld) addVolumeToReportAsAttached(
 	logger klog.Logger, volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
-	// In case the volume/node entry is no longer in attachedVolume list, skip the rest
+	// 卷/节点条目可能已被并发移除；此时无需再上报，直接跳过。
 	if _, _, err := asw.getNodeAndVolume(volumeName, nodeName); err != nil {
 		logger.V(4).Info("Volume is no longer attached to node", "node", klog.KRef("", string(nodeName)), "volumeName", volumeName)
 		return
 	}
 	nodeToUpdate, nodeToUpdateExists := asw.nodesToUpdateStatusFor[nodeName]
 	if !nodeToUpdateExists {
-		// Create object if it doesn't exist
+		// 节点首次需要上报状态时创建对应记录。
 		nodeToUpdate = nodeToUpdateStatusFor{
 			nodeName:                  nodeName,
 			statusUpdateNeeded:        true,
@@ -508,6 +466,7 @@ func (asw *actualStateOfWorld) addVolumeToReportAsAttached(
 	_, nodeToUpdateVolumeExists :=
 		nodeToUpdate.volumesToReportAsAttached[volumeName]
 	if !nodeToUpdateVolumeExists {
+		// 仅在新加入卷时标记待更新，避免重复写相同卷触发无谓的状态更新。
 		nodeToUpdate.statusUpdateNeeded = true
 		nodeToUpdate.volumesToReportAsAttached[volumeName] = volumeName
 		asw.nodesToUpdateStatusFor[nodeName] = nodeToUpdate
@@ -515,14 +474,14 @@ func (asw *actualStateOfWorld) addVolumeToReportAsAttached(
 	}
 }
 
-// Update the flag statusUpdateNeeded to indicate whether node status is already updated or
-// needs to be updated again by the node status updater.
-// If the specified node does not exist in the nodesToUpdateStatusFor list, log the error and return
-// This is an internal function and caller should acquire and release the lock
+// updateNodeStatusUpdateNeeded 更新 statusUpdateNeeded，
+// 标记节点状态是否已更新或仍需由节点状态更新器再次更新；
+// 内部函数，调用方需自行加锁和解锁。
+// 若指定节点不在 nodesToUpdateStatusFor 列表中，返回错误。
 func (asw *actualStateOfWorld) updateNodeStatusUpdateNeeded(nodeName types.NodeName, needed bool) error {
 	nodeToUpdate, nodeToUpdateExists := asw.nodesToUpdateStatusFor[nodeName]
 	if !nodeToUpdateExists {
-		// should not happen
+		// 理论上不应发生：只有需要上报状态的节点才会进入该 map。
 		errMsg := fmt.Sprintf("Failed to set statusUpdateNeeded to needed %t, because nodeName=%q does not exist",
 			needed, nodeName)
 		return errors.New(errMsg)
@@ -534,6 +493,7 @@ func (asw *actualStateOfWorld) updateNodeStatusUpdateNeeded(nodeName types.NodeN
 	return nil
 }
 
+// SetNodeStatusUpdateNeeded 标记指定节点的状态需要再次更新。
 func (asw *actualStateOfWorld) SetNodeStatusUpdateNeeded(logger klog.Logger, nodeName types.NodeName) {
 	asw.Lock()
 	defer asw.Unlock()
@@ -542,6 +502,7 @@ func (asw *actualStateOfWorld) SetNodeStatusUpdateNeeded(logger klog.Logger, nod
 	}
 }
 
+// DeleteVolumeNode 删除卷与节点的挂接关系；卷不再挂接任何节点时一并删除卷记录。
 func (asw *actualStateOfWorld) DeleteVolumeNode(
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) {
 	asw.Lock()
@@ -557,14 +518,17 @@ func (asw *actualStateOfWorld) DeleteVolumeNode(
 		delete(asw.attachedVolumes[volumeName].nodesAttachedTo, nodeName)
 	}
 
+	// 卷已不挂接任何节点，保留空壳记录没有意义，直接删除。
 	if len(volumeObj.nodesAttachedTo) == 0 {
 		delete(asw.attachedVolumes, volumeName)
 	}
 
-	// Remove volume from volumes to report as attached
+	// 卸载已开始时就不再上报该卷为已挂接，避免状态滞后。
 	asw.removeVolumeFromReportAsAttached(volumeName, nodeName)
 }
 
+// GetAttachState 返回卷/节点组合的挂接状态；未挂接返回 Detached，
+// 存在但未确认返回 Uncertain，已确认返回 Attached。
 func (asw *actualStateOfWorld) GetAttachState(
 	volumeName v1.UniqueVolumeName, nodeName types.NodeName) AttachState {
 	asw.RLock()
@@ -583,16 +547,19 @@ func (asw *actualStateOfWorld) GetAttachState(
 	return AttachStateDetached
 }
 
-// SetVolumeClaimSize sets size of the volume. But this function should not be used from attach_detach controller.
+// InitializeClaimSize 是空实现：attach/detach 控制器不设置卷声明大小，
+// 仅为满足 operationexecutor 接口要求。
 func (asw *actualStateOfWorld) InitializeClaimSize(logger klog.Logger, volumeName v1.UniqueVolumeName, claimSize resource.Quantity) {
 	logger.V(5).Info("no-op InitializeClaimSize call in attach-detach controller")
 }
 
+// GetClaimSize 返回零值：attach/detach 控制器不关心卷声明大小。
 func (asw *actualStateOfWorld) GetClaimSize(volumeName v1.UniqueVolumeName) resource.Quantity {
-	// not needed in attach-detach controller
+	// attach/detach 控制器不需要该信息。
 	return resource.Quantity{}
 }
 
+// GetAttachedVolumes 返回当前所有卷/节点挂接关系，包括未确认挂接的卷。
 func (asw *actualStateOfWorld) GetAttachedVolumes() []AttachedVolume {
 	asw.RLock()
 	defer asw.RUnlock()
@@ -609,6 +576,7 @@ func (asw *actualStateOfWorld) GetAttachedVolumes() []AttachedVolume {
 	return attachedVolumes
 }
 
+// GetAttachedVolumesForNode 返回指定节点上已挂接或可能挂接的所有卷。
 func (asw *actualStateOfWorld) GetAttachedVolumesForNode(
 	nodeName types.NodeName) []AttachedVolume {
 	asw.RLock()
@@ -627,6 +595,8 @@ func (asw *actualStateOfWorld) GetAttachedVolumesForNode(
 	return attachedVolumes
 }
 
+// GetAttachedVolumesPerNode 按节点分组返回已确认挂接的卷，
+// 供 reconciler 校验挂接关系是否仍然有效。
 func (asw *actualStateOfWorld) GetAttachedVolumesPerNode() map[types.NodeName][]operationexecutor.AttachedVolume {
 	asw.RLock()
 	defer asw.RUnlock()
@@ -634,6 +604,7 @@ func (asw *actualStateOfWorld) GetAttachedVolumesPerNode() map[types.NodeName][]
 	attachedVolumesPerNode := make(map[types.NodeName][]operationexecutor.AttachedVolume)
 	for _, volumeObj := range asw.attachedVolumes {
 		for nodeName, nodeObj := range volumeObj.nodesAttachedTo {
+			// 只返回存储已确认的挂接，不确定状态不参与校验。
 			if nodeObj.attachedConfirmed {
 				volumes := attachedVolumesPerNode[nodeName]
 				volumes = append(volumes, asw.getAttachedVolume(&volumeObj, &nodeObj).AttachedVolume)
@@ -645,6 +616,7 @@ func (asw *actualStateOfWorld) GetAttachedVolumesPerNode() map[types.NodeName][]
 	return attachedVolumesPerNode
 }
 
+// GetNodesForAttachedVolume 返回卷已确认挂接到的所有节点，供多重挂接检查使用。
 func (asw *actualStateOfWorld) GetNodesForAttachedVolume(volumeName v1.UniqueVolumeName) []types.NodeName {
 	asw.RLock()
 	defer asw.RUnlock()
@@ -656,6 +628,7 @@ func (asw *actualStateOfWorld) GetNodesForAttachedVolume(volumeName v1.UniqueVol
 
 	nodes := []types.NodeName{}
 	for nodeName, nodesAttached := range volumeObj.nodesAttachedTo {
+		// 只统计已确认挂接的节点，避免误判多重挂接。
 		if nodesAttached.attachedConfirmed {
 			nodes = append(nodes, nodeName)
 		}
@@ -663,6 +636,8 @@ func (asw *actualStateOfWorld) GetNodesForAttachedVolume(volumeName v1.UniqueVol
 	return nodes
 }
 
+// GetVolumesToReportAttached 返回各节点需上报的已挂接卷列表，
+// 并在读取后清除待更新标记，表示状态已交给更新器处理。
 func (asw *actualStateOfWorld) GetVolumesToReportAttached(logger klog.Logger) map[types.NodeName][]v1.AttachedVolume {
 	asw.Lock()
 	defer asw.Unlock()
@@ -672,9 +647,8 @@ func (asw *actualStateOfWorld) GetVolumesToReportAttached(logger klog.Logger) ma
 		if nodeToUpdateObj.statusUpdateNeeded {
 			volumesToReportAttached[nodeToUpdateObj.nodeName] = asw.getAttachedVolumeFromUpdateObject(nodeToUpdateObj.volumesToReportAsAttached)
 		}
-		// When GetVolumesToReportAttached is called by node status updater, the current status
-		// of this node will be updated, so set the flag statusUpdateNeeded to false indicating
-		// the current status is already updated.
+		// 节点状态更新器读取后立即清除待更新标记，
+		// 避免同一状态被重复推送；期间的新变化会重新置位。
 		if err := asw.updateNodeStatusUpdateNeeded(nodeName, false); err != nil {
 			logger.Error(err, "Failed to update statusUpdateNeeded field when getting volumes")
 		}
@@ -683,6 +657,8 @@ func (asw *actualStateOfWorld) GetVolumesToReportAttached(logger klog.Logger) ma
 	return volumesToReportAttached
 }
 
+// GetVolumesToReportAttachedForNode 返回单个节点需上报的已挂接卷列表，
+// 布尔值表示是否确有状态更新，读取后清除待更新标记。
 func (asw *actualStateOfWorld) GetVolumesToReportAttachedForNode(logger klog.Logger, nodeName types.NodeName) (bool, []v1.AttachedVolume) {
 	asw.Lock()
 	defer asw.Unlock()
@@ -696,9 +672,7 @@ func (asw *actualStateOfWorld) GetVolumesToReportAttachedForNode(logger klog.Log
 	}
 
 	volumesToReportAttached := asw.getAttachedVolumeFromUpdateObject(nodeToUpdateObj.volumesToReportAsAttached)
-	// When GetVolumesToReportAttached is called by node status updater, the current status
-	// of this node will be updated, so set the flag statusUpdateNeeded to false indicating
-	// the current status is already updated.
+	// 状态已被读取并即将更新，清除标记避免重复推送。
 	if err := asw.updateNodeStatusUpdateNeeded(nodeName, false); err != nil {
 		logger.Error(err, "Failed to update statusUpdateNeeded field when getting volumes")
 	}
@@ -706,10 +680,12 @@ func (asw *actualStateOfWorld) GetVolumesToReportAttachedForNode(logger klog.Log
 	return true, volumesToReportAttached
 }
 
+// GetNodesToUpdateStatusFor 返回所有需要更新状态的节点记录。
 func (asw *actualStateOfWorld) GetNodesToUpdateStatusFor() map[types.NodeName]nodeToUpdateStatusFor {
 	return asw.nodesToUpdateStatusFor
 }
 
+// getAttachedVolumeFromUpdateObject 将待上报卷名列表转换为带设备路径的 API 卷对象。
 func (asw *actualStateOfWorld) getAttachedVolumeFromUpdateObject(volumesToReportAsAttached map[v1.UniqueVolumeName]v1.UniqueVolumeName) []v1.AttachedVolume {
 	var attachedVolumes = make(
 		[]v1.AttachedVolume,
@@ -725,6 +701,8 @@ func (asw *actualStateOfWorld) getAttachedVolumeFromUpdateObject(volumesToReport
 	return attachedVolumes
 }
 
+// getAttachedVolume 根据内部缓存记录组装对外暴露的 AttachedVolume，
+// 挂载状态和卸载请求时间也一并带上。
 func (asw *actualStateOfWorld) getAttachedVolume(
 	attachedVolume *attachedVolume,
 	nodeAttachedTo *nodeAttachedTo) AttachedVolume {

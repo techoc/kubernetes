@@ -20,20 +20,15 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultDeviceTaintEvictionControllerConfiguration defaults a pointer to a
-// DeviceTaintEvictionControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultDeviceTaintEvictionControllerConfiguration 为
+// DeviceTaintEvictionControllerConfiguration 设置推荐默认值，值可能随 API 版本变化。
+// 该函数故意不注册为 scheme 中普通的 `SetDefaults_Foo`：默认值处理发生在转换过程中，
+// 强制套用会使用户无法为自己的嵌入配置选择不同默认值。需要时用调用方应在包装
+// 结构的 `SetDefaults_` 方法中显式调用。
 func RecommendedDefaultDeviceTaintEvictionControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.DeviceTaintEvictionControllerConfiguration) {
 	if obj.ConcurrentSyncs == 0 {
-		// This is a compromise between getting work done and not overwhelming the apiserver
-		// and pod informers. Integration testing with 100 workers modified pods so quickly
-		// that a watch in the integration test couldn't keep up:
+		// 取 8 是在处理速度与 apiserver/pod informer 负载之间的折中。
+		// 集成测试曾表明 100 个 worker 修改 Pod 太快，导致 watch 无法跟上：
 		//   cacher.go:855] cacher (pods): 100 objects queued in incoming channel.
 		//   cache_watcher.go:203] Forcing pods watcher close due to unresponsiveness: key: "/pods/", labels: "", fields: "". len(c.input) = 10, len(c.result) = 10, graceful = false
 		obj.ConcurrentSyncs = 8

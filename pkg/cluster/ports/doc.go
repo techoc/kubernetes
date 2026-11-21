@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package ports defines ports used by various pieces of the kubernetes
-// infrastructure.
+// Package ports 定义 Kubernetes 各基础设施组件使用的默认端口常量。
 package ports

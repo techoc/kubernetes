@@ -46,38 +46,35 @@ const (
 	vacNameKeyIndex = "volumeAttributesClassName"
 )
 
-// Controller is controller that adds and removes VACProtectionFinalizer
-// from VACs that are not used by any PV or PVC.
+// Controller 负责给未被任何 PV 或 PVC 使用的 VolumeAttributesClass（VAC）
+// 添加或移除 VACProtectionFinalizer，防止仍有对象引用的 VAC 被提前删除。
 //
-// This controller only use informers, so it may remove the finalizer too early.
+// 本控制器只依赖 informer 缓存，没有向 API Server 发起 Get/List 请求，因此存在
+// finalizer 被过早移除的窗口：informer 事件到达的先后顺序无法保证。
 //
-// One scenario is:
-//  1. There is a VolumeAttributesClass that is not used by any PVC. This
-//     VolumeAttributesClass is synced to all informers (external-provisioner,
-//     external-resizer, KCM)
+// 一种典型场景：
+//  1. 存在一个未被任何 PVC 使用的 VAC，它已同步到所有 informer
+//     （external-provisioner、external-resizer、KCM）
 //
-//  2. At the same time:
+//  2. 与此同时：
 //
-//       * User creates a PVC that uses this VolumeAttributesClass.
+//       * 用户创建了引用该 VAC 的 PVC。
 //
-//       * Another user deletes the VolumeAttributesClass.
+//       * 另一个用户删除了该 VAC。
 //
-//  3. VolumeAttributesClass deletion event with DeletionTimestamp reaches
-//     this controller. Because the PVC creation event has not yet
-//     reached KCM informers, the controller lets the VolumeAttributesClass
-//     to be deleted by removing the finalizer. PVC creation event reaches
-//     the external-provisioner, before VolumeAttributesClass update. The
-//     external-provisioner will try to provision a new volume using the
-//     VolumeAttributesClass that will get deleted soon.
+//  3. 带 DeletionTimestamp 的 VAC 删除事件先到达本控制器；由于 PVC 创建事件
+//     尚未同步到 KCM 的 informer，控制器误判 VAC 未被使用，移除 finalizer
+//     使其被删除。随后 PVC 创建事件先于 VAC 删除事件到达 external-provisioner，
+//     后者会尝试使用一个即将被删除的 VAC 来制备卷。
 //
-//       * If the external-provisioner gets the VolumeAttributesClass before
-//     deletion in the informer, the provisioning will succeed.
+//       * 如果 external-provisioner 在 informer 中先看到 VAC 再看到删除，
+//     制备会成功。
 //
-//       * Otherwise the external-prosivioner will fail the provisioning.
+//       * 反之，external-provisioner 会因找不到 VAC 而制备失败。
 //
-// Solving this scenario properly requires to Get/List requests to the API server,
-// which will cause performance issue in larger cluster similar to the existing
-// PVC protection controller - related issue https://github.com/kubernetes/kubernetes/issues/109282
+// 要彻底解决这一竞态，需要在处理时向 API Server 发起 Get/List 请求；但在大规模
+// 集群中这会带来性能问题，与既有 PVC 保护控制器面临的情况类似，详见
+// https://github.com/kubernetes/kubernetes/issues/109282
 
 type Controller struct {
 	client clientset.Interface
@@ -93,7 +90,9 @@ type Controller struct {
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// NewVACProtectionController returns a new *Controller.
+// NewVACProtectionController 构造控制器：为 VAC 注册增删事件处理，
+// 为 PV/PVC informer 建立按引用 VAC 名称的索引，并挂接 PV/PVC 的更新与删除事件。
+// 索引使 isBeingUsed 无需遍历所有 PV/PVC 即可判断某个 VAC 是否被引用。
 func NewVACProtectionController(logger klog.Logger,
 	client clientset.Interface,
 	pvcInformer coreinformers.PersistentVolumeClaimInformer,
@@ -207,7 +206,8 @@ func NewVACProtectionController(logger klog.Logger,
 	return c, nil
 }
 
-// Run runs the controller goroutines.
+// Run 等待三个 informer 同步完成后启动 workers 个 worker goroutine，
+// 并阻塞直到 ctx 被取消；退出时先关闭队列，再等待所有 worker 结束。
 func (c *Controller) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
@@ -233,12 +233,15 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// runWorker 循环调用 processNextWorkItem 处理队列，直到队列关闭（processNextWorkItem 返回 false）。
 func (c *Controller) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
-// processNextWorkItem deals with one pvcKey off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 从队列中取出一个 VAC 名称并调用 processVAC 处理。
+// 成功时调用 Forget 清除失败计数；失败时记录错误并按限速重新入队，保证最终一致。
+// 队列关闭后返回 false，worker 随之退出。
 func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	vacKey, quit := c.queue.Get()
 	if quit {
@@ -258,6 +261,9 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// processVAC 处理单个 VAC：待删除候选对象先检查是否仍被引用，未被引用则移除
+// finalizer 允许删除；非删除对象若缺少 finalizer 则补上，防止后续被误删。
+// VAC 已从缓存中消失时说明已被删除，直接忽略即可。
 func (c *Controller) processVAC(ctx context.Context, vacName string) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Processing VAC", "VAC", klog.KRef("", vacName))
@@ -276,8 +282,8 @@ func (c *Controller) processVAC(ctx context.Context, vacName string) error {
 	}
 
 	if protectionutil.IsDeletionCandidate(vac, volumeutil.VACProtectionFinalizer) {
-		// VAC should be deleted. Check if it's used and remove finalizer if
-		// it's not.
+		// VAC 正在等待删除：只有确认没有 PV/PVC 引用后才能放行，
+		// 否则保留 finalizer 阻止删除。
 		isUsed := c.isBeingUsed(ctx, vac)
 		if !isUsed {
 			return c.removeFinalizer(ctx, vac)
@@ -292,6 +298,8 @@ func (c *Controller) processVAC(ctx context.Context, vacName string) error {
 	return nil
 }
 
+// addFinalizer 在 VAC 的副本上追加保护 finalizer 并更新回 API Server。
+// 必须在副本上修改，避免写回 informer 缓存中的共享对象。
 func (c *Controller) addFinalizer(ctx context.Context, vac *storagev1.VolumeAttributesClass) error {
 	vacClone := vac.DeepCopy()
 	vacClone.ObjectMeta.Finalizers = append(vacClone.ObjectMeta.Finalizers, volumeutil.VACProtectionFinalizer)
@@ -305,6 +313,8 @@ func (c *Controller) addFinalizer(ctx context.Context, vac *storagev1.VolumeAttr
 	return nil
 }
 
+// removeFinalizer 从 VAC 的副本上移除保护 finalizer 并更新回 API Server，
+// 使 Kubernetes 能够真正完成删除。使用副本的原因同 addFinalizer。
 func (c *Controller) removeFinalizer(ctx context.Context, vac *storagev1.VolumeAttributesClass) error {
 	vacClone := vac.DeepCopy()
 	vacClone.ObjectMeta.Finalizers = slice.RemoveString(vacClone.ObjectMeta.Finalizers, volumeutil.VACProtectionFinalizer, nil)
@@ -318,6 +328,9 @@ func (c *Controller) removeFinalizer(ctx context.Context, vac *storagev1.VolumeA
 	return nil
 }
 
+// isBeingUsed 通过 informer 索引查找引用该 VAC 的 PV 和 PVC。
+// 查询出错时保守地返回 true：宁可保留 finalizer 让删除卡住，也不能误删
+// 仍被引用的 VAC；索引是缓存视图，所以这一判断可能滞后于真实状态。
 func (c *Controller) isBeingUsed(ctx context.Context, vac *storagev1.VolumeAttributesClass) bool {
 	logger := klog.FromContext(ctx)
 
@@ -341,7 +354,8 @@ func (c *Controller) isBeingUsed(ctx context.Context, vac *storagev1.VolumeAttri
 	return false
 }
 
-// pvAddedUpdated reacts to vac added/updated events
+// vacAddedUpdated 响应 VAC 的新增与更新事件：只在需要添加或移除 finalizer
+// 时才入队，避免处理无关的状态变化。
 func (c *Controller) vacAddedUpdated(logger klog.Logger, obj interface{}) {
 	vac, ok := obj.(*storagev1.VolumeAttributesClass)
 	if !ok {
@@ -355,7 +369,8 @@ func (c *Controller) vacAddedUpdated(logger klog.Logger, obj interface{}) {
 	}
 }
 
-// pvcDeleted reacts to pvc deleted events
+// pvcDeleted 响应 PVC 删除事件：把该 PVC 引用过的所有 VAC 入队，
+// 使原本被保护而等待删除的 VAC 有机会移除 finalizer。
 func (c *Controller) pvcDeleted(logger klog.Logger, obj interface{}) {
 	pvc, ok := obj.(*v1.PersistentVolumeClaim)
 	if !ok {
@@ -369,7 +384,9 @@ func (c *Controller) pvcDeleted(logger klog.Logger, obj interface{}) {
 	}
 }
 
-// pvcUpdated reacts to pvc updated events
+// pvcUpdated 响应 PVC 更新事件：只把从旧对象中不再被引用、且新对象中也未引用
+// 的 VAC 入队。取“旧减新”的差集是因为只有引用减少才可能释放 VAC；
+// 新增引用由 VAC 自身的添加 finalizer 流程处理。
 func (c *Controller) pvcUpdated(logger klog.Logger, old, new interface{}) {
 	oldPVC, ok := old.(*v1.PersistentVolumeClaim)
 	if !ok {
@@ -390,7 +407,8 @@ func (c *Controller) pvcUpdated(logger klog.Logger, old, new interface{}) {
 	}
 }
 
-// pvUpdated reacts to pv updated events
+// pvUpdated 响应 PV 更新事件：把从旧对象到新对象之间不再被引用的 VAC 入队，
+// 与 pvcUpdated 同理，仅引用减少才需要重新检查 finalizer。
 func (c *Controller) pvUpdated(logger klog.Logger, old, new interface{}) {
 	oldPV, ok := old.(*v1.PersistentVolume)
 	if !ok {
@@ -410,7 +428,8 @@ func (c *Controller) pvUpdated(logger klog.Logger, old, new interface{}) {
 	}
 }
 
-// pvDeleted reacts to pv deleted events
+// pvDeleted 响应 PV 删除事件：把被删 PV 引用过的所有 VAC 入队，
+// 以便释放那些因该 PV 存在而保留的 finalizer。
 func (c *Controller) pvDeleted(logger klog.Logger, obj interface{}) {
 	pv, ok := obj.(*v1.PersistentVolume)
 	if !ok {
@@ -424,7 +443,9 @@ func (c *Controller) pvDeleted(logger klog.Logger, obj interface{}) {
 	}
 }
 
-// getPVCReferencedVACNames returns a list of VAC names that are referenced by the PVC.
+// getPVCReferencedVACNames 收集 PVC 的 spec、status 当前值和 modify 目标值中
+// 出现的所有 VAC 名称并用 set 去重：一个 PVC 可能在不同阶段同时引用多个 VAC，
+// 任一引用都意味着对应 VAC 不能被删除。
 func getPVCReferencedVACNames(pvc *v1.PersistentVolumeClaim) []string {
 	keys := sets.New[string]()
 	vacName := ptr.Deref(pvc.Spec.VolumeAttributesClassName, "")
@@ -442,7 +463,8 @@ func getPVCReferencedVACNames(pvc *v1.PersistentVolumeClaim) []string {
 	return keys.UnsortedList()
 }
 
-// getPVReferencedVACNames returns a list of VAC names that are referenced by the PV.
+// getPVReferencedVACNames 返回 PV 的 spec 中引用的 VAC 名称；
+// PV 只会引用一个 VAC，所以这里无需像 PVC 那样收集三处字段。
 func getPVReferencedVACNames(pv *v1.PersistentVolume) []string {
 	result := []string{}
 	vacName := ptr.Deref(pv.Spec.VolumeAttributesClassName, "")

@@ -27,6 +27,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestExecute 验证立即触发的工作项都会被处理。
+// 使用工作队列的同步执行语义：每个 AddWork 对应一次回调，计数应为工作项数量。
 func TestExecute(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	testVal := int32(0)
@@ -50,6 +52,9 @@ func TestExecute(t *testing.T) {
 	}
 }
 
+// TestExecuteDelayed 验证延迟工作项的去重语义：
+// 对相同 key 重复添加不会累积多次执行，时间推进后每个 key 只触发一次回调。
+// 使用假时钟避免测试真的等待 10 秒。
 func TestExecuteDelayed(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	testVal := int32(0)
@@ -82,6 +87,8 @@ func TestExecuteDelayed(t *testing.T) {
 	}
 }
 
+// TestCancel 验证取消工作项后该 key 不再触发回调。
+// 取消必须在假时钟推进之前完成，才能证明是取消而非超时导致的跳过。
 func TestCancel(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	testVal := int32(0)
@@ -116,6 +123,8 @@ func TestCancel(t *testing.T) {
 	}
 }
 
+// TestCancelAndRead 验证被取消的 key 再次添加后可以重新生效：
+// 取消只影响当时排队的工作项，不应永久屏蔽相同 key 的后续调度。
 func TestCancelAndRead(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	testVal := int32(0)

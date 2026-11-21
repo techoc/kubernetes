@@ -18,4 +18,7 @@ limitations under the License.
 // +k8s:conversion-gen=k8s.io/kubernetes/pkg/controller/volume/ephemeral/config
 // +k8s:conversion-gen-external-types=k8s.io/kube-controller-manager/config/v1alpha1
 
+// Package v1alpha1 包含临时卷（ephemeral volume）控制器的 v1alpha1 配置版本。
+// 其转换目标为内部版本 pkg/controller/volume/ephemeral/config，外部类型来自
+// kube-controller-manager 的 config/v1alpha1；转换与深拷贝代码均由生成器产生。
 package v1alpha1

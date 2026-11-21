@@ -20,25 +20,25 @@ import (
 	"time"
 )
 
-// Timeout manages the resync loop timing for a given node sync operation. The
-// timeout changes depending on whether or not there was an error reported for
-// the operation. Consecutive errors will result in exponential backoff to a
-// maxBackoff timeout.
+// Timeout 管理某次节点同步操作的重新同步（resync）循环间隔。
+// 间隔随操作是否报错而调整：连续出错时按指数退避增长，直至 MaxBackoff 上限；
+// 成功一次后重置为常规 Resync 间隔。
 type Timeout struct {
-	// Resync is the default timeout duration when there are no errors.
+	// Resync 是无错误时的默认超时（重新同步）间隔。
 	Resync time.Duration
-	// MaxBackoff is the maximum timeout when in a error backoff state.
+	// MaxBackoff 是处于错误退避状态时的最大超时间隔。
 	MaxBackoff time.Duration
-	// InitialRetry is the initial retry interval when an error is reported.
+	// InitialRetry 是首次报告错误后的初始重试间隔。
 	InitialRetry time.Duration
 
-	// errs is the count of consecutive errors that have occurred.
+	// errs 记录连续发生的错误次数，成功时清零。
 	errs int
-	// current is the current backoff timeout.
+	// current 保存当前的退避超时间隔。
 	current time.Duration
 }
 
-// Update the timeout with the current error state.
+// Update 根据本次操作结果更新超时状态：成功则清零错误次数并恢复 Resync 间隔；
+// 失败则首次使用 InitialRetry，之后每次翻倍，直到达到 MaxBackoff。
 func (b *Timeout) Update(ok bool) {
 	if ok {
 		b.errs = 0
@@ -47,18 +47,22 @@ func (b *Timeout) Update(ok bool) {
 	}
 
 	b.errs++
+	// 第一次出错使用较短的 InitialRetry，避免长时间等待；
+	// 之后每次失败翻倍退避，防止在持续故障时疯狂重试压制 API server。
 	if b.errs == 1 {
 		b.current = b.InitialRetry
 		return
 	}
 
 	b.current *= 2
+	// 退避上限封顶，保证故障恢复后不会无限期延迟下一次同步。
 	if b.current >= b.MaxBackoff {
 		b.current = b.MaxBackoff
 	}
 }
 
-// Next returns the next operation timeout given the disposition of err.
+// Next 返回下一次操作应使用的超时间隔：无错误时用 Resync，
+// 处于退避状态时返回当前计算出的 current。
 func (b *Timeout) Next() time.Duration {
 	if b.errs == 0 {
 		return b.Resync

@@ -39,6 +39,7 @@ const (
 	metricServerDefaultMetricWindow = time.Minute
 )
 
+// NewRESTMetricsClient 将三类指标客户端聚合为一个 MetricsClient。
 func NewRESTMetricsClient(resourceClient resourceclient.PodMetricsesGetter, customClient customclient.CustomMetricsClient, externalClient externalclient.ExternalMetricsClient) MetricsClient {
 	return &restMetricsClient{
 		&resourceMetricsClient{resourceClient},
@@ -47,23 +48,19 @@ func NewRESTMetricsClient(resourceClient resourceclient.PodMetricsesGetter, cust
 	}
 }
 
-// restMetricsClient is a client which supports fetching
-// metrics from the resource metrics API, the
-// custom metrics API and the external metrics API.
+// restMetricsClient 聚合资源、自定义与外部指标 API 的查询能力。
 type restMetricsClient struct {
 	*resourceMetricsClient
 	*customMetricsClient
 	*externalMetricsClient
 }
 
-// resourceMetricsClient implements the resource-metrics-related parts of MetricsClient,
-// using data from the resource metrics API.
+// resourceMetricsClient 通过资源指标 API 实现 MetricsClient 的资源指标部分。
 type resourceMetricsClient struct {
 	client resourceclient.PodMetricsesGetter
 }
 
-// GetResourceMetric gets the given resource metric (and an associated oldest timestamp)
-// for all pods matching the specified selector in the given namespace
+// GetResourceMetric 返回命名空间内匹配 selector 的所有 Pod 的指定资源指标及时间戳。
 func (c *resourceMetricsClient) GetResourceMetric(ctx context.Context, resource v1.ResourceName, namespace string, selector labels.Selector, container string) (PodMetricsInfo, time.Time, error) {
 	metrics, err := c.client.PodMetricses(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector.String()})
 	if err != nil {
@@ -83,6 +80,7 @@ func (c *resourceMetricsClient) GetResourceMetric(ctx context.Context, resource 
 	return res, timestamp, nil
 }
 
+// getContainerMetrics 提取各 Pod 中指定容器的指标；缺少该容器则忽略并记日志。
 func getContainerMetrics(ctx context.Context, rawMetrics []metricsapi.PodMetrics, resource v1.ResourceName, container string) PodMetricsInfo {
 	res := make(PodMetricsInfo, len(rawMetrics))
 	for _, m := range rawMetrics {
@@ -107,6 +105,7 @@ func getContainerMetrics(ctx context.Context, rawMetrics []metricsapi.PodMetrics
 	return res
 }
 
+// getPodMetrics 汇总 Pod 各容器的指标；任一容器缺失则丢弃该 Pod 的数据。
 func getPodMetrics(ctx context.Context, rawMetrics []metricsapi.PodMetrics, resource v1.ResourceName) PodMetricsInfo {
 	res := make(PodMetricsInfo, len(rawMetrics))
 	for _, m := range rawMetrics {
@@ -132,14 +131,12 @@ func getPodMetrics(ctx context.Context, rawMetrics []metricsapi.PodMetrics, reso
 	return res
 }
 
-// customMetricsClient implements the custom-metrics-related parts of MetricsClient,
-// using data from the custom metrics API.
+// customMetricsClient 通过自定义指标 API 实现 MetricsClient 的自定义指标部分。
 type customMetricsClient struct {
 	client customclient.CustomMetricsClient
 }
 
-// GetRawMetric gets the given metric (and an associated oldest timestamp)
-// for all pods matching the specified selector in the given namespace
+// GetRawMetric 返回命名空间内匹配 selector 的所有 Pod 的指定自定义指标及时间戳。
 func (c *customMetricsClient) GetRawMetric(metricName string, namespace string, selector labels.Selector, metricSelector labels.Selector) (PodMetricsInfo, time.Time, error) {
 	metrics, err := c.client.NamespacedMetrics(namespace).GetForObjects(schema.GroupKind{Kind: "Pod"}, selector, metricName, metricSelector)
 	if err != nil {
@@ -168,16 +165,13 @@ func (c *customMetricsClient) GetRawMetric(metricName string, namespace string, 
 	return res, timestamp, nil
 }
 
-// GetObjectMetric gets the given metric (and an associated timestamp) for the given
-// object in the given namespace
+// GetObjectMetric 返回指定对象的自定义指标值及时间戳。
 func (c *customMetricsClient) GetObjectMetric(metricName string, namespace string, objectRef *autoscaling.CrossVersionObjectReference, metricSelector labels.Selector) (int64, time.Time, error) {
 	gvk := schema.FromAPIVersionAndKind(objectRef.APIVersion, objectRef.Kind)
 	var metricValue *customapi.MetricValue
 	var err error
 	if gvk.Kind == "Namespace" && gvk.Group == "" {
-		// handle namespace separately
-		// NB: we ignore namespace name here, since CrossVersionObjectReference isn't
-		// supposed to allow you to escape your namespace
+		// Namespace 需走根作用域接口；此处忽略引用中的名称，防止越出当前命名空间。
 		metricValue, err = c.client.RootScopedMetrics().GetForObject(gvk.GroupKind(), namespace, metricName, metricSelector)
 	} else {
 		metricValue, err = c.client.NamespacedMetrics(namespace).GetForObject(gvk.GroupKind(), objectRef.Name, metricName, metricSelector)
@@ -190,14 +184,12 @@ func (c *customMetricsClient) GetObjectMetric(metricName string, namespace strin
 	return metricValue.Value.MilliValue(), metricValue.Timestamp.Time, nil
 }
 
-// externalMetricsClient implements the external metrics related parts of MetricsClient,
-// using data from the external metrics API.
+// externalMetricsClient 通过外部指标 API 实现 MetricsClient 的外部指标部分。
 type externalMetricsClient struct {
 	client externalclient.ExternalMetricsClient
 }
 
-// GetExternalMetric gets all the values of a given external metric
-// that match the specified selector.
+// GetExternalMetric 返回匹配 selector 的指定外部指标的所有值及时间戳。
 func (c *externalMetricsClient) GetExternalMetric(metricName, namespace string, selector labels.Selector) ([]int64, time.Time, error) {
 	metrics, err := c.client.NamespacedMetrics(namespace).List(metricName, selector)
 	if err != nil {

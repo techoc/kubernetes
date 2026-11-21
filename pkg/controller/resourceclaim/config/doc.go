@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package config 定义 ResourceClaim 控制器的内部配置类型。
+//
+// 内部类型供控制器运行时直接使用，外部版本（v1alpha1）定义在
+// kube-controller-manager/config/v1alpha1，二者通过自动生成的转换函数互转。
+//
 // +k8s:deepcopy-gen=package
 
 package config

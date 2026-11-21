@@ -32,18 +32,23 @@ const (
 	givenTokenSecret = "tokenSecret"
 )
 
+// timeString 以当前时间为基准加上 delta，生成 RFC3339 格式的字符串，
+// 供 token 过期时间等测试字段使用；delta 为负数即表示已过期。
 func timeString(delta time.Duration) string {
 	return time.Now().Add(delta).Format(time.RFC3339)
 }
 
+// TestValidateSecretForSigning 以表驱动方式验证 validateSecretForSigning 对
+// 签名 token 的检查：覆盖无过期时间、已过期、格式错误以及 ID、secret、签名位缺失等情况。
 func TestValidateSecretForSigning(t *testing.T) {
+	// 表驱动用例：每行只改动一个字段，便于定位是哪一项校验拒绝了 token。
 	cases := []struct {
-		description string
-		tokenID     string
-		tokenSecret string
-		okToSign    string
-		expiration  string
-		valid       bool
+		description string // 用例名称
+		tokenID     string // token ID
+		tokenSecret string // token secret
+		okToSign    string // 是否允许签名
+		expiration  string // 过期时间
+		valid       bool   // 期望是否校验通过
 	}{
 		{
 			"Signing token with no exp",
@@ -82,6 +87,7 @@ func TestValidateSecretForSigning(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.description, func(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
+			// 用固定的资源版本和名称构造合法的 Secret，只让待测字段随用例变化。
 			secret := &v1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace:       metav1.NamespaceSystem,
@@ -101,6 +107,7 @@ func TestValidateSecretForSigning(t *testing.T) {
 			if ok != tc.valid {
 				t.Errorf("Unexpected validation failure. Expected %v, got %v", tc.valid, ok)
 			}
+			// 只有校验通过时才检查返回值；失败用例无需关心解析出的 ID 和 secret。
 			if ok {
 				if tokenID != tc.tokenID {
 					t.Errorf("Unexpected Token ID. Expected %q, got %q", givenTokenID, tokenID)
@@ -114,8 +121,11 @@ func TestValidateSecretForSigning(t *testing.T) {
 
 }
 
+// TestValidateSecret 验证合法且带签名许可的 Secret 能通过校验，
+// 并确认返回的 token ID 与 secret 与 Secret 中存储的值一致。
 func TestValidateSecret(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
+	// 构造包含完整字段的合法 Secret，作为正向校验的基准用例。
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:       metav1.NamespaceSystem,
@@ -142,8 +152,11 @@ func TestValidateSecret(t *testing.T) {
 	}
 }
 
+// TestBadSecretName 验证 Secret 名称缺少 bootstrap token 前缀时校验失败，
+// 防止任意命名的 Secret 被当作引导 token 使用。
 func TestBadSecretName(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
+	// 名称直接使用 token ID，刻意省略 bootstrap token 前缀。
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:       metav1.NamespaceSystem,
@@ -164,8 +177,11 @@ func TestBadSecretName(t *testing.T) {
 	}
 }
 
+// TestMismatchSecretName 验证 Secret 名称中的 token ID 与数据字段里的 ID
+// 不一致时校验失败，避免名称与内容被篡改后仍能通过校验。
 func TestMismatchSecretName(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
+	// 名称使用 givenTokenID2，数据字段却使用 givenTokenID，制造不一致。
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:       metav1.NamespaceSystem,

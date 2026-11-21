@@ -23,25 +23,21 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultNodeLifecycleControllerConfiguration defaults a pointer to a
-// NodeLifecycleControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultNodeLifecycleControllerConfiguration 为
+// NodeLifecycleControllerConfiguration 指针设置推荐的默认值；这些默认值可能随 API 版本变化。
+// 该函数刻意没有作为普通的 `SetDefaults_Foo` 注册到 scheme 中：
+// scheme 的 defaulting 发生在 conversion 过程中，消费方无法方便地选择退出，
+// 强制使用这些默认值会给嵌套自己的配置带来问题。
+// 因此需要这些默认值时，应在自己的包装结构体的 `SetDefaults_` 方法中显式调用本函数。
 func RecommendedDefaultNodeLifecycleControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.NodeLifecycleControllerConfiguration) {
 	zero := metav1.Duration{}
 	if obj.PodEvictionTimeout == zero {
 		obj.PodEvictionTimeout = metav1.Duration{Duration: 5 * time.Minute}
 	}
-	// NodeMonitorGracePeriod is set to a default value of 50 seconds.
-	// This value should be greater than the sum of HTTP2_PING_TIMEOUT_SECONDS (30s)
-	// and HTTP2_READ_IDLE_TIMEOUT_SECONDS (15s) from the http2 health check
-	// to ensure that the server has adequate time to handle slow or idle connections
-	// properly before marking a node as unhealthy.
+	// NodeMonitorGracePeriod 默认 50 秒。
+	// 该值必须大于 http2 健康检查中 HTTP2_PING_TIMEOUT_SECONDS（30s）与
+	// HTTP2_READ_IDLE_TIMEOUT_SECONDS（15s）之和，以确保 server 有足够时间
+	// 正确处理慢连接或空闲连接，再判定节点不健康。
 	if obj.NodeMonitorGracePeriod == zero {
 		obj.NodeMonitorGracePeriod = metav1.Duration{Duration: 50 * time.Second}
 	}

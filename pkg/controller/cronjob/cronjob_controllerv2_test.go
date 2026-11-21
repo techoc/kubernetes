@@ -43,6 +43,9 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
+// 测试用固定参数：shortDead/mediumDead/longDead 分别覆盖不同时长的截止阈值，
+// noDead 用负数作哨兵，表示不设置 StartingDeadlineSeconds。
+// errorSchedule 与 errorTimeZone 故意非法，用于验证解析失败只产生警告而不崩溃。
 var (
 	shortDead  int64 = 10
 	mediumDead int64 = 2 * 60 * 60
@@ -50,15 +53,18 @@ var (
 	noDead     int64 = -12345
 
 	errorSchedule = "obvious error schedule"
-	// schedule is hourly on the hour
+	// 每小时整点触发一次的调度表达式。
 	onTheHour = "0 * * * ?"
 	everyHour = "@every 1h"
 
+	// 非法时区名，用于触发时区解析失败。
 	errorTimeZone = "bad timezone"
-	newYork       = "America/New_York"
+	// IANA 时区标识，用于验证时区调度场景。
+	newYork = "America/New_York"
 )
 
-// returns a cronJob with some fields filled in.
+// cronJob 构造一个仅填充关键字段的 CronJob fixture：
+// 创建时间设为整点前，便于覆盖“首次调度时间已到/未到”两类分支。
 func cronJob() batchv1.CronJob {
 	return batchv1.CronJob{
 		ObjectMeta: metav1.ObjectMeta{
@@ -81,6 +87,8 @@ func cronJob() batchv1.CronJob {
 	}
 }
 
+// jobSpec 返回最小可用的 JobSpec fixture：并行度与完成数均为 1，
+// 镜像用占位值 foo/bar，测试只关心调度逻辑而非 Pod 内容。
 func jobSpec() batchv1.JobSpec {
 	one := int32(1)
 	return batchv1.JobSpec{
@@ -101,6 +109,8 @@ func jobSpec() batchv1.JobSpec {
 	}
 }
 
+// justASecondBeforeTheHour 构造用于调度测试的时间点。
+// justASecondBeforeTheHour 返回 09:59:59Z，用于验证“距整点仅差一秒”的边界。
 func justASecondBeforeTheHour() time.Time {
 	T1, err := time.Parse(time.RFC3339, "2016-05-19T09:59:59Z")
 	if err != nil {
@@ -109,6 +119,9 @@ func justASecondBeforeTheHour() time.Time {
 	return T1
 }
 
+// justAfterThePriorHour 构造用于调度测试的时间点。
+// justAfterThePriorHour 返回 09:01:00Z，即上一个整点刚过，
+// 用作“上次调度之后”的固定参照时间。
 func justAfterThePriorHour() time.Time {
 	T1, err := time.Parse(time.RFC3339, "2016-05-19T09:01:00Z")
 	if err != nil {
@@ -117,6 +130,9 @@ func justAfterThePriorHour() time.Time {
 	return T1
 }
 
+// justBeforeThePriorHour 构造用于调度测试的时间点。
+// justBeforeThePriorHour 返回 08:59:00Z，即上一个整点之前，
+// 用作需要更早创建时间时的固定参照。
 func justBeforeThePriorHour() time.Time {
 	T1, err := time.Parse(time.RFC3339, "2016-05-19T08:59:00Z")
 	if err != nil {
@@ -125,6 +141,9 @@ func justBeforeThePriorHour() time.Time {
 	return T1
 }
 
+// justAfterTheHour 构造用于调度测试的时间点。
+// justAfterTheHour 返回 10:01:00Z 的指针，表示当前整点刚过，
+// 返回指针便于直接赋给 LastScheduleTime 等指针字段。
 func justAfterTheHour() *time.Time {
 	T1, err := time.Parse(time.RFC3339, "2016-05-19T10:01:00Z")
 	if err != nil {
@@ -133,6 +152,9 @@ func justAfterTheHour() *time.Time {
 	return &T1
 }
 
+// justAfterTheHourInZone 构造用于调度测试的时间点。
+// justAfterTheHourInZone 按给定时区解析 10:01:00Z 对应的绝对时刻，
+// 用于验证不同时区下“整点刚过”的判定一致。
 func justAfterTheHourInZone(tz string) time.Time {
 	location, err := time.LoadLocation(tz)
 	if err != nil {
@@ -146,6 +168,9 @@ func justAfterTheHourInZone(tz string) time.Time {
 	return T1
 }
 
+// justBeforeTheHour 构造用于调度测试的时间点。
+// justBeforeTheHour 返回 09:59:00Z，即整点前一分钟，
+// 用作“尚未到调度时间”的默认 now。
 func justBeforeTheHour() time.Time {
 	T1, err := time.Parse(time.RFC3339, "2016-05-19T09:59:00Z")
 	if err != nil {
@@ -154,6 +179,8 @@ func justBeforeTheHour() time.Time {
 	return T1
 }
 
+// justBeforeTheNextHour 构造用于调度测试的时间点。
+// justBeforeTheNextHour 返回 10:59:00Z，用于构造跨越整点的调度边界场景。
 func justBeforeTheNextHour() time.Time {
 	T1, err := time.Parse(time.RFC3339, "2016-05-19T10:59:00Z")
 	if err != nil {
@@ -162,6 +189,9 @@ func justBeforeTheNextHour() time.Time {
 	return T1
 }
 
+// weekAfterTheHour 构造用于调度测试的时间点。
+// weekAfterTheHour 返回一周后的 10:00:00Z，
+// 用于模拟长期未调度（overdue）且超过截止时间的场景。
 func weekAfterTheHour() time.Time {
 	T1, err := time.Parse(time.RFC3339, "2016-05-26T10:00:00Z")
 	if err != nil {
@@ -170,8 +200,11 @@ func weekAfterTheHour() time.Time {
 	return T1
 }
 
+// TestControllerV2SyncCronJob 表驱动验证 syncCronJob 的核心行为：
+// 非法 schedule/时区只告警、未到点按间隔重新入队、到点创建 Job（含三种并发策略）、
+// 已完成任务的历史清理、命名空间终止时跳过创建，以及 LastSuccessfulTime 的写入。
 func TestControllerV2SyncCronJob(t *testing.T) {
-	// Check expectations on deadline parameters
+	// 先确认三个 deadline 常量落在预期量级，否则后续基于它们的断言失去意义。
 	if shortDead/60/60 >= 1 {
 		t.Errorf("shortDead should be less than one hour")
 	}
@@ -185,7 +218,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 	}
 
 	testCases := map[string]struct {
-		// cj spec
+		// CronJob 的 spec 字段
 		concurrencyPolicy          batchv1.ConcurrencyPolicy
 		suspend                    bool
 		schedule                   string
@@ -193,11 +226,11 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 		deadline                   int64
 		successfulJobsHistoryLimit *int32
 
-		// cj status
+		// CronJob 的 status 字段
 		ranPreviously bool
 		stillActive   bool
 
-		// environment
+		// 环境与外部依赖（fake 客户端返回的错误、当前时间等）
 		cronjobCreationTime time.Time
 		jobCreationTime     time.Time
 		lastScheduleTime    time.Time
@@ -205,7 +238,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 		jobCreateError      error
 		jobGetErr           error
 
-		// expectations
+		// 期望结果（创建/删除、事件数、重排延迟等）
 		expectCreate               bool
 		expectDelete               bool
 		expectCompleted            bool
@@ -696,8 +729,8 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 			jobPresentInCJActiveStatus: true,
 		},
 
-		// Controller should fail to schedule these, as there are too many missed starting times
-		// and either no deadline or a too long deadline.
+		// 这些场景中错过的调度次数过多，且没有 deadline 或 deadline 太长，
+		// 因此控制器应当放弃调度。
 		"prev ran but done, long overdue, not past deadline, A": {
 			concurrencyPolicy:          "Allow",
 			schedule:                   onTheHour,
@@ -888,8 +921,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 			expectCompleted:            true,
 		},
 
-		// Tests for time skews
-		// the controller sees job is created, takes no actions
+		// 时钟回拨场景：控制器看到 Job 已创建，因此不采取任何动作。
 		"this ran but done, time drifted back, F": {
 			concurrencyPolicy:       "Forbid",
 			schedule:                onTheHour,
@@ -903,7 +935,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 			expectUpdateStatus:      true,
 		},
 
-		// Tests for slow job lister
+		// 模拟 Job lister 滞后：Job 已创建但暂时查不到。
 		"this started but went missing, not past deadline, A": {
 			concurrencyPolicy:          "Allow",
 			schedule:                   onTheHour,
@@ -947,7 +979,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 			jobPresentInCJActiveStatus: true,
 		},
 
-		// Tests for slow cronjob list
+		// 模拟 CronJob 列表滞后：Job 已启动但未出现在 Active 列表。
 		"this started but is not present in cronjob active list, not past deadline, A": {
 			concurrencyPolicy:       "Allow",
 			schedule:                onTheHour,
@@ -985,7 +1017,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 			expectedRequeueDuration: 1*time.Hour - 1*time.Minute - time.Millisecond*100 + nextScheduleDelta,
 		},
 
-		// Tests for @every-style schedule
+		// @every 风格调度表达式的相关场景。
 		"with @every schedule, never ran, not time": {
 			concurrencyPolicy:          "Allow",
 			schedule:                   everyHour,
@@ -1083,10 +1115,9 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 			jobPresentInCJActiveStatus: true,
 			expectCompleted:            true,
 		},
-		// This test will fail: the logic around StartingDeadlineSecond in getNextScheduleTime messes up
-		// the time that calculating schedule.Next(earliestTime) is based on. While this works perfectly
-		// well for classic cron scheduled, with @every X, schedule.Next(earliestTime) just returns the time
-		// offset by X relative to the earliestTime.
+		// 该用例目前会失败：getNextScheduleTime 中围绕 StartingDeadlineSecond 的逻辑
+		// 扰乱了计算 schedule.Next(earliestTime) 所依据的时间点。传统 cron 表达式下一切正常，
+		// 但使用 @every X 时，schedule.Next(earliestTime) 只是返回在 earliestTime 基础上偏移 X 的时间。
 		// "with @every schedule, prev ran but done, is time, not past deadline": {
 		// 	concurrencyPolicy:          "Allow",
 		// 	schedule:                   everyHour,
@@ -1263,6 +1294,8 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 				err error
 			)
 			js := []*batchv1.Job{}
+			// realCJ 模拟 API Server 侧的对象（供 fakeCJControl 使用）。
+			// 它与待同步的 cj 分离，便于最后断言 sync 未就地修改入参。
 			realCJ := cj.DeepCopy()
 			if tc.ranPreviously {
 				cj.ObjectMeta.CreationTimestamp = metav1.Time{Time: justBeforeThePriorHour()}
@@ -1288,12 +1321,16 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 					cj.Status.Active = []v1.ObjectReference{*ref}
 				}
 
+				// stillActive 表示 Job 仍在运行：把它放进 realCJ.Active 模拟集群现状，
+				// 这样 sync 才能观察到“活跃的 Job”。
 				if tc.stillActive {
 					realCJ.Status.Active = []v1.ObjectReference{*ref}
 					if !tc.jobStillNotFoundInLister {
 						js = append(js, job)
 					}
 				} else {
+					// 非活跃分支：给 Job 打上 Complete 条件与完成时间，
+					// 使 sync 能识别为已结束并在需要时更新 LastSuccessfulTime。
 					job.Status.CompletionTime = &metav1.Time{Time: job.ObjectMeta.CreationTimestamp.Add(time.Second * 10)}
 					job.Status.Conditions = append(job.Status.Conditions, batchv1.JobCondition{
 						Type:   batchv1.JobComplete,
@@ -1313,6 +1350,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 				}
 			}
 
+			// fake 控制面把用例中的错误原样注入，用于覆盖创建/查询失败路径。
 			jc := &fakeJobControl{Job: job, CreateErr: tc.jobCreateError, Err: tc.jobGetErr}
 			cjc := &fakeCJControl{CronJob: realCJ}
 			recorder := record.NewFakeRecorder(10)
@@ -1325,6 +1363,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 					return tc.now
 				},
 			}
+			// 传入深拷贝，最后再比较地址，确保 syncCronJob 不修改调用方的对象。
 			cjCopy := cj.DeepCopy()
 			requeueAfter, updateStatus, err := jm.syncCronJob(context.TODO(), cjCopy, js)
 			if tc.expectErr && err == nil {
@@ -1342,6 +1381,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 			if tc.expectCreate {
 				expectedCreates = 1
 			}
+			// 上次创建的 Job 已完成时，LastSuccessfulTime 应等于其完成时间。
 			if tc.ranPreviously && !tc.stillActive {
 				completionTime := tc.jobCreationTime.Add(10 * time.Second)
 				if cjCopy.Status.LastSuccessfulTime == nil || !cjCopy.Status.LastSuccessfulTime.Time.Equal(completionTime) {
@@ -1383,7 +1423,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 				t.Errorf("%s: expected %d job deleted, actually %v", name, expectedDeletes, len(jc.DeleteJobName))
 			}
 
-			// Status update happens once when ranging through job list, and another one if create jobs.
+			// 遍历 Job 列表会触发一次状态更新；若本轮创建了 Job，还会再更新一次。
 			expectUpdates := 1
 			expectedEvents := 0
 			if tc.expectCreate {
@@ -1397,7 +1437,7 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 				expectedEvents++
 			}
 			if name == "still active, is time, F" {
-				// this is the only test case where we would raise an event for not scheduling
+				// Forbid 策略下已有活跃 Job 时会额外发出“未调度”事件，仅此用例涉及。
 				expectedEvents++
 			}
 			expectedEvents += tc.expectedWarnings
@@ -1429,18 +1469,23 @@ func TestControllerV2SyncCronJob(t *testing.T) {
 
 }
 
+// fakeQueue 是 TypedRateLimitingInterface 的最小替身，
+// 只记录 AddAfter 收到的 key 与 delay，供 updateCronJob 测试断言重排延迟。
 type fakeQueue struct {
 	workqueue.TypedRateLimitingInterface[string]
 	delay time.Duration
 	key   interface{}
 }
 
+// AddAfter 不真正入队，仅记录参数，避免测试中等待真实定时器。
 func (f *fakeQueue) AddAfter(key string, delay time.Duration) {
 	f.delay = delay
 	f.key = key
 }
 
-// this test will take around 61 seconds to complete
+// TestControllerV2UpdateCronJob 表驱动验证 updateCronJob 在 spec 变化后的重排延迟：
+// template 变化立即重排，schedule 变化按新表达式计算下一次触发的等待时间，
+// @every 节奏变化与时区变化也有对应预期。该测试会真实等待约 61 秒。
 func TestControllerV2UpdateCronJob(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1667,6 +1712,9 @@ func TestControllerV2UpdateCronJob(t *testing.T) {
 	}
 }
 
+// TestControllerV2CleanupFinishedJobs 验证已完成 Job 的历史清理：
+// 即使创建 Job 因配额不足失败，仍要删除超出成功历史限制的旧 Job，避免死锁；
+// 未达到限制时不得删除。
 func TestControllerV2CleanupFinishedJobs(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -1744,6 +1792,7 @@ func TestControllerV2CleanupFinishedJobs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
 
+			// 统一给 finishedJobs 打上 Complete 条件，模拟“已成功结束”的 Job。
 			for _, job := range tt.finishedJobs {
 				job.Status.Conditions = []batchv1.JobCondition{{Type: batchv1.JobComplete, Status: v1.ConditionTrue}}
 			}
@@ -1751,6 +1800,7 @@ func TestControllerV2CleanupFinishedJobs(t *testing.T) {
 			client := fake.NewSimpleClientset()
 
 			informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
+			// 直接向 informer 索引器注入对象，跳过事件回调，使测试可确定性地驱动一次 sync。
 			_ = informerFactory.Batch().V1().CronJobs().Informer().GetIndexer().Add(tt.cronJob)
 			for _, job := range tt.finishedJobs {
 				_ = informerFactory.Batch().V1().Jobs().Informer().GetIndexer().Add(job)
@@ -1784,9 +1834,8 @@ func TestControllerV2CleanupFinishedJobs(t *testing.T) {
 	}
 }
 
-// TestControllerV2JobAlreadyExistsButNotInActiveStatus validates that an already created job that was not added to the status
-// of a CronJob initially will be added back on the next sync. Previously, if we failed to update the status after creating a job,
-// cronjob controller would retry continuously because it would attempt to create a job that already exists.
+// TestControllerV2JobAlreadyExistsButNotInActiveStatus 验证：已创建但初始未写入 CronJob.Status.Active 的 Job，
+// 会在下一次 sync 被补回 Active 列表。否则控制器会因反复尝试创建同名 Job 而不断重试。
 func TestControllerV2JobAlreadyExistsButNotInActiveStatus(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -1845,8 +1894,8 @@ func TestControllerV2JobAlreadyExistsButNotInActiveStatus(t *testing.T) {
 	}
 }
 
-// TestControllerV2JobAlreadyExistsButDifferentOwnner validates that an already created job
-// not owned by the cronjob controller is ignored.
+// TestControllerV2JobAlreadyExistsButDifferentOwner 验证不属于该 CronJob 控制器的已存在 Job 会被安全忽略：
+// 不写回状态、也不把它认作自己的活跃 Job。
 func TestControllerV2JobAlreadyExistsButDifferentOwner(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -1864,8 +1913,8 @@ func TestControllerV2JobAlreadyExistsButDifferentOwner(t *testing.T) {
 	job.UID = "1234"
 	job.Namespace = cj.Namespace
 
-	// remove owners for this test since we are testing that jobs not belonging to cronjob
-	// controller are safely ignored
+	// 清空属主引用，构造“不属于该 CronJob 的已存在 Job”，
+	// 这是本用例要验证的安全忽略场景。
 	job.OwnerReferences = []metav1.OwnerReference{}
 
 	client := fake.NewSimpleClientset(cjCopy, job)
@@ -1898,6 +1947,8 @@ func TestControllerV2JobAlreadyExistsButDifferentOwner(t *testing.T) {
 	}
 }
 
+// TestControllerV2ProcessNextItemClearFailureRate 验证成功处理一个 key 后会清空其限流失败计数，
+// 避免先前错误导致的退避状态一直残留，使后续重试被无限延迟。
 func TestControllerV2ProcessNextItemClearFailureRate(t *testing.T) {
 
 	t.Run("cronjob controller resets rate limiter successfully", func(t *testing.T) {
@@ -1922,7 +1973,7 @@ func TestControllerV2ProcessNextItemClearFailureRate(t *testing.T) {
 
 		key, _ := controller.KeyFunc(cjCopy)
 
-		// add a forced N rate limit failure to replicate scenario where for a key a previous error exists.
+		// 人为制造两次限流失败，模拟该 key 之前处理出错、NumRequeues 大于 0 的状态。
 		for range 2 {
 			jm.queue.AddRateLimited(key)
 			k, quit := jm.queue.Get()
@@ -1930,13 +1981,13 @@ func TestControllerV2ProcessNextItemClearFailureRate(t *testing.T) {
 				t.Fatal("queue shut down unexpectedly")
 			}
 			jm.queue.Done(k)
-			// no clearing of the rate limit failure/backoff count.
+			// 此处故意不调用 Forget，保留退避计数以便下一步断言。
 		}
 		if requeues := jm.queue.NumRequeues(key); requeues != 2 {
 			t.Fatalf("expected >0 requeues after priming, got %d", requeues)
 		}
 
-		// attempt to process a cron job.
+		// 正常处理该 key，期望 processNextWorkItem 内部调用 Forget 清零计数。
 		jm.queue.Add(key)
 		jm.processNextWorkItem(ctx)
 

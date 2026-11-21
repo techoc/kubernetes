@@ -32,7 +32,9 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
-// GetTestVolumeSpec returns a test volume spec
+// GetTestVolumeSpec 构造测试用的 volume.Spec：使用 GCE PD 作为卷源，
+// 文件系统类型固定为 "fake"，访问模式为 ReadWriteOnce。
+// diskName 直接作为 PDName，便于断言时识别目标卷。
 func GetTestVolumeSpec(volumeName string, diskName v1.UniqueVolumeName) *volume.Spec {
 	return &volume.Spec{
 		Volume: &v1.Volume{
@@ -55,6 +57,10 @@ func GetTestVolumeSpec(volumeName string, diskName v1.UniqueVolumeName) *volume.
 	}
 }
 
+// CreateTestClient 创建并配置 attach/detach 控制器测试用的 fake clientset。
+// 通过自定义 reactor 提供一组固定的 Pod/Node/CSINode 列表，并让 Create/Update
+// 操作写回内存中的列表，从而模拟 API server 的状态；同时注册 fake watch 以便
+// 控制器接收变更事件。
 func CreateTestClient(logger klog.Logger) *fake.Clientset {
 	var extraPods *v1.PodList
 	var volumeAttachments *storagev1.VolumeAttachmentList
@@ -63,7 +69,10 @@ func CreateTestClient(logger klog.Logger) *fake.Clientset {
 
 	fakeClient := &fake.Clientset{}
 
+	// extraPods 保存测试中动态创建的 Pod，供后续 list 一并返回，
+	// 从而模拟持久化存储（fake client 默认不会把 create 的对象加入 list 结果）。
 	extraPods = &v1.PodList{}
+	// list pods 返回 5 个固定名称的运行中 Pod，再叠加测试动态创建的 Pod。
 	fakeClient.AddReactor("list", "pods", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := &v1.PodList{}
 		podNamePrefix := "mypod"
@@ -103,7 +112,7 @@ func CreateTestClient(logger klog.Logger) *fake.Clientset {
 								GCEPersistentDisk: &v1.GCEPersistentDiskVolumeSource{
 									PDName: "pdName",
 									FSType: "ext4",
-									// Make the translated volume allow Multi-Attach.
+									// 设为只读是为了让迁移后的卷允许多挂载（Multi-Attach）。
 									ReadOnly: true,
 								},
 							},
@@ -117,12 +126,15 @@ func CreateTestClient(logger klog.Logger) *fake.Clientset {
 		obj.Items = append(obj.Items, extraPods.Items...)
 		return true, obj, nil
 	})
+	// create pods 将对象写入 extraPods，确保后续 list pods 能够看到它。
 	fakeClient.AddReactor("create", "pods", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		createAction := action.(core.CreateAction)
 		pod := createAction.GetObject().(*v1.Pod)
 		extraPods.Items = append(extraPods.Items, *pod)
 		return true, createAction.GetObject(), nil
 	})
+	// nodes 预先构造节点状态：5 个节点挂载了 "lostVolumeName"，
+	// 其中 "mynode" 还挂载了 "inUseVolume" 且标记为正在使用。
 	nodes = &v1.NodeList{}
 	nodeNamePrefix := "mynode"
 	for i := 0; i < 5; i++ {
@@ -130,12 +142,14 @@ func CreateTestClient(logger klog.Logger) *fake.Clientset {
 		if i != 0 {
 			nodeName = fmt.Sprintf("%s-%d", nodeNamePrefix, i)
 		} else {
-			// We want also the "mynode" node since all the testing pods live there
+			// 第一个节点保留裸名 "mynode"，因为测试 Pod 都调度在该节点上。
 			nodeName = nodeNamePrefix
 		}
 		attachVolumeToNode(nodes, "lostVolumeName", nodeName, false)
 	}
 	attachVolumeToNode(nodes, "inUseVolume", nodeNamePrefix, true)
+	// update nodes 用更新后的对象替换本地列表中的同名节点，
+	// 让控制器对节点状态的修改在后续 list 中可见。
 	fakeClient.AddReactor("update", "nodes", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		updateAction := action.(core.UpdateAction)
 		node := updateAction.GetObject().(*v1.Node)
@@ -146,19 +160,22 @@ func CreateTestClient(logger klog.Logger) *fake.Clientset {
 		}
 		return true, updateAction.GetObject(), nil
 	})
+	// list nodes 返回内存中的节点列表副本，避免调用方修改底层切片。
 	fakeClient.AddReactor("list", "nodes", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := &v1.NodeList{}
 		obj.Items = append(obj.Items, nodes.Items...)
 		return true, obj, nil
 	})
+	// list csinodes 为每个节点生成 CSINode，声明所有 in-tree 插件均已迁移，
+	// 使控制器走 CSI 迁移后的 attach/detach 路径。
 	fakeClient.AddReactor("list", "csinodes", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := &storagev1.CSINodeList{}
 		for _, node := range nodes.Items {
 			csiNode := storagev1.CSINode{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
-						// All the in-tree plugins have been migrated to CSI since v1.27.
-						// So hardcoding the migrated plugins here.
+						// 自 v1.27 起所有 in-tree 插件均已迁移到 CSI，
+						// 因此这里直接硬编码已迁移的插件列表。
 						"storage.alpha.kubernetes.io/migrated-plugins": "kubernetes.io/aws-ebs,kubernetes.io/azure-disk,kubernetes.io/azure-file,kubernetes.io/cinder,kubernetes.io/gce-pd,kubernetes.io/vsphere-volume",
 					},
 					Name: node.Name,
@@ -168,12 +185,14 @@ func CreateTestClient(logger klog.Logger) *fake.Clientset {
 		}
 		return true, obj, nil
 	})
+	// volumeAttachments 保存创建的 VolumeAttachment，模拟 ATTACH 记录的存储。
 	volumeAttachments = &storagev1.VolumeAttachmentList{}
 	fakeClient.AddReactor("list", "volumeattachments", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := &storagev1.VolumeAttachmentList{}
 		obj.Items = append(obj.Items, volumeAttachments.Items...)
 		return true, obj, nil
 	})
+	// create volumeattachments 将新附件写入内存列表，供 list 时返回。
 	fakeClient.AddReactor("create", "volumeattachments", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		createAction := action.(core.CreateAction)
 		va := createAction.GetObject().(*storagev1.VolumeAttachment)
@@ -181,12 +200,14 @@ func CreateTestClient(logger klog.Logger) *fake.Clientset {
 		return true, createAction.GetObject(), nil
 	})
 
+	// pvs 保存测试中创建的 PersistentVolume，供 list 时返回。
 	pvs = &v1.PersistentVolumeList{}
 	fakeClient.AddReactor("list", "persistentvolumes", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := &v1.PersistentVolumeList{}
 		obj.Items = append(obj.Items, pvs.Items...)
 		return true, obj, nil
 	})
+	// create persistentvolumes 将新 PV 写入内存列表。
 	fakeClient.AddReactor("create", "persistentvolumes", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		createAction := action.(core.CreateAction)
 		pv := createAction.GetObject().(*v1.PersistentVolume)
@@ -194,13 +215,15 @@ func CreateTestClient(logger klog.Logger) *fake.Clientset {
 		return true, createAction.GetObject(), nil
 	})
 
+	// 所有资源共用同一个 fake watch，以便控制器通过事件通道感知变更。
 	fakeWatch := watch.NewFakeWithOptions(watch.FakeOptions{Logger: &logger})
 	fakeClient.AddWatchReactor("*", core.DefaultWatchReactor(fakeWatch, nil))
 
 	return fakeClient
 }
 
-// NewPod returns a test pod object
+// NewPod 构造一个最小的测试 Pod：UID 和 Name 取自参数，Namespace 与 Name 相同，
+// 适用于只关心 Pod 身份标识的场景。
 func NewPod(uid, name string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -211,7 +234,8 @@ func NewPod(uid, name string) *v1.Pod {
 	}
 }
 
-// NewPodWithVolume returns a test pod object
+// NewPodWithVolume 构造一个已调度到 nodeName、挂载 GCE PD 卷的测试 Pod。
+// 卷以只读方式挂载，使迁移后的卷允许 Multi-Attach；命名空间固定为 "mynamespace"。
 func NewPodWithVolume(podName, volumeName, nodeName string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -243,7 +267,7 @@ func NewPodWithVolume(podName, volumeName, nodeName string) *v1.Pod {
 						GCEPersistentDisk: &v1.GCEPersistentDiskVolumeSource{
 							PDName: "pdName",
 							FSType: "ext4",
-							// Make the translated volume allow Multi-Attach.
+							// 设为只读是为了让迁移后的卷允许多挂载（Multi-Attach）。
 							ReadOnly: true,
 						},
 					},
@@ -254,7 +278,9 @@ func NewPodWithVolume(podName, volumeName, nodeName string) *v1.Pod {
 	}
 }
 
-// Returns a volumeAttachment object
+// NewVolumeAttachment 构造测试用 VolumeAttachment：关联 pvName 指定的 PV 与
+// nodeName 指定的节点，附加器为测试插件 "test.storage.gke.io"，
+// status 参数决定 .status.attached 的值。
 func NewVolumeAttachment(vaName, pvName, nodeName string, status bool) *storagev1.VolumeAttachment {
 	return &storagev1.VolumeAttachment{
 
@@ -275,7 +301,7 @@ func NewVolumeAttachment(vaName, pvName, nodeName string, status bool) *storagev
 	}
 }
 
-// Returns a persistentVolume object
+// NewPV 构造以 GCE PD（PDName 为 volumeName）为卷源的测试 PersistentVolume。
 func NewPV(pvName, volumeName string) *v1.PersistentVolume {
 	return &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -292,7 +318,9 @@ func NewPV(pvName, volumeName string) *v1.PersistentVolume {
 	}
 }
 
-// Returns an NFS PV. This can be used for an in-tree volume that is not migrated (unlike NewPV, which uses the GCE persistent disk).
+// NewNFSPV 构造以 NFS（Server 为 volumeName）为卷源的测试 PersistentVolume。
+// 与 NewPV 使用 GCE PD 不同，NFS 属于尚未迁移到 CSI 的 in-tree 卷，
+// 可用于测试非迁移路径。
 func NewNFSPV(pvName, volumeName string) *v1.PersistentVolume {
 	return &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -309,8 +337,11 @@ func NewNFSPV(pvName, volumeName string) *v1.PersistentVolume {
 	}
 }
 
+// attachVolumeToNode 将卷追加到指定节点的 status.VolumesAttached，
+// 并在 inUse 为 true 时同时追加到 VolumesInUse。若节点不存在则先创建，
+// 并打上 controller-managed attach 注解。
 func attachVolumeToNode(nodes *v1.NodeList, volumeName, nodeName string, inUse bool) {
-	// if nodeName exists, get the object.. if not create node object
+	// 同名节点已存在则复用，否则新建一个节点对象。
 	var node *v1.Node
 	for i := range nodes.Items {
 		curNode := &nodes.Items[i]
@@ -333,6 +364,7 @@ func attachVolumeToNode(nodes *v1.NodeList, volumeName, nodeName string, inUse b
 		})
 		node = &nodes.Items[len(nodes.Items)-1]
 	}
+	// 卷名需带上测试插件前缀，才能匹配控制器的 attached volume 标识格式。
 	uniqueVolumeName := v1.UniqueVolumeName(TestPluginName + "/" + volumeName)
 	volumeAttached := v1.AttachedVolume{
 		Name:       uniqueVolumeName,
@@ -340,6 +372,7 @@ func attachVolumeToNode(nodes *v1.NodeList, volumeName, nodeName string, inUse b
 	}
 	node.Status.VolumesAttached = append(node.Status.VolumesAttached, volumeAttached)
 
+	// VolumesInUse 表示卷已被节点上的 Pod 使用，与仅完成挂载的 VolumesAttached 区分。
 	if inUse {
 		node.Status.VolumesInUse = append(node.Status.VolumesInUse, uniqueVolumeName)
 	}

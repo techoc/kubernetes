@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package config 定义 ValidatingAdmissionPolicyStatus 控制器的内部配置类型；
+// 下面的指令要求生成器为整个包生成深拷贝方法。
 // +k8s:deepcopy-gen=package
 
 package config

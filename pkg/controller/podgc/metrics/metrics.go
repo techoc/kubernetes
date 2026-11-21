@@ -49,24 +49,25 @@ var (
 )
 
 const (
-	// Possible values for the "reason" label in the above metrics.
+	// 以下是上述指标中 "reason" 标签的可能取值。
 
-	// PodGCReasonTerminated is used when the pod is terminated.
+	// PodGCReasonTerminated 表示 Pod 已终止。
 	PodGCReasonTerminated = "terminated"
-	// PodGCReasonCompleted is used when the pod is terminating and the corresponding node
-	// is not ready and has `node.kubernetes.io/out-of-service` taint.
+	// PodGCReasonTerminatingOutOfService 表示 Pod 正在终止，且其所在节点处于 NotReady 状态，
+	// 并带有 `node.kubernetes.io/out-of-service` 污点。
 	PodGCReasonTerminatingOutOfService = "out-of-service"
-	// PodGCReasonOrphaned is used when the pod is orphaned which means the corresponding node
-	// has been deleted.
+	// PodGCReasonOrphaned 表示 Pod 成为孤儿，即其所在节点已被删除。
 	PodGCReasonOrphaned = "orphaned"
-	// PodGCReasonUnscheduled is used when the pod is terminating and unscheduled.
+	// PodGCReasonTerminatingUnscheduled 表示 Pod 正在终止但尚未被调度。
 	PodGCReasonTerminatingUnscheduled = "unscheduled"
 )
 
+// registerMetrics 保证指标只注册一次。
 var registerMetrics sync.Once
 
-// Register the metrics that are to be monitored.
+// RegisterMetrics 注册需要监控的指标。
 func RegisterMetrics() {
+	// 使用 sync.Once 避免重复注册时 legacyregistry 因指标冲突而 panic。
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(DeletingPodsTotal)
 		legacyregistry.MustRegister(DeletingPodsErrorTotal)

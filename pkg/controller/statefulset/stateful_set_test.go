@@ -45,10 +45,13 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// parentKind 是 ControllerRevision 所属父对象的 GVK。
 var parentKind = apps.SchemeGroupVersion.WithKind("StatefulSet")
 
+// alwaysReady 作为 informer 同步检查，测试中缓存视为已同步。
 func alwaysReady() bool { return true }
 
+// TestStatefulSetControllerCreates 验证控制器扩容后状态中的副本数正确。
 func TestStatefulSetControllerCreates(t *testing.T) {
 	set := newStatefulSet(3)
 	logger, ctx := ktesting.NewTestContext(t)
@@ -66,6 +69,7 @@ func TestStatefulSetControllerCreates(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerDeletes 验证控制器缩容到零后状态中的副本数正确。
 func TestStatefulSetControllerDeletes(t *testing.T) {
 	set := newStatefulSet(3)
 	logger, ctx := ktesting.NewTestContext(t)
@@ -95,6 +99,7 @@ func TestStatefulSetControllerDeletes(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerRespectsTermination 验证终止中的 Pod 不被重建或计入副本数。
 func TestStatefulSetControllerRespectsTermination(t *testing.T) {
 	set := newStatefulSet(3)
 	logger, ctx := ktesting.NewTestContext(t)
@@ -110,6 +115,7 @@ func TestStatefulSetControllerRespectsTermination(t *testing.T) {
 	if set.Status.Replicas != 3 {
 		t.Errorf("set.Status.Replicas = %v; want 3", set.Status.Replicas)
 	}
+	// 终止中的 Pod 仍在 lister 中，恢复时不能被当作缺失副本重建。
 	_, err := om.addTerminatingPod(set, 3)
 	if err != nil {
 		t.Error(err)
@@ -147,6 +153,7 @@ func TestStatefulSetControllerRespectsTermination(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerBlocksScaling 验证有 Pod 终止中时扩容被阻塞，清理后恢复。
 func TestStatefulSetControllerBlocksScaling(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	set := newStatefulSet(3)
@@ -163,6 +170,7 @@ func TestStatefulSetControllerBlocksScaling(t *testing.T) {
 		t.Errorf("set.Status.Replicas = %v; want 3", set.Status.Replicas)
 	}
 	*set.Spec.Replicas = 5
+	// 递增 resourceVersion 以模拟 API server 的真实更新，否则事件过滤可能吞掉变更。
 	fakeResourceVersion(set)
 	om.setsIndexer.Update(set)
 	_, err := om.setPodTerminated(set, 0)
@@ -195,6 +203,7 @@ func TestStatefulSetControllerBlocksScaling(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerDeletionTimestamp 验证已标记删除的 StatefulSet 不再创建 Pod。
 func TestStatefulSetControllerDeletionTimestamp(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	set := newStatefulSet(3)
@@ -203,7 +212,7 @@ func TestStatefulSetControllerDeletionTimestamp(t *testing.T) {
 
 	om.setsIndexer.Add(set)
 
-	// Force a sync. It should not try to create any Pods.
+	// 主动触发同步，确认带删除时间戳的 StatefulSet 不会创建任何 Pod。
 	ssc.enqueueStatefulSet(logger, set)
 	fakeWorker(ssc)
 
@@ -220,19 +229,20 @@ func TestStatefulSetControllerDeletionTimestamp(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerDeletionTimestampRace 验证客户端与缓存对删除状态判断不一致时不收养孤儿资源。
 func TestStatefulSetControllerDeletionTimestampRace(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	set := newStatefulSet(3)
-	// The bare client says it IS deleted.
+	// 裸客户端认为对象已标记删除。
 	set.DeletionTimestamp = new(metav1.Time)
 	ssc, _, om, ssh := newFakeStatefulSetController(ctx, set)
 
-	// The lister (cache) says it's NOT deleted.
+	// lister（缓存）中对象仍未标记删除，制造竞态窗口。
 	set2 := *set
 	set2.DeletionTimestamp = nil
 	om.setsIndexer.Add(&set2)
 
-	// The recheck occurs in the presence of a matching orphan.
+	// 竞态复核时存在匹配的孤儿 Pod 和 Revision。
 	pod := newStatefulSetPod(set, 1)
 	pod.OwnerReferences = nil
 	om.podsIndexer.Add(pod)
@@ -247,7 +257,7 @@ func TestStatefulSetControllerDeletionTimestampRace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Force a sync. It should not try to create any Pods.
+	// 主动触发同步：孤儿 Pod 与 Revision 应留在原地。
 	ssc.enqueueStatefulSet(logger, set)
 	fakeWorker(ssc)
 
@@ -263,14 +273,14 @@ func TestStatefulSetControllerDeletionTimestampRace(t *testing.T) {
 		t.Errorf("len(pods) = %v, want %v", got, want)
 	}
 
-	// It should not adopt pods.
+	// 不应给孤儿 Pod 添加 ownerReference。
 	for _, pod := range pods {
 		if len(pod.OwnerReferences) > 0 {
 			t.Errorf("unexpected pod owner references: %v", pod.OwnerReferences)
 		}
 	}
 
-	// It should not adopt revisions.
+	// 同理，孤儿 Revision 也不应被收养。
 	revisions, err := ssh.ListControllerRevisions(set, parentKind, selector)
 	if err != nil {
 		t.Fatal(err)
@@ -285,6 +295,7 @@ func TestStatefulSetControllerDeletionTimestampRace(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerAddPod 验证 Pod 添加事件会把所属 StatefulSet 入队。
 func TestStatefulSetControllerAddPod(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
@@ -295,6 +306,7 @@ func TestStatefulSetControllerAddPod(t *testing.T) {
 	om.setsIndexer.Add(set1)
 	om.setsIndexer.Add(set2)
 
+	// addPod 应根据 Pod 的 ownerReference 找到所属 Set 并入队其 key。
 	ssc.addPod(logger, pod1)
 	key, done := ssc.queue.Get()
 	if key == "" || done {
@@ -314,6 +326,7 @@ func TestStatefulSetControllerAddPod(t *testing.T) {
 	ssc.queue.Done(key)
 }
 
+// TestStatefulSetControllerAddPodOrphan 验证孤儿 Pod 会入队所有标签匹配的 StatefulSet。
 func TestStatefulSetControllerAddPodOrphan(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
@@ -328,7 +341,7 @@ func TestStatefulSetControllerAddPodOrphan(t *testing.T) {
 	om.setsIndexer.Add(set2)
 	om.setsIndexer.Add(set3)
 
-	// Make pod an orphan. Expect matching sets to be queued.
+	// 去掉 owner 引用后，靠标签匹配定位候选 Set：set1/set2 命中，set3 标签不同不入队。
 	pod.OwnerReferences = nil
 	ssc.addPod(logger, pod)
 	if got, want := ssc.queue.Len(), 2; got != want {
@@ -336,11 +349,13 @@ func TestStatefulSetControllerAddPodOrphan(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerAddPodNoSet 验证没有匹配 StatefulSet 的 Pod 不入队。
 func TestStatefulSetControllerAddPodNoSet(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, _, _ := newFakeStatefulSetController(ctx)
 	set := newStatefulSet(3)
 	pod := newStatefulSetPod(set, 0)
+	// 没有 Set 索引时 addPod 无法推断归属，队列必须保持为空。
 	ssc.addPod(logger, pod)
 	ssc.queue.ShutDown()
 	key, _ := ssc.queue.Get()
@@ -349,6 +364,7 @@ func TestStatefulSetControllerAddPodNoSet(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerUpdatePod 验证 Pod 更新事件会把所属 StatefulSet 入队。
 func TestStatefulSetControllerUpdatePod(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
@@ -360,6 +376,7 @@ func TestStatefulSetControllerUpdatePod(t *testing.T) {
 	om.setsIndexer.Add(set1)
 	om.setsIndexer.Add(set2)
 
+	// 递增 resourceVersion 模拟真实更新，否则 updatePod 会因版本相同而忽略事件。
 	prev := *pod1
 	fakeResourceVersion(pod1)
 	ssc.updatePod(logger, &prev, pod1)
@@ -381,6 +398,7 @@ func TestStatefulSetControllerUpdatePod(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerUpdatePodWithNoSet 验证无匹配 StatefulSet 的 Pod 更新不入队。
 func TestStatefulSetControllerUpdatePodWithNoSet(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, _, _ := newFakeStatefulSetController(ctx)
@@ -388,6 +406,7 @@ func TestStatefulSetControllerUpdatePodWithNoSet(t *testing.T) {
 	pod := newStatefulSetPod(set, 0)
 	prev := *pod
 	fakeResourceVersion(pod)
+	// 没有已索引的 Set，更新事件也无法产生可入队的归属。
 	ssc.updatePod(logger, &prev, pod)
 	ssc.queue.ShutDown()
 	key, _ := ssc.queue.Get()
@@ -396,12 +415,14 @@ func TestStatefulSetControllerUpdatePodWithNoSet(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerUpdatePodWithSameVersion 验证 resourceVersion 未变化的更新被忽略。
 func TestStatefulSetControllerUpdatePodWithSameVersion(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
 	set := newStatefulSet(3)
 	pod := newStatefulSetPod(set, 0)
 	om.setsIndexer.Add(set)
+	// 新旧对象 resourceVersion 相同意味着没有实质变更，应被忽略避免无谓同步。
 	ssc.updatePod(logger, pod, pod)
 	ssc.queue.ShutDown()
 	key, _ := ssc.queue.Get()
@@ -410,6 +431,7 @@ func TestStatefulSetControllerUpdatePodWithSameVersion(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerUpdatePodOrphanWithNewLabels 验证孤儿 Pod 标签变化后新旧匹配的 Set 都入队。
 func TestStatefulSetControllerUpdatePodOrphanWithNewLabels(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
@@ -420,6 +442,7 @@ func TestStatefulSetControllerUpdatePodOrphanWithNewLabels(t *testing.T) {
 	set2.Name = "foo2"
 	om.setsIndexer.Add(set)
 	om.setsIndexer.Add(set2)
+	// 孤儿 Pod 改标签后，旧标签与新标签匹配的 Set 都应被入队以重新评估归属。
 	clone := *pod
 	clone.Labels = map[string]string{"foo2": "bar2"}
 	fakeResourceVersion(&clone)
@@ -429,6 +452,7 @@ func TestStatefulSetControllerUpdatePodOrphanWithNewLabels(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerUpdatePodChangeControllerRef 验证 controller 引用变更时旧、新 Set 都入队。
 func TestStatefulSetControllerUpdatePodChangeControllerRef(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
@@ -439,6 +463,7 @@ func TestStatefulSetControllerUpdatePodChangeControllerRef(t *testing.T) {
 	pod2 := newStatefulSetPod(set2, 0)
 	om.setsIndexer.Add(set)
 	om.setsIndexer.Add(set2)
+	// controller 引用切换时，旧属主与新属主都要入队：前者释放 Pod，后者接管。
 	clone := *pod
 	clone.OwnerReferences = pod2.OwnerReferences
 	fakeResourceVersion(&clone)
@@ -448,6 +473,7 @@ func TestStatefulSetControllerUpdatePodChangeControllerRef(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerUpdatePodRelease 验证 Pod 被释放时旧属主和标签匹配的 Set 都入队。
 func TestStatefulSetControllerUpdatePodRelease(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
@@ -457,6 +483,7 @@ func TestStatefulSetControllerUpdatePodRelease(t *testing.T) {
 	pod := newStatefulSetPod(set, 0)
 	om.setsIndexer.Add(set)
 	om.setsIndexer.Add(set2)
+	// Pod 被释放时，旧属主需入队处理孤儿，标签匹配的 Set 也需入队尝试收养。
 	clone := *pod
 	clone.OwnerReferences = nil
 	fakeResourceVersion(&clone)
@@ -466,6 +493,7 @@ func TestStatefulSetControllerUpdatePodRelease(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerDeletePod 验证 Pod 删除事件把所属 StatefulSet 入队。
 func TestStatefulSetControllerDeletePod(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
@@ -477,6 +505,7 @@ func TestStatefulSetControllerDeletePod(t *testing.T) {
 	om.setsIndexer.Add(set1)
 	om.setsIndexer.Add(set2)
 
+	// 删除事件同样通过 ownerReference 把所属 Set 入队，触发副本数补齐。
 	ssc.deletePod(logger, pod1)
 	key, done := ssc.queue.Get()
 	if key == "" || done {
@@ -494,6 +523,7 @@ func TestStatefulSetControllerDeletePod(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerDeletePodOrphan 验证孤儿 Pod 删除不会入队任何 StatefulSet。
 func TestStatefulSetControllerDeletePodOrphan(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
@@ -504,6 +534,7 @@ func TestStatefulSetControllerDeletePodOrphan(t *testing.T) {
 	om.setsIndexer.Add(set1)
 	om.setsIndexer.Add(set2)
 
+	// 孤儿 Pod 没有属主可通知，删除不应产生任何入队。
 	pod1.OwnerReferences = nil
 	ssc.deletePod(logger, pod1)
 	if got, want := ssc.queue.Len(), 0; got != want {
@@ -511,12 +542,14 @@ func TestStatefulSetControllerDeletePodOrphan(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerDeletePodTombstone 验证墓碑形式的删除事件仍能入队所属 StatefulSet。
 func TestStatefulSetControllerDeletePodTombstone(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
 	set := newStatefulSet(3)
 	pod := newStatefulSetPod(set, 0)
 	om.setsIndexer.Add(set)
+	// informer 可能只给出墓碑，处理器仍需从 Obj 中还原 Pod 归属并入队。
 	tombstoneKey, _ := controller.KeyFunc(pod)
 	tombstone := cache.DeletedFinalStateUnknown{Key: tombstoneKey, Obj: pod}
 	ssc.deletePod(logger, tombstone)
@@ -528,12 +561,14 @@ func TestStatefulSetControllerDeletePodTombstone(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControllerGetStatefulSetsForPod 验证能找出所有标签匹配给定 Pod 的 StatefulSet。
 func TestStatefulSetControllerGetStatefulSetsForPod(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx)
 	set1 := newStatefulSet(3)
 	set2 := newStatefulSet(3)
 	set2.Name = "foo2"
+	// 按 Pod 标签反查候选 Set，两个标签相同的 Set 都应命中。
 	pod := newStatefulSetPod(set1, 0)
 	om.setsIndexer.Add(set1)
 	om.setsIndexer.Add(set2)
@@ -544,17 +579,19 @@ func TestStatefulSetControllerGetStatefulSetsForPod(t *testing.T) {
 	}
 }
 
+// TestGetPodsForStatefulSetAdopt 验证匹配标签与名称的孤儿 Pod 会被收养，其余被忽略。
 func TestGetPodsForStatefulSetAdopt(t *testing.T) {
 	set := newStatefulSet(5)
+	// pod1 有属主且名称、标签都匹配，是最普通的保留场景。
 	pod1 := newStatefulSetPod(set, 1)
-	// pod2 is an orphan with matching labels and name.
+	// pod2 是标签和名称都匹配的孤儿，应被收养。
 	pod2 := newStatefulSetPod(set, 2)
 	pod2.OwnerReferences = nil
-	// pod3 has wrong labels.
+	// pod3 标签不匹配。
 	pod3 := newStatefulSetPod(set, 3)
 	pod3.OwnerReferences = nil
 	pod3.Labels = nil
-	// pod4 has wrong name.
+	// pod4 名称不匹配。
 	pod4 := newStatefulSetPod(set, 4)
 	pod4.OwnerReferences = nil
 	pod4.Name = "x" + pod4.Name
@@ -578,13 +615,14 @@ func TestGetPodsForStatefulSetAdopt(t *testing.T) {
 	for _, pod := range pods {
 		got.Insert(pod.Name)
 	}
-	// pod2 should be claimed, pod3 and pod4 ignored
+	// 只有 pod1 和 pod2 应被认领，pod3/pod4 被忽略。
 	want := sets.NewString(pod1.Name, pod2.Name)
 	if !got.Equal(want) {
 		t.Errorf("getPodsForStatefulSet() = %v, want %v", got, want)
 	}
 }
 
+// TestAdoptOrphanRevisions 验证孤儿 ControllerRevision 被收养并设置 ownerReference。
 func TestAdoptOrphanRevisions(t *testing.T) {
 	ss1 := newStatefulSetWithLabels(3, "ss1", types.UID("ss1"), map[string]string{"foo": "bar"})
 	ss1.Status.CollisionCount = new(int32)
@@ -600,6 +638,7 @@ func TestAdoptOrphanRevisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	ss1Rev2.Namespace = ss1.Namespace
+	// 清空 ownerReference 制造孤儿 Revision，等待 adoptOrphanRevisions 收养。
 	ss1Rev2.OwnerReferences = []metav1.OwnerReference{}
 
 	_, ctx := ktesting.NewTestContext(t)
@@ -608,6 +647,7 @@ func TestAdoptOrphanRevisions(t *testing.T) {
 	om.revisionsIndexer.Add(ss1Rev1)
 	om.revisionsIndexer.Add(ss1Rev2)
 
+	// 收养会 patch Revision 的 ownerReference，fake client 下由 control 层处理。
 	err = ssc.adoptOrphanRevisions(context.TODO(), ss1)
 	if err != nil {
 		t.Errorf("adoptOrphanRevisions() error: %v", err)
@@ -628,18 +668,19 @@ func TestAdoptOrphanRevisions(t *testing.T) {
 	}
 }
 
+// TestGetPodsForStatefulSetRelease 验证名称或标签不再匹配的已属主 Pod 被释放。
 func TestGetPodsForStatefulSetRelease(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	set := newStatefulSet(3)
 	ssc, _, om, _ := newFakeStatefulSetController(ctx, set)
 	pod1 := newStatefulSetPod(set, 1)
-	// pod2 is owned but has wrong name.
+	// pod2 虽归本 Set 所有，但名称不匹配。
 	pod2 := newStatefulSetPod(set, 2)
 	pod2.Name = "x" + pod2.Name
-	// pod3 is owned but has wrong labels.
+	// pod3 归本 Set 所有，但标签不匹配。
 	pod3 := newStatefulSetPod(set, 3)
 	pod3.Labels = nil
-	// pod4 is an orphan that doesn't match.
+	// pod4 是不匹配的孤儿，不在收养范围。
 	pod4 := newStatefulSetPod(set, 4)
 	pod4.OwnerReferences = nil
 	pod4.Labels = nil
@@ -661,13 +702,14 @@ func TestGetPodsForStatefulSetRelease(t *testing.T) {
 		got.Insert(pod.Name)
 	}
 
-	// Expect only pod1 (pod2 and pod3 should be released, pod4 ignored).
+	// 只保留 pod1：pod2/pod3 应被释放，pod4 直接忽略。
 	want := sets.NewString(pod1.Name)
 	if !got.Equal(want) {
 		t.Errorf("getPodsForStatefulSet() = %v, want %v", got, want)
 	}
 }
 
+// TestOrphanedPodsWithPVCDeletePolicy 验证不同 PVC 保留策略下孤儿 Pod 的 PVC ownerReference 归属。
 func TestOrphanedPodsWithPVCDeletePolicy(t *testing.T) {
 	testFn := func(t *testing.T, scaledownPolicy, deletionPolicy apps.PersistentVolumeClaimRetentionPolicyType) {
 		set := newStatefulSet(4)
@@ -680,13 +722,14 @@ func TestOrphanedPodsWithPVCDeletePolicy(t *testing.T) {
 
 		pods := []*v1.Pod{}
 		pods = append(pods, newStatefulSetPod(set, 0))
-		// pod1 is orphaned
+		// pod1 是孤儿，但仍会被 controller 重新认领。
 		pods = append(pods, newStatefulSetPod(set, 1))
 		pods[1].OwnerReferences = nil
-		// pod2 is owned but has wrong name.
+		// pod2 名称不匹配，其 PVC 不应被归属。
 		pods = append(pods, newStatefulSetPod(set, 2))
 		pods[2].Name = "x" + pods[2].Name
 
+		// fake client 不会应用 strategic merge patch，需手动应用到本地 Pod 对象。
 		ssc.kubeClient.(*fake.Clientset).PrependReactor("patch", "pods", func(action core.Action) (bool, runtime.Object, error) {
 			patch := action.(core.PatchAction).GetPatch()
 			target := action.(core.PatchAction).GetName()
@@ -734,10 +777,11 @@ func TestOrphanedPodsWithPVCDeletePolicy(t *testing.T) {
 			}
 		}
 
-		// First sync to manage orphaned pod, then set replicas.
+		// 先同步认领孤儿 Pod，再缩容：这样被缩容删除的 PVC 才会按策略获得正确的 ownerRef。
 		ssc.enqueueStatefulSet(logger, set)
 		fakeWorker(ssc)
-		*set.Spec.Replicas = 0 // Put an ownerRef for all scale-down deleted PVCs.
+		// 缩容到零：被引发的 PVC 删除应按策略决定 ownerRef 归属。
+		*set.Spec.Replicas = 0
 		ssc.enqueueStatefulSet(logger, set)
 		fakeWorker(ssc)
 
@@ -778,7 +822,7 @@ func TestOrphanedPodsWithPVCDeletePolicy(t *testing.T) {
 			t.Errorf("Unexpected number of claims: %d", len(claims))
 		}
 		for _, claim := range claims {
-			// Only the first pod and the reclaimed orphan pod should have owner refs.
+			// 只有 pod0 和重新认领的 pod1 的 PVC 可能带 ownerRef；pod2 名称不匹配应无引用。
 			switch claim.Name {
 			case "datadir-foo-0", "datadir-foo-1":
 				verifyOwnerRefs(claim, false)
@@ -795,6 +839,7 @@ func TestOrphanedPodsWithPVCDeletePolicy(t *testing.T) {
 		apps.RetainPersistentVolumeClaimRetentionPolicyType,
 		apps.DeletePersistentVolumeClaimRetentionPolicyType,
 	}
+	// 遍历两种策略的笛卡尔积，覆盖缩容与删除两个时机的所有组合。
 	for _, scaledownPolicy := range policies {
 		for _, deletionPolicy := range policies {
 			testName := fmt.Sprintf("ScaleDown:%s/SetDeletion:%s", scaledownPolicy, deletionPolicy)
@@ -803,6 +848,7 @@ func TestOrphanedPodsWithPVCDeletePolicy(t *testing.T) {
 	}
 }
 
+// TestStaleOwnerRefOnScaleup 验证 PVC 存在过期 owner 引用时扩容受阻，清理后才能完成。
 func TestStaleOwnerRefOnScaleup(t *testing.T) {
 	for _, policy := range []*apps.StatefulSetPersistentVolumeClaimRetentionPolicy{
 		{
@@ -817,6 +863,7 @@ func TestStaleOwnerRefOnScaleup(t *testing.T) {
 		onPolicy := func(msg string, args ...interface{}) string {
 			return fmt.Sprintf(fmt.Sprintf("(%s) %s", policy, msg), args...)
 		}
+		// 仅当缩容策略为 Delete 时才会给 PVC 打上 Pod ownerRef，才能制造 stale 引用。
 		set := newStatefulSet(3)
 		set.Spec.PersistentVolumeClaimRetentionPolicy = policy
 		logger, ctx := ktesting.NewTestContext(t)
@@ -852,7 +899,7 @@ func TestStaleOwnerRefOnScaleup(t *testing.T) {
 		if len(refs) != 1 {
 			t.Error(onPolicy("Expected only one refs: %v", refs))
 		}
-		// Make the pod ref stale.
+		// 篡改 Pod ownerReference 的 UID，制造 stale 引用。
 		for i := range refs {
 			if refs[i].Name == "foo-2" {
 				refs[i].UID = "stale"
@@ -865,7 +912,7 @@ func TestStaleOwnerRefOnScaleup(t *testing.T) {
 		}
 
 		*set.Spec.Replicas = 3
-		// Until the stale PVC goes away, the scale up should never finish. Run 10 iterations, then delete the PVC.
+		// stale PVC 未删除前扩容不能完成：限制 10 次迭代后删除 PVC 再验证恢复。
 		if err := scaleUpStatefulSetControllerBounded(logger, set, ssc, spc, om, 10); err != nil {
 			t.Error(onPolicy("Failed attempt to scale StatefulSet back up: %v", err))
 		}
@@ -912,10 +959,11 @@ func TestStaleOwnerRefOnScaleup(t *testing.T) {
 	}
 }
 
+// TestStatefulSetAvailabilityCheck 验证 minReadySeconds 对 availableReplicas 的影响及到期重排。
 func TestStatefulSetAvailabilityCheck(t *testing.T) {
 	tCtx := ktesting.Init(t)
 
-	set := setMinReadySeconds(newStatefulSet(4), int32(5)) // 5 seconds
+	set := setMinReadySeconds(newStatefulSet(4), int32(5)) // 5 秒
 	set = setupPodManagementPolicy(apps.ParallelPodManagement, set)
 	ssc, _, om, _ := newFakeStatefulSetController(tCtx, set)
 	if err := om.setsIndexer.Add(set); err != nil {
@@ -926,10 +974,13 @@ func TestStatefulSetAvailabilityCheck(t *testing.T) {
 	pods := []*v1.Pod{}
 	pods = append(pods, newStatefulSetPod(set, 0))
 	pods = append(pods, newStatefulSetPod(set, 1))
+	// 刚就绪，尚未满足 minReadySeconds=5s。
 	pods[1].Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue, LastTransitionTime: metav1.Time{Time: now}}}
 	pods = append(pods, newStatefulSetPod(set, 2))
+	// 就绪 2 秒，仍未满足 5 秒门槛。
 	pods[2].Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue, LastTransitionTime: metav1.Time{Time: now.Add(-2 * time.Second)}}}
 	pods = append(pods, newStatefulSetPod(set, 3))
+	// 就绪 4.3 秒，还差 0.7 秒才满足门槛，用于验证自动重排。
 	pods[3].Status.Conditions = []v1.PodCondition{{Type: v1.PodReady, Status: v1.ConditionTrue, LastTransitionTime: metav1.Time{Time: now.Add(-4300 * time.Millisecond)}}}
 
 	for i, pod := range pods {
@@ -950,7 +1001,7 @@ func TestStatefulSetAvailabilityCheck(t *testing.T) {
 		t.Fatalf("Could not get StatefulSet: %v", err)
 	}
 
-	// one pod is not ready
+	// pod0 未就绪，其余三个中至少两个未满足 minReadySeconds，故均不算可用。
 	if set.Status.ReadyReplicas != 3 {
 		t.Errorf("Expected updated StatefulSet to contain ready replicas %v, got %v instead",
 			3, set.Status.ReadyReplicas)
@@ -964,12 +1015,13 @@ func TestStatefulSetAvailabilityCheck(t *testing.T) {
 		t.Errorf("queue.Len() = %v, want %v", got, want)
 	}
 
-	// RS should be re-queued after 700ms to recompute .status.availableReplicas (200ms extra for the test).
+	// 700ms 后应重新入队以重算 availableReplicas；额外 200ms 留给测试调度。
 	tCtx.Eventually(ssc.queue.Len).WithTimeout(900*time.Millisecond).
 		WithPolling(10*time.Millisecond).
 		Should(gomega.Equal(1), " StatefulSet should be re-queued to recompute .status.availableReplicas")
 }
 
+// newFakeStatefulSetController 搭建使用 fake client 与 informer 的控制器测试环境。
 func newFakeStatefulSetController(ctx context.Context, initialObjects ...runtime.Object) (*StatefulSetController, *StatefulPodControl, *fakeObjectManager, history.Interface) {
 	client := fake.NewSimpleClientset(initialObjects...)
 	informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
@@ -985,6 +1037,7 @@ func newFakeStatefulSetController(ctx context.Context, initialObjects ...runtime
 		client,
 	)
 	ssh := history.NewFakeHistory(informerFactory.Apps().V1().ControllerRevisions())
+	// 测试不启动 informer，直接把同步检查标记为已完成。
 	ssc.podListerSynced = alwaysReady
 	ssc.setListerSynced = alwaysReady
 	ssc.control = NewDefaultStatefulSetControl(spc, ssu, ssh)
@@ -992,6 +1045,7 @@ func newFakeStatefulSetController(ctx context.Context, initialObjects ...runtime
 	return ssc, spc, om, ssh
 }
 
+// fakeWorker 取出队列中的一项并同步一次，代替真实 worker 循环。
 func fakeWorker(ssc *StatefulSetController) {
 	if obj, done := ssc.queue.Get(); !done {
 		_ = ssc.sync(context.TODO(), obj)
@@ -999,18 +1053,23 @@ func fakeWorker(ssc *StatefulSetController) {
 	}
 }
 
+// getPodAtOrdinal 按序号排序后返回指定位置的 Pod，越界返回 nil。
 func getPodAtOrdinal(pods []*v1.Pod, ordinal int) *v1.Pod {
+	// 防止越界索引，调用方据此判断序号处是否已有 Pod。
 	if 0 > ordinal || ordinal >= len(pods) {
 		return nil
 	}
+	// lister 返回顺序不保证，先按序号排序才能正确定位。
 	sort.Sort(ascendingOrdinal(pods))
 	return pods[ordinal]
 }
 
+// scaleUpStatefulSetController 反复模拟 Pod 生命周期事件，直到 StatefulSet 扩容到目标副本数。
 func scaleUpStatefulSetController(logger klog.Logger, set *apps.StatefulSet, ssc *StatefulSetController, spc *StatefulPodControl, om *fakeObjectManager) error {
 	return scaleUpStatefulSetControllerBounded(logger, set, ssc, spc, om, -1)
 }
 
+// scaleUpStatefulSetControllerBounded 与 scaleUpStatefulSetController 相同，但限制模拟迭代次数。
 func scaleUpStatefulSetControllerBounded(logger klog.Logger, set *apps.StatefulSet, ssc *StatefulSetController, spc *StatefulPodControl, om *fakeObjectManager, maxIterations int) error {
 	om.setsIndexer.Add(set)
 	ssc.enqueueStatefulSet(logger, set)
@@ -1020,6 +1079,7 @@ func scaleUpStatefulSetControllerBounded(logger klog.Logger, set *apps.StatefulS
 		return err
 	}
 	iterations := 0
+	// 每次迭代推进一步生命周期：Pending -> Running -> Ready，并同步触发对应事件。
 	for (maxIterations < 0 || iterations < maxIterations) && set.Status.ReadyReplicas < *set.Spec.Replicas {
 		iterations++
 		pods, err := om.podsLister.Pods(set.Namespace).List(selector)
@@ -1062,6 +1122,7 @@ func scaleUpStatefulSetControllerBounded(logger klog.Logger, set *apps.StatefulS
 	return assertMonotonicInvariants(set, om)
 }
 
+// scaleDownStatefulSetController 模拟终止并删除最高序号 Pod，直到缩容到目标副本数。
 func scaleDownStatefulSetController(logger klog.Logger, set *apps.StatefulSet, ssc *StatefulSetController, spc *StatefulPodControl, om *fakeObjectManager) error {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
@@ -1115,6 +1176,7 @@ func scaleDownStatefulSetController(logger klog.Logger, set *apps.StatefulSet, s
 	return assertMonotonicInvariants(set, om)
 }
 
+// rawTemplate 将 Pod 模板序列化为 ControllerRevision 使用的 RawExtension。
 func rawTemplate(template *v1.PodTemplateSpec) runtime.RawExtension {
 	buf := new(bytes.Buffer)
 	enc := json.NewEncoder(buf)

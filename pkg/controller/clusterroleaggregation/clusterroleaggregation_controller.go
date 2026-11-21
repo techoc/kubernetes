@@ -42,7 +42,8 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
-// ClusterRoleAggregationController is a controller to combine cluster roles
+// ClusterRoleAggregationController 是负责聚合 ClusterRole 的控制器。
+// 它根据带有 AggregationRule 的 ClusterRole 中的选择器，把其他 ClusterRole 的规则汇总进去。
 type ClusterRoleAggregationController struct {
 	clusterRoleClient  rbacclient.ClusterRolesGetter
 	clusterRoleLister  rbaclisters.ClusterRoleLister
@@ -52,7 +53,7 @@ type ClusterRoleAggregationController struct {
 	queue       workqueue.TypedRateLimitingInterface[string]
 }
 
-// NewClusterRoleAggregation creates a new controller
+// NewClusterRoleAggregation 创建一个新的 ClusterRole 聚合控制器。
 func NewClusterRoleAggregation(clusterRoleInformer rbacinformers.ClusterRoleInformer, clusterRoleClient rbacclient.ClusterRolesGetter) *ClusterRoleAggregationController {
 	c := &ClusterRoleAggregationController{
 		clusterRoleClient:  clusterRoleClient,
@@ -82,6 +83,8 @@ func NewClusterRoleAggregation(clusterRoleInformer rbacinformers.ClusterRoleInfo
 	return c
 }
 
+// syncClusterRole 同步单个 ClusterRole：按其 AggregationRule 中的选择器找出所有被聚合的 ClusterRole，
+// 汇总它们的规则，并在结果发生变化时回写。
 func (c *ClusterRoleAggregationController) syncClusterRole(ctx context.Context, key string) error {
 	_, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
@@ -89,12 +92,14 @@ func (c *ClusterRoleAggregationController) syncClusterRole(ctx context.Context, 
 	}
 	sharedClusterRole, err := c.clusterRoleLister.Get(name)
 	if errors.IsNotFound(err) {
+		// 目标已被删除，无需再聚合。
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 	if sharedClusterRole.AggregationRule == nil {
+		// 没有聚合规则的对象不是本控制器的职责范围。
 		return nil
 	}
 
@@ -109,15 +114,18 @@ func (c *ClusterRoleAggregationController) syncClusterRole(ctx context.Context, 
 		if err != nil {
 			return err
 		}
+		// 排序保证聚合结果的顺序稳定，避免规则顺序抖动引起无谓的更新。
 		sort.Sort(byName(clusterRoles))
 
 		for i := range clusterRoles {
+			// 聚合角色自身的规则由聚合结果决定，必须排除，防止自引用。
 			if clusterRoles[i].Name == sharedClusterRole.Name {
 				continue
 			}
 
 			for j := range clusterRoles[i].Rules {
 				currRule := clusterRoles[i].Rules[j]
+				// 规则去重，多个被聚合角色可能声明相同的规则。
 				if !ruleExists(newPolicyRules, currRule) {
 					newPolicyRules = append(newPolicyRules, currRule)
 				}
@@ -125,6 +133,7 @@ func (c *ClusterRoleAggregationController) syncClusterRole(ctx context.Context, 
 		}
 	}
 
+	// 结果一致时跳过写操作，减少不必要的 API 请求。
 	if equality.Semantic.DeepEqual(newPolicyRules, sharedClusterRole.Rules) {
 		return nil
 	}
@@ -132,6 +141,7 @@ func (c *ClusterRoleAggregationController) syncClusterRole(ctx context.Context, 
 	return c.applyClusterRoles(ctx, sharedClusterRole.Name, newPolicyRules)
 }
 
+// applyClusterRoles 通过 server-side apply 将聚合后的规则写入目标 ClusterRole。
 func (c *ClusterRoleAggregationController) applyClusterRoles(ctx context.Context, name string, newPolicyRules []rbacv1.PolicyRule) error {
 	clusterRoleApply := rbacv1ac.ClusterRole(name).
 		WithRules(toApplyPolicyRules(newPolicyRules)...)
@@ -141,6 +151,7 @@ func (c *ClusterRoleAggregationController) applyClusterRoles(ctx context.Context
 	return err
 }
 
+// toApplyPolicyRules 将一组 PolicyRule 批量转换为 server-side apply 所需的配置对象。
 func toApplyPolicyRules(rules []rbacv1.PolicyRule) []*rbacv1ac.PolicyRuleApplyConfiguration {
 	var result []*rbacv1ac.PolicyRuleApplyConfiguration
 	for _, rule := range rules {
@@ -149,6 +160,7 @@ func toApplyPolicyRules(rules []rbacv1.PolicyRule) []*rbacv1ac.PolicyRuleApplyCo
 	return result
 }
 
+// toApplyPolicyRule 将单条 PolicyRule 转换为 apply 配置对象。
 func toApplyPolicyRule(rule rbacv1.PolicyRule) *rbacv1ac.PolicyRuleApplyConfiguration {
 	result := rbacv1ac.PolicyRule()
 	result.Resources = rule.Resources
@@ -159,6 +171,7 @@ func toApplyPolicyRule(rule rbacv1.PolicyRule) *rbacv1ac.PolicyRuleApplyConfigur
 	return result
 }
 
+// ruleExists 判断 haystack 中是否已存在与 needle 语义相等的规则。
 func ruleExists(haystack []rbacv1.PolicyRule, needle rbacv1.PolicyRule) bool {
 	for _, curr := range haystack {
 		if equality.Semantic.DeepEqual(curr, needle) {
@@ -168,7 +181,7 @@ func ruleExists(haystack []rbacv1.PolicyRule, needle rbacv1.PolicyRule) bool {
 	return false
 }
 
-// Run starts the controller and blocks until stopCh is closed.
+// Run 启动控制器，并阻塞直到 ctx 被取消。
 func (c *ClusterRoleAggregationController) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
@@ -194,11 +207,13 @@ func (c *ClusterRoleAggregationController) Run(ctx context.Context, workers int)
 	<-ctx.Done()
 }
 
+// runWorker 是单个 worker 的主循环，持续处理工作队列中的条目。
 func (c *ClusterRoleAggregationController) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
+// processNextWorkItem 从队列中取出一个条目并处理；成功则清除限流状态，失败则重新入队重试。
 func (c *ClusterRoleAggregationController) processNextWorkItem(ctx context.Context) bool {
 	dsKey, quit := c.queue.Get()
 	if quit {
@@ -218,17 +233,17 @@ func (c *ClusterRoleAggregationController) processNextWorkItem(ctx context.Conte
 	return true
 }
 
+// enqueue 把所有需要聚合的 ClusterRole 都加入队列。
 func (c *ClusterRoleAggregationController) enqueue() {
-	// this is unusual, but since the set of all clusterroles is small and we don't know the dependency
-	// graph, just queue up every thing each time.  This allows errors to be selectively retried if there
-	// is a problem updating a single role
+	// 这种做法不常见，但 ClusterRole 总量很小，且依赖关系无法预知，
+	// 因此每次事件都把全部对象入队；这样单个角色更新失败时也可以针对性地重试。
 	allClusterRoles, err := c.clusterRoleLister.List(labels.Everything())
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("Couldn't list all objects %v", err))
 		return
 	}
 	for _, clusterRole := range allClusterRoles {
-		// only queue ones that we may need to aggregate
+		// 只入队可能需要聚合的对象，即设置了 AggregationRule 的 ClusterRole。
 		if clusterRole.AggregationRule == nil {
 			continue
 		}
@@ -241,8 +256,14 @@ func (c *ClusterRoleAggregationController) enqueue() {
 	}
 }
 
+// byName 按名称对 ClusterRole 排序，保证聚合结果顺序稳定。
 type byName []*rbacv1.ClusterRole
 
-func (a byName) Len() int           { return len(a) }
-func (a byName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+// Len 返回待排序的对象数量。
+func (a byName) Len() int { return len(a) }
+
+// Swap 交换 i 与 j 位置上的两个对象。
+func (a byName) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
+// Less 按名称比较两个 ClusterRole 的先后顺序。
 func (a byName) Less(i, j int) bool { return a[i].Name < a[j].Name }

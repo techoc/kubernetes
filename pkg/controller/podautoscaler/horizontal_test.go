@@ -76,14 +76,12 @@ import (
 	_ "k8s.io/kubernetes/pkg/apis/autoscaling/install"
 )
 
-// From now on, the HPA controller does have history in it (scaleUpEvents, scaleDownEvents)
-// Hence the second HPA controller reconcile cycle might return different result (comparing with the first run).
-// Current test infrastructure has a race condition, when several reconcile cycles will be performed
-//    while it should be stopped right after the first one. And the second will raise an exception
-//    because of different result.
-
-// This comment has more info: https://github.com/kubernetes/kubernetes/pull/74525#issuecomment-502653106
-// We need to rework this infrastructure:  https://github.com/kubernetes/kubernetes/issues/79222
+// 现在的 HPA 控制器内部保留了历史记录（scaleUpEvents、scaleDownEvents），
+// 因此第二次 reconcile 周期的结果可能与第一次不同。当前测试基础设施存在竞态：
+// 本应在第一次 reconcile 后就停止，却可能执行多个周期，而第二次会因为结果不同
+// 而抛出异常（断言失败）。
+// 更多背景见：https://github.com/kubernetes/kubernetes/pull/74525#issuecomment-502653106
+// 该基础设施需要重构：https://github.com/kubernetes/kubernetes/issues/79222
 
 const (
 	hpaName      = "test-hpa"
@@ -104,7 +102,8 @@ var scaledToZeroFalse = autoscalingv2.HorizontalPodAutoscalerCondition{
 	Type: autoscalingv2.ScaledToZero, Status: v1.ConditionFalse, Reason: "NotScaledToZero",
 }
 
-// statusOkWithOverrides returns the "ok" status with the given conditions as overridden
+// statusOkWithOverrides 返回“正常”状态（statusOk 的副本），并用给定的条件覆盖其中对应项。
+// 各用例只需声明与默认状态不同的条件，避免重复构造完整的条件列表。
 func statusOkWithOverrides(overrides ...autoscalingv2.HorizontalPodAutoscalerCondition) []autoscalingv2.HorizontalPodAutoscalerCondition {
 	resv2 := make([]autoscalingv2.HorizontalPodAutoscalerCondition, len(statusOk))
 	copy(resv2, statusOk)
@@ -112,7 +111,8 @@ func statusOkWithOverrides(overrides ...autoscalingv2.HorizontalPodAutoscalerCon
 		resv2 = setConditionInList(resv2, override.Type, override.Status, override.Reason, "%s", override.Message)
 	}
 
-	// copy to a v1 slice
+	// 再复制一份，仅保留 Type/Status/Reason：Message 与 LastTransitionTime
+	// 由控制器在运行时生成，不适合写进静态期望值。
 	resv1 := make([]autoscalingv2.HorizontalPodAutoscalerCondition, len(resv2))
 	for i, cond := range resv2 {
 		resv1[i] = autoscalingv2.HorizontalPodAutoscalerCondition{
@@ -125,7 +125,8 @@ func statusOkWithOverrides(overrides ...autoscalingv2.HorizontalPodAutoscalerCon
 	return resv1
 }
 
-// AddGetScaleReactor adds a 'get' reactor to a FakeScaleClient returning a specific Scale object.
+// AddGetScaleReactor 向 FakeScaleClient 注册 get reactor，返回由 cfg 构造的 Scale 对象。
+// spec 与 status 的副本数分别取自场景配置，用来模拟期望副本数与实际副本数不一致的情况。
 func AddGetScaleReactor(client *scalefake.FakeScaleClient, resourceType string, cfg *horizontalScenario) {
 	client.AddReactor("get", resourceType, func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		labelSet := map[string]string{"name": podNamePrefix}
@@ -147,8 +148,8 @@ func AddGetScaleReactor(client *scalefake.FakeScaleClient, resourceType string, 
 	})
 }
 
-// AddUpdateScaleReactor adds an 'update' reactor to a FakeScaleClient that simulates
-// a successful update by echoing back the updated Scale object.
+// AddUpdateScaleReactor 向 FakeScaleClient 注册 update reactor，通过原样返回
+// 传入的 Scale 对象来模拟一次成功的更新。
 func AddUpdateScaleReactor(client *scalefake.FakeScaleClient, resourceType string) {
 	client.AddReactor("update", resourceType, func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := action.(core.UpdateAction).GetObject().(*autoscalingv1.Scale)
@@ -156,7 +157,8 @@ func AddUpdateScaleReactor(client *scalefake.FakeScaleClient, resourceType strin
 	})
 }
 
-// AddUpdateAutoscalingReactor registers an update reactor for horizontalpodautoscalers.
+// AddUpdateAutoscalingReactor 为 horizontalpodautoscalers 注册 update reactor，
+// 原样返回被更新的 HPA，使状态写入能够“成功”完成。
 func AddUpdateAutoscalingReactor(fakeClient *fake.Clientset) {
 	fakeClient.AddReactor("update", "horizontalpodautoscalers", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		hpa := action.(core.UpdateAction).GetObject().(*autoscalingv2.HorizontalPodAutoscaler)
@@ -164,7 +166,8 @@ func AddUpdateAutoscalingReactor(fakeClient *fake.Clientset) {
 	})
 }
 
-// AddListHPAReactor registers a list reactor that returns a populated HPA list.
+// AddListHPAReactor 注册 list reactor，返回仅包含由 cfg 构造的 HPA 的列表，
+// 让 informer 的缓存里始终能看到这一个被测对象。
 func AddListHPAReactor(fakeClient *fake.Clientset, cfg *horizontalScenario, t *testing.T) {
 	hpa := buildHPA(t, cfg)
 	fakeClient.AddReactor("list", "horizontalpodautoscalers", func(action core.Action) (handled bool, ret runtime.Object, err error) {
@@ -175,10 +178,15 @@ func AddListHPAReactor(fakeClient *fake.Clientset, cfg *horizontalScenario, t *t
 	})
 }
 
+// AddListPodsReactor 注册 list pods reactor，按场景配置生成 Pod 列表。
+// Pod 的数量、就绪状态、启动时间、运行阶段、删除时间戳与 CPU request 均可逐项指定，
+// 用于覆盖控制器对“哪些 Pod 参与指标计算”的各种判断分支。
 func AddListPodsReactor(fakeClient *fake.Clientset, cfg *horizontalScenario) {
 	fakeClient.AddReactor("list", "pods", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := &v1.PodList{}
 
+		// 显式给出每个 Pod 的 CPU request 时，Pod 数量以该列表长度为准，
+		// 否则按 Scale status 中的副本数生成，避免两个来源互相矛盾。
 		specifiedCPURequests := cfg.reportedCPURequests != nil
 
 		numPodsToCreate := int(cfg.statusReplicas)
@@ -187,6 +195,8 @@ func AddListPodsReactor(fakeClient *fake.Clientset, cfg *horizontalScenario) {
 		}
 
 		for i := 0; i < numPodsToCreate; i++ {
+			// 未指定的属性采用“健康运行中”的默认值，这样用例只需
+			// 声明与正常状态有差异的维度（如未就绪、处于终止中）。
 			podReadiness := v1.ConditionTrue
 			if cfg.reportedPodReadiness != nil {
 				podReadiness = cfg.reportedPodReadiness[i]
@@ -263,6 +273,8 @@ func AddListPodsReactor(fakeClient *fake.Clientset, cfg *horizontalScenario) {
 	})
 }
 
+// AddCreateEventReactor 注册 create events reactor，原样返回创建的 Event 对象，
+// 使控制器记录扩缩容事件时不会因为 fake 客户端拒绝而中断。
 func AddCreateEventReactor(fakeClient *fake.Clientset) {
 	fakeClient.AddReactor("create", "events", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := action.(core.CreateAction).GetObject().(*v1.Event)
@@ -270,11 +282,15 @@ func AddCreateEventReactor(fakeClient *fake.Clientset) {
 	})
 }
 
+// AddListPodMetricsReactor 注册 list pod metrics reactor，按 cfg.reportedLevels
+// 为每个 Pod 生成 CPU/内存指标。每个 Pod 的两容器用量各占一半，
+// 这样聚合后的 Pod 用量正好等于用例声明的 reportedLevel，便于直接推算利用率。
 func AddListPodMetricsReactor(fakeMetricsClient *metricsfake.Clientset, cfg *horizontalScenario) {
 	fakeMetricsClient.AddReactor("list", "pods", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		metrics := &metricsapi.PodMetricsList{}
 		labelSet := map[string]string{"name": podNamePrefix}
 
+		// reportedLevels 的下标即 Pod 编号，与 AddListPodsReactor 生成的 Pod 一一对应。
 		for i, cpu := range cfg.reportedLevels {
 			podMetric := metricsapi.PodMetrics{
 				ObjectMeta: metav1.ObjectMeta{
@@ -316,6 +332,9 @@ func AddListPodMetricsReactor(fakeMetricsClient *metricsfake.Clientset, cfg *hor
 	})
 }
 
+// AddGetCustomMetricsReactor 注册自定义指标的 get reactor，按 reportedLevels
+// 返回每个 Pod 的指标值。这里强制要求是 GetForAction：控制器必须按对象逐个取指标，
+// 否则无法判断哪些 Pod 缺少指标报告。
 func AddGetCustomMetricsReactor(fakeCMClient *cmfake.FakeCustomMetricsClient, cfg *horizontalScenario) {
 	fakeCMClient.AddReactor("get", "*", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		_, wasGetFor := action.(cmfake.GetForAction)
@@ -342,6 +361,8 @@ func AddGetCustomMetricsReactor(fakeCMClient *cmfake.FakeCustomMetricsClient, cf
 	})
 }
 
+// AddListExternalMetricsReactor 注册外部指标的 list reactor，按 reportedLevels
+// 返回一组 qps 指标值。外部指标与 Pod 数量无关，故直接按数值列表逐个构造。
 func AddListExternalMetricsReactor(fakeEMClient *emfake.FakeExternalMetricsClient, cfg *horizontalScenario) {
 	fakeEMClient.AddReactor("list", "*", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		_, wasList := action.(core.ListAction)
@@ -364,8 +385,9 @@ func AddListExternalMetricsReactor(fakeEMClient *emfake.FakeExternalMetricsClien
 	})
 }
 
-// newHorizontalSetup handles the wiring up of a HorizontalController using the provided
-// mock clients and informer configurations, returning the setup ready to run.
+// newHorizontalSetup 用给定的 mock 客户端与 informer 配置组装一个 HorizontalController，
+// 返回可以直接运行的 setup。它负责注册各类监控指标并在开始前清零，
+// 避免前一个用例累积的计数影响当前用例的指标断言。
 func newHorizontalSetup(t *testing.T, s *horizontalScenario, testClient *fake.Clientset, eventClient *fake.Clientset, testMetricsClient *metricsfake.Clientset, testCMClient *cmfake.FakeCustomMetricsClient, testEMClient *emfake.FakeExternalMetricsClient, testScaleClient *scalefake.FakeScaleClient) *horizontalSetup {
 	t.Helper()
 
@@ -394,6 +416,9 @@ func newHorizontalSetup(t *testing.T, s *horizontalScenario, testClient *fake.Cl
 		defaultTestingCPUInitializationPeriod,
 		defaultTestingDelayOfInitialReadinessStatus,
 	)
+	// 直接标记 lister 已同步，跳过 informer 缓存同步的等待，让用例可以
+	// 立即调用 reconcileAutoscaler；后续 informerFactory.Start 仍会启动 Informer，
+	// 但测试不依赖其同步信号。
 	hpaController.hpaListerSynced = alwaysReady
 
 	monitor.Register()
@@ -425,6 +450,7 @@ func newHorizontalSetup(t *testing.T, s *horizontalScenario, testClient *fake.Cl
 	}
 }
 
+// alwaysReady 是一个恒为 true 的 HasSynced 函数，用于测试中跳过缓存同步等待。
 func alwaysReady() bool { return true }
 
 type fakeResource struct {
@@ -433,7 +459,9 @@ type fakeResource struct {
 	kind       string
 }
 
-// horizontalScenario describes the fake data returned by newFakeHorizontalClient.
+// horizontalScenario 描述一次扩缩容测试的输入场景：HPA 的副本边界、目标指标、
+// 各 Pod 的上报值/就绪状态/启动时间，以及期望状态与历史推荐值。
+// 各 reactor 依据这些字段构造 fake 客户端返回的数据。
 type horizontalScenario struct {
 	minReplicas    int32
 	maxReplicas    int32
@@ -460,7 +488,9 @@ type horizontalScenario struct {
 	recommendations   []timestampedRecommendation
 }
 
-// buildHPA constructs an HPA object from a horizontalScenario for use with reconcileAutoscaler.
+// buildHPA 根据 horizontalScenario 构造 HPA 对象，供 reconcileAutoscaler 直接调用。
+// 若场景未指定指标，会补一个默认的 CPU 指标占位，因为真实 API 总要求至少有一个指标；
+// 同时显式调用默认值函数，保证行为策略的默认值与 apiserver 侧一致。
 func buildHPA(t *testing.T, s *horizontalScenario) *autoscalingv2.HorizontalPodAutoscaler {
 	t.Helper()
 
@@ -537,7 +567,8 @@ func buildHPA(t *testing.T, s *horizontalScenario) *autoscalingv2.HorizontalPodA
 	return hpa
 }
 
-// horizontalSetup holds an HPA controller and its informer factory.
+// horizontalSetup 聚合一个 HPA 控制器、其 informer factory 以及所有关联的
+// fake 客户端与上下文，方便用例统一准备和清理。
 type horizontalSetup struct {
 	controller      *HorizontalController
 	informerFactory informers.SharedInformerFactory
@@ -550,6 +581,8 @@ type horizontalSetup struct {
 	ctx             context.Context
 }
 
+// testCase 保存一次“启动控制器等待其 reconcile”式测试的输入与期望结果。
+// 各 fake reactor 在被调用时读取这些字段，再由 verifyResults 统一断言。
 type testCase struct {
 	sync.Mutex
 	minReplicas     int32
@@ -618,7 +651,8 @@ type testCase struct {
 	verifyMetricComputationDurations bool
 }
 
-// Needs to be called under a lock.
+// computeCPUCurrent 根据各 Pod 上报的 CPU 用量与 request 计算平均利用率百分比。
+// 调用方必须持有 tc 的锁，因为该方法会写入 CPUCurrent，且与 reactor 并发读写 tc。
 func (tc *testCase) computeCPUCurrent() {
 	if len(tc.reportedLevels) != len(tc.reportedCPURequests) || len(tc.reportedLevels) == 0 {
 		return
@@ -634,11 +668,17 @@ func (tc *testCase) computeCPUCurrent() {
 	tc.CPUCurrent = int32(100 * reported / requested)
 }
 
+// init 抬高全局的扩容量上限因子，避免测试场景中的大幅扩容被生产默认值截断，
+// 从而使期望副本数可预测。
 func init() {
-	// set this high so we don't accidentally run into it when testing
+	// 把一个较大的值固定下来，避免测试中不慎触发该上限而让期望值失准。
 	scaleUpLimitFactor = 8
 }
 
+// prepareTestClient 构造并返回测试所需的一组 fake 客户端（kube、metrics、
+// custom metrics、external metrics、scale）。各 reactor 在列表/更新时读取 tc 字段，
+// 并对命名空间、名称、期望副本数及状态条件做断言——这正是断言缩容决策语义的地方：
+// 只有当期望副本数发生变化时才应触发 scale 更新。
 func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfake.Clientset, *cmfake.FakeCustomMetricsClient, *emfake.FakeExternalMetricsClient, *scalefake.FakeScaleClient) {
 	logger, _ := ktesting.NewTestContext(t)
 	namespace := "test-namespace"
@@ -699,7 +739,8 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 				Conditions:      tc.initialConditions,
 			},
 		}
-		// Initialize default values
+		// 显式施加行为策略默认值，与 apiserver 默认化路径保持一致，
+		// 否则控制器看到的默认窗口/策略会与用例预期不一致。
 		autoscalingapiv2.SetDefaults_HorizontalPodAutoscalerBehavior(&hpa)
 
 		obj := &autoscalingv2.HorizontalPodAutoscalerList{
@@ -725,7 +766,7 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 		}
 
 		if len(obj.Items[0].Spec.Metrics) == 0 {
-			// manually add in the defaulting logic
+			// 手动补上默认指标，模拟 apiserver 的默认化行为。
 			obj.Items[0].Spec.Metrics = []autoscalingv2.MetricSpec{
 				{
 					Type: autoscalingv2.ResourceMetricSourceType,
@@ -850,23 +891,21 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 			}
 
 			actualConditions := obj.Status.Conditions
-			// TODO: it's ok not to sort these because statusOk
-			// contains all the conditions, so we'll never be appending.
-			// Default to statusOk when missing any specific conditions. The
-			// default covers tests that perform a normal rescale, so it also
-			// includes the ScaledToZero=False condition recorded by the
-			// controller while the default-on HPAScaleToZero gate is enabled.
+			// TODO: 不需要排序，因为 statusOk 已包含全部条件类型，后续不会再追加新条件。
+			// 未指定具体条件时默认采用 statusOk，并带上 ScaledToZero=False：
+			// 在默认开启的 HPAScaleToZero 门控下，正常扩缩容也会记录该条件。
 			if tc.expectedConditions == nil {
 				tc.expectedConditions = statusOkWithOverrides(scaledToZeroFalse)
 			}
-			// clear the message so that we can easily compare
+			// 清除 Message 与 LastTransitionTime，便于稳定比较：
+			// 这些字段由控制器按当前时间生成，静态期望值无法预知。
 			for i := range actualConditions {
 				actualConditions[i].Message = ""
 				actualConditions[i].LastTransitionTime = metav1.Time{}
 			}
 			assert.Equal(t, tc.expectedConditions, actualConditions, "the status conditions should have been as expected")
 			tc.statusUpdated = true
-			// Every time we reconcile HPA object we are updating status.
+			// 每次 reconcile 都会写回 status，因此 statusUpdated 标志能代表一次完整处理。
 			return true, obj, nil
 		}()
 		if obj != nil {
@@ -979,8 +1018,8 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 
 		metrics := &metricsapi.PodMetricsList{}
 		for i, cpu := range tc.reportedLevels {
-			// NB: the list reactor actually does label selector filtering for us,
-			// so we have to make sure our results match the label selector
+			// 注意：fake 客户端的 list reactor 会替我们做标签选择器过滤，
+			// 因此返回的指标必须带有与 Pod 一致的标签，否则会被过滤掉。
 			podMetric := metricsapi.PodMetrics{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("%s-%d", podNamePrefix, i),
@@ -1033,7 +1072,7 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 		if getForAction.GetName() == "*" {
 			metrics := &cmapi.MetricValueList{}
 
-			// multiple objects
+			// name 为 "*" 时表示按多个对象批量取指标。
 			assert.Equal(t, "pods", getForAction.GetResource().Resource, "the type of object that we requested multiple metrics for should have been pods")
 			assert.Equal(t, "qps", getForAction.GetMetricName(), "the metric name requested should have been qps, as specified in the metric spec")
 
@@ -1126,6 +1165,8 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 	return fakeClient, fakeMetricsClient, fakeCMClient, fakeEMClient, fakeScaleClient
 }
 
+// findCpuUtilization 从状态指标列表中找出 CPU 资源指标的平均利用率。
+// 状态里可能混入其他类型的指标，因此跳过非 Resource、非 CPU 或无利用率的项。
 func findCpuUtilization(metricStatus []autoscalingv2.MetricStatus) (utilization *int32) {
 	for _, s := range metricStatus {
 		if s.Type != autoscalingv2.ResourceMetricSourceType {

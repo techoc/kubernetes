@@ -28,6 +28,8 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// newTokenSecret 构造一个符合 bootstrap token 格式的 Secret，供各控制器的单元测试复用。
+// 名称前缀、类型和键名都遵循 cluster-bootstrap 约定，否则 token 校验逻辑无法识别它。
 func newTokenSecret(tokenID, tokenSecret string) *v1.Secret {
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -44,14 +46,21 @@ func newTokenSecret(tokenID, tokenSecret string) *v1.Secret {
 	}
 }
 
+// addSecretExpiration 给 token Secret 写入过期时间字段。
+// 过期时间是可选字段，测试需要显式添加才能覆盖清理器的过期判断分支。
 func addSecretExpiration(s *v1.Secret, expiration string) {
 	s.Data[bootstrapapi.BootstrapTokenExpirationKey] = []byte(expiration)
 }
 
+// addSecretSigningUsage 给 token Secret 写入 "signing" 用途标记。
+// 只有带此标记的 token 才会被 CSR 签名控制器用于证书签发。
 func addSecretSigningUsage(s *v1.Secret, value string) {
 	s.Data[bootstrapapi.BootstrapTokenUsageSigningKey] = []byte(value)
 }
 
+// verifyActions 按序比对 fake 客户端记录的实际动作与期望动作。
+// 逐个比对而非集合比对，因为控制器发出 API 请求的顺序本身也是行为契约；
+// 同时报告多余的、缺失的和内容不符的动作，减少反复运行测试定位问题的次数。
 func verifyActions(t *testing.T, expected, actual []core.Action) {
 	for i, a := range actual {
 		if len(expected) < i+1 {

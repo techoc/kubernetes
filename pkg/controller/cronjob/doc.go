@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cronjob contains the controller for CronJob objects.
+// Package cronjob 包含 CronJob 对象的控制器，负责按 cron 调度表周期性创建 Job。
 package cronjob

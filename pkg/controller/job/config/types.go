@@ -16,10 +16,10 @@ limitations under the License.
 
 package config
 
-// JobControllerConfiguration contains elements describing JobController.
+// JobControllerConfiguration 描述 Job 控制器的可配置项。
 type JobControllerConfiguration struct {
-	// concurrentJobSyncs is the number of job objects that are
-	// allowed to sync concurrently. Larger number = more responsive jobs,
-	// but more CPU (and network) load.
+	// ConcurrentJobSyncs 是允许同时同步的 Job 对象数量。
+	// 数值越大，Job 的状态更新越及时，但会增加 CPU 与 apiserver 网络负载；
+	// 需要在响应速度与控制平面压力之间权衡。
 	ConcurrentJobSyncs int32
 }

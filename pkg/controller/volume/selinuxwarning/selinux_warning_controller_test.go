@@ -40,26 +40,41 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// 测试用的固定命名空间和 PVC UID，方便在各测试对象间保持一致。
 const (
 	namespace = "ns1"
 	pvcUID    = "uid1"
 )
 
+// TestSELinuxWarningController_Sync 验证控制器对 Pod 的同步逻辑：
+// 覆盖卷注册、SELinux 标签与变更策略冲突检测、事件上报以及失效 Pod 的清理。
 func TestSELinuxWarningController_Sync(t *testing.T) {
 	tests := []struct {
-		name               string
-		existingPVCs       []*v1.PersistentVolumeClaim
-		existingPVs        []*v1.PersistentVolume
+		// name 为测试用例名称。
+		name string
+		// existingPVCs 为预置到 informer 缓存中的 PVC。
+		existingPVCs []*v1.PersistentVolumeClaim
+		// existingPVs 为预置到 informer 缓存中的 PV。
+		existingPVs []*v1.PersistentVolume
+		// existingCSIDrivers 为预置的 CSI 驱动对象。
 		existingCSIDrivers []*storagev1.CSIDriver
-		existingPods       []*v1.Pod
+		// existingPods 为预置到 informer 缓存中的 Pod。
+		existingPods []*v1.Pod
 
-		pod                     cache.ObjectName
+		// pod 为本次 sync 操作的目标 Pod 键。
+		pod cache.ObjectName
+		// csiDriverSELinuxEnabled 控制测试插件是否宣称支持 SELinux 挂载。
 		csiDriverSELinuxEnabled bool
-		conflicts               []volumecache.Conflict
-		expectError             bool
-		expectedAddedVolumes    []addedVolume
-		expectedEvents          []string
-		expectedDeletedPods     []cache.ObjectName
+		// conflicts 为假缓存为该 Pod 准备的冲突列表。
+		conflicts []volumecache.Conflict
+		// expectError 表示期望 sync 返回错误。
+		expectError bool
+		// expectedAddedVolumes 为期望写入卷缓存的卷信息。
+		expectedAddedVolumes []addedVolume
+		// expectedEvents 为期望记录的事件。
+		expectedEvents []string
+		// expectedDeletedPods 为期望从卷缓存中删除的 Pod 键。
+		expectedDeletedPods []cache.ObjectName
 	}{
 		{
 			name: "existing pod with no volumes",
@@ -78,7 +93,7 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 			},
 			pod:                     cache.ObjectName{Namespace: namespace, Name: "pod1"},
 			csiDriverSELinuxEnabled: true,
-			expectError:             true, // PVC is missing, add back to queue with exp. backoff
+			expectError:             true, // PVC 缺失，sync 应报错以便重新入队并按指数退避重试
 			expectedEvents:          nil,
 			expectedAddedVolumes:    nil,
 		},
@@ -102,7 +117,7 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
 					label:        ":::s0:c1,c2",
 					changePolicy: v1.SELinuxChangePolicyMountOption,
-					csiDriver:    "ebs.csi.aws.com", // The PV is a fake EBS volume
+					csiDriver:    "ebs.csi.aws.com", // 该 PV 是伪造的 EBS 卷
 				},
 			},
 		},
@@ -124,9 +139,9 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 				{
 					volumeName:   "fake-plugin/pv1",
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
-					label:        "", // Label is cleared with the Recursive policy
+					label:        "", // Recursive 策略下标签会被清空
 					changePolicy: v1.SELinuxChangePolicyRecursive,
-					csiDriver:    "ebs.csi.aws.com", // The PV is a fake EBS volume
+					csiDriver:    "ebs.csi.aws.com", // 该 PV 是伪造的 EBS 卷
 				},
 			},
 		},
@@ -150,7 +165,7 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
 					label:        ":::s0:c1,c2",
 					changePolicy: v1.SELinuxChangePolicyMountOption,
-					csiDriver:    "ebs.csi.aws.com", // The inline volume is AWS EBS
+					csiDriver:    "ebs.csi.aws.com", // 该内联卷是 AWS EBS 卷
 				},
 			},
 		},
@@ -174,14 +189,14 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
 					label:        ":::s0:c1,c2",
 					changePolicy: v1.SELinuxChangePolicyMountOption,
-					csiDriver:    "ebs.csi.aws.com", // The PV is a fake EBS volume
+					csiDriver:    "ebs.csi.aws.com", // 该 PV 是伪造的 EBS 卷
 				},
 				{
 					volumeName:   "fake-plugin/ebs.csi.aws.com-inlinevol1",
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
 					label:        ":::s0:c1,c2",
 					changePolicy: v1.SELinuxChangePolicyMountOption,
-					csiDriver:    "ebs.csi.aws.com", // The inline volume is AWS EBS
+					csiDriver:    "ebs.csi.aws.com", // 该内联卷是 AWS EBS 卷
 				},
 			},
 		},
@@ -223,7 +238,7 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
 					label:        ":::s0:c1,c2",
 					changePolicy: v1.SELinuxChangePolicyMountOption,
-					csiDriver:    "ebs.csi.aws.com", // The PV is a fake EBS volume
+					csiDriver:    "ebs.csi.aws.com", // 该 PV 是伪造的 EBS 卷
 				},
 			},
 			expectedEvents: []string{
@@ -250,9 +265,9 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 				{
 					volumeName:   "fake-plugin/pv1",
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
-					label:        "", // Label is cleared with the Recursive policy
+					label:        "", // Recursive 策略下标签会被清空
 					changePolicy: v1.SELinuxChangePolicyRecursive,
-					csiDriver:    "ebs.csi.aws.com", // The PV is a fake EBS volume
+					csiDriver:    "ebs.csi.aws.com", // 该 PV 是伪造的 EBS 卷
 				},
 			},
 		},
@@ -292,9 +307,9 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 				{
 					volumeName:   "fake-plugin/pv1",
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
-					label:        "", // Label is cleared with the Recursive policy
+					label:        "", // Recursive 策略下标签会被清空
 					changePolicy: v1.SELinuxChangePolicyRecursive,
-					csiDriver:    "ebs.csi.aws.com", // The PV is a fake EBS volume
+					csiDriver:    "ebs.csi.aws.com", // 该 PV 是伪造的 EBS 卷
 				},
 			},
 			expectedEvents: []string{
@@ -312,7 +327,7 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 			},
 			existingPods: []*v1.Pod{
 				pod("pod1", "s0:c1,c2", nil).withPVC("pvc1", "vol1").build(),
-				// "pod2" does not exist
+				// pod2 不在 informer 缓存中
 			},
 			pod:                     cache.ObjectName{Namespace: namespace, Name: "pod1"},
 			csiDriverSELinuxEnabled: true,
@@ -340,11 +355,11 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
 					label:        ":::s0:c1,c2",
 					changePolicy: v1.SELinuxChangePolicyMountOption,
-					csiDriver:    "ebs.csi.aws.com", // The PV is a fake EBS volume
+					csiDriver:    "ebs.csi.aws.com", // 该 PV 是伪造的 EBS 卷
 				},
 			},
 			expectedEvents: []string{
-				// Event for the missing pod is not sent
+				// 不存在的 Pod 不应收到事件
 				`Normal SELinuxLabelConflict SELinuxLabel ":::s0:c1,c2" conflicts with pod pod2 that uses the same volume as this pod with SELinuxLabel ":::s0:c98,c99". If both pods land on the same node, only one of them may access the volume.`,
 			},
 		},
@@ -367,7 +382,7 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 					volumeName:   "fake-plugin/pv1",
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
 					label:        "",
-					changePolicy: v1.SELinuxChangePolicyRecursive, // Reset to Recursive when the label is empty
+					changePolicy: v1.SELinuxChangePolicyRecursive, // 标签为空时回退到 Recursive 策略
 					csiDriver:    "ebs.csi.aws.com",
 				},
 			},
@@ -457,7 +472,7 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 		{
 			name:         "deleted pod",
 			existingPods: []*v1.Pod{
-				// "pod1" does not exist in the informer
+				// pod1 不在 informer 缓存中
 			},
 			pod:                     cache.ObjectName{Namespace: namespace, Name: "pod1"},
 			csiDriverSELinuxEnabled: true,
@@ -484,9 +499,9 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 				{
 					volumeName:   "fake-plugin/pv1",
 					podKey:       cache.ObjectName{Namespace: namespace, Name: "pod1"},
-					label:        "",                              // Label is cleared when the CSI driver does not support SELinuxMount
-					changePolicy: v1.SELinuxChangePolicyRecursive, // Reset to Recursive when the CSI driver does not support SELinuxMount
-					csiDriver:    "ebs.csi.aws.com",               // The PV is a fake EBS volume
+					label:        "",                              // 驱动不支持 SELinuxMount 时清空标签
+					changePolicy: v1.SELinuxChangePolicyRecursive, // 驱动不支持 SELinuxMount 时回退到 Recursive
+					csiDriver:    "ebs.csi.aws.com",               // 该 PV 是伪造的 EBS 卷
 				},
 			},
 		},
@@ -523,7 +538,7 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to create controller: %v", err)
 			}
-			// Use a fake volume cache
+			// 用假卷缓存记录调用并按需注入冲突，避免依赖真实实现
 			labelCache := &fakeVolumeCache{
 				conflictsToSend: map[cache.ObjectName][]volumecache.Conflict{
 					{Namespace: tt.pod.Namespace, Name: tt.pod.Name}: tt.conflicts,
@@ -533,15 +548,15 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 			fakeRecorder := record.NewFakeRecorder(10)
 			c.eventRecorder = fakeRecorder
 
-			// Start the informers
+			// 启动 informer 并等待缓存同步完成
 			fakeInformerFactory.Start(ctx.Done())
 			fakeInformerFactory.WaitForCacheSync(ctx.Done())
-			// Start the controller
+			// 启动控制器；sync 逻辑不依赖其运行，此处仅模拟真实运行环境
 			wg.Go(func() {
 				c.Run(ctx, 1)
 			})
 
-			// Inject fake existing objects
+			// 直接写入 informer 的本地存储，注入测试对象
 			for _, pvc := range tt.existingPVCs {
 				_ = pvcInformer.Informer().GetStore().Add(pvc)
 			}
@@ -552,10 +567,10 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 				_ = podInformer.Informer().GetStore().Add(pod)
 			}
 
-			// Act: call sync() on the pod that *is* in the informer cache
+			// 对缓存中的目标 Pod 调用 sync
 			err = c.sync(ctx, tt.pod)
 
-			// Assert:
+			// 校验卷缓存、事件和删除记录
 			if tt.expectError {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
@@ -587,6 +602,7 @@ func TestSELinuxWarningController_Sync(t *testing.T) {
 	}
 }
 
+// pv 创建一个使用 AWS EBS 作为卷源的伪造 PV。
 func pv(name string) *v1.PersistentVolume {
 	return &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -602,6 +618,7 @@ func pv(name string) *v1.PersistentVolume {
 	}
 }
 
+// pvc 创建一个绑定所需命名空间和 UID 的伪造 PVC。
 func pvc(name string) *v1.PersistentVolumeClaim {
 	return &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -615,6 +632,7 @@ func pvc(name string) *v1.PersistentVolumeClaim {
 	}
 }
 
+// pvBoundToPVC 创建一个与指定 PVC 绑定的 PV。
 func pvBoundToPVC(pvName, pvcName string) *v1.PersistentVolume {
 	pv := pv(pvName)
 	pv.Spec.ClaimRef = &v1.ObjectReference{
@@ -628,6 +646,7 @@ func pvBoundToPVC(pvName, pvcName string) *v1.PersistentVolume {
 	return pv
 }
 
+// pvcBoundToPV 创建一个与指定 PV 绑定的 PVC。
 func pvcBoundToPV(pvName, pvcName string) *v1.PersistentVolumeClaim {
 	pvc := pvc(pvcName)
 	pvc.Spec.VolumeName = pvName
@@ -636,10 +655,14 @@ func pvcBoundToPV(pvName, pvcName string) *v1.PersistentVolumeClaim {
 	return pvc
 }
 
+// podBuilder 以流式方式构造测试用 Pod，减少重复的字段设置。
 type podBuilder struct {
+	// pod 为当前正在构造的 Pod 对象。
 	pod *v1.Pod
 }
 
+// pod 创建一个带有基础容器和 emptyDir 卷的 Pod 构造器；
+// level 为空时不设置 SELinuxOptions，以覆盖未指定标签的场景。
 func pod(podName, level string, changePolicy *v1.PodSELinuxChangePolicy) *podBuilder {
 	var opts *v1.SELinuxOptions
 	if level != "" {
@@ -686,11 +709,13 @@ func pod(podName, level string, changePolicy *v1.PodSELinuxChangePolicy) *podBui
 	}
 }
 
+// withPhase 设置 Pod 的阶段，用于测试不同阶段的处理逻辑。
 func (b *podBuilder) withPhase(phase v1.PodPhase) *podBuilder {
 	b.pod.Status.Phase = phase
 	return b
 }
 
+// withInlineVolume 为 Pod 添加一个 AWS EBS 内联卷及其挂载点。
 func (b *podBuilder) withInlineVolume() *podBuilder {
 	b.pod.Spec.Volumes = append(b.pod.Spec.Volumes, v1.Volume{
 		Name: "inlineVolume",
@@ -707,6 +732,7 @@ func (b *podBuilder) withInlineVolume() *podBuilder {
 	return b
 }
 
+// withPVC 为 Pod 添加一个引用指定 PVC 的卷及其挂载点。
 func (b *podBuilder) withPVC(pvcName, volumeName string) *podBuilder {
 	b.pod.Spec.Volumes = append(b.pod.Spec.Volumes, v1.Volume{
 		Name: volumeName,
@@ -723,18 +749,26 @@ func (b *podBuilder) withPVC(pvcName, volumeName string) *podBuilder {
 	return b
 }
 
+// build 返回构造完成的 Pod 对象。
 func (b *podBuilder) build() *v1.Pod {
 	return b.pod
 }
 
+// addedVolume 记录一次 AddVolume 调用的参数，供断言使用。
 type addedVolume struct {
-	volumeName   v1.UniqueVolumeName
-	podKey       cache.ObjectName
-	label        string
+	// volumeName 为卷的唯一名称。
+	volumeName v1.UniqueVolumeName
+	// podKey 为该卷所属 Pod 的键。
+	podKey cache.ObjectName
+	// label 为该 Pod 的 SELinux 标签。
+	label string
+	// changePolicy 为该 Pod 的 SELinux 变更策略。
 	changePolicy v1.PodSELinuxChangePolicy
-	csiDriver    string
+	// csiDriver 为该卷对应的 CSI 驱动名称。
+	csiDriver string
 }
 
+// sortAddedVolumes 按卷名和 Pod 键排序，消除遍历顺序带来的不确定性。
 func sortAddedVolumes(a []addedVolume) {
 	sort.Slice(a, func(i, j int) bool {
 		ikey := string(a[i].volumeName) + "/" + a[i].podKey.String()
@@ -743,15 +777,20 @@ func sortAddedVolumes(a []addedVolume) {
 	})
 }
 
+// fakeVolumeCache 是 VolumeCache 的测试替身，记录调用并按配置返回冲突。
 type fakeVolumeCache struct {
+	// addedVolumes 记录所有 AddVolume 调用。
 	addedVolumes []addedVolume
-	// Conflicts to send when AddPod with given pod name is called.
+	// conflictsToSend 按 Pod 键配置 AddVolume 时要返回的冲突。
 	conflictsToSend map[cache.ObjectName][]volumecache.Conflict
-	deletedPods     []cache.ObjectName
+	// deletedPods 记录所有 DeletePod 调用。
+	deletedPods []cache.ObjectName
 }
 
+// 编译期检查 fakeVolumeCache 实现了 VolumeCache 接口。
 var _ volumecache.VolumeCache = &fakeVolumeCache{}
 
+// AddVolume 记录卷信息并返回该 Pod 预置的冲突列表。
 func (f *fakeVolumeCache) AddVolume(logger klog.Logger, volumeName v1.UniqueVolumeName, podKey cache.ObjectName, label string, changePolicy v1.PodSELinuxChangePolicy, csiDriver string) []volumecache.Conflict {
 	f.addedVolumes = append(f.addedVolumes, addedVolume{
 		volumeName:   volumeName,
@@ -764,10 +803,12 @@ func (f *fakeVolumeCache) AddVolume(logger klog.Logger, volumeName v1.UniqueVolu
 	return conflicts
 }
 
+// DeletePod 记录被删除的 Pod 键。
 func (f *fakeVolumeCache) DeletePod(logger klog.Logger, podKey cache.ObjectName) {
 	f.deletedPods = append(f.deletedPods, podKey)
 }
 
+// GetPodsForCSIDriver 返回使用指定 CSI 驱动的所有 Pod 键。
 func (f *fakeVolumeCache) GetPodsForCSIDriver(driverName string) []cache.ObjectName {
 	pods := []cache.ObjectName{}
 	for _, v := range f.addedVolumes {
@@ -778,6 +819,7 @@ func (f *fakeVolumeCache) GetPodsForCSIDriver(driverName string) []cache.ObjectN
 	return pods
 }
 
+// GetConflicts 汇总返回预置的全部冲突。
 func (f *fakeVolumeCache) GetConflicts(logger klog.Logger) []volumecache.Conflict {
 	result := make([]volumecache.Conflict, 0)
 	for _, conflicts := range f.conflictsToSend {
@@ -786,6 +828,8 @@ func (f *fakeVolumeCache) GetConflicts(logger klog.Logger) []volumecache.Conflic
 	return result
 }
 
+// collectEvents 非阻塞地排空 FakeRecorder 的事件通道，
+// 避免等待事件到达导致测试挂起。
 func collectEvents(source <-chan string) []string {
 	done := false
 	events := make([]string, 0)

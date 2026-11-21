@@ -22,6 +22,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+// TestSELinuxOptionsToFileLabel 验证 SELinuxOptions 到 SELinux 文件标签字符串的转换。
+// 逐字段覆盖 nil、全字段、部分字段和空对象等情形：
+// 空字段在标签中仍保留为空段（如 ::container_t:s0:c0,c1），因为标签各段的位置有固定语义。
 func TestSELinuxOptionsToFileLabel(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -73,6 +76,7 @@ func TestSELinuxOptionsToFileLabel(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+			// 断言整个标签字符串完全一致，确保空字段的位置也被正确保留。
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
 			}
@@ -80,6 +84,9 @@ func TestSELinuxOptionsToFileLabel(t *testing.T) {
 	}
 }
 
+// TestLabelsConflict 验证两个 SELinux 标签是否被判定为冲突。
+// 冲突判定基于逐段比较：任一段非空且不同即冲突；
+// 空段表示未指定，可与任意值兼容，覆盖空标签、不同长度和仅 level 不同等边界。
 func TestLabelsConflict(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -143,6 +150,7 @@ func TestLabelsConflict(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 逐表项验证冲突判定，特别关注空段与不同长度标签的边界情况。
 			c := ControllerSELinuxTranslator{}
 			ret := c.Conflicts(test.a, test.b)
 			if ret != test.conflict {

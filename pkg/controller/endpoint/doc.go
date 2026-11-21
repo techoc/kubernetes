@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package endpoint provides EndpointController implementation
-// to manage and sync service endpoints.
+// Package endpoint 提供 EndpointController 的实现，用于管理和同步 Service 的端点。
+// 该控制器监听 Service 与 Pod 的变化，维护与 Service 选择器匹配的 Endpoint（或 EndpointSlice）对象。
 package endpoint

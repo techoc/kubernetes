@@ -35,66 +35,59 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// CIDRAllocatorType is the type of the allocator to use.
+// CIDRAllocatorType 表示要使用的分配器类型。
 type CIDRAllocatorType string
 
 const (
-	// RangeAllocatorType is the allocator that uses an internal CIDR
-	// range allocator to do node CIDR range allocations.
+	// RangeAllocatorType 使用内部 CIDR 区段分配器为节点分配 CIDR 区段。
 	RangeAllocatorType CIDRAllocatorType = "RangeAllocator"
-	// CloudAllocatorType is the allocator that uses cloud platform
-	// support to do node CIDR range allocations.
+	// CloudAllocatorType 借助云厂商的能力为节点分配 CIDR 区段。
 	CloudAllocatorType CIDRAllocatorType = "CloudAllocator"
-	// IPAMFromClusterAllocatorType uses the ipam controller sync'ing the node
-	// CIDR range allocations from the cluster to the cloud.
+	// IPAMFromClusterAllocatorType 使用 ipam 控制器将节点 CIDR 区段分配从集群同步到云端。
 	IPAMFromClusterAllocatorType = "IPAMFromCluster"
-	// IPAMFromCloudAllocatorType uses the ipam controller sync'ing the node
-	// CIDR range allocations from the cloud to the cluster.
+	// IPAMFromCloudAllocatorType 使用 ipam 控制器将节点 CIDR 区段分配从云端同步到集群。
 	IPAMFromCloudAllocatorType = "IPAMFromCloud"
 )
 
-// TODO: figure out the good setting for those constants.
+// TODO: 确定这些常量的合理取值。
 const (
-	// The amount of time the nodecontroller polls on the list nodes endpoint.
+	// 节点控制器轮询 list nodes 接口的最长总时长。
 	apiserverStartupGracePeriod = 10 * time.Minute
 
-	// The no. of NodeSpec updates NC can process concurrently.
+	// 节点控制器可并发处理的 NodeSpec 更新数量。
 	cidrUpdateWorkers = 30
 
-	// cidrUpdateRetries is the no. of times a NodeSpec update will be retried before dropping it.
+	// cidrUpdateRetries 是放弃一次 NodeSpec 更新前的重试次数。
 	cidrUpdateRetries = 3
 )
 
-// nodePollInterval is used in listing node
+// nodePollInterval 是列取节点时的轮询间隔。
 var nodePollInterval = 10 * time.Second
 
-// CIDRAllocator is an interface implemented by things that know how
-// to allocate/occupy/recycle CIDR for nodes.
+// CIDRAllocator 是需要为节点分配、占用和回收 CIDR 的组件所实现的接口。
 type CIDRAllocator interface {
-	// AllocateOrOccupyCIDR looks at the given node, assigns it a valid
-	// CIDR if it doesn't currently have one or mark the CIDR as used if
-	// the node already have one.
+	// AllocateOrOccupyCIDR 检查给定节点：若其尚无 CIDR 则分配一个有效区段，
+	// 若已有则把该区段标记为已占用。
 	AllocateOrOccupyCIDR(ctx context.Context, node *v1.Node) error
-	// ReleaseCIDR releases the CIDR of the removed node.
+	// ReleaseCIDR 释放已移除节点占用的 CIDR。
 	ReleaseCIDR(logger klog.Logger, node *v1.Node) error
-	// Run starts all the working logic of the allocator.
+	// Run 启动分配器的全部工作逻辑。
 	Run(ctx context.Context)
 }
 
-// CIDRAllocatorParams is parameters that's required for creating new
-// cidr range allocator.
+// CIDRAllocatorParams 是创建新的 CIDR 区段分配器所需的参数。
 type CIDRAllocatorParams struct {
-	// ClusterCIDRs is list of cluster cidrs.
+	// ClusterCIDRs 是集群 CIDR 列表。
 	ClusterCIDRs []*net.IPNet
-	// ServiceCIDR is primary service cidr for cluster.
+	// ServiceCIDR 是集群的主 Service CIDR。
 	ServiceCIDR *net.IPNet
-	// SecondaryServiceCIDR is secondary service cidr for cluster.
+	// SecondaryServiceCIDR 是集群的辅助 Service CIDR。
 	SecondaryServiceCIDR *net.IPNet
-	// NodeCIDRMaskSizes is list of node cidr mask sizes.
+	// NodeCIDRMaskSizes 是节点 CIDR 掩码长度列表。
 	NodeCIDRMaskSizes []int
 }
 
-// New creates a new CIDR range allocator.
+// New 创建一个新的 CIDR 区段分配器。
 func New(ctx context.Context, kubeClient clientset.Interface, cloud cloudprovider.Interface, nodeInformer informers.NodeInformer, allocatorType CIDRAllocatorType, allocatorParams CIDRAllocatorParams) (CIDRAllocator, error) {
 	nodeList, err := listNodes(ctx, kubeClient)
 	if err != nil {
@@ -113,8 +106,7 @@ func listNodes(ctx context.Context, kubeClient clientset.Interface) (*v1.NodeLis
 	var nodeList *v1.NodeList
 	logger := klog.FromContext(ctx)
 
-	// We must poll because apiserver might not be up. This error causes
-	// controller manager to restart.
+	// 必须轮询等待，因为 apiserver 可能尚未就绪；超时错误会触发控制器管理器重启。
 	if pollErr := wait.PollUntilContextTimeout(ctx, nodePollInterval, apiserverStartupGracePeriod, true, func(ctx context.Context) (bool, error) {
 		var err error
 		nodeList, err = kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{
@@ -133,7 +125,7 @@ func listNodes(ctx context.Context, kubeClient clientset.Interface) (*v1.NodeLis
 	return nodeList, nil
 }
 
-// ipnetToStringList converts a slice of net.IPNet into a list of CIDR in string format
+// ipnetToStringList 将 net.IPNet 切片转换为字符串形式的 CIDR 列表。
 func ipnetToStringList(inCIDRs []*net.IPNet) []string {
 	outCIDRs := make([]string, len(inCIDRs))
 	for idx, inCIDR := range inCIDRs {
@@ -142,8 +134,7 @@ func ipnetToStringList(inCIDRs []*net.IPNet) []string {
 	return outCIDRs
 }
 
-// occupyServiceCIDR removes the service CIDR range from the cluster CIDR if it
-// intersects.
+// occupyServiceCIDR 在 Service CIDR 与集群 CIDR 相交时，将 Service CIDR 区段标记为已占用。
 func occupyServiceCIDR(set *cidrset.CidrSet, clusterCIDR, serviceCIDR *net.IPNet) error {
 	if clusterCIDR.Contains(serviceCIDR.IP) || serviceCIDR.Contains(clusterCIDR.IP) {
 		if err := set.Occupy(serviceCIDR); err != nil {

@@ -27,12 +27,13 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// clustertrustbundlePublisher - subsystem name used by clustertrustbundle_publisher
+// clustertrustbundlePublisher 是 clustertrustbundle_publisher 使用的指标子系统名称。
 const (
 	clustertrustbundlePublisher = "clustertrustbundle_publisher"
 )
 
 var (
+	// syncCounter 按同步结果状态码统计同步次数，便于区分成功与各类失败。
 	syncCounter = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      clustertrustbundlePublisher,
@@ -42,6 +43,7 @@ var (
 		},
 		[]string{"code"},
 	)
+	// syncLatency 按结果状态码记录同步耗时，用于观察控制器性能回归。
 	syncLatency = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      clustertrustbundlePublisher,
@@ -54,12 +56,16 @@ var (
 	)
 )
 
+// recordMetrics 根据一次同步的结果记录耗时与计数。
+// 优先使用 API 错误携带的真实 HTTP 状态码作为标签，便于定位特定失败类型；
+// 非 API 错误统一记为 500。
 func recordMetrics(start time.Time, err error) {
 	code := "500"
 	if err == nil {
 		code = "200"
 	} else {
 		var statusErr apierrors.APIStatus
+		// 保留 API 错误的状态码（如 404、409），使指标能反映具体的失败原因。
 		if errors.As(err, &statusErr) && statusErr.Status().Code != 0 {
 			code = strconv.Itoa(int(statusErr.Status().Code))
 		}
@@ -68,8 +74,10 @@ func recordMetrics(start time.Time, err error) {
 	syncCounter.WithLabelValues(code).Inc()
 }
 
+// once 确保指标只注册一次，重复注册到 legacyregistry 会触发 panic。
 var once sync.Once
 
+// registerMetrics 将该包的指标一次性注册到 legacyregistry。
 func registerMetrics() {
 	once.Do(func() {
 		legacyregistry.MustRegister(syncCounter)

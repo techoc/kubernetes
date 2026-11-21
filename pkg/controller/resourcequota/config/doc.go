@@ -16,4 +16,7 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package config 定义 ResourceQuotaController 的内部配置类型。
+// 这些类型在控制器管理器中通过 API 转换和外部版本配置相互映射，
+// 包内类型由 +k8s:deepcopy-gen 指令自动生成 DeepCopy 方法。
 package config

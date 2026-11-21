@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package config 定义 ServiceAccount 控制器的内部配置类型。
+// 该包由 deepcopy-gen 生成深拷贝代码，供控制器在运行时读取配置。
+
 // +k8s:deepcopy-gen=package
 
 package config

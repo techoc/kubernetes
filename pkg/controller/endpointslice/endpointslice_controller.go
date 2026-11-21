@@ -51,37 +51,35 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
+// 以下常量定义控制器的重试策略、同步延迟、退避周期与标识值。
 const (
-	// maxRetries is the number of times a service will be retried before it is
-	// dropped out of the queue. Any sync error, such as a failure to create or
-	// update an EndpointSlice could trigger a retry. With the current
-	// rate-limiter in use (1s*2^(numRetries-1)) the following numbers represent
-	// the sequence of delays between successive queuings of a service.
+	// maxRetries 是 Service 在出队前允许重试的次数。任何同步错误（例如创建或更新 EndpointSlice 失败）
+	// 都可能触发重试。以当前限速器（1s*2^(numRetries-1)）为例，连续入队的延迟依次为：
 	//
+	// 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 512s, 1000s（上限）
 	// 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 512s, 1000s (max)
 	maxRetries = 15
 
-	// endpointSliceChangeMinSyncDelay indicates the minimum delay before
-	// queuing a syncService call after an EndpointSlice changes. If
-	// endpointUpdatesBatchPeriod is greater than this value, it will be used
-	// instead. This helps batch processing of changes to multiple
-	// EndpointSlices.
+	// endpointSliceChangeMinSyncDelay 表示 EndpointSlice 变更后将 syncService 入队的最小延迟。
+	// 若 endpointUpdatesBatchPeriod 更大，则使用后者。该延迟有助于合并对多个 EndpointSlice
+	// 的连续变更，避免逐个触发同步。
 	endpointSliceChangeMinSyncDelay = 1 * time.Second
 
-	// defaultSyncBackOff is the default backoff period for syncService calls.
+	// defaultSyncBackOff 是 syncService 调用的默认退避周期。
 	defaultSyncBackOff = 1 * time.Second
-	// maxSyncBackOff is the max backoff period for syncService calls.
+	// maxSyncBackOff 是 syncService 调用的最大退避周期。
 	maxSyncBackOff = 1000 * time.Second
 
-	// ControllerName is a unique value used with LabelManagedBy to indicated
-	// the component managing an EndpointSlice.
+	// ControllerName 是与 LabelManagedBy 配合使用的唯一标识值，
+	// 用于标明某个 EndpointSlice 由哪个组件管理。
 	ControllerName = "endpointslice-controller.k8s.io"
 
-	// topologyQueueItemKey is the key for all items in the topologyQueue.
+	// topologyQueueItemKey 是 topologyQueue 中所有项共用固定键，因为拓扑检查是全局性的。
 	topologyQueueItemKey = "topologyQueueItemKey"
 )
 
-// NewController creates and initializes a new Controller
+// NewController 创建并初始化一个 Controller：注册各 informer 的事件处理器、
+// 构造工作队列，并初始化 tracker、拓扑缓存与 EndpointSlice 协调器。
 func NewController(ctx context.Context, podInformer coreinformers.PodInformer,
 	serviceInformer coreinformers.ServiceInformer,
 	nodeInformer coreinformers.NodeInformer,
@@ -97,17 +95,14 @@ func NewController(ctx context.Context, podInformer coreinformers.PodInformer,
 
 	c := &Controller{
 		client: client,
-		// This is similar to the DefaultControllerRateLimiter, just with a
-		// significantly higher default backoff (1s vs 5ms). This controller
-		// processes events that can require significant EndpointSlice changes,
-		// such as an update to a Service or Deployment. A more significant
-		// rate limit back off here helps ensure that the Controller does not
-		// overwhelm the API Server.
+		// 与 DefaultControllerRateLimiter 类似，但默认退避显著更大（1s 对比 5ms）。
+		// 本控制器处理的事件可能引发大规模 EndpointSlice 变更（例如 Service 或 Deployment 更新），
+		// 更大的退避可以避免控制器对 API Server 造成过大压力。
 		serviceQueue: workqueue.NewTypedRateLimitingQueueWithConfig(
 			workqueue.NewTypedMaxOfRateLimiter(
 				workqueue.NewTypedItemExponentialFailureRateLimiter[string](defaultSyncBackOff, maxSyncBackOff),
-				// 10 qps, 100 bucket size. This is only for retry speed and its
-				// only the overall factor (not per item).
+				// 10 qps，桶大小 100。仅用于限制重试速率，
+				// 且是整体因子（不是针对每个队列项）。
 				&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(10), 100)},
 			),
 			workqueue.TypedRateLimitingQueueConfig[string]{
@@ -189,89 +184,80 @@ func NewController(ctx context.Context, podInformer coreinformers.PodInformer,
 	return c
 }
 
-// Controller manages selector-based service endpoint slices
+// Controller 管理基于 selector 的 Service 对应的 EndpointSlice，
+// 通过多个队列分别处理 Service、Pod 与拓扑变化，并维护缓存与协调所需的各类 tracker。
 type Controller struct {
 	client           clientset.Interface
 	eventBroadcaster record.EventBroadcaster
 	eventRecorder    record.EventRecorder
 
-	// serviceLister is able to list/get services and is populated by the
-	// shared informer passed to NewController
+	// serviceLister 用于 list/get Service，数据来自传给 NewController 的共享 informer。
 	serviceLister corelisters.ServiceLister
-	// servicesSynced returns true if the service shared informer has been synced at least once.
-	// Added as a member to the struct to allow injection for testing.
+	// servicesSynced 在 Service 共享 informer 至少完成一次同步后返回 true。
+	// 作为结构体字段是为了便于在测试中注入。
 	servicesSynced cache.InformerSynced
 
-	// podLister is able to list/get pods and is populated by the
-	// shared informer passed to NewController
+	// podLister 用于 list/get Pod，数据来自传给 NewController 的共享 informer。
 	podLister corelisters.PodLister
-	// podsSynced returns true if the pod shared informer has been synced at least once.
-	// Added as a member to the struct to allow injection for testing.
+	// podsSynced 在 Pod 共享 informer 至少完成一次同步后返回 true。
+	// 作为结构体字段是为了便于在测试中注入。
 	podsSynced cache.InformerSynced
 
-	// endpointSliceLister is able to list/get endpoint slices and is populated by the
-	// shared informer passed to NewController
+	// endpointSliceLister 用于 list/get EndpointSlice，数据来自传给 NewController 的共享 informer。
 	endpointSliceLister discoverylisters.EndpointSliceLister
-	// endpointSlicesSynced returns true if the endpoint slice shared informer has been synced at least once.
-	// Added as a member to the struct to allow injection for testing.
+	// endpointSlicesSynced 在 EndpointSlice 共享 informer 至少完成一次同步后返回 true。
+	// 作为结构体字段是为了便于在测试中注入。
 	endpointSlicesSynced cache.InformerSynced
-	// endpointSliceTracker tracks the list of EndpointSlices and associated
-	// resource versions expected for each Service. It can help determine if a
-	// cached EndpointSlice is out of date.
+	// endpointSliceTracker 记录每个 Service 预期的 EndpointSlice 列表及其资源版本，
+	// 用于判断缓存中的 EndpointSlice 是否已过期。
 	endpointSliceTracker *endpointsliceutil.EndpointSliceTracker
 
-	// nodeLister is able to list/get nodes and is populated by the
-	// shared informer passed to NewController
+	// nodeLister 用于 list/get Node，数据来自传给 NewController 的共享 informer。
 	nodeLister corelisters.NodeLister
-	// nodesSynced returns true if the node shared informer has been synced at least once.
-	// Added as a member to the struct to allow injection for testing.
+	// nodesSynced 在 Node 共享 informer 至少完成一次同步后返回 true。
+	// 作为结构体字段是为了便于在测试中注入。
 	nodesSynced cache.InformerSynced
 
-	// reconciler is an util used to reconcile EndpointSlice changes.
+	// reconciler 是执行 EndpointSlice 实际协调的工具。
 	reconciler *endpointslicerec.Reconciler
 
-	// triggerTimeTracker is an util used to compute and export the
-	// EndpointsLastChangeTriggerTime annotation.
+	// triggerTimeTracker 用于计算并导出 EndpointsLastChangeTriggerTime 注解，
+	// 记录导致端点变更的最早触发时间。
 	triggerTimeTracker *endpointsliceutil.TriggerTimeTracker
 
-	// Services that need to be updated. A channel is inappropriate here,
-	// because it allows services with lots of pods to be serviced much
-	// more often than services with few pods; it also would cause a
-	// service that's inserted multiple times to be processed more than
-	// necessary.
+	// serviceQueue 保存需要更新的 Service。此处不适合使用 channel：
+	// channel 会让 Pod 数量多的 Service 获得远高于 Pod 少的 Service 的处理频率；
+	// 而且同一个 Service 被多次插入时会被重复处理，造成不必要的同步。
 	serviceQueue workqueue.TypedRateLimitingInterface[string]
 
-	// podQueue is used to compute pod->services mapping and drive matching services into serviceQueue.
-	// This operation can be expensive when large number of services exist in the pod's namespace and
-	// label selection logic has to be evaluated against each service.
+	// podQueue 用于计算 pod->services 映射，并将匹配的 Service 推入 serviceQueue。
+	// 当 Pod 所在 namespace 中存在大量 Service 时，这一操作开销较大，
+	// 因为需要为每个 Service 逐一评估标签选择逻辑。
 	podQueue workqueue.TypedRateLimitingInterface[*endpointsliceutil.PodProjectionKey]
 
-	// topologyQueue is used to trigger a topology cache update and checking node
-	// topology distribution.
+	// topologyQueue 用于触发拓扑缓存更新及节点拓扑分布检查。
 	topologyQueue workqueue.TypedRateLimitingInterface[string]
 
-	// maxEndpointsPerSlice references the maximum number of endpoints that
-	// should be added to an EndpointSlice
+	// maxEndpointsPerSlice 指定单个 EndpointSlice 中允许加入的最大端点数。
 	maxEndpointsPerSlice int32
 
-	// workerLoopPeriod is the time between worker runs. The workers
-	// process the queue of service and pod changes
+	// workerLoopPeriod 是 worker 两次运行之间的间隔；worker 负责处理 Service 与 Pod 变更队列。
 	workerLoopPeriod time.Duration
 
-	// endpointUpdatesBatchPeriod is an artificial delay added to all service syncs triggered by pod changes.
-	// This can be used to reduce overall number of all endpoint slice updates.
+	// endpointUpdatesBatchPeriod 是 Pod 变更触发 Service 同步时人为加入的延迟，
+	// 用于减少 EndpointSlice 的总体更新次数。
 	endpointUpdatesBatchPeriod time.Duration
 
-	// topologyCache tracks the distribution of Nodes and endpoints across zones
-	// to enable TopologyAwareHints.
+	// topologyCache 跟踪各可用区中节点与端点的分布，为实现拓扑感知提示（TopologyAwareHints）提供依据。
 	topologyCache *topologycache.TopologyCache
 }
 
-// Run will not return until stopCh is closed.
+// Run 启动事件广播器、等待各 informer 缓存同步，然后启动 Service、Pod 与拓扑队列的 worker，
+// 直到 ctx 被取消才返回。
 func (c *Controller) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
-	// Start events processing pipeline.
+	// 启动事件处理流水线：日志与事件落盘。
 	c.eventBroadcaster.StartLogging(klog.Infof)
 	c.eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: c.client.CoreV1().Events("")})
 	defer c.eventBroadcaster.Shutdown()
@@ -309,15 +295,15 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
-// serviceQueueWorker runs a worker thread that just dequeues items, processes
-// them, and marks them done. You may run as many of these in parallel as you
-// wish; the workqueue guarantees that they will not end up processing the same
-// service at the same time
+// serviceQueueWorker 运行一个工作线程，不断从队列中取出项、处理并标记完成。
+// 可以并行运行任意数量的工作线程；workqueue 保证同一个 Service 不会被并发处理，
+// 从而避免对同一 Service 的 EndpointSlice 产生竞争性的写操作。
 func (c *Controller) serviceQueueWorker(logger klog.Logger) {
 	for c.processNextServiceWorkItem(logger) {
 	}
 }
 
+// processNextServiceWorkItem 取出下一个 Service 键，执行同步并按结果安排重试。
 func (c *Controller) processNextServiceWorkItem(logger klog.Logger) bool {
 	cKey, quit := c.serviceQueue.Get()
 	if quit {
@@ -331,11 +317,13 @@ func (c *Controller) processNextServiceWorkItem(logger klog.Logger) bool {
 	return true
 }
 
+// topologyQueueWorker 持续从 topologyQueue 中取出并处理拓扑更新项。
 func (c *Controller) topologyQueueWorker(logger klog.Logger) {
 	for c.processNextTopologyWorkItem(logger) {
 	}
 }
 
+// processNextTopologyWorkItem 取出拓扑项，执行节点拓扑分布检查。
 func (c *Controller) processNextTopologyWorkItem(logger klog.Logger) bool {
 	key, quit := c.topologyQueue.Get()
 	if quit {
@@ -346,6 +334,8 @@ func (c *Controller) processNextTopologyWorkItem(logger klog.Logger) bool {
 	return true
 }
 
+// handleErr 按重试预算处理 Service 同步错误：成功则清除计数，
+// 未超过上限则限速重新入队，超过上限则丢弃并上报错误。
 func (c *Controller) handleErr(logger klog.Logger, err error, key string) {
 	trackSync(err)
 
@@ -365,6 +355,9 @@ func (c *Controller) handleErr(logger klog.Logger, err error, key string) {
 	utilruntime.HandleError(err)
 }
 
+// syncService 协调单个 Service 的 EndpointSlice：从各 informer 缓存中读取 Service、匹配的 Pod
+// 与受控 EndpointSlice，校验缓存新鲜度后调用 reconciler 完成实际协调。
+// 对于 ExternalName 或无 selector 的 Service 直接跳过，因为本控制器不为其生成端点。
 func (c *Controller) syncService(logger klog.Logger, key string) error {
 	startTime := time.Now()
 	defer func() {
@@ -385,19 +378,19 @@ func (c *Controller) syncService(logger klog.Logger, key string) error {
 		c.triggerTimeTracker.DeleteService(namespace, name)
 		c.reconciler.DeleteService(namespace, name)
 		c.endpointSliceTracker.DeleteService(namespace, name)
-		// The service has been deleted, return nil so that it won't be retried.
+		// Service 已删除，返回 nil 避免再次重试。
 		return nil
 	}
 
 	if service.Spec.Type == v1.ServiceTypeExternalName {
-		// services with Type ExternalName receive no endpoints from this controller;
-		// Ref: https://issues.k8s.io/105986
+		// ExternalName 类型的 Service 不从本控制器获得任何端点；
+		// 参考：https://issues.k8s.io/105986
 		return nil
 	}
 
 	if service.Spec.Selector == nil {
-		// services without a selector receive no endpoint slices from this controller;
-		// these services will receive endpoint slices that are created out-of-band via the REST API.
+		// 没有 selector 的 Service 不会由本控制器创建 EndpointSlice；
+		// 这类 Service 的 EndpointSlice 由用户通过 REST API 在带外创建。
 		return nil
 	}
 
@@ -406,8 +399,7 @@ func (c *Controller) syncService(logger klog.Logger, key string) error {
 	podLabelSelector := labels.Set(service.Spec.Selector).AsSelectorPreValidated()
 	pods, err := c.podLister.Pods(service.Namespace).List(podLabelSelector)
 	if err != nil {
-		// Since we're getting stuff from a local cache, it is basically
-		// impossible to get this error.
+		// 数据来自本地缓存，理论上基本不会出现此错误；一旦出现则记录事件并重试。
 		c.eventRecorder.Eventf(service, v1.EventTypeWarning, "FailedToListPods",
 			"Error listing Pods for Service %s/%s: %v", service.Namespace, service.Name, err)
 		return err
@@ -420,23 +412,21 @@ func (c *Controller) syncService(logger klog.Logger, key string) error {
 	endpointSlices, err := c.endpointSliceLister.EndpointSlices(service.Namespace).List(esLabelSelector)
 
 	if err != nil {
-		// Since we're getting stuff from a local cache, it is basically
-		// impossible to get this error.
+		// 数据来自本地缓存，理论上基本不会出现此错误；一旦出现则记录事件并重试。
 		c.eventRecorder.Eventf(service, v1.EventTypeWarning, "FailedToListEndpointSlices",
 			"Error listing Endpoint Slices for Service %s/%s: %v", service.Namespace, service.Name, err)
 		return err
 	}
 
-	// Drop EndpointSlices that have been marked for deletion to prevent the controller from getting stuck.
+	// 丢弃已标记删除的 EndpointSlice，避免控制器被这些即将消失的对象卡住。
 	endpointSlices = dropEndpointSlicesPendingDeletion(endpointSlices)
 
 	if c.endpointSliceTracker.StaleSlices(service, endpointSlices) {
 		return endpointslicepkg.NewStaleInformerCache("EndpointSlice informer cache is out of date")
 	}
 
-	// We call ComputeEndpointLastChangeTriggerTime here to make sure that the
-	// state of the trigger time tracker gets updated even if the sync turns out
-	// to be no-op and we don't update the EndpointSlice objects.
+	// 此处调用 ComputeEndpointLastChangeTriggerTime，即使本次同步是空操作、不更新 EndpointSlice，
+	// 也要确保触发时间追踪器的状态被刷新，避免后续变更的时间戳统计失真。
 	lastChangeTriggerTime := c.triggerTimeTracker.
 		ComputeEndpointLastChangeTriggerTime(namespace, service, pods)
 
@@ -450,11 +440,13 @@ func (c *Controller) syncService(logger klog.Logger, key string) error {
 	return nil
 }
 
+// podQueueWorker 持续从 podQueue 中取出并处理 Pod 投影键。
 func (c *Controller) podQueueWorker(logger klog.Logger) {
 	for c.processNextPodWorkItem(logger) {
 	}
 }
 
+// processNextPodWorkItem 取出下一个 Pod 投影键，执行同步，并按错误情况安排重试或丢弃。
 func (c *Controller) processNextPodWorkItem(logger klog.Logger) bool {
 	cKey, quit := c.podQueue.Get()
 	if quit {
@@ -468,6 +460,8 @@ func (c *Controller) processNextPodWorkItem(logger klog.Logger) bool {
 	return true
 }
 
+// handlePodErr 按重试预算处理 Pod 同步错误：成功则清除重试计数，
+// 未超过上限则限速重新入队，超过上限则丢弃并上报错误。
 func (c *Controller) handlePodErr(logger klog.Logger, err error, key *endpointsliceutil.PodProjectionKey) {
 	if err == nil {
 		c.podQueue.Forget(key)
@@ -485,6 +479,8 @@ func (c *Controller) handlePodErr(logger klog.Logger, err error, key *endpointsl
 	utilruntime.HandleError(err)
 }
 
+// syncPod 处理单个 Pod 投影键：找出所有可能受该 Pod 变化影响的 Service，
+// 并将它们延迟一定时间后放入 serviceQueue，以合并同一 namespace 内大量 Service 的筛选开销。
 func (c *Controller) syncPod(logger klog.Logger, key *endpointsliceutil.PodProjectionKey) error {
 	startTime := time.Now()
 	defer func() {
@@ -503,7 +499,7 @@ func (c *Controller) syncPod(logger klog.Logger, key *endpointsliceutil.PodProje
 	return nil
 }
 
-// onServiceUpdate updates the Service Selector in the cache and queues the Service for processing.
+// onServiceUpdate 将 Service 入队处理。Selectors 的缓存由后续同步流程处理。
 func (c *Controller) onServiceUpdate(obj interface{}) {
 	key, err := controller.KeyFunc(obj)
 	if err != nil {
@@ -514,7 +510,7 @@ func (c *Controller) onServiceUpdate(obj interface{}) {
 	c.serviceQueue.Add(key)
 }
 
-// onServiceDelete removes the Service Selector from the cache and queues the Service for processing.
+// onServiceDelete 从缓存中移除 Service Selector，并将该 Service 入队处理。
 func (c *Controller) onServiceDelete(obj interface{}) {
 	key, err := controller.KeyFunc(obj)
 	if err != nil {
@@ -525,7 +521,8 @@ func (c *Controller) onServiceDelete(obj interface{}) {
 	c.serviceQueue.Add(key)
 }
 
-// onPodUpdate enqueues the pod's projection key on Add/Update/Delete events, to find matching services later.
+// onPodUpdate 在 Pod 的 Add/Update/Delete 事件中将 Pod 的投影键入队，
+// 以便在后续阶段查找所有匹配该 Pod 的 Service。
 func (c *Controller) onPodUpdate(old, cur interface{}) {
 	key := endpointsliceutil.GetPodUpdateProjectionKey(old, cur)
 	if key != nil {
@@ -533,9 +530,8 @@ func (c *Controller) onPodUpdate(old, cur interface{}) {
 	}
 }
 
-// onEndpointSliceAdd queues a sync for the relevant Service for a sync if the
-// EndpointSlice resource version does not match the expected version in the
-// endpointSliceTracker.
+// onEndpointSliceAdd 在 EndpointSlice 的资源版本与 endpointSliceTracker 中预期的不一致时，
+// 将相关 Service 入队同步。
 func (c *Controller) onEndpointSliceAdd(obj interface{}) {
 	endpointSlice := obj.(*discovery.EndpointSlice)
 	if endpointSlice == nil {
@@ -547,10 +543,8 @@ func (c *Controller) onEndpointSliceAdd(obj interface{}) {
 	}
 }
 
-// onEndpointSliceUpdate queues a sync for the relevant Service for a sync if
-// the EndpointSlice resource version does not match the expected version in the
-// endpointSliceTracker or the managed-by value of the EndpointSlice has changed
-// from or to this controller.
+// onEndpointSliceUpdate 在 EndpointSlice 的资源版本与 tracker 中预期的不一致时，
+// 或者其 managed-by 值变为/不再是本控制器时，将相关 Service 入队同步。
 func (c *Controller) onEndpointSliceUpdate(logger klog.Logger, prevObj, obj interface{}) {
 	prevEndpointSlice := prevObj.(*discovery.EndpointSlice)
 	endpointSlice := obj.(*discovery.EndpointSlice)
@@ -558,9 +552,8 @@ func (c *Controller) onEndpointSliceUpdate(logger klog.Logger, prevObj, obj inte
 		utilruntime.HandleError(fmt.Errorf("Invalid EndpointSlice provided to onEndpointSliceUpdate()"))
 		return
 	}
-	// EndpointSlice generation does not change when labels change. Although the
-	// controller will never change LabelServiceName, users might. This check
-	// ensures that we handle changes to this label.
+	// EndpointSlice 的 generation 不会因标签变化而改变。虽然本控制器不会修改 LabelServiceName，
+	// 但用户可能会；此检查确保正确处理该标签的变更。
 	svcName := endpointSlice.Labels[discovery.LabelServiceName]
 	prevSvcName := prevEndpointSlice.Labels[discovery.LabelServiceName]
 	if svcName != prevSvcName {
@@ -574,22 +567,21 @@ func (c *Controller) onEndpointSliceUpdate(logger klog.Logger, prevObj, obj inte
 	}
 }
 
-// onEndpointSliceDelete queues a sync for the relevant Service for a sync if the
-// EndpointSlice resource version does not match the expected version in the
-// endpointSliceTracker.
+// onEndpointSliceDelete 在 EndpointSlice 的资源版本与 tracker 中预期的不一致时，
+// 将相关 Service 入队同步。
 func (c *Controller) onEndpointSliceDelete(obj interface{}) {
 	endpointSlice := getEndpointSliceFromDeleteAction(obj)
 	if endpointSlice != nil && c.reconciler.ManagedByController(endpointSlice) && c.endpointSliceTracker.Has(endpointSlice) {
-		// This returns false if we didn't expect the EndpointSlice to be
-		// deleted. If that is the case, we queue the Service for another sync.
+		// HandleDeletion 返回 false 表示这不是预期中的删除；
+		// 此时需要再次入队 Service，以确保其状态被重新协调。
 		if !c.endpointSliceTracker.HandleDeletion(endpointSlice) {
 			c.queueServiceForEndpointSlice(endpointSlice)
 		}
 	}
 }
 
-// queueServiceForEndpointSlice attempts to queue the corresponding Service for
-// the provided EndpointSlice.
+// queueServiceForEndpointSlice 将给定 EndpointSlice 所属的 Service 入队同步。
+// 入队带有延迟，用于合并多个 EndpointSlice 的连续变更，避免频繁触发同步。
 func (c *Controller) queueServiceForEndpointSlice(endpointSlice *discovery.EndpointSlice) {
 	key, err := endpointslicerec.ServiceControllerKey(endpointSlice)
 	if err != nil {
@@ -597,8 +589,7 @@ func (c *Controller) queueServiceForEndpointSlice(endpointSlice *discovery.Endpo
 		return
 	}
 
-	// queue after the max of endpointSliceChangeMinSyncDelay and
-	// endpointUpdatesBatchPeriod.
+	// 取两个延迟中的较大值：既保证最小的冷却时间，又遵循配置的批量周期。
 	delay := endpointSliceChangeMinSyncDelay
 	if c.endpointUpdatesBatchPeriod > delay {
 		delay = c.endpointUpdatesBatchPeriod
@@ -606,10 +597,14 @@ func (c *Controller) queueServiceForEndpointSlice(endpointSlice *discovery.Endpo
 	c.serviceQueue.AddAfter(key, delay)
 }
 
+// addNode 在节点新增时将固定的拓扑项入队，触发拓扑缓存刷新与分布检查。
 func (c *Controller) addNode() {
 	c.topologyQueue.Add(topologyQueueItemKey)
 }
 
+// updateNode 在节点的 Ready 状态或拓扑区域标签变化时将拓扑项入队。
+// 云厂商可能在节点创建后异步添加 topology.kubernetes.io/zone 标签，
+// 因此仅当这些与分布相关的字段发生变化时才需要重新计算。
 func (c *Controller) updateNode(old, cur interface{}) {
 	oldNode := old.(*v1.Node)
 	curNode := cur.(*v1.Node)
@@ -622,12 +617,13 @@ func (c *Controller) updateNode(old, cur interface{}) {
 	}
 }
 
+// deleteNode 在节点删除时将拓扑项入队，以便重新计算节点分布并更新相关提示。
 func (c *Controller) deleteNode() {
 	c.topologyQueue.Add(topologyQueueItemKey)
 }
 
-// checkNodeTopologyDistribution updates Nodes in the topology cache and then
-// queues any Services that are past the threshold.
+// checkNodeTopologyDistribution 用最新的节点列表刷新拓扑缓存，
+// 并将因节点变化而超出拓扑分布阈值的 Service 入队重新协调。
 func (c *Controller) checkNodeTopologyDistribution(logger klog.Logger) {
 	if c.topologyCache == nil {
 		return
@@ -645,7 +641,8 @@ func (c *Controller) checkNodeTopologyDistribution(logger klog.Logger) {
 	}
 }
 
-// trackSync increments the EndpointSliceSyncs metric with the result of a sync.
+// trackSync 按同步结果（success / stale / error）给 EndpointSliceSyncs 指标计数。
+// 将缓存过期单独归类，便于观察 informer 缓存不一致对同步的影响。
 func trackSync(err error) {
 	metricLabel := "success"
 	if err != nil {
@@ -658,6 +655,8 @@ func trackSync(err error) {
 	endpointslicemetrics.EndpointSliceSyncs.WithLabelValues(metricLabel).Inc()
 }
 
+// dropEndpointSlicesPendingDeletion 过滤掉带有删除时间戳（正在删除）的 EndpointSlice。
+// 在原切片上原地压缩以避免额外分配；跳过这些对象可防止控制器反复处理即将消失的资源而卡住。
 func dropEndpointSlicesPendingDeletion(endpointSlices []*discovery.EndpointSlice) []*discovery.EndpointSlice {
 	n := 0
 	for _, endpointSlice := range endpointSlices {
@@ -669,14 +668,16 @@ func dropEndpointSlicesPendingDeletion(endpointSlices []*discovery.EndpointSlice
 	return endpointSlices[:n]
 }
 
-// getEndpointSliceFromDeleteAction parses an EndpointSlice from a delete action.
+// getEndpointSliceFromDeleteAction 从删除事件的对象中提取 EndpointSlice。
+// 事件对象既可能是 EndpointSlice 本身，也可能是 cache.DeletedFinalStateUnknown 墓碑；
+// 后者用于 informer 未能观察到最终删除状态时，需要从墓碑中取回原始对象。
 func getEndpointSliceFromDeleteAction(obj interface{}) *discovery.EndpointSlice {
 	if endpointSlice, ok := obj.(*discovery.EndpointSlice); ok {
-		// Enqueue all the services that the pod used to be a member of.
-		// This is the same thing we do when we add a pod.
+		// 对刚加入的对象，需要把其所属的所有 Service 重新入队以重算端点；
+		// 这里对删除场景也执行同样的处理，以确保 Service 的状态被刷新。
 		return endpointSlice
 	}
-	// If we reached here it means the pod was deleted but its final state is unrecorded.
+	// 到达这里说明删除事件携带的是墓碑对象，而非 EndpointSlice 本身，需要进一步解包。
 	tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 	if !ok {
 		utilruntime.HandleError(fmt.Errorf("Couldn't get object from tombstone %#v", obj))
@@ -690,7 +691,9 @@ func getEndpointSliceFromDeleteAction(obj interface{}) *discovery.EndpointSlice 
 	return endpointSlice
 }
 
-// isNodeReady returns true if a node is ready; false otherwise.
+// isNodeReady 返回节点是否就绪；未就绪的节点不应参与端点分布计算。
+// isNodeReady 判断节点是否处于 Ready 状态（Status.Conditions 中 NodeReady 为 True）。
+// 拓扑分布计算依赖此状态，以排除尚未就绪的节点。
 func isNodeReady(node *v1.Node) bool {
 	for _, c := range node.Status.Conditions {
 		if c.Type == v1.NodeReady {

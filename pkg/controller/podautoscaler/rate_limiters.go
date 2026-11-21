@@ -22,36 +22,36 @@ import (
 	"k8s.io/client-go/util/workqueue"
 )
 
-// FixedItemIntervalRateLimiter limits items to a fixed-rate interval
+// FixedItemIntervalRateLimiter 对每个条目使用固定的重试间隔，不做指数退避。
 type FixedItemIntervalRateLimiter struct {
 	interval time.Duration
 }
 
 var _ workqueue.TypedRateLimiter[string] = &FixedItemIntervalRateLimiter{}
 
-// NewFixedItemIntervalRateLimiter creates a new instance of a RateLimiter using a fixed interval
+// NewFixedItemIntervalRateLimiter 创建使用固定间隔的限速器。
 func NewFixedItemIntervalRateLimiter(interval time.Duration) workqueue.TypedRateLimiter[string] {
 	return &FixedItemIntervalRateLimiter{
 		interval: interval,
 	}
 }
 
-// When returns the interval of the rate limiter
+// When 返回该条目的下一次重试延迟，始终为固定间隔。
 func (r *FixedItemIntervalRateLimiter) When(item string) time.Duration {
 	return r.interval
 }
 
-// NumRequeues returns back how many failures the item has had
+// NumRequeues 返回已重试次数；固定间隔策略不跟踪次数，恒返回 1 作为占位。
 func (r *FixedItemIntervalRateLimiter) NumRequeues(item string) int {
 	return 1
 }
 
-// Forget indicates that an item is finished being retried.
+// Forget 表示条目已结束重试；固定间隔策略无需清理状态，故为空实现。
 func (r *FixedItemIntervalRateLimiter) Forget(item string) {
 }
 
-// NewDefaultHPARateLimiter creates a rate limiter which limits overall (as per the
-// default controller rate limiter), as well as per the resync interval
+// NewDefaultHPARateLimiter 创建 HPA 默认的限速器，以 resync 间隔作为固定重试间隔，
+// 保证失败的重试节奏与常规同步周期一致。
 func NewDefaultHPARateLimiter(interval time.Duration) workqueue.TypedRateLimiter[string] {
 	return NewFixedItemIntervalRateLimiter(interval)
 }

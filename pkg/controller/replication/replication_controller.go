@@ -14,14 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// ### ATTENTION ###
+// ### 注意 ###
 //
-// ReplicationManager is now just a wrapper around ReplicaSetController,
-// with a conversion layer that effectively treats ReplicationController
-// as if it were an older API version of ReplicaSet.
+// ReplicationManager 现在只是 ReplicaSetController 的一个包装层，通过适配层把
+// ReplicationController 当作 ReplicaSet 的旧版 API 来处理。
 //
-// However, RC and RS still have separate storage and separate instantiations
-// of the ReplicaSetController object.
+// 但 RC 与 RS 仍使用各自的存储，并分别实例化各自的 ReplicaSetController 对象。
 
 package replication
 
@@ -43,17 +41,17 @@ const (
 	BurstReplicas = replicaset.BurstReplicas
 )
 
-// ReplicationManager is responsible for synchronizing ReplicationController objects stored
-// in the system with actual running pods.
-// It is actually just a wrapper around ReplicaSetController.
+// ReplicationManager 负责将系统中的 ReplicationController 对象与实际运行的 Pod 保持同步，
+// 实际上只是 ReplicaSetController 的一层包装。
 type ReplicationManager struct {
 	replicaset.ReplicaSetController
 }
 
-// NewReplicationManager configures a replication manager with the specified event recorder
+// NewReplicationManager 用给定的 Informer 与客户端构造 ReplicationManager。
 func NewReplicationManager(ctx context.Context, podInformer coreinformers.PodInformer, rcInformer coreinformers.ReplicationControllerInformer, kubeClient clientset.Interface, burstReplicas int) *ReplicationManager {
 	logger := klog.FromContext(ctx)
 	eventBroadcaster := record.NewBroadcaster(record.WithContext(ctx))
+	// 复用 ReplicaSetController 的实现，通过 informer/client/podControl 适配器屏蔽 RC 与 RS 的 API 差异。
 	return &ReplicationManager{
 		*replicaset.NewBaseController(logger, informerAdapter{rcInformer}, podInformer, clientsetAdapter{kubeClient}, burstReplicas,
 			v1.SchemeGroupVersion.WithKind("ReplicationController"),
@@ -65,8 +63,7 @@ func NewReplicationManager(ctx context.Context, podInformer coreinformers.PodInf
 			}},
 			eventBroadcaster,
 			replicaset.ReplicaSetControllerFeatures{
-				// ReplicationController API does not support the .status.terminatingReplicas field. However,
-				// ReplicaSets do support this field, which is then propagated to Deployments for higher-level features.
+				// RC API 不支持 .status.terminatingReplicas 字段；RS 支持该字段，并向上传播给 Deployment 以支持上层功能，因此这里必须显式关闭。
 				EnableStatusTerminatingReplicas: false,
 			},
 			// TODO: Replication controller does not currently support stale controller consistency.

@@ -52,54 +52,42 @@ func init() {
 	klog.InitFlags(nil)
 }
 
-// This is a unit test framework for persistent volume controller.
-// It fills the controller with test claims/volumes and can simulate these
-// scenarios:
-// 1) Call syncClaim/syncVolume once.
-// 2) Call syncClaim/syncVolume several times (both simulating "claim/volume
-//    modified" events and periodic sync), until the controller settles down and
-//    does not modify anything.
-// 3) Simulate almost real API server/etcd and call add/update/delete
-//    volume/claim.
-// In all these scenarios, when the test finishes, the framework can compare
-// resulting claims/volumes with list of expected claims/volumes and report
-// differences.
+// 这是持久卷控制器的单元测试框架。它用测试用的 PVC/PV 填充控制器，可模拟以下场景：
+// 1) 调用一次 syncClaim/syncVolume。
+// 2) 多次调用 syncClaim/syncVolume（既模拟“PVC/PV 变更”事件，也模拟周期同步），
+//    直到控制器收敛、不再修改任何对象。
+// 3) 模拟近乎真实的 API server/etcd，调用卷/声明的增删改。
+// 在所有场景中，测试结束后框架都会把最终的 PVC/PV 与期望列表比较并报告差异。
 
-// controllerTest contains a single controller test input.
-// Each test has initial set of volumes and claims that are filled into the
-// controller before the test starts. The test then contains a reference to
-// function to call as the actual test. Available functions are:
-//   - testSyncClaim - calls syncClaim on the first claim in initialClaims.
-//   - testSyncClaimError - calls syncClaim on the first claim in initialClaims
-//     and expects an error to be returned.
-//   - testSyncVolume - calls syncVolume on the first volume in initialVolumes.
-//   - any custom function for specialized tests.
+// controllerTest 描述单个控制器用例的输入与期望。
+// 每个用例在开始前把初始卷/声明灌入控制器，并指定实际执行的函数；常见选择有：
+//   - testSyncClaim：对 initialClaims 中首个声明调用 syncClaim。
+//   - testSyncClaimError：调用 syncClaim 并期望返回错误。
+//   - testSyncVolume：对 initialVolumes 中首个卷调用 syncVolume。
+//   - 特殊场景可传入自定义函数。
 //
-// The test then contains list of volumes/claims that are expected at the end
-// of the test and list of generated events.
+// 用例还给出结束时期望的卷/声明列表以及期望产生的事件列表。
 type controllerTest struct {
-	// Name of the test, for logging
+	// 用例名称，仅用于日志输出
 	name string
-	// Initial content of controller volume cache.
+	// 控制器卷缓存的初始内容。
 	initialVolumes []*v1.PersistentVolume
-	// Expected content of controller volume cache at the end of the test.
+	// 测试结束时控制器卷缓存的期望内容。
 	expectedVolumes []*v1.PersistentVolume
-	// Initial content of controller claim cache.
+	// 控制器声明缓存的初始内容。
 	initialClaims []*v1.PersistentVolumeClaim
-	// Expected content of controller claim cache at the end of the test.
+	// 测试结束时控制器声明缓存的期望内容。
 	expectedClaims []*v1.PersistentVolumeClaim
-	// Expected events - any event with prefix will pass, we don't check full
-	// event message.
+	// 期望事件——只要实际事件以前缀匹配即算通过，不校验完整消息文本。
 	expectedEvents []string
-	// Errors to produce on matching action
+	// 在匹配的操作上注入的错误
 	errors []pvtesting.ReactorError
-	// Function to call as the test.
+	// 作为测试主体调用的函数。
 	test testCall
 }
 
-// annSkipLocalStore can be used to mark initial PVs or PVCs that are meant to be added only
-// to the fake apiserver (i.e. available via Get) but not to the local store (i.e. the controller
-// won't have them in its cache).
+// annSkipLocalStore 用于标记只加入 fake apiserver（可通过 Get 取到）、
+// 而不加入本地 store 的初始 PV/PVC，借此模拟对象尚未进入 informer 缓存的时序。
 const annSkipLocalStore = "pv-testing-skip-local-store"
 
 type testCall func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error
@@ -117,6 +105,7 @@ type volumeReactor struct {
 	ctrl *PersistentVolumeController
 }
 
+// newVolumeReactor 在通用 VolumeReactor 之上持有控制器引用，便于等待收敛时读取控制器内部状态。
 func newVolumeReactor(ctx context.Context, client *fake.Clientset, ctrl *PersistentVolumeController, fakeVolumeWatch, fakeClaimWatch *watch.FakeWatcher, errors []pvtesting.ReactorError) *volumeReactor {
 	return &volumeReactor{
 		pvtesting.NewVolumeReactor(ctx, client, fakeVolumeWatch, fakeClaimWatch, errors),
@@ -124,29 +113,27 @@ func newVolumeReactor(ctx context.Context, client *fake.Clientset, ctrl *Persist
 	}
 }
 
-// waitForIdle waits until all tests, controllers and other goroutines do their
-// job and no new actions are registered for 10 milliseconds.
+// waitForIdle 等待所有测试、控制器及其他 goroutine 完成工作，并在连续 10 毫秒内没有新动作时返回。
 func (r *volumeReactor) waitForIdle() {
 	r.ctrl.runningOperations.WaitForCompletion()
-	// Check every 10ms if the controller does something and stop if it's
+	// 每 10 毫秒检查一次控制器是否仍在动作，空闲即退出。
 	// idle.
 	oldChanges := -1
 	for {
 		time.Sleep(10 * time.Millisecond)
 		changes := r.GetChangeCount()
 		if changes == oldChanges {
-			// No changes for last 10ms -> controller must be idle.
+			// 最近 10 毫秒无变化，说明控制器已空闲。
 			break
 		}
 		oldChanges = changes
 	}
 }
 
-// waitTest waits until all tests, controllers and other goroutines do their
-// job and list of current volumes/claims is equal to list of expected
-// volumes/claims (with ~10 second timeout).
+// waitTest 在约 10 秒超时内等待所有 goroutine 完成，并使当前卷/声明列表与期望列表一致；
+// 采用指数退避是为了给异步操作留出收敛时间。
 func (r *volumeReactor) waitTest(test controllerTest) error {
-	// start with 10 ms, multiply by 2 each step, 10 steps = 10.23 seconds
+	// 从 10 毫秒起步、每步翻倍，10 步合计约 10.23 秒
 	backoff := wait.Backoff{
 		Duration: 10 * time.Millisecond,
 		Jitter:   0,
@@ -154,10 +141,10 @@ func (r *volumeReactor) waitTest(test controllerTest) error {
 		Steps:    10,
 	}
 	err := wait.ExponentialBackoff(backoff, func() (done bool, err error) {
-		// Finish all operations that are in progress
+		// 先等待进行中的操作结束，避免竞态导致误判
 		r.ctrl.runningOperations.WaitForCompletion()
 
-		// Return 'true' if the reactor reached the expected state
+		// 达到期望状态才返回 true，让退避循环退出
 		err1 := r.CheckClaims(test.expectedClaims)
 		err2 := r.CheckVolumes(test.expectedVolumes)
 		if err1 == nil && err2 == nil {
@@ -168,13 +155,12 @@ func (r *volumeReactor) waitTest(test controllerTest) error {
 	return err
 }
 
-// checkEvents compares all expectedEvents with events generated during the test
-// and reports differences.
+// checkEvents 把期望事件与测试期间实际产生的事件逐一比较并报告差异，
+// 采用前缀匹配是因为消息中的对象名等细节由被测逻辑拼接。
 func checkEvents(t *testing.T, ctx context.Context, expectedEvents []string, ctrl *PersistentVolumeController) error {
 	var err error
 
-	// Read recorded events - wait up to 1 minute to get all the expected ones
-	// (just in case some goroutines are slower with writing)
+	// 读取记录的事件——最多等待 1 分钟，以防慢 goroutine 尚未写入。
 	timer := time.NewTimer(time.Minute)
 	defer timer.Stop()
 	logger := klog.FromContext(ctx)
@@ -197,7 +183,7 @@ func checkEvents(t *testing.T, ctx context.Context, expectedEvents []string, ctr
 		}
 	}
 
-	// Evaluate the events
+	// 逐项校验事件数量、顺序及前缀是否匹配
 	for i, expected := range expectedEvents {
 		if len(gotEvents) <= i {
 			t.Errorf("Event %q not emitted", expected)
@@ -217,8 +203,11 @@ func checkEvents(t *testing.T, ctx context.Context, expectedEvents []string, ctr
 	return err
 }
 
+// alwaysReady 作为 listerSynced 的桩：测试注入的是静态对象，无需等待 informer 同步。
 func alwaysReady() bool { return true }
 
+// newTestController 构造测试用控制器：用 FakeRecorder 替换事件记录器、把 listerSynced 置为始终就绪，
+// 并缩短异步创建 PV 的重试间隔，使单测能快速收敛。
 func newTestController(ctx context.Context, kubeClient clientset.Interface, informerFactory informers.SharedInformerFactory, enableDynamicProvisioning bool) (*PersistentVolumeController, error) {
 	if informerFactory == nil {
 		informerFactory = informers.NewSharedInformerFactory(kubeClient, controller.NoResyncPeriodFunc())
@@ -242,12 +231,12 @@ func newTestController(ctx context.Context, kubeClient clientset.Interface, info
 	ctrl.volumeListerSynced = alwaysReady
 	ctrl.claimListerSynced = alwaysReady
 	ctrl.classListerSynced = alwaysReady
-	// Speed up the test
+	// 缩短异步创建 PV 的间隔，加快测试
 	ctrl.createProvisionedPVInterval = 5 * time.Millisecond
 	return ctrl, nil
 }
 
-// newVolume returns a new volume with given attributes
+// newVolume 按给定属性构造 PV；GCE PD 源只是占位值，多数用例只关心容量/绑定/阶段等元数据。
 func newVolume(name, capacity, boundToClaimUID, boundToClaimName string, phase v1.PersistentVolumePhase, reclaimPolicy v1.PersistentVolumeReclaimPolicy, class string, annotations ...string) *v1.PersistentVolume {
 	fs := v1.PersistentVolumeFilesystem
 	volume := v1.PersistentVolume{
@@ -297,7 +286,7 @@ func newVolume(name, capacity, boundToClaimUID, boundToClaimName string, phase v
 	return &volume
 }
 
-// newExternalProvisionedVolume returns a new volume with given attributes
+// newExternalProvisionedVolume 构造 CSI 外部置备的 PV，用于覆盖 finalizer、驱动名等外部置备特有字段。
 func newExternalProvisionedVolume(name, capacity, boundToClaimUID, boundToClaimName string, phase v1.PersistentVolumePhase, reclaimPolicy v1.PersistentVolumeReclaimPolicy, class string, driverName string, finalizers []string, annotations ...string) *v1.PersistentVolume {
 	fs := v1.PersistentVolumeFilesystem
 	volume := v1.PersistentVolume{
@@ -357,23 +346,20 @@ func newExternalProvisionedVolume(name, capacity, boundToClaimUID, boundToClaimN
 }
 
 // newVolume returns a new volume with given attributes
+// newVolumeWithFinalizers 在 newVolume 基础上附加 finalizer，用于测试删除被阻塞的场景。
 func newVolumeWithFinalizers(name, capacity, boundToClaimUID, boundToClaimName string, phase v1.PersistentVolumePhase, reclaimPolicy v1.PersistentVolumeReclaimPolicy, class string, finalizers []string, annotations ...string) *v1.PersistentVolume {
 	retVolume := newVolume(name, capacity, boundToClaimUID, boundToClaimName, phase, reclaimPolicy, class, annotations...)
 	retVolume.SetFinalizers(finalizers)
 	return retVolume
 }
 
-// withLabels applies the given labels to the first volume in the array and
-// returns the array.  Meant to be used to compose volumes specified inline in
-// a test.
+// withLabels 给卷切片的首个元素设置标签，便于在测试中内联拼装卷对象。
 func withLabels(labels map[string]string, volumes []*v1.PersistentVolume) []*v1.PersistentVolume {
 	volumes[0].Labels = labels
 	return volumes
 }
 
-// withLabelSelector sets the label selector of the first claim in the array
-// to be MatchLabels of the given label set and returns the array.  Meant
-// to be used to compose claims specified inline in a test.
+// withLabelSelector 把首个声明的选择器设为给定标签的 MatchLabels，便于内联拼装对象。
 func withLabelSelector(labels map[string]string, claims []*v1.PersistentVolumeClaim) []*v1.PersistentVolumeClaim {
 	claims[0].Spec.Selector = &metav1.LabelSelector{
 		MatchLabels: labels,
@@ -382,25 +368,19 @@ func withLabelSelector(labels map[string]string, claims []*v1.PersistentVolumeCl
 	return claims
 }
 
-// withVolumeVolumeMode applies the given VolumeMode to the first volume in the array and
-// returns the array.  Meant to be used to compose volumes specified inline in
-// a test.
+// withVolumeVolumeMode 设置首个卷的 VolumeMode，便于内联拼装卷对象。
 func withVolumeVolumeMode(mode *v1.PersistentVolumeMode, volumes []*v1.PersistentVolume) []*v1.PersistentVolume {
 	volumes[0].Spec.VolumeMode = mode
 	return volumes
 }
 
-// withClaimVolumeMode applies the given VolumeMode to the first claim in the array and
-// returns the array.  Meant to be used to compose volumes specified inline in
-// a test.
+// withClaimVolumeMode 设置首个声明的 VolumeMode，便于内联拼装声明对象。
 func withClaimVolumeMode(mode *v1.PersistentVolumeMode, claims []*v1.PersistentVolumeClaim) []*v1.PersistentVolumeClaim {
 	claims[0].Spec.VolumeMode = mode
 	return claims
 }
 
-// withExpectedCapacity sets the claim.Spec.Capacity of the first claim in the
-// array to given value and returns the array.  Meant to be used to compose
-// claims specified inline in a test.
+// withExpectedCapacity 设置首个声明的 Status.Capacity，用于表达期望的绑定容量。
 func withExpectedCapacity(capacity string, claims []*v1.PersistentVolumeClaim) []*v1.PersistentVolumeClaim {
 	claims[0].Status.Capacity = v1.ResourceList{
 		v1.ResourceName(v1.ResourceStorage): resource.MustParse(capacity),
@@ -409,24 +389,19 @@ func withExpectedCapacity(capacity string, claims []*v1.PersistentVolumeClaim) [
 	return claims
 }
 
-// withExpectedVAC sets the claim.Status.CurrentVolumeAttributesClassName of the first claim in the
-// array to given value and returns the array.  Meant to be used to compose
-// claims specified inline in a test.
+// withExpectedVAC 设置首个声明当前的 VolumeAttributesClassName，用于表达期望状态。
 func withExpectedVAC(vacName *string, claims []*v1.PersistentVolumeClaim) []*v1.PersistentVolumeClaim {
 	claims[0].Status.CurrentVolumeAttributesClassName = vacName
 	return claims
 }
 
-// withMessage saves given message into volume.Status.Message of the first
-// volume in the array and returns the array.  Meant to be used to compose
-// volumes specified inline in a test.
+// withMessage 把给定消息写入首个卷的 Status.Message，便于内联构造期望对象。
 func withMessage(message string, volumes []*v1.PersistentVolume) []*v1.PersistentVolume {
 	volumes[0].Status.Message = message
 	return volumes
 }
 
-// newVolumeArray returns array with a single volume that would be returned by
-// newVolume() with the same parameters.
+// newVolumeArray 返回只含一个卷的切片，该卷由 newVolume() 用相同参数构造。
 // TODO: make the newVolumeArray function accept volume attributes class name as an input parameter
 func newVolumeArray(name, capacity, boundToClaimUID, boundToClaimName string, phase v1.PersistentVolumePhase, reclaimPolicy v1.PersistentVolumeReclaimPolicy, class string, annotations ...string) []*v1.PersistentVolume {
 	return []*v1.PersistentVolume{
@@ -434,10 +409,12 @@ func newVolumeArray(name, capacity, boundToClaimUID, boundToClaimName string, ph
 	}
 }
 
+// withVolumeDeletionTimestamp 给所有 PV 设置固定的删除时间戳。用固定时间而非 time.Now()，
+// 否则期望值与实际值会因纳秒差异永远不相等。
 func withVolumeDeletionTimestamp(pvs []*v1.PersistentVolume) []*v1.PersistentVolume {
 	result := []*v1.PersistentVolume{}
 	for _, pv := range pvs {
-		// Using time.Now() here will cause mismatching deletion timestamps in tests
+		// 使用 time.Now() 会导致期望值与实际值时间戳不一致
 		deleteTime := metav1.Date(2020, time.February, 18, 10, 30, 30, 10, time.UTC)
 		pv.SetDeletionTimestamp(&deleteTime)
 		result = append(result, pv)
@@ -445,6 +422,7 @@ func withVolumeDeletionTimestamp(pvs []*v1.PersistentVolume) []*v1.PersistentVol
 	return result
 }
 
+// volumesWithFinalizers 批量设置 finalizer，用于构造处于删除中或被保护的 PV。
 func volumesWithFinalizers(pvs []*v1.PersistentVolume, finalizers []string) []*v1.PersistentVolume {
 	result := []*v1.PersistentVolume{}
 	for _, pv := range pvs {
@@ -454,7 +432,7 @@ func volumesWithFinalizers(pvs []*v1.PersistentVolume, finalizers []string) []*v
 	return result
 }
 
-// newClaim returns a new claim with given attributes
+// newClaim 按给定属性构造 PVC；绑定态会同步填充 Status，使多数用例无需再手工设置。
 func newClaim(name, claimUID, capacity, boundToVolume string, phase v1.PersistentVolumeClaimPhase, class *string, annotations ...string) *v1.PersistentVolumeClaim {
 	fs := v1.PersistentVolumeFilesystem
 	claim := v1.PersistentVolumeClaim{
@@ -492,22 +470,21 @@ func newClaim(name, claimUID, capacity, boundToVolume string, phase v1.Persisten
 		}
 	}
 
-	// Bound claims must have proper Status.
+	// 已绑定的声明必须带有自洽的 Status，否则会被控制器判定为状态不一致。
 	if phase == v1.ClaimBound {
 		claim.Status.AccessModes = claim.Spec.AccessModes
-		// For most of the tests it's enough to copy claim's requested capacity,
-		// individual tests can adjust it using withExpectedCapacity()
+		// 多数用例直接复制请求容量即可，
+		// 个别用例可用 withExpectedCapacity() 覆盖。
 		claim.Status.Capacity = claim.Spec.Resources.Requests
-		// For most of the tests it's enough to copy claim's requested vac,
-		// individual tests can adjust it using withExpectedVAC()
+		// 多数用例直接复制请求的 VAC 即可，
+		// 个别用例可用 withExpectedVAC() 覆盖。
 		claim.Status.CurrentVolumeAttributesClassName = claim.Spec.VolumeAttributesClassName
 	}
 
 	return &claim
 }
 
-// newClaimArray returns array with a single claim that would be returned by
-// newClaim() with the same parameters.
+// newClaimArray 返回只含一个声明的切片，该声明由 newClaim() 用相同参数构造。
 // TODO: make the newClaimArray function accept volume attributes class name as an input parameter
 func newClaimArray(name, claimUID, capacity, boundToVolume string, phase v1.PersistentVolumeClaimPhase, class *string, annotations ...string) []*v1.PersistentVolumeClaim {
 	return []*v1.PersistentVolumeClaim{
@@ -515,13 +492,13 @@ func newClaimArray(name, claimUID, capacity, boundToVolume string, phase v1.Pers
 	}
 }
 
+// claimWithVAC 设置首个声明的 VolumeAttributesClassName，用于内联构造期望对象。
 func claimWithVAC(vacName *string, claims []*v1.PersistentVolumeClaim) []*v1.PersistentVolumeClaim {
 	claims[0].Spec.VolumeAttributesClassName = vacName
 	return claims
 }
 
-// claimWithAnnotation saves given annotation into given claims. Meant to be
-// used to compose claims specified inline in a test.
+// claimWithAnnotation 把给定注解写入声明切片的首个元素，便于内联拼装声明对象。
 // TODO(refactor): This helper function (and other helpers related to claim
 // arrays) could use some cleaning up (most assume an array size of one)-
 // replace with annotateClaim at all callsites. The tests require claimArrays
@@ -535,6 +512,7 @@ func claimWithAnnotation(name, value string, claims []*v1.PersistentVolumeClaim)
 	return claims
 }
 
+// claimWithDataSource 给首个声明设置数据源，用于覆盖克隆/恢复场景的测试。
 func claimWithDataSource(name, kind, apiGroup string, claims []*v1.PersistentVolumeClaim) []*v1.PersistentVolumeClaim {
 	claims[0].Spec.DataSource = &v1.TypedLocalObjectReference{
 		Name:     name,
@@ -544,6 +522,7 @@ func claimWithDataSource(name, kind, apiGroup string, claims []*v1.PersistentVol
 	return claims
 }
 
+// annotateClaim 给单个声明批量写入注解，适用于非数组形式的构造场景。
 func annotateClaim(claim *v1.PersistentVolumeClaim, ann map[string]string) *v1.PersistentVolumeClaim {
 	if claim.Annotations == nil {
 		claim.Annotations = map[string]string{}
@@ -554,14 +533,14 @@ func annotateClaim(claim *v1.PersistentVolumeClaim, ann map[string]string) *v1.P
 	return claim
 }
 
-// volumeWithVAC saves given vac into given volume.
+// volumeWithVAC 给单个卷设置 VolumeAttributesClassName，供内联构造使用。
 // Meant to be used to compose volume specified inline in a test.
 func volumeWithVAC(vacName string, volume *v1.PersistentVolume) *v1.PersistentVolume {
 	volume.Spec.VolumeAttributesClassName = &vacName
 	return volume
 }
 
-// volumesWithVAC saves given vac into given volumes.
+// volumesWithVAC 批量设置卷的 VolumeAttributesClassName。
 // Meant to be used to compose volumes specified inline in a test.
 func volumesWithVAC(vacName string, volumes []*v1.PersistentVolume) []*v1.PersistentVolume {
 	for _, volume := range volumes {
@@ -570,7 +549,7 @@ func volumesWithVAC(vacName string, volumes []*v1.PersistentVolume) []*v1.Persis
 	return volumes
 }
 
-// volumeWithAnnotation saves given annotation into given volume.
+// volumeWithAnnotation 给单个卷写入注解，供内联构造使用。
 // Meant to be used to compose volume specified inline in a test.
 func volumeWithAnnotation(name, value string, volume *v1.PersistentVolume) *v1.PersistentVolume {
 	if volume.Annotations == nil {
@@ -581,7 +560,7 @@ func volumeWithAnnotation(name, value string, volume *v1.PersistentVolume) *v1.P
 	return volume
 }
 
-// volumesWithAnnotation saves given annotation into given volumes.
+// volumesWithAnnotation 批量给卷写入注解。
 // Meant to be used to compose volumes specified inline in a test.
 func volumesWithAnnotation(name, value string, volumes []*v1.PersistentVolume) []*v1.PersistentVolume {
 	for _, volume := range volumes {
@@ -590,17 +569,19 @@ func volumesWithAnnotation(name, value string, volumes []*v1.PersistentVolume) [
 	return volumes
 }
 
-// claimWithAccessMode saves given access into given claims.
+// claimWithAccessMode 设置首个声明的访问模式。
 // Meant to be used to compose claims specified inline in a test.
 func claimWithAccessMode(modes []v1.PersistentVolumeAccessMode, claims []*v1.PersistentVolumeClaim) []*v1.PersistentVolumeClaim {
 	claims[0].Spec.AccessModes = modes
 	return claims
 }
 
+// testSyncClaim 对首个初始声明调用一次 syncClaim，用于单步同步测试。
 func testSyncClaim(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
 	return ctrl.syncClaim(context.TODO(), test.initialClaims[0])
 }
 
+// testSyncClaimError 期望 syncClaim 返回错误；成功返回反而视为测试失败。
 func testSyncClaimError(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
 	err := ctrl.syncClaim(context.TODO(), test.initialClaims[0])
 
@@ -610,6 +591,7 @@ func testSyncClaimError(ctrl *PersistentVolumeController, reactor *pvtesting.Vol
 	return fmt.Errorf("syncClaim succeeded when failure was expected")
 }
 
+// testSyncVolume 对首个初始卷调用一次 syncVolume。
 func testSyncVolume(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
 	return ctrl.syncVolume(context.TODO(), test.initialVolumes[0])
 }
@@ -636,11 +618,9 @@ var (
 	modeWait = storage.VolumeBindingWaitForFirstConsumer
 )
 
-// wrapTestWithPluginCalls returns a testCall that:
-//   - configures controller with a volume plugin that implements recycler,
-//     deleter and provisioner. The plugin returns provided errors when a volume
-//     is deleted, recycled or provisioned.
-//   - calls given testCall
+// wrapTestWithPluginCalls 返回一个 testCall：
+//   - 注入同时实现回收/删除/置备接口的模拟插件，按预置顺序返回结果或错误；
+//   - 再调用被包装的测试函数。
 func wrapTestWithPluginCalls(expectedRecycleCalls, expectedDeleteCalls []error, expectedProvisionCalls []provisionCall, toWrap testCall) testCall {
 	return func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
 		plugin := &mockVolumePlugin{
@@ -653,10 +633,8 @@ func wrapTestWithPluginCalls(expectedRecycleCalls, expectedDeleteCalls []error, 
 	}
 }
 
-// wrapTestWithReclaimCalls returns a testCall that:
-//   - configures controller with recycler or deleter which will return provided
-//     errors when a volume is deleted or recycled
-//   - calls given testCall
+// wrapTestWithReclaimCalls 返回一个 testCall：按操作类型注入回收器或删除器，
+// 使其按序返回预置错误，再调用被包装的测试函数。
 func wrapTestWithReclaimCalls(operation operationType, expectedOperationCalls []error, toWrap testCall) testCall {
 	if operation == operationDelete {
 		return wrapTestWithPluginCalls(nil, expectedOperationCalls, nil, toWrap)
@@ -665,29 +643,31 @@ func wrapTestWithReclaimCalls(operation operationType, expectedOperationCalls []
 	}
 }
 
-// wrapTestWithProvisionCalls returns a testCall that:
-//   - configures controller with a provisioner which will return provided errors
-//     when a claim is provisioned
-//   - calls given testCall
+// wrapTestWithProvisionCalls 返回一个 testCall：注入按序返回预置结果的置备器，
+// 再调用被包装的测试函数。
 func wrapTestWithProvisionCalls(expectedProvisionCalls []provisionCall, toWrap testCall) testCall {
 	return wrapTestWithPluginCalls(nil, nil, expectedProvisionCalls, toWrap)
 }
 
+// fakeCSINameTranslator 把内置插件名映射为固定的模拟 CSI 驱动名，用于迁移测试。
 type fakeCSINameTranslator struct{}
 
+// GetCSINameFromInTreeName 返回固定的驱动名，不关心传入的插件名。
 func (t fakeCSINameTranslator) GetCSINameFromInTreeName(pluginName string) (string, error) {
 	return "vendor.com/MockCSIDriver", nil
 }
 
+// fakeCSIMigratedPluginManager 宣称所有插件均启用 CSI 迁移，以触发迁移代码路径。
 type fakeCSIMigratedPluginManager struct{}
 
+// IsMigrationEnabledForPlugin 恒返回 true，强制走 CSI 迁移分支。
 func (t fakeCSIMigratedPluginManager) IsMigrationEnabledForPlugin(pluginName string) bool {
 	return true
 }
 
-// wrapTestWithCSIMigrationProvisionCalls returns a testCall that:
-// - configures controller with a volume plugin that emulates CSI migration
-// - calls given testCall
+// wrapTestWithCSIMigrationProvisionCalls 返回一个 testCall：
+// - 注入模拟插件并替换名称转换器与迁移管理器，伪装成 CSI 迁移已启用；
+// - 再调用被包装的测试函数。
 func wrapTestWithCSIMigrationProvisionCalls(toWrap testCall) testCall {
 	plugin := &mockVolumePlugin{}
 	return func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
@@ -698,34 +678,29 @@ func wrapTestWithCSIMigrationProvisionCalls(toWrap testCall) testCall {
 	}
 }
 
-// wrapTestWithInjectedOperation returns a testCall that:
-//   - starts the controller and lets it run original testCall until
-//     scheduleOperation() call. It blocks the controller there and calls the
-//     injected function to simulate that something is happening when the
-//     controller waits for the operation lock. Controller is then resumed and we
-//     check how it behaves.
+// wrapTestWithInjectedOperation 返回一个 testCall：在 scheduleOperation 处设钩子阻塞原测试函数，
+// 趁控制器等待操作锁时调用注入函数模拟外部事件，随后放行控制器并校验其后续行为。
 func wrapTestWithInjectedOperation(ctx context.Context, toWrap testCall, injectBeforeOperation func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor)) testCall {
 
 	return func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
-		// Inject a hook before async operation starts
+		// 在异步操作开始前注入钩子，以此截住 scheduleOperation
 		ctrl.preOperationHook = func(operationName string) {
-			// Inside the hook, run the function to inject
+			// 在钩子内执行注入逻辑，此时控制器正等待操作锁
 			klog.FromContext(ctx).V(4).Info("Reactor: scheduleOperation reached, injecting call")
 			injectBeforeOperation(ctrl, reactor)
 		}
 
-		// Run the tested function (typically syncClaim/syncVolume) in a
-		// separate goroutine.
+		// 在独立 goroutine 中运行被测函数：钩子会阻塞控制器，主 goroutine 需保持响应才能完成注入。
 		var testError error
 		var testFinished int32
 
 		go func() {
 			testError = toWrap(ctrl, reactor, test)
-			// Let the "main" test function know that syncVolume has finished.
+			// 用原子标志通知主 goroutine 被测函数已结束，避免数据竞争。
 			atomic.StoreInt32(&testFinished, 1)
 		}()
 
-		// Wait for the controller to finish the test function.
+		// 轮询等待被测函数结束；与上面的原子写入配对。
 		for atomic.LoadInt32(&testFinished) == 0 {
 			time.Sleep(time.Millisecond * 10)
 		}
@@ -734,8 +709,9 @@ func wrapTestWithInjectedOperation(ctx context.Context, toWrap testCall, injectB
 	}
 }
 
+// evaluateTestResults 统一校验声明、卷和事件三方面结果，避免每个用例重复断言。
 func evaluateTestResults(ctx context.Context, ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest, t *testing.T) {
-	// Evaluate results
+	// 依次校验声明、卷、事件是否符合期望
 	if err := reactor.CheckClaims(test.expectedClaims); err != nil {
 		t.Errorf("Test %q: %v", test.name, err)
 
@@ -749,15 +725,11 @@ func evaluateTestResults(ctx context.Context, ctrl *PersistentVolumeController, 
 	}
 }
 
-// Test single call to syncClaim and syncVolume methods.
-// For all tests:
-//  1. Fill in the controller with initial data
-//  2. Call the tested function (syncClaim/syncVolume) via
-//     controllerTest.testCall *once*.
-//  3. Compare resulting volumes and claims with expected volumes and claims.
+// runSyncTests 执行单次同步测试：先用初始数据填充控制器，只调用一次被测函数，
+// 再比较最终的卷/声明与期望值。刻意只调一次，用于验证单步行为。
 func runSyncTests(t *testing.T, ctx context.Context, tests []controllerTest, storageClasses []*storage.StorageClass, pods []*v1.Pod) {
 	doit := func(t *testing.T, test controllerTest) {
-		// Initialize the controller
+		// 构造测试用控制器
 		client := &fake.Clientset{}
 		ctrl, err := newTestController(ctx, client, nil, true)
 		if err != nil {
@@ -779,7 +751,7 @@ func runSyncTests(t *testing.T, ctx context.Context, tests []controllerTest, sto
 		reactor.AddClaims(test.initialClaims)
 		reactor.AddVolumes(test.initialVolumes)
 
-		// Inject classes into controller via a custom lister.
+		// 用自定义 lister 注入 StorageClass，绕开 informer 同步时序。
 		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 		for _, class := range storageClasses {
 			indexer.Add(class)
@@ -799,7 +771,7 @@ func runSyncTests(t *testing.T, ctx context.Context, tests []controllerTest, sto
 			t.Errorf("Test %q failed: %v", test.name, err)
 		}
 
-		// Wait for the target state
+		// 等待异步操作把对象推进到期望状态
 		err = reactor.waitTest(test)
 		if err != nil {
 			t.Errorf("Test %q failed: %v", test.name, err)
@@ -815,34 +787,28 @@ func runSyncTests(t *testing.T, ctx context.Context, tests []controllerTest, sto
 	}
 }
 
-// Test multiple calls to syncClaim/syncVolume and periodic sync of all
-// volume/claims. For all tests, the test follows this pattern:
-//  0. Load the controller with initial data.
-//  1. Call controllerTest.testCall() once as in TestSync()
-//  2. For all volumes/claims changed by previous syncVolume/syncClaim calls,
-//     call appropriate syncVolume/syncClaim (simulating "volume/claim changed"
-//     events). Go to 2. if these calls change anything.
-//  3. When all changes are processed and no new changes were made, call
-//     syncVolume/syncClaim on all volumes/claims (simulating "periodic sync").
-//  4. If some changes were done by step 3., go to 2. (simulation of
-//     "volume/claim updated" events, eventually performing step 3. again)
-//  5. When 3. does not do any changes, finish the tests and compare final set
-//     of volumes/claims with expected claims/volumes and report differences.
+// runMultisyncTests 反复调用 syncClaim/syncVolume 并穿插周期同步，直到系统收敛。流程：
+//  0. 用初始数据填充控制器。
+//  1. 先像 runSyncTests 一样调用一次 controllerTest.testCall()。
+//  2. 对上一步发生变化的对象再次调用相应的 sync，模拟“对象变更”事件；仍有变化则重复本步。
+//  3. 无新变化时对所有对象调用 sync，模拟周期同步。
+//  4. 若第 3 步造成变化，回到第 2 步处理事件，并最终再次执行第 3 步。
+//  5. 周期同步不再产生变化时结束，比较最终对象与期望值。
 //
-// Some limit of calls in enforced to prevent endless loops.
+// 为避免逻辑错误导致死循环，循环次数设有上限。
 func runMultisyncTests(t *testing.T, ctx context.Context, tests []controllerTest, storageClasses []*storage.StorageClass, defaultStorageClass string) {
 	logger := klog.FromContext(ctx)
 	run := func(t *testing.T, test controllerTest) {
 		logger.V(4).Info("Starting multisync test", "testName", test.name)
 
-		// Initialize the controller
+		// 构造测试用控制器
 		client := &fake.Clientset{}
 		ctrl, err := newTestController(ctx, client, nil, true)
 		if err != nil {
 			t.Fatalf("Test %q construct persistent volume failed: %v", test.name, err)
 		}
 
-		// Inject classes into controller via a custom lister.
+		// 用自定义 lister 注入 StorageClass，绕开 informer 同步时序。
 		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 		for _, class := range storageClasses {
 			indexer.Add(class)
@@ -859,14 +825,13 @@ func runMultisyncTests(t *testing.T, ctx context.Context, tests []controllerTest
 		reactor.AddClaims(test.initialClaims)
 		reactor.AddVolumes(test.initialVolumes)
 
-		// Run the tested function
+		// 执行被测函数
 		err = test.test(ctrl, reactor.VolumeReactor, test)
 		if err != nil {
 			t.Errorf("Test %q failed: %v", test.name, err)
 		}
 
-		// Simulate any "changed" events and "periodical sync" until we reach a
-		// stable state.
+		// 交替模拟“对象变更”事件与周期同步，直到达到稳定状态。
 		firstSync := true
 		counter := 0
 		for {
@@ -878,63 +843,61 @@ func runMultisyncTests(t *testing.T, ctx context.Context, tests []controllerTest
 				break
 			}
 
-			// Wait for all goroutines to finish
+			// 先等待所有 goroutine 结束，再判断是否有待处理变更
 			reactor.waitForIdle()
 
 			obj := reactor.PopChange(ctx)
 			if obj == nil {
-				// Nothing was changed, should we exit?
+				// 没有变更对象时判断是否收敛
 				if firstSync || reactor.GetChangeCount() > 0 {
-					// There were some changes after the last "periodic sync".
-					// Simulate "periodic sync" of everything (until it produces
-					// no changes).
+					// 上次周期同步之后又出现了变更，需要再跑一轮全量同步
+					// 模拟所有对象的周期同步，直到不再产生变更。
 					firstSync = false
 					logger.V(4).Info("Test simulating periodical sync of all claims and volumes", "testName", test.name)
 					reactor.SyncAll()
 				} else {
-					// Last sync did not produce any updates, the test reached
-					// stable state -> finish.
+					// 上一轮同步未产生任何更新，系统已稳定，结束测试。
 					break
 				}
 			}
-			// waiting here cools down exponential backoff
+			// 稍作等待让 fake apiserver 的退避冷却，避免干扰下一轮
 			time.Sleep(600 * time.Millisecond)
 
-			// There were some changes, process them
+			// 有变更对象，逐个处理
 			switch obj.(type) {
 			case *v1.PersistentVolumeClaim:
 				claim := obj.(*v1.PersistentVolumeClaim)
-				// Simulate "claim updated" event
+				// 模拟 PVC 更新事件：先更新本地缓存再同步
 				ctrl.claims.Update(claim)
 				err = ctrl.syncClaim(context.TODO(), claim)
 				if err != nil {
 					if err == pvtesting.ErrVersionConflict {
-						// Ignore version errors
+						// 版本冲突是 fake reactor 的正常现象，忽略
 						logger.V(4).Info("Test intentionally ignores version error")
 					} else {
 						t.Errorf("Error calling syncClaim: %v", err)
-						// Finish the loop on the first error
+						// 遇到真实错误即终止循环
 						break
 					}
 				}
-				// Process generated changes
+				// 继续处理本次同步产生的变更
 				continue
 			case *v1.PersistentVolume:
 				volume := obj.(*v1.PersistentVolume)
-				// Simulate "volume updated" event
+				// 模拟 PV 更新事件：先更新本地缓存再同步
 				ctrl.volumes.store.Update(volume)
 				err = ctrl.syncVolume(context.TODO(), volume)
 				if err != nil {
 					if err == pvtesting.ErrVersionConflict {
-						// Ignore version errors
+						// 版本冲突是 fake reactor 的正常现象，忽略
 						logger.V(4).Info("Test intentionally ignores version error")
 					} else {
 						t.Errorf("Error calling syncVolume: %v", err)
-						// Finish the loop on the first error
+						// 遇到真实错误即终止循环
 						break
 					}
 				}
-				// Process generated changes
+				// 继续处理本次同步产生的变更
 				continue
 			}
 		}
@@ -950,8 +913,8 @@ func runMultisyncTests(t *testing.T, ctx context.Context, tests []controllerTest
 	}
 }
 
-// Dummy volume plugin for provisioning, deletion and recycling. It contains
-// lists of expected return values to simulate errors.
+// mockVolumePlugin 是置备/删除/回收用的桩插件，内部按序保存预置返回值，
+// 用于覆盖成功与错误路径。
 type mockVolumePlugin struct {
 	provisionCalls       []provisionCall
 	provisionCallCounter int
@@ -972,55 +935,67 @@ var _ volume.RecyclableVolumePlugin = &mockVolumePlugin{}
 var _ volume.DeletableVolumePlugin = &mockVolumePlugin{}
 var _ volume.ProvisionableVolumePlugin = &mockVolumePlugin{}
 
+// Init 是接口要求的空实现，测试无需初始化真实主机环境。
 func (plugin *mockVolumePlugin) Init(host volume.VolumeHost) error {
 	return nil
 }
 
+// GetPluginName 返回模拟插件名，供控制器按名称查找。
 func (plugin *mockVolumePlugin) GetPluginName() string {
 	return mockPluginName
 }
 
+// GetVolumeName 直接返回规格名称，避免解析真实卷源。
 func (plugin *mockVolumePlugin) GetVolumeName(spec *volume.Spec) (string, error) {
 	return spec.Name(), nil
 }
 
+// CanSupport 恒为 true，让测试对象都能匹配该插件。
 func (plugin *mockVolumePlugin) CanSupport(spec *volume.Spec) bool {
 	return true
 }
 
+// RequiresRemount 返回 false：本插件不参与挂载流程。
 func (plugin *mockVolumePlugin) RequiresRemount(spec *volume.Spec) bool {
 	return false
 }
 
+// SupportsMountOption 返回 false。
 func (plugin *mockVolumePlugin) SupportsMountOption() bool {
 	return false
 }
 
+// SupportsBulkVolumeVerification 返回 false。
 func (plugin *mockVolumePlugin) SupportsBulkVolumeVerification() bool {
 	return false
 }
 
+// ConstructVolumeSpec 返回零值，测试不会走真实卷重建逻辑。
 func (plugin *mockVolumePlugin) ConstructVolumeSpec(volumeName, mountPath string) (volume.ReconstructedVolume, error) {
 	return volume.ReconstructedVolume{}, nil
 }
 
+// SupportsSELinuxContextMount 返回 false。
 func (plugin *mockVolumePlugin) SupportsSELinuxContextMount(spec *volume.Spec) (bool, error) {
 	return false, nil
 }
 
+// NewMounter 不支持挂载，直接报错以暴露误用。
 func (plugin *mockVolumePlugin) NewMounter(spec *volume.Spec, podRef *v1.Pod) (volume.Mounter, error) {
 	return nil, fmt.Errorf("Mounter is not supported by this plugin")
 }
 
+// NewUnmounter 不支持卸载，直接报错以暴露误用。
 func (plugin *mockVolumePlugin) NewUnmounter(name string, podUID types.UID) (volume.Unmounter, error) {
 	return nil, fmt.Errorf("Unmounter is not supported by this plugin")
 }
 
-// Provisioner interfaces
+// Provisioner 接口实现
 
+// NewProvisioner 在配置了置备调用时返回插件自身（它也实现 Provisioner），否则报错。
 func (plugin *mockVolumePlugin) NewProvisioner(logger klog.Logger, options volume.VolumeOptions) (volume.Provisioner, error) {
 	if len(plugin.provisionCalls) > 0 {
-		// mockVolumePlugin directly implements Provisioner interface
+		// 插件自身即 Provisioner，省去额外桩类型
 		logger.V(4).Info("Mock plugin NewProvisioner called, returning mock provisioner")
 		plugin.provisionOptions = options
 		return plugin, nil
@@ -1029,6 +1004,7 @@ func (plugin *mockVolumePlugin) NewProvisioner(logger klog.Logger, options volum
 	}
 }
 
+// Provision 按预置顺序返回置备结果：先校验参数，再构造最小 PV 或返回预置错误。
 func (plugin *mockVolumePlugin) Provision(selectedNode *v1.Node, allowedTopologies []v1.TopologySelectorTerm) (*v1.PersistentVolume, error) {
 	if len(plugin.provisionCalls) <= plugin.provisionCallCounter {
 		return nil, fmt.Errorf("Mock plugin error: unexpected provisioner call %d", plugin.provisionCallCounter)
@@ -1040,7 +1016,7 @@ func (plugin *mockVolumePlugin) Provision(selectedNode *v1.Node, allowedTopologi
 		return nil, fmt.Errorf("Mock plugin error: invalid provisioner call")
 	}
 	if call.ret == nil {
-		// Create a fake PV with known GCE volume (to match expected volume)
+		// 构造带 GCE 卷源的 PV，与期望对象保持一致
 		capacity := plugin.provisionOptions.PVC.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]
 		accessModes := plugin.provisionOptions.PVC.Spec.AccessModes
 		pv = &v1.PersistentVolume{
@@ -1069,11 +1045,12 @@ func (plugin *mockVolumePlugin) Provision(selectedNode *v1.Node, allowedTopologi
 	return pv, call.ret
 }
 
-// Deleter interfaces
+// Deleter 接口实现
 
+// NewDeleter 在配置了删除调用时返回插件自身，否则报错。
 func (plugin *mockVolumePlugin) NewDeleter(logger klog.Logger, spec *volume.Spec) (volume.Deleter, error) {
 	if len(plugin.deleteCalls) > 0 {
-		// mockVolumePlugin directly implements Deleter interface
+		// 插件自身即 Deleter
 		logger.V(4).Info("Mock plugin NewDeleter called, returning mock deleter")
 		return plugin, nil
 	} else {
@@ -1081,6 +1058,7 @@ func (plugin *mockVolumePlugin) NewDeleter(logger klog.Logger, spec *volume.Spec
 	}
 }
 
+// Delete 按预置顺序返回删除结果，并递增调用计数以校验调用次数。
 func (plugin *mockVolumePlugin) Delete() error {
 	if len(plugin.deleteCalls) <= plugin.deleteCallCounter {
 		return fmt.Errorf("Mock plugin error: unexpected deleter call %d", plugin.deleteCallCounter)
@@ -1091,18 +1069,21 @@ func (plugin *mockVolumePlugin) Delete() error {
 	return ret
 }
 
-// Volume interfaces
+// Volume 接口实现
 
+// GetPath 返回空路径，测试不涉及真实挂载路径。
 func (plugin *mockVolumePlugin) GetPath() string {
 	return ""
 }
 
+// GetMetrics 返回空指标。
 func (plugin *mockVolumePlugin) GetMetrics() (*volume.Metrics, error) {
 	return nil, nil
 }
 
-// Recycler interfaces
+// Recycler 接口实现
 
+// Recycle 按预置顺序返回回收结果，并递增调用计数。
 func (plugin *mockVolumePlugin) Recycle(pvName string, spec *volume.Spec, eventRecorder recyclerclient.RecycleEventRecorder) error {
 	if len(plugin.recycleCalls) == 0 {
 		return fmt.Errorf("Mock plugin error: no recycleCalls configured")

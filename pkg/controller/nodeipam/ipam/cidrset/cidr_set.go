@@ -26,55 +26,50 @@ import (
 	"sync"
 )
 
-// CidrSet manages a set of CIDR ranges from which blocks of IPs can
-// be allocated from.
+// CidrSet 管理一个集群 CIDR 地址池，可将它划分为若干子网块供节点分配。
+// 内部用大整数位图跟踪每个子网的占用情况，并通过互斥锁保证并发安全。
 type CidrSet struct {
 	sync.Mutex
-	// clusterCIDR is the CIDR assigned to the cluster
+	// clusterCIDR 是分配给集群的 CIDR 范围。
 	clusterCIDR *net.IPNet
-	// clusterMaskSize is the mask size, in bits, assigned to the cluster
-	// caches the mask size to avoid the penalty of calling clusterCIDR.Mask.Size()
+	// clusterMaskSize 是集群掩码位数，缓存以避免重复调用 clusterCIDR.Mask.Size()。
 	clusterMaskSize int
-	// nodeMask is the network mask assigned to the nodes
+	// nodeMask 是分配给节点的子网掩码。
 	nodeMask net.IPMask
-	// nodeMaskSize is the mask size, in bits,assigned to the nodes
-	// caches the mask size to avoid the penalty of calling nodeMask.Size()
+	// nodeMaskSize 是节点掩码位数，缓存以避免重复调用 nodeMask.Size()。
 	nodeMaskSize int
-	// maxCIDRs is the maximum number of CIDRs that can be allocated
+	// maxCIDRs 是可分配子网块的最大数量。
 	maxCIDRs int
-	// allocatedCIDRs counts the number of CIDRs allocated
+	// allocatedCIDRs 是当前已分配的子网块数量。
 	allocatedCIDRs int
-	// nextCandidate points to the next CIDR that should be free
+	// nextCandidate 指向下一次分配时优先检查的候选块索引，减少线性扫描开销。
 	nextCandidate int
-	// used is a bitmap used to track the CIDRs allocated
+	// used 是跟踪子网块分配情况的位图。
 	used big.Int
-	// label is used to identify the metrics
+	// label 用于在指标中区分不同的 CIDR 集合。
 	label string
 }
 
 const (
-	// The subnet mask size cannot be greater than 16 more than the cluster mask size
+	// 子网掩码位数最多只能比集群掩码位数大 16。
 	// TODO: https://github.com/kubernetes/kubernetes/issues/44918
-	// clusterSubnetMaxDiff limited to 16 due to the uncompressed bitmap
-	// Due to this limitation the subnet mask for IPv6 cluster cidr needs to be >= 48
-	// as default mask size for IPv6 is 64.
+	// 受未压缩位图实现限制，clusterSubnetMaxDiff 被限制为 16；
+	// 因此 IPv6 集群的子网掩码至少为 48 位（IPv6 默认掩码为 64 位）。
 	clusterSubnetMaxDiff = 16
-	// halfIPv6Len is the half of the IPv6 length
+	// halfIPv6Len 是 IPv6 地址长度的一半，用于分高低 64 位处理。
 	halfIPv6Len = net.IPv6len / 2
 )
 
 var (
-	// ErrCIDRRangeNoCIDRsRemaining occurs when there is no more space
-	// to allocate CIDR ranges.
+	// ErrCIDRRangeNoCIDRsRemaining 表示可分配范围内已无剩余 CIDR。
 	ErrCIDRRangeNoCIDRsRemaining = errors.New(
 		"CIDR allocation failed; there are no remaining CIDRs left to allocate in the accepted range")
-	// ErrCIDRSetSubNetTooBig occurs when the subnet mask size is too
-	// big compared to the CIDR mask size.
+	// ErrCIDRSetSubNetTooBig 表示节点子网掩码相对集群掩码过大。
 	ErrCIDRSetSubNetTooBig = errors.New(
 		"New CIDR set failed; the node CIDR size is too big")
 )
 
-// NewCIDRSet creates a new CidrSet.
+// NewCIDRSet 创建一个新的 CidrSet，并校验子网掩码大小、注册相关指标。
 func NewCIDRSet(clusterCIDR *net.IPNet, subNetMaskSize int) (*CidrSet, error) {
 	clusterMask := clusterCIDR.Mask
 	clusterMaskSize, bits := clusterMask.Size()
@@ -83,7 +78,7 @@ func NewCIDRSet(clusterCIDR *net.IPNet, subNetMaskSize int) (*CidrSet, error) {
 		return nil, ErrCIDRSetSubNetTooBig
 	}
 
-	// register CidrSet metrics
+	// 注册 CIDR 集合的监控指标，仅首次调用生效。
 	registerCidrsetMetrics()
 
 	maxCIDRs := getMaxCIDRs(subNetMaskSize, clusterMaskSize)
@@ -100,6 +95,7 @@ func NewCIDRSet(clusterCIDR *net.IPNet, subNetMaskSize int) (*CidrSet, error) {
 	return cidrSet, nil
 }
 
+// indexToCIDRBlock 将块索引转换为对应的 CIDR 子网，区分 IPv4 与 IPv6 计算。
 func (s *CidrSet) indexToCIDRBlock(index int) *net.IPNet {
 	var ip []byte
 	switch /*v4 or v6*/ {
@@ -122,19 +118,18 @@ func (s *CidrSet) indexToCIDRBlock(index int) *net.IPNet {
 			ip = make([]byte, net.IPv6len)
 
 			if s.nodeMaskSize <= halfV6NBits {
-				// We only care about left side IP
+				// 子网在高 64 位内即可区分，只需修改左半部分。
 				leftClusterIP |= uint64(index) << uint(halfV6NBits-s.nodeMaskSize)
 			} else {
 				if s.clusterMaskSize < halfV6NBits {
-					// see how many bits are needed to reach the left side
+					// 计算索引中有多少位会溢出到左半部分。
 					btl := uint(s.nodeMaskSize - halfV6NBits)
 					indexMaxBit := uint(64 - bits.LeadingZeros64(uint64(index)))
 					if indexMaxBit > btl {
 						leftClusterIP |= uint64(index) >> btl
 					}
 				}
-				// the right side will be calculated the same way either the
-				// subNetMaskSize affects both left and right sides
+				// 右半部分的计算方式不变：子网掩码大于 64 位时会同时影响左右两侧。
 				rightClusterIP |= uint64(index) << uint(v6NBits-s.nodeMaskSize)
 			}
 			binary.BigEndian.PutUint64(ip[:halfIPv6Len], leftClusterIP)
@@ -147,8 +142,8 @@ func (s *CidrSet) indexToCIDRBlock(index int) *net.IPNet {
 	}
 }
 
-// AllocateNext allocates the next free CIDR range. This will set the range
-// as occupied and return the allocated range.
+// AllocateNext 分配下一个空闲的 CIDR 子网块并标记为占用。
+// 从 nextCandidate 开始环形扫描位图，找到空闲块后更新游标并同步指标。
 func (s *CidrSet) AllocateNext() (*net.IPNet, error) {
 	s.Lock()
 	defer s.Unlock()
@@ -159,6 +154,7 @@ func (s *CidrSet) AllocateNext() (*net.IPNet, error) {
 	candidate := s.nextCandidate
 	var i int
 	for i = 0; i < s.maxCIDRs; i++ {
+		// 环形扫描，最多遍历一圈即可确定是否还有空闲块。
 		if s.used.Bit(candidate) == 0 {
 			break
 		}
@@ -168,7 +164,7 @@ func (s *CidrSet) AllocateNext() (*net.IPNet, error) {
 	s.nextCandidate = (candidate + 1) % s.maxCIDRs
 	s.used.SetBit(&s.used, candidate, 1)
 	s.allocatedCIDRs++
-	// Update metrics
+	// 更新分配次数、每次分配的探测次数与使用率指标。
 	cidrSetAllocations.WithLabelValues(s.label).Inc()
 	cidrSetAllocationTriesPerRequest.WithLabelValues(s.label).Observe(float64(i))
 	cidrSetUsage.WithLabelValues(s.label).Set(float64(s.allocatedCIDRs) / float64(s.maxCIDRs))
@@ -176,6 +172,8 @@ func (s *CidrSet) AllocateNext() (*net.IPNet, error) {
 	return s.indexToCIDRBlock(candidate), nil
 }
 
+// getBeginningAndEndIndices 计算给定 CIDR 覆盖的块索引范围 [begin, end]。
+// 先校验该 CIDR 与集群 CIDR 有交集，避免越界释放或占用其他集群的地址。
 func (s *CidrSet) getBeginningAndEndIndices(cidr *net.IPNet) (begin, end int, err error) {
 	if cidr == nil {
 		return -1, -1, fmt.Errorf("error getting indices for cluster cidr %v, cidr is nil", s.clusterCIDR)
@@ -219,7 +217,8 @@ func (s *CidrSet) getBeginningAndEndIndices(cidr *net.IPNet) (begin, end int, er
 	return begin, end, nil
 }
 
-// Release releases the given CIDR range.
+// Release 释放给定的 CIDR 范围，将其对应的块在位图中清零。
+// 只对实际占用的块递减计数，避免重复释放导致计数错误。
 func (s *CidrSet) Release(cidr *net.IPNet) error {
 	begin, end, err := s.getBeginningAndEndIndices(cidr)
 	if err != nil {
@@ -228,8 +227,7 @@ func (s *CidrSet) Release(cidr *net.IPNet) error {
 	s.Lock()
 	defer s.Unlock()
 	for i := begin; i <= end; i++ {
-		// Only change the counters if we change the bit to prevent
-		// double counting.
+		// 仅当位状态真正变化时才调整计数，防止重复释放导致重复计数。
 		if s.used.Bit(i) != 0 {
 			s.used.SetBit(&s.used, i, 0)
 			s.allocatedCIDRs--
@@ -241,8 +239,8 @@ func (s *CidrSet) Release(cidr *net.IPNet) error {
 	return nil
 }
 
-// Occupy marks the given CIDR range as used. Occupy succeeds even if the CIDR
-// range was previously used.
+// Occupy 将给定 CIDR 范围标记为已占用。
+// 对已占用的块是幂等操作，用于从外部状态恢复时重建位图。
 func (s *CidrSet) Occupy(cidr *net.IPNet) (err error) {
 	begin, end, err := s.getBeginningAndEndIndices(cidr)
 	if err != nil {
@@ -251,8 +249,7 @@ func (s *CidrSet) Occupy(cidr *net.IPNet) (err error) {
 	s.Lock()
 	defer s.Unlock()
 	for i := begin; i <= end; i++ {
-		// Only change the counters if we change the bit to prevent
-		// double counting.
+		// 仅当位状态真正变化时才调整计数，防止重复占用导致重复计数。
 		if s.used.Bit(i) == 0 {
 			s.used.SetBit(&s.used, i, 1)
 			s.allocatedCIDRs++
@@ -264,6 +261,8 @@ func (s *CidrSet) Occupy(cidr *net.IPNet) (err error) {
 	return nil
 }
 
+// getIndexForIP 将 IP 地址映射为其所属子网块的索引。
+// IPv4 直接用整数位移计算，IPv6 用 big.Int 处理 128 位异或与右移。
 func (s *CidrSet) getIndexForIP(ip net.IP) (int, error) {
 	if ip.To4() != nil {
 		cidrIndex := (binary.BigEndian.Uint32(s.clusterCIDR.IP) ^ binary.BigEndian.Uint32(ip.To4())) >> uint32(32-s.nodeMaskSize)
@@ -286,8 +285,7 @@ func (s *CidrSet) getIndexForIP(ip net.IP) (int, error) {
 	return 0, fmt.Errorf("invalid IP: %v", ip)
 }
 
-// getMaxCIDRs returns the max number of CIDRs that can be obtained by subdividing a mask of size `clusterMaskSize`
-// into subnets with mask of size `subNetMaskSize`.
+// getMaxCIDRs 返回把 clusterMaskSize 的集群 CIDR 按 subNetMaskSize 划分子网后可得到的最大块数。
 func getMaxCIDRs(subNetMaskSize, clusterMaskSize int) int {
 	return 1 << uint32(subNetMaskSize-clusterMaskSize)
 }

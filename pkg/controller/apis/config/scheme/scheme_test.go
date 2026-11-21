@@ -23,6 +23,8 @@ import (
 	"k8s.io/kubernetes/pkg/controller/apis/config/fuzzer"
 )
 
+// TestRoundTripTypes 验证 scheme 中的类型经序列化和反序列化后能无损还原。
 func TestRoundTripTypes(t *testing.T) {
+	// 借助 fuzzer 生成的随机取值，覆盖各种字段组合下的往返转换。
 	roundtrip.RoundTripTestForScheme(t, Scheme, fuzzer.Funcs)
 }

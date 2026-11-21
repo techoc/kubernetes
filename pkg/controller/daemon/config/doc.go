@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package config 定义 DaemonSet 控制器的内部配置类型。
+// deepcopy 生成指令必须紧邻包声明之前，生成器据此为本包类型生成深拷贝方法。
 // +k8s:deepcopy-gen=package
 
 package config

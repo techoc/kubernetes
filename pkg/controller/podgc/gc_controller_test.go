@@ -47,8 +47,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// alwaysReady 作为已同步判定，绕过 informer 启动等待，让测试直接驱动控制器。
 func alwaysReady() bool { return true }
 
+// NewFromClient 用给定客户端搭建控制器与 informer，并返回三者供测试填充本地存储。
 func NewFromClient(ctx context.Context, kubeClient clientset.Interface, terminatedPodThreshold int) (*PodGCController, coreinformers.PodInformer, coreinformers.NodeInformer) {
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, controller.NoResyncPeriodFunc())
 	podInformer := informerFactory.Core().V1().Pods()
@@ -58,6 +60,8 @@ func NewFromClient(ctx context.Context, kubeClient clientset.Interface, terminat
 	return controller, podInformer, nodeInformer
 }
 
+// TestGCTerminated 表驱动验证终止态 Pod 的回收：超过阈值的失败/成功 Pod 被删除，
+// 阈值为 0 或数量不足时不动。
 func TestGCTerminated(t *testing.T) {
 	type nameToPhase struct {
 		name   string
@@ -89,7 +93,7 @@ func TestGCTerminated(t *testing.T) {
 				{name: "b", phase: v1.PodSucceeded},
 			},
 			threshold: 0,
-			// threshold = 0 disables terminated pod deletion
+			// 阈值为 0 表示关闭终止态 Pod 回收。
 		},
 		{
 			name: "threshold = 1, delete pod a which is PodFailed and pod b which is PodSucceeded",
@@ -177,6 +181,7 @@ func TestGCTerminated(t *testing.T) {
 	}
 }
 
+// makePod 构造带节点与阶段的最小 Pod，供孤儿回收场景复用。
 func makePod(name string, nodeName string, phase v1.PodPhase) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -188,6 +193,7 @@ func makePod(name string, nodeName string, phase v1.PodPhase) *v1.Pod {
 	}
 }
 
+// waitForAdded 轮询等待延迟队列达到期望深度，避免依赖固定 sleep。
 func waitForAdded(q workqueue.TypedDelayingInterface[string], depth int) error {
 	return wait.Poll(1*time.Millisecond, 10*time.Second, func() (done bool, err error) {
 		if q.Len() == depth {
@@ -198,6 +204,8 @@ func waitForAdded(q workqueue.TypedDelayingInterface[string], depth int) error {
 	})
 }
 
+// TestGCOrphaned 验证节点消失的 Pod 需经过隔离期才被回收，
+// 并覆盖隔离期内节点重新出现、客户端与 informer 视图不一致等边界。
 func TestGCOrphaned(t *testing.T) {
 	testCases := []struct {
 		name                 string
@@ -315,8 +323,7 @@ func TestGCOrphaned(t *testing.T) {
 			itemsInQueue: 1,
 		},
 		{
-			// It shouldn't happen that client will be lagging behind informer.
-			// This test case is more a sanity check.
+			// 客户端落后于 informer 本不该发生，此用例仅作健全性检查。
 			name:               "node deleted from client after quarantine",
 			initialClientNodes: []*v1.Node{testutil.NewNode("node")},
 			delay:              2 * quarantineTime,
@@ -352,12 +359,12 @@ func TestGCOrphaned(t *testing.T) {
 			for _, pod := range test.pods {
 				podInformer.Informer().GetStore().Add(pod)
 			}
-			// Overwrite queue
+			// 默认队列使用真实时钟，这里换成假时钟队列以可控地推进隔离期。
 			fakeClock := testingclock.NewFakeClock(time.Now())
 			gcc.nodeQueue.ShutDown()
 			gcc.nodeQueue = workqueue.NewTypedDelayingQueueWithConfig(workqueue.TypedDelayingQueueConfig[string]{Clock: fakeClock, Name: "podgc_test_queue"})
 
-			// First GC of orphaned pods
+			// 首轮回收时节点尚未超时，不应删除任何 Pod。
 			gcc.gc(ctx)
 			deletedPodNames := getDeletedPodNames(client)
 
@@ -365,9 +372,9 @@ func TestGCOrphaned(t *testing.T) {
 				t.Errorf("no pods should be deleted at this point.\n\tactual: %v", deletedPodNames)
 			}
 
-			// Move clock forward
+			// 推进假时钟，使隔离期到期。
 			fakeClock.Step(test.delay)
-			// Wait for queue goroutine to process items
+			// 等待队列协程处理完到期项，避免竞态断言。
 			if test.itemsInQueue > 0 {
 				err := waitForAdded(gcc.nodeQueue, test.itemsInQueue)
 				if err != nil {
@@ -376,7 +383,7 @@ func TestGCOrphaned(t *testing.T) {
 				}
 			}
 
-			// Execute planned nodes changes
+			// 在隔离期结束后改变节点状态，覆盖回收前的复核逻辑。
 			for _, node := range test.addedClientNodes {
 				client.CoreV1().Nodes().Create(context.TODO(), node, metav1.CreateOptions{})
 			}
@@ -390,7 +397,7 @@ func TestGCOrphaned(t *testing.T) {
 				nodeInformer.Informer().GetStore().Delete(node)
 			}
 
-			// Actual pod deletion
+			// 再次回收，此时才应真正删除目标 Pod。
 			gcc.gc(context.TODO())
 			verifyDeletedAndPatchedPods(t, client, test.deletedPodNames, test.patchedPodNames)
 			testDeletingPodsMetrics(t, len(test.deletedPodNames), metrics.PodGCReasonOrphaned)
@@ -398,6 +405,8 @@ func TestGCOrphaned(t *testing.T) {
 	}
 }
 
+// TestGCUnscheduledTerminating 验证未调度的终止中 Pod 会被强制删除，
+// 已调度的则保留。
 func TestGCUnscheduledTerminating(t *testing.T) {
 	type nameToPhase struct {
 		name              string
@@ -468,6 +477,8 @@ func TestGCUnscheduledTerminating(t *testing.T) {
 	}
 }
 
+// TestGCTerminating 验证节点 NotReady 或被标记 out-of-service 时，
+// 其终止中 Pod 是否以及如何被强制删除。
 func TestGCTerminating(t *testing.T) {
 	type node struct {
 		name           string
@@ -505,60 +516,60 @@ func TestGCTerminating(t *testing.T) {
 			name: "some pods have deletion timestamp and/or phase set and some of the corresponding nodes have an" +
 				"outofservice taint that are not ready",
 			nodes: []node{
-				// terminated pods on this node should be force deleted
+				// 带 out-of-service 且 NoExecute 效果：其终止态 Pod 应被强制删除。
 				{name: "worker-0", readyCondition: v1.ConditionFalse, taints: []v1.Taint{{Key: v1.TaintNodeOutOfService,
 					Effect: v1.TaintEffectNoExecute}}},
-				// terminated pods on this node should not be force deleted
+				// 仅 NotReady 无 out-of-service：不应强制删除。
 				{name: "worker-1", readyCondition: v1.ConditionFalse},
-				// terminated pods on this node should not be force deleted
+				// 节点就绪：不应强制删除。
 				{name: "worker-2", readyCondition: v1.ConditionTrue},
-				// terminated pods on this node should be force deleted
+				// out-of-service 配 NoSchedule 亦满足条件，应强制删除。
 				{name: "worker-3", readyCondition: v1.ConditionFalse, taints: []v1.Taint{{Key: v1.TaintNodeOutOfService,
 					Effect: v1.TaintEffectNoSchedule}}},
-				// terminated pods on this node should be force deleted
+				// 任意污点效果均算命中，应强制删除。
 				{name: "worker-4", readyCondition: v1.ConditionFalse, taints: []v1.Taint{{Key: v1.TaintNodeOutOfService,
 					Effect: v1.TaintEffectPreferNoSchedule}}},
-				// terminated pods on this node should be force deleted
+				// value 不影响判定，应强制删除。
 				{name: "worker-5", readyCondition: v1.ConditionFalse, taints: []v1.Taint{{Key: v1.TaintNodeOutOfService,
 					Value: "any-value", Effect: v1.TaintEffectNoExecute}}},
 			},
 			pods: []nameToPodConfig{
-				// pods a1, b1, c1, d1 and e1 are on node worker-0
+				// worker-0 上的五个 Pod 覆盖不同阶段与删除时间戳。
 				{name: "a1", nodeName: "worker-0"},
 				{name: "b1", deletionTimeStamp: &metav1.Time{}, nodeName: "worker-0"},
 				{name: "c1", phase: v1.PodPending, nodeName: "worker-0"},
 				{name: "d1", phase: v1.PodRunning, nodeName: "worker-0"},
 				{name: "e1", phase: v1.PodUnknown, nodeName: "worker-0"},
 
-				// pods a2, b2, c2, d2 and e2 are on node worker-1
+				// worker-1 上的同类对照组。
 				{name: "a2", nodeName: "worker-1"},
 				{name: "b2", deletionTimeStamp: &metav1.Time{}, nodeName: "worker-1"},
 				{name: "c2", phase: v1.PodPending, nodeName: "worker-1"},
 				{name: "d2", phase: v1.PodRunning, nodeName: "worker-1"},
 				{name: "e2", phase: v1.PodUnknown, nodeName: "worker-1"},
 
-				// pods a3, b3, c3, d3 and e3 are on node worker-2
+				// worker-2 上的同类对照组。
 				{name: "a3", nodeName: "worker-2"},
 				{name: "b3", deletionTimeStamp: &metav1.Time{}, nodeName: "worker-2"},
 				{name: "c3", phase: v1.PodPending, nodeName: "worker-2"},
 				{name: "d3", phase: v1.PodRunning, nodeName: "worker-2"},
 				{name: "e3", phase: v1.PodUnknown, nodeName: "worker-2"},
 
-				// pods a4, b4, c4, d4 and e4 are on node worker-3
+				// worker-3 上的同类对照组。
 				{name: "a4", nodeName: "worker-3"},
 				{name: "b4", deletionTimeStamp: &metav1.Time{}, nodeName: "worker-3"},
 				{name: "c4", phase: v1.PodPending, nodeName: "worker-3"},
 				{name: "d4", phase: v1.PodRunning, nodeName: "worker-3"},
 				{name: "e4", phase: v1.PodUnknown, nodeName: "worker-3"},
 
-				// pods a5, b5, c5, d5 and e5 are on node worker-4
+				// worker-4 上的同类对照组。
 				{name: "a5", nodeName: "worker-3"},
 				{name: "b5", deletionTimeStamp: &metav1.Time{}, nodeName: "worker-4"},
 				{name: "c5", phase: v1.PodPending, nodeName: "worker-4"},
 				{name: "d5", phase: v1.PodRunning, nodeName: "worker-4"},
 				{name: "e5", phase: v1.PodUnknown, nodeName: "worker-4"},
 
-				// pods a6, b6, c6, d6 and e6 are on node worker-5
+				// worker-5 上的同类对照组。
 				{name: "a6", nodeName: "worker-5"},
 				{name: "b6", deletionTimeStamp: &metav1.Time{}, nodeName: "worker-5"},
 				{name: "c6", phase: v1.PodPending, nodeName: "worker-5"},
@@ -634,6 +645,8 @@ func TestGCTerminating(t *testing.T) {
 	}
 }
 
+// TestGCInspectingPatchedPodBeforeDeletion 验证删除前的补丁内容：
+// 孤儿 Pod 被打上 DisruptionTarget 条件并以零优雅期删除。
 func TestGCInspectingPatchedPodBeforeDeletion(t *testing.T) {
 	testCases := []struct {
 		name                 string
@@ -700,6 +713,7 @@ func TestGCInspectingPatchedPodBeforeDeletion(t *testing.T) {
 
 			client := setupNewSimpleClient(nil, pods)
 			gcc, podInformer, _ := NewFromClient(ctx, client, -1)
+			// 负隔离期使孤儿判定立即生效，省去等待队列延迟。
 			gcc.quarantineTime = time.Duration(-1)
 			podInformer.Informer().GetStore().Add(test.pod)
 			gcc.gc(ctx)
@@ -719,6 +733,7 @@ func TestGCInspectingPatchedPodBeforeDeletion(t *testing.T) {
 				}
 			}
 
+			// 先确认补丁动作的有无与预期一致，再解析内容，避免空指针误判。
 			if patchAction != nil && test.expectedPatchedPod == nil {
 				t.Fatalf("Pod was pactched but expectedPatchedPod is nil")
 			}
@@ -728,6 +743,7 @@ func TestGCInspectingPatchedPodBeforeDeletion(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to marshal original pod %#v: %v", originalPod, err)
 				}
+				// 补丁是增量数据，需合并回原对象才能与完整期望 Pod 比较。
 				updated, err := strategicpatch.StrategicMergePatch(originalPod, patchedPodBytes, v1.Pod{})
 				if err != nil {
 					t.Fatalf("Failed to apply strategic merge patch %q on pod %#v: %v", patchedPodBytes, originalPod, err)
@@ -738,6 +754,7 @@ func TestGCInspectingPatchedPodBeforeDeletion(t *testing.T) {
 					t.Fatalf("Failed to unmarshal updated pod %q: %v", updated, err)
 				}
 
+				// 忽略由 API 填充或随时间变化的字段，只比较控制器真正写入的内容。
 				if diff := cmp.Diff(test.expectedPatchedPod, updatedPod, cmpopts.IgnoreFields(v1.Pod{}, "TypeMeta"), cmpopts.IgnoreFields(v1.PodCondition{}, "LastTransitionTime")); diff != "" {
 					t.Fatalf("Unexpected diff on pod (-want,+got):\n%s", diff)
 				}
@@ -747,6 +764,7 @@ func TestGCInspectingPatchedPodBeforeDeletion(t *testing.T) {
 				t.Fatalf("Pod was deleted but expectedDeleteAction is nil")
 			}
 			if test.expectedDeleteAction != nil {
+				// 只校验删除选项等语义字段，动作元信息由客户端框架填充。
 				if diff := cmp.Diff(*test.expectedDeleteAction, deleteAction, cmpopts.IgnoreFields(clienttesting.DeleteActionImpl{}, "ActionImpl")); diff != "" {
 					t.Fatalf("Unexpected diff on deleteAction (-want,+got):\n%s", diff)
 				}
@@ -755,9 +773,12 @@ func TestGCInspectingPatchedPodBeforeDeletion(t *testing.T) {
 	}
 }
 
+// verifyDeletedAndPatchedPods 从 fake client 的动作记录提取删除与补丁名单并比对期望，
+// 空集合等价处理。
 func verifyDeletedAndPatchedPods(t *testing.T, client *fake.Clientset, wantDeletedPodNames, wantPatchedPodNames sets.Set[string]) {
 	t.Helper()
 	deletedPodNames := getDeletedPodNames(client)
+	// 期望与实际都为空时视为相等，避免在“无操作”用例里区分 nil 与空集。
 	if diff := cmp.Diff(wantDeletedPodNames, deletedPodNames, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("Deleted pod names (-want,+got):\n%s", diff)
 	}
@@ -767,6 +788,7 @@ func verifyDeletedAndPatchedPods(t *testing.T, client *fake.Clientset, wantDelet
 	}
 }
 
+// testDeletingPodsMetrics 校验删除计数与错误计数：指定原因的删除数为期望值，错误数应为零。
 func testDeletingPodsMetrics(t *testing.T, total int, reason string) {
 	t.Helper()
 
@@ -787,6 +809,7 @@ func testDeletingPodsMetrics(t *testing.T, total int, reason string) {
 	}
 }
 
+// setupNewSimpleClient 把节点与 Pod 列表交给 fake client 作为初始对象。
 func setupNewSimpleClient(nodes []*v1.Node, pods []*v1.Pod) *fake.Clientset {
 	podList := &v1.PodList{}
 	for _, podItem := range pods {
@@ -799,6 +822,7 @@ func setupNewSimpleClient(nodes []*v1.Node, pods []*v1.Pod) *fake.Clientset {
 	return fake.NewSimpleClientset(nodeList, podList)
 }
 
+// getDeletedPodNames 从动作记录中汇总被删除的 Pod 名称。
 func getDeletedPodNames(client *fake.Clientset) sets.Set[string] {
 	deletedPodNames := sets.New[string]()
 	for _, action := range client.Actions() {
@@ -810,6 +834,7 @@ func getDeletedPodNames(client *fake.Clientset) sets.Set[string] {
 	return deletedPodNames
 }
 
+// getPatchedPodNames 从动作记录中汇总被打补丁的 Pod 名称。
 func getPatchedPodNames(client *fake.Clientset) sets.Set[string] {
 	patchedPodNames := sets.New[string]()
 	for _, action := range client.Actions() {
@@ -821,6 +846,7 @@ func getPatchedPodNames(client *fake.Clientset) sets.Set[string] {
 	return patchedPodNames
 }
 
+// resetMetrics 在每个用例开始前清空计数器，避免用例间指标串扰。
 func resetMetrics() {
 	metrics.DeletingPodsTotal.Reset()
 	metrics.DeletingPodsErrorTotal.Reset()

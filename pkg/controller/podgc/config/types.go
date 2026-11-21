@@ -16,10 +16,10 @@ limitations under the License.
 
 package config
 
-// PodGCControllerConfiguration contains elements describing PodGCController.
+// PodGCControllerConfiguration 包含描述 PodGCController 的配置项。
 type PodGCControllerConfiguration struct {
-	// terminatedPodGCThreshold is the number of terminated pods that can exist
-	// before the terminated pod garbage collector starts deleting terminated pods.
-	// If <= 0, the terminated pod garbage collector is disabled.
+	// TerminatedPodGCThreshold 是允许存在的已终止 Pod 数量上限，
+	// 超过该阈值后，已终止 Pod 垃圾回收器开始清理。
+	// 小于或等于 0 表示禁用该垃圾回收器。
 	TerminatedPodGCThreshold int32
 }

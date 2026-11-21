@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1alpha1 定义 CronJob 控制器配置的外部版本，并通过下面的生成器指令
+// 为内部配置包生成 deepcopy 与双向转换代码。
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/kubernetes/pkg/controller/cronjob/config
 // +k8s:conversion-gen-external-types=k8s.io/kube-controller-manager/config/v1alpha1

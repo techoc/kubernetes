@@ -57,6 +57,9 @@ MLd7MVm4cS/MNcx4L7l23UC3Hx4+nAxvIg==
 -----END CERTIFICATE-----`
 )
 
+// TestCleanerWithApprovedExpiredCSR 验证 CSR 清理器根据证书有效期和 Condition 时间决定是否删除请求。
+// 表项覆盖：已批准/已拒绝/已失败/待处理状态、是否超过截止时间、
+// 以及证书已过期或无法解析的情形；expectedActions 断言是否产生了 delete 操作。
 func TestCleanerWithApprovedExpiredCSR(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -256,6 +259,8 @@ func TestCleanerWithApprovedExpiredCSR(t *testing.T) {
 				t.Fatalf("failed to clean CSR: %v", err)
 			}
 
+			// 断言 API 操作的数量与类型完全匹配：
+			// 数量不符说明清理器做了多余或遗漏的删除。
 			actions := client.Actions()
 			if len(actions) != len(tc.expectedActions) {
 				t.Fatalf("got %d actions, wanted %d actions", len(actions), len(tc.expectedActions))

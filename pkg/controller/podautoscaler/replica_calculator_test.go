@@ -60,66 +60,68 @@ const (
 	numContainersPerPod = 2
 )
 
-// testDeploymentRef is the default object reference
+// testDeploymentRef 是测试中默认使用的对象引用，指向 apps/v1 版本的 Deployment
+// "some-deployment"，供对象指标（object metric）相关场景复用。
 var testDeploymentRef = &autoscalingv2.CrossVersionObjectReference{
 	Kind:       "Deployment",
 	APIVersion: "apps/v1",
 	Name:       "some-deployment",
 }
 
+// testExternalSelector 是外部指标测试常用的标签选择器，匹配 label=value，用于构造带 selector 的 customMetric 夹具。
 var testExternalSelector = &metav1.LabelSelector{MatchLabels: map[string]string{"label": "value"}}
 
-// cpuResource describes the per-container CPU requests and the pod-level metric
-// levels that shape the fake pod/metrics clients for resource-based tests.
+// cpuResource 描述基于资源（CPU）的测试中，伪 Pod 客户端与指标客户端所需的
+// 每容器 CPU request 以及 Pod 级别的指标数值。
 type cpuResource struct {
-	// requests is the per-pod CPU request. len(requests) is the number of pods.
+	// requests 是每个 Pod 的 CPU request；len(requests) 即 Pod 的数量。
 	requests []resource.Quantity
-	// levels[i][j] is the usage of container j in pod i. Out-of-range values
-	// simulate pods with missing metrics.
+	// levels[i][j] 表示第 i 个 Pod 中第 j 个容器的用量；越界值
+	// 用来模拟缺失指标的容器。
 	levels [][]int64
-	// podNames, if non-empty, overrides the pod name returned by the fake
-	// metrics client for index i.
+	// podNames 非空时覆盖伪指标客户端在第 i 个索引处返回的 Pod 名称，
+	// 可用于构造指标名称与 Pod 名称不匹配的场景。
 	podNames []string
 }
 
-// customMetric describes how the fake custom - or external-metrics client should
-// respond in metric-based tests.
+// customMetric 描述基于自定义/外部指标的测试中，伪指标客户端应如何响应。
+// name 为指标名称，levels 为返回的数值序列。
+// name 是指标名称。
 type customMetric struct {
 	name string
-	// levels are the values returned by the metrics client, one per pod
-	// (or one per external-metric sample).
+	// levels 是指标客户端返回的值，每个 Pod 一个
+	// （外部指标则每个样本一个）。
 	levels []int64
-	// singleObject is required for object and objectPerPod metric tests.
+	// singleObject 用于 object 与 objectPerPod 指标测试。
 	singleObject *autoscalingv2.CrossVersionObjectReference
-	// selector is required for external and externalPerPod metric tests.
+	// selector 用于 external 与 externalPerPod 指标测试。
 	selector *metav1.LabelSelector
 }
 
-// calcScenario is a pure input bundle: it describes what pods exist, what
-// metrics they report, and what readiness/phase they are in.
+// calcScenario 是纯粹的输入集合：描述存在哪些 Pod、它们上报的指标，以及就绪状态与阶段。
 type calcScenario struct {
 	currentReplicas int32
 
-	// Exactly one of resource or metric is set.
+	// resource 与 metric 二者恰好设置一个。
 	resource *cpuResource
 	metric   *customMetric
 
-	// container, if set, scopes GetResourceReplicas to a specific container.
+	// container 非空时将 GetResourceReplicas 的计算限定到指定容器。
 	container string
 
-	// timestamp used by the fake metrics clients for all returned samples.
+	// timestamp 是伪指标客户端为所有返回样本使用的时间戳。
 	timestamp time.Time
 
-	// Per-pod state. When non-nil, each slice must be at least currentReplicas
-	// long (or longer if the fixture is also describing failed/deleted pods
-	// that aren't counted in currentReplicas).
+	// 每个 Pod 的状态。非 nil 时每个切片长度至少为 currentReplicas
+	// （若夹具还要描述未计入 currentReplicas 的失败/被删除 Pod，
+	// 则可更长）。
 	podReadiness         []v1.ConditionStatus
 	podStartTime         []metav1.Time
 	podPhase             []v1.PodPhase
 	podDeletionTimestamp []bool
 }
 
-// cpuRequests returns n identical CPU resource quantities parsed from val.
+// cpuRequests 返回 n 个从 val 解析出的相同 CPU 资源数量。
 func cpuRequests(n int, val string) []resource.Quantity {
 	requests := make([]resource.Quantity, n)
 	for i := range requests {
@@ -128,8 +130,8 @@ func cpuRequests(n int, val string) []resource.Quantity {
 	return requests
 }
 
-// makePodMetricLevels returns a [pod][container]int64 where every container in
-// pod i reports the same usage containerMetric[i].
+// makePodMetricLevels 返回 [Pod][容器]int64 二维数组，
+// 其中 Pod i 的每个容器都上报相同用量 containerMetric[i]。
 func makePodMetricLevels(containerMetric ...int64) [][]int64 {
 	metrics := make([][]int64, len(containerMetric))
 	for i := range containerMetric {
@@ -141,6 +143,9 @@ func makePodMetricLevels(containerMetric ...int64) [][]int64 {
 	return metrics
 }
 
+// assertMetricReplicas 校验基于指标计算副本数的结果：期望出错时只校验错误非空且包含期望文本；
+// 否则要求无错误，并逐项比对副本数、用量与时间戳。时间戳用 Equal 比较，
+// 避免 time.Time 中单调时钟或位置差异造成误判。
 func assertMetricReplicas(t *testing.T, wantReplicas int32, wantUsage int64, wantTimestamp time.Time, wantErr error,
 	gotReplicas int32, gotUsage int64, gotTimestamp time.Time, gotErr error) {
 	t.Helper()
@@ -155,8 +160,8 @@ func assertMetricReplicas(t *testing.T, wantReplicas int32, wantUsage int64, wan
 	assert.True(t, wantTimestamp.Equal(gotTimestamp), "timestamp should be as expected")
 }
 
-// replicaCalcSetup holds a ReplicaCalculator and the fake clients it uses.
-// Tests call methods on .calc and check the result.
+// replicaCalcSetup 持有一个 ReplicaCalculator 及其使用的伪客户端。
+// 测试通过 .calc 调用方法并检查结果。
 type replicaCalcSetup struct {
 	calc       *ReplicaCalculator
 	ctx        context.Context
@@ -165,7 +170,7 @@ type replicaCalcSetup struct {
 	tolerances Tolerances
 }
 
-// resourceCase bundles a single input fixture with expected outputs for the resource-based replica tests.
+// resourceCase 将单个输入夹具与基于资源的副本数测试的期望输出打包。
 type resourceCase struct {
 	name    string
 	fixture calcScenario
@@ -176,11 +181,11 @@ type resourceCase struct {
 	expectedRawValue    int64
 	expectedError       error
 
-	// tolerances, if non-nil, overrides the default setup tolerances.
+	// tolerances 非 nil 时覆盖 setup 中的默认容忍度。
 	tolerances *Tolerances
 }
 
-// metricCase bundles a single input fixture with expected outputs for pod-metric-based, object-metric-based, and external-metric-based replica tests.
+// metricCase 将单个输入夹具与基于 Pod 指标、对象指标、外部指标的副本数测试期望输出打包。
 type metricCase struct {
 	name    string
 	fixture calcScenario
@@ -190,11 +195,11 @@ type metricCase struct {
 	expectedUsage    int64
 	expectedError    error
 
-	// tolerances, if non-nil, overrides the default setup tolerances.
+	// tolerances 非 nil 时覆盖 setup 中的默认容忍度。
 	tolerances *Tolerances
 }
 
-// perPodMetricCase bundles a single input fixture with expected outputs for object-per-pod-metric-based and external-per-pod-metric-based replica tests.
+// perPodMetricCase 将单个输入夹具与基于每 Pod 对象指标、每 Pod 外部指标的测试期望输出打包。
 type perPodMetricCase struct {
 	name    string
 	fixture calcScenario
@@ -204,12 +209,12 @@ type perPodMetricCase struct {
 	expectedUsage     int64
 	expectedError     error
 
-	// tolerances, if non-nil, overrides the default setup tolerances.
+	// tolerances 非 nil 时覆盖 setup 中的默认容忍度。
 	tolerances *Tolerances
 }
 
-// newReplicaCalcSetup creates fake pod, metrics, custom-metrics, and
-// external-metrics clients and adds them to ReplicaCalculator within replicaCalcSetup.
+// newReplicaCalcSetup 创建伪 Pod、资源指标、自定义指标与外部指标客户端，
+// 并将它们注入 ReplicaCalculator；返回的 setup 包含计算器、上下文、选择器、命名空间与默认容忍度。
 func newReplicaCalcSetup(t *testing.T, f *calcScenario) *replicaCalcSetup {
 	t.Helper()
 
@@ -228,14 +233,17 @@ func newReplicaCalcSetup(t *testing.T, f *calcScenario) *replicaCalcSetup {
 	calc := NewReplicaCalculator(metricsClient, informer.Lister(),
 		defaultTestingCPUInitializationPeriod, defaultTestingDelayOfInitialReadinessStatus)
 
+	// 必须先启动 informer，Lister 才能看到伪客户端里生成的 Pod。
 	informerFactory.Start(tCtx.Done())
 
+	// 给缓存同步设置超时上限，避免夹具异常时测试永久阻塞。
 	syncCtx, cancel := context.WithTimeout(tCtx, 10*time.Second)
 	defer cancel()
 	if !cache.WaitForNamedCacheSyncWithContext(syncCtx, informer.Informer().HasSynced) {
 		tCtx.Fatal("Failed to sync informer cache within the 10s timeout")
 	}
 
+	// 选择器必须与 buildFakePod 中给 Pod 打的标签保持一致。
 	selector, err := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 		MatchLabels: map[string]string{"name": podNamePrefix},
 	})
@@ -250,13 +258,13 @@ func newReplicaCalcSetup(t *testing.T, f *calcScenario) *replicaCalcSetup {
 	}
 }
 
-// newFakePodClient returns a fake Kubernetes clientset that lists pods.
+// newFakePodClient 返回一个伪 Kubernetes clientset，其 list pods reactor 按夹具生成 Pod 列表。
 func newFakePodClient(f *calcScenario) *fake.Clientset {
 	fakeClient := &fake.Clientset{}
 	fakeClient.AddReactor("list", "pods", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := &v1.PodList{}
 		podsCount := int(f.currentReplicas)
-		// Failed pods aren't included in currentReplicas.
+		// 失败 Pod 不计入 currentReplicas，但仍要列出以验证计算器会忽略它们。
 		if f.podPhase != nil && len(f.podPhase) > podsCount {
 			podsCount = len(f.podPhase)
 		}
@@ -268,7 +276,7 @@ func newFakePodClient(f *calcScenario) *fake.Clientset {
 	return fakeClient
 }
 
-// buildFakePod build a fake pod based on calcScenario's pod index.
+// buildFakePod 根据夹具与 Pod 索引 i 构造伪 Pod：索引决定名称，readiness/startTime/phase/deletionTimestamp/request 由夹具覆盖默认值。
 func buildFakePod(f *calcScenario, i int) v1.Pod {
 	podReadiness := v1.ConditionTrue
 	if f.podReadiness != nil && i < len(f.podReadiness) {
@@ -301,9 +309,11 @@ func buildFakePod(f *calcScenario, i int) v1.Pod {
 			Containers: []v1.Container{{Name: "container1"}, {Name: "container2"}},
 		},
 	}
+	// 即使处于 Running，也要能被删除时间戳标记，以验证忽略逻辑。
 	if deleted {
 		pod.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	}
+	// 仅当夹具声明了 CPU 资源时才给两个容器设置 request。
 	if f.resource != nil && i < len(f.resource.requests) {
 		req := v1.ResourceRequirements{
 			Requests: v1.ResourceList{v1.ResourceCPU: f.resource.requests[i]},
@@ -314,7 +324,7 @@ func buildFakePod(f *calcScenario, i int) v1.Pod {
 	return pod
 }
 
-// newFakeResourceMetricsClient returns a fake metrics.k8s.io client.
+// newFakeResourceMetricsClient 返回一个伪 metrics.k8s.io 客户端，按夹具生成 PodMetricsList。
 func newFakeResourceMetricsClient(f *calcScenario) *metricsfake.Clientset {
 	fakeMetricsClient := &metricsfake.Clientset{}
 	fakeMetricsClient.AddReactor("list", "pods", func(action core.Action) (handled bool, ret runtime.Object, err error) {
@@ -327,8 +337,8 @@ func newFakeResourceMetricsClient(f *calcScenario) *metricsfake.Clientset {
 			if len(f.resource.podNames) > i {
 				podName = f.resource.podNames[i]
 			}
-			// The list reactor does label-selector filtering for us, so the
-			// returned pod metrics must match the selector.
+			// list reactor 会替我们做标签选择器过滤，因此返回的 Pod 指标
+			// 必须带有与选择器匹配的标签。
 			podMetric := metricsapi.PodMetrics{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      podName,
@@ -354,9 +364,11 @@ func newFakeResourceMetricsClient(f *calcScenario) *metricsfake.Clientset {
 	return fakeMetricsClient
 }
 
-// newFakeCustomMetricsClient returns a fake custom-metrics client.
+// newFakeCustomMetricsClient 返回一个伪自定义指标客户端：名称 "*" 返回多 Pod 指标，
+// 具体对象名返回单对象指标，并校验指标名、资源类型与对象名是否符合夹具。
 func newFakeCustomMetricsClient(t *testing.T, f *calcScenario) *cmfake.FakeCustomMetricsClient {
 	fakeCMClient := &cmfake.FakeCustomMetricsClient{}
+	// get reactor 同时覆盖多 Pod 查询（名称 "*"）与单对象查询。
 	fakeCMClient.AddReactor("get", "*", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		getForAction, wasGetFor := action.(cmfake.GetForAction)
 		if !wasGetFor {
@@ -368,7 +380,7 @@ func newFakeCustomMetricsClient(t *testing.T, f *calcScenario) *cmfake.FakeCusto
 		assert.Equal(t, f.metric.name, getForAction.GetMetricName(), "the metric requested should have matched the one specified")
 
 		if getForAction.GetName() == "*" {
-			// Multiple-pod query.
+			// 多 Pod 查询：名称 "*" 表示返回所有 Pod 的指标。
 			assert.Equal(t, "pods", getForAction.GetResource().Resource, "the type of object that we requested multiple metrics for should have been pods")
 			metrics := cmapi.MetricValueList{}
 			for i, level := range f.metric.levels {
@@ -386,7 +398,7 @@ func newFakeCustomMetricsClient(t *testing.T, f *calcScenario) *cmfake.FakeCusto
 			return true, &metrics, nil
 		}
 
-		// Single-object query.
+		// 单对象查询：校验 GroupKind 映射的资源与对象名。
 		name := getForAction.GetName()
 		assert.NotNil(t, f.metric.singleObject, "should have only requested a single-object metric when calling GetObjectMetricReplicas")
 		mapper := testrestmapper.TestOnlyStaticRESTMapper(legacyscheme.Scheme)
@@ -414,9 +426,11 @@ func newFakeCustomMetricsClient(t *testing.T, f *calcScenario) *cmfake.FakeCusto
 	return fakeCMClient
 }
 
-// newFakeExternalMetricsClient returns a fake external-metrics client.
+// newFakeExternalMetricsClient 返回一个伪外部指标客户端，按夹具返回外部指标值列表，
+// 并校验指标名与标签选择器是否与夹具一致。
 func newFakeExternalMetricsClient(t *testing.T, f *calcScenario) *emfake.FakeExternalMetricsClient {
 	fakeEMClient := &emfake.FakeExternalMetricsClient{}
+	// 外部指标通过 list 动作查询，需校验标签选择器与夹具一致。
 	fakeEMClient.AddReactor("list", "*", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		listAction, wasList := action.(core.ListAction)
 		if !wasList {
@@ -446,8 +460,8 @@ func newFakeExternalMetricsClient(t *testing.T, f *calcScenario) *emfake.FakeExt
 	return fakeEMClient
 }
 
-// assertResourceReplicas checks the result of GetResourceReplicas against
-// expected values (or expected error) and verifies the metric timestamp.
+// assertResourceReplicas 校验 GetResourceReplicas 的结果：期望出错时只校验错误包含关系；
+// 否则比对副本数、利用率、原始值与时间戳。
 func assertResourceReplicas(t *testing.T, wantReplicas int32, wantUtilization int32, wantRawValue int64, wantTimestamp time.Time, wantErr error,
 	gotReplicas int32, gotUtilization int32, gotRawValue int64, gotTimestamp time.Time, gotErr error) {
 	t.Helper()
@@ -463,7 +477,9 @@ func assertResourceReplicas(t *testing.T, wantReplicas int32, wantUtilization in
 	assert.True(t, wantTimestamp.Equal(gotTimestamp), "timestamp should be as expected")
 }
 
-// TestReplicaCalcResourceScale covers scale-up, scale-down, and no-scale scenarios for GetResourceReplicas.
+// TestReplicaCalcResourceScale 覆盖 GetResourceReplicas 的扩容、缩容与不伸缩场景：
+// 包括指定容器、未就绪/刚启动（CPU 过热）/失败/正在删除的 Pod 被排除或降权，
+// 以及“仍在运行但已标记删除”的 Pod 必须被忽略的回归用例。
 func TestReplicaCalcResourceScale(t *testing.T) {
 	testCases := []resourceCase{
 		{
@@ -481,6 +497,7 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 			expectedRawValue:    numContainersPerPod * 500,
 		},
 		{
+			// 只统计指定容器的用量，另一容器的高值不应影响结果。
 			name: "scale up: container metric",
 			fixture: calcScenario{
 				currentReplicas: 3,
@@ -542,6 +559,7 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 			expectedRawValue:    numContainersPerPod * 600,
 		},
 		{
+			// 未就绪 Pod 的指标会被忽略，仅用就绪 Pod 计算。
 			name: "no scale: unready pods ignored",
 			fixture: calcScenario{
 				currentReplicas: 3,
@@ -573,6 +591,7 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 			expectedRawValue:    numContainersPerPod * 400,
 		},
 		{
+			// 失败 Pod 不计入 currentReplicas，但其指标仍会出现在 API 返回中。
 			name: "scale up: failed pods ignored",
 			fixture: calcScenario{
 				currentReplicas: 2,
@@ -649,7 +668,7 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 				container:            "container1",
 				resource: &cpuResource{
 					requests: cpuRequests(4, "1.0"),
-					levels:   makePodMetricLevels(500, 700), // TODO: This test is broken and works only because of missing metrics.
+					levels:   makePodMetricLevels(500, 700), // TODO: 该用例本身有问题，只是因缺失指标才碰巧通过。
 				},
 			},
 			targetUtilization:   30,
@@ -658,6 +677,7 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 			expectedRawValue:    600,
 		},
 		{
+			// 5 个 Pod 平均用量低于目标，应缩容到 3 个。
 			name: "scale down",
 			fixture: calcScenario{
 				currentReplicas: 5,
@@ -718,6 +738,7 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 			expectedRawValue:    300,
 		},
 		{
+			// Pending Pod 没有 CPU 用量，不应拉低平均值导致过度缩容。
 			name: "scale down: exclude unscheduled pods",
 			fixture: calcScenario{
 				currentReplicas: 5,
@@ -751,6 +772,7 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 			expectedRawValue:    100,
 		},
 		{
+			// 刚启动的 Pod CPU 指标不稳定，应排除以免错误缩容。
 			name: "scale down: ignore hot-CPU pods",
 			fixture: calcScenario{
 				currentReplicas: 5,
@@ -806,7 +828,7 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 				container:       "container2",
 				resource: &cpuResource{
 					requests: cpuRequests(7, "1.0"),
-					levels:   [][]int64{{1000, 100}, {1000, 300}, {1000, 500}, {1000, 250}, {1000, 250}}, // TODO: Test is broken.
+					levels:   [][]int64{{1000, 100}, {1000, 300}, {1000, 500}, {1000, 250}, {1000, 250}}, // TODO: 该用例本身有问题。
 				},
 			},
 			targetUtilization:   50,
@@ -832,7 +854,7 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 			expectedRawValue:    numContainersPerPod * 280,
 		},
 		{
-			// Regression test for https://github.com/kubernetes/kubernetes/issues/83561.
+			// 针对 https://github.com/kubernetes/kubernetes/issues/83561 的回归测试。
 			name: "scale down: still-running pods being deleted are ignored",
 			fixture: calcScenario{
 				currentReplicas:      5,
@@ -851,6 +873,7 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 			expectedRawValue:    280,
 		},
 	}
+	// 每个子测试重建 setup，防止 Pod 与指标夹具在用例之间串扰。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newReplicaCalcSetup(t, &tc.fixture)
@@ -869,8 +892,10 @@ func TestReplicaCalcResourceScale(t *testing.T) {
 	}
 }
 
-// TestReplicaCalcExternalPerPodMetric covers GetExternalPerPodMetricReplicas scale-up/down
+// TestReplicaCalcExternalPerPodMetric 覆盖 GetExternalPerPodMetricReplicas 的扩容、缩容、
+// 默认与可配置容忍度，以及整数溢出：副本数溢出时饱和到 MaxInt32，目标值极大时保持副本数不变。
 func TestReplicaCalcExternalPerPodMetric(t *testing.T) {
+	// 构造带外部选择器、名为 qps 的外部每 Pod 指标夹具。
 	externalPerPodMetric := func(levels ...int64) *customMetric {
 		return &customMetric{name: "qps", levels: levels, selector: testExternalSelector}
 	}
@@ -882,7 +907,7 @@ func TestReplicaCalcExternalPerPodMetric(t *testing.T) {
 				currentReplicas: 1,
 				metric:          externalPerPodMetric(math.MaxInt64),
 			},
-			// Targeting a 1:1 ratio between metric value and number of pods.
+			// 目标为 1:1（指标值与 Pod 数之比），放大副本数以触发溢出。
 			perPodTargetUsage: 1,
 			expectedReplicas:  math.MaxInt32,
 			expectedUsage:     math.MaxInt64,
@@ -893,7 +918,7 @@ func TestReplicaCalcExternalPerPodMetric(t *testing.T) {
 				currentReplicas: 1,
 				metric:          externalPerPodMetric(math.MaxInt64),
 			},
-			// Targeting a high value:1 ratio between metric value and number of pods.
+			// 目标为高值:1，使副本数计算结果很小，从而让用量计算溢出。
 			perPodTargetUsage: math.MaxInt64,
 			expectedReplicas:  1,
 			expectedUsage:     math.MaxInt64,
@@ -943,6 +968,7 @@ func TestReplicaCalcExternalPerPodMetric(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试重建 setup，防止伪客户端状态在用例间泄漏。
 			h := newReplicaCalcSetup(t, &tc.fixture)
 			if tc.tolerances != nil {
 				h.tolerances = *tc.tolerances
@@ -959,8 +985,10 @@ func TestReplicaCalcExternalPerPodMetric(t *testing.T) {
 	}
 }
 
-// TestReplicaCalcPodMetric covers GetMetricReplicas scale-up/down.
+// TestReplicaCalcPodMetric 覆盖 GetMetricReplicas 的扩容、缩容、容忍度与缺失指标，
+// 以及未就绪/CPU 过热 Pod 对计算的影响，还有滚动更新 maxSurge 时多出的 Pod 缺失指标的场景。
 func TestReplicaCalcPodMetric(t *testing.T) {
+	// 构造名为 qps 的 Pod 指标夹具。
 	podMetric := func(levels ...int64) *customMetric {
 		return &customMetric{name: "qps", levels: levels}
 	}
@@ -1031,6 +1059,7 @@ func TestReplicaCalcPodMetric(t *testing.T) {
 			expectedUsage:    20666,
 		},
 		{
+			// 部分 Pod 缺失指标时不修改副本数，避免误缩容。
 			name: "no change: missing metrics",
 			fixture: calcScenario{
 				currentReplicas: 5,
@@ -1041,6 +1070,7 @@ func TestReplicaCalcPodMetric(t *testing.T) {
 			expectedUsage:    20000,
 		},
 		{
+			// maxSurge 产生的额外 Pod 没有指标，不应导致副本数变化。
 			name: "rolling update with maxSurge: extra pod missing metric",
 			fixture: calcScenario{
 				currentReplicas: 2,
@@ -1055,6 +1085,7 @@ func TestReplicaCalcPodMetric(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试重建 setup，避免指标与 Pod 状态在用例间串扰。
 			h := newReplicaCalcSetup(t, &tc.fixture)
 			if tc.tolerances != nil {
 				h.tolerances = *tc.tolerances
@@ -1071,8 +1102,10 @@ func TestReplicaCalcPodMetric(t *testing.T) {
 	}
 }
 
-// TestReplicaCalcObjectMetric covers GetObjectMetricReplicas scale-up/down.
+// TestReplicaCalcObjectMetric 覆盖 GetObjectMetricReplicas 的扩容、缩容与容忍度，
+// 包括极大指标值使副本数饱和到 MaxInt32、忽略未就绪 Pod 等场景。
 func TestReplicaCalcObjectMetric(t *testing.T) {
+	// 构造指向默认 Deployment 的对象指标夹具。
 	objectMetric := func(level int64) *customMetric {
 		return &customMetric{name: "qps", levels: []int64{level}, singleObject: testDeploymentRef}
 	}
@@ -1092,9 +1125,9 @@ func TestReplicaCalcObjectMetric(t *testing.T) {
 			name: "scale up: very large metric saturates replicas to MaxInt32",
 			fixture: calcScenario{
 				currentReplicas: 3,
-				metric:          objectMetric(math.MaxInt64), // MaxInt64 to force a very large value.
+				metric:          objectMetric(math.MaxInt64), // 取 MaxInt64 以构造极大的指标值。
 			},
-			targetUsage:      1, // Very low target forces high scaling.
+			targetUsage:      1, // 目标值取 1，强制触发大幅扩容。
 			expectedReplicas: math.MaxInt32,
 			expectedUsage:    math.MaxInt64,
 		},
@@ -1144,6 +1177,7 @@ func TestReplicaCalcObjectMetric(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试重建 setup，保证对象指标查询互不干扰。
 			h := newReplicaCalcSetup(t, &tc.fixture)
 			if tc.tolerances != nil {
 				h.tolerances = *tc.tolerances
@@ -1160,8 +1194,9 @@ func TestReplicaCalcObjectMetric(t *testing.T) {
 	}
 }
 
-// TestReplicaCalcObjectPerPodMetric covers GetObjectPerPodMetricReplicas scale-up/down and tolerance behavior.
+// TestReplicaCalcObjectPerPodMetric 覆盖 GetObjectPerPodMetricReplicas 的扩容、缩容与容忍度行为。
 func TestReplicaCalcObjectPerPodMetric(t *testing.T) {
+	// 构造指向默认 Deployment 的每 Pod 对象指标夹具。
 	perPodMetric := func(level int64) *customMetric {
 		return &customMetric{name: "qps", levels: []int64{level}, singleObject: testDeploymentRef}
 	}
@@ -1212,6 +1247,7 @@ func TestReplicaCalcObjectPerPodMetric(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试重建 setup，避免夹具状态残留。
 			h := newReplicaCalcSetup(t, &tc.fixture)
 			if tc.tolerances != nil {
 				h.tolerances = *tc.tolerances
@@ -1228,8 +1264,10 @@ func TestReplicaCalcObjectPerPodMetric(t *testing.T) {
 	}
 }
 
-// TestReplicaCalcExternalMetric covers GetExternalMetricReplicas scale-up/down.
+// TestReplicaCalcExternalMetric 覆盖 GetExternalMetricReplicas 的扩容、缩容与容忍度，
+// 包括忽略未就绪 Pod（否则会错误扩容）以及用量溢出封顶到 MaxInt64。
 func TestReplicaCalcExternalMetric(t *testing.T) {
+	// 构造带外部选择器、名为 qps 的外部指标夹具。
 	externalMetric := func(levels ...int64) *customMetric {
 		return &customMetric{name: "qps", levels: levels, selector: testExternalSelector}
 	}
@@ -1243,7 +1281,7 @@ func TestReplicaCalcExternalMetric(t *testing.T) {
 				metric:          externalMetric(8600),
 			},
 			targetUsage:      4400,
-			expectedReplicas: 2, // Would be 6 if we didn't ignore unready pods.
+			expectedReplicas: 2, // 若不忽略未就绪 Pod，此处会算成 6。
 			expectedUsage:    8600,
 		},
 		{
@@ -1281,17 +1319,18 @@ func TestReplicaCalcExternalMetric(t *testing.T) {
 			name: "usage overflow caps at MaxInt64",
 			fixture: calcScenario{
 				currentReplicas: 3,
-				// Two values that when added together would overflow int64.
+				// 两个值相加会超出 int64 范围。
 				metric: externalMetric(math.MaxInt64/2+1, math.MaxInt64/2+1),
 			},
-			targetUsage:      math.MaxInt64, // High target.
+			targetUsage:      math.MaxInt64, // 目标值很高，阻止扩容。
 			expectedReplicas: 3,
-			expectedUsage:    math.MaxInt64, // Capped.
+			expectedUsage:    math.MaxInt64, // 用量被封顶到 MaxInt64。
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试重建 setup，避免外部指标客户端状态残留。
 			h := newReplicaCalcSetup(t, &tc.fixture)
 			if tc.tolerances != nil {
 				h.tolerances = *tc.tolerances
@@ -1308,8 +1347,10 @@ func TestReplicaCalcExternalMetric(t *testing.T) {
 	}
 }
 
-// TestReplicaCalcResourceTolerance covers default and configurable tolerance behavior of GetResourceReplicas.
+// TestReplicaCalcResourceTolerance 覆盖 GetResourceReplicas 的默认与可配置容忍度：
+// 分别验证扩容/缩容容忍度边界内不伸缩、越界才伸缩，以及两个方向的容忍度互不干扰。
 func TestReplicaCalcResourceTolerance(t *testing.T) {
+	// 三个 Pod 的 request 各不相同，用于验证按各 Pod 分别计算比率，而不是假设 request 相同。
 	mixedRequests := []resource.Quantity{resource.MustParse("0.9"), resource.MustParse("1.0"), resource.MustParse("1.1")}
 	testCases := []resourceCase{
 		{
@@ -1327,6 +1368,7 @@ func TestReplicaCalcResourceTolerance(t *testing.T) {
 			expectedRawValue:    numContainersPerPod * 1020,
 		},
 		{
+			// 容忍度为 0 时，任何偏差都应触发伸缩。
 			name:       "outside 0% tolerance",
 			tolerances: &Tolerances{0., 0.},
 			fixture: calcScenario{
@@ -1387,6 +1429,7 @@ func TestReplicaCalcResourceTolerance(t *testing.T) {
 			expectedRawValue:    numContainersPerPod * 650,
 		},
 		{
+			// 缩容容忍度略低于当前偏差，应触发缩容。
 			name:       "outside 34% scale-down tolerance",
 			tolerances: &Tolerances{.34, defaultTestingTolerance},
 			fixture: calcScenario{
@@ -1402,6 +1445,7 @@ func TestReplicaCalcResourceTolerance(t *testing.T) {
 			expectedRawValue:    numContainersPerPod * 650,
 		},
 	}
+	// 每个子测试重建 setup，确保不同容忍度设置互不干扰。
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newReplicaCalcSetup(t, &tc.fixture)
@@ -1420,10 +1464,13 @@ func TestReplicaCalcResourceTolerance(t *testing.T) {
 	}
 }
 
-// TestReplicaCalcResourceMissingMetrics covers GetResourceReplicas behavior when metric data is incomplete, superfluous, or otherwise partial and error paths.
+// TestReplicaCalcResourceMissingMetrics 覆盖 GetResourceReplicas 在指标缺失、冗余、
+// 部分可用时的行为及错误路径：多余指标会被计入、缺失指标导致缩容、
+// 未就绪/CPU 过热 Pod 的指标缺失有特殊处理，以及名称不匹配、无指标数据、容器缺少 CPU request 等错误。
 func TestReplicaCalcResourceMissingMetrics(t *testing.T) {
 	testCases := []resourceCase{
 		{
+			// API 返回的指标数多于 Pod 数时，多余指标仍会被计入总量。
 			name: "superfluous metrics counted",
 			fixture: calcScenario{
 				currentReplicas: 4,
@@ -1449,7 +1496,7 @@ func TestReplicaCalcResourceMissingMetrics(t *testing.T) {
 			targetUtilization:   100,
 			expectedReplicas:    3,
 			expectedUtilization: 24,
-			expectedRawValue:    495, // numContainersPerPod * 247, for sufficiently large values of 247.
+			expectedRawValue:    495, // 即 numContainersPerPod * 247（247 足够大时的取整结果）。
 		},
 		{
 			name: "no change: metric equal to target",
@@ -1494,6 +1541,7 @@ func TestReplicaCalcResourceMissingMetrics(t *testing.T) {
 			expectedRawValue:    numContainersPerPod * 600,
 		},
 		{
+			// 未就绪 Pod 缺失指标不影响计算，直接用其余 Pod 的指标。
 			name: "no change: unready pod metric missing",
 			fixture: calcScenario{
 				currentReplicas: 3,
@@ -1555,6 +1603,7 @@ func TestReplicaCalcResourceMissingMetrics(t *testing.T) {
 			expectedRawValue:    numContainersPerPod * 2000,
 		},
 		{
+			// 指标数少于 Pod 数会被视为部分 Pod 已消失，从而缩容。
 			name: "scale down: unready pod metric missing",
 			fixture: calcScenario{
 				currentReplicas: 4,
@@ -1600,6 +1649,7 @@ func TestReplicaCalcResourceMissingMetrics(t *testing.T) {
 			expectedRawValue:    numContainersPerPod * 100,
 		},
 		{
+			// 指标名称与已知 Pod 完全不匹配时应报错。
 			name: "disjoint pod and metric names",
 			fixture: calcScenario{
 				currentReplicas: 1,
@@ -1625,6 +1675,7 @@ func TestReplicaCalcResourceMissingMetrics(t *testing.T) {
 			expectedError:     fmt.Errorf("unable to get metrics for resource cpu: no metrics returned from resource metrics API"),
 		},
 		{
+			// 容器未声明 CPU request 时无法计算利用率，应报错。
 			name: "missing CPU request on container",
 			fixture: calcScenario{
 				currentReplicas: 1,
@@ -1655,30 +1706,29 @@ func TestReplicaCalcResourceMissingMetrics(t *testing.T) {
 	}
 }
 
-// TestComputedToleranceAlgImplementation is a regression test which
-// back-calculates a minimal percentage for downscaling based on a small percentage
-// increase in pod utilization which is calibrated against the tolerance value.
+// TestReplicaCalcComputedToleranceAlgImplementation 是回归测试：根据容差值反推出触发缩容所需的
+// 最小利用率增幅，验证增幅刚越过容忍度时会缩容，而非常接近但仍在容差内时不发生伸缩。
 func TestReplicaCalcComputedToleranceAlgImplementation(t *testing.T) {
 
 	startPods := int32(10)
-	// 150 mCPU per pod.
+	// 每个 Pod 使用 150 mCPU。
 	totalUsedCPUOfAllPods := int64(startPods * 150)
-	// Each pod starts out asking for 2X what is really needed.
-	// This means we will have a 50% ratio of used/requested
+	// 每个 Pod 最初申请的额度是实际需要的 2 倍，
+	// 因此 used/requested 比率为 50%。
 	totalRequestedCPUOfAllPods := int32(2 * totalUsedCPUOfAllPods)
 	requestedToUsed := float64(totalRequestedCPUOfAllPods / int32(totalUsedCPUOfAllPods))
-	// Spread the amount we ask over 10 pods.  We can add some jitter later in reportedLevels.
+	// 将申请量均摊到 10 个 Pod，随后在上报的 request 中加入抖动。
 	perPodRequested := totalRequestedCPUOfAllPods / startPods
 
-	// Force a minimal scaling event by satisfying  (tolerance < 1 - resourcesUsedRatio).
+	// 通过满足 (tolerance < 1 - resourcesUsedRatio) 强制触发一次幅度最小的伸缩。
 	target := math.Abs(1/(requestedToUsed*(1-defaultTestingTolerance))) + .01
 	finalCPUPercentTarget := int32(target * 100)
 	resourcesUsedRatio := float64(totalUsedCPUOfAllPods) / float64(float64(totalRequestedCPUOfAllPods)*target)
 
-	// i.e. .60 * 20 -> scaled down expectation.
+	// 例如 .60 * 20，期望触发缩容。
 	finalPods := int32(math.Ceil(resourcesUsedRatio * float64(startPods)))
 
-	// To breach tolerance we will create a utilization ratio difference of tolerance to usageRatioToleranceValue)
+	// 为越过容忍度，使利用率比率与 usageRatioToleranceValue 相差一个 tolerance。
 	buildFixture := func() calcScenario {
 		return calcScenario{
 			currentReplicas: startPods,
@@ -1724,8 +1774,9 @@ func TestReplicaCalcComputedToleranceAlgImplementation(t *testing.T) {
 		replicas, util, raw, ts, err,
 	)
 
-	// Reuse the data structure above, now testing "unscaling".
-	// Now, we test that no scaling happens if we are in a very close margin to the tolerance
+	// 复用上面的夹具，现在测试“不伸缩”的情况。
+	// 当利用率与容差边界非常接近但仍在容差内时，应当不发生伸缩。
+	// 将增幅从 .01 收窄到 .004，使其落在容忍度之内。
 	target = math.Abs(1/(requestedToUsed*(1-defaultTestingTolerance))) + .004
 	finalCPUPercentTarget = int32(target * 100)
 
@@ -1741,6 +1792,9 @@ func TestReplicaCalcComputedToleranceAlgImplementation(t *testing.T) {
 	)
 }
 
+// TestGroupPods 覆盖 groupPods 对 Pod 的四分类：就绪 Pod 计数、未就绪 Pod、
+// 缺失指标 Pod 与忽略的 Pod（被删除或失败）。重点验证 CPU 指标在初始化期内对
+// “新鲜指标”的要求与延迟就绪判定，以及内存资源不受该新鲜度限制。
 func TestGroupPods(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -1753,6 +1807,7 @@ func TestGroupPods(t *testing.T) {
 		expectIgnoredPods   sets.Set[string]
 	}{
 		{
+			// 空输入应得到全空的分类结果。
 			name:                "void",
 			pods:                []*v1.Pod{},
 			metrics:             metricsclient.PodMetricsInfo{},
@@ -1782,6 +1837,7 @@ func TestGroupPods(t *testing.T) {
 			expectMissingPods:   sets.New[string](),
 			expectIgnoredPods:   sets.New[string](),
 		}, {
+			// CPU 资源下没有 Ready 条件的 Pod 视为未就绪。
 			name: "unready a pod without ready condition - CPU",
 			pods: []*v1.Pod{
 				{
@@ -1805,6 +1861,7 @@ func TestGroupPods(t *testing.T) {
 			expectMissingPods:   sets.New[string](),
 			expectIgnoredPods:   sets.New[string](),
 		}, {
+			// 初始化期内指标窗口足够短才算“新鲜”，可计入就绪副本。
 			name: "count in a ready pod with fresh metrics during initialization period - CPU",
 			pods: []*v1.Pod{
 				{
@@ -1985,6 +2042,7 @@ func TestGroupPods(t *testing.T) {
 			expectMissingPods:   sets.New[string](),
 			expectIgnoredPods:   sets.New[string](),
 		}, {
+			// 无指标上报的 Pod 归入 missing 集合。
 			name: "a missing pod",
 			pods: []*v1.Pod{
 				{
@@ -2077,6 +2135,7 @@ func TestGroupPods(t *testing.T) {
 			expectMissingPods:   sets.New[string](),
 			expectIgnoredPods:   sets.New[string](),
 		}, {
+			// 带删除时间戳的 Pod 无论状态如何都应忽略。
 			name: "ignore pods with deletion timestamps",
 			pods: []*v1.Pod{
 				{
@@ -2121,6 +2180,7 @@ func TestGroupPods(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 逐个核对四类结果，确保 Pod 被分到正确类别。
 			readyPodCount, unreadyPods, missingPods, ignoredPods := groupPods(tc.pods, tc.metrics, tc.resource, defaultTestingCPUInitializationPeriod, defaultTestingDelayOfInitialReadinessStatus)
 			if readyPodCount != tc.expectReadyPodCount {
 				t.Errorf("%s got readyPodCount %d, expected %d", tc.name, readyPodCount, tc.expectReadyPodCount)
@@ -2138,6 +2198,9 @@ func TestGroupPods(t *testing.T) {
 	}
 }
 
+// TestCalculateRequests 覆盖 calculateRequests 的 request 计算：未启用 Pod 级资源时累加各容器 request，
+// 启用后 Pod 级 resource 优先（未设置则回退到容器求和），指定容器名时只计算该容器，
+// 容器缺失 request 时报错，以及可重启 init 容器的 request 需要计入。
 func TestCalculateRequests(t *testing.T) {
 	containerRestartPolicyAlways := v1.ContainerRestartPolicyAlways
 	testPod := "test-pod"
@@ -2152,6 +2215,7 @@ func TestCalculateRequests(t *testing.T) {
 		expectedError           error
 	}{
 		{
+			// 空 Pod 列表返回空结果。
 			name:             "void",
 			pods:             []*v1.Pod{},
 			container:        "",
@@ -2160,6 +2224,7 @@ func TestCalculateRequests(t *testing.T) {
 			expectedError:    nil,
 		},
 		{
+			// 特性关闭时按容器 request 求和。
 			name: "Sum container requests if pod-level feature is disabled",
 			pods: []*v1.Pod{{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2199,6 +2264,7 @@ func TestCalculateRequests(t *testing.T) {
 			expectedError:    nil,
 		},
 		{
+			// 特性开启且设置了 Pod 级 request 时，以 Pod 级值覆盖容器求和。
 			name:                    "Pod-level resources override container requests when feature enabled and pod resources specified",
 			enablePodLevelResources: true,
 			pods: []*v1.Pod{{
@@ -2265,6 +2331,7 @@ func TestCalculateRequests(t *testing.T) {
 			expectedError:    nil,
 		},
 		{
+			// 指定容器名时只计算该容器的 request。
 			name: "Container: if a container name is specified, calculate requests only for that container",
 			pods: []*v1.Pod{{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2307,6 +2374,7 @@ func TestCalculateRequests(t *testing.T) {
 			expectedError:    nil,
 		},
 		{
+			// 可重启的 init 容器 request 需要计入总量，普通 init 容器则不需要。
 			name: "pod with restartable init containers",
 			pods: []*v1.Pod{{
 				ObjectMeta: metav1.ObjectMeta{
@@ -2332,6 +2400,7 @@ func TestCalculateRequests(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 每个子测试单独设置特性开关，确保 Pod 级资源行为互不干扰。
 			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PodLevelResources, tc.enablePodLevelResources)
 
 			requests, err := calculateRequests(tc.pods, tc.container, tc.resource)
@@ -2340,6 +2409,9 @@ func TestCalculateRequests(t *testing.T) {
 		})
 	}
 }
+
+// TestCalculatePodRequestsFromContainers_NonExistentContainer 验证当指定容器名在 Pod 中不存在时，
+// calculatePodRequestsFromContainers 返回 0 以及格式正确的错误信息。
 func TestCalculatePodRequestsFromContainers_NonExistentContainer(t *testing.T) {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

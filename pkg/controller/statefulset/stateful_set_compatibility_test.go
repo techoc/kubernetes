@@ -30,7 +30,11 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 )
 
+// TestStatefulSetCompatibility 验证跨版本兼容性：用 1.33/1.34 版本的 StatefulSet
+// 及其 ControllerRevision 固定样本，调用 getStatefulSetRevisions 计算当前/更新 revision，
+// 断言结果均与最后一个（最新）revision 完全一致，即历史版本不会触发无谓的修订变更。
 func TestStatefulSetCompatibility(t *testing.T) {
+	// 加载两个版本的固定样本；每个用例使用 DeepCopy 防止用例间共享状态被相互污染。
 	set133 := &appsv1.StatefulSet{}
 	set134 := &appsv1.StatefulSet{}
 	rev133 := &appsv1.ControllerRevision{}
@@ -64,6 +68,7 @@ func TestStatefulSetCompatibility(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// revisions 按版本升序排列，最后一个即为最新 revision，作为期望结果。
 			latestRev := tc.revisions[len(tc.revisions)-1]
 			client := fake.NewClientset(tc.set)
 			_, _, ssc := setupController(client)
@@ -71,6 +76,8 @@ func TestStatefulSetCompatibility(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// currentRev 与 updateRev 都必须等于最新 revision：
+			// 否则说明跨版本样本被误判为模板变更，会触发非预期的滚动更新。
 			if !reflect.DeepEqual(currentRev, latestRev) {
 				t.Fatalf("expected no change from latestRev, got %s", cmp.Diff(latestRev, currentRev))
 			}
@@ -81,6 +88,8 @@ func TestStatefulSetCompatibility(t *testing.T) {
 	}
 }
 
+// BenchmarkStatefulSetCompatibility 对 getStatefulSetRevisions 做基准测试，
+// 用例与 TestStatefulSetCompatibility 相同，用于衡量跨版本 revision 计算的开销。
 func BenchmarkStatefulSetCompatibility(b *testing.B) {
 	set133 := &appsv1.StatefulSet{}
 	set134 := &appsv1.StatefulSet{}
@@ -117,6 +126,7 @@ func BenchmarkStatefulSetCompatibility(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			latestRev := tc.revisions[len(tc.revisions)-1]
 			client := fake.NewClientset(tc.set)
+			// 控制器只搭建一次，循环内仅执行被测函数，避免 setup 开销污染基准结果。
 			_, _, ssc := setupController(client)
 			for i := 0; i < b.N; i++ {
 				currentRev, updateRev, _, err := ssc.(*defaultStatefulSetControl).getStatefulSetRevisions(tc.set, tc.revisions)
@@ -134,6 +144,9 @@ func BenchmarkStatefulSetCompatibility(b *testing.B) {
 	}
 }
 
+// load 从 testdata 目录读取 JSON 文件并严格反序列化到 object。
+// 使用 UnmarshalStrict 可捕获样本中与目标类型定义不一致的字段；
+// 最后按从 etcd 读取的场景执行 defaulting，保证样本与真实 API 返回一致。
 func load(t testing.TB, filename string, object runtime.Object) {
 	data, err := os.ReadFile("testdata/" + filename)
 	if err != nil {
@@ -144,6 +157,6 @@ func load(t testing.TB, filename string, object runtime.Object) {
 	} else if len(strictErrs) > 0 {
 		t.Fatal(strictErrs)
 	}
-	// apply defaulting just as if it was read from etcd
+	// 与从 etcd 读取时一样应用默认值，避免样本缺少默认字段导致断言失真。
 	legacyscheme.Scheme.Default(object)
 }

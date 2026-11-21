@@ -26,6 +26,8 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// CheckQueueEq 按顺序比较字符串切片与 TimedQueue 中的 Value，
+// 只检查 lhs 覆盖的前缀，用于验证队列的出队顺序。
 func CheckQueueEq(lhs []string, rhs TimedQueue) bool {
 	for i := 0; i < len(lhs); i++ {
 		if rhs[i].Value != lhs[i] {
@@ -35,10 +37,14 @@ func CheckQueueEq(lhs []string, rhs TimedQueue) bool {
 	return true
 }
 
+// CheckSetEq 判断两个集合是否包含相同元素（双向子集），
+// 因为队列内部集合的遍历顺序不确定，比较时必须忽略顺序。
 func CheckSetEq(lhs, rhs sets.Set[string]) bool {
 	return lhs.IsSuperset(rhs) && rhs.IsSuperset(lhs)
 }
 
+// TestUniqueQueueGet 验证 UniqueQueue 的 Get 行为：元素出队时同时从 set 中移除，
+// 且队列与集合始终保持一致；用递增的假时钟让 AddedAt/ProcessAt 可预测。
 func TestUniqueQueueGet(t *testing.T) {
 	var tick int64
 	now = func() time.Time {
@@ -89,6 +95,8 @@ func TestUniqueQueueGet(t *testing.T) {
 	}
 }
 
+// TestAddNode 验证用 AlwaysRateLimiter 添加三个节点后，
+// 队列顺序和去重集合都正确记录了全部节点。
 func TestAddNode(t *testing.T) {
 	evictor := NewRateLimitedTimedQueue(flowcontrol.NewFakeAlwaysRateLimiter())
 	evictor.Add("first", "11111")
@@ -112,6 +120,8 @@ func TestAddNode(t *testing.T) {
 	}
 }
 
+// TestDelNode 验证删除队首、队中、队尾节点后，队列和集合都能同步移除对应元素，
+// 确保后续 Try 不会处理已删除的节点。
 func TestDelNode(t *testing.T) {
 	defer func() { now = time.Now }()
 	var tick int64
@@ -187,6 +197,8 @@ func TestDelNode(t *testing.T) {
 	}
 }
 
+// TestTry 验证 Try 会跳过已被 Remove 的元素：回调只收到队列中仍存在的
+// first 和 third，被删除的 second 不会被处理。
 func TestTry(t *testing.T) {
 	evictor := NewRateLimitedTimedQueue(flowcontrol.NewFakeAlwaysRateLimiter())
 	evictor.Add("first", "11111")
@@ -210,11 +222,15 @@ func TestTry(t *testing.T) {
 	}
 }
 
+// TestTryOrdering 验证被重试（返回 false）的元素会按新的 ProcessAt
+// 重新排队，不会阻塞其他到期元素：second 延迟 2ms 后，third 仍先被处理；
+// 同时断言每个元素的 AddedAt 在反复重试后保持不变。
 func TestTryOrdering(t *testing.T) {
 	defer func() { now = time.Now }()
 	current := time.Unix(0, 0)
 	delay := 0
-	// the current time is incremented by 1ms every time now is invoked
+	// 每次调用 now 时把当前时间推进 1ms，用假时钟精确控制
+	// AddedAt 与 ProcessAt，便于断言重试延迟后的顺序。
 	now = func() time.Time {
 		if delay > 0 {
 			delay--
@@ -276,6 +292,8 @@ func TestTryOrdering(t *testing.T) {
 	}
 }
 
+// TestTryRemovingWhileTry 验证 Try 回调执行期间元素被并发删除后，
+// 该元素不会因重试请求而重新入队，最终只处理 first 和 third。
 func TestTryRemovingWhileTry(t *testing.T) {
 	evictor := NewRateLimitedTimedQueue(flowcontrol.NewFakeAlwaysRateLimiter())
 	evictor.Add("first", "11111")
@@ -288,8 +306,8 @@ func TestTryRemovingWhileTry(t *testing.T) {
 	count := 0
 	queued := false
 
-	// while the Try function is processing "second", remove it from the queue
-	// we should not see "second" retried.
+	// 在 Try 的回调正在处理 second 时将其删除，模拟并发移除场景：
+	// 即使回调返回 false 请求重试，second 也不应再次出现。
 	go func() {
 		<-processing
 		evictor.Remove("second")
@@ -322,6 +340,7 @@ func TestTryRemovingWhileTry(t *testing.T) {
 	}
 }
 
+// TestClear 验证 Clear 会一次性清空队列中的所有元素。
 func TestClear(t *testing.T) {
 	evictor := NewRateLimitedTimedQueue(flowcontrol.NewFakeAlwaysRateLimiter())
 	evictor.Add("first", "11111")
@@ -335,6 +354,8 @@ func TestClear(t *testing.T) {
 	}
 }
 
+// TestSwapLimiter 验证 SwapLimiter 在各种 QPS 下的行为：0 切换到 Never 限速、
+// 正值切换到对应限速器；QPS 未变化时不能替换，避免重置已积累的令牌状态。
 func TestSwapLimiter(t *testing.T) {
 	evictor := NewRateLimitedTimedQueue(flowcontrol.NewFakeAlwaysRateLimiter())
 	fakeAlways := flowcontrol.NewFakeAlwaysRateLimiter()
@@ -364,6 +385,8 @@ func TestSwapLimiter(t *testing.T) {
 	}
 }
 
+// TestAddAfterTry 验证处理过的元素即使再次 Add，只要没有显式 Remove，
+// 就不会被重复处理；这是 UniqueQueue 去重语义的关键保证。
 func TestAddAfterTry(t *testing.T) {
 	evictor := NewRateLimitedTimedQueue(flowcontrol.NewFakeAlwaysRateLimiter())
 	evictor.Add("first", "11111")

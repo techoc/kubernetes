@@ -50,18 +50,28 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// alwaysReady/neverReady 作为 informer HasSynced 检查的替身，测试中无需等待真实缓存同步。
 var alwaysReady = func() bool { return true }
 var neverReady = func() bool { return false }
+
+// emptyNodeName 用作期望端点地址中节点名指针的值（空字符串）。
 var emptyNodeName string
+
+// triggerTime 及其字符串形式用于验证 EndpointsLastChangeTriggerTime 注解的写入、覆盖与清除。
+// oldTriggerTimeString 表示更早的触发时间，用于验证旧注解会被新值覆盖。
 var triggerTime = time.Date(2018, 01, 01, 0, 0, 0, 0, time.UTC)
 var triggerTimeString = triggerTime.Format(time.RFC3339Nano)
 var oldTriggerTimeString = triggerTime.Add(-time.Hour).Format(time.RFC3339Nano)
 
+// 单栈与双栈集群的 IP 族组合，供各类同步用例复用。
 var ipv4only = []v1.IPFamily{v1.IPv4Protocol}
 var ipv6only = []v1.IPFamily{v1.IPv6Protocol}
 var ipv4ipv6 = []v1.IPFamily{v1.IPv4Protocol, v1.IPv6Protocol}
 var ipv6ipv4 = []v1.IPFamily{v1.IPv6Protocol, v1.IPv4Protocol}
 
+// testPod 构造测试用 Pod：编号决定名称、标签与 IP，isReady 决定 PodReady 条件，
+// nPorts 决定容器端口数量，ipFamilies 决定 PodIPs 的族与顺序。
+// IP 由 id 确定性推导（IPv4 为 1.2.x.y，IPv6 为 2000::x），便于在断言中写出期望地址。
 func testPod(namespace string, id int, nPorts int, isReady bool, ipFamilies []v1.IPFamily) *v1.Pod {
 	p := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -107,6 +117,8 @@ func testPod(namespace string, id int, nPorts int, isReady bool, ipFamilies []v1
 	return p
 }
 
+// addPods 向 store 批量写入 nPods 个就绪 Pod 与 nNotReady 个未就绪 Pod；
+// 前 nPods 个下标对应就绪 Pod，其余对应未就绪 Pod，具体对象由 testPod 生成。
 func addPods(store cache.Store, namespace string, nPods int, nPorts int, nNotReady int, ipFamilies []v1.IPFamily) {
 	for i := 0; i < nPods+nNotReady; i++ {
 		isReady := i < nPods
@@ -115,6 +127,8 @@ func addPods(store cache.Store, namespace string, nPods int, nPorts int, nNotRea
 	}
 }
 
+// addBadIPPod 写入一个 IP 前多出一个 0 的 Pod，用于验证
+// podToEndpointAddressForService 会修正非法 IP 而不是原样透传。
 func addBadIPPod(store cache.Store, namespace string, ipFamilies []v1.IPFamily) {
 	pod := testPod(namespace, 0, 1, true, ipFamilies)
 	pod.Status.PodIPs[0].IP = "0" + pod.Status.PodIPs[0].IP
@@ -122,6 +136,8 @@ func addBadIPPod(store cache.Store, namespace string, ipFamilies []v1.IPFamily) 
 	store.Add(pod)
 }
 
+// addNotReadyPodsWithSpecifiedRestartPolicyAndPhase 批量构造未就绪、且处于指定相位与
+// 重启策略的 Pod，用于验证终态 Pod 是否会被排除在 Endpoints 之外。
 func addNotReadyPodsWithSpecifiedRestartPolicyAndPhase(store cache.Store, namespace string, nPods int, nPorts int, restartPolicy v1.RestartPolicy, podPhase v1.PodPhase) {
 	for i := 0; i < nPods; i++ {
 		p := &v1.Pod{
@@ -154,6 +170,9 @@ func addNotReadyPodsWithSpecifiedRestartPolicyAndPhase(store cache.Store, namesp
 	}
 }
 
+// makeTestServer 启动一个仅服务于指定命名空间 Endpoints 路径的假 API Server。
+// 其他路径一律返回 404 并让测试失败，确保控制器没有发出预期外的请求；
+// 返回的 FakeHandler 用于断言请求次数与请求内容。
 func makeTestServer(t *testing.T, namespace string) (*httptest.Server, *utiltesting.FakeHandler) {
 	fakeEndpointsHandler := utiltesting.FakeHandler{
 		StatusCode:   http.StatusOK,
@@ -172,9 +191,10 @@ func makeTestServer(t *testing.T, namespace string) (*httptest.Server, *utiltest
 	return httptest.NewServer(mux), &fakeEndpointsHandler
 }
 
-// makeBlockingEndpointTestServer will signal the blockNextAction channel on endpoint "POST", "PUT", and "DELETE"
-// requests. "POST" and "PUT" requests will wait on a blockUpdate signal if provided, while "DELETE" requests will wait
-// on a blockDelete signal if provided. If controller is nil, an error will be sent in the response.
+// makeBlockingEndpointTestServer 在收到 Endpoints 的 POST/PUT/DELETE 请求时向 blockNextAction 发信号。
+// POST/PUT 会先等待 blockUpdate（若提供），DELETE 会先等待 blockDelete（若提供），
+// 从而人为制造“API Server 已处理但本地缓存尚未更新”的窗口。
+// controller 为 nil 时直接返回错误，防止控制器就绪前误发请求。
 func makeBlockingEndpointTestServer(t *testing.T, controller *endpointController, endpoint *v1.Endpoints, blockUpdate, blockDelete, blockNextAction chan struct{}, namespace string) *httptest.Server {
 
 	handlerFunc := func(res http.ResponseWriter, req *http.Request) {
@@ -187,7 +207,7 @@ func makeBlockingEndpointTestServer(t *testing.T, controller *endpointController
 		if req.Method == "POST" || req.Method == "PUT" {
 			if blockUpdate != nil {
 				go func() {
-					// Delay the update of endpoints to make endpoints cache out of sync
+					// 延迟写入缓存，使 endpoints 缓存与 API Server 状态不一致
 					<-blockUpdate
 					_ = controller.endpointsStore.Add(endpoint)
 				}()
@@ -200,7 +220,7 @@ func makeBlockingEndpointTestServer(t *testing.T, controller *endpointController
 		if req.Method == "DELETE" {
 			if blockDelete != nil {
 				go func() {
-					// Delay the deletion of endpoints to make endpoints cache out of sync
+					// 延迟从缓存删除，使 endpoints 缓存与 API Server 状态不一致
 					<-blockDelete
 					_ = controller.endpointsStore.Delete(endpoint)
 					controller.onEndpointsDelete(endpoint)
@@ -229,6 +249,8 @@ func makeBlockingEndpointTestServer(t *testing.T, controller *endpointController
 
 }
 
+// endpointController 在真实 Controller 之上暴露 informer 的底层 Store，
+// 便于测试直接预置 Pod/Service/Endpoints 对象并观察控制器行为。
 type endpointController struct {
 	*Controller
 	podStore       cache.Store
@@ -236,6 +258,8 @@ type endpointController struct {
 	endpointsStore cache.Store
 }
 
+// newController 基于假 API Server 的 URL 创建控制器，并把三个 HasSynced 检查
+// 替换为 alwaysReady，使测试无需等待 informer 完成初始列表同步即可调用 syncService。
 func newController(ctx context.Context, url string, batchPeriod time.Duration) *endpointController {
 	client := clientset.NewForConfigOrDie(&restclient.Config{Host: url, ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}, ContentType: runtime.ContentTypeJSON}})
 	informerFactory := informers.NewSharedInformerFactory(client, controllerpkg.NoResyncPeriodFunc())
@@ -252,6 +276,8 @@ func newController(ctx context.Context, url string, batchPeriod time.Duration) *
 	}
 }
 
+// newFakeController 使用 fake clientset 创建控制器，同样跳过 informer 同步等待。
+// 返回值中的 client 供测试直接读取 API 侧的 Endpoints，以验证同步结果。
 func newFakeController(ctx context.Context, batchPeriod time.Duration) (*fake.Clientset, *endpointController) {
 	client := fake.NewSimpleClientset()
 	informerFactory := informers.NewSharedInformerFactory(client, controllerpkg.NoResyncPeriodFunc())
@@ -276,6 +302,8 @@ func newFakeController(ctx context.Context, batchPeriod time.Duration) (*fake.Cl
 	}
 }
 
+// TestSyncEndpointsItemsPreserveNoSelector 验证无 selector 的 Service：控制器不应接管或
+// 覆盖已存在的 Endpoints，因此期望 0 次写请求。
 func TestSyncEndpointsItemsPreserveNoSelector(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -305,6 +333,8 @@ func TestSyncEndpointsItemsPreserveNoSelector(t *testing.T) {
 	endpointsHandler.ValidateRequestCount(t, 0)
 }
 
+// TestSyncEndpointsExistingNilSubsets 验证已有的、由本控制器管理的 Endpoints 在
+// subsets 为 nil 且计算结果无变化时不会被重复更新。
 func TestSyncEndpointsExistingNilSubsets(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -337,6 +367,8 @@ func TestSyncEndpointsExistingNilSubsets(t *testing.T) {
 	endpointsHandler.ValidateRequestCount(t, 0)
 }
 
+// TestSyncEndpointsExistingEmptySubsets 与上一个用例类似，区别是 subsets 为空切片而非 nil，
+// 同样期望控制器跳过无意义的 PUT。
 func TestSyncEndpointsExistingEmptySubsets(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -369,6 +401,8 @@ func TestSyncEndpointsExistingEmptySubsets(t *testing.T) {
 	endpointsHandler.ValidateRequestCount(t, 0)
 }
 
+// TestSyncEndpointsWithPodResourceVersionUpdateOnly 验证仅 Pod ResourceVersion 变化时，
+// 由于端点地址与端口均未改变，控制器不应重新写入 Endpoints。
 func TestSyncEndpointsWithPodResourceVersionUpdateOnly(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -412,6 +446,7 @@ func TestSyncEndpointsWithPodResourceVersionUpdateOnly(t *testing.T) {
 			IPFamilies: []v1.IPFamily{v1.IPv4Protocol},
 		},
 	})
+	// 只 bump ResourceVersion，保持 IP、端口与就绪状态不变，模拟无实质变化的状态更新。
 	pod0.ResourceVersion = "3"
 	pod1.ResourceVersion = "4"
 	endpoints.podStore.Add(pod0)
@@ -424,6 +459,8 @@ func TestSyncEndpointsWithPodResourceVersionUpdateOnly(t *testing.T) {
 	endpointsHandler.ValidateRequestCount(t, 0)
 }
 
+// TestSyncEndpointsNewNoSubsets 验证 Service 已有 selector 但 Endpoints 尚不存在时，
+// 控制器会创建一条新的 Endpoints（期望 1 次写请求）。
 func TestSyncEndpointsNewNoSubsets(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -444,6 +481,8 @@ func TestSyncEndpointsNewNoSubsets(t *testing.T) {
 	endpointsHandler.ValidateRequestCount(t, 1)
 }
 
+// TestCheckLeftoverEndpoints 验证 checkLeftoverEndpoints 会把“存在 Endpoints 但无对应
+// Service/selector”的键重新入队，以便后续同步清理这些遗留对象。
 func TestCheckLeftoverEndpoints(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, _ := makeTestServer(t, ns)
@@ -472,6 +511,8 @@ func TestCheckLeftoverEndpoints(t *testing.T) {
 	}
 }
 
+// TestSyncEndpointsProtocolTCP 验证 Service 端口协议 TCP 会传播到 Endpoints 子集，
+// 并断言写请求为 PUT 且请求体与期望对象一致。
 func TestSyncEndpointsProtocolTCP(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -522,6 +563,8 @@ func TestSyncEndpointsProtocolTCP(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsHeadlessServiceLabel 验证当 Endpoints 已带有控制器管理与 headless 标签、
+// 且子集为空无需变更时，控制器不会发出写请求。
 func TestSyncEndpointsHeadlessServiceLabel(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -555,11 +598,14 @@ func TestSyncEndpointsHeadlessServiceLabel(t *testing.T) {
 	endpointsHandler.ValidateRequestCount(t, 0)
 }
 
+// TestSyncServiceExternalNameType 验证 ExternalName 类型的 Service 无论是否带有 selector
+// 或端口都不应生成/更新 Endpoints；四个子用例均断言 0 次写请求。
 func TestSyncServiceExternalNameType(t *testing.T) {
 	serviceName := "testing-1"
 	namespace := metav1.NamespaceDefault
 
 	testCases := []struct {
+		// desc 为子用例名称；service 为待同步的 Service 对象。
 		desc    string
 		service *v1.Service
 	}{
@@ -605,6 +651,7 @@ func TestSyncServiceExternalNameType(t *testing.T) {
 		},
 	}
 
+	// 所有子用例的共同断言：ExternalName Service 不产生任何 Endpoints 写请求。
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			testServer, endpointsHandler := makeTestServer(t, namespace)
@@ -625,6 +672,7 @@ func TestSyncServiceExternalNameType(t *testing.T) {
 	}
 }
 
+// TestSyncEndpointsProtocolUDP 验证 UDP 协议 Service 生成携带 UDP 端口的 Endpoints。
 func TestSyncEndpointsProtocolUDP(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -675,6 +723,7 @@ func TestSyncEndpointsProtocolUDP(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsProtocolSCTP 验证 SCTP 协议 Service 生成携带 SCTP 端口的 Endpoints。
 func TestSyncEndpointsProtocolSCTP(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -725,8 +774,11 @@ func TestSyncEndpointsProtocolSCTP(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
-// Compare to ConformanceIt("should serve endpoints on same port and different protocols")
-// in test/e2e/network/service.go
+// TestSyncEndpointsProtocolMultiProtocolSamePort 验证同一端口号上的 TCP/UDP 两个 ServicePort
+// 会在 Endpoints 中生成两个协议不同、端口相同的 EndpointPort。
+//
+// 对应 test/e2e/network/service.go 中的
+// ConformanceIt("should serve endpoints on same port and different protocols")。
 func TestSyncEndpointsProtocolMultiProtocolSamePort(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -779,6 +831,7 @@ func TestSyncEndpointsProtocolMultiProtocolSamePort(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsItemsEmptySelectorSelectsAll 验证空 selector 会选中命名空间内所有 Pod。
 func TestSyncEndpointsItemsEmptySelectorSelectsAll(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -825,6 +878,8 @@ func TestSyncEndpointsItemsEmptySelectorSelectsAll(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsItemsEmptySelectorSelectsAllNotReady 验证空 selector 下未就绪 Pod
+// 被放入 NotReadyAddresses 而非 Addresses。
 func TestSyncEndpointsItemsEmptySelectorSelectsAllNotReady(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -872,6 +927,8 @@ func TestSyncEndpointsItemsEmptySelectorSelectsAllNotReady(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsItemsEmptySelectorSelectsAllMixed 验证空 selector 下就绪与未就绪 Pod
+// 分别进入 Addresses 与 NotReadyAddresses。
 func TestSyncEndpointsItemsEmptySelectorSelectsAllMixed(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -920,6 +977,8 @@ func TestSyncEndpointsItemsEmptySelectorSelectsAllMixed(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsItemsPreexisting 验证已有的、由控制器管理的 Endpoints 内容陈旧时，
+// 控制器通过 PUT 用新计算的子集覆盖它。
 func TestSyncEndpointsItemsPreexisting(t *testing.T) {
 	ns := "bar"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -972,6 +1031,8 @@ func TestSyncEndpointsItemsPreexisting(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsItemsPreexistingIdentical 验证已有 Endpoints 与期望结果完全一致时
+// 控制器不发出写请求（幂等性）。
 func TestSyncEndpointsItemsPreexistingIdentical(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1008,6 +1069,8 @@ func TestSyncEndpointsItemsPreexistingIdentical(t *testing.T) {
 	endpointsHandler.ValidateRequestCount(t, 0)
 }
 
+// TestSyncEndpointsItemsPreexistingIdenticalUnsorted 验证 Endpoints 子集顺序与当前
+// RepackSubsets 结果不同但语义相同时仍被视为无变化，避免无谓的重新同步。
 func TestSyncEndpointsItemsPreexistingIdenticalUnsorted(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1019,15 +1082,15 @@ func TestSyncEndpointsItemsPreexistingIdenticalUnsorted(t *testing.T) {
 
 	subsets := []v1.EndpointSubset{{
 		Addresses: []v1.EndpointAddress{
-			// known to not be packed correctly according to the current hash
+			// 已知该顺序与当前 hash 算法打包出的顺序不同
 			{IP: pod1.Status.PodIPs[0].IP, NodeName: &emptyNodeName, TargetRef: &v1.ObjectReference{Kind: "Pod", Name: pod1.Name, Namespace: ns}},
 			{IP: pod0.Status.PodIPs[0].IP, NodeName: &emptyNodeName, TargetRef: &v1.ObjectReference{Kind: "Pod", Name: pod0.Name, Namespace: ns}},
 		},
 		Ports: []v1.EndpointPort{{Port: 8080, Protocol: "TCP"}},
 	}}
 
-	// Assert that endpoints are not repacked correctly according to the current hash.
-	// We want to prove that this does not cause a re-sync.
+	// 先断言这两组子集确实不是排序后的状态，确保用例前提成立；
+	// 这样才能证明“未排序”本身不会触发重新同步。
 	repacked := endptspkg.RepackSubsets(subsets)
 	if reflect.DeepEqual(subsets, repacked) {
 		t.Errorf("subsets were already in sorted order")
@@ -1061,10 +1124,12 @@ func TestSyncEndpointsItemsPreexistingIdenticalUnsorted(t *testing.T) {
 		t.Errorf("Unexpected error syncing service %v", err)
 	}
 
-	// syncing should've been a no-op
+	// 同步应当是一次 no-op。
 	endpointsHandler.ValidateRequestCount(t, 0)
 }
 
+// TestSyncEndpointsItems 验证多 Pod、多端口场景下生成的 Endpoints 子集内容，
+// 同时断言写请求为 POST（Endpoints 不存在）且请求体与排序后的期望对象一致。
 func TestSyncEndpointsItems(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1072,7 +1137,7 @@ func TestSyncEndpointsItems(t *testing.T) {
 	tCtx := ktesting.Init(t)
 	endpoints := newController(tCtx, testServer.URL, 0*time.Second)
 	addPods(endpoints.podStore, ns, 3, 2, 0, ipv4only)
-	addPods(endpoints.podStore, "blah", 5, 2, 0, ipv4only) // make sure these aren't found!
+	addPods(endpoints.podStore, "blah", 5, 2, 0, ipv4only) // 再造一些其他命名空间的 Pod，确保它们不会被选中。
 
 	endpoints.serviceStore.Add(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: ns},
@@ -1116,6 +1181,8 @@ func TestSyncEndpointsItems(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints", "POST", &data)
 }
 
+// TestSyncEndpointsItemsWithLabels 验证 Service 的自定义标签会被复制到新建的 Endpoints，
+// 并同时附加控制器管理标签与 headless 标签。
 func TestSyncEndpointsItemsWithLabels(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1170,6 +1237,8 @@ func TestSyncEndpointsItemsWithLabels(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints", "POST", &data)
 }
 
+// TestSyncEndpointsItemsPreexistingLabelsChange 验证 Service 标签变化时，已有 Endpoints
+// 的标签会被更新（PUT），且子集内容一并刷新。
 func TestSyncEndpointsItemsPreexistingLabelsChange(t *testing.T) {
 	ns := "bar"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1226,13 +1295,17 @@ func TestSyncEndpointsItemsPreexistingLabelsChange(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestWaitsForAllInformersToBeSynced2 验证控制器必须等 Pod、Service、Endpoints 三个
+// informer 全部同步后才处理工作队列：任一 HasSynced 为 false 都不应产生写请求。
 func TestWaitsForAllInformersToBeSynced2(t *testing.T) {
 	var tests = []struct {
+		// 三个字段分别替换对应 informer 的 HasSynced 检查；shouldUpdateEndpoints 表示是否预期写请求。
 		podsSynced            func() bool
 		servicesSynced        func() bool
 		endpointsSynced       func() bool
 		shouldUpdateEndpoints bool
 	}{
+		// 依次覆盖：Pod 未同步、Service 未同步、Endpoints 未同步、三者全部同步。
 		{neverReady, alwaysReady, alwaysReady, false},
 		{alwaysReady, neverReady, alwaysReady, false},
 		{alwaysReady, alwaysReady, neverReady, false},
@@ -1264,12 +1337,12 @@ func TestWaitsForAllInformersToBeSynced2(t *testing.T) {
 			endpoints.workerLoopPeriod = 10 * time.Millisecond
 			go endpoints.Run(tCtx, 1)
 
-			// cache.WaitForNamedCacheSync has a 100ms poll period, and the endpoints worker has a 10ms period.
-			// To ensure we get all updates, including unexpected ones, we need to wait at least as long as
-			// a single cache sync period and worker period, with some fudge room.
+			// cache.WaitForNamedCacheSync 的轮询周期是 100ms，而 endpoints worker 的周期是 10ms。
+			// 为捕获包括意外写请求在内的所有行为，等待时间至少要覆盖一个同步周期
+			// 与一个 worker 周期，并留出一定余量。
 			time.Sleep(150 * time.Millisecond)
 			if test.shouldUpdateEndpoints {
-				// Ensure the work queue has been processed by looping for up to a second to prevent flakes.
+				// 为避免抖动，轮询等待队列清空，最长等待 1 秒。
 				wait.PollImmediate(50*time.Millisecond, 1*time.Second, func() (bool, error) {
 					return endpoints.queue.Len() == 0, nil
 				})
@@ -1281,6 +1354,8 @@ func TestWaitsForAllInformersToBeSynced2(t *testing.T) {
 	}
 }
 
+// TestSyncEndpointsHeadlessService 验证 ClusterIP=None 的 headless Service：自定义标签
+// 会被保留并附加 headless 标签，且同步过程不会修改传入的 Service 对象。
 func TestSyncEndpointsHeadlessService(t *testing.T) {
 	ns := "headless"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1330,6 +1405,7 @@ func TestSyncEndpointsHeadlessService(t *testing.T) {
 			Ports:     []v1.EndpointPort{},
 		}},
 	})
+	// 用 DeepCopy 对比防止控制器就地修改共享 informer 缓存中的 Service 对象。
 	if !reflect.DeepEqual(originalService, service) {
 		t.Fatalf("syncing endpoints changed service: %s", cmp.Diff(service, originalService))
 	}
@@ -1337,6 +1413,8 @@ func TestSyncEndpointsHeadlessService(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsItemsExcludeNotReadyPodsWithRestartPolicyNeverAndPhaseFailed 验证
+// RestartPolicy=Never 且 Phase=Failed 的终态 Pod 即使未就绪也不得进入 NotReadyAddresses。
 func TestSyncEndpointsItemsExcludeNotReadyPodsWithRestartPolicyNeverAndPhaseFailed(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1384,6 +1462,8 @@ func TestSyncEndpointsItemsExcludeNotReadyPodsWithRestartPolicyNeverAndPhaseFail
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsItemsExcludeNotReadyPodsWithRestartPolicyNeverAndPhaseSucceeded 验证
+// RestartPolicy=Never 且 Phase=Succeeded 的终态 Pod 同样被排除在 Endpoints 之外。
 func TestSyncEndpointsItemsExcludeNotReadyPodsWithRestartPolicyNeverAndPhaseSucceeded(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1430,6 +1510,8 @@ func TestSyncEndpointsItemsExcludeNotReadyPodsWithRestartPolicyNeverAndPhaseSucc
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsItemsExcludeNotReadyPodsWithRestartPolicyOnFailureAndPhaseSucceeded
+// 验证 RestartPolicy=OnFailure 且 Phase=Succeeded 的成功终态 Pod 也被排除。
 func TestSyncEndpointsItemsExcludeNotReadyPodsWithRestartPolicyOnFailureAndPhaseSucceeded(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1477,6 +1559,8 @@ func TestSyncEndpointsItemsExcludeNotReadyPodsWithRestartPolicyOnFailureAndPhase
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestSyncEndpointsHeadlessWithoutPort 验证无端口的 headless Service 仍会创建 Endpoints，
+// 其中子集的 Ports 为 nil。
 func TestSyncEndpointsHeadlessWithoutPort(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1515,11 +1599,16 @@ func TestSyncEndpointsHeadlessWithoutPort(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints", "POST", &data)
 }
 
+// TestPodToEndpointAddressForService 以表驱动方式验证 Pod IP 族选择逻辑：根据 Service 的
+// ClusterIP/IPFamilies 与 Pod 的 IP 列表选出匹配的 IP，同时验证非法 IP 会被修正以及
+// TargetRef 各字段的填充。
 func TestPodToEndpointAddressForService(t *testing.T) {
 	ipv4 := v1.IPv4Protocol
 	ipv6 := v1.IPv6Protocol
 
 	testCases := []struct {
+		// name 为用例名；ipFamilies 模拟集群启用的 IP 族；service 为待匹配 Service；
+		// expectedEndpointFamily 为期望选中的 IP 族；expectError 表示是否预期报错。
 		name                   string
 		ipFamilies             []v1.IPFamily
 		service                v1.Service
@@ -1609,7 +1698,7 @@ func TestPodToEndpointAddressForService(t *testing.T) {
 			service: v1.Service{
 				Spec: v1.ServiceSpec{
 					ClusterIP:  v1.ClusterIPNone,
-					IPFamilies: []v1.IPFamily{v1.IPv6Protocol}, // <- set by a api-server defaulting logic
+					IPFamilies: []v1.IPFamily{v1.IPv6Protocol}, // <- 该字段由 API Server 的默认值逻辑填充
 				},
 			},
 			expectedEndpointFamily: ipv6,
@@ -1630,8 +1719,8 @@ func TestPodToEndpointAddressForService(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			podStore := cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc)
 			ns := "test"
-			// We use addBadIPPod to test that podToEndpointAddressForService
-			// fixes up the bad IP.
+			// 使用 addBadIPPod 构造带非法 IP 的 Pod，验证 podToEndpointAddressForService
+			// 会修正该 IP 而不是原样透传。
 			addBadIPPod(podStore, ns, tc.ipFamilies)
 			pods := podStore.List()
 			if len(pods) != 1 {
@@ -1640,6 +1729,7 @@ func TestPodToEndpointAddressForService(t *testing.T) {
 			pod := pods[0].(*v1.Pod)
 			epa, err := podToEndpointAddressForService(&tc.service, pod)
 
+			// 错误检查分两步：先识别“意外的错误”与“缺失的预期错误”，再进入地址内容校验。
 			if err != nil && !tc.expectError {
 				t.Fatalf("podToEndpointAddressForService returned unexpected error %v", err)
 			}
@@ -1652,12 +1742,15 @@ func TestPodToEndpointAddressForService(t *testing.T) {
 				return
 			}
 
+			// 通过 IsIPv6String 判断地址族而非直接比较具体 IP，便于适配确定性生成的地址。
 			if utilnet.IsIPv6String(epa.IP) != (tc.expectedEndpointFamily == ipv6) {
 				t.Fatalf("IP: expected %s, got: %s", tc.expectedEndpointFamily, epa.IP)
 			}
+			// 非法 IP 若未被修正仍会以 0 开头；这里断言修正后的地址不再是非法格式。
 			if strings.HasPrefix(epa.IP, "0") {
 				t.Fatalf("IP: expected valid, got: %s", epa.IP)
 			}
+			// NodeName 直接取自 Pod；TargetRef 只填身份信息，ResourceVersion 必须留空。
 			if *(epa.NodeName) != pod.Spec.NodeName {
 				t.Fatalf("NodeName: expected: %s, got: %s", pod.Spec.NodeName, *(epa.NodeName))
 			}
@@ -1681,6 +1774,8 @@ func TestPodToEndpointAddressForService(t *testing.T) {
 
 }
 
+// TestLastTriggerChangeTimeAnnotation 验证 Service 创建时间会被写入 Endpoints 的
+// EndpointsLastChangeTriggerTime 注解（RFC3339Nano 格式）。
 func TestLastTriggerChangeTimeAnnotation(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1735,6 +1830,8 @@ func TestLastTriggerChangeTimeAnnotation(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestLastTriggerChangeTimeAnnotation_AnnotationOverridden 验证已有的旧触发时间注解
+// 会被新的 Service 创建时间覆盖，而不是被保留或删除。
 func TestLastTriggerChangeTimeAnnotation_AnnotationOverridden(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1792,6 +1889,8 @@ func TestLastTriggerChangeTimeAnnotation_AnnotationOverridden(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
+// TestLastTriggerChangeTimeAnnotation_AnnotationCleared 验证当 Pod 与 Service 均没有
+// 触发时间信息时，Endpoints 上原有的触发时间注解会被清除。
 func TestLastTriggerChangeTimeAnnotation_AnnotationCleared(t *testing.T) {
 	ns := "other"
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -1813,7 +1912,7 @@ func TestLastTriggerChangeTimeAnnotation_AnnotationCleared(t *testing.T) {
 			Ports:     []v1.EndpointPort{{Port: 1000, Protocol: "TCP"}},
 		}},
 	})
-	// Neither pod nor service has trigger time, this should cause annotation to be cleared.
+	// Pod 与 Service 都没有触发时间，因此期望注解被清除。
 	addPods(endpoints.podStore, ns, 1, 1, 0, ipv4only)
 	endpoints.serviceStore.Add(&v1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: ns},
@@ -1837,7 +1936,7 @@ func TestLastTriggerChangeTimeAnnotation_AnnotationCleared(t *testing.T) {
 			Labels: map[string]string{
 				LabelManagedBy:       ControllerName,
 				v1.IsHeadlessService: "",
-			}, // Annotation not set anymore.
+			}, // 期望的 Endpoints 不再带有该注解。
 		},
 		Subsets: []v1.EndpointSubset{{
 			Addresses: []v1.EndpointAddress{{IP: "1.2.3.4", NodeName: &emptyNodeName, TargetRef: &v1.ObjectReference{Kind: "Pod", Name: "pod0", Namespace: ns}}},
@@ -1847,16 +1946,20 @@ func TestLastTriggerChangeTimeAnnotation_AnnotationCleared(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "PUT", &data)
 }
 
-// TestPodUpdatesBatching verifies that endpoint updates caused by pod updates are batched together.
-// This test uses real time.Sleep, as there is no easy way to mock time in endpoints controller now.
-// TODO(mborsz): Migrate this test to mock clock when possible.
+// TestPodUpdatesBatching 验证由 Pod 更新引发的 Endpoints 更新会被批处理（在 batchPeriod 内合并）。
+// 本用例依赖真实的 time.Sleep，因为当前控制器没有方便的时钟注入点。
+// TODO(mborsz): 待条件允许时迁移到 mock clock。
 func TestPodUpdatesBatching(t *testing.T) {
+	// podUpdate 描述一次更新：delay 为相对上次事件的等待时间，podName 与 podIP 指定目标 Pod
+	// 与新 IP。
 	type podUpdate struct {
 		delay   time.Duration
 		podName string
 		podIP   string
 	}
 
+	// name 为用例名；batchPeriod 为批处理窗口；podsCount 为预置 Pod 数；updates 为更新序列；
+	// finalDelay 为最后一次更新后的观察窗口；wantRequestCount 为期望的写请求次数。
 	tests := []struct {
 		name             string
 		batchPeriod      time.Duration
@@ -1866,12 +1969,13 @@ func TestPodUpdatesBatching(t *testing.T) {
 		wantRequestCount int
 	}{
 		{
+			// 未开启批处理：三次更新应产生三次写请求。
 			name:        "three updates with no batching",
 			batchPeriod: 0 * time.Second,
 			podsCount:   10,
 			updates: []podUpdate{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 启动后约需 100ms 才开始处理更新，首个事件多等待一段时间。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 					podIP:   "10.0.0.0",
@@ -1891,12 +1995,13 @@ func TestPodUpdatesBatching(t *testing.T) {
 			wantRequestCount: 3,
 		},
 		{
+			// 1 秒批处理窗口内完成三次更新：应合并为一次写请求。
 			name:        "three updates in one batch",
 			batchPeriod: 1 * time.Second,
 			podsCount:   10,
 			updates: []podUpdate{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 启动后约需 100ms 才开始处理更新，首个事件多等待一段时间。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 					podIP:   "10.0.0.0",
@@ -1916,12 +2021,13 @@ func TestPodUpdatesBatching(t *testing.T) {
 			wantRequestCount: 1,
 		},
 		{
+			// 前两次更新落在同一窗口，第三次间隔 1 秒：预期两次写请求。
 			name:        "three updates in two batches",
 			batchPeriod: 1 * time.Second,
 			podsCount:   10,
 			updates: []podUpdate{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 启动后约需 100ms 才开始处理更新，首个事件多等待一段时间。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 					podIP:   "10.0.0.0",
@@ -1996,14 +2102,17 @@ func TestPodUpdatesBatching(t *testing.T) {
 	}
 }
 
-// TestPodAddsBatching verifies that endpoint updates caused by pod addition are batched together.
-// This test uses real time.Sleep, as there is no easy way to mock time in endpoints controller now.
-// TODO(mborsz): Migrate this test to mock clock when possible.
+// TestPodAddsBatching 验证由 Pod 新增引发的 Endpoints 更新会被批处理。
+// 同样依赖真实的 time.Sleep，当前控制器无法 mock 时钟。
+// TODO(mborsz): 待条件允许时迁移到 mock clock。
 func TestPodAddsBatching(t *testing.T) {
+	// podAdd 只携带相对等待时间 delay，Pod 由循环下标生成。
 	type podAdd struct {
 		delay time.Duration
 	}
 
+	// 字段含义与 PodUpdatesBatching 相同：batchPeriod 决定合并窗口，adds 为新增序列，
+	// finalDelay 为观察窗口，wantRequestCount 为期望写请求次数。
 	tests := []struct {
 		name             string
 		batchPeriod      time.Duration
@@ -2011,12 +2120,13 @@ func TestPodAddsBatching(t *testing.T) {
 		finalDelay       time.Duration
 		wantRequestCount int
 	}{
+		// 未开启批处理：三次新增应产生三次写请求。
 		{
 			name:        "three adds with no batching",
 			batchPeriod: 0 * time.Second,
 			adds: []podAdd{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 启动后约需 100ms 才开始处理更新，首个事件多等待一段时间。
 					delay: 200 * time.Millisecond,
 				},
 				{
@@ -2030,11 +2140,12 @@ func TestPodAddsBatching(t *testing.T) {
 			wantRequestCount: 3,
 		},
 		{
+			// 1 秒窗口内的三次新增合并为一次写请求。
 			name:        "three adds in one batch",
 			batchPeriod: 1 * time.Second,
 			adds: []podAdd{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 启动后约需 100ms 才开始处理更新，首个事件多等待一段时间。
 					delay: 200 * time.Millisecond,
 				},
 				{
@@ -2048,11 +2159,12 @@ func TestPodAddsBatching(t *testing.T) {
 			wantRequestCount: 1,
 		},
 		{
+			// 前两次新增在同一窗口，第三次间隔 1 秒：预期两次写请求。
 			name:        "three adds in two batches",
 			batchPeriod: 1 * time.Second,
 			adds: []podAdd{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 启动后约需 100ms 才开始处理更新，首个事件多等待一段时间。
 					delay: 200 * time.Millisecond,
 				},
 				{
@@ -2105,15 +2217,17 @@ func TestPodAddsBatching(t *testing.T) {
 	}
 }
 
-// TestPodDeleteBatching verifies that endpoint updates caused by pod deletion are batched together.
-// This test uses real time.Sleep, as there is no easy way to mock time in endpoints controller now.
-// TODO(mborsz): Migrate this test to mock clock when possible.
+// TestPodDeleteBatching 验证由 Pod 删除引发的 Endpoints 更新会被批处理。
+// 依赖真实 time.Sleep，当前控制器无法 mock 时钟。
+// TODO(mborsz): 待条件允许时迁移到 mock clock。
 func TestPodDeleteBatching(t *testing.T) {
+	// podDelete 指定相对等待时间与要删除的 Pod 名称。
 	type podDelete struct {
 		delay   time.Duration
 		podName string
 	}
 
+	// podsCount 为预置 Pod 数；deletes 为删除序列；其余字段含义与前两个批处理用例一致。
 	tests := []struct {
 		name             string
 		batchPeriod      time.Duration
@@ -2122,13 +2236,14 @@ func TestPodDeleteBatching(t *testing.T) {
 		finalDelay       time.Duration
 		wantRequestCount int
 	}{
+		// 未开启批处理：三次删除应产生三次写请求。
 		{
 			name:        "three deletes with no batching",
 			batchPeriod: 0 * time.Second,
 			podsCount:   10,
 			deletes: []podDelete{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 启动后约需 100ms 才开始处理更新，首个事件多等待一段时间。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 				},
@@ -2145,12 +2260,13 @@ func TestPodDeleteBatching(t *testing.T) {
 			wantRequestCount: 3,
 		},
 		{
+			// 1 秒窗口内的三次删除合并为一次写请求。
 			name:        "three deletes in one batch",
 			batchPeriod: 1 * time.Second,
 			podsCount:   10,
 			deletes: []podDelete{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 启动后约需 100ms 才开始处理更新，首个事件多等待一段时间。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 				},
@@ -2167,12 +2283,13 @@ func TestPodDeleteBatching(t *testing.T) {
 			wantRequestCount: 1,
 		},
 		{
+			// 前两次删除在同一窗口，第三次间隔 1 秒：预期两次写请求。
 			name:        "three deletes in two batches",
 			batchPeriod: 1 * time.Second,
 			podsCount:   10,
 			deletes: []podDelete{
 				{
-					// endpoints.Run needs ~100 ms to start processing updates.
+					// endpoints.Run 启动后约需 100ms 才开始处理更新，首个事件多等待一段时间。
 					delay:   200 * time.Millisecond,
 					podName: "pod0",
 				},
@@ -2236,6 +2353,8 @@ func TestPodDeleteBatching(t *testing.T) {
 	}
 }
 
+// TestSyncEndpointsServiceNotFound 验证 Service 已从缓存中消失但 Endpoints 仍存在时，
+// 控制器会发出 DELETE 请求清理孤儿 Endpoints。
 func TestSyncEndpointsServiceNotFound(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, endpointsHandler := makeTestServer(t, ns)
@@ -2258,8 +2377,14 @@ func TestSyncEndpointsServiceNotFound(t *testing.T) {
 	endpointsHandler.ValidateRequest(t, "/api/v1/namespaces/"+ns+"/endpoints/foo", "DELETE", nil)
 }
 
+// TestSyncServiceOverCapacity 验证 Endpoints 超过 maxCapacity 时的截断行为，以及
+// EndpointsOverCapacity 注解的添加、修正与移除时机。
 func TestSyncServiceOverCapacity(t *testing.T) {
 	testCases := []struct {
+		// startingAnnotation 为预置注解值（nil 表示无注解）；numExisting 为已有地址数；
+		// numDesired/numDesiredNotReady 为期望的就绪/未就绪 Pod 数；
+		// numExpectedReady/numExpectedNotReady 为截断后期望的地址数量；expectedAnnotation 表示
+		// 是否预期存在值为 "truncated" 的注解。
 		name                string
 		startingAnnotation  *string
 		numExisting         int
@@ -2269,7 +2394,8 @@ func TestSyncServiceOverCapacity(t *testing.T) {
 		numExpectedNotReady int
 		expectedAnnotation  bool
 	}{{
-		name:                "empty",
+		name: "empty",
+		// 空场景：无需截断，也不应有注解。
 		startingAnnotation:  nil,
 		numExisting:         0,
 		numDesired:          0,
@@ -2277,6 +2403,7 @@ func TestSyncServiceOverCapacity(t *testing.T) {
 		numExpectedNotReady: 0,
 		expectedAnnotation:  false,
 	}, {
+		// 总数超过容量：添加注解，并按比例截断未就绪地址。
 		name:                "annotation added past capacity, < than maxCapacity of Ready Addresses",
 		startingAnnotation:  nil,
 		numExisting:         maxCapacity - 1,
@@ -2286,6 +2413,7 @@ func TestSyncServiceOverCapacity(t *testing.T) {
 		numExpectedNotReady: 3,
 		expectedAnnotation:  true,
 	}, {
+		// 就绪地址刚好占满容量：未就绪地址被全部截断，仍需注解。
 		name:                "annotation added past capacity, maxCapacity of Ready Addresses ",
 		startingAnnotation:  nil,
 		numExisting:         maxCapacity - 1,
@@ -2295,6 +2423,7 @@ func TestSyncServiceOverCapacity(t *testing.T) {
 		numExpectedNotReady: 0,
 		expectedAnnotation:  true,
 	}, {
+		// 从超限回落到容量以下：注解应被移除。
 		name:                "annotation removed below capacity",
 		startingAnnotation:  ptr.To("truncated"),
 		numExisting:         maxCapacity - 1,
@@ -2304,6 +2433,7 @@ func TestSyncServiceOverCapacity(t *testing.T) {
 		numExpectedNotReady: 0,
 		expectedAnnotation:  false,
 	}, {
+		// 恰好处于容量边界且旧注解为 warning：注解应被移除。
 		name:                "annotation was set to warning previously, annotation removed at capacity",
 		startingAnnotation:  ptr.To("warning"),
 		numExisting:         maxCapacity,
@@ -2313,6 +2443,7 @@ func TestSyncServiceOverCapacity(t *testing.T) {
 		numExpectedNotReady: 0,
 		expectedAnnotation:  false,
 	}, {
+		// 仍处于超限状态但旧注解为 warning：应修正为 truncated。
 		name:                "annotation was set to warning previously but still over capacity",
 		startingAnnotation:  ptr.To("warning"),
 		numExisting:         maxCapacity + 1,
@@ -2322,6 +2453,7 @@ func TestSyncServiceOverCapacity(t *testing.T) {
 		numExpectedNotReady: 0,
 		expectedAnnotation:  true,
 	}, {
+		// 容量边界且旧注解为 truncated：注解应被移除。
 		name:                "annotation removed at capacity",
 		startingAnnotation:  ptr.To("truncated"),
 		numExisting:         maxCapacity,
@@ -2331,6 +2463,7 @@ func TestSyncServiceOverCapacity(t *testing.T) {
 		numExpectedNotReady: 0,
 		expectedAnnotation:  false,
 	}, {
+		// 端点数量未变但注解值非法：应修正为 truncated。
 		name:                "no endpoints change, annotation value corrected",
 		startingAnnotation:  ptr.To("invalid"),
 		numExisting:         maxCapacity + 1,
@@ -2394,6 +2527,7 @@ func TestSyncServiceOverCapacity(t *testing.T) {
 				t.Fatalf("unexpected error getting endpoints: %v", err)
 			}
 
+			// 分别校验注解的有无与取值，以及截断后就绪/未就绪地址的数量。
 			actualAnnotation, ok := actualEndpoints.Annotations[v1.EndpointsOverCapacity]
 			if tc.expectedAnnotation {
 				if !ok {
@@ -2422,39 +2556,46 @@ func TestSyncServiceOverCapacity(t *testing.T) {
 	}
 }
 
+// TestTruncateEndpoints 验证 truncateEndpoints 会在多个子集间按比例分配 maxCapacity，
+// 并优先保留就绪地址、按需要缩减未就绪地址。
 func TestTruncateEndpoints(t *testing.T) {
 	testCases := []struct {
 		desc string
-		// subsetsReady, subsetsNotReady, expectedReady, expectedNotReady
-		// must all be the same length
+		// subsetsReady、subsetsNotReady、expectedReady、expectedNotReady
+		// 四个切片长度必须一致，每个元素对应一个子集。
 		subsetsReady     []int
 		subsetsNotReady  []int
 		expectedReady    []int
 		expectedNotReady []int
 	}{{
+		// 空输入。
 		desc:             "empty",
 		subsetsReady:     []int{},
 		subsetsNotReady:  []int{},
 		expectedReady:    []int{},
 		expectedNotReady: []int{},
+		// 总数低于容量：不截断。
 	}, {
 		desc:             "total endpoints < max capacity",
 		subsetsReady:     []int{50, 100, 100, 100, 100},
 		subsetsNotReady:  []int{50, 100, 100, 100, 100},
 		expectedReady:    []int{50, 100, 100, 100, 100},
 		expectedNotReady: []int{50, 100, 100, 100, 100},
+		// 总数恰好等于容量：保持原样。
 	}, {
 		desc:             "total endpoints = max capacity",
 		subsetsReady:     []int{100, 100, 100, 100, 100},
 		subsetsNotReady:  []int{100, 100, 100, 100, 100},
 		expectedReady:    []int{100, 100, 100, 100, 100},
 		expectedNotReady: []int{100, 100, 100, 100, 100},
+		// 就绪地址未超容量但总数超出：只缩减未就绪地址。
 	}, {
 		desc:             "total ready endpoints < max capacity, but total endpoints > max capacity",
 		subsetsReady:     []int{90, 110, 50, 10, 20},
 		subsetsNotReady:  []int{101, 200, 200, 201, 298},
 		expectedReady:    []int{90, 110, 50, 10, 20},
 		expectedNotReady: []int{73, 144, 144, 145, 214},
+		// 就绪地址已超容量：未就绪地址清零，就绪地址按比例缩减。
 	}, {
 		desc:             "total ready endpoints > max capacity",
 		subsetsReady:     []int{205, 400, 402, 400, 693},
@@ -2494,6 +2635,8 @@ func TestTruncateEndpoints(t *testing.T) {
 	}
 }
 
+// TestEndpointPortFromServicePort 验证 ServicePort 的 AppProtocol 会原样传播到
+// EndpointPort；nil 与具体值两种情况均覆盖，stringVal 仅用于格式化失败信息。
 func TestEndpointPortFromServicePort(t *testing.T) {
 	http := ptr.To("http")
 	testCases := map[string]struct {
@@ -2521,9 +2664,9 @@ func TestEndpointPortFromServicePort(t *testing.T) {
 	}
 }
 
-// TestMultipleServiceChanges tests that endpoints that are not created because of an out of sync endpoints cache are eventually recreated
-// A service will be created. After the endpoints exist, the service will be deleted and the endpoints will not be deleted from the cache immediately.
-// After the service is recreated, the endpoints will be deleted replicating an out of sync cache. Expect that eventually the endpoints will be recreated.
+// TestMultipleServiceChanges 验证因 Endpoints 缓存不同步而未能创建的 Endpoints 最终会被重建。
+// 流程：创建 Service 并等待 Endpoints 出现 → 删除 Service，但人为阻塞缓存中的 Endpoints 删除 →
+// 重新创建 Service（此时不会立刻发起 Create） → 放行缓存删除 → 期望 Endpoints 被重新创建。
 func TestMultipleServiceChanges(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	expectedSubsets := []v1.EndpointSubset{{
@@ -2536,7 +2679,10 @@ func TestMultipleServiceChanges(t *testing.T) {
 		Subsets:    expectedSubsets,
 	}
 
+	// 先用空壳控制器启动服务器：服务器回调需要引用控制器指针，随后再用 newController
+	// 的结果填充该指针。
 	controller := &endpointController{}
+	// blockDelete/blockNextAction 用于控制缓存更新时机与等待请求到达。
 	blockDelete := make(chan struct{})
 	blockNextAction := make(chan struct{})
 	stopChan := make(chan struct{})
@@ -2561,24 +2707,24 @@ func TestMultipleServiceChanges(t *testing.T) {
 
 	controller.serviceStore.Add(svc)
 	controller.onServiceUpdate(svc)
-	// blockNextAction should eventually unblock once server gets endpoint request.
+	// 服务器收到 Endpoints 请求后，blockNextAction 应当被解除阻塞。
 	waitForChanReceive(t, 1*time.Second, blockNextAction, "Service Add should have caused a request to be sent to the test server")
 
 	controller.serviceStore.Delete(svc)
 	controller.onServiceDelete(svc)
 	waitForChanReceive(t, 1*time.Second, blockNextAction, "Service Delete should have caused a request to be sent to the test server")
 
-	// If endpoints cache has not updated before service update is registered
-	// Services add will not trigger a Create endpoint request.
+	// 如果 Service 更新被处理时 Endpoints 缓存尚未同步，
+	// Service Add 不会立即触发 Create Endpoints 请求。
 	controller.serviceStore.Add(svc)
 	controller.onServiceUpdate(svc)
 
-	// Ensure the work queue has been processed by looping for up to a second to prevent flakes.
+	// 为避免抖动，轮询等待队列清空，最长等待 1 秒。
 	wait.PollImmediate(50*time.Millisecond, 1*time.Second, func() (bool, error) {
 		return controller.queue.Len() == 0, nil
 	})
 
-	// Cause test server to delete endpoints
+	// 放行测试服务器执行删除操作。
 	close(blockDelete)
 	waitForChanReceive(t, 1*time.Second, blockNextAction, "Endpoint should have been recreated")
 
@@ -2586,8 +2732,8 @@ func TestMultipleServiceChanges(t *testing.T) {
 	close(stopChan)
 }
 
-// TestMultiplePodChanges tests that endpoints that are not updated because of an out of sync endpoints cache are
-// eventually resynced after multiple Pod changes.
+// TestMultiplePodChanges 验证因 Endpoints 缓存不同步而未能更新的 Endpoints，
+// 在多次 Pod 变更后最终会被重新同步。
 func TestMultiplePodChanges(t *testing.T) {
 	ns := metav1.NamespaceDefault
 
@@ -2610,6 +2756,7 @@ func TestMultiplePodChanges(t *testing.T) {
 		}},
 	}
 
+	// 与上一个用例相同，先创建空壳控制器供阻塞服务器回调使用。
 	controller := &endpointController{}
 	blockUpdate := make(chan struct{})
 	blockNextAction := make(chan struct{})
@@ -2634,7 +2781,7 @@ func TestMultiplePodChanges(t *testing.T) {
 
 	go func() { controller.Run(tCtx, 1) }()
 
-	// Rapidly update the Pod: Ready -> NotReady -> Ready.
+	// 快速连续更新 Pod：Ready → NotReady → Ready。
 	pod2 := pod.DeepCopy()
 	pod2.ResourceVersion = "2"
 	pod2.Status.Conditions[0].Status = v1.ConditionFalse
@@ -2642,13 +2789,13 @@ func TestMultiplePodChanges(t *testing.T) {
 	controller.onPodUpdate(pod, pod2)
 	// blockNextAction should eventually unblock once server gets endpoints request.
 	waitForChanReceive(t, 1*time.Second, blockNextAction, "Pod Update should have caused a request to be sent to the test server")
-	// The endpoints update hasn't been applied to the cache yet.
+	// 此时缓存中的 Endpoints 更新尚未生效。
 	pod3 := pod.DeepCopy()
 	pod3.ResourceVersion = "3"
 	pod3.Status.Conditions[0].Status = v1.ConditionTrue
 	_ = controller.podStore.Update(pod3)
 	controller.onPodUpdate(pod2, pod3)
-	// It shouldn't get endpoints request as the endpoints in the cache is out-of-date.
+	// 缓存中的 Endpoints 仍是旧值，因此这次 Pod 更新不应触发写请求。
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case <-timer.C:
@@ -2656,7 +2803,7 @@ func TestMultiplePodChanges(t *testing.T) {
 		t.Errorf("Pod Update shouldn't have caused a request to be sent to the test server")
 	}
 
-	// Applying the endpoints update to the cache should cause test server to update endpoints.
+	// 放行缓存更新后，控制器应重新发起 Endpoints 更新请求。
 	close(blockUpdate)
 	waitForChanReceive(t, 1*time.Second, blockNextAction, "Endpoints should have been updated")
 
@@ -2664,7 +2811,11 @@ func TestMultiplePodChanges(t *testing.T) {
 	close(stopChan)
 }
 
+// TestSyncServiceAddresses 以表驱动方式验证哪些 Pod 会被计入 Endpoints 地址：
+// 覆盖 Pod 各相位（Running/Unknown/Pending/Failed/Succeeded）、就绪条件、是否处于删除中，
+// 以及 Service 是否通过 PublishNotReadyAddresses 容忍未就绪地址。
 func TestSyncServiceAddresses(t *testing.T) {
+	// makeService 构造测试 Service；tolerateUnready 控制是否设置 PublishNotReadyAddresses。
 	makeService := func(tolerateUnready bool) *v1.Service {
 		return &v1.Service{
 			ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "ns"},
@@ -2679,6 +2830,7 @@ func TestSyncServiceAddresses(t *testing.T) {
 		}
 	}
 
+	// makePod 按 Pod 相位、就绪条件与是否处于删除中构造 Pod。
 	makePod := func(phase v1.PodPhase, isReady bool, terminating bool) *v1.Pod {
 		statusCondition := v1.ConditionFalse
 		if isReady {
@@ -2718,6 +2870,8 @@ func TestSyncServiceAddresses(t *testing.T) {
 		}
 	}
 
+	// name 为用例名；pod/service 为输入对象；expectedReady 与 expectedUnready 分别为
+	// 期望的就绪与未就绪地址数量。
 	testCases := []struct {
 		name            string
 		pod             *v1.Pod
@@ -2725,6 +2879,7 @@ func TestSyncServiceAddresses(t *testing.T) {
 		expectedReady   int
 		expectedUnready int
 	}{
+		// 正常分组：Running/Unknown/Pending 且就绪的 Pod 计入就绪地址。
 		{
 			name:            "pod running phase",
 			pod:             makePod(v1.PodRunning, true, false),
@@ -2767,6 +2922,7 @@ func TestSyncServiceAddresses(t *testing.T) {
 			expectedReady:   0,
 			expectedUnready: 0,
 		},
+		// 未就绪且不容忍未就绪的 Pod 计入未就绪地址。
 		{
 			name:            "pod unknown phase container not ready",
 			pod:             makePod(v1.PodUnknown, false, false),
@@ -2781,6 +2937,7 @@ func TestSyncServiceAddresses(t *testing.T) {
 			expectedReady:   0,
 			expectedUnready: 1,
 		},
+		// Failed/Succeeded 终态 Pod 不产生任何地址。
 		{
 			name:            "pod failed phase",
 			pod:             makePod(v1.PodFailed, false, false),
@@ -2795,6 +2952,7 @@ func TestSyncServiceAddresses(t *testing.T) {
 			expectedReady:   0,
 			expectedUnready: 0,
 		},
+		// PublishNotReadyAddresses=true 时，即使 Pod 未就绪也计入就绪地址。
 		{
 			name:            "pod running phase and tolerate unready",
 			pod:             makePod(v1.PodRunning, false, false),
@@ -2837,6 +2995,7 @@ func TestSyncServiceAddresses(t *testing.T) {
 			expectedReady:   1,
 			expectedUnready: 0,
 		},
+		// 终态 Pod 即便设置 PublishNotReadyAddresses 仍被排除。
 		{
 			name:            "pod failed phase and tolerate unready",
 			pod:             makePod(v1.PodFailed, false, false),
@@ -2878,6 +3037,7 @@ func TestSyncServiceAddresses(t *testing.T) {
 				t.Errorf("Unexpected error %v", err)
 			}
 
+			// 分别累加各子集的 Addresses 与 NotReadyAddresses 数量后与期望值比较。
 			readyEndpoints := 0
 			unreadyEndpoints := 0
 			for _, subset := range endpoints.Subsets {
@@ -2896,6 +3056,8 @@ func TestSyncServiceAddresses(t *testing.T) {
 	}
 }
 
+// TestEndpointsDeletionEvents 验证 Endpoints 删除事件（无论是否预期）都会把所属 Service
+// 入队，以便重新核对是否需要重建 Endpoints。
 func TestEndpointsDeletionEvents(t *testing.T) {
 	ns := metav1.NamespaceDefault
 	testServer, _ := makeTestServer(t, ns)
@@ -2912,7 +3074,7 @@ func TestEndpointsDeletionEvents(t *testing.T) {
 		},
 	}
 
-	// Test Unexpected and Expected Deletes
+	// 同时覆盖“意外删除”与“预期删除”：从 store 删除后立即触发 onEndpointsDelete。
 	store.Delete(ep1)
 	controller.onEndpointsDelete(ep1)
 
@@ -2921,6 +3083,7 @@ func TestEndpointsDeletionEvents(t *testing.T) {
 	}
 }
 
+// stringVal 把可能为 nil 的字符串指针转成可读文本，仅用于断言失败信息。
 func stringVal(str *string) string {
 	if str == nil {
 		return "nil"
@@ -2928,7 +3091,8 @@ func stringVal(str *string) string {
 	return *str
 }
 
-// waitForChanReceive blocks up to the timeout waiting for the receivingChan to receive
+// waitForChanReceive 最多等待 timeout，校验 receivingChan 是否收到信号；
+// 超时则用 errorMsg 报错，避免测试永久阻塞。
 func waitForChanReceive(t *testing.T, timeout time.Duration, receivingChan chan struct{}, errorMsg string) {
 	timer := time.NewTimer(timeout)
 	select {
@@ -2938,7 +3102,11 @@ func waitForChanReceive(t *testing.T, timeout time.Duration, receivingChan chan 
 	}
 }
 
+// TestEndpointSubsetsEqualIgnoreResourceVersion 验证 endpointSubsetsEqualIgnoreResourceVersion
+// 在比较端点子集时会忽略 TargetRef.ResourceVersion 的变化（包括被清空），
+// 但 IP 与端口等实质字段变化仍判为不相等，从而避免仅 RV 变动引发无谓更新。
 func TestEndpointSubsetsEqualIgnoreResourceVersion(t *testing.T) {
+	// copyAndMutateEndpointSubset 深拷贝子集后应用 mutator，构造“仅某个字段不同”的对照对象。
 	copyAndMutateEndpointSubset := func(orig *v1.EndpointSubset, mutator func(*v1.EndpointSubset)) *v1.EndpointSubset {
 		newSubSet := orig.DeepCopy()
 		mutator(newSubSet)
@@ -2974,18 +3142,21 @@ func TestEndpointSubsetsEqualIgnoreResourceVersion(t *testing.T) {
 		},
 		Ports: []v1.EndpointPort{{Port: 8082, Protocol: "TCP"}},
 	}
+	// name 为用例名；subsets1/subsets2 为待比较的子集；expected 为期望的比较结果。
 	tests := []struct {
 		name     string
 		subsets1 []v1.EndpointSubset
 		subsets2 []v1.EndpointSubset
 		expected bool
 	}{
+		// 子集数量不同 → 不相等。
 		{
 			name:     "Subsets removed",
 			subsets1: []v1.EndpointSubset{*es1, *es2},
 			subsets2: []v1.EndpointSubset{*es1},
 			expected: false,
 		},
+		// 就绪地址 IP 变化 → 不相等。
 		{
 			name:     "Ready Pod IP changed",
 			subsets1: []v1.EndpointSubset{*es1, *es2},
@@ -2994,6 +3165,7 @@ func TestEndpointSubsetsEqualIgnoreResourceVersion(t *testing.T) {
 			}), *es2},
 			expected: false,
 		},
+		// 未就绪地址 IP 变化 → 不相等。
 		{
 			name:     "NotReady Pod IP changed",
 			subsets1: []v1.EndpointSubset{*es1, *es2},
@@ -3002,6 +3174,7 @@ func TestEndpointSubsetsEqualIgnoreResourceVersion(t *testing.T) {
 			})},
 			expected: false,
 		},
+		// 仅 TargetRef.ResourceVersion 变化 → 视为相等（本测试的核心断言）。
 		{
 			name:     "Pod ResourceVersion changed",
 			subsets1: []v1.EndpointSubset{*es1, *es2},
@@ -3010,6 +3183,7 @@ func TestEndpointSubsetsEqualIgnoreResourceVersion(t *testing.T) {
 			})},
 			expected: true,
 		},
+		// RV 从有值变为空 → 同样视为相等。
 		{
 			name:     "Pod ResourceVersion removed",
 			subsets1: []v1.EndpointSubset{*es1, *es2},
@@ -3018,6 +3192,7 @@ func TestEndpointSubsetsEqualIgnoreResourceVersion(t *testing.T) {
 			})},
 			expected: true,
 		},
+		// 端口变化 → 不相等。
 		{
 			name:     "Ports changed",
 			subsets1: []v1.EndpointSubset{*es1, *es2},
@@ -3036,8 +3211,10 @@ func TestEndpointSubsetsEqualIgnoreResourceVersion(t *testing.T) {
 	}
 }
 
-// Compare to It("should be updated after adding or deleting ports") in
-// test/e2e/network/service.go.
+// TestSyncEndpointsAddDeletePorts 验证 Service 端口的增删会正确反映到 Endpoints：
+// 依次追加端口与 Pod、再次追加端口与 Pod、最后删除首个端口，逐步比对期望的 Endpoints 对象。
+//
+// 对应 test/e2e/network/service.go 中的 It("should be updated after adding or deleting ports")。
 func TestSyncEndpointsAddDeletePorts(t *testing.T) {
 	ctx := ktesting.Init(t)
 	client, c := newFakeController(ctx, 0*time.Second)
@@ -3058,6 +3235,7 @@ func TestSyncEndpointsAddDeletePorts(t *testing.T) {
 		},
 	}
 
+	// podTemplate 作为 Pod 模板，每轮复制后填入名称、IP 与容器端口。
 	podTemplate := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: svc.Namespace,
@@ -3076,6 +3254,7 @@ func TestSyncEndpointsAddDeletePorts(t *testing.T) {
 		},
 	}
 
+	// expectEndpoints 从 ResourceVersion 非空的占位对象开始，随每轮同步逐步构造期望值。
 	expectEndpoints := &v1.Endpoints{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        svc.Name,
@@ -3088,8 +3267,8 @@ func TestSyncEndpointsAddDeletePorts(t *testing.T) {
 		},
 		Subsets: []v1.EndpointSubset{},
 	}
-	// Unit testing requires starting with a dummy Endpoints with a non-empty
-	// ResourceVersion.
+	// 单测需要先放一个 ResourceVersion 非空的占位 Endpoints，
+	// 才能让同步走更新路径而非创建路径。
 	err := c.endpointsStore.Add(expectEndpoints)
 	if err != nil {
 		t.Fatalf("Unexpected error adding endpoints: %v", err)
@@ -3146,7 +3325,7 @@ func TestSyncEndpointsAddDeletePorts(t *testing.T) {
 		t.Fatalf("incorrect endpoints after adding first pod:\n%s", diff)
 	}
 
-	// Add another port to the service
+	// 给 Service 增加第二个端口。
 	svc.Spec.Ports = append(svc.Spec.Ports, v1.ServicePort{
 		Name:       "portname2",
 		Port:       81,
@@ -3157,7 +3336,7 @@ func TestSyncEndpointsAddDeletePorts(t *testing.T) {
 		t.Fatalf("Unexpected error updating service: %v", err)
 	}
 
-	// Add another endpoint
+	// 增加对应的第二个端点 Pod。
 	pod2 := podTemplate.DeepCopy()
 	pod2.Name = "pod2"
 	pod2.Status.PodIP = "10.1.1.2"
@@ -3197,13 +3376,14 @@ func TestSyncEndpointsAddDeletePorts(t *testing.T) {
 			}},
 		},
 	)
+	// 期望子集需先按当前规则重新打包，才能与控制器输出做稳定比较。
 	expectEndpoints.Subsets = endptspkg.RepackSubsets(expectEndpoints.Subsets)
 
 	if diff := cmp.Diff(expectEndpoints, endpoints); diff != "" {
 		t.Fatalf("incorrect endpoints after adding second pod:\n%s", diff)
 	}
 
-	// Delete a port from the service
+	// 从 Service 中删除第一个端口。
 	svc.Spec.Ports = svc.Spec.Ports[1:]
 	err = c.serviceStore.Add(svc)
 	if err != nil {
@@ -3225,7 +3405,11 @@ func TestSyncEndpointsAddDeletePorts(t *testing.T) {
 	}
 }
 
+// TestPodToEndpointAddressForServiceEmptyIPFamilies 验证 Service 未设置 IPFamilies 时，
+// 控制器会根据 ClusterIP（headful）或 PodIP（headless）推断地址族并选取匹配的 Pod IP。
 func TestPodToEndpointAddressForServiceEmptyIPFamilies(t *testing.T) {
+	// name 为用例名；clusterIP 与 podIPs/podIP 模拟 Service/Pod 的地址；
+	// wantErr 表示是否预期报错；wantFamily 为期望选中的 IP 族。
 	testCases := []struct {
 		name       string
 		clusterIP  string
@@ -3273,7 +3457,7 @@ func TestPodToEndpointAddressForServiceEmptyIPFamilies(t *testing.T) {
 			svc := &v1.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "bar"},
 				Spec: v1.ServiceSpec{
-					// Intentionally leave IPFamilies empty.
+					// 刻意不设置 IPFamilies，触发控制器的推断逻辑。
 					ClusterIP: tc.clusterIP,
 				},
 			}
@@ -3284,6 +3468,7 @@ func TestPodToEndpointAddressForServiceEmptyIPFamilies(t *testing.T) {
 			}
 
 			addr, err := podToEndpointAddressForService(svc, pod)
+			// 先校验错误的有无，再校验返回地址的 IP 族。
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error but got addr=%v", addr)

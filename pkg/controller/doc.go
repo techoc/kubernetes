@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package controller contains code for controllers (like the replication
-// controller).
+// Package controller 包含各类控制器的通用代码（例如副本控制器 ReplicationController）。
+// 控制器通过监听 informer 的事件，持续将集群的实际状态调谐到期望状态。
 package controller

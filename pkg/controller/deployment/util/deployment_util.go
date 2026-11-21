@@ -44,63 +44,56 @@ import (
 )
 
 const (
-	// RevisionAnnotation is the revision annotation of a deployment's replica sets which records its rollout sequence
+	// RevisionAnnotation 是 Deployment 的 ReplicaSet 上的修订注解，记录其发布顺序。
 	RevisionAnnotation = "deployment.kubernetes.io/revision"
-	// RevisionHistoryAnnotation maintains the history of all old revisions that a replica set has served for a deployment.
+	// RevisionHistoryAnnotation 维护某个 ReplicaSet 为 Deployment 服务过的所有历史修订号。
 	RevisionHistoryAnnotation = "deployment.kubernetes.io/revision-history"
-	// DesiredReplicasAnnotation is the desired replicas for a deployment recorded as an annotation
-	// in its replica sets. Helps in separating scaling events from the rollout process and for
-	// determining if the new replica set for a deployment is really saturated.
+	// DesiredReplicasAnnotation 是记录在 ReplicaSet 注解中的 Deployment 期望副本数。
+	// 它有助于把扩缩容事件与发布过程区分开，并判断 Deployment 的新 ReplicaSet 是否真正饱和。
 	DesiredReplicasAnnotation = "deployment.kubernetes.io/desired-replicas"
-	// MaxReplicasAnnotation is the maximum replicas a deployment can have at a given point, which
-	// is deployment.spec.replicas + maxSurge. Used by the underlying replica sets to estimate their
-	// proportions in case the deployment has surge replicas.
+	// MaxReplicasAnnotation 是 Deployment 在某一时刻允许拥有的最大副本数，即
+	// deployment.spec.replicas + maxSurge。底层 ReplicaSet 据此在有突发副本时估算各自的比例。
 	MaxReplicasAnnotation = "deployment.kubernetes.io/max-replicas"
 
-	// RollbackRevisionNotFound is not found rollback event reason
+	// RollbackRevisionNotFound 是“未找到回滚版本”的事件原因。
 	RollbackRevisionNotFound = "DeploymentRollbackRevisionNotFound"
-	// RollbackTemplateUnchanged is the template unchanged rollback event reason
+	// RollbackTemplateUnchanged 是“模板未改变”的回滚事件原因。
 	RollbackTemplateUnchanged = "DeploymentRollbackTemplateUnchanged"
-	// RollbackDone is the done rollback event reason
+	// RollbackDone 是回滚完成的事件原因。
 	RollbackDone = "DeploymentRollback"
 
-	// Reasons for deployment conditions
+	// Deployment 条件的各种原因
 	//
-	// Progressing:
+	// Progressing：
 
-	// ReplicaSetUpdatedReason is added in a deployment when one of its replica sets is updated as part
-	// of the rollout process.
+	// ReplicaSetUpdatedReason 在发布过程中某个 ReplicaSet 被更新时添加到 Deployment 上。
 	ReplicaSetUpdatedReason = "ReplicaSetUpdated"
-	// FailedRSCreateReason is added in a deployment when it cannot create a new replica set.
+	// FailedRSCreateReason 在无法创建新 ReplicaSet 时添加到 Deployment 上。
 	FailedRSCreateReason = "ReplicaSetCreateError"
-	// NewReplicaSetReason is added in a deployment when it creates a new replica set.
+	// NewReplicaSetReason 在创建新 ReplicaSet 时添加到 Deployment 上。
 	NewReplicaSetReason = "NewReplicaSetCreated"
-	// FoundNewRSReason is added in a deployment when it adopts an existing replica set.
+	// FoundNewRSReason 在纳管已有 ReplicaSet 时添加到 Deployment 上。
 	FoundNewRSReason = "FoundNewReplicaSet"
-	// NewRSAvailableReason is added in a deployment when its newest replica set is made available
-	// ie. the number of new pods that have passed readiness checks and run for at least minReadySeconds
-	// is at least the minimum available pods that need to run for the deployment.
+	// NewRSAvailableReason 在最新 ReplicaSet 变为可用时添加到 Deployment 上，
+	// 即通过就绪检查且运行至少 minReadySeconds 的新 Pod 数量已达到 Deployment 所需的最小可用副本数。
 	NewRSAvailableReason = "NewReplicaSetAvailable"
-	// TimedOutReason is added in a deployment when its newest replica set fails to show any progress
-	// within the given deadline (progressDeadlineSeconds).
+	// TimedOutReason 在最新 ReplicaSet 未能在规定期限（progressDeadlineSeconds）内展现任何进展时添加。
 	TimedOutReason = "ProgressDeadlineExceeded"
-	// PausedDeployReason is added in a deployment when it is paused. Lack of progress shouldn't be
-	// estimated once a deployment is paused.
+	// PausedDeployReason 在 Deployment 暂停时添加。一旦暂停，就不应再评估其是否缺乏进展。
 	PausedDeployReason = "DeploymentPaused"
-	// ResumedDeployReason is added in a deployment when it is resumed. Useful for not failing accidentally
-	// deployments that paused amidst a rollout and are bounded by a deadline.
+	// ResumedDeployReason 在 Deployment 恢复时添加，可避免在发布中途暂停且受截止时间约束的
+	// Deployment 被误判为失败。
 	ResumedDeployReason = "DeploymentResumed"
 	//
-	// Available:
+	// Available：
 
-	// MinimumReplicasAvailable is added in a deployment when it has its minimum replicas required available.
+	// MinimumReplicasAvailable 在 Deployment 达到最小所需可用副本数时添加。
 	MinimumReplicasAvailable = "MinimumReplicasAvailable"
-	// MinimumReplicasUnavailable is added in a deployment when it doesn't have the minimum required replicas
-	// available.
+	// MinimumReplicasUnavailable 在 Deployment 未达到最小所需可用副本数时添加。
 	MinimumReplicasUnavailable = "MinimumReplicasUnavailable"
 )
 
-// NewDeploymentCondition creates a new deployment condition.
+// NewDeploymentCondition 创建一个新的 Deployment 条件。
 func NewDeploymentCondition(condType apps.DeploymentConditionType, status v1.ConditionStatus, reason, message string) *apps.DeploymentCondition {
 	return &apps.DeploymentCondition{
 		Type:               condType,
@@ -112,7 +105,7 @@ func NewDeploymentCondition(condType apps.DeploymentConditionType, status v1.Con
 	}
 }
 
-// GetDeploymentCondition returns the condition with the provided type.
+// GetDeploymentCondition 返回指定类型的条件。
 func GetDeploymentCondition(status apps.DeploymentStatus, condType apps.DeploymentConditionType) *apps.DeploymentCondition {
 	for i := range status.Conditions {
 		c := status.Conditions[i]
@@ -123,14 +116,14 @@ func GetDeploymentCondition(status apps.DeploymentStatus, condType apps.Deployme
 	return nil
 }
 
-// SetDeploymentCondition updates the deployment to include the provided condition. If the condition that
-// we are about to add already exists and has the same status and reason then we are not going to update.
+// SetDeploymentCondition 更新 Deployment 状态以包含给定条件。
+// 如果要添加的条件已存在且状态与原因相同，则不做更新。
 func SetDeploymentCondition(status *apps.DeploymentStatus, condition apps.DeploymentCondition) {
 	currentCond := GetDeploymentCondition(*status, condition.Type)
 	if currentCond != nil && currentCond.Status == condition.Status && currentCond.Reason == condition.Reason {
 		return
 	}
-	// Do not update lastTransitionTime if the status of the condition doesn't change.
+	// 条件状态未变时保留原有的 LastTransitionTime，避免误报状态翻转时间。
 	if currentCond != nil && currentCond.Status == condition.Status {
 		condition.LastTransitionTime = currentCond.LastTransitionTime
 	}
@@ -138,12 +131,12 @@ func SetDeploymentCondition(status *apps.DeploymentStatus, condition apps.Deploy
 	status.Conditions = append(newConditions, condition)
 }
 
-// RemoveDeploymentCondition removes the deployment condition with the provided type.
+// RemoveDeploymentCondition 移除指定类型的 Deployment 条件。
 func RemoveDeploymentCondition(status *apps.DeploymentStatus, condType apps.DeploymentConditionType) {
 	status.Conditions = filterOutCondition(status.Conditions, condType)
 }
 
-// filterOutCondition returns a new slice of deployment conditions without conditions with the provided type.
+// filterOutCondition 返回过滤掉指定类型条件后的新切片。
 func filterOutCondition(conditions []apps.DeploymentCondition, condType apps.DeploymentConditionType) []apps.DeploymentCondition {
 	var newConditions []apps.DeploymentCondition
 	for _, c := range conditions {
@@ -155,8 +148,8 @@ func filterOutCondition(conditions []apps.DeploymentCondition, condType apps.Dep
 	return newConditions
 }
 
-// ReplicaSetToDeploymentCondition converts a replica set condition into a deployment condition.
-// Useful for promoting replica set failure conditions into deployments.
+// ReplicaSetToDeploymentCondition 把 ReplicaSet 条件转换为 Deployment 条件。
+// 用于将 ReplicaSet 的失败条件“提升”到 Deployment 层面。
 func ReplicaSetToDeploymentCondition(cond apps.ReplicaSetCondition) apps.DeploymentCondition {
 	return apps.DeploymentCondition{
 		Type:               apps.DeploymentConditionType(cond.Type),
@@ -168,7 +161,7 @@ func ReplicaSetToDeploymentCondition(cond apps.ReplicaSetCondition) apps.Deploym
 	}
 }
 
-// SetDeploymentRevision updates the revision for a deployment.
+// SetDeploymentRevision 更新 Deployment 的修订号注解，返回是否发生了变更。
 func SetDeploymentRevision(deployment *apps.Deployment, revision string) bool {
 	updated := false
 
@@ -183,12 +176,12 @@ func SetDeploymentRevision(deployment *apps.Deployment, revision string) bool {
 	return updated
 }
 
-// MaxRevision finds the highest revision in the replica sets
+// MaxRevision 找出所有 ReplicaSet 中的最大修订号。
 func MaxRevision(logger klog.Logger, allRSs []*apps.ReplicaSet) int64 {
 	max := int64(0)
 	for _, rs := range allRSs {
 		if v, err := Revision(rs); err != nil {
-			// Skip the replica sets when it failed to parse their revision information
+			// 修订号解析失败的 ReplicaSet 直接跳过，不参与最大值的计算。
 			logger.V(4).Info("Couldn't parse revision for replica set, deployment controller will skip it when reconciling revisions", "replicaSet", klog.KObj(rs), "err", err)
 		} else if v > max {
 			max = v
@@ -197,12 +190,12 @@ func MaxRevision(logger klog.Logger, allRSs []*apps.ReplicaSet) int64 {
 	return max
 }
 
-// LastRevision finds the second max revision number in all replica sets (the last revision)
+// LastRevision 找出所有 ReplicaSet 中第二大的修订号（即上一次发布的修订号）。
 func LastRevision(logger klog.Logger, allRSs []*apps.ReplicaSet) int64 {
 	max, secMax := int64(0), int64(0)
 	for _, rs := range allRSs {
 		if v, err := Revision(rs); err != nil {
-			// Skip the replica sets when it failed to parse their revision information
+			// 修订号解析失败的 ReplicaSet 直接跳过，不参与计算。
 			logger.V(4).Info("Couldn't parse revision for replica set, deployment controller will skip it when reconciling revisions", "replicaSet", klog.KObj(rs), "err", err)
 		} else if v >= max {
 			secMax = max
@@ -214,7 +207,7 @@ func LastRevision(logger klog.Logger, allRSs []*apps.ReplicaSet) int64 {
 	return secMax
 }
 
-// Revision returns the revision number of the input object.
+// Revision 从给定对象的注解中读取并解析修订号。
 func Revision(obj runtime.Object) (int64, error) {
 	acc, err := meta.Accessor(obj)
 	if err != nil {
@@ -227,20 +220,20 @@ func Revision(obj runtime.Object) (int64, error) {
 	return strconv.ParseInt(v, 10, 64)
 }
 
-// SetNewReplicaSetAnnotations sets new replica set's annotations appropriately by updating its revision and
-// copying required deployment annotations to it; it returns true if replica set's annotation is changed.
+// SetNewReplicaSetAnnotations 通过更新修订号并把必要的 Deployment 注解拷贝过来，
+// 正确设置新 ReplicaSet 的注解；当 ReplicaSet 的注解发生变化时返回 true。
 func SetNewReplicaSetAnnotations(ctx context.Context, deployment *apps.Deployment, newRS *apps.ReplicaSet, newRevision string, exists bool, revHistoryLimitInChars int) bool {
 	logger := klog.FromContext(ctx)
-	// First, copy deployment's annotations (except for apply and revision annotations)
+	// 先拷贝 Deployment 的注解（apply 与 revision 类注解除外）。
 	annotationChanged := copyDeploymentAnnotationsToReplicaSet(deployment, newRS)
-	// Then, update replica set's revision annotation
+	// 再更新 ReplicaSet 的修订注解。
 	if newRS.Annotations == nil {
 		newRS.Annotations = make(map[string]string)
 	}
 	oldRevision, ok := newRS.Annotations[RevisionAnnotation]
-	// The newRS's revision should be the greatest among all RSes. Usually, its revision number is newRevision (the max revision number
-	// of all old RSes + 1). However, it's possible that some of the old RSes are deleted after the newRS revision being updated, and
-	// newRevision becomes smaller than newRS's revision. We should only update newRS revision when it's smaller than newRevision.
+	// 新 ReplicaSet 的修订号应当是所有 RS 中最大的。通常它就是 newRevision（所有旧 RS 的最大修订号 + 1）。
+	// 但也可能出现这种情况：新 RS 的修订号更新后，某些旧 RS 被删除，导致 newRevision 反而小于新 RS 的修订号。
+	// 因此只在新 RS 修订号小于 newRevision 时才更新，避免修订号倒退。
 
 	oldRevisionInt, err := strconv.ParseInt(oldRevision, 10, 64)
 	if err != nil {
@@ -248,7 +241,7 @@ func SetNewReplicaSetAnnotations(ctx context.Context, deployment *apps.Deploymen
 			logger.Info("Updating replica set revision OldRevision not int", "err", err)
 			return false
 		}
-		//If the RS annotation is empty then initialise it to 0
+		// ReplicaSet 注解为空时，把旧修订号初始化为 0。
 		oldRevisionInt = 0
 	}
 	newRevisionInt, err := strconv.ParseInt(newRevision, 10, 64)
@@ -261,9 +254,8 @@ func SetNewReplicaSetAnnotations(ctx context.Context, deployment *apps.Deploymen
 		annotationChanged = true
 		logger.V(4).Info("Updating replica set revision", "replicaSet", klog.KObj(newRS), "newRevision", newRevision)
 	}
-	// If a revision annotation already existed and this replica set was updated with a new revision
-	// then that means we are rolling back to this replica set. We need to preserve the old revisions
-	// for historical information.
+	// 如果原先就有修订注解，而该 ReplicaSet 又被赋予了新的修订号，说明正在回滚到该 ReplicaSet。
+	// 需要保留旧修订号作为历史信息。
 	if ok && oldRevisionInt < newRevisionInt {
 		revisionHistoryAnnotation := newRS.Annotations[RevisionHistoryAnnotation]
 		oldRevisions := strings.Split(revisionHistoryAnnotation, ",")
@@ -271,7 +263,7 @@ func SetNewReplicaSetAnnotations(ctx context.Context, deployment *apps.Deploymen
 			newRS.Annotations[RevisionHistoryAnnotation] = oldRevision
 		} else {
 			totalLen := len(revisionHistoryAnnotation) + len(oldRevision) + 1
-			// index for the starting position in oldRevisions
+			// start 表示在 oldRevisions 中开始丢弃的起始位置。
 			start := 0
 			for totalLen > revHistoryLimitInChars && start < len(oldRevisions) {
 				totalLen = totalLen - len(oldRevisions[start]) - 1
@@ -285,7 +277,7 @@ func SetNewReplicaSetAnnotations(ctx context.Context, deployment *apps.Deploymen
 			}
 		}
 	}
-	// If the new replica set is about to be created, we need to add replica annotations to it.
+	// 如果新 ReplicaSet 即将被创建，还需要给它加上副本数相关的注解。
 	if !exists && SetReplicasAnnotations(newRS, *(deployment.Spec.Replicas), *(deployment.Spec.Replicas)+MaxSurge(*deployment)) {
 		annotationChanged = true
 	}
@@ -301,25 +293,25 @@ var annotationsToSkip = map[string]bool{
 	apps.DeprecatedRollbackTo:      true,
 }
 
-// skipCopyAnnotation returns true if we should skip copying the annotation with the given annotation key
+// skipCopyAnnotation 判断给定键的注解是否应跳过拷贝。
 //
-// See https://github.com/kubernetes/kubernetes/pull/20035#issuecomment-179558615
+// 参见 https://github.com/kubernetes/kubernetes/pull/20035#issuecomment-179558615
 func skipCopyAnnotation(key string) bool {
 	return annotationsToSkip[key]
 }
 
-// copyDeploymentAnnotationsToReplicaSet copies deployment's annotations to replica set's annotations,
-// and returns true if replica set's annotation is changed.
-// Note that apply and revision annotations are not copied.
+// copyDeploymentAnnotationsToReplicaSet 把 Deployment 的注解拷贝到 ReplicaSet，
+// 并在 ReplicaSet 注解发生变化时返回 true。
+// 注意 apply 与 revision 类注解不会被拷贝。
 func copyDeploymentAnnotationsToReplicaSet(deployment *apps.Deployment, rs *apps.ReplicaSet) bool {
 	rsAnnotationsChanged := false
 	if rs.Annotations == nil {
 		rs.Annotations = make(map[string]string)
 	}
 	for k, v := range deployment.Annotations {
-		// newRS revision is updated automatically in getNewReplicaSet, and the deployment's revision number is then updated
-		// by copying its newRS revision number. We should not copy deployment's revision to its newRS, since the update of
-		// deployment revision number may fail (revision becomes stale) and the revision number in newRS is more reliable.
+		// 新 RS 的修订号由 getNewReplicaSet 自动更新，随后再把新 RS 的修订号拷贝回 Deployment。
+		// 不能反向把 Deployment 的修订号拷贝到新 RS，因为 Deployment 修订号的更新可能失败（导致修订号过时），
+		// 而新 RS 上的修订号更可靠。
 		if _, exist := rs.Annotations[k]; skipCopyAnnotation(k) || (exist && rs.Annotations[k] == v) {
 			continue
 		}
@@ -329,9 +321,9 @@ func copyDeploymentAnnotationsToReplicaSet(deployment *apps.Deployment, rs *apps
 	return rsAnnotationsChanged
 }
 
-// SetDeploymentAnnotationsTo sets deployment's annotations as given RS's annotations.
-// This action should be done if and only if the deployment is rolling back to this rs.
-// Note that apply and revision annotations are not changed.
+// SetDeploymentAnnotationsTo 把给定 ReplicaSet 的注解设置为 Deployment 的注解。
+// 该操作仅应在 Deployment 回滚到该 ReplicaSet 时执行。
+// 注意 apply 与 revision 类注解不会改动。
 func SetDeploymentAnnotationsTo(deployment *apps.Deployment, rollbackToRS *apps.ReplicaSet) {
 	deployment.Annotations = getSkippedAnnotations(deployment.Annotations)
 	for k, v := range rollbackToRS.Annotations {
@@ -341,6 +333,7 @@ func SetDeploymentAnnotationsTo(deployment *apps.Deployment, rollbackToRS *apps.
 	}
 }
 
+// getSkippedAnnotations 从注解中筛出那些应跳过拷贝的注解。
 func getSkippedAnnotations(annotations map[string]string) map[string]string {
 	skippedAnnotations := make(map[string]string)
 	for k, v := range annotations {
@@ -351,8 +344,8 @@ func getSkippedAnnotations(annotations map[string]string) map[string]string {
 	return skippedAnnotations
 }
 
-// FindActiveOrLatest returns the only active or the latest replica set in case there is at most one active
-// replica set. If there are more active replica sets, then we should proportionally scale them.
+// FindActiveOrLatest 在最多只有一个活跃 ReplicaSet 时返回它（没有活跃 RS 时返回最新的一个）。
+// 如果存在多个活跃 ReplicaSet，则返回 nil，让调用方按比例扩缩它们。
 func FindActiveOrLatest(newRS *apps.ReplicaSet, oldRSs []*apps.ReplicaSet) *apps.ReplicaSet {
 	if newRS == nil && len(oldRSs) == 0 {
 		return nil
@@ -363,7 +356,7 @@ func FindActiveOrLatest(newRS *apps.ReplicaSet, oldRSs []*apps.ReplicaSet) *apps
 
 	switch len(allRSs) {
 	case 0:
-		// If there is no active replica set then we should return the newest.
+		// 没有活跃的 ReplicaSet 时返回最新的那个（oldRSs 已按创建时间倒序排列）。
 		if newRS != nil {
 			return newRS
 		}
@@ -375,15 +368,17 @@ func FindActiveOrLatest(newRS *apps.ReplicaSet, oldRSs []*apps.ReplicaSet) *apps
 	}
 }
 
-// GetDesiredReplicasAnnotation returns the number of desired replicas
+// GetDesiredReplicasAnnotation 从 ReplicaSet 注解中读取期望副本数。
 func GetDesiredReplicasAnnotation(logger klog.Logger, rs *apps.ReplicaSet) (int32, bool) {
 	return getNonNegativeInt32FromAnnotationVerbose(logger, rs, DesiredReplicasAnnotation)
 }
 
+// getMaxReplicasAnnotation 从 ReplicaSet 注解中读取最大副本数。
 func getMaxReplicasAnnotation(logger klog.Logger, rs *apps.ReplicaSet) (int32, bool) {
 	return getNonNegativeInt32FromAnnotationVerbose(logger, rs, MaxReplicasAnnotation)
 }
 
+// getNonNegativeInt32FromAnnotationVerbose 读取非负整型注解，解析失败时记录日志。
 func getNonNegativeInt32FromAnnotationVerbose(logger klog.Logger, rs *apps.ReplicaSet, annotationKey string) (int32, bool) {
 	value, ok, err := getNonNegativeInt32FromAnnotation(rs, annotationKey)
 	if err != nil {
@@ -392,6 +387,7 @@ func getNonNegativeInt32FromAnnotationVerbose(logger klog.Logger, rs *apps.Repli
 	return value, ok
 }
 
+// getNonNegativeInt32FromAnnotation 解析指定注解为非负 int32，返回数值、是否存在以及解析错误。
 func getNonNegativeInt32FromAnnotation(rs *apps.ReplicaSet, annotationKey string) (int32, bool, error) {
 	annotationValue, ok := rs.Annotations[annotationKey]
 	if !ok {
@@ -407,7 +403,7 @@ func getNonNegativeInt32FromAnnotation(rs *apps.ReplicaSet, annotationKey string
 	return int32(intValue), true, nil
 }
 
-// SetReplicasAnnotations sets the desiredReplicas and maxReplicas into the annotations
+// SetReplicasAnnotations 把 desiredReplicas 与 maxReplicas 写入注解，返回是否发生变更。
 func SetReplicasAnnotations(rs *apps.ReplicaSet, desiredReplicas, maxReplicas int32) bool {
 	updated := false
 	if rs.Annotations == nil {
@@ -426,7 +422,7 @@ func SetReplicasAnnotations(rs *apps.ReplicaSet, desiredReplicas, maxReplicas in
 	return updated
 }
 
-// ReplicasAnnotationsNeedUpdate return true if ReplicasAnnotations need to be updated
+// ReplicasAnnotationsNeedUpdate 判断副本数相关注解是否需要更新，避免不必要的 API 写操作。
 func ReplicasAnnotationsNeedUpdate(rs *apps.ReplicaSet, desiredReplicas, maxReplicas int32) bool {
 	if rs.Annotations == nil {
 		return true
@@ -442,12 +438,12 @@ func ReplicasAnnotationsNeedUpdate(rs *apps.ReplicaSet, desiredReplicas, maxRepl
 	return false
 }
 
-// MaxUnavailable returns the maximum unavailable pods a rolling deployment can take.
+// MaxUnavailable 返回滚动更新过程中允许的最大不可用 Pod 数。
 func MaxUnavailable(deployment apps.Deployment) int32 {
 	if !IsRollingUpdate(&deployment) || *(deployment.Spec.Replicas) == 0 {
 		return int32(0)
 	}
-	// Error caught by validation
+	// 参数合法性已由校验环节保证，这里忽略错误。
 	_, maxUnavailable, _ := ResolveFenceposts(deployment.Spec.Strategy.RollingUpdate.MaxSurge, deployment.Spec.Strategy.RollingUpdate.MaxUnavailable, *(deployment.Spec.Replicas))
 	if maxUnavailable > *deployment.Spec.Replicas {
 		return *deployment.Spec.Replicas
@@ -455,7 +451,7 @@ func MaxUnavailable(deployment apps.Deployment) int32 {
 	return maxUnavailable
 }
 
-// MinAvailable returns the minimum available pods of a given deployment
+// MinAvailable 返回给定 Deployment 所需的最小可用 Pod 数。
 func MinAvailable(deployment *apps.Deployment) int32 {
 	if !IsRollingUpdate(deployment) {
 		return int32(0)
@@ -463,19 +459,18 @@ func MinAvailable(deployment *apps.Deployment) int32 {
 	return *(deployment.Spec.Replicas) - MaxUnavailable(*deployment)
 }
 
-// MaxSurge returns the maximum surge pods a rolling deployment can take.
+// MaxSurge 返回滚动更新过程中允许的最大超出期望副本数的 Pod 数。
 func MaxSurge(deployment apps.Deployment) int32 {
 	if !IsRollingUpdate(&deployment) {
 		return int32(0)
 	}
-	// Error caught by validation
+	// 参数合法性已由校验环节保证，这里忽略错误。
 	maxSurge, _, _ := ResolveFenceposts(deployment.Spec.Strategy.RollingUpdate.MaxSurge, deployment.Spec.Strategy.RollingUpdate.MaxUnavailable, *(deployment.Spec.Replicas))
 	return maxSurge
 }
 
-// GetReplicaSetProportion will estimate the proportion for the provided replica set using 1. the current size
-// of the parent deployment, 2. the replica count that needs be added on the replica sets of the
-// deployment, and 3. the total replicas added in the replica sets of the deployment so far.
+// GetReplicaSetProportion 根据 1) 父 Deployment 当前规模、2) 需要在各 ReplicaSet 上增减的副本数、
+// 3) 到目前为止已在各 ReplicaSet 上增减的副本总数，估算给定 ReplicaSet 应分摊的比例。
 func GetReplicaSetProportion(logger klog.Logger, rs *apps.ReplicaSet, d apps.Deployment, deploymentReplicasToAdd, deploymentReplicasAdded int32) int32 {
 	if rs == nil || *(rs.Spec.Replicas) == 0 || deploymentReplicasToAdd == 0 || deploymentReplicasToAdd == deploymentReplicasAdded {
 		return int32(0)
@@ -485,21 +480,17 @@ func GetReplicaSetProportion(logger klog.Logger, rs *apps.ReplicaSet, d apps.Dep
 	allowed := deploymentReplicasToAdd - deploymentReplicasAdded
 
 	if deploymentReplicasToAdd > 0 {
-		// Use the minimum between the replica set fraction and the maximum allowed replicas
-		// when scaling up. This way we ensure we will not scale up more than the allowed
-		// replicas we can add.
+		// 扩容时取估算值与剩余可增加副本数的较小者，确保不会超出允许增加的副本数。
 		return min(rsFraction, allowed)
 	}
-	// Use the maximum between the replica set fraction and the maximum allowed replicas
-	// when scaling down. This way we ensure we will not scale down more than the allowed
-	// replicas we can remove.
+	// 缩容时取估算值与剩余可移除副本数的较大者（两者皆为负），确保不会超出允许移除的副本数。
 	return max(rsFraction, allowed)
 }
 
-// getReplicaSetFraction estimates the fraction of replicas a replica set can have in
-// 1. a scaling event during a rollout or 2. when scaling a paused deployment.
+// getReplicaSetFraction 估算 ReplicaSet 在以下场景中应分摊的副本数：
+// 1) 发布过程中的扩缩容事件；2) 对暂停的 Deployment 进行扩缩容。
 func getReplicaSetFraction(logger klog.Logger, rs apps.ReplicaSet, d apps.Deployment) int32 {
-	// If we are scaling down to zero then the fraction of this replica set is its whole size (negative)
+	// 缩容到 0 时，该 ReplicaSet 应分摊的副本数就是它的全部副本（取负值）。
 	if *(d.Spec.Replicas) == int32(0) {
 		return -*(rs.Spec.Replicas)
 	}
@@ -507,26 +498,24 @@ func getReplicaSetFraction(logger klog.Logger, rs apps.ReplicaSet, d apps.Deploy
 	deploymentMaxReplicas := *(d.Spec.Replicas) + MaxSurge(d)
 	deploymentMaxReplicasBeforeScale, ok := getMaxReplicasAnnotation(logger, &rs)
 	if !ok || deploymentMaxReplicasBeforeScale == 0 {
-		// If we cannot find the annotation then fallback to the current deployment size.
-		// This can occur if someone tampers with the annotation (removes it, sets it to an invalid value, or to 0).
-		// Note that this will not be an accurate proportion estimation in case other replica sets have different values
-		// which means that the deployment was scaled at some point but we at least will stay in limits
-		// due to the min-max comparisons in GetReplicaSetProportion.
+		// 注解缺失时回退到 Deployment 当前的副本数。注解可能被人为篡改（删除、设为非法值或 0）。
+		// 若其他 ReplicaSet 上的注解值不同（说明 Deployment 曾被扩缩容），这样估算并不精确，
+		// 但 GetReplicaSetProportion 中的 min/max 比较至少能保证结果不越界。
 		deploymentMaxReplicasBeforeScale = d.Status.Replicas
 		if deploymentMaxReplicasBeforeScale == 0 {
-			// Rare situation: missing annotation; some actor has removed it and pods are failing to be created.
+			// 极少见的情况：注解缺失且 Pod 创建失败，导致状态副本数为 0。
 			return 0
 		}
 	}
 
-	// We should never proportionally scale up from zero (see GetReplicaSetProportion) which means rs.spec.replicas will never be zero here.
+	// GetReplicaSetProportion 不会从 0 按比例扩容，因此这里 rs.spec.replicas 不会为 0。
 	scaleBase := *(rs.Spec.Replicas)
-	// deploymentMaxReplicasBeforeScale should normally be a positive value, and we have made sure that it is not a zero.
+	// deploymentMaxReplicasBeforeScale 通常为正值，上面已经确保它不为 0。
 	newRSsize := (float64(scaleBase * deploymentMaxReplicas)) / float64(deploymentMaxReplicasBeforeScale)
 	return integer.RoundToInt32(newRSsize) - *(rs.Spec.Replicas)
 }
 
-// RsListFromClient returns an rsListFunc that wraps the given client.
+// RsListFromClient 返回一个包装给定 client 的 rsListFunc。
 func RsListFromClient(c appsclient.AppsV1Interface) RsListFunc {
 	return func(namespace string, options metav1.ListOptions) ([]*apps.ReplicaSet, error) {
 		rsList, err := c.ReplicaSets(namespace).List(context.TODO(), options)
@@ -541,16 +530,15 @@ func RsListFromClient(c appsclient.AppsV1Interface) RsListFunc {
 	}
 }
 
-// RsListFunc returns the ReplicaSet from the ReplicaSet namespace and the List metav1.ListOptions.
+// RsListFunc 按命名空间与 ListOptions 返回 ReplicaSet 列表。
 type RsListFunc func(string, metav1.ListOptions) ([]*apps.ReplicaSet, error)
 
-// podListFunc returns the PodList from the Pod namespace and the List metav1.ListOptions.
+// podListFunc 按命名空间与 ListOptions 返回 Pod 列表。
 type podListFunc func(string, metav1.ListOptions) (*v1.PodList, error)
 
-// ListReplicaSets returns a slice of RSes the given deployment targets.
-// Note that this does NOT attempt to reconcile ControllerRef (adopt/orphan),
-// because only the controller itself should do that.
-// However, it does filter out anything whose ControllerRef doesn't match.
+// ListReplicaSets 返回给定 Deployment 所指向的 ReplicaSet 切片。
+// 注意这里不会协调 ControllerRef（纳管/弃管），因为只有控制器自身才应做这件事；
+// 但会过滤掉 ControllerRef 不匹配的 ReplicaSet。
 func ListReplicaSets(deployment *apps.Deployment, getRSList RsListFunc) ([]*apps.ReplicaSet, error) {
 	// TODO: Right now we list replica sets by their labels. We should list them by selector, i.e. the replica set's selector
 	//       should be a superset of the deployment's selector, see https://github.com/kubernetes/kubernetes/issues/19830.
@@ -564,7 +552,7 @@ func ListReplicaSets(deployment *apps.Deployment, getRSList RsListFunc) ([]*apps
 	if err != nil {
 		return nil, err
 	}
-	// Only include those whose ControllerRef matches the Deployment.
+	// 只保留 ControllerRef 指向该 Deployment 的 ReplicaSet。
 	owned := make([]*apps.ReplicaSet, 0, len(all))
 	for _, rs := range all {
 		if metav1.IsControlledBy(rs, deployment) {
@@ -574,12 +562,10 @@ func ListReplicaSets(deployment *apps.Deployment, getRSList RsListFunc) ([]*apps
 	return owned, nil
 }
 
-// ListPods returns a list of pods the given deployment targets.
-// This needs a list of ReplicaSets for the Deployment,
-// which can be found with ListReplicaSets().
-// Note that this does NOT attempt to reconcile ControllerRef (adopt/orphan),
-// because only the controller itself should do that.
-// However, it does filter out anything whose ControllerRef doesn't match.
+// ListPods 返回给定 Deployment 所指向的 Pod 列表。
+// 调用方需要先通过 ListReplicaSets() 取得该 Deployment 的 ReplicaSet 列表。
+// 注意这里不会协调 ControllerRef（纳管/弃管），因为只有控制器自身才应做这件事；
+// 但会过滤掉 ControllerRef 不匹配的 Pod。
 func ListPods(deployment *apps.Deployment, rsList []*apps.ReplicaSet, getPodList podListFunc) (*v1.PodList, error) {
 	namespace := deployment.Namespace
 	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
@@ -591,8 +577,7 @@ func ListPods(deployment *apps.Deployment, rsList []*apps.ReplicaSet, getPodList
 	if err != nil {
 		return all, err
 	}
-	// Only include those whose ControllerRef points to a ReplicaSet that is in
-	// turn owned by this Deployment.
+	// 只保留 ControllerRef 指向属于本 Deployment 的 ReplicaSet 的 Pod。
 	rsMap := make(map[types.UID]bool, len(rsList))
 	for _, rs := range rsList {
 		rsMap[rs.UID] = true
@@ -608,44 +593,42 @@ func ListPods(deployment *apps.Deployment, rsList []*apps.ReplicaSet, getPodList
 	return owned, nil
 }
 
-// EqualIgnoreHash returns true if two given podTemplateSpec are equal, ignoring the diff in value of Labels[pod-template-hash]
-// We ignore pod-template-hash because:
-//  1. The hash result would be different upon podTemplateSpec API changes
-//     (e.g. the addition of a new field will cause the hash code to change)
-//  2. The deployment template won't have hash labels
+// EqualIgnoreHash 判断两个 PodTemplateSpec 是否相等，忽略 Labels[pod-template-hash] 取值的差异。
+// 忽略 pod-template-hash 的原因是：
+//  1. PodTemplateSpec 的 API 发生变化时（例如新增字段）哈希值就会改变；
+//  2. Deployment 的模板本身不带哈希标签。
 func EqualIgnoreHash(template1, template2 *v1.PodTemplateSpec) bool {
 	t1Copy := template1.DeepCopy()
 	t2Copy := template2.DeepCopy()
-	// Remove hash labels from template.Labels before comparing
+	// 比较前先从标签中移除哈希标签。
 	delete(t1Copy.Labels, apps.DefaultDeploymentUniqueLabelKey)
 	delete(t2Copy.Labels, apps.DefaultDeploymentUniqueLabelKey)
 	return apiequality.Semantic.DeepEqual(t1Copy, t2Copy)
 }
 
-// FindNewReplicaSet returns the new RS this given deployment targets (the one with the same pod template).
+// FindNewReplicaSet 返回给定 Deployment 指向的新 ReplicaSet（即 Pod 模板相同的那个）。
 func FindNewReplicaSet(deployment *apps.Deployment, rsList []*apps.ReplicaSet) *apps.ReplicaSet {
 	sort.Sort(controller.ReplicaSetsByCreationTimestamp(rsList))
 	for i := range rsList {
 		if EqualIgnoreHash(&rsList[i].Spec.Template, &deployment.Spec.Template) {
-			// In rare cases, such as after cluster upgrades, Deployment may end up with
-			// having more than one new ReplicaSets that have the same template as its template,
-			// see https://github.com/kubernetes/kubernetes/issues/40415
-			// We deterministically choose the oldest new ReplicaSet.
+			// 极少数情况下（例如集群升级后），Deployment 可能出现多个模板相同的新 ReplicaSet，
+			// 参见 https://github.com/kubernetes/kubernetes/issues/40415。
+			// 这里确定性地选择最早创建的那个（rsList 已按创建时间排序）。
 			return rsList[i]
 		}
 	}
-	// new ReplicaSet does not exist.
+	// 新 ReplicaSet 不存在。
 	return nil
 }
 
-// FindOldReplicaSets returns the old replica sets targeted by the given Deployment, with the given slice of RSes.
-// Note that the first set of old replica sets doesn't include the ones with no pods, and the second set of old replica sets include all old replica sets.
+// FindOldReplicaSets 从给定 ReplicaSet 切片中找出属于给定 Deployment 的旧 ReplicaSet。
+// 返回两个集合：第一个不含副本数为 0 的旧 ReplicaSet，第二个包含所有旧 ReplicaSet。
 func FindOldReplicaSets(deployment *apps.Deployment, rsList []*apps.ReplicaSet) ([]*apps.ReplicaSet, []*apps.ReplicaSet) {
 	var requiredRSs []*apps.ReplicaSet
 	var allRSs []*apps.ReplicaSet
 	newRS := FindNewReplicaSet(deployment, rsList)
 	for _, rs := range rsList {
-		// Filter out new replica set
+		// 过滤掉新 ReplicaSet。
 		if newRS != nil && rs.UID == newRS.UID {
 			continue
 		}
@@ -657,7 +640,7 @@ func FindOldReplicaSets(deployment *apps.Deployment, rsList []*apps.ReplicaSet) 
 	return requiredRSs, allRSs
 }
 
-// SetFromReplicaSetTemplate sets the desired PodTemplateSpec from a replica set template to the given deployment.
+// SetFromReplicaSetTemplate 用 ReplicaSet 的模板设置 Deployment 的期望 PodTemplateSpec，并移除哈希标签。
 func SetFromReplicaSetTemplate(deployment *apps.Deployment, template v1.PodTemplateSpec) *apps.Deployment {
 	deployment.Spec.Template.ObjectMeta = template.ObjectMeta
 	deployment.Spec.Template.Spec = template.Spec
@@ -667,7 +650,7 @@ func SetFromReplicaSetTemplate(deployment *apps.Deployment, template v1.PodTempl
 	return deployment
 }
 
-// GetReplicaCountForReplicaSets returns the sum of Replicas of the given replica sets.
+// GetReplicaCountForReplicaSets 返回给定 ReplicaSet 的期望副本数之和。
 func GetReplicaCountForReplicaSets(replicaSets []*apps.ReplicaSet) int32 {
 	totalReplicas := int32(0)
 	for _, rs := range replicaSets {
@@ -678,7 +661,7 @@ func GetReplicaCountForReplicaSets(replicaSets []*apps.ReplicaSet) int32 {
 	return totalReplicas
 }
 
-// GetActualReplicaCountForReplicaSets returns the sum of actual replicas of the given replica sets.
+// GetActualReplicaCountForReplicaSets 返回给定 ReplicaSet 的实际副本数之和。
 func GetActualReplicaCountForReplicaSets(replicaSets []*apps.ReplicaSet) int32 {
 	totalActualReplicas := int32(0)
 	for _, rs := range replicaSets {
@@ -689,7 +672,7 @@ func GetActualReplicaCountForReplicaSets(replicaSets []*apps.ReplicaSet) int32 {
 	return totalActualReplicas
 }
 
-// GetReadyReplicaCountForReplicaSets returns the number of ready pods corresponding to the given replica sets.
+// GetReadyReplicaCountForReplicaSets 返回给定 ReplicaSet 中处于 Ready 状态的 Pod 数。
 func GetReadyReplicaCountForReplicaSets(replicaSets []*apps.ReplicaSet) int32 {
 	totalReadyReplicas := int32(0)
 	for _, rs := range replicaSets {
@@ -700,7 +683,7 @@ func GetReadyReplicaCountForReplicaSets(replicaSets []*apps.ReplicaSet) int32 {
 	return totalReadyReplicas
 }
 
-// GetAvailableReplicaCountForReplicaSets returns the number of available pods corresponding to the given replica sets.
+// GetAvailableReplicaCountForReplicaSets 返回给定 ReplicaSet 中处于 Available 状态的 Pod 数。
 func GetAvailableReplicaCountForReplicaSets(replicaSets []*apps.ReplicaSet) int32 {
 	totalAvailableReplicas := int32(0)
 	for _, rs := range replicaSets {
@@ -711,18 +694,18 @@ func GetAvailableReplicaCountForReplicaSets(replicaSets []*apps.ReplicaSet) int3
 	return totalAvailableReplicas
 }
 
-// GetTerminatingReplicaCountForReplicaSets returns the number of terminating pods for all replica sets
-// or returns an error if any replica sets have been synced by the controller but do not report their terminating count.
+// GetTerminatingReplicaCountForReplicaSets 返回所有 ReplicaSet 中处于终止中的 Pod 数；
+// 若某个已被控制器同步过的 ReplicaSet 没有上报该计数，则返回 nil 表示无法计算。
 func GetTerminatingReplicaCountForReplicaSets(replicaSets []*apps.ReplicaSet) *int32 {
 	terminatingReplicas := int32(0)
 	for _, rs := range replicaSets {
 		switch {
 		case rs == nil:
-			// No-op
+			// 空对象直接跳过。
 		case rs.Status.ObservedGeneration == 0 && rs.Status.TerminatingReplicas == nil:
-			// Replicasets that have never been synced by the controller don't contribute to TerminatingReplicas
+			// 从未被控制器同步过的 ReplicaSet 不计入终止副本数。
 		case rs.Status.TerminatingReplicas == nil:
-			// If any replicaset synced by the controller hasn't reported TerminatingReplicas, we cannot calculate a sum
+			// 已被控制器同步但未上报终止副本数的 ReplicaSet 会导致无法求和，只能返回 nil。
 			return nil
 		default:
 			terminatingReplicas += *rs.Status.TerminatingReplicas
@@ -731,13 +714,12 @@ func GetTerminatingReplicaCountForReplicaSets(replicaSets []*apps.ReplicaSet) *i
 	return &terminatingReplicas
 }
 
-// IsRollingUpdate returns true if the strategy type is a rolling update.
+// IsRollingUpdate 判断 Deployment 的更新策略是否为滚动更新。
 func IsRollingUpdate(deployment *apps.Deployment) bool {
 	return deployment.Spec.Strategy.Type == apps.RollingUpdateDeploymentStrategyType
 }
 
-// DeploymentComplete considers a deployment to be complete once all of its desired replicas
-// are updated and available, and no old pods are running.
+// DeploymentComplete 判断 Deployment 是否已完成：所有期望副本都已更新且可用，且没有旧 Pod 在运行。
 func DeploymentComplete(deployment *apps.Deployment, newStatus *apps.DeploymentStatus) bool {
 	return newStatus.UpdatedReplicas == *(deployment.Spec.Replicas) &&
 		newStatus.Replicas == *(deployment.Spec.Replicas) &&
@@ -745,14 +727,13 @@ func DeploymentComplete(deployment *apps.Deployment, newStatus *apps.DeploymentS
 		newStatus.ObservedGeneration >= deployment.Generation
 }
 
-// DeploymentProgressing reports progress for a deployment. Progress is estimated by comparing the
-// current with the new status of the deployment that the controller is observing. More specifically,
-// when new pods are scaled up or become ready or available, or old pods are scaled down, then we
-// consider the deployment is progressing.
+// DeploymentProgressing 判断 Deployment 是否有进展。
+// 通过比较控制器观察到的当前状态与新状态来评估：新副本增加、Pod 变为 Ready/Available，
+// 或旧副本减少，都视为有进展。
 func DeploymentProgressing(deployment *apps.Deployment, newStatus *apps.DeploymentStatus) bool {
 	oldStatus := deployment.Status
 
-	// Old replicas that need to be scaled down
+	// 需要被缩容的旧副本数 = 总副本数 - 已更新副本数。
 	oldStatusOldReplicas := oldStatus.Replicas - oldStatus.UpdatedReplicas
 	newStatusOldReplicas := newStatus.Replicas - newStatus.UpdatedReplicas
 
@@ -762,35 +743,28 @@ func DeploymentProgressing(deployment *apps.Deployment, newStatus *apps.Deployme
 		newStatus.AvailableReplicas > deployment.Status.AvailableReplicas
 }
 
-// used for unit testing
+// nowFn 用于单元测试中替换时间源。
 var nowFn = time.Now
 
-// DeploymentTimedOut considers a deployment to have timed out once its condition that reports progress
-// is older than progressDeadlineSeconds or a Progressing condition with a TimedOutReason reason already
-// exists.
+// DeploymentTimedOut 判断 Deployment 是否已超时：报告进展的条件已超过 progressDeadlineSeconds，
+// 或已经存在原因为 TimedOutReason 的 Progressing 条件。
 func DeploymentTimedOut(ctx context.Context, deployment *apps.Deployment, newStatus *apps.DeploymentStatus) bool {
 	if !HasProgressDeadline(deployment) {
 		return false
 	}
 
-	// Look for the Progressing condition. If it doesn't exist, we have no base to estimate progress.
-	// If it's already set with a TimedOutReason reason, we have already timed out, no need to check
-	// again.
+	// 查找 Progressing 条件：不存在时无从评估进展；已是 TimedOutReason 则说明已经超时，无需重复检查。
 	condition := GetDeploymentCondition(*newStatus, apps.DeploymentProgressing)
 	if condition == nil {
 		return false
 	}
-	// If the previous condition has been a successful rollout then we shouldn't try to
-	// estimate any progress. Scenario:
+	// 若上一次条件是成功的发布完成，就不应再评估进展。场景如下：
 	//
-	// * progressDeadlineSeconds is smaller than the difference between now and the time
-	//   the last rollout finished in the past.
-	// * the creation of a new ReplicaSet triggers a resync of the Deployment prior to the
-	//   cached copy of the Deployment getting updated with the status.condition that indicates
-	//   the creation of the new ReplicaSet.
+	// * progressDeadlineSeconds 小于“当前时间 - 上一次发布完成时间”；
+	// * 新建 ReplicaSet 触发了 Deployment 重新同步，而缓存中 Deployment 的状态条件尚未更新为
+	//   “发现新 ReplicaSet”。
 	//
-	// The Deployment will be resynced and eventually its Progressing condition will catch
-	// up with the state of the world.
+	// Deployment 会被再次同步，其 Progressing 条件最终会追上真实状态。
 	if condition.Reason == NewRSAvailableReason {
 		return false
 	}
@@ -798,9 +772,8 @@ func DeploymentTimedOut(ctx context.Context, deployment *apps.Deployment, newSta
 		return true
 	}
 	logger := klog.FromContext(ctx)
-	// Look at the difference in seconds between now and the last time we reported any
-	// progress or tried to create a replica set, or resumed a paused deployment and
-	// compare against progressDeadlineSeconds.
+	// 计算当前时间与上次报告进展/创建 ReplicaSet/恢复暂停 Deployment 之间的秒数，
+	// 并与 progressDeadlineSeconds 比较。
 	from := condition.LastUpdateTime
 	now := nowFn()
 	delta := time.Duration(*deployment.Spec.ProgressDeadlineSeconds) * time.Second
@@ -810,28 +783,28 @@ func DeploymentTimedOut(ctx context.Context, deployment *apps.Deployment, newSta
 	return timedOut
 }
 
-// NewRSNewReplicas calculates the number of replicas a deployment's new RS should have.
-// When one of the followings is true, we're rolling out the deployment; otherwise, we're scaling it.
-// 1) The new RS is saturated: newRS's replicas == deployment's replicas
-// 2) Max number of pods allowed is reached: deployment's replicas + maxSurge == all RSs' replicas
+// NewRSNewReplicas 计算 Deployment 的新 ReplicaSet 应有的副本数。
+// 满足以下任一条件时视为正在发布，否则视为扩缩容：
+// 1) 新 ReplicaSet 已饱和：其副本数等于 Deployment 的期望副本数；
+// 2) 已达 Pod 数量上限：Deployment 期望副本数 + maxSurge 等于所有 ReplicaSet 的副本总数。
 func NewRSNewReplicas(deployment *apps.Deployment, allRSs []*apps.ReplicaSet, newRS *apps.ReplicaSet) (int32, error) {
 	switch deployment.Spec.Strategy.Type {
 	case apps.RollingUpdateDeploymentStrategyType:
-		// Check if we can scale up.
+		// 检查是否还能扩容。
 		maxSurge, err := intstrutil.GetScaledValueFromIntOrPercent(deployment.Spec.Strategy.RollingUpdate.MaxSurge, int(*(deployment.Spec.Replicas)), true)
 		if err != nil {
 			return 0, err
 		}
-		// Find the total number of pods
+		// 统计当前所有 ReplicaSet 的 Pod 总数。
 		currentPodCount := GetReplicaCountForReplicaSets(allRSs)
 		maxTotalPods := *(deployment.Spec.Replicas) + int32(maxSurge)
 		if currentPodCount >= maxTotalPods {
-			// Cannot scale up.
+			// 已达到上限，不能再扩容。
 			return *(newRS.Spec.Replicas), nil
 		}
-		// Scale up.
+		// 计算可扩容的数量。
 		scaleUpCount := maxTotalPods - currentPodCount
-		// Do not exceed the number of desired replicas.
+		// 不超过 Deployment 的期望副本数。
 		scaleUpCount = min(scaleUpCount, *(deployment.Spec.Replicas)-*(newRS.Spec.Replicas))
 		return *(newRS.Spec.Replicas) + scaleUpCount, nil
 	case apps.RecreateDeploymentStrategyType:
@@ -841,10 +814,9 @@ func NewRSNewReplicas(deployment *apps.Deployment, allRSs []*apps.ReplicaSet, ne
 	}
 }
 
-// IsSaturated checks if the new replica set is saturated by comparing its size with its deployment size.
-// Both the deployment and the replica set have to believe this replica set can own all of the desired
-// replicas in the deployment and the annotation helps in achieving that. All pods of the ReplicaSet
-// need to be available.
+// IsSaturated 通过比较新 ReplicaSet 的规模与 Deployment 的规模来判断它是否饱和。
+// Deployment 与 ReplicaSet 都必须认可该 ReplicaSet 能承载 Deployment 的全部期望副本，
+// 注解机制正是为此服务；同时该 ReplicaSet 的所有 Pod 都必须可用。
 func IsSaturated(deployment *apps.Deployment, rs *apps.ReplicaSet) bool {
 	if rs == nil {
 		return false
@@ -859,8 +831,8 @@ func IsSaturated(deployment *apps.Deployment, rs *apps.ReplicaSet) bool {
 		rs.Status.AvailableReplicas == *(deployment.Spec.Replicas)
 }
 
-// WaitForObservedDeployment polls for deployment to be updated so that deployment.Status.ObservedGeneration >= desiredGeneration.
-// Returns error if polling timesout.
+// WaitForObservedDeployment 轮询等待 Deployment 更新，直到其 ObservedGeneration >= desiredGeneration。
+// 轮询超时则返回错误。
 func WaitForObservedDeployment(getDeploymentFunc func() (*apps.Deployment, error), desiredGeneration int64, interval, timeout time.Duration) error {
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
 		deployment, err := getDeploymentFunc()
@@ -871,15 +843,14 @@ func WaitForObservedDeployment(getDeploymentFunc func() (*apps.Deployment, error
 	})
 }
 
-// ResolveFenceposts resolves both maxSurge and maxUnavailable. This needs to happen in one
-// step. For example:
+// ResolveFenceposts 同时解析 maxSurge 与 maxUnavailable，必须在一步内完成。例如：
 //
-// 2 desired, max unavailable 1%, surge 0% - should scale old(-1), then new(+1), then old(-1), then new(+1)
-// 1 desired, max unavailable 1%, surge 0% - should scale old(-1), then new(+1)
-// 2 desired, max unavailable 25%, surge 1% - should scale new(+1), then old(-1), then new(+1), then old(-1)
-// 1 desired, max unavailable 25%, surge 1% - should scale new(+1), then old(-1)
-// 2 desired, max unavailable 0%, surge 1% - should scale new(+1), then old(-1), then new(+1), then old(-1)
-// 1 desired, max unavailable 0%, surge 1% - should scale new(+1), then old(-1)
+// 期望 2，maxUnavailable 1%，surge 0% —— 应先缩旧(-1)，再扩新(+1)，再缩旧(-1)，再扩新(+1)
+// 期望 1，maxUnavailable 1%，surge 0% —— 应先缩旧(-1)，再扩新(+1)
+// 期望 2，maxUnavailable 25%，surge 1% —— 应先扩新(+1)，再缩旧(-1)，再扩新(+1)，再缩旧(-1)
+// 期望 1，maxUnavailable 25%，surge 1% —— 应先扩新(+1)，再缩旧(-1)
+// 期望 2，maxUnavailable 0%，surge 1% —— 应先扩新(+1)，再缩旧(-1)，再扩新(+1)，再缩旧(-1)
+// 期望 1，maxUnavailable 0%，surge 1% —— 应先扩新(+1)，再缩旧(-1)
 func ResolveFenceposts(maxSurge, maxUnavailable *intstrutil.IntOrString, desired int32) (int32, int32, error) {
 	surge, err := intstrutil.GetScaledValueFromIntOrPercent(intstrutil.ValueOrDefault(maxSurge, intstrutil.FromInt32(0)), int(desired), true)
 	if err != nil {
@@ -891,34 +862,30 @@ func ResolveFenceposts(maxSurge, maxUnavailable *intstrutil.IntOrString, desired
 	}
 
 	if surge == 0 && unavailable == 0 {
-		// Validation should never allow the user to explicitly use zero values for both maxSurge
-		// maxUnavailable. Due to rounding down maxUnavailable though, it may resolve to zero.
-		// If both fenceposts resolve to zero, then we should set maxUnavailable to 1 on the
-		// theory that surge might not work due to quota.
+		// 校验环节不应允许用户同时显式设置 maxSurge 与 maxUnavailable 为 0，
+		// 但 maxUnavailable 向下取整后可能变成 0。若两者都解析为 0，
+		// 则把 maxUnavailable 设为 1，因为 surge 可能因配额限制而无法生效。
 		unavailable = 1
 	}
 
 	return int32(surge), int32(unavailable), nil
 }
 
-// HasProgressDeadline checks if the Deployment d is expected to surface the reason
-// "ProgressDeadlineExceeded" when the Deployment progress takes longer than expected time.
+// HasProgressDeadline 判断 Deployment 是否在进展耗时过长时应上报 "ProgressDeadlineExceeded" 原因。
 func HasProgressDeadline(d *apps.Deployment) bool {
 	return d.Spec.ProgressDeadlineSeconds != nil && *d.Spec.ProgressDeadlineSeconds != math.MaxInt32
 }
 
-// HasRevisionHistoryLimit checks if the Deployment d is expected to keep a specified number of
-// old replicaSets. These replicaSets are mainly kept with the purpose of rollback.
-// The RevisionHistoryLimit can start from 0 (no retained replicasSet). When set to math.MaxInt32,
-// the Deployment will keep all revisions.
+// HasRevisionHistoryLimit 判断 Deployment 是否需要保留指定数量的旧 ReplicaSet。
+// 保留它们主要是为了支持回滚。RevisionHistoryLimit 可以从 0（不保留）开始；
+// 当设置为 math.MaxInt32 时，Deployment 将保留所有历史版本。
 func HasRevisionHistoryLimit(d *apps.Deployment) bool {
 	return d.Spec.RevisionHistoryLimit != nil && *d.Spec.RevisionHistoryLimit != math.MaxInt32
 }
 
-// GetDeploymentsForReplicaSet returns a list of Deployments that potentially
-// match a ReplicaSet. Only the one specified in the ReplicaSet's ControllerRef
-// will actually manage it.
-// Returns an error only if no matching Deployments are found.
+// GetDeploymentsForReplicaSet 返回所有可能匹配某个 ReplicaSet 的 Deployment 列表。
+// 其中只有 ReplicaSet 的 ControllerRef 指定的那个才会真正管理它。
+// 仅在找不到匹配的 Deployment 时返回错误。
 func GetDeploymentsForReplicaSet(deploymentLister appslisters.DeploymentLister, rs *apps.ReplicaSet) ([]*apps.Deployment, error) {
 	if len(rs.Labels) == 0 {
 		return nil, fmt.Errorf("no deployments found for ReplicaSet %v because it has no labels", rs.Name)
@@ -933,10 +900,10 @@ func GetDeploymentsForReplicaSet(deploymentLister appslisters.DeploymentLister, 
 	for _, d := range dList {
 		selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
 		if err != nil {
-			// This object has an invalid selector, it does not match the replicaset
+			// 选择器非法的 Deployment 与该 ReplicaSet 不匹配。
 			continue
 		}
-		// If a deployment with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 若混入选择器为空的 Deployment，它不应匹配任何对象，而不是匹配所有对象。
 		if selector.Empty() || !selector.Matches(labels.Set(rs.Labels)) {
 			continue
 		}
@@ -950,12 +917,17 @@ func GetDeploymentsForReplicaSet(deploymentLister appslisters.DeploymentLister, 
 	return deployments, nil
 }
 
-// ReplicaSetsByRevision sorts a list of ReplicaSet by revision, using their creation timestamp or name as a tie breaker.
-// By using the creation timestamp, this sorts from old to new replica sets.
+// ReplicaSetsByRevision 按修订号对 ReplicaSet 排序，修订号相同时以创建时间或名称作为决胜键。
+// 借助创建时间，排序结果是从旧到新。
 type ReplicaSetsByRevision []*apps.ReplicaSet
 
-func (o ReplicaSetsByRevision) Len() int      { return len(o) }
+// Len 返回待排序的 ReplicaSet 数量。
+func (o ReplicaSetsByRevision) Len() int { return len(o) }
+
+// Swap 交换 i 与 j 位置上的两个 ReplicaSet。
 func (o ReplicaSetsByRevision) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
+
+// Less 按修订号比较两个 ReplicaSet；修订号相同或解析失败时回退到创建时间比较。
 func (o ReplicaSetsByRevision) Less(i, j int) bool {
 	revision1, err1 := Revision(o[i])
 	revision2, err2 := Revision(o[j])

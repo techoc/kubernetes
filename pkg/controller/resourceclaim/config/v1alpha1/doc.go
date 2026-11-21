@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1alpha1 定义 ResourceClaim 控制器配置的 v1alpha1 外部版本。
+//
+// 外部类型本身位于 kube-controller-manager/config/v1alpha1；
+// 本包只为 conversion-gen 提供内部与外部类型之间的转换落点。
+//
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/kubernetes/pkg/controller/resourceclaim/config
 // +k8s:conversion-gen-external-types=k8s.io/kube-controller-manager/config/v1alpha1

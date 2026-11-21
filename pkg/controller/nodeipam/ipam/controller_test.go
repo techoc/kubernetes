@@ -24,10 +24,13 @@ import (
 	"k8s.io/kubernetes/pkg/controller/nodeipam/ipam/test"
 )
 
+// TestOccupyServiceCIDR 验证占用 Service CIDR 后，CIDRSet 分配的 Pod CIDR 均不会
+// 与 Service CIDR 重叠。既覆盖完全位于集群 CIDR 内的情况，也覆盖部分/完全不重叠的情况。
 func TestOccupyServiceCIDR(t *testing.T) {
 	const clusterCIDR = "10.1.0.0/16"
 
 TestCase:
+	// 用标签跳转跳过当前用例的后续检查：分配出现非预期错误时继续下一个用例没有意义。
 	for _, tc := range []struct {
 		serviceCIDR string
 	}{
@@ -44,7 +47,7 @@ TestCase:
 		if err := occupyServiceCIDR(set, test.MustParseCIDR(clusterCIDR), serviceCIDR); err != nil {
 			t.Errorf("test case %+v: occupyServiceCIDR() = %v, want nil", tc, err)
 		}
-		// Allocate until full.
+		// 持续分配直到 CIDRSet 耗尽，以便检查所有已分配网段。
 		var cidrs []*net.IPNet
 		for {
 			cidr, err := set.AllocateNext()
@@ -57,7 +60,8 @@ TestCase:
 			}
 			cidrs = append(cidrs, cidr)
 		}
-		// No allocated CIDR range should intersect with serviceCIDR.
+		// 双向 Contains 检查：网段起点可能落在对方范围内，也可能对方起点落在本范围内，
+		// 任一方向命中都说明存在重叠。
 		for _, c := range cidrs {
 			if c.Contains(serviceCIDR.IP) || serviceCIDR.Contains(c.IP) {
 				t.Errorf("test case %+v: allocated CIDR %v from service range", tc, c)

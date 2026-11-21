@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package replication contains logic for watching and synchronizing
-// replication controllers.
+// Package replication 包含监听和同步 ReplicationController 的逻辑。
+// 控制器将实际 Pod 数量与期望副本数对齐，并通过标签选择器识别所属的 Pod。
 package replication

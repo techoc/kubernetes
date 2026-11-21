@@ -48,27 +48,25 @@ import (
 )
 
 const (
-	// maxRetries is the number of times an Endpoints resource will be retried
-	// before it is dropped out of the queue. Any sync error, such as a failure
-	// to create or update an EndpointSlice could trigger a retry. With the
-	// current rate-limiter in use (1s*2^(numRetries-1)) up to a max of 100s.
-	// The following numbers represent the sequence of delays between successive
-	// queuings of an Endpoints resource.
+	// maxRetries 是 Endpoints 资源在被丢弃出队列前的最大重试次数。
+	// 任何同步错误（如创建或更新 EndpointSlice 失败）都会触发重试。
+	// 当前限速器按 1s*2^(numRetries-1) 退避，最长 100s。
+	// 以下数字表示同一 Endpoints 资源相邻两次入队之间的退避间隔：
+	// 1s、2s、4s、8s、16s、32s、64s、100s（上限）。
 	//
-	// 1s, 2s, 4s, 8s, 16s, 32s, 64s, 100s (max)
 	maxRetries = 15
 
-	// defaultSyncBackOff is the default backoff period for syncEndpoints calls.
+	// defaultSyncBackOff 是 syncEndpoints 调用的默认退避时长。
 	defaultSyncBackOff = 1 * time.Second
-	// maxSyncBackOff is the max backoff period for syncEndpoints calls.
+	// maxSyncBackOff 是 syncEndpoints 调用的最大退避时长。
 	maxSyncBackOff = 100 * time.Second
 
-	// ControllerName is a unique value used with LabelManagedBy to indicated
-	// the component managing an EndpointSlice.
+	// ControllerName 是与 LabelManagedBy 配合使用的唯一值，用于标识管理该 EndpointSlice 的组件。
 	ControllerName = "endpointslicemirroring-controller.k8s.io"
 )
 
-// NewController creates and initializes a new Controller
+// NewController 创建并初始化一个新的 Controller。
+// 它注册 Endpoints、EndpointSlice 和 Service 的事件处理器，并初始化协调器与限速队列。
 func NewController(ctx context.Context, endpointsInformer coreinformers.EndpointsInformer,
 	endpointSliceInformer discoveryinformers.EndpointSliceInformer,
 	serviceInformer coreinformers.ServiceInformer,
@@ -77,6 +75,7 @@ func NewController(ctx context.Context, endpointsInformer coreinformers.Endpoint
 	endpointUpdatesBatchPeriod time.Duration,
 ) *Controller {
 	logger := klog.FromContext(ctx)
+	// 事件广播器，用于把控制器事件记录到 API Server。
 	broadcaster := record.NewBroadcaster(record.WithContext(ctx))
 	recorder := broadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "endpoint-slice-mirroring-controller"})
 
@@ -84,15 +83,12 @@ func NewController(ctx context.Context, endpointsInformer coreinformers.Endpoint
 
 	c := &Controller{
 		client: client,
-		// This is similar to the DefaultControllerRateLimiter, just with a
-		// significantly higher default backoff (1s vs 5ms). This controller
-		// processes events that can require significant EndpointSlice changes.
-		// A more significant rate limit back off here helps ensure that the
-		// Controller does not overwhelm the API Server.
+		// 类似 DefaultControllerRateLimiter，但默认退避大得多（1s 对比 5ms）。
+		// 该控制器处理的事件可能引起大量 EndpointSlice 变更，
+		// 因此更保守的退避能避免对 API Server 造成冲击。
 		queue: workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.NewTypedMaxOfRateLimiter(
 			workqueue.NewTypedItemExponentialFailureRateLimiter[string](defaultSyncBackOff, maxSyncBackOff),
-			// 10 qps, 100 bucket size. This is only for retry speed and its
-			// only the overall factor (not per item).
+			// 10 qps、桶容量 100；只影响整体重试速度，不针对单个条目。
 			&workqueue.TypedBucketRateLimiter[string]{Limiter: rate.NewLimiter(rate.Limit(10), 100)},
 		),
 			workqueue.TypedRateLimitingQueueConfig[string]{
@@ -154,70 +150,58 @@ func NewController(ctx context.Context, endpointsInformer coreinformers.Endpoint
 	return c
 }
 
-// Controller manages selector-based service endpoint slices
+// Controller 管理基于 selector 的 Service 对应的 EndpointSlice 镜像。
 type Controller struct {
 	client           clientset.Interface
 	eventBroadcaster record.EventBroadcaster
 	eventRecorder    record.EventRecorder
 
-	// endpointsLister is able to list/get endpoints and is populated by the
-	// shared informer passed to NewController.
+	// endpointsLister 从共享 informer 缓存中列出/获取 Endpoints。
 	endpointsLister corelisters.EndpointsLister
-	// endpointsSynced returns true if the endpoints shared informer has been
-	// synced at least once. Added as a member to the struct to allow injection
-	// for testing.
+	// endpointsSynced 表示 Endpoints informer 至少完成过一次同步。
+	// 作为结构体字段是为了在测试中注入。
 	endpointsSynced cache.InformerSynced
 
-	// endpointSliceLister is able to list/get endpoint slices and is populated
-	// by the shared informer passed to NewController
+	// endpointSliceLister 从共享 informer 缓存中列出/获取 EndpointSlice。
 	endpointSliceLister discoverylisters.EndpointSliceLister
-	// endpointSlicesSynced returns true if the endpoint slice shared informer
-	// has been synced at least once. Added as a member to the struct to allow
-	// injection for testing.
+	// endpointSlicesSynced 表示 EndpointSlice informer 至少完成过一次同步。
+	// 作为结构体字段是为了在测试中注入。
 	endpointSlicesSynced cache.InformerSynced
 
-	// endpointSliceTracker tracks the list of EndpointSlices and associated
-	// resource versions expected for each Endpoints resource. It can help
-	// determine if a cached EndpointSlice is out of date.
+	// endpointSliceTracker 跟踪每个 Endpoints 资源所期望的 EndpointSlice 列表及其资源版本，
+	// 用于判断缓存中的 EndpointSlice 是否已经过期。
 	endpointSliceTracker *endpointsliceutil.EndpointSliceTracker
 
-	// serviceLister is able to list/get services and is populated by the shared
-	// informer passed to NewController.
+	// serviceLister 从共享 informer 缓存中列出/获取 Service。
 	serviceLister corelisters.ServiceLister
-	// servicesSynced returns true if the services shared informer has been
-	// synced at least once. Added as a member to the struct to allow injection
-	// for testing.
+	// servicesSynced 表示 Service informer 至少完成过一次同步。
+	// 作为结构体字段是为了在测试中注入。
 	servicesSynced cache.InformerSynced
 
-	// reconciler is an util used to reconcile EndpointSlice changes.
+	// reconciler 负责执行 EndpointSlice 的实际协调逻辑。
 	reconciler *reconciler
 
-	// Endpoints that need to be updated. A channel is inappropriate here,
-	// because it allows Endpoints with lots of addresses to be serviced much
-	// more often than Endpoints with few addresses; it also would cause an
-	// Endpoints resource that's inserted multiple times to be processed more
-	// than necessary.
+	// queue 保存需要同步的 Endpoints 键。这里不适合用 channel：
+	// channel 会让地址多的 Endpoints 被过于频繁地处理，也会让重复入队的同一对象被多次处理；
+	// workqueue 则能对同一键去重并按限速重试。
 	queue workqueue.TypedRateLimitingInterface[string]
 
-	// maxEndpointsPerSubset references the maximum number of endpoints that
-	// should be added to an EndpointSlice for an EndpointSubset.
+	// maxEndpointsPerSubset 是单个 EndpointSubset 可加入 EndpointSlice 的最大端点数。
 	maxEndpointsPerSubset int32
 
-	// workerLoopPeriod is the time between worker runs. The workers process the
-	// queue of changes to Endpoints resources.
+	// workerLoopPeriod 是 worker 两次运行之间的间隔。
 	workerLoopPeriod time.Duration
 
-	// endpointUpdatesBatchPeriod is an artificial delay added to all Endpoints
-	// syncs triggered by EndpointSlice changes. This can be used to reduce
-	// overall number of all EndpointSlice updates.
+	// endpointUpdatesBatchPeriod 是 EndpointSlice 变更触发的 Endpoints 同步所附加的人为延迟，
+	// 用于对多次变更做批处理，减少 EndpointSlice 更新总次数。
 	endpointUpdatesBatchPeriod time.Duration
 }
 
-// Run will not return until stopCh is closed.
+// Run 启动控制器，直到 ctx 结束才返回。
 func (c *Controller) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
-	// Start events processing pipeline.
+	// 启动事件处理流水线：日志与写入 API Server 的事件接收端。
 	c.eventBroadcaster.StartLogging(klog.Infof)
 	c.eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: c.client.CoreV1().Events("")})
 	defer c.eventBroadcaster.Shutdown()
@@ -226,18 +210,21 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	logger.Info("Starting EndpointSliceMirroring controller")
 
 	var wg sync.WaitGroup
+	// 关闭时先关闭队列，再等待所有 worker 退出。
 	defer func() {
 		logger.Info("Shutting down EndpointSliceMirroring controller")
 		c.queue.ShutDown()
 		wg.Wait()
 	}()
 
+	// 等三类 informer 缓存都同步完成后再启动 worker，避免读到不完整数据。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, c.endpointsSynced, c.endpointSlicesSynced, c.servicesSynced) {
 		return
 	}
 
 	logger.V(2).Info("Starting worker threads", "total", workers)
 
+	// 启动多个 worker 并发处理；workqueue 保证同一个键不会被并发处理。
 	for i := 0; i < workers; i++ {
 		wg.Go(func() {
 			wait.UntilWithContext(ctx, c.worker, c.workerLoopPeriod)
@@ -246,20 +233,21 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
-// worker runs a worker thread that just dequeues items, processes them, and
-// marks them done. You may run as many of these in parallel as you wish; the
-// workqueue guarantees that they will not end up processing the same service
-// at the same time
+// worker 运行一个工作线程，不断出队、处理并标记条目完成。
+// 可以并行运行任意多个 worker；workqueue 保证同一个 Service 不会被同时处理。
 func (c *Controller) worker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
+// processNextWorkItem 处理队列中的一个 Endpoints 键，并按处理结果更新重试计数。
+// 返回 false 表示队列已关闭，worker 应退出。
 func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	cKey, quit := c.queue.Get()
 	if quit {
 		return false
 	}
+	// 保证每次 Get 都有对应的 Done，否则队列条目会一直处于处理中状态。
 	defer c.queue.Done(cKey)
 
 	err := c.syncEndpoints(ctx, cKey)
@@ -268,26 +256,31 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// handleErr 处理同步错误：成功则清除重试计数，未超过上限则限速重试，超过上限则丢弃。
 func (c *Controller) handleErr(logger klog.Logger, err error, key string) {
 	if err == nil {
 		c.queue.Forget(key)
 		return
 	}
 
+	// 重试次数未达上限，按限速队列的退避策略重新入队。
 	if c.queue.NumRequeues(key) < maxRetries {
 		logger.Info("Error mirroring EndpointSlices for Endpoints, retrying", "key", key, "err", err)
 		c.queue.AddRateLimited(key)
 		return
 	}
 
+	// 重试预算耗尽：清除计数并丢弃该键，避免坏对象无限阻塞队列。
 	logger.Info("Retry budget exceeded, dropping Endpoints out of the queue", "key", key, "err", err)
 	c.queue.Forget(key)
 	utilruntime.HandleError(err)
 }
 
+// syncEndpoints 对一个 Endpoints 资源执行一次完整同步：必要时创建、更新或删除镜像 EndpointSlice。
 func (c *Controller) syncEndpoints(ctx context.Context, key string) error {
 	logger := klog.FromContext(ctx)
 	startTime := time.Now()
+	// 用 defer 统计每次同步耗时，覆盖所有返回路径。
 	defer func() {
 		syncDuration := float64(time.Since(startTime).Milliseconds()) / 1000
 		metrics.EndpointsSyncDuration.WithLabelValues().Observe(syncDuration)
@@ -304,6 +297,7 @@ func (c *Controller) syncEndpoints(ctx context.Context, key string) error {
 	endpoints, err := c.endpointsLister.Endpoints(namespace).Get(name)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			// Endpoints 已删除，清理其所有镜像 EndpointSlice。
 			logger.V(4).Info("Endpoints not found, cleaning up any mirrored EndpointSlices", "endpoints", klog.KRef(namespace, name))
 			c.endpointSliceTracker.DeleteService(namespace, name)
 			return c.deleteMirroredSlices(ctx, namespace, name)
@@ -311,6 +305,7 @@ func (c *Controller) syncEndpoints(ctx context.Context, key string) error {
 		return err
 	}
 
+	// 带有跳过镜像标签或 leader election 注解的 Endpoints 不应被镜像。
 	if !c.shouldMirror(endpoints) {
 		logger.V(4).Info("Endpoints should not be mirrored, cleaning up any mirrored EndpointSlices", "endpoints", klog.KRef(namespace, name))
 		c.endpointSliceTracker.DeleteService(namespace, name)
@@ -320,6 +315,7 @@ func (c *Controller) syncEndpoints(ctx context.Context, key string) error {
 	svc, err := c.serviceLister.Services(namespace).Get(name)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			// 对应 Service 已删除，清理镜像 EndpointSlice。
 			logger.V(4).Info("Service not found, cleaning up any mirrored EndpointSlices", "service", klog.KRef(namespace, name))
 			c.endpointSliceTracker.DeleteService(namespace, name)
 			return c.deleteMirroredSlices(ctx, namespace, name)
@@ -327,7 +323,7 @@ func (c *Controller) syncEndpoints(ctx context.Context, key string) error {
 		return err
 	}
 
-	// If a selector is specified, clean up any mirrored slices.
+	// Service 一旦设置了 selector，就应由 EndpointSlice 控制器接管，清理本控制器创建的镜像。
 	if svc.Spec.Selector != nil {
 		logger.V(4).Info("Service now has selector, cleaning up any mirrored EndpointSlices", "service", klog.KRef(namespace, name))
 		c.endpointSliceTracker.DeleteService(namespace, name)
@@ -339,6 +335,7 @@ func (c *Controller) syncEndpoints(ctx context.Context, key string) error {
 		return err
 	}
 
+	// tracker 记录的期望版本与缓存不一致，说明 informer 缓存过期，返回特殊错误触发重试。
 	if c.endpointSliceTracker.StaleSlices(svc, endpointSlices) {
 		return endpointslicepkg.NewStaleInformerCache("EndpointSlice informer cache is out of date")
 	}
@@ -351,7 +348,7 @@ func (c *Controller) syncEndpoints(ctx context.Context, key string) error {
 	return nil
 }
 
-// queueEndpoints queues the Endpoints resource for processing.
+// queueEndpoints 把 Endpoints 资源对应的键加入工作队列等待处理。
 func (c *Controller) queueEndpoints(obj interface{}) {
 	key, err := controller.KeyFunc(obj)
 	if err != nil {
@@ -362,13 +359,12 @@ func (c *Controller) queueEndpoints(obj interface{}) {
 	c.queue.Add(key)
 }
 
-// shouldMirror returns true if an Endpoints resource should be mirrored by this
-// controller. This will be false if:
-// - the Endpoints resource is nil.
-// - the Endpoints resource has a skip-mirror label.
-// - the Endpoints resource has a leader election annotation.
-// This does not ensure that a corresponding Service exists with a nil selector.
-// That check should be performed separately.
+// shouldMirror 判断一个 Endpoints 资源是否应由本控制器镜像。
+// 以下情况返回 false：
+// - Endpoints 为 nil；
+// - 带有跳过镜像的标签；
+// - 带有 leader election 注解。
+// 本函数不检查是否存在 selector 为空的对应 Service，该检查需单独进行。
 func (c *Controller) shouldMirror(endpoints *v1.Endpoints) bool {
 	if endpoints == nil || skipMirror(endpoints.Labels) || hasLeaderElection(endpoints.Annotations) {
 		return false
@@ -377,19 +373,20 @@ func (c *Controller) shouldMirror(endpoints *v1.Endpoints) bool {
 	return true
 }
 
-// onServiceAdd queues a sync for the relevant Endpoints resource.
+// onServiceAdd 在 selector 为空的 Service 创建时，把对应 Endpoints 加入队列。
 func (c *Controller) onServiceAdd(obj interface{}) {
 	service := obj.(*v1.Service)
 	if service == nil {
 		utilruntime.HandleError(fmt.Errorf("onServiceAdd() expected type v1.Service, got %T", obj))
 		return
 	}
+	// 只有无 selector 的 Service 才需要镜像 Endpoints。
 	if service.Spec.Selector == nil {
 		c.queueEndpoints(obj)
 	}
 }
 
-// onServiceUpdate queues a sync for the relevant Endpoints resource.
+// onServiceUpdate 在 Service 的 selector 有无发生变化时，把对应 Endpoints 加入队列。
 func (c *Controller) onServiceUpdate(prevObj, obj interface{}) {
 	service := obj.(*v1.Service)
 	prevService := prevObj.(*v1.Service)
@@ -397,12 +394,13 @@ func (c *Controller) onServiceUpdate(prevObj, obj interface{}) {
 		utilruntime.HandleError(fmt.Errorf("onServiceUpdate() expected type v1.Service, got %T, %T", prevObj, obj))
 		return
 	}
+	// selector 从无到有或反之，都意味着镜像归属发生变化，需要同步清理或创建。
 	if (service.Spec.Selector == nil) != (prevService.Spec.Selector == nil) {
 		c.queueEndpoints(obj)
 	}
 }
 
-// onServiceDelete queues a sync for the relevant Endpoints resource.
+// onServiceDelete 在 selector 为空的 Service 删除时，把对应 Endpoints 加入队列以清理镜像。
 func (c *Controller) onServiceDelete(obj interface{}) {
 	service := getServiceFromDeleteAction(obj)
 	if service == nil {
@@ -414,7 +412,7 @@ func (c *Controller) onServiceDelete(obj interface{}) {
 	}
 }
 
-// onEndpointsAdd queues a sync for the relevant Endpoints resource.
+// onEndpointsAdd 在需要镜像的 Endpoints 创建时将其加入队列。
 func (c *Controller) onEndpointsAdd(logger klog.Logger, obj interface{}) {
 	endpoints := obj.(*v1.Endpoints)
 	if endpoints == nil {
@@ -428,7 +426,7 @@ func (c *Controller) onEndpointsAdd(logger klog.Logger, obj interface{}) {
 	c.queueEndpoints(obj)
 }
 
-// onEndpointsUpdate queues a sync for the relevant Endpoints resource.
+// onEndpointsUpdate 在 Endpoints 更新时，只要新旧任一版本需要镜像，就把对应 Endpoints 加入队列。
 func (c *Controller) onEndpointsUpdate(logger klog.Logger, prevObj, obj interface{}) {
 	endpoints := obj.(*v1.Endpoints)
 	prevEndpoints := prevObj.(*v1.Endpoints)
@@ -436,6 +434,7 @@ func (c *Controller) onEndpointsUpdate(logger klog.Logger, prevObj, obj interfac
 		utilruntime.HandleError(fmt.Errorf("onEndpointsUpdate() expected type v1.Endpoints, got %T, %T", prevObj, obj))
 		return
 	}
+	// 新旧都不需要镜像时跳过；任一需要镜像则入队，以便处理镜像状态的切换。
 	if !c.shouldMirror(endpoints) && !c.shouldMirror(prevEndpoints) {
 		logger.V(5).Info("Skipping mirroring", "endpoints", klog.KObj(endpoints))
 		return
@@ -443,7 +442,7 @@ func (c *Controller) onEndpointsUpdate(logger klog.Logger, prevObj, obj interfac
 	c.queueEndpoints(obj)
 }
 
-// onEndpointsDelete queues a sync for the relevant Endpoints resource.
+// onEndpointsDelete 在需要镜像的 Endpoints 删除时将其加入队列以清理镜像。
 func (c *Controller) onEndpointsDelete(logger klog.Logger, obj interface{}) {
 	endpoints := getEndpointsFromDeleteAction(obj)
 	if endpoints == nil {
@@ -457,24 +456,22 @@ func (c *Controller) onEndpointsDelete(logger klog.Logger, obj interface{}) {
 	c.queueEndpoints(obj)
 }
 
-// onEndpointSliceAdd queues a sync for the relevant Endpoints resource for a
-// sync if the EndpointSlice resource version does not match the expected
-// version in the endpointSliceTracker.
+// onEndpointSliceAdd 在 EndpointSlice 的资源版本与 tracker 中期望的不一致时，
+// 把对应的 Endpoints 加入队列同步。
 func (c *Controller) onEndpointSliceAdd(obj interface{}) {
 	endpointSlice := obj.(*discovery.EndpointSlice)
 	if endpointSlice == nil {
 		utilruntime.HandleError(fmt.Errorf("onEndpointSliceAdd() expected type discovery.EndpointSlice, got %T", obj))
 		return
 	}
+	// 只处理由本控制器管理的 EndpointSlice，避免被其他控制器的对象触发无谓同步。
 	if managedByController(endpointSlice) && c.endpointSliceTracker.ShouldSync(endpointSlice) {
 		c.queueEndpointsForEndpointSlice(endpointSlice)
 	}
 }
 
-// onEndpointSliceUpdate queues a sync for the relevant Endpoints resource for a
-// sync if the EndpointSlice resource version does not match the expected
-// version in the endpointSliceTracker or the managed-by value of the
-// EndpointSlice has changed from or to this controller.
+// onEndpointSliceUpdate 在 EndpointSlice 版本与期望不一致，或其 managed-by 值变为/不再是本控制器时，
+// 把对应的 Endpoints 加入队列同步。
 func (c *Controller) onEndpointSliceUpdate(logger klog.Logger, prevObj, obj interface{}) {
 	endpointSlice := obj.(*discovery.EndpointSlice)
 	prevEndpointSlice := prevObj.(*discovery.EndpointSlice)
@@ -482,9 +479,8 @@ func (c *Controller) onEndpointSliceUpdate(logger klog.Logger, prevObj, obj inte
 		utilruntime.HandleError(fmt.Errorf("onEndpointSliceUpdated() expected type discovery.EndpointSlice, got %T, %T", prevObj, obj))
 		return
 	}
-	// EndpointSlice generation does not change when labels change. Although the
-	// controller will never change LabelServiceName, users might. This check
-	// ensures that we handle changes to this label.
+	// 仅修改 label 不会改变 generation；虽然本控制器从不改 LabelServiceName，但用户可能改。
+	// 因此显式比较新旧 label，确保这种变更也能触发同步。
 	svcName := endpointSlice.Labels[discovery.LabelServiceName]
 	prevSvcName := prevEndpointSlice.Labels[discovery.LabelServiceName]
 	if svcName != prevSvcName {
@@ -498,9 +494,8 @@ func (c *Controller) onEndpointSliceUpdate(logger klog.Logger, prevObj, obj inte
 	}
 }
 
-// onEndpointSliceDelete queues a sync for the relevant Endpoints resource for a
-// sync if the EndpointSlice resource version does not match the expected
-// version in the endpointSliceTracker.
+// onEndpointSliceDelete 在本控制器管理的 EndpointSlice 被意外删除时，
+// 把对应的 Endpoints 加入队列以触发重建。
 func (c *Controller) onEndpointSliceDelete(obj interface{}) {
 	endpointSlice := getEndpointSliceFromDeleteAction(obj)
 	if endpointSlice == nil {
@@ -508,16 +503,15 @@ func (c *Controller) onEndpointSliceDelete(obj interface{}) {
 		return
 	}
 	if managedByController(endpointSlice) && c.endpointSliceTracker.Has(endpointSlice) {
-		// This returns false if we didn't expect the EndpointSlice to be
-		// deleted. If that is the case, we queue the Service for another sync.
+		// 返回 false 表示这次删除不在预期内（并非本控制器发起），需要重新同步以重建。
 		if !c.endpointSliceTracker.HandleDeletion(endpointSlice) {
 			c.queueEndpointsForEndpointSlice(endpointSlice)
 		}
 	}
 }
 
-// queueEndpointsForEndpointSlice attempts to queue the corresponding Endpoints
-// resource for the provided EndpointSlice.
+// queueEndpointsForEndpointSlice 把给定 EndpointSlice 对应的 Endpoints 延迟加入队列。
+// 延迟由 endpointUpdatesBatchPeriod 控制，以合并短时间内多次 EndpointSlice 变更。
 func (c *Controller) queueEndpointsForEndpointSlice(endpointSlice *discovery.EndpointSlice) {
 	key, err := endpointsControllerKey(endpointSlice)
 	if err != nil {
@@ -525,23 +519,24 @@ func (c *Controller) queueEndpointsForEndpointSlice(endpointSlice *discovery.End
 		return
 	}
 
+	// 延迟入队，给同一批次的多次变更留出合并窗口。
 	c.queue.AddAfter(key, c.endpointUpdatesBatchPeriod)
 }
 
-// deleteMirroredSlices will delete and EndpointSlices that have been mirrored
-// for Endpoints with this namespace and name.
+// deleteMirroredSlices 删除指定命名空间和名称下已被镜像的所有 EndpointSlice。
 func (c *Controller) deleteMirroredSlices(ctx context.Context, namespace, name string) error {
 	endpointSlices, err := endpointSlicesMirroredForService(c.endpointSliceLister, namespace, name)
 	if err != nil {
 		return err
 	}
 
+	// 先清除 tracker 中该 Service 的记录，避免后续同步误判为版本过期。
 	c.endpointSliceTracker.DeleteService(namespace, name)
 	return c.reconciler.deleteEndpoints(ctx, namespace, name, endpointSlices)
 }
 
-// endpointSlicesMirroredForService returns the EndpointSlices that have been
-// mirrored for a Service by this controller.
+// endpointSlicesMirroredForService 返回由本控制器为指定 Service 镜像的所有 EndpointSlice。
+// 通过 Service 名称标签与 managed-by 标签联合筛选，避免误删其他控制器的对象。
 func endpointSlicesMirroredForService(endpointSliceLister discoverylisters.EndpointSliceLister, namespace, name string) ([]*discovery.EndpointSlice, error) {
 	esLabelSelector := labels.Set(map[string]string{
 		discovery.LabelServiceName: name,

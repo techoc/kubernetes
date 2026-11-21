@@ -30,16 +30,21 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// backoffRecord 记录某个 Job 在最近一次成功之后连续失败的次数与最后失败时间，
+// 用于计算指数退避的剩余等待时间。
 type backoffRecord struct {
-	key                      string
-	failuresAfterLastSuccess int32
-	lastFailureTime          *time.Time
+	key                      string     // Job 的键
+	failuresAfterLastSuccess int32      // 最近一次成功后的连续失败次数
+	lastFailureTime          *time.Time // 最后一次失败的时间
 }
 
+// backoffStore 用 cache.Store 缓存各 Job 的退避记录。
 type backoffStore struct {
 	store cache.Store
 }
 
+// updateBackoffRecord 写入或更新退避记录。
+// 已存在时原地更新字段，避免替换指针导致其他持有者看到旧值。
 func (s *backoffStore) updateBackoffRecord(record backoffRecord) error {
 	b, ok, err := s.store.GetByKey(record.key)
 	if err != nil {
@@ -60,6 +65,7 @@ func (s *backoffStore) updateBackoffRecord(record backoffRecord) error {
 	return nil
 }
 
+// removeBackoffRecord 删除 Job 的退避记录；Job 完成或被删除后不再需要退避状态。
 func (s *backoffStore) removeBackoffRecord(jobId string) error {
 	b, ok, err := s.store.GetByKey(jobId)
 	if err != nil {
@@ -77,6 +83,7 @@ func (s *backoffStore) removeBackoffRecord(jobId string) error {
 
 }
 
+// newBackoffStore 创建以 backoffRecord.key 为键的退避记录存储。
 func newBackoffStore() *backoffStore {
 	return &backoffStore{
 		store: cache.NewStore(backoffRecordKeyFunc),
@@ -84,15 +91,20 @@ func newBackoffStore() *backoffStore {
 }
 
 var backoffRecordKeyFunc = func(obj interface{}) (string, error) {
+	// 只接受 backoffRecord 指针，其他类型视为编程错误。
 	if u, ok := obj.(*backoffRecord); ok {
 		return u.key, nil
 	}
 	return "", fmt.Errorf("could not find key for obj %#v", obj)
 }
 
+// newBackoffRecord 根据新观测到的成功/失败 Pod 计算退避记录。
+// 成功 Pod 会重置连续失败计数；只有晚于最后一次成功时间的失败才计入退避，
+// 防止把同步之前就存在的失败误算进来。
 func (s *backoffStore) newBackoffRecord(key string, newSucceededPods []*v1.Pod, newFailedPods []*v1.Pod) backoffRecord {
 	var backoff *backoffRecord
 
+	// 以已有记录为基础累积，确保跨多次同步的失败次数不丢失。
 	if b, exists, _ := s.store.GetByKey(key); exists {
 		old := b.(*backoffRecord)
 		backoff = &backoffRecord{
@@ -108,10 +120,13 @@ func (s *backoffStore) newBackoffRecord(key string, newSucceededPods []*v1.Pod, 
 		}
 	}
 
+	// 先按完成时间排序，才能用最后一个元素表示最近的事件。
 	sortByFinishedTime(newSucceededPods)
 	sortByFinishedTime(newFailedPods)
 
+	// 本次没有新成功：继续累加失败次数。
 	if len(newSucceededPods) == 0 {
+		// 既无成功也无失败，保持原记录不变。
 		if len(newFailedPods) == 0 {
 			return *backoff
 		}
@@ -122,6 +137,7 @@ func (s *backoffStore) newBackoffRecord(key string, newSucceededPods []*v1.Pod, 
 		return *backoff
 
 	} else {
+		// 本次出现成功，失败序列被打断，重置退避状态。
 		if len(newFailedPods) == 0 {
 			backoff.failuresAfterLastSuccess = 0
 			backoff.lastFailureTime = nil
@@ -131,6 +147,7 @@ func (s *backoffStore) newBackoffRecord(key string, newSucceededPods []*v1.Pod, 
 		backoff.failuresAfterLastSuccess = 0
 		backoff.lastFailureTime = nil
 
+		// 只统计严格晚于最后成功时间的失败：按时间从后向前遍历，遇到更早的失败即停止。
 		lastSuccessTime := getFinishedTime(newSucceededPods[len(newSucceededPods)-1])
 		for i := len(newFailedPods) - 1; i >= 0; i-- {
 			failedTime := getFinishedTime(newFailedPods[i])
@@ -149,6 +166,7 @@ func (s *backoffStore) newBackoffRecord(key string, newSucceededPods []*v1.Pod, 
 
 }
 
+// sortByFinishedTime 按 Pod 的完成时间升序排序。
 func sortByFinishedTime(pods []*v1.Pod) {
 	sort.Slice(pods, func(i, j int) bool {
 		p1 := pods[i]
@@ -160,15 +178,14 @@ func sortByFinishedTime(pods []*v1.Pod) {
 	})
 }
 
-// Returns the pod finish time using the following lookups:
-// 1. if all containers finished, use the latest time
-// 2. if the pod has Ready=False condition, use the last transition time
-// 3. if the pod has been deleted, use the `deletionTimestamp - grace_period` to estimate the moment of deletion
-// 4. fallback to pod's creation time
+// getFinishedTime 按以下优先级推断 Pod 的完成时间：
+// 1. 所有容器均已结束时，取最晚的结束时间；
+// 2. 存在 Ready=False 条件时，取该条件的最后转换时间；
+// 3. 已被删除时，用 deletionTimestamp 减去宽限期估算删除时刻；
+// 4. 兜底使用 Pod 的创建时间。
 //
-// Pods owned by Kubelet are marked with Ready=False condition when
-// transitioning to terminal phase, thus being handled by (1.) or (2.).
-// Orphaned pods are deleted by PodGC, thus being handled by (3.).
+// Kubelet 管理的 Pod 进入终态时会被标记 Ready=False，因此命中 (1) 或 (2)；
+// 孤立 Pod 会被 PodGC 删除，因此命中 (3)。
 func getFinishedTime(p *v1.Pod) time.Time {
 	if finishTime := getFinishTimeFromContainers(p); finishTime != nil {
 		return *finishTime
@@ -179,15 +196,15 @@ func getFinishedTime(p *v1.Pod) time.Time {
 	if finishTime := getFinishTimeFromDeletionTimestamp(p); finishTime != nil {
 		return *finishTime
 	}
-	// This should not happen in clusters with Kubelet and PodGC running.
+	// 正常运行 Kubelet 与 PodGC 的集群中不应走到这里，创建时间只是最后兜底。
 	return p.CreationTimestamp.Time
 }
 
+// getFinishTimeFromContainers 从容器状态中提取完成时间。
 func getFinishTimeFromContainers(p *v1.Pod) *time.Time {
 	finishTime := latestFinishTime(nil, p.Status.ContainerStatuses, nil)
-	// We need to check InitContainerStatuses here also,
-	// because with the sidecar (restartable init) containers,
-	// sidecar containers will always finish later than regular containers.
+	// 还需检查可重启的 init 容器（sidecar）状态：sidecar 的结束时间总是晚于普通容器，
+	// 只取普通容器会低估 Pod 的真实完成时间。
 	names := sets.New[string]()
 	for _, c := range p.Spec.InitContainers {
 		if c.RestartPolicy != nil && *c.RestartPolicy == v1.ContainerRestartPolicyAlways {
@@ -201,6 +218,8 @@ func getFinishTimeFromContainers(p *v1.Pod) *time.Time {
 	return finishTime
 }
 
+// latestFinishTime 在容器状态列表中取最晚结束时间。
+// 任一被检查的容器尚未终止或结束时间为零时返回 nil，表示信息不完整。
 func latestFinishTime(prevFinishTime *time.Time, cs []v1.ContainerStatus, check func(status v1.ContainerStatus) bool) *time.Time {
 	var finishTime = prevFinishTime
 	for _, containerState := range cs {
@@ -218,6 +237,7 @@ func latestFinishTime(prevFinishTime *time.Time, cs []v1.ContainerStatus, check 
 	return finishTime
 }
 
+// getFinishTimeFromPodReadyFalseCondition 取 Ready=False 条件的最后转换时间。
 func getFinishTimeFromPodReadyFalseCondition(p *v1.Pod) *time.Time {
 	if _, c := apipod.GetPodCondition(&p.Status, v1.PodReady); c != nil && c.Status == v1.ConditionFalse && !c.LastTransitionTime.Time.IsZero() {
 		return &c.LastTransitionTime.Time
@@ -225,6 +245,7 @@ func getFinishTimeFromPodReadyFalseCondition(p *v1.Pod) *time.Time {
 	return nil
 }
 
+// getFinishTimeFromDeletionTimestamp 用删除时间戳减去宽限期估算 Pod 实际终止的时刻。
 func getFinishTimeFromDeletionTimestamp(p *v1.Pod) *time.Time {
 	if p.DeletionTimestamp != nil {
 		finishTime := p.DeletionTimestamp.Time.Add(-time.Duration(ptr.Deref(p.DeletionGracePeriodSeconds, 0)) * time.Second)
@@ -233,18 +254,17 @@ func getFinishTimeFromDeletionTimestamp(p *v1.Pod) *time.Time {
 	return nil
 }
 
+// getRemainingTime 计算当前退避记录还需等待的时间。
 func (backoff backoffRecord) getRemainingTime(clock clock.WithTicker, defaultBackoff time.Duration, maxBackoff time.Duration) time.Duration {
 	return getRemainingTimeForFailuresCount(clock, defaultBackoff, maxBackoff, backoff.failuresAfterLastSuccess, backoff.lastFailureTime)
 }
 
-// getRemainingTimePerIndex returns the remaining time left for a given index to
-// create the replacement pods. The number of consecutive pod failures for the
-// index is retrieved from the `job-index-failure-count` annotation of the
-// last failed pod within the index (represented by `lastFailedPod`).
-// The last failed pod is also used to determine the time of the last failure.
+// getRemainingTimePerIndex 计算某个索引创建替代 Pod 前还需等待的时间。
+// 连续失败次数取自该索引最后一个失败 Pod 上的 job-index-failure-count 注解，
+// 该 Pod 的完成时间同时用作最近一次失败时间。
 func getRemainingTimePerIndex(logger klog.Logger, clock clock.WithTicker, defaultBackoff time.Duration, maxBackoff time.Duration, lastFailedPod *v1.Pod) time.Duration {
 	if lastFailedPod == nil {
-		// There is no previous failed pod for this index
+		// 该索引尚无失败记录，无需退避。
 		return time.Duration(0)
 	}
 	failureCount := getIndexAbsoluteFailureCount(logger, lastFailedPod) + 1
@@ -252,6 +272,8 @@ func getRemainingTimePerIndex(logger klog.Logger, clock clock.WithTicker, defaul
 	return getRemainingTimeForFailuresCount(clock, defaultBackoff, maxBackoff, failureCount, &lastFailureTime)
 }
 
+// getRemainingTimeForFailuresCount 按指数退避公式计算剩余等待时间：
+// 退避时长随失败次数翻倍并封顶于 maxBackoff，再扣除自上次失败以来已过去的时间。
 func getRemainingTimeForFailuresCount(clock clock.WithTicker, defaultBackoff time.Duration, maxBackoff time.Duration, failuresCount int32, lastFailureTime *time.Time) time.Duration {
 	if failuresCount == 0 {
 		return 0
@@ -260,6 +282,7 @@ func getRemainingTimeForFailuresCount(clock clock.WithTicker, defaultBackoff tim
 	backoffDuration := defaultBackoff
 	for i := 1; i < int(failuresCount); i++ {
 		backoffDuration = backoffDuration * 2
+		// 达到上限后不再翻倍，防止等待时间无限增长。
 		if backoffDuration >= maxBackoff {
 			backoffDuration = maxBackoff
 			break

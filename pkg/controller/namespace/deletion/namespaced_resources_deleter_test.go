@@ -43,6 +43,7 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
+// TestFinalized 验证 finalized 的判定：存在 finalizer 时未终结，清空后视为已终结。
 func TestFinalized(t *testing.T) {
 	testNamespace := &v1.Namespace{
 		Spec: v1.NamespaceSpec{
@@ -58,6 +59,8 @@ func TestFinalized(t *testing.T) {
 	}
 }
 
+// TestFinalizeNamespaceFunc 验证 finalizeNamespace 仅移除 kubernetes finalizer，
+// 保留其他 finalizer，并通过 finalize 子资源提交更新。
 func TestFinalizeNamespaceFunc(t *testing.T) {
 	mockClient := &fake.Clientset{}
 	testNamespace := &v1.Namespace{
@@ -90,6 +93,9 @@ func TestFinalizeNamespaceFunc(t *testing.T) {
 	}
 }
 
+// testSyncNamespaceThatIsTerminating 是终止中 Namespace 删除流程的共享测试驱动：
+// 按不同场景构造 Namespace 与 API 发现错误，触发 Delete 后校验
+// kube/metadata 客户端产生的请求集合与 Namespace 状态条件。
 func testSyncNamespaceThatIsTerminating(t *testing.T, versions *metav1.APIVersions) {
 	now := metav1.Now()
 	namespaceName := "test"
@@ -118,7 +124,7 @@ func testSyncNamespaceThatIsTerminating(t *testing.T, versions *metav1.APIVersio
 		},
 	}
 
-	// when doing a delete all of content, we will do a GET of a collection, and DELETE of a collection by default
+	// 批量删除资源时默认会先 GET 集合再 DELETE 集合，据此预构造期望的请求集合。
 	metadataClientActionSet := sets.NewString()
 	resources := testResources()
 	groupVersionResources, _ := discovery.GroupVersionResources(resources)
@@ -208,7 +214,7 @@ func testSyncNamespaceThatIsTerminating(t *testing.T, versions *metav1.APIVersio
 				t.Errorf("expected error %q when syncing namespace, got %q, %v", testInput.expectErrorOnDelete, err, testInput.expectErrorOnDelete == err)
 			}
 
-			// validate traffic from kube client
+			// 校验 kube client 产生的请求集合。
 			actionSet := sets.NewString()
 			for _, action := range mockClient.Actions() {
 				actionSet.Insert(strings.Join([]string{action.GetVerb(), action.GetResource().Resource, action.GetSubresource()}, "-"))
@@ -218,7 +224,7 @@ func testSyncNamespaceThatIsTerminating(t *testing.T, versions *metav1.APIVersio
 					testInput.kubeClientActionSet, actionSet, testInput.kubeClientActionSet.Difference(actionSet))
 			}
 
-			// validate traffic from metadata client
+			// 校验 metadata client 产生的请求集合。
 			actionSet = sets.NewString()
 			for _, action := range testHandler.actions {
 				actionSet.Insert(action.String())
@@ -228,7 +234,7 @@ func testSyncNamespaceThatIsTerminating(t *testing.T, versions *metav1.APIVersio
 					testInput.metadataClientActionSet, actionSet, testInput.metadataClientActionSet.Difference(actionSet))
 			}
 
-			// validate status conditions
+			// 校验失败场景下写入 Namespace 的状态条件。
 			if testInput.expectStatus != nil {
 				obj, err := mockClient.Tracker().Get(schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}, testInput.testNamespace.Namespace, testInput.testNamespace.Name)
 				if err != nil {
@@ -252,6 +258,8 @@ func testSyncNamespaceThatIsTerminating(t *testing.T, versions *metav1.APIVersio
 	}
 }
 
+// TestRetryOnConflictError 验证 retryOnConflictError 在遇到冲突时会重试，
+// 直到操作成功（本用例中第二次即成功）。
 func TestRetryOnConflictError(t *testing.T) {
 	mockClient := &fake.Clientset{}
 	numTries := 0
@@ -275,14 +283,18 @@ func TestRetryOnConflictError(t *testing.T) {
 	}
 }
 
+// TestSyncNamespaceThatIsTerminatingNonExperimental 用空 API 版本列表驱动终止中 Namespace 的删除测试。
 func TestSyncNamespaceThatIsTerminatingNonExperimental(t *testing.T) {
 	testSyncNamespaceThatIsTerminating(t, &metav1.APIVersions{})
 }
 
+// TestSyncNamespaceThatIsTerminatingV1 用含 apps/v1 的 API 版本列表驱动终止中 Namespace 的删除测试。
 func TestSyncNamespaceThatIsTerminatingV1(t *testing.T) {
 	testSyncNamespaceThatIsTerminating(t, &metav1.APIVersions{Versions: []string{"apps/v1"}})
 }
 
+// TestSyncNamespaceThatIsActive 验证对处于 Active 状态的 Namespace，Delete 只读取一次对象，
+// 不会触发任何删除动作。
 func TestSyncNamespaceThatIsActive(t *testing.T) {
 	mockClient := &fake.Clientset{}
 	testNamespace := &v1.Namespace{
@@ -316,7 +328,7 @@ func TestSyncNamespaceThatIsActive(t *testing.T) {
 	}
 }
 
-// matchError returns true if errors match, false if they don't, compares by error message only for convenience which should be sufficient for these tests
+// matchErrors 比较两个 error 是否匹配；本测试中按错误消息比较即可满足需要。
 func matchErrors(e1, e2 error) bool {
 	if e1 == nil && e2 == nil {
 		return true
@@ -327,7 +339,7 @@ func matchErrors(e1, e2 error) bool {
 	return false
 }
 
-// testServerAndClientConfig returns a server that listens and a config that can reference it
+// testServerAndClientConfig 启动一个测试 HTTP 服务并返回可连接到它的客户端配置。
 func testServerAndClientConfig(handler func(http.ResponseWriter, *http.Request)) (*httptest.Server, *restclient.Config) {
 	srv := httptest.NewServer(http.HandlerFunc(handler))
 	config := &restclient.Config{
@@ -336,27 +348,27 @@ func testServerAndClientConfig(handler func(http.ResponseWriter, *http.Request))
 	return srv, config
 }
 
-// fakeAction records information about requests to aid in testing.
+// fakeAction 记录一次请求的 method 与 path，便于在测试中比对客户端发出的请求。
 type fakeAction struct {
 	method string
 	path   string
 }
 
-// String returns method=path to aid in testing
+// String 以 method=path 的形式返回请求信息，便于放入集合做比较。
 func (f *fakeAction) String() string {
 	return strings.Join([]string{f.method, f.path}, "=")
 }
 
-// fakeActionHandler holds a list of fakeActions received
+// fakeActionHandler 记录接收到的所有 fakeAction 的 HTTP 处理器。
 type fakeActionHandler struct {
-	// statusCode returned by this handler
+	// statusCode 是该处理器对所有请求返回的 HTTP 状态码。
 	statusCode int
 
 	lock    sync.Mutex
 	actions []fakeAction
 }
 
-// ServeHTTP logs the action that occurred and always returns the associated status code
+// ServeHTTP 记录收到的请求信息，并始终返回预设的状态码与空列表响应。
 func (f *fakeActionHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -367,7 +379,7 @@ func (f *fakeActionHandler) ServeHTTP(response http.ResponseWriter, request *htt
 	response.Write([]byte("{\"apiVersion\": \"v1\", \"kind\": \"List\",\"items\":null}"))
 }
 
-// testResources returns a mocked up set of resources across different api groups for testing namespace controller.
+// testResources 返回测试用的资源发现信息，覆盖多个 API 组，供 namespace 控制器测试使用。
 func testResources() []*metav1.APIResourceList {
 	results := []*metav1.APIResourceList{
 		{
@@ -402,6 +414,9 @@ func testResources() []*metav1.APIResourceList {
 	return results
 }
 
+// TestDeleteEncounters404 验证删除过程中遇到 NotFound 时的回退路径：
+// delete-collection 返回 404 后改用 list 再 list 确认资源已清空；
+// 并验证不同 Namespace 之间不会相互干扰。
 func TestDeleteEncounters404(t *testing.T) {
 	now := metav1.Now()
 	ns1 := &v1.Namespace{
@@ -418,7 +433,7 @@ func TestDeleteEncounters404(t *testing.T) {
 
 	ns1FlakesNotFound := func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		if action.GetNamespace() == "ns1" {
-			// simulate the flakes resource not existing when ns1 is processed
+			// 模拟处理 ns1 时 flakes 资源不存在，触发 NotFound 回退路径。
 			return true, nil, errors.NewNotFound(schema.GroupResource{}, "")
 		}
 		return false, nil, nil
@@ -436,7 +451,7 @@ func TestDeleteEncounters404(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	d := NewNamespacedResourcesDeleter(ctx, mockClient.CoreV1().Namespaces(), mockMetadataClient, mockClient.CoreV1(), resourcesFn, v1.FinalizerKubernetes)
 
-	// Delete ns1 and get NotFound errors for the flakes resource
+	// 删除 ns1，flakes 资源会返回 NotFound 错误。
 	mockMetadataClient.ClearActions()
 	if err := d.Delete(ctx, ns1.Name); err != nil {
 		t.Fatal(err)
@@ -451,7 +466,7 @@ func TestDeleteEncounters404(t *testing.T) {
 		t.Error("ns1: expected delete-collection -> fallback to list -> list to verify 0 items")
 	}
 
-	// Delete ns2
+	// 删除 ns2，验证其回退路径不受 ns1 影响。
 	mockMetadataClient.ClearActions()
 	if err := d.Delete(ctx, ns2.Name); err != nil {
 		t.Fatal(err)

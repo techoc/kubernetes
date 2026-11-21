@@ -20,61 +20,47 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// PersistentVolumeBinderControllerConfiguration contains elements describing
-// PersistentVolumeBinderController.
+// PersistentVolumeBinderControllerConfiguration 包含描述 PersistentVolumeBinderController 的配置项。
 type PersistentVolumeBinderControllerConfiguration struct {
-	// pvClaimBinderSyncPeriod is the period for syncing persistent volumes
-	// and persistent volume claims.
+	// PVClaimBinderSyncPeriod 是同步持久卷（PV）与持久卷声明（PVC）的周期。
 	PVClaimBinderSyncPeriod metav1.Duration
-	// volumeConfiguration holds configuration for volume related features.
+	// VolumeConfiguration 保存与卷相关特性的配置。
 	VolumeConfiguration VolumeConfiguration
 }
 
-// VolumeConfiguration contains *all* enumerated flags meant to configure all volume
-// plugins. From this config, the controller-manager binary will create many instances of
-// volume.VolumeConfig, each containing only the configuration needed for that plugin which
-// are then passed to the appropriate plugin. The ControllerManager binary is the only part
-// of the code which knows what plugins are supported and which flags correspond to each plugin.
+// VolumeConfiguration 包含用于配置所有卷插件的全部枚举标志。
+// controller-manager 二进制会据此创建多个 volume.VolumeConfig 实例，每个实例仅包含某个插件所需的配置，
+// 再传递给对应的插件。只有 ControllerManager 二进制知道支持哪些插件，以及哪些标志属于哪个插件。
 type VolumeConfiguration struct {
-	// enableHostPathProvisioning enables HostPath PV provisioning when running without a
-	// cloud provider. This allows testing and development of provisioning features. HostPath
-	// provisioning is not supported in any way, won't work in a multi-node cluster, and
-	// should not be used for anything other than testing or development.
+	// EnableHostPathProvisioning 在无云提供商环境下启用 HostPath 类型 PV 的自动供给。
+	// 这样可以测试并开发供给相关特性。HostPath 供给不受官方支持，无法在多节点集群中工作，
+	// 除测试和开发外不应挪作他用。
 	EnableHostPathProvisioning bool
-	// enableDynamicProvisioning enables the provisioning of volumes when running within an environment
-	// that supports dynamic provisioning. Defaults to true.
+	// EnableDynamicProvisioning 在支持动态供给的环境中启用卷的动态供给，默认为 true。
 	EnableDynamicProvisioning bool
-	// persistentVolumeRecyclerConfiguration holds configuration for persistent volume plugins.
+	// PersistentVolumeRecyclerConfiguration 保存持久卷回收器插件的配置。
 	PersistentVolumeRecyclerConfiguration PersistentVolumeRecyclerConfiguration
-	// volumePluginDir is the full path of the directory in which the flex
-	// volume plugin should search for additional third party volume plugins
+	// FlexVolumePluginDir 是 flex 卷插件查找第三方卷插件的完整目录路径。
 	FlexVolumePluginDir string
 }
 
-// PersistentVolumeRecyclerConfiguration contains elements describing persistent volume plugins.
+// PersistentVolumeRecyclerConfiguration 包含描述持久卷回收器插件的配置项。
 type PersistentVolumeRecyclerConfiguration struct {
-	// maximumRetry is number of retries the PV recycler will execute on failure to recycle
-	// PV.
+	// MaximumRetry 是 PV 回收失败时回收器执行的最大重试次数。
 	MaximumRetry int32
-	// minimumTimeoutNFS is the minimum ActiveDeadlineSeconds to use for an NFS Recycler
-	// pod.
+	// MinimumTimeoutNFS 是 NFS 回收器 Pod 使用的最小 ActiveDeadlineSeconds。
 	MinimumTimeoutNFS int32
-	// podTemplateFilePathNFS is the file path to a pod definition used as a template for
-	// NFS persistent volume recycling
+	// PodTemplateFilePathNFS 是用作 NFS 持久卷回收模板的 Pod 定义文件路径。
 	PodTemplateFilePathNFS string
-	// incrementTimeoutNFS is the increment of time added per Gi to ActiveDeadlineSeconds
-	// for an NFS scrubber pod.
+	// IncrementTimeoutNFS 是 NFS 清理器 Pod 每增加 1 Gi 容量时，ActiveDeadlineSeconds 的增量。
 	IncrementTimeoutNFS int32
-	// podTemplateFilePathHostPath is the file path to a pod definition used as a template for
-	// HostPath persistent volume recycling. This is for development and testing only and
-	// will not work in a multi-node cluster.
+	// PodTemplateFilePathHostPath 是用作 HostPath 持久卷回收模板的 Pod 定义文件路径。
+	// 该项仅供开发与测试，无法在多节点集群中工作。
 	PodTemplateFilePathHostPath string
-	// minimumTimeoutHostPath is the minimum ActiveDeadlineSeconds to use for a HostPath
-	// Recycler pod.  This is for development and testing only and will not work in a multi-node
-	// cluster.
+	// MinimumTimeoutHostPath 是 HostPath 回收器 Pod 使用的最小 ActiveDeadlineSeconds。
+	// 该项仅供开发与测试，无法在多节点集群中工作。
 	MinimumTimeoutHostPath int32
-	// incrementTimeoutHostPath is the increment of time added per Gi to ActiveDeadlineSeconds
-	// for a HostPath scrubber pod.  This is for development and testing only and will not work
-	// in a multi-node cluster.
+	// IncrementTimeoutHostPath 是 HostPath 清理器 Pod 每增加 1 Gi 容量时，ActiveDeadlineSeconds 的增量。
+	// 该项仅供开发与测试，无法在多节点集群中工作。
 	IncrementTimeoutHostPath int32
 }

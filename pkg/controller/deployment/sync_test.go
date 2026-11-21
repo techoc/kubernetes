@@ -37,11 +37,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestScale 验证 Deployment 扩容与缩容时的副本分配：
+// 包括按比例缩放、余数分配、失败更新以及 maxSurge 变化等场景。
 func TestScale(t *testing.T) {
 	newTimestamp := metav1.Date(2016, 5, 20, 2, 0, 0, 0, time.UTC)
 	oldTimestamp := metav1.Date(2016, 5, 20, 1, 0, 0, 0, time.UTC)
 	olderTimestamp := metav1.Date(2016, 5, 20, 0, 0, 0, 0, time.UTC)
 
+	// updatedTemplate 生成一个模板发生改变的 Deployment，用于验证模板变更时的缩放。
 	var updatedTemplate = func(replicas int32) *apps.Deployment {
 		d := newDeployment("foo", replicas, nil, nil, nil, map[string]string{"foo": "bar"})
 		d.Spec.Template.Labels["another"] = "label"
@@ -49,17 +52,26 @@ func TestScale(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		deployment    *apps.Deployment
+		// name 为测试用例名称。
+		name string
+		// deployment 为缩放后的目标 Deployment。
+		deployment *apps.Deployment
+		// oldDeployment 为缩放前的 Deployment，用于读取 maxSurge 等旧配置。
 		oldDeployment *apps.Deployment
 
-		newRS  *apps.ReplicaSet
+		// newRS 为最新的 ReplicaSet。
+		newRS *apps.ReplicaSet
+		// oldRSs 为历史 ReplicaSet 列表。
 		oldRSs []*apps.ReplicaSet
 
-		expectedNew  *apps.ReplicaSet
-		expectedOld  []*apps.ReplicaSet
+		// expectedNew 为新 ReplicaSet 的期望副本数。
+		expectedNew *apps.ReplicaSet
+		// expectedOld 为历史 ReplicaSet 的期望副本数。
+		expectedOld []*apps.ReplicaSet
+		// wasntUpdated 标记预期不会被更新的 ReplicaSet，校验时跳过。
 		wasntUpdated map[string]bool
 
+		// desiredReplicasAnnotations 为指定 ReplicaSet 设置期望副本注解。
 		desiredReplicasAnnotations map[string]int32
 	}{
 		{
@@ -139,7 +151,7 @@ func TestScale(t *testing.T) {
 			expectedNew: rs("foo-v3", 1, nil, newTimestamp),
 			expectedOld: []*apps.ReplicaSet{rs("foo-v2", 5, nil, oldTimestamp), rs("foo-v1", 2, nil, olderTimestamp)},
 		},
-		// Scales up the new replica set.
+		// 余数优先分配给最新的 ReplicaSet。
 		{
 			name:          "leftover distribution: 3 -> 4",
 			deployment:    newDeployment("foo", 4, nil, nil, nil, nil),
@@ -151,7 +163,7 @@ func TestScale(t *testing.T) {
 			expectedNew: rs("foo-v3", 2, nil, newTimestamp),
 			expectedOld: []*apps.ReplicaSet{rs("foo-v2", 1, nil, oldTimestamp), rs("foo-v1", 1, nil, olderTimestamp)},
 		},
-		// Scales down the older replica set.
+		// 余数优先从最旧的 ReplicaSet 扣除。
 		{
 			name:          "leftover distribution: 3 -> 2",
 			deployment:    newDeployment("foo", 2, nil, nil, nil, nil),
@@ -163,7 +175,7 @@ func TestScale(t *testing.T) {
 			expectedNew: rs("foo-v3", 1, nil, newTimestamp),
 			expectedOld: []*apps.ReplicaSet{rs("foo-v2", 1, nil, oldTimestamp), rs("foo-v1", 0, nil, olderTimestamp)},
 		},
-		// Scales up the latest replica set first.
+		// 没有新 ReplicaSet 时，优先扩容最新的历史 ReplicaSet。
 		{
 			name:          "proportional scaling (no new rs): 4 -> 5",
 			deployment:    newDeployment("foo", 5, nil, nil, nil, nil),
@@ -175,7 +187,7 @@ func TestScale(t *testing.T) {
 			expectedNew: nil,
 			expectedOld: []*apps.ReplicaSet{rs("foo-v2", 3, nil, oldTimestamp), rs("foo-v1", 2, nil, olderTimestamp)},
 		},
-		// Scales down to zero
+		// 缩容到零。
 		{
 			name:          "proportional scaling: 6 -> 0",
 			deployment:    newDeployment("foo", 0, nil, nil, nil, nil),
@@ -187,7 +199,7 @@ func TestScale(t *testing.T) {
 			expectedNew: rs("foo-v3", 0, nil, newTimestamp),
 			expectedOld: []*apps.ReplicaSet{rs("foo-v2", 0, nil, oldTimestamp), rs("foo-v1", 0, nil, olderTimestamp)},
 		},
-		// Scales up from zero
+		// 从零扩容。
 		{
 			name:          "proportional scaling: 0 -> 6",
 			deployment:    newDeployment("foo", 6, nil, nil, nil, nil),
@@ -200,9 +212,9 @@ func TestScale(t *testing.T) {
 			expectedOld:  []*apps.ReplicaSet{rs("foo-v2", 0, nil, oldTimestamp), rs("foo-v1", 0, nil, olderTimestamp)},
 			wasntUpdated: map[string]bool{"foo-v2": true, "foo-v1": true},
 		},
-		// Scenario: deployment.spec.replicas == 3 ( foo-v1.spec.replicas == foo-v2.spec.replicas == foo-v3.spec.replicas == 1 )
-		// Deployment is scaled to 5. foo-v3.spec.replicas and foo-v2.spec.replicas should increment by 1 but foo-v2 fails to
-		// update.
+		// 场景：deployment.spec.replicas 为 3，且三个 ReplicaSet 各有 1 个副本；
+		// Deployment 被扩到 5，foo-v3 和 foo-v2 应各增加 1 个副本，但 foo-v2 更新失败；
+		// 此时期望副本数应记录在注解中以便后续重试。
 		{
 			name:          "failed rs update",
 			deployment:    newDeployment("foo", 5, nil, nil, nil, nil),
@@ -271,12 +283,15 @@ func TestScale(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			_ = olderTimestamp
 			t.Log(test.name)
+			// 用假客户端记录 scale 产生的 UPDATE 动作。
 			fake := fake.Clientset{}
 			dc := &DeploymentController{
 				client:        &fake,
 				eventRecorder: &record.FakeRecorder{},
 			}
 
+			// 预先设置期望副本注解，模拟真实 controller 在缩放前写入的状态；
+			// scale 逻辑会从这些注解读取上次的目标副本数。
 			if test.newRS != nil {
 				desiredReplicas := *(test.oldDeployment.Spec.Replicas)
 				if desired, ok := test.desiredReplicasAnnotations[test.newRS.Name]; ok {
@@ -286,6 +301,7 @@ func TestScale(t *testing.T) {
 			}
 			for i := range test.oldRSs {
 				rs := test.oldRSs[i]
+				// 用例允许传入 nil 表示对应位置没有 ReplicaSet，跳过即可。
 				if rs == nil {
 					continue
 				}
@@ -303,9 +319,9 @@ func TestScale(t *testing.T) {
 				return
 			}
 
-			// Construct the nameToSize map that will hold all the sizes we got our of tests
-			// Skip updating the map if the replica set wasn't updated since there will be
-			// no update action for it.
+			// nameToSize 汇总 scale 之后各 ReplicaSet 的副本数
+			// 对预期未被更新的 ReplicaSet 跳过校验，
+			// 因为客户端不会收到对应的 UPDATE 动作。
 			nameToSize := make(map[string]int32)
 			if test.newRS != nil {
 				nameToSize[test.newRS.Name] = *(test.newRS.Spec.Replicas)
@@ -314,7 +330,7 @@ func TestScale(t *testing.T) {
 				rs := test.oldRSs[i]
 				nameToSize[rs.Name] = *(rs.Spec.Replicas)
 			}
-			// Get all the UPDATE actions and update nameToSize with all the updated sizes.
+			// 从 UPDATE 动作中提取更新后的副本数，覆盖初始记录
 			for _, action := range fake.Actions() {
 				rs := action.(testclient.UpdateAction).GetObject().(*apps.ReplicaSet)
 				if !test.wasntUpdated[rs.Name] {
@@ -341,6 +357,8 @@ func TestScale(t *testing.T) {
 	}
 }
 
+// TestDeploymentController_cleanupDeployment 验证清理逻辑会删除超出历史限制的旧 ReplicaSet，
+// 同时只清理副本数已归零且尚未开始删除的对象。
 func TestDeploymentController_cleanupDeployment(t *testing.T) {
 	selector := map[string]string{"foo": "bar"}
 	alreadyDeleted := newRSWithStatus("foo-1", 0, 0, selector)
@@ -348,9 +366,12 @@ func TestDeploymentController_cleanupDeployment(t *testing.T) {
 	alreadyDeleted.DeletionTimestamp = &now
 
 	tests := []struct {
-		oldRSs               []*apps.ReplicaSet
+		// oldRSs 为待清理的历史 ReplicaSet。
+		oldRSs []*apps.ReplicaSet
+		// revisionHistoryLimit 为保留的历史版本数量。
 		revisionHistoryLimit int32
-		expectedDeletions    int
+		// expectedDeletions 为期望的删除动作数量。
+		expectedDeletions int
 	}{
 		{
 			oldRSs: []*apps.ReplicaSet{
@@ -362,7 +383,7 @@ func TestDeploymentController_cleanupDeployment(t *testing.T) {
 			expectedDeletions:    2,
 		},
 		{
-			// Only delete the replica set with Spec.Replicas = Status.Replicas = 0.
+			// 只删除 Spec.Replicas 与 Status.Replicas 都为 0 的 ReplicaSet。
 			oldRSs: []*apps.ReplicaSet{
 				newRSWithStatus("foo-1", 0, 0, selector),
 				newRSWithStatus("foo-2", 0, 1, selector),
@@ -397,7 +418,7 @@ func TestDeploymentController_cleanupDeployment(t *testing.T) {
 			expectedDeletions:    0,
 		},
 		{
-			// with unlimited revisionHistoryLimit
+			// 历史版本上限无限大时不应删除任何 ReplicaSet。
 			oldRSs: []*apps.ReplicaSet{
 				newRSWithStatus("foo-1", 0, 0, selector),
 				newRSWithStatus("foo-2", 0, 0, selector),
@@ -422,9 +443,11 @@ func TestDeploymentController_cleanupDeployment(t *testing.T) {
 		}
 
 		controller.eventRecorder = &record.FakeRecorder{}
+		// lister 的同步探针直接置为 ready，避免为单测启动完整 informer 同步流程。
 		controller.dListerSynced = alwaysReady
 		controller.rsListerSynced = alwaysReady
 		controller.podListerSynced = alwaysReady
+		// 把用例中的历史 RS 灌入 informer 索引，cleanupDeployment 依赖 lister 读取它们。
 		for _, rs := range test.oldRSs {
 			informers.Apps().V1().ReplicaSets().Informer().GetIndexer().Add(rs)
 		}
@@ -451,11 +474,14 @@ func TestDeploymentController_cleanupDeployment(t *testing.T) {
 	}
 }
 
+// TestDeploymentController_cleanupDeploymentOrder 验证清理顺序：
+// 优先按修订版本号删除旧 ReplicaSet，缺失修订版本或仍有副本的对象会被跳过。
 func TestDeploymentController_cleanupDeploymentOrder(t *testing.T) {
 	selector := map[string]string{"foo": "bar"}
 	now := metav1.Now()
 	duration := time.Minute
 
+	// newRSWithRevisionAndCreationTimestamp 构造带创建时间和修订版本注解的 ReplicaSet。
 	newRSWithRevisionAndCreationTimestamp := func(name string, replicas int32, selector map[string]string, timestamp time.Time, revision string) *apps.ReplicaSet {
 		rs := rs(name, replicas, selector, metav1.NewTime(timestamp))
 		if revision != "" {
@@ -469,14 +495,17 @@ func TestDeploymentController_cleanupDeploymentOrder(t *testing.T) {
 		return rs
 	}
 
-	// for all test cases, creationTimestamp order keeps as: rs1 < rs2 < rs3 < r4
+	// 所有用例中创建时间顺序固定为 rs1 < rs2 < rs3 < rs4，以便单独验证修订版本的影响。
 	tests := []struct {
-		oldRSs               []*apps.ReplicaSet
+		// oldRSs 为待清理的历史 ReplicaSet。
+		oldRSs []*apps.ReplicaSet
+		// revisionHistoryLimit 为保留的历史版本数量。
 		revisionHistoryLimit int32
-		expectedDeletedRSs   sets.String
+		// expectedDeletedRSs 为期望被删除的 ReplicaSet 名称集合。
+		expectedDeletedRSs sets.String
 	}{
 		{
-			// revision order: rs1 < rs2, delete rs1
+			// 修订版本顺序 rs1 < rs2，应删除 rs1
 			oldRSs: []*apps.ReplicaSet{
 				newRSWithRevisionAndCreationTimestamp("foo-1", 0, selector, now.Add(-1*duration), "1"),
 				newRSWithRevisionAndCreationTimestamp("foo-2", 0, selector, now.Time, "2"),
@@ -485,7 +514,7 @@ func TestDeploymentController_cleanupDeploymentOrder(t *testing.T) {
 			expectedDeletedRSs:   sets.NewString("foo-1"),
 		},
 		{
-			// revision order: rs2 < rs1, delete rs2
+			// 修订版本顺序 rs2 < rs1，应删除 rs2
 			oldRSs: []*apps.ReplicaSet{
 				newRSWithRevisionAndCreationTimestamp("foo-1", 0, selector, now.Add(-1*duration), "2"),
 				newRSWithRevisionAndCreationTimestamp("foo-2", 0, selector, now.Time, "1"),
@@ -494,7 +523,7 @@ func TestDeploymentController_cleanupDeploymentOrder(t *testing.T) {
 			expectedDeletedRSs:   sets.NewString("foo-2"),
 		},
 		{
-			// rs1 has revision but rs2 doesn't have revision, delete rs2
+			// rs1 有修订版本而 rs2 没有，应删除 rs2
 			oldRSs: []*apps.ReplicaSet{
 				newRSWithRevisionAndCreationTimestamp("foo-1", 0, selector, now.Add(-1*duration), "1"),
 				newRSWithRevisionAndCreationTimestamp("foo-2", 0, selector, now.Time, ""),
@@ -503,7 +532,7 @@ func TestDeploymentController_cleanupDeploymentOrder(t *testing.T) {
 			expectedDeletedRSs:   sets.NewString("foo-2"),
 		},
 		{
-			// rs1 doesn't have revision while rs2 has revision, delete rs1
+			// rs1 没有修订版本而 rs2 有，应删除 rs1
 			oldRSs: []*apps.ReplicaSet{
 				newRSWithRevisionAndCreationTimestamp("foo-1", 0, selector, now.Add(-1*duration), ""),
 				newRSWithRevisionAndCreationTimestamp("foo-2", 0, selector, now.Time, "2"),
@@ -512,7 +541,7 @@ func TestDeploymentController_cleanupDeploymentOrder(t *testing.T) {
 			expectedDeletedRSs:   sets.NewString("foo-1"),
 		},
 		{
-			// revision order: rs1 < rs2 < r3, but rs1 has replicas, delete rs2
+			// 修订版本 rs1 < rs2 < rs3，但 rs1 仍有副本，应删除 rs2
 			oldRSs: []*apps.ReplicaSet{
 				newRSWithRevisionAndCreationTimestamp("foo-1", 1, selector, now.Add(-1*duration), "1"),
 				newRSWithRevisionAndCreationTimestamp("foo-2", 0, selector, now.Time, "2"),
@@ -522,7 +551,7 @@ func TestDeploymentController_cleanupDeploymentOrder(t *testing.T) {
 			expectedDeletedRSs:   sets.NewString("foo-2"),
 		},
 		{
-			// revision order: rs1 < rs2 < r3, both rs1 && rs2 have replicas, don't delete
+			// 修订版本 rs1 < rs2 < rs3，rs1 和 rs2 都有副本，不应删除
 			oldRSs: []*apps.ReplicaSet{
 				newRSWithRevisionAndCreationTimestamp("foo-1", 1, selector, now.Add(-1*duration), "1"),
 				newRSWithRevisionAndCreationTimestamp("foo-2", 1, selector, now.Time, "2"),
@@ -532,7 +561,7 @@ func TestDeploymentController_cleanupDeploymentOrder(t *testing.T) {
 			expectedDeletedRSs:   sets.NewString(),
 		},
 		{
-			// revision order: rs2 < rs4 < rs1 < rs3, delete rs2 && rs4
+			// 修订版本 rs2 < rs4 < rs1 < rs3，应删除 rs2 和 rs4
 			oldRSs: []*apps.ReplicaSet{
 				newRSWithRevisionAndCreationTimestamp("foo-1", 0, selector, now.Add(-1*duration), "3"),
 				newRSWithRevisionAndCreationTimestamp("foo-2", 0, selector, now.Time, "1"),
@@ -558,9 +587,11 @@ func TestDeploymentController_cleanupDeploymentOrder(t *testing.T) {
 		}
 
 		controller.eventRecorder = &record.FakeRecorder{}
+		// lister 的同步探针直接置为 ready，避免为单测启动完整 informer 同步流程。
 		controller.dListerSynced = alwaysReady
 		controller.rsListerSynced = alwaysReady
 		controller.podListerSynced = alwaysReady
+		// 把用例中的历史 RS 灌入 informer 索引，cleanupDeployment 依赖 lister 读取它们。
 		for _, rs := range test.oldRSs {
 			informers.Apps().V1().ReplicaSets().Informer().GetIndexer().Add(rs)
 		}
@@ -595,10 +626,15 @@ func TestDeploymentController_cleanupDeploymentOrder(t *testing.T) {
 	}
 }
 
+// TestDeploymentController_generateReplicaSetName 验证新 ReplicaSet 的名称生成：
+// Deployment 名称会被截断以给哈希后缀留出空间，且总长度不超过 DNS 子域限制。
 func TestDeploymentController_generateReplicaSetName(t *testing.T) {
 	tests := []struct {
-		name                  string
-		deploymentName        string
+		// name 为测试用例名称。
+		name string
+		// deploymentName 为输入的 Deployment 名称。
+		deploymentName string
+		// wantDeploymentPortion 为期望名称中 Deployment 部分的内容。
 		wantDeploymentPortion string
 	}{
 		{
@@ -644,6 +680,7 @@ func TestDeploymentController_generateReplicaSetName(t *testing.T) {
 			return
 		}
 
+		// 生成的 RS 名称无法直接调用内部函数得到，只能从假客户端记录的 CREATE 动作中反推。
 		rsName := ""
 		for _, action := range fake.Actions() {
 			if createAction, ok := action.(testclient.CreateAction); ok {
@@ -682,12 +719,17 @@ func TestDeploymentController_generateReplicaSetName(t *testing.T) {
 	}
 }
 
+// TestGenerateReplicaSetName 验证 generateReplicaSetName 在各种名称与哈希长度下的拼接结果。
 func TestGenerateReplicaSetName(t *testing.T) {
 	tests := []struct {
-		name           string
+		// name 为测试用例名称。
+		name string
+		// deploymentName 为输入的 Deployment 名称。
 		deploymentName string
-		hash           string
-		want           string
+		// hash 为输入的 pod-template-hash。
+		hash string
+		// want 为期望生成的 ReplicaSet 名称。
+		want string
 	}{
 		{
 			name:           "short name",

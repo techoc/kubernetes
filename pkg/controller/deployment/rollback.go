@@ -28,7 +28,8 @@ import (
 	deploymentutil "k8s.io/kubernetes/pkg/controller/deployment/util"
 )
 
-// rollback the deployment to the specified revision. In any case cleanup the rollback spec.
+// rollback 把 Deployment 回滚到指定 revision；无论成功与否，最后都会清理 rollbackTo 规格，
+// 避免同一请求在后续 requeue 中被反复处理。
 func (dc *DeploymentController) rollback(ctx context.Context, d *apps.Deployment, rsList []*apps.ReplicaSet) error {
 	logger := klog.FromContext(ctx)
 	newRS, allOldRSs, err := dc.getAllReplicaSetsAndSyncRevision(ctx, d, rsList, true)
@@ -38,10 +39,10 @@ func (dc *DeploymentController) rollback(ctx context.Context, d *apps.Deployment
 
 	allRSs := append(allOldRSs, newRS)
 	rollbackRevision := *getRollbackTo(d)
-	// If rollback revision is 0, rollback to the last revision
+	// revision 为 0 表示用户未指定版本，回退到最近一个历史版本
 	if rollbackRevision == 0 {
 		if rollbackRevision = deploymentutil.LastRevision(logger, allRSs); rollbackRevision == 0 {
-			// If we still can't find the last revision, gives up rollback
+			// 找不到可回退的历史版本，放弃回滚并清理标记
 			dc.emitRollbackWarningEvent(d, deploymentutil.RollbackRevisionNotFound, "Unable to find last revision.")
 			// Gives up rollback
 			return dc.updateDeploymentAndClearRollbackTo(ctx, d)
@@ -55,9 +56,9 @@ func (dc *DeploymentController) rollback(ctx context.Context, d *apps.Deployment
 		}
 		if v == rollbackRevision {
 			logger.V(4).Info("Found replica set with desired revision", "replicaSet", klog.KObj(rs), "revision", v)
-			// rollback by copying podTemplate.Spec from the replica set
-			// revision number will be incremented during the next getAllReplicaSetsAndSyncRevision call
-			// no-op if the spec matches current deployment's podTemplate.Spec
+			// 通过复制目标 ReplicaSet 的 podTemplate.Spec 完成回滚；
+			// 即使模板相同也继续清理 rollbackTo，revision 号会在下次同步时递增。
+			// 模板未变化时 rollbackToTemplate 为空操作。
 			performedRollback, err := dc.rollbackToTemplate(ctx, d, rs)
 			if performedRollback && err == nil {
 				dc.emitRollbackNormalEvent(d, fmt.Sprintf("Rolled back deployment %q to revision %d", d.Name, rollbackRevision))
@@ -70,26 +71,20 @@ func (dc *DeploymentController) rollback(ctx context.Context, d *apps.Deployment
 	return dc.updateDeploymentAndClearRollbackTo(ctx, d)
 }
 
-// rollbackToTemplate compares the templates of the provided deployment and replica set and
-// updates the deployment with the replica set template in case they are different. It also
-// cleans up the rollback spec so subsequent requeues of the deployment won't end up in here.
+// rollbackToTemplate 比较 Deployment 与 ReplicaSet 的模板，不同则用 ReplicaSet 的模板更新 Deployment，
+// 并清理 rollbackTo 规格，防止后续 requeue 再次进入回滚流程。
 func (dc *DeploymentController) rollbackToTemplate(ctx context.Context, d *apps.Deployment, rs *apps.ReplicaSet) (bool, error) {
 	logger := klog.FromContext(ctx)
 	performedRollback := false
 	if !deploymentutil.EqualIgnoreHash(&d.Spec.Template, &rs.Spec.Template) {
 		logger.V(4).Info("Rolling back deployment to old template spec", "deployment", klog.KObj(d), "templateSpec", rs.Spec.Template.Spec)
 		deploymentutil.SetFromReplicaSetTemplate(d, rs.Spec.Template)
-		// set RS (the old RS we'll rolling back to) annotations back to the deployment;
-		// otherwise, the deployment's current annotations (should be the same as current new RS) will be copied to the RS after the rollback.
+		// 必须把目标旧 RS 的注解同步回 Deployment：回滚后新 RS 会从 Deployment 继承注解，
+		// 若不同步，change-cause 等历史信息会被当前版本覆盖。
 		//
-		// For example,
-		// A Deployment has old RS1 with annotation {change-cause:create}, and new RS2 {change-cause:edit}.
-		// Note that both annotations are copied from Deployment, and the Deployment should be annotated {change-cause:edit} as well.
-		// Now, rollback Deployment to RS1, we should update Deployment's pod-template and also copy annotation from RS1.
-		// Deployment is now annotated {change-cause:create}, and we have new RS1 {change-cause:create}, old RS2 {change-cause:edit}.
-		//
-		// If we don't copy the annotations back from RS to deployment on rollback, the Deployment will stay as {change-cause:edit},
-		// and new RS1 becomes {change-cause:edit} (copied from deployment after rollback), old RS2 {change-cause:edit}, which is not correct.
+		// 例如旧 RS1 带 {change-cause:create}，新 RS2 带 {change-cause:edit}，Deployment 当前也是 edit。
+		// 回滚到 RS1 时应把模板和注解一并复制回来：Deployment 变为 create，新 RS1 为 create，旧 RS2 仍为 edit。
+		// 否则 Deployment 停留在 edit，新 RS1 也会继承 edit，导致变更历史错误。
 		deploymentutil.SetDeploymentAnnotationsTo(d, rs)
 		performedRollback = true
 	} else {
@@ -101,17 +96,18 @@ func (dc *DeploymentController) rollbackToTemplate(ctx context.Context, d *apps.
 	return performedRollback, dc.updateDeploymentAndClearRollbackTo(ctx, d)
 }
 
+// emitRollbackWarningEvent 记录回滚失败的 Warning 事件。
 func (dc *DeploymentController) emitRollbackWarningEvent(d *apps.Deployment, reason, message string) {
 	dc.eventRecorder.Eventf(d, v1.EventTypeWarning, reason, "%s", message)
 }
 
+// emitRollbackNormalEvent 记录回滚成功的 Normal 事件。
 func (dc *DeploymentController) emitRollbackNormalEvent(d *apps.Deployment, message string) {
 	dc.eventRecorder.Eventf(d, v1.EventTypeNormal, deploymentutil.RollbackDone, "%s", message)
 }
 
-// updateDeploymentAndClearRollbackTo sets .spec.rollbackTo to nil and update the input deployment
-// It is assumed that the caller will have updated the deployment template appropriately (in case
-// we want to rollback).
+// updateDeploymentAndClearRollbackTo 清空 .spec.rollbackTo 并更新 Deployment。
+// 调用方应已在需要回滚时更新好模板；本函数也用于回滚失败后的清理。
 func (dc *DeploymentController) updateDeploymentAndClearRollbackTo(ctx context.Context, d *apps.Deployment) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Cleans up rollbackTo of deployment", "deployment", klog.KObj(d))
@@ -120,7 +116,7 @@ func (dc *DeploymentController) updateDeploymentAndClearRollbackTo(ctx context.C
 	return err
 }
 
-// getRollbackTo returns the revision to roll back to from the deprecated rollback annotation, or nil if absent or invalid.
+// getRollbackTo 从已废弃的 rollback 注解中读取目标 revision；注解缺失或格式非法时返回 nil。
 func getRollbackTo(d *apps.Deployment) *int64 {
 	// Extract the annotation used for round-tripping the deprecated RollbackTo field.
 	revision := d.Annotations[apps.DeprecatedRollbackTo]
@@ -129,13 +125,13 @@ func getRollbackTo(d *apps.Deployment) *int64 {
 	}
 	revision64, err := strconv.ParseInt(revision, 10, 64)
 	if err != nil {
-		// If it's invalid, ignore it.
+		// 注解内容非法时视为未指定，不阻断同步流程
 		return nil
 	}
 	return &revision64
 }
 
-// setRollbackTo sets the deprecated rollback annotation to the given revision, or clears it if revision is nil.
+// setRollbackTo 设置已废弃的 rollback 注解；revision 为 nil 时删除该注解。
 func setRollbackTo(d *apps.Deployment, revision *int64) {
 	if revision == nil {
 		delete(d.Annotations, apps.DeprecatedRollbackTo)

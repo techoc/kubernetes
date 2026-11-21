@@ -34,13 +34,14 @@ import (
 	"k8s.io/kubernetes/pkg/controller/nodeipam/ipam"
 )
 
-// ipamController is an interface abstracting an interface for
-// legacy mode.
+// ipamController 抽象 legacy 模式下的 IPAM 控制循环，
+// 使 Controller 能以统一方式运行新旧两套分配器。
 type ipamController interface {
 	Run(ctx context.Context)
 }
 
-// Controller is the controller that manages node ipam state.
+// Controller 管理节点 IPAM 状态：根据 allocatorType 选择 legacy IPAM
+// 或 CIDR 分配器，为节点分配 podCIDR 并监听集群节点变化。
 type Controller struct {
 	allocatorType ipam.CIDRAllocatorType
 
@@ -58,11 +59,9 @@ type Controller struct {
 	cidrAllocator ipam.CIDRAllocator
 }
 
-// NewNodeIpamController returns a new node IP Address Management controller to
-// sync instances from cloudprovider.
-// This method returns an error if it is unable to initialize the CIDR bitmap with
-// podCIDRs it has already allocated to nodes. Since we don't allow podCIDR changes
-// currently, this should be handled as a fatal error.
+// NewNodeIpamController 创建一个新的节点 IP 地址管理控制器，用于与 cloudprovider 同步节点实例信息。
+// 如果无法用已分配给节点的 podCIDR 初始化 CIDR 位图则返回错误；
+// 由于当前不允许修改 podCIDR，这类错误必须作为致命错误处理。
 func NewNodeIpamController(
 	ctx context.Context,
 	nodeInformer coreinformers.NodeInformer,
@@ -78,7 +77,8 @@ func NewNodeIpamController(
 		return nil, fmt.Errorf("kubeClient is nil when starting Controller")
 	}
 
-	// Cloud CIDR allocator does not rely on clusterCIDR or nodeCIDRMaskSize for allocation.
+	// Cloud CIDR 分配器直接使用云厂商提供的 CIDR，不依赖 clusterCIDR 或 nodeCIDRMaskSize，
+	// 因此仅对其他分配器校验这两个参数。
 	if allocatorType != ipam.CloudAllocatorType {
 		if len(clusterCIDRs) == 0 {
 			return nil, fmt.Errorf("Controller: Must specify --cluster-cidr if --allocate-node-cidrs is set")
@@ -102,7 +102,8 @@ func NewNodeIpamController(
 		allocatorType:        allocatorType,
 	}
 
-	// TODO: Abstract this check into a generic controller manager should run method.
+	// TODO: 将这类检查抽象为 controller manager 通用的启动方法。
+	// 根据分配器类型选择 legacy IPAM（从集群/云获取 CIDR）或通用的 CIDR 分配器。
 	if ic.allocatorType == ipam.IPAMFromClusterAllocatorType || ic.allocatorType == ipam.IPAMFromCloudAllocatorType {
 		var err error
 		ic.legacyIPAM, err = createLegacyIPAM(ctx, ic, nodeInformer, cloud, kubeClient, clusterCIDRs, serviceCIDR, nodeCIDRMaskSizes)
@@ -131,11 +132,13 @@ func NewNodeIpamController(
 	return ic, nil
 }
 
-// Run starts an asynchronous loop that monitors the status of cluster nodes.
+// Run 启动异步循环，监控集群节点状态并驱动相应的 IPAM 分配器。
+// 启动前需等待 node informer 缓存同步完成，否则基于缓存的分配决策会遗漏已有节点。
 func (nc *Controller) Run(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 
-	// Start event processing pipeline.
+	// 启动事件处理流水线：结构化日志与事件落盘到 API server，
+	// 退出时关闭 broadcaster，避免事件写入 goroutine 泄漏。
 	nc.eventBroadcaster.StartStructuredLogging(3)
 	nc.eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: nc.kubeClient.CoreV1().Events("")})
 	defer nc.eventBroadcaster.Shutdown()
@@ -153,7 +156,8 @@ func (nc *Controller) Run(ctx context.Context) {
 	}
 }
 
-// RunWithMetrics is a wrapper for Run that also tracks starting and stopping of the nodeipam controller with additional metric
+// RunWithMetrics 是对 Run 的包装，在启动/停止 nodeipam 控制器时额外记录指标，
+// 便于 controller manager 观测各控制器的运行状态。
 func (nc *Controller) RunWithMetrics(ctx context.Context, controllerManagerMetrics *controllersmetrics.ControllerManagerMetrics) {
 	controllerManagerMetrics.ControllerStarted("nodeipam")
 	defer controllerManagerMetrics.ControllerStopped("nodeipam")

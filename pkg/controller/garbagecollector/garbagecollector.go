@@ -47,29 +47,24 @@ import (
 	"k8s.io/kubernetes/pkg/controller/garbagecollector/metrics"
 )
 
-// ResourceResyncTime defines the resync period of the garbage collector's informers.
+// ResourceResyncTime 定义垃圾回收器 informer 的重新同步周期（0 表示不做周期性重同步）。
 const ResourceResyncTime time.Duration = 0
 
-// GarbageCollector runs reflectors to watch for changes of managed API
-// objects, funnels the results to a single-threaded dependencyGraphBuilder,
-// which builds a graph caching the dependencies among objects. Triggered by the
-// graph changes, the dependencyGraphBuilder enqueues objects that can
-// potentially be garbage-collected to the `attemptToDelete` queue, and enqueues
-// objects whose dependents need to be orphaned to the `attemptToOrphan` queue.
-// The GarbageCollector has workers who consume these two queues, send requests
-// to the API server to delete/update the objects accordingly.
-// Note that having the dependencyGraphBuilder notify the garbage collector
-// ensures that the garbage collector operates with a graph that is at least as
-// up to date as the notification is sent.
+// GarbageCollector 运行 reflector 监听受管理 API 对象的变化，把结果汇入单线程的
+// dependencyGraphBuilder，后者构建并维护缓存对象间依赖关系的有向图。
+// 图发生变化时，dependencyGraphBuilder 把可能被回收的对象放入 attemptToDelete 队列，
+// 把需要孤立其 dependents 的对象放入 attemptToOrphan 队列。
+// GarbageCollector 的 worker 消费这两个队列，向 API Server 发送删除/更新请求。
+// 由 dependencyGraphBuilder 主动通知 GC，可保证 GC 处理时使用的图至少与通知一样新。
 type GarbageCollector struct {
 	restMapper     meta.ResettableRESTMapper
 	metadataClient metadata.Interface
-	// garbage collector attempts to delete the items in attemptToDelete queue when the time is ripe.
+	// 时机成熟时，GC 会尝试删除 attemptToDelete 队列中的对象。
 	attemptToDelete workqueue.TypedRateLimitingInterface[*node]
-	// garbage collector attempts to orphan the dependents of the items in the attemptToOrphan queue, then deletes the items.
+	// GC 会先孤立 attemptToOrphan 队列中对象的 dependents，再删除这些对象。
 	attemptToOrphan        workqueue.TypedRateLimitingInterface[*node]
 	dependencyGraphBuilder *GraphBuilder
-	// GC caches the owners that do not exist according to the API server.
+	// GC 缓存那些 API Server 已确认不存在的 owner，避免重复查询。
 	absentOwnerCache *ReferenceCache
 
 	kubeClient       clientset.Interface
@@ -79,7 +74,7 @@ type GarbageCollector struct {
 var _ controller.Interface = (*GarbageCollector)(nil)
 var _ controller.Debuggable = (*GarbageCollector)(nil)
 
-// NewGarbageCollector creates a new GarbageCollector.
+// NewGarbageCollector 创建一个新的 GarbageCollector，内部先构造依赖图构建器再组装 GC。
 func NewGarbageCollector(
 	ctx context.Context,
 	kubeClient clientset.Interface,
@@ -93,6 +88,7 @@ func NewGarbageCollector(
 	return NewComposedGarbageCollector(ctx, kubeClient, metadataClient, mapper, graphBuilder)
 }
 
+// NewComposedGarbageCollector 构造并返回测试或控制器所需的对象。
 func NewComposedGarbageCollector(
 	ctx context.Context,
 	kubeClient clientset.Interface,
@@ -118,8 +114,7 @@ func NewComposedGarbageCollector(
 	return gc, nil
 }
 
-// resyncMonitors starts or stops resource monitors as needed to ensure that all
-// (and only) those resources present in the map are monitored.
+// resyncMonitors 按需启动或停止资源 monitor，确保恰好监控 map 中列出的资源。
 func (gc *GarbageCollector) resyncMonitors(logger klog.Logger, deletableResources map[schema.GroupVersionResource]struct{}) error {
 	if err := gc.dependencyGraphBuilder.syncMonitors(logger, deletableResources); err != nil {
 		return err
@@ -128,11 +123,11 @@ func (gc *GarbageCollector) resyncMonitors(logger klog.Logger, deletableResource
 	return nil
 }
 
-// Run starts garbage collector workers.
+// Run 启动垃圾回收器的图构建器与各类 worker，直到 ctx 结束。
 func (gc *GarbageCollector) Run(ctx context.Context, workers int, initialSyncTimeout time.Duration) {
 	defer utilruntime.HandleCrash()
 
-	// Start events processing pipeline.
+	// 启动事件处理流水线。
 	gc.eventBroadcaster.StartStructuredLogging(3)
 	gc.eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: gc.kubeClient.CoreV1().Events("")})
 	defer gc.eventBroadcaster.Shutdown()
@@ -149,12 +144,12 @@ func (gc *GarbageCollector) Run(ctx context.Context, workers int, initialSyncTim
 		wg.Wait()
 	}()
 
-	// Start dependency graph builder.
+	// 在独立 goroutine 中启动依赖图构建器。
 	wg.Go(func() {
 		gc.dependencyGraphBuilder.Run(ctx)
 	})
 
-	// Create a new context that is cancelled after the initialSyncTimeout.
+	// 创建一个带超时的 context，用于限制初始缓存同步的等待时间。
 	syncCtx, cancel := context.WithTimeout(ctx, initialSyncTimeout)
 	defer cancel()
 
@@ -168,7 +163,7 @@ func (gc *GarbageCollector) Run(ctx context.Context, workers int, initialSyncTim
 
 	logger.Info("Proceeding to collect garbage")
 
-	// gc workers
+	// 启动 gc worker：分别处理删除队列与孤立队列。
 	for i := 0; i < workers; i++ {
 		wg.Go(func() {
 			wait.UntilWithContext(ctx, gc.runAttemptToDeleteWorker, 1*time.Second)
@@ -180,19 +175,15 @@ func (gc *GarbageCollector) Run(ctx context.Context, workers int, initialSyncTim
 	<-ctx.Done()
 }
 
-// Sync periodically resyncs the garbage collector when new resources are
-// observed from discovery. When new resources are detected, it will reset
-// gc.restMapper, and resync the monitors.
-//
-// Note that discoveryClient should NOT be shared with gc.restMapper, otherwise
-// the mapper's underlying discovery client will be unnecessarily reset during
-// the course of detecting new resources.
+// Sync 定期根据发现结果重新同步垃圾回收器：检测到新资源时重置 restMapper 并重新同步 monitor。
+// 注意 discoveryClient 不应与 gc.restMapper 共享，否则在检测新资源的过程中，
+// mapper 底层的 discovery client 会被不必要地重置。
 func (gc *GarbageCollector) Sync(ctx context.Context, discoveryClient discovery.ServerResourcesInterface, period time.Duration) {
 	oldResources := make(map[schema.GroupVersionResource]struct{})
 	wait.UntilWithContext(ctx, func(ctx context.Context) {
 		logger := klog.FromContext(ctx)
 
-		// Get the current resource list from discovery.
+		// 从发现接口获取当前资源列表。
 		newResources, err := GetDeletableResources(ctx, discovery.ToServerResourcesInterfaceWithContext(discoveryClient))
 
 		if len(newResources) == 0 {
@@ -201,7 +192,7 @@ func (gc *GarbageCollector) Sync(ctx context.Context, discoveryClient discovery.
 			return
 		}
 		if groupLookupFailures, isLookupFailure := discovery.GroupDiscoveryFailedErrorGroups(err); isLookupFailure {
-			// In partial discovery cases, preserve existing synced informers for resources in the failed groups, so resyncMonitors will only add informers for newly seen resources
+			// 部分发现失败时，保留失败组中已同步的现有 informer，这样 resyncMonitors 只会为新发现的资源创建 informer。
 			for k, v := range oldResources {
 				if _, failed := groupLookupFailures[k.GroupVersion()]; failed && gc.dependencyGraphBuilder.IsResourceSynced(k) {
 					newResources[k] = v
@@ -209,7 +200,7 @@ func (gc *GarbageCollector) Sync(ctx context.Context, discoveryClient discovery.
 			}
 		}
 
-		// Decide whether discovery has reported a change.
+		// 比较新旧资源集合，判断发现结果是否真的发生变化。
 		if reflect.DeepEqual(oldResources, newResources) {
 			logger.V(5).Info("no resource updates from discovery, skipping garbage collector sync")
 			return
@@ -220,21 +211,17 @@ func (gc *GarbageCollector) Sync(ctx context.Context, discoveryClient discovery.
 			"diff", printDiff(oldResources, newResources),
 		)
 
-		// Resetting the REST mapper will also invalidate the underlying discovery
-		// client. This is a leaky abstraction and assumes behavior about the REST
-		// mapper, but we'll deal with it for now.
+		// 重置 REST mapper 也会使其底层 discovery client 失效。
+		// 这是一种抽象泄漏，依赖了 REST mapper 的具体行为，目前只能接受。
 		gc.restMapper.Reset()
 		logger.V(4).Info("reset restmapper")
 
-		// Perform the monitor resync and wait for controllers to report cache sync.
+		// 重新同步 monitor，并等待各 controller 报告缓存已同步。
 		//
-		// NOTE: It's possible that newResources will diverge from the resources
-		// discovered by restMapper during the call to Reset, since they are
-		// distinct discovery clients invalidated at different times. For example,
-		// newResources may contain resources not returned in the restMapper's
-		// discovery call if the resources appeared in-between the calls. In that
-		// case, the restMapper will fail to map some of newResources until the next
-		// attempt.
+		// 注意：newResources 可能与 restMapper 在 Reset 时发现的资源不一致，
+		// 因为二者使用不同的 discovery client 且失效时间不同。例如若资源在两次调用之间出现，
+		// newResources 可能包含 restMapper 发现调用未返回的资源，此时 restMapper 直到下一次尝试前
+		// 都无法映射这些资源。
 		if err := gc.resyncMonitors(logger, newResources); err != nil {
 			utilruntime.HandleError(fmt.Errorf("failed to sync resource monitors: %w", err))
 			metrics.GarbageCollectorResourcesSyncError.Inc()
@@ -245,7 +232,7 @@ func (gc *GarbageCollector) Sync(ctx context.Context, discoveryClient discovery.
 		syncCtx, cancel := context.WithTimeout(ctx, period)
 		defer cancel()
 
-		// gc worker no longer waits for cache to be synced, but we will keep the periodical check to provide logs & metrics
+		// gc worker 不再等待缓存同步，但保留周期性检查以提供日志和指标。
 		cacheSynced := cache.WaitForNamedCacheSyncWithContext(syncCtx, func() bool {
 			return gc.dependencyGraphBuilder.IsSynced(logger)
 		})
@@ -256,14 +243,13 @@ func (gc *GarbageCollector) Sync(ctx context.Context, discoveryClient discovery.
 			metrics.GarbageCollectorResourcesSyncError.Inc()
 		}
 
-		// Finally, keep track of our new resource monitor state.
-		// Monitors where the cache sync times out are still tracked here as
-		// subsequent runs should stop them if their resources were removed.
+		// 最后更新记录的资源 monitor 状态。即使某些 monitor 缓存同步超时也仍记录，
+		// 以便后续发现其资源被移除时能停止这些 monitor。
 		oldResources = newResources
 	}, period)
 }
 
-// printDiff returns a human-readable summary of what resources were added and removed
+// printDiff 返回新增与移除资源的可读摘要，便于日志排查。
 func printDiff(oldResources, newResources map[schema.GroupVersionResource]struct{}) string {
 	removed := sets.NewString()
 	for oldResource := range oldResources {
@@ -280,25 +266,33 @@ func printDiff(oldResources, newResources map[schema.GroupVersionResource]struct
 	return fmt.Sprintf("added: %v, removed: %v", added.List(), removed.List())
 }
 
-// IsSynced returns true if dependencyGraphBuilder is synced.
+// IsSynced 在依赖图构建器已完成同步时返回 true。
 func (gc *GarbageCollector) IsSynced(logger klog.Logger) bool {
 	return gc.dependencyGraphBuilder.IsSynced(logger)
 }
 
+// runAttemptToDeleteWorker 持续消费 attemptToDelete 队列，直到队列关闭。
+// 每次调用 processAttemptToDeleteWorker 处理一个节点；返回 false 表示队列已关闭，循环退出。
 func (gc *GarbageCollector) runAttemptToDeleteWorker(ctx context.Context) {
 	for gc.processAttemptToDeleteWorker(ctx) {
 	}
 }
 
+// enqueuedVirtualDeleteEventErr 是标记错误：已入队虚拟删除事件，无需重试。
 var enqueuedVirtualDeleteEventErr = goerrors.New("enqueued virtual delete event")
 
+// namespacedOwnerOfClusterScopedObjectErr 是标记错误：集群级对象不能引用命名空间级 owner。
 var namespacedOwnerOfClusterScopedObjectErr = goerrors.New("cluster-scoped objects cannot refer to namespaced owners")
 
+// processAttemptToDeleteWorker 从 attemptToDelete 队列取一个节点并尝试回收它。
+// 根据 attemptToDeleteWorker 返回的动作决定遗忘还是限速重试；队列关闭时返回 false。
 func (gc *GarbageCollector) processAttemptToDeleteWorker(ctx context.Context) bool {
 	item, quit := gc.attemptToDelete.Get()
 	if quit {
 		return false
 	}
+	// 必须标记 Done，否则工作队列会认为该节点仍在处理中，
+	// 后续 AddRateLimited 的重试入队会被阻塞。
 	defer gc.attemptToDelete.Done(item)
 
 	action := gc.attemptToDeleteWorker(ctx, item)
@@ -312,13 +306,17 @@ func (gc *GarbageCollector) processAttemptToDeleteWorker(ctx context.Context) bo
 	return true
 }
 
+// workQueueItemAction 表示工作队列项处理后的动作：重试或遗忘。
 type workQueueItemAction int
 
+// 工作队列项处理动作的枚举值。
 const (
 	requeueItem = iota
 	forgetItem
 )
 
+// attemptToDeleteWorker 判断队首节点是否已过期或已被真实对象取代，
+// 再交给 attemptToDeleteItem 执行回收；根据结果返回重试或遗忘的动作。
 func (gc *GarbageCollector) attemptToDeleteWorker(ctx context.Context, item interface{}) workQueueItemAction {
 	n, ok := item.(*node)
 	if !ok {
@@ -331,14 +329,14 @@ func (gc *GarbageCollector) attemptToDeleteWorker(ctx context.Context, item inte
 	if !n.isObserved() {
 		nodeFromGraph, existsInGraph := gc.dependencyGraphBuilder.uidToNode.Read(n.identity.UID)
 		if !existsInGraph {
-			// this can happen if attemptToDelete loops on a requeued virtual node because attemptToDeleteItem returned an error,
-			// and in the meantime a deletion of the real object associated with that uid was observed
+			// 当 attemptToDeleteItem 返回错误导致虚拟节点被重新入队并循环时会出现这种情况：
+			// 期间又观测到该 UID 对应的真实对象被删除。
 			logger.V(5).Info("item no longer in the graph, skipping attemptToDeleteItem", "item", n.identity)
 			return forgetItem
 		}
 		if nodeFromGraph.isObserved() {
-			// this can happen if attemptToDelete loops on a requeued virtual node because attemptToDeleteItem returned an error,
-			// and in the meantime the real object associated with that uid was observed
+			// 当 attemptToDeleteItem 返回错误导致虚拟节点被重新入队并循环时会出现这种情况：
+			// 期间又观测到该 UID 对应的真实对象。
 			logger.V(5).Info("item no longer virtual in the graph, skipping attemptToDeleteItem on virtual node", "item", n.identity)
 			return forgetItem
 		}
@@ -346,30 +344,27 @@ func (gc *GarbageCollector) attemptToDeleteWorker(ctx context.Context, item inte
 
 	err := gc.attemptToDeleteItem(ctx, n)
 	if err == enqueuedVirtualDeleteEventErr {
-		// a virtual event was produced and will be handled by processGraphChanges, no need to requeue this node
+		// 已生成虚拟事件并交由 processGraphChanges 处理，无需重新入队该节点。
 		return forgetItem
 	} else if err == namespacedOwnerOfClusterScopedObjectErr {
-		// a cluster-scoped object referring to a namespaced owner is an error that will not resolve on retry, no need to requeue this node
+		// 集群级对象引用命名空间级 owner 是重试也无法修复的错误，无需重新入队。
 		return forgetItem
 	} else if err != nil {
 		if _, ok := err.(*restMappingError); ok {
-			// There are at least two ways this can happen:
-			// 1. The reference is to an object of a custom type that has not yet been
-			//    recognized by gc.restMapper (this is a transient error).
-			// 2. The reference is to an invalid group/version. We don't currently
-			//    have a way to distinguish this from a valid type we will recognize
-			//    after the next discovery sync.
-			// For now, log the error and retry.
+			// 至少有两类可能：
+			// 1. 引用了 gc.restMapper 尚未识别的自定义类型对象（暂时性错误）。
+			// 2. 引用了非法的 group/version，目前无法与下次发现同步后才会识别的合法类型区分。
+			// 目前先记录错误并重试。
 			logger.V(5).Info("error syncing item", "item", n.identity, "err", err)
 		} else {
 			utilruntime.HandleError(fmt.Errorf("error syncing item %s: %v", n, err))
 		}
-		// retry if garbage collection of an object failed.
+		// 对象回收失败时重试。
 		return requeueItem
 	} else if !n.isObserved() {
-		// requeue if item hasn't been observed via an informer event yet.
-		// otherwise a virtual node for an item added AND removed during watch reestablishment can get stuck in the graph and never removed.
-		// see https://issue.k8s.io/56121
+		// 若节点尚未通过 informer 事件被观测到则重新入队；
+		// 否则在 watch 重建期间被添加又被删除的对象，其虚拟节点可能永远滞留在图中无法清除。
+		// 见 https://issue.k8s.io/56121
 		logger.V(5).Info("item hasn't been observed via informer yet", "item", n.identity)
 		return requeueItem
 	}
@@ -377,14 +372,13 @@ func (gc *GarbageCollector) attemptToDeleteWorker(ctx context.Context, item inte
 	return forgetItem
 }
 
-// isDangling check if a reference is pointing to an object that doesn't exist.
-// If isDangling looks up the referenced object at the API server, it also
-// returns its latest state.
+// isDangling 检查 owner 引用是否指向不存在的对象。
+// 若向 API Server 查询了该对象，还会返回它的最新状态。
 func (gc *GarbageCollector) isDangling(ctx context.Context, reference metav1.OwnerReference, item *node) (
 	dangling bool, owner *metav1.PartialObjectMetadata, err error) {
 
 	logger := klog.FromContext(ctx)
-	// check for recorded absent cluster-scoped parent
+	// 先查缓存中是否记录了该集群级 owner 不存在。
 	absentOwnerCacheKey := objectReference{OwnerReference: ownerReferenceCoordinates(reference)}
 	if gc.absentOwnerCache.Has(absentOwnerCacheKey) {
 		logger.V(5).Info("according to the absentOwnerCache, item's owner does not exist",
@@ -394,7 +388,7 @@ func (gc *GarbageCollector) isDangling(ctx context.Context, reference metav1.Own
 		return true, nil, nil
 	}
 
-	// check for recorded absent namespaced parent
+	// 再查缓存中是否记录了该命名空间级 owner 不存在。
 	absentOwnerCacheKey.Namespace = item.identity.Namespace
 	if gc.absentOwnerCache.Has(absentOwnerCacheKey) {
 		logger.V(5).Info("according to the absentOwnerCache, item's owner does not exist in namespace",
@@ -410,6 +404,7 @@ func (gc *GarbageCollector) isDangling(ctx context.Context, reference metav1.Own
 	// ii) should update the object to remove such references. This is to
 	// prevent objects having references to an old resource from being
 	// deleted during a cluster upgrade.
+	// 将引用解析为可查询的资源；集群级与命名空间级的命名空间参数不同。
 	resource, namespaced, err := gc.apiResource(reference.APIVersion, reference.Kind)
 	if err != nil {
 		return false, nil, err
@@ -419,8 +414,8 @@ func (gc *GarbageCollector) isDangling(ctx context.Context, reference metav1.Own
 	}
 
 	if len(item.identity.Namespace) == 0 && namespaced {
-		// item is a cluster-scoped object referring to a namespace-scoped owner, which is not valid.
-		// return a marker error, rather than retrying on the lookup failure forever.
+		// 集群级对象引用命名空间级 owner 是非法的，返回标记错误，
+		// 避免对注定失败的查询无限重试。
 		logger.V(2).Info("item is cluster-scoped, but refers to a namespaced owner",
 			"item", item.identity,
 			"owner", reference,
@@ -431,6 +426,7 @@ func (gc *GarbageCollector) isDangling(ctx context.Context, reference metav1.Own
 	// TODO: It's only necessary to talk to the API server if the owner node
 	// is a "virtual" node. The local graph could lag behind the real
 	// status, but in practice, the difference is small.
+	// 向 API Server 获取 owner 最新状态，以 UID 是否匹配判定引用是否悬空。
 	owner, err = gc.metadataClient.Resource(resource).Namespace(resourceDefaultNamespace(namespaced, item.identity.Namespace)).Get(ctx, reference.Name, metav1.GetOptions{})
 	switch {
 	case errors.IsNotFound(err):
@@ -455,12 +451,11 @@ func (gc *GarbageCollector) isDangling(ctx context.Context, reference metav1.Own
 	return false, owner, nil
 }
 
-// classify the latestReferences to three categories:
-// solid: the owner exists, and is not "waitingForDependentsDeletion"
-// dangling: the owner does not exist
-// waitingForDependentsDeletion: the owner exists, its deletionTimestamp is non-nil, and it has
-// FinalizerDeletingDependents
-// This function communicates with the server.
+// classifyReferences 把最新 ownerRef 分为三类：
+// solid：owner 存在且未处于等待 dependents 删除状态；
+// dangling：owner 不存在；
+// waitingForDependentsDeletion：owner 存在、已标记删除且带有 FinalizerDeletingDependents。
+// 本函数会与 API Server 通信。
 func (gc *GarbageCollector) classifyReferences(ctx context.Context, item *node, latestReferences []metav1.OwnerReference) (
 	solid, dangling, waitingForDependentsDeletion []metav1.OwnerReference, err error) {
 	for _, reference := range latestReferences {
@@ -486,6 +481,7 @@ func (gc *GarbageCollector) classifyReferences(ctx context.Context, item *node, 
 	return solid, dangling, waitingForDependentsDeletion, nil
 }
 
+// ownerRefsToUIDs 从 ownerRef 列表中提取 UID 列表。
 func ownerRefsToUIDs(refs []metav1.OwnerReference) []types.UID {
 	var ret []types.UID
 	for _, ref := range refs {
@@ -494,12 +490,10 @@ func ownerRefsToUIDs(refs []metav1.OwnerReference) []types.UID {
 	return ret
 }
 
-// attemptToDeleteItem looks up the live API object associated with the node,
-// and issues a delete IFF the uid matches, the item is not blocked on deleting dependents,
-// and all owner references are dangling.
-//
-// if the API get request returns a NotFound error, or the retrieved item's uid does not match,
-// a virtual delete event for the node is enqueued and enqueuedVirtualDeleteEventErr is returned.
+// attemptToDeleteItem 查询节点对应的实际 API 对象，仅当 UID 匹配、未被阻塞于删除 dependents
+// 且所有 ownerRef 均为悬空引用时才执行删除。
+// 若查询返回 NotFound 或取回对象的 UID 不匹配，会为该节点入队一个虚拟删除事件并返回
+// enqueuedVirtualDeleteEventErr。
 func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node) error {
 	logger := klog.FromContext(ctx)
 
@@ -508,7 +502,7 @@ func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node)
 		"virtual", !item.isObserved(),
 	)
 
-	// "being deleted" is an one-way trip to the final deletion. We'll just wait for the final deletion, and then process the object's dependents.
+	// 进入删除流程是单向的，最终必然被删除；因此只需等待最终删除，再处理其 dependents。
 	if item.isBeingDeleted() && !item.isDeletingDependents() {
 		logger.V(5).Info("processing item returned at once, because its DeletionTimestamp is non-nil",
 			"item", item.identity,
@@ -518,12 +512,12 @@ func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node)
 	// TODO: It's only necessary to talk to the API server if this is a
 	// "virtual" node. The local graph could lag behind the real status, but in
 	// practice, the difference is small.
+	// 获取对象最新版本，NotFound 或 UID 不匹配都说明对象已消失。
 	latest, err := gc.getObject(item.identity)
 	switch {
 	case errors.IsNotFound(err):
-		// the GraphBuilder can add "virtual" node for an owner that doesn't
-		// exist yet, so we need to enqueue a virtual Delete event to remove
-		// the virtual node from GraphBuilder.uidToNode.
+		// GraphBuilder 可能为尚不存在的 owner 添加虚拟节点，
+		// 因此需入队虚拟删除事件，把它从 uidToNode 中清除。
 		logger.V(5).Info("item not found, generating a virtual delete event",
 			"item", item.identity,
 		)
@@ -543,11 +537,12 @@ func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node)
 
 	// TODO: attemptToOrphanWorker() routine is similar. Consider merging
 	// attemptToOrphanWorker() into attemptToDeleteItem() as well.
+	// 处于 foreground 删除流程时交给专门的处理逻辑。
 	if item.isDeletingDependents() {
 		return gc.processDeletingDependentsItem(logger, item)
 	}
 
-	// compute if we should delete the item
+	// 根据 ownerRef 分类决定是否回收该对象。
 	ownerReferences := latest.GetOwnerReferences()
 	if len(ownerReferences) == 0 {
 		logger.V(2).Info("item doesn't have an owner, continue on next item",
@@ -581,9 +576,8 @@ func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node)
 			"dangling", dangling,
 			"waitingForDependentsDeletion", waitingForDependentsDeletion,
 		)
-		// waitingForDependentsDeletion needs to be deleted from the
-		// ownerReferences, otherwise the referenced objects will be stuck with
-		// the FinalizerDeletingDependents and never get deleted.
+		// 必须从 ownerReferences 中移除处于等待删除状态的引用，
+		// 否则被引用的对象会一直带有 FinalizerDeletingDependents 而无法删除。
 		ownerUIDs := append(ownerRefsToUIDs(dangling), ownerRefsToUIDs(waitingForDependentsDeletion)...)
 		p, err := c.GenerateDeleteOwnerRefStrategicMergeBytes(item.identity.UID, ownerUIDs)
 		if err != nil {
@@ -597,11 +591,8 @@ func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node)
 		deps := item.getDependents()
 		for _, dep := range deps {
 			if dep.isDeletingDependents() {
-				// this circle detection has false positives, we need to
-				// apply a more rigorous detection if this turns out to be a
-				// problem.
-				// there are multiple workers run attemptToDeleteItem in
-				// parallel, the circle detection can fail in a race condition.
+				// 这种环检测存在误判；若出现问题需采用更严格的检测。
+				// 多个 worker 并行执行 attemptToDeleteItem，竞态下环检测可能失效。
 				logger.V(2).Info("processing item, some of its owners and its dependent have FinalizerDeletingDependents, to prevent potential cycle, its ownerReferences are going to be modified to be non-blocking, then the item is going to be deleted with Foreground",
 					"item", item.identity,
 					"dependent", dep.identity,
@@ -619,11 +610,8 @@ func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node)
 		logger.V(2).Info("at least one owner of item has FinalizerDeletingDependents, and the item itself has dependents, so it is going to be deleted in Foreground",
 			"item", item.identity,
 		)
-		// the deletion event will be observed by the graphBuilder, so the item
-		// will be processed again in processDeletingDependentsItem. If it
-		// doesn't have dependents, the function will remove the
-		// FinalizerDeletingDependents from the item, resulting in the final
-		// deletion of the item.
+		// 删除事件会被 graphBuilder 观测到，对象将在 processDeletingDependentsItem 中再次处理；
+		// 若届时已无 dependents，该函数会移除 FinalizerDeletingDependents，完成最终删除。
 		policy := metav1.DeletePropagationForeground
 		err := gc.deleteObject(item.identity, latest.ResourceVersion, latest.OwnerReferences, &policy)
 		if errors.IsNotFound(err) {
@@ -632,19 +620,18 @@ func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node)
 		}
 		return err
 	default:
-		// item doesn't have any solid owner, so it needs to be garbage
-		// collected. Also, none of item's owners is waiting for the deletion of
-		// the dependents, so set propagationPolicy based on existing finalizers.
+		// 对象没有任何有效的 solid owner，需要被回收；且没有 owner 在等待 dependents 删除，
+		// 因此根据对象现有的 finalizer 决定传播策略。
 		var policy metav1.DeletionPropagation
 		switch {
 		case hasOrphanFinalizer(latest):
-			// if an existing orphan finalizer is already on the object, honor it.
+			// 对象已有 orphan finalizer，遵循它选择 Orphan 传播。
 			policy = metav1.DeletePropagationOrphan
 		case hasDeleteDependentsFinalizer(latest):
-			// if an existing foreground finalizer is already on the object, honor it.
+			// 对象已有 foreground finalizer，遵循它选择 Foreground 传播。
 			policy = metav1.DeletePropagationForeground
 		default:
-			// otherwise, default to background.
+			// 否则默认使用 Background 传播。
 			policy = metav1.DeletePropagationBackground
 		}
 		logger.V(2).Info("Deleting item",
@@ -660,7 +647,7 @@ func (gc *GarbageCollector) attemptToDeleteItem(ctx context.Context, item *node)
 	}
 }
 
-// process item that's waiting for its dependents to be deleted
+// processDeletingDependentsItem 处理正在等待其 dependents 被删除的对象。
 func (gc *GarbageCollector) processDeletingDependentsItem(logger klog.Logger, item *node) error {
 	blockingDependents := item.blockingDependents()
 	if len(blockingDependents) == 0 {
@@ -679,7 +666,8 @@ func (gc *GarbageCollector) processDeletingDependentsItem(logger klog.Logger, it
 	return nil
 }
 
-// dependents are copies of pointers to the owner's dependents, they don't need to be locked.
+// orphanDependents 并发地把 owner 从每个 dependent 的 ownerRef 中移除，实现“孤立”。
+// 传入的 dependents 是 owner dependents 指针的副本，无需加锁。
 func (gc *GarbageCollector) orphanDependents(logger klog.Logger, owner objectReference, dependents []*node) error {
 	errCh := make(chan error, len(dependents))
 	wg := sync.WaitGroup{}
@@ -687,7 +675,7 @@ func (gc *GarbageCollector) orphanDependents(logger klog.Logger, owner objectRef
 	for i := range dependents {
 		go func(dependent *node) {
 			defer wg.Done()
-			// the dependent.identity.UID is used as precondition
+			// 用 dependent 的 UID 作为 patch 的前置条件，避免误改已变化的对象。
 			p, err := c.GenerateDeleteOwnerRefStrategicMergeBytes(dependent.identity.UID, []types.UID{owner.UID})
 			if err != nil {
 				errCh <- fmt.Errorf("orphaning %s failed, %v", dependent.identity, err)
@@ -696,8 +684,7 @@ func (gc *GarbageCollector) orphanDependents(logger klog.Logger, owner objectRef
 			_, err = gc.patch(dependent, p, func(n *node) ([]byte, error) {
 				return gc.deleteOwnerRefJSONMergePatch(n, owner.UID)
 			})
-			// note that if the target ownerReference doesn't exist in the
-			// dependent, strategic merge patch will NOT return an error.
+			// 注意：若目标 ownerRef 已不在 dependent 中，strategic merge patch 不会报错。
 			if err != nil && !errors.IsNotFound(err) {
 				errCh <- fmt.Errorf("orphaning %s failed, %v", dependent.identity, err)
 			}
@@ -718,21 +705,22 @@ func (gc *GarbageCollector) orphanDependents(logger klog.Logger, owner objectRef
 	return nil
 }
 
+// runAttemptToOrphanWorker 持续消费 attemptToOrphan 队列，直到队列关闭。
+// 与删除队列不同，这里使用普通 wait.Until 驱动，因此通过 ctx.Done() 感知停止信号。
 func (gc *GarbageCollector) runAttemptToOrphanWorker(logger klog.Logger) {
 	for gc.processAttemptToOrphanWorker(logger) {
 	}
 }
 
-// processAttemptToOrphanWorker dequeues a node from the attemptToOrphan, then finds its
-// dependents based on the graph maintained by the GC, then removes it from the
-// OwnerReferences of its dependents, and finally updates the owner to remove
-// the "Orphan" finalizer. The node is added back into the attemptToOrphan if any of
-// these steps fail.
+// processAttemptToOrphanWorker 从 attemptToOrphan 取出节点，根据 GC 维护的图找到其 dependents，
+// 把自己从这些 dependents 的 OwnerReferences 中移除，最后更新 owner 以移除 Orphan finalizer。
+// 任一步失败都会把节点重新加入 attemptToOrphan。
 func (gc *GarbageCollector) processAttemptToOrphanWorker(logger klog.Logger) bool {
 	item, quit := gc.attemptToOrphan.Get()
 	if quit {
 		return false
 	}
+	// 与删除队列同理：未 Done 会阻塞后续的重试入队。
 	defer gc.attemptToOrphan.Done(item)
 
 	action := gc.attemptToOrphanWorker(logger, item)
@@ -746,13 +734,16 @@ func (gc *GarbageCollector) processAttemptToOrphanWorker(logger klog.Logger) boo
 	return true
 }
 
+// attemptToOrphanWorker 取出 owner 节点，复制其 dependents 快照后并发孤立它们，
+// 再移除 owner 的 Orphan finalizer；任一步失败都返回重试动作。
+// 复制快照是为了避免在遍历时长期持有 dependentsLock。
 func (gc *GarbageCollector) attemptToOrphanWorker(logger klog.Logger, item interface{}) workQueueItemAction {
 	owner, ok := item.(*node)
 	if !ok {
 		utilruntime.HandleError(fmt.Errorf("expect *node, got %#v", item))
 		return forgetItem
 	}
-	// we don't need to lock each element, because they never get updated
+	// 不需要逐元素加锁，因为这些元素从不会被更新。
 	owner.dependentsLock.RLock()
 	dependents := make([]*node, 0, len(owner.dependents))
 	for dependent := range owner.dependents {
@@ -765,7 +756,7 @@ func (gc *GarbageCollector) attemptToOrphanWorker(logger klog.Logger, item inter
 		utilruntime.HandleError(fmt.Errorf("orphanDependents for %s failed with %v", owner.identity, err))
 		return requeueItem
 	}
-	// update the owner, remove "orphaningFinalizer" from its finalizers list
+	// 更新 owner，从其 finalizer 列表中移除 Orphan finalizer。
 	err = gc.removeFinalizer(logger, owner, metav1.FinalizerOrphanDependents)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("removeOrphanFinalizer for %s failed with %v", owner.identity, err))
@@ -774,32 +765,25 @@ func (gc *GarbageCollector) attemptToOrphanWorker(logger klog.Logger, item inter
 	return forgetItem
 }
 
-// *FOR TEST USE ONLY*
-// GraphHasUID returns if the GraphBuilder has a particular UID store in its
-// uidToNode graph. It's useful for debugging.
-// This method is used by integration tests.
+// *仅供测试使用*
+// GraphHasUID 返回依赖图构建器的 uidToNode 中是否存有指定 UID，便于调试。
+// 该方法主要由集成测试使用。
 func (gc *GarbageCollector) GraphHasUID(u types.UID) bool {
 	_, ok := gc.dependencyGraphBuilder.uidToNode.Read(u)
 	return ok
 }
 
-// GetDeletableResources returns all resources from discoveryClient that the
-// garbage collector should recognize and work with. More specifically, all
-// preferred resources which support the 'delete', 'list', and 'watch' verbs.
-//
-// If an error was encountered fetching resources from the server,
-// it is included as well, along with any resources that were successfully resolved.
-//
-// All discovery errors are considered temporary. Upon encountering any error,
-// GetDeletableResources will log and return any discovered resources it was
-// able to process (which may be none).
+// GetDeletableResources 返回 discoveryClient 发现的资源中 GC 需要处理的部分，
+// 即所有支持 delete/list/watch 操作的 preferred 资源。
+// 若发现过程中遇到错误，会连同已成功解析的资源一并作为结果返回。
+// 所有发现错误都视为暂时性的：遇到错误时记录日志，并返回已能处理的资源（可能为空）。
 func GetDeletableResources(ctx context.Context, discoveryClient discovery.ServerResourcesInterfaceWithContext) (map[schema.GroupVersionResource]struct{}, error) {
 	logger := klog.FromContext(ctx)
 	preferredResources, lookupErr := discoveryClient.ServerPreferredResourcesWithContext(ctx)
 	if lookupErr != nil {
 		if groupLookupFailures, isLookupFailure := discovery.GroupDiscoveryFailedErrorGroups(lookupErr); isLookupFailure {
-			// Serialize groupLookupFailures here as map[schema.GroupVersion]error is not json encodable, otherwise the
-			// logger would throw internal error.
+			// 这里先把 groupLookupFailures 序列化成字符串，因为 map[schema.GroupVersion]error 无法 JSON 编码，
+			// 否则日志框架会抛出内部错误。
 			logger.Info("failed to discover some groups", "groups", fmt.Sprintf("%q", groupLookupFailures))
 		} else {
 			logger.Info("failed to discover preferred resources", "error", lookupErr)
@@ -809,8 +793,7 @@ func GetDeletableResources(ctx context.Context, discoveryClient discovery.Server
 		return map[schema.GroupVersionResource]struct{}{}, lookupErr
 	}
 
-	// This is extracted from discovery.GroupVersionResources to allow tolerating
-	// failures on a per-resource basis.
+	// 这里没有直接使用 discovery.GroupVersionResources，以便按资源粒度容忍发现失败。
 	deletableResources := discovery.FilteredBy(discovery.SupportsAllVerbs{Verbs: []string{"delete", "list", "watch"}}, preferredResources)
 	deletableGroupVersionResources := map[schema.GroupVersionResource]struct{}{}
 	for _, rl := range deletableResources {
@@ -827,11 +810,12 @@ func GetDeletableResources(ctx context.Context, discoveryClient discovery.Server
 	return deletableGroupVersionResources, lookupErr
 }
 
+// Name 返回垃圾回收器的控制器名称。
 func (gc *GarbageCollector) Name() string {
 	return "garbagecollector"
 }
 
-// GetDependencyGraphBuilder return graph builder which is particularly helpful for testing where controllerContext is not available
+// GetDependencyGraphBuilder 返回依赖图构建器，在无法获取 controllerContext 的测试场景中尤其有用。
 func (gc *GarbageCollector) GetDependencyGraphBuilder() *GraphBuilder {
 	return gc.dependencyGraphBuilder
 }

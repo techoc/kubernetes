@@ -29,21 +29,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test verifies helper function PutIfAbsent used during enqueue is not overwriting values
-// that are updated during reconciliation phase
+// TestHPASelectorStorePutIfAbsent 验证入队阶段使用的 PutIfAbsent 不会覆盖协调阶段更新的值。
+// 若已被占用就保持原值，避免入队时写入的旧选择器覆盖协调阶段的最新结果。
 func TestHPASelectorStorePutIfAbsent(t *testing.T) {
 	store := newHPASelectorStore()
 	key := selectors.Key{Name: "hpa-1", Namespace: "ns-1"}
 	sel1, _ := labels.Parse("app=hakuna")
 	sel2, _ := labels.Parse("app=matata")
 
-	// This should succeed.
+	// 首次插入应当成功。
 	assert.True(t, store.PutIfAbsent("ns-1", key, sel1))
 
-	// This should be a no-op, should not overwrite.
+	// 键已存在时应当无操作，不能覆盖原选择器。
 	assert.False(t, store.PutIfAbsent("ns-1", key, sel2))
 
-	// Verify original selector is still in place.
+	// 通过匹配结果确认原选择器仍然生效。
 	pods := []*v1.Pod{
 		{ObjectMeta: metav1.ObjectMeta{Name: "pod-1", Namespace: "ns-1", Labels: map[string]string{"app": "hakuna"}}},
 	}
@@ -55,34 +55,36 @@ func TestHPASelectorStorePutIfAbsent(t *testing.T) {
 	assert.Empty(t, store.HPAsMatchingPods("ns-1", pods2, 0))
 }
 
-// This verifies helper function PutIfPresent used during reconciliation phase
-// is not accidentally adding HPA that was deleted from store
+// TestHPASelectorStorePutIfPresent 验证协调阶段使用的 PutIfPresent 不会误加入已从存储中删除的 HPA。
+// 仅在键已存在时更新，防止删除后残留的更新请求把 HPA 重新带回来。
 func TestHPASelectorStorePutIfPresent(t *testing.T) {
 	store := newHPASelectorStore()
 	key := selectors.Key{Name: "hpa-1", Namespace: "ns-1"}
 	sel1, _ := labels.Parse("app=hakuna")
 	sel2, _ := labels.Parse("app=matata")
 
-	// Update on non-existent key is a no-op.
+	// 对不存在的键更新应当无操作。
 	assert.False(t, store.PutIfPresent("ns-1", key, sel2))
 
-	// Insert then update.
+	// 先插入再更新，用于验证更新确实生效。
 	store.PutIfAbsent("ns-1", key, sel1)
 	assert.True(t, store.PutIfPresent("ns-1", key, sel2))
 
-	// Verify selector was updated.
+	// 选择器已更新，旧标签的 Pod 不再匹配。
 	pods := []*v1.Pod{
 		{ObjectMeta: metav1.ObjectMeta{Name: "pod-1", Namespace: "ns-1", Labels: map[string]string{"app": "hakuna"}}},
 	}
 	assert.Empty(t, store.HPAsMatchingPods("ns-1", pods, 0))
 
+	// 新标签的 Pod 应当匹配到更新后的选择器。
 	pods2 := []*v1.Pod{
 		{ObjectMeta: metav1.ObjectMeta{Name: "pod-2", Namespace: "ns-1", Labels: map[string]string{"app": "matata"}}},
 	}
 	assert.Len(t, store.HPAsMatchingPods("ns-1", pods2, 0), 1)
 }
 
-// This test ensures we are not leaking empty namespace entries when deleted
+// TestHPASelectorStoreDeleteCleansUpNamespace 验证删除 HPA 时不会遗留空的命名空间条目。
+// 只有命名空间内最后一个 HPA 被删除时，对应的命名空间条目才应被清理。
 func TestHPASelectorStoreDeleteCleansUpNamespace(t *testing.T) {
 	store := newHPASelectorStore()
 	sel, _ := labels.Parse("app=hakuna")
@@ -92,24 +94,25 @@ func TestHPASelectorStoreDeleteCleansUpNamespace(t *testing.T) {
 	store.PutIfAbsent("ns-1", key1, sel)
 	store.PutIfAbsent("ns-1", key2, sel)
 
-	// Delete first HPA, namespace still exists.
+	// 删除第一个 HPA 后仍有残留，命名空间条目必须保留。
 	store.Delete("ns-1", key1)
 	store.mu.RLock()
 	require.Contains(t, store.namespaces, "ns-1")
 	store.mu.RUnlock()
 
-	// Delete the last HPA, namespace entry is removed.
+	// 删除最后一个 HPA，命名空间条目应被移除。
 	store.Delete("ns-1", key2)
 	store.mu.RLock()
 	require.NotContains(t, store.namespaces, "ns-1")
 	store.mu.RUnlock()
 }
 
-// This verifies that it is not iterating the entire selectorStore when matching work is done
+// TestHPASelectorStoreHPAsMatchingPodsLimit 验证匹配时不会遍历整个 selectorStore。
+// 达到 limit 后立即提前返回，既限制结果数量也避免不必要的扫描。
 func TestHPASelectorStoreHPAsMatchingPodsLimit(t *testing.T) {
 	store := newHPASelectorStore()
 
-	// Both HPAs select "app=hakuna".
+	// 两个 HPA 都选择 "app=hakuna"，用于观察数量限制效果。
 	sel, _ := labels.Parse("app=hakuna")
 	store.PutIfAbsent("ns-1", selectors.Key{Name: "hpa-1", Namespace: "ns-1"}, sel)
 	store.PutIfAbsent("ns-1", selectors.Key{Name: "hpa-2", Namespace: "ns-1"}, sel)
@@ -118,17 +121,18 @@ func TestHPASelectorStoreHPAsMatchingPodsLimit(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "pod-1", Namespace: "ns-1", Labels: map[string]string{"app": "hakuna"}}},
 	}
 
-	// Without limit, returns all matches.
+	// limit 为 0 表示不限制，返回全部匹配结果。
 	assert.Len(t, store.HPAsMatchingPods("ns-1", pods, 0), 2)
 
-	// With limit=2, returns exactly 2 (early exit).
+	// limit 为 2 时恰好返回 2 个，验证提前退出不会少算。
 	assert.Len(t, store.HPAsMatchingPods("ns-1", pods, 2), 2)
 
-	// With limit=1, returns only 1.
+	// limit 为 1 时只返回 1 个，验证数量限制生效。
 	assert.Len(t, store.HPAsMatchingPods("ns-1", pods, 1), 1)
 }
 
-// Test ensures we are not iterating through all the HPA's across all namespaces
+// TestHPASelectorStoreHPAsMatchingPodsNamespaceIsolation 验证匹配时不会遍历所有命名空间下的 HPA。
+// 查询只会命中目标命名空间，其他命名空间的 HPA 不可见。
 func TestHPASelectorStoreHPAsMatchingPodsNamespaceIsolation(t *testing.T) {
 	store := newHPASelectorStore()
 	sel, _ := labels.Parse("app=hakuna")
@@ -140,25 +144,29 @@ func TestHPASelectorStoreHPAsMatchingPodsNamespaceIsolation(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "pod-1", Namespace: "ns-1", Labels: map[string]string{"app": "hakuna"}}},
 	}
 
-	// Only returns HPAs from the queried namespace.
+	// 只返回被查询命名空间中的 HPA。
 	result := store.HPAsMatchingPods("ns-1", pods, 0)
 	assert.Len(t, result, 1)
 	assert.Equal(t, "hpa-1", result[0].Name)
 
-	// Different namespace returns nothing for ns-1 pods.
+	// 查询不存在的命名空间时，ns-1 的 Pod 不会匹配到任何 HPA。
 	assert.Empty(t, store.HPAsMatchingPods("ns-3", pods, 0))
 }
 
+// BenchmarkHPAsMatchingPodsParallel 基准测试新版 hpaSelectorStore 在并发匹配场景下的性能。
 func BenchmarkHPAsMatchingPodsParallel(b *testing.B) {
 	benchmarkMatchingPodsParallel(b, newHPASelectorStore())
 }
 
 // TODO: Remove once HPAOptimizedSelectorStore graduates to GA and the legacy
 // BiMultimap tracker is removed.
+// BenchmarkHPAsMatchingPodsParallelBiMultimap 基准测试旧版 BiMultimap 跟踪器，用于与新版做性能对比。
 func BenchmarkHPAsMatchingPodsParallelBiMultimap(b *testing.B) {
 	benchmarkMatchingPodsParallel(b, newBiMultimapSelectorTracker())
 }
 
+// benchmarkMatchingPodsParallel 以多组 HPA/Pod 规模并发运行匹配基准，供不同实现横向比较。
+// 通过 RunParallel 和 ReportAllocs 同时观察吞吐量与分配开销。
 func benchmarkMatchingPodsParallel(b *testing.B, tracker hpaSelectorTracker) {
 	scenarios := []struct {
 		name     string
@@ -180,7 +188,7 @@ func benchmarkMatchingPodsParallel(b *testing.B, tracker hpaSelectorTracker) {
 				tracker.PutIfAbsent(namespace, key, sel)
 			}
 
-			// Pods labels match to first HPA's selector
+			// 所有 Pod 的标签都匹配第一个 HPA 的选择器，使匹配路径稳定可比较。
 			pods := make([]*v1.Pod, 0, s.podCount)
 			for i := 0; i < s.podCount; i++ {
 				pods = append(pods, &v1.Pod{

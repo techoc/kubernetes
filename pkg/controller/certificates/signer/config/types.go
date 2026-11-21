@@ -20,35 +20,37 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// CSRSigningControllerConfiguration contains elements describing CSRSigningController.
+// CSRSigningControllerConfiguration 包含描述 CSRSigningController 的配置项。
 type CSRSigningControllerConfiguration struct {
-	// clusterSigningCertFile is the filename containing a PEM-encoded
-	// X509 CA certificate used to issue cluster-scoped certificates
+	// ClusterSigningCertFile 是 PEM 编码的 X509 CA 证书文件路径，
+	// 用于签发集群范围的证书。
 	ClusterSigningCertFile string
-	// clusterSigningCertFile is the filename containing a PEM-encoded
-	// RSA or ECDSA private key used to issue cluster-scoped certificates
+	// ClusterSigningKeyFile 是 PEM 编码的 RSA 或 ECDSA 私钥文件路径，
+	// 用于签发集群范围的证书。
 	ClusterSigningKeyFile string
 
-	// kubeletServingSignerConfiguration holds the certificate and key used to issue certificates for the kubernetes.io/kubelet-serving signer
+	// KubeletServingSignerConfiguration 保存用于签发 kubernetes.io/kubelet-serving
+	// signer 证书的证书和私钥。
 	KubeletServingSignerConfiguration CSRSigningConfiguration
-	// kubeletClientSignerConfiguration holds the certificate and key used to issue certificates for the kubernetes.io/kube-apiserver-client-kubelet
+	// KubeletClientSignerConfiguration 保存用于签发
+	// kubernetes.io/kube-apiserver-client-kubelet signer 证书的证书和私钥。
 	KubeletClientSignerConfiguration CSRSigningConfiguration
-	// kubeAPIServerClientSignerConfiguration holds the certificate and key used to issue certificates for the kubernetes.io/kube-apiserver-client
+	// KubeAPIServerClientSignerConfiguration 保存用于签发
+	// kubernetes.io/kube-apiserver-client signer 证书的证书和私钥。
 	KubeAPIServerClientSignerConfiguration CSRSigningConfiguration
-	// legacyUnknownSignerConfiguration holds the certificate and key used to issue certificates for the kubernetes.io/legacy-unknown
+	// LegacyUnknownSignerConfiguration 保存用于签发
+	// kubernetes.io/legacy-unknown signer 证书的证书和私钥。
 	LegacyUnknownSignerConfiguration CSRSigningConfiguration
 
-	// clusterSigningDuration is the max length of duration signed certificates will be given.
-	// Individual CSRs may request shorter certs by setting spec.expirationSeconds.
+	// ClusterSigningDuration 是签发证书的最长有效期。
+	// 单个 CSR 可通过 spec.expirationSeconds 请求更短的有效期。
 	ClusterSigningDuration metav1.Duration
 }
 
-// CSRSigningConfiguration holds information about a particular CSR signer
+// CSRSigningConfiguration 保存某个 CSR signer 所需的证书和私钥信息。
 type CSRSigningConfiguration struct {
-	// certFile is the filename containing a PEM-encoded
-	// X509 CA certificate used to issue certificates
+	// CertFile 是 PEM 编码的 X509 CA 证书文件路径，用于签发证书。
 	CertFile string
-	// keyFile is the filename containing a PEM-encoded
-	// RSA or ECDSA private key used to issue certificates
+	// KeyFile 是 PEM 编码的 RSA 或 ECDSA 私钥文件路径，用于签发证书。
 	KeyFile string
 }

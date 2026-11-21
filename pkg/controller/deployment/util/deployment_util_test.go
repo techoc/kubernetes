@@ -40,6 +40,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// newDControllerRef 为 Deployment 构造一个指向它的 Controller 类型 OwnerReference。
 func newDControllerRef(d *apps.Deployment) *metav1.OwnerReference {
 	isController := true
 	return &metav1.OwnerReference{
@@ -51,7 +52,7 @@ func newDControllerRef(d *apps.Deployment) *metav1.OwnerReference {
 	}
 }
 
-// generateRS creates a replica set, with the input deployment's template as its template
+// generateRS 以给定 Deployment 的模板创建 ReplicaSet，并为其建立指向该 Deployment 的归属引用。
 func generateRS(deployment apps.Deployment) apps.ReplicaSet {
 	template := deployment.Spec.Template.DeepCopy()
 	return apps.ReplicaSet{
@@ -69,11 +70,12 @@ func generateRS(deployment apps.Deployment) apps.ReplicaSet {
 	}
 }
 
+// randomUID 生成随机 UID，避免各测试用例中的对象标识相互冲突。
 func randomUID() types.UID {
 	return types.UID(strconv.FormatInt(rand.Int63(), 10))
 }
 
-// generateDeployment creates a deployment, with the input image as its template
+// generateDeployment 以给定镜像名创建 Deployment，作为各测试的初始对象。
 func generateDeployment(image string) apps.Deployment {
 	podLabels := map[string]string{"name": image}
 	terminationSec := int64(30)
@@ -110,6 +112,7 @@ func generateDeployment(image string) apps.Deployment {
 	}
 }
 
+// generatePodTemplateSpec 构造仅含名称、节点、注解与标签的 Pod 模板，便于精确比较模板差异。
 func generatePodTemplateSpec(name, nodeName string, annotations, labels map[string]string) v1.PodTemplateSpec {
 	return v1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -123,6 +126,7 @@ func generatePodTemplateSpec(name, nodeName string, annotations, labels map[stri
 	}
 }
 
+// TestEqualIgnoreHash 验证 EqualIgnoreHash 忽略 pod-template-hash 标签后的相等性判断，并检查比较过程不会篡改标签。
 func TestEqualIgnoreHash(t *testing.T) {
 	tests := []struct {
 		Name           string
@@ -193,12 +197,13 @@ func TestEqualIgnoreHash(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
+			// runTest 以给定顺序调用 EqualIgnoreHash 并校验结果与标签未被修改。
 			runTest := func(t1, t2 *v1.PodTemplateSpec, reversed bool) {
 				reverseString := ""
 				if reversed {
 					reverseString = " (reverse order)"
 				}
-				// Run
+				// 调用被测函数并核对结果。
 				equal := EqualIgnoreHash(t1, t2)
 				if equal != test.expected {
 					t.Errorf("%q%s: expected %v", test.Name, reverseString, test.expected)
@@ -210,12 +215,13 @@ func TestEqualIgnoreHash(t *testing.T) {
 			}
 
 			runTest(&test.former, &test.latter, false)
-			// Test the same case in reverse order
+			// 反向再测一次，确保比较结果不依赖参数顺序。
 			runTest(&test.latter, &test.former, true)
 		})
 	}
 }
 
+// TestFindNewReplicaSet 验证 FindNewReplicaSet 能找出模板匹配的新 ReplicaSet，并在多个候选时选择最旧的那个。
 func TestFindNewReplicaSet(t *testing.T) {
 	now := metav1.Now()
 	later := metav1.Time{Time: now.Add(time.Minute)}
@@ -269,6 +275,7 @@ func TestFindNewReplicaSet(t *testing.T) {
 	}
 }
 
+// TestFindOldReplicaSets 验证 FindOldReplicaSets 对旧 ReplicaSet 的筛选，包括按 spec.replicas 区分的 requireRS 结果。
 func TestFindOldReplicaSets(t *testing.T) {
 	now := metav1.Now()
 	later := metav1.Time{Time: now.Add(time.Minute)}
@@ -330,12 +337,13 @@ func TestFindOldReplicaSets(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
 			requireRS, allRS := FindOldReplicaSets(&test.deployment, test.rsList)
+			// 两侧都按创建时间排序，避免实现调整返回顺序导致误报。
 			sort.Sort(controller.ReplicaSetsByCreationTimestamp(allRS))
 			sort.Sort(controller.ReplicaSetsByCreationTimestamp(test.expected))
 			if !reflect.DeepEqual(allRS, test.expected) {
 				t.Errorf("In test case %q, expected %#v, got %#v", test.Name, test.expected, allRS)
 			}
-			// RSs are getting filtered correctly by rs.spec.replicas
+			// 校验按 rs.spec.replicas 过滤的结果：只有副本数大于零的 RS 会进入 requireRS。
 			if !reflect.DeepEqual(requireRS, test.expectedRequire) {
 				t.Errorf("In test case %q, expected %#v, got %#v", test.Name, test.expectedRequire, requireRS)
 			}
@@ -343,6 +351,7 @@ func TestFindOldReplicaSets(t *testing.T) {
 	}
 }
 
+// TestGetReplicaCountForReplicaSets 验证三个计数函数分别返回期望副本数、实际副本数与终止中副本数。
 func TestGetReplicaCountForReplicaSets(t *testing.T) {
 	rs1 := generateRS(generateDeployment("foo-rs"))
 	rs1.Status.ObservedGeneration = 1
@@ -436,6 +445,7 @@ func TestGetReplicaCountForReplicaSets(t *testing.T) {
 	}
 }
 
+// TestResolveFenceposts 验证 maxSurge/maxUnavailable 的百分比与数值解析，以及非法输入时的报错行为。
 func TestResolveFenceposts(t *testing.T) {
 	tests := []struct {
 		maxSurge          *string
@@ -526,6 +536,7 @@ func TestResolveFenceposts(t *testing.T) {
 	}
 }
 
+// TestNewRSNewReplicas 验证滚动更新与重建策略下新 ReplicaSet 目标副本数的计算。
 func TestNewRSNewReplicas(t *testing.T) {
 	tests := []struct {
 		Name          string
@@ -577,6 +588,7 @@ func TestNewRSNewReplicas(t *testing.T) {
 }
 
 var (
+	// condProgressing 构造状态为 False 的 Progressing 条件，用于覆盖场景。
 	condProgressing = func() apps.DeploymentCondition {
 		return apps.DeploymentCondition{
 			Type:   apps.DeploymentProgressing,
@@ -585,6 +597,7 @@ var (
 		}
 	}
 
+	// condProgressing2 构造状态为 True 的 Progressing 条件，用于覆盖同类型条件覆盖场景。
 	condProgressing2 = func() apps.DeploymentCondition {
 		return apps.DeploymentCondition{
 			Type:   apps.DeploymentProgressing,
@@ -593,6 +606,7 @@ var (
 		}
 	}
 
+	// condAvailable 构造状态为 True 的 Available 条件。
 	condAvailable = func() apps.DeploymentCondition {
 		return apps.DeploymentCondition{
 			Type:   apps.DeploymentAvailable,
@@ -601,6 +615,7 @@ var (
 		}
 	}
 
+	// status 组合出同时包含 Progressing 与 Available 条件的 DeploymentStatus。
 	status = func() *apps.DeploymentStatus {
 		return &apps.DeploymentStatus{
 			Conditions: []apps.DeploymentCondition{condProgressing(), condAvailable()},
@@ -608,6 +623,7 @@ var (
 	}
 )
 
+// TestGetCondition 验证 GetDeploymentCondition 能按条件类型找到或不找到对应条件。
 func TestGetCondition(t *testing.T) {
 	exampleStatus := status()
 
@@ -648,6 +664,7 @@ func TestGetCondition(t *testing.T) {
 	}
 }
 
+// TestSetCondition 验证 SetDeploymentCondition 的新增、追加与同类型覆盖行为。
 func TestSetCondition(t *testing.T) {
 	tests := []struct {
 		name string
@@ -693,6 +710,7 @@ func TestSetCondition(t *testing.T) {
 	}
 }
 
+// TestRemoveCondition 验证 RemoveDeploymentCondition 按类型移除条件且不影响其他条件。
 func TestRemoveCondition(t *testing.T) {
 	tests := []struct {
 		name string
@@ -738,7 +756,9 @@ func TestRemoveCondition(t *testing.T) {
 	}
 }
 
+// TestDeploymentComplete 验证 DeploymentComplete 对副本可用性、更新进度以及 maxSurge 期间旧 Pod 尚未清除的判断。
 func TestDeploymentComplete(t *testing.T) {
+	// deployment 构造带有指定副本数、滚动更新参数与状态的 Deployment。
 	deployment := func(desired, current, updated, available, maxUnavailable, maxSurge int32) *apps.Deployment {
 		return &apps.Deployment{
 			Spec: apps.DeploymentSpec{
@@ -793,8 +813,8 @@ func TestDeploymentComplete(t *testing.T) {
 		{
 			name: "not complete: still running old pods",
 
-			// old replica set: spec.replicas=1, status.replicas=1, status.availableReplicas=1
-			// new replica set: spec.replicas=1, status.replicas=1, status.availableReplicas=0
+			// 旧 RS：spec.replicas=1，status.replicas=1，status.availableReplicas=1。
+			// 新 RS：spec.replicas=1，status.replicas=1，status.availableReplicas=0。
 			d:        deployment(1, 2, 1, 1, 0, 1),
 			expected: false,
 		},
@@ -815,7 +835,9 @@ func TestDeploymentComplete(t *testing.T) {
 	}
 }
 
+// TestDeploymentProgressing 验证 DeploymentProgressing 能识别新 Pod 增加、旧 Pod 减少与就绪/可用副本增加等进展。
 func TestDeploymentProgressing(t *testing.T) {
+	// deployment 构造带有指定副本统计的 Deployment。
 	deployment := func(current, updated, ready, available int32) *apps.Deployment {
 		return &apps.Deployment{
 			Status: apps.DeploymentStatus{
@@ -826,6 +848,7 @@ func TestDeploymentProgressing(t *testing.T) {
 			},
 		}
 	}
+	// newStatus 构造更新后的 DeploymentStatus，便于与旧状态比较。
 	newStatus := func(current, updated, ready, available int32) apps.DeploymentStatus {
 		return apps.DeploymentStatus{
 			Replicas:          current,
@@ -910,6 +933,7 @@ func TestDeploymentProgressing(t *testing.T) {
 	}
 }
 
+// TestDeploymentTimedOut 验证 DeploymentTimedOut 依据进度截止时间判断超时，并处理未设置、无限大及已完成等边界情况。
 func TestDeploymentTimedOut(t *testing.T) {
 	var (
 		null     *int32
@@ -917,9 +941,11 @@ func TestDeploymentTimedOut(t *testing.T) {
 		infinite = int32(math.MaxInt32)
 	)
 
+	// timeFn 生成固定日期的时间，确保超时计算可预测。
 	timeFn := func(min, sec int) time.Time {
 		return time.Date(2016, 1, 1, 0, min, sec, 0, time.UTC)
 	}
+	// deployment 构造带有指定进度条件、截止时间与起始时间的 Deployment。
 	deployment := func(condType apps.DeploymentConditionType, status v1.ConditionStatus, reason string, pds *int32, from time.Time) apps.Deployment {
 		return apps.Deployment{
 			Spec: apps.DeploymentSpec{
@@ -984,6 +1010,7 @@ func TestDeploymentTimedOut(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// 替换包级时间函数，让超时判断基于用例指定的固定时间。
 			nowFn = test.nowFn
 			_, ctx := ktesting.NewTestContext(t)
 			if got, exp := DeploymentTimedOut(ctx, &test.d, &test.d.Status), test.expected; got != exp {
@@ -993,7 +1020,9 @@ func TestDeploymentTimedOut(t *testing.T) {
 	}
 }
 
+// TestMaxUnavailable 验证 MaxUnavailable 对绝对值、百分比、重建策略及副本数为零等场景的计算结果。
 func TestMaxUnavailable(t *testing.T) {
+	// deployment 构造带有指定副本数与 maxUnavailable 的 Deployment。
 	deployment := func(replicas int32, maxUnavailable intstr.IntOrString) apps.Deployment {
 		return apps.Deployment{
 			Spec: apps.DeploymentSpec{
@@ -1072,6 +1101,7 @@ func TestMaxUnavailable(t *testing.T) {
 	}
 }
 
+// TestGetNonNegativeInt32FromAnnotation 验证注解中非负 int32 的解析，覆盖空值、非法值、边界值与溢出。
 func TestGetNonNegativeInt32FromAnnotation(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1153,24 +1183,24 @@ func TestGetNonNegativeInt32FromAnnotation(t *testing.T) {
 	}
 }
 
-// Set of simple tests for annotation related util functions
+// TestAnnotationUtils 集中测试注解相关的工具函数，包括修订历史、副本数注解与饱和状态判断。
 func TestAnnotationUtils(t *testing.T) {
 
-	//Setup
+	// 准备共享的 Deployment 与 ReplicaSet 对象。
 	tDeployment := generateDeployment("nginx")
 	tRS := generateRS(tDeployment)
 	tDeployment.Annotations[RevisionAnnotation] = "1"
 
-	//Test Case 1: Check if anotations are copied properly from deployment to RS
+	// 用例 1：检查注解是否从 Deployment 正确复制到 ReplicaSet。
 	t.Run("SetNewReplicaSetAnnotations", func(t *testing.T) {
 		_, ctx := ktesting.NewTestContext(t)
 
-		//Try to set the increment revision from 11 through 20
+		// 连续递增修订号，以触发修订历史注解的截断逻辑。
 		for i := 10; i < 20; i++ {
 
 			nextRevision := fmt.Sprintf("%d", i+1)
 			SetNewReplicaSetAnnotations(ctx, &tDeployment, &tRS, nextRevision, true, 5)
-			//Now the ReplicaSets Revision Annotation should be i+1
+			// 此时 ReplicaSet 的修订号注解应为 i+1。
 
 			if i >= 12 {
 				expectedHistoryAnnotation := fmt.Sprintf("%d,%d", i-1, i)
@@ -1184,7 +1214,7 @@ func TestAnnotationUtils(t *testing.T) {
 		}
 	})
 
-	//Test Case 2:  Check if annotations are set properly
+	// 用例 2：检查副本数注解是否被正确设置。
 	t.Run("SetReplicasAnnotations", func(t *testing.T) {
 		updated := SetReplicasAnnotations(&tRS, 10, 11)
 		if !updated {
@@ -1205,7 +1235,7 @@ func TestAnnotationUtils(t *testing.T) {
 		}
 	})
 
-	//Test Case 3:  Check if annotations reflect deployments state
+	// 用例 3：检查注解是否正确反映 Deployment 的状态。
 	tRS.Annotations[DesiredReplicasAnnotation] = "1"
 	tRS.Status.AvailableReplicas = 1
 	tRS.Spec.Replicas = new(int32)
@@ -1217,9 +1247,10 @@ func TestAnnotationUtils(t *testing.T) {
 			t.Errorf("SetReplicasAnnotations Expected=true Obtained=false")
 		}
 	})
-	//Tear Down
+	// 用例之间共享对象，无需额外清理。
 }
 
+// TestReplicasAnnotationsNeedUpdate 验证副本数注解缺失或与期望值不符时才返回需要更新。
 func TestReplicasAnnotationsNeedUpdate(t *testing.T) {
 
 	desiredReplicas := fmt.Sprintf("%d", int32(10))
@@ -1294,6 +1325,7 @@ func TestReplicasAnnotationsNeedUpdate(t *testing.T) {
 	}
 }
 
+// TestGetDeploymentsForReplicaSet 验证按标签选择器找到匹配的 Deployment，并在无匹配时返回错误。
 func TestGetDeploymentsForReplicaSet(t *testing.T) {
 	fakeInformerFactory := informers.NewSharedInformerFactory(&fake.Clientset{}, 0*time.Second)
 	var deployments []*apps.Deployment
@@ -1375,8 +1407,10 @@ func TestGetDeploymentsForReplicaSet(t *testing.T) {
 
 }
 
+// TestMinAvailable 验证 MinAvailable 在不同 maxUnavailable 表示及重建策略下计算出的最小可用副本数。
 func TestMinAvailable(t *testing.T) {
 	maxSurge := ptr.To(intstr.FromInt32(1))
+	// deployment 构造带有指定副本数与 maxUnavailable 的 Deployment 指针。
 	deployment := func(replicas int32, maxUnavailable intstr.IntOrString) *apps.Deployment {
 		return &apps.Deployment{
 			Spec: apps.DeploymentSpec{
@@ -1453,6 +1487,7 @@ func TestMinAvailable(t *testing.T) {
 	}
 }
 
+// TestGetReplicaSetFraction 验证 getReplicaSetFraction 在扩缩容、注解缺失及存在 maxSurge 时按 RS 分配副本数的计算。
 func TestGetReplicaSetFraction(t *testing.T) {
 	tests := []struct {
 		name                                          string
@@ -1519,8 +1554,8 @@ func TestGetReplicaSetFraction(t *testing.T) {
 			rsAnnotations: map[string]string{
 				MaxReplicasAnnotation: "110",
 			},
-			// expectedFraction is not the whole 1/5 (10) since maxSurge pods have to be taken into account
-			// and replica sets with these surge pods should proportionally scale as well during a rollout
+			// 期望增量不是完整的 1/5（10），因为 maxSurge 的 Pod 也需计入；
+			// 滚动升级期间承载这些 surge Pod 的 ReplicaSet 也要按比例缩放。
 			expectedFraction: 9,
 		},
 		{

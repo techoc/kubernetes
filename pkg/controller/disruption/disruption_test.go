@@ -56,10 +56,16 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// pdbStates 是 PDB 键到状态快照的内存映射，充当 fake updater 的写入目标，
+// 让状态断言无需依赖 API Server。
 type pdbStates map[string]policy.PodDisruptionBudget
 
+// alwaysReady 是恒为真的同步检查函数，用于跳过 informer 缓存等待，
+// 使测试注入对象后可立即驱动 sync。
 var alwaysReady = func() bool { return true }
 
+// Set 将给定的 PDB 深拷贝后按 controller.KeyFunc 计算出的键存入 ps。
+// 深拷贝是为了隔离快照，避免调用方后续修改原对象污染测试断言。
 func (ps *pdbStates) Set(ctx context.Context, pdb *policy.PodDisruptionBudget) error {
 	key, err := controller.KeyFunc(pdb)
 	if err != nil {
@@ -69,10 +75,15 @@ func (ps *pdbStates) Set(ctx context.Context, pdb *policy.PodDisruptionBudget) e
 	return nil
 }
 
+// Get 返回键对应的 PDB 快照；键不存在时返回零值，
+// 便于断言“该 PDB 尚未被同步/写入”的场景。
 func (ps *pdbStates) Get(key string) policy.PodDisruptionBudget {
 	return (*ps)[key]
 }
 
+// VerifyPdbStatus 全面校验 PDB 状态：先移除 Conditions 后比较 DisruptionsAllowed、
+// CurrentHealthy、DesiredHealthy、ExpectedPods、DisruptedPods 与 ObservedGeneration，
+// 再单独检查 DisruptionAllowed 条件——允许中断时为 True，否则为 False。
 func (ps *pdbStates) VerifyPdbStatus(t *testing.T, key string, disruptionsAllowed, currentHealthy, desiredHealthy, expectedPods int32, disruptedPodMap map[string]metav1.Time) {
 	t.Helper()
 	actualPDB := ps.Get(key)
@@ -108,6 +119,8 @@ func (ps *pdbStates) VerifyPdbStatus(t *testing.T, key string, disruptionsAllowe
 	}
 }
 
+// VerifyDisruptionAllowed 只校验 PDB 的 DisruptionsAllowed 字段。
+// 失败时打印调用栈，便于定位是哪次 sync 写入了错误值。
 func (ps *pdbStates) VerifyDisruptionAllowed(t *testing.T, key string, disruptionsAllowed int32) {
 	pdb := ps.Get(key)
 	if pdb.Status.DisruptionsAllowed != disruptionsAllowed {
@@ -116,6 +129,8 @@ func (ps *pdbStates) VerifyDisruptionAllowed(t *testing.T, key string, disruptio
 	}
 }
 
+// VerifyNoStatusError 确认 PDB 状态中不存在因“未托管 pod（找不到 controller ref）”
+// 而产生的 SyncFailed 条件，用于验证控制器不会把无属主 pod 当作同步错误。
 func (ps *pdbStates) VerifyNoStatusError(t *testing.T, key string) {
 	pdb := ps.Get(key)
 	for _, condition := range pdb.Status.Conditions {
@@ -125,6 +140,8 @@ func (ps *pdbStates) VerifyNoStatusError(t *testing.T, key string) {
 	}
 }
 
+// disruptionController 在真实控制器之上暴露 fake 客户端与各对象 store，
+// 便于测试直接注入 pod/PDB/工作负载并观察事件与状态。
 type disruptionController struct {
 	*DisruptionController
 
@@ -141,16 +158,23 @@ type disruptionController struct {
 	informerFactory informers.SharedInformerFactory
 }
 
+// customGVK 模拟一个不受内建 finder 识别的自定义控制器 GVK，
+// 用于验证“属主为未知控制器”的 pod 会让期望规模计算失败。
 var customGVK = schema.GroupVersionKind{
 	Group:   "custom.k8s.io",
 	Version: "v1",
 	Kind:    "customresource",
 }
 
+// newFakeDisruptionController 以当前时间构造测试用控制器，
+// 是 newFakeDisruptionControllerWithTime 的便捷封装。
 func newFakeDisruptionController(ctx context.Context) (*disruptionController, *pdbStates) {
 	return newFakeDisruptionControllerWithTime(ctx, time.Now())
 }
 
+// newFakeDisruptionControllerWithTime 搭建完整的假控制器：fake 客户端与 informer、
+// fake scale/discovery 客户端、可控时钟，并把状态写入替换成内存 pdbStates、
+// 把 informer 同步检查置为恒真，从而让测试能直接向 store 注入对象并驱动 sync。
 func newFakeDisruptionControllerWithTime(ctx context.Context, now time.Time) (*disruptionController, *pdbStates) {
 	ps := &pdbStates{}
 
@@ -163,6 +187,7 @@ func newFakeDisruptionControllerWithTime(ctx context.Context, now time.Time) (*d
 	fakeDiscovery := &discoveryfake.FakeDiscovery{
 		Fake: &core.Fake{},
 	}
+	// 使用 fake clock，测试可精确推进逻辑时间而不必真实等待，便于验证超时与陈旧判定。
 	fakeClock := clocktesting.NewFakeClock(now)
 
 	dc := NewDisruptionControllerInternal(
@@ -180,7 +205,9 @@ func newFakeDisruptionControllerWithTime(ctx context.Context, now time.Time) (*d
 		fakeClock,
 		stalePodDisruptionTimeout,
 	)
+	// 将状态写入替换为内存 pdbStates，使断言不依赖 API Server 的 ResourceVersion 冲突处理。
 	dc.getUpdater = func() updater { return ps.Set }
+	// informer 同步检查置为恒真，测试可直接向 store 注入对象后立即 sync，无需等待事件回调。
 	dc.podListerSynced = alwaysReady
 	dc.pdbListerSynced = alwaysReady
 	dc.rcListerSynced = alwaysReady
@@ -206,18 +233,23 @@ func newFakeDisruptionControllerWithTime(ctx context.Context, now time.Time) (*d
 	}, ps
 }
 
+// fooBar 返回测试用的 {"foo": "bar"} 标签集，作为多数 fixture 的默认标签。
 func fooBar() map[string]string {
 	return map[string]string{"foo": "bar"}
 }
 
+// newSel 由给定的标签 map 构造 MatchLabels 类型的 LabelSelector。
 func newSel(labels map[string]string) *metav1.LabelSelector {
 	return &metav1.LabelSelector{MatchLabels: labels}
 }
 
+// newSelFooBar 返回匹配 foo=bar 的 LabelSelector，是 PDB 与工作负载 fixture 的默认选择器。
 func newSelFooBar() *metav1.LabelSelector {
 	return newSel(map[string]string{"foo": "bar"})
 }
 
+// newMinAvailablePodDisruptionBudget 构造指定 minAvailable、选择器为 foo=bar 的 PDB，
+// 并返回其 controller 键；UID 与 ResourceVersion 固定以便结果可复现。
 func newMinAvailablePodDisruptionBudget(t *testing.T, minAvailable intstr.IntOrString) (*policy.PodDisruptionBudget, string) {
 
 	pdb := &policy.PodDisruptionBudget{
@@ -242,6 +274,8 @@ func newMinAvailablePodDisruptionBudget(t *testing.T, minAvailable intstr.IntOrS
 	return pdb, pdbName
 }
 
+// newMaxUnavailablePodDisruptionBudget 构造指定 maxUnavailable、选择器为 foo=bar 的 PDB，
+// 并返回其 controller 键；用于验证按“不可中断上限”计算的场景。
 func newMaxUnavailablePodDisruptionBudget(t *testing.T, maxUnavailable intstr.IntOrString) (*policy.PodDisruptionBudget, string) {
 	pdb := &policy.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -265,6 +299,8 @@ func newMaxUnavailablePodDisruptionBudget(t *testing.T, maxUnavailable intstr.In
 	return pdb, pdbName
 }
 
+// updatePodOwnerToRc 将 pod 的控制器属主引用指向给定 RC，
+// 使控制器能据此反查 RC 的规模。
 func updatePodOwnerToRc(t *testing.T, pod *v1.Pod, rc *v1.ReplicationController) {
 	var controllerReference metav1.OwnerReference
 	var trueVar = true
@@ -272,6 +308,8 @@ func updatePodOwnerToRc(t *testing.T, pod *v1.Pod, rc *v1.ReplicationController)
 	pod.OwnerReferences = append(pod.OwnerReferences, controllerReference)
 }
 
+// updatePodOwnerToRs 将 pod 的控制器属主引用指向给定 ReplicaSet，
+// 使控制器能据此反查 RS 的规模。
 func updatePodOwnerToRs(t *testing.T, pod *v1.Pod, rs *apps.ReplicaSet) {
 	var controllerReference metav1.OwnerReference
 	var trueVar = true
@@ -279,6 +317,8 @@ func updatePodOwnerToRs(t *testing.T, pod *v1.Pod, rs *apps.ReplicaSet) {
 	pod.OwnerReferences = append(pod.OwnerReferences, controllerReference)
 }
 
+// updatePodOwnerToSs 将 pod 的控制器属主引用指向给定 StatefulSet，
+// 使控制器能据此反查 SS 的规模。
 func updatePodOwnerToSs(t *testing.T, pod *v1.Pod, ss *apps.StatefulSet) {
 	var controllerReference metav1.OwnerReference
 	var trueVar = true
@@ -286,6 +326,8 @@ func updatePodOwnerToSs(t *testing.T, pod *v1.Pod, ss *apps.StatefulSet) {
 	pod.OwnerReferences = append(pod.OwnerReferences, controllerReference)
 }
 
+// newPod 构造一个带 foo=bar 标签且 PodReady=True 的 pod 并返回其 controller 键；
+// 默认视为健康/可用，测试可通过清空 Conditions 使其变为不可用。
 func newPod(t *testing.T, name string) (*v1.Pod, string) {
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -313,6 +355,7 @@ func newPod(t *testing.T, name string) (*v1.Pod, string) {
 	return pod, podName
 }
 
+// newReplicationController 构造指定副本数、选择器为 foo=bar 的 RC fixture 并返回其键。
 func newReplicationController(t *testing.T, size int32) (*v1.ReplicationController, string) {
 	rc := &v1.ReplicationController{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -337,6 +380,7 @@ func newReplicationController(t *testing.T, size int32) (*v1.ReplicationControll
 	return rc, rcName
 }
 
+// newDeployment 构造指定副本数、选择器为 foo=bar 的 Deployment fixture 并返回其键。
 func newDeployment(t *testing.T, size int32) (*apps.Deployment, string) {
 	d := &apps.Deployment{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -361,6 +405,7 @@ func newDeployment(t *testing.T, size int32) (*apps.Deployment, string) {
 	return d, dName
 }
 
+// newReplicaSet 构造指定副本数、选择器为 foo=bar 的 ReplicaSet fixture 并返回其键。
 func newReplicaSet(t *testing.T, size int32) (*apps.ReplicaSet, string) {
 	rs := &apps.ReplicaSet{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -385,6 +430,7 @@ func newReplicaSet(t *testing.T, size int32) (*apps.ReplicaSet, string) {
 	return rs, rsName
 }
 
+// newStatefulSet 构造指定副本数、选择器为 foo=bar 的 StatefulSet fixture 并返回其键。
 func newStatefulSet(t *testing.T, size int32) (*apps.StatefulSet, string) {
 	ss := &apps.StatefulSet{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -409,19 +455,23 @@ func newStatefulSet(t *testing.T, size int32) (*apps.StatefulSet, string) {
 	return ss, ssName
 }
 
+// update 将对象写入 cache.Store 并断言成功，用于模拟 informer 收到更新事件。
 func update(t *testing.T, store cache.Store, obj interface{}) {
 	if err := store.Update(obj); err != nil {
 		t.Fatalf("Could not add %+v to %+v: %v", obj, store, err)
 	}
 }
 
+// add 将对象加入 cache.Store 并断言成功，用于模拟 informer 收到新增事件。
 func add(t *testing.T, store cache.Store, obj interface{}) {
 	if err := store.Add(obj); err != nil {
 		t.Fatalf("Could not add %+v to %+v: %v", obj, store, err)
 	}
 }
 
-// Create one with no selector.  Verify it matches all pods
+// TestNoSelector 验证空选择器（匹配所有 pod）的 PDB：
+// 起初无 pod 时不允许中断；加入一个匹配 pod 后 currentHealthy 与 expectedPods 递增，
+// 但因未达到 minAvailable=3 仍禁止中断。
 func TestNoSelector(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -439,8 +489,9 @@ func TestNoSelector(t *testing.T) {
 	ps.VerifyPdbStatus(t, pdbName, 0, 1, 3, 1, map[string]metav1.Time{})
 }
 
-// Verify that available/expected counts go up as we add pods, then verify that
-// available count goes down when we make a pod unavailable.
+// TestUnavailable 验证可用/期望计数随 pod 增加而逐次上升，
+// 并在某个 pod 变为不可用（清空 Ready 条件）后 currentHealthy 下降、
+// DisruptionsAllowed 从 1 回落为 0。
 func TestUnavailable(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -449,7 +500,7 @@ func TestUnavailable(t *testing.T) {
 	add(t, dc.pdbStore, pdb)
 	dc.sync(ctx, pdbName)
 
-	// Add three pods, verifying that the counts go up at each step.
+	// 逐个加入 4 个 pod，验证每次 sync 后计数逐步上升。
 	pods := []*v1.Pod{}
 	for i := int32(0); i < 4; i++ {
 		ps.VerifyPdbStatus(t, pdbName, 0, i, 3, i, map[string]metav1.Time{})
@@ -460,17 +511,17 @@ func TestUnavailable(t *testing.T) {
 	}
 	ps.VerifyPdbStatus(t, pdbName, 1, 4, 3, 4, map[string]metav1.Time{})
 
-	// Now set one pod as unavailable
+	// 清空首个 pod 的 Ready 条件，模拟其变为不可用。
 	pods[0].Status.Conditions = []v1.PodCondition{}
 	update(t, dc.podStore, pods[0])
 	dc.sync(ctx, pdbName)
 
-	// Verify expected update
+	// expectedPods 不变，但 currentHealthy 减一，导致不再允许中断。
 	ps.VerifyPdbStatus(t, pdbName, 0, 3, 3, 4, map[string]metav1.Time{})
 }
 
-// Verify that an integer MaxUnavailable won't
-// allow a disruption for pods with no controller.
+// TestIntegerMaxUnavailable 验证整数型 maxUnavailable 对无控制器 pod 不生效：
+// 零 pod 与裸 pod 场景均不允许中断，并发出 UnmanagedPods 事件。
 func TestIntegerMaxUnavailable(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -478,7 +529,7 @@ func TestIntegerMaxUnavailable(t *testing.T) {
 	pdb, pdbName := newMaxUnavailablePodDisruptionBudget(t, intstr.FromInt32(1))
 	add(t, dc.pdbStore, pdb)
 	dc.sync(ctx, pdbName)
-	// This verifies that when a PDB has 0 pods, disruptions are not allowed.
+	// 先验证 PDB 匹配 0 个 pod 时不允许中断。
 	ps.VerifyDisruptionAllowed(t, pdbName, 0)
 
 	pod, _ := newPod(t, "naked")
@@ -490,8 +541,9 @@ func TestIntegerMaxUnavailable(t *testing.T) {
 
 }
 
-// Verify that an integer MaxUnavailable will recompute allowed disruptions when the scale of
-// the selected pod's controller is modified.
+// TestIntegerMaxUnavailableWithScaling 验证整数型 maxUnavailable 会随被选 pod 控制器
+// （ReplicaSet）副本数变化重算：副本数从 7 降到 5 后，desiredHealthy 与
+// expectedPods 相应更新，DisruptionsAllowed 保持为 0。
 func TestIntegerMaxUnavailableWithScaling(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -508,7 +560,7 @@ func TestIntegerMaxUnavailableWithScaling(t *testing.T) {
 	dc.sync(ctx, pdbName)
 	ps.VerifyPdbStatus(t, pdbName, 0, 1, 5, 7, map[string]metav1.Time{})
 
-	// Update scale of ReplicaSet and check PDB
+	// 修改 ReplicaSet 副本数，验证 PDB 会依据控制器规模重算。
 	rs.Spec.Replicas = ptr.To[int32](5)
 	update(t, dc.rsStore, rs)
 
@@ -516,8 +568,8 @@ func TestIntegerMaxUnavailableWithScaling(t *testing.T) {
 	ps.VerifyPdbStatus(t, pdbName, 0, 1, 3, 5, map[string]metav1.Time{})
 }
 
-// Verify that an percentage MaxUnavailable will recompute allowed disruptions when the scale of
-// the selected pod's controller is modified.
+// TestPercentageMaxUnavailableWithScaling 验证百分比 maxUnavailable（30%）随控制器
+// 副本数变化重算：副本数从 7 降到 3 后，期望规模与阈值按百分比重新计算。
 func TestPercentageMaxUnavailableWithScaling(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -534,7 +586,7 @@ func TestPercentageMaxUnavailableWithScaling(t *testing.T) {
 	dc.sync(ctx, pdbName)
 	ps.VerifyPdbStatus(t, pdbName, 0, 1, 4, 7, map[string]metav1.Time{})
 
-	// Update scale of ReplicaSet and check PDB
+	// 修改 ReplicaSet 副本数，验证 PDB 会依据控制器规模重算。
 	rs.Spec.Replicas = ptr.To[int32](3)
 	update(t, dc.rsStore, rs)
 
@@ -542,8 +594,8 @@ func TestPercentageMaxUnavailableWithScaling(t *testing.T) {
 	ps.VerifyPdbStatus(t, pdbName, 0, 1, 2, 3, map[string]metav1.Time{})
 }
 
-// Create a pod  with no controller, and verify that a PDB with a percentage
-// specified won't allow a disruption.
+// TestNakedPod 验证百分比 minAvailable 的 PDB 遇到无控制器（裸）pod 时不允许中断，
+// 并发出 UnmanagedPods 事件。
 func TestNakedPod(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -551,7 +603,7 @@ func TestNakedPod(t *testing.T) {
 	pdb, pdbName := newMinAvailablePodDisruptionBudget(t, intstr.FromString("28%"))
 	add(t, dc.pdbStore, pdb)
 	dc.sync(ctx, pdbName)
-	// This verifies that when a PDB has 0 pods, disruptions are not allowed.
+	// 先验证 PDB 匹配 0 个 pod 时不允许中断。
 	ps.VerifyDisruptionAllowed(t, pdbName, 0)
 
 	pod, _ := newPod(t, "naked")
@@ -562,8 +614,8 @@ func TestNakedPod(t *testing.T) {
 	verifyEventEmitted(t, dc, "UnmanagedPods")
 }
 
-// Create a pod  with unsupported controller, and verify that a PDB with a percentage
-// specified won't allow a disruption.
+// TestUnsupportedControllerPod 验证 pod 属主为不受支持的自定义控制器时无法计算期望规模，
+// PDB 保持不允许中断，并发出 CalculateExpectedPodCountFailed 事件。
 func TestUnsupportedControllerPod(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -571,7 +623,7 @@ func TestUnsupportedControllerPod(t *testing.T) {
 	pdb, pdbName := newMinAvailablePodDisruptionBudget(t, intstr.FromString("28%"))
 	add(t, dc.pdbStore, pdb)
 	dc.sync(ctx, pdbName)
-	// This verifies that when a PDB has 0 pods, disruptions are not allowed.
+	// 先验证 PDB 匹配 0 个 pod 时不允许中断。
 	ps.VerifyDisruptionAllowed(t, pdbName, 0)
 
 	pod, _ := newPod(t, "naked")
@@ -591,7 +643,8 @@ func TestUnsupportedControllerPod(t *testing.T) {
 	verifyEventEmitted(t, dc, "CalculateExpectedPodCountFailed")
 }
 
-// Verify that disruption controller is not erroring when unmanaged pods are found
+// TestStatusForUnmanagedPod 验证发现未托管 pod 时控制器不会写入
+// SyncFailed/“found no controller ref” 错误状态，仅记录 UnmanagedPods 事件。
 func TestStatusForUnmanagedPod(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -599,7 +652,7 @@ func TestStatusForUnmanagedPod(t *testing.T) {
 	pdb, pdbName := newMinAvailablePodDisruptionBudget(t, intstr.FromString("28%"))
 	add(t, dc.pdbStore, pdb)
 	dc.sync(ctx, pdbName)
-	// This verifies that when a PDB has 0 pods, disruptions are not allowed.
+	// 先验证 PDB 匹配 0 个 pod 时不允许中断。
 	ps.VerifyDisruptionAllowed(t, pdbName, 0)
 
 	pod, _ := newPod(t, "unmanaged")
@@ -609,7 +662,8 @@ func TestStatusForUnmanagedPod(t *testing.T) {
 	verifyEventEmitted(t, dc, "UnmanagedPods")
 }
 
-// Check if the unmanaged pods are correctly collected or not
+// TestTotalUnmanagedPods 验证 getExpectedScale 能正确把无控制器 pod 计入
+// unmanagedPods 列表（恰好 1 个），且不产生状态错误。
 func TestTotalUnmanagedPods(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -617,7 +671,7 @@ func TestTotalUnmanagedPods(t *testing.T) {
 	pdb, pdbName := newMinAvailablePodDisruptionBudget(t, intstr.FromString("28%"))
 	add(t, dc.pdbStore, pdb)
 	dc.sync(ctx, pdbName)
-	// This verifies that when a PDB has 0 pods, disruptions are not allowed.
+	// 先验证 PDB 匹配 0 个 pod 时不允许中断。
 	ps.VerifyDisruptionAllowed(t, pdbName, 0)
 
 	pod, _ := newPod(t, "unmanaged")
@@ -633,7 +687,8 @@ func TestTotalUnmanagedPods(t *testing.T) {
 	verifyEventEmitted(t, dc, "UnmanagedPods")
 }
 
-// Verify that we count the scale of a ReplicaSet even when it has no Deployment.
+// TestReplicaSet 验证即使 ReplicaSet 没有 Deployment，控制器仍按其规模（10）
+// 计算期望 pod 数，并把 20% 的 minAvailable 向上取整为 2。
 func TestReplicaSet(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -650,6 +705,9 @@ func TestReplicaSet(t *testing.T) {
 	ps.VerifyPdbStatus(t, pdbName, 0, 1, 2, 10, map[string]metav1.Time{})
 }
 
+// TestScaleResource 验证通过 scale 子资源获取自定义控制器规模的场景：
+// reactor 模拟 get 返回 replicas=10，结合 maxUnavailable=5 与 4 个 pod，
+// 计算允许的中断数并校验状态。
 func TestScaleResource(t *testing.T) {
 	customResourceUID := uuid.NewUUID()
 	replicas := int32(10)
@@ -659,6 +717,7 @@ func TestScaleResource(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
 
+	// 自定义资源没有内建 scale 控制器，需用 reactor 模拟 scale 子资源返回。
 	dc.scaleClient.AddReactor("get", "customresources", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 		obj := &autoscalingapi.Scale{
 			ObjectMeta: metav1.ObjectMeta{
@@ -696,6 +755,8 @@ func TestScaleResource(t *testing.T) {
 	ps.VerifyPdbStatus(t, pdbName, disruptionsAllowed, pods, replicas-maxUnavailable, replicas, map[string]metav1.Time{})
 }
 
+// TestScaleFinderNoResource 表驱动验证 getScaleController 对 discovery 中 scale 子资源
+// 声明的处理：正确声明 scale 子资源时成功；仅声明同 Kind 普通资源或完全无 scale 时报错。
 func TestScaleFinderNoResource(t *testing.T) {
 	resourceName := "customresources"
 	testCases := map[string]struct {
@@ -752,6 +813,7 @@ func TestScaleFinderNoResource(t *testing.T) {
 			_, ctx := ktesting.NewTestContext(t)
 			dc, _ := newFakeDisruptionController(ctx)
 
+			// 让 get 返回 NotFound，迫使 getScaleController 依赖 discovery 判定能否找到 scale。
 			dc.scaleClient.AddReactor("get", resourceName, func(action core.Action) (handled bool, ret runtime.Object, err error) {
 				gr := schema.GroupResource{
 					Group:    customGVK.Group,
@@ -759,6 +821,7 @@ func TestScaleFinderNoResource(t *testing.T) {
 				}
 				return true, nil, errors.NewNotFound(gr, "name")
 			})
+			// discovery 中的 scale 子资源声明是各用例能否成功的关键差异。
 			dc.discoveryClient.Resources = []*metav1.APIResourceList{
 				{
 					GroupVersion: customGVK.GroupVersion().String(),
@@ -787,7 +850,8 @@ func TestScaleFinderNoResource(t *testing.T) {
 	}
 }
 
-// Verify that multiple controllers doesn't allow the PDB to be set true.
+// TestMultipleControllers 验证多个控制器不会让 PDB 被误判为可中断：
+// 无控制器时禁止；单一 RC 时允许；出现两个 RC 时应禁止（历史断言已注释并保留 TODO）。
 func TestMultipleControllers(t *testing.T) {
 	const podCount = 2
 	_, ctx := ktesting.NewTestContext(t)
@@ -804,7 +868,7 @@ func TestMultipleControllers(t *testing.T) {
 	}
 	dc.sync(ctx, pdbName)
 
-	// No controllers yet => no disruption allowed
+	// 此时 pod 尚无控制器，无法计算期望规模，因此不允许中断。
 	ps.VerifyDisruptionAllowed(t, pdbName, 0)
 
 	rc, _ := newReplicationController(t, 1)
@@ -814,7 +878,7 @@ func TestMultipleControllers(t *testing.T) {
 	}
 	add(t, dc.rcStore, rc)
 	dc.sync(ctx, pdbName)
-	// One RC and 200%>1% healthy => disruption allowed
+	// 单一 RC 下健康比例 200% 高于 1% 阈值，允许中断。
 	ps.VerifyDisruptionAllowed(t, pdbName, 1)
 
 	rc, _ = newReplicationController(t, 1)
@@ -825,16 +889,18 @@ func TestMultipleControllers(t *testing.T) {
 	add(t, dc.rcStore, rc)
 	dc.sync(ctx, pdbName)
 
-	// 100%>1% healthy BUT two RCs => no disruption allowed
-	// TODO: Find out if this assert is still needed
+	// 健康比例 100% 仍高于 1%，但存在两个 RC（历史语义应禁止中断）。
+	// TODO: 确认此断言是否仍然需要
 	//ps.VerifyDisruptionAllowed(t, pdbName, 0)
 }
 
+// TestReplicationController 验证按 RC 规模计算 PDB：34% 向上取整为 2 个最小健康 pod，
+// 随 3 个 pod 加入逐次校验状态；最后加入一个仅匹配标签但无控制器的 rogue pod，
+// 验证允许中断数仍按受控 pod 计算。
 func TestReplicationController(t *testing.T) {
-	// The budget in this test matches foo=bar, but the RC and its pods match
-	// {foo=bar, baz=quux}.  Later, when we add a rogue pod with only a foo=bar
-	// label, it will match the budget but have no controllers, which should
-	// trigger the controller to set PodDisruptionAllowed to false.
+	// 本测试的 PDB 匹配 foo=bar，而 RC 及其 pod 匹配 {foo=bar, baz=quux}。
+	// 之后加入一个仅带 foo=bar 标签的 rogue pod：它匹配 PDB 但没有控制器，
+	// 用于验证控制器不会错误地把无控制器 pod 当作同步失败。
 	labels := map[string]string{
 		"foo": "bar",
 		"baz": "quux",
@@ -842,7 +908,7 @@ func TestReplicationController(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
 
-	// 34% should round up to 2
+	// 34% 的 3 个副本应向上取整为 2 个最小健康 pod。
 	pdb, pdbName := newMinAvailablePodDisruptionBudget(t, intstr.FromString("34%"))
 	add(t, dc.pdbStore, pdb)
 	rc, _ := newReplicationController(t, 3)
@@ -850,8 +916,8 @@ func TestReplicationController(t *testing.T) {
 	add(t, dc.rcStore, rc)
 	dc.sync(ctx, pdbName)
 
-	// It starts out at 0 expected because, with no pods, the PDB doesn't know
-	// about the RC.  This is a known bug.  TODO(mml): file issue
+	// 起始 expectedPods 为 0：没有 pod 时 PDB 无法感知 RC 的存在。
+	// 这是已知问题。TODO(mml): 提交 issue 跟踪。
 	ps.VerifyPdbStatus(t, pdbName, 0, 0, 0, 0, map[string]metav1.Time{})
 
 	for i := int32(0); i < 3; i++ {
@@ -873,6 +939,8 @@ func TestReplicationController(t *testing.T) {
 	ps.VerifyDisruptionAllowed(t, pdbName, 2)
 }
 
+// TestStatefulSetController 验证 StatefulSet 作为控制器时与 RC 行为一致：
+// 34% 阈值向上取整为 2，随 pod 加入 currentHealthy 递增，达到阈值后允许中断。
 func TestStatefulSetController(t *testing.T) {
 	labels := map[string]string{
 		"foo": "bar",
@@ -882,15 +950,15 @@ func TestStatefulSetController(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
 
-	// 34% should round up to 2
+	// 34% 的 3 个副本应向上取整为 2 个最小健康 pod。
 	pdb, pdbName := newMinAvailablePodDisruptionBudget(t, intstr.FromString("34%"))
 	add(t, dc.pdbStore, pdb)
 	ss, _ := newStatefulSet(t, 3)
 	add(t, dc.ssStore, ss)
 	dc.sync(ctx, pdbName)
 
-	// It starts out at 0 expected because, with no pods, the PDB doesn't know
-	// about the SS.  This is a known bug.  TODO(mml): file issue
+	// 起始 expectedPods 为 0：没有 pod 时 PDB 无法感知 SS 的存在。
+	// 这是已知问题。TODO(mml): 提交 issue 跟踪。
 	ps.VerifyPdbStatus(t, pdbName, 0, 0, 0, 0, map[string]metav1.Time{})
 
 	for i := int32(0); i < 3; i++ {
@@ -907,9 +975,11 @@ func TestStatefulSetController(t *testing.T) {
 	}
 }
 
+// TestTwoControllers 验证两个控制器共同被 PDB 选中时的期望规模与阈值合并计算：
+// 先仅为 RC 创建 pod 验证中间态，再加入属于 RS 的 pod，
+// 最后通过逐个切换 pod 的 Ready 状态验证中断允许数的增减边界。
 func TestTwoControllers(t *testing.T) {
-	// Most of this test is in verifying intermediate cases as we define the
-	// three controllers and create the pods.
+	// 本测试的重点是在定义三个控制器并创建 pod 的过程中校验各种中间状态。
 	rcLabels := map[string]string{
 		"foo": "bar",
 		"baz": "quux",
@@ -921,13 +991,11 @@ func TestTwoControllers(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
 
-	// These constants are related, but I avoid calculating the correct values in
-	// code.  If you update a parameter here, recalculate the correct values for
-	// all of them.  Further down in the test, we use these to control loops, and
-	// that level of logic is enough complexity for me.
-	const collectionSize int32 = 11 // How big each collection is
-	const minimumOne int32 = 4      // integer minimum with one controller
-	const minimumTwo int32 = 7      // integer minimum with two controllers
+	// 这些常量相互关联，故不在代码中动态计算正确值；修改任一参数都需重新推算其余值。
+	// 后续循环直接依赖这些常量，保持显式取值比引入计算逻辑更易读。
+	const collectionSize int32 = 11 // 每个控制器管理的集合大小
+	const minimumOne int32 = 4      // 单一控制器时的整数型最小值
+	const minimumTwo int32 = 7      // 两个控制器时的整数型最小值
 
 	pdb, pdbName := newMinAvailablePodDisruptionBudget(t, intstr.FromString("28%"))
 	add(t, dc.pdbStore, pdb)
@@ -973,7 +1041,7 @@ func TestTwoControllers(t *testing.T) {
 	dc.sync(ctx, pdbName)
 	ps.VerifyPdbStatus(t, pdbName, 1, minimumOne+1, minimumOne, collectionSize, map[string]metav1.Time{})
 
-	// By the end of this loop, the number of ready pods should be N+2 (hence minimumTwo+2).
+	// 循环结束时健康 pod 数应为 N+2（即 minimumTwo+2），据此推导不可用的 pod 数量。
 	unavailablePods = 2*collectionSize - (minimumTwo + 2) - unavailablePods
 	for i := int32(1); i <= collectionSize; i++ {
 		pod, _ := newPod(t, fmt.Sprintf("quuux %d", i))
@@ -995,9 +1063,8 @@ func TestTwoControllers(t *testing.T) {
 		}
 	}
 
-	// Now we verify we can bring down 1 pod and a disruption is still permitted,
-	// but if we bring down two, it's not.  Then we make the pod ready again and
-	// verify that a disruption is permitted again.
+	// 验证边界：停用 1 个 pod 仍允许中断，停用 2 个则不允许；
+	// 再把其中一个恢复为 Ready 后，中断允许数应恢复。
 	ps.VerifyPdbStatus(t, pdbName, 2, 2+minimumTwo, minimumTwo, 2*collectionSize, map[string]metav1.Time{})
 	pods[collectionSize-1].Status.Conditions = []v1.PodCondition{}
 	update(t, dc.podStore, pods[collectionSize-1])
@@ -1015,7 +1082,7 @@ func TestTwoControllers(t *testing.T) {
 	ps.VerifyPdbStatus(t, pdbName, 1, 1+minimumTwo, minimumTwo, 2*collectionSize, map[string]metav1.Time{})
 }
 
-// Test pdb doesn't exist
+// TestPDBNotExist 验证 sync 一个缓存中不存在的 PDB 键时返回 nil 而非报错。
 func TestPDBNotExist(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, _ := newFakeDisruptionController(ctx)
@@ -1026,17 +1093,21 @@ func TestPDBNotExist(t *testing.T) {
 	}
 }
 
+// TestUpdateDisruptedPods 验证 sync 会清理 DisruptedPods：
+// 移除已开始删除的 pod、超过 stalePodDisruptionTimeout 的过期条目以及对应 pod 已消失的条目，
+// 仅保留仍在中断中且未超时的条目。
 func TestUpdateDisruptedPods(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
 	dc.recheckQueue = workqueue.NewTypedDelayingQueueWithConfig(workqueue.TypedDelayingQueueConfig[string]{Name: "pdb_queue"})
 	pdb, pdbName := newMinAvailablePodDisruptionBudget(t, intstr.FromInt32(1))
 	currentTime := dc.clock.Now()
+	// 构造四类条目以覆盖所有清理分支：正在删除、已过期、仍在中断、pod 已消失。
 	pdb.Status.DisruptedPods = map[string]metav1.Time{
-		"p1":       {Time: currentTime},                       // Should be removed, pod deletion started.
-		"p2":       {Time: currentTime.Add(-3 * time.Minute)}, // Should be removed, expired.
-		"p3":       {Time: currentTime.Add(-time.Minute)},     // Should remain, pod untouched.
-		"notthere": {Time: currentTime},                       // Should be removed, pod deleted.
+		"p1":       {Time: currentTime},                       // 应被移除：pod 已开始删除。
+		"p2":       {Time: currentTime.Add(-3 * time.Minute)}, // 应被移除：已超过陈旧超时。
+		"p3":       {Time: currentTime.Add(-time.Minute)},     // 应保留：pod 仍在中断中且未超时。
+		"notthere": {Time: currentTime},                       // 应被移除：对应 pod 已被删除。
 	}
 	add(t, dc.pdbStore, pdb)
 
@@ -1054,6 +1125,8 @@ func TestUpdateDisruptedPods(t *testing.T) {
 	ps.VerifyPdbStatus(t, pdbName, 0, 1, 1, 3, map[string]metav1.Time{"p3": {Time: currentTime.Add(-time.Minute)}})
 }
 
+// TestBasicFinderFunctions 表驱动验证 ReplicaSet、ReplicationController、StatefulSet 三种 finder：
+// apiVersion/Kind 正确时返回控制器及其规模，group 或 kind 不匹配时返回 nil。
 func TestBasicFinderFunctions(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, _ := newFakeDisruptionController(ctx)
@@ -1156,6 +1229,8 @@ func TestBasicFinderFunctions(t *testing.T) {
 	}
 }
 
+// TestDeploymentFinderFunction 表驱动验证 getPodDeployment 沿 RS→Deployment 的属主链查找：
+// 仅当 RS 与 Deployment 的 apiVersion/Kind 均合法时返回 Deployment 规模，否则返回 nil。
 func TestDeploymentFinderFunction(t *testing.T) {
 	labels := map[string]string{
 		"foo": "bar",
@@ -1255,25 +1330,18 @@ func TestDeploymentFinderFunction(t *testing.T) {
 	}
 }
 
-// This test checks that the disruption controller does not write stale data to
-// a PDB status during race conditions with the eviction handler. Specifically,
-// failed updates due to ResourceVersion conflict should not cause a stale value
-// of DisruptionsAllowed to be written.
-//
-// In this test, DisruptionsAllowed starts at 2.
-// (A) We will delete 1 pod and trigger DisruptionController to set
-// DisruptionsAllowed to 1.
-// (B) As the DisruptionController attempts this write, we will evict the
-// remaining 2 pods and update DisruptionsAllowed to 0. (The real eviction
-// handler would allow this because it still sees DisruptionsAllowed=2.)
-// (C) If the DisruptionController writes DisruptionsAllowed=1 despite the
-// resource conflict error, then there is a bug.
+// TestUpdatePDBStatusRetries 验证在与驱逐处理器竞态时，控制器不会把陈旧数据写回 PDB 状态；
+// 具体而言，因 ResourceVersion 冲突而失败的更新不应导致旧的 DisruptionsAllowed 被写入。
+// 场景中 DisruptionsAllowed 初始为 2：
+// (A) 删除 1 个 pod，触发控制器尝试把 DisruptionsAllowed 写为 1；
+// (B) 在该写入发生时驱逐剩余 2 个 pod，把值更新为 0（真实驱逐处理器仍看到 2，故允许）；
+// (C) 若控制器在冲突后仍写入 1，即为 bug。
 func TestUpdatePDBStatusRetries(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, _ := newFakeDisruptionController(ctx)
-	// Inject the production code over our fake impl
+	// 注入生产实现，覆盖构造时的假 updater，使写入走真实的冲突处理路径。
 	dc.getUpdater = func() updater { return dc.writePdbStatus }
-	// Create a PDB and 3 pods that match it.
+	// 创建一个 PDB 与 3 个匹配它的 pod，作为竞态场景的初始状态。
 	pdb, pdbKey := newMinAvailablePodDisruptionBudget(t, intstr.FromInt32(1))
 	pdb, err := dc.coreClient.PolicyV1().PodDisruptionBudgets(pdb.Namespace).Create(ctx, pdb, metav1.CreateOptions{})
 	if err != nil {
@@ -1288,11 +1356,9 @@ func TestUpdatePDBStatusRetries(t *testing.T) {
 		}
 	}
 
-	// Block until the fake clientset writes are observable in the informer caches.
-	// FUN FACT: This guarantees that the informer caches have updated, but it does
-	// not guarantee that informer event handlers have completed. Fortunately,
-	// DisruptionController does most of its logic by reading from informer
-	// listers, so this guarantee is sufficient.
+	// 阻塞等待 fake 客户端的写入在 informer 缓存中可见。
+	// 注意：这保证缓存已更新，但不保证事件处理器已全部完成；
+	// 所幸 DisruptionController 主要读 informer lister，因此该保证已足够。
 	if err := waitForCacheCount(dc.pdbStore, 1); err != nil {
 		t.Fatalf("Failed to verify PDB in informer cache: %v", err)
 	}
@@ -1300,30 +1366,30 @@ func TestUpdatePDBStatusRetries(t *testing.T) {
 		t.Fatalf("Failed to verify pods in informer cache: %v", err)
 	}
 
-	// Sync DisruptionController once to update PDB status.
+	// 先同步一次，让控制器写入初始 PDB 状态（DisruptionsAllowed=2）。
 	if err := dc.sync(ctx, pdbKey); err != nil {
 		t.Fatalf("Failed initial sync: %v", err)
 	}
 
-	// Evict simulates the visible effects of eviction in our fake client.
+	// evict 在 fake 客户端中模拟驱逐的可见副作用。
 	evict := func(podNames ...string) {
-		// These GVRs are copied from the generated fake code because they are not exported.
+		// 这些 GVR 从生成的 fake 代码复制而来，因为原处未导出。
 		var (
 			podsResource                 = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
 			poddisruptionbudgetsResource = schema.GroupVersionResource{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}
 		)
 
-		// Bypass the coreClient.Fake and write directly to the ObjectTracker, because
-		// this helper will be called while the Fake is holding a lock.
+		// 直接写 ObjectTracker 以绕过 coreClient.Fake：调用发生时 Fake 正持有锁，
+		// 若再走 Fake 接口会死锁。
 		obj, err := dc.coreClient.Tracker().Get(poddisruptionbudgetsResource, pdb.Namespace, pdb.Name)
 		if err != nil {
 			t.Fatalf("Failed to get PDB: %v", err)
 		}
 		updatedPDB := obj.(*policy.PodDisruptionBudget)
-		// Each eviction,
-		// - decrements DisruptionsAllowed
-		// - adds the pod to DisruptedPods
-		// - deletes the pod
+		// 每次驱逐会：
+		// - 递减 DisruptionsAllowed
+		// - 把 pod 加入 DisruptedPods
+		// - 删除该 pod
 		updatedPDB.Status.DisruptionsAllowed -= int32(len(podNames))
 		updatedPDB.Status.DisruptedPods = make(map[string]metav1.Time)
 		for _, name := range podNames {
@@ -1339,13 +1405,12 @@ func TestUpdatePDBStatusRetries(t *testing.T) {
 		}
 	}
 
-	// The fake kube client does not update ResourceVersion or check for conflicts.
-	// Instead, we add a reactor that returns a conflict error on the first PDB
-	// update and success after that.
+	// fake 客户端不会更新 ResourceVersion，也不检查冲突；
+	// 因此用 reactor 让首次 PDB 更新返回冲突错误，之后正常成功，以模拟竞态。
 	var failOnce sync.Once
 	dc.coreClient.Fake.PrependReactor("update", "poddisruptionbudgets", func(a core.Action) (handled bool, obj runtime.Object, err error) {
 		failOnce.Do(func() {
-			// (B) Evict two pods and fail this update.
+			// (B) 驱逐两个 pod，并让本次更新失败，制造冲突窗口。
 			evict(podNames[1], podNames[2])
 			handled = true
 			err = errors.NewConflict(a.GetResource().GroupResource(), pdb.Name, fmt.Errorf("conflict"))
@@ -1353,7 +1418,7 @@ func TestUpdatePDBStatusRetries(t *testing.T) {
 		return handled, obj, err
 	})
 
-	// (A) Delete one pod
+	// (A) 删除一个 pod，触发控制器的写入尝试。
 	if err := dc.coreClient.CoreV1().Pods("default").Delete(ctx, podNames[0], metav1.DeleteOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -1361,17 +1426,15 @@ func TestUpdatePDBStatusRetries(t *testing.T) {
 		t.Fatalf("Failed to verify pods in informer cache: %v", err)
 	}
 
-	// The sync() function should either write a correct status which takes the
-	// evictions into account, or re-queue the PDB for another sync (by returning
-	// an error)
+	// sync() 要么写出已考虑驱逐结果的正确状态，
+	// 要么返回错误把 PDB 重新入队等待下次同步。
 	if err := dc.sync(ctx, pdbKey); err != nil {
 		t.Logf("sync() returned with error: %v", err)
 	} else {
 		t.Logf("sync() returned with no error")
 	}
 
-	// (C) Whether or not sync() returned an error, the PDB status should reflect
-	// the evictions that took place.
+	// (C) 无论 sync() 是否返回错误，最终 PDB 状态都必须反映已发生的驱逐。
 	finalPDB, err := dc.coreClient.PolicyV1().PodDisruptionBudgets("default").Get(ctx, pdb.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Failed to get PDB: %v", err)
@@ -1381,6 +1444,8 @@ func TestUpdatePDBStatusRetries(t *testing.T) {
 	}
 }
 
+// TestInvalidSelectors 验证非法 LabelSelector（键含多余斜杠、非法操作符）不会导致控制器崩溃，
+// 而是把 PDB 状态置为全 0 的初始值。
 func TestInvalidSelectors(t *testing.T) {
 	testCases := map[string]struct {
 		labelSelector *metav1.LabelSelector
@@ -1421,6 +1486,9 @@ func TestInvalidSelectors(t *testing.T) {
 	}
 }
 
+// TestStalePodDisruption 验证 DisruptionTarget 条件超过 2 分钟陈旧阈值后被置为 False，
+// 未超时保持 True；正在删除或本已是 False 的 pod 不被改写。
+// 使用 fake clock 精确跨越 ±1 秒的边界，避免依赖真实时间。
 func TestStalePodDisruption(t *testing.T) {
 	now := time.Now()
 	cases := map[string]struct {
@@ -1544,7 +1612,9 @@ func TestStalePodDisruption(t *testing.T) {
 			if _, err := dc.coreClient.CoreV1().Pods(tc.pod.Namespace).Create(tCtx, tc.pod, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Failed to create pod: %v", err)
 			}
+			// fake clock 的 Sleep 只推进逻辑时间，不阻塞真实时间，可精确跨越 2 分钟阈值。
 			dc.clock.Sleep(tc.timePassed)
+			// 时间推进后重新把 pod 加入索引器，触发 worker 重新评估 DisruptionTarget 是否陈旧。
 			if err := dc.informerFactory.Core().V1().Pods().Informer().GetIndexer().Add(tc.pod); err != nil {
 				t.Fatalf("Failed adding pod to indexer: %v", err)
 			}
@@ -1563,6 +1633,8 @@ func TestStalePodDisruption(t *testing.T) {
 	}
 }
 
+// TestKeepExistingPDBConditionDuringSync 验证 sync 更新 PDB 状态时会保留已有的自定义 Condition，
+// 不会被新条件集整体覆盖（最终应同时存在原有条件与 DisruptionAllowed 共 2 个条件）。
 func TestKeepExistingPDBConditionDuringSync(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	dc, ps := newFakeDisruptionController(ctx)
@@ -1594,15 +1666,16 @@ func TestKeepExistingPDBConditionDuringSync(t *testing.T) {
 	}
 }
 
-// waitForCacheCount blocks until the given cache store has the desired number
-// of items in it. This will return an error if the condition is not met after a
-// 10 second timeout.
+// waitForCacheCount 阻塞等待给定 cache store 中的条目数达到 n，
+// 10 秒超时仍未满足则返回错误，用于确定性地等待 informer 缓存同步。
 func waitForCacheCount(store cache.Store, n int) error {
 	return wait.Poll(10*time.Millisecond, 10*time.Second, func() (bool, error) {
 		return len(store.List()) == n, nil
 	})
 }
 
+// verifyEventEmitted 从 FakeRecorder 持续读取事件，直到出现包含 expectedEvent 的消息；
+// 500ms ticker 超时则失败，防止事件缺失时测试永久阻塞。
 func verifyEventEmitted(t *testing.T, dc *disruptionController, expectedEvent string) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	for {

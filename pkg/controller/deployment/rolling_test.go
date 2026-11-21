@@ -28,6 +28,8 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// TestDeploymentController_reconcileNewReplicaSet 验证滚动更新时新 ReplicaSet 的扩缩容判断：
+// 依据 maxSurge 与当前副本数决定是否扩容，以及副本数超出目标时是否缩回。
 func TestDeploymentController_reconcileNewReplicaSet(t *testing.T) {
 	tests := []struct {
 		deploymentReplicas  int32
@@ -38,7 +40,7 @@ func TestDeploymentController_reconcileNewReplicaSet(t *testing.T) {
 		expectedNewReplicas int32
 	}{
 		{
-			// Should not scale up.
+			// 没有 surge 余量时不扩容。
 			deploymentReplicas: 10,
 			maxSurge:           intstr.FromInt32(0),
 			oldReplicas:        10,
@@ -69,7 +71,7 @@ func TestDeploymentController_reconcileNewReplicaSet(t *testing.T) {
 			scaleExpected:      false,
 		},
 		{
-			// Should scale down.
+			// 新副本数超过期望值时缩回目标副本数。
 			deploymentReplicas:  10,
 			maxSurge:            intstr.FromInt32(2),
 			oldReplicas:         2,
@@ -100,6 +102,7 @@ func TestDeploymentController_reconcileNewReplicaSet(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 			continue
 		}
+		// 期望不扩缩容时，返回值和 fake 客户端动作都必须为空，防止偷偷发起写请求。
 		if !test.scaleExpected {
 			if scaled || len(fake.Actions()) > 0 {
 				t.Errorf("unexpected scaling: %v", fake.Actions())
@@ -121,6 +124,8 @@ func TestDeploymentController_reconcileNewReplicaSet(t *testing.T) {
 	}
 }
 
+// TestDeploymentController_reconcileOldReplicaSets 验证滚动更新时旧 ReplicaSet 的缩容判断，
+// 覆盖按 maxUnavailable 缩容、清理不健康副本，以及新副本不可用时停止进一步缩容的场景。
 func TestDeploymentController_reconcileOldReplicaSets(t *testing.T) {
 	tests := []struct {
 		deploymentReplicas  int32
@@ -152,7 +157,7 @@ func TestDeploymentController_reconcileOldReplicaSets(t *testing.T) {
 			scaleExpected:       true,
 			expectedOldReplicas: 8,
 		},
-		{ // expect unhealthy replicas from old replica sets been cleaned up
+		{ // 期望清理旧 ReplicaSet 中不健康的副本
 			deploymentReplicas:  10,
 			maxUnavailable:      intstr.FromInt32(2),
 			oldReplicas:         10,
@@ -162,7 +167,7 @@ func TestDeploymentController_reconcileOldReplicaSets(t *testing.T) {
 			scaleExpected:       true,
 			expectedOldReplicas: 8,
 		},
-		{ // expect 1 unhealthy replica from old replica sets been cleaned up, and 1 ready pod been scaled down
+		{ // 期望清理 1 个不健康副本，同时缩掉 1 个就绪 Pod
 			deploymentReplicas:  10,
 			maxUnavailable:      intstr.FromInt32(2),
 			oldReplicas:         10,
@@ -172,7 +177,7 @@ func TestDeploymentController_reconcileOldReplicaSets(t *testing.T) {
 			scaleExpected:       true,
 			expectedOldReplicas: 8,
 		},
-		{ // the unavailable pods from the newRS would not make us scale down old RSs in a further step
+		{ // 新 ReplicaSet 中存在不可用 Pod 时，不应继续推进旧 ReplicaSet 的缩容
 			deploymentReplicas: 10,
 			maxUnavailable:     intstr.FromInt32(2),
 			oldReplicas:        8,
@@ -189,6 +194,7 @@ func TestDeploymentController_reconcileOldReplicaSets(t *testing.T) {
 		newSelector := map[string]string{"foo": "new"}
 		oldSelector := map[string]string{"foo": "old"}
 		newRS := rs("foo-new", test.newReplicas, newSelector, noTimestamp)
+		// 把就绪副本数写入 Status，模拟控制器从状态中读取的可用副本信息。
 		newRS.Status.AvailableReplicas = int32(test.readyPodsFromNewRS)
 		oldRS := rs("foo-old", test.oldReplicas, oldSelector, noTimestamp)
 		oldRS.Status.AvailableReplicas = int32(test.readyPodsFromOldRS)
@@ -207,6 +213,7 @@ func TestDeploymentController_reconcileOldReplicaSets(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 			continue
 		}
+		// 缩容标记是直接返回值，不依赖 fake 客户端动作，这里只验证决策结果。
 		if !test.scaleExpected && scaled {
 			t.Errorf("unexpected scaling: %v", fakeClientset.Actions())
 		}
@@ -218,6 +225,8 @@ func TestDeploymentController_reconcileOldReplicaSets(t *testing.T) {
 	}
 }
 
+// TestDeploymentController_cleanupUnhealthyReplicas 验证按允许的清理上限缩容旧 ReplicaSet 中的不健康副本，
+// 确保实际清理数不超过 maxCleanupCount，也不超过真实的不健康副本数。
 func TestDeploymentController_cleanupUnhealthyReplicas(t *testing.T) {
 	tests := []struct {
 		oldReplicas          int32

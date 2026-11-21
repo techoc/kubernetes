@@ -55,12 +55,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// This file contains the controller base functionality, i.e. framework to
-// process PV/PVC added/updated/deleted events. The real binding, provisioning,
-// recycling and deleting is done in pv_controller.go
+// 本文件包含控制器的基础框架，即处理 PV/PVC 添加/更新/删除事件的通用逻辑。
+// 真正的绑定、制备、回收与删除操作在 pv_controller.go 中实现。
 
-// ControllerParameters contains arguments for creation of a new
-// PersistentVolume controller.
+// ControllerParameters 保存创建新 PersistentVolume 控制器所需的参数。
 type ControllerParameters struct {
 	KubeClient                clientset.Interface
 	SyncPeriod                time.Duration
@@ -73,7 +71,7 @@ type ControllerParameters struct {
 	EnableDynamicProvisioning bool
 }
 
-// NewController creates a new PersistentVolume controller
+// NewController 创建并初始化一个新的 PersistentVolume 控制器。
 func NewController(ctx context.Context, p ControllerParameters) (*PersistentVolumeController, error) {
 	eventBroadcaster := record.NewBroadcaster(record.WithContext(ctx))
 	eventRecorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "persistentvolume-controller"})
@@ -100,7 +98,7 @@ func NewController(ctx context.Context, p ControllerParameters) (*PersistentVolu
 		operationTimestamps: metrics.NewOperationStartTimeCache(),
 	}
 
-	// Prober is nil because PV is not aware of Flexvolume.
+	// 这里传入 nil 作为 prober，因为 PV 控制器不感知 Flexvolume。
 	if err := controller.volumePluginMgr.InitPlugins(p.VolumePlugins, nil /* prober */, controller); err != nil {
 		return nil, fmt.Errorf("could not initialize volume plugins for PersistentVolume Controller: %w", err)
 	}
@@ -142,8 +140,7 @@ func NewController(ctx context.Context, p ControllerParameters) (*PersistentVolu
 	controller.NodeLister = p.NodeInformer.Lister()
 	controller.NodeListerSynced = p.NodeInformer.Informer().HasSynced
 
-	// This custom indexer will index pods by its PVC keys. Then we don't need
-	// to iterate all pods every time to find pods which reference given PVC.
+	// 建立按 PVC 键索引 Pod 的自定义索引器，这样查找引用某 PVC 的 Pod 时无需遍历全部 Pod。
 	if err := common.AddPodPVCIndexerIfNotPresent(controller.podIndexer); err != nil {
 		return nil, fmt.Errorf("could not initialize attach detach controller: %w", err)
 	}
@@ -155,9 +152,8 @@ func NewController(ctx context.Context, p ControllerParameters) (*PersistentVolu
 	return controller, nil
 }
 
-// initializeCaches fills all controller caches with initial data from etcd in
-// order to have the caches already filled when first addClaim/addVolume to
-// perform initial synchronization of the controller.
+// initializeCaches 用 etcd 中的初始数据填充控制器缓存，
+// 确保首次 addClaim/addVolume 事件到来前缓存已就绪，从而完成控制器的初始同步。
 func (ctrl *PersistentVolumeController) initializeCaches(logger klog.Logger, volumeLister corelisters.PersistentVolumeLister, claimLister corelisters.PersistentVolumeClaimLister) {
 	volumeList, err := volumeLister.List(labels.Everything())
 	if err != nil {
@@ -184,9 +180,9 @@ func (ctrl *PersistentVolumeController) initializeCaches(logger klog.Logger, vol
 	logger.V(4).Info("Controller initialized")
 }
 
-// enqueueWork adds volume or claim to given work queue.
+// enqueueWork 把卷或声明的名字加入给定的工作队列。
 func (ctrl *PersistentVolumeController) enqueueWork(ctx context.Context, queue workqueue.TypedInterface[string], obj interface{}) {
-	// Beware of "xxx deleted" events
+	// 注意处理“对象已删除”事件：DeltaFIFO 可能用 DeletedFinalStateUnknown 包装对象。
 	logger := klog.FromContext(ctx)
 	if unknown, ok := obj.(cache.DeletedFinalStateUnknown); ok && unknown.Obj != nil {
 		obj = unknown.Obj
@@ -200,19 +196,20 @@ func (ctrl *PersistentVolumeController) enqueueWork(ctx context.Context, queue w
 	queue.Add(objName)
 }
 
+// storeVolumeUpdate 把卷的新版本写入控制器缓存，返回是否为新版本。
 func (ctrl *PersistentVolumeController) storeVolumeUpdate(logger klog.Logger, volume interface{}) (bool, error) {
 	return storeObjectUpdate(logger, ctrl.volumes.store, volume, "volume")
 }
 
+// storeClaimUpdate 把声明的新版本写入控制器缓存，返回是否为新版本。
 func (ctrl *PersistentVolumeController) storeClaimUpdate(logger klog.Logger, claim interface{}) (bool, error) {
 	return storeObjectUpdate(logger, ctrl.claims, claim, "claim")
 }
 
-// updateVolume runs in worker thread and handles "volume added",
-// "volume updated" and "periodic sync" events.
+// updateVolume 在 worker 线程中运行，处理“卷添加”“卷更新”和“周期性同步”事件：
+// 仅当缓存写入的是新版本时才执行同步。
 func (ctrl *PersistentVolumeController) updateVolume(ctx context.Context, volume *v1.PersistentVolume) error {
-	// Store the new volume version in the cache and do not process it if this
-	// is an old version.
+	// 先把新版本写入缓存；若是旧版本则跳过处理。
 	logger := klog.FromContext(ctx)
 	new, err := ctrl.storeVolumeUpdate(logger, volume)
 	if err != nil {
@@ -226,8 +223,8 @@ func (ctrl *PersistentVolumeController) updateVolume(ctx context.Context, volume
 	err = ctrl.syncVolume(ctx, volume)
 	if err != nil {
 		if errors.IsConflict(err) {
-			// Version conflict error happens quite often and the controller
-			// recovers from it easily.
+			// 版本冲突错误相当常见，控制器
+			// 控制器可以很容易地从该状态恢复。
 			logger.V(3).Info("Could not sync volume", "volumeName", volume.Name, "err", err)
 		} else {
 			logger.Error(err, "Could not sync volume", "volumeName", volume.Name)
@@ -237,7 +234,8 @@ func (ctrl *PersistentVolumeController) updateVolume(ctx context.Context, volume
 	return nil
 }
 
-// deleteVolume runs in worker thread and handles "volume deleted" event.
+// deleteVolume 在 worker 线程中运行，处理“卷删除”事件，
+// 清理缓存并记录删除耗时指标，同时触发关联声明的同步。
 func (ctrl *PersistentVolumeController) deleteVolume(ctx context.Context, volume *v1.PersistentVolume) {
 	logger := klog.FromContext(ctx)
 	if err := ctrl.volumes.store.Delete(volume); err != nil {
@@ -245,27 +243,23 @@ func (ctrl *PersistentVolumeController) deleteVolume(ctx context.Context, volume
 	} else {
 		logger.V(4).Info("volume deleted", "volumeName", volume.Name)
 	}
-	// record deletion metric if a deletion start timestamp is in the cache
-	// the following calls will be a no-op if there is nothing for this volume in the cache
-	// end of timestamp cache entry lifecycle, "RecordMetric" will do the clean
+	// 若缓存中存在该卷的删除起始时间则记录删除耗时指标；
+	// 缓存中无记录时该调用为空操作，RecordMetric 会负责清理时间戳缓存项。
 	metrics.RecordMetric(volume.Name, &ctrl.operationTimestamps, nil)
 
 	if volume.Spec.ClaimRef == nil {
 		return
 	}
-	// sync the claim when its volume is deleted. Explicitly syncing the
-	// claim here in response to volume deletion prevents the claim from
-	// waiting until the next sync period for its Lost status.
+	// 卷被删除时主动同步其关联声明，避免声明一直等到下个同步周期才更新为 Lost 状态。
 	claimKey := claimrefToClaimKey(volume.Spec.ClaimRef)
 	logger.V(5).Info("deleteVolume: scheduling sync of claim", "PVC", klog.KRef(volume.Spec.ClaimRef.Namespace, volume.Spec.ClaimRef.Name), "volumeName", volume.Name)
 	ctrl.claimQueue.Add(claimKey)
 }
 
-// updateClaim runs in worker thread and handles "claim added",
-// "claim updated" and "periodic sync" events.
+// updateClaim 在 worker 线程中运行，处理“声明添加”“声明更新”和“周期性同步”事件：
+// 仅当缓存写入的是新版本时才执行同步。
 func (ctrl *PersistentVolumeController) updateClaim(ctx context.Context, claim *v1.PersistentVolumeClaim) error {
-	// Store the new claim version in the cache and do not process it if this is
-	// an old version.
+	// 先把新版本写入缓存；若是旧版本则跳过处理。
 	logger := klog.FromContext(ctx)
 	new, err := ctrl.storeClaimUpdate(logger, claim)
 	if err != nil {
@@ -278,8 +272,8 @@ func (ctrl *PersistentVolumeController) updateClaim(ctx context.Context, claim *
 	err = ctrl.syncClaim(ctx, claim)
 	if err != nil {
 		if errors.IsConflict(err) {
-			// Version conflict error happens quite often and the controller
-			// recovers from it easily.
+			// 版本冲突错误相当常见，控制器
+			// 控制器可以很容易地从该状态恢复。
 			logger.V(3).Info("Could not sync claim", "PVC", klog.KObj(claim), "err", err)
 		} else {
 			logger.Error(err, "Could not sync claim", "PVC", klog.KObj(claim))
@@ -290,7 +284,8 @@ func (ctrl *PersistentVolumeController) updateClaim(ctx context.Context, claim *
 }
 
 // Unit test [5-5] [5-6] [5-7]
-// deleteClaim runs in worker thread and handles "claim deleted" event.
+// deleteClaim 在 worker 线程中运行，处理“声明删除”事件，
+// 清理缓存与时间戳，并触发关联卷的同步。
 func (ctrl *PersistentVolumeController) deleteClaim(ctx context.Context, claim *v1.PersistentVolumeClaim) {
 	logger := klog.FromContext(ctx)
 	if err := ctrl.claims.Delete(claim); err != nil {
@@ -298,7 +293,7 @@ func (ctrl *PersistentVolumeController) deleteClaim(ctx context.Context, claim *
 	}
 	claimKey := claimToClaimKey(claim)
 	logger.V(4).Info("Claim deleted", "PVC", klog.KObj(claim))
-	// clean any possible unfinished provision start timestamp from cache
+	// 清理可能残留的未完成的制备起始时间戳。
 	// Unit test [5-8] [5-9]
 	ctrl.operationTimestamps.Delete(claimKey)
 
@@ -308,18 +303,16 @@ func (ctrl *PersistentVolumeController) deleteClaim(ctx context.Context, claim *
 		return
 	}
 
-	// sync the volume when its claim is deleted.  Explicitly sync'ing the
-	// volume here in response to claim deletion prevents the volume from
-	// waiting until the next sync period for its Release.
+	// 声明被删除时主动同步其关联卷，避免卷一直等到下个同步周期才进入 Released 状态。
 	logger.V(5).Info("deleteClaim: scheduling sync of volume", "PVC", klog.KObj(claim), "volumeName", volumeName)
 	ctrl.volumeQueue.Add(volumeName)
 }
 
-// Run starts all of this controller's control loops
+// Run 启动本控制器的所有控制循环，直到 ctx 结束。
 func (ctrl *PersistentVolumeController) Run(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 
-	// Start events processing pipeline.
+	// 启动事件处理流水线。
 	ctrl.eventBroadcaster.StartStructuredLogging(3)
 	ctrl.eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: ctrl.kubeClient.CoreV1().Events("")})
 	defer ctrl.eventBroadcaster.Shutdown()
@@ -355,6 +348,7 @@ func (ctrl *PersistentVolumeController) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// updateClaimMigrationAnnotations 修复声明上的 CSI 迁移注解；无变化时返回副本不写 API。
 func (ctrl *PersistentVolumeController) updateClaimMigrationAnnotations(ctx context.Context,
 	claim *v1.PersistentVolumeClaim) (*v1.PersistentVolumeClaim, error) {
 	// TODO: update[Claim|Volume]MigrationAnnotations can be optimized to not
@@ -362,7 +356,8 @@ func (ctrl *PersistentVolumeController) updateClaimMigrationAnnotations(ctx cont
 	// requires some refactoring as well as an interesting change in the
 	// semantics of the function which may be undesirable. If no copy is made
 	// when no modifications are required this function could sometimes return a
-	// copy of the volume and sometimes return a ref to the original
+	// copy of the volume and sometimes return a ref to the original.
+	// 先深拷贝声明，避免直接修改 informer 缓存中的对象。
 	claimClone := claim.DeepCopy()
 	logger := klog.FromContext(ctx)
 	modified := updateMigrationAnnotations(logger, ctrl.csiMigratedPluginManager, ctrl.translator, claimClone.Annotations, true)
@@ -380,6 +375,8 @@ func (ctrl *PersistentVolumeController) updateClaimMigrationAnnotations(ctx cont
 	return newClaim, nil
 }
 
+// updateVolumeMigrationAnnotationsAndFinalizers 修复卷上的迁移注解与删除保护 finalizer；
+// 无变化时返回副本不写 API。
 func (ctrl *PersistentVolumeController) updateVolumeMigrationAnnotationsAndFinalizers(ctx context.Context,
 	volume *v1.PersistentVolume) (*v1.PersistentVolume, error) {
 	volumeClone := volume.DeepCopy()
@@ -403,18 +400,15 @@ func (ctrl *PersistentVolumeController) updateVolumeMigrationAnnotationsAndFinal
 	return newVol, nil
 }
 
-// modifyDeletionFinalizers updates the finalizers based on the reclaim policy and if it is a in-tree volume or not.
-// The in-tree PV deletion protection finalizer is only added if the reclaimPolicy associated with the PV is `Delete`.
-// The in-tree PV deletion protection finalizer is removed if the reclaimPolicy associated with the PV is `Retain` or
-// `Recycle`, removing the finalizer is necessary to reflect the recalimPolicy updates on the PV.
-// The method also removes any external PV Deletion Protection finalizers added on the PV, this represents CSI migration
-// rollback/disable scenarios.
+// modifyDeletionFinalizers 根据回收策略以及是否为 in-tree 卷来更新 finalizer 列表：
+// 仅当 PV 的回收策略为 Delete 时才添加 in-tree 删除保护 finalizer；
+// 回收策略为 Retain 或 Recycle 时移除它，以反映 PV 上回收策略的更新。
+// 同时移除外部 PV 删除保护 finalizer，以处理 CSI 迁移回滚/禁用场景。
 func modifyDeletionFinalizers(logger klog.Logger, cmpm CSIMigratedPluginManager, volume *v1.PersistentVolume) ([]string, bool) {
 	modified := false
 	var outFinalizers []string
 	if !metav1.HasAnnotation(volume.ObjectMeta, storagehelpers.AnnDynamicallyProvisioned) {
-		// PV deletion protection finalizer is currently supported only for dynamically
-		// provisioned volumes.
+		// 删除保护 finalizer 目前仅对动态制备的卷有意义。
 		return volume.Finalizers, false
 	}
 	if volume.Finalizers != nil {
@@ -422,31 +416,31 @@ func modifyDeletionFinalizers(logger klog.Logger, cmpm CSIMigratedPluginManager,
 	}
 	provisioner := volume.Annotations[storagehelpers.AnnDynamicallyProvisioned]
 	if cmpm.IsMigrationEnabledForPlugin(provisioner) {
-		// Remove in-tree delete finalizer on the PV as migration is enabled.
+		// 已启用 CSI 迁移时移除 PV 上的 in-tree 删除保护 finalizer。
 		if slices.Contains(outFinalizers, storagehelpers.PVDeletionInTreeProtectionFinalizer) {
 			outFinalizers = slice.RemoveString(outFinalizers, storagehelpers.PVDeletionInTreeProtectionFinalizer, nil)
 			modified = true
 		}
 		return outFinalizers, modified
 	}
-	// Check if it is a in-tree volume.
+	// 检查是否为 in-tree 卷。
 	if !strings.HasPrefix(provisioner, "kubernetes.io/") {
-		// The provision plugin does not begin with known in-tree plugin volume prefix annotation.
+		// 制备插件名不以已知 in-tree 插件前缀开头，不属于 in-tree 卷。
 		return volume.Finalizers, false
 	}
 	reclaimPolicy := volume.Spec.PersistentVolumeReclaimPolicy
-	// Add back the in-tree PV deletion protection finalizer if does not already exists
+	// 若尚未存在，则补回 in-tree PV 删除保护 finalizer。
 	if reclaimPolicy == v1.PersistentVolumeReclaimDelete && !slices.Contains(outFinalizers, storagehelpers.PVDeletionInTreeProtectionFinalizer) {
 		logger.V(4).Info("Adding in-tree pv deletion protection finalizer on volume", "volumeName", volume.Name)
 		outFinalizers = append(outFinalizers, storagehelpers.PVDeletionInTreeProtectionFinalizer)
 		modified = true
 	} else if (reclaimPolicy == v1.PersistentVolumeReclaimRetain || reclaimPolicy == v1.PersistentVolumeReclaimRecycle) && slices.Contains(outFinalizers, storagehelpers.PVDeletionInTreeProtectionFinalizer) {
-		// Remove the in-tree PV deletion protection finalizer if the reclaim policy is 'Retain' or 'Recycle'
+		// 回收策略为 Retain 或 Recycle 时移除 in-tree 删除保护 finalizer。
 		logger.V(4).Info("Removing in-tree pv deletion protection finalizer on volume", "volumeName", volume.Name)
 		outFinalizers = slice.RemoveString(outFinalizers, storagehelpers.PVDeletionInTreeProtectionFinalizer, nil)
 		modified = true
 	}
-	// Remove the external PV deletion protection finalizer
+	// 移除外部 PV 删除保护 finalizer。
 	if slices.Contains(outFinalizers, storagehelpers.PVDeletionProtectionFinalizer) {
 		logger.V(4).Info("Removing external pv deletion protection finalizer on volume", "volumeName", volume.Name)
 		outFinalizers = slice.RemoveString(outFinalizers, storagehelpers.PVDeletionProtectionFinalizer, nil)
@@ -455,19 +449,15 @@ func modifyDeletionFinalizers(logger klog.Logger, cmpm CSIMigratedPluginManager,
 	return outFinalizers, modified
 }
 
-// updateMigrationAnnotations takes an Annotations map and checks for a
-// provisioner name using the provisionerKey. It will then add a
-// "pv.kubernetes.io/migrated-to" annotation if migration with the CSI
-// driver name for that provisioner is "on" based on feature flags, it will also
-// remove the annotation is migration is "off" for that provisioner in rollback
-// scenarios. Returns true if the annotations map was modified and false otherwise.
+// updateMigrationAnnotations 检查注解映射中的制备器名称，按功能开关判断是否启用 CSI 迁移：
+// 启用时为对应制备器添加 "pv.kubernetes.io/migrated-to" 注解，
+// 回滚场景下迁移关闭时移除该注解。返回注解映射是否被修改。
 func updateMigrationAnnotations(logger klog.Logger, cmpm CSIMigratedPluginManager, translator CSINameTranslator, ann map[string]string, claim bool) bool {
 	var csiDriverName string
 	var err error
 
 	if ann == nil {
-		// No annotations so we can't get the provisioner and don't know whether
-		// this is migrated - no change
+		// 没有注解时无法得知制备器及迁移状态，不做修改。
 		return false
 	}
 	var provisionerKey string
@@ -479,13 +469,13 @@ func updateMigrationAnnotations(logger klog.Logger, cmpm CSIMigratedPluginManage
 	provisioner, ok := ann[provisionerKey]
 	if !ok {
 		if claim {
-			// Also check beta AnnStorageProvisioner annontation to make sure
+			// 对声明还要检查 beta 版制备器注解，确保兼容旧对象。
 			provisioner, ok = ann[storagehelpers.AnnBetaStorageProvisioner]
 			if !ok {
 				return false
 			}
 		} else {
-			// Volume Statically provisioned.
+			// 卷是静态制备的，没有制备器注解。
 			return false
 		}
 	}
@@ -503,7 +493,7 @@ func updateMigrationAnnotations(logger klog.Logger, cmpm CSIMigratedPluginManage
 		}
 	} else {
 		if migratedToDriver != "" {
-			// Migration annotation exists but the driver isn't migrated currently
+			// 迁移注解仍存在但当前该功能已关闭，需移除注解。
 			delete(ann, storagehelpers.AnnMigratedTo)
 			return true
 		}
@@ -511,14 +501,14 @@ func updateMigrationAnnotations(logger klog.Logger, cmpm CSIMigratedPluginManage
 	return false
 }
 
-// volumeWorker runs a worker thread that just dequeues items, processes them, and marks them done.
-// It enforces that the syncHandler is never invoked concurrently with the same key.
+// volumeWorker 运行一个 worker 线程，从队列取出条目处理后标记完成，
+// 保证同一 key 的 syncHandler 不会被并发调用。
 func (ctrl *PersistentVolumeController) volumeWorker(ctx context.Context) {
 	for ctrl.processNextVolumeWorkItem(ctx) {
 	}
 }
 
-// processNextVolumeWorkItem deals with one key off the volumeQueue. It returns false when it's time to quit.
+// processNextVolumeWorkItem 处理卷队列中的一个 key；队列关闭时返回 false。
 func (ctrl *PersistentVolumeController) processNextVolumeWorkItem(ctx context.Context) bool {
 	key, quit := ctrl.volumeQueue.Get()
 	if quit {
@@ -537,7 +527,7 @@ func (ctrl *PersistentVolumeController) processNextVolumeWorkItem(ctx context.Co
 	return true
 }
 
-// syncVolumeByKey processes a single volume identified by key from the queue.
+// syncVolumeByKey 处理队列中 key 对应的单个卷：按 informer/本地缓存判断是更新还是删除。
 func (ctrl *PersistentVolumeController) syncVolumeByKey(ctx context.Context, key string) error {
 	logger := klog.FromContext(ctx)
 	logger.V(5).Info("syncVolumeByKey", "volumeKey", key)
@@ -550,8 +540,7 @@ func (ctrl *PersistentVolumeController) syncVolumeByKey(ctx context.Context, key
 
 	volume, err := ctrl.volumeLister.Get(name)
 	if err == nil {
-		// The volume still exists in informer cache, the event must have
-		// been add/update/sync
+		// 卷仍在 informer 缓存中，说明事件是添加/更新/同步。
 		return ctrl.updateVolume(ctx, volume)
 	}
 	if !errors.IsNotFound(err) {
@@ -559,36 +548,35 @@ func (ctrl *PersistentVolumeController) syncVolumeByKey(ctx context.Context, key
 		return err
 	}
 
-	// The volume is not in informer cache, the event must have been "delete"
+	// 卷已不在 informer 缓存中，说明事件是删除。
 	volumeObj, found, err := ctrl.volumes.store.GetByKey(key)
 	if err != nil {
 		logger.V(2).Info("Error getting volume from cache", "volumeKey", key, "err", err)
 		return err
 	}
 	if !found {
-		// The controller has already processed the delete event and
-		// deleted the volume from its cache
+		// 控制器已处理过删除事件，并已从缓存中删除该卷。
 		logger.V(2).Info("Deletion of volume was already processed", "volumeKey", key)
 		return nil
 	}
 	volume, ok := volumeObj.(*v1.PersistentVolume)
 	if !ok {
 		logger.Error(nil, "Expected volume, got", "obj", volumeObj)
-		// Don't retry on type assertion failure
+		// 类型断言失败不重试：这属于编程错误，重试无意义。
 		return nil
 	}
 	ctrl.deleteVolume(ctx, volume)
 	return nil
 }
 
-// claimWorker runs a worker thread that just dequeues items, processes them, and marks them done.
-// It enforces that the syncHandler is never invoked concurrently with the same key.
+// claimWorker 运行一个 worker 线程，从队列取出条目处理后标记完成，
+// 保证同一 key 的 syncHandler 不会被并发调用。
 func (ctrl *PersistentVolumeController) claimWorker(ctx context.Context) {
 	for ctrl.processNextClaimWorkItem(ctx) {
 	}
 }
 
-// processNextClaimWorkItem deals with one key off the claimQueue. It returns false when it's time to quit.
+// processNextClaimWorkItem 处理声明队列中的一个 key；队列关闭时返回 false。
 func (ctrl *PersistentVolumeController) processNextClaimWorkItem(ctx context.Context) bool {
 	key, quit := ctrl.claimQueue.Get()
 	if quit {
@@ -607,7 +595,7 @@ func (ctrl *PersistentVolumeController) processNextClaimWorkItem(ctx context.Con
 	return true
 }
 
-// syncClaimByKey processes a single claim identified by key from the queue.
+// syncClaimByKey 处理队列中 key 对应的单个声明：按 informer/本地缓存判断是更新还是删除。
 func (ctrl *PersistentVolumeController) syncClaimByKey(ctx context.Context, key string) error {
 	logger := klog.FromContext(ctx)
 	logger.V(5).Info("syncClaimByKey", "claimKey", key)
@@ -620,8 +608,7 @@ func (ctrl *PersistentVolumeController) syncClaimByKey(ctx context.Context, key 
 
 	claim, err := ctrl.claimLister.PersistentVolumeClaims(namespace).Get(name)
 	if err == nil {
-		// The claim still exists in informer cache, the event must have
-		// been add/update/sync
+		// 声明仍在 informer 缓存中，说明事件是添加/更新/同步。
 		return ctrl.updateClaim(ctx, claim)
 	}
 	if !errors.IsNotFound(err) {
@@ -629,31 +616,29 @@ func (ctrl *PersistentVolumeController) syncClaimByKey(ctx context.Context, key 
 		return err
 	}
 
-	// The claim is not in informer cache, the event must have been "delete"
+	// 声明已不在 informer 缓存中，说明事件是删除。
 	claimObj, found, err := ctrl.claims.GetByKey(key)
 	if err != nil {
 		logger.V(2).Info("Error getting claim from cache", "claimKey", key, "err", err)
 		return err
 	}
 	if !found {
-		// The controller has already processed the delete event and
-		// deleted the claim from its cache
+		// 控制器已处理过删除事件，并已从缓存中删除该声明。
 		logger.V(2).Info("Deletion of claim was already processed", "claimKey", key)
 		return nil
 	}
 	claim, ok := claimObj.(*v1.PersistentVolumeClaim)
 	if !ok {
 		logger.Error(nil, "Expected claim, got", "obj", claimObj)
-		// Don't retry on type assertion failure
+		// 类型断言失败不重试：这属于编程错误，重试无意义。
 		return nil
 	}
 	ctrl.deleteClaim(ctx, claim)
 	return nil
 }
 
-// resync supplements short resync period of shared informers - we don't want
-// all consumers of PV/PVC shared informer to have a short resync period,
-// therefore we do our own.
+// resync 补充共享 informer 重同步周期较长的不足：不希望所有 PV/PVC 共享 informer
+// 的使用者都被迫使用很短的重同步周期，因此本控制器自行周期性地把所有对象重新入队。
 func (ctrl *PersistentVolumeController) resync(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Resyncing PV controller")
@@ -677,16 +662,15 @@ func (ctrl *PersistentVolumeController) resync(ctx context.Context) {
 	}
 }
 
-// setClaimProvisioner saves
-// claim.Annotations["volume.kubernetes.io/storage-provisioner"] = class.Provisioner
+// setClaimProvisioner 把存储类制备器名称写入声明的
+// volume.kubernetes.io/storage-provisioner 注解。
 func (ctrl *PersistentVolumeController) setClaimProvisioner(ctx context.Context, claim *v1.PersistentVolumeClaim, provisionerName string) (*v1.PersistentVolumeClaim, error) {
 	if val, ok := claim.Annotations[storagehelpers.AnnStorageProvisioner]; ok && val == provisionerName {
-		// annotation is already set, nothing to do
+		// 注解已是目标值，无需更新。
 		return claim, nil
 	}
 
-	// The volume from method args can be pointing to watcher cache. We must not
-	// modify these, therefore create a copy.
+	// 参数中的声明可能指向 watcher 缓存对象，绝不能直接修改，必须先深拷贝。
 	claimClone := claim.DeepCopy()
 	// TODO: remove the beta storage provisioner anno after the deprecation period
 	logger := klog.FromContext(ctx)
@@ -704,8 +688,9 @@ func (ctrl *PersistentVolumeController) setClaimProvisioner(ctx context.Context,
 	return newClaim, nil
 }
 
-// Stateless functions
+// 以下为无状态辅助函数。
 
+// getClaimStatusForLogging 返回声明的关键状态字段，便于日志输出。
 func getClaimStatusForLogging(claim *v1.PersistentVolumeClaim) string {
 	bound := metav1.HasAnnotation(claim.ObjectMeta, storagehelpers.AnnBindCompleted)
 	boundByController := metav1.HasAnnotation(claim.ObjectMeta, storagehelpers.AnnBoundByController)
@@ -713,6 +698,7 @@ func getClaimStatusForLogging(claim *v1.PersistentVolumeClaim) string {
 	return fmt.Sprintf("phase: %s, bound to: %q, bindCompleted: %v, boundByController: %v", claim.Status.Phase, claim.Spec.VolumeName, bound, boundByController)
 }
 
+// getVolumeStatusForLogging 返回卷的关键状态字段，便于日志输出。
 func getVolumeStatusForLogging(volume *v1.PersistentVolume) string {
 	boundByController := metav1.HasAnnotation(volume.ObjectMeta, storagehelpers.AnnBoundByController)
 	claimName := ""
@@ -722,10 +708,8 @@ func getVolumeStatusForLogging(volume *v1.PersistentVolume) string {
 	return fmt.Sprintf("phase: %s, bound to: %q, boundByController: %v", volume.Status.Phase, claimName, boundByController)
 }
 
-// storeObjectUpdate updates given cache with a new object version from Informer
-// callback (i.e. with events from etcd) or with an object modified by the
-// controller itself. Returns "true", if the cache was updated, false if the
-// object is an old version and should be ignored.
+// storeObjectUpdate 用 informer 回调或控制器自身修改后的对象版本更新缓存。
+// 缓存被更新时返回 true；对象版本过旧应忽略时返回 false。
 func storeObjectUpdate(logger klog.Logger, store cache.Store, obj interface{}, className string) (bool, error) {
 	objName, err := controller.KeyFunc(obj)
 	if err != nil {
@@ -741,7 +725,7 @@ func storeObjectUpdate(logger klog.Logger, store cache.Store, obj interface{}, c
 		return false, err
 	}
 	if !found {
-		// This is a new object
+		// 缓存中不存在，是新对象。
 		logger.V(4).Info("storeObjectUpdate, adding obj", "storageClassName", className, "objName", objName, "resourceVersion", objAccessor.GetResourceVersion())
 		if err = store.Add(obj); err != nil {
 			return false, fmt.Errorf("error adding %s %q to controller cache: %w", className, objName, err)
@@ -763,8 +747,7 @@ func storeObjectUpdate(logger klog.Logger, store cache.Store, obj interface{}, c
 		return false, fmt.Errorf("error parsing old ResourceVersion %q of %s %q: %s", oldObjAccessor.GetResourceVersion(), className, objName, err)
 	}
 
-	// Throw away only older version, let the same version pass - we do want to
-	// get periodic sync events.
+	// 只丢弃更旧的版本，相同版本仍放行，以便获得周期性同步事件。
 	if oldObjResourceVersion > objResourceVersion {
 		logger.V(4).Info("storeObjectUpdate: ignoring obj", "storageClassName", className, "objName", objName, "resourceVersion", objAccessor.GetResourceVersion())
 		return false, nil

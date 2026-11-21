@@ -34,42 +34,38 @@ import (
 	"k8s.io/kubernetes/pkg/controller/endpointslicemirroring/metrics"
 )
 
-// reconciler is responsible for transforming current EndpointSlice state into
-// desired state
+// reconciler 负责把 EndpointSlice 的当前状态转变为期望状态。
 type reconciler struct {
 	client clientset.Interface
 
-	// endpointSliceTracker tracks the list of EndpointSlices and associated
-	// resource versions expected for each Endpoints resource. It can help
-	// determine if a cached EndpointSlice is out of date.
+	// endpointSliceTracker 记录每个 Endpoints 资源期望存在的 EndpointSlice
+	// 及其资源版本，用于判断缓存中的对象是否已经过期。
 	endpointSliceTracker *endpointsliceutil.EndpointSliceTracker
 
-	// eventRecorder allows reconciler to record an event if it finds an invalid
-	// IP address in an Endpoints resource.
+	// eventRecorder 在发现 Endpoints 中存在非法 IP 时记录事件，
+	// 让用户能从 API 事件中看到地址被忽略的原因。
 	eventRecorder record.EventRecorder
 
-	// maxEndpointsPerSubset references the maximum number of endpoints that
-	// should be added to an EndpointSlice for an EndpointSubset. This allows
-	// for a simple 1:1 mapping between EndpointSubset and EndpointSlice.
+	// maxEndpointsPerSubset 限制单个 EndpointSubset 镜像到 EndpointSlice
+	// 的 endpoint 数量，从而维持 EndpointSubset 与 EndpointSlice 的简单 1:1 映射。
 	maxEndpointsPerSubset int32
 
-	// metricsCache tracks values for total numbers of desired endpoints as well
-	// as the efficiency of EndpointSlice endpoints distribution
+	// metricsCache 跟踪期望 endpoint 总数以及 EndpointSlice 分布效率，
+	// 供指标查询使用。
 	metricsCache *metrics.Cache
 }
 
-// reconcile takes an Endpoints resource and ensures that corresponding
-// EndpointSlices exist. It creates, updates, or deletes EndpointSlices to
-// ensure the desired set of addresses are represented by EndpointSlices.
+// reconcile 接收 Endpoints 资源并确保对应的 EndpointSlice 存在。
+// 它通过创建、更新或删除 EndpointSlice，使实际地址集合与 Endpoints 中的期望地址一致。
 func (r *reconciler) reconcile(ctx context.Context, endpoints *corev1.Endpoints, existingSlices []*discovery.EndpointSlice) error {
 	logger := klog.FromContext(ctx)
-	// Calculate desired state.
+	// 先计算期望状态。
 	d := newDesiredCalc()
 
 	numInvalidAddresses := 0
 	addressesSkipped := 0
 
-	// canonicalize the Endpoints subsets before processing them
+	// 先规范化 subset：减少因 Endpoints 中地址排列不同而产生的无意义变更。
 	subsets := endpointsv1.RepackSubsets(endpoints.Subsets)
 	for _, subset := range subsets {
 		multiKey := d.initPorts(subset.Ports)
@@ -78,9 +74,8 @@ func (r *reconciler) reconcile(ctx context.Context, endpoints *corev1.Endpoints,
 		totalAddressesAdded := 0
 
 		for _, address := range subset.Addresses {
-			// Break if we've reached the max number of addresses to mirror
-			// per EndpointSubset. This allows for a simple 1:1 mapping between
-			// EndpointSubset and EndpointSlice.
+			// 达到单 subset 镜像上限即停止，以维持 EndpointSubset 与
+			// EndpointSlice 的 1:1 映射；超出部分稍后计入跳过数。
 			if totalAddressesAdded >= int(r.maxEndpointsPerSubset) {
 				break
 			}
@@ -93,9 +88,8 @@ func (r *reconciler) reconcile(ctx context.Context, endpoints *corev1.Endpoints,
 		}
 
 		for _, address := range subset.NotReadyAddresses {
-			// Break if we've reached the max number of addresses to mirror
-			// per EndpointSubset. This allows for a simple 1:1 mapping between
-			// EndpointSubset and EndpointSlice.
+			// 与 ready 地址共享同一配额，先到的地址优先被镜像；
+			// 达到上限后剩余地址只计入跳过数。
 			if totalAddressesAdded >= int(r.maxEndpointsPerSubset) {
 				break
 			}
@@ -110,29 +104,26 @@ func (r *reconciler) reconcile(ctx context.Context, endpoints *corev1.Endpoints,
 		addressesSkipped += totalAddresses - totalAddressesAdded
 	}
 
-	// This metric includes addresses skipped for being invalid or exceeding
-	// MaxEndpointsPerSubset.
+	// 该指标同时统计因非法 IP 和因超过上限而被跳过的地址。
 	metrics.AddressesSkippedPerSync.WithLabelValues().Observe(float64(addressesSkipped))
 
-	// Record an event on the Endpoints resource if we skipped mirroring for any
-	// invalid IP addresses.
+	// 对非法 IP 单独记录事件，便于用户定位错误配置。
 	if numInvalidAddresses > 0 {
 		r.eventRecorder.Eventf(endpoints, corev1.EventTypeWarning, InvalidIPAddress,
 			"Skipped %d invalid IP addresses when mirroring to EndpointSlices", numInvalidAddresses)
 	}
 
-	// Record a separate event if we skipped mirroring due to the number of
-	// addresses exceeding MaxEndpointsPerSubset.
+	// 超上限与非法 IP 是不同原因，分开记录事件才能给出正确的处理建议。
 	if addressesSkipped > numInvalidAddresses {
 		logger.Info("Addresses in Endpoints were skipped due to exceeding MaxEndpointsPerSubset", "skippedAddresses", addressesSkipped, "endpoints", klog.KObj(endpoints))
 		r.eventRecorder.Eventf(endpoints, corev1.EventTypeWarning, TooManyAddressesToMirror,
 			"A max of %d addresses can be mirrored to EndpointSlices per Endpoints subset. %d addresses were skipped", r.maxEndpointsPerSubset, addressesSkipped)
 	}
 
-	// Build data structures for existing state.
+	// 构建现有状态的索引，便于按端口映射逐组对账。
 	existingSlicesByKey := endpointSlicesByKey(existingSlices)
 
-	// Determine changes necessary for each group of slices by port map.
+	// 按端口映射分组计算每组需要执行的变更。
 	epMetrics := metrics.NewEndpointPortCache()
 	totals := totalsByAction{}
 	slices := slicesByAction{}
@@ -151,8 +142,8 @@ func (r *reconciler) reconcile(ctx context.Context, endpoints *corev1.Endpoints,
 		})
 	}
 
-	// If there are unique sets of ports that are no longer desired, mark
-	// the corresponding endpoint slices for deletion.
+	// 期望状态中已不存在的端口组合，其对应的 EndpointSlice 必须删除，
+	// 否则会残留无效路由。
 	for portKey, existingSlices := range existingSlicesByKey {
 		if _, ok := d.endpointsByKey[portKey]; !ok {
 			for _, existingSlice := range existingSlices {
@@ -171,9 +162,8 @@ func (r *reconciler) reconcile(ctx context.Context, endpoints *corev1.Endpoints,
 	return r.finalize(ctx, endpoints, slices)
 }
 
-// reconcileByPortMapping compares the endpoints found in existing slices with
-// the list of desired endpoints and returns lists of slices to create, update,
-// and delete.
+// reconcileByPortMapping 比较现有 EndpointSlice 中的 endpoint 与期望集合，
+// 返回需要创建、更新和删除的 EndpointSlice 列表，以及增/改/删的数量统计。
 func (r *reconciler) reconcileByPortMapping(
 	endpoints *corev1.Endpoints,
 	existingSlices []*discovery.EndpointSlice,
@@ -184,8 +174,8 @@ func (r *reconciler) reconcileByPortMapping(
 	slices := slicesByAction{}
 	totals := totalsByAction{}
 
-	// If no endpoints are desired, mark existing slices for deletion and
-	// return.
+	// 不再需要任何 endpoint 时直接删除所有现有 slice：
+	// 保留空 slice 没有意义，还会占用资源。
 	if desiredSet.Len() == 0 {
 		slices.toDelete = existingSlices
 		for _, epSlice := range existingSlices {
@@ -195,29 +185,34 @@ func (r *reconciler) reconcileByPortMapping(
 	}
 
 	if len(existingSlices) == 0 {
-		// if no existing slices, all desired endpoints will be added.
+		// 没有现有 slice 时所有期望 endpoint 都算新增。
 		totals.added = desiredSet.Len()
 	} else {
-		// if >0 existing slices, mark all but 1 for deletion.
+		// 存在多个 slice 时只保留第一个作为更新目标，其余标记删除，
+		// 逐步收敛到每端口组合一个 slice。
 		slices.toDelete = existingSlices[1:]
 
-		// generated slices must mirror all endpoints annotations but EndpointsLastChangeTriggerTime and LastAppliedConfigAnnotation
+		// 比较时排除由控制器自身维护或仅用于变更触发的元数据，
+		// 避免这些字段导致无意义的反复更新。
 		compareAnnotations := cloneAndRemoveKeys(endpoints.Annotations, corev1.EndpointsLastChangeTriggerTime, corev1.LastAppliedConfigAnnotation)
 		compareLabels := cloneAndRemoveKeys(existingSlices[0].Labels, discovery.LabelManagedBy, discovery.LabelServiceName)
-		// Return early if first slice matches desired endpoints, labels and annotations
+		// 首个 slice 已与期望状态一致时直接返回，省去一次无用的 Update。
 		totals = totalChanges(existingSlices[0], desiredSet)
 		if totals.added == 0 && totals.updated == 0 && totals.removed == 0 &&
 			apiequality.Semantic.DeepEqual(endpoints.Labels, compareLabels) &&
 			apiequality.Semantic.DeepEqual(compareAnnotations, existingSlices[0].Annotations) &&
 			!needRebuildExistingSlices(endpoints, existingSlices[0]) {
 			if !r.endpointSliceTracker.Has(existingSlices[0]) {
-				r.endpointSliceTracker.Update(existingSlices[0]) // Always ensure each EndpointSlice is being tracked.
+				// 即使无需更新，也要确保该 slice 处于跟踪状态，
+				// 否则后续缓存事件会被误判为过期。
+				r.endpointSliceTracker.Update(existingSlices[0])
 			}
 			return slices, totals
 		}
 	}
 
-	// generate a new slice with the desired endpoints.
+	// 用期望的 endpoint 构造目标 slice；复用首个现有 slice 的名称，
+	// 使变更以 Update 而非 Create+Delete 的方式落地。
 	var sliceName string
 	if len(existingSlices) > 0 {
 		sliceName = existingSlices[0].Name
@@ -228,36 +223,37 @@ func (r *reconciler) reconcileByPortMapping(
 		newSlice.Endpoints = append(newSlice.Endpoints, *endpoint)
 	}
 
+	// 有名称的 slice 走更新路径；新建的 slice 依赖 GenerateName 生成名称以避免冲突。
 	if newSlice.Name != "" {
 		slices.toUpdate = []*discovery.EndpointSlice{newSlice}
-	} else { // Slices to be created set GenerateName instead of Name.
+	} else {
 		slices.toCreate = []*discovery.EndpointSlice{newSlice}
 	}
 
 	return slices, totals
 }
 
-// finalize creates, updates, and deletes slices as specified
+// finalize 按切片列表执行创建、更新和删除操作。
 func (r *reconciler) finalize(ctx context.Context, endpoints *corev1.Endpoints, slices slicesByAction) error {
-	// If there are slices to create and delete, recycle the slices marked for
-	// deletion by replacing creates with updates of slices that would otherwise
-	// be deleted.
+	// 有待删除的 slice 时优先复用它们：把创建改为更新，
+	// 减少 API 对象增删带来的抖动，也让名称保持稳定。
 	recycleSlices(&slices)
 
 	epsClient := r.client.DiscoveryV1().EndpointSlices(endpoints.Namespace)
 
-	// Don't create more EndpointSlices if corresponding Endpoints resource is
-	// being deleted.
+	// Endpoints 正在删除时不再创建新 slice，避免刚创建就被级联删除。
 	if endpoints.DeletionTimestamp == nil {
 		for _, endpointSlice := range slices.toCreate {
 			createdSlice, err := epsClient.Create(ctx, endpointSlice, metav1.CreateOptions{})
 			if err != nil {
-				// If the namespace is terminating, creates will continue to fail. Simply drop the item.
+				// 命名空间正在终止时创建会持续失败，重试没有意义，
+				// 直接丢弃并返回 nil，避免队列无限重排该事件。
 				if errors.HasStatusCause(err, corev1.NamespaceTerminatingCause) {
 					return nil
 				}
 				return fmt.Errorf("failed to create EndpointSlice for Endpoints %s/%s: %v", endpoints.Namespace, endpoints.Name, err)
 			}
+			// 记录服务端返回的资源版本，供后续判断缓存是否过期。
 			r.endpointSliceTracker.Update(createdSlice)
 			metrics.EndpointSliceChanges.WithLabelValues("create").Inc()
 		}
@@ -268,6 +264,7 @@ func (r *reconciler) finalize(ctx context.Context, endpoints *corev1.Endpoints, 
 		if err != nil {
 			return fmt.Errorf("failed to update %s EndpointSlice for Endpoints %s/%s: %v", endpointSlice.Name, endpoints.Namespace, endpoints.Name, err)
 		}
+		// 用更新后的版本刷新跟踪信息，防止下一次对账误判为过期。
 		r.endpointSliceTracker.Update(updatedSlice)
 		metrics.EndpointSliceChanges.WithLabelValues("update").Inc()
 	}
@@ -277,6 +274,7 @@ func (r *reconciler) finalize(ctx context.Context, endpoints *corev1.Endpoints, 
 		if err != nil {
 			return fmt.Errorf("failed to delete %s EndpointSlice for Endpoints %s/%s: %v", endpointSlice.Name, endpoints.Namespace, endpoints.Name, err)
 		}
+		// 提前登记预期删除，使删除事件到达时不会被视为意外变更。
 		r.endpointSliceTracker.ExpectDeletion(endpointSlice)
 		metrics.EndpointSliceChanges.WithLabelValues("delete").Inc()
 	}
@@ -284,14 +282,15 @@ func (r *reconciler) finalize(ctx context.Context, endpoints *corev1.Endpoints, 
 	return nil
 }
 
-// deleteEndpoints deletes any associated EndpointSlices and cleans up any
-// Endpoints references from the metricsCache.
+// deleteEndpoints 删除关联的 EndpointSlice，并清理 metricsCache 中的引用。
 func (r *reconciler) deleteEndpoints(ctx context.Context, namespace, name string, endpointSlices []*discovery.EndpointSlice) error {
+	// 先清理指标缓存，避免 Endpoints 消失后残留陈旧统计。
 	r.metricsCache.DeleteEndpoints(types.NamespacedName{Namespace: namespace, Name: name})
 	var errs []error
 	for _, endpointSlice := range endpointSlices {
 		err := r.client.DiscoveryV1().EndpointSlices(namespace).Delete(ctx, endpointSlice.Name, metav1.DeleteOptions{})
 		if err != nil {
+			// 收集全部失败后再统一返回，让调用方一次性了解删除情况。
 			errs = append(errs, err)
 		}
 	}
@@ -301,8 +300,8 @@ func (r *reconciler) deleteEndpoints(ctx context.Context, namespace, name string
 	return nil
 }
 
-// endpointSlicesByKey returns a map that groups EndpointSlices by unique
-// addrTypePortMapKey values.
+// endpointSlicesByKey 按地址类型与端口映射的组合（addrTypePortMapKey）
+// 对 EndpointSlice 分组，使不同端口集合能独立对账。
 func endpointSlicesByKey(existingSlices []*discovery.EndpointSlice) map[addrTypePortMapKey][]*discovery.EndpointSlice {
 	slicesByKey := map[addrTypePortMapKey][]*discovery.EndpointSlice{}
 	for _, existingSlice := range existingSlices {
@@ -312,8 +311,8 @@ func endpointSlicesByKey(existingSlices []*discovery.EndpointSlice) map[addrType
 	return slicesByKey
 }
 
-// totalChanges returns the total changes that will be required for an
-// EndpointSlice to match a desired set of endpoints.
+// totalChanges 统计某个 EndpointSlice 匹配期望 endpoint 集合所需的
+// 新增、更新与删除数量，用于快速判断是否可以跳过更新。
 func totalChanges(existingSlice *discovery.EndpointSlice, desiredSet endpointsliceutil.EndpointSet) totalsByAction {
 	totals := totalsByAction{}
 	existingMatches := 0
@@ -321,29 +320,31 @@ func totalChanges(existingSlice *discovery.EndpointSlice, desiredSet endpointsli
 	for _, endpoint := range existingSlice.Endpoints {
 		got := desiredSet.Get(&endpoint)
 		if got == nil {
-			// If not desired, increment number of endpoints to be deleted.
+			// 不再期望该 endpoint，需要删除。
 			totals.removed++
 		} else {
 			existingMatches++
 
-			// If existing version of endpoint doesn't match desired version
-			// increment number of endpoints to be updated.
+			// 哈希之外的字段也可能变化，必须比较完整内容才能发现需更新的 endpoint。
 			if !endpointsliceutil.EndpointsEqualBeyondHash(got, &endpoint) {
 				totals.updated++
 			}
 		}
 	}
 
-	// Any desired endpoints that have not been found in the existing slice will
-	// be added.
+	// 未在现有 slice 中匹配到的期望 endpoint 均需新增。
 	totals.added = desiredSet.Len() - existingMatches
 	return totals
 }
 
+// needRebuildExistingSlices 判断 slice 的 Endpoints 属主是否已变更。
+// UID 不同说明旧属主已删除并重建，必须重建 slice 而非在原对象上更新。
 func needRebuildExistingSlices(endpoints *corev1.Endpoints, existingSlice *discovery.EndpointSlice) bool {
 	for index := range existingSlice.OwnerReferences {
 		owner := existingSlice.OwnerReferences[index]
 		if owner.Kind == "Endpoints" && owner.Name == endpoints.Name && owner.UID != endpoints.UID {
+			// 同名但 UID 不同意味着 Endpoints 被删除后重新创建，
+			// 旧 slice 上的属主引用已失效，必须重建。
 			return true
 		}
 	}

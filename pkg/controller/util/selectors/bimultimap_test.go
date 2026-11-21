@@ -26,6 +26,9 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 )
 
+// TestAssociations 表驱动验证双向映射的正向/反向查询：单对多、多对一、
+// 命名空间隔离、对象/选择器更新、KeepOnly 以及删除后清空。
+// 对顺序不敏感的用例还会遍历全部操作排列，确保关联维护与顺序无关。
 func TestAssociations(t *testing.T) {
 	cases := []struct {
 		name                string
@@ -118,9 +121,9 @@ func TestAssociations(t *testing.T) {
 			putSelectingObject(key("hpa-1", "namespace-2"), selector("a", "1")),
 		},
 		want: []expectation{
-			forwardSelect(key("hpa-1", "namespace-1")), // selects nothing
+			forwardSelect(key("hpa-1", "namespace-1")), // 跨命名空间不匹配，不选任何对象
 			forwardSelect(key("hpa-1", "namespace-2"), key("pod-1", "namespace-2")),
-			reverseSelect(key("pod-1", "namespace-1")), // selects nothing
+			reverseSelect(key("pod-1", "namespace-1")), // 跨命名空间不匹配，不选任何对象
 			reverseSelect(key("pod-1", "namespace-2"), key("hpa-1", "namespace-2")),
 		},
 		testAllPermutations: true,
@@ -215,11 +218,10 @@ func TestAssociations(t *testing.T) {
 	for _, tc := range cases {
 		var permutations [][]int
 		if tc.testAllPermutations {
-			// Run test case with all permutations of operations.
+			// 对操作顺序不敏感的用例，遍历所有操作排列以覆盖顺序组合。
 			permutations = indexPermutations(len(tc.ops))
 		} else {
-			// Unless test is order dependent (e.g. includes
-			// deletes) or just too big.
+			// 对顺序敏感（如包含删除）或规模过大的用例，只按原顺序执行一次。
 			var p []int
 			for i := 0; i < len(tc.ops); i++ {
 				p = append(p, i)
@@ -232,7 +234,7 @@ func TestAssociations(t *testing.T) {
 				multimap := NewBiMultimap()
 				for i := range permutation {
 					tc.ops[i](multimap)
-					// Run consistency check after every operation.
+					// 每步操作后都校验内部一致性，确保缓存与双向关联始终同步。
 					err := consistencyCheck(multimap)
 					if err != nil {
 						t.Fatal(err.Error())
@@ -249,14 +251,16 @@ func TestAssociations(t *testing.T) {
 	}
 }
 
+// TestEfficientAssociation 验证选择器只在全量扫描时使用一次，
+// 后续 Put 复用缓存关联而不会再次调用 selector。
 func TestEfficientAssociation(t *testing.T) {
 	useOnceSelector := useOnce(selector("a", "1"))
 	m := NewBiMultimap()
 	m.PutSelector(key("hpa-1"), useOnceSelector)
 	m.Put(key("pod-1"), labels("a", "1"))
 
-	// Selector is used only during full scan. Second Put will use
-	// cached association or explode.
+	// 选择器只在首次全量扫描时被调用；第二次 Put 必须复用缓存关联，
+	// 否则 useOnceSelector 会 panic。
 	m.Put(key("pod-2"), labels("a", "1"))
 
 	err := forwardSelect(key("hpa-1"), key("pod-1"), key("pod-2"))(m)
@@ -265,13 +269,14 @@ func TestEfficientAssociation(t *testing.T) {
 	}
 }
 
+// TestUseOnceSelector 验证 useOnceSelector 被第二次调用时会 panic。
 func TestUseOnceSelector(t *testing.T) {
 	useOnceSelector := useOnce(selector("a", "1"))
 	labels := pkglabels.Set(labels("a", "1"))
 
-	// Use once.
+	// 第一次调用应当正常返回。
 	useOnceSelector.Matches(labels)
-	// Use twice.
+	// 第二次调用应当触发 panic。
 	defer func() {
 		if r := recover(); r == nil {
 			t.Errorf("Expected panic when using selector twice.")
@@ -280,41 +285,46 @@ func TestUseOnceSelector(t *testing.T) {
 	useOnceSelector.Matches(labels)
 }
 
+// TestObjectsExist 验证对象的存在性判断随 Put/Delete 正确变化。
 func TestObjectsExist(t *testing.T) {
 	m := NewBiMultimap()
 
-	// Nothing exists in the empty map.
+	// 空 map 中不应存在任何对象。
 	assert.False(t, m.Exists(key("pod-1")))
 	assert.False(t, m.SelectorExists(key("hpa-1")))
 
-	// Adding entries.
+	// 添加一个选择器和一个带标签对象。
 	m.PutSelector(key("hpa-1"), useOnce(selector("a", "1")))
 	m.Put(key("pod-1"), labels("a", "1"))
 
-	// Entries exist.
+	// 添加后两个条目都应存在。
 	assert.True(t, m.Exists(key("pod-1")))
 	assert.True(t, m.SelectorExists(key("hpa-1")))
 
-	// Removing the entries.
+	// 删除这两个条目。
 	m.DeleteSelector(key("hpa-1"))
 	m.Delete(key("pod-1"))
 
-	// They don't exist anymore.
+	// 删除后两个条目都不应再存在。
 	assert.False(t, m.Exists(key("pod-1")))
 	assert.False(t, m.SelectorExists(key("hpa-1")))
 }
 
+// useOnceSelector 包装一个 Selector，确保它最多只被调用一次，
+// 用于验证缓存命中时不会重复求值选择器。
 type useOnceSelector struct {
 	used     bool
 	selector pkglabels.Selector
 }
 
+// useOnce 返回一个只允许使用一次的 Selector 包装。
 func useOnce(s pkglabels.Selector) pkglabels.Selector {
 	return &useOnceSelector{
 		selector: s,
 	}
 }
 
+// Matches 判断标签是否匹配，重复调用会 panic。
 func (u *useOnceSelector) Matches(l pkglabels.Labels) bool {
 	if u.used {
 		panic("useOnceSelector used more than once")
@@ -323,33 +333,40 @@ func (u *useOnceSelector) Matches(l pkglabels.Labels) bool {
 	return u.selector.Matches(l)
 }
 
+// Empty 委托底层选择器判断是否为空。
 func (u *useOnceSelector) Empty() bool {
 	return u.selector.Empty()
 }
 
+// String 返回底层选择器的字符串表示。
 func (u *useOnceSelector) String() string {
 	return u.selector.String()
 }
 
+// Add 向底层选择器追加规则，并返回自身。
 func (u *useOnceSelector) Add(r ...pkglabels.Requirement) pkglabels.Selector {
 	u.selector = u.selector.Add(r...)
 	return u
 }
 
+// Requirements 返回底层选择器的规则集合。
 func (u *useOnceSelector) Requirements() (pkglabels.Requirements, bool) {
 	return u.selector.Requirements()
 }
 
+// DeepCopySelector 深拷贝底层选择器并返回自身。
 func (u *useOnceSelector) DeepCopySelector() pkglabels.Selector {
 	u.selector = u.selector.DeepCopySelector()
 	return u
 }
 
+// RequiresExactMatch 查询底层选择器对某个标签是否要求精确匹配。
 func (u *useOnceSelector) RequiresExactMatch(label string) (value string, found bool) {
 	v, f := u.selector.RequiresExactMatch(label)
 	return v, f
 }
 
+// indexPermutations 返回 0..size-1 的所有排列，用于穷举操作顺序。
 func indexPermutations(size int) [][]int {
 	var permute func([]int, []int) [][]int
 	permute = func(placed, remaining []int) (permutations [][]int) {
@@ -357,9 +374,11 @@ func indexPermutations(size int) [][]int {
 			return [][]int{placed}
 		}
 		for i, v := range remaining {
-			r := append([]int(nil), remaining...) // copy remaining
-			r = append(r[:i], r[i+1:]...)         // delete placed index
-			p := permute(append(placed, v), r)    // place index and permute
+			// 先复制剩余元素，再移除本次要放置的下标，避免修改原始切片。
+			r := append([]int(nil), remaining...)
+			r = append(r[:i], r[i+1:]...)
+			// 放入当前下标后递归生成后续排列。
+			p := permute(append(placed, v), r)
 			permutations = append(permutations, p...)
 		}
 		return
@@ -371,32 +390,38 @@ func indexPermutations(size int) [][]int {
 	return permute(nil, remaining)
 }
 
+// operation 表示一步可应用到 BiMultimap 上的测试操作。
 type operation func(*BiMultimap)
 
+// putLabeledObject 返回一个向 map 写入带标签对象的操作。
 func putLabeledObject(key Key, labels map[string]string) operation {
 	return func(m *BiMultimap) {
 		m.Put(key, labels)
 	}
 }
 
+// putSelectingObject 返回一个向 map 写入选择器对象的操作。
 func putSelectingObject(key Key, selector pkglabels.Selector) operation {
 	return func(m *BiMultimap) {
 		m.PutSelector(key, selector)
 	}
 }
 
+// deleteLabeled 返回一个删除指定带标签对象的操作。
 func deleteLabeled(key Key) operation {
 	return func(m *BiMultimap) {
 		m.Delete(key)
 	}
 }
 
+// deleteSelecting 返回一个删除指定选择器对象的操作。
 func deleteSelecting(key Key) operation {
 	return func(m *BiMultimap) {
 		m.DeleteSelector(key)
 	}
 }
 
+// deleteAll 清空 map 中的所有对象与选择器。
 func deleteAll(m *BiMultimap) {
 	for key := range m.labeledObjects {
 		m.Delete(key)
@@ -406,18 +431,21 @@ func deleteAll(m *BiMultimap) {
 	}
 }
 
+// keepOnly 返回一个只保留指定带标签对象的操作。
 func keepOnly(keys ...Key) operation {
 	return func(m *BiMultimap) {
 		m.KeepOnly(keys)
 	}
 }
 
+// keepOnlySelectors 返回一个只保留指定选择器对象的操作。
 func keepOnlySelectors(keys ...Key) operation {
 	return func(m *BiMultimap) {
 		m.KeepOnlySelectors(keys)
 	}
 }
 
+// randomOperations 返回一个执行指定次数随机增/删操作的操作，用于模糊测试。
 func randomOperations(times int) operation {
 	pods := []Key{
 		key("pod-1"),
@@ -479,8 +507,10 @@ func randomOperations(times int) operation {
 	}
 }
 
+// expectation 表示对 BiMultimap 状态的一项断言。
 type expectation func(*BiMultimap) error
 
+// forwardSelect 返回一个断言：按选择器键正向查询得到期望的对象集合。
 func forwardSelect(key Key, want ...Key) expectation {
 	return func(m *BiMultimap) error {
 		got, _ := m.Select(key)
@@ -491,6 +521,7 @@ func forwardSelect(key Key, want ...Key) expectation {
 	}
 }
 
+// reverseSelect 返回一个断言：按对象键反向查询得到期望的选择器集合。
 func reverseSelect(key Key, want ...Key) expectation {
 	return func(m *BiMultimap) error {
 		got, _ := m.ReverseSelect(key)
@@ -501,6 +532,7 @@ func reverseSelect(key Key, want ...Key) expectation {
 	}
 }
 
+// emptyMap 断言 map 的四个内部存储都已清空。
 func emptyMap(m *BiMultimap) error {
 	if len(m.labeledObjects) != 0 {
 		return fmt.Errorf("Found %v labeledObjects. Wanted none.", len(m.labeledObjects))
@@ -517,6 +549,8 @@ func emptyMap(m *BiMultimap) error {
 	return nil
 }
 
+// consistencyCheck 校验内部缓存与对象映射的一致性，包括无空键/空值、
+// 无孤立的引用计数条目。
 func consistencyCheck(m *BiMultimap) error {
 	emptyKey := Key{}
 	emptyLabelsKey := labelsKey{}
@@ -578,6 +612,7 @@ func consistencyCheck(m *BiMultimap) error {
 	return nil
 }
 
+// key 构造一个 Key；可选第二个参数表示命名空间。
 func key(s string, ss ...string) Key {
 	if len(ss) > 1 {
 		panic("Key requires 1 or 2 parts.")
@@ -591,6 +626,7 @@ func key(s string, ss ...string) Key {
 	return k
 }
 
+// labels 将成对的字符串转换为标签 map。
 func labels(ls ...string) map[string]string {
 	if len(ls)%2 != 0 {
 		panic("labels requires pairs of strings.")
@@ -602,6 +638,7 @@ func labels(ls ...string) map[string]string {
 	return ss
 }
 
+// selector 将成对的字符串构造为相等匹配的 Selector。
 func selector(ss ...string) pkglabels.Selector {
 	if len(ss)%2 != 0 {
 		panic("selector requires pairs of strings.")
@@ -617,6 +654,7 @@ func selector(ss ...string) pkglabels.Selector {
 	return s
 }
 
+// unorderedEqual 判断两个 Key 切片作为多重集合是否相等（忽略顺序）。
 func unorderedEqual(as, bs []Key) bool {
 	if len(as) != len(bs) {
 		return false

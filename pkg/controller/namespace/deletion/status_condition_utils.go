@@ -26,8 +26,9 @@ import (
 	"k8s.io/client-go/discovery"
 )
 
-// NamespaceConditionUpdater interface that translates namespace deleter errors
-// into namespace status conditions.
+// NamespaceConditionUpdater 将命名空间清理器（namespace deleter）在删除过程中
+// 遇到的各类错误转换为 namespace 的 status conditions。
+// 每类错误对应一种 condition；Update 负责把累积的结果一次性写回 status。
 type NamespaceConditionUpdater interface {
 	ProcessDiscoverResourcesErr(e error)
 	ProcessGroupVersionErr(e error)
@@ -35,6 +36,9 @@ type NamespaceConditionUpdater interface {
 	Update(*v1.Namespace) bool
 }
 
+// namespaceConditionUpdater 是 NamespaceConditionUpdater 的默认实现。
+// newConditions 暂存本轮新生成的 condition；deleteContentErrors 单独累积删除内容的错误，
+// 待所有资源类型处理完毕后在 Update 中统一汇总为一个 condition。
 type namespaceConditionUpdater struct {
 	newConditions       []v1.NamespaceCondition
 	deleteContentErrors []error
@@ -43,7 +47,8 @@ type namespaceConditionUpdater struct {
 var _ NamespaceConditionUpdater = &namespaceConditionUpdater{}
 
 var (
-	// conditionTypes Namespace condition types that are maintained by namespace_deleter controller.
+	// conditionTypes 由 namespace_deleter 控制器维护的 namespace condition 类型列表。
+	// 顺序固定：Update 会按此顺序遍历，未报告错误的类型会被置为“成功”状态。
 	conditionTypes = []v1.NamespaceConditionType{
 		v1.NamespaceDeletionDiscoveryFailure,
 		v1.NamespaceDeletionGVParsingFailure,
@@ -51,6 +56,7 @@ var (
 		v1.NamespaceContentRemaining,
 		v1.NamespaceFinalizersRemaining,
 	}
+	// okMessages 定义各 condition 处于“成功”（Status=False）状态时的说明信息。
 	okMessages = map[v1.NamespaceConditionType]string{
 		v1.NamespaceDeletionDiscoveryFailure: "All resources successfully discovered",
 		v1.NamespaceDeletionGVParsingFailure: "All legacy kube types successfully parsed",
@@ -58,6 +64,8 @@ var (
 		v1.NamespaceContentRemaining:         "All content successfully removed",
 		v1.NamespaceFinalizersRemaining:      "All content-preserving finalizers finished",
 	}
+	// okReasons 定义各 condition 处于“成功”（Status=False）状态时的原因码，
+	// 与 okMessages 配套使用，保证成功状态的 Reason/Message 稳定可比对。
 	okReasons = map[v1.NamespaceConditionType]string{
 		v1.NamespaceDeletionDiscoveryFailure: "ResourcesDiscovered",
 		v1.NamespaceDeletionGVParsingFailure: "ParsedGroupVersions",
@@ -67,7 +75,8 @@ var (
 	}
 )
 
-// ProcessGroupVersionErr creates error condition if parsing GroupVersion of resources fails.
+// ProcessGroupVersionErr 在资源 GroupVersion 解析失败时记录一个错误 condition。
+// 解析失败意味着无法确定资源对应的 REST 映射，后续删除可能无法覆盖该类资源。
 func (u *namespaceConditionUpdater) ProcessGroupVersionErr(err error) {
 	d := v1.NamespaceCondition{
 		Type:               v1.NamespaceDeletionGVParsingFailure,
@@ -79,7 +88,9 @@ func (u *namespaceConditionUpdater) ProcessGroupVersionErr(err error) {
 	u.newConditions = append(u.newConditions, d)
 }
 
-// ProcessDiscoverResourcesErr creates error condition from ErrGroupDiscoveryFailed.
+// ProcessDiscoverResourcesErr 根据资源发现阶段的错误生成错误 condition。
+// 对 ErrGroupDiscoveryFailed 单独统计失败的 API group 数量，便于用户定位问题范围；
+// 其他类型的错误则直接使用其错误文本。
 func (u *namespaceConditionUpdater) ProcessDiscoverResourcesErr(err error) {
 	var msg string
 	if derr, ok := err.(*discovery.ErrGroupDiscoveryFailed); ok {
@@ -98,7 +109,9 @@ func (u *namespaceConditionUpdater) ProcessDiscoverResourcesErr(err error) {
 
 }
 
-// ProcessContentTotals may create conditions for NamespaceContentRemaining and NamespaceFinalizersRemaining.
+// ProcessContentTotals 根据删除汇总信息，按需生成 NamespaceContentRemaining
+// 和 NamespaceFinalizersRemaining 两个 condition。
+// 遍历 map 时顺序不确定，因此需先排序，避免相同状态产生不同的 Message 导致无谓的 status 更新。
 func (u *namespaceConditionUpdater) ProcessContentTotals(contentTotals allGVRDeletionMetadata) {
 	if len(contentTotals.gvrToNumRemaining) != 0 {
 		remainingResources := []string{}
@@ -108,7 +121,7 @@ func (u *namespaceConditionUpdater) ProcessContentTotals(contentTotals allGVRDel
 			}
 			remainingResources = append(remainingResources, fmt.Sprintf("%s.%s has %d resource instances", gvr.Resource, gvr.Group, numRemaining))
 		}
-		// sort for stable updates
+		// 排序保证 Message 稳定，避免在 map 遍历顺序变化时反复触发 status 更新。
 		sort.Strings(remainingResources)
 		u.newConditions = append(u.newConditions, v1.NamespaceCondition{
 			Type:               v1.NamespaceContentRemaining,
@@ -127,7 +140,7 @@ func (u *namespaceConditionUpdater) ProcessContentTotals(contentTotals allGVRDel
 			}
 			remainingByFinalizer = append(remainingByFinalizer, fmt.Sprintf("%s in %d resource instances", finalizer, numRemaining))
 		}
-		// sort for stable updates
+		// 同上：排序后再拼接，保证 finalizer 列表顺序稳定。
 		sort.Strings(remainingByFinalizer)
 		u.newConditions = append(u.newConditions, v1.NamespaceCondition{
 			Type:               v1.NamespaceFinalizersRemaining,
@@ -139,12 +152,15 @@ func (u *namespaceConditionUpdater) ProcessContentTotals(contentTotals allGVRDel
 	}
 }
 
-// ProcessDeleteContentErr creates error condition from multiple delete content errors.
+// ProcessDeleteContentErr 累积删除内容时的错误。
+// 这里不立即生成 condition：所有资源类型的删除错误会在 Update 中合并为一个
+// NamespaceDeletionContentFailure，避免同类 condition 重复出现。
 func (u *namespaceConditionUpdater) ProcessDeleteContentErr(err error) {
 	u.deleteContentErrors = append(u.deleteContentErrors, err)
 }
 
-// Update compiles processed errors from namespace deletion into status conditions.
+// Update 将命名空间删除过程中累积的错误汇总为 status conditions 并写入 namespace。
+// 返回值表示 status 是否发生变化，调用方可据此决定是否真正发起 API 更新。
 func (u *namespaceConditionUpdater) Update(ns *v1.Namespace) bool {
 	if c := getCondition(u.newConditions, v1.NamespaceDeletionContentFailure); c == nil {
 		if c := makeDeleteContentCondition(u.deleteContentErrors); c != nil {
@@ -154,6 +170,8 @@ func (u *namespaceConditionUpdater) Update(ns *v1.Namespace) bool {
 	return updateConditions(&ns.Status, u.newConditions)
 }
 
+// makeDeleteContentCondition 将多个删除内容错误合并为一个 NamespaceDeletionContentFailure
+// condition；没有错误时返回 nil。错误消息排序后拼接，保证输出稳定可比对。
 func makeDeleteContentCondition(err []error) *v1.NamespaceCondition {
 	if len(err) == 0 {
 		return nil
@@ -172,22 +190,26 @@ func makeDeleteContentCondition(err []error) *v1.NamespaceCondition {
 	}
 }
 
+// updateConditions 将 newConditions 合并进 status.Conditions，并报告是否发生变化。
+// 对每种受维护的 condition 类型：本轮没有报告错误时，用“成功”版本覆盖旧状态；
+// 仅在 Status/Message/Reason 有差异时才写回，减少不必要的 API 更新。
+// LastTransitionTime 只在 Status 真正翻转时刷新，保持其语义（状态转换时间）。
 func updateConditions(status *v1.NamespaceStatus, newConditions []v1.NamespaceCondition) (hasChanged bool) {
 	for _, conditionType := range conditionTypes {
 		newCondition := getCondition(newConditions, conditionType)
-		// if we weren't failing, then this returned nil.  We should set the "ok" variant of the condition
+		// 本轮没有该类型的错误 condition，说明已恢复正常，需写入对应的“成功”版本。
 		if newCondition == nil {
 			newCondition = newSuccessfulCondition(conditionType)
 		}
 		oldCondition := getCondition(status.Conditions, conditionType)
 
-		// only new condition of this type exists, add to the list
+		// 旧 status 中不存在该类型的 condition，直接追加。
 		if oldCondition == nil {
 			status.Conditions = append(status.Conditions, *newCondition)
 			hasChanged = true
 
 		} else if oldCondition.Status != newCondition.Status || oldCondition.Message != newCondition.Message || oldCondition.Reason != newCondition.Reason {
-			// old condition needs to be updated
+			// 旧 condition 内容有差异，需要更新；其中 Status 翻转才刷新转换时间。
 			if oldCondition.Status != newCondition.Status {
 				oldCondition.LastTransitionTime = metav1.Now()
 			}
@@ -201,6 +223,8 @@ func updateConditions(status *v1.NamespaceStatus, newConditions []v1.NamespaceCo
 	return
 }
 
+// newSuccessfulCondition 为指定类型构造一个“成功”condition：Status=False，
+// Reason/Message 取自 okReasons/okMessages，表示本轮未检测到该类错误。
 func newSuccessfulCondition(conditionType v1.NamespaceConditionType) *v1.NamespaceCondition {
 	return &v1.NamespaceCondition{
 		Type:               conditionType,
@@ -211,6 +235,7 @@ func newSuccessfulCondition(conditionType v1.NamespaceConditionType) *v1.Namespa
 	}
 }
 
+// getCondition 按类型查找 condition，返回其指针以便调用方原地修改；不存在时返回 nil。
 func getCondition(conditions []v1.NamespaceCondition, conditionType v1.NamespaceConditionType) *v1.NamespaceCondition {
 	for i := range conditions {
 		if conditions[i].Type == conditionType {

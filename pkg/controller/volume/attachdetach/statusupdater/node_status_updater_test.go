@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 
+	"testing"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,13 +35,12 @@ import (
 	"k8s.io/kubernetes/pkg/controller/volume/attachdetach/cache"
 	controllervolumetesting "k8s.io/kubernetes/pkg/controller/volume/attachdetach/testing"
 	volumetesting "k8s.io/kubernetes/pkg/volume/testing"
-	"testing"
 )
 
-// setupNodeStatusUpdate creates all the needed objects for testing.
-// the initial environment has 2 nodes with no volumes attached
-// and adds one volume to attach to each node to the actual state of the world
+// setupNodeStatusUpdate 创建测试所需的全部对象：
+// 初始环境包含 2 个未挂载任何卷的节点，并向实际状态世界为每个节点添加一个待上报的卷。
 func setupNodeStatusUpdate(logger klog.Logger, t *testing.T) (cache.ActualStateOfWorld, *fake.Clientset, NodeStatusUpdater) {
+	// 两个节点需要同时进入 informer store 和 fake client，后续更新才能找到对象。
 	testNode1 := corev1.Node{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Node",
@@ -67,6 +68,7 @@ func setupNodeStatusUpdate(logger klog.Logger, t *testing.T) (cache.ActualStateO
 	nodeInformer := informerFactory.Core().V1().Nodes()
 	nsu := NewNodeStatusUpdater(fakeKubeClient, nodeInformer.Lister(), asw)
 
+	// 手动写入 informer store：测试不启动 informer，lister 只能读取已缓存的对象。
 	err := nodeInformer.Informer().GetStore().Add(&testNode1)
 	if err != nil {
 		t.Fatalf(".Informer().GetStore().Add failed. Expected: <no error> Actual: <%v>", err)
@@ -85,6 +87,7 @@ func setupNodeStatusUpdate(logger klog.Logger, t *testing.T) (cache.ActualStateO
 	nodeName2 := types.NodeName("testnode-2")
 	devicePath := "fake/device/path"
 
+	// 最后一个参数 true 表示卷已挂载但尚未上报到节点状态，正是本测试要验证的场景。
 	_, err = asw.AddVolumeNode(logger, volumeName1, volumeSpec1, nodeName1, devicePath, true)
 	if err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", err)
@@ -97,10 +100,9 @@ func setupNodeStatusUpdate(logger klog.Logger, t *testing.T) (cache.ActualStateO
 	return asw, fakeKubeClient, nsu
 }
 
-// TestNodeStatusUpdater_UpdateNodeStatuses_TwoNodesUpdate calls setup
-// calls UpdateNodeStatuses()
-// check that asw.GetVolumesToReportAttached reports nothing left to attach
-// checks that each node status.volumesAttached is of length 1 and contains the correct volume
+// TestNodeStatusUpdater_UpdateNodeStatuses_TwoNodesUpdate 验证批量更新：
+// 调用 UpdateNodeStatuses 后不应再有未上报的卷，且每个节点的 volumesAttached
+// 长度为 1 且包含正确的卷。
 func TestNodeStatusUpdater_UpdateNodeStatuses_TwoNodesUpdate(t *testing.T) {
 	ctx := context.Background()
 	logger := klog.FromContext(ctx)
@@ -139,11 +141,14 @@ func TestNodeStatusUpdater_UpdateNodeStatuses_TwoNodesUpdate(t *testing.T) {
 	}
 }
 
+// TestNodeStatusUpdater_UpdateNodeStatuses_FailureInFirstUpdate 验证部分失败场景：
+// 第一次 patch 出错时该节点的卷应保持未上报状态，其余节点的更新不受影响。
 func TestNodeStatusUpdater_UpdateNodeStatuses_FailureInFirstUpdate(t *testing.T) {
 	ctx := context.Background()
 	logger := klog.FromContext(ctx)
 	asw, fakeKubeClient, nsu := setupNodeStatusUpdate(logger, t)
 
+	// reactor 只在第一次 patch 时注入错误，用于模拟单个节点更新失败。
 	var failedNode string
 	failedOnce := false
 	failureErr := fmt.Errorf("test generated error")
@@ -162,6 +167,7 @@ func TestNodeStatusUpdater_UpdateNodeStatuses_FailureInFirstUpdate(t *testing.T)
 		t.Fatalf("UpdateNodeStatuses failed. Expected: <test generated error> Actual: <%v>", err)
 	}
 
+	// 失败节点的更新未完成，因此该卷仍留在待上报集合中，供下次同步重试。
 	needToReport := asw.GetVolumesToReportAttached(logger)
 	if len(needToReport) != 1 {
 		t.Fatalf("len(asw.GetVolumesToReportAttached()) Expected: <1> Actual: <%v>", len(needToReport))
@@ -192,10 +198,9 @@ func TestNodeStatusUpdater_UpdateNodeStatuses_FailureInFirstUpdate(t *testing.T)
 	}
 }
 
-// TestNodeStatusUpdater_UpdateNodeStatusForNode calls setup
-// calls UpdateNodeStatusesForNode on testnode-1
-// check that asw.GetVolumesToReportAttached reports testnode-2 needs to be reported
-// checks that testnode-1 status.volumesAttached is of length 1 and contains the correct volume
+// TestNodeStatusUpdater_UpdateNodeStatusForNode 验证单节点更新：
+// 对 testnode-1 调用 UpdateNodeStatusForNode 后，只有该节点完成上报，
+// testnode-2 仍留在待上报集合中。
 func TestNodeStatusUpdater_UpdateNodeStatusForNode(t *testing.T) {
 	ctx := context.Background()
 	logger := klog.FromContext(ctx)

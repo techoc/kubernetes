@@ -23,12 +23,12 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// EphemeralVolumeSubsystem - subsystem name used for Endpoint Slices.
+// EphemeralVolumeSubsystem 是本控制器所有指标共用的 Prometheus 子系统名，用于区分其他控制器的同名指标。
 const EphemeralVolumeSubsystem = "ephemeral_volume_controller"
 
 var (
-	// EphemeralVolumeCreateAttempts tracks the number of
-	// PersistentVolumeClaims().Create calls (both successful and unsuccessful)
+	// EphemeralVolumeCreateAttempts 统计 PersistentVolumeClaims().Create 的调用次数，
+	// 无论成功还是失败都计数；与失败数配合即可算出创建成功率。
 	EphemeralVolumeCreateAttempts = metrics.NewCounter(
 		&metrics.CounterOpts{
 			Subsystem:      EphemeralVolumeSubsystem,
@@ -36,8 +36,8 @@ var (
 			Help:           "Number of PersistentVolumeClaim creation requests",
 			StabilityLevel: metrics.ALPHA,
 		})
-	// EphemeralVolumeCreateFailures tracks the number of unsuccessful
-	// PersistentVolumeClaims().Create calls
+	// EphemeralVolumeCreateFailures 只统计失败的 PersistentVolumeClaims().Create 调用，
+	// 用于监控临时卷 PVC 创建异常，例如配额不足或 API 拒绝。
 	EphemeralVolumeCreateFailures = metrics.NewCounter(
 		&metrics.CounterOpts{
 			Subsystem:      EphemeralVolumeSubsystem,
@@ -49,7 +49,8 @@ var (
 
 var registerMetrics sync.Once
 
-// RegisterMetrics registers EphemeralVolume metrics.
+// RegisterMetrics 把本控制器的指标注册到 legacyregistry。
+// 用 sync.Once 包裹是必需的：控制器可能被重复初始化，而 Prometheus 不支持重复注册同名指标。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(EphemeralVolumeCreateAttempts)

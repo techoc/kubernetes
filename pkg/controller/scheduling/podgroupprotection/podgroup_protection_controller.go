@@ -41,15 +41,13 @@ import (
 )
 
 const (
-	// The index name for looking up active pods by their
-	// schedulingGroup.podGroupName field.
+	// activePodSchedulingGroupIndex 是用于按 schedulingGroup.podGroupName 字段查找活跃 Pod 的索引名。
 	activePodSchedulingGroupIndex = "activePodSchedulingGroup"
 )
 
-// Controller manages the PodGroupProtectionFinalizer on PodGroup objects.
-// The finalizer is stamped at creation time by the PodGroupProtection admission
-// plugin; this controller removes it when the PodGroup is being deleted and no
-// active (non-terminated) pods still reference it.
+// Controller 负责管理 PodGroup 对象上的 PodGroupProtectionFinalizer。
+// 该 finalizer 在创建时由 PodGroupProtection 准入插件打上；当 PodGroup 正在被删除、
+// 且不再有活跃的（未终止的）Pod 引用它时，本控制器会将其移除。
 type Controller struct {
 	kubeClient clientset.Interface
 
@@ -58,14 +56,13 @@ type Controller struct {
 
 	podSynced cache.InformerSynced
 
-	// podIndexer has the common Pod indexer installed to
-	// limit iteration over pods to those of interest.
+	// podIndexer 安装了通用的 Pod 索引，用于把遍历范围缩小到我们关心的 Pod。
 	podIndexer cache.Indexer
 
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// NewPodGroupProtectionController returns a new instance of the PodGroup protection controller.
+// NewPodGroupProtectionController 创建一个 PodGroup 保护控制器实例。
 func NewPodGroupProtectionController(
 	logger klog.Logger,
 	podGroupInformer schedulinginformers.PodGroupInformer,
@@ -116,17 +113,18 @@ func NewPodGroupProtectionController(
 	return c, nil
 }
 
-// addActivePodSchedulingGroupIndexer adds an indexer to look up active
-// pods by their schedulingGroup.podGroupName field so we can efficiently
-// determine whether a PodGroup still has active pods.
+// addActivePodSchedulingGroupIndexer 为 Pod 索引器添加一个按 schedulingGroup.podGroupName
+// 字段查找活跃 Pod 的索引，从而能高效判断某个 PodGroup 是否仍有活跃 Pod 在使用。
 func addActivePodSchedulingGroupIndexer(indexer cache.Indexer) error {
 	return indexer.AddIndexers(cache.Indexers{
 		activePodSchedulingGroupIndex: func(obj interface{}) ([]string, error) {
 			pod, ok := obj.(*v1.Pod)
 			if !ok {
+				// 索引函数只对 Pod 生效，其他类型直接忽略。
 				return nil, nil
 			}
 			if isPodTerminated(pod) {
+				// 已终止的 Pod 不再持有 PodGroup，排除出索引。
 				return nil, nil
 			}
 			if pod.Spec.SchedulingGroup == nil || pod.Spec.SchedulingGroup.PodGroupName == nil {
@@ -137,7 +135,7 @@ func addActivePodSchedulingGroupIndexer(indexer cache.Indexer) error {
 	})
 }
 
-// Run runs the controller goroutines.
+// Run 启动控制器的各个 worker goroutine，并阻塞直到 ctx 被取消。
 func (c *Controller) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
@@ -163,11 +161,13 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// runWorker 是单个 worker 的主循环，持续处理队列中的条目。
 func (c *Controller) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
+// processNextWorkItem 取出并处理一个 PodGroup；成功则清除限流状态，失败则限流重试。
 func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	pgKey, quit := c.queue.Get()
 	if quit {
@@ -187,6 +187,7 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// processPodGroup 处理单个 PodGroup：处于删除候选状态且无活跃 Pod 引用时移除保护 finalizer。
 func (c *Controller) processPodGroup(ctx context.Context, pgKey string) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Processing PodGroup", "podGroup", pgKey)
@@ -205,6 +206,7 @@ func (c *Controller) processPodGroup(ctx context.Context, pgKey string) error {
 		return err
 	}
 
+	// 只有正在删除且仍带有保护 finalizer 的 PodGroup 才需要处理。
 	if !protectionutil.IsDeletionCandidate(pg, scheduling.PodGroupProtectionFinalizer) {
 		return nil
 	}
@@ -220,8 +222,10 @@ func (c *Controller) processPodGroup(ctx context.Context, pgKey string) error {
 	return nil
 }
 
+// removeFinalizer 从 PodGroup 上移除保护 finalizer，使其真正被删除。
 func (c *Controller) removeFinalizer(ctx context.Context, pg *schedulingv1beta1.PodGroup) error {
 	logger := klog.FromContext(ctx)
+	// 在深拷贝上修改，绝不改动 informer 缓存中的对象。
 	pgClone := pg.DeepCopy()
 
 	pgClone.Finalizers = slice.RemoveString(pgClone.Finalizers, scheduling.PodGroupProtectionFinalizer, nil)
@@ -235,9 +239,8 @@ func (c *Controller) removeFinalizer(ctx context.Context, pg *schedulingv1beta1.
 	return nil
 }
 
-// hasActivePods returns true if any active pods reference the PodGroup
-// via spec.schedulingGroup.podGroupName. The index only contains
-// non-terminated pods, so a non-empty result means the PodGroup is still in use.
+// hasActivePods 判断是否有活跃 Pod 通过 spec.schedulingGroup.podGroupName 引用该 PodGroup。
+// 索引中只包含未终止的 Pod，因此查询结果非空即可说明该 PodGroup 仍在使用中。
 func (c *Controller) hasActivePods(ctx context.Context, pg *schedulingv1beta1.PodGroup) (bool, error) {
 	logger := klog.FromContext(ctx)
 	indexKey := pg.Namespace + "/" + pg.Name
@@ -256,13 +259,13 @@ func (c *Controller) hasActivePods(ctx context.Context, pg *schedulingv1beta1.Po
 	return false, nil
 }
 
-// isPodTerminated returns true if the pod has completed (Succeeded or Failed).
+// isPodTerminated 判断 Pod 是否已经结束（Succeeded 或 Failed）。
 func isPodTerminated(pod *v1.Pod) bool {
 	return pod.Status.Phase == v1.PodSucceeded || pod.Status.Phase == v1.PodFailed
 }
 
-// handlePodGroupUpdate handles PodGroup add/update events.
-// Only deletion candidates which are being deleted and have the finalizer need processing.
+// handlePodGroupUpdate 处理 PodGroup 的新增/更新事件。
+// 只有正在删除且带有 finalizer 的删除候选对象才需要处理。
 func (c *Controller) handlePodGroupUpdate(logger klog.Logger, obj interface{}) {
 	pg, ok := obj.(*schedulingv1beta1.PodGroup)
 	if !ok {
@@ -281,9 +284,8 @@ func (c *Controller) handlePodGroupUpdate(logger klog.Logger, obj interface{}) {
 	c.queue.Add(key)
 }
 
-// handlePodChange handles Pod add/delete/update events.
-// It enqueues the referenced PodGroup only when the event could affect
-// finalizer decisions where the pod is deleted or transitioned to a terminal phase.
+// handlePodChange 处理 Pod 的新增/删除/更新事件。
+// 只有在事件可能影响 finalizer 决策时（Pod 被删除或进入终止阶段）才把引用的 PodGroup 入队。
 func (c *Controller) handlePodChange(logger klog.Logger, old, new interface{}) {
 	newPod := getPod(new)
 	oldPod := getPod(old)
@@ -292,10 +294,8 @@ func (c *Controller) handlePodChange(logger klog.Logger, old, new interface{}) {
 		c.enqueuePodGroupForPod(logger, newPod)
 	}
 
-	// An update notification might mask the deletion of a pod X and the
-	// following creation of a pod Y with the same namespaced name as X. If
-	// that's the case, X needs to be processed as well to handle the case
-	// where it was the last active pod keeping the finalizer on a PodGroup.
+	// 一次更新通知可能掩盖了这样的过程：Pod X 被删除，随后又创建了同名同命名空间的 Pod Y。
+	// 此时 X 也需要处理，因为它可能是最后一个持有 PodGroup finalizer 的活跃 Pod。
 	if newPod != nil && oldPod != nil && oldPod.UID != newPod.UID {
 		c.enqueuePodGroupForPod(logger, oldPod)
 	}
@@ -305,9 +305,8 @@ func (c *Controller) handlePodChange(logger klog.Logger, old, new interface{}) {
 	}
 }
 
-// enqueuePodGroupForPod enqueues the PodGroup referenced by the pod.
-// Callers are responsible for only passing pods whose state change could allow
-// finalizer removal (deleted or transitioned to a terminal phase).
+// enqueuePodGroupForPod 将 Pod 引用的 PodGroup 加入队列。
+// 调用方负责保证只传入状态变化可能导致 finalizer 被移除的 Pod（已删除或已进入终止阶段）。
 func (c *Controller) enqueuePodGroupForPod(logger klog.Logger, pod *v1.Pod) {
 	if pod.Spec.SchedulingGroup == nil || pod.Spec.SchedulingGroup.PodGroupName == nil {
 		return
@@ -318,6 +317,7 @@ func (c *Controller) enqueuePodGroupForPod(logger klog.Logger, pod *v1.Pod) {
 	c.queue.Add(pgKey)
 }
 
+// getPod 从 informer 事件对象中解析出 Pod，兼容删除事件中的 tombstone 包装。
 func getPod(obj interface{}) *v1.Pod {
 	if obj == nil {
 		return nil

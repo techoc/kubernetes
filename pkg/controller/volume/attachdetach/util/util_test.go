@@ -61,6 +61,8 @@ var (
 	fsVolumeMode               = new(v1.PersistentVolumeMode)
 )
 
+// vaTest 描述 CreateVolumeSpecWithNodeMigration 的单个测试场景：
+// 给定 Pod 与节点名，声明期望得到的 Volume、PersistentVolume 或错误信息。
 type vaTest struct {
 	desc                 string
 	createNodeName       kubetypes.NodeName
@@ -70,6 +72,9 @@ type vaTest struct {
 	wantErrorMessage     string
 }
 
+// Test_CreateVolumeSpec 验证 CSI 迁移场景下卷规格的生成逻辑：
+// 可迁移的内联卷或 PVC 应转换为 CSI PersistentVolume，不可迁移的卷保持原样，
+// 当节点上没有对应 CSINode 时则跳过转换。
 func Test_CreateVolumeSpec(t *testing.T) {
 	for _, test := range []vaTest{
 		{
@@ -244,14 +249,17 @@ func Test_CreateVolumeSpec(t *testing.T) {
 			plugMgr, intreeToCSITranslator, csiTranslator, pvLister, pvcLister := setup(testNodeName, t)
 			actualSpec, err := CreateVolumeSpecWithNodeMigration(logger, test.pod.Spec.Volumes[0], test.pod, test.createNodeName, plugMgr, pvcLister, pvLister, intreeToCSITranslator, csiTranslator)
 
+			// 期望生成卷规格时，实际结果不应为空。
 			if actualSpec == nil && (test.wantPersistentVolume != nil || test.wantVolume != nil) {
 				t.Errorf("got volume spec is nil")
 			}
 
+			// 错误信息按子串匹配，避免测试与错误文案的无关改动耦合。
 			if (len(test.wantErrorMessage) > 0 && err == nil) || (err != nil && !strings.Contains(err.Error(), test.wantErrorMessage)) {
 				t.Errorf("got err %v, want err with message %v", err, test.wantErrorMessage)
 			}
 
+			// 期望迁移结果时，逐字段比对 PV 名称与 Spec。
 			if test.wantPersistentVolume != nil {
 				if actualSpec.PersistentVolume == nil {
 					t.Errorf("gotVolumeWithCSIMigration is nil")
@@ -266,6 +274,7 @@ func Test_CreateVolumeSpec(t *testing.T) {
 					t.Errorf("got volume.Spec and want.Spec diff is %s", cmp.Diff(gotVolumeWithCSIMigration.Spec, test.wantPersistentVolume.Spec))
 				}
 			}
+			// 不可迁移的卷应保持原始 VolumeSource 不变。
 			if test.wantVolume != nil {
 				if actualSpec.Volume == nil {
 					t.Errorf("gotVolume is nil")
@@ -280,13 +289,17 @@ func Test_CreateVolumeSpec(t *testing.T) {
 	}
 }
 
+// setup 构造测试所需的插件管理器、CSI 转换器，
+// 以及包含可迁移与不可迁移 PV、已绑定 PVC 的 lister。
 func setup(nodeName string, t *testing.T) (*volume.VolumePluginMgr, csimigration.PluginManager, csitrans.CSITranslator, tf.PersistentVolumeLister, tf.PersistentVolumeClaimLister) {
 	tmpDir, err := utiltesting.MkTmpdir("csi-test")
 	if err != nil {
 		t.Fatalf("can't make a temp dir: %v", err)
 	}
+	// 临时目录仅用于模拟插件宿主，测试结束立即清理。
 	defer os.RemoveAll(tmpDir)
 
+	// fsVolumeMode 是包级变量，被各测试用例共享，这里统一初始化。
 	*fsVolumeMode = v1.PersistentVolumeFilesystem
 
 	csiTranslator := csitrans.New()

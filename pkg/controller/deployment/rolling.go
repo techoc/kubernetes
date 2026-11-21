@@ -27,7 +27,9 @@ import (
 	deploymentutil "k8s.io/kubernetes/pkg/controller/deployment/util"
 )
 
-// rolloutRolling implements the logic for rolling a new replica set.
+// rolloutRolling 执行 RollingUpdate 策略下新 ReplicaSet 的滚动发布逻辑。
+// 顺序固定为：先扩容新 RS，再缩容旧 RS，最后清理已完成的历史 RS 并同步状态；
+// 每完成一步就返回，确保状态能及时反映中间进度。
 func (dc *DeploymentController) rolloutRolling(ctx context.Context, d *apps.Deployment, rsList []*apps.ReplicaSet) error {
 	newRS, oldRSs, err := dc.getAllReplicaSetsAndSyncRevision(ctx, d, rsList, true)
 	if err != nil {
@@ -36,6 +38,7 @@ func (dc *DeploymentController) rolloutRolling(ctx context.Context, d *apps.Depl
 	allRSs := append(oldRSs, newRS)
 
 	// Scale up, if we can.
+	// 先扩容新 RS：只有新版本有了可用副本，缩容旧版本才不会降低可用性。
 	scaledUp, err := dc.reconcileNewReplicaSet(ctx, allRSs, newRS, d)
 	if err != nil {
 		return err
@@ -46,6 +49,7 @@ func (dc *DeploymentController) rolloutRolling(ctx context.Context, d *apps.Depl
 	}
 
 	// Scale down, if we can.
+	// 新 RS 已尽可能扩容后再缩容旧 RS，避免在发布中途扩大不可用副本数。
 	scaledDown, err := dc.reconcileOldReplicaSets(ctx, allRSs, controller.FilterActiveReplicaSets(oldRSs), newRS, d)
 	if err != nil {
 		return err
@@ -65,6 +69,8 @@ func (dc *DeploymentController) rolloutRolling(ctx context.Context, d *apps.Depl
 	return dc.syncRolloutStatus(ctx, allRSs, newRS, d)
 }
 
+// reconcileNewReplicaSet 调整新 ReplicaSet 的副本数以匹配 Deployment 期望值。
+// 若新 RS 副本已超过期望值（例如回滚场景）则直接缩容；否则按 maxSurge/maxUnavailable 计算本次可扩容数量。
 func (dc *DeploymentController) reconcileNewReplicaSet(ctx context.Context, allRSs []*apps.ReplicaSet, newRS *apps.ReplicaSet, deployment *apps.Deployment) (bool, error) {
 	if *(newRS.Spec.Replicas) == *(deployment.Spec.Replicas) {
 		// Scaling not required.
@@ -83,6 +89,8 @@ func (dc *DeploymentController) reconcileNewReplicaSet(ctx context.Context, allR
 	return scaled, err
 }
 
+// reconcileOldReplicaSets 判断并计算旧 ReplicaSet 的缩容数量。
+// 缩容额度必须扣除新 RS 中不可用的副本数，否则新版本故障时会进一步削减旧版本、放大不可用范围。
 func (dc *DeploymentController) reconcileOldReplicaSets(ctx context.Context, allRSs []*apps.ReplicaSet, oldRSs []*apps.ReplicaSet, newRS *apps.ReplicaSet, deployment *apps.Deployment) (bool, error) {
 	logger := klog.FromContext(ctx)
 	oldPodsCount := deploymentutil.GetReplicaCountForReplicaSets(oldRSs)
@@ -133,6 +141,7 @@ func (dc *DeploymentController) reconcileOldReplicaSets(ctx context.Context, all
 
 	// Clean up unhealthy replicas first, otherwise unhealthy replicas will block deployment
 	// and cause timeout. See https://github.com/kubernetes/kubernetes/issues/16737
+	// 优先清理不健康副本：它们会一直占用额度导致发布无法推进直至超时。
 	oldRSs, cleanupCount, err := dc.cleanupUnhealthyReplicas(ctx, oldRSs, deployment, maxScaledDown)
 	if err != nil {
 		return false, nil
@@ -151,13 +160,15 @@ func (dc *DeploymentController) reconcileOldReplicaSets(ctx context.Context, all
 	return totalScaledDown > 0, nil
 }
 
-// cleanupUnhealthyReplicas will scale down old replica sets with unhealthy replicas, so that all unhealthy replicas will be deleted.
+// cleanupUnhealthyReplicas 缩容包含不健康副本的旧 ReplicaSet，直到所有不健康副本都被删除。
+// 按创建时间排序后先处理最老的 RS，以保证清理行为可预测且与历史保留策略一致。
 func (dc *DeploymentController) cleanupUnhealthyReplicas(ctx context.Context, oldRSs []*apps.ReplicaSet, deployment *apps.Deployment, maxCleanupCount int32) ([]*apps.ReplicaSet, int32, error) {
 	logger := klog.FromContext(ctx)
 	sort.Sort(controller.ReplicaSetsByCreationTimestamp(oldRSs))
 	// Safely scale down all old replica sets with unhealthy replicas. Replica set will sort the pods in the order
 	// such that not-ready < ready, unscheduled < scheduled, and pending < running. This ensures that unhealthy replicas will
 	// been deleted first and won't increase unavailability.
+	// ReplicaSet 删除 Pod 时会优先删除未就绪的 Pod，因此先清理不健康副本不会进一步降低可用性。
 	totalScaledDown := int32(0)
 	for i, targetRS := range oldRSs {
 		if totalScaledDown >= maxCleanupCount {
@@ -188,8 +199,9 @@ func (dc *DeploymentController) cleanupUnhealthyReplicas(ctx context.Context, ol
 	return oldRSs, totalScaledDown, nil
 }
 
-// scaleDownOldReplicaSetsForRollingUpdate scales down old replica sets when deployment strategy is "RollingUpdate".
-// Need check maxUnavailable to ensure availability
+// scaleDownOldReplicaSetsForRollingUpdate 在 RollingUpdate 策略下缩容旧 ReplicaSet。
+// 缩容前校验 maxUnavailable，确保剩余可用副本不低于 minAvailable。
+// 按创建时间从旧到新缩容，与 ReplicaSet 清理顺序一致，便于回滚时保留最近的副本。
 func (dc *DeploymentController) scaleDownOldReplicaSetsForRollingUpdate(ctx context.Context, allRSs []*apps.ReplicaSet, oldRSs []*apps.ReplicaSet, deployment *apps.Deployment) (int32, error) {
 	logger := klog.FromContext(ctx)
 	maxUnavailable := deploymentutil.MaxUnavailable(*deployment)

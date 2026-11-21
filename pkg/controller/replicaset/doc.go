@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package replicaset contains logic for watching and synchronizing
-// ReplicaSets.
+// Package replicaset 包含监听并同步 ReplicaSet 的逻辑。
+//
+// ReplicaSet 控制器通过 watch 感知 ReplicaSet 与 Pod 的变化，
+// 将实际副本数收敛到期望副本数，并处理 Pod 的所有权与隔离。
 package replicaset

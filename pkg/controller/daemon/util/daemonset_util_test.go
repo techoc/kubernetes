@@ -30,6 +30,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// newPod 构造一个测试用的 Pod，带上指定名称、节点、标签和默认命名空间，
+// 其 Spec 包含一个最简容器，供后续亲和性或标签相关断言使用。
 func newPod(podName string, nodeName string, label map[string]string) *v1.Pod {
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1"},
@@ -50,6 +52,10 @@ func newPod(podName string, nodeName string, label map[string]string) *v1.Pod {
 	return pod
 }
 
+// TestIsPodUpdated 验证 IsPodUpdated 对 Pod 是否已按当前 DaemonSet 模板更新的判定。
+// 判定依据是 Pod 标签中的 templateGeneration 与唯一性 hash：两者都匹配才算已更新。
+// 表中覆盖 generation/hash 分别匹配或不匹配、标签缺失与无标签等组合，
+// 以确保遗留 Pod（缺少 hash 标签）和标签不完整的 Pod 得到正确结论。
 func TestIsPodUpdated(t *testing.T) {
 	templateGeneration := ptr.To[int64](12345)
 	badGeneration := ptr.To[int64](12350)
@@ -134,6 +140,7 @@ func TestIsPodUpdated(t *testing.T) {
 			false,
 		},
 	}
+	// 逐一断言 IsPodUpdated 的返回值；generation 与 hash 任一不匹配都会导致 Pod 被视为过期。
 	for _, test := range tests {
 		updated := IsPodUpdated(test.pod, test.hash, test.templateGeneration)
 		if updated != test.isUpdated {
@@ -142,6 +149,9 @@ func TestIsPodUpdated(t *testing.T) {
 	}
 }
 
+// TestCreatePodTemplate 验证 CreatePodTemplate 为 Pod 模板写入的标签：
+// DaemonSetTemplateGenerationKey 必须始终写入；当 hash 非空时，
+// DefaultDaemonSetUniqueLabelKey 也必须写入，hash 为空时则不应出现该标签。
 func TestCreatePodTemplate(t *testing.T) {
 	tests := []struct {
 		templateGeneration *int64
@@ -168,6 +178,11 @@ func TestCreatePodTemplate(t *testing.T) {
 	}
 }
 
+// TestReplaceDaemonSetPodNodeNameNodeAffinity 验证 ReplaceDaemonSetPodNodeNameNodeAffinity 的行为：
+// 该函数将节点亲和性替换为只按 metadata.name（节点名）精确匹配的 MatchFields 约束。
+// 用例覆盖：无亲和性、已有 MatchExpressions、已有 preferred 调度项、已有 MatchFields、
+// 多值或多条 NodeSelectorTerms、NotIn 操作符、以及不受支持的字段键等场景，
+// 断言这些约束均被规范化为单一的节点名约束，而 preferred 项保持不变。
 func TestReplaceDaemonSetPodNodeNameNodeAffinity(t *testing.T) {
 	tests := []struct {
 		affinity *v1.Affinity
@@ -431,9 +446,9 @@ func TestReplaceDaemonSetPodNodeNameNodeAffinity(t *testing.T) {
 							{
 								MatchFields: []v1.NodeSelectorRequirement{
 									{
-										// NOTE: Only `metadata.name` is valid key in `MatchFields` in 1.11;
-										//       added this case for compatibility: the feature works as normal
-										//       when new Keys introduced.
+										// 注意：在 1.11 中 MatchFields 只支持 metadata.name 这一合法键；
+										// 保留这个用例是为了兼容性：当后续引入新的键时，相关功能
+										// 仍应正常工作（未知键在重写节点亲和性时会被替换掉）。
 										Key:      "metadata.foo",
 										Operator: v1.NodeSelectorOpIn,
 										Values:   []string{"bar"},
@@ -465,6 +480,7 @@ func TestReplaceDaemonSetPodNodeNameNodeAffinity(t *testing.T) {
 		},
 	}
 
+	// 遍历所有亲和性用例，替换后的期望结果是仅保留指向给定主机名的 MatchFields 约束。
 	for i, test := range tests {
 		got := ReplaceDaemonSetPodNodeNameNodeAffinity(test.affinity, test.hostname)
 		if !reflect.DeepEqual(test.expected, got) {
@@ -474,6 +490,9 @@ func TestReplaceDaemonSetPodNodeNameNodeAffinity(t *testing.T) {
 	}
 }
 
+// forEachFeatureGate 针对每个给定的特性门控分别以开启和关闭两种状态运行 tf 子测试。
+// 在子测试中动态修改全局特性门控是测试不同行为分支的标准方式；用闭包包裹以确保
+// SetFeatureGateDuringTest 注册的 Cleanup 在该子测试结束后立即恢复原值。
 func forEachFeatureGate(t *testing.T, tf func(t *testing.T), gates ...featuregate.Feature) {
 	for _, fg := range gates {
 		for _, f := range []bool{true, false} {
@@ -485,7 +504,12 @@ func forEachFeatureGate(t *testing.T, tf func(t *testing.T), gates ...featuregat
 	}
 }
 
+// TestGetTargetNodeName 验证 GetTargetNodeName 如何在两种来源间确定 Pod 的目标节点：
+// 优先取 pod.Spec.NodeName（由调度器直接写入），否则从节点亲和性的 MatchFields 中提取
+// metadata.name；上游不支持 matchExpressions 和除 metadata.name 以外的字段键。
+// 测试通过 forEachFeatureGate 在特性门控开/关两种配置下运行，以覆盖不同代码分支。
 func TestGetTargetNodeName(t *testing.T) {
+	// testFun 封装实际断言逻辑，供各特性门控组合分别以子测试运行。
 	testFun := func(t *testing.T) {
 		tests := []struct {
 			pod         *v1.Pod

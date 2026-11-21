@@ -47,6 +47,7 @@ import (
 	"k8s.io/kubernetes/pkg/quota/v1/install"
 )
 
+// getResourceList 按给定的 CPU 与内存字符串构造资源列表。
 func getResourceList(cpu, memory string) v1.ResourceList {
 	res := v1.ResourceList{}
 	if cpu != "" {
@@ -58,6 +59,7 @@ func getResourceList(cpu, memory string) v1.ResourceList {
 	return res
 }
 
+// getResourceRequirements 用给定的 requests 与 limits 构造容器资源需求。
 func getResourceRequirements(requests, limits v1.ResourceList) v1.ResourceRequirements {
 	res := v1.ResourceRequirements{}
 	res.Requests = requests
@@ -65,10 +67,12 @@ func getResourceRequirements(requests, limits v1.ResourceList) v1.ResourceRequir
 	return res
 }
 
+// mockDiscoveryFunc 返回空的发现结果，避免测试依赖真实 API 发现。
 func mockDiscoveryFunc() ([]*metav1.APIResourceList, error) {
 	return []*metav1.APIResourceList{}, nil
 }
 
+// mockListerForResourceFunc 按 GVR 返回预置 lister，缺失时报错以便定位配置遗漏。
 func mockListerForResourceFunc(listersForResource map[schema.GroupVersionResource]cache.GenericLister) quota.ListerForResourceFunc {
 	return func(gvr schema.GroupVersionResource) (cache.GenericLister, error) {
 		lister, found := listersForResource[gvr]
@@ -79,6 +83,7 @@ func mockListerForResourceFunc(listersForResource map[schema.GroupVersionResourc
 	}
 }
 
+// newGenericLister 用给定对象构造带 namespace 索引的通用 lister。
 func newGenericLister(groupResource schema.GroupResource, items []runtime.Object) cache.GenericLister {
 	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{"namespace": cache.MetaNamespaceIndexFunc})
 	for _, item := range items {
@@ -87,28 +92,39 @@ func newGenericLister(groupResource schema.GroupResource, items []runtime.Object
 	return cache.NewGenericLister(store, groupResource)
 }
 
+// newErrorLister 返回一个列表与获取操作总是失败的 lister。
 func newErrorLister() cache.GenericLister {
 	return errorLister{}
 }
 
+// errorLister 用于模拟 lister 访问失败。
 type errorLister struct {
 }
 
+// List 始终返回列表错误。
 func (errorLister) List(selector labels.Selector) (ret []runtime.Object, err error) {
 	return nil, fmt.Errorf("error listing")
 }
+
+// Get 始终返回获取错误。
 func (errorLister) Get(name string) (runtime.Object, error) {
 	return nil, fmt.Errorf("error getting")
 }
+
+// ByNamespace 返回同样会报错的 namespace lister。
 func (errorLister) ByNamespace(namespace string) cache.GenericNamespaceLister {
 	return errorLister{}
 }
 
+// quotaController 包装控制器与其停止通道，便于测试中启停 informer。
 type quotaController struct {
+	// Controller 嵌入的实际控制器。
 	*Controller
+	// stop 关闭后停止 informer。
 	stop chan struct{}
 }
 
+// setupQuotaController 构造使用 fake 客户端与自定义 lister 的配额控制器。
 func setupQuotaController(t *testing.T, kubeClient kubernetes.Interface, lister quota.ListerForResourceFunc, discoveryFunc NamespacedResourcesFunc) quotaController {
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, controller.NoResyncPeriodFunc())
 	quotaConfiguration, err := install.NewQuotaConfigurationForControllers(lister, informerFactory)
@@ -138,6 +154,7 @@ func setupQuotaController(t *testing.T, kubeClient kubernetes.Interface, lister 
 	return quotaController{qc, stop}
 }
 
+// newTestPods 构造两个运行中的 Burstable Pod 和一个失败的 Pod。
 func newTestPods() []runtime.Object {
 	return []runtime.Object{
 		&v1.Pod{
@@ -167,6 +184,7 @@ func newTestPods() []runtime.Object {
 	}
 }
 
+// newBestEffortTestPods 构造两个 BestEffort 运行 Pod 与一个失败 Pod。
 func newBestEffortTestPods() []runtime.Object {
 	return []runtime.Object{
 		&v1.Pod{
@@ -196,6 +214,7 @@ func newBestEffortTestPods() []runtime.Object {
 	}
 }
 
+// newTestPodsWithPriorityClasses 构造带不同优先级类及无优先级类的 Pod。
 func newTestPodsWithPriorityClasses() []runtime.Object {
 	return []runtime.Object{
 		&v1.Pod{
@@ -227,14 +246,22 @@ func newTestPodsWithPriorityClasses() []runtime.Object {
 	}
 }
 
+// TestSyncResourceQuota 验证配额同步的状态计算、错误传播与写回行为。
 func TestSyncResourceQuota(t *testing.T) {
 	testCases := map[string]struct {
-		gvr               schema.GroupVersionResource
-		errorGVR          schema.GroupVersionResource
-		items             []runtime.Object
-		quota             v1.ResourceQuota
-		status            v1.ResourceQuotaStatus
-		expectedError     string
+		// gvr 配置了通用 lister 的资源。
+		gvr schema.GroupVersionResource
+		// errorGVR 被配置为列表失败的资源。
+		errorGVR schema.GroupVersionResource
+		// items 供通用 lister 返回的对象。
+		items []runtime.Object
+		// quota 待同步的 ResourceQuota。
+		quota v1.ResourceQuota
+		// status 期望写回的状态。
+		status v1.ResourceQuotaStatus
+		// expectedError 期望的错误子串，为空表示不应报错。
+		expectedError string
+		// expectedActionSet 期望客户端收到的动作集合。
 		expectedActionSet sets.String
 	}{
 		"non-matching-best-effort-scoped-quota": {
@@ -780,6 +807,7 @@ func TestSyncResourceQuota(t *testing.T) {
 		},
 	}
 
+	// 每个用例独立创建客户端与控制器，避免动作记录相互污染。
 	for testName, testCase := range testCases {
 		kubeClient := fake.NewSimpleClientset(&testCase.quota)
 		listersForResourceConfig := map[schema.GroupVersionResource]cache.GenericLister{
@@ -817,7 +845,7 @@ func TestSyncResourceQuota(t *testing.T) {
 			t.Fatalf("test: %s,\nExpected update action usage, got none: actions:\n%v", testName, actions)
 		}
 
-		// ensure usage is as expected
+		// 校验最终写回的用量与期望一致
 		if len(usage.Status.Hard) != len(testCase.status.Hard) {
 			t.Errorf("test: %s, status hard lengths do not match", testName)
 		}
@@ -843,6 +871,7 @@ func TestSyncResourceQuota(t *testing.T) {
 	}
 }
 
+// TestAddQuota 验证新增配额按是否缺少用量进入不同工作队列。
 func TestAddQuota(t *testing.T) {
 	kubeClient := fake.NewSimpleClientset()
 	gvr := v1.SchemeGroupVersion.WithResource("pods")
@@ -854,8 +883,11 @@ func TestAddQuota(t *testing.T) {
 	defer close(qc.stop)
 
 	testCases := []struct {
-		name             string
-		quota            *v1.ResourceQuota
+		// name 用例名称。
+		name string
+		// quota 待加入控制器的 ResourceQuota。
+		quota *v1.ResourceQuota
+		// expectedPriority 是否应进入优先处理队列。
 		expectedPriority bool
 	}{
 		{
@@ -981,6 +1013,7 @@ func TestAddQuota(t *testing.T) {
 		},
 	}
 
+	// 逐用例清空队列，避免前一个用例的键影响后续断言。
 	for _, tc := range testCases {
 		logger, _ := ktesting.NewTestContext(t)
 		qc.addQuota(logger, tc.quota)
@@ -1010,8 +1043,8 @@ func TestAddQuota(t *testing.T) {
 	}
 }
 
-// TestDiscoverySync ensures that a discovery client error
-// will not cause the quota controller to block infinitely.
+// TestDiscoverySync 验证发现客户端报错时
+// 配额控制器不会无限阻塞。
 func TestDiscoverySync(t *testing.T) {
 	serverResources := []*metav1.APIResourceList{
 		{
@@ -1091,23 +1124,23 @@ func TestDiscoverySync(t *testing.T) {
 
 	stopSync := make(chan struct{})
 	defer close(stopSync)
-	// The pseudo-code of Sync():
-	// Sync(client, period, stopCh):
-	//    wait.Until() loops with `period` until the `stopCh` is closed :
+	// Sync() 的伪代码：
+	// Sync(client, period, stopCh)：
+	// wait.Until() 按 `period` 循环，直到 `stopCh` 关闭：
 	//       GetQuotableResources()
 	//       resyncMonitors()
-	//       cache.WaitForNamedCacheSync() loops with `syncedPollPeriod` (hardcoded to 100ms), until either its stop channel is closed after `period`, or all caches synced.
+	// cache.WaitForNamedCacheSync() 按 `syncedPollPeriod`（硬编码为 100ms）轮询，直到等待期结束或全部缓存同步完成。
 	//
-	// Setting the period to 200ms allows the WaitForCacheSync() to check
-	// for cache sync ~2 times in every wait.Until() loop.
+	// 将周期设为 200ms，可让每轮 wait.Until() 中大约进行两次
+	// 缓存同步检查。
 	//
-	// The 1s sleep in the test allows GetQuotableResources and
-	// resyncMonitors to run ~5 times to ensure the changes to the
-	// fakeDiscoveryClient are picked up.
+	// 测试中 1s 的睡眠让 GetQuotableResources 与 resyncMonitors
+	// 运行约 5 次，确保 fakeDiscoveryClient 的变化
+	// 能被同步循环捕获。
 	_, ctx := ktesting.NewTestContext(t)
 	go qc.Sync(ctx, fakeDiscoveryClient.ServerPreferredNamespacedResources, 200*time.Millisecond)
 
-	// Wait until the sync discovers the initial resources
+	// 等待同步循环发现初始资源
 	time.Sleep(1 * time.Second)
 
 	err = expectSyncNotBlocked(fakeDiscoveryClient, &qc.workerLock)
@@ -1116,15 +1149,15 @@ func TestDiscoverySync(t *testing.T) {
 	}
 	assertMonitors(t, qc, "pods", "deployments")
 
-	// Simulate the discovery client returning an error
+	// 模拟发现客户端返回错误
 	fakeDiscoveryClient.setPreferredResources(nil, fmt.Errorf("error calling discoveryClient.ServerPreferredResources()"))
 
-	// Wait until sync discovers the change
+	// 等待同步循环感知变化
 	time.Sleep(1 * time.Second)
-	// No monitors removed
+	// 不应移除任何 monitor
 	assertMonitors(t, qc, "pods", "deployments")
 
-	// Remove the error from being returned and see if the quota sync is still working
+	// 清除错误，确认配额同步仍可正常工作
 	fakeDiscoveryClient.setPreferredResources(serverResources, nil)
 
 	err = expectSyncNotBlocked(fakeDiscoveryClient, &qc.workerLock)
@@ -1133,59 +1166,60 @@ func TestDiscoverySync(t *testing.T) {
 	}
 	assertMonitors(t, qc, "pods", "deployments")
 
-	// Simulate the discovery client returning a resource the restmapper can resolve, but will not sync caches
+	// 模拟返回 restmapper 能解析但缓存无法同步的资源
 	fakeDiscoveryClient.setPreferredResources(unsyncableServerResources, nil)
 
-	// Wait until sync discovers the change
+	// 等待同步循环感知变化
 	time.Sleep(1 * time.Second)
-	// deployments removed, secrets added
+	// deployments 被移除，secrets 被加入
 	assertMonitors(t, qc, "pods", "secrets")
 
-	// Put the resources back to normal and ensure quota sync recovers
+	// 恢复正常资源，确认配额同步能够恢复
 	fakeDiscoveryClient.setPreferredResources(serverResources, nil)
 
-	// Wait until sync discovers the change
+	// 等待同步循环感知变化
 	time.Sleep(1 * time.Second)
 	err = expectSyncNotBlocked(fakeDiscoveryClient, &qc.workerLock)
 	if err != nil {
 		t.Fatalf("Expected quotacontroller.Sync to still be running but it is blocked: %v", err)
 	}
-	// secrets removed, deployments readded
+	// secrets 被移除，deployments 重新加入
 	assertMonitors(t, qc, "pods", "deployments")
 
-	// apps/v1 discovery failure
+	// apps/v1 发现失败
 	fakeDiscoveryClient.setPreferredResources(unsyncableServerResources, appsV1Error)
-	// Wait until sync discovers the change
+	// 等待同步循环感知变化
 	time.Sleep(1 * time.Second)
 	err = expectSyncNotBlocked(fakeDiscoveryClient, &qc.workerLock)
 	if err != nil {
 		t.Fatalf("Expected quotacontroller.Sync to still be running but it is blocked: %v", err)
 	}
-	// deployments remain due to appsv1 error, secrets added
+	// appsv1 报错时保留 deployments，同时加入 secrets
 	assertMonitors(t, qc, "pods", "deployments", "secrets")
 
-	// core/v1 discovery failure
+	// core/v1 发现失败
 	fakeDiscoveryClient.setPreferredResources(appsV1Resources, coreV1Error)
-	// Wait until sync discovers the change
+	// 等待同步循环感知变化
 	time.Sleep(1 * time.Second)
 	err = expectSyncNotBlocked(fakeDiscoveryClient, &qc.workerLock)
 	if err != nil {
 		t.Fatalf("Expected quotacontroller.Sync to still be running but it is blocked: %v", err)
 	}
-	// pods and secrets remain due to corev1 error
+	// corev1 报错时保留 pods 与 secrets
 	assertMonitors(t, qc, "pods", "deployments", "secrets")
 
-	// Put the resources back to normal and ensure quota sync recovers
+	// 恢复正常资源，确认配额同步能够恢复
 	fakeDiscoveryClient.setPreferredResources(serverResources, nil)
 
 	err = expectSyncNotBlocked(fakeDiscoveryClient, &qc.workerLock)
 	if err != nil {
 		t.Fatalf("Expected quotacontroller.Sync to still be running but it is blocked: %v", err)
 	}
-	// secrets removed, deployments remain
+	// secrets 被移除，deployments 保留
 	assertMonitors(t, qc, "pods", "deployments")
 }
 
+// assertMonitors 断言当前 monitor 集合与给定资源列表一致。
 func assertMonitors(t *testing.T, qc quotaController, resources ...string) {
 	t.Helper()
 	expected := sets.NewString(resources...)
@@ -1198,7 +1232,7 @@ func assertMonitors(t *testing.T, qc quotaController, resources ...string) {
 	}
 }
 
-// testServerAndClientConfig returns a server that listens and a config that can reference it
+// testServerAndClientConfig 返回监听中的测试服务器及指向它的客户端配置。
 func testServerAndClientConfig(handler func(http.ResponseWriter, *http.Request)) (*httptest.Server, *rest.Config) {
 	srv := httptest.NewServer(http.HandlerFunc(handler))
 	config := &rest.Config{
@@ -1207,6 +1241,7 @@ func testServerAndClientConfig(handler func(http.ResponseWriter, *http.Request))
 	return srv, config
 }
 
+// expectSyncNotBlocked 通过发现接口调用次数与加锁耗时判断同步循环未被卡住。
 func expectSyncNotBlocked(fakeDiscoveryClient *fakeServerResources, workerLock *sync.RWMutex) error {
 	before := fakeDiscoveryClient.getInterfaceUsedCount()
 	t := 1 * time.Second
@@ -1217,6 +1252,7 @@ func expectSyncNotBlocked(fakeDiscoveryClient *fakeServerResources, workerLock *
 	}
 
 	workerLockAcquired := make(chan struct{})
+	// 用能否及时拿到锁判断工作协程没有长期占用 workerLock。
 	go func() {
 		workerLock.Lock()
 		defer workerLock.Unlock()
@@ -1230,21 +1266,29 @@ func expectSyncNotBlocked(fakeDiscoveryClient *fakeServerResources, workerLock *
 	}
 }
 
+// fakeServerResources 是可并发读写的发现客户端伪造实现。
 type fakeServerResources struct {
+	// PreferredResources 是下一次发现调用返回的资源列表。
 	PreferredResources []*metav1.APIResourceList
-	Error              error
-	Lock               sync.Mutex
+	// Error 是下一次发现调用返回的错误。
+	Error error
+	// Lock 保护伪造状态，避免与同步协程并发读写。
+	Lock sync.Mutex
+	// InterfaceUsedCount 记录发现接口被调用的次数。
 	InterfaceUsedCount int
 }
 
+// ServerResourcesForGroupVersion 未在本测试中使用，返回空结果。
 func (*fakeServerResources) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	return nil, nil
 }
 
+// ServerPreferredResources 未在本测试中使用，返回空结果。
 func (*fakeServerResources) ServerPreferredResources() ([]*metav1.APIResourceList, error) {
 	return nil, nil
 }
 
+// setPreferredResources 设置下一次发现调用返回的资源与错误。
 func (f *fakeServerResources) setPreferredResources(resources []*metav1.APIResourceList, err error) {
 	f.Lock.Lock()
 	defer f.Lock.Unlock()
@@ -1252,12 +1296,14 @@ func (f *fakeServerResources) setPreferredResources(resources []*metav1.APIResou
 	f.Error = err
 }
 
+// getInterfaceUsedCount 返回发现接口被调用的次数。
 func (f *fakeServerResources) getInterfaceUsedCount() int {
 	f.Lock.Lock()
 	defer f.Lock.Unlock()
 	return f.InterfaceUsedCount
 }
 
+// ServerPreferredNamespacedResources 返回预置结果并累计调用次数。
 func (f *fakeServerResources) ServerPreferredNamespacedResources() ([]*metav1.APIResourceList, error) {
 	f.Lock.Lock()
 	defer f.Lock.Unlock()
@@ -1265,33 +1311,41 @@ func (f *fakeServerResources) ServerPreferredNamespacedResources() ([]*metav1.AP
 	return f.PreferredResources, f.Error
 }
 
-// fakeAction records information about requests to aid in testing.
+// fakeAction 记录请求信息，便于测试断言。
 type fakeAction struct {
+	// method HTTP 方法。
 	method string
-	path   string
-	query  string
+	// path 请求路径。
+	path string
+	// query 请求查询串。
+	query string
 }
 
-// String returns method=path to aid in testing
+// String 返回 method=path 形式，便于测试断言。
 func (f *fakeAction) String() string {
 	return strings.Join([]string{f.method, f.path}, "=")
 }
 
+// FakeResponse 是 handler 返回的伪造状态码与响应体。
 type FakeResponse struct {
+	// statusCode HTTP 状态码。
 	statusCode int
-	content    []byte
+	// content 响应体内容。
+	content []byte
 }
 
-// fakeActionHandler holds a list of fakeActions received
+// fakeActionHandler 保存收到的请求及预置响应。
 type fakeActionHandler struct {
-	// statusCode and content returned by this handler for different method + path.
+	// response 按 method + path 返回对应的状态码与内容。
 	response map[string]FakeResponse
 
-	lock    sync.Mutex
+	// lock 保护 actions 与 response 的并发访问。
+	lock sync.Mutex
+	// actions 按接收顺序记录的请求。
 	actions []fakeAction
 }
 
-// ServeHTTP logs the action that occurred and always returns the associated status code
+// ServeHTTP 记录收到的请求并返回预置的状态码与内容。
 func (f *fakeActionHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	func() {
 		f.lock.Lock()
@@ -1308,7 +1362,7 @@ func (f *fakeActionHandler) ServeHTTP(response http.ResponseWriter, request *htt
 		response.Write(fakeResponse.content)
 	}()
 
-	// This is to allow the fakeActionHandler to simulate a watch being opened
+	// 对 watch=true 的请求保持连接，模拟 informer 的 watch 长连接。
 	if strings.Contains(request.URL.RawQuery, "watch=true") {
 		hijacker, ok := response.(http.Hijacker)
 		if !ok {

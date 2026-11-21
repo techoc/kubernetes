@@ -59,17 +59,20 @@ var (
 )
 
 type reaction struct {
+	// verb 与 resource 指定拦截的操作，reactorfn 决定注入何种错误。
 	verb      string
 	resource  string
 	reactorfn clienttesting.ReactionFunc
 }
 
+// generateUpdateErrorFunc 返回一个 reactor：前 failures 次更新返回 Forbidden，
+// 模拟 API 暂时不可用，用于验证控制器的重试行为。
 func generateUpdateErrorFunc(t *testing.T, failures int) clienttesting.ReactionFunc {
 	i := 0
 	return func(action clienttesting.Action) (bool, runtime.Object, error) {
 		i++
 		if i <= failures {
-			// Update fails
+			// 失败次数未满时拦截更新并返回 Forbidden。
 			update, ok := action.(clienttesting.UpdateAction)
 
 			if !ok {
@@ -78,39 +81,37 @@ func generateUpdateErrorFunc(t *testing.T, failures int) clienttesting.ReactionF
 			acc, _ := meta.Accessor(update.GetObject())
 			return true, nil, apierrors.NewForbidden(update.GetResource().GroupResource(), acc.GetName(), errors.New("Mock error"))
 		}
-		// Update succeeds
+		// 不拦截，交给后续 reactor 或默认处理，视为更新成功。
 		return false, nil, nil
 	}
 }
 
+// TestVACProtectionController 通过模拟 VAC/PV/PVC 事件验证 VAC 删除保护：
+// 新 VAC 加 finalizer，终止中的 VAC 在无人引用时移除 finalizer，
+// 仍被 PV/PVC 或其状态引用时保留，更新失败时持续重试。
 func TestVACProtectionController(t *testing.T) {
 	tests := []struct {
 		name string
-		// Object to insert into fake kubeclient before the test starts.
+		// 测试开始前放入伪客户端的初始对象。
 		initialObjects []runtime.Object
-		// Optional client reactors.
+		// 可选的错误注入 reactor。
 		reactors []reaction
 
-		// VAC event to simulate. This VAC will be automatically added to
-		// initialObjects.
+		// 要模拟的 VAC 事件；该对象会自动加入 initialObjects。
 		updatedVAC *storagev1.VolumeAttributesClass
 
-		// PV event to simulate. The updatedPV will be automatically added to
-		// initialObjects.
+		// 要模拟的 PV 事件；updatedPV 会自动加入 initialObjects。
 		oldPV     *v1.PersistentVolume
 		updatedPV *v1.PersistentVolume
 
-		// PVC event to simulate. The updatedPVC will be automatically added to
-		// initialObjects.
+		// 要模拟的 PVC 事件；updatedPVC 会自动加入 initialObjects。
 		oldPVC     *v1.PersistentVolumeClaim
 		updatedPVC *v1.PersistentVolumeClaim
 
-		// List of expected kubeclient actions that should happen during the
-		// test.
+		// 期望客户端在测试过程中发生的动作列表。
 		expectedActions []clienttesting.Action
 	}{
-		// VAC events
-		//
+		// VAC 事件相关用例。
 		{
 			name:       "VAC without finalizer -> finalizer is added",
 			updatedVAC: vac1,
@@ -134,11 +135,10 @@ func TestVACProtectionController(t *testing.T) {
 				},
 			},
 			expectedActions: []clienttesting.Action{
-				// This fails
+				// 前两次因注入错误失败。
 				clienttesting.NewUpdateAction(vacGVR, "", vac1WithFinalizer),
-				// This fails too
 				clienttesting.NewUpdateAction(vacGVR, "", vac1WithFinalizer),
-				// This succeeds
+				// 第三次重试成功。
 				clienttesting.NewUpdateAction(vacGVR, "", vac1WithFinalizer),
 			},
 		},
@@ -160,11 +160,10 @@ func TestVACProtectionController(t *testing.T) {
 				},
 			},
 			expectedActions: []clienttesting.Action{
-				// Fails
+				// 前两次因注入错误失败。
 				clienttesting.NewUpdateAction(vacGVR, "", vac1Terminating),
-				// Fails too
 				clienttesting.NewUpdateAction(vacGVR, "", vac1Terminating),
-				// Succeeds
+				// 第三次重试成功。
 				clienttesting.NewUpdateAction(vacGVR, "", vac1Terminating),
 			},
 		},
@@ -180,8 +179,7 @@ func TestVACProtectionController(t *testing.T) {
 			updatedVAC:      vac1TerminatingWithFinalizer,
 			expectedActions: []clienttesting.Action{},
 		},
-		// PV events
-		//
+		// PV 事件相关用例。
 		{
 			name:           "pv changes vac and deleted VAC with finalizer -> finalizer is removed",
 			initialObjects: []runtime.Object{vac1TerminatingWithFinalizer},
@@ -211,8 +209,7 @@ func TestVACProtectionController(t *testing.T) {
 			oldPV:           pv1WithVAC1,
 			expectedActions: []clienttesting.Action{},
 		},
-		// PVC events
-		//
+		// PVC 事件相关用例。
 		{
 			name:           "pvc changes vac and deleted VAC with finalizer -> finalizer is removed",
 			initialObjects: []runtime.Object{vac1TerminatingWithFinalizer},
@@ -251,7 +248,7 @@ func TestVACProtectionController(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// Create client with initial data
+		// 把事件相关对象并入初始数据，保证控制器能从客户端和 informer 中取到它们。
 		objs := test.initialObjects
 		if test.updatedVAC != nil {
 			objs = append(objs, test.updatedVAC)
@@ -265,14 +262,13 @@ func TestVACProtectionController(t *testing.T) {
 
 		client := fake.NewSimpleClientset(objs...)
 
-		// Create informers
+		// 构造 informer；控制器通过 informer 缓存读取 PV/PVC/VAC。
 		informers := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 		pvcInformer := informers.Core().V1().PersistentVolumeClaims()
 		pvInformer := informers.Core().V1().PersistentVolumes()
 		vacInformer := informers.Storage().V1().VolumeAttributesClasses()
 
-		// Populate the informers with initial objects so the controller can
-		// Get() it.
+		// 测试未启动 informer 的事件循环，需手动填充缓存供控制器 Get 使用。
 		for _, obj := range objs {
 			switch obj.(type) {
 			case *v1.PersistentVolumeClaim:
@@ -286,17 +282,17 @@ func TestVACProtectionController(t *testing.T) {
 			}
 		}
 
-		// Add reactor to inject test errors.
+		// 前置 reactor 优先于默认处理，用于注入更新失败。
 		for _, reactor := range test.reactors {
 			client.Fake.PrependReactor(reactor.verb, reactor.resource, reactor.reactorfn)
 		}
 
-		// Create the controller
+		// 控制器创建成功后才会注册工作队列回调。
 		logger, _ := ktesting.NewTestContext(t)
 		ctrl, err := NewVACProtectionController(logger, client, pvcInformer, pvInformer, vacInformer)
 		require.NoError(t, err, "failed to create controller")
 
-		// Start the test by simulating an event
+		// 按用例直接调用对应事件处理函数，避免依赖真实 watch 的时序。
 		if test.updatedVAC != nil {
 			ctrl.vacAddedUpdated(logger, test.updatedVAC)
 		}
@@ -311,7 +307,7 @@ func TestVACProtectionController(t *testing.T) {
 			ctrl.pvcDeleted(logger, test.oldPVC)
 		}
 
-		// Process the controller queue until we get expected results
+		// 控制器异步处理队列；轮询至动作数达到预期或超时，重试场景需要等待退避。
 		timeout := time.Now().Add(10 * time.Second)
 		lastReportedActionCount := 0
 		for {
@@ -324,18 +320,17 @@ func TestVACProtectionController(t *testing.T) {
 				ctrl.processNextWorkItem(context.TODO())
 			}
 			if ctrl.queue.Len() > 0 {
-				// There is still some work in the queue, process it now
+				// 队列仍有待处理项，继续消化，避免提前判定动作缺失。
 				continue
 			}
 			currentActionCount := len(client.Actions())
 			if currentActionCount < len(test.expectedActions) {
-				// Do not log evey wait, only when the action count changes.
+				// 仅在动作数变化时打印，避免等待退避期间刷屏。
 				if lastReportedActionCount < currentActionCount {
 					logger.V(5).Info("Waiting for the remaining actions", "test", test.name, "currentActionCount", currentActionCount, "expectedActionCount", len(test.expectedActions))
 					lastReportedActionCount = currentActionCount
 				}
-				// The test expected more to happen, wait for the actions.
-				// Most probably it's exponential backoff
+				// 动作数尚未达到预期，通常是重试的指数退避尚未结束，继续等待。
 				time.Sleep(10 * time.Millisecond)
 				continue
 			}

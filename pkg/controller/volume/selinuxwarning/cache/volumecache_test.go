@@ -29,28 +29,34 @@ import (
 	"k8s.io/kubernetes/pkg/controller/volume/selinuxwarning/translator"
 )
 
+// getTestLoggers 返回两个 logger：默认 V(5) 的普通 logger（不输出 dump），
+// 以及 V(dumpLogLevel) 的 logger（会输出缓存 dump）。
+// 后者仅在断言失败时用于打印缓存内容，避免正常测试产生大量日志。
 func getTestLoggers(t *testing.T) (klog.Logger, klog.Logger) {
-	// Logger with the default V(5), does not log dumps
+	// 默认 V(5) 的 logger：正常测试不应输出缓存 dump，避免日志噪音。
 	logger, _ := ktesting.NewTestContext(t)
 
-	// Logger with V(dumpLogLevel), logs dumps
+	// V(dumpLogLevel) 的 logger：仅在断言失败需要诊断缓存内容时使用。
 	logConfig := ktesting.NewConfig(ktesting.Verbosity(dumpLogLevel))
 	dumpLogger := ktesting.NewLogger(t, logConfig)
 
 	return logger, dumpLogger
 }
 
+// sortConflicts 按 Conflict.Pod 的字符串表示原地排序，
+// 使基于 DeepEqual 的比较不依赖 map 迭代顺序。
 func sortConflicts(conflicts []Conflict) {
 	sort.Slice(conflicts, func(i, j int) bool {
 		return conflicts[i].Pod.String() < conflicts[j].Pod.String()
 	})
 }
 
-// verifyReverseIndexConsistency checks that forward and reverse indexes are symmetric
+// verifyReverseIndexConsistency 校验正向索引（volume→pod）与反向索引（pod→volume）对称一致：
+// 反向索引中的每个 (pod, volume) 必须能在正向索引找到，反之亦然；不一致时报告错误。
 func verifyReverseIndexConsistency(t *testing.T, c *volumeCache) {
 	t.Helper()
 
-	// For every (pod, volume) in reverse index, verify it exists in forward index.
+	// 校验反向索引里的每个 (pod, volume) 都能在正向索引中对应。
 	for podKey, volumes := range c.podToVolumes {
 		for volumeName := range volumes {
 			volume, found := c.volumes[volumeName]
@@ -64,7 +70,7 @@ func verifyReverseIndexConsistency(t *testing.T, c *volumeCache) {
 		}
 	}
 
-	// For every (volume, pod) in forward index, verify it exists in reverse index.
+	// 反向校验正向索引里的每个 (volume, pod) 都能在反向索引中对应，确保两侧严格对称。
 	for volumeName, volume := range c.volumes {
 		for podKey := range volume.pods {
 			podVolumes, found := c.podToVolumes[podKey]
@@ -79,14 +85,16 @@ func verifyReverseIndexConsistency(t *testing.T, c *volumeCache) {
 	}
 }
 
-// Delete all items in a bigger cache and check it's empty
+// TestVolumeCache_DeleteAll 向缓存批量加入 4 个命名空间 × 4 个 pod × 4 个卷（共 64 条），
+// 然后逐个 DeletePod，验证正向与反向索引都被清空且保持一致。
+// 使用统一标签/策略以排除干扰冲突，仅聚焦删除后的清空行为。
 func TestVolumeCache_DeleteAll(t *testing.T) {
 	var podsToDelete []cache.ObjectName
 	seLinuxTranslator := &translator.ControllerSELinuxTranslator{}
 	c := NewVolumeLabelCache(seLinuxTranslator).(*volumeCache)
 	logger, dumpLogger := getTestLoggers(t)
 
-	// Arrange: add a lot of volumes to the cache
+	// 准备阶段：向缓存加入大量卷，放大删除路径中索引清理可能遗漏的问题。
 	for _, namespace := range []string{"ns1", "ns2", "ns3", "ns4"} {
 		for _, name := range []string{"pod1", "pod2", "pod3", "pod4"} {
 			for _, volumeName := range []v1.UniqueVolumeName{"vol1", "vol2", "vol3", "vol4"} {
@@ -94,7 +102,7 @@ func TestVolumeCache_DeleteAll(t *testing.T) {
 				podsToDelete = append(podsToDelete, podKey)
 				conflicts := c.AddVolume(logger, volumeName, podKey, "label1", v1.SELinuxChangePolicyMountOption, "csiDriver1")
 				if len(conflicts) != 0 {
-					// All volumes have the same labels and policy, there should be no conflicts
+					// 所有卷的标签与策略相同，理论上不应产生冲突，出现即说明逻辑有误。
 					t.Errorf("AddVolume %s/%s %s returned unexpected conflicts: %+v", namespace, name, volumeName, conflicts)
 				}
 			}
@@ -105,24 +113,25 @@ func TestVolumeCache_DeleteAll(t *testing.T) {
 
 	verifyReverseIndexConsistency(t, c)
 
-	// Act: delete all pods
+	// 执行阶段：逐个删除所有 pod，触发卷与反向索引的清理。
 	for _, podKey := range podsToDelete {
 		c.DeletePod(logger, podKey)
 	}
 
-	// Assert: the cache is empty
+	// 断言阶段：正向索引（volumes）应为空。
 	if len(c.volumes) != 0 {
 		t.Errorf("Expected cache to be empty, got %d volumes", len(c.volumes))
 		c.dump(dumpLogger)
 	}
 
-	// Assert: the reverse index is also empty
+	// 反向索引（podToVolumes）也必须为空；只清理一侧会导致陈旧映射残留。
 	if len(c.podToVolumes) != 0 {
 		t.Errorf("Expected reverse index to be empty, got %d pods", len(c.podToVolumes))
 	}
 	verifyReverseIndexConsistency(t, c)
 }
 
+// podWithVolume 汇总一条测试用例涉及的 Pod 与卷标识、SELinux 标签及变更策略。
 type podWithVolume struct {
 	podNamespace string
 	podName      string
@@ -131,6 +140,8 @@ type podWithVolume struct {
 	changePolicy v1.PodSELinuxChangePolicy
 }
 
+// addReverseConflict 为每个 Conflict 追加一条方向相反的镜像条目（pod 与 otherPod 互换），
+// 因为被测代码会对每对冲突同时报告两个方向，期望值需匹配该行为。
 func addReverseConflict(conflicts []Conflict) []Conflict {
 	newConflicts := make([]Conflict, 0, len(conflicts)*2)
 	for _, c := range conflicts {
@@ -147,7 +158,9 @@ func addReverseConflict(conflicts []Conflict) []Conflict {
 	return newConflicts
 }
 
-// Test that AddVolume and GetConflicts return the same []conflict data
+// TestVolumeCache_AddVolumeGetConflicts 表驱动验证 AddVolume 返回的冲突与 GetConflicts 一致：
+// 覆盖新卷、同标签/策略复用卷、标签或策略冲突、pod 替换，以及 SELinux 标签各组成部分
+// （user/role/category）缺失导致的可比与不可比情形；同时校验 podInfo 被正确缓存与索引一致。
 func TestVolumeCache_AddVolumeGetConflicts(t *testing.T) {
 	existingPods := []podWithVolume{
 		{
@@ -161,62 +174,62 @@ func TestVolumeCache_AddVolumeGetConflicts(t *testing.T) {
 			podNamespace: "ns2",
 			podName:      "pod2-recursive",
 			volumeName:   "vol2",
-			label:        "", // labels on volumes with Recursive policy are cleared, we don't want the controller to report label conflicts on them
+			label:        "", // Recursive 策略卷的标签会被清空，不应报告标签冲突
 			changePolicy: v1.SELinuxChangePolicyRecursive,
 		},
 		{
 			podNamespace: "ns3",
 			podName:      "pod3-1",
-			volumeName:   "vol3", // vol3 is used by 2 pods with the same label + recursive policy
-			label:        "",     // labels on volumes with Recursive policy are cleared, we don't want the controller to report label conflicts on them
+			volumeName:   "vol3", // vol3 被两个相同标签 + Recursive 策略的 pod 使用
+			label:        "",     // Recursive 策略卷的标签会被清空，不应报告标签冲突
 			changePolicy: v1.SELinuxChangePolicyRecursive,
 		},
 		{
 			podNamespace: "ns3",
 			podName:      "pod3-2",
-			volumeName:   "vol3", // vol3 is used by 2 pods with the same label + recursive policy
-			label:        "",     // labels on volumes with Recursive policy are cleared, we don't want the controller to report label conflicts on them
+			volumeName:   "vol3", // vol3 被两个相同标签 + Recursive 策略的 pod 使用
+			label:        "",     // Recursive 策略卷的标签会被清空，不应报告标签冲突
 			changePolicy: v1.SELinuxChangePolicyRecursive,
 		},
 		{
 			podNamespace: "ns4",
 			podName:      "pod4-1",
-			volumeName:   "vol4", // vol4 is used by 2 pods with the same label + mount policy
+			volumeName:   "vol4", // vol4 被两个相同标签 + MountOption 策略的 pod 使用
 			label:        "system_u:system_r:label4",
 			changePolicy: v1.SELinuxChangePolicyMountOption,
 		},
 		{
 			podNamespace: "ns4",
 			podName:      "pod4-2",
-			volumeName:   "vol4", // vol4 is used by 2 pods with the same label + mount policy
+			volumeName:   "vol4", // vol4 被两个相同标签 + MountOption 策略的 pod 使用
 			label:        "system_u:system_r:label4",
 			changePolicy: v1.SELinuxChangePolicyMountOption,
 		},
 		{
 			podNamespace: "ns5",
 			podName:      "pod5",
-			volumeName:   "vol5", // vol5 has no user and role
+			volumeName:   "vol5", // vol5 的标签缺少 user 与 role 部分
 			label:        "::label5",
 			changePolicy: v1.SELinuxChangePolicyMountOption,
 		},
 		{
 			podNamespace: "ns6",
 			podName:      "pod6",
-			volumeName:   "vol6", // vol6 has no user
+			volumeName:   "vol6", // vol6 的标签缺少 user 部分
 			label:        ":system_r:label6",
 			changePolicy: v1.SELinuxChangePolicyMountOption,
 		},
 		{
 			podNamespace: "ns7",
 			podName:      "pod7",
-			volumeName:   "vol7", // vol7 has no user and role, but has categories
+			volumeName:   "vol7", // vol7 的标签缺少 user 与 role，但含 categories
 			label:        "::label7:c0,c1",
 			changePolicy: v1.SELinuxChangePolicyMountOption,
 		},
 		{
 			podNamespace: "ns8",
 			podName:      "pod8",
-			volumeName:   "vol8", // vol has no label
+			volumeName:   "vol8", // vol8 没有任何标签
 			label:        "",
 			changePolicy: v1.SELinuxChangePolicyMountOption,
 		},
@@ -226,7 +239,7 @@ func TestVolumeCache_AddVolumeGetConflicts(t *testing.T) {
 		name              string
 		initialPods       []podWithVolume
 		podToAdd          podWithVolume
-		expectedConflicts []Conflict // conflicts for the other direction (pod, otherPod = otherPod, pod) will be added automatically
+		expectedConflicts []Conflict // 反方向的冲突（pod/otherPod 互换）会由 addReverseConflict 自动补上
 	}{
 		{
 			name:        "new volume in empty cache",
@@ -444,7 +457,7 @@ func TestVolumeCache_AddVolumeGetConflicts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger, dumpLogger := getTestLoggers(t)
-			// Arrange: add initial pods to the cache
+			// 准备阶段：先把既有 pod 加入缓存，确保后续 AddVolume 与已有条目产生交互。
 			seLinuxTranslator := &translator.ControllerSELinuxTranslator{}
 			c := NewVolumeLabelCache(seLinuxTranslator).(*volumeCache)
 			for _, podToAdd := range tt.initialPods {
@@ -454,10 +467,10 @@ func TestVolumeCache_AddVolumeGetConflicts(t *testing.T) {
 				}
 			}
 
-			// Act
+			// 执行阶段：加入待测 pod，观察返回的冲突。
 			conflicts := c.AddVolume(logger, tt.podToAdd.volumeName, cache.ObjectName{Namespace: tt.podToAdd.podNamespace, Name: tt.podToAdd.podName}, tt.podToAdd.label, tt.podToAdd.changePolicy, "csiDriver1")
 
-			// Assert
+			// 断言阶段：补齐反向冲突并排序后再比较，避免顺序影响。
 			expectedConflicts := addReverseConflict(tt.expectedConflicts)
 			sortConflicts(conflicts)
 			sortConflicts(expectedConflicts)
@@ -466,7 +479,7 @@ func TestVolumeCache_AddVolumeGetConflicts(t *testing.T) {
 				t.Logf("Expected conflicts: %+v", expectedConflicts)
 				c.dump(dumpLogger)
 			}
-			// Expect the pod + volume to be present in the cache
+			// 即使存在冲突，pod 与卷仍应被写入缓存，冲突报告不应阻断添加。
 			volume, ok := c.volumes[tt.podToAdd.volumeName]
 			if !ok {
 				t.Errorf("volume %s is not present in the cache", tt.podToAdd.volumeName)
@@ -485,10 +498,10 @@ func TestVolumeCache_AddVolumeGetConflicts(t *testing.T) {
 				t.Errorf("pod %s has unexpected info: %+v", podKey, existingInfo)
 			}
 
-			// Verify reverse index consistency
+			// 每次添加后都校验双向索引一致性，及时暴露索引维护错误。
 			verifyReverseIndexConsistency(t, c)
 
-			// Verify that GetConflicts returns the same conflicts
+			// GetConflicts 的结果必须与 AddVolume 当时返回的冲突一致，保证查询接口可靠。
 			receivedConflicts := c.GetConflicts(logger)
 			sortConflicts(receivedConflicts)
 			if !reflect.DeepEqual(receivedConflicts, expectedConflicts) {
@@ -499,8 +512,9 @@ func TestVolumeCache_AddVolumeGetConflicts(t *testing.T) {
 	}
 }
 
-// Test that conflicts are tracked per-volume: a pod with conflicts on
-// multiple volumes retains all of them after successive AddVolume calls.
+// TestVolumeCache_MultiVolumeConflicts 验证冲突按卷分别记录：
+// 同一 pod 在 vol1、vol2 上分别与其他 pod 冲突时，GetConflicts 返回两者之和；
+// 删除该 pod 后所有相关冲突消失；另外验证不同卷上完全相同的冲突条目会被去重。
 func TestVolumeCache_MultiVolumeConflicts(t *testing.T) {
 	logger, _ := getTestLoggers(t)
 	seLinuxTranslator := &translator.ControllerSELinuxTranslator{}
@@ -510,24 +524,24 @@ func TestVolumeCache_MultiVolumeConflicts(t *testing.T) {
 	podB := cache.ObjectName{Namespace: "ns", Name: "podB"}
 	podC := cache.ObjectName{Namespace: "ns", Name: "podC"}
 
-	// podB uses vol1 with label1
+	// podB 使用 vol1，标签为 labelB。
 	c.AddVolume(logger, "vol1", podB, "system_u:system_r:labelB", v1.SELinuxChangePolicyMountOption, "driver1")
-	// podC uses vol2 with label2
+	// podC 使用 vol2，标签为 labelC。
 	c.AddVolume(logger, "vol2", podC, "system_u:system_r:labelC", v1.SELinuxChangePolicyMountOption, "driver1")
 
-	// podA uses vol1 with a different label (conflict with podB)
+	// podA 以不同标签使用 vol1，预期与 podB 冲突。
 	conflicts1 := c.AddVolume(logger, "vol1", podA, "system_u:system_r:labelA", v1.SELinuxChangePolicyMountOption, "driver1")
 	if len(conflicts1) == 0 {
 		t.Fatal("Expected conflicts on vol1 between podA and podB")
 	}
 
-	// podA also uses vol2 with a different label (conflict with podC)
+	// podA 同时以不同标签使用 vol2，预期与 podC 冲突。
 	conflicts2 := c.AddVolume(logger, "vol2", podA, "system_u:system_r:labelA", v1.SELinuxChangePolicyMountOption, "driver1")
 	if len(conflicts2) == 0 {
 		t.Fatal("Expected conflicts on vol2 between podA and podC")
 	}
 
-	// GetConflicts must return conflicts from BOTH volumes
+	// 核心断言：GetConflicts 必须返回两个卷上的冲突之和，而非只保留最后一个卷的。
 	allConflicts := c.GetConflicts(logger)
 	expectedCount := len(conflicts1) + len(conflicts2)
 	if len(allConflicts) != expectedCount {
@@ -535,15 +549,15 @@ func TestVolumeCache_MultiVolumeConflicts(t *testing.T) {
 			len(allConflicts), expectedCount, len(conflicts1), len(conflicts2))
 	}
 
-	// After deleting podA, all conflicts should be gone
+	// 删除 podA 后，其引发的冲突应全部清除，验证删除会清理所有卷上的关联。
 	c.DeletePod(logger, podA)
 	remaining := c.GetConflicts(logger)
 	if len(remaining) != 0 {
 		t.Errorf("Expected no conflicts after deleting podA, got %d: %+v", len(remaining), remaining)
 	}
 
-	// Verify deduplication: podD and podE conflict on two volumes with the same labels.
-	// Identical Conflict entries from different volumes must be deduplicated by GetConflicts.
+	// 验证去重：podD 与 podE 在两个卷上以相同标签冲突。
+	// 来自不同卷但内容完全相同的 Conflict 条目应被 GetConflicts 去重。
 	podD := cache.ObjectName{Namespace: "ns", Name: "podD"}
 	podE := cache.ObjectName{Namespace: "ns", Name: "podE"}
 
@@ -572,6 +586,9 @@ func TestVolumeCache_MultiVolumeConflicts(t *testing.T) {
 	}
 }
 
+// TestVolumeCache_DeletePodConflicts 表驱动验证 DeletePod 对冲突的影响：
+// 删除冲突双方之一会清除该对冲突，删除无关 pod 保留既有冲突，
+// 删除在多个卷上有冲突的 pod 会一并清除；同时校验双向冲突对称性与重复删除的幂等性。
 func TestVolumeCache_DeletePodConflicts(t *testing.T) {
 	podA := cache.ObjectName{Namespace: "ns", Name: "podA"}
 	podB := cache.ObjectName{Namespace: "ns", Name: "podB"}
@@ -580,14 +597,14 @@ func TestVolumeCache_DeletePodConflicts(t *testing.T) {
 
 	tests := []struct {
 		name string
-		// Pods to add before deletion.
+		// 删除前预先加入缓存的 pod 列表。
 		initialPods []podWithVolume
-		// Pod to delete.
+		// 本用例要删除的 pod。
 		podToDelete cache.ObjectName
-		// If true, delete the pod a second time to verify idempotency.
+		// 为 true 时会再删一次，用于验证删除操作的幂等性。
 		deleteTwice bool
-		// Pod pairs that must still have symmetric conflicts after deletion.
-		// Each pair [2]cache.ObjectName expects both (A→B) and (B→A) to be present.
+		// 删除后仍应保留双向冲突的 pod 对。
+		// 每一对 [2]cache.ObjectName 期望同时存在 (A→B) 与 (B→A) 两个方向。
 		expectedSurvivingPairs [][2]cache.ObjectName
 	}{
 		{
@@ -670,14 +687,14 @@ func TestVolumeCache_DeletePodConflicts(t *testing.T) {
 
 			remaining := c.GetConflicts(logger)
 
-			// Deleted pod must not appear in any conflict
+			// 被删除的 pod 不得出现在任何冲突中，确保删除清理彻底。
 			for _, conflict := range remaining {
 				if conflict.Pod == tt.podToDelete || conflict.OtherPod == tt.podToDelete {
 					t.Errorf("found conflict involving deleted pod %s: %+v", tt.podToDelete, conflict)
 				}
 			}
 
-			// Verify each expected surviving pair exists in both directions
+			// 存活的冲突对必须双向对称，避免只清理了一个方向。
 			for _, pair := range tt.expectedSurvivingPairs {
 				hasForward := false
 				hasReverse := false
@@ -694,7 +711,7 @@ func TestVolumeCache_DeletePodConflicts(t *testing.T) {
 				}
 			}
 
-			// If no pairs are expected, there should be no conflicts at all
+			// 若没有期望保留的冲突对，则缓存中不应残留任何冲突。
 			if len(tt.expectedSurvivingPairs) == 0 && len(remaining) != 0 {
 				t.Errorf("expected no conflicts, got %+v", remaining)
 			}
@@ -704,6 +721,9 @@ func TestVolumeCache_DeletePodConflicts(t *testing.T) {
 	}
 }
 
+// TestVolumeCache_GetPodsForCSIDriver 验证按 CSI 驱动名聚合 pod：
+// 先向三个驱动分别加入若干 pod（含共享卷场景），再断言每个驱动返回的 pod 列表正确，
+// 未知驱动返回 nil。返回列表排序后再比较，消除 map 迭代顺序影响。
 func TestVolumeCache_GetPodsForCSIDriver(t *testing.T) {
 	seLinuxTranslator := &translator.ControllerSELinuxTranslator{}
 	c := NewVolumeLabelCache(seLinuxTranslator).(*volumeCache)
@@ -730,14 +750,14 @@ func TestVolumeCache_GetPodsForCSIDriver(t *testing.T) {
 			{
 				podNamespace: "ns3",
 				podName:      "pod3-1",
-				volumeName:   "vol3", // vol3 is used by 2 pods with the same label + recursive policy
+				volumeName:   "vol3", // vol3 被两个相同标签 + Recursive 策略的 pod 使用
 				label:        "label3",
 				changePolicy: v1.SELinuxChangePolicyRecursive,
 			},
 			{
 				podNamespace: "ns3",
 				podName:      "pod3-2",
-				volumeName:   "vol3", // vol3 is used by 2 pods with the same label + recursive policy
+				volumeName:   "vol3", // vol3 被两个相同标签 + Recursive 策略的 pod 使用
 				label:        "label3",
 				changePolicy: v1.SELinuxChangePolicyRecursive,
 			},
@@ -746,14 +766,14 @@ func TestVolumeCache_GetPodsForCSIDriver(t *testing.T) {
 			{
 				podNamespace: "ns4",
 				podName:      "pod4-1",
-				volumeName:   "vol4", // vol4 is used by 2 pods with the same label + mount policy
+				volumeName:   "vol4", // vol4 被两个相同标签 + MountOption 策略的 pod 使用
 				label:        "label4",
 				changePolicy: v1.SELinuxChangePolicyMountOption,
 			},
 			{
 				podNamespace: "ns4",
 				podName:      "pod4-2",
-				volumeName:   "vol4", // vol4 is used by 2 pods with the same label + mount policy
+				volumeName:   "vol4", // vol4 被两个相同标签 + MountOption 策略的 pod 使用
 				label:        "label4",
 				changePolicy: v1.SELinuxChangePolicyMountOption,
 			},
@@ -769,7 +789,7 @@ func TestVolumeCache_GetPodsForCSIDriver(t *testing.T) {
 		}
 	}
 
-	// Act
+	// 执行阶段：查询各 CSI 驱动对应的 pod 列表。
 	expectedPods := map[string][]cache.ObjectName{
 		"csiDriver1": {
 			{Namespace: "ns1", Name: "pod1-mountOption"},
@@ -783,9 +803,10 @@ func TestVolumeCache_GetPodsForCSIDriver(t *testing.T) {
 			{Namespace: "ns4", Name: "pod4-1"},
 			{Namespace: "ns4", Name: "pod4-2"},
 		},
-		"csiDriver4": nil, // totally unknown CSI driver
+		"csiDriver4": nil, // 完全未知的 CSI 驱动，应返回 nil
 	}
 	for csiDriverName, expectedPodsForDriver := range expectedPods {
+		// 结果顺序取决于 map 迭代，先排序再比较以获得确定性断言。
 		podsForDriver := c.GetPodsForCSIDriver(csiDriverName)
 		sort.Slice(podsForDriver, func(i, j int) bool {
 			return podsForDriver[i].String() < podsForDriver[j].String()

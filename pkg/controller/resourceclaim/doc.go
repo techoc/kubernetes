@@ -14,8 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package resourceclaim implements the controller part of
+// Package resourceclaim 实现了
 // https://github.com/kubernetes/enhancements/tree/master/keps/sig-node/3063-dynamic-resource-allocation
+// 中描述的控制器的控制器部分。
 //
-// It was derived from the generic ephemeral volume controller.
+// 该控制器脱胎于通用临时卷（generic ephemeral volume）控制器。
 package resourceclaim

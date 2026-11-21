@@ -45,15 +45,15 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
-// ControllerRevisionHashLabel is the label used to indicate the hash value of a ControllerRevision's Data.
+// ControllerRevisionHashLabel 标注 ControllerRevision.Data 的哈希值，用于快速识别内容相同的版本。
 const ControllerRevisionHashLabel = "controller.kubernetes.io/hash"
 
-// ControllerRevisionControllerIndex is the index name for the ControllerRevision controller index.
+// ControllerRevisionControllerIndex 是 ControllerRevision 按控制器归属建立索引的名称。
 const ControllerRevisionControllerIndex = "controllerRevisionController"
 
-// ControllerRevisionControllerIndexKey returns the index key to locate ControllerRevisions with the specified controller ownerReference.
-// If the ownerReference is specified, the key is "namespace/kind/ownerReference.Name/ownerReference.UID".
-// If the ownerReference is nil, the key is just "namespace" for orphan revisions.
+// ControllerRevisionControllerIndexKey 返回用于定位指定控制器 ownerReference 的 ControllerRevision 的索引键。
+// 有 ownerReference 时键为 "namespace/kind/ownerReference.Name/ownerReference.UID"；
+// 为 nil 时只返回命名空间，表示孤儿版本，便于按命名空间整体查询。
 func ControllerRevisionControllerIndexKey(namespace string, ownerReference *metav1.OwnerReference) string {
 	if ownerReference == nil {
 		return namespace
@@ -61,8 +61,9 @@ func ControllerRevisionControllerIndexKey(namespace string, ownerReference *meta
 	return namespace + "/" + ownerReference.Kind + "/" + ownerReference.Name + "/" + string(ownerReference.UID)
 }
 
-// AddControllerRevisionControllerIndexer adds an indexer for ControllerRevision's controllerRef.UID to the given Informer.
-// This indexer is used to efficiently look up ControllerRevisions by their ControllerRef.UID
+// AddControllerRevisionControllerIndexer 给 informer 添加按 controllerRef 归属索引 ControllerRevision 的能力，
+// 以便按 ControllerRef.UID 高效查找版本；索引已存在时直接返回，避免重复注册。
+// 检查与注册之间若有其他控制器抢先注册，二次确认后也视为成功。
 func AddControllerRevisionControllerIndexer(informer cache.SharedIndexInformer) error {
 	if _, exists := informer.GetIndexer().GetIndexers()[ControllerRevisionControllerIndex]; exists {
 		// indexer already exists, do nothing
@@ -75,14 +76,12 @@ func AddControllerRevisionControllerIndexer(informer cache.SharedIndexInformer) 
 			if !ok {
 				return nil, nil
 			}
-			// Get the ControllerRef of the ControllerRevision to check if it's managed by a controller.
-			// Index with a non-nil controller (indicating an owned revision) or a nil controller (indicating an orphan revision).
+			// 用控制归属（或非归属）作为索引键：非 nil 表示已被控制器拥有，nil 表示孤儿版本。
 			return []string{ControllerRevisionControllerIndexKey(cr.Namespace, metav1.GetControllerOfNoCopy(cr))}, nil
 		},
 	})
 	if err != nil {
-		// It's possible that the indexer was added by another controller between the check and the AddIndexers call.
-		// Check again if the indexer was added by another controller, otherwise return the error.
+		// 检查与注册之间可能有其他控制器抢先注册，二次确认后视为成功，避免误报错误。
 		if _, exists := informer.GetIndexer().GetIndexers()[ControllerRevisionControllerIndex]; exists {
 			return nil
 		}
@@ -90,8 +89,8 @@ func AddControllerRevisionControllerIndexer(informer cache.SharedIndexInformer) 
 	return err
 }
 
-// ControllerRevisionName returns the Name for a ControllerRevision in the form prefix-hash. If the length
-// of prefix is greater than 223 bytes, it is truncated to allow for a name that is no larger than 253 bytes.
+// ControllerRevisionName 生成 prefix-hash 形式的 ControllerRevision 名称。
+// 前缀超过 223 字节时截断，确保总长度不超过 Kubernetes 名称的 253 字节上限。
 func ControllerRevisionName(prefix string, hash string) string {
 	if len(prefix) > 223 {
 		prefix = prefix[:223]
@@ -100,11 +99,9 @@ func ControllerRevisionName(prefix string, hash string) string {
 	return fmt.Sprintf("%s-%s", prefix, hash)
 }
 
-// NewControllerRevision returns a ControllerRevision with a ControllerRef pointing to parent and indicating that
-// parent is of parentKind. The ControllerRevision has labels matching template labels, contains Data equal to data, and
-// has a Revision equal to revision. The collisionCount is used when creating the name of the ControllerRevision
-// so the name is likely unique. If the returned error is nil, the returned ControllerRevision is valid. If the
-// returned error is not nil, the returned ControllerRevision is invalid for use.
+// NewControllerRevision 构造一个 ControllerRevision：其 ControllerRef 指向 parent，标签取自 templateLabels，
+// Data 为 data，Revision 为 revision。collisionCount 参与名称哈希，降低同名冲突概率；
+// 返回错误为 nil 时结果可用，否则不应使用。
 func NewControllerRevision(parent metav1.Object,
 	parentKind schema.GroupVersionKind,
 	templateLabels map[string]string,
@@ -129,8 +126,8 @@ func NewControllerRevision(parent metav1.Object,
 	return cr, nil
 }
 
-// HashControllerRevision hashes the contents of revision's Data using FNV hashing. If probe is not nil, the byte value
-// of probe is added written to the hash as well. The returned hash will be a safe encoded string to avoid bad words.
+// HashControllerRevision 用 FNV 哈希 revision 的 Data；probe 非 nil 时其值也写入哈希，
+// 使名称冲突时可通过改变 probe 得到不同哈希。返回串经过安全编码，避免出现敏感词。
 func HashControllerRevision(revision *apps.ControllerRevision, probe *int32) string {
 	hf := fnv.New32()
 	if len(revision.Data.Raw) > 0 {
@@ -145,13 +142,13 @@ func HashControllerRevision(revision *apps.ControllerRevision, probe *int32) str
 	return rand.SafeEncodeString(fmt.Sprint(hf.Sum32()))
 }
 
-// SortControllerRevisions sorts revisions by their Revision.
+// SortControllerRevisions 按 Revision 升序稳定排序，保证相同版本号的相对顺序不变。
 func SortControllerRevisions(revisions []*apps.ControllerRevision) {
 	sort.Stable(byRevision(revisions))
 }
 
-// EqualRevision returns true if lhs and rhs are either both nil, or both point to non-nil ControllerRevisions that
-// contain semantically equivalent data. Otherwise this method returns false.
+// EqualRevision 判断两个版本是否语义等价：都为 nil，或都非 nil 且 Data 原始字节与对象语义均相等。
+// 仅比较 Data，忽略 ownerReference、标签等元数据差异。
 func EqualRevision(lhs *apps.ControllerRevision, rhs *apps.ControllerRevision) bool {
 	if lhs == nil || rhs == nil {
 		return lhs == rhs
@@ -159,8 +156,8 @@ func EqualRevision(lhs *apps.ControllerRevision, rhs *apps.ControllerRevision) b
 	return bytes.Equal(lhs.Data.Raw, rhs.Data.Raw) && apiequality.Semantic.DeepEqual(lhs.Data.Object, rhs.Data.Object)
 }
 
-// FindEqualRevisions returns all ControllerRevisions in revisions that are equal to needle using EqualRevision as the
-// equality test. The returned slice preserves the order of revisions.
+// FindEqualRevisions 返回 revisions 中所有与 needle 语义相等的版本，保持原始顺序，
+// 便于调用方判断某个版本是否已存在。
 func FindEqualRevisions(revisions []*apps.ControllerRevision, needle *apps.ControllerRevision) []*apps.ControllerRevision {
 	var eq []*apps.ControllerRevision
 	for i := range revisions {
@@ -171,14 +168,15 @@ func FindEqualRevisions(revisions []*apps.ControllerRevision, needle *apps.Contr
 	return eq
 }
 
-// byRevision implements sort.Interface to allow ControllerRevisions to be sorted by Revision.
+// byRevision 实现 sort.Interface，用于按 Revision 排序 ControllerRevision。
 type byRevision []*apps.ControllerRevision
 
+// Len 返回版本数量，是 sort.Interface 要求的实现。
 func (br byRevision) Len() int {
 	return len(br)
 }
 
-// Less breaks ties first by creation timestamp, then by name
+// Less 先按 Revision 排序；版本号相同时按创建时间，仍相同则按名称，保证排序结果确定。
 func (br byRevision) Less(i, j int) bool {
 	if br[i].Revision == br[j].Revision {
 		if br[j].CreationTimestamp.Equal(&br[i].CreationTimestamp) {
@@ -189,71 +187,61 @@ func (br byRevision) Less(i, j int) bool {
 	return br[i].Revision < br[j].Revision
 }
 
+// Swap 交换两个版本的位置，是 sort.Interface 要求的实现。
 func (br byRevision) Swap(i, j int) {
 	br[i], br[j] = br[j], br[i]
 }
 
-// Interface provides an interface allowing for management of a Controller's history as realized by recorded
-// ControllerRevisions. An instance of Interface can be retrieved from NewHistory. Implementations must treat all
-// pointer parameters as "in" parameter, and they must not be mutated.
+// Interface 定义控制器历史（以 ControllerRevision 形式记录）的管理能力。
+// 实例可通过 NewHistory 获取；实现必须把所有指针参数当作只读输入，不得修改。
 type Interface interface {
-	// ListControllerRevisions lists all ControllerRevisions matching selector and owned by parent or no other
-	// controller. If the returned error is nil the returned slice of ControllerRevisions is valid. If the
-	// returned error is not nil, the returned slice is not valid.
+	// ListControllerRevisions 列出所有匹配 selector、且归 parent 所有或无人拥有的 ControllerRevision。
+	// 返回错误为 nil 时结果有效，否则返回的切片不可用。
 	ListControllerRevisions(parent metav1.Object, parentKind schema.GroupVersionKind, selector labels.Selector) ([]*apps.ControllerRevision, error)
-	// CreateControllerRevision attempts to create the revision as owned by parent via a ControllerRef. If name
-	// collision occurs, collisionCount (incremented each time collision occurs except for the first time) is
-	// added to the hash of the revision and it is renamed using ControllerRevisionName. Implementations may
-	// cease to attempt to retry creation after some number of attempts and return an error. If the returned
-	// error is not nil, creation failed. If the returned error is nil, the returned ControllerRevision has been
-	// created.
-	// Callers must make sure that collisionCount is not nil. An error is returned if it is.
+	// CreateControllerRevision 尝试以 parent 为拥有者创建修订版本。发生名称冲突时，
+	// 把 collisionCount 加入版本哈希并重命名后重试（可限制重试次数）。调用方必须保证
+	// collisionCount 非 nil，否则返回错误；成功时返回已创建的版本。
 	CreateControllerRevision(parent metav1.Object, revision *apps.ControllerRevision, collisionCount *int32) (*apps.ControllerRevision, error)
-	// DeleteControllerRevision attempts to delete revision. If the returned error is not nil, deletion has failed.
+	// DeleteControllerRevision 尝试删除修订版本，返回非 nil 错误表示删除失败。
 	DeleteControllerRevision(revision *apps.ControllerRevision) error
-	// UpdateControllerRevision updates revision such that its Revision is equal to newRevision. Implementations
-	// may retry on conflict. If the returned error is nil, the update was successful and returned ControllerRevision
-	// is valid. If the returned error is not nil, the update failed and the returned ControllerRevision is invalid.
+	// UpdateControllerRevision 将 revision 的 Revision 更新为 newRevision，实现可在冲突时重试。
+	// 返回错误为 nil 表示更新成功且返回值有效，否则更新失败、返回值不可用。
 	UpdateControllerRevision(revision *apps.ControllerRevision, newRevision int64) (*apps.ControllerRevision, error)
-	// AdoptControllerRevision attempts to adopt revision by adding a ControllerRef indicating that the parent
-	// Object of parentKind is the owner of revision. If revision is already owned, an error is returned. If the
-	// resource patch fails, an error is returned. If no error is returned, the returned ControllerRevision is
-	// valid.
+	// AdoptControllerRevision 通过添加 ControllerRef 将 revision 归到 parent 名下。
+	// 若已被其他对象拥有或补丁更新失败则返回错误；成功时返回有效的版本对象。
 	AdoptControllerRevision(parent metav1.Object, parentKind schema.GroupVersionKind, revision *apps.ControllerRevision) (*apps.ControllerRevision, error)
-	// ReleaseControllerRevision attempts to release parent's ownership of revision by removing parent from the
-	// OwnerReferences of revision. If an error is returned, parent remains the owner of revision. If no error is
-	// returned, the returned ControllerRevision is valid.
+	// ReleaseControllerRevision 通过从 OwnerReferences 中移除 parent 来解除其对 revision 的所有权。
+	// 返回错误时所有权不变；成功时返回有效的版本对象。
 	ReleaseControllerRevision(parent metav1.Object, revision *apps.ControllerRevision) (*apps.ControllerRevision, error)
 }
 
-// NewHistory returns an instance of Interface that uses client to communicate with the API Server and lister to list
-// ControllerRevisions. This method should be used to create an Interface for all scenarios other than testing.
-// If indexer is not nil, it will be used to optimize ListControllerRevisions and the indexer must have had
-// AddControllerRevisionControllerIndexer called on it.
+// NewHistory 创建生产环境使用的 Interface：通过 client 与 API Server 交互，通过 lister 列举版本。
+// indexer 非 nil 时用于优化 ListControllerRevisions，且必须已调用 AddControllerRevisionControllerIndexer。
 func NewHistory(client clientset.Interface, lister appslisters.ControllerRevisionLister, indexer cache.Indexer) Interface {
 	return &realHistory{client, lister, indexer}
 }
 
-// NewFakeHistory returns an instance of Interface that uses informer to create, update, list, and delete
-// ControllerRevisions. This method should be used to create an Interface for testing purposes.
+// NewFakeHistory 创建测试用 Interface：直接基于 informer 的索引器完成版本的增删改查，避免访问 API Server。
 func NewFakeHistory(informer appsinformers.ControllerRevisionInformer) Interface {
 	return &fakeHistory{informer.Informer().GetIndexer(), informer.Lister()}
 }
 
+// realHistory 是基于 API Server 客户端与 lister 的生产环境实现。
 type realHistory struct {
 	client  clientset.Interface
 	lister  appslisters.ControllerRevisionLister
 	indexer cache.Indexer
 }
 
+// ListControllerRevisions 通过索引或 lister 获取匹配 selector 的版本，并过滤出归 parent 所有或孤儿版本。
 func (rh *realHistory) ListControllerRevisions(parent metav1.Object, parentKind schema.GroupVersionKind, selector labels.Selector) ([]*apps.ControllerRevision, error) {
-	// List all revisions in the namespace that match the selector
+	// 先收集命名空间内所有匹配 selector 的版本，再按归属过滤。
 	var history []*apps.ControllerRevision
 	var err error
 	if rh.indexer != nil {
 		keys := []string{
 			ControllerRevisionControllerIndexKey(parent.GetNamespace(), metav1.NewControllerRef(parent, parentKind)),
-			ControllerRevisionControllerIndexKey(parent.GetNamespace(), nil), // Include orphans
+			ControllerRevisionControllerIndexKey(parent.GetNamespace(), nil), // 同时包含孤儿版本，避免漏掉可领养的历史。
 		}
 
 		for _, key := range keys {
@@ -272,7 +260,7 @@ func (rh *realHistory) ListControllerRevisions(parent metav1.Object, parentKind 
 			}
 		}
 	} else {
-		// Fallback to slow list if no indexer
+		// 没有索引器时退化为全量列举，虽然慢但保证功能正确。
 		history, err = rh.lister.ControllerRevisions(parent.GetNamespace()).List(selector)
 		if err != nil {
 			return nil, err
@@ -290,18 +278,19 @@ func (rh *realHistory) ListControllerRevisions(parent metav1.Object, parentKind 
 	return owned, err
 }
 
+// CreateControllerRevision 调用 API Server 创建版本；名称冲突时若已存在相同内容则复用，否则增加碰撞计数后重试。
 func (rh *realHistory) CreateControllerRevision(parent metav1.Object, revision *apps.ControllerRevision, collisionCount *int32) (*apps.ControllerRevision, error) {
 	if collisionCount == nil {
 		return nil, fmt.Errorf("collisionCount should not be nil")
 	}
 
-	// Clone the input
+	// 深拷贝输入对象。
 	clone := revision.DeepCopy()
 
-	// Continue to attempt to create the revision updating the name with a new hash on each iteration
+	// 持续尝试创建修订版本，每次迭代用新的哈希更新名称。
 	for {
 		hash := HashControllerRevision(revision, collisionCount)
-		// Update the revisions name
+		// 用新哈希重命名版本，规避名称冲突。
 		clone.Name = ControllerRevisionName(parent.GetName(), hash)
 		ns := parent.GetNamespace()
 		created, err := rh.client.AppsV1().ControllerRevisions(ns).Create(context.TODO(), clone, metav1.CreateOptions{})
@@ -320,6 +309,7 @@ func (rh *realHistory) CreateControllerRevision(parent metav1.Object, revision *
 	}
 }
 
+// UpdateControllerRevision 通过 API Server 更新版本号，冲突时从 lister 重新获取最新对象后重试。
 func (rh *realHistory) UpdateControllerRevision(revision *apps.ControllerRevision, newRevision int64) (*apps.ControllerRevision, error) {
 	clone := revision.DeepCopy()
 	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
@@ -335,7 +325,7 @@ func (rh *realHistory) UpdateControllerRevision(revision *apps.ControllerRevisio
 			clone = updated
 		}
 		if updated, err := rh.lister.ControllerRevisions(clone.Namespace).Get(clone.Name); err == nil {
-			// make a copy so we don't mutate the shared cache
+			// 深拷贝缓存对象后再修改，避免污染共享 informer 缓存。
 			clone = updated.DeepCopy()
 		}
 		return updateErr
@@ -343,24 +333,27 @@ func (rh *realHistory) UpdateControllerRevision(revision *apps.ControllerRevisio
 	return clone, err
 }
 
+// DeleteControllerRevision 通过 API Server 删除指定版本。
 func (rh *realHistory) DeleteControllerRevision(revision *apps.ControllerRevision) error {
 	return rh.client.AppsV1().ControllerRevisions(revision.Namespace).Delete(context.TODO(), revision.Name, metav1.DeleteOptions{})
 }
 
+// objectForPatch 是添加/删除 ownerReference 时使用的 strategic merge patch 载荷。
 type objectForPatch struct {
 	Metadata objectMetaForPatch `json:"metadata"`
 }
 
-// objectMetaForPatch define object meta struct for patch operation
+// objectMetaForPatch 定义补丁所需的元数据字段；UID 用于确保补丁只作用于目标版本。
 type objectMetaForPatch struct {
 	OwnerReferences []metav1.OwnerReference `json:"ownerReferences"`
 	UID             types.UID               `json:"uid"`
 }
 
+// AdoptControllerRevision 用 strategic merge patch 给孤儿版本添加指向 parent 的 ControllerRef 以完成领养。
 func (rh *realHistory) AdoptControllerRevision(parent metav1.Object, parentKind schema.GroupVersionKind, revision *apps.ControllerRevision) (*apps.ControllerRevision, error) {
 	blockOwnerDeletion := true
 	isController := true
-	// Return an error if the revision is not orphan
+	// 只允许领养孤儿版本；若已有控制器拥有者则拒绝，防止归属冲突。
 	if owner := metav1.GetControllerOfNoCopy(revision); owner != nil {
 		return nil, fmt.Errorf("attempt to adopt revision owned by %v", owner)
 	}
@@ -381,40 +374,43 @@ func (rh *realHistory) AdoptControllerRevision(parent metav1.Object, parentKind 
 	if err != nil {
 		return nil, err
 	}
-	// Use strategic merge patch to add an owner reference indicating a controller ref
+	// 使用 strategic merge patch 添加 ownerReference 以表明控制归属。
 	return rh.client.AppsV1().ControllerRevisions(parent.GetNamespace()).Patch(context.TODO(), revision.GetName(),
 		types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
 }
 
+// ReleaseControllerRevision 用 strategic merge patch 从所有引用中移除 parent，解除其所有权。
 func (rh *realHistory) ReleaseControllerRevision(parent metav1.Object, revision *apps.ControllerRevision) (*apps.ControllerRevision, error) {
 	dataBytes, err := controller.GenerateDeleteOwnerRefStrategicMergeBytes(revision.UID, []types.UID{parent.GetUID()})
 	if err != nil {
 		return nil, err
 	}
 
-	// Use strategic merge patch to add an owner reference indicating a controller ref
+	// 使用 strategic merge patch 添加 ownerReference 以表明控制归属。
 	released, err := rh.client.AppsV1().ControllerRevisions(revision.GetNamespace()).Patch(context.TODO(), revision.GetName(),
 		types.StrategicMergePatchType, dataBytes, metav1.PatchOptions{})
 
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// We ignore deleted revisions
+			// 版本已被删除时视为释放成功，无需报错。
 			return nil, nil
 		}
 		if errors.IsInvalid(err) {
-			// We ignore cases where the parent no longer owns the revision or where the revision has no
-			// owner.
+			// 忽略 parent 已不再拥有该版本或版本已无拥有者的情况，这些都属于幂等成功的情形。
+			// 幂等场景，无需处理。
 			return nil, nil
 		}
 	}
 	return released, err
 }
 
+// fakeHistory 是基于 informer 索引器的测试实现，避免访问 API Server。
 type fakeHistory struct {
 	indexer cache.Indexer
 	lister  appslisters.ControllerRevisionLister
 }
 
+// ListControllerRevisions 测试实现：从 lister 列举并过滤出归 parent 所有或孤儿版本。
 func (fh *fakeHistory) ListControllerRevisions(parent metav1.Object, parentKind schema.GroupVersionKind, selector labels.Selector) ([]*apps.ControllerRevision, error) {
 	history, err := fh.lister.ControllerRevisions(parent.GetNamespace()).List(selector)
 	if err != nil {
@@ -432,6 +428,7 @@ func (fh *fakeHistory) ListControllerRevisions(parent metav1.Object, parentKind 
 	return owned, err
 }
 
+// addRevision 将版本写入测试索引器；键已存在时返回 AlreadyExists，模拟 API Server 的名称冲突。
 func (fh *fakeHistory) addRevision(revision *apps.ControllerRevision) (*apps.ControllerRevision, error) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(revision)
 	if err != nil {
@@ -448,19 +445,20 @@ func (fh *fakeHistory) addRevision(revision *apps.ControllerRevision) (*apps.Con
 	return revision, fh.indexer.Update(revision)
 }
 
+// CreateControllerRevision 测试实现：把版本写入索引器，名称冲突时增加碰撞计数并重试。
 func (fh *fakeHistory) CreateControllerRevision(parent metav1.Object, revision *apps.ControllerRevision, collisionCount *int32) (*apps.ControllerRevision, error) {
 	if collisionCount == nil {
 		return nil, fmt.Errorf("collisionCount should not be nil")
 	}
 
-	// Clone the input
+	// 深拷贝输入对象。
 	clone := revision.DeepCopy()
 	clone.Namespace = parent.GetNamespace()
 
-	// Continue to attempt to create the revision updating the name with a new hash on each iteration
+	// 持续尝试创建修订版本，每次迭代用新的哈希更新名称。
 	for {
 		hash := HashControllerRevision(revision, collisionCount)
-		// Update the revisions name and labels
+		// 用新哈希重命名版本，规避名称冲突。
 		clone.Name = ControllerRevisionName(parent.GetName(), hash)
 		created, err := fh.addRevision(clone)
 		if errors.IsAlreadyExists(err) {
@@ -471,6 +469,7 @@ func (fh *fakeHistory) CreateControllerRevision(parent metav1.Object, revision *
 	}
 }
 
+// DeleteControllerRevision 测试实现：从索引器删除版本，不存在时返回 NotFound。
 func (fh *fakeHistory) DeleteControllerRevision(revision *apps.ControllerRevision) error {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(revision)
 	if err != nil {
@@ -486,12 +485,14 @@ func (fh *fakeHistory) DeleteControllerRevision(revision *apps.ControllerRevisio
 	return fh.indexer.Delete(obj)
 }
 
+// UpdateControllerRevision 测试实现：修改版本号后更新索引器中的对象。
 func (fh *fakeHistory) UpdateControllerRevision(revision *apps.ControllerRevision, newRevision int64) (*apps.ControllerRevision, error) {
 	clone := revision.DeepCopy()
 	clone.Revision = newRevision
 	return clone, fh.indexer.Update(clone)
 }
 
+// AdoptControllerRevision 测试实现：为孤儿版本添加指向 parent 的 ControllerRef 并更新索引器。
 func (fh *fakeHistory) AdoptControllerRevision(parent metav1.Object, parentKind schema.GroupVersionKind, revision *apps.ControllerRevision) (*apps.ControllerRevision, error) {
 	if owner := metav1.GetControllerOf(revision); owner != nil {
 		return nil, fmt.Errorf("attempt to adopt revision owned by %v", owner)
@@ -512,6 +513,7 @@ func (fh *fakeHistory) AdoptControllerRevision(parent metav1.Object, parentKind 
 	return clone, fh.indexer.Update(clone)
 }
 
+// ReleaseControllerRevision 测试实现：移除 parent 的 ownerReference 后更新索引器；版本不存在时视为成功。
 func (fh *fakeHistory) ReleaseControllerRevision(parent metav1.Object, revision *apps.ControllerRevision) (*apps.ControllerRevision, error) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(revision)
 	if err != nil {

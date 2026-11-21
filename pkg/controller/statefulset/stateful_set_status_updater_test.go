@@ -34,6 +34,9 @@ import (
 	"k8s.io/kubernetes/pkg/controller/util/consistency"
 )
 
+// TestStatefulSetStatusUpdater 验证状态更新器能正确写入副本数、observedGeneration、
+// 可用副本数等字段，并覆盖服务端内部错误与持续冲突两类失败场景。
+// 通过 fake reactor 注入错误，确保错误传播语义与预期一致。
 func TestStatefulSetStatusUpdater(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -105,6 +108,8 @@ func TestStatefulSetStatusUpdater(t *testing.T) {
 	}
 }
 
+// TestStatefulSetStatusUpdaterUpdateReplicasConflict 验证更新遇到一次 Conflict 后会重试并成功：
+// 第一次返回冲突、第二次返回成功，最终不应向调用方暴露错误。
 func TestStatefulSetStatusUpdaterUpdateReplicasConflict(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	set := newStatefulSet(3)
@@ -132,6 +137,8 @@ func TestStatefulSetStatusUpdaterUpdateReplicasConflict(t *testing.T) {
 	}
 }
 
+// TestStatefulSetStatusUpdaterConsistencyStore 验证状态更新后会记录 ResourceVersion，
+// 只有观察者的版本追上该值时一致性存储才就绪，避免读到过期状态。
 func TestStatefulSetStatusUpdaterConsistencyStore(t *testing.T) {
 	set := newStatefulSet(3)
 	status := apps.StatefulSetStatus{ObservedGeneration: 1, Replicas: 2}

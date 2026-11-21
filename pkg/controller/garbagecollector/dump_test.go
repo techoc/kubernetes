@@ -29,6 +29,8 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// 以下闭包构造用于图转储测试的 node：alpha 有两个 owner，
+// bravo/charlie 是它的 owner；delta→foxtrot→golf 构成另一条链；echo 是孤立节点。
 var (
 	alphaNode = func() *node {
 		return &node{
@@ -117,6 +119,8 @@ var (
 	}
 )
 
+// TestToDOTGraph 验证从 uidToNode 映射生成的 DOT 顶点与边：缺失的 owner 会被补成合成顶点，
+// 没有任何引用的节点会被丢弃。
 func TestToDOTGraph(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -142,7 +146,8 @@ func TestToDOTGraph(t *testing.T) {
 			},
 		},
 		{
-			name: "missing", // synthetic vertex created
+			// 缺失的 owner 会被创建为合成顶点。
+			name: "missing",
 			uidToNode: map[types.UID]*node{
 				types.UID("alpha"):   alphaNode(),
 				types.UID("charlie"): charlieNode(),
@@ -210,6 +215,8 @@ func TestToDOTGraph(t *testing.T) {
 	}
 }
 
+// TestToDOTGraphObj 验证按指定 UID 集合裁剪子图：只输出这些对象及其关联节点，
+// 当指定对象不存在时输出空图。
 func TestToDOTGraphObj(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -237,7 +244,8 @@ func TestToDOTGraphObj(t *testing.T) {
 			},
 		},
 		{
-			name: "missing", // synthetic vertex created
+			// 缺失的 owner 会被创建为合成顶点。
+			name: "missing",
 			uidToNode: map[types.UID]*node{
 				types.UID("alpha"):   alphaNode(),
 				types.UID("charlie"): charlieNode(),
@@ -336,6 +344,7 @@ func TestToDOTGraphObj(t *testing.T) {
 	}
 }
 
+// compareGraphs 按顶点数量、UID 和边逐一比较实际图与期望图。
 func compareGraphs(expectedNodes, actualNodes []*dotVertex, expectedEdges, actualEdges []dotEdge, t *testing.T) {
 	if len(expectedNodes) != len(actualNodes) {
 		t.Fatal(dump.Pretty(actualNodes))
@@ -359,6 +368,8 @@ func compareGraphs(expectedNodes, actualNodes []*dotVertex, expectedEdges, actua
 	}
 }
 
+// TestMarshalDOT 将生成的 DOT 文本与 testdata 中的 golden 文件比对，
+// 其中 escaping 用例专门覆盖 UID/名称中的引号、反斜杠、Unicode 与 emoji 的转义。
 func TestMarshalDOT(t *testing.T) {
 	ref1 := objectReference{
 		OwnerReference: metav1.OwnerReference{
@@ -426,6 +437,7 @@ func TestMarshalDOT(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// 与 golden 文件比对时输出完整 diff，便于定位转义或排序差异。
 			if e, a := string(goldenData), string(b.Bytes()); cmp.Diff(e, a) != "" {
 				t.Logf("got\n%s", string(a))
 				t.Fatalf("unexpected diff:\n%s", cmp.Diff(e, a))

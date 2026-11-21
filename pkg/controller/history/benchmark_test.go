@@ -31,7 +31,10 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
+// BenchmarkListControllerRevisions 对 ListControllerRevisions 做基准测试，
+// 覆盖不同“自有/孤儿/其他控制器所有”的 revision 占比，衡量索引与过滤成本。
 func BenchmarkListControllerRevisions(b *testing.B) {
+	// 被查询的父对象；自有 revision 通过 controller ref 指向它。
 	parent := &apps.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-parent",
@@ -48,8 +51,8 @@ func BenchmarkListControllerRevisions(b *testing.B) {
 	scenarios := []struct {
 		name             string
 		totalRevisions   int
-		ownedPercentage  float64 // percentage of totalRevisions that are owned
-		orphanPercentage float64 // percentage of totalRevisions that are orphans
+		ownedPercentage  float64 // 自有 revision 占总数的百分比
+		orphanPercentage float64 // 孤儿 revision 占总数的百分比
 
 	}{
 		{
@@ -96,8 +99,10 @@ func BenchmarkListControllerRevisions(b *testing.B) {
 		},
 	}
 
+	// 固定 5 万条 revision，仅改变所有权分布，隔离过滤成本。
 	for _, s := range scenarios {
 		b.Run(s.name, func(b *testing.B) {
+			// 三类 revision 相加恰好等于总数，其余归为其他控制器所有。
 			ownedRevisions := int(float64(s.totalRevisions) * s.ownedPercentage / 100)
 			orphans := int(float64(s.totalRevisions) * s.orphanPercentage / 100)
 			otherOwned := s.totalRevisions - ownedRevisions - orphans
@@ -106,6 +111,7 @@ func BenchmarkListControllerRevisions(b *testing.B) {
 			informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 			revisionInformer := informerFactory.Apps().V1().ControllerRevisions()
 
+			// 必须按 controller ref 建索引，被测函数依赖该索引快速过滤。
 			if err := AddControllerRevisionControllerIndexer(revisionInformer.Informer()); err != nil {
 				b.Fatalf("failed to add indexer: %v", err)
 			}
@@ -115,15 +121,15 @@ func BenchmarkListControllerRevisions(b *testing.B) {
 				revisions = append(revisions, createRevision(s.name, i, parent, parentKind))
 			}
 
-			// Create orphaned revisions (nil controller ref)
+			// 创建孤儿 revision（无 controller ref），用于验证不会被误判为自有。
 			for i := 0; i < orphans; i++ {
 				rev := createRevision(s.name, ownedRevisions+i, nil, schema.GroupVersionKind{})
-				// Make sure it has no owner ref or at least no controller ref
+				// 清空 owner ref，确保没有 controller ref 影响过滤结果。
 				rev.OwnerReferences = nil
 				revisions = append(revisions, rev)
 			}
 
-			// Create revisions owned by other controllers
+			// 创建由其他控制器拥有的 revision，验证按 UID 过滤的正确性。
 			otherParent := &apps.StatefulSet{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "other-parent",
@@ -135,6 +141,7 @@ func BenchmarkListControllerRevisions(b *testing.B) {
 				revisions = append(revisions, createRevision(s.name, ownedRevisions+orphans+i, otherParent, parentKind))
 			}
 
+			// 直接灌入索引器，跳过 API Server，使基准只测量查询路径。
 			indexer := revisionInformer.Informer().GetIndexer()
 			for _, obj := range revisions {
 				if err := indexer.Add(obj); err != nil {
@@ -145,6 +152,7 @@ func BenchmarkListControllerRevisions(b *testing.B) {
 			history := NewHistory(client, revisionInformer.Lister(), indexer)
 			selector, _ := labels.Parse("name=" + s.name)
 
+			// 排除数据准备时间，只统计 ListControllerRevisions 的耗时。
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				_, err := history.ListControllerRevisions(parent, parentKind, selector)
@@ -156,6 +164,8 @@ func BenchmarkListControllerRevisions(b *testing.B) {
 	}
 }
 
+// createRevision 构造一条带唯一名称/UID 的 ControllerRevision；
+// owner 非空时附加 controller ref，用于模拟不同所有权分布。
 func createRevision(scenarioName string, index int, owner metav1.Object, ownerKind schema.GroupVersionKind) *apps.ControllerRevision {
 	rev := &apps.ControllerRevision{
 		ObjectMeta: metav1.ObjectMeta{
@@ -164,7 +174,7 @@ func createRevision(scenarioName string, index int, owner metav1.Object, ownerKi
 			Labels: map[string]string{
 				"name": scenarioName,
 			},
-			UID: types.UID(fmt.Sprintf("%s-%d", scenarioName, index)), // Ensure unique UID
+			UID: types.UID(fmt.Sprintf("%s-%d", scenarioName, index)), // 保证 UID 唯一，避免索引合并
 		},
 		Data:     runtime.RawExtension{Raw: []byte("{}")},
 		Revision: int64(index),

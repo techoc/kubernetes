@@ -37,6 +37,8 @@ import (
 	k8s_certificates_v1 "k8s.io/kubernetes/pkg/apis/certificates/v1"
 )
 
+// TestHandle 测试 sarApprover.handle 根据识别结果与授权结果决定如何处理 CSR。
+// 只有既被识别又获得授权的 CSR 才会被批准；未被识别的 CSR 不应产生任何客户端调用。
 func TestHandle(t *testing.T) {
 	cases := []struct {
 		allowed    bool
@@ -45,6 +47,7 @@ func TestHandle(t *testing.T) {
 		verify     func(*testing.T, []testclient.Action)
 	}{
 		{
+			// 未识别且未授权：不应触发任何 API 调用。
 			recognized: false,
 			allowed:    false,
 			verify: func(t *testing.T, as []testclient.Action) {
@@ -54,6 +57,7 @@ func TestHandle(t *testing.T) {
 			},
 		},
 		{
+			// 未识别但授权：识别器不认得，仍不应触发任何 API 调用。
 			recognized: false,
 			allowed:    true,
 			verify: func(t *testing.T, as []testclient.Action) {
@@ -63,6 +67,7 @@ func TestHandle(t *testing.T) {
 			},
 		},
 		{
+			// 已识别但未授权：会创建 SubjectAccessReview，但不会批准 CSR，并返回错误。
 			recognized: true,
 			allowed:    false,
 			verify: func(t *testing.T, as []testclient.Action) {
@@ -75,6 +80,7 @@ func TestHandle(t *testing.T) {
 			err: true,
 		},
 		{
+			// 已识别且已授权：先创建 SubjectAccessReview，再更新 CSR 的 approval 子资源。
 			recognized: true,
 			allowed:    true,
 			verify: func(t *testing.T, as []testclient.Action) {
@@ -111,6 +117,7 @@ func TestHandle(t *testing.T) {
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("recognized:%v,allowed: %v,err: %v", c.recognized, c.allowed, c.err), func(t *testing.T) {
 			client := &fake.Clientset{}
+			// 用 reactor 固定 SubjectAccessReview 的授权结果，使测试不依赖真实鉴权。
 			client.AddReactor("create", "subjectaccessreviews", func(action testclient.Action) (handled bool, ret runtime.Object, err error) {
 				return true, &authorization.SubjectAccessReview{
 					Status: authorization.SubjectAccessReviewStatus{
@@ -140,7 +147,11 @@ func TestHandle(t *testing.T) {
 	}
 }
 
+// TestRecognizers 测试 isNodeClientCert 与 isSelfNodeClientCert 两个识别器。
+// 通过构造不同的 CSR 字段组合，验证合法用例被接受、非法用例被拒绝，
+// 以及请求者与 CN 不一致时两个识别器行为的差异。
 func TestRecognizers(t *testing.T) {
+	// 合法 CSR 只需默认字段，无需额外修改。
 	goodCases := []func(b *csrBuilder){
 		func(b *csrBuilder) {
 		},
@@ -149,6 +160,7 @@ func TestRecognizers(t *testing.T) {
 	testRecognizer(t, goodCases, isNodeClientCert, true)
 	testRecognizer(t, goodCases, isSelfNodeClientCert, true)
 
+	// 非法用例逐一破坏某个必要条件：CN、组织、签名者名称或用途任一不符都应被拒绝。
 	badCases := []func(b *csrBuilder){
 		func(b *csrBuilder) {
 			b.cn = "mike"
@@ -173,7 +185,7 @@ func TestRecognizers(t *testing.T) {
 	testRecognizer(t, badCases, isNodeClientCert, false)
 	testRecognizer(t, badCases, isSelfNodeClientCert, false)
 
-	// cn different then requestor
+	// CN 与请求者不同：节点客户端证书仍可识别，自签名节点客户端证书则要求两者一致。
 	differentCN := []func(b *csrBuilder){
 		func(b *csrBuilder) {
 			b.requestor = "joe"
@@ -187,6 +199,9 @@ func TestRecognizers(t *testing.T) {
 	testRecognizer(t, differentCN, isSelfNodeClientCert, false)
 }
 
+// testRecognizer 对一组 CSR 变更函数逐一构造 CSR，验证识别器的判定结果。
+// 每个用例都会运行两遍：一遍包含 UsageKeyEncipherment，一遍不包含，
+// 因为某些识别逻辑会区分这两种密钥用途。
 func testRecognizer(t *testing.T, cases []func(b *csrBuilder), recognizeFunc func(csr *capi.CertificateSigningRequest, x509cr *x509.CertificateRequest) bool, shouldRecognize bool) {
 	for _, c := range cases {
 		b := csrBuilder{
@@ -211,7 +226,7 @@ func testRecognizer(t *testing.T, cases []func(b *csrBuilder), recognizeFunc fun
 				t.Errorf("expected recognized to be %v", shouldRecognize)
 			}
 		})
-		// reset the builder to run testcase without usage key encipherment
+		// 重置 builder，再运行一遍不含 UsageKeyEncipherment 的用例。
 		d := csrBuilder{
 			signerName: capi.KubeAPIServerClientKubeletSignerName,
 			cn:         "system:node:foo",
@@ -236,14 +251,16 @@ func testRecognizer(t *testing.T, cases []func(b *csrBuilder), recognizeFunc fun
 	}
 }
 
-// noncryptographic for faster testing
+// 非密码学安全的随机数，仅用于加速测试。
 // DO NOT COPY THIS CODE
 var insecureRand = rand.New(rand.NewSource(0))
 
+// makeTestCsr 构造一个仅包含 CN 的默认测试 CSR。
 func makeTestCsr() *capi.CertificateSigningRequest {
 	return makeFancyTestCsr(csrBuilder{cn: "test-cert"})
 }
 
+// csrBuilder 汇总构造测试 CSR 所需的字段，便于各用例只覆盖关心的部分。
 type csrBuilder struct {
 	cn         string
 	orgs       []string
@@ -255,6 +272,8 @@ type csrBuilder struct {
 	signerName string
 }
 
+// makeFancyTestCsr 根据 csrBuilder 生成带真实 PEM 编码签名请求的 CSR 对象。
+// 使用固定随机源仅为速度考虑，生成的密钥不具备安全性，不能用于生产。
 func makeFancyTestCsr(b csrBuilder) *capi.CertificateSigningRequest {
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), insecureRand)
 	if err != nil {

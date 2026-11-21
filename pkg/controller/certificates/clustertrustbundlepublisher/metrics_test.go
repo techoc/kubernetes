@@ -29,6 +29,8 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
+// TestSyncCounter 验证 recordMetrics 会把同步结果按错误类型映射为正确的 HTTP code 标签，
+// 覆盖成功、API 错误（含嵌套错误）和一般错误等场景。
 func TestSyncCounter(t *testing.T) {
 	testCases := []struct {
 		desc    string
@@ -37,6 +39,7 @@ func TestSyncCounter(t *testing.T) {
 		want    string
 	}{
 		{
+			// 成功同步应记为 200，证明无错误时不会错误地归类为失败。
 			desc: "nil error",
 			err:  nil,
 			metrics: []string{
@@ -61,6 +64,7 @@ clustertrustbundle_publisher_sync_total{code="404"} 1
 				`,
 		},
 		{
+			// 包装后的 API 错误仍能提取出 code，防止嵌套后丢掉错误分类。
 			desc: "nested kube api error",
 			err:  fmt.Errorf("oh noes: %w", apierrors.NewBadRequest("bad request!")),
 			metrics: []string{
@@ -73,6 +77,7 @@ clustertrustbundle_publisher_sync_total{code="400"} 1
 				`,
 		},
 		{
+			// 无法提取 code 的 API 错误必须降级为 500，避免产生无意义或空的标签值。
 			desc: "kube api error without code",
 			err:  &apierrors.StatusError{},
 			metrics: []string{
@@ -85,6 +90,7 @@ clustertrustbundle_publisher_sync_total{code="500"} 1
 				`,
 		},
 		{
+			// 非 API 错误统一记为 500，保证指标标签取值集合稳定。
 			desc: "general error",
 			err:  errors.New("test"),
 			metrics: []string{
@@ -101,7 +107,9 @@ clustertrustbundle_publisher_sync_total{code="500"} 1
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			recordMetrics(time.Now(), tc.err)
+			// 计数器是全局共享的，每个用例结束必须重置，防止前一个用例的累加污染后续断言。
 			defer syncCounter.Reset()
+			// 对比完整指标文本（含标签），确保 code 标签值和计数都精确匹配预期。
 			if err := testutil.GatherAndCompare(legacyregistry.DefaultGatherer, strings.NewReader(tc.want), tc.metrics...); err != nil {
 				t.Fatal(err)
 			}

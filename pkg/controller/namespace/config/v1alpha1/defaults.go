@@ -23,15 +23,13 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultNamespaceControllerConfiguration defaults a pointer to a
-// NamespaceControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultNamespaceControllerConfiguration 为 NamespaceControllerConfiguration
+// 结构体指针设置推荐默认值。这些默认值可能随 API 版本变化。
+// 该函数刻意没有以常规的 `SetDefaults_Foo` 形式注册到 scheme 中，
+// 以便该类型的使用者能为自身嵌入的配置自由设定默认值。
+// 强制使用这套默认值会带来问题：scheme 中的默认值设定是转换过程的一部分，
+// 使用者将无法便捷地退出。若想采用此默认逻辑，请在外层包装结构体的
+// `SetDefaults_` 方法中调用它。
 func RecommendedDefaultNamespaceControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.NamespaceControllerConfiguration) {
 	zero := metav1.Duration{}
 	if obj.ConcurrentNamespaceSyncs == 0 {

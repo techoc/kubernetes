@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package config 定义 DeviceTaintEviction 控制器的内部配置类型。
+//
+// 该包是配置的内部表示，外部版本位于 kube-controller-manager/config/v1alpha1，
+// 二者之间通过自动生成的转换函数互转。
+//
 // +k8s:deepcopy-gen=package
 
 package config

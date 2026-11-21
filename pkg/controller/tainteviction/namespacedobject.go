@@ -20,15 +20,15 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// NamespacedObject comprises a resource name with a mandatory namespace
-// and optional UID. It gets rendered as "<namespace>/<name>[:<uid>]"
-// (text output) or as an object (JSON output).
+// NamespacedObject 表示带必需 namespace 和可选 UID 的资源名。
+// 文本输出格式为 "<namespace>/<name>[:<uid>]"，JSON 输出为结构体对象。
+// 保留 UID 可以在对象被删除并同名重建时区分两代资源。
 type NamespacedObject struct {
 	types.NamespacedName
 	UID types.UID
 }
 
-// String returns the general purpose string representation
+// String 返回通用文本表示；UID 非空时附加 ":uid" 以区分同名对象。
 func (n NamespacedObject) String() string {
 	if n.UID != "" {
 		return n.Namespace + string(types.Separator) + n.Name + ":" + string(n.UID)
@@ -36,7 +36,7 @@ func (n NamespacedObject) String() string {
 	return n.Namespace + string(types.Separator) + n.Name
 }
 
-// MarshalLog emits a struct containing required key/value pair
+// MarshalLog 输出包含各字段的结构体，便于结构化日志按字段检索。
 func (n NamespacedObject) MarshalLog() interface{} {
 	return struct {
 		Name      string    `json:"name"`

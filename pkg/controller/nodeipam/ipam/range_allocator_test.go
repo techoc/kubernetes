@@ -31,20 +31,30 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// testCase 描述 CIDR 分配器的一个测试用例。
 type testCase struct {
-	description     string
+	// description 为用例名称，同时用作子测试名，便于定位失败场景。
+	description string
+	// fakeNodeHandler 提供模拟的节点存储，并承载分配器的节点更新结果。
 	fakeNodeHandler *testutil.FakeNodeHandler
+	// allocatorParams 为创建分配器所需的集群 CIDR、Service CIDR 及节点掩码配置。
 	allocatorParams CIDRAllocatorParams
-	// key is index of the cidr allocated
+	// expectedAllocatedCIDR 的键是 CIDR 集合的索引，值是该集合期望分配到的 CIDR。
+	// 键是已分配 CIDR 集合的索引。
 	expectedAllocatedCIDR map[int]string
-	allocatedCIDRs        map[int][]string
-	// should controller creation fail?
+	// allocatedCIDRs 按 CIDR 集合索引记录需要预先占用的 CIDR，模拟已被其他节点使用的地址。
+	allocatedCIDRs map[int][]string
+	// ctrlCreateFail 表示创建分配器是否应当失败，用于校验非法配置。
+	// 控制器创建是否应当失败。
 	ctrlCreateFail bool
 }
 
+// TestOccupyPreExistingCIDR 验证分配器初始化时能正确识别节点上已存在的 PodCIDR。
+// 合法配置应创建成功，非法配置（如节点 CIDR 不在集群范围内）应创建失败。
 func TestOccupyPreExistingCIDR(t *testing.T) {
-	// all tests operate on a single node
+	// 所有用例都只操作单个节点，便于集中校验占用逻辑。
 	testCases := []testCase{
+		// 成功场景：单栈集群，节点尚未分配 CIDR，分配器应正常创建。
 		{
 			description: "success, single stack no node allocation",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -70,6 +80,7 @@ func TestOccupyPreExistingCIDR(t *testing.T) {
 			expectedAllocatedCIDR: nil,
 			ctrlCreateFail:        false,
 		},
+		// 成功场景：双栈集群，节点尚未分配 CIDR，分配器应正常创建。
 		{
 			description: "success, dual stack no node allocation",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -96,6 +107,7 @@ func TestOccupyPreExistingCIDR(t *testing.T) {
 			expectedAllocatedCIDR: nil,
 			ctrlCreateFail:        false,
 		},
+		// 成功场景：单栈集群，节点已分配且位于集群范围内的 CIDR，应被正确占用。
 		{
 			description: "success, single stack correct node allocation",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -124,6 +136,7 @@ func TestOccupyPreExistingCIDR(t *testing.T) {
 			expectedAllocatedCIDR: nil,
 			ctrlCreateFail:        false,
 		},
+		// 成功场景：双栈集群，节点的 IPv4 与 IPv6 CIDR 均合法，应被同时占用。
 		{
 			description: "success, dual stack both allocated correctly",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -153,7 +166,8 @@ func TestOccupyPreExistingCIDR(t *testing.T) {
 			expectedAllocatedCIDR: nil,
 			ctrlCreateFail:        false,
 		},
-		// failure cases
+		// 以下是预期创建失败的用例。
+		// 失败场景：单栈集群，节点 CIDR 不在集群范围内，分配器创建应失败。
 		{
 			description: "fail, single stack incorrect node allocation",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -182,6 +196,7 @@ func TestOccupyPreExistingCIDR(t *testing.T) {
 			expectedAllocatedCIDR: nil,
 			ctrlCreateFail:        true,
 		},
+		// 失败场景：双栈节点使用了集群中不存在的 IPv6 CIDR，但只配置单栈集群，创建应失败。
 		{
 			description: "fail, dualstack node allocating from non existing cidr",
 
@@ -211,6 +226,7 @@ func TestOccupyPreExistingCIDR(t *testing.T) {
 			expectedAllocatedCIDR: nil,
 			ctrlCreateFail:        true,
 		},
+		// 失败场景：双栈节点的 IPv4 CIDR 不在集群范围内，分配器创建应失败。
 		{
 			description: "fail, dualstack node allocating bad v4",
 
@@ -241,6 +257,7 @@ func TestOccupyPreExistingCIDR(t *testing.T) {
 			expectedAllocatedCIDR: nil,
 			ctrlCreateFail:        true,
 		},
+		// 失败场景：双栈节点的 IPv6 CIDR 不在集群范围内，分配器创建应失败。
 		{
 			description: "fail, dualstack node allocating bad v6",
 
@@ -273,17 +290,19 @@ func TestOccupyPreExistingCIDR(t *testing.T) {
 		},
 	}
 
-	// test function
+	// 统一执行表驱动用例：只校验分配器能否按预期创建。
 	tCtx := ktesting.Init(t)
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			// Initialize the range allocator.
+			// 用模拟节点处理器创建分配器，触发对已有 CIDR 的占用检查。
 			fakeNodeInformer := test.FakeNodeInformer(tc.fakeNodeHandler)
 			nodeList, _ := tc.fakeNodeHandler.List(tCtx, metav1.ListOptions{})
 			_, err := NewCIDRRangeAllocator(tCtx, tc.fakeNodeHandler, fakeNodeInformer, tc.allocatorParams, nodeList)
+			// 预期失败却成功，说明非法的已有 CIDR 未被识别。
 			if err == nil && tc.ctrlCreateFail {
 				t.Fatalf("creating range allocator was expected to fail, but it did not")
 			}
+			// 预期成功却失败，说明合法的已有 CIDR 被误判为非法。
 			if err != nil && !tc.ctrlCreateFail {
 				t.Fatalf("creating range allocator was expected to succeed, but it did not")
 			}
@@ -291,16 +310,19 @@ func TestOccupyPreExistingCIDR(t *testing.T) {
 	}
 }
 
+// TestAllocateOrOccupyCIDRSuccess 验证分配器能为未分配 CIDR 的节点成功分配地址，
+// 并正确跳过 Service CIDR、已占用 CIDR，以及处理双栈场景。
 func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
-	// Non-parallel test (overrides global var)
+	// 该测试会修改全局变量 nodePollInterval，不能并行执行；结束后恢复原值。
 	oldNodePollInterval := nodePollInterval
 	nodePollInterval = test.NodePollInterval
 	defer func() {
 		nodePollInterval = oldNodePollInterval
 	}()
 
-	// all tests operate on a single node
+	// 所有用例中只有一个节点尚未分配 CIDR，便于断言更新次数。
 	testCases := []testCase{
+		// 无 Service CIDR 时，应从集群 CIDR 段的第一个可用子网开始分配。
 		{
 			description: "When there's no ServiceCIDR return first CIDR in range",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -326,6 +348,7 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 				0: "127.123.234.0/30",
 			},
 		},
+		// 配置 Service CIDR 后，应跳过其占用的地址段，从其后第一个可用子网分配。
 		{
 			description: "Correctly filter out ServiceCIDR",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -350,11 +373,12 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 				SecondaryServiceCIDR: nil,
 				NodeCIDRMaskSizes:    []int{30},
 			},
-			// it should return first /30 CIDR after service range
+			// 应从 Service CIDR 地址段之后的第一个 /30 子网开始分配。
 			expectedAllocatedCIDR: map[int]string{
 				0: "127.123.234.64/30",
 			},
 		},
+		// 已占用 CIDR 不再重复分配，即使地址段中间存在空洞也应先填补空洞。
 		{
 			description: "Correctly ignore already allocated CIDRs",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -386,6 +410,7 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 				0: "127.123.234.76/30",
 			},
 		},
+		// 双栈场景：集群 CIDR 按 IPv4 在前、IPv6 在后的顺序配置，应分别分配对应地址族的子网。
 		{
 			description: "Dualstack CIDRs v4,v6",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -412,6 +437,7 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 				NodeCIDRMaskSizes:    []int{24, 98},
 			},
 		},
+		// 双栈场景：集群 CIDR 按 IPv6 在前、IPv4 在后的顺序配置，应分别分配对应地址族的子网。
 		{
 			description: "Dualstack CIDRs v6,v4",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -438,6 +464,7 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 				NodeCIDRMaskSizes:    []int{98, 24},
 			},
 		},
+		// 配置了超过两个集群 CIDR 时，应只使用每个地址族的第一个 CIDR 进行分配。
 		{
 			description: "Dualstack CIDRs, more than two",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -465,6 +492,7 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 				NodeCIDRMaskSizes:    []int{24, 98, 24},
 			},
 		},
+		// 已分配 CIDR 的多个节点不应导致重复计数，空洞子网仍应被优先分配。
 		{
 			description: "no double counting",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -508,12 +536,13 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 		},
 	}
 
-	// test function
+	// 单个用例的执行函数：创建分配器、预占 CIDR、触发分配并校验结果。
 	_, tCtx := ktesting.NewTestContext(t)
 	testFunc := func(tc testCase) {
+		// 每个用例使用独立的 informer 与节点列表，避免相互干扰。
 		fakeNodeInformer := test.FakeNodeInformer(tc.fakeNodeHandler)
 		nodeList, _ := tc.fakeNodeHandler.List(tCtx, metav1.ListOptions{})
-		// Initialize the range allocator.
+		// 用模拟节点处理器初始化分配器。
 		allocator, err := NewCIDRRangeAllocator(tCtx, tc.fakeNodeHandler, fakeNodeInformer, tc.allocatorParams, nodeList)
 		if err != nil {
 			t.Errorf("%v: failed to create CIDRRangeAllocator with error %v", tc.description, err)
@@ -528,8 +557,7 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 		rangeAllocator.recorder = testutil.NewFakeRecorder()
 		go allocator.Run(tCtx)
 
-		// this is a bit of white box testing
-		// pre allocate the cidrs as per the test
+		// 白盒测试：直接占用指定的 CIDR，模拟这些地址已被集群中其他节点使用。
 		for idx, allocatedList := range tc.allocatedCIDRs {
 			for _, allocated := range allocatedList {
 				_, cidr, err := netutils.ParseCIDRSloppy(allocated)
@@ -542,6 +570,7 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 			}
 		}
 
+		// 统计需要分配 CIDR 的节点数，作为期望的更新次数。
 		updateCount := 0
 		for _, node := range tc.fakeNodeHandler.Existing {
 			if node.Spec.PodCIDRs == nil {
@@ -551,22 +580,25 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 				t.Errorf("%v: unexpected error in AllocateOrOccupyCIDR: %v", tc.description, err)
 			}
 		}
+		// 所有用例都设计为只更新一个节点，否则说明用例自身设置有误。
 		if updateCount != 1 {
 			t.Fatalf("test error: all tests must update exactly one node")
 		}
+		// 分配是异步写回节点的，需等待更新完成再校验。
 		if err := test.WaitForUpdatedNodeWithTimeout(tc.fakeNodeHandler, updateCount, wait.ForeverTestTimeout); err != nil {
 			t.Fatalf("%v: timeout while waiting for Node update: %v", tc.description, err)
 		}
 
 		if len(tc.expectedAllocatedCIDR) == 0 {
-			// nothing further expected
+			// 未声明期望值，说明本用例只关注“分配成功”。
 			return
 		}
 		for _, updatedNode := range tc.fakeNodeHandler.GetUpdatedNodesCopy() {
 			if len(updatedNode.Spec.PodCIDRs) == 0 {
-				continue // not assigned yet
+				// 尚未分配到 CIDR 的节点跳过。
+				continue
 			}
-			//match
+			// 逐地址族比对期望的 PodCIDR。
 			for podCIDRIdx, expectedPodCIDR := range tc.expectedAllocatedCIDR {
 				if updatedNode.Spec.PodCIDRs[podCIDRIdx] != expectedPodCIDR {
 					t.Errorf("%v: Unable to find allocated CIDR %v, found updated Nodes with CIDRs: %v", tc.description, expectedPodCIDR, updatedNode.Spec.PodCIDRs)
@@ -576,14 +608,16 @@ func TestAllocateOrOccupyCIDRSuccess(t *testing.T) {
 		}
 	}
 
-	// run the test cases
+	// 逐个运行表驱动用例（不使用子测试，因为全局变量已被修改）。
 	for _, tc := range testCases {
 		testFunc(tc)
 	}
 }
 
+// TestAllocateOrOccupyCIDRFailure 验证集群 CIDR 范围内没有可用子网时，分配应失败且不更新节点。
 func TestAllocateOrOccupyCIDRFailure(t *testing.T) {
 	testCases := []testCase{
+		// 集群 CIDR 的全部 /30 子网均被预占，后续分配应失败。
 		{
 			description: "When there's no ServiceCIDR return first CIDR in range",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -612,7 +646,7 @@ func TestAllocateOrOccupyCIDRFailure(t *testing.T) {
 	}
 	_, tCtx := ktesting.NewTestContext(t)
 	testFunc := func(tc testCase) {
-		// Initialize the range allocator.
+		// 创建分配器；这里未传入节点列表，后续通过白盒方式预占 CIDR。
 		allocator, err := NewCIDRRangeAllocator(tCtx, tc.fakeNodeHandler, test.FakeNodeInformer(tc.fakeNodeHandler), tc.allocatorParams, nil)
 		if err != nil {
 			t.Logf("%v: failed to create CIDRRangeAllocator with error %v", tc.description, err)
@@ -626,7 +660,7 @@ func TestAllocateOrOccupyCIDRFailure(t *testing.T) {
 		rangeAllocator.recorder = testutil.NewFakeRecorder()
 		go allocator.Run(tCtx)
 
-		// this is a bit of white box testing
+		// 白盒测试：预占集群 CIDR 内的全部子网，制造无可用地址的局面。
 		for setIdx, allocatedList := range tc.allocatedCIDRs {
 			for _, allocated := range allocatedList {
 				_, cidr, err := netutils.ParseCIDRSloppy(allocated)
@@ -639,23 +673,25 @@ func TestAllocateOrOccupyCIDRFailure(t *testing.T) {
 				}
 			}
 		}
+		// 地址耗尽时必须返回错误。
 		if err := allocator.AllocateOrOccupyCIDR(tCtx, tc.fakeNodeHandler.Existing[0]); err == nil {
 			t.Errorf("%v: unexpected success in AllocateOrOccupyCIDR: %v", tc.description, err)
 		}
-		// We don't expect any updates, so just sleep for some time
+		// 不应有节点更新；用短暂等待确认没有异步写回发生。
 		time.Sleep(time.Second)
 		if len(tc.fakeNodeHandler.GetUpdatedNodesCopy()) != 0 {
 			t.Fatalf("%v: unexpected update of nodes: %v", tc.description, tc.fakeNodeHandler.GetUpdatedNodesCopy())
 		}
 		if len(tc.expectedAllocatedCIDR) == 0 {
-			// nothing further expected
+			// 未声明期望值，说明本用例只关注“分配失败且无更新”。
 			return
 		}
 		for _, updatedNode := range tc.fakeNodeHandler.GetUpdatedNodesCopy() {
 			if len(updatedNode.Spec.PodCIDRs) == 0 {
-				continue // not assigned yet
+				// 尚未分配到 CIDR 的节点跳过。
+				continue
 			}
-			//match
+			// 确认这些 CIDR 没有被错误地分配给节点。
 			for podCIDRIdx, expectedPodCIDR := range tc.expectedAllocatedCIDR {
 				if updatedNode.Spec.PodCIDRs[podCIDRIdx] == expectedPodCIDR {
 					t.Errorf("%v: found cidr %v that should not be allocated on node with CIDRs:%v", tc.description, expectedPodCIDR, updatedNode.Spec.PodCIDRs)
@@ -669,18 +705,28 @@ func TestAllocateOrOccupyCIDRFailure(t *testing.T) {
 	}
 }
 
+// releaseTestCase 描述 CIDR 释放与回收的一个测试用例。
 type releaseTestCase struct {
-	description                      string
-	fakeNodeHandler                  *testutil.FakeNodeHandler
-	allocatorParams                  CIDRAllocatorParams
-	expectedAllocatedCIDRFirstRound  map[int]string
+	// description 为用例名称，同时用作失败信息中的标识。
+	description string
+	// fakeNodeHandler 提供模拟节点存储，并接收分配器的更新结果。
+	fakeNodeHandler *testutil.FakeNodeHandler
+	// allocatorParams 为创建分配器所需的配置。
+	allocatorParams CIDRAllocatorParams
+	// expectedAllocatedCIDRFirstRound 为释放前第一轮分配期望得到的 CIDR。
+	expectedAllocatedCIDRFirstRound map[int]string
+	// expectedAllocatedCIDRSecondRound 为释放后第二轮分配期望得到的 CIDR。
 	expectedAllocatedCIDRSecondRound map[int]string
-	allocatedCIDRs                   map[int][]string
-	cidrsToRelease                   [][]string
+	// allocatedCIDRs 按 CIDR 集合索引记录需要预先占用的 CIDR。
+	allocatedCIDRs map[int][]string
+	// cidrsToRelease 为需要模拟释放的 PodCIDR 列表。
+	cidrsToRelease [][]string
 }
 
+// TestReleaseCIDRSuccess 验证 CIDR 释放后能被重新分配：
+// 既覆盖“释放后原本不可用的地址变为可用”，也覆盖“释放的地址被回收复用”。
 func TestReleaseCIDRSuccess(t *testing.T) {
-	// Non-parallel test (overrides global var)
+	// 该测试会修改全局变量 nodePollInterval，不能并行执行；结束后恢复原值。
 	oldNodePollInterval := nodePollInterval
 	nodePollInterval = test.NodePollInterval
 	defer func() {
@@ -688,6 +734,7 @@ func TestReleaseCIDRSuccess(t *testing.T) {
 	}()
 
 	testCases := []releaseTestCase{
+		// 释放预先占用的 CIDR 后，该地址应变为可用并在下一轮被分配。
 		{
 			description: "Correctly release preallocated CIDR",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -720,6 +767,7 @@ func TestReleaseCIDRSuccess(t *testing.T) {
 				0: "127.123.234.4/30",
 			},
 		},
+		// 节点释放已分配的 CIDR 后，该地址应被回收并在下一轮重新分配。
 		{
 			description: "Correctly recycle CIDR",
 			fakeNodeHandler: &testutil.FakeNodeHandler{
@@ -757,7 +805,7 @@ func TestReleaseCIDRSuccess(t *testing.T) {
 	}
 	logger, tCtx := ktesting.NewTestContext(t)
 	testFunc := func(tc releaseTestCase) {
-		// Initialize the range allocator.
+		// 创建分配器，随后通过白盒方式预占 CIDR。
 		allocator, _ := NewCIDRRangeAllocator(tCtx, tc.fakeNodeHandler, test.FakeNodeInformer(tc.fakeNodeHandler), tc.allocatorParams, nil)
 		rangeAllocator, ok := allocator.(*rangeAllocator)
 		if !ok {
@@ -768,7 +816,7 @@ func TestReleaseCIDRSuccess(t *testing.T) {
 		rangeAllocator.recorder = testutil.NewFakeRecorder()
 		go allocator.Run(tCtx)
 
-		// this is a bit of white box testing
+		// 白盒测试：直接占用指定 CIDR，构造地址被预占的初始状态。
 		for setIdx, allocatedList := range tc.allocatedCIDRs {
 			for _, allocated := range allocatedList {
 				_, cidr, err := netutils.ParseCIDRSloppy(allocated)
@@ -782,6 +830,7 @@ func TestReleaseCIDRSuccess(t *testing.T) {
 			}
 		}
 
+		// 第一轮分配：根据期望值判断应成功还是因地址耗尽而失败。
 		err := allocator.AllocateOrOccupyCIDR(tCtx, tc.fakeNodeHandler.Existing[0])
 		if len(tc.expectedAllocatedCIDRFirstRound) != 0 {
 			if err != nil {
@@ -790,16 +839,18 @@ func TestReleaseCIDRSuccess(t *testing.T) {
 			if err := test.WaitForUpdatedNodeWithTimeout(tc.fakeNodeHandler, 1, wait.ForeverTestTimeout); err != nil {
 				t.Fatalf("%v: timeout while waiting for Node update: %v", tc.description, err)
 			}
+			// 第一轮期望失败，因为可用地址已被全部预占。
 		} else {
 			if err == nil {
 				t.Fatalf("%v: unexpected success in AllocateOrOccupyCIDR: %v", tc.description, err)
 			}
-			// We don't expect any updates here
+			// 失败不应触发节点更新，等待确认没有异步写回。
 			time.Sleep(time.Second)
 			if len(tc.fakeNodeHandler.GetUpdatedNodesCopy()) != 0 {
 				t.Fatalf("%v: unexpected update of nodes: %v", tc.description, tc.fakeNodeHandler.GetUpdatedNodesCopy())
 			}
 		}
+		// 模拟节点删除：构造只带待释放 CIDR 的节点对象并触发释放。
 		for _, cidrToRelease := range tc.cidrsToRelease {
 			nodeToRelease := v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -820,14 +871,15 @@ func TestReleaseCIDRSuccess(t *testing.T) {
 		}
 
 		if len(tc.expectedAllocatedCIDRSecondRound) == 0 {
-			// nothing further expected
+			// 未声明期望值，说明本用例到释放成功即可结束。
 			return
 		}
 		for _, updatedNode := range tc.fakeNodeHandler.GetUpdatedNodesCopy() {
 			if len(updatedNode.Spec.PodCIDRs) == 0 {
-				continue // not assigned yet
+				// 尚未分配到 CIDR 的节点跳过。
+				continue
 			}
-			//match
+			// 逐地址族比对第二轮分配的 CIDR。
 			for podCIDRIdx, expectedPodCIDR := range tc.expectedAllocatedCIDRSecondRound {
 				if updatedNode.Spec.PodCIDRs[podCIDRIdx] != expectedPodCIDR {
 					t.Errorf("%v: found cidr %v that should not be allocated on node with CIDRs:%v", tc.description, expectedPodCIDR, updatedNode.Spec.PodCIDRs)
@@ -841,7 +893,11 @@ func TestReleaseCIDRSuccess(t *testing.T) {
 		testFunc(tc)
 	}
 }
+
+// TestNodeDeletionReleaseCIDR 验证节点删除时的 CIDR 释放行为：
+// 仅当节点已从存储中彻底消失时才释放其 CIDR，处于删除中或仍存在的节点不释放。
 func TestNodeDeletionReleaseCIDR(t *testing.T) {
+	// 解析集群 CIDR 与节点已分配的 CIDR，作为所有用例的公共输入。
 	_, clusterCIDRv4, err := netutils.ParseCIDRSloppy("10.10.0.0/16")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -852,11 +908,15 @@ func TestNodeDeletionReleaseCIDR(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	testCases := []struct {
-		description       string
-		nodeKey           string
-		existingNodes     []*v1.Node
+		description string
+		// nodeKey 为需要执行节点同步的节点名。
+		nodeKey string
+		// existingNodes 为模拟存储中的节点集合。
+		existingNodes []*v1.Node
+		// shouldReleaseCIDR 表示该场景是否期望 CIDR 被释放。
 		shouldReleaseCIDR bool
 	}{
+		// 普通存活节点：同步时不应释放其 CIDR。
 		{
 			description: "Regular node not under deletion",
 			nodeKey:     "node0",
@@ -872,6 +932,7 @@ func TestNodeDeletionReleaseCIDR(t *testing.T) {
 			},
 			shouldReleaseCIDR: false,
 		},
+		// 节点带有删除时间戳但尚未真正删除：同步时仍不应释放其 CIDR。
 		{
 			description: "Node under deletion",
 			nodeKey:     "node0",
@@ -888,6 +949,7 @@ func TestNodeDeletionReleaseCIDR(t *testing.T) {
 			},
 			shouldReleaseCIDR: false,
 		},
+		// 节点已从存储中删除：同步时应释放其 CIDR，使其可被再次分配。
 		{
 			description:       "Node deleted",
 			nodeKey:           "node0",
@@ -904,6 +966,7 @@ func TestNodeDeletionReleaseCIDR(t *testing.T) {
 				NodeCIDRMaskSizes:    []int{24},
 			}
 
+			// 每个子测试使用独立的模拟存储，避免节点状态相互污染。
 			fakeNodeHandler := &testutil.FakeNodeHandler{
 				Existing:  tc.existingNodes,
 				Clientset: fake.NewSimpleClientset(),
@@ -934,14 +997,16 @@ func TestNodeDeletionReleaseCIDR(t *testing.T) {
 				t.Fatalf("Expected a single cidrSet, but got %d", len(rangeAllocator.cidrSets))
 			}
 
-			// if the allocated CIDR was released we expect the nextAllocated CIDR to be the same
+			// 通过下一次分配的结果间接判断 CIDR 是否被释放：若已释放，应能重新分配到原来那个 CIDR；否则只能分配到下一个。
 			nextCIDR, err := rangeAllocator.cidrSets[0].AllocateNext()
 			if err != nil {
 				t.Fatalf("unexpected error trying to allocate next CIDR: %v", err)
 			}
-			expectedCIDR := "10.10.1.0/24" // existing allocated is 10.0.0.0/24
+			// 已被节点占用的是 10.0.0.0/24。
+			expectedCIDR := "10.10.1.0/24"
 			if tc.shouldReleaseCIDR {
-				expectedCIDR = allocatedCIDR.String() // if cidr was released we expect to reuse it. ie: 10.0.0.0/24
+				// CIDR 已释放，期望复用原地址（即 10.0.0.0/24）。
+				expectedCIDR = allocatedCIDR.String()
 			}
 			if nextCIDR.String() != expectedCIDR {
 				t.Fatalf("Expected CIDR %s to be allocated next, but got: %v", expectedCIDR, nextCIDR.String())

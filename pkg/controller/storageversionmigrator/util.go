@@ -25,6 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// setStatusConditions 为迁移对象设置指定类型的状态条件，并返回更新后的对象。
+// 条件一旦设置便不可再次修改：迁移状态是单调递增的，重复设置会破坏状态语义。
 func setStatusConditions(
 	toBeUpdatedSVM *svmv1.StorageVersionMigration,
 	conditionType svmv1.MigrationConditionType,
@@ -47,6 +49,8 @@ func setStatusConditions(
 	return toBeUpdatedSVM
 }
 
+// migrationRunningMessage 根据待处理对象数、总数与瞬时错误构造迁移进度消息。
+// 进度信息帮助运维人员判断迁移是否卡住，瞬时错误单独提示以免误判为迁移失败。
 func migrationRunningMessage(objectsToPatch, totalObjects *int, transientError error) string {
 	msg := "The migration is running"
 	if objectsToPatch != nil && totalObjects != nil && *totalObjects > 0 {

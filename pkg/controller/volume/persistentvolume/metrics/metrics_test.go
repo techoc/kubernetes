@@ -24,8 +24,9 @@ import (
 	"k8s.io/component-base/metrics/testutil"
 )
 
-// TestVolumeOperationError tests recording metric when operation has error
+// TestVolumeOperationError 验证卷操作失败时指标能以插件名和操作名为标签正确记录。
 func TestVolumeOperationError(t *testing.T) {
+	// 每次测试使用独立注册表，避免与其他测试的指标状态相互污染。
 	registry := metrics.NewKubeRegistry()
 	defer registry.Reset()
 	registry.MustRegister(volumeOperationErrorMetric)

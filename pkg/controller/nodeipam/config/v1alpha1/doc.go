@@ -18,4 +18,6 @@ limitations under the License.
 // +k8s:conversion-gen=k8s.io/kubernetes/pkg/controller/nodeipam/config
 // +k8s:conversion-gen-external-types=k8s.io/kube-controller-manager/config/v1alpha1
 
+// Package v1alpha1 定义 nodeipam 控制器配置的 v1alpha1 外部版本，
+// 并与内部配置类型相互转换；生成器标记如上所示。
 package v1alpha1

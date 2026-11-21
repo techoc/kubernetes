@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestGetAlternateOwnerIdentity 测试：当某个 owner 引用被确认不存在时，
+// 如何从其他依赖项中找出可能代表同一父对象的替代引用（版本、kind、命名空间或名称不同）。
 func TestGetAlternateOwnerIdentity(t *testing.T) {
 	ns1child1 := makeID("v1", "Child", "ns1", "child1", "childuid11")
 	ns1child2 := makeID("v1", "Child", "ns1", "child2", "childuid12")
@@ -62,10 +64,10 @@ func TestGetAlternateOwnerIdentity(t *testing.T) {
 	}
 
 	testcases := []struct {
-		name              string
-		deps              []*node
-		verifiedAbsent    objectReference
-		expectedAlternate *objectReference
+		name              string           // 用例名称
+		deps              []*node          // 依赖节点集合，每个节点携带其 owner 引用
+		verifiedAbsent    objectReference  // 已被确认不存在的 owner 引用
+		expectedAlternate *objectReference // 预期找到的替代引用，nil 表示不应找到
 	}{
 		{
 			name: "namespaced alternate version",
@@ -74,7 +76,7 @@ func TestGetAlternateOwnerIdentity(t *testing.T) {
 				makeNode(ns1child2, withOwners(nsabsentparent_version)),
 			},
 			verifiedAbsent:    nsabsentparentns1,
-			expectedAlternate: &nsabsentparent_version, // switch to alternate version
+			expectedAlternate: &nsabsentparent_version, // 应切换到备用 API 版本
 		},
 		{
 			name: "namespaced alternate kind",
@@ -83,7 +85,7 @@ func TestGetAlternateOwnerIdentity(t *testing.T) {
 				makeNode(ns1child2, withOwners(nsabsentparent_kind)),
 			},
 			verifiedAbsent:    nsabsentparentns1,
-			expectedAlternate: &nsabsentparent_kind, // switch to alternate kind
+			expectedAlternate: &nsabsentparent_kind, // 应切换到备用 Kind
 		},
 		{
 			name: "namespaced alternate namespace",
@@ -92,7 +94,7 @@ func TestGetAlternateOwnerIdentity(t *testing.T) {
 				makeNode(ns2child1, withOwners(nsabsentparentns2)),
 			},
 			verifiedAbsent:    nsabsentparentns1,
-			expectedAlternate: &nsabsentparentns2, // switch to alternate namespace
+			expectedAlternate: &nsabsentparentns2, // 应切换到备用命名空间
 		},
 		{
 			name: "namespaced alternate name",
@@ -101,7 +103,7 @@ func TestGetAlternateOwnerIdentity(t *testing.T) {
 				makeNode(ns1child1, withOwners(nsabsentparent_name)),
 			},
 			verifiedAbsent:    nsabsentparentns1,
-			expectedAlternate: &nsabsentparent_name, // switch to alternate name
+			expectedAlternate: &nsabsentparent_name, // 应切换到备用名称
 		},
 
 		{
@@ -111,7 +113,7 @@ func TestGetAlternateOwnerIdentity(t *testing.T) {
 				makeNode(ns1child2, withOwners(clusterabsentparent_version)),
 			},
 			verifiedAbsent:    clusterabsentparent,
-			expectedAlternate: &clusterabsentparent_ns1_version, // switch to alternate version, namespaced to new dependent since we don't know the version is cluster-scoped
+			expectedAlternate: &clusterabsentparent_ns1_version, // 应切换到备用版本；由于无法确定该版本是否为集群作用域，按新依赖项的命名空间查找
 		},
 		{
 			name: "cluster alternate kind",
@@ -120,7 +122,7 @@ func TestGetAlternateOwnerIdentity(t *testing.T) {
 				makeNode(ns1child2, withOwners(clusterabsentparent_kind)),
 			},
 			verifiedAbsent:    clusterabsentparent,
-			expectedAlternate: &clusterabsentparent_ns1_kind, // switch to alternate kind, namespaced to new dependent since we don't know the new kind is cluster-scoped
+			expectedAlternate: &clusterabsentparent_ns1_kind, // 应切换到备用 Kind；由于无法确定新 Kind 是否为集群作用域，按新依赖项的命名空间查找
 		},
 		{
 			name: "cluster alternate namespace",
@@ -129,7 +131,7 @@ func TestGetAlternateOwnerIdentity(t *testing.T) {
 				makeNode(ns2child1, withOwners(clusterabsentparent)),
 			},
 			verifiedAbsent:    clusterabsentparent,
-			expectedAlternate: nil, // apiVersion/kind verified cluster-scoped, namespace delta ignored, no alternates found
+			expectedAlternate: nil, // apiVersion/kind 已确认是集群作用域，命名空间差异应被忽略，因此找不到替代引用
 		},
 		{
 			name: "cluster alternate name",
@@ -138,7 +140,7 @@ func TestGetAlternateOwnerIdentity(t *testing.T) {
 				makeNode(ns1child1, withOwners(clusterabsentparent_name)),
 			},
 			verifiedAbsent:    clusterabsentparent,
-			expectedAlternate: &clusterabsentparent_name, // switch to alternate name, apiVersion/kind verified cluster-scoped, namespace dropped
+			expectedAlternate: &clusterabsentparent_name, // 应切换到备用名称；apiVersion/kind 已确认是集群作用域，应忽略命名空间
 		},
 
 		{
@@ -203,6 +205,7 @@ func TestGetAlternateOwnerIdentity(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			// 用深层比较判断返回的替代引用是否与预期完全一致（包括 nil）。
 			alternate := getAlternateOwnerIdentity(tc.deps, tc.verifiedAbsent)
 			if !reflect.DeepEqual(alternate, tc.expectedAlternate) {
 				t.Errorf("expected\n%#v\ngot\n%#v", tc.expectedAlternate, alternate)

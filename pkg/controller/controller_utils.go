@@ -59,38 +59,27 @@ import (
 )
 
 const (
-	// If a watch drops a delete event for a pod, it'll take this long
-	// before a dormant controller waiting for those packets is woken up anyway. It is
-	// specifically targeted at the case where some problem prevents an update
-	// of expectations, without it the controller could stay asleep forever. This should
-	// be set based on the expected latency of watch events.
+	// watch 若丢失 Pod 的删除事件，休眠中的控制器最迟会在此时限后被唤醒。
+	// 专门应对期望更新受阻的情况：否则控制器可能永久休眠；取值应参考 watch 事件的预期延迟。
 	//
-	// Currently a controller can service (create *and* observe the watch events for said
-	// creation) about 10 pods a second, so it takes about 1 min to service
-	// 500 pods. Just creation is limited to 20qps, and watching happens with ~10-30s
-	// latency/pod at the scale of 3000 pods over 100 nodes.
+	// 当前控制器每秒约能处理（创建并观察其 watch 事件）10 个 Pod，处理 500 个约需 1 分钟；
+	// 纯创建受 20qps 限制，而在 100 节点、3000 Pod 的规模下，watch 延迟约为每 Pod 10-30 秒。
 	ExpectationsTimeout = 5 * time.Minute
-	// When batching pod creates, SlowStartInitialBatchSize is the size of the
-	// initial batch.  The size of each successive batch is twice the size of
-	// the previous batch.  For example, for a value of 1, batch sizes would be
-	// 1, 2, 4, 8, ...  and for a value of 10, batch sizes would be
-	// 10, 20, 40, 80, ...  Setting the value higher means that quota denials
-	// will result in more doomed API calls and associated event spam.  Setting
-	// the value lower will result in more API call round trip periods for
-	// large batches.
+	// 批量创建 Pod 时，SlowStartInitialBatchSize 为首批大小，后续每批翻倍。
+	// 例如取 1 时批大小为 1、2、4、8……；取 10 时为 10、20、40、80……。
+	// 取值偏大会在配额不足时产生更多注定失败的 API 调用和事件噪音；偏小则大批量需更多往返。
 	//
-	// Given a number of pods to start "N":
-	// The number of doomed calls per sync once quota is exceeded is given by:
+	// 设待启动 Pod 数为 N：
+	// 配额耗尽后每次同步注定失败的调用数为：
 	//      min(N,SlowStartInitialBatchSize)
-	// The number of batches is given by:
+	// 批次数为：
 	//      1+floor(log_2(ceil(N/SlowStartInitialBatchSize)))
 	SlowStartInitialBatchSize = 1
 
-	// PodNodeNameKeyIndex is the name of the index used by PodInformer to index pods by their node name.
+	// PodNodeNameKeyIndex 是 PodInformer 按节点名索引 Pod 所用的索引名。
 	PodNodeNameKeyIndex = "spec.nodeName"
 
-	// PodControllerIndex is the name for the Pod store's index function,
-	// which indexes by the key returned from PodControllerIndexKey.
+	// PodControllerIndex 是 Pod store 索引函数名，按 PodControllerIndexKey 返回的键索引。
 	PodControllerIndex = "podController"
 )
 
@@ -113,34 +102,34 @@ var (
 
 type ResyncPeriodFunc func() time.Duration
 
-// Returns 0 for resyncPeriod in case resyncing is not needed.
+// NoResyncPeriodFunc 在无需重新同步时返回 0 作为同步周期。
 func NoResyncPeriodFunc() time.Duration {
 	return 0
 }
 
-// StaticResyncPeriodFunc returns the resync period specified
+// StaticResyncPeriodFunc 返回固定重同步周期的工厂函数。
 func StaticResyncPeriodFunc(resyncPeriod time.Duration) ResyncPeriodFunc {
 	return func() time.Duration {
 		return resyncPeriod
 	}
 }
 
-// Expectations are a way for controllers to tell the controller manager what they expect. eg:
+// Expectations 是控制器向控制器管理器声明预期的方式，例如：
 //	ControllerExpectations: {
-//		controller1: expects  2 adds in 2 minutes
-//		controller2: expects  2 dels in 2 minutes
-//		controller3: expects -1 adds in 2 minutes => controller3's expectations have already been met
+//		controller1: 2 分钟内预期新增 2 个
+//		controller2: 2 分钟内预期删除 2 个
+//		controller3: 2 分钟内预期新增 -1 个 => controller3 的预期已满足
 //	}
 //
-// Implementation:
-//	ControlleeExpectation = pair of atomic counters to track controllee's creation/deletion
-//	ControllerExpectationsStore = TTLStore + a ControlleeExpectation per controller
+// 实现：
+//	ControlleeExpectation = 一对原子计数，跟踪下属对象的创建/删除
+//	ControllerExpectationsStore = TTLStore + 每个控制器一个 ControlleeExpectation
 //
-// * Once set expectations can only be lowered
-// * A controller isn't synced till its expectations are either fulfilled, or expire
-// * Controllers that don't set expectations will get woken up for every matching controllee
+// * 期望一经设置只能减少
+// * 期望被满足或过期前，控制器不会被同步
+// * 未设置期望的控制器，每出现一个匹配的下属对象都会被唤醒
 
-// ExpKeyFunc to parse out the key from a ControlleeExpectation
+// ExpKeyFunc 从 ControlleeExpectation 中解析出键。
 var ExpKeyFunc = func(obj interface{}) (string, error) {
 	if e, ok := obj.(*ControlleeExpectations); ok {
 		return e.key, nil
@@ -148,10 +137,9 @@ var ExpKeyFunc = func(obj interface{}) (string, error) {
 	return "", fmt.Errorf("could not find key for obj %#v", obj)
 }
 
-// ControllerExpectationsInterface is an interface that allows users to set and wait on expectations.
-// Only abstracted out for testing.
-// Warning: if using KeyFunc it is not safe to use a single ControllerExpectationsInterface with different
-// types of controllers, because the keys might conflict across types.
+// ControllerExpectationsInterface 允许设置并等待期望，抽象成接口仅为方便测试。
+// 注意：若使用 KeyFunc，不要让不同类型的控制器共用一个 ControllerExpectationsInterface，
+// 因为它们的键可能冲突。
 type ControllerExpectationsInterface interface {
 	GetExpectations(controllerKey string) (*ControlleeExpectations, bool, error)
 	SatisfiedExpectations(logger klog.Logger, controllerKey string) bool
@@ -165,12 +153,12 @@ type ControllerExpectationsInterface interface {
 	LowerExpectations(logger klog.Logger, controllerKey string, add, del int)
 }
 
-// ControllerExpectations is a cache mapping controllers to what they expect to see before being woken up for a sync.
+// ControllerExpectations 是缓存，记录各控制器被唤醒同步前预期观察到的事件。
 type ControllerExpectations struct {
 	cache.Store
 }
 
-// GetExpectations returns the ControlleeExpectations of the given controller.
+// GetExpectations 返回指定控制器的 ControlleeExpectations。
 func (r *ControllerExpectations) GetExpectations(controllerKey string) (*ControlleeExpectations, bool, error) {
 	exp, exists, err := r.GetByKey(controllerKey)
 	if err == nil && exists {
@@ -179,7 +167,7 @@ func (r *ControllerExpectations) GetExpectations(controllerKey string) (*Control
 	return nil, false, err
 }
 
-// DeleteExpectations deletes the expectations of the given controller from the TTLStore.
+// DeleteExpectations 从 TTLStore 删除指定控制器的期望。
 func (r *ControllerExpectations) DeleteExpectations(logger klog.Logger, controllerKey string) {
 	if exp, exists, err := r.GetByKey(controllerKey); err == nil && exists {
 		if err := r.Delete(exp); err != nil {
@@ -189,9 +177,8 @@ func (r *ControllerExpectations) DeleteExpectations(logger klog.Logger, controll
 	}
 }
 
-// SatisfiedExpectations returns true if the required adds/dels for the given controller have been observed.
-// Add/del counts are established by the controller at sync time, and updated as controllees are observed by the controller
-// manager.
+// SatisfiedExpectations 在指定控制器所需的新增/删除事件都被观察到时返回 true。
+// 增减计数由控制器在同步时设定，并随控制器管理器观察到下属对象而更新。
 func (r *ControllerExpectations) SatisfiedExpectations(logger klog.Logger, controllerKey string) bool {
 	if exp, exists, err := r.GetExpectations(controllerKey); exists {
 		if exp.Fulfilled() {
@@ -207,18 +194,17 @@ func (r *ControllerExpectations) SatisfiedExpectations(logger klog.Logger, contr
 	} else if err != nil {
 		logger.V(2).Info("Error encountered while checking expectations, forcing sync", "err", err)
 	} else {
-		// When a new controller is created, it doesn't have expectations.
-		// When it doesn't see expected watch events for > TTL, the expectations expire.
-		//	- In this case it wakes up, creates/deletes controllees, and sets expectations again.
-		// When it has satisfied expectations and no controllees need to be created/destroyed > TTL, the expectations expire.
-		//	- In this case it continues without setting expectations till it needs to create/delete controllees.
+		// 新控制器没有期望；超过 TTL 未看到预期 watch 事件时期望过期，
+		// 此时它会被唤醒、创建/删除下属对象并重新设置期望。
+		// 期望已满足且超过 TTL 无需新建/销毁时同样过期，
+		// 此后在真正需要创建/删除前不再设置期望。
 		logger.V(4).Info("Controller either never recorded expectations, or the ttl expired", "controller", controllerKey)
 	}
-	// Trigger a sync if we either encountered and error (which shouldn't happen since we're
-	// getting from local store) or this controller hasn't established expectations.
+	// 从本地 store 读取不应出错；一旦出错或控制器尚未建立期望，就触发一次同步兜底。
 	return true
 }
 
+// isExpired 判断期望是否已超过超时时限。
 // TODO: Extend ExpirationCache to support explicit expiration.
 // TODO: Make this possible to disable in tests.
 // TODO: Support injection of clock.
@@ -226,78 +212,79 @@ func (exp *ControlleeExpectations) isExpired() bool {
 	return clock.RealClock{}.Since(exp.timestamp) > ExpectationsTimeout
 }
 
-// SetExpectations registers new expectations for the given controller. Forgets existing expectations.
+// SetExpectations 为指定控制器登记新期望，并覆盖旧期望。
 func (r *ControllerExpectations) SetExpectations(logger klog.Logger, controllerKey string, add, del int) error {
 	exp := &ControlleeExpectations{add: int64(add), del: int64(del), key: controllerKey, timestamp: clock.RealClock{}.Now()}
 	logger.V(4).Info("Setting expectations", "expectations", exp)
 	return r.Add(exp)
 }
 
+// ExpectCreations 登记指定控制器的新增期望，删除期望置零。
 func (r *ControllerExpectations) ExpectCreations(logger klog.Logger, controllerKey string, adds int) error {
 	return r.SetExpectations(logger, controllerKey, adds, 0)
 }
 
+// ExpectDeletions 登记指定控制器的删除期望，新增期望置零。
 func (r *ControllerExpectations) ExpectDeletions(logger klog.Logger, controllerKey string, dels int) error {
 	return r.SetExpectations(logger, controllerKey, 0, dels)
 }
 
-// Decrements the expectation counts of the given controller.
+// LowerExpectations 减少指定控制器的期望计数。
 func (r *ControllerExpectations) LowerExpectations(logger klog.Logger, controllerKey string, add, del int) {
 	if exp, exists, err := r.GetExpectations(controllerKey); err == nil && exists {
 		exp.Add(int64(-add), int64(-del))
-		// The expectations might've been modified since the update on the previous line.
+		// 读取期望与这里的更新之间有并发窗口，日志中的值可能已被其他 goroutine 改动。
 		logger.V(4).Info("Lowered expectations", "expectations", exp)
 	}
 }
 
-// Increments the expectation counts of the given controller.
+// RaiseExpectations 增加指定控制器的期望计数。
 func (r *ControllerExpectations) RaiseExpectations(logger klog.Logger, controllerKey string, add, del int) {
 	if exp, exists, err := r.GetExpectations(controllerKey); err == nil && exists {
 		exp.Add(int64(add), int64(del))
-		// The expectations might've been modified since the update on the previous line.
+		// 读取期望与这里的更新之间有并发窗口，日志中的值可能已被其他 goroutine 改动。
 		logger.V(4).Info("Raised expectations", "expectations", exp)
 	}
 }
 
-// CreationObserved atomically decrements the `add` expectation count of the given controller.
+// CreationObserved 原子地减少指定控制器的新增期望计数。
 func (r *ControllerExpectations) CreationObserved(logger klog.Logger, controllerKey string) {
 	r.LowerExpectations(logger, controllerKey, 1, 0)
 }
 
-// DeletionObserved atomically decrements the `del` expectation count of the given controller.
+// DeletionObserved 原子地减少指定控制器的删除期望计数。
 func (r *ControllerExpectations) DeletionObserved(logger klog.Logger, controllerKey string) {
 	r.LowerExpectations(logger, controllerKey, 0, 1)
 }
 
-// ControlleeExpectations track controllee creates/deletes.
+// ControlleeExpectations 跟踪下属对象的创建/删除期望。
 type ControlleeExpectations struct {
-	// Important: Since these two int64 fields are using sync/atomic, they have to be at the top of the struct due to a bug on 32-bit platforms
-	// See: https://golang.org/pkg/sync/atomic/ for more information
+	// 重要：这两个 int64 字段用于 sync/atomic，受 32 位平台对齐限制必须放在结构体开头，
+	// 详见 https://golang.org/pkg/sync/atomic/。
 	add       int64
 	del       int64
 	key       string
 	timestamp time.Time
 }
 
-// Add increments the add and del counters.
+// Add 原子地增加新增和删除计数。
 func (e *ControlleeExpectations) Add(add, del int64) {
 	atomic.AddInt64(&e.add, add)
 	atomic.AddInt64(&e.del, del)
 }
 
-// Fulfilled returns true if this expectation has been fulfilled.
+// Fulfilled 在新增和删除期望均已满足（计数不大于零）时返回 true。
 func (e *ControlleeExpectations) Fulfilled() bool {
 	// TODO: think about why this line being atomic doesn't matter
 	return atomic.LoadInt64(&e.add) <= 0 && atomic.LoadInt64(&e.del) <= 0
 }
 
-// GetExpectations returns the add and del expectations of the controllee.
+// GetExpectations 原子读取当前的新增和删除期望计数。
 func (e *ControlleeExpectations) GetExpectations() (int64, int64) {
 	return atomic.LoadInt64(&e.add), atomic.LoadInt64(&e.del)
 }
 
-// MarshalLog makes a thread-safe copy of the values of the expectations that
-// can be used for logging.
+// MarshalLog 对期望值做线程安全拷贝，供日志安全读取。
 func (e *ControlleeExpectations) MarshalLog() interface{} {
 	return struct {
 		add int64
@@ -310,12 +297,12 @@ func (e *ControlleeExpectations) MarshalLog() interface{} {
 	}
 }
 
-// NewControllerExpectations returns a store for ControllerExpectations.
+// NewControllerExpectations 创建存储 ControllerExpectations 的 store。
 func NewControllerExpectations() *ControllerExpectations {
 	return &ControllerExpectations{cache.NewStore(ExpKeyFunc)}
 }
 
-// UIDSetKeyFunc to parse out the key from a UIDSet.
+// UIDSetKeyFunc 从 UIDSet 中解析出键。
 var UIDSetKeyFunc = func(obj interface{}) (string, error) {
 	if u, ok := obj.(*UIDSet); ok {
 		return u.key, nil
@@ -323,33 +310,28 @@ var UIDSetKeyFunc = func(obj interface{}) (string, error) {
 	return "", fmt.Errorf("could not find key for obj %#v", obj)
 }
 
-// UIDSet holds a key and a set of UIDs. Used by the
-// UIDTrackingControllerExpectations to remember which UID it has seen/still
-// waiting for.
+// UIDSet 保存键和 UID 集合，供 UIDTrackingControllerExpectations 记录
+// 已观察到或仍在等待的 UID。
 type UIDSet struct {
 	sets.String
 	key string
 }
 
-// UIDTrackingControllerExpectations tracks the UID of the pods it deletes.
-// This cache is needed over plain old expectations to safely handle graceful
-// deletion. The desired behavior is to treat an update that sets the
-// DeletionTimestamp on an object as a delete. To do so consistently, one needs
-// to remember the expected deletes so they aren't double counted.
+// UIDTrackingControllerExpectations 跟踪被删除 Pod 的 UID。
+// 相比普通期望，额外的缓存是为安全处理优雅删除：把设置 DeletionTimestamp 的
+// 更新视作删除，只有记住预期删除的 UID 才能避免重复计数。
 // TODO: Track creates as well (#22599)
 type UIDTrackingControllerExpectations struct {
 	ControllerExpectationsInterface
 	// TODO: There is a much nicer way to do this that involves a single store,
 	// a lock per entry, and a ControlleeExpectationsInterface type.
 	uidStoreLock sync.Mutex
-	// Store used for the UIDs associated with any expectation tracked via the
-	// ControllerExpectationsInterface.
+	// 存放与 ControllerExpectationsInterface 所跟踪期望关联的 UID。
 	uidStore cache.Store
 }
 
-// GetUIDs is a convenience method to avoid exposing the set of expected uids.
-// The returned set is not thread safe, all modifications must be made holding
-// the uidStoreLock.
+// GetUIDs 避免直接暴露期望 UID 集合；返回的集合非线程安全，
+// 所有修改都必须在持有 uidStoreLock 时进行。
 func (u *UIDTrackingControllerExpectations) GetUIDs(controllerKey string) sets.String {
 	if uid, exists, err := u.uidStore.GetByKey(controllerKey); err == nil && exists {
 		return uid.(*UIDSet).String
@@ -357,7 +339,7 @@ func (u *UIDTrackingControllerExpectations) GetUIDs(controllerKey string) sets.S
 	return nil
 }
 
-// ExpectDeletions records expectations for the given deleteKeys, against the given controller.
+// ExpectDeletions 为指定控制器登记待删除 UID 集合对应的删除期望。
 func (u *UIDTrackingControllerExpectations) ExpectDeletions(logger klog.Logger, rcKey string, deletedKeys []string) error {
 	expectedUIDs := sets.NewString()
 	for _, k := range deletedKeys {
@@ -368,6 +350,7 @@ func (u *UIDTrackingControllerExpectations) ExpectDeletions(logger klog.Logger, 
 	defer u.uidStoreLock.Unlock()
 
 	if existing := u.GetUIDs(rcKey); existing != nil && existing.Len() != 0 {
+		// 同一控制器再次登记会覆盖旧 UID 集合，记录日志便于发现重复设置。
 		logger.Error(nil, "Clobbering existing delete keys", "keys", existing)
 	}
 	if err := u.uidStore.Add(&UIDSet{expectedUIDs, rcKey}); err != nil {
@@ -376,12 +359,13 @@ func (u *UIDTrackingControllerExpectations) ExpectDeletions(logger klog.Logger, 
 	return u.ControllerExpectationsInterface.ExpectDeletions(logger, rcKey, expectedUIDs.Len())
 }
 
-// DeletionObserved records the given deleteKey as a deletion, for the given rc.
+// DeletionObserved 为指定 rc 记录一次 UID 删除，并递减对应期望。
 func (u *UIDTrackingControllerExpectations) DeletionObserved(logger klog.Logger, rcKey, deleteKey string) {
 	u.uidStoreLock.Lock()
 	defer u.uidStoreLock.Unlock()
 
 	uids := u.GetUIDs(rcKey)
+	// 只对该 UID 首次出现的删除递减期望，避免优雅删除时重复计数。
 	if uids != nil && uids.Has(deleteKey) {
 		logger.V(4).Info("Controller received delete for pod", "controller", rcKey, "key", deleteKey)
 		u.ControllerExpectationsInterface.DeletionObserved(logger, rcKey)
@@ -389,8 +373,7 @@ func (u *UIDTrackingControllerExpectations) DeletionObserved(logger klog.Logger,
 	}
 }
 
-// DeleteExpectations deletes the UID set and invokes DeleteExpectations on the
-// underlying ControllerExpectationsInterface.
+// DeleteExpectations 删除 UID 集合，并调用底层 ControllerExpectationsInterface 的同名方法。
 func (u *UIDTrackingControllerExpectations) DeleteExpectations(logger klog.Logger, rcKey string) {
 	u.uidStoreLock.Lock()
 	defer u.uidStoreLock.Unlock()
@@ -403,36 +386,30 @@ func (u *UIDTrackingControllerExpectations) DeleteExpectations(logger klog.Logge
 	}
 }
 
-// NewUIDTrackingControllerExpectations returns a wrapper around
-// ControllerExpectations that is aware of deleteKeys.
+// NewUIDTrackingControllerExpectations 返回能感知 deleteKeys 的 ControllerExpectations 包装器。
 func NewUIDTrackingControllerExpectations(ce ControllerExpectationsInterface) *UIDTrackingControllerExpectations {
 	return &UIDTrackingControllerExpectations{ControllerExpectationsInterface: ce, uidStore: cache.NewStore(UIDSetKeyFunc)}
 }
 
-// Reasons for pod events
+// Pod 事件的原因枚举。
 const (
-	// FailedCreatePodReason is added in an event and in a replica set condition
-	// when a pod for a replica set is failed to be created.
+	// FailedCreatePodReason 用于副本集 Pod 创建失败时的事件和 condition。
 	FailedCreatePodReason = "FailedCreate"
-	// SuccessfulCreatePodReason is added in an event when a pod for a replica set
-	// is successfully created.
+	// SuccessfulCreatePodReason 用于副本集 Pod 创建成功的事件。
 	SuccessfulCreatePodReason = "SuccessfulCreate"
-	// FailedDeletePodReason is added in an event and in a replica set condition
-	// when a pod for a replica set is failed to be deleted.
+	// FailedDeletePodReason 用于副本集 Pod 删除失败时的事件和 condition。
 	FailedDeletePodReason = "FailedDelete"
-	// SuccessfulDeletePodReason is added in an event when a pod for a replica set
-	// is successfully deleted.
+	// SuccessfulDeletePodReason 用于副本集 Pod 删除成功的事件。
 	SuccessfulDeletePodReason = "SuccessfulDelete"
 )
 
-// RSControlInterface is an interface that knows how to add or delete
-// ReplicaSets, as well as increment or decrement them. It is used
-// by the deployment controller to ease testing of actions that it takes.
+// RSControlInterface 抽象 ReplicaSet 的增删和扩缩，
+// 供 deployment 控制器注入假实现以测试其行为。
 type RSControlInterface interface {
 	PatchReplicaSet(ctx context.Context, namespace, name string, data []byte) error
 }
 
-// RealRSControl is the default implementation of RSControllerInterface.
+// RealRSControl 是 RSControlInterface 的默认实现。
 type RealRSControl struct {
 	KubeClient clientset.Interface
 	Recorder   record.EventRecorder
@@ -440,45 +417,45 @@ type RealRSControl struct {
 
 var _ RSControlInterface = &RealRSControl{}
 
+// PatchReplicaSet 用策略合并补丁更新指定 ReplicaSet。
 func (r RealRSControl) PatchReplicaSet(ctx context.Context, namespace, name string, data []byte) error {
 	_, err := r.KubeClient.AppsV1().ReplicaSets(namespace).Patch(ctx, name, types.StrategicMergePatchType, data, metav1.PatchOptions{})
 	return err
 }
 
 // TODO: merge the controller revision interface in controller_history.go with this one
-// ControllerRevisionControlInterface is an interface that knows how to patch
-// ControllerRevisions, as well as increment or decrement them. It is used
-// by the daemonset controller to ease testing of actions that it takes.
+// ControllerRevisionControlInterface 抽象 ControllerRevision 的补丁更新和扩缩，
+// 供 daemonset 控制器注入假实现以测试其行为。
 type ControllerRevisionControlInterface interface {
 	PatchControllerRevision(ctx context.Context, namespace, name string, data []byte) error
 }
 
-// RealControllerRevisionControl is the default implementation of ControllerRevisionControlInterface.
+// RealControllerRevisionControl 是 ControllerRevisionControlInterface 的默认实现。
 type RealControllerRevisionControl struct {
 	KubeClient clientset.Interface
 }
 
 var _ ControllerRevisionControlInterface = &RealControllerRevisionControl{}
 
+// PatchControllerRevision 用策略合并补丁更新指定 ControllerRevision。
 func (r RealControllerRevisionControl) PatchControllerRevision(ctx context.Context, namespace, name string, data []byte) error {
 	_, err := r.KubeClient.AppsV1().ControllerRevisions(namespace).Patch(ctx, name, types.StrategicMergePatchType, data, metav1.PatchOptions{})
 	return err
 }
 
-// PodControlInterface is an interface that knows how to add or delete pods
-// created as an interface to allow testing.
+// PodControlInterface 抽象 Pod 的创建/删除/补丁，抽象出来是为了便于测试。
 type PodControlInterface interface {
-	// CreatePods creates new pods according to the spec, and sets object as the pod's controller.
+	// CreatePods 按模板创建 Pod，并将 object 设为 Pod 的控制器。
 	CreatePods(ctx context.Context, namespace string, template *v1.PodTemplateSpec, object runtime.Object, controllerRef *metav1.OwnerReference) error
-	// CreatePodsWithGenerateName creates new pods according to the spec, sets object as the pod's controller and sets pod's generateName.
+	// CreatePodsWithGenerateName 按模板创建 Pod，设置控制器并指定 generateName。
 	CreatePodsWithGenerateName(ctx context.Context, namespace string, template *v1.PodTemplateSpec, object runtime.Object, controllerRef *metav1.OwnerReference, generateName string) error
-	// DeletePod deletes the pod identified by podID.
+	// DeletePod 删除 podID 指定的 Pod。
 	DeletePod(ctx context.Context, namespace string, podID string, object runtime.Object) error
-	// PatchPod patches the pod.
+	// PatchPod 给 Pod 打补丁。
 	PatchPod(ctx context.Context, namespace, name string, data []byte) error
 }
 
-// RealPodControl is the default implementation of PodControlInterface.
+// RealPodControl 是 PodControlInterface 的默认实现。
 type RealPodControl struct {
 	KubeClient clientset.Interface
 	Recorder   record.EventRecorder
@@ -487,6 +464,7 @@ type RealPodControl struct {
 
 var _ PodControlInterface = &RealPodControl{}
 
+// getPodsLabelSet 拷贝模板标签，避免与模板共享 map。
 func getPodsLabelSet(template *v1.PodTemplateSpec) labels.Set {
 	desiredLabels := make(labels.Set)
 	for k, v := range template.Labels {
@@ -495,12 +473,14 @@ func getPodsLabelSet(template *v1.PodTemplateSpec) labels.Set {
 	return desiredLabels
 }
 
+// getPodsFinalizers 拷贝模板 finalizer，避免与模板共享切片。
 func getPodsFinalizers(template *v1.PodTemplateSpec) []string {
 	desiredFinalizers := make([]string, len(template.Finalizers))
 	copy(desiredFinalizers, template.Finalizers)
 	return desiredFinalizers
 }
 
+// getPodsAnnotationSet 拷贝模板注解，避免与模板共享 map。
 func getPodsAnnotationSet(template *v1.PodTemplateSpec) labels.Set {
 	desiredAnnotations := make(labels.Set)
 	for k, v := range template.Annotations {
@@ -509,8 +489,9 @@ func getPodsAnnotationSet(template *v1.PodTemplateSpec) labels.Set {
 	return desiredAnnotations
 }
 
+// getPodsPrefix 生成 Pod 名称前缀，名字允许时用连字符让名称更可读。
 func getPodsPrefix(controllerName string) string {
-	// use the dash (if the name isn't too long) to make the pod name a bit prettier
+	// 带连字符的前缀若超过 Pod 名称长度限制则退回控制器原名。
 	prefix := fmt.Sprintf("%s-", controllerName)
 	if len(validation.ValidatePodName(prefix, true)) != 0 {
 		prefix = controllerName
@@ -518,6 +499,7 @@ func getPodsPrefix(controllerName string) string {
 	return prefix
 }
 
+// validateControllerRef 在创建 Pod 前校验 controllerRef 字段完整，防止产生无主或无法级联删除的对象。
 func validateControllerRef(controllerRef *metav1.OwnerReference) error {
 	if controllerRef == nil {
 		return fmt.Errorf("controllerRef is nil")
@@ -537,10 +519,12 @@ func validateControllerRef(controllerRef *metav1.OwnerReference) error {
 	return nil
 }
 
+// CreatePods 按模板创建 Pod，generateName 留空由控制器名生成。
 func (r RealPodControl) CreatePods(ctx context.Context, namespace string, template *v1.PodTemplateSpec, controllerObject runtime.Object, controllerRef *metav1.OwnerReference) error {
 	return r.CreatePodsWithGenerateName(ctx, namespace, template, controllerObject, controllerRef, "")
 }
 
+// CreatePodsWithGenerateName 按模板创建 Pod，并校验 controllerRef、设置 generateName。
 func (r RealPodControl) CreatePodsWithGenerateName(ctx context.Context, namespace string, template *v1.PodTemplateSpec, controllerObject runtime.Object, controllerRef *metav1.OwnerReference, generateName string) error {
 	if err := validateControllerRef(controllerRef); err != nil {
 		return err
@@ -555,6 +539,7 @@ func (r RealPodControl) CreatePodsWithGenerateName(ctx context.Context, namespac
 	return r.createPods(ctx, namespace, pod, controllerObject, controllerRef)
 }
 
+// PatchPod 用策略合并补丁更新 Pod，成功时触发 OnWrite 回调。
 func (r RealPodControl) PatchPod(ctx context.Context, namespace, name string, data []byte) error {
 	pod, err := r.KubeClient.CoreV1().Pods(namespace).Patch(ctx, name, types.StrategicMergePatchType, data, metav1.PatchOptions{})
 	if err == nil && r.OnWrite != nil {
@@ -564,6 +549,7 @@ func (r RealPodControl) PatchPod(ctx context.Context, namespace, name string, da
 	return err
 }
 
+// GetPodFromTemplate 依据模板构造 Pod，复制标签、注解、finalizer 和 Spec，并设置所属者引用。
 func GetPodFromTemplate(template *v1.PodTemplateSpec, parentObject runtime.Object, controllerRef *metav1.OwnerReference) (*v1.Pod, error) {
 	desiredLabels := getPodsLabelSet(template)
 	desiredFinalizers := getPodsFinalizers(template)
@@ -585,17 +571,19 @@ func GetPodFromTemplate(template *v1.PodTemplateSpec, parentObject runtime.Objec
 	if controllerRef != nil {
 		pod.OwnerReferences = append(pod.OwnerReferences, *controllerRef)
 	}
+	// 深拷贝 Spec，避免创建的 Pod 与模板共享 map/切片等引用。
 	pod.Spec = *template.Spec.DeepCopy()
 	return pod, nil
 }
 
+// createPods 真正调用 API 创建 Pod，并处理事件记录与 OnWrite 回调。
 func (r RealPodControl) createPods(ctx context.Context, namespace string, pod *v1.Pod, object runtime.Object, controllerRef *metav1.OwnerReference) error {
 	if len(labels.Set(pod.Labels)) == 0 {
 		return fmt.Errorf("unable to create pods, no labels")
 	}
 	newPod, err := r.KubeClient.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
-		// only send an event if the namespace isn't terminating
+		// 命名空间正在终止时创建失败是预期行为，无需再发送告警事件。
 		if !apierrors.HasStatusCause(err, v1.NamespaceTerminatingCause) {
 			r.Recorder.Eventf(object, v1.EventTypeWarning, FailedCreatePodReason, "Error creating: %v", err)
 		}
@@ -616,6 +604,7 @@ func (r RealPodControl) createPods(ctx context.Context, namespace string, pod *v
 	return nil
 }
 
+// DeletePod 删除指定 Pod，已不存在时直接返回错误，不额外发送告警事件。
 func (r RealPodControl) DeletePod(ctx context.Context, namespace string, podID string, object runtime.Object) error {
 	accessor, err := meta.Accessor(object)
 	if err != nil {
@@ -624,6 +613,7 @@ func (r RealPodControl) DeletePod(ctx context.Context, namespace string, podID s
 	logger := klog.FromContext(ctx)
 	logger.V(2).Info("Deleting pod", "controller", accessor.GetName(), "pod", klog.KRef(namespace, podID))
 	if err := r.KubeClient.CoreV1().Pods(namespace).Delete(ctx, podID, metav1.DeleteOptions{}); err != nil {
+		// 已删除属于幂等成功，不再发送删除失败事件。
 		if apierrors.IsNotFound(err) {
 			logger.V(4).Info("Pod has already been deleted.", "pod", klog.KRef(namespace, podID))
 			return err
@@ -636,6 +626,7 @@ func (r RealPodControl) DeletePod(ctx context.Context, namespace string, podID s
 	return nil
 }
 
+// FakePodControl 记录 Pod 操作的测试替身，可用 Err 注入错误、CreateLimit 限制创建次数。
 type FakePodControl struct {
 	sync.Mutex
 	Templates       []v1.PodTemplateSpec
@@ -649,6 +640,7 @@ type FakePodControl struct {
 
 var _ PodControlInterface = &FakePodControl{}
 
+// PatchPod 记录补丁内容并按 Err 返回预设错误。
 func (f *FakePodControl) PatchPod(ctx context.Context, namespace, name string, data []byte) error {
 	f.Lock()
 	defer f.Unlock()
@@ -659,14 +651,18 @@ func (f *FakePodControl) PatchPod(ctx context.Context, namespace, name string, d
 	return nil
 }
 
+// CreatePods 记录一次 Pod 创建，generateName 留空。
 func (f *FakePodControl) CreatePods(ctx context.Context, namespace string, spec *v1.PodTemplateSpec, object runtime.Object, controllerRef *metav1.OwnerReference) error {
 	return f.CreatePodsWithGenerateName(ctx, namespace, spec, object, controllerRef, "")
 }
 
+// CreatePodsWithGenerateName 记录创建的模板和 controllerRef，受 CreateLimit 限制。
 func (f *FakePodControl) CreatePodsWithGenerateName(ctx context.Context, namespace string, spec *v1.PodTemplateSpec, object runtime.Object, controllerRef *metav1.OwnerReference, generateNamePrefix string) error {
 	f.Lock()
 	defer f.Unlock()
 	f.CreateCallCount++
+	// CreateLimit 为 0 表示不限制，否则超出上限即报错，
+	// 用于验证控制器不会在已设置期望后重复创建 Pod。
 	if f.CreateLimit != 0 && f.CreateCallCount > f.CreateLimit {
 		return fmt.Errorf("not creating pod, limit %d already reached (create call %d)", f.CreateLimit, f.CreateCallCount)
 	}
@@ -679,6 +675,7 @@ func (f *FakePodControl) CreatePodsWithGenerateName(ctx context.Context, namespa
 	return nil
 }
 
+// DeletePod 记录被删除的 Pod 名称并按 Err 返回预设错误。
 func (f *FakePodControl) DeletePod(ctx context.Context, namespace string, podID string, object runtime.Object) error {
 	f.Lock()
 	defer f.Unlock()
@@ -689,6 +686,7 @@ func (f *FakePodControl) DeletePod(ctx context.Context, namespace string, podID 
 	return nil
 }
 
+// Clear 清空记录的操作和限制，便于用例间复用同一个 FakePodControl。
 func (f *FakePodControl) Clear() {
 	f.Lock()
 	defer f.Unlock()
@@ -700,28 +698,32 @@ func (f *FakePodControl) Clear() {
 	f.CreateCallCount = 0
 }
 
-// ByLogging allows custom sorting of pods so the best one can be picked for getting its logs.
+// ByLogging 自定义 Pod 排序，优先挑选最适合取日志的 Pod。
 type ByLogging []*v1.Pod
 
-func (s ByLogging) Len() int      { return len(s) }
+// Len 返回待排序 Pod 数量。
+func (s ByLogging) Len() int { return len(s) }
+
+// Swap 交换两个 Pod 的位置。
 func (s ByLogging) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
+// Less 按适合取日志的优先级比较两个 Pod，越优先的排越前。
 func (s ByLogging) Less(i, j int) bool {
-	// 1. assigned < unassigned
+	// 1. 已调度优先于未调度。
 	if s[i].Spec.NodeName != s[j].Spec.NodeName && (len(s[i].Spec.NodeName) == 0 || len(s[j].Spec.NodeName) == 0) {
 		return len(s[i].Spec.NodeName) > 0
 	}
-	// 2. PodRunning < PodUnknown < PodPending
+	// 2. PodRunning 优先于 PodUnknown，再优先于 PodPending。
 	if s[i].Status.Phase != s[j].Status.Phase {
 		return podPhaseToOrdinal[s[i].Status.Phase] > podPhaseToOrdinal[s[j].Status.Phase]
 	}
-	// 3. ready < not ready
+	// 3. 已就绪优先于未就绪。
 	if podutil.IsPodReady(s[i]) != podutil.IsPodReady(s[j]) {
 		return podutil.IsPodReady(s[i])
 	}
 	// TODO: take availability into account when we push minReadySeconds information from deployment into pods,
 	//       see https://github.com/kubernetes/kubernetes/issues/22065
-	// 4. Been ready for more time < less time < empty time
+	// 4. 就绪时间越长越优先，无就绪时间最末。
 	if podutil.IsPodReady(s[i]) && podutil.IsPodReady(s[j]) {
 		readyTime1 := podReadyTime(s[i])
 		readyTime2 := podReadyTime(s[j])
@@ -729,42 +731,43 @@ func (s ByLogging) Less(i, j int) bool {
 			return afterOrZero(readyTime2, readyTime1)
 		}
 	}
-	// 5. Pods with containers with higher restart counts < lower restart counts
+	// 5. 容器重启次数多的优先被选中。
 	if res := compareMaxContainerRestarts(s[i], s[j]); res != nil {
 		return *res
 	}
-	// 6. older pods < newer pods < empty timestamp pods
+	// 6. 创建时间早的优先；无时间戳的排最后。
 	if !s[i].CreationTimestamp.Equal(&s[j].CreationTimestamp) {
 		return afterOrZero(&s[j].CreationTimestamp, &s[i].CreationTimestamp)
 	}
 	return false
 }
 
-// ActivePods type allows custom sorting of pods so a controller can pick the best ones to delete.
+// ActivePods 自定义 Pod 排序，让控制器优先删除最合适的 Pod。
 type ActivePods []*v1.Pod
 
-func (s ActivePods) Len() int      { return len(s) }
+// Len 返回待排序 Pod 数量。
+func (s ActivePods) Len() int { return len(s) }
+
+// Swap 交换两个 Pod 的位置。
 func (s ActivePods) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
+// Less 按优先删除的顺序比较两个 Pod。
 func (s ActivePods) Less(i, j int) bool {
-	// 1. Unassigned < assigned
-	// If only one of the pods is unassigned, the unassigned one is smaller
+	// 1. 未调度优先删除；仅一方未调度时该方更小。
 	if s[i].Spec.NodeName != s[j].Spec.NodeName && (len(s[i].Spec.NodeName) == 0 || len(s[j].Spec.NodeName) == 0) {
 		return len(s[i].Spec.NodeName) == 0
 	}
-	// 2. PodPending < PodUnknown < PodRunning
+	// 2. PodPending 优先于 PodUnknown，再优先于 PodRunning。
 	if podPhaseToOrdinal[s[i].Status.Phase] != podPhaseToOrdinal[s[j].Status.Phase] {
 		return podPhaseToOrdinal[s[i].Status.Phase] < podPhaseToOrdinal[s[j].Status.Phase]
 	}
-	// 3. Not ready < ready
-	// If only one of the pods is not ready, the not ready one is smaller
+	// 3. 未就绪优先删除；仅一方未就绪时该方更小。
 	if podutil.IsPodReady(s[i]) != podutil.IsPodReady(s[j]) {
 		return !podutil.IsPodReady(s[i])
 	}
 	// TODO: take availability into account when we push minReadySeconds information from deployment into pods,
 	//       see https://github.com/kubernetes/kubernetes/issues/22065
-	// 4. Been ready for empty time < less time < more time
-	// If both pods are ready, the latest ready one is smaller
+	// 4. 就绪时间短的优先删除；双方都就绪时，最近才就绪的更小。
 	if podutil.IsPodReady(s[i]) && podutil.IsPodReady(s[j]) {
 		readyTime1 := podReadyTime(s[i])
 		readyTime2 := podReadyTime(s[j])
@@ -772,91 +775,73 @@ func (s ActivePods) Less(i, j int) bool {
 			return afterOrZero(readyTime1, readyTime2)
 		}
 	}
-	// 5. Pods with containers with higher restart counts < lower restart counts
+	// 5. 容器重启次数多的优先删除。
 	if res := compareMaxContainerRestarts(s[i], s[j]); res != nil {
 		return *res
 	}
-	// 6. Empty creation time pods < newer pods < older pods
+	// 6. 创建时间晚的优先删除；无时间戳的排最前。
 	if !s[i].CreationTimestamp.Equal(&s[j].CreationTimestamp) {
 		return afterOrZero(&s[i].CreationTimestamp, &s[j].CreationTimestamp)
 	}
 	return false
 }
 
-// ActivePodsWithRanks is a sortable list of pods and a list of corresponding
-// ranks which will be considered during sorting.  The two lists must have equal
-// length.  After sorting, the pods will be ordered as follows, applying each
-// rule in turn until one matches:
+// ActivePodsWithRanks 是可排序的 Pod 列表及对应 rank 列表，两列表长度必须一致。
+// 排序时依次应用下列规则，命中即停：
 //
-//  1. If only one of the pods is assigned to a node, the pod that is not
-//     assigned comes before the pod that is.
-//  2. If the pods' phases differ, a pending pod comes before a pod whose phase
-//     is unknown, and a pod whose phase is unknown comes before a running pod.
-//  3. If exactly one of the pods is ready, the pod that is not ready comes
-//     before the ready pod.
-//  4. If controller.kubernetes.io/pod-deletion-cost annotation is set, then
-//     the pod with the lower value will come first.
-//  5. If the pods' ranks differ, the pod with greater rank comes before the pod
-//     with lower rank.
-//  6. If both pods are ready but have not been ready for the same amount of
-//     time, the pod that has been ready for a shorter amount of time comes
-//     before the pod that has been ready for longer.
-//  7. If one pod has a container that has restarted more than any container in
-//     the other pod, the pod with the container with more restarts comes
-//     before the other pod.
-//  8. If the pods' creation times differ, the pod that was created more recently
-//     comes before the older pod.
+//  1. 仅一方已调度时，未调度的排在前面。
+//  2. 阶段不同时：Pending 排在 Unknown 前，Unknown 排在 Running 前。
+//  3. 仅一方就绪时，未就绪的排在前面。
+//  4. 设置了 controller.kubernetes.io/pod-deletion-cost 注解时，值小的排在前面。
+//  5. rank 不同时，rank 大的排在前面。
+//  6. 双方就绪且就绪时长不同时，就绪时间短的排在前面。
+//  7. 某 Pod 存在比对方任何容器重启次数都多的容器时，该 Pod 排在前面。
+//  8. 创建时间不同时，较新的排在较旧的之前。
 //
-// In 6 and 8, times are compared in a logarithmic scale. This allows a level
-// of randomness among equivalent Pods when sorting. If two pods have the same
-// logarithmic rank, they are sorted by UUID to provide a pseudorandom order.
+// 规则 6、8 以对数尺度比较时间，使等价 Pod 之间保留一定随机性；
+// 对数等级相同时按 UID 排序，提供伪随机顺序。
 //
-// If none of these rules matches, the second pod comes before the first pod.
+// 若所有规则都不匹配，则第二个 Pod 排在第一个之前。
 //
-// The intention of this ordering is to put pods that should be preferred for
-// deletion first in the list.
+// 排序意图是把最应优先删除的 Pod 放在列表前面。
 type ActivePodsWithRanks struct {
-	// Pods is a list of pods.
+	// Pods 为待排序的 Pod 列表。
 	Pods []*v1.Pod
 
-	// Rank is a ranking of pods.  This ranking is used during sorting when
-	// comparing two pods that are both scheduled, in the same phase, and
-	// having the same ready status.
+	// Rank 为 Pod 的排名，仅当两个 Pod 都已调度、阶段相同且就绪状态相同时参与比较。
 	Rank []int
 
-	// Now is a reference timestamp for doing logarithmic timestamp comparisons.
-	// If zero, comparison happens without scaling.
+	// Now 是对数时间比较的参考时刻；为零时不缩放直接比较。
 	Now metav1.Time
 }
 
+// Len 返回待排序 Pod 数量。
 func (s ActivePodsWithRanks) Len() int {
 	return len(s.Pods)
 }
 
+// Swap 同步交换两个 Pod 及其 rank，保持两列表对应。
 func (s ActivePodsWithRanks) Swap(i, j int) {
 	s.Pods[i], s.Pods[j] = s.Pods[j], s.Pods[i]
 	s.Rank[i], s.Rank[j] = s.Rank[j], s.Rank[i]
 }
 
-// Less compares two pods with corresponding ranks and returns true if the first
-// one should be preferred for deletion.
+// Less 比较带 rank 的两个 Pod，第一个更应优先删除时返回 true。
 func (s ActivePodsWithRanks) Less(i, j int) bool {
-	// 1. Unassigned < assigned
-	// If only one of the pods is unassigned, the unassigned one is smaller
+	// 1. 未调度优先删除；仅一方未调度时该方更小。
 	if s.Pods[i].Spec.NodeName != s.Pods[j].Spec.NodeName && (len(s.Pods[i].Spec.NodeName) == 0 || len(s.Pods[j].Spec.NodeName) == 0) {
 		return len(s.Pods[i].Spec.NodeName) == 0
 	}
-	// 2. PodPending < PodUnknown < PodRunning
+	// 2. PodPending 优先于 PodUnknown，再优先于 PodRunning。
 	if podPhaseToOrdinal[s.Pods[i].Status.Phase] != podPhaseToOrdinal[s.Pods[j].Status.Phase] {
 		return podPhaseToOrdinal[s.Pods[i].Status.Phase] < podPhaseToOrdinal[s.Pods[j].Status.Phase]
 	}
-	// 3. Not ready < ready
-	// If only one of the pods is not ready, the not ready one is smaller
+	// 3. 未就绪优先删除；仅一方未就绪时该方更小。
 	if podutil.IsPodReady(s.Pods[i]) != podutil.IsPodReady(s.Pods[j]) {
 		return !podutil.IsPodReady(s.Pods[i])
 	}
 
-	// 4. lower pod-deletion-cost < higher pod-deletion cost
+	// 4. deletion-cost 越小越优先删除；特性关闭时跳过该规则。
 	if utilfeature.DefaultFeatureGate.Enabled(features.PodDeletionCost) {
 		pi, _ := helper.GetDeletionCostFromPodAnnotations(s.Pods[i].Annotations)
 		pj, _ := helper.GetDeletionCostFromPodAnnotations(s.Pods[j].Annotations)
@@ -865,41 +850,40 @@ func (s ActivePodsWithRanks) Less(i, j int) bool {
 		}
 	}
 
-	// 5. Doubled up < not doubled up
-	// If one of the two pods is on the same node as one or more additional
-	// ready pods that belong to the same replicaset, whichever pod has more
-	// colocated ready pods is less
+	// 5. 同节点上同副本集的就绪 Pod 越多，越优先删除（rank 大者优先）。
 	if s.Rank[i] != s.Rank[j] {
 		return s.Rank[i] > s.Rank[j]
 	}
 	// TODO: take availability into account when we push minReadySeconds information from deployment into pods,
 	//       see https://github.com/kubernetes/kubernetes/issues/22065
-	// 6. Been ready for empty time < less time < more time
-	// If both pods are ready, the latest ready one is smaller
+	// 6. 就绪时间短的优先删除；双方都就绪时，最近才就绪的更小。
 	if podutil.IsPodReady(s.Pods[i]) && podutil.IsPodReady(s.Pods[j]) {
 		readyTime1 := podReadyTime(s.Pods[i])
 		readyTime2 := podReadyTime(s.Pods[j])
 		if !readyTime1.Equal(readyTime2) {
+			// 参考时刻或就绪时间缺失时无法缩放，退回直接比较。
 			if s.Now.IsZero() || readyTime1.IsZero() || readyTime2.IsZero() {
 				return afterOrZero(readyTime1, readyTime2)
 			}
 			rankDiff := logarithmicRankDiff(*readyTime1, *readyTime2, s.Now)
+			// 对数等级相同则按 UID 排，避免等价 Pod 总保持固定顺序。
 			if rankDiff == 0 {
 				return s.Pods[i].UID < s.Pods[j].UID
 			}
 			return rankDiff < 0
 		}
 	}
-	// 7. Pods with containers with higher restart counts < lower restart counts
+	// 7. 容器重启次数多的优先删除。
 	if res := compareMaxContainerRestarts(s.Pods[i], s.Pods[j]); res != nil {
 		return *res
 	}
-	// 8. Empty creation time pods < newer pods < older pods
+	// 8. 创建时间晚的优先删除；无时间戳的排最前。
 	if !s.Pods[i].CreationTimestamp.Equal(&s.Pods[j].CreationTimestamp) {
 		if s.Now.IsZero() || s.Pods[i].CreationTimestamp.IsZero() || s.Pods[j].CreationTimestamp.IsZero() {
 			return afterOrZero(&s.Pods[i].CreationTimestamp, &s.Pods[j].CreationTimestamp)
 		}
 		rankDiff := logarithmicRankDiff(s.Pods[i].CreationTimestamp, s.Pods[j].CreationTimestamp, s.Now)
+		// 对数等级相同则按 UID 排，打破创建时间相近 Pod 的固定顺序。
 		if rankDiff == 0 {
 			return s.Pods[i].UID < s.Pods[j].UID
 		}
@@ -908,8 +892,7 @@ func (s ActivePodsWithRanks) Less(i, j int) bool {
 	return false
 }
 
-// afterOrZero checks if time t1 is after time t2; if one of them
-// is zero, the zero time is seen as after non-zero time.
+// afterOrZero 判断 t1 是否晚于 t2；零值时间被视为晚于非零时间。
 func afterOrZero(t1, t2 *metav1.Time) bool {
 	if t1.Time.IsZero() || t2.Time.IsZero() {
 		return t1.Time.IsZero()
@@ -917,8 +900,7 @@ func afterOrZero(t1, t2 *metav1.Time) bool {
 	return t1.After(t2.Time)
 }
 
-// logarithmicRankDiff calculates the base-2 logarithmic ranks of 2 timestamps,
-// compared to the current timestamp
+// logarithmicRankDiff 计算两个时间戳相对当前时刻的以 2 为底的对数等级之差。
 func logarithmicRankDiff(t1, t2, now metav1.Time) int64 {
 	d1 := now.Sub(t1.Time)
 	d2 := now.Sub(t2.Time)
@@ -933,10 +915,11 @@ func logarithmicRankDiff(t1, t2, now metav1.Time) int64 {
 	return r1 - r2
 }
 
+// podReadyTime 返回 Pod 进入就绪状态的时间，未就绪时返回零值。
 func podReadyTime(pod *v1.Pod) *metav1.Time {
 	if podutil.IsPodReady(pod) {
 		for _, c := range pod.Status.Conditions {
-			// we only care about pod ready conditions
+			// 只关心处于 True 的 PodReady 条件，其跳转时间即就绪起点。
 			if c.Type == v1.PodReady && c.Status == v1.ConditionTrue {
 				return &c.LastTransitionTime
 			}
@@ -945,11 +928,13 @@ func podReadyTime(pod *v1.Pod) *metav1.Time {
 	return &metav1.Time{}
 }
 
+// maxContainerRestarts 返回普通容器和常驻 sidecar 各自的最大重启次数。
 func maxContainerRestarts(pod *v1.Pod) (regularRestarts, sidecarRestarts int) {
 	for _, c := range pod.Status.ContainerStatuses {
 		regularRestarts = max(regularRestarts, int(c.RestartCount))
 	}
 	names := sets.New[string]()
+	// 只有 RestartPolicy=Always 的 init 容器才是 sidecar，需单独统计其重启次数。
 	for _, c := range pod.Spec.InitContainers {
 		if c.RestartPolicy != nil && *c.RestartPolicy == v1.ContainerRestartPolicyAlways {
 			names.Insert(c.Name)
@@ -963,10 +948,8 @@ func maxContainerRestarts(pod *v1.Pod) (regularRestarts, sidecarRestarts int) {
 	return
 }
 
-// We use *bool here to determine equality:
-// true: pi has a higher container restart count.
-// false: pj has a higher container restart count.
-// nil: Both have the same container restart count.
+// compareMaxContainerRestarts 比较两个 Pod 的最大重启次数。
+// 返回值为 true 表示 pi 更高，false 表示 pj 更高，nil 表示相同。
 func compareMaxContainerRestarts(pi *v1.Pod, pj *v1.Pod) *bool {
 	regularRestartsI, sidecarRestartsI := maxContainerRestarts(pi)
 	regularRestartsJ, sidecarRestartsJ := maxContainerRestarts(pj)
@@ -974,7 +957,7 @@ func compareMaxContainerRestarts(pi *v1.Pod, pj *v1.Pod) *bool {
 		res := regularRestartsI > regularRestartsJ
 		return &res
 	}
-	// If pods have the same restart count, an attempt is made to compare the restart counts of sidecar containers.
+	// 普通容器重启次数相同时，再用 sidecar 的重启次数区分。
 	if sidecarRestartsI != sidecarRestartsJ {
 		res := sidecarRestartsI > sidecarRestartsJ
 		return &res
@@ -982,12 +965,12 @@ func compareMaxContainerRestarts(pi *v1.Pod, pj *v1.Pod) *bool {
 	return nil
 }
 
-// FilterClaimedPods returns pods that are controlled by the controller and match the selector.
+// FilterClaimedPods 返回由该控制器掌控且匹配选择器的 Pod。
 func FilterClaimedPods(controller metav1.Object, selector labels.Selector, pods []*v1.Pod) []*v1.Pod {
 	var result []*v1.Pod
 	for _, pod := range pods {
 		if !metav1.IsControlledBy(pod, controller) {
-			// It's an orphan or owned by someone else.
+			// 孤儿 Pod 或属于其他控制器，直接跳过。
 			continue
 		}
 		if selector.Matches(labels.Set(pod.Labels)) {
@@ -997,7 +980,7 @@ func FilterClaimedPods(controller metav1.Object, selector labels.Selector, pods 
 	return result
 }
 
-// FilterActivePods returns pods that have not terminated.
+// FilterActivePods 返回尚未终止的 Pod。
 func FilterActivePods(logger klog.Logger, pods []*v1.Pod) []*v1.Pod {
 	var result []*v1.Pod
 	for _, p := range pods {
@@ -1008,6 +991,7 @@ func FilterActivePods(logger klog.Logger, pods []*v1.Pod) []*v1.Pod {
 	return result
 }
 
+// FilterTerminatingPods 返回处于终止中（已设删除时间戳但未终止）的 Pod。
 func FilterTerminatingPods(pods []*v1.Pod) []*v1.Pod {
 	var result []*v1.Pod
 	for _, p := range pods {
@@ -1018,6 +1002,7 @@ func FilterTerminatingPods(pods []*v1.Pod) []*v1.Pod {
 	return result
 }
 
+// CountTerminatingPods 统计处于终止中的 Pod 数量。
 func CountTerminatingPods(pods []*v1.Pod) int32 {
 	numberOfTerminatingPods := 0
 	for _, p := range pods {
@@ -1028,32 +1013,35 @@ func CountTerminatingPods(pods []*v1.Pod) int32 {
 	return int32(numberOfTerminatingPods)
 }
 
-// nextPodAvailabilityCheck implements similar logic to podutil.IsPodAvailable
+// nextPodAvailabilityCheck 计算 Pod 距变为可用还需多久，逻辑与 podutil.IsPodAvailable 一致。
 func nextPodAvailabilityCheck(pod *v1.Pod, minReadySeconds int32, now time.Time) *time.Duration {
+	// 未就绪或未设置 minReadySeconds 时无需安排后续可用性检查。
 	if !podutil.IsPodReady(pod) || minReadySeconds <= 0 {
 		return nil
 	}
 
 	c := podutil.GetPodReadyCondition(pod.Status)
+	// 缺少就绪跳转时间时无法推算，放弃本次检查。
 	if c.LastTransitionTime.IsZero() {
 		return nil
 	}
 	minReadySecondsDuration := time.Duration(minReadySeconds) * time.Second
 	nextCheck := c.LastTransitionTime.Add(minReadySecondsDuration).Sub(now)
+	// 已过检查点则无需再安排。
 	if nextCheck > 0 {
 		return ptr.To(nextCheck)
 	}
 	return nil
 }
 
-// findMinNextPodAvailabilitySimpleCheck finds a duration when the next availability check should occur. It also returns the
-// first pod affected by the future availability recalculation (there might be more pods if they became ready at the same time;
-// this helps to implement FindMinNextPodAvailabilityCheck).
+// findMinNextPodAvailabilitySimpleCheck 找出最早需要再次做可用性检查的时间，
+// 并返回触发该检查的 Pod（可能有多个同时就绪，此处取首个）。
 func findMinNextPodAvailabilitySimpleCheck(pods []*v1.Pod, minReadySeconds int32, now time.Time) (*time.Duration, *v1.Pod) {
 	var minAvailabilityCheck *time.Duration
 	var checkPod *v1.Pod
 	for _, p := range pods {
 		nextCheck := nextPodAvailabilityCheck(p, minReadySeconds, now)
+		// 仅保留最早的一次检查及其触发 Pod。
 		if nextCheck != nil && (minAvailabilityCheck == nil || *nextCheck < *minAvailabilityCheck) {
 			minAvailabilityCheck = nextCheck
 			checkPod = p
@@ -1062,38 +1050,38 @@ func findMinNextPodAvailabilitySimpleCheck(pods []*v1.Pod, minReadySeconds int32
 	return minAvailabilityCheck, checkPod
 }
 
-// FindMinNextPodAvailabilityCheck finds a duration when the next availability check should occur.
-// We should check for the availability at the same time as the status evaluation/update occurs (e.g. .status.availableReplicas) by
-// passing lastOwnerStatusEvaluation. This ensures that we will not skip any pods that might become available
-// (findMinNextPodAvailabilitySimpleCheck would return nil in the future time), since the owner status evaluation.
-// clock is then used to calculate the precise time for the next availability check.
+// FindMinNextPodAvailabilityCheck 返回距下一次可用性检查的时长。
+// 传入 lastOwnerStatusEvaluation（状态评估/更新时间，如 .status.availableReplicas），
+// 确保不会漏掉届时可能变为可用的 Pod（否则简单检查在未来时刻会返回 nil）；
+// 再由 clock 计算精确的下次检查时间。
 func FindMinNextPodAvailabilityCheck(pods []*v1.Pod, minReadySeconds int32, lastOwnerStatusEvaluation time.Time, clock clock.PassiveClock) *time.Duration {
 	nextCheckAccordingToOwnerStatusEvaluation, checkPod := findMinNextPodAvailabilitySimpleCheck(pods, minReadySeconds, lastOwnerStatusEvaluation)
 	if nextCheckAccordingToOwnerStatusEvaluation == nil || checkPod == nil {
 		return nil
 	}
-	// There must be a nextCheck. We try to calculate a more precise value for the next availability check.
-	// Check the earliest pod to avoid being preempted by a later pod.
+	// 用最早触发检查的 Pod 和当前时刻重算，避免被更晚的 Pod 抢占判断。
 	if updatedNextCheck := nextPodAvailabilityCheck(checkPod, minReadySeconds, clock.Now()); updatedNextCheck != nil {
-		// There is a delay since the last Now() call (lastOwnerStatusEvaluation). Use the updatedNextCheck.
+		// 距上次状态评估已有延迟，采用基于当前时刻的更精确结果。
 		return updatedNextCheck
 	}
-	// Fall back to 0 (immediate check) in case the last nextPodAvailabilityCheck call (with a refreshed Now) returns nil, as we might be past the check.
+	// 重算返回 nil 说明检查点可能已过，改为立即检查。
 	return ptr.To(time.Duration(0))
 }
 
+// IsPodActive 判断 Pod 是否仍在运行（未成功/失败终止且未进入删除）。
 func IsPodActive(p *v1.Pod) bool {
 	return v1.PodSucceeded != p.Status.Phase &&
 		v1.PodFailed != p.Status.Phase &&
 		p.DeletionTimestamp == nil
 }
 
+// IsPodTerminating 判断 Pod 是否已开始删除但尚未终止。
 func IsPodTerminating(p *v1.Pod) bool {
 	return !podutil.IsPodTerminal(p) &&
 		p.DeletionTimestamp != nil
 }
 
-// FilterActiveReplicaSets returns replica sets that have (or at least ought to have) pods.
+// FilterActiveReplicaSets 返回当前有（或至少应有）Pod 的副本集。
 func FilterActiveReplicaSets(replicaSets []*apps.ReplicaSet) []*apps.ReplicaSet {
 	activeFilter := func(rs *apps.ReplicaSet) bool {
 		return rs != nil && *(rs.Spec.Replicas) > 0
@@ -1101,9 +1089,10 @@ func FilterActiveReplicaSets(replicaSets []*apps.ReplicaSet) []*apps.ReplicaSet 
 	return FilterReplicaSets(replicaSets, activeFilter)
 }
 
+// filterRS 定义副本集的过滤条件。
 type filterRS func(rs *apps.ReplicaSet) bool
 
-// FilterReplicaSets returns replica sets that are filtered by filterFn (all returned ones should match filterFn).
+// FilterReplicaSets 返回所有满足 filterFn 的副本集。
 func FilterReplicaSets(RSes []*apps.ReplicaSet, filterFn filterRS) []*apps.ReplicaSet {
 	var filtered []*apps.ReplicaSet
 	for i := range RSes {
@@ -1114,11 +1103,10 @@ func FilterReplicaSets(RSes []*apps.ReplicaSet, filterFn filterRS) []*apps.Repli
 	return filtered
 }
 
-// AddPodNodeNameIndexer adds an indexer for Pod's nodeName to the given PodInformer.
-// This indexer is used to efficiently look up pods by their node name.
+// AddPodNodeNameIndexer 为 PodInformer 添加按 nodeName 的索引，便于按节点快速查找 Pod。
 func AddPodNodeNameIndexer(podInformer cache.SharedIndexInformer) error {
 	if _, exists := podInformer.GetIndexer().GetIndexers()[PodNodeNameKeyIndex]; exists {
-		// indexer already exists, do nothing
+		// 索引已存在时直接返回，避免重复注册。
 		return nil
 	}
 
@@ -1136,8 +1124,8 @@ func AddPodNodeNameIndexer(podInformer cache.SharedIndexInformer) error {
 	})
 }
 
-// PodControllerIndexKey returns the index key to locate pods with the specified controller ownerReference.
-// If ownerReference is nil, the returned key locates pods in the namespace without a controller ownerReference.
+// PodControllerIndexKey 返回定位指定控制器所属 Pod 的索引键。
+// ownerReference 为 nil 时返回的键定位该命名空间下的孤儿 Pod。
 func PodControllerIndexKey(namespace string, ownerReference *metav1.OwnerReference) string {
 	if ownerReference == nil {
 		return namespace
@@ -1145,11 +1133,10 @@ func PodControllerIndexKey(namespace string, ownerReference *metav1.OwnerReferen
 	return namespace + "/" + ownerReference.Kind + "/" + ownerReference.Name + "/" + string(ownerReference.UID)
 }
 
-// AddPodControllerIndexer adds an indexer for Pod's controllerRef.UID to the given PodInformer.
-// This indexer is used to efficiently look up pods by their ControllerRef.UID
+// AddPodControllerIndexer 为 PodInformer 添加按 controllerRef.UID 的索引，便于按控制器快速查找 Pod。
 func AddPodControllerIndexer(podInformer cache.SharedIndexInformer) error {
 	if _, exists := podInformer.GetIndexer().GetIndexers()[PodControllerIndex]; exists {
-		// indexer already exists, do nothing
+		// 索引已存在时直接返回，避免重复注册。
 		return nil
 	}
 	return podInformer.AddIndexers(cache.Indexers{
@@ -1158,14 +1145,13 @@ func AddPodControllerIndexer(podInformer cache.SharedIndexInformer) error {
 			if !ok {
 				return nil, nil
 			}
-			// Get the ControllerRef of the Pod to check if it's managed by a controller.
-			// Index with a non-nil controller (indicating an owned pod) or a nil controller (indicating an orphan pod).
+			// 按控制器引用建索引：非 nil 表示有主 Pod，nil 表示孤儿 Pod。
 			return []string{PodControllerIndexKey(pod.Namespace, metav1.GetControllerOf(pod))}, nil
 		},
 	})
 }
 
-// FilterPodsByOwner gets the Pods managed by an owner or orphan Pods in the owner's namespace
+// FilterPodsByOwner 获取指定 owner 管理的 Pod，可选地包含其命名空间下的孤儿 Pod。
 func FilterPodsByOwner(podIndexer cache.Indexer, owner *metav1.ObjectMeta, ownerKind string, includeOrphanedPods bool) ([]*v1.Pod, error) {
 	result := []*v1.Pod{}
 
@@ -1181,10 +1167,10 @@ func FilterPodsByOwner(podIndexer cache.Indexer, owner *metav1.ObjectMeta, owner
 	if len(ownerKind) == 0 {
 		return nil, fmt.Errorf("no owner kind provided")
 	}
-	// Always include the owner key, which identifies Pods that are controlled by the owner
+	// owner 键必然包含，用于定位受其控制的 Pod。
 	keys := []string{PodControllerIndexKey(owner.Namespace, &metav1.OwnerReference{Name: owner.Name, Kind: ownerKind, UID: owner.UID})}
 	if includeOrphanedPods {
-		// Optionally include the unowned key, which identifies orphaned Pods in the owner's namespace and might be adopted by the owner later
+		// 按需加入无主键：这些孤儿 Pod 位于 owner 的命名空间，日后可能被其接管。
 		keys = append(keys, PodControllerIndexKey(owner.Namespace, nil))
 	}
 	for _, key := range keys {
@@ -1204,19 +1190,22 @@ func FilterPodsByOwner(podIndexer cache.Indexer, owner *metav1.ObjectMeta, owner
 	return result, nil
 }
 
-// PodKey returns a key unique to the given pod within a cluster.
-// It's used so we consistently use the same key scheme in this module.
-// It does exactly what cache.MetaNamespaceKeyFunc would have done
-// except there's not possibility for error since we know the exact type.
+// PodKey 返回集群内唯一标识该 Pod 的键，保证本模块键格式一致。
+// 行为与 cache.MetaNamespaceKeyFunc 相同，但因类型确定而不会出错。
 func PodKey(pod *v1.Pod) string {
 	return fmt.Sprintf("%v/%v", pod.Namespace, pod.Name)
 }
 
-// ControllersByCreationTimestamp sorts a list of ReplicationControllers by creation timestamp, using their names as a tie breaker.
+// ControllersByCreationTimestamp 按创建时间排列 ReplicationController，时间相同则按名称决胜。
 type ControllersByCreationTimestamp []*v1.ReplicationController
 
-func (o ControllersByCreationTimestamp) Len() int      { return len(o) }
+// Len 返回控制器数量。
+func (o ControllersByCreationTimestamp) Len() int { return len(o) }
+
+// Swap 交换两个控制器的位置。
 func (o ControllersByCreationTimestamp) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
+
+// Less 按创建时间升序排列，时间相同按名称升序。
 func (o ControllersByCreationTimestamp) Less(i, j int) bool {
 	if o[i].CreationTimestamp.Equal(&o[j].CreationTimestamp) {
 		return o[i].Name < o[j].Name
@@ -1224,11 +1213,16 @@ func (o ControllersByCreationTimestamp) Less(i, j int) bool {
 	return o[i].CreationTimestamp.Before(&o[j].CreationTimestamp)
 }
 
-// ReplicaSetsByCreationTimestamp sorts a list of ReplicaSet by creation timestamp, using their names as a tie breaker.
+// ReplicaSetsByCreationTimestamp 按创建时间排列副本集，时间相同则按名称决胜。
 type ReplicaSetsByCreationTimestamp []*apps.ReplicaSet
 
-func (o ReplicaSetsByCreationTimestamp) Len() int      { return len(o) }
+// Len 返回副本集数量。
+func (o ReplicaSetsByCreationTimestamp) Len() int { return len(o) }
+
+// Swap 交换两个副本集的位置。
 func (o ReplicaSetsByCreationTimestamp) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
+
+// Less 按创建时间升序排列，时间相同按名称升序。
 func (o ReplicaSetsByCreationTimestamp) Less(i, j int) bool {
 	if o[i].CreationTimestamp.Equal(&o[j].CreationTimestamp) {
 		return o[i].Name < o[j].Name
@@ -1236,12 +1230,17 @@ func (o ReplicaSetsByCreationTimestamp) Less(i, j int) bool {
 	return o[i].CreationTimestamp.Before(&o[j].CreationTimestamp)
 }
 
-// ReplicaSetsBySizeOlder sorts a list of ReplicaSet by size in descending order, using their creation timestamp or name as a tie breaker.
-// By using the creation timestamp, this sorts from old to new replica sets.
+// ReplicaSetsBySizeOlder 按副本数降序排列副本集，数量相同按创建时间或名称决胜。
+// 使用创建时间使同规模副本集从旧到新排列。
 type ReplicaSetsBySizeOlder []*apps.ReplicaSet
 
-func (o ReplicaSetsBySizeOlder) Len() int      { return len(o) }
+// Len 返回副本集数量。
+func (o ReplicaSetsBySizeOlder) Len() int { return len(o) }
+
+// Swap 交换两个副本集的位置。
 func (o ReplicaSetsBySizeOlder) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
+
+// Less 副本数多者优先，数量相同则较旧的排在前面。
 func (o ReplicaSetsBySizeOlder) Less(i, j int) bool {
 	if *(o[i].Spec.Replicas) == *(o[j].Spec.Replicas) {
 		return ReplicaSetsByCreationTimestamp(o).Less(i, j)
@@ -1249,12 +1248,17 @@ func (o ReplicaSetsBySizeOlder) Less(i, j int) bool {
 	return *(o[i].Spec.Replicas) > *(o[j].Spec.Replicas)
 }
 
-// ReplicaSetsBySizeNewer sorts a list of ReplicaSet by size in descending order, using their creation timestamp or name as a tie breaker.
-// By using the creation timestamp, this sorts from new to old replica sets.
+// ReplicaSetsBySizeNewer 按副本数降序排列副本集，数量相同按创建时间或名称决胜。
+// 使用创建时间使同规模副本集从新到旧排列。
 type ReplicaSetsBySizeNewer []*apps.ReplicaSet
 
-func (o ReplicaSetsBySizeNewer) Len() int      { return len(o) }
+// Len 返回副本集数量。
+func (o ReplicaSetsBySizeNewer) Len() int { return len(o) }
+
+// Swap 交换两个副本集的位置。
 func (o ReplicaSetsBySizeNewer) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
+
+// Less 副本数多者优先，数量相同则较新的排在前面。
 func (o ReplicaSetsBySizeNewer) Less(i, j int) bool {
 	if *(o[i].Spec.Replicas) == *(o[j].Spec.Replicas) {
 		return ReplicaSetsByCreationTimestamp(o).Less(j, i)
@@ -1262,8 +1266,7 @@ func (o ReplicaSetsBySizeNewer) Less(i, j int) bool {
 	return *(o[i].Spec.Replicas) > *(o[j].Spec.Replicas)
 }
 
-// AddOrUpdateTaintOnNode add taints to the node. If taint was added into node, it'll issue API calls
-// to update nodes; otherwise, no API calls. Return error if any.
+// AddOrUpdateTaintOnNode 为节点添加或更新污点；仅当节点实际发生变化时才发起 API 更新。
 func AddOrUpdateTaintOnNode(ctx context.Context, c clientset.Interface, nodeName string, taints ...*v1.Taint) error {
 	if len(taints) == 0 {
 		return nil
@@ -1272,8 +1275,7 @@ func AddOrUpdateTaintOnNode(ctx context.Context, c clientset.Interface, nodeName
 	return clientretry.RetryOnConflict(UpdateTaintBackoff, func() error {
 		var err error
 		var oldNode *v1.Node
-		// First we try getting node from the API server cache, as it's cheaper. If it fails
-		// we get it from etcd to be sure to have fresh data.
+		// 首次尝试从 apiserver 缓存读取（更廉价），失败则直读 etcd 以获取最新数据。
 		option := metav1.GetOptions{}
 		if firstTry {
 			option.ResourceVersion = "0"
@@ -1292,10 +1294,12 @@ func AddOrUpdateTaintOnNode(ctx context.Context, c clientset.Interface, nodeName
 			if err != nil {
 				return fmt.Errorf("failed to update taint of node")
 			}
+			// 逐个累加污点变更；以 oldNodeCopy 为基准避免丢失前面的修改。
 			updated = updated || ok
 			newNode = curNewNode
 			oldNodeCopy = curNewNode
 		}
+		// 没有实际变更就不发 API 请求。
 		if !updated {
 			return nil
 		}
@@ -1303,15 +1307,13 @@ func AddOrUpdateTaintOnNode(ctx context.Context, c clientset.Interface, nodeName
 	})
 }
 
-// RemoveTaintOffNode is for cleaning up taints temporarily added to node,
-// won't fail if target taint doesn't exist or has been removed.
-// If passed a node it'll check if there's anything to be done, if taint is not present it won't issue
-// any API calls.
+// RemoveTaintOffNode 清理节点上临时添加的污点；目标污点不存在时不会报错。
+// 若传入 node，会先在本地检查以减少不必要的 API 调用。
 func RemoveTaintOffNode(ctx context.Context, c clientset.Interface, nodeName string, node *v1.Node, taints ...*v1.Taint) error {
 	if len(taints) == 0 {
 		return nil
 	}
-	// Short circuit for limiting amount of API calls.
+	// 传入的节点中若没有目标污点，直接短路返回，省去 API 调用。
 	if node != nil {
 		match := false
 		for _, taint := range taints {
@@ -1329,8 +1331,7 @@ func RemoveTaintOffNode(ctx context.Context, c clientset.Interface, nodeName str
 	return clientretry.RetryOnConflict(UpdateTaintBackoff, func() error {
 		var err error
 		var oldNode *v1.Node
-		// First we try getting node from the API server cache, as it's cheaper. If it fails
-		// we get it from etcd to be sure to have fresh data.
+		// 首次尝试从 apiserver 缓存读取（更廉价），失败则直读 etcd 以获取最新数据。
 		option := metav1.GetOptions{}
 		if firstTry {
 			option.ResourceVersion = "0"
@@ -1349,6 +1350,7 @@ func RemoveTaintOffNode(ctx context.Context, c clientset.Interface, nodeName str
 			if err != nil {
 				return fmt.Errorf("failed to remove taint of node")
 			}
+			// 以累积后的副本继续移除，保证多个污点的删除都生效。
 			updated = updated || ok
 			newNode = curNewNode
 			oldNodeCopy = curNewNode
@@ -1360,11 +1362,11 @@ func RemoveTaintOffNode(ctx context.Context, c clientset.Interface, nodeName str
 	})
 }
 
-// PatchNodeTaints patches node's taints.
+// PatchNodeTaints 用策略合并补丁更新节点污点，并借助 RV 检测并发冲突。
 func PatchNodeTaints(ctx context.Context, c clientset.Interface, nodeName string, oldNode *v1.Node, newNode *v1.Node) error {
-	// Strip base diff node from RV to ensure that our Patch request will set RV to check for conflicts over .spec.taints.
-	// This is needed because .spec.taints does not specify patchMergeKey and patchStrategy and adding them is no longer an option for compatibility reasons.
-	// Using other Patch strategy works for adding new taints, however will not resolve problem with taint removal.
+	// 从基准数据中去掉 ResourceVersion，让 Patch 请求带上 RV 以检测 .spec.taints 的并发冲突。
+	// .spec.taints 未定义 patchMergeKey/patchStrategy，出于兼容性也无法再加；
+	// 换其他 Patch 策略虽能新增污点，却无法正确处理污点删除。
 	oldNodeNoRV := oldNode.DeepCopy()
 	oldNodeNoRV.ResourceVersion = ""
 	oldDataNoRV, err := json.Marshal(&oldNodeNoRV)
@@ -1372,6 +1374,7 @@ func PatchNodeTaints(ctx context.Context, c clientset.Interface, nodeName string
 		return fmt.Errorf("failed to marshal old node %#v for node %q: %v", oldNodeNoRV, nodeName, err)
 	}
 
+	// 仅替换污点字段，避免新节点对象上的其他改动被一并写入补丁。
 	newTaints := newNode.Spec.Taints
 	newNodeClone := oldNode.DeepCopy()
 	newNodeClone.Spec.Taints = newTaints
@@ -1389,14 +1392,12 @@ func PatchNodeTaints(ctx context.Context, c clientset.Interface, nodeName string
 	return err
 }
 
-// ComputeHash returns a hash value calculated from pod template and
-// a collisionCount to avoid hash collision. The hash will be safe encoded to
-// avoid bad words.
+// ComputeHash 根据 Pod 模板和 collisionCount 计算哈希，并用安全编码避免出现不当字符串。
 func ComputeHash(template *v1.PodTemplateSpec, collisionCount *int32) string {
 	podTemplateSpecHasher := fnv.New32a()
 	hashutil.DeepHashObject(podTemplateSpecHasher, *template)
 
-	// Add collisionCount in the hash if it exists.
+	// 将 collisionCount 纳入哈希，使哈希碰撞时可使用不同取值重新生成名称。
 	if collisionCount != nil {
 		collisionCountBytes := make([]byte, 8)
 		binary.LittleEndian.PutUint32(collisionCountBytes, uint32(*collisionCount))
@@ -1406,13 +1407,13 @@ func ComputeHash(template *v1.PodTemplateSpec, collisionCount *int32) string {
 	return rand.SafeEncodeString(fmt.Sprint(podTemplateSpecHasher.Sum32()))
 }
 
+// AddOrUpdateLabelsOnNode 添加或更新节点标签。
 func AddOrUpdateLabelsOnNode(kubeClient clientset.Interface, nodeName string, labelsToUpdate map[string]string) error {
 	firstTry := true
 	return clientretry.RetryOnConflict(UpdateLabelBackoff, func() error {
 		var err error
 		var node *v1.Node
-		// First we try getting node from the API server cache, as it's cheaper. If it fails
-		// we get it from etcd to be sure to have fresh data.
+		// 首次尝试从 apiserver 缓存读取（更廉价），失败则直读 etcd 以获取最新数据。
 		option := metav1.GetOptions{}
 		if firstTry {
 			option.ResourceVersion = "0"
@@ -1423,7 +1424,7 @@ func AddOrUpdateLabelsOnNode(kubeClient clientset.Interface, nodeName string, la
 			return err
 		}
 
-		// Make a copy of the node and update the labels.
+		// 在副本上改标签，生成两路合并补丁时保留原对象。
 		newNode := node.DeepCopy()
 		if newNode.Labels == nil {
 			newNode.Labels = make(map[string]string)

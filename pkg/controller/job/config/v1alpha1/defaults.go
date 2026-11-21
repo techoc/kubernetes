@@ -20,16 +20,13 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultJobControllerConfiguration defaults a pointer to a
-// JobControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultJobControllerConfiguration 为 JobControllerConfiguration 设置推荐默认值，
+// 这些值可能随 API 版本变化。
+// 这里刻意不把它注册为 scheme 中普通的 `SetDefaults_Foo` 函数：scheme 的默认值处理
+// 是转换流程的一部分，一旦强制调用就没有便捷的退出方式，会剥夺调用方为嵌入配置
+// 自行设定默认值的能力。需要的调用方应在自己的包装结构上，于 `SetDefaults_` 方法中显式调用它。
 func RecommendedDefaultJobControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.JobControllerConfiguration) {
+	// 仅在零值时填充，保留调用方显式指定的配置。
 	if obj.ConcurrentJobSyncs == 0 {
 		obj.ConcurrentJobSyncs = 5
 	}

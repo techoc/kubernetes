@@ -20,15 +20,12 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultValidatingAdmissionPolicyStatusControllerConfiguration defaults a pointer to a
-// ValidatingAdmissionPolicyStatusControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultValidatingAdmissionPolicyStatusControllerConfiguration 为
+// ValidatingAdmissionPolicyStatusControllerConfiguration 填充推荐默认值（当前为 5 个并发同步）。
+// 这些默认值可能随 API 版本变化。
+// 刻意不将其注册为 scheme 中普通的 `SetDefaults_Foo` 函数：scheme 的默认值处理是转换的一部分，
+// 一旦强制应用，消费者就无法为自己的嵌入配置设置不同的默认值，也没有简单的退出方式。
+// 需要这些默认值的消费者应在自己的包装结构体的 `SetDefaults_` 方法中显式调用它。
 func RecommendedDefaultValidatingAdmissionPolicyStatusControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.ValidatingAdmissionPolicyStatusControllerConfiguration) {
 	if obj.ConcurrentPolicySyncs == 0 {
 		obj.ConcurrentPolicySyncs = 5

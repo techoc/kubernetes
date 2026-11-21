@@ -26,9 +26,9 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
-// exclusionNodeAffinity mirrors the node affinity commonly carried by
-// cluster-wide DaemonSets (log shippers, node agents) that must avoid a few
-// special node classes: a single term with several NotIn expressions.
+// exclusionNodeAffinity 模拟集群级 DaemonSet（如日志采集、节点 agent）常见的
+// 节点亲和性配置：单个 term 内包含多个 NotIn 表达式，用于避开几类特殊节点。
+// 这种结构在评测中代表最典型的“排除型”亲和性匹配开销。
 func exclusionNodeAffinity() *v1.Affinity {
 	return &v1.Affinity{
 		NodeAffinity: &v1.NodeAffinity{
@@ -48,12 +48,11 @@ func exclusionNodeAffinity() *v1.Affinity {
 	}
 }
 
-// BenchmarkUpdateDaemonSetStatus measures the per-node evaluation loop shared
-// by the DaemonSet controller's sync paths (updateDaemonSetStatus, manage,
-// rollingUpdate all evaluate NodeShouldRunDaemonPod for every node in the
-// cluster). The dominant per-node cost is evaluating whether the daemon pod
-// fits the node, so this approximates the controller's per-sync CPU cost on
-// an otherwise steady-state DaemonSet.
+// BenchmarkUpdateDaemonSetStatus 测量 DaemonSet 控制器各同步路径共用的逐节点评估循环。
+// updateDaemonSetStatus、manage、rollingUpdate 都会对集群中每个节点调用
+// NodeShouldRunDaemonPod；单节点主要开销就是判断 daemon pod 是否适合该节点。
+// 因此该基准近似反映稳态 DaemonSet 下控制器每次同步的 CPU 成本。
+// 用例覆盖有无亲和性、1000/10000 节点组合，以评估不同规模与表达式复杂度的影响。
 func BenchmarkUpdateDaemonSetStatus(b *testing.B) {
 	for _, tc := range []struct {
 		name     string
@@ -64,16 +63,13 @@ func BenchmarkUpdateDaemonSetStatus(b *testing.B) {
 	} {
 		for _, numNodes := range []int{1000, 10000} {
 			b.Run(fmt.Sprintf("affinity=%s/nodes=%d", tc.name, numNodes), func(b *testing.B) {
-				// Silence per-iteration log output so the benchmark measures
-				// the evaluation loop, not the test logger.
+				// 关闭每次迭代的日志输出，使基准只测量评估循环本身，而非测试 logger 的开销。
 				logger := ktesting.NewLogger(b, ktesting.NewConfig(ktesting.Verbosity(0)))
 				ctx := klog.NewContext(context.Background(), logger)
 				ds := newDaemonSet("bench")
 				ds.Spec.Template.Spec.Affinity = tc.affinity
-				// Pre-set the status to the values the loop computes so that
-				// storeDaemonSetStatus short-circuits and each iteration
-				// measures only the per-node evaluation loop, not the fake
-				// client's status update.
+				// 预先把 status 设置为循环将计算出的值，使 storeDaemonSetStatus 走短路路径，
+				// 从而每次迭代只测量逐节点评估循环，不包含 fake client 的 status 更新开销。
 				ds.Status.DesiredNumberScheduled = int32(numNodes)
 				ds.Status.NumberUnavailable = int32(numNodes)
 				manager, _, _, err := newTestController(ctx, ds)
@@ -84,6 +80,8 @@ func BenchmarkUpdateDaemonSetStatus(b *testing.B) {
 					b.Fatal(err)
 				}
 				nodeList := make([]*v1.Node, 0, numNodes)
+				// 构造指定数量的节点并写入 nodeStore；hostname/zone/region 标签用于模拟真实拓扑，
+				// 让亲和性评估走与生产环境相近的路径。
 				for i := range numNodes {
 					node := newNode(fmt.Sprintf("node-%d", i), map[string]string{
 						"kubernetes.io/hostname":        fmt.Sprintf("node-%d", i),
@@ -97,6 +95,7 @@ func BenchmarkUpdateDaemonSetStatus(b *testing.B) {
 				}
 
 				b.ReportAllocs()
+				// 计时前完成全部 fixture 搭建，避免把节点/控制器初始化计入基准结果。
 				b.ResetTimer()
 				for range b.N {
 					if err := manager.updateDaemonSetStatus(ctx, ds, nodeList, "hash", false); err != nil {

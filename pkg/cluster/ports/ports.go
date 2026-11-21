@@ -20,35 +20,34 @@ import (
 	cpoptions "k8s.io/cloud-provider/options"
 )
 
-// In this file, we can see all default port of cluster.
-// It's also an important documentation for us. So don't remove them easily.
+// 本文件汇总集群各组件的默认端口，也是一份重要的参考文档，不要轻易删除。
+// 这些端口都可以在组件启动时通过命令行参数覆盖。
 const (
-	// ProxyStatusPort is the default port for the proxy metrics server.
-	// May be overridden by a flag at startup.
+	// ProxyStatusPort 是 kube-proxy metrics 服务的默认端口。
+	// 可在启动时通过参数覆盖。
 	ProxyStatusPort = 10249
-	// KubeletPort is the default port for the kubelet server on each host machine.
-	// May be overridden by a flag at startup.
+	// KubeletPort 是每台主机上 kubelet 服务的默认端口。
+	// 可在启动时通过参数覆盖。
 	KubeletPort = 10250
-	// KubeletReadOnlyPort exposes basic read-only services from the kubelet.
-	// May be overridden by a flag at startup.
-	// This is necessary for heapster to collect monitoring stats from the kubelet
-	// until heapster can transition to using the SSL endpoint.
-	// TODO(roberthbailey): Remove this once we have a better solution for heapster.
+	// KubeletReadOnlyPort 暴露 kubelet 的基础只读服务。
+	// 可在启动时通过参数覆盖。
+	// 在 heapster 切换到 SSL 端点之前，需要该端口供其采集 kubelet 监控数据。
+	// TODO(roberthbailey): 待 heapster 有更好的方案后删除此端口。
 	KubeletReadOnlyPort = 10255
-	// KubeletHealthzPort exposes a healthz endpoint from the kubelet.
-	// May be overridden by a flag at startup.
+	// KubeletHealthzPort 是 kubelet healthz 端点使用的端口。
+	// 可在启动时通过参数覆盖。
 	KubeletHealthzPort = 10248
-	// ProxyHealthzPort is the default port for the proxy healthz server.
-	// May be overridden by a flag at startup.
+	// ProxyHealthzPort 是 kube-proxy healthz 服务的默认端口。
+	// 可在启动时通过参数覆盖。
 	ProxyHealthzPort = 10256
-	// KubeControllerManagerPort is the default port for the controller manager status server.
-	// May be overridden by a flag at startup.
+	// KubeControllerManagerPort 是 kube-controller-manager 状态服务的默认端口。
+	// 可在启动时通过参数覆盖。
 	KubeControllerManagerPort = 10257
-	// CloudControllerManagerPort is the default port for the cloud controller manager server.
-	// This value may be overridden by a flag at startup.
+	// CloudControllerManagerPort 是 cloud-controller-manager 服务的默认端口。
+	// 可在启动时通过参数覆盖。
 	CloudControllerManagerPort = 10258
-	// CloudControllerManagerWebhookPort is the default port for the cloud
-	// controller manager webhook server.  May be overridden by a flag at
-	// startup.
+	// CloudControllerManagerWebhookPort 是 cloud-controller-manager webhook 服务的默认端口。
+	// 可在启动时通过参数覆盖。该值直接复用 cloud-provider 包中的定义，
+	// 以保证两个组件使用的端口一致。
 	CloudControllerManagerWebhookPort = cpoptions.CloudControllerManagerWebhookPort
 )

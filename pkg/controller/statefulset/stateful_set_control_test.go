@@ -61,8 +61,11 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// invariantFunc 定义测试用的校验函数：在每个控制器操作后验证 StatefulSet、Pod 与 PVC 的不变量。
 type invariantFunc func(set *apps.StatefulSet, om *fakeObjectManager) error
 
+// setupController 用给定的 fake 客户端构造 StatefulSet 控制器及其 fake 依赖。
+// 返回对象管理器、状态更新器与控制器接口，供用例直接驱动协调循环。
 func setupController(client clientset.Interface) (*fakeObjectManager, *fakeStatefulSetStatusUpdater, StatefulSetControlInterface) {
 	informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 	om := newFakeObjectManager(informerFactory)
@@ -70,14 +73,13 @@ func setupController(client clientset.Interface) (*fakeObjectManager, *fakeState
 	ssu := newFakeStatefulSetStatusUpdater(informerFactory.Apps().V1().StatefulSets())
 	ssc := NewDefaultStatefulSetControl(spc, ssu, history.NewFakeHistory(informerFactory.Apps().V1().ControllerRevisions()))
 
-	// The informer is not started. The tests here manipulate the local cache (indexers) directly, and there is no waiting
-	// for client state to sync. In fact, because the client is not updated during tests, informer updates will break tests
-	// by unexpectedly deleting objects.
+	// 这里没有启动 informer：测试直接操作本地缓存索引，也不需要等待客户端状态同步。
+	// 若启动 informer，反而可能因客户端对象未被更新而意外删除缓存中的对象，破坏测试。
 	//
-	// TODO: It might be better to rewrite all these tests manipulate the client an explicitly sync to ensure consistent
-	// state, or to create a fake client that does not use a local cache.
+	// TODO: 更好的做法或许是重写所有测试，让它们操作客户端并显式同步以保证状态一致，
+	// 或者改用不依赖本地缓存的 fake 客户端。
 
-	// The client is passed initial sets, so we have to put them in the local setsIndexer cache.
+	// 客户端已带有初始 StatefulSet，因此必须手动把它们写入本地 setsIndexer 缓存。
 	if sets, err := client.AppsV1().StatefulSets("").List(context.TODO(), metav1.ListOptions{}); err != nil {
 		panic(err)
 	} else {
@@ -91,16 +93,20 @@ func setupController(client clientset.Interface) (*fakeObjectManager, *fakeState
 	return om, ssu, ssc
 }
 
+// burst 将 StatefulSet 的 Pod 管理策略设为并行，用于覆盖并行（burst）语义的测试。
 func burst(set *apps.StatefulSet) *apps.StatefulSet {
 	set.Spec.PodManagementPolicy = apps.ParallelPodManagement
 	return set
 }
 
+// setMinReadySeconds 设置 StatefulSet 的 MinReadySeconds，用于验证就绪等待时间的行为。
 func setMinReadySeconds(set *apps.StatefulSet, minReadySeconds int32) *apps.StatefulSet {
 	set.Spec.MinReadySeconds = minReadySeconds
 	return set
 }
 
+// runTestOverPVCRetentionPolicies 在全部 PVC 保留策略组合上运行给定子测试。
+// 先以指定名称执行一次，再针对每种策略（含未设置策略）以策略描述为名运行。
 func runTestOverPVCRetentionPolicies(t *testing.T, testName string, testFn func(*testing.T, *apps.StatefulSetPersistentVolumeClaimRetentionPolicy)) {
 	t.Run(testName, func(t *testing.T) {
 		testFn(t, &apps.StatefulSetPersistentVolumeClaimRetentionPolicy{
@@ -125,7 +131,7 @@ func runTestOverPVCRetentionPolicies(t *testing.T, testName string, testFn func(
 			WhenScaled:  apps.DeletePersistentVolumeClaimRetentionPolicyType,
 			WhenDeleted: apps.DeletePersistentVolumeClaimRetentionPolicyType,
 		},
-		// tests the case when no policy is set.
+		// 覆盖未显式设置任何保留策略的情形。
 		nil,
 	} {
 		subtestName := pvcDeletePolicyString(policy)
@@ -138,6 +144,7 @@ func runTestOverPVCRetentionPolicies(t *testing.T, testName string, testFn func(
 	}
 }
 
+// pvcDeletePolicyString 把 PVC 保留策略组合映射为简短可读的子测试名称。
 func pvcDeletePolicyString(policy *apps.StatefulSetPersistentVolumeClaimRetentionPolicy) string {
 	if policy == nil {
 		return "nullPolicy"
@@ -157,6 +164,8 @@ func pvcDeletePolicyString(policy *apps.StatefulSetPersistentVolumeClaimRetentio
 	return "invalid"
 }
 
+// TestStatefulSetControl 在多种 PVC 保留策略下，按单调与并行两种模式运行控制器的核心行为用例。
+// 每个用例都会附带相应的不变量校验函数。
 func TestStatefulSetControl(t *testing.T) {
 	simpleSetFn := func() *apps.StatefulSet { return newStatefulSet(3) }
 	largeSetFn := func() *apps.StatefulSet { return newStatefulSet(5) }
@@ -208,6 +217,8 @@ func TestStatefulSetControl(t *testing.T) {
 	}
 }
 
+// CreatePods 验证控制器能从零创建出指定数量的 Pod。
+// 同时校验状态字段正确，且每个 Pod 的序号标签与名称中的序号一致。
 func CreatePods(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	client := fake.NewSimpleClientset(set)
 	om, _, ssc := setupController(client)
@@ -230,7 +241,7 @@ func CreatePods(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 		t.Error("Failed to set UpdatedReplicas correctly")
 	}
 
-	// Check all pods have correct pod index label.
+	// 校验所有 Pod 都带有正确的序号标签。
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
 		t.Error(err)
@@ -255,6 +266,7 @@ func CreatePods(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	}
 }
 
+// ScalesUp 验证控制器在副本数增加时正确扩容并更新状态。
 func ScalesUp(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	client := fake.NewSimpleClientset(set)
 	om, _, ssc := setupController(client)
@@ -282,6 +294,7 @@ func ScalesUp(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	}
 }
 
+// ScalesDown 验证控制器在副本数降为零时正确缩容并更新状态。
 func ScalesDown(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	client := fake.NewSimpleClientset(set)
 	om, _, ssc := setupController(client)
@@ -299,7 +312,7 @@ func ScalesDown(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 		t.Errorf("Failed to scale StatefulSet : %s", err)
 	}
 
-	// Check updated set.
+	// 校验缩容后 StatefulSet 的状态已更新。
 	set, err = om.setsLister.StatefulSets(set.Namespace).Get(set.Name)
 	if err != nil {
 		t.Fatalf("Error getting updated StatefulSet: %v", err)
@@ -315,6 +328,8 @@ func ScalesDown(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	}
 }
 
+// ReplacesPods 验证被删除的 Pod 会被控制器按序重建。
+// 这里间隔删除多个 Pod，以覆盖重建过程中的顺序约束。
 func ReplacesPods(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	client := fake.NewSimpleClientset(set)
 	om, _, ssc := setupController(client)
@@ -398,6 +413,8 @@ func ReplacesPods(t *testing.T, set *apps.StatefulSet, invariants invariantFunc)
 	}
 }
 
+// recreatesPod 验证处于终止阶段的 Pod 会被删除并重建。
+// 通过 terminalPhase 指定终止状态，并可注入删除失败以验证失败路径。
 func recreatesPod(t *testing.T, set *apps.StatefulSet, invariants invariantFunc, terminalPhase v1.PodPhase, testDeletePodFailure bool) {
 	client := fake.NewSimpleClientset()
 	om, _, ssc := setupController(client)
@@ -425,10 +442,10 @@ func recreatesPod(t *testing.T, set *apps.StatefulSet, invariants invariantFunc,
 
 	terminalPodOrdinal := -1
 	for i, pod := range pods {
-		// Set at least Pending phase to acknowledge the creation of pods
+		// 至少设为 Pending，以表示 Pod 创建已被控制器确认。
 		newPhase := v1.PodPending
 		if i == 0 {
-			// Set terminal phase for the first pod
+			// 将第一个 Pod 设为终止状态，作为待重建的目标。
 			newPhase = terminalPhase
 			terminalPodOrdinal = getOrdinal(pod)
 		}
@@ -441,7 +458,7 @@ func recreatesPod(t *testing.T, set *apps.StatefulSet, invariants invariantFunc,
 		t.Error(err)
 	}
 	if testDeletePodFailure {
-		// Expect pod deletion failure
+		// 注入 Pod 删除失败，验证错误会向上传播且不破坏不变量。
 		om.SetDeleteStatefulPodError(apierrors.NewInternalError(errors.New("API server failed")), 0)
 		expectedNumOfDeleteRequests++
 		if _, err = ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now()); !isOrHasInternalError(err) {
@@ -458,7 +475,7 @@ func recreatesPod(t *testing.T, set *apps.StatefulSet, invariants invariantFunc,
 		}
 	}
 
-	// Expect pod deletion
+	// 期望控制器发起一次 Pod 删除。
 	expectedNumOfDeleteRequests++
 	if _, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now()); err != nil {
 		t.Errorf("Error updating StatefulSet %s", err)
@@ -473,7 +490,7 @@ func recreatesPod(t *testing.T, set *apps.StatefulSet, invariants invariantFunc,
 		t.Error(err)
 	}
 
-	// Expect no additional delete calls and expect pod creation
+	// 期望不再有额外的删除请求，而是触发新 Pod 的创建。
 	if _, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now()); err != nil {
 		t.Errorf("Error updating StatefulSet %s", err)
 	}
@@ -487,7 +504,7 @@ func recreatesPod(t *testing.T, set *apps.StatefulSet, invariants invariantFunc,
 		t.Error(err)
 	}
 	recreatedPod := findPodByOrdinal(pods, terminalPodOrdinal)
-	// new recreated pod should have empty phase
+	// 新建的 Pod 应处于无阶段状态，与终止中的旧 Pod 区分开。
 	if recreatedPod == nil || isCreated(recreatedPod) {
 		t.Error("StatefulSet did not recreate failed Pod")
 	}
@@ -501,22 +518,27 @@ func recreatesPod(t *testing.T, set *apps.StatefulSet, invariants invariantFunc,
 
 }
 
+// RecreatesFailedPod 验证失败的 Pod 会被重建。
 func RecreatesFailedPod(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	recreatesPod(t, set, invariants, v1.PodFailed, false)
 }
 
+// RecreatesSucceededPod 验证成功完成的 Pod 会被重建。
 func RecreatesSucceededPod(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	recreatesPod(t, set, invariants, v1.PodSucceeded, false)
 }
 
+// RecreatesFailedPodWithDeleteFailure 验证删除失败后失败 Pod 最终仍能被重建。
 func RecreatesFailedPodWithDeleteFailure(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	recreatesPod(t, set, invariants, v1.PodFailed, true)
 }
 
+// RecreatesSucceededPodWithDeleteFailure 验证删除失败后成功 Pod 最终仍能被重建。
 func RecreatesSucceededPodWithDeleteFailure(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	recreatesPod(t, set, invariants, v1.PodSucceeded, true)
 }
 
+// CreatePodFailure 验证创建 Pod 失败时控制器返回错误，并在重试后恢复正常扩容。
 func CreatePodFailure(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	client := fake.NewSimpleClientset(set)
 	om, _, ssc := setupController(client)
@@ -525,7 +547,7 @@ func CreatePodFailure(t *testing.T, set *apps.StatefulSet, invariants invariantF
 	if err := scaleUpStatefulSetControl(set, ssc, om, invariants, nil); !isOrHasInternalError(err) {
 		t.Errorf("StatefulSetControl did not return InternalError, found %s", err)
 	}
-	// Update so set.Status is set for the next scaleUpStatefulSetControl call.
+	// 重新获取 StatefulSet，使 set.Status 反映上次操作，供下一次扩容使用。
 	var err error
 	set, err = om.setsLister.StatefulSets(set.Namespace).Get(set.Name)
 	if err != nil {
@@ -549,12 +571,13 @@ func CreatePodFailure(t *testing.T, set *apps.StatefulSet, invariants invariantF
 	}
 }
 
+// UpdatePodFailure 验证更新 Pod 身份失败时控制器返回 InternalError。
 func UpdatePodFailure(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	client := fake.NewSimpleClientset(set)
 	om, _, ssc := setupController(client)
 	om.SetUpdateStatefulPodError(apierrors.NewInternalError(errors.New("API server failed")), 0)
 
-	// have to have 1 successful loop first
+	// 先成功完成一轮循环，确保 Pod 都已存在，再注入更新错误。
 	if err := scaleUpStatefulSetControl(set, ssc, om, invariants, nil); err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -573,7 +596,7 @@ func UpdatePodFailure(t *testing.T, set *apps.StatefulSet, invariants invariantF
 		t.Error("Failed to set updatedReplicas correctly")
 	}
 
-	// now mutate a pod's identity
+	// 修改某个 Pod 的身份，使控制器在后续循环中尝试更新它。
 	pods, err := om.podsLister.List(labels.Everything())
 	if err != nil {
 		t.Fatalf("Error listing pods: %v", err)
@@ -585,12 +608,13 @@ func UpdatePodFailure(t *testing.T, set *apps.StatefulSet, invariants invariantF
 	pods[0].Name = "goo-0"
 	om.podsIndexer.Update(pods[0])
 
-	// now it should fail
+	// 此时更新应因注入的错误而失败。
 	if _, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now()); !isOrHasInternalError(err) {
 		t.Errorf("StatefulSetControl did not return InternalError, found %s", err)
 	}
 }
 
+// UpdateSetStatusFailure 验证更新 StatefulSet 状态失败时的错误传播与重试行为。
 func UpdateSetStatusFailure(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	client := fake.NewSimpleClientset(set)
 	om, ssu, ssc := setupController(client)
@@ -599,7 +623,7 @@ func UpdateSetStatusFailure(t *testing.T, set *apps.StatefulSet, invariants inva
 	if err := scaleUpStatefulSetControl(set, ssc, om, invariants, nil); !isOrHasInternalError(err) {
 		t.Errorf("StatefulSetControl did not return InternalError, found %s", err)
 	}
-	// Update so set.Status is set for the next scaleUpStatefulSetControl call.
+	// 重新获取 StatefulSet，使 set.Status 反映上次操作，供下一次扩容使用。
 	var err error
 	set, err = om.setsLister.StatefulSets(set.Namespace).Get(set.Name)
 	if err != nil {
@@ -623,6 +647,8 @@ func UpdateSetStatusFailure(t *testing.T, set *apps.StatefulSet, invariants inva
 	}
 }
 
+// NewRevisionDeletePodFailure 验证新版本滚动更新中删除 Pod 失败时的处理。
+// 删除失败不应推进 CurrentReplicas；删除成功后才更新计数。
 func NewRevisionDeletePodFailure(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	client := fake.NewSimpleClientset(set)
 	om, _, ssc := setupController(client)
@@ -646,7 +672,7 @@ func NewRevisionDeletePodFailure(t *testing.T, set *apps.StatefulSet, invariants
 		t.Error(err)
 	}
 
-	// trigger a new revision
+	// 修改镜像触发新版本生成。
 	updateSet := set.DeepCopy()
 	updateSet.Spec.Template.Spec.Containers[0].Image = "nginx-new"
 	if err := om.setsIndexer.Update(updateSet); err != nil {
@@ -657,7 +683,7 @@ func NewRevisionDeletePodFailure(t *testing.T, set *apps.StatefulSet, invariants
 		t.Fatalf("Error getting updated StatefulSet: %v", err)
 	}
 
-	// delete fails
+	// 注入删除失败，验证当前版本计数不会推进。
 	om.SetDeleteStatefulPodError(apierrors.NewInternalError(errors.New("API server failed")), 0)
 	_, err = ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now())
 	if err == nil {
@@ -678,7 +704,7 @@ func NewRevisionDeletePodFailure(t *testing.T, set *apps.StatefulSet, invariants
 		t.Error("Failed to create new revision")
 	}
 
-	// delete works
+	// 取消错误注入，验证删除成功后版本计数正常推进。
 	om.SetDeleteStatefulPodError(nil, 0)
 	status, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now())
 	if err != nil {
@@ -692,10 +718,12 @@ func NewRevisionDeletePodFailure(t *testing.T, set *apps.StatefulSet, invariants
 	}
 }
 
+// emptyInvariants 是空的不变量校验函数，用于不需要额外校验的场景。
 func emptyInvariants(set *apps.StatefulSet, om *fakeObjectManager) error {
 	return nil
 }
 
+// TestStatefulSetControlWithStartOrdinal 验证起始序号非零时控制器创建 Pod 的序号正确。
 func TestStatefulSetControlWithStartOrdinal(t *testing.T) {
 	simpleSetFn := func() *apps.StatefulSet {
 		statefulSet := newStatefulSet(3)
@@ -719,6 +747,7 @@ func TestStatefulSetControlWithStartOrdinal(t *testing.T) {
 	}
 }
 
+// CreatesPodsWithStartOrdinal 验证从指定起始序号开始创建 Pod，且序号连续递增。
 func CreatesPodsWithStartOrdinal(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	client := fake.NewSimpleClientset(set)
 	om, _, ssc := setupController(client)
@@ -758,6 +787,7 @@ func CreatesPodsWithStartOrdinal(t *testing.T, set *apps.StatefulSet, invariants
 	}
 }
 
+// RecreatesPVCForPendingPod 验证 Pending Pod 缺失的 PVC 会被控制器重新创建。
 func RecreatesPVCForPendingPod(t *testing.T, set *apps.StatefulSet, invariants invariantFunc) {
 	client := fake.NewSimpleClientset()
 	om, _, ssc := setupController(client)
@@ -787,7 +817,7 @@ func RecreatesPVCForPendingPod(t *testing.T, set *apps.StatefulSet, invariants i
 	if _, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now()); err != nil {
 		t.Errorf("Error updating StatefulSet %s", err)
 	}
-	// invariants check if there any missing PVCs for the Pods
+	// 通过不变量校验确认每个 Pod 的 PVC 都不缺失。
 	if err := invariants(set, om); err != nil {
 		t.Error(err)
 	}
@@ -797,6 +827,7 @@ func RecreatesPVCForPendingPod(t *testing.T, set *apps.StatefulSet, invariants i
 	}
 }
 
+// TestStatefulSetControlScaleDownDeleteError 验证缩容时删除 Pod 失败后的重试与最终成功。
 func TestStatefulSetControlScaleDownDeleteError(t *testing.T) {
 	runTestOverPVCRetentionPolicies(
 		t, "", func(t *testing.T, policy *apps.StatefulSetPersistentVolumeClaimRetentionPolicy) {
@@ -842,6 +873,8 @@ func TestStatefulSetControlScaleDownDeleteError(t *testing.T) {
 		})
 }
 
+// TestStatefulSetControl_getSetRevisions 验证 getStatefulSetRevisions 的版本创建、查找与回滚行为。
+// 覆盖初次创建、更新创建新版本、避免重复创建以及回滚到历史版本等场景。
 func TestStatefulSetControl_getSetRevisions(t *testing.T) {
 	updateRevision := func(cr *apps.ControllerRevision, revision int64) *apps.ControllerRevision {
 		clone := cr.DeepCopy()
@@ -965,11 +998,14 @@ func TestStatefulSetControl_getSetRevisions(t *testing.T) {
 		})
 }
 
+// setupPodManagementPolicy 设置 StatefulSet 的 Pod 管理策略，便于按策略驱动同一测试流程。
 func setupPodManagementPolicy(podManagementPolicy apps.PodManagementPolicyType, set *apps.StatefulSet) *apps.StatefulSet {
 	set.Spec.PodManagementPolicy = podManagementPolicy
 	return set
 }
 
+// TestStatefulSetControlRollingUpdateWithMaxUnavailable 验证滚动更新时 maxUnavailable 的并发控制。
+// 分别在并行与有序策略下，检查可同时不可用 Pod 的数量与顺序约束。
 func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.MaxUnavailableStatefulSet, true)
 
@@ -982,12 +1018,12 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 		selector labels.Selector,
 		now time.Time,
 	) []*v1.Pod {
-		// in burst mode, 2 pods got deleted, so 2 new pods will be created at the same time
+		// 并行模式下两个 Pod 被同时删除，因此会同时创建两个新 Pod。
 		if len(pods) != totalPods {
 			t.Fatalf("Expected create pods 4/5, got pods %v", len(pods))
 		}
 
-		// if pod 4 ready, start to update pod 3.
+		// Pod 4 就绪后，可以开始更新 Pod 3。
 		spc.setPodRunning(set, 4)
 		originalPods, _ := spc.setPodReadyCondition(set, 4, true, now)
 		sort.Sort(ascendingOrdinal(originalPods))
@@ -999,12 +1035,12 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 			t.Fatal(err)
 		}
 		sort.Sort(ascendingOrdinal(pods))
-		// pods 0, 1,2, 4,5 should be present(note 3 is missing)
+		// 此时应只缺少 Pod 3，其余 Pod 0、1、2、4、5 都在。
 		if !reflect.DeepEqual(pods, append(originalPods[:3], originalPods[4:]...)) {
 			t.Fatalf("Expected pods %v, got pods %v", append(originalPods[:3], originalPods[4:]...), pods)
 		}
 
-		// create new pod 3
+		// 创建新的 Pod 3。
 		if _, err = ssc.UpdateStatefulSet(context.TODO(), set, pods, now); err != nil {
 			t.Fatal(err)
 		}
@@ -1027,14 +1063,14 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 		selector labels.Selector,
 		now time.Time,
 	) []*v1.Pod {
-		// only one pod gets created at a time due to OrderedReady
+		// OrderedReady 模式下一次只创建一个 Pod。
 		if len(pods) != 5 {
 			t.Fatalf("Expected create pods 5, got pods %v", len(pods))
 		}
 		spc.setPodRunning(set, 4)
 		spc.setPodReadyCondition(set, 4, true, now) // nolint:errcheck
 
-		// create new pod 4 (only one pod gets created at a time due to OrderedReady)
+		// 创建新的 Pod 4，同样受一次只创建一个 Pod 的限制。
 		if _, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, now); err != nil {
 			t.Fatal(err)
 		}
@@ -1043,7 +1079,7 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// In OrderedReady mode, only 4 pods exist at this point (pod 5 not created yet)
+		// 此时只有 4 个 Pod，Pod 5 尚未创建。
 		if len(pods) != totalPods-1 {
 			t.Fatalf("Expected create pods %d, got pods %v", totalPods-1, len(pods))
 		}
@@ -1066,7 +1102,7 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 		{apps.ParallelPodManagement, simpleParallelVerificationFn},
 	}
 	for _, tc := range testCases {
-		// Setup the statefulSet controller
+		// 配置 StatefulSet 控制器与滚动更新参数。
 		var totalPods int32 = 6
 		var partition int32 = 3
 		var maxUnavailable = intstr.FromInt32(2)
@@ -1092,7 +1128,7 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Change the image to trigger an update
+		// 修改镜像以触发滚动更新。
 		set.Spec.Template.Spec.Containers[0].Image = "foo"
 
 		selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
@@ -1105,7 +1141,7 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 		}
 		sort.Sort(ascendingOrdinal(originalPods))
 
-		// since maxUnavailable is 2, update pods 4 and 5, this will delete the pod 4 and 5,
+		// maxUnavailable 为 2，因此先删除 Pod 4 和 5。
 		if _, err = ssc.UpdateStatefulSet(context.TODO(), set, originalPods, fakeClock.Now()); err != nil {
 			t.Fatal(err)
 		}
@@ -1116,12 +1152,12 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 
 		sort.Sort(ascendingOrdinal(pods))
 
-		// expected number of pod is 0,1,2,3
+		// 此时应只剩下 Pod 0、1、2、3。
 		if !reflect.DeepEqual(pods, originalPods[:4]) {
 			t.Fatalf("Expected pods %v, got pods %v", originalPods[:4], pods)
 		}
 
-		// create new pods
+		// 创建被删除的新 Pod。
 		if _, err = ssc.UpdateStatefulSet(context.TODO(), set, pods, fakeClock.Now()); err != nil {
 			t.Fatal(err)
 		}
@@ -1132,7 +1168,7 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 
 		tc.verifyFn(set, spc, ssc, pods, int(totalPods), selector, fakeClock.Now())
 
-		// pods 3/4/5 ready, should not update other pods
+		// Pod 3、4、5 已就绪，不应再更新其他 Pod。
 		spc.setPodRunning(set, 3)
 		spc.setPodRunning(set, 5)
 		spc.setPodReadyCondition(set, 5, true, fakeClock.Now()) // nolint:errcheck
@@ -1153,10 +1189,12 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailable(t *testing.T) {
 
 }
 
+// setupForInvariant 准备一个用于不变量校验的 StatefulSet 环境。
+// 创建 6 个 Pod，并设置 partition 为 3、maxUnavailable 为 2。
 func setupForInvariant(t *testing.T) (*apps.StatefulSet, *fakeObjectManager, StatefulSetControlInterface, intstr.IntOrString, int32) {
 	var totalPods int32 = 6
 	set := newStatefulSet(totalPods)
-	// update all pods >=3(3,4,5)
+	// 更新序号大于等于 3 的 Pod（即 3、4、5）。
 	var partition int32 = 3
 	var maxUnavailable = intstr.FromInt32(2)
 	set.Spec.UpdateStrategy = apps.StatefulSetUpdateStrategy{
@@ -1182,11 +1220,11 @@ func setupForInvariant(t *testing.T) (*apps.StatefulSet, *fakeObjectManager, Sta
 	return set, spc, ssc, maxUnavailable, totalPods
 }
 
+// TestStatefulSetControlRollingUpdateWithMaxUnavailableInOrderedModeVerifyInvariant 验证在已有不可用 Pod 时，
+// 有序模式下的滚动更新是否遵守 maxUnavailable 预算。
 func TestStatefulSetControlRollingUpdateWithMaxUnavailableInOrderedModeVerifyInvariant(t *testing.T) {
-	// Make all pods in statefulset unavailable one by one
-	// and verify that RollingUpdate doesnt proceed with maxUnavailable set
-	// this could have been a simple loop, keeping it like this to be able
-	// to add more params here.
+	// 逐个让 StatefulSet 中的 Pod 不可用，并验证设置了 maxUnavailable 时滚动更新不会继续推进。
+	// 这里显式列出各种组合而非简单循环，是为了便于后续扩展更多参数场景。
 	testCases := []struct {
 		ordinalOfPodToTerminate []int
 	}{
@@ -1199,8 +1237,10 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailableInOrderedModeVerifyInv
 		{[]int{5, 3}},
 		{[]int{4, 3}},
 		{[]int{5, 4, 3}},
-		{[]int{2}}, // note this is an ordinal greater than partition(3)
-		{[]int{1}}, // note this is an ordinal greater than partition(3)
+		// 注意该序号实际小于 partition（3）。
+		{[]int{2}},
+		// 注意该序号实际小于 partition（3）。
+		{[]int{1}},
 	}
 	for _, tc := range testCases {
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.MaxUnavailableStatefulSet, true)
@@ -1210,7 +1250,7 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailableInOrderedModeVerifyInv
 			updateRevision := &apps.ControllerRevision{}
 
 			for i := 0; i < len(tc.ordinalOfPodToTerminate); i++ {
-				// Ensure at least one pod is unavailable before trying to update
+				// 先确保至少有一个 Pod 不可用，再尝试更新。
 				_, err := spc.addTerminatingPod(set, tc.ordinalOfPodToTerminate[i])
 				if err != nil {
 					t.Fatal(err)
@@ -1229,11 +1269,10 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailableInOrderedModeVerifyInv
 
 			sort.Sort(ascendingOrdinal(originalPods))
 
-			// start to update
+			// 开始滚动更新。
 			set.Spec.Template.Spec.Containers[0].Image = "foo"
 
-			// try to update the statefulset
-			// this function is only called in main code when feature gate is enabled
+			// 尝试更新 StatefulSet；主流程仅在特性门控启用时调用该函数。
 			if _, err = updateStatefulSetAfterInvariantEstablished(context.TODO(), ssc.(*defaultStatefulSetControl), set, originalPods, updateRevision, status, time.Now()); err != nil {
 				t.Fatal(err)
 			}
@@ -1259,14 +1298,10 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailableInOrderedModeVerifyInv
 	}
 }
 
-// Regression test for https://github.com/kubernetes/kubernetes/issues/137409.
-// When MaxUnavailableStatefulSet is enabled and a pod with Parallel pod management is on an
-// old revision AND already unavailable (e.g. crashlooping), the controller must still delete
-// the pod to trigger a revision update. The bug caused a deadlock: the pod could never become
-// available because it had the wrong revision, and the controller would never update it because
-// it treated the pod's existing unavailability as consuming the entire maxUnavailable budget.
-// For OrderedReady pod management the original strict behaviour is preserved for backwards
-// compatibility.
+// TestStatefulSetControlRollingUpdateWithMaxUnavailableAndUnavailableStalePod 是 issue 137409 的回归测试。
+// 当启用 MaxUnavailableStatefulSet 时，并行策略下处于旧版本且已不可用（如崩溃循环）的 Pod 也必须被删除，以触发版本更新。
+// 原缺陷会导致死锁：Pod 因版本错误而永远不可用，控制器又因其不可用而认为预算耗尽，从而永远不更新它。
+// 对于 OrderedReady 策略，保持原有的严格行为以维持向后兼容。
 func TestStatefulSetControlRollingUpdateWithMaxUnavailableAndUnavailableStalePod(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.MaxUnavailableStatefulSet, true)
 
@@ -1609,9 +1644,7 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailableAndUnavailableStalePod
 				t.Fatal(err)
 			}
 
-			// IsPodAvailable checks lastTransitionTime, so for those cases where
-			// we rely on minReadySeconds we need to ensure that pod report it
-			// with appropriate higher value
+			// IsPodAvailable 会检查 lastTransitionTime，因此依赖 minReadySeconds 的用例需要让 Pod 上报更早的时间。
 			if tc.minReadySeconds > 0 {
 				pastTime := fakeClock.Now().Add(-time.Duration(tc.minReadySeconds+60) * time.Second)
 				for ordinal := 0; ordinal < int(tc.replicas); ordinal++ {
@@ -1639,7 +1672,7 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailableAndUnavailableStalePod
 
 			status := apps.StatefulSetStatus{Replicas: tc.replicas}
 			updateRevision := &apps.ControllerRevision{}
-			// set minReadySeconds only for the invariant check
+			// 仅为不变量校验设置 minReadySeconds，避免影响更新前的状态计算。
 			set.Spec.MinReadySeconds = tc.minReadySeconds
 			if _, err = updateStatefulSetAfterInvariantEstablished(
 				t.Context(),
@@ -1678,6 +1711,8 @@ func TestStatefulSetControlRollingUpdateWithMaxUnavailableAndUnavailableStalePod
 	}
 }
 
+// TestStatefulSetControlRollingUpdate 验证 RollingUpdate 策略下的镜像更新。
+// 覆盖单调与并行模式，以及扩容、缩容与更新组合场景。
 func TestStatefulSetControlRollingUpdate(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -1846,6 +1881,8 @@ func TestStatefulSetControlRollingUpdate(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControlOnDeleteUpdate 验证 OnDelete 策略下镜像不会自动更新。
+// 只有当 Pod 被删除重建后才会使用新版本，并校验 PVC 的所有权引用正确。
 func TestStatefulSetControlOnDeleteUpdate(t *testing.T) {
 	originalImage := newStatefulSet(3).Spec.Template.Spec.Containers[0].Image
 
@@ -2061,7 +2098,7 @@ func TestStatefulSetControlOnDeleteUpdate(t *testing.T) {
 				t.Fatalf("%s: %s", test.name, err)
 			}
 
-			// Pods may have been deleted in the update. Delete any claims with a pod ownerRef.
+			// Pod 可能在更新过程中被删除；清理仍带有 Pod ownerRef 的 PVC。
 			selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 			if err != nil {
 				t.Fatalf("%s: %s", test.name, err)
@@ -2151,6 +2188,8 @@ func TestStatefulSetControlOnDeleteUpdate(t *testing.T) {
 	})
 }
 
+// TestStatefulSetControlRollingUpdateWithPartition 验证带 partition 的滚动更新。
+// 序号小于 partition 的 Pod 保持旧版本，大于等于 partition 的 Pod 更新到新版本。
 func TestStatefulSetControlRollingUpdateWithPartition(t *testing.T) {
 	originalImage := newStatefulSet(3).Spec.Template.Spec.Containers[0].Image
 
@@ -2303,6 +2342,8 @@ func TestStatefulSetControlRollingUpdateWithPartition(t *testing.T) {
 	})
 }
 
+// TestStatefulSetControlRecreateUpdatePreservesPVC 验证 Recreate 策略更新时 PVC 会被保留。
+// 通过比较更新前后 PVC 的 UID，确认 PVC 未被删除重建。
 func TestStatefulSetControlRecreateUpdatePreservesPVC(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.StatefulSetRecreateStrategy, true)
 	runTestOverPVCRetentionPolicies(
@@ -2372,6 +2413,8 @@ func TestStatefulSetControlRecreateUpdatePreservesPVC(t *testing.T) {
 		})
 }
 
+// TestStatefulSetControlRecreateUpdate 验证 Recreate 策略下的更新行为。
+// 覆盖正常更新、无变化时的空操作、卡住或失败 Pod 的处理，以及扩缩容场景。
 func TestStatefulSetControlRecreateUpdate(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.StatefulSetRecreateStrategy, true)
 	type testcase struct {
@@ -2663,6 +2706,8 @@ func TestStatefulSetControlRecreateUpdate(t *testing.T) {
 	}
 }
 
+// TestStatefulSetHonorRevisionHistoryLimit 验证控制器遵循 revisionHistoryLimit 配置。
+// 反复更新镜像时，历史版本数量应始终受限于配置值。
 func TestStatefulSetHonorRevisionHistoryLimit(t *testing.T) {
 	runTestOverPVCRetentionPolicies(t, "", func(t *testing.T, policy *apps.StatefulSetPersistentVolumeClaimRetentionPolicy) {
 		invariants := assertMonotonicInvariants
@@ -2692,8 +2737,8 @@ func TestStatefulSetHonorRevisionHistoryLimit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error listing revisions: %v", err)
 			}
-			// the extra 2 revisions are `currentRevision` and `updateRevision`
-			// They're considered as `live`, and truncateHistory only cleans up non-live revisions
+			// 额外的两个版本是 currentRevision 与 updateRevision。
+			// 它们被视为存活版本，truncateHistory 只会清理非存活版本。
 			if len(revisions) > int(*set.Spec.RevisionHistoryLimit)+2 {
 				t.Fatalf("%s: %d greater than limit %d", "", len(revisions), *set.Spec.RevisionHistoryLimit)
 			}
@@ -2701,6 +2746,7 @@ func TestStatefulSetHonorRevisionHistoryLimit(t *testing.T) {
 	})
 }
 
+// TestStatefulSetControlLimitsHistory 验证不同 revisionHistoryLimit 配置下的历史版本数量限制。
 func TestStatefulSetControlLimitsHistory(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -2788,8 +2834,7 @@ func TestStatefulSetControlLimitsHistory(t *testing.T) {
 				}
 
 				if *set.Spec.RevisionHistoryLimit < 0 {
-					// If the revisionHistoryLimit is negative value, we don't truncate
-					// the revision history and it is incremental.
+					// revisionHistoryLimit 为负数时不裁剪历史版本，版本数量会持续增长。
 					continue
 				}
 
@@ -2801,6 +2846,8 @@ func TestStatefulSetControlLimitsHistory(t *testing.T) {
 	}
 }
 
+// TestStatefulSetControlRollback 验证回滚到历史版本后 Pod 会恢复原有镜像。
+// 覆盖单调与并行模式，以及扩容、缩容组合场景。
 func TestStatefulSetControlRollback(t *testing.T) {
 	originalImage := newStatefulSet(3).Spec.Template.Spec.Containers[0].Image
 	tests := []struct {
@@ -3048,6 +3095,8 @@ func TestStatefulSetControlRollback(t *testing.T) {
 	}
 }
 
+// TestStatefulSetAvailability 验证启用 minReadySeconds 时可用副本数的计算。
+// 只有处于就绪状态超过规定时间的 Pod 才计入可用副本。
 func TestStatefulSetAvailability(t *testing.T) {
 	tests := []struct {
 		name                   string
@@ -3101,6 +3150,8 @@ func TestStatefulSetAvailability(t *testing.T) {
 	}
 }
 
+// TestStatefulSetStatusUpdate 验证同步错误与状态更新错误的传播优先级。
+// 当两类错误同时发生时，同步错误优先返回。
 func TestStatefulSetStatusUpdate(t *testing.T) {
 	var (
 		syncErr   = fmt.Errorf("sync error")
@@ -3173,13 +3224,14 @@ func TestStatefulSetStatusUpdate(t *testing.T) {
 	}
 }
 
+// requestTracker 记录 fake 依赖的调用次数，并可按需注入错误与统计并发请求。
 type requestTracker struct {
 	sync.Mutex
 	requests int
 	err      error
 	after    int
 
-	// this block should be updated consistently
+	// 以下字段用于并行请求统计，修改时需与 trackParallelRequests 保持一致。
 	parallelLock                sync.Mutex
 	shouldTrackParallelRequests bool
 	parallelRequests            int
@@ -3187,38 +3239,42 @@ type requestTracker struct {
 	parallelRequestDelay        time.Duration
 }
 
+// trackParallelRequests 统计同时进行的请求数量，并记录观测到的最大并发数。
+// 通过 TryLock 区分首个并发请求与后续并发请求，并可注入延时制造冲突。
 func (rt *requestTracker) trackParallelRequests() {
 	if !rt.shouldTrackParallelRequests {
-		// do not track parallel requests unless specifically enabled
+		// 未显式开启时不统计并行请求。
 		return
 	}
 	if rt.parallelLock.TryLock() {
-		// lock acquired: we are the only or the first concurrent request
-		// initialize the next set of parallel requests
+		// 成功加锁说明是唯一请求或首个并发请求。
+		// 初始化新一轮并发请求计数。
 		rt.parallelRequests = 1
 	} else {
-		// lock is held by other requests
-		// now wait for the lock to increase the parallelRequests
+		// 锁被其他请求持有。
+		// 等待锁释放后递增并发计数。
 		rt.parallelLock.Lock()
 		rt.parallelRequests++
 	}
 	defer rt.parallelLock.Unlock()
-	// update the local maximum of parallel collisions
+	// 记录观测到的最大并发冲突数。
 	if rt.maxParallelRequests < rt.parallelRequests {
 		rt.maxParallelRequests = rt.parallelRequests
 	}
-	// increase the chance of collisions
+	// 注入延时以提高发生并发冲突的概率。
 	if rt.parallelRequestDelay > 0 {
 		time.Sleep(rt.parallelRequestDelay)
 	}
 }
 
+// incWithOptionalError 递增请求计数，并在达到指定次数后返回一次注入的错误。
+// 错误只生效一次，返回前会重置以确保后续调用正常。
 func (rt *requestTracker) incWithOptionalError() error {
 	rt.Lock()
 	defer rt.Unlock()
 	rt.requests++
 	if rt.err != nil && rt.requests >= rt.after {
-		// reset and pass the error
+		// 重置注入错误，保证它只影响一次调用。
 		defer func() {
 			rt.err = nil
 			rt.after = 0
@@ -3228,6 +3284,7 @@ func (rt *requestTracker) incWithOptionalError() error {
 	return nil
 }
 
+// newRequestTracker 以指定的初始计数、错误和触发次数构造 requestTracker。
 func newRequestTracker(requests int, err error, after int) requestTracker {
 	return requestTracker{
 		requests: requests,
@@ -3236,6 +3293,8 @@ func newRequestTracker(requests int, err error, after int) requestTracker {
 	}
 }
 
+// fakeObjectManager 实现 StatefulPodControlObjectManager。
+// 它基于 informer 的本地索引器操作对象，并记录各类请求的调用情况。
 type fakeObjectManager struct {
 	podsLister       corelisters.PodLister
 	claimsLister     corelisters.PersistentVolumeClaimLister
@@ -3249,6 +3308,7 @@ type fakeObjectManager struct {
 	deletePodTracker requestTracker
 }
 
+// newFakeObjectManager 基于 informerFactory 构造 fakeObjectManager。
 func newFakeObjectManager(informerFactory informers.SharedInformerFactory) *fakeObjectManager {
 	podInformer := informerFactory.Core().V1().Pods()
 	claimInformer := informerFactory.Core().V1().PersistentVolumeClaims()
@@ -3269,6 +3329,8 @@ func newFakeObjectManager(informerFactory informers.SharedInformerFactory) *fake
 	}
 }
 
+// CreatePod 将 Pod 写入本地索引器，并记录请求与注入错误。
+// 同时设置 UID 以模拟真实 API 服务器创建的对象。
 func (om *fakeObjectManager) CreatePod(ctx context.Context, pod *v1.Pod, ss *apps.StatefulSet) error {
 	defer om.createPodTracker.trackParallelRequests()
 	if err := om.createPodTracker.incWithOptionalError(); err != nil {
@@ -3278,10 +3340,12 @@ func (om *fakeObjectManager) CreatePod(ctx context.Context, pod *v1.Pod, ss *app
 	return om.podsIndexer.Update(pod)
 }
 
+// GetPod 从本地索引器获取指定名称的 Pod。
 func (om *fakeObjectManager) GetPod(namespace, podName string) (*v1.Pod, error) {
 	return om.podsLister.Pods(namespace).Get(podName)
 }
 
+// UpdatePod 更新本地索引器中的 Pod，并记录请求与注入错误。
 func (om *fakeObjectManager) UpdatePod(pod *v1.Pod, ss *apps.StatefulSet) error {
 	defer om.updatePodTracker.trackParallelRequests()
 	if err := om.updatePodTracker.incWithOptionalError(); err != nil {
@@ -3290,6 +3354,7 @@ func (om *fakeObjectManager) UpdatePod(pod *v1.Pod, ss *apps.StatefulSet) error 
 	return om.podsIndexer.Update(pod)
 }
 
+// DeletePod 从本地索引器中删除指定 Pod；Pod 不存在时不视为错误。
 func (om *fakeObjectManager) DeletePod(pod *v1.Pod) error {
 	defer om.deletePodTracker.trackParallelRequests()
 	if err := om.deletePodTracker.incWithOptionalError(); err != nil {
@@ -3305,17 +3370,20 @@ func (om *fakeObjectManager) DeletePod(pod *v1.Pod) error {
 	return nil // Not found, no error in deleting.
 }
 
+// CreateClaim 将 PVC 写入本地索引器。
 func (om *fakeObjectManager) CreateClaim(claim *v1.PersistentVolumeClaim, ss *apps.StatefulSet) error {
 	om.claimsIndexer.Update(claim)
 	return nil
 }
 
+// GetClaim 从本地索引器获取指定名称的 PVC。
 func (om *fakeObjectManager) GetClaim(namespace, claimName string) (*v1.PersistentVolumeClaim, error) {
 	return om.claimsLister.PersistentVolumeClaims(namespace).Get(claimName)
 }
 
+// UpdateClaim 校验 PVC 的 ownerRef 完整性后更新本地索引器。
 func (om *fakeObjectManager) UpdateClaim(claim *v1.PersistentVolumeClaim, ss *apps.StatefulSet) error {
-	// Validate ownerRefs.
+	// 校验 ownerRef 的各字段必须填写完整。
 	refs := claim.GetOwnerReferences()
 	for _, ref := range refs {
 		if ref.APIVersion == "" || ref.Kind == "" || ref.Name == "" {
@@ -3326,21 +3394,25 @@ func (om *fakeObjectManager) UpdateClaim(claim *v1.PersistentVolumeClaim, ss *ap
 	return nil
 }
 
+// SetCreateStatefulPodError 设置创建 Pod 时注入的错误与触发次数。
 func (om *fakeObjectManager) SetCreateStatefulPodError(err error, after int) {
 	om.createPodTracker.err = err
 	om.createPodTracker.after = after
 }
 
+// SetUpdateStatefulPodError 设置更新 Pod 时注入的错误与触发次数。
 func (om *fakeObjectManager) SetUpdateStatefulPodError(err error, after int) {
 	om.updatePodTracker.err = err
 	om.updatePodTracker.after = after
 }
 
+// SetDeleteStatefulPodError 设置删除 Pod 时注入的错误与触发次数。
 func (om *fakeObjectManager) SetDeleteStatefulPodError(err error, after int) {
 	om.deletePodTracker.err = err
 	om.deletePodTracker.after = after
 }
 
+// findPodByOrdinal 按序号查找 Pod，返回深拷贝以避免修改缓存中的对象。
 func findPodByOrdinal(pods []*v1.Pod, ordinal int) *v1.Pod {
 	for _, pod := range pods {
 		if getOrdinal(pod) == ordinal {
@@ -3351,6 +3423,7 @@ func findPodByOrdinal(pods []*v1.Pod, ordinal int) *v1.Pod {
 	return nil
 }
 
+// setPodPending 将指定序号的 Pod 状态设为 Pending，并返回更新后的 Pod 列表。
 func (om *fakeObjectManager) setPodPending(set *apps.StatefulSet, ordinal int) ([]*v1.Pod, error) {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
@@ -3370,6 +3443,7 @@ func (om *fakeObjectManager) setPodPending(set *apps.StatefulSet, ordinal int) (
 	return om.podsLister.Pods(set.Namespace).List(selector)
 }
 
+// setPodRunning 将指定序号的 Pod 状态设为 Running，并返回更新后的 Pod 列表。
 func (om *fakeObjectManager) setPodRunning(set *apps.StatefulSet, ordinal int) ([]*v1.Pod, error) {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
@@ -3389,9 +3463,10 @@ func (om *fakeObjectManager) setPodRunning(set *apps.StatefulSet, ordinal int) (
 	return om.podsLister.Pods(set.Namespace).List(selector)
 }
 
+// updatePodCondition 更新 Pod 的 Ready 条件。
+// 此处复制 podutil.UpdatePodCondition 的实现，是为了能够控制注入的 LastTransitionTime。
 func (om *fakeObjectManager) updatePodCondition(status *v1.PodStatus, condition *v1.PodCondition) {
-	// this method is very similar to podutil.UpdatePodCondition, but since we need
-	// to have control over injected LastTransitionTime, we're copying it here
+	// 此处复制 podutil.UpdatePodCondition 的实现，是为了能够控制注入的 LastTransitionTime。
 	conditionIndex, oldCondition := podutil.GetPodCondition(status, v1.PodReady)
 	if oldCondition == nil {
 		status.Conditions = append(status.Conditions, *condition)
@@ -3403,6 +3478,7 @@ func (om *fakeObjectManager) updatePodCondition(status *v1.PodStatus, condition 
 	status.Conditions[conditionIndex] = *condition
 }
 
+// setPodReadyCondition 设置指定序号 Pod 的 Ready 条件及状态转换时间。
 func (om *fakeObjectManager) setPodReadyCondition(set *apps.StatefulSet, ordinal int, ready bool, lastTransitionTime time.Time) ([]*v1.Pod, error) {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
@@ -3426,6 +3502,7 @@ func (om *fakeObjectManager) setPodReadyCondition(set *apps.StatefulSet, ordinal
 	return om.podsLister.Pods(set.Namespace).List(selector)
 }
 
+// setPodAvailable 将指定序号 Pod 标记为 Ready，并设置状态转换时间以模拟可用状态。
 func (om *fakeObjectManager) setPodAvailable(set *apps.StatefulSet, ordinal int, lastTransitionTime time.Time) ([]*v1.Pod, error) {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
@@ -3456,6 +3533,7 @@ func (om *fakeObjectManager) setPodAvailable(set *apps.StatefulSet, ordinal int,
 	return om.podsLister.Pods(set.Namespace).List(selector)
 }
 
+// addTerminatingPod 新增一个带删除时间戳的 Pod，用于模拟正在终止的 Pod。
 func (om *fakeObjectManager) addTerminatingPod(set *apps.StatefulSet, ordinal int) ([]*v1.Pod, error) {
 	pod := newStatefulSetPod(set, ordinal)
 	pod.SetUID(types.UID(pod.Name + "-uid")) // To match fakeObjectManager.CreatePod
@@ -3473,6 +3551,7 @@ func (om *fakeObjectManager) addTerminatingPod(set *apps.StatefulSet, ordinal in
 	return om.podsLister.Pods(set.Namespace).List(selector)
 }
 
+// setPodTerminated 为指定序号的 Pod 设置删除时间戳，模拟已终止状态。
 func (om *fakeObjectManager) setPodTerminated(set *apps.StatefulSet, ordinal int) ([]*v1.Pod, error) {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
@@ -3495,12 +3574,15 @@ func (om *fakeObjectManager) setPodTerminated(set *apps.StatefulSet, ordinal int
 
 var _ StatefulPodControlObjectManager = &fakeObjectManager{}
 
+// fakeStatefulSetStatusUpdater 实现 StatefulSetStatusUpdaterInterface。
+// 它在本地索引器中更新状态，并记录调用次数与注入错误。
 type fakeStatefulSetStatusUpdater struct {
 	setsLister          appslisters.StatefulSetLister
 	setsIndexer         cache.Indexer
 	updateStatusTracker requestTracker
 }
 
+// newFakeStatefulSetStatusUpdater 基于 StatefulSet informer 构造 fake 状态更新器。
 func newFakeStatefulSetStatusUpdater(setInformer appsinformers.StatefulSetInformer) *fakeStatefulSetStatusUpdater {
 	return &fakeStatefulSetStatusUpdater{
 		setInformer.Lister(),
@@ -3509,6 +3591,7 @@ func newFakeStatefulSetStatusUpdater(setInformer appsinformers.StatefulSetInform
 	}
 }
 
+// UpdateStatefulSetStatus 将新状态写回本地索引器，并记录请求与注入错误。
 func (ssu *fakeStatefulSetStatusUpdater) UpdateStatefulSetStatus(ctx context.Context, set *apps.StatefulSet, status *apps.StatefulSetStatus) error {
 	defer ssu.updateStatusTracker.trackParallelRequests()
 	if err := ssu.updateStatusTracker.incWithOptionalError(); err != nil {
@@ -3519,6 +3602,7 @@ func (ssu *fakeStatefulSetStatusUpdater) UpdateStatefulSetStatus(ctx context.Con
 	return nil
 }
 
+// SetUpdateStatefulSetStatusError 设置更新状态时注入的错误与触发次数。
 func (ssu *fakeStatefulSetStatusUpdater) SetUpdateStatefulSetStatusError(err error, after int) {
 	ssu.updateStatusTracker.err = err
 	ssu.updateStatusTracker.after = after
@@ -3526,6 +3610,8 @@ func (ssu *fakeStatefulSetStatusUpdater) SetUpdateStatefulSetStatusError(err err
 
 var _ StatefulSetStatusUpdaterInterface = &fakeStatefulSetStatusUpdater{}
 
+// assertMonotonicInvariants 校验有序策略下的不变量。
+// 包括 Pod 按序就绪、序号连续、存储与身份匹配，以及 PVC 保留策略正确。
 func assertMonotonicInvariants(set *apps.StatefulSet, om *fakeObjectManager) error {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
@@ -3563,6 +3649,8 @@ func assertMonotonicInvariants(set *apps.StatefulSet, om *fakeObjectManager) err
 	return nil
 }
 
+// assertBurstInvariants 校验并行策略下的不变量。
+// 不要求 Pod 按序就绪，但仍校验存储、身份与 PVC 的约束。
 func assertBurstInvariants(set *apps.StatefulSet, om *fakeObjectManager) error {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
@@ -3597,6 +3685,8 @@ func assertBurstInvariants(set *apps.StatefulSet, om *fakeObjectManager) error {
 	return nil
 }
 
+// assertUpdateInvariants 校验更新过程中的不变量。
+// 除存储、身份和 PVC 外，还校验新旧版本 Pod 的分布与状态中的版本计数一致。
 func assertUpdateInvariants(set *apps.StatefulSet, om *fakeObjectManager) error {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
@@ -3646,6 +3736,8 @@ func assertUpdateInvariants(set *apps.StatefulSet, om *fakeObjectManager) error 
 	return nil
 }
 
+// checkClaimInvarients 根据 PVC 保留策略校验 PVC 的 ownerRef 是否符合预期。
+// 未保留的 PVC 即使缺失也不违反不变量。
 func checkClaimInvarients(set *apps.StatefulSet, pod *v1.Pod, claim *v1.PersistentVolumeClaim) error {
 	policy := apps.StatefulSetPersistentVolumeClaimRetentionPolicy{
 		WhenScaled:  apps.RetainPersistentVolumeClaimRetentionPolicyType,
@@ -3663,7 +3755,7 @@ func checkClaimInvarients(set *apps.StatefulSet, pod *v1.Pod, claim *v1.Persiste
 	}
 
 	if pod.Status.Phase != v1.PodRunning || !podutil.IsPodReady(pod) {
-		// The pod has spun up yet, we do not expect the owner refs on the claim to have been set.
+		// Pod 尚未启动时，不期望 PVC 上已设置 ownerRef。
 		return nil
 	}
 
@@ -3708,6 +3800,7 @@ func checkClaimInvarients(set *apps.StatefulSet, pod *v1.Pod, claim *v1.Persiste
 	return nil
 }
 
+// fakeResourceVersion 为对象设置或递增 resourceVersion，模拟 API 服务器的版本管理。
 func fakeResourceVersion(object interface{}) {
 	obj, isObj := object.(metav1.Object)
 	if !isObj {
@@ -3719,6 +3812,9 @@ func fakeResourceVersion(object interface{}) {
 		obj.SetResourceVersion(strconv.FormatInt(intValue+1, 10))
 	}
 }
+
+// TestParallelScale 验证并行策略下大规模扩缩容能在有限轮次内完成。
+// 同时通过追踪并发请求数确认控制器具备并行处理能力。
 func TestParallelScale(t *testing.T) {
 	for _, tc := range []struct {
 		desc                        string
@@ -3761,11 +3857,12 @@ func TestParallelScale(t *testing.T) {
 
 }
 
+// parallelScale 在并行策略下执行扩容或缩容，并校验不变量与最小并发请求数。
 func parallelScale(t *testing.T, set *apps.StatefulSet, replicas, desiredReplicas int32, expectedMinParallelRequests int, invariants invariantFunc) {
 	var err error
 	diff := desiredReplicas - replicas
 
-	// maxParallelRequests: MaxBatchSize of the controller is 500, We divide the diff by 4 to allow maximum of the half of the last batch.
+	// 控制器单批最多处理 500 个 Pod；这里将差值除以 4，给最后一批留出足够空间。
 	if maxParallelRequests := min(500, math.Abs(float64(diff))/4); expectedMinParallelRequests < 2 || float64(expectedMinParallelRequests) > maxParallelRequests {
 		t.Fatalf("expectedMinParallelRequests should be between 2 and %v. Batch size of the controller is expontially increasing until 500. "+
 			"Got expectedMinParallelRequests %v, ", maxParallelRequests, expectedMinParallelRequests)
@@ -3810,6 +3907,8 @@ func parallelScale(t *testing.T, set *apps.StatefulSet, replicas, desiredReplica
 	}
 }
 
+// parallelScaleUpStatefulSetControl 在并行策略下反复调用控制器直到扩容完成。
+// 每轮先把新 Pod 置为 Pending，再调用控制器并校验不变量。
 func parallelScaleUpStatefulSetControl(set *apps.StatefulSet,
 	ssc StatefulSetControlInterface,
 	om *fakeObjectManager,
@@ -3819,9 +3918,8 @@ func parallelScaleUpStatefulSetControl(set *apps.StatefulSet,
 		return err
 	}
 
-	// Give up after 2 loops.
-	// 2 * 500 pods per loop = 1000 max pods <- this should be enough for all test cases.
-	// Anything slower than that (requiring more iterations) indicates a problem and should fail the test.
+	// 最多执行 2 轮；每轮可处理 500 个 Pod，共 1000 个，足以覆盖所有测试用例。
+	// 若需要更多轮次，说明并行处理存在问题，测试应当失败。
 	maxLoops := 2
 	loops := maxLoops
 	for set.Status.Replicas < *set.Spec.Replicas {
@@ -3841,14 +3939,14 @@ func parallelScaleUpStatefulSetControl(set *apps.StatefulSet,
 				ordinals = append(ordinals, getOrdinal(pod))
 			}
 		}
-		// ensure all pods are valid (have a phase)
+		// 确保所有 Pod 都处于有效阶段。
 		for _, ord := range ordinals {
 			if pods, err = om.setPodPending(set, ord); err != nil {
 				return err
 			}
 		}
 
-		// run the controller once and check invariants
+		// 执行一次控制器逻辑并校验不变量。
 		_, err = ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now())
 		if err != nil {
 			return err
@@ -3864,15 +3962,15 @@ func parallelScaleUpStatefulSetControl(set *apps.StatefulSet,
 	return invariants(set, om)
 }
 
+// parallelScaleDownStatefulSetControl 在并行策略下反复调用控制器直到缩容完成。
 func parallelScaleDownStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetControlInterface, om *fakeObjectManager, invariants invariantFunc) error {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
 		return err
 	}
 
-	// Give up after 2 loops.
-	// 2 * 500 pods per loop = 1000 max pods <- this should be enough for all test cases.
-	// Anything slower than that (requiring more iterations) indicates a problem and should fail the test.
+	// 最多执行 2 轮；每轮可处理 500 个 Pod，共 1000 个，足以覆盖所有测试用例。
+	// 若需要更多轮次，说明并行处理存在问题，测试应当失败。
 	maxLoops := 2
 	loops := maxLoops
 	for set.Status.Replicas > *set.Spec.Replicas {
@@ -3908,6 +4006,8 @@ func parallelScaleDownStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetC
 	return nil
 }
 
+// scaleUpStatefulSetControl 反复驱动控制器，直到所有 Pod 就绪且状态更新完成。
+// 每轮随机推进一个 Pod 的状态，并在每步之后校验不变量。
 func scaleUpStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetControlInterface, om *fakeObjectManager,
 	invariants invariantFunc, fakeClock *testingclock.FakeClock) error {
 	now := func() time.Time {
@@ -3930,7 +4030,7 @@ func scaleUpStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetControlInte
 		}
 		sort.Sort(ascendingOrdinal(pods))
 
-		// ensure all pods are valid (have a phase)
+		// 确保所有 Pod 都处于有效阶段。
 		for _, pod := range pods {
 			if pod.Status.Phase == "" {
 				if pods, err = om.setPodPending(set, getOrdinal(pod)); err != nil {
@@ -3940,7 +4040,7 @@ func scaleUpStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetControlInte
 			}
 		}
 
-		// select one of the pods and move it forward in status
+		// 随机选择一个 Pod 并推进其状态，模拟 Pod 陆续就绪的过程。
 		if len(pods) > 0 {
 			idx := int(rand.Int63n(int64(len(pods))))
 			pod := pods[idx]
@@ -3957,7 +4057,7 @@ func scaleUpStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetControlInte
 				continue
 			}
 		}
-		// run the controller once and check invariants
+		// 执行一次控制器逻辑并校验不变量。
 		_, err = ssc.UpdateStatefulSet(context.TODO(), set, pods, now())
 		if err != nil {
 			return err
@@ -3973,6 +4073,8 @@ func scaleUpStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetControlInte
 	return invariants(set, om)
 }
 
+// scaleDownStatefulSetControl 驱动控制器完成缩容，并清理已删除 Pod 对应的 PVC。
+// 每轮先让控制器删除旧 Pod，再模拟终止与移除过程。
 func scaleDownStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetControlInterface, om *fakeObjectManager, invariants invariantFunc) error {
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
@@ -4025,7 +4127,7 @@ func scaleDownStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetControlIn
 			return err
 		}
 	}
-	// If there are claims with ownerRefs on pods that have been deleted, delete them.
+	// 如果某些 PVC 的 ownerRef 指向已被删除的 Pod，则将这些 PVC 删除。
 	pods, err := om.podsLister.Pods(set.Namespace).List(selector)
 	if err != nil {
 		return err
@@ -4057,6 +4159,8 @@ func scaleDownStatefulSetControl(set *apps.StatefulSet, ssc StatefulSetControlIn
 	return invariants(set, om)
 }
 
+// updateComplete 判断 StatefulSet 的更新是否已经全部完成。
+// 依据更新策略分别检查 Pod 数量、就绪数与版本分布。
 func updateComplete(set *apps.StatefulSet, pods []*v1.Pod) bool {
 	sort.Sort(ascendingOrdinal(pods))
 	if len(pods) != int(*set.Spec.Replicas) {
@@ -4103,6 +4207,7 @@ func updateComplete(set *apps.StatefulSet, pods []*v1.Pod) bool {
 	return true
 }
 
+// verifyRecreateDeleteAll 校验 Recreate 策略在删除阶段一次性删除了所有旧版本 Pod。
 func verifyRecreateDeleteAll(om *fakeObjectManager, set *apps.StatefulSet, expectedDeletes, deleteRequests int) error {
 	deletesInReconcile := om.deletePodTracker.requests - deleteRequests
 	if deletesInReconcile != expectedDeletes {
@@ -4123,6 +4228,8 @@ func verifyRecreateDeleteAll(om *fakeObjectManager, set *apps.StatefulSet, expec
 	return nil
 }
 
+// updateStatefulSetControl 反复驱动控制器，直到更新完成并校验不变量。
+// 对 Recreate 策略还会额外校验旧版本 Pod 是否被一次性全部删除。
 func updateStatefulSetControl(set *apps.StatefulSet,
 	ssc StatefulSetControlInterface,
 	om *fakeObjectManager,
@@ -4212,6 +4319,7 @@ func updateStatefulSetControl(set *apps.StatefulSet,
 	return invariants(set, om)
 }
 
+// newRevisionOrDie 为 StatefulSet 构造指定版本的 ControllerRevision，失败时直接 panic。
 func newRevisionOrDie(set *apps.StatefulSet, revision int64) *apps.ControllerRevision {
 	rev, err := newRevision(set, revision, set.Status.CollisionCount)
 	if err != nil {
@@ -4220,6 +4328,7 @@ func newRevisionOrDie(set *apps.StatefulSet, revision int64) *apps.ControllerRev
 	return rev
 }
 
+// isOrHasInternalError 判断错误本身或聚合错误中是否包含 InternalError。
 func isOrHasInternalError(err error) bool {
 	if err == nil {
 		return false
@@ -4233,17 +4342,18 @@ func isOrHasInternalError(err error) bool {
 	return apierrors.IsInternalError(err)
 }
 
+// TestStatefulSetRollingUpdateRespectsMinReadySeconds 验证滚动更新逻辑将 MinReadySeconds 传给 isUnavailable()。
+// 只有就绪时间超过 MinReadySeconds 的 Pod 才计入可用副本。
 func TestStatefulSetRollingUpdateRespectsMinReadySeconds(t *testing.T) {
-	// This test validates that the change to pass set.Spec.MinReadySeconds to isUnavailable()
-	// in the rolling update logic actually works
+	// 该测试验证在滚动更新逻辑中向 isUnavailable() 传递 MinReadySeconds 的改动确实生效。
 	set := setMinReadySeconds(newStatefulSet(2), int32(30)) // 30 seconds MinReadySeconds
 	client := fake.NewClientset(set)
 	om, _, ssc := setupController(client)
 
-	// Create running and ready pods manually
+	// 手动创建已运行且就绪的 Pod。
 	set, _ = om.setsLister.StatefulSets(set.Namespace).Get(set.Name)
 
-	// Manually create pods that are running and ready
+	// 手动创建已运行且就绪的 Pod。
 	for i := 0; i < 2; i++ {
 		pod := newStatefulSetPod(set, i)
 		pod.Status.Phase = v1.PodRunning
@@ -4256,10 +4366,10 @@ func TestStatefulSetRollingUpdateRespectsMinReadySeconds(t *testing.T) {
 		}
 	}
 
-	// Trigger a rolling update by changing the image
+	// 修改镜像以触发滚动更新。
 	set.Spec.Template.Spec.Containers[0].Image = "updated-image"
 
-	// Get pods
+	// 获取当前 Pod 列表。
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 	if err != nil {
 		t.Fatalf("failed to create selector: %s", err)
@@ -4269,23 +4379,24 @@ func TestStatefulSetRollingUpdateRespectsMinReadySeconds(t *testing.T) {
 		t.Fatalf("failed to list pods: %s", err)
 	}
 
-	// Perform update - should be blocked because pods haven't been ready for 30 seconds
+	// 此时应阻止滚动更新：Pod 就绪时间尚未达到 30 秒。
 	status, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now())
 	if err != nil {
 		t.Fatalf("failed to update StatefulSet: %s", err)
 	}
 
-	// Verify that MinReadySeconds prevented the rolling update from proceeding
+	// 验证 MinReadySeconds 阻止了滚动更新继续推进。
 	if status.AvailableReplicas != 0 {
 		t.Errorf("expected 0 available replicas due to MinReadySeconds (pods ready for <30s), got %d", status.AvailableReplicas)
 	}
 
-	// Now set pods as ready for longer than MinReadySeconds
+	// 将 Pod 的就绪时间调整为超过 MinReadySeconds。
 	for i := 0; i < 2; i++ {
 		pod := newStatefulSetPod(set, i)
 		pod.Status.Phase = v1.PodRunning
 		pod.Status.Conditions = []v1.PodCondition{
-			{Type: v1.PodReady, Status: v1.ConditionTrue, LastTransitionTime: metav1.Time{Time: time.Now().Add(-60 * time.Second)}}, // 60 seconds > 30
+			// 60 秒 > 30 秒
+			{Type: v1.PodReady, Status: v1.ConditionTrue, LastTransitionTime: metav1.Time{Time: time.Now().Add(-60 * time.Second)}},
 		}
 		fakeResourceVersion(pod)
 		if err := om.podsIndexer.Update(pod); err != nil {
@@ -4293,37 +4404,39 @@ func TestStatefulSetRollingUpdateRespectsMinReadySeconds(t *testing.T) {
 		}
 	}
 
-	// Get updated pods
+	// 获取更新后的 Pod 列表。
 	pods, err = om.podsLister.Pods(set.Namespace).List(selector)
 	if err != nil {
 		t.Fatalf("failed to list pods: %s", err)
 	}
 
-	// Perform update again - now should proceed
+	// 再次执行更新，此时应允许继续推进。
 	status, err = ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now())
 	if err != nil {
 		t.Fatalf("failed to update StatefulSet: %s", err)
 	}
 
-	// Now pods should be considered available
+	// 此时 Pod 应被视为可用。
 	if status.AvailableReplicas != 2 {
 		t.Errorf("expected 2 available replicas when MinReadySeconds is satisfied (pods ready for >30s), got %d", status.AvailableReplicas)
 	}
 }
 
+// TestStatefulSetScaleDownRespectsMinReadySeconds 验证缩容操作同样受 MinReadySeconds 约束。
 func TestStatefulSetScaleDownRespectsMinReadySeconds(t *testing.T) {
-	// Test that scale down operations also respect MinReadySeconds
-	set := setMinReadySeconds(newStatefulSet(3), int32(30)) // 30 seconds
+	// 验证缩容操作也遵循 MinReadySeconds。
+	// 30 秒
+	set := setMinReadySeconds(newStatefulSet(3), int32(30))
 	client := fake.NewClientset(set)
 	om, _, ssc := setupController(client)
 
-	// Scale up to 3 replicas first
+	// 先扩容到 3 个副本。
 	fakeClock := testingclock.NewFakeClock(time.Date(2026, time.May, 11, 10, 0, 0, 0, time.UTC))
 	if err := scaleUpStatefulSetControl(set, ssc, om, assertMonotonicInvariants, fakeClock); err != nil {
 		t.Fatalf("failed to scale up: %s", err)
 	}
 
-	// Create pods that are running and ready but not for long enough
+	// 创建已运行且就绪、但就绪时间不足的 Pod。
 	for i := 0; i < 3; i++ {
 		pod := newStatefulSetPod(set, i)
 		pod.Status.Phase = v1.PodRunning
@@ -4342,7 +4455,7 @@ func TestStatefulSetScaleDownRespectsMinReadySeconds(t *testing.T) {
 		}
 	}
 
-	// Now scale down to 1 replica
+	// 现在缩容到 1 个副本。
 	set.Spec.Replicas = &[]int32{1}[0]
 
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
@@ -4354,7 +4467,7 @@ func TestStatefulSetScaleDownRespectsMinReadySeconds(t *testing.T) {
 		t.Fatalf("failed to list pods: %s", err)
 	}
 
-	// Scale down should be blocked because pods haven't been available for 30 seconds
+	// 由于 Pod 可用时间不足 30 秒，缩容应被阻止。
 	status, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now())
 	if err != nil {
 		t.Fatalf("failed to update StatefulSet: %s", err)
@@ -4364,7 +4477,7 @@ func TestStatefulSetScaleDownRespectsMinReadySeconds(t *testing.T) {
 		t.Errorf("expected 0 available replicas due to MinReadySeconds during scale down, got %d", status.AvailableReplicas)
 	}
 
-	// Pods should still be present (scale down blocked)
+	// Pod 仍应存在，说明缩容已被阻止。
 	newPods, err := om.podsLister.Pods(set.Namespace).List(selector)
 	if err != nil {
 		t.Fatalf("failed to list pods: %s", err)
@@ -4374,20 +4487,22 @@ func TestStatefulSetScaleDownRespectsMinReadySeconds(t *testing.T) {
 	}
 }
 
+// TestStatefulSetOnDeleteStrategyIgnoresMinReadySeconds 验证 OnDelete 策略不受 MinReadySeconds 影响。
 func TestStatefulSetOnDeleteStrategyIgnoresMinReadySeconds(t *testing.T) {
-	// Test that OnDelete strategy is not affected by MinReadySeconds
-	set := setMinReadySeconds(newStatefulSet(2), int32(30)) // 30 seconds
+	// 验证 OnDelete 策略不受 MinReadySeconds 影响。
+	// 30 秒
+	set := setMinReadySeconds(newStatefulSet(2), int32(30))
 	set.Spec.UpdateStrategy.Type = apps.OnDeleteStatefulSetStrategyType
 	client := fake.NewClientset(set)
 	om, _, ssc := setupController(client)
 
-	// Scale up first
+	// 先扩容。
 	fakeClock := testingclock.NewFakeClock(time.Date(2026, time.May, 11, 10, 0, 0, 0, time.UTC))
 	if err := scaleUpStatefulSetControl(set, ssc, om, assertMonotonicInvariants, fakeClock); err != nil {
 		t.Fatalf("failed to scale up: %s", err)
 	}
 
-	// Create pods that are ready but not for long enough for MinReadySeconds
+	// 创建已就绪但就绪时间不足 MinReadySeconds 的 Pod。
 	for i := 0; i < 2; i++ {
 		pod := newStatefulSetPod(set, i)
 		pod.Status.Phase = v1.PodRunning
@@ -4406,7 +4521,7 @@ func TestStatefulSetOnDeleteStrategyIgnoresMinReadySeconds(t *testing.T) {
 		}
 	}
 
-	// Trigger a rolling update by changing image
+	// 修改镜像触发更新。
 	set.Spec.Template.Spec.Containers[0].Image = "updated-image"
 
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
@@ -4418,35 +4533,38 @@ func TestStatefulSetOnDeleteStrategyIgnoresMinReadySeconds(t *testing.T) {
 		t.Fatalf("failed to list pods: %s", err)
 	}
 
-	// OnDelete strategy should complete regardless of MinReadySeconds
+	// 无论 MinReadySeconds 如何，OnDelete 策略都应完成更新流程。
 	status, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now())
 	if err != nil {
 		t.Fatalf("failed to update StatefulSet: %s", err)
 	}
 
-	// Status should be computed normally (AvailableReplicas should be 0 due to MinReadySeconds)
+	// 状态应正常计算；由于 MinReadySeconds，AvailableReplicas 应为 0。
 	if status.AvailableReplicas != 0 {
 		t.Errorf("expected 0 available replicas due to MinReadySeconds, got %d", status.AvailableReplicas)
 	}
 
-	// But the update should have completed (OnDelete doesn't wait)
+	// 但更新应已完成，因为 OnDelete 不等待 Pod 就绪。
 	if status.UpdateRevision == "" {
 		t.Error("expected UpdateRevision to be set for OnDelete strategy")
 	}
 }
 
+// TestStatefulSetZeroMinReadySeconds 验证 MinReadySeconds 为零时恢复原有行为。
 func TestStatefulSetZeroMinReadySeconds(t *testing.T) {
-	// Test that zero MinReadySeconds works like the original behavior
-	set := setMinReadySeconds(newStatefulSet(2), int32(0)) // 0 seconds = immediate availability
+	// 验证 MinReadySeconds 为 0 时行为与原始逻辑一致。
+	// 0 秒表示立即可用
+	set := setMinReadySeconds(newStatefulSet(2), int32(0))
 	client := fake.NewClientset(set)
 	om, _, ssc := setupController(client)
 
-	// Create pods that are running and ready (even just now)
+	// 创建处于 Running 且 Ready 的 Pod，即使刚刚就绪。
 	for i := 0; i < 2; i++ {
 		pod := newStatefulSetPod(set, i)
 		pod.Status.Phase = v1.PodRunning
 		pod.Status.Conditions = []v1.PodCondition{
-			{Type: v1.PodReady, Status: v1.ConditionTrue, LastTransitionTime: metav1.Time{Time: time.Now()}}, // Ready right now
+			// 刚刚就绪
+			{Type: v1.PodReady, Status: v1.ConditionTrue, LastTransitionTime: metav1.Time{Time: time.Now()}},
 		}
 		fakeResourceVersion(pod)
 		if err := om.podsIndexer.Add(pod); err != nil {
@@ -4463,7 +4581,7 @@ func TestStatefulSetZeroMinReadySeconds(t *testing.T) {
 		t.Fatalf("failed to list pods: %s", err)
 	}
 
-	// With zero MinReadySeconds, pods should be immediately available
+	// MinReadySeconds 为 0 时，Pod 应立即被视为可用。
 	status, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now())
 	if err != nil {
 		t.Fatalf("failed to update StatefulSet: %s", err)
@@ -4474,9 +4592,11 @@ func TestStatefulSetZeroMinReadySeconds(t *testing.T) {
 	}
 }
 
+// TestStatefulSetPartitionRollingUpdateWithMinReadySeconds 验证带 partition 的滚动更新遵循 MinReadySeconds。
 func TestStatefulSetPartitionRollingUpdateWithMinReadySeconds(t *testing.T) {
-	// Test that partition-based rolling updates respect MinReadySeconds
-	set := setMinReadySeconds(newStatefulSet(4), int32(30)) // 30 seconds
+	// 验证基于 partition 的滚动更新遵循 MinReadySeconds。
+	// 30 秒
+	set := setMinReadySeconds(newStatefulSet(4), int32(30))
 	set = setupPodManagementPolicy(apps.OrderedReadyPodManagement, set)
 	var partition int32 = 2
 	set.Spec.UpdateStrategy = apps.StatefulSetUpdateStrategy{
@@ -4488,7 +4608,7 @@ func TestStatefulSetPartitionRollingUpdateWithMinReadySeconds(t *testing.T) {
 	client := fake.NewClientset(set)
 	om, _, ssc := setupController(client)
 
-	// Create pods that are ready but not for long enough
+	// 创建已就绪但就绪时间不足的 Pod。
 	for i := 0; i < 4; i++ {
 		pod := newStatefulSetPod(set, i)
 		pod.Status.Phase = v1.PodRunning
@@ -4501,7 +4621,7 @@ func TestStatefulSetPartitionRollingUpdateWithMinReadySeconds(t *testing.T) {
 		}
 	}
 
-	// Trigger rolling update by changing image (should only affect pods >= partition, i.e., pods 2 and 3)
+	// 修改镜像触发滚动更新；只应影响序号大于等于 partition 的 Pod，即 Pod 2 和 3。
 	set.Spec.Template.Spec.Containers[0].Image = "updated-image"
 
 	selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
@@ -4513,7 +4633,7 @@ func TestStatefulSetPartitionRollingUpdateWithMinReadySeconds(t *testing.T) {
 		t.Fatalf("failed to list pods: %s", err)
 	}
 
-	// Rolling update should be blocked because pods haven't been available for 30 seconds
+	// 由于 Pod 可用时间不足 30 秒，滚动更新应被阻止。
 	status, err := ssc.UpdateStatefulSet(context.TODO(), set, pods, time.Now())
 	if err != nil {
 		t.Fatalf("failed to update StatefulSet: %s", err)
@@ -4523,7 +4643,7 @@ func TestStatefulSetPartitionRollingUpdateWithMinReadySeconds(t *testing.T) {
 		t.Errorf("expected 0 available replicas due to MinReadySeconds in partition update, got %d", status.AvailableReplicas)
 	}
 
-	// All pods should still be present (update blocked)
+	// 所有 Pod 仍应存在，说明更新已被阻止。
 	newPods, err := om.podsLister.Pods(set.Namespace).List(selector)
 	if err != nil {
 		t.Fatalf("failed to list pods: %s", err)
@@ -4533,6 +4653,8 @@ func TestStatefulSetPartitionRollingUpdateWithMinReadySeconds(t *testing.T) {
 	}
 }
 
+// TestStatefulSetMetrics 验证 MaxUnavailable 与 UnavailableReplicas 指标值的计算。
+// 覆盖不同管理策略、更新策略与 maxUnavailable 配置组合。
 func TestStatefulSetMetrics(t *testing.T) {
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.MaxUnavailableStatefulSet, true)
 	metrics.Register()
@@ -4558,89 +4680,99 @@ func TestStatefulSetMetrics(t *testing.T) {
 			expectedUnavailableReplicasValue: 1,
 		},
 		{
-			name:                             "parallel pods exceeding limit",
-			totalPods:                        10,
-			maxUnavailable:                   &intstr.IntOrString{Type: intstr.String, StrVal: "20%"},
-			updateStrategy:                   apps.RollingUpdateStatefulSetStrategyType,
-			podManagementPolicy:              apps.ParallelPodManagement,
-			unavailablePodCount:              3, // (20% of 10), violation but gauge shows current values
+			name:                "parallel pods exceeding limit",
+			totalPods:           10,
+			maxUnavailable:      &intstr.IntOrString{Type: intstr.String, StrVal: "20%"},
+			updateStrategy:      apps.RollingUpdateStatefulSetStrategyType,
+			podManagementPolicy: apps.ParallelPodManagement,
+			// 10 个副本的 20% 为 2，此处违反限制但指标应显示当前值。
+			unavailablePodCount:              3,
 			expectedMaxUnavailableValue:      2,
 			expectedUnavailableReplicasValue: 3,
 		},
 		{
-			name:                             "ordered pods exactly at limit",
-			totalPods:                        6,
-			maxUnavailable:                   &intstr.IntOrString{Type: intstr.Int, IntVal: 3},
-			updateStrategy:                   apps.RollingUpdateStatefulSetStrategyType,
-			podManagementPolicy:              apps.OrderedReadyPodManagement,
-			unavailablePodCount:              3, // exactly at limit
+			name:                "ordered pods exactly at limit",
+			totalPods:           6,
+			maxUnavailable:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3},
+			updateStrategy:      apps.RollingUpdateStatefulSetStrategyType,
+			podManagementPolicy: apps.OrderedReadyPodManagement,
+			// 正好处于限制值
+			unavailablePodCount:              3,
 			expectedMaxUnavailableValue:      3,
 			expectedUnavailableReplicasValue: 3,
 		},
 		{
-			name:                             "parallel pods all available",
-			totalPods:                        4,
-			maxUnavailable:                   &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
-			updateStrategy:                   apps.RollingUpdateStatefulSetStrategyType,
-			podManagementPolicy:              apps.ParallelPodManagement,
-			unavailablePodCount:              0, // all pods available
+			name:                "parallel pods all available",
+			totalPods:           4,
+			maxUnavailable:      &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
+			updateStrategy:      apps.RollingUpdateStatefulSetStrategyType,
+			podManagementPolicy: apps.ParallelPodManagement,
+			// 所有 Pod 均可用
+			unavailablePodCount:              0,
 			expectedMaxUnavailableValue:      1,
 			expectedUnavailableReplicasValue: 0,
 		},
 		{
-			name:                             "ordered pods with percentage maxUnavailable",
-			totalPods:                        8,
-			maxUnavailable:                   &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
-			updateStrategy:                   apps.RollingUpdateStatefulSetStrategyType,
-			podManagementPolicy:              apps.OrderedReadyPodManagement,
-			unavailablePodCount:              1, // (25% of 8), within limit
+			name:                "ordered pods with percentage maxUnavailable",
+			totalPods:           8,
+			maxUnavailable:      &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
+			updateStrategy:      apps.RollingUpdateStatefulSetStrategyType,
+			podManagementPolicy: apps.OrderedReadyPodManagement,
+			// 8 个副本的 25% 为 2，在限制之内。
+			unavailablePodCount:              1,
 			expectedMaxUnavailableValue:      2,
 			expectedUnavailableReplicasValue: 1,
 		},
 		{
-			name:                             "parallel pods with large percentage",
-			totalPods:                        5,
-			maxUnavailable:                   &intstr.IntOrString{Type: intstr.String, StrVal: "80%"},
-			updateStrategy:                   apps.RollingUpdateStatefulSetStrategyType,
-			podManagementPolicy:              apps.ParallelPodManagement,
-			unavailablePodCount:              4, // (80% of 5), exactly at limit
+			name:                "parallel pods with large percentage",
+			totalPods:           5,
+			maxUnavailable:      &intstr.IntOrString{Type: intstr.String, StrVal: "80%"},
+			updateStrategy:      apps.RollingUpdateStatefulSetStrategyType,
+			podManagementPolicy: apps.ParallelPodManagement,
+			// 5 个副本的 80% 为 4，正好处于限制值。
+			unavailablePodCount:              4,
 			expectedMaxUnavailableValue:      4,
 			expectedUnavailableReplicasValue: 4,
 		},
 		{
-			name:                             "small statefulset with maxUnavailable 1",
-			totalPods:                        2,
-			maxUnavailable:                   &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
-			updateStrategy:                   apps.RollingUpdateStatefulSetStrategyType,
-			podManagementPolicy:              apps.OrderedReadyPodManagement,
-			unavailablePodCount:              1, // exactly at limit
+			name:                "small statefulset with maxUnavailable 1",
+			totalPods:           2,
+			maxUnavailable:      &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
+			updateStrategy:      apps.RollingUpdateStatefulSetStrategyType,
+			podManagementPolicy: apps.OrderedReadyPodManagement,
+			// 正好处于限制值
+			unavailablePodCount:              1,
 			expectedMaxUnavailableValue:      1,
 			expectedUnavailableReplicasValue: 1,
 		},
 		{
-			name:                             "single pod statefulset",
-			totalPods:                        1,
-			maxUnavailable:                   &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
-			updateStrategy:                   apps.RollingUpdateStatefulSetStrategyType,
-			podManagementPolicy:              apps.ParallelPodManagement,
-			unavailablePodCount:              1, // single pod unavailable
+			name:                "single pod statefulset",
+			totalPods:           1,
+			maxUnavailable:      &intstr.IntOrString{Type: intstr.Int, IntVal: 1},
+			updateStrategy:      apps.RollingUpdateStatefulSetStrategyType,
+			podManagementPolicy: apps.ParallelPodManagement,
+			// 单个 Pod 不可用
+			unavailablePodCount:              1,
 			expectedMaxUnavailableValue:      1,
 			expectedUnavailableReplicasValue: 1,
 		},
 		{
-			name:                             "OnDelete strategy defaults to maxUnavailable 1",
-			totalPods:                        3,
-			maxUnavailable:                   nil, // OnDelete doesn't use maxUnavailable
-			updateStrategy:                   apps.OnDeleteStatefulSetStrategyType,
-			podManagementPolicy:              apps.OrderedReadyPodManagement,
-			unavailablePodCount:              2,
-			expectedMaxUnavailableValue:      1, // default value
+			name:      "OnDelete strategy defaults to maxUnavailable 1",
+			totalPods: 3,
+			// OnDelete 不使用 maxUnavailable。
+			maxUnavailable:      nil,
+			updateStrategy:      apps.OnDeleteStatefulSetStrategyType,
+			podManagementPolicy: apps.OrderedReadyPodManagement,
+			unavailablePodCount: 2,
+			// 默认值
+			expectedMaxUnavailableValue:      1,
 			expectedUnavailableReplicasValue: 2,
 		},
 		{
-			name:                             "OnDelete strategy with parallel management",
-			totalPods:                        4,
-			maxUnavailable:                   nil, // OnDelete doesn't use maxUnavailable
+			name:      "OnDelete strategy with parallel management",
+			totalPods: 4,
+			// OnDelete 不使用 maxUnavailable。
+			maxUnavailable:                   nil,
 			updateStrategy:                   apps.OnDeleteStatefulSetStrategyType,
 			podManagementPolicy:              apps.ParallelPodManagement,
 			unavailablePodCount:              1,
@@ -4648,9 +4780,10 @@ func TestStatefulSetMetrics(t *testing.T) {
 			expectedUnavailableReplicasValue: 1,
 		},
 		{
-			name:                             "RollingUpdate with nil maxUnavailable defaults to 1",
-			totalPods:                        5,
-			maxUnavailable:                   nil, // nil should default to 1
+			name:      "RollingUpdate with nil maxUnavailable defaults to 1",
+			totalPods: 5,
+			// nil 应默认为 1
+			maxUnavailable:                   nil,
 			updateStrategy:                   apps.RollingUpdateStatefulSetStrategyType,
 			podManagementPolicy:              apps.OrderedReadyPodManagement,
 			unavailablePodCount:              2,
@@ -4658,9 +4791,10 @@ func TestStatefulSetMetrics(t *testing.T) {
 			expectedUnavailableReplicasValue: 2,
 		},
 		{
-			name:                             "RollingUpdate with nil maxUnavailable and parallel pods",
-			totalPods:                        6,
-			maxUnavailable:                   nil, // nil should default to 1
+			name:      "RollingUpdate with nil maxUnavailable and parallel pods",
+			totalPods: 6,
+			// nil 应默认为 1
+			maxUnavailable:                   nil,
 			updateStrategy:                   apps.RollingUpdateStatefulSetStrategyType,
 			podManagementPolicy:              apps.ParallelPodManagement,
 			unavailablePodCount:              0,
@@ -4673,7 +4807,7 @@ func TestStatefulSetMetrics(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			fakeClock := testingclock.NewFakeClock(time.Date(2026, time.March, 12, 12, 0, 0, 0, time.UTC))
 
-			// Create StatefulSet
+			// 创建 StatefulSet。
 			set := newStatefulSet(test.totalPods)
 			if test.updateStrategy == apps.RollingUpdateStatefulSetStrategyType {
 				var partition int32 = 0
@@ -4692,11 +4826,11 @@ func TestStatefulSetMetrics(t *testing.T) {
 			set = setupPodManagementPolicy(test.podManagementPolicy, set)
 			set.Status.CollisionCount = new(int32)
 
-			// Setup controller
+			// 配置控制器。
 			client := fake.NewClientset(set)
 			spc, _, ssc := setupController(client)
 
-			// Scale up StatefulSet
+			// 扩容 StatefulSet。
 			if err := scaleUpStatefulSetControl(set, ssc, spc, assertBurstInvariants, nil); err != nil {
 				t.Fatal(err)
 			}
@@ -4705,16 +4839,16 @@ func TestStatefulSetMetrics(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Change the image to trigger an update
+			// 修改镜像以触发滚动更新。
 			set.Spec.Template.Spec.Containers[0].Image = "foo"
 
-			// Get selector
+			// 获取标签选择器。
 			selector, err := metav1.LabelSelectorAsSelector(set.Spec.Selector)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// Make some pods unavailable
+			// 让部分 Pod 不可用。
 			var pods []*v1.Pod
 			for i := 0; i < test.unavailablePodCount; i++ {
 				if test.podManagementPolicy == apps.OrderedReadyPodManagement {
@@ -4725,15 +4859,15 @@ func TestStatefulSetMetrics(t *testing.T) {
 				}
 			}
 
-			// Make remaining pods ready
+			// 让其余 Pod 保持就绪。
 			for i := test.unavailablePodCount; i < int(test.totalPods); i++ {
 				_, _ = spc.setPodRunning(set, i)
 				pods, _ = spc.setPodReadyCondition(set, i, true, fakeClock.Now())
 			}
 			sort.Sort(ascendingOrdinal(pods))
 
-			// Update StatefulSet
-			// Calculate ready replicas based on the test setup
+			// 更新 StatefulSet。
+			// 根据测试配置计算就绪副本数。
 			readyReplicas := test.totalPods - int32(test.unavailablePodCount)
 			status := apps.StatefulSetStatus{
 				Replicas:      test.totalPods,
@@ -4745,20 +4879,20 @@ func TestStatefulSetMetrics(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Also call updateStatefulSetStatus to ensure metrics are updated
+			// 同时调用 updateStatefulSetStatus，确保指标得到更新。
 			err = ssc.(*defaultStatefulSetControl).updateStatefulSetStatus(context.TODO(), set, &status)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			// Get updated pods
+			// 获取更新后的 Pod 列表。
 			pods, err = spc.podsLister.Pods(set.Namespace).List(selector)
 			if err != nil {
 				t.Fatal(err)
 			}
 			sort.Sort(ascendingOrdinal(pods))
 
-			// Verify metrics
+			// 校验指标值。
 			maxUnavailableValue, err := testutil.GetGaugeMetricValue(
 				metrics.MaxUnavailable.WithLabelValues(set.Namespace, set.Name, string(test.podManagementPolicy)))
 			if err != nil {

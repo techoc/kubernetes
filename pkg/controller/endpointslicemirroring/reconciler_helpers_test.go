@@ -24,7 +24,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestRecycleSlices 验证 recycleSlices 的回收逻辑：
+// 优先把待创建的切片复用为待更新的切片，其次复用为待删除切片的替代，
+// 从而减少不必要的创建/删除操作，同时保证 IPv4 与 IPv6 切片不会交叉复用。
 func TestRecycleSlices(t *testing.T) {
+	// 表驱动用例覆盖空输入、各种创建/更新/删除数量组合，
+	// 以及地址族匹配与不匹配时的复用行为。
 	testCases := []struct {
 		testName       string
 		startingSlices *slicesByAction
@@ -126,6 +131,7 @@ func TestRecycleSlices(t *testing.T) {
 			startingSlices := tc.startingSlices
 			recycleSlices(startingSlices)
 
+			// 回收逻辑不保证切片顺序，比较前按名称排序以消除顺序影响。
 			unorderedSlices := [][]*discovery.EndpointSlice{startingSlices.toCreate, startingSlices.toUpdate, startingSlices.toDelete}
 			for _, actual := range unorderedSlices {
 				sort.Slice(actual, func(i, j int) bool {
@@ -133,6 +139,7 @@ func TestRecycleSlices(t *testing.T) {
 				})
 			}
 
+			// 分别校验三个动作分组，确保切片被放进了正确的回收桶。
 			expectEqualSlices(t, startingSlices.toCreate, tc.expectedSlices.toCreate)
 			expectEqualSlices(t, startingSlices.toUpdate, tc.expectedSlices.toUpdate)
 			expectEqualSlices(t, startingSlices.toDelete, tc.expectedSlices.toDelete)
@@ -140,14 +147,17 @@ func TestRecycleSlices(t *testing.T) {
 	}
 }
 
-// Test helpers
+// expectEqualSlices 断言实际切片列表与期望列表在名称、地址类型及端点地址上完全一致。
+// 逐字段比较而非直接 DeepEqual，是因为测试只需要关心回收逻辑影响的关键字段。
 func expectEqualSlices(t *testing.T, actual, expected []*discovery.EndpointSlice) {
 	t.Helper()
+	// 数量不一致说明切片被错误地创建、删除或放错了分组。
 	if len(actual) != len(expected) {
 		t.Fatalf("Expected %d EndpointSlices, got %d: %v", len(expected), len(actual), actual)
 	}
 
 	for i, expectedSlice := range expected {
+		// 地址族必须一致：IPv4 地址不能被复用到 IPv6 切片上，反之亦然。
 		if expectedSlice.AddressType != actual[i].AddressType {
 			t.Errorf("Expected Slice to have %s address type, got %s", expectedSlice.AddressType, actual[i].AddressType)
 		}

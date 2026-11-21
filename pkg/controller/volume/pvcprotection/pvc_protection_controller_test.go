@@ -43,12 +43,15 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// reaction 描述向 fake client 注入的一个 reactor：
+// verb 与 resource 用于匹配动作，reactorfn 决定返回的对象或错误。
 type reaction struct {
 	verb      string
 	resource  string
 	reactorfn clienttesting.ReactionFunc
 }
 
+// 测试使用的固定命名空间、PVC/Pod/节点名称与 UID，便于断言。
 const (
 	defaultNS       = "default"
 	namespace2      = "namespace-2"
@@ -58,6 +61,7 @@ const (
 	defaultUID      = "uid1"
 )
 
+// pod 构造一个已调度到默认节点、处于 Pending 状态的测试 Pod。
 func pod() *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -74,6 +78,7 @@ func pod() *v1.Pod {
 	}
 }
 
+// podWithConfig 与 pod 类似，但可指定 Pod 的名称和命名空间。
 func podWithConfig(name string, namespace string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -90,11 +95,13 @@ func podWithConfig(name string, namespace string) *v1.Pod {
 	}
 }
 
+// unscheduled 清空 Pod 的 nodeName，用于模拟尚未调度的 Pod。
 func unscheduled(pod *v1.Pod) *v1.Pod {
 	pod.Spec.NodeName = ""
 	return pod
 }
 
+// withPVC 给 Pod 添加一个引用指定 PVC 的卷，模拟 Pod 正在使用该 PVC。
 func withPVC(pvcName string, pod *v1.Pod) *v1.Pod {
 	volume := v1.Volume{
 		Name: pvcName,
@@ -108,6 +115,7 @@ func withPVC(pvcName string, pod *v1.Pod) *v1.Pod {
 	return pod
 }
 
+// withEmptyDir 给 Pod 添加一个空目录卷，用于构造不引用任何 PVC 的 Pod。
 func withEmptyDir(pod *v1.Pod) *v1.Pod {
 	volume := v1.Volume{
 		Name: "emptyDir",
@@ -119,16 +127,19 @@ func withEmptyDir(pod *v1.Pod) *v1.Pod {
 	return pod
 }
 
+// withStatus 设置 Pod 的运行阶段，用于区分运行中 Pod 与已终止 Pod。
 func withStatus(phase v1.PodPhase, pod *v1.Pod) *v1.Pod {
 	pod.Status.Phase = phase
 	return pod
 }
 
+// withUID 覆盖 Pod 的 UID，用于模拟同名但不同实例的 Pod 删除后重建。
 func withUID(uid types.UID, pod *v1.Pod) *v1.Pod {
 	pod.ObjectMeta.UID = uid
 	return pod
 }
 
+// pvc 构造默认的 PVC 对象。
 func pvc() *v1.PersistentVolumeClaim {
 	return &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -138,6 +149,7 @@ func pvc() *v1.PersistentVolumeClaim {
 	}
 }
 
+// pvcWithConfig 构造可指定名称和命名空间的 PVC 对象。
 func pvcWithConfig(name string, namespace string) *v1.PersistentVolumeClaim {
 	return &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -147,16 +159,19 @@ func pvcWithConfig(name string, namespace string) *v1.PersistentVolumeClaim {
 	}
 }
 
+// withProtectionFinalizer 给 PVC 加上保护 finalizer，表示控制器已接管其保护。
 func withProtectionFinalizer(pvc *v1.PersistentVolumeClaim) *v1.PersistentVolumeClaim {
 	pvc.Finalizers = append(pvc.Finalizers, volumeutil.PVCProtectionFinalizer)
 	return pvc
 }
 
+// bound 将 PVC 状态设为 Bound，Unused 条件只对已绑定 PVC 生效。
 func bound(pvc *v1.PersistentVolumeClaim) *v1.PersistentVolumeClaim {
 	pvc.Status.Phase = v1.ClaimBound
 	return pvc
 }
 
+// withUnusedCondition 给 PVC 附加 Unused 条件；状态为 False 时附上原因是仍有 Pod 在使用该 PVC。
 func withUnusedCondition(status v1.ConditionStatus, ts metav1.Time, pvc *v1.PersistentVolumeClaim) *v1.PersistentVolumeClaim {
 	pvc.Status.Conditions = append(pvc.Status.Conditions, v1.PersistentVolumeClaimCondition{
 		Type:               v1.PersistentVolumeClaimUnused,
@@ -172,17 +187,20 @@ func withUnusedCondition(status v1.ConditionStatus, ts metav1.Time, pvc *v1.Pers
 	return pvc
 }
 
+// deleted 通过设置 deletionTimestamp 模拟进入删除流程的 PVC。
 func deleted(pvc *v1.PersistentVolumeClaim) *v1.PersistentVolumeClaim {
 	pvc.DeletionTimestamp = &metav1.Time{}
 	return pvc
 }
 
+// generateUpdateErrorFunc 返回一个 reactor：前 failures 次 update 返回 Forbidden 错误，之后放行，
+// 用于验证控制器的重试行为。
 func generateUpdateErrorFunc(t *testing.T, failures int) clienttesting.ReactionFunc {
 	i := 0
 	return func(action clienttesting.Action) (bool, runtime.Object, error) {
 		i++
 		if i <= failures {
-			// Update fails
+			// 前几次 update 注入错误。
 			update, ok := action.(clienttesting.UpdateAction)
 
 			if !ok {
@@ -191,28 +209,32 @@ func generateUpdateErrorFunc(t *testing.T, failures int) clienttesting.ReactionF
 			acc, _ := meta.Accessor(update.GetObject())
 			return true, nil, apierrors.NewForbidden(update.GetResource().GroupResource(), acc.GetName(), errors.New("Mock error"))
 		}
-		// Update succeeds
+		// 之后的 update 正常放行。
 		return false, nil, nil
 	}
 }
 
+// generatePodListErrorFunc 与前者的思路相同，但针对 Pod list 操作注入错误。
 func generatePodListErrorFunc(t *testing.T, failures int) clienttesting.ReactionFunc {
 	i := 0
 	return func(action clienttesting.Action) (bool, runtime.Object, error) {
 		i++
 		if i <= failures {
-			// Pod List fails
+			// 前几次 Pod list 注入错误。
 			list, ok := action.(clienttesting.ListAction)
 			if !ok {
 				t.Fatalf("Reactor got non-list action: %+v", action)
 			}
 			return true, nil, apierrors.NewForbidden(list.GetResource().GroupResource(), "mock pod", errors.New("Mock error"))
 		}
-		// List succeeds
+		// 之后的 Pod list 正常放行。
 		return false, nil, nil
 	}
 }
 
+// TestPVCProtectionController 以表格驱动方式验证 PVC 保护控制器对 PVC 与 Pod 事件的响应：
+// 包括保护 finalizer 的添加与移除、API 失败后的重试、informer 数据滞后等场景，
+// 以及 PersistentVolumeClaimUnusedSinceTime 特性开启时 Unused 状态的维护。
 func TestPVCProtectionController(t *testing.T) {
 	pvcGVR := schema.GroupVersionResource{
 		Group:    v1.GroupName,
@@ -233,29 +255,24 @@ func TestPVCProtectionController(t *testing.T) {
 	tests := []struct {
 		name                     string
 		enablePVCUnusedSinceTime bool
-		// Object to insert into fake kubeclient before the test starts.
+		// 测试开始前插入 fake client 的对象。
 		initialObjects []runtime.Object
-		// Whether not to insert the content of initialObjects into the
-		// informers before the test starts. Set it to true to simulate the case
-		// where informers have not been notified yet of certain API objects.
+		// 是否不把 initialObjects 同步到 informer。
+		// 设为 true 可模拟 informer 尚未收到某些 API 对象通知的情况。
 		informersAreLate bool
-		// Optional client reactors.
+		// 可选的错误注入 reactor。
 		reactors []reaction
-		// PVC event to simulate. This PVC will be automatically added to
-		// initialObjects.
+		// 要模拟的 PVC 事件，这些 PVC 会自动加入 initialObjects。
 		updatedPVCs []*v1.PersistentVolumeClaim
-		// Pod event to simulate. This Pod will be automatically added to
-		// initialObjects.
+		// 要模拟的 Pod 事件，该 Pod 会自动加入 initialObjects。
 		updatedPod *v1.Pod
-		// Pod event to simulate. This Pod is *not* added to
-		// initialObjects.
+		// 要模拟的 Pod 事件，该 Pod 不会加入 initialObjects。
 		deletedPod *v1.Pod
-		// List of expected kubeclient actions that should happen during the
-		// test.
+		// 测试期间期望 fake client 收到的动作列表，用于逐条比对。
 		expectedActions []clienttesting.Action
 	}{
 		//
-		// PVC events
+		// PVC 事件
 		//
 		{
 			name:        "PVC without finalizer -> finalizer is added",
@@ -277,15 +294,15 @@ func TestPVCProtectionController(t *testing.T) {
 				{
 					verb:      "update",
 					resource:  "persistentvolumeclaims",
-					reactorfn: generateUpdateErrorFunc(t, 2 /* update fails twice*/),
+					reactorfn: generateUpdateErrorFunc(t, 2 /* 连续两次更新失败 */),
 				},
 			},
 			expectedActions: []clienttesting.Action{
-				// This fails
+				// 第一次更新失败。
 				clienttesting.NewUpdateAction(pvcGVR, defaultNS, withProtectionFinalizer(pvc())),
-				// This fails too
+				// 第二次更新仍失败。
 				clienttesting.NewUpdateAction(pvcGVR, defaultNS, withProtectionFinalizer(pvc())),
-				// This succeeds
+				// 第三次更新成功。
 				clienttesting.NewUpdateAction(pvcGVR, defaultNS, withProtectionFinalizer(pvc())),
 			},
 		},
@@ -318,18 +335,18 @@ func TestPVCProtectionController(t *testing.T) {
 				{
 					verb:      "update",
 					resource:  "persistentvolumeclaims",
-					reactorfn: generateUpdateErrorFunc(t, 2 /* update fails twice*/),
+					reactorfn: generateUpdateErrorFunc(t, 2 /* 连续两次更新失败 */),
 				},
 			},
 			expectedActions: []clienttesting.Action{
 				clienttesting.NewListAction(podGVR, podGVK, defaultNS, metav1.ListOptions{}),
-				// Fails
+				// 本次更新失败。
 				clienttesting.NewUpdateAction(pvcGVR, defaultNS, deleted(pvc())),
 				clienttesting.NewListAction(podGVR, podGVK, defaultNS, metav1.ListOptions{}),
-				// Fails too
+				// 再次更新仍然失败。
 				clienttesting.NewUpdateAction(pvcGVR, defaultNS, deleted(pvc())),
 				clienttesting.NewListAction(podGVR, podGVK, defaultNS, metav1.ListOptions{}),
-				// Succeeds
+				// 本次更新成功。
 				clienttesting.NewUpdateAction(pvcGVR, defaultNS, deleted(pvc())),
 			},
 		},
@@ -340,13 +357,13 @@ func TestPVCProtectionController(t *testing.T) {
 				{
 					verb:      "list",
 					resource:  "pods",
-					reactorfn: generatePodListErrorFunc(t, 1 /* update fails twice*/),
+					reactorfn: generatePodListErrorFunc(t, 1 /* 一次列表请求失败 */),
 				},
 			},
 			expectedActions: []clienttesting.Action{
-				// Fails
+				// 本次列表请求失败。
 				clienttesting.NewListAction(podGVR, podGVK, defaultNS, metav1.ListOptions{}),
-				// Succeed with next pvc in queue
+				// 继续处理队列中的下一个 PVC。
 				clienttesting.NewListAction(podGVR, podGVK, defaultNS, metav1.ListOptions{}),
 				clienttesting.NewUpdateAction(pvcGVR, defaultNS, deleted(pvcWithConfig("pvc2", defaultNS))),
 
@@ -427,7 +444,7 @@ func TestPVCProtectionController(t *testing.T) {
 			},
 		},
 		//
-		// PVC UnusedSince condition — when feature gate is enabled
+		// PVC UnusedSince 条件：特性门控开启时
 		//
 		{
 			name:                     "feature enabled: unused bound PVC with no pods -> Unused=True condition set",
@@ -442,16 +459,16 @@ func TestPVCProtectionController(t *testing.T) {
 			name:                     "feature enabled: pending PVC -> no Unused condition",
 			enablePVCUnusedSinceTime: true,
 			updatedPVCs:              []*v1.PersistentVolumeClaim{withProtectionFinalizer(pvc())},
-			// PVC is not Bound, so the Unused condition is not evaluated.
-			// No pod list, no status update.
+			// PVC 尚未绑定，不会评估 Unused 条件。
+			// 因此既不查询 Pod，也不更新状态。
 			expectedActions: []clienttesting.Action{},
 		},
 		{
 			name:                     "feature enabled: bound PVC already has Unused=True and is still unused -> no update",
 			enablePVCUnusedSinceTime: true,
 			updatedPVCs:              []*v1.PersistentVolumeClaim{bound(withUnusedCondition(v1.ConditionTrue, metav1.Unix(100, 0), withProtectionFinalizer(pvc())))},
-			// PVC already has condition (index != -1), so pvcAddedUpdated does not enqueue it.
-			// No pod event to trigger re-evaluation. No actions expected.
+			// PVC 已带有该条件，pvcAddedUpdated 不会将其入队。
+			// 也没有 Pod 事件触发重新评估，因此不应产生任何动作。
 			expectedActions: []clienttesting.Action{},
 		},
 		{
@@ -601,9 +618,9 @@ func TestPVCProtectionController(t *testing.T) {
 			},
 			updatedPVCs: []*v1.PersistentVolumeClaim{bound(pvc())},
 			expectedActions: []clienttesting.Action{
-				// First: condition set proactively (UpdateStatus on PVC without finalizer)
+				// 第一步：主动设置状态条件（对尚无 finalizer 的 PVC 执行 UpdateStatus）。
 				clienttesting.NewUpdateSubresourceAction(pvcGVR, "status", defaultNS, withUnusedCondition(v1.ConditionFalse, metav1.Unix(123, 0), bound(pvc()))),
-				// Then: finalizer added (Update on original PVC without condition)
+				// 第二步：添加 finalizer（对不含该条件的原始 PVC 执行 Update）。
 				clienttesting.NewUpdateAction(pvcGVR, defaultNS, bound(withProtectionFinalizer(pvc()))),
 			},
 		},
@@ -617,7 +634,7 @@ func TestPVCProtectionController(t *testing.T) {
 			expectedActions: []clienttesting.Action{},
 		},
 		//
-		// Pod events
+		// Pod 事件
 		//
 		{
 			name: "updated running Pod -> no action",
@@ -699,16 +716,18 @@ func TestPVCProtectionController(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		// 固定仿真版本，避免不同 Kubernetes 版本的默认特性取值影响断言。
 		featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.36"))
 		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.PersistentVolumeClaimUnusedSinceTime, test.enablePVCUnusedSinceTime)
 
 		origNowFunc := unusedSinceNowFunc
+		// 固定时间函数，使 UnusedSince 时间戳可预测。
 		unusedSinceNowFunc = func() metav1.Time { return metav1.Unix(123, 0) }
 		t.Cleanup(func() {
 			unusedSinceNowFunc = origNowFunc
 		})
 
-		// Create initial data for client and informers.
+		// 为 client 和 informer 准备初始数据。
 		var (
 			clientObjs    []runtime.Object
 			informersObjs []runtime.Object
@@ -727,23 +746,22 @@ func TestPVCProtectionController(t *testing.T) {
 		if !test.informersAreLate {
 			informersObjs = append(informersObjs, test.initialObjects...)
 		}
-		// Create client with initial data
+		// 用初始数据创建 fake client。
 		client := fake.NewSimpleClientset(clientObjs...)
 
-		// Create informers
+		// 创建 informer。
 		informers := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 		pvcInformer := informers.Core().V1().PersistentVolumeClaims()
 		podInformer := informers.Core().V1().Pods()
 
-		// Create the controller
+		// 创建控制器。
 		logger, _ := ktesting.NewTestContext(t)
 		ctrl, err := NewPVCProtectionController(logger, pvcInformer, podInformer, client)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// Populate the informers with initial objects so the controller can
-		// Get() and List() it.
+		// 将初始对象写入 informer 存储，使控制器的 Get() 与 List() 能读取到它们。
 		for _, obj := range informersObjs {
 			switch obj.(type) {
 			case *v1.PersistentVolumeClaim:
@@ -755,12 +773,12 @@ func TestPVCProtectionController(t *testing.T) {
 			}
 		}
 
-		// Add reactor to inject test errors.
+		// 注入测试所需的错误 reactor。
 		for _, reactor := range test.reactors {
 			client.Fake.PrependReactor(reactor.verb, reactor.resource, reactor.reactorfn)
 		}
 
-		// Start the test by simulating an event
+		// 通过模拟事件启动测试。
 		if test.updatedPVCs != nil {
 			for i := 0; i < len(test.updatedPVCs); i++ {
 				ctrl.pvcAddedUpdated(logger, test.updatedPVCs[i])
@@ -775,7 +793,7 @@ func TestPVCProtectionController(t *testing.T) {
 			ctrl.podAddedDeletedUpdated(logger, nil, test.deletedPod, true)
 		}
 
-		// Process the controller queue until we get expected results
+		// 持续处理控制器队列，直到得到期望的动作序列。
 		timeout := time.Now().Add(10 * time.Second)
 		lastReportedActionCount := 0
 		for {
@@ -793,19 +811,19 @@ func TestPVCProtectionController(t *testing.T) {
 			}
 
 			if ctrl.queue.Len() > 0 {
-				// There is still some work in the queue, process it now
+				// 队列中仍有任务，继续处理。
 				continue
 			}
 
 			currentActionCount := len(client.Actions())
 			if currentActionCount < len(test.expectedActions) {
-				// Do not log every wait, only when the action count changes.
+				// 只在动作数量变化时打印日志，避免每次等待都输出。
 				if lastReportedActionCount < currentActionCount {
 					logger.V(5).Info("Waiting for the remaining actions", "test", test.name, "currentActionCount", currentActionCount, "expectedActionCount", len(test.expectedActions))
 					lastReportedActionCount = currentActionCount
 				}
-				// The test expected more to happen, wait for the actions.
-				// Most probably it's exponential backoff
+				// 期望的动作尚未全部出现，继续等待；
+				// 通常是控制器正在进行指数退避重试。
 				time.Sleep(10 * time.Millisecond)
 				continue
 			}

@@ -20,15 +20,11 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultReplicationControllerConfiguration defaults a pointer to a
-// ReplicationControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultReplicationControllerConfiguration 为
+// ReplicationControllerConfiguration 设置推荐默认值，值可能随 API 版本变化。
+// 该函数故意不注册为 scheme 中普通的 `SetDefaults_Foo`：默认值处理发生在转换过程中，
+// 强制套用会使用户无法为自己的嵌入配置选择不同默认值。需要时用调用方应在包装
+// 结构的 `SetDefaults_` 方法中显式调用。
 func RecommendedDefaultReplicationControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.ReplicationControllerConfiguration) {
 	if obj.ConcurrentRCSyncs == 0 {
 		obj.ConcurrentRCSyncs = 5

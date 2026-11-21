@@ -28,6 +28,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestNewBackoffRecord 验证 newBackoffRecord 能根据已有记录、新增成功/失败 Pod 正确构造退避记录，
+// 覆盖空存储、累计失败次数、成功重置计数以及相同时间戳等场景。
 func TestNewBackoffRecord(t *testing.T) {
 	emptyStoreInitializer := func(*backoffStore) {}
 	defaultTestTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
@@ -199,6 +201,7 @@ func TestNewBackoffRecord(t *testing.T) {
 	}
 }
 
+// TestGetFinishedTime 验证 getFinishedTime 能从容器状态、删除时间戳、条件状态或创建时间中正确推断 Pod 的结束时间。
 func TestGetFinishedTime(t *testing.T) {
 	defaultTestTime := time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC)
 	defaultTestTimeMinus30s := defaultTestTime.Add(-30 * time.Second)
@@ -356,9 +359,8 @@ func TestGetFinishedTime(t *testing.T) {
 			},
 			wantFinishTime: defaultTestTime,
 		},
-		// In this case, init container is stopped after the regular containers.
-		// This is because with the sidecar (restartable init) containers,
-		// sidecar containers will always finish later than regular containers.
+		// 该场景中 init 容器比普通容器更晚停止：因为对于 sidecar（可重启的 init）容器，
+		// sidecar 总是比普通容器更晚结束，所以结束时间应取 sidecar 的完成时间。
 		"Pod with sidecar container and all containers terminated": {
 			pod: v1.Pod{
 				Spec: v1.PodSpec{
@@ -401,6 +403,7 @@ func TestGetFinishedTime(t *testing.T) {
 	}
 }
 
+// TestGetRemainingBackoffTime 验证 getRemainingTime 根据失败次数和已流逝时间计算剩余退避时长，并校验最大退避上限。
 func TestGetRemainingBackoffTime(t *testing.T) {
 	defaultTestTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
 	testCases := map[string]struct {
@@ -502,6 +505,7 @@ func TestGetRemainingBackoffTime(t *testing.T) {
 	}
 }
 
+// TestGetRemainingBackoffTimePerIndex 验证 getRemainingTimePerIndex 能结合 Pod 索引上的失败计数计算剩余退避时长。
 func TestGetRemainingBackoffTimePerIndex(t *testing.T) {
 	defaultTestTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
 	testCases := map[string]struct {

@@ -22,7 +22,10 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
+// TestRecommendedDefaultDeviceTaintEvictionControllerConfiguration 验证
+// 默认配置函数会把并发同步数设置为推荐的 8。
 func TestRecommendedDefaultDeviceTaintEvictionControllerConfiguration(t *testing.T) {
+	// 从零值配置开始，确保被检查的值确实来自默认函数而非预设值。
 	config := new(kubectrlmgrconfigv1alpha1.DeviceTaintEvictionControllerConfiguration)
 	RecommendedDefaultDeviceTaintEvictionControllerConfiguration(config)
 	if config.ConcurrentSyncs != 8 {

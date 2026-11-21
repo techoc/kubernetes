@@ -20,13 +20,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ResourceQuotaControllerConfiguration contains elements describing ResourceQuotaController.
+// ResourceQuotaControllerConfiguration 包含描述 ResourceQuotaController 的各项配置。
 type ResourceQuotaControllerConfiguration struct {
-	// resourceQuotaSyncPeriod is the period for syncing quota usage status
-	// in the system.
+	// resourceQuotaSyncPeriod 是同步系统中配额使用状态的周期。
 	ResourceQuotaSyncPeriod metav1.Duration
-	// concurrentResourceQuotaSyncs is the number of resource quotas that are
-	// allowed to sync concurrently. Larger number = more responsive quota
-	// management, but more CPU (and network) load.
+	// concurrentResourceQuotaSyncs 是允许并发同步的资源配额数量。
+	// 数值越大，配额管理响应越快，但 CPU（及网络）负载也越高。
 	ConcurrentResourceQuotaSyncs int32
 }

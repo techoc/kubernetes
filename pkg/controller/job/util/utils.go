@@ -21,10 +21,12 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// FinishedCondition returns true if a job is finished as well as the condition type indicating that.
-// Returns false and no condition type otherwise
+// FinishedCondition 判断 Job 是否已结束，并返回表明结束原因的 Condition 类型（Complete 或 Failed）。
+// 未结束时返回 false 和空类型。
+// 只有 Status 为 True 的 Condition 才算数，因为 Condition 为 False 通常表示该终止状态曾被移除。
 func FinishedCondition(j *batch.Job) (bool, batch.JobConditionType) {
 	for _, c := range j.Status.Conditions {
+		// 同时接受成功和失败两种终态，控制器据此停止对 Job 的进一步调谐。
 		if (c.Type == batch.JobComplete || c.Type == batch.JobFailed) && c.Status == v1.ConditionTrue {
 			return true, c.Type
 		}
@@ -32,14 +34,15 @@ func FinishedCondition(j *batch.Job) (bool, batch.JobConditionType) {
 	return false, ""
 }
 
-// IsJobFinished checks whether the given Job has finished execution.
-// It does not discriminate between successful and failed terminations.
+// IsJobFinished 检查给定 Job 是否已执行结束。
+// 该方法不区分成功（Complete）和失败（Failed）两种终态。
 func IsJobFinished(j *batch.Job) bool {
 	isFinished, _ := FinishedCondition(j)
 	return isFinished
 }
 
-// IsJobSucceeded returns whether a job has completed successfully.
+// IsJobSucceeded 判断 Job 是否成功完成。
+// 与 IsJobFinished 不同，失败结束的 Job 在这里返回 false。
 func IsJobSucceeded(j *batch.Job) bool {
 	for _, c := range j.Status.Conditions {
 		if c.Type == batch.JobComplete && c.Status == v1.ConditionTrue {

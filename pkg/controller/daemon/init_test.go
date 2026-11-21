@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package daemon 的测试初始化文件：空导入 ktesting/init 以在测试中安装 klog 的测试输出适配器，
+// 使控制器日志进入测试日志流，便于失败时定位问题。
 package daemon
 
 import (

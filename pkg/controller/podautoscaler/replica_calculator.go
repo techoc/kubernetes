@@ -36,28 +36,31 @@ import (
 )
 
 const (
-	// defaultTestingTolerance is default value for calculating when to
-	// scale up/scale down.
-	defaultTestingTolerance                     = 0.1
-	defaultTestingCPUInitializationPeriod       = 2 * time.Minute
+	// defaultTestingTolerance 是计算何时扩容/缩容时使用的默认容差值。
+	defaultTestingTolerance = 0.1
+	// defaultTestingCPUInitializationPeriod 默认 CPU 指标初始化期。
+	defaultTestingCPUInitializationPeriod = 2 * time.Minute
+	// defaultTestingDelayOfInitialReadinessStatus 默认初始就绪状态判定的延迟时间。
 	defaultTestingDelayOfInitialReadinessStatus = 10 * time.Second
 )
 
-// Tolerances contains metric usage ratio scale-up and scale-down tolerances.
+// Tolerances 包含指标使用率在扩容和缩容方向上的容差范围。
 type Tolerances struct {
 	scaleDown float64
 	scaleUp   float64
 }
 
+// String 以百分比形式返回缩容与扩容容差的字符串表示。
 func (t Tolerances) String() string {
 	return fmt.Sprintf("[down:%.1f%%, up:%.1f%%]", t.scaleDown*100., t.scaleUp*100.)
 }
 
+// isWithin 判断使用率是否落在容差区间内，即变化幅度是否小到无需调整副本数。
 func (t Tolerances) isWithin(usageRatio float64) bool {
 	return (1.0-t.scaleDown) <= usageRatio && usageRatio <= (1.0+t.scaleUp)
 }
 
-// ReplicaCalculator bundles all needed information to calculate the target amount of replicas
+// ReplicaCalculator 汇集计算目标副本数所需的全部信息。
 type ReplicaCalculator struct {
 	metricsClient                 metricsclient.MetricsClient
 	podLister                     corelisters.PodLister
@@ -65,7 +68,7 @@ type ReplicaCalculator struct {
 	delayOfInitialReadinessStatus time.Duration
 }
 
-// NewReplicaCalculator creates a new ReplicaCalculator and passes all necessary information to the new instance
+// NewReplicaCalculator 创建一个新的 ReplicaCalculator，并将所有必要信息传递给新实例。
 func NewReplicaCalculator(metricsClient metricsclient.MetricsClient, podLister corelisters.PodLister, cpuInitializationPeriod, delayOfInitialReadinessStatus time.Duration) *ReplicaCalculator {
 	return &ReplicaCalculator{
 		metricsClient:                 metricsClient,
@@ -75,8 +78,8 @@ func NewReplicaCalculator(metricsClient metricsclient.MetricsClient, podLister c
 	}
 }
 
-// GetResourceReplicas calculates the desired replica count based on a target resource utilization percentage
-// of the given resource for pods matching the given selector in the given namespace, and the current replica count
+// GetResourceReplicas 根据指定命名空间中匹配给定选择器的 Pod 的目标资源利用率百分比，
+// 以及当前副本数，计算期望的副本数量。
 func (c *ReplicaCalculator) GetResourceReplicas(ctx context.Context, currentReplicas int32, targetUtilization int32, resource v1.ResourceName, tolerances Tolerances, namespace string, selector labels.Selector, container string) (replicaCount int32, utilization int32, rawUtilization int64, timestamp time.Time, err error) {
 	metrics, timestamp, err := c.metricsClient.GetResourceMetric(ctx, resource, namespace, selector, container)
 	if err != nil {
@@ -110,24 +113,24 @@ func (c *ReplicaCalculator) GetResourceReplicas(ctx context.Context, currentRepl
 	scaleUpWithUnready := len(unreadyPods) > 0 && usageRatio > 1.0
 	if !scaleUpWithUnready && len(missingPods) == 0 {
 		if tolerances.isWithin(usageRatio) {
-			// return the current replicas if the change would be too small
+			// 变化幅度太小则不调整，避免频繁扩缩造成抖动。
 			return currentReplicas, utilization, rawUtilization, timestamp, nil
 		}
 
-		// if we don't have any unready or missing pods, we can calculate the new replica count now
+		// 没有未就绪或缺失指标的 Pod 时，可直接按当前指标计算目标副本数。
 		return int32(math.Ceil(usageRatio * float64(readyPodCount))), utilization, rawUtilization, timestamp, nil
 	}
 
 	if len(missingPods) > 0 {
 		if usageRatio < 1.0 {
-			// on a scale-down, treat missing pods as using 100% (all) of the resource request
-			// or the utilization target for targets higher than 100%
+			// 缩容时将缺失指标的 Pod 按 100%（或更高的目标利用率）估算，
+			// 以免低估用量而过度缩容。
 			fallbackUtilization := int64(max(100, targetUtilization))
 			for podName := range missingPods {
 				metrics[podName] = metricsclient.PodMetric{Value: requests[podName] * fallbackUtilization / 100}
 			}
 		} else if usageRatio > 1.0 {
-			// on a scale-up, treat missing pods as using 0% of the resource request
+			// 扩容时将缺失指标的 Pod 按 0% 估算，确保计算出的扩容趋势不受影响。
 			for podName := range missingPods {
 				metrics[podName] = metricsclient.PodMetric{Value: 0}
 			}
@@ -135,37 +138,35 @@ func (c *ReplicaCalculator) GetResourceReplicas(ctx context.Context, currentRepl
 	}
 
 	if scaleUpWithUnready {
-		// on a scale-up, treat unready pods as using 0% of the resource request
+		// 扩容时将未就绪 Pod 按 0% 估算，因为它们尚未承担实际负载。
 		for podName := range unreadyPods {
 			metrics[podName] = metricsclient.PodMetric{Value: 0}
 		}
 	}
 
-	// re-run the utilization calculation with our new numbers
+	// 用修正后的指标重新计算使用率，得到更贴近真实负载的比例。
 	newUsageRatio, _, _, err := metricsclient.GetResourceUtilizationRatio(metrics, requests, targetUtilization)
 	if err != nil {
 		return 0, utilization, rawUtilization, time.Time{}, err
 	}
 
 	if tolerances.isWithin(newUsageRatio) || (usageRatio < 1.0 && newUsageRatio > 1.0) || (usageRatio > 1.0 && newUsageRatio < 1.0) {
-		// return the current replicas if the change would be too small,
-		// or if the new usage ratio would cause a change in scale direction
+		// 变化太小或修正后扩缩方向发生反转时保持现状，避免做出与目标相反的调整。
 		return currentReplicas, utilization, rawUtilization, timestamp, nil
 	}
 
 	newReplicas := int32(math.Ceil(newUsageRatio * float64(len(metrics))))
 	if (newUsageRatio < 1.0 && newReplicas > currentReplicas) || (newUsageRatio > 1.0 && newReplicas < currentReplicas) {
-		// return the current replicas if the change of metrics length would cause a change in scale direction
+		// 指标数量变化导致扩缩方向反转时保持现状，避免被不完整的数据误导。
 		return currentReplicas, utilization, rawUtilization, timestamp, nil
 	}
 
-	// return the result, where the number of replicas considered is
-	// however many replicas factored into our calculation
+	// 返回结果，其中参与计算的副本数以实际纳入指标统计的数量为准。
 	return newReplicas, utilization, rawUtilization, timestamp, nil
 }
 
-// GetRawResourceReplicas calculates the desired replica count based on a target resource usage (as a raw milli-value)
-// for pods matching the given selector in the given namespace, and the current replica count
+// GetRawResourceReplicas 根据指定命名空间中匹配给定选择器的 Pod 的目标资源用量
+// （以原始毫值为单位）以及当前副本数，计算期望的副本数量。
 func (c *ReplicaCalculator) GetRawResourceReplicas(ctx context.Context, currentReplicas int32, targetUsage int64, resource v1.ResourceName, tolerances Tolerances, namespace string, selector labels.Selector, container string) (replicaCount int32, usage int64, timestamp time.Time, err error) {
 	metrics, timestamp, err := c.metricsClient.GetResourceMetric(ctx, resource, namespace, selector, container)
 	if err != nil {
@@ -176,9 +177,8 @@ func (c *ReplicaCalculator) GetRawResourceReplicas(ctx context.Context, currentR
 	return replicaCount, usage, timestamp, err
 }
 
-// GetMetricReplicas calculates the desired replica count based on a target metric usage
-// (as a milli-value) for pods matching the given selector in the given namespace, and the
-// current replica count
+// GetMetricReplicas 根据指定命名空间中匹配给定选择器的 Pod 的目标指标用量
+// （以毫值为单位）以及当前副本数，计算期望的副本数量。
 func (c *ReplicaCalculator) GetMetricReplicas(currentReplicas int32, targetUsage int64, metricName string, tolerances Tolerances, namespace string, selector labels.Selector, metricSelector labels.Selector) (replicaCount int32, usage int64, timestamp time.Time, err error) {
 	metrics, timestamp, err := c.metricsClient.GetRawMetric(metricName, namespace, selector, metricSelector)
 	if err != nil {
@@ -189,7 +189,7 @@ func (c *ReplicaCalculator) GetMetricReplicas(currentReplicas int32, targetUsage
 	return replicaCount, usage, timestamp, err
 }
 
-// calcPlainMetricReplicas calculates the desired replicas for plain (i.e. non-utilization percentage) metrics.
+// calcPlainMetricReplicas 为普通指标（即非使用率百分比的指标）计算期望副本数。
 func (c *ReplicaCalculator) calcPlainMetricReplicas(metrics metricsclient.PodMetricsInfo, currentReplicas int32, targetUsage int64, tolerances Tolerances, namespace string, selector labels.Selector, resource v1.ResourceName) (replicaCount int32, usage int64, err error) {
 
 	podList, err := c.podLister.Pods(namespace).List(selector)
@@ -215,22 +215,22 @@ func (c *ReplicaCalculator) calcPlainMetricReplicas(metrics metricsclient.PodMet
 
 	if !scaleUpWithUnready && len(missingPods) == 0 {
 		if tolerances.isWithin(usageRatio) {
-			// return the current replicas if the change would be too small
+			// 变化幅度太小则不调整，避免频繁扩缩造成抖动。
 			return currentReplicas, usage, nil
 		}
 
-		// if we don't have any unready or missing pods, we can calculate the new replica count now
+		// 没有未就绪或缺失指标的 Pod 时，可直接按当前指标计算目标副本数。
 		return int32(math.Ceil(usageRatio * float64(readyPodCount))), usage, nil
 	}
 
 	if len(missingPods) > 0 {
 		if usageRatio < 1.0 {
-			// on a scale-down, treat missing pods as using exactly the target amount
+			// 缩容时将缺失指标的 Pod 按目标值估算，以免低估用量而过度缩容。
 			for podName := range missingPods {
 				metrics[podName] = metricsclient.PodMetric{Value: targetUsage}
 			}
 		} else if usageRatio > 1.0 {
-			// on a scale-up, treat missing pods as using 0% of the resource request
+			// 扩容时将缺失指标的 Pod 按 0% 估算，确保扩容趋势不受影响。
 			for podName := range missingPods {
 				metrics[podName] = metricsclient.PodMetric{Value: 0}
 			}
@@ -238,34 +238,32 @@ func (c *ReplicaCalculator) calcPlainMetricReplicas(metrics metricsclient.PodMet
 	}
 
 	if scaleUpWithUnready {
-		// on a scale-up, treat unready pods as using 0% of the resource request
+		// 扩容时将未就绪 Pod 按 0% 估算，因为它们尚未承担实际负载。
 		for podName := range unreadyPods {
 			metrics[podName] = metricsclient.PodMetric{Value: 0}
 		}
 	}
 
-	// re-run the usage calculation with our new numbers
+	// 用修正后的指标重新计算使用率，得到更贴近真实负载的比例。
 	newUsageRatio, _ := metricsclient.GetMetricUsageRatio(metrics, targetUsage)
 
 	if tolerances.isWithin(newUsageRatio) || (usageRatio < 1.0 && newUsageRatio > 1.0) || (usageRatio > 1.0 && newUsageRatio < 1.0) {
-		// return the current replicas if the change would be too small,
-		// or if the new usage ratio would cause a change in scale direction
+		// 变化太小或修正后扩缩方向发生反转时保持现状，避免做出与目标相反的调整。
 		return currentReplicas, usage, nil
 	}
 
 	newReplicas := int32(math.Ceil(newUsageRatio * float64(len(metrics))))
 	if (newUsageRatio < 1.0 && newReplicas > currentReplicas) || (newUsageRatio > 1.0 && newReplicas < currentReplicas) {
-		// return the current replicas if the change of metrics length would cause a change in scale direction
+		// 指标数量变化导致扩缩方向反转时保持现状，避免被不完整的数据误导。
 		return currentReplicas, usage, nil
 	}
 
-	// return the result, where the number of replicas considered is
-	// however many replicas factored into our calculation
+	// 返回结果，其中参与计算的副本数以实际纳入指标统计的数量为准。
 	return newReplicas, usage, nil
 }
 
-// GetObjectMetricReplicas calculates the desired replica count based on a target metric usage (as a milli-value)
-// for the given object in the given namespace, and the current replica count.
+// GetObjectMetricReplicas 根据指定命名空间中给定对象的目标指标用量（以毫值为单位）
+// 以及当前副本数，计算期望的副本数量。
 func (c *ReplicaCalculator) GetObjectMetricReplicas(currentReplicas int32, targetUsage int64, metricName string, tolerances Tolerances, namespace string, objectRef *autoscaling.CrossVersionObjectReference, selector labels.Selector, metricSelector labels.Selector) (replicaCount int32, usage int64, timestamp time.Time, err error) {
 	usage, _, err = c.metricsClient.GetObjectMetric(metricName, namespace, objectRef, metricSelector)
 	if err != nil {
@@ -277,12 +275,12 @@ func (c *ReplicaCalculator) GetObjectMetricReplicas(currentReplicas int32, targe
 	return replicaCount, usage, timestamp, err
 }
 
-// getUsageRatioReplicaCount calculates the desired replica count based on usageRatio and ready pods count.
-// For currentReplicas=0 doesn't take into account ready pods count and tolerance to support scaling to zero pods.
+// getUsageRatioReplicaCount 根据使用率和使用率对应的就绪 Pod 数量计算期望副本数。
+// 当 currentReplicas=0 时不考虑就绪 Pod 数量和容差，以支持缩容到零个 Pod。
 func (c *ReplicaCalculator) getUsageRatioReplicaCount(currentReplicas int32, usageRatio float64, tolerances Tolerances, namespace string, selector labels.Selector) (replicaCount int32, timestamp time.Time, err error) {
 	if currentReplicas != 0 {
 		if tolerances.isWithin(usageRatio) {
-			// return the current replicas if the change would be too small
+			// 变化幅度太小则不调整，避免频繁扩缩造成抖动。
 			return currentReplicas, timestamp, nil
 		}
 		readyPodCount := int64(0)
@@ -290,24 +288,24 @@ func (c *ReplicaCalculator) getUsageRatioReplicaCount(currentReplicas int32, usa
 		if err != nil {
 			return 0, time.Time{}, fmt.Errorf("unable to calculate ready pods: %s", err)
 		}
-		// Calculate replicaCount as float64 first
+		// 先用 float64 计算，避免转换过程中过早丢失精度。
 		replicaCountFloat := usageRatio * float64(readyPodCount)
-		// Check if replicaCount exceeds max int32
+		// 结果可能超出 int32 范围，需提前做上限保护。
 		if replicaCountFloat > math.MaxInt32 {
 			replicaCount = math.MaxInt32
 		} else {
 			replicaCount = int32(math.Ceil(replicaCountFloat))
 		}
 	} else {
-		// Scale to zero or n pods depending on usageRatio
+		// 当前无副本时直接按使用率决定扩到 n 个还是保持零个。
 		replicaCount = int32(math.Ceil(usageRatio))
 	}
 
 	return replicaCount, timestamp, err
 }
 
-// GetObjectPerPodMetricReplicas calculates the desired replica count based on a target metric usage (as a milli-value)
-// for the given object in the given namespace, and the current replica count.
+// GetObjectPerPodMetricReplicas 根据指定命名空间中给定对象的每 Pod 目标指标用量
+// （以毫值为单位）以及当前副本数，计算期望的副本数量。
 func (c *ReplicaCalculator) GetObjectPerPodMetricReplicas(statusReplicas int32, targetAverageUsage int64, metricName string, tolerances Tolerances, namespace string, objectRef *autoscaling.CrossVersionObjectReference, metricSelector labels.Selector) (replicaCount int32, usage int64, timestamp time.Time, err error) {
 	usage, timestamp, err = c.metricsClient.GetObjectMetric(metricName, namespace, objectRef, metricSelector)
 	if err != nil {
@@ -317,16 +315,16 @@ func (c *ReplicaCalculator) GetObjectPerPodMetricReplicas(statusReplicas int32, 
 	replicaCount = statusReplicas
 	usageRatio := float64(usage) / (float64(targetAverageUsage) * float64(replicaCount))
 	if !tolerances.isWithin(usageRatio) {
-		// update number of replicas if change is large enough
+		// 变化足够大时才更新副本数，避免小幅波动引起抖动。
 		replicaCount = int32(math.Ceil(float64(usage) / float64(targetAverageUsage)))
 	}
 	usage = int64(math.Ceil(float64(usage) / float64(statusReplicas)))
 	return replicaCount, usage, timestamp, nil
 }
 
-// @TODO(mattjmcnaughton) Many different functions in this module use variations
-// of this function. Make this function generic, so we don't repeat the same
-// logic in multiple places.
+// getReadyPodsCount 统计指定命名空间中匹配选择器的运行中且已就绪的 Pod 数量。
+// @TODO(mattjmcnaughton) 本模块中多个函数都使用了此函数的变体。
+// 应将此函数通用化，以免在多个地方重复相同的逻辑。
 func (c *ReplicaCalculator) getReadyPodsCount(namespace string, selector labels.Selector) (int64, error) {
 	podList, err := c.podLister.Pods(namespace).List(selector)
 	if err != nil {
@@ -348,9 +346,8 @@ func (c *ReplicaCalculator) getReadyPodsCount(namespace string, selector labels.
 	return int64(readyPodCount), nil
 }
 
-// GetExternalMetricReplicas calculates the desired replica count based on a
-// target metric value (as a milli-value) for the external metric in the given
-// namespace, and the current replica count.
+// GetExternalMetricReplicas 根据指定命名空间中外部指标的目标值（以毫值为单位）
+// 以及当前副本数，计算期望的副本数量。
 func (c *ReplicaCalculator) GetExternalMetricReplicas(currentReplicas int32, targetUsage int64, metricName string, tolerances Tolerances, namespace string, metricSelector *metav1.LabelSelector, podSelector labels.Selector) (replicaCount int32, usage int64, timestamp time.Time, err error) {
 	metricLabelSelector, err := metav1.LabelSelectorAsSelector(metricSelector)
 	if err != nil {
@@ -363,7 +360,7 @@ func (c *ReplicaCalculator) GetExternalMetricReplicas(currentReplicas int32, tar
 
 	usage = 0
 	for _, val := range metrics {
-		// Cap at MaxInt64 for positive overflow
+		// 正数相加可能溢出 int64，累加前先检查上限。
 		if val > 0 && usage > math.MaxInt64-val {
 			usage = math.MaxInt64
 			break
@@ -376,9 +373,8 @@ func (c *ReplicaCalculator) GetExternalMetricReplicas(currentReplicas int32, tar
 	return replicaCount, usage, timestamp, err
 }
 
-// GetExternalPerPodMetricReplicas calculates the desired replica count based on a
-// target metric value per pod (as a milli-value) for the external metric in the
-// given namespace, and the current replica count.
+// GetExternalPerPodMetricReplicas 根据指定命名空间中外部指标的每 Pod 目标值
+// （以毫值为单位）以及当前副本数，计算期望的副本数量。
 func (c *ReplicaCalculator) GetExternalPerPodMetricReplicas(statusReplicas int32, targetUsagePerPod int64, metricName string, tolerances Tolerances, namespace string, metricSelector *metav1.LabelSelector) (replicaCount int32, usage int64, timestamp time.Time, err error) {
 	metricLabelSelector, err := metav1.LabelSelectorAsSelector(metricSelector)
 	if err != nil {
@@ -392,7 +388,7 @@ func (c *ReplicaCalculator) GetExternalPerPodMetricReplicas(statusReplicas int32
 	for _, val := range metrics {
 		usage = usage + val
 		if usage < 0 {
-			// the only way we would ever get here is because of an Int64 overflow
+			// 累加出现负数只可能是发生了 int64 溢出。
 			usage = math.MaxInt64
 			break
 		}
@@ -401,16 +397,16 @@ func (c *ReplicaCalculator) GetExternalPerPodMetricReplicas(statusReplicas int32
 	replicaCount = statusReplicas
 	usageRatio := float64(usage) / (float64(targetUsagePerPod) * float64(replicaCount))
 	if !tolerances.isWithin(usageRatio) {
-		// update number of replicas if the change is large enough
+		// 变化足够大时才更新副本数，避免小幅波动引起抖动。
 		replicaCountResult := math.Ceil(float64(usage) / float64(targetUsagePerPod))
-		// Ensure that the result exceeds the bounds of an int32
+		// 计算结果可能超出 int32 范围，需做上限保护。
 		if replicaCountResult > float64(math.MaxInt32) {
 			replicaCount = math.MaxInt32
 		} else {
 			replicaCount = int32(replicaCountResult)
 		}
 	}
-	// Handle usage overflow cases
+	// 用量溢出时直接返回上限值，避免转换过程中丢失精度。
 	if float64(usage) >= float64(math.MaxInt64) {
 		usage = math.MaxInt64
 	} else {
@@ -419,6 +415,7 @@ func (c *ReplicaCalculator) GetExternalPerPodMetricReplicas(statusReplicas int32
 	return replicaCount, usage, timestamp, nil
 }
 
+// groupPods 按指标可用性将 Pod 分组，返回就绪 Pod 数量以及未就绪、缺失指标和被忽略的 Pod 集合。
 func groupPods(pods []*v1.Pod, metrics metricsclient.PodMetricsInfo, resource v1.ResourceName, cpuInitializationPeriod, delayOfInitialReadinessStatus time.Duration) (readyPodCount int, unreadyPods, missingPods, ignoredPods sets.Set[string]) {
 	missingPods = sets.New[string]()
 	unreadyPods = sets.New[string]()
@@ -428,30 +425,29 @@ func groupPods(pods []*v1.Pod, metrics metricsclient.PodMetricsInfo, resource v1
 			ignoredPods.Insert(pod.Name)
 			continue
 		}
-		// Pending pods are ignored.
+		// 处于 Pending 的 Pod 尚未运行，不参与指标统计。
 		if pod.Status.Phase == v1.PodPending {
 			unreadyPods.Insert(pod.Name)
 			continue
 		}
-		// Pods missing metrics.
+		// 没有指标数据的 Pod 单独归类，后续按扩缩方向做保守估算。
 		metric, found := metrics[pod.Name]
 		if !found {
 			missingPods.Insert(pod.Name)
 			continue
 		}
-		// Unready pods are ignored.
 		if resource == v1.ResourceCPU {
 			var unready bool
 			_, condition := podutil.GetPodCondition(&pod.Status, v1.PodReady)
 			if condition == nil || pod.Status.StartTime == nil {
 				unready = true
 			} else {
-				// Pod still within possible initialisation period.
+				// Pod 可能仍处于启动初始化期，此时指标波动不代表真实负载。
 				if pod.Status.StartTime.Add(cpuInitializationPeriod).After(time.Now()) {
-					// Ignore sample if pod is unready or one window of metric wasn't collected since last state transition.
+					// 未就绪或自上次状态转换以来缺少完整窗口数据时忽略该样本。
 					unready = condition.Status == v1.ConditionFalse || metric.Timestamp.Before(condition.LastTransitionTime.Time.Add(metric.Window))
 				} else {
-					// Ignore metric if pod is unready and it has never been ready.
+					// 初始化期过后，仅当 Pod 未就绪且从未就绪过时忽略其指标。
 					unready = condition.Status == v1.ConditionFalse && pod.Status.StartTime.Add(delayOfInitialReadinessStatus).After(condition.LastTransitionTime.Time)
 				}
 			}
@@ -465,25 +461,22 @@ func groupPods(pods []*v1.Pod, metrics metricsclient.PodMetricsInfo, resource v1
 	return
 }
 
-// calculateRequests computes the request value for each pod for the specified
-// resource.
-// If container is non-empty, it uses the request of that specific container.
-// If container is empty, it uses pod-level requests if pod-level requests are
-// set on the pod. Otherwise, it sums the requests of all containers in the pod
-// (including restartable init containers).
-// It returns a map of pod names to their calculated request values.
+// calculateRequests 计算每个 Pod 指定资源的 request 值。
+// 如果 container 非空，则使用该指定容器的 request。
+// 如果 container 为空且 Pod 设置了 Pod 级 request，则使用 Pod 级 request。
+// 否则累加 Pod 中所有容器的 request（包括可重启的 init 容器）。
+// 返回 Pod 名称到其 request 值的映射。
 func calculateRequests(pods []*v1.Pod, container string, resource v1.ResourceName) (map[string]int64, error) {
 	podLevelResourcesEnabled := feature.DefaultFeatureGate.Enabled(features.PodLevelResources)
 	requests := make(map[string]int64, len(pods))
 	for _, pod := range pods {
 		var request int64
 		var err error
-		// Determine if we should use pod-level requests: see KEP-2837
+		// 是否使用 Pod 级 request 参见 KEP-2837：
 		// https://github.com/kubernetes/enhancements/blob/master/keps/sig-node/2837-pod-level-resource-spec/README.md
 		usePodLevelRequests := podLevelResourcesEnabled &&
 			resourcehelpers.IsPodLevelRequestsSet(pod) &&
-			// If a container name is specified in the HPA, it takes precedence over
-			// the pod-level requests.
+			// HPA 中指定了容器名时优先使用该容器，而非 Pod 级 request。
 			container == ""
 
 		if usePodLevelRequests {
@@ -499,8 +492,7 @@ func calculateRequests(pods []*v1.Pod, container string, resource v1.ResourceNam
 	return requests, nil
 }
 
-// calculatePodLevelRequests computes the requests for the specific resource at
-// the pod level.
+// calculatePodLevelRequests 计算 Pod 级别指定资源的 request 值。
 func calculatePodLevelRequests(pod *v1.Pod, resource v1.ResourceName) (int64, error) {
 	podLevelRequests := resourcehelpers.PodRequests(pod, resourcehelpers.PodResourcesOptions{})
 	podRequest, ok := podLevelRequests[resource]
@@ -510,12 +502,12 @@ func calculatePodLevelRequests(pod *v1.Pod, resource v1.ResourceName) (int64, er
 	return podRequest.MilliValue(), nil
 }
 
-// calculatePodRequestsFromContainers computes the requests for the specified
-// resource by summing requests from all containers in the pod.
-// If a container name is specified, it uses only that container.
+// calculatePodRequestsFromContainers 通过累加 Pod 中所有容器的 request 计算指定资源的 request。
+// 如果指定了容器名，则只使用该容器的 request。
 func calculatePodRequestsFromContainers(pod *v1.Pod, container string, resource v1.ResourceName) (int64, error) {
 	containers := append([]v1.Container{}, pod.Spec.Containers...)
 	for _, c := range pod.Spec.InitContainers {
+		// 可重启的 init 容器会持续运行，其 request 应计入长期资源占用。
 		if c.RestartPolicy != nil && *c.RestartPolicy == v1.ContainerRestartPolicyAlways {
 			containers = append(containers, c)
 		}
@@ -530,13 +522,13 @@ func calculatePodRequestsFromContainers(pod *v1.Pod, container string, resource 
 			}
 			request += containerRequest.MilliValue()
 		}
-		// container names are unique inside the pod
+		// Pod 内容器名唯一，找到目标容器即可提前返回。
 		if container == c.Name {
 			return request, nil
 		}
 	}
 
-	// If we're looking for a specific container and didn't find it
+	// 指定了容器名却遍历完仍未找到，说明该容器不存在。
 	if container != "" {
 		return 0, fmt.Errorf("container %s not found in Pod %s", container, pod.Name)
 	}
@@ -544,6 +536,7 @@ func calculatePodRequestsFromContainers(pod *v1.Pod, container string, resource 
 	return request, nil
 }
 
+// removeMetricsForPods 从指标映射中删除给定 Pod 的指标，避免脏数据参与后续计算。
 func removeMetricsForPods(metrics metricsclient.PodMetricsInfo, pods sets.Set[string]) {
 	for _, pod := range pods.UnsortedList() {
 		delete(metrics, pod)

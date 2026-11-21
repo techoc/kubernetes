@@ -16,10 +16,10 @@ limitations under the License.
 
 package config
 
-// DeploymentControllerConfiguration contains elements describing DeploymentController.
+// DeploymentControllerConfiguration 描述 DeploymentController 的配置项。
 type DeploymentControllerConfiguration struct {
-	// concurrentDeploymentSyncs is the number of deployment objects that are
-	// allowed to sync concurrently. Larger number = more responsive deployments,
-	// but more CPU (and network) load.
+	// ConcurrentDeploymentSyncs 是允许并发同步的 Deployment 对象数量。
+	// 数值越大，Deployment 响应越及时，但 CPU 和网络负载也越高；
+	// 需要在收敛速度和 API 服务器压力之间权衡。
 	ConcurrentDeploymentSyncs int32
 }

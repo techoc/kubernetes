@@ -38,8 +38,8 @@ import (
 	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 )
 
-// Controller is controller that removes PVProtectionFinalizer
-// from PVs that are not bound to PVCs.
+// Controller 负责从不再被 PVC 使用的 PV 上移除 PVProtectionFinalizer，
+// 并为缺少该 finalizer 的存量 PV 补加，防止 PV 被使用时被误删除。
 type Controller struct {
 	client clientset.Interface
 
@@ -49,7 +49,7 @@ type Controller struct {
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// NewPVProtectionController returns a new *Controller.
+// NewPVProtectionController 创建 PV 保护控制器，注册 PV 的 Add/Update 事件处理函数。
 func NewPVProtectionController(logger klog.Logger, pvInformer coreinformers.PersistentVolumeInformer, cl clientset.Interface) (*Controller, error) {
 	e := &Controller{
 		client: cl,
@@ -61,6 +61,8 @@ func NewPVProtectionController(logger klog.Logger, pvInformer coreinformers.Pers
 
 	e.pvLister = pvInformer.Lister()
 	e.pvListerSynced = pvInformer.Informer().HasSynced
+	// Add 与 Update 共用处理逻辑：两者都只关心对象当前状态，
+	// 删除事件无需入队（finalizer 保证删除前会先收到 Update）。
 	_, err := pvInformer.Informer().AddEventHandlerWithOptions(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			e.pvAddedUpdated(logger, obj)
@@ -76,7 +78,7 @@ func NewPVProtectionController(logger klog.Logger, pvInformer coreinformers.Pers
 	return e, nil
 }
 
-// Run runs the controller goroutines.
+// Run 启动控制器：先等待缓存同步，再拉起 worker，直到 context 取消。
 func (c *Controller) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
@@ -102,12 +104,14 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// runWorker 持续处理工作队列，直到队列被关闭（processNextWorkItem 返回 false）。
 func (c *Controller) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
-// processNextWorkItem deals with one pvcKey off the queue.  It returns false when it's time to quit.
+// processNextWorkItem 处理队列中的一个 PV key；队列关闭时返回 false。
+// 失败时通过限速队列重试，避免热点 PV 无限快速重试。
 func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	pvKey, quit := c.queue.Get()
 	if quit {
@@ -129,6 +133,8 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// processPV 根据 PV 状态维护 finalizer：删除中的未使用 PV 移除 finalizer；
+// 普通 PV 若缺 finalizer 则补加（兼容启用 admission 插件前创建的存量 PV）。
 func (c *Controller) processPV(ctx context.Context, pvName string) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Processing PV", "PV", klog.KRef("", pvName))
@@ -147,8 +153,7 @@ func (c *Controller) processPV(ctx context.Context, pvName string) error {
 	}
 
 	if protectionutil.IsDeletionCandidate(pv, volumeutil.PVProtectionFinalizer) {
-		// PV should be deleted. Check if it's used and remove finalizer if
-		// it's not.
+		// PV 正在被删除：先确认是否仍被使用，未使用才能移除 finalizer 放行删除
 		isUsed := c.isBeingUsed(pv)
 		if !isUsed {
 			return c.removeFinalizer(ctx, pv)
@@ -157,15 +162,14 @@ func (c *Controller) processPV(ctx context.Context, pvName string) error {
 	}
 
 	if protectionutil.NeedToAddFinalizer(pv, volumeutil.PVProtectionFinalizer) {
-		// PV is not being deleted -> it should have the finalizer. The
-		// finalizer should be added by admission plugin, this is just to add
-		// the finalizer to old PVs that were created before the admission
-		// plugin was enabled.
+		// 正常 PV 应带 finalizer；通常由 admission 插件添加，这里兜底处理
+		// 插件启用前创建的存量 PV。
 		return c.addFinalizer(ctx, pv)
 	}
 	return nil
 }
 
+// addFinalizer 在深拷贝上追加保护 finalizer 后更新，避免污染 informer 缓存中的对象。
 func (c *Controller) addFinalizer(ctx context.Context, pv *v1.PersistentVolume) error {
 	pvClone := pv.DeepCopy()
 	pvClone.ObjectMeta.Finalizers = append(pvClone.ObjectMeta.Finalizers, volumeutil.PVProtectionFinalizer)
@@ -179,6 +183,7 @@ func (c *Controller) addFinalizer(ctx context.Context, pv *v1.PersistentVolume) 
 	return nil
 }
 
+// removeFinalizer 在深拷贝上移除保护 finalizer 后更新，避免污染 informer 缓存。
 func (c *Controller) removeFinalizer(ctx context.Context, pv *v1.PersistentVolume) error {
 	pvClone := pv.DeepCopy()
 	pvClone.ObjectMeta.Finalizers = slice.RemoveString(pvClone.ObjectMeta.Finalizers, volumeutil.PVProtectionFinalizer, nil)
@@ -192,9 +197,10 @@ func (c *Controller) removeFinalizer(ctx context.Context, pv *v1.PersistentVolum
 	return nil
 }
 
+// isBeingUsed 依据 PV status 判断是否仍被绑定使用；该状态由 PV controller 维护，
+// 这里不直接查 PVC，避免跨对象依赖和额外 API 调用。
 func (c *Controller) isBeingUsed(pv *v1.PersistentVolume) bool {
-	// check if PV is being bound to a PVC by its status
-	// the status will be updated by PV controller
+	// 只有 Bound 相位代表仍在使用中
 	if pv.Status.Phase == v1.VolumeBound {
 		// the PV is being used now
 		return true
@@ -203,8 +209,10 @@ func (c *Controller) isBeingUsed(pv *v1.PersistentVolume) bool {
 	return false
 }
 
-// pvAddedUpdated reacts to pv added/updated events
+// pvAddedUpdated 处理 PV 新增/更新事件：仅在需要增删 finalizer 时才入队，
+// 避免无关事件造成无谓的 API 更新。
 func (c *Controller) pvAddedUpdated(logger klog.Logger, obj interface{}) {
+	// informer 理论上只会给出 PV，类型断言失败属于异常情况，记录后跳过
 	pv, ok := obj.(*v1.PersistentVolume)
 	if !ok {
 		utilruntime.HandleError(fmt.Errorf("PV informer returned non-PV object: %#v", obj))

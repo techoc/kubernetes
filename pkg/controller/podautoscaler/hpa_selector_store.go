@@ -26,11 +26,12 @@ import (
 	"k8s.io/kubernetes/pkg/controller/util/selectors"
 )
 
-// hpaSelectorTracker has two implementations based on HPAOptimizedSelectorStore feature gate,
-// hpaSelectorStore (optimized) when feature gate is true
-// and biMultimapSelectorTracker when feature gate is false.
+// hpaSelectorTracker 有两种实现，由 HPAOptimizedSelectorStore 特性门控决定：
+// 门控开启时使用 hpaSelectorStore（优化实现），关闭时使用 biMultimapSelectorTracker。
 // TODO: Remove Bimultimap implementation once HPAOptimizedSelectorStore
 // graduates to GA.
+// 接口只暴露选择器的增删以及按 Pod 反查 HPA 的能力，
+// 使控制器无需关心底层存储结构。
 type hpaSelectorTracker interface {
 	PutIfAbsent(namespace string, key selectors.Key, selector labels.Selector) bool
 
@@ -41,26 +42,30 @@ type hpaSelectorTracker interface {
 	HPAsMatchingPods(namespace string, pods []*v1.Pod, limit int) []selectors.Key
 }
 
+// 编译期断言：优化实现必须满足 hpaSelectorTracker 接口。
 var _ hpaSelectorTracker = &hpaSelectorStore{}
 
-// hpaSelectorStore is a per-namespace store of HPA selectors that supports
-// concurrent read-only overlap detection.
+// hpaSelectorStore 按命名空间保存 HPA 标签选择器，
+// 读写锁使并发只读的重叠检测可以在所有 worker 间并行进行。
 type hpaSelectorStore struct {
 	mu         sync.RWMutex
 	namespaces map[string]map[selectors.Key]labels.Selector
 }
 
+// newHPASelectorStore 创建一个空的 hpaSelectorStore。
 func newHPASelectorStore() *hpaSelectorStore {
 	return &hpaSelectorStore{
 		namespaces: make(map[string]map[selectors.Key]labels.Selector),
 	}
 }
 
-// PutIfAbsent inserts an HPA's selector only if the key is not already present.
-// Returns true if the selector was inserted (i.e., the key was new).
+// PutIfAbsent 仅在键不存在时插入 HPA 选择器；
+// 返回 true 表示确实插入了新键，插入失败说明该 HPA 的选择器已存在。
+// 写操作持有独占锁，防止与查询并发读写同一 map。
 func (s *hpaSelectorStore) PutIfAbsent(namespace string, key selectors.Key, selector labels.Selector) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// 命名空间已存在时只判断该键是否已登记。
 	if ns := s.namespaces[namespace]; ns != nil {
 		if _, exists := ns[key]; exists {
 			return false
@@ -72,8 +77,8 @@ func (s *hpaSelectorStore) PutIfAbsent(namespace string, key selectors.Key, sele
 	return true
 }
 
-// PutIfPresent updates an HPA's selector only if the key already exists.
-// Returns true if the selector was updated.
+// PutIfPresent 仅在键已存在时更新 HPA 选择器；
+// 返回 true 表示更新成功，避免为已删除的 HPA 重新插入陈旧选择器。
 func (s *hpaSelectorStore) PutIfPresent(namespace string, key selectors.Key, selector labels.Selector) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -86,10 +91,11 @@ func (s *hpaSelectorStore) PutIfPresent(namespace string, key selectors.Key, sel
 	return false
 }
 
-// Delete removes an HPA's selector.
+// Delete 移除指定 HPA 的选择器；命名空间空了之后一并删除，避免 map 无限膨胀。
 func (s *hpaSelectorStore) Delete(namespace string, key selectors.Key) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// 最后一个选择器被删除后回收命名空间条目。
 	if ns := s.namespaces[namespace]; ns != nil {
 		delete(ns, key)
 		if len(ns) == 0 {
@@ -98,11 +104,11 @@ func (s *hpaSelectorStore) Delete(namespace string, key selectors.Key) {
 	}
 }
 
-// HPAsMatchingPods returns the keys of all HPAs in the given namespace whose
-// selectors match at least one of the provided pods. This is a read-only
-// operation that holds only a shared read lock, allowing full concurrency
-// across all workers. If limit > 0, it short-circuits after finding that many distinct matches.
+// HPAsMatchingPods 返回指定命名空间中选择器与任一给定 Pod 匹配的所有 HPA 键。
+// 该操作只读且仅持有共享读锁，允许所有 worker 完全并发执行。
+// limit > 0 时，找到足够数量的不同匹配项即可提前返回。
 func (s *hpaSelectorStore) HPAsMatchingPods(namespace string, pods []*v1.Pod, limit int) []selectors.Key {
+	// 只读路径使用读锁，不阻塞其他查询。
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -111,8 +117,8 @@ func (s *hpaSelectorStore) HPAsMatchingPods(namespace string, pods []*v1.Pod, li
 		return nil
 	}
 
-	// Deduplicate pod label sets to avoid redundant selector matching.
-	// Pods from the same ReplicaSet typically share identical labels.
+	// 同一 ReplicaSet 的 Pod 通常标签完全相同；
+	// 先按标签集合去重，避免对同一标签集重复跑选择器匹配。
 	uniqueLabels := make(map[string]labels.Set)
 	for _, pod := range pods {
 		key := labels.Set(pod.Labels).String()
@@ -121,11 +127,13 @@ func (s *hpaSelectorStore) HPAsMatchingPods(namespace string, pods []*v1.Pod, li
 		}
 	}
 
+	// 用集合收集结果，确保同一 HPA 命中多个 Pod 时只返回一次。
 	hpas := make(map[selectors.Key]struct{})
 	for _, set := range uniqueLabels {
 		for key, sel := range nsSelectors {
 			if sel.Matches(set) {
 				hpas[key] = struct{}{}
+				// 达到上限立即返回：调用方只关心是否有足够数量的 HPA 需要处理。
 				if limit > 0 && len(hpas) >= limit {
 					return slices.Collect(maps.Keys(hpas))
 				}
@@ -135,22 +143,25 @@ func (s *hpaSelectorStore) HPAsMatchingPods(namespace string, pods []*v1.Pod, li
 	return slices.Collect(maps.Keys(hpas))
 }
 
+// 编译期断言：旧实现同样满足 hpaSelectorTracker 接口。
 var _ hpaSelectorTracker = &biMultimapSelectorTracker{}
 
-// biMultimapSelectorTracker is the legacy hpaSelectorTracker backed by a
-// BiMultimap. It is used when HPAOptimizedSelectorStore is disabled.
+// biMultimapSelectorTracker 是基于 BiMultimap 的旧版 hpaSelectorTracker，
+// 在 HPAOptimizedSelectorStore 门控关闭时使用。
 // TODO: Remove once HPAOptimizedSelectorStore graduates to GA.
 type biMultimapSelectorTracker struct {
 	mu        sync.Mutex
 	selectors *selectors.BiMultimap
 }
 
+// newBiMultimapSelectorTracker 创建一个空的旧版选择器追踪器。
 func newBiMultimapSelectorTracker() *biMultimapSelectorTracker {
 	return &biMultimapSelectorTracker{
 		selectors: selectors.NewBiMultimap(),
 	}
 }
 
+// PutIfAbsent 仅在 HPA 键不存在时写入选择器，返回是否插入。
 func (t *biMultimapSelectorTracker) PutIfAbsent(namespace string, key selectors.Key, selector labels.Selector) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -161,6 +172,7 @@ func (t *biMultimapSelectorTracker) PutIfAbsent(namespace string, key selectors.
 	return true
 }
 
+// PutIfPresent 仅在 HPA 键已存在时更新选择器，返回是否更新。
 func (t *biMultimapSelectorTracker) PutIfPresent(namespace string, key selectors.Key, selector labels.Selector) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -171,12 +183,15 @@ func (t *biMultimapSelectorTracker) PutIfPresent(namespace string, key selectors
 	return true
 }
 
+// Delete 从双向映射中移除指定 HPA 的选择器。
 func (t *biMultimapSelectorTracker) Delete(namespace string, key selectors.Key) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.selectors.DeleteSelector(key)
 }
 
+// HPAsMatchingPods 通过临时把 Pod 标签放入 BiMultimap 后反向查询，
+// 返回选择器匹配任一 Pod 的 HPA 键；查询结束后清空临时 Pod 条目。
 func (t *biMultimapSelectorTracker) HPAsMatchingPods(namespace string, pods []*v1.Pod, limit int) []selectors.Key {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -184,6 +199,7 @@ func (t *biMultimapSelectorTracker) HPAsMatchingPods(namespace string, pods []*v
 	hpas := map[selectors.Key]struct{}{}
 	for _, p := range pods {
 		podKey := selectors.Key{Name: p.Name, Namespace: p.Namespace}
+		// 只在查询期间登记 Pod 标签，避免把 Pod 长期留在选择器索引中。
 		t.selectors.Put(podKey, p.Labels)
 
 		selectingHpas, ok := t.selectors.ReverseSelect(podKey)
@@ -194,7 +210,7 @@ func (t *biMultimapSelectorTracker) HPAsMatchingPods(namespace string, pods []*v
 			hpas[hpa] = struct{}{}
 		}
 	}
-	// Clean up all added pods.
+	// 清空本次查询加入的全部 Pod，防止后续查询被陈旧数据污染。
 	t.selectors.KeepOnly([]selectors.Key{})
 
 	hpaList := []selectors.Key{}

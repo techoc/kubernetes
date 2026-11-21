@@ -26,6 +26,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestCIDRSetFullyAllocated 验证只有一个子网的 CIDRSet 在分配、耗尽、释放、再分配过程中的行为：
+// IPv4 与 IPv6 均应能分配出该唯一子网，分配两次必须失败，释放后又能重新分配。
 func TestCIDRSetFullyAllocated(t *testing.T) {
 	cases := []struct {
 		clusterCIDRStr string
@@ -83,6 +85,8 @@ func TestCIDRSetFullyAllocated(t *testing.T) {
 	}
 }
 
+// TestIndexToCIDRBlock 验证 indexToCIDRBlock 将数字索引转换为对应 CIDR 子网的正确性，
+// 覆盖 IPv4/IPv6 的多种前缀与掩码长度，以及非首个子网的偏移量计算。
 func TestIndexToCIDRBlock(t *testing.T) {
 	cases := []struct {
 		clusterCIDRStr string
@@ -210,6 +214,8 @@ func TestIndexToCIDRBlock(t *testing.T) {
 	}
 }
 
+// TestCIDRSet_RandomishAllocation 验证 CIDRSet 在多轮“全量分配 - 释放 - 再分配”后，
+// 分配集合是否保持一致（“随机化”分配顺序下仍应覆盖全部子网，且释放后能完整回收）。
 func TestCIDRSet_RandomishAllocation(t *testing.T) {
 	cases := []struct {
 		clusterCIDRStr string
@@ -230,7 +236,7 @@ func TestCIDRSet_RandomishAllocation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error allocating CIDRSet for %v", tc.description)
 		}
-		// allocate all the CIDRs
+		// 分配全部 256 个 /24 CIDR，并在耗尽后验证再次分配会失败。
 		var cidrs []*net.IPNet
 
 		for i := 0; i < 256; i++ {
@@ -246,12 +252,12 @@ func TestCIDRSet_RandomishAllocation(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error because of fully-allocated range for %v", tc.description)
 		}
-		// release them all
+		// 释放所有 CIDR，为下一轮分配做准备。
 		for i := 0; i < len(cidrs); i++ {
 			a.Release(cidrs[i])
 		}
 
-		// allocate the CIDRs again
+		// 再次分配全部 256 个 CIDR，验证释放后可重新分配。
 		var rcidrs []*net.IPNet
 		for i := 0; i < 256; i++ {
 			if c, err := a.AllocateNext(); err == nil {
@@ -271,6 +277,9 @@ func TestCIDRSet_RandomishAllocation(t *testing.T) {
 	}
 }
 
+// TestCIDRSet_AllocationOccupied 验证混合“释放 + 占用”场景下的分配行为：
+// 先分配并释放全部 CIDR，再占用后一半，随后只能分配前一半；
+// 最终断言重新分配的 CIDR 与占用标记共同构成原始的完整集合。
 func TestCIDRSet_AllocationOccupied(t *testing.T) {
 	cases := []struct {
 		clusterCIDRStr string
@@ -291,7 +300,7 @@ func TestCIDRSet_AllocationOccupied(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error allocating CIDRSet for %v", tc.description)
 		}
-		// allocate all the CIDRs
+		// 分配全部 256 个 CIDR。
 		var cidrs []*net.IPNet
 		var numCIDRs = 256
 
@@ -308,18 +317,18 @@ func TestCIDRSet_AllocationOccupied(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error because of fully-allocated range for %v", tc.description)
 		}
-		// release them all
+		// 释放所有 CIDR。
 		for i := 0; i < len(cidrs); i++ {
 			a.Release(cidrs[i])
 		}
-		// occupy the last 128 CIDRs
+		// 占用后 128 个 CIDR。
 		for i := numCIDRs / 2; i < numCIDRs; i++ {
 			a.Occupy(cidrs[i])
 		}
-		// occupy the first of the last 128 again
+		// 再次占用后半部分的第一个 CIDR，验证重复占用是幂等的。
 		a.Occupy(cidrs[numCIDRs/2])
 
-		// allocate the first 128 CIDRs again
+		// 重新分配前 128 个 CIDR（后半部分已被占用）。
 		var rcidrs []*net.IPNet
 		for i := 0; i < numCIDRs/2; i++ {
 			if c, err := a.AllocateNext(); err == nil {
@@ -333,7 +342,7 @@ func TestCIDRSet_AllocationOccupied(t *testing.T) {
 			t.Fatalf("expected error because of fully-allocated range for %v", tc.description)
 		}
 
-		// check Occupy() work properly
+		// 校验 Occupy() 的结果：将占用过的 CIDR 加入结果集后应与原始集合一致。
 		for i := numCIDRs / 2; i < numCIDRs; i++ {
 			rcidrs = append(rcidrs, cidrs[i])
 		}
@@ -343,60 +352,60 @@ func TestCIDRSet_AllocationOccupied(t *testing.T) {
 	}
 }
 
+// TestDoubleOccupyRelease 验证重复占用与重复释放 CIDR 时内部计数是否准确：
+// 依次执行占用/释放操作，并在每步检查已占用数量；最后验证可分配数量与预期一致。
 func TestDoubleOccupyRelease(t *testing.T) {
-	// Run a sequence of operations and check the number of occupied CIDRs
-	// after each one.
+	// 按顺序执行一系列操作，并在每步之后检查已占用的 CIDR 数量。
 	clusterCIDRStr := "10.42.0.0/16"
 	operations := []struct {
 		cidrStr     string
 		operation   string
 		numOccupied int
 	}{
-		// Occupy 1 element: +1
+		// 占用 1 个 CIDR：占用数 +1。
 		{
 			cidrStr:     "10.42.5.0/24",
 			operation:   "occupy",
 			numOccupied: 1,
 		},
-		// Occupy 1 more element: +1
+		// 再占用 1 个 CIDR：占用数 +1。
 		{
 			cidrStr:     "10.42.9.0/24",
 			operation:   "occupy",
 			numOccupied: 2,
 		},
-		// Occupy 4 elements overlapping with one from the above: +3
+		// 占用 4 个 CIDR，其中一个与前面已占用的重叠：占用数 +3。
 		{
 			cidrStr:     "10.42.8.0/22",
 			operation:   "occupy",
 			numOccupied: 5,
 		},
-		// Occupy an already-coccupied element: no change
+		// 再次占用同一个已占用的 CIDR：占用数不变。
 		{
 			cidrStr:     "10.42.9.0/24",
 			operation:   "occupy",
 			numOccupied: 5,
 		},
-		// Release an coccupied element: -1
+		// 释放一个已占用的 CIDR：占用数 -1。
 		{
 			cidrStr:     "10.42.9.0/24",
 			operation:   "release",
 			numOccupied: 4,
 		},
-		// Release an unoccupied element: no change
+		// 释放一个未占用的 CIDR：占用数不变。
 		{
 			cidrStr:     "10.42.9.0/24",
 			operation:   "release",
 			numOccupied: 4,
 		},
-		// Release 4 elements, only one of which is occupied: -1
+		// 释放 4 个 CIDR，其中只有一个之前被占用：占用数 -1。
 		{
 			cidrStr:     "10.42.4.0/22",
 			operation:   "release",
 			numOccupied: 3,
 		},
 	}
-	// Check that there are exactly that many allocatable CIDRs after all
-	// operations have been executed.
+	// 所有操作完成后，应恰好剩下 (1 << 8) - 3 个可分配的 /24 子网。
 	numAllocatable24s := (1 << 8) - 3
 
 	_, clusterCIDR, _ := netutils.ParseCIDRSloppy(clusterCIDRStr)
@@ -405,7 +414,7 @@ func TestDoubleOccupyRelease(t *testing.T) {
 		t.Fatalf("Error allocating CIDRSet")
 	}
 
-	// Execute the operations
+	// 按顺序执行占用/释放操作，并逐步校验已占用的 CIDR 数量。
 	for _, op := range operations {
 		_, cidr, _ := netutils.ParseCIDRSloppy(op.cidrStr)
 		switch op.operation {
@@ -421,7 +430,7 @@ func TestDoubleOccupyRelease(t *testing.T) {
 		}
 	}
 
-	// Make sure that we can allocate exactly `numAllocatable24s` elements.
+	// 验证经过上述分配与释放后，恰好还能分配 numAllocatable24s 个 /24 子网。
 	for i := 0; i < numAllocatable24s; i++ {
 		_, err := a.AllocateNext()
 		if err != nil {
@@ -435,6 +444,8 @@ func TestDoubleOccupyRelease(t *testing.T) {
 	}
 }
 
+// TestGetBitforCIDR 验证 getIndexForIP 对给定 IP 在 CIDRSet 中索引的计算：
+// 覆盖 IPv4/IPv6 的多种掩码长度、多段偏移，以及 IP 不属于集群网段时返回错误的场景。
 func TestGetBitforCIDR(t *testing.T) {
 	cases := []struct {
 		clusterCIDRStr string
@@ -556,6 +567,7 @@ func TestGetBitforCIDR(t *testing.T) {
 		},
 	}
 
+	// 子测试名即用例描述；对 expectErr 场景单独断言错误是否出现，避免误判索引值。
 	for _, tc := range cases {
 		t.Run(tc.description, func(t *testing.T) {
 			_, clusterCIDR, err := netutils.ParseCIDRSloppy(tc.clusterCIDRStr)
@@ -589,6 +601,8 @@ func TestGetBitforCIDR(t *testing.T) {
 	}
 }
 
+// TestOccupy 验证 Occupy 对不同前缀长度的 CIDR 的占用范围计算是否正确，
+// 覆盖 IPv4/IPv6、占用全部/单个/部分/越界偏移等场景，并直接比较内部 used 位图。
 func TestOccupy(t *testing.T) {
 	cases := []struct {
 		clusterCIDRStr    string
@@ -727,6 +741,8 @@ func TestOccupy(t *testing.T) {
 		},
 	}
 
+	// 逐一验证 Occupy 后 used 位图中被置位的索引范围与期望一致；
+	// 该位图直接反映哪些子网被标记为已占用。
 	for _, tc := range cases {
 		_, clusterCIDR, err := netutils.ParseCIDRSloppy(tc.clusterCIDRStr)
 		if err != nil {
@@ -763,6 +779,8 @@ func TestOccupy(t *testing.T) {
 	}
 }
 
+// TestCIDRSetv6 覆盖 IPv6（及部分 IPv4）场景下的 CIDRSet 行为：
+// 既检查超出最大子网掩码的构造错误，也检查正常分配时返回的子网是否符合预期顺序。
 func TestCIDRSetv6(t *testing.T) {
 	cases := []struct {
 		clusterCIDRStr string
@@ -796,6 +814,7 @@ func TestCIDRSetv6(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
+		// 分别校验构造 CIDRSet 的成功/失败预期，以及随后两次 AllocateNext 的返回值。
 		t.Run(tc.description, func(t *testing.T) {
 			_, clusterCIDR, _ := netutils.ParseCIDRSloppy(tc.clusterCIDRStr)
 			a, err := NewCIDRSet(clusterCIDR, tc.subNetMaskSize)
@@ -833,12 +852,14 @@ func TestCIDRSetv6(t *testing.T) {
 	}
 }
 
+// TestCidrSetMetrics 验证 CIDRSet 各项指标随分配和释放的变化：
+// 使用率、累计分配/释放次数、最大容量等指标均需在每一步操作后与期望值完全一致。
 func TestCidrSetMetrics(t *testing.T) {
 	cidr := "10.0.0.0/16"
 	_, clusterCIDR, _ := netutils.ParseCIDRSloppy(cidr)
 	clearMetrics(map[string]string{"clusterCIDR": cidr})
 
-	// We have 256 free cidrs
+	// 初始状态：/16 前缀按 /24 划分，共有 256 个可用 CIDR。
 	a, err := NewCIDRSet(clusterCIDR, 24)
 	if err != nil {
 		t.Fatalf("unexpected error creating CidrSet: %v", err)
@@ -855,7 +876,7 @@ func TestCidrSetMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidr, em)
 
-	// Allocate next all
+	// 逐个分配全部 256 个 CIDR，并在每次分配后校验指标递增。
 	for i := 1; i <= 256; i++ {
 		_, err := a.AllocateNext()
 		if err != nil {
@@ -870,7 +891,7 @@ func TestCidrSetMetrics(t *testing.T) {
 		}
 		expectMetrics(t, cidr, em)
 	}
-	// Release all
+	// 一次性释放全部 CIDR，验证释放计数与使用率归零。
 	a.Release(clusterCIDR)
 	em = testMetrics{
 		usage:      0,
@@ -881,7 +902,7 @@ func TestCidrSetMetrics(t *testing.T) {
 	}
 	expectMetrics(t, cidr, em)
 
-	// Allocate all
+	// 通过 Occupy 直接占用全部 CIDR，验证 usage 达到 1。
 	a.Occupy(clusterCIDR)
 	em = testMetrics{
 		usage:      1,
@@ -893,12 +914,15 @@ func TestCidrSetMetrics(t *testing.T) {
 	expectMetrics(t, cidr, em)
 }
 
+// TestCidrSetMetricsHistogram 验证 allocTries 直方图指标：
+// Occupy 会直接标记 CIDR 已使用但不推进 nextCandidate，因此紧接着的 AllocateNext
+// 必须遍历已占用的 CIDR 才能找到下一个空闲块，遍历次数会体现在直方图中。
 func TestCidrSetMetricsHistogram(t *testing.T) {
 	cidr := "10.0.0.0/16"
 	_, clusterCIDR, _ := netutils.ParseCIDRSloppy(cidr)
 	clearMetrics(map[string]string{"clusterCIDR": cidr})
 
-	// We have 256 free cidrs
+	// 初始状态：/16 前缀按 /24 划分，共有 256 个可用 CIDR。
 	a, err := NewCIDRSet(clusterCIDR, 24)
 	if err != nil {
 		t.Fatalf("unexpected error creating CidrSet: %v", err)
@@ -915,8 +939,8 @@ func TestCidrSetMetricsHistogram(t *testing.T) {
 	}
 	expectMetrics(t, cidr, em)
 
-	// Allocate half of the range
-	// Occupy does not update the nextCandidate
+	// 占用范围的一半 CIDR。
+	// 注意：Occupy 不会更新 nextCandidate，这一点由后续直方图断言验证。
 	_, halfClusterCIDR, _ := netutils.ParseCIDRSloppy("10.0.0.0/17")
 	a.Occupy(halfClusterCIDR)
 	em = testMetrics{
@@ -927,8 +951,8 @@ func TestCidrSetMetricsHistogram(t *testing.T) {
 		max:        float64(max),
 	}
 	expectMetrics(t, cidr, em)
-	// Allocate next should iterate until the next free cidr
-	// that is exactly the same number we allocated previously
+	// 下一次 AllocateNext 应跳过已占用的 CIDR，直到找到第一个空闲块；
+	// 尝试的次数应与先前通过 Occupy 占用的 CIDR 数量一致。
 	_, err = a.AllocateNext()
 	if err != nil {
 		t.Fatalf("unexpected error allocating a new CIDR: %v", err)
@@ -944,7 +968,7 @@ func TestCidrSetMetricsHistogram(t *testing.T) {
 }
 
 func TestCidrSetMetricsDual(t *testing.T) {
-	// create IPv4 cidrSet
+	// 创建 IPv4 cidrSet 并校验其初始指标。
 	cidrIPv4 := "10.0.0.0/16"
 	_, clusterCIDRv4, _ := netutils.ParseCIDRSloppy(cidrIPv4)
 	clearMetrics(map[string]string{"clusterCIDR": cidrIPv4})
@@ -965,7 +989,7 @@ func TestCidrSetMetricsDual(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv4, em)
 
-	// create IPv6 cidrSet
+	// 创建 IPv6 cidrSet，并与 IPv4 集合分别校验指标。
 	cidrIPv6 := "2001:db8::/48"
 	_, clusterCIDRv6, _ := netutils.ParseCIDRSloppy(cidrIPv6)
 	clearMetrics(map[string]string{"clusterCIDR": cidrIPv6})
@@ -986,7 +1010,7 @@ func TestCidrSetMetricsDual(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv6, em)
 
-	// Allocate all
+	// 占用全部 CIDR，验证双栈场景下各协议族的指标互不干扰。
 	a.Occupy(clusterCIDRv4)
 	em = testMetrics{
 		usage:      1,
@@ -1007,7 +1031,7 @@ func TestCidrSetMetricsDual(t *testing.T) {
 	}
 	expectMetrics(t, cidrIPv6, em)
 
-	// Release all
+	// 释放全部 CIDR，验证释放后指标回到初始值且计数累加。
 	a.Release(clusterCIDRv4)
 	em = testMetrics{
 		usage:      0,
@@ -1028,6 +1052,8 @@ func TestCidrSetMetricsDual(t *testing.T) {
 	expectMetrics(t, cidrIPv6, em)
 }
 
+// Test_getMaxCIDRs 验证 getMaxCIDRs 计算的 CIDR 集合最大容量：IPv4 /16 按 /24 划分为 256 个，
+// IPv6 /48 按 /64 划分为 65536 个。
 func Test_getMaxCIDRs(t *testing.T) {
 	cidrIPv4 := "10.0.0.0/16"
 	_, clusterCIDRv4, _ := netutils.ParseCIDRSloppy(cidrIPv4)
@@ -1056,6 +1082,7 @@ func Test_getMaxCIDRs(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		// 分别验证 IPv4/IPv6 下 getMaxCIDRs 对可容纳子网数的计算。
 		t.Run(test.name, func(t *testing.T) {
 			clusterMaskSize, _ := test.clusterCIDR.Mask.Size()
 			maxCIDRs := getMaxCIDRs(test.subNetMaskSize, clusterMaskSize)
@@ -1066,7 +1093,9 @@ func Test_getMaxCIDRs(t *testing.T) {
 	}
 }
 
-// Metrics helpers
+// 指标测试辅助函数。
+// clearMetrics 清除指定标签对应的所有 CidrSet 指标，
+// 避免同一进程中不同测试用例之间的指标值相互污染。
 func clearMetrics(labels map[string]string) {
 	cidrSetAllocations.Delete(labels)
 	cidrSetReleases.Delete(labels)
@@ -1075,14 +1104,22 @@ func clearMetrics(labels map[string]string) {
 	cidrSetMaxCidrs.Delete(labels)
 }
 
+// testMetrics 聚合一次断言所需的全部指标期望值。
 type testMetrics struct {
-	usage      float64
-	allocs     float64
-	releases   float64
+	// usage 为已分配 CIDR 的比例（gauge）。
+	usage float64
+	// allocs 为累计分配次数（counter）。
+	allocs float64
+	// releases 为累计释放次数（counter）。
+	releases float64
+	// allocTries 为每次 AllocateNext 请求的尝试次数分布统计（histogram）。
 	allocTries float64
-	max        float64
+	// max 为该 CIDR 集合可容纳的最大子网数（gauge）。
+	max float64
 }
 
+// expectMetrics 逐一读取所有 CidrSet 监控指标并与期望值比较。
+// 对 gauge/counter/histogram 分别使用对应的 testutil 读取函数；任一指标读取失败或值不符都会导致测试失败。
 func expectMetrics(t *testing.T, label string, em testMetrics) {
 	var m testMetrics
 	var err error
@@ -1112,29 +1149,42 @@ func expectMetrics(t *testing.T, label string, em testMetrics) {
 	}
 }
 
-// Benchmarks
+// 以下为性能测试。
+// benchmarkAllocateAllIPv6 是 IPv6 分配性能测试的公共实现：
+// 在给定前缀和子网掩码下反复分配整个地址段并释放，用于测量分配热路径的吞吐。
 func benchmarkAllocateAllIPv6(cidr string, subnetMaskSize int, b *testing.B) {
 	_, clusterCIDR, _ := netutils.ParseCIDRSloppy(cidr)
 	a, _ := NewCIDRSet(clusterCIDR, subnetMaskSize)
 	for n := 0; n < b.N; n++ {
-		// Allocate the whole range + 1
+		// 每轮分配整个范围并再尝试一次（预计失败），以覆盖分配耗尽路径。
 		for i := 0; i <= a.maxCIDRs; i++ {
 			a.AllocateNext()
 		}
-		// Release all
+		// 每轮结束后释放整个网段，使下一轮从相同的初始状态开始。
 		a.Release(clusterCIDR)
 	}
 }
 
+// BenchmarkAllocateAll_48_52 基准测试在 /48 前缀下按 /52 子网分配全部 CIDR。
 func BenchmarkAllocateAll_48_52(b *testing.B) { benchmarkAllocateAllIPv6("2001:db8::/48", 52, b) }
+
+// BenchmarkAllocateAll_48_56 基准测试在 /48 前缀下按 /56 子网分配全部 CIDR。
 func BenchmarkAllocateAll_48_56(b *testing.B) { benchmarkAllocateAllIPv6("2001:db8::/48", 56, b) }
 
+// BenchmarkAllocateAll_48_60 基准测试在 /48 前缀下按 /60 子网分配全部 CIDR。
 func BenchmarkAllocateAll_48_60(b *testing.B) { benchmarkAllocateAllIPv6("2001:db8::/48", 60, b) }
+
+// BenchmarkAllocateAll_48_64 基准测试在 /48 前缀下按 /64 子网分配全部 CIDR。
 func BenchmarkAllocateAll_48_64(b *testing.B) { benchmarkAllocateAllIPv6("2001:db8::/48", 64, b) }
 
+// BenchmarkAllocateAll_64_68 基准测试在 /64 前缀下按 /68 子网分配全部 CIDR。
 func BenchmarkAllocateAll_64_68(b *testing.B) { benchmarkAllocateAllIPv6("2001:db8::/64", 68, b) }
 
+// BenchmarkAllocateAll_64_72 基准测试在 /64 前缀下按 /72 子网分配全部 CIDR。
 func BenchmarkAllocateAll_64_72(b *testing.B) { benchmarkAllocateAllIPv6("2001:db8::/64", 72, b) }
+
+// BenchmarkAllocateAll_64_76 基准测试在 /64 前缀下按 /76 子网分配全部 CIDR。
 func BenchmarkAllocateAll_64_76(b *testing.B) { benchmarkAllocateAllIPv6("2001:db8::/64", 76, b) }
 
+// BenchmarkAllocateAll_64_80 基准测试在 /64 前缀下按 /80 子网分配全部 CIDR。
 func BenchmarkAllocateAll_64_80(b *testing.B) { benchmarkAllocateAllIPv6("2001:db8::/64", 80, b) }

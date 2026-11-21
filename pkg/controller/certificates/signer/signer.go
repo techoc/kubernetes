@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package signer implements a CA signer that uses keys stored on local disk.
+// Package signer 实现基于本地磁盘密钥的 CA 签名控制器。
+// 它为不同类型的 CSR（kubelet serving/client、apiserver client、legacy unknown）
+// 提供自动签名，并支持 CA 证书与密钥的热重载。
 package signer
 
 import (
@@ -39,11 +41,15 @@ import (
 	"k8s.io/kubernetes/pkg/controller/certificates/authority"
 )
 
+// CSRSigningController 组合通用证书控制器与 CA 证书热重载器：
+// 前者负责处理 CSR 队列，后者负责监听 CA 文件变化并重新加载密钥。
 type CSRSigningController struct {
 	certificateController *certificates.CertificateController
 	dynamicCertReloader   dynamiccertificates.ControllerRunner
 }
 
+// NewKubeletServingCSRSigningController 创建用于 kubelet serving 证书的签名控制器，
+// 对应 signerName 为 kubernetes.io/kubelet-serving。
 func NewKubeletServingCSRSigningController(
 	ctx context.Context,
 	client clientset.Interface,
@@ -54,6 +60,8 @@ func NewKubeletServingCSRSigningController(
 	return NewCSRSigningController(ctx, "csrsigning-kubelet-serving", capi.KubeletServingSignerName, client, csrInformer, caFile, caKeyFile, certTTL)
 }
 
+// NewKubeletClientCSRSigningController 创建用于 kubelet 客户端证书的签名控制器，
+// 对应 signerName 为 kubernetes.io/kube-apiserver-client-kubelet。
 func NewKubeletClientCSRSigningController(
 	ctx context.Context,
 	client clientset.Interface,
@@ -64,6 +72,8 @@ func NewKubeletClientCSRSigningController(
 	return NewCSRSigningController(ctx, "csrsigning-kubelet-client", capi.KubeAPIServerClientKubeletSignerName, client, csrInformer, caFile, caKeyFile, certTTL)
 }
 
+// NewKubeAPIServerClientCSRSigningController 创建用于 apiserver 客户端证书的签名控制器，
+// 对应 signerName 为 kubernetes.io/kube-apiserver-client。
 func NewKubeAPIServerClientCSRSigningController(
 	ctx context.Context,
 	client clientset.Interface,
@@ -74,6 +84,8 @@ func NewKubeAPIServerClientCSRSigningController(
 	return NewCSRSigningController(ctx, "csrsigning-kube-apiserver-client", capi.KubeAPIServerClientSignerName, client, csrInformer, caFile, caKeyFile, certTTL)
 }
 
+// NewLegacyUnknownCSRSigningController 创建遗留 unknown signer 的签名控制器，
+// 对应 signerName 为 kubernetes.io/legacy-unknown，保持对 v1 的向后兼容。
 func NewLegacyUnknownCSRSigningController(
 	ctx context.Context,
 	client clientset.Interface,
@@ -84,6 +96,8 @@ func NewLegacyUnknownCSRSigningController(
 	return NewCSRSigningController(ctx, "csrsigning-legacy-unknown", capiv1beta1.LegacyUnknownSignerName, client, csrInformer, caFile, caKeyFile, certTTL)
 }
 
+// NewCSRSigningController 根据 signerName 构造签名器并创建控制器实例，
+// 将 signer.handle 作为通用证书控制器的处理函数。
 func NewCSRSigningController(
 	ctx context.Context,
 	controllerName string,
@@ -110,7 +124,7 @@ func NewCSRSigningController(
 	}, nil
 }
 
-// Run the main goroutine responsible for watching and syncing jobs.
+// Run 同时启动 CA 证书重载器与 CSR 处理控制器，并等待两者退出。
 func (c *CSRSigningController) Run(ctx context.Context, workers int) {
 	var wg sync.WaitGroup
 	wg.Go(func() {
@@ -122,18 +136,22 @@ func (c *CSRSigningController) Run(ctx context.Context, workers int) {
 	wg.Wait()
 }
 
+// isRequestForSignerFunc 校验 CSR 是否属于某个 signer 以及其属性是否合法：
+// 第一个返回值表示是否由该 signer 处理，第二个返回校验错误。
 type isRequestForSignerFunc func(req *x509.CertificateRequest, usages []capi.KeyUsage, signerName string) (bool, error)
 
+// signer 实现单个 signerName 的 CSR 校验与签名逻辑。
 type signer struct {
 	caProvider *caProvider
 
 	client  clientset.Interface
-	certTTL time.Duration // max TTL; individual requests may request shorter certs by setting spec.expirationSeconds
+	certTTL time.Duration // 证书最大有效期；请求可通过 spec.expirationSeconds 申请更短的证书
 
 	signerName           string
 	isRequestForSignerFn isRequestForSignerFunc
 }
 
+// newSigner 根据 signerName 选择对应的校验函数，并加载本地 CA 证书与密钥。
 func newSigner(signerName, caFile, caKeyFile string, client clientset.Interface, certificateDuration time.Duration) (*signer, error) {
 	isRequestForSignerFn, err := getCSRVerificationFuncForSignerName(signerName)
 	if err != nil {
@@ -154,13 +172,16 @@ func newSigner(signerName, caFile, caKeyFile string, client clientset.Interface,
 	return ret, nil
 }
 
+// handle 处理单个 CSR：跳过未批准、已失败或不属于本 signer 的请求；
+// 校验通过后签发证书并写回 CSR 状态。
+// 校验类错误通过 Failed Condition 反馈给用户，而不是触发反复重试。
 func (s *signer) handle(ctx context.Context, csr *capi.CertificateSigningRequest) error {
-	// Ignore unapproved or failed requests
+	// 仅处理已批准且未失败的请求，避免对终态 CSR 做无谓操作。
 	if !certificates.IsCertificateRequestApproved(csr) || certificates.HasTrueCondition(csr, capi.CertificateFailed) {
 		return nil
 	}
 
-	// Fast-path to avoid any additional processing if the CSRs signerName does not match
+	// 快速路径：signerName 不匹配时直接跳过，多个签名控制器共享同一个 CSR informer。
 	if csr.Spec.SignerName != s.signerName {
 		return nil
 	}
@@ -183,7 +204,7 @@ func (s *signer) handle(ctx context.Context, csr *capi.CertificateSigningRequest
 		}
 		return nil
 	} else if !recognized {
-		// Ignore requests for kubernetes.io signerNames we don't recognize
+		// 其他 Kubernetes 内置 signer 由各自的控制器处理，这里忽略。
 		return nil
 	}
 	cert, err := s.sign(x509cr, csr.Spec.Usages, csr.Spec.ExpirationSeconds, nil)
@@ -198,6 +219,8 @@ func (s *signer) handle(ctx context.Context, csr *capi.CertificateSigningRequest
 	return nil
 }
 
+// sign 使用当前 CA 对 CSR 签名并返回 PEM 编码的证书。
+// 参数 now 便于测试注入固定时间。
 func (s *signer) sign(x509cr *x509.CertificateRequest, usages []capi.KeyUsage, expirationSeconds *int32, now func() time.Time) ([]byte, error) {
 	currCA, err := s.caProvider.currentCA()
 	if err != nil {
@@ -206,8 +229,8 @@ func (s *signer) sign(x509cr *x509.CertificateRequest, usages []capi.KeyUsage, e
 	der, err := currCA.Sign(x509cr.Raw, authority.PermissiveSigningPolicy{
 		TTL:      s.duration(expirationSeconds),
 		Usages:   usages,
-		Backdate: 5 * time.Minute, // this must always be less than the minimum TTL requested by a user (see sanity check requestedDuration below)
-		Short:    8 * time.Hour,   // 5 minutes of backdating is roughly 1% of 8 hours
+		Backdate: 5 * time.Minute, // 必须小于用户可申请的最小 TTL（见下方 duration 中的下限检查）
+		Short:    8 * time.Hour,   // 5 分钟回溯大约占 8 小时的 1%，用于容忍时钟偏差
 		Now:      now,
 	})
 	if err != nil {
@@ -216,13 +239,15 @@ func (s *signer) sign(x509cr *x509.CertificateRequest, usages []capi.KeyUsage, e
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), nil
 }
 
+// duration 计算证书有效期：遵循请求的 expirationSeconds，但限定在 [10 分钟, certTTL] 区间。
+// 10 分钟下限是回溯时间（5 分钟）的两倍，防止回溯导致证书刚签发即接近过期。
 func (s *signer) duration(expirationSeconds *int32) time.Duration {
 	if expirationSeconds == nil {
 		return s.certTTL
 	}
 
-	// honor requested duration is if it is less than the default TTL
-	// use 10 min (2x hard coded backdate above) as a sanity check lower bound
+	// 仅在请求的有效期小于默认 TTL 时才采纳请求值；
+	// 10 分钟作为合理性下限，是上面硬编码回溯时间的两倍。
 	const min = 10 * time.Minute
 	switch requestedDuration := csr.ExpirationSecondsToDuration(*expirationSeconds); {
 	case requestedDuration > s.certTTL:
@@ -236,8 +261,8 @@ func (s *signer) duration(expirationSeconds *int32) time.Duration {
 	}
 }
 
-// getCSRVerificationFuncForSignerName is a function that provides reliable mapping of signer names to verification so that
-// we don't have accidents with wiring at some later date.
+// getCSRVerificationFuncForSignerName 集中维护 signerName 到校验函数的映射，
+// 避免后续接线时出现错配。
 func getCSRVerificationFuncForSignerName(signerName string) (isRequestForSignerFunc, error) {
 	switch signerName {
 	case capi.KubeletServingSignerName:
@@ -252,10 +277,13 @@ func getCSRVerificationFuncForSignerName(signerName string) (isRequestForSignerF
 		// TODO type this error so that a different reporting loop (one without a signing cert), can mark
 		//  CSRs with unknown kube signers as terminal if we wish.  This largely depends on how tightly we want to control
 		//  our signerNames.
+		// 未知 signer 目前视为普通错误由通用控制器重试；
+		// 若将其定义为终态，需要单独的错误类型与上报循环。
 		return nil, fmt.Errorf("unrecognized signerName: %q", signerName)
 	}
 }
 
+// isKubeletServing 校验 kubelet serving 证书的 CSR 属性。
 func isKubeletServing(req *x509.CertificateRequest, usages []capi.KeyUsage, signerName string) (bool, error) {
 	if signerName != capi.KubeletServingSignerName {
 		return false, nil
@@ -263,6 +291,7 @@ func isKubeletServing(req *x509.CertificateRequest, usages []capi.KeyUsage, sign
 	return true, capihelper.ValidateKubeletServingCSR(req, usagesToSet(usages))
 }
 
+// isKubeletClient 校验 kubelet 客户端证书的 CSR 属性。
 func isKubeletClient(req *x509.CertificateRequest, usages []capi.KeyUsage, signerName string) (bool, error) {
 	if signerName != capi.KubeAPIServerClientKubeletSignerName {
 		return false, nil
@@ -270,6 +299,8 @@ func isKubeletClient(req *x509.CertificateRequest, usages []capi.KeyUsage, signe
 	return true, capihelper.ValidateKubeletClientCSR(req, usagesToSet(usages))
 }
 
+// isKubeAPIServerClient 校验 apiserver 客户端证书的 CSR 属性，
+// 此处只检查 usages，不检查证书请求内容。
 func isKubeAPIServerClient(req *x509.CertificateRequest, usages []capi.KeyUsage, signerName string) (bool, error) {
 	if signerName != capi.KubeAPIServerClientSignerName {
 		return false, nil
@@ -277,20 +308,22 @@ func isKubeAPIServerClient(req *x509.CertificateRequest, usages []capi.KeyUsage,
 	return true, validAPIServerClientUsages(usages)
 }
 
+// isLegacyUnknown 识别遗留 unknown signer。
 func isLegacyUnknown(req *x509.CertificateRequest, usages []capi.KeyUsage, signerName string) (bool, error) {
 	if signerName != capiv1beta1.LegacyUnknownSignerName {
 		return false, nil
 	}
-	// No restrictions are applied to the legacy-unknown signerName to
-	// maintain backward compatibility in v1.
+	// 为保持 v1 向后兼容，legacy-unknown signer 不施加任何限制。
 	return true, nil
 }
 
+// validAPIServerClientUsages 校验 apiserver 客户端证书的 usages：
+// client auth 必填，digital signature 与 key encipherment 可选，其余均视为非法。
 func validAPIServerClientUsages(usages []capi.KeyUsage) error {
 	hasClientAuth := false
 	for _, u := range usages {
 		switch u {
-		// these usages are optional
+		// 这两个 usages 是可选的。
 		case capi.UsageDigitalSignature, capi.UsageKeyEncipherment:
 		case capi.UsageClientAuth:
 			hasClientAuth = true
@@ -304,6 +337,7 @@ func validAPIServerClientUsages(usages []capi.KeyUsage) error {
 	return nil
 }
 
+// usagesToSet 将 usages 切片转换为集合，便于校验函数做成员判断。
 func usagesToSet(usages []capi.KeyUsage) sets.String {
 	result := sets.NewString()
 	for _, usage := range usages {

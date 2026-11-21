@@ -23,23 +23,25 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultSAControllerConfiguration defaults a pointer to a
-// SAControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultSAControllerConfiguration 为 SAControllerConfiguration
+// 设置推荐默认值。这些默认值可能会随 API 版本变化。此函数刻意不注册为
+// scheme 中普通的 `SetDefaults_Foo` 函数，以便该类型的使用者可以为自己
+// 嵌套的配置设置任意默认值。若强制使用这里的默认值，会带来问题：scheme
+// 中的 defaulting 是转换过程的一部分，使用者将无法便捷地关闭它。
+// 因此，若想使用此默认逻辑，请在本类型的包装结构体的 `SetDefaults_` 方法中调用它。
 func RecommendedDefaultSAControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.SAControllerConfiguration) {
+	// 零值表示未显式配置，此时用并发同步数 5 作为推荐默认值。
 	if obj.ConcurrentSATokenSyncs == 0 {
 		obj.ConcurrentSATokenSyncs = 5
 	}
 }
 
+// RecommendedDefaultLegacySATokenCleanerConfiguration 为
+// LegacySATokenCleanerConfiguration 设置推荐默认值。
 func RecommendedDefaultLegacySATokenCleanerConfiguration(obj *kubectrlmgrconfigv1alpha1.LegacySATokenCleanerConfiguration) {
 	zero := metav1.Duration{}
+	// 零值说明未配置清理周期；默认一年，给旧令牌留出足够长的生命周期，
+	// 避免过早清理仍可能被使用的令牌。
 	if obj.CleanUpPeriod == zero {
 		obj.CleanUpPeriod = metav1.Duration{Duration: 365 * 24 * time.Hour}
 	}

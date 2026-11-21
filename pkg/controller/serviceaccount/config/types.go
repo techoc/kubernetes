@@ -20,21 +20,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// SAControllerConfiguration contains elements describing ServiceAccountController.
+// SAControllerConfiguration 描述 ServiceAccountController（ServiceAccount 控制器）的配置参数。
 type SAControllerConfiguration struct {
-	// serviceAccountKeyFile is the filename containing a PEM-encoded private RSA key
-	// used to sign service account tokens.
+	// serviceAccountKeyFile 是 PEM 编码的 RSA 私钥文件名，
+	// 用于签发 ServiceAccount token。
 	ServiceAccountKeyFile string
-	// concurrentSATokenSyncs is the number of service account token syncing operations
-	// that will be done concurrently.
+	// concurrentSATokenSyncs 是允许并发执行的 ServiceAccount token 同步操作数。
 	ConcurrentSATokenSyncs int32
-	// rootCAFile is the root certificate authority will be included in service
-	// account's token secret. This must be a valid PEM-encoded CA bundle.
+	// rootCAFile 指向根 CA 证书文件，该 CA 会被写入 ServiceAccount 的 token secret；
+	// 必须是有效的 PEM 编码 CA 证书包。
 	RootCAFile string
 }
 
+// LegacySATokenCleanerConfiguration 描述旧版 ServiceAccount token 清理器的配置。
 type LegacySATokenCleanerConfiguration struct {
-	// CleanUpPeriod is the period of time since the last usage of an
-	// auto-generated service account token before it can be deleted.
+	// CleanUpPeriod 是自动生成的 ServiceAccount token 自上次使用起，
+	// 经过多长时间后可以删除。
 	CleanUpPeriod metav1.Duration
 }

@@ -43,20 +43,17 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
-// Test the real controller methods (add/update/delete claim/volume) with
-// a fake API server.
-// There is no controller API to 'initiate syncAll now', therefore these tests
-// can't reliably simulate periodic sync of volumes/claims - it would be
-// either very timing-sensitive or slow to wait for real periodic sync.
+// TestControllerSync 借助伪 API Server 调用控制器真实的 add/update/delete
+// Claim/Volume 方法，模拟控制器接到事件后的完整处理流程。
+// 控制器没有"立即触发 syncAll"的接口，因此这里无法可靠地模拟周期性同步：
+// 等待真实周期要么对时序过于敏感，要么会拖慢测试。
 func TestControllerSync(t *testing.T) {
 	tests := []controllerTest{
-		// [Unit test set 5] - controller tests.
-		// We test the controller as if
-		// it was connected to real API server, i.e. we call add/update/delete
-		// Claim/Volume methods. Also, all changes to volumes and claims are
-		// sent to add/update/delete Claim/Volume as real controller would do.
+		// 单元测试集 5：像连接真实 API Server 一样测试控制器，
+		// 直接调用 add/update/delete Claim/Volume 方法；所有变更也像
+		// 真实控制器那样经由这些方法通知，而非手动改缓存。
 		{
-			// addClaim gets a new claim. Check it's bound to a volume.
+			// 模拟收到新的 Claim：期望控制器将其绑定到已有 Volume。
 			name:            "5-2 - complete bind",
 			initialVolumes:  newVolumeArray("volume5-2", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimRetain, classEmpty),
 			expectedVolumes: newVolumeArray("volume5-2", "1Gi", "uid5-2", "claim5-2", v1.VolumeBound, v1.PersistentVolumeReclaimRetain, classEmpty, volume.AnnBoundByController),
@@ -64,7 +61,7 @@ func TestControllerSync(t *testing.T) {
 			expectedClaims:  newClaimArray("claim5-2", "uid5-2", "1Gi", "volume5-2", v1.ClaimBound, nil, volume.AnnBoundByController, volume.AnnBindCompleted),
 			expectedEvents:  noevents,
 			errors:          noerrors,
-			// Custom test function that generates an add event
+			// 自定义测试函数主动触发 add 事件，而非依赖初始数据。
 			test: func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
 				claim := newClaim("claim5-2", "uid5-2", "1Gi", "", v1.ClaimPending, nil)
 				reactor.AddClaimEvent(claim)
@@ -98,7 +95,7 @@ func TestControllerSync(t *testing.T) {
 			},
 		},
 		{
-			// deleteClaim with a bound claim makes bound volume released.
+			// 删除已绑定 Claim，期望对应 Volume 转为 Released。
 			name:            "5-3 - delete claim",
 			initialVolumes:  newVolumeArray("volume5-3", "10Gi", "uid5-3", "claim5-3", v1.VolumeBound, v1.PersistentVolumeReclaimRetain, classEmpty, volume.AnnBoundByController),
 			expectedVolumes: newVolumeArray("volume5-3", "10Gi", "uid5-3", "claim5-3", v1.VolumeReleased, v1.PersistentVolumeReclaimRetain, classEmpty, volume.AnnBoundByController),
@@ -106,7 +103,7 @@ func TestControllerSync(t *testing.T) {
 			expectedClaims:  noclaims,
 			expectedEvents:  noevents,
 			errors:          noerrors,
-			// Custom test function that generates a delete event
+			// 从控制器缓存中取出 Claim，触发一次真实的删除事件。
 			test: func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
 				obj := ctrl.claims.List()[0]
 				claim := obj.(*v1.PersistentVolumeClaim)
@@ -115,7 +112,7 @@ func TestControllerSync(t *testing.T) {
 			},
 		},
 		{
-			// deleteVolume with a bound volume. Check the claim is Lost.
+			// 删除已绑定 Volume，期望 Claim 被标记为 Lost。
 			name:            "5-4 - delete volume",
 			initialVolumes:  newVolumeArray("volume5-4", "1Gi", "uid5-4", "claim5-4", v1.VolumeBound, v1.PersistentVolumeReclaimRetain, classEmpty),
 			expectedVolumes: novolumes,
@@ -123,7 +120,7 @@ func TestControllerSync(t *testing.T) {
 			expectedClaims:  newClaimArray("claim5-4", "uid5-4", "1Gi", "volume5-4", v1.ClaimLost, nil, volume.AnnBoundByController, volume.AnnBindCompleted),
 			expectedEvents:  []string{"Warning ClaimLost"},
 			errors:          noerrors,
-			// Custom test function that generates a delete event
+			// 从控制器缓存中取出 Volume，触发一次真实的删除事件。
 			test: func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
 				obj := ctrl.volumes.store.List()[0]
 				volume := obj.(*v1.PersistentVolume)
@@ -132,8 +129,8 @@ func TestControllerSync(t *testing.T) {
 			},
 		},
 		{
-			// deleteClaim with a bound claim makes bound volume released with external deleter.
-			// delete the corresponding volume from apiserver, and report latency metric
+			// 外部 deleter 场景：删除绑定 Claim 使 Volume 转为 Released，
+			// 随后从 API Server 删除 Volume，验证删除延迟指标被上报。
 			name: "5-5 - delete claim and delete volume report metric",
 			initialVolumes: volumesWithAnnotation(volume.AnnDynamicallyProvisioned, "gcr.io/vendor-csi",
 				newVolumeArray("volume5-5", "10Gi", "uid5-5", "claim5-5", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classExternal, volume.AnnBoundByController)),
@@ -143,9 +140,8 @@ func TestControllerSync(t *testing.T) {
 			expectedClaims: noclaims,
 			expectedEvents: noevents,
 			errors:         noerrors,
-			// Custom test function that generates a delete claim event which should have been caught by
-			// "deleteClaim" to remove the claim from controller's cache, after that, a volume deleted
-			// event will be generated to trigger "deleteVolume" call for metric reporting
+			// 先发 Claim 删除事件让 deleteClaim 清理缓存，再发 Volume 删除事件，
+			// 以触发 deleteVolume 中的指标上报，顺序不可颠倒。
 			test: func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
 				test.initialVolumes[0].Annotations[volume.AnnDynamicallyProvisioned] = "gcr.io/vendor-csi"
 				obj := ctrl.claims.List()[0]
@@ -157,15 +153,15 @@ func TestControllerSync(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				// claim has been removed from controller's cache, generate a volume deleted event
+				// 确认 Claim 已从缓存移除后再删除 Volume，否则时序会被指标统计误解。
 				volume := ctrl.volumes.store.List()[0].(*v1.PersistentVolume)
 				reactor.DeleteVolumeEvent(volume)
 				return nil
 			},
 		},
 		{
-			// deleteClaim with a bound claim makes bound volume released with external deleter pending
-			// there should be an entry in operation timestamps cache in controller
+			// 外部 deleter 尚未完成删除时，Volume 转 Released 且操作时间戳缓存中
+			// 应保留对应条目，供后续指标统计使用。
 			name:            "5-6 - delete claim and waiting for external volume deletion",
 			initialVolumes:  volumesWithAnnotation(volume.AnnDynamicallyProvisioned, "gcr.io/vendor-csi", []*v1.PersistentVolume{newExternalProvisionedVolume("volume5-6", "10Gi", "uid5-6", "claim5-6", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classExternal, "fake.driver.csi", nil, volume.AnnBoundByController)}),
 			expectedVolumes: volumesWithAnnotation(volume.AnnDynamicallyProvisioned, "gcr.io/vendor-csi", []*v1.PersistentVolume{newExternalProvisionedVolume("volume5-6", "10Gi", "uid5-6", "claim5-6", v1.VolumeReleased, v1.PersistentVolumeReclaimDelete, classExternal, "fake.driver.csi", nil, volume.AnnBoundByController)}),
@@ -174,23 +170,22 @@ func TestControllerSync(t *testing.T) {
 			expectedClaims: noclaims,
 			expectedEvents: noevents,
 			errors:         noerrors,
-			// Custom test function that generates a delete claim event which should have been caught by
-			// "deleteClaim" to remove the claim from controller's cache and mark bound volume to be released
+			// 触发 Claim 删除事件，使 deleteClaim 清理缓存并将 Volume 标记为 Released。
 			test: func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
-				// should have been provisioned by external provisioner
+				// 该卷由外部 provisioner 提供，删除需等待外部组件完成。
 				obj := ctrl.claims.List()[0]
 				claim := obj.(*v1.PersistentVolumeClaim)
 				reactor.DeleteClaimEvent(claim)
-				// wait until claim is cleared from cache, i.e., deleteClaim is called
+				// 等待 Claim 从缓存清空，即 deleteClaim 已被调用。
 				err := wait.Poll(10*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 					return len(ctrl.claims.ListKeys()) == 0, nil
 				})
 				if err != nil {
 					return err
 				}
-				// wait for volume delete operation to appear once volumeWorker() runs
+				// 等 volumeWorker 处理后写入删除操作时间戳，异步过程需要轮询。
 				return wait.PollImmediate(10*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
-					// make sure the operation timestamp cache is NOT empty
+					// 时间戳缓存非空说明删除操作已被记录。
 					if ctrl.operationTimestamps.Has("volume5-6") {
 						return true, nil
 					}
@@ -200,8 +195,8 @@ func TestControllerSync(t *testing.T) {
 			},
 		},
 		{
-			// deleteVolume event issued before deleteClaim, no metric should have been reported
-			// and no delete operation start timestamp should be inserted into controller.operationTimestamps cache
+			// Volume 删除事件先于 Claim 到达，Claim 会转为 Lost；
+			// 此时不应上报指标，也不应写入删除操作时间戳。
 			name:            "5-7 - delete volume event makes claim lost, delete claim event will not report metric",
 			initialVolumes:  newVolumeArray("volume5-7", "10Gi", "uid5-7", "claim5-7", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classExternal, volume.AnnBoundByController, volume.AnnDynamicallyProvisioned),
 			expectedVolumes: novolumes,
@@ -210,8 +205,8 @@ func TestControllerSync(t *testing.T) {
 			expectedClaims: noclaims,
 			expectedEvents: []string{"Warning ClaimLost"},
 			errors:         noerrors,
-			// Custom test function that generates a delete claim event which should have been caught by
-			// "deleteClaim" to remove the claim from controller's cache and mark bound volume to be released
+			// 先发 Volume 删除事件使 Claim 变为 Lost，再发 Claim 删除事件，
+			// 验证后到者不会再触发指标上报。
 			test: func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
 				volume := ctrl.volumes.store.List()[0].(*v1.PersistentVolume)
 				reactor.DeleteVolumeEvent(volume)
@@ -222,8 +217,7 @@ func TestControllerSync(t *testing.T) {
 					return err
 				}
 
-				// Wait for the PVC to get fully processed. This avoids races between PV controller and DeleteClaimEvent
-				// below.
+				// 等 Claim 进入 Lost 再继续，避免与下面的 DeleteClaimEvent 产生竞态。
 				err = wait.Poll(10*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 					obj := ctrl.claims.List()[0]
 					claim := obj.(*v1.PersistentVolumeClaim)
@@ -233,18 +227,18 @@ func TestControllerSync(t *testing.T) {
 					return err
 				}
 
-				// trying to remove the claim as well
+				// 再尝试删除 Claim，确认不会产生删除操作时间戳。
 				obj := ctrl.claims.List()[0]
 				claim := obj.(*v1.PersistentVolumeClaim)
 				reactor.DeleteClaimEvent(claim)
-				// wait until claim is cleared from cache, i.e., deleteClaim is called
+				// 等 Claim 从缓存清空，确认 deleteClaim 已被调用。
 				err = wait.Poll(10*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 					return len(ctrl.claims.ListKeys()) == 0, nil
 				})
 				if err != nil {
 					return err
 				}
-				// make sure operation timestamp cache is empty
+				// 确认时间戳缓存为空，即本场景未记录删除操作。
 				if ctrl.operationTimestamps.Has("volume5-7") {
 					return errors.New("failed checking timestamp cache")
 				}
@@ -252,7 +246,8 @@ func TestControllerSync(t *testing.T) {
 			},
 		},
 		{
-			// delete a claim waiting for being bound cleans up provision(volume ref == "") entry from timestamp cache
+			// 删除仍在等待绑定的 Claim，应清理其 provision 操作时间戳
+			// （此时 volumeRef 为空），避免遗留条目干扰指标统计。
 			name:            "5-8 - delete claim cleans up operation timestamp cache for provision",
 			initialVolumes:  novolumes,
 			expectedVolumes: novolumes,
@@ -261,28 +256,27 @@ func TestControllerSync(t *testing.T) {
 			expectedClaims: noclaims,
 			expectedEvents: []string{"Normal ExternalProvisioning"},
 			errors:         noerrors,
-			// Custom test function that generates a delete claim event which should have been caught by
-			// "deleteClaim" to remove the claim from controller's cache and mark bound volume to be released
+			// 模拟 Claim 删除事件，验证 deleteClaim 清理时间戳缓存。
 			test: func(ctrl *PersistentVolumeController, reactor *pvtesting.VolumeReactor, test controllerTest) error {
-				// wait until the provision timestamp has been inserted
+				// 先等 provision 时间戳写入，才有可验证的清理对象。
 				err := wait.Poll(10*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 					return ctrl.operationTimestamps.Has("default/claim5-8"), nil
 				})
 				if err != nil {
 					return err
 				}
-				// delete the claim
+				// 发出删除事件，触发 deleteClaim 清理缓存与时间戳。
 				obj := ctrl.claims.List()[0]
 				claim := obj.(*v1.PersistentVolumeClaim)
 				reactor.DeleteClaimEvent(claim)
-				// wait until claim is cleared from cache, i.e., deleteClaim is called
+				// 等 Claim 从缓存清空，确认 deleteClaim 已被调用。
 				err = wait.Poll(10*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 					return len(ctrl.claims.ListKeys()) == 0, nil
 				})
 				if err != nil {
 					return err
 				}
-				// make sure operation timestamp cache is empty
+				// 确认 provision 时间戳已被清理，未遗留条目。
 				if ctrl.operationTimestamps.Has("default/claim5-8") {
 					return errors.New("failed checking timestamp cache")
 				}
@@ -290,8 +284,8 @@ func TestControllerSync(t *testing.T) {
 			},
 		},
 		{
-			// Test that the finalizer gets removed if CSI migration is disabled. The in-tree finalizer is added
-			// back on the PV since migration is disabled.
+			// CSI 迁移关闭时移除 external-provisioner 加的 finalizer，
+			// 并重新加上 in-tree 的 PV 删除保护 finalizer。
 			name: "5-9 - volume has its external PV deletion protection finalizer removed as CSI migration is disabled",
 			initialVolumes: volumesWithFinalizers(
 				volumesWithAnnotation(volume.AnnMigratedTo, "pd.csi.storage.gke.io",
@@ -310,7 +304,7 @@ func TestControllerSync(t *testing.T) {
 	}
 	logger, ctx := ktesting.NewTestContext(t)
 	doit := func(test controllerTest) {
-		// Initialize the controller
+		// 用空的 fake client 起步，各类 watch reactor 决定其事件流。
 		client := &fake.Clientset{}
 
 		fakeVolumeWatch := watch.NewFakeWithOptions(watch.FakeOptions{Logger: &logger})
@@ -327,7 +321,8 @@ func TestControllerSync(t *testing.T) {
 			t.Fatalf("Test %q construct persistent volume failed: %v", test.name, err)
 		}
 
-		// Inject storage classes into controller via a custom lister for test [5-5]
+		// fake client 缺乏真实的 StorageClass 索引，直接注入自定义 lister，
+		// 供用例 5-5 的类查询使用。
 		storageClasses := []*storagev1.StorageClass{
 			makeStorageClass(classExternal, &modeImmediate),
 		}
@@ -355,7 +350,7 @@ func TestControllerSync(t *testing.T) {
 			}(volume)
 		}
 
-		// Start the controller
+		// 控制器在独立 goroutine 运行，测试结束前必须等待其退出。
 		var wg sync.WaitGroup
 		defer wg.Wait()
 		ctx, cancel := context.WithCancel(context.TODO())
@@ -368,7 +363,7 @@ func TestControllerSync(t *testing.T) {
 			ctrl.Run(ctx)
 		})
 
-		// Wait for the controller to pass initial sync and fill its caches.
+		// 等初始同步完成、缓存填满后再执行测试动作，否则事件可能被丢弃。
 		err = wait.Poll(10*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 			return len(ctrl.claims.ListKeys()) >= len(test.initialClaims) &&
 				len(ctrl.volumes.store.ListKeys()) >= len(test.initialVolumes), nil
@@ -378,13 +373,12 @@ func TestControllerSync(t *testing.T) {
 		}
 		logger.V(4).Info("controller synced, starting test")
 
-		// Call the tested function
+		// 执行用例自己的事件触发逻辑。
 		err = test.test(ctrl, reactor.VolumeReactor, test)
 		if err != nil {
 			t.Errorf("Test %q initial test call failed: %v", test.name, err)
 		}
-		// Simulate a periodic resync, just in case some events arrived in a
-		// wrong order.
+		// 主动触发一次 resync，消除事件乱序带来的影响后再校验结果。
 		ctrl.resync(ctx)
 
 		err = reactor.waitTest(test)
@@ -402,6 +396,8 @@ func TestControllerSync(t *testing.T) {
 	}
 }
 
+// storeVersion 用给定 resourceVersion 写入缓存并校验 storeObjectUpdate 的返回值
+// 与最终存入的版本，覆盖新旧版本覆盖逻辑。
 func storeVersion(t *testing.T, prefix string, c cache.Store, version string, expectedReturn bool) {
 	pv := newVolume("pvName", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimDelete, classEmpty)
 	pv.ResourceVersion = version
@@ -414,8 +410,7 @@ func storeVersion(t *testing.T, prefix string, c cache.Store, version string, ex
 		t.Errorf("%s: expected storeObjectUpdate to return %v, got: %v", prefix, expectedReturn, ret)
 	}
 
-	// find the stored version
-
+	// 从缓存读回，确认实际存入的版本符合预期。
 	pvObj, found, err := c.GetByKey("pvName")
 	if err != nil {
 		t.Errorf("expected volume 'pvName' in the cache, got error instead: %v", err)
@@ -439,28 +434,29 @@ func storeVersion(t *testing.T, prefix string, c cache.Store, version string, ex
 	}
 }
 
-// TestControllerCache tests func storeObjectUpdate()
+// TestControllerCache 验证 storeObjectUpdate 仅接受更新的版本：
+// 重复或过期事件不得覆盖缓存，且版本号按整数而非字符串比较。
 func TestControllerCache(t *testing.T) {
-	// Cache under test
+	// 被测缓存，使用处理删除对象的键函数。
 	c := cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc)
 
-	// Store new PV
+	// 首次写入新 PV。
 	storeVersion(t, "Step1", c, "1", true)
-	// Store the same PV
+	// 重复写入同一版本，不应视为更新。
 	storeVersion(t, "Step2", c, "1", true)
-	// Store newer PV
+	// 写入更高版本，应覆盖缓存。
 	storeVersion(t, "Step3", c, "2", true)
-	// Store older PV - simulating old "PV updated" event or periodic sync with
-	// old data
+	// 写入旧版本，模拟迟到的更新事件或带旧数据的周期同步，应被忽略。
 	storeVersion(t, "Step4", c, "1", false)
-	// Store newer PV - test integer parsing ("2" > "10" as string,
-	// while 2 < 10 as integers)
+	// "10" 按字符串小于 "2"、按整数大于 "2"，用来验证版本号按数值解析。
 	storeVersion(t, "Step5", c, "10", true)
 }
 
+// TestControllerCacheParsingError 验证非法 resourceVersion 会导致更新失败，
+// 避免缓存被无法比较的版本污染。
 func TestControllerCacheParsingError(t *testing.T) {
 	c := cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc)
-	// There must be something in the cache to compare with
+	// 先放入一个合法版本，版本比较才有基准。
 	storeVersion(t, "Step1", c, "1", true)
 
 	pv := newVolume("pvName", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimDelete, classEmpty)
@@ -472,6 +468,7 @@ func TestControllerCacheParsingError(t *testing.T) {
 	}
 }
 
+// makeStorageClass 构造使用 no-provisioner 的 StorageClass，专注于绑定模式的测试。
 func makeStorageClass(scName string, mode *storagev1.VolumeBindingMode) *storagev1.StorageClass {
 	return &storagev1.StorageClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -482,6 +479,7 @@ func makeStorageClass(scName string, mode *storagev1.VolumeBindingMode) *storage
 	}
 }
 
+// makeDefaultStorageClass 构造带默认注解的 StorageClass，用于测试默认类追溯分配。
 func makeDefaultStorageClass(scName string, mode *storagev1.VolumeBindingMode) *storagev1.StorageClass {
 	return &storagev1.StorageClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -495,13 +493,11 @@ func makeDefaultStorageClass(scName string, mode *storagev1.VolumeBindingMode) *
 	}
 }
 
+// TestAnnealMigrationAnnotations 验证 CSI 迁移开启/关闭时 PV 与 PVC 上迁移注解的
+// 增删行为，包括回滚、Beta provisioner 注解及未迁移插件不受影响等场景。
 func TestAnnealMigrationAnnotations(t *testing.T) {
-	// The gce-pd plugin is used to test a migrated plugin (as the feature is
-	// locked as of 1.25), and rbd is used as a non-migrated plugin (still alpha
-	// as of 1.25). As plugins are migrated, rbd should be changed to a non-
-	// migrated plugin. If there are no other non-migrated plugins, then those
-	// test cases are moot and they can be removed (keeping only the test cases
-	// with gce-pd).
+	// gce-pd 自 1.25 起特性锁定，用作已迁移插件；rbd 当时仍为 alpha，用作未迁移插件。
+	// 待 rbd 也被迁移后，未迁移相关用例即可删除，仅保留 gce-pd 用例。
 	const testPlugin = "non-migrated-plugin"
 	const migratedPlugin = "kubernetes.io/gce-pd"
 	const migratedDriver = "pd.csi.storage.gke.io"
@@ -580,6 +576,7 @@ func TestAnnealMigrationAnnotations(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// nil 注解表示无需测试该对象类型；非 nil 时直接原地修改并检查期望结果。
 			if tc.volumeAnnotations != nil {
 				ann := tc.volumeAnnotations
 				updateMigrationAnnotations(logger, cmpm, translator, ann, false)
@@ -599,12 +596,12 @@ func TestAnnealMigrationAnnotations(t *testing.T) {
 	}
 }
 
+// TestModifyDeletionFinalizers 验证 CSI 迁移状态变化时 PV 删除保护 finalizer 的
+// 增删逻辑，覆盖回滚、多种 finalizer 共存及不同 reclaimPolicy 等场景。
 func TestModifyDeletionFinalizers(t *testing.T) {
-	// This set of tests ensures that protection finalizer is removed when CSI migration is disabled
-	// and PV controller needs to remove finalizers added by the external-provisioner. The rbd
-	// in-tree plugin is used as migration is disabled. When that plugin is migrated, a different
-	// non-migrated one should be used. If all plugins are migrated this test can be removed. The
-	// gce in-tree plugin is used for a migrated driver as it is feature-locked as of 1.25.
+	// 迁移关闭时需移除 external-provisioner 加的 finalizer。rbd 作为未迁移插件，
+	// 其迁移被禁用；待其被迁移后需换用其他未迁移插件，若全部迁移则本测试可删除。
+	// gce 自 1.25 起特性锁定，用作已迁移驱动。
 	const nonmigratedDriver = "rbd.csi.ceph.com"
 	const migratedPlugin = "kubernetes.io/gce-pd"
 	const migratedDriver = "pd.csi.storage.gke.io"
@@ -617,26 +614,22 @@ func TestModifyDeletionFinalizers(t *testing.T) {
 		expModified         bool
 	}{
 		{
-			// Represents a CSI volume provisioned through external-provisioner, no CSI migration enabled.
+			// 未启用迁移的 CSI 卷：finalizer 应保持原样，不做修改。
 			name:                "13-1 migration was never enabled, volume has the finalizer",
 			initialVolume:       newExternalProvisionedVolume("volume-13-1", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classCopper, nonmigratedDriver, []string{volume.PVDeletionProtectionFinalizer}, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			expVolumeFinalizers: []string{volume.PVDeletionProtectionFinalizer},
 			expModified:         false,
 		},
 		{
-			// Represents a volume provisioned through external-provisioner but the external-provisioner has
-			// yet to sync the volume to add the new finalizer
+			// external-provisioner 尚未同步加上新 finalizer，控制器不应擅自补写。
 			name:                "13-2 migration was never enabled, volume does not have the finalizer",
 			initialVolume:       newExternalProvisionedVolume("volume-13-2", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classCopper, nonmigratedDriver, nil, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			expVolumeFinalizers: nil,
 			expModified:         false,
 		},
 		{
-			// Represents an in-tree volume that has the migrated-to annotation but the external-provisioner is
-			// yet to sync the volume and add the pv deletion protection finalizer. The custom finalizer is some
-			// pre-existing finalizer, for example the pv-protection finalizer. When csi-migration is disabled,
-			// the migrated-to annotation will be removed shortly when updateVolumeMigrationAnnotationsAndFinalizers
-			// is called followed by adding back the in-tree pv protection finalizer.
+			// in-tree 卷带迁移注解但外部组件尚未加删除保护 finalizer；自定义 finalizer
+			// 模拟已有的 pv-protection。迁移关闭后应保留它并补回 in-tree 保护 finalizer。
 			name:                "13-3 migration was disabled, volume has existing custom finalizer, does not have in-tree pv deletion protection finalizer",
 			initialVolume:       newVolumeWithFinalizers("volume-13-3", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classCopper, []string{customFinalizer}, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			expVolumeFinalizers: []string{customFinalizer, volume.PVDeletionInTreeProtectionFinalizer},
@@ -649,26 +642,22 @@ func TestModifyDeletionFinalizers(t *testing.T) {
 			expModified:         true,
 		},
 		{
-			// Represents roll back scenario where the external-provisioner has added the pv deletion protection
-			// finalizer and later the csi migration was disabled. The pv deletion protection finalizer added through
-			// external-provisioner will be removed and the in-tree pv deletion protection finalizer will be added.
+			// 回滚场景：迁移关闭后移除外部组件加的删除保护 finalizer，
+			// 改由 in-tree 的 finalizer 接管。
 			name:                "13-5 migration was disabled, volume has external PV deletion finalizer",
 			initialVolume:       newVolumeWithFinalizers("volume-13-5", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classCopper, []string{volume.PVDeletionProtectionFinalizer}, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			expVolumeFinalizers: []string{volume.PVDeletionInTreeProtectionFinalizer},
 			expModified:         true,
 		},
 		{
-			// Represents roll-back of csi-migration as 13-5, here there are multiple finalizers, only the pv deletion
-			// protection finalizer added by external-provisioner will be removed and the in-tree pv deletion protection
-			// finalizer will be added.
+			// 同 13-5，但存在多个 finalizer：只替换删除保护项，其余保持不动。
 			name:                "13-6 migration was disabled, volume has multiple finalizers",
 			initialVolume:       newVolumeWithFinalizers("volume-13-6", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classCopper, []string{volume.PVDeletionProtectionFinalizer, customFinalizer}, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			expVolumeFinalizers: []string{customFinalizer, volume.PVDeletionInTreeProtectionFinalizer},
 			expModified:         true,
 		},
 		{
-			// csi migration is enabled, the pv controller should not delete the finalizer added by the
-			// external-provisioner and the in-tree finalizer should be deleted.
+			// 迁移开启时保留外部组件加的 finalizer，并移除 in-tree 的重复保护项。
 			name:                "13-7 migration is enabled, volume has both the in-tree and external PV deletion protection finalizer",
 			initialVolume:       newVolumeWithFinalizers("volume-13-7", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classCopper, []string{volume.PVDeletionProtectionFinalizer, volume.PVDeletionInTreeProtectionFinalizer}, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			volumeAnnotations:   map[string]string{volume.AnnDynamicallyProvisioned: migratedPlugin, volume.AnnMigratedTo: migratedDriver},
@@ -676,23 +665,21 @@ func TestModifyDeletionFinalizers(t *testing.T) {
 			expModified:         true,
 		},
 		{
-			// csi-migration is not completely enabled as the specific plugin feature is not present. This is equivalent
-			// of disabled csi-migration.
+			// 插件级迁移特性未开启等同于迁移关闭，仍需切换为 in-tree finalizer。
 			name:                "13-8 migration is enabled but plugin migration feature is disabled, volume has the external PV deletion protection finalizer",
 			initialVolume:       newVolumeWithFinalizers("volume-13-8", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classCopper, []string{volume.PVDeletionProtectionFinalizer}, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			expVolumeFinalizers: []string{volume.PVDeletionInTreeProtectionFinalizer},
 			expModified:         true,
 		},
 		{
-			// same as 13-8 but multiple finalizers exists, only the pv deletion protection finalizer needs to be
-			// removed and the in-tree pv deletion protection finalizer needs to be added.
+			// 同 13-8，多个 finalizer 时仅替换删除保护项。
 			name:                "13-9 migration is enabled but plugin migration feature is disabled, volume has multiple finalizers including external PV deletion protection finalizer",
 			initialVolume:       newVolumeWithFinalizers("volume-13-9", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classCopper, []string{volume.PVDeletionProtectionFinalizer, customFinalizer}, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			expVolumeFinalizers: []string{customFinalizer, volume.PVDeletionInTreeProtectionFinalizer},
 			expModified:         true,
 		},
 		{
-			// corner error case.
+			// 边界情况：缺少注解时无法判断是否迁移，保持 finalizer 原样。
 			name:                "13-10 missing annotations but finalizers exist",
 			initialVolume:       newVolumeWithFinalizers("volume-13-10", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimDelete, classCopper, []string{volume.PVDeletionProtectionFinalizer}),
 			expVolumeFinalizers: []string{volume.PVDeletionProtectionFinalizer},
@@ -705,28 +692,28 @@ func TestModifyDeletionFinalizers(t *testing.T) {
 			expModified:         false,
 		},
 		{
-			// When ReclaimPolicy is Retain ensure that in-tree pv deletion protection finalizer is not added.
+			// Retain 策略下卷不会被自动删除，无需添加 in-tree 删除保护 finalizer。
 			name:                "13-12 migration is disabled, volume has no finalizers, reclaimPolicy is Retain",
 			initialVolume:       newVolumeWithFinalizers("volume-13-12", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimRetain, classCopper, nil, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			expVolumeFinalizers: nil,
 			expModified:         false,
 		},
 		{
-			// When ReclaimPolicy is Recycle ensure that in-tree pv deletion protection finalizer is not added.
+			// Recycle 策略同样不需要 in-tree 删除保护 finalizer。
 			name:                "13-13 migration is disabled, volume has no finalizers, reclaimPolicy is Recycle",
 			initialVolume:       newVolumeWithFinalizers("volume-13-13", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimRecycle, classCopper, nil, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			expVolumeFinalizers: nil,
 			expModified:         false,
 		},
 		{
-			// When ReclaimPolicy is Retain ensure that in-tree pv deletion protection finalizer present is removed.
+			// Retain 策略下已有的 in-tree 删除保护 finalizer 也应被清理。
 			name:                "13-14 migration is disabled, volume has in-tree pv deletion finalizers, reclaimPolicy is Retain",
 			initialVolume:       newVolumeWithFinalizers("volume-13-14", "1Gi", "uid11-23", "claim11-23", v1.VolumeBound, v1.PersistentVolumeReclaimRetain, classCopper, []string{volume.PVDeletionInTreeProtectionFinalizer}, volume.AnnDynamicallyProvisioned, volume.AnnBoundByController),
 			expVolumeFinalizers: nil,
 			expModified:         true,
 		},
 		{
-			// Statically provisioned volumes should not have the in-tree pv deletion protection finalizer
+			// 静态创建的卷不是动态供给流程的一部分，不添加删除保护 finalizer。
 			name:                "13-15 migration is disabled, statically provisioned PV",
 			initialVolume:       newVolumeWithFinalizers("volume-13-14", "1Gi", "", "", v1.VolumeAvailable, v1.PersistentVolumeReclaimDelete, classCopper, nil),
 			expVolumeFinalizers: nil,
@@ -754,12 +741,14 @@ func TestModifyDeletionFinalizers(t *testing.T) {
 	}
 }
 
+// TestRetroactiveStorageClassAssignment 验证默认 StorageClass 的追溯分配：
+// 仅在存在默认类且 Claim 尚未绑定、未指定存储类时才补上，多个默认类时按名称确定选择。
 func TestRetroactiveStorageClassAssignment(t *testing.T) {
 	tests := []struct {
 		storageClasses []*storagev1.StorageClass
 		tests          []controllerTest
 	}{
-		// [Unit test set 15] - retroactive storage class assignment tests
+		// 单元测试集 15：默认 StorageClass 的追溯分配测试。
 		{
 			storageClasses: []*storagev1.StorageClass{},
 			tests: []controllerTest{

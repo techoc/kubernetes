@@ -45,66 +45,65 @@ import (
 )
 
 const (
-	// Workload.spec.controllerRef and PodGroup.spec.workloadRef
-	// carry only names (no UIDs), so these indexes use namespace/name as
-	// the key. Callers must still verify ownership via ownerRef UID checks
-	// before acting on results.
+	// Workload.spec.controllerRef 与 PodGroup.spec.workloadRef 只包含名称（不含 UID），
+	// 因此这两个索引以 namespace/name 作为键。由于名称可能被复用，调用方在根据查询结果
+	// 采取行动前，仍必须通过 ownerRef 的 UID 校验所有权。
 	workloadByJobNameIndexKey      = "workloadByJobName"
 	podGroupByWorkloadNameIndexKey = "podGroupByWorkloadName"
 )
 
-// managementMode describes which scheduling objects the Job controller
-// manages for a given Job.
+// managementMode 描述 Job 控制器对给定 Job 负责管理哪些调度对象。
 type managementMode int
 
 const (
-	// the controller manages no scheduling objects, either the feature
-	// is off, the user brought their own PodGroup, or a parent controller
-	// owns both objects without delegating.
+	// manageNone 表示控制器不管理任何调度对象：可能是特性门控关闭、
+	// 用户自带了 PodGroup，或者父控制器同时拥有两个对象且未下放管理权。
 	manageNone managementMode = iota
 
-	// the controller owns both Workload and PodGroup.
+	// manageBoth 表示控制器同时拥有 Workload 和 PodGroup。
 	manageBoth
 
-	// a non-root Job whose parent owns the Workload and delegated
-	// runtime PodGroup management to the Job controller.
+	// managePodGroupOnly 适用于非根 Job：父控制器拥有 Workload，
+	// 但把运行时 PodGroup 的管理下放给了 Job 控制器。
 	managePodGroupOnly
 )
 
-// getManagementMode computes which scheduling objects the Job controller
-// manages for the Job.
+// getManagementMode 计算 Job 控制器应为该 Job 管理哪些调度对象。
 func getManagementMode(job *batch.Job) managementMode {
+	// 特性未开启时不接管任何调度对象。
 	if !feature.DefaultFeatureGate.Enabled(features.WorkloadWithJob) {
 		return manageNone
 	}
+	// 用户 Pod 模板里自带调度组，说明用户自行管理调度对象。
 	if job.Spec.Template.Spec.SchedulingGroup != nil {
 		return manageNone
 	}
-	// A Job with no controller owner is a root workload node.
+	// 没有 controller owner 的 Job 是工作负载树的根节点，由本控制器全权管理。
 	if metav1.GetControllerOf(job) == nil {
 		return manageBoth
 	}
+	// 非根 Job 只有在父控制器显式下放时才接管 PodGroup。
 	if hasDelegatedPodGroup(job) {
 		return managePodGroupOnly
 	}
 	return manageNone
 }
 
-// shouldManageWorkloadForJob reports whether the Job controller should
-// materialize scheduling objects (Workload and PodGroup) for the Job.
+// shouldManageWorkloadForJob 判断 Job 控制器是否应为该 Job 创建调度对象（Workload 与 PodGroup）。
 func shouldManageWorkloadForJob(job *batch.Job) bool {
 	return getManagementMode(job) != manageNone
 }
 
-// hasDelegatedPodGroup reports whether a parent controller delegated runtime
-// PodGroup management to the Job controller via the podGroupTemplate annotation.
+// hasDelegatedPodGroup 判断父控制器是否通过 podGroupTemplate 注解
+// 把运行时 PodGroup 的管理权下放给了 Job 控制器。
 func hasDelegatedPodGroup(job *batch.Job) bool {
 	_, ok := job.Annotations[apischeduling.GroupTemplateNameAnnotation]
 	return ok
 }
 
-// filterControlledByJob returns only the objects whose controller ownerRef
-// points at the given Job, i.e. the ones this controller created and owns.
+// filterControlledByJob 只保留 controller ownerRef 指向给定 Job 的对象，
+// 即本控制器创建并拥有的对象。
+// 按 UID 校验可排除名称相同但并非本 Job 创建的对象。
 func filterControlledByJob[T metav1.Object](objs []T, job *batch.Job) []T {
 	matched := make([]T, 0, len(objs))
 	for _, obj := range objs {
@@ -115,22 +114,20 @@ func filterControlledByJob[T metav1.Object](objs []T, job *batch.Job) []T {
 	return matched
 }
 
-// ensureWorkloadAndPodGroup discovers or creates Workload and PodGroup for the given Job.
-// Returns both objects when workload integration is active, or nils when the Job
-// should fall back to default scheduling / defers ownership to a parent.
+// ensureWorkloadAndPodGroup 为给定 Job 查找或创建 Workload 与 PodGroup。
+// 工作负载集成生效时返回两个对象；Job 应回退到默认调度或将所有权交由父控制器时返回 nil。
 func (jm *Controller) ensureWorkloadAndPodGroup(ctx context.Context, job *batch.Job, pods []*v1.Pod) (*schedulingv1beta1.Workload, *schedulingv1beta1.PodGroup, error) {
 	mode := getManagementMode(job)
+	// 不需要管理时直接返回，避免无谓的 API 查询。
 	if mode == manageNone {
 		return nil, nil, nil
 	}
 
-	// Objects are only created for a Job that has never started, so a
-	// Job that predates the feature gate being enabled is left untouched.
-	// An already-started Job discovers and reuses existing objects
-	// but never creates new ones.
+	// 只为从未启动过的 Job 创建对象：特性门控开启前就已存在的 Job 不会被改动，
+	// 已启动的 Job 只发现并复用已有对象，绝不新建，以免干扰运行中的工作负载。
 	newJob := isNewJob(job, pods)
 
-	// Case 1 - manage the PodGroup only.
+	// 情形一：只管理 PodGroup。
 	if mode == managePodGroupOnly {
 		pg, err := jm.getOrCreateDelegatedPodGroup(ctx, job, newJob)
 		if err != nil {
@@ -139,7 +136,7 @@ func (jm *Controller) ensureWorkloadAndPodGroup(ctx context.Context, job *batch.
 		return nil, pg, nil
 	}
 
-	// Case 2 - manage both Workload and PodGroup (root Job).
+	// 情形二：根 Job，同时管理 Workload 与 PodGroup。
 	wl, err := jm.getOrCreateWorkload(ctx, job, newJob)
 	if err != nil || wl == nil {
 		return nil, nil, err
@@ -149,9 +146,8 @@ func (jm *Controller) ensureWorkloadAndPodGroup(ctx context.Context, job *batch.
 		return nil, nil, err
 	}
 
-	// propagate a changed gang minCount (elastic scaling) to the controller-owned
-	// Workload/PodGroup. Runs regardless of pod state so a running gang Job can
-	// be resized.
+	// 把变化的 gang minCount（弹性伸缩）同步到控制器拥有的 Workload/PodGroup。
+	// 此步骤不依赖 Pod 状态，以便运行中的 gang Job 也能被调整规模。
 	err = jm.syncGangMinCount(ctx, job, wl, pg)
 	if err != nil {
 		return nil, nil, err
@@ -159,27 +155,27 @@ func (jm *Controller) ensureWorkloadAndPodGroup(ctx context.Context, job *batch.
 	return wl, pg, nil
 }
 
-// syncGangMinCount propagates an updated gang size to the controller-owned
-// Workload and runtime PodGroup. It recompiles the desired Workload from
-// the current Job spec. When the resolved policy is Gang, it updates only
-// the minCount on the live objects if it differs.
+// syncGangMinCount 把更新后的 gang 规模同步到控制器拥有的 Workload 和运行时 PodGroup。
+// 它根据当前 Job 规约重新编译出期望的 Workload；当解析出的策略为 Gang 时，
+// 仅在现存对象的 minCount 与期望值不同时才更新。
 //
-// Basic policies are a no-op. Only minCount is changed; every other
-// Workload/PodGroup field is immutable at the API.
+// Basic 策略无需处理。除 minCount 外，其他 Workload/PodGroup 字段在 API 层面均不可变。
 func (jm *Controller) syncGangMinCount(ctx context.Context, job *batch.Job,
 	workload *schedulingv1beta1.Workload, podGroup *schedulingv1beta1.PodGroup) error {
 
+	// 从 Job 规约重新编译期望状态，以获取最新的 gang 配置。
 	desiredWorkload, err := jm.generateWorkload(job)
 	if err != nil || len(desiredWorkload.Spec.PodGroupTemplates) == 0 {
 		return err
 	}
 	gang := desiredWorkload.Spec.PodGroupTemplates[0].SchedulingPolicy.Gang
 	if gang == nil {
-		// Basic (non-gang) policies have no minCount to reconcile, so this is a no-op.
+		// Basic（非 gang）策略没有 minCount 需要协调，直接返回。
 		return nil
 	}
 	desiredMinCount := gang.MinCount
 
+	// 只在结构符合 alpha 约束（单个模板）时更新 Workload，避免误改异常对象。
 	currentPGTemplate := workload.Spec.PodGroupTemplates
 	if len(currentPGTemplate) == 1 &&
 		currentPGTemplate[0].SchedulingPolicy.Gang != nil &&
@@ -203,9 +199,10 @@ func (jm *Controller) syncGangMinCount(ctx context.Context, job *batch.Job,
 	return nil
 }
 
-// patchWorkloadMinCount sets the gang minCount on the Workload's single
-// PodGroupTemplate. minCount is the only mutable field on a compiled Workload.
+// patchWorkloadMinCount 更新 Workload 唯一 PodGroupTemplate 上的 gang minCount。
+// minCount 是编译后的 Workload 上唯一可变字段，因此采用补丁更新。
 func (jm *Controller) patchWorkloadMinCount(ctx context.Context, workload *schedulingv1beta1.Workload, minCount int32) error {
+	// 在副本上修改，避免改动 informer 缓存中的对象。
 	updatedW := workload.DeepCopy()
 	updatedW.Spec.PodGroupTemplates[0].SchedulingPolicy.Gang.MinCount = minCount
 
@@ -218,6 +215,7 @@ func (jm *Controller) patchWorkloadMinCount(ctx context.Context, workload *sched
 	if err != nil {
 		return err
 	}
+	// 通过双向合并补丁只提交变化字段，防止覆盖其他控制器并发写入的内容。
 	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, &schedulingv1beta1.Workload{})
 	if err != nil {
 		return err
@@ -227,8 +225,9 @@ func (jm *Controller) patchWorkloadMinCount(ctx context.Context, workload *sched
 	return err
 }
 
-// patchPodGroupMinCount sets the gang minCount on the runtime PodGroup.
+// patchPodGroupMinCount 更新运行时 PodGroup 上的 gang minCount。
 func (jm *Controller) patchPodGroupMinCount(ctx context.Context, podGroup *schedulingv1beta1.PodGroup, minCount int32) error {
+	// 在副本上修改，避免改动 informer 缓存中的对象。
 	updatedPG := podGroup.DeepCopy()
 	updatedPG.Spec.SchedulingPolicy.Gang.MinCount = minCount
 
@@ -251,10 +250,10 @@ func (jm *Controller) patchPodGroupMinCount(ctx context.Context, podGroup *sched
 	return err
 }
 
-// findParentWorkload returns the parent-owned Workload for a non-root Job: the
-// Workload in the Job's namespace whose spec.controllerRef points to the Job's
-// parent controller.
+// findParentWorkload 查找非根 Job 的父级 Workload：
+// 即同命名空间下 spec.controllerRef 指向该 Job 父控制器的 Workload。
 func (jm *Controller) findParentWorkload(job *batch.Job) (*schedulingv1beta1.Workload, error) {
+	// lister 未配置说明 informer 未接入，无法执行查询。
 	if jm.workloadLister == nil {
 		return nil, fmt.Errorf("workload lister is not configured")
 	}
@@ -262,6 +261,7 @@ func (jm *Controller) findParentWorkload(job *batch.Job) (*schedulingv1beta1.Wor
 	if parent == nil {
 		return nil, nil
 	}
+	// 父控制器 APIVersion 无法解析时不再尝试匹配。
 	gv, err := schema.ParseGroupVersion(parent.APIVersion)
 	if err != nil {
 		return nil, nil
@@ -271,10 +271,9 @@ func (jm *Controller) findParentWorkload(job *batch.Job) (*schedulingv1beta1.Wor
 		return nil, err
 	}
 	for _, wl := range workloads {
-		// metav1.IsControlledBy can't be used here: it matches an object's
-		// metadata.ownerReferences by UID, but spec.ControllerRef is a name-based
-		// TypedLocalObjectReference that points at the Job's parent controller
-		// rather than at the Job itself.
+		// 此处不能使用 metav1.IsControlledBy：它按 UID 匹配对象的
+		// metadata.ownerReferences，而 spec.ControllerRef 是基于名称的
+		// TypedLocalObjectReference，指向的是 Job 的父控制器而非 Job 本身。
 		if ref := wl.Spec.ControllerRef; ref != nil &&
 			ref.APIGroup == gv.Group && ref.Kind == parent.Kind && ref.Name == parent.Name {
 			return wl, nil
@@ -283,14 +282,14 @@ func (jm *Controller) findParentWorkload(job *batch.Job) (*schedulingv1beta1.Wor
 	return nil, nil
 }
 
-// getOrCreateDelegatedPodGroup discovers or creates the runtime PodGroup for a
-// non-root Job whose parent delegates PodGroup management. The PodGroup maps to
-// the parent-owned Workload via the named PodGroupTemplate from the delegation
-// annotation and carries only a controller ownerRef to the Job.
+// getOrCreateDelegatedPodGroup 为父控制器下放 PodGroup 管理权的非根 Job
+// 查找或创建运行时 PodGroup。PodGroup 通过下放注解中指定的 PodGroupTemplate
+// 关联到父级拥有的 Workload，并且只有指向该 Job 的 controller ownerRef。
 func (jm *Controller) getOrCreateDelegatedPodGroup(ctx context.Context,
 	job *batch.Job, newJob bool) (*schedulingv1beta1.PodGroup, error) {
 	logger := klog.FromContext(ctx)
 
+	// 父级 Workload 可能尚未创建，此时返回 nil 并等待下一次同步重试。
 	parentWorkload, err := jm.findParentWorkload(job)
 	if err != nil {
 		return nil, err
@@ -309,8 +308,8 @@ func (jm *Controller) getOrCreateDelegatedPodGroup(ctx context.Context,
 		return nil, nil
 	}
 
-	// The parent owns and compiled the Workload, so materialize the PodGroup
-	// from its persisted template rather than recompiling from this Job's spec.
+	// Workload 由父控制器拥有并编译，因此应基于其持久化的模板创建 PodGroup，
+	// 而不是根据本 Job 的规约重新编译。
 	builder := newBuilderFromExistingWorkload(job, parentWorkload)
 
 	matched, err := jm.listPodGroupsForWorkload(parentWorkload)
@@ -324,30 +323,27 @@ func (jm *Controller) getOrCreateDelegatedPodGroup(ctx context.Context,
 			break
 		}
 	}
-	// Create only when the Job has no pods yet and none exists; otherwise
-	// discover-only. A create that races with another actor returns
-	// AlreadyExists, which requeues the Job so the next sync discovers it.
+	// 只有在 Job 尚无 Pod 且 PodGroup 不存在时才创建，否则只做发现。
+	// 与其他创建者并发时会返回 AlreadyExists，Job 随之重新入队，下次同步即可发现已有对象。
 	if updatedPG == nil && newJob {
-		// A delegated Job maps to a parent-owned Workload, so the PodGroup does
-		// not link the Workload as an owner (linkWorkloadOwner=false).
+		// 下放模式下的 Job 对应父级拥有的 Workload，因此 PodGroup 不把该 Workload
+		// 设为 owner（linkWorkloadOwner=false），父控制器仍是 Workload 的唯一所有者。
 		updatedPG, err = jm.createPodGroup(ctx, job, parentWorkload, templateName, false, builder)
 		if err != nil {
 			return nil, err
 		}
 	}
-	// The parent controller may resize the gang on its Workload's template
-	// after the PodGroup exists; the controller owns PodGroup management in
-	// the delegated mode, so follow the template.
+	// 父控制器可能在 PodGroup 创建后调整 Workload 模板中的 gang 规模；
+	// 下放模式下本控制器负责 PodGroup，因此以模板为准进行同步。
 	if err := jm.syncDelegatedPodGroupMinCount(ctx, template, updatedPG); err != nil {
 		return nil, err
 	}
 	return updatedPG, nil
 }
 
-// syncDelegatedPodGroupMinCount propagates a gang minCount change made by the
-// parent controller on its Workload's PodGroupTemplate to the delegated
-// runtime PodGroup. The parent's template is the source of truth in the
-// delegated mode.
+// syncDelegatedPodGroupMinCount 把父控制器在其 Workload 的 PodGroupTemplate 上
+// 修改的 gang minCount 同步到下放的运行时 PodGroup。
+// 下放模式下父控制器的模板是唯一事实来源。
 func (jm *Controller) syncDelegatedPodGroupMinCount(ctx context.Context,
 	template *schedulingv1beta1.PodGroupTemplate, podGroup *schedulingv1beta1.PodGroup) error {
 	if podGroup == nil ||
@@ -361,16 +357,13 @@ func (jm *Controller) syncDelegatedPodGroupMinCount(ctx context.Context,
 	return jm.patchPodGroupMinCount(ctx, podGroup, desiredMinCount)
 }
 
-// isNewJob returns true if the Job has never started. This prevents creating
-// scheduling objects for Jobs that predate the feature gate being enabled.
+// isNewJob 判断 Job 是否从未启动过，避免为特性门控开启前就已存在的 Job 创建调度对象。
 //
-// This heuristic is intentionally conservative for alpha and will be replaced
-// by a more robust mechanism before beta.
+// 该启发式判断在 alpha 阶段刻意保守，beta 之前会被更可靠的机制取代。
 //
-// We check pods, StartTime, terminal counters, and the Suspended condition
-// because each alone has gaps, pods may be GC'd, StartTime is reset on
-// suspend, but Succeeded/Failed persist. A Job that was suspended early
-// would pass the other checks, so the Suspended condition catches that case.
+// 同时检查 Pod、StartTime、终态计数和 Suspended 条件，是因为每一项单独使用都有盲区：
+// Pod 可能被 GC 回收，StartTime 在挂起时会重置，而 Succeeded/Failed 会一直保留；
+// 早期就被挂起的 Job 能通过其他检查，Suspended 条件正好覆盖这种情况。
 func isNewJob(job *batch.Job, pods []*v1.Pod) bool {
 	if len(pods) != 0 ||
 		job.Status.StartTime != nil ||
@@ -381,10 +374,9 @@ func isNewJob(job *batch.Job, pods []*v1.Pod) bool {
 	return findConditionByType(job.Status.Conditions, batch.JobSuspended) == nil
 }
 
-// getOrCreateWorkload returns the Workload for this Job, creating one if needed.
-// Returns (nil, nil) when the Job should fall back to default scheduling
-// (i.e., ambiguous matches, unsupported structure, or
-// not a new Job).
+// getOrCreateWorkload 返回该 Job 对应的 Workload，必要时创建。
+// 当 Job 应回退到默认调度时返回 (nil, nil)：例如匹配结果不唯一、
+// 结构不受支持，或该 Job 并非新 Job。
 func (jm *Controller) getOrCreateWorkload(ctx context.Context,
 	job *batch.Job, newJob bool) (*schedulingv1beta1.Workload, error) {
 	allWorkloads, err := jm.listWorkloadsForJob(job)
@@ -392,16 +384,14 @@ func (jm *Controller) getOrCreateWorkload(ctx context.Context,
 		return nil, err
 	}
 
-	// Only Workloads this controller created are managed, identified by a
-	// controller ownerRef to the Job. User pre-created (BYO) Workloads are
-	// ignored so the controller always owns the objects it schedules against.
+	// 只管理本控制器创建的 Workload，依据是指向该 Job 的 controller ownerRef。
+	// 忽略用户预先创建（自带）的 Workload，确保控制器调度时所依据的对象归自己所有。
 	matched := filterControlledByJob(allWorkloads, job)
 
 	switch len(matched) {
 	case 0:
-		// Create only when the Job has no pods yet; otherwise discover-only.
-		// A create that races with another actor returns AlreadyExists, which
-		// requeues the Job so the next sync discovers the existing Workload.
+		// 仅在 Job 尚无 Pod 时创建，否则只做发现。
+		// 并发创建时返回 AlreadyExists 会使 Job 重新入队，下次同步即可发现已存在的 Workload。
 		if !newJob {
 			return nil, nil
 		}
@@ -418,18 +408,14 @@ func (jm *Controller) getOrCreateWorkload(ctx context.Context,
 	}
 }
 
-// validateWorkloadStructure checks alpha constraints on a controller-owned
-// Workload. It returns an error when the structure is unsupported so the Job is
-// requeued and the problem is surfaced, rather than silently degrading to
-// default scheduling.
+// validateWorkloadStructure 检查控制器拥有的 Workload 是否满足 alpha 阶段的约束。
+// 结构不受支持时返回错误，使 Job 重新入队并暴露问题，而不是静默回退到默认调度。
 //
-// TODO(beta): This only validates the initial shape. A user (or another
-// controller) could mutate the Workload after creation, breaking our
-// assumptions (e.g., adding/removing PodGroupTemplates, changing the
-// scheduling policy). Before beta we need to decide how to handle such
-// mutations; overwrite them back to the expected state, fall back to
-// default scheduling, or reject the update via admission.
+// TODO(beta): 这里只校验初始形态。用户或其他控制器可能在创建后修改 Workload，
+// 破坏我们的假设（例如增删 PodGroupTemplates、更改调度策略）。beta 之前需要决定
+// 如何处理这类修改：覆盖回预期状态、回退到默认调度，或通过准入控制拒绝更新。
 func (jm *Controller) validateWorkloadStructure(job *batch.Job, wl *schedulingv1beta1.Workload) error {
+	// alpha 阶段每个 Workload 只能有一个模板，否则后续按首元素取模板的逻辑不成立。
 	if len(wl.Spec.PodGroupTemplates) != 1 {
 		return fmt.Errorf("workload %s/%s for job %s/%s has %d PodGroupTemplates, want exactly 1",
 			wl.Namespace, wl.Name, job.Namespace, job.Name, len(wl.Spec.PodGroupTemplates))
@@ -437,33 +423,32 @@ func (jm *Controller) validateWorkloadStructure(job *batch.Job, wl *schedulingv1
 	return nil
 }
 
-// getOrCreatePodGroup returns the PodGroup for this Workload, creating one if needed.
-// Returns (nil, nil) when the Job should fall back to default scheduling
-// (ambiguous matches or not owned by this controller).
+// getOrCreatePodGroup 返回该 Workload 对应的 PodGroup，必要时创建。
+// 当 Job 应回退到默认调度时返回 (nil, nil)：匹配结果不唯一，
+// 或对象并非本控制器所有。
 func (jm *Controller) getOrCreatePodGroup(ctx context.Context, job *batch.Job,
 	workload *schedulingv1beta1.Workload, newJob bool) (*schedulingv1beta1.PodGroup, error) {
+	// Workload 已存在且由其编译 PodGroup，直接从现有模板生成。
 	builder := newBuilderFromExistingWorkload(job, workload)
 
 	allPodGroups, err := jm.listPodGroupsForWorkload(workload)
 	if err != nil {
 		return nil, err
 	}
-	// Only PodGroups this controller created are managed, identified by a
-	// controller ownerRef to the Job. User pre-created (BYO) PodGroups are
-	// ignored so the controller always owns the objects it schedules against.
+	// 只管理本控制器创建的 PodGroup，依据是指向该 Job 的 controller ownerRef。
+	// 忽略用户预先创建（自带）的 PodGroup，确保控制器调度时所依据的对象归自己所有。
 	matched := filterControlledByJob(allPodGroups, job)
 
 	switch len(matched) {
 	case 0:
-		// Create only when the Job has no pods yet; otherwise discover-only.
-		// This also completes a partial set (Workload exists, PodGroup missing)
-		// left by a mid-flow restart, but only before pods exist.
+		// 仅在 Job 尚无 Pod 时创建，否则只做发现。
+		// 这也能补全流程中途重启留下的不完整对象（Workload 存在但 PodGroup 缺失），
+		// 但前提同样是 Pod 尚未出现。
 		if !newJob {
 			return nil, nil
 		}
-		// A root Job owns its Workload, so the PodGroup links it as a
-		// non-controller owner (linkWorkloadOwner=true). An empty template
-		// name selects the Workload's single template.
+		// 根 Job 拥有其 Workload，因此 PodGroup 以非 controller owner 的方式
+		// 关联它（linkWorkloadOwner=true）。空模板名表示选用 Workload 的唯一模板。
 		return jm.createPodGroup(ctx, job, workload, "", true, builder)
 	case 1:
 		return matched[0], nil
@@ -474,9 +459,9 @@ func (jm *Controller) getOrCreatePodGroup(ctx context.Context, job *batch.Job,
 	}
 }
 
-// listWorkloadsForJob returns all Workloads in the Job's namespace whose
-// spec.controllerRef points to the given Job.
+// listWorkloadsForJob 返回 Job 命名空间下 spec.controllerRef 指向该 Job 的所有 Workload。
 func (jm *Controller) listWorkloadsForJob(job *batch.Job) ([]*schedulingv1beta1.Workload, error) {
+	// 索引器未配置时无法通过索引查询。
 	if jm.workloadIndexer == nil {
 		return nil, fmt.Errorf("workload indexer is not configured")
 	}
@@ -496,9 +481,9 @@ func (jm *Controller) listWorkloadsForJob(job *batch.Job) ([]*schedulingv1beta1.
 	return matched, nil
 }
 
-// listPodGroupsForWorkload returns all PodGroups in the Workload's namespace
-// whose spec.workloadRef references the given Workload.
+// listPodGroupsForWorkload 返回 Workload 命名空间下 spec.workloadRef 引用该 Workload 的所有 PodGroup。
 func (jm *Controller) listPodGroupsForWorkload(workload *schedulingv1beta1.Workload) ([]*schedulingv1beta1.PodGroup, error) {
+	// 索引器未配置时无法通过索引查询。
 	if jm.podGroupIndexer == nil {
 		return nil, fmt.Errorf("podgroup indexer is not configured")
 	}
@@ -518,16 +503,17 @@ func (jm *Controller) listPodGroupsForWorkload(workload *schedulingv1beta1.Workl
 	return matched, nil
 }
 
-// podGroupTemplateName returns the name of the single PodGroupTemplate the
-// controller compiles for a Job. For alpha there is exactly one template per Job.
+// podGroupTemplateName 返回控制器为 Job 编译的唯一 PodGroupTemplate 的名称。
+// alpha 阶段每个 Job 只有一个模板，因此索引固定为 0。
 func podGroupTemplateName(job *batch.Job) string {
 	return fmt.Sprintf("%s-pgt-%d", job.Name, 0)
 }
 
-// buildWorkloadItem assembles the single-node logical workload tree for a Job.
-// The Job defaults to Basic scheduling; the user's spec.scheduling overrides it.
+// buildWorkloadItem 为 Job 组装单节点的逻辑工作负载树。
+// Job 默认使用 Basic 调度；用户设置的 spec.scheduling 会覆盖默认值。
 func buildWorkloadItem(job *batch.Job) *workloadbuilder.WorkloadItem {
 	var input workloadbuilder.WorkloadInput
+	// 未指定调度配置时保留零值输入，让构建器使用默认策略。
 	if s := job.Spec.Scheduling; s != nil {
 		input = jobutil.WorkloadInputForJobV1(s)
 	}
@@ -535,9 +521,8 @@ func buildWorkloadItem(job *batch.Job) *workloadbuilder.WorkloadItem {
 		job.Spec.Template.Spec.PriorityClassName, job.Spec.Parallelism, input, nil)
 }
 
-// generateWorkload compiles the Job's spec.scheduling into a Workload via the
-// shared workloadbuilder library. BuildWorkload also sets the controller
-// ownerReference and spec.controllerRef pointing at the Job.
+// generateWorkload 通过共享的 workloadbuilder 库把 Job 的 spec.scheduling 编译为 Workload。
+// BuildWorkload 还会设置指向该 Job 的 controller ownerReference 和 spec.controllerRef。
 func (jm *Controller) generateWorkload(job *batch.Job) (*schedulingv1beta1.Workload, error) {
 	return workloadbuilder.NewBuilder(buildWorkloadItem(job), workloadbuilder.BuildOptions{
 		Name:      computeWorkloadName(job),
@@ -546,7 +531,8 @@ func (jm *Controller) generateWorkload(job *batch.Job) (*schedulingv1beta1.Workl
 	}).BuildWorkload()
 }
 
-// createWorkloadForJob compiles and creates a new Workload object for the given Job.
+// createWorkloadForJob 为给定 Job 编译并创建新的 Workload 对象。
+// 编译和创建失败都会记录 Event，方便用户排查为何未启用工作负载调度。
 func (jm *Controller) createWorkloadForJob(ctx context.Context, job *batch.Job) (*schedulingv1beta1.Workload, error) {
 	workload, err := jm.generateWorkload(job)
 	if err != nil {
@@ -567,9 +553,10 @@ func (jm *Controller) createWorkloadForJob(ctx context.Context, job *batch.Job) 
 	return created, nil
 }
 
-// getPodGroupTemplateByName returns the named PodGroupTemplate from the Workload.
-// An empty name selects the Workload's single template.
+// getPodGroupTemplateByName 从 Workload 中返回指定名称的 PodGroupTemplate。
+// 名称为空时选择 Workload 的唯一模板。
 func getPodGroupTemplateByName(workload *schedulingv1beta1.Workload, name string) (*schedulingv1beta1.PodGroupTemplate, error) {
+	// 没有模板时无从创建 PodGroup，直接返回错误。
 	if len(workload.Spec.PodGroupTemplates) == 0 {
 		return nil, fmt.Errorf("workload %s/%s has no PodGroupTemplates", workload.Namespace, workload.Name)
 	}
@@ -584,23 +571,20 @@ func getPodGroupTemplateByName(workload *schedulingv1beta1.Workload, name string
 	return nil, fmt.Errorf("PodGroupTemplate %q not found in workload %s/%s", name, workload.Namespace, workload.Name)
 }
 
-// newBuilderFromExistingWorkload returns a builder that materializes PodGroups from
-// an already-persisted Workload. A delegated Job's Workload is owned and
-// compiled by a parent, so its persisted template is the source of truth and the
-// Job's own spec.scheduling is irrelevant here. Only the Job controllerRef and
-// the supplied Workload are needed.
+// newBuilderFromExistingWorkload 返回一个从已持久化 Workload 生成 PodGroup 的 builder。
+// 下放模式下 Job 的 Workload 由父控制器拥有并编译，其持久化模板是唯一事实来源，
+// Job 自身的 spec.scheduling 在此不参与决策，只需提供 Job 的 controllerRef 和该 Workload。
 func newBuilderFromExistingWorkload(job *batch.Job, workload *schedulingv1beta1.Workload) *workloadbuilder.Builder {
 	return workloadbuilder.NewBuilderFromExistingWorkload(workload, workloadbuilder.BuildOptions{
 		Owner: metav1.NewControllerRef(job, controllerKind),
 	})
 }
 
-// createPodGroup creates a runtime PodGroup for the Job from the Workload's
-// PodGroupTemplate named templateName. It always carries a controller ownerRef
-// to the Job. When linkWorkloadOwner is true, it gets a non-controller ownerRef
-// to the Workload; a delegated (parent-owned) Workload gets none, leaving the
-// parent as the Workload's sole owner. BlockOwnerDeletion is left unset so
-// Workload deletion is never blocked by surviving PodGroups.
+// createPodGroup 根据 Workload 中名为 templateName 的 PodGroupTemplate 为 Job 创建运行时 PodGroup。
+// 它总是携带指向 Job 的 controller ownerRef；linkWorkloadOwner 为 true 时，
+// 还会添加指向 Workload 的非 controller ownerRef；下放（父级拥有）的 Workload 不加该引用，
+// 以保证父控制器仍是 Workload 的唯一所有者。不设置 BlockOwnerDeletion，
+// 避免残留的 PodGroup 阻碍 Workload 被删除。
 func (jm *Controller) createPodGroup(ctx context.Context, job *batch.Job, workload *schedulingv1beta1.Workload,
 	templateName string, linkWorkloadOwner bool, builder *workloadbuilder.Builder) (*schedulingv1beta1.PodGroup, error) {
 	template, err := getPodGroupTemplateByName(workload, templateName)
@@ -631,15 +615,15 @@ func (jm *Controller) createPodGroup(ctx context.Context, job *batch.Job, worklo
 	return created, nil
 }
 
-// computeWorkloadName generates a deterministic name for a Workload associated with a Job.
-// The pattern is: <truncated-job-name>-<hash>
-// The hash is derived from the Job UID to ensure uniqueness and stability across restarts.
+// computeWorkloadName 为与某个 Job 关联的 Workload 生成确定性名称。
+// 格式为：<截断后的 Job 名>-<哈希>
+// 哈希由 Job UID 计算得出，以保证唯一性以及重启后的稳定性。
 func computeWorkloadName(job *batch.Job) string {
 	hasher := fnv.New32a()
 	hashutil.DeepHashObject(hasher, job.UID)
 	hash := rand.SafeEncodeString(fmt.Sprint(hasher.Sum32()))
 
-	// hash is ~10 chars; include separator "-"
+	// 哈希约 10 个字符，再为分隔符 "-" 预留一个字符。
 	maxPrefixLen := validation.DNS1123SubdomainMaxLength - len(hash) - 1
 	prefix := job.Name
 	if len(prefix) > maxPrefixLen {
@@ -648,36 +632,35 @@ func computeWorkloadName(job *batch.Job) string {
 	return fmt.Sprintf("%s-%s", prefix, hash)
 }
 
-// computePodGroupName generates a deterministic name for a PodGroup associated with a Workload.
-// The pattern is: <truncated-workload-name>-<truncated-template-name>-<hash>
-// The hash is derived from the workload name and template name for uniqueness.
+// computePodGroupName 为与某个 Workload 关联的 PodGroup 生成确定性名称。
+// 格式为：<截断后的 Workload 名>-<截断后的模板名>-<哈希>
+// 哈希由 Workload 名和模板名共同计算，以保证唯一性。
 func computePodGroupName(workloadName, templateName string) string {
 	hasher := fnv.New32a()
-	// hash the full combination for uniqueness.
+	// 对完整组合做哈希，避免不同名称组合产生相同结果。
 	hasher.Write([]byte(workloadName))
 	hasher.Write([]byte(templateName))
 	hash := rand.SafeEncodeString(fmt.Sprint(hasher.Sum32()))
 
-	// Truncate workloadName and templateName to fit within the DNS subdomain
-	// max length, reserving space for the hash and two "-" separators.
+	// 截断 Workload 名与模板名以符合 DNS 子域名的长度上限，
+	// 同时为哈希和两个 "-" 分隔符预留空间。
 	maxAvailable := validation.DNS1123SubdomainMaxLength - len(hash) - 2
 	wl := workloadName
 	tpl := templateName
 
 	if len(wl)+len(tpl) > maxAvailable {
-		// only truncate the part that exceeds its fair share.
-		// give each part up to half the space; if one is short, the other
-		// gets the remainder.
+		// 只截断超出各自公平份额的部分：每部分最多占一半空间，
+		// 若某一部分较短，剩余空间全部让给另一部分。
 		half := maxAvailable / 2
 		switch {
 		case len(wl) <= half:
-			// workload name fits in its half, give template the rest.
+			// Workload 名未超过其一半份额，剩余空间都给模板名。
 			tpl = tpl[:maxAvailable-len(wl)]
 		case len(tpl) <= half:
-			// template name fits in its half, give workload the rest.
+			// 模板名未超过其一半份额，剩余空间都给 Workload 名。
 			wl = wl[:maxAvailable-len(tpl)]
 		default:
-			// both exceed half, split evenly (workload gets the extra char if odd).
+			// 两者都超过一半，平均分配（长度为奇数时 Workload 名多占一个字符）。
 			wl = wl[:maxAvailable-half]
 			tpl = tpl[:half]
 		}
@@ -686,9 +669,10 @@ func computePodGroupName(workloadName, templateName string) string {
 	return fmt.Sprintf("%s-%s-%s", wl, tpl, hash)
 }
 
-// addSchedulingInformers wires up Workload and PodGroup informers
-// and indexers so that changes to those objects re-enqueue the owning Job.
+// addSchedulingInformers 接入 Workload 和 PodGroup 的 informer 与索引器，
+// 以便这些对象发生变化时把对应的 Job 重新入队。
 func (jm *Controller) addSchedulingInformers(logger klog.Logger, workloadInformer schedulinginformers.WorkloadInformer, podGroupInformer schedulinginformers.PodGroupInformer) error {
+	// 特性开启后缺少任一 informer 都无法保证完整发现调度对象。
 	if workloadInformer == nil {
 		return fmt.Errorf("workload informer is required when the feature gate %q is enabled", features.WorkloadWithJob)
 	}
@@ -716,12 +700,13 @@ func (jm *Controller) addSchedulingInformers(logger klog.Logger, workloadInforme
 	return nil
 }
 
+// namespacedNameIndexKey 生成用于索引的 namespace/name 键，与索引函数的输出保持一致。
 func namespacedNameIndexKey(namespace, name string) string {
 	return cache.NewObjectName(namespace, name).String()
 }
 
-// workloadControllerRefJobName returns the Job name from the Workload's
-// spec.controllerRef if it points to a batch Job, or "" otherwise.
+// workloadControllerRefJobName 从 Workload 的 spec.controllerRef 中提取 Job 名称；
+// 当该引用不指向 batch Job 时返回空字符串。
 func workloadControllerRefJobName(wl *schedulingv1beta1.Workload) string {
 	if wl.Spec.ControllerRef == nil ||
 		wl.Spec.ControllerRef.APIGroup != batch.SchemeGroupVersion.Group ||
@@ -732,8 +717,8 @@ func workloadControllerRefJobName(wl *schedulingv1beta1.Workload) string {
 	return wl.Spec.ControllerRef.Name
 }
 
-// podGroupWorkloadName returns the workload name from the PodGroup's
-// spec.workloadRef, or "" if the reference is not set.
+// podGroupWorkloadName 从 PodGroup 的 spec.workloadRef 中提取 Workload 名称；
+// 引用未设置时返回空字符串。
 func podGroupWorkloadName(pg *schedulingv1beta1.PodGroup) string {
 	if pg.Spec.WorkloadRef == nil ||
 		pg.Spec.WorkloadRef.WorkloadName == "" {
@@ -742,8 +727,11 @@ func podGroupWorkloadName(pg *schedulingv1beta1.PodGroup) string {
 	return pg.Spec.WorkloadRef.WorkloadName
 }
 
+// workloadByJobNameIndexFunc 为 Workload 建立按关联 Job 名称的索引键。
+// 只有 controllerRef 指向 batch Job 的对象才会被索引。
 func workloadByJobNameIndexFunc(obj interface{}) ([]string, error) {
 	wl, ok := obj.(*schedulingv1beta1.Workload)
+	// 索引器可能收到非 Workload 对象，必须显式报错以免静默污染索引。
 	if !ok {
 		return nil, fmt.Errorf("unexpected object type %T", obj)
 	}
@@ -753,8 +741,11 @@ func workloadByJobNameIndexFunc(obj interface{}) ([]string, error) {
 	return nil, nil
 }
 
+// podGroupByWorkloadNameIndexFunc 为 PodGroup 建立按关联 Workload 名称的索引键。
+// 只有设置了 workloadRef 的对象才会被索引。
 func podGroupByWorkloadNameIndexFunc(obj interface{}) ([]string, error) {
 	pg, ok := obj.(*schedulingv1beta1.PodGroup)
+	// 索引器可能收到非 PodGroup 对象，必须显式报错以免静默污染索引。
 	if !ok {
 		return nil, fmt.Errorf("unexpected object type %T", obj)
 	}

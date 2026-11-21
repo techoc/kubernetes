@@ -20,17 +20,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EndpointControllerConfiguration contains elements describing EndpointController.
+// EndpointControllerConfiguration 描述端点控制器（EndpointController）的配置参数。
 type EndpointControllerConfiguration struct {
-	// concurrentEndpointSyncs is the number of endpoint syncing operations
-	// that will be done concurrently. Larger number = faster endpoint updating,
-	// but more CPU (and network) load.
+	// ConcurrentEndpointSyncs 是允许并发执行的端点同步操作数。
+	// 增大该值可以更快更新 Endpoint，但会增加 CPU 与网络负载。
 	ConcurrentEndpointSyncs int32
 
-	// EndpointUpdatesBatchPeriod can be used to batch endpoint updates.
-	// All updates of endpoint triggered by pod change will be delayed by up to
-	// 'EndpointUpdatesBatchPeriod'. If other pods in the same endpoint change
-	// in that period, they will be batched to a single endpoint update.
-	// Default 0 value means that each pod update triggers an endpoint update.
+	// EndpointUpdatesBatchPeriod 用于批量合并端点更新。
+	// 由 Pod 变化触发的 Endpoint 更新最多延迟该时长；若同一 Endpoint 中的其他 Pod
+	// 在此期间也发生变化，则合并为一次 Endpoint 更新，避免频繁写 API。
+	// 默认值为 0，表示每次 Pod 更新都会立即触发一次 Endpoint 更新。
 	EndpointUpdatesBatchPeriod metav1.Duration
 }

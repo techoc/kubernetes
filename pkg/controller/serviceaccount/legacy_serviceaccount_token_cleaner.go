@@ -42,19 +42,23 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// 日期标签格式与默认同步间隔；日期只精确到天，便于比较 token 的上次使用时间。
 const (
 	dateFormat                 = "2006-01-02"
 	DefaultCleanerSyncInterval = 24 * time.Hour
 )
 
-// TokenCleanerOptions contains options for the LegacySATokenCleaner
+// TokenCleanerOptions 定义 LegacySATokenCleaner 的清理周期与同步间隔。
 type LegacySATokenCleanerOptions struct {
-	// CleanUpPeriod is the period of time since the last usage of an legacy token before it can be deleted.
+	// CleanUpPeriod 是旧 token 自上次使用以来必须经过的时间，
+	// 只有超过该时长才允许删除，避免误删仍可能被引用的凭证。
 	CleanUpPeriod time.Duration
-	SyncInterval  time.Duration
+	SyncInterval  time.Duration // 连续两轮评估之间的时间间隔
 }
 
-// LegacySATokenCleaner is a controller that deletes legacy serviceaccount tokens that are not in use for a specified period of time.
+// LegacySATokenCleaner 负责清理长时间未使用的旧版 ServiceAccount token（Secret）。
+// 它先给候选 token 打上 invalidSince 标记，经过一个完整清理周期后才真正删除，
+// 从而给使用者留出感知凭证失效的缓冲期。
 type LegacySATokenCleaner struct {
 	client           clientset.Interface
 	clock            clock.Clock
@@ -71,7 +75,8 @@ type LegacySATokenCleaner struct {
 	minimumSinceLastUsed time.Duration
 }
 
-// NewLegacySATokenCleaner returns a new *NewLegacySATokenCleaner.
+// NewLegacySATokenCleaner 构造旧版 token 清理器，并校验清理周期与同步间隔必须为正数：
+// 非法的周期会导致所有 token 被立即删除或永不清理，因此必须在启动时拒绝。
 func NewLegacySATokenCleaner(saInformer coreinformers.ServiceAccountInformer, secretInformer coreinformers.SecretInformer, podInformer coreinformers.PodInformer, client clientset.Interface, cl clock.Clock, options LegacySATokenCleanerOptions) (*LegacySATokenCleaner, error) {
 	if !(options.CleanUpPeriod > 0) {
 		return nil, fmt.Errorf("invalid CleanUpPeriod: %v", options.CleanUpPeriod)
@@ -96,6 +101,8 @@ func NewLegacySATokenCleaner(saInformer coreinformers.ServiceAccountInformer, se
 	return tc, nil
 }
 
+// Run 等待三个 informer 同步后，按 syncInterval 周期性调用 evaluateSATokens，
+// 直到 ctx 被取消。必须先同步缓存，否则会基于不完整数据误删 token。
 func (tc *LegacySATokenCleaner) Run(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 
@@ -110,6 +117,11 @@ func (tc *LegacySATokenCleaner) Run(ctx context.Context) {
 	wait.UntilWithContext(ctx, tc.evaluateSATokens, tc.syncInterval)
 }
 
+// evaluateSATokens 执行一轮清理评估：先确认 token 使用跟踪已运行足够长时间，
+// 再遍历 ServiceAccount token 类型的 Secret，依次排除新建、正在删除、近期使用、
+// 仍被挂载或已被 ServiceAccount 引用的对象；符合条件的先打 invalidSince 标记，
+// 标记超过清理周期后才真正删除。删除时带 ResourceVersion 前置条件，防止
+// 并发更新导致误删；冲突和已不存在都视为可接受的并发结果。
 func (tc *LegacySATokenCleaner) evaluateSATokens(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 
@@ -121,7 +133,8 @@ func (tc *LegacySATokenCleaner) evaluateSATokens(ctx context.Context) {
 	}
 
 	if now.Before(trackedSince.Add(tc.minimumSinceLastUsed)) {
-		// we haven't been tracking long enough
+		// 跟踪时间不足一个完整清理周期，此时“未使用”不等于“不再使用”，
+		// 必须等待，避免把刚启用跟踪时没有 LastUsed 标签的 token 全部误删。
 		return
 	}
 
@@ -147,13 +160,14 @@ func (tc *LegacySATokenCleaner) evaluateSATokens(ctx context.Context) {
 			continue
 		}
 
-		// if LastUsedLabelKey does not exist, we think the secret has not been used
-		// since the legacy token starts to track.
+		// 缺少 LastUsedLabelKey 意味着自跟踪开始以来该 token 从未被使用；
+		// 因此只需判断存在且格式正确、日期又足够新的标签即可跳过。
 		lastUsed, ok := secret.Labels[serviceaccount.LastUsedLabelKey]
 		if ok {
 			_, err := time.Parse(dateFormat, lastUsed)
 			if err != nil {
-				// the lastUsed value is not well-formed thus we cannot determine it
+				// 标签格式非法，无法判断最近使用时间；保守起见跳过该 Secret，
+				// 不做任何删除决策。
 				logger.Error(err, "Parsing lastUsed time", "secret", klog.KRef(secret.Namespace, secret.Name))
 				continue
 			}
@@ -169,7 +183,8 @@ func (tc *LegacySATokenCleaner) evaluateSATokens(ctx context.Context) {
 			continue
 		}
 		if sa == nil || !hasSecretReference(sa, secret.Name) {
-			// can't determine if this is an auto-generated token
+			// 找不到对应的 ServiceAccount，或该 Secret 未被其引用，
+			// 就无法确认这是自动生成的 token，因此不能清理。
 			continue
 		}
 
@@ -179,12 +194,13 @@ func (tc *LegacySATokenCleaner) evaluateSATokens(ctx context.Context) {
 			continue
 		}
 		if mountedSecretNames.Has(secret.Name) {
-			// still used by pods
+			// Secret 仍被 Pod 挂载，使用中，不能删除。
 			continue
 		}
 
 		invalidSince := secret.Labels[serviceaccount.InvalidSinceLabelKey]
-		// If the secret has not been labeled with invalid since date or the label value has invalid format, update the invalidSince label with the current date value.
+		// 未打过 invalidSince 标记或标记格式非法时，用当天日期补上标记；
+		// 两阶段清理保证即使当前看起来未被使用，也先宣告失效再延迟删除。
 		_, err = time.Parse(dateFormat, invalidSince)
 		if err != nil {
 			invalidSince = now.Format(dateFormat)
@@ -211,6 +227,9 @@ func (tc *LegacySATokenCleaner) evaluateSATokens(ctx context.Context) {
 	}
 }
 
+// getMountedSecretNames 返回指定命名空间中仍被 Pod 挂载的 Secret 名称集合。
+// 结果按命名空间缓存在 map 中，因为一轮评估会遍历大量 Secret，
+// 重复列举同一命名空间的 Pod 会带来不必要的开销。
 func (tc *LegacySATokenCleaner) getMountedSecretNames(secretNamespace string, namespaceToUsedSecretNames map[string]sets.String) (sets.String, error) {
 	if secrets, ok := namespaceToUsedSecretNames[secretNamespace]; ok {
 		return secrets, nil
@@ -237,6 +256,8 @@ func (tc *LegacySATokenCleaner) getMountedSecretNames(secretNamespace string, na
 	return secrets, nil
 }
 
+// getServiceAccount 根据 Secret 上的注解找到其所属的 ServiceAccount。
+// 若注解带有 UID，则必须同时匹配，防止同名 ServiceAccount 被重建后误判。
 func (tc *LegacySATokenCleaner) getServiceAccount(secret *v1.Secret) (*v1.ServiceAccount, error) {
 	saName := secret.Annotations[v1.ServiceAccountNameKey]
 	if len(saName) == 0 {
@@ -251,7 +272,7 @@ func (tc *LegacySATokenCleaner) getServiceAccount(secret *v1.Secret) (*v1.Servic
 		return nil, err
 	}
 
-	// Ensure UID matches if given
+	// 若注解提供了 UID，必须验证一致；否则同名重建的账户可能指向已失效的旧 token。
 	if len(saUID) == 0 || saUID == sa.UID {
 		return sa, nil
 	}
@@ -259,7 +280,11 @@ func (tc *LegacySATokenCleaner) getServiceAccount(secret *v1.Secret) (*v1.Servic
 	return nil, nil
 }
 
-// get the latest possible TrackedSince time information from the configMap label.
+// token 使用跟踪的开始日期，并加一天取次日零点：
+// 日期标签只精确到天，次日零点才是“可以确定整天都在跟踪”的最早时刻。
+// latestPossibleTrackedSinceTime 从 kube-system 命名空间的 ConfigMap 读取
+// token 使用跟踪的开始日期，并加一天取次日零点。日期标签只精确到天，
+// 次日零点才是可以确定整天都在跟踪的最早时刻。
 func (tc *LegacySATokenCleaner) latestPossibleTrackedSinceTime(ctx context.Context) (time.Time, error) {
 	configMap, err := tc.client.CoreV1().ConfigMaps(metav1.NamespaceSystem).Get(ctx, legacytokentracking.ConfigMapName, metav1.GetOptions{})
 	if err != nil {
@@ -273,10 +298,13 @@ func (tc *LegacySATokenCleaner) latestPossibleTrackedSinceTime(ctx context.Conte
 	if err != nil {
 		return time.Time{}, fmt.Errorf("error parsing trackedSince time: %v", err)
 	}
-	// make sure the time to be 00:00 on the day just after the date starts to track
+	// 日期只精确到天，因此向上取整到跟踪开始日的次日 00:00，
+	// 避免把开始当天不完整的使用记录误当作完整的跟踪数据。
 	return trackedSinceTime.AddDate(0, 0, 1), nil
 }
 
+// hasSecretReference 判断 ServiceAccount 是否引用了指定名称的 Secret，
+// 用于确认待清理的 Secret 是否确实由该账户自动生成。
 func hasSecretReference(serviceAccount *v1.ServiceAccount, secretName string) bool {
 	for _, secret := range serviceAccount.Secrets {
 		if secret.Name == secretName {

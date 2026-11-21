@@ -20,12 +20,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// NamespaceControllerConfiguration contains elements describing NamespaceController.
+// NamespaceControllerConfiguration 描述 NamespaceController 的配置项。
 type NamespaceControllerConfiguration struct {
-	// namespaceSyncPeriod is the period for syncing namespace life-cycle
-	// updates.
+	// NamespaceSyncPeriod 是同步命名空间生命周期更新的周期。
+	// 生命周期终结需要反复检查资源是否清理完毕，因此按固定间隔重新入队。
 	NamespaceSyncPeriod metav1.Duration
-	// concurrentNamespaceSyncs is the number of namespace objects that are
-	// allowed to sync concurrently.
+	// ConcurrentNamespaceSyncs 是允许并发同步的命名空间对象数量。
+	// 增大该值可提升终结速度，但会增加 API 服务器负载。
 	ConcurrentNamespaceSyncs int32
 }

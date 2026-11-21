@@ -37,36 +37,38 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// testGenerator 是令牌生成器的测试替身，可预设要返回的令牌或错误。
 type testGenerator struct {
 	Token string
 	Err   error
 }
 
+// GenerateToken 直接返回预设结果，使测试无需依赖真实签名逻辑即可模拟成功或失败。
 func (t *testGenerator) GenerateToken(ctx context.Context, sc *jwt.Claims, pc interface{}) (string, error) {
 	return t.Token, t.Err
 }
 
-// emptySecretReferences is used by a service account without any secrets
+// emptySecretReferences 返回没有任何 Secret 引用的 ServiceAccount 配置。
 func emptySecretReferences() []v1.ObjectReference {
 	return []v1.ObjectReference{}
 }
 
-// missingSecretReferences is used by a service account that references secrets which do no exist
+// missingSecretReferences 返回引用了不存在 Secret 的配置，用于验证控制器对悬空引用的处理。
 func missingSecretReferences() []v1.ObjectReference {
 	return []v1.ObjectReference{{Name: "missing-secret-1"}}
 }
 
-// regularSecretReferences is used by a service account that references secrets which are not ServiceAccountTokens
+// regularSecretReferences 返回引用普通（非 ServiceAccountToken）Secret 的配置。
 func regularSecretReferences() []v1.ObjectReference {
 	return []v1.ObjectReference{{Name: "regular-secret-1"}}
 }
 
-// tokenSecretReferences is used by a service account that references a ServiceAccountToken secret
+// tokenSecretReferences 返回引用一个 ServiceAccountToken 类型 Secret 的配置。
 func tokenSecretReferences() []v1.ObjectReference {
 	return []v1.ObjectReference{{Name: "token-secret-1"}}
 }
 
-// serviceAccount returns a service account with the given secret refs
+// serviceAccount 构造带有指定 Secret 引用的测试用 ServiceAccount。
 func serviceAccount(secretRefs []v1.ObjectReference) *v1.ServiceAccount {
 	return &v1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -79,14 +81,14 @@ func serviceAccount(secretRefs []v1.ObjectReference) *v1.ServiceAccount {
 	}
 }
 
-// updatedServiceAccount returns a service account with the resource version modified
+// updatedServiceAccount 抬高 resourceVersion 以模拟缓存中过期的 ServiceAccount。
 func updatedServiceAccount(secretRefs []v1.ObjectReference) *v1.ServiceAccount {
 	sa := serviceAccount(secretRefs)
 	sa.ResourceVersion = "2"
 	return sa
 }
 
-// opaqueSecret returns a persisted non-ServiceAccountToken secret named "regular-secret-1"
+// opaqueSecret 构造名为 "regular-secret-1" 的普通 Opaque Secret。
 func opaqueSecret() *v1.Secret {
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -102,7 +104,7 @@ func opaqueSecret() *v1.Secret {
 	}
 }
 
-// serviceAccountTokenSecret returns an existing ServiceAccountToken secret named "token-secret-1"
+// serviceAccountTokenSecret 构造带完整 token/CA/namespace 数据的 ServiceAccountToken Secret。
 func serviceAccountTokenSecret() *v1.Secret {
 	return &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -124,47 +126,49 @@ func serviceAccountTokenSecret() *v1.Secret {
 	}
 }
 
-// serviceAccountTokenSecretWithoutTokenData returns an existing ServiceAccountToken secret that lacks token data
+// serviceAccountTokenSecretWithoutTokenData 构造缺少 token 字段的令牌 Secret，用于触发补全逻辑。
 func serviceAccountTokenSecretWithoutTokenData() *v1.Secret {
 	secret := serviceAccountTokenSecret()
 	delete(secret.Data, v1.ServiceAccountTokenKey)
 	return secret
 }
 
-// serviceAccountTokenSecretWithoutCAData returns an existing ServiceAccountToken secret that lacks ca data
+// serviceAccountTokenSecretWithoutCAData 构造缺少 CA 数据的令牌 Secret。
 func serviceAccountTokenSecretWithoutCAData() *v1.Secret {
 	secret := serviceAccountTokenSecret()
 	delete(secret.Data, v1.ServiceAccountRootCAKey)
 	return secret
 }
 
-// serviceAccountTokenSecretWithCAData returns an existing ServiceAccountToken secret with the specified ca data
+// serviceAccountTokenSecretWithCAData 构造带有指定 CA 数据的令牌 Secret。
 func serviceAccountTokenSecretWithCAData(data []byte) *v1.Secret {
 	secret := serviceAccountTokenSecret()
 	secret.Data[v1.ServiceAccountRootCAKey] = data
 	return secret
 }
 
-// serviceAccountTokenSecretWithoutNamespaceData returns an existing ServiceAccountToken secret that lacks namespace data
+// serviceAccountTokenSecretWithoutNamespaceData 构造缺少 namespace 数据的令牌 Secret。
 func serviceAccountTokenSecretWithoutNamespaceData() *v1.Secret {
 	secret := serviceAccountTokenSecret()
 	delete(secret.Data, v1.ServiceAccountNamespaceKey)
 	return secret
 }
 
-// serviceAccountTokenSecretWithNamespaceData returns an existing ServiceAccountToken secret with the specified namespace data
+// serviceAccountTokenSecretWithNamespaceData 构造带有指定 namespace 数据的令牌 Secret。
 func serviceAccountTokenSecretWithNamespaceData(data []byte) *v1.Secret {
 	secret := serviceAccountTokenSecret()
 	secret.Data[v1.ServiceAccountNamespaceKey] = data
 	return secret
 }
 
+// reaction 描述要在 fake 客户端上注册的一个 reactor：动词、资源及其构造函数。
 type reaction struct {
 	verb     string
 	resource string
 	reactor  func(t *testing.T) core.ReactionFunc
 }
 
+// TestTokenCreation 以事件驱动方式验证令牌控制器处理 ServiceAccount/Secret 增删改时产生的 API 动作序列。
 func TestTokenCreation(t *testing.T) {
 	testcases := map[string]struct {
 		ClientObjects []runtime.Object
@@ -335,7 +339,7 @@ func TestTokenCreation(t *testing.T) {
 
 			AddedSecret:     serviceAccountTokenSecretWithNamespaceData([]byte("custom")),
 			ExpectedActions: []core.Action{
-				// no update is performed... the custom namespace is preserved
+				// 自定义 namespace 应被保留，因此这里不期望任何更新动作。
 			},
 		},
 
@@ -403,7 +407,7 @@ func TestTokenCreation(t *testing.T) {
 
 			UpdatedSecret:   serviceAccountTokenSecretWithNamespaceData([]byte("custom")),
 			ExpectedActions: []core.Action{
-				// no update is performed... the custom namespace is preserved
+				// 自定义 namespace 应被保留，因此这里不期望任何更新动作。
 			},
 		},
 
@@ -435,15 +439,17 @@ func TestTokenCreation(t *testing.T) {
 		t.Run(k, func(t *testing.T) {
 			logger, ctx := ktesting.NewTestContext(t)
 
-			// Re-seed to reset name generation
+			// 重置随机种子，保证各用例生成的名字可复现。
 			utilrand.Seed(1)
 
 			generator := &testGenerator{Token: "ABC"}
 
 			client := fake.NewSimpleClientset(tc.ClientObjects...)
+			// reactor 需先于默认处理注册，才能拦截指定动作。
 			for _, reactor := range tc.Reactors {
 				client.Fake.PrependReactor(reactor.verb, reactor.resource, reactor.reactor(t))
 			}
+			// 用 informer 存储模拟控制器缓存，使队列处理看到与真实环境一致的本地状态。
 			informers := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 			secretInformer := informers.Core().V1().Secrets().Informer()
 			secrets := secretInformer.GetStore()
@@ -453,6 +459,7 @@ func TestTokenCreation(t *testing.T) {
 				t.Fatalf("error creating Tokens controller: %v", err)
 			}
 
+			// 直接写缓存并手动入队，绕过 watch 时序，确定性地覆盖各事件路径。
 			if tc.ExistingServiceAccount != nil {
 				serviceAccounts.Add(tc.ExistingServiceAccount)
 			}
@@ -485,10 +492,11 @@ func TestTokenCreation(t *testing.T) {
 				controller.queueSecretSync(tc.DeletedSecret)
 			}
 
-			// This is the longest we'll wait for async tests
+			// 异步用例最多等待 30 秒，避免失败时测试无限挂起。
 			timeout := time.Now().Add(30 * time.Second)
 			waitedForAdditionalActions := false
 
+			// 手动排空队列替代真实 worker，确保断言前所有排队同步都已执行。
 			for {
 				if controller.syncServiceAccountQueue.Len() > 0 {
 					controller.syncServiceAccount(ctx)
@@ -497,21 +505,21 @@ func TestTokenCreation(t *testing.T) {
 					controller.syncSecret(ctx)
 				}
 
-				// The queues still have things to work on
+				// 队列非空时先处理完，再做动作断言。
 				if controller.syncServiceAccountQueue.Len() > 0 || controller.syncSecretQueue.Len() > 0 {
 					continue
 				}
 
-				// If we expect this test to work asynchronously...
+				// 异步用例要等动作出现或超时后才能下结论。
 				if tc.IsAsync {
-					// if we're still missing expected actions within our test timeout
+					// 期望的动作尚未齐全且未超时，继续等待。
 					if len(client.Actions()) < len(tc.ExpectedActions) && time.Now().Before(timeout) {
-						// wait for the expected actions (without hotlooping)
+						// 短暂休眠而非忙等，避免空转消耗 CPU。
 						time.Sleep(time.Millisecond)
 						continue
 					}
 
-					// if we exactly match our expected actions, wait a bit to make sure no other additional actions show up
+					// 动作数吻合后再观察一秒，确认没有多余的后续动作。
 					if len(client.Actions()) == len(tc.ExpectedActions) && !waitedForAdditionalActions {
 						time.Sleep(time.Second)
 						waitedForAdditionalActions = true
@@ -529,6 +537,7 @@ func TestTokenCreation(t *testing.T) {
 				t.Errorf("%s: unexpected items in secret queue: %d", k, controller.syncSecretQueue.Len())
 			}
 
+			// 按序逐条比对：多余或缺失的 API 调用都说明协调逻辑有误。
 			actions := client.Actions()
 			for i, action := range actions {
 				if len(tc.ExpectedActions) < i+1 {
@@ -553,6 +562,7 @@ func TestTokenCreation(t *testing.T) {
 	}
 }
 
+// TestQueueServiceAccountSync_Tombstone 验证删除事件的墓碑对象也能入队并解析出原始 UID。
 func TestQueueServiceAccountSync_Tombstone(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	sa := serviceAccount(emptySecretReferences())
@@ -568,6 +578,7 @@ func TestQueueServiceAccountSync_Tombstone(t *testing.T) {
 		t.Fatalf("error creating Tokens controller: %v", err)
 	}
 
+	// 墓碑对象携带的 Obj 才是原始 ServiceAccount，需按 UID 入队。
 	tokenController.queueServiceAccountSync(tombstone)
 	if tokenController.syncServiceAccountQueue.Len() != 1 {
 		t.Errorf("expected 1 item in queue, got %d", tokenController.syncServiceAccountQueue.Len())

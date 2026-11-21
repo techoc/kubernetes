@@ -48,62 +48,85 @@ import (
 )
 
 const (
-	// TODO (k82cn): Figure out a reasonable number of workers/channels and propagate
-	// the number of workers up making it a parameter of Run() function.
+	// TODO (k82cn): 确定合理的 worker/channel 数量，并将其向上传递，
+	// 使之成为 Run() 函数的一个参数。
 
-	// NodeUpdateChannelSize defines the size of channel for node update events.
+	// NodeUpdateChannelSize 定义节点更新事件通道的缓冲区大小。
 	NodeUpdateChannelSize = 10
-	// UpdateWorkerSize defines the size of workers for node update or/and pod update.
-	UpdateWorkerSize     = 8
+	// UpdateWorkerSize 定义处理节点更新和/或 Pod 更新的 worker 数量。
+	UpdateWorkerSize = 8
+	// podUpdateChannelSize 定义 Pod 更新事件通道的缓冲区大小；设为 1 可让 worker 及时取走事件处理。
 	podUpdateChannelSize = 1
-	retries              = 5
+	// retries 定义删除 Pod 失败后的最大重试次数。
+	retries = 5
 )
 
+// nodeUpdateItem 表示一个待处理的节点更新事件，只携带节点名。
 type nodeUpdateItem struct {
 	nodeName string
 }
 
+// podUpdateItem 表示一个待处理的 Pod 更新事件，记录 Pod 的命名空间、名称及其所在节点。
 type podUpdateItem struct {
 	podName      string
 	podNamespace string
 	nodeName     string
 }
 
+// hash 将字符串稳定映射到 [0, max) 的一个分片编号。
+// 用确定性哈希（而非随机分发）保证同一节点的所有事件始终落到同一个 worker，
+// 从而避免同一节点的状态在多个 worker 之间产生竞态。
 func hash(val string, max int) int {
 	hasher := fnv.New32a()
 	io.WriteString(hasher, val)
 	return int(hasher.Sum32() % uint32(max))
 }
 
-// GetPodsByNodeNameFunc returns the list of pods assigned to the specified node.
+// GetPodsByNodeNameFunc 返回被调度到指定节点上的 Pod 列表。
 type GetPodsByNodeNameFunc func(nodeName string) ([]*v1.Pod, error)
 
-// Controller listens to Taint/Toleration changes and is responsible for removing Pods
-// from Nodes tainted with NoExecute Taints.
+// Controller 监听 Taint/Toleration 的变化，负责驱逐带有 NoExecute 污点节点上的 Pod。
 type Controller struct {
+	// name 为本控制器名称，用于日志和事件来源标识。
 	name string
 
-	client                clientset.Interface
-	broadcaster           record.EventBroadcaster
-	recorder              record.EventRecorder
-	podLister             corelisters.PodLister
-	podListerSynced       cache.InformerSynced
-	nodeLister            corelisters.NodeLister
-	nodeListerSynced      cache.InformerSynced
+	// client 用于与 API Server 通信。
+	client clientset.Interface
+	// broadcaster 负责把事件分发到日志和 API Server 的事件接收端。
+	broadcaster record.EventBroadcaster
+	// recorder 用于记录 Pod 删除与取消删除事件。
+	recorder record.EventRecorder
+	// podLister 提供 Pod 的本地缓存读取能力。
+	podLister corelisters.PodLister
+	// podListerSynced 用于等待 Pod 本地缓存完成同步。
+	podListerSynced cache.InformerSynced
+	// nodeLister 提供 Node 的本地缓存读取能力。
+	nodeLister corelisters.NodeLister
+	// nodeListerSynced 用于等待 Node 本地缓存完成同步。
+	nodeListerSynced cache.InformerSynced
+	// getPodsAssignedToNode 查询指定节点上已经分配的所有 Pod。
 	getPodsAssignedToNode GetPodsByNodeNameFunc
 
+	// taintEvictionQueue 是延迟驱逐队列，承载到达容忍时间后执行的删除工作。
 	taintEvictionQueue *TimedWorkerQueue
-	// keeps a map from nodeName to all noExecute taints on that Node
+	// 缓存节点名到该节点上所有 NoExecute 污点的映射；读取和写入必须持有下面的锁。
 	taintedNodesLock sync.Mutex
 	taintedNodes     map[string][]v1.Taint
 
+	// 两类更新通道都按节点哈希分片，保证同一节点的节点与 Pod 事件由同一 worker 顺序处理。
 	nodeUpdateChannels []chan nodeUpdateItem
-	podUpdateChannels  []chan podUpdateItem
+	// podUpdateChannels 是按节点分片的 Pod 更新事件通道。
+	podUpdateChannels []chan podUpdateItem
 
+	// 两个工作队列负责去重，事件交给通道后由对应 worker 调用 Done 标记完成。
 	nodeUpdateQueue workqueue.TypedInterface[nodeUpdateItem]
-	podUpdateQueue  workqueue.TypedInterface[podUpdateItem]
+	// podUpdateQueue 保存待处理的 Pod 更新事件。
+	podUpdateQueue workqueue.TypedInterface[podUpdateItem]
 }
 
+// deletePodHandler 构造延迟队列到期后执行的删除回调。
+// 回调先发出删除事件，再重试给 Pod 打上 DisruptionTarget 条件并删除，
+// 重试是为了容忍 API Server 的短暂冲突或失败。
 func deletePodHandler(c clientset.Interface, emitEventFunc func(types.NamespacedName), controllerName string) func(ctx context.Context, fireAt time.Time, args *WorkArgs) error {
 	return func(ctx context.Context, fireAt time.Time, args *WorkArgs) error {
 		ns := args.Object.Namespace
@@ -114,23 +137,28 @@ func deletePodHandler(c clientset.Interface, emitEventFunc func(types.Namespaced
 		}
 		var err error
 		for i := 0; i < retries; i++ {
+			// 只有全部重试失败才返回错误，避免偶发失败导致驱逐丢失。
 			err = addConditionAndDeletePod(ctx, c, name, ns)
 			if err == nil {
 				metrics.PodDeletionsTotal.Inc()
 				metrics.PodDeletionsLatency.Observe(float64(time.Since(fireAt) * time.Second))
 				break
 			}
+			// 短暂退避，给 API Server 冲突或网络抖动留出恢复时间。
 			time.Sleep(10 * time.Millisecond)
 		}
 		return err
 	}
 }
 
+// addConditionAndDeletePod 给 Pod 打上 DisruptionTarget 状态条件后将其删除。
+// 先记录条件再删除，是为了让监控与用户能区分"被驱逐"和普通删除。
 func addConditionAndDeletePod(ctx context.Context, c clientset.Interface, name, ns string) (err error) {
 	pod, err := c.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
+	// 在副本上更新条件，避免修改 informer 缓存中的对象。
 	newStatus := pod.Status.DeepCopy()
 	updated := apipod.UpdatePodCondition(newStatus, &v1.PodCondition{
 		Type:               v1.DisruptionTarget,
@@ -139,6 +167,7 @@ func addConditionAndDeletePod(ctx context.Context, c clientset.Interface, name, 
 		Reason:             "DeletionByTaintManager",
 		Message:            "Taint manager: deleting due to NoExecute taint",
 	})
+	// 条件已存在时无需重复打补丁，直接删除即可。
 	if updated {
 		if _, _, _, err := utilpod.PatchPodStatus(ctx, c, pod.Namespace, pod.Name, pod.UID, pod.Status, *newStatus); err != nil {
 			return err
@@ -147,6 +176,8 @@ func addConditionAndDeletePod(ctx context.Context, c clientset.Interface, name, 
 	return c.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
+// getNoExecuteTaints 从污点列表中筛选出 NoExecute 类型的污点。
+// 只有 NoExecute 污点会触发驱逐，其他效果与本控制器无关。
 func getNoExecuteTaints(taints []v1.Taint) []v1.Taint {
 	result := []v1.Taint{}
 	for i := range taints {
@@ -157,16 +188,19 @@ func getNoExecuteTaints(taints []v1.Taint) []v1.Taint {
 	return result
 }
 
-// getMinTolerationTime returns minimal toleration time from the given slice, or -1 if it's infinite.
+// getMinTolerationTime 返回给定容忍列表中最短的容忍时间，无限容忍返回 -1。
 func getMinTolerationTime(tolerations []v1.Toleration) time.Duration {
 	minTolerationTime := int64(math.MaxInt64)
+	// 没有任何容忍意味着完全不容忍，应立即驱逐，故返回 0。
 	if len(tolerations) == 0 {
 		return 0
 	}
 
 	for i := range tolerations {
+		// 未指定 TolerationSeconds 的容忍是永久有效的，跳过即可。
 		if tolerations[i].TolerationSeconds != nil {
 			tolerationSeconds := *(tolerations[i].TolerationSeconds)
+			// 非正数表示永久容忍，直接返回 0 让 Pod 立即被驱逐。
 			if tolerationSeconds <= 0 {
 				return 0
 			} else if tolerationSeconds < minTolerationTime {
@@ -175,15 +209,17 @@ func getMinTolerationTime(tolerations []v1.Toleration) time.Duration {
 		}
 	}
 
+	// 所有容忍都没有时限，等价于永久容忍，用 -1 表示。
 	if minTolerationTime == int64(math.MaxInt64) {
 		return -1
 	}
 	return time.Duration(minTolerationTime) * time.Second
 }
 
-// New creates a new Controller that will use passed clientset to communicate with the API server.
+// New 创建一个新的 Controller，使用传入的 clientset 与 API Server 通信。
 func New(ctx context.Context, c clientset.Interface, podInformer corev1informers.PodInformer, nodeInformer corev1informers.NodeInformer, controllerName string) (*Controller, error) {
 	logger := klog.FromContext(ctx)
+	// 先注册指标，保证后续使用指标时名称已就绪。
 	metrics.Register()
 	eventBroadcaster := record.NewBroadcaster(record.WithContext(ctx))
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: controllerName})
@@ -234,7 +270,8 @@ func New(ctx context.Context, c clientset.Interface, podInformer corev1informers
 		},
 		DeleteFunc: func(obj interface{}) {
 			pod, isPod := obj.(*v1.Pod)
-			// We can get DeletedFinalStateUnknown instead of *v1.Pod here and we need to handle that correctly.
+			// 删除事件可能携带 DeletedFinalStateUnknown 包装而非原始 Pod，
+			// 需要先解包，否则会把已删除的 Pod 当作普通对象而漏掉处理。
 			if !isPod {
 				deletedState, ok := obj.(cache.DeletedFinalStateUnknown)
 				if !ok {
@@ -275,14 +312,14 @@ func New(ctx context.Context, c clientset.Interface, podInformer corev1informers
 	return tm, nil
 }
 
-// Run starts the controller which will run in loop until `stopCh` is closed.
+// Run 启动控制器并持续运行，直到 ctx 被取消。
 func (tc *Controller) Run(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 
 	logger := klog.FromContext(ctx)
 	logger.Info("Starting", "controller", tc.name)
 
-	// Start events processing pipeline.
+	// 启动事件处理流水线，将事件同时写入日志和 API Server。
 	tc.broadcaster.StartStructuredLogging(3)
 	tc.broadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: tc.client.CoreV1().Events("")})
 	logger.Info("Sending events to API server")
@@ -297,7 +334,7 @@ func (tc *Controller) Run(ctx context.Context) {
 		wg.Wait()
 	}()
 
-	// wait for the cache to be synced
+	// 先等待缓存同步，否则 lister 读到的数据不完整，可能做出错误的驱逐决策。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, tc.podListerSynced, tc.nodeListerSynced) {
 		return
 	}
@@ -307,7 +344,7 @@ func (tc *Controller) Run(ctx context.Context) {
 		tc.podUpdateChannels = append(tc.podUpdateChannels, make(chan podUpdateItem, podUpdateChannelSize))
 	}
 
-	// Functions that are responsible for taking work items out of the workqueues and putting them into channels.
+	// 下面两个 goroutine 负责把工作项从队列取出并投递到按节点分片的通道。
 	wg.Go(func() {
 		for {
 			nodeUpdate, shutdown := tc.nodeUpdateQueue.Get()
@@ -320,7 +357,7 @@ func (tc *Controller) Run(ctx context.Context) {
 				tc.nodeUpdateQueue.Done(nodeUpdate)
 				return
 			case tc.nodeUpdateChannels[hash] <- nodeUpdate:
-				// tc.nodeUpdateQueue.Done is called by the nodeUpdateChannels worker
+				// Done 由消费该通道的 worker 调用，确保事件处理完才从队列移除。
 			}
 		}
 	})
@@ -331,17 +368,15 @@ func (tc *Controller) Run(ctx context.Context) {
 			if shutdown {
 				break
 			}
-			// The fact that pods are processed by the same worker as nodes is used to avoid races
-			// between node worker setting tc.taintedNodes and pod worker reading this to decide
-			// whether to delete pod.
-			// It's possible that even without this assumption this code is still correct.
+			// Pod 与节点事件必须由同一 worker 处理，以确保写入 tc.taintedNodes
+			// 与读取该状态决定驱逐之间不会出现竞态；没有这一假设代码也许可行，但无法保证。
 			hash := hash(podUpdate.nodeName, UpdateWorkerSize)
 			select {
 			case <-ctx.Done():
 				tc.podUpdateQueue.Done(podUpdate)
 				return
 			case tc.podUpdateChannels[hash] <- podUpdate:
-				// tc.podUpdateQueue.Done is called by the podUpdateChannels worker
+				// Done 由消费该通道的 worker 调用，确保事件处理完才从队列移除。
 			}
 		}
 	})
@@ -354,11 +389,10 @@ func (tc *Controller) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// worker 持续处理分配给自己的节点与 Pod 更新事件。
+// 节点更新优先于 Pod 更新，因为节点污点的变化必须尽快生效，
+// 否则用户或系统会等到 Pod 队列排空后才能开始驱逐污点节点上的 Pod。
 func (tc *Controller) worker(ctx context.Context, worker int) {
-	// When processing events we want to prioritize Node updates over Pod updates,
-	// as NodeUpdates that interest the controller should be handled as soon as possible -
-	// we don't want user (or system) to wait until PodUpdate queue is drained before it can
-	// start evicting Pods from tainted Nodes.
 	for {
 		select {
 		case <-ctx.Done():
@@ -367,7 +401,7 @@ func (tc *Controller) worker(ctx context.Context, worker int) {
 			tc.handleNodeUpdate(ctx, nodeUpdate)
 			tc.nodeUpdateQueue.Done(nodeUpdate)
 		case podUpdate := <-tc.podUpdateChannels[worker]:
-			// If we found a Pod update we need to empty Node queue first.
+			// 处理 Pod 更新前先清空节点队列，确保最新的污点状态已生效。
 		priority:
 			for {
 				select {
@@ -378,14 +412,15 @@ func (tc *Controller) worker(ctx context.Context, worker int) {
 					break priority
 				}
 			}
-			// After Node queue is emptied we process podUpdate.
+			// 节点队列清空后再按最新状态处理 Pod 更新。
 			tc.handlePodUpdate(ctx, podUpdate)
 			tc.podUpdateQueue.Done(podUpdate)
 		}
 	}
 }
 
-// PodUpdated is used to notify NoExecuteTaintManager about Pod changes.
+// PodUpdated 通知 NoExecuteTaintManager 有 Pod 发生变化。
+// 仅在容忍配置或所在节点发生变化时才入队，其余变化与本控制器无关。
 func (tc *Controller) PodUpdated(oldPod *v1.Pod, newPod *v1.Pod) {
 	podName := ""
 	podNamespace := ""
@@ -405,6 +440,7 @@ func (tc *Controller) PodUpdated(oldPod *v1.Pod, newPod *v1.Pod) {
 		newTolerations = newPod.Spec.Tolerations
 	}
 
+	// 容忍与调度节点都没变，驱逐决策不会改变，直接忽略该事件。
 	if oldPod != nil && newPod != nil && helper.Semantic.DeepEqual(oldTolerations, newTolerations) && oldPod.Spec.NodeName == newPod.Spec.NodeName {
 		return
 	}
@@ -417,7 +453,8 @@ func (tc *Controller) PodUpdated(oldPod *v1.Pod, newPod *v1.Pod) {
 	tc.podUpdateQueue.Add(updateItem)
 }
 
-// NodeUpdated is used to notify NoExecuteTaintManager about Node changes.
+// NodeUpdated 通知 NoExecuteTaintManager 有节点发生变化。
+// 只有 NoExecute 污点集合发生变化才需要重新评估驱逐决策。
 func (tc *Controller) NodeUpdated(oldNode *v1.Node, newNode *v1.Node) {
 	nodeName := ""
 	oldTaints := []v1.Taint{}
@@ -432,6 +469,7 @@ func (tc *Controller) NodeUpdated(oldNode *v1.Node, newNode *v1.Node) {
 		newTaints = getNoExecuteTaints(newNode.Spec.Taints)
 	}
 
+	// NoExecute 污点未变，驱逐决策也不会变，无需入队。
 	if oldNode != nil && newNode != nil && helper.Semantic.DeepEqual(oldTaints, newTaints) {
 		return
 	}
@@ -442,12 +480,16 @@ func (tc *Controller) NodeUpdated(oldNode *v1.Node, newNode *v1.Node) {
 	tc.nodeUpdateQueue.Add(updateItem)
 }
 
+// cancelWorkWithEvent 取消对该 Pod 已排期的驱逐，并在确实取消了工作时发出取消事件。
 func (tc *Controller) cancelWorkWithEvent(logger klog.Logger, nsName types.NamespacedName) {
+	// 只有原本存在待执行的工作才发事件，避免产生大量无意义的事件。
 	if tc.taintEvictionQueue.CancelWork(logger, nsName.String()) {
 		tc.emitCancelPodDeletionEvent(nsName)
 	}
 }
 
+// processPodOnNode 根据节点污点与 Pod 容忍重新计算驱逐时间：
+// 不容忍则立即驱逐，永久容忍则取消驱逐，有限容忍则按最早的可容忍期限排期。
 func (tc *Controller) processPodOnNode(
 	ctx context.Context,
 	podNamespacedName types.NamespacedName,
@@ -457,19 +499,20 @@ func (tc *Controller) processPodOnNode(
 	now time.Time,
 ) {
 	logger := klog.FromContext(ctx)
+	// 节点已无污点，之前排期的驱逐必须撤销。
 	if len(taints) == 0 {
 		tc.cancelWorkWithEvent(logger, podNamespacedName)
 	}
 	allTolerated, usedTolerations := v1helper.GetMatchingTolerations(logger, taints, tolerations)
 	if !allTolerated {
 		logger.V(2).Info("Not all taints are tolerated after update for pod on node", "pod", podNamespacedName.String(), "node", klog.KRef("", nodeName))
-		// We're canceling scheduled work (if any), as we're going to delete the Pod right away.
+		// 马上就要删除 Pod，先取消已排期的驱逐，避免重复执行。
 		tc.cancelWorkWithEvent(logger, podNamespacedName)
 		tc.taintEvictionQueue.AddWork(ctx, NewWorkArgs(podNamespacedName.Name, podNamespacedName.Namespace), now, now)
 		return
 	}
 	minTolerationTime := getMinTolerationTime(usedTolerations)
-	// getMinTolerationTime returns negative value to denote infinite toleration.
+	// getMinTolerationTime 用负值表示永久容忍，此时不会再触发驱逐。
 	if minTolerationTime < 0 {
 		logger.V(4).Info("Current tolerations for pod tolerate forever, cancelling any scheduled deletion", "pod", podNamespacedName.String())
 		tc.cancelWorkWithEvent(logger, podNamespacedName)
@@ -480,21 +523,25 @@ func (tc *Controller) processPodOnNode(
 	triggerTime := startTime.Add(minTolerationTime)
 	scheduledEviction := tc.taintEvictionQueue.GetWorkerUnsafe(podNamespacedName.String())
 	if scheduledEviction != nil {
+		// 沿用原排期的起始时间，避免每次状态刷新都把容忍期限重新计时。
 		startTime = scheduledEviction.CreatedAt
+		// 已排期的时间更早，说明现有安排更激进，无需更新。
 		if startTime.Add(minTolerationTime).Before(triggerTime) {
 			return
 		}
+		// 新计算出的时间更晚，先撤销旧工作再按新时间排期。
 		tc.cancelWorkWithEvent(logger, podNamespacedName)
 	}
 	tc.taintEvictionQueue.AddWork(ctx, NewWorkArgs(podNamespacedName.Name, podNamespacedName.Namespace), startTime, triggerTime)
 }
 
+// handlePodUpdate 处理 Pod 更新：删除事件取消排期，创建或更新事件按最新状态重新评估驱逐。
 func (tc *Controller) handlePodUpdate(ctx context.Context, podUpdate podUpdateItem) {
 	pod, err := tc.podLister.Pods(podUpdate.podNamespace).Get(podUpdate.podName)
 	logger := klog.FromContext(ctx)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			// Delete
+			// Pod 已删除，无需再驱逐，取消可能存在的排期。
 			podNamespacedName := types.NamespacedName{Namespace: podUpdate.podNamespace, Name: podUpdate.podName}
 			logger.V(4).Info("Noticed pod deletion", "pod", podNamespacedName)
 			tc.cancelWorkWithEvent(logger, podNamespacedName)
@@ -504,12 +551,13 @@ func (tc *Controller) handlePodUpdate(ctx context.Context, podUpdate podUpdateIt
 		return
 	}
 
-	// We key the workqueue and shard workers by nodeName. If we don't match the current state we should not be the one processing the current object.
+	// 队列按节点名分片，事件所在分片可能与 Pod 当前节点不一致；
+	// 只有负责当前节点状态的 worker 才能处理该 Pod，避免基于过期节点做出决策。
 	if pod.Spec.NodeName != podUpdate.nodeName {
 		return
 	}
 
-	// Create or Update
+	// 创建或更新：先确认 Pod 已被调度，未调度的 Pod 不受节点污点影响。
 	podNamespacedName := types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name}
 	logger.V(4).Info("Noticed pod update", "pod", podNamespacedName)
 	nodeName := pod.Spec.NodeName
@@ -522,20 +570,21 @@ func (tc *Controller) handlePodUpdate(ctx context.Context, podUpdate podUpdateIt
 		taints, ok := tc.taintedNodes[nodeName]
 		return taints, ok
 	}()
-	// It's possible that Node was deleted, or Taints were removed before, which triggered
-	// eviction cancelling if it was needed.
+	// 节点可能已被删除或污点已被清除，对应的驱逐取消逻辑已在节点更新时执行，
+	// 这里找不到污点记录就直接返回。
 	if !ok {
 		return
 	}
 	tc.processPodOnNode(ctx, podNamespacedName, nodeName, pod.Spec.Tolerations, taints, time.Now())
 }
 
+// handleNodeUpdate 处理节点更新：维护 NoExecute 污点缓存，并按最新污点重新评估其上所有 Pod 的驱逐。
 func (tc *Controller) handleNodeUpdate(ctx context.Context, nodeUpdate nodeUpdateItem) {
 	node, err := tc.nodeLister.Get(nodeUpdate.nodeName)
 	logger := klog.FromContext(ctx)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			// Delete
+			// 节点已删除，清除其污点缓存，防止后续误判。
 			logger.V(4).Info("Noticed node deletion", "node", klog.KRef("", nodeUpdate.nodeName))
 			tc.taintedNodesLock.Lock()
 			defer tc.taintedNodesLock.Unlock()
@@ -546,7 +595,7 @@ func (tc *Controller) handleNodeUpdate(ctx context.Context, nodeUpdate nodeUpdat
 		return
 	}
 
-	// Create or Update
+	// 创建或更新：先把最新污点写入缓存，再处理节点上的 Pod。
 	logger.V(4).Info("Noticed node update", "node", klog.KObj(node))
 	taints := getNoExecuteTaints(node.Spec.Taints)
 	func() {
@@ -560,9 +609,8 @@ func (tc *Controller) handleNodeUpdate(ctx context.Context, nodeUpdate nodeUpdat
 		}
 	}()
 
-	// This is critical that we update tc.taintedNodes before we call getPodsAssignedToNode:
-	// getPodsAssignedToNode can be delayed as long as all future updates to pods will call
-	// tc.PodUpdated which will use tc.taintedNodes to potentially delete delayed pods.
+	// 必须先更新 tc.taintedNodes 再查询节点上的 Pod：
+	// 即使查询有延迟，后续 Pod 更新也会通过 PodUpdated 读取最新缓存来补救遗漏的驱逐。
 	pods, err := tc.getPodsAssignedToNode(node.Name)
 	if err != nil {
 		logger.Error(err, "Failed to get pods assigned to node", "node", klog.KObj(node))
@@ -571,7 +619,7 @@ func (tc *Controller) handleNodeUpdate(ctx context.Context, nodeUpdate nodeUpdat
 	if len(pods) == 0 {
 		return
 	}
-	// Short circuit, to make this controller a bit faster.
+	// 节点已无污点，直接取消其上所有 Pod 的驱逐，省去逐个评估。
 	if len(taints) == 0 {
 		logger.V(4).Info("All taints were removed from the node. Cancelling all evictions...", "node", klog.KObj(node))
 		for i := range pods {
@@ -587,6 +635,7 @@ func (tc *Controller) handleNodeUpdate(ctx context.Context, nodeUpdate nodeUpdat
 	}
 }
 
+// emitPodDeletionEvent 记录 Pod 被标记为删除的事件；未配置 recorder 时静默跳过。
 func (tc *Controller) emitPodDeletionEvent(nsName types.NamespacedName) {
 	if tc.recorder == nil {
 		return
@@ -600,6 +649,7 @@ func (tc *Controller) emitPodDeletionEvent(nsName types.NamespacedName) {
 	tc.recorder.Eventf(ref, v1.EventTypeNormal, "TaintManagerEviction", "Marking for deletion Pod %s", nsName.String())
 }
 
+// emitCancelPodDeletionEvent 记录取消删除 Pod 的事件；未配置 recorder 时静默跳过。
 func (tc *Controller) emitCancelPodDeletionEvent(nsName types.NamespacedName) {
 	if tc.recorder == nil {
 		return

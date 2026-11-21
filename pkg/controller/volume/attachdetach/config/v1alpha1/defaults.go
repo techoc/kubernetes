@@ -23,17 +23,15 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultAttachDetachControllerConfiguration defaults a pointer to a
-// AttachDetachControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultAttachDetachControllerConfiguration 为
+// AttachDetachControllerConfiguration 指针设置推荐默认值。默认值可能随 API 版本变化。
+// 该函数有意不注册为 scheme 中的普通 `SetDefaults_Foo` 函数，
+// 以便使用该类型的调用方为内嵌配置自行设置默认值。
+// 强制使用这些默认值会有问题：scheme 中的默认值设置是转换的一部分，调用方难以选择退出。
+// 因此，若想使用此默认逻辑，应在包装该类型的结构的 `SetDefaults_` 方法中调用它。
 func RecommendedDefaultAttachDetachControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.AttachDetachControllerConfiguration) {
 	zero := metav1.Duration{}
+	// 仅当未显式配置时才填充默认值，避免覆盖用户设置。
 	if obj.ReconcilerSyncLoopPeriod == zero {
 		obj.ReconcilerSyncLoopPeriod = metav1.Duration{Duration: 60 * time.Second}
 	}

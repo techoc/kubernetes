@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package ephemeral implements the controller part of
+// Package ephemeral 实现通用临时卷 KEP 中控制器的部分：
 // https://github.com/kubernetes/enhancements/tree/master/keps/sig-storage/1698-generic-ephemeral-volumes
 //
-// It was derived from the expand controller.
+// 该控制器的实现由 expand 控制器衍生而来。
 package ephemeral

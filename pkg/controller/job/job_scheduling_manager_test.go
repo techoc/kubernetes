@@ -44,8 +44,8 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 )
 
-// newGangSchedulingJob creates a Job that opts into gang scheduling via
-// spec.scheduling with minCount equal to parallelism.
+// newGangSchedulingJob 构造一个通过 spec.scheduling 选择 gang 调度的 Job，
+// 其 minCount 与 parallelism 保持一致，便于验证默认策略。
 func newGangSchedulingJob(name string, parallelism int32) *batch.Job {
 	indexed := batch.IndexedCompletion
 	return &batch.Job{
@@ -78,6 +78,8 @@ func newGangSchedulingJob(name string, parallelism int32) *batch.Job {
 	}
 }
 
+// newWorkloadJobControllerRef 构造指向 Job 的控制器引用，供 Workload.Spec.ControllerRef 使用，
+// 以便控制器识别该 Workload 归属哪个 Job。
 func newWorkloadJobControllerRef(jobName string) *schedulingv1beta1.TypedLocalObjectReference {
 	return &schedulingv1beta1.TypedLocalObjectReference{
 		APIGroup: batch.SchemeGroupVersion.Group,
@@ -86,8 +88,9 @@ func newWorkloadJobControllerRef(jobName string) *schedulingv1beta1.TypedLocalOb
 	}
 }
 
-// newControllerWithSchedulingInformers creates a Job controller with Workload and PodGroup
-// informers wired up, suitable for testing scheduling manager functionality.
+// newControllerWithSchedulingInformers 创建接入 Workload 与 PodGroup informer 的 Job 控制器，
+// 并开启相关特性门控与仿真版本，便于测试调度管理逻辑。
+// 将各存储同步函数置为 alwaysReady，避免测试中等待 informer 同步。
 func newControllerWithSchedulingInformers(ctx context.Context, t *testing.T, kubeClient *fake.Clientset) (*Controller, informers.SharedInformerFactory) {
 	t.Helper()
 	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.36"))
@@ -115,7 +118,11 @@ func newControllerWithSchedulingInformers(ctx context.Context, t *testing.T, kub
 	return jm, sharedInformers
 }
 
+// TestShouldManageWorkloadForJob 验证不同特性门控与 Job 形态下的管理模式：
+// 独立 Job 同时纳管 Workload/PodGroup，被父级 Workload 拥有或自带调度组的 Job 则不纳管或仅纳管 PodGroup。
 func TestShouldManageWorkloadForJob(t *testing.T) {
+	// 为父级 Workload 与 CronJob 各准备一组 ownerRef，用于覆盖委托与父级拥有的场景；
+	// 只有控制者 owner 才参与归属判断。
 	parentWorkloadOwner := []metav1.OwnerReference{{
 		APIVersion: "jobset.x-k8s.io/v1alpha2",
 		Kind:       "JobSet",
@@ -212,6 +219,7 @@ func TestShouldManageWorkloadForJob(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			// 管理模式依赖特性门控，每个子用例都单独设置，避免相互干扰。
 			featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, feature.DefaultFeatureGate, utilversion.MustParse("1.36"))
 			featuregatetesting.SetFeatureGatesDuringTest(t, feature.DefaultFeatureGate, featuregatetesting.FeatureOverrides{
 				features.GenericWorkload: tc.workloadWithJob,
@@ -228,11 +236,14 @@ func TestShouldManageWorkloadForJob(t *testing.T) {
 	}
 }
 
+// TestGenerateWorkload 验证根据 Job 的调度配置生成 Workload 的正确性：
+// 覆盖默认 Basic 策略、Gang 策略及其 minCount 默认值、约束透传以及优先级类名复制。
 func TestGenerateWorkload(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	clientSet := fake.NewClientset()
 	jm, _ := newControllerWithSchedulingInformers(ctx, t, clientSet)
 
+	// 集中构造不同调度配置的 Job，避免在用例表中重复样板代码。
 	newJob := func(name string, parallelism int32, scheduling *batch.JobSchedulingConfiguration) *batch.Job {
 		return &batch.Job{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: metav1.NamespaceDefault, UID: types.UID(name + "-uid")},
@@ -240,6 +251,8 @@ func TestGenerateWorkload(t *testing.T) {
 		}
 	}
 
+	// 期望字段只描述本用例关心的部分；例如 wantGangMinCount 为 0 表示
+	// 该用例期望 Basic 策略，而 wantErr 用于需要生成失败的场景。
 	testCases := map[string]struct {
 		job                   *batch.Job
 		wantErr               bool
@@ -310,6 +323,7 @@ func TestGenerateWorkload(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			wl, err := jm.generateWorkload(tc.job)
+			// 先处理期望失败的场景，避免后续对空 Workload 解引用。
 			if tc.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got none")
@@ -322,6 +336,7 @@ func TestGenerateWorkload(t *testing.T) {
 			if len(wl.Spec.PodGroupTemplates) != 1 {
 				t.Fatalf("expected 1 template, got %d", len(wl.Spec.PodGroupTemplates))
 			}
+			// 模板名必须可复算，否则后续无法通过名字找到匹配的 PodGroup。
 			tpl := wl.Spec.PodGroupTemplates[0]
 			if tpl.Name != podGroupTemplateName(tc.job) {
 				t.Errorf("template name = %q, want %q", tpl.Name, podGroupTemplateName(tc.job))
@@ -367,6 +382,8 @@ func TestGenerateWorkload(t *testing.T) {
 	}
 }
 
+// TestComputeWorkloadName 验证 Workload 名称满足 DNS 子域长度限制、带哈希后缀、
+// 结果确定且随 UID 变化，避免同名 Job 复用后发生名称冲突。
 func TestComputeWorkloadName(t *testing.T) {
 	tests := map[string]struct {
 		jobName string
@@ -392,24 +409,24 @@ func TestComputeWorkloadName(t *testing.T) {
 			}
 			result := computeWorkloadName(job)
 
-			// Must fit within DNS subdomain length.
+			// 名称必须是合法的 DNS 子域，否则 API Server 会拒绝创建。
 			if len(result) > validation.DNS1123SubdomainMaxLength {
 				t.Errorf("name length %d exceeds DNS1123SubdomainMaxLength %d", len(result), validation.DNS1123SubdomainMaxLength)
 			}
 
-			// Must contain a hash suffix (separated by "-").
+			// 名称须含哈希后缀，长名字截断后才能保持唯一。
 			parts := strings.Split(result, "-")
 			if len(parts) < 2 {
 				t.Errorf("expected at least 2 parts (prefix-hash), got %q", result)
 			}
 
-			// Must be deterministic.
+			// 名称必须确定，重复计算才能定位到同一个 Workload。
 			result2 := computeWorkloadName(job)
 			if result != result2 {
 				t.Errorf("non-deterministic: %q != %q", result, result2)
 			}
 
-			// Different UIDs must produce different names.
+			// 同名重建的 Job 必须靠 UID 区分，否则会误用旧 Workload。
 			job2 := job.DeepCopy()
 			job2.UID = "different-uid"
 			result3 := computeWorkloadName(job2)
@@ -420,6 +437,8 @@ func TestComputeWorkloadName(t *testing.T) {
 	}
 }
 
+// TestComputePodGroupName 验证 PodGroup 名称的长度限制、命名结构、确定性，
+// 以及截断时同时保留 Workload 名与模板名，避免两者同名串扰。
 func TestComputePodGroupName(t *testing.T) {
 	tests := map[string]struct {
 		workloadName string
@@ -468,7 +487,7 @@ func TestComputePodGroupName(t *testing.T) {
 		})
 	}
 
-	// Verify truncation preserves both parts.
+	// 超长名字截断时必须同时保留两段来源信息，便于从名称追溯归属。
 	t.Run("truncation preserves both parts", func(t *testing.T) {
 		result := computePodGroupName(strings.Repeat("w", 200), strings.Repeat("t", 200))
 		lastDash := strings.LastIndex(result, "-")
@@ -484,7 +503,7 @@ func TestComputePodGroupName(t *testing.T) {
 		}
 	})
 
-	// Verify short name is not truncated when the other is long.
+	// 短名字本身不携带歧义，截断时应优先牺牲另一段长名字。
 	t.Run("short workload name is not truncated", func(t *testing.T) {
 		result := computePodGroupName("wl", strings.Repeat("t", 250))
 		if !strings.HasPrefix(result, "wl-") {
@@ -493,6 +512,9 @@ func TestComputePodGroupName(t *testing.T) {
 	})
 }
 
+// TestEnsureWorkloadAndPodGroup 验证 ensureWorkloadAndPodGroup 的行为：
+// 仅在 Job 尚未启动且无 Pod 时创建 Workload/PodGroup，能识别已有对象，
+// 对多义或非本控制器创建的对象回退重建，并正确处理委托场景与创建错误。
 func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -501,6 +523,8 @@ func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 	templateName := fmt.Sprintf("%s-pgt-%d", baseJob.Name, 0)
 	podGroupName := computePodGroupName(workloadName, templateName)
 
+	// 构造由本控制器持有的 Workload，用于模拟"已存在的目标对象"，
+	// 因为发现逻辑依赖 ownerRef 归属。
 	makeWorkload := func(name, jobName string) *schedulingv1beta1.Workload {
 		return &schedulingv1beta1.Workload{
 			ObjectMeta: metav1.ObjectMeta{
@@ -523,6 +547,7 @@ func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 		}
 	}
 
+	// PodGroup 通过 WorkloadRef 关联模板，构造时需同时指向 Workload 与模板名。
 	makePodGroup := func(name, wlName string) *schedulingv1beta1.PodGroup {
 		return &schedulingv1beta1.PodGroup{
 			ObjectMeta: metav1.ObjectMeta{
@@ -540,6 +565,7 @@ func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 		}
 	}
 
+	// 委托场景：Job 由父级 Workload 拥有，并通过注解指定要继承的模板名。
 	delegatedJob := baseJob.DeepCopy()
 	delegatedJob.OwnerReferences = []metav1.OwnerReference{{
 		APIVersion: "jobset.x-k8s.io/v1alpha2",
@@ -550,6 +576,7 @@ func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 	}}
 	delegatedJob.Annotations = map[string]string{apischeduling.GroupTemplateNameAnnotation: "workers"}
 
+	// 父级 Workload 不属于本控制器，其模板作为委托 PodGroup 的配置来源。
 	makeParentWorkload := func(minCount int32) *schedulingv1beta1.Workload {
 		return &schedulingv1beta1.Workload{
 			ObjectMeta: metav1.ObjectMeta{
@@ -573,6 +600,7 @@ func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 		}
 	}
 	delegatedPodGroupName := computePodGroupName("parent-workload", "workers")
+	// 委托 PodGroup 名称由父 Workload 与模板名推导，与 Job 自身名称无关。
 	makeDelegatedPodGroup := func(minCount int32) *schedulingv1beta1.PodGroup {
 		return &schedulingv1beta1.PodGroup{
 			ObjectMeta: metav1.ObjectMeta{
@@ -599,9 +627,9 @@ func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 		existingWorkloads []*schedulingv1beta1.Workload
 		existingPodGroups []*schedulingv1beta1.PodGroup
 
-		// When true, the Workload create reactor returns a generic error.
+		// 为 true 时向 Workload 创建注入错误，用于验证错误向上传播。
 		simulateCreateError bool
-		// When true, PodGroup create returns a generic error.
+		// 为 true 时向 PodGroup 创建注入错误，验证独立于 Workload 的错误路径。
 		simulatePGCreateError bool
 
 		wantPodGroup             bool
@@ -804,6 +832,7 @@ func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 			clientSet := fake.NewClientset(objs...)
 			jm, sharedInformers := newControllerWithSchedulingInformers(ctx, t, clientSet)
 
+			// 用前置 reactor 拦截创建请求，模拟 API Server 返回错误。
 			if tc.simulateCreateError {
 				clientSet.PrependReactor("create", "workloads", func(action k8stesting.Action) (bool, runtime.Object, error) {
 					return true, nil, fmt.Errorf("synthetic API error")
@@ -816,6 +845,7 @@ func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 				})
 			}
 
+			// 发现逻辑走 informer 缓存，先启动并等待同步，避免读到空缓存误判为不存在。
 			sharedInformers.Start(ctx.Done())
 			sharedInformers.WaitForCacheSync(ctx.Done())
 
@@ -839,6 +869,7 @@ func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 			} else if pg != nil {
 				t.Errorf("expected nil PodGroup, got %v", pg)
 			}
+			// minCount 的期望值需要从 API 读取，确认实际写入的是更新后的策略而非返回值。
 			if tc.wantPodGroupGangMinCount != nil {
 				gotPG, err := clientSet.SchedulingV1beta1().PodGroups(metav1.NamespaceDefault).Get(ctx, tc.wantPodGroupName, metav1.GetOptions{})
 				if err != nil {
@@ -855,6 +886,8 @@ func TestEnsureWorkloadAndPodGroup(t *testing.T) {
 	}
 }
 
+// TestCreateWorkloadForJob 验证创建出的 Workload 名称、命名空间、控制器引用、
+// 模板策略及 ownerRef 均正确，保证调度器能识别其归属与 gang 规模。
 func TestCreateWorkloadForJob(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	clientSet := fake.NewClientset()
@@ -877,6 +910,7 @@ func TestCreateWorkloadForJob(t *testing.T) {
 	if wl.Spec.ControllerRef == nil {
 		t.Fatal("expected controllerRef")
 	}
+	// 用 cmp.Diff 对比整个引用结构，避免遗漏 APIGroup 或 Kind 字段。
 	if diff := cmp.Diff(wl.Spec.ControllerRef, newWorkloadJobControllerRef(job.Name)); diff != "" {
 		t.Errorf("unexpected controllerRef (-got +want):\n%s", diff)
 	}
@@ -894,6 +928,8 @@ func TestCreateWorkloadForJob(t *testing.T) {
 	}
 }
 
+// TestCreatePodGroup 验证 PodGroup 的名称、ownerRef 数量及从 Workload 模板复制的
+// 调度策略与优先级；根 Job 会额外把 Workload 作为非控制器 owner，委托场景则不会。
 func TestCreatePodGroup(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	clientSet := fake.NewClientset()
@@ -940,6 +976,7 @@ func TestCreatePodGroup(t *testing.T) {
 				},
 			}
 
+			// 从已有 Workload 构造 builder，确保 PodGroup 继承模板中的全部策略字段。
 			builder := newBuilderFromExistingWorkload(job, workload)
 			pg, err := jm.createPodGroup(ctx, job, workload, "", tc.linkWorkloadOwner, builder)
 			if err != nil {
@@ -965,6 +1002,7 @@ func TestCreatePodGroup(t *testing.T) {
 				PriorityClassName: "high-priority",
 				Priority:          new(int32(1000)),
 			}
+			// 整段比较 Spec，防止模板字段在复制过程中被漏掉或被改写。
 			if diff := cmp.Diff(wantSpec, pg.Spec); diff != "" {
 				t.Errorf("unexpected PodGroup spec (-want +got):\n%s", diff)
 			}
@@ -972,10 +1010,12 @@ func TestCreatePodGroup(t *testing.T) {
 	}
 }
 
+// TestSyncGangMinCount 验证控制器拥有的 Workload/PodGroup 会被调整到 Job 的
+// gang minCount，而已经一致时不再变更。
 func TestSyncGangMinCount(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
-	// The Job opts into gang with minCount=5, so the desired runtime size is 5.
+	// Job 声明 minCount=5，因此已存在的对象都应被同步为 5。
 	job := newGangSchedulingJob("scale-job", 5)
 	wlName := computeWorkloadName(job)
 	tmplName := podGroupTemplateName(job)

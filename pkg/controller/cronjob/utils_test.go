@@ -33,9 +33,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestGetJobFromTemplate2 验证从模板创建 Job 时正确复制标签、注解与调度时间注释。
 func TestGetJobFromTemplate2(t *testing.T) {
-	// getJobFromTemplate2() needs to take the job template and copy the labels and annotations
-	// and other fields, and add a created-by reference.
+	// 需复制模板的标签、注解等字段并添加 created-by 引用，Job 才能被控制器归属与回收。
 	var (
 		one             int64 = 1
 		no              bool
@@ -135,6 +135,7 @@ func TestGetJobFromTemplate2(t *testing.T) {
 				t.Errorf("Wrong number of annotations")
 			}
 
+			// 调度时间注释须与按目标时区换算后的期望值一致，否则定时语义会错乱。
 			scheduledAnnotation := job.ObjectMeta.Annotations[batchv1.CronJobScheduledTimestampAnnotation]
 			timeZoneLocation, err := time.LoadLocation(ptr.Deref(tt.timeZone, ""))
 			if err != nil {
@@ -147,9 +148,10 @@ func TestGetJobFromTemplate2(t *testing.T) {
 	}
 }
 
+// TestNextScheduleTime 覆盖首次调度、已有上次调度、截止时间及非法计划等场景下 nextScheduleTime 的返回值。
 func TestNextScheduleTime(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
-	// schedule is hourly on the hour
+	// 计划设为每小时整点，便于用固定时间点推导预期结果。
 	schedule := "0 * * * ?"
 
 	ParseSchedule := func(schedule string) cron.Schedule {
@@ -160,10 +162,10 @@ func TestNextScheduleTime(t *testing.T) {
 		}
 		return sched
 	}
+	// FakeRecorder 承接事件，避免测试依赖真实事件管道。
 	recorder := record.NewFakeRecorder(50)
-	// T1 is a scheduled start time of that schedule
+	// T1、T2 是相邻的两个预定启动时间，作为后续场景的基准。
 	T1 := *topOfTheHour()
-	// T2 is a scheduled start time of that schedule after T1
 	T2 := *deltaTimeAfterTopOfTheHour(1 * time.Hour)
 
 	cj := batchv1.CronJob{
@@ -179,10 +181,9 @@ func TestNextScheduleTime(t *testing.T) {
 		},
 	}
 	{
-		// Case 1: no known start times, and none needed yet.
-		// Creation time is before T1.
+		// 场景 1：没有已知启动时间；创建时间早于 T1。
 		cj.ObjectMeta.CreationTimestamp = metav1.Time{Time: T1.Add(-10 * time.Minute)}
-		// Current time is more than creation time, but less than T1.
+		// 当前时间虽晚于创建时间但仍早于 T1，不应触发调度。
 		now := T1.Add(-7 * time.Minute)
 		schedule, _ := nextScheduleTime(logger, &cj, now, ParseSchedule(cj.Spec.Schedule), recorder)
 		if schedule != nil {
@@ -190,10 +191,8 @@ func TestNextScheduleTime(t *testing.T) {
 		}
 	}
 	{
-		// Case 2: no known start times, and one needed.
-		// Creation time is before T1.
+		// 场景 2：没有已知启动时间且当前时间已过 T1，应补一次调度。
 		cj.ObjectMeta.CreationTimestamp = metav1.Time{Time: T1.Add(-10 * time.Minute)}
-		// Current time is after T1
 		now := T1.Add(2 * time.Second)
 		schedule, _ := nextScheduleTime(logger, &cj, now, ParseSchedule(cj.Spec.Schedule), recorder)
 		if schedule == nil {
@@ -203,12 +202,9 @@ func TestNextScheduleTime(t *testing.T) {
 		}
 	}
 	{
-		// Case 3: known LastScheduleTime, no start needed.
-		// Creation time is before T1.
+		// 场景 3：LastScheduleTime 已覆盖 T1，无需重复调度。
 		cj.ObjectMeta.CreationTimestamp = metav1.Time{Time: T1.Add(-10 * time.Minute)}
-		// Status shows a start at the expected time.
 		cj.Status.LastScheduleTime = &metav1.Time{Time: T1}
-		// Current time is after T1
 		now := T1.Add(2 * time.Minute)
 		schedule, _ := nextScheduleTime(logger, &cj, now, ParseSchedule(cj.Spec.Schedule), recorder)
 		if schedule != nil {
@@ -216,12 +212,9 @@ func TestNextScheduleTime(t *testing.T) {
 		}
 	}
 	{
-		// Case 4: known LastScheduleTime, a start needed
-		// Creation time is before T1.
+		// 场景 4：已有 T1 的调度记录，当前时间越过 T2，应返回 T2。
 		cj.ObjectMeta.CreationTimestamp = metav1.Time{Time: T1.Add(-10 * time.Minute)}
-		// Status shows a start at the expected time.
 		cj.Status.LastScheduleTime = &metav1.Time{Time: T1}
-		// Current time is after T1 and after T2
 		now := T2.Add(5 * time.Minute)
 		schedule, _ := nextScheduleTime(logger, &cj, now, ParseSchedule(cj.Spec.Schedule), recorder)
 		if schedule == nil {
@@ -231,10 +224,9 @@ func TestNextScheduleTime(t *testing.T) {
 		}
 	}
 	{
-		// Case 5: known LastScheduleTime, two starts needed
+		// 场景 5：跨越多个调度点；函数只返回最近一次，其余由后续循环补上。
 		cj.ObjectMeta.CreationTimestamp = metav1.Time{Time: T1.Add(-2 * time.Hour)}
 		cj.Status.LastScheduleTime = &metav1.Time{Time: T1.Add(-1 * time.Hour)}
-		// Current time is after T1 and after T2
 		now := T2.Add(5 * time.Minute)
 		schedule, _ := nextScheduleTime(logger, &cj, now, ParseSchedule(cj.Spec.Schedule), recorder)
 		if schedule == nil {
@@ -244,7 +236,7 @@ func TestNextScheduleTime(t *testing.T) {
 		}
 	}
 	{
-		// Case 6: now is way way ahead of last start time, and there is no deadline.
+		// 场景 6：当前时间远超上次调度且未设截止时间，应判定存在遗漏。
 		cj.ObjectMeta.CreationTimestamp = metav1.Time{Time: T1.Add(-2 * time.Hour)}
 		cj.Status.LastScheduleTime = &metav1.Time{Time: T1.Add(-1 * time.Hour)}
 		now := T2.Add(10 * 24 * time.Hour)
@@ -254,11 +246,10 @@ func TestNextScheduleTime(t *testing.T) {
 		}
 	}
 	{
-		// Case 7: now is way way ahead of last start time, but there is a short deadline.
+		// 场景 7：仍有遗漏，但短截止时间会把过旧的调度点排除在外。
 		cj.ObjectMeta.CreationTimestamp = metav1.Time{Time: T1.Add(-2 * time.Hour)}
 		cj.Status.LastScheduleTime = &metav1.Time{Time: T1.Add(-1 * time.Hour)}
 		now := T2.Add(10 * 24 * time.Hour)
-		// Deadline is short
 		deadline := int64(2 * 60 * 60)
 		cj.Spec.StartingDeadlineSeconds = &deadline
 		schedule, _ := nextScheduleTime(logger, &cj, now, ParseSchedule(cj.Spec.Schedule), recorder)
@@ -267,11 +258,10 @@ func TestNextScheduleTime(t *testing.T) {
 		}
 	}
 	{
-		// Case 8: ensure the error from mostRecentScheduleTime gets populated up
+		// 场景 8：非法计划产生的错误必须向上传播，不能被吞掉。
 		cj.ObjectMeta.CreationTimestamp = metav1.Time{Time: T1.Add(10 * time.Second)}
 		cj.Status.LastScheduleTime = nil
 		now := *deltaTimeAfterTopOfTheHour(1 * time.Hour)
-		// rouge schedule
 		schedule, err := nextScheduleTime(logger, &cj, now, ParseSchedule("59 23 31 2 *"), recorder)
 		if schedule != nil {
 			t.Errorf("expected no start time, got:  %v", schedule)
@@ -282,7 +272,9 @@ func TestNextScheduleTime(t *testing.T) {
 	}
 }
 
+// TestByJobStartTime 验证 byJobStartTime 对 nil 与已设置 StartTime 的 Job 的排序规则。
 func TestByJobStartTime(t *testing.T) {
+	// nil 的 StartTime 视为最早，同时间再按名称打破平局。
 	now := metav1.NewTime(time.Date(2018, time.January, 1, 2, 3, 4, 5, time.UTC))
 	later := metav1.NewTime(time.Date(2019, time.January, 1, 2, 3, 4, 5, time.UTC))
 	aNil := &batchv1.Job{
@@ -345,6 +337,7 @@ func TestByJobStartTime(t *testing.T) {
 	}
 }
 
+// TestMostRecentScheduleTime 校验 mostRecentScheduleTime 计算的最早时间、最近调度时间及遗漏程度。
 func TestMostRecentScheduleTime(t *testing.T) {
 	metav1TopOfTheHour := metav1.NewTime(*topOfTheHour())
 	metav1HalfPastTheHour := metav1.NewTime(*deltaTimeAfterTopOfTheHour(30 * time.Minute))
@@ -586,6 +579,7 @@ func TestMostRecentScheduleTime(t *testing.T) {
 				t.Errorf("error setting up the test, %s", err)
 			}
 			gotEarliestTime, gotRecentTime, gotTooManyMissed, err := mostRecentScheduleTime(tt.cj, tt.now, sched, tt.includeSDS)
+			// 先处理预期的错误分支，避免对 nil 结果继续做时间断言而误报。
 			if tt.wantErr {
 				if err == nil {
 					t.Error("mostRecentScheduleTime() got no error when expected one")
@@ -611,6 +605,7 @@ func TestMostRecentScheduleTime(t *testing.T) {
 	}
 }
 
+// TestNextScheduleTimeDuration 检查 nextScheduleTimeDuration 在复杂计划与漏跑场景下的重排队间隔。
 func TestNextScheduleTimeDuration(t *testing.T) {
 	metav1TopOfTheHour := metav1.NewTime(*topOfTheHour())
 	metav1HalfPastTheHour := metav1.NewTime(*deltaTimeAfterTopOfTheHour(30 * time.Minute))
@@ -691,6 +686,7 @@ func TestNextScheduleTimeDuration(t *testing.T) {
 				t.Errorf("error setting up the test, %s", err)
 			}
 			gotScheduleTimeDuration := nextScheduleTimeDuration(tt.cj, tt.now, sched)
+			// 负间隔意味着调度计算出错，必须先拦截再比对具体数值。
 			if *gotScheduleTimeDuration < 0 {
 				t.Errorf("scheduleTimeDuration should never be less than 0, got %s", gotScheduleTimeDuration)
 			}
@@ -701,6 +697,7 @@ func TestNextScheduleTimeDuration(t *testing.T) {
 	}
 }
 
+// topOfTheHour 返回测试中作为基准的固定整点时间，保证各用例时间可复现。
 func topOfTheHour() *time.Time {
 	T1, err := time.Parse(time.RFC3339, "2016-05-19T10:00:00Z")
 	if err != nil {
@@ -709,6 +706,7 @@ func topOfTheHour() *time.Time {
 	return &T1
 }
 
+// deltaTimeAfterTopOfTheHour 返回基准整点加上偏移后的时间，便于构造相对时间点。
 func deltaTimeAfterTopOfTheHour(duration time.Duration) *time.Time {
 	T1, err := time.Parse(time.RFC3339, "2016-05-19T10:00:00Z")
 	if err != nil {

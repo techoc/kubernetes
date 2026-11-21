@@ -30,16 +30,17 @@ import (
 	consistencyutil "k8s.io/kubernetes/pkg/controller/util/consistency"
 )
 
-// StatefulSetStatusUpdaterInterface is an interface used to update the StatefulSetStatus associated with a StatefulSet.
-// For any use other than testing, clients should create an instance using NewRealStatefulSetStatusUpdater.
+// StatefulSetStatusUpdaterInterface 用于更新 StatefulSet 关联的 StatefulSetStatus。
+// 除测试外的场景，调用方都应使用 NewRealStatefulSetStatusUpdater 创建实例。
 type StatefulSetStatusUpdaterInterface interface {
-	// UpdateStatefulSetStatus sets the set's Status to status. Implementations are required to retry on conflicts,
-	// but fail on other errors. If the returned error is nil set's Status has been successfully set to status.
+	// UpdateStatefulSetStatus 将该 StatefulSet 的 Status 设为 status。
+	// 实现方必须在发生冲突时重试，但遇到其他错误应直接失败。
+	// 若返回 nil，说明状态已成功写入。
 	UpdateStatefulSetStatus(ctx context.Context, set *apps.StatefulSet, status *apps.StatefulSetStatus) error
 }
 
-// NewRealStatefulSetStatusUpdater returns a StatefulSetStatusUpdaterInterface that updates the Status of a StatefulSet,
-// using the supplied client and setLister.
+// NewRealStatefulSetStatusUpdater 返回一个 StatefulSetStatusUpdaterInterface，
+// 使用给定的客户端与 setLister 更新 StatefulSet 的 Status。
 func NewRealStatefulSetStatusUpdater(
 	client clientset.Interface,
 	setLister appslisters.StatefulSetLister,
@@ -58,10 +59,10 @@ func (ssu *realStatefulSetStatusUpdater) UpdateStatefulSetStatus(
 	set *apps.StatefulSet,
 	status *apps.StatefulSetStatus) error {
 	logger := klog.FromContext(ctx)
-	// don't wait due to limited number of clients, but backoff after the default number of steps
+	// 由于客户端数量有限，这里在冲突时不额外等待，但仍沿用默认的退避重试策略。
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		set.Status = *status
-		// TODO: This context.TODO should use a real context once we have RetryOnConflictWithContext
+		// TODO: 待提供 RetryOnConflictWithContext 后，这里的 context.TODO 应换成真实 context。
 		updatedSet, updateErr := ssu.client.AppsV1().StatefulSets(set.Namespace).UpdateStatus(context.TODO(), set, metav1.UpdateOptions{})
 		if updateErr == nil {
 			ssu.consistencyStore.WroteAt(
@@ -74,7 +75,7 @@ func (ssu *realStatefulSetStatusUpdater) UpdateStatefulSetStatus(
 		}
 
 		if updated, err := ssu.setLister.StatefulSets(set.Namespace).Get(set.Name); err == nil {
-			// make a copy so we don't mutate the shared cache
+			// 必须深拷贝，避免修改 lister 背后的共享缓存对象。
 			set = updated.DeepCopy()
 		} else {
 			utilruntime.HandleErrorWithLogger(logger, nil, "Error getting updated StatefulSet from lister", "StatefulSet", klog.KObj(set))

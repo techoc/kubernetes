@@ -51,7 +51,9 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// 以下是所有测试用例共享的夹具：名称、命名空间、UID，以及由构造函数派生的各种资源状态。
 var (
+	// 基础名称、命名空间与 UID。
 	testPodName          = "test-pod"
 	testPodGroupName     = "test-podgroup"
 	testNamespace        = "my-namespace"
@@ -62,6 +64,7 @@ var (
 	templateName         = "my-template"
 	nodeName             = "worker"
 
+	// 由基础 Pod 派生的各种形态：带资源声明、带 PodGroup 资源声明等。
 	testPod                     = makePod(testPodName, testNamespace, testPodUID)
 	testPodWithResource         = makePod(testPodName, testNamespace, testPodUID, *makePodResourceClaim(podResourceClaimName, templateName))
 	testPodWithPodGroupResource = podInPodGroup(testPodWithResource, testPodName, testPodGroupName)
@@ -78,6 +81,7 @@ var (
 		return podGroup
 	}()
 
+	// 预置的 ResourceClaim：未分配、已分配、被保留，以及对应的队列键。
 	testClaim              = makeClaim(testPodName+"-"+podResourceClaimName, testNamespace, makeOwnerReference(testPodWithResource, true))
 	testPodGroupClaim      = makeClaim(testPodName+"-"+podResourceClaimName, testNamespace, makeOwnerReference(testPodGroupWithResource, true))
 	testClaimAllocated     = allocateClaim(testClaim)
@@ -87,8 +91,10 @@ var (
 	testPodKey             = podKeyPrefix + testNamespace + "/" + testPodName
 	testPodGroupKey        = podGroupKeyPrefix + testNamespace + "/" + testPodGroupName
 
+	// 被 PodGroup 保留的声明，用于验证工作负载维度的保留逻辑。
 	testClaimReservedForPodGroup = reserveClaim(testClaimAllocated, testPodGroupWithResource)
 
+	// 模板生成的声明及其各阶段状态；GenerateName 用于覆盖模板创建路径。
 	templatedTestClaim                    = makeTemplatedClaim(podResourceClaimName, testPodName+"-"+podResourceClaimName+"-", testNamespace, 1, makeOwnerReference(testPodWithResource, true), nil)
 	templatedTestClaimAllocated           = allocateClaim(templatedTestClaim)
 	templatedTestClaimReserved            = reserveClaim(templatedTestClaimAllocated, testPodWithResource)
@@ -98,15 +104,18 @@ var (
 	templatedTestClaimWithAdmin          = makeTemplatedClaim(podResourceClaimName, testPodName+"-"+podResourceClaimName+"-", testNamespace, 1, makeOwnerReference(testPodWithResource, true), new(true))
 	templatedTestClaimWithAdminAllocated = allocateClaim(templatedTestClaimWithAdmin)
 
+	// 扩展资源声明来自 Pod 状态而非模板，走独立的创建路径。
 	extendedTestClaim          = makeExtendedResourceClaim(testPodName, testNamespace, 1, makeOwnerReference(testPodWithResource, true))
 	extendedTestClaimAllocated = allocateClaim(extendedTestClaim)
 
+	// 无 owner 的同名声明、其他命名空间的声明，以及带管理员访问的模板。
 	conflictingClaim         = makeClaim(testPodName+"-"+podResourceClaimName, testNamespace, nil)
 	conflictingPodGroupClaim = makeClaim(testPodGroupName+"-"+podResourceClaimName, testNamespace, nil)
 	otherNamespaceClaim      = makeClaim(testPodName+"-"+podResourceClaimName, otherNamespace, nil)
 	template                 = makeTemplate(templateName, testNamespace, nil)
 	templateWithAdminAccess  = makeTemplate(templateName, testNamespace, new(true))
 
+	// 已调度到节点的 Pod：控制器据此判断可以写入保留信息。
 	testPodWithNodeName = func() *v1.Pod {
 		pod := testPodWithResource.DeepCopy()
 		pod.Spec.NodeName = nodeName
@@ -119,7 +128,7 @@ var (
 	testPodWithPodGroupAndNodeName = podInPodGroup(testPodWithNodeName, testPodName, testPodGroupName)
 	adminAccessFeatureOffError     = "admin access is requested, but the feature is disabled"
 
-	// WorkloadResourceClaims depends on GenericWorkload
+	// WorkloadResourceClaims 依赖 GenericWorkload，只枚举两者兼容的组合。
 	allPossibleFeatures = []controllerFeatures{
 		{AdminAccess: false, GenericWorkload: false, PrioritizedList: false, WorkloadResourceClaims: false},
 		{AdminAccess: false, GenericWorkload: false, PrioritizedList: true, WorkloadResourceClaims: false},
@@ -134,6 +143,7 @@ var (
 		{AdminAccess: true, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: false},
 		{AdminAccess: true, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: true},
 	}
+	// 以下变量是 allPossibleFeatures 的子集，按单个特性开关筛选用例。
 	adminAccessDisabled = []controllerFeatures{
 		{AdminAccess: false, GenericWorkload: false, PrioritizedList: false, WorkloadResourceClaims: false},
 		{AdminAccess: false, GenericWorkload: false, PrioritizedList: true, WorkloadResourceClaims: false},
@@ -142,6 +152,7 @@ var (
 		{AdminAccess: false, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: false},
 		{AdminAccess: false, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: true},
 	}
+	// 仅开启管理员访问的组合。
 	adminAccessEnabled = []controllerFeatures{
 		{AdminAccess: true, GenericWorkload: false, PrioritizedList: false, WorkloadResourceClaims: false},
 		{AdminAccess: true, GenericWorkload: false, PrioritizedList: true, WorkloadResourceClaims: false},
@@ -150,12 +161,14 @@ var (
 		{AdminAccess: true, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: false},
 		{AdminAccess: true, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: true},
 	}
+	// 关闭通用工作负载的组合。
 	genericWorkloadDisabled = []controllerFeatures{
 		{AdminAccess: false, GenericWorkload: false, PrioritizedList: false, WorkloadResourceClaims: false},
 		{AdminAccess: false, GenericWorkload: false, PrioritizedList: true, WorkloadResourceClaims: false},
 		{AdminAccess: true, GenericWorkload: false, PrioritizedList: false, WorkloadResourceClaims: false},
 		{AdminAccess: true, GenericWorkload: false, PrioritizedList: true, WorkloadResourceClaims: false},
 	}
+	// 开启通用工作负载的组合。
 	genericWorkloadEnabled = []controllerFeatures{
 		{AdminAccess: false, GenericWorkload: true, PrioritizedList: false, WorkloadResourceClaims: false},
 		{AdminAccess: false, GenericWorkload: true, PrioritizedList: false, WorkloadResourceClaims: true},
@@ -166,6 +179,7 @@ var (
 		{AdminAccess: true, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: false},
 		{AdminAccess: true, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: true},
 	}
+	// 关闭工作负载资源声明的组合。
 	workloadResourceClaimsDisabled = []controllerFeatures{
 		{AdminAccess: false, GenericWorkload: false, PrioritizedList: false, WorkloadResourceClaims: false},
 		{AdminAccess: false, GenericWorkload: false, PrioritizedList: true, WorkloadResourceClaims: false},
@@ -176,12 +190,14 @@ var (
 		{AdminAccess: true, GenericWorkload: true, PrioritizedList: false, WorkloadResourceClaims: false},
 		{AdminAccess: true, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: false},
 	}
+	// 开启工作负载资源声明的组合。
 	workloadResourceClaimsEnabled = []controllerFeatures{
 		{AdminAccess: false, GenericWorkload: true, PrioritizedList: false, WorkloadResourceClaims: true},
 		{AdminAccess: false, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: true},
 		{AdminAccess: true, GenericWorkload: true, PrioritizedList: false, WorkloadResourceClaims: true},
 		{AdminAccess: true, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: true},
 	}
+	// 通用工作负载开启但工作负载资源声明关闭：用于验证特性依赖报错。
 	workloadResourceClaimsDisabledGenericWorkloadEnabled = []controllerFeatures{
 		{AdminAccess: false, GenericWorkload: true, PrioritizedList: false, WorkloadResourceClaims: false},
 		{AdminAccess: false, GenericWorkload: true, PrioritizedList: true, WorkloadResourceClaims: false},
@@ -190,12 +206,13 @@ var (
 	}
 )
 
+// TestSyncHandler 是 testSyncHandler 的入口，负责初始化测试上下文。
 func TestSyncHandler(t *testing.T) { testSyncHandler(ktesting.Init(t)) }
 
-// TestCreateClaimDoesNotMutateTemplate verifies that creating a ResourceClaim
-// from a ResourceClaimTemplate with pre-existing annotations copies the map and
-// leaves the shared informer-cached template unmodified, on both claim paths.
+// TestCreateClaimDoesNotMutateTemplate 验证从已有注解的模板创建声明时会复制注解 map，
+// 不修改共享 informer 缓存中的模板；Pod 与 PodGroup 两条创建路径都要覆盖。
 func TestCreateClaimDoesNotMutateTemplate(t *testing.T) {
+	// trigger 是触发事件的对象，key 是期望处理的队列键；features 决定走哪条创建路径。
 	for _, tc := range []struct {
 		name     string
 		trigger  runtime.Object
@@ -231,8 +248,8 @@ func TestCreateClaimDoesNotMutateTemplate(t *testing.T) {
 			}()
 			informerFactory.WaitForCacheSync(tCtx.Done())
 
-			// cachedTemplate is the object the controller reads from the shared informer
-			// cache; snapshot it so any in-place mutation is detectable.
+			// cachedTemplate 是控制器从共享 informer 缓存中读到的对象；先做快照，
+			// 这样任何原地修改都能被检测出来。
 			cachedTemplate, err := templateInformer.Lister().ResourceClaimTemplates(testNamespace).Get(templateName)
 			if err != nil {
 				tCtx.Fatalf("template not in informer cache: %v", err)
@@ -248,8 +265,7 @@ func TestCreateClaimDoesNotMutateTemplate(t *testing.T) {
 				tCtx.Errorf("PodResourceClaimAnnotation leaked into the shared template's annotations")
 			}
 
-			// The generated claim must still carry both the template's annotation and
-			// the controller-added PodResourceClaimAnnotation.
+			// 生成的声明必须同时保留模板原有注解和控制器追加的 PodResourceClaimAnnotation。
 			claims, err := fakeKubeClient.ResourceV1().ResourceClaims(testNamespace).List(tCtx, metav1.ListOptions{})
 			if err != nil {
 				tCtx.Fatalf("listing claims: %v", err)
@@ -262,23 +278,28 @@ func TestCreateClaimDoesNotMutateTemplate(t *testing.T) {
 		})
 	}
 }
+
+// testSyncHandler 覆盖 syncHandler 的创建、幂等、冲突、状态清理和保留处理场景。
 func testSyncHandler(tCtx ktesting.TContext) {
+	// claims 写入 fake 客户端；claimsInCache 只写入变更缓存；claimsLater 在 informer 停止后写入以模拟竞态。
 	tests := []struct {
-		name                     string
-		key                      string
-		featureCombinations      []controllerFeatures
-		claims                   []*resourceapi.ResourceClaim
-		claimsInCache            []*resourceapi.ResourceClaim
-		pods                     []*v1.Pod
-		podsLater                []*v1.Pod
-		claimsLater              []*resourceapi.ResourceClaim
-		podGroups                []*schedulingapi.PodGroup
-		templates                []*resourceapi.ResourceClaimTemplate
-		expectedClaims           []resourceapi.ResourceClaim
+		name                string
+		key                 string
+		featureCombinations []controllerFeatures
+		claims              []*resourceapi.ResourceClaim
+		claimsInCache       []*resourceapi.ResourceClaim
+		pods                []*v1.Pod
+		podsLater           []*v1.Pod
+		claimsLater         []*resourceapi.ResourceClaim
+		podGroups           []*schedulingapi.PodGroup
+		templates           []*resourceapi.ResourceClaimTemplate
+		expectedClaims      []resourceapi.ResourceClaim
+		// expectedStatuses 与 expectedPodGroupStatuses 只收集非空状态。
 		expectedStatuses         map[string][]v1.PodResourceClaimStatus
 		expectedPodGroupStatuses map[string][]schedulingapi.PodGroupResourceClaimStatus
-		expectedError            string
-		expectedMetrics          claimCreateMetrics
+		// expectedError 为空表示期望同步成功；expectedMetrics 需精确匹配。
+		expectedError   string
+		expectedMetrics claimCreateMetrics
 	}{
 		{
 			name:           "create",
@@ -475,10 +496,11 @@ func testSyncHandler(tCtx ktesting.TContext) {
 				}
 				return pod
 			}()},
-			templates:      []*resourceapi.ResourceClaimTemplate{template},
-			key:            podKey(testPodWithResource),
-			claimsInCache:  []*resourceapi.ResourceClaim{templatedTestClaim},
-			expectedClaims: nil, // the claim only lives in the mutation cache, nothing exists in the apiserver
+			templates:     []*resourceapi.ResourceClaimTemplate{template},
+			key:           podKey(testPodWithResource),
+			claimsInCache: []*resourceapi.ResourceClaim{templatedTestClaim},
+			// 声明只存在于变更缓存中，apiserver 里没有任何对象。
+			expectedClaims: nil,
 			expectedStatuses: map[string][]v1.PodResourceClaimStatus{
 				testPodWithResource.Name: {
 					{Name: testPodWithResource.Spec.ResourceClaims[0].Name, ResourceClaimName: &templatedTestClaim.Name},
@@ -496,10 +518,11 @@ func testSyncHandler(tCtx ktesting.TContext) {
 				}
 				return podGroup
 			}()},
-			templates:      []*resourceapi.ResourceClaimTemplate{template},
-			key:            podGroupKey(testPodGroupWithResource),
-			claimsInCache:  []*resourceapi.ResourceClaim{templatedTestPodGroupClaim},
-			expectedClaims: nil, // the claim only lives in the mutation cache, nothing exists in the apiserver
+			templates:     []*resourceapi.ResourceClaimTemplate{template},
+			key:           podGroupKey(testPodGroupWithResource),
+			claimsInCache: []*resourceapi.ResourceClaim{templatedTestPodGroupClaim},
+			// 声明只存在于变更缓存中，apiserver 里没有任何对象。
+			expectedClaims: nil,
 			expectedPodGroupStatuses: map[string][]schedulingapi.PodGroupResourceClaimStatus{
 				testPodGroupWithResource.Name: {
 					{Name: testPodGroupWithResource.Spec.ResourceClaims[0].Name, ResourceClaimName: &templatedTestPodGroupClaim.Name},
@@ -798,6 +821,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 			expectedMetrics:     claimCreateMetrics{},
 		},
 		{
+			// 注入冲突错误，验证创建失败时的指标计数。
 			name:      "create-conflict",
 			pods:      []*v1.Pod{testPodWithResource},
 			templates: []*resourceapi.ResourceClaimTemplate{template},
@@ -838,6 +862,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 			expectedMetrics: claimCreateMetrics{},
 		},
 		{
+			// Pod 在 informer 停止后才出现，已有保留仍应保持不变。
 			name:            "stay-reserved-not-seen",
 			podsLater:       []*v1.Pod{testPodWithResource},
 			key:             claimKey(testClaimReserved),
@@ -930,6 +955,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 			expectedMetrics: claimCreateMetrics{},
 		},
 		{
+			// Pod 成功后应清除保留和分配结果。
 			name: "clear-reserved-when-done",
 			pods: func() []*v1.Pod {
 				pods := []*v1.Pod{testPodWithResource.DeepCopy()}
@@ -958,6 +984,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 			expectedMetrics: claimCreateMetrics{},
 		},
 		{
+			// Pod 成功后且声明归该 Pod 所有时直接删除声明。
 			name: "delete-claim-when-done",
 			pods: func() []*v1.Pod {
 				pods := []*v1.Pod{testPodWithResource.DeepCopy()}
@@ -970,6 +997,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 			expectedMetrics: claimCreateMetrics{},
 		},
 		{
+			// Pod 已调度到节点，允许写入保留信息。
 			name:           "add-reserved",
 			pods:           []*v1.Pod{testPodWithNodeName},
 			key:            podKey(testPodWithNodeName),
@@ -1071,7 +1099,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 					*makePodResourceClaim("claimA", templateName),
 					*makePodResourceClaim("claimB", templateName),
 				)
-				// Initially only claimA is in status
+				// 初始状态中只有 claimA，期望同步后补上 claimB。
 				pod.Status.ResourceClaimStatuses = []v1.PodResourceClaimStatus{
 					{Name: "claimA", ResourceClaimName: new("claimA-object")},
 				}
@@ -1099,7 +1127,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 	}
 
 	for _, tc := range tests {
-		// Run sequentially because of global logging and global metrics.
+		// 日志与指标都是全局状态，用例必须串行执行。
 		run := func(tCtx ktesting.TContext, features controllerFeatures) {
 			var objects []runtime.Object
 			for _, pod := range tc.pods {
@@ -1116,6 +1144,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 			}
 
 			fakeKubeClient := createTestClient(objects...)
+			// 期望失败指标时注入冲突错误。
 			for labels, expected := range tc.expectedMetrics {
 				if expected > 0 && labels.status == "failure" {
 					fakeKubeClient.PrependReactor("create", "resourceclaims", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
@@ -1124,6 +1153,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 					break
 				}
 			}
+			// 记录状态补丁但不处理该 action（返回 false），交由默认 reactor 执行。
 			var appliedPatches []string
 			fakeKubeClient.PrependReactor("patch", "pods", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 				patchAction := action.(k8stesting.PatchAction)
@@ -1144,7 +1174,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 				tCtx.Fatalf("error creating ephemeral controller : %v", err)
 			}
 
-			// Ensure informers are up-to-date.
+			// 等待 informer 缓存同步完成。
 			informerFactory.Start(tCtx.Done())
 			stopInformers := func() {
 				tCtx.Cancel("stopping informers")
@@ -1153,12 +1183,12 @@ func testSyncHandler(tCtx ktesting.TContext) {
 			defer stopInformers()
 			informerFactory.WaitForCacheSync(tCtx.Done())
 
-			// Add claims that only exist in the mutation cache.
+			// 加入只存在于变更缓存中的声明。
 			for _, claim := range tc.claimsInCache {
 				ec.claimCache.Mutation(claim)
 			}
 
-			// Simulate race: stop informers, add more objects that the controller doesn't know about.
+			// 模拟竞态：停止 informer 后再写入控制器尚不知晓的对象。
 			stopInformers()
 			for _, pod := range tc.podsLater {
 				_, err := fakeKubeClient.CoreV1().Pods(pod.Namespace).Create(tCtx, pod, metav1.CreateOptions{})
@@ -1188,8 +1218,9 @@ func testSyncHandler(tCtx ktesting.TContext) {
 			} else if err != nil {
 				tCtx.Errorf("unexpected sync handler error: %v", err)
 			}
-			// keep going to check other side effects
+			// 继续执行以检查其他副作用。
 
+			// 该用例验证一次补丁同时写入两个声明的状态。
 			if tc.name == "flapping-resourceclaim-statuses" {
 				assert.Len(tCtx, appliedPatches, 1, "should have applied status once")
 				assert.Contains(tCtx, appliedPatches[0], `"name":"claimA"`, "patch should contain claimA")
@@ -1206,6 +1237,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 			if err != nil {
 				tCtx.Fatalf("unexpected error while listing pods: %v", err)
 			}
+			// 没有状态的 Pod 不参与比较，避免空 slice 与 nil 的差异干扰断言。
 			var actualStatuses map[string][]v1.PodResourceClaimStatus
 			for _, pod := range pods.Items {
 				if len(pod.Status.ResourceClaimStatuses) == 0 {
@@ -1222,6 +1254,7 @@ func testSyncHandler(tCtx ktesting.TContext) {
 			if err != nil {
 				tCtx.Fatalf("unexpected error while listing podgroups: %v", err)
 			}
+			// PodGroup 状态同样只收集非空值。
 			var actualPodGroupStatuses map[string][]schedulingapi.PodGroupResourceClaimStatus
 			for _, podGroup := range podGroups.Items {
 				if len(podGroup.Status.ResourceClaimStatuses) == 0 {
@@ -1249,10 +1282,13 @@ func testSyncHandler(tCtx ktesting.TContext) {
 	}
 }
 
-// TestClaimExists covering the three places it looks for a claim
-// (mutation cache, underlay informer store, storeapiserver), and a optional owner check.
+// TestClaimExists 覆盖 claimExists 查找声明的三个位置（变更缓存、informer 底层存储、
+// apiserver 回退），以及可选的 owner 检查。
 func TestClaimExists(t *testing.T) { testClaimExists(ktesting.Init(t)) }
+
+// testClaimExists 是 TestClaimExists 的实际实现。
 func testClaimExists(tCtx ktesting.TContext) {
+	// 用桩函数控制 owner 检查结果，避免构造真实 owner 引用。
 	alwaysOwned := func(*resourceapi.ResourceClaim) bool { return true }
 	neverOwned := func(*resourceapi.ResourceClaim) bool { return false }
 
@@ -1261,7 +1297,7 @@ func testClaimExists(tCtx ktesting.TContext) {
 		claimInMutationCache *resourceapi.ResourceClaim
 		claimInInformerCache *resourceapi.ResourceClaim
 		claimInAPIServer     *resourceapi.ResourceClaim
-		// reactor injected on GET to simulate a transient apiserver error.
+		// 在 GET 上注入 reactor，模拟 apiserver 的瞬时错误。
 		getReactor   k8stesting.ReactionFunc
 		invalidOwner bool
 		wantExists   bool
@@ -1321,7 +1357,7 @@ func testClaimExists(tCtx ktesting.TContext) {
 				controllerFeatures{})
 			tCtx.ExpectNoError(err, "creating controller")
 
-			// Ensure informers are up-to-date.
+			// 等待 informer 缓存同步完成。
 			informerFactory.Start(tCtx.Done())
 			stopInformers := func() {
 				tCtx.Cancel("stopping informers")
@@ -1330,12 +1366,12 @@ func testClaimExists(tCtx ktesting.TContext) {
 			defer stopInformers()
 			informerFactory.WaitForCacheSync(tCtx.Done())
 
-			// Add claims that only exist in the mutation cache.
+			// 加入只存在于变更缓存中的声明。
 			if claim := tc.claimInMutationCache; claim != nil {
 				ec.claimCache.Mutation(claim)
 			}
 
-			// Simulate race: stop informers, add more objects that the controller doesn't know about.
+			// 模拟竞态：停止 informer 后再写入控制器尚不知晓的对象。
 			stopInformers()
 			if claim := tc.claimInAPIServer; claim != nil {
 				_, err := fakeKubeClient.ResourceV1().ResourceClaims(claim.Namespace).Create(tCtx, claim, metav1.CreateOptions{})
@@ -1360,8 +1396,12 @@ func testClaimExists(tCtx ktesting.TContext) {
 	}
 }
 
+// TestEventHandlers 是 testEventHandlers 的入口。
 func TestEventHandlers(t *testing.T) { testEventHandlers(ktesting.Init(t)) }
+
+// testEventHandlers 验证各类资源事件是否正确转换为工作队列键，并更新索引与指标。
 func testEventHandlers(tCtx ktesting.TContext) {
+	// object 同时满足 runtime.Object 与 metav1.Object，便于统一处理事件对象。
 	type object interface {
 		runtime.Object
 		metav1.Object
@@ -1411,6 +1451,7 @@ func testEventHandlers(tCtx ktesting.TContext) {
 	failedPodWithExtendedResourceClaim := podWithExtendedResourceClaim.DeepCopy()
 	failedPodWithExtendedResourceClaim.Status.Phase = v1.PodFailed
 
+	// 扩展资源声明的队列键，由 Pod 状态中的名称推导。
 	extendedResourceClaimKey := claimKeyPrefix + testNamespace + "/" + extendedResourceClaimName
 
 	tests := map[string]struct {
@@ -1420,9 +1461,11 @@ func testEventHandlers(tCtx ktesting.TContext) {
 		updateObjects       []object
 		deleteObjects       []object
 
+		// expectedKeys 是期望进入队列的键；expectedMetrics 是期望的数量指标。
 		expectedKeys    []string
 		expectedMetrics map[controllermetrics.NumResourceClaimLabels]float64
 
+		// 该索引按模板记录 Pod，仅部分用例需要校验。
 		expectedIndexedPodsByResourceClaimTemplate []string
 	}{
 		"nothing": {},
@@ -1580,6 +1623,7 @@ func testEventHandlers(tCtx ktesting.TContext) {
 				otherNamespace + "/" + templateName,
 			},
 		},
+		// 模板位于其他命名空间，不应触发该 Pod 入队。
 		"new-template-for-pod-other-namespace": {
 			initialObjects: []runtime.Object{testPodWithResource, otherNSPod, template},
 			createObjects:  []object{otherNSTemplate},
@@ -1593,6 +1637,7 @@ func testEventHandlers(tCtx ktesting.TContext) {
 			createObjects: []object{testPod},
 			expectedKeys:  []string{},
 		},
+		// 运行中的 Pod 无需入队；完成或失败后才需要清理扩展资源声明。
 		"running-pod-with-extended-resource-claim": {
 			createObjects: []object{podWithExtendedResourceClaim},
 			expectedKeys:  []string{},
@@ -1648,6 +1693,7 @@ func testEventHandlers(tCtx ktesting.TContext) {
 			createObjects:       []object{template},
 			expectedKeys:        []string{testPodGroupKey},
 		},
+		// 状态更新后只有同组且使用该声明的 Pod 需要入队。
 		"podgroup-claim-status-update": {
 			featureCombinations: workloadResourceClaimsEnabled,
 			initialObjects: []runtime.Object{
@@ -1700,6 +1746,7 @@ func testEventHandlers(tCtx ktesting.TContext) {
 			}
 			tCtx.Cleanup(stopInformers)
 
+			// drainQueue 等待事件处理完成并取出队列中的所有键。
 			drainQueue := func() []string {
 				tCtx.Wait()
 				actualKeys := []string{}
@@ -1712,6 +1759,7 @@ func testEventHandlers(tCtx ktesting.TContext) {
 				}
 				return actualKeys
 			}
+			// gvr 把测试对象映射到 fake tracker 所需的 GVR。
 			gvr := func(obj metav1.Object) schema.GroupVersionResource {
 				switch obj.(type) {
 				case *v1.Pod:
@@ -1727,8 +1775,7 @@ func testEventHandlers(tCtx ktesting.TContext) {
 				return schema.GroupVersionResource{}
 			}
 
-			// Not checking after initial objects added. Waiting for the
-			// interesting operations.
+			// 初始对象入队不在校验范围内，只关注后续操作产生的键。
 			_ = drainQueue()
 
 			for _, object := range test.createObjects {
@@ -1769,7 +1816,10 @@ func testEventHandlers(tCtx ktesting.TContext) {
 	}
 }
 
+// TestWorkqueue 是 testWorkqueue 的入口。
 func TestWorkqueue(t *testing.T) { testWorkqueue(ktesting.Init(t)) }
+
+// testWorkqueue 验证 processNextWorkItem 对成功、可重试错误、不可重试错误及关闭的处理。
 func testWorkqueue(tCtx ktesting.TContext) {
 	tests := map[string]struct {
 		shutdown       bool
@@ -1805,13 +1855,10 @@ func testWorkqueue(tCtx ktesting.TContext) {
 	}
 	for name, test := range tests {
 		tCtx.SyncTest(name, func(tCtx ktesting.TContext) {
-			// The default [utilruntime.ErrorHandlers] use [time] but are
-			// initialized before the synctest bubble is established. As a
-			// result, when the error handler is invoked the default rate
-			// limiting begins a sleep for the duration between *fake* now and
-			// *actual* now. The workqueue in turn spins through its internal
-			// periodic accounting for more than 26 years(!) which eventually
-			// resolves, but wastes actual CPU time.
+			// 默认的 [utilruntime.ErrorHandlers] 依赖 [time]，但在 synctest bubble 建立之前
+			// 就已初始化。因此错误处理器被调用时，默认限速会按 *fake* 时间与 *actual*
+			// 时间之差休眠；workqueue 内部的周期性计算会因此空转 26 年(!)的虚拟时间，
+			// 虽然最终能结束，但会白白消耗真实 CPU。
 			oldErrorHandlers := utilruntime.ErrorHandlers
 			tCtx.Cleanup(func() {
 				utilruntime.ErrorHandlers = oldErrorHandlers
@@ -1853,8 +1900,7 @@ func testWorkqueue(tCtx ktesting.TContext) {
 				tCtx.Expect(synced).To(gomega.BeFalseBecause("sync handler should not have run but did"))
 			}
 			time.Sleep(rateLimitDelay)
-			// The delayed Add races with checking the length of the queue. Wait
-			// for the Add to finish before checking the length.
+			// 延迟的 Add 与检查队列长度存在竞态，先等待 Add 完成再断言长度。
 			tCtx.Wait()
 			if test.expectRequeue {
 				tCtx.Expect(ec.queue.Len()).To(gomega.Equal(1), "key should have been queued")
@@ -1865,6 +1911,8 @@ func testWorkqueue(tCtx ktesting.TContext) {
 	}
 }
 
+// TestGetAdminAccessMetricLabel 验证 getAdminAccessMetricLabel 能从设备请求中
+// 正确提取管理员访问标签：任一请求为 true 即返回 "true"。
 func TestGetAdminAccessMetricLabel(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -1922,6 +1970,7 @@ func TestGetAdminAccessMetricLabel(t *testing.T) {
 			want: "true",
 		},
 		{
+			// 优先列表目前只检查 Exactly 请求，应返回 "false"。
 			name: "prioritized-list",
 			claim: &resourceapi.ResourceClaim{
 				Spec: resourceapi.ResourceClaimSpec{
@@ -1992,6 +2041,7 @@ func TestGetAdminAccessMetricLabel(t *testing.T) {
 	}
 }
 
+// makeClaim 构造一个最小的 ResourceClaim，可选地设置 owner 引用。
 func makeClaim(name, namespace string, owner *metav1.OwnerReference) *resourceapi.ResourceClaim {
 	claim := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -2003,6 +2053,8 @@ func makeClaim(name, namespace string, owner *metav1.OwnerReference) *resourceap
 	return claim
 }
 
+// makeTemplatedClaim 模拟由模板生成的声明：GenerateName 与名称中的计数对应，
+// 并带上 PodResourceClaim 注解。
 func makeTemplatedClaim(podClaimName, generateName, namespace string, createCounter int, owner *metav1.OwnerReference, adminAccess *bool) *resourceapi.ResourceClaim {
 	claim := &resourceapi.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2034,6 +2086,7 @@ func makeTemplatedClaim(podClaimName, generateName, namespace string, createCoun
 	return claim
 }
 
+// makeExtendedResourceClaim 构造扩展资源声明，其来源由注解标识而不是模板。
 func makeExtendedResourceClaim(podName, namespace string, createCounter int, owner *metav1.OwnerReference) *resourceapi.ResourceClaim {
 	generateName := podName + "-extended-resources-"
 	claim := &resourceapi.ResourceClaim{
@@ -2051,20 +2104,23 @@ func makeExtendedResourceClaim(podName, namespace string, createCounter int, own
 	return claim
 }
 
+// allocateClaim 返回带有分配结果的声明副本。
 func allocateClaim(claim *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
 	claim = claim.DeepCopy()
 	claim.Status.Allocation = &resourceapi.AllocationResult{}
 	return claim
 }
 
+// structuredParameters 返回带有结构化参数 finalizer 的声明副本；控制器据此判断
+// 分配是否由自己完成。
 func structuredParameters(claim *resourceapi.ResourceClaim) *resourceapi.ResourceClaim {
 	claim = claim.DeepCopy()
-	// As far the controller is concerned, a claim was allocated by us if it has
-	// this finalizer. For testing we don't need to update the allocation result.
+	// 对控制器而言，带有该 finalizer 即表示声明由它分配；测试里无需真正填写分配结果。
 	claim.Finalizers = append(claim.Finalizers, resourceapi.Finalizer)
 	return claim
 }
 
+// reserveClaim 返回追加了指定 Pod 或 PodGroup 消费者引用的声明副本。
 func reserveClaim(claim *resourceapi.ResourceClaim, obj metav1.Object) *resourceapi.ResourceClaim {
 	claim = claim.DeepCopy()
 	var apiGroup, resource string
@@ -2089,6 +2145,7 @@ func reserveClaim(claim *resourceapi.ResourceClaim, obj metav1.Object) *resource
 	return claim
 }
 
+// makePodResourceClaim 构造一个引用模板的 PodResourceClaim。
 func makePodResourceClaim(name, templateName string) *v1.PodResourceClaim {
 	return &v1.PodResourceClaim{
 		Name:                      name,
@@ -2096,6 +2153,7 @@ func makePodResourceClaim(name, templateName string) *v1.PodResourceClaim {
 	}
 }
 
+// makePod 构造带有指定名称、命名空间、UID 和资源声明列表的 Pod。
 func makePod(name, namespace string, uid types.UID, podClaims ...v1.PodResourceClaim) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, UID: uid},
@@ -2107,6 +2165,7 @@ func makePod(name, namespace string, uid types.UID, podClaims ...v1.PodResourceC
 	return pod
 }
 
+// makePodGroupResourceClaim 构造一个引用模板的 PodGroupResourceClaim。
 func makePodGroupResourceClaim(name, templateName string) *schedulingapi.PodGroupResourceClaim {
 	return &schedulingapi.PodGroupResourceClaim{
 		Name:                      name,
@@ -2114,6 +2173,7 @@ func makePodGroupResourceClaim(name, templateName string) *schedulingapi.PodGrou
 	}
 }
 
+// makePodGroup 构造带有指定名称、命名空间、UID 和资源声明列表的 PodGroup。
 func makePodGroup(name, namespace string, uid types.UID, podGroupClaims ...schedulingapi.PodGroupResourceClaim) *schedulingapi.PodGroup {
 	podGroup := &schedulingapi.PodGroup{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, UID: uid},
@@ -2124,6 +2184,8 @@ func makePodGroup(name, namespace string, uid types.UID, podGroupClaims ...sched
 
 	return podGroup
 }
+
+// podInPodGroup 复制 Pod，重命名并把其加入指定的 PodGroup。
 func podInPodGroup(pod *v1.Pod, podName, podGroupName string) *v1.Pod {
 	pod = pod.DeepCopy()
 	pod.Name = podName
@@ -2133,6 +2195,7 @@ func podInPodGroup(pod *v1.Pod, podName, podGroupName string) *v1.Pod {
 	return pod
 }
 
+// makeTemplate 构造 ResourceClaimTemplate；adminAccess 非 nil 时写入对应的设备请求。
 func makeTemplate(name, namespace string, adminAccess *bool) *resourceapi.ResourceClaimTemplate {
 	template := &resourceapi.ResourceClaimTemplate{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -2157,18 +2220,22 @@ func makeTemplate(name, namespace string, adminAccess *bool) *resourceapi.Resour
 	return template
 }
 
+// podKey 返回 Pod 对应的工作队列键。
 func podKey(pod *v1.Pod) string {
 	return podKeyPrefix + pod.Namespace + "/" + pod.Name
 }
 
+// podGroupKey 返回 PodGroup 对应的工作队列键。
 func podGroupKey(podGroup *schedulingapi.PodGroup) string {
 	return podGroupKeyPrefix + podGroup.Namespace + "/" + podGroup.Name
 }
 
+// claimKey 返回 ResourceClaim 对应的工作队列键。
 func claimKey(claim *resourceapi.ResourceClaim) string {
 	return claimKeyPrefix + claim.Namespace + "/" + claim.Name
 }
 
+// makeOwnerReference 为 Pod 或 PodGroup 构造控制器 owner 引用。
 func makeOwnerReference(obj metav1.Object, isController bool) *metav1.OwnerReference {
 	var apiVersion, kind string
 	switch obj.(type) {
@@ -2190,6 +2257,8 @@ func makeOwnerReference(obj metav1.Object, isController bool) *metav1.OwnerRefer
 	}
 }
 
+// normalizeClaims 按命名空间和名称排序声明，并把空的 ReservedFor 归一化为 nil，
+// 便于比较期望值与实际值。
 func normalizeClaims(claims []resourceapi.ResourceClaim) []resourceapi.ResourceClaim {
 	sort.Slice(claims, func(i, j int) bool {
 		if claims[i].Namespace < claims[j].Namespace {
@@ -2208,14 +2277,15 @@ func normalizeClaims(claims []resourceapi.ResourceClaim) []resourceapi.ResourceC
 	return claims
 }
 
+// createTestClient 创建 fake 客户端，并注册 GenerateName 所需的 reactor。
 func createTestClient(objects ...runtime.Object) *fake.Clientset {
 	fakeClient := fake.NewSimpleClientset(objects...)
 	fakeClient.PrependReactor("create", "resourceclaims", createResourceClaimReactor())
 	return fakeClient
 }
 
-// createResourceClaimReactor implements the logic required for the GenerateName field to work when using
-// the fake client. Add it with client.PrependReactor to your fake client.
+// createResourceClaimReactor 为 fake 客户端补齐 GenerateName 行为：创建时按计数器
+// 生成真实名称。通过 PrependReactor 注册到 fake 客户端。
 func createResourceClaimReactor() func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 	nameCounter := 1
 	var mutex sync.Mutex
@@ -2231,17 +2301,20 @@ func createResourceClaimReactor() func(action k8stesting.Action) (handled bool, 
 	}
 }
 
+// numMetrics 保存期望的 ResourceClaim 数量指标以及用于实时采集的 lister。
 type numMetrics struct {
+	// metrics 是按标签聚合的期望值；lister 用于采集当前指标。
 	metrics map[controllermetrics.NumResourceClaimLabels]float64
 	lister  resourcelisters.ResourceClaimLister
 }
 
+// getNumMetric 通过独立注册表采集数量指标，避免与全局 collector 冲突。
 func getNumMetric(lister resourcelisters.ResourceClaimLister, logger klog.Logger) (em numMetrics, err error) {
 	if lister == nil {
 		return numMetrics{}, nil
 	}
 
-	// Create a fresh collector instance for each call to avoid registration conflicts
+	// 每次调用都创建新的 collector，避免重复注册冲突。
 	freshCollector := newCustomCollector(lister, getAdminAccessMetricLabel, logger)
 	testRegistry := metrics.NewKubeRegistry()
 	testRegistry.CustomMustRegister(freshCollector)
@@ -2281,6 +2354,7 @@ func getNumMetric(lister resourcelisters.ResourceClaimLister, logger klog.Logger
 	return em, nil
 }
 
+// verify 采集当前指标并与期望值比较。
 func (em numMetrics) verify(tCtx ktesting.TContext) {
 	tCtx.Helper()
 	result, err := getNumMetric(em.lister, tCtx.Logger())
@@ -2288,15 +2362,19 @@ func (em numMetrics) verify(tCtx ktesting.TContext) {
 	tCtx.Expect(result.metrics).To(gomega.Equal(em.metrics))
 }
 
+// claimCreateMetricLabels 是资源声明创建计数器的一组标签。
 type claimCreateMetricLabels struct {
+	// status 为 success/failure；adminAccess、ownerGroup、ownerKind 标识声明来源。
 	status      string
 	adminAccess string
 	ownerGroup  string
 	ownerKind   string
 }
 
+// claimCreateMetrics 按标签聚合资源声明创建计数器的期望值。
 type claimCreateMetrics map[claimCreateMetricLabels]float64
 
+// expectMetrics 从全局注册表采集创建计数器，并与期望值比较。
 func expectMetrics(tCtx ktesting.TContext, em claimCreateMetrics) {
 	tCtx.Helper()
 
@@ -2329,14 +2407,16 @@ func expectMetrics(tCtx ktesting.TContext, em claimCreateMetrics) {
 	tCtx.Expect(actualMetrics).To(gomega.Equal(em))
 }
 
+// setupMetrics 打开指标测试模式并重置每个用例的创建计数器。
 func setupMetrics() {
-	// Enable test mode to prevent global custom collector registration
+	// 开启测试模式，避免向全局注册表注册自定义 collector。
 	controllermetrics.SetTestMode(true)
 
-	// Reset counter metrics for each test (they are registered by the controller itself)
+	// 计数器由控制器自行注册，每个用例前都需要重置。
 	resourceclaimmetrics.ResourceClaimCreate.Reset()
 }
 
+// newNumMetrics 构造所有标签组合、计数均为 0 的期望指标。
 func newNumMetrics(lister resourcelisters.ResourceClaimLister) numMetrics {
 	metrics := make(map[controllermetrics.NumResourceClaimLabels]float64)
 	for _, allocated := range []string{"false", "true"} {
@@ -2356,6 +2436,7 @@ func newNumMetrics(lister resourcelisters.ResourceClaimLister) numMetrics {
 	}
 }
 
+// withUpdates 返回叠加增量后的新期望指标。
 func (em numMetrics) withUpdates(rcLabels controllermetrics.NumResourceClaimLabels, n float64) numMetrics {
 	em.metrics[rcLabels] += n
 	return numMetrics{
@@ -2364,31 +2445,33 @@ func (em numMetrics) withUpdates(rcLabels controllermetrics.NumResourceClaimLabe
 	}
 }
 
-// staticRateLimiter delays any item by a fixed amount of time. It allows a test
-// to know exactly how long to wait before rate-limited items are added to the
-// queue.
+// staticRateLimiter 以固定时长延迟条目入队，使测试能够精确知道限速条目
+// 何时会被重新加入队列。
 type staticRateLimiter[T comparable] struct {
+	// delay 是每次重试前固定的等待时间。
 	delay time.Duration
 
+	// requeuesLock 保护并发访问的 requeues 映射。
 	requeuesLock sync.Mutex
-	requeues     map[T]int
+	// requeues 记录每个条目到目前为止的重试次数。
+	requeues map[T]int
 }
 
-// Forget implements [workqueue.TypedRateLimiter].
+// Forget 实现 [workqueue.TypedRateLimiter]，清除指定条目的重试计数。
 func (s *staticRateLimiter[T]) Forget(item T) {
 	s.requeuesLock.Lock()
 	defer s.requeuesLock.Unlock()
 	delete(s.requeues, item)
 }
 
-// NumRequeues implements [workqueue.TypedRateLimiter].
+// NumRequeues 实现 [workqueue.TypedRateLimiter]，返回指定条目的重试次数。
 func (s *staticRateLimiter[T]) NumRequeues(item T) int {
 	s.requeuesLock.Lock()
 	defer s.requeuesLock.Unlock()
 	return s.requeues[item]
 }
 
-// When implements [workqueue.TypedRateLimiter].
+// When 实现 [workqueue.TypedRateLimiter]，递增重试计数并返回固定延迟。
 func (s *staticRateLimiter[T]) When(item T) time.Duration {
 	s.requeuesLock.Lock()
 	defer s.requeuesLock.Unlock()

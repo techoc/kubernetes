@@ -14,10 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cleaner implements an automated cleaner that does garbage collection
-// on CSRs that meet specific criteria. With automated CSR requests and
-// automated approvals, the volume of CSRs only increases over time, at a rapid
-// rate if the certificate duration is short.
+// Package cleaner 实现自动清理器，对满足特定条件的 CSR（证书签名请求）执行垃圾回收。
+// 随着自动化 CSR 申请与自动审批的普及，CSR 数量只会不断增长；证书有效期越短，增长越快，
+// 因此需要定期清理以免 etcd 被无用对象堆积占满。
 package cleaner
 
 import (
@@ -40,11 +39,9 @@ import (
 )
 
 const (
-	// The interval to list all CSRs and check each one against the criteria to
-	// automatically clean it up.
+	// 每隔该时间间隔列出全部 CSR 并逐条检查是否满足清理条件。
 	pollingInterval = 1 * time.Hour
-	// The time periods after which these different CSR statuses should be
-	// cleaned up.
+	// 不同状态的 CSR 超过以下时长后即可清理。
 	approvedExpiration = 1 * time.Hour
 	deniedExpiration   = 1 * time.Hour
 	pendingExpiration  = 24 * time.Hour
@@ -64,7 +61,7 @@ type CSRCleanerController struct {
 	csrLister certificateslisters.CertificateSigningRequestLister
 }
 
-// NewCSRCleanerController creates a new CSRCleanerController.
+// NewCSRCleanerController 创建 CSR 清理控制器，通过 informer 的 lister 读取 CSR 缓存。
 func NewCSRCleanerController(
 	csrClient csrclient.CertificateSigningRequestInterface,
 	csrInformer certificatesinformers.CertificateSigningRequestInformer,
@@ -75,7 +72,7 @@ func NewCSRCleanerController(
 	}
 }
 
-// Run the main goroutine responsible for watching and syncing jobs.
+// Run 启动 worker 定期轮询并清理 CSR，直到 ctx 结束。
 func (ccc *CSRCleanerController) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
@@ -96,7 +93,7 @@ func (ccc *CSRCleanerController) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
-// worker runs a thread that dequeues CSRs, handles them, and marks them done.
+// worker 从 informer 缓存列出所有 CSR 并逐条尝试清理；单个失败只记录日志，不阻断其余对象。
 func (ccc *CSRCleanerController) worker(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	csrs, err := ccc.csrLister.List(labels.Everything())
@@ -111,6 +108,7 @@ func (ccc *CSRCleanerController) worker(ctx context.Context) {
 	}
 }
 
+// handle 判断 CSR 是否满足任一清理条件，满足则调用 API 删除。
 func (ccc *CSRCleanerController) handle(ctx context.Context, csr *capi.CertificateSigningRequest) error {
 	logger := klog.FromContext(ctx)
 	if isIssuedPastDeadline(logger, csr) ||
@@ -126,8 +124,7 @@ func (ccc *CSRCleanerController) handle(ctx context.Context, csr *capi.Certifica
 	return nil
 }
 
-// isIssuedExpired checks if the CSR has been issued a certificate and if the
-// expiration of the certificate (the NotAfter value) has passed.
+// isIssuedExpired 判断 CSR 是否已签发证书且证书的 NotAfter 时间已过。
 func isIssuedExpired(logger klog.Logger, csr *capi.CertificateSigningRequest) bool {
 	for _, c := range csr.Status.Conditions {
 		if c.Type == capi.CertificateApproved && isIssued(csr) && isExpired(csr) {
@@ -138,12 +135,9 @@ func isIssuedExpired(logger klog.Logger, csr *capi.CertificateSigningRequest) bo
 	return false
 }
 
-// isPendingPastDeadline checks if the certificate has a Pending status and the
-// creation time of the CSR is passed the deadline that pending requests are
-// maintained for.
+// isPendingPastDeadline 判断 CSR 是否仍处于 Pending（无任何状态条件）且已超过待处理保留期限。
 func isPendingPastDeadline(logger klog.Logger, csr *capi.CertificateSigningRequest) bool {
-	// If there are no Conditions on the status, the CSR will appear via
-	// `kubectl` as `Pending`.
+	// 没有任何 status condition 的 CSR 在 kubectl 中显示为 Pending。
 	if len(csr.Status.Conditions) == 0 && isOlderThan(csr.CreationTimestamp, pendingExpiration) {
 		logger.Info("Cleaning CSR as it is more than pendingExpiration duration old and unhandled.", "csr", csr.Name, "pendingExpiration", pendingExpiration)
 		return true
@@ -151,9 +145,7 @@ func isPendingPastDeadline(logger klog.Logger, csr *capi.CertificateSigningReque
 	return false
 }
 
-// isDeniedPastDeadline checks if the certificate has a Denied status and the
-// creation time of the CSR is passed the deadline that denied requests are
-// maintained for.
+// isDeniedPastDeadline 判断 CSR 是否已被拒绝且拒绝时间超过保留期限。
 func isDeniedPastDeadline(logger klog.Logger, csr *capi.CertificateSigningRequest) bool {
 	for _, c := range csr.Status.Conditions {
 		if c.Type == capi.CertificateDenied && isOlderThan(c.LastUpdateTime, deniedExpiration) {
@@ -164,9 +156,7 @@ func isDeniedPastDeadline(logger klog.Logger, csr *capi.CertificateSigningReques
 	return false
 }
 
-// isFailedPastDeadline checks if the certificate has a Failed status and the
-// creation time of the CSR is passed the deadline that pending requests are
-// maintained for.
+// isFailedPastDeadline 判断 CSR 是否已失败且失败时间超过保留期限。
 func isFailedPastDeadline(logger klog.Logger, csr *capi.CertificateSigningRequest) bool {
 	for _, c := range csr.Status.Conditions {
 		if c.Type == capi.CertificateFailed && isOlderThan(c.LastUpdateTime, deniedExpiration) {
@@ -177,9 +167,7 @@ func isFailedPastDeadline(logger klog.Logger, csr *capi.CertificateSigningReques
 	return false
 }
 
-// isIssuedPastDeadline checks if the certificate has an Issued status and the
-// creation time of the CSR is passed the deadline that issued requests are
-// maintained for.
+// isIssuedPastDeadline 判断 CSR 是否已签发证书且审批时间超过签发保留期限。
 func isIssuedPastDeadline(logger klog.Logger, csr *capi.CertificateSigningRequest) bool {
 	if !isIssued(csr) {
 		return false
@@ -193,9 +181,7 @@ func isIssuedPastDeadline(logger klog.Logger, csr *capi.CertificateSigningReques
 	return false
 }
 
-// isApprovedUnissuedPastDeadline checks if the certificate has an Approved status but
-// no certificate has been issued, and the approval time has passed the deadline
-// that pending requests are maintained for.
+// isApprovedUnissuedPastDeadline 判断 CSR 已获批准但始终未签发证书，且批准时间已超过待处理保留期限。
 func isApprovedUnissuedPastDeadline(logger klog.Logger, csr *capi.CertificateSigningRequest) bool {
 	if isIssued(csr) {
 		return false
@@ -209,20 +195,18 @@ func isApprovedUnissuedPastDeadline(logger klog.Logger, csr *capi.CertificateSig
 	return false
 }
 
-// isOlderThan checks that t is a non-zero and older than d from time.Now().
+// isOlderThan 判断时间 t 非零且距当前已超过 d；零值时间必须排除，否则会被误判为过期。
 func isOlderThan(t metav1.Time, d time.Duration) bool {
 	return !t.IsZero() && time.Since(t.Time) > d
 }
 
-// isIssued checks if the CSR has `Issued` status. There is no explicit
-// 'Issued' status. Implicitly, if there is a certificate associated with the
-// CSR, the CSR statuses that are visible via `kubectl` will include 'Issued'.
+// isIssued 判断 CSR 是否已签发。API 中没有显式的 Issued 状态；只要 CSR 关联了证书，
+// kubectl 展示的状态中会隐含 Issued。
 func isIssued(csr *capi.CertificateSigningRequest) bool {
 	return len(csr.Status.Certificate) > 0
 }
 
-// isExpired checks if the CSR has a certificate and the date in the `NotAfter`
-// field has gone by.
+// isExpired 解析 CSR 中的证书并判断其 NotAfter 时间是否已过；解析失败按未过期处理，避免误删。
 func isExpired(csr *capi.CertificateSigningRequest) bool {
 	if len(csr.Status.Certificate) == 0 {
 		return false

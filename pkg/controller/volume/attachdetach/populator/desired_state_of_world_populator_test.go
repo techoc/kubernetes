@@ -34,6 +34,9 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
+// TestFindAndAddActivePods_FindAndRemoveDeletedPods 验证期望状态世界的增删全流程：
+// findAndAddActivePods 能把活跃 Pod 引用的卷加入 DSW，手动删除后再次调用可重新加入，
+// 而 findAndRemoveDeletedPods 会在 Pod 从 informer 中消失后把对应卷清除。
 func TestFindAndAddActivePods_FindAndRemoveDeletedPods(t *testing.T) {
 	fakeVolumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	fakeClient := &fake.Clientset{}
@@ -67,15 +70,19 @@ func TestFindAndAddActivePods_FindAndRemoveDeletedPods(t *testing.T) {
 		},
 	}
 
+	// 直接写入 informer 的本地 store，省去启动 informer 与 apiserver 的开销。
 	fakePodInformer.Informer().GetStore().Add(pod)
 
+	// DSW 以唯一 Pod 名标识 Pod，需按生产逻辑生成同一标识。
 	podName := util.GetUniquePodName(pod)
 
+	// 期望的卷名由 fake 插件名与 RBD 镜像名拼接而成，须与生产命名规则一致。
 	generatedVolumeName := "fake-plugin/" + pod.Spec.Volumes[0].RBD.RBDImage
 
 	pvcLister := fakeInformerFactory.Core().V1().PersistentVolumeClaims().Lister()
 	pvLister := fakeInformerFactory.Core().V1().PersistentVolumes().Lister()
 
+	// 组装被测 populator：各 lister 指向 fake informer，使测试无需真实 apiserver。
 	csiTranslator := csitrans.New()
 	dswp := &desiredStateOfWorldPopulator{
 		loopSleepDuration:        100 * time.Millisecond,
@@ -89,14 +96,14 @@ func TestFindAndAddActivePods_FindAndRemoveDeletedPods(t *testing.T) {
 		intreeToCSITranslator:    csiTranslator,
 	}
 
-	//add the given node to the list of nodes managed by dsw
+	// 先把节点加入 DSW 管理列表，否则卷无法挂到该节点下。
 	dswp.desiredStateOfWorld.AddNode(k8stypes.NodeName(pod.Spec.NodeName))
 	logger, _ := ktesting.NewTestContext(t)
 	dswp.findAndAddActivePods(logger)
 
 	expectedVolumeName := v1.UniqueVolumeName(generatedVolumeName)
 
-	//check if the given volume referenced by the pod is added to dsw
+	// 校验 Pod 引用的卷已加入 DSW。
 	volumeExists := dswp.desiredStateOfWorld.VolumeExists(expectedVolumeName, k8stypes.NodeName(pod.Spec.NodeName))
 	if !volumeExists {
 		t.Fatalf(
@@ -105,10 +112,10 @@ func TestFindAndAddActivePods_FindAndRemoveDeletedPods(t *testing.T) {
 			volumeExists)
 	}
 
-	//delete the pod and volume manually
+	// 手动从 DSW 删除 Pod 与卷，构造需要重新发现的场景。
 	dswp.desiredStateOfWorld.DeletePod(podName, expectedVolumeName, k8stypes.NodeName(pod.Spec.NodeName))
 
-	//check if the given volume referenced by the pod still exists in dsw
+	// 校验卷已从 DSW 中移除。
 	volumeExists = dswp.desiredStateOfWorld.VolumeExists(expectedVolumeName, k8stypes.NodeName(pod.Spec.NodeName))
 	if volumeExists {
 		t.Fatalf(
@@ -117,10 +124,10 @@ func TestFindAndAddActivePods_FindAndRemoveDeletedPods(t *testing.T) {
 			volumeExists)
 	}
 
-	//add pod and volume again
+	// 再次运行发现逻辑，验证卷可被重新加入。
 	dswp.findAndAddActivePods(logger)
 
-	//check if the given volume referenced by the pod is added to dsw for the second time
+	// 校验第二次发现后卷重新出现在 DSW。
 	volumeExists = dswp.desiredStateOfWorld.VolumeExists(expectedVolumeName, k8stypes.NodeName(pod.Spec.NodeName))
 	if !volumeExists {
 		t.Fatalf(
@@ -131,7 +138,7 @@ func TestFindAndAddActivePods_FindAndRemoveDeletedPods(t *testing.T) {
 
 	fakePodInformer.Informer().GetStore().Delete(pod)
 	dswp.findAndRemoveDeletedPods(logger)
-	//check if the given volume referenced by the pod still exists in dsw
+	// 校验 Pod 从 informer 删除后，卷被 findAndRemoveDeletedPods 清除。
 	volumeExists = dswp.desiredStateOfWorld.VolumeExists(expectedVolumeName, k8stypes.NodeName(pod.Spec.NodeName))
 	if volumeExists {
 		t.Fatalf(
@@ -142,6 +149,8 @@ func TestFindAndAddActivePods_FindAndRemoveDeletedPods(t *testing.T) {
 
 }
 
+// TestFindAndRemoveNonattachableVolumes 验证卷插件变为不可挂载后，
+// findAndRemoveDeletedPods 会将其从 DSW 中清除，避免后续尝试挂载。
 func TestFindAndRemoveNonattachableVolumes(t *testing.T) {
 	fakeVolumePluginMgr, fakeVolumePlugin := volumetesting.GetTestVolumePluginMgr(t)
 	fakeClient := &fake.Clientset{}
@@ -175,12 +184,15 @@ func TestFindAndRemoveNonattachableVolumes(t *testing.T) {
 		},
 	}
 
+	// 直接写入 informer 的本地 store，省去启动 informer 与 apiserver 的开销。
 	fakePodInformer.Informer().GetStore().Add(pod)
 
+	// CSI 卷名由 fake 插件名与驱动名拼接，须与生产命名规则一致。
 	generatedVolumeName := "fake-plugin/dswp-test-fake-csi-driver"
 	pvcLister := fakeInformerFactory.Core().V1().PersistentVolumeClaims().Lister()
 	pvLister := fakeInformerFactory.Core().V1().PersistentVolumes().Lister()
 
+	// 组装被测 populator：各 lister 指向 fake informer，使测试无需真实 apiserver。
 	csiTranslator := csitrans.New()
 	dswp := &desiredStateOfWorldPopulator{
 		loopSleepDuration:        100 * time.Millisecond,
@@ -194,14 +206,14 @@ func TestFindAndRemoveNonattachableVolumes(t *testing.T) {
 		intreeToCSITranslator:    csiTranslator,
 	}
 
-	//add the given node to the list of nodes managed by dsw
+	// 先把节点加入 DSW 管理列表。
 	dswp.desiredStateOfWorld.AddNode(k8stypes.NodeName(pod.Spec.NodeName))
 	logger, _ := ktesting.NewTestContext(t)
 	dswp.findAndAddActivePods(logger)
 
 	expectedVolumeName := v1.UniqueVolumeName(generatedVolumeName)
 
-	//check if the given volume referenced by the pod is added to dsw
+	// 校验 CSI 卷已加入 DSW。
 	volumeExists := dswp.desiredStateOfWorld.VolumeExists(expectedVolumeName, k8stypes.NodeName(pod.Spec.NodeName))
 	if !volumeExists {
 		t.Fatalf(
@@ -210,12 +222,12 @@ func TestFindAndRemoveNonattachableVolumes(t *testing.T) {
 			volumeExists)
 	}
 
-	// Change the CSI volume plugin attachability
+	// 将插件标记为不可挂载，模拟卷能力变化。
 	fakeVolumePlugin.NonAttachable = true
 
 	dswp.findAndRemoveDeletedPods(logger)
 
-	// The volume should not exist after it becomes non-attachable
+	// 卷变为不可挂载后应被清理出 DSW。
 	volumeExists = dswp.desiredStateOfWorld.VolumeExists(expectedVolumeName, k8stypes.NodeName(pod.Spec.NodeName))
 	if volumeExists {
 		t.Fatalf(

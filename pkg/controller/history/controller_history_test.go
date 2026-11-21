@@ -44,18 +44,28 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestRealHistory_ListControllerRevisions 验证 History 真实实现按父对象与标签选择器列出修订，
+// 且不会混入其他父对象的修订。
 func TestRealHistory_ListControllerRevisions(t *testing.T) {
+	// testcase 描述一次列表查询的输入与预期结果。
 	type testcase struct {
-		name      string
-		parent    metav1.Object
-		selector  labels.Selector
+		// name 用例名称。
+		name string
+		// parent 用于过滤的父对象。
+		parent metav1.Object
+		// selector 用于过滤修订的标签选择器。
+		selector labels.Selector
+		// revisions 预置到 informer 索引器中的修订。
 		revisions []*apps.ControllerRevision
-		want      map[string]bool
+		// want 期望返回的修订名称集合（以 map 模拟集合）。
+		want map[string]bool
 	}
+	// testFn 执行单个用例：启动 informer、灌入修订并校验列表结果。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
 		informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 
+		// 用 stop 通道控制 informer 生命周期，延迟关闭避免 goroutine 泄漏。
 		stop := make(chan struct{})
 		defer close(stop)
 		informerFactory.Start(stop)
@@ -64,6 +74,7 @@ func TestRealHistory_ListControllerRevisions(t *testing.T) {
 			t.Fatalf("failed to add indexer: %v", err)
 		}
 		informerFactory.WaitForCacheSync(stop)
+		// 直接写入索引器绕过 API Server，使用例聚焦于列表过滤逻辑。
 		for i := range test.revisions {
 			informer.Informer().GetIndexer().Add(test.revisions[i])
 		}
@@ -73,6 +84,7 @@ func TestRealHistory_ListControllerRevisions(t *testing.T) {
 		if err != nil {
 			t.Errorf("%s: %s", test.name, err)
 		}
+		// 转为名称集合，避免受返回顺序影响。
 		got := make(map[string]bool)
 		for i := range revisions {
 			got[revisions[i].Name] = true
@@ -81,6 +93,7 @@ func TestRealHistory_ListControllerRevisions(t *testing.T) {
 			t.Errorf("%s: want %v got %v", test.name, test.want, got)
 		}
 	}
+	// 构造两个父对象及多个修订，覆盖同父对象、不同父对象与孤儿修订三种场景。
 	ss1 := newStatefulSet(3, "ss1", types.UID("ss1"), map[string]string{"foo": "bar"})
 	ss2 := newStatefulSet(3, "ss2", types.UID("ss2"), map[string]string{"goo": "car"})
 	sel1, err := metav1.LabelSelectorAsSelector(ss1.Spec.Selector)
@@ -102,6 +115,7 @@ func TestRealHistory_ListControllerRevisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	ss2Rev1.Namespace = ss2.Namespace
+	// 清空属主引用构造孤儿修订，用于验证孤儿也会被列出。
 	ss1Orphan, err := NewControllerRevision(ss1, parentKind, ss1.Spec.Template.Labels, rawTemplate(&ss1.Spec.Template), 3, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -144,18 +158,28 @@ func TestRealHistory_ListControllerRevisions(t *testing.T) {
 	}
 }
 
+// TestFakeHistory_ListControllerRevisions 验证 FakeHistory 按父对象与标签选择器列出修订，
+// 覆盖空结果、同父对象全部、排除其他父对象与包含孤儿等场景。
 func TestFakeHistory_ListControllerRevisions(t *testing.T) {
+	// testcase 描述一次列表查询的输入与预期结果。
 	type testcase struct {
-		name      string
-		parent    metav1.Object
-		selector  labels.Selector
+		// name 用例名称。
+		name string
+		// parent 用于过滤的父对象。
+		parent metav1.Object
+		// selector 用于过滤修订的标签选择器。
+		selector labels.Selector
+		// revisions 预置到 informer 索引器中的修订。
 		revisions []*apps.ControllerRevision
-		want      map[string]bool
+		// want 期望返回的修订名称集合（以 map 模拟集合）。
+		want map[string]bool
 	}
+	// testFn 执行单个用例：启动 informer、灌入修订并校验列表结果。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
 		informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 
+		// 用 stop 通道控制 informer 生命周期，延迟关闭避免 goroutine 泄漏。
 		stop := make(chan struct{})
 		defer close(stop)
 		informerFactory.Start(stop)
@@ -164,6 +188,7 @@ func TestFakeHistory_ListControllerRevisions(t *testing.T) {
 			t.Fatalf("failed to add indexer: %v", err)
 		}
 		informerFactory.WaitForCacheSync(stop)
+		// 直接写入索引器绕过 API Server，使用例聚焦于列表过滤逻辑。
 		for i := range test.revisions {
 			informer.Informer().GetIndexer().Add(test.revisions[i])
 		}
@@ -173,6 +198,7 @@ func TestFakeHistory_ListControllerRevisions(t *testing.T) {
 		if err != nil {
 			t.Errorf("%s: %s", test.name, err)
 		}
+		// 转为名称集合，避免受返回顺序影响。
 		got := make(map[string]bool)
 		for i := range revisions {
 			got[revisions[i].Name] = true
@@ -181,6 +207,7 @@ func TestFakeHistory_ListControllerRevisions(t *testing.T) {
 			t.Errorf("%s: want %v got %v", test.name, test.want, got)
 		}
 	}
+	// 构造两个父对象及多个修订，覆盖不同过滤场景。
 	ss1 := newStatefulSet(3, "ss1", types.UID("ss1"), map[string]string{"foo": "bar"})
 	ss2 := newStatefulSet(3, "ss2", types.UID("ss2"), map[string]string{"goo": "car"})
 	sel1, err := metav1.LabelSelectorAsSelector(ss1.Spec.Selector)
@@ -202,6 +229,7 @@ func TestFakeHistory_ListControllerRevisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	ss2Rev1.Namespace = ss2.Namespace
+	// 清空属主引用构造孤儿修订，用于验证孤儿也会被列出。
 	ss1Orphan, err := NewControllerRevision(ss1, parentKind, ss1.Spec.Template.Labels, rawTemplate(&ss1.Spec.Template), 3, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -244,17 +272,26 @@ func TestFakeHistory_ListControllerRevisions(t *testing.T) {
 	}
 }
 
+// TestRealHistory_CreateControllerRevision 验证真实 History 创建修订：正常创建、不同父对象不冲突、
+// 名称冲突时重命名并递增冲突计数。
 func TestRealHistory_CreateControllerRevision(t *testing.T) {
+	// testcase 描述一次创建操作的输入与预期行为。
 	type testcase struct {
-		name     string
-		parent   metav1.Object
+		// name 用例名称。
+		name string
+		// parent 待创建修订所属的父对象。
+		parent metav1.Object
+		// revision 待创建的修订。
 		revision *apps.ControllerRevision
+		// existing 预置的修订及其父对象，用于构造名称冲突场景。
 		existing []struct {
 			parent   metav1.Object
 			revision *apps.ControllerRevision
 		}
+		// rename 是否期望因名称冲突而重命名。
 		rename bool
 	}
+	// testFn 执行单个用例：预置修订、创建目标修订并校验名称与冲突计数。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
 		informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
@@ -268,6 +305,7 @@ func TestRealHistory_CreateControllerRevision(t *testing.T) {
 		informerFactory.WaitForCacheSync(stop)
 		history := NewHistory(client, informer.Lister(), informer.Informer().GetIndexer())
 
+		// 冲突计数在用例内共享，用于验证冲突处理逻辑。
 		var collisionCount int32
 		for _, item := range test.existing {
 			_, err := client.AppsV1().ControllerRevisions(item.parent.GetNamespace()).Create(context.TODO(), item.revision, metav1.CreateOptions{})
@@ -275,13 +313,14 @@ func TestRealHistory_CreateControllerRevision(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		// Clear collisionCount before creating the test revision
+		// 创建待测修订前清零冲突计数，避免前序用例状态干扰。
 		collisionCount = 0
 		created, err := history.CreateControllerRevision(test.parent, test.revision, &collisionCount)
 		if err != nil {
 			t.Errorf("%s: %s", test.name, err)
 		}
 
+		// 仅在预期冲突时校验重命名与冲突计数。
 		if test.rename {
 			if created.Name == test.revision.Name {
 				t.Errorf("%s: wanted rename got %s %s", test.name, created.Name, test.revision.Name)
@@ -291,7 +330,7 @@ func TestRealHistory_CreateControllerRevision(t *testing.T) {
 				t.Errorf("%s: on name collision wanted new name %s got %s", test.name, expectedName, created.Name)
 			}
 
-			// Second name collision will be caused by an identical revision, so no need to do anything
+			// 第二次名称冲突由完全相同的修订引起，无需额外处理。
 			_, err = history.CreateControllerRevision(test.parent, test.revision, &collisionCount)
 			if err != nil {
 				t.Errorf("%s: %s", test.name, err)
@@ -314,10 +353,9 @@ func TestRealHistory_CreateControllerRevision(t *testing.T) {
 	}
 	ss1Rev1.Namespace = ss1.Namespace
 
-	// Create a new revision with the same name and hash label as an existing revision, but with
-	// a different template. This could happen as a result of a hash collision, but in this test
-	// this situation is created by setting name and hash label to values known to be in use by
-	// an existing revision.
+	// 构造一个与已有修订同名且哈希标签相同、但模板不同的新修订。
+	// 真实场景中这可能由哈希碰撞引发；此处通过显式设置名称和哈希标签
+	// 为已被占用的值来模拟该情况。
 	modTemplate := ss1.Spec.Template.DeepCopy()
 	modTemplate.Labels["foo"] = "not_bar"
 	ss1Rev2, err := NewControllerRevision(ss1, parentKind, ss1.Spec.Template.Labels, rawTemplate(modTemplate), 2, ss1.Status.CollisionCount)
@@ -378,17 +416,25 @@ func TestRealHistory_CreateControllerRevision(t *testing.T) {
 	}
 }
 
+// TestFakeHistory_CreateControllerRevision 验证 FakeHistory 创建修订及冲突重命名逻辑与真实实现一致。
 func TestFakeHistory_CreateControllerRevision(t *testing.T) {
+	// testcase 描述一次创建操作的输入与预期行为。
 	type testcase struct {
-		name     string
-		parent   metav1.Object
+		// name 用例名称。
+		name string
+		// parent 待创建修订所属的父对象。
+		parent metav1.Object
+		// revision 待创建的修订。
 		revision *apps.ControllerRevision
+		// existing 预置的修订及其父对象，用于构造名称冲突场景。
 		existing []struct {
 			parent   metav1.Object
 			revision *apps.ControllerRevision
 		}
+		// rename 是否期望因名称冲突而重命名。
 		rename bool
 	}
+	// testFn 执行单个用例：预置修订、创建目标修订并校验名称与冲突计数。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
 		informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
@@ -403,6 +449,7 @@ func TestFakeHistory_CreateControllerRevision(t *testing.T) {
 		informerFactory.WaitForCacheSync(stop)
 		history := NewFakeHistory(informer)
 
+		// 冲突计数在用例内共享，用于验证冲突处理逻辑。
 		var collisionCount int32
 		for i := range test.existing {
 			_, err := history.CreateControllerRevision(test.existing[i].parent, test.existing[i].revision, &collisionCount)
@@ -410,7 +457,7 @@ func TestFakeHistory_CreateControllerRevision(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		// Clear collisionCount before creating the test revision
+		// 创建待测修订前清零冲突计数，避免前序用例状态干扰。
 		collisionCount = 0
 		created, err := history.CreateControllerRevision(test.parent, test.revision, &collisionCount)
 		if err != nil {
@@ -426,7 +473,7 @@ func TestFakeHistory_CreateControllerRevision(t *testing.T) {
 				t.Errorf("%s: on name collision wanted new name %s got %s", test.name, expectedName, created.Name)
 			}
 
-			// Second name collision should have incremented collisionCount to 2
+			// 第二次名称冲突应将冲突计数递增到 2。
 			_, err = history.CreateControllerRevision(test.parent, test.revision, &collisionCount)
 			if err != nil {
 				t.Errorf("%s: %s", test.name, err)
@@ -504,19 +551,30 @@ func TestFakeHistory_CreateControllerRevision(t *testing.T) {
 	}
 }
 
+// TestRealHistory_UpdateControllerRevision 验证真实 History 更新修订：成功更新、无变化时成功、
+// 内部错误时失败、冲突时重试成功。
 func TestRealHistory_UpdateControllerRevision(t *testing.T) {
+	// 记录冲突重试次数，供反应器与用例间共享。
 	conflictAttempts := 0
+	// testcase 描述一次更新操作的输入与预期结果。
 	type testcase struct {
-		name        string
-		revision    *apps.ControllerRevision
+		// name 用例名称。
+		name string
+		// revision 待更新的修订。
+		revision *apps.ControllerRevision
+		// newRevision 目标修订号。
 		newRevision int64
-		existing    []struct {
+		// existing 预置的修订及其父对象。
+		existing []struct {
 			parent   metav1.Object
 			revision *apps.ControllerRevision
 		}
+		// reactor 注入到 fake client 的反应器，用于模拟冲突或内部错误。
 		reactor core.ReactionFunc
-		err     bool
+		// err 是否期望返回错误。
+		err bool
 	}
+	// conflictSuccess 在前两次更新时返回冲突、第三次放行，用于验证重试逻辑。
 	conflictSuccess := func(action core.Action) (bool, runtime.Object, error) {
 		defer func() {
 			conflictAttempts++
@@ -533,6 +591,7 @@ func TestRealHistory_UpdateControllerRevision(t *testing.T) {
 			return false, nil, nil
 		}
 	}
+	// internalError 对更新操作返回内部错误，用于验证错误传播。
 	internalError := func(action core.Action) (bool, runtime.Object, error) {
 		switch action.(type) {
 		case core.UpdateActionImpl:
@@ -542,6 +601,7 @@ func TestRealHistory_UpdateControllerRevision(t *testing.T) {
 		}
 	}
 
+	// testFn 执行单个用例：预置修订、注入反应器并校验更新结果。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
 
@@ -562,6 +622,7 @@ func TestRealHistory_UpdateControllerRevision(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		// 在预置修订后再注入反应器，避免影响初始化过程。
 		if test.reactor != nil {
 			client.PrependReactor("*", "*", test.reactor)
 		}
@@ -655,23 +716,32 @@ func TestRealHistory_UpdateControllerRevision(t *testing.T) {
 		},
 	}
 	for i := range tests {
+		// 每个用例前重置重试计数，确保反应器计数相互独立。
 		conflictAttempts = 0
 		testFn(&tests[i], t)
 	}
 }
 
+// TestFakeHistory_UpdateControllerRevision 验证 FakeHistory 更新修订的成功路径，包括修订号无变化的场景。
 func TestFakeHistory_UpdateControllerRevision(t *testing.T) {
+	// testcase 描述一次更新操作的输入与预期结果。
 	type testcase struct {
-		name        string
-		revision    *apps.ControllerRevision
+		// name 用例名称。
+		name string
+		// revision 待更新的修订。
+		revision *apps.ControllerRevision
+		// newRevision 目标修订号。
 		newRevision int64
-		existing    []struct {
+		// existing 预置的修订及其父对象。
+		existing []struct {
 			parent   metav1.Object
 			revision *apps.ControllerRevision
 		}
+		// err 是否期望返回错误。
 		err bool
 	}
 
+	// testFn 执行单个用例：预置修订并校验更新结果。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
 
@@ -753,16 +823,23 @@ func TestFakeHistory_UpdateControllerRevision(t *testing.T) {
 	}
 }
 
+// TestRealHistory_DeleteControllerRevision 验证真实 History 删除修订：空集群删除失败、存在则成功、不存在则失败。
 func TestRealHistory_DeleteControllerRevision(t *testing.T) {
+	// testcase 描述一次删除操作的输入与预期结果。
 	type testcase struct {
-		name     string
+		// name 用例名称。
+		name string
+		// revision 待删除的修订。
 		revision *apps.ControllerRevision
+		// existing 预置的修订及其父对象。
 		existing []struct {
 			parent   metav1.Object
 			revision *apps.ControllerRevision
 		}
+		// err 是否期望返回错误。
 		err bool
 	}
+	// testFn 执行单个用例：预置修订、删除目标修订并校验错误。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
 		informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
@@ -859,16 +936,23 @@ func TestRealHistory_DeleteControllerRevision(t *testing.T) {
 	}
 }
 
+// TestFakeHistory_DeleteControllerRevision 验证 FakeHistory 删除修订的成功与失败路径。
 func TestFakeHistory_DeleteControllerRevision(t *testing.T) {
+	// testcase 描述一次删除操作的输入与预期结果。
 	type testcase struct {
-		name     string
+		// name 用例名称。
+		name string
+		// revision 待删除的修订。
 		revision *apps.ControllerRevision
+		// existing 预置的修订及其父对象。
 		existing []struct {
 			parent   metav1.Object
 			revision *apps.ControllerRevision
 		}
+		// err 是否期望返回错误。
 		err bool
 	}
+	// testFn 执行单个用例：预置修订、删除目标修订并校验错误。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
 		informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
@@ -965,19 +1049,29 @@ func TestFakeHistory_DeleteControllerRevision(t *testing.T) {
 	}
 }
 
+// TestRealHistory_AdoptControllerRevision 验证真实 History 收养修订：孤儿可收养、已被其他对象拥有的修订拒绝、
+// 不存在的修订失败。
 func TestRealHistory_AdoptControllerRevision(t *testing.T) {
+	// testcase 描述一次收养操作的输入与预期结果。
 	type testcase struct {
-		name     string
-		parent   metav1.Object
+		// name 用例名称。
+		name string
+		// parent 期望收养修订的父对象。
+		parent metav1.Object
+		// revision 待收养的修订。
 		revision *apps.ControllerRevision
+		// existing 预置的修订及其父对象。
 		existing []struct {
 			parent   metav1.Object
 			revision *apps.ControllerRevision
 		}
+		// err 是否期望返回错误。
 		err bool
 	}
+	// testFn 执行单个用例：预置修订、注入 Patch 反应器并校验收养结果。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
+		// 注入 Patch 反应器，在内存中应用 strategic merge patch，模拟服务端合并行为。
 		client.AddReactor("*", "*", func(action core.Action) (bool, runtime.Object, error) {
 			switch action := action.(type) {
 			case core.PatchActionImpl:
@@ -992,6 +1086,7 @@ func TestRealHistory_AdoptControllerRevision(t *testing.T) {
 				if found == nil {
 					return true, nil, errors.NewNotFound(apps.Resource("controllerrevisions"), test.revision.Name)
 				}
+				// 用 strategic merge patch 将补丁应用到修订，模拟 API Server 的合并语义。
 				b, err := strategicpatch.StrategicMergePatch(
 					[]byte(runtime.EncodeOrDie(clientscheme.Codecs.LegacyCodec(apps.SchemeGroupVersion), test.revision)),
 					action.GetPatch(), test.revision)
@@ -1056,6 +1151,7 @@ func TestRealHistory_AdoptControllerRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	ss1Rev2.Namespace = ss1.Namespace
+	// 清空属主引用，构造可被收养的孤儿修订。
 	ss1Rev2.OwnerReferences = []metav1.OwnerReference{}
 	ss2Rev1, err := NewControllerRevision(ss2, parentKind, ss2.Spec.Template.Labels, rawTemplate(&ss2.Spec.Template), 1, ss2.Status.CollisionCount)
 	if err != nil {
@@ -1106,18 +1202,27 @@ func TestRealHistory_AdoptControllerRevision(t *testing.T) {
 	}
 }
 
+// TestFakeHistory_AdoptControllerRevision 验证 FakeHistory 收养修订的成功与失败路径。
 func TestFakeHistory_AdoptControllerRevision(t *testing.T) {
+	// testcase 描述一次收养操作的输入与预期结果。
 	type testcase struct {
-		name       string
-		parent     metav1.Object
+		// name 用例名称。
+		name string
+		// parent 期望收养修订的父对象。
+		parent metav1.Object
+		// parentType 父对象的类型元信息。
 		parentType *metav1.TypeMeta
-		revision   *apps.ControllerRevision
-		existing   []struct {
+		// revision 待收养的修订。
+		revision *apps.ControllerRevision
+		// existing 预置的修订及其父对象。
+		existing []struct {
 			parent   metav1.Object
 			revision *apps.ControllerRevision
 		}
+		// err 是否期望返回错误。
 		err bool
 	}
+	// testFn 执行单个用例：预置修订并校验收养结果。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
 
@@ -1165,6 +1270,7 @@ func TestFakeHistory_AdoptControllerRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	ss1Rev2.Namespace = ss1.Namespace
+	// 清空属主引用，构造可被收养的孤儿修订。
 	ss1Rev2.OwnerReferences = []metav1.OwnerReference{}
 	ss2Rev1, err := NewControllerRevision(ss2, parentKind, ss2.Spec.Template.Labels, rawTemplate(&ss2.Spec.Template), 1, ss2.Status.CollisionCount)
 	if err != nil {
@@ -1218,19 +1324,29 @@ func TestFakeHistory_AdoptControllerRevision(t *testing.T) {
 	}
 }
 
+// TestRealHistory_ReleaseControllerRevision 验证真实 History 释放修订：释放自身拥有、孤儿、
+// 他人拥有及不存在的修订均可成功。
 func TestRealHistory_ReleaseControllerRevision(t *testing.T) {
+	// testcase 描述一次释放操作的输入与预期结果。
 	type testcase struct {
-		name     string
-		parent   metav1.Object
+		// name 用例名称。
+		name string
+		// parent 期望释放修订的父对象。
+		parent metav1.Object
+		// revision 待释放的修订。
 		revision *apps.ControllerRevision
+		// existing 预置的修订及其父对象。
 		existing []struct {
 			parent   metav1.Object
 			revision *apps.ControllerRevision
 		}
+		// err 是否期望返回错误。
 		err bool
 	}
+	// testFn 执行单个用例：预置修订、注入 Patch 反应器并校验释放结果。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
+		// 注入 Patch 反应器模拟服务端应用 strategic merge patch。
 		client.AddReactor("*", "*", func(action core.Action) (bool, runtime.Object, error) {
 			switch action := action.(type) {
 			case core.PatchActionImpl:
@@ -1292,6 +1408,7 @@ func TestRealHistory_ReleaseControllerRevision(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s: %s", test.name, err)
 			}
+			// 释放不存在的修订时返回 nil 对象，属正常情况。
 			if adopted == nil {
 				return
 			}
@@ -1316,6 +1433,7 @@ func TestRealHistory_ReleaseControllerRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	ss1Rev2.Namespace = ss1.Namespace
+	// 清空属主引用，构造孤儿修订。
 	ss1Rev2.OwnerReferences = []metav1.OwnerReference{}
 	ss2Rev1, err := NewControllerRevision(ss2, parentKind, ss2.Spec.Template.Labels, rawTemplate(&ss2.Spec.Template), 1, nil)
 	if err != nil {
@@ -1381,17 +1499,25 @@ func TestRealHistory_ReleaseControllerRevision(t *testing.T) {
 	}
 }
 
+// TestFakeHistory_ReleaseControllerRevision 验证 FakeHistory 释放修订的各类场景均成功。
 func TestFakeHistory_ReleaseControllerRevision(t *testing.T) {
+	// testcase 描述一次释放操作的输入与预期结果。
 	type testcase struct {
-		name     string
-		parent   metav1.Object
+		// name 用例名称。
+		name string
+		// parent 期望释放修订的父对象。
+		parent metav1.Object
+		// revision 待释放的修订。
 		revision *apps.ControllerRevision
+		// existing 预置的修订及其父对象。
 		existing []struct {
 			parent   metav1.Object
 			revision *apps.ControllerRevision
 		}
+		// err 是否期望返回错误。
 		err bool
 	}
+	// testFn 执行单个用例：预置修订并校验释放结果。
 	testFn := func(test *testcase, t *testing.T) {
 		client := fake.NewSimpleClientset()
 		informerFactory := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
@@ -1442,6 +1568,7 @@ func TestFakeHistory_ReleaseControllerRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	ss1Rev2.Namespace = ss1.Namespace
+	// 清空属主引用，构造孤儿修订。
 	ss1Rev2.OwnerReferences = []metav1.OwnerReference{}
 	ss2Rev1, err := NewControllerRevision(ss2, parentKind, ss2.Spec.Template.Labels, rawTemplate(&ss2.Spec.Template), 1, ss2.Status.CollisionCount)
 	if err != nil {
@@ -1507,13 +1634,21 @@ func TestFakeHistory_ReleaseControllerRevision(t *testing.T) {
 	}
 }
 
+// TestFindEqualRevisions 验证 FindEqualRevisions 找出与目标修订内容等价的修订，
+// 空列表与无匹配时返回空集合。
 func TestFindEqualRevisions(t *testing.T) {
+	// testcase 描述一次等价查找的输入与预期结果。
 	type testcase struct {
-		name      string
-		revision  *apps.ControllerRevision
+		// name 用例名称。
+		name string
+		// revision 作为比较基准的修订。
+		revision *apps.ControllerRevision
+		// revisions 待比较的修订列表。
 		revisions []*apps.ControllerRevision
-		want      map[string]bool
+		// want 期望找到的修订名称集合。
+		want map[string]bool
 	}
+	// testFn 执行单个用例，校验找到的等价修订集合。
 	testFn := func(test *testcase, t *testing.T) {
 		found := FindEqualRevisions(test.revisions, test.revision)
 		if len(found) != len(test.want) {
@@ -1576,13 +1711,21 @@ func TestFindEqualRevisions(t *testing.T) {
 	}
 }
 
+// TestSortControllerRevisions 验证 SortControllerRevisions 按修订号与创建时间排序，
+// 覆盖乱序、已排序、逆序、相同时间戳及空列表。
 func TestSortControllerRevisions(t *testing.T) {
+	// testcase 描述一次排序操作的输入与预期顺序。
 	type testcase struct {
-		name      string
+		// name 用例名称。
+		name string
+		// revisions 待排序的修订。
 		revisions []*apps.ControllerRevision
-		want      []string
+		// want 期望的修订名称顺序。
+		want []string
 	}
+	// testFn 执行单个用例：排序后逐项校验名称顺序。
 	testFn := func(test *testcase, t *testing.T) {
+		// 使用子测试便于定位失败用例。
 		t.Run(test.name, func(t *testing.T) {
 			SortControllerRevisions(test.revisions)
 			for i := range test.revisions {
@@ -1612,11 +1755,13 @@ func TestSortControllerRevisions(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// 构造两个修订号相同但创建时间不同的副本，验证排序对“平局”的处理。
 	ss1Rev3Time2, err := NewControllerRevision(ss1, parentKind, ss1.Spec.Template.Labels, rawTemplate(&ss1.Spec.Template), 3, ss1.Status.CollisionCount)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ss1Rev3Time2.Namespace = ss1.Namespace
+	// 将创建时间后移一秒，制造排序所需的差异。
 	ss1Rev3Time2.CreationTimestamp = metav1.Time{Time: ss1Rev3.CreationTimestamp.Add(time.Second)}
 
 	ss1Rev3Time2Name2, err := NewControllerRevision(ss1, parentKind, ss1.Spec.Template.Labels, rawTemplate(&ss1.Spec.Template), 3, ss1.Status.CollisionCount)
@@ -1658,8 +1803,10 @@ func TestSortControllerRevisions(t *testing.T) {
 	}
 }
 
+// newStatefulSet 构造测试用 StatefulSet，其选择器完全基于 MatchExpressions。
 func newStatefulSet(replicas int, name string, uid types.UID, labels map[string]string) *apps.StatefulSet {
-	// Converting all the map-only selectors to set-based selectors.
+	// 将仅基于 map 的选择器转换为基于集合（set-based）的选择器。
+	// 为每个标签生成一条 In 表达式。
 	var testMatchExpressions []metav1.LabelSelectorRequirement
 	for key, value := range labels {
 		sel := metav1.LabelSelectorRequirement{
@@ -1681,8 +1828,8 @@ func newStatefulSet(replicas int, name string, uid types.UID, labels map[string]
 		},
 		Spec: apps.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
-				// Purposely leaving MatchLabels nil, so to ensure it will break if any link
-				// in the chain ignores the set-based MatchExpressions.
+				// 刻意将 MatchLabels 留空，确保调用链中任何环节若忽略基于集合的
+				// MatchExpressions 都会导致测试失败。
 				MatchLabels:      nil,
 				MatchExpressions: testMatchExpressions,
 			},
@@ -1728,8 +1875,10 @@ func newStatefulSet(replicas int, name string, uid types.UID, labels map[string]
 	}
 }
 
+// parentKind 测试中修订所属父对象的 Kind（StatefulSet）。
 var parentKind = apps.SchemeGroupVersion.WithKind("StatefulSet")
 
+// rawTemplate 将 Pod 模板编码为 JSON RawExtension，作为修订的数据负载。
 func rawTemplate(template *v1.PodTemplateSpec) runtime.RawExtension {
 	buf := new(bytes.Buffer)
 	enc := json.NewEncoder(buf)

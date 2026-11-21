@@ -43,35 +43,35 @@ import (
 	"k8s.io/kubernetes/pkg/serviceaccount"
 )
 
-// RemoveTokenBackoff is the recommended (empirical) retry interval for removing
-// a secret reference from a service account when the secret is deleted. It is
-// exported for use by custom secret controllers.
+// RemoveTokenBackoff 是删除 Secret 后从 ServiceAccount 移除其引用时
+// 推荐（经验值）的重试退避参数。导出以供自定义 Secret 控制器使用。
 var RemoveTokenBackoff = wait.Backoff{
 	Steps:    10,
 	Duration: 100 * time.Millisecond,
 	Jitter:   1.0,
 }
 
-// TokensControllerOptions contains options for the TokensController
+// TokensControllerOptions 包含 TokensController 的配置选项。
 type TokensControllerOptions struct {
-	// TokenGenerator is the generator to use to create new tokens
+	// TokenGenerator 用于生成新 token。
 	TokenGenerator serviceaccount.TokenGenerator
-	// ServiceAccountResync is the time.Duration at which to fully re-list service accounts.
-	// If zero, re-list will be delayed as long as possible
+	// ServiceAccountResync 是完整重新 list ServiceAccount 的周期。
+	// 为零时尽可能推迟重新 list。
 	ServiceAccountResync time.Duration
-	// SecretResync is the time.Duration at which to fully re-list secrets.
-	// If zero, re-list will be delayed as long as possible
+	// SecretResync 是完整重新 list Secret 的周期。
+	// 为零时尽可能推迟重新 list。
 	SecretResync time.Duration
-	// This CA will be added in the secrets of service accounts
+	// RootCA 会被写入 ServiceAccount 对应的 Secret 中。
 	RootCA []byte
 
-	// MaxRetries controls the maximum number of times a particular key is retried before giving up
-	// If zero, a default max is used
+	// MaxRetries 控制在放弃前对同一 key 的最大重试次数。
+	// 为零时使用默认上限。
 	MaxRetries int
 }
 
-// NewTokensController returns a new *TokensController.
+// NewTokensController 创建一个新的 *TokensController。
 func NewTokensController(logger klog.Logger, serviceAccounts informers.ServiceAccountInformer, secrets informers.SecretInformer, cl clientset.Interface, options TokensControllerOptions) (*TokensController, error) {
+	// 未显式配置时使用默认重试上限，避免无限重试。
 	maxRetries := options.MaxRetries
 	if maxRetries == 0 {
 		maxRetries = 10
@@ -107,6 +107,7 @@ func NewTokensController(logger klog.Logger, serviceAccounts informers.ServiceAc
 
 	e.secrets = secrets.Lister()
 	e.secretSynced = secrets.Informer().HasSynced
+	// 只关心 ServiceAccountToken 类型的 Secret，避免无关 Secret 事件进入队列。
 	secrets.Informer().AddEventHandlerWithOptions(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
@@ -133,7 +134,7 @@ func NewTokensController(logger klog.Logger, serviceAccounts informers.ServiceAc
 	return e, nil
 }
 
-// TokensController manages ServiceAccountToken secrets for ServiceAccount objects
+// TokensController 管理 ServiceAccount 对象对应的 ServiceAccountToken Secret。
 type TokensController struct {
 	client clientset.Interface
 	token  serviceaccount.TokenGenerator
@@ -143,26 +144,26 @@ type TokensController struct {
 	serviceAccounts listersv1.ServiceAccountLister
 	secrets         listersv1.SecretLister
 
-	// Since we join two objects, we'll watch both of them with controllers.
+	// 该控制器关联两类对象，因此需要同时监听两者并等待各自缓存同步。
 	serviceAccountSynced cache.InformerSynced
 	secretSynced         cache.InformerSynced
 
-	// syncServiceAccountQueue handles service account events:
-	//   * ensures tokens are removed for service accounts which no longer exist
-	// key is "<namespace>/<name>/<uid>"
+	// syncServiceAccountQueue 处理 ServiceAccount 事件：
+	//   * 确保不存在的 ServiceAccount 所对应的 token 被清除
+	// key 形如 "<namespace>/<name>/<uid>"。
 	syncServiceAccountQueue workqueue.TypedRateLimitingInterface[serviceAccountQueueKey]
 
-	// syncSecretQueue handles secret events:
-	//   * deletes tokens whose service account no longer exists
-	//   * updates tokens with missing token or namespace data, or mismatched ca data
-	//   * ensures service account secret references are removed for tokens which are deleted
-	// key is a secretQueueKey{}
+	// syncSecretQueue 处理 Secret 事件：
+	//   * 删除其 ServiceAccount 已不存在的 token
+	//   * 补全缺失的 token/namespace 数据，或修正不匹配的 CA 数据
+	//   * 确保被删除 token 的引用从 ServiceAccount 中移除
+	// key 为 secretQueueKey{}。
 	syncSecretQueue workqueue.TypedRateLimitingInterface[secretQueueKey]
 
 	maxRetries int
 }
 
-// Run runs controller blocks until stopCh is closed
+// Run 启动控制器并阻塞，直到 ctx 被取消。
 func (e *TokensController) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 	logger := klog.FromContext(ctx)
@@ -170,6 +171,7 @@ func (e *TokensController) Run(ctx context.Context, workers int) {
 	var wg sync.WaitGroup
 	defer func() {
 		logger.V(1).Info("Shutting down")
+		// 先关闭两个队列再等待 worker 退出，防止关闭后仍有任务被处理。
 		e.syncServiceAccountQueue.ShutDown()
 		e.syncSecretQueue.ShutDown()
 		wg.Wait()
@@ -191,6 +193,8 @@ func (e *TokensController) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// queueServiceAccountSync 将 ServiceAccount 事件（含删除事件）转换为队列 key。
+// 删除事件可能是 tombstone，需要解包出原始对象。
 func (e *TokensController) queueServiceAccountSync(obj interface{}) {
 	if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
 		obj = tombstone.Obj
@@ -202,19 +206,21 @@ func (e *TokensController) queueServiceAccountSync(obj interface{}) {
 	utilruntime.HandleError(fmt.Errorf("error decoding object, invalid type: %T", obj))
 }
 
+// queueServiceAccountUpdateSync 根据更新后的 ServiceAccount 生成队列 key。
 func (e *TokensController) queueServiceAccountUpdateSync(oldObj interface{}, newObj interface{}) {
 	if serviceAccount, ok := newObj.(*v1.ServiceAccount); ok {
 		e.syncServiceAccountQueue.Add(makeServiceAccountKey(serviceAccount))
 	}
 }
 
-// complete optionally requeues key, then calls queue.Done(key)
+// retryOrForget 根据 requeue 标记决定限速重入队还是清除重试计数，最后调用 Done。
 func retryOrForget[T comparable](logger klog.Logger, queue workqueue.TypedRateLimitingInterface[T], key T, requeue bool, maxRetries int) {
 	if !requeue {
 		queue.Forget(key)
 		return
 	}
 
+	// 超过最大重试次数后放弃，避免永久失败的对象无限占用队列。
 	requeueCount := queue.NumRequeues(key)
 	if requeueCount < maxRetries {
 		queue.AddRateLimited(key)
@@ -225,18 +231,22 @@ func retryOrForget[T comparable](logger klog.Logger, queue workqueue.TypedRateLi
 	queue.Forget(key)
 }
 
+// queueSecretSync 将 Secret 事件转换为队列 key。
 func (e *TokensController) queueSecretSync(obj interface{}) {
 	if secret, ok := obj.(*v1.Secret); ok {
 		e.syncSecretQueue.Add(makeSecretQueueKey(secret))
 	}
 }
 
+// queueSecretUpdateSync 根据更新后的 Secret 生成队列 key。
 func (e *TokensController) queueSecretUpdateSync(oldObj interface{}, newObj interface{}) {
 	if secret, ok := newObj.(*v1.Secret); ok {
 		e.syncSecretQueue.Add(makeSecretQueueKey(secret))
 	}
 }
 
+// syncServiceAccount 处理一个 ServiceAccount 队列项：
+// 若对象已不存在，清理其遗留的 token；获取失败则限速重试。
 func (e *TokensController) syncServiceAccount(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	key, quit := e.syncServiceAccountQueue.Get()
@@ -262,7 +272,7 @@ func (e *TokensController) syncServiceAccount(ctx context.Context) {
 		logger.Error(err, "Getting service account")
 		retry = true
 	case sa == nil:
-		// service account no longer exists, so delete related tokens
+		// ServiceAccount 已不存在，清理其遗留 token。
 		logger.V(4).Info("Service account deleted, removing tokens", "namespace", saInfo.namespace, "serviceaccount", saInfo.name)
 		sa = &v1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: saInfo.namespace, Name: saInfo.name, UID: saInfo.uid}}
 		retry, err = e.deleteTokens(ctx, sa)
@@ -272,6 +282,8 @@ func (e *TokensController) syncServiceAccount(ctx context.Context) {
 	}
 }
 
+// syncSecret 处理一个 Secret 队列项，覆盖三种情况：
+// Secret 已删除时清理引用；ServiceAccount 已删除时删除 token；否则补全 token 数据。
 func (e *TokensController) syncSecret(ctx context.Context) {
 	key, quit := e.syncSecretQueue.Get()
 	if quit {
@@ -280,7 +292,7 @@ func (e *TokensController) syncSecret(ctx context.Context) {
 	defer e.syncSecretQueue.Done(key)
 
 	logger := klog.FromContext(ctx)
-	// Track whether or not we should retry this sync
+	// retry 决定本次处理结束后是否限速重试。
 	retry := false
 	defer func() {
 		retryOrForget(logger, e.syncSecretQueue, key, retry, e.maxRetries)
@@ -298,9 +310,9 @@ func (e *TokensController) syncSecret(ctx context.Context) {
 		logger.Error(err, "Getting secret")
 		retry = true
 	case secret == nil:
-		// If the service account exists
+		// Secret 已删除：若其 ServiceAccount 仍存在，需移除对该 Secret 的引用。
 		if sa, saErr := e.getServiceAccount(ctx, secretInfo.namespace, secretInfo.saName, secretInfo.saUID, false); saErr == nil && sa != nil {
-			// secret no longer exists, so delete references to this secret from the service account
+			// Secret 已不存在，从 ServiceAccount 中移除对它的引用。
 			if err := clientretry.RetryOnConflict(RemoveTokenBackoff, func() error {
 				return e.removeSecretReference(ctx, secretInfo.namespace, secretInfo.saName, secretInfo.saUID, secretInfo.name)
 			}); err != nil {
@@ -308,21 +320,21 @@ func (e *TokensController) syncSecret(ctx context.Context) {
 			}
 		}
 	default:
-		// Ensure service account exists
+		// Secret 仍存在，先确认其 ServiceAccount 是否存在。
 		sa, saErr := e.getServiceAccount(ctx, secretInfo.namespace, secretInfo.saName, secretInfo.saUID, true)
 		switch {
 		case saErr != nil:
 			logger.Error(saErr, "Getting service account")
 			retry = true
 		case sa == nil:
-			// Delete token
+			// ServiceAccount 已不存在，删除该 token。
 			logger.V(4).Info("Service account does not exist, deleting token", "secret", klog.KRef(secretInfo.namespace, secretInfo.name))
 			if retriable, err := e.deleteToken(ctx, secretInfo.namespace, secretInfo.name, secretInfo.uid); err != nil {
 				logger.Error(err, "Deleting serviceaccount token", "secret", klog.KRef(secretInfo.namespace, secretInfo.name), "serviceAccount", klog.KRef(secretInfo.namespace, secretInfo.saName))
 				retry = retriable
 			}
 		default:
-			// Update token if needed
+			// 按需补全 token 数据。
 			if retriable, err := e.generateTokenIfNeeded(ctx, sa, secret); err != nil {
 				logger.Error(err, "Populating serviceaccount token", "secret", klog.KRef(secretInfo.namespace, secretInfo.name), "serviceAccount", klog.KRef(secretInfo.namespace, secretInfo.saName))
 				retry = retriable
@@ -331,10 +343,12 @@ func (e *TokensController) syncSecret(ctx context.Context) {
 	}
 }
 
+// deleteTokens 删除指定 ServiceAccount 名下的全部 token Secret，
+// 汇总各次删除的错误，并在任一删除需要重试时返回 retry=true。
 func (e *TokensController) deleteTokens(ctx context.Context, serviceAccount *v1.ServiceAccount) ( /*retry*/ bool, error) {
 	tokens, err := e.listTokenSecrets(serviceAccount)
 	if err != nil {
-		// don't retry on cache lookup errors
+		// 缓存查询失败不应重试：这不是瞬时性 API 错误。
 		return false, err
 	}
 	retry := false
@@ -351,21 +365,22 @@ func (e *TokensController) deleteTokens(ctx context.Context, serviceAccount *v1.
 	return retry, utilerrors.NewAggregate(errs)
 }
 
+// deleteToken 删除指定的 Secret。带上 UID 前置条件可避免误删同名重建的对象。
 func (e *TokensController) deleteToken(ctx context.Context, ns, name string, uid types.UID) ( /*retry*/ bool, error) {
 	var opts metav1.DeleteOptions
 	if len(uid) > 0 {
 		opts.Preconditions = &metav1.Preconditions{UID: &uid}
 	}
 	err := e.client.CoreV1().Secrets(ns).Delete(ctx, name, opts)
-	// NotFound doesn't need a retry (it's already been deleted)
-	// Conflict doesn't need a retry (the UID precondition failed)
+	// NotFound 表示已删除，Conflict 表示 UID 前置条件不满足（对象已被替换），均无需重试。
 	if err == nil || apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
 		return false, nil
 	}
-	// Retry for any other error
+	// 其他错误可能是瞬时故障，需要重试。
 	return true, err
 }
 
+// secretUpdateNeeded 依次返回是否需要更新 CA 数据、namespace 数据和 token 数据。
 func (e *TokensController) secretUpdateNeeded(secret *v1.Secret) (bool, bool, bool) {
 	caData := secret.Data[v1.ServiceAccountRootCAKey]
 	needsCA := len(e.rootCA) > 0 && !bytes.Equal(caData, e.rootCA)
@@ -378,24 +393,22 @@ func (e *TokensController) secretUpdateNeeded(secret *v1.Secret) (bool, bool, bo
 	return needsCA, needsNamespace, needsToken
 }
 
-// generateTokenIfNeeded populates the token data for the given Secret if not already set
+// generateTokenIfNeeded 在 Secret 缺少 CA/namespace/token 数据时将其补全；已完整则不做任何改动。
 func (e *TokensController) generateTokenIfNeeded(ctx context.Context, serviceAccount *v1.ServiceAccount, cachedSecret *v1.Secret) ( /* retry */ bool, error) {
-	// Check the cached secret to see if changes are needed
+	// 先用缓存副本快速判断，避免每次事件都访问 API Server。
 	if needsCA, needsNamespace, needsToken := e.secretUpdateNeeded(cachedSecret); !needsCA && !needsToken && !needsNamespace {
 		return false, nil
 	}
 
-	// We don't want to update the cache's copy of the secret
-	// so add the token to a freshly retrieved copy of the secret
+	// 不能修改 informer 缓存中的对象，必须取一份实时副本再更新。
 	secrets := e.client.CoreV1().Secrets(cachedSecret.Namespace)
 	liveSecret, err := secrets.Get(ctx, cachedSecret.Name, metav1.GetOptions{})
 	if err != nil {
-		// Retry for any error other than a NotFound
+		// NotFound 表示 Secret 已删除，无需重试；其他错误需重试。
 		return !apierrors.IsNotFound(err), err
 	}
 	if liveSecret.ResourceVersion != cachedSecret.ResourceVersion {
-		// our view of the secret is not up to date
-		// we'll get notified of an update event later and get to try again
+		// 缓存视图已落后于真实对象；稍后会收到更新事件，届时再重试，避免覆盖他人修改。
 		klog.FromContext(ctx).V(2).Info("Secret is not up to date, skipping token population", "secret", klog.KRef(liveSecret.Namespace, liveSecret.Name))
 		return false, nil
 	}
@@ -412,16 +425,16 @@ func (e *TokensController) generateTokenIfNeeded(ctx context.Context, serviceAcc
 		liveSecret.Data = map[string][]byte{}
 	}
 
-	// Set the CA
+	// 补全 CA 数据。
 	if needsCA {
 		liveSecret.Data[v1.ServiceAccountRootCAKey] = e.rootCA
 	}
-	// Set the namespace
+	// 补全 namespace 数据。
 	if needsNamespace {
 		liveSecret.Data[v1.ServiceAccountNamespaceKey] = []byte(liveSecret.Namespace)
 	}
 
-	// Generate the token
+	// 生成并写入 token 数据。
 	if needsToken {
 		c, pc := serviceaccount.LegacyClaims(*serviceAccount, *liveSecret)
 		token, err := e.token.GenerateToken(ctx, c, pc)
@@ -431,15 +444,15 @@ func (e *TokensController) generateTokenIfNeeded(ctx context.Context, serviceAcc
 		liveSecret.Data[v1.ServiceAccountTokenKey] = []byte(token)
 	}
 
-	// Set annotations
+	// 记录所属 ServiceAccount 的名称与 UID，供后续归属判断使用。
 	liveSecret.Annotations[v1.ServiceAccountNameKey] = serviceAccount.Name
 	liveSecret.Annotations[v1.ServiceAccountUIDKey] = string(serviceAccount.UID)
 
-	// Save the secret
+	// 将补全后的 Secret 写回 API Server。
 	_, err = secrets.Update(ctx, liveSecret, metav1.UpdateOptions{})
 	if apierrors.IsConflict(err) || apierrors.IsNotFound(err) {
-		// if we got a Conflict error, the secret was updated by someone else, and we'll get an update notification later
-		// if we got a NotFound error, the secret no longer exists, and we don't need to populate a token
+		// Conflict 表示 Secret 被他人更新，稍后会收到更新事件；
+		// NotFound 表示 Secret 已不存在，无需再补全 token。两种情况都不重试。
 		return false, nil
 	}
 	if err != nil {
@@ -448,13 +461,12 @@ func (e *TokensController) generateTokenIfNeeded(ctx context.Context, serviceAcc
 	return false, nil
 }
 
-// removeSecretReference updates the given ServiceAccount to remove a reference to the given secretName if needed.
+// removeSecretReference 在需要时从 ServiceAccount 中移除对指定 Secret 的引用。
 func (e *TokensController) removeSecretReference(ctx context.Context, saNamespace string, saName string, saUID types.UID, secretName string) error {
-	// We don't want to update the cache's copy of the service account
-	// so remove the secret from a freshly retrieved copy of the service account
+	// 不能修改 informer 缓存中的对象，取实时副本再更新。
 	serviceAccounts := e.client.CoreV1().ServiceAccounts(saNamespace)
 	serviceAccount, err := serviceAccounts.Get(ctx, saName, metav1.GetOptions{})
-	// Ignore NotFound errors when attempting to remove a reference
+	// ServiceAccount 已不存在时无需清理引用，直接返回成功。
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
@@ -462,17 +474,17 @@ func (e *TokensController) removeSecretReference(ctx context.Context, saNamespac
 		return err
 	}
 
-	// Short-circuit if the UID doesn't match
+	// UID 不匹配说明对象已被重建，旧引用不应由本次操作清除。
 	if len(saUID) > 0 && saUID != serviceAccount.UID {
 		return nil
 	}
 
-	// Short-circuit if the secret is no longer referenced
+	// 引用已不存在，无需更新。
 	if !getSecretReferences(serviceAccount).Has(secretName) {
 		return nil
 	}
 
-	// Remove the secret
+	// 过滤掉目标 Secret 的引用后写回。
 	secrets := []v1.ObjectReference{}
 	for _, s := range serviceAccount.Secrets {
 		if s.Name != secretName {
@@ -481,21 +493,23 @@ func (e *TokensController) removeSecretReference(ctx context.Context, saNamespac
 	}
 	serviceAccount.Secrets = secrets
 	_, err = serviceAccounts.Update(ctx, serviceAccount, metav1.UpdateOptions{})
-	// Ignore NotFound errors when attempting to remove a reference
+	// ServiceAccount 已不存在时无需清理引用，直接返回成功。
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
 	return err
 }
 
+// getServiceAccount 从缓存读取 ServiceAccount；缓存缺失且 fetchOnCacheMiss 为真时回源 API Server。
+// 若指定了 UID，还会校验对象身份，防止同名重建对象被误用。
 func (e *TokensController) getServiceAccount(ctx context.Context, ns string, name string, uid types.UID, fetchOnCacheMiss bool) (*v1.ServiceAccount, error) {
-	// Look up in cache
+	// 先查缓存，只有确认不存在（或 UID 不符）时才考虑回源。
 	sa, err := e.serviceAccounts.ServiceAccounts(ns).Get(name)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
 	if sa != nil {
-		// Ensure UID matches if given
+		// 校验 UID，避免命中同名重建对象。
 		if len(uid) == 0 || uid == sa.UID {
 			return sa, nil
 		}
@@ -505,7 +519,7 @@ func (e *TokensController) getServiceAccount(ctx context.Context, ns string, nam
 		return nil, nil
 	}
 
-	// Live lookup
+	// 缓存未命中，回源读取实时对象。
 	sa, err = e.client.CoreV1().ServiceAccounts(ns).Get(ctx, name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil, nil
@@ -513,15 +527,16 @@ func (e *TokensController) getServiceAccount(ctx context.Context, ns string, nam
 	if err != nil {
 		return nil, err
 	}
-	// Ensure UID matches if given
+	// 再次校验 UID，不匹配视为对象不存在。
 	if len(uid) == 0 || uid == sa.UID {
 		return sa, nil
 	}
 	return nil, nil
 }
 
+// getSecret 从缓存读取 Secret 并校验 UID；不存在或 UID 不符均返回 nil。
 func (e *TokensController) getSecret(ctx context.Context, ns string, name string, uid types.UID) (*v1.Secret, error) {
-	// Look up in cache
+	// 查缓存，NotFound 表示 Secret 已被删除。
 	secret, err := e.secrets.Secrets(ns).Get(name)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -530,7 +545,7 @@ func (e *TokensController) getSecret(ctx context.Context, ns string, name string
 		return nil, err
 	}
 
-	// Ensure UID matches if given
+	// 校验 UID，避免命中同名重建的 Secret。
 	if len(uid) == 0 || uid == secret.UID {
 		return secret, nil
 	}
@@ -538,8 +553,7 @@ func (e *TokensController) getSecret(ctx context.Context, ns string, name string
 	return nil, nil
 }
 
-// listTokenSecrets returns a list of all the ServiceAccountToken secrets that
-// reference the given service account's name and uid
+// listTokenSecrets 返回所有引用指定 ServiceAccount 名称与 UID 的 ServiceAccountToken Secret。
 func (e *TokensController) listTokenSecrets(serviceAccount *v1.ServiceAccount) ([]*v1.Secret, error) {
 	namespaceSecrets, err := e.secrets.Secrets(serviceAccount.Namespace).List(labels.Everything())
 	if err != nil {
@@ -555,6 +569,7 @@ func (e *TokensController) listTokenSecrets(serviceAccount *v1.ServiceAccount) (
 	return items, nil
 }
 
+// getSecretReferences 提取 ServiceAccount 引用的所有 Secret 名称集合。
 func getSecretReferences(serviceAccount *v1.ServiceAccount) sets.String {
 	references := sets.NewString()
 	for _, secret := range serviceAccount.Secrets {
@@ -563,15 +578,15 @@ func getSecretReferences(serviceAccount *v1.ServiceAccount) sets.String {
 	return references
 }
 
-// serviceAccountQueueKey holds information we need to sync a service account.
-// It contains enough information to look up the cached service account,
-// or delete owned tokens if the service account no longer exists.
+// serviceAccountQueueKey 保存同步 ServiceAccount 所需的信息。
+// 其中信息足以查找缓存中的对象，或在对象已不存在时删除其所属的 token。
 type serviceAccountQueueKey struct {
 	namespace string
 	name      string
 	uid       types.UID
 }
 
+// makeServiceAccountKey 从 ServiceAccount 构造队列 key，保留 UID 以识别重建对象。
 func makeServiceAccountKey(sa *v1.ServiceAccount) serviceAccountQueueKey {
 	return serviceAccountQueueKey{
 		namespace: sa.Namespace,
@@ -580,6 +595,7 @@ func makeServiceAccountKey(sa *v1.ServiceAccount) serviceAccountQueueKey {
 	}
 }
 
+// parseServiceAccountKey 解析并校验队列 key，字段缺失时返回错误。
 func parseServiceAccountKey(key interface{}) (serviceAccountQueueKey, error) {
 	queueKey, ok := key.(serviceAccountQueueKey)
 	if !ok || len(queueKey.namespace) == 0 || len(queueKey.name) == 0 || len(queueKey.uid) == 0 {
@@ -588,18 +604,18 @@ func parseServiceAccountKey(key interface{}) (serviceAccountQueueKey, error) {
 	return queueKey, nil
 }
 
-// secretQueueKey holds information we need to sync a service account token secret.
-// It contains enough information to look up the cached service account,
-// or delete the secret reference if the secret no longer exists.
+// secretQueueKey 保存同步 ServiceAccountToken Secret 所需的信息。
+// 其中信息足以查找缓存中的对象，或在对象已不存在时删除其引用。
 type secretQueueKey struct {
 	namespace string
 	name      string
 	uid       types.UID
 	saName    string
-	// optional, will be blank when syncing tokens missing the service account uid annotation
+	// 可选字段：当 token 缺少 ServiceAccount UID 注解时为空。
 	saUID types.UID
 }
 
+// makeSecretQueueKey 从 Secret 的注解与元数据构造队列 key。
 func makeSecretQueueKey(secret *v1.Secret) secretQueueKey {
 	return secretQueueKey{
 		namespace: secret.Namespace,
@@ -610,6 +626,7 @@ func makeSecretQueueKey(secret *v1.Secret) secretQueueKey {
 	}
 }
 
+// parseSecretQueueKey 解析并校验队列 key，字段缺失时返回错误。
 func parseSecretQueueKey(key interface{}) (secretQueueKey, error) {
 	queueKey, ok := key.(secretQueueKey)
 	if !ok || len(queueKey.namespace) == 0 || len(queueKey.name) == 0 || len(queueKey.uid) == 0 || len(queueKey.saName) == 0 {

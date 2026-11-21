@@ -35,7 +35,13 @@ import (
 
 const testSignerName = "test.test/testSigner"
 
+// TestCTBPublisherSync 以表驱动方式验证 ClusterTrustBundle 发布控制器的同步行为。
+//
+// 控制器需要保证：给定签名者恰好有一个名称确定的 CTB，内容等于当前 CA；
+// 各用例分别构造“不存在 / 内容陈旧 / 存在多个 / 状态已正确”等初始状态，
+// 断言同步后产生的 API 动作序列，覆盖创建、更新、删除和空操作四类结果。
 func TestCTBPublisherSync(t *testing.T) {
+	// checkCreatedTestSignerBundle 断言客户端记录里只有一次针对测试签名者的 CTB 创建动作。
 	checkCreatedTestSignerBundle := func(t *testing.T, actions []clienttesting.Action) {
 		filteredActions := filterOutListWatch(actions)
 		if len(filteredActions) != 1 {
@@ -54,6 +60,8 @@ func TestCTBPublisherSync(t *testing.T) {
 		}
 	}
 
+	// checkUpdatedTestSignerBundle 返回一个断言函数，检查唯一动作是把 CTB 更新为给定的 CA 内容。
+	// 闭包捕获期望的 CA 字节，便于在不同用例间复用同一套检查逻辑。
 	checkUpdatedTestSignerBundle := func(expectedCABytes []byte) func(t *testing.T, actions []clienttesting.Action) {
 		return func(t *testing.T, actions []clienttesting.Action) {
 			filteredActions := filterOutListWatch(actions)
@@ -78,6 +86,8 @@ func TestCTBPublisherSync(t *testing.T) {
 		}
 	}
 
+	// checkDeletedTestSignerBundle 返回一个断言函数，检查唯一动作是删除指定名称的 CTB。
+	// 多个同名签名者 CTB 时，控制器会保留规范名称的那个并删除多余的副本。
 	checkDeletedTestSignerBundle := func(name string) func(t *testing.T, actions []clienttesting.Action) {
 		return func(t *testing.T, actions []clienttesting.Action) {
 			filteredActions := filterOutListWatch(actions)
@@ -102,10 +112,12 @@ func TestCTBPublisherSync(t *testing.T) {
 		expectActions func(t *testing.T, actions []clienttesting.Action)
 		wantErr       bool
 	}{
+		// 集群里没有任何 CTB：应创建规范命名的那一个。
 		{
 			name:          "no CTBs exist",
 			expectActions: checkCreatedTestSignerBundle,
 		},
+		// 存在其他签名者的 CTB：它们与当前签名者无关，不应干扰创建动作。
 		{
 			name: "no CTBs for the current signer exist",
 			existingCTBs: []runtime.Object{
@@ -129,6 +141,7 @@ func TestCTBPublisherSync(t *testing.T) {
 			},
 			expectActions: checkCreatedTestSignerBundle,
 		},
+		// 规范命名的 CTB 内容陈旧：应更新为当前 CA。
 		{
 			name: "CTB for the signer exists with different content",
 			existingCTBs: []runtime.Object{
@@ -144,6 +157,7 @@ func TestCTBPublisherSync(t *testing.T) {
 			},
 			expectActions: checkUpdatedTestSignerBundle(testCAProvider.CurrentCABundleContent()),
 		},
+		// 同名签名者有多个 CTB 且内容都正确：只保留规范名称，删除多余副本。
 		{
 			name: "multiple CTBs for the signer",
 			existingCTBs: []runtime.Object{
@@ -168,6 +182,7 @@ func TestCTBPublisherSync(t *testing.T) {
 			},
 			expectActions: checkDeletedTestSignerBundle("test.test/testSigner:name2"),
 		},
+		// 多个 CTB 中规范名称那个内容陈旧：先更新它，再删除多余副本。
 		{
 			name: "multiple CTBs for the signer - the one with the proper name needs changing",
 			existingCTBs: []runtime.Object{
@@ -199,6 +214,7 @@ func TestCTBPublisherSync(t *testing.T) {
 				checkDeletedTestSignerBundle("test.test/testSigner:name2")(t, filteredActions[1:])
 			},
 		},
+		// 当前签名者只有一个非规范名称的 CTB：应新建规范名称的，并删掉旧的那个。
 		{
 			name: "another CTB with a different name exists for the signer",
 			existingCTBs: []runtime.Object{
@@ -221,6 +237,7 @@ func TestCTBPublisherSync(t *testing.T) {
 				checkDeletedTestSignerBundle("test.test/testSigner:preexisting")(t, filteredActions[1:])
 			},
 		},
+		// 状态已完全正确（含无关签名者的 CTB）：应产生零个动作，验证同步的幂等性。
 		{
 			name: "CTB at the correct state - noop",
 			existingCTBs: []runtime.Object{
@@ -274,6 +291,7 @@ func TestCTBPublisherSync(t *testing.T) {
 				t.Fatalf("failed to assert the controller for the beta API")
 			}
 
+			// 同步依赖 informer 缓存读取现有 CTB，因此先启动 informer 并等待缓存同步完成。
 			go controller.ctbInformer.RunWithContext(testCtx)
 			if !cache.WaitForCacheSync(testCtx.Done(), controller.ctbInformer.HasSynced) {
 				t.Fatal("timed out waiting for informer to sync")

@@ -42,6 +42,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestIsResourceMigratable 验证 isResourceMigratable 能否按发现文档判断某 GVR 是否具备迁移所需的动词，
+// 覆盖动词齐全、动词缺失、资源不存在以及多版本/多组场景下选错版本的情况。
 func TestIsResourceMigratable(t *testing.T) {
 	tcs := []struct {
 		name      string
@@ -178,6 +180,7 @@ func TestIsResourceMigratable(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {}))
 			defer server.Close()
 			discoveryClient := fakediscovery.FakeDiscovery{Fake: &kubetesting.Fake{}}
+			// 用假发现客户端注入用例里的发现文档；单测没有真实 API Server 可查询。
 			discoveryClient.Resources = tc.resources
 			rvController := ResourceVersionController{
 				discoveryClient: discovery.ToDiscoveryInterfaceWithContext(&discoveryClient),
@@ -185,11 +188,13 @@ func TestIsResourceMigratable(t *testing.T) {
 
 			isMigratable, err := rvController.isResourceMigratable(tCtx, tc.resource)
 			if err != nil {
+				// 资源不在发现文档中时返回错误而非布尔值，所以“未知资源”用例只校验错误文本。
 				if !strings.Contains(err.Error(), tc.wantErr) {
 					t.Errorf("Unexpected error: %v, want: %v", err, tc.wantErr)
 				}
 				return
 			}
+			// 其余用例校验布尔判定，避免把缺失 list/update/patch 动词的资源误判为可迁移。
 			if isMigratable != tc.want {
 				t.Errorf("Expected %v, got %v", tc.want, isMigratable)
 			}
@@ -197,6 +202,8 @@ func TestIsResourceMigratable(t *testing.T) {
 	}
 }
 
+// TestRVSync 验证 ResourceVersionController.sync 的各条分支：迁移未开始或已终结时直接跳过，
+// 可迁移时写入最新 resourceVersion 并更新状态，资源或元数据异常时标记失败或返回错误。
 func TestRVSync(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -298,7 +305,7 @@ func TestRVSync(t *testing.T) {
 			discoveryResources: &metav1.APIResourceList{
 				GroupVersion: "apps/v1",
 				APIResources: []metav1.APIResource{
-					{Name: "deployments", Namespaced: true, Kind: "Deployment", Verbs: []string{"update", "patch"}}, // Missing "list"
+					{Name: "deployments", Namespaced: true, Kind: "Deployment", Verbs: []string{"update", "patch"}}, // 缺少 "list" 动词
 				},
 			},
 			expectKubeActions: []kubetesting.Action{
@@ -392,13 +399,13 @@ func TestRVSync(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			// Setup fake discovery client
+			// 用假发现客户端模拟 API Server 的资源发现结果。
 			discoveryClient := &fakediscovery.FakeDiscovery{Fake: &kubetesting.Fake{}}
 			if tc.discoveryResources != nil {
 				discoveryClient.Resources = []*metav1.APIResourceList{tc.discoveryResources}
 			}
 
-			// Setup fake metadata client
+			// 用假元数据客户端模拟 list 请求，以便顺带校验请求携带的 GVR 和命名空间。
 			metadatascheme := metadatafake.NewTestScheme()
 			err := svmv1.AddToScheme(metadatascheme)
 			require.NoError(t, err)
@@ -406,6 +413,7 @@ func TestRVSync(t *testing.T) {
 			require.NoError(t, err)
 			metadataClient := metadatafake.NewSimpleMetadataClient(metadatascheme)
 
+			// 拦截所有 list 调用：既要返回预设的 resourceVersion，也要校验请求是否落在预期的命名空间范围。
 			metadataClient.Fake.PrependReactor("list", "*", func(action kubetesting.Action) (handled bool, ret runtime.Object, err error) {
 				listAction, ok := action.(kubetesting.ListAction)
 				require.True(t, ok, "expected ListAction")
@@ -439,6 +447,7 @@ func TestRVSync(t *testing.T) {
 				require.NoError(t, err)
 			}
 
+			// informer 启动会产生 list/watch 噪声，过滤掉后再断言控制器真正发出的写操作。
 			kubeActions := filterListWatchActions(kubeClient.Actions())
 			if tc.expectKubeActions == nil {
 				require.Empty(t, kubeActions, "expected zero kube client actions")
@@ -454,7 +463,7 @@ func TestRVSync(t *testing.T) {
 				actualSvm := actual.(kubetesting.UpdateAction).GetObject().(*svmv1.StorageVersionMigration)
 				expectedSvm := expected.(kubetesting.UpdateAction).GetObject().(*svmv1.StorageVersionMigration)
 
-				// Check the important parts: ResourceVersion and Conditions
+				// 只比对关心的字段：其余元数据由 fake client 填充，全量比对会引入无关噪声。
 				require.Equal(t, expectedSvm.Status.ResourceVersion, actualSvm.Status.ResourceVersion, "kube action %d: status.resourceVersion mismatch", i)
 
 				expectedConditions := expectedSvm.Status.Conditions
@@ -471,10 +480,12 @@ func TestRVSync(t *testing.T) {
 	}
 }
 
-// filterListWatchActions filters out list/watch actions from the client-go fake client.
+// filterListWatchActions 过滤掉 client-go 假客户端记录的 list/watch 动作，
+// 只留下控制器实际触发的写操作供断言。
 func filterListWatchActions(actions []kubetesting.Action) []kubetesting.Action {
 	var filteredActions []kubetesting.Action
 	for _, action := range actions {
+		// list/watch 由 informer 产生，与被测的同步逻辑无关。
 		if action.GetVerb() == "list" || action.GetVerb() == "watch" {
 			continue
 		}
@@ -483,15 +494,18 @@ func filterListWatchActions(actions []kubetesting.Action) []kubetesting.Action {
 	return filteredActions
 }
 
+// testRESTMapper 给假 RESTMapper 加上 Reset，供发现结果定期刷新时重置缓存。
 type testRESTMapper struct {
 	meta.RESTMapper
 }
 
+// Reset 委托给底层 RESTMapper 的 Reset，避免测试中的 mapper 缓存过期资源。
 func (m *testRESTMapper) Reset() {
 	meta.MaybeResetRESTMapper(m.RESTMapper)
 }
 
-// newTestRVController creates a new ResourceVersionController for testing.
+// newTestRVController 组装一个供测试使用的 ResourceVersionController，
+// 注入假客户端与 informer，并预置可解析测试 GVR 的 RESTMapper。
 func newTestRVController(
 	kubeClient kubernetes.Interface,
 	discoveryClient discovery.DiscoveryInterface,

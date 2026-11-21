@@ -16,7 +16,7 @@ limitations under the License.
 
 package events
 
-// volume relevant event reasons
+// 以下常量是存储卷相关事件（Event）的 Reason，用于向用户暴露卷生命周期中的失败与进度。
 const (
 	FailedBinding             = "FailedBinding"
 	VolumeMismatch            = "VolumeMismatch"

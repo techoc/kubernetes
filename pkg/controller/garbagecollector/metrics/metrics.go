@@ -23,9 +23,13 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
+// GarbageCollectorControllerSubsystem 定义垃圾回收控制器指标的子系统命名空间，
+// 避免与其他控制器的同名指标发生冲突。
 const GarbageCollectorControllerSubsystem = "garbagecollector_controller"
 
 var (
+	// GarbageCollectorResourcesSyncError 统计资源同步过程中的错误次数。
+	// 该指标为 ALPHA 稳定性级别，用于观测垃圾回收器能否正常完成图重建。
 	GarbageCollectorResourcesSyncError = metrics.NewCounter(
 		&metrics.CounterOpts{
 			Subsystem:      GarbageCollectorControllerSubsystem,
@@ -35,9 +39,11 @@ var (
 		})
 )
 
+// registerMetrics 保证指标只注册一次；重复注册同一指标会导致 legacyregistry  panic。
 var registerMetrics sync.Once
 
-// Register registers GarbageCollectorController metrics.
+// Register 向 legacyregistry 注册垃圾回收控制器的指标。
+// 使用 sync.Once 包装是因为同一进程内该函数可能被调用多次，而重复注册会触发 panic。
 func Register() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(GarbageCollectorResourcesSyncError)

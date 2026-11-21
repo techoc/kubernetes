@@ -16,11 +16,9 @@ limitations under the License.
 
 package config
 
-// CronJobControllerConfiguration contains elements describing the
-// CronJobControllerV2.
+// CronJobControllerConfiguration 包含描述 CronJobControllerV2 的配置项。
 type CronJobControllerConfiguration struct {
-	// ConcurrentCronJobSyncs is the number of cron job objects that are
-	// allowed to sync concurrently. Larger number = more responsive jobs,
-	// but more CPU (and network) load.
+	// ConcurrentCronJobSyncs 是允许同时同步的 CronJob 对象数量。
+	// 数值越大，任务响应越及时，但 CPU 和网络负载也越高。
 	ConcurrentCronJobSyncs int32
 }

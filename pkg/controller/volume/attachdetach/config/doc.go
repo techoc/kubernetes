@@ -16,4 +16,6 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package config 定义挂载/卸载（attach/detach）控制器的内部配置类型。
+// 该包由 deepcopy-gen 生成深拷贝代码（见 +k8s 指令）。
 package config

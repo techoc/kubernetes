@@ -17,17 +17,17 @@ limitations under the License.
 package endpointslicemirroring
 
 const (
-	// FailedToListEndpointSlices indicates the controller has failed to list
-	// EndpointSlices.
+	// FailedToListEndpointSlices 表示控制器列举 EndpointSlice 失败。
+	// 该事件用于提示同步无法获取期望状态，需排查 API 连通性或权限。
 	FailedToListEndpointSlices = "FailedToListEndpointSlices"
-	// FailedToUpdateEndpointSlices indicates the controller has failed to
-	// update EndpointSlices.
+	// FailedToUpdateEndpointSlices 表示控制器更新 EndpointSlice 失败。
+	// 出现该事件时镜像数据可能落后于 Endpoints，需关注写入冲突或配额限制。
 	FailedToUpdateEndpointSlices = "FailedToUpdateEndpointSlices"
-	// InvalidIPAddress indicates that an IP address found in an Endpoints
-	// resource is invalid.
+	// InvalidIPAddress 表示 Endpoints 资源中发现的 IP 地址无效。
+	// 无效地址不会被镜像，事件用于提醒用户修正 Endpoints 内容。
 	InvalidIPAddress = "InvalidIPAddress"
-	// TooManyAddressesToMirror indicates that some addresses were not mirrored
-	// due to an EndpointSubset containing more addresses to mirror than
-	// MaxEndpointsPerSubset allows.
+	// TooManyAddressesToMirror 表示部分地址未被镜像。
+	// 原因是某个 EndpointSubset 中待镜像的地址数超过 MaxEndpointsPerSubset 上限，
+	// 属于截断行为，需提示用户调整 Endpoints 规模或配置。
 	TooManyAddressesToMirror = "TooManyAddressesToMirror"
 )

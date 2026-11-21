@@ -20,26 +20,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// HPAControllerConfiguration contains elements describing HPAController.
+// HPAControllerConfiguration 包含描述 HPAController 的各项配置。
 type HPAControllerConfiguration struct {
-	// ConcurrentHorizontalPodAutoscalerSyncs is the number of HPA objects that are allowed to sync concurrently.
-	// Larger number = more responsive HPA processing, but more CPU (and network) load.
+	// ConcurrentHorizontalPodAutoscalerSyncs 允许并发同步的 HPA 对象数量。
+	// 数值越大，HPA 处理响应越及时，但也会带来更高的 CPU（和网络）负载。
 	ConcurrentHorizontalPodAutoscalerSyncs int32
-	// horizontalPodAutoscalerSyncPeriod is the period for syncing the number of
-	// pods in horizontal pod autoscaler.
+	// HorizontalPodAutoscalerSyncPeriod 是水平 Pod 自动扩缩容器同步 Pod 数量的周期。
 	HorizontalPodAutoscalerSyncPeriod metav1.Duration
-	// HorizontalPodAutoscalerDowncaleStabilizationWindow is a period for which autoscaler will look
-	// backwards and not scale down below any recommendation it made during that period.
+	// HorizontalPodAutoscalerDownscaleStabilizationWindow 是自动扩缩容器回看的时间窗口：
+	// 在该窗口内，不会把 Pod 数量降到低于期间任意一次推荐值，以避免缩容抖动。
 	HorizontalPodAutoscalerDownscaleStabilizationWindow metav1.Duration
-	// horizontalPodAutoscalerTolerance is the tolerance for when
-	// resource usage suggests upscaling/downscaling
+	// HorizontalPodAutoscalerTolerance 是资源使用率触发扩容/缩容判断的容差。
 	HorizontalPodAutoscalerTolerance float64
-	// HorizontalPodAutoscalerCPUInitializationPeriod is the period after pod start when CPU samples
-	// might be skipped.
+	// HorizontalPodAutoscalerCPUInitializationPeriod 是 Pod 启动后的一段时期，
+	// 期间采集到的 CPU 样本可能会被忽略，因为启动阶段的数据尚不稳定。
 	HorizontalPodAutoscalerCPUInitializationPeriod metav1.Duration
-	// HorizontalPodAutoscalerInitialReadinessDelay is period after pod start during which readiness
-	// changes are treated as readiness being set for the first time. The only effect of this is that
-	// HPA will disregard CPU samples from unready pods that had last readiness change during that
-	// period.
+	// HorizontalPodAutoscalerInitialReadinessDelay 是 Pod 启动后的一段时间，
+	// 期间就绪状态的变化被视为首次设置就绪。其唯一效果是：
+	// HPA 会忽略在该时间段内最后一次发生就绪状态变化的未就绪 Pod 的 CPU 样本。
 	HorizontalPodAutoscalerInitialReadinessDelay metav1.Duration
 }

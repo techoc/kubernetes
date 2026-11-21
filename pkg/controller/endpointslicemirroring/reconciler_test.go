@@ -36,26 +36,40 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// defaultMaxEndpointsPerSubset 单个 EndpointSubset 默认允许的最大端点数。
 const defaultMaxEndpointsPerSubset = int32(1000)
 
-// TestReconcile ensures that Endpoints are reconciled into corresponding
-// EndpointSlices with appropriate fields.
+// TestReconcile 确保 Endpoints 能被对账为带有相应字段的 EndpointSlice，
+// 覆盖子集/端口/地址组合、待删除状态、属主引用差异、注解镜像、双栈、非法地址、
+// 每子集端点数上限等场景，并校验客户端操作次数与指标。
 func TestReconcile(t *testing.T) {
 	protoTCP := corev1.ProtocolTCP
 	protoUDP := corev1.ProtocolUDP
 
+	// 表驱动用例：每个用例描述一组 Endpoints 输入及期望的对账结果。
 	testCases := []struct {
-		testName                 string
-		subsets                  []corev1.EndpointSubset
-		epLabels                 map[string]string
-		epAnnotations            map[string]string
-		uid                      string
+		// testName 用例名称，用作子测试名。
+		testName string
+		// subsets Endpoints 的子集，包含端口与就绪/未就绪地址。
+		subsets []corev1.EndpointSubset
+		// epLabels Endpoints 的标签，应被镜像到 EndpointSlice。
+		epLabels map[string]string
+		// epAnnotations Endpoints 的注解，应被镜像（部分键例外）。
+		epAnnotations map[string]string
+		// uid Endpoints 的 UID，用于校验属主引用。
+		uid string
+		// endpointsDeletionPending 为 true 时模拟 Endpoints 处于待删除状态。
 		endpointsDeletionPending bool
-		maxEndpointsPerSubset    int32
-		existingEndpointSlices   []*discovery.EndpointSlice
-		expectedNumSlices        int
-		expectedClientActions    int
-		expectedMetrics          *expectedMetrics
+		// maxEndpointsPerSubset 单个子集允许的端点上限，0 表示使用默认值。
+		maxEndpointsPerSubset int32
+		// existingEndpointSlices 预置到 fake client 中的 EndpointSlice。
+		existingEndpointSlices []*discovery.EndpointSlice
+		// expectedNumSlices 期望最终存在的 EndpointSlice 数量。
+		expectedNumSlices int
+		// expectedClientActions 期望对账阶段新增的客户端动作数。
+		expectedClientActions int
+		// expectedMetrics 期望的指标值；nil 表示不校验。
+		expectedMetrics *expectedMetrics
 	}{{
 		testName:               "Endpoints with no subsets",
 		subsets:                []corev1.EndpointSubset{},
@@ -1058,8 +1072,10 @@ func TestReconcile(t *testing.T) {
 		expectedClientActions: 1,
 	}}
 
+	// 逐个用例执行，并以用例名创建子测试便于定位失败。
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
+			// 初始化带测试日志的上下文，供事件记录器等组件使用。
 			tCtx := ktesting.Init(t)
 			client := newClientset()
 			setupMetrics()
@@ -1069,11 +1085,13 @@ func TestReconcile(t *testing.T) {
 				Subsets:    tc.subsets,
 			}
 
+			// 设置删除时间戳，使 reconciler 看到待删除的 Endpoints。
 			if tc.endpointsDeletionPending {
 				now := metav1.Now()
 				endpoints.DeletionTimestamp = &now
 			}
 
+			// 先记录预置数据产生的动作数，后续只统计对账本身新增的动作。
 			numInitialActions := 0
 			for _, epSlice := range tc.existingEndpointSlices {
 				epSlice.Labels = map[string]string{
@@ -1087,6 +1105,7 @@ func TestReconcile(t *testing.T) {
 				numInitialActions++
 			}
 
+			// 用例未指定上限时回退到默认值，避免零值导致所有端点被跳过。
 			maxEndpointsPerSubset := tc.maxEndpointsPerSubset
 			if maxEndpointsPerSubset == 0 {
 				maxEndpointsPerSubset = defaultMaxEndpointsPerSubset
@@ -1094,11 +1113,13 @@ func TestReconcile(t *testing.T) {
 			r := newReconciler(tCtx, client, maxEndpointsPerSubset)
 			reconcileHelper(t, r, &endpoints, tc.existingEndpointSlices)
 
+			// 扣减预置动作数，确保断言只针对对账阶段的客户端调用。
 			numExtraActions := len(client.Actions()) - numInitialActions
 			if numExtraActions != tc.expectedClientActions {
 				t.Fatalf("Expected %d additional client actions, got %d: %#v", tc.expectedClientActions, numExtraActions, client.Actions()[numInitialActions:])
 			}
 
+			// 仅在用例声明了期望值时校验指标，避免无关用例的指标噪音。
 			if tc.expectedMetrics != nil {
 				expectMetrics(t, *tc.expectedMetrics)
 			}
@@ -1109,8 +1130,9 @@ func TestReconcile(t *testing.T) {
 	}
 }
 
-// Test Helpers
+// 测试辅助函数
 
+// newReconciler 构造一个使用 fake client 的 reconciler，并注入事件记录器、EndpointSlice 跟踪器与指标缓存。
 func newReconciler(ctx context.Context, client *fake.Clientset, maxEndpointsPerSubset int32) *reconciler {
 	broadcaster := record.NewBroadcaster(record.WithContext(ctx))
 	recorder := broadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "endpoint-slice-mirroring-controller"})
@@ -1124,12 +1146,15 @@ func newReconciler(ctx context.Context, client *fake.Clientset, maxEndpointsPerS
 	}
 }
 
+// expectEndpointSlices 校验 EndpointSlice 的数量、命名、服务标签、注解，
+// 以及各子集端口对应的地址、就绪状态、主机名与节点名。
 func expectEndpointSlices(t *testing.T, num, maxEndpointsPerSubset int, endpoints corev1.Endpoints, endpointSlices []discovery.EndpointSlice) {
 	t.Helper()
 	if len(endpointSlices) != num {
 		t.Fatalf("Expected %d EndpointSlices, got %d", num, len(endpointSlices))
 	}
 
+	// 期望数量为 0 时前面已校验实际为空，无需继续检查内容。
 	if num == 0 {
 		return
 	}
@@ -1147,6 +1172,7 @@ func expectEndpointSlices(t *testing.T, num, maxEndpointsPerSubset int, endpoint
 			t.Errorf("Expected EndpointSlice to have %s label set to %s, got %s", discovery.LabelServiceName, endpoints.Name, serviceNameVal)
 		}
 
+		// last-applied-configuration 属于 kubectl 客户端元数据，不应被镜像到 EndpointSlice。
 		_, ok = epSlice.Annotations[corev1.LastAppliedConfigAnnotation]
 		if ok {
 			t.Errorf("Expected LastAppliedConfigAnnotation to be unset, got %s", epSlice.Annotations[corev1.LastAppliedConfigAnnotation])
@@ -1167,9 +1193,8 @@ func expectEndpointSlices(t *testing.T, num, maxEndpointsPerSubset int, endpoint
 		}
 	}
 
-	// canonicalize endpoints to match the expected endpoints, otherwise the test
-	// that creates more endpoints than allowed fail becaused the list of final
-	// endpoints doesn't match.
+	// 将端点重新打包（canonicalize）以匹配期望的端点集合；否则“创建端点数超过上限”
+	// 的用例会因最终端点列表不一致而失败。
 	for _, epSubset := range endpointsv1.RepackSubsets(endpoints.Subsets) {
 		if len(epSubset.Addresses) == 0 && len(epSubset.NotReadyAddresses) == 0 {
 			continue
@@ -1199,11 +1224,13 @@ func expectEndpointSlices(t *testing.T, num, maxEndpointsPerSubset int, endpoint
 	}
 }
 
+// portsMatch 判断 Endpoints 子集端口与 EndpointSlice 端口是否一致，比较时忽略端口顺序。
 func portsMatch(epPorts []corev1.EndpointPort, epsPorts []discovery.EndpointPort) bool {
 	if len(epPorts) != len(epsPorts) {
 		return false
 	}
 
+	// 以端口值作为键建立索引，从而忽略两组端口的排列顺序差异。
 	portsToBeMatched := map[int32]corev1.EndpointPort{}
 
 	for _, epPort := range epPorts {
@@ -1234,16 +1261,22 @@ func portsMatch(epPorts []corev1.EndpointPort, epsPorts []discovery.EndpointPort
 	return true
 }
 
+// expectMatchingAddresses 校验 EndpointSlice 中的地址集合及每个地址的就绪状态、
+// 主机名与节点名是否与 Endpoints 子集一致。
 func expectMatchingAddresses(t *testing.T, epSubset corev1.EndpointSubset, esEndpoints []discovery.Endpoint, addrType discovery.AddressType, maxEndpointsPerSubset int) {
 	t.Helper()
+	// addressInfo 记录一个端点地址及其是否就绪。
 	type addressInfo struct {
-		ready     bool
+		// ready 地址是否处于就绪状态。
+		ready bool
+		// epAddress 原始 Endpoints 地址。
 		epAddress corev1.EndpointAddress
 	}
 
-	// This approach assumes that each IP is unique within an EndpointSubset.
+	// 该方法假设同一 EndpointSubset 内每个 IP 唯一。
 	expectedEndpoints := map[string]addressInfo{}
 
+	// 先收集就绪地址，再收集未就绪地址，两者共用同一个上限。
 	for _, address := range epSubset.Addresses {
 		_, at := addressToEndpoint(address, true)
 		if at != nil && *at == addrType && len(expectedEndpoints) < maxEndpointsPerSubset {
@@ -1302,8 +1335,10 @@ func expectMatchingAddresses(t *testing.T, epSubset corev1.EndpointSubset, esEnd
 	}
 }
 
+// fetchEndpointSlices 从 fake client 中列出本控制器管理的 EndpointSlice。
 func fetchEndpointSlices(t *testing.T, client *fake.Clientset, namespace string) []discovery.EndpointSlice {
 	t.Helper()
+	// 只查询带本控制器管理标签的对象，避免混入其他控制器创建的 EndpointSlice。
 	fetchedSlices, err := client.DiscoveryV1().EndpointSlices(namespace).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: discovery.LabelManagedBy + "=" + ControllerName,
 	})
@@ -1314,6 +1349,7 @@ func fetchEndpointSlices(t *testing.T, client *fake.Clientset, namespace string)
 	return fetchedSlices.Items
 }
 
+// reconcileHelper 调用 reconciler 的对账方法，并在返回错误时让测试立即失败。
 func reconcileHelper(t *testing.T, r *reconciler, endpoints *corev1.Endpoints, existingSlices []*discovery.EndpointSlice) {
 	t.Helper()
 	_, ctx := ktesting.NewTestContext(t)
@@ -1323,21 +1359,33 @@ func reconcileHelper(t *testing.T, r *reconciler, endpoints *corev1.Endpoints, e
 	}
 }
 
-// Metrics helpers
+// 指标校验辅助函数
 
+// expectedMetrics 描述一次对账后期望的各项指标值，零值表示期望为 0。
 type expectedMetrics struct {
-	desiredSlices    int
-	actualSlices     int
+	// desiredSlices 期望的 EndpointSlice 数量（gauge）。
+	desiredSlices int
+	// actualSlices 实际的 EndpointSlice 数量（gauge）。
+	actualSlices int
+	// desiredEndpoints 期望的端点总数（gauge）。
 	desiredEndpoints int
-	addedPerSync     int
-	updatedPerSync   int
-	removedPerSync   int
-	skippedPerSync   int
-	numCreated       int
-	numUpdated       int
-	numDeleted       int
+	// addedPerSync 本次对账新增的端点数（histogram）。
+	addedPerSync int
+	// updatedPerSync 本次对账更新的端点数（histogram）。
+	updatedPerSync int
+	// removedPerSync 本次对账移除的端点数（histogram）。
+	removedPerSync int
+	// skippedPerSync 本次对账因非法地址或超出上限而跳过的地址数（histogram）。
+	skippedPerSync int
+	// numCreated 创建的 EndpointSlice 数（counter）。
+	numCreated int
+	// numUpdated 更新的 EndpointSlice 数（counter）。
+	numUpdated int
+	// numDeleted 删除的 EndpointSlice 数（counter）。
+	numDeleted int
 }
 
+// expectMetrics 逐项校验 gauge、histogram 与 counter 指标是否达到期望值。
 func expectMetrics(t *testing.T, em expectedMetrics) {
 	t.Helper()
 
@@ -1402,12 +1450,14 @@ func expectMetrics(t *testing.T, em expectedMetrics) {
 	}
 }
 
+// handleErr 在读取指标失败时记录错误，并带上指标名便于定位。
 func handleErr(t *testing.T, err error, metricName string) {
 	if err != nil {
 		t.Errorf("Failed to get %s value, err: %v", metricName, err)
 	}
 }
 
+// setupMetrics 注册指标并清零各指标，保证用例之间的指标状态相互隔离。
 func setupMetrics() {
 	metrics.RegisterMetrics()
 	metrics.NumEndpointSlices.Delete(map[string]string{})

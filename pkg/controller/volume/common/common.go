@@ -25,13 +25,12 @@ import (
 )
 
 const (
-	// PodPVCIndex is the lookup name for the index function, which is to index by pod pvcs.
+	// PodPVCIndex 是按 Pod 所用 PVC 建立索引的索引函数查找名。
 	PodPVCIndex = "pod-pvc-index"
 )
 
-// PodPVCIndexFunc creates an index function that returns PVC keys (=
-// namespace/name) for given pod.  This includes the PVCs
-// that might be created for generic ephemeral volumes.
+// PodPVCIndexFunc 创建索引函数，对给定 Pod 返回其 PVC 键（即 namespace/name）。
+// 其中也包含可能为通用临时卷（generic ephemeral volume）创建的 PVC。
 func PodPVCIndexFunc() func(obj interface{}) ([]string, error) {
 	return func(obj interface{}) ([]string, error) {
 		pod, ok := obj.(*v1.Pod)
@@ -54,12 +53,12 @@ func PodPVCIndexFunc() func(obj interface{}) ([]string, error) {
 	}
 }
 
-// AddPodPVCIndexerIfNotPresent adds the PodPVCIndexFunc.
+// AddPodPVCIndexerIfNotPresent 添加 PodPVCIndexFunc 索引器（若尚未添加）。
 func AddPodPVCIndexerIfNotPresent(indexer cache.Indexer) error {
 	return AddIndexerIfNotPresent(indexer, PodPVCIndex, PodPVCIndexFunc())
 }
 
-// AddIndexerIfNotPresent adds the index function with the name into the cache indexer if not present
+// AddIndexerIfNotPresent 在缓存索引器中不存在指定名称时，添加对应的索引函数。
 func AddIndexerIfNotPresent(indexer cache.Indexer, indexName string, indexFunc cache.IndexFunc) error {
 	indexers := indexer.GetIndexers()
 	if _, ok := indexers[indexName]; ok {

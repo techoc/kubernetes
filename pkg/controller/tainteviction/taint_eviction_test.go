@@ -40,8 +40,11 @@ import (
 	"k8s.io/kubernetes/pkg/controller/testutil"
 )
 
+// 短暂等待时间，用于让控制器有机会处理事件，避免断言过早。
 var timeForControllerToProgressForSanityCheck = 20 * time.Millisecond
 
+// getPodsAssignedToNode 返回一个查询函数，通过 field selector 从 fake client 中
+// 列出调度到指定节点的所有 Pod，模拟 TaintManager 对 Pod 的按节点查询。
 func getPodsAssignedToNode(ctx context.Context, c *fake.Clientset) GetPodsByNodeNameFunc {
 	return func(nodeName string) ([]*corev1.Pod, error) {
 		selector := fields.SelectorFromSet(fields.Set{"spec.nodeName": nodeName})
@@ -60,6 +63,8 @@ func getPodsAssignedToNode(ctx context.Context, c *fake.Clientset) GetPodsByNode
 	}
 }
 
+// createNoExecuteTaint 按索引生成带/testTaint<index> 键值的 NoExecute 污点，
+// 并记录当前时间作为 TimeAdded。
 func createNoExecuteTaint(index int) corev1.Taint {
 	now := metav1.Now()
 	return corev1.Taint{
@@ -70,6 +75,8 @@ func createNoExecuteTaint(index int) corev1.Taint {
 	}
 }
 
+// addToleration 给 Pod 添加一个匹配指定索引污点的容忍；
+// duration 为负数表示无限期容忍，否则为带 TolerationSeconds 的有限期容忍。
 func addToleration(pod *corev1.Pod, index int, duration int64) *corev1.Pod {
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}
@@ -83,6 +90,8 @@ func addToleration(pod *corev1.Pod, index int, duration int64) *corev1.Pod {
 	return pod
 }
 
+// addTaintsToNode 为节点设置由索引列表生成的 NoExecute 污点，
+// 返回节点本身，便于在测试中链式构造节点对象。
 func addTaintsToNode(node *corev1.Node, key, value string, indices []int) *corev1.Node {
 	taints := []corev1.Taint{}
 	for _, index := range indices {
@@ -92,8 +101,12 @@ func addTaintsToNode(node *corev1.Node, key, value string, indices []int) *corev
 	return node
 }
 
+// alwaysReady 是测试用的同步检查函数，始终返回 true。
 var alwaysReady = func() bool { return true }
 
+// setupNewController 用 fake client 构造一个测试用 Controller，
+// 注入 informer 索引器与按节点查询 Pod 的函数，并让 lister 的同步检查始终返回就绪，
+// 从而在测试中无需启动完整的 informer。
 func setupNewController(ctx context.Context, fakeClientSet *fake.Clientset) (*Controller, cache.Indexer, cache.Indexer) {
 	informerFactory := informers.NewSharedInformerFactory(fakeClientSet, 0)
 	podIndexer := informerFactory.Core().V1().Pods().Informer().GetIndexer()
@@ -105,17 +118,25 @@ func setupNewController(ctx context.Context, fakeClientSet *fake.Clientset) (*Co
 	return mgr, podIndexer, nodeIndexer
 }
 
+// timestampedPod 记录一组预期在同一时间点被删除的 Pod 名称，
+// timestamp 表示从测试开始到删除的预期时长。
 type timestampedPod struct {
-	names     []string
+	// names 为预期在该时间点被删除的 Pod 名称列表。
+	names []string
+	// timestamp 为预期的驱逐时间点。
 	timestamp time.Duration
 }
 
+// durationSlice 是 timestampedPod 的切片，实现 sort.Interface 以便按时间排序。
 type durationSlice []timestampedPod
 
+// Len/Swap/Less 实现 sort.Interface，使 durationSlice 能按时间戳升序排序。
 func (a durationSlice) Len() int           { return len(a) }
 func (a durationSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a durationSlice) Less(i, j int) bool { return a[i].timestamp < a[j].timestamp }
 
+// TestFilterNoExecuteTaints 验证 getNoExecuteTaints 只保留 NoExecute 类型的污点，
+// 忽略 NoSchedule 等其他效果。
 func TestFilterNoExecuteTaints(t *testing.T) {
 	taints := []corev1.Taint{
 		{
@@ -135,6 +156,8 @@ func TestFilterNoExecuteTaints(t *testing.T) {
 	}
 }
 
+// TestCreatePod 验证 Pod 创建事件的处理：只有调度到带 NoExecute 污点节点
+// 且未能容忍该污点的 Pod 才会被标记并删除；未调度或在无污点节点上的 Pod 应被忽略。
 func TestCreatePod(t *testing.T) {
 	testCases := []struct {
 		description  string
@@ -192,6 +215,8 @@ func TestCreatePod(t *testing.T) {
 	}
 
 	for _, item := range testCases {
+		// 为每个用例启动控制器，将 Pod 加入索引并触发 PodUpdated 事件，
+		// 然后验证是否按预期产生 patch/delete 动作。
 		t.Run(item.description, func(t *testing.T) {
 			var wg sync.WaitGroup
 			defer wg.Wait()
@@ -217,6 +242,8 @@ func TestCreatePod(t *testing.T) {
 	}
 }
 
+// TestDeletePod 验证 Pod 删除事件的健壮性：删除一个已调度到带污点节点的 Pod 时，
+// 控制器不应 panic；通过短暂等待让控制器有机会处理该事件。
 func TestDeletePod(t *testing.T) {
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -233,10 +260,12 @@ func TestDeletePod(t *testing.T) {
 		"node1": {createNoExecuteTaint(1)},
 	}
 	controller.PodUpdated(testutil.NewPod("pod1", "node1"), nil)
-	// wait a bit to see if nothing will panic
+	// 稍作等待，确认删除事件不会引发 panic。
 	time.Sleep(timeForControllerToProgressForSanityCheck)
 }
 
+// TestUpdatePod 验证 Pod 更新事件的处理：调度到带污点节点、容忍被移除或容忍被延长时，
+// 控制器是否正确安排或取消驱逐。
 func TestUpdatePod(t *testing.T) {
 	testCases := []struct {
 		description               string
@@ -293,9 +322,10 @@ func TestUpdatePod(t *testing.T) {
 	}
 
 	for _, item := range testCases {
+		// 逐一运行用例；Windows 上部分时间相关用例存在偶发失败，需跳过。
 		t.Run(item.description, func(t *testing.T) {
 			if item.skipOnWindows && goruntime.GOOS == "windows" {
-				// TODO: remove skip once the flaking test has been fixed.
+				// TODO: 待该偶发失败的测试修复后移除此跳过逻辑。
 				t.Skip("Skip flaking test on Windows.")
 			}
 
@@ -316,6 +346,8 @@ func TestUpdatePod(t *testing.T) {
 			podIndexer.Add(item.prevPod)
 			controller.PodUpdated(nil, item.prevPod)
 
+			// 对于移除容忍或延长容忍的用例，先等待驱逐任务进入队列，
+			// 再执行 Pod 更新，避免竞态导致断言时机过早。
 			if item.awaitForScheduledEviction {
 				nsName := types.NamespacedName{Namespace: item.prevPod.Namespace, Name: item.prevPod.Name}
 				err := wait.PollImmediate(time.Millisecond*10, time.Second, func() (bool, error) {
@@ -336,6 +368,8 @@ func TestUpdatePod(t *testing.T) {
 	}
 }
 
+// TestCreateNode 验证新建节点事件的处理：若节点带有 NoExecute 污点，
+// 则已调度到该节点且不容忍污点的 Pod 应被驱逐；容忍的 Pod 则保留。
 func TestCreateNode(t *testing.T) {
 	testCases := []struct {
 		description  string
@@ -400,6 +434,8 @@ func TestCreateNode(t *testing.T) {
 	}
 }
 
+// TestDeleteNode 验证节点删除后，控制器会从 taintedNodes 缓存中移除该节点，
+// 通过轮询等待缓存清空来确认事件已被处理。
 func TestDeleteNode(t *testing.T) {
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -419,7 +455,7 @@ func TestDeleteNode(t *testing.T) {
 
 	controller.NodeUpdated(testutil.NewNode("node1"), nil)
 
-	// await until controller.taintedNodes is empty
+	// 轮询等待控制器处理完节点删除，清空 taintedNodes 缓存。
 	err := wait.PollImmediate(10*time.Millisecond, time.Second, func() (bool, error) {
 		controller.taintedNodesLock.Lock()
 		defer controller.taintedNodesLock.Unlock()
@@ -431,6 +467,9 @@ func TestDeleteNode(t *testing.T) {
 	}
 }
 
+// TestUpdateNode 验证节点更新事件的处理：添加污点会驱逐不容忍的 Pod，
+// 容忍污点的 Pod 不会被驱逐，而污点被移除后也不应触发驱逐。
+// 表中还覆盖多个容忍中第一个到期即驱逐的场景。
 func TestUpdateNode(t *testing.T) {
 	testCases := []struct {
 		description     string
@@ -539,6 +578,9 @@ func TestUpdateNode(t *testing.T) {
 	}
 }
 
+// TestUpdateNodeWithMultipleTaints 验证节点污点变化时 Pod 排队状态如何更新：
+// 无限期容忍的污点不应触发驱逐；一旦出现无法无限期容忍的污点，Pod 应被排入驱逐队列；
+// 当该污点被移除后应取消排队，且整个过程中不应产生实际的删除动作。
 func TestUpdateNodeWithMultipleTaints(t *testing.T) {
 	taint1 := createNoExecuteTaint(1)
 	taint2 := createNoExecuteTaint(2)
@@ -572,39 +614,39 @@ func TestUpdateNodeWithMultipleTaints(t *testing.T) {
 		controller.Run(ctx)
 	})
 
-	// no taint
+	// 节点无污点：Pod 不应被排入驱逐队列。
 	nodeIndexer.Add(untaintedNode)
 	controller.handleNodeUpdate(ctx, nodeUpdateItem{"node1"})
-	// verify pod is not queued for deletion
+	// 验证 Pod 没有被排入驱逐队列。
 	if controller.taintEvictionQueue.GetWorkerUnsafe(podNamespacedName.String()) != nil {
 		t.Fatalf("pod queued for deletion with no taints")
 	}
 
-	// no taint -> infinitely tolerated taint
+	// 无污点 -> 添加无限期容忍的污点：Pod 不应被驱逐。
 	nodeIndexer.Update(singleTaintedNode)
 	controller.handleNodeUpdate(ctx, nodeUpdateItem{"node1"})
-	// verify pod is not queued for deletion
+	// 验证 Pod 没有被排入驱逐队列。
 	if controller.taintEvictionQueue.GetWorkerUnsafe(podNamespacedName.String()) != nil {
 		t.Fatalf("pod queued for deletion with permanently tolerated taint")
 	}
 
-	// infinitely tolerated taint -> temporarily tolerated taint
+	// 无限期容忍 -> 再添加一个仅临时容忍的污点：Pod 应被排入驱逐队列。
 	nodeIndexer.Update(doubleTaintedNode)
 	controller.handleNodeUpdate(ctx, nodeUpdateItem{"node1"})
-	// verify pod is queued for deletion
+	// 验证 Pod 已被排入驱逐队列。
 	if controller.taintEvictionQueue.GetWorkerUnsafe(podNamespacedName.String()) == nil {
 		t.Fatalf("pod not queued for deletion after addition of temporarily tolerated taint")
 	}
 
-	// temporarily tolerated taint -> infinitely tolerated taint
+	// 临时容忍 -> 回到仅无限期容忍的污点：应取消驱逐排队。
 	nodeIndexer.Update(singleTaintedNode)
 	controller.handleNodeUpdate(ctx, nodeUpdateItem{"node1"})
-	// verify pod is not queued for deletion
+	// 验证 Pod 没有被排入驱逐队列。
 	if controller.taintEvictionQueue.GetWorkerUnsafe(podNamespacedName.String()) != nil {
 		t.Fatalf("pod queued for deletion after removal of temporarily tolerated taint")
 	}
 
-	// verify pod is not deleted
+	// 最终验证整个过程中没有产生对 Pod 的实际删除操作。
 	for _, action := range fakeClientset.Actions() {
 		if action.GetVerb() == "delete" && action.GetResource().Resource == "pods" {
 			t.Error("Unexpected deletion")
@@ -612,6 +654,8 @@ func TestUpdateNodeWithMultipleTaints(t *testing.T) {
 	}
 }
 
+// TestUpdateNodeWithMultiplePods 验证节点被加上污点后，多个 Pod 按各自容忍时长在正确时间被驱逐：
+// 无容忍或容忍不匹配的 Pod 立即删除，有限期容忍的 Pod 在容忍结束后删除，无限期容忍的 Pod 不删除。
 func TestUpdateNodeWithMultiplePods(t *testing.T) {
 	testCases := []struct {
 		description         string
@@ -659,6 +703,7 @@ func TestUpdateNodeWithMultiplePods(t *testing.T) {
 			defer cancel()
 
 			fakeClientset := fake.NewSimpleClientset(&corev1.PodList{Items: item.pods})
+			// 期望的删除时间按时间戳排序，便于逐批检查。
 			sort.Sort(item.expectedDeleteTimes)
 			controller, _, nodeIndexer := setupNewController(ctx, fakeClientset)
 			nodeIndexer.Add(item.newNode)
@@ -673,8 +718,8 @@ func TestUpdateNodeWithMultiplePods(t *testing.T) {
 			startedAt := time.Now()
 			for i := range item.expectedDeleteTimes {
 				if i == 0 || item.expectedDeleteTimes[i-1].timestamp != item.expectedDeleteTimes[i].timestamp {
-					// compute a grace duration to give controller time to process updates. Choose big
-					// enough intervals in the test cases above to avoid flakes.
+					// 计算一段宽限期，给控制器留出处理更新的时间。
+					// 上面用例中的时间间隔取得足够大，以避免测试出现偶发失败。
 					var increment time.Duration
 					if i == len(item.expectedDeleteTimes)-1 || item.expectedDeleteTimes[i+1].timestamp == item.expectedDeleteTimes[i].timestamp {
 						increment = 500 * time.Millisecond
@@ -729,12 +774,15 @@ func TestUpdateNodeWithMultiplePods(t *testing.T) {
 						t.Errorf("Pod %v was deleted even though it shouldn't have", deletedPodName)
 					}
 				}
+				// 每批检查后清空动作记录，避免影响下一批的判断。
 				fakeClientset.ClearActions()
 			}
 		})
 	}
 }
 
+// TestGetMinTolerationTime 验证 getMinTolerationTime 对容忍时长的计算：
+// 空列表返回 0，存在无限期容忍返回 -1，多个有限期容忍返回其中最短值。
 func TestGetMinTolerationTime(t *testing.T) {
 	one := int64(1)
 	two := int64(2)
@@ -792,6 +840,8 @@ func TestGetMinTolerationTime(t *testing.T) {
 		},
 	}
 
+	// 注意语义：空容忍列表返回 0；包含无限期容忍（TolerationSeconds 为 nil）时返回 -1；
+	// 多个有限期容忍取最短的那个。
 	for _, test := range tests {
 		got := getMinTolerationTime(test.tolerations)
 		if got != test.expected {
@@ -800,10 +850,12 @@ func TestGetMinTolerationTime(t *testing.T) {
 	}
 }
 
-// TestEventualConsistency verifies if getPodsAssignedToNode returns incomplete data
-// (e.g. due to watch latency), it will reconcile the remaining pods eventually.
-// This scenario is partially covered by TestUpdatePods, but given this is an important
-// property of TaintManager, it's better to have explicit test for this.
+// TestEventualConsistency 验证：即使 getPodsAssignedToNode 返回的数据不完整
+// （例如由于 watch 延迟），TaintManager 最终也会协调并驱逐剩余的 Pod。
+// TestUpdatePods 已部分覆盖该场景，但鉴于这是 TaintManager 的重要性质，
+// 有必要提供一个显式的测试。
+// TestEventualConsistency 表驱动验证最终一致性：节点更新先处理已知 Pod，
+// 随后到达的 Pod 更新也需被处理，确保不会因数据延迟而漏掉驱逐。
 func TestEventualConsistency(t *testing.T) {
 	testCases := []struct {
 		description  string
@@ -886,27 +938,30 @@ func TestEventualConsistency(t *testing.T) {
 				controller.PodUpdated(nil, item.prevPod)
 			}
 
-			// First we simulate NodeUpdate that should delete 'pod1'. It doesn't know about 'pod2' yet.
+			// 首先模拟一次 NodeUpdate：此时控制器还不知道 pod2，
+			// 因此只应当删除已纳入视野的 pod1。
 			controller.NodeUpdated(item.oldNode, item.newNode)
 
 			verifyPodActions(t, item.description, fakeClientset, item.expectPatch, item.expectDelete)
 			fakeClientset.ClearActions()
 
-			// And now the delayed update of 'pod2' comes to the TaintManager. We should delete it as well.
+			// 随后 pod2 的延迟更新才到达 TaintManager，此时它也应被驱逐。
 			podIndexer.Update(item.newPod)
 			controller.PodUpdated(item.prevPod, item.newPod)
-			// wait a bit
+			// 稍作等待，让控制器处理延迟到达的 Pod 更新。
 			time.Sleep(timeForControllerToProgressForSanityCheck)
 		})
 	}
 }
 
+// verifyPodActions 轮询 fake client 的动作记录，直到同时满足期望的 patch/delete 组合。
+// 使用 wait.Poll 留出控制器处理时间；超时后再逐项断言失败原因，便于定位。
 func verifyPodActions(t *testing.T, description string, fakeClientset *fake.Clientset, expectPatch, expectDelete bool) {
 	t.Helper()
 	podPatched := false
 	podDeleted := false
-	// use Poll instead of PollImmediate to give some processing time to the controller that the expected
-	// actions are likely to be already sent
+	// 使用 Poll 而不是 PollImmediate，是为了给控制器留出处理时间，
+	// 使期望的动作很可能已经被发出后再检查，避免由于竞态造成误判。
 	err := wait.Poll(10*time.Millisecond, 5*time.Second, func() (bool, error) {
 		for _, action := range fakeClientset.Actions() {
 			if action.GetVerb() == "patch" && action.GetResource().Resource == "pods" {
@@ -929,17 +984,20 @@ func verifyPodActions(t *testing.T, description string, fakeClientset *fake.Clie
 	}
 }
 
-// TestPodDeletionEvent Verify that the output events are as expected
+// TestPodDeletionEvent 校验控制器输出的 Pod 删除相关事件。
+// TestPodDeletionEvent 验证 Pod 驱逐相关事件的输出符合预期。
+// 通过 cmp.FilterPath 忽略时间戳与事件名称等运行时字段，仅比较事件的核心内容。
 func TestPodDeletionEvent(t *testing.T) {
 	f := func(path cmp.Path) bool {
 		switch path.String() {
-		// These fields change at runtime, so ignore it
+		// 这些字段在运行时会变化，比较时需忽略。
 		case "LastTimestamp", "FirstTimestamp", "ObjectMeta.Name":
 			return true
 		}
 		return false
 	}
 
+	// 验证 emitPodDeletionEvent 生成的标记驱逐事件内容正确。
 	t.Run("emitPodDeletionEvent", func(t *testing.T) {
 		controller := &Controller{}
 		recorder := testutil.NewFakeRecorder()
@@ -971,6 +1029,7 @@ func TestPodDeletionEvent(t *testing.T) {
 		}
 	})
 
+	// 验证 emitCancelPodDeletionEvent 生成的取消驱逐事件内容正确。
 	t.Run("emitCancelPodDeletionEvent", func(t *testing.T) {
 		controller := &Controller{}
 		recorder := testutil.NewFakeRecorder()

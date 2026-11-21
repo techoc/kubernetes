@@ -20,16 +20,14 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultCronJobControllerConfiguration defaults a pointer to a
-// CronJobControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultCronJobControllerConfiguration 为 CronJobControllerConfiguration
+// 指针设置推荐默认值；这些默认值可能随 API 版本变化。
+// 该函数有意不被注册为 scheme 中普通的 `SetDefaults_Foo` 函数，
+// 原因是：scheme 的默认值设置发生在转换过程中，若强制使用这些默认值，
+// 引用该类型的上层结构将无法为自己的嵌入配置指定默认值，也没有便捷的关闭方式。
+// 因此，若需要使用该默认值逻辑，请在包装该类型的结构的 `SetDefaults_` 方法中显式调用。
 func RecommendedDefaultCronJobControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.CronJobControllerConfiguration) {
+	// 仅在未显式配置（零值）时应用默认值，避免覆盖用户的自定义设置。
 	if obj.ConcurrentCronJobSyncs == 0 {
 		obj.ConcurrentCronJobSyncs = 5
 	}

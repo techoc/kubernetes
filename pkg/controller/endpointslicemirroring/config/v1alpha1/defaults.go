@@ -20,21 +20,18 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultEndpointSliceMirroringControllerConfiguration defaults a
-// pointer to a EndpointSliceMirroringControllerConfiguration struct. This will
-// set the recommended default values, but they may be subject to change between
-// API versions. This function is intentionally not registered in the scheme as
-// a "normal" `SetDefaults_Foo` function to allow consumers of this type to set
-// whatever defaults for their embedded configs. Forcing consumers to use these
-// defaults would be problematic as defaulting in the scheme is done as part of
-// the conversion, and there would be no easy way to opt-out. Instead, if you
-// want to use this defaulting method run it in your wrapper struct of this type
-// in its `SetDefaults_` method.
+// RecommendedDefaultEndpointSliceMirroringControllerConfiguration 为
+// EndpointSliceMirroringControllerConfiguration 设置推荐默认值；这些值可能随 API 版本变化。
+// 该函数特意没有作为普通的 `SetDefaults_Foo` 注册到 scheme 中：scheme 的默认值设置
+// 发生在转换过程中，若强制使用这里的值，消费方无法为内嵌配置自定义默认值或选择退出。
+// 需要使用这些默认值时，应在包装结构体的 `SetDefaults_` 方法中调用本函数。
 func RecommendedDefaultEndpointSliceMirroringControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.EndpointSliceMirroringControllerConfiguration) {
+	// 零值表示用户未指定，填入推荐的镜像同步并发度。
 	if obj.MirroringConcurrentServiceEndpointSyncs == 0 {
 		obj.MirroringConcurrentServiceEndpointSyncs = 5
 	}
 
+	// 限制单个 subset 的 endpoint 数，避免一次同步产生过大的 EndpointSlice。
 	if obj.MirroringMaxEndpointsPerSubset == 0 {
 		obj.MirroringMaxEndpointsPerSubset = 1000
 	}

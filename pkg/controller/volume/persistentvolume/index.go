@@ -29,18 +29,18 @@ import (
 	"k8s.io/kubernetes/pkg/volume/util"
 )
 
-// persistentVolumeOrderedIndex is a cache.Store that keeps persistent volumes
-// indexed by AccessModes and ordered by storage capacity.
+// persistentVolumeOrderedIndex 是一个 cache.Store，按 AccessModes 对持久卷
+// 建立索引。
 type persistentVolumeOrderedIndex struct {
 	store cache.Indexer
 }
 
+// newPersistentVolumeOrderedIndex 创建一个按访问模式索引的持久卷索引。
 func newPersistentVolumeOrderedIndex() persistentVolumeOrderedIndex {
 	return persistentVolumeOrderedIndex{cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{"accessmodes": accessModesIndexFunc})}
 }
 
-// accessModesIndexFunc is an indexing function that returns a persistent
-// volume's AccessModes as a string
+// accessModesIndexFunc 是索引函数，将持久卷的 AccessModes 转成字符串作为索引键。
 func accessModesIndexFunc(obj interface{}) ([]string, error) {
 	if pv, ok := obj.(*v1.PersistentVolume); ok {
 		modes := v1helper.GetAccessModesAsString(pv.Spec.AccessModes)
@@ -49,8 +49,8 @@ func accessModesIndexFunc(obj interface{}) ([]string, error) {
 	return []string{""}, fmt.Errorf("object is not a persistent volume: %v", obj)
 }
 
-// listByAccessModes returns all volumes with the given set of
-// AccessModeTypes. The list is unsorted!
+// listByAccessModes 返回具有给定 AccessModeTypes 集合的所有卷。
+// 注意：返回的列表未经排序！
 func (pvIndex *persistentVolumeOrderedIndex) listByAccessModes(modes []v1.PersistentVolumeAccessMode) ([]*v1.PersistentVolume, error) {
 	pv := &v1.PersistentVolume{
 		Spec: v1.PersistentVolumeSpec{
@@ -71,21 +71,17 @@ func (pvIndex *persistentVolumeOrderedIndex) listByAccessModes(modes []v1.Persis
 	return volumes, nil
 }
 
-// find returns the nearest PV from the ordered list or nil if a match is not found
+// findByClaim 从有序列表中返回与 PVC 最匹配的 PV，若无匹配则返回 nil。
 func (pvIndex *persistentVolumeOrderedIndex) findByClaim(claim *v1.PersistentVolumeClaim, delayBinding bool) (*v1.PersistentVolume, error) {
-	// PVs are indexed by their access modes to allow easier searching.  Each
-	// index is the string representation of a set of access modes. There is a
-	// finite number of possible sets and PVs will only be indexed in one of
-	// them (whichever index matches the PV's modes).
+	// PV 按其访问模式建立索引以便查找。每个索引是一组访问模式的字符串表示。
+	// 可能的模式组合数量有限，每个 PV 只会落入其中一个索引（与其模式匹配的那个）。
 	//
-	// A request for resources will always specify its desired access modes.
-	// Any matching PV must have at least that number of access modes, but it
-	// can have more.  For example, a user asks for ReadWriteOnce but a GCEPD
-	// is available, which is ReadWriteOnce+ReadOnlyMany.
+	// 资源请求总会指定期望的访问模式。匹配的 PV 必须至少包含请求的那些模式，
+	// 也可以更多。例如用户请求 ReadWriteOnce，而可用的 GCEPD 支持
+	// ReadWriteOnce+ReadOnlyMany。
 	//
-	// Searches are performed against a set of access modes, so we can attempt
-	// not only the exact matching modes but also potential matches (the GCEPD
-	// example above).
+	// 由于查找按模式集合进行，除了完全匹配的模式外，还要尝试潜在匹配
+	// （即上面的 GCEPD 情形）。
 	allPossibleModes := pvIndex.allPossibleMatchingAccessModes(claim.Spec.AccessModes)
 
 	for _, modes := range allPossibleModes {
@@ -106,28 +102,24 @@ func (pvIndex *persistentVolumeOrderedIndex) findByClaim(claim *v1.PersistentVol
 	return nil, nil
 }
 
-// findBestMatchForClaim is a convenience method that finds a volume by the claim's AccessModes and requests for Storage
+// findBestMatchForClaim 是便捷方法，根据 PVC 的 AccessModes 和存储请求查找卷。
 func (pvIndex *persistentVolumeOrderedIndex) findBestMatchForClaim(claim *v1.PersistentVolumeClaim, delayBinding bool) (*v1.PersistentVolume, error) {
 	return pvIndex.findByClaim(claim, delayBinding)
 }
 
-// allPossibleMatchingAccessModes returns an array of AccessMode arrays that
-// can satisfy a user's requested modes.
+// allPossibleMatchingAccessModes 返回所有能满足用户请求模式的 AccessMode 组合。
 //
-// see comments in the Find func above regarding indexing.
+// 关于索引的说明见上面 findByClaim 的注释。
 //
-// allPossibleMatchingAccessModes gets all stringified accessmodes from the
-// index and returns all those that contain at least all of the requested
-// mode.
+// 本函数从索引中取出所有字符串化的访问模式，返回其中至少包含全部请求模式的
+// 那些组合。
 //
-// For example, assume the index contains 2 types of PVs where the stringified
-// accessmodes are:
+// 例如，假设索引中有两类 PV，其字符串化访问模式分别为：
 //
-// "RWO,ROX" -- some number of GCEPDs
-// "RWO,ROX,RWX" -- some number of NFS volumes
+// "RWO,ROX" —— 若干个 GCEPD
+// "RWO,ROX,RWX" —— 若干个 NFS 卷
 //
-// A request for RWO could be satisfied by both sets of indexed volumes, so
-// allPossibleMatchingAccessModes returns:
+// 请求 RWO 时两组索引卷都能满足，因此 allPossibleMatchingAccessModes 返回：
 //
 //	[][]v1.PersistentVolumeAccessMode {
 //	     []v1.PersistentVolumeAccessMode {
@@ -138,8 +130,7 @@ func (pvIndex *persistentVolumeOrderedIndex) findBestMatchForClaim(claim *v1.Per
 //			},
 //	}
 //
-// A request for RWX can be satisfied by only one set of indexed volumes, so
-// the return is:
+// 请求 RWX 时只有一组能满足，因此返回：
 //
 //	[][]v1.PersistentVolumeAccessMode {
 //	     []v1.PersistentVolumeAccessMode {
@@ -147,8 +138,7 @@ func (pvIndex *persistentVolumeOrderedIndex) findBestMatchForClaim(claim *v1.Per
 //			},
 //	}
 //
-// This func returns modes with ascending levels of modes to give the user
-// what is closest to what they actually asked for.
+// 本函数按模式数量递增返回，以便给用户提供最接近其实际请求的模式组合。
 func (pvIndex *persistentVolumeOrderedIndex) allPossibleMatchingAccessModes(requestedModes []v1.PersistentVolumeAccessMode) [][]v1.PersistentVolumeAccessMode {
 	matchedModes := [][]v1.PersistentVolumeAccessMode{}
 	keys := pvIndex.store.ListIndexFuncValues("accessmodes")
@@ -159,34 +149,38 @@ func (pvIndex *persistentVolumeOrderedIndex) allPossibleMatchingAccessModes(requ
 		}
 	}
 
-	// sort by the number of modes in each array with the fewest number of
-	// modes coming first. this allows searching for volumes by the minimum
-	// number of modes required of the possible matches.
+	// 按每组模式的数量排序，模式最少的排在前面，这样优先用所需模式最少的
+	// 候选去查找卷。
 	sort.Sort(byAccessModes{matchedModes})
 	return matchedModes
 }
 
-// byAccessModes is used to order access modes by size, with the fewest modes first
+// byAccessModes 用于按访问模式组合的大小排序，模式最少的排在前面。
 type byAccessModes struct {
 	modes [][]v1.PersistentVolumeAccessMode
 }
 
+// Less 判断第 i 组模式数量是否小于第 j 组。
 func (c byAccessModes) Less(i, j int) bool {
 	return len(c.modes[i]) < len(c.modes[j])
 }
 
+// Swap 交换第 i 组与第 j 组模式。
 func (c byAccessModes) Swap(i, j int) {
 	c.modes[i], c.modes[j] = c.modes[j], c.modes[i]
 }
 
+// Len 返回模式组合的数量。
 func (c byAccessModes) Len() int {
 	return len(c.modes)
 }
 
+// claimToClaimKey 将 PVC 转换为 namespace/name 形式的键。
 func claimToClaimKey(claim *v1.PersistentVolumeClaim) string {
 	return fmt.Sprintf("%s/%s", claim.Namespace, claim.Name)
 }
 
+// claimrefToClaimKey 将 PVC 的 ObjectReference 转换为 namespace/name 形式的键。
 func claimrefToClaimKey(claimref *v1.ObjectReference) string {
 	return fmt.Sprintf("%s/%s", claimref.Namespace, claimref.Name)
 }

@@ -44,6 +44,8 @@ import (
 	"k8s.io/kubernetes/test/utils/ktesting"
 )
 
+// TestSyncHandler 以表驱动方式验证 syncHandler 的行为：包括无 PV 绑定、
+// in-tree 插件的迁移注解、扩容前容量注解以及无迁移路径的 CSI 插件等场景。
 func TestSyncHandler(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -54,12 +56,14 @@ func TestSyncHandler(t *testing.T) {
 		hasError           bool
 		expectedAnnotation map[string]string
 	}{
+		// PVC 尚未绑定 PV，无法确定扩容方式，应报错。
 		{
 			name:     "when pvc has no PV binding",
 			pvc:      getFakePersistentVolumeClaim("no-pv-pvc", "", "1Gi", "1Gi", ""),
 			pvcKey:   "default/no-pv-pvc",
 			hasError: true,
 		},
+		// in-tree 插件有 CSI 迁移路径时，应写入驱动注解而不会调用扩容操作。
 		{
 			name:               "when pvc and pv has everything for in-tree plugin",
 			pv:                 getFakePersistentVolume("vol-3", csitranslationplugins.AWSEBSInTreePluginName, "1Gi", "good-pvc-vol-3"),
@@ -68,6 +72,7 @@ func TestSyncHandler(t *testing.T) {
 			expansionCalled:    false,
 			expectedAnnotation: map[string]string{volumetypes.VolumeResizerKey: csitranslationplugins.AWSEBSDriverName},
 		},
+		// PV 上已有的扩容前容量注解是幂等标记，应再次避免触发扩容。
 		{
 			name: "if pv has pre-resize capacity annotation, generate expand operation should not be called",
 			pv: func() *v1.PersistentVolume {
@@ -80,6 +85,7 @@ func TestSyncHandler(t *testing.T) {
 			pvcKey:          "default/good-pvc",
 			expansionCalled: false,
 		},
+		// 原生 CSI 插件不走 in-tree 迁移路径，也不应触发这里的扩容操作。
 		{
 			name:            "for csi plugin without migration path",
 			pv:              getFakePersistentVolume("vol-5", "com.csi.ceph", "1Gi", "ceph-csi-pvc-vol-6"),
@@ -97,6 +103,7 @@ func TestSyncHandler(t *testing.T) {
 		pvcInformer := informerFactory.Core().V1().PersistentVolumeClaims()
 
 		pvc := test.pvc
+		// 不启动 informer，直接填充索引器作为控制器的本地缓存。
 		if test.pv != nil {
 			_ = informerFactory.Core().V1().PersistentVolumes().Informer().GetIndexer().Add(test.pv)
 		}
@@ -113,6 +120,7 @@ func TestSyncHandler(t *testing.T) {
 
 		var expController *expandController
 		expController, _ = expc.(*expandController)
+		// 用计数器替换真正的操作生成器，通过标记判断扩容操作是否被调用。
 		var expansionCalled bool
 		expController.operationGenerator = operationexecutor.NewFakeOGCounter(func() volumetypes.OperationContext {
 			expansionCalled = true
@@ -120,12 +128,14 @@ func TestSyncHandler(t *testing.T) {
 		})
 
 		if test.pv != nil {
+			// 通过 reactor 让 get 请求返回用例中的 PV，绕开 API 状态准备。
 			fakeKubeClient.AddReactor("get", "persistentvolumes", func(action coretesting.Action) (bool, runtime.Object, error) {
 				return true, test.pv, nil
 			})
 		}
 		fakeKubeClient.AddReactor("patch", "persistentvolumeclaims", func(action coretesting.Action) (bool, runtime.Object, error) {
 			if action.GetSubresource() == "status" {
+				// 本地应用 status 补丁，使后续断言能看到控制器写入的结果。
 				patchActionaction, _ := action.(coretesting.PatchAction)
 				pvc, err = applyPVCPatch(pvc, patchActionaction.GetPatch())
 				if err != nil {
@@ -148,12 +158,14 @@ func TestSyncHandler(t *testing.T) {
 			t.Fatalf("for: %s; expected expansionCalled to be %v but was %v", test.name, test.expansionCalled, expansionCalled)
 		}
 
+		// 只在用例声明了期望注解时校验，避免受控制器其他默认注解干扰。
 		if len(test.expectedAnnotation) != 0 && !reflect.DeepEqual(test.expectedAnnotation, pvc.Annotations) {
 			t.Fatalf("for: %s; expected %v annotations, got %v", test.name, test.expectedAnnotation, pvc.Annotations)
 		}
 	}
 }
 
+// applyPVCPatch 将 StrategicMergePatch 应用到 PVC 上，返回更新后的对象。
 func applyPVCPatch(originalPVC *v1.PersistentVolumeClaim, patch []byte) (*v1.PersistentVolumeClaim, error) {
 	pvcData, err := json.Marshal(originalPVC)
 	if err != nil {
@@ -170,6 +182,7 @@ func applyPVCPatch(originalPVC *v1.PersistentVolumeClaim, patch []byte) (*v1.Per
 	return updatedPVC, nil
 }
 
+// getFakePersistentVolume 构造测试用 PV；pluginName 含 "csi" 时生成 CSI 卷源，否则生成 in-tree AWS EBS 卷源。
 func getFakePersistentVolume(volumeName, pluginName string, size string, pvcUID types.UID) *v1.PersistentVolume {
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{Name: volumeName},
@@ -187,6 +200,7 @@ func getFakePersistentVolume(volumeName, pluginName string, size string, pvcUID 
 		pv.Spec.ClaimRef.UID = pvcUID
 	}
 
+	// 插件类型决定使用哪种卷源，从而命中控制器不同的处理分支。
 	if matched, _ := regexp.MatchString(`csi`, pluginName); matched {
 		pv.Spec.PersistentVolumeSource.CSI = &v1.CSIPersistentVolumeSource{
 			Driver:       pluginName,
@@ -201,6 +215,7 @@ func getFakePersistentVolume(volumeName, pluginName string, size string, pvcUID 
 	return pv
 }
 
+// getFakePersistentVolumeClaim 构造测试用 PVC，按需设置绑定卷名并分别指定 status 容量与 request 大小。
 func getFakePersistentVolumeClaim(pvcName, volumeName, statusSize, requestSize string, uid types.UID) *v1.PersistentVolumeClaim {
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: pvcName, Namespace: "default", UID: uid},
@@ -217,6 +232,7 @@ func getFakePersistentVolumeClaim(pvcName, volumeName, statusSize, requestSize s
 			},
 		},
 	}
+	// 空卷名表示 PVC 尚未绑定 PV。
 	if volumeName != "" {
 		pvc.Spec.VolumeName = volumeName
 	}

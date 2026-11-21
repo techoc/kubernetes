@@ -25,18 +25,19 @@ import (
 )
 
 var (
-	// Scheme defines methods for serializing and deserializing API objects.
+	// Scheme 定义了 API 对象序列化与反序列化所需的方法。
 	Scheme = runtime.NewScheme()
-	// Codecs provides methods for retrieving codecs and serializers for specific
-	// versions and content types.
+	// Codecs 提供按指定版本和内容类型获取 codec 与 serializer 的方法。
 	Codecs = serializer.NewCodecFactory(Scheme)
 )
 
+// init 在包初始化时注册内部类型与外部版本，
+// 确保调用方直接使用 Scheme/Codecs 时无需手动完成注册。
 func init() {
 	AddToScheme(Scheme)
 }
 
-// AddToScheme registers the API group and adds types to a scheme
+// AddToScheme 注册 API 组并向 scheme 添加类型，同时设定版本优先级。
 func AddToScheme(scheme *runtime.Scheme) {
 	utilruntime.Must(config.AddToScheme(scheme))
 	utilruntime.Must(v1alpha1.AddToScheme(scheme))

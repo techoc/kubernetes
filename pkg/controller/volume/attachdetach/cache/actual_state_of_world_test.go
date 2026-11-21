@@ -28,10 +28,11 @@ import (
 	volumeutil "k8s.io/kubernetes/pkg/volume/util"
 )
 
-// Calls AddVolumeNode() once with attached set to true.
-// Verifies a single volume/node entry exists.
+// Test_AddVolumeNode_Positive_NewVolumeNewNode 验证以 attached=true 新增卷/节点：
+//   - AddVolumeNode 成功返回生成的卷名；
+//   - 该组合在 ASW 中状态为 AttachStateAttached，且只有一条记录。
 func Test_AddVolumeNode_Positive_NewVolumeNewNode(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -40,11 +41,11 @@ func Test_AddVolumeNode_Positive_NewVolumeNewNode(t *testing.T) {
 	nodeName := types.NodeName("node-name")
 	devicePath := "fake/device/path"
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
 	generatedVolumeName, err := asw.AddVolumeNode(logger, volumeName, volumeSpec, nodeName, devicePath, true)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -62,12 +63,14 @@ func Test_AddVolumeNode_Positive_NewVolumeNewNode(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Calls AddVolumeNode() once with attached set to false.
-// Verifies a single volume/node entry exists.
-// Then calls AddVolumeNode() with attached set to true
-// Verifies volume is attached to the node according to asw.
+// Test_AddVolumeNode_Positive_NewVolumeNewNodeWithFalseAttached 验证 attached=false
+// 的条目先以 Uncertain 状态入库、不参与上报，随后以 attached=true 再次添加时
+// 会被提升为 Attached 并进入上报列表：
+//   - 首次添加后 GetAttachState 返回 AttachStateUncertain；
+//   - 该卷不出现在 GetVolumesToReportAttached 与 GetAttachedVolumesPerNode 中；
+//   - 再次添加生成相同卷名，状态变为 AttachStateAttached 且可被上报。
 func Test_AddVolumeNode_Positive_NewVolumeNewNodeWithFalseAttached(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -76,11 +79,12 @@ func Test_AddVolumeNode_Positive_NewVolumeNewNodeWithFalseAttached(t *testing.T)
 	nodeName := types.NodeName("node-name")
 	devicePath := "fake/device/path"
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
+	// 以 attached=false 添加：条目先以 Uncertain 状态入库，尚未确认挂载。
 	generatedVolumeName, err := asw.AddVolumeNode(logger, volumeName, volumeSpec, nodeName, devicePath, false)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -96,6 +100,7 @@ func Test_AddVolumeNode_Positive_NewVolumeNewNodeWithFalseAttached(t *testing.T)
 	}
 	verifyAttachedVolume(t, allVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 
+	// Uncertain 状态不应上报为已挂载，避免 kubelet 误判。
 	reportAsAttachedVolumesMap := asw.GetVolumesToReportAttached(logger)
 	_, exists := reportAsAttachedVolumesMap[nodeName]
 	if exists {
@@ -119,14 +124,15 @@ func Test_AddVolumeNode_Positive_NewVolumeNewNodeWithFalseAttached(t *testing.T)
 		t.Fatalf("AddVolumeNode_Positive_NewVolumeNewNodeWithFalseAttached failed. Expect no nodes returned.")
 	}
 
-	// Add the volume to the node second time with attached set to true
+	// 第二次以 attached=true 添加：期望提升状态而不是新增条目。
 	generatedVolumeName2, add2Err := asw.AddVolumeNode(logger, volumeName, volumeSpec, nodeName, devicePath, true)
 
-	// Assert
+	// 断言
 	if add2Err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add2Err)
 	}
 
+	// 卷名由卷规格唯一确定，与节点无关；不一致会导致索引错位。
 	if generatedVolumeName != generatedVolumeName2 {
 		t.Fatalf(
 			"Generated volume names for the same volume should be the same but they are not: %q and %q",
@@ -162,12 +168,13 @@ func Test_AddVolumeNode_Positive_NewVolumeNewNodeWithFalseAttached(t *testing.T)
 
 }
 
-// Calls AddVolumeNode() once with attached set to false.
-// Verifies a single volume/node entry exists.
-// Then calls AddVolumeNode() to attach the volume to a different node with attached set to true
-// Verifies volume is attached to the node according to asw.
+// Test_AddVolumeNode_Positive_NewVolumeTwoNodesWithFalseAttached 验证同一卷先用
+// attached=false 关联节点1、再以 attached=true 关联节点2 的行为：
+//   - 两个节点各有一条条目，节点1为 Uncertain、节点2为 Attached；
+//   - 只有节点2的卷进入上报列表与按节点索引；
+//   - GetNodesForAttachedVolume 只返回处于 Attached 状态的节点。
 func Test_AddVolumeNode_Positive_NewVolumeTwoNodesWithFalseAttached(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -177,11 +184,11 @@ func Test_AddVolumeNode_Positive_NewVolumeTwoNodesWithFalseAttached(t *testing.T
 	node2Name := types.NodeName("node2-name")
 	devicePath := "fake/device/path"
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
 	generatedVolumeName, err := asw.AddVolumeNode(logger, volumeName, volumeSpec, node1Name, devicePath, false)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -191,9 +198,10 @@ func Test_AddVolumeNode_Positive_NewVolumeTwoNodesWithFalseAttached(t *testing.T
 		t.Fatalf("%q/%q volume/node combo is marked %q, expected 'Uncertain'.", generatedVolumeName, node1Name, volumeNodeComboState)
 	}
 
+	// 节点2以 attached=true 添加，与节点1的 Uncertain 状态形成对照。
 	generatedVolumeName2, add2Err := asw.AddVolumeNode(logger, volumeName, volumeSpec, node2Name, devicePath, true)
 
-	// Assert
+	// 断言
 	if add2Err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add2Err)
 	}
@@ -229,6 +237,7 @@ func Test_AddVolumeNode_Positive_NewVolumeTwoNodesWithFalseAttached(t *testing.T
 		t.Fatalf("AddVolumeNode_Positive_NewVolumeTwoNodesWithFalseAttached failed. Actual: <node %q does not exist> Expect: <node does exist in the reportedAsAttached map", node2Name)
 	}
 
+	// 只返回 Attached 状态的节点，节点1的 Uncertain 条目应被排除。
 	nodes := asw.GetNodesForAttachedVolume(volumeName)
 	if len(nodes) != 1 {
 		t.Fatalf("AddVolumeNode_Positive_NewVolumeNewNodeWithFalseAttached failed. Expect one node returned.")
@@ -241,10 +250,11 @@ func Test_AddVolumeNode_Positive_NewVolumeTwoNodesWithFalseAttached(t *testing.T
 	}
 }
 
-// Calls AddVolumeNode() twice. Second time use a different node name.
-// Verifies two volume/node entries exist with the same volumeSpec.
+// Test_AddVolumeNode_Positive_ExistingVolumeNewNode 验证同一卷添加到两个不同节点：
+//   - 两次调用生成相同的卷名；
+//   - 两条卷/节点条目均为 Attached，且共享同一份 volumeSpec。
 func Test_AddVolumeNode_Positive_ExistingVolumeNewNode(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -253,12 +263,13 @@ func Test_AddVolumeNode_Positive_ExistingVolumeNewNode(t *testing.T) {
 	node2Name := types.NodeName("node2-name")
 	devicePath := "fake/device/path"
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
+	// 同一卷挂到不同节点，期望生成相同卷名但两条独立条目。
 	generatedVolumeName1, add1Err := asw.AddVolumeNode(logger, volumeName, volumeSpec, node1Name, devicePath, true)
 	generatedVolumeName2, add2Err := asw.AddVolumeNode(logger, volumeName, volumeSpec, node2Name, devicePath, true)
 
-	// Assert
+	// 断言
 	if add1Err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add1Err)
 	}
@@ -266,6 +277,7 @@ func Test_AddVolumeNode_Positive_ExistingVolumeNewNode(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add2Err)
 	}
 
+	// 卷名由卷规格唯一确定，与节点无关。
 	if generatedVolumeName1 != generatedVolumeName2 {
 		t.Fatalf(
 			"Generated volume names for the same volume should be the same but they are not: %q and %q",
@@ -292,10 +304,10 @@ func Test_AddVolumeNode_Positive_ExistingVolumeNewNode(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName1, string(volumeName), node2Name, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Calls AddVolumeNode() twice. Uses the same volume and node both times.
-// Verifies a single volume/node entry exists.
+// Test_AddVolumeNode_Positive_ExistingVolumeExistingNode 验证对同一卷/节点重复
+// AddVolumeNode 不会产生重复条目：第二次调用复用已有条目，仍只有一条记录。
 func Test_AddVolumeNode_Positive_ExistingVolumeExistingNode(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -303,12 +315,13 @@ func Test_AddVolumeNode_Positive_ExistingVolumeExistingNode(t *testing.T) {
 	nodeName := types.NodeName("node-name")
 	devicePath := "fake/device/path"
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
 	generatedVolumeName1, add1Err := asw.AddVolumeNode(logger, volumeName, volumeSpec, nodeName, devicePath, true)
+	// 重复添加同一卷/节点，用于验证条目不重复。
 	generatedVolumeName2, add2Err := asw.AddVolumeNode(logger, volumeName, volumeSpec, nodeName, devicePath, true)
 
-	// Assert
+	// 断言
 	if add1Err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add1Err)
 	}
@@ -336,11 +349,11 @@ func Test_AddVolumeNode_Positive_ExistingVolumeExistingNode(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName1, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Calls DeleteVolumeNode() to delete volume/node.
-// Verifies no volume/node entries exists.
+// Test_DeleteVolumeNode_Positive_VolumeExistsNodeExists 验证删除已存在的卷/节点：
+//   - DeleteVolumeNode 后该组合状态变为 AttachStateDetached；
+//   - GetAttachedVolumes 不再返回该条目。
 func Test_DeleteVolumeNode_Positive_VolumeExistsNodeExists(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -353,10 +366,11 @@ func Test_DeleteVolumeNode_Positive_VolumeExistsNodeExists(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act
+	// 执行
+	// 删除已挂载条目后应立即从 Attached 列表中消失。
 	asw.DeleteVolumeNode(generatedVolumeName, nodeName)
 
-	// Assert
+	// 断言
 	volumeNodeComboState := asw.GetAttachState(generatedVolumeName, nodeName)
 	if volumeNodeComboState != AttachStateDetached {
 		t.Fatalf("%q/%q volume/node combo is marked %q, expected 'Detached'.", generatedVolumeName, nodeName, volumeNodeComboState)
@@ -368,19 +382,20 @@ func Test_DeleteVolumeNode_Positive_VolumeExistsNodeExists(t *testing.T) {
 	}
 }
 
-// Calls DeleteVolumeNode() to delete volume/node on empty data struct
-// Verifies no volume/node entries exists.
+// Test_DeleteVolumeNode_Positive_VolumeDoesntExistNodeDoesntExist 验证对空 ASW
+// 删除不存在的卷/节点是安全的（幂等），状态保持 Detached 且无条目。
 func Test_DeleteVolumeNode_Positive_VolumeDoesntExistNodeDoesntExist(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	nodeName := types.NodeName("node-name")
 
-	// Act
+	// 执行
+	// 对空状态执行删除，验证操作幂等。
 	asw.DeleteVolumeNode(volumeName, nodeName)
 
-	// Assert
+	// 断言
 	volumeNodeComboState := asw.GetAttachState(volumeName, nodeName)
 	if volumeNodeComboState != AttachStateDetached {
 		t.Fatalf("%q/%q volume/node combo is marked %q, expected 'Detached'.", volumeName, nodeName, volumeNodeComboState)
@@ -392,12 +407,10 @@ func Test_DeleteVolumeNode_Positive_VolumeDoesntExistNodeDoesntExist(t *testing.
 	}
 }
 
-// Populates data struct with two volume/node entries the second one using a
-// different node.
-// Calls DeleteVolumeNode() to delete first volume/node.
-// Verifies only second volume/node entry exists.
+// Test_DeleteVolumeNode_Positive_TwoNodesOneDeleted 验证删除同一卷在节点1上的
+// 条目不影响节点2：节点1变为 Detached，节点2仍为 Attached 并保留在结果中。
 func Test_DeleteVolumeNode_Positive_TwoNodesOneDeleted(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -421,10 +434,11 @@ func Test_DeleteVolumeNode_Positive_TwoNodesOneDeleted(t *testing.T) {
 			generatedVolumeName2)
 	}
 
-	// Act
+	// 执行
+	// 只删除节点1的条目，节点2应保持 Attached。
 	asw.DeleteVolumeNode(generatedVolumeName1, node1Name)
 
-	// Assert
+	// 断言
 	volumeNodeComboState := asw.GetAttachState(generatedVolumeName1, node1Name)
 	if volumeNodeComboState != AttachStateDetached {
 		t.Fatalf("%q/%q volume/node combo is marked %q, expected 'Detached'.", generatedVolumeName1, node1Name, volumeNodeComboState)
@@ -443,11 +457,10 @@ func Test_DeleteVolumeNode_Positive_TwoNodesOneDeleted(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName1, string(volumeName), node2Name, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Calls GetAttachState() to verify entry.
-// Verifies the populated volume/node entry exists.
+// Test_VolumeNodeExists_Positive_VolumeExistsNodeExists 验证 GetAttachState 能
+// 正确返回已存在卷/节点的 AttachStateAttached 状态。
 func Test_VolumeNodeExists_Positive_VolumeExistsNodeExists(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -460,10 +473,11 @@ func Test_VolumeNodeExists_Positive_VolumeExistsNodeExists(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act
+	// 执行
+	// 按卷+节点精确匹配，避免只按卷名查询导致误判。
 	volumeNodeComboState := asw.GetAttachState(generatedVolumeName, nodeName)
 
-	// Assert
+	// 断言
 	if volumeNodeComboState != AttachStateAttached {
 		t.Fatalf("%q/%q volume/node combo is marked %q; expected 'Attached'.", generatedVolumeName, nodeName, volumeNodeComboState)
 	}
@@ -476,11 +490,10 @@ func Test_VolumeNodeExists_Positive_VolumeExistsNodeExists(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume1/node1 entry.
-// Calls GetAttachState() with volume1/node2.
-// Verifies requested entry does not exist, but populated entry does.
+// Test_VolumeNodeExists_Positive_VolumeExistsNodeDoesntExist 验证 GetAttachState
+// 按卷+节点精确匹配：查询不存在的节点返回 Detached，已有条目不受影响。
 func Test_VolumeNodeExists_Positive_VolumeExistsNodeDoesntExist(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -494,10 +507,11 @@ func Test_VolumeNodeExists_Positive_VolumeExistsNodeDoesntExist(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act
+	// 执行
+	// 用不同节点查询，验证匹配的是卷与节点的组合而非仅卷名。
 	volumeNodeComboState := asw.GetAttachState(generatedVolumeName, node2Name)
 
-	// Assert
+	// 断言
 	if volumeNodeComboState != AttachStateDetached {
 		t.Fatalf("%q/%q volume/node combo is marked %q, expected 'Detached'.", generatedVolumeName, node2Name, volumeNodeComboState)
 	}
@@ -510,19 +524,20 @@ func Test_VolumeNodeExists_Positive_VolumeExistsNodeDoesntExist(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), node1Name, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Calls GetAttachState() on empty data struct.
-// Verifies requested entry does not exist.
+// Test_VolumeNodeExists_Positive_VolumeAndNodeDontExist 验证空 ASW 上查询
+// GetAttachState 返回 Detached，不会误报已挂载。
 func Test_VolumeNodeExists_Positive_VolumeAndNodeDontExist(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	nodeName := types.NodeName("node-name")
 
-	// Act
+	// 执行
+	// 空状态下查询应安全返回 Detached。
 	volumeNodeComboState := asw.GetAttachState(volumeName, nodeName)
 
-	// Assert
+	// 断言
 	if volumeNodeComboState != AttachStateDetached {
 		t.Fatalf("%q/%q volume/node combo is marked %q, expected 'Detached'.", volumeName, nodeName, volumeNodeComboState)
 	}
@@ -533,27 +548,26 @@ func Test_VolumeNodeExists_Positive_VolumeAndNodeDontExist(t *testing.T) {
 	}
 }
 
-// Calls GetAttachedVolumes() on empty data struct.
-// Verifies no volume/node entries are returned.
+// Test_GetAttachedVolumes_Positive_NoVolumesOrNodes 验证空 ASW 的
+// GetAttachedVolumes 返回空列表。
 func Test_GetAttachedVolumes_Positive_NoVolumesOrNodes(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 
-	// Act
+	// 执行
 	attachedVolumes := asw.GetAttachedVolumes()
 
-	// Assert
+	// 断言
 	if len(attachedVolumes) != 0 {
 		t.Fatalf("len(attachedVolumes) Expected: <0> Actual: <%v>", len(attachedVolumes))
 	}
 }
 
-// Populates data struct with one volume/node entry.
-// Calls GetAttachedVolumes() to get list of entries.
-// Verifies one volume/node entry is returned.
+// Test_GetAttachedVolumes_Positive_OneVolumeOneNode 验证 GetAttachedVolumes
+// 返回唯一一条卷/节点条目且字段完整。
 func Test_GetAttachedVolumes_Positive_OneVolumeOneNode(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -566,10 +580,10 @@ func Test_GetAttachedVolumes_Positive_OneVolumeOneNode(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act
+	// 执行
 	attachedVolumes := asw.GetAttachedVolumes()
 
-	// Assert
+	// 断言
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
 	}
@@ -577,11 +591,10 @@ func Test_GetAttachedVolumes_Positive_OneVolumeOneNode(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with two volume/node entries (different node and volume).
-// Calls GetAttachedVolumes() to get list of entries.
-// Verifies both volume/node entries are returned.
+// Test_GetAttachedVolumes_Positive_TwoVolumeTwoNodes 验证两个不同卷/节点
+// 条目均被 GetAttachedVolumes 返回，互不干扰。
 func Test_GetAttachedVolumes_Positive_TwoVolumeTwoNodes(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volume1Name := v1.UniqueVolumeName("volume1-name")
@@ -601,10 +614,10 @@ func Test_GetAttachedVolumes_Positive_TwoVolumeTwoNodes(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add2Err)
 	}
 
-	// Act
+	// 执行
 	attachedVolumes := asw.GetAttachedVolumes()
 
-	// Assert
+	// 断言
 	if len(attachedVolumes) != 2 {
 		t.Fatalf("len(attachedVolumes) Expected: <2> Actual: <%v>", len(attachedVolumes))
 	}
@@ -613,17 +626,17 @@ func Test_GetAttachedVolumes_Positive_TwoVolumeTwoNodes(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName2, string(volume2Name), node2Name, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with two volume/node entries (same volume different node).
-// Calls GetAttachedVolumes() to get list of entries.
-// Verifies both volume/node entries are returned.
+// Test_GetAttachedVolumes_Positive_OneVolumeTwoNodes 验证同一卷挂到两个节点时
+// GetAttachedVolumes 返回两条记录；第二次添加传入空卷名也能解析出相同卷名。
 func Test_GetAttachedVolumes_Positive_OneVolumeTwoNodes(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	volumeSpec := controllervolumetesting.GetTestVolumeSpec(string(volumeName), volumeName)
 	node1Name := types.NodeName("node1-name")
 	devicePath := "fake/device/path"
+	// 先从卷规格解析插件与唯一卷名，模拟真实调用方传入规范卷名。
 	plugin, err := volumePluginMgr.FindAttachablePluginBySpec(volumeSpec)
 	if err != nil || plugin == nil {
 		t.Fatalf("Failed to get volume plugin from spec %v, %v", volumeSpec, err)
@@ -638,6 +651,7 @@ func Test_GetAttachedVolumes_Positive_OneVolumeTwoNodes(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add1Err)
 	}
 	node2Name := types.NodeName("node2-name")
+	// 第二次传空卷名，验证 ASW 会自行从卷规格推导相同的卷名。
 	generatedVolumeName2, add2Err := asw.AddVolumeNode(logger, v1.UniqueVolumeName(""), volumeSpec, node2Name, devicePath, true)
 	if add2Err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add2Err)
@@ -650,10 +664,10 @@ func Test_GetAttachedVolumes_Positive_OneVolumeTwoNodes(t *testing.T) {
 			generatedVolumeName2)
 	}
 
-	// Act
+	// 执行
 	attachedVolumes := asw.GetAttachedVolumes()
 
-	// Assert
+	// 断言
 	if len(attachedVolumes) != 2 {
 		t.Fatalf("len(attachedVolumes) Expected: <2> Actual: <%v>", len(attachedVolumes))
 	}
@@ -662,10 +676,10 @@ func Test_GetAttachedVolumes_Positive_OneVolumeTwoNodes(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName1, string(volumeName), node2Name, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Verifies mountedByNode is true and DetachRequestedTime is zero.
+// Test_SetVolumesMountedByNode_Positive_Set 验证新增条目的默认值：
+// mountedByNode 为 true、DetachRequestedTime 为零，无需显式 Set 即可满足预期。
 func Test_SetVolumesMountedByNode_Positive_Set(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -678,9 +692,9 @@ func Test_SetVolumesMountedByNode_Positive_Set(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act: do not mark -- test default value
+	// 执行：不显式标记，用于验证默认挂载状态。
 
-	// Assert
+	// 断言
 	attachedVolumes := asw.GetAttachedVolumes()
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
@@ -689,11 +703,11 @@ func Test_SetVolumesMountedByNode_Positive_Set(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Calls SetVolumesMountedByNode twice, first setting mounted to true then false.
-// Verifies mountedByNode is false.
+// Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSet 验证
+// SetVolumesMountedByNode 的覆盖语义：先标记挂载再传 nil 取消标记，
+// 最终 mountedByNode 为 false。
 func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSet(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -706,8 +720,9 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSet(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act
+	// 执行
 	asw.SetVolumesMountedByNode(logger, []v1.UniqueVolumeName{generatedVolumeName}, nodeName)
+	// 传 nil 表示取消该节点上所有卷的 mounted 标记。
 	asw.SetVolumesMountedByNode(logger, nil, nodeName)
 
 	attachedVolumes := asw.GetAttachedVolumes()
@@ -718,11 +733,10 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSet(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, false /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Calls SetVolumesMountedByNode once, setting mounted to false.
-// Verifies mountedByNode is false because value is overwritten
+// Test_SetVolumesMountedByNode_Positive_UnsetWithoutInitialSet 验证即使没有
+// 预先标记，传 nil 调用也会把 mountedByNode 覆盖为 false。
 func Test_SetVolumesMountedByNode_Positive_UnsetWithoutInitialSet(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -742,10 +756,11 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithoutInitialSet(t *testing.T) 
 
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 
-	// Act
+	// 执行
+	// 即使此前未显式标记，nil 也会把默认值覆盖为 false。
 	asw.SetVolumesMountedByNode(logger, nil, nodeName)
 
-	// Assert
+	// 断言
 	attachedVolumes = asw.GetAttachedVolumes()
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
@@ -754,12 +769,11 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithoutInitialSet(t *testing.T) 
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, false /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Calls SetVolumesMountedByNode twice, first setting mounted to true then false.
-// Calls AddVolumeNode to readd the same volume/node.
-// Verifies mountedByNode is false and detachRequestedTime is zero.
+// Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetAddVolumeNodeNotReset
+// 验证对已存在卷/节点重复 AddVolumeNode 不会重置 mountedByNode（仍为 false），
+// 也不会引入非零的 DetachRequestedTime。
 func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetAddVolumeNodeNotReset(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -772,12 +786,13 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetAddVolumeNodeNotRe
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act
+	// 执行
 	asw.SetVolumesMountedByNode(logger, []v1.UniqueVolumeName{generatedVolumeName}, nodeName)
 	asw.SetVolumesMountedByNode(logger, nil, nodeName)
+	// 重新添加同一卷/节点，期望不重置 mountedByNode。
 	generatedVolumeName, addErr = asw.AddVolumeNode(logger, volumeName, volumeSpec, nodeName, devicePath, true)
 
-	// Assert
+	// 断言
 	if addErr != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
@@ -790,12 +805,11 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetAddVolumeNodeNotRe
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, false /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Calls RemoveVolumeFromReportAsAttached() once on volume/node entry.
-// Calls SetVolumesMountedByNode() twice, first setting mounted to true then false.
-// Verifies mountedByNode is false and detachRequestedTime is NOT zero.
+// Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetVerifyDetachRequestedTimePerserved
+// 验证 SetVolumesMountedByNode 只影响 mountedByNode，不会清除此前
+// SetDetachRequestTime 记录的时间戳；时间戳必须与操作前完全一致。
 func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetVerifyDetachRequestedTimePerserved(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -807,6 +821,7 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetVerifyDetachReques
 	if addErr != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
+	// 先记录卸载请求时间，后续用于验证它不会被状态变更清除。
 	_, err := asw.SetDetachRequestTime(logger, generatedVolumeName, nodeName)
 	if err != nil {
 		t.Fatalf("SetDetachRequestTime failed. Expected: <no error> Actual: <%v>", err)
@@ -815,13 +830,14 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetVerifyDetachReques
 	if err != nil {
 		t.Fatalf("RemoveVolumeFromReportAsAttached failed. Expected: <no error> Actual: <%v>", err)
 	}
+	// 保存基准时间戳，断言时要求精确相等而非仅非零。
 	expectedDetachRequestedTime := asw.GetAttachedVolumes()[0].DetachRequestedTime
 
-	// Act
+	// 执行
 	asw.SetVolumesMountedByNode(logger, []v1.UniqueVolumeName{generatedVolumeName}, nodeName)
 	asw.SetVolumesMountedByNode(logger, nil, nodeName)
 
-	// Assert
+	// 断言
 	attachedVolumes := asw.GetAttachedVolumes()
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
@@ -833,10 +849,10 @@ func Test_SetVolumesMountedByNode_Positive_UnsetWithInitialSetVerifyDetachReques
 	}
 }
 
-// Populates data struct with one volume/node entry.
-// Verifies mountedByNode is true and detachRequestedTime is zero (default values).
+// Test_RemoveVolumeFromReportAsAttached_Positive_Set 验证新增条目的默认值
+// （mountedByNode=true、DetachRequestedTime=0），与取消上报操作无关。
 func Test_RemoveVolumeFromReportAsAttached_Positive_Set(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -849,9 +865,9 @@ func Test_RemoveVolumeFromReportAsAttached_Positive_Set(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act: do not mark -- test default value
+	// 执行：不显式标记，用于验证默认状态。
 
-	// Assert
+	// 断言
 	attachedVolumes := asw.GetAttachedVolumes()
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
@@ -860,11 +876,11 @@ func Test_RemoveVolumeFromReportAsAttached_Positive_Set(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Calls RemoveVolumeFromReportAsAttached() once on volume/node entry.
-// Verifies mountedByNode is true and detachRequestedTime is NOT zero.
+// Test_RemoveVolumeFromReportAsAttached_Positive_Marked 验证
+// RemoveVolumeFromReportAsAttached 与 SetDetachRequestTime 配合后，
+// 条目仍记录非零 DetachRequestedTime，mountedByNode 保持 true。
 func Test_RemoveVolumeFromReportAsAttached_Positive_Marked(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -877,7 +893,8 @@ func Test_RemoveVolumeFromReportAsAttached_Positive_Marked(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act
+	// 执行
+	// 先记录卸载请求时间，再取消上报，验证两个状态字段独立更新。
 	_, err := asw.SetDetachRequestTime(logger, generatedVolumeName, nodeName)
 	if err != nil {
 		t.Fatalf("SetDetachRequestTime failed. Expected: <no error> Actual: <%v>", err)
@@ -887,7 +904,7 @@ func Test_RemoveVolumeFromReportAsAttached_Positive_Marked(t *testing.T) {
 		t.Fatalf("MarkDesireToDetach failed. Expected: <no error> Actual: <%v>", markDesireToDetachErr)
 	}
 
-	// Assert
+	// 断言
 	attachedVolumes := asw.GetAttachedVolumes()
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
@@ -896,12 +913,11 @@ func Test_RemoveVolumeFromReportAsAttached_Positive_Marked(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, true /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Calls MarkDesireToDetach() once on volume/node entry.
-// Calls ResetDetachRequestTime() to reset the detach request time value back to 0.
+// Test_MarkDesireToDetach_Positive_MarkedAddVolumeNodeReset 验证
+// ResetDetachRequestTime 能把已设置的卸载请求时间清零，恢复默认状态。
 // Verifies mountedByNode is true and detachRequestedTime is reset to zero.
 func Test_MarkDesireToDetach_Positive_MarkedAddVolumeNodeReset(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -914,21 +930,21 @@ func Test_MarkDesireToDetach_Positive_MarkedAddVolumeNodeReset(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act
+	// 执行
 	_, err := asw.SetDetachRequestTime(logger, generatedVolumeName, nodeName)
 	if err != nil {
 		t.Fatalf("SetDetachRequestTime failed. Expected: <no error> Actual: <%v>", err)
 	}
 	markDesireToDetachErr := asw.RemoveVolumeFromReportAsAttached(generatedVolumeName, nodeName)
-	// Reset detach request time to 0
+	// 重置卸载请求时间至 0，验证状态可恢复默认值。
 	asw.ResetDetachRequestTime(logger, generatedVolumeName, nodeName)
 
-	// Assert
+	// 断言
 	if markDesireToDetachErr != nil {
 		t.Fatalf("RemoveVolumeFromReportAsAttached failed. Expected: <no error> Actual: <%v>", markDesireToDetachErr)
 	}
 
-	// Assert
+	// 断言
 	attachedVolumes := asw.GetAttachedVolumes()
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
@@ -937,12 +953,11 @@ func Test_MarkDesireToDetach_Positive_MarkedAddVolumeNodeReset(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Calls SetVolumesMountedByNode() twice, first setting mounted to true then false.
-// Calls RemoveVolumeFromReportAsAttached() once on volume/node entry.
-// Verifies mountedByNode is false and detachRequestedTime is NOT zero.
+// Test_RemoveVolumeFromReportAsAttached_Positive_UnsetWithInitialSetVolumesMountedByNodePreserved
+// 验证两种状态变更互不干扰：取消 mountedByNode 后再设置卸载请求时间，
+// mountedByNode 保持 false 且 DetachRequestedTime 非零。
 func Test_RemoveVolumeFromReportAsAttached_Positive_UnsetWithInitialSetVolumesMountedByNodePreserved(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -954,9 +969,10 @@ func Test_RemoveVolumeFromReportAsAttached_Positive_UnsetWithInitialSetVolumesMo
 	if addErr != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
+	// 先取消 mounted 标记再记录卸载请求，验证两者互不覆盖。
 	asw.SetVolumesMountedByNode(logger, []v1.UniqueVolumeName{generatedVolumeName}, nodeName)
 	asw.SetVolumesMountedByNode(logger, nil, nodeName)
-	// Act
+	// 执行
 	_, err := asw.SetDetachRequestTime(logger, generatedVolumeName, nodeName)
 	if err != nil {
 		t.Fatalf("SetDetachRequestTime failed. Expected: <no error> Actual: <%v>", err)
@@ -966,7 +982,7 @@ func Test_RemoveVolumeFromReportAsAttached_Positive_UnsetWithInitialSetVolumesMo
 		t.Fatalf("RemoveVolumeFromReportAsAttached failed. Expected: <no error> Actual: <%v>", removeVolumeDetachErr)
 	}
 
-	// Assert
+	// 断言
 	attachedVolumes := asw.GetAttachedVolumes()
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
@@ -975,11 +991,10 @@ func Test_RemoveVolumeFromReportAsAttached_Positive_UnsetWithInitialSetVolumesMo
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, false /* expectedMountedByNode */, true /* expectNonZeroDetachRequestedTime */)
 }
 
-// Populates data struct with one volume/node entry.
-// Calls RemoveVolumeFromReportAsAttached
-// Verifies there is no volume as reported as attached
+// Test_RemoveVolumeFromReportAsAttached 验证取消上报后节点仍保留在
+// reportedAsAttached 映射中（便于后续状态同步），但其卷列表为空。
 func Test_RemoveVolumeFromReportAsAttached(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -997,6 +1012,7 @@ func Test_RemoveVolumeFromReportAsAttached(t *testing.T) {
 		t.Fatalf("RemoveVolumeFromReportAsAttached failed. Expected: <no error> Actual: <%v>", removeVolumeDetachErr)
 	}
 
+	// 节点仍应保留在映射中，只是卷列表为空，便于状态同步。
 	reportAsAttachedVolumesMap := asw.GetVolumesToReportAttached(logger)
 	volumes, exists := reportAsAttachedVolumesMap[nodeName]
 	if !exists {
@@ -1008,12 +1024,10 @@ func Test_RemoveVolumeFromReportAsAttached(t *testing.T) {
 
 }
 
-// Populates data struct with one volume/node entry.
-// Calls RemoveVolumeFromReportAsAttached
-// Calls AddVolumeToReportAsAttached to add volume back as attached
-// Verifies there is one volume as reported as attached
+// Test_RemoveVolumeFromReportAsAttached_AddVolumeToReportAsAttached_Positive
+// 验证取消上报后可通过 AddVolumeToReportAsAttached 恢复，节点卷列表重新为一条。
 func Test_RemoveVolumeFromReportAsAttached_AddVolumeToReportAsAttached_Positive(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -1040,6 +1054,7 @@ func Test_RemoveVolumeFromReportAsAttached_AddVolumeToReportAsAttached_Positive(
 		t.Fatalf("len(reportAsAttachedVolumes) Expected: <0> Actual: <%v>", len(volumes))
 	}
 
+	// 重新加入上报列表，验证取消与恢复操作可逆。
 	asw.AddVolumeToReportAsAttached(logger, generatedVolumeName, nodeName)
 	reportAsAttachedVolumesMap = asw.GetVolumesToReportAttached(logger)
 	volumes, exists = reportAsAttachedVolumesMap[nodeName]
@@ -1051,13 +1066,10 @@ func Test_RemoveVolumeFromReportAsAttached_AddVolumeToReportAsAttached_Positive(
 	}
 }
 
-// Populates data struct with one volume/node entry.
-// Calls RemoveVolumeFromReportAsAttached
-// Calls DeleteVolumeNode
-// Calls AddVolumeNode
-// Verifies there is no volume as reported as attached
+// Test_RemoveVolumeFromReportAsAttached_Delete_AddVolumeNode 验证卷/节点先取消
+// 上报、再删除后重新添加的生命周期：重新添加的卷会再次进入上报列表。
 func Test_RemoveVolumeFromReportAsAttached_Delete_AddVolumeNode(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -1084,6 +1096,7 @@ func Test_RemoveVolumeFromReportAsAttached_Delete_AddVolumeNode(t *testing.T) {
 		t.Fatalf("len(reportAsAttachedVolumes) Expected: <0> Actual: <%v>", len(volumes))
 	}
 
+	// 删除后重新添加，验证上报状态随条目生命周期正确重建。
 	asw.DeleteVolumeNode(generatedVolumeName, nodeName)
 
 	asw.AddVolumeNode(logger, volumeName, volumeSpec, nodeName, "" /*device path*/, true)
@@ -1098,12 +1111,12 @@ func Test_RemoveVolumeFromReportAsAttached_Delete_AddVolumeNode(t *testing.T) {
 	}
 }
 
-// Populates data struct with one volume/node entry.
-// Calls SetDetachRequestTime twice and sleep maxWaitTime (1 second) in between
-// The elapsed time returned from the first SetDetachRequestTime call should be smaller than maxWaitTime
-// The elapsed time returned from the second SetDetachRequestTime call should be larger than maxWaitTime
+// Test_SetDetachRequestTime_Positive 验证 SetDetachRequestTime 返回的等待时长
+// 随记录时间增长：
+//   - 首次调用后立即返回，elapsed 小于 maxWaitTime；
+//   - 睡眠 maxWaitTime 后再次调用，elapsed 不小于 maxWaitTime。
 func Test_SetDetachRequestTime_Positive(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -1116,6 +1129,7 @@ func Test_SetDetachRequestTime_Positive(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
+	// 使用 1 秒阈值，使两次调用的等待时长差异可被稳定观测。
 	maxWaitTime := 1 * time.Second
 	etime, err := asw.SetDetachRequestTime(logger, generatedVolumeName, nodeName)
 	if err != nil {
@@ -1124,7 +1138,7 @@ func Test_SetDetachRequestTime_Positive(t *testing.T) {
 	if etime >= maxWaitTime {
 		t.Logf("SetDetachRequestTim Expected: <elapsed time %v is smaller than maxWaitTime %v> Actual <elapsed time is larger than maxWaitTime>", etime, maxWaitTime)
 	}
-	// Sleep and call SetDetachRequestTime again
+	// 睡眠一个阈值后再次调用，使 elapsed 超过 maxWaitTime。
 	time.Sleep(maxWaitTime)
 	etime, err = asw.SetDetachRequestTime(logger, generatedVolumeName, nodeName)
 	if err != nil {
@@ -1135,23 +1149,27 @@ func Test_SetDetachRequestTime_Positive(t *testing.T) {
 	}
 }
 
+// Test_GetAttachedVolumesForNode_Positive_NoVolumesOrNodes 验证空 ASW 上
+// 按节点查询返回空列表。
 func Test_GetAttachedVolumesForNode_Positive_NoVolumesOrNodes(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	node := types.NodeName("random")
 
-	// Act
+	// 执行
 	attachedVolumes := asw.GetAttachedVolumesForNode(node)
 
-	// Assert
+	// 断言
 	if len(attachedVolumes) != 0 {
 		t.Fatalf("len(attachedVolumes) Expected: <0> Actual: <%v>", len(attachedVolumes))
 	}
 }
 
+// Test_GetAttachedVolumesForNode_Positive_OneVolumeOneNode 验证按节点查询
+// 能返回该节点下唯一的卷条目。
 func Test_GetAttachedVolumesForNode_Positive_OneVolumeOneNode(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -1164,10 +1182,10 @@ func Test_GetAttachedVolumesForNode_Positive_OneVolumeOneNode(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", addErr)
 	}
 
-	// Act
+	// 执行
 	attachedVolumes := asw.GetAttachedVolumesForNode(nodeName)
 
-	// Assert
+	// 断言
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
 	}
@@ -1175,8 +1193,10 @@ func Test_GetAttachedVolumesForNode_Positive_OneVolumeOneNode(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
+// Test_GetAttachedVolumesForNode_Positive_TwoVolumeTwoNodes 验证按节点查询
+// 具有隔离性：节点2只返回自己的卷，节点1的卷不混入。
 func Test_GetAttachedVolumesForNode_Positive_TwoVolumeTwoNodes(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volume1Name := v1.UniqueVolumeName("volume1-name")
@@ -1196,10 +1216,10 @@ func Test_GetAttachedVolumesForNode_Positive_TwoVolumeTwoNodes(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add2Err)
 	}
 
-	// Act
+	// 执行
 	attachedVolumes := asw.GetAttachedVolumesForNode(node2Name)
 
-	// Assert
+	// 断言
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
 	}
@@ -1207,8 +1227,10 @@ func Test_GetAttachedVolumesForNode_Positive_TwoVolumeTwoNodes(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName2, string(volume2Name), node2Name, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
+// Test_GetAttachedVolumesForNode_Positive_OneVolumeTwoNodes 验证同一卷挂到
+// 两个节点时，按节点查询只返回所查询节点的那一条记录。
 func Test_GetAttachedVolumesForNode_Positive_OneVolumeTwoNodes(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -1229,6 +1251,7 @@ func Test_GetAttachedVolumesForNode_Positive_OneVolumeTwoNodes(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add1Err)
 	}
 	node2Name := types.NodeName("node2-name")
+	// 传空卷名让 ASW 从卷规格解析，验证与显式卷名一致。
 	generatedVolumeName2, add2Err := asw.AddVolumeNode(logger, v1.UniqueVolumeName(""), volumeSpec, node2Name, devicePath, true)
 	if add2Err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add2Err)
@@ -1241,10 +1264,10 @@ func Test_GetAttachedVolumesForNode_Positive_OneVolumeTwoNodes(t *testing.T) {
 			generatedVolumeName2)
 	}
 
-	// Act
+	// 执行
 	attachedVolumes := asw.GetAttachedVolumesForNode(node1Name)
 
-	// Assert
+	// 断言
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
 	}
@@ -1252,8 +1275,10 @@ func Test_GetAttachedVolumesForNode_Positive_OneVolumeTwoNodes(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName1, string(volumeName), node1Name, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
+// Test_OneVolumeTwoNodes_TwoDevicePaths 验证同一卷在两个节点上可保存各自的
+// DevicePath，按节点查询返回对应设备路径。
 func Test_OneVolumeTwoNodes_TwoDevicePaths(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -1274,6 +1299,7 @@ func Test_OneVolumeTwoNodes_TwoDevicePaths(t *testing.T) {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", add1Err)
 	}
 	node2Name := types.NodeName("node2-name")
+	// 两个节点使用不同设备路径，验证按节点查询返回各自路径。
 	devicePath2 := "fake/device/path2"
 	generatedVolumeName2, add2Err := asw.AddVolumeNode(logger, v1.UniqueVolumeName(""), volumeSpec, node2Name, devicePath2, true)
 	if add2Err != nil {
@@ -1287,10 +1313,10 @@ func Test_OneVolumeTwoNodes_TwoDevicePaths(t *testing.T) {
 			generatedVolumeName2)
 	}
 
-	// Act
+	// 执行
 	attachedVolumes := asw.GetAttachedVolumesForNode(node2Name)
 
-	// Assert
+	// 断言
 	if len(attachedVolumes) != 1 {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
 	}
@@ -1298,31 +1324,32 @@ func Test_OneVolumeTwoNodes_TwoDevicePaths(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, generatedVolumeName2, string(volumeName), node2Name, devicePath2, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Test_SetNodeStatusUpdateNeededError expects the map nodesToUpdateStatusFor
-// to be empty if the SetNodeStatusUpdateNeeded is called on a node that
-// does not exist in the actual state of the world
+// Test_SetNodeStatusUpdateNeededError 验证对不存在的节点调用
+// SetNodeStatusUpdateNeeded 不会在 nodesToUpdateStatusFor 中凭空创建条目。
 func Test_SetNodeStatusUpdateNeededError(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	nodeName := types.NodeName("node-1")
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
+	// 节点不存在时不应创建状态条目，避免后续误报需要更新。
 	asw.SetNodeStatusUpdateNeeded(logger, nodeName)
 
-	// Assert
+	// 断言
 	nodesToUpdateStatusFor := asw.GetNodesToUpdateStatusFor()
 	if len(nodesToUpdateStatusFor) != 0 {
 		t.Fatalf("nodesToUpdateStatusFor should be empty as nodeName does not exist")
 	}
 }
 
-// Test_updateNodeStatusUpdateNeeded expects statusUpdateNeeded to be properly updated if
-// updateNodeStatusUpdateNeeded is called on a node that exists in the actual state of the world
+// Test_updateNodeStatusUpdateNeeded 验证对已存在的节点调用
+// updateNodeStatusUpdateNeeded 能正确翻转 statusUpdateNeeded 标志。
 func Test_updateNodeStatusUpdateNeeded(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
+	// 直接构造内部结构体，以便精确控制节点的初始状态。
 	asw := &actualStateOfWorld{
 		attachedVolumes:        make(map[v1.UniqueVolumeName]attachedVolume),
 		nodesToUpdateStatusFor: make(map[types.NodeName]nodeToUpdateStatusFor),
@@ -1336,10 +1363,11 @@ func Test_updateNodeStatusUpdateNeeded(t *testing.T) {
 	}
 	asw.nodesToUpdateStatusFor[nodeName] = nodeToUpdate
 
-	// Act
+	// 执行
+	// 将标志从 true 翻转为 false，验证更新逻辑生效。
 	err := asw.updateNodeStatusUpdateNeeded(nodeName, false)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("updateNodeStatusUpdateNeeded should not return error, but got: %v", err)
 	}
@@ -1349,10 +1377,10 @@ func Test_updateNodeStatusUpdateNeeded(t *testing.T) {
 	}
 }
 
-// Test_updateNodeStatusUpdateNeededError expects statusUpdateNeeded to report error if
-// updateNodeStatusUpdateNeeded is called on a node that does not exist in the actual state of the world
+// Test_updateNodeStatusUpdateNeededError 验证对不存在的节点调用
+// updateNodeStatusUpdateNeeded 会返回错误，避免静默丢失状态更新请求。
 func Test_updateNodeStatusUpdateNeededError(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := &actualStateOfWorld{
 		attachedVolumes:        make(map[v1.UniqueVolumeName]attachedVolume),
@@ -1361,20 +1389,21 @@ func Test_updateNodeStatusUpdateNeededError(t *testing.T) {
 	}
 	nodeName := types.NodeName("node-1")
 
-	// Act
+	// 执行
+	// 不存在的节点必须报错，否则状态更新会被静默丢弃。
 	err := asw.updateNodeStatusUpdateNeeded(nodeName, false)
 
-	// Assert
+	// 断言
 	if err == nil {
 		t.Fatalf("updateNodeStatusUpdateNeeded should return error, but got nothing")
 	}
 }
 
-// Mark a volume as attached to a node.
-// Verify GetAttachState returns AttachedState
-// Verify GetAttachedVolumes return this volume
+// Test_MarkVolumeAsAttached 验证 MarkVolumeAsAttached 将卷直接标记为已挂载：
+//   - GetAttachState 返回 AttachStateAttached；
+//   - GetAttachedVolumes 包含该卷且设备路径等信息正确。
 func Test_MarkVolumeAsAttached(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -1383,16 +1412,17 @@ func Test_MarkVolumeAsAttached(t *testing.T) {
 	nodeName := types.NodeName("node-name")
 	devicePath := "fake/device/path"
 
+	// 确认卷规格能解析出可挂载插件，排除测试环境配置问题。
 	plugin, err := volumePluginMgr.FindAttachablePluginBySpec(volumeSpec)
 	if err != nil || plugin == nil {
 		t.Fatalf("Failed to get volume plugin from spec %v, %v", volumeSpec, err)
 	}
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
 	err = asw.MarkVolumeAsAttached(logger, volumeName, volumeSpec, nodeName, devicePath)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("MarkVolumeAsAttached failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -1409,27 +1439,28 @@ func Test_MarkVolumeAsAttached(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, volumeName, string(volumeName), nodeName, devicePath, true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Mark a volume as attachment as uncertain.
-// Verify GetAttachState returns UncertainState
-// Verify GetAttachedVolumes return this volume
+// Test_MarkVolumeAsUncertain 验证 MarkVolumeAsUncertain 将卷标记为不确定状态：
+//   - GetAttachState 返回 AttachStateUncertain；
+//   - 卷仍出现在 GetAttachedVolumes 中，但设备路径为空。
 func Test_MarkVolumeAsUncertain(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
 	volumeSpec := controllervolumetesting.GetTestVolumeSpec(string(volumeName), volumeName)
 	nodeName := types.NodeName("node-name")
 
+	// 确认插件可解析，才能判断 Uncertain 状态确实由实现返回。
 	plugin, err := volumePluginMgr.FindAttachablePluginBySpec(volumeSpec)
 	if err != nil || plugin == nil {
 		t.Fatalf("Failed to get volume plugin from spec %v, %v", volumeSpec, err)
 	}
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
 	err = asw.MarkVolumeAsUncertain(logger, volumeName, volumeSpec, nodeName)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("MarkVolumeAsUncertain failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -1445,14 +1476,13 @@ func Test_MarkVolumeAsUncertain(t *testing.T) {
 	verifyAttachedVolume(t, attachedVolumes, volumeName, string(volumeName), nodeName, "", true /* expectedMountedByNode */, false /* expectNonZeroDetachRequestedTime */)
 }
 
-// Calls AddVolumeNode() once with attached set to true.
-// Verifies GetVolumesToReportAttachedForNode has an update for the node.
-// Call GetVolumesToReportAttachedForNode a second time for the node, verify it does not report
-// an update is needed any more
-// Then calls RemoveVolumeFromReportAsAttached()
-// Verifies GetVolumesToReportAttachedForNode reports an update is needed
+// Test_GetVolumesToReportAttachedForNode_Positive 验证节点状态更新标志的
+// 读取即清除语义：
+//   - 首次新增卷后查询返回 needsUpdate=true；
+//   - 再次查询返回 needsUpdate=false，避免重复上报；
+//   - 取消上报后会再次置位，确保状态变化被同步。
 func Test_GetVolumesToReportAttachedForNode_Positive(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	volumeName := v1.UniqueVolumeName("volume-name")
@@ -1461,11 +1491,11 @@ func Test_GetVolumesToReportAttachedForNode_Positive(t *testing.T) {
 	nodeName := types.NodeName("node-name")
 	devicePath := "fake/device/path"
 
-	// Act
+	// 执行
 	logger, _ := ktesting.NewTestContext(t)
 	generatedVolumeName, err := asw.AddVolumeNode(logger, volumeName, volumeSpec, nodeName, devicePath, true)
 
-	// Assert
+	// 断言
 	if err != nil {
 		t.Fatalf("AddVolumeNode failed. Expected: <no error> Actual: <%v>", err)
 	}
@@ -1478,11 +1508,13 @@ func Test_GetVolumesToReportAttachedForNode_Positive(t *testing.T) {
 		t.Fatalf("len(attachedVolumes) Expected: <1> Actual: <%v>", len(attachedVolumes))
 	}
 
+	// 第二次查询应清除标志，验证读取即清除以避免重复同步。
 	needsUpdate, _ = asw.GetVolumesToReportAttachedForNode(logger, nodeName)
 	if needsUpdate {
 		t.Fatalf("GetVolumesToReportAttachedForNode_Positive_NewVolumeNewNodeWithTrueAttached failed. Actual: <node %q needs an update> Expect: <node exists in the reportedAsAttached map and does not need an update", nodeName)
 	}
 
+	// 取消上报会再次置位，确保 kubelet 收到状态变化。
 	removeVolumeDetachErr := asw.RemoveVolumeFromReportAsAttached(generatedVolumeName, nodeName)
 	if removeVolumeDetachErr != nil {
 		t.Fatalf("RemoveVolumeFromReportAsAttached failed. Expected: <no error> Actual: <%v>", removeVolumeDetachErr)
@@ -1497,9 +1529,10 @@ func Test_GetVolumesToReportAttachedForNode_Positive(t *testing.T) {
 	}
 }
 
-// Verifies GetVolumesToReportAttachedForNode reports no update needed for an unknown node.
+// Test_GetVolumesToReportAttachedForNode_UnknownNode 验证查询未知节点时
+// needsUpdate 为 false，不会为不存在的节点创建状态记录。
 func Test_GetVolumesToReportAttachedForNode_UnknownNode(t *testing.T) {
-	// Arrange
+	// 准备
 	volumePluginMgr, _ := volumetesting.GetTestVolumePluginMgr(t)
 	asw := NewActualStateOfWorld(volumePluginMgr)
 	nodeName := types.NodeName("node-name")
@@ -1510,6 +1543,10 @@ func Test_GetVolumesToReportAttachedForNode_UnknownNode(t *testing.T) {
 	}
 }
 
+// verifyAttachedVolume 在 attachedVolumes 中查找匹配全部期望字段的条目：
+//   - 卷名、卷规格名、节点名、设备路径与 mountedByNode 必须完全一致；
+//   - DetachRequestedTime 是否为零由 expectNonZeroDetachRequestedTime 决定；
+//   - 找不到匹配项时直接 Fatalf，避免后续断言基于错误数据继续。
 func verifyAttachedVolume(
 	t *testing.T,
 	attachedVolumes []AttachedVolume,

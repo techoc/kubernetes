@@ -51,23 +51,24 @@ import (
 )
 
 const (
-	// maxRetries is the max number of times a service object will be retried before it is dropped out of the queue.
-	// With the current rate-limiter in use (5ms*2^(maxRetries-1)) the following numbers represent the
-	// sequence of delays between successive queuings of a service.
+	// maxRetries 是 Service 对象在从队列中丢弃之前可重试的最大次数。
+	// 以当前的限速器（5ms*2^(maxRetries-1)）计算，以下数字表示
+	// 同一 Service 连续入队之间的延迟序列：
 	//
 	// 5ms, 10ms, 20ms, 40ms, 80ms, 160ms, 320ms, 640ms, 1.3s, 2.6s, 5.1s, 10.2s, 20.4s, 41s, 82s
 	maxRetries     = 15
 	controllerName = "service-cidr-controller"
 
+	// ServiceCIDRProtectionFinalizer 是控制器添加到 ServiceCIDR 上的保护 finalizer，
+	// 确保删除前先完成状态传播与依赖检查。
 	ServiceCIDRProtectionFinalizer = "networking.k8s.io/service-cidr-finalizer"
 
-	// deletionGracePeriod is the time in seconds to wait to remove the finalizer from a ServiceCIDR to ensure the
-	// deletion informations has been propagated to the apiserver allocators to avoid allocating any IP address
-	// before we complete delete the ServiceCIDR
+	// deletionGracePeriod 是移除 ServiceCIDR finalizer 前等待的秒数，用于确保删除信息
+	// 已传播到 apiserver 的分配器，避免在完成 ServiceCIDR 删除前又分配出新的 IP 地址。
 	deletionGracePeriod = 10 * time.Second
 )
 
-// NewController returns a new *Controller.
+// NewController 返回一个新的 *Controller。
 func NewController(
 	ctx context.Context,
 	serviceCIDRInformer networkinginformers.ServiceCIDRInformer,
@@ -107,7 +108,8 @@ func NewController(
 	return c
 }
 
-// Controller manages selector-based service ipAddress.
+// Controller 管理 Service IP 地址段（ServiceCIDR）的生命周期，
+// 包括保护 finalizer 的添加/移除以及 Ready 状态的维护。
 type Controller struct {
 	client           clientset.Interface
 	eventBroadcaster record.EventBroadcaster
@@ -121,11 +123,11 @@ type Controller struct {
 
 	queue workqueue.TypedRateLimitingInterface[string]
 
-	// workerLoopPeriod is the time between worker runs. The workers process the queue of service and ipRange changes.
+	// workerLoopPeriod 是 worker 两次运行之间的间隔。worker 处理 Service 和 IP 地址段变更队列。
 	workerLoopPeriod time.Duration
 }
 
-// Run will not return until stopCh is closed.
+// Run 在 ctx 结束前不会返回。
 func (c *Controller) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 
@@ -143,6 +145,7 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 		wg.Wait()
 	}()
 
+	// 等缓存同步后再启动 worker，确保 lister 能看到完整的对象。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, c.serviceCIDRsSynced, c.ipAddressSynced) {
 		return
 	}
@@ -155,17 +158,20 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// addServiceCIDR 响应 ServiceCIDR 添加事件，入队自身及所有重叠的 ServiceCIDR。
 func (c *Controller) addServiceCIDR(obj interface{}) {
 	cidr, ok := obj.(*networkingapiv1.ServiceCIDR)
 	if !ok {
 		return
 	}
 	c.queue.Add(cidr.Name)
+	// CIDR 范围的增删会改变重叠关系，需重新评估其他 ServiceCIDR 的删除阻塞状态。
 	for _, key := range c.overlappingServiceCIDRs(cidr) {
 		c.queue.Add(key)
 	}
 }
 
+// updateServiceCIDR 响应 ServiceCIDR 更新事件，将其加入工作队列。
 func (c *Controller) updateServiceCIDR(oldObj, obj interface{}) {
 	key, err := cache.MetaNamespaceKeyFunc(obj)
 	if err == nil {
@@ -173,7 +179,7 @@ func (c *Controller) updateServiceCIDR(oldObj, obj interface{}) {
 	}
 }
 
-// deleteServiceCIDR
+// deleteServiceCIDR 响应 ServiceCIDR 删除事件。
 func (c *Controller) deleteServiceCIDR(obj interface{}) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err == nil {
@@ -181,7 +187,7 @@ func (c *Controller) deleteServiceCIDR(obj interface{}) {
 	}
 }
 
-// addIPAddress may block a ServiceCIDR deletion
+// addIPAddress 响应 IPAddress 添加事件；新增 IP 可能阻塞某个 ServiceCIDR 的删除。
 func (c *Controller) addIPAddress(obj interface{}) {
 	ip, ok := obj.(*networkingapiv1.IPAddress)
 	if !ok {
@@ -193,10 +199,11 @@ func (c *Controller) addIPAddress(obj interface{}) {
 	}
 }
 
-// deleteIPAddress may unblock a ServiceCIDR deletion
+// deleteIPAddress 响应 IPAddress 删除事件；删除 IP 可能解除对某个 ServiceCIDR 删除的阻塞。
 func (c *Controller) deleteIPAddress(obj interface{}) {
 	ip, ok := obj.(*networkingapiv1.IPAddress)
 	if !ok {
+		// 删除事件可能携带 tombstone，需先解包出真正的 IPAddress。
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			return
@@ -212,13 +219,13 @@ func (c *Controller) deleteIPAddress(obj interface{}) {
 	}
 }
 
-// overlappingServiceCIDRs, given a ServiceCIDR return the ServiceCIDRs that contain or are contained,
-// this is required because adding or removing a CIDR will require to recompute the
-// state of each ServiceCIDR to check if can be unblocked on deletion.
+// overlappingServiceCIDRs 返回与给定 ServiceCIDR 存在包含或被包含关系的所有 ServiceCIDR 名称。
+// 增删 CIDR 时需要重新计算每个相关 ServiceCIDR 的状态，以判断是否可解除删除阻塞。
 func (c *Controller) overlappingServiceCIDRs(serviceCIDR *networkingapiv1.ServiceCIDR) []string {
 	result := sets.New[string]()
 	for _, cidr := range serviceCIDR.Spec.CIDRs {
-		if prefix, err := netip.ParsePrefix(cidr); err == nil { // if is empty err will not be nil
+		// 若 CIDR 字符串为空，ParsePrefix 会返回错误。
+		if prefix, err := netip.ParsePrefix(cidr); err == nil {
 			serviceCIDRs := servicecidr.OverlapsPrefix(c.serviceCIDRLister, prefix)
 			for _, v := range serviceCIDRs {
 				result.Insert(v.Name)
@@ -229,10 +236,10 @@ func (c *Controller) overlappingServiceCIDRs(serviceCIDR *networkingapiv1.Servic
 	return result.UnsortedList()
 }
 
-// containingServiceCIDRs, given an IPAddress return the ServiceCIDRs that contains the IP,
-// as it may block or be blocking the deletion of the ServiceCIDRs that contain it.
+// containingServiceCIDRs 返回包含给定 IPAddress 的所有 ServiceCIDR 名称，
+// 因为这些 ServiceCIDR 可能阻塞该 IP，也可能被该 IP 阻塞删除。
 func (c *Controller) containingServiceCIDRs(ip *networkingapiv1.IPAddress) []string {
-	// only process IPs managed by the kube-apiserver
+	// 只处理由 kube-apiserver 管理的 IP。
 	managedBy, ok := ip.Labels[networkingapiv1.LabelManagedBy]
 	if !ok || managedBy != ipallocator.ControllerName {
 		return []string{}
@@ -240,8 +247,7 @@ func (c *Controller) containingServiceCIDRs(ip *networkingapiv1.IPAddress) []str
 
 	address, err := netip.ParseAddr(ip.Name)
 	if err != nil {
-		// This should not happen, the IPAddress object validates
-		// the name is a valid IPAddress
+		// 理论上不会出现：IPAddress 对象已校验名称是合法 IP。
 		return []string{}
 	}
 
@@ -254,11 +260,13 @@ func (c *Controller) containingServiceCIDRs(ip *networkingapiv1.IPAddress) []str
 	return result.UnsortedList()
 }
 
+// worker 持续处理工作队列，直到队列关闭。
 func (c *Controller) worker(ctx context.Context) {
 	for c.processNext(ctx) {
 	}
 }
 
+// processNext 从队列取出一个键并同步，失败时按重试次数决定限流重试或丢弃。
 func (c *Controller) processNext(ctx context.Context) bool {
 	key, quit := c.queue.Get()
 	if quit {
@@ -276,6 +284,7 @@ func (c *Controller) processNext(ctx context.Context) bool {
 		logger.V(2).Info("Error syncing ServiceCIDR, retrying", "ServiceCIDR", key, "err", err)
 		c.queue.AddRateLimited(key)
 	} else {
+		// 超过最大重试次数则丢弃，避免错误项无限占用队列。
 		logger.Info("Dropping ServiceCIDR out of the queue", "ServiceCIDR", key, "err", err)
 		c.queue.Forget(key)
 		utilruntime.HandleErrorWithContext(ctx, err, "ServiceCIDR sync failed after max retries")
@@ -283,6 +292,7 @@ func (c *Controller) processNext(ctx context.Context) bool {
 	return true
 }
 
+// sync 同步单个 ServiceCIDR：处理删除流程、维护 finalizer 与 Ready 状态。
 func (c *Controller) sync(ctx context.Context, key string) error {
 	logger := klog.FromContext(ctx)
 	startTime := time.Now()
@@ -294,23 +304,23 @@ func (c *Controller) sync(ctx context.Context, key string) error {
 	cidr, err := c.serviceCIDRLister.Get(key)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
+			// ServiceCIDR 已不存在，无需处理。
 			logger.V(4).Info("ServiceCIDR no longer exist", "ServiceCIDR", key)
 			return nil
 		}
 		return err
 	}
 
-	// Deleting ....
+	// 删除流程。
 	if !cidr.GetDeletionTimestamp().IsZero() {
-		// check if the existing ServiceCIDR can be deleted before removing the finalizer
+		// 移除 finalizer 前先确认该 ServiceCIDR 可以安全删除。
 		ok, err := c.canDeleteCIDR(ctx, cidr)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			// update the status to indicate why the ServiceCIDR can not be deleted,
-			// it will be reevaludated by an event on any ServiceCIDR or IPAddress related object
-			// that may remove this condition.
+			// 更新状态说明无法删除的原因；任何相关 ServiceCIDR 或 IPAddress 对象
+			// 的事件都会重新评估，可能最终解除该条件。
 			condition := metav1.Condition{
 				Type:               networkingapiv1.ServiceCIDRConditionReady,
 				Status:             metav1.ConditionFalse,
@@ -320,11 +330,9 @@ func (c *Controller) sync(ctx context.Context, key string) error {
 			}
 			return c.updateConditionIfNeeded(ctx, cidr, condition)
 		}
-		// If there are no IPAddress depending on this ServiceCIDR is safe to remove it,
-		// however, there can be a race when the allocators still consider the ServiceCIDR
-		// ready and allocate a new IPAddress from them, to avoid that, we wait during a
-		// a grace period to be sure the deletion change has been propagated to the allocators
-		// and no new IPAddress is going to be allocated.
+		// 若没有 IPAddress 依赖该 ServiceCIDR，删除是安全的。但分配器可能仍认为
+		// 它处于 Ready 状态并从中分配新 IP；为避免竞态，需等待一段宽限期，
+		// 确保删除变更已传播到分配器、不会再有新 IP 被分配。
 		timeUntilDeleted := deletionGracePeriod - time.Since(cidr.GetDeletionTimestamp().Time)
 		if timeUntilDeleted > 0 {
 			c.queue.AddAfter(key, timeUntilDeleted)
@@ -333,7 +341,7 @@ func (c *Controller) sync(ctx context.Context, key string) error {
 		return c.removeServiceCIDRFinalizerIfNeeded(ctx, cidr)
 	}
 
-	// Created or Updated, the ServiceCIDR must have a finalizer.
+	// 创建或更新：ServiceCIDR 必须带有 finalizer。
 	err = c.addServiceCIDRFinalizerIfNeeded(ctx, cidr)
 	if err != nil {
 		return err
@@ -354,14 +362,13 @@ func (c *Controller) sync(ctx context.Context, key string) error {
 	return nil
 }
 
-// canDeleteCIDR checks that the ServiceCIDR can be safely deleted and not leave orphan IPAddresses
+// canDeleteCIDR 检查 ServiceCIDR 是否可以安全删除而不会遗留孤立 IPAddress。
 func (c *Controller) canDeleteCIDR(ctx context.Context, serviceCIDR *networkingapiv1.ServiceCIDR) (bool, error) {
 	logger := klog.FromContext(ctx)
-	// Check if there is a subnet that already contains the ServiceCIDR that is going to be deleted.
+	// 检查是否存在已经包含待删除 ServiceCIDR 的上级子网。
 	hasParent := true
 	for _, cidr := range serviceCIDR.Spec.CIDRs {
-		// Find if there is a larger subnet that contains the existing one,
-		// or there is another ServiceCIDR with the same subnet.
+		// 查找是否有更大的子网包含当前子网，或存在子网完全相同的其他 ServiceCIDR。
 		if prefix, err := netip.ParsePrefix(cidr); err == nil {
 			serviceCIDRs := servicecidr.ContainsPrefix(c.serviceCIDRLister, prefix)
 			if len(serviceCIDRs) == 0 ||
@@ -371,18 +378,17 @@ func (c *Controller) canDeleteCIDR(ctx context.Context, serviceCIDR *networkinga
 		}
 	}
 
-	// All the existing IP addresses will be contained on the parent ServiceCIDRs,
-	// it is safe to delete, remove the finalizer.
+	// 所有已分配的 IP 都会被上级 ServiceCIDR 包含，可安全删除并移除 finalizer。
 	if hasParent {
 		logger.Info("Deleting ServiceCIDR contained in other ServiceCIDR", "ServiceCIDR", serviceCIDR.String())
 		return true, nil
 	}
 
-	// TODO: optimize this
-	// Since current ServiceCIDR does not have another ServiceCIDR containing it,
-	// verify there are no existing IPAddresses referencing it that will be orphan.
+	// TODO: 后续优化此处。
+	// 当前 ServiceCIDR 没有其他 ServiceCIDR 包含它，
+	// 需验证不存在仅引用它、删除后会成为孤立的 IPAddress。
 	for _, cidr := range serviceCIDR.Spec.CIDRs {
-		// get all the IPv4 addresses
+		// 通过标签筛选获取该地址族下所有由 apiserver 分配的 IP。
 		ipLabelSelector := labels.Set(map[string]string{
 			networkingapiv1.LabelIPAddressFamily: string(convertToV1IPFamily(netutils.IPFamilyOfCIDRString(cidr))),
 			networkingapiv1.LabelManagedBy:       ipallocator.ControllerName,
@@ -392,16 +398,15 @@ func (c *Controller) canDeleteCIDR(ctx context.Context, serviceCIDR *networkinga
 			return false, err
 		}
 		for _, ip := range ips {
-			// if the longest prefix match is the ServiceCIDR to be deleted
-			// and is the only existing one, at least one IPAddress will be
-			// orphan, block the ServiceCIDR deletion.
+			// 若最长前缀匹配到的正是待删除 ServiceCIDR 且它是唯一匹配项，
+			// 删除后至少会遗留一个孤立 IPAddress，须阻塞删除。
 			address, err := netip.ParseAddr(ip.Name)
 			if err != nil {
-				// the IPAddress object validates that the name is a valid IPAddress
+				// IPAddress 对象已校验名称合法，实际上不应发生。
 				logger.Info("[SHOULD NOT HAPPEN] unexpected error parsing IPAddress", "IPAddress", ip.Name, "error", err)
 				continue
 			}
-			// find all ServiceCIDRs containing this IP
+			// 查找所有包含该 IP 的 ServiceCIDR。
 			serviceCIDRs := servicecidr.ContainsAddress(c.serviceCIDRLister, address)
 			if len(serviceCIDRs) == 1 && serviceCIDRs[0].Name == serviceCIDR.Name {
 				logger.Info("Deleting ServiceCIDR blocked by IP address", "IPAddress", address.String())
@@ -410,17 +415,18 @@ func (c *Controller) canDeleteCIDR(ctx context.Context, serviceCIDR *networkinga
 		}
 	}
 
-	// There are no IPAddresses that depend on the existing ServiceCIDR, so
-	// it is safe to delete, remove finalizer.
+	// 不存在仅依赖该 ServiceCIDR 的 IPAddress，可安全删除并移除 finalizer。
 	logger.Info("Deleting ServiceCIDR no longer have orphan IPs", "ServiceCIDR", serviceCIDR.String())
 	return true, nil
 }
 
+// addServiceCIDRFinalizerIfNeeded 在 ServiceCIDR 尚无保护 finalizer 时添加它。
 func (c *Controller) addServiceCIDRFinalizerIfNeeded(ctx context.Context, cidr *networkingapiv1.ServiceCIDR) error {
 	if slices.Contains(cidr.GetFinalizers(), ServiceCIDRProtectionFinalizer) {
 		return nil
 	}
 
+	// 使用 Strategic Merge Patch 添加 finalizer，避免整对象更新覆盖其他字段。
 	patch := map[string]interface{}{
 		"metadata": map[string]interface{}{
 			"finalizers": []string{ServiceCIDRProtectionFinalizer},
@@ -431,6 +437,7 @@ func (c *Controller) addServiceCIDRFinalizerIfNeeded(ctx context.Context, cidr *
 		return err
 	}
 	_, err = c.client.NetworkingV1().ServiceCIDRs().Patch(ctx, cidr.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	// 对象可能已被删除，NotFound 属于正常情况。
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
@@ -439,10 +446,12 @@ func (c *Controller) addServiceCIDRFinalizerIfNeeded(ctx context.Context, cidr *
 
 }
 
+// removeServiceCIDRFinalizerIfNeeded 在 ServiceCIDR 仍带有保护 finalizer 时将其移除。
 func (c *Controller) removeServiceCIDRFinalizerIfNeeded(ctx context.Context, cidr *networkingapiv1.ServiceCIDR) error {
 	if !slices.Contains(cidr.GetFinalizers(), ServiceCIDRProtectionFinalizer) {
 		return nil
 	}
+	// 通过 strategic merge patch 的删除指令移除 finalizer 列表中的指定项。
 	patch := map[string]interface{}{
 		"metadata": map[string]interface{}{
 			"$deleteFromPrimitiveList/finalizers": []string{ServiceCIDRProtectionFinalizer},
@@ -460,11 +469,11 @@ func (c *Controller) removeServiceCIDRFinalizerIfNeeded(ctx context.Context, cid
 	return nil
 }
 
-// updateConditionIfNeeded updates the status condition of the ServiceCIDR if needed.
+// updateConditionIfNeeded 在必要时更新 ServiceCIDR 的状态条件。
 func (c *Controller) updateConditionIfNeeded(ctx context.Context, cidr *networkingapiv1.ServiceCIDR, newCondition metav1.Condition) error {
 	logger := klog.FromContext(ctx)
 	currentCondition := apimeta.FindStatusCondition(cidr.Status.Conditions, newCondition.Type)
-	// Condition exists and is the same, no need to update.
+	// 条件已存在且完全一致，无需更新。
 	if currentCondition != nil &&
 		currentCondition.Status == newCondition.Status &&
 		currentCondition.Reason == newCondition.Reason &&
@@ -481,16 +490,18 @@ func (c *Controller) updateConditionIfNeeded(ctx context.Context, cidr *networki
 			WithStatus(newCondition.Status).
 			WithReason(newCondition.Reason).
 			WithMessage(newCondition.Message).
-			WithLastTransitionTime(newCondition.LastTransitionTime)) // Use the timestamp from the new condition
+			// 使用新条件自带的时间戳。
+			WithLastTransitionTime(newCondition.LastTransitionTime))
 
 	svcApply := networkingapiv1apply.ServiceCIDR(cidr.Name).WithStatus(svcApplyStatus)
+	// 以 server-side apply 更新状态，Force=true 保证控制器可覆盖自身管理的字段。
 	_, err := c.client.NetworkingV1().ServiceCIDRs().ApplyStatus(ctx, svcApply, metav1.ApplyOptions{FieldManager: controllerName, Force: true})
 	return err
 }
 
-// Convert netutils.IPFamily to v1.IPFamily
-// TODO: consolidate helpers
-// copied from pkg/proxy/util/utils.go
+// convertToV1IPFamily 将 netutils.IPFamily 转换为 v1.IPFamily。
+// TODO: 合并重复的辅助函数。
+// 复制自 pkg/proxy/util/utils.go。
 func convertToV1IPFamily(ipFamily netutils.IPFamily) v1.IPFamily {
 	switch ipFamily {
 	case netutils.IPv4:

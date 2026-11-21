@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package nodeipam contains code for syncing cloud instances with
-// node registry
+// Package nodeipam 包含将云服务商中的实例与节点注册表同步的代码。
+// 控制器为每个节点分配 CIDR，并在云实例信息变化时同步更新节点配置，
+// 使节点能够获得可路由的 Pod 网段。
 package nodeipam

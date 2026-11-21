@@ -18,6 +18,7 @@ package deployment
 
 import (
 	"context"
+
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,9 +26,9 @@ import (
 	"k8s.io/kubernetes/pkg/controller/deployment/util"
 )
 
-// rolloutRecreate implements the logic for recreating a replica set.
+// rolloutRecreate 实现 Recreate 策略下重建 ReplicaSet 的发布逻辑。
 func (dc *DeploymentController) rolloutRecreate(ctx context.Context, d *apps.Deployment, rsList []*apps.ReplicaSet, podMap map[types.UID][]*v1.Pod) error {
-	// Don't create a new RS if not already existed, so that we avoid scaling up before scaling down.
+	// 此时不创建新 RS，确保不会在旧 RS 缩容之前先扩容。
 	newRS, oldRSs, err := dc.getAllReplicaSetsAndSyncRevision(ctx, d, rsList, false)
 	if err != nil {
 		return err
@@ -35,22 +36,22 @@ func (dc *DeploymentController) rolloutRecreate(ctx context.Context, d *apps.Dep
 	allRSs := append(oldRSs, newRS)
 	activeOldRSs := controller.FilterActiveReplicaSets(oldRSs)
 
-	// scale down old replica sets.
+	// 先对旧 ReplicaSet 缩容。
 	scaledDown, err := dc.scaleDownOldReplicaSetsForRecreate(ctx, activeOldRSs, d)
 	if err != nil {
 		return err
 	}
 	if scaledDown {
-		// Update DeploymentStatus.
+		// 缩容过程中先更新 DeploymentStatus，反映当前进展。
 		return dc.syncRolloutStatus(ctx, allRSs, newRS, d)
 	}
 
-	// Do not process a deployment when it has old pods running.
+	// 若仍有旧 Pod 在运行，暂停后续发布步骤。
 	if oldPodsRunning(newRS, oldRSs, podMap) {
 		return dc.syncRolloutStatus(ctx, allRSs, newRS, d)
 	}
 
-	// If we need to create a new RS, create it now.
+	// 旧 Pod 全部退出后，才创建新的 ReplicaSet。
 	if newRS == nil {
 		newRS, oldRSs, err = dc.getAllReplicaSetsAndSyncRevision(ctx, d, rsList, true)
 		if err != nil {
@@ -59,7 +60,7 @@ func (dc *DeploymentController) rolloutRecreate(ctx context.Context, d *apps.Dep
 		allRSs = append(oldRSs, newRS)
 	}
 
-	// scale up new replica set.
+	// 对新 ReplicaSet 扩容。
 	if _, err := dc.scaleUpNewReplicaSetForRecreate(ctx, newRS, d); err != nil {
 		return err
 	}
@@ -70,16 +71,16 @@ func (dc *DeploymentController) rolloutRecreate(ctx context.Context, d *apps.Dep
 		}
 	}
 
-	// Sync deployment status.
+	// 最后同步 Deployment 状态。
 	return dc.syncRolloutStatus(ctx, allRSs, newRS, d)
 }
 
-// scaleDownOldReplicaSetsForRecreate scales down old replica sets when deployment strategy is "Recreate".
+// scaleDownOldReplicaSetsForRecreate 在部署策略为 Recreate 时对旧 ReplicaSet 缩容。
 func (dc *DeploymentController) scaleDownOldReplicaSetsForRecreate(ctx context.Context, oldRSs []*apps.ReplicaSet, deployment *apps.Deployment) (bool, error) {
 	scaled := false
 	for i := range oldRSs {
 		rs := oldRSs[i]
-		// Scaling not required.
+		// 副本数已为 0，无需缩容。
 		if *(rs.Spec.Replicas) == 0 {
 			continue
 		}
@@ -95,29 +96,29 @@ func (dc *DeploymentController) scaleDownOldReplicaSetsForRecreate(ctx context.C
 	return scaled, nil
 }
 
-// oldPodsRunning returns whether there are old pods running or any of the old ReplicaSets thinks that it runs pods.
+// oldPodsRunning 判断是否存在运行中的旧 Pod，或旧 ReplicaSet 是否仍认为其持有 Pod。
 func oldPodsRunning(newRS *apps.ReplicaSet, oldRSs []*apps.ReplicaSet, podMap map[types.UID][]*v1.Pod) bool {
 	if oldPods := util.GetActualReplicaCountForReplicaSets(oldRSs); oldPods > 0 {
 		return true
 	}
 	for rsUID, podList := range podMap {
-		// If the pods belong to the new ReplicaSet, ignore.
+		// 属于新 ReplicaSet 的 Pod 不计入旧 Pod。
 		if newRS != nil && newRS.UID == rsUID {
 			continue
 		}
 		for _, pod := range podList {
 			switch pod.Status.Phase {
 			case v1.PodFailed, v1.PodSucceeded:
-				// Don't count pods in terminal state.
+				// 已终止的 Pod 不算在运行。
 				continue
 			case v1.PodUnknown:
-				// v1.PodUnknown is a deprecated status.
-				// This logic is kept for backward compatibility.
-				// This used to happen in situation like when the node is temporarily disconnected from the cluster.
-				// If we can't be sure that the pod is not running, we have to count it.
+				// v1.PodUnknown 是已废弃的状态。
+				// 保留此逻辑以兼容旧版本行为。
+				// 过去节点与集群短暂失联时会出现该状态。
+				// 无法确认 Pod 未运行时，必须保守地视作仍在运行。
 				return true
 			default:
-				// Pod is not in terminal phase.
+				// Pod 尚未进入终止阶段，视为仍在运行。
 				return true
 			}
 		}
@@ -125,7 +126,7 @@ func oldPodsRunning(newRS *apps.ReplicaSet, oldRSs []*apps.ReplicaSet, podMap ma
 	return false
 }
 
-// scaleUpNewReplicaSetForRecreate scales up new replica set when deployment strategy is "Recreate".
+// scaleUpNewReplicaSetForRecreate 在部署策略为 Recreate 时对新 ReplicaSet 扩容。
 func (dc *DeploymentController) scaleUpNewReplicaSetForRecreate(ctx context.Context, newRS *apps.ReplicaSet, deployment *apps.Deployment) (bool, error) {
 	scaled, _, err := dc.scaleReplicaSet(ctx, newRS, *(deployment.Spec.Replicas), deployment, false)
 	return scaled, err

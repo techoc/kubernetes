@@ -39,10 +39,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// DeletePods will delete all pods from master running on given node,
-// and return true if any pods were deleted, or were found pending
-// deletion.
+// DeletePods 从 master 删除运行在给定节点上的所有 Pod，
+// 如果有 Pod 被删除，或发现 Pod 处于待删除状态，则返回 true。
 func DeletePods(ctx context.Context, kubeClient clientset.Interface, pods []*v1.Pod, recorder record.EventRecorder, nodeName, nodeUID string, daemonStore appsv1listers.DaemonSetLister) (bool, error) {
+	// remaining 表示节点上仍有 Pod 存活（正在删除或待删除），调用方据此决定是否需要重试。
 	remaining := false
 	var updateErrList []error
 	logger := klog.FromContext(ctx)
@@ -52,29 +52,30 @@ func DeletePods(ctx context.Context, kubeClient clientset.Interface, pods []*v1.
 	}
 
 	for i := range pods {
-		// Defensive check, also needed for tests.
+		// 防御性检查：调用方理论上只传入本节点的 Pod，但测试中可能构造出不一致的数据。
 		if pods[i].Spec.NodeName != nodeName {
 			continue
 		}
 
-		// Pod will be modified, so making copy is required.
+		// 必须深拷贝：lister 返回的是共享缓存对象，直接修改会污染 informer 缓存。
 		pod := pods[i].DeepCopy()
-		// Set reason and message in the pod object.
+		// 在 Pod 对象上设置终止原因和消息。
 		if _, err := SetPodTerminationReason(ctx, kubeClient, pod, nodeName); err != nil {
 			if apierrors.IsConflict(err) {
+				// 冲突说明状态被并发更新，跳过该 Pod 以免覆盖他人修改，错误稍后统一聚合返回。
 				updateErrList = append(updateErrList,
 					fmt.Errorf("update status failed for pod %q: %v", format.Pod(pod), err))
 				continue
 			}
 		}
-		// if the pod has already been marked for deletion, we still return true that there are remaining pods.
+		// 即使 Pod 已被标记为删除，仍视为“仍有 Pod”，因为删除尚未完成。
 		if pod.DeletionGracePeriodSeconds != nil {
 			remaining = true
 			continue
 		}
-		// if the pod is managed by a daemonset, ignore it
+		// 忽略 DaemonSet 管理的 Pod：它们由 DaemonSet 控制器负责，不应由节点控制器删除。
 		if _, err := daemonStore.GetPodDaemonSets(pod); err == nil {
-			// No error means at least one daemonset was found
+			// 无错误表示至少找到一个 DaemonSet。
 			continue
 		}
 
@@ -82,8 +83,7 @@ func DeletePods(ctx context.Context, kubeClient clientset.Interface, pods []*v1.
 		recorder.Eventf(pod, v1.EventTypeNormal, "NodeControllerEviction", "Marking for deletion Pod %s from Node %s", pod.Name, nodeName)
 		if err := kubeClient.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{}); err != nil {
 			if apierrors.IsNotFound(err) {
-				// NotFound error means that pod was already deleted.
-				// There is nothing left to do with this pod.
+				// NotFound 说明 Pod 已被删除，视为成功，无需处理。
 				continue
 			}
 			return false, err
@@ -91,16 +91,17 @@ func DeletePods(ctx context.Context, kubeClient clientset.Interface, pods []*v1.
 		remaining = true
 	}
 
+	// 汇总状态更新冲突：只要存在冲突就返回失败，由调用方重试。
 	if len(updateErrList) > 0 {
 		return false, utilerrors.NewAggregate(updateErrList)
 	}
 	return remaining, nil
 }
 
-// SetPodTerminationReason attempts to set a reason and message in the
-// pod status, updates it in the apiserver, and returns an error if it
-// encounters one.
+// SetPodTerminationReason 尝试在 Pod 状态中设置终止原因和消息，
+// 将其更新到 apiserver，并在遇到错误时返回该错误。
 func SetPodTerminationReason(ctx context.Context, kubeClient clientset.Interface, pod *v1.Pod, nodeName string) (*v1.Pod, error) {
+	// 已经是节点不可达原因则无需重复更新，保证幂等。
 	if pod.Status.Reason == nodepkg.NodeUnreachablePodReason {
 		return pod, nil
 	}
@@ -116,20 +117,21 @@ func SetPodTerminationReason(ctx context.Context, kubeClient clientset.Interface
 	return updatedPod, nil
 }
 
-// MarkPodsNotReady updates ready status of given pods running on
-// given node from master return true if success
+// MarkPodsNotReady 从 master 将给定节点上 Pod 的就绪状态更新为 false，
+// 全部成功时返回 nil，失败时返回聚合错误。
 func MarkPodsNotReady(ctx context.Context, kubeClient clientset.Interface, recorder record.EventRecorder, pods []*v1.Pod, nodeName string) error {
 	logger := klog.FromContext(ctx)
 	logger.V(2).Info("Update ready status of pods on node", "node", klog.KRef("", nodeName))
 
+	// 聚合所有 Pod 的更新错误，避免首个错误就中断其余 Pod 的处理。
 	errs := []error{}
 	for i := range pods {
-		// Defensive check, also needed for tests.
+		// 防御性检查：调用方理论上只传入本节点的 Pod，但测试中可能构造出不一致的数据。
 		if pods[i].Spec.NodeName != nodeName {
 			continue
 		}
 
-		// Pod will be modified, so making copy is required.
+		// 必须深拷贝：lister 返回的是共享缓存对象，直接修改会污染 informer 缓存。
 		pod := pods[i].DeepCopy()
 		for _, cond := range pod.Status.Conditions {
 			if cond.Type != v1.PodReady {
@@ -138,20 +140,20 @@ func MarkPodsNotReady(ctx context.Context, kubeClient clientset.Interface, recor
 
 			cond.Status = v1.ConditionFalse
 			if !utilpod.UpdatePodCondition(&pod.Status, &cond) {
+				// 条件已是目标状态，无需提交无意义的更新。
 				break
 			}
 
 			logger.V(2).Info("Updating ready status of pod to false", "pod", klog.KObj(pod))
 			if _, err := kubeClient.CoreV1().Pods(pod.Namespace).UpdateStatus(ctx, pod, metav1.UpdateOptions{}); err != nil {
 				if apierrors.IsNotFound(err) {
-					// NotFound error means that pod was already deleted.
-					// There is nothing left to do with this pod.
+					// NotFound 说明 Pod 已被删除，忽略即可。
 					continue
 				}
 				logger.Info("Failed to update status for pod", "pod", klog.KObj(pod), "err", err)
 				errs = append(errs, err)
 			}
-			// record NodeNotReady event after updateStatus to make sure pod still exists
+			// 在 UpdateStatus 成功后再记录 NodeNotReady 事件，确保 Pod 仍然存在。
 			recorder.Event(pod, v1.EventTypeWarning, "NodeNotReady", "Node is not ready")
 			break
 		}
@@ -160,9 +162,10 @@ func MarkPodsNotReady(ctx context.Context, kubeClient clientset.Interface, recor
 	return utilerrors.NewAggregate(errs)
 }
 
-// RecordNodeEvent records a event related to a node.
+// RecordNodeEvent 记录与节点相关的事件。
 func RecordNodeEvent(ctx context.Context, recorder record.EventRecorder, nodeName, nodeUID, eventtype, reason, event string) {
 	logger := klog.FromContext(ctx)
+	// 事件需要 ObjectReference；节点不属于任何命名空间，故 Namespace 留空。
 	ref := &v1.ObjectReference{
 		APIVersion: "v1",
 		Kind:       "Node",
@@ -174,7 +177,7 @@ func RecordNodeEvent(ctx context.Context, recorder record.EventRecorder, nodeNam
 	recorder.Eventf(ref, eventtype, reason, "Node %s event: %s", nodeName, event)
 }
 
-// RecordNodeStatusChange records a event related to a node status change. (Common to lifecycle and ipam)
+// RecordNodeStatusChange 记录与节点状态变更相关的事件（lifecycle 与 ipam 共用）。
 func RecordNodeStatusChange(logger klog.Logger, recorder record.EventRecorder, node *v1.Node, newStatus string) {
 	ref := &v1.ObjectReference{
 		APIVersion: "v1",
@@ -189,17 +192,18 @@ func RecordNodeStatusChange(logger klog.Logger, recorder record.EventRecorder, n
 	recorder.Eventf(ref, v1.EventTypeNormal, newStatus, "Node %s status is now: %s", node.Name, newStatus)
 }
 
-// SwapNodeControllerTaint returns true in case of success and false
-// otherwise.
+// SwapNodeControllerTaint 成功时返回 true，否则返回 false。
 func SwapNodeControllerTaint(ctx context.Context, kubeClient clientset.Interface, taintsToAdd, taintsToRemove []*v1.Taint, node *v1.Node) bool {
 	logger := klog.FromContext(ctx)
 	for _, taintToAdd := range taintsToAdd {
 		now := metav1.Now()
+		// 为待添加污点记录时间，NoExecute 驱逐逻辑据此计算容忍时长。
 		taintToAdd.TimeAdded = &now
 	}
 
 	err := controller.AddOrUpdateTaintOnNode(ctx, kubeClient, node.Name, taintsToAdd...)
 	if err != nil {
+		// 添加失败立即返回，不再删除旧污点，避免状态出现半更新。
 		utilruntime.HandleError(
 			fmt.Errorf(
 				"unable to taint %+v unresponsive Node %q: %v",
@@ -210,6 +214,7 @@ func SwapNodeControllerTaint(ctx context.Context, kubeClient clientset.Interface
 	}
 	logger.V(4).Info("Added taint to node", "taint", taintsToAdd, "node", klog.KRef("", node.Name))
 
+	// 先添加新污点再移除旧污点，保证节点不会处于两者都缺失的中间态。
 	err = controller.RemoveTaintOffNode(ctx, kubeClient, node.Name, node, taintsToRemove...)
 	if err != nil {
 		utilruntime.HandleError(
@@ -225,8 +230,7 @@ func SwapNodeControllerTaint(ctx context.Context, kubeClient clientset.Interface
 	return true
 }
 
-// AddOrUpdateLabelsOnNode updates the labels on the node and returns true on
-// success and false on failure.
+// AddOrUpdateLabelsOnNode 更新节点上的标签，成功返回 true，失败返回 false。
 func AddOrUpdateLabelsOnNode(ctx context.Context, kubeClient clientset.Interface, labelsToUpdate map[string]string, node *v1.Node) bool {
 	logger := klog.FromContext(ctx)
 	if err := controller.AddOrUpdateLabelsOnNode(kubeClient, node.Name, labelsToUpdate); err != nil {
@@ -242,9 +246,10 @@ func AddOrUpdateLabelsOnNode(ctx context.Context, kubeClient clientset.Interface
 	return true
 }
 
-// CreateAddNodeHandler creates an add node handler.
+// CreateAddNodeHandler 创建节点添加事件的处理函数。
 func CreateAddNodeHandler(f func(node *v1.Node) error) func(obj interface{}) {
 	return func(originalObj interface{}) {
+		// informer 中的对象是共享缓存，回调拿到深拷贝才不会污染缓存。
 		node := originalObj.(*v1.Node).DeepCopy()
 		if err := f(node); err != nil {
 			utilruntime.HandleError(fmt.Errorf("Error while processing Node Add: %v", err))
@@ -252,9 +257,10 @@ func CreateAddNodeHandler(f func(node *v1.Node) error) func(obj interface{}) {
 	}
 }
 
-// CreateUpdateNodeHandler creates a node update handler. (Common to lifecycle and ipam)
+// CreateUpdateNodeHandler 创建节点更新事件的处理函数（lifecycle 与 ipam 共用）。
 func CreateUpdateNodeHandler(f func(oldNode, newNode *v1.Node) error) func(oldObj, newObj interface{}) {
 	return func(origOldObj, origNewObj interface{}) {
+		// 新旧对象都来自共享缓存，回调不应持有或改动它们。
 		node := origNewObj.(*v1.Node).DeepCopy()
 		prevNode := origOldObj.(*v1.Node).DeepCopy()
 
@@ -264,12 +270,12 @@ func CreateUpdateNodeHandler(f func(oldNode, newNode *v1.Node) error) func(oldOb
 	}
 }
 
-// CreateDeleteNodeHandler creates a delete node handler. (Common to lifecycle and ipam)
+// CreateDeleteNodeHandler 创建节点删除事件的处理函数（lifecycle 与 ipam 共用）。
 func CreateDeleteNodeHandler(logger klog.Logger, f func(node *v1.Node) error) func(obj interface{}) {
 	return func(originalObj interface{}) {
 		originalNode, isNode := originalObj.(*v1.Node)
-		// We can get DeletedFinalStateUnknown instead of *v1.Node here and
-		// we need to handle that correctly. #34692
+		// 删除事件可能丢失，informer 此时投递 tombstone（DeletedFinalStateUnknown），
+		// 必须从中取出原对象，否则会漏处理删除。见 #34692。
 		if !isNode {
 			deletedState, ok := originalObj.(cache.DeletedFinalStateUnknown)
 			if !ok {
@@ -289,8 +295,8 @@ func CreateDeleteNodeHandler(logger klog.Logger, f func(node *v1.Node) error) fu
 	}
 }
 
-// GetNodeCondition extracts the provided condition from the given status and returns that.
-// Returns nil and -1 if the condition is not present, and the index of the located condition.
+// GetNodeCondition 从给定状态中提取并返回指定的条件。
+// 条件不存在时返回 nil 和 -1，存在时返回条件及其索引。
 func GetNodeCondition(status *v1.NodeStatus, conditionType v1.NodeConditionType) (int, *v1.NodeCondition) {
 	if status == nil {
 		return -1, nil

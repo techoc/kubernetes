@@ -32,8 +32,11 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
+// testTokenID 是测试用的令牌 ID，同时作为 ConfigMap 中签名条目的键。
 const testTokenID = "abc123"
 
+// newSigner 构造测试用 Signer，返回 Signer、fake 客户端以及 Secret/ConfigMap informer，
+// 便于在测试中直接向 informer 索引器注入对象。
 func newSigner() (*Signer, *fake.Clientset, coreinformers.SecretInformer, coreinformers.ConfigMapInformer, error) {
 	options := DefaultSignerOptions()
 	cl := fake.NewSimpleClientset()
@@ -47,7 +50,9 @@ func newSigner() (*Signer, *fake.Clientset, coreinformers.SecretInformer, corein
 	return bsc, cl, secrets, configMaps, nil
 }
 
+// newConfigMap 构造 cluster-info ConfigMap；若 tokenID 非空，则附带对应签名条目。
 func newConfigMap(tokenID, signature string) *v1.ConfigMap {
+	// kube-config 载荷固定不变，仅签名条目随 tokenID 变化。
 	ret := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:       metav1.NamespacePublic,
@@ -58,12 +63,14 @@ func newConfigMap(tokenID, signature string) *v1.ConfigMap {
 			bootstrapapi.KubeConfigKey: "payload",
 		},
 	}
+	// 空 tokenID 表示不附加签名，供"无签名"场景构造基线对象。
 	if len(tokenID) > 0 {
 		ret.Data[bootstrapapi.JWSSignatureKeyPrefix+tokenID] = signature
 	}
 	return ret
 }
 
+// TestNoConfigMap 验证没有 ConfigMap 时签名流程不产生任何 API 操作。
 func TestNoConfigMap(t *testing.T) {
 	signer, cl, _, _, err := newSigner()
 	if err != nil {
@@ -73,6 +80,7 @@ func TestNoConfigMap(t *testing.T) {
 	verifyActions(t, []core.Action{}, cl.Actions())
 }
 
+// TestSimpleSign 验证存在可用令牌 Secret 时会为 ConfigMap 生成并写入 JWS 签名。
 func TestSimpleSign(t *testing.T) {
 	signer, cl, secrets, configMaps, err := newSigner()
 	if err != nil {
@@ -97,6 +105,7 @@ func TestSimpleSign(t *testing.T) {
 	verifyActions(t, expected, cl.Actions())
 }
 
+// TestNoSignNeeded 验证签名已正确时不会重复更新 ConfigMap。
 func TestNoSignNeeded(t *testing.T) {
 	signer, cl, secrets, configMaps, err := newSigner()
 	if err != nil {
@@ -115,6 +124,7 @@ func TestNoSignNeeded(t *testing.T) {
 	verifyActions(t, []core.Action{}, cl.Actions())
 }
 
+// TestUpdateSignature 验证签名过期或不匹配时会用新签名覆盖旧签名。
 func TestUpdateSignature(t *testing.T) {
 	signer, cl, secrets, configMaps, err := newSigner()
 	if err != nil {
@@ -139,6 +149,7 @@ func TestUpdateSignature(t *testing.T) {
 	verifyActions(t, expected, cl.Actions())
 }
 
+// TestRemoveSignature 验证令牌 Secret 消失后，ConfigMap 中的签名条目会被清除。
 func TestRemoveSignature(t *testing.T) {
 	signer, cl, _, configMaps, err := newSigner()
 	if err != nil {

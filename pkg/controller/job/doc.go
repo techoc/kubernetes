@@ -14,5 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package job contains logic for watching and synchronizing jobs.
+// Package job 包含监听和同步 Job 对象的逻辑。
+// 控制器根据 Job 的并行度与完成数约束创建、重试 Pod，并更新 Job 状态。
 package job

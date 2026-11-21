@@ -14,17 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package ipam provides different allocators for assigning IP ranges to nodes.
-// We currently support several kinds of IPAM allocators (these are denoted by
-// the CIDRAllocatorType):
-//   - RangeAllocator is an allocator that assigns PodCIDRs to nodes and works
-//     in conjunction with the RouteController to configure the network to get
-//     connectivity.
-//   - CloudAllocator is an allocator that synchronizes PodCIDRs from IP
-//     ranges assignments from the underlying cloud platform.
-//   - (Alpha only) IPAMFromCluster is an allocator that has the similar
-//     functionality as the RangeAllocator but also synchronizes cluster-managed
-//     ranges into the cloud platform.
-//   - (Alpha only) IPAMFromCloud is the same as CloudAllocator (synchronizes
-//     from cloud into the cluster.)
+// Package ipam 提供多种为节点分配 IP 段的分配器。
+// 目前支持以下几类（由 CIDRAllocatorType 标识）：
+//   - RangeAllocator：为节点分配 PodCIDR，并与 RouteController 配合配置网络以打通连通性；
+//   - CloudAllocator：从底层云平台分配的地址段同步 PodCIDR；
+//   - （仅 Alpha）IPAMFromCluster：功能类似 RangeAllocator，同时把集群管理的地址段同步回云平台；
+//   - （仅 Alpha）IPAMFromCloud：与 CloudAllocator 相同，把云平台信息同步进集群。
+//
+// 这些实现共享节点 CIDR 的分配语义，但同步方向（集群到云或云到集群）不同，
+// 需根据部署环境选择。
 package ipam

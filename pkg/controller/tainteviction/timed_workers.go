@@ -27,29 +27,26 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// WorkArgs keeps arguments that will be passed to the function executed by the worker.
+// WorkArgs 保存传递给定时工作函数的参数。
 type WorkArgs struct {
-	// Object is the work item. The UID is only set if it was set when adding the work item.
+	// Object 是工作项；只有在添加工作项时指定了 UID，这里才会携带 UID。
 	Object NamespacedObject
 }
 
-// KeyFromWorkArgs creates a key for the given `WorkArgs`.
-//
-// The key is the same as the NamespacedName of the object in the work item,
-// i.e. the UID is ignored. There cannot be two different
-// work items with the same NamespacedName and different UIDs.
+// KeyFromWorkArgs 返回 WorkArgs 的键，即工作项的 NamespacedName，忽略 UID。
+// 同一 NamespacedName 不会对应多个不同 UID 的工作项，因此该键可安全去重。
 func (w *WorkArgs) KeyFromWorkArgs() string {
 	return w.Object.NamespacedName.String()
 }
 
-// NewWorkArgs is a helper function to create new `WorkArgs` without a UID.
+// NewWorkArgs 创建不带 UID 的 WorkArgs。
 func NewWorkArgs(name, namespace string) *WorkArgs {
 	return &WorkArgs{
 		Object: NamespacedObject{NamespacedName: types.NamespacedName{Namespace: namespace, Name: name}},
 	}
 }
 
-// TimedWorker is a responsible for executing a function no earlier than at FireAt time.
+// TimedWorker 负责在不早于 FireAt 的时刻执行函数。
 type TimedWorker struct {
 	WorkItem  *WorkArgs
 	CreatedAt time.Time
@@ -58,8 +55,8 @@ type TimedWorker struct {
 	cancelled atomic.Bool
 }
 
-// createWorker creates a TimedWorker that will execute `f` not earlier than `fireAt`.
-// Returns nil if the work was started immediately and doesn't need a timer.
+// createWorker 创建一个在 fireAt 之后执行 f 的 TimedWorker。
+// 若需要立即执行（无延迟），则直接启动并返回 nil，无需分配定时器。
 func createWorker(ctx context.Context, wg *sync.WaitGroup, args *WorkArgs, createdAt time.Time, fireAt time.Time, f func(ctx context.Context, fireAt time.Time, args *WorkArgs) error, clock clock.WithDelayedExecution) *TimedWorker {
 	delay := fireAt.Sub(createdAt)
 	logger := klog.FromContext(ctx)
@@ -70,15 +67,12 @@ func createWorker(ctx context.Context, wg *sync.WaitGroup, args *WorkArgs, creat
 		FireAt:    fireAt,
 	}
 
-	// This dance with the cancelled flag is here so that we can be sure that once TimedWorker.Cancel returns,
-	// we either never get to any processing, or the thread is already registered with the WaitGroup.
-	// Otherwise, the following sequence can happen:
-	//   1. TimedWorker.Timer fires and gets to go wrapper().
-	//   2. TimedWorker.Cancel is called to stop the timer, but a goroutine is already running.
-	//      It's started, but wg.Go hasn't been called yet to register the goroutine.
-	//   3. We call wg.Wait, which unblocks, because the inner wg.Go hasn't been called yet.
-	//      This causes wg.Wait to unblock after TimedWorker.Cancel is called and still start a goroutine.
-	// So in our case we can still get to starting an unregistered goroutine, but it will exit immediately.
+	// cancelled 标志用于保证 Cancel 返回时，工作要么根本不会执行，
+	// 要么其 goroutine 已经注册进 WaitGroup。否则可能出现这样的竞态：
+	//   1. 定时器触发，进入 wrapper()。
+	//   2. Cancel 调用 Timer.Stop，但 goroutine 已进入 wrapper，尚未调用 wg.Go 注册。
+	//   3. wg.Wait 因未注册的 goroutine 而提前返回，随后该 goroutine 才启动。
+	// 借助该标志，即使出现上述时序，goroutine 也会立即退出，不会执行实际工作。
 	wrapper := func() {
 		wg.Go(func() {
 			if worker.cancelled.Load() {
@@ -89,6 +83,8 @@ func createWorker(ctx context.Context, wg *sync.WaitGroup, args *WorkArgs, creat
 			}
 		})
 	}
+	// 已到期的工作无需定时器，立即执行。
+	// 已到期的工作无需定时器，立即执行。
 	if delay <= 0 {
 		wrapper()
 		return nil
@@ -97,29 +93,27 @@ func createWorker(ctx context.Context, wg *sync.WaitGroup, args *WorkArgs, creat
 	return &worker
 }
 
-// Cancel cancels the execution of function by the `TimedWorker`
+// Cancel 取消 TimedWorker 的执行。接收者为 nil 时是空操作，
+// 便于对"立即执行、没有定时器"的工作统一调用。
 func (w *TimedWorker) Cancel() {
 	if w != nil {
-		// Mark the worker as cancelled.
-		// This ensures the worker is either already running or unstarted on return from Cancel.
+		// 先置取消标志再停定时器，保证返回时工作要么已经运行、要么不会启动。
 		w.cancelled.Store(true)
 		w.Timer.Stop()
 	}
 }
 
-// TimedWorkerQueue keeps a set of TimedWorkers that are still wait for execution.
+// TimedWorkerQueue 维护一组尚未执行的 TimedWorker，按工作项的键索引。
 type TimedWorkerQueue struct {
 	sync.Mutex
-	// map of workers keyed by string returned by 'KeyFromWorkArgs' from the given worker.
-	// Entries may be nil if the work didn't need a timer and is already running.
+	// workers 以 KeyFromWorkArgs 的返回值作为键；值为 nil 表示工作无需定时器、已在执行中。
 	workers  map[string]*TimedWorker
 	workerWG sync.WaitGroup
 	workFunc func(ctx context.Context, fireAt time.Time, args *WorkArgs) error
 	clock    clock.WithDelayedExecution
 }
 
-// CreateWorkerQueue creates a new TimedWorkerQueue for workers that will execute
-// given function `f`.
+// CreateWorkerQueue 创建一个 TimedWorkerQueue，其所有工作到期后执行 f。
 func CreateWorkerQueue(f func(ctx context.Context, fireAt time.Time, args *WorkArgs) error) *TimedWorkerQueue {
 	return &TimedWorkerQueue{
 		workers:  make(map[string]*TimedWorker),
@@ -128,6 +122,10 @@ func CreateWorkerQueue(f func(ctx context.Context, fireAt time.Time, args *WorkA
 	}
 }
 
+// getWrappedWorkerFunc 包装实际工作函数，在工作结束后从队列中删除对应条目。
+// 工作期间持有锁会阻塞队列操作，因此先执行工作、再加锁清理。
+// getWrappedWorkerFunc 包装实际工作函数，在工作结束后从队列中删除对应条目。
+// 工作期间持有锁会阻塞队列操作，因此先执行工作、再加锁清理。
 func (q *TimedWorkerQueue) getWrappedWorkerFunc(key string) func(ctx context.Context, fireAt time.Time, args *WorkArgs) error {
 	return func(ctx context.Context, fireAt time.Time, args *WorkArgs) error {
 		logger := klog.FromContext(ctx)
@@ -141,15 +139,16 @@ func (q *TimedWorkerQueue) getWrappedWorkerFunc(key string) func(ctx context.Con
 	}
 }
 
-// AddWork adds a work to the WorkerQueue which will be executed not earlier than `fireAt`.
-// If replace is false, an existing work item will not get replaced, otherwise it
-// gets canceled and the new one is added instead.
+// AddWork 向队列添加不早于 fireAt 执行的工作。
+// 同名工作已存在时直接跳过：调用方应先使用 UpdateWork 决定是否替换。
 func (q *TimedWorkerQueue) AddWork(ctx context.Context, args *WorkArgs, createdAt time.Time, fireAt time.Time) {
 	key := args.KeyFromWorkArgs()
 	logger := klog.FromContext(ctx)
 
 	q.Lock()
 	defer q.Unlock()
+	// 同名工作已在队列中，避免重复注册导致同一对象被并发处理。
+	// 同名工作已在队列中，避免重复注册导致同一对象被并发处理。
 	if _, exists := q.workers[key]; exists {
 		logger.V(4).Info("Trying to add already existing work, skipping", "item", key, "createTime", createdAt, "firedTime", fireAt)
 		return
@@ -159,8 +158,9 @@ func (q *TimedWorkerQueue) AddWork(ctx context.Context, args *WorkArgs, createdA
 	q.workers[key] = worker
 }
 
-// UpdateWork adds or replaces a work item such that it will be executed not earlier than `fireAt`.
-// This is a cheap no-op when the old and new fireAt are the same.
+// UpdateWork 添加或替换工作，使其不早于 fireAt 执行。
+// 执行时间未变时是廉价空操作；工作已在执行中时也不打断，
+// 因为正在执行的工作已读取所需状态，取消它反而会丢失处理。
 func (q *TimedWorkerQueue) UpdateWork(ctx context.Context, args *WorkArgs, createdAt time.Time, fireAt time.Time) {
 	key := args.KeyFromWorkArgs()
 	logger := klog.FromContext(ctx)
@@ -168,10 +168,14 @@ func (q *TimedWorkerQueue) UpdateWork(ctx context.Context, args *WorkArgs, creat
 	q.Lock()
 	defer q.Unlock()
 	if worker, exists := q.workers[key]; exists {
+		// nil 表示工作已经在执行，保留现状。
+		// nil 表示工作已经在执行，保留现状。
 		if worker == nil {
 			logger.V(4).Info("Keeping existing work, already in progress", "item", key)
 			return
 		}
+		// 触发时间相同，无需 Cancel 再重建定时器。
+		// 触发时间相同，无需 Cancel 再重建定时器。
 		if worker.FireAt.Compare(fireAt) == 0 {
 			logger.V(4).Info("Keeping existing work, same time", "item", key, "createTime", worker.CreatedAt, "firedTime", worker.FireAt)
 			return
@@ -184,9 +188,8 @@ func (q *TimedWorkerQueue) UpdateWork(ctx context.Context, args *WorkArgs, creat
 	q.workers[key] = worker
 }
 
-// CancelWork removes scheduled function execution from the queue. Returns true if work was cancelled.
-// The key must be the same as the one returned by WorkArgs.KeyFromWorkArgs, i.e.
-// the result of NamespacedName.String.
+// CancelWork 从队列中移除已排定的工作，返回值表示是否取消了尚未执行的工作。
+// key 必须是 WorkArgs.KeyFromWorkArgs（即 NamespacedName.String）的结果。
 func (q *TimedWorkerQueue) CancelWork(logger klog.Logger, key string) bool {
 	q.Lock()
 	defer q.Unlock()
@@ -203,17 +206,19 @@ func (q *TimedWorkerQueue) CancelWork(logger klog.Logger, key string) bool {
 	return result
 }
 
-// GetWorkerUnsafe returns a TimedWorker corresponding to the given key.
-// Unsafe method - workers have attached goroutines which can fire after this function is called.
+// GetWorkerUnsafe 返回给定键对应的 TimedWorker。
+// 不安全之处在于返回的 worker 可能带有定时器，调用后仍会触发，因此仅供测试使用。
 func (q *TimedWorkerQueue) GetWorkerUnsafe(key string) *TimedWorker {
 	q.Lock()
 	defer q.Unlock()
 	return q.workers[key]
 }
 
-// CancelAndWait cancels all workers and waits for all running threads to terminate before returning.
+// CancelAndWait 取消所有工作，并等待正在执行的 goroutine 全部退出，
+// 用于控制器关闭时确保没有后台工作继续访问已释放的资源。
 func (q *TimedWorkerQueue) CancelAndWait() {
-	// Wait must be called after Unlock, otherwise this hangs.
+	// 必须在释放锁之后 Wait：正在执行的工作完成时需要获取同一把锁清理队列条目，
+	// 若持锁等待会形成死锁。
 	defer q.workerWG.Wait()
 	q.Lock()
 	defer q.Unlock()

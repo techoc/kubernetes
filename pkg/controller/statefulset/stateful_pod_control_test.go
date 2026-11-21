@@ -44,6 +44,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestStatefulPodControlCreatesPods 验证 PVC 不存在时创建流程会同时建出 PVC 与 Pod，
+// 并只发出正常类型事件。
 func TestStatefulPodControlCreatesPods(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	set := newStatefulSet(3)
@@ -52,6 +54,7 @@ func TestStatefulPodControlCreatesPods(t *testing.T) {
 	claimIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	claimLister := corelisters.NewPersistentVolumeClaimLister(claimIndexer)
 	control := NewStatefulPodControl(fakeClient, nil, claimLister, recorder, consistency.NewNoopConsistencyStore())
+	// lister 与 fake client 是两套状态，需在 reactor 里同步索引，模拟 informer 观察到的创建。
 	fakeClient.AddReactor("get", "persistentvolumeclaims", func(action core.Action) (bool, runtime.Object, error) {
 		return true, nil, apierrors.NewNotFound(action.GetResource().GroupResource(), action.GetResource().Resource)
 	})
@@ -78,6 +81,8 @@ func TestStatefulPodControlCreatesPods(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlCreatePodExists 验证 Pod 与 PVC 均已存在时不重复创建事件，
+// 且 Pod 已存在的错误会向上传递。
 func TestStatefulPodControlCreatePodExists(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	set := newStatefulSet(3)
@@ -110,6 +115,8 @@ func TestStatefulPodControlCreatePodExists(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlCreatePodPvcCreateFailure 验证 PVC 创建失败时流程报错，
+// 并以告警事件记录该失败。
 func TestStatefulPodControlCreatePodPvcCreateFailure(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	set := newStatefulSet(3)
@@ -138,6 +145,9 @@ func TestStatefulPodControlCreatePodPvcCreateFailure(t *testing.T) {
 		}
 	}
 }
+
+// TestStatefulPodControlCreatePodPVCDeleting 验证 PVC 处于删除中时创建 Pod 会被阻止，
+// 避免 Pod 绑定到即将消失的存储。
 func TestStatefulPodControlCreatePodPVCDeleting(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	set := newStatefulSet(3)
@@ -148,6 +158,7 @@ func TestStatefulPodControlCreatePodPVCDeleting(t *testing.T) {
 	deleteTime := time.Date(2019, time.January, 1, 0, 0, 0, 0, time.UTC)
 	for k := range pvcs {
 		pvc := pvcs[k]
+		// 打上删除时间戳即可让控制器认为声明正在删除，无需真的发起删除。
 		pvc.DeletionTimestamp = &metav1.Time{Time: deleteTime}
 		pvcIndexer.Add(&pvc)
 	}
@@ -175,15 +186,19 @@ func TestStatefulPodControlCreatePodPVCDeleting(t *testing.T) {
 	}
 }
 
+// fakeIndexer 用于模拟 lister 查询失败，只覆盖 GetByKey，其余方法由内嵌 Indexer 提供。
 type fakeIndexer struct {
 	cache.Indexer
 	getError error
 }
 
+// GetByKey 始终返回预设错误，用来驱动调用方的失败分支。
 func (f *fakeIndexer) GetByKey(key string) (interface{}, bool, error) {
 	return nil, false, f.getError
 }
 
+// TestStatefulPodControlCreatePodPvcGetFailure 验证查询 PVC 失败时创建流程报错并发告警事件，
+// 与 PVC 真正创建失败走同一处理路径。
 func TestStatefulPodControlCreatePodPvcGetFailure(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	set := newStatefulSet(3)
@@ -213,6 +228,8 @@ func TestStatefulPodControlCreatePodPvcGetFailure(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlCreatePodFailed 验证 PVC 建好但 Pod 创建失败时的事件顺序：
+// 先正常记录 PVC 创建，再告警记录 Pod 失败。
 func TestStatefulPodControlCreatePodFailed(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	set := newStatefulSet(3)
@@ -242,6 +259,8 @@ func TestStatefulPodControlCreatePodFailed(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlNoOpUpdate 验证身份与存储均匹配时更新是空操作，
+// 不应触发任何客户端调用或事件。
 func TestStatefulPodControlNoOpUpdate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	recorder := record.NewFakeRecorder(10)
@@ -256,6 +275,7 @@ func TestStatefulPodControlNoOpUpdate(t *testing.T) {
 	}
 	claimLister := corelisters.NewPersistentVolumeClaimLister(indexer)
 	control := NewStatefulPodControl(fakeClient, nil, claimLister, recorder, consistency.NewNoopConsistencyStore())
+	// 兜底 reactor 拦截任意调用：空操作若触碰 API，测试立即失败。
 	fakeClient.AddReactor("*", "*", func(action core.Action) (bool, runtime.Object, error) {
 		t.Error("no-op update should not make any client invocation")
 		return true, nil, apierrors.NewInternalError(errors.New("if we are here we have a problem"))
@@ -269,6 +289,8 @@ func TestStatefulPodControlNoOpUpdate(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlUpdatesIdentity 验证 Pod 名称变更后更新会写回，
+// 且更新后的身份与 StatefulSet 期望一致。
 func TestStatefulPodControlUpdatesIdentity(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	recorder := record.NewFakeRecorder(10)
@@ -299,6 +321,8 @@ func TestStatefulPodControlUpdatesIdentity(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlUpdateIdentityFailure 验证更新失败时告警事件被记录，
+// 且传入的 Pod 对象不会被就地改写身份。
 func TestStatefulPodControlUpdateIdentityFailure(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	recorder := record.NewFakeRecorder(10)
@@ -313,6 +337,7 @@ func TestStatefulPodControlUpdateIdentityFailure(t *testing.T) {
 	claimIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	claimLister := corelisters.NewPersistentVolumeClaimLister(claimIndexer)
 	control := NewStatefulPodControl(fakeClient, podLister, claimLister, recorder, consistency.NewNoopConsistencyStore())
+	// 在 reactor 内也改一次名字：若控制器复用了入参指针，失败后身份就会被污染。
 	fakeClient.AddReactor("update", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		pod.Name = "goo-0"
 		return true, nil, apierrors.NewInternalError(errors.New("API server down"))
@@ -332,6 +357,8 @@ func TestStatefulPodControlUpdateIdentityFailure(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlUpdatesPodStorage 验证缺失的 PVC 卷会被补回 Pod 声明，
+// 并发出正常事件。
 func TestStatefulPodControlUpdatesPodStorage(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	recorder := record.NewFakeRecorder(10)
@@ -380,6 +407,8 @@ func TestStatefulPodControlUpdatesPodStorage(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlUpdatePodStorageFailure 验证补建 PVC 失败时更新流程报错，
+// 并通过告警事件暴露给上层。
 func TestStatefulPodControlUpdatePodStorageFailure(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	recorder := record.NewFakeRecorder(10)
@@ -418,6 +447,8 @@ func TestStatefulPodControlUpdatePodStorageFailure(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlUpdatePodConflictSuccess 验证首次更新遭遇冲突后会自动重试，
+// 重试成功后仍只记一条正常事件。
 func TestStatefulPodControlUpdatePodConflictSuccess(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	recorder := record.NewFakeRecorder(10)
@@ -440,6 +471,7 @@ func TestStatefulPodControlUpdatePodConflictSuccess(t *testing.T) {
 	conflict := false
 	fakeClient.AddReactor("update", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		update := action.(core.UpdateAction)
+		// 只在第一次注入冲突，模拟一次性的资源版本竞争。
 		if !conflict {
 			conflict = true
 			return true, update.GetObject(), apierrors.NewConflict(action.GetResource().GroupResource(), pod.Name, errors.New("conflict"))
@@ -462,6 +494,8 @@ func TestStatefulPodControlUpdatePodConflictSuccess(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlDeleteStatefulPod 表驱动验证删除成功、Pod 不存在与删除失败
+// 三种情形下的错误返回及事件类型。
 func TestStatefulPodControlDeleteStatefulPod(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -495,6 +529,7 @@ func TestStatefulPodControlDeleteStatefulPod(t *testing.T) {
 			fakeClient.AddReactor("delete", "pods", func(action core.Action) (bool, runtime.Object, error) {
 				return true, nil, tc.reactorErr
 			})
+			// NotFound 被视为成功：目标已消失即达到删除目的。
 			err := control.DeleteStatefulPod(set, pod)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("DeleteStatefulPod() error = %v, wantErr %v", err, tc.wantErr)
@@ -509,9 +544,11 @@ func TestStatefulPodControlDeleteStatefulPod(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlClaimsMatchDeletionPolcy 验证保留策略接线：
+// Retain 时匹配，改为删除时不再匹配，具体判定逻辑不在此重复测试。
 func TestStatefulPodControlClaimsMatchDeletionPolcy(t *testing.T) {
-	// The isClaimOwnerUpToDate is tested exhaustively in stateful_set_utils_test; this
-	// test is for the wiring to the method tested there.
+	// isClaimOwnerUpToDate 的判定逻辑已在 stateful_set_utils_test 充分覆盖；
+	// 这里只验证 pod control 是否正确接到了该方法。
 	_, ctx := ktesting.NewTestContext(t)
 	fakeClient := &fake.Clientset{}
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
@@ -544,9 +581,11 @@ func TestStatefulPodControlClaimsMatchDeletionPolcy(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlUpdatePodClaimForRetentionPolicy 验证删除策略下
+// 无属主的 PVC 会被加上控制器引用，已有控制器的则跳过。
 func TestStatefulPodControlUpdatePodClaimForRetentionPolicy(t *testing.T) {
-	// All the update conditions are tested exhaustively in stateful_set_utils_test. This
-	// tests the wiring from the pod control to that method.
+	// 各种更新条件已在 stateful_set_utils_test 充分覆盖；
+	// 这里只验证 pod control 到该方法的接线。
 	_, ctx := ktesting.NewTestContext(t)
 	testCases := []struct {
 		name      string
@@ -570,6 +609,7 @@ func TestStatefulPodControlUpdatePodClaimForRetentionPolicy(t *testing.T) {
 		claimLister := corelisters.NewPersistentVolumeClaimLister(indexer)
 		fakeClient.AddReactor("update", "persistentvolumeclaims", func(action core.Action) (bool, runtime.Object, error) {
 			update := action.(core.UpdateAction)
+			// fake client 不会更新 lister，需手动回填以模拟 informer 同步。
 			if err := indexer.Update(update.GetObject()); err != nil {
 				t.Fatalf("could not update index: %v", err)
 			}
@@ -608,6 +648,8 @@ func TestStatefulPodControlUpdatePodClaimForRetentionPolicy(t *testing.T) {
 	}
 }
 
+// TestPodClaimIsStale 表驱动验证陈旧声明判定：缺失或属主 UID 匹配不算陈旧，
+// 属主 UID 不匹配或缺失时才算陈旧。
 func TestPodClaimIsStale(t *testing.T) {
 	const missing = "missing"
 	const exists = "exists"
@@ -679,7 +721,7 @@ func TestPodClaimIsStale(t *testing.T) {
 			claim.Namespace = set.Namespace
 			switch claimState {
 			case missing:
-			// Do nothing, the claim shouldn't exist.
+			// 故意不加入索引，模拟声明在 API 中尚不存在。
 			case exists:
 				claimIndexer.Add(&claim)
 			case stale:
@@ -712,13 +754,15 @@ func TestPodClaimIsStale(t *testing.T) {
 		claimLister := corelisters.NewPersistentVolumeClaimLister(claimIndexer)
 		control := NewStatefulPodControl(&fake.Clientset{}, nil, claimLister, &noopRecorder{}, consistency.NewNoopConsistencyStore())
 		expected := tc.expected
-		// Note that the error isn't / can't be tested.
+		// 查询错误的分支在此无法稳定制造，因此只校验陈旧判定结果。
 		if stale, _ := control.PodClaimIsStale(&set, &pod); stale != expected {
 			t.Errorf("unexpected stale for %s", tc.name)
 		}
 	}
 }
 
+// TestStatefulPodControlRetainDeletionPolicyUpdate 验证改为 Retain 策略后，
+// 更新流程会移除 PVC 上指向 StatefulSet 的属主引用。
 func TestStatefulPodControlRetainDeletionPolicyUpdate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	recorder := record.NewFakeRecorder(10)
@@ -742,7 +786,7 @@ func TestStatefulPodControlRetainDeletionPolicyUpdate(t *testing.T) {
 	}
 	for k := range claims {
 		claim := claims[k]
-		// This ownerRef should be removed in the update.
+		// 预先埋入属主引用，供更新流程将其移除。
 		claim.SetOwnerReferences(addControllerRef(claim.GetOwnerReferences(), set, controllerKind))
 		if err := claimIndexer.Add(&claim); err != nil {
 			t.Errorf("couldn't add %s to index: %v", claim.GetName(), err)
@@ -764,6 +808,8 @@ func TestStatefulPodControlRetainDeletionPolicyUpdate(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlRetentionPolicyUpdate 验证改为删除策略后，
+// 更新流程会给 PVC 补上指向 StatefulSet 的属主引用。
 func TestStatefulPodControlRetentionPolicyUpdate(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -811,6 +857,8 @@ func TestStatefulPodControlRetentionPolicyUpdate(t *testing.T) {
 	}
 }
 
+// TestStatefulPodControlRetentionPolicyUpdateMissingClaims 验证 PVC 尚未出现时更新不报错，
+// 等 PVC 出现后的下一次更新再补上属主引用。
 func TestStatefulPodControlRetentionPolicyUpdateMissingClaims(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -865,9 +913,12 @@ func TestStatefulPodControlRetentionPolicyUpdateMissingClaims(t *testing.T) {
 	}
 }
 
+// collectEvents 把 fake recorder 的异步事件流一次性排空，
+// 便于按数量与类型断言事件。
 func collectEvents(source <-chan string) []string {
 	done := false
 	events := make([]string, 0)
+	// 用非阻塞读取排空 channel，避免等待永远不来的后续事件。
 	for !done {
 		select {
 		case event := <-source:
@@ -879,14 +930,18 @@ func collectEvents(source <-chan string) []string {
 	return events
 }
 
+// fakeRVGetter 提供可控的 last-sync resourceVersion，用于验证一致性存储门槛。
 type fakeRVGetter struct {
 	rv string
 }
 
+// LastStoreSyncResourceVersion 返回当前模拟的资源版本。
 func (f *fakeRVGetter) LastStoreSyncResourceVersion() string {
 	return f.rv
 }
 
+// TestStatefulPodControlConsistencyStore 验证增删改操作写入的资源版本
+// 会被一致性存储记录：版本落后时拒绝就绪，追平后放行。
 func TestStatefulPodControlConsistencyStore(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -921,7 +976,7 @@ func TestStatefulPodControlConsistencyStore(t *testing.T) {
 		{
 			name: "UpdatePod",
 			action: func(ctx context.Context, control *StatefulPodControl, set *apps.StatefulSet, pod *v1.Pod) error {
-				pod.Name = "goo-0" // mismatch identity to trigger update
+				pod.Name = "goo-0" // 制造身份不一致，迫使更新发生
 				return control.UpdateStatefulPod(ctx, set, pod)
 			},
 			resource: schema.GroupResource{Group: "", Resource: "pods"},
@@ -988,6 +1043,7 @@ func TestStatefulPodControlConsistencyStore(t *testing.T) {
 			claimIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 			claimLister := corelisters.NewPersistentVolumeClaimLister(claimIndexer)
 
+			// 初始版本落后于写入的 "2"，制造短暂的不一致窗口。
 			rvGetter := &fakeRVGetter{rv: "1"}
 			consistencyStore := consistency.NewConsistencyStore(map[schema.GroupResource]consistency.LastSyncRVGetter{
 				tc.resource: rvGetter,
@@ -1001,6 +1057,7 @@ func TestStatefulPodControlConsistencyStore(t *testing.T) {
 				t.Fatalf("action failed: %v", err)
 			}
 
+			// 写入尚未被消费前应拒绝就绪，否则控制器会读到过期对象。
 			if err := consistencyStore.EnsureReady(types.NamespacedName{Namespace: set.Namespace, Name: set.Name}); err == nil {
 				t.Error("expected consistency store to return an error, got nil")
 			}

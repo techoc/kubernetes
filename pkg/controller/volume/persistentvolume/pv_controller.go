@@ -60,87 +60,65 @@ import (
 )
 
 // ==================================================================
-// PLEASE DO NOT ATTEMPT TO SIMPLIFY THIS CODE.
-// KEEP THE SPACE SHUTTLE FLYING.
-// ==================================================================
-//
-// This controller is intentionally written in a very verbose style. You will
-// notice:
-//
-// 1. Every 'if' statement has a matching 'else' (exception: simple error
-//    checks for a client API call)
-// 2. Things that may seem obvious are commented explicitly
-//
-// We call this style 'space shuttle style'. Space shuttle style is meant to
-// ensure that every branch and condition is considered and accounted for -
-// the same way code is written at NASA for applications like the space
-// shuttle.
-//
-// Originally, the work of this controller was split amongst three
-// controllers. This controller is the result a large effort to simplify the
-// PV subsystem. During that effort, it became clear that we needed to ensure
-// that every single condition was handled and accounted for in the code, even
-// if it resulted in no-op code branches.
-//
-// As a result, the controller code may seem overly verbose, commented, and
-// 'branchy'. However, a large amount of business knowledge and context is
-// recorded here in order to ensure that future maintainers can correctly
-// reason through the complexities of the binding behavior. For that reason,
-// changes to this file should preserve and add to the space shuttle style.
+// 请不要试图简化这段代码。
+// 让航天飞机继续飞行。
 //
 // ==================================================================
-// PLEASE DO NOT ATTEMPT TO SIMPLIFY THIS CODE.
-// KEEP THE SPACE SHUTTLE FLYING.
+//
+// 本控制器刻意采用非常冗长的写法，你会注意到：
+//
+// 1. 每个 if 语句都有配套的 else（简单检查客户端 API 调用的错误除外）。
+//
+// 2. 即使看上去显而易见的事情，也会显式地写成注释。
+//
+// 我们把这种风格称为“航天飞机风格”。它的目的是确保每一个分支和条件都被考虑到、处理到 ——
+// 就像 NASA 为航天飞机这类应用编写代码时所做的那样。
+//
+// 最初，这个控制器的工作由三个控制器分担。本控制器是简化 PV 子系统的一次大规模努力的成果。
+// 在这个过程中，我们意识到必须确保代码中处理并覆盖了每一个条件，即使某些分支是空操作。
+//
+// 因此，控制器代码可能显得过于冗长、注释繁多且“分支重重”。但这里记录了大量的业务知识和背景，
+// 以确保未来的维护者能够正确地推理绑定行为的复杂性。因此，对本文件的修改应当保留并延续航天飞机风格。
+// ==================================================================
+// 请不要试图简化这段代码。
+// 让航天飞机继续飞行。
 // ==================================================================
 
-// Design:
+// 设计：
 //
-// The fundamental key to this design is the bi-directional "pointer" between
-// PersistentVolumes (PVs) and PersistentVolumeClaims (PVCs), which is
-// represented here as pvc.Spec.VolumeName and pv.Spec.ClaimRef. The bi-
-// directionality is complicated to manage in a transactionless system, but
-// without it we can't ensure sane behavior in the face of different forms of
-// trouble. For example, a rogue HA controller instance could end up racing
-// and making multiple bindings that are indistinguishable, resulting in
-// potential data loss.
+// 这个设计最根本的关键，是 PersistentVolume（PV）和 PersistentVolumeClaim（PVC）之间双向的“指针”，
+// 在这里表现为 pvc.Spec.VolumeName 和 pv.Spec.ClaimRef。在无事务的系统中，双向性管理起来很复杂，
+// 但缺少它就无法在面对各种故障时保证合理的行为。例如，一个失控的 HA 控制器实例最终可能竞态地
+// 做出多个无法区分的绑定，从而造成潜在的数据丢失。
 //
-// This controller is designed to work in active-passive high availability
-// mode. It *could* work also in active-active HA mode, all the object
-// transitions are designed to cope with this, however performance could be
-// lower as these two active controllers will step on each other toes
-// frequently.
+// 本控制器设计为在主动-被动（active-passive）高可用模式下工作。它也*可以*在主动-主动（active-active）
+// HA 模式下工作，所有对象状态转换都设计成能应对这种情况；但性能可能较低，因为两个处于活动状态的
+// 控制器会频繁地互相干扰。
 //
-// This controller supports pre-bound (by the creator) objects in both
-// directions: a PVC that wants a specific PV or a PV that is reserved for a
-// specific PVC.
+// 本控制器支持两个方向上的（由创建者完成的）预绑定对象：想要特定 PV 的 PVC，或者为特定 PVC 预留的 PV。
 //
-// The binding is two-step process. PV.Spec.ClaimRef is modified first and
-// PVC.Spec.VolumeName second. At any point of this transaction, the PV or PVC
-// can be modified by user or other controller or completely deleted. Also,
-// two (or more) controllers may try to bind different volumes to different
-// claims at the same time. The controller must recover from any conflicts
-// that may arise from these conditions.
+// 绑定是两步过程：先修改 PV.Spec.ClaimRef，再修改 PVC.Spec.VolumeName。在这个事务的任意时刻，
+// PV 或 PVC 都可能被用户或其他控制器修改，甚至被完全删除。此外，两个（或更多）控制器可能同时尝试
+// 把不同的卷绑定到不同的声明上。控制器必须能从这些情况引发的任何冲突中恢复。
 
-// Number of retries when we create a PV object for a provisioned volume.
+// 为已制备的卷创建 PV 对象时的重试次数。
 const createProvisionedPVRetryCount = 5
 
-// Interval between retries when we create a PV object for a provisioned volume.
+// 为已制备的卷创建 PV 对象时，两次重试之间的间隔。
 const createProvisionedPVInterval = 10 * time.Second
 
-// CSINameTranslator can get the CSI Driver name based on the in-tree plugin name
+// CSINameTranslator 可以根据 in-tree 插件名称获取对应的 CSI 驱动名称。
 type CSINameTranslator interface {
 	GetCSINameFromInTreeName(pluginName string) (string, error)
 }
 
-// CSIMigratedPluginManager keeps track of CSI migration status of a plugin
+// CSIMigratedPluginManager 负责跟踪某个插件的 CSI 迁移状态。
 type CSIMigratedPluginManager interface {
 	IsMigrationEnabledForPlugin(pluginName string) bool
 }
 
-// PersistentVolumeController is a controller that synchronizes
-// PersistentVolumeClaims and PersistentVolumes. It starts two
-// cache.Controllers that watch PersistentVolume and PersistentVolumeClaim
-// changes.
+// PersistentVolumeController 是负责同步 PersistentVolumeClaim 与 PersistentVolume 的控制器。
+// 它会启动两个 cache.Controller，分别监听 PersistentVolume 和 PersistentVolumeClaim 的变化。
 type PersistentVolumeController struct {
 	volumeLister       corelisters.PersistentVolumeLister
 	volumeListerSynced cache.InformerSynced
@@ -161,108 +139,93 @@ type PersistentVolumeController struct {
 	enableDynamicProvisioning bool
 	resyncPeriod              time.Duration
 
-	// Cache of the last known version of volumes and claims. This cache is
-	// thread safe as long as the volumes/claims there are not modified, they
-	// must be cloned before any modification. These caches get updated both by
-	// "xxx added/updated/deleted" events from etcd and by the controller when
-	// it saves newer version to etcd.
-	// Why local cache: binding a volume to a claim generates 4 events, roughly
-	// in this order (depends on goroutine ordering):
-	// - volume.Spec update
-	// - volume.Status update
-	// - claim.Spec update
-	// - claim.Status update
-	// With these caches, the controller can check that it has already saved
-	// volume.Status and claim.Spec+Status and does not need to do anything
-	// when e.g. volume.Spec update event arrives before all the other events.
-	// Without this cache, it would see the old version of volume.Status and
-	// claim in the informers (it has not been updated from API server events
-	// yet) and it would try to fix these objects to be bound together.
-	// Any write to API server would fail with version conflict - these objects
-	// have been already written.
+	// 缓存已知最新的卷和声明版本。只要不修改其中的卷/声明，这个缓存就是线程安全的；
+	// 任何修改之前都必须先克隆。这些缓存既会由来自 etcd 的 "xxx added/updated/deleted" 事件更新，
+	// 也会在控制器把较新版本保存到 etcd 时由控制器自己更新。
+	// 为什么需要本地缓存：把一个卷绑定到声明会产生 4 个事件，大致顺序如下（取决于 goroutine 的调度顺序）：
+	// - volume.Spec 更新
+	// - volume.Status 更新
+	// - claim.Spec 更新
+	// - claim.Status 更新
+	// 有了这些缓存，当例如 volume.Spec 更新事件先于其他事件到达时，控制器可以检查到自己已经保存过
+	// volume.Status 以及 claim.Spec+Status，从而无需做任何操作。
+	// 没有这个缓存，控制器在 informer 中看到的将是旧版本的 volume.Status 和 claim
+	// （它们还没有被 API server 的事件更新），从而试图“修复”这些对象让它们绑定在一起。
+	// 而任何写入 API server 的操作都会因版本冲突而失败 —— 因为这些对象已经被写入过了。
 	volumes persistentVolumeOrderedIndex
 	claims  cache.Store
 
-	// Work queues of claims and volumes to process. Every queue should have
-	// exactly one worker thread, especially syncClaim() is not reentrant.
-	// Two syncClaims could bind two different claims to the same volume or one
-	// claim to two volumes. The controller would recover from this (due to
-	// version errors in API server and other checks in this controller),
-	// however overall speed of multi-worker controller would be lower than if
-	// it runs single thread only.
+	// 待处理的声明和卷的工作队列。每个队列应当只有一个工作线程，尤其是 syncClaim() 是不可重入的。
+	// 两个并发的 syncClaim 可能把两个不同的声明绑定到同一个卷，或者把一个声明绑定到两个卷。
+	// 控制器可以从这种情况中恢复（依靠 API server 的版本错误以及控制器中的其他检查），
+	// 但多工作线程控制器的整体速度会比单线程更低。
 	claimQueue  workqueue.TypedRateLimitingInterface[string]
 	volumeQueue workqueue.TypedRateLimitingInterface[string]
 
-	// Map of scheduled/running operations.
+	// 已调度/正在运行的操作的映射。
 	runningOperations goroutinemap.GoRoutineMap
 
-	// For testing only: hook to call before an asynchronous operation starts.
-	// Not used when set to nil.
+	// 仅供测试使用：在异步操作开始前调用的钩子。设为 nil 时不生效。
 	preOperationHook func(operationName string)
 
 	createProvisionedPVRetryCount int
 	createProvisionedPVInterval   time.Duration
 
-	// operationTimestamps caches start timestamp of operations
-	// (currently provision + binding/deletion) for metric recording.
-	// Detailed lifecycle/key for each operation
-	// 1. provision + binding
-	//     key:        claimKey
-	//     start time: user has NOT provide any volume ref in the claim AND
-	//                 there is no existing volume found for the claim,
-	//                 "provisionClaim" is called with a valid plugin/external provisioner
-	//                 to provision a volume
-	//     end time:   after a volume has been provisioned and bound to the claim successfully
-	//                 the corresponding timestamp entry will be deleted from cache
-	//     abort:      claim has not been bound to a volume yet but a claim deleted event
-	//                 has been received from API server
-	// 2. deletion
-	//     key:        volumeName
-	//     start time: when "reclaimVolume" process a volume with reclaim policy
-	//                 set to be "PersistentVolumeReclaimDelete"
-	//     end time:   after a volume deleted event has been received from API server
-	//                 the corresponding timestamp entry will be deleted from cache
-	//     abort:      N.A.
+	// operationTimestamps 缓存操作（目前是制备+绑定/删除）的开始时间戳，用于指标记录。
+	// 各操作的详细生命周期/键如下：
+	// 1. 制备 + 绑定
+	//    键：        claimKey
+	//    开始时间：用户在声明中未提供任何卷引用，且没有为该声明找到已有卷时，
+	//              以有效的插件/外部制备器调用 "provisionClaim" 来制备卷
+	//    结束时间：卷被成功制备并绑定到声明后，相应的时间戳条目会从缓存中删除
+	//    中止：    声明尚未绑定到卷，但已从 API server 收到声明被删除的事件
+	// 2. 删除
+	//    键：        volumeName
+	//    开始时间："reclaimVolume" 处理回收策略为 "PersistentVolumeReclaimDelete" 的卷时
+	//    结束时间：从 API server 收到卷删除事件后，相应的时间戳条目会从缓存中删除
+	//    中止：    不适用
 	operationTimestamps metrics.OperationStartTimeCache
 
 	translator               CSINameTranslator
 	csiMigratedPluginManager CSIMigratedPluginManager
 }
 
-// syncClaim is the main controller method to decide what to do with a claim.
-// It's invoked by appropriate cache.Controller callbacks when a claim is
-// created, updated or periodically synced. We do not differentiate between
-// these events.
-// For easier readability, it was split into syncUnboundClaim and syncBoundClaim
-// methods.
+// syncClaim 是控制器决定如何处理某个 PVC 的主入口方法。
+// 当声明被创建、更新或周期性同步时，由相应的 cache.Controller 回调调用；我们不区分这些事件。
+// 为了便于阅读，它被拆分为 syncUnboundClaim 和 syncBoundClaim 两个方法。
 func (ctrl *PersistentVolumeController) syncClaim(ctx context.Context, claim *v1.PersistentVolumeClaim) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Synchronizing PersistentVolumeClaim", "PVC", klog.KObj(claim), "claimStatus", getClaimStatusForLogging(claim))
 
-	// Set correct "migrated-to" annotations on PVC and update in API server if
-	// necessary
+	// 必要时修正 PVC 上正确的 "migrated-to" 注解，并更新到 API server。
 	newClaim, err := ctrl.updateClaimMigrationAnnotations(ctx, claim)
+	// 先修正 PVC 上“迁移到”的注解，避免后续绑定判断基于过期的迁移信息。
 	if err != nil {
-		// Nothing was saved; we will fall back into the same
-		// condition in the next call to this method
+		// 什么都没保存成功；下次调用本方法时仍会回到同样的状态并重试。
 		return err
 	}
 	claim = newClaim
 
 	if !metav1.HasAnnotation(claim.ObjectMeta, storagehelpers.AnnBindCompleted) {
+		// 用 AnnBindCompleted 注解区分未绑定/已绑定的声明，二者走不同的处理路径。
 		return ctrl.syncUnboundClaim(ctx, claim)
 	} else {
+		// 卷被另一个声明占用，当前声明属于错误绑定，置为终态 Lost。
+		// 控制器绑定的卷却指向其他声明，理论上不会发生（否则 AnnBindCompleted 会被移除），视为错误。
 		return ctrl.syncBoundClaim(ctx, claim)
 	}
 }
 
-// checkVolumeSatisfyClaim checks if the volume requested by the claim satisfies the requirements of the claim
+// checkVolumeSatisfyClaim 检查声明所请求的卷是否满足该声明的要求。
+// 依次检查：卷是否被标记删除、容量是否足够、StorageClass 是否匹配、
+// VolumeAttributesClass 是否匹配（受 FeatureGate 控制）、volumeMode 和访问模式是否兼容。
 func checkVolumeSatisfyClaim(volume *v1.PersistentVolume, claim *v1.PersistentVolumeClaim) error {
 	requestedQty := claim.Spec.Resources.Requests[v1.ResourceName(v1.ResourceStorage)]
 	requestedSize := requestedQty.Value()
 
-	// check if PV's DeletionTimeStamp is set, if so, return error.
+	// 检查 PV 是否设置了 DeletionTimeStamp，若已设置则返回错误。
 	if volume.ObjectMeta.DeletionTimestamp != nil {
+		// 正在删除的卷不能用于绑定，否则可能把一个即将消失的卷分配给声明。
 		return fmt.Errorf("the volume is marked for deletion %q", volume.Name)
 	}
 
@@ -278,6 +241,7 @@ func checkVolumeSatisfyClaim(volume *v1.PersistentVolume, claim *v1.PersistentVo
 	}
 
 	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
+		// 特性开启时要求 VAC 严格一致；关闭时两边都不允许出现 VAC。
 		requestedVAC := ptr.Deref(claim.Spec.VolumeAttributesClassName, "")
 		volumeVAC := ptr.Deref(volume.Spec.VolumeAttributesClassName, "")
 		if requestedVAC != volumeVAC {
@@ -292,6 +256,7 @@ func checkVolumeSatisfyClaim(volume *v1.PersistentVolume, claim *v1.PersistentVo
 	}
 
 	if storagehelpers.CheckVolumeModeMismatches(&claim.Spec, &volume.Spec) {
+		// volumeMode 不匹配时 findBestMatchForClaim 不会选中该卷，syncUnboundClaim 也不会绑定，这里直接跳过。
 		return fmt.Errorf("incompatible volumeMode")
 	}
 
@@ -302,8 +267,8 @@ func checkVolumeSatisfyClaim(volume *v1.PersistentVolume, claim *v1.PersistentVo
 	return nil
 }
 
-// emitEventForUnboundDelayBindingClaim generates informative event for claim
-// if it's in delay binding mode and not bound yet.
+// emitEventForUnboundDelayBindingClaim 为处于延迟绑定模式且尚未绑定的声明生成提示性事件。
+// 若存在引用该 PVC 且尚未调度的 Pod，则事件会改为提示等待这些 Pod 被调度。
 func (ctrl *PersistentVolumeController) emitEventForUnboundDelayBindingClaim(claim *v1.PersistentVolumeClaim) error {
 	reason := events.WaitForFirstConsumer
 	message := "waiting for first consumer to be created before binding"
@@ -314,10 +279,11 @@ func (ctrl *PersistentVolumeController) emitEventForUnboundDelayBindingClaim(cla
 	if len(podNames) > 0 {
 		reason = events.WaitForPodScheduled
 		if len(podNames) > 1 {
-			// Although only one pod is taken into account in
-			// volume scheduling, more than one pods can reference
-			// the PVC at the same time. We can't know which pod is
-			// used in scheduling, all pods are included.
+			// 卷调度时只考虑一个 Pod，但可能有多个 Pod 同时引用该 PVC；无法确定是哪一个，因此全部列出。
+			// 卷调度时只考虑一个 Pod，
+			// 但可能有多个 Pod 同时引用该 PVC；
+			// 我们无法知道调度时用的是哪一个，
+			// 因此把所有 Pod 都列出来。
 			message = fmt.Sprintf("waiting for pods %s to be scheduled", strings.Join(podNames, ","))
 		} else {
 			message = fmt.Sprintf("waiting for pod %s to be scheduled", podNames[0])
@@ -327,29 +293,33 @@ func (ctrl *PersistentVolumeController) emitEventForUnboundDelayBindingClaim(cla
 	return nil
 }
 
-// syncUnboundClaim is the main controller method to decide what to do with an
-// unbound claim.
+// syncUnboundClaim 是控制器决定如何处理未绑定声明的主方法。
+// 若声明没有指定卷名：先尝试找匹配的 PV，找不到则尝试分配默认 StorageClass、动态制备或保持 Pending；
+// 若声明指定了卷名：校验该 PV 并绑定，或处理已被其他声明占用等冲突情况。
 func (ctrl *PersistentVolumeController) syncUnboundClaim(ctx context.Context, claim *v1.PersistentVolumeClaim) error {
-	// This is a new PVC that has not completed binding
-	// OBSERVATION: pvc is "Pending"
+	// 这是一个尚未完成绑定新 PVC。
+	// OBSERVATION：pvc 处于 "Pending"。
 	logger := klog.FromContext(ctx)
 	if claim.Spec.VolumeName == "" {
-		// User did not care which PV they get.
+		// 声明曾绑定过但不再引用任何卷，数据可能已丢失，标记 Lost 并告警。
+		// 用户没有指定想要哪个 PV。
 		delayBinding, err := storagehelpers.IsDelayBindingMode(claim, ctrl.classLister)
+		// 延迟绑定模式下不应立即为声明选择 PV，需等待 Pod 调度后再绑定。
 		if err != nil {
 			return err
 		}
 
-		// [Unit test set 1]
+		// [单元测试组 1]
 		volume, err := ctrl.volumes.findBestMatchForClaim(claim, delayBinding)
 		if err != nil {
 			logger.V(2).Info("Synchronizing unbound PersistentVolumeClaim, Error finding PV for claim", "PVC", klog.KObj(claim), "err", err)
 			return fmt.Errorf("error finding PV for claim %q: %w", claimToClaimKey(claim), err)
 		}
 		if volume == nil {
+			// 没有传入卷时清空 AccessModes/Capacity/CurrentVolumeAttributesClassName，避免遗留旧值。
 			logger.V(4).Info("Synchronizing unbound PersistentVolumeClaim, no volume found", "PVC", klog.KObj(claim))
-			// No PV could be found. Try to provision one if possible.
-			// OBSERVATION: pvc is "Pending", will retry
+			// 找不到合适的 PV，尽可能尝试动态制备一个。
+			// OBSERVATION：pvc 处于 "Pending"，稍后会重试。
 
 			logger.V(4).Info("Attempting to assign storage class to unbound PersistentVolumeClaim", "PVC", klog.KObj(claim))
 			updated, err := ctrl.assignDefaultStorageClass(ctx, claim)
@@ -358,6 +328,7 @@ func (ctrl *PersistentVolumeController) syncUnboundClaim(ctx context.Context, cl
 				return fmt.Errorf("can't update PersistentVolumeClaim[%q]: %w", claimToClaimKey(claim), err)
 			}
 			if updated {
+				// 刚给声明补上默认 StorageClass，本次同步到此为止，让下一次同步基于新声明继续处理。
 				logger.V(4).Info("PersistentVolumeClaim update successful, restarting claim sync", "PVC", klog.KObj(claim))
 				metrics.RecordRetroactiveStorageClassMetric(true)
 				return nil
@@ -365,15 +336,17 @@ func (ctrl *PersistentVolumeController) syncUnboundClaim(ctx context.Context, cl
 
 			switch {
 			case delayBinding && !storagehelpers.IsDelayBindingProvisioning(claim):
-				// Scheduler does not observe any pod using this claim.
+				// 调度器尚未观察到使用该声明的 Pod，不触发制备，只发出等待事件。
+				// 调度器尚未观察到任何使用该声明的 Pod。
 				if err = ctrl.emitEventForUnboundDelayBindingClaim(claim); err != nil {
 					return err
 				}
 			case storagehelpers.GetPersistentVolumeClaimClass(claim) != "":
-				// The provisionClaim function may start a new asynchronous operation to provision a volume,
-				// or the operation is already running. The claim will be updated in the asynchronous operation,
-				// so the branch should be returned directly and the bind operation is expected to continue in
-				// the next sync loop.
+				// 制备是异步操作，声明会在异步流程中更新，因此这里直接返回，等待下一轮同步继续绑定。
+				// provisionClaim 可能启动新的异步制备操作，
+				// 或该操作已在运行；声明会在异步流程中更新，
+				// 因此这里直接返回，预期绑定操作在下一轮同步中继续。
+				// （接上行：下一轮同步循环。）
 				if err = ctrl.provisionClaim(ctx, claim); err != nil {
 					return err
 				}
@@ -382,44 +355,47 @@ func (ctrl *PersistentVolumeController) syncUnboundClaim(ctx context.Context, cl
 				ctrl.eventRecorder.Event(claim, v1.EventTypeNormal, events.FailedBinding, "no persistent volumes available for this claim and no storage class is set")
 			}
 
-			// Mark the claim as Pending and try to find a match in the next
-			// periodic syncClaim
+			// 把声明标记为 Pending，在下一次周期性 syncClaim 中再尝试寻找匹配。
 			if _, err = ctrl.updateClaimStatus(ctx, claim, v1.ClaimPending, nil); err != nil {
 				return err
 			}
 			return nil
 		} else /* pv != nil */ {
-			// Found a PV for this claim
-			// OBSERVATION: pvc is "Pending", pv is "Available"
+			// 为该声明找到了一个 PV。
+			// OBSERVATION：pvc 处于 "Pending"，pv 处于 "Available"。
 			claimKey := claimToClaimKey(claim)
 			logger.V(4).Info("Synchronizing unbound PersistentVolumeClaim, volume found", "PVC", klog.KObj(claim), "volumeName", volume.Name, "volumeStatus", getVolumeStatusForLogging(volume))
 			if err = ctrl.bind(ctx, volume, claim); err != nil {
-				// On any error saving the volume or the claim, subsequent
-				// syncClaim will finish the binding.
-				// record count error for provision if exists
-				// timestamp entry will remain in cache until a success binding has happened
+				// 保存卷或声明时若出现任何错误，后续的
+				// syncClaim 会继续完成绑定。
+				// 如果存在制备操作，则记录错误计数。
+				// 时间戳条目会留在缓存中，直到绑定成功才清理。
+				// 绑定保存失败时记录错误指标；时间戳条目保留，直到绑定成功才清理。
 				metrics.RecordMetric(claimKey, &ctrl.operationTimestamps, err)
 				return err
 			}
-			// OBSERVATION: claim is "Bound", pv is "Bound"
-			// if exists a timestamp entry in cache, record end to end provision latency and clean up cache
-			// End of the provision + binding operation lifecycle, cache will be cleaned by "RecordMetric"
-			// [Unit test 12-1, 12-2, 12-4]
+			// OBSERVATION：claim 为 "Bound"，pv 为 "Bound"。
+			// 若缓存中存在时间戳条目，记录端到端制备延迟并清理缓存。
+			// 制备+绑定操作生命周期结束，缓存由 "RecordMetric" 清理。
+			// [单元测试 12-1、12-2、12-4]
+			// 绑定全部完成，记录端到端制备延迟并清理缓存中的时间戳条目。
 			metrics.RecordMetric(claimKey, &ctrl.operationTimestamps, nil)
 			return nil
 		}
 	} else /* pvc.Spec.VolumeName != nil */ {
-		// [Unit test set 2]
-		// User asked for a specific PV.
+		// [单元测试组 2]
+		// 用户请求了一个指定的 PV。
 		logger.V(4).Info("Synchronizing unbound PersistentVolumeClaim, volume requested", "PVC", klog.KObj(claim), "volumeName", claim.Spec.VolumeName)
 		obj, found, err := ctrl.volumes.store.GetByKey(claim.Spec.VolumeName)
 		if err != nil {
 			return err
 		}
 		if !found {
-			// User asked for a PV that does not exist.
-			// OBSERVATION: pvc is "Pending"
-			// Retry later.
+			// 本地缓存未找到声明时，需要依次查 informer 缓存和 API server，避免误回收 PV。
+			// 声明引用的卷不存在，同样标记为 Lost。
+			// 用户请求了一个不存在的 PV。
+			// OBSERVATION：pvc 处于 "Pending"。
+			// 稍后重试。
 			logger.V(4).Info("Synchronizing unbound PersistentVolumeClaim， volume requested and not found, will try again next time", "PVC", klog.KObj(claim), "volumeName", claim.Spec.VolumeName)
 			if _, err = ctrl.updateClaimStatus(ctx, claim, v1.ClaimPending, nil); err != nil {
 				return err
@@ -432,51 +408,54 @@ func (ctrl *PersistentVolumeController) syncUnboundClaim(ctx context.Context, cl
 			}
 			logger.V(4).Info("Synchronizing unbound PersistentVolumeClaim, volume requested and found", "PVC", klog.KObj(claim), "volumeName", claim.Spec.VolumeName, "volumeStatus", getVolumeStatusForLogging(volume))
 			if volume.Spec.ClaimRef == nil {
-				// User asked for a PV that is not claimed
-				// OBSERVATION: pvc is "Pending", pv is "Available"
+				// 没有 ClaimRef 的卷从未被绑定，谈不上释放。
+				// 无法区分卷被解绑与缓存未更新两种情况，统一重新绑定并把状态恢复为 Bound。
+				// 卷尚未被任何声明占用，先校验其是否满足声明要求再绑定。
+				// 用户请求了一个尚未被任何声明占用的 PV。
+				// OBSERVATION：pvc 处于 "Pending"，pv 处于 "Available"。
 				logger.V(4).Info("Synchronizing unbound PersistentVolumeClaim, volume is unbound, binding", "PVC", klog.KObj(claim))
 				if err = checkVolumeSatisfyClaim(volume, claim); err != nil {
 					logger.V(4).Info("Can't bind the claim to volume", "volumeName", volume.Name, "err", err)
-					// send an event
+					// 发出一个事件。
 					msg := fmt.Sprintf("Cannot bind to requested volume %q: %s", volume.Name, err)
 					ctrl.eventRecorder.Event(claim, v1.EventTypeWarning, events.VolumeMismatch, msg)
-					// volume does not satisfy the requirements of the claim
+					// 该卷不满足声明的要求。
 					if _, err = ctrl.updateClaimStatus(ctx, claim, v1.ClaimPending, nil); err != nil {
 						return err
 					}
 				} else if err = ctrl.bind(ctx, volume, claim); err != nil {
-					// On any error saving the volume or the claim, subsequent
-					// syncClaim will finish the binding.
+					// 保存卷或声明时若出现任何错误，后续的 syncClaim 会继续完成绑定。
 					return err
 				}
-				// OBSERVATION: pvc is "Bound", pv is "Bound"
+				// OBSERVATION：pvc 为 "Bound"，pv 为 "Bound"。
 				return nil
 			} else if storagehelpers.IsVolumeBoundToClaim(volume, claim) {
-				// User asked for a PV that is claimed by this PVC
-				// OBSERVATION: pvc is "Pending", pv is "Bound"
+				// 卷已被本声明预留，调用 bind 补上 UID 等字段即可完成绑定。
+				// 用户请求了一个已被本 PVC 占用的 PV。
+				// OBSERVATION：pvc 处于 "Pending"，pv 处于 "Bound"。
 				logger.V(4).Info("Synchronizing unbound PersistentVolumeClaim, volume already bound, finishing the binding", "PVC", klog.KObj(claim))
 
-				// Finish the volume binding by adding claim UID.
+				// 通过补上声明的 UID 来完成卷绑定。
 				if err = ctrl.bind(ctx, volume, claim); err != nil {
 					return err
 				}
-				// OBSERVATION: pvc is "Bound", pv is "Bound"
+				// OBSERVATION：pvc 为 "Bound"，pv 为 "Bound"。
 				return nil
 			} else {
-				// User asked for a PV that is claimed by someone else
-				// OBSERVATION: pvc is "Pending", pv is "Bound"
+				// 用户请求了一个已被其他声明占用的 PV。
+				// OBSERVATION：pvc 处于 "Pending"，pv 处于 "Bound"。
 				if !metav1.HasAnnotation(claim.ObjectMeta, storagehelpers.AnnBoundByController) {
+					// 声明不是控制器绑定的，说明是用户指定的预绑定冲突，只能加事件并稍后重试。
 					logger.V(4).Info("Synchronizing unbound PersistentVolumeClaim, volume already bound to different claim by user, will retry later", "PVC", klog.KObj(claim))
 					claimMsg := fmt.Sprintf("volume %q already bound to a different claim.", volume.Name)
 					ctrl.eventRecorder.Event(claim, v1.EventTypeWarning, events.FailedBinding, claimMsg)
-					// User asked for a specific PV, retry later
+					// 用户指定了特定的 PV，稍后重试。
 					if _, err = ctrl.updateClaimStatus(ctx, claim, v1.ClaimPending, nil); err != nil {
 						return err
 					}
 					return nil
 				} else {
-					// This should never happen because someone had to remove
-					// AnnBindCompleted annotation on the claim.
+					// 这理论上不会发生，因为必须有人移除了声明上的 AnnBindCompleted 注解。
 					logger.V(4).Info("Synchronizing unbound PersistentVolumeClaim, volume already bound to different claim by controller, THIS SHOULD NEVER HAPPEN", "PVC", klog.KObj(claim), "boundClaim", klog.KRef(volume.Spec.ClaimRef.Namespace, volume.Spec.ClaimRef.Name))
 					claimMsg := fmt.Sprintf("volume %q already bound to a different claim.", volume.Name)
 					ctrl.eventRecorder.Event(claim, v1.EventTypeWarning, events.FailedBinding, claimMsg)
@@ -488,18 +467,17 @@ func (ctrl *PersistentVolumeController) syncUnboundClaim(ctx context.Context, cl
 	}
 }
 
-// syncBoundClaim is the main controller method to decide what to do with a
-// bound claim.
+// syncBoundClaim 是控制器决定如何处理已绑定声明的主方法。
+// 若声明丢失卷引用或卷不存在，将声明置为 Lost；若卷被解绑或声明 UID 不匹配，重新绑定或判定为绑定错误。
 func (ctrl *PersistentVolumeController) syncBoundClaim(ctx context.Context, claim *v1.PersistentVolumeClaim) error {
-	// HasAnnotation(pvc, storagehelpers.AnnBindCompleted)
-	// This PVC has previously been bound
-	// OBSERVATION: pvc is not "Pending"
-	// [Unit test set 3]
+	// HasAnnotation(pvc, storagehelpers.AnnBindCompleted)：该 PVC 此前已经绑定过。
+	// OBSERVATION：pvc 不处于 "Pending"。
+	// [单元测试组 3]
 
 	logger := klog.FromContext(ctx)
 
 	if claim.Spec.VolumeName == "" {
-		// Claim was bound before but not any more.
+		// 声明曾绑定过，但现在已经不再绑定。
 		if _, err := ctrl.updateClaimStatusWithEvent(ctx, claim, v1.ClaimLost, nil, v1.EventTypeWarning, "ClaimLost", "Bound claim has lost reference to PersistentVolume. Data on the volume is lost!"); err != nil {
 			return err
 		}
@@ -510,7 +488,7 @@ func (ctrl *PersistentVolumeController) syncBoundClaim(ctx context.Context, clai
 		return err
 	}
 	if !found {
-		// Claim is bound to a non-existing volume.
+		// 声明绑定到了一个不存在的卷。
 		if _, err = ctrl.updateClaimStatusWithEvent(ctx, claim, v1.ClaimLost, nil, v1.EventTypeWarning, "ClaimLost", "Bound claim has lost its PersistentVolume. Data on the volume is lost!"); err != nil {
 			return err
 		}
@@ -523,31 +501,30 @@ func (ctrl *PersistentVolumeController) syncBoundClaim(ctx context.Context, clai
 
 		logger.V(4).Info("Synchronizing bound PersistentVolumeClaim, volume found", "PVC", klog.KObj(claim), "volumeName", claim.Spec.VolumeName, "volumeStatus", getVolumeStatusForLogging(volume))
 		if volume.Spec.ClaimRef == nil {
-			// Claim is bound but volume has come unbound.
-			// Or, a claim was bound and the controller has not received updated
-			// volume yet. We can't distinguish these cases.
-			// Bind the volume again and set all states to Bound.
+			// 声明已绑定，但卷变成了未绑定状态；
+			// 也可能是声明已绑定而控制器尚未收到更新后的卷。
+			// 我们无法区分这两种情况，
+			// 统一重新绑定卷并把所有状态设为 Bound。
 			logger.V(4).Info("Synchronizing bound PersistentVolumeClaim, volume is unbound, fixing", "PVC", klog.KObj(claim))
 			if err = ctrl.bind(ctx, volume, claim); err != nil {
-				// Objects not saved, next syncPV or syncClaim will try again
+				// 对象未保存成功，下一次 syncPV 或 syncClaim 会重试。
 				return err
 			}
 			return nil
 		} else if volume.Spec.ClaimRef.UID == claim.UID {
-			// All is well
-			// NOTE: syncPV can handle this so it can be left out.
-			// NOTE: bind() call here will do nothing in most cases as
-			// everything should be already set.
+			// 一切正常；bind 在大多数情况下不会改动对象，但保留调用以兜底修复。
+			// 一切正常。
+			// 注意：syncPV 可以处理这种情况，因此这里可省略。
+			// 注意：这里调用 bind() 在大多数情况下不会改动对象，
+			// 因为所有字段应该都已设置好。
 			logger.V(4).Info("Synchronizing bound PersistentVolumeClaim, claim is already correctly bound", "PVC", klog.KObj(claim))
 			if err = ctrl.bind(ctx, volume, claim); err != nil {
-				// Objects not saved, next syncPV or syncClaim will try again
+				// 对象未保存成功，下一次 syncPV 或 syncClaim 会重试。
 				return err
 			}
 			return nil
 		} else {
-			// Claim is bound but volume has a different claimant.
-			// Set the claim phase to 'Lost', which is a terminal
-			// phase.
+			// 声明已绑定，但卷被另一个声明占用。 把该声明的阶段设为终态 "Lost"。
 			if _, err = ctrl.updateClaimStatusWithEvent(ctx, claim, v1.ClaimLost, nil, v1.EventTypeWarning, "ClaimMisbound", "Two claims are bound to the same volume, this one is bound incorrectly"); err != nil {
 				return err
 			}
@@ -556,48 +533,46 @@ func (ctrl *PersistentVolumeController) syncBoundClaim(ctx context.Context, clai
 	}
 }
 
-// syncVolume is the main controller method to decide what to do with a volume.
-// It's invoked by appropriate cache.Controller callbacks when a volume is
-// created, updated or periodically synced. We do not differentiate between
-// these events.
+// syncVolume 是控制器决定如何处理某个卷的主入口方法。
+// 当卷被创建、更新或周期性同步时，由相应的 cache.Controller 回调调用；我们不区分这些事件。
+// 先修正卷上的迁移注解与 finalizer，再根据 ClaimRef 是否存在、声明是否匹配，
+// 决定更新阶段、重新绑定、触发回收或解除绑定。
 func (ctrl *PersistentVolumeController) syncVolume(ctx context.Context, volume *v1.PersistentVolume) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Synchronizing PersistentVolume", "volumeName", volume.Name, "volumeStatus", getVolumeStatusForLogging(volume))
-	// Set correct "migrated-to" annotations and modify finalizers on PV and update in API server if
-	// necessary
+	// 必要时修正 PV 上正确的 "migrated-to" 注解、修改 finalizer，并更新到 API server。
 	newVolume, err := ctrl.updateVolumeMigrationAnnotationsAndFinalizers(ctx, volume)
+	// 先同步迁移注解和 finalizer，避免基于陈旧状态做错误的回收/删除判断。
 	if err != nil {
-		// Nothing was saved; we will fall back into the same
-		// condition in the next call to this method
+		// 什么都没保存成功；下次调用本方法时仍会回到同样的状态并重试。
 		return err
 	}
 	volume = newVolume
 
-	// [Unit test set 4]
+	// [单元测试组 4]
 	if volume.Spec.ClaimRef == nil {
-		// Volume is unused
+		// 卷未被使用。
 		logger.V(4).Info("Synchronizing PersistentVolume, volume is unused", "volumeName", volume.Name)
 		if _, err := ctrl.updateVolumePhase(ctx, volume, v1.VolumeAvailable, ""); err != nil {
-			// Nothing was saved; we will fall back into the same
-			// condition in the next call to this method
+			// 什么都没保存成功；下次调用本方法时仍会回到同样的状态并重试。
 			return err
 		}
 		return nil
 	} else /* pv.Spec.ClaimRef != nil */ {
-		// Volume is bound to a claim.
+		// 卷已绑定到某个声明。
 		if volume.Spec.ClaimRef.UID == "" {
-			// The PV is reserved for a PVC; that PVC has not yet been
-			// bound to this PV; the PVC sync will handle it.
+			// ClaimRef 尚无 UID 表示 PV 为特定 PVC 预留，绑定由 PVC 同步流程完成。
+			// PV 为某个 PVC 预留，但该 PVC 尚未
+			// 绑定到该 PV，PVC 同步流程会处理。
 			logger.V(4).Info("Synchronizing PersistentVolume, volume is pre-bound to claim", "PVC", klog.KRef(volume.Spec.ClaimRef.Namespace, volume.Spec.ClaimRef.Name), "volumeName", volume.Name)
 			if _, err := ctrl.updateVolumePhase(ctx, volume, v1.VolumeAvailable, ""); err != nil {
-				// Nothing was saved; we will fall back into the same
-				// condition in the next call to this method
+				// 什么都没保存成功；下次调用本方法时仍会回到同样的状态并重试。
 				return err
 			}
 			return nil
 		}
 		logger.V(4).Info("Synchronizing PersistentVolume, volume is bound to claim", "PVC", klog.KRef(volume.Spec.ClaimRef.Namespace, volume.Spec.ClaimRef.Name), "volumeName", volume.Name)
-		// Get the PVC by _name_
+		// 按名称查找对应的 PVC。
 		var claim *v1.PersistentVolumeClaim
 		claimName := claimrefToClaimKey(volume.Spec.ClaimRef)
 		obj, found, err := ctrl.claims.GetByKey(claimName)
@@ -605,16 +580,13 @@ func (ctrl *PersistentVolumeController) syncVolume(ctx context.Context, volume *
 			return err
 		}
 		if !found {
-			// If the PV was created by an external PV provisioner or
-			// bound by external PV binder (e.g. kube-scheduler), it's
-			// possible under heavy load that the corresponding PVC is not synced to
-			// controller local cache yet. So we need to double-check PVC in
-			//   1) informer cache
-			//   2) apiserver if not found in informer cache
-			// to make sure we will not reclaim a PV wrongly.
-			// Note that only non-released and non-failed volumes will be
-			// updated to Released state when PVC does not exist.
+			// 如果 PV 是由外部制备器创建或由外部绑定器（如 kube-scheduler）绑定的，高负载下对应的 PVC 可能还没有同步到控制器本地缓存。
+			// 因此需要依次确认 PVC 是否存在于： 1）informer 缓存；
+			// 2）若 informer 中未找到，再查 API server；
+			// 以确保不会错误地回收 PV。
+			// 注意，当 PVC 不存在时，只有非 Released 和非 Failed 的卷才会被更新为 Released。
 			if volume.Status.Phase != v1.VolumeReleased && volume.Status.Phase != v1.VolumeFailed {
+				// 仅对非 Released/Failed 的卷做二次确认，避免把已处于终态的卷错误地回收。
 				obj, err = ctrl.claimLister.PersistentVolumeClaims(volume.Spec.ClaimRef.Namespace).Get(volume.Spec.ClaimRef.Name)
 				if err != nil && !apierrors.IsNotFound(err) {
 					return err
@@ -631,7 +603,7 @@ func (ctrl *PersistentVolumeController) syncVolume(ctx context.Context, volume *
 		}
 		if !found {
 			logger.V(4).Info("Synchronizing PersistentVolume, claim not found", "PVC", klog.KRef(volume.Spec.ClaimRef.Namespace, volume.Spec.ClaimRef.Name), "volumeName", volume.Name)
-			// Fall through with claim = nil
+			// 继续往下执行，此时 claim 为 nil。
 		} else {
 			var ok bool
 			claim, ok = obj.(*v1.PersistentVolumeClaim)
@@ -641,17 +613,18 @@ func (ctrl *PersistentVolumeController) syncVolume(ctx context.Context, volume *
 			logger.V(4).Info("Synchronizing PersistentVolume, claim found", "PVC", klog.KRef(volume.Spec.ClaimRef.Namespace, volume.Spec.ClaimRef.Name), "claimStatus", getClaimStatusForLogging(claim), "volumeName", volume.Name)
 		}
 		if claim != nil && claim.UID != volume.Spec.ClaimRef.UID {
-			// The claim that the PV was pointing to was deleted, and another
-			// with the same name created.
-			// in some cases, the cached claim is not the newest, and the volume.Spec.ClaimRef.UID is newer than cached.
-			// so we should double check by calling apiserver and get the newest claim, then compare them.
+			// 可能是同名声明被删除后重建；本地缓存可能过期，需向 API server 取最新声明核对 UID。
+			// PV 原来指向的声明已被删除，
+			// 之后又创建了一个同名声明。
+			// 有时缓存中的声明不是最新的，而 volume.Spec.ClaimRef.UID 更新，
+			// 因此需要向 API server 取最新声明再比较。
 			logger.V(4).Info("Maybe cached claim is not the newest one, we should fetch it from apiserver", "PVC", klog.KRef(volume.Spec.ClaimRef.Namespace, volume.Spec.ClaimRef.Name))
 
 			claim, err = ctrl.kubeClient.CoreV1().PersistentVolumeClaims(volume.Spec.ClaimRef.Namespace).Get(ctx, volume.Spec.ClaimRef.Name, metav1.GetOptions{})
 			if err != nil && !apierrors.IsNotFound(err) {
 				return err
 			} else if claim != nil {
-				// Treat the volume as bound to a missing claim.
+				// 把该卷视为绑定到一个已经不存在的声明。
 				if claim.UID != volume.Spec.ClaimRef.UID {
 					logger.V(4).Info("Synchronizing PersistentVolume, claim has a newer UID than pv.ClaimRef, the old one must have been deleted", "PVC", klog.KRef(volume.Spec.ClaimRef.Namespace, volume.Spec.ClaimRef.Name), "volumeName", volume.Name)
 					claim = nil
@@ -662,110 +635,91 @@ func (ctrl *PersistentVolumeController) syncVolume(ctx context.Context, volume *
 		}
 
 		if claim == nil {
-			// If we get into this block, the claim must have been deleted;
-			// NOTE: reclaimVolume may either release the PV back into the pool or
-			// recycle it or do nothing (retain)
+			// 进入此分支说明声明一定已被删除。 注意：reclaimVolume 可能把 PV 释放回资源池、回收它，或什么都不做（Retain）。
 
-			// Do not overwrite previous Failed state - let the user see that
-			// something went wrong, while we still re-try to reclaim the
-			// volume.
+			// 不要覆盖之前的 Failed 状态：让用户看到曾出错，同时我们仍会继续尝试回收该卷。
 			if volume.Status.Phase != v1.VolumeReleased && volume.Status.Phase != v1.VolumeFailed {
-				// Also, log this only once:
+				// 不要覆盖之前的 Failed 状态，以便用户看到曾发生的错误；同时只记录一次日志。
+				// 另外，这条日志只记录一次：
 				logger.V(2).Info("Volume is released and reclaim policy will be executed", "volumeName", volume.Name, "reclaimPolicy", volume.Spec.PersistentVolumeReclaimPolicy)
 				if volume, err = ctrl.updateVolumePhase(ctx, volume, v1.VolumeReleased, ""); err != nil {
-					// Nothing was saved; we will fall back into the same condition
-					// in the next call to this method
+					// 什么都没保存成功；下次调用本方法时仍会回到同样的状态并重试。
 					return err
 				}
 			}
 			if err = ctrl.reclaimVolume(ctx, volume); err != nil {
-				// Release failed, we will fall back into the same condition
-				// in the next call to this method
+				// 释放失败，下次调用本方法时仍会回到同样的状态并重试。
 				return err
 			}
 			if volume.Spec.PersistentVolumeReclaimPolicy == v1.PersistentVolumeReclaimRetain {
-				// volume is being retained, it references a claim that does not exist now.
+				// 卷的策略为 Retain，它仍引用着一个现在已经不存在的声明。
 				logger.V(4).Info("PersistentVolume references a claim that is not found", "PVC", klog.KRef(volume.Spec.ClaimRef.Namespace, volume.Spec.ClaimRef.Name), "claimUID", volume.Spec.ClaimRef.UID, "volumeName", volume.Name)
 			}
 			return nil
 		} else if claim.Spec.VolumeName == "" {
 			if storagehelpers.CheckVolumeModeMismatches(&claim.Spec, &volume.Spec) {
-				// Binding for the volume won't be called in syncUnboundClaim,
-				// because findBestMatchForClaim won't return the volume due to volumeMode mismatch.
+				// syncUnboundClaim 中不会对该卷执行绑定，因为 volumeMode 不匹配时 findBestMatchForClaim 不会返回该卷。
 				volumeMsg := fmt.Sprintf("Cannot bind PersistentVolume to requested PersistentVolumeClaim %q due to incompatible volumeMode.", claim.Name)
 				ctrl.eventRecorder.Event(volume, v1.EventTypeWarning, events.VolumeMismatch, volumeMsg)
 				claimMsg := fmt.Sprintf("Cannot bind PersistentVolume %q to requested PersistentVolumeClaim due to incompatible volumeMode.", volume.Name)
 				ctrl.eventRecorder.Event(claim, v1.EventTypeWarning, events.VolumeMismatch, claimMsg)
-				// Skipping syncClaim
+				// 跳过本次 syncClaim。
 				return nil
 			}
 
 			if metav1.HasAnnotation(volume.ObjectMeta, storagehelpers.AnnBoundByController) {
-				// The binding is not completed; let PVC sync handle it
+				// 控制器绑定的卷被解绑：这是控制器的正常修正逻辑，直接解除绑定。
+				// 绑定尚未完成，交给 PVC 同步流程处理。
 				logger.V(4).Info("Synchronizing PersistentVolume, volume not bound yet, waiting for syncClaim to fix it", "volumeName", volume.Name)
 			} else {
-				// Dangling PV; try to re-establish the link in the PVC sync
+				// 悬空的 PV，尝试在 PVC 同步流程中重新建立关联。
 				logger.V(4).Info("Synchronizing PersistentVolume, volume was bound and got unbound (by user?), waiting for syncClaim to fix it", "volumeName", volume.Name)
 			}
-			// In both cases, the volume is Bound and the claim is Pending.
-			// Next syncClaim will fix it. To speed it up, we enqueue the claim
-			// into the controller, which results in syncClaim to be called
-			// shortly (and in the right worker goroutine).
-			// This speeds up binding of provisioned volumes - provisioner saves
-			// only the new PV and it expects that next syncClaim will bind the
-			// claim to it.
+			// 两种情况下卷都是 Bound、声明都是 Pending，下一次 syncClaim 会修正它。
+			// 为加快处理，这里把声明入队，从而很快在正确的工作 goroutine 中调用 syncClaim。
+			// 这能加速已制备卷的绑定：制备器只保存新 PV，并期望下一次 syncClaim 把声明绑定到它。
 			ctrl.claimQueue.Add(claimToClaimKey(claim))
+			// 主动把声明入队以加快绑定，确保由正确的工作 goroutine 尽快调用 syncClaim。
 			return nil
 		} else if claim.Spec.VolumeName == volume.Name {
-			// Volume is bound to a claim properly, update status if necessary
+			// 卷已正确绑定到声明，必要时更新其状态。
 			logger.V(4).Info("Synchronizing PersistentVolume, all is bound", "volumeName", volume.Name)
 			if _, err = ctrl.updateVolumePhase(ctx, volume, v1.VolumeBound, ""); err != nil {
-				// Nothing was saved; we will fall back into the same
-				// condition in the next call to this method
+				// 什么都没保存成功；下次调用本方法时仍会回到同样的状态并重试。
 				return err
 			}
 			return nil
 		} else {
-			// Volume is bound to a claim, but the claim is bound elsewhere
+			// 卷绑定到了某个声明，但该声明却绑定到了别处。
 			if metav1.HasAnnotation(volume.ObjectMeta, storagehelpers.AnnDynamicallyProvisioned) && volume.Spec.PersistentVolumeReclaimPolicy == v1.PersistentVolumeReclaimDelete {
-				// This volume was dynamically provisioned for this claim. The
-				// claim got bound elsewhere, and thus this volume is not
-				// needed. Delete it.
-				// Mark the volume as Released for external deleters and to let
-				// the user know. Don't overwrite existing Failed status!
+				// 该卷是为这个声明动态制备的，而声明已绑定到别处，因此不再需要该卷，应删除它。 把卷标记为 Released，供外部删除器识别并提示用户；但不要覆盖已有的 Failed 状态！
 				if volume.Status.Phase != v1.VolumeReleased && volume.Status.Phase != v1.VolumeFailed {
-					// Also, log this only once:
+					// 动态制备的卷不再被需要时先标记 Released，供外部删除器识别并提示用户，但不覆盖 Failed。
+					// 另外，这条日志只记录一次：
 					logger.V(2).Info("Dynamically provisioned volume is released and it will be deleted", "volumeName", volume.Name)
 					if volume, err = ctrl.updateVolumePhase(ctx, volume, v1.VolumeReleased, ""); err != nil {
-						// Nothing was saved; we will fall back into the same condition
-						// in the next call to this method
+						// 什么都没保存成功；下次调用本方法时仍会回到同样的状态并重试。
 						return err
 					}
 				}
 				if err = ctrl.reclaimVolume(ctx, volume); err != nil {
-					// Deletion failed, we will fall back into the same condition
-					// in the next call to this method
+					// 删除失败，下次调用本方法时仍会回到同样的状态并重试。
 					return err
 				}
 				return nil
 			} else {
-				// Volume is bound to a claim, but the claim is bound elsewhere
-				// and it's not dynamically provisioned.
+				// 卷绑定到了某个声明，但该声明绑定到了别处，且该卷不是动态制备的。
 				if metav1.HasAnnotation(volume.ObjectMeta, storagehelpers.AnnBoundByController) {
-					// This is part of the normal operation of the controller; the
-					// controller tried to use this volume for a claim but the claim
-					// was fulfilled by another volume. We did this; fix it.
+					// 这是控制器正常操作的一部分：控制器曾尝试把该卷用于某个声明，但该声明后来由另一个卷满足了。 这是我们自己造成的，应当自行修正。
 					logger.V(4).Info("Synchronizing PersistentVolume, volume is bound by controller to a claim that is bound to another volume, unbinding", "volumeName", volume.Name)
 					if err = ctrl.unbindVolume(ctx, volume); err != nil {
 						return err
 					}
 					return nil
 				} else {
-					// The PV must have been created with this ptr; leave it alone.
+					// 这个 PV 必定是带着该 ClaimRef 创建的，保持原样、不要干预。
 					logger.V(4).Info("Synchronizing PersistentVolume, volume is bound by user to a claim that is bound to another volume, waiting for the claim to get unbound", "volumeName", volume.Name)
-					// This just updates the volume phase and clears
-					// volume.Spec.ClaimRef.UID. It leaves the volume pre-bound
-					// to the claim.
+					// 这里只更新卷阶段并清空 volume.Spec.ClaimRef.UID，仍保留卷到声明的预绑定关系。
 					if err = ctrl.unbindVolume(ctx, volume); err != nil {
 						return err
 					}
@@ -776,12 +730,13 @@ func (ctrl *PersistentVolumeController) syncVolume(ctx context.Context, volume *
 	}
 }
 
-// updateClaimStatus saves new claim.Status to API server.
-// Parameters:
-//
-//	claim - claim to update
-//	phase - phase to set
-//	volume - volume which Capacity is set into claim.Status.Capacity and VolumeAttributesClassName is set into claim.Status.CurrentVolumeAttributesClassName
+// updateClaimStatus 把新的 claim.Status 保存到 API server。
+// 只有在确实发生变化时才写入；volume 不为 nil 时，同时把它的 Capacity 写入 claim.Status.Capacity，
+// 把 VolumeAttributesClassName 写入 claim.Status.CurrentVolumeAttributesClassName。
+// 参数：
+//   - claim：要更新的声明
+//   - phase：要设置的阶段
+//   - volume：容量和卷属性类名称的来源卷（可为 nil，表示清空这些状态字段）
 func (ctrl *PersistentVolumeController) updateClaimStatus(ctx context.Context, claim *v1.PersistentVolumeClaim, phase v1.PersistentVolumeClaimPhase, volume *v1.PersistentVolume) (*v1.PersistentVolumeClaim, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Updating PersistentVolumeClaim status", "PVC", klog.KObj(claim), "setPhase", phase)
@@ -789,13 +744,14 @@ func (ctrl *PersistentVolumeController) updateClaimStatus(ctx context.Context, c
 	dirty := false
 
 	claimClone := claim.DeepCopy()
+	// 传入的声明可能指向 informer 缓存，绝不能直接修改，必须先克隆。
 	if claim.Status.Phase != phase {
 		claimClone.Status.Phase = phase
 		dirty = true
 	}
 
 	if volume == nil {
-		// Need to reset AccessModes, Capacity and CurrentVolumeAttributesClassName
+		// 需要清空 AccessModes、Capacity 和 CurrentVolumeAttributesClassName。
 		if claim.Status.AccessModes != nil {
 			claimClone.Status.AccessModes = nil
 			dirty = true
@@ -809,27 +765,28 @@ func (ctrl *PersistentVolumeController) updateClaimStatus(ctx context.Context, c
 			dirty = true
 		}
 	} else {
-		// Need to update AccessModes, Capacity and CurrentVolumeAttributesClassName
+		// 需要更新 AccessModes、Capacity 和 CurrentVolumeAttributesClassName。
 		if !reflect.DeepEqual(claim.Status.AccessModes, volume.Spec.AccessModes) {
 			claimClone.Status.AccessModes = volume.Spec.AccessModes
 			dirty = true
 		}
 
-		// Update Capacity if the claim is becoming Bound, not if it was already.
-		// A discrepancy can be intentional to mean that the PVC filesystem size
-		// doesn't match the PV block device size, so don't clobber it
+		// 只在声明即将进入 Bound 时更新 Capacity，而不是在它已经是 Bound 时更新。 容量不一致可能是有意的（PVC 文件系统大小与 PV 块设备大小不同），因此不要贸然覆盖。
 		if claim.Status.Phase != phase {
 			volumeCap, ok := volume.Spec.Capacity[v1.ResourceStorage]
+			// 仅在声明新进入 Bound 时更新 Capacity：文件系统大小与块设备大小可能有意不同，不要随意覆盖。
 			if !ok {
 				return nil, fmt.Errorf("PersistentVolume %q is without a storage capacity", volume.Name)
 			}
 			claimCap, ok := claim.Status.Capacity[v1.ResourceStorage]
-			// If PV has a resize annotation, set the claim's request capacity
+			// 如果 PV 带有扩容注解，则把声明的状态容量设为扩容前的值。
 			if metav1.HasAnnotation(volume.ObjectMeta, util.AnnPreResizeCapacity) {
+				// 卷需要文件系统扩容时，把 PVC 状态容量设为扩容前的值，以保持与实际文件系统一致。
 				logger.V(2).Info("Volume requires filesystem resize: setting pvc status capacity", "PVC", klog.KObj(claim), "volumeName", volume.Name, "statusCapacity", volume.ObjectMeta.Annotations[util.AnnPreResizeCapacity])
 				preQty, err := resource.ParseQuantity(volume.ObjectMeta.Annotations[util.AnnPreResizeCapacity])
 				if err != nil {
 					logger.Info("Parsing pre-resize-capacity from PV failed", "volumeName", volume.Name, "err", err)
+					// 解析扩容前容量失败时回退到 PV 当前容量，不因注解格式错误而阻断状态更新。
 					preQty = volume.Spec.Capacity[v1.ResourceStorage]
 				}
 				if claimClone.Status.Capacity == nil {
@@ -844,14 +801,14 @@ func (ctrl *PersistentVolumeController) updateClaimStatus(ctx context.Context, c
 		}
 
 		if utilfeature.DefaultFeatureGate.Enabled(features.VolumeAttributesClass) {
-			// There are two components to updating the current vac name, this controller and external-resizer.
-			// The controller ensures that the field is set properly when the volume is statically provisioned.
-			// It is safer for the controller to only set this field during binding, but not after. Without this
-			// constraint, there is a potential race condition where the resizer sets the field after the controller
-			// has set it, or vice versa. Afterwards, it should be handled only by the resizer, or if an admin wants
-			// to override.
+			// 更新当前 VAC 名称由两部分负责：本控制器和 external-resizer。
+			// 控制器确保静态制备的卷在绑定时正确设置该字段。
+			// 控制器只在绑定阶段设置该字段而不在其后修改，这样更安全；
+			// 否则可能与调整器产生竞态 （调整器在控制器之后设置，或反过来）。
+			// 此后该字段应只由调整器处理，除非管理员显式覆盖。
 			if claim.Status.Phase == v1.ClaimPending && phase == v1.ClaimBound &&
 				!reflect.DeepEqual(claim.Status.CurrentVolumeAttributesClassName, volume.Spec.VolumeAttributesClassName) {
+				// VAC 字段只在本控制器完成绑定时设置：之后由 external-resizer 负责，避免与调整器产生竞态。
 				claimClone.Status.CurrentVolumeAttributesClassName = volume.Spec.VolumeAttributesClassName
 				dirty = true
 			}
@@ -859,7 +816,8 @@ func (ctrl *PersistentVolumeController) updateClaimStatus(ctx context.Context, c
 	}
 
 	if !dirty {
-		// Nothing to do.
+		// 无需处理。
+		// 没有任何字段变化则直接返回，避免无意义的 API 写入。
 		logger.V(4).Info("Updating PersistentVolumeClaim status, phase already set", "PVC", klog.KObj(claim), "phase", phase)
 		return claim, nil
 	}
@@ -878,20 +836,19 @@ func (ctrl *PersistentVolumeController) updateClaimStatus(ctx context.Context, c
 	return newClaim, nil
 }
 
-// updateClaimStatusWithEvent saves new claim.Status to API server and emits
-// given event on the claim. It saves the status and emits the event only when
-// the status has actually changed from the version saved in API server.
-// Parameters:
-//
-//	claim - claim to update
-//	phase - phase to set
-//	volume - volume which Capacity is set into claim.Status.Capacity and VolumeAttributesClassName is set into claim.Status.CurrentVolumeAttributesClassName
-//	eventtype, reason, message - event to send, see EventRecorder.Event()
+// updateClaimStatusWithEvent 把新的 claim.Status 保存到 API server，并在声明上发出指定事件。
+// 只有当状态相对 API server 中的版本真正发生变化时才会保存状态并发出事件。
+// 参数：
+//   - claim：要更新的声明
+//   - phase：要设置的阶段
+//   - volume：容量和卷属性类名称的来源卷
+//   - eventtype、reason、message：事件类型、原因和消息，见 EventRecorder.Event()
 func (ctrl *PersistentVolumeController) updateClaimStatusWithEvent(ctx context.Context, claim *v1.PersistentVolumeClaim, phase v1.PersistentVolumeClaimPhase, volume *v1.PersistentVolume, eventtype, reason, message string) (*v1.PersistentVolumeClaim, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Updating updateClaimStatusWithEvent", "PVC", klog.KObj(claim), "setPhase", phase)
 	if claim.Status.Phase == phase {
-		// Nothing to do.
+		// 无需处理。
+		// 阶段已是目标值时直接跳过，既避免重复写入也避免重复发事件。
 		logger.V(4).Info("Updating updateClaimStatusWithEvent, phase already set", "PVC", klog.KObj(claim), "phase", phase)
 		return claim, nil
 	}
@@ -901,20 +858,23 @@ func (ctrl *PersistentVolumeController) updateClaimStatusWithEvent(ctx context.C
 		return nil, err
 	}
 
-	// Emit the event only when the status change happens, not every time
-	// syncClaim is called.
+	// 事件只在状态真正发生变化时发出，而不是每次调用 syncClaim 都发。
 	logger.V(3).Info("Claim changed status", "PVC", klog.KObj(claim), "phase", phase, "message", message)
 	ctrl.eventRecorder.Event(newClaim, eventtype, reason, message)
 
 	return newClaim, nil
 }
 
-// updateVolumePhase saves new volume phase to API server.
+// updateVolumePhase 把新的卷阶段保存到 API server。
+// 若阶段已是目标值则直接返回；否则克隆卷、更新 Status.Phase 与 Status.Message，
+// 写入 API server 后同步内部缓存。
 func (ctrl *PersistentVolumeController) updateVolumePhase(ctx context.Context, volume *v1.PersistentVolume, phase v1.PersistentVolumePhase, message string) (*v1.PersistentVolume, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Updating PersistentVolume", "volumeName", volume.Name, "setPhase", phase)
 	if volume.Status.Phase == phase {
-		// Nothing to do.
+		// 无需处理。
+		// 阶段未变化时不写状态也不发事件。
+		// 阶段已是目标值时无需写入，直接返回。
 		logger.V(4).Info("Updating PersistentVolume: phase already set", "volumeName", volume.Name, "phase", phase)
 		return volume, nil
 	}
@@ -937,14 +897,13 @@ func (ctrl *PersistentVolumeController) updateVolumePhase(ctx context.Context, v
 	return newVol, err
 }
 
-// updateVolumePhaseWithEvent saves new volume phase to API server and emits
-// given event on the volume. It saves the phase and emits the event only when
-// the phase has actually changed from the version saved in API server.
+// updateVolumePhaseWithEvent 把新的卷阶段保存到 API server，并在卷上发出指定事件。
+// 只有当阶段相对 API server 中的版本真正发生变化时才会保存并发出事件。
 func (ctrl *PersistentVolumeController) updateVolumePhaseWithEvent(ctx context.Context, volume *v1.PersistentVolume, phase v1.PersistentVolumePhase, eventtype, reason, message string) (*v1.PersistentVolume, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Updating updateVolumePhaseWithEvent", "volumeName", volume.Name, "setPhase", phase)
 	if volume.Status.Phase == phase {
-		// Nothing to do.
+		// 无需处理。
 		logger.V(4).Info("Updating updateVolumePhaseWithEvent: phase already set", "volumeName", volume.Name, "phase", phase)
 		return volume, nil
 	}
@@ -954,22 +913,22 @@ func (ctrl *PersistentVolumeController) updateVolumePhaseWithEvent(ctx context.C
 		return nil, err
 	}
 
-	// Emit the event only when the status change happens, not every time
-	// syncClaim is called.
+	// 事件只在状态真正发生变化时发出，而不是每次调用 syncClaim 都发。
 	logger.V(3).Info("Volume changed status", "volumeName", volume.Name, "changedPhase", phase, "message", message)
 	ctrl.eventRecorder.Event(newVol, eventtype, reason, message)
 
 	return newVol, nil
 }
 
-// assignDefaultStorageClass updates the claim storage class if there is any, the claim is updated to the API server.
-// Ignores claims that already have a storage class.
-// TODO: if resync is ever changed to a larger period, we might need to change how we set the default class on existing unbound claims
+// assignDefaultStorageClass 为没有指定 StorageClass 的声明补上默认 StorageClass，并写回 API server。
+// 已指定 StorageClass 的声明会被忽略；找不到默认类时不做修改。
+// TODO: 如果 resync 周期被调大，可能需要改变为已有未绑定声明设置默认类的方式。
 func (ctrl *PersistentVolumeController) assignDefaultStorageClass(ctx context.Context, claim *v1.PersistentVolumeClaim) (bool, error) {
 	logger := klog.FromContext(ctx)
 
 	if storagehelpers.PersistentVolumeClaimHasClass(claim) {
-		// The user asked for a class.
+		// 用户已指定 StorageClass，必须尊重其选择，不能覆盖。
+		// 用户已指定 StorageClass。
 		return false, nil
 	}
 
@@ -977,6 +936,7 @@ func (ctrl *PersistentVolumeController) assignDefaultStorageClass(ctx context.Co
 	if err != nil {
 		return false, err
 	} else if class == nil {
+		// 没有默认 StorageClass 时保持声明原样，由后续流程按无类情况处理。
 		logger.V(4).Info("Can not assign storage class to PersistentVolumeClaim: default storage class not found", "PVC", klog.KObj(claim))
 		return false, nil
 	}
@@ -992,8 +952,8 @@ func (ctrl *PersistentVolumeController) assignDefaultStorageClass(ctx context.Co
 	return true, nil
 }
 
-// bindVolumeToClaim modifies given volume to be bound to a claim and saves it to
-// API server. The claim is not modified in this method!
+// bindVolumeToClaim 修改给定卷使其绑定到声明，并保存到 API server。
+// 该方法不会修改声明本身；若没有任何变化则跳过写入。
 func (ctrl *PersistentVolumeController) bindVolumeToClaim(ctx context.Context, volume *v1.PersistentVolume, claim *v1.PersistentVolumeClaim) (*v1.PersistentVolume, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Updating PersistentVolume: binding to claim", "PVC", klog.KObj(claim), "volumeName", volume.Name)
@@ -1003,17 +963,18 @@ func (ctrl *PersistentVolumeController) bindVolumeToClaim(ctx context.Context, v
 		return nil, err
 	}
 
-	// Save the volume only if something was changed
+	// 只有确实发生改动时才保存卷。
 	if dirty {
 		return ctrl.updateBindVolumeToClaim(ctx, volumeClone, true)
+		// 只有 ClaimRef 等字段确实变化时才写回，避免无意义的 API 调用。
 	}
 
 	logger.V(4).Info("Updating PersistentVolume: already bound to claim", "PVC", klog.KObj(claim), "volumeName", volume.Name)
 	return volume, nil
 }
 
-// updateBindVolumeToClaim modifies given volume to be bound to a claim and saves it to
-// API server. The claim is not modified in this method!
+// updateBindVolumeToClaim 把已经准备好的卷副本写入 API server 完成绑定。
+// 与 bindVolumeToClaim 不同，它不再计算差异，直接执行更新；updateCache 控制是否同步内部缓存。
 func (ctrl *PersistentVolumeController) updateBindVolumeToClaim(ctx context.Context, volumeClone *v1.PersistentVolume, updateCache bool) (*v1.PersistentVolume, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(2).Info("Claim bound to volume", "PVC", klog.KRef(volumeClone.Spec.ClaimRef.Namespace, volumeClone.Spec.ClaimRef.Name), "volumeName", volumeClone.Name)
@@ -1023,6 +984,7 @@ func (ctrl *PersistentVolumeController) updateBindVolumeToClaim(ctx context.Cont
 		return newVol, err
 	}
 	if updateCache {
+		// 某些调用场景不希望立刻更新缓存（例如随后还会修改卷），由调用方决定是否同步。
 		_, err = ctrl.storeVolumeUpdate(logger, newVol)
 		if err != nil {
 			logger.V(4).Info("Updating PersistentVolume: cannot update internal cache", "volumeName", volumeClone.Name, "err", err)
@@ -1033,37 +995,38 @@ func (ctrl *PersistentVolumeController) updateBindVolumeToClaim(ctx context.Cont
 	return newVol, nil
 }
 
-// bindClaimToVolume modifies the given claim to be bound to a volume and
-// saves it to API server. The volume is not modified in this method!
+// bindClaimToVolume 修改给定声明使其绑定到卷，并保存到 API server。
+// 该方法不会修改卷本身；会设置 Spec.VolumeName、AnnBoundByController 和 AnnBindCompleted 注解。
 func (ctrl *PersistentVolumeController) bindClaimToVolume(ctx context.Context, claim *v1.PersistentVolumeClaim, volume *v1.PersistentVolume) (*v1.PersistentVolumeClaim, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Updating PersistentVolumeClaim: binding to volume", "PVC", klog.KObj(claim), "volumeName", volume.Name)
 
 	dirty := false
 
-	// Check if the claim was already bound (either by controller or by user)
+	// 检查声明是否已绑定（无论由控制器还是用户绑定）。
 	shouldBind := false
 	if volume.Name != claim.Spec.VolumeName {
 		shouldBind = true
 	}
 
-	// The claim from method args can be pointing to watcher cache. We must not
-	// modify these, therefore create a copy.
+	// 方法参数中的声明可能指向 watcher 缓存，绝不能直接修改，必须先创建副本。
 	claimClone := claim.DeepCopy()
 
 	if shouldBind {
 		dirty = true
-		// Bind the claim to the volume
+		// 把声明绑定到卷。
 		claimClone.Spec.VolumeName = volume.Name
 
-		// Set AnnBoundByController if it is not set yet
+		// 若尚未设置 AnnBoundByController 注解，则补上。
 		if !metav1.HasAnnotation(claimClone.ObjectMeta, storagehelpers.AnnBoundByController) {
+			// 标记绑定由控制器完成，便于后续冲突时判断能否自动解绑。
 			metav1.SetMetaDataAnnotation(&claimClone.ObjectMeta, storagehelpers.AnnBoundByController, "yes")
 		}
 	}
 
-	// Set AnnBindCompleted if it is not set yet
+	// 若尚未设置 AnnBindCompleted 注解，则补上。
 	if !metav1.HasAnnotation(claimClone.ObjectMeta, storagehelpers.AnnBindCompleted) {
+		// AnnBindCompleted 用于区分声明是否已进入绑定流程，是 syncClaim 分派的关键标志。
 		metav1.SetMetaDataAnnotation(&claimClone.ObjectMeta, storagehelpers.AnnBindCompleted, "yes")
 		dirty = true
 	}
@@ -1088,14 +1051,12 @@ func (ctrl *PersistentVolumeController) bindClaimToVolume(ctx context.Context, c
 	return claim, nil
 }
 
-// bind saves binding information both to the volume and the claim and marks
-// both objects as Bound. Volume is saved first.
-// It returns on first error, it's up to the caller to implement some retry
-// mechanism.
+// bind 把绑定信息同时写入卷和声明，并把两者都标记为 Bound。
+// 按“卷 Spec → 卷 Status → 声明 Spec → 声明 Status”的顺序保存：先改卷，
+// 这样即使中途失败，后续同步也能从卷侧恢复。遇到第一个错误就返回，重试由调用方负责。
 func (ctrl *PersistentVolumeController) bind(ctx context.Context, volume *v1.PersistentVolume, claim *v1.PersistentVolumeClaim) error {
 	var err error
-	// use updateClaim/updatedVolume to keep the original claim/volume for
-	// logging in error cases.
+	// 使用 updateClaim/updatedVolume 变量保存更新后的对象，以便在出错时仍能记录原始的声明/卷。
 	var updatedClaim *v1.PersistentVolumeClaim
 	var updatedVolume *v1.PersistentVolume
 
@@ -1103,6 +1064,7 @@ func (ctrl *PersistentVolumeController) bind(ctx context.Context, volume *v1.Per
 	logger.V(4).Info("Binding volume to claim", "PVC", klog.KObj(claim), "volumeName", volume.Name)
 
 	if updatedVolume, err = ctrl.bindVolumeToClaim(ctx, volume, claim); err != nil {
+		// 先绑定卷是两步事务的第一步，失败时声明尚未被改动，可安全重试。
 		logger.V(3).Info("Error binding volume to claim: failed saving the volume", "PVC", klog.KObj(claim), "volumeName", volume.Name, "err", err)
 		return err
 	}
@@ -1115,6 +1077,7 @@ func (ctrl *PersistentVolumeController) bind(ctx context.Context, volume *v1.Per
 	volume = updatedVolume
 
 	if updatedClaim, err = ctrl.bindClaimToVolume(ctx, claim, volume); err != nil {
+		// 卷侧完成后再改声明，避免声明先指向一个尚未预留的卷。
 		logger.V(3).Info("Error binding volume to claim: failed saving the claim", "PVC", klog.KObj(claim), "volumeName", volume.Name, "err", err)
 		return err
 	}
@@ -1132,30 +1095,29 @@ func (ctrl *PersistentVolumeController) bind(ctx context.Context, volume *v1.Per
 	return nil
 }
 
-// unbindVolume rolls back previous binding of the volume. This may be necessary
-// when two controllers bound two volumes to single claim - when we detect this,
-// only one binding succeeds and the second one must be rolled back.
-// This method updates both Spec and Status.
-// It returns on first error, it's up to the caller to implement some retry
-// mechanism.
+// unbindVolume 回滚卷上先前的绑定信息。
+// 当两个控制器把两个卷绑定到同一个声明时，只有一个绑定会成功，另一个必须回滚。
+// 该方法同时更新 Spec 和 Status；遇到第一个错误就返回，重试由调用方负责。
 func (ctrl *PersistentVolumeController) unbindVolume(ctx context.Context, volume *v1.PersistentVolume) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Updating PersistentVolume: rolling back binding from claim", "PVC", klog.KRef(volume.Spec.ClaimRef.Namespace, volume.Spec.ClaimRef.Name), "volumeName", volume.Name)
 
-	// Save the PV only when any modification is necessary.
+	// 只有确实需要修改时才保存 PV。
 	volumeClone := volume.DeepCopy()
 
 	if metav1.HasAnnotation(volume.ObjectMeta, storagehelpers.AnnBoundByController) {
-		// The volume was bound by the controller.
+		// 该卷由控制器绑定。
+		// 控制器绑定的卷可以彻底清除 ClaimRef；用户预绑定的卷只需清空 UID，保留预绑定关系。
 		volumeClone.Spec.ClaimRef = nil
 		delete(volumeClone.Annotations, storagehelpers.AnnBoundByController)
 		if len(volumeClone.Annotations) == 0 {
-			// No annotations look better than empty annotation map (and it's easier
-			// to test).
+			// 空注解 map 不如 nil 直观，也难测试，因此清空为 nil。
+			// 没有注解比空注解 map 更好（也更容易
+			// 测试）。
 			volumeClone.Annotations = nil
 		}
 	} else {
-		// The volume was pre-bound by user. Clear only the binding UID.
+		// 该卷由用户预绑定，只清空绑定的 UID，保留其余预绑定信息。
 		volumeClone.Spec.ClaimRef.UID = ""
 	}
 
@@ -1171,18 +1133,19 @@ func (ctrl *PersistentVolumeController) unbindVolume(ctx context.Context, volume
 	}
 	logger.V(4).Info("Updating PersistentVolume: rolled back", "volumeName", newVol.Name)
 
-	// Update the status
+	// 更新状态。
 	_, err = ctrl.updateVolumePhase(ctx, newVol, v1.VolumeAvailable, "")
 	return err
 }
 
-// reclaimVolume implements volume.Spec.PersistentVolumeReclaimPolicy and
-// starts appropriate reclaim action.
+// reclaimVolume 根据 volume.Spec.PersistentVolumeReclaimPolicy 执行相应的回收动作：
+// Retain 不处理，Recycle 和 Delete 调度为异步操作，未知策略则把卷标记为 Failed。
 func (ctrl *PersistentVolumeController) reclaimVolume(ctx context.Context, volume *v1.PersistentVolume) error {
 	logger := klog.FromContext(ctx)
 	if migrated := volume.Annotations[storagehelpers.AnnMigratedTo]; len(migrated) > 0 {
-		// PV is Migrated. The PV controller should stand down and the external
-		// provisioner will handle this PV
+		// 已迁移到 CSI 的 PV 应由外部制备器处理，PV 控制器必须让位，不做回收。
+		// PV 已迁移，PV 控制器应当让位，
+		// 由外部制备器处理该 PV。
 		return nil
 	}
 	switch volume.Spec.PersistentVolumeReclaimPolicy {
@@ -1199,23 +1162,22 @@ func (ctrl *PersistentVolumeController) reclaimVolume(ctx context.Context, volum
 
 	case v1.PersistentVolumeReclaimDelete:
 		logger.V(4).Info("ReclaimVolume: policy is Delete", "volumeName", volume.Name)
+		// Delete 策略需要记录删除操作的起始时间，以便后续统计删除延迟。
 		opName := fmt.Sprintf("delete-%s[%s]", volume.Name, string(volume.UID))
-		// create a start timestamp entry in cache for deletion operation if no one exists with
-		// key = volume.Name, pluginName = provisionerName, operation = "delete"
+		// 为删除操作记录起始时间戳（若尚无对应条目）：键为 volume.Name，pluginName 为制备器名称，operation 为 "delete"。
 		ctrl.operationTimestamps.AddIfNotExist(volume.Name, ctrl.getProvisionerNameFromVolume(volume), "delete")
 		ctrl.scheduleOperation(logger, opName, func() error {
 			_, err := ctrl.deleteVolumeOperation(ctx, volume)
 			if err != nil {
-				// only report error count to "volume_operation_total_errors"
-				// latency reporting will happen when the volume get finally
-				// deleted and a volume deleted event is captured
+				// 这里只把错误计数上报到 "volume_operation_total_errors"；延迟指标会在卷最终被删除、 捕获到卷删除事件后再上报。
 				metrics.RecordMetric(volume.Name, &ctrl.operationTimestamps, err)
 			}
 			return err
 		})
 
 	default:
-		// Unknown PersistentVolumeReclaimPolicy
+		// 未知的 PersistentVolumeReclaimPolicy。
+		// 未知回收策略无法自动处理，标记为 Failed 并发出告警事件让用户介入。
 		if _, err := ctrl.updateVolumePhaseWithEvent(ctx, volume, v1.VolumeFailed, v1.EventTypeWarning, "VolumeUnknownReclaimPolicy", "Volume has unrecognized PersistentVolumeReclaimPolicy"); err != nil {
 			return err
 		}
@@ -1223,15 +1185,17 @@ func (ctrl *PersistentVolumeController) reclaimVolume(ctx context.Context, volum
 	return nil
 }
 
-// recycleVolumeOperation recycles a volume. This method is running in
-// standalone goroutine and already has all necessary locks.
+// recycleVolumeOperation 回收一个卷。该方法运行在独立的 goroutine 中，已持有所有必要的锁。
+// 它先重新读取卷的最新状态并确认仍需回收、且没有被 Pod 使用，再查找回收插件执行回收；
+// 成功后解除绑定使卷重新可用，任何失败都只记录日志/事件并交给下一次同步重试。
 func (ctrl *PersistentVolumeController) recycleVolumeOperation(ctx context.Context, volume *v1.PersistentVolume) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("RecycleVolumeOperation started", "volumeName", volume.Name)
 
-	// This method may have been waiting for a volume lock for some time.
-	// Previous recycleVolumeOperation might just have saved an updated version,
-	// so read current volume state now.
+	// 本方法可能已等待卷锁一段时间。
+	// 上一次 recycleVolumeOperation 可能刚保存了更新版本，
+	// 因此现在重新读取卷的最新状态。
+	// 等待锁期间卷可能已被上一次操作更新，必须重新读取以避免基于陈旧状态操作。
 	newVolume, err := ctrl.kubeClient.CoreV1().PersistentVolumes().Get(ctx, volume.Name, metav1.GetOptions{})
 	if err != nil {
 		logger.V(3).Info("Error reading persistent volume", "volumeName", volume.Name, "err", err)
@@ -1244,6 +1208,7 @@ func (ctrl *PersistentVolumeController) recycleVolumeOperation(ctx context.Conte
 	}
 	if !needsReclaim {
 		logger.V(3).Info("Volume no longer needs recycling, skipping", "volumeName", volume.Name)
+		// 卷可能已被其他流程处理，不再需要回收时直接跳过。
 		return
 	}
 	pods, used, err := ctrl.isVolumeUsed(newVolume)
@@ -1252,10 +1217,11 @@ func (ctrl *PersistentVolumeController) recycleVolumeOperation(ctx context.Conte
 		return
 	}
 
-	// Verify the claim is in cache: if so, then it is a different PVC with the same name
-	// since the volume is known to be released at this moment. The new (cached) PVC must use
-	// a different PV -- we checked that the PV is unused in isVolumeReleased.
-	// So the old PV is safe to be recycled.
+	// 确认缓存中是否存在该声明：若存在，则它必定是同名的新 PVC，
+	// 因为此时已知该卷已 Released；缓存中的新 PVC 必须使用
+	// 另一个 PV（isVolumeReleased 已确认本卷未被使用）。
+	// 因此回收旧 PV 是安全的。
+	// 若缓存中存在同名 PVC，它一定是新建的不同声明（旧 PV 已 Released 且未被使用），因此回收旧 PV 是安全的。
 	claimName := claimrefToClaimKey(volume.Spec.ClaimRef)
 	_, claimCached, err := ctrl.claims.GetByKey(claimName)
 	if err != nil {
@@ -1264,63 +1230,66 @@ func (ctrl *PersistentVolumeController) recycleVolumeOperation(ctx context.Conte
 	}
 
 	if used && !claimCached {
+		// 卷仍被 Pod 使用且没有同名新声明时，回收会破坏数据，必须放弃。
 		msg := fmt.Sprintf("Volume is used by pods: %s", strings.Join(pods, ","))
 		logger.V(3).Info("Can't recycle volume", "volumeName", volume.Name, "msg", msg)
 		ctrl.eventRecorder.Event(volume, v1.EventTypeNormal, events.VolumeFailedRecycle, msg)
 		return
 	}
 
-	// Use the newest volume copy, this will save us from version conflicts on
-	// saving.
+	// 使用最新读取的卷副本，可避免保存时发生
+	// 版本冲突。
+	// 使用最新读取的副本可避免后续保存时发生版本冲突。
 	volume = newVolume
 
-	// Find a plugin.
+	// 查找插件。
 	spec := vol.NewSpecFromPersistentVolume(volume, false)
 	plugin, err := ctrl.volumePluginMgr.FindRecyclablePluginBySpec(spec)
 	if err != nil {
-		// No recycler found. Emit an event and mark the volume Failed.
+		// 未找到回收插件，发出事件并把卷标记为 Failed。
+		// 找不到回收插件时把卷标记为 Failed 并发出事件；即使 Failed，仍会在每次 syncVolume 时重试。
 		if _, err = ctrl.updateVolumePhaseWithEvent(ctx, volume, v1.VolumeFailed, v1.EventTypeWarning, events.VolumeFailedRecycle, "No recycler plugin found for the volume!"); err != nil {
 			logger.V(4).Info("RecycleVolumeOperation: failed to mark volume as failed", "volumeName", volume.Name, "err", err)
-			// Save failed, retry on the next deletion attempt
+			// 保存失败，下一次删除尝试时会重试。
 			return
 		}
-		// Despite the volume being Failed, the controller will retry recycling
-		// the volume in every syncVolume() call.
+		// 即使卷被标记为 Failed，控制器仍会在每次 syncVolume() 调用时重试回收。
 		return
 	}
 
-	// Plugin found
+	// 已找到插件。
 	recorder := ctrl.newRecyclerEventRecorder(volume)
 
 	if err = plugin.Recycle(volume.Name, spec, recorder); err != nil {
-		// Recycler failed
+		// 回收失败。
 		strerr := fmt.Sprintf("Recycle failed: %s", err)
 		if _, err = ctrl.updateVolumePhaseWithEvent(ctx, volume, v1.VolumeFailed, v1.EventTypeWarning, events.VolumeFailedRecycle, strerr); err != nil {
 			logger.V(4).Info("RecycleVolumeOperation: failed to mark volume as failed", "volumeName", volume.Name, "err", err)
-			// Save failed, retry on the next deletion attempt
+			// 保存失败，下一次删除尝试时会重试。
 			return
 		}
-		// Despite the volume being Failed, the controller will retry recycling
-		// the volume in every syncVolume() call.
+		// 即使卷被标记为 Failed，控制器仍会在每次 syncVolume() 调用时重试回收。
 		return
 	}
 
 	logger.V(2).Info("Volume recycled", "volumeName", volume.Name)
-	// Send an event
+	// 发出事件。
 	ctrl.eventRecorder.Event(volume, v1.EventTypeNormal, events.VolumeRecycled, "Volume recycled")
-	// Make the volume available again
+	// 让卷重新变为 Available。
 	if err = ctrl.unbindVolume(ctx, volume); err != nil {
-		// Oops, could not save the volume and therefore the controller will
-		// recycle the volume again on next update. We _could_ maintain a cache
-		// of "recently recycled volumes" and avoid unnecessary recycling, this
-		// is left out as future optimization.
+		// 糟糕，卷未能保存，因此控制器会
+		// 解绑失败会导致下次同步再次回收；维护“最近已回收卷”缓存来避免重复是未来的优化点。
+		// 在下次更新时再次回收。我们*可以*维护一个
+		// “最近已回收卷”缓存来避免不必要的回收，
+		// 这留作未来的优化。
 		logger.V(3).Info("RecycleVolumeOperation: failed to make recycled volume 'Available', we will recycle the volume again", "volumeName", volume.Name, "err", err)
 		return
 	}
 }
 
-// deleteVolumeOperation deletes a volume. This method is running in standalone
-// goroutine and already has all necessary locks.
+// deleteVolumeOperation 删除一个卷。该方法运行在独立的 goroutine 中，已持有所有必要的锁。
+// 它查找删除插件、重新确认卷仍待删除、执行底层存储删除，最后从 API server 删除 PV 对象。
+// 返回插件名供指标使用；底层删除失败时标记卷 Failed 或（对 VolumeInUse 错误）仅发普通事件。
 func (ctrl *PersistentVolumeController) deleteVolumeOperation(ctx context.Context, volume *v1.PersistentVolume) (string, error) {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("DeleteVolumeOperation started", "volumeName", volume.Name)
@@ -1329,21 +1298,23 @@ func (ctrl *PersistentVolumeController) deleteVolumeOperation(ctx context.Contex
 	if err != nil {
 		if _, err := ctrl.updateVolumePhaseWithEvent(ctx, volume, v1.VolumeFailed, v1.EventTypeWarning, events.VolumeFailedDelete, err.Error()); err != nil {
 			logger.V(4).Info("DeleteVolumeOperation: failed to mark volume as failed", "volumeName", volume.Name, "err", err)
-			// Save failed, retry on the next deletion attempt
+			// 保存失败，下一次删除尝试时会重试。
 			return "", err
 		}
 	}
 	if plugin == nil {
-		// External deleter is requested, do nothing
+		// 已请求外部删除器，这里不做任何操作。
+		// 找到外部删除器时不执行内部删除，由外部组件负责。
 		logger.V(3).Info("External deleter for volume requested, ignoring", "volumeName", volume.Name)
 		return "", nil
 	}
 	pluginName := plugin.GetPluginName()
 	logger.V(5).Info("Found a deleter plugin for volume", "pluginName", pluginName, "volumeName", volume.Name)
 
-	// This method may have been waiting for a volume lock for some time.
-	// Previous deleteVolumeOperation might just have saved an updated version, so
-	// read current volume state now.
+	// 本方法可能已等待卷锁一段时间。
+	// 上一次 deleteVolumeOperation 可能刚保存了更新版本，
+	// 因此现在重新读取卷的最新状态。
+	// 等待锁期间卷可能已被更新，重新读取最新状态再判断是否仍需删除。
 	newVolume, err := ctrl.kubeClient.CoreV1().PersistentVolumes().Get(ctx, volume.Name, metav1.GetOptions{})
 	if err != nil {
 		logger.V(3).Info("Error reading persistent volume", "volumeName", volume.Name, "err", err)
@@ -1362,53 +1333,52 @@ func (ctrl *PersistentVolumeController) deleteVolumeOperation(ctx context.Contex
 
 	err = ctrl.doDeleteVolume(ctx, plugin, volume)
 	if err != nil {
-		// Delete failed, update the volume and emit an event.
+		// 删除失败，更新卷状态并发出事件。
 		logger.V(3).Info("Deletion of volume failed", "volumeName", volume.Name, "err", err)
 		if volerr.IsDeletedVolumeInUse(err) {
-			// The plugin needs more time, don't mark the volume as Failed
-			// and send Normal event only
+			// 插件只是需要更多时间，不把卷标记为 Failed，
+			// 卷仍被使用时只需插件再等等，不标记 Failed，只发普通事件。
+			// 只发普通事件。
 			ctrl.eventRecorder.Event(volume, v1.EventTypeNormal, events.VolumeDelete, err.Error())
 		} else {
-			// The plugin failed, mark the volume as Failed and send Warning
-			// event
+			// 插件执行失败，把卷标记为 Failed 并发出 Warning 事件。
 			if _, err := ctrl.updateVolumePhaseWithEvent(ctx, volume, v1.VolumeFailed, v1.EventTypeWarning, events.VolumeFailedDelete, err.Error()); err != nil {
 				logger.V(4).Info("DeleteVolumeOperation: failed to mark volume as failed", "volumeName", volume.Name, "err", err)
-				// Save failed, retry on the next deletion attempt
+				// 保存失败，下一次删除尝试时会重试。
 				return pluginName, err
 			}
 		}
 
-		// Despite the volume being Failed, the controller will retry deleting
-		// the volume in every syncVolume() call.
+		// 即使卷被标记为 Failed，控制器仍会在每次 syncVolume() 调用时重试删除。
 		return pluginName, err
 	}
 
 	logger.V(4).Info("DeleteVolumeOperation: success", "volumeName", volume.Name)
-	// Delete the volume
+	// 删除该卷。
 	if err = ctrl.kubeClient.CoreV1().PersistentVolumes().Delete(ctx, volume.Name, metav1.DeleteOptions{}); err != nil {
-		// Oops, could not delete the volume and therefore the controller will
-		// try to delete the volume again on next update. We _could_ maintain a
-		// cache of "recently deleted volumes" and avoid unnecessary deletion,
-		// this is left out as future optimization.
+		// 糟糕，卷未能删除，因此控制器会
+		// 删除 PV 对象失败时下次同步会重试；维护“最近已删除卷”缓存是未来的优化点。
+		// 在下次更新时再次尝试删除。我们*可以*维护一个
+		// “最近已删除卷”缓存来避免不必要的删除，
+		// 这留作未来的优化。
 		logger.V(3).Info("Failed to delete volume from database", "volumeName", volume.Name, "err", err)
 		return pluginName, nil
 	}
 	return pluginName, nil
 }
 
-// isVolumeReleased returns true if given volume is released and can be recycled
-// or deleted, based on its retain policy. I.e. the volume is bound to a claim
-// and the claim does not exist or exists and is bound to different volume.
+// isVolumeReleased 判断给定卷是否已释放，可按其回收策略被回收或删除。
+// 条件：卷有 ClaimRef，且该声明不存在、UID 不匹配，或声明已绑定到其他卷。
 func (ctrl *PersistentVolumeController) isVolumeReleased(logger klog.Logger, volume *v1.PersistentVolume) (bool, error) {
-	// A volume needs reclaim if it has ClaimRef and appropriate claim does not
-	// exist.
+	// 卷带有 ClaimRef 且对应声明不存在时，就需要执行回收。
 	if volume.Spec.ClaimRef == nil {
 		logger.V(4).Info("isVolumeReleased: ClaimRef is nil", "volumeName", volume.Name)
 		return false, nil
 	}
 	if volume.Spec.ClaimRef.UID == "" {
-		// This is a volume bound by user and the controller has not finished
-		// binding to the real claim yet.
+		// 这是用户预绑定的卷，控制器尚未
+		// UID 为空表示用户预绑定尚未完成，控制器还不能回收。
+		// 完成到真实声明的绑定。
 		logger.V(4).Info("isVolumeReleased: ClaimRef is not bound", "volumeName", volume.Name)
 		return false, nil
 	}
@@ -1420,7 +1390,7 @@ func (ctrl *PersistentVolumeController) isVolumeReleased(logger klog.Logger, vol
 		return false, err
 	}
 	if !found {
-		// Fall through with claim = nil
+		// 继续往下执行，此时 claim 为 nil。
 	} else {
 		var ok bool
 		claim, ok = obj.(*v1.PersistentVolumeClaim)
@@ -1429,10 +1399,11 @@ func (ctrl *PersistentVolumeController) isVolumeReleased(logger klog.Logger, vol
 		}
 	}
 	if claim != nil && claim.UID == volume.Spec.ClaimRef.UID {
-		// the claim still exists and has the right UID
+		// 声明仍然存在且 UID 正确。
 
 		if len(claim.Spec.VolumeName) > 0 && claim.Spec.VolumeName != volume.Name {
-			// the claim is bound to another PV, this PV *is* released
+			// 声明仍存在但已绑到其他卷，说明本卷已被释放。
+			// 声明已绑定到另一个 PV，因此本 PV *确实*已释放。
 			return true, nil
 		}
 
@@ -1444,6 +1415,10 @@ func (ctrl *PersistentVolumeController) isVolumeReleased(logger klog.Logger, vol
 	return true, nil
 }
 
+// findPodsByPVCKey 通过 PVC 索引查找所有引用该 PVC 的 Pod。
+// 用索引而非遍历全部 Pod，避免回收 PV 时每次都做全量扫描。
+// findPodsByPVCKey 根据 PVC 的 "namespace/name" 键，从 Pod 索引中找出所有引用该 PVC 的 Pod。
+// 索引中类型不匹配的对象会被跳过。
 func (ctrl *PersistentVolumeController) findPodsByPVCKey(key string) ([]*v1.Pod, error) {
 	pods := []*v1.Pod{}
 	objs, err := ctrl.podIndexer.ByIndex(common.PodPVCIndex, key)
@@ -1452,6 +1427,7 @@ func (ctrl *PersistentVolumeController) findPodsByPVCKey(key string) ([]*v1.Pod,
 	}
 	for _, obj := range objs {
 		pod, ok := obj.(*v1.Pod)
+		// 索引里可能有非 Pod 对象，忽略它们而不是报错。
 		if !ok {
 			continue
 		}
@@ -1460,7 +1436,8 @@ func (ctrl *PersistentVolumeController) findPodsByPVCKey(key string) ([]*v1.Pod,
 	return pods, err
 }
 
-// isVolumeUsed returns list of active pods that use given PV.
+// isVolumeUsed 返回正在使用给定 PV 的活跃 Pod 列表。
+// 通过 PVC 键查找引用该 PVC 的 Pod，过滤掉已终止的 Pod；返回名称列表以及是否确实有 Pod 在使用。
 func (ctrl *PersistentVolumeController) isVolumeUsed(pv *v1.PersistentVolume) ([]string, bool, error) {
 	if pv.Spec.ClaimRef == nil {
 		return nil, false, nil
@@ -1475,12 +1452,14 @@ func (ctrl *PersistentVolumeController) isVolumeUsed(pv *v1.PersistentVolume) ([
 		if util.IsPodTerminated(pod, pod.Status) {
 			continue
 		}
+		// 已终止的 Pod 不再占用卷，不应阻止回收。
 		podNames.Insert(pod.Namespace + "/" + pod.Name)
 	}
 	return podNames.List(), podNames.Len() != 0, nil
 }
 
-// findNonScheduledPodsByPVC returns list of non-scheduled active pods that reference given PVC.
+// findNonScheduledPodsByPVC 返回引用给定 PVC 且尚未被调度的活跃 Pod 名称列表。
+// 用于延迟绑定模式下提示用户等待 Pod 调度。
 func (ctrl *PersistentVolumeController) findNonScheduledPodsByPVC(pvc *v1.PersistentVolumeClaim) ([]string, error) {
 	pvcKey := fmt.Sprintf("%s/%s", pvc.Namespace, pvc.Name)
 	pods, err := ctrl.findPodsByPVCKey(pvcKey)
@@ -1493,16 +1472,15 @@ func (ctrl *PersistentVolumeController) findNonScheduledPodsByPVC(pvc *v1.Persis
 			continue
 		}
 		if len(pod.Spec.NodeName) == 0 {
+			// NodeName 为空表示 Pod 尚未被调度，正是延迟绑定要等待的对象。
 			podNames = append(podNames, pod.Name)
 		}
 	}
 	return podNames, nil
 }
 
-// doDeleteVolume finds appropriate delete plugin and deletes given volume, returning
-// the volume plugin name. Also, it returns 'true', when the volume was deleted and
-// 'false' when the volume cannot be deleted because the deleter is external. No
-// error should be reported in this case.
+// doDeleteVolume 使用给定的可删除插件删除卷，并记录卷删除操作的耗时。
+// 删除成功后会移除 in-tree 删除保护 finalizer，否则 PV 对象将无法被真正删除。
 func (ctrl *PersistentVolumeController) doDeleteVolume(ctx context.Context, plugin vol.DeletableVolumePlugin, volume *v1.PersistentVolume) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("doDeleteVolume", "volumeName", volume.Name)
@@ -1512,26 +1490,34 @@ func (ctrl *PersistentVolumeController) doDeleteVolume(ctx context.Context, plug
 	spec := vol.NewSpecFromPersistentVolume(volume, false)
 	deleter, err := plugin.NewDeleter(logger, spec)
 	if err != nil {
-		// Cannot create deleter
+		// 无法创建删除器。
 		return fmt.Errorf("failed to create deleter for volume %q: %w", volume.Name, err)
 	}
 
 	opComplete := util.OperationCompleteHook(pluginName, "volume_delete")
+	// 通过 hook 记录底层删除操作的耗时指标。
 	err = deleter.Delete()
 	opComplete(volumetypes.CompleteFuncParam{Err: &err})
 	if err != nil {
-		// Deleter failed
+		// 删除器执行失败。
 		return err
 	}
 	logger.V(2).Info("Volume deleted", "volumeName", volume.Name)
 	if err := ctrl.removeDeletionProtectionFinalizer(ctx, volume); err != nil {
+		// 必须移除删除保护 finalizer，否则 PV 对象会一直卡在终止状态。
 		return err
 	}
 	return nil
 }
 
+// removeDeletionProtectionFinalizer 在卷删除完成后移除树内删除保护 finalizer。
+// 必须先从 API Server 重新读取最新对象再修改，否则可能覆盖其他控制器对
+// finalizer 的并发变更；只有确实存在该 finalizer 时才发起更新。
+// removeDeletionProtectionFinalizer 从 PV 上移除 in-tree 删除保护 finalizer。
+// 先获取最新版本以避免基于陈旧对象更新，只有确实包含该 finalizer 时才写回并更新缓存。
 func (ctrl *PersistentVolumeController) removeDeletionProtectionFinalizer(ctx context.Context, volume *v1.PersistentVolume) error {
-	// Retrieve latest version
+	// 获取最新版本。
+	// 必须先取最新版本，避免覆盖其他流程对 PV 的修改。
 	logger := klog.FromContext(ctx)
 	newVolume, err := ctrl.kubeClient.CoreV1().PersistentVolumes().Get(ctx, volume.Name, metav1.GetOptions{})
 	if err != nil {
@@ -1542,6 +1528,7 @@ func (ctrl *PersistentVolumeController) removeDeletionProtectionFinalizer(ctx co
 	volumeClone := volume.DeepCopy()
 	pvFinalizers := volumeClone.Finalizers
 	if pvFinalizers != nil && slices.Contains(pvFinalizers, storagehelpers.PVDeletionInTreeProtectionFinalizer) {
+		// 只有存在该 finalizer 时才更新，减少不必要的 API 写入。
 		volumeClone.SetFinalizers(slice.RemoveString(pvFinalizers, storagehelpers.PVDeletionInTreeProtectionFinalizer, nil))
 		_, err = ctrl.kubeClient.CoreV1().PersistentVolumes().Update(ctx, volumeClone, metav1.UpdateOptions{})
 		if err != nil {
@@ -1556,48 +1543,52 @@ func (ctrl *PersistentVolumeController) removeDeletionProtectionFinalizer(ctx co
 	return nil
 }
 
-// provisionClaim starts new asynchronous operation to provision a claim if
-// provisioning is enabled.
+// provisionClaim 在开启动态制备时，为声明启动一个异步的制备操作。
+// 它先查找可用的制备插件（内部插件或外部制备器），再通过 scheduleOperation 异步执行；
+// 查找插件失败时只发事件并返回 nil，由后续每次 syncUnboundClaim 重试。
 func (ctrl *PersistentVolumeController) provisionClaim(ctx context.Context, claim *v1.PersistentVolumeClaim) error {
 	if !ctrl.enableDynamicProvisioning {
+		// 动态制备被禁用时直接跳过，不创建任何异步操作。
 		return nil
 	}
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("provisionClaim: started", "PVC", klog.KObj(claim))
 	opName := fmt.Sprintf("provision-%s[%s]", claimToClaimKey(claim), string(claim.UID))
 	plugin, storageClass, err := ctrl.findProvisionablePlugin(claim)
-	// findProvisionablePlugin does not return err for external provisioners
+	// 对于外部制备器，findProvisionablePlugin 不会返回错误。
 	if err != nil {
+		// 外部制备器不返回错误；这里出错说明找不到请求的插件，保留原有返回 nil 的行为由后续同步重试。
 		ctrl.eventRecorder.Event(claim, v1.EventTypeWarning, events.ProvisioningFailed, err.Error())
 		logger.Error(err, "Error finding provisioning plugin for claim", "PVC", klog.KObj(claim))
-		// failed to find the requested provisioning plugin, directly return err for now.
-		// controller will retry the provisioning in every syncUnboundClaim() call
-		// retain the original behavior of returning nil from provisionClaim call
+		// 找不到请求的制备插件时，目前直接返回错误即可；控制器会在每次 syncUnboundClaim() 中重试制备。 保留 provisionClaim 调用原本返回 nil 的行为。
 		return nil
 	}
 	ctrl.scheduleOperation(logger, opName, func() error {
-		// create a start timestamp entry in cache for provision operation if no one exists with
-		// key = claimKey, pluginName = provisionerName, operation = "provision"
+		// 为制备操作记录起始时间戳（若尚无对应条目）：
+		// 键为 claimKey，pluginName 为制备器名称，operation 为 "provision"。
+		// 记录制备操作起始时间，供端到端延迟指标使用。
 		claimKey := claimToClaimKey(claim)
 		ctrl.operationTimestamps.AddIfNotExist(claimKey, ctrl.getProvisionerName(plugin, storageClass), "provision")
 		var err error
 		if plugin == nil {
 			_, err = ctrl.provisionClaimOperationExternal(ctx, claim, storageClass)
+			// plugin 为 nil 表示使用外部制备器，只需写注解等待外部组件，不执行内部制备。
 		} else {
 			_, err = ctrl.provisionClaimOperation(ctx, claim, plugin, storageClass)
 		}
-		// if error happened, record an error count metric
-		// timestamp entry will remain in cache until a success binding has happened
+		// 若发生错误则记录错误计数指标；时间戳条目会一直留在缓存中，直到绑定成功才清理。
 		if err != nil {
 			metrics.RecordMetric(claimKey, &ctrl.operationTimestamps, err)
+			// 出错时记录错误计数；时间戳条目保留到绑定成功才清理。
 		}
 		return err
 	})
 	return nil
 }
 
-// provisionClaimOperation provisions a volume. This method is running in
-// standalone goroutine and already has all necessary locks.
+// provisionClaimOperation 使用内部插件为声明制备卷。该方法运行在独立的 goroutine 中，已持有所有必要的锁。
+// 它校验数据源与插件能力、制备底层存储、构造 PV 对象并写入 API server（带重试）；
+// 若 PV 对象创建失败，会尽力清理已创建的底层存储，避免留下孤儿卷。
 func (ctrl *PersistentVolumeController) provisionClaimOperation(
 	ctx context.Context,
 	claim *v1.PersistentVolumeClaim,
@@ -1607,12 +1598,14 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("provisionClaimOperation started", "PVC", klog.KObj(claim), "storageClassName", claimClass)
 
-	// called from provisionClaim(), in this case, plugin MUST NOT be nil
-	// NOTE: checks on plugin/storageClass has been saved
+	// 由 provisionClaim() 调用，此时 plugin 必定不为 nil。
+	// 注意：调用方已检查过 plugin/storageClass。
+	// 调用方已确保 plugin 与 storageClass 有效，此处直接取用。
 	pluginName := plugin.GetPluginName()
 	if pluginName != "kubernetes.io/csi" && claim.Spec.DataSource != nil {
-		// Only CSI plugin can have a DataSource. Fail the operation
-		// if Datasource in Claim is not nil and it is not a CSI plugin,
+		// 只有 CSI 插件支持 DataSource，非 CSI 插件遇到数据源必须直接失败。
+		// 只有 CSI 插件支持 DataSource，
+		// 若声明带有数据源但插件非 CSI，则操作失败。
 		strerr := fmt.Sprintf("plugin %q is not a CSI plugin. Only CSI plugin can provision a claim with a datasource", pluginName)
 		logger.V(2).Info(strerr)
 		ctrl.eventRecorder.Event(claim, v1.EventTypeWarning, events.ProvisioningFailed, strerr)
@@ -1622,20 +1615,22 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 	provisionerName := storageClass.Provisioner
 	logger.V(4).Info("provisionClaimOperation", "PVC", klog.KObj(claim), "pluginName", pluginName, "provisionerName", provisionerName)
 
-	// Add provisioner annotation to be consistent with external provisioner workflow
+	// 添加制备器注解，与外部制备器流程保持一致。
+	// 写入制备器注解，与外部制备流程保持一致。
 	newClaim, err := ctrl.setClaimProvisioner(ctx, claim, provisionerName)
 	if err != nil {
-		// Save failed, the controller will retry in the next sync
+		// 保存失败，控制器会在下一次同步时重试。
 		logger.V(2).Info("Error saving claim", "PVC", klog.KObj(claim), "err", err)
 		return pluginName, err
 	}
 	claim = newClaim
 
-	// internal provisioning
+	// 内部制备流程。
 
-	//  A previous provisionClaimOperation may just have finished while we were waiting for
-	//  the locks. Check that PV (with deterministic name) hasn't been provisioned
-	//  yet.
+	// 等待锁期间，上一次 provisionClaimOperation 可能刚完成；
+	// PV 名称是确定性的，先检查它是否已被制备，
+	// 以免重复创建。
+	// 等待锁期间可能已有另一次制备完成；PV 名称是确定性的，先检查是否已存在以免重复制备。
 
 	pvName := ctrl.getProvisionedVolumeNameForClaim(claim)
 	volume, err := ctrl.kubeClient.CoreV1().PersistentVolumes().Get(ctx, pvName, metav1.GetOptions{})
@@ -1644,13 +1639,14 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 		return pluginName, err
 	}
 	if err == nil && volume != nil {
-		// Volume has been already provisioned, nothing to do.
+		// 卷已经被制备过了，无需处理。
 		logger.V(4).Info("provisionClaimOperation: volume already exists, skipping", "PVC", klog.KObj(claim))
 		return pluginName, err
 	}
 
-	// Prepare a claimRef to the claim early (to fail before a volume is
-	// provisioned)
+	// 提前构造指向声明的 ClaimRef，这样引用获取失败时
+	// 就不会先创建出孤立的存储卷。
+	// 提前构造 ClaimRef，这样引用获取失败时不会先创建出孤立存储。
 	claimRef, err := ref.GetReference(scheme.Scheme, claim)
 	if err != nil {
 		logger.V(3).Info("Unexpected error getting claim reference", "err", err)
@@ -1665,16 +1661,16 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 		Parameters:                    storageClass.Parameters,
 	}
 
-	// Refuse to provision if the plugin doesn't support mount options, creation
-	// of PV would be rejected by validation anyway
+	// 插件不支持挂载选项时拒绝制备，因为这样创建出的 PV 无论如何都会被校验拒绝。
 	if !plugin.SupportsMountOption() && len(options.MountOptions) > 0 {
+		// 插件不支持挂载选项时提前失败，避免创建出会被 API 校验拒绝的 PV。
 		strerr := fmt.Sprintf("Mount options are not supported by the provisioner but StorageClass %q has mount options %v", storageClass.Name, options.MountOptions)
 		logger.V(2).Info("Mount options are not supported by the provisioner but claim's StorageClass has mount options", "PVC", klog.KObj(claim), "storageClassName", storageClass.Name, "options", options.MountOptions)
 		ctrl.eventRecorder.Event(claim, v1.EventTypeWarning, events.ProvisioningFailed, strerr)
 		return pluginName, fmt.Errorf("provisioner %q doesn't support mount options", plugin.GetPluginName())
 	}
 
-	// Provision the volume
+	// 制备该卷。
 	provisioner, err := plugin.NewProvisioner(logger, options)
 	if err != nil {
 		strerr := fmt.Sprintf("Failed to create provisioner: %v", err)
@@ -1685,6 +1681,7 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 
 	var selectedNode *v1.Node = nil
 	if nodeName, ok := claim.Annotations[storagehelpers.AnnSelectedNode]; ok {
+		// 存在 SelectedNode 注解说明是调度器触发的制备，需要把目标节点传给插件。
 		selectedNode, err = ctrl.NodeLister.Get(nodeName)
 		if err != nil {
 			strerr := fmt.Sprintf("Failed to get target node: %v", err)
@@ -1699,9 +1696,10 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 	volume, err = provisioner.Provision(selectedNode, allowedTopologies)
 	opComplete(volumetypes.CompleteFuncParam{Err: &err})
 	if err != nil {
-		// Other places of failure have nothing to do with VolumeScheduling,
-		// so just let controller retry in the next sync. We'll only call func
-		// rescheduleProvisioning here when the underlying provisioning actually failed.
+		// 其他失败点与 VolumeScheduling 无关，
+		// 只有底层制备真正失败才通知调度器重新选择节点，其他失败交给常规重试。
+		// 交给控制器下次同步重试即可；只有在底层制备真正失败时
+		// 才在这里调用 rescheduleProvisioning。
 		ctrl.rescheduleProvisioning(ctx, claim)
 
 		strerr := fmt.Sprintf("Failed to provision volume with StorageClass %q: %v", storageClass.Name, err)
@@ -1712,30 +1710,33 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 
 	logger.V(3).Info("Volume for claim created", "PVC", klog.KObj(claim), "volumeName", volume.Name)
 
-	// Create Kubernetes PV object for the volume.
+	// 为该卷创建 Kubernetes PV 对象。
 	if volume.Name == "" {
 		volume.Name = pvName
 	}
-	// Bind it to the claim
+	// 把它绑定到声明。
 	volume.Spec.ClaimRef = claimRef
 	volume.Status.Phase = v1.VolumeBound
 	volume.Spec.StorageClassName = claimClass
 
-	// Add AnnBoundByController (used in deleting the volume)
+	// 添加 AnnBoundByController 注解（用于后续删除卷）。
+	// 该注解用于后续判断卷能否由控制器解绑/删除。
 	metav1.SetMetaDataAnnotation(&volume.ObjectMeta, storagehelpers.AnnBoundByController, "yes")
 	metav1.SetMetaDataAnnotation(&volume.ObjectMeta, storagehelpers.AnnDynamicallyProvisioned, plugin.GetPluginName())
 
 	if volume.Spec.PersistentVolumeReclaimPolicy == v1.PersistentVolumeReclaimDelete {
-		// Add In-Tree protection finalizer here only when the reclaim policy is `Delete`
+		// 仅 Delete 策略需要加 in-tree 删除保护 finalizer，防止 PV 被误删。
+		// 仅在回收策略为 `Delete` 时添加 in-tree 保护 finalizer。
 		volume.SetFinalizers([]string{storagehelpers.PVDeletionInTreeProtectionFinalizer})
 	}
 
-	// Try to create the PV object several times
+	// 多次尝试创建 PV 对象。
 	for i := 0; i < ctrl.createProvisionedPVRetryCount; i++ {
 		logger.V(4).Info("provisionClaimOperation: trying to save volume", "PVC", klog.KObj(claim), "volumeName", volume.Name)
 		var newVol *v1.PersistentVolume
 		if newVol, err = ctrl.kubeClient.CoreV1().PersistentVolumes().Create(ctx, volume, metav1.CreateOptions{}); err == nil || apierrors.IsAlreadyExists(err) {
-			// Save succeeded.
+			// AlreadyExists 也视为成功：确定性名称的 PV 已由并发操作创建，直接复用即可。
+			// 保存成功。
 			if err != nil {
 				logger.V(3).Info("Volume for claim already exists, reusing", "PVC", klog.KObj(claim), "volumeName", volume.Name)
 				err = nil
@@ -1744,22 +1745,20 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 
 				_, updateErr := ctrl.storeVolumeUpdate(logger, newVol)
 				if updateErr != nil {
-					// We will get an "volume added" event soon, this is not a big error
+					// 很快会收到 volume added 事件，这不是严重错误。
+					// 缓存更新失败不算严重，随后会收到 volume added 事件。
 					logger.V(4).Info("provisionClaimOperation: cannot update internal cache", "volumeName", volume.Name, "err", updateErr)
 				}
 			}
 			break
 		}
-		// Save failed, try again after a while.
+		// 保存失败，稍后重试。
 		logger.V(3).Info("Failed to save volume for claim", "PVC", klog.KObj(claim), "volumeName", volume.Name, "err", err)
 		time.Sleep(ctrl.createProvisionedPVInterval)
 	}
 
 	if err != nil {
-		// Save failed. Now we have a storage asset outside of Kubernetes,
-		// but we don't have appropriate PV object for it.
-		// Emit some event here and try to delete the storage asset several
-		// times.
+		// 保存失败。此时 Kubernetes 之外已经存在存储资产，而我们还没有对应的 PV 对象。 这里发出事件提示，并多次尝试删除该存储资产。
 		strerr := fmt.Sprintf("Error creating provisioned PV object for claim %s: %v. Deleting the volume.", claimToClaimKey(claim), err)
 		logger.V(3).Info(strerr)
 		ctrl.eventRecorder.Event(claim, v1.EventTypeWarning, events.ProvisioningFailed, strerr)
@@ -1767,9 +1766,10 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 		delPlugin, deleteErr := ctrl.findDeletablePlugin(volume)
 		if deleteErr == nil {
 			if delPlugin == nil {
-				// This is unreachable code, the volume was provisioned by an
-				// internal plugin and therefore there MUST be an internal
-				// plugin that deletes it.
+				// 内部制备的卷必然有内部删除插件，走到这里说明代码路径异常。
+				// 这是不可达代码：卷由内部插件制备，
+				// 因此必定存在能删除它的内部插件。
+				// （接上行。）
 				logger.Error(nil, "Error finding internal deleter for volume plugin", "plugin", plugin.GetPluginName())
 				return pluginName, nil
 			}
@@ -1777,19 +1777,20 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 			for i := 0; i < ctrl.createProvisionedPVRetryCount; i++ {
 				deleteErr = ctrl.doDeleteVolume(ctx, delPlugin, volume)
 				if deleteErr == nil {
-					// Delete succeeded
+					// 删除成功。
 					logger.V(4).Info("provisionClaimOperation: cleaning volume succeeded", "PVC", klog.KObj(claim), "volumeName", volume.Name)
 					break
 				}
-				// Delete failed, try again after a while.
+				// 删除失败，稍后重试。
 				logger.V(3).Info("Failed to delete volume", "volumeName", volume.Name, "err", deleteErr)
 				time.Sleep(ctrl.createProvisionedPVInterval)
 			}
 		}
 
 		if deleteErr != nil {
-			// Delete failed several times. There is an orphaned volume and there
-			// is nothing we can do about it.
+			// 多次删除均失败，留下了孤儿卷，
+			// 清理多次失败会留下孤儿卷，控制器无能为力，只能发事件提示人工删除。
+			// 我们对此无能为力。
 			strerr := fmt.Sprintf("Error cleaning provisioned volume for claim %s: %v. Please delete manually.", claimToClaimKey(claim), deleteErr)
 			logger.V(2).Info(strerr)
 			ctrl.eventRecorder.Event(claim, v1.EventTypeWarning, events.ProvisioningCleanupFailed, strerr)
@@ -1802,8 +1803,9 @@ func (ctrl *PersistentVolumeController) provisionClaimOperation(
 	return pluginName, nil
 }
 
-// provisionClaimOperationExternal provisions a volume using external provisioner async-ly
-// This method will be running in a standalone go-routine scheduled in "provisionClaim"
+// provisionClaimOperationExternal 触发外部制备器进行异步制备。
+// 该方法运行在由 provisionClaim 调度的独立 goroutine 中：处理 CSI 迁移名称转换、
+// 写入制备器注解作为启动信号，并发事件告知用户等待外部制备器创建卷。
 func (ctrl *PersistentVolumeController) provisionClaimOperationExternal(
 	ctx context.Context,
 	claim *v1.PersistentVolumeClaim,
@@ -1811,11 +1813,12 @@ func (ctrl *PersistentVolumeController) provisionClaimOperationExternal(
 	claimClass := storagehelpers.GetPersistentVolumeClaimClass(claim)
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("provisionClaimOperationExternal started", "PVC", klog.KObj(claim), "storageClassName", claimClass)
-	// Set provisionerName to external provisioner name by setClaimProvisioner
+	// 通过 setClaimProvisioner 把 provisionerName 设为外部制备器的名称。
 	var err error
 	provisionerName := storageClass.Provisioner
 	if ctrl.csiMigratedPluginManager.IsMigrationEnabledForPlugin(storageClass.Provisioner) {
-		// update the provisioner name to use the migrated CSI plugin name
+		// CSI 迁移场景下必须把 in-tree 制备器名称转换为 CSI 驱动名称。
+		// 把制备器名称更新为迁移后的 CSI 插件名称。
 		provisionerName, err = ctrl.translator.GetCSINameFromInTreeName(storageClass.Provisioner)
 		if err != nil {
 			strerr := fmt.Sprintf("error getting CSI name for In tree plugin %s: %v", storageClass.Provisioner, err)
@@ -1824,10 +1827,11 @@ func (ctrl *PersistentVolumeController) provisionClaimOperationExternal(
 			return provisionerName, err
 		}
 	}
-	// Add provisioner annotation so external provisioners know when to start
+	// 添加制备器注解，外部制备器据此知道何时开始。
+	// 外部制备器通过监听该注解得知应该开始制备。
 	newClaim, err := ctrl.setClaimProvisioner(ctx, claim, provisionerName)
 	if err != nil {
-		// Save failed, the controller will retry in the next sync
+		// 保存失败，控制器会在下一次同步时重试。
 		strerr := fmt.Sprintf("Error saving claim: %v", err)
 		logger.V(2).Info("Error saving claim", "PVC", klog.KObj(claim), "err", err)
 		ctrl.eventRecorder.Event(claim, v1.EventTypeWarning, events.ProvisioningFailed, strerr)
@@ -1837,51 +1841,53 @@ func (ctrl *PersistentVolumeController) provisionClaimOperationExternal(
 	msg := fmt.Sprintf("Waiting for a volume to be created either by the external provisioner '%s' "+
 		"or manually by the system administrator. If volume creation is delayed, please verify that "+
 		"the provisioner is running and correctly registered.", provisionerName)
-	// External provisioner has been requested for provisioning the volume
-	// Report an event and wait for external provisioner to finish
+	// 已请求外部制备器来制备卷，发出事件后等待外部制备器完成。
 	ctrl.eventRecorder.Event(claim, v1.EventTypeNormal, events.ExternalProvisioning, msg)
 	logger.V(3).Info("provisionClaimOperationExternal provisioning claim", "PVC", klog.KObj(claim), "msg", msg)
-	// return provisioner name here for metric reporting
+	// 这里返回制备器名称，供指标上报使用。
 	return provisionerName, nil
 }
 
-// rescheduleProvisioning signal back to the scheduler to retry dynamic provisioning
-// by removing the AnnSelectedNode annotation
+// rescheduleProvisioning 通过删除 AnnSelectedNode 注解通知调度器重新进行动态制备。
+// 仅当该注解存在（即制备由调度器触发）时才处理；更新失败只记录日志。
 func (ctrl *PersistentVolumeController) rescheduleProvisioning(ctx context.Context, claim *v1.PersistentVolumeClaim) {
 	if _, ok := claim.Annotations[storagehelpers.AnnSelectedNode]; !ok {
-		// Provisioning not triggered by the scheduler, skip
+		// 没有该注解说明制备不是调度器触发的，无需回讯。
+		// 制备并非由调度器触发，跳过。
 		return
 	}
 
-	// The claim from method args can be pointing to watcher cache. We must not
-	// modify these, therefore create a copy.
+	// 方法参数中的声明可能指向 watcher 缓存，绝不能直接修改，必须先创建副本。
 	newClaim := claim.DeepCopy()
+	// 参数可能指向 informer 缓存，不能原地修改，必须先克隆。
 	delete(newClaim.Annotations, storagehelpers.AnnSelectedNode)
-	// Try to update the PVC object
+	// 尝试更新 PVC 对象。
 	logger := klog.FromContext(ctx)
 	if _, err := ctrl.kubeClient.CoreV1().PersistentVolumeClaims(newClaim.Namespace).Update(ctx, newClaim, metav1.UpdateOptions{}); err != nil {
 		logger.V(4).Info("Failed to delete annotation 'storagehelpers.AnnSelectedNode' for PersistentVolumeClaim", "PVC", klog.KObj(newClaim), "err", err)
 		return
 	}
 	if _, err := ctrl.storeClaimUpdate(logger, newClaim); err != nil {
-		// We will get an "claim updated" event soon, this is not a big error
+		// 很快会收到 claim updated 事件，这不是严重错误。
+		// 缓存更新失败无关紧要，随后会收到 claim updated 事件。
 		logger.V(4).Info("Updating PersistentVolumeClaim: cannot update internal cache", "PVC", klog.KObj(newClaim), "err", err)
 	}
 }
 
-// getProvisionedVolumeNameForClaim returns PV.Name for the provisioned volume.
-// The name must be unique.
+// getProvisionedVolumeNameForClaim 返回为声明制备的卷的 PV 名称。
+// 使用 PVC 的 UID 保证名称唯一且可预测，便于并发制备时检测重复。
 func (ctrl *PersistentVolumeController) getProvisionedVolumeNameForClaim(claim *v1.PersistentVolumeClaim) string {
 	return "pvc-" + string(claim.UID)
 }
 
-// scheduleOperation starts given asynchronous operation on given volume. It
-// makes sure the operation is already not running.
+// scheduleOperation 以指定名称调度一个异步操作，并保证同名操作不会重复运行。
+// 若操作已在运行或因指数退避被推迟，只记录日志；测试钩子 preOperationHook 会在操作启动前被调用。
 func (ctrl *PersistentVolumeController) scheduleOperation(logger klog.Logger, operationName string, operation func() error) {
 	logger.V(4).Info("scheduleOperation", "operationName", operationName)
 
-	// Poke test code that an operation is just about to get started.
+	// 通知测试代码：某个操作即将开始。
 	if ctrl.preOperationHook != nil {
+		// 测试用钩子，便于在异步操作启动前注入断言或同步点。
 		ctrl.preOperationHook(operationName)
 	}
 
@@ -1889,6 +1895,7 @@ func (ctrl *PersistentVolumeController) scheduleOperation(logger klog.Logger, op
 	if err != nil {
 		switch {
 		case goroutinemap.IsAlreadyExists(err):
+			// 同名操作已在运行，直接跳过，避免并发操作互相干扰。
 			logger.V(4).Info("Operation is already running, skipping", "operationName", operationName)
 		case exponentialbackoff.IsExponentialBackoff(err):
 			logger.V(4).Info("Operation postponed due to exponential backoff", "operationName", operationName)
@@ -1898,35 +1905,35 @@ func (ctrl *PersistentVolumeController) scheduleOperation(logger klog.Logger, op
 	}
 }
 
-// newRecyclerEventRecorder returns a RecycleEventRecorder that sends all events
-// to given volume.
+// newRecyclerEventRecorder 返回一个 RecycleEventRecorder，把回收 Pod 产生的所有事件
+// 都转发到给定卷上。
 func (ctrl *PersistentVolumeController) newRecyclerEventRecorder(volume *v1.PersistentVolume) recyclerclient.RecycleEventRecorder {
 	return func(eventtype, message string) {
 		ctrl.eventRecorder.Eventf(volume, eventtype, events.RecyclerPod, "Recycler pod: %s", message)
 	}
 }
 
-// findProvisionablePlugin finds a provisioner plugin for a given claim.
-// It returns either the provisioning plugin or nil when an external
-// provisioner is requested.
+// findProvisionablePlugin 为给定声明查找制备插件。
+// 返回内部制备插件，或在使用外部制备器/CSI 迁移时返回 nil（同时返回 StorageClass）；找不到内部插件且名称非 kubernetes.io/ 前缀时视为外部制备器，不报错。
 func (ctrl *PersistentVolumeController) findProvisionablePlugin(claim *v1.PersistentVolumeClaim) (vol.ProvisionableVolumePlugin, *storage.StorageClass, error) {
-	// provisionClaim() which leads here is never called with claimClass=="", we
-	// can save some checks.
+	// 调用到这里的 provisionClaim() 永远不会在 claimClass 为空时被调用，因此可以省去一些检查。
 	claimClass := storagehelpers.GetPersistentVolumeClaimClass(claim)
 	class, err := ctrl.classLister.Get(claimClass)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Find a plugin for the class
+	// 为该 StorageClass 查找插件。
 	if ctrl.csiMigratedPluginManager.IsMigrationEnabledForPlugin(class.Provisioner) {
-		// CSI migration scenario - do not depend on in-tree plugin
+		// CSI 迁移场景，不依赖 in-tree 插件。
+		// CSI 迁移场景下不依赖 in-tree 插件，交给外部 CSI 制备器。
 		return nil, class, nil
 	}
 	plugin, err := ctrl.volumePluginMgr.FindProvisionablePluginByName(class.Provisioner)
 	if err != nil {
 		if !strings.HasPrefix(class.Provisioner, "kubernetes.io/") {
-			// External provisioner is requested, do not report error
+			// 请求的是外部制备器，不报错。
+			// 非 kubernetes.io/ 前缀表示外部制备器，找不到对应内部插件是正常情况。
 			return nil, class, nil
 		}
 		return nil, class, err
@@ -1934,18 +1941,21 @@ func (ctrl *PersistentVolumeController) findProvisionablePlugin(claim *v1.Persis
 	return plugin, class, nil
 }
 
-// findDeletablePlugin finds a deleter plugin for a given volume. It returns
-// either the deleter plugin or nil when an external deleter is requested.
+// findDeletablePlugin 为给定卷查找删除插件。
+// 优先使用制备时的插件注解，其次处理 CSI 迁移/CSI 卷源（交给外部删除器），
+// 最后按卷规格查找；找不到时返回错误。
 func (ctrl *PersistentVolumeController) findDeletablePlugin(volume *v1.PersistentVolume) (vol.DeletableVolumePlugin, error) {
-	// Find a plugin. Try to find the same plugin that provisioned the volume
+	// 查找插件，优先尝试找到当初制备该卷的同一个插件。
 	var plugin vol.DeletableVolumePlugin
 	if metav1.HasAnnotation(volume.ObjectMeta, storagehelpers.AnnDynamicallyProvisioned) {
 		provisionPluginName := volume.Annotations[storagehelpers.AnnDynamicallyProvisioned]
 		if provisionPluginName != "" {
+			// 优先使用制备该卷的插件来删除，保证语义一致。
 			plugin, err := ctrl.volumePluginMgr.FindDeletablePluginByName(provisionPluginName)
 			if err != nil {
 				if !strings.HasPrefix(provisionPluginName, "kubernetes.io/") {
-					// External provisioner is requested, do not report error
+					// 外部制备器名称找不到内部插件是正常情况，返回 nil 交给外部删除器。
+					// 请求的是外部制备器，不报错。
 					return nil, nil
 				}
 				return nil, err
@@ -1955,41 +1965,43 @@ func (ctrl *PersistentVolumeController) findDeletablePlugin(volume *v1.Persisten
 	}
 
 	if metav1.HasAnnotation(volume.ObjectMeta, storagehelpers.AnnMigratedTo) {
-		// CSI migration scenario - do not depend on in-tree plugin
+		// CSI 迁移场景，不依赖 in-tree 插件。
+		// 已迁移到 CSI 的卷不再依赖 in-tree 插件。
 		return nil, nil
 	}
 
 	if volume.Spec.CSI != nil {
-		// CSI volume source scenario - external provisioner is requested
+		// CSI 卷源场景，由外部制备器处理。
+		// CSI 卷源必然由外部 CSI 驱动处理，控制器不做内部删除。
 		return nil, nil
 	}
 
-	// The plugin that provisioned the volume was not found or the volume
-	// was not dynamically provisioned. Try to find a plugin by spec.
+	// 制备该卷的插件未找到，或该卷并非动态制备，尝试根据卷规格查找插件。
 	spec := vol.NewSpecFromPersistentVolume(volume, false)
 	plugin, err := ctrl.volumePluginMgr.FindDeletablePluginBySpec(spec)
 	if err != nil {
-		// No deleter found. Emit an event and mark the volume Failed.
+		// 未找到删除器，发出事件并把卷标记为 Failed。
 		return nil, fmt.Errorf("error getting deleter volume plugin for volume %q: %w", volume.Name, err)
 	}
 	return plugin, nil
 }
 
-// obtain provisioner/deleter name for a volume
+// getProvisionerNameFromVolume 获取某个卷对应的制备器/删除器名称，用于指标上报。
+// 优先用卷的删除插件名；外部制备器或 CSI 迁移场景则从 StorageClass 推导，
+// 避免把任意注解值直接用作指标标签导致基数爆炸。失败时返回 "N/A"。
 func (ctrl *PersistentVolumeController) getProvisionerNameFromVolume(volume *v1.PersistentVolume) string {
 	plugin, err := ctrl.findDeletablePlugin(volume)
 	if err != nil {
 		return "N/A"
 	}
+	// 无法确定插件名时用 N/A，避免指标标签缺失或滥用卷上的任意注解值。
 	if plugin != nil {
+		// 非 CSI 迁移的 in-tree 插件，直接使用插件名。
 		return plugin.GetPluginName()
 	}
-	// If reached here, Either an external provisioner was used for provisioning
-	// or a plugin has been migrated to CSI.
-	// If an external provisioner was used, i.e., plugin == nil, instead of using
-	// the AnnDynamicallyProvisioned annotation value, use the storageClass's Provisioner
-	// field to avoid explosion of the metric in the cases like local storage provisioner
-	// tagging a volume with arbitrary provisioner names
+	// 执行到这里，说明要么使用了外部制备器，要么插件已迁移到 CSI。
+	// 对于外部制备器（plugin == nil），不使用 AnnDynamicallyProvisioned 注解值，
+	// 而改用 StorageClass 的 Provisioner 字段，以避免在 local storage provisioner 给卷打上任意名称时 造成指标标签基数爆炸。
 	storageClass := storagehelpers.GetPersistentVolumeClass(volume)
 	class, err := ctrl.classLister.Get(storageClass)
 	if err != nil {
@@ -2005,15 +2017,16 @@ func (ctrl *PersistentVolumeController) getProvisionerNameFromVolume(volume *v1.
 	return class.Provisioner
 }
 
-// obtain plugin/external provisioner name from plugin and storage class for timestamp logging purposes
+// getProvisionerName 根据插件和 StorageClass 获取用于时间戳指标记录的制备器名称。
+// 内部插件直接返回插件名；外部制备器返回 StorageClass.Provisioner；
+// CSI 迁移场景下返回转换后的 CSI 驱动名，失败时返回 "N/A"。
 func (ctrl *PersistentVolumeController) getProvisionerName(plugin vol.ProvisionableVolumePlugin, storageClass *storage.StorageClass) string {
-	// non CSI-migrated in-tree plugin, returns the plugin's name
+	// 非 CSI 迁移的 in-tree 插件，直接返回插件名称。
 	if plugin != nil {
 		return plugin.GetPluginName()
 	}
 	if ctrl.csiMigratedPluginManager.IsMigrationEnabledForPlugin(storageClass.Provisioner) {
-		// get the name of the CSI plugin that the in-tree storage class
-		// provisioner has migrated to
+		// 获取 in-tree StorageClass 制备器所迁移到的 CSI 插件名称。
 		provisionerName, err := ctrl.translator.GetCSINameFromInTreeName(storageClass.Provisioner)
 		if err != nil {
 			return "N/A"

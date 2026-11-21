@@ -44,19 +44,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// fixedTimestamp 是测试用的固定基准时间，各处时间戳都基于它做偏移，
+// 保证断言可重复。
 var fixedTimestamp = time.Date(2015, time.November, 10, 12, 30, 0, 0, time.UTC)
 
-// timestamp is used for establishing order on metricPoints
+// metricPoint 描述一个指标采样点：level 为指标值，timestamp 为相对基准
+// 时间的分钟偏移，用于确定采样点先后顺序。
 type metricPoint struct {
 	level     uint64
 	timestamp int
 }
 
+// restClientTestCase 描述一个 REST 指标客户端的测试用例。
 type restClientTestCase struct {
 	desiredMetricValues PodMetricsInfo
 	desiredError        error
 
-	// "timestamps" here are actually the offset in minutes from a base timestamp
+	// 这里的 "timestamps" 实际是相对基准时间的分钟偏移，而非绝对时间。
 	targetTimestamp      int
 	window               time.Duration
 	reportedMetricPoints []metricPoint
@@ -72,6 +76,8 @@ type restClientTestCase struct {
 	metricLabelSelector labels.Selector
 }
 
+// prepareTestClient 根据用例类型准备相应的 fake 客户端：资源指标、
+// 自定义指标或外部指标，并注册返回预设数据的 reactor。
 func (tc *restClientTestCase) prepareTestClient(t *testing.T) (*metricsfake.Clientset, *cmfake.FakeCustomMetricsClient, *emfake.FakeExternalMetricsClient) {
 	namespace := "test-namespace"
 	tc.namespace = namespace
@@ -79,9 +85,9 @@ func (tc *restClientTestCase) prepareTestClient(t *testing.T) (*metricsfake.Clie
 	podLabels := map[string]string{"name": podNamePrefix}
 	tc.selector = labels.SelectorFromSet(podLabels)
 
-	// it's a resource test if we have a resource name
+	// 配置了 resourceName 表示这是资源指标测试。
 	isResource := len(tc.resourceName) > 0
-	// it's an external test if we have a metric selector
+	// 配置了 metricSelector 表示这是外部指标测试。
 	isExternal := tc.metricSelector != nil
 
 	fakeMetricsClient := &metricsfake.Clientset{}
@@ -144,7 +150,7 @@ func (tc *restClientTestCase) prepareTestClient(t *testing.T) (*metricsfake.Clie
 			assert.Equal(t, tc.metricName, getForAction.GetMetricName(), "the metric requested should have matched the one specified")
 
 			if getForAction.GetName() == "*" {
-				// multiple objects
+				// "*" 表示一次请求多个对象的指标。
 				metrics := cmapi.MetricValueList{}
 				assert.Equal(t, "pods", getForAction.GetResource().Resource, "type of object that we requested multiple metrics for should have been pods")
 
@@ -208,6 +214,8 @@ func (tc *restClientTestCase) prepareTestClient(t *testing.T) (*metricsfake.Clie
 	return fakeMetricsClient, fakeCMClient, fakeEMClient
 }
 
+// verifyResults 校验查询返回的指标值、时间戳和窗口是否符合预期，
+// 或在用例期望出错时校验错误信息。
 func (tc *restClientTestCase) verifyResults(t *testing.T, metrics PodMetricsInfo, timestamp time.Time, err error) {
 	if tc.desiredError != nil {
 		require.Error(t, err, "there should be an error retrieving the metrics")
@@ -234,6 +242,7 @@ func (tc *restClientTestCase) verifyResults(t *testing.T, metrics PodMetricsInfo
 	assert.True(t, targetTimestamp.Equal(timestamp), "the timestamp should be as expected (%s) but was %s", targetTimestamp, timestamp)
 }
 
+// runTest 按用例类型调用对应的指标查询方法，并统一校验结果。
 func (tc *restClientTestCase) runTest(t *testing.T) {
 	var err error
 	testMetricsClient, testCMClient, testEMClient := tc.prepareTestClient(t)
@@ -264,6 +273,7 @@ func (tc *restClientTestCase) runTest(t *testing.T) {
 	}
 }
 
+// TestRESTClientPodCPU 验证按选择器查询 Pod CPU 资源指标。
 func TestRESTClientPodCPU(t *testing.T) {
 	targetTimestamp := 1
 	window := 30 * time.Second
@@ -281,6 +291,8 @@ func TestRESTClientPodCPU(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientContainerCPU 验证查询指定容器的 CPU 指标，并忽略
+// 同一 Pod 中其他容器的数据。
 func TestRESTClientContainerCPU(t *testing.T) {
 	targetTimestamp := 1
 	window := 30 * time.Second
@@ -299,6 +311,7 @@ func TestRESTClientContainerCPU(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientExternal 验证查询外部指标并正确映射到 PodMetricsInfo。
 func TestRESTClientExternal(t *testing.T) {
 	tc := restClientTestCase{
 		desiredMetricValues: PodMetricsInfo{
@@ -312,6 +325,7 @@ func TestRESTClientExternal(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientQPS 验证通过自定义指标 API 查询 QPS 指标。
 func TestRESTClientQPS(t *testing.T) {
 	targetTimestamp := 1
 	tc := restClientTestCase{
@@ -327,6 +341,7 @@ func TestRESTClientQPS(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientSingleObject 验证查询单个对象（如 Deployment）的指标。
 func TestRESTClientSingleObject(t *testing.T) {
 	tc := restClientTestCase{
 		desiredMetricValues:  PodMetricsInfo{"some-dep": {Value: 10}},
@@ -342,6 +357,8 @@ func TestRESTClientSingleObject(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientQpsSumEqualZero 验证当所有 Pod 的 QPS 指标都为 0 时
+// 仍能正确返回。
 func TestRESTClientQpsSumEqualZero(t *testing.T) {
 	targetTimestamp := 0
 	tc := restClientTestCase{
@@ -357,6 +374,7 @@ func TestRESTClientQpsSumEqualZero(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientExternalSumEqualZero 验证外部指标全为 0 时的返回值。
 func TestRESTClientExternalSumEqualZero(t *testing.T) {
 	tc := restClientTestCase{
 		desiredMetricValues: PodMetricsInfo{
@@ -370,6 +388,7 @@ func TestRESTClientExternalSumEqualZero(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientQpsEmptyMetrics 验证自定义指标 API 返回空列表时报错。
 func TestRESTClientQpsEmptyMetrics(t *testing.T) {
 	tc := restClientTestCase{
 		metricName:           "qps",
@@ -380,6 +399,7 @@ func TestRESTClientQpsEmptyMetrics(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientExternalEmptyMetrics 验证外部指标 API 返回空列表时报错。
 func TestRESTClientExternalEmptyMetrics(t *testing.T) {
 	tc := restClientTestCase{
 		metricName:           "external",
@@ -391,6 +411,7 @@ func TestRESTClientExternalEmptyMetrics(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientPodCPUEmptyMetrics 验证资源指标 API 返回空列表时报错。
 func TestRESTClientPodCPUEmptyMetrics(t *testing.T) {
 	tc := restClientTestCase{
 		resourceName:         v1.ResourceCPU,
@@ -401,6 +422,8 @@ func TestRESTClientPodCPUEmptyMetrics(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientPodCPUEmptyMetricsForOnePod 验证某个 Pod 没有指标数据时，
+// 其余 Pod 的指标仍能正常返回。
 func TestRESTClientPodCPUEmptyMetricsForOnePod(t *testing.T) {
 	targetTimestamp := 1
 	window := 30 * time.Second
@@ -417,6 +440,8 @@ func TestRESTClientPodCPUEmptyMetricsForOnePod(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientContainerCPUEmptyMetricsForOnePod 验证某个 Pod 没有容器
+// 指标时，其余 Pod 的容器指标仍能正常返回。
 func TestRESTClientContainerCPUEmptyMetricsForOnePod(t *testing.T) {
 	targetTimestamp := 1
 	window := 30 * time.Second
@@ -434,6 +459,8 @@ func TestRESTClientContainerCPUEmptyMetricsForOnePod(t *testing.T) {
 	tc.runTest(t)
 }
 
+// TestRESTClientContainerCPUEmptyMetricsForOnePodReturnsOnlyFoundContainer
+// 验证只返回确实包含目标容器的 Pod 的指标。
 func TestRESTClientContainerCPUEmptyMetricsForOnePodReturnsOnlyFoundContainer(t *testing.T) {
 	targetTimestamp := 1
 	window := 30 * time.Second
@@ -450,6 +477,7 @@ func TestRESTClientContainerCPUEmptyMetricsForOnePodReturnsOnlyFoundContainer(t 
 	tc.runTest(t)
 }
 
+// offsetTimestampBy 返回相对固定基准时间偏移指定分钟数后的时间。
 func offsetTimestampBy(t int) time.Time {
 	return fixedTimestamp.Add(time.Duration(t) * time.Minute)
 }

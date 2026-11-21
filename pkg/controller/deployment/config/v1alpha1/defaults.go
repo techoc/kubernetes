@@ -20,16 +20,14 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultDeploymentControllerConfiguration defaults a pointer to a
-// DeploymentControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultDeploymentControllerConfiguration 为 DeploymentControllerConfiguration
+// 填充推荐默认值（可能会随 API 版本演进而变化）：并发 Deployment 同步数默认 5。
+//
+// 该函数刻意不注册为 scheme 中普通的 `SetDefaults_Foo`：scheme 的默认值设置是
+// 转换的一部分，一旦强制使用便无法退出。这样使用方可以在自己的包装类型
+// `SetDefaults_` 方法中按需调用或改用自己的默认值。
 func RecommendedDefaultDeploymentControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.DeploymentControllerConfiguration) {
+	// 仅补齐零值，避免覆盖调用方显式配置的并发数。
 	if obj.ConcurrentDeploymentSyncs == 0 {
 		obj.ConcurrentDeploymentSyncs = 5
 	}

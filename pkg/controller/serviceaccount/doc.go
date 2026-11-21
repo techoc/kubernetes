@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package serviceaccount provides implementations
-// to manage service accounts and service account tokens
+// Package serviceaccount 提供管理 ServiceAccount 及其令牌的实现。
 package serviceaccount

@@ -16,4 +16,7 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package config 定义控制器共享的 API 配置类型（如 LeaderElectionConfiguration、
+// GenericControllerManagerConfiguration 等），供各类控制器作为嵌入配置复用。
+// 包内类型由 +k8s:deepcopy-gen 指令自动生成 DeepCopy 方法。
 package config

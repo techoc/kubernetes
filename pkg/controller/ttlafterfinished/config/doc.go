@@ -16,4 +16,6 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package config 定义 TTL-After-Finished 控制器的内部配置类型，
+// 由代码生成器按上述标记为类型生成 DeepCopy 方法。
 package config

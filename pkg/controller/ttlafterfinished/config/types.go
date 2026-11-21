@@ -16,9 +16,8 @@ limitations under the License.
 
 package config
 
-// TTLAfterFinishedControllerConfiguration contains elements describing TTLAfterFinishedController.
+// TTLAfterFinishedControllerConfiguration 包含描述 TTLAfterFinishedController 的各项配置。
 type TTLAfterFinishedControllerConfiguration struct {
-	// concurrentTTLSyncs is the number of TTL-after-finished collector workers that are
-	// allowed to sync concurrently.
+	// ConcurrentTTLSyncs 是允许并发同步的 TTL-after-finished 回收 worker 数量。
 	ConcurrentTTLSyncs int32
 }

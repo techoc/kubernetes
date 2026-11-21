@@ -24,14 +24,13 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// matchPodFailurePolicy returns information about matching a given failed pod
-// against the pod failure policy rules. The information is represented as an
-//   - optional job failure message (present in case the pod matched a 'FailJob' rule),
-//   - a boolean indicating if the failure should be counted towards backoffLimit
-//     (and backoffLimitPerIndex if specified). It should not be counted
-//     if the pod matched an 'Ignore' rule,
-//   - a pointer to the matched pod failure policy action.
+// matchPodFailurePolicy 返回给定失败 Pod 与 Pod 失败策略规则的匹配信息：
+//   - 可选的 Job 失败消息（仅当 Pod 命中 'FailJob' 规则时存在）；
+//   - 一个布尔值，表示失败是否应计入 backoffLimit（若指定，
+//     也计入 backoffLimitPerIndex）。命中 'Ignore' 规则时不应计入；
+//   - 指向命中的 pod failure policy action 的指针。
 func matchPodFailurePolicy(podFailurePolicy *batch.PodFailurePolicy, failedPod *v1.Pod) (*string, bool, *batch.PodFailurePolicyAction) {
+	// 未配置策略时沿用默认行为：计入失败次数，不产生失败消息。
 	if podFailurePolicy == nil {
 		return nil, true, nil
 	}
@@ -40,6 +39,8 @@ func matchPodFailurePolicy(podFailurePolicy *batch.PodFailurePolicy, failedPod *
 	failIndex := batch.PodFailurePolicyActionFailIndex
 	count := batch.PodFailurePolicyActionCount
 	for index, podFailurePolicyRule := range podFailurePolicy.Rules {
+		// 规则按索引顺序检查，首个命中的规则生效；消息中的 index 便于
+		// 用户定位是哪条规则触发了失败。
 		if podFailurePolicyRule.OnExitCodes != nil {
 			if containerStatus := matchOnExitCodes(&failedPod.Status, podFailurePolicyRule.OnExitCodes); containerStatus != nil {
 				switch podFailurePolicyRule.Action {
@@ -75,15 +76,17 @@ func matchPodFailurePolicy(podFailurePolicy *batch.PodFailurePolicy, failedPod *
 	return nil, true, nil
 }
 
-// matchOnExitCodes returns a terminated container status that matches the error code requirement, if any exists.
-// If the returned status is non-nil, it has a non-nil Terminated field.
+// matchOnExitCodes 返回首个匹配退出码要求的已终止容器状态（若存在）。
+// 若返回状态非 nil，则其 Terminated 字段必非 nil。
 func matchOnExitCodes(podStatus *v1.PodStatus, requirement *batch.PodFailurePolicyOnExitCodesRequirement) *v1.ContainerStatus {
+	// 先查普通容器再查 init 容器，保证匹配顺序确定。
 	if containerStatus := getMatchingContainerFromList(podStatus.ContainerStatuses, requirement); containerStatus != nil {
 		return containerStatus
 	}
 	return getMatchingContainerFromList(podStatus.InitContainerStatuses, requirement)
 }
 
+// matchOnPodConditions 返回首个同时满足类型和状态模式的 Pod 条件（若存在）。
 func matchOnPodConditions(podStatus *v1.PodStatus, requirement []batch.PodFailurePolicyOnPodConditionsPattern) *v1.PodCondition {
 	for _, podCondition := range podStatus.Conditions {
 		for _, pattern := range requirement {
@@ -95,12 +98,12 @@ func matchOnPodConditions(podStatus *v1.PodStatus, requirement []batch.PodFailur
 	return nil
 }
 
-// getMatchingContainerFromList returns the first terminated container status in the list that matches the error code requirement, or nil if none match.
-// If the returned status is non-nil, it has a non-nil Terminated field
+// getMatchingContainerFromList 返回列表中首个匹配退出码要求的已终止容器状态，
+// 没有匹配项则返回 nil。若返回状态非 nil，则其 Terminated 字段必非 nil。
 func getMatchingContainerFromList(containerStatuses []v1.ContainerStatus, requirement *batch.PodFailurePolicyOnExitCodesRequirement) *v1.ContainerStatus {
 	for _, containerStatus := range containerStatuses {
 		if containerStatus.State.Terminated == nil {
-			// This container is still be terminating. There is no exit code to match.
+			// 容器仍在运行中，没有退出码可供匹配，跳过。
 			continue
 		}
 		if requirement.ContainerName == nil || *requirement.ContainerName == containerStatus.Name {
@@ -114,6 +117,7 @@ func getMatchingContainerFromList(containerStatuses []v1.ContainerStatus, requir
 	return nil
 }
 
+// isOnExitCodesOperatorMatching 按 In/NotIn 操作符判断退出码是否命中要求的值集合。
 func isOnExitCodesOperatorMatching(exitCode int32, requirement *batch.PodFailurePolicyOnExitCodesRequirement) bool {
 	switch requirement.Operator {
 	case batch.PodFailurePolicyOnExitCodesOpIn:

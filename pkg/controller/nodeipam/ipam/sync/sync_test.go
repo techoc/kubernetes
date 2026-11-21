@@ -34,15 +34,18 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+// 测试中使用的集群 CIDR 范围，用于构造 CIDR 分配与同步的场景。
 var (
 	_, clusterCIDRRange, _ = netutils.ParseCIDRSloppy("10.1.0.0/16")
 )
 
+// fakeEvent 记录测试中发出的事件：节点名称与事件原因。
 type fakeEvent struct {
 	nodeName string
 	reason   string
 }
 
+// fakeAPIs 是 CIDR 同步器所依赖各接口的 fake 实现，记录调用轨迹并允许注入错误。
 type fakeAPIs struct {
 	aliasRange    *net.IPNet
 	aliasErr      error
@@ -62,35 +65,42 @@ type fakeAPIs struct {
 	logger klog.Logger
 }
 
+// Alias 返回云服务商为节点配置的 CIDR 范围（fake 实现）。
 func (f *fakeAPIs) Alias(ctx context.Context, node *v1.Node) (*net.IPNet, error) {
 	f.calls = append(f.calls, fmt.Sprintf("alias %v", node.Name))
 	return f.aliasRange, f.aliasErr
 }
 
+// AddAlias 模拟在云服务商侧为节点添加 CIDR 别名（fake 实现）。
 func (f *fakeAPIs) AddAlias(ctx context.Context, node *v1.Node, cidrRange *net.IPNet) error {
 	f.calls = append(f.calls, fmt.Sprintf("addAlias %v %v", node.Name, cidrRange))
 	return f.addAliasErr
 }
 
+// Node 按名称返回节点对象（fake 实现）。
 func (f *fakeAPIs) Node(ctx context.Context, name string) (*v1.Node, error) {
 	f.calls = append(f.calls, fmt.Sprintf("node %v", name))
 	return f.nodeRet, f.nodeErr
 }
 
+// UpdateNodePodCIDR 模拟把 CIDR 写回节点的 PodCIDR 字段（fake 实现）。
 func (f *fakeAPIs) UpdateNodePodCIDR(ctx context.Context, node *v1.Node, cidrRange *net.IPNet) error {
 	f.calls = append(f.calls, fmt.Sprintf("updateNode %v", node))
 	return f.updateNodeErr
 }
 
+// UpdateNodeNetworkUnavailable 模拟更新节点 NetworkUnavailable 状态（fake 实现）。
 func (f *fakeAPIs) UpdateNodeNetworkUnavailable(nodeName string, unavailable bool) error {
 	f.calls = append(f.calls, fmt.Sprintf("updateNodeNetworkUnavailable %v %v", nodeName, unavailable))
 	return f.updateNodeNetworkUnavailableErr
 }
 
+// EmitNodeWarningEvent 记录一条节点 Warning 事件（fake 实现）。
 func (f *fakeAPIs) EmitNodeWarningEvent(nodeName, reason, fmtStr string, args ...interface{}) {
 	f.events = append(f.events, fakeEvent{nodeName, reason})
 }
 
+// ReportResult 记录同步结果，并在需要时通知等待中的测试（fake 实现）。
 func (f *fakeAPIs) ReportResult(err error) {
 	f.logger.V(2).Info("ReportResult", "err", err)
 	f.results = append(f.results, err)
@@ -99,6 +109,7 @@ func (f *fakeAPIs) ReportResult(err error) {
 	}
 }
 
+// ResyncTimeout 返回重新同步的超时时间；未显式设置时返回一个很大的值以免测试中触发。
 func (f *fakeAPIs) ResyncTimeout() time.Duration {
 	if f.resyncTimeout == 0 {
 		return time.Second * 10000
@@ -106,21 +117,26 @@ func (f *fakeAPIs) ResyncTimeout() time.Duration {
 	return f.resyncTimeout
 }
 
+// dumpTrace 把记录下来的调用轨迹输出到测试日志。
 func (f *fakeAPIs) dumpTrace() {
 	for i, x := range f.calls {
 		f.logger.Info("trace", "index", i, "call", x)
 	}
 }
 
+// nodeWithoutCIDRRange 是尚未分配 PodCIDR 的节点，用于测试从云端同步 CIDR 的场景。
 var nodeWithoutCIDRRange = &v1.Node{
 	ObjectMeta: metav1.ObjectMeta{Name: "node1"},
 }
 
+// nodeWithCIDRRange 是已分配 PodCIDR 的节点，用于测试从集群读取 CIDR 的场景。
 var nodeWithCIDRRange = &v1.Node{
 	ObjectMeta: metav1.ObjectMeta{Name: "node1"},
 	Spec:       v1.NodeSpec{PodCIDR: "10.1.1.0/24"},
 }
 
+// TestNodeSyncUpdate 覆盖不同同步模式与节点状态下，NodeSync 单次 Update 的行为，
+// 校验发出的事件与是否产生错误符合预期。
 func TestNodeSyncUpdate(t *testing.T) {
 	t.Parallel()
 
@@ -204,7 +220,7 @@ func TestNodeSyncUpdate(t *testing.T) {
 		sync := New(&tc.fake, &tc.fake, &tc.fake, tc.mode, "node1", cidr)
 		doneChan := make(chan struct{})
 
-		// Do a single step of the loop.
+		// 让同步循环只执行一步：启动 Loop 后送入一次更新，再关闭操作通道等待结束。
 		go sync.Loop(logger, doneChan)
 		sync.Update(tc.node)
 		close(sync.opChan)
@@ -226,13 +242,13 @@ func TestNodeSyncUpdate(t *testing.T) {
 	}
 }
 
+// TestNodeSyncResync 验证在 SyncFromCluster 模式下，同步循环会按超时周期触发重新同步。
 func TestNodeSyncResync(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	fake := &fakeAPIs{
 		nodeRet:       nodeWithCIDRRange,
 		resyncTimeout: time.Millisecond,
-		// Allow one extra resync notification to land while the test is
-		// closing the loop down.
+		// 缓冲区留 1 个位置，允许测试关闭循环期间多到达一次重新同步通知。
 		reportChan: make(chan struct{}, 1),
 		logger:     logger,
 	}
@@ -240,15 +256,16 @@ func TestNodeSyncResync(t *testing.T) {
 	sync := New(fake, fake, fake, SyncFromCluster, "node1", cidr)
 	doneChan := make(chan struct{})
 	go sync.Loop(logger, doneChan)
-	// Wait for the first resync to complete
+	// 等待第一次重新同步完成。
 	<-fake.reportChan
-	// Close the operation channel to stop the loop
+	// 关闭操作通道以停止循环。
 	close(sync.opChan)
-	// Wait for the loop to complete
+	// 等待循环退出。
 	<-doneChan
 	fake.dumpTrace()
 }
 
+// TestNodeSyncDelete 验证 Delete 事件处理：覆盖正常 CIDR、无 CIDR 以及非法 CIDR 的多种节点。
 func TestNodeSyncDelete(t *testing.T) {
 	t.Parallel()
 
@@ -283,7 +300,7 @@ func TestNodeSyncDelete(t *testing.T) {
 		sync := New(&tc.fake, &tc.fake, &tc.fake, tc.mode, "node1", cidr)
 		doneChan := make(chan struct{})
 
-		// Do a single step of the loop.
+		// 让同步循环只执行一步：启动 Loop 后送入一次更新，再关闭操作通道等待结束。
 		go sync.Loop(logger, doneChan)
 		sync.Delete(tc.node)
 		<-doneChan

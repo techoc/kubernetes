@@ -52,102 +52,101 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// KubeControllerManagerConfiguration contains elements describing kube-controller manager.
+// KubeControllerManagerConfiguration 包含 kube-controller-manager 的全部配置。
 type KubeControllerManagerConfiguration struct {
 	metav1.TypeMeta
 
-	// Generic holds configuration for a generic controller-manager
+	// Generic 保存通用 controller-manager 的配置
 	Generic cmconfig.GenericControllerManagerConfiguration
-	// KubeCloudSharedConfiguration holds configuration for shared related features
-	// both in cloud controller manager and kube-controller manager.
+	// KubeCloudSharedConfiguration 保存 cloud-controller-manager 与 kube-controller-manager 共用的配置
 	KubeCloudShared cpconfig.KubeCloudSharedConfiguration
 
-	// AttachDetachControllerConfiguration holds configuration for
+	// AttachDetachControllerConfiguration 保存 AttachDetachController 相关功能的配置。
 	// AttachDetachController related features.
 	AttachDetachController attachdetachconfig.AttachDetachControllerConfiguration
-	// CronJobControllerConfiguration holds configuration for CronJobController
+	// CronJobControllerConfiguration 保存 CronJobController 相关功能的配置。
 	// related features.
 	CronJobController cronjobconfig.CronJobControllerConfiguration
-	// CSRSigningControllerConfiguration holds configuration for
+	// CSRSigningControllerConfiguration 保存 CSRSigningController 相关功能的配置。
 	// CSRSigningController related features.
 	CSRSigningController csrsigningconfig.CSRSigningControllerConfiguration
-	// DaemonSetControllerConfiguration holds configuration for DaemonSetController
+	// DaemonSetControllerConfiguration 保存 DaemonSetController 相关功能的配置。
 	// related features.
 	DaemonSetController daemonconfig.DaemonSetControllerConfiguration
-	// DeploymentControllerConfiguration holds configuration for
+	// DeploymentControllerConfiguration 保存 DeploymentController 相关功能的配置。
 	// DeploymentController related features.
 	DeploymentController deploymentconfig.DeploymentControllerConfiguration
-	// DisruptionControllerConfiguration holds configuration for
+	// DisruptionControllerConfiguration 保存 DisruptionController 相关功能的配置。
 	// DisruptionController related features.
 	DisruptionController disruptionconfig.DisruptionControllerConfiguration
-	// DeviceTaintEvictionControllerConfiguration contains elements configuring the device taint eviction controller.
+	// DeviceTaintEvictionControllerConfiguration 保存 DeviceTaintEvictionController 相关功能的配置。
 	DeviceTaintEvictionController devicetaintevictionconfig.DeviceTaintEvictionControllerConfiguration
-	// DeprecatedControllerConfiguration holds configuration for some deprecated
+	// DeprecatedControllerConfiguration 包含已废弃的配置项（当前为空）。
 	// features.
 	DeprecatedController DeprecatedControllerConfiguration
-	// EndpointControllerConfiguration holds configuration for EndpointController
+	// EndpointControllerConfiguration 保存 EndpointController 相关功能的配置。
 	// related features.
 	EndpointController endpointconfig.EndpointControllerConfiguration
-	// EndpointSliceControllerConfiguration holds configuration for
+	// EndpointSliceControllerConfiguration 保存 EndpointSliceController 相关功能的配置。
 	// EndpointSliceController related features.
 	EndpointSliceController endpointsliceconfig.EndpointSliceControllerConfiguration
-	// EndpointSliceMirroringControllerConfiguration holds configuration for
+	// EndpointSliceMirroringControllerConfiguration 保存 EndpointSliceMirroringController 相关功能的配置。
 	// EndpointSliceMirroringController related features.
 	EndpointSliceMirroringController endpointslicemirroringconfig.EndpointSliceMirroringControllerConfiguration
-	// EphemeralVolumeControllerConfiguration holds configuration for EphemeralVolumeController
+	// EphemeralVolumeControllerConfiguration 保存 EphemeralVolumeController 相关功能的配置。
 	// related features.
 	EphemeralVolumeController ephemeralvolumeconfig.EphemeralVolumeControllerConfiguration
-	// GarbageCollectorControllerConfiguration holds configuration for
+	// GarbageCollectorControllerConfiguration 保存 GarbageCollectorController 相关功能的配置。
 	// GarbageCollectorController related features.
 	GarbageCollectorController garbagecollectorconfig.GarbageCollectorControllerConfiguration
-	// HPAControllerConfiguration holds configuration for HPAController related features.
+	// HPAControllerConfiguration 保存 HPAController 相关功能的配置。
 	HPAController poautosclerconfig.HPAControllerConfiguration
-	// JobControllerConfiguration holds configuration for JobController related features.
+	// JobControllerConfiguration 保存 JobController 相关功能的配置。
 	JobController jobconfig.JobControllerConfiguration
-	// LegacySATokenCleanerConfiguration holds configuration for LegacySATokenCleaner related features.
+	// LegacySATokenCleanerConfiguration 保存 LegacySATokenCleaner 相关功能的配置。
 	LegacySATokenCleaner serviceaccountconfig.LegacySATokenCleanerConfiguration
-	// NamespaceControllerConfiguration holds configuration for NamespaceController
+	// NamespaceControllerConfiguration 保存 NamespaceController 相关功能的配置。
 	// related features.
 	NamespaceController namespaceconfig.NamespaceControllerConfiguration
-	// NodeIPAMControllerConfiguration holds configuration for NodeIPAMController
+	// NodeIPAMControllerConfiguration 保存 NodeIPAMController 相关功能的配置。
 	// related features.
 	NodeIPAMController nodeipamconfig.NodeIPAMControllerConfiguration
-	// NodeLifecycleControllerConfiguration holds configuration for
+	// NodeLifecycleControllerConfiguration 保存 NodeLifecycleController 相关功能的配置。
 	// NodeLifecycleController related features.
 	NodeLifecycleController nodelifecycleconfig.NodeLifecycleControllerConfiguration
-	// PersistentVolumeBinderControllerConfiguration holds configuration for
+	// PersistentVolumeBinderControllerConfiguration 保存 PersistentVolumeBinderController 相关功能的配置。
 	// PersistentVolumeBinderController related features.
 	PersistentVolumeBinderController persistentvolumeconfig.PersistentVolumeBinderControllerConfiguration
-	// PodGCControllerConfiguration holds configuration for PodGCController
+	// PodGCControllerConfiguration 保存 PodGCController 相关功能的配置。
 	// related features.
 	PodGCController podgcconfig.PodGCControllerConfiguration
-	// ReplicaSetControllerConfiguration holds configuration for ReplicaSet related features.
+	// ReplicaSetControllerConfiguration 保存 ReplicaSetController 相关功能的配置。
 	ReplicaSetController replicasetconfig.ReplicaSetControllerConfiguration
-	// ReplicationControllerConfiguration holds configuration for
+	// ReplicationControllerConfiguration 保存 ReplicationController 相关功能的配置。
 	// ReplicationController related features.
 	ReplicationController replicationconfig.ReplicationControllerConfiguration
-	// ResourceQuotaControllerConfiguration holds configuration for
+	// ResourceQuotaControllerConfiguration 保存 ResourceQuotaController 相关功能的配置。
 	// ResourceQuotaController related features.
 	ResourceQuotaController resourcequotaconfig.ResourceQuotaControllerConfiguration
-	// SAControllerConfiguration holds configuration for ServiceAccountController
+	// SAControllerConfiguration 保存 SAController 相关功能的配置。
 	// related features.
 	SAController serviceaccountconfig.SAControllerConfiguration
-	// ServiceControllerConfiguration holds configuration for ServiceController
+	// ServiceControllerConfiguration 保存 ServiceController 相关功能的配置。
 	// related features.
 	ServiceController serviceconfig.ServiceControllerConfiguration
-	// StatefulSetControllerConfiguration holds configuration for
+	// StatefulSetControllerConfiguration 保存 StatefulSetController 相关功能的配置。
 	// StatefulSetController related features.
 	StatefulSetController statefulsetconfig.StatefulSetControllerConfiguration
-	// TTLAfterFinishedControllerConfiguration holds configuration for
+	// TTLAfterFinishedControllerConfiguration 保存 TTLAfterFinishedController 相关功能的配置。
 	// TTLAfterFinishedController related features.
 	TTLAfterFinishedController ttlafterfinishedconfig.TTLAfterFinishedControllerConfiguration
-	// ValidatingAdmissionPolicyStatusControllerConfiguration holds configuration for
+	// ValidatingAdmissionPolicyStatusControllerConfiguration 保存 ValidatingAdmissionPolicyStatusController 相关功能的配置。
 	// ValidatingAdmissionPolicyStatusController related features.
 	ValidatingAdmissionPolicyStatusController validatingadmissionpolicystatusconfig.ValidatingAdmissionPolicyStatusControllerConfiguration
-	// ResourceClaimControllerConfiguration contains elements configuring the resource claim controller.
+	// ResourceClaimControllerConfiguration 保存 ResourceClaimController 相关功能的配置。
 	ResourceClaimController resourceclaimconfig.ResourceClaimControllerConfiguration
 }
 
-// DeprecatedControllerConfiguration contains elements be deprecated.
+// DeprecatedControllerConfiguration 包含已废弃的配置项（当前为空）。
 type DeprecatedControllerConfiguration struct {
 }

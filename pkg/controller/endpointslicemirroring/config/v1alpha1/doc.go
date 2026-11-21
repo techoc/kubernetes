@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// +k8s:deepcopy-gen=package
+// Package v1alpha1 定义 EndpointSlice 镜像控制器配置的外部版本。
+// 下面的生成器指令要求为整个包生成深拷贝方法，
+// 并针对内部配置包与外部 v1alpha1 类型生成转换代码。
 // +k8s:conversion-gen=k8s.io/kubernetes/pkg/controller/endpointslicemirroring/config
 // +k8s:conversion-gen-external-types=k8s.io/kube-controller-manager/config/v1alpha1
 

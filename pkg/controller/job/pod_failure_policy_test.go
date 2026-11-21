@@ -27,6 +27,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestMatchPodFailurePolicy 表驱动验证 matchPodFailurePolicy 对 Pod 失败策略规则的匹配逻辑：
+// 覆盖按退出码或 Pod 条件匹配、Ignore/FailJob/FailIndex/Count 各动作的返回值，
+// 以及未知动作、未知操作符、无规则等边界场景。
+// 关键语义：未知动作或未知操作符的规则会被跳过，而不是阻断后续规则的匹配。
 func TestMatchPodFailurePolicy(t *testing.T) {
 	validPodObjectMeta := metav1.ObjectMeta{
 		Namespace: "default",
@@ -37,6 +41,12 @@ func TestMatchPodFailurePolicy(t *testing.T) {
 	failIndex := batch.PodFailurePolicyActionFailIndex
 	count := batch.PodFailurePolicyActionCount
 
+	// testCases 是表驱动用例集合，字段含义：
+	//   podFailurePolicy：待匹配的 Pod 失败策略，nil 表示未配置策略；
+	//   failedPod：已失败的 Pod，其状态提供退出码或 Pod 条件；
+	//   wantJobFailureMessage：期望的 Job 失败消息，nil 表示不应产生；
+	//   wantCountFailed：期望是否将该 Pod 计入失败次数（FailJob 场景通常为 true）；
+	//   wantAction：期望匹配到的策略动作，nil 表示未匹配到任何有效规则。
 	testCases := map[string]struct {
 		podFailurePolicy      *batch.PodFailurePolicy
 		failedPod             *v1.Pod
@@ -798,7 +808,10 @@ func TestMatchPodFailurePolicy(t *testing.T) {
 			wantAction:            &count,
 		},
 	}
+	// 遍历所有测试用例；用例名称直接作为子测试名，便于定位失败场景。
 	for name, tc := range testCases {
+		// 逐个断言 matchPodFailurePolicy 的三个返回值：Job 失败消息、是否计入失败次数、
+		// 以及最终匹配到的动作。cmp.Diff 用于指针的深比较（比较所指内容而非地址）。
 		t.Run(name, func(t *testing.T) {
 			jobFailMessage, countFailed, action := matchPodFailurePolicy(tc.podFailurePolicy, tc.failedPod)
 			if diff := cmp.Diff(tc.wantJobFailureMessage, jobFailMessage); diff != "" {

@@ -52,14 +52,12 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// SELinuxWarning controller is a controller that emits a warning event and metrics when
-// two pods *might* use the same volume with different SELinux labels.
-// It is optional. It does nothing on a cluster that has SELinux disabled.
-// It does not modify any API objects except for the warning events.
+// SELinuxWarning 控制器在两个 Pod *可能* 用不同 SELinux 标签使用同一卷时，
+// 发出告警事件并记录指标。它是可选组件，在禁用 SELinux 的集群上不执行任何操作，
+// 除告警事件外也不会修改任何 API 对象。
 //
-// The controller watches *all* Pods and reports issues on all their volumes,
-// regardless if the Pod actually run on are Pending forever or if they have
-// correct node anti-affinity and never run on the same node.
+// 该控制器监听 *所有* Pod 并报告其所有卷的问题，
+// 无论 Pod 是否一直处于 Pending，或是否配置了反亲和性而永远不会运行在同一节点上。
 type Controller struct {
 	kubeClient       clientset.Interface
 	podLister        corelisters.PodLister
@@ -83,6 +81,8 @@ type Controller struct {
 	labelCache volumecache.VolumeCache
 }
 
+// NewController 构造 SELinuxWarning 控制器：初始化事件记录器、卷插件、CSI 迁移转换器，
+// 为 Pod 建立 PVC 索引，并为 Pod/PVC/PV/CSIDriver 注册事件处理器。
 func NewController(
 	ctx context.Context,
 	kubeClient clientset.Interface,
@@ -131,8 +131,7 @@ func NewController(
 	c.csiTranslator = csiTranslator
 	c.cmpm = csimigration.NewPluginManager(csiTranslator)
 
-	// Index pods by its PVC keys. Then we don't need to iterate all pods every time to find
-	// pods which reference given PVC.
+	// 按 PVC 键为 Pod 建立索引，这样查找引用某 PVC 的 Pod 时无需每次遍历全部 Pod。
 	err = common.AddPodPVCIndexerIfNotPresent(c.podIndexer)
 	if err != nil {
 		return nil, fmt.Errorf("could not initialize SELinux warning controller: %w", err)
@@ -178,6 +177,7 @@ func NewController(
 	return c, nil
 }
 
+// enqueuePod 把 Pod 对象转换为名字（兼容删除事件中的 tombstone）后放入工作队列。
 func (c *Controller) enqueuePod(_ klog.Logger, obj interface{}) {
 	podRef, err := cache.DeletionHandlingObjectToName(obj)
 	if err != nil {
@@ -186,11 +186,13 @@ func (c *Controller) enqueuePod(_ klog.Logger, obj interface{}) {
 	c.queue.Add(podRef)
 }
 
+// updatePod 处理 Pod 更新事件。
+// 与本控制器相关的 Pod.Spec 字段（卷、SELinux 标签、privileged 标记）创建后不可变，
+// 因此仅在 Pod 进入终态（Failed/Succeeded）时才需处理，
+// 此时 kubelet 会卸载卷，控制器应将其从缓存中移除。
 func (c *Controller) updatePod(logger klog.Logger, oldObj, newObj interface{}) {
-	// Pod.Spec fields that are relevant to this controller are immutable after creation (i.e.
-	// pod volumes, SELinux labels, privileged flag). React to update only when the Pod
-	// reaches its final state - kubelet will unmount the Pod volumes and the controller should
-	// therefore remove them from the cache.
+	// 与本控制器相关的 Pod.Spec 字段（卷、SELinux 标签、privileged 标记）创建后不可变，
+	// 只在 Pod 进入终态时响应更新：kubelet 会卸载卷，控制器需要据此清理缓存。
 	oldPod, ok := oldObj.(*v1.Pod)
 	if !ok {
 		return
@@ -200,8 +202,8 @@ func (c *Controller) updatePod(logger klog.Logger, oldObj, newObj interface{}) {
 		return
 	}
 
-	// This is an optimization. In theory, passing most pod updates to the controller queue should lead to noop.
-	// To save some CPU, pass only pod updates that can cause any action in the controller
+	// 优化：理论上大多数 Pod 更新入队后都是空操作，
+	// 为节省 CPU，只把可能引发控制器动作的更新入队。
 	if oldPod.Status.Phase == newPod.Status.Phase {
 		return
 	}
@@ -211,18 +213,20 @@ func (c *Controller) updatePod(logger klog.Logger, oldObj, newObj interface{}) {
 	c.enqueuePod(logger, newObj)
 }
 
+// addPVC 处理 PVC 添加事件：仅当 PVC 已绑定时才重新入队引用它的 Pod。
 func (c *Controller) addPVC(logger klog.Logger, obj interface{}) {
 	pvc, ok := obj.(*v1.PersistentVolumeClaim)
 	if !ok {
 		return
 	}
 	if pvc.Spec.VolumeName == "" {
-		// Ignore unbound PVCs
+		// 未绑定的 PVC 尚无卷，无需处理。
 		return
 	}
 	c.enqueueAllPodsForPVC(logger, pvc.Namespace, pvc.Name)
 }
 
+// updatePVC 处理 PVC 更新事件：仅在 PVC 从“未绑定”变为“已绑定”时重新入队相关 Pod。
 func (c *Controller) updatePVC(logger klog.Logger, oldObj, newObj interface{}) {
 	oldPVC, ok := oldObj.(*v1.PersistentVolumeClaim)
 	if !ok {
@@ -233,11 +237,12 @@ func (c *Controller) updatePVC(logger klog.Logger, oldObj, newObj interface{}) {
 		return
 	}
 	if oldPVC.Spec.VolumeName != newPVC.Spec.VolumeName {
-		// The PVC was just bound
+		// PVC 刚刚完成绑定，卷信息现在可用。
 		c.enqueueAllPodsForPVC(logger, newPVC.Namespace, newPVC.Name)
 	}
 }
 
+// addPV 处理 PV 添加事件：对已完整绑定到某 PVC 的 PV，重新入队引用该 PVC 的 Pod。
 func (c *Controller) addPV(logger klog.Logger, obj interface{}) {
 	pv, ok := obj.(*v1.PersistentVolume)
 	if !ok {
@@ -245,16 +250,18 @@ func (c *Controller) addPV(logger klog.Logger, obj interface{}) {
 	}
 	claimRef := pv.Spec.ClaimRef
 	if claimRef == nil {
-		// Ignore unbound PVs
+		// 未绑定的 PV 无需处理。
 		return
 	}
 	if claimRef.UID == "" {
-		// Ignore PVs with incomplete binding.
+		// 绑定尚未完成（无 UID），无需处理。
 		return
 	}
 	c.enqueueAllPodsForPVC(logger, claimRef.Namespace, claimRef.Name)
 }
 
+// updatePV 处理 PV 更新事件：当 PV 的绑定关系发生变化（新绑定或解绑）时，
+// 重新入队引用对应 PVC 的 Pod。
 func (c *Controller) updatePV(logger klog.Logger, oldObj, newObj interface{}) {
 	oldPV, ok := oldObj.(*v1.PersistentVolume)
 	if !ok {
@@ -266,28 +273,27 @@ func (c *Controller) updatePV(logger klog.Logger, oldObj, newObj interface{}) {
 	}
 	newClaimRef := newPV.Spec.ClaimRef
 	if newClaimRef == nil {
-		// Ignore unbound PVs
+		// 未绑定的 PV 无需处理。
 		return
 	}
 	if newClaimRef.UID == "" {
-		// Ignore PVs with incomplete binding.
+		// 绑定尚未完成（无 UID），无需处理。
 		return
 	}
 	oldClaimRef := oldPV.Spec.ClaimRef
 	if oldClaimRef == nil || oldClaimRef.UID != newClaimRef.UID {
-		// The PV was just bound (or un-bound)
-		// Re-queue all Pods in the same namespace as the PVC bound to this PV
+		// PV 刚被绑定或解绑，需重新入队该 PVC 所在命名空间中使用它的 Pod。
 		c.enqueueAllPodsForPVC(logger, newClaimRef.Namespace, newClaimRef.Name)
 	}
 }
 
+// enqueueAllPodsForPVC 借助 Pod 索引找出引用给定 PVC 的所有 Pod 并入队。
 func (c *Controller) enqueueAllPodsForPVC(logger klog.Logger, namespace, name string) {
-	// Re-queue all Pods in the same namespace as the PVC.
-	// As consequence, all events for Pods in the namespace will be re-sent.
-	// Possible optimizations:
-	// - Resolve which Pods use the PVC here, in informer hook, using Pod informer. That could block the hook for longer than necessary.
-	// - Resolve which Pods use the PVC here, in informer hook, using a new cache (map?) of Pods that wait for a PVC with given name.
-	// - Enqueue the PVC name and find Pods that use the PVC in a worker thread. That would mean that the queue can have either PVCs or Pods.
+	// 保守地重新入队与该 PVC 同一命名空间的所有 Pod，代价是该命名空间下所有 Pod 事件都会被重新发送。
+	// 可能的优化方向：
+	// - 在 informer 回调中用 Pod informer 精确解析哪些 Pod 使用该 PVC，但可能延长回调阻塞时间。
+	// - 维护一份“等待某 PVC 的 Pod”缓存，在回调中直接查表。
+	// - 改为把 PVC 名字入队，由 worker 线程解析具体 Pod，但队列中将同时存在 PVC 和 Pod 两类元素。
 	objs, err := c.podIndexer.ByIndex(common.PodPVCIndex, fmt.Sprintf("%s/%s", namespace, name))
 	if err != nil {
 		logger.Error(err, "listing pods from cache")
@@ -298,19 +304,21 @@ func (c *Controller) enqueueAllPodsForPVC(logger klog.Logger, namespace, name st
 	}
 }
 
+// addCSIDriver 处理 CSIDriver 添加事件：SELinuxMount 能力会影响卷的有效 SELinux 策略，
+// 因此需重新入队使用该驱动的 Pod 重新评估冲突。
 func (c *Controller) addCSIDriver(_ klog.Logger, obj interface{}) {
 	csiDriver, ok := obj.(*storagev1.CSIDriver)
 	if !ok {
 		return
 	}
-	// SELinuxMount may have changed. Pods that use volumes of this driver may have
-	// a different effective SELinuxChangePolicy.
-	// With SELinuxMount: false / nil, Pod SELinuxChangePolicy is ignored and implied to `Recursive`.
-	// With SELinuxMount: true, the actual SELinuxChangePolicy is used.
-	// Re-queue all pods that use this CSIDriver to re-evaluate their conflicts.
+	// 新增驱动意味着 SELinuxMount 能力从“无”变为“有”，使用该驱动卷的 Pod 的有效策略可能改变：
+	// SELinuxMount 为 false/nil 时忽略 Pod 的 SELinuxChangePolicy，视作 `Recursive`；
+	// 为 true 时才使用 Pod 实际声明的策略。重新入队相关 Pod 以重新评估冲突。
 	c.enqueueAllPodsForCSIDriver(csiDriver.Name)
 }
 
+// updateCSIDriver 处理 CSIDriver 更新事件：仅当 SELinuxMount 开关发生变化时，
+// 重新入队使用该驱动的 Pod 以重新评估冲突。
 func (c *Controller) updateCSIDriver(_ klog.Logger, oldObj, newObj interface{}) {
 	oldCSIDriver, ok := oldObj.(*storagev1.CSIDriver)
 	if !ok {
@@ -323,30 +331,29 @@ func (c *Controller) updateCSIDriver(_ klog.Logger, oldObj, newObj interface{}) 
 	oldSELinuxMount := ptr.Deref(oldCSIDriver.Spec.SELinuxMount, false)
 	newSELinuxMount := ptr.Deref(newCSIDriver.Spec.SELinuxMount, false)
 	if oldSELinuxMount != newSELinuxMount {
-		// SELinuxMount changed. Pods that use volumes of this driver may have
-		// a different effective SELinuxChangePolicy.
-		// With SELinuxMount: false / nil, Pod SELinuxChangePolicy is ignored and implied to `Recursive`.
-		// With SELinuxMount: true, the actual SELinuxChangePolicy is used.
-		// Re-queue all pods that use this CSIDriver to re-evaluate their conflicts.
+		// SELinuxMount 开关变化会改变卷的有效 SELinuxChangePolicy：
+		// false/nil 时视作 `Recursive`，true 时使用 Pod 声明的策略。
+		// 重新入队使用该驱动的 Pod 以重新评估冲突。
 		c.enqueueAllPodsForCSIDriver(newCSIDriver.Name)
 	}
 }
 
+// deleteCSIDriver 处理 CSIDriver 删除事件：若被删除的驱动声明支持 SELinuxMount，
+// 其能力将回退为默认的不支持，需重新入队使用该驱动的 Pod。
 func (c *Controller) deleteCSIDriver(_ klog.Logger, obj interface{}) {
 	csiDriver, ok := obj.(*storagev1.CSIDriver)
 	if !ok {
 		return
 	}
 	if ptr.Deref(csiDriver.Spec.SELinuxMount, false) {
-		// The deleted CSIDriver announced SELinuxMount support. Drivers without CSIDriver instance default to `SELinuxMount: false`.
-		// Pods that use volumes of this driver may have a different effective SELinuxChangePolicy now.
-		// With SELinuxMount: true, the actual SELinuxChangePolicy was used.
-		// With missing CSIDriver (= SELinuxMount: false), Pod SELinuxChangePolicy is ignored and implied to `Recursive`.
-		// Re-queue all pods that use this CSIDriver to re-evaluate their conflicts.
+		// 被删除的驱动曾声明支持 SELinuxMount；没有 CSIDriver 实例时默认为 `SELinuxMount: false`。
+		// 之前使用 Pod 实际声明的策略，之后将视作 `Recursive`，
+		// 因此需重新入队相关 Pod 以重新评估冲突。
 		c.enqueueAllPodsForCSIDriver(csiDriver.Name)
 	}
 }
 
+// enqueueAllPodsForCSIDriver 把缓存中记录的使用指定 CSI 驱动的所有 Pod 入队。
 func (c *Controller) enqueueAllPodsForCSIDriver(csiDriverName string) {
 	podKeys := c.labelCache.GetPodsForCSIDriver(csiDriverName)
 	for _, podKey := range podKeys {
@@ -354,6 +361,8 @@ func (c *Controller) enqueueAllPodsForCSIDriver(csiDriverName string) {
 	}
 }
 
+// Run 启动控制器：等待缓存同步后运行 workers 个工作协程处理队列，
+// 直到 ctx 结束再排空队列并关闭事件广播器。
 func (c *Controller) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 
@@ -367,7 +376,7 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 		wg.Wait()
 	}()
 
-	c.eventBroadcaster.StartStructuredLogging(3) // verbosity level 3 is used by the other KCM controllers
+	c.eventBroadcaster.StartStructuredLogging(3) // 与其他 KCM 控制器保持一致，使用日志级别 3
 	c.eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: c.kubeClient.CoreV1().Events("")})
 	defer c.eventBroadcaster.Shutdown()
 
@@ -383,11 +392,14 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// runWorker 持续处理队列中的条目，直到 processNextWorkItem 返回 false（队列关闭）。
 func (c *Controller) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
+// processNextWorkItem 从队列取出一个 Pod 并同步；
+// 失败时记录错误并按速率限制重新入队，成功时调用 Forget 重置退避。
 func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	item, shutdown := c.queue.Get()
 	if shutdown {
@@ -407,29 +419,29 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
-// syncHandler is invoked for each pod which might need to be processed.
-// If an error is returned from this function, the pod will be requeued.
+// sync 对可能需要处理的 Pod 执行一次同步；返回错误时该 Pod 会被重新入队。
+// Pod 被删除或进入终态时走删除路径，从标签缓存中移除其卷。
 func (c *Controller) sync(ctx context.Context, podRef cache.ObjectName) error {
 	logger := klog.FromContext(ctx)
 
 	pod, err := c.podLister.Pods(podRef.Namespace).Get(podRef.Name)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			// The pod must have been deleted
+			// Pod 已从 API 中消失，按删除处理。
 			return c.syncPodDelete(ctx, podRef)
 		}
 		logger.V(5).Info("Error getting pod from informer", "pod", klog.KObj(pod), "podUID", pod.UID, "err", err)
 		return err
 	}
 	if pod.Status.Phase == v1.PodFailed || pod.Status.Phase == v1.PodSucceeded {
-		// The pod has reached its final state and kubelet is unmounting is volumes.
-		// Remove them from the cache.
+		// Pod 已进入终态，kubelet 正在卸载卷，应将其从缓存中移除。
 		return c.syncPodDelete(ctx, podRef)
 	}
 
 	return c.syncPod(ctx, pod)
 }
 
+// syncPodDelete 从标签缓存中移除指定 Pod 的所有卷记录。
 func (c *Controller) syncPodDelete(ctx context.Context, podKey cache.ObjectName) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Deleting pod", "key", podKey)
@@ -438,6 +450,8 @@ func (c *Controller) syncPodDelete(ctx context.Context, podKey cache.ObjectName)
 	return nil
 }
 
+// syncPod 计算 Pod 每个卷的 SELinux 标签并写入标签缓存，
+// 聚合处理过程中遇到的错误返回（部分失败不阻断其他卷）。
 func (c *Controller) syncPod(ctx context.Context, pod *v1.Pod) error {
 	logger := klog.FromContext(ctx)
 	logger.V(4).Info("Syncing pod", "pod", klog.KObj(pod))
@@ -445,12 +459,11 @@ func (c *Controller) syncPod(ctx context.Context, pod *v1.Pod) error {
 	errs := []error{}
 	volumeSpecs := make(map[string]*volume.Spec)
 
-	// Pre-compute volumes
+	// 预先解析所有卷的 Spec，避免在挂载遍历中重复处理。
 	for i := range pod.Spec.Volumes {
 		spec, err := util.CreateVolumeSpec(logger, pod.Spec.Volumes[i], pod, c.vpm, c.pvcLister, c.pvLister, c.cmpm, c.csiTranslator)
 		if err != nil {
-			// This can happen frequently when PVC or PV do not exist yet.
-			// Report it, but continue further.
+			// PVC 或 PV 尚未创建时这是常见情况：记录错误但继续处理其余卷。
 			errs = append(errs, err)
 			continue
 		}
@@ -462,7 +475,7 @@ func (c *Controller) syncPod(ctx context.Context, pod *v1.Pod) error {
 		opts := seLinuxLabels[mount]
 		spec, found := volumeSpecs[mount]
 		if !found {
-			// This must be a volume that failed CreateVolumeSpec above. Error will be reported.
+			// 该卷在上一步 CreateVolumeSpec 失败，错误已记录，跳过即可。
 			logger.V(4).Info("skipping not found volume", "pod", klog.KObj(pod), "volume", mount)
 			continue
 		}
@@ -477,8 +490,8 @@ func (c *Controller) syncPod(ctx context.Context, pod *v1.Pod) error {
 			continue
 		}
 
-		// Use the same label as kubelet will use for mount -o context.
-		// If the Pod has opted in to Recursive policy, it will be empty string here and no conflicts will be reported for it.
+		// 使用与 kubelet 挂载时 -o context 相同的标签。
+		// 若 Pod 选择了 Recursive 策略，这里标签为空，不参与冲突检测。
 		seLinuxLabel := mountInfo.SELinuxMountLabel
 
 		err = c.syncVolume(logger, pod, spec, seLinuxLabel, mountInfo.PluginSupportsSELinuxContextMount)
@@ -490,10 +503,11 @@ func (c *Controller) syncPod(ctx context.Context, pod *v1.Pod) error {
 	return errorutils.NewAggregate(errs)
 }
 
+// syncVolume 将单个卷及其 SELinux 标签、变更策略写入标签缓存，并上报检测到的冲突事件。
 func (c *Controller) syncVolume(logger klog.Logger, pod *v1.Pod, spec *volume.Spec, seLinuxLabel string, pluginSupportsSELinuxContextMount bool) error {
 	plugin, err := c.vpm.FindPluginBySpec(spec)
 	if err != nil {
-		// The controller does not have all volume plugins, only those that affect SELinux.
+		// 控制器只加载与 SELinux 相关的插件，未知插件的卷直接跳过。
 		logger.V(4).Info("Skipping volume of unknown plugin", "volume", spec.Name(), "err", err)
 		return nil
 	}
@@ -520,7 +534,7 @@ func (c *Controller) syncVolume(logger klog.Logger, pod *v1.Pod, spec *volume.Sp
 
 	csiDriver, err := csi.GetCSIDriverName(spec)
 	if err != nil {
-		// This is likely not a CSI volume
+		// 获取 CSI 驱动名失败，说明这很可能不是 CSI 卷。
 		csiDriver = ""
 	}
 	logger.V(4).Info("Syncing pod volume", "pod", klog.KObj(pod), "volume", spec.Name(), "label", seLinuxLabel, "uniqueVolumeName", uniqueVolumeName, "changePolicy", changePolicy, "csiDriver", csiDriver)
@@ -531,12 +545,14 @@ func (c *Controller) syncVolume(logger klog.Logger, pod *v1.Pod, spec *volume.Sp
 	return nil
 }
 
+// reportConflictEvents 为检测到的每个卷冲突发出 Normal 事件；
+// 若冲突涉及的 Pod 已被删除（说明冲突已自然消解），则跳过上报。
 func (c *Controller) reportConflictEvents(logger klog.Logger, conflicts []volumecache.Conflict) {
 	for _, conflict := range conflicts {
 		pod, err := c.podLister.Pods(conflict.Pod.Namespace).Get(conflict.Pod.Name)
 		if err != nil {
 			logger.V(2).Info("failed to get first pod for event", "pod", conflict.Pod, "err", err)
-			// It does not make sense to report a conflict that has been resolved by deleting one of the pods.
+			// 冲突因其中一个 Pod 被删除而自然消解，再上报没有意义。
 			return
 		}
 		c.eventRecorder.Event(pod, v1.EventTypeNormal, conflict.EventReason, conflict.EventMessage())

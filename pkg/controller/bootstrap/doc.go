@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package bootstrap provides automatic processes necessary for bootstraping.
-// This includes managing and expiring tokens along with signing well known
-// configmaps with those tokens.
+// Package bootstrap 提供集群引导所需的自动化流程，
+// 包括管理并过期引导令牌，以及用这些令牌对已知 ConfigMap 签名。
 package bootstrap

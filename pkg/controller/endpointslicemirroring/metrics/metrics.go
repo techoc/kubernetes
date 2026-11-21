@@ -23,13 +23,11 @@ import (
 	"k8s.io/component-base/metrics/legacyregistry"
 )
 
-// EndpointSliceMirroringSubsystem is the name of the subsystem used for
-// EndpointSliceMirroring controller.
+// EndpointSliceMirroringSubsystem 是 EndpointSliceMirroring 控制器指标使用的子系统名称。
 const EndpointSliceMirroringSubsystem = "endpoint_slice_mirroring_controller"
 
 var (
-	// EndpointsAddedPerSync tracks the number of endpoints added on each
-	// Endpoints sync.
+	// EndpointsAddedPerSync 记录每次 Endpoints 同步时新增的端点数量。
 	EndpointsAddedPerSync = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      EndpointSliceMirroringSubsystem,
@@ -40,8 +38,7 @@ var (
 		},
 		[]string{},
 	)
-	// EndpointsUpdatedPerSync tracks the number of endpoints updated on each
-	// Endpoints sync.
+	// EndpointsUpdatedPerSync 记录每次 Endpoints 同步时更新的端点数量。
 	EndpointsUpdatedPerSync = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      EndpointSliceMirroringSubsystem,
@@ -52,8 +49,7 @@ var (
 		},
 		[]string{},
 	)
-	// EndpointsRemovedPerSync tracks the number of endpoints removed on each
-	// Endpoints sync.
+	// EndpointsRemovedPerSync 记录每次 Endpoints 同步时移除的端点数量。
 	EndpointsRemovedPerSync = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      EndpointSliceMirroringSubsystem,
@@ -64,8 +60,7 @@ var (
 		},
 		[]string{},
 	)
-	// AddressesSkippedPerSync tracks the number of addresses skipped on each
-	// Endpoints sync due to being invalid or exceeding MaxEndpointsPerSubset.
+	// AddressesSkippedPerSync 记录每次同步时因地址非法或超出 MaxEndpointsPerSubset 而被跳过的地址数量。
 	AddressesSkippedPerSync = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      EndpointSliceMirroringSubsystem,
@@ -76,8 +71,7 @@ var (
 		},
 		[]string{},
 	)
-	// EndpointsSyncDuration tracks how long syncEndpoints() takes in a number
-	// of Seconds.
+	// EndpointsSyncDuration 记录 syncEndpoints() 的执行耗时（秒）。
 	EndpointsSyncDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
 			Subsystem:      EndpointSliceMirroringSubsystem,
@@ -88,7 +82,7 @@ var (
 		},
 		[]string{},
 	)
-	// EndpointsDesired tracks the total number of desired endpoints.
+	// EndpointsDesired 记录期望的端点总数。
 	EndpointsDesired = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      EndpointSliceMirroringSubsystem,
@@ -98,7 +92,7 @@ var (
 		},
 		[]string{},
 	)
-	// NumEndpointSlices tracks the number of EndpointSlices in a cluster.
+	// NumEndpointSlices 记录集群中 EndpointSlice 的数量。
 	NumEndpointSlices = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      EndpointSliceMirroringSubsystem,
@@ -108,8 +102,7 @@ var (
 		},
 		[]string{},
 	)
-	// DesiredEndpointSlices tracks the number of EndpointSlices that would
-	// exist with perfect endpoint allocation.
+	// DesiredEndpointSlices 记录理想分配情况下应当存在的 EndpointSlice 数量，用于与实际数量对比评估碎片化程度。
 	DesiredEndpointSlices = metrics.NewGaugeVec(
 		&metrics.GaugeOpts{
 			Subsystem:      EndpointSliceMirroringSubsystem,
@@ -119,7 +112,7 @@ var (
 		},
 		[]string{},
 	)
-	// EndpointSliceChanges tracks the number of changes to Endpoint Slices.
+	// EndpointSliceChanges 记录 EndpointSlice 的变更次数，按操作类型（add/update/delete）区分。
 	EndpointSliceChanges = metrics.NewCounterVec(
 		&metrics.CounterOpts{
 			Subsystem:      EndpointSliceMirroringSubsystem,
@@ -131,9 +124,10 @@ var (
 	)
 )
 
+// registerMetrics 保证指标只注册一次；重复注册会导致 panic。
 var registerMetrics sync.Once
 
-// RegisterMetrics registers EndpointSlice metrics.
+// RegisterMetrics 将 EndpointSliceMirroring 控制器的指标注册到 legacy registry。
 func RegisterMetrics() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(EndpointsAddedPerSync)

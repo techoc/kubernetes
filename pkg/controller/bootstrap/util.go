@@ -27,6 +27,9 @@ import (
 	bootstrapsecretutil "k8s.io/cluster-bootstrap/util/secrets"
 )
 
+// validateSecretForSigning 校验一个 bootstrap token Secret 是否可用于签名。
+// 依次检查 Secret 名称、token ID/Secret 数据的一致性、过期时间以及 signing 用途标记；
+// 任一检查失败都返回 ok=false，调用方据此拒绝该 Secret。
 func validateSecretForSigning(ctx context.Context, secret *v1.Secret) (tokenID, tokenSecret string, ok bool) {
 	logger := klog.FromContext(ctx)
 	nameTokenID, ok := bootstrapsecretutil.ParseName(secret.Name)
@@ -35,6 +38,7 @@ func validateSecretForSigning(ctx context.Context, secret *v1.Secret) (tokenID, 
 		return "", "", false
 	}
 
+	// token ID 既来自名称也来自数据，二者必须一致，防止伪造名称引用别的 token。
 	tokenID = bootstrapsecretutil.GetData(secret, bootstrapapi.BootstrapTokenIDKey)
 	if len(tokenID) == 0 {
 		logger.V(3).Info("No key in Secret", "key", bootstrapapi.BootstrapTokenIDKey, "secret", klog.KObj(secret))
@@ -52,14 +56,13 @@ func validateSecretForSigning(ctx context.Context, secret *v1.Secret) (tokenID, 
 		return "", "", false
 	}
 
-	// Ensure this secret hasn't expired.  The TokenCleaner should remove this
-	// but if that isn't working or it hasn't gotten there yet we should check
-	// here.
+	// 确认 Secret 尚未过期。TokenCleaner 本应清理过期 Secret，
+	// 但如果它失效或尚未执行到，这里必须再次检查，避免过期 token 仍被接受。
 	if bootstrapsecretutil.HasExpired(secret, time.Now()) {
 		return "", "", false
 	}
 
-	// Make sure this secret can be used for signing
+	// 确认该 Secret 被显式标记为可用于签名，防止其他用途的 token 被误用。
 	okToSign := bootstrapsecretutil.GetData(secret, bootstrapapi.BootstrapTokenUsageSigningKey)
 	if okToSign != "true" {
 		return "", "", false

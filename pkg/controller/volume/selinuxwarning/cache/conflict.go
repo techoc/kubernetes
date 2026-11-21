@@ -22,31 +22,31 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// A single conflict between two Pods using the same volume with different SELinux labels or policies.
-// Event should be sent to both of them.
+// Conflict 表示两个 Pod 使用同一卷但 SELinux 标签或策略不同而产生的一次冲突。
+// 应当为双方 Pod 都发送相应事件。
 type Conflict struct {
-	// Human-readable name of the conflicting property + value of "property" label of selinux_volume_conflict metric.
+	// PropertyName 是冲突属性的可读名称，同时作为 selinux_volume_conflict 指标 "property" 标签的取值。
 	PropertyName string
-	// Reason for the event, to be set as the Event.Reason field.
+	// EventReason 是事件原因，用作 Event.Reason 字段。
 	EventReason string
 
-	// Pod to generate the event on
+	// Pod 是要为其生成事件的目标 Pod。
 	Pod           cache.ObjectName
 	PropertyValue string
-	// only for logging / messaging
+	// OtherPod 与 OtherPropertyValue 仅用于日志与消息文案。
 	OtherPod           cache.ObjectName
 	OtherPropertyValue string
 }
 
-// Generate a message about this conflict.
+// EventMessage 生成描述该冲突的可读消息。
 func (c *Conflict) EventMessage() string {
-	// Quote the values for better readability.
+	// 给属性值加引号，提升可读性。
 	value := "\"" + c.PropertyValue + "\""
 	otherValue := "\"" + c.OtherPropertyValue + "\""
 	if c.Pod.Namespace == c.OtherPod.Namespace {
-		// In the same namespace, be very specific about the pod names.
+		// 同一命名空间内可以直接点明对方 Pod 名称，信息足够具体。
 		return fmt.Sprint(c.PropertyName, " ", value, " conflicts with pod ", c.OtherPod.Name, " that uses the same volume as this pod with ", c.PropertyName, " ", otherValue, ". If both pods land on the same node, only one of them may access the volume.")
 	}
-	// Pods are in different namespaces, do not reveal the other namespace or pod name.
+	// 两个 Pod 分属不同命名空间，不能泄露对方的命名空间或 Pod 名称。
 	return fmt.Sprint(c.PropertyName, value, " conflicts with another pod that uses the same volume as this pod with a different ", c.PropertyName, ". If both pods land on the same node, only one of them may access the volume.")
 }

@@ -48,13 +48,9 @@ const MigrationRunnerControllerName string = "migration-runner-controller"
 
 const migrationRunningReason = "MigrationRunning"
 
-// MigrationRunnerController is responsible for managing the lifecycle of
-// StorageVersionMigration resources. It will ensure that only a single StorageVersionMigration
-// will be active at a time for a given GroupResource, by adding the MigrationRunning condition
-// to the SVMs that are active. Only these SVMs will be processed by the downstream migration controllers.
-//
-// It adds the StorageMigrating condition to the CRD and is in charge of removing old
-// stored versions from the CRD status.
+// MigrationRunnerController 管理 StorageVersionMigration 的生命周期：对同一 GroupResource
+// 只让一个 SVM 处于活跃状态（打上 MigrationRunning 条件），下游迁移控制器仅处理这些 SVM。
+// 同时它负责给 CRD 添加 StorageMigrating 条件，并从 CRD status 中清理旧的 stored versions。
 type MigrationRunnerController struct {
 	svmListers svmlisters.StorageVersionMigrationLister
 	svmSynced  cache.InformerSynced
@@ -63,6 +59,7 @@ type MigrationRunnerController struct {
 	crdClient  apiextensionsclient.CustomResourceDefinitionInterface
 }
 
+// NewCustomResourceController 创建迁移调度控制器，并订阅 SVM 的增改删事件。
 func NewCustomResourceController(
 	ctx context.Context,
 	kubeClient clientset.Interface,
@@ -98,12 +95,14 @@ func NewCustomResourceController(
 	return crController
 }
 
+// addSVM 将新增 SVM 所属的资源入队。
 func (crc *MigrationRunnerController) addSVM(logger klog.Logger, obj interface{}) {
 	svm := obj.(*svmv1.StorageVersionMigration)
 	logger.V(4).Info("Adding", "svm", klog.KObj(svm))
 	crc.enqueue(svm)
 }
 
+// updateSVM 将更新 SVM 所属的资源入队。
 func (crc *MigrationRunnerController) updateSVM(logger klog.Logger, oldObj, newObj interface{}) {
 	oldSVM := oldObj.(*svmv1.StorageVersionMigration)
 	newSVM := newObj.(*svmv1.StorageVersionMigration)
@@ -111,6 +110,7 @@ func (crc *MigrationRunnerController) updateSVM(logger klog.Logger, oldObj, newO
 	crc.enqueue(newSVM)
 }
 
+// deleteSVM 处理删除事件（含 tombstone），重新评估该资源的待迁移 SVM。
 func (crc *MigrationRunnerController) deleteSVM(logger klog.Logger, obj interface{}) {
 	svm, ok := obj.(*svmv1.StorageVersionMigration)
 	if !ok {
@@ -129,10 +129,12 @@ func (crc *MigrationRunnerController) deleteSVM(logger klog.Logger, obj interfac
 	crc.enqueue(svm)
 }
 
+// enqueue 按 SVM 的目标资源入队，聚合同一资源上的所有 SVM。
 func (crc *MigrationRunnerController) enqueue(svm *svmv1.StorageVersionMigration) {
 	crc.queue.Add(svm.Spec.Resource)
 }
 
+// Run 启动控制器，等待缓存同步后处理队列直到上下文结束。
 func (crc *MigrationRunnerController) Run(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 
@@ -156,11 +158,13 @@ func (crc *MigrationRunnerController) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// worker 持续消费队列，直到 processNext 返回 false。
 func (crc *MigrationRunnerController) worker(ctx context.Context) {
 	for crc.processNext(ctx) {
 	}
 }
 
+// processNext 同步一个队首元素，失败时限速重试。
 func (crc *MigrationRunnerController) processNext(ctx context.Context) bool {
 	key, quit := crc.queue.Get()
 	if quit {
@@ -180,8 +184,9 @@ func (crc *MigrationRunnerController) processNext(ctx context.Context) bool {
 	return true
 }
 
+// sync 清理已完成/冲突的迁移，并提升下一个可执行的 SVM。
 func (crc *MigrationRunnerController) sync(ctx context.Context, resource metav1.GroupResource) error {
-	// Get all SVMs for this resource and trigger re-sync
+	// 先收集待清理与待提升的 SVM，再统一处理。
 	svmsToCleanup, svmToPromote, err := crc.getSVMsForResource(resource)
 	if err != nil {
 		return err
@@ -202,6 +207,7 @@ func (crc *MigrationRunnerController) sync(ctx context.Context, resource metav1.
 	return nil
 }
 
+// cleanupAdmission 清除 SVM 的运行中条件，并同步清理 CRD 迁移状态。
 func (crc *MigrationRunnerController) cleanupAdmission(ctx context.Context, svm *svmv1.StorageVersionMigration) error {
 	needsUpdate := false
 	migratingCond := meta.FindStatusCondition(svm.Status.Conditions, string(svmv1.MigrationRunning))
@@ -238,8 +244,9 @@ func (crc *MigrationRunnerController) cleanupAdmission(ctx context.Context, svm 
 	return nil
 }
 
+// markAsActive 将 CRD 与 SVM 标记为迁移中，使下游控制器开始处理该 SVM。
 func (crc *MigrationRunnerController) markAsActive(ctx context.Context, svm *svmv1.StorageVersionMigration) error {
-	// Mark CRD as undergoing migration.
+	// 先在 CRD 上标记迁移中，再激活 SVM，避免下游在 CRD 未就绪时启动。
 	crd, exists, err := crc.crdForGroupResource(ctx, svm.Spec.Resource)
 	if err != nil {
 		return err
@@ -251,9 +258,7 @@ func (crc *MigrationRunnerController) markAsActive(ctx context.Context, svm *svm
 				return err
 			}
 			applyConfig := applyconfigurationapiextensionsv1.CustomResourceDefinition(crd.Name).
-				// We add resource version to ensure there were no changes to the CRD
-				// between our get and apply, since if there was that may affect the
-				// generation we set in the condition.
+				// 携带 resourceVersion，确保 get 与 apply 之间 CRD 未被改动，否则 generation 可能已失效。
 				WithResourceVersion(crd.ResourceVersion).
 				WithStatus(applyconfigurationapiextensionsv1.CustomResourceDefinitionStatus().
 					WithConditions(applyconfigurationapiextensionsv1.CustomResourceDefinitionCondition().
@@ -290,6 +295,7 @@ func (crc *MigrationRunnerController) markAsActive(ctx context.Context, svm *svm
 	return nil
 }
 
+// compareSVM 按创建时间、名称排序，保证选择待提升 SVM 的顺序稳定。
 func compareSVM(a, b *svmv1.StorageVersionMigration) int {
 	if i := a.CreationTimestamp.Compare(b.CreationTimestamp.Time); i != 0 {
 		return i
@@ -297,6 +303,7 @@ func compareSVM(a, b *svmv1.StorageVersionMigration) int {
 	return strings.Compare(a.Name, b.Name)
 }
 
+// getSVMsForResource 找出需清理的 SVM，并选出唯一可提升的候选。
 func (crc *MigrationRunnerController) getSVMsForResource(resource metav1.GroupResource) (svmsToCleanup []*svmv1.StorageVersionMigration, svmToPromote *svmv1.StorageVersionMigration, err error) {
 	svms, err := crc.svmListers.List(labels.Everything())
 	if err != nil {
@@ -329,15 +336,18 @@ func (crc *MigrationRunnerController) getSVMsForResource(resource metav1.GroupRe
 	return svmsToCleanup, svmToPromote, nil
 }
 
+// isTerminal 判断迁移是否已进入成功或失败终态。
 func isTerminal(svm *svmv1.StorageVersionMigration) bool {
 	return meta.IsStatusConditionTrue(svm.Status.Conditions, string(svmv1.MigrationSucceeded)) ||
 		meta.IsStatusConditionTrue(svm.Status.Conditions, string(svmv1.MigrationFailed))
 }
 
+// isRunning 判断 SVM 是否处于迁移中。
 func isRunning(svm *svmv1.StorageVersionMigration) bool {
 	return meta.IsStatusConditionTrue(svm.Status.Conditions, string(svmv1.MigrationRunning))
 }
 
+// cleanupCRD 结束 CRD 上的迁移标记，迁移成功时同时清理旧 stored versions。
 func (crc *MigrationRunnerController) cleanupCRD(ctx context.Context, toBeProcessedSVM *svmv1.StorageVersionMigration) error {
 	migratingSuccessfulCond := meta.FindStatusCondition(toBeProcessedSVM.Status.Conditions, string(svmv1.MigrationSucceeded))
 	success := migratingSuccessfulCond != nil && migratingSuccessfulCond.Status == metav1.ConditionTrue
@@ -355,6 +365,7 @@ func (crc *MigrationRunnerController) cleanupCRD(ctx context.Context, toBeProces
 	return nil
 }
 
+// finishCRDMigration 清除 CRD 的 StorageMigrating 条件；仅当 generation 未变时才更新 stored versions。
 func (crc *MigrationRunnerController) finishCRDMigration(ctx context.Context, crd *apiextensionsv1.CustomResourceDefinition, success bool) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		crd, err := crc.crdClient.Get(ctx, crd.Name, metav1.GetOptions{})
@@ -382,9 +393,7 @@ func (crc *MigrationRunnerController) finishCRDMigration(ctx context.Context, cr
 		}
 
 		applyConfig := applyconfigurationapiextensionsv1.CustomResourceDefinition(crd.Name).
-			// We add resource version to ensure there were no changes to the CRD
-			// between our get and apply, since if there was that may affect the validity
-			// of the stored versions we are about to set.
+			// 携带 resourceVersion，确保 get 与 apply 之间 CRD 未被改动，否则 stored versions 可能已失效。
 			WithResourceVersion(crd.ResourceVersion).
 			WithStatus(applyconfigurationapiextensionsv1.CustomResourceDefinitionStatus().
 				WithConditions(applyconfigurationapiextensionsv1.CustomResourceDefinitionCondition().
@@ -396,8 +405,7 @@ func (crc *MigrationRunnerController) finishCRDMigration(ctx context.Context, cr
 					WithObservedGeneration(crd.Generation)))
 
 		if canUpdateStoredVersions {
-			// Wipe out all stored versions that we have migrated off of if nothing else
-			// has transpired while the migration was in progress.
+			// 仅当迁移期间无其他变更时，才将 stored versions 收敛到当前存储版本。
 			for _, version := range crd.Spec.Versions {
 				if version.Storage {
 					applyConfig.Status.WithStoredVersions(version.Name)
@@ -414,6 +422,7 @@ func (crc *MigrationRunnerController) finishCRDMigration(ctx context.Context, cr
 	})
 }
 
+// crdForGroupResource 按 GroupResource 查找对应 CRD；不存在时返回 false 而非错误。
 func (crc *MigrationRunnerController) crdForGroupResource(ctx context.Context, gr metav1.GroupResource) (*apiextensionsv1.CustomResourceDefinition, bool, error) {
 	crdName := fmt.Sprintf("%s.%s", gr.Resource, gr.Group)
 	crd, err := crc.crdClient.Get(ctx, crdName, metav1.GetOptions{})

@@ -14,6 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package tainteviction contains the logic implementing taint-based eviction
-// for Pods running on Nodes with NoExecute taints.
+// Package tainteviction 包含基于污点的驱逐逻辑：
+// 对带有 NoExecute 污点的节点上运行的 Pod 执行驱逐。
 package tainteviction

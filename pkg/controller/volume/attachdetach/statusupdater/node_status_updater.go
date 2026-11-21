@@ -14,12 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package statusupdater implements interfaces that enable updating the status
-// of API objects.
+// Package statusupdater 提供更新 API 对象状态的接口实现，
+// 主要用于将实际状态世界中已挂载的卷写回 Node 的 VolumesAttached 字段。
 package statusupdater
 
 import (
 	"fmt"
+
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,17 +31,15 @@ import (
 	"k8s.io/kubernetes/pkg/controller/volume/attachdetach/cache"
 )
 
-// NodeStatusUpdater defines a set of operations for updating the
-// VolumesAttached field in the Node Status.
+// NodeStatusUpdater 定义更新 Node 状态中 VolumesAttached 字段的操作集合。
 type NodeStatusUpdater interface {
-	// Gets a list of node statuses that should be updated from the actual state
-	// of the world and updates them.
+	// UpdateNodeStatuses 遍历实际状态世界中所有待上报的节点并更新其状态。
 	UpdateNodeStatuses(logger klog.Logger) error
-	// Update any pending status change for the given node
+	// UpdateNodeStatusForNode 更新指定节点上的所有待处理状态变更。
 	UpdateNodeStatusForNode(logger klog.Logger, nodeName types.NodeName) error
 }
 
-// NewNodeStatusUpdater returns a new instance of NodeStatusUpdater.
+// NewNodeStatusUpdater 返回一个 NodeStatusUpdater 实例。
 func NewNodeStatusUpdater(
 	kubeClient clientset.Interface,
 	nodeLister corelisters.NodeLister,
@@ -52,12 +51,16 @@ func NewNodeStatusUpdater(
 	}
 }
 
+// nodeStatusUpdater 是 NodeStatusUpdater 的默认实现，依赖实际状态世界、
+// Node informer 缓存与 kubeClient 完成状态回写。
 type nodeStatusUpdater struct {
 	kubeClient         clientset.Interface
 	nodeLister         corelisters.NodeLister
 	actualStateOfWorld cache.ActualStateOfWorld
 }
 
+// UpdateNodeStatuses 批量更新所有待上报节点的 VolumesAttached 状态。
+// 单个节点更新失败不会中断其他节点的处理，但最终会聚合为错误以触发上层重试。
 func (nsu *nodeStatusUpdater) UpdateNodeStatuses(logger klog.Logger) error {
 	var nodeIssues int
 	// TODO: investigate right behavior if nodeName is empty
@@ -75,6 +78,7 @@ func (nsu *nodeStatusUpdater) UpdateNodeStatuses(logger klog.Logger) error {
 	return nil
 }
 
+// UpdateNodeStatusForNode 仅更新指定节点的状态；若该节点没有待上报变更则直接返回。
 func (nsu *nodeStatusUpdater) UpdateNodeStatusForNode(logger klog.Logger, nodeName types.NodeName) error {
 	needsUpdate, attachedVolumes := nsu.actualStateOfWorld.GetVolumesToReportAttachedForNode(logger, nodeName)
 	if !needsUpdate {
@@ -83,6 +87,8 @@ func (nsu *nodeStatusUpdater) UpdateNodeStatusForNode(logger klog.Logger, nodeNa
 	return nsu.processNodeVolumes(logger, nodeName, attachedVolumes)
 }
 
+// processNodeVolumes 处理单个节点的卷状态上报。
+// 节点不存在时静默跳过，避免节点创建前无意义地反复重试；其他错误则重新标记待更新标志。
 func (nsu *nodeStatusUpdater) processNodeVolumes(logger klog.Logger, nodeName types.NodeName, attachedVolumes []v1.AttachedVolume) error {
 	nodeObj, err := nsu.nodeLister.Get(string(nodeName))
 	if errors.IsNotFound(err) {
@@ -118,6 +124,8 @@ func (nsu *nodeStatusUpdater) processNodeVolumes(logger klog.Logger, nodeName ty
 	return nil
 }
 
+// updateNodeStatus 通过 Patch 更新 Node 的 VolumesAttached 字段。
+// 使用 DeepCopy 避免修改 informer 缓存中的对象；Patch 而非 Update 可减少冲突。
 func (nsu *nodeStatusUpdater) updateNodeStatus(logger klog.Logger, nodeName types.NodeName, nodeObj *v1.Node, attachedVolumes []v1.AttachedVolume) error {
 	node := nodeObj.DeepCopy()
 	node.Status.VolumesAttached = attachedVolumes

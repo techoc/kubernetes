@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package resourcepoolstatusrequest contains the controller for processing
-// ResourcePoolStatusRequest objects. The controller watches for new requests
-// and calculates pool status information by aggregating data from ResourceSlices
-// and tracking allocations from ResourceClaims.
+// Package resourcepoolstatusrequest 包含处理 ResourcePoolStatusRequest 对象的控制器。
+// 控制器监听新的请求，通过聚合 ResourceSlice 中的数据并跟踪 ResourceClaim 的分配情况，
+// 计算出资源池的状态信息。
+// 之所以需要同时关注两类资源，是因为池容量来自 ResourceSlice，而实际占用来自 ResourceClaim。
 package resourcepoolstatusrequest

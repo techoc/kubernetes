@@ -40,12 +40,14 @@ import (
 
 const defaultPVName = "default-pv"
 
+// reaction 描述注入到 fake client 的 reactor，用于模拟 API 错误。
 type reaction struct {
 	verb      string
 	resource  string
 	reactorfn clienttesting.ReactionFunc
 }
 
+// pv 构造一个未绑定、无 finalizer 的普通 PV。
 func pv() *v1.PersistentVolume {
 	return &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -54,6 +56,7 @@ func pv() *v1.PersistentVolume {
 	}
 }
 
+// boundPV 构造一个处于 Bound 相位的 PV，表示正在被使用。
 func boundPV() *v1.PersistentVolume {
 	return &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
@@ -65,17 +68,20 @@ func boundPV() *v1.PersistentVolume {
 	}
 }
 
+// withProtectionFinalizer 给 PV 加上保护 finalizer；测试直接修改入参以简化构造。
 func withProtectionFinalizer(pv *v1.PersistentVolume) *v1.PersistentVolume {
 	pv.Finalizers = append(pv.Finalizers, volumeutil.PVProtectionFinalizer)
 	return pv
 }
 
+// generateUpdateErrorFunc 生成"前 failures 次 update 失败、之后成功"的 reactor，
+// 用于验证控制器的限速重试行为。
 func generateUpdateErrorFunc(t *testing.T, failures int) clienttesting.ReactionFunc {
 	i := 0
 	return func(action clienttesting.Action) (bool, runtime.Object, error) {
 		i++
 		if i <= failures {
-			// Update fails
+			// 前 N 次更新返回 Forbidden，模拟 API 暂时不可用
 			update, ok := action.(clienttesting.UpdateAction)
 
 			if !ok {
@@ -89,11 +95,15 @@ func generateUpdateErrorFunc(t *testing.T, failures int) clienttesting.ReactionF
 	}
 }
 
+// deleted 给 PV 设置删除时间戳，模拟用户发起删除后的状态。
 func deleted(pv *v1.PersistentVolume) *v1.PersistentVolume {
 	pv.DeletionTimestamp = &metav1.Time{}
 	return pv
 }
 
+// TestPVProtectionController 表驱动验证 finalizer 的增删与重试：
+// 缺 finalizer 时补加、被删除且未使用时移除、仍被 Bound 时保留，
+// 以及 API 更新失败后的重试次数与最终动作序列。
 func TestPVProtectionController(t *testing.T) {
 	pvVer := schema.GroupVersionResource{
 		Group:    v1.GroupName,
@@ -102,20 +112,19 @@ func TestPVProtectionController(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		// Object to insert into fake kubeclient before the test starts.
+		// initialObjects 在测试开始前写入 fake client。
 		initialObjects []runtime.Object
-		// Optional client reactors.
+		// reactors 是可选的客户端拦截器。
 		reactors []reaction
-		// PV event to simulate. This PV will be automatically added to
-		// initialObjects.
+		// updatedPV 模拟 PV 事件，该对象也会自动加入 initialObjects。
 		updatedPV *v1.PersistentVolume
-		// List of expected kubeclient actions that should happen during the
-		// test.
+		// expectedActions 是期望发生的 kubeclient 动作列表，用于精确断言。
 		expectedActions []clienttesting.Action
 	}{
 		// PV events
 		//
 		{
+			// 普通 PV 缺少 finalizer 时应补加
 			name:      "PV without finalizer -> finalizer is added",
 			updatedPV: pv(),
 			expectedActions: []clienttesting.Action{
@@ -123,11 +132,13 @@ func TestPVProtectionController(t *testing.T) {
 			},
 		},
 		{
+			// 已有 finalizer 的普通 PV 不触发更新
 			name:            "PVC with finalizer -> no action",
 			updatedPV:       withProtectionFinalizer(pv()),
 			expectedActions: []clienttesting.Action{},
 		},
 		{
+			// 更新失败两次后第三次成功，验证重试
 			name:      "saving PVC finalizer fails -> controller retries",
 			updatedPV: pv(),
 			reactors: []reaction{
@@ -147,6 +158,7 @@ func TestPVProtectionController(t *testing.T) {
 			},
 		},
 		{
+			// 删除中的未使用 PV 应移除 finalizer 放行删除
 			name:      "deleted PV with finalizer -> finalizer is removed",
 			updatedPV: deleted(withProtectionFinalizer(pv())),
 			expectedActions: []clienttesting.Action{
@@ -154,6 +166,7 @@ func TestPVProtectionController(t *testing.T) {
 			},
 		},
 		{
+			// 移除 finalizer 失败后重试
 			name:      "finalizer removal fails -> controller retries",
 			updatedPV: deleted(withProtectionFinalizer(pv())),
 			reactors: []reaction{
@@ -173,6 +186,7 @@ func TestPVProtectionController(t *testing.T) {
 			},
 		},
 		{
+			// 删除中但仍 Bound 的 PV 必须保留 finalizer，避免数据丢失
 			name:            "deleted PVC with finalizer + PV is bound -> finalizer is not removed",
 			updatedPV:       deleted(withProtectionFinalizer(boundPV())),
 			expectedActions: []clienttesting.Action{},
@@ -180,7 +194,7 @@ func TestPVProtectionController(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// Create client with initial data
+		// 用初始对象构造 fake client
 		objs := test.initialObjects
 		if test.updatedPV != nil {
 			objs = append(objs, test.updatedPV)
@@ -192,8 +206,7 @@ func TestPVProtectionController(t *testing.T) {
 		informers := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 		pvInformer := informers.Core().V1().PersistentVolumes()
 
-		// Populate the informers with initial objects so the controller can
-		// Get() it.
+		// 预填充 informer 存储，使控制器的 lister 能读到对象
 		for _, obj := range objs {
 			switch obj.(type) {
 			case *v1.PersistentVolume:
@@ -203,7 +216,7 @@ func TestPVProtectionController(t *testing.T) {
 			}
 		}
 
-		// Add reactor to inject test errors.
+		// 注入 reactor 以模拟 API 错误
 		for _, reactor := range test.reactors {
 			client.Fake.PrependReactor(reactor.verb, reactor.resource, reactor.reactorfn)
 		}
@@ -215,12 +228,12 @@ func TestPVProtectionController(t *testing.T) {
 			t.Fatalf("unexpected error constructing controller: %v", err)
 		}
 
-		// Start the test by simulating an event
+		// 通过模拟 PV 事件启动测试流程
 		if test.updatedPV != nil {
 			ctrl.pvAddedUpdated(logger, test.updatedPV)
 		}
 
-		// Process the controller queue until we get expected results
+		// 驱动队列直到获得预期动作；失败重试有指数退避，故设置超时与轮询
 		timeout := time.Now().Add(10 * time.Second)
 		lastReportedActionCount := 0
 		for {
@@ -233,18 +246,17 @@ func TestPVProtectionController(t *testing.T) {
 				ctrl.processNextWorkItem(context.TODO())
 			}
 			if ctrl.queue.Len() > 0 {
-				// There is still some work in the queue, process it now
+				// 队列仍有重试任务，立即继续处理
 				continue
 			}
 			currentActionCount := len(client.Actions())
 			if currentActionCount < len(test.expectedActions) {
-				// Do not log evey wait, only when the action count changes.
+				// 只在动作数变化时打印，避免退避期间刷屏
 				if lastReportedActionCount < currentActionCount {
 					logger.V(5).Info("Waiting for the remaining actions", "test", test.name, "currentActionCount", currentActionCount, "expectedActionCount", len(test.expectedActions))
 					lastReportedActionCount = currentActionCount
 				}
-				// The test expected more to happen, wait for the actions.
-				// Most probably it's exponential backoff
+				// 等待重试发生，通常是限速队列的指数退避
 				time.Sleep(10 * time.Millisecond)
 				continue
 			}
@@ -252,6 +264,7 @@ func TestPVProtectionController(t *testing.T) {
 		}
 		actions := client.Actions()
 
+		// 精确比较整个动作序列，确保没有多余或缺失的 API 调用
 		if !reflect.DeepEqual(actions, test.expectedActions) {
 			t.Errorf("Test %q: action not expected\nExpected:\n%s\ngot:\n%s", test.name, dump.Pretty(test.expectedActions), dump.Pretty(actions))
 		}

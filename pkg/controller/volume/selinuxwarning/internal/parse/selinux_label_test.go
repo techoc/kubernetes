@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestParseSELinuxLabel 验证 ParseSELinuxLabel 对各类 SELinux 标签的切分行为：
+// 覆盖完整标签、缺省字段、空组件以及级别中含额外冒号等边界情况。
 func TestParseSELinuxLabel(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -97,6 +99,7 @@ func TestParseSELinuxLabel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parts := ParseSELinuxLabel(tt.label)
+			// 断言返回数组的每个分量都与预期完全一致，保证缺失字段保留为空串而非被省略。
 			partsSlice := parts[:]
 			if !reflect.DeepEqual(partsSlice, tt.expectedParts) {
 				t.Errorf("ParseSELinuxLabel(%q) = %v, expected parts = %v", tt.label, partsSlice, tt.expectedParts)

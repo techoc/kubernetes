@@ -20,16 +20,14 @@ import (
 	kubectrlmgrconfigv1alpha1 "k8s.io/kube-controller-manager/config/v1alpha1"
 )
 
-// RecommendedDefaultEndpointControllerConfiguration defaults a pointer to a
-// EndpointControllerConfiguration struct. This will set the recommended default
-// values, but they may be subject to change between API versions. This function
-// is intentionally not registered in the scheme as a "normal" `SetDefaults_Foo`
-// function to allow consumers of this type to set whatever defaults for their
-// embedded configs. Forcing consumers to use these defaults would be problematic
-// as defaulting in the scheme is done as part of the conversion, and there would
-// be no easy way to opt-out. Instead, if you want to use this defaulting method
-// run it in your wrapper struct of this type in its `SetDefaults_` method.
+// RecommendedDefaultEndpointControllerConfiguration 为 EndpointControllerConfiguration
+// 指针填充推荐默认值。这些默认值可能随 API 版本变化。
+// 本函数有意不注册为 scheme 中普通的 `SetDefaults_Foo`，以允许该类型的使用方
+// 为嵌入的配置自行设置默认值：scheme 中的默认值填充是转换的一部分，强制使用
+// 这些默认值会让使用方难以退出。若需要这些默认值，请在外层结构的
+// `SetDefaults_` 方法中调用本函数。
 func RecommendedDefaultEndpointControllerConfiguration(obj *kubectrlmgrconfigv1alpha1.EndpointControllerConfiguration) {
+	// 仅当未显式配置（零值）时才填充默认值，避免覆盖使用方的设置。
 	if obj.ConcurrentEndpointSyncs == 0 {
 		obj.ConcurrentEndpointSyncs = 5
 	}

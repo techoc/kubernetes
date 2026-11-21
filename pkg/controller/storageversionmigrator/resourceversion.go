@@ -44,16 +44,19 @@ import (
 )
 
 const (
-	// this name is guaranteed to be not present in the cluster as it not a valid namespace name
+	// 该名称不是合法的命名空间名，因此集群中不可能存在同名命名空间，
+	// 用它查询可以拿到一个"空"列表的 resourceVersion 作为时间基准。
 	fakeSVMNamespaceName          string = "@fake:svm_ns!"
 	ResourceVersionControllerName string = "resource-version-controller"
 )
 
+// verbsRequiredForMigration 是判断资源能否迁移所需的最小动词集合：
+// 迁移过程需要更新、打补丁和列举资源。
 var verbsRequiredForMigration = []string{"update", "patch", "list"}
 
-// ResourceVersionController adds the resource version obtained from a randomly nonexistent namespace
-// to the SVM status before the migration is initiated. This resource version is utilized for checking
-// freshness of GC cache before the migration is initiated.
+// ResourceVersionController 在迁移开始前，从一个随机不存在的命名空间获取
+// resourceVersion 并写入 SVM 的 status。该 resourceVersion 作为时间基准，
+// 供迁移前校验 GC（垃圾回收）缓存是否足够新。
 type ResourceVersionController struct {
 	discoveryClient discovery.DiscoveryInterfaceWithContext
 	metadataClient  metadata.Interface
@@ -63,10 +66,14 @@ type ResourceVersionController struct {
 	kubeClient      clientset.Interface
 	mapper          meta.ResettableRESTMapper
 
+	// lastResetLock 保护 lastReset，避免多个 worker 并发重置 mapper 时重复重置。
 	lastResetLock sync.Mutex
-	lastReset     time.Time
+	lastReset     time.Time // 上次重置 RESTMapper 的时间，用于限频
 }
 
+// NewResourceVersionController 创建 ResourceVersionController：
+// 初始化 SVM informer 的 lister / synced、限速工作队列，并注册 Add/Update
+// 事件处理器，使 SVM 变更都能入队处理。
 func NewResourceVersionController(
 	ctx context.Context,
 	kubeClient clientset.Interface,
@@ -90,6 +97,7 @@ func NewResourceVersionController(
 		),
 	}
 
+	// 监听新增与更新事件：两种情况都可能需要为 SVM 补写 resourceVersion。
 	_, err := svmInformer.Informer().AddEventHandlerWithOptions(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			rvController.addSVM(logger, obj)
@@ -103,12 +111,15 @@ func NewResourceVersionController(
 	return rvController
 }
 
+// addSVM 处理 informer 的新增事件，将新 SVM 入队。
 func (rv *ResourceVersionController) addSVM(logger klog.Logger, obj interface{}) {
 	svm := obj.(*svmv1.StorageVersionMigration)
 	logger.V(4).Info("Adding", "svm", klog.KObj(svm))
 	rv.enqueue(svm)
 }
 
+// updateSVM 处理 informer 的更新事件：以新对象入队，
+// 因为状态判断和资源查询都要基于最新的 SVM。
 func (rv *ResourceVersionController) updateSVM(logger klog.Logger, oldObj, newObj interface{}) {
 	oldSVM := oldObj.(*svmv1.StorageVersionMigration)
 	newSVM := newObj.(*svmv1.StorageVersionMigration)
@@ -116,6 +127,8 @@ func (rv *ResourceVersionController) updateSVM(logger klog.Logger, oldObj, newOb
 	rv.enqueue(newSVM)
 }
 
+// enqueue 通过 controller.KeyFunc 计算 SVM 的命名空间/名称键并加入工作队列；
+// 键计算失败时记录错误并跳过该对象。
 func (rv *ResourceVersionController) enqueue(svm *svmv1.StorageVersionMigration) {
 	key, err := controller.KeyFunc(svm)
 	if err != nil {
@@ -126,6 +139,8 @@ func (rv *ResourceVersionController) enqueue(svm *svmv1.StorageVersionMigration)
 	rv.queue.Add(key)
 }
 
+// Run 启动控制器：等待 SVM informer 缓存同步后，以单 worker 持续处理队列，
+// 直到 ctx 取消；退出时关闭队列并等待 worker 结束，避免泄漏。
 func (rv *ResourceVersionController) Run(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 
@@ -139,11 +154,13 @@ func (rv *ResourceVersionController) Run(ctx context.Context) {
 		wg.Wait()
 	}()
 
+	// 缓存未同步前处理队列会拿到空数据，因此先阻塞等待。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, rv.svmSynced) {
 		return
 	}
 
 	wg.Go(func() {
+		// worker 异常退出后每秒重试一次，保证循环不会因瞬时错误停摆。
 		wait.UntilWithContext(ctx, rv.worker, time.Second)
 	})
 	<-ctx.Done()

@@ -26,7 +26,7 @@ import (
 const taintEvictionControllerSubsystem = "taint_eviction_controller"
 
 var (
-	// PodDeletionsTotal counts the number of Pods deleted by TaintEvictionController since its start.
+	// PodDeletionsTotal 统计 TaintEvictionController 自启动以来删除的 Pod 数量。
 	PodDeletionsTotal = metrics.NewCounter(
 		&metrics.CounterOpts{
 			Subsystem:      taintEvictionControllerSubsystem,
@@ -36,14 +36,13 @@ var (
 		},
 	)
 
-	// PodDeletionsLatency tracks the latency, in seconds, between the time when a taint effect has been activated
-	// for the Pod and its deletion.
+	// PodDeletionsLatency 记录从 Pod 上的污点效果生效到其被删除之间的延迟（秒）。
 	PodDeletionsLatency = metrics.NewHistogram(
 		&metrics.HistogramOpts{
 			Subsystem:      taintEvictionControllerSubsystem,
 			Name:           "pod_deletion_duration_seconds",
 			Help:           "Latency, in seconds, between the time when a taint effect has been activated for the Pod and its deletion via TaintEvictionController.",
-			Buckets:        []float64{0.005, 0.025, 0.1, 0.5, 1, 2.5, 10, 30, 60, 120, 180, 240}, // 5ms to 4m
+			Buckets:        []float64{0.005, 0.025, 0.1, 0.5, 1, 2.5, 10, 30, 60, 120, 180, 240}, // 5 毫秒至 4 分钟
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
@@ -51,7 +50,7 @@ var (
 
 var registerMetrics sync.Once
 
-// Register registers TaintEvictionController metrics.
+// Register 注册 TaintEvictionController 的各项指标。
 func Register() {
 	registerMetrics.Do(func() {
 		legacyregistry.MustRegister(PodDeletionsTotal)

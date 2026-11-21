@@ -46,14 +46,17 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// init 注册本控制器的指标，确保进程启动时指标可用。
 func init() {
 	registerMetrics()
 }
 
+// PublisherRunner 是证书发布控制器的运行入口接口。
 type PublisherRunner interface {
 	Run(context.Context)
 }
 
+// ClusterTrustBundlePublisher 负责将指定签名者的 CA 发布为 ClusterTrustBundle 对象。
 type ClusterTrustBundlePublisher[T clusterTrustBundle] struct {
 	signerName string
 	ca         dynamiccertificates.CAContentProvider
@@ -69,24 +72,25 @@ type ClusterTrustBundlePublisher[T clusterTrustBundle] struct {
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
-// clusterTrustBundle is a type constraint grouping all APIs versions of ClusterTrustBundles
+// clusterTrustBundle 是涵盖 ClusterTrustBundles 所有 API 版本的类型约束。
 type clusterTrustBundle interface {
 	certificatesv1alpha1.ClusterTrustBundle | certificatesv1beta1.ClusterTrustBundle | certificatesv1.ClusterTrustBundle
 }
 
-// clusterTrustBundlesClient is an API-version independent client for the ClusterTrustBundles API
+// clusterTrustBundlesClient 是与 API 版本无关的 ClusterTrustBundles 客户端抽象。
 type clusterTrustBundlesClient[T clusterTrustBundle] interface {
 	Create(context.Context, *T, metav1.CreateOptions) (*T, error)
 	Update(context.Context, *T, metav1.UpdateOptions) (*T, error)
 	Delete(context.Context, string, metav1.DeleteOptions) error
 }
 
-// clusterTrustBundlesLister is an API-version independent lister for the ClusterTrustBundles API
+// clusterTrustBundlesLister 是与 API 版本无关的 ClusterTrustBundles 查询接口。
 type clusterTrustBundlesLister[T clusterTrustBundle] interface {
 	Get(string) (*T, error)
 	List(labels.Selector) ([]*T, error)
 }
 
+// clusterTrustBundleHandlers 封装各 API 版本操作 ClusterTrustBundle 的差异。
 type clusterTrustBundleHandlers[T clusterTrustBundle] interface {
 	createClusterTrustBundle(bundleName, signerName, trustBundle string) *T
 	updateWithTrustBundle(ctbObject *T, newBundle string) *T
@@ -98,10 +102,10 @@ var _ clusterTrustBundleHandlers[certificatesv1.ClusterTrustBundle] = &gaHandler
 var _ clusterTrustBundleHandlers[certificatesv1beta1.ClusterTrustBundle] = &betaHandlers{}
 var _ clusterTrustBundleHandlers[certificatesv1alpha1.ClusterTrustBundle] = &alphaHandlers{}
 
-// betaHandlers groups the `clusterTrustBundleHandlers` for the v1 API of
-// clusterTrustBundles
+// gaHandlers 实现 v1 版本 ClusterTrustBundles 的 clusterTrustBundleHandlers。
 type gaHandlers struct{}
 
+// createClusterTrustBundle 构造一个 v1 版本的 ClusterTrustBundle 对象。
 func (w *gaHandlers) createClusterTrustBundle(bundleName, signerName, trustBundle string) *certificatesv1.ClusterTrustBundle {
 	return &certificatesv1.ClusterTrustBundle{
 		ObjectMeta: metav1.ObjectMeta{
@@ -114,24 +118,27 @@ func (w *gaHandlers) createClusterTrustBundle(bundleName, signerName, trustBundl
 	}
 }
 
+// updateWithTrustBundle 返回信任包更新为新内容的副本，避免修改 informer 缓存中的对象。
 func (w *gaHandlers) updateWithTrustBundle(ctbObject *certificatesv1.ClusterTrustBundle, newBundle string) *certificatesv1.ClusterTrustBundle {
 	newObj := ctbObject.DeepCopy()
 	newObj.Spec.TrustBundle = newBundle
 	return newObj
 }
 
+// containsTrustBundle 判断对象中的信任包是否已是目标内容。
 func (w *gaHandlers) containsTrustBundle(ctbObject *certificatesv1.ClusterTrustBundle, bundle string) bool {
 	return ctbObject.Spec.TrustBundle == bundle
 }
 
+// getName 返回 ClusterTrustBundle 对象的名称。
 func (w *gaHandlers) getName(ctbObject *certificatesv1.ClusterTrustBundle) string {
 	return ctbObject.Name
 }
 
-// betaHandlers groups the `clusterTrustBundleHandlers` for the v1beta1 API of
-// clusterTrustBundles
+// betaHandlers 实现 v1beta1 版本 ClusterTrustBundles 的 clusterTrustBundleHandlers。
 type betaHandlers struct{}
 
+// createClusterTrustBundle 构造一个 v1beta1 版本的 ClusterTrustBundle 对象。
 func (w *betaHandlers) createClusterTrustBundle(bundleName, signerName, trustBundle string) *certificatesv1beta1.ClusterTrustBundle {
 	return &certificatesv1beta1.ClusterTrustBundle{
 		ObjectMeta: metav1.ObjectMeta{
@@ -144,24 +151,27 @@ func (w *betaHandlers) createClusterTrustBundle(bundleName, signerName, trustBun
 	}
 }
 
+// updateWithTrustBundle 返回信任包更新为新内容的副本，避免修改 informer 缓存中的对象。
 func (w *betaHandlers) updateWithTrustBundle(ctbObject *certificatesv1beta1.ClusterTrustBundle, newBundle string) *certificatesv1beta1.ClusterTrustBundle {
 	newObj := ctbObject.DeepCopy()
 	newObj.Spec.TrustBundle = newBundle
 	return newObj
 }
 
+// containsTrustBundle 判断对象中的信任包是否已是目标内容。
 func (w *betaHandlers) containsTrustBundle(ctbObject *certificatesv1beta1.ClusterTrustBundle, bundle string) bool {
 	return ctbObject.Spec.TrustBundle == bundle
 }
 
+// getName 返回 ClusterTrustBundle 对象的名称。
 func (w *betaHandlers) getName(ctbObject *certificatesv1beta1.ClusterTrustBundle) string {
 	return ctbObject.Name
 }
 
-// alphaHandlers groups the `clusterTrustBundleHandlers` for the v1alpha1 API of
-// clusterTrustBundles
+// alphaHandlers 实现 v1alpha1 版本 ClusterTrustBundles 的 clusterTrustBundleHandlers。
 type alphaHandlers struct{}
 
+// createClusterTrustBundle 构造一个 v1alpha1 版本的 ClusterTrustBundle 对象。
 func (w *alphaHandlers) createClusterTrustBundle(bundleName, signerName, trustBundle string) *certificatesv1alpha1.ClusterTrustBundle {
 	return &certificatesv1alpha1.ClusterTrustBundle{
 		ObjectMeta: metav1.ObjectMeta{
@@ -174,28 +184,32 @@ func (w *alphaHandlers) createClusterTrustBundle(bundleName, signerName, trustBu
 	}
 }
 
+// updateWithTrustBundle 返回信任包更新为新内容的副本，避免修改 informer 缓存中的对象。
 func (w *alphaHandlers) updateWithTrustBundle(ctbObject *certificatesv1alpha1.ClusterTrustBundle, newBundle string) *certificatesv1alpha1.ClusterTrustBundle {
 	newObj := ctbObject.DeepCopy()
 	newObj.Spec.TrustBundle = newBundle
 	return newObj
 }
 
+// containsTrustBundle 判断对象中的信任包是否已是目标内容。
 func (w *alphaHandlers) containsTrustBundle(ctbObject *certificatesv1alpha1.ClusterTrustBundle, bundle string) bool {
 	return ctbObject.Spec.TrustBundle == bundle
 }
 
+// getName 返回 ClusterTrustBundle 对象的名称。
 func (w *alphaHandlers) getName(ctbObject *certificatesv1alpha1.ClusterTrustBundle) string {
 	return ctbObject.Name
 }
 
+// caContentListener 将 CA 内容变更回调适配为 dynamiccertificates.Listener。
 type caContentListener func()
 
+// Enqueue 在 CA 内容发生变化时触发回调，通知控制器重新入队。
 func (f caContentListener) Enqueue() {
 	f()
 }
 
-// NewBetaClusterTrustBundlePublisher sets up a ClusterTrustBundlePublisher for the
-// v1 API
+// NewGAClusterTrustBundlePublisher 为 v1 API 创建一个 ClusterTrustBundlePublisher。
 func NewGAClusterTrustBundlePublisher(
 	signerName string,
 	caProvider dynamiccertificates.CAContentProvider,
@@ -219,8 +233,7 @@ func NewGAClusterTrustBundlePublisher(
 	)
 }
 
-// NewBetaClusterTrustBundlePublisher sets up a ClusterTrustBundlePublisher for the
-// v1beta1 API
+// NewBetaClusterTrustBundlePublisher 为 v1beta1 API 创建一个 ClusterTrustBundlePublisher。
 func NewBetaClusterTrustBundlePublisher(
 	signerName string,
 	caProvider dynamiccertificates.CAContentProvider,
@@ -245,8 +258,7 @@ func NewBetaClusterTrustBundlePublisher(
 	)
 }
 
-// NewAlphaClusterTrustBundlePublisher sets up a ClusterTrustBundlePublisher for the
-// v1alpha1 API
+// NewAlphaClusterTrustBundlePublisher 为 v1alpha1 API 创建一个 ClusterTrustBundlePublisher。
 func NewAlphaClusterTrustBundlePublisher(
 	signerName string,
 	caProvider dynamiccertificates.CAContentProvider,
@@ -271,9 +283,8 @@ func NewAlphaClusterTrustBundlePublisher(
 	)
 }
 
-// NewClusterTrustBundlePublisher creates and maintains a cluster trust bundle object
-// for a signer named `signerName`. The cluster trust bundle object contains the
-// CA from the `caProvider` in its .spec.TrustBundle.
+// newClusterTrustBundlePublisher 为名为 signerName 的签名者创建并维护一个集群信任包对象，
+// 该对象的 .spec.TrustBundle 中包含来自 caProvider 的 CA。
 func newClusterTrustBundlePublisher[T clusterTrustBundle](
 	signerName string,
 	caProvider dynamiccertificates.CAContentProvider,
@@ -305,6 +316,8 @@ func newClusterTrustBundlePublisher[T clusterTrustBundle](
 		),
 	}
 
+	// 所有 ClusterTrustBundle 事件都映射为同一个队列键：
+	// 协调过程会全量对账，无需区分具体哪个对象发生变化。
 	_, err := p.ctbInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			p.queue.Add("")
@@ -324,12 +337,14 @@ func newClusterTrustBundlePublisher[T clusterTrustBundle](
 	return p, nil
 }
 
+// caContentChangedListener 返回一个监听器，在 CA 内容变更时入队触发协调。
 func (p *ClusterTrustBundlePublisher[T]) caContentChangedListener() dynamiccertificates.Listener {
 	return caContentListener(func() {
 		p.queue.Add("")
 	})
 }
 
+// Run 启动控制器，运行 informer 与工作协程，直到 ctx 结束。
 func (p *ClusterTrustBundlePublisher[T]) Run(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 
@@ -347,10 +362,12 @@ func (p *ClusterTrustBundlePublisher[T]) Run(ctx context.Context) {
 		p.ctbInformer.RunWithContext(ctx)
 	})
 
+	// 缓存未同步前不能读取 lister，否则会基于不完整数据做出错误更新。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, p.ctbListerSynced) {
 		return
 	}
 
+	// 首次入队触发一次全量对账，补齐启动前发生的变化。
 	p.queue.Add("")
 	wg.Go(func() {
 		wait.UntilWithContext(ctx, p.runWorker(), time.Second)
@@ -358,6 +375,7 @@ func (p *ClusterTrustBundlePublisher[T]) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// runWorker 返回一个工作循环，持续处理队列中的任务直到控制器退出。
 func (p *ClusterTrustBundlePublisher[T]) runWorker() func(context.Context) {
 	return func(ctx context.Context) {
 		for p.processNextWorkItem(ctx) {
@@ -365,8 +383,7 @@ func (p *ClusterTrustBundlePublisher[T]) runWorker() func(context.Context) {
 	}
 }
 
-// processNextWorkItem deals with one key off the queue. It returns false when
-// it's time to quit.
+// processNextWorkItem 处理队列中的一个键；返回 false 表示应退出工作循环。
 func (p *ClusterTrustBundlePublisher[T]) processNextWorkItem(ctx context.Context) bool {
 	key, quit := p.queue.Get()
 	if quit {
@@ -376,14 +393,17 @@ func (p *ClusterTrustBundlePublisher[T]) processNextWorkItem(ctx context.Context
 
 	if err := p.syncClusterTrustBundle(ctx); err != nil {
 		utilruntime.HandleError(fmt.Errorf("syncing %q failed: %w", key, err))
+		// 失败时按速率限制重试，避免错误循环压垮 API 服务器。
 		p.queue.AddRateLimited(key)
 		return true
 	}
 
+	// 成功后清空该键的失败计数，下次触发可立即处理。
 	p.queue.Forget(key)
 	return true
 }
 
+// syncClusterTrustBundle 协调集群信任包：创建或更新当前 CA 对应的对象，并清理过期对象。
 func (p *ClusterTrustBundlePublisher[T]) syncClusterTrustBundle(ctx context.Context) (err error) {
 	startTime := time.Now()
 	defer func() {
@@ -392,6 +412,7 @@ func (p *ClusterTrustBundlePublisher[T]) syncClusterTrustBundle(ctx context.Cont
 	}()
 
 	caBundle := string(p.ca.CurrentCABundleContent())
+	// 名称包含 CA 内容哈希：CA 轮换后生成新对象，便于新旧信任包并存过渡。
 	bundleName := constructBundleName(p.signerName, []byte(caBundle))
 
 	bundle, err := p.ctbLister.Get(bundleName)
@@ -411,7 +432,7 @@ func (p *ClusterTrustBundlePublisher[T]) syncClusterTrustBundle(ctx context.Cont
 		return err
 	}
 
-	// keep the deletion error to be returned in the end in order to retrigger the reconciliation loop
+	// 保留删除错误并在最后返回，以便重新触发协调循环重试清理。
 	var deletionError error
 	for _, bundleObject := range signerTrustBundles {
 		if p.handlers.getName(bundleObject) == bundleName {
@@ -428,8 +449,11 @@ func (p *ClusterTrustBundlePublisher[T]) syncClusterTrustBundle(ctx context.Cont
 	return deletionError
 }
 
+// constructBundleName 根据签名者名称和信任包内容生成对象名：名称前缀加上内容哈希的前 12 字节。
 func constructBundleName(signerName string, bundleBytes []byte) string {
+	// 签名者名称中的斜杠不符合对象名规则，替换为冒号。
 	namePrefix := strings.ReplaceAll(signerName, "/", ":") + ":"
+	// 取哈希前缀即可区分不同 CA，同时保持名称长度可控。
 	bundleHash := sha256.Sum256(bundleBytes)
 	return fmt.Sprintf("%s%x", namePrefix, bundleHash[:12])
 

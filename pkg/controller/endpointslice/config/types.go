@@ -20,23 +20,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EndpointSliceControllerConfiguration contains elements describing
-// EndpointSliceController.
+// EndpointSliceControllerConfiguration 包含描述 EndpointSliceController 行为的配置项。
 type EndpointSliceControllerConfiguration struct {
-	// concurrentServiceEndpointSyncs is the number of service endpoint syncing
-	// operations that will be done concurrently. Larger number = faster
-	// endpoint slice updating, but more CPU (and network) load.
+	// ConcurrentServiceEndpointSyncs 是并发执行 service endpoint 同步操作的数量。
+	// 数值越大，EndpointSlice 更新越快，但 CPU（及网络）负载也越高。
 	ConcurrentServiceEndpointSyncs int32
 
-	// maxEndpointsPerSlice is the maximum number of endpoints that will be
-	// added to an EndpointSlice. More endpoints per slice will result in fewer
-	// and larger endpoint slices, but larger resources.
+	// MaxEndpointsPerSlice 是单个 EndpointSlice 中允许加入的最大 endpoint 数量。
+	// 每个 slice 容纳更多 endpoint 会减少 slice 数量、使单个资源变大，
+	// 但也会产生更大的资源对象。
 	MaxEndpointsPerSlice int32
 
-	// EndpointUpdatesBatchPeriod can be used to batch endpoint updates.
-	// All updates of endpoint triggered by pod change will be delayed by up to
-	// 'EndpointUpdatesBatchPeriod'. If other pods in the same endpoint change
-	// in that period, they will be batched to a single endpoint update.
-	// Default 0 value means that each pod update triggers an endpoint update.
+	// EndpointUpdatesBatchPeriod 用于对 endpoint 更新做批处理。
+	// 由 pod 变化触发的 endpoint 更新最多延迟 EndpointUpdatesBatchPeriod；
+	// 若在该时间段内同一 endpoint 涉及的其他 pod 也发生变化，会被合并为一次 endpoint 更新。
+	// 默认值 0 表示每次 pod 更新都立即触发一次 endpoint 更新，不做合并。
 	EndpointUpdatesBatchPeriod metav1.Duration
 }
