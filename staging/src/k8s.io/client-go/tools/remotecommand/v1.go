@@ -30,6 +30,7 @@ import (
 // protocol. This version has some bugs, such as not being able to detect when
 // non-interactive stdin data has ended. See https://issues.k8s.io/13394 and
 // https://issues.k8s.io/13395 for more details.
+// 该版本只被极旧的服务端使用；实现保留是为了兼容，而不是推荐路径。
 type streamProtocolV1 struct {
 	StreamOptions
 
@@ -39,15 +40,20 @@ type streamProtocolV1 struct {
 	remoteStderr httpstream.Stream
 }
 
+// 编译期断言：v1 必须满足协议处理器接口。
 var _ streamProtocolHandler = &streamProtocolV1{}
 
+// newStreamProtocolV1 仅做结构体初始化，真正的流在 stream 中按需创建。
 func newStreamProtocolV1(options StreamOptions) streamProtocolHandler {
 	return &streamProtocolV1{
 		StreamOptions: options,
 	}
 }
 
+// stream 建立全部流并启动双向拷贝；ready 会在流就绪后关闭，供上层开始输出内容。
+// 返回时只表示 stdout/stderr 拷贝完成，stdin 拷贝可能仍在后台（见下方待办注释）。
 func (p *streamProtocolV1) stream(logger klog.Logger, conn streamCreator, ready chan<- struct{}) error {
+	// doneChan 容量 2 正好对应 stdout/stderr 两条输出流。
 	doneChan := make(chan struct{}, 2)
 	errorChan := make(chan error)
 
@@ -57,6 +63,7 @@ func (p *streamProtocolV1) stream(logger klog.Logger, conn streamCreator, ready 
 		if _, err := io.Copy(dst, src); err != nil && err != io.EOF {
 			logger.Error(err, "Error copying", "data", s)
 		}
+		// 只有输出流结束才计入完成数；stdin 不计入，否则非交互输入永远等不到 EOF 之外的事件。
 		if s == v1.StreamTypeStdout || s == v1.StreamTypeStderr {
 			doneChan <- struct{}{}
 		}
@@ -98,6 +105,7 @@ func (p *streamProtocolV1) stream(logger klog.Logger, conn streamCreator, ready 
 	}
 
 	if p.Stderr != nil && !p.Tty {
+		// TTY 模式下 stderr 与 stdout 合一，服务端不会单独建立 stderr 流。
 		headers.Set(v1.StreamType, v1.StreamTypeStderr)
 		p.remoteStderr, err = conn.CreateStream(headers)
 		if err != nil {
@@ -115,6 +123,7 @@ func (p *streamProtocolV1) stream(logger klog.Logger, conn streamCreator, ready 
 
 	// always read from errorStream
 	go func() {
+		// 错误流中的数据是命令失败的诊断信息；读到非空内容即视为执行失败。
 		message, err := io.ReadAll(p.errorStream)
 		if err != nil && err != io.EOF {
 			errorChan <- fmt.Errorf("Error reading from error stream: %s", err)
@@ -137,6 +146,7 @@ func (p *streamProtocolV1) stream(logger klog.Logger, conn streamCreator, ready 
 	waitCount := 0
 	completedStreams := 0
 
+	// 只等待输出流；这正是 v1 的缺陷之一，非交互 stdin 的结束无法被感知。
 	if p.Stdout != nil {
 		waitCount++
 		go cp(v1.StreamTypeStdout, p.Stdout, p.remoteStdout)

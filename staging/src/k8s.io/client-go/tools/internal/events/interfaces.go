@@ -17,6 +17,9 @@ limitations under the License.
 // Package internal is needed to break an import cycle: record.EventRecorderAdapter
 // needs this interface definition to implement it, but event.NewEventBroadcasterAdapter
 // needs record.NewBroadcaster. Therefore this interface cannot be in event/interfaces.go.
+//
+// Package internal 的存在纯粹是为了切断导入环：适配器需要事件记录接口，
+// 而接口所在的外层包又依赖 record 包的广播器，把接口下沉到内部包即可解环。
 package internal
 
 import (
@@ -40,6 +43,9 @@ type EventRecorder interface {
 	// (ReportingController is a type of a Controller reporting an Event, e.g. k8s.io/node-controller, k8s.io/kubelet.)
 	// take in regarding's name; it should be in UpperCamelCase format (starting with a capital letter).
 	// 'note' is intended to be human readable.
+	//
+	// 注意 reason/action 的命名会进入自动化管道，保持稳定的 UpperCamelCase
+	// 比措辞优雅更重要；note 才是自由文本。
 	Eventf(regarding runtime.Object, related runtime.Object, eventtype, reason, action, note string, args ...interface{})
 }
 
@@ -49,6 +55,7 @@ type EventRecorder interface {
 // Kubernetes events are best-effort, supplemental observability data and may be dropped, deduped or aggregated at any
 // point in pipeline. Do not rely on annotations for event-driven control flow.
 type AnnotatedEventRecorder interface {
+	// AnnotatedEventf 与 Eventf 相同，但允许在创建事件时附加注解元数据。
 	AnnotatedEventf(regarding runtime.Object, related runtime.Object, annotations map[string]string, eventtype, reason, action, note string, args ...interface{})
 }
 
@@ -64,5 +71,7 @@ type EventRecorderLogger interface {
 	//    recorder := ...
 	//    logger := klog.FromContext(ctx)
 	//    recorder.WithLogger(logger).Eventf(...)
+	//
+	// 返回新的记录器而非原地修改，因此可安全地在并发路径上派生不同 logger。
 	WithLogger(logger klog.Logger) EventRecorderLogger
 }

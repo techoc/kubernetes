@@ -25,15 +25,17 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-// Encoder serializes watch.Events into io.Writer. The internal objects
-// are encoded using embedded encoder, and the outer Event is serialized
-// using encoder.
+// Encoder 把 watch.Event 序列化到 io.Writer。
+//
+// 内外两层分别编码：先由 embeddedEncoder 把事件对象编成字节，
+// 再由 encoder 把包着这些字节的 WatchEvent 信封写出。
 // TODO: this type is only used by tests
 type Encoder struct {
 	encoder         streaming.Encoder
 	embeddedEncoder runtime.Encoder
 }
 
+// NewEncoder 根据给定的流式编码器与内嵌编码器创建 Encoder。
 func NewEncoder(encoder streaming.Encoder, embeddedEncoder runtime.Encoder) *Encoder {
 	return &Encoder{
 		encoder:         encoder,
@@ -41,8 +43,7 @@ func NewEncoder(encoder streaming.Encoder, embeddedEncoder runtime.Encoder) *Enc
 	}
 }
 
-// Encode writes an event to the writer. Returns an error
-// if the writer is closed or an object can't be encoded.
+// Encode 把事件写入 writer。writer 已关闭或对象无法编码时返回错误。
 func (e *Encoder) Encode(event *watch.Event) error {
 	data, err := runtime.Encode(e.embeddedEncoder, event.Object)
 	if err != nil {

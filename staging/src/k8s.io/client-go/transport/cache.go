@@ -36,16 +36,21 @@ import (
 // TlsTransportCache caches TLS http.RoundTrippers different configurations. The
 // same RoundTripper will be returned for configs with identical TLS options If
 // the config has no custom TLS options, http.DefaultTransport is returned.
+//
+// 单例缓存：相同 TLS 配置共享连接池，避免每个 clientset 各建一套连接。
+// GC 开启时用 weak.Pointer，transport 不再被引用后条目可被回收。
 type tlsTransportCache struct {
 	mu               sync.Mutex
 	transports       map[tlsCacheKey]weak.Pointer[trackedTransport] // GC-enabled
 	strongTransports map[tlsCacheKey]http.RoundTripper              // GC-disabled
 }
 
+// idleConnsPerHost 与 http.DefaultTransport 的默认值一致，避免共享 transport 时连接数骤降。
 const idleConnsPerHost = 25
 
 var tlsCache = newTLSCache()
 
+// newTLSCache 初始化两张缓存表；实际使用哪张由 feature gate 决定。
 func newTLSCache() *tlsTransportCache {
 	return &tlsTransportCache{
 		transports:       make(map[tlsCacheKey]weak.Pointer[trackedTransport]),
@@ -53,6 +58,8 @@ func newTLSCache() *tlsTransportCache {
 	}
 }
 
+// tlsCacheKey 是 TLS 配置的等值判断依据；字段必须严格可比较，
+// 因此函数使用可比较的 holder 包装。
 type tlsCacheKey struct {
 	insecure           bool
 	caData             string
@@ -70,6 +77,7 @@ type tlsCacheKey struct {
 }
 
 func (t tlsCacheKey) String() string {
+	// 私钥内容不能出现在日志或错误信息中，只标记是否存在。
 	keyText := "<none>"
 	if len(t.keyData) > 0 {
 		keyText = "<redacted>"
@@ -78,6 +86,8 @@ func (t tlsCacheKey) String() string {
 		t.insecure, t.caData, t.caFile, t.certData, keyText, t.serverName, t.disableCompression, t.getCert, t.dial)
 }
 
+// get 返回（或创建）与 config 对应的 RoundTripper。
+// 缓存命中时直接复用；不可缓存（如自定义 Proxy）时每次新建。
 func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 	key, canCache, err := tlsConfigKey(config)
 	if err != nil {
@@ -96,6 +106,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 				metrics.TransportCreateCalls.Increment("hit")
 				return t, nil
 			}
+			// key 存在但弱引用已被 GC 清空，视为 miss 并重建。
 			metrics.TransportCreateCalls.Increment("miss-gc")
 		} else {
 			metrics.TransportCreateCalls.Increment("miss")
@@ -110,6 +121,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 		return nil, err
 	}
 	// The options didn't require a custom TLS config
+	// 没有自定义 TLS/Dial/Proxy 时复用全局 DefaultTransport，最大化连接复用。
 	if tlsConfig == nil && config.DialHolder == nil && config.Proxy == nil {
 		return http.DefaultTransport, nil
 	}
@@ -127,6 +139,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 	// If we use are reloading files, we need to handle certificate rotation properly
 	// TODO(jackkleeman): We can also add rotation here when config.HasCertCallback() is true
 	var cancel context.CancelFunc
+	// ReloadTLSFiles 表示证书来自磁盘且可能被外部轮换；启动后台协程持续重载。
 	if config.TLS.ReloadTLSFiles && tlsConfig != nil && tlsConfig.GetClientCertificate != nil {
 		// The TLS cache is a singleton, so sharing the same name for all of its
 		// background activity seems okay.
@@ -155,13 +168,16 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 	var transport http.RoundTripper = httpTransport
 
 	if config.TLS.ReloadCAFiles && tlsConfig != nil && tlsConfig.RootCAs != nil && len(config.TLS.CAFile) > 0 {
+		// CA 文件可能在连接存活期间被替换；原子 holder 在下次 TLS 握手时读取新 CA。
 		transport = newAtomicTransportHolder(config.TLS.CAFile, config.TLS.CAData, httpTransport)
 	}
 
 	if !canCache && cancel == nil {
+		// 既不可缓存又没有后台协程，返回后无需任何清理。
 		return transport, nil // uncacheable config with no cert rotation - nothing to GC
 	}
 
+	// 未开启 GC feature gate：缓存强引用，且故意不取消轮换协程以保持历史行为。
 	if !clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.ClientsAllowTLSCacheGC) {
 		if canCache {
 			c.strongTransports[key] = transport
@@ -173,6 +189,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 
 	if cancel != nil {
 		// capture metric as local var so that cleanups do not influence other tests via globals
+		// 清理回调在对象被回收时运行，因此不能捕获 cache 全局状态以外的可变状态。
 		transportCertRotationGCCalls := metrics.TransportCertRotationGCCalls
 		runtime.AddCleanup(transportWithGC, func(_ struct{}) {
 			cancel()
@@ -191,6 +208,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 			defer c.mu.Unlock()
 
 			// make sure we only delete the weak pointer created by this specific setLocked call
+			// 若同 key 已被新 transport 覆盖，旧条目的清理不能误删新条目。
 			if c.transports[key] != wp {
 				transportCacheGCCalls.Increment("skipped")
 				return
@@ -204,6 +222,7 @@ func (c *tlsTransportCache) get(config *Config) (http.RoundTripper, error) {
 	return transportWithGC, nil
 }
 
+// getLocked 按 feature gate 选择强/弱引用缓存查询；调用方必须持有 c.mu。
 func (c *tlsTransportCache) getLocked(key tlsCacheKey) (http.RoundTripper, bool) {
 	if !clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.ClientsAllowTLSCacheGC) {
 		v, ok := c.strongTransports[key]
@@ -224,6 +243,7 @@ func (c *tlsTransportCache) getLocked(key tlsCacheKey) (http.RoundTripper, bool)
 	return v, true
 }
 
+// lenLocked 返回当前缓存条目数；关闭 GC 时统计强引用表。
 func (c *tlsTransportCache) lenLocked() int {
 	if !clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.ClientsAllowTLSCacheGC) {
 		return len(c.strongTransports)
@@ -241,10 +261,12 @@ type trackedTransport struct {
 var _ http.RoundTripper = &trackedTransport{}
 var _ utilnet.RoundTripperWrapper = &trackedTransport{}
 
+// RoundTrip 透传到被包装的 transport。
 func (v *trackedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return v.rt.RoundTrip(req)
 }
 
+// WrappedRoundTripper 暴露被包装的 transport，供 utilnet 识别连接复用等能力。
 func (v *trackedTransport) WrappedRoundTripper() http.RoundTripper {
 	return v.rt
 }
@@ -258,6 +280,7 @@ func tlsConfigKey(c *Config) (tlsCacheKey, bool, error) {
 
 	if c.Proxy != nil {
 		// cannot determine equality for functions
+		// 无法比较函数是否相等，只能放弃缓存。
 		return tlsCacheKey{}, false, nil
 	}
 
@@ -271,6 +294,7 @@ func tlsConfigKey(c *Config) (tlsCacheKey, bool, error) {
 	}
 
 	if c.TLS.ReloadTLSFiles {
+		// 重载模式下文件内容可能变化，用路径而不是内容做 key，保证轮换后仍命中同一 transport。
 		k.certFile = c.TLS.CertFile
 		k.keyFile = c.TLS.KeyFile
 	} else {

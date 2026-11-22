@@ -22,6 +22,9 @@ import (
 
 // Where possible, json tags match the cli argument names.
 // Top level config objects and all values required for proper functioning are not "omitempty".  Any truly optional piece of config is allowed to be omitted.
+//
+// 中文：这些类型对外是稳定的 kubeconfig v1 文件格式，字段增删需保持向后兼容；
+// 内部表示见 tools/clientcmd/api，转换由 conversion 完成。
 
 // Config holds the information needed to build connect to remote kubernetes clusters as a given user
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -38,10 +41,12 @@ type Config struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 	// Preferences holds general information to be use for cli interactions
 	// Deprecated: this field is deprecated in v1.34. It is not used by any of the Kubernetes components.
+	// 已弃用：该字段自 v1.34 起不再使用，仅为兼容旧版 kubeconfig 而保留。
 	Preferences Preferences `json:"preferences,omitzero"`
 	// Clusters is a map of referencable names to cluster configs
 	Clusters []NamedCluster `json:"clusters"`
 	// AuthInfos is a map of referencable names to user configs
+	// 注意 json tag 为 "users"，与文件格式保持一致。
 	AuthInfos []NamedAuthInfo `json:"users"`
 	// Contexts is a map of referencable names to context configs
 	Contexts []NamedContext `json:"contexts"`
@@ -53,6 +58,7 @@ type Config struct {
 }
 
 // Deprecated: this structure is deprecated in v1.34. It is not used by any of the Kubernetes components.
+// 已弃用：自 v1.34 起无组件使用，仅为文件兼容保留。
 type Preferences struct {
 	// +optional
 	Colors bool `json:"colors,omitempty"`
@@ -99,6 +105,8 @@ type Cluster struct {
 }
 
 // AuthInfo contains information that describes identity information.  This is use to tell the kubernetes cluster who you are.
+//
+// 中文：证书/密钥/Token 同时存在时，*Data 字段优先于文件路径；TokenFile 会周期性重读。
 type AuthInfo struct {
 	// ClientCertificate is the path to a client cert file for TLS.
 	// +optional
@@ -163,6 +171,7 @@ type Context struct {
 }
 
 // NamedCluster relates nicknames to cluster information
+// 中文：kubeconfig 用列表 + name 表示 map，便于 YAML 保序与人类阅读。
 type NamedCluster struct {
 	// Name is the nickname for this Cluster
 	Name string `json:"name"`
@@ -171,6 +180,7 @@ type NamedCluster struct {
 }
 
 // NamedContext relates nicknames to context information
+// 中文：同 NamedCluster，列表形式在转换时若出现重名会报错。
 type NamedContext struct {
 	// Name is the nickname for this Context
 	Name string `json:"name"`
@@ -179,6 +189,7 @@ type NamedContext struct {
 }
 
 // NamedAuthInfo relates nicknames to auth information
+// 中文：json 中表现为 users 列表中的一项。
 type NamedAuthInfo struct {
 	// Name is the nickname for this AuthInfo
 	Name string `json:"name"`
@@ -187,6 +198,7 @@ type NamedAuthInfo struct {
 }
 
 // NamedExtension relates nicknames to extension information
+// 中文：扩展用于第三方工具持久化附加配置，未知字段得以在读写间保留。
 type NamedExtension struct {
 	// Name is the nickname for this Extension
 	Name string `json:"name"`
@@ -195,6 +207,7 @@ type NamedExtension struct {
 }
 
 // AuthProviderConfig holds the configuration for a specified auth provider.
+// 中文：多数内置 auth provider 已移除，当前主要用于 exec 插件之外的兼容配置。
 type AuthProviderConfig struct {
 	Name   string            `json:"name"`
 	Config map[string]string `json:"config"`
@@ -205,6 +218,8 @@ type AuthProviderConfig struct {
 //
 // See the client.authentication.k8s.io API group for specifications of the exact input
 // and output format
+//
+// 中文：Exec 插件认证，输入经 KUBERNETES_EXEC_INFO 传递，输出为 ExecCredential。
 type ExecConfig struct {
 	// Command to execute.
 	Command string `json:"command"`
@@ -248,12 +263,14 @@ type ExecConfig struct {
 
 // ExecEnvVar is used for setting environment variables when executing an exec-based
 // credential plugin.
+// 中文：与宿主环境合并，同名时以插件配置为准。
 type ExecEnvVar struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 }
 
 // ExecInteractiveMode is a string that describes an exec plugin's relationship with standard input.
+// 中文：仅在 v1 及更高版本要求显式设置；旧版本默认 IfAvailable。
 type ExecInteractiveMode string
 
 const (

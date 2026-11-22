@@ -22,6 +22,8 @@ import (
 
 // This file contains our own "internal" version of scale that we use for conversions,
 // since we can't use the main Kubernetes internal versions.
+// 这里自定义内部 Scale 类型，是因为 client-go 不能依赖 k8s.io/kubernetes 的内部
+// API 包；转换器以本包类型作为中间表示。
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -55,6 +57,7 @@ type ScaleStatus struct {
 
 	// label query over pods that should match the replicas count.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
+	// 内部表示统一使用结构化 LabelSelector，旧版本的字符串 TargetSelector 在转换时解析。
 	// +optional
 	Selector *metav1.LabelSelector
 }

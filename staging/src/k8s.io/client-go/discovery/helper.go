@@ -28,15 +28,22 @@ import (
 
 // IsResourceEnabled queries the server to determine if the resource specified is present on the server.
 // This is particularly helpful when writing a controller or an e2e test that requires a particular resource to function.
+//
+// 中文说明：只需一次 discovery 请求即可判断某个资源是否可用。适用于编写控制器或 e2e
+// 测试时探测可选 API（例如某个特性门控开启后才注册的资源）是否已存在于目标集群。
 func IsResourceEnabled(client DiscoveryInterface, resourceToCheck schema.GroupVersionResource) (bool, error) {
 	// this is a single request.  The ServerResourcesForGroupVersion handles the core v1 group as legacy.
+	// 中文：只查询目标 group/version，避免拉取全量 discovery 数据；核心 v1 组的遗留路径由
+	// ServerResourcesForGroupVersion 内部处理。
 	resourceList, err := client.ServerResourcesForGroupVersion(resourceToCheck.GroupVersion().String())
 	if apierrors.IsNotFound(err) { // if the discovery endpoint isn't present, then the resource isn't present.
+		// 中文：404 表示该 group/version 未注册，资源自然不存在，这不是错误。
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
+	// 中文：group/version 存在不代表资源存在，还要逐个比对资源名。
 	for _, actualResource := range resourceList.APIResources {
 		if actualResource.Name == resourceToCheck.Resource {
 			return true, nil
@@ -49,12 +56,15 @@ func IsResourceEnabled(client DiscoveryInterface, resourceToCheck schema.GroupVe
 // MatchesServerVersion queries the server to compares the build version
 // (git hash) of the client with the server's build version. It returns an error
 // if it failed to contact the server or if the versions are not an exact match.
+//
+// 中文说明：用于客户端与服务端二进制必须严格同版本的场景（如 e2e 测试），任一字段不一致即返回错误。
 func MatchesServerVersion(clientVersion apimachineryversion.Info, client DiscoveryInterface) error {
 	sVer, err := client.ServerVersion()
 	if err != nil {
 		return fmt.Errorf("couldn't read version from server: %v", err)
 	}
 	// GitVersion includes GitCommit and GitTreeState, but best to be safe?
+	// 中文：GitVersion 通常已隐含后两者，但仍显式比较，避免不同构建方式导致字段组合不一致。
 	if clientVersion.GitVersion != sVer.GitVersion || clientVersion.GitCommit != sVer.GitCommit || clientVersion.GitTreeState != sVer.GitTreeState {
 		return fmt.Errorf("server version (%#v) differs from client version (%#v)", sVer, clientVersion)
 	}
@@ -63,11 +73,16 @@ func MatchesServerVersion(clientVersion apimachineryversion.Info, client Discove
 }
 
 // ServerSupportsVersion returns an error if the server doesn't have the required version
+//
+// 中文说明：通过 ServerGroups 列出所有 group/version，检查目标版本是否在其中。
+// 注意：discovery 可能因 403 而返回空列表，此时故意放行，以免 RBAC 受限的客户端被误判为
+// 不支持该版本。
 func ServerSupportsVersion(client DiscoveryInterface, requiredGV schema.GroupVersion) error {
 	groups, err := client.ServerGroups()
 	if err != nil {
 		// This is almost always a connection error, and higher level code should treat this as a generic error,
 		// not a negotiation specific error.
+		// 中文：连接类错误应原样向上传递，交由上层按普通错误处理，而不是包装成版本协商错误。
 		return err
 	}
 	versions := metav1.ExtractGroupVersions(groups)
@@ -82,6 +97,7 @@ func ServerSupportsVersion(client DiscoveryInterface, requiredGV schema.GroupVer
 
 	// If the server supports no versions, then we should pretend it has the version because of old servers.
 	// This can happen because discovery fails due to 403 Forbidden errors
+	// 中文：空集合说明 discovery 结果不可信（多为旧版本服务端或 403），宁可假定支持。
 	if len(serverVersions) == 0 {
 		return nil
 	}
@@ -90,6 +106,9 @@ func ServerSupportsVersion(client DiscoveryInterface, requiredGV schema.GroupVer
 }
 
 // GroupVersionResources converts APIResourceLists to the GroupVersionResources.
+//
+// 中文说明：把 discovery 返回的 APIResourceList 拍平成一个 GVR 集合。
+// 用 map[struct{}] 而非切片是为了 O(1) 的存在性判断。
 func GroupVersionResources(rls []*metav1.APIResourceList) (map[schema.GroupVersionResource]struct{}, error) {
 	gvrs := map[schema.GroupVersionResource]struct{}{}
 	for _, rl := range rls {
@@ -97,6 +116,7 @@ func GroupVersionResources(rls []*metav1.APIResourceList) (map[schema.GroupVersi
 		if err != nil {
 			return nil, err
 		}
+		// 中文：每个 group/version 下的每个 resource 组合成一个 GVR。
 		for i := range rl.APIResources {
 			gvrs[schema.GroupVersionResource{Group: gv.Group, Version: gv.Version, Resource: rl.APIResources[i].Name}] = struct{}{}
 		}
@@ -105,9 +125,13 @@ func GroupVersionResources(rls []*metav1.APIResourceList) (map[schema.GroupVersi
 }
 
 // FilteredBy filters by the given predicate. Empty APIResourceLists are dropped.
+//
+// 中文说明：逐条筛选资源；某个 group/version 若没有任何资源通过谓词，则整条列表被丢弃，
+// 避免调用方拿到空列表产生误解。
 func FilteredBy(pred ResourcePredicate, rls []*metav1.APIResourceList) []*metav1.APIResourceList {
 	result := []*metav1.APIResourceList{}
 	for _, rl := range rls {
+		// 中文：复制列表头，只替换资源切片，保持 group/version 等元数据不变。
 		filtered := *rl
 		filtered.APIResources = nil
 		for i := range rl.APIResources {
@@ -115,6 +139,7 @@ func FilteredBy(pred ResourcePredicate, rls []*metav1.APIResourceList) []*metav1
 				filtered.APIResources = append(filtered.APIResources, rl.APIResources[i])
 			}
 		}
+		// 中文：nil 表示该 group/version 无匹配资源，直接跳过。
 		if filtered.APIResources != nil {
 			result = append(result, &filtered)
 		}
@@ -123,11 +148,16 @@ func FilteredBy(pred ResourcePredicate, rls []*metav1.APIResourceList) []*metav1
 }
 
 // ResourcePredicate has a method to check if a resource matches a given condition.
+//
+// 中文说明：FilteredBy 使用的筛选条件抽象，便于调用方以函数或结构体形式提供谓词。
 type ResourcePredicate interface {
+	// Match 判断给定 group/version 下的资源是否满足条件。
 	Match(groupVersion string, r *metav1.APIResource) bool
 }
 
 // ResourcePredicateFunc returns true if it matches a resource based on a custom condition.
+//
+// 中文说明：让普通函数通过适配器直接满足 ResourcePredicate。
 type ResourcePredicateFunc func(groupVersion string, r *metav1.APIResource) bool
 
 // Match is a wrapper around ResourcePredicateFunc.
@@ -136,11 +166,16 @@ func (fn ResourcePredicateFunc) Match(groupVersion string, r *metav1.APIResource
 }
 
 // SupportsAllVerbs is a predicate matching a resource iff all given verbs are supported.
+//
+// 中文说明：例如只会读的客户端可要求资源至少支持 get 与 list。
 type SupportsAllVerbs struct {
+	// Verbs 是要求资源全部支持的动词集合。
 	Verbs []string
 }
 
 // Match checks if a resource contains all the given verbs.
+//
+// 中文说明：按“全部包含”语义判断，而非任意一个。
 func (p SupportsAllVerbs) Match(groupVersion string, r *metav1.APIResource) bool {
 	return sets.NewString([]string(r.Verbs)...).HasAll(p.Verbs...)
 }

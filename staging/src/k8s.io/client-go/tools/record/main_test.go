@@ -22,6 +22,8 @@ import (
 	"go.uber.org/goleak"
 )
 
+// TestMain 用 goleak 检查测试结束后是否有 goroutine 泄漏，
+// 事件广播器会起后台 goroutine，泄漏往往意味着 close 没被正确处理。
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }

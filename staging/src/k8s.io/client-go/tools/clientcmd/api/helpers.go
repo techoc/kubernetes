@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package api contains the in-memory representation of kubeconfig files
+// and helpers for manipulating them (merging, flattening, redacting).
+//
+// api 包定义 kubeconfig 的内存模型，以及合并、内联（flatten）、脱敏等辅助函数。
+// 其类型与 v1 外部版本通过 conversion 相互转换。
 package api
 
 import (
@@ -27,6 +32,8 @@ import (
 )
 
 func init() {
+	// 预解码占位字符串：ShortenConfig 依赖 json.Marshal 对 []byte 做 base64 编码的特性，
+	// 先把想要展示的明文做一次 base64 解码，编码回去时即可还原为可读文本。
 	sDec, _ := base64.StdEncoding.DecodeString("REDACTED+")
 	redactedBytes = []byte(string(sDec))
 	sDec, _ = base64.StdEncoding.DecodeString("DATA+OMITTED")
@@ -35,6 +42,7 @@ func init() {
 
 // IsConfigEmpty returns true if the config is empty.
 func IsConfigEmpty(config *Config) bool {
+	// 只有所有集合与当前上下文都为空才算空配置；Preferences 单独判断。
 	return len(config.AuthInfos) == 0 && len(config.Clusters) == 0 && len(config.Contexts) == 0 &&
 		len(config.CurrentContext) == 0 &&
 		len(config.Preferences.Extensions) == 0 && !config.Preferences.Colors &&
@@ -43,6 +51,9 @@ func IsConfigEmpty(config *Config) bool {
 
 // MinifyConfig read the current context and uses that to keep only the relevant pieces of config
 // This is useful for making secrets based on kubeconfig files
+//
+// MinifyConfig 裁剪配置，只保留 current-context 及其引用的 cluster/user，
+// 以便把 kubeconfig 打包成更小的 Secret。引用的对象缺失时返回错误。
 func MinifyConfig(config *Config) error {
 	if len(config.CurrentContext) == 0 {
 		return errors.New("current-context must exist in order to minify")
@@ -74,6 +85,7 @@ func MinifyConfig(config *Config) error {
 		newAuthInfos[currContext.AuthInfo] = config.AuthInfos[currContext.AuthInfo]
 	}
 
+	// 用新映射整体替换，丢弃其余条目。
 	config.AuthInfos = newAuthInfos
 	config.Clusters = newClusters
 	config.Contexts = newContexts
@@ -82,11 +94,16 @@ func MinifyConfig(config *Config) error {
 }
 
 var (
+	// dataOmittedBytes 是写入 []byte 字段后经 JSON 编码呈 "DATA+OMITTED" 的占位值。
 	dataOmittedBytes []byte
-	redactedBytes    []byte
+	// redactedBytes 是写入 []byte 字段后经 JSON 编码呈 "REDACTED+" 的占位值。
+	redactedBytes []byte
 )
 
 // ShortenConfig redacts raw data entries from the config object for a human-readable view.
+//
+// ShortenConfig 就地脱敏配置，用于人读展示：证书/密钥数据替换为 DATA+OMITTED，
+// token 替换为 REDACTED。它直接修改传入对象，如需保留原始值请先深拷贝。
 func ShortenConfig(config *Config) {
 	// trick json encoder into printing a human-readable string in the raw data
 	// by base64 decoding what we want to print. Relies on implementation of
@@ -112,6 +129,9 @@ func ShortenConfig(config *Config) {
 }
 
 // FlattenConfig changes the config object into a self-contained config (useful for making secrets)
+//
+// FlattenConfig 把以文件路径引用的证书/密钥读取进内存，生成不依赖外部文件的配置，
+// 以便存入 Secret 后在任何机器上都能使用。路径先相对 LocationOfOrigin 解析。
 func FlattenConfig(config *Config) error {
 	for key, authInfo := range config.AuthInfos {
 		baseDir, err := MakeAbs(filepath.Dir(authInfo.LocationOfOrigin), "")
@@ -144,6 +164,8 @@ func FlattenConfig(config *Config) error {
 	return nil
 }
 
+// FlattenContent 读取 path 指向的文件写入 contents，并清空 path。
+// path 与 contents 同时有值时返回错误，因为语义上二者互斥，无法判断应以哪个为准。
 func FlattenContent(path *string, contents *[]byte, baseDir string) error {
 	if len(*path) != 0 {
 		if len(*contents) > 0 {
@@ -166,6 +188,7 @@ func FlattenContent(path *string, contents *[]byte, baseDir string) error {
 // ResolvePath returns the path as an absolute paths, relative to the given base directory
 func ResolvePath(path string, base string) string {
 	// Don't resolve empty paths
+	// 空路径与绝对路径都原样返回，避免改变已有语义。
 	if len(path) > 0 {
 		// Don't resolve absolute paths
 		if !filepath.IsAbs(path) {
@@ -176,6 +199,7 @@ func ResolvePath(path string, base string) string {
 	return path
 }
 
+// MakeAbs 把可能为相对的路径转换为绝对路径；base 为空时以当前工作目录为基准。
 func MakeAbs(path, base string) (string, error) {
 	if filepath.IsAbs(path) {
 		return path, nil
@@ -191,10 +215,15 @@ func MakeAbs(path, base string) (string, error) {
 }
 
 // RedactSecrets replaces any sensitive values with REDACTED
+//
+// RedactSecrets 依据结构体字段的 datapolicy 标签把敏感字段替换为 REDACTED，
+// 用于日志或错误信息中安全地输出配置。
 func RedactSecrets(config *Config) error {
 	return redactSecrets(reflect.ValueOf(config), false)
 }
 
+// redactSecrets 递归遍历值；redact 表示当前值是否位于一个标记为敏感的字段之下。
+// 之所以向下传递标志，是为了让敏感字段中的字符串、字节切片被整体替换。
 func redactSecrets(curr reflect.Value, redact bool) error {
 	redactedBytes = []byte("REDACTED")
 	if !curr.IsValid() {
@@ -208,6 +237,7 @@ func redactSecrets(curr reflect.Value, redact bool) error {
 
 	switch actualCurrValue.Kind() {
 	case reflect.Map:
+		// 映射的值不可直接 Set，因此只递归检查（敏感替换在更深层的字段上完成）。
 		for _, v := range actualCurrValue.MapKeys() {
 			err := redactSecrets(actualCurrValue.MapIndex(v), false)
 			if err != nil {
@@ -217,6 +247,7 @@ func redactSecrets(curr reflect.Value, redact bool) error {
 		return nil
 
 	case reflect.String:
+		// 仅当处于敏感字段路径上且非零值时才替换，保留空字符串语义。
 		if redact {
 			if !actualCurrValue.IsZero() {
 				actualCurrValue.SetString("REDACTED")
@@ -225,6 +256,7 @@ func redactSecrets(curr reflect.Value, redact bool) error {
 		return nil
 
 	case reflect.Slice:
+		// []byte 视为原始数据整体替换；其余切片逐元素递归。
 		if actualCurrValue.Type() == reflect.TypeOf([]byte{}) && redact {
 			if !actualCurrValue.IsNil() {
 				actualCurrValue.SetBytes(redactedBytes)
@@ -243,6 +275,7 @@ func redactSecrets(curr reflect.Value, redact bool) error {
 		for fieldIndex := 0; fieldIndex < actualCurrValue.NumField(); fieldIndex++ {
 			currFieldValue := actualCurrValue.Field(fieldIndex)
 			currFieldType := actualCurrValue.Type().Field(fieldIndex)
+			// 这里读取 datapolicy 标签而非 json/yaml 标签，因为脱敏关注的是安全策略。
 			currYamlTag := currFieldType.Tag.Get("datapolicy")
 			currFieldTypeYamlName := strings.Split(currYamlTag, ",")[0]
 			if currFieldTypeYamlName != "" {

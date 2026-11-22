@@ -43,6 +43,9 @@ import (
 
 // TestEventProcessorExit is expected to timeout if the event processor fails
 // to exit when stopped.
+//
+// 两种场景分别让 run 阻塞在“读输入”和“写输出”上，验证 stop 都能打断它；
+// 若不能，测试会因等待 exited 而超时失败。
 func TestEventProcessorExit(t *testing.T) {
 	event := watch.Event{}
 
@@ -85,11 +88,15 @@ func TestEventProcessorExit(t *testing.T) {
 	}
 }
 
+// apiInt 是最小的 runtime.Object 替身，借整数把事件序号直接编码进对象，
+// 从而能在接收端断言顺序。
 type apiInt int
 
 func (apiInt) GetObjectKind() schema.ObjectKind { return nil }
 func (apiInt) DeepCopyObject() runtime.Object   { return nil }
 
+// TestEventProcessorOrdersEvents 验证并发 push 时输出顺序与 push 顺序一致（内部队列是 FIFO），
+// 并且 1000 个事件全部送达。
 func TestEventProcessorOrdersEvents(t *testing.T) {
 	out := make(chan watch.Event)
 	e := newEventProcessor(out)
@@ -121,6 +128,8 @@ func TestEventProcessorOrdersEvents(t *testing.T) {
 
 }
 
+// byEventTypeAndName 为事件提供稳定排序：先按类型，再按 Secret 名。
+// 测试末尾据此比较集合，消除 informer 不保证事件顺序带来的抖动。
 type byEventTypeAndName []watch.Event
 
 func (a byEventTypeAndName) Len() int      { return len(a) }
@@ -137,6 +146,7 @@ func (a byEventTypeAndName) Less(i, j int) bool {
 	return a[i].Object.(*corev1.Secret).Name < a[j].Object.(*corev1.Secret).Name
 }
 
+// newTestSecret 构造仅含名称与一个数据项的 Secret，足够区分不同事件。
 func newTestSecret(name, key, value string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -148,6 +158,9 @@ func newTestSecret(name, key, value string) *corev1.Secret {
 	}
 }
 
+// TestNewInformerWatcher 对比 WatchListClient 特性开关关闭/开启时，watcher 对外的事件序列差异：
+// 关闭时由 reflector 为 list 结果合成 ADDED 事件；开启时服务端直接推送初始事件，且结束标记
+// bookmark 不会透传给客户端。
 func TestNewInformerWatcher(t *testing.T) {
 	// Make sure there are no 2 same types of events on a secret with the same name or that might be flaky.
 	tt := []struct {
@@ -298,6 +311,7 @@ func TestNewInformerWatcher(t *testing.T) {
 			// But stop it at the end of the test, just in case.
 			defer inputWatcher.Stop()
 			inputStopCh := inputWatcher.StopChan()
+			// 用 watch reactor 替换真实 watch，把用例中的 inputEvents 原样注入 reflector。
 			fake.PrependWatchReactor("secrets", testcore.DefaultWatchReactor(inputWatcher, nil))
 			// Send events and then close the done channel
 			inputDoneCh := make(chan struct{})
@@ -325,6 +339,7 @@ func TestNewInformerWatcher(t *testing.T) {
 			outputCh := outputWatcher.ResultChan()
 			timeoutCh := time.After(wait.ForeverTestTimeout)
 			var result []watch.Event
+			// 只收齐期望数量的事件即提前退出，随后用排序消除顺序差异。
 		loop:
 			for {
 				select {
@@ -384,6 +399,10 @@ func TestNewInformerWatcher(t *testing.T) {
 // at https://github.com/kubernetes/kubernetes/blob/dc39ab2417bfddcec37be4011131c59921fdbe98/staging/src/k8s.io/client-go/tools/cache/delta_fifo.go#L736-L739.
 //
 // Code from @liggitt
+//
+// 场景：首次 list 得到一个 secret，随后 watch 立刻收到 Gone 错误并触发重新 list；
+// 第二次 list 为空，于是 DeltaFIFO 用 DeletedFinalStateUnknown 合成删除事件。
+// watcher 必须把它正确转换为 Deleted 事件，并保留原始对象（含 RV）。
 func TestInformerWatcherDeletedFinalStateUnknown(t *testing.T) {
 	listCalls := 0
 	watchCalls := 0
@@ -465,6 +484,8 @@ func TestInformerWatcherDeletedFinalStateUnknown(t *testing.T) {
 	}
 }
 
+// listWatchWithUnSupportedWatchListSemanticsWrapper 显式声明不支持 WatchList 语义，
+// 强制 reflector 走传统 list+watch 路径，从而构造出上面的 Gone/重列场景。
 type listWatchWithUnSupportedWatchListSemanticsWrapper struct {
 	*cache.ListWatch
 }

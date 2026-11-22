@@ -36,6 +36,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// tcpLB 是一个极简的 TCP 负载均衡/代理，用来在测试中插入可切断的中间连接，
+// 从而模拟"TCP 连接已损坏但未被正确关闭"的场景。dials 用于统计已接受的连接数。
 type tcpLB struct {
 	t         *testing.T
 	ln        net.Listener
@@ -43,6 +45,8 @@ type tcpLB struct {
 	dials     int32
 }
 
+// handleConnection 在客户端与真实服务端之间双向转发数据，直到 stopCh 关闭后断开，
+// 从而制造连接被"半关闭"的效果。
 func (lb *tcpLB) handleConnection(in net.Conn, stopCh chan struct{}) {
 	out, err := net.Dial("tcp", lb.serverURL)
 	if err != nil {
@@ -57,6 +61,7 @@ func (lb *tcpLB) handleConnection(in net.Conn, stopCh chan struct{}) {
 	}
 }
 
+// serve 接受一个连接并增加 dials 计数；每次只处理一个连接，便于精确控制连接代数。
 func (lb *tcpLB) serve(stopCh chan struct{}) {
 	conn, err := lb.ln.Accept()
 	if err != nil {
@@ -66,6 +71,7 @@ func (lb *tcpLB) serve(stopCh chan struct{}) {
 	go lb.handleConnection(conn, stopCh)
 }
 
+// newLB 在本地随机端口上监听，serverURL 为真实后端地址。
 func newLB(t *testing.T, serverURL string) *tcpLB {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -84,7 +90,10 @@ const (
 	pingTimeout     int = 1
 )
 
+// TestReconnectBrokenTCP 验证 HTTP/2 健康检查能发现并剔除已损坏的连接，
+// 使得后续请求不会复用坏连接，而是新建连接（dials 从 1 变为 2）。
 func TestReconnectBrokenTCP(t *testing.T) {
+	// 缩短读空闲与 ping 超时，避免测试等待过久；同时确保 HTTP/2 处于启用状态。
 	t.Setenv("HTTP2_READ_IDLE_TIMEOUT_SECONDS", strconv.Itoa(readIdleTimeout))
 	t.Setenv("HTTP2_PING_TIMEOUT_SECONDS", strconv.Itoa(pingTimeout))
 	t.Setenv("DISABLE_HTTP2", "")
@@ -156,6 +165,9 @@ func TestReconnectBrokenTCP(t *testing.T) {
 	}
 }
 
+// TestReconnectBrokenTCP_HTTP1 验证 HTTP/1.1 场景：连接损坏后关闭空闲连接，客户端应重新拨号
+// 而不是复用已损坏的连接。
+//
 // 1. connect to https server with http1.1 using a TCP proxy
 // 2. the connection has keepalive enabled so it will be reused
 // 3. break the TCP connection stopping the proxy
@@ -233,6 +245,9 @@ func TestReconnectBrokenTCP_HTTP1(t *testing.T) {
 	}
 }
 
+// TestReconnectBrokenTCPInFlight_HTTP1 验证存在在途请求且连接损坏时，新请求会另建连接，
+// 而原来的在途请求最终只能超时失败。
+//
 // 1. connect to https server with http1.1 using a TCP proxy making the connection to timeout
 // 2. the connection has keepalive enabled so it will be reused
 // 3. close the in-flight connection to force creating a new connection
@@ -339,6 +354,8 @@ func TestReconnectBrokenTCPInFlight_HTTP1(t *testing.T) {
 
 }
 
+// TestRestClientTimeout 验证 rest.Config.Timeout 会作用于整个请求，
+// 服务端响应慢于超时时间时客户端应返回 deadline exceeded 错误。
 func TestRestClientTimeout(t *testing.T) {
 	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(2 * time.Second)

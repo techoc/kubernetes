@@ -30,6 +30,8 @@ import (
 	"k8s.io/client-go/util/watchlist"
 )
 
+// 测试夹具：metadata 客户端只处理 PartialObjectMetadata，
+// 这里的组/版本/资源名仅用于构造 GVR，不对应真实 API。
 const (
 	testGroup      = "testgroup"
 	testVersion    = "testversion"
@@ -40,6 +42,7 @@ const (
 	testAPIVersion = "testgroup/testversion"
 )
 
+// newPartialObjectMetadata 构造带 TypeMeta 与命名空间/名称的最小元数据对象。
 func newPartialObjectMetadata(apiVersion, kind, namespace, name string) *metav1.PartialObjectMetadata {
 	return &metav1.PartialObjectMetadata{
 		TypeMeta: metav1.TypeMeta{
@@ -53,12 +56,16 @@ func newPartialObjectMetadata(apiVersion, kind, namespace, name string) *metav1.
 	}
 }
 
+// newPartialObjectMetadataWithAnnotations 在基础对象上附加注解，
+// 供 patch 用例验证字段增删改。
 func newPartialObjectMetadataWithAnnotations(annotations map[string]string) *metav1.PartialObjectMetadata {
 	u := newPartialObjectMetadata(testAPIVersion, testKind, testNamespace, testName)
 	u.Annotations = annotations
 	return u
 }
 
+// TestDoesClientSupportWatchListSemantics 确认 metadata fake 客户端不支持
+// WatchList 语义，与真实客户端的降级路径保持一致。
 func TestDoesClientSupportWatchListSemantics(t *testing.T) {
 	target := &FakeMetadataClient{}
 	if !watchlist.DoesClientNotSupportWatchListSemantics(target) {
@@ -66,6 +73,8 @@ func TestDoesClientSupportWatchListSemantics(t *testing.T) {
 	}
 }
 
+// TestList 验证按 GVR 过滤：只有 group/version 下的对象被返回，
+// 期望顺序与 fake tracker 的输出一致。
 func TestList(t *testing.T) {
 	scheme := NewTestScheme()
 	metav1.AddMetaToScheme(scheme)
@@ -91,6 +100,8 @@ func TestList(t *testing.T) {
 	}
 }
 
+// patchTestCase 描述一次 Patch 调用：输入对象/补丁类型/补丁字节，
+// 以及期望的错误消息或结果对象。
 type patchTestCase struct {
 	name                  string
 	object                runtime.Object
@@ -100,6 +111,8 @@ type patchTestCase struct {
 	expectedPatchedObject runtime.Object
 }
 
+// runner 为每个用例创建独立的 fake client，执行 Patch 并校验错误与结果。
+// 每个用例使用新 client，避免上一个用例的修改泄漏到下一个用例。
 func (tc *patchTestCase) runner(t *testing.T) {
 	scheme := NewTestScheme()
 	metav1.AddMetaToScheme(scheme)
@@ -137,6 +150,7 @@ func (tc *patchTestCase) verifyErr(err error) error {
 	return nil
 }
 
+// verifyResult 校验 Patch 返回的对象；预期为 nil 时只要求结果也为 nil。
 func (tc *patchTestCase) verifyResult(result *metav1.PartialObjectMetadata) error {
 	if tc.expectedPatchedObject == nil && result == nil {
 		return nil
@@ -147,15 +161,20 @@ func (tc *patchTestCase) verifyResult(result *metav1.PartialObjectMetadata) erro
 	return nil
 }
 
+// TestPatch 覆盖 JSON Patch、Merge Patch 与 Strategic Merge Patch 在
+// PartialObjectMetadata 上的行为。注意测试资源名是 "thekinds"，
+// 与常量 testResource（"testkinds"）不同：此处按资源名精确匹配。
 func TestPatch(t *testing.T) {
 	testCases := []patchTestCase{
 		{
+			// PartialObjectMetadata 没有注册 strategic merge 元数据，合并补丁会按 JSON 解析而失败。
 			name:       "jsonpatch fails with merge type",
 			object:     newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar"}),
 			patchType:  types.StrategicMergePatchType,
 			patchBytes: []byte(`[]`),
 			wantErrMsg: "invalid JSON document",
 		}, {
+			// 空 JSON Patch 是合法的 no-op，对象应保持不变。
 			name:      "jsonpatch works with empty patch",
 			object:    newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar"}),
 			patchType: types.JSONPatchType,
@@ -191,6 +210,7 @@ func TestPatch(t *testing.T) {
 			patchBytes: []byte(`[{"op": "add", "path": "/metadata/annotations/newvalue", "value": "dummy"}]`),
 			wantErrMsg: "invalid JSON document",
 		}, {
+			// merge patch 是递归合并，因此只覆盖给定的 annotations 键。
 			name:                  "merge patch works with simple replacement",
 			object:                newPartialObjectMetadataWithAnnotations(map[string]string{"foo": "bar"}),
 			patchType:             types.MergePatchType,

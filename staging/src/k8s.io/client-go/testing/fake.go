@@ -30,6 +30,7 @@ import (
 // a default implementation. This makes faking out just the method you want to
 // test easier.
 type Fake struct {
+	// 内嵌读写锁：reactor 链和 action 记录都可能被并发访问。
 	sync.RWMutex
 	actions []Action // these may be castable to other types, but "Action" is the minimum
 
@@ -43,6 +44,7 @@ type Fake struct {
 	// for every request in the order they are tried.
 	ProxyReactionChain []ProxyReactor
 
+	// Resources 供 fake discovery 返回的 API 资源列表；为 nil 时按需构造。
 	Resources []*metav1.APIResourceList
 }
 
@@ -95,6 +97,7 @@ type WatchReactionFunc func(action Action) (handled bool, ret watch.Interface, e
 type ProxyReactionFunc func(action Action) (handled bool, ret restclient.ResponseWrapper, err error)
 
 // AddReactor appends a reactor to the end of the chain.
+// 后添加的 reactor 优先级更低：链前面的 reactor 先处理。
 func (c *Fake) AddReactor(verb, resource string, reaction ReactionFunc) {
 	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{verb, resource, reaction})
 }
@@ -135,6 +138,8 @@ func (c *Fake) Invokes(action Action, defaultReturnObj runtime.Object) (runtime.
 	c.Lock()
 	defer c.Unlock()
 
+	// 记录与 reactor 都使用深拷贝：防止 reactor 或调用方事后修改同一对象导致
+	// 断言结果不稳定。
 	actionCopy := action.DeepCopy()
 	c.actions = append(c.actions, action.DeepCopy())
 	for _, reactor := range c.ReactionChain {
@@ -150,6 +155,7 @@ func (c *Fake) Invokes(action Action, defaultReturnObj runtime.Object) (runtime.
 		return ret, err
 	}
 
+	// 没有 reactor 处理时返回调用方给的默认对象，模拟“成功但无特定行为”。
 	return defaultReturnObj, nil
 }
 
@@ -190,6 +196,7 @@ func (c *Fake) InvokesProxy(action Action) restclient.ResponseWrapper {
 			continue
 		}
 
+		// 代理 reactor 出错时静默跳过，由调用方以 nil 响应判定未处理。
 		handled, ret, err := reactor.React(actionCopy)
 		if !handled || err != nil {
 			continue
@@ -214,6 +221,7 @@ func (c *Fake) ClearActions() {
 func (c *Fake) Actions() []Action {
 	c.RLock()
 	defer c.RUnlock()
+	// 返回副本，避免调用方在锁外修改内部切片。
 	fa := make([]Action, len(c.actions))
 	copy(fa, c.actions)
 	return fa

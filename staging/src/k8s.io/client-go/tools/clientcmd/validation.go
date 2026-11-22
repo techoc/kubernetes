@@ -30,9 +30,12 @@ import (
 )
 
 var (
-	ErrNoContext   = errors.New("no context chosen")
+	// ErrNoContext 表示既未显式指定 context，配置里也没有 current-context。
+	ErrNoContext = errors.New("no context chosen")
+	// ErrEmptyConfig 用 errEmptyConfig 类型承载，以便 IsEmptyConfig 能通过类型断言识别。
 	ErrEmptyConfig = NewEmptyConfigError("no configuration has been provided, try setting KUBERNETES_MASTER environment variable")
 	// message is for consistency with old behavior
+	// ErrEmptyCluster 保留旧错误文本，调用方可能依赖它做字符串判断。
 	ErrEmptyCluster = errors.New("cluster has no server defined")
 )
 
@@ -49,6 +52,7 @@ func (e *errEmptyConfig) Error() string {
 	return e.message
 }
 
+// errContextNotFound 记录缺失的 context 名，便于错误信息定位具体配置项。
 type errContextNotFound struct {
 	ContextName string
 }
@@ -63,6 +67,7 @@ func IsContextNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
+	// 类型断言之外还做字符串匹配，是为了兼容被 wrap 或跨进程序列化后丢失具体类型的错误。
 	if _, ok := err.(*errContextNotFound); ok || err == ErrNoContext {
 		return true
 	}
@@ -71,6 +76,8 @@ func IsContextNotFound(err error) bool {
 
 // IsEmptyConfig returns true if the provided error indicates the provided configuration
 // is empty.
+// 空配置可能被包装在聚合错误中，因此两种形态都要识别；聚合里必须只有空配置错误，
+// 否则说明还存在其他真实问题，不能简单当作“没配”。
 func IsEmptyConfig(err error) bool {
 	switch t := err.(type) {
 	case errConfigurationInvalid:
@@ -85,6 +92,8 @@ func IsEmptyConfig(err error) bool {
 }
 
 // errConfigurationInvalid is a set of errors indicating the configuration is invalid.
+//
+// 它同时充当错误集合与 utilerrors.Aggregate，既保留全部校验错误，又能参与 errors.Is 判定。
 type errConfigurationInvalid []error
 
 // errConfigurationInvalid implements error and Aggregate
@@ -117,6 +126,7 @@ func (e errConfigurationInvalid) Is(target error) bool {
 	})
 }
 
+// visit 递归遍历嵌套的聚合错误，供 Is 实现使用；遇到第一个匹配即返回。
 func (e errConfigurationInvalid) visit(f func(err error) bool) bool {
 	for _, err := range e {
 		switch err := err.(type) {
@@ -150,6 +160,8 @@ func IsConfigurationInvalid(err error) bool {
 }
 
 // Validate checks for errors in the Config.  It does not return early so that it can find as many errors as possible.
+//
+// 校验覆盖 current-context 是否存在、每个 context 的引用关系、各用户与集群自身的一致性。
 func Validate(config clientcmdapi.Config) error {
 	validationErrors := make([]error, 0)
 
@@ -180,6 +192,8 @@ func Validate(config clientcmdapi.Config) error {
 
 // ConfirmUsable looks a particular context and determines if that particular part of the config is useable.  There might still be errors in the config,
 // but no errors in the sections requested or referenced.  It does not return early so that it can find as many errors as possible.
+//
+// 与 Validate 的差别在于只检查当前 context 及其引用，忽略其他未使用的配置项。
 func ConfirmUsable(config clientcmdapi.Config, passedContextName string) error {
 	validationErrors := make([]error, 0)
 
@@ -224,6 +238,8 @@ func ConfirmUsable(config clientcmdapi.Config, passedContextName string) error {
 }
 
 // validateClusterInfo looks for conflicts and errors in the cluster info
+//
+// 只做静态检查：server 非空、proxy-url 可解析、CA 的 file 与 data 不同时存在且文件可读。
 func validateClusterInfo(clusterName string, clusterInfo clientcmdapi.Cluster) []error {
 	validationErrors := make([]error, 0)
 
@@ -261,6 +277,9 @@ func validateClusterInfo(clusterName string, clusterInfo clientcmdapi.Cluster) [
 }
 
 // validateAuthInfo looks for conflicts and errors in the auth info
+//
+// 重点检查互斥的认证方式、证书与私钥的配对，以及 exec 插件必填字段（命令、apiVersion、
+// interactiveMode、env 名与非空插件策略）。
 func validateAuthInfo(authInfoName string, authInfo clientcmdapi.AuthInfo) []error {
 	validationErrors := make([]error, 0)
 
@@ -347,6 +366,8 @@ func validateAuthInfo(authInfoName string, authInfo clientcmdapi.AuthInfo) []err
 }
 
 // validateContext looks for errors in the context.  It is not transitive, so errors in the reference authInfo or cluster configs are not included in this return
+//
+// “非传递”意味着这里只确认引用目标存在，目标内部的配置错误由各自校验函数负责。
 func validateContext(contextName string, context clientcmdapi.Context, config clientcmdapi.Config) []error {
 	validationErrors := make([]error, 0)
 

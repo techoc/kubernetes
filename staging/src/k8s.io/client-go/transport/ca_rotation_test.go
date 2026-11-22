@@ -79,6 +79,7 @@ BRjCI+izPzFTjsxD4aORE+WOkyWFCGPWKfNejfw0
 )
 
 // writeCAFile writes CA data to a temporary file
+// 文件路径成为 transport 监测的 CA 来源；测试结束后自动清理。
 func writeCAFile(t testing.TB, caData []byte) string {
 	tmpDir := t.TempDir()
 	caFile := filepath.Join(tmpDir, "ca.crt")
@@ -96,6 +97,7 @@ func writeCAFile(t testing.TB, caData []byte) string {
 }
 
 // createTestTransport creates a test transport with TLS config
+// 仅设置 RootCAs，足以验证根证书池被替换；不需要真实的拨号行为。
 func createTestTransport(t testing.TB, caData []byte) *http.Transport {
 	CAs, err := rootCertPool(caData)
 	if err != nil {
@@ -108,6 +110,9 @@ func createTestTransport(t testing.TB, caData []byte) *http.Transport {
 	}
 }
 
+// TestCheckCAFileAndRotate 表驱动覆盖 CA 文件检查的各种结果：
+// 内容未变、有效变更、非法内容、文件不可读、空文件、以及从空文件变为有效 CA。
+// 只有“内容变化且新内容可解析”时才应替换 transport。
 func TestCheckCAFileAndRotate(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -205,6 +210,9 @@ func TestCheckCAFileAndRotate(t *testing.T) {
 	}
 }
 
+// generateServerCertAndCA 生成一个自签服务端证书链，并从中提取 CA 证书。
+//
+// 返回值中的 caCertPEM 用作客户端信任锚：轮换测试通过替换它来模拟 CA 变更。
 func generateServerCertAndCA(t testing.TB) (servingCertPEM, servingKeyPEM, caCertPEM []byte) {
 	t.Helper()
 	certPEM, keyPEM, err := cert.GenerateSelfSignedCertKey("127.0.0.1", nil, nil)
@@ -332,6 +340,8 @@ func TestCARotationConnectionBehavior(t *testing.T) {
 	t.Log("Success! Client reconnected after CA was refreshed.")
 }
 
+// TestCARotationConnectionBehavior_Disabled 验证特性门控关闭时不会创建
+// atomicTransportHolder，因此 CA 文件更新后客户端也不会自动重连。
 func TestCARotationConnectionBehavior_Disabled(t *testing.T) {
 	t.Log("Testing CA Rotation Connection Behavior (Feature Disabled)")
 
@@ -442,10 +452,12 @@ func TestCARotationConnectionBehavior_Disabled(t *testing.T) {
 }
 
 // testCAReloadsMetric is a fake metric recorder that records calls to Increment.
+// 用切片而非计数保存每次调用，便于断言 result/reason 组合。
 type testCAReloadsMetric struct {
 	calls []caReloadCall
 }
 
+// caReloadCall 记录一次指标上报的 result/reason 组合。
 type caReloadCall struct {
 	result, reason string
 }
@@ -456,6 +468,8 @@ func (m *testCAReloadsMetric) Increment(result, reason string) {
 
 // TestCARotationMetricsEmitted verifies that ca_rotation.go emits the correct
 // metrics during actual CA reload operations.
+//
+// 每个子用例只触发一次刷新，断言恰好产生一条指标，且结果与原因符合预期。
 func TestCARotationMetricsEmitted(t *testing.T) {
 	fakeMetricRecorder := &testCAReloadsMetric{}
 	origMetric := metrics.TransportCAReloads
@@ -539,6 +553,7 @@ func TestCARotationMetricsEmitted(t *testing.T) {
 }
 
 // helper to create a simple, non-blocking test server with a given certificate.
+// 使用未启动的 httptest.Server，便于调用方自行指定 Listener（复用端口）。
 func newTestServer(t *testing.T, certPEM, keyPEM []byte) *httptest.Server {
 	t.Helper()
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

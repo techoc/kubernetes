@@ -16,4 +16,6 @@ limitations under the License.
 
 // Package record has all client logic for recording and reporting
 // "k8s.io/api/core/v1".Event events.
+//
+// 中文：该包负责事件去重、聚合与限流，并按配置写入 core/v1 或 events/v1 的事件 API。
 package record

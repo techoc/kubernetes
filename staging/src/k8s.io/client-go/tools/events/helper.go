@@ -27,6 +27,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// mapping 记录各事件 API 版本中“被引用对象”字段的前缀。
+//
+// events.k8s.io 使用 regarding，core/v1 使用 involvedObject；字段选择器必须
+// 与服务端字段名完全一致，否则 List/Watch 会静默返回空结果。
 var mapping = map[schema.GroupVersion]string{
 	eventsv1.SchemeGroupVersion:      "regarding",
 	eventsv1beta1.SchemeGroupVersion: "regarding",
@@ -35,6 +39,9 @@ var mapping = map[schema.GroupVersion]string{
 
 // GetFieldSelector returns the appropriate field selector based on the API version being used to communicate with the server.
 // The returned field selector can be used with List and Watch to filter desired events.
+//
+// 只填充调用方实际提供的维度：空值不写入 selector，避免把“未指定”误当成
+// “必须为空”。未知 eventsGroupVersion 直接报错，防止拼出错误的字段名。
 func GetFieldSelector(eventsGroupVersion schema.GroupVersion, regardingGroupVersionKind schema.GroupVersionKind, regardingName string, regardingUID types.UID) (fields.Selector, error) {
 	field := fields.Set{}
 

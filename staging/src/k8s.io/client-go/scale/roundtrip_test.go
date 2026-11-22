@@ -26,9 +26,12 @@ import (
 // scheme/autoscalingv1 from scheme causes a dependency loop from
 // conversions
 
+// TestRoundTrip 验证 scale scheme 中所有类型经过 fuzz 后仍能无损 round-trip，
+// 确保转换函数不会丢失或改变字段。
 func TestRoundTrip(t *testing.T) {
 	scheme := NewScaleConverter().Scheme()
 	// we don't actually need any custom fuzzer funcs ATM -- the defaults
 	// will do just fine
+	// 目前无需自定义 fuzzer，默认实现足以覆盖所有字段。
 	roundtrip.RoundTripTestForScheme(t, scheme, nil)
 }

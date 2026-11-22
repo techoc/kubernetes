@@ -56,6 +56,7 @@ const (
 	defaultTimeout = 32 * time.Second
 
 	// defaultBurst is the default burst to be used with the discovery client's token bucket rate limiter
+	// discovery 会短时间并发查询大量 GroupVersion，因此默认 burst 高于普通客户端的 10。
 	defaultBurst = 300
 
 	AcceptV1 = runtime.ContentTypeJSON
@@ -550,6 +551,9 @@ func (i *openAPIClientWrapper) PathsWithContext(ctx context.Context) (map[string
 
 // DiscoveryClient implements the functions that discover server-supported API groups,
 // versions and resources.
+//
+// DiscoveryClient 通过 /api、/apis、/version、/openapi 等端点了解服务端能力。
+// 它本身无状态且可并发使用；需要缓存时请使用 cached discovery 包装。
 type DiscoveryClient struct {
 	restClient restclient.Interface
 
@@ -619,6 +623,7 @@ func (d *DiscoveryClient) GroupsAndMaybeResourcesWithContext(ctx context.Context
 
 	// Legacy group ordered first (there is only one -- core/v1 group). Returned groups must
 	// be non-nil, but it could be empty. Returned resources, apiResources map could be nil.
+	// 先查 /api（核心组），保证核心组始终排在返回列表最前。
 	groups, resources, failedGVs, err := d.downloadLegacy(ctx)
 	if err != nil {
 		return nil, nil, nil, err
@@ -633,6 +638,7 @@ func (d *DiscoveryClient) GroupsAndMaybeResourcesWithContext(ctx context.Context
 		groups.Groups = append(groups.Groups, group)
 	}
 	// For safety, only return resources if both endpoints returned resources.
+	// 任一端点退化为非聚合格式时无法保证资源完整，宁可不返回资源也不返回不完整集合。
 	if resources != nil && apiResources != nil {
 		for gv, resourceList := range apiResources {
 			resources[gv] = resourceList
@@ -669,6 +675,7 @@ func (d *DiscoveryClient) downloadLegacy(ctx context.Context) (
 	failedGVs := map[schema.GroupVersion]error{}
 	if err != nil {
 		// Tolerate 404, since aggregated api servers can return it.
+		// 某些聚合 apiserver 没有核心组，返回 404 属于正常情况，应视为空结果。
 		if errors.IsNotFound(err) {
 			// Return empty structures and no error.
 			emptyGVMap := map[schema.GroupVersion]*metav1.APIResourceList{}
@@ -680,6 +687,7 @@ func (d *DiscoveryClient) downloadLegacy(ctx context.Context) (
 
 	var resourcesByGV map[schema.GroupVersion]*metav1.APIResourceList
 	// Based on the content-type server responded with: aggregated or unaggregated.
+	// 以响应 Content-Type（而非请求 Accept）判断服务端实际返回的格式。
 	if isGVK, _ := ContentTypeIsGVK(responseContentType, v2GVK); isGVK {
 		var aggregatedDiscovery apidiscoveryv2.APIGroupDiscoveryList
 		err = json.Unmarshal(body, &aggregatedDiscovery)
@@ -747,6 +755,8 @@ func (d *DiscoveryClient) downloadAPIs(ctx context.Context) (
 	return apiGroupList, resourcesByGV, failedGVs, nil
 }
 
+// selectDiscoveryAcceptHeader 决定 Accept 头：显式 legacy 优先；nopeer 模式把
+// 单 apiserver 的聚合视图排在第一位，同时仍接受其他格式作为回退。
 func selectDiscoveryAcceptHeader(useLegacy, nopeer bool) string {
 	if useLegacy {
 		return AcceptV1
@@ -817,6 +827,7 @@ func (d *DiscoveryClient) ServerResourcesForGroupVersionWithContext(ctx context.
 	if len(groupVersion) == 0 {
 		return nil, fmt.Errorf("groupVersion shouldn't be empty")
 	}
+	// 核心组 "v1" 使用 LegacyPrefix（通常是 /api），其余组使用 /apis。
 	if len(d.LegacyPrefix) > 0 && groupVersion == "v1" {
 		url.Path = d.LegacyPrefix + "/" + groupVersion
 	} else {
@@ -830,6 +841,7 @@ func (d *DiscoveryClient) ServerResourcesForGroupVersionWithContext(ctx context.
 		// Tolerate core/v1 not found response by returning empty resource list;
 		// this probably should not happen. But we should verify all callers are
 		// not depending on this toleration before removal.
+		// 保留该容忍是为了兼容旧调用方；移除前需确认无人依赖“v1 始终返回非 nil”。
 		if groupVersion == "v1" && errors.IsNotFound(err) {
 			return resources, nil
 		}
@@ -851,6 +863,9 @@ func (d *DiscoveryClient) ServerGroupsAndResourcesWithContext(ctx context.Contex
 }
 
 // ErrGroupDiscoveryFailed is returned if one or more API groups fail to load.
+//
+// 该错误携带部分成功的结果：调用方仍可使用其余 GroupVersion，
+// 同时通过 IsGroupDiscoveryFailedError/GroupDiscoveryFailedErrorGroups 判断是否需要重试。
 type ErrGroupDiscoveryFailed struct {
 	// Groups is a list of the groups that failed to load and the error cause
 	Groups map[schema.GroupVersion]error
@@ -908,6 +923,7 @@ func ServerGroupsAndResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 
 	// If the passed discovery object implements the wider AggregatedDiscoveryInterface,
 	// then attempt to retrieve aggregated discovery with both groups and the resources.
+	// 优先走聚合发现：一次请求即可拿到组和资源，减少 API 调用数。
 	ad, ok := d.(AggregatedDiscoveryInterfaceWithContext)
 	if !ok {
 		if ad2, ok2 := d.(AggregatedDiscoveryInterface); ok2 {
@@ -943,9 +959,11 @@ func ServerGroupsAndResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 		return resultGroups, resources, ferr
 	}
 
+	// 非聚合路径：并行拉取每个 GroupVersion 的资源，再按发现顺序重排。
 	groupVersionResources, failedGroups := fetchGroupVersionResources(ctx, d, sgs)
 
 	// order results by group/version discovery order
+	// map 遍历无序，必须按 serverGroupList 的顺序重建结果以保证稳定性。
 	result := []*metav1.APIResourceList{}
 	for _, apiGroup := range sgs.Groups {
 		for _, version := range apiGroup.Versions {
@@ -1011,6 +1029,7 @@ func ServerPreferredResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 	grAPIResources := map[schema.GroupResource]*metav1.APIResource{}        // selected APIResource for a GroupResource
 	gvAPIResourceLists := map[schema.GroupVersion]*metav1.APIResourceList{} // blueprint for a APIResourceList for later grouping
 
+	// 第一遍：为每个 GroupVersion 挑选“首选版本”的资源，并记录资源到版本的映射。
 	for _, apiGroup := range serverGroupList.Groups {
 		for _, version := range apiGroup.Versions {
 			groupVersion := schema.GroupVersion{Group: apiGroup.Name, Version: version.Version}
@@ -1029,12 +1048,14 @@ func ServerPreferredResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 
 			for i := range apiResourceList.APIResources {
 				apiResource := &apiResourceList.APIResources[i]
+				// 子资源（含 "/"）不单独出现在首选资源列表中。
 				if strings.Contains(apiResource.Name, "/") {
 					continue
 				}
 				gv := schema.GroupResource{Group: apiGroup.Name, Resource: apiResource.Name}
 				if _, ok := grAPIResources[gv]; ok && version.Version != apiGroup.PreferredVersion.Version {
 					// only override with preferred version
+					// 同一资源出现在多个版本时，优先保留 PreferredVersion 的定义。
 					continue
 				}
 				grVersions[gv] = version.Version
@@ -1044,6 +1065,7 @@ func ServerPreferredResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 	}
 
 	// group selected APIResources according to GroupVersion into APIResourceLists
+	// 第二遍：把选中的资源按版本归并回各自的 APIResourceList。
 	for groupResource, apiResource := range grAPIResources {
 		version := grVersions[groupResource]
 		groupVersion := schema.GroupVersion{Group: groupResource.Group, Version: version}
@@ -1059,6 +1081,9 @@ func ServerPreferredResourcesWithContext(ctx context.Context, d DiscoveryInterfa
 }
 
 // fetchServerResourcesForGroupVersions uses the discovery client to fetch the resources for the specified groups in parallel.
+//
+// 每个 GroupVersion 一个 goroutine；结果用互斥锁保护，避免并发写 map。
+// 单个 GV 失败会记入 failedGroups，不影响其他结果返回。
 func fetchGroupVersionResources(ctx context.Context, d DiscoveryInterfaceWithContext, apiGroups *metav1.APIGroupList) (map[schema.GroupVersion]*metav1.APIResourceList, map[schema.GroupVersion]error) {
 	groupVersionResources := make(map[schema.GroupVersion]*metav1.APIResourceList)
 	failedGroups := make(map[schema.GroupVersion]error)
@@ -1208,6 +1233,7 @@ func (d *DiscoveryClient) OpenAPIV3WithContext(ctx context.Context) openapi.Clie
 //
 // Contextual logging: Use WithLegacyWithContext instead.
 func (d *DiscoveryClient) WithLegacy() DiscoveryInterface {
+	// 复制而非修改接收者，保持原客户端仍可继续使用聚合发现。
 	client := *d
 	client.UseLegacyDiscovery = true
 	return &client
@@ -1223,6 +1249,9 @@ func (d *DiscoveryClient) WithLegacyWithContext(ctx context.Context) DiscoveryIn
 
 // withRetries retries the given recovery function in case the groups supported by the server change after ServerGroup() returns.
 // It retries only if the context isn't canceled.
+//
+// 只重试 ErrGroupDiscoveryFailed（聚合组可能短暂过期）；其他错误立即返回。
+// 达到最大次数后仍返回最后一次的部分结果，便于调用方降级使用。
 func withRetries(ctx context.Context, maxRetries int, f func() ([]*metav1.APIGroup, []*metav1.APIResourceList, error)) ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	var result []*metav1.APIResourceList
 	var resultGroups []*metav1.APIGroup
@@ -1244,6 +1273,7 @@ func withRetries(ctx context.Context, maxRetries int, f func() ([]*metav1.APIGro
 }
 
 func setDiscoveryDefaults(config *restclient.Config) error {
+	// discovery 使用绝对路径（/api、/apis），因此清空 API 前缀与 GroupVersion。
 	config.APIPath = ""
 	config.GroupVersion = nil
 	if config.Timeout == 0 {
@@ -1257,6 +1287,7 @@ func setDiscoveryDefaults(config *restclient.Config) error {
 		// see https://issue.k8s.io/86149
 		config.Burst = defaultBurst
 	}
+	// 只解码不编码：discovery 客户端从不发送对象。
 	codec := runtime.NoopEncoder{Decoder: scheme.Codecs.UniversalDecoder()}
 	config.NegotiatedSerializer = serializer.NegotiatedSerializerWrapper(runtime.SerializerInfo{Serializer: codec})
 	if len(config.UserAgent) == 0 {
@@ -1270,6 +1301,7 @@ func setDiscoveryDefaults(config *restclient.Config) error {
 // NewDiscoveryClientForConfig is equivalent to NewDiscoveryClientForConfigAndClient(c, httpClient),
 // where httpClient was generated with rest.HTTPClientFor(c).
 func NewDiscoveryClientForConfig(c *restclient.Config) (*DiscoveryClient, error) {
+	// 复制配置后再改默认值，避免修改调用方的对象。
 	config := *c
 	if err := setDiscoveryDefaults(&config); err != nil {
 		return nil, err
@@ -1289,6 +1321,7 @@ func NewDiscoveryClientForConfigAndClient(c *restclient.Config, httpClient *http
 	if err := setDiscoveryDefaults(&config); err != nil {
 		return nil, err
 	}
+	// 使用未版本化 REST 客户端：discovery 端点不属于任何 GroupVersion。
 	client, err := restclient.UnversionedRESTClientForConfigAndClient(&config, httpClient)
 	return &DiscoveryClient{restClient: client, LegacyPrefix: "/api", UseLegacyDiscovery: false}, err
 }

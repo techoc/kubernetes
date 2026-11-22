@@ -30,6 +30,9 @@ import (
 
 // internalPackages are packages that ignored when creating a name for featureGates. These packages are in the common
 // call chains, so they'd be unhelpful as names.
+//
+// 这些包处于公共调用链上，若用于推断调用点名称只能得到无意义的 "features"，
+// 因此从栈回溯中排除。
 var internalPackages = []string{"k8s.io/client-go/features/envvar.go"}
 
 var _ Gates = &envVarFeatureGates{}
@@ -51,7 +54,11 @@ var _ Gates = &envVarFeatureGates{}
 // Features can also be set directly via the Set method.
 // In that case, these features take precedence over
 // features set via environmental variables.
+//
+// newEnvVarFeatureGates 基于环境变量实现 Gates。延迟到首次 Enabled/Set 时才读取环境变量，
+// 以避免包初始化阶段读取环境造成不可预期的行为。
 func newEnvVarFeatureGates(features map[Feature]FeatureSpec) *envVarFeatureGates {
+	// 复制一份已知开关，防止调用方之后修改传入 map 影响本实例。
 	known := map[Feature]FeatureSpec{}
 	for name, spec := range features {
 		known[name] = spec
@@ -81,6 +88,8 @@ type envVarFeatureGates struct {
 
 	// enabledViaEnvVar holds a map[Feature]bool
 	// with values explicitly set via env var
+	//
+	// 使用 atomic.Value 存放只写一次的 map，读取路径无锁。
 	enabledViaEnvVar atomic.Value
 
 	// lockEnabledViaSetMethod protects enabledViaSetMethod
@@ -97,11 +106,15 @@ type envVarFeatureGates struct {
 }
 
 // Enabled returns true if the key is enabled. If the key is not known, this call will panic.
+//
+// 查找顺序：Set/SetForTesting 显式设置 > 环境变量 > 默认值 > panic（未知开关）。
+// 未知开关直接 panic，是为了尽早暴露拼写错误，而不是静默返回 false。
 func (f *envVarFeatureGates) Enabled(key Feature) bool {
 	if v, ok := f.wasFeatureEnabledViaSetMethod(key); ok {
 		// ensue that the state of all known features
 		// is loaded from environment variables
 		// on the first call to Enabled method.
+		// 即使命中 Set 值，也触发一次环境变量加载，保证日志中打印的是完整状态。
 		if !f.hasAlreadyReadEnvVar() {
 			_ = f.getEnabledMapFromEnvVar()
 		}
@@ -130,10 +143,14 @@ func (f *envVarFeatureGates) Set(featureName Feature, featureValue bool) error {
 //
 // Features set via this method take precedence over
 // the features set via environment variables.
+//
+// SetForTesting 绕过 LockToDefault 检查，仅限测试使用。
 func (f *envVarFeatureGates) SetForTesting(featureName Feature, featureValue bool) error {
 	return f.set(featureName, featureValue, true)
 }
 
+// set 是 Set 与 SetForTesting 的共同实现；allowChangingLockedFeatures 决定是否允许
+// 违反 LockToDefault 的锁定值。锁定是为了让已发布开关在移除前保持稳定。
 func (f *envVarFeatureGates) set(featureName Feature, featureValue bool, allowChangingLockedFeatures bool) error {
 	feature, ok := f.known[featureName]
 	if !ok {
@@ -155,6 +172,8 @@ func (f *envVarFeatureGates) set(featureName Feature, featureValue bool, allowCh
 // getEnabledMapFromEnvVar will fill the enabled map on the first call.
 // This is the only time a known feature can be set to a value
 // read from the corresponding environmental variable.
+//
+// 只读取一次环境变量：后续修改环境不会再生效，这与“进程启动时配置固定”的语义一致。
 func (f *envVarFeatureGates) getEnabledMapFromEnvVar() map[Feature]bool {
 	f.readEnvVarsOnce.Do(func() {
 		// This code does not really support contextual logging. Making it do so has huge
@@ -173,8 +192,10 @@ func (f *envVarFeatureGates) getEnabledMapFromEnvVar() map[Feature]bool {
 			boolVal, boolErr := strconv.ParseBool(featureState)
 			switch {
 			case boolErr != nil:
+				// 非法布尔值被忽略并记录，而不是让进程启动失败。
 				utilruntime.HandleErrorWithLogger(logger, boolErr, "Could not set feature gate", "feature", feature, "desiredState", featureState)
 			case featureSpec.LockToDefault:
+				// 锁定开关只接受与默认值相同的环境变量值。
 				if boolVal != featureSpec.Default {
 					utilruntime.HandleErrorWithLogger(logger, nil, "Could not set feature gate, feature is locked", "feature", feature, "desiredState", featureState, "lockedState", featureSpec.Default)
 					break
@@ -187,6 +208,7 @@ func (f *envVarFeatureGates) getEnabledMapFromEnvVar() map[Feature]bool {
 		f.enabledViaEnvVar.Store(featureGatesState)
 		f.readEnvVars.Store(true)
 
+		// 在 V(1) 下打印每个开关的最终状态，便于排查为什么某个开关未生效。
 		for feature, featureSpec := range f.known {
 			if featureState, ok := featureGatesState[feature]; ok {
 				logger.V(1).Info("Feature gate updated state", "feature", feature, "enabled", featureState)
@@ -198,6 +220,7 @@ func (f *envVarFeatureGates) getEnabledMapFromEnvVar() map[Feature]bool {
 	return f.enabledViaEnvVar.Load().(map[Feature]bool)
 }
 
+// wasFeatureEnabledViaSetMethod 加读锁查询 Set 方法写入的值。
 func (f *envVarFeatureGates) wasFeatureEnabledViaSetMethod(key Feature) (bool, bool) {
 	f.lockEnabledViaSetMethod.RLock()
 	defer f.lockEnabledViaSetMethod.RUnlock()
@@ -206,6 +229,7 @@ func (f *envVarFeatureGates) wasFeatureEnabledViaSetMethod(key Feature) (bool, b
 	return value, found
 }
 
+// hasAlreadyReadEnvVar 报告环境变量是否已加载；Enabled 用它避免重复触发。
 func (f *envVarFeatureGates) hasAlreadyReadEnvVar() bool {
 	return f.readEnvVars.Load()
 }

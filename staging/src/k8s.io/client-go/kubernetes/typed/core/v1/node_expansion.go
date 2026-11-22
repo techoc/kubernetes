@@ -27,6 +27,9 @@ import (
 type NodeExpansion interface {
 	// PatchStatus modifies the status of an existing node. It returns the copy
 	// of the node that the server returns, or an error.
+	//
+	// 之所以单独暴露，是因为生成的 NodeInterface 不包含 status 子资源操作；
+	// 走 status 子资源可以绕过 spec 的写入校验，仅由 kubelet 等特权组件使用。
 	PatchStatus(ctx context.Context, nodeName string, data []byte) (*v1.Node, error)
 }
 
@@ -34,6 +37,8 @@ type NodeExpansion interface {
 // the node that the server returns, or an error.
 func (c *nodes) PatchStatus(ctx context.Context, nodeName string, data []byte) (*v1.Node, error) {
 	result := &v1.Node{}
+	// 使用 strategic merge patch：调用方只需提交要改动的 status 字段，
+	// 其余字段由服务器按合并策略保留。
 	err := c.GetClient().Patch(types.StrategicMergePatchType).
 		Resource("nodes").
 		Name(nodeName).

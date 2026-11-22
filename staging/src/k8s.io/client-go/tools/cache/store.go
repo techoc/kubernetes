@@ -62,6 +62,8 @@ type Store interface {
 
 	// Bookmark observes a new resource version passed into it and
 	// will be used to get the latest resource version of the store.
+	//
+	// bookmark 事件不携带对象，仅推进 resourceVersion，用于无变更时维持 watch 进度。
 	Bookmark(rv string)
 
 	// Get returns the accumulator associated with the given object's key
@@ -98,6 +100,10 @@ type Transaction struct {
 	Type   TransactionType
 }
 
+// TransactionStore 是一次性提交多步操作的可选能力。
+//
+// 依赖它的调用方可在高竞争场景下把多次修改合并到一次加锁中，
+// 避免分批写入时被其他写者穿插而无法推进。
 type TransactionStore interface {
 	// Transaction allows multiple operations to occur within a single lock acquisition to
 	// ensure progress can be made when there is contention.
@@ -106,6 +112,7 @@ type TransactionStore interface {
 
 var _ error = &TransactionError{}
 
+// TransactionError 汇总批量事务中失败的操作，同时给出成功操作的原始下标。
 type TransactionError struct {
 	SuccessfulIndices []int
 	TotalTransactions int
@@ -152,6 +159,7 @@ type ExplicitKey string
 //
 // TODO maybe some day?: change Store to be keyed differently
 func MetaNamespaceKeyFunc(obj interface{}) (string, error) {
+	// ExplicitKey 允许调用方在只有 key、没有对象时仍走统一入口。
 	if key, ok := obj.(ExplicitKey); ok {
 		return string(key), nil
 	}
@@ -174,6 +182,7 @@ func ObjectToName(obj interface{}) (ObjectName, error) {
 
 // MetaObjectToName returns the structured name for the given object
 func MetaObjectToName(obj metav1.Object) ObjectName {
+	// 集群级对象没有命名空间，ObjectName.Namespace 留空以与命名空间对象区分。
 	if len(obj.GetNamespace()) > 0 {
 		return ObjectName{Namespace: obj.GetNamespace(), Name: obj.GetName()}
 	}
@@ -196,6 +205,7 @@ func SplitMetaNamespaceKey(key string) (namespace, name string, err error) {
 		return parts[0], parts[1], nil
 	}
 
+	// 多于两段说明 key 被拼接错误，返回明确错误而非猜测。
 	return "", "", fmt.Errorf("unexpected key format: %q", key)
 }
 
@@ -217,6 +227,10 @@ type cache struct {
 
 var _ Store = &cache{}
 
+// Transaction 把一批操作交给底层 ThreadSafeStore 原子执行。
+//
+// key 计算失败的条目会被跳过并记录，成功计算的条目即使整体返回错误也已生效，
+// 调用方需按 SuccessfulIndices 判断实际结果。
 func (c *cache) Transaction(txns ...Transaction) *TransactionError {
 	txnStore, ok := c.cacheStorage.(ThreadSafeStoreWithTransaction)
 	if !ok {
@@ -257,6 +271,7 @@ func (c *cache) Add(obj interface{}) error {
 	if err != nil {
 		return KeyError{obj, err}
 	}
+	// transformer 在写入前改写对象（如裁剪字段），失败则拒绝写入以保持缓存一致。
 	if c.transformer != nil {
 		obj, err = c.transformer(obj)
 		if err != nil {
@@ -289,6 +304,7 @@ func (c *cache) Delete(obj interface{}) error {
 	if err != nil {
 		return KeyError{obj, err}
 	}
+	// 传入完整对象供底层实现（如指标）识别被删除的是哪一个。
 	c.cacheStorage.DeleteWithObject(key, obj)
 	return nil
 }
@@ -382,6 +398,7 @@ func (c *cache) Replace(list []interface{}, resourceVersion string) error {
 		}
 		items[key] = item
 	}
+	// 先构造完整映射再一次性替换，避免中途错误留下部分更新的缓存。
 	c.cacheStorage.Replace(items, resourceVersion)
 	return nil
 }
@@ -391,14 +408,17 @@ func (c *cache) Resync() error {
 	return nil
 }
 
+// StoreOption 用于在构造 Store/Indexer 时注入可选行为。
 type StoreOption = func(*cache)
 
+// WithTransformer 设置写入前的对象转换函数。
 func WithTransformer(transformer TransformFunc) StoreOption {
 	return func(c *cache) {
 		c.transformer = transformer
 	}
 }
 
+// WithStoreMetrics 绑定指标标识；metrics 为 nil 时使用全局默认提供者。
 func WithStoreMetrics(identifier InformerNameAndResource, metrics InformerMetricsProvider) StoreOption {
 	return func(c *cache) {
 		c.identifier = identifier

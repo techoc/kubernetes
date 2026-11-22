@@ -17,6 +17,9 @@ limitations under the License.
 // Package fake provides a fake client interface to arbitrary Kubernetes
 // APIs that exposes common high level operations and exposes common
 // metadata.
+//
+// Package fake 实现 scale.ScalesGetter 的测试替身：请求通过 testing.Fake
+// 的 reactor 分发，调用方可按需注入返回的 Scale 对象或错误。
 package fake
 
 import (
@@ -35,6 +38,8 @@ type FakeScaleClient struct {
 	testing.Fake
 }
 
+// Scales 返回绑定到 namespace 的 ScaleInterface；每个调用都共享同一个
+// testing.Fake，因此 reactor 注册在各个 namespace 之间通用。
 func (f *FakeScaleClient) Scales(namespace string) scale.ScaleInterface {
 	return &fakeNamespacedScaleClient{
 		namespace: namespace,
@@ -42,11 +47,15 @@ func (f *FakeScaleClient) Scales(namespace string) scale.ScaleInterface {
 	}
 }
 
+// fakeNamespacedScaleClient 把 namespace 与共享的 testing.Fake 组合，
+// 实现 namespaced 的 scale 操作。
 type fakeNamespacedScaleClient struct {
 	namespace string
 	fake      *testing.Fake
 }
 
+// Get 通过 GetSubresourceAction 请求 scale 子资源。
+// resource.WithVersion("") 清空版本，因为 ScaleInterface 只以 GroupResource 定位。
 func (f *fakeNamespacedScaleClient) Get(ctx context.Context, resource schema.GroupResource, name string, opts metav1.GetOptions) (*autoscalingapi.Scale, error) {
 	obj, err := f.fake.
 		Invokes(testing.NewGetSubresourceAction(resource.WithVersion(""), f.namespace, "scale", name), &autoscalingapi.Scale{})
@@ -58,6 +67,7 @@ func (f *fakeNamespacedScaleClient) Get(ctx context.Context, resource schema.Gro
 	return obj.(*autoscalingapi.Scale), err
 }
 
+// Update 通过 UpdateSubresourceAction 更新 scale 子资源。
 func (f *fakeNamespacedScaleClient) Update(ctx context.Context, resource schema.GroupResource, scale *autoscalingapi.Scale, opts metav1.UpdateOptions) (*autoscalingapi.Scale, error) {
 	obj, err := f.fake.
 		Invokes(testing.NewUpdateSubresourceAction(resource.WithVersion(""), "scale", f.namespace, scale), &autoscalingapi.Scale{})
@@ -69,6 +79,8 @@ func (f *fakeNamespacedScaleClient) Update(ctx context.Context, resource schema.
 	return obj.(*autoscalingapi.Scale), err
 }
 
+// Patch 通过 PatchSubresourceAction 打补丁；此处接收完整 GVR，
+// 因为补丁需要明确版本才能构造正确的资源路径。
 func (f *fakeNamespacedScaleClient) Patch(ctx context.Context, gvr schema.GroupVersionResource, name string, pt types.PatchType, patch []byte, opts metav1.PatchOptions) (*autoscalingapi.Scale, error) {
 	obj, err := f.fake.
 		Invokes(testing.NewPatchSubresourceAction(gvr, f.namespace, name, pt, patch, "scale"), &autoscalingapi.Scale{})

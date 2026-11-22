@@ -18,4 +18,6 @@ limitations under the License.
 
 // Package version supplies version information collected at build time to
 // kubernetes components.
+//
+// 这些变量由构建脚本通过 -ldflags -X 注入；源码树中的值只是 git archive 场景的占位。
 package version

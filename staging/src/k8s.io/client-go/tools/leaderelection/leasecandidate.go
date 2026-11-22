@@ -39,12 +39,17 @@ import (
 	coordinationv1beta1listers "k8s.io/client-go/listers/coordination/v1beta1"
 )
 
+// requeueInterval 是成功续期后下一次续期的最短间隔。
+// 续期只依赖 PingTime 的推进，过短会产生无谓的写入，过长则可能让 leader 误判候选失效。
 const requeueInterval = 5 * time.Minute
 
+// CacheSyncWaiter 抽象出"等待 informer 缓存同步完成"的能力，便于替换实现与测试。
 type CacheSyncWaiter interface {
 	WaitForCacheSync(stopCh <-chan struct{}) map[reflect.Type]bool
 }
 
+// LeaseCandidate 是协调式 leader 选举（CoordinatedLeaderElection）中的候选者控制器。
+// 它负责创建/续期 LeaseCandidate 对象，使 server 端能够感知该候选仍存活。
 type LeaseCandidate struct {
 	leaseClient            coordinationv1beta1client.LeaseCandidateInterface
 	leaseCandidateInformer cache.SharedIndexInformer
@@ -53,6 +58,7 @@ type LeaseCandidate struct {
 	hasSynced              cache.InformerSynced
 
 	// At most there will be one item in this Queue (since we only watch one item)
+	// 队列中最多只有一项（key 恒为 0），复用限速重试语义。
 	queue workqueue.TypedRateLimitingInterface[int]
 
 	name      string
@@ -79,9 +85,11 @@ func NewCandidate(clientset kubernetes.Interface,
 	binaryVersion, emulationVersion string,
 	strategy v1.CoordinatedLeaseStrategy,
 ) (*LeaseCandidate, CacheSyncWaiter, error) {
+	// 只监听自己这一个候选对象，用 fieldSelector 显著降低 watch 开销。
 	fieldSelector := fields.OneTermEqualSelector("metadata.name", candidateName).String()
 	// A separate informer factory is required because this must start before informerFactories
 	// are started for leader elected components
+	// 独立的 informer factory 便于候选控制器先于其他组件启动并进行缓存同步。
 	informerFactory := informers.NewSharedInformerFactoryWithOptions(
 		clientset, 5*time.Minute,
 		informers.WithNamespace(candidateNamespace),
@@ -107,6 +115,7 @@ func NewCandidate(clientset kubernetes.Interface,
 	}
 	lc.queue = workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.DefaultTypedControllerRateLimiter[int](), workqueue.TypedRateLimitingQueueConfig[int]{Name: "leasecandidate"})
 
+	// server 端通过把 PingTime 推到 RenewTime 之后来"敲门"；一旦观察到这种变化就触发续期。
 	h, err := leaseCandidateInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			if leasecandidate, ok := newObj.(*v1beta1.LeaseCandidate); ok {
@@ -124,6 +133,7 @@ func NewCandidate(clientset kubernetes.Interface,
 	return lc, informerFactory, nil
 }
 
+// Run 启动 informer、等待缓存同步，然后进入工作循环，直到 ctx 被取消。
 func (c *LeaseCandidate) Run(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	logger = klog.LoggerWithName(logger, "leasecandidate")
@@ -136,10 +146,12 @@ func (c *LeaseCandidate) Run(ctx context.Context) {
 	}()
 
 	c.informerFactory.Start(ctx.Done())
+	// 缓存未同步就续期会基于不完整状态做出错误的创建/更新决定。
 	if !cache.WaitForNamedCacheSyncWithContext(ctx, c.hasSynced) {
 		return
 	}
 
+	// 启动后立即确保一次候选对象存在，避免第一次续期被推迟一个 requeueInterval。
 	c.enqueueLease()
 	wg.Go(func() {
 		c.runWorker(ctx)
@@ -147,11 +159,13 @@ func (c *LeaseCandidate) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// runWorker 持续从队列取任务处理，直到队列关闭。
 func (c *LeaseCandidate) runWorker(ctx context.Context) {
 	for c.processNextWorkItem(ctx) {
 	}
 }
 
+// processNextWorkItem 处理单个队列项：成功则按固定间隔重新入队，失败则指数退避重试。
 func (c *LeaseCandidate) processNextWorkItem(ctx context.Context) bool {
 	key, shutdown := c.queue.Get()
 	if shutdown {
@@ -161,6 +175,7 @@ func (c *LeaseCandidate) processNextWorkItem(ctx context.Context) bool {
 
 	err := c.ensureLease(ctx)
 	if err == nil {
+		// 正常路径：定时续期而不是立即重试。
 		c.queue.AddAfter(key, requeueInterval)
 		return true
 	}
@@ -171,6 +186,7 @@ func (c *LeaseCandidate) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
+// enqueueLease 把唯一的任务键放入队列；重复调用会被队列去重。
 func (c *LeaseCandidate) enqueueLease() {
 	c.queue.Add(0)
 }
@@ -193,6 +209,7 @@ func (c *LeaseCandidate) ensureLease(ctx context.Context) error {
 		return err
 	}
 	logger.V(2).Info("Lease candidate exists. Renewing.")
+	// 深拷贝后再改，避免篡改 lister 缓存中的共享对象。
 	clone := lease.DeepCopy()
 	clone.Spec.RenewTime = &metav1.MicroTime{Time: c.clock.Now()}
 	_, err = c.leaseClient.Update(ctx, clone, metav1.UpdateOptions{})
@@ -202,6 +219,7 @@ func (c *LeaseCandidate) ensureLease(ctx context.Context) error {
 	return nil
 }
 
+// newLeaseCandidate 构造一个新的候选对象，并把 RenewTime 初始化为当前时间。
 func (c *LeaseCandidate) newLeaseCandidate() *v1beta1.LeaseCandidate {
 	lc := &v1beta1.LeaseCandidate{
 		ObjectMeta: metav1.ObjectMeta{

@@ -34,7 +34,10 @@ import (
 
 var benchmarkNamespace = "default"
 
+// BenchmarkSharedIndexInformer 在不同缓存规模与并发读者数下测量 informer
+// 处理写入和 ListAllByNamespace 读取的吞吐，用于发现锁竞争与索引退化。
 func BenchmarkSharedIndexInformer(b *testing.B) {
+	// 规模跨越 1.6 万到 16 万，按 2 倍递增，便于观察复杂度趋势。
 	for _, podCount := range []int{10_000, 20_000, 40_000, 80_000, 160_000} {
 		b.Run(fmt.Sprintf("podCount=%d", podCount), func(b *testing.B) {
 			pods := createPods(podCount, benchmarkNamespace)
@@ -51,6 +54,7 @@ func BenchmarkSharedIndexInformer(b *testing.B) {
 	}
 }
 
+// createPods 生成指定数量的 Pod，名字随机以接近真实分布。
 func createPods(count int, namespace string) []corev1.Pod {
 	pods := []corev1.Pod{}
 	for i := 0; i < count; i++ {
@@ -65,6 +69,8 @@ func createPods(count int, namespace string) []corev1.Pod {
 	return pods
 }
 
+// setupSharedIndexInformer 用内存 List + 假 watcher 启动 informer，并忙等到缓存同步，
+// 返回的清理函数负责关闭 informer 并等待其 goroutine 退出。
 func setupSharedIndexInformer(watcher watch.Interface, pods []corev1.Pod) (SharedIndexInformer, func()) {
 	podInformer := NewSharedIndexInformerWithOptions(
 		&ListWatch{
@@ -126,6 +132,8 @@ func benchmarkSharedIndexInformer(b *testing.B, readers int, watcher *watch.Fake
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
 	var reads atomic.Int64
+	// readers=0 表示纯写入基线；其余并发读者持续执行全量 namespace 列表，
+	// 制造读锁与写锁的竞争。
 	for i := 0; i < readers; i++ {
 		wg.Add(1)
 		go func() {
@@ -148,6 +156,7 @@ func benchmarkSharedIndexInformer(b *testing.B, readers int, watcher *watch.Fake
 
 	writes.Store(0)
 	reads.Store(0)
+	// got 是有界信号量：队列满时阻塞，模拟处理速度跟不上事件速率时的背压。
 	for b.Loop() {
 		pod := pods[rand.Intn(len(pods))]
 		watcher.Modify(&pod)

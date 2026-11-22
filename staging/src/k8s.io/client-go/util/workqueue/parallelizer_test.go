@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// testCase 描述一次并行处理的规模；String 用作子测试名，便于定位失败组合。
 type testCase struct {
 	pieces    int
 	workers   int
@@ -35,6 +36,7 @@ func (c testCase) String() string {
 	return fmt.Sprintf("pieces:%d,workers:%d,chunkSize:%d", c.pieces, c.workers, c.chunkSize)
 }
 
+// cases 覆盖整除、非整除以及 chunkSize=1/大于1 的边界，确保最后一块不重复/不遗漏。
 var cases = []testCase{
 	{
 		pieces:    1000,
@@ -58,6 +60,7 @@ var cases = []testCase{
 	},
 }
 
+// TestParallelizeUntil 用原子计数验证每个下标恰好被处理一次。
 func TestParallelizeUntil(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.String(), func(t *testing.T) {
@@ -78,6 +81,7 @@ func TestParallelizeUntil(t *testing.T) {
 	}
 }
 
+// BenchmarkParallelizeUntil 以质数计算为负载，测量不同分块大小下的吞吐。
 func BenchmarkParallelizeUntil(b *testing.B) {
 	for _, tc := range cases {
 		b.Run(tc.String(), func(b *testing.B) {
@@ -90,6 +94,7 @@ func BenchmarkParallelizeUntil(b *testing.B) {
 				}, WithChunkSize(tc.chunkSize))
 			}
 			b.StopTimer()
+			// 用前 12 个结果校验实现没有跳过或重复写入下标。
 			want := []bool{false, false, true, true, false, true, false, true, false, false, false, true}
 			if diff := cmp.Diff(want, isPrime[:len(want)]); diff != "" {
 				b.Errorf("miscalculated isPrime (-want,+got):\n%s", diff)
@@ -98,6 +103,7 @@ func BenchmarkParallelizeUntil(b *testing.B) {
 	}
 }
 
+// calPrime 朴素质数判定，仅作为基准测试的计算负载。
 func calPrime(p int) bool {
 	if p <= 1 {
 		return false

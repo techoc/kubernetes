@@ -21,25 +21,30 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名。
+// 直接复用 k8s.io/api 的结果，避免两处常量不同步。
 const GroupName = extensionsapiv1beta1.GroupName
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象时使用的组/版本。
+// 版本字符串固定为 "v1beta1"，与包名保持一致。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接收不带组限定的资源名，返回带组限定的 GroupResource。
+// 例如把 "deployments" 变成 "deployments.extensions"。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
 var (
+	// 复用 k8s.io/api 对应包的 SchemeBuilder，使本包注册的转换函数
+	// 与 API 类型落在同一个 scheme 构建器中。
 	localSchemeBuilder = &extensionsapiv1beta1.SchemeBuilder
-	AddToScheme        = localSchemeBuilder.AddToScheme
+	// AddToScheme 将本包中的类型与转换函数注册到目标 scheme。
+	AddToScheme = localSchemeBuilder.AddToScheme
 )
 
 func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
+	// 这里只注册手写的函数；生成函数的注册在生成文件中完成。
+	// 这种拆分保证生成文件缺失时包仍可编译。
 	localSchemeBuilder.Register()
 }

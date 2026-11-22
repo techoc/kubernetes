@@ -20,12 +20,15 @@ import (
 	"testing"
 )
 
+// mockHandler 用于验证 nameForHandler 对普通结构体和其指针的命名规则。
 type mockHandler struct{}
 
 func (m mockHandler) OnAdd(any, bool)   {}
 func (m mockHandler) OnUpdate(any, any) {}
 func (m mockHandler) OnDelete(any)      {}
 
+// TestNameForHandler 校验事件处理器名称的推导，结果用于日志与注册诊断。
+// 关键点：ResourceEventHandlerFuncs 会被展开为其内部函数名，nil 与 typed-nil 需区分。
 func TestNameForHandler(t *testing.T) {
 	emptyHandler := ResourceEventHandlerFuncs{}
 

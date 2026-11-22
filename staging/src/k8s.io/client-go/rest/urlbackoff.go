@@ -31,18 +31,23 @@ import (
 // In general these should be errors that indicate a server is overloaded.
 // These shouldn't be configured by any user, we set them based on conventions
 // described in
+//
+// 中文：429 表示服务端限流；>= 500 且不超过 maxResponseCode 的响应也视为过载。
 var serverIsOverloadedSet = sets.NewInt(429)
 var maxResponseCode = 499
 
 //go:generate mockery
 
 // Deprecated: BackoffManager.Sleep ignores the caller's context. Use BackoffManagerWithContext instead.
+// 已弃用：Sleep 不响应调用方 context，新代码应实现 BackoffManagerWithContext。
 type BackoffManager interface {
 	UpdateBackoff(actualURL *url.URL, err error, responseCode int)
 	CalculateBackoff(actualURL *url.URL) time.Duration
 	Sleep(d time.Duration)
 }
 
+// BackoffManagerWithContext 是感知 context 的退避接口；所有睡眠都能被取消，
+// 避免请求已取消后仍阻塞 goroutine。
 type BackoffManagerWithContext interface {
 	UpdateBackoffWithContext(ctx context.Context, actualURL *url.URL, err error, responseCode int)
 	CalculateBackoffWithContext(ctx context.Context, actualURL *url.URL) time.Duration
@@ -56,6 +61,7 @@ var _ BackoffManagerWithContext = &URLBackoff{}
 // we need for URL specific exponential backoff.
 type URLBackoff struct {
 	// Uses backoff as underlying implementation.
+	// 以 host 为 key 记录失败次数，因此同一 API server 的不同路径共享退避状态。
 	Backoff *flowcontrol.Backoff
 }
 
@@ -63,26 +69,32 @@ type URLBackoff struct {
 type NoBackoff struct {
 }
 
+// UpdateBackoff 实现 BackoffManager，忽略 context（兼容旧接口）。
 func (n *NoBackoff) UpdateBackoff(actualURL *url.URL, err error, responseCode int) {
 	// do nothing.
 }
 
+// UpdateBackoffWithContext 实现 BackoffManagerWithContext，不记录任何状态。
 func (n *NoBackoff) UpdateBackoffWithContext(ctx context.Context, actualURL *url.URL, err error, responseCode int) {
 	// do nothing.
 }
 
+// CalculateBackoff 始终返回 0，即不进行退避。
 func (n *NoBackoff) CalculateBackoff(actualURL *url.URL) time.Duration {
 	return 0 * time.Second
 }
 
+// CalculateBackoffWithContext 始终返回 0，即不进行退避。
 func (n *NoBackoff) CalculateBackoffWithContext(ctx context.Context, actualURL *url.URL) time.Duration {
 	return 0 * time.Second
 }
 
+// Sleep 直接阻塞指定时长，不响应取消。
 func (n *NoBackoff) Sleep(d time.Duration) {
 	time.Sleep(d)
 }
 
+// SleepWithContext 在 d 时长内等待，期间 context 取消则立即返回。
 func (n *NoBackoff) SleepWithContext(ctx context.Context, d time.Duration) {
 	if d == 0 {
 		return
@@ -123,6 +135,7 @@ func (b *URLBackoff) UpdateBackoff(actualURL *url.URL, err error, responseCode i
 func (b *URLBackoff) UpdateBackoffWithContext(ctx context.Context, actualURL *url.URL, err error, responseCode int) {
 	// range for retry counts that we store is [0,13]
 	if responseCode > maxResponseCode || serverIsOverloadedSet.Has(responseCode) {
+		// 服务端过载：累计失败次数，后续 CalculateBackoff 会按指数增长等待时间。
 		b.Backoff.Next(b.baseUrlKey(actualURL), b.Backoff.Clock.Now())
 		return
 	} else if responseCode >= 300 || err != nil {
@@ -130,6 +143,7 @@ func (b *URLBackoff) UpdateBackoffWithContext(ctx context.Context, actualURL *ur
 	}
 
 	//If we got this far, there is no backoff required for this URL anymore.
+	// 成功或仅客户端错误时清除该 host 的历史，避免过期的失败记录拖慢后续请求。
 	b.Backoff.Reset(b.baseUrlKey(actualURL))
 }
 
@@ -145,10 +159,12 @@ func (b *URLBackoff) CalculateBackoffWithContext(_ context.Context, actualURL *u
 	return b.CalculateBackoff(actualURL)
 }
 
+// Sleep 通过 Backoff 的 Clock 睡眠，便于测试注入假时钟。
 func (b *URLBackoff) Sleep(d time.Duration) {
 	b.Backoff.Clock.Sleep(d)
 }
 
+// SleepWithContext 在 d 时长内等待，context 取消时提前返回。
 func (b *URLBackoff) SleepWithContext(ctx context.Context, d time.Duration) {
 	if d == 0 {
 		return
@@ -162,6 +178,7 @@ func (b *URLBackoff) SleepWithContext(ctx context.Context, d time.Duration) {
 }
 
 // backoffManagerNopContext wraps a BackoffManager and adds the *WithContext methods.
+// 兼容适配器：让仅实现旧接口的 BackoffManager 也能满足新接口要求。
 type backoffManagerNopContext struct {
 	BackoffManager
 }
@@ -169,14 +186,17 @@ type backoffManagerNopContext struct {
 var _ BackoffManager = &backoffManagerNopContext{}
 var _ BackoffManagerWithContext = &backoffManagerNopContext{}
 
+// UpdateBackoffWithContext 忽略 context，委托给旧方法。
 func (b *backoffManagerNopContext) UpdateBackoffWithContext(ctx context.Context, actualURL *url.URL, err error, responseCode int) {
 	b.UpdateBackoff(actualURL, err, responseCode)
 }
 
+// CalculateBackoffWithContext 忽略 context，委托给旧方法。
 func (b *backoffManagerNopContext) CalculateBackoffWithContext(ctx context.Context, actualURL *url.URL) time.Duration {
 	return b.CalculateBackoff(actualURL)
 }
 
+// SleepWithContext 忽略 context，委托给旧方法；因此仍不可取消。
 func (b *backoffManagerNopContext) SleepWithContext(ctx context.Context, d time.Duration) {
 	b.Sleep(d)
 }

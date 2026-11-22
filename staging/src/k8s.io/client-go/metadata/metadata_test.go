@@ -36,6 +36,8 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// TestDoesClientSupportWatchListSemantics 确认 metadata 客户端被标记为支持
+// WatchList 语义，否则 informer 在 feature gate 开启时不会走 WatchList 路径。
 func TestDoesClientSupportWatchListSemantics(t *testing.T) {
 	target, err := NewForConfig(&rest.Config{})
 	if err != nil {
@@ -46,6 +48,9 @@ func TestDoesClientSupportWatchListSemantics(t *testing.T) {
 	}
 }
 
+// TestClient 通过 httptest 服务端驱动 metadata 客户端，覆盖：
+// GET/LIST 的 Accept 协商与 PartialObjectMetadata 转换、缺失 kind/apiVersion
+// 时的解码错误、以及 DELETE 请求体必须是合法 JSON。
 func TestClient(t *testing.T) {
 	gvr := schema.GroupVersionResource{Group: "group", Version: "v1", Resource: "resource"}
 	statusOK := &metav1.Status{
@@ -72,6 +77,7 @@ func TestClient(t *testing.T) {
 		{
 			name: "GET is able to convert a JSON object to PartialObjectMetadata",
 			handler: func(t *testing.T, w http.ResponseWriter, req *http.Request) {
+				// 客户端必须请求 PartialObjectMetadata 表示；服务端忽略时降级为 JSON 也应能转换。
 				if req.Header.Get("Accept") != "application/vnd.kubernetes.protobuf;as=PartialObjectMetadata;g=meta.k8s.io;v=v1,application/json;as=PartialObjectMetadata;g=meta.k8s.io;v=v1,application/json" {
 					t.Fatal(req.Header.Get("Accept"))
 				}
@@ -109,6 +115,7 @@ func TestClient(t *testing.T) {
 		{
 			name: "LIST is able to convert a JSON object to PartialObjectMetadata",
 			handler: func(t *testing.T, w http.ResponseWriter, req *http.Request) {
+				// 列表请求协商 PartialObjectMetadataList，且必须保留 resourceVersion。
 				if req.Header.Get("Accept") != "application/vnd.kubernetes.protobuf;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1,application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1,application/json" {
 					t.Fatal(req.Header.Get("Accept"))
 				}
@@ -165,6 +172,7 @@ func TestClient(t *testing.T) {
 
 		{
 			name: "GET fails if the object is JSON and has no kind",
+			// 无 TypeMeta 时无法确定目标类型，应返回 IsMissingKind 错误而非猜测。
 			handler: func(t *testing.T, w http.ResponseWriter, req *http.Request) {
 				if req.Header.Get("Accept") != "application/vnd.kubernetes.protobuf;as=PartialObjectMetadata;g=meta.k8s.io;v=v1,application/json;as=PartialObjectMetadata;g=meta.k8s.io;v=v1,application/json" {
 					t.Fatal(req.Header.Get("Accept"))
@@ -221,6 +229,8 @@ func TestClient(t *testing.T) {
 
 		{
 			name: "GET fails if the object is JSON and not clearly metadata",
+			// 空 ObjectMeta 可能意味着返回的是完整对象而非 metadata，必须拒绝，
+			// 避免把完整对象误当元数据返回给调用方。
 			handler: func(t *testing.T, w http.ResponseWriter, req *http.Request) {
 				if req.Header.Get("Accept") != "application/vnd.kubernetes.protobuf;as=PartialObjectMetadata;g=meta.k8s.io;v=v1,application/json;as=PartialObjectMetadata;g=meta.k8s.io;v=v1,application/json" {
 					t.Fatal(req.Header.Get("Accept"))
@@ -249,6 +259,7 @@ func TestClient(t *testing.T) {
 
 		{
 			name: "Delete fails if DeleteOptions cannot be serialized to JSON",
+			// 测试名沿用历史描述；实际断言 DELETE 请求体是合法 JSON。
 			handler: func(t *testing.T, w http.ResponseWriter, req *http.Request) {
 				if req.Header.Get("Content-Type") != runtime.ContentTypeJSON {
 					t.Fatal(req.Header.Get("Content-Type"))

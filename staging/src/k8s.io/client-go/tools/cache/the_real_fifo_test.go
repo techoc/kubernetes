@@ -30,6 +30,7 @@ import (
 	clientfeaturestesting "k8s.io/client-go/features/testing"
 )
 
+// getItems 在锁内复制一份待处理 delta 列表，避免测试与后台 Pop 竞争。
 func (f *RealFIFO) getItems() []Delta {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -39,10 +40,12 @@ func (f *RealFIFO) getItems() []Delta {
 	return ret
 }
 
+// 这些哨兵名让 testRealFIFOPop 能把“队列关闭/原子替换/bookmark”也当成普通值断言。
 const closedFIFOName = "FIFO WAS CLOSED"
 const isAtomic = "ATOMIC REPLACED OBJ"
 const isBookmark = "BOOKMARK OBJ"
 
+// popN 连续 Pop n 次并收集对象，用于把队列内容展开成 Deltas。
 func popN(queue Queue, count int) []interface{} {
 	result := []interface{}{}
 	for i := 0; i < count; i++ {
@@ -55,6 +58,7 @@ func popN(queue Queue, count int) []interface{} {
 }
 
 // helper function to reduce stuttering
+// 把 Pop 的结果归一化为 testFifoObject：关闭、ReplacedAll、Bookmark 都用特殊 name 表示。
 func testRealFIFOPop(f *RealFIFO) testFifoObject {
 	val := Pop(f)
 	if val == nil {
@@ -73,6 +77,7 @@ func testRealFIFOPop(f *RealFIFO) testFifoObject {
 	return val.(Deltas).Newest().Object.(testFifoObject)
 }
 
+// emptyKnownObjects 返回空的 KeyListerGetter，表示 FIFO 不持有任何已知对象快照。
 func emptyKnownObjects() KeyListerGetter {
 	return literalListerGetter(
 		func() []testFifoObject {
@@ -81,6 +86,7 @@ func emptyKnownObjects() KeyListerGetter {
 	)
 }
 
+// TestRealFIFO_basic 校验并发写入时，同一来源（int/uint）内部的顺序不乱。
 func TestRealFIFO_basic(t *testing.T) {
 	f := NewRealFIFO(testFifoObjectKeyFunc, emptyKnownObjects(), nil)
 	const amount = 500
@@ -147,6 +153,8 @@ func TestRealFIFO_replaceWithDeleteDeltaIn(t *testing.T) {
 	}
 }
 
+// TestRealFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue 校验 Replace 对“仅在队列中”的对象
+// 产生删除，且删除只产生一次；涵盖先加后删、重复 Replace、bookmark 等组合。
 func TestRealFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue(t *testing.T) {
 	obj := mkFifoObj("foo", 2)
 	objV2 := mkFifoObj("foo", 3)
@@ -270,6 +278,7 @@ func TestRealFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue(t *testing.T) {
 	}
 }
 
+// collapseDeltas 把多次 Pop 得到的 Deltas 展平成一个按时间排序的 Deltas。
 func collapseDeltas(ins []interface{}) Deltas {
 	ret := Deltas{}
 	for _, curr := range ins {
@@ -283,6 +292,7 @@ func collapseDeltas(ins []interface{}) Deltas {
 // ATTENTION: difference with delta_fifo_test, there is no requeue option anymore
 // func TestDeltaFIFO_requeueOnPop(t *testing.T) {
 
+// TestRealFIFO_addUpdate 校验 Add/Update/Delete 全部按发生顺序入队，且 Pop 后队列清空。
 func TestRealFIFO_addUpdate(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -352,6 +362,8 @@ func TestRealFIFO_addUpdate(t *testing.T) {
 	<-done
 }
 
+// TestRealFIFO_transformer 校验 TransformFunc 只作用一次，且对 DeletedFinalStateUnknown
+// 包裹的对象也不会重复变换。
 func TestRealFIFO_transformer(t *testing.T) {
 	mk := func(name string, rv int) testFifoObject {
 		return mkFifoObj(name, &rvAndXfrm{rv, 0})
@@ -441,6 +453,7 @@ func TestRealFIFO_transformer(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_enqueueingNoLister 校验没有 KnownObjects 时所有操作都被入队，包括删除。
 func TestRealFIFO_enqueueingNoLister(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -467,6 +480,7 @@ func TestRealFIFO_enqueueingNoLister(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_enqueueingWithLister 校验删除已知对象会被入队，从而让消费者感知删除。
 func TestRealFIFO_enqueueingWithLister(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -492,6 +506,7 @@ func TestRealFIFO_enqueueingWithLister(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_addReplace 校验 Add 之后 Replace 会同时保留旧事件与快照事件，按顺序交付。
 func TestRealFIFO_addReplace(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -536,6 +551,7 @@ func TestRealFIFO_addReplace(t *testing.T) {
 	<-done
 }
 
+// TestRealFIFO_ResyncNonExisting 校验对已删除且不在 KnownObjects 中的对象执行 Resync 不再产生 Sync。
 func TestRealFIFO_ResyncNonExisting(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -556,6 +572,7 @@ func TestRealFIFO_ResyncNonExisting(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_Resync 校验 Resync 为 KnownObjects 中的对象生成 Sync delta。
 func TestRealFIFO_Resync(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -575,6 +592,8 @@ func TestRealFIFO_Resync(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_DeleteExistingNonPropagated 校验先 Add 再 Delete 时两条 delta 都被保留，
+// 消费者因此能先看到创建再看到删除。
 func TestRealFIFO_DeleteExistingNonPropagated(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -593,6 +612,8 @@ func TestRealFIFO_DeleteExistingNonPropagated(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_ReplaceMakesDeletions 覆盖 Replace 为“消失的已知对象”生成 tombstone 删除的各种情形，
+// 包括对象在队列中被删除后又重建、以及多次 Replace 的顺序。
 func TestRealFIFO_ReplaceMakesDeletions(t *testing.T) {
 	// We test with only one pre-existing object because there is no
 	// promise about how their deletes are ordered.
@@ -773,6 +794,7 @@ func TestRealFIFO_ReplaceMakesDeletionsReplaced(t *testing.T) {
 // ATTENTION: difference with delta_fifo_test, the previous value was hardcoded as use "Replace" so I've eliminated the option to set it differently
 //func TestRealFIFO_ReplaceDeltaType(t *testing.T) {
 
+// TestRealFIFO_UpdateResyncRace 校验 Update 与 Resync 竞争时不会把旧值重新入队。
 func TestRealFIFO_UpdateResyncRace(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -796,6 +818,8 @@ func TestRealFIFO_UpdateResyncRace(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_HasSyncedCorrectOnDeletion 校验首次 Replace 产生的 tombstone 删除也计入初始批次，
+// 必须全部 Pop 完 HasSynced 才变为 true。
 func TestRealFIFO_HasSyncedCorrectOnDeletion(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -832,6 +856,8 @@ func TestRealFIFO_HasSyncedCorrectOnDeletion(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_detectLineJumpers 校验同一对象被多次更新时不会“插队”，
+// 后到的新版本必须排在已入队的所有 key 之后。
 func TestRealFIFO_detectLineJumpers(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -870,6 +896,7 @@ func TestRealFIFO_detectLineJumpers(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_KeyOf 校验 keyOf 对普通对象、tombstone、Deltas 的 key 提取规则。
 func TestRealFIFO_KeyOf(t *testing.T) {
 	f := RealFIFO{keyFunc: testFifoObjectKeyFunc}
 
@@ -895,6 +922,8 @@ func TestRealFIFO_KeyOf(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_HasSynced 校验 HasSynced 的边界：无操作时为 false，
+// 首次 Replace 的项全部 Pop 后才为 true。
 func TestRealFIFO_HasSynced(t *testing.T) {
 	tests := []struct {
 		actions        []func(f *RealFIFO)
@@ -1000,6 +1029,8 @@ func TestRealFIFO_PopShouldUnblockWhenClosed(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_PopMultipleDeltaInBatch 校验批量 Pop 的切批规则：
+// 初始列表与非初始事件分批、同一 key 的重复事件单独成批、batchSize 上限生效。
 func TestRealFIFO_PopMultipleDeltaInBatch(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.InOrderInformersBatchProcess, true)
 	const unlimitedBatchSize = 999999
@@ -1207,6 +1238,7 @@ func TestRealFIFO_PopMultipleDeltaInBatch(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_PopBrokenItemsInBatch 校验 keyFunc 失败的对象会在批处理边界被正确隔离。
 func TestRealFIFO_PopBrokenItemsInBatch(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.InOrderInformersBatchProcess, true)
 	const unlimitedBatchSize = 999999
@@ -1319,6 +1351,8 @@ func TestRealFIFO_PopBrokenItemsInBatch(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_ReplaceAtomic 校验开启原子事件后，Replace 生成单个 ReplacedAll delta，
+// 而不是逐对象的 Replaced。
 func TestRealFIFO_ReplaceAtomic(t *testing.T) {
 	obj := mkFifoObj("foo", 2)
 	table := []struct {
@@ -1417,6 +1451,7 @@ func TestRealFIFO_ReplaceAtomic(t *testing.T) {
 	}
 }
 
+// TestRealFIFO_ReplaceAtomicPop 校验原子 Replace 的 delta 在 Pop 时按整体交付。
 func TestRealFIFO_ReplaceAtomicPop(t *testing.T) {
 	f := NewRealFIFO(
 		testFifoObjectKeyFunc,
@@ -1462,6 +1497,7 @@ func TestRealFIFO_ReplaceAtomicPop(t *testing.T) {
 	<-done
 }
 
+// TestRealFIFO_ResyncAtomic 校验原子 Resync 生成单个 SyncAll delta。
 func TestRealFIFO_ResyncAtomic(t *testing.T) {
 	obj := mkFifoObj("foo", 2)
 	table := []struct {

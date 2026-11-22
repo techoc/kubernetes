@@ -25,9 +25,11 @@ import (
 
 // PopProcessFunc is passed to Pop() method of Queue interface.
 // It is supposed to process the accumulator popped from the queue.
+// isInInitialList 为 true 表示该项来自首次 Replace 的快照，供处理器区分初始同步与增量事件。
 type PopProcessFunc func(obj interface{}, isInInitialList bool) error
 
 // ErrFIFOClosed used when FIFO is closed
+// 关闭后仍阻塞在 Pop 的消费者会收到此错误，从而退出循环。
 var ErrFIFOClosed = errors.New("DeltaFIFO: manipulating with closed queue")
 
 // Queue extends ReflectorStore with a collection of Store keys to "process".
@@ -109,10 +111,14 @@ type QueueWithBatch interface {
 //   - You do not want to periodically reprocess objects.
 //
 // Compare with DeltaFIFO for other use cases.
+//
+// 中文：这里的“FIFO”只保证 key 的处理顺序，不保留事件历史；
+// 因此不能用于需要看到每一次变更（edge）的场景，那应使用 DeltaFIFO/RealFIFO。
 type FIFO struct {
 	lock sync.RWMutex
 	cond sync.Cond
 	// We depend on the property that every key in `items` is also in `queue`
+	// 该不变式让 Pop 可以安全地跳过已被删除的 key。
 	items map[string]interface{}
 	queue []string
 
@@ -143,6 +149,7 @@ var (
 )
 
 // Close the queue.
+// 关闭后唤醒所有等待者；之后 Pop 返回 ErrFIFOClosed，但其他 CRUD 仍会执行。
 func (f *FIFO) Close() {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -160,6 +167,7 @@ func (f *FIFO) HasSynced() bool {
 
 // HasSyncedChecker is done if an Add/Update/Delete/AddIfNotPresent are called first,
 // or the first batch of items inserted by Replace() has been popped.
+// 返回自身以便配合 WaitForNamedCacheSync 等待 channel 关闭。
 func (f *FIFO) HasSyncedChecker() DoneChecker {
 	return f
 }
@@ -175,6 +183,7 @@ func (f *FIFO) Done() <-chan struct{} {
 }
 
 // hasSynced_locked returns the result of a prior checkSynced call.
+// 调用方必须已持有 f.lock。
 func (f *FIFO) hasSynced_locked() bool {
 	return f.syncedClosed
 }
@@ -182,6 +191,8 @@ func (f *FIFO) hasSynced_locked() bool {
 // checkSynced checks whether the initial sync is completed.
 // It must be called whenever populated or initialPopulationCount change
 // while the mutex is still locked.
+//
+// synced channel 只能关闭一次，syncedClosed 用于避免重复 close 导致 panic。
 func (f *FIFO) checkSynced() {
 	synced := f.populated && f.initialPopulationCount == 0
 	if synced && !f.syncedClosed {
@@ -201,6 +212,7 @@ func (f *FIFO) Add(obj interface{}) error {
 	defer f.lock.Unlock()
 	f.populated = true
 	f.checkSynced()
+	// 已存在的 key 不重复入队；稍后处理时会拿到 items 中最新的对象。
 	if _, exists := f.items[id]; !exists {
 		f.queue = append(f.queue, id)
 	}
@@ -226,6 +238,7 @@ func (f *FIFO) Delete(obj interface{}) error {
 	defer f.lock.Unlock()
 	f.populated = true
 	f.checkSynced()
+	// 不清理 queue 中的 id：Pop 时发现 items 缺失会自动跳过。
 	delete(f.items, id)
 	return err
 }
@@ -257,12 +270,14 @@ func (f *FIFO) Pop(process PopProcessFunc) (interface{}, error) {
 
 			f.cond.Wait()
 		}
+		// 初次 Replace 尚未全部处理完时，弹出的项标记为 initial list。
 		isInInitialList := !f.hasSynced_locked()
 		id := f.queue[0]
 		f.queue = f.queue[1:]
 		if f.initialPopulationCount > 0 {
 			f.initialPopulationCount--
 			// Must be done *after* process has completed.
+			// 用 defer 确保处理函数返回（或 panic 展开）后才计入已同步。
 			defer f.checkSynced()
 		}
 		item, ok := f.items[id]
@@ -281,6 +296,7 @@ func (f *FIFO) Pop(process PopProcessFunc) (interface{}, error) {
 // after calling this function. f's queue is reset, too; upon return, it
 // will contain the items in the map, in no particular order.
 func (f *FIFO) Replace(list []interface{}, resourceVersion string) error {
+	// 先完整构建新 map，再在锁内一次性替换，避免消费者看到半成品状态。
 	items := make(map[string]interface{}, len(list))
 	for _, item := range list {
 		key, err := f.keyFunc(item)
@@ -312,6 +328,8 @@ func (f *FIFO) Replace(list []interface{}, resourceVersion string) error {
 
 // Resync will ensure that every object in the Store has its key in the queue.
 // This should be a no-op, because that property is maintained by all operations.
+//
+// 保留该实现是为了满足 Queue 接口；若不变式被破坏，它会补入缺失的 key。
 func (f *FIFO) Resync() error {
 	f.lock.Lock()
 	defer f.lock.Unlock()

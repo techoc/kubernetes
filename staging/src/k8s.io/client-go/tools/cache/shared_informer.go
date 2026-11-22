@@ -142,6 +142,10 @@ import (
 // A delete notification exposes the last locally known non-absent
 // state, except that its ResourceVersion is replaced with a
 // ResourceVersion in which the object is actually absent.
+//
+// 概括：SharedInformer 把 ListAndWatch 得到的权威状态同步到本地缓存，
+// 再把变化分发给注册的事件处理器。缓存最终一致、同一对象的通知有序，
+// 但不同对象之间没有顺序保证；处理器必须快速返回，耗时逻辑应交给 workqueue。
 type SharedInformer interface {
 	// AddEventHandler adds an event handler to the shared informer using
 	// the shared informer's resync period.  Events to a single handler are
@@ -279,6 +283,8 @@ type ResourceEventHandlerRegistration interface {
 // May be left empty.
 type HandlerOptions struct {
 	// Logger overrides the default klog.Background() logger.
+	//
+	// 处理器内部的日志应使用该 logger，才能带上是哪个 informer 的上下文。
 	Logger *klog.Logger
 
 	// ResyncPeriod requests a certain resync period from an informer. Zero
@@ -299,6 +305,9 @@ type SharedIndexInformer interface {
 
 // TypedSharedIndexInformer adds type-safe variants for non-type-safe methods
 // in SharedIndexInformer. No type casts are needed when using those variants.
+//
+// 类型参数 T 由调用方保证与 informer 实际处理的对象类型一致；
+// 包装层只在回调边界做类型断言。
 type TypedSharedIndexInformer[T Object] interface {
 	SharedIndexInformer
 
@@ -315,6 +324,9 @@ type TypedSharedIndexInformer[T Object] interface {
 	GetTypedIndexer() TypedIndexer[T]
 }
 
+// NewTypedSharedIndexInformer 把普通 informer 包装为类型安全视图。
+//
+// 不复制底层 informer，所有类型安全方法最终都委托给同一个缓存与分发器。
 func NewTypedSharedIndexInformer[T Object](informer SharedIndexInformer) TypedSharedIndexInformer[T] {
 	return &typedSharedIndexInformer[T]{SharedIndexInformer: informer}
 }
@@ -325,6 +337,7 @@ type typedSharedIndexInformer[T Object] struct {
 
 func (s typedSharedIndexInformer[T]) AddTypedEventHandler(handler TypedResourceEventHandler[T], options ...HandlerOptions) (ResourceEventHandlerRegistration, error) {
 	var o HandlerOptions
+	// 可变参数只为兼容“零个或一个 options”，多于一个属于调用错误。
 	switch len(options) {
 	case 0:
 	case 1:
@@ -442,6 +455,8 @@ func NewSharedIndexInformerWithOptions(lw ListerWatcher, exampleObject runtime.O
 	realClock := &clock.RealClock{}
 
 	processor := &sharedProcessor{clock: realClock}
+	// listenersRCond 使用 RLock 作为等待语义：distribute 持读锁等待“监听器已启动”，
+	// run() 持写锁设置 started 后 Signal，避免通知在监听器就绪前丢失。
 	processor.listenersRCond = sync.NewCond(processor.listenersLock.RLocker())
 
 	return &sharedIndexInformer{
@@ -535,6 +550,9 @@ func WaitForNamedCacheSyncWithContext(ctx context.Context, cacheSyncs ...Informe
 // WaitForCacheSync waits for caches to populate.  It returns true if it was successful, false
 // if the controller should shutdown
 // callers should prefer WaitForNamedCacheSync()
+//
+// 采用轮询而非事件通知，实现简单但存在最多 syncedPollPeriod 的延迟；
+// 新代码可考虑基于 DoneChecker 的 WaitFor。
 func WaitForCacheSync(stopCh <-chan struct{}, cacheSyncs ...InformerSynced) bool {
 	err := wait.PollImmediateUntil(syncedPollPeriod,
 		func() (bool, error) {
@@ -567,6 +585,9 @@ func WaitForCacheSync(stopCh <-chan struct{}, cacheSyncs ...InformerSynced) bool
 // need polling, which makes it react immediately. When used in a synctest unit
 // test, waiting completes without moving time forward randomly, which
 // makes tests more predictable.
+//
+// 与轮询式 WaitForCacheSync 不同，这里直接等待 DoneChecker 的 channel，
+// 因而没有轮询延迟，也不会在 fake clock 测试中推进时间。
 func WaitFor(ctx context.Context, what string, checkers ...DoneChecker) bool {
 	logger := klog.FromContext(ctx)
 	if what != "" {
@@ -582,6 +603,9 @@ func WaitFor(ctx context.Context, what string, checkers ...DoneChecker) bool {
 	// work, so instead each goroutine just notifies the parent
 	// goroutine when it's checker is done and the main goroutine then
 	// logs it.
+	//
+	// 每个 checker 一个 goroutine，结果经无缓冲 channel 回传；
+	// 主 goroutine 收满 len(checkers) 个结果即返回，不会被单个慢 checker 阻塞。
 	var wg sync.WaitGroup
 	type result struct {
 		checker DoneChecker
@@ -708,6 +732,7 @@ func (c SyncResult) AsError() error {
 // sharedProcessor, which is responsible for relaying those
 // notifications to each of the informer's clients.
 type sharedIndexInformer struct {
+	// indexer 是本地缓存兼索引，DeltaFIFO 的 knownObjects 也指向它。
 	indexer    Indexer
 	controller Controller
 
@@ -722,8 +747,9 @@ type sharedIndexInformer struct {
 
 	// objectType is an example object of the type this informer is expected to handle. If set, an event
 	// with an object with a mismatching type is dropped instead of being delivered to listeners.
+	//
+	// 同时用于类型化 API 的 T 断言、日志中的类型描述以及缓存变更检测器的命名。
 	objectType runtime.Object
-
 	// objectDescription is the description of this informer's objects. This typically defaults to
 	objectDescription string
 
@@ -742,6 +768,9 @@ type sharedIndexInformer struct {
 
 	// blockDeltas gives a way to stop all event distribution so that a late event handler
 	// can safely join the shared informer.
+	//
+	// 添加/移除处理器时必须持有它：先挡住分发，再把缓存快照作为初始 Add 注入新处理器，
+	// 避免处理器在“已同步”和“收到初始列表”之间看到不一致状态。
 	blockDeltas sync.Mutex
 
 	// Called whenever the ListAndWatch drops the connection with an error.
@@ -842,6 +871,8 @@ func (s *sharedIndexInformer) RunWithContext(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
 	logger := klog.FromContext(ctx)
 
+	// informer 只能运行一次：重复 Run 会创建多个 controller 与消费者，
+	// 导致同一事件被处理多次，因此这里直接忽略第二次调用。
 	if s.HasStarted() {
 		logger.Info("Warning: the sharedIndexInformer has started, run more than once is not allowed")
 		return
@@ -851,6 +882,7 @@ func (s *sharedIndexInformer) RunWithContext(ctx context.Context) {
 		s.startedLock.Lock()
 		defer s.startedLock.Unlock()
 
+		// 在持锁状态下构建 FIFO 与 controller，保证 started 标志与它们同时可见。
 		logger, fifo := newQueueFIFO(logger, s.objectType, s.indexer, s.transform, s.identifier, s.informerMetricsProvider)
 
 		cfg := &Config{
@@ -878,6 +910,9 @@ func (s *sharedIndexInformer) RunWithContext(ctx context.Context) {
 	// Separate stop context because Processor should be stopped strictly after controller.
 	// Cancelation in the parent context is ignored and all values are passed on,
 	// including - but not limited to - a logger.
+	//
+	// 独立 context 使延迟调用的顺序可控：controller 返回后先通知 processor 停止，
+	// 再等待 processor 退出，避免控制器还在分发时处理器已被拆掉。
 	processorStopCtx, stopProcessor := context.WithCancelCause(context.WithoutCancel(ctx))
 	var wg wait.Group
 	defer wg.Wait()                                         // Wait for Processor to stop
@@ -892,6 +927,8 @@ func (s *sharedIndexInformer) RunWithContext(ctx context.Context) {
 			// We were stopped without completing the sync.
 		case <-s.controller.HasSyncedChecker().Done():
 			// Controller has synced and thus so have we.
+			//
+			// 只有 controller 完成首次同步才关闭 synced，缓存此时才可被安全读取。
 			close(s.synced)
 		}
 	})
@@ -1039,6 +1076,9 @@ func (s *sharedIndexInformer) AddEventHandlerWithOptions(handler ResourceEventHa
 	// 2. do a list against the store
 	// 3. send synthetic "Add" events to the new handler
 	// 4. unblock
+	//
+	// blockDeltas 保证第 1~4 步之间没有并发分发，否则处理器可能先收到增量事件、
+	// 再收到初始列表，导致状态错乱。
 	s.blockDeltas.Lock()
 	defer s.blockDeltas.Unlock()
 
@@ -1064,6 +1104,7 @@ func (s *sharedIndexInformer) AddEventHandlerWithOptions(handler ResourceEventHa
 }
 
 func (s *sharedIndexInformer) handleDeltas(logger klog.Logger, obj interface{}, isInInitialList bool) error {
+	// 与添加处理器互斥：确保处理某个对象的 delta 时，不会有监听器正在做初始列表快照。
 	s.blockDeltas.Lock()
 	defer s.blockDeltas.Unlock()
 
@@ -1160,6 +1201,9 @@ func ShutDownEventHandler(informer SharedInformer, handle ResourceEventHandlerRe
 // subset of the listeners that (a) is recomputed in the occasional
 // calls to shouldResync and (b) every listener is initially put in.
 // The non-sync distributions go to every listener.
+//
+// listeners map 的 value 表示该监听器本轮是否需要 resync，
+// 由 shouldResync 周期性重算；distribute 据此过滤同步事件。
 type sharedProcessor struct {
 	listenersStarted bool
 	listenersLock    sync.RWMutex
@@ -1241,6 +1285,8 @@ func (p *sharedProcessor) distribute(obj interface{}, sync bool) {
 	// ensure that they all have been started. If the processor stops,
 	// p.listeners gets cleared, in which case we also continue here
 	// and return without doing anything.
+	//
+	// 用读锁 + Cond 等待，避免在监听器 goroutine 尚未启动时向其 channel 写入而永久阻塞。
 	for !p.listenersStarted && len(p.listeners) > 0 {
 		p.listenersRCond.Wait()
 	}
@@ -1350,6 +1396,9 @@ func (p *sharedProcessor) resyncCheckPeriodChanged(logger klog.Logger, resyncChe
 //
 // processorListener also keeps track of the adjusted requested resync
 // period of the listener.
+//
+// 三个 goroutine 的分工保证了“向 addCh 写入永不阻塞分发方”，
+// 代价是慢处理器会让 ring buffer 持续增长（注释中明确接受这一取舍）。
 type processorListener struct {
 	logger      klog.Logger
 	nextCh      chan interface{}
@@ -1446,6 +1495,7 @@ func (p *processorListener) pop() {
 	defer close(p.nextCh) // Tell .run() to stop
 	defer close(p.done)   // Tell .watchSynced() to stop
 
+	// nextCh 初始为 nil 时该 select 分支被禁用，直到有通知可发送。
 	var nextCh chan<- interface{}
 	var notification interface{}
 	for {
@@ -1463,6 +1513,7 @@ func (p *processorListener) pop() {
 			if !ok {
 				return
 			}
+			// 没有待发送通知时直接交接，省去一次 ring buffer 读写。
 			if notification == nil { // No notification to pop (and pendingNotifications is empty)
 				// Optimize the case - skip adding to pendingNotifications
 				notification = notificationToAdd
@@ -1483,6 +1534,9 @@ func (p *processorListener) run() {
 	// delivering again.
 	//
 	// This only applies if utilruntime is configured to not panic, which is not the default.
+	//
+	// 若处理器 panic 且 runtime 未选择崩溃，跳过当前通知并退避一秒，
+	// 防止同一个坏对象把整个监听器卡死。
 	sleepAfterCrash := false
 	for next := range p.nextCh {
 		if sleepAfterCrash {

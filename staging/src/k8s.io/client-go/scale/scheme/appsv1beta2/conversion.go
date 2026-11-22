@@ -25,6 +25,9 @@ import (
 	scheme "k8s.io/client-go/scale/scheme"
 )
 
+// Convert_scheme_ScaleStatus_To_v1beta2_ScaleStatus 把内部 ScaleStatus 转换为 apps/v1beta2 版本。
+// v1beta2 的 Selector 是旧的字符串 map，TargetSelector 是新的字符串选择器：
+// 只有当内部选择器不含 matchExpressions 时，才能无损降级为 map 形式。
 func Convert_scheme_ScaleStatus_To_v1beta2_ScaleStatus(in *scheme.ScaleStatus, out *v1beta2.ScaleStatus, s conversion.Scope) error {
 	out.Replicas = in.Replicas
 	out.Selector = nil
@@ -34,6 +37,7 @@ func Convert_scheme_ScaleStatus_To_v1beta2_ScaleStatus(in *scheme.ScaleStatus, o
 			out.Selector = in.Selector.MatchLabels
 		}
 
+		// 无论如何都生成 TargetSelector 的字符串形式，让新版客户端能拿到完整选择器。
 		selector, err := metav1.LabelSelectorAsSelector(in.Selector)
 		if err != nil {
 			return fmt.Errorf("invalid label selector: %v", err)
@@ -44,6 +48,7 @@ func Convert_scheme_ScaleStatus_To_v1beta2_ScaleStatus(in *scheme.ScaleStatus, o
 	return nil
 }
 
+// Convert_v1beta2_ScaleStatus_To_scheme_ScaleStatus 把 apps/v1beta2 版本转换回内部 ScaleStatus。
 func Convert_v1beta2_ScaleStatus_To_scheme_ScaleStatus(in *v1beta2.ScaleStatus, out *scheme.ScaleStatus, s conversion.Scope) error {
 	out.Replicas = in.Replicas
 
@@ -51,6 +56,7 @@ func Convert_v1beta2_ScaleStatus_To_scheme_ScaleStatus(in *v1beta2.ScaleStatus, 
 	// old clients can't be expected to know about new fields but clients that know about the
 	// new field can be expected to know about the old field (though that's not quite true, due
 	// to kubectl apply). However, these fields are readonly, so any non-nil value should work.
+	// 优先解析更完整的 TargetSelector；只有它为空时才退回旧的 Selector map。
 	if in.TargetSelector != "" {
 		labelSelector, err := metav1.ParseToLabelSelector(in.TargetSelector)
 		if err != nil {
@@ -61,6 +67,7 @@ func Convert_v1beta2_ScaleStatus_To_scheme_ScaleStatus(in *v1beta2.ScaleStatus, 
 	} else if in.Selector != nil {
 		out.Selector = new(metav1.LabelSelector)
 		selector := make(map[string]string)
+		// 拷贝 map，避免输出对象与输入对象共享底层存储。
 		for key, val := range in.Selector {
 			selector[key] = val
 		}

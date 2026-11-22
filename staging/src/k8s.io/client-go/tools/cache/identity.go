@@ -21,6 +21,9 @@ limitations under the License.
 // list currently available nodes), and one that additionally acts as
 // a FIFO queue (for example, to allow a scheduler to process incoming
 // pods).
+//
+// Package cache 实现客户端缓存：Reflector 从服务器 watch 并把对象写入 Store，
+// 上层控制器从本地缓存读取，避免频繁访问 API Server。
 package cache
 
 import (
@@ -75,6 +78,7 @@ func NewInformerName(name string) (*InformerName, error) {
 
 	if existing, ok := informerNameRegistry.names[name]; ok {
 		// Check if the existing one is still reserved
+		// 仍被持有时拒绝重复注册；已 Release 的条目允许复用同名。
 		if existing.reserved.Load() {
 			return nil, fmt.Errorf("informer name %q is already registered", name)
 		}
@@ -103,6 +107,7 @@ func NewInformerName(name string) (*InformerName, error) {
 // If the GVR was already registered, the returned InformerNameAndResource
 // will have Reserved() return false to prevent duplicate metrics.
 func (n *InformerName) WithResource(gvr schema.GroupVersionResource) InformerNameAndResource {
+	// nil 接收者表示调用方未配置名称，返回零值即可，Reserved() 恒为 false。
 	if n == nil {
 		return InformerNameAndResource{gvr: gvr}
 	}
@@ -113,6 +118,7 @@ func (n *InformerName) WithResource(gvr schema.GroupVersionResource) InformerNam
 	retval := InformerNameAndResource{name: n.name, gvr: gvr, reserved: &atomic.Bool{}}
 	if n.reserved.Load() {
 		if _, gvrExists := n.gvrs[gvr]; !gvrExists {
+			// 首个注册者获得指标发布权，后续同名同 GVR 的注册静默关闭指标。
 			retval.reserved.Store(true)
 			n.gvrs[gvr] = retval.reserved
 		} else {
@@ -141,6 +147,9 @@ func (n *InformerName) Release() {
 	// instances that were returned from WithResource() will have
 	// Reserved() return false. These instances hold pointers to the
 	// same atomic bools, so we must flip them before clearing the map.
+	//
+	// 已发出的 InformerNameAndResource 持有这些 bool 的指针，
+	// 必须在清空 map 之前逐个置 false，否则它们仍会发布指标。
 	for _, reserved := range n.gvrs {
 		reserved.Store(false)
 	}
@@ -159,6 +168,7 @@ func (n *InformerName) Release() {
 
 // Name returns the name of this InformerName.
 func (n *InformerName) Name() string {
+	// 容忍 nil，让未配置名称的调用方无需额外判空。
 	if n == nil {
 		return ""
 	}
@@ -185,6 +195,7 @@ type InformerNameAndResource struct {
 // - The parent InformerName was released
 // - This was a duplicate GVR registration
 func (n InformerNameAndResource) Reserved() bool {
+	// 零值实例没有 reserved 指针，等价于“未配置名称”。
 	if n.reserved == nil {
 		return false
 	}
@@ -204,6 +215,7 @@ func (n InformerNameAndResource) GroupVersionResource() schema.GroupVersionResou
 // ResetInformerNamesForTesting clears the informer name registry.
 // This is exported for testing purposes only.
 func ResetInformerNamesForTesting() {
+	// 先在锁内拷贝快照，再逐个 Release：Release 自身也需要获取全局注册表锁。
 	informerNameRegistry.Lock()
 	names := make([]*InformerName, 0, len(informerNameRegistry.names))
 	for _, name := range informerNameRegistry.names {

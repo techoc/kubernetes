@@ -39,6 +39,8 @@ func init() {
 	time.Local = time.UTC
 }
 
+// TestWaitFor 用 synctest 控制虚拟时间，验证 WaitFor 的完成判定、超时/取消
+// 原因以及日志输出格式。
 func TestWaitFor(t *testing.T) {
 	for name, tc := range map[string]struct {
 		what          string
@@ -160,6 +162,9 @@ I0101 00:01:00.000000 %7[1]d wait_test.go:%[2]d] "Timed out waiting" for="my-cac
 
 // newMockChecker can be created outside of a synctest bubble.
 // It constructs the channel inside when Done is first called.
+//
+// 延迟通道必须在 synctest 气泡内创建，否则虚拟时钟无法驱动它，故延后到
+// 首次 Done 调用时初始化。
 func newMockChecker(name string, delay time.Duration) DoneChecker {
 	return &mockChecker{
 		name:  name,
@@ -167,6 +172,8 @@ func newMockChecker(name string, delay time.Duration) DoneChecker {
 	}
 }
 
+// mockChecker 以延迟模拟不同完成时间的缓存：正值延时关闭，0 立即关闭，
+// 负值永不关闭。
 type mockChecker struct {
 	name        string
 	delay       time.Duration
@@ -200,6 +207,8 @@ func (m *mockChecker) Done() <-chan struct{} {
 	return m.done
 }
 
+// TestSyncResult 验证 SyncResult.AsError 的错误文本、未同步类型排序以及
+// errors.Is 包装关系。
 func TestSyncResult(t *testing.T) {
 	for name, tc := range map[string]struct {
 		result        SyncResult

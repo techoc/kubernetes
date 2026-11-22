@@ -23,11 +23,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestDefaultWarningHandler 验证默认 warning handler 的读写：默认实现类型、
+// 设置/清空 handler 后的行为，以及新旧（带/不带 context）接口的互操作。
 func TestDefaultWarningHandler(t *testing.T) {
 	t.Run("default", func(t *testing.T) {
 		assert.IsType(t, WarningHandlerWithContext(WarningLogger{}), getDefaultWarningHandler())
 	})
 
+	// deferRestore 在子测试结束后恢复全局默认 handler，避免测试间互相影响。
 	deferRestore := func(t *testing.T) {
 		handler := getDefaultWarningHandler()
 		t.Cleanup(func() {
@@ -42,6 +45,7 @@ func TestDefaultWarningHandler(t *testing.T) {
 		SetDefaultWarningHandler(handler)
 		getDefaultWarningHandler().HandleWarningHeaderWithContext(context.Background(), 0, "", "message")
 		assert.Equal(t, []string{"message"}, handler.messages)
+		// 设置为 nil 后再次读取应为 nil。
 		SetDefaultWarningHandler(nil)
 		assert.Nil(t, getDefaultWarningHandler())
 	})

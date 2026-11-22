@@ -50,6 +50,9 @@ limitations under the License.
 // DISCLAIMER: this is an alpha API. This library will likely change significantly
 // or even be removed entirely in subsequent releases. Depend on this API at
 // your own risk.
+//
+// 该实现只保证"最多一个客户端认为自己持有租约"的尽力语义，不做 fencing；
+// 失去租约的旧 leader 可能仍在短暂执行，受保护的临界区需要自行保证幂等。
 package leaderelection
 
 import (
@@ -69,11 +72,13 @@ import (
 )
 
 const (
+	// JitterFactor 给重试间隔加抖动，避免所有副本同时争抢同一个租约。
 	JitterFactor = 1.2
 )
 
 // NewLeaderElector creates a LeaderElector from a LeaderElectionConfig
 func NewLeaderElector(lec LeaderElectionConfig) (*LeaderElector, error) {
+	// 时间参数之间必须留有余量，否则网络延迟或时钟抖动会导致频繁丢失租约。
 	if lec.LeaseDuration <= lec.RenewDeadline {
 		return nil, fmt.Errorf("leaseDuration must be greater than renewDeadline")
 	}
@@ -99,6 +104,7 @@ func NewLeaderElector(lec LeaderElectionConfig) (*LeaderElector, error) {
 	if lec.Lock == nil {
 		return nil, fmt.Errorf("Lock must not be nil.")
 	}
+	// identity 用于区分参与者；空值会让 IsLeader 永远无法正确判断。
 	id := lec.Lock.Identity()
 	if id == "" {
 		return nil, fmt.Errorf("Lock identity is empty")
@@ -109,10 +115,12 @@ func NewLeaderElector(lec LeaderElectionConfig) (*LeaderElector, error) {
 		clock:   clock.RealClock{},
 		metrics: globalMetricsFactory.newLeaderMetrics(),
 	}
+	// 初始化指标为"非 leader"状态，避免进程启动时误报。
 	le.metrics.leaderOff(le.config.Name)
 	return &le, nil
 }
 
+// LeaderElectionConfig 是选举的全部配置。
 type LeaderElectionConfig struct {
 	// Lock is the resource that will be used for locking
 	Lock rl.Interface
@@ -162,6 +170,8 @@ type LeaderElectionConfig struct {
 
 	// Coordinated will use the Coordinated Leader Election feature
 	// WARNING: Coordinated leader election is ALPHA.
+	//
+	// 协调式选举会参考 PreferredHolder/Strategy，支持优雅交接；当前仍是 alpha。
 	Coordinated bool
 }
 
@@ -170,6 +180,8 @@ type LeaderElectionConfig struct {
 //
 // possible future callbacks:
 //   - OnChallenge()
+//
+// 回调均在独立 goroutine 中执行，不能被阻塞太久；OnStoppedLeading 总会被调用。
 type LeaderCallbacks struct {
 	// OnStartedLeading is called when a LeaderElector client starts leading
 	OnStartedLeading func(context.Context)
@@ -185,9 +197,12 @@ type LeaderCallbacks struct {
 }
 
 // LeaderElector is a leader election client.
+// 除 config 外，运行期状态都由 observedRecordLock 保护。
 type LeaderElector struct {
 	config LeaderElectionConfig
 	// internal bookkeeping
+	// observedRecord 是最近一次从 API 观察到（或自己写入）的租约记录；
+	// observedTime 是观察到它的本地时间，用于判断租约是否过期。
 	observedRecord    rl.LeaderElectionRecord
 	observedRawRecord []byte
 	observedTime      time.Time
@@ -209,12 +224,14 @@ type LeaderElector struct {
 // before leader election loop is stopped by ctx or it has
 // stopped holding the leader lease
 func (le *LeaderElector) Run(ctx context.Context) {
+	// OnStoppedLeading 必须在任何退出路径执行，包括未成功竞选就收到取消。
 	defer runtime.HandleCrashWithContext(ctx)
 	defer le.config.Callbacks.OnStoppedLeading()
 
 	if !le.acquire(ctx) {
 		return // ctx signalled done
 	}
+	// 为 OnStartedLeading 派生可取消的 ctx；失去租约时通过 cancel 通知业务停止。
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go le.config.Callbacks.OnStartedLeading(ctx)
@@ -229,6 +246,7 @@ func RunOrDie(ctx context.Context, lec LeaderElectionConfig) {
 	if err != nil {
 		panic(err)
 	}
+	// WatchDog 用于健康检查；必须在 Run 之前关联，才能反映后续状态。
 	if lec.WatchDog != nil {
 		lec.WatchDog.SetLeaderElection(le)
 	}
@@ -256,6 +274,7 @@ func (le *LeaderElector) acquire(ctx context.Context) bool {
 	desc := le.config.Lock.Describe()
 	logger := klog.FromContext(ctx)
 	logger.Info("Attempting to acquire leader lease...", "lock", desc)
+	// JitterUntil 持续重试直至成功；成功后 cancel 让循环退出。
 	wait.JitterUntilWithContext(ctx, func(ctx context.Context) {
 		if !le.config.Coordinated {
 			succeeded = le.tryAcquireOrRenew(ctx)
@@ -277,10 +296,12 @@ func (le *LeaderElector) acquire(ctx context.Context) bool {
 
 // renew loops calling tryAcquireOrRenew and returns immediately when tryAcquireOrRenew fails or ctx signals done.
 func (le *LeaderElector) renew(ctx context.Context) {
+	// 无论续约成功还是失败，退出前都记录"stopped leading"事件。
 	defer le.config.Lock.RecordEvent("stopped leading")
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	logger := klog.FromContext(ctx)
+	// 每个 RetryPeriod 发起一轮续约，单轮在 RenewDeadline 内重试；超时即认为失去租约。
 	wait.UntilWithContext(ctx, func(ctx context.Context) {
 		err := wait.PollUntilContextTimeout(ctx, le.config.RetryPeriod, le.config.RenewDeadline, true, func(ctx context.Context) (done bool, err error) {
 			// PollUntilContextTimeout invokes condition even when the context is canceled when immediate=true.
@@ -317,12 +338,14 @@ func (le *LeaderElector) renew(ctx context.Context) {
 // cancellation error while the apiserver completes the update and bumps
 // the resource version.
 func (le *LeaderElector) release(logger klog.Logger) bool {
+	// 这里刻意使用 Background 而非已取消的 ctx：释放锁需要在原 ctx 取消后继续完成。
 	ctx := klog.NewContext(context.Background(), logger)
 	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, le.config.RenewDeadline)
 	defer timeoutCancel()
 	return le.tryRelease(timeoutCtx)
 }
 
+// tryRelease 读取当前锁并在自己仍是 leader 时写入一个已过期的最小记录。
 func (le *LeaderElector) tryRelease(ctx context.Context) bool {
 	logger := klog.FromContext(ctx)
 	oldLeaderElectionRecord, _, err := le.config.Lock.Get(ctx)
@@ -339,6 +362,7 @@ func (le *LeaderElector) tryRelease(ctx context.Context) bool {
 		return true
 	}
 	now := metav1.NewTime(le.clock.Now())
+	// 写入 LeaseDurationSeconds=1 的空持有者记录，让其他候选者尽快接管。
 	leaderElectionRecord := rl.LeaderElectionRecord{
 		LeaderTransitions:    oldLeaderElectionRecord.LeaderTransitions,
 		LeaseDurationSeconds: 1,
@@ -347,6 +371,7 @@ func (le *LeaderElector) tryRelease(ctx context.Context) bool {
 	}
 	if err := le.config.Lock.Update(ctx, leaderElectionRecord); err != nil {
 		if errors.IsConflict(err) {
+			// 冲突说明有并发的 update 抢先提交；重新读取后再试。
 			logger.V(4).Info("Conflict when releasing lease, retrying", "lock", le.config.Lock.Describe())
 			return le.tryRelease(ctx)
 		}
@@ -441,6 +466,8 @@ func (le *LeaderElector) tryCoordinatedRenew(ctx context.Context) bool {
 // tryAcquireOrRenew tries to acquire a leader lease if it is not already acquired,
 // else it tries to renew the lease if it has already been acquired. Returns true
 // on success else returns false.
+//
+// 先走乐观快路径（直接 Update），失败再回退到读取-判断-更新的慢路径。
 func (le *LeaderElector) tryAcquireOrRenew(ctx context.Context) bool {
 	logger := klog.FromContext(ctx)
 	now := metav1.NewTime(le.clock.Now())
@@ -515,6 +542,7 @@ func (le *LeaderElector) tryAcquireOrRenew(ctx context.Context) bool {
 }
 
 func (le *LeaderElector) maybeReportTransition() {
+	// reportedLeader 可能滞后于 observedRecord，这里只在真正变化时回调一次。
 	if le.observedRecord.HolderIdentity == le.reportedLeader {
 		return
 	}
@@ -525,6 +553,8 @@ func (le *LeaderElector) maybeReportTransition() {
 }
 
 // Check will determine if the current lease is expired by more than timeout.
+// 作为健康检查使用：若已超过 leaseDuration+容忍时间仍认为自己是 leader，
+// 说明续约循环可能卡死，返回错误让上层重启进程。
 func (le *LeaderElector) Check(maxTolerableExpiredLease time.Duration) error {
 	if !le.IsLeader() {
 		// Currently not concerned with the case that we are hot standby
@@ -545,6 +575,8 @@ func (le *LeaderElector) Check(maxTolerableExpiredLease time.Duration) error {
 	return nil
 }
 
+// isLeaseValid 判断本地观察到的租约是否仍在有效期内。
+// 只用本地时钟，避免依赖其他节点时钟的准确性。
 func (le *LeaderElector) isLeaseValid(now time.Time) bool {
 	// Lock to safely read both the time and the record
 	le.observedRecordLock.RLock()

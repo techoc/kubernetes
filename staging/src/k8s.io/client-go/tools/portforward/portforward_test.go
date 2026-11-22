@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/httpstream"
 )
 
+// fakeDialer 记录是否被调用，并返回预置的连接/协议/错误。
 type fakeDialer struct {
 	dialed             bool
 	conn               httpstream.Connection
@@ -41,11 +42,14 @@ type fakeDialer struct {
 	negotiatedProtocol string
 }
 
+// Dial 忽略协议列表，直接返回预置结果，便于断言“是否发起过转发”。
 func (d *fakeDialer) Dial(protocols ...string) (httpstream.Connection, string, error) {
 	d.dialed = true
 	return d.conn, d.negotiatedProtocol, d.err
 }
 
+// fakeConnection 是 httpstream.Connection 的测试实现：只支持 data/error 两类流，
+// 并统计当前打开的流数量，用于验证 handleConnection 会关闭全部流。
 type fakeConnection struct {
 	closed      bool
 	closeChan   chan bool
@@ -76,6 +80,7 @@ func (c *fakeConnection) CreateStream(headers http.Header) (httpstream.Stream, e
 }
 
 func (c *fakeConnection) Close() error {
+	// 幂等关闭：重复调用不应重复关闭 channel（否则会 panic）。
 	if !c.closed {
 		c.closed = true
 		close(c.closeChan)
@@ -97,6 +102,7 @@ func (c *fakeConnection) SetIdleTimeout(timeout time.Duration) {
 	// no-op
 }
 
+// fakeListener 的 Accept 在 Close 之前一直阻塞，模拟没有新连接的监听器。
 type fakeListener struct {
 	net.Listener
 	closeChan chan bool
@@ -129,6 +135,7 @@ type fakeAddr struct{}
 func (fakeAddr) Network() string { return "fake" }
 func (fakeAddr) String() string  { return "fake" }
 
+// fakeStream 用可注入的 read/write 函数模拟 SPDY 流，便于构造阻塞与错误场景。
 type fakeStream struct {
 	headers   http.Header
 	readFunc  func(p []byte) (int, error)
@@ -142,6 +149,8 @@ func (*fakeStream) Reset() error                        { return nil }
 func (s *fakeStream) Headers() http.Header              { return s.headers }
 func (*fakeStream) Identifier() uint32                  { return 0 }
 
+// fakeConn 用两个 buffer 模拟本地 TCP 连接：Read 读取“客户端发往远端”的数据，
+// Write 记录“远端返回给客户端”的数据。
 type fakeConn struct {
 	sendBuffer    *bytes.Buffer
 	receiveBuffer *bytes.Buffer
@@ -156,6 +165,8 @@ func (fakeConn) SetDeadline(t time.Time) error      { return nil }
 func (fakeConn) SetReadDeadline(t time.Time) error  { return nil }
 func (fakeConn) SetWriteDeadline(t time.Time) error { return nil }
 
+// TestParsePortsAndNew 覆盖端口/监听地址解析与 New/NewOnAddresses 的参数校验：
+// 非法端口、非法 IP、重复 localhost 展开为 tcp4/tcp6 以及 failureMode 的推导。
 func TestParsePortsAndNew(t *testing.T) {
 	tests := []struct {
 		input                   []string
@@ -282,6 +293,7 @@ func TestParsePortsAndNew(t *testing.T) {
 		}
 
 		// default to localhost
+		// 未显式指定地址时，默认仅监听 localhost 的 v4/v6 两个地址。
 		if len(test.addresses) == 0 && len(test.expectedAddresses) == 0 {
 			test.addresses = []string{"localhost"}
 			test.expectedAddresses = []listenAddress{{protocol: "tcp4", address: "127.0.0.1"}, {protocol: "tcp6", address: "::1"}}
@@ -330,9 +342,11 @@ func TestParsePortsAndNew(t *testing.T) {
 		}
 
 		if dialer.dialed {
+			// 构造阶段不应建立连接；只有 ForwardPorts 才会真正 dial。
 			t.Fatalf("%d: expected not dialed", i)
 		}
 		if _, portErr := pf.GetPorts(); portErr == nil {
+			// Ready 之前端口尚未绑定，GetPorts 必须报错。
 			t.Fatalf("%d: GetPorts: error expected but got nil", i)
 		}
 
@@ -353,6 +367,7 @@ func TestParsePortsAndNew(t *testing.T) {
 	}
 }
 
+// GetListenerTestCase 描述一次 getListener 调用及其期望结果。
 type GetListenerTestCase struct {
 	Hostname                string
 	Protocol                string
@@ -360,6 +375,7 @@ type GetListenerTestCase struct {
 	ExpectedListenerAddress string
 }
 
+// TestGetListener 验证协议与地址族必须匹配：v4 地址不能用 tcp6 监听，反之亦然。
 func TestGetListener(t *testing.T) {
 	var pf PortForwarder
 	testCases := []GetListenerTestCase{
@@ -396,6 +412,7 @@ func TestGetListener(t *testing.T) {
 	for i, testCase := range testCases {
 		forwardedPort := &ForwardedPort{Local: 0, Remote: 12345}
 		listener, err := pf.getListener(testCase.Protocol, testCase.Hostname, forwardedPort)
+		// 某些环境缺少对应地址族时跳过，而不是误判为测试失败。
 		if err != nil && strings.Contains(err.Error(), "cannot assign requested address") {
 			t.Logf("Can't test #%d: %v", i, err)
 			continue
@@ -429,6 +446,8 @@ func TestGetListener(t *testing.T) {
 	}
 }
 
+// TestGetPortsReturnsDynamicallyAssignedLocalPort 验证 “:5000” 形式让系统分配本地端口，
+// 且 Ready 关闭后 GetPorts 返回的是实际绑定端口而非 0。
 func TestGetPortsReturnsDynamicallyAssignedLocalPort(t *testing.T) {
 	dialer := &fakeDialer{
 		conn:               newFakeConnection(),
@@ -476,6 +495,8 @@ func TestGetPortsReturnsDynamicallyAssignedLocalPort(t *testing.T) {
 	}
 }
 
+// TestHandleConnection 验证双向数据转发：本地写 -> 远端读，远端写 -> 本地读，
+// 并在结束时关闭所有流、打印连接日志。
 func TestHandleConnection(t *testing.T) {
 	out := bytes.NewBufferString("")
 
@@ -497,6 +518,7 @@ func TestHandleConnection(t *testing.T) {
 	blockRemoteSend := make(chan struct{})
 	remoteConnection := newFakeConnection()
 	remoteConnection.dataStream.readFunc = func(p []byte) (int, error) {
+		// 先等到本地数据写出后再响应，确保读路径确实拿到了转发后的数据。
 		<-blockRemoteSend // Wait for the expected data to be received before responding
 		return remoteDataToSend.Read(p)
 	}
@@ -518,6 +540,7 @@ func TestHandleConnection(t *testing.T) {
 	assert.Equal(t, "Handling connection for 1111\n", out.String())
 }
 
+// TestHandleConnectionSendsRemoteError 验证远端 error 流的内容不会被当作数据返回给本地连接。
 func TestHandleConnectionSendsRemoteError(t *testing.T) {
 	out := bytes.NewBufferString("")
 	errOut := bytes.NewBufferString("")
@@ -552,6 +575,8 @@ func TestHandleConnectionSendsRemoteError(t *testing.T) {
 	assert.Equal(t, "Handling connection for 1111\n", out.String())
 }
 
+// TestWaitForConnectionExitsOnStreamConnClosed 验证底层 SPDY 连接关闭后，
+// waitForConnection 能立即返回，不会永久阻塞在 Accept 上。
 func TestWaitForConnectionExitsOnStreamConnClosed(t *testing.T) {
 	out := bytes.NewBufferString("")
 	errOut := bytes.NewBufferString("")
@@ -570,6 +595,8 @@ func TestWaitForConnectionExitsOnStreamConnClosed(t *testing.T) {
 	pf.waitForConnection(&listener, port)
 }
 
+// TestForwardPortsReturnsErrorWhenConnectionIsLost 验证与 Pod 的连接意外断开时
+// ForwardPorts 返回 ErrLostConnectionToPod，调用方可据此提示或重试。
 func TestForwardPortsReturnsErrorWhenConnectionIsLost(t *testing.T) {
 	dialer := &fakeDialer{
 		conn:               newFakeConnection(),
@@ -602,6 +629,8 @@ func TestForwardPortsReturnsErrorWhenConnectionIsLost(t *testing.T) {
 	}
 }
 
+// TestForwardPortsReturnsNilWhenStopChanIsClosed 验证调用方主动停止（关闭 stopChan）
+// 被视为正常结束，返回 nil 而不是错误。
 func TestForwardPortsReturnsNilWhenStopChanIsClosed(t *testing.T) {
 	dialer := &fakeDialer{
 		conn:               newFakeConnection(),

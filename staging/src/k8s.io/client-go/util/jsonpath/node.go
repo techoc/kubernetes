@@ -22,10 +22,13 @@ import "fmt"
 type NodeType int
 
 // Type returns itself and provides an easy default implementation
+//
+// 所有节点都内嵌 NodeType，从而自动获得 Type() 方法，无需逐个实现。
 func (t NodeType) Type() NodeType {
 	return t
 }
 
+// String 返回节点类型的可读名称，便于调试与错误信息。
 func (t NodeType) String() string {
 	return NodeTypeName[t]
 }
@@ -45,6 +48,7 @@ const (
 	NodeBool
 )
 
+// NodeTypeName 提供 NodeType 的字符串表示；未知类型返回空串。
 var NodeTypeName = map[NodeType]string{
 	NodeText:       "NodeText",
 	NodeArray:      "NodeArray",
@@ -60,6 +64,7 @@ var NodeTypeName = map[NodeType]string{
 	NodeBool:       "NodeBool",
 }
 
+// Node 是 AST 节点的公共接口：既能标识自身类型，也能格式化为可读形式。
 type Node interface {
 	Type() NodeType
 	String() string
@@ -75,6 +80,7 @@ func newList() *ListNode {
 	return &ListNode{NodeType: NodeList}
 }
 
+// append 按词法顺序追加子节点。
 func (l *ListNode) append(n Node) {
 	l.Nodes = append(l.Nodes, n)
 }
@@ -129,6 +135,8 @@ func (f *IdentifierNode) String() string {
 }
 
 // ParamsEntry holds param information for ArrayNode
+//
+// Known 表示解析时已确定具体下标；Derived 表示下标来自表达式求值而非字面量。
 type ParamsEntry struct {
 	Value   int
 	Known   bool // whether the value is known when parse it
@@ -136,6 +144,8 @@ type ParamsEntry struct {
 }
 
 // ArrayNode holds start, end, step information for array index selection
+//
+// 对应 a[start:end:step]；缺省项由 ParamsEntry.Known 标记。
 type ArrayNode struct {
 	NodeType
 	Params [3]ParamsEntry // start, end, step
@@ -153,6 +163,8 @@ func (a *ArrayNode) String() string {
 }
 
 // FilterNode holds operand and operator information for filter
+//
+// 对应 [?(@.left op right)]；Left/Right 为表达式子树，operator 为比较符。
 type FilterNode struct {
 	NodeType
 	Left     *ListNode
@@ -228,6 +240,8 @@ func (r *RecursiveNode) String() string {
 }
 
 // UnionNode is union of ListNode
+//
+// 对应 (expr1,expr2,...)：各分支的结果按出现顺序合并。
 type UnionNode struct {
 	NodeType
 	Nodes []*ListNode

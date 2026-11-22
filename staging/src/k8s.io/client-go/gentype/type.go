@@ -30,18 +30,22 @@ import (
 )
 
 // objectWithMeta matches objects implementing both runtime.Object and metav1.Object.
+// 同时满足 runtime.Object（可序列化）与 metav1.Object（有 metadata）约束，是泛型客户端的最小对象要求。
 type objectWithMeta interface {
 	runtime.Object
 	metav1.Object
 }
 
 // namedObject matches comparable objects implementing GetName(); it is intended for use with apply declarative configurations.
+// 要求 comparable，是为了能用零值比较判断 Apply 传入的对象是否为 nil（C 可能是值类型而非指针）。
 type namedObject interface {
 	comparable
 	GetName() *string
 }
 
 // Client represents a client, optionally namespaced, with no support for lists or apply declarative configurations.
+// 所有生成类型客户端共享的基础实现：通过 rest.Interface 拼接通用 REST 请求，
+// 具体资源名、命名空间与空对象构造器由生成代码注入。
 type Client[T objectWithMeta] struct {
 	resource       string
 	client         rest.Interface
@@ -49,10 +53,12 @@ type Client[T objectWithMeta] struct {
 	newObject      func() T
 	parameterCodec runtime.ParameterCodec
 
+	// prefersProtobuf 控制请求时是否优先协商 protobuf；由 NewClient 的 Option 设置。
 	prefersProtobuf bool
 }
 
 // ClientWithList represents a client with support for lists.
+// 通过组合 alsoLister 获得 List/DeleteCollection 能力，而不是继承，便于按需拼装不同能力。
 type ClientWithList[T objectWithMeta, L runtime.Object] struct {
 	*Client[T]
 	alsoLister[T, L]
@@ -72,17 +78,21 @@ type ClientWithListAndApply[T objectWithMeta, L runtime.Object, C namedObject] s
 }
 
 // Helper types for composition
+// alsoLister 为 Client 组合出列表能力；它持有 client 指针以复用同一 REST 配置。
 type alsoLister[T objectWithMeta, L runtime.Object] struct {
 	client  *Client[T]
 	newList func() L
 }
 
+// alsoApplier 为 Client 组合出 apply 能力。
 type alsoApplier[T objectWithMeta, C namedObject] struct {
 	client *Client[T]
 }
 
+// Option 是构造 Client 时可选的配置项（函数式选项模式），避免构造函数参数继续膨胀。
 type Option[T objectWithMeta] func(*Client[T])
 
+// PrefersProtobuf 让客户端在支持时优先使用 protobuf 编解码，通常能显著降低带宽与 CPU 开销。
 func PrefersProtobuf[T objectWithMeta]() Option[T] {
 	return func(c *Client[T]) { c.prefersProtobuf = true }
 }
@@ -100,6 +110,7 @@ func NewClient[T objectWithMeta](
 		namespace:      namespace,
 		newObject:      emptyObjectCreator,
 	}
+	// 按调用方给出的顺序应用选项。
 	for _, option := range options {
 		option(c)
 	}
@@ -112,6 +123,7 @@ func NewClientWithList[T objectWithMeta, L runtime.Object](
 	emptyListCreator func() L, options ...Option[T],
 ) *ClientWithList[T, L] {
 	typeClient := NewClient[T](resource, client, parameterCodec, namespace, emptyObjectCreator, options...)
+	// 复用同一个 Client 实例，确保列表请求与单对象请求共享命名空间、编码器等配置。
 	return &ClientWithList[T, L]{
 		typeClient,
 		alsoLister[T, L]{typeClient, emptyListCreator},
@@ -155,6 +167,7 @@ func (c *Client[T]) GetNamespace() string {
 
 // Get takes name of the resource, and returns the corresponding object, and an error if there is any.
 func (c *Client[T]) Get(ctx context.Context, name string, options metav1.GetOptions) (T, error) {
+	// 每次请求都新建目标对象，避免多个并发调用共享同一份可变状态。
 	result := c.newObject()
 	err := c.client.Get().
 		UseProtobufAsDefaultIfPreferred(c.prefersProtobuf).
@@ -170,6 +183,7 @@ func (c *Client[T]) Get(ctx context.Context, name string, options metav1.GetOpti
 // List takes label and field selectors, and returns the list of resources that match those selectors.
 func (l *alsoLister[T, L]) List(ctx context.Context, opts metav1.ListOptions) (L, error) {
 	list := l.newList()
+	// 服务端超时时间由 ListOptions 指定，同时传给客户端 Timeout，避免两侧超时策略不一致。
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -191,6 +205,7 @@ func (c *Client[T]) Watch(ctx context.Context, opts metav1.ListOptions) (watch.I
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
 	}
+	// 强制打开 watch 标志，避免调用方漏设而得到一次普通 List。
 	opts.Watch = true
 	return c.client.Get().
 		UseProtobufAsDefaultIfPreferred(c.prefersProtobuf).
@@ -238,6 +253,7 @@ func (c *Client[T]) UpdateStatus(ctx context.Context, obj T, opts metav1.UpdateO
 		NamespaceIfScoped(c.namespace, c.namespace != "").
 		Resource(c.resource).
 		Name(obj.GetName()).
+		// status 是标准子资源，单独更新它可以绕过普通更新的 spec 校验与并发冲突范围。
 		SubResource("status").
 		VersionedParams(&opts, c.parameterCodec).
 		Body(obj).
@@ -260,6 +276,7 @@ func (c *Client[T]) Delete(ctx context.Context, name string, opts metav1.DeleteO
 
 // DeleteCollection deletes a collection of objects.
 func (l *alsoLister[T, L]) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
+	// 批量删除本质上是对集合的 DELETE，但仍需用 listOpts 里的 selectors 与超时来限定范围。
 	var timeout time.Duration
 	if listOpts.TimeoutSeconds != nil {
 		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
@@ -294,14 +311,17 @@ func (c *Client[T]) Patch(ctx context.Context, name string, pt types.PatchType, 
 // Apply takes the given apply declarative configuration, applies it and returns the applied resource.
 func (a *alsoApplier[T, C]) Apply(ctx context.Context, obj C, opts metav1.ApplyOptions) (T, error) {
 	result := a.client.newObject()
+	// C 可能是值类型，用零值比较判断调用方是否传了有效对象。
 	if obj == *new(C) {
 		return *new(T), fmt.Errorf("object provided to Apply must not be nil")
 	}
 	patchOpts := opts.ToPatchOptions()
+	// server-side apply 必须以对象名定位目标，缺失名字无法构造 PATCH 请求。
 	if obj.GetName() == nil {
 		return *new(T), fmt.Errorf("obj.Name must be provided to Apply")
 	}
 
+	// apply.NewRequest 会按对象的 apiVersion/kind 生成 PATCH 请求体。
 	request, err := apply.NewRequest(a.client.client, obj)
 	if err != nil {
 		return *new(T), err
@@ -340,6 +360,7 @@ func (a *alsoApplier[T, C]) ApplyStatus(ctx context.Context, obj C, opts metav1.
 		NamespaceIfScoped(a.client.namespace, a.client.namespace != "").
 		Resource(a.client.resource).
 		Name(*obj.GetName()).
+		// 与 UpdateStatus 相同：apply 也只作用于 status 子资源。
 		SubResource("status").
 		VersionedParams(&patchOpts, a.client.parameterCodec).
 		Do(ctx).

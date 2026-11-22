@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package csr 封装证书签名请求（CSR）的创建与等待签发流程，供需要自行申请
+// 客户端/服务端证书的组件（如 kubelet、kube-proxy）使用。
+//
+// 兼容性：优先使用 certificates.k8s.io/v1，API 不存在时回退到 v1beta1。
 package csr
 
 import (
@@ -49,6 +53,8 @@ import (
 // certificate.  This is not guaranteed as the signer may choose to ignore the request.
 //
 // Deprecated: use RequestCertificateWithContext instead.
+//
+// 已弃用：无法传入 context，无法取消/传递日志上下文；请使用 RequestCertificateWithContext。
 func RequestCertificate(client clientset.Interface, csrData []byte, name, signerName string, requestedDuration *time.Duration, usages []certificatesv1.KeyUsage, privateKey interface{}) (reqName string, reqUID types.UID, err error) {
 	return RequestCertificateWithContext(context.Background(), client, csrData, name, signerName, requestedDuration, usages, privateKey)
 }
@@ -71,6 +77,7 @@ func RequestCertificateWithContext(ctx context.Context, client clientset.Interfa
 			SignerName: signerName,
 		},
 	}
+	// 未指定名字时由 server 生成，便于并发创建多个请求。
 	if len(csr.Name) == 0 {
 		csr.GenerateName = "csr-"
 	}
@@ -87,6 +94,8 @@ func RequestCertificateWithContext(ctx context.Context, client clientset.Interfa
 		return reqName, reqUID, err
 
 	case apierrors.IsAlreadyExists(err) && len(name) > 0:
+		// 进程重启后复用上次未完成的同名 CSR，避免反复堆积；但必须确认请求内容
+		// 与当前私钥/主题一致，否则重签会失败或产生错误身份。
 		logger.Info("csr for this node already exists, reusing")
 		req, err := get(ctx, client, name)
 		if err != nil {
@@ -103,14 +112,17 @@ func RequestCertificateWithContext(ctx context.Context, client clientset.Interfa
 	}
 }
 
+// DurationToExpirationSeconds 把时长转换为 CSR 的 expirationSeconds（整秒）。
 func DurationToExpirationSeconds(duration time.Duration) *int32 {
 	return ptr.To(int32(duration / time.Second))
 }
 
+// ExpirationSecondsToDuration 是 DurationToExpirationSeconds 的逆运算。
 func ExpirationSecondsToDuration(expirationSeconds int32) time.Duration {
 	return time.Duration(expirationSeconds) * time.Second
 }
 
+// get 读取 CSR，v1 不存在时回退 v1beta1 并做字段级转换。
 func get(ctx context.Context, client clientset.Interface, name string) (*certificatesv1.CertificateSigningRequest, error) {
 	v1req, v1err := client.CertificatesV1().CertificateSigningRequests().Get(ctx, name, metav1.GetOptions{})
 	if v1err == nil || !apierrors.IsNotFound(v1err) {
@@ -122,6 +134,7 @@ func get(ctx context.Context, client clientset.Interface, name string) (*certifi
 		return nil, v1beta1err
 	}
 
+	// 只搬运判断兼容性所需的字段；这里不需要完整转换。
 	v1req = &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: v1beta1req.ObjectMeta,
 		Spec: certificatesv1.CertificateSigningRequestSpec{
@@ -137,8 +150,10 @@ func get(ctx context.Context, client clientset.Interface, name string) (*certifi
 	return v1req, nil
 }
 
+// create 优先走 v1；若 API 不存在或使用 legacy-unknown signer，则回退 v1beta1。
 func create(ctx context.Context, client clientset.Interface, csr *certificatesv1.CertificateSigningRequest) (reqName string, reqUID types.UID, err error) {
 	// only attempt a create via v1 if we specified signerName and usages and are not using the legacy unknown signerName
+	// v1 要求 signerName/usages 必填，且 legacy-unknown 只在 v1beta1 中可表达。
 	if len(csr.Spec.Usages) > 0 && len(csr.Spec.SignerName) > 0 && csr.Spec.SignerName != "kubernetes.io/legacy-unknown" {
 		v1req, v1err := client.CertificatesV1().CertificateSigningRequests().Create(ctx, csr, metav1.CreateOptions{})
 		switch {
@@ -156,6 +171,7 @@ func create(ctx context.Context, client clientset.Interface, csr *certificatesv1
 	}
 
 	// convert relevant bits to v1beta1
+	// v1beta1 的 SignerName 是可选指针，必须显式取地址。
 	v1beta1csr := &certificatesv1beta1.CertificateSigningRequest{
 		ObjectMeta: csr.ObjectMeta,
 		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
@@ -180,6 +196,7 @@ func WaitForCertificate(ctx context.Context, client clientset.Interface, reqName
 	fieldSelector := fields.OneTermEqualSelector("metadata.name", reqName).String()
 	logger := klog.FromContext(ctx)
 
+	// 先探测可用 API 版本再建立 watch；期间以固定间隔重试，直到成功或 ctx 结束。
 	var lw cache.ListerWatcher
 	var obj runtime.Object
 	for {
@@ -252,6 +269,7 @@ func WaitForCertificate(ctx context.Context, client clientset.Interface, reqName
 
 			switch csr := event.Object.(type) {
 			case *certificatesv1.CertificateSigningRequest:
+				// UID 变化说明同名对象被删除重建，旧请求的签发结果不能复用。
 				if csr.UID != reqUID {
 					return false, fmt.Errorf("csr %q changed UIDs", csr.Name)
 				}
@@ -308,6 +326,7 @@ func WaitForCertificate(ctx context.Context, client clientset.Interface, reqName
 			return false, nil
 		},
 	)
+	// 把 ctx 超时/取消统一为社会约定的 Interrupted 错误，便于调用方判断。
 	if wait.Interrupted(err) {
 		return nil, wait.ErrorInterrupted(nil)
 	}
@@ -328,6 +347,7 @@ func ensureCompatible(new, orig *certificatesv1.CertificateSigningRequest, priva
 	if err != nil {
 		return fmt.Errorf("unable to parse original csr: %v", err)
 	}
+	// 主题或 signerName 不一致意味着复用会得到不同身份的证书，必须拒绝。
 	if !reflect.DeepEqual(newCSR.Subject, origCSR.Subject) {
 		return fmt.Errorf("csr subjects differ: new: %#v, orig: %#v", newCSR.Subject, origCSR.Subject)
 	}
@@ -339,6 +359,7 @@ func ensureCompatible(new, orig *certificatesv1.CertificateSigningRequest, priva
 		return fmt.Errorf("privateKey is not a signer")
 	}
 	newCSR.PublicKey = signer.Public()
+	// 用当前私钥验证原 CSR 的签名，确认 CSR 确实由本进程密钥生成。
 	if err := newCSR.CheckSignature(); err != nil {
 		return fmt.Errorf("error validating signature new CSR against old key: %v", err)
 	}
@@ -359,6 +380,8 @@ func ensureCompatible(new, orig *certificatesv1.CertificateSigningRequest, priva
 
 // formatError preserves the type of an API message but alters the message. Expects
 // a single argument format string, and returns the wrapped error.
+// 保留 APIStatus 类型（从而保住 Status/Reason 字段），只改写 Message，供上层做
+// apierrors 判断或展示。
 func formatError(format string, err error) error {
 	if s, ok := err.(apierrors.APIStatus); ok {
 		se := &apierrors.StatusError{ErrStatus: s.Status()}

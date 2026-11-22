@@ -17,4 +17,8 @@ limitations under the License.
 // +k8s:conversion-gen=k8s.io/client-go/scale/scheme
 // +k8s:conversion-gen-external-types=k8s.io/api/autoscaling/v1
 
+// Package autoscalingv1 注册 scale 内部类型到 autoscaling/v1 的版本信息与转换函数。
+//
+// 该包本身不定义类型，只为 scale 子资源客户端提供 GroupVersion/Resource
+// 辅助方法，并作为 conversion-gen 生成的转换代码的挂载点。
 package autoscalingv1

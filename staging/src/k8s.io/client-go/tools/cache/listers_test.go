@@ -25,6 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
+// TestListAll 验证 ListAll 只把匹配 selector 的对象交给回调。
+//
+// 中文说明：用 10 万到 100 万级的对象量覆盖不同匹配比例，确保筛选逻辑在极端规模下
+// 仍然正确（子集匹配、全匹配、无匹配三种情形）。
 func TestListAll(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -35,6 +39,7 @@ func TestListAll(t *testing.T) {
 		expectedCount  int
 	}{
 		{
+			// 中文：10% 的对象带 match=true，selector 也应只命中这 10%。
 			name:           "subset match",
 			numObjects:     100000,
 			numMatching:    10000,
@@ -43,6 +48,7 @@ func TestListAll(t *testing.T) {
 			expectedCount:  10000,
 		},
 		{
+			// 中文：全部对象标签为空，Everything 应匹配所有对象。
 			name:           "all match",
 			numObjects:     1000000,
 			numMatching:    0,
@@ -51,6 +57,7 @@ func TestListAll(t *testing.T) {
 			expectedCount:  1000000,
 		},
 		{
+			// 中文：对象带 nomatch 标签，而 selector 要求 match=true，结果应为 0。
 			name:           "no match",
 			numObjects:     1000000,
 			numMatching:    0,
@@ -81,6 +88,11 @@ func TestListAll(t *testing.T) {
 	}
 }
 
+// mustCreateStore 构造一个包含 numObjects 个对象的 Store，其中前 numMatching 个
+// 使用给定的标签集合。
+//
+// 中文：以对象名作为 key；对象使用 PartialObjectMetadata 以降低大规模测试的内存与
+// 构造开销。
 func mustCreateStore(numObjects int, numMatching int, labels map[string]string) Store {
 	if numMatching > numObjects {
 		panic("there can not be more matches than objects")
@@ -111,6 +123,7 @@ func mustCreateStore(numObjects int, numMatching int, labels map[string]string) 
 	return store
 }
 
+// benchmarkLister 测量在指定对象规模与匹配数量下遍历筛选的耗时。
 func benchmarkLister(b *testing.B, numObjects int, numMatching int, label map[string]string) {
 	store := mustCreateStore(numObjects, numMatching, label)
 	selector := labels.SelectorFromSet(label)
@@ -124,6 +137,7 @@ func benchmarkLister(b *testing.B, numObjects int, numMatching int, label map[st
 	}
 }
 
+// 以下 benchmark 固定命中数量为 100，仅改变对象总数，用于观察规模增长对遍历成本的影响。
 func BenchmarkLister_Match_1k_100(b *testing.B) {
 	benchmarkLister(b, 1000, 100, map[string]string{"match": "true"})
 }
@@ -139,6 +153,7 @@ func BenchmarkLister_Match_1M_100(b *testing.B) {
 	benchmarkLister(b, 1000000, 100, map[string]string{"match": "true"})
 }
 
+// benchmarkNothingLister 测量“没有任何对象匹配”这一最坏情况下仍须全量遍历的成本。
 func benchmarkNothingLister(b *testing.B, numObjects int, numMatching int, labelSelector *metav1.LabelSelector) {
 	store := mustCreateStore(numObjects, numMatching, nil)
 	selector, err := metav1.LabelSelectorAsSelector(labelSelector)
@@ -155,6 +170,8 @@ func benchmarkNothingLister(b *testing.B, numObjects int, numMatching int, label
 	}
 }
 
+// BenchmarkLister_Match_1M_0 使用 nil LabelSelector（等价于 Nothing），
+// 验证 100 万对象全部扫描但零命中的场景。
 func BenchmarkLister_Match_1M_0(b *testing.B) {
 	benchmarkNothingLister(b, 1000000, 0, nil)
 }

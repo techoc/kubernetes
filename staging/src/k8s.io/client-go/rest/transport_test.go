@@ -29,6 +29,9 @@ import (
 // TestTransportForThreadSafe is meant to be run with the race detector
 // to detect that the Transport generation for client-go is safe to
 // call from multiple goroutines.
+//
+// 该测试并发地对同一 Config 反复调用 TransportFor，验证传输层缓存
+// （按配置指纹共享 http.RoundTripper）在并发下不会产生数据竞争。
 func TestTransportForThreadSafe(t *testing.T) {
 	const (
 		rootCACert = `-----BEGIN CERTIFICATE-----
@@ -55,10 +58,12 @@ uml0obOEy+ON91k+SWTJ3ggmF/U=
 	err := RegisterAuthProviderPlugin(authPluginName, pluginAProvider)
 	// the plugins are stored in a global variable that fails if the test
 	// runs with the flag -count N, with N > 1
+	// 插件注册是进程级的全局状态，重复执行测试时忽略“已注册”错误即可。
 	if err != nil && !strings.Contains(err.Error(), "was registered twice") {
 		t.Errorf("Unexpected error: failed to register pluginA: %v", err)
 	}
 
+	// 覆盖不同的 Config 形态，确保每种形态的传输层缓存路径都被并发访问到。
 	configurations := []struct {
 		name   string
 		config *Config
@@ -72,6 +77,7 @@ uml0obOEy+ON91k+SWTJ3ggmF/U=
 			},
 		},
 		{
+			// 自定义 Dial 使配置不可缓存，走另一条传输层构造路径。
 			name: "not cacheable config",
 			config: &Config{
 				Host:     "localhost:8080",
@@ -127,6 +133,7 @@ uml0obOEy+ON91k+SWTJ3ggmF/U=
 	}
 	var wg sync.WaitGroup
 
+	// 每个配置起一个 goroutine，其内部再并发 50 次调用，放大竞争窗口。
 	for _, tt := range configurations {
 		wg.Add(1)
 		go func() {

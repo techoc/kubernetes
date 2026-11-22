@@ -27,7 +27,10 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
+// TestMutationDetector 验证缓存变更检测器能发现对象被就地修改：
+// informer 把对象交给消费者后，若消费者擅自改动其字段，检测器应触发 failureFunc。
 func TestMutationDetector(t *testing.T) {
+	// 使用 fake watch 手动投递事件，避免依赖真实 API server。
 	fakeWatch := watch.NewFake()
 	lw := toListWatcherWithUnSupportedWatchListSemantics(&ListWatch{
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
@@ -76,6 +79,7 @@ func TestMutationDetector(t *testing.T) {
 		return addedLen+cachedLen > 0, nil
 	})
 
+	// 故意就地修改被缓存对象的标签（未经过 informer），预期检测器在下一轮比较时报告 mutation。
 	detector.compareObjectsLock.Lock()
 	pod.Labels["change"] = "true"
 	detector.compareObjectsLock.Unlock()

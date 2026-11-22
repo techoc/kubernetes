@@ -24,6 +24,11 @@ import (
 	core "k8s.io/client-go/testing"
 )
 
+// Evict 模拟对 Pod 的 eviction 子资源发起的创建请求。
+//
+// 注意驱逐虽然通过 policy/v1 的 Eviction 类型表达，但实际写入的是 core/v1
+// 的 pods 子资源，因此 action.Resource 固定为 pods 而不是 evictions，
+// reactor 匹配时也应以这一资源为准。
 func (c *fakeEvictions) Evict(ctx context.Context, eviction *policy.Eviction) error {
 	action := core.CreateActionImpl{}
 	action.Verb = "create"

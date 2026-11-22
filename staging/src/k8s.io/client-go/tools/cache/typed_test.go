@@ -52,6 +52,7 @@ func (r *recordingTypedHandler) OnDelete(obj DeletedObject[*v1.Pod]) {
 	r.deleted = append(r.deleted, obj)
 }
 
+// TestTypedResourceEventHandlerFuncs 校验简化版回调包装器：只调用非 nil 回调，且不 panic。
 func TestTypedResourceEventHandlerFuncs(t *testing.T) {
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod"}}
 	oldPod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "old-pod"}}
@@ -100,6 +101,7 @@ func TestTypedResourceEventHandlerFuncs(t *testing.T) {
 	var _ TypedResourceEventHandler[*v1.Pod] = TypedResourceEventHandlerFuncs[*v1.Pod]{}
 }
 
+// TestTypedResourceEventHandlerDetailedFuncs 校验 AddFunc 能收到 isInInitialList 的详细版本。
 func TestTypedResourceEventHandlerDetailedFuncs(t *testing.T) {
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod"}}
 	oldPod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "old-pod"}}
@@ -150,6 +152,8 @@ func TestTypedResourceEventHandlerDetailedFuncs(t *testing.T) {
 	var _ TypedResourceEventHandler[*v1.Pod] = TypedResourceEventHandlerDetailedFuncs[*v1.Pod]{}
 }
 
+// TestTypedFilteringResourceEventHandler 校验过滤器的状态迁移：
+// 过滤通过与否决定 update 被转成 update、add 还是 delete。
 func TestTypedFilteringResourceEventHandler(t *testing.T) {
 	oldPod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "old"}}
 	newPod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "new"}}
@@ -266,6 +270,8 @@ func TestTypedFilteringResourceEventHandler(t *testing.T) {
 	var _ TypedResourceEventHandler[*v1.Pod] = TypedFilteringResourceEventHandler[*v1.Pod]{}
 }
 
+// TestTypedResourceEventHandlerAdapter 校验无类型 handler 到泛型 handler 的适配，
+// 特别是 tombstone 携带/不携带对象两种删除形态。
 func TestTypedResourceEventHandlerAdapter(t *testing.T) {
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod"}}
 	oldPod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "old-pod"}}
@@ -323,6 +329,7 @@ func TestTypedResourceEventHandlerAdapter(t *testing.T) {
 	var _ ResourceEventHandler = &typedResourceEventHandler[*v1.Pod]{}
 }
 
+// TestTypedIndexer 校验泛型 indexer 的按对象索引、按值索引以及追加索引器。
 func TestTypedIndexer(t *testing.T) {
 	pod1 := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pod1", Labels: map[string]string{"foo": "bar"}}}
 	pod2 := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pod2", Labels: map[string]string{"foo": "bar"}}}
@@ -398,6 +405,8 @@ func (f *fakeSharedIndexInformer) GetIndexer() Indexer {
 	return f.indexer
 }
 
+// TestTypedSharedIndexInformerAddTypedEventHandler 校验可选 HandlerOptions 的数量约束：
+// 0 个用默认值，1 个透传，2 个报错。
 func TestTypedSharedIndexInformerAddTypedEventHandler(t *testing.T) {
 	period := time.Minute
 
@@ -439,6 +448,7 @@ func TestTypedSharedIndexInformerAddTypedEventHandler(t *testing.T) {
 	}
 }
 
+// TestTypedSharedIndexInformerAddTypedIndexers 校验类型化索引器被转换成无类型索引器并向上传递错误。
 func TestTypedSharedIndexInformerAddTypedIndexers(t *testing.T) {
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod"}}
 
@@ -462,6 +472,7 @@ func TestTypedSharedIndexInformerAddTypedIndexers(t *testing.T) {
 	assert.EqualError(t, err, "boom")
 }
 
+// TestTypedSharedIndexInformerGetTypedIndexer 校验从 informer 取出底层 indexer 后仍可类型化查询。
 func TestTypedSharedIndexInformerGetTypedIndexer(t *testing.T) {
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pod"}}
 	raw := NewIndexer(MetaNamespaceKeyFunc, Indexers{
@@ -484,6 +495,7 @@ func TestTypedSharedIndexInformerGetTypedIndexer(t *testing.T) {
 	assert.Equal(t, []*v1.Pod{pod}, res)
 }
 
+// TestTypedIndexersToIndexers 校验类型化索引器集合可无损转换为 Indexers。
 func TestTypedIndexersToIndexers(t *testing.T) {
 	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod"}}
 

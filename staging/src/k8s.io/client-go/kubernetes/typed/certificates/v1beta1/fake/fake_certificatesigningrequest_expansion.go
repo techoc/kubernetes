@@ -24,6 +24,9 @@ import (
 	core "k8s.io/client-go/testing"
 )
 
+// UpdateApproval 通过 fake 的 Invokes 机制模拟更新 CSR 的 approval 子资源。
+// 这里构造 RootUpdateSubresourceAction 而非普通 Update，是因为 approval 属于集群级对象的子资源，
+// 没有命名空间维度；返回的 obj 为 nil 时表示调用方注入的 reactor 没有产出结果。
 func (c *fakeCertificateSigningRequests) UpdateApproval(ctx context.Context, certificateSigningRequest *certificates.CertificateSigningRequest, opts metav1.UpdateOptions) (result *certificates.CertificateSigningRequest, err error) {
 	obj, err := c.Fake.
 		Invokes(core.NewRootUpdateSubresourceAction(c.Resource(), "approval", certificateSigningRequest), &certificates.CertificateSigningRequest{})

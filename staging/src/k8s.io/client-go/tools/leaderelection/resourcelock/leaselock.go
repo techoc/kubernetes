@@ -28,17 +28,24 @@ import (
 	coordinationv1client "k8s.io/client-go/kubernetes/typed/coordination/v1"
 )
 
+// LeaseLock 基于 coordination.k8s.io/v1 Lease 对象实现 LeaderElection 的资源锁。
 type LeaseLock struct {
 	// LeaseMeta should contain a Name and a Namespace of a
 	// LeaseMeta object that the LeaderElector will attempt to lead.
+	//
+	// LeaseMeta 指定 LeaderElector 尝试持有的 Lease 对象的 name 与 namespace。
 	LeaseMeta  metav1.ObjectMeta
 	Client     coordinationv1client.LeasesGetter
 	LockConfig ResourceLockConfig
-	lease      *coordinationv1.Lease
-	Labels     map[string]string
+	// lease 缓存最近一次 Get/Create/Update 得到的对象，Update 依赖它携带 resourceVersion。
+	lease  *coordinationv1.Lease
+	Labels map[string]string
 }
 
 // Get returns the election record from a Lease spec
+//
+// Get 读取 Lease 并转换为内部的 LeaderElectionRecord；
+// 同时把对象缓存到 ll.lease，供后续 Update 使用。
 func (ll *LeaseLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, error) {
 	lease, err := ll.Client.Leases(ll.LeaseMeta.Namespace).Get(ctx, ll.LeaseMeta.Name, metav1.GetOptions{})
 	if err != nil {
@@ -54,6 +61,8 @@ func (ll *LeaseLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, er
 }
 
 // Create attempts to create a Lease
+//
+// Create 用给定的选举记录创建 Lease；只有当前没有 holder 时才会成功。
 func (ll *LeaseLock) Create(ctx context.Context, ler LeaderElectionRecord) error {
 	var err error
 	lease := &coordinationv1.Lease{
@@ -70,6 +79,8 @@ func (ll *LeaseLock) Create(ctx context.Context, ler LeaderElectionRecord) error
 }
 
 // Update will update an existing Lease spec.
+//
+// Update 更新已有 Lease；必须先前调用过 Get 或 Create，否则无法确定 resourceVersion。
 func (ll *LeaseLock) Update(ctx context.Context, ler LeaderElectionRecord) error {
 	if ll.lease == nil {
 		return errors.New("lease not initialized, call get or create first")
@@ -81,6 +92,7 @@ func (ll *LeaseLock) Update(ctx context.Context, ler LeaderElectionRecord) error
 			ll.lease.Labels = map[string]string{}
 		}
 		// Only overwrite the labels that are specifically set
+		// 保留未在 ll.Labels 中声明的既有标签，避免覆盖其他控制器写入的元数据。
 		for k, v := range ll.Labels {
 			ll.lease.Labels[k] = v
 		}
@@ -96,6 +108,8 @@ func (ll *LeaseLock) Update(ctx context.Context, ler LeaderElectionRecord) error
 }
 
 // RecordEvent in leader election while adding meta-data
+//
+// RecordEvent 以 Lease 为 involved object 记录一条 LeaderElection 事件。
 func (ll *LeaseLock) RecordEvent(s string) {
 	if ll.LockConfig.EventRecorder == nil {
 		return
@@ -110,15 +124,21 @@ func (ll *LeaseLock) RecordEvent(s string) {
 
 // Describe is used to convert details on current resource lock
 // into a string
+//
+// Describe 返回 "namespace/name" 形式的锁描述，用于日志。
 func (ll *LeaseLock) Describe() string {
 	return fmt.Sprintf("%v/%v", ll.LeaseMeta.Namespace, ll.LeaseMeta.Name)
 }
 
 // Identity returns the Identity of the lock
+//
+// Identity 返回持有者标识。
 func (ll *LeaseLock) Identity() string {
 	return ll.LockConfig.Identity
 }
 
+// LeaseSpecToLeaderElectionRecord 把 LeaseSpec 转成内部选举记录；
+// 指针字段为 nil 时保持零值。
 func LeaseSpecToLeaderElectionRecord(spec *coordinationv1.LeaseSpec) *LeaderElectionRecord {
 	var r LeaderElectionRecord
 	if spec.HolderIdentity != nil {
@@ -146,6 +166,8 @@ func LeaseSpecToLeaderElectionRecord(spec *coordinationv1.LeaseSpec) *LeaderElec
 
 }
 
+// LeaderElectionRecordToLeaseSpec 把内部选举记录转成 LeaseSpec；
+// 空字符串的可选字段不设置指针，避免写入无意义的值。
 func LeaderElectionRecordToLeaseSpec(ler *LeaderElectionRecord) coordinationv1.LeaseSpec {
 	leaseDurationSeconds := int32(ler.LeaseDurationSeconds)
 	leaseTransitions := int32(ler.LeaderTransitions)

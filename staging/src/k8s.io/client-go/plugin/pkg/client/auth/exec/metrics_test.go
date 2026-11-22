@@ -28,6 +28,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// mockExpiryGauge 记录最近一次 Set 的时间点，用于断言过期时间指标。
 type mockExpiryGauge struct {
 	v *time.Time
 }
@@ -36,6 +37,8 @@ func (m *mockExpiryGauge) Set(t *time.Time) {
 	m.v = t
 }
 
+// TestCertificateExpirationTracker 验证证书过期时间指标取所有认证器中最小的那个到期时间。
+// 子测试之间有状态依赖（共享 tracker），因此必须串行执行。
 func TestCertificateExpirationTracker(t *testing.T) {
 	now := time.Now()
 	mockMetric := &mockExpiryGauge{}
@@ -98,11 +101,13 @@ func TestCertificateExpirationTracker(t *testing.T) {
 	}
 }
 
+// mockCallsMetric 记录一次插件调用的退出码与错误类型。
 type mockCallsMetric struct {
 	exitCode  int
 	errorType string
 }
 
+// mockCallsMetricCounter 按调用顺序累积插件调用指标，便于整体比对。
 type mockCallsMetricCounter struct {
 	calls []mockCallsMetric
 }
@@ -111,6 +116,7 @@ func (f *mockCallsMetricCounter) Increment(exitCode int, errorType string) {
 	f.calls = append(f.calls, mockCallsMetric{exitCode: exitCode, errorType: errorType})
 }
 
+// TestCallsMetric 验证执行插件时上报的退出码与错误分类，包括插件根本不存在的特殊情况。
 func TestCallsMetric(t *testing.T) {
 	const (
 		goodOutput = `{
@@ -168,6 +174,7 @@ func TestCallsMetric(t *testing.T) {
 
 	// Run some iterations of the authenticator where the exec plugin fails to run to test special
 	// metric values.
+	// 覆盖插件路径不存在的三种写法（无斜杠、相对路径、绝对路径），它们都应归类为 plugin_not_found_error。
 	refreshCreds := func(command string) {
 		c := api.ExecConfig{
 			Command:         command,
@@ -197,10 +204,12 @@ func TestCallsMetric(t *testing.T) {
 	}
 }
 
+// mockPolicyCallsMetric 记录一次策略判断的结果（allowed/denied）。
 type mockPolicyCallsMetric struct {
 	status string
 }
 
+// mockPolicyCallsMetricCounter 按顺序累积策略调用指标。
 type mockPolicyCallsMetricCounter struct {
 	policyCalls []mockPolicyCallsMetric
 }
@@ -209,6 +218,7 @@ func (f *mockPolicyCallsMetricCounter) Increment(status string) {
 	f.policyCalls = append(f.policyCalls, mockPolicyCallsMetric{status: status})
 }
 
+// TestPolicyCallsMetric 验证 AllowAll/DenyAll/Allowlist 等插件策略的判定结果与指标上报一致。
 func TestPolicyCallsMetric(t *testing.T) {
 	const (
 		goodOutput = `{

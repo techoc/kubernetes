@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestCategoryExpansion 验证静态 SimpleCategoryExpander 的展开行为：
+// 未配置的分类返回 (nil, false)，已配置的分类按注册顺序返回全部资源。
 func TestCategoryExpansion(t *testing.T) {
 	tests := []struct {
 		name string
@@ -33,11 +35,13 @@ func TestCategoryExpansion(t *testing.T) {
 		expectedOk bool
 	}{
 		{
+			// 普通资源名不是分类，不应展开。
 			name:     "no-replacement",
 			arg:      "service",
 			expected: nil,
 		},
 		{
+			// "all" 是内置聚合分类，展开后应包含所有组下的资源。
 			name: "all-replacement",
 			arg:  "all",
 			expected: []schema.GroupResource{
@@ -72,6 +76,8 @@ func TestCategoryExpansion(t *testing.T) {
 	}
 }
 
+// TestDiscoveryCategoryExpander 验证基于服务端发现信息的分类展开：
+// 只有显式声明了对应 category 的资源才会被返回。
 func TestDiscoveryCategoryExpander(t *testing.T) {
 	tests := []struct {
 		category       string
@@ -79,6 +85,7 @@ func TestDiscoveryCategoryExpander(t *testing.T) {
 		expected       []schema.GroupResource
 	}{
 		{
+			// jobs 声明了 categories: all，因此应被展开。
 			category: "all",
 			serverResponse: []*metav1.APIResourceList{
 				{
@@ -100,6 +107,7 @@ func TestDiscoveryCategoryExpander(t *testing.T) {
 			},
 		},
 		{
+			// 资源未声明任何分类，因此展开结果为空。
 			category: "all",
 			serverResponse: []*metav1.APIResourceList{
 				{
@@ -114,6 +122,7 @@ func TestDiscoveryCategoryExpander(t *testing.T) {
 			},
 		},
 		{
+			// 请求不存在的分类，即使资源声明了其他分类也不应命中。
 			category: "targaryens",
 			serverResponse: []*metav1.APIResourceList{
 				{
@@ -132,6 +141,7 @@ func TestDiscoveryCategoryExpander(t *testing.T) {
 
 	dc := &fakeDiscoveryClient{}
 	for _, test := range tests {
+		// 每轮替换发现结果，验证展开器总是基于当前服务端状态计算。
 		dc.serverResourcesHandler = func() ([]*metav1.APIResourceList, error) {
 			return test.serverResponse, nil
 		}

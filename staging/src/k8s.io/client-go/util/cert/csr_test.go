@@ -28,6 +28,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestMakeCSR 验证生成的 PEM 只含一个 CERTIFICATE REQUEST 块，且 CommonName、
+// DNS SAN 与 IP SAN 都被正确写入。
 func TestMakeCSR(t *testing.T) {
 	keyFile := "testdata/dontUseThisKey.pem"
 	subject := &pkix.Name{

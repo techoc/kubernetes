@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package watch 提供在 watch 流上等待条件的辅助函数。
+// 相比裸 watch，它处理连接中断、API 超时与 resourceVersion 过期等常见故障。
 package watch
 
 import (
@@ -53,12 +55,15 @@ var ErrWatchClosed = errors.New("watch closed before UntilWithoutRetry timeout")
 // Warning: You are most probably looking for a function *Until* or *UntilWithSync* below,
 // Warning: solving such issues.
 // TODO: Consider making this function private to prevent misuse when the other occurrences in our codebase are gone.
+//
+// 中文：本函数不做重连；一旦 watch 关闭或 RV 过期就直接失败。
 func UntilWithoutRetry(ctx context.Context, watcher watch.Interface, conditions ...ConditionFunc) (*watch.Event, error) {
 	ch := watcher.ResultChan()
 	defer watcher.Stop()
 	var lastEvent *watch.Event
 	for _, condition := range conditions {
 		// check the next condition against the previous event and short circuit waiting for the next watch
+		// 同一事件可能同时满足多个条件，因此先复用 lastEvent，避免不必要的等待。
 		if lastEvent != nil {
 			done, err := condition(*lastEvent)
 			if err != nil {
@@ -104,6 +109,8 @@ func UntilWithoutRetry(ctx context.Context, watcher watch.Interface, conditions 
 // those items. In normal code you should care about being level driven so you'd not care about not seeing all the edges.)
 //
 // The most frequent usage for Until would be a test where you want to verify exact order of events ("edges").
+//
+// 中文：通过 RetryWatcher 自动重连，但 RV 过期仍会失败，因为那需要重新 LIST。
 func Until(ctx context.Context, initialResourceVersion string, watcherClient cache.Watcher, conditions ...ConditionFunc) (*watch.Event, error) {
 	w, err := NewRetryWatcherWithContext(ctx, initialResourceVersion, cache.ToWatcherWithContext(watcherClient))
 	if err != nil {
@@ -125,6 +132,8 @@ func Until(ctx context.Context, initialResourceVersion string, watcherClient cac
 // particular object, not between more of them even it's the same resource.
 // The most frequent usage would be a command that needs to watch the "state of the world" and should't fail, like:
 // waiting for object reaching a state, "small" controllers, ...
+//
+// 中文：借助 informer 与重新 LIST 从 RV 过期中恢复，代价是可能漏掉中间事件。
 func UntilWithSync(ctx context.Context, lw cache.ListerWatcher, objType runtime.Object, precondition PreconditionFunc, conditions ...ConditionFunc) (*watch.Event, error) {
 	indexer, informer, watcher, done := NewIndexerInformerWatcherWithLogger(klog.FromContext(ctx), lw, objType)
 	// We need to wait for the internal informers to fully stop so it's easier to reason about
@@ -153,6 +162,7 @@ func UntilWithSync(ctx context.Context, lw cache.ListerWatcher, objType runtime.
 }
 
 // ContextWithOptionalTimeout wraps context.WithTimeout and handles infinite timeouts expressed as 0 duration.
+// 中文：0 表示无限等待，因此退化为可取消的 WithCancel；负值视为非法配置并修正为 0。
 func ContextWithOptionalTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout < 0 {
 		// This should be handled in validation

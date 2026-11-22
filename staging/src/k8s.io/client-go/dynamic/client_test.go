@@ -39,16 +39,19 @@ import (
 	"k8s.io/client-go/util/watchlist"
 )
 
+// getJSON 构造一个最小的单对象 JSON 响应体，仅含 apiVersion、kind 与 metadata.name。
 func getJSON(version, kind, name string) []byte {
 	return []byte(fmt.Sprintf(`{"apiVersion": %q, "kind": %q, "metadata": {"name": %q}}`, version, kind, name))
 }
 
+// getListJSON 把若干对象 JSON 拼装成列表响应体。
 func getListJSON(version, kind string, items ...[]byte) []byte {
 	json := fmt.Sprintf(`{"apiVersion": %q, "kind": %q, "items": [%s]}`,
 		version, kind, bytes.Join(items, []byte(",")))
 	return []byte(json)
 }
 
+// getObject 构造与 getJSON 等价的 unstructured 对象，用于期望值比较。
 func getObject(version, kind, name string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -61,12 +64,16 @@ func getObject(version, kind, name string) *unstructured.Unstructured {
 	}
 }
 
+// getObjectFromJSON 从 JSON 反序列化出 unstructured 对象。
+// 这里刻意忽略解析错误，因为一旦解析失败，后续的 DeepEqual 比较自然会失败。
 func getObjectFromJSON(b []byte) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}
 	_ = obj.UnmarshalJSON(b) // can ignore parse error because the comparison will fail
 	return obj
 }
 
+// getClientServer 基于给定 handler 启动 httptest 服务并构造指向它的动态客户端。
+// 返回客户端、服务端句柄与错误，调用方负责关闭服务端。
 func getClientServer(h func(http.ResponseWriter, *http.Request)) (Interface, *httptest.Server, error) {
 	srv := httptest.NewServer(http.HandlerFunc(h))
 	cl, err := NewForConfig(&restclient.Config{
@@ -79,6 +86,7 @@ func getClientServer(h func(http.ResponseWriter, *http.Request)) (Interface, *ht
 	return cl, srv, nil
 }
 
+// TestDoesClientSupportWatchListSemantics 验证动态客户端未被标记为不支持 WatchList 语义。
 func TestDoesClientSupportWatchListSemantics(t *testing.T) {
 	target, err := NewForConfig(&restclient.Config{})
 	if err != nil {
@@ -89,6 +97,7 @@ func TestDoesClientSupportWatchListSemantics(t *testing.T) {
 	}
 }
 
+// TestList 验证 List 在集群级与命名空间级下的请求路径、HTTP 方法与返回解析。
 func TestList(t *testing.T) {
 	tcs := []struct {
 		name      string
@@ -165,6 +174,7 @@ func TestList(t *testing.T) {
 	}
 }
 
+// TestGet 覆盖普通、命名空间、子资源以及子资源返回列表对象这几种 Get 场景。
 func TestGet(t *testing.T) {
 	tcs := []struct {
 		resource    string
@@ -249,6 +259,7 @@ func TestGet(t *testing.T) {
 	}
 }
 
+// TestDelete 验证删除的路径、方法、Content-Type，以及带 deleteOptions 时的请求构造。
 func TestDelete(t *testing.T) {
 	background := metav1.DeletePropagationBackground
 	uid := types.UID("uid")
@@ -324,6 +335,7 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+// TestDeleteCollection 验证删除集合请求落在资源集合路径上（不含对象名）。
 func TestDeleteCollection(t *testing.T) {
 	statusOK := &metav1.Status{
 		TypeMeta: metav1.TypeMeta{Kind: "Status"},
@@ -377,6 +389,7 @@ func TestDeleteCollection(t *testing.T) {
 	}
 }
 
+// TestCreate 验证创建请求使用 POST、路径正确，并回显服务端返回的对象。
 func TestCreate(t *testing.T) {
 	tcs := []struct {
 		resource    string
@@ -459,6 +472,7 @@ func TestCreate(t *testing.T) {
 	}
 }
 
+// TestUpdate 验证更新请求使用 PUT，且对象名从对象本身取得。
 func TestUpdate(t *testing.T) {
 	tcs := []struct {
 		resource    string
@@ -541,6 +555,7 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+// TestWatch 验证 watch 请求带上 watch=true 查询参数，并将流式事件解析为 watch.Event。
 func TestWatch(t *testing.T) {
 	tcs := []struct {
 		name      string
@@ -613,6 +628,7 @@ func TestWatch(t *testing.T) {
 	}
 }
 
+// TestPatch 验证 Patch 使用 PATCH 方法并透传 patch 的 Content-Type。
 func TestPatch(t *testing.T) {
 	tcs := []struct {
 		resource    string
@@ -700,6 +716,8 @@ func TestPatch(t *testing.T) {
 	}
 }
 
+// TestInvalidSegments 验证注入型名字（含斜杠）在各类操作中都会被本地校验拦截，
+// 从而避免路径被拼接成意料之外的 URL。这里不含成功的期望值，只断言错误类型。
 func TestInvalidSegments(t *testing.T) {
 	name := "bad/name"
 	namespace := "bad/namespace"

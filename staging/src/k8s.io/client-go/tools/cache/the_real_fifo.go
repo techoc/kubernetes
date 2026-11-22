@@ -28,6 +28,9 @@ import (
 )
 
 // RealFIFOOptions is the configuration parameters for RealFIFO.
+//
+// 部分选项互斥：AtomicEvents 与 KnownObjects 不能同时设置，
+// UnlockWhileProcessing 和 EmitDeltaTypeBookmark 只能在 AtomicEvents 下启用。
 type RealFIFOOptions struct {
 	// If set, log output will go to this logger instead of klog.Background().
 	// The name of the fifo gets added automatically.
@@ -48,6 +51,9 @@ type RealFIFOOptions struct {
 	// when Replace() is called; 'Deleted' deltas are produced for the missing items.
 	// KnownObjects is required if AtomicEvents is false since it is used to
 	// query the state of the internal store for Replace and Resync handling.
+	//
+	// 它通常指向 informer 的 indexer；与 AtomicEvents 互斥是为了避免在
+	// 释放锁处理事件时读到与队列不一致的存储状态。
 	KnownObjects KeyListerGetter
 
 	// If set, will be called for objects before enqueueing them. Please
@@ -76,6 +82,8 @@ type RealFIFOOptions struct {
 
 	// EmitDeltaTypeBookmark is used to specify whether the RealFIFO will emit
 	// bookmark deltas or not. This can only be set if AtomicEvents is true.
+	//
+	// 在 AtomicEvents 下发出 bookmark 才能保证 Replace/Resync 期间事件不脱离 RV 顺序。
 	EmitDeltaTypeBookmark bool
 }
 
@@ -90,6 +98,9 @@ var _ QueueWithBatch = &RealFIFO{}
 // This means that it
 // 1. delivers notifications for items that have been deleted
 // 2. delivers multiple notifications per item instead of simply the most recent value
+//
+// 与只保留最新状态的缓存不同，RealFIFO 保序投递每一条 Delta，
+// 因此消费者必须自己处理重复事件和删除事件。
 type RealFIFO struct {
 	// logger is a per-instance logger. This gets chosen when constructing
 	// the instance, with klog.Background() as default.
@@ -99,8 +110,10 @@ type RealFIFO struct {
 	name string
 
 	lock sync.RWMutex
+	// cond 的 L 在构造时指向 &lock；Close 通过 Broadcast 唤醒等待中的 Pop。
 	cond sync.Cond
 
+	// items 是待处理 Delta 的 FIFO；出队后会把槽位置零以避免引用泄漏。
 	items []Delta
 
 	// synced is initially an open channel. It gets closed (once!) by checkSynced_locked
@@ -160,6 +173,7 @@ type RealFIFO struct {
 }
 
 // ReplacedAllInfo is the object associated with a Delta of type=ReplacedAll
+// 表示 Replace 产生的一次原子事件，Objects 已完成 transformer 处理。
 type ReplacedAllInfo struct {
 	// ResourceVersion is the resource version passed to the Replace() call that created this Delta
 	ResourceVersion string
@@ -185,6 +199,7 @@ var (
 )
 
 // Close the queue.
+// 关闭后 Pop/PopBatch 在队列取空时返回 ErrFIFOClosed；已入队的条目仍会被处理。
 func (f *RealFIFO) Close() {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -195,6 +210,7 @@ func (f *RealFIFO) Close() {
 // KeyOf exposes f's keyFunc, but also detects the key of a Deltas object or
 // DeletedFinalStateUnknown objects.
 func (f *RealFIFO) keyOf(obj interface{}) (string, error) {
+	// Deltas 取最新一条 Delta 的对象；空的 Deltas 属于非法输入。
 	if d, ok := obj.(Deltas); ok {
 		if len(d) == 0 {
 			return "", KeyError{obj, ErrZeroLengthDeltasObject}
@@ -205,6 +221,7 @@ func (f *RealFIFO) keyOf(obj interface{}) (string, error) {
 		obj = d.Object
 	}
 	if d, ok := obj.(DeletedFinalStateUnknown); ok {
+		// tombstone 可能包裹一个已无法取到的对象，其 Key 字段仍可信。
 		return d.Key, nil
 	}
 	return f.keyFunc(obj)
@@ -212,6 +229,8 @@ func (f *RealFIFO) keyOf(obj interface{}) (string, error) {
 
 // HasSynced returns true if an Add/Update/Delete are called first,
 // or the first batch of items inserted by Replace() has been popped.
+//
+// 注意是"已处理"而非"已入队"：Replace 的首批对象全部 Pop 完成后才置为已同步。
 func (f *RealFIFO) HasSynced() bool {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -230,6 +249,7 @@ func (f *RealFIFO) Name() string {
 }
 
 // Done implements [DoneChecker.Done]
+// 返回的 channel 在首次同步完成时关闭，供 WaitForCacheSync 等待。
 func (f *RealFIFO) Done() <-chan struct{} {
 	return f.synced
 }
@@ -243,6 +263,7 @@ func (f *RealFIFO) hasSynced_locked() bool {
 // and closes the synced channel as needed. It must be called after changing f.populated and/or
 // f.initialPopulationCount while the mutex is still locked.
 func (f *RealFIFO) checkSynced_locked() {
+	// 同步条件：已经历过首次填充，且首批条目已全部出队处理。
 	synced := f.populated && f.initialPopulationCount == 0
 	if synced && !f.syncedClosed {
 		// Initial sync is complete.
@@ -252,6 +273,7 @@ func (f *RealFIFO) checkSynced_locked() {
 }
 
 // addToItems_locked appends to the delta list.
+// 调用方必须持有 f.lock；出错时不会追加任何条目。
 func (f *RealFIFO) addToItems_locked(deltaActionType DeltaType, skipTransform bool, obj interface{}) error {
 	// we must be able to read the keys in order to determine whether the knownObjcts and the items
 	// in this FIFO overlap
@@ -292,6 +314,7 @@ func (f *RealFIFO) addToItems_locked(deltaActionType DeltaType, skipTransform bo
 }
 
 // addReplaceToItemsLocked appends to the delta list.
+// 在原子模式下，Replace 只入队一条 ReplacedAll，消费者一次性拿到整批对象。
 func (f *RealFIFO) addReplaceToItemsLocked(objs []interface{}, resourceVersion string) error {
 	// Replaced items must be transformed before being added to the queue. These objects must
 	// all be objects that have not been transformed yet.
@@ -321,6 +344,7 @@ func (f *RealFIFO) addReplaceToItemsLocked(objs []interface{}, resourceVersion s
 	return nil
 }
 
+// addResyncToItemsLocked 在原子模式下入队一条 SyncAll，表示需要重放整个缓存。
 func (f *RealFIFO) addResyncToItemsLocked() error {
 	f.items = append(f.items, Delta{
 		Type:   SyncAll,
@@ -334,6 +358,9 @@ func (f *RealFIFO) addResyncToItemsLocked() error {
 
 // Add inserts an item, and puts it in the queue. The item is only enqueued
 // if it doesn't already exist in the set.
+//
+// 注意：上面"仅在不存在时入队"的描述不适用于本实现，
+// RealFIFO 会保留每一条通知，不做去重。
 func (f *RealFIFO) Add(obj interface{}) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -346,6 +373,7 @@ func (f *RealFIFO) Add(obj interface{}) error {
 }
 
 // Update is the same as Add in this implementation.
+// 只有 Delta 的 Type 不同，用于让消费者区分新增与更新。
 func (f *RealFIFO) Update(obj interface{}) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -360,6 +388,9 @@ func (f *RealFIFO) Update(obj interface{}) error {
 // Delete removes an item. It doesn't add it to the queue, because
 // this implementation assumes the consumer only cares about the objects,
 // not the order in which they were created/added.
+//
+// 注意：RealFIFO 仍会把 Deleted Delta 入队，消费者会收到删除通知，
+// 因此上面的"不加入队列"描述与实际实现不一致。
 func (f *RealFIFO) Delete(obj interface{}) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -391,6 +422,7 @@ func (f *RealFIFO) Pop(process PopProcessFunc) (interface{}, error) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
+	// 队列为空时阻塞等待；Close 设置的 closed 标志配合 Broadcast 解除等待。
 	for len(f.items) == 0 {
 		// When the queue is empty, invocation of Pop() is blocked until new item is enqueued.
 		// When Close() is called, the f.closed is set and the condition is broadcasted.
@@ -403,6 +435,7 @@ func (f *RealFIFO) Pop(process PopProcessFunc) (interface{}, error) {
 	}
 
 	isInInitialList := !f.hasSynced_locked()
+	// 先取出队首；随后的 defer 会在处理结束后递减首批计数，避免 hasSynced 提前为真。
 	item := f.items[0]
 	// The underlying array still exists and references this object, so the object will not be garbage collected unless we zero the reference.
 	f.items[0] = Delta{}
@@ -483,6 +516,9 @@ var batchable = map[DeltaType]bool{
 // UnlockWhileProcessing is false. It is expected that the caller of PopBatch
 // will be a single threaded consumer, since otherwise it is possible for
 // multiple ProcessBatchFunc or PopProcessFunc's to be running simultaneously.
+//
+// 批量仅限同一 key 不重复的可批处理 Delta 类型；遇到不可批处理类型或重复 key
+// 时立即收束批次，保证同一对象的相对顺序。
 func (f *RealFIFO) PopBatch(processBatch ProcessBatchFunc, processSingle PopProcessFunc) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -582,6 +618,8 @@ func (f *RealFIFO) PopBatch(processBatch ProcessBatchFunc, processSingle PopProc
 	})
 }
 
+// Bookmark 在允许时入队一个 bookmark Delta，用于推进已见的 resourceVersion。
+// 未启用 EmitDeltaTypeBookmark 时直接忽略，避免消费者看到意外类型。
 func (f *RealFIFO) Bookmark(resourceVersion string) error {
 	if !f.emitDeltaTypeBookmark {
 		return nil
@@ -606,6 +644,7 @@ func (f *RealFIFO) Replace(newItems []interface{}, resourceVersion string) error
 	defer f.lock.Unlock()
 
 	var err error
+	// 原子模式只产生一条 ReplacedAll，否则逐个核对队列与 knownObjects 的差异。
 	if f.emitAtomicEvents {
 		err = f.addReplaceToItemsLocked(newItems, resourceVersion)
 	} else {
@@ -623,6 +662,7 @@ func (f *RealFIFO) Replace(newItems []interface{}, resourceVersion string) error
 
 	if !f.populated {
 		f.populated = true
+		// 只有首次 Replace 才计入初始同步；后续 Replace 是重连后的全量刷新。
 		f.initialPopulationCount = len(f.items)
 		f.checkSynced_locked()
 	}
@@ -741,6 +781,7 @@ func (f *RealFIFO) Resync() error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
+	// 原子模式下仅入队一条 SyncAll，由消费者重放整个 store。
 	if f.emitAtomicEvents {
 		return f.addResyncToItemsLocked()
 	}
@@ -795,6 +836,7 @@ func (f *RealFIFO) Transformer() TransformFunc {
 // process.
 //
 // Deprecated: Use NewRealFIFOWithOptions instead.
+// 旧构造函数只能设置三个字段；新代码应使用 RealFIFOOptions 以启用原子事件与指标。
 func NewRealFIFO(keyFunc KeyFunc, knownObjects KeyListerGetter, transformer TransformFunc) *RealFIFO {
 	return NewRealFIFOWithOptions(RealFIFOOptions{
 		KeyFunction:  keyFunc,
@@ -806,6 +848,7 @@ func NewRealFIFO(keyFunc KeyFunc, knownObjects KeyListerGetter, transformer Tran
 // NewRealFIFOWithOptions returns a Queue which can be used to process changes to
 // items. See also the comment on RealFIFO.
 func NewRealFIFOWithOptions(opts RealFIFOOptions) *RealFIFO {
+	// 未指定 key 函数时默认使用 namespace/name。
 	if opts.KeyFunction == nil {
 		opts.KeyFunction = MetaNamespaceKeyFunc
 	}
@@ -829,6 +872,7 @@ func NewRealFIFOWithOptions(opts RealFIFOOptions) *RealFIFO {
 		}
 	}
 
+	// 批量大小固定为 defaultBatchSize；批量越大，单次处理耗时越长。
 	f := &RealFIFO{
 		logger:                klog.Background(),
 		name:                  "RealFIFO",

@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package oidc implements the "oidc" kubeconfig auth provider.
+//
+// Package oidc 实现 kubeconfig 中的 oidc 认证提供者：用 id-token 发起请求，
+// 过期时用 refresh-token 走 OAuth2 刷新流程，并把新 token 写回 kubeconfig。
+// 注意该 in-tree provider 已属遗留实现，新代码更推荐 exec 凭证插件。
 package oidc
 
 import (
@@ -35,6 +40,7 @@ import (
 )
 
 const (
+	// 以下是 kubeconfig 中 auth-provider.config 支持的全部键名。
 	cfgIssuerURL                = "idp-issuer-url"
 	cfgClientID                 = "client-id"
 	cfgClientSecret             = "client-secret"
@@ -48,6 +54,7 @@ const (
 )
 
 func init() {
+	// 同名 provider 重复注册属于编程错误，直接终止。
 	if err := restclient.RegisterAuthProviderPlugin("oidc", newOIDCAuthProvider); err != nil {
 		klog.Fatalf("Failed to register oidc auth plugin: %v", err)
 	}
@@ -65,6 +72,9 @@ var cache = newClientCache()
 // Like TLS transports, keep a cache of OIDC clients indexed by issuer URL. This ensures
 // current requests from different clients don't concurrently attempt to refresh the same
 // set of credentials.
+//
+// clientCache 按 (集群地址, issuer, clientID) 缓存 provider；同一组凭证只应有一个
+// provider 实例，否则并发刷新会互相覆盖 kubeconfig。
 type clientCache struct {
 	mu sync.RWMutex
 
@@ -75,6 +85,8 @@ func newClientCache() *clientCache {
 	return &clientCache{cache: make(map[cacheKey]*oidcAuthProvider)}
 }
 
+// cacheKey 定位一组互相独立的 OIDC 凭证。clusterAddress 参与键计算，
+// 使同一 issuer 但不同集群的配置可以共存。
 type cacheKey struct {
 	clusterAddress string
 	// Canonical issuer URL string of the provider.
@@ -91,6 +103,9 @@ func (c *clientCache) getClient(clusterAddress, issuer, clientID string) (*oidcA
 
 // setClient attempts to put the client in the cache but may return any clients
 // with the same keys set before. This is so there's only ever one client for a provider.
+//
+// 若键已存在则返回旧实例：调用方必须使用返回值，否则会绕过共享互斥锁，
+// 导致对 kubeconfig 的并发写入。
 func (c *clientCache) setClient(clusterAddress, issuer, clientID string, client *oidcAuthProvider) *oidcAuthProvider {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -108,6 +123,8 @@ func (c *clientCache) setClient(clusterAddress, issuer, clientID string, client 
 	return client
 }
 
+// newOIDCAuthProvider 校验必需配置并构造 provider。CA 数据支持内联 base64，
+// 与 TLS 客户端配置的优先级保持一致（内联数据优先于文件路径）。
 func newOIDCAuthProvider(clusterAddress string, cfg map[string]string, persister restclient.AuthProviderConfigPersister) (restclient.AuthProvider, error) {
 	issuer := cfg[cfgIssuerURL]
 	if issuer == "" {
@@ -125,6 +142,7 @@ func newOIDCAuthProvider(clusterAddress string, cfg map[string]string, persister
 	}
 
 	if len(cfg[cfgExtraScopes]) > 0 {
+		// 保留该字段仅为兼容旧配置；刷新请求不再发送 scopes。
 		klog.V(2).Infof("%s auth provider field depricated, refresh request don't send scopes",
 			cfgExtraScopes)
 	}
@@ -138,6 +156,7 @@ func newOIDCAuthProvider(clusterAddress string, cfg map[string]string, persister
 		}
 	}
 
+	// 仅使用 CA 相关字段；该 transport 只用于访问 issuer 的发现文档和 token 端点。
 	clientConfig := restclient.Config{
 		TLSClientConfig: restclient.TLSClientConfig{
 			CAFile: cfg[cfgCertificateAuthority],
@@ -161,10 +180,12 @@ func newOIDCAuthProvider(clusterAddress string, cfg map[string]string, persister
 	return cache.setClient(clusterAddress, issuer, clientID, provider), nil
 }
 
+// oidcAuthProvider 保存可变配置与持久化回调；cfg 由 mu 保护。
 type oidcAuthProvider struct {
 	client *http.Client
 
 	// Method for determining the current time.
+	// 提取为字段便于测试中伪造时间，避免依赖真实时钟。
 	now func() time.Time
 
 	// Mutex guards persisting to the kubeconfig file and allows synchronized
@@ -175,6 +196,7 @@ type oidcAuthProvider struct {
 	persister restclient.AuthProviderConfigPersister
 }
 
+// WrapTransport 在原始 transport 外包裹一层，为缺少 Authorization 头的请求注入 Bearer token。
 func (p *oidcAuthProvider) WrapTransport(rt http.RoundTripper) http.RoundTripper {
 	return &roundTripper{
 		wrapped:  rt,
@@ -182,10 +204,13 @@ func (p *oidcAuthProvider) WrapTransport(rt http.RoundTripper) http.RoundTripper
 	}
 }
 
+// Login 尚未实现；OIDC provider 只依赖 kubeconfig 中已有的 token。
 func (p *oidcAuthProvider) Login() error {
 	return errors.New("not yet implemented")
 }
 
+// roundTripper 在发送前补充 Authorization 头，并实现 RoundTripperWrapper 以支持
+// 取消包装（例如连接池/超时配置需要访问底层 transport）。
 type roundTripper struct {
 	provider *oidcAuthProvider
 	wrapped  http.RoundTripper
@@ -194,6 +219,7 @@ type roundTripper struct {
 var _ net.RoundTripperWrapper = &roundTripper{}
 
 func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// 已有认证头（如显式 Bearer）则不覆盖，避免破坏调用方意图。
 	if len(req.Header.Get("Authorization")) != 0 {
 		return r.wrapped.RoundTrip(req)
 	}
@@ -207,6 +233,7 @@ func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	*r2 = *req
 	// deep copy of the Header so we don't modify the original
 	// request's Header (as per RoundTripper contract).
+	// Header 是 map，浅拷贝仍共享底层数据，必须逐项复制以遵守 RoundTripper 不得修改入参的约定。
 	r2.Header = make(http.Header)
 	for k, s := range req.Header {
 		r2.Header[k] = s
@@ -218,6 +245,8 @@ func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (r *roundTripper) WrappedRoundTripper() http.RoundTripper { return r.wrapped }
 
+// idToken 返回可用的 id-token：未过期则直接复用，否则用 refresh-token 换取新 token。
+// mu 串行化整个刷新与持久化过程，防止并发请求同时刷新、重复写 kubeconfig。
 func (p *oidcAuthProvider) idToken() (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -251,6 +280,7 @@ func (p *oidcAuthProvider) idToken() (string, error) {
 		Endpoint:     oauth2.Endpoint{TokenURL: tokenURL},
 	}
 
+	// 通过 context 注入自定义 http.Client，使 oauth2 使用配置好的 CA/transport。
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, p.client)
 	token, err := config.TokenSource(ctx, &oauth2.Token{RefreshToken: rt}).Token()
 	if err != nil {
@@ -267,18 +297,21 @@ func (p *oidcAuthProvider) idToken() (string, error) {
 	}
 
 	// Create a new config to persist.
+	// 复制一份再改，避免在持久化失败时污染内存中的旧配置。
 	newCfg := make(map[string]string)
 	for key, val := range p.cfg {
 		newCfg[key] = val
 	}
 
 	// Update the refresh token if the server returned another one.
+	// 部分 IdP 会轮换 refresh token；未返回新值则保留旧值。
 	if token.RefreshToken != "" && token.RefreshToken != rt {
 		newCfg[cfgRefreshToken] = token.RefreshToken
 	}
 	newCfg[cfgIDToken] = idToken
 
 	// Persist new config and if successful, update the in memory config.
+	// 先落盘成功再更新内存，保证进程内与 kubeconfig 一致。
 	if err = p.persister.Persist(newCfg); err != nil {
 		return "", fmt.Errorf("could not persist new tokens: %v", err)
 	}
@@ -294,6 +327,7 @@ func tokenEndpoint(client *http.Client, issuer string) (string, error) {
 	// Well known URL for getting OpenID Connect metadata.
 	//
 	// https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
+	// issuer 末尾的 "/" 需去掉，避免拼出 "//.well-known"。
 	wellKnown := strings.TrimSuffix(issuer, "/") + "/.well-known/openid-configuration"
 	resp, err := client.Get(wellKnown)
 	if err != nil {
@@ -307,6 +341,7 @@ func tokenEndpoint(client *http.Client, issuer string) (string, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		// Don't produce an error that's too huge (e.g. if we get HTML back for some reason).
+		// 截断响应体，避免把整页 HTML 塞进错误信息。
 		const n = 80
 		if len(body) > n {
 			body = append(body[:n], []byte("...")...)
@@ -330,12 +365,15 @@ func tokenEndpoint(client *http.Client, issuer string) (string, error) {
 	return metadata.TokenURL, nil
 }
 
+// idTokenExpired 解析 JWT 载荷的 exp 声明，并用 expiryDelta 做提前量判断。
+// 注意返回值为“仍有效”，命名沿用历史实现，与函数名语义相反。
 func idTokenExpired(now func() time.Time, idToken string) (bool, error) {
 	parts := strings.Split(idToken, ".")
 	if len(parts) != 3 {
 		return false, fmt.Errorf("ID Token is not a valid JWT")
 	}
 
+	// 载荷使用 RawURLEncoding（无填充），base64.StdEncoding 会解析失败。
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
 		return false, err
@@ -362,6 +400,7 @@ func (j *jsonTime) UnmarshalJSON(b []byte) error {
 	}
 	var unix int64
 
+	// 先按整数解析；失败再按浮点解析并截断小数部分。
 	if t, err := n.Int64(); err == nil {
 		unix = t
 	} else {

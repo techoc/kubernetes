@@ -32,6 +32,9 @@ import (
 //  2. a name of an index, and
 //  3. an "indexed value", which is produced by an IndexFunc and
 //     can be a field value or any other string computed from the object.
+//
+// 索引与主存储保持同步：对象写入/删除时，对应的索引项也一并更新，
+// 因此 List/ByIndex 的结果总是反映同一时刻的缓存快照。
 type Indexer interface {
 	Store
 	// Index returns the stored objects whose set of indexed values
@@ -55,6 +58,8 @@ type Indexer interface {
 }
 
 // IndexFunc knows how to compute the set of indexed values for an object.
+//
+// 一个对象可以对应多个索引值（例如多个标签），返回空切片表示不被索引。
 type IndexFunc func(obj interface{}) ([]string, error)
 
 // IndexFuncToKeyFuncAdapter adapts an indexFunc to a keyFunc.  This is only useful if your index function returns
@@ -66,6 +71,7 @@ func IndexFuncToKeyFuncAdapter(indexFunc IndexFunc) KeyFunc {
 		if err != nil {
 			return "", err
 		}
+		// 键函数必须唯一，因此索引值多于一个直接报错，而不是随意取一个。
 		if len(indexKeys) > 1 {
 			return "", fmt.Errorf("too many keys: %v", indexKeys)
 		}
@@ -82,6 +88,9 @@ const (
 )
 
 // MetaNamespaceIndexFunc is a default index function that indexes based on an object's namespace
+//
+// 无法获取 ObjectMeta 时返回空 namespace 并附带错误信息，
+// 让调用方能够定位是哪个对象不满足索引前提。
 func MetaNamespaceIndexFunc(obj interface{}) ([]string, error) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
@@ -99,8 +108,14 @@ type Indexers map[string]IndexFunc
 // Indices maps a name to an Index
 type Indices map[string]index
 
+// TypedIndexers 是类型安全的索引函数表，键为索引名。
 type TypedIndexers[T any] map[string]TypedIndexFunc[T]
+
+// TypedIndexFunc 是类型安全的 IndexFunc，参数已确定为 T，内部无需再做断言。
 type TypedIndexFunc[T any] func(obj T) ([]string, error)
+
+// TypedIndexer 在普通 Indexer 之上提供返回 []T 的便捷方法。
+// 底层仍是同一份索引，只是省去调用方反复做类型断言。
 type TypedIndexer[T any] interface {
 	Indexer
 
@@ -127,6 +142,9 @@ func TypedIndexersToIndexers[T any](indexers TypedIndexers[T]) Indexers {
 // This is needed primarily for setting up [SharedIndexInformerOptions.Indexers].
 // When using one of the typed APIs for installing an indexer function
 // the conversion is done automatically.
+//
+// 这里的类型断言不做检查：调用方通过类型安全的 API 注册，
+// 传入的对象类型由 informer 保证与 T 一致；类型不符会直接 panic，属于编程错误。
 func TypedIndexerFuncToIndexerFunc[T any](indexer TypedIndexFunc[T]) IndexFunc {
 	return func(obj any) ([]string, error) {
 		return indexer(obj.(T))

@@ -24,10 +24,15 @@ import (
 	scheme "k8s.io/client-go/kubernetes/scheme"
 )
 
+// CertificateSigningRequestExpansion 补充生成代码之外的手写方法，
+// 通过嵌入该接口让 CertificateSigningRequestInterface 暴露出这些方法。
 type CertificateSigningRequestExpansion interface {
 	UpdateApproval(ctx context.Context, certificateSigningRequest *certificates.CertificateSigningRequest, opts metav1.UpdateOptions) (result *certificates.CertificateSigningRequest, err error)
 }
 
+// UpdateApproval 通过 PUT 请求更新 CSRS 的 approval 子资源。
+// 审批结果不能走普通 Update：apiserver 只允许通过子资源修改 conditions，
+// 因此这里显式指定 SubResource("approval")。传入的整个对象作为请求体。
 func (c *certificateSigningRequests) UpdateApproval(ctx context.Context, certificateSigningRequest *certificates.CertificateSigningRequest, opts metav1.UpdateOptions) (result *certificates.CertificateSigningRequest, err error) {
 	result = &certificates.CertificateSigningRequest{}
 	err = c.GetClient().Put().

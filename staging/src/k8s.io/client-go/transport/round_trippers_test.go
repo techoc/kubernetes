@@ -33,6 +33,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// testRoundTripper 记录收到的请求并返回预设响应，用于观察包装器改写后的请求。
 type testRoundTripper struct {
 	Request  *http.Request
 	Response *http.Response
@@ -44,6 +45,8 @@ func (rt *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	return rt.Response, rt.Err
 }
 
+// TestMaskValue 校验 Authorization 头脱敏：只替换 scheme 之后的凭据，保留 scheme 便于排查；
+// 非 Authorization 头必须原样保留。
 func TestMaskValue(t *testing.T) {
 	tcs := []struct {
 		key      string
@@ -129,6 +132,7 @@ func TestMaskValue(t *testing.T) {
 	}
 }
 
+// TestBearerAuthRoundTripper 校验注入 Bearer 头，并复制请求而不是修改调用方的对象。
 func TestBearerAuthRoundTripper(t *testing.T) {
 	rt := &testRoundTripper{}
 	req := &http.Request{}
@@ -144,6 +148,7 @@ func TestBearerAuthRoundTripper(t *testing.T) {
 	}
 }
 
+// TestBasicAuthRoundTripper 校验 Basic 认证头，包括空密码场景。
 func TestBasicAuthRoundTripper(t *testing.T) {
 	for n, tc := range map[string]struct {
 		user string
@@ -167,6 +172,7 @@ func TestBasicAuthRoundTripper(t *testing.T) {
 	}
 }
 
+// TestUserAgentRoundTripper 校验已存在的 User-Agent 不被覆盖；为空时才写入默认值。
 func TestUserAgentRoundTripper(t *testing.T) {
 	rt := &testRoundTripper{}
 	req := &http.Request{
@@ -197,6 +203,7 @@ func TestUserAgentRoundTripper(t *testing.T) {
 	}
 }
 
+// TestImpersonationRoundTripper 校验模拟身份头：用户、UID、组与 extra 字段的转义规则。
 func TestImpersonationRoundTripper(t *testing.T) {
 	tcs := []struct {
 		name                string
@@ -308,6 +315,7 @@ func TestImpersonationRoundTripper(t *testing.T) {
 	}
 }
 
+// TestAuthProxyRoundTripper 校验认证代理头（X-Remote-*）的写入与 extra key 的转义。
 func TestAuthProxyRoundTripper(t *testing.T) {
 	for n, tc := range map[string]struct {
 		username      string
@@ -412,6 +420,7 @@ func TestAuthProxyRoundTripper(t *testing.T) {
 
 // TestHeaderEscapeRoundTrip tests to see if foo == url.PathUnescape(headerEscape(foo))
 // This behavior is important for client -> API server transmission of extra values.
+// 中文：检验 headerKeyEscape 与 url.PathUnescape 互逆，确保服务端能还原原始 extra key。
 func TestHeaderEscapeRoundTrip(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -465,6 +474,8 @@ func TestHeaderEscapeRoundTrip(t *testing.T) {
 	}
 }
 
+// TestDebuggingRoundTripper 校验各调试级别（URL/头/耗时/curl）与 -v 级别组合下的日志输出。
+//
 //nolint:logcheck // Intentionally tests with global logging.
 func TestDebuggingRoundTripper(t *testing.T) {
 	rawURL := "https://127.0.0.1:12345/api/v1/pods?limit=500"

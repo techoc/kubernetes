@@ -27,22 +27,29 @@ import (
 
 // ReplicaSetListerExpansion allows custom methods to be added to
 // ReplicaSetLister.
+//
+// 生成器无法预知这种按 Pod 反查归属者集合的定制方法，故通过扩展接口注入。
 type ReplicaSetListerExpansion interface {
 	GetPodReplicaSets(pod *v1.Pod) ([]*extensions.ReplicaSet, error)
 }
 
 // ReplicaSetNamespaceListerExpansion allows custom methods to be added to
 // ReplicaSetNamespaceLister.
+//
+// 当前没有命名空间级别的定制方法，接口保留为空以维持生成代码的扩展点。
 type ReplicaSetNamespaceListerExpansion interface{}
 
 // GetPodReplicaSets returns a list of ReplicaSets that potentially match a pod.
 // Only the one specified in the Pod's ControllerRef will actually manage it.
 // Returns an error only if no matching ReplicaSets are found.
 func (s *replicaSetLister) GetPodReplicaSets(pod *v1.Pod) ([]*extensions.ReplicaSet, error) {
+	// 没有标签的 Pod 不可能匹配任何 selector，提前返回可给出更明确的错误。
 	if len(pod.Labels) == 0 {
 		return nil, fmt.Errorf("no ReplicaSets found for pod %v because it has no labels", pod.Name)
 	}
 
+	// 先在命名空间内全量取出，再按 selector 过滤；注意这里不能直接用
+	// selector 查询，因为需要返回所有“潜在”匹配者供调用方判断归属。
 	list, err := s.ReplicaSets(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err

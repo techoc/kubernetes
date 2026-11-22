@@ -38,6 +38,12 @@ import (
 	"k8s.io/streaming/pkg/httpstream/wsstream"
 )
 
+// TestWebSocketRoundTripper_RoundTripperSucceeds 验证成功升级后，协商出的子协议与请求
+// 指定的 V5 流协议一致。
+//
+// 中文说明：RoundTripperFor 返回两层——外层是普通 http.RoundTripper，内层持有已建立的
+// WebSocket 连接（wsRt）。通过服务端配合完成 upgrade 后，可从 wsRt.Connection()
+// 读到协商结果。
 func TestWebSocketRoundTripper_RoundTripperSucceeds(t *testing.T) {
 	// Create fake WebSocket server.
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -57,6 +63,7 @@ func TestWebSocketRoundTripper_RoundTripperSucceeds(t *testing.T) {
 	rt, wsRt, err := RoundTripperFor(&restclient.Config{Host: websocketLocation.Host})
 	require.NoError(t, err)
 	requestedProtocol := remotecommand.StreamProtocolV5Name
+	// 中文：通过 Sec-WebSocket-Protocol 头声明客户端支持的子协议。
 	req.Header[wsstream.WebSocketProtocolHeader] = []string{requestedProtocol}
 	_, err = rt.RoundTrip(req)
 	require.NoError(t, err)
@@ -67,6 +74,12 @@ func TestWebSocketRoundTripper_RoundTripperSucceeds(t *testing.T) {
 
 }
 
+// TestWebSocketRoundTripper_RoundTripperFails 验证握手失败时错误的分类与透传。
+//
+// 中文说明：所有失败都应包装为 httpstream.UpgradeFailureError（可用
+// IsUpgradeFailure 判断）；若响应体是合法的 metav1.Status，错误里应能取出原始
+// StatusError。statusCode 为 -1 表示不显式写状态码，从而模拟“非升级响应”的
+// 基础 bad handshake。
 func TestWebSocketRoundTripper_RoundTripperFails(t *testing.T) {
 	testCases := map[string]struct {
 		statusCode    int
@@ -75,21 +88,25 @@ func TestWebSocketRoundTripper_RoundTripperFails(t *testing.T) {
 		expectedError string
 	}{
 		"Empty response status still returns basic websocket error": {
+			// 中文：不写状态码也不带升级头，得到底层 websocket 库的握手错误。
 			statusCode:    -1,
 			body:          "",
 			expectedError: "websocket: bad handshake",
 		},
 		"Empty response body still returns status": {
+			// 中文：仅状态码，无正文，错误信息里应包含状态码文本。
 			statusCode:    http.StatusForbidden,
 			body:          "",
 			expectedError: "(403 Forbidden)",
 		},
 		"Error response body returned as string when can not be cast as metav1.Status": {
+			// 中文：正文不是合法 Status，应原样拼接进错误信息。
 			statusCode:    http.StatusForbidden,
 			body:          "RBAC violated",
 			expectedError: "(403 Forbidden): RBAC violated",
 		},
 		"Error returned as metav1.Status within response body": {
+			// 中文：正文是合法 Status，应解码为 StatusError 保留结构化字段。
 			statusCode: http.StatusBadRequest,
 			body:       "",
 			status: &metav1.Status{
@@ -108,6 +125,7 @@ func TestWebSocketRoundTripper_RoundTripperFails(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 			// Create fake WebSocket server.
 			websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				// 中文：按用例构造失败响应，不执行升级。
 				if testCase.statusCode > 0 {
 					w.WriteHeader(testCase.statusCode)
 				}
@@ -143,6 +161,7 @@ func TestWebSocketRoundTripper_RoundTripperFails(t *testing.T) {
 			require.Error(t, err)
 			assert.True(t, httpstream.IsUpgradeFailure(err))
 			if testCase.status != nil {
+				// 中文：结构化错误需可经 errors.As 逐层还原为 StatusError。
 				upgradeErr := &httpstream.UpgradeFailureError{}
 				validErr := errors.As(err, &upgradeErr)
 				assert.True(t, validErr, "could not cast error as httpstream.UpgradeFailureError")
@@ -159,6 +178,10 @@ func TestWebSocketRoundTripper_RoundTripperFails(t *testing.T) {
 	}
 }
 
+// TestWebSocketRoundTripper_NegotiateCreatesConnection 验证 Negotiate 直接完成升级
+// 并返回可用的 WebSocket 连接。
+//
+// 中文：与 RoundTrip 路径不同，Negotiate 不经过外层 RoundTripper 的响应处理。
 func TestWebSocketRoundTripper_NegotiateCreatesConnection(t *testing.T) {
 	// Create fake WebSocket server.
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -190,6 +213,10 @@ type websocketStreams struct {
 	conn io.Closer
 }
 
+// webSocketServerStreams 在服务端接受升级，并注册 V5 协议所需的通道配置。
+//
+// 中文说明：idle timeout 设为 4 小时，远大于测试时长，避免连接在断言前因空闲被
+// 关闭而产生偶发失败。
 func webSocketServerStreams(req *http.Request, w http.ResponseWriter) (*websocketStreams, error) {
 	conn := wsstream.NewConn(map[string]wsstream.ChannelProtocolConfig{
 		remotecommand.StreamProtocolV5Name: {

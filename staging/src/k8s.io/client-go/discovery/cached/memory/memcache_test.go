@@ -42,11 +42,16 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// resourceMapEntry 保存某个 groupVersion 下的资源列表及获取时产生的错误，用来模拟服务端发现接口的响应。
 type resourceMapEntry struct {
 	list *metav1.APIResourceList
 	err  error
 }
 
+// fakeDiscovery 是内存缓存客户端的最小化假实现。
+// 它刻意只嵌入 discovery.DiscoveryInterface（而不是 *fake.FakeDiscovery），
+// 因为被测代码只依赖并部分覆盖该接口；如果继承完整的 FakeDiscovery，
+// 还需要额外覆盖 ServerGroupsWithContext 等方法，得不偿失。
 type fakeDiscovery struct {
 	// Intentionally limited to discovery.DiscoveryInterface because that is all that this
 	// code knows about and partly overrides. *fake.FakeDiscovery would inherit
@@ -59,6 +64,8 @@ type fakeDiscovery struct {
 	resourceMap  map[string]*resourceMapEntry
 }
 
+// ServerResourcesForGroupVersion 返回指定 groupVersion 下预先注入的资源列表；
+// 未注入的 groupVersion 一律返回 "doesn't exist" 错误。
 func (c *fakeDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -68,6 +75,7 @@ func (c *fakeDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*me
 	return nil, errors.New("doesn't exist")
 }
 
+// ServerGroups 返回预先注入的 group 列表；groupList 为 nil 时表示该数据尚未就绪，返回错误。
 func (c *fakeDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -77,7 +85,8 @@ func (c *fakeDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
 	return c.groupList, c.groupListErr
 }
 
-// fakeDiscoveryWithContext is a variant of fakeDiscovery which supports only the *WithContext methods.
+// fakeDiscoveryWithContext 是 fakeDiscovery 的一个变体，只公开支持 *WithContext 系列方法。
+// 非 Context 版本被刻意实现为 panic，以便断言被测代码确实走的是带 Context 的路径。
 type fakeDiscoveryWithContext struct {
 	*fakeDiscovery
 	discovery.DiscoveryInterfaceWithContext
@@ -86,14 +95,17 @@ type fakeDiscoveryWithContext struct {
 	serverGroupsWithContextPostCallback func()
 }
 
+// ServerResourcesForGroupVersion 被禁用：若被调用说明客户端错误地退回了非 Context 接口。
 func (c *fakeDiscoveryWithContext) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	panic("fakeDiscoveryWithContext.ServerResourcesForGroupVersion should not have been called")
 }
 
+// ServerGroups 被禁用：若被调用说明客户端错误地退回了非 Context 接口。
 func (c *fakeDiscoveryWithContext) ServerGroups() (*metav1.APIGroupList, error) {
 	panic("fakeDiscoveryWithContext.ServerGroups should not have been called")
 }
 
+// ServerResourcesForGroupVersionWithContext 先检查取消状态，再委托给内嵌的 fakeDiscovery。
 func (c *fakeDiscoveryWithContext) ServerResourcesForGroupVersionWithContext(ctx context.Context, groupVersion string) (*metav1.APIResourceList, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -101,6 +113,7 @@ func (c *fakeDiscoveryWithContext) ServerResourcesForGroupVersionWithContext(ctx
 	return c.fakeDiscovery.ServerResourcesForGroupVersion(groupVersion)
 }
 
+// ServerGroupsWithContext 先检查取消状态再返回数据；回调在返回前执行，用于在刷新过程中模拟取消。
 func (c *fakeDiscoveryWithContext) ServerGroupsWithContext(ctx context.Context) (*metav1.APIGroupList, error) {
 	if c.serverGroupsWithContextPostCallback != nil {
 		defer c.serverGroupsWithContextPostCallback()
@@ -111,7 +124,9 @@ func (c *fakeDiscoveryWithContext) ServerGroupsWithContext(ctx context.Context) 
 	return c.fakeDiscovery.ServerGroups()
 }
 
+// TestClient 对基于 DiscoveryInterface 与 DiscoveryInterfaceWithContext 的两条代码路径做相同的行为验证。
 func TestClient(t *testing.T) {
+	// newFake 构造一份包含单个 group 与单个资源条目的固定发现数据。
 	newFake := func() *fakeDiscovery {
 		return &fakeDiscovery{
 			groupList: &metav1.APIGroupList{
@@ -146,8 +161,11 @@ func TestClient(t *testing.T) {
 	t.Run("DiscoveryInterfaceWithContext", func(t *testing.T) { testClient(t, fakeWithContext.fakeDiscovery, fakeWithContext) })
 }
 
+// testClient 验证缓存客户端的基本生命周期：初始不新鲜、读取后变新鲜、失效后重新拉取。
+// fake 用于断言返回内容，delegate 是实际传给缓存客户端的发现接口实现。
 func testClient(t *testing.T, fake *fakeDiscovery, delegate discovery.DiscoveryInterface) {
 	c := NewMemCacheClient(delegate)
+	// 尚未加载任何数据，缓存应报告不新鲜。
 	if c.Fresh() {
 		t.Errorf("Expected not fresh.")
 	}
@@ -158,10 +176,12 @@ func testClient(t *testing.T, fake *fakeDiscovery, delegate discovery.DiscoveryI
 	if e, a := fake.groupList, g; !reflect.DeepEqual(e, a) {
 		t.Errorf("Expected %#v, got %#v", e, a)
 	}
+	// 成功拉取后缓存应变新鲜。
 	if !c.Fresh() {
 		t.Errorf("Expected fresh.")
 	}
 	c.Invalidate()
+	// Invalidate 之后立即回到不新鲜状态。
 	if c.Fresh() {
 		t.Errorf("Expected not fresh.")
 	}
@@ -184,6 +204,7 @@ func testClient(t *testing.T, fake *fakeDiscovery, delegate discovery.DiscoveryI
 		t.Errorf("Expected %#v, got %#v", e, a)
 	}
 
+	// 替换底层数据源，模拟服务端资源列表发生了变化。
 	fake.lock.Lock()
 	fake.resourceMap = map[string]*resourceMapEntry{
 		"astronomy/v8beta1": {
@@ -201,6 +222,7 @@ func testClient(t *testing.T, fake *fakeDiscovery, delegate discovery.DiscoveryI
 	}
 	fake.lock.Unlock()
 
+	// 只有先失效缓存，才能读到新数据。
 	c.Invalidate()
 	r, err = c.ServerResourcesForGroupVersion("astronomy/v8beta1")
 	if err != nil {
@@ -211,6 +233,8 @@ func testClient(t *testing.T, fake *fakeDiscovery, delegate discovery.DiscoveryI
 	}
 }
 
+// TestRetryAfterCancellation 验证刷新过程中 context 被取消后，用新 context 重试能够成功。
+// 这覆盖了按 groupVersion 分别处理错误的代码路径。
 func TestRetryAfterCancellation(t *testing.T) {
 	fake := &fakeDiscoveryWithContext{
 		fakeDiscovery: &fakeDiscovery{
@@ -255,6 +279,7 @@ func TestRetryAfterCancellation(t *testing.T) {
 	}
 
 	// This retries the lookup with a fresh context.
+	// 使用未取消的 context 重试：缓存不应把中途取消留下的错误当作永久失败。
 	r, err := c.ServerResourcesForGroupVersionWithContext(ctx, "astronomy/v8beta1")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -267,6 +292,7 @@ func TestRetryAfterCancellation(t *testing.T) {
 	}
 }
 
+// TestServerGroupsFails 验证 ServerGroups 失败时缓存保持不新鲜，后续资源查询会重新触发刷新。
 func TestServerGroupsFails(t *testing.T) {
 	fake := &fakeDiscovery{
 		groupList: &metav1.APIGroupList{
@@ -303,6 +329,7 @@ func TestServerGroupsFails(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected error")
 	}
+	// 拉取失败不应把缓存标记为新鲜，否则后续查询会一直命中坏数据。
 	if c.Fresh() {
 		t.Errorf("Expected not fresh.")
 	}
@@ -321,6 +348,8 @@ func TestServerGroupsFails(t *testing.T) {
 	}
 }
 
+// TestPartialPermanentFailure 验证某个 groupVersion 永久失败不影响其他 groupVersion，
+// 且永久错误会被缓存、在 Invalidate 之前不会重试。
 func TestPartialPermanentFailure(t *testing.T) {
 	fake := &fakeDiscovery{
 		groupList: &metav1.APIGroupList{
@@ -408,6 +437,8 @@ func TestPartialPermanentFailure(t *testing.T) {
 	}
 }
 
+// TestPartialRetryableFailure 验证 retryable 错误（如 503）会在下次查询时自动重试，
+// 而成功后即使底层数据再变坏也应命中缓存、不再重试。
 func TestPartialRetryableFailure(t *testing.T) {
 	fake := &fakeDiscovery{
 		groupList: &metav1.APIGroupList{
@@ -509,6 +540,8 @@ func TestPartialRetryableFailure(t *testing.T) {
 
 // Tests that schema instances returned by openapi cached and returned after
 // successive calls
+// 该测试确认：OpenAPI 客户端与解析出的 schema 会被缓存，连续调用返回同一指针；
+// 而 Invalidate 之后必须重新构造，返回内容相同但指针不同。
 func TestOpenAPIMemCache(t *testing.T) {
 	fakeServer, err := testutil.NewFakeOpenAPIV3Server("../../testdata")
 	require.NoError(t, err)
@@ -577,6 +610,7 @@ func TestOpenAPIMemCache(t *testing.T) {
 
 // Tests that schema instances returned by openapi are cached and returned after
 // successive calls.
+// 与 TestOpenAPIMemCache 类似，但走 *WithContext API：此时连 paths map 本身也会被缓存。
 func TestOpenAPIMemCacheWithContext(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	fakeServer, err := testutil.NewFakeOpenAPIV3Server("../../testdata")
@@ -646,6 +680,7 @@ func TestOpenAPIMemCacheWithContext(t *testing.T) {
 }
 
 // Tests function "GroupsAndMaybeResources" when the "unaggregated" discovery is returned.
+// 覆盖旧版（分两次请求 /api 与 /apis）发现格式；该格式不返回资源，故 resourcesMap 恒为 nil。
 func TestMemCacheGroupsAndMaybeResources(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -811,6 +846,7 @@ func TestMemCacheGroupsAndMaybeResources(t *testing.T) {
 }
 
 // Tests function "GroupsAndMaybeResources" when the "aggregated" discovery is returned.
+// 覆盖 v2 aggregated discovery：一次响应即包含 group 与资源，并验证 stale 版本被计入 failedGVs。
 func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -1353,6 +1389,7 @@ func TestAggregatedMemCacheGroupsAndMaybeResources(t *testing.T) {
 }
 
 // Tests function "ServerGroups" when the "aggregated" discovery is returned.
+// 额外验证 preferred version 的取舍：列表中的第一个版本被视为首选版本。
 func TestMemCacheAggregatedServerGroups(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -1639,6 +1676,7 @@ func TestMemCacheAggregatedServerGroups(t *testing.T) {
 	}
 }
 
+// groupNamesFromList 提取 group 列表中的名称，便于用 sets 做无序比较。
 func groupNamesFromList(groups *metav1.APIGroupList) []string {
 	result := []string{}
 	for _, group := range groups.Groups {
@@ -1647,6 +1685,7 @@ func groupNamesFromList(groups *metav1.APIGroupList) []string {
 	return result
 }
 
+// preferredVersionsFromList 提取每个 group 的 preferred groupVersion，用于断言首选版本。
 func preferredVersionsFromList(groups *metav1.APIGroupList) []string {
 	result := []string{}
 	for _, group := range groups.Groups {
@@ -1656,6 +1695,7 @@ func preferredVersionsFromList(groups *metav1.APIGroupList) []string {
 	return result
 }
 
+// groupVersionsFromGroups 摊平所有 group 的所有版本，得到完整的 groupVersion 集合。
 func groupVersionsFromGroups(groups *metav1.APIGroupList) []string {
 	result := []string{}
 	for _, group := range groups.Groups {
@@ -1666,6 +1706,7 @@ func groupVersionsFromGroups(groups *metav1.APIGroupList) []string {
 	return result
 }
 
+// groupVersionKinds 把资源列表展开为 "group/version/kind" 形式的字符串集合。
 func groupVersionKinds(resources []*metav1.APIResourceList) []string {
 	result := []string{}
 	for _, resourceList := range resources {
@@ -1677,6 +1718,7 @@ func groupVersionKinds(resources []*metav1.APIResourceList) []string {
 	return result
 }
 
+// failedGroupVersions 把失败的 groupVersion 映射转成字符串集合，方便断言。
 func failedGroupVersions(gvs map[schema.GroupVersion]error) []string {
 	result := []string{}
 	for gv := range gvs {

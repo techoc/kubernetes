@@ -26,6 +26,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// newEventProcessor 创建事件缓冲器；out 由调用方提供，done 用于通知停止。
 func newEventProcessor(out chan<- watch.Event) *eventProcessor {
 	return &eventProcessor{
 		out:  out,
@@ -39,6 +40,9 @@ func newEventProcessor(out chan<- watch.Event) *eventProcessor {
 // input with a condition, and synchronizes output with a channels. It needs to
 // be able to yield while both waiting on an input condition and while blocked
 // on writing to the output channel.
+//
+// 输入侧用 cond 唤醒（事件到达），输出侧用 channel + done 选择（可被停止打断），
+// 这样即使消费者暂时不读取也不会阻塞 Informer 的事件处理协程太久。
 type eventProcessor struct {
 	out chan<- watch.Event
 
@@ -48,6 +52,7 @@ type eventProcessor struct {
 	done chan struct{}
 }
 
+// run 循环取批并写出，直到收到停止信号。
 func (e *eventProcessor) run() {
 	for {
 		batch := e.takeBatch()
@@ -58,6 +63,7 @@ func (e *eventProcessor) run() {
 	}
 }
 
+// takeBatch 阻塞等待缓冲区非空或停止；取走当前全部事件以减少锁竞争。
 func (e *eventProcessor) takeBatch() []watch.Event {
 	e.cond.L.Lock()
 	defer e.cond.L.Unlock()
@@ -71,6 +77,7 @@ func (e *eventProcessor) takeBatch() []watch.Event {
 	return batch
 }
 
+// writeBatch 逐条写出；done 关闭时丢弃剩余事件并返回。
 func (e *eventProcessor) writeBatch(events []watch.Event) {
 	for _, event := range events {
 		select {
@@ -81,6 +88,7 @@ func (e *eventProcessor) writeBatch(events []watch.Event) {
 	}
 }
 
+// push 把事件追加到缓冲区并唤醒 run。
 func (e *eventProcessor) push(event watch.Event) {
 	e.cond.L.Lock()
 	defer e.cond.L.Unlock()
@@ -88,6 +96,7 @@ func (e *eventProcessor) push(event watch.Event) {
 	e.buff = append(e.buff, event)
 }
 
+// stopped 非阻塞地检查 done 是否已关闭。
 func (e *eventProcessor) stopped() bool {
 	select {
 	case <-e.done:
@@ -97,6 +106,7 @@ func (e *eventProcessor) stopped() bool {
 	}
 }
 
+// stop 关闭 done 并唤醒可能阻塞在 cond.Wait 的 run。
 func (e *eventProcessor) stop() {
 	close(e.done)
 	e.cond.Signal()
@@ -114,6 +124,9 @@ func NewIndexerInformerWatcher(lw cache.ListerWatcher, objType runtime.Object) (
 // NewIndexerInformerWatcherWithLogger will create an IndexerInformer and wrap it into watch.Interface
 // so you can use it anywhere where you'd have used a regular Watcher returned from Watch method.
 // it also returns a channel you can use to wait for the informers to fully shutdown.
+//
+// 返回的 watch.Interface 在首次 List 完成前不会产生事件；对调用方而言，
+// 它等价于一个从“当前状态”开始的 watch。doneCh 在 Informer 退出后关闭。
 func NewIndexerInformerWatcherWithLogger(logger klog.Logger, lw cache.ListerWatcher, objType runtime.Object) (cache.Indexer, cache.Controller, watch.Interface, <-chan struct{}) {
 	ch := make(chan watch.Event)
 	w := watch.NewProxyWatcher(ch)
@@ -138,6 +151,7 @@ func NewIndexerInformerWatcherWithLogger(logger klog.Logger, lw cache.ListerWatc
 				// We have no means of passing the additional information down using
 				// watch API based on watch.Event but the caller can filter such
 				// objects by checking if metadata.deletionTimestamp is set
+				// 用最后一次已知状态代替；调用方可通过 deletionTimestamp 判断是否为删除墓碑。
 				obj = staleObj.Obj
 			}
 

@@ -22,6 +22,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// TestNamespacePrefixStrip 验证 --namespace 值中的 "namespace/..."、"ns/..."
+// 前缀会被剥离，且前缀匹配不区分大小写；只有前缀而没有名字时保持原值。
 func TestNamespacePrefixStrip(t *testing.T) {
 	testData := map[string]string{
 		"namespaces/foo": "foo",
@@ -32,9 +34,10 @@ func TestNamespacePrefixStrip(t *testing.T) {
 		"nameSpace/foo":  "foo",
 		"ns/foo":         "foo",
 		"NS/foo":         "foo",
-		"namespaces/":    "namespaces/",
-		"namespace/":     "namespace/",
-		"ns/":            "ns/",
+		// 无具体命名空间时不剥离，避免得到空字符串后回退到默认命名空间。
+		"namespaces/": "namespaces/",
+		"namespace/":  "namespace/",
+		"ns/":         "ns/",
 	}
 
 	for before, after := range testData {

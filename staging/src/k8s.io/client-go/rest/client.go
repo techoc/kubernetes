@@ -44,6 +44,9 @@ const (
 )
 
 // Interface captures the set of operations for generically interacting with Kubernetes REST apis.
+//
+// 它是 RESTClient 的最小抽象：生成的客户端只依赖该接口，
+// 使测试可以注入 fake transport，也便于在中间层替换实现。
 type Interface interface {
 	GetRateLimiter() flowcontrol.RateLimiter
 	Verb(verb string) *Request
@@ -71,6 +74,9 @@ type ClientContentConfig struct {
 	// GroupVersion is the API version to talk to. Must be provided when initializing
 	// a RESTClient directly. When initializing a Client, will be set with the default
 	// code version. This is used as the default group version for VersionedParams.
+	//
+	// 该版本号用于给请求参数套上正确的类型（VersionedParams），
+	// 因此直接构造 RESTClient 时必须显式设置，不能留空。
 	GroupVersion schema.GroupVersion
 	// Negotiator is used for obtaining encoders and decoders for multiple
 	// supported media types.
@@ -91,9 +97,14 @@ type RESTClient struct {
 	versionedAPIPath string
 
 	// content describes how a RESTClient encodes and decodes responses.
+	//
+	// 除固定的序列化配置外，它还记录“服务端不支持 CBOR”的负缓存状态，
+	// 因此被所有请求共享。
 	content requestClientContentConfigProvider
 
 	// creates BackoffManager that is passed to requests.
+	//
+	// 用函数而不是实例，是为了让每个请求拿到独立的退避状态。
 	createBackoffMgr func() BackoffManagerWithContext
 
 	// rateLimiter is shared among all requests created by this client unless specifically
@@ -113,6 +124,8 @@ type RESTClient struct {
 func NewRESTClient(baseURL *url.URL, versionedAPIPath string, config ClientContentConfig, rateLimiter flowcontrol.RateLimiter, client *http.Client) (*RESTClient, error) {
 	metrics.EnsureRegistered()
 
+	// 复制 URL 再规范化：调用方传入的 *url.URL 不应被修改，
+	// 同时清空 query/fragment，避免它们意外出现在每个请求上。
 	base := *baseURL
 	if !strings.HasSuffix(base.Path, "/") {
 		base.Path += "/"
@@ -130,12 +143,18 @@ func NewRESTClient(baseURL *url.URL, versionedAPIPath string, config ClientConte
 	}, nil
 }
 
+// scrubCBORContentConfigIfDisabled 在 CBOR 门控关闭时，把配置中的 CBOR 一律降级为 JSON。
+//
+// 这样即使用户 kubeconfig 或调用方硬编码了 application/cbor，旧服务端也不会因
+// 不认识的媒体类型而失败。
 func scrubCBORContentConfigIfDisabled(content ClientContentConfig) ClientContentConfig {
 	if clientfeatures.FeatureGates().Enabled(clientfeatures.ClientsAllowCBOR) {
+		// 门控打开时额外包一层，把 "application/cbor-seq" 当作流的别名。
 		content.Negotiator = clientNegotiatorWithCBORSequenceStreamDecoder{content.Negotiator}
 		return content
 	}
 
+	// 显式指定的 CBOR ContentType 降级为 JSON。
 	if mediatype, _, err := mime.ParseMediaType(content.ContentType); err == nil && mediatype == "application/cbor" {
 		content.ContentType = "application/json"
 	}
@@ -143,6 +162,8 @@ func scrubCBORContentConfigIfDisabled(content ClientContentConfig) ClientContent
 	clauses := goautoneg.ParseAccept(content.AcceptContentTypes)
 	scrubbed := false
 	for i, clause := range clauses {
+		// Accept 头里可能同时列了 cbor 与 json，只把 cbor 子类型替换为 json，
+		// 保留其 q 值，从而尽量维持原有的偏好顺序。
 		if clause.Type == "application" && clause.SubType == "cbor" {
 			scrubbed = true
 			clauses[i].SubType = "json"
@@ -181,6 +202,9 @@ func (c *RESTClient) GetRateLimiter() flowcontrol.RateLimiter {
 // readExpBackoffConfig handles the internal logic of determining what the
 // backoff policy is.  By default if no information is available, NoBackoff.
 // TODO Generalize this see #17727 .
+//
+// 退避参数通过环境变量注入，环境变量缺失或格式错误时明确退回 NoBackoff，
+// 避免客户端在配置损坏时无限重试。
 func readExpBackoffConfig() BackoffManagerWithContext {
 	backoffBase := os.Getenv(envBackoffBase)
 	backoffDuration := os.Getenv(envBackoffDuration)
@@ -190,6 +214,7 @@ func readExpBackoffConfig() BackoffManagerWithContext {
 	if errBase != nil || errDuration != nil {
 		return &NoBackoff{}
 	}
+	// 两个环境变量都以秒为单位。
 	return &URLBackoff{
 		Backoff: flowcontrol.NewBackOff(
 			time.Duration(backoffBaseInt)*time.Second,
@@ -210,6 +235,9 @@ func readExpBackoffConfig() BackoffManagerWithContext {
 //
 // if err != nil { ... }
 // list, ok := resp.(*api.PodList)
+//
+// 每次调用都会创建新的 Request（含独立的退避与限流包装），
+// 因此 Request 不可跨 goroutine 复用。
 func (c *RESTClient) Verb(verb string) *Request {
 	return NewRequest(c).Verb(verb)
 }
@@ -262,6 +290,9 @@ type requestClientContentConfigProvider struct {
 
 // GetClientContentConfig returns the ClientContentConfig that should be used for new requests by
 // this client and true if the request ContentType was selected by default.
+//
+// 返回值中的 bool 表示 ContentType 是否来自默认值；调用方据此区分
+// “用户显式要求 CBOR”和“客户端自行偏好 CBOR”，决定是否允许降级。
 func (p *requestClientContentConfigProvider) GetClientContentConfig() (ClientContentConfig, bool) {
 	config := p.base
 
@@ -274,6 +305,8 @@ func (p *requestClientContentConfigProvider) GetClientContentConfig() (ClientCon
 		return config, defaulted
 	}
 
+	// 只有在用户未指定 ContentType 时才主动偏好 CBOR；
+	// 显式指定了其他格式时尊重用户选择。
 	if defaulted && clientfeatures.FeatureGates().Enabled(clientfeatures.ClientsPreferCBOR) {
 		config.ContentType = "application/cbor"
 	}
@@ -303,6 +336,9 @@ func (p *requestClientContentConfigProvider) UnsupportedMediaType(requestContent
 	// Accept-Encoding response headers, the request method, and URI (as mentioned in
 	// https://www.rfc-editor.org/rfc/rfc9110.html#section-15.5.16). The request Content-Type
 	// header is sufficient to implement a blanket CBOR fallback mechanism.
+	//
+	// 只根据请求的 Content-Type 判断：415 若是针对 CBOR 或其 patch 类型，
+	// 就永久关闭该客户端后续的 CBOR 使用（atomic.Bool 保证并发安全）。
 	requestContentType, _, _ = mime.ParseMediaType(requestContentType)
 	switch requestContentType {
 	case runtime.ContentTypeCBOR, string(types.ApplyCBORPatchType):
@@ -334,6 +370,8 @@ func (n clientNegotiatorWithCBORSequenceStreamDecoder) StreamDecoder(contentType
 
 	switch contentType {
 	case runtime.ContentTypeCBORSequence:
+		// CBOR Sequence 允许零个或多个数据项，正好对应 watch 流的多个事件，
+		// 因此复用单个 CBOR 解码器即可。
 		return n.negotiator.StreamDecoder(runtime.ContentTypeCBOR, params)
 	case runtime.ContentTypeCBOR:
 		// This media type is only appropriate for exactly one data item, not the zero or

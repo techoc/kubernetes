@@ -27,18 +27,26 @@ import (
 
 // PodDisruptionBudgetListerExpansion allows custom methods to be added to
 // PodDisruptionBudgetLister.
+//
+// PodDisruptionBudgetListerExpansion 为生成的 PDB Lister 补充跨对象查询方法。
 type PodDisruptionBudgetListerExpansion interface {
 	GetPodPodDisruptionBudgets(pod *v1.Pod) ([]*policy.PodDisruptionBudget, error)
 }
 
 // PodDisruptionBudgetNamespaceListerExpansion allows custom methods to be added to
 // PodDisruptionBudgetNamespaceLister.
+//
+// 当前没有命名空间级扩展方法，保留空接口是为了与代码生成器的扩展点约定一致。
 type PodDisruptionBudgetNamespaceListerExpansion interface{}
 
 // GetPodPodDisruptionBudgets returns a list of PodDisruptionBudgets matching a pod.
+//
+// 返回结果可能包含多个 PDB：v1 语义允许一个 Pod 同时被多个 PDB 选中，
+// 调用方需要按各自的 disruptionsAllowed 综合判断能否驱逐。
 func (s *podDisruptionBudgetLister) GetPodPodDisruptionBudgets(pod *v1.Pod) ([]*policy.PodDisruptionBudget, error) {
 	var selector labels.Selector
 
+	// 先按命名空间取出全部 PDB，再在客户端做标签匹配；Lister 缓存本身不做选择器过滤。
 	list, err := s.PodDisruptionBudgets(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err
@@ -50,6 +58,7 @@ func (s *podDisruptionBudgetLister) GetPodPodDisruptionBudgets(pod *v1.Pod) ([]*
 		selector, err = metav1.LabelSelectorAsSelector(pdb.Spec.Selector)
 		if err != nil {
 			// This object has an invalid selector, it does not match the pod
+			// 选择器非法的 PDB 视为不匹配，避免因为单个坏对象影响整体结果。
 			continue
 		}
 

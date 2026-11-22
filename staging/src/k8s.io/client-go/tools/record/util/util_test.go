@@ -23,7 +23,10 @@ import (
 	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
 )
 
+// TestGenerateEventName 验证事件名的生成：合法引用名拼接时间戳后仍是合法的 DNS 子域名，
+// 而超长、含大写或特殊字符的引用名也必须被规整成合法名称（不返回错误）。
 func TestGenerateEventName(t *testing.T) {
+	// 固定时间戳使 golden 期望值可重复。
 	timestamp := int64(105999103295324396)
 	testCases := []struct {
 		name     string
@@ -57,6 +60,7 @@ func TestGenerateEventName(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			actual := GenerateEventName(tc.refName, timestamp)
 
+			// 核心不变量：无论输入多离谱，输出都必须能作为对象的名称使用。
 			if errs := apimachineryvalidation.NameIsDNSSubdomain(actual, false); len(errs) > 0 {
 				t.Errorf("generateEventName(%s) = %s; not a valid name: %v", tc.refName, actual, errs)
 

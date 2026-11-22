@@ -59,6 +59,9 @@ Example:
 	clientConfig = info.MergeWithConfig()
 	client := client.New(clientConfig)
 	client.Pods(ns).List()
+
+中文：该包定义 kubeconfig 之外的一种简单凭据文件格式，主要保留给历史用户和工具；
+新代码通常应直接使用 k8s.io/client-go/tools/clientcmd 或 rest.Config。
 */
 package auth
 
@@ -79,13 +82,15 @@ type Info struct {
 	CertFile    string
 	KeyFile     string
 	BearerToken string `datapolicy:"token"`
-	Insecure    *bool
+	// Insecure 使用指针以区分“未设置”和“显式设为 false”，合并配置时才有正确语义。
+	Insecure *bool
 }
 
 // LoadFromFile parses an Info object from a file path.
 // If the file does not exist, then os.IsNotExist(err) == true
 func LoadFromFile(path string) (*Info, error) {
 	var info Info
+	// 先 Stat 是为了让“文件不存在”保持 os.IsNotExist 语义，方便调用方区分可选配置。
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil, err
 	}
@@ -103,6 +108,8 @@ func LoadFromFile(path string) (*Info, error) {
 // MergeWithConfig returns a copy of a client.Config with values from the Info.
 // The fields of client.Config with a corresponding field in the Info are set
 // with the value from the Info.
+//
+// 返回副本而非原地修改，避免调用方共享的 Config 被意外覆盖。
 func (info Info) MergeWithConfig(c restclient.Config) (restclient.Config, error) {
 	var config = c
 	config.Username = info.User
@@ -118,6 +125,7 @@ func (info Info) MergeWithConfig(c restclient.Config) (restclient.Config, error)
 }
 
 // Complete returns true if the Kubernetes API authorization info is complete.
+// 只要有任一可用凭据（用户名、客户端证书或 bearer token）即视为完整。
 func (info Info) Complete() bool {
 	return len(info.User) > 0 ||
 		len(info.CertFile) > 0 ||

@@ -30,6 +30,7 @@ import (
 )
 
 // mockRecorder implements record.EventRecorder for testing
+// 只记录消息文本，足以断言 RecordEvent 的格式与去重行为。
 type mockRecorder struct {
 	events []string
 }
@@ -53,6 +54,7 @@ const (
 )
 
 var (
+	// 测试共享状态由 setup() 在每个用例前重置，避免用例间相互影响。
 	testTime   = time.Now()
 	client     *fake.Clientset
 	leaseLock  *LeaseLock
@@ -87,6 +89,7 @@ func setup() {
 	}
 }
 
+// TestGetError 校验读取不存在的 Lease 返回 NotFound，调用方可据此判断首次获取。
 func TestGetError(t *testing.T) {
 	setup()
 	// Test Get on non-existent lease
@@ -99,6 +102,7 @@ func TestGetError(t *testing.T) {
 	}
 }
 
+// TestGet 校验写入的 LeaderElectionRecord 能完整读回，且原始 JSON bytes 可再次反序列化。
 func TestGet(t *testing.T) {
 	setup()
 
@@ -137,6 +141,7 @@ func TestGet(t *testing.T) {
 	}
 }
 
+// TestRecordEventSuccess 校验事件消息前缀为 identity，便于在事件流中识别持有者。
 func TestRecordEventSuccess(t *testing.T) {
 	setup()
 
@@ -160,6 +165,7 @@ func TestRecordEventSuccess(t *testing.T) {
 	}
 }
 
+// TestRecordEventNilRecorder 校验未配置 recorder 时记录事件不会 panic。
 func TestRecordEventNilRecorder(t *testing.T) {
 	setup()
 
@@ -173,6 +179,7 @@ func TestRecordEventNilRecorder(t *testing.T) {
 	leaseLock.RecordEvent("should not panic")
 }
 
+// TestCreateError 校验重复创建 Lease 返回 AlreadyExists。
 func TestCreateError(t *testing.T) {
 	setup()
 
@@ -191,6 +198,7 @@ func TestCreateError(t *testing.T) {
 	}
 }
 
+// TestUpdateError 校验在未 Get 初始化 lease 前直接 Update 会失败。
 func TestUpdateError(t *testing.T) {
 	setup()
 
@@ -201,6 +209,7 @@ func TestUpdateError(t *testing.T) {
 	}
 }
 
+// TestDescribe 校验 Describe 输出 namespace/name，用于日志与事件定位。
 func TestDescribe(t *testing.T) {
 	setup()
 
@@ -210,6 +219,7 @@ func TestDescribe(t *testing.T) {
 	}
 }
 
+// TestLeaseConversion 校验 LeaderElectionRecord 与 LeaseSpec 双向转换不丢字段。
 func TestLeaseConversion(t *testing.T) {
 	setup()
 
@@ -266,6 +276,7 @@ func TestLeaseConversion(t *testing.T) {
 	}
 }
 
+// TestUpdateWithNilLabelsOnLease 校验 Lease 上 Labels 为 nil 时 Update 仍能补齐锁配置中的标签。
 func TestUpdateWithNilLabelsOnLease(t *testing.T) {
 	setup()
 
@@ -288,6 +299,7 @@ func TestUpdateWithNilLabelsOnLease(t *testing.T) {
 	}
 }
 
+// TestUpdateWithNilLabelsOnLeaseLock 校验 LeaseLock.Labels 为 nil 时不会触发 nil map 写入 panic。
 func TestUpdateWithNilLabelsOnLeaseLock(t *testing.T) {
 	setup()
 
@@ -310,6 +322,7 @@ func TestUpdateWithNilLabelsOnLeaseLock(t *testing.T) {
 	}
 }
 
+// TestLabelUpdate 校验锁配置中的标签会覆盖 Lease 上的同名标签，同时保留其他既有标签。
 func TestLabelUpdate(t *testing.T) {
 	setup()
 

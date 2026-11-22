@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package fake 提供基于对象追踪器（ObjectTracker）的内存版 dynamic 客户端。
+//
+// 它接受任意 GVR，适合在不启动 API Server 的情况下测试依赖 unstructured
+// 的控制器；写操作通过 testing.Fake 的 reactor 机制完成，因此可以注入
+// 自定义行为或断言收到的 action。
 package fake
 
 import (
@@ -34,12 +39,17 @@ import (
 	"k8s.io/client-go/testing"
 )
 
+// NewSimpleDynamicClient 构造 dynamic 客户端，并按给定 scheme 注册对应的 unstructured 类型。
+//
+// 所有已知类型（及其 List 变体）都映射到 Unstructured/UnstructuredList，
+// 使 ObjectTracker 能在返回结果时构造出正确的类型。
 func NewSimpleDynamicClient(scheme *runtime.Scheme, objects ...runtime.Object) *FakeDynamicClient {
 	unstructuredScheme := runtime.NewScheme()
 	for gvk := range scheme.AllKnownTypes() {
 		if unstructuredScheme.Recognizes(gvk) {
 			continue
 		}
+		// List 类型需要对应 UnstructuredList，其余用 Unstructured。
 		if strings.HasSuffix(gvk.Kind, "List") {
 			unstructuredScheme.AddKnownTypeWithName(gvk, &unstructured.UnstructuredList{})
 			continue
@@ -52,6 +62,7 @@ func NewSimpleDynamicClient(scheme *runtime.Scheme, objects ...runtime.Object) *
 		panic(err)
 	}
 
+	// 初始对象可能引用 scheme 之外的 GVK，为它们补齐单对象与 List 注册。
 	for _, obj := range objects {
 		gvk := obj.GetObjectKind().GroupVersionKind()
 		if !unstructuredScheme.Recognizes(gvk) {
@@ -82,6 +93,7 @@ func NewSimpleDynamicClientWithCustomListKinds(scheme *runtime.Scheme, gvrToList
 		if !strings.HasSuffix(listGVK.Kind, "List") {
 			continue
 		}
+		// 去掉 "List" 后缀得到单对象 Kind，再猜测其资源名（复数形式）。
 		nonListGVK := listGVK.GroupVersion().WithKind(listGVK.Kind[:len(listGVK.Kind)-4])
 		plural, _ := meta.UnsafeGuessKindToResource(nonListGVK)
 		completeGVRToListKind[plural] = listGVK.Kind
@@ -94,6 +106,7 @@ func NewSimpleDynamicClientWithCustomListKinds(scheme *runtime.Scheme, gvrToList
 		listGVK := gvr.GroupVersion().WithKind(listKind)
 
 		// if we already have this type registered, just skip it
+		// 已注册的类型直接采用；未注册的补一个 UnstructuredList，保证 tracker 能创建列表。
 		if _, err := scheme.New(listGVK); err == nil {
 			completeGVRToListKind[gvr] = listKind
 			continue
@@ -112,6 +125,7 @@ func NewSimpleDynamicClientWithCustomListKinds(scheme *runtime.Scheme, gvrToList
 	}
 
 	cs := &FakeDynamicClient{scheme: scheme, gvrToListKind: completeGVRToListKind, tracker: o}
+	// 默认 reactor：所有动词都交给对象追踪器处理。
 	cs.AddReactor("*", "*", testing.ObjectReaction(o))
 	cs.AddWatchReactor("*", func(action testing.Action) (handled bool, ret watch.Interface, err error) {
 		var opts metav1.ListOptions
@@ -140,11 +154,13 @@ type FakeDynamicClient struct {
 	tracker       testing.ObjectTracker
 }
 
+// dynamicResourceClient 绑定单个 GVR（以及可选命名空间）的视图。
 type dynamicResourceClient struct {
 	client    *FakeDynamicClient
 	namespace string
 	resource  schema.GroupVersionResource
-	listKind  string
+	// listKind 是该 GVR 对应的 List Kind，List 时用于构造返回值类型。
+	listKind string
 }
 
 var (
@@ -161,6 +177,7 @@ func (c *FakeDynamicClient) Resource(resource schema.GroupVersionResource) dynam
 }
 
 func (c *FakeDynamicClient) IsWatchListSemanticsUnSupported() bool {
+	// 假客户端不支持流式 List/Watch 语义，显式声明以便客户端走普通路径。
 	return true
 }
 
@@ -179,6 +196,7 @@ func (c *dynamicResourceClient) Create(ctx context.Context, obj *unstructured.Un
 			Invokes(testing.NewRootCreateActionWithOptions(c.resource, obj, opts), obj)
 
 	case len(c.namespace) == 0 && len(subresources) > 0:
+		// 子资源 action 需要对象名，因此先从对象元数据取出 name。
 		var accessor metav1.Object // avoid shadowing err
 		accessor, err = meta.Accessor(obj)
 		if err != nil {
@@ -257,6 +275,7 @@ func (c *dynamicResourceClient) Update(ctx context.Context, obj *unstructured.Un
 func (c *dynamicResourceClient) UpdateStatus(ctx context.Context, obj *unstructured.Unstructured, opts metav1.UpdateOptions) (*unstructured.Unstructured, error) {
 	var uncastRet runtime.Object
 	var err error
+	// status 子资源的语义等价于以 "status" 为子资源的 Update。
 	switch {
 	case len(c.namespace) == 0:
 		uncastRet, err = c.client.Fake.
@@ -284,6 +303,7 @@ func (c *dynamicResourceClient) UpdateStatus(ctx context.Context, obj *unstructu
 
 func (c *dynamicResourceClient) Delete(ctx context.Context, name string, opts metav1.DeleteOptions, subresources ...string) error {
 	var err error
+	// Delete 不关心返回值，传入一个占位 Status 供默认 reactor 读取。
 	switch {
 	case len(c.namespace) == 0 && len(subresources) == 0:
 		_, err = c.client.Fake.
@@ -357,10 +377,12 @@ func (c *dynamicResourceClient) Get(ctx context.Context, name string, opts metav
 }
 
 func (c *dynamicResourceClient) List(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+	// 列表 action 必须携带 listGVK；缺失说明创建客户端时未注册映射，属于编码错误。
 	if len(c.listKind) == 0 {
 		panic(fmt.Sprintf("coding error: you must register resource to list kind for every resource you're going to LIST when creating the client.  See NewSimpleDynamicClientWithCustomListKinds or register the list into the scheme: %v out of %v", c.resource, c.client.gvrToListKind))
 	}
 	listGVK := c.resource.GroupVersion().WithKind(c.listKind)
+	// 基础库会自行给 Kind 追加 List 后缀，因此这里传去掉后缀的 Kind。
 	listForFakeClientGVK := c.resource.GroupVersion().WithKind(c.listKind[:len(c.listKind)-4]) /*base library appends List*/
 
 	var obj runtime.Object
@@ -380,6 +402,7 @@ func (c *dynamicResourceClient) List(ctx context.Context, opts metav1.ListOption
 		return nil, err
 	}
 
+	// 默认 reactor 不处理标签过滤，这里在客户端侧按 ListOptions 的 selector 过滤。
 	label, _, _ := testing.ExtractFromListOptions(opts)
 	if label == nil {
 		label = labels.Everything()
@@ -395,6 +418,7 @@ func (c *dynamicResourceClient) List(ctx context.Context, opts metav1.ListOption
 	}
 
 	list := &unstructured.UnstructuredList{}
+	// 新建列表以保留分页与版本元数据，并逐项应用 selector。
 	list.SetRemainingItemCount(entireList.GetRemainingItemCount())
 	list.SetResourceVersion(entireList.GetResourceVersion())
 	list.SetContinue(entireList.GetContinue())
@@ -424,6 +448,7 @@ func (c *dynamicResourceClient) Watch(ctx context.Context, opts metav1.ListOptio
 			InvokesWatch(testing.NewWatchActionWithOptions(c.resource, c.namespace, opts))
 	}
 
+	// 上面的分支已穷尽两种情况，走到这里说明逻辑被改坏了。
 	panic("math broke")
 }
 
@@ -466,10 +491,12 @@ func (c *dynamicResourceClient) Patch(ctx context.Context, name string, pt types
 
 // TODO: opts are currently ignored.
 func (c *dynamicResourceClient) Apply(ctx context.Context, name string, obj *unstructured.Unstructured, options metav1.ApplyOptions, subresources ...string) (*unstructured.Unstructured, error) {
+	// Server-side apply 在协议上就是一次 apply patch，这里把对象编码成 patch body。
 	outBytes, err := runtime.Encode(unstructured.UnstructuredJSONScheme, obj)
 	if err != nil {
 		return nil, err
 	}
+	// ApplyOptions 与 PatchOptions 字段不完全一致，只搬运协议支持的子集。
 	patchOptions := metav1.PatchOptions{
 		Force:        &options.Force,
 		DryRun:       options.DryRun,
@@ -510,9 +537,11 @@ func (c *dynamicResourceClient) Apply(ctx context.Context, name string, obj *uns
 }
 
 func (c *dynamicResourceClient) ApplyStatus(ctx context.Context, name string, obj *unstructured.Unstructured, options metav1.ApplyOptions) (*unstructured.Unstructured, error) {
+	// status 子资源复用 Apply，仅追加 "status" 子资源路径。
 	return c.Apply(ctx, name, obj, options, "status")
 }
 
+// convertObjectsToUnstructured 对初始对象做批量转换，任一失败即整体失败。
 func convertObjectsToUnstructured(s *runtime.Scheme, objs []runtime.Object) ([]runtime.Object, error) {
 	ul := make([]runtime.Object, 0, len(objs))
 
@@ -527,6 +556,7 @@ func convertObjectsToUnstructured(s *runtime.Scheme, objs []runtime.Object) ([]r
 	return ul, nil
 }
 
+// convertToUnstructured 把任意对象转换为 Unstructured，并在缺失时用 scheme 补齐 GVK。
 func convertToUnstructured(s *runtime.Scheme, obj runtime.Object) (runtime.Object, error) {
 	var (
 		err error

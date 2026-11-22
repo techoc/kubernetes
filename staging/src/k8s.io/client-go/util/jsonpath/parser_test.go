@@ -20,6 +20,7 @@ import (
 	"testing"
 )
 
+// parserTest 描述一条解析用例：模板文本、期望的节点序列，以及是否应报错。
 type parserTest struct {
 	name        string
 	text        string
@@ -27,6 +28,8 @@ type parserTest struct {
 	shouldError bool
 }
 
+// parserTests 覆盖 jsonpath 的主要语法：文本、字段、数组切片、通配符、
+// 过滤器、递归下降、union 以及 range/end；同时包含引号转义与负索引的边界情况。
 var parserTests = []parserTest{
 	{"plain", `hello jsonpath`, []Node{newText("hello jsonpath")}, false},
 	{"variable", `hello {.jsonpath}`,
@@ -85,6 +88,8 @@ var parserTests = []parserTest{
 		newArray([3]ParamsEntry{{1, true, false}, {-1, true, false}, {0, false, false}})}, false},
 }
 
+// collectNode 把语法树按先序展开为节点列表，便于与期望序列逐项比较。
+// 只深入 ListNode、FilterNode、UnionNode 这几类容器节点。
 func collectNode(nodes []Node, cur Node) []Node {
 	nodes = append(nodes, cur)
 	switch cur.Type() {
@@ -103,6 +108,8 @@ func collectNode(nodes []Node, cur Node) []Node {
 	return nodes
 }
 
+// TestParser 验证每条用例解析出的节点序列与期望一致；
+// 使用 String() 比较以忽略节点的内部字段差异。
 func TestParser(t *testing.T) {
 	for _, test := range parserTests {
 		parser, err := Parse(test.name, test.text)
@@ -128,12 +135,15 @@ func TestParser(t *testing.T) {
 	}
 }
 
+// failParserTest 描述一条应解析失败的用例及其精确错误信息。
 type failParserTest struct {
 	name string
 	text string
 	err  string
 }
 
+// TestFailParser 验证非法模板会返回具体、稳定的错误文本，
+// 这些文本属于用户可见输出，改动需谨慎。
 func TestFailParser(t *testing.T) {
 	failParserTests := []failParserTest{
 		{"unclosed action", "{.hello", "unclosed action"},

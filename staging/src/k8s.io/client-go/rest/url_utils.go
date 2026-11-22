@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package rest 实现 Kubernetes 的 REST 客户端：负责请求构造、序列化、认证与传输层配置。
 package rest
 
 import (
@@ -27,10 +28,14 @@ import (
 // DefaultServerURL converts a host, host:port, or URL string to the default base server API path
 // to use with a Client at a given API version following the standard conventions for a
 // Kubernetes API.
+//
+// 三个返回值分别是：带（可选）前缀路径的 base URL、相对 base 的版本化 API 路径、错误。
+// 若传入的 host 不含 scheme，则按 defaultTLS 补上 http:// 或 https://。
 func DefaultServerURL(host, apiPath string, groupVersion schema.GroupVersion, defaultTLS bool) (*url.URL, string, error) {
 	if host == "" {
 		return nil, "", fmt.Errorf("host must be a URL or a host:port pair")
 	}
+	// 先按完整 URL 解析；失败或缺少 scheme/host 时才把它当作 host:port 处理。
 	base := host
 	hostURL, err := url.Parse(base)
 	if err != nil || hostURL.Scheme == "" || hostURL.Host == "" {
@@ -42,6 +47,7 @@ func DefaultServerURL(host, apiPath string, groupVersion schema.GroupVersion, de
 		if err != nil {
 			return nil, "", err
 		}
+		// 补 scheme 之后若仍带有非根路径，说明输入既不是纯 host:port 也不是合法 URL。
 		if hostURL.Path != "" && hostURL.Path != "/" {
 			return nil, "", fmt.Errorf("host must be a URL or a host:port pair: %q", base)
 		}
@@ -63,6 +69,9 @@ func DefaultServerURL(host, apiPath string, groupVersion schema.GroupVersion, de
 
 // DefaultVersionedAPIPath constructs the default path for the given group version, assuming the given
 // API path, following the standard conventions of the Kubernetes API.
+//
+// 核心组不带 group 段（/api/v1），其他组形如 /apis/<group>/<version>；这里只负责把
+// apiPath、group、version 拼接起来，具体是 api 还是 apis 前缀由调用方传入的 apiPath 决定。
 func DefaultVersionedAPIPath(apiPath string, groupVersion schema.GroupVersion) string {
 	versionedAPIPath := path.Join("/", apiPath)
 
@@ -79,6 +88,9 @@ func DefaultVersionedAPIPath(apiPath string, groupVersion schema.GroupVersion) s
 
 // DefaultServerUrlFor is shared between IsConfigTransportTLS and RESTClientFor. It
 // requires Host and Version to be set prior to being called.
+//
+// 是否默认使用 TLS 取决于配置里是否出现任何凭据材料（CA 或客户端证书），或者显式设置了
+// Insecure。Insecure 的语义是“仍用 HTTPS，但不校验证书”，并非改用明文 HTTP。
 func DefaultServerUrlFor(config *Config) (*url.URL, string, error) {
 	// TODO: move the default to secure when the apiserver supports TLS by default
 	// config.Insecure is taken to mean "I want HTTPS but don't bother checking the certs against a CA."

@@ -48,6 +48,7 @@ type AsyncTracker[T comparable] struct {
 	cancel func()
 }
 
+// NewAsyncTracker 创建跟踪器；synced 上下文在满足同步条件时被取消。
 func NewAsyncTracker[T comparable](name string) *AsyncTracker[T] {
 	t := &AsyncTracker[T]{
 		name: name,
@@ -119,6 +120,7 @@ func (t *AsyncTracker[T]) Done() <-chan struct{} {
 	return t.synced.Done()
 }
 
+// Name 返回实例名，用于日志与错误信息。
 func (t *AsyncTracker[T]) Name() string {
 	return t.name
 }
@@ -147,6 +149,7 @@ type SingleFileTracker struct {
 	cancel func()
 }
 
+// NewSingleFileTracker 创建顺序处理场景的跟踪器。
 func NewSingleFileTracker(name string) *SingleFileTracker {
 	t := &SingleFileTracker{
 		name: name,
@@ -209,6 +212,7 @@ func (t *SingleFileTracker) Done() <-chan struct{} {
 	return t.synced.Done()
 }
 
+// Name 返回实例名，用于日志与错误信息。
 func (t *SingleFileTracker) Name() string {
 	return t.name
 }

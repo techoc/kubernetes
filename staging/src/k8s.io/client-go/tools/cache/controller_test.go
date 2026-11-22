@@ -45,6 +45,10 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// Example 演示直接用 Config + RealFIFO 组装一个底层控制器。
+//
+// 控制器对每个到达的 Pod 先写入下游 Store，再立即从假数据源删除它，
+// 因此最终只会观察到删除事件；输出顺序经集合排序以保证稳定。
 func Example() {
 	// source simulates an apiserver object endpoint.
 	source := fcache.NewFakeControllerSource()
@@ -131,6 +135,8 @@ func Example() {
 	// c-framework
 }
 
+// ExampleNewInformer 演示 NewInformer 的用法：AddFunc 中立即删除对象，
+// DeleteFunc 中记录键，最终输出被删除对象的键。
 func ExampleNewInformer() {
 	// source simulates an apiserver object endpoint.
 	source := fcache.NewFakeControllerSource()
@@ -189,6 +195,8 @@ func ExampleNewInformer() {
 	// c-framework
 }
 
+// TestHammerController 并发地增删改大量对象，用来暴露锁与协程错误；
+// 失败通常表现为死锁、竞态检测器报错或测试挂起。
 func TestHammerController(t *testing.T) {
 	// This test executes a bunch of requests through the fake source and
 	// controller framework to make sure there's no locking/threading
@@ -243,6 +251,7 @@ func TestHammerController(t *testing.T) {
 	}()
 
 	// Let's wait for the controller to do its initial sync
+	// 轮询而非阻塞等待，因为此处要验证的是 HasSynced 状态本身。
 	wait.Poll(100*time.Millisecond, wait.ForeverTestTimeout, func() (bool, error) {
 		return controller.HasSynced(), nil
 	})
@@ -311,6 +320,10 @@ func TestHammerController(t *testing.T) {
 	t.Logf("got: %#v", outputSet)
 }
 
+// TestUpdate 验证各种合法的更新迁移组合。
+//
+// 由于重同步与 watch 事件异步到达，测试只接受 {from->to, to->to, from->from}
+// 三种迁移，其他组合说明事件顺序或缓存状态有误。
 func TestUpdate(t *testing.T) {
 	// This test is going to exercise the various paths that result in a
 	// call to update.
@@ -425,6 +438,8 @@ func TestUpdate(t *testing.T) {
 	testDoneWG.Wait()
 }
 
+// TestPanicPropagated 验证 handler 中的 panic 不会被控制器吞掉，而是向调用
+// RunWithContext 的协程传播，便于上层决定是否崩溃。
 func TestPanicPropagated(t *testing.T) {
 	// source simulates an apiserver object endpoint.
 	source := newFakeControllerSource(t)
@@ -472,6 +487,8 @@ func TestPanicPropagated(t *testing.T) {
 	}
 }
 
+// TestTransformingInformer 验证 Transform 在对象进入 Store 之前生效，
+// 且 handler 收到的是转换后的对象。
 func TestTransformingInformer(t *testing.T) {
 	// source simulates an apiserver object endpoint.
 	source := newFakeControllerSource(t)
@@ -594,6 +611,8 @@ func TestTransformingInformer(t *testing.T) {
 	verifyStore([]interface{}{expectedPod("pod2", "2"), expectedPod("pod3", "1")})
 }
 
+// TestTransformingInformerRace 在重同步期间并发读取 Store，验证转换后的对象
+// 不会因共享指针被二次转换或并发修改；badTransform 一旦置位即失败。
 func TestTransformingInformerRace(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	// Canceled *only* when the test is done.
@@ -713,6 +732,8 @@ func TestTransformingInformerRace(t *testing.T) {
 	}
 }
 
+// TestDeletionHandlingObjectToName 验证 DeletedFinalStateUnknown 会直接使用
+// 其 Key，而不是重新从对象元数据推导。
 func TestDeletionHandlingObjectToName(t *testing.T) {
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -741,6 +762,8 @@ func TestDeletionHandlingObjectToName(t *testing.T) {
 	}
 }
 
+// TestDeletedObjectGetObjectName 覆盖三种来源：正常对象、FinalStateUnknown
+// 带对象、FinalStateUnknown 仅带 Key，以及完全零值对象不得 panic。
 func TestDeletedObjectGetObjectName(t *testing.T) {
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -795,6 +818,8 @@ func TestDeletedObjectGetObjectName(t *testing.T) {
 	}
 }
 
+// TestDeletedObjectGetKey 验证 GetKey 与 MetaNamespaceKeyFunc 编码一致，
+// 并覆盖 FinalStateUnknown 与零值对象。
 func TestDeletedObjectGetKey(t *testing.T) {
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -845,6 +870,8 @@ func TestDeletedObjectGetKey(t *testing.T) {
 	}
 }
 
+// listWatchWithUnSupportedWatchListSemanticsWrapper 用于模拟不支持 WatchList
+// 语义的客户端；嵌入 ListWatch 以保留 List/Watch 行为。
 type listWatchWithUnSupportedWatchListSemanticsWrapper struct {
 	*ListWatch
 }
@@ -853,12 +880,16 @@ func (lw listWatchWithUnSupportedWatchListSemanticsWrapper) IsWatchListSemantics
 	return true
 }
 
+// toListWatcherWithUnSupportedWatchListSemantics 把普通 ListWatch 包成
+// “不支持 WatchList 语义”的变体，用于测试 reflector 的回退路径。
 func toListWatcherWithUnSupportedWatchListSemantics(lw *ListWatch) ListerWatcher {
 	return listWatchWithUnSupportedWatchListSemanticsWrapper{
 		lw,
 	}
 }
 
+// TestProcessDeltasInBatch 验证批量事务的部分成功语义：
+// 只有已提交的对象触发 handler，失败对象既不落盘也不回调。
 func TestProcessDeltasInBatch(t *testing.T) {
 	cm1 := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -973,6 +1004,8 @@ func TestProcessDeltasInBatch(t *testing.T) {
 
 var _ TransactionStore = &mockTxnStore{}
 
+// mockTxnStore 让指定对象在事务中失败，用于构造部分成功场景。
+// succeedCount 记录成功提交的数量，供测试断言。
 type mockTxnStore struct {
 	failingObjs  []runtime.Object
 	succeedCount int
@@ -1006,6 +1039,8 @@ func (m *mockTxnStore) Transaction(txns ...Transaction) *TransactionError {
 	return nil
 }
 
+// TestReplaceEvents 验证原子与非原子两种 replace 路径产生相同的事件和
+// 缓存最终状态；两种模式共享同一组子测试。
 func TestReplaceEvents(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -1052,6 +1087,10 @@ func TestReplaceEvents(t *testing.T) {
 	}
 }
 
+// testReplaceEvents 是 TestReplaceEvents 的共享用例集。
+//
+// 期望顺序固定为“先删除、再按输入顺序新增/更新”，与 RealFIFO#Replace 一致；
+// 删除事件之间无固有顺序，比较前按 key 排序。
 func testReplaceEvents(t *testing.T, ctx context.Context, fifo Queue, m *eventRecorder, store Store, atomic bool) {
 	tcs := []struct {
 		name            string
@@ -1136,6 +1175,8 @@ func testReplaceEvents(t *testing.T, ctx context.Context, fifo Queue, m *eventRe
 	}
 }
 
+// TestResetWatch 验证 watch 被服务端重置后，reflector 重新 List 会为已存在
+// 对象产生 update、为新对象产生 add，且都不属于初始列表。
 func TestResetWatch(t *testing.T) {
 	for _, atomic := range []bool{false, true} {
 		t.Run("atomic "+strconv.FormatBool(atomic), func(t *testing.T) {
@@ -1190,6 +1231,10 @@ func TestResetWatch(t *testing.T) {
 	}
 }
 
+// testResetWatch 执行重置 watch 的具体断言。
+//
+// ModifyDropWatch/AddDropWatch 先模拟事件丢失，ResetWatch 再强制一次重新
+// List，从而验证增量事件丢失后状态仍能收敛。
 func testResetWatch(t *testing.T, ctx context.Context, source *fcache.FakeControllerSource, recorder *eventRecorder) {
 	// The first event should be the initial add.
 	require.NoError(t, recorder.waitForEventCount(ctx, 1, 5*time.Second), "Controller failed to receive initial setup all events, got: %v", recorder.getHistory())
@@ -1238,6 +1283,8 @@ func testResetWatch(t *testing.T, ctx context.Context, source *fcache.FakeContro
 	assert.False(t, addEvent.IsInInitialList)
 }
 
+// TestStoreResourceVersion 验证 Store 会随 update/delete 事件推进
+// LastStoreSyncResourceVersion。
 func TestStoreResourceVersion(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -1283,6 +1330,7 @@ func TestStoreResourceVersion(t *testing.T) {
 	testResourceVersion(t, ctx, source, recorder, store)
 }
 
+// testResourceVersion 断言事件携带的 resourceVersion 最终反映到 Store 上。
 func testResourceVersion(t *testing.T, ctx context.Context, source *fcache.FakeControllerSource, recorder *eventRecorder, store Store) {
 	// The first event should be the initial add.
 	require.NoError(t, recorder.waitForEventCount(ctx, 1, 5*time.Second), "Controller failed to receive initial setup all events, got: %v", recorder.getHistory())
@@ -1322,6 +1370,9 @@ func testResourceVersion(t *testing.T, ctx context.Context, source *fcache.FakeC
 	assert.Equal(t, history[0].EventRV, store.LastStoreSyncResourceVersion())
 }
 
+// TestStoreResourceVersionWithNonMetaTransform 验证 Transform 把对象转换为
+// 非元数据类型时，Store 仍能通过 replace 事件推进 resourceVersion，
+// 而普通 update 事件因缺少元数据无法推进。
 func TestStoreResourceVersionWithNonMetaTransform(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -1381,6 +1432,7 @@ func TestStoreResourceVersionWithNonMetaTransform(t *testing.T) {
 	testResourceVersionWithNonMetaTransform(t, ctx, source, recorder, store)
 }
 
+// testResourceVersionWithNonMetaTransform 校验非元数据 Transform 下的版本推进规则。
 func testResourceVersionWithNonMetaTransform(t *testing.T, ctx context.Context, source *fcache.FakeControllerSource, recorder *eventRecorder, store Store) {
 	// The first event should be the initial add.
 	require.NoError(t, recorder.waitForEventCount(ctx, 1, 5*time.Second), "Controller failed to receive initial setup all events, got: %v", recorder.getHistory())
@@ -1427,6 +1479,10 @@ func testResourceVersionWithNonMetaTransform(t *testing.T, ctx context.Context, 
 	assert.Equal(t, "3", store.LastStoreSyncResourceVersion())
 }
 
+// eventRecord 是 eventRecorder 为每次回调保存的快照。
+//
+// StoreRV 记录回调发生时缓存中该对象的 resourceVersion，用于验证
+// “先改缓存、再回调”的时序。
 type eventRecord struct {
 	Action          string
 	Key             string
@@ -1435,6 +1491,8 @@ type eventRecord struct {
 	IsInInitialList bool
 }
 
+// eventRecorder 是一个线程安全的 ResourceEventHandler，记录事件并提供
+// 基于通道的等待接口，避免测试轮询。
 type eventRecorder struct {
 	historyLock sync.Mutex
 	history     []eventRecord
@@ -1444,6 +1502,7 @@ type eventRecorder struct {
 	updateCh chan bool
 }
 
+// newEventRecorder 创建记录器；updateCh 缓冲 1，通知丢失也不会阻塞记录。
 func newEventRecorder(store Store, keyFunc KeyFunc) *eventRecorder {
 	return &eventRecorder{
 		store:    store,
@@ -1462,6 +1521,7 @@ func (m *eventRecorder) OnDelete(obj interface{}) {
 	m.record("delete", obj, false)
 }
 
+// record 保存一条事件快照；完成时以非阻塞方式唤醒等待者。
 func (m *eventRecorder) record(action string, obj interface{}, isInInitialList bool) {
 	m.historyLock.Lock()
 	defer m.historyLock.Unlock()
@@ -1511,6 +1571,7 @@ func (m *eventRecorder) getHistory() []eventRecord {
 	return historyCopy
 }
 
+// waitForEventCount 等待至少 count 条事件，超时或上下文取消时返回错误。
 func (m *eventRecorder) waitForEventCount(ctx context.Context, count int, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -1533,6 +1594,7 @@ func (m *eventRecorder) waitForEventCount(ctx context.Context, count int, timeou
 	}
 }
 
+// sortItemsByKey 按 key 排序，消除缓存遍历顺序的不确定性。
 func sortItemsByKey(items []interface{}, keyFunc KeyFunc) []interface{} {
 	sort.Slice(items, func(i, j int) bool {
 		keyI, _ := keyFunc(items[i])
@@ -1542,6 +1604,8 @@ func sortItemsByKey(items []interface{}, keyFunc KeyFunc) []interface{} {
 	return items
 }
 
+// sortDeleteEventsByKey 只对删除事件按 key 排序，其他事件保持相对顺序：
+// 删除来自集合 diff，本身没有顺序保证；新增/更新则必须忠于输入顺序。
 func sortDeleteEventsByKey(events []eventRecord) []eventRecord {
 	sort.Slice(events, func(i, j int) bool {
 		eventI := events[i]

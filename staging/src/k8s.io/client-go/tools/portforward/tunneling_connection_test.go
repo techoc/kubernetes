@@ -40,9 +40,12 @@ import (
 )
 
 func init() {
+	// 注册 klog 标准参数，避免测试中日志初始化报错。
 	klog.InitFlags(nil)
 }
 
+// TestTunnelingConnection_ReadWriteClose 验证端到端：客户端通过 WebSocket 隧道承载 SPDY，
+// 写入的数据能从服务端 SPDY 流中完整读出，且协商出的子协议正确。
 func TestTunnelingConnection_ReadWriteClose(t *testing.T) {
 	// Stream channel that will receive streams created on upstream SPDY server.
 	streamChan := make(chan httpstream.Stream)
@@ -114,6 +117,8 @@ func TestTunnelingConnection_ReadWriteClose(t *testing.T) {
 	assert.Equal(t, expected, string(actual), "error validating tunneled string")
 }
 
+// TestTunnelingConnection_LocalRemoteAddress 验证 TunnelingConnection 暴露的
+// LocalAddr/RemoteAddr 是合法的 TCP 地址（net.Conn 语义要求）。
 func TestTunnelingConnection_LocalRemoteAddress(t *testing.T) {
 	stopServerChan := make(chan struct{})
 	defer close(stopServerChan)
@@ -151,6 +156,8 @@ func TestTunnelingConnection_LocalRemoteAddress(t *testing.T) {
 	assert.NoError(t, err, "tunneling connection remote addr should parse")
 }
 
+// TestTunnelingConnection_ReadWriteDeadlines 验证 deadline 相关方法在 WebSocket 隧道上可用：
+// 零值关闭 deadline，未来时间可正常设置。
 func TestTunnelingConnection_ReadWriteDeadlines(t *testing.T) {
 	stopServerChan := make(chan struct{})
 	defer close(stopServerChan)
@@ -196,6 +203,8 @@ func TestTunnelingConnection_ReadWriteDeadlines(t *testing.T) {
 // dialForTunnelingConnection upgrades a request at the passed "url", creating
 // a websocket connection. Returns the TunnelingConnection injected with the
 // websocket connection or an error if one occurs.
+//
+// 测试辅助：手动完成 WebSocket 升级并构造客户端 TunnelingConnection，绕过 Dialer 的 SPDY 封装。
 func dialForTunnelingConnection(url *url.URL) (*TunnelingConnection, error) {
 	req, err := http.NewRequest("GET", url.String(), nil)
 	if err != nil {
@@ -215,6 +224,8 @@ func dialForTunnelingConnection(url *url.URL) (*TunnelingConnection, error) {
 	return NewTunnelingConnection("client", conn), nil
 }
 
+// justQueueStream 返回一个 streamHandler，把收到的每条流塞进 channel，
+// 使测试线程可以同步处理，无需真实的上游服务。
 func justQueueStream(streams chan httpstream.Stream) func(httpstream.Stream, <-chan struct{}) error {
 	return func(stream httpstream.Stream, replySent <-chan struct{}) error {
 		streams <- stream

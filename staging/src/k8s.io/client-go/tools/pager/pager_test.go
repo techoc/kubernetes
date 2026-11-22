@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// list 构造包含 count 个 PartialObjectMetadata 的测试列表，用于与分页结果做深比较。
 func list(count int, rv string) *metainternalversion.List {
 	var list metainternalversion.List
 	for i := 0; i < count; i++ {
@@ -43,6 +44,8 @@ func list(count int, rv string) *metainternalversion.List {
 	return &list
 }
 
+// testPager 模拟服务端的分页行为：按 limit 返回条目并维护 continue token，
+// 同时校验客户端是否在 continue 请求中正确省略 resourceVersion。
 type testPager struct {
 	t          *testing.T
 	rv         string
@@ -62,6 +65,8 @@ func (p *testPager) reset() {
 	p.done = false
 }
 
+// PagedList 模拟一次分页 List 调用，并在违反分页不变量时主动失败。
+// 关键不变量：使用 continue 时不能再指定 resourceVersion/resourceVersionMatch。
 func (p *testPager) PagedList(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 	if p.done {
 		p.t.Errorf("did not expect additional call to paged list")
@@ -108,6 +113,7 @@ func (p *testPager) PagedList(ctx context.Context, options metav1.ListOptions) (
 	return &list, nil
 }
 
+// ExpiresOnSecondPage 在第二页返回 ResourceExpired，用于验证默认行为是向上返回错误。
 func (p *testPager) ExpiresOnSecondPage(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 	if p.continuing {
 		p.done = true
@@ -116,6 +122,8 @@ func (p *testPager) ExpiresOnSecondPage(ctx context.Context, options metav1.List
 	return p.PagedList(ctx, options)
 }
 
+// ExpiresOnSecondPageThenFullList 在第二页过期后重置状态并允许后续全量 List，
+// 用于验证 FullListIfExpired 打开时客户端会退回一次性完整列表。
 func (p *testPager) ExpiresOnSecondPageThenFullList(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 	if p.continuing {
 		p.reset()
@@ -125,6 +133,8 @@ func (p *testPager) ExpiresOnSecondPageThenFullList(ctx context.Context, options
 	return p.PagedList(ctx, options)
 }
 
+// TestListPager_List 覆盖 ListPager.List 的分页边界：空页、不足一页、刚好一页、
+// 多页，以及 continue token 过期后是否返回错误或回退到全量列表。
 func TestListPager_List(t *testing.T) {
 	type fields struct {
 		PageSize          int64
@@ -243,6 +253,8 @@ func TestListPager_List(t *testing.T) {
 	}
 }
 
+// TestListPager_EachListItem 验证逐项回调时出错/panic/取消 context 的传播语义：
+// 已访问的条目应保留，错误或 panic 应原样返回给调用方。
 func TestListPager_EachListItem(t *testing.T) {
 	type fields struct {
 		PageSize int64
@@ -362,6 +374,8 @@ func TestListPager_EachListItem(t *testing.T) {
 	}
 }
 
+// TestListPager_eachListPageBuffered 验证带缓冲的页级处理：
+// PageBufferSize 决定预取多少页，测试用“已发起的 List 次数”确认缓冲策略符合预期。
 func TestListPager_eachListPageBuffered(t *testing.T) {
 	tests := []struct {
 		name           string

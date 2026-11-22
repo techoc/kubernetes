@@ -25,9 +25,13 @@ import (
 
 // Get returns the overall codebase version. It's for detecting
 // what code a binary was built from.
+//
+// 返回值在启动时即已固定：git 相关字段由构建脚本通过 -ldflags 注入，
+// 未注入时回退到 base.go 中的占位值。该结果常被用于版本协商与问题上报。
 func Get() apimachineryversion.Info {
 	// These variables typically come from -ldflags settings and in
 	// their absence fallback to the settings in pkg/version/base.go
+	// GoVersion/Compiler/Platform 取自当前运行时，而不是构建时的快照。
 	return apimachineryversion.Info{
 		Major:        gitMajor,
 		Minor:        gitMinor,

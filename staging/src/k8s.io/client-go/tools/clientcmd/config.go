@@ -43,6 +43,8 @@ type ConfigAccess interface {
 	GetExplicitFile() string
 }
 
+// PathOptions 汇总决定 kubeconfig 读取路径的各项来源：显式文件、环境变量、
+// 默认全局文件，以及底层 LoadingRules。解析优先级在 GetLoadingPrecedence 中定义。
 type PathOptions struct {
 	// GlobalFile is the full path to the file to load as the global (final) option
 	GlobalFile string
@@ -63,9 +65,12 @@ var (
 	// This variable is intentionaly made public so other consumers of this library
 	// can modify its default behavior, but be caution when disabling it since
 	// this will make your code not threadsafe.
+	//
+	// 关闭后多个进程/协程并发写 kubeconfig 可能互相覆盖；仅在确定无并发时禁用。
 	UseModifyConfigLock = true
 )
 
+// GetEnvVarFiles 返回环境变量中列出的 kubeconfig 文件列表（已去重）。
 func (o *PathOptions) GetEnvVarFiles() []string {
 	if len(o.EnvVar) == 0 {
 		return []string{}
@@ -81,6 +86,7 @@ func (o *PathOptions) GetEnvVarFiles() []string {
 	return deduplicate(fileList)
 }
 
+// GetLoadingPrecedence 返回读取顺序：显式文件 > 环境变量列表 > 全局文件。
 func (o *PathOptions) GetLoadingPrecedence() []string {
 	if o.IsExplicitFile() {
 		return []string{o.GetExplicitFile()}
@@ -92,8 +98,10 @@ func (o *PathOptions) GetLoadingPrecedence() []string {
 	return []string{o.GlobalFile}
 }
 
+// GetStartingConfig 按上述优先级加载并合并 kubeconfig；文件不存在视为空配置而非错误。
 func (o *PathOptions) GetStartingConfig() (*clientcmdapi.Config, error) {
 	// don't mutate the original
+	// 复制一份 rules 再改 Precedence，避免污染调用方共享的 LoadingRules。
 	loadingRules := *o.LoadingRules
 	loadingRules.Precedence = o.GetLoadingPrecedence()
 
@@ -109,6 +117,8 @@ func (o *PathOptions) GetStartingConfig() (*clientcmdapi.Config, error) {
 	return &rawConfig, nil
 }
 
+// GetDefaultFilename 返回新建条目应写入的文件：显式文件优先，其次环境变量列表中
+// 已存在或最后一个文件，最后回退到全局文件。
 func (o *PathOptions) GetDefaultFilename() string {
 	if o.IsExplicitFile() {
 		return o.GetExplicitFile()
@@ -133,14 +143,17 @@ func (o *PathOptions) GetDefaultFilename() string {
 	return o.GlobalFile
 }
 
+// IsExplicitFile 表示是否通过 --kubeconfig 之类的参数显式指定了单个文件。
 func (o *PathOptions) IsExplicitFile() bool {
 	return len(o.LoadingRules.ExplicitPath) > 0
 }
 
+// GetExplicitFile 返回显式指定的 kubeconfig 路径。
 func (o *PathOptions) GetExplicitFile() string {
 	return o.LoadingRules.ExplicitPath
 }
 
+// NewDefaultPathOptions 返回采用 kubectl 约定路径与环境变量的 PathOptions。
 func NewDefaultPathOptions() *PathOptions {
 	ret := &PathOptions{
 		GlobalFile:       RecommendedHomeFile,
@@ -151,6 +164,7 @@ func NewDefaultPathOptions() *PathOptions {
 
 		LoadingRules: NewDefaultClientConfigLoadingRules(),
 	}
+	// 保留用户写入的相对路径，避免加载时解析成基于当前工作目录的绝对路径。
 	ret.LoadingRules.DoNotResolvePaths = true
 
 	return ret
@@ -162,11 +176,15 @@ func NewDefaultPathOptions() *PathOptions {
 // (no nil strings), we're forced have separate handling for them.  In the kubeconfig cases, newConfig should have at most one difference,
 // that means that this code will only write into a single file.  If you want to relativizePaths, you must provide a fully qualified path in any
 // modified element.
+//
+// 算法：逐项对比新旧配置，只把发生变化的 stanza 写回其 LocationOfOrigin（未记录来源
+// 时写默认文件），删除项同理。CurrentContext/Preferences 是全局字段，单独写入默认文件。
 func ModifyConfig(configAccess ConfigAccess, newConfig clientcmdapi.Config, relativizePaths bool) error {
 	if UseModifyConfigLock {
 		possibleSources := configAccess.GetLoadingPrecedence()
 		// sort the possible kubeconfig files so we always "lock" in the same order
 		// to avoid deadlock (note: this can fail w/ symlinks, but... come on).
+		// 固定加锁顺序，防止并发进程以不同顺序加锁而死锁。
 		sort.Strings(possibleSources)
 		for _, filename := range possibleSources {
 			if err := lockFile(filename); err != nil {
@@ -204,6 +222,7 @@ func ModifyConfig(configAccess ConfigAccess, newConfig clientcmdapi.Config, rela
 	for key, cluster := range newConfig.Clusters {
 		startingCluster, exists := startingConfig.Clusters[key]
 		if !reflect.DeepEqual(cluster, startingCluster) || !exists {
+			// 写回原文件，保持多文件 kubeconfig 的条目归属不变。
 			destinationFile := cluster.LocationOfOrigin
 			if len(destinationFile) == 0 {
 				destinationFile = configAccess.GetDefaultFilename()
@@ -230,6 +249,7 @@ func ModifyConfig(configAccess ConfigAccess, newConfig clientcmdapi.Config, rela
 	}
 
 	// seenConfigs stores a map of config source filenames to computed config objects
+	// 同一文件里可能有多处改动，先累积到内存，最后每个文件只写一次。
 	seenConfigs := map[string]*clientcmdapi.Config{}
 
 	for key, context := range newConfig.Contexts {
@@ -292,6 +312,7 @@ func ModifyConfig(configAccess ConfigAccess, newConfig clientcmdapi.Config, rela
 		}
 	}
 
+	// 第二阶段：处理删除——旧配置中存在、新配置中已消失的条目。
 	for key, cluster := range startingConfig.Clusters {
 		if _, exists := newConfig.Clusters[key]; !exists {
 			destinationFile := cluster.LocationOfOrigin
@@ -352,15 +373,19 @@ func ModifyConfig(configAccess ConfigAccess, newConfig clientcmdapi.Config, rela
 	return nil
 }
 
+// PersisterForUser 返回把 AuthProvider 的临时配置（如刷新后的 token）写回 kubeconfig
+// 的持久化器，user 为 kubeconfig 中 authInfo 的条目名。
 func PersisterForUser(configAccess ConfigAccess, user string) restclient.AuthProviderConfigPersister {
 	return &persister{configAccess, user}
 }
 
+// persister 实现 restclient.AuthProviderConfigPersister。
 type persister struct {
 	configAccess ConfigAccess
 	user         string
 }
 
+// Persist 把新的 provider 配置合并进对应用户的 authInfo 并落盘；用户不存在时静默忽略。
 func (p *persister) Persist(config map[string]string) error {
 	newConfig, err := p.configAccess.GetStartingConfig()
 	if err != nil {
@@ -385,6 +410,7 @@ func writeCurrentContext(configAccess ConfigAccess, newCurrentContext string) er
 		return nil
 	}
 
+	// 显式文件模式下只操作该文件，不触碰其他 kubeconfig。
 	if configAccess.IsExplicitFile() {
 		file := configAccess.GetExplicitFile()
 		currConfig, err := getConfigFromFile(file)
@@ -415,6 +441,7 @@ func writeCurrentContext(configAccess ConfigAccess, newCurrentContext string) er
 	}
 
 	// we're supposed to be clearing the current context.  We need to find the first spot in the chain that is setting it and clear it
+	// 清空时要找到优先级链中第一个真正设置了 current-context 的文件，而不是盲目写默认文件。
 	for _, file := range configAccess.GetLoadingPrecedence() {
 		if _, err := os.Stat(file); err == nil {
 			currConfig, err := getConfigFromFile(file)
@@ -436,6 +463,7 @@ func writeCurrentContext(configAccess ConfigAccess, newCurrentContext string) er
 	return errors.New("no config found to write context")
 }
 
+// writePreferences 把全局 Preferences 写入显式文件，或优先级链中第一个值不同的文件。
 func writePreferences(configAccess ConfigAccess, newPrefs clientcmdapi.Preferences) error {
 	if startingConfig, err := configAccess.GetStartingConfig(); err != nil {
 		return err
@@ -463,6 +491,7 @@ func writePreferences(configAccess ConfigAccess, newPrefs clientcmdapi.Preferenc
 			return err
 		}
 
+		// 写到第一个（优先级最高的）能够覆盖旧值的文件。
 		if !reflect.DeepEqual(currConfig.Preferences, newPrefs) {
 			currConfig.Preferences = newPrefs
 			if err := WriteToFile(*currConfig, file); err != nil {
@@ -479,6 +508,7 @@ func writePreferences(configAccess ConfigAccess, newPrefs clientcmdapi.Preferenc
 // getConfigFromFile tries to read a kubeconfig file and if it can't, returns an error.  One exception, missing files result in empty configs, not an error.
 func getConfigFromFile(filename string) (*clientcmdapi.Config, error) {
 	config, err := LoadFromFile(filename)
+	// 目标文件可能尚不存在（新建 kubeconfig 的常见场景），以空配置继续。
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}

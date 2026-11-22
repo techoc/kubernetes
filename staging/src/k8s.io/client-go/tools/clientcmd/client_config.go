@@ -49,6 +49,9 @@ var (
 
 // getDefaultServer returns a default setting for DefaultClientConfig
 // DEPRECATED
+//
+// 保留 KUBERNETES_MASTER 环境变量的读取，是为了兼容早期 kubectl/组件的使用方式；
+// 新代码应显式提供 kubeconfig 或 server 地址。
 func getDefaultServer() string {
 	if server := os.Getenv("KUBERNETES_MASTER"); len(server) > 0 {
 		return server
@@ -57,6 +60,9 @@ func getDefaultServer() string {
 }
 
 // ClientConfig is used to make it easy to get an api server client
+//
+// 它把“kubeconfig + 命令行覆盖项”解析为可直接用的 rest.Config；
+// Namespace 的第二个返回值表示命名空间是否来自显式覆盖。
 type ClientConfig interface {
 	// RawConfig returns the merged result of all overrides
 	RawConfig() (clientcmdapi.Config, error)
@@ -77,8 +83,10 @@ type OverridingClientConfig interface {
 	MergedRawConfig() (clientcmdapi.Config, error)
 }
 
+// PersistAuthProviderConfigForUser 为指定用户构造凭据持久化器；返回 nil 表示不持久化。
 type PersistAuthProviderConfigForUser func(user string) restclient.AuthProviderConfigPersister
 
+// promptedCredentials 缓存交互式输入的凭据，避免同一配置对象被多次调用时重复提示。
 type promptedCredentials struct {
 	username string
 	password string `datapolicy:"password"`
@@ -106,6 +114,8 @@ func NewNonInteractiveClientConfig(config clientcmdapi.Config, contextName strin
 }
 
 // NewInteractiveClientConfig creates a DirectClientConfig using the passed context name and a reader in case auth information is not provided via files or flags
+//
+// fallbackReader 非 nil 时，缺失凭据会触发交互式提示；服务器端组件应使用 NonInteractive 版本。
 func NewInteractiveClientConfig(config clientcmdapi.Config, contextName string, overrides *ConfigOverrides, fallbackReader io.Reader, configAccess ConfigAccess) OverridingClientConfig {
 	return &DirectClientConfig{config, contextName, overrides, fallbackReader, configAccess, promptedCredentials{}}
 }
@@ -135,6 +145,9 @@ func (config *DirectClientConfig) RawConfig() (clientcmdapi.Config, error) {
 }
 
 // MergedRawConfig returns the raw kube config merged with the overrides
+//
+// 与 RawConfig 不同，这里返回的是覆盖项生效后的视图，且当前 context 会被改写为合并后的名字，
+// 便于调用方把完整配置原样输出或持久化。
 func (config *DirectClientConfig) MergedRawConfig() (clientcmdapi.Config, error) {
 	if err := config.ConfirmUsable(); err != nil {
 		return clientcmdapi.Config{}, err
@@ -203,6 +216,7 @@ func (config *DirectClientConfig) ClientConfig() (*restclient.Config, error) {
 		clientConfig.Proxy = http.ProxyURL(u)
 	}
 
+	// 压缩会改变线上传输形式，必须与集群配置保持一致。
 	clientConfig.DisableCompression = configClusterInfo.DisableCompression
 
 	if config.overrides != nil && len(config.overrides.Timeout) > 0 {
@@ -213,6 +227,7 @@ func (config *DirectClientConfig) ClientConfig() (*restclient.Config, error) {
 		clientConfig.Timeout = timeout
 	}
 
+	// 去掉 host 上的查询串与 fragment：它们属于单次请求，不能固化成 base URL 的一部分。
 	if u, err := url.ParseRequestURI(clientConfig.Host); err == nil && u.Opaque == "" && len(u.Path) > 1 {
 		u.RawQuery = ""
 		u.Fragment = ""
@@ -228,6 +243,7 @@ func (config *DirectClientConfig) ClientConfig() (*restclient.Config, error) {
 	}
 
 	// only try to read the auth information if we are secure
+	// 明文 HTTP 上发送凭据既不安全也无意义，因此只在 TLS 生效时收集认证信息。
 	if restclient.IsConfigTransportTLS(*clientConfig) {
 		var err error
 		var persister restclient.AuthProviderConfigPersister
@@ -235,6 +251,8 @@ func (config *DirectClientConfig) ClientConfig() (*restclient.Config, error) {
 			authInfoName, _ := config.getAuthInfoName()
 			persister = PersisterForUser(config.configAccess, authInfoName)
 		}
+		// 用户侧与服务器侧配置的合并顺序不同，因此分两步 merge：
+		// 先合并用户身份，再合并服务器身份，后者可覆盖 host 级别的 TLS 设置。
 		userAuthPartialConfig, err := config.getUserIdentificationPartialConfig(configAuthInfo, config.fallbackReader, persister, configClusterInfo)
 		if err != nil {
 			return nil, err
@@ -274,6 +292,7 @@ func (config *DirectClientConfig) getUserIdentificationPartialConfig(configAuthI
 	mergedConfig := &restclient.Config{}
 
 	// blindly overwrite existing values based on precedence
+	// 显式 token 优先于 token 文件；同时保留 TokenFile 让 rest 层能自行轮询刷新。
 	if len(configAuthInfo.Token) > 0 {
 		mergedConfig.BearerToken = configAuthInfo.Token
 		mergedConfig.BearerTokenFile = configAuthInfo.TokenFile
@@ -293,6 +312,7 @@ func (config *DirectClientConfig) getUserIdentificationPartialConfig(configAuthI
 			Extra:    configAuthInfo.ImpersonateUserExtra,
 		}
 	}
+	// 只有证书与私钥同时存在才启用 mTLS；否则保持未设置，让校验逻辑报错。
 	if len(configAuthInfo.ClientCertificate) > 0 || len(configAuthInfo.ClientCertificateData) > 0 {
 		mergedConfig.CertFile = configAuthInfo.ClientCertificate
 		mergedConfig.CertData = configAuthInfo.ClientCertificateData
@@ -309,7 +329,9 @@ func (config *DirectClientConfig) getUserIdentificationPartialConfig(configAuthI
 	}
 	if configAuthInfo.Exec != nil {
 		mergedConfig.ExecProvider = configAuthInfo.Exec
+		// 安装提示会在名称未找到时打印到终端，去掉 ANSI 转义避免破坏用户终端状态。
 		mergedConfig.ExecProvider.InstallHint = cleanANSIEscapeCodes(mergedConfig.ExecProvider.InstallHint)
+		// exec 插件可以从集群扩展中读取额外的调用参数，这是该扩展键的唯一用途。
 		mergedConfig.ExecProvider.Config = configClusterInfo.Extensions[clusterExtensionKey]
 	}
 
@@ -325,6 +347,7 @@ func (config *DirectClientConfig) getUserIdentificationPartialConfig(configAuthI
 		if err != nil {
 			return nil, err
 		}
+		// 先合并提示得到的凭据，再合并已有配置：已有配置优先，提示值只用于填补空缺。
 		promptedConfig := makeUserIdentificationConfig(*promptedAuthInfo)
 		previouslyMergedConfig := mergedConfig
 		mergedConfig = &restclient.Config{}
@@ -375,6 +398,9 @@ func cleanANSIEscapeCodes(s string) string {
 
 	// Why not make this deny-only (instead of allow-only)? Because unicode.C
 	// contains newline and tab characters that we want.
+	//
+	// 采用“白名单”而非“仅剔除 ESC”：控制字符类别中还包含需要保留的换行与制表符，
+	// 逐类允许更不容易误伤。不认识的字符会被转义为 \uXXXX 形式输出。
 	allowedRanges := []*unicode.RangeTable{
 		unicode.L,
 		unicode.M,
@@ -402,6 +428,7 @@ func (config *DirectClientConfig) Namespace() (string, bool, error) {
 		// the namespace override instead of having config.ConfirmUsable() return an error. This allows
 		// things like in-cluster clients to execute `kubectl get pods --namespace=foo` and have the
 		// --namespace flag honored instead of being ignored.
+		// 注意这里跳过了 ConfirmUsable：没有 kubeconfig 时也应尊重显式的命名空间覆盖。
 		return config.overrides.Context.Namespace, true, nil
 	}
 
@@ -428,6 +455,8 @@ func (config *DirectClientConfig) ConfigAccess() ConfigAccess {
 
 // ConfirmUsable looks a particular context and determines if that particular part of the config is useable.  There might still be errors in the config,
 // but no errors in the sections requested or referenced.  It does not return early so that it can find as many errors as possible.
+//
+// 特意收集全部错误再一次性返回，让用户可以同时看到多处配置问题，而不是修一个冒一个。
 func (config *DirectClientConfig) ConfirmUsable() error {
 	validationErrors := make([]error, 0)
 
@@ -453,6 +482,7 @@ func (config *DirectClientConfig) ConfirmUsable() error {
 	validationErrors = append(validationErrors, validateClusterInfo(clusterName, cluster)...)
 	// when direct client config is specified, and our only error is that no server is defined, we should
 	// return a standard "no config" error
+	// 只缺 server 时统一报告 ErrEmptyConfig，避免调用方看到令人困惑的“空集群”细节。
 	if len(validationErrors) == 1 && validationErrors[0] == ErrEmptyCluster {
 		return newErrConfigurationInvalid([]error{ErrEmptyConfig})
 	}
@@ -495,6 +525,8 @@ func (config *DirectClientConfig) getClusterName() (string, bool) {
 }
 
 // getContext returns the clientcmdapi.Context, or an error if a required context is not found.
+//
+// 合并顺序固定为“默认值 → kubeconfig 中的 context → 命令行覆盖”，后者的非空字段生效。
 func (config *DirectClientConfig) getContext() (clientcmdapi.Context, error) {
 	contexts := config.config.Contexts
 	contextName, required := config.getContextName()
@@ -517,6 +549,8 @@ func (config *DirectClientConfig) getContext() (clientcmdapi.Context, error) {
 }
 
 // getAuthInfo returns the clientcmdapi.AuthInfo, or an error if a required auth info is not found.
+//
+// required 为 true 表示名字来自用户显式指定，此时找不到必须报错；否则允许得到默认空对象。
 func (config *DirectClientConfig) getAuthInfo() (clientcmdapi.AuthInfo, error) {
 	authInfos := config.config.AuthInfos
 	authInfoName, required := config.getAuthInfoName()
@@ -537,6 +571,7 @@ func (config *DirectClientConfig) getAuthInfo() (clientcmdapi.AuthInfo, error) {
 		// Handle ClientKey/ClientKeyData conflict: if override sets ClientKey, also use override's ClientKeyData
 		// otherwise if original config has ClientKeyData set,
 		// validation returns error "client-key-data and client-key are both specified <user-name>"
+		// 覆盖项的 file 与 data 必须成对替换，否则会残留另一半导致校验冲突。
 		if len(config.overrides.AuthInfo.ClientKey) > 0 || len(config.overrides.AuthInfo.ClientKeyData) > 0 {
 			mergedAuthInfo.ClientKey = config.overrides.AuthInfo.ClientKey
 			mergedAuthInfo.ClientKeyData = config.overrides.AuthInfo.ClientKeyData
@@ -544,6 +579,7 @@ func (config *DirectClientConfig) getAuthInfo() (clientcmdapi.AuthInfo, error) {
 		// Handle ClientCertificate/ClientCertificateData conflict, if override sets ClientCertificate, also use override's ClientCertificateData
 		// otherwise if original config has ClientCertificateData set,
 		// validation returns error "client-cert-data and client-cert are both specified <user-name>"
+		// 与 key 同理，证书的 file/data 也必须成对覆盖。
 		if len(config.overrides.AuthInfo.ClientCertificate) > 0 || len(config.overrides.AuthInfo.ClientCertificateData) > 0 {
 			mergedAuthInfo.ClientCertificate = config.overrides.AuthInfo.ClientCertificate
 			mergedAuthInfo.ClientCertificateData = config.overrides.AuthInfo.ClientCertificateData
@@ -554,6 +590,8 @@ func (config *DirectClientConfig) getAuthInfo() (clientcmdapi.AuthInfo, error) {
 }
 
 // getCluster returns the clientcmdapi.Cluster, or an error if a required cluster is not found.
+//
+// ClusterDefaults 最先合并，随后是 kubeconfig 中的集群，最后是显式覆盖。
 func (config *DirectClientConfig) getCluster() (clientcmdapi.Cluster, error) {
 	clusterInfos := config.config.Clusters
 	clusterInfoName, required := config.getClusterName()
@@ -580,6 +618,7 @@ func (config *DirectClientConfig) getCluster() (clientcmdapi.Cluster, error) {
 	// * An override of --insecure-skip-tls-verify=true and no accompanying CA/CA data should clear already-set CA/CA data
 	// otherwise, a kubeconfig containing a CA reference would return an error that "CA and insecure-skip-tls-verify couldn't both be set".
 	// * An override of --certificate-authority should also override TLS skip settings and CA data, otherwise existing CA data will take precedence.
+	// 这三种覆盖必须整体替换 CA 相关三个字段，避免出现“既跳过校验又带 CA”的非法组合。
 	if config.overrides != nil {
 		caLen := len(config.overrides.ClusterInfo.CertificateAuthority)
 		caDataLen := len(config.overrides.ClusterInfo.CertificateAuthorityData)
@@ -608,6 +647,7 @@ type inClusterClientConfig struct {
 	inClusterConfigProvider func() (*restclient.Config, error)
 }
 
+// 编译期断言：in-cluster 配置同样满足 ClientConfig 接口。
 var _ ClientConfig = &inClusterClientConfig{}
 
 func (config *inClusterClientConfig) RawConfig() (clientcmdapi.Config, error) {
@@ -615,6 +655,7 @@ func (config *inClusterClientConfig) RawConfig() (clientcmdapi.Config, error) {
 }
 
 func (config *inClusterClientConfig) ClientConfig() (*restclient.Config, error) {
+	// provider 可注入，便于测试时不依赖真实 ServiceAccount 挂载。
 	inClusterConfigProvider := config.inClusterConfigProvider
 	if inClusterConfigProvider == nil {
 		inClusterConfigProvider = restclient.InClusterConfig
@@ -646,6 +687,7 @@ func (config *inClusterClientConfig) ClientConfig() (*restclient.Config, error) 
 func (config *inClusterClientConfig) Namespace() (string, bool, error) {
 	// This way assumes you've set the POD_NAMESPACE environment variable using the downward API.
 	// This check has to be done first for backwards compatibility with the way InClusterConfig was originally set up
+	// 优先读取环境变量：downward API 显式注入的值比 ServiceAccount 挂载文件更可信。
 	if ns := os.Getenv("POD_NAMESPACE"); ns != "" {
 		return ns, false, nil
 	}
@@ -677,6 +719,9 @@ func (config *inClusterClientConfig) Possible() bool {
 // components. Warnings should reflect this usage. If neither masterUrl or kubeconfigPath
 // are passed in we fallback to inClusterConfig. If inClusterConfig fails, we fallback
 // to the default config.
+//
+// 三条路径的优先级：显式参数 → in-cluster → 默认加载规则（含 $HOME/.kube/config 等），
+// 这是集群组件常见的渐进式配置体验。
 func BuildConfigFromFlags(masterUrl, kubeconfigPath string) (*restclient.Config, error) {
 	if kubeconfigPath == "" && masterUrl == "" {
 		//nolint:logcheck // A helper function like this should not log. But this is probably part of the the established client-go API and not worth changing.

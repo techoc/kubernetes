@@ -22,4 +22,7 @@ limitations under the License.
 
 // +groupName=client.authentication.k8s.io
 
+// Package v1 定义 exec 凭证插件协议（client.authentication.k8s.io/v1）的
+// 外部版本类型。这些类型描述插件输出给 client-go 的 ExecCredential 对象，
+// 与 API Server 的 API 组相互独立，仅用于本地进程间通信。
 package v1

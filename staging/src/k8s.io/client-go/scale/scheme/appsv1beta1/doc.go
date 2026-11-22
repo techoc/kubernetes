@@ -17,4 +17,10 @@ limitations under the License.
 // +k8s:conversion-gen=k8s.io/client-go/scale/scheme
 // +k8s:conversion-gen-external-types=k8s.io/api/apps/v1beta1
 
+// Package appsv1beta1 是 scale 转换体系的外部版本包（external version），
+// 对应 apps/v1beta1 的 Scale 类型。
+//
+// 它依赖 conversion-gen 生成的转换函数，在对外（wire）版本与内部统一版本
+// k8s.io/client-go/scale/scheme 之间来回转换。转换函数由上面的标记生成，
+// 手写的注册代码位于 register.go。
 package appsv1beta1

@@ -25,12 +25,16 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// retryScenarioStep 描述一个时间推进步骤及其预期的重试判定结果。
 type retryScenarioStep struct {
 	clockStep time.Duration
 	err       error
 	wantRetry bool
 }
 
+// TestRetryWithDeadline 使用假时钟验证 RetryWithDeadline 的时间窗口语义：
+// 只有在 duration 窗口内的可重试错误才继续重试；不可重试错误不改变窗口，
+// 而重置间隔（reset）决定跟踪状态何时被清理。场景逐步骤推进以覆盖边界。
 func TestRetryWithDeadline(t *testing.T) {
 	internalError := apierrors.NewInternalError(fmt.Errorf("etcdserver: no leader"))
 	otherError := fmt.Errorf("some other error")

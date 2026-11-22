@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// defaultTestFeatures 是测试用的一组特性门，覆盖默认关闭的 Alpha 与默认开启的 Beta。
 var defaultTestFeatures = map[Feature]FeatureSpec{
 	"TestAlpha": {
 		Default:       false,
@@ -36,8 +37,11 @@ var defaultTestFeatures = map[Feature]FeatureSpec{
 	},
 }
 
+// TestEnvVarFeatureGates 逐场景校验环境变量、Set、SetForTesting 与 LockToDefault 的优先级。
+// 同时断言内部记录的两张来源表（env var 与 Set 方法），以确认决策来源而非只看最终值。
 func TestEnvVarFeatureGates(t *testing.T) {
 	expectedDefaultFeaturesState := map[Feature]bool{"TestAlpha": false, "TestBeta": true}
+	// copyExpectedStateMap 复制基准状态，避免场景之间相互污染。
 	copyExpectedStateMap := func(toCopy map[Feature]bool) map[Feature]bool {
 		m := map[Feature]bool{}
 		for k, v := range toCopy {
@@ -151,6 +155,7 @@ func TestEnvVarFeatureGates(t *testing.T) {
 	}
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
+			// t.Setenv 会在子测试结束时自动恢复，保证环境变量不泄漏到其他场景。
 			for k, v := range scenario.envVariables {
 				t.Setenv(k, v)
 			}
@@ -170,6 +175,7 @@ func TestEnvVarFeatureGates(t *testing.T) {
 			}
 
 			enabledViaEnvVarInternalMap := target.enabledViaEnvVar.Load().(map[Feature]bool)
+			// 两张内部表用于诊断配置来源，应与场景声明的期望完全一致。
 			require.Len(t, enabledViaEnvVarInternalMap, len(scenario.expectedInternalEnabledViaEnvVarFeatureState))
 			for expectedFeatureName, expectedFeatureValue := range scenario.expectedInternalEnabledViaEnvVarFeatureState {
 				actualFeatureValue, wasExpectedFeatureFound := enabledViaEnvVarInternalMap[expectedFeatureName]
@@ -192,11 +198,13 @@ func TestEnvVarFeatureGates(t *testing.T) {
 	}
 }
 
+// TestEnvVarFeatureGatesEnabledPanic 校验查询未注册特性会 panic，避免拼写错误被静默忽略。
 func TestEnvVarFeatureGatesEnabledPanic(t *testing.T) {
 	target := newEnvVarFeatureGates(nil)
 	require.PanicsWithError(t, fmt.Errorf("feature %q is not registered in FeatureGates %q", "UnknownFeature", target.callSiteName).Error(), func() { target.Enabled("UnknownFeature") })
 }
 
+// TestHasAlreadyReadEnvVar 校验环境变量只在首次读取时解析并缓存。
 func TestHasAlreadyReadEnvVar(t *testing.T) {
 	target := newEnvVarFeatureGates(nil)
 	require.False(t, target.hasAlreadyReadEnvVar())
@@ -205,6 +213,7 @@ func TestHasAlreadyReadEnvVar(t *testing.T) {
 	require.True(t, target.hasAlreadyReadEnvVar())
 }
 
+// TestEnvVarFeatureGatesSetNegative 覆盖 Set 的失败路径：空名、未注册、已锁定。
 func TestEnvVarFeatureGatesSetNegative(t *testing.T) {
 	scenarios := []struct {
 		name         string

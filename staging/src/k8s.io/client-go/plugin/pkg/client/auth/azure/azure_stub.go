@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package azure 是已移除的 Azure auth provider 的占位实现。
+// 保留同名包只为在用户仍配置 auth-provider: azure 时返回可操作的迁移提示，
+// 而不是静默失败或出现“未知 provider”这种难以诊断的错误。
 package azure
 
 import (
@@ -24,11 +27,13 @@ import (
 )
 
 func init() {
+	// 注册一个总是失败的 provider：注册本身必须成功，错误留到真正创建 provider 时再返回。
 	if err := rest.RegisterAuthProviderPlugin("azure", newAzureAuthProvider); err != nil {
 		klog.Fatalf("Failed to register azure auth plugin: %v", err)
 	}
 }
 
+// newAzureAuthProvider 始终返回迁移错误，引导用户改用 kubelogin 凭据插件。
 func newAzureAuthProvider(_ string, _ map[string]string, _ rest.AuthProviderConfigPersister) (rest.AuthProvider, error) {
 	return nil, errors.New(`The azure auth plugin has been removed.
 Please use the https://github.com/Azure/kubelogin kubectl/client-go credential plugin instead.

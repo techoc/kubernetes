@@ -58,12 +58,17 @@ const (
 	pluginDenied = "denied"
 )
 
+// certificateExpirationTracker 跟踪每个 exec 认证器提供的客户端证书过期时间。
+//
+// 指标只暴露全局最早过期时间，这样监控告警不会被尚未使用的认证器干扰；
+// 因此需要维护每个认证器的值并重新求最小值。
 type certificateExpirationTracker struct {
 	mu        sync.RWMutex
 	m         map[*Authenticator]time.Time
 	metricSet func(*time.Time)
 }
 
+// expirationMetrics 是进程级的单例，直接写入 tools/metrics 注册的全局指标。
 var expirationMetrics = &certificateExpirationTracker{
 	m: map[*Authenticator]time.Time{},
 	metricSet: func(e *time.Time) {
@@ -73,11 +78,14 @@ var expirationMetrics = &certificateExpirationTracker{
 
 // set stores the given expiration time and updates the updates the certificate
 // expiry metric to the earliest expiration time.
+//
+// 零值表示该认证器尚未提供证书；若所有值都是零，指标设为 nil 表示未知。
 func (c *certificateExpirationTracker) set(a *Authenticator, t time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.m[a] = t
 
+	// 全量扫描而不是增量维护堆：认证器数量通常很少，简单实现不易出错。
 	earliest := time.Time{}
 	for _, t := range c.m {
 		if t.IsZero() {
@@ -97,6 +105,9 @@ func (c *certificateExpirationTracker) set(a *Authenticator, t time.Time) {
 // incrementCallsMetric increments a global metrics counter for the number of calls to an exec
 // plugin, partitioned by exit code. The provided err should be the return value from
 // exec.Cmd.Run().
+//
+// 退出码和错误类别分开统计：插件未找到与插件执行失败对运维的含义不同，
+// 前者通常意味着环境配置问题，后者才是插件自身逻辑失败。
 func incrementCallsMetric(err error) {
 	execExitError := &exec.ExitError{}
 	execError := &exec.Error{}
@@ -117,6 +128,9 @@ func incrementCallsMetric(err error) {
 	}
 }
 
+// incrementPolicyMetric 记录一次 exec 插件策略检查的结果。
+//
+// err 非 nil 表示策略拒绝或 allowlist 不匹配，两者对调用方而言都是“被拒绝”。
 func incrementPolicyMetric(err error) {
 	if err != nil {
 		metrics.ExecPluginPolicyCalls.Increment(pluginDenied)

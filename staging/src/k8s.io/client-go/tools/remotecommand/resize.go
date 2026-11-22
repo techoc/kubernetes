@@ -19,6 +19,7 @@ package remotecommand
 // TerminalSize represents the width and height of a terminal.
 // It is the same as staging/src/k8s.io/kubectl/pkg/util/term.TerminalSize.
 // Copied to decouple the packages. Terminal-related package should not depend on API client and vice versa.
+// TerminalSize 表示终端宽高；刻意复制而非复用 kubectl 的同名类型，避免 API 客户端与终端工具互相依赖。
 type TerminalSize struct {
 	Width  uint16
 	Height uint16
@@ -27,8 +28,10 @@ type TerminalSize struct {
 // TerminalSizeQueue is capable of returning terminal resize events as they occur.
 // It is the same as staging/src/k8s.io/kubectl/pkg/util/term.TerminalSizeQueue.
 // Copied to decouple the packages. Terminal-related package should not depend on API client and vice versa.
+// TerminalSizeQueue 以阻塞方式提供终端尺寸变化事件。
 type TerminalSizeQueue interface {
 	// Next returns the new terminal size after the terminal has been resized. It returns nil when
 	// monitoring has been stopped.
+	// Next 在没有新尺寸时阻塞；监控停止时返回 nil，调用方据此结束 resize 循环。
 	Next() *TerminalSize
 }

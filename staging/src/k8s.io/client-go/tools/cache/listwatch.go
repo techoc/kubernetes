@@ -35,16 +35,23 @@ type Lister interface {
 	// ResourceVersion field will be used to start the watch in the right place.
 	//
 	// Deprecated: use ListerWithContext.ListWithContext instead.
+	//
+	// 已弃用：新代码应使用 ListerWithContext，以便传递取消信号与上下文日志。
 	List(options metav1.ListOptions) (runtime.Object, error)
 }
 
 // ListerWithContext is any object that knows how to perform an initial list.
+//
+// 返回列表对象的 ResourceVersion 是 Reflector 继续 watch 的起点，
+// 因此实现必须保留服务端返回的 RV，不能自行清零。
 type ListerWithContext interface {
 	// ListWithContext should return a list type object; the Items field will be extracted, and the
 	// ResourceVersion field will be used to start the watch in the right place.
 	ListWithContext(ctx context.Context, options metav1.ListOptions) (runtime.Object, error)
 }
 
+// ToListerWithContext 把仅实现旧接口的 Lister 适配为 ListerWithContext；
+// 若已实现新接口则直接返回，避免不必要的包装。
 func ToListerWithContext(l Lister) ListerWithContext {
 	if l, ok := l.(ListerWithContext); ok {
 		return l
@@ -54,6 +61,7 @@ func ToListerWithContext(l Lister) ListerWithContext {
 	}
 }
 
+// listerWrapper 用后台 context 调用旧的 List，属于兼容垫片。
 type listerWrapper struct {
 	parent Lister
 }
@@ -73,6 +81,8 @@ type Watcher interface {
 	// This allows the caller to ignore the watch, if the error is non-nil.
 	//
 	// Deprecated: use WatcherWithContext.WatchWithContext instead.
+	//
+	// 已弃用：新代码应使用 WatcherWithContext。
 	Watch(options metav1.ListOptions) (watch.Interface, error)
 }
 
@@ -86,6 +96,7 @@ type WatcherWithContext interface {
 	WatchWithContext(ctx context.Context, options metav1.ListOptions) (watch.Interface, error)
 }
 
+// ToWatcherWithContext 与 ToListerWithContext 同理，为旧实现提供适配。
 func ToWatcherWithContext(w Watcher) WatcherWithContext {
 	if w, ok := w.(WatcherWithContext); ok {
 		return w
@@ -95,6 +106,7 @@ func ToWatcherWithContext(w Watcher) WatcherWithContext {
 	}
 }
 
+// watcherWrapper 用后台 context 调用旧 Watch。
 type watcherWrapper struct {
 	parent Watcher
 }
@@ -117,6 +129,7 @@ type ListerWatcherWithContext interface {
 	WatcherWithContext
 }
 
+// ToListerWatcherWithContext 组合两个适配器；即使 lw 只实现旧接口也能得到新接口。
 func ToListerWatcherWithContext(lw ListerWatcher) ListerWatcherWithContext {
 	if lw, ok := lw.(ListerWatcherWithContext); ok {
 		return lw
@@ -127,6 +140,7 @@ func ToListerWatcherWithContext(lw ListerWatcher) ListerWatcherWithContext {
 	}
 }
 
+// listerWatcherWrapper 嵌入两个适配器以满足 ListerWatcherWithContext。
 type listerWatcherWrapper struct {
 	ListerWithContext
 	WatcherWithContext
@@ -146,6 +160,7 @@ type listWatcherWithWatchListSemanticsWrapper struct {
 	unsupportedWatchListSemantics bool
 }
 
+// IsWatchListSemanticsUnSupported 供 Reflector 判断是否必须退回普通 List+Watch。
 func (lw *listWatcherWithWatchListSemanticsWrapper) IsWatchListSemanticsUnSupported() bool {
 	return lw.unsupportedWatchListSemantics
 }
@@ -164,6 +179,8 @@ func ToListWatcherWithWatchListSemantics(lw *ListWatch, client any) ListerWatche
 // ListFunc knows how to list resources
 //
 // Deprecated: use ListWithContextFunc instead.
+//
+// 已弃用：新代码应使用 ListWithContextFunc。
 type ListFunc func(options metav1.ListOptions) (runtime.Object, error)
 
 // ListWithContextFunc knows how to list resources
@@ -172,6 +189,8 @@ type ListWithContextFunc func(ctx context.Context, options metav1.ListOptions) (
 // WatchFunc knows how to watch resources
 //
 // Deprecated: use WatchFuncWithContext instead.
+//
+// 已弃用：新代码应使用 WatchFuncWithContext。
 type WatchFunc func(options metav1.ListOptions) (watch.Interface, error)
 
 // WatchFuncWithContext knows how to watch resources
@@ -192,14 +211,19 @@ type WatchFuncWithContext func(ctx context.Context, options metav1.ListOptions) 
 // which only know about ListFunc and WatchFunc continue to work.
 type ListWatch struct {
 	// Deprecated: use ListWithContext instead.
+	//
+	// 已弃用：新代码应使用 ListWithContext。
 	ListFunc ListFunc
 	// Deprecated: use WatchWithContext instead.
+	//
+	// 已弃用：新代码应使用 WatchWithContext。
 	WatchFunc WatchFunc
 
 	ListWithContextFunc  ListWithContextFunc
 	WatchFuncWithContext WatchFuncWithContext
 
 	// DisableChunking requests no chunking for this list watcher.
+	// 分块列表可降低单次响应大小，但某些服务端/代理不支持，故提供关闭开关。
 	DisableChunking bool
 }
 
@@ -215,6 +239,8 @@ type Getter interface {
 
 // NewListWatchFromClient creates a new ListWatch from the specified client, resource, namespace and field selector.
 // For backward compatibility, all function fields are populated.
+//
+// fieldSelector 通过字符串写入 ListOptions，与服务端字段选择器语法一致。
 func NewListWatchFromClient(c Getter, resource string, namespace string, fieldSelector fields.Selector) *ListWatch {
 	optionsModifier := func(options *metav1.ListOptions) {
 		options.FieldSelector = fieldSelector.String()
@@ -226,6 +252,8 @@ func NewListWatchFromClient(c Getter, resource string, namespace string, fieldSe
 // Option modifier is a function takes a ListOptions and modifies the consumed ListOptions. Provide customized modifier function
 // to apply modification to ListOptions with a field selector, a label selector, or any other desired options.
 // For backward compatibility, all function fields are populated.
+//
+// 同时填充旧/新两组函数字段，使只认识 ListFunc/WatchFunc 的调用方无需修改。
 func NewFilteredListWatchFromClient(c Getter, resource string, namespace string, optionsModifier func(options *metav1.ListOptions)) *ListWatch {
 	listFunc := func(options metav1.ListOptions) (runtime.Object, error) {
 		optionsModifier(&options)
@@ -287,6 +315,7 @@ func (lw *ListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
 func (lw *ListWatch) ListWithContext(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 	// ListWatch is used in Reflector, which already supports pagination.
 	// Don't paginate here to avoid duplication.
+	// 优先新接口；仅设置旧字段时回退，保证向后兼容。
 	if lw.ListWithContextFunc != nil {
 		return lw.ListWithContextFunc(ctx, options)
 	}

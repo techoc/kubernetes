@@ -21,5 +21,6 @@ import (
 )
 
 func init() {
+	// 注册 klog 的 -v 等命令行参数，使测试可以通过 go test -args -v=4 调整日志级别。
 	klog.InitFlags(nil)
 }

@@ -24,9 +24,13 @@ import (
 )
 
 // GroupName is the group name use in this package
+//
+// 这里借用 apps/v1beta2 的组名常量；组名与版本无关，因此可以安全复用。
 const GroupName = appsv1beta2.GroupName
 
 // SchemeGroupVersion is group version used to register these objects
+//
+// 版本固定为 runtime.APIVersionInternal，表示内部类型而非可序列化的外部版本。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 // Kind takes an unqualified kind and returns a Group qualified GroupKind
@@ -48,6 +52,7 @@ var (
 
 // Adds the list of known types to api.Scheme.
 func addKnownTypes(scheme *runtime.Scheme) error {
+	// 只注册 internal Scale；外部版本的类型由各自的 register.go 负责。
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&scalescheme.Scale{},
 	)

@@ -32,10 +32,13 @@ import (
 
 // APIGroupResources is an API group with a mapping of versions to
 // resources.
+// APIGroupResources 用来把某个 API group 的发现信息（各版本及其资源）聚合在一起，
+// 是构造 DeferredDiscoveryRESTMapper 的输入数据。
 type APIGroupResources struct {
 	Group metav1.APIGroup
 	// A mapping of version string to a slice of APIResources for
 	// that version.
+	// 版本字符串（不含 group 前缀）到该版本 APIResource 列表的映射。
 	VersionedResources map[string][]metav1.APIResource
 }
 
@@ -45,12 +48,15 @@ type APIGroupResources struct {
 // NewDiscoveryRESTMapperWithContext is a better alternative because it supports contextual logging and cancellation.
 //
 // Contextual logging: Use NewDiscoveryRESTMapperWithContext instead.
+// 该构造函数已不带 Context，新代码应优先使用 ...WithContext 版本。
 func NewDiscoveryRESTMapper(groupResources []*APIGroupResources) meta.RESTMapper {
 	mappers, resourcePriority, kindPriority := newDiscoveryRESTMapper(groupResources)
 	multiMapper := make(meta.MultiRESTMapper, len(mappers))
 	for i, m := range mappers {
 		multiMapper[i] = m
 	}
+	// PriorityRESTMapper 会按 resourcePriority/kindPriority 的顺序在各 mapper 中挑首个命中项，
+	// 从而保证 /v1 与 preferred version 优先。
 	return &meta.PriorityRESTMapper{
 		Delegate:         multiMapper,
 		ResourcePriority: resourcePriority,
@@ -73,6 +79,10 @@ func NewDiscoveryRESTMapperWithContext(groupResources []*APIGroupResources) meta
 	}
 }
 
+// newDiscoveryRESTMapper 为每个 groupVersion 构造一个 DefaultRESTMapper，
+// 同时生成全局的资源/类型优先级列表。
+// 不变量：优先级列表中 /v1 永远排第一，其次是各 group 的 preferred version，
+// 最后才是非首选版本与仅按 group 匹配的兜底项。
 func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.DefaultRESTMapper, []schema.GroupVersionResource, []schema.GroupVersionKind) {
 	var unionMapper []*meta.DefaultRESTMapper
 
@@ -85,6 +95,7 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 		groupPriority = append(groupPriority, group.Group.Name)
 
 		// Make sure the preferred version comes first
+		// 只有该 preferred version 确实出现在发现结果中时才加入优先级，避免排入空版本。
 		if len(group.Group.PreferredVersion.Version) != 0 {
 			preferred := group.Group.PreferredVersion.Version
 			if _, ok := group.VersionedResources[preferred]; ok {
@@ -133,6 +144,7 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 				}
 
 				// if we have a slash, then this is a subresource and we shouldn't create mappings for those.
+				// 子资源（如 pods/status）无法直接映射为独立的 GVR，故跳过。
 				if strings.Contains(resource.Name, "/") {
 					continue
 				}
@@ -144,6 +156,7 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 					_, singular = meta.UnsafeGuessKindToResource(gv.WithKind(resource.Kind))
 				}
 
+				// 同时注册小写与原始大小写的 Kind，兼容历史客户端传入不同大小写的行为。
 				versionMapper.AddSpecific(gv.WithKind(strings.ToLower(resource.Kind)), plural, singular, scope)
 				versionMapper.AddSpecific(gv.WithKind(resource.Kind), plural, singular, scope)
 				// TODO this is producing unsafe guesses that don't actually work, but it matches previous behavior
@@ -155,6 +168,7 @@ func newDiscoveryRESTMapper(groupResources []*APIGroupResources) ([]*meta.Defaul
 		}
 	}
 
+	// 最后追加仅按 group 匹配的兜底项：当请求只给出 group（未指定版本）时仍能命中。
 	for _, group := range groupPriority {
 		resourcePriority = append(resourcePriority, schema.GroupVersionResource{
 			Group:    group,
@@ -185,10 +199,12 @@ func GetAPIGroupResources(cl discovery.DiscoveryInterface) ([]*APIGroupResources
 // discovery information and populate a slice of APIGroupResources.
 func GetAPIGroupResourcesWithContext(ctx context.Context, cl discovery.DiscoveryInterfaceWithContext) ([]*APIGroupResources, error) {
 	gs, rs, err := cl.ServerGroupsAndResourcesWithContext(ctx)
+	// 只有部分结果时也直接返回错误，避免基于不完整映射做出误判。
 	if rs == nil || gs == nil {
 		return nil, err
 		// TODO track the errors and update callers to handle partial errors.
 	}
+	// 先按 groupVersion 建索引，避免在每个 group/version 上重复线性查找。
 	rsm := map[string]*metav1.APIResourceList{}
 	for _, r := range rs {
 		rsm[r.GroupVersion] = r
@@ -203,6 +219,7 @@ func GetAPIGroupResourcesWithContext(ctx context.Context, cl discovery.Discovery
 		for _, version := range group.Versions {
 			resources, ok := rsm[version.GroupVersion]
 			if !ok {
+				// 该版本没有对应的资源列表（可能发现失败），跳过而不是塞入空切片。
 				continue
 			}
 			groupResources.VersionedResources[version.Version] = resources.APIResources
@@ -215,6 +232,8 @@ func GetAPIGroupResourcesWithContext(ctx context.Context, cl discovery.Discovery
 // DeferredDiscoveryRESTMapper is a RESTMapper and RESTMapperContext that will defer
 // initialization of the RESTMapper until the first mapping is
 // requested.
+// 延迟初始化可以避免在启动阶段即对 API server 发起发现请求；
+// 当映射失败且缓存已不新鲜时，它会失效缓存并重新发现。
 type DeferredDiscoveryRESTMapper struct {
 	initMu   sync.Mutex
 	delegate meta.RESTMapperWithContext
@@ -250,6 +269,8 @@ func NewDeferredDiscoveryRESTMapperWithContext(cl discovery.CachedDiscoveryInter
 	}
 }
 
+// getDelegate 在首次调用时用发现信息构造 delegate，并在互斥锁保护下缓存。
+// 双检模式：先判断是否已初始化，未初始化才在持锁状态下构建，避免每次映射都重新发现。
 func (d *DeferredDiscoveryRESTMapper) getDelegate(ctx context.Context) (meta.RESTMapperWithContext, error) {
 	d.initMu.Lock()
 	defer d.initMu.Unlock()
@@ -281,6 +302,7 @@ func (d *DeferredDiscoveryRESTMapper) ResetWithContext(ctx context.Context) {
 	d.initMu.Lock()
 	defer d.initMu.Unlock()
 
+	// 同时失效底层发现缓存与本地 delegate，确保下一次映射拿到的是重新发现的数据。
 	d.cl.InvalidateWithContext(ctx)
 	d.delegate = nil
 }
@@ -303,6 +325,7 @@ func (d *DeferredDiscoveryRESTMapper) KindForWithContext(ctx context.Context, re
 		return schema.GroupVersionKind{}, err
 	}
 	gvk, err = del.KindForWithContext(ctx, resource)
+	// 映射失败且发现缓存已过期时，可能是新装 CRD 未被缓存，失效后重试一次。
 	if err != nil && !d.cl.FreshWithContext(ctx) {
 		d.ResetWithContext(ctx)
 		gvk, err = d.KindForWithContext(ctx, resource)
@@ -328,6 +351,7 @@ func (d *DeferredDiscoveryRESTMapper) KindsForWithContext(ctx context.Context, r
 		return nil, err
 	}
 	gvks, err = del.KindsForWithContext(ctx, resource)
+	// 结果为空且缓存不新鲜时同样重试一次；空结果通常意味着资源刚被创建。
 	if len(gvks) == 0 && !d.cl.FreshWithContext(ctx) {
 		d.ResetWithContext(ctx)
 		gvks, err = d.KindsForWithContext(ctx, resource)
@@ -353,6 +377,7 @@ func (d *DeferredDiscoveryRESTMapper) ResourceForWithContext(ctx context.Context
 		return schema.GroupVersionResource{}, err
 	}
 	gvr, err = del.ResourceForWithContext(ctx, input)
+	// 失败且缓存不新鲜时重新发现并重试，覆盖新增资源类型的场景。
 	if err != nil && !d.cl.FreshWithContext(ctx) {
 		d.ResetWithContext(ctx)
 		gvr, err = d.ResourceForWithContext(ctx, input)
@@ -378,6 +403,7 @@ func (d *DeferredDiscoveryRESTMapper) ResourcesForWithContext(ctx context.Contex
 		return nil, err
 	}
 	gvrs, err = del.ResourcesForWithContext(ctx, input)
+	// 空结果且缓存不新鲜时重试一次。
 	if len(gvrs) == 0 && !d.cl.FreshWithContext(ctx) {
 		d.ResetWithContext(ctx)
 		gvrs, err = d.ResourcesForWithContext(ctx, input)
@@ -403,6 +429,7 @@ func (d *DeferredDiscoveryRESTMapper) RESTMappingWithContext(ctx context.Context
 		return nil, err
 	}
 	m, err = del.RESTMappingWithContext(ctx, gk, versions...)
+	// 失败且缓存不新鲜时重新发现并重试。
 	if err != nil && !d.cl.FreshWithContext(ctx) {
 		d.ResetWithContext(ctx)
 		m, err = d.RESTMappingWithContext(ctx, gk, versions...)
@@ -430,6 +457,7 @@ func (d *DeferredDiscoveryRESTMapper) RESTMappingsWithContext(ctx context.Contex
 		return nil, err
 	}
 	ms, err = del.RESTMappingsWithContext(ctx, gk, versions...)
+	// 空结果且缓存不新鲜时重新发现并重试。
 	if len(ms) == 0 && !d.cl.FreshWithContext(ctx) {
 		d.ResetWithContext(ctx)
 		ms, err = d.RESTMappingsWithContext(ctx, gk, versions...)
@@ -455,6 +483,7 @@ func (d *DeferredDiscoveryRESTMapper) ResourceSingularizerWithContext(ctx contex
 		return resource, err
 	}
 	singular, err = del.ResourceSingularizerWithContext(ctx, resource)
+	// 失败且缓存不新鲜时重新发现并重试。
 	if err != nil && !d.cl.FreshWithContext(ctx) {
 		d.ResetWithContext(ctx)
 		singular, err = d.ResourceSingularizerWithContext(ctx, resource)
@@ -462,6 +491,8 @@ func (d *DeferredDiscoveryRESTMapper) ResourceSingularizerWithContext(ctx contex
 	return
 }
 
+// String 返回委托 mapper 的字符串形式；delegate 尚未初始化时会尝试用后台 context 初始化。
+// 注意这是调试输出，可能触发一次发现请求。
 func (d *DeferredDiscoveryRESTMapper) String() string {
 	del, err := d.getDelegate(context.Background() /* hopefully we already have a delegate and don't need the context */)
 	if err != nil {

@@ -33,10 +33,12 @@ const (
 	keyExtension  = ".key"
 	certExtension = ".crt"
 	pemExtension  = ".pem"
-	currentPair   = "current"
-	updatedPair   = "updated"
+	// current/updated 是轮转时用于原子切换 symlink 的两个固定名字。
+	currentPair = "current"
+	updatedPair = "updated"
 )
 
+// fileStore 是 FileStore 的基于文件系统的实现。
 type fileStore struct {
 	logger         klog.Logger
 	pairNamePrefix string
@@ -48,10 +50,14 @@ type fileStore struct {
 
 // FileStore is a store that provides certificate retrieval as well as
 // the path on disk of the current PEM.
+//
+// FileStore 在 Store 之外额外暴露当前证书在磁盘上的 PEM 路径。
 type FileStore interface {
 	Store
 	// CurrentPath returns the path on disk of the current certificate/key
 	// pair encoded as PEM files.
+	//
+	// CurrentPath 返回当前证书/私钥对（PEM）在磁盘上的路径。
 	CurrentPath() string
 }
 
@@ -70,6 +76,9 @@ type FileStore interface {
 // link to the currently selected cert/key pair.
 //
 // Contextual logging: NewFileStoreWithLogger should be used instead of NewFileStore in code which supports contextual logging.
+//
+// NewFileStore 创建基于文件系统的证书存储。启动时按上述顺序查找已存在的证书/私钥对，
+// 使用第一个找到的；启用轮转后，新证书写入 certDirectory，并更新 current 符号链接。
 func NewFileStore(
 	pairNamePrefix string,
 	certDirectory string,
@@ -82,6 +91,8 @@ func NewFileStore(
 // NewFileStoreWithLogger is a variant of NewFileStore where the caller is in
 // control of logging. All log messages get emitted with logger.Info, so
 // pass e.g. logger.V(3) to make logging less verbose.
+//
+// NewFileStoreWithLogger 是允许调用方控制日志的 NewFileStore 变体。
 func NewFileStoreWithLogger(
 	logger klog.Logger,
 	pairNamePrefix string,
@@ -98,6 +109,7 @@ func NewFileStoreWithLogger(
 		certFile:       certFile,
 		keyFile:        keyFile,
 	}
+	// 启动时先修复可能被中断的轮转，避免后续读写落在不一致的状态上。
 	if err := s.recover(); err != nil {
 		return nil, err
 	}
@@ -111,6 +123,9 @@ func (s *fileStore) CurrentPath() string {
 
 // recover checks if there is a certificate rotation that was interrupted while
 // progress, and if so, attempts to recover to a good state.
+//
+// recover 处理轮转中途崩溃的情况：若 current 不存在但 updated 符号链接存在，
+// 说明轮转在最后一步改名之前中断，将其重命名为 current 完成切换。
 func (s *fileStore) recover() error {
 	// If the 'current' file doesn't exist, continue on with the recovery process.
 	currentPath := filepath.Join(s.certDirectory, s.filename(currentPair))
@@ -129,6 +144,7 @@ func (s *fileStore) recover() error {
 		}
 		return err
 	} else if fi.Mode()&os.ModeSymlink != os.ModeSymlink {
+		// updated 必须是符号链接，普通文件说明状态被外部破坏，无法安全恢复。
 		return fmt.Errorf("expected %q to be a symlink but it is a file", updatedPath)
 	}
 
@@ -139,6 +155,7 @@ func (s *fileStore) recover() error {
 	return nil
 }
 
+// Current 按 NewFileStore 描述的优先级加载当前证书/私钥对。
 func (s *fileStore) Current() (*tls.Certificate, error) {
 	pairFile := filepath.Join(s.certDirectory, s.filename(currentPair))
 	if pairFileExists, err := fileExists(pairFile); err != nil {
@@ -186,6 +203,7 @@ func (s *fileStore) Current() (*tls.Certificate, error) {
 	return nil, &noKeyErr
 }
 
+// loadFile 从单个 PEM 文件加载证书与私钥，并填充 Leaf 缓存解析结果。
 func loadFile(pairFile string) (*tls.Certificate, error) {
 	// LoadX509KeyPair knows how to parse combined cert and private key from
 	// the same file.
@@ -201,6 +219,7 @@ func loadFile(pairFile string) (*tls.Certificate, error) {
 	return &cert, nil
 }
 
+// Update 将新的证书/私钥对写入带时间戳的文件，并把 current 符号链接指向它。
 func (s *fileStore) Update(certData, keyData []byte) (*tls.Certificate, error) {
 	ts := time.Now().Format("2006-01-02-15-04-05")
 	pemFilename := s.filename(ts)
@@ -210,6 +229,7 @@ func (s *fileStore) Update(certData, keyData []byte) (*tls.Certificate, error) {
 	}
 	certPath := filepath.Join(s.certDirectory, pemFilename)
 
+	// 私钥与证书合并在同一文件，权限限定为 0600，防止私钥被其他用户读取。
 	f, err := os.OpenFile(certPath, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("could not open %q: %v", certPath, err)
@@ -232,6 +252,7 @@ func (s *fileStore) Update(certData, keyData []byte) (*tls.Certificate, error) {
 	pem.Encode(f, keyBlock)
 
 	// Ensure data is written to disk
+	// 落盘后再切换符号链接，避免指向尚未持久化的文件。
 	if err := f.Sync(); err != nil {
 		return nil, fmt.Errorf("failed to sync certificate data to disk: %w (file: %q)", err, certPath)
 	}
@@ -250,6 +271,9 @@ func (s *fileStore) Update(certData, keyData []byte) (*tls.Certificate, error) {
 // updateSymLink updates the current symlink to point to the file that is
 // passed it. It will fail if there is a non-symlink file exists where the
 // symlink is expected to be.
+//
+// updateSymlink 通过“先建 updated 再 rename”的方式原子替换 current 符号链接；
+// 若 target 不是符号链接则报错，防止覆盖用户手工放置的文件。
 func (s *fileStore) updateSymlink(filename string) error {
 	// If the 'current' file either doesn't exist, or is already a symlink,
 	// proceed. Otherwise, this is an unrecoverable error.
@@ -275,6 +299,7 @@ func (s *fileStore) updateSymlink(filename string) error {
 	} else if fi.Mode()&os.ModeSymlink != os.ModeSymlink {
 		return fmt.Errorf("expected %q to be a symlink but it is a file", updatedPath)
 	} else {
+		// 残留的 updated 符号链接来自上次中断的轮转，删除后重建。
 		if err := os.Remove(updatedPath); err != nil {
 			return fmt.Errorf("unable to remove %q: %v", updatedPath, err)
 		}
@@ -312,10 +337,12 @@ func (s *fileStore) updateSymlink(filename string) error {
 	return nil
 }
 
+// filename 生成 "<prefix>-<qualifier>.pem" 形式的文件名。
 func (s *fileStore) filename(qualifier string) string {
 	return s.pairNamePrefix + "-" + qualifier + pemExtension
 }
 
+// loadX509KeyPair 从分开的 cert/key 文件加载证书对，并填充 Leaf。
 func loadX509KeyPair(certFile, keyFile string) (*tls.Certificate, error) {
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
@@ -330,6 +357,8 @@ func loadX509KeyPair(certFile, keyFile string) (*tls.Certificate, error) {
 }
 
 // FileExists checks if specified file exists.
+//
+// fileExists 判断文件是否存在；不存在返回 (false, nil)，其他错误原样返回。
 func fileExists(filename string) (bool, error) {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return false, nil

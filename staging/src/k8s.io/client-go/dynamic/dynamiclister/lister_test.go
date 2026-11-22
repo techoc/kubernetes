@@ -29,6 +29,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// TestNamespaceGetMethod 验证命名空间级 DynamicLister 的 Get 语义：
+// 只在目标命名空间内查找，且不存在时返回错误。
 func TestNamespaceGetMethod(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -40,6 +42,7 @@ func TestNamespaceGetMethod(t *testing.T) {
 		expectError     bool
 	}{
 		{
+			// 对象存在于目标命名空间，应能取到。
 			name: "scenario 1: gets name-foo1 resource from the indexer from ns-foo namespace",
 			existingObjects: []runtime.Object{
 				newUnstructured("group/version", "TheKind", "ns-foo", "name-foo"),
@@ -52,6 +55,7 @@ func TestNamespaceGetMethod(t *testing.T) {
 			expectedObject:  newUnstructured("group/version", "TheKind", "ns-foo", "name-foo1"),
 		},
 		{
+			// 名称不存在的对象应返回错误，而不是 nil 对象。
 			name: "scenario 2: gets name-foo-non-existing resource from the indexer from ns-foo namespace",
 			existingObjects: []runtime.Object{
 				newUnstructured("group/version", "TheKind", "ns-foo", "name-foo"),
@@ -96,6 +100,7 @@ func TestNamespaceGetMethod(t *testing.T) {
 	}
 }
 
+// TestNamespaceListMethod 验证命名空间级 List 只返回该命名空间内的对象。
 func TestNamespaceListMethod(t *testing.T) {
 	// test data
 	objs := []runtime.Object{
@@ -127,6 +132,8 @@ func TestNamespaceListMethod(t *testing.T) {
 	assertListOrDie(expectedOutput, actualOutput, t)
 }
 
+// TestListerGetMethod 验证集群级 DynamicLister 的 Get 语义：
+// 只能访问空命名空间（集群级）对象，命名空间内的对象不可见。
 func TestListerGetMethod(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -138,6 +145,7 @@ func TestListerGetMethod(t *testing.T) {
 		expectError     bool
 	}{
 		{
+			// 集群级 lister 使用空命名空间作为键的一部分，因此能找到空 namespace 的对象。
 			name: "scenario 1: gets name-foo1 resource from the indexer",
 			existingObjects: []runtime.Object{
 				newUnstructured("group/version", "TheKind", "ns-foo", "name-foo"),
@@ -150,6 +158,7 @@ func TestListerGetMethod(t *testing.T) {
 			expectedObject:  newUnstructured("group/version", "TheKind", "", "name-foo1"),
 		},
 		{
+			// 集群级 Get 不会退化为跨命名空间查找，命名空间内的同名对象应不可见。
 			name: "scenario 2: doesn't get name-foo resource from the indexer from ns-foo namespace",
 			existingObjects: []runtime.Object{
 				newUnstructured("group/version", "TheKind", "ns-foo", "name-foo"),
@@ -166,6 +175,7 @@ func TestListerGetMethod(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// test data
+			// 直接用 Indexer 作为缓存，避免引入真实 informer 的异步同步逻辑。
 			indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 			for _, obj := range test.existingObjects {
 				err := indexer.Add(obj)
@@ -194,6 +204,7 @@ func TestListerGetMethod(t *testing.T) {
 	}
 }
 
+// TestListerListMethod 验证集群级 List 返回缓存中的全部对象。
 func TestListerListMethod(t *testing.T) {
 	// test data
 	objs := []runtime.Object{
@@ -223,6 +234,7 @@ func TestListerListMethod(t *testing.T) {
 	assertListOrDie(expectedOutput, actualOutput, t)
 }
 
+// newUnstructured 构造一个只包含 apiVersion/kind/metadata 的最小非结构化对象。
 func newUnstructured(apiVersion, kind, namespace, name string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -236,6 +248,7 @@ func newUnstructured(apiVersion, kind, namespace, name string) *unstructured.Uns
 	}
 }
 
+// assertListOrDie 比较两个集合（顺序无关），数量不同或任一元素内容不一致即失败。
 func assertListOrDie(expected, actual []*unstructured.Unstructured, t *testing.T) {
 	if len(actual) != len(expected) {
 		t.Fatalf("unexpected number of items returned, expected = %d, actual = %d", len(expected), len(actual))

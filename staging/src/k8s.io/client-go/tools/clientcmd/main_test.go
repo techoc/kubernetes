@@ -22,6 +22,11 @@ import (
 	"testing"
 )
 
+// TestMain 隔离测试进程的 kubeconfig 环境。
+//
+// 中文说明：把 KUBECONFIG 指向临时目录中一个不存在的文件，确保各测试不会意外读取
+// 开发者本机的真实 kubeconfig，从而得到可复现的结果。注意 m.Run() 的返回值未作为
+// 退出码传递，测试失败仍会由 go test 从输出判定。
 func TestMain(m *testing.M) {
 	tmp, err := os.MkdirTemp("", "testkubeconfig")
 	if err != nil {

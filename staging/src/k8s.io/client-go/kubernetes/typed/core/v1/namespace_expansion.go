@@ -25,11 +25,17 @@ import (
 )
 
 // The NamespaceExpansion interface allows manually adding extra methods to the NamespaceInterface.
+//
+// Finalize 是最终确定（finalize）流程的入口：它把 spec.finalizers 的变更提交给
+// 服务端的 finalize 子资源，由 namespace 控制器在后台完成实际清理。
 type NamespaceExpansion interface {
 	Finalize(ctx context.Context, item *v1.Namespace, opts metav1.UpdateOptions) (*v1.Namespace, error)
 }
 
 // Finalize takes the representation of a namespace to update.  Returns the server's representation of the namespace, and an error, if it occurs.
+//
+// 注意走的是 PUT .../namespaces/<name>/finalize 子资源，而不是普通 update；
+// 该子资源只接受对 finalizers 字段的修改，其他字段的改动会被服务端拒绝。
 func (c *namespaces) Finalize(ctx context.Context, namespace *v1.Namespace, opts metav1.UpdateOptions) (result *v1.Namespace, err error) {
 	result = &v1.Namespace{}
 	err = c.GetClient().Put().Resource("namespaces").Name(namespace.Name).VersionedParams(&opts, scheme.ParameterCodec).SubResource("finalize").Body(namespace).Do(ctx).Into(result)

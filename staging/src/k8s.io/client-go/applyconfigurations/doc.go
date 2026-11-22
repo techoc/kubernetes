@@ -18,6 +18,12 @@ limitations under the License.
 Package applyconfigurations provides typesafe go representations of the apply
 configurations that are used to constructs Server-side Apply requests.
 
+中文概述：本包提供与服务端 Apply（SSA）请求体一一对应的 Go 类型。与常规 API
+类型不同，这里所有字段都是指针，未设置的字段序列化后直接缺席，因而不会被 SSA
+误认为“由本 field manager 置零”。各 <Kind> 构造函数与 With<Field> 方法用于安全地
+拼装请求；Extract<Kind> 可从已读取的对象中还原出仅含指定 field manager 所拥有
+字段的配置。注意这些类型由代码生成器产出，手改无效。
+
 # Basics
 
 The Apply functions in the typed client (see the k8s.io/client-go/kubernetes/typed packages) offer

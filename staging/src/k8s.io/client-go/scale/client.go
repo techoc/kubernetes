@@ -30,6 +30,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 )
 
+// scaleConverter 在包级别共享：scheme 构建代价高，且只读，可被所有客户端复用。
 var scaleConverter = NewScaleConverter()
 var codecs = serializer.NewCodecFactory(scaleConverter.Scheme())
 var parameterScheme = runtime.NewScheme()
@@ -38,6 +39,7 @@ var dynamicParameterCodec = runtime.NewParameterCodec(parameterScheme)
 var versionV1 = schema.GroupVersion{Version: "v1"}
 
 func init() {
+	// 查询参数（如 GetOptions）按元数据 v1 编码，与目标资源的实际版本无关。
 	metav1.AddToGroupVersion(parameterScheme, versionV1)
 }
 
@@ -46,6 +48,10 @@ func init() {
 // client to support an discoverable resource.
 // It behaves somewhat similarly to the dynamic ClientPool,
 // but is more specifically scoped to Scale.
+//
+// 它本身不持有任何按资源区分的客户端，所有请求都复用同一个 REST client，
+// 只是每次调用前动态计算路径和版本：mapper 把调用方给出的（可能不带版本的）资源
+// 解析为首选 GVR，scaleKindResolver 决定该资源的 scale 子资源实际使用的 GVK。
 type scaleClient struct {
 	mapper PreferredResourceMapper
 
@@ -59,8 +65,10 @@ type scaleClient struct {
 // the given dynamic.APIPathResolverFunc.
 func NewForConfig(cfg *restclient.Config, mapper PreferredResourceMapper, resolver dynamic.APIPathResolverFunc, scaleKindResolver ScaleKindResolver) (ScalesGetter, error) {
 	// so that the RESTClientFor doesn't complain
+	// 通用 REST client 不绑定单一 GV，必须显式清空，否则 RESTClientFor 会报错。
 	cfg.GroupVersion = &schema.GroupVersion{}
 
+	// 不做版本转换：响应体由 convertToScale 自行解码/转换。
 	cfg.NegotiatedSerializer = codecs.WithoutConversion()
 	if len(cfg.UserAgent) == 0 {
 		cfg.UserAgent = restclient.DefaultKubernetesUserAgent()
@@ -91,6 +99,7 @@ func (c *scaleClient) apiPathFor(groupVer schema.GroupVersion) string {
 	// we need to set the API path based on GroupVersion (defaulting to the legacy path if none is set)
 	// TODO: we "cheat" here since the API path really only depends on group ATM, but this should
 	// *probably* take GroupVersionResource and not GroupVersionKind.
+	// 解析器只关心 group，这里用空 Kind 即可；空前缀回退到历史路径 /api。
 	apiPath := c.apiPathResolverFunc(groupVer.WithKind(""))
 	if apiPath == "" {
 		apiPath = "/api"
@@ -102,6 +111,7 @@ func (c *scaleClient) apiPathFor(groupVer schema.GroupVersion) string {
 // pathAndVersionFor returns the appropriate base path and the associated full GroupVersionResource
 // for the given GroupResource
 func (c *scaleClient) pathAndVersionFor(resource schema.GroupResource) (string, schema.GroupVersionResource, error) {
+	// 清空版本，让 mapper 返回该资源的首选版本；后续请求都基于该版本构造。
 	gvr, err := c.mapper.ResourceFor(resource.WithVersion(""))
 	if err != nil {
 		return "", gvr, fmt.Errorf("unable to get full preferred group-version-resource for %s: %v", resource.String(), err)
@@ -125,6 +135,7 @@ func convertToScale(result *restclient.Result) (*autoscaling.Scale, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 各版本 /scale 端点返回的类型不同，先按所有已知 scale 版本解码。
 	decoder := scaleConverter.codecs.UniversalDecoder(scaleConverter.ScaleVersions()...)
 	rawScaleObj, err := runtime.Decode(decoder, scaleBytes)
 	if err != nil {
@@ -132,6 +143,7 @@ func convertToScale(result *restclient.Result) (*autoscaling.Scale, error) {
 	}
 
 	// convert whatever this is to autoscaling/v1.Scale
+	// 统一出口类型，调用方只需处理 autoscaling/v1。
 	scaleObj, err := scaleConverter.ConvertToVersion(rawScaleObj, autoscaling.SchemeGroupVersion)
 	if err != nil {
 		return nil, fmt.Errorf("received an object from a /scale endpoint which was not convertible to autoscaling Scale: %v", err)
@@ -158,6 +170,7 @@ func (c *namespacedScaleClient) Get(ctx context.Context, resource schema.GroupRe
 		return nil, fmt.Errorf("unable to get client for %s: %v", resource.String(), err)
 	}
 
+	// 命名空间为空时不应构造 namespaced 路径（集群级资源）。
 	result := c.client.clientBase.Get().
 		AbsPath(path).
 		NamespaceIfScoped(c.namespace, c.namespace != "").
@@ -184,6 +197,7 @@ func (c *namespacedScaleClient) Update(ctx context.Context, resource schema.Grou
 	// we need to deal with sending and accepting different API versions.
 
 	// figure out what scale we actually need here
+	// 写请求必须先确定端点接受的具体 GVK，再做编码，否则 server 会拒绝。
 	desiredGVK, err := c.client.scaleKindResolver.ScaleForResource(gvr)
 	if err != nil {
 		return nil, fmt.Errorf("could not find proper group-version for scale subresource of %s: %v", gvr.String(), err)
@@ -213,6 +227,7 @@ func (c *namespacedScaleClient) Update(ctx context.Context, resource schema.Grou
 		// propagate "raw" error from the API
 		// this allows callers to interpret underlying Reason field
 		// for example: errors.IsConflict(err)
+		// 不要包装错误，否则调用方无法用 errors.IsConflict 判断资源版本冲突。
 		return nil, err
 	}
 
@@ -220,6 +235,7 @@ func (c *namespacedScaleClient) Update(ctx context.Context, resource schema.Grou
 }
 
 func (c *namespacedScaleClient) Patch(ctx context.Context, gvr schema.GroupVersionResource, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions) (*autoscaling.Scale, error) {
+	// Patch 的调用方已提供完整 GVR，无需再做 mapper 解析。
 	groupVersion := gvr.GroupVersion()
 	result := c.client.clientBase.Patch(pt).
 		AbsPath(c.client.apiPathFor(groupVersion)).

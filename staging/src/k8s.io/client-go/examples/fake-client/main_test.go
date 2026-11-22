@@ -32,6 +32,9 @@ import (
 )
 
 // TestFakeClient demonstrates how to use a fake client with SharedInformerFactory in tests.
+//
+// 示例刻意展示 fake client 与 informer 配合时的两个坑：fake client 不维护
+// resourceVersion，且需要显式等到 watch 建立后再写入，否则事件会丢失。
 func TestFakeClient(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -40,6 +43,9 @@ func TestFakeClient(t *testing.T) {
 	// Create the fake client.
 	client := fake.NewSimpleClientset()
 	// A catch-all watch reactor that allows us to inject the watcherStarted channel.
+	//
+	// Prepend 确保该 reactor 先于 tracker 默认实现执行：我们自己调用
+	// Tracker().Watch 并把结果返回，从而能在 watch 真正建立时 close 通道。
 	client.PrependWatchReactor("*", func(action clienttesting.Action) (handled bool, ret watch.Interface, err error) {
 		var opts metav1.ListOptions
 		if watchAction, ok := action.(clienttesting.WatchActionImpl); ok {
@@ -56,6 +62,7 @@ func TestFakeClient(t *testing.T) {
 	})
 
 	// We will create an informer that writes added pods to a channel.
+	// 通道缓冲为 1，避免 handler 在测试主协程尚未读取时阻塞。
 	pods := make(chan *v1.Pod, 1)
 	informers := informers.NewSharedInformerFactory(client, 0)
 	podInformer := informers.Core().V1().Pods().Informer()
@@ -85,6 +92,7 @@ func TestFakeClient(t *testing.T) {
 	// informer/controllers.
 	<-watcherStarted
 	// Inject an event into the fake client.
+	// 需要注意：Create 的命名空间是 test-ns，而 informer 监听所有命名空间。
 	p := &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "my-pod"}}
 	_, err := client.CoreV1().Pods("test-ns").Create(context.TODO(), p, metav1.CreateOptions{})
 	if err != nil {

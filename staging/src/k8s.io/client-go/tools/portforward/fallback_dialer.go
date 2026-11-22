@@ -28,6 +28,9 @@ var _ streamhttp.Dialer = &StreamingFallbackDialer{}
 // FallbackDialer encapsulates a primary and secondary dialer, including
 // the boolean function to determine if the primary dialer failed. Implements
 // the httpstream.Dialer interface.
+//
+// 典型用途是优先使用 WebSocket 流式协议，失败时回退到 SPDY；
+// shouldFallback 决定哪些错误值得重试，避免对明确的认证/配置错误做无谓尝试。
 type FallbackDialer struct {
 	primary        httpstream.Dialer
 	secondary      httpstream.Dialer

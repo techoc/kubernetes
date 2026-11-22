@@ -31,16 +31,19 @@ import (
 	"k8s.io/streaming/pkg/httpstream"
 )
 
+// fakeReader 总是返回预置错误，用于模拟流读取失败。
 type fakeReader struct {
 	err error
 }
 
 func (r *fakeReader) Read([]byte) (int, error) { return 0, r.err }
 
+// fakeWriter 丢弃写入内容。
 type fakeWriter struct{}
 
 func (*fakeWriter) Write([]byte) (int, error) { return 0, nil }
 
+// fakeStreamCreator 按流类型记录创建情况并返回预置错误。
 type fakeStreamCreator struct {
 	created map[string]bool
 	errors  map[string]error
@@ -54,6 +57,8 @@ func (f *fakeStreamCreator) CreateStream(headers http.Header) (httpstream.Stream
 	return nil, f.errors[streamType]
 }
 
+// TestV2CreateStreams 表驱动验证 v2 协议按选项创建 stdin/stdout/stderr/error 流：
+// 任一 CreateStream 失败都应向上返回；TTY 模式下不创建 stderr 流。
 func TestV2CreateStreams(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -179,6 +184,8 @@ func TestV2CreateStreams(t *testing.T) {
 	}
 }
 
+// TestV2ErrorStreamReading 验证 error 流的三种结局：
+// 读取 IO 错误被包装；有内容时按远端命令错误解码；底层 typed error 可通过 errors.Is 识别。
 func TestV2ErrorStreamReading(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	tests := []struct {

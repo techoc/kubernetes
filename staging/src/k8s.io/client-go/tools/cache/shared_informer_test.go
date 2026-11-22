@@ -46,6 +46,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// testListener 是记录收到对象名的测试事件处理器，可校验 resync 是否按周期触发。
 type testListener struct {
 	printlnFunc       func(string) // Some, but not all tests use this for per-test output.
 	lock              sync.RWMutex
@@ -93,6 +94,7 @@ func (l *testListener) handle(obj interface{}) {
 	l.receivedItemNames = append(l.receivedItemNames, objectMeta.GetName())
 }
 
+// ok 轮询等待收到预期对象集合，再额外等待一秒以确保没有多余事件。
 func (l *testListener) ok() bool {
 	l.println("polling")
 	err := wait.PollImmediate(100*time.Millisecond, 2*time.Second, func() (bool, error) {
@@ -125,6 +127,7 @@ func (l *testListener) reset() {
 	l.receivedItemNames = nil
 }
 
+// eventHandlerCount 直接读取内部 processor 的监听器数量；仅测试包内可用。
 func eventHandlerCount(i SharedInformer) int {
 	s := i.(*sharedIndexInformer)
 	s.startedLock.Lock()
@@ -132,6 +135,7 @@ func eventHandlerCount(i SharedInformer) int {
 	return len(s.processor.listeners)
 }
 
+// isStarted 在锁保护下读取 informer 的 started 标志。
 func isStarted(i SharedInformer) bool {
 	s := i.(*sharedIndexInformer)
 	s.startedLock.Lock()
@@ -139,11 +143,14 @@ func isStarted(i SharedInformer) bool {
 	return s.started
 }
 
+// isRegistered 通过 processor 内部映射判断注册句柄是否仍然有效。
 func isRegistered(i SharedInformer, h ResourceEventHandlerRegistration) bool {
 	s := i.(*sharedIndexInformer)
 	return s.processor.getListener(h) != nil
 }
 
+// TestIndexer 验证在运行中以及事后添加索引器都能正确建立索引，
+// 且 ListIndexFuncValues 能反映所有已索引的标签值。
 func TestIndexer(t *testing.T) {
 	assert := assert.New(t)
 	// source simulates an apiserver object endpoint.
@@ -224,6 +231,8 @@ func TestIndexer(t *testing.T) {
 	}
 }
 
+// TestListenerResyncPeriods 使用 synctest 的虚拟时钟验证不同监听器各自按
+// 自己的 resync 周期触发，且互不串扰。
 func TestListenerResyncPeriods(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) { testListenerResyncPeriods(t, 0) })
 }
@@ -235,9 +244,13 @@ func TestListenerResyncPeriodsDelayed(t *testing.T) {
 	//
 	// Must not run in parallel to other tests, but it doesn't need to:
 	// it doesn't sleep in real-world time and therefore completes quickly.
+	//
+	// 该用例人为让 processor.run 晚于第一次 distribute，覆盖历史死锁回归。
 	synctest.Test(t, func(t *testing.T) { testListenerResyncPeriods(t, time.Second) })
 }
 
+// testListenerResyncPeriods 的核心场景：三个监听器分别 0/2s/3s 重同步，
+// 逐个推进虚拟时间，验证只有到期者收到事件。
 func testListenerResyncPeriods(t *testing.T, startupDelay time.Duration) {
 	start := time.Now()
 	println := func(msg string) {
@@ -347,6 +360,8 @@ func testListenerResyncPeriods(t *testing.T, startupDelay time.Duration) {
 	}
 }
 
+// TestResyncCheckPeriod 验证 resyncCheckPeriod 取所有监听器周期的最小值，
+// 已有监听器的 resync 周期不会因后续注册而改变。
 func TestResyncCheckPeriod(t *testing.T) {
 	// source simulates an apiserver object endpoint.
 	source := newFakeControllerSource(t)
@@ -420,6 +435,7 @@ func TestResyncCheckPeriod(t *testing.T) {
 }
 
 // verify that https://github.com/kubernetes/kubernetes/issues/59822 is fixed
+// 并发 AddEventHandler 与 Run 不应产生数据竞争或 panic。
 func TestSharedInformerInitializationRace(t *testing.T) {
 	source := newFakeControllerSource(t)
 	informer := NewSharedInformer(source, &v1.Pod{}, 1*time.Second).(*sharedIndexInformer)
@@ -438,6 +454,9 @@ func TestSharedInformerInitializationRace(t *testing.T) {
 // TestSharedInformerWatchDisruption simulates a watch that was closed
 // with updates to the store during that time. We ensure that handlers with
 // resync and no resync see the expected state.
+//
+// 关键语义：不重同步的监听器在 relist 后只会看到发生变化的增量对象，
+// 而重同步的监听器会看到全量对象。
 func TestSharedInformerWatchDisruption(t *testing.T) {
 	// source simulates an apiserver object endpoint.
 	source := newFakeControllerSource(t)
@@ -517,6 +536,7 @@ func TestSharedInformerWatchDisruption(t *testing.T) {
 	}
 }
 
+// TestSharedInformerErrorHandling 验证 List 错误会交给 SetWatchErrorHandler 注册的回调。
 func TestSharedInformerErrorHandling(t *testing.T) {
 	source := newFakeControllerSource(t)
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
@@ -577,6 +597,7 @@ func TestSharedInformerStartRace(t *testing.T) {
 	}()
 }
 
+// TestSharedInformerTransformer 验证 SetTransform 改写后的事件会以变换后的形式送达监听器。
 func TestSharedInformerTransformer(t *testing.T) {
 	// source simulates an apiserver object endpoint.
 	source := newFakeControllerSource(t)
@@ -613,6 +634,7 @@ func TestSharedInformerTransformer(t *testing.T) {
 	}
 }
 
+// TestSharedInformerRemoveHandler 验证移除句柄后监听器计数正确递减。
 func TestSharedInformerRemoveHandler(t *testing.T) {
 	source := newFakeControllerSource(t)
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
@@ -651,6 +673,8 @@ func TestSharedInformerRemoveHandler(t *testing.T) {
 	}
 }
 
+// TestSharedInformerRemoveForeignHandler 验证对另一个 informer 使用本 informer 的
+// 句柄移除不会产生副作用（句柄按 informer 隔离）。
 func TestSharedInformerRemoveForeignHandler(t *testing.T) {
 	source := newFakeControllerSource(t)
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
@@ -733,6 +757,10 @@ func TestSharedInformerRemoveForeignHandler(t *testing.T) {
 	}
 }
 
+// TestSharedInformerMultipleRegistration 验证同一 handler 注册多次会得到
+// 独立句柄，移除其一不影响另一个（每次注册都是独立监听器）。
+// TestSharedInformerMultipleRegistration 验证同一 handler 注册多次会得到
+// 独立句柄，移除其一不影响另一个（每次注册都是独立监听器）。
 func TestSharedInformerMultipleRegistration(t *testing.T) {
 	source := newFakeControllerSource(t)
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
@@ -801,6 +829,7 @@ func TestSharedInformerMultipleRegistration(t *testing.T) {
 	}
 }
 
+// TestRemovingRemovedSharedInformer 验证重复移除同一句柄是幂等的、不报错。
 func TestRemovingRemovedSharedInformer(t *testing.T) {
 	source := newFakeControllerSource(t)
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
@@ -833,6 +862,8 @@ func TestRemovingRemovedSharedInformer(t *testing.T) {
 // Shows that many concurrent goroutines can be manipulating shared informer
 // listeners without tripping it up. There are not really many assertions in this
 // test. Meant to be run with -race to find race conditions
+//
+// 100 个 worker 随机增删监听器，同时持续产生 10k 个事件，重点在于竞争检测。
 func TestSharedInformerHandlerAbuse(t *testing.T) {
 	source := newFakeControllerSource(t)
 	informer := NewSharedInformer(source, &v1.Pod{}, 1*time.Second).(*sharedIndexInformer)
@@ -949,6 +980,8 @@ func TestSharedInformerHandlerAbuse(t *testing.T) {
 	wg.Wait()
 }
 
+// TestStateSharedInformer 验证 Started/Stopped 状态转换：
+// 创建后未启动、运行中已启动未停止、关闭 stop 通道后变为已停止但仍记录曾经启动。
 func TestStateSharedInformer(t *testing.T) {
 	source := newFakeControllerSource(t)
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
@@ -1000,6 +1033,7 @@ func TestStateSharedInformer(t *testing.T) {
 	}
 }
 
+// TestAddOnStoppedSharedInformer 验证 informer 停止后 AddEventHandler 返回明确错误。
 func TestAddOnStoppedSharedInformer(t *testing.T) {
 	source := newFakeControllerSource(t)
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
@@ -1035,6 +1069,7 @@ func TestAddOnStoppedSharedInformer(t *testing.T) {
 	}
 }
 
+// TestRemoveOnStoppedSharedInformer 验证停止后仍可移除既有句柄（清理路径必须可用）。
 func TestRemoveOnStoppedSharedInformer(t *testing.T) {
 	source := newFakeControllerSource(t)
 	source.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1"}})
@@ -1065,6 +1100,7 @@ func TestRemoveOnStoppedSharedInformer(t *testing.T) {
 	}
 }
 
+// TestRemoveWhileActive 验证运行中移除监听器后，后续事件不再送达该监听器。
 func TestRemoveWhileActive(t *testing.T) {
 	// source simulates an apiserver object endpoint.
 	source := newFakeControllerSource(t)
@@ -1105,6 +1141,8 @@ func TestRemoveWhileActive(t *testing.T) {
 	}
 }
 
+// TestAddWhileActive 验证运行中新增的监听器会先补发当前全量对象完成同步，
+// 之后才接收增量事件；HasSynced 在同步前为 false。
 func TestAddWhileActive(t *testing.T) {
 	// source simulates an apiserver object endpoint.
 	source := newFakeControllerSource(t)
@@ -1179,6 +1217,8 @@ func TestAddWhileActive(t *testing.T) {
 
 // TestShutdown depends on goleak.VerifyTestMain in main_test.go to verify that
 // all goroutines really have stopped in the different scenarios.
+//
+// 覆盖“先加 handler 再 Run”“Run 后再加 handler”“只加 handler 不 Run”三种生命周期。
 func TestShutdown(t *testing.T) {
 	t.Run("no-context", func(t *testing.T) {
 		source := newFakeControllerSource(t)
@@ -1237,6 +1277,8 @@ func TestShutdown(t *testing.T) {
 	})
 }
 
+// TestEventPanics 验证处理器 panic 会被 runtime 捕获并记录，而不会拖垮 informer；
+// 每个 panic 后处理器会退避，且不同 handler 的日志带各自的名字。
 func TestEventPanics(t *testing.T) {
 	// timeInUTC := time.Date(2009, 12, 1, 13, 30, 40, 42000, time.UTC)
 	// timeString := "1201 13:30:40.000042"
@@ -1374,6 +1416,7 @@ func TestEventPanics(t *testing.T) {
 	})
 }
 
+// numOccurrences 统计 needle 在 hay 中出现的次数。
 func numOccurrences(hay, needle string) int {
 	count := 0
 	for {
@@ -1386,6 +1429,8 @@ func numOccurrences(hay, needle string) int {
 	}
 }
 
+// TestRemoveEventHandler_AsynchronousPanic 验证异步处理器运行期间调用
+// RemoveEventHandler 会立即返回，而不会等待正在阻塞的处理器。
 func TestRemoveEventHandler_AsynchronousPanic(t *testing.T) {
 	source := newFakeControllerSource(t)
 	informer := NewSharedInformer(source, &v1.Pod{}, 0).(*sharedIndexInformer)
@@ -1452,6 +1497,8 @@ func TestRemoveEventHandler_AsynchronousPanic(t *testing.T) {
 	t.Logf("Caught expected panic: %v", panicVal)
 }
 
+// TestRemoveEventHandler_SynchronousShutdown 验证 ShutDownEventHandler 会等待
+// 处理器完全退出，之后再关闭其依赖的资源才是安全的。
 func TestRemoveEventHandler_SynchronousShutdown(t *testing.T) {
 	source := newFakeControllerSource(t)
 	informer := NewSharedInformer(source, &v1.Pod{}, 0).(*sharedIndexInformer)
@@ -1517,6 +1564,8 @@ func TestRemoveEventHandler_SynchronousShutdown(t *testing.T) {
 	}
 }
 
+// TestShutDownEventHandler_Lifecycles 覆盖 ShutDownEventHandler 在三种生命周期下的行为：
+// informer 从未启动、启动后新增再关闭、新增后启动再关闭，均应正常返回。
 func TestShutDownEventHandler_Lifecycles(t *testing.T) {
 	t.Run("InformerNeverStarted", func(t *testing.T) {
 		source := newFakeControllerSource(t)

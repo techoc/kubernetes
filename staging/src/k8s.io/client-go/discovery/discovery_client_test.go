@@ -44,6 +44,7 @@ import (
 	"k8s.io/kube-openapi/pkg/spec3"
 )
 
+// TestGetServerVersion 验证 ServerVersion 能正确解析 /version 的 JSON 响应。
 func TestGetServerVersion(t *testing.T) {
 	expect := version.Info{
 		Major:     "foo",
@@ -75,6 +76,8 @@ func TestGetServerVersion(t *testing.T) {
 	}
 }
 
+// TestGetServerGroupsWithV1Server 验证 ServerGroups 会把核心组 /api 与 /apis 中的组
+// 合并成统一的组列表，核心组以 "v1" 形式出现。
 func TestGetServerGroupsWithV1Server(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var obj interface{}
@@ -124,6 +127,8 @@ func TestGetServerGroupsWithV1Server(t *testing.T) {
 	}
 }
 
+// TestDiscoveryToleratesMissingCoreGroup 覆盖聚合 apiserver 可能不提供 /api 的情况：
+// 核心组 404 可被容忍，非核心组仍应正常返回。
 func TestDiscoveryToleratesMissingCoreGroup(t *testing.T) {
 	// Discovery tolerates 404 from /api. Aggregated api servers can do this.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -168,6 +173,8 @@ func TestDiscoveryToleratesMissingCoreGroup(t *testing.T) {
 	}
 }
 
+// TestDiscoveryFailsWhenNonCoreGroupsMissing 与上例相反：/apis 不可用属于致命错误，
+// 因为非核心组无法从其他途径获知。
 func TestDiscoveryFailsWhenNonCoreGroupsMissing(t *testing.T) {
 	// Discovery fails when /apis returns 404.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -202,6 +209,8 @@ func TestDiscoveryFailsWhenNonCoreGroupsMissing(t *testing.T) {
 	}
 }
 
+// TestGetServerGroupsWithBrokenServer 用 404/403 两种“服务端不配合”的响应确认
+// ServerGroups 都会返回错误，而不是静默给出空列表。
 func TestGetServerGroupsWithBrokenServer(t *testing.T) {
 	// 404 Not Found errors because discovery at /apis returns an error.
 	// 403 Forbidden errors because discovery at both /api and /apis returns error.
@@ -218,12 +227,17 @@ func TestGetServerGroupsWithBrokenServer(t *testing.T) {
 	}
 }
 
+// TestTimeoutIsSet 确认 setDiscoveryDefaults 会为未配置超时的客户端补上默认值，
+// 防止 discovery 请求无限期挂起。
 func TestTimeoutIsSet(t *testing.T) {
 	cfg := &restclient.Config{}
 	setDiscoveryDefaults(cfg)
 	assert.Equal(t, defaultTimeout, cfg.Timeout)
 }
 
+// TestGetServerResourcesForGroupVersion 验证单个 group/version 的资源列表请求：
+// 核心组走 /api/v1，扩展组走 /apis/<group>/<version>，未知版本应报错。
+// 同时确认 ServerGroupsAndResources 会并发拉取所有版本且耗时可控。
 func TestGetServerResourcesForGroupVersion(t *testing.T) {
 	stable := metav1.APIResourceList{
 		GroupVersion: "v1",
@@ -455,6 +469,8 @@ func TestGetServerResourcesForGroupVersion(t *testing.T) {
 	}
 }
 
+// returnedOpenAPI 返回 /openapi/v2 的期望文档，包含一个整数属性与一个字符串数组属性，
+// 足以覆盖基本类型与 items 的编码。
 func returnedOpenAPI() *openapi_v2.Document {
 	return &openapi_v2.Document{
 		Definitions: &openapi_v2.Definitions{
@@ -507,6 +523,8 @@ func returnedOpenAPI() *openapi_v2.Document {
 	}
 }
 
+// openapiSchemaFakeServer 模拟 /openapi/v2，并严格校验路径、方法与 Accept 头：
+// 客户端必须以 protobuf 形式请求 v2 文档。
 func openapiSchemaFakeServer(t *testing.T) (*httptest.Server, error) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.URL.Path != "/openapi/v2" {
@@ -547,6 +565,7 @@ func openapiSchemaFakeServer(t *testing.T) (*httptest.Server, error) {
 	return server, nil
 }
 
+// openapiV3SchemaFakeServer 用 testutil 提供的通用假服务端加载 testdata 下的 v3 文档。
 func openapiV3SchemaFakeServer(t *testing.T) (*httptest.Server, map[string]*spec3.OpenAPI, error) {
 	res, err := testutil.NewFakeOpenAPIV3Server("testdata")
 	if err != nil {
@@ -555,6 +574,7 @@ func openapiV3SchemaFakeServer(t *testing.T) (*httptest.Server, map[string]*spec
 	return res.HttpServer, res.ServedDocuments, nil
 }
 
+// TestGetOpenAPISchema 验证 OpenAPISchema 拉取并解析 v2 文档的完整往返。
 func TestGetOpenAPISchema(t *testing.T) {
 	server, err := openapiSchemaFakeServer(t)
 	if err != nil {
@@ -572,6 +592,8 @@ func TestGetOpenAPISchema(t *testing.T) {
 	}
 }
 
+// TestGetOpenAPISchemaV3 同时验证 v3 文档的 JSON 与 protobuf 两种内容协商结果，
+// 并确认每次 Schema() 都重新解码而不是返回缓存实例（调用方可能修改返回的字节）。
 func TestGetOpenAPISchemaV3(t *testing.T) {
 	server, testV3Specs, err := openapiV3SchemaFakeServer(t)
 	if err != nil {
@@ -651,6 +673,8 @@ func TestGetOpenAPISchemaV3(t *testing.T) {
 	}
 }
 
+// TestServerPreferredResources 覆盖“部分组获取失败”的降级行为：只要核心组可用，
+// 仍应返回能拿到的资源，并通过 IsGroupDiscoveryFailedError 告知调用方有组失败。
 func TestServerPreferredResources(t *testing.T) {
 	stable := metav1.APIResourceList{
 		GroupVersion: "v1",
@@ -780,6 +804,8 @@ func TestServerPreferredResources(t *testing.T) {
 	}
 }
 
+// TestServerPreferredResourcesRetries 验证 discovery 对单个组的瞬时 5xx 会重试一次：
+// 仅失败一次时可完全恢复；连续失败两次则返回部分结果加组发现失败错误。
 func TestServerPreferredResourcesRetries(t *testing.T) {
 	stable := metav1.APIResourceList{
 		GroupVersion: "v1",
@@ -883,6 +909,8 @@ func TestServerPreferredResourcesRetries(t *testing.T) {
 	}
 }
 
+// TestServerPreferredNamespacedResources 验证只返回命名空间级资源（跳过 namespaces 等集群级资源），
+// 并覆盖“/api 缺失”与“preferredVersion 指向非列表版本”等边界情况。
 func TestServerPreferredNamespacedResources(t *testing.T) {
 	stable := metav1.APIResourceList{
 		GroupVersion: "v1",
@@ -1077,6 +1105,9 @@ func TestServerPreferredNamespacedResources(t *testing.T) {
 }
 
 // Tests of the aggregated discovery format.
+//
+// 聚合发现（aggregated discovery）把组、版本与资源合并成单个文档返回，避免每个
+// group/version 各发一次请求。
 func TestAggregatedServerGroups(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -1358,6 +1389,8 @@ func TestAggregatedServerGroups(t *testing.T) {
 	}
 }
 
+// TestAggregatedServerGroupsAndResources 验证聚合格式能同时产出组信息与完整资源列表；
+// 各用例重点检查版本顺序（首个版本即 preferred）以及核心组与命名空间组并存时的合并。
 func TestAggregatedServerGroupsAndResources(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -1972,6 +2005,8 @@ func TestAggregatedServerGroupsAndResources(t *testing.T) {
 	}
 }
 
+// TestAggregatedServerGroupsAndResourcesWithErrors 明确聚合发现下的容错边界：
+// 核心组 /api 的 404 可容忍；但 /api 的 403 或 /apis 的任何失败都会让整体失败。
 func TestAggregatedServerGroupsAndResourcesWithErrors(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -2107,6 +2142,8 @@ func TestAggregatedServerGroupsAndResourcesWithErrors(t *testing.T) {
 	}
 }
 
+// TestAggregatedServerPreferredResources 验证聚合格式下 preferred 资源的选取：
+// 每组只采用首选版本，失败版本通过 ErrGroupDiscoveryFailed 暴露给调用方。
 func TestAggregatedServerPreferredResources(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -2721,6 +2758,8 @@ func TestAggregatedServerPreferredResources(t *testing.T) {
 	}
 }
 
+// TestDiscoveryContentTypeVersion 验证 ContentTypeIsGVK 的解析：容忍参数顺序变化、
+// 忽略 charset 等额外参数，空 Content-Type 视为解析错误。
 func TestDiscoveryContentTypeVersion(t *testing.T) {
 	v2 := schema.GroupVersionKind{Group: "apidiscovery.k8s.io", Version: "v2", Kind: "APIGroupDiscoveryList"}
 	tests := []struct {
@@ -2795,9 +2834,12 @@ func TestDiscoveryContentTypeVersion(t *testing.T) {
 	}
 }
 
+// TestUseLegacyDiscovery 验证 UseLegacyDiscovery 开关只影响 Accept 头：
+// 默认为聚合+旧格式组合，打开后仅请求旧格式，以便与不理解聚合格式的服务端兼容。
 func TestUseLegacyDiscovery(t *testing.T) {
 	// Default client sends aggregated discovery accept format (first) as well as legacy format.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// 默认客户端的 Accept 应同时包含聚合格式与旧格式，服务端可任选其一。
 		acceptHeader := req.Header.Get("Accept")
 		assert.Equal(t, acceptDiscoveryFormats, acceptHeader)
 	}))
@@ -2815,6 +2857,7 @@ func TestUseLegacyDiscovery(t *testing.T) {
 	client.ServerGroups()
 }
 
+// groupNames 从 []*metav1.APIGroup 提取组名，供集合比较使用。
 func groupNames(groups []*metav1.APIGroup) []string {
 	result := []string{}
 	for _, group := range groups {
@@ -2823,6 +2866,7 @@ func groupNames(groups []*metav1.APIGroup) []string {
 	return result
 }
 
+// groupNamesFromList 从组列表提取组名；与 groupNames 的区别只是输入形态。
 func groupNamesFromList(groups *metav1.APIGroupList) []string {
 	result := []string{}
 	for _, group := range groups.Groups {
@@ -2831,6 +2875,7 @@ func groupNamesFromList(groups *metav1.APIGroupList) []string {
 	return result
 }
 
+// preferredVersionsFromList 提取每组的首选 groupVersion，用于断言 version 排序规则。
 func preferredVersionsFromList(groups *metav1.APIGroupList) []string {
 	result := []string{}
 	for _, group := range groups.Groups {
@@ -2840,6 +2885,7 @@ func preferredVersionsFromList(groups *metav1.APIGroupList) []string {
 	return result
 }
 
+// groupVersions 从资源列表提取 groupVersion。
 func groupVersions(resources []*metav1.APIResourceList) []string {
 	result := []string{}
 	for _, resourceList := range resources {
@@ -2848,6 +2894,7 @@ func groupVersions(resources []*metav1.APIResourceList) []string {
 	return result
 }
 
+// groupVersionsFromGroups 展开每组的全部版本，而不仅是首选版本。
 func groupVersionsFromGroups(groups *metav1.APIGroupList) []string {
 	result := []string{}
 	for _, group := range groups.Groups {
@@ -2858,6 +2905,7 @@ func groupVersionsFromGroups(groups *metav1.APIGroupList) []string {
 	return result
 }
 
+// groupVersionKinds 把资源列表展开成 "group/version/Kind" 字符串集合，便于整体比较。
 func groupVersionKinds(resources []*metav1.APIResourceList) []string {
 	result := []string{}
 	for _, resourceList := range resources {
@@ -2869,6 +2917,8 @@ func groupVersionKinds(resources []*metav1.APIResourceList) []string {
 	return result
 }
 
+// failedGroupVersions 从 ErrGroupDiscoveryFailed 中取出失败的 group/version；
+// 错误类型不符时返回空切片，让调用方在断言中看到明确的差异。
 func failedGroupVersions(err error) []string {
 	result := []string{}
 	ferr, ok := err.(*ErrGroupDiscoveryFailed)

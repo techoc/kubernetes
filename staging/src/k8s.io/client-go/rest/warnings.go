@@ -29,6 +29,10 @@ import (
 )
 
 // WarningHandler is an interface for handling warning headers
+//
+// 中文说明：Kubernetes 服务端通过 HTTP `Warning` 响应头返回弃用提示等信息，
+// 该接口在每次收到 warning header 时被调用。新代码应优先实现
+// WarningHandlerWithContext 以支持日志上下文与取消。
 type WarningHandler interface {
 	// HandleWarningHeader is called with the warn code, agent, and text when a warning header is countered.
 	HandleWarningHeader(code int, agent string, text string)
@@ -42,6 +46,7 @@ type WarningHandlerWithContext interface {
 }
 
 var (
+	// 默认处理器在包初始化时即存在，避免未配置时出现 nil 判断分支。
 	defaultWarningHandler     WarningHandlerWithContext = WarningLogger{}
 	defaultWarningHandlerLock sync.RWMutex
 )
@@ -53,6 +58,9 @@ var (
 //   - NewWarningWriter() outputs warnings to the provided writer.
 //
 // logcheck:context // SetDefaultWarningHandlerWithContext should be used instead of SetDefaultWarningHandler in code which supports contextual logging.
+//
+// 中文说明：该默认处理器是进程级全局状态，影响所有 rest 客户端；测试或多组件共用
+// 进程时应注意相互干扰。传入 nil 会清空默认处理器（收到 warning 时静默丢弃）。
 func SetDefaultWarningHandler(l WarningHandler) {
 	if l == nil {
 		SetDefaultWarningHandlerWithContext(nil)
@@ -62,12 +70,15 @@ func SetDefaultWarningHandler(l WarningHandler) {
 }
 
 // SetDefaultWarningHandlerWithContext is a variant of [SetDefaultWarningHandler] which supports contextual logging.
+//
+// 中文：写锁保护，允许并发读取默认处理器。
 func SetDefaultWarningHandlerWithContext(l WarningHandlerWithContext) {
 	defaultWarningHandlerLock.Lock()
 	defer defaultWarningHandlerLock.Unlock()
 	defaultWarningHandler = l
 }
 
+// getDefaultWarningHandler 读取当前默认处理器。
 func getDefaultWarningHandler() WarningHandlerWithContext {
 	defaultWarningHandlerLock.RLock()
 	defer defaultWarningHandlerLock.RUnlock()
@@ -75,10 +86,12 @@ func getDefaultWarningHandler() WarningHandlerWithContext {
 	return l
 }
 
+// warningLoggerNopContext 把不支持 context 的旧处理器适配为新接口。
 type warningLoggerNopContext struct {
 	l WarningHandler
 }
 
+// HandleWarningHeaderWithContext 丢弃 ctx，直接委托给旧接口。
 func (w warningLoggerNopContext) HandleWarningHeaderWithContext(_ context.Context, code int, agent string, message string) {
 	w.l.HandleWarningHeader(code, agent, message)
 }
@@ -86,7 +99,10 @@ func (w warningLoggerNopContext) HandleWarningHeaderWithContext(_ context.Contex
 // NoWarnings is an implementation of [WarningHandler] and [WarningHandlerWithContext] that suppresses warnings.
 type NoWarnings struct{}
 
+// HandleWarningHeader 丢弃所有 warning。
 func (NoWarnings) HandleWarningHeader(code int, agent string, message string) {}
+
+// HandleWarningHeaderWithContext 丢弃所有 warning。
 func (NoWarnings) HandleWarningHeaderWithContext(ctx context.Context, code int, agent string, message string) {
 }
 
@@ -96,10 +112,15 @@ var _ WarningHandlerWithContext = NoWarnings{}
 // WarningLogger is an implementation of [WarningHandler] and [WarningHandlerWithContext] that logs code 299 warnings
 type WarningLogger struct{}
 
+// HandleWarningHeader 使用 Background context 调用带 context 的实现。
 func (w WarningLogger) HandleWarningHeader(code int, agent string, message string) {
 	w.HandleWarningHeaderWithContext(context.Background(), code, agent, message)
 }
 
+// HandleWarningHeaderWithContext 把 warning 写入 klog。
+//
+// 中文：只有 code 299（Kubernetes 约定的“警告”）且有正文时才输出；其它代码按
+// RFC 语义可能只是提示，避免产生噪声。
 func (WarningLogger) HandleWarningHeaderWithContext(ctx context.Context, code int, agent string, message string) {
 	if code != 299 || len(message) == 0 {
 		return
@@ -110,12 +131,14 @@ func (WarningLogger) HandleWarningHeaderWithContext(ctx context.Context, code in
 var _ WarningHandler = WarningLogger{}
 var _ WarningHandlerWithContext = WarningLogger{}
 
+// warningWriter 把 warning 输出到指定 writer，可选去重与着色。
 type warningWriter struct {
 	// out is the writer to output warnings to
 	out io.Writer
 	// opts contains options controlling warning output
 	opts WarningWriterOptions
 	// writtenLock guards written and writtenCount
+	// 中文：同时保护去重集合与计数器，使多个并发请求的 warning 输出串行化。
 	writtenLock  sync.Mutex
 	writtenCount int
 	written      map[string]struct{}
@@ -125,12 +148,16 @@ type warningWriter struct {
 type WarningWriterOptions struct {
 	// Deduplicate indicates a given warning message should only be written once.
 	// Setting this to true in a long-running process handling many warnings can result in increased memory use.
+	// 中文：去重集合只增不减，长生命周期进程中可能持续增长，需权衡内存。
 	Deduplicate bool
 	// Color indicates that warning output can include ANSI color codes
 	Color bool
 }
 
 // NewWarningWriter returns an implementation of WarningHandler that outputs code 299 warnings to the specified writer.
+//
+// 中文说明：未启用 Deduplicate 时不分配 map，减少无谓内存；返回类型是未导出的
+// 具体类型，调用方只能依赖 WarningHandler 接口，这也便于后续扩展。
 func NewWarningWriter(out io.Writer, opts WarningWriterOptions) *warningWriter {
 	h := &warningWriter{out: out, opts: opts}
 	if opts.Deduplicate {
@@ -145,6 +172,8 @@ const (
 )
 
 // HandleWarningHeader prints warnings with code=299 to the configured writer.
+//
+// 中文：仅实现旧接口；写入操作在锁内完成，保证多行输出不会交错。
 func (w *warningWriter) HandleWarningHeader(code int, agent string, message string) {
 	if code != 299 || len(message) == 0 {
 		return
@@ -168,12 +197,18 @@ func (w *warningWriter) HandleWarningHeader(code int, agent string, message stri
 	}
 }
 
+// WarningCount 返回已写出的 warning 数量（去重后）。
 func (w *warningWriter) WarningCount() int {
 	w.writtenLock.Lock()
 	defer w.writtenLock.Unlock()
 	return w.writtenCount
 }
 
+// handleWarnings 解析响应头并对每条 warning 调用处理器。
+//
+// 中文说明：handler 为 nil 时回退到全局默认处理器；解析失败的头会被忽略（错误
+// 直接丢弃），因为 warning 是尽力而为的附加信息，不应影响正常请求结果。
+// 返回解析出的 warning 列表，便于调用方记录或测试断言。
 func handleWarnings(ctx context.Context, headers http.Header, handler WarningHandlerWithContext) []net.WarningHeader {
 	if handler == nil {
 		handler = getDefaultWarningHandler()

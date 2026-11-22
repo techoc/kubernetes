@@ -31,12 +31,15 @@ import (
 )
 
 const (
+	// LeaderElectionRecordAnnotationKey 是旧版 endpoints/configmaps 锁存放记录用的注解键；
+	// 现在仅用于兼容读取历史数据。
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
-	endpointsResourceLock             = "endpoints"
-	configMapsResourceLock            = "configmaps"
-	LeasesResourceLock                = "leases"
-	endpointsLeasesResourceLock       = "endpointsleases"
-	configMapsLeasesResourceLock      = "configmapsleases"
+	// 以下旧锁类型已移除，仅保留常量用于给出迁移提示。
+	endpointsResourceLock        = "endpoints"
+	configMapsResourceLock       = "configmaps"
+	LeasesResourceLock           = "leases"
+	endpointsLeasesResourceLock  = "endpointsleases"
+	configMapsLeasesResourceLock = "configmapsleases"
 )
 
 // LeaderElectionRecord is the record that is stored in the leader election annotation.
@@ -49,16 +52,19 @@ type LeaderElectionRecord struct {
 	// attempt to acquire leases with empty identities and will wait for the full lease
 	// interval to expire before attempting to reacquire. This value is set to empty when
 	// a client voluntarily steps down.
-	HolderIdentity       string                      `json:"holderIdentity"`
-	LeaseDurationSeconds int                         `json:"leaseDurationSeconds"`
-	AcquireTime          metav1.Time                 `json:"acquireTime"`
-	RenewTime            metav1.Time                 `json:"renewTime"`
-	LeaderTransitions    int                         `json:"leaderTransitions"`
-	Strategy             v1.CoordinatedLeaseStrategy `json:"strategy"`
-	PreferredHolder      string                      `json:"preferredHolder"`
+	HolderIdentity       string      `json:"holderIdentity"`
+	LeaseDurationSeconds int         `json:"leaseDurationSeconds"`
+	AcquireTime          metav1.Time `json:"acquireTime"`
+	RenewTime            metav1.Time `json:"renewTime"`
+	// LeaderTransitions 统计 leader 变更次数，用于观测与调试。
+	LeaderTransitions int `json:"leaderTransitions"`
+	// Strategy 与 PreferredHolder 仅在协调式选举（alpha）中使用。
+	Strategy        v1.CoordinatedLeaseStrategy `json:"strategy"`
+	PreferredHolder string                      `json:"preferredHolder"`
 }
 
 // EventRecorder records a change in the ResourceLock.
+// 实现方通常传入 events 客户端；为 nil 时不应记录事件。
 type EventRecorder interface {
 	Eventf(obj runtime.Object, eventType, reason, message string, args ...interface{})
 }
@@ -78,6 +84,8 @@ type ResourceLockConfig struct {
 // to hide the details on specific implementations in order to allow
 // them to change over time.  This interface is strictly for use
 // by the leaderelection code.
+//
+// Get 同时返回原始字节，供调用方判断记录是否变化而无需深比较。
 type Interface interface {
 	// Get returns the LeaderElectionRecord
 	Get(ctx context.Context) (*LeaderElectionRecord, []byte, error)
@@ -100,6 +108,7 @@ type Interface interface {
 }
 
 // new will create a lock of a given type according to the input parameters
+// 目前只支持 Lease 锁；旧类型返回错误以引导用户迁移。
 func new(lockType string, ns string, name string, coreClient corev1.CoreV1Interface, coordinationClient coordinationv1.CoordinationV1Interface, rlc ResourceLockConfig, labels map[string]string) (Interface, error) {
 	leaseLock := &LeaseLock{
 		LeaseMeta: metav1.ObjectMeta{
@@ -143,6 +152,7 @@ func NewWithLabels(lockType string, ns string, name string, coreClient corev1.Co
 // Setting it to max(time.Second, RenewDeadline/2) as a reasonable heuristic.
 func NewFromKubeconfig(lockType string, ns string, name string, rlc ResourceLockConfig, kubeconfig *restclient.Config, renewDeadline time.Duration) (Interface, error) {
 	// shallow copy, do not modify the kubeconfig
+	// 仅复制结构体，不修改调用方传入的配置。
 	config := *kubeconfig
 	timeout := renewDeadline / 2
 	if timeout < time.Second {

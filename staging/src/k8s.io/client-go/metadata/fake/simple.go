@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package fake provides an in-memory implementation of metadata.Getter for tests.
+//
+// Package fake 提供 metadata.Getter 的测试实现。与真实客户端不同，它额外暴露
+// CreateFake/UpdateFake，因为 metadata 接口本身只有只读操作；所有动作都会经过
+// testing.Fake 的反应器，便于测试断言和注入错误。
 package fake
 
 import (
@@ -42,6 +47,8 @@ type MetadataClient interface {
 }
 
 // NewTestScheme creates a unique Scheme for each test.
+//
+// 每个测试使用独立 Scheme，避免并行测试之间通过全局注册表互相污染。
 func NewTestScheme() *runtime.Scheme {
 	return runtime.NewScheme()
 }
@@ -54,12 +61,14 @@ func NewSimpleMetadataClient(scheme *runtime.Scheme, objects ...runtime.Object) 
 	if !scheme.Recognizes(gvkFakeList) {
 		// In order to use List with this client, you have to have the v1.List registered in your scheme, since this is a test
 		// type we modify the input scheme
+		// 元数据 List 结果统一用 v1.List 承载，这里按需把它注册进调用方提供的 scheme。
 		scheme.AddKnownTypeWithName(gvkFakeList, &metav1.List{})
 	}
 
 	codecs := serializer.NewCodecFactory(scheme)
 	o := testing.NewObjectTracker(scheme, codecs.UniversalDeserializer())
 	for _, obj := range objects {
+		// 预先放入的对象视为已存在；重复添加会返回错误，说明测试数据有误。
 		if err := o.Add(obj); err != nil {
 			panic(err)
 		}
@@ -93,6 +102,7 @@ type FakeMetadataClient struct {
 	tracker testing.ObjectTracker
 }
 
+// metadataResourceClient 绑定具体资源与（可选）命名空间，复用统一的方法实现。
 type metadataResourceClient struct {
 	client    *FakeMetadataClient
 	namespace string
@@ -104,6 +114,7 @@ var (
 	_ testing.FakeClient = &FakeMetadataClient{}
 )
 
+// Tracker 返回底层对象跟踪器，测试可直接操作以准备数据。
 func (c *FakeMetadataClient) Tracker() testing.ObjectTracker {
 	return c.tracker
 }
@@ -113,12 +124,16 @@ func (c *FakeMetadataClient) Resource(resource schema.GroupVersionResource) meta
 	return &metadataResourceClient{client: c, resource: resource}
 }
 
+// IsWatchListSemanticsUnSupported 返回 true：该 fake 不支持 WatchList 语义，
+// 以便 Reflector 在没有真实流式能力时回退到普通 List+Watch。
 func (c *FakeMetadataClient) IsWatchListSemanticsUnSupported() bool {
 	return true
 }
 
 // Namespace returns an interface for accessing the current resource in the specified
 // namespace.
+//
+// 复制值而不是修改接收者，避免同一 Resource 句柄被并发用于多个命名空间。
 func (c *metadataResourceClient) Namespace(ns string) metadata.ResourceInterface {
 	ret := *c
 	ret.namespace = ns
@@ -126,6 +141,9 @@ func (c *metadataResourceClient) Namespace(ns string) metadata.ResourceInterface
 }
 
 // CreateFake records the object creation and processes it via the reactor.
+//
+// 四个分支对应 根/命名空间 × 主资源/子资源 的组合；子资源动作需要对象名，
+// 因此先从对象中取 metadata。
 func (c *metadataResourceClient) CreateFake(obj *metav1.PartialObjectMetadata, opts metav1.CreateOptions, subresources ...string) (*metav1.PartialObjectMetadata, error) {
 	var uncastRet runtime.Object
 	var err error
@@ -166,6 +184,7 @@ func (c *metadataResourceClient) CreateFake(obj *metav1.PartialObjectMetadata, o
 	if uncastRet == nil {
 		return nil, err
 	}
+	// 反应器可能返回任意 runtime.Object，这里严格断言，尽早暴露测试中的错误桩。
 	ret, ok := uncastRet.(*metav1.PartialObjectMetadata)
 	if !ok {
 		return nil, fmt.Errorf("unexpected return value type %T", uncastRet)
@@ -213,6 +232,7 @@ func (c *metadataResourceClient) UpdateFake(obj *metav1.PartialObjectMetadata, o
 func (c *metadataResourceClient) UpdateStatus(obj *metav1.PartialObjectMetadata, opts metav1.UpdateOptions) (*metav1.PartialObjectMetadata, error) {
 	var uncastRet runtime.Object
 	var err error
+	// status 永远是子资源，因此只需区分是否带命名空间。
 	switch {
 	case len(c.namespace) == 0:
 		uncastRet, err = c.client.Fake.
@@ -314,6 +334,8 @@ func (c *metadataResourceClient) Get(ctx context.Context, name string, opts meta
 }
 
 // List records the object deletion and processes it via the reactor.
+//
+// List 的 Kind 留空：tracker 会自动补上 "List" 后缀，与真实 scheme 的行为一致。
 func (c *metadataResourceClient) List(ctx context.Context, opts metav1.ListOptions) (*metav1.PartialObjectMetadataList, error) {
 	var obj runtime.Object
 	var err error
@@ -332,6 +354,7 @@ func (c *metadataResourceClient) List(ctx context.Context, opts metav1.ListOptio
 		return nil, err
 	}
 
+	// fake 的 tracker 不一定实现标签过滤，这里在客户端侧再过滤一次。
 	label, _, _ := testing.ExtractFromListOptions(opts)
 	if label == nil {
 		label = labels.Everything()
@@ -361,6 +384,7 @@ func (c *metadataResourceClient) List(ctx context.Context, opts metav1.ListOptio
 	return list, nil
 }
 
+// Watch 强制把 opts.Watch 置为 true，然后交给 tracker 生成 watch 事件流。
 func (c *metadataResourceClient) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	opts.Watch = true
 	switch {
@@ -373,6 +397,7 @@ func (c *metadataResourceClient) Watch(ctx context.Context, opts metav1.ListOpti
 			InvokesWatch(testing.NewWatchAction(c.resource, c.namespace, opts))
 	}
 
+	// 命名空间长度不可能同时为 0 和 >0，走到这里说明逻辑错误。
 	panic("math broke")
 }
 

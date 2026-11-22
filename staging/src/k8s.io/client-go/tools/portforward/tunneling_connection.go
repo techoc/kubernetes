@@ -33,6 +33,10 @@ var _ net.Conn = &TunnelingConnection{}
 
 // TunnelingConnection implements the "httpstream.Connection" interface, wrapping
 // a websocket connection that tunnels SPDY.
+//
+// inProgressMessage 保存当前尚未读完的 WebSocket 消息。Read 不保证一次读满
+// 调用方缓冲区，因此必须跨调用保留该 reader，否则会丢消息边界。
+// closeOnce 保证底层连接只关闭一次。
 type TunnelingConnection struct {
 	logger            klog.Logger
 	conn              *gwebsocket.Conn
@@ -63,9 +67,13 @@ func NewTunnelingConnectionWithLogger(logger klog.Logger, conn *gwebsocket.Conn)
 // Read implements "io.Reader" interface, reading from the stored connection
 // into the passed buffer "p". Returns the number of bytes read and an error.
 // Can keep track of the "inProgress" messsage from the tunneled connection.
+//
+// 读取可能跨多条 WebSocket 消息：当前消息读尽（n==0 且 EOF）后清理状态，
+// 循环进入下一条消息；其他情况直接返回，确保不丢失消息边界。
 func (c *TunnelingConnection) Read(p []byte) (len int, err error) {
 	c.logger.V(7).Info("Tunneling connection read...")
 	defer func() {
+		// 仅在开启高详细度日志时才输出数据内容，避免敏感信息泄漏与大日志量。
 		if loggerV := c.logger.V(8); loggerV.Enabled() {
 			loggerV.Info("Tunneling connection read...complete", "length", len, "data", p[:len], "err", err)
 		} else {
@@ -78,12 +86,14 @@ func (c *TunnelingConnection) Read(p []byte) (len int, err error) {
 			messageType, nextReader, err := c.conn.NextReader()
 			if err != nil {
 				closeError := &gwebsocket.CloseError{}
+				// 对端正常关闭映射为 io.EOF，符合 net.Conn 的读取约定。
 				if errors.As(err, &closeError) && closeError.Code == gwebsocket.CloseNormalClosure {
 					return 0, io.EOF
 				}
 				c.logger.V(4).Info("Tunneling connection NextReader() failed", "err", err)
 				return 0, err
 			}
+			// 该隧道只承载二进制数据，文本帧属于协议错误。
 			if messageType != gwebsocket.BinaryMessage {
 				return 0, fmt.Errorf("invalid message type received")
 			}
@@ -102,6 +112,9 @@ func (c *TunnelingConnection) Read(p []byte) (len int, err error) {
 // Write implements "io.Writer" interface, copying the data in the passed
 // byte array "p" into the stored tunneled connection. Returns the number
 // of bytes written and an error.
+//
+// 每次 Write 对应一条独立的 WebSocket 二进制消息；必须 Close writer 才能
+// 真正发送（flush），因此错误处理要兼顾写入与关闭两个阶段。
 func (c *TunnelingConnection) Write(p []byte) (n int, err error) {
 	c.logger.V(7).Info("Tunneling connection write", "length", len(p), "data", p)
 	defer c.logger.V(7).Info("Tunneling connection write...complete")
@@ -124,6 +137,9 @@ func (c *TunnelingConnection) Write(p []byte) (n int, err error) {
 
 // Close implements "io.Closer" interface, signaling the other tunneled connection
 // endpoint, and closing the tunneled connection only once.
+//
+// 先用带 1 秒超时的 close control frame 通知对端，再关闭底层连接；所有
+// 操作包在 sync.Once 中，重复调用不会重复发送关闭帧。
 func (c *TunnelingConnection) Close() error {
 	var err error
 	c.closeOnce.Do(func() {
@@ -149,12 +165,16 @@ func (c *TunnelingConnection) LocalAddr() net.Addr {
 
 // LocalAddr implements part of the "net.Conn" interface, returning the remote
 // endpoint network address of the tunneled connection.
+//
+// （方法名为 RemoteAddr；上面的英文注释沿用了 LocalAddr 的措辞。）
 func (c *TunnelingConnection) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
 // SetDeadline sets the *absolute* time in the future for both
 // read and write deadlines. Returns an error if one occurs.
+//
+// 同时设置读、写截止时间，并合并两个错误。
 func (c *TunnelingConnection) SetDeadline(t time.Time) error {
 	rerr := c.SetReadDeadline(t)
 	werr := c.SetWriteDeadline(t)
@@ -163,12 +183,16 @@ func (c *TunnelingConnection) SetDeadline(t time.Time) error {
 
 // SetDeadline sets the *absolute* time in the future for the
 // read deadlines. Returns an error if one occurs.
+//
+// （方法名为 SetReadDeadline，只影响读截止时间。）
 func (c *TunnelingConnection) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
 }
 
 // SetDeadline sets the *absolute* time in the future for the
 // write deadlines. Returns an error if one occurs.
+//
+// （方法名为 SetWriteDeadline，只影响写截止时间。）
 func (c *TunnelingConnection) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }

@@ -29,6 +29,8 @@ import (
 	cgtesting "k8s.io/client-go/testing"
 )
 
+// TestFakePodsGetLogs 验证默认 fake 路径下 GetLogs().Stream 能返回非空日志且可正常关闭。
+// 该测试覆盖没有 reactor 时的内置默认行为。
 func TestFakePodsGetLogs(t *testing.T) {
 	fp := newFakePods(&FakeCoreV1{Fake: &cgtesting.Fake{}}, "default")
 	req := fp.GetLogs("foo", &corev1.PodLogOptions{})
@@ -50,11 +52,14 @@ func TestFakePodsGetLogs(t *testing.T) {
 	}
 }
 
+// TestFakePodsGetLogsReactorError 验证 reactor 可返回错误，并能在 reactor 中
+// 检查 action 携带的值（此处确认 GetValue 是 *PodLogOptions 且 Container 正确）。
 func TestFakePodsGetLogsReactorError(t *testing.T) {
 	fake := &cgtesting.Fake{}
 	fp := newFakePods(&FakeCoreV1{Fake: fake}, "default")
 	expectedErr := errors.New("reactor get logs failure")
 	fake.PrependReactor("get", "pods/log", func(action cgtesting.Action) (bool, runtime.Object, error) {
+		// GetLogs 走 GenericAction，参数通过 GetValue 传递。
 		genericAction, ok := action.(cgtesting.GenericAction)
 		if !ok {
 			t.Fatalf("expected GenericAction, got %T", action)
@@ -76,6 +81,8 @@ func TestFakePodsGetLogsReactorError(t *testing.T) {
 	}
 }
 
+// TestFakePodsGetLogsReactorResponse 验证 reactor 可用 *runtime.Unknown 提供日志内容，
+// 客户端会将其作为响应体返回。
 func TestFakePodsGetLogsReactorResponse(t *testing.T) {
 	fake := &cgtesting.Fake{}
 	fp := newFakePods(&FakeCoreV1{Fake: fake}, "default")
@@ -104,6 +111,8 @@ func TestFakePodsGetLogsReactorResponse(t *testing.T) {
 	}
 }
 
+// TestFakePodsGetLogsReactorInvalidObject 验证 reactor 返回非 *runtime.Unknown 对象时
+// 会得到明确提示的错误，避免调用方误以为可以返回任意对象。
 func TestFakePodsGetLogsReactorInvalidObject(t *testing.T) {
 	fake := &cgtesting.Fake{}
 	fp := newFakePods(&FakeCoreV1{Fake: fake}, "default")

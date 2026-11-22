@@ -43,16 +43,20 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// lwSupportsWatchListSemantics 显式声明支持 WatchList（SendInitialEvents 流式语义）。
 type lwSupportsWatchListSemantics struct{ fakeListWatcher }
 
 func (lw *lwSupportsWatchListSemantics) IsWatchListSemanticsUnSupported() bool { return false }
 
+// lwDoesNotSupportWatchListSemantics 声明客户端不兼容 WatchList，应回退到 LIST/WATCH。
 type lwDoesNotSupportWatchListSemantics struct{ fakeListWatcher }
 
 func (lw *lwDoesNotSupportWatchListSemantics) IsWatchListSemanticsUnSupported() bool { return true }
 
+// lwNoWatchListSemanticsUnSupportedExposed 未实现可选接口，默认被视为支持 WatchList。
 type lwNoWatchListSemanticsUnSupportedExposed struct{ fakeListWatcher }
 
+// TestNewReflectorWithDisablementWatchList 校验特性门与 ListerWatcher 能力共同决定是否启用 WatchList。
 func TestNewReflectorWithDisablementWatchList(t *testing.T) {
 	scenarios := []struct {
 		name                    string
@@ -99,6 +103,8 @@ func TestNewReflectorWithDisablementWatchList(t *testing.T) {
 	}
 }
 
+// TestInitialEventsEndBookmarkTicker 校验“等待 initial-events-end bookmark”的告警计时器：
+// 禁用时完全是空实现；启用时每秒触发一次，并在收到任何事件后切换告警文案。
 func TestInitialEventsEndBookmarkTicker(t *testing.T) {
 	assertNoEvents := func(t *testing.T, c <-chan time.Time) {
 		select {
@@ -168,6 +174,8 @@ func TestInitialEventsEndBookmarkTicker(t *testing.T) {
 	})
 }
 
+// TestWatchListResourceVersion 校验只有携带 initial-events-end 注解的 bookmark 才推进 RV，
+// 普通 Added 事件不应改变已同步的 resourceVersion。
 func TestWatchListResourceVersion(t *testing.T) {
 	scenarios := []struct {
 		name                    string
@@ -230,6 +238,8 @@ func TestWatchListResourceVersion(t *testing.T) {
 	}
 }
 
+// TestWatchList 覆盖 WatchList 特性的核心行为：同步判定、429 重试、watch 中断后重建、
+// 以及服务端不支持流式时回退到传统 LIST/WATCH。每个场景断言请求次数、请求参数与缓存内容。
 func TestWatchList(t *testing.T) {
 	scenarios := []struct {
 		name                string
@@ -631,6 +641,7 @@ func TestWatchList(t *testing.T) {
 	}
 }
 
+// verifyRequestOptions 逐条比对请求参数；TimeoutSeconds 的具体数值由 reflector 动态决定，只校验有无。
 func verifyRequestOptions(t *testing.T, lw *fakeListWatcher, expectedRequestOptions []metav1.ListOptions) {
 	if len(lw.requestOptions) != len(expectedRequestOptions) {
 		t.Fatalf("expected to receive exactly %v requests, got %v", len(expectedRequestOptions), len(lw.requestOptions))
@@ -653,24 +664,28 @@ func verifyRequestOptions(t *testing.T, lw *fakeListWatcher, expectedRequestOpti
 	}
 }
 
+// verifyListCounter 断言 LIST 请求次数，用于确认是否发生了回退。
 func verifyListCounter(t *testing.T, lw *fakeListWatcher, expectedListCounter int) {
 	if lw.listCounter != expectedListCounter {
 		t.Fatalf("unexpected number of LIST requests, got: %v, expected: %v", lw.listCounter, expectedListCounter)
 	}
 }
 
+// verifyWatchCounter 断言 WATCH 请求次数，例如 watch 中断后是否按预期重建。
 func verifyWatchCounter(t *testing.T, lw *fakeListWatcher, expectedWatchCounter int) {
 	if lw.watchCounter != expectedWatchCounter {
 		t.Fatalf("unexpected number of WATCH requests, got: %v, expected: %v", lw.watchCounter, expectedWatchCounter)
 	}
 }
 
+// byName 让 Store 内容比较不受 map 迭代顺序影响。
 type byName []v1.Pod
 
 func (a byName) Len() int           { return len(a) }
 func (a byName) Less(i, j int) bool { return a[i].Name < a[j].Name }
 func (a byName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
+// verifyStore 排序后比较缓存内容，避免事件到达顺序造成假失败。
 func verifyStore(t *testing.T, s Store, expectedPods []v1.Pod) {
 	rawPods := s.List()
 	actualPods := []v1.Pod{}
@@ -685,10 +700,12 @@ func verifyStore(t *testing.T, s Store, expectedPods []v1.Pod) {
 	}
 }
 
+// makePod 构造仅含关键字段的 Pod，UID 与 name 相同便于稳定比较。
 func makePod(name, rv string) *v1.Pod {
 	return &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, ResourceVersion: rv, UID: types.UID(name)}}
 }
 
+// testData 组装 Reflector、Store 与可取消的 context；stopFunc 用于在指定请求次数后终止测试。
 func testData(ctx context.Context) (*fakeListWatcher, Store, *Reflector, context.Context, func(error)) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	s := NewStore(MetaNamespaceKeyFunc)
@@ -703,6 +720,7 @@ func testData(ctx context.Context) (*fakeListWatcher, Store, *Reflector, context
 	return lw, s, r, ctx, cancel
 }
 
+// fakeListWatcher 记录 LIST/WATCH 请求并允许按计数触发取消，便于精确模拟服务端行为。
 type fakeListWatcher struct {
 	lock                    sync.Mutex
 	fakeWatcher             *watch.FakeWatcher
@@ -746,6 +764,7 @@ func (lw *fakeListWatcher) Watch(options metav1.ListOptions) (watch.Interface, e
 	return lw.fakeWatcher, nil
 }
 
+// StopAndRecreateWatch 模拟 watch 连接断开后 reflector 重新发起请求的场景。
 func (lw *fakeListWatcher) StopAndRecreateWatch() {
 	lw.lock.Lock()
 	defer lw.lock.Unlock()

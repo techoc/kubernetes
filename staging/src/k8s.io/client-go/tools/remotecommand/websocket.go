@@ -38,6 +38,8 @@ import (
 
 // writeDeadline defines the time that a client-side write to the websocket
 // connection must complete before an i/o timeout occurs.
+//
+// 写超时防止对端停止读取时写协程永久阻塞，进而让整个命令无法收尾。
 const writeDeadline = 60 * time.Second
 
 var (
@@ -45,6 +47,8 @@ var (
 	_ streamCreator     = &wsStreamCreator{}
 	_ httpstream.Stream = &stream{}
 
+	// streamType2streamID 把 API 的流类型映射为协议中的单字节流 ID；
+	// 这些 ID 在 v5.channel.k8s.io 协议中固定，不能随意调整。
 	streamType2streamID = map[string]byte{
 		v1.StreamTypeStdin:  remotecommand.StreamStdIn,
 		v1.StreamTypeStdout: remotecommand.StreamStdOut,
@@ -66,6 +70,9 @@ const (
 )
 
 // wsStreamExecutor handles transporting standard shell streams over an httpstream connection.
+//
+// 与 SPDY 不同，WebSocket 没有原生的多流复用，所有流共用一条连接，
+// 因此写入必须串行化，读端依靠每帧首字节的流 ID 解复用。
 type wsStreamExecutor struct {
 	transport http.RoundTripper
 	upgrader  websocket.ConnectionHolder
@@ -81,15 +88,20 @@ type wsStreamExecutor struct {
 	heartbeatDeadline time.Duration
 }
 
+// NewWebSocketExecutor 创建一个仅协商 V5 协议的 WebSocket 执行器。
+//
+// Only supports V5 protocol for correct version skew functionality.
+// Previous api servers will proxy upgrade requests to legacy websocket
+// servers on container runtimes which support V1-V4. These legacy
+// websocket servers will not handle the new CLOSE signal.
 func NewWebSocketExecutor(config *restclient.Config, method, url string) (Executor, error) {
-	// Only supports V5 protocol for correct version skew functionality.
-	// Previous api servers will proxy upgrade requests to legacy websocket
-	// servers on container runtimes which support V1-V4. These legacy
-	// websocket servers will not handle the new CLOSE signal.
 	return NewWebSocketExecutorForProtocols(config, method, url, remotecommand.StreamProtocolV5Name)
 }
 
 // NewWebSocketExecutorForProtocols allows to execute commands via a WebSocket connection.
+//
+// protocols 按优先级排列，服务端选择第一个双方都支持的子协议；调用方通常
+// 只需使用 NewWebSocketExecutor。
 func NewWebSocketExecutorForProtocols(config *restclient.Config, method, url string, protocols ...string) (Executor, error) {
 	transport, upgrader, err := websocket.RoundTripperFor(config)
 	if err != nil {
@@ -108,6 +120,8 @@ func NewWebSocketExecutorForProtocols(config *restclient.Config, method, url str
 
 // Deprecated: use StreamWithContext instead to avoid possible resource leaks.
 // See https://github.com/kubernetes/kubernetes/pull/103177 for details.
+//
+// 旧方法没有 context，调用方无法取消，连接可能一直存活。
 func (e *wsStreamExecutor) Stream(options StreamOptions) error {
 	return e.StreamWithContext(context.Background(), options)
 }
@@ -116,6 +130,9 @@ func (e *wsStreamExecutor) Stream(options StreamOptions) error {
 // goroutines to implement the necessary streams over the connection. The "options" parameter
 // defines which streams are requested. Returns an error if one occurred. This method is NOT
 // safe to run concurrently with the same executor (because of the state stored in the upgrader).
+//
+// 握手完成后先等待 readyChan：只有所有流创建完毕，读解复用循环才能安全启动，
+// 否则可能收到指向尚未创建流的数据帧。
 func (e *wsStreamExecutor) StreamWithContext(ctx context.Context, options StreamOptions) error {
 	req, err := http.NewRequestWithContext(ctx, e.method, e.url, nil)
 	if err != nil {
@@ -191,6 +208,10 @@ func (e *wsStreamExecutor) StreamWithContext(ctx context.Context, options Stream
 	}
 }
 
+// wsStreamCreator 管理一条 WebSocket 连接上的所有逻辑流。
+//
+// 读是单协程解复用、写由各流共享一把锁；关闭时统一以错误终止所有流的
+// 管道，使阻塞中的 Read 立即返回。
 type wsStreamCreator struct {
 	logger klog.Logger
 	conn   *gwebsocket.Conn
@@ -204,6 +225,7 @@ type wsStreamCreator struct {
 	setStreamErr error
 }
 
+// newWSStreamCreator 创建流管理器；streams 在首次使用前为空映射。
 func newWSStreamCreator(logger klog.Logger, conn *gwebsocket.Conn) *wsStreamCreator {
 	return &wsStreamCreator{
 		logger:  logger,
@@ -212,12 +234,14 @@ func newWSStreamCreator(logger klog.Logger, conn *gwebsocket.Conn) *wsStreamCrea
 	}
 }
 
+// getStream 按流 ID 查找流；不存在时返回 nil。
 func (c *wsStreamCreator) getStream(id byte) *stream {
 	c.streamsMu.Lock()
 	defer c.streamsMu.Unlock()
 	return c.streams[id]
 }
 
+// setStream 注册流；若连接已关闭则返回关闭原因，阻止新建流。
 func (c *wsStreamCreator) setStream(id byte, s *stream) error {
 	c.streamsMu.Lock()
 	defer c.streamsMu.Unlock()
@@ -230,6 +254,9 @@ func (c *wsStreamCreator) setStream(id byte, s *stream) error {
 
 // CreateStream uses id from passed headers to create a stream over "c.conn" connection.
 // Returns a Stream structure or nil and an error if one occurred.
+//
+// 每个流用一对 io.Pipe 连接“解复用读”和调用方的 Read；写则直接写入共享
+// WebSocket 连接。同一类型只允许一条流，避免协议歧义。
 func (c *wsStreamCreator) CreateStream(headers http.Header) (httpstream.Stream, error) {
 	streamType := headers.Get(v1.StreamType)
 	id, ok := streamType2streamID[streamType]
@@ -262,6 +289,9 @@ func (c *wsStreamCreator) CreateStream(headers http.Header) (httpstream.Stream, 
 // into one of the individual stream pipes (by checking the stream id). This
 // loop can *not* be run concurrently, because there can only be one websocket
 // connection reader at a time (a read mutex would provide no benefit).
+//
+// 每帧格式为 [1 字节流 ID][负载]；未知流 ID 的帧被丢弃而不是报错，以便
+// 客户端与未来版本的服务端保持兼容。
 func (c *wsStreamCreator) readDemuxLoop(bufferSize int, period time.Duration, deadline time.Duration) {
 	// Initialize and start the ping/pong heartbeat.
 	h := newHeartbeat(c.logger, c.conn, period, deadline)
@@ -354,6 +384,10 @@ func (c *wsStreamCreator) closeAllStreamReaders(err error) {
 	}
 }
 
+// stream 是 WebSocket 协议上的一条逻辑流。
+//
+// 读来自 io.Pipe（由解复用循环写入），写直接落到共享连接；因此并发写必须
+// 经过 connWriteLock。
 type stream struct {
 	logger    klog.Logger
 	headers   http.Header
@@ -368,6 +402,7 @@ type stream struct {
 	id            byte
 }
 
+// Read 从解复用管道读取数据；连接关闭时返回带有原因的错误或 io.EOF。
 func (s *stream) Read(p []byte) (n int, err error) {
 	return s.readPipe.Read(p)
 }
@@ -425,6 +460,7 @@ func (s *stream) Close() error {
 	return err
 }
 
+// Reset 半关闭对端并关闭本端写管道，用于在错误路径上尽快释放资源。
 func (s *stream) Reset() error {
 	s.logger.V(4).Info("Reset() on stream")
 	defer s.logger.V(4).Info("Reset() done on stream")
@@ -432,10 +468,12 @@ func (s *stream) Reset() error {
 	return s.writePipe.Close()
 }
 
+// Headers 返回创建流时的请求头，包含流类型与端口等信息。
 func (s *stream) Headers() http.Header {
 	return s.headers
 }
 
+// Identifier 返回协议中的流 ID。
 func (s *stream) Identifier() uint32 {
 	return uint32(s.id)
 }
@@ -462,6 +500,8 @@ type heartbeat struct {
 // newHeartbeat creates heartbeat structure encapsulating fields necessary to
 // run the websocket connection ping/pong mechanism and sets up handlers on
 // the websocket connection.
+//
+// CloseHandler 被包装而不是替换，保留底层库默认的关闭帧处理。
 func newHeartbeat(logger klog.Logger, conn *gwebsocket.Conn, period time.Duration, deadline time.Duration) *heartbeat {
 	h := &heartbeat{
 		logger: logger,
@@ -496,6 +536,9 @@ func newHeartbeat(logger klog.Logger, conn *gwebsocket.Conn, period time.Duratio
 
 // setMessage is optional data sent with "ping" heartbeat. According to the websocket RFC
 // this data sent with "ping" message should be returned in "pong" message.
+//
+// setMessage 必须在 start 之前调用；heartbeat 启动后不再加锁，事后写入会有
+// 数据竞争。
 func (h *heartbeat) setMessage(msg string) {
 	h.message = []byte(msg)
 }
@@ -504,6 +547,8 @@ func (h *heartbeat) setMessage(msg string) {
 // message every "period" until the "closer" channel is closed.
 func (h *heartbeat) start() {
 	// Loop to continually send "ping" message through websocket connection every "period".
+	// 只有明确的致命错误才退出循环；超时与 ErrCloseSent 可能是暂时性的，
+	// 连接是否关闭由读取循环判定。
 	t := time.NewTicker(h.period)
 	defer t.Stop()
 	for {

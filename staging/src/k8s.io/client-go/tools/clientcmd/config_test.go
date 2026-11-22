@@ -23,6 +23,8 @@ import (
 	"testing"
 )
 
+// TestModifyConfigWritesToFirstKubeconfigFile 校验 ModifyConfig 写入“加载顺序中的第一个文件”，
+// 而非字母序第一个；避免修改 current-context 时写错文件。
 func TestModifyConfigWritesToFirstKubeconfigFile(t *testing.T) {
 	const (
 		contextNameA   = "context-a"
@@ -80,6 +82,7 @@ current-context: `+contextNameB+`
 
 	// Set KUBECONFIG to the files, in descending alphabetical order.
 	// This will be used to check that they don't get sorted.
+	// 中文：显式让字母序与加载顺序相反，确保实现不会偷偷排序。
 	envVarValue := fmt.Sprintf("%s%c%s", configFile2, filepath.ListSeparator, configFile1)
 	t.Setenv(RecommendedConfigPathEnvVar, envVarValue)
 

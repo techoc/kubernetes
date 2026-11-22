@@ -22,6 +22,7 @@ import (
 	"go.uber.org/goleak"
 )
 
+// TestMain 用 goleak 检查测试结束后是否残留 goroutine；informers/reflectors 的泄漏常在此暴露。
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }

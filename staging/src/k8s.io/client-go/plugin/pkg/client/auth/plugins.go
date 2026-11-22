@@ -14,9 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package auth 通过空导入（blank import）注册通用客户端认证插件。
+//
+// 使用方只需空导入本包，即可让 client-go 在解析 kubeconfig 时识别
+// "oidc" 等认证提供者；插件通过 init() 向 client-go 的全局注册表注册，
+// 因此导入顺序不会影响可用性。
 package auth
 
 import (
 	// Initialize common client auth plugins.
+	// 空导入触发 oidc 插件的 init()，完成认证提供者注册。
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )

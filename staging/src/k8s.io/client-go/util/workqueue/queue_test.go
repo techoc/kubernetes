@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package workqueue_test 从外部视角验证 workqueue 的并发、去重、关闭与 drain 语义。
 package workqueue_test
 
 import (
@@ -29,6 +30,8 @@ import (
 )
 
 // traceQueue traces whether items are touched
+//
+// traceQueue 记录哪些条目被 Touch 过，用于验证“处理中重复入队”是否走 Touch 而非重新排队。
 type traceQueue struct {
 	workqueue.Queue[any]
 
@@ -45,6 +48,8 @@ func (t *traceQueue) Touch(item interface{}) {
 
 var _ workqueue.Queue[any] = &traceQueue{}
 
+// TestBasic 用多生产者/多消费者压测队列：关闭后 Add 应被忽略，
+// 已入队条目应被消费完毕，最终 Len 为 0。分别覆盖 ShutDown 与 ShutDownWithDrain。
 func TestBasic(t *testing.T) {
 	tests := []struct {
 		queue         *workqueue.Type
@@ -101,6 +106,7 @@ func TestBasic(t *testing.T) {
 
 		producerWG.Wait()
 		test.queueShutDown(test.queue)
+		// 模拟“关闭后仍尝试入队”，消费者读到该条目即视为失败。
 		test.queue.Add("added after shutdown!")
 		consumerWG.Wait()
 		if test.queue.Len() != 0 {
@@ -109,6 +115,8 @@ func TestBasic(t *testing.T) {
 	}
 }
 
+// TestAddWhileProcessing 验证“处理中再次 Add”只会把条目标记为 dirty，
+// 在 Done 后重新可被消费一次，而不会重复入队多次。
 func TestAddWhileProcessing(t *testing.T) {
 	tests := []struct {
 		queue         *workqueue.Type
@@ -169,6 +177,7 @@ func TestAddWhileProcessing(t *testing.T) {
 	}
 }
 
+// TestLen 验证 Len 反映待处理条目数，且重复 Add 不会增加长度。
 func TestLen(t *testing.T) {
 	q := workqueue.New()
 	q.Add("foo")
@@ -185,6 +194,7 @@ func TestLen(t *testing.T) {
 	}
 }
 
+// TestReinsert 验证处理中重新 Add 会在 Done 后再次出队，且最终清空。
 func TestReinsert(t *testing.T) {
 	q := workqueue.New()
 	q.Add("foo")
@@ -215,6 +225,7 @@ func TestReinsert(t *testing.T) {
 	}
 }
 
+// TestCollapse 验证重复 Add 同一未处理条目时，底层队列只保留一份（去重）。
 func TestCollapse(t *testing.T) {
 	tq := &traceQueue{Queue: workqueue.DefaultQueue[any]()}
 	q := workqueue.NewWithConfig(workqueue.QueueConfig{
@@ -244,6 +255,8 @@ func TestCollapse(t *testing.T) {
 	}
 }
 
+// TestCollapseWhileProcessing 验证“处理中重复 Add”不会被 Touch（不走重新排队路径），
+// 且 Done 后条目仍会回到队列被另一 worker 取走。
 func TestCollapseWhileProcessing(t *testing.T) {
 	tq := &traceQueue{Queue: workqueue.DefaultQueue[any]()}
 	q := workqueue.NewWithConfig(workqueue.QueueConfig{
@@ -297,6 +310,8 @@ func TestCollapseWhileProcessing(t *testing.T) {
 	}
 }
 
+// TestQueueDrainageUsingShutDownWithDrain 验证 ShutDownWithDrain 会等待所有已取出的条目
+// 完成 Done 后才返回，即“排空”语义。
 func TestQueueDrainageUsingShutDownWithDrain(t *testing.T) {
 
 	q := workqueue.New()
@@ -329,6 +344,7 @@ func TestQueueDrainageUsingShutDownWithDrain(t *testing.T) {
 	finishedWG.Wait()
 }
 
+// TestNoQueueDrainageUsingShutDown 验证 ShutDown 立即返回，不等待未 Done 的条目。
 func TestNoQueueDrainageUsingShutDown(t *testing.T) {
 
 	q := workqueue.New()
@@ -352,6 +368,8 @@ func TestNoQueueDrainageUsingShutDown(t *testing.T) {
 	finishedWG.Wait()
 }
 
+// TestForceQueueShutdownUsingShutDown 验证在 ShutDownWithDrain 等待期间调用 ShutDown
+// 可强制结束，模拟收到第二次 SIGTERM/SIGINT 时的行为。
 func TestForceQueueShutdownUsingShutDown(t *testing.T) {
 
 	q := workqueue.New()
@@ -385,6 +403,8 @@ func TestForceQueueShutdownUsingShutDown(t *testing.T) {
 	finishedWG.Wait()
 }
 
+// TestQueueDrainageUsingShutDownWithDrainWithDirtyItem 验证存在 dirty 条目时，
+// drain 会先让 dirty 条目重新出队并处理完，然后再返回。
 func TestQueueDrainageUsingShutDownWithDrainWithDirtyItem(t *testing.T) {
 	q := workqueue.New()
 
@@ -427,6 +447,8 @@ func TestQueueDrainageUsingShutDownWithDrainWithDirtyItem(t *testing.T) {
 
 // TestGarbageCollection ensures that objects that are added then removed from the queue are
 // able to be garbage collected.
+//
+// 验证队列处理后不残留对条目的引用（否则会造成内存泄漏）。
 func TestGarbageCollection(t *testing.T) {
 	type bigObject struct {
 		data []byte
@@ -462,6 +484,7 @@ func mustGarbageCollect(t *testing.T, i interface{}) {
 	})
 }
 
+// BenchmarkQueue 基准测试入队+出队+Done 的单轮开销（每轮 100 个不同 key）。
 func BenchmarkQueue(b *testing.B) {
 	keys := make([]string, 100)
 	for idx := range keys {

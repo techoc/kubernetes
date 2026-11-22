@@ -26,13 +26,18 @@ import (
 	"unicode/utf8"
 )
 
+// eof 是输入结束的哨兵值，避免与任何合法 rune 冲突。
 const eof = -1
 
 const (
+	// 模板中动作表达式被包裹在 { } 之间。
 	leftDelim  = "{"
 	rightDelim = "}"
 )
 
+// Parser 是 JSONPath 表达式的递归下降解析器，持有输入文本与扫描位置。
+//
+// 解析结果是以 Root 为根的 AST；解析器本身不是并发安全的，每个表达式应独立解析。
 type Parser struct {
 	Name  string
 	Root  *ListNode
@@ -43,6 +48,7 @@ type Parser struct {
 }
 
 var (
+	// ErrSyntax 表示表达式语法错误。
 	ErrSyntax        = errors.New("invalid syntax")
 	dictKeyRex       = regexp.MustCompile(`^'([^']*)'$`)
 	sliceOperatorRex = regexp.MustCompile(`^(-?[\d]*)(:-?[\d]*)?(:-?[\d]*)?$`)
@@ -51,6 +57,8 @@ var (
 // Parse parsed the given text and return a node Parser.
 // If an error is encountered, parsing stops and an empty
 // Parser is returned with the error
+//
+// Parse 解析文本并返回 Parser；出错时返回 nil，便于调用方直接判空。
 func Parse(name, text string) (*Parser, error) {
 	p := NewParser(name)
 	err := p.Parse(text)
@@ -60,6 +68,7 @@ func Parse(name, text string) (*Parser, error) {
 	return p, err
 }
 
+// NewParser 创建指定名字的空解析器。
 func NewParser(name string) *Parser {
 	return &Parser{
 		Name: name,
@@ -67,6 +76,8 @@ func NewParser(name string) *Parser {
 }
 
 // parseAction parsed the expression inside delimiter
+//
+// parseAction 解析两个分隔符之间的动作表达式，并返回以该动作根节点为 Root 的 Parser。
 func parseAction(name, text string) (*Parser, error) {
 	p, err := Parse(name, fmt.Sprintf("%s%s%s", leftDelim, text, rightDelim))
 	// when error happens, p will be nil, so we need to return here
@@ -77,6 +88,7 @@ func parseAction(name, text string) (*Parser, error) {
 	return p, nil
 }
 
+// Parse 重置解析状态并解析 text。
 func (p *Parser) Parse(text string) error {
 	p.input = text
 	p.Root = newList()
@@ -85,6 +97,8 @@ func (p *Parser) Parse(text string) error {
 }
 
 // consumeText return the parsed text since last cosumeText
+//
+// consumeText 返回自上次消费以来的文本，并把起点移动到当前位置。
 func (p *Parser) consumeText() string {
 	value := p.input[p.start:p.pos]
 	p.start = p.pos
@@ -115,6 +129,8 @@ func (p *Parser) backup() {
 	p.pos -= p.width
 }
 
+// parseText 扫描普通文本，直到遇到左分隔符或输入结束；
+// 文本片段作为 TextNode 追加到当前列表，左分隔符交给 parseLeftDelim 处理。
 func (p *Parser) parseText(cur *ListNode) error {
 	for {
 		if strings.HasPrefix(p.input[p.pos:], leftDelim) {
@@ -135,6 +151,8 @@ func (p *Parser) parseText(cur *ListNode) error {
 }
 
 // parseLeftDelim scans the left delimiter, which is known to be present.
+//
+// parseLeftDelim 消费左分隔符，新建一个列表节点进入动作内部继续解析。
 func (p *Parser) parseLeftDelim(cur *ListNode) error {
 	p.pos += len(leftDelim)
 	p.consumeText()
@@ -144,6 +162,8 @@ func (p *Parser) parseLeftDelim(cur *ListNode) error {
 	return p.parseInsideAction(cur)
 }
 
+// parseInsideAction 解析动作内部的语法，按前缀分派到过滤器、递归下降，
+// 或根据当前字符分派到数组、字符串、字段、数字、标识符等解析函数。
 func (p *Parser) parseInsideAction(cur *ListNode) error {
 	prefixMap := map[string]func(*ListNode) error{
 		rightDelim: p.parseRightDelim,
@@ -182,6 +202,8 @@ func (p *Parser) parseInsideAction(cur *ListNode) error {
 }
 
 // parseRightDelim scans the right delimiter, which is known to be present.
+//
+// parseRightDelim 消费右分隔符，回到文本模式继续解析。
 func (p *Parser) parseRightDelim(cur *ListNode) error {
 	p.pos += len(rightDelim)
 	p.consumeText()
@@ -189,6 +211,8 @@ func (p *Parser) parseRightDelim(cur *ListNode) error {
 }
 
 // parseIdentifier scans build-in keywords, like "range" "end"
+//
+// parseIdentifier 扫描标识符；true/false 会被解析为布尔字面量，其余作为 identifier 节点。
 func (p *Parser) parseIdentifier(cur *ListNode) error {
 	var r rune
 	for {
@@ -215,6 +239,8 @@ func (p *Parser) parseIdentifier(cur *ListNode) error {
 }
 
 // parseRecursive scans the recursive descent operator ..
+//
+// parseRecursive 解析递归下降运算符 ".."；不允许连续出现两个 ".."。
 func (p *Parser) parseRecursive(cur *ListNode) error {
 	if lastIndex := len(cur.Nodes) - 1; lastIndex >= 0 && cur.Nodes[lastIndex].Type() == NodeRecursive {
 		return fmt.Errorf("invalid multiple recursive descent")
@@ -229,6 +255,8 @@ func (p *Parser) parseRecursive(cur *ListNode) error {
 }
 
 // parseNumber scans number
+//
+// parseNumber 解析整数或浮点数（支持前导正负号）。
 func (p *Parser) parseNumber(cur *ListNode) error {
 	r := p.peek()
 	if r == '+' || r == '-' {
@@ -242,6 +270,7 @@ func (p *Parser) parseNumber(cur *ListNode) error {
 		}
 	}
 	value := p.consumeText()
+	// 先尝试整数，失败再尝试浮点，保持对整数值的最精确表示。
 	i, err := strconv.Atoi(value)
 	if err == nil {
 		cur.append(newInt(i))
@@ -256,6 +285,8 @@ func (p *Parser) parseNumber(cur *ListNode) error {
 }
 
 // parseArray scans array index selection
+//
+// parseArray 解析方括号内的索引、通配、并集、字典键或切片表达式。
 func (p *Parser) parseArray(cur *ListNode) error {
 Loop:
 	for {
@@ -268,6 +299,7 @@ Loop:
 	}
 	text := p.consumeText()
 	text = text[1 : len(text)-1]
+	// "*" 等价于完整切片 ":"。
 	if text == "*" {
 		text = ":"
 	}
@@ -288,6 +320,7 @@ Loop:
 	}
 
 	// dict key
+	// 'key' 形式的字典下标，转换为字段访问。
 	value := dictKeyRex.FindStringSubmatch(text)
 	if value != nil {
 		parser, err := parseAction("arraydict", fmt.Sprintf(".%s", value[1]))
@@ -309,6 +342,7 @@ Loop:
 	params := [3]ParamsEntry{}
 	for i := 0; i < 3; i++ {
 		if value[i] != "" {
+			// 后两个参数带 ":" 前缀，需要去掉再解析数字。
 			if i > 0 {
 				value[i] = value[i][1:]
 			}
@@ -324,6 +358,7 @@ Loop:
 			}
 		} else {
 			if i == 1 {
+				// 省略结束位置时，默认到起始位置之后一位（单个元素）。
 				params[i].Known = true
 				params[i].Value = params[0].Value + 1
 				params[i].Derived = true
@@ -338,6 +373,8 @@ Loop:
 }
 
 // parseFilter scans filter inside array selection
+//
+// parseFilter 解析 "[?(...)]" 过滤器；无法识别比较运算符时按“字段存在”处理。
 func (p *Parser) parseFilter(cur *ListNode) error {
 	p.pos += len("[?(")
 	p.consumeText()
@@ -378,6 +415,7 @@ Loop:
 	text = text[:len(text)-2]
 	value := reg.FindStringSubmatch(text)
 	if value == nil {
+		// 没有比较运算符，视为“存在性”过滤。
 		parser, err := parseAction("text", text)
 		if err != nil {
 			return err
@@ -398,6 +436,8 @@ Loop:
 }
 
 // parseQuote unquotes string inside double or single quote
+//
+// parseQuote 解析单/双引号字符串，支持转义引号。
 func (p *Parser) parseQuote(cur *ListNode, end rune) error {
 Loop:
 	for {
@@ -421,6 +461,8 @@ Loop:
 }
 
 // parseField scans a field until a terminator
+//
+// parseField 解析字段名直到终止符；"*" 会被解析为通配符节点。
 func (p *Parser) parseField(cur *ListNode) error {
 	p.consumeText()
 	for p.advance() {
@@ -429,12 +471,15 @@ func (p *Parser) parseField(cur *ListNode) error {
 	if value == "*" {
 		cur.append(newWildcard())
 	} else {
+		// 去掉转义用的反斜杠，得到真实字段名。
 		cur.append(newField(strings.Replace(value, "\\", "", -1)))
 	}
 	return p.parseInsideAction(cur)
 }
 
 // advance scans until next non-escaped terminator
+//
+// advance 前进一个 rune；遇到转义符时跳过其后一个字符，遇到未转义的终止符则回退并返回 false。
 func (p *Parser) advance() bool {
 	r := p.next()
 	if r == '\\' {
@@ -479,6 +524,8 @@ func isBool(s string) bool {
 }
 
 // UnquoteExtend is almost same as strconv.Unquote(), but it support parse single quotes as a string
+//
+// UnquoteExtend 与 strconv.Unquote 基本相同，但额外支持单引号字符串。
 func UnquoteExtend(s string) (string, error) {
 	n := len(s)
 	if n < 2 {
@@ -517,6 +564,7 @@ func UnquoteExtend(s string) (string, error) {
 	return string(buf), nil
 }
 
+// contains 判断字节 c 是否出现在 s 中。
 func contains(s string, c byte) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] == c {

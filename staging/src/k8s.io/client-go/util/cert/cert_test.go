@@ -31,6 +31,9 @@ const COMMON_NAME = "foo.example.com"
 // a SAN ensures that the certificate is considered
 // valid by default in go 1.15 and above, which
 // turns off fallback to Common Name by default.
+//
+// 回归点：Go 1.15 起不再回退到 Common Name 校验，因此自签证书必须带 SAN，
+// 否则 TLS 校验会失败。
 func TestSelfSignedCertHasSAN(t *testing.T) {
 	key, err := rsa.GenerateKey(cryptorand.Reader, 2048)
 	if err != nil {

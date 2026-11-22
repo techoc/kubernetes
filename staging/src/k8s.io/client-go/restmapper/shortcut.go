@@ -30,11 +30,15 @@ import (
 )
 
 // shortcutExpander is a RESTMapper that can be used for Kubernetes resources.   It expands the resource first, then invokes the wrapped
+//
+// 它把用户输入的短名（如 "deploy"、"cm"）展开为完整资源名后，再委托给底层
+// RESTMapper，因此兼容 kubectl 风格的简写。
 type shortcutExpander struct {
 	RESTMapper meta.RESTMapperWithContext
 
 	discoveryClient discovery.DiscoveryInterfaceWithContext
 
+	// warningHandler 在短名存在多个候选时收到告警；为 nil 表示静默。
 	warningHandler func(string)
 }
 
@@ -73,6 +77,8 @@ func (e shortcutExpander) KindForWithContext(ctx context.Context, resource schem
 	// cache and fetch all data from a cluster (see k8s.io/client-go/restmapper/discovery.go#KindFor).
 	// Thus another call to expandResourceShortcut, after a NoMatchError should successfully
 	// read Kind to the user or an error.
+	// 这里的重试是有意为之：底层 mapper 在未命中时会刷新 discovery 缓存，
+	// 第二次展开才能看到刚创建的 CRD。
 	gvk, err := e.RESTMapper.KindForWithContext(ctx, e.expandResourceShortcut(ctx, resource))
 	if meta.IsNoMatchError(err) {
 		return e.RESTMapper.KindForWithContext(ctx, e.expandResourceShortcut(ctx, resource))
@@ -133,6 +139,7 @@ func (e shortcutExpander) ResourceSingularizer(resource string) (string, error) 
 
 // ResourceSingularizerWithContext fulfills meta.RESTMapperWithContext
 func (e shortcutExpander) ResourceSingularizerWithContext(ctx context.Context, resource string) (string, error) {
+	// 先把短名展开，再用展开后的资源名去求单数形式。
 	return e.RESTMapper.ResourceSingularizerWithContext(ctx, e.expandResourceShortcut(ctx, schema.GroupVersionResource{Resource: resource}).Resource)
 }
 
@@ -146,6 +153,7 @@ func (e shortcutExpander) RESTMapping(gk schema.GroupKind, versions ...string) (
 }
 
 // RESTMappingWithContext fulfills meta.RESTMapperWithContext
+// 按 GroupKind 查询时不存在资源短名问题，直接透传。
 func (e shortcutExpander) RESTMappingWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) (*meta.RESTMapping, error) {
 	return e.RESTMapper.RESTMappingWithContext(ctx, gk, versions...)
 }
@@ -172,6 +180,7 @@ func (e shortcutExpander) getShortcutMappings(ctx context.Context) ([]*metav1.AP
 	res := []resourceShortcuts{}
 	// get server resources
 	// This can return an error *and* the results it was able to find.  We don't need to fail on the error.
+	// 部分 group 不可用时仍可基于已取到的结果工作，因此仅记录日志。
 	_, apiResList, err := e.discoveryClient.ServerGroupsAndResourcesWithContext(ctx)
 	if err != nil {
 		klog.FromContext(ctx).V(1).Info("Error loading discovery information", "err", err)
@@ -193,6 +202,7 @@ func (e shortcutExpander) getShortcutMappings(ctx context.Context) ([]*metav1.AP
 		}
 	}
 
+	// 保持 discovery 返回的顺序，即 group 优先级顺序。
 	return apiResList, res, nil
 }
 
@@ -204,6 +214,7 @@ func (e shortcutExpander) expandResourceShortcut(ctx context.Context, resource s
 	// get the shortcut mappings and return on first match.
 	if allResources, shortcutResources, err := e.getShortcutMappings(ctx); err == nil {
 		// avoid expanding if there's an exact match to a full resource name
+		// 完整资源名（或其单数形式）优先，绝不能被短名规则误改。
 		for _, apiResources := range allResources {
 			gv, err := schema.ParseGroupVersion(apiResources.GroupVersion)
 			if err != nil {
@@ -224,6 +235,7 @@ func (e shortcutExpander) expandResourceShortcut(ctx context.Context, resource s
 
 		found := false
 		var rsc schema.GroupVersionResource
+		// 对同一短名的多个候选只告警一次，避免刷屏。
 		warnedAmbiguousShortcut := make(map[schema.GroupResource]bool)
 		for _, item := range shortcutResources {
 			if len(resource.Group) != 0 && resource.Group != item.ShortForm.Group {
@@ -255,6 +267,7 @@ func (e shortcutExpander) expandResourceShortcut(ctx context.Context, resource s
 		}
 
 		// we didn't find exact match so match on group prefixing. This allows autoscal to match autoscaling
+		// 前缀匹配只在调用方指定了 group 时进行，避免产生意外解析。
 		if len(resource.Group) == 0 {
 			return resource
 		}
@@ -280,6 +293,7 @@ func (e shortcutExpander) Reset() {
 	e.ResetWithContext(context.Background())
 }
 
+// ResetWithContext 清除底层 mapper 的 discovery 缓存；本层自身不缓存任何状态。
 func (e shortcutExpander) ResetWithContext(ctx context.Context) {
 	meta.MaybeResetRESTMapperWithContext(ctx, e.RESTMapper)
 }

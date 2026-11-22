@@ -29,9 +29,13 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// handlerWaitTime 模拟慢事件处理器，使处理阶段持续占用队列。
 const handlerWaitTime = time.Millisecond
 
+// BenchmarkAddWithSlowHandlers 测量事件处理器很慢时向队列添加对象的开销，
+// 并对比"处理期间持锁"与"处理期间解锁"两种模式的差异。
 func BenchmarkAddWithSlowHandlers(b *testing.B) {
+	// unlockWhileProcessing=true 时使用 AtomicEvents 模式，处理期间允许生产者并发入队。
 	for _, unlockWhileProcessing := range []bool{false, true} {
 		b.Run(fmt.Sprintf("unlockWhileProcessing=%t", unlockWhileProcessing), func(b *testing.B) {
 			logger, ctx := ktesting.NewTestContext(b)
@@ -46,6 +50,8 @@ func BenchmarkAddWithSlowHandlers(b *testing.B) {
 
 			store := NewStore(DeletionHandlingMetaNamespaceKeyFunc)
 			fifoOptions := RealFIFOOptions{}
+			// 两种模式互斥：AtomicEvents 要求不提供 KnownObjects，
+			// 而 UnlockWhileProcessing 只能在 AtomicEvents 下开启。
 			if unlockWhileProcessing {
 				fifoOptions.UnlockWhileProcessing = true
 				fifoOptions.AtomicEvents = true
@@ -77,11 +83,13 @@ func BenchmarkAddWithSlowHandlers(b *testing.B) {
 			}
 			c := New(cfg)
 			go c.RunWithContext(ctx)
+			// 等首次同步完成后开始计时，避免初始化噪声影响基准结果。
 			if !WaitForCacheSync(ctx.Done(), c.HasSynced) {
 				b.Fatal("Timed out waiting for cache sync")
 			}
 
 			// Producer: Modify object as fast as the handler can process it. This should ensure that the process func is always running.
+			// 生产者与慢处理器同频修改对象，保证队列中始终有事件待处理。
 			go func() {
 				// Stop when the benchmark context is cancelled.
 				ticker := time.NewTicker(handlerWaitTime)
@@ -100,7 +108,10 @@ func BenchmarkAddWithSlowHandlers(b *testing.B) {
 	}
 }
 
+// benchmarkReflectorWithSlowHandlers 在控制器持续处理事件的同时，
+// 测量向 FIFO 添加新对象的耗时（b.N 次）。
 func benchmarkReflectorWithSlowHandlers(b *testing.B, fifo *RealFIFO) {
+	// 重置计时，排除上面的准备与同步阶段。
 	b.ResetTimer()
 	// Try adding an object to the queue, while the controller is processing other events.
 	for i := 0; i < b.N; i++ {

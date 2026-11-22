@@ -27,7 +27,10 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// TestDaemonSetLister 校验 lister 的列表与按 Pod 反查 DaemonSet 的行为。
+// 覆盖：全量列举、无 Pod 标签、无选择器、以及跨命名空间时只命中同命名空间的选择器。
 func TestDaemonSetLister(t *testing.T) {
+	// 用 namespace 索引的 Indexer 模拟 SharedInformer 的本地缓存。
 	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{"namespace": cache.MetaNamespaceIndexFunc})
 	lister := NewDaemonSetLister(store)
 	testCases := []struct {
@@ -127,6 +130,7 @@ func TestDaemonSetLister(t *testing.T) {
 		},
 	}
 	for _, c := range testCases {
+		// 每个用例都向同一个 store 追加对象；用例之间的数据会累积，但期望值只关心各自的命名空间/选择器。
 		for _, r := range c.inDSs {
 			store.Add(r)
 		}

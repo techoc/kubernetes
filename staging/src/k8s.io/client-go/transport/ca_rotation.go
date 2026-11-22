@@ -34,6 +34,9 @@ var _ utilnet.RoundTripperWrapper = &atomicTransportHolder{}
 
 // atomicTransportHolder holds a transport that can be atomically updated
 // when CA files change, enabling graceful CA rotation without cache complexity
+//
+// 与重建整个 REST 客户端不同，这里只替换持有的 *http.Transport，
+// 已有请求继续使用旧 transport 完成，新请求则走新的根证书池。
 type atomicTransportHolder struct {
 	caFile        string
 	currentCAData []byte // Track the actual CA data currently in use
@@ -57,7 +60,9 @@ func (h *atomicTransportHolder) WrappedRoundTripper() http.RoundTripper {
 	return h.transport
 }
 
+// getTransport 返回当前应使用的 transport，必要时刷新 CA。
 func (h *atomicTransportHolder) getTransport(ctx context.Context) *http.Transport {
+	// 常见情况：仍在刷新窗口内，读锁直接返回，避免每个请求都抢写锁。
 	if rt := h.getTransportIfFresh(); rt != nil {
 		return rt
 	}
@@ -65,10 +70,12 @@ func (h *atomicTransportHolder) getTransport(ctx context.Context) *http.Transpor
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	// 拿到写锁后需要二次检查，可能其他 goroutine 已完成刷新。
 	h.tryRefreshTransportLocked(ctx)
 	return h.transport
 }
 
+// getTransportIfFresh 在刷新窗口内返回当前 transport，否则返回 nil。
 func (h *atomicTransportHolder) getTransportIfFresh() *http.Transport {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -79,6 +86,7 @@ func (h *atomicTransportHolder) getTransportIfFresh() *http.Transport {
 	return nil
 }
 
+// tryRefreshTransportLocked 在持写锁的前提下检查并替换 transport。
 func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 	// If some other goroutine already checked/updated the CA
 	if h.clock.Since(h.transportLastChecked) < h.caRefreshDuration {
@@ -86,6 +94,7 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 	}
 
 	// only attempt CA reload once per caRefreshDuration, even if the reload fails
+	// 失败也推进检查时间，防止文件持续不可读时每个请求都触发 stat/read。
 	h.transportLastChecked = h.clock.Now()
 
 	logger := klog.FromContext(ctx).WithValues("caFile", h.caFile)
@@ -95,18 +104,22 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 	// Load new CA data from file
 	newCAData, err := os.ReadFile(h.caFile)
 	// Return old transport on read error
+	// 文件暂时不可读（如 kubelet 原子替换 CA 卷的瞬间）时保留旧 transport，
+	// 保证连接不会因短暂的 IO 错误中断。
 	if err != nil {
 		logger.Error(err, "Failed to read CA data from file")
 		metrics.TransportCAReloads.Increment("failure", "read_error")
 		return
 	}
 
+	// 空文件通常表示写入未完成，用空池替换会导致所有 TLS 校验失败。
 	if len(newCAData) == 0 {
 		logger.Info("CA file empty, skipping transport rotation")
 		metrics.TransportCAReloads.Increment("failure", "empty")
 		return
 	}
 
+	// 内容未变则无谓地 clone transport 只会浪费连接池，直接跳过。
 	if bytes.Equal(h.currentCAData, newCAData) {
 		logger.V(4).Info("CA file unchanged, skipping transport rotation")
 		metrics.TransportCAReloads.Increment("success", "unchanged")
@@ -123,6 +136,7 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 		metrics.TransportCAReloads.Increment("failure", "ca_parse_error")
 		return
 	}
+	// Clone 复制连接池配置，只替换根证书，其余 TLS/代理设置保持不变。
 	newTransport := h.transport.Clone()
 	newTransport.TLSClientConfig.RootCAs = newCAs
 	oldTransport := h.transport
@@ -131,6 +145,7 @@ func (h *atomicTransportHolder) tryRefreshTransportLocked(ctx context.Context) {
 	h.currentCAData = newCAData
 
 	// Close idle connections on the old transport to encourage migration
+	// 旧连接仍被进行中的请求使用，只能关闭空闲连接，使其自然淘汰。
 	oldTransport.CloseIdleConnections()
 
 	logger.V(4).Info("Transport updated for CA rotation")

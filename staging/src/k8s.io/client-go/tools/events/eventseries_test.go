@@ -37,6 +37,8 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// testEventSeriesSink 是可注入回调的 fake EventSink，让测试能观察 Create/Update/Patch
+// 被调用的时机与内容；未设置回调时原样返回事件。
 type testEventSeriesSink struct {
 	OnCreate func(e *eventsv1.Event) (*eventsv1.Event, error)
 	OnUpdate func(e *eventsv1.Event) (*eventsv1.Event, error)
@@ -67,6 +69,8 @@ func (t *testEventSeriesSink) Patch(ctx context.Context, e *eventsv1.Event, p []
 	return e, nil
 }
 
+// TestEventSeriesf 验证事件聚合：相同（regarding/related/type/reason/action）的事件
+// 会走 Patch 并递增 Series.Count，而 action 不同的事件则作为新事件 Create。
 func TestEventSeriesf(t *testing.T) {
 	hostname, _ := os.Hostname()
 
@@ -104,11 +108,14 @@ func TestEventSeriesf(t *testing.T) {
 		Type:                v1.EventTypeNormal,
 	}
 
+	// isomorphic 与 nonIsomorphic 分别代表可聚合与不可聚合的事件：
+	// 仅 action 不同即视为不同事件，不应被合并。
 	isomorphicEvent := expectedEvent.DeepCopy()
 
 	nonIsomorphicEvent := expectedEvent.DeepCopy()
 	nonIsomorphicEvent.Action = "stopped"
 
+	// 期望的聚合事件带 Series.Count=2（首次创建 + 一次增量）。
 	expectedEvent.Series = &eventsv1.EventSeries{Count: 2}
 	table := []struct {
 		regarding    k8sruntime.Object
@@ -140,6 +147,7 @@ func TestEventSeriesf(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// 用 channel 接收 sink 回调，测试依次断言“Patch 或 Create”路径。
 	createEvent := make(chan *eventsv1.Event)
 	updateEvent := make(chan *eventsv1.Event)
 	patchEvent := make(chan *eventsv1.Event)
@@ -170,6 +178,7 @@ func TestEventSeriesf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 先发一条事件填充聚合缓存，之后才能验证同键事件的 Patch 路径。
 	recorder.Eventf(regarding, related, isomorphicEvent.Type, isomorphicEvent.Reason, isomorphicEvent.Action, isomorphicEvent.Note, []interface{}{1})
 	// read from the chan as this was needed only to populate the cache
 	<-createEvent
@@ -192,6 +201,8 @@ func TestEventSeriesf(t *testing.T) {
 // TestEventSeriesWithEventSinkImplRace verifies that when Events are emitted to
 // an EventSink consecutively there is no data race.  This test is meant to be
 // run with the `-race` option.
+//
+// 连续发出两条相同事件，最终应只留下一条带 Series 的记录；配合 -race 检测并发问题。
 func TestEventSeriesWithEventSinkImplRace(t *testing.T) {
 	kubeClient := fake.NewSimpleClientset()
 
@@ -206,6 +217,7 @@ func TestEventSeriesWithEventSinkImplRace(t *testing.T) {
 	recorder.Eventf(&v1.ObjectReference{}, nil, v1.EventTypeNormal, "reason", "action", "", "")
 	recorder.Eventf(&v1.ObjectReference{}, nil, v1.EventTypeNormal, "reason", "action", "", "")
 
+	// PollImmediate 轮询等待聚合结果：一条事件、且 Series 非空。
 	err := wait.PollImmediate(100*time.Millisecond, 5*time.Second, func() (done bool, err error) {
 		events, err := kubeClient.EventsV1().Events(metav1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
@@ -227,6 +239,8 @@ func TestEventSeriesWithEventSinkImplRace(t *testing.T) {
 	}
 }
 
+// validateEvent 校验事件是否满足预期：时间戳必须设置；
+// 期望聚合时 Series 计数一致且名称带前缀，否则 Series 必须为 nil。
 func validateEvent(messagePrefix string, expectedUpdate bool, actualEvent *eventsv1.Event, expectedEvent *eventsv1.Event, t *testing.T) {
 	recvEvent := *actualEvent
 
@@ -257,6 +271,8 @@ func validateEvent(messagePrefix string, expectedUpdate bool, actualEvent *event
 
 }
 
+// TestFinishSeries 验证 finishSeries 只处理已过期的聚合事件：
+// 缓存中未过期的事件保留，过期事件被 Patch 收尾并从缓存移除。
 func TestFinishSeries(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	hostname, _ := os.Hostname()
@@ -329,6 +345,8 @@ func TestFinishSeries(t *testing.T) {
 	}
 }
 
+// TestRefreshExistingEventSeries 验证周期性刷新：对聚合事件执行 Patch 以更新
+// LastObservedTime，同时覆盖 Patch 失败时不破坏缓存的情况。
 func TestRefreshExistingEventSeries(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	hostname, _ := os.Hostname()

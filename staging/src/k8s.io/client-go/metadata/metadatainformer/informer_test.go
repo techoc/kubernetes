@@ -44,14 +44,19 @@ import (
 )
 
 func init() {
+	// 打开 klog 便于在测试失败时查看 informer/reflector 的行为。
 	klog.InitFlags(flag.CommandLine)
 	flag.CommandLine.Lookup("v").Value.Set("5")
 	flag.CommandLine.Lookup("alsologtostderr").Value.Set("true")
 }
 
+// TestWatchListSemanticsSimple 验证开启 WatchListClient 特性后，metadata
+// informer 会直接发起 watch 请求，并使用服务端返回的 initial-events
+// bookmark 作为初始同步完成的信号（而不是先 list 再 watch）。
 func TestWatchListSemanticsSimple(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
 
+	// 服务端只接受 watch；若客户端先发 list，测试即失败。
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if _, ok := req.URL.Query()["watch"]; !ok {
 			t.Errorf("expected a watch request, params: %v", req.URL.Query())
@@ -59,6 +64,7 @@ func TestWatchListSemanticsSimple(t *testing.T) {
 			return
 		}
 
+		// initial-events-end 注解标记初始事件集合结束，informer 据此判定缓存已同步。
 		obj := &metav1.PartialObjectMetadata{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "meta.k8s.io/v1",
@@ -77,6 +83,7 @@ func TestWatchListSemanticsSimple(t *testing.T) {
 			return
 		}
 
+		// 以 bookmark 事件下发该注解，客户端不把它当作普通对象处理。
 		watchEvent := &metav1.WatchEvent{
 			Type:   string(watch.Bookmark),
 			Object: runtime.RawExtension{Raw: rawObj},
@@ -113,6 +120,8 @@ func TestWatchListSemanticsSimple(t *testing.T) {
 	}
 }
 
+// TestUnSupportWatchListSemantics 验证当服务端/客户端实现不支持 WatchList
+// 语义时，informer 能回退到 list+watch 并正常完成初始同步。
 func TestUnSupportWatchListSemantics(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
 	scheme := runtime.NewScheme()
@@ -121,6 +130,7 @@ func TestUnSupportWatchListSemantics(t *testing.T) {
 	}
 	// The fake client doesn’t support WatchList semantics,
 	// so we don’t need to prepare a response.
+	// 这里的关键是验证回退路径，而不是 watch 事件内容。
 	fakeClient := fake.NewSimpleMetadataClient(scheme)
 	factory := NewFilteredSharedInformerFactory(fakeClient, 0, "ns", nil)
 	target := factory.ForResource(schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"})
@@ -134,6 +144,9 @@ func TestUnSupportWatchListSemantics(t *testing.T) {
 	}
 }
 
+// TestMetadataSharedInformerFactory 覆盖 metadata SharedInformerFactory 的
+// 三种事件回调：新增、更新、删除，验证事件能从 fake 客户端经 informer
+// 正确投递到事件处理器。
 func TestMetadataSharedInformerFactory(t *testing.T) {
 	scenarios := []struct {
 		name        string
@@ -145,6 +158,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 	}{
 		// scenario 1
 		{
+			// 新建对象应触发 AddFunc。
 			name: "scenario 1: test if adding an object triggers AddFunc",
 			ns:   "ns-foo",
 			gvr:  schema.GroupVersionResource{Group: "extensions", Version: "v1beta1", Resource: "deployments"},
@@ -167,6 +181,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 
 		// scenario 2
 		{
+			// 修改注解应触发 UpdateFunc，且处理器收到的是更新后的对象。
 			name:        "scenario 2: tests if updating an object triggers UpdateFunc",
 			ns:          "ns-foo",
 			gvr:         schema.GroupVersionResource{Group: "extensions", Version: "v1beta1", Resource: "deployments"},
@@ -193,6 +208,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 
 		// scenario 3
 		{
+			// 删除对象应触发 DeleteFunc。
 			name:        "scenario 3: test if deleting an object triggers DeleteFunc",
 			ns:          "ns-foo",
 			gvr:         schema.GroupVersionResource{Group: "extensions", Version: "v1beta1", Resource: "deployments"},
@@ -222,6 +238,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 			defer cancel()
 			scheme := fake.NewTestScheme()
 			metav1.AddMetaToScheme(scheme)
+			// 带缓冲的通道用于在事件处理器与测试主体之间传递对象，避免处理器阻塞。
 			informerReciveObjectCh := make(chan *metav1.PartialObjectMetadata, 1)
 			objs := []runtime.Object{}
 			if ts.existingObj != nil {
@@ -239,6 +256,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 			}
 
 			testObject := ts.trigger(ts.gvr, ts.ns, fakeClient, ts.existingObj)
+			// 等待处理器收到对象或超时，确保测试不会永久挂起。
 			select {
 			case objFromInformer := <-informerReciveObjectCh:
 				if !equality.Semantic.DeepEqual(testObject, objFromInformer) {
@@ -251,6 +269,7 @@ func TestMetadataSharedInformerFactory(t *testing.T) {
 	}
 }
 
+// newPartialObjectMetadata 构造只含 TypeMeta 与基本 ObjectMeta 的元数据对象。
 func newPartialObjectMetadata(apiVersion, kind, namespace, name string) *metav1.PartialObjectMetadata {
 	return &metav1.PartialObjectMetadata{
 		TypeMeta: metav1.TypeMeta{

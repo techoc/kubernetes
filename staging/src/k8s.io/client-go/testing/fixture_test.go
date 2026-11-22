@@ -43,6 +43,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// getArbitraryResource 构造一个用于测试的 unstructured 对象；
+// "data" 字段写入随机数，便于验证对象内容确实来自创建而非残留。
 func getArbitraryResource(s schema.GroupVersionResource, name, namespace string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -60,6 +62,7 @@ func getArbitraryResource(s schema.GroupVersionResource, name, namespace string)
 	}
 }
 
+// TestWatchCallNonNamespace 验证按命名空间 watch 时，Create 会产生与该命名空间匹配的事件。
 func TestWatchCallNonNamespace(t *testing.T) {
 	testResource := schema.GroupVersionResource{Group: "", Version: "test_version", Resource: "test_kind"}
 	testObj := getArbitraryResource(testResource, "test_name", "test_namespace")
@@ -75,6 +78,7 @@ func TestWatchCallNonNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("test resource watch failed in %s: %v ", ns, err)
 	}
+	// Create 在 goroutine 中执行，避免在事件被读取前阻塞。
 	go func() {
 		err := o.Create(testResource, testObj, ns)
 		if err != nil {
@@ -85,6 +89,8 @@ func TestWatchCallNonNamespace(t *testing.T) {
 	assert.Equal(t, testObj, out.Object, "watched object mismatch")
 }
 
+// TestWatchCallAllNamespace 验证命名空间级与全命名空间级 watch 会同时收到
+// Added/Modified/Deleted 事件。
 func TestWatchCallAllNamespace(t *testing.T) {
 	testResource := schema.GroupVersionResource{Group: "", Version: "test_version", Resource: "test_kind"}
 	testObj := getArbitraryResource(testResource, "test_name", "test_namespace")
@@ -136,6 +142,8 @@ func TestWatchCallAllNamespace(t *testing.T) {
 	assert.Equal(t, testObj, outAll.Object, "watched deleted object mismatch")
 }
 
+// TestWatchCallMultipleInvocation 验证多个 watch 订阅者（含全命名空间）按各自作用域
+// 正确收到事件，不会互相串扰。
 func TestWatchCallMultipleInvocation(t *testing.T) {
 	cases := []struct {
 		name string
@@ -238,6 +246,7 @@ func TestWatchCallMultipleInvocation(t *testing.T) {
 	wg.Wait()
 }
 
+// TestWatchAddAfterStop 验证 watch.Stop 之后的事件会被忽略且不 panic。
 func TestWatchAddAfterStop(t *testing.T) {
 	testResource := schema.GroupVersionResource{Group: "", Version: "test_version", Resource: "test_kind"}
 	testObj := getArbitraryResource(testResource, "test_name", "test_namespace")
@@ -269,6 +278,7 @@ func TestWatchAddAfterStop(t *testing.T) {
 	}
 }
 
+// TestPatchWithMissingObject 验证对不存在的对象打补丁返回 NotFound，而不是创建空对象。
 func TestPatchWithMissingObject(t *testing.T) {
 	nodesResource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}
 
@@ -283,6 +293,7 @@ func TestPatchWithMissingObject(t *testing.T) {
 	assert.EqualError(t, err, `nodes "node-1" not found`)
 }
 
+// TestApplyCreate 验证 server-side apply 可在对象不存在时创建它，并写入补丁中的字段。
 func TestApplyCreate(t *testing.T) {
 	cmResource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configMaps"}
 	scheme := runtime.NewScheme()
@@ -303,6 +314,7 @@ func TestApplyCreate(t *testing.T) {
 	assert.Equal(t, map[string]string{"k": "v"}, cm.Data)
 }
 
+// TestApplyNoMeta 验证 apply 配置缺少 metadata.name 时，名称取自 action 路径而非配置。
 func TestApplyNoMeta(t *testing.T) {
 	cmResource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configMaps"}
 	scheme := runtime.NewScheme()
@@ -324,6 +336,8 @@ func TestApplyNoMeta(t *testing.T) {
 	assert.Equal(t, map[string]string{"k": "v"}, cm.Data)
 }
 
+// TestApplyUpdateMultipleFieldManagers 验证字段归属（managed fields）的完整语义：
+// 不同 manager 的字段合并、冲突检测、Force 覆盖，以及 Update 的整体覆盖。
 func TestApplyUpdateMultipleFieldManagers(t *testing.T) {
 	cmResource := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configMaps"}
 	scheme := runtime.NewScheme()
@@ -435,6 +449,8 @@ func TestApplyUpdateMultipleFieldManagers(t *testing.T) {
 	assert.Equal(t, map[string]string{"k99": "v99"}, typedCm.Data)
 }
 
+// TestGetWithExactMatch 验证 tracker 的 Get 严格匹配命名空间：
+// 集群级对象不能带命名空间查询，命名空间对象不能省略命名空间。
 func TestGetWithExactMatch(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -482,6 +498,8 @@ func TestGetWithExactMatch(t *testing.T) {
 	assert.EqualError(t, err, errNotFound.Error())
 }
 
+// Test_resourceCovers 验证 reactor 的 resource 匹配规则：
+// "*" 匹配全部；"resource/subresource" 需同时匹配资源与子资源。
 func Test_resourceCovers(t *testing.T) {
 	type args struct {
 		resource string
@@ -569,6 +587,8 @@ func Test_resourceCovers(t *testing.T) {
 	}
 }
 
+// configMapTypeConverter 用精简的 typed schema 构造类型转换器，
+// 以便在无完整 OpenAPI 数据的情况下测试 managed fields。
 func configMapTypeConverter(scheme *runtime.Scheme) managedfields.TypeConverter {
 	parser, err := typed.NewParser(configMapTypedSchema)
 	if err != nil {
@@ -578,6 +598,7 @@ func configMapTypeConverter(scheme *runtime.Scheme) managedfields.TypeConverter 
 	return managedfields.NewSchemeTypeConverter(scheme, parser)
 }
 
+// configMapTypedSchema 是测试用的最小 typed schema，只覆盖 ConfigMap 与 ObjectMeta/ManagedFields。
 var configMapTypedSchema = typed.YAMLObject(`types:
 - name: io.k8s.api.core.v1.ConfigMap
   map:
@@ -665,6 +686,8 @@ var configMapTypedSchema = typed.YAMLObject(`types:
     elementRelationship: separable
 `)
 
+// TestManagedFieldsObjectTrackerReloadsScheme 验证 tracker 在创建后才注册类型时，
+// 后续 Create 仍能正常工作（不会缓存过期的 scheme 视图）。
 func TestManagedFieldsObjectTrackerReloadsScheme(t *testing.T) {
 	cmResource := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
 	scheme := runtime.NewScheme()
@@ -687,6 +710,8 @@ func TestManagedFieldsObjectTrackerReloadsScheme(t *testing.T) {
 	assert.NoError(t, err, "Create should succeed after registering type")
 }
 
+// TestManagedFielsdObjectTrackerWithUnstructured 验证 unstructured 对象经 apply 创建与更新后
+// 内容正确（比较前移除 tracker 生成的 managedFields）。
 func TestManagedFielsdObjectTrackerWithUnstructured(t *testing.T) {
 	cmResource := schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}
 	cmGVK := schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}
@@ -742,6 +767,8 @@ func TestManagedFielsdObjectTrackerWithUnstructured(t *testing.T) {
 	require.Empty(t, cmp.Diff(cmOriginal, cmActual))
 }
 
+// TestDoesClientSupportWatchListSemantics 断言 fake ObjectTracker 不支持 watch-list 语义，
+// 从而让 reflector 正确回退到普通 List。
 func TestDoesClientSupportWatchListSemantics(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)

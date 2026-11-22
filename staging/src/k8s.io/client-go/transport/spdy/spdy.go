@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package spdy 提供把普通 HTTP 连接升级为 SPDY 流的拨号与协商逻辑，
+// 并在 k8s.io/apimachinery 的 httpstream 与 k8s.io/streaming 的新接口之间做适配。
 package spdy
 
 import (
@@ -36,6 +38,9 @@ type Upgrader interface {
 }
 
 // RoundTripperFor returns a round tripper and upgrader to use with SPDY.
+//
+// 返回的 upgrader 与 round tripper 必须配套使用：请求经 round tripper 发出后，
+// 由 upgrader 校验 101 响应并从连接中接管底层流。
 func RoundTripperFor(config *restclient.Config) (http.RoundTripper, Upgrader, error) {
 	tlsConfig, err := restclient.TLSConfigFor(config)
 	if err != nil {
@@ -45,6 +50,7 @@ func RoundTripperFor(config *restclient.Config) (http.RoundTripper, Upgrader, er
 	if config.Proxy != nil {
 		proxy = config.Proxy
 	}
+	// 5 秒的 ping 周期用于及时发现半开连接，避免 exec/attach 会话静默悬挂。
 	upgradeRoundTripper, err := httpstreamspdy.NewRoundTripperWithConfig(httpstreamspdy.RoundTripperConfig{
 		TLS:              tlsConfig,
 		Proxier:          proxy,
@@ -54,6 +60,7 @@ func RoundTripperFor(config *restclient.Config) (http.RoundTripper, Upgrader, er
 	if err != nil {
 		return nil, nil, err
 	}
+	// wrapper 叠加认证/限速等 rest.Config 中的传输层包装，使升级请求也经过它们。
 	wrapper, err := restclient.HTTPWrappersForConfig(config, upgradeRoundTripper)
 	if err != nil {
 		return nil, nil, err
@@ -69,6 +76,7 @@ type dialer struct {
 	url      *url.URL
 }
 
+// 编译期断言拨号器实现标准接口，便于在 remotecommand 等通用代码中复用。
 var _ httpstream.Dialer = &dialer{}
 
 // NewDialer will create a dialer that connects to the provided URL and upgrades the connection to SPDY.
@@ -93,6 +101,7 @@ func NewUpgraderForStreaming(upgrader streamhttp.UpgradeRoundTripper) Upgrader {
 	return &compatUpgraderAdapter{delegate: upgrader}
 }
 
+// Dial 用预设的 method/url 构造请求并进入协议协商；protocols 是客户端支持的子协议列表。
 func (d *dialer) Dial(protocols ...string) (httpstream.Connection, string, error) {
 	req, err := http.NewRequest(d.method, d.url.String(), nil)
 	if err != nil {
@@ -105,6 +114,7 @@ func (d *dialer) Dial(protocols ...string) (httpstream.Connection, string, error
 // a SPDY connection. Upon success, it returns the connection and the protocol selected by
 // the server. The client transport must use the upgradeRoundTripper - see RoundTripperFor.
 func Negotiate(upgrader Upgrader, client *http.Client, req *http.Request, protocols ...string) (httpstream.Connection, string, error) {
+	// 同一 header 可重复添加，等价于逗号分隔的候选协议列表。
 	for i := range protocols {
 		req.Header.Add(httpstream.HeaderProtocolVersion, protocols[i])
 	}
@@ -113,6 +123,7 @@ func Negotiate(upgrader Upgrader, client *http.Client, req *http.Request, protoc
 		return nil, "", fmt.Errorf("error sending request: %v", err)
 	}
 	defer resp.Body.Close()
+	// 服务端在响应头中回选一个协议；调用方需据此决定使用哪套流语义。
 	conn, err := upgrader.NewConnection(resp)
 	if err != nil {
 		return nil, "", err
@@ -130,6 +141,7 @@ func NegotiateStreaming(upgrader Upgrader, client *http.Client, req *http.Reques
 	return wrapStreamingConnection(conn), protocol, nil
 }
 
+// 适配层保持两套接口（apimachinery 与 streaming）双向可用，避免调用方因迁移而重复实现。
 type streamingDialerAdapter struct {
 	delegate httpstream.Dialer
 }

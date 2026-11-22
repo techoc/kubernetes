@@ -24,6 +24,8 @@ import (
 	fcache "k8s.io/client-go/tools/cache/testing"
 )
 
+// newFakeControllerSource 创建假的 controller source，并注册测试清理回调，
+// 避免测试结束后后台 goroutine 泄漏。
 func newFakeControllerSource(tb testing.TB) *fcache.FakeControllerSource {
 	source := fcache.NewFakeControllerSource()
 	tb.Cleanup(source.Shutdown)
@@ -31,17 +33,22 @@ func newFakeControllerSource(tb testing.TB) *fcache.FakeControllerSource {
 }
 
 // threadSafeBuffer is a thread-safe wrapper around bytes.Buffer.
+//
+// 测试中 reflector 等组件会从多个 goroutine 并发写日志缓冲，普通 bytes.Buffer
+// 并不安全，因此用互斥锁保护。
 type threadSafeBuffer struct {
 	buffer bytes.Buffer
 	mu     sync.Mutex
 }
 
+// Write 实现 io.Writer，加锁后写入底层缓冲。
 func (b *threadSafeBuffer) Write(p []byte) (n int, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buffer.Write(p)
 }
 
+// String 加锁读取当前缓冲内容。
 func (b *threadSafeBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()

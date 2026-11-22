@@ -22,4 +22,6 @@ limitations under the License.
 
 // +groupName=client.authentication.k8s.io
 
+// Package v1beta1 定义 client.authentication.k8s.io/v1beta1 版本的类型。
+// 这些类型用于 exec 凭据插件向 client-go 返回认证信息；新代码应优先使用 v1。
 package v1beta1

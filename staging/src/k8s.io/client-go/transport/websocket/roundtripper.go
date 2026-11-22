@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package websocket 把 HTTP 请求升级为 WebSocket 连接，供 exec/port-forward 等流式接口使用。
+// 它复用 rest.Config 的 TLS/代理配置，并在握手失败时把错误转换为
+// httpstream.UpgradeFailureError，以便上层决定是否回退到 SPDY。
 package websocket
 
 import (
@@ -38,11 +41,13 @@ import (
 	"k8s.io/streaming/pkg/httpstream/wsstream"
 )
 
+// 编译期断言：RoundTripper 同时满足 TLS 配置持有者与标准 RoundTripper 接口。
 var (
 	_ utilnet.TLSClientConfigHolder = &RoundTripper{}
 	_ http.RoundTripper             = &RoundTripper{}
 )
 
+// statusScheme 只注册 metav1.Status，用于把握手失败响应体解析成 StatusError。
 var (
 	statusScheme = runtime.NewScheme()
 	statusCodecs = serializer.NewCodecFactory(statusScheme)
@@ -63,6 +68,9 @@ type ConnectionHolder interface {
 
 // RoundTripper knows how to establish a connection to a remote WebSocket endpoint and make it available for use.
 // RoundTripper must not be reused.
+//
+// 因为一次成功握手后连接被保存在 rt.Conn 中，复用同一个实例会让第二次请求
+// 覆盖前者，所以调用方必须为每个连接创建独立实例。
 type RoundTripper struct {
 	// TLSConfig holds the TLS configuration settings to use when connecting
 	// to the remote server.
@@ -85,6 +93,8 @@ func (rt *RoundTripper) Connection() *gwebsocket.Conn {
 
 // DataBufferSize returns the size of buffers for the
 // websocket connection.
+//
+// 32KB 足以容纳常规 exec 数据帧，同时避免为每条流分配过大内存。
 func (rt *RoundTripper) DataBufferSize() int {
 	return 32 * 1024
 }
@@ -107,6 +117,8 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 	}()
 
 	// set the protocol version directly on the dialer from the header
+	// 子协议通过请求头传入，但 gorilla/websocket 要求通过 Dialer.Subprotocols 指定，
+	// 因此取出后要从 Header 中删除，避免作为普通头重复发送。
 	protocolVersions := request.Header[wsstream.WebSocketProtocolHeader]
 	delete(request.Header, wsstream.WebSocketProtocolHeader)
 
@@ -117,6 +129,7 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 		ReadBufferSize:  rt.DataBufferSize() + 1024, // add space for the protocol byte indicating which channel the data is for
 		WriteBufferSize: rt.DataBufferSize() + 1024, // add space for the protocol byte indicating which channel the data is for
 	}
+	// http/https 需要转换成 ws/wss，其他 scheme 无法升级。
 	switch request.URL.Scheme {
 	case "https":
 		request.URL.Scheme = "wss"
@@ -140,6 +153,7 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 					cause = fmt.Errorf("%w: unable to read error from server response", cause)
 				} else {
 					// If returned error can be decoded as "metav1.Status", return a "StatusError".
+					// 服务端通常以 Status 描述拒绝原因，保留它可以向上层暴露 403/404 等语义。
 					responseError = strings.TrimSpace(string(responseErrorBytes))
 					if len(responseError) > 0 {
 						if obj, _, decodeErr := statusCodecs.UniversalDecoder().Decode(responseErrorBytes, nil, &metav1.Status{}); decodeErr == nil {
@@ -159,6 +173,7 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 	}
 
 	// Ensure we got back a protocol we understand
+	// 服务端可能选择我们未请求的子协议，此时连接不可用，必须关闭并按升级失败处理。
 	foundProtocol := false
 	for _, protocolVersion := range protocolVersions {
 		if protocolVersion == wsConn.Subprotocol() {
@@ -180,6 +195,9 @@ func (rt *RoundTripper) RoundTrip(request *http.Request) (retResp *http.Response
 // as a pointer to the websocket RoundTripper. The websocket RoundTripper contains the
 // websocket connection after RoundTrip() on the wrapper. Returns an error if there is
 // a problem creating the round trippers.
+//
+// 返回的 wrapper 负责认证等 HTTP 层逻辑，真正的 WebSocket 握手仍由第二个返回值完成；
+// 两者必须配套使用。
 func RoundTripperFor(config *restclient.Config) (http.RoundTripper, ConnectionHolder, error) {
 	transportCfg, err := config.TransportConfig()
 	if err != nil {
@@ -191,6 +209,7 @@ func RoundTripperFor(config *restclient.Config) (http.RoundTripper, ConnectionHo
 	}
 	proxy := config.Proxy
 	if proxy == nil {
+		// 默认代理函数需遵守 NO_PROXY/CIDR 排除规则，与普通 REST 客户端保持一致。
 		proxy = utilnet.NewProxierWithNoProxyCIDR(http.ProxyFromEnvironment)
 	}
 
@@ -215,6 +234,8 @@ func Negotiate(rt http.RoundTripper, connectionInfo ConnectionHolder, req *http.
 	if err != nil {
 		return nil, err
 	}
+	// 握手的 HTTP 响应体此时已无用途，关闭它以释放资源；
+	// 失败时连已建立的 WebSocket 一并关闭，避免连接泄漏。
 	err = resp.Body.Close()
 	if err != nil {
 		connectionInfo.Connection().Close()

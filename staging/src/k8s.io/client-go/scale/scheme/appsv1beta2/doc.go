@@ -17,4 +17,9 @@ limitations under the License.
 // +k8s:conversion-gen=k8s.io/client-go/scale/scheme
 // +k8s:conversion-gen-external-types=k8s.io/api/apps/v1beta2
 
+// Package appsv1beta2 registers the apps/v1beta2 types used by the scale client's
+// scheme and provides generated conversions to the internal scale types.
+//
+// Package appsv1beta2 把 apps/v1beta2 的 Deployment/ReplicaSet/StatefulSet 等类型
+// 接入 scale 转换 scheme，供 /scale 子资源在不同 API 版本之间做字段转换。
 package appsv1beta2

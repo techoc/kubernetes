@@ -26,6 +26,7 @@ import (
 	"testing"
 )
 
+// jsonpathTest 描述一条 jsonpath 用例：模板、输入、期望输出以及是否期望错误。
 type jsonpathTest struct {
 	name        string
 	template    string
@@ -34,6 +35,8 @@ type jsonpathTest struct {
 	expectError bool
 }
 
+// testJSONPath 逐条执行用例；执行成功时比较输出字符串，期望错误时只关心是否返回错误。
+// allowMissingKeys 控制访问不存在字段时是跳过还是报错。
 func testJSONPath(tests []jsonpathTest, allowMissingKeys bool, t *testing.T) {
 	for _, test := range tests {
 		j := New(test.name)
@@ -63,6 +66,7 @@ func testJSONPath(tests []jsonpathTest, allowMissingKeys bool, t *testing.T) {
 }
 
 // testJSONPathSortOutput test cases related to map, the results may print in random order
+// 遍历 map 时 Go 不保证顺序，因此这里把实际与期望输出都按空白切分并排序后再比较。
 func testJSONPathSortOutput(tests []jsonpathTest, t *testing.T) {
 	for _, test := range tests {
 		j := New(test.name)
@@ -87,6 +91,7 @@ func testJSONPathSortOutput(tests []jsonpathTest, t *testing.T) {
 	}
 }
 
+// testFailJSONPath 断言执行阶段返回的错误文本，用于验证错误消息本身。
 func testFailJSONPath(tests []jsonpathTest, t *testing.T) {
 	for _, test := range tests {
 		j := New(test.name)
@@ -108,6 +113,8 @@ func testFailJSONPath(tests []jsonpathTest, t *testing.T) {
 	}
 }
 
+// TestTypesInput 验证对 bool、int、float、string、interface、map、struct 等异构切片的下标、
+// 反向下标与切片/步长访问。
 func TestTypesInput(t *testing.T) {
 	types := map[string]interface{}{
 		"bools":      []bool{true, false, true, false},
@@ -196,6 +203,7 @@ func TestTypesInput(t *testing.T) {
 	testJSONPath(sliceTests, false, t)
 }
 
+// book 是结构体输入样例，用于验证 jsonpath 对 Go 结构体的字段访问。
 type book struct {
 	Category string
 	Author   string
@@ -203,6 +211,7 @@ type book struct {
 	Price    float32
 }
 
+// String 让 book 在作为整体输出时使用自定义格式。
 func (b book) String() string {
 	return fmt.Sprintf("{Category: %s, Author: %s, Title: %s, Price: %v}", b.Category, b.Author, b.Title, b.Price)
 }
@@ -215,6 +224,8 @@ type bicycle struct {
 
 type empName string
 type job string
+
+// store 汇总各类嵌套结构（切片、map、自定义 key 类型），覆盖递归取值等场景。
 type store struct {
 	Book      []book
 	Bicycle   []bicycle
@@ -223,6 +234,7 @@ type store struct {
 	Employees map[empName]job
 }
 
+// TestStructInput 覆盖结构体输入下的递归、过滤、联合、切片、range 等语法，以及错误用例。
 func TestStructInput(t *testing.T) {
 
 	storeData := store{
@@ -294,6 +306,7 @@ func TestStructInput(t *testing.T) {
 	testFailJSONPath(failStoreTests, t)
 }
 
+// TestJSONInput 验证 JSON 反序列化后的输入（map/slice）上的存在性过滤、方括号键与 null 值。
 func TestJSONInput(t *testing.T) {
 	var pointsJSON = []byte(`[
 		{"id": "i1", "x":4, "y":-5},
@@ -318,6 +331,7 @@ func TestJSONInput(t *testing.T) {
 }
 
 // TestKubernetes tests some use cases from kubernetes
+// 复刻 kubectl 常见的 jsonpath 用法：range、联合键、过滤、转义点号与递归字段。
 func TestKubernetes(t *testing.T) {
 	var input = []byte(`{
 	  "kind": "List",
@@ -396,6 +410,7 @@ func TestKubernetes(t *testing.T) {
 	testJSONPathSortOutput(randomPrintOrderTests, t)
 }
 
+// TestEmptyRange 验证空列表上的 range（含嵌套 range）不会输出任何内容，也不应报错。
 func TestEmptyRange(t *testing.T) {
 	var input = []byte(`{"items":[]}`)
 	var emptyList interface{}
@@ -411,6 +426,7 @@ func TestEmptyRange(t *testing.T) {
 	testJSONPath(tests, true, t)
 }
 
+// TestNestedRanges 验证多层嵌套 range（包括同一层级并列的 range）输出拼接顺序与边界正确。
 func TestNestedRanges(t *testing.T) {
 	var input = []byte(`{
 		"items": [
@@ -538,6 +554,8 @@ func TestNestedRanges(t *testing.T) {
 	)
 }
 
+// TestFilterPartialMatchesSometimesMissingAnnotations 验证过滤器遇到缺少 annotations 的条目时，
+// AllowMissingKeys=true 只返回匹配项，false 则报错。
 func TestFilterPartialMatchesSometimesMissingAnnotations(t *testing.T) {
 	// for https://issues.k8s.io/45546
 	var input = []byte(`{
@@ -613,6 +631,7 @@ func TestFilterPartialMatchesSometimesMissingAnnotations(t *testing.T) {
 	)
 }
 
+// TestNegativeIndex 验证负数下标/切片的边界语义（如 [-1] 等价于最后一个元素），以及越界报错。
 func TestNegativeIndex(t *testing.T) {
 	var input = []byte(
 		`{
@@ -763,6 +782,7 @@ func TestNegativeIndex(t *testing.T) {
 	)
 }
 
+// TestRunningPodsJSONPathOutput 验证带过滤器的 range 能跳过缺少 status.phase 的最后一项而不报错。
 func TestRunningPodsJSONPathOutput(t *testing.T) {
 	var input = []byte(`{
 		"kind": "List",
@@ -820,6 +840,7 @@ func TestRunningPodsJSONPathOutput(t *testing.T) {
 	)
 }
 
+// TestStep 验证切片步长（step）的语义，包括省略步长等价于 1，以及 0 或负步长应报错。
 func TestStep(t *testing.T) {
 	var input = []byte(
 		`{

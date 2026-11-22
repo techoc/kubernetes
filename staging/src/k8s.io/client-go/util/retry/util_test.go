@@ -27,11 +27,14 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// TestRetryOnConflict 覆盖 RetryOnConflict 的四种典型路径：
+// 一直冲突到耗尽步数、首次即成功、遇到非冲突错误立即返回、中途冲突后成功。
 func TestRetryOnConflict(t *testing.T) {
 	opts := wait.Backoff{Factor: 1.0, Steps: 3}
 	conflictErr := errors.NewConflict(schema.GroupResource{Resource: "test"}, "other", nil)
 
 	// never returns
+	// 冲突错误会持续重试，步数耗尽后把最后一次冲突错误原样返回。
 	err := RetryOnConflict(opts, func() error {
 		return conflictErr
 	})
@@ -40,6 +43,7 @@ func TestRetryOnConflict(t *testing.T) {
 	}
 
 	// returns immediately
+	// 首次成功即停止，函数恰好只被调用一次。
 	i := 0
 	err = RetryOnConflict(opts, func() error {
 		i++
@@ -50,6 +54,7 @@ func TestRetryOnConflict(t *testing.T) {
 	}
 
 	// returns immediately on error
+	// 非冲突错误不属于可重试范畴，必须立即透出。
 	testErr := fmt.Errorf("some other error")
 	err = RetryOnConflict(opts, func() error {
 		return testErr
@@ -59,6 +64,7 @@ func TestRetryOnConflict(t *testing.T) {
 	}
 
 	// keeps retrying
+	// 前两次冲突、第三次成功，验证重试计数与最终 nil 结果。
 	i = 0
 	err = RetryOnConflict(opts, func() error {
 		if i < 2 {
@@ -72,6 +78,8 @@ func TestRetryOnConflict(t *testing.T) {
 	}
 }
 
+// TestRetryOnConflictPreservesContextErrorWithoutLastError 验证当操作返回
+// context.Canceled 时错误链未被包装替换，调用方仍可用 errors.Is 识别取消。
 func TestRetryOnConflictPreservesContextErrorWithoutLastError(t *testing.T) {
 	err := RetryOnConflict(DefaultBackoff, func() error {
 		return context.Canceled

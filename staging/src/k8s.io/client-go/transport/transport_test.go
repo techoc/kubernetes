@@ -98,6 +98,8 @@ stR0Yiw0buV6DL/moUO0HIM9Bjh96HJp+LxiIS6UCdIhMPp5HoQa
 -----END RSA PRIVATE KEY-----`
 )
 
+// TestNew 覆盖 New 在各类 Config 下的传输层构造结果：
+// 是否复用默认 Transport、是否启用 TLS、根证书来源、客户端证书来源等。
 func TestNew(t *testing.T) {
 	globalGetCert := &GetCertHolder{
 		GetCert: func() (*tls.Certificate, error) { return nil, nil },
@@ -117,6 +119,7 @@ func TestNew(t *testing.T) {
 		DefaultRoots bool
 	}{
 		"default transport": {
+			// 空配置应直接返回 http.DefaultTransport，不额外包装。
 			Default: true,
 			Config:  &Config{},
 		},
@@ -163,6 +166,7 @@ func TestNew(t *testing.T) {
 			},
 		},
 		"ca data overriding bad ca file transport": {
+			// 内联 CAData 优先于 CAFile，因此即使文件路径非法也能成功。
 			TLS: true,
 			Config: &Config{
 				TLS: TLSConfig{
@@ -216,6 +220,7 @@ func TestNew(t *testing.T) {
 			},
 		},
 		"callback cert and key": {
+			// 通过 GetCertHolder 动态提供客户端证书，模拟证书轮换。
 			TLS:     true,
 			TLSCert: true,
 			Config: &Config{
@@ -246,6 +251,7 @@ func TestNew(t *testing.T) {
 			},
 		},
 		"cert data overrides empty callback result": {
+			// 回调返回 (nil, nil) 时回退到内联 CertData/KeyData。
 			TLS:     true,
 			TLSCert: true,
 			Config: &Config{
@@ -291,6 +297,7 @@ func TestNew(t *testing.T) {
 			DefaultRoots: false,
 		},
 		"non-nil dial holder and nil internal": {
+			// Holder 存在但内部 Dial 为 nil 属于非法配置，应报错。
 			Config: &Config{
 				TLS: TLSConfig{
 					GetCertHolder: nil,
@@ -300,6 +307,7 @@ func TestNew(t *testing.T) {
 			Err: true,
 		},
 		"non-nil cert holder and nil internal": {
+			// Holder 存在但内部 GetCert 为 nil，同样属于非法配置。
 			Config: &Config{
 				TLS: TLSConfig{
 					GetCertHolder: &GetCertHolder{},
@@ -389,6 +397,7 @@ func TestNew(t *testing.T) {
 			}
 
 			// We only know how to check TLSConfig on http.Transports
+			// 非默认传输可能被 trackedTransport 包装一层，需要先解包。
 			transport, ok := rt.(*http.Transport)
 			if !ok {
 				transport = rt.(*trackedTransport).rt.(*http.Transport)
@@ -436,28 +445,33 @@ func TestNew(t *testing.T) {
 	}
 }
 
+// fakeRoundTripper 记录收到的请求并返回预设响应，用于验证包装链是否生效。
 type fakeRoundTripper struct {
 	Req  *http.Request
 	Resp *http.Response
 	Err  error
 }
 
+// RoundTrip 实现 http.RoundTripper，记录请求后直接返回预设结果。
 func (rt *fakeRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	rt.Req = req
 	return rt.Resp, rt.Err
 }
 
+// chainRoundTripper 在响应头中追加 value，用于验证多个 Wrapper 的嵌套顺序。
 type chainRoundTripper struct {
 	rt    http.RoundTripper
 	value string
 }
 
+// testChain 生成一个向响应头 Value 追加固定字符串的 WrapperFunc。
 func testChain(value string) WrapperFunc {
 	return func(rt http.RoundTripper) http.RoundTripper {
 		return &chainRoundTripper{rt: rt, value: value}
 	}
 }
 
+// RoundTrip 先调用被包装的 RoundTripper，再在响应头上按包装顺序累加 value。
 func (rt *chainRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := rt.rt.RoundTrip(req)
 	if resp != nil {
@@ -469,6 +483,9 @@ func (rt *chainRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	return resp, err
 }
 
+// TestWrappers 验证 Wrappers 的组合语义：
+// 全为 nil 时返回 nil；否则按列表顺序嵌套，后注册的 Wrapper 位于外层、
+// 优先处理响应。
 func TestWrappers(t *testing.T) {
 	resp1 := &http.Response{}
 	wrapperResp1 := func(rt http.RoundTripper) http.RoundTripper {
@@ -486,6 +503,7 @@ func TestWrappers(t *testing.T) {
 		want    func(*http.Response) bool
 	}{
 		{fns: []WrapperFunc{}, wantNil: true},
+		// 只有 nil 的列表等同于没有 Wrapper。
 		{fns: []WrapperFunc{nil, nil}, wantNil: true},
 		{fns: []WrapperFunc{nil}, wantNil: false},
 
@@ -523,6 +541,8 @@ func TestWrappers(t *testing.T) {
 	}
 }
 
+// Test_contextCanceller_RoundTrip 验证 contextCanceller 在上下文已取消时
+// 直接返回预设错误，且不向下游发起请求；未取消时正常透传。
 func Test_contextCanceller_RoundTrip(t *testing.T) {
 	tests := []struct {
 		name string
@@ -574,6 +594,9 @@ func Test_contextCanceller_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestRootCertPoolEmptyData 验证空 CA 数据在不同特性门控下的语义：
+// 门控关闭时返回 nil（使用系统根证书）；开启时返回空池（不信任任何证书），
+// 以避免误用系统根证书造成的安全风险。
 func TestRootCertPoolEmptyData(t *testing.T) {
 	testCases := []struct {
 		name               string

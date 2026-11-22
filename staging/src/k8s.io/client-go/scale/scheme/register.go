@@ -26,6 +26,7 @@ import (
 const GroupName = autoscalingv1.GroupName
 
 // SchemeGroupVersion is group version used to register these objects
+// 内部版本（__internal）仅用于客户端内部的类型转换，不直接与 API server 交互。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 // Kind takes an unqualified kind and returns a Group qualified GroupKind
@@ -47,6 +48,7 @@ var (
 
 // Adds the list of known types to api.Scheme.
 func addKnownTypes(scheme *runtime.Scheme) error {
+	// 只注册内部 Scale；外部版本由各自的 api 包注册，转换由 conversion-gen 生成。
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Scale{},
 	)

@@ -35,6 +35,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// buildConfig 优先使用显式 kubeconfig，否则回退到集群内配置。
+// 两种来源的取舍决定了示例既能在本地运行，也能作为 Pod 部署。
 func buildConfig(kubeconfig string) (*rest.Config, error) {
 	if kubeconfig != "" {
 		cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
@@ -58,6 +60,7 @@ func main() {
 	var leaseLockName string
 	var leaseLockNamespace string
 	var id string
+	// startedLeading 区分“真正当过 leader”与“从未当选”，OnStoppedLeading 依赖它决定是否清理。
 	var startedLeading atomic.Bool
 
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
@@ -93,6 +96,7 @@ func main() {
 
 	run := func(ctx context.Context) {
 		// complete your controller loop here
+		// 示例用空 select 永久阻塞，真实控制器应在此运行 reconcile 循环。
 		logger.Info("Controller loop...")
 
 		select {}
@@ -116,6 +120,8 @@ func main() {
 
 	// we use the Lease lock type since edits to Leases are less common
 	// and fewer objects in the cluster watch "all Leases".
+	//
+	// Identity 必须全局唯一，否则多个副本会互相覆盖租约记录。
 	lock := &resourcelock.LeaseLock{
 		LeaseMeta: metav1.ObjectMeta{
 			Name:      leaseLockName,

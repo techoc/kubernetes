@@ -34,6 +34,7 @@ import (
 	core "k8s.io/client-go/testing"
 )
 
+// Bind 通过 Fake 反应器模拟 Pod 绑定（create pods/binding 子资源）。
 func (c *fakePods) Bind(ctx context.Context, binding *v1.Binding, opts metav1.CreateOptions) error {
 	action := core.CreateActionImpl{}
 	action.Verb = "create"
@@ -46,6 +47,8 @@ func (c *fakePods) Bind(ctx context.Context, binding *v1.Binding, opts metav1.Cr
 	return err
 }
 
+// GetBinding 模拟读取 pods/binding 子资源；Fake 返回 nil 时保持与真实客户端一致，
+// 返回 nil 结果而不是做类型断言。
 func (c *fakePods) GetBinding(name string) (result *v1.Binding, err error) {
 	obj, err := c.Fake.
 		Invokes(core.NewGetSubresourceAction(c.Resource(), c.Namespace(), "binding", name), &v1.Binding{})
@@ -56,6 +59,9 @@ func (c *fakePods) GetBinding(name string) (result *v1.Binding, err error) {
 	return obj.(*v1.Binding), err
 }
 
+// GetLogs 模拟 pods/log：先在 Fake 反应器里触发一次 generic get 动作，让测试可以
+// 记录/拦截该请求，再构造一个只返回预设日志内容的假 RESTClient。
+// 默认返回 "fake logs"，测试可用反应器替换为 *runtime.Unknown 提供自定义内容。
 func (c *fakePods) GetLogs(name string, opts *v1.PodLogOptions) *restclient.Request {
 	action := core.GenericActionImpl{}
 	action.Verb = "get"
@@ -76,6 +82,7 @@ func (c *fakePods) GetLogs(name string, opts *v1.PodLogOptions) *restclient.Requ
 		}
 	}
 
+	// 把反应器产生的错误延迟到真正发起请求时返回，保持返回类型为 *Request。
 	fakeClient := &fakerest.RESTClient{
 		Client: fakerest.CreateHTTPClient(func(request *http.Request) (*http.Response, error) {
 			if err != nil {
@@ -94,10 +101,12 @@ func (c *fakePods) GetLogs(name string, opts *v1.PodLogOptions) *restclient.Requ
 	return fakeClient.Request()
 }
 
+// Evict 是 EvictV1beta1 的别名，保留 policy/v1beta1 的旧调用入口。
 func (c *fakePods) Evict(ctx context.Context, eviction *policyv1beta1.Eviction) error {
 	return c.EvictV1beta1(ctx, eviction)
 }
 
+// EvictV1 模拟 policy/v1 的 pods/eviction 子资源创建。
 func (c *fakePods) EvictV1(ctx context.Context, eviction *policyv1.Eviction) error {
 	action := core.CreateActionImpl{}
 	action.Verb = "create"
@@ -110,6 +119,7 @@ func (c *fakePods) EvictV1(ctx context.Context, eviction *policyv1.Eviction) err
 	return err
 }
 
+// EvictV1beta1 模拟 policy/v1beta1 的 pods/eviction 子资源创建。
 func (c *fakePods) EvictV1beta1(ctx context.Context, eviction *policyv1beta1.Eviction) error {
 	action := core.CreateActionImpl{}
 	action.Verb = "create"
@@ -122,6 +132,8 @@ func (c *fakePods) EvictV1beta1(ctx context.Context, eviction *policyv1beta1.Evi
 	return err
 }
 
+// ProxyGet 模拟通过 apiserver 代理访问 Pod 端口的请求，返回 ResponseWrapper 以便
+// 调用方沿用与真实客户端相同的读取方式。
 func (c *fakePods) ProxyGet(scheme, name, port, path string, params map[string]string) restclient.ResponseWrapper {
 	return c.Fake.InvokesProxy(core.NewProxyGetAction(c.Resource(), c.Namespace(), scheme, name, port, path, params))
 }

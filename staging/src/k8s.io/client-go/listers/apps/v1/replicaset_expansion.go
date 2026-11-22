@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package v1 提供 apps/v1 ReplicaSet 等资源的只读 informer 缓存 lister。
 package v1
 
 import (
@@ -27,6 +28,8 @@ import (
 
 // ReplicaSetListerExpansion allows custom methods to be added to
 // ReplicaSetLister.
+//
+// 通过扩展接口注入（而非直接修改生成代码），以便 lister-gen 重新生成时不丢失手写方法。
 type ReplicaSetListerExpansion interface {
 	GetPodReplicaSets(pod *v1.Pod) ([]*apps.ReplicaSet, error)
 }
@@ -38,11 +41,15 @@ type ReplicaSetNamespaceListerExpansion interface{}
 // GetPodReplicaSets returns a list of ReplicaSets that potentially match a pod.
 // Only the one specified in the Pod's ControllerRef will actually manage it.
 // Returns an error only if no matching ReplicaSets are found.
+//
+// 中文：基于选择器在缓存中做粗匹配；ControllerRef 的精确认领由调用方判断。
 func (s *replicaSetLister) GetPodReplicaSets(pod *v1.Pod) ([]*apps.ReplicaSet, error) {
+	// 没有标签的 Pod 不可能被任何选择器匹配，直接报错以避免无意义的全量扫描。
 	if len(pod.Labels) == 0 {
 		return nil, fmt.Errorf("no ReplicaSets found for pod %v because it has no labels", pod.Name)
 	}
 
+	// 先按命名空间缩小范围；缓存 lister 不访问 API server。
 	list, err := s.ReplicaSets(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err
@@ -60,6 +67,7 @@ func (s *replicaSetLister) GetPodReplicaSets(pod *v1.Pod) ([]*apps.ReplicaSet, e
 		}
 
 		// If a ReplicaSet with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 空选择器按 Kubernetes 约定匹配零个对象，不能退化为匹配全部。
 		if selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
 			continue
 		}

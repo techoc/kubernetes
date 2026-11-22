@@ -40,6 +40,7 @@ import (
 )
 
 var (
+	// 这些配置作为测试夹具：token 使用占位符，避免真实凭据进入仓库。
 	testConfigAlfa = clientcmdapi.Config{
 		AuthInfos: map[string]*clientcmdapi.AuthInfo{
 			"red-user": {Token: "red-token"}},
@@ -84,6 +85,7 @@ var (
 	}
 )
 
+// TestNilOutMap 校验解码不含部分 map 的 kubeconfig 不会因 nil map 写入而失败。
 func TestNilOutMap(t *testing.T) {
 	var fakeKubeconfigData = `apiVersion: v1
 kind: Config
@@ -110,6 +112,7 @@ users:
 	}
 }
 
+// TestNonExistentCommandLineFile 校验显式指定的文件不存在时报错，且错误信息包含路径。
 func TestNonExistentCommandLineFile(t *testing.T) {
 	loadingRules := ClientConfigLoadingRules{
 		ExplicitPath: "bogus_file",
@@ -124,6 +127,8 @@ func TestNonExistentCommandLineFile(t *testing.T) {
 	}
 }
 
+// TestToleratingMissingFiles 校验 WarnIfAllMissing 时缺失文件只告警、不阻断加载。
+//
 //nolint:logcheck // Tests klog APIs.
 func TestToleratingMissingFiles(t *testing.T) {
 	envVarValue := "bogus"
@@ -149,6 +154,8 @@ func TestToleratingMissingFiles(t *testing.T) {
 	}
 }
 
+// TestWarningMissingFiles 校验 v>=1 时会输出 “Config not found” 告警。
+//
 //nolint:logcheck // Tests klog APIs.
 func TestWarningMissingFiles(t *testing.T) {
 	envVarValue := "bogus"
@@ -175,6 +182,8 @@ func TestWarningMissingFiles(t *testing.T) {
 	}
 }
 
+// TestNoWarningMissingFiles 校验默认 verbosity 下不输出缺失文件告警，避免污染普通用户日志。
+//
 //nolint:logcheck // Tests klog APIs.
 func TestNoWarningMissingFiles(t *testing.T) {
 	envVarValue := "bogus"
@@ -201,6 +210,7 @@ func TestNoWarningMissingFiles(t *testing.T) {
 	}
 }
 
+// TestErrorReadingFile 校验内容非法的 kubeconfig 会返回包含文件名的解析错误。
 func TestErrorReadingFile(t *testing.T) {
 	commandLineFile, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, commandLineFile)
@@ -222,6 +232,7 @@ func TestErrorReadingFile(t *testing.T) {
 	}
 }
 
+// TestErrorReadingNonFile 校验把目录当作 kubeconfig 时会报错，而不是静默忽略。
 func TestErrorReadingNonFile(t *testing.T) {
 	tmpdir, err := os.MkdirTemp("", "")
 	if err != nil {
@@ -242,6 +253,7 @@ func TestErrorReadingNonFile(t *testing.T) {
 	}
 }
 
+// TestConflictingCurrentContext 校验显式指定的文件优先于环境变量文件，其 current-context 胜出。
 func TestConflictingCurrentContext(t *testing.T) {
 	commandLineFile, _ := os.CreateTemp("", "")
 	envVarFile, _ := os.CreateTemp("", "")
@@ -272,6 +284,7 @@ func TestConflictingCurrentContext(t *testing.T) {
 	}
 }
 
+// TestEncodeYAML 校验序列化输出的字段顺序与键排序稳定，便于 diff 与版本控制。
 func TestEncodeYAML(t *testing.T) {
 	config := clientcmdapi.Config{
 		CurrentContext: "any-context-value",
@@ -321,6 +334,8 @@ users: null
 	}
 }
 
+// TestLoadingEmptyMaps 校验空 kubeconfig 加载后 Clusters/AuthInfos/Contexts 均非 nil，
+// 调用方因此可以直接写入而无需初始化 map。
 func TestLoadingEmptyMaps(t *testing.T) {
 	configFile, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, configFile)
@@ -347,6 +362,7 @@ func TestLoadingEmptyMaps(t *testing.T) {
 	}
 }
 
+// TestDuplicateClusterName 校验列表转 map 时重名 cluster 会报错，避免静默覆盖。
 func TestDuplicateClusterName(t *testing.T) {
 	configFile, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, configFile)
@@ -389,6 +405,7 @@ users:
 	}
 }
 
+// TestDuplicateContextName 校验重名 context 会报错。
 func TestDuplicateContextName(t *testing.T) {
 	configFile, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, configFile)
@@ -431,6 +448,7 @@ users:
 	}
 }
 
+// TestDuplicateUserName 校验重名 user 会报错。
 func TestDuplicateUserName(t *testing.T) {
 	configFile, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, configFile)
@@ -471,6 +489,7 @@ users:
 	}
 }
 
+// TestDuplicateExtensionName 校验重名 extension 会报错。
 func TestDuplicateExtensionName(t *testing.T) {
 	configFile, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, configFile)
@@ -515,6 +534,8 @@ extensions:
 	}
 }
 
+// TestRelativizePathWithNoBacksteps 校验路径相对化规则：
+// 仅当目标位于 base 之下才转相对路径；需要 “..” 回退或本身是绝对路径时保持原样。
 func TestRelativizePathWithNoBacksteps(t *testing.T) {
 	var root string
 	var base string
@@ -640,6 +661,8 @@ func TestRelativizePathWithNoBacksteps(t *testing.T) {
 	}
 }
 
+// TestResolveRelativePaths 校验相对路径按“该配置项所在文件”的目录解析，
+// 而不是按第一个或当前工作目录解析；exec 命令相对路径同样处理，PATH 中的裸命令保持不变。
 func TestResolveRelativePaths(t *testing.T) {
 	absoluteDir := filepath.Join(t.TempDir(), "absolute")
 	pathResolutionConfig1 := clientcmdapi.Config{
@@ -753,6 +776,7 @@ func TestResolveRelativePaths(t *testing.T) {
 
 }
 
+// TestMigratingFile 校验 MigrationRules 会把旧文件迁移到目标位置，并保留权限。
 func TestMigratingFile(t *testing.T) {
 	tempDir := t.TempDir()
 	sourceFile := filepath.Join(tempDir, "source")
@@ -796,6 +820,7 @@ func TestMigratingFile(t *testing.T) {
 	}
 }
 
+// TestMigratingFileLeaveExistingFileAlone 校验目标文件已存在时迁移不会覆盖它。
 func TestMigratingFileLeaveExistingFileAlone(t *testing.T) {
 	sourceFile, _ := os.CreateTemp("", "")
 	destinationFile, _ := os.CreateTemp("", "")
@@ -821,6 +846,7 @@ func TestMigratingFileLeaveExistingFileAlone(t *testing.T) {
 	}
 }
 
+// TestMigratingFileSourceMissingSkip 校验源文件缺失时跳过迁移，且不会创建空目标文件。
 func TestMigratingFileSourceMissingSkip(t *testing.T) {
 	sourceFilename := "some-missing-file"
 	destinationFile, _ := os.CreateTemp("", "")
@@ -840,6 +866,7 @@ func TestMigratingFileSourceMissingSkip(t *testing.T) {
 	}
 }
 
+// TestFileLocking 校验同一文件不能被重复加锁，防止并发写入互相覆盖。
 func TestFileLocking(t *testing.T) {
 	f, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, f)
@@ -856,6 +883,7 @@ func TestFileLocking(t *testing.T) {
 	}
 }
 
+// Example_noMergingOnExplicitPaths 演示设置了 ExplicitPath 后不再合并其他来源。
 func Example_noMergingOnExplicitPaths() {
 	commandLineFile, _ := os.CreateTemp("", "")
 	envVarFile, _ := os.CreateTemp("", "")
@@ -903,6 +931,7 @@ func Example_noMergingOnExplicitPaths() {
 	//     token: red-token
 }
 
+// Example_mergingSomeWithConflict 演示合并多个文件时，同名字段以先出现者为准，不同名字段取并集。
 func Example_mergingSomeWithConflict() {
 	commandLineFile, _ := os.CreateTemp("", "")
 	envVarFile, _ := os.CreateTemp("", "")
@@ -957,6 +986,7 @@ func Example_mergingSomeWithConflict() {
 	//     token: yellow-token
 }
 
+// Example_mergingEverythingNoConflicts 演示无冲突时所有来源的 cluster/context/user 被合并。
 func Example_mergingEverythingNoConflicts() {
 	commandLineFile, _ := os.CreateTemp("", "")
 	envVarFile, _ := os.CreateTemp("", "")
@@ -1040,6 +1070,7 @@ func Example_mergingEverythingNoConflicts() {
 	//     token: red-token
 }
 
+// TestDeduplicate 校验去重保留首次出现的顺序，供加载 precedence 使用。
 func TestDeduplicate(t *testing.T) {
 	testCases := []struct {
 		src    []string
@@ -1067,6 +1098,7 @@ func TestDeduplicate(t *testing.T) {
 	}
 }
 
+// TestLoadingGetLoadingPrecedence 校验默认路径、显式路径与 KUBECONFIG 多路径的优先级顺序。
 func TestLoadingGetLoadingPrecedence(t *testing.T) {
 	testCases := map[string]struct {
 		rules      *ClientConfigLoadingRules

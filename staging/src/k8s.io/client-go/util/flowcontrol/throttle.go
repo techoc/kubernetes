@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package flowcontrol 提供客户端侧的限流与退避工具。
+// RateLimiter 基于令牌桶实现平滑 QPS 限制，并支持突发；Clock 抽象使测试无需真实等待。
 package flowcontrol
 
 import (
@@ -26,6 +28,8 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// PassiveRateLimiter 是不可阻塞的限流器：只能探测当前是否有令牌，
+// 适用于“能拿就拿、拿不到就跳过”的场景（如 metrics 上报）。
 type PassiveRateLimiter interface {
 	// TryAccept returns true if a token is taken immediately. Otherwise,
 	// it returns false.
@@ -36,6 +40,8 @@ type PassiveRateLimiter interface {
 	QPS() float32
 }
 
+// RateLimiter 在 PassiveRateLimiter 之上增加阻塞等待能力，
+// 是 REST 客户端默认使用的接口。
 type RateLimiter interface {
 	PassiveRateLimiter
 	// Accept returns once a token becomes available.
@@ -44,12 +50,15 @@ type RateLimiter interface {
 	Wait(ctx context.Context) error
 }
 
+// tokenBucketPassiveRateLimiter 用 golang.org/x/time/rate 实现令牌桶，
+// 但只暴露非阻塞接口；clock 用于让 TryAccept 使用可注入的时间。
 type tokenBucketPassiveRateLimiter struct {
 	limiter *rate.Limiter
 	qps     float32
 	clock   clock.PassiveClock
 }
 
+// tokenBucketRateLimiter 额外持有可 Sleep 的时钟，用于 Accept 的阻塞等待。
 type tokenBucketRateLimiter struct {
 	tokenBucketPassiveRateLimiter
 	clock Clock
@@ -117,20 +126,26 @@ func (tbprl *tokenBucketPassiveRateLimiter) QPS() float32 {
 	return tbprl.qps
 }
 
+// TryAccept 以注入时钟的当前时间尝试取一个令牌，不阻塞。
 func (tbprl *tokenBucketPassiveRateLimiter) TryAccept() bool {
 	return tbprl.limiter.AllowN(tbprl.clock.Now(), 1)
 }
 
 // Accept will block until a token becomes available
+//
+// 通过 ReserveN 计算需要等待的时长再 Sleep，而不是忙等或依赖真实时间，
+// 这样 fake clock 可以在测试中瞬间推进。
 func (tbrl *tokenBucketRateLimiter) Accept() {
 	now := tbrl.clock.Now()
 	tbrl.clock.Sleep(tbrl.limiter.ReserveN(now, 1).DelayFrom(now))
 }
 
+// Wait 直接使用 rate.Limiter 的阻塞等待，并响应 context 取消。
 func (tbrl *tokenBucketRateLimiter) Wait(ctx context.Context) error {
 	return tbrl.limiter.Wait(ctx)
 }
 
+// fakeAlwaysRateLimiter 永远放行，供测试或无需限流的场景使用。
 type fakeAlwaysRateLimiter struct{}
 
 func NewFakeAlwaysRateLimiter() RateLimiter {
@@ -153,6 +168,8 @@ func (t *fakeAlwaysRateLimiter) Wait(ctx context.Context) error {
 	return nil
 }
 
+// fakeNeverRateLimiter 永不放行：Accept 会一直阻塞到 Stop 被调用，
+// 用来模拟“完全限流”并验证调用方是否会正确退出。
 type fakeNeverRateLimiter struct {
 	wg sync.WaitGroup
 }

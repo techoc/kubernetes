@@ -26,6 +26,8 @@ import (
 
 // TestAddFeaturesToExistingFeatureGates ensures that
 // the defaultVersionedKubernetesFeatureGates are added to a test feature gates registry.
+//
+// 验证非版本化注册路径：期望注册表收到的是“最新规格 + 清空版本”的视图。
 func TestAddFeaturesToExistingFeatureGates(t *testing.T) {
 	fakeFeatureGates := &fakeRegistry{}
 	require.NoError(t, AddFeaturesToExistingFeatureGates(fakeFeatureGates))
@@ -34,12 +36,16 @@ func TestAddFeaturesToExistingFeatureGates(t *testing.T) {
 
 // TestAddVersionedFeaturesToExistingFeatureGates ensures that
 // the defaultVersionedKubernetesFeatureGates are added to a versioned test feature gates registry.
+//
+// 验证版本化注册路径：完整的 VersionedSpecs 应原样传给注册表。
 func TestAddVersionedFeaturesToExistingFeatureGates(t *testing.T) {
 	fakeFeatureGates := &fakeVersionedRegistry{}
 	require.NoError(t, AddVersionedFeaturesToExistingFeatureGates(fakeFeatureGates))
 	require.Equal(t, defaultVersionedKubernetesFeatureGates, fakeFeatureGates.specs)
 }
 
+// TestUnversionedFeatureGates 校验降级逻辑：多版本特性应只取最后一条，
+// 并丢弃 Version 字段；单版本特性保持原样。
 func TestUnversionedFeatureGates(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -80,6 +86,8 @@ func TestUnversionedFeatureGates(t *testing.T) {
 	}
 }
 
+// TestReplaceFeatureGatesWithWarningIndicator 验证：默认实现已经读取过门控值之后再替换，
+// 返回值必须指示需要告警，避免调用方在错误的初始化顺序下静默覆盖。
 func TestReplaceFeatureGatesWithWarningIndicator(t *testing.T) {
 	defaultFeatureGates := FeatureGates()
 	require.Panics(t, func() { defaultFeatureGates.Enabled("Foo") }, "reading an unregistered feature gate Foo should panic")
@@ -89,6 +97,7 @@ func TestReplaceFeatureGatesWithWarningIndicator(t *testing.T) {
 	}
 }
 
+// fakeRegistry 是最小化的非版本化注册表，仅记录最后一次 Add 的内容。
 type fakeRegistry struct {
 	specs map[Feature]FeatureSpec
 }
@@ -98,6 +107,7 @@ func (f *fakeRegistry) Add(specs map[Feature]FeatureSpec) error {
 	return nil
 }
 
+// fakeVersionedRegistry 是最小化的版本化注册表，仅记录最后一次 AddVersioned 的内容。
 type fakeVersionedRegistry struct {
 	specs map[Feature]VersionedSpecs
 }

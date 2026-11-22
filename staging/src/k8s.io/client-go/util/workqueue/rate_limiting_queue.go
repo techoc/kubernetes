@@ -24,6 +24,9 @@ import "k8s.io/utils/clock"
 type RateLimitingInterface TypedRateLimitingInterface[any]
 
 // TypedRateLimitingInterface is an interface that rate limits items being added to the queue.
+//
+// 它在延迟队列基础上叠加限流器：重试延迟由 rateLimiter.When 决定，
+// 调用方成功后必须 Forget，否则失败计数会一直保留。
 type TypedRateLimitingInterface[T comparable] interface {
 	TypedDelayingInterface[T]
 
@@ -91,6 +94,7 @@ func NewRateLimitingQueueWithConfig(rateLimiter RateLimiter, config RateLimiting
 // with options to customize different properties.
 // Remember to call Forget!  If you don't, you may end up tracking failures forever.
 func NewTypedRateLimitingQueueWithConfig[T comparable](rateLimiter TypedRateLimiter[T], config TypedRateLimitingQueueConfig[T]) TypedRateLimitingInterface[T] {
+	// 未注入时钟/延迟队列时使用默认实现，并把名称与指标配置透传下去。
 	if config.Clock == nil {
 		config.Clock = clock.RealClock{}
 	}
@@ -134,14 +138,18 @@ type rateLimitingType[T comparable] struct {
 }
 
 // AddRateLimited AddAfter's the item based on the time when the rate limiter says it's ok
+//
+// 注意 When 会同时推进该条目的失败计数，因此每次重试调用一次即可。
 func (q *rateLimitingType[T]) AddRateLimited(item T) {
 	q.TypedDelayingInterface.AddAfter(item, q.rateLimiter.When(item))
 }
 
+// NumRequeues 返回限流器记录的该条目重试次数。
 func (q *rateLimitingType[T]) NumRequeues(item T) int {
 	return q.rateLimiter.NumRequeues(item)
 }
 
+// Forget 清除限流器中的失败记录；底层队列的 Done 仍需单独调用。
 func (q *rateLimitingType[T]) Forget(item T) {
 	q.rateLimiter.Forget(item)
 }

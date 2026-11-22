@@ -29,6 +29,9 @@ import (
 	v1ac "k8s.io/client-go/applyconfigurations/core/v1"
 )
 
+// TestNewSimpleClientset 验证简单 fake clientset 的创建、删除与列举行为：
+// 先创建两个 pod，再驱逐其中一个，最后确认列表包含两者（fake 只模拟 API 形状，
+// 不执行驱逐的副作用）。
 func TestNewSimpleClientset(t *testing.T) {
 	client := NewSimpleClientset()
 	expectedPods := []*v1.Pod{}
@@ -63,6 +66,8 @@ func TestNewSimpleClientset(t *testing.T) {
 	cmp.Equal(expectedPods, pods.Items)
 }
 
+// TestManagedFieldClientset 验证 fake clientset 的 server-side apply 语义：
+// 字段所有权冲突、force 覆盖，以及普通 Update 会整体替换资源。
 func TestManagedFieldClientset(t *testing.T) {
 	client := NewClientset()
 	name := "pod-1"
@@ -77,6 +82,7 @@ func TestManagedFieldClientset(t *testing.T) {
 
 	// Apply with test-manager-1
 	// Expect data to be shared with initial create
+	// 不同 manager 管理不同字段时，apply 应合并而不是覆盖。
 	cm, err = client.CoreV1().ConfigMaps("default").Apply(context.Background(),
 		v1ac.ConfigMap(name, namespace).WithData(map[string]string{"k1": "v1"}),
 		meta_v1.ApplyOptions{FieldManager: "test-manager-1"})
@@ -84,6 +90,7 @@ func TestManagedFieldClientset(t *testing.T) {
 	require.Equal(t, map[string]string{"k0": "v0", "k1": "v1"}, cm.Data)
 
 	// Apply conflicting with test-manager-2, expect apply to fail
+	// test-manager-2 试图修改 test-manager-1 拥有的 k1，未 force 时应冲突。
 	_, err = client.CoreV1().ConfigMaps("default").Apply(context.Background(),
 		v1ac.ConfigMap(name, namespace).WithData(map[string]string{"k1": "xyz"}),
 		meta_v1.ApplyOptions{FieldManager: "test-manager-2"})
@@ -108,6 +115,7 @@ func TestManagedFieldClientset(t *testing.T) {
 
 	// Force apply with test-manager-2
 	// Expect data owned by test-manager-1 to be updated, expect data already owned but not in apply configuration to be removed
+	// Force 会夺取冲突字段的所有权，并删除该 manager 拥有但本次 apply 未声明的字段（k2）。
 	cm, err = client.CoreV1().ConfigMaps("default").Apply(context.Background(),
 		v1ac.ConfigMap(name, namespace).WithData(map[string]string{"k1": "v202"}),
 		meta_v1.ApplyOptions{FieldManager: "test-manager-2", Force: true})
@@ -115,6 +123,7 @@ func TestManagedFieldClientset(t *testing.T) {
 	require.Equal(t, map[string]string{"k0": "v0", "k1": "v202"}, cm.Data)
 
 	// Update with test-manager-1 to perform a force update of the entire resource
+	// 普通 Update 忽略字段所有权，整体替换 Data。
 	cm, err = client.CoreV1().ConfigMaps("default").Update(context.Background(),
 		&v1.ConfigMap{
 			TypeMeta: meta_v1.TypeMeta{

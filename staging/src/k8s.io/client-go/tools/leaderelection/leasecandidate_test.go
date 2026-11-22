@@ -29,11 +29,13 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// testcase 汇总 LeaseCandidate 测试所需的标识与版本信息。
 type testcase struct {
 	candidateName, candidateNamespace, leaseName string
 	binaryVersion, emulationVersion              string
 }
 
+// TestLeaseCandidateCreation 校验 candidate 启动后会创建 LeaseCandidate 并写入版本字段。
 func TestLeaseCandidateCreation(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	tc := testcase{
@@ -68,6 +70,7 @@ func TestLeaseCandidateCreation(t *testing.T) {
 	}
 }
 
+// TestLeaseCandidateAck 校验收到 PingTime（服务端要求续约）后会刷新 RenewTime。
 func TestLeaseCandidateAck(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -122,6 +125,7 @@ func TestLeaseCandidateAck(t *testing.T) {
 	}
 }
 
+// pollForLease 轮询直到 LeaseCandidate 出现且字段符合预期；t 非 nil 时还要求 RenewTime 晚于该时刻。
 func pollForLease(ctx context.Context, tc testcase, client *fake.Clientset, t *metav1.MicroTime) error {
 	return wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (done bool, err error) {
 		lc, err := client.CoordinationV1beta1().LeaseCandidates(tc.candidateNamespace).Get(ctx, tc.candidateName, metav1.GetOptions{})

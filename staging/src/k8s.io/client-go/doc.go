@@ -18,6 +18,10 @@ limitations under the License.
 // a standard set of clients and tools for building applications, controllers,
 // and operators that communicate with a Kubernetes cluster.
 //
+// clientgo 是 Kubernetes API 的官方 Go 客户端。它以一组可组合的包提供从底层
+// REST 传输、类型化/动态客户端到 Informer、Lister、工作队列等控制器基础
+// 设施，既可在集群内 Pod 中运行，也可在集群外作为 CLI 或本地开发工具使用。
+//
 // # Key Packages
 //
 //   - kubernetes: Contains the typed Clientset for interacting with built-in,

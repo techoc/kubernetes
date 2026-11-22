@@ -27,6 +27,8 @@ import (
 	"k8s.io/client-go/third_party/forked/golang/template"
 )
 
+// JSONPath 保存一次解析后的模板执行状态。
+// 注意它包含 range 嵌套深度等可变字段，因此同一个实例不可被多个 goroutine 并发复用。
 type JSONPath struct {
 	name       string
 	parser     *Parser
@@ -65,6 +67,8 @@ func (j *JSONPath) Parse(text string) error {
 }
 
 // Execute bounds data into template and writes the result.
+//
+// 所有顶层结果按出现顺序写入同一个 writer，彼此以空格分隔（由 PrintResults 负责）。
 func (j *JSONPath) Execute(wr io.Writer, data interface{}) error {
 	fullResults, err := j.FindResults(data)
 	if err != nil {
@@ -78,6 +82,10 @@ func (j *JSONPath) Execute(wr io.Writer, data interface{}) error {
 	return nil
 }
 
+// FindResults 按节点顺序求值，返回每个顶层节点产生的一组结果。
+//
+// range 节点通过递归调用自身实现循环：递归前临时替换 parser.Root.Nodes，
+// 使循环体只处理 range 与 end 之间的节点，返回后再恢复到结束节点之后。
 func (j *JSONPath) FindResults(data interface{}) ([][]reflect.Value, error) {
 	if j.parser == nil {
 		return nil, fmt.Errorf("%s is an incomplete jsonpath template", j.name)
@@ -143,6 +151,9 @@ func (j *JSONPath) EnableJSONOutput(v bool) {
 }
 
 // PrintResults writes the results into writer
+//
+// 复合类型（map/slice/struct 等）默认输出 JSON；标量走 evalToText，
+// 以免给字符串加上多余的引号。多个结果之间以单空格分隔。
 func (j *JSONPath) PrintResults(wr io.Writer, results []reflect.Value) error {
 	if j.outputJSON {
 		// convert the []reflect.Value to something that json
@@ -197,6 +208,7 @@ func (j *JSONPath) PrintResults(wr io.Writer, results []reflect.Value) error {
 
 // walk visits tree rooted at the given node in DFS order
 func (j *JSONPath) walk(value []reflect.Value, node Node) ([]reflect.Value, error) {
+	// 按节点类型分派到对应求值器；未知节点类型说明解析阶段出现了不一致。
 	switch node := node.(type) {
 	case *ListNode:
 		return j.evalList(value, node)
@@ -287,6 +299,8 @@ func (j *JSONPath) evalIdentifier(input []reflect.Value, node *IdentifierNode) (
 }
 
 // evalArray evaluates ArrayNode
+//
+// 支持 [start:end:step] 切片，负索引从末尾计数；params 未给出时分别默认 0/len。
 func (j *JSONPath) evalArray(input []reflect.Value, node *ArrayNode) ([]reflect.Value, error) {
 	result := []reflect.Value{}
 	for _, value := range input {
@@ -302,6 +316,7 @@ func (j *JSONPath) evalArray(input []reflect.Value, node *ArrayNode) ([]reflect.
 		if !params[0].Known {
 			params[0].Value = 0
 		}
+		// 负起始索引转换为相对末尾的位置。
 		if params[0].Value < 0 {
 			params[0].Value += value.Len()
 		}
@@ -309,6 +324,7 @@ func (j *JSONPath) evalArray(input []reflect.Value, node *ArrayNode) ([]reflect.
 			params[1].Value = value.Len()
 		}
 
+		// Derived 表示结束索引来自 [-1] 这类单元素写法，0 需要解释为末尾。
 		if params[1].Value < 0 || (params[1].Value == 0 && params[1].Derived) {
 			params[1].Value += value.Len()
 		}
@@ -356,6 +372,9 @@ func (j *JSONPath) evalUnion(input []reflect.Value, node *UnionNode) ([]reflect.
 	return result, nil
 }
 
+// findFieldInValue 在结构体中按 json tag 查找字段；
+// 匿名且 tag 为空的字段视为 inline，会递归进入其内部查找。
+// 找不到时回退到 Go 字段名，保持与 encoding/json 类似的宽松行为。
 func (j *JSONPath) findFieldInValue(value *reflect.Value, node *FieldNode) (reflect.Value, error) {
 	t := value.Type()
 	var inlineValue *reflect.Value
@@ -422,6 +441,8 @@ func (j *JSONPath) evalField(input []reflect.Value, node *FieldNode) ([]reflect.
 		}
 	}
 	if len(results) == 0 {
+		// 默认把“字段不存在”视为错误；allowMissingKeys 打开时返回空结果，
+		// 便于 kubectl 对异构对象做批量查询。
 		if j.allowMissingKeys {
 			return results, nil
 		}
@@ -458,6 +479,9 @@ func (j *JSONPath) evalWildcard(input []reflect.Value, node *WildcardNode) ([]re
 }
 
 // evalRecursive visits the given value recursively and pushes all of them to result
+//
+// 先序输出：只有包含子元素的节点才会被收集，叶子节点本身不进入结果，
+// 这与 {..field} 语义一致（后续 FieldNode 再从中筛选）。
 func (j *JSONPath) evalRecursive(input []reflect.Value, node *RecursiveNode) ([]reflect.Value, error) {
 	result := []reflect.Value{}
 	for _, value := range input {
@@ -494,6 +518,9 @@ func (j *JSONPath) evalRecursive(input []reflect.Value, node *RecursiveNode) ([]
 }
 
 // evalFilter filters array according to FilterNode
+//
+// 对数组每个元素求 left/right 表达式并应用比较运算符；
+// "exists" 是特殊运算符，只判断左侧是否有结果。
 func (j *JSONPath) evalFilter(input []reflect.Value, node *FilterNode) ([]reflect.Value, error) {
 	results := []reflect.Value{}
 	for _, value := range input {
@@ -568,6 +595,9 @@ func (j *JSONPath) evalFilter(input []reflect.Value, node *FilterNode) ([]reflec
 }
 
 // evalToText translates reflect value to corresponding text
+//
+// 优先使用 template.PrintableValue 取得可直接打印的接口值；
+// nil 输出 "null"，其余按 Go 默认格式打印。
 func (j *JSONPath) evalToText(v reflect.Value) ([]byte, error) {
 	iface, ok := template.PrintableValue(v)
 	if !ok {

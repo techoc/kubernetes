@@ -28,6 +28,8 @@ import (
 	clientcmdv1 "k8s.io/client-go/tools/clientcmd/api/v1"
 )
 
+// TestClientAuthenticationClusterTypesAreSynced 对每个 ExecCredential 外部版本的 Cluster 类型
+// 分别运行字段同步校验。
 func TestClientAuthenticationClusterTypesAreSynced(t *testing.T) {
 	t.Parallel()
 
@@ -48,6 +50,9 @@ func TestClientAuthenticationClusterTypesAreSynced(t *testing.T) {
 // We want clientauthentication*.Cluster types to offer the same knobs as clientcmdv1.Cluster to
 // allow someone to connect to the kubernetes API. This test should fail if a new field is added to
 // one of the structs without updating the other.
+//
+// 该测试双向比对字段名、类型与 tag，防止 executor 插件使用的 Cluster 与 kubeconfig 的
+// clientcmdv1.Cluster 出现漂移（两者必须能互相转换且语义等价）。
 func testClientAuthenticationClusterTypesAreSynced(t *testing.T, cluster interface{}) {
 	execType := reflect.TypeOf(cluster)
 	clientcmdType := reflect.TypeOf(clientcmdv1.Cluster{})
@@ -97,6 +102,7 @@ func testClientAuthenticationClusterTypesAreSynced(t *testing.T, cluster interfa
 		t.Parallel()
 
 		// These are the fields that we don't want to shadow from clientcmdv1.Cluster.
+		// 这两个字段有替代来源（CA 数据走 CertificateAuthorityData，扩展不经 exec 传递）。
 		clientcmdSkippedFieldNames := sets.NewString(
 			// CA data will be passed via CertificateAuthorityData, so we don't need this field.
 			"CertificateAuthority",
@@ -140,6 +146,9 @@ func testClientAuthenticationClusterTypesAreSynced(t *testing.T, cluster interfa
 // TestAllClusterTypesAreSynced is a TODO so that we remember to write a test similar to
 // TestClientAuthenticationClusterTypesAreSynced for any future ExecCredential version. It should start failing
 // when someone adds support for any other ExecCredential type to this package.
+//
+// 防漏测试：枚举所有已注册的 ExecCredential 版本，若新增了未覆盖的版本则失败，
+// 提醒补上对应的字段同步测试。
 func TestAllClusterTypesAreSynced(t *testing.T) {
 	versionsThatDontNeedTests := sets.NewString(
 		// The internal Cluster type should only be used...internally...and therefore doesn't

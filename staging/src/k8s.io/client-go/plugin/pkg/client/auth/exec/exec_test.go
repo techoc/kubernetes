@@ -49,6 +49,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// 测试用的一对 PEM 证书/私钥；init 中解析一次供所有用例复用。
 var (
 	certData = []byte(`-----BEGIN CERTIFICATE-----
 MIIC6jCCAdSgAwIBAgIBCzALBgkqhkiG9w0BAQswIzEhMB8GA1UEAwwYMTAuMTMu
@@ -99,6 +100,7 @@ stR0Yiw0buV6DL/moUO0HIM9Bjh96HJp+LxiIS6UCdIhMPp5HoQa
 )
 
 func init() {
+	// 提前解析叶子证书，便于用例直接比较 credentials.cert。
 	cert, err := tls.X509KeyPair(certData, keyData)
 	if err != nil {
 		panic(err)
@@ -110,6 +112,9 @@ func init() {
 	validCert = &cert
 }
 
+// TestCacheKey 验证 authenticator 缓存键的相等/区分语义：命令、参数、环境变量、
+// cluster 信息与 interactive/stdin 状态任一不同都应产生不同 key；完全相同的配置
+// 必须命中同一 key。
 func TestCacheKey(t *testing.T) {
 	c1 := &api.ExecConfig{
 		Command: "foo-bar",
@@ -290,6 +295,7 @@ func TestCacheKey(t *testing.T) {
 	}
 }
 
+// compJSON 比较两段 JSON 的语义内容（忽略空白与缩进），失败时打印格式化结果。
 func compJSON(t *testing.T, got, want []byte) {
 	t.Helper()
 	gotJSON := &bytes.Buffer{}
@@ -308,6 +314,9 @@ func compJSON(t *testing.T, got, want []byte) {
 	}
 }
 
+// TestRefreshCreds 以表驱动方式驱动 test-plugin.sh（通过 TEST_OUTPUT/
+// TEST_EXIT_CODE 控制输出），覆盖各 API 版本的凭据解析、TLS 凭据校验、
+// interactive 语义、过期时间以及各类错误路径。
 func TestRefreshCreds(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -849,6 +858,7 @@ func TestRefreshCreds(t *testing.T) {
 	}
 }
 
+// pluginPolicyTest 描述一次凭据插件策略测试的全部输入与期望。
 type pluginPolicyTest struct {
 	name             string
 	wantErr          bool
@@ -863,8 +873,10 @@ type pluginPolicyTest struct {
 	allowlist        []api.AllowlistEntry
 }
 
+// dualBool 同时表示“插件侧”和“allowlist 条目侧”的布尔维度。
 type dualBool struct{ plugin, entry bool }
 
+// pluginPolicyTestMatrix 定义需要组合遍历的维度，以及判定期望错误的规则。
 type pluginPolicyTestMatrix struct {
 	exists           []dualBool
 	absolute         []dualBool
@@ -875,6 +887,7 @@ type pluginPolicyTestMatrix struct {
 	shouldErrFunc func(tt *pluginPolicyTest) (bool, string)
 }
 
+// allPermutations 遍历 plugin/entry 是否存在（或是否为绝对路径）的四种组合。
 var allPermutations = []dualBool{
 	{plugin: false, entry: false},
 	{plugin: false, entry: true},
@@ -999,6 +1012,7 @@ func TestPluginPolicy(t *testing.T) {
 }
 
 func (m *pluginPolicyTestMatrix) makeTests(t *testing.T, testdataDir, path string) []pluginPolicyTest {
+	// 把 testdata 目录置于 PATH 前端，使 test-plugin.sh 同时可按 basename 和绝对路径解析。
 	const existingPluginInPATHBasename = "test-plugin.sh"
 	existingPluginInPATHAbsolutePath := filepath.Join(testdataDir, existingPluginInPATHBasename)
 
@@ -1051,20 +1065,25 @@ func (m *pluginPolicyTestMatrix) makeTests(t *testing.T, testdataDir, path strin
 	return tests
 }
 
+// setErrDetails 根据矩阵的判定函数填充期望结果。
 func (tt *pluginPolicyTest) setErrDetails(m *pluginPolicyTestMatrix) {
 	tt.wantErr, tt.wantErrSubstr = m.shouldErrFunc(tt)
 }
 
+// setAbsolute 设置插件命令与 allowlist 条目是否使用绝对路径。
 func (tt *pluginPolicyTest) setAbsolute(absolute dualBool) {
 	tt.usePluginAbsPath = absolute.plugin
 	tt.useEntryAbsPath = absolute.entry
 }
 
+// setExists 设置插件与 allowlist 条目在该路径上是否真实存在。
 func (tt *pluginPolicyTest) setExists(exists dualBool) {
 	tt.pluginExists = exists.plugin
 	tt.entryExists = exists.entry
 }
 
+// setAllowlist 按长度构造 allowlist：-1 表示 nil，0 表示空，>=1 时首项指向测试插件，
+// 其余填入无关条目，并打乱顺序以验证匹配与顺序无关。
 func (tt *pluginPolicyTest) setAllowlist(l int, existingPluginInPATHAbsolutePath string, existingPluginInPATHBasename string) {
 	tt.allowlistLength = l
 	if tt.allowlistLength >= 0 {
@@ -1087,6 +1106,8 @@ func (tt *pluginPolicyTest) setAllowlist(l int, existingPluginInPATHAbsolutePath
 	}
 }
 
+// makeAllowlistEntry 根据“是否存在/是否绝对路径”构造一条 allowlist 条目，
+// 覆盖命中与不命中的组合。
 func (tt *pluginPolicyTest) makeAllowlistEntry(existingPluginInPATHAbsolutePath string, existingPluginInPATHBasename string) api.AllowlistEntry {
 	var entry api.AllowlistEntry
 
@@ -1104,6 +1125,8 @@ func (tt *pluginPolicyTest) makeAllowlistEntry(existingPluginInPATHAbsolutePath 
 	return entry
 }
 
+// setExecConfig 依据当前维度生成 ExecConfig；只有真正指向 test-plugin.sh 时才
+// 注入测试输出环境变量，避免对不存在的命令产生误导性输出。
 func (tt *pluginPolicyTest) setExecConfig(existingPluginInPATHAbsolutePath string, existingPluginInPATHBasename string) {
 	var cmd string
 
@@ -1147,6 +1170,7 @@ func (tt *pluginPolicyTest) setExecConfig(existingPluginInPATHAbsolutePath strin
 	tt.config = &config
 }
 
+// makeExistsString 生成 test 名称中的存在性描述片段。
 func makeExistsString(s string, t bool) string {
 	ne := "nonexistent"
 	if t {
@@ -1156,6 +1180,7 @@ func makeExistsString(s string, t bool) string {
 	return fmt.Sprintf("%s-%s-path", ne, s)
 }
 
+// makePathString 生成 test 名称中的路径形式描述片段。
 func makePathString(s string, t bool) string {
 	ba := "basename"
 	if t {
@@ -1165,6 +1190,7 @@ func makePathString(s string, t bool) string {
 	return fmt.Sprintf("%s-%s", ba, s)
 }
 
+// setName 把各维度拼成可读且唯一的子测试名（用路径分隔符形成层级）。
 func (tt *pluginPolicyTest) setName() {
 	p := string(tt.policyType)
 	if string(tt.policyType) == "" {
@@ -1197,6 +1223,9 @@ func (tt *pluginPolicyTest) setName() {
 	)
 }
 
+// TestRoundTripper 端到端验证 exec 凭据在 HTTP transport 中的行为：
+// 首次获取 token 后缓存复用；服务端 401 触发重新执行；token 过期后自动刷新，
+// 不依赖 401。
 func TestRoundTripper(t *testing.T) {
 	wantToken := ""
 
@@ -1316,6 +1345,9 @@ func TestRoundTripper(t *testing.T) {
 	get(t, http.StatusOK)
 }
 
+// TestAuthorizationHeaderPresentCancelsExecAction 验证 transport 配置中已存在
+// 其他认证方式（bearer、basic、客户端证书）时，exec 插件不应被激活，
+// 避免覆盖用户显式配置的凭据。
 func TestAuthorizationHeaderPresentCancelsExecAction(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -1367,6 +1399,8 @@ func TestAuthorizationHeaderPresentCancelsExecAction(t *testing.T) {
 	}
 }
 
+// TestTLSCredentials 验证 exec 插件返回的客户端证书会被用于 mTLS；证书过期
+// 后重新执行插件，新证书若不被服务端信任则握手失败，换回受信任证书后恢复。
 func TestTLSCredentials(t *testing.T) {
 	now := time.Now()
 
@@ -1465,6 +1499,8 @@ func TestTLSCredentials(t *testing.T) {
 	get(t, "valid TLS cert again", false)
 }
 
+// TestConcurrentUpdateTransportConfig 并发反复调用 UpdateTransportConfig，
+// 配合 -race 验证内部状态（缓存与配置更新）无数据竞争。
 func TestConcurrentUpdateTransportConfig(t *testing.T) {
 	n := time.Now()
 	now := func() time.Time { return n }
@@ -1511,6 +1547,8 @@ func TestConcurrentUpdateTransportConfig(t *testing.T) {
 	time.Sleep(2 * time.Second)
 }
 
+// TestInstallHintRateLimit 验证 installHint 仅在阈值内展示，并在时间窗口过后重置，
+// 防止插件持续缺失时反复打印安装提示。
 func TestInstallHintRateLimit(t *testing.T) {
 	tests := []struct {
 		name string

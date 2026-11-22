@@ -44,6 +44,8 @@ import (
 	testclocks "k8s.io/utils/clock/testing"
 )
 
+// testEventSink 是可编程的 EventSink：三个回调分别替换 Create/Update/Patch，
+// 未设置的直接回显事件，便于在测试中观察写入路径。
 type testEventSink struct {
 	OnCreate func(e *v1.Event) (*v1.Event, error)
 	OnUpdate func(e *v1.Event) (*v1.Event, error)
@@ -76,6 +78,8 @@ func (t *testEventSink) Patch(e *v1.Event, p []byte) (*v1.Event, error) {
 
 type OnCreateFunc func(*v1.Event) (*v1.Event, error)
 
+// OnCreateFactory 返回一个记录到 testCache 并把事件送入 createEvent 的 Create 回调，
+// 测试据此断言事件是否走了“新建”路径。
 func OnCreateFactory(testCache map[string]*v1.Event, createEvent chan<- *v1.Event) OnCreateFunc {
 	return func(event *v1.Event) (*v1.Event, error) {
 		testCache[getEventKey(event)] = event
@@ -86,6 +90,8 @@ func OnCreateFactory(testCache map[string]*v1.Event, createEvent chan<- *v1.Even
 
 type OnPatchFunc func(*v1.Event, []byte) (*v1.Event, error)
 
+// OnPatchFactory 在缓存中的事件上执行 strategic merge patch，
+// 用于验证聚合事件（Count>1）走的是 Patch 而非 Create。
 func OnPatchFactory(testCache map[string]*v1.Event, patchEvent chan<- *v1.Event) OnPatchFunc {
 	return func(event *v1.Event, patch []byte) (*v1.Event, error) {
 		cachedEvent, found := testCache[getEventKey(event)]
@@ -113,6 +119,8 @@ func OnPatchFactory(testCache map[string]*v1.Event, patchEvent chan<- *v1.Event)
 // newBroadcasterForTests creates a new broadcaster which produces per-test log
 // output if StartStructuredLogging is used. Will be shut down automatically
 // after the test.
+//
+// 关闭 sleep 以便重试路径在测试中立即推进；ctx 让日志写入测试缓冲区。
 func newBroadcasterForTests(tb testing.TB) EventBroadcaster {
 	_, ctx := ktesting.NewTestContext(tb)
 	caster := NewBroadcaster(WithSleepDuration(0), WithContext(ctx))
@@ -120,6 +128,8 @@ func newBroadcasterForTests(tb testing.TB) EventBroadcaster {
 	return caster
 }
 
+// TestBroadcasterShutdown 验证取消 context 后 broadcaster 的后台 goroutine 能退出，
+// 不留下泄漏（用 goleak 检查）。
 func TestBroadcasterShutdown(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -164,6 +174,9 @@ func TestStartEventWatcherExitsOnDirectShutdown(t *testing.T) {
 	goleak.VerifyNone(t)
 }
 
+// TestNonRacyShutdown 从多个 goroutine 并发调用 Eventf 后立刻 Shutdown，
+// 验证不会出现“写入已关闭 channel”的数据竞争；这也是不把 Action 放进
+// 另一个 goroutine 的原因。
 func TestNonRacyShutdown(t *testing.T) {
 	// Attempt to simulate previously racy conditions, and ensure that no race
 	// occurs: Nominally, calling "Eventf" *followed by* shutdown from the same
@@ -187,6 +200,9 @@ func TestNonRacyShutdown(t *testing.T) {
 	caster.Shutdown()
 }
 
+// TestEventf 是事件记录的主用例：逐条驱动 recorder.Eventf，
+// 验证事件内容（引用、类型、原因、消息）、日志输出，以及聚合逻辑选择
+// Create 还是 Patch。
 func TestEventf(t *testing.T) {
 	testPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -496,10 +512,14 @@ func TestEventf(t *testing.T) {
 	sinkWatcher.Stop()
 }
 
+// recorderWithFakeClock 直接构造 recorderImpl 并注入 fake clock，
+// 使事件名中的时间戳与 FirstTimestamp 可预测。
 func recorderWithFakeClock(t *testing.T, eventSource v1.EventSource, eventBroadcaster EventBroadcaster, clock clock.Clock) EventRecorder {
 	return &recorderImpl{scheme.Scheme, eventSource, eventBroadcaster.(*eventBroadcasterImpl).Broadcaster, clock}
 }
 
+// TestWriteEventError 验证 recordToSink 的重试策略：
+// 请求构造错误与 StatusError 立即放弃，其他错误最多重试 maxTriesPerEvent 次。
 func TestWriteEventError(t *testing.T) {
 	type entry struct {
 		timesToSendError int
@@ -561,6 +581,8 @@ func TestWriteEventError(t *testing.T) {
 	}
 }
 
+// TestUpdateExpiredEvent 验证 Patch 返回 NotFound 时会改为 Create，
+// 且创建前清空 ResourceVersion（服务端不接受带 RV 的创建）。
 func TestUpdateExpiredEvent(t *testing.T) {
 	clock := testclocks.SimpleIntervalClock{Time: time.Now(), Duration: time.Second}
 	eventCorrelator := NewEventCorrelator(&clock)
@@ -601,6 +623,8 @@ func TestUpdateExpiredEvent(t *testing.T) {
 	}
 }
 
+// TestCancelEvent 验证 context 已取消时 recordToSink 只尝试一次就放弃，
+// 不会在重试循环里空转。
 func TestCancelEvent(t *testing.T) {
 	clock := testclocks.SimpleIntervalClock{Time: time.Now(), Duration: time.Second}
 	eventCorrelator := NewEventCorrelator(&clock)
@@ -628,6 +652,8 @@ func TestCancelEvent(t *testing.T) {
 	}
 }
 
+// TestLotsOfEvents 在队列容量上限附近并发写入大量事件，
+// 验证 sink 与日志监听器都不丢事件、且每条事件都完成了重试。
 func TestLotsOfEvents(t *testing.T) {
 	recorderCalled := make(chan struct{})
 	loggerCalled := make(chan struct{})
@@ -684,6 +710,8 @@ func TestLotsOfEvents(t *testing.T) {
 	logWatcher.Stop()
 }
 
+// TestEventfNoNamespace 验证目标对象没有 namespace 时，
+// 事件被放到 default namespace，而引用仍保留空 namespace。
 func TestEventfNoNamespace(t *testing.T) {
 	testPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -780,6 +808,8 @@ func TestEventfNoNamespace(t *testing.T) {
 	sinkWatcher.Stop()
 }
 
+// TestMultiSinkCache 验证每个 StartRecordingToSink 拥有独立的 correlator 缓存：
+// 第二个 sink 看到的是干净状态，第一条同名事件仍走 Create 且 Count=1。
 func TestMultiSinkCache(t *testing.T) {
 	testPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{

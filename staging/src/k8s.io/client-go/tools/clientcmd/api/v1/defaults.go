@@ -20,10 +20,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 把本包手工维护的默认值函数注册到 scheme；由 zz_generated.defaults.go
+// 生成的代码通过它接入 scheme 的默认化流程。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_ExecConfig 为旧版 exec 插件配置补齐 interactiveMode。
+//
+// v1beta1/v1alpha1 产生时还没有 interactiveMode 字段，为了向后兼容，缺省设为
+// IfAvailableExecInteractiveMode，使旧插件在有 stdin 时仍能拿到输入。v1 要求显式声明，
+// 因此其他版本保持空值，由后续校验拒绝，避免“意外获得 stdin”。
 func SetDefaults_ExecConfig(exec *ExecConfig) {
 	if len(exec.InteractiveMode) == 0 {
 		switch exec.APIVersion {

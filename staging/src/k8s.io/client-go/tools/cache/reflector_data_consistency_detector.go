@@ -33,11 +33,17 @@ import (
 //
 // Note that this function will panic when data inconsistency is detected.
 // This is intentional because we want to catch it in the CI.
+//
+// 中文说明：WatchList 相比传统 List+Watch 可能因服务端缓存组合顺序不同而漏事件，
+// 该检查把 WatchList 结果与一次直连 etcd 语义的标准 List 做比对。因开销大且可能
+// panic，仅应在 CI 中通过环境变量开启，生产环境不要启用。
 func checkWatchListDataConsistencyIfRequested[T runtime.Object, U any](ctx context.Context, identity string, lastSyncedResourceVersion string, listFn consistencydetector.ListFunc[T], listItemTransformFunc func(interface{}) (interface{}, error), retrieveItemsFn consistencydetector.RetrieveItemsFunc[U]) {
+	// 中文：环境变量在进程启动时读取一次，未开启时每条 watch 路径零额外开销。
 	if !consistencydetector.IsDataConsistencyDetectionForWatchListEnabled() {
 		return
 	}
 	// for informers we pass an empty ListOptions because
 	// listFn might be wrapped for filtering during informer construction.
+	// 中文：过滤逻辑已封装在 listFn 中，若这里再传限制条件会重复过滤导致误报。
 	consistencydetector.CheckDataConsistency(ctx, identity, lastSyncedResourceVersion, listFn, listItemTransformFunc, metav1.ListOptions{}, retrieveItemsFn)
 }

@@ -25,6 +25,9 @@ import (
 
 // ExecCredential is used by exec-based plugins to communicate credentials to
 // HTTP transports.
+//
+// 传输层通过标准输入把 Spec 交给插件，插件在标准输出返回带 Status 的
+// 同一结构；Status 中的凭据会被缓存在内存里直到过期。
 type ExecCredential struct {
 	metav1.TypeMeta `json:""`
 
@@ -48,6 +51,8 @@ type ExecCredentialSpec struct {
 	Cluster *Cluster `json:"cluster,omitempty"`
 
 	// Interactive declares whether stdin has been passed to this exec plugin.
+	//
+	// 插件据此决定能否提示用户输入；为 true 时不应假设运行在无终端环境。
 	Interactive bool `json:"interactive"`
 }
 

@@ -43,20 +43,28 @@ import (
 // modifying objects stored by the indexers (if any) will *not* automatically lead
 // to a re-index. So it's not a good idea to directly modify the objects returned by
 // Get/List, in general.
+//
+// 所有方法都通过 RWMutex 保护内部 map；读操作返回的是对象指针本身，
+// 因此"线程安全"只覆盖容器操作，不覆盖对象内容。
 type ThreadSafeStore interface {
+	// Add 以 key 插入对象；key 已存在时等同于 Update。
 	Add(key string, obj interface{})
+	// Update 替换 key 对应的对象，并同步更新所有索引。
 	Update(key string, obj interface{})
 	// Delete is equivalent to calling DeleteWithObject(key, nil) however it is
 	// not recommended to use this function as it will not update the resource
 	// version of the store, possibly causing it to be out of date.
 	Delete(key string)
+	// DeleteWithObject 删除对象；提供 obj 时会用其 resourceVersion 更新 store 的 RV。
 	DeleteWithObject(key string, obj interface{})
 	Get(key string) (item interface{}, exists bool)
 	List() []interface{}
 	ListKeys() []string
+	// Replace 整体替换存储内容，并按新内容重建所有索引。
 	Replace(map[string]interface{}, string)
 	Index(indexName string, obj interface{}) ([]interface{}, error)
 	IndexKeys(indexName, indexedValue string) ([]string, error)
+	// Bookmark 仅推进 store 记录的最新 resourceVersion，不改变对象集合。
 	Bookmark(rv string)
 	LastStoreSyncResourceVersion() string
 	ListIndexFuncValues(name string) []string
@@ -70,6 +78,7 @@ type ThreadSafeStore interface {
 }
 
 // ThreadSafeStoreWithTransaction is a store that can batch execute multiple transactions.
+// 批量写入在同一把锁内完成，避免消费者看到中间状态，也减少锁开销。
 type ThreadSafeStoreWithTransaction interface {
 	ThreadSafeStore
 	// Transaction allows performing multiple writes in one call.
@@ -82,8 +91,10 @@ type ThreadSafeStoreTransaction struct {
 	Key string
 }
 
+// ThreadSafeStoreOption 用于在构造 store 时注入可选能力（如指标）。
 type ThreadSafeStoreOption = func(*threadSafeMap)
 
+// WithThreadSafeStoreMetrics 注入 informer 指标；未提供时构造器会补上 no-op 实现。
 func WithThreadSafeStoreMetrics(identifier InformerNameAndResource, metricsProvider InformerMetricsProvider) ThreadSafeStoreOption {
 	return func(c *threadSafeMap) {
 		c.metrics = newStoreMetrics(identifier, metricsProvider)
@@ -98,10 +109,12 @@ type storeIndex struct {
 	indices Indices
 }
 
+// reset 清空所有索引；Replace 后需要基于新对象集合重建。
 func (i *storeIndex) reset() {
 	i.indices = Indices{}
 }
 
+// getKeysFromIndex 计算对象在一个索引上命中的全部 store key。
 func (i *storeIndex) getKeysFromIndex(indexName string, obj interface{}) (sets.Set[string], error) {
 	indexFunc := i.indexers[indexName]
 	if indexFunc == nil {
@@ -133,6 +146,7 @@ func (i *storeIndex) getKeysFromIndex(indexName string, obj interface{}) (sets.S
 	return storeKeySet, nil
 }
 
+// getKeysByIndex 返回某个索引值下登记的全部 key。
 func (i *storeIndex) getKeysByIndex(indexName, indexedValue string) (sets.Set[string], error) {
 	indexFunc := i.indexers[indexName]
 	if indexFunc == nil {
@@ -143,6 +157,7 @@ func (i *storeIndex) getKeysByIndex(indexName, indexedValue string) (sets.Set[st
 	return index[indexedValue], nil
 }
 
+// getIndexValues 返回索引中出现过的所有索引值（用于 ListIndexFuncValues）。
 func (i *storeIndex) getIndexValues(indexName string) []string {
 	index := i.indices[indexName]
 	names := make([]string, 0, len(index))
@@ -152,6 +167,7 @@ func (i *storeIndex) getIndexValues(indexName string) []string {
 	return names
 }
 
+// addIndexers 注册新的索引函数；索引名冲突时整体失败，不部分生效。
 func (i *storeIndex) addIndexers(newIndexers Indexers) error {
 	oldKeys := sets.KeySet(i.indexers)
 	newKeys := sets.KeySet(newIndexers)
@@ -207,6 +223,7 @@ func (i *storeIndex) updateSingleIndex(name string, oldObj interface{}, newObj i
 
 	if len(indexValues) == 1 && len(oldIndexValues) == 1 && indexValues[0] == oldIndexValues[0] {
 		// We optimize for the most common case where indexFunc returns a single value which has not been changed
+		// 绝大多数 Update 不改变索引值，此时无需触碰索引结构。
 		return
 	}
 
@@ -229,6 +246,7 @@ func (i *storeIndex) updateIndices(oldObj interface{}, newObj interface{}, key s
 	}
 }
 
+// addKeyToIndex 把 key 加入索引值对应的集合，集合不存在时懒创建。
 func (i *storeIndex) addKeyToIndex(key, indexValue string, index index) {
 	set := index[indexValue]
 	if set == nil {
@@ -238,6 +256,7 @@ func (i *storeIndex) addKeyToIndex(key, indexValue string, index index) {
 	set.Insert(key)
 }
 
+// deleteKeyFromIndex 从索引集合中移除 key；集合为空时连同索引值一起删除，防止内存累积。
 func (i *storeIndex) deleteKeyFromIndex(key, indexValue string, index index) {
 	set := index[indexValue]
 	if set == nil {
@@ -254,6 +273,7 @@ func (i *storeIndex) deleteKeyFromIndex(key, indexValue string, index index) {
 
 // threadSafeMap implements ThreadSafeStore
 type threadSafeMap struct {
+	// lock 保护 items 与 index：所有 *_locked 方法都假定调用方已持锁。
 	lock  sync.RWMutex
 	items map[string]interface{}
 
@@ -266,10 +286,12 @@ type threadSafeMap struct {
 	metrics *storeMetrics
 }
 
+// Transaction 在一把锁内依次应用多个写操作，最后统一更新 resourceVersion。
 func (c *threadSafeMap) Transaction(txns ...ThreadSafeStoreTransaction) {
 	if len(txns) == 0 {
 		return
 	}
+	// 以最后一个对象的 RV 作为事务结束后的 store RV。
 	finalObj := txns[len(txns)-1].Object
 	rv, rvErr := rvFromObject(finalObj)
 	rvInt, parseErr := parseRVForMetricsWithTruncation(rv)
@@ -298,14 +320,17 @@ func (c *threadSafeMap) Transaction(txns ...ThreadSafeStoreTransaction) {
 	}
 }
 
+// Add 等价于 Update：若 key 已存在会被覆盖，同时更新索引。
 func (c *threadSafeMap) Add(key string, obj interface{}) {
 	c.Update(key, obj)
 }
 
+// addLocked 是持锁版本的 Add。
 func (c *threadSafeMap) addLocked(key string, obj interface{}) {
 	c.updateLocked(key, obj)
 }
 
+// Update 写入对象并推进 store 的 resourceVersion（解析失败时忽略指标）。
 func (c *threadSafeMap) Update(key string, obj interface{}) {
 	rv, rvErr := rvFromObject(obj)
 	rvInt, parseErr := parseRVForMetricsWithTruncation(rv)
@@ -320,16 +345,19 @@ func (c *threadSafeMap) Update(key string, obj interface{}) {
 	}
 }
 
+// updateLocked 替换 map 条目并增量更新索引；调用方必须持锁。
 func (c *threadSafeMap) updateLocked(key string, obj interface{}) {
 	oldObject := c.items[key]
 	c.items[key] = obj
 	c.index.updateIndices(oldObject, obj, key)
 }
 
+// Delete 删除 key，但不像 DeleteWithObject 那样能推进 RV。
 func (c *threadSafeMap) Delete(key string) {
 	c.DeleteWithObject(key, nil)
 }
 
+// DeleteWithObject 删除 key；obj 非 nil 时用它携带的 RV 更新 store。
 func (c *threadSafeMap) DeleteWithObject(key string, obj interface{}) {
 	var rv string
 	var rvInt int64
@@ -349,6 +377,7 @@ func (c *threadSafeMap) DeleteWithObject(key string, obj interface{}) {
 	}
 }
 
+// deleteLocked 从 map 和所有索引中移除 key；不存在时为空操作。
 func (c *threadSafeMap) deleteLocked(key string) {
 	if obj, exists := c.items[key]; exists {
 		c.index.updateIndices(obj, nil, key)
@@ -356,6 +385,7 @@ func (c *threadSafeMap) deleteLocked(key string) {
 	}
 }
 
+// Get 返回对象本身（不是副本），调用方不得修改。
 func (c *threadSafeMap) Get(key string) (item interface{}, exists bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -363,6 +393,7 @@ func (c *threadSafeMap) Get(key string) (item interface{}, exists bool) {
 	return item, exists
 }
 
+// List 返回所有对象；顺序不确定，且元素与缓存共享，调用方不得修改。
 func (c *threadSafeMap) List() []interface{} {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -385,6 +416,8 @@ func (c *threadSafeMap) ListKeys() []string {
 	return list
 }
 
+// Replace 整体替换 items，并用给定的 resourceVersion 覆盖 store 的 RV。
+// 索引无法增量推导，因此先 reset 再全量重建。
 func (c *threadSafeMap) Replace(items map[string]interface{}, resourceVersion string) {
 	var rvInt int64
 	var parseErr error
@@ -405,6 +438,7 @@ func (c *threadSafeMap) Replace(items map[string]interface{}, resourceVersion st
 	}
 }
 
+// rvFromObject 通过 meta.Accessor 读取 resourceVersion；非 API 对象会返回错误。
 func rvFromObject(obj interface{}) (rv string, err error) {
 	meta, err := meta.Accessor(obj)
 	if err != nil {
@@ -435,6 +469,7 @@ func (c *threadSafeMap) Index(indexName string, obj interface{}) ([]interface{},
 // LastStoreSyncResourceVersion returns the latest resource version that the store has seen.
 func (c *threadSafeMap) LastStoreSyncResourceVersion() string {
 	// We cannot return the resource version if the AtomicFIFO feature gate is not enabled.
+	// 关闭 AtomicFIFO 时 store 的 RV 更新路径不保证完整，返回空串以避免误用。
 	if !clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.AtomicFIFO) {
 		return ""
 	}
@@ -444,6 +479,7 @@ func (c *threadSafeMap) LastStoreSyncResourceVersion() string {
 }
 
 // Bookmark sets the latest resource version that the store has seen.
+// 只记录 RV，不触发任何事件或索引变化。
 func (c *threadSafeMap) Bookmark(rv string) {
 	var rvInt int64
 	var parseErr error
@@ -459,6 +495,7 @@ func (c *threadSafeMap) Bookmark(rv string) {
 }
 
 // ByIndex returns a list of the items whose indexed values in the given index include the given indexed value
+// 返回顺序由 map 迭代决定，不保证稳定。
 func (c *threadSafeMap) ByIndex(indexName, indexedValue string) ([]interface{}, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -481,6 +518,7 @@ func (c *threadSafeMap) IndexKeys(indexName, indexedValue string) ([]string, err
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
+	// 索引可能不存在：getKeysByIndex 对未知索引名返回错误。
 	set, err := c.index.getKeysByIndex(indexName, indexedValue)
 	if err != nil {
 		return nil, err
@@ -488,6 +526,7 @@ func (c *threadSafeMap) IndexKeys(indexName, indexedValue string) ([]string, err
 	return sets.List(set), nil
 }
 
+// ListIndexFuncValues 返回索引中出现的所有索引值。
 func (c *threadSafeMap) ListIndexFuncValues(indexName string) []string {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -495,10 +534,12 @@ func (c *threadSafeMap) ListIndexFuncValues(indexName string) []string {
 	return c.index.getIndexValues(indexName)
 }
 
+// GetIndexers 返回索引函数映射本身；调用方只应读取，不应修改。
 func (c *threadSafeMap) GetIndexers() Indexers {
 	return c.index.indexers
 }
 
+// AddIndexers 注册新索引并为已有对象补建索引。
 func (c *threadSafeMap) AddIndexers(newIndexers Indexers) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -517,11 +558,13 @@ func (c *threadSafeMap) AddIndexers(newIndexers Indexers) error {
 	return nil
 }
 
+// Resync 是空操作：store 的内容已由 informer 维护，无需重新计算。
 func (c *threadSafeMap) Resync() error {
 	// Nothing to do
 	return nil
 }
 
+// NewThreadSafeStore 构造线程安全的索引存储；未显式注入指标时使用 no-op 实现。
 func NewThreadSafeStore(indexers Indexers, indices Indices, opts ...ThreadSafeStoreOption) ThreadSafeStore {
 	store := &threadSafeMap{
 		items: map[string]interface{}{},
@@ -539,6 +582,8 @@ func NewThreadSafeStore(indexers Indexers, indices Indices, opts ...ThreadSafeSt
 	return store
 }
 
+// parseRVForMetricsWithTruncation 把 RV 转成可安全放入 float64 的整数。
+// etcd RV 可能超出 2^53，直接转换会丢精度，因此只保留末 15 位。
 func parseRVForMetricsWithTruncation(rv string) (int64, error) {
 	if rv == "" {
 		return 0, nil

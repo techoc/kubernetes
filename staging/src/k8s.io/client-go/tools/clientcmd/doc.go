@@ -34,4 +34,9 @@ Sample usage from merged .kubeconfig files (local directory, home directory)
 	client, err := metav1.New(config)
 	// ...
 */
+
+// Package clientcmd 提供从固定配置、.kubeconfig 文件、命令行参数或它们的任意
+// 合并结果构建 REST 客户端的统一入口。示例中的加载规则决定多份 kubeconfig
+// 的合并顺序（后者覆盖前者），而 ConfigOverrides 承载命令行覆盖值；两者都在
+// 真正构建 client 时才解析，因此可以安全地延迟到需要时再读取。
 package clientcmd

@@ -17,6 +17,10 @@ limitations under the License.
 package cache
 
 // FakeCustomStore lets you define custom functions for store operations.
+//
+// FakeCustomStore 允许为 Store 的每个操作指定自定义函数。
+// 任何未设置的回调都会退化为安全的默认行为（读操作返回空值、写操作返回 nil），
+// 方便测试只关心部分操作。
 type FakeCustomStore struct {
 	AddFunc                          func(obj interface{}) error
 	UpdateFunc                       func(obj interface{}) error

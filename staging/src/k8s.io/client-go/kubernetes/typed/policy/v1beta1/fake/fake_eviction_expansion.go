@@ -24,6 +24,10 @@ import (
 	core "k8s.io/client-go/testing"
 )
 
+// Evict 在 fake 客户端上模拟驱逐 Pod：实际 API 是向 core/v1 的
+// pods/eviction 子资源发 POST，而不是对 policy/v1beta1 资源操作。
+// 因此这里构造的 action 故意使用核心组 GVR 和 "eviction" 子资源，
+// 以便使用者的 reactor 能按一致的方式匹配。
 func (c *fakeEvictions) Evict(ctx context.Context, eviction *policy.Eviction) error {
 	action := core.CreateActionImpl{}
 	action.Verb = "create"

@@ -23,6 +23,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestSlowBackoff 验证退避时长的指数增长与上限：1s、2s、4s……直到 50s
+// 封顶，随后 Reset 清零。
 func TestSlowBackoff(t *testing.T) {
 	id := "_idSlow"
 	tc := testingclock.NewFakeClock(time.Now())
@@ -41,6 +43,7 @@ func TestSlowBackoff(t *testing.T) {
 	}
 
 	//Now confirm that the Reset cancels backoff.
+	// 即使已经达到高水位，Reset 也应立即把退避清零。
 	b.Next(id, tc.Now())
 	b.Reset(id)
 	if b.Get(id) != 0 {
@@ -49,6 +52,8 @@ func TestSlowBackoff(t *testing.T) {
 
 }
 
+// TestBackoffReset 验证长时间（> 2*maxDuration）没有新失败后，
+// IsInBackOffSince 会认为退避已过期，相当于自动重置。
 func TestBackoffReset(t *testing.T) {
 	id := "_idReset"
 	tc := testingclock.NewFakeClock(time.Now())
@@ -75,6 +80,8 @@ func TestBackoffReset(t *testing.T) {
 	}
 }
 
+// TestBackoffHighWaterMark 验证超过过期窗口后再次失败时，退避不会继续
+// 增长，而是停留在高水位 maxDuration。
 func TestBackoffHighWaterMark(t *testing.T) {
 	id := "_idHiWaterMark"
 	tc := testingclock.NewFakeClock(time.Now())
@@ -97,6 +104,8 @@ func TestBackoffHighWaterMark(t *testing.T) {
 	}
 }
 
+// TestBackoffGC 验证 GC 的过期判定：未超过 2*maxDuration 时保留条目，
+// 超过后才删除，防止 map 无界增长。
 func TestBackoffGC(t *testing.T) {
 	id := "_idGC"
 	tc := testingclock.NewFakeClock(time.Now())
@@ -125,6 +134,8 @@ func TestBackoffGC(t *testing.T) {
 	}
 }
 
+// TestAlternateBackoffGC 验证自定义 HasExpiredFunc 可改变 GC 的过期阈值，
+// 而不影响默认的 2*maxDuration 行为。
 func TestAlternateBackoffGC(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -134,12 +145,14 @@ func TestAlternateBackoffGC(t *testing.T) {
 		expiredTime    time.Duration
 	}{
 		{
+			// 默认过期规则：超过 2*maxDuration 才回收。
 			name:           "default GC",
 			maxDuration:    time.Duration(50 * time.Second),
 			nonExpiredTime: time.Duration(5 * time.Second),
 			expiredTime:    time.Duration(101 * time.Second),
 		},
 		{
+			// 自定义 200s 阈值，远大于默认的 2*50s。
 			name: "GC later than 2*maxDuration",
 			hasExpiredFunc: func(eventTime time.Time, lastUpdate time.Time, maxDuration time.Duration) bool {
 				return eventTime.Sub(lastUpdate) >= 200*time.Second
@@ -186,6 +199,9 @@ func TestAlternateBackoffGC(t *testing.T) {
 	}
 }
 
+// TestIsInBackOffSinceUpdate 用一张时间表验证 IsInBackOffSinceUpdate 的
+// 语义：只有当距离上次更新时间小于当前退避时长时才算“仍在退避中”，
+// 并检查对应的退避值（指数增长、10s 封顶、过期后归零）。
 func TestIsInBackOffSinceUpdate(t *testing.T) {
 	id := "_idIsInBackOffSinceUpdate"
 	tc := testingclock.NewFakeClock(time.Now())
@@ -250,11 +266,14 @@ func TestIsInBackOffSinceUpdate(t *testing.T) {
 		}
 
 		if !c.inBackOff {
+			// 只有不在退避中时才推进一次失败计数，模拟下一次重试。
 			b.Next(id, tc.Now())
 		}
 	}
 }
 
+// TestBackoffWithJitter 验证启用抖动后，每次退避值落在
+// (prev, prev*(1+maxJitterFactor)] 区间内，或已封顶为 maxDuration。
 func TestBackoffWithJitter(t *testing.T) {
 	id := "_idJitter"
 	tc := testingclock.NewFakeClock(time.Now())
@@ -277,6 +296,8 @@ func TestBackoffWithJitter(t *testing.T) {
 	b := NewFakeBackOffWithJitter(initial, maxDuration, tc, maxJitterFactor)
 
 	assert := func(t *testing.T, factor int, prevDelayGot, curDelayGot time.Duration) {
+		// 期望区间为 (prev*factor, prev*factor + prev*maxJitterFactor]；
+		// 达到 maxDuration 时允许直接等于上限。
 		low := time.Duration((float64(prevDelayGot) * float64(factor)))
 		high := low + time.Duration(maxJitterFactor*float64(prevDelayGot))
 		if !((curDelayGot > low && curDelayGot <= high) || curDelayGot == maxDuration) {
@@ -312,6 +333,8 @@ func TestBackoffWithJitter(t *testing.T) {
 	t.Logf("exponentially backed off jittered delays: %v", delays)
 }
 
+// TestAlternateHasExpiredFunc 验证自定义 HasExpiredFunc 控制“何时重置退避”：
+// 分别覆盖默认阈值和更短的 8s 阈值。
 func TestAlternateHasExpiredFunc(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -321,12 +344,14 @@ func TestAlternateHasExpiredFunc(t *testing.T) {
 		expiredTime    time.Duration
 	}{
 		{
+			// 默认规则下 5s 尚未过期。
 			name:           "default expiration",
 			maxDuration:    time.Duration(50 * time.Second),
 			nonExpiredTime: time.Duration(5 * time.Second),
 			expiredTime:    time.Duration(101 * time.Second),
 		},
 		{
+			// 自定义 8s 过期：超过后 Next 应把退避重置为初始值。
 			name: "expires faster than maxDuration",
 			hasExpiredFunc: func(eventTime time.Time, lastUpdate time.Time, maxDuration time.Duration) bool {
 				return eventTime.Sub(lastUpdate) >= 8*time.Second

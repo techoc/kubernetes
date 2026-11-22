@@ -34,9 +34,11 @@ type spdyStreamExecutor struct {
 	upgrader  spdy.Upgrader
 	transport http.RoundTripper
 
-	method          string
-	url             *url.URL
-	protocols       []string
+	method    string
+	url       *url.URL
+	protocols []string
+	// rejectRedirects 为 true 时把重定向视为错误；升级请求被重定向通常意味着
+	// 请求打到了错误的端点，继续跟随可能把命令发到非预期服务器。
 	rejectRedirects bool // if true, receiving redirect from upstream is an error
 }
 
@@ -66,6 +68,9 @@ func NewSPDYExecutorRejectRedirects(transport http.RoundTripper, upgrader spdy.U
 
 // NewSPDYExecutorForTransports connects to the provided server using the given transport,
 // upgrades the response using the given upgrader to multiplexed bidirectional streams.
+//
+// 按从新到旧的顺序声明协议，服务端选择第一个双方都支持的版本；
+// V5 引入 CLOSE 信号，V4 支持退出码，更旧的版本为兼容保留。
 func NewSPDYExecutorForTransports(transport http.RoundTripper, upgrader spdy.Upgrader, method string, url *url.URL) (Executor, error) {
 	return NewSPDYExecutorForProtocols(
 		transport, upgrader, method, url,
@@ -92,11 +97,17 @@ func NewSPDYExecutorForProtocols(transport http.RoundTripper, upgrader spdy.Upgr
 
 // Stream opens a protocol streamer to the server and streams until a client closes
 // the connection or the server disconnects.
+//
+// 该版本没有 context，调用方无法取消；新代码应使用 StreamWithContext 以便
+// 在取消时释放连接。
 func (e *spdyStreamExecutor) Stream(options StreamOptions) error {
 	return e.StreamWithContext(context.Background(), options)
 }
 
 // newConnectionAndStream creates a new SPDY connection and a stream protocol handler upon it.
+//
+// 协议协商结果为空串时回退到 V1：旧服务端可能完全不返回协议头，
+// 此时只能按最早的流布局工作。
 func (e *spdyStreamExecutor) newConnectionAndStream(ctx context.Context, options StreamOptions) (httpstream.Connection, streamProtocolHandler, error) {
 	req, err := http.NewRequestWithContext(ctx, e.method, e.url.String(), nil)
 	if err != nil {
@@ -150,6 +161,8 @@ func (e *spdyStreamExecutor) StreamWithContext(ctx context.Context, options Stre
 	}
 	defer conn.Close()
 
+	// stream 在独立协程运行，因为 handler 内部可能阻塞在 stdin 读取；
+	// panic 与 error 分别经通道回传，保证握手阶段之后的 panic 也能到达调用方。
 	panicChan := make(chan any, 1)
 	errorChan := make(chan error, 1)
 	go func() {

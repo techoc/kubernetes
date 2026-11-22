@@ -42,7 +42,10 @@ import (
 	"k8s.io/streaming/pkg/httpstream/spdy"
 )
 
+// AttachFunc 抽象服务端处理已升级流的方式，不同测试可注入不同的读写行为。
 type AttachFunc func(in io.Reader, out, err io.WriteCloser, tty bool, resize <-chan TerminalSize) error
+
+// streamContext 汇总一次 SPDY 升级后得到的各条流，供服务端测试代码使用。
 type streamContext struct {
 	conn         io.Closer
 	stdinStream  io.ReadCloser
@@ -67,6 +70,7 @@ func (s *fakeEmptyDataPty) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// fakeMassiveDataPty 刻意在读写 1 秒后返回错误，用于触发“对端崩溃/阻塞”路径。
 type fakeMassiveDataPty struct{}
 
 func (s *fakeMassiveDataPty) Read(p []byte) (int, error) {
@@ -79,6 +83,8 @@ func (s *fakeMassiveDataPty) Write(p []byte) (int, error) {
 	return len(p), errors.New("return err")
 }
 
+// fakeMassiveDataAttacher 持续向 stdout/stderr 写入大量数据直到第一个流结束，
+// 用于验证客户端在连接被关闭或超时后能退出，而不是无限阻塞。
 func fakeMassiveDataAttacher(stdin io.Reader, stdout, stderr io.WriteCloser, tty bool, resize <-chan TerminalSize) error {
 
 	copyDone := make(chan struct{}, 3)
@@ -106,12 +112,14 @@ func fakeMassiveDataAttacher(stdin io.Reader, stdout, stderr io.WriteCloser, tty
 		copyDone <- writeMassiveData(stderr)
 	}()
 
+	// 任意一个方向结束即返回，模拟服务端主动结束会话。
 	select {
 	case <-copyDone:
 		return nil
 	}
 }
 
+// writeMassiveData 反复写入固定内容，直到写入失败（连接关闭）。
 func writeMassiveData(stdStream io.Writer) struct{} { // write to stdin or stdout
 	for {
 		_, err := io.Copy(stdStream, strings.NewReader("something"))
@@ -122,6 +130,8 @@ func writeMassiveData(stdStream io.Writer) struct{} { // write to stdin or stdou
 	return struct{}{}
 }
 
+// TestSPDYExecutorStream 验证在服务端制造阻塞/错误与客户端 timeout 时，
+// StreamWithContext 能按预期返回（成功或 context.DeadlineExceeded）。
 func TestSPDYExecutorStream(t *testing.T) {
 	tests := []struct {
 		timeout     time.Duration
@@ -186,6 +196,9 @@ func TestSPDYExecutorStream(t *testing.T) {
 
 // TestSPDYExecutorNonZeroExitCode verifies SPDY v4 status-stream non-zero exit
 // code handling remains compatible with CRI streaming servers.
+//
+// 服务端先写 stdout 再写 NonZeroExitCode 状态；客户端应把错误解析为
+// utilexec.ExitError(17)，同时保留已写入的 stdout 内容。
 func TestSPDYExecutorNonZeroExitCode(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		ctx, err := createHTTPStreams(writer, request, &StreamOptions{
@@ -249,6 +262,8 @@ func TestSPDYExecutorNonZeroExitCode(t *testing.T) {
 	}
 }
 
+// newTestHTTPServer 启动一个假的 SPDY 服务端：完成协议握手后执行 attacher，
+// 并把结果写入 error 流（StatusError），与 kubelet 的响应格式一致。
 func newTestHTTPServer(f AttachFunc, options *StreamOptions) *httptest.Server {
 	//nolint:errcheck
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -271,6 +286,8 @@ func newTestHTTPServer(f AttachFunc, options *StreamOptions) *httptest.Server {
 	return server
 }
 
+// attach2Server 在独立 goroutine 中执行 StreamWithContext，并用
+// wait.ForeverTestTimeout 兜底，防止测试因流未关闭而永久挂起。
 func attach2Server(ctx context.Context, rawURL string, options StreamOptions) error {
 	uri, _ := url.Parse(rawURL)
 	exec, err := NewSPDYExecutor(&rest.Config{Host: uri.Host}, "POST", uri)
@@ -291,6 +308,9 @@ func attach2Server(ctx context.Context, rawURL string, options StreamOptions) er
 }
 
 // simplify createHttpStreams , only support StreamProtocolV4Name
+//
+// 服务端只需按 StreamOptions 等待对应数量的流（error/stdout/stdin/stderr），
+// 超出的流类型直接报错，便于发现客户端协议实现偏差。
 func createHTTPStreams(w http.ResponseWriter, req *http.Request, opts *StreamOptions) (*streamContext, error) {
 	_, err := httpstream.Handshake(req, w, []string{remotecommandconsts.StreamProtocolV4Name})
 	if err != nil {
@@ -311,7 +331,7 @@ func createHTTPStreams(w http.ResponseWriter, req *http.Request, opts *StreamOpt
 	replyChan := make(chan struct{}, 4)
 	defer close(replyChan)
 	receivedStreams := 0
-	expectedStreams := 1
+	expectedStreams := 1 // error 流始终存在
 	if opts.Stdout != nil {
 		expectedStreams++
 	}
@@ -354,6 +374,7 @@ WaitForStreams:
 	return ctx, nil
 }
 
+// v4WriteStatusFunc 把 StatusError 序列化为 JSON 写入 error 流；这是 SPDY v4 的约定。
 func v4WriteStatusFunc(stream io.Writer) func(status *apierrors.StatusError) error {
 	return func(status *apierrors.StatusError) error {
 		bs, err := json.Marshal(status.Status())
@@ -379,11 +400,13 @@ func newWriterDetector(w io.Writer) *writeDetector {
 	}
 }
 
+// BlockUntilWritten 阻塞到第一次写入发生，用于确认流 goroutine 已启动。
 func (w *writeDetector) BlockUntilWritten() {
 	<-w.written
 }
 
 func (w *writeDetector) Write(p []byte) (n int, err error) {
+	// 只在首次写入时关闭 channel；重复关闭会 panic。
 	if !w.closed {
 		close(w.written)
 		w.closed = true
@@ -437,6 +460,8 @@ func TestStreamExitsAfterConnectionIsClosed(t *testing.T) {
 	}
 }
 
+// TestStreamRandomData 发送 1MiB 随机数据并原样回显，验证大数据量下
+// stdin/stdout 的流不丢字节、不截断。
 func TestStreamRandomData(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var stdin, stdout bytes.Buffer

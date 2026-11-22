@@ -27,6 +27,7 @@ import (
 const GroupName = extensionsv1beta1.GroupName
 
 // SchemeGroupVersion is group version used to register these objects
+// 内部版本不参与线缆传输，仅作为 extensions group 的转换枢纽。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 // Kind takes an unqualified kind and returns a Group qualified GroupKind
@@ -47,6 +48,8 @@ var (
 )
 
 // Adds the list of known types to api.Scheme.
+// 复用 scale/scheme 的 Scale 类型，并以 extensions 的内部组版本注册，从而与其他
+// group 的内部类型区分开。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&scalescheme.Scale{},

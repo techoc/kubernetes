@@ -91,19 +91,24 @@ func Pop(queue Queue) interface{} {
 	return result
 }
 
+// testFifoObjectKeyFunc 用对象内的 name 作为键，便于构造同名对象验证合并语义。
 func testFifoObjectKeyFunc(obj interface{}) (string, error) {
 	return obj.(testFifoObject).name, nil
 }
 
+// testFifoObject 是测试用的最小对象，val 用于判断顺序与更新结果。
 type testFifoObject struct {
 	name string
 	val  interface{}
 }
 
+// mkFifoObj 构造一个 testFifoObject。
 func mkFifoObj(name string, val interface{}) testFifoObject {
 	return testFifoObject{name: name, val: val}
 }
 
+// TestFIFO_basic 并发写入 int 和 uint64 两种值，验证同一写入者内部严格有序，
+// 且 Pop 后队列会被清空。
 func TestFIFO_basic(t *testing.T) {
 	f := NewFIFO(testFifoObjectKeyFunc)
 	const amount = 500
@@ -139,6 +144,8 @@ func TestFIFO_basic(t *testing.T) {
 	}
 }
 
+// TestFIFO_addUpdate 验证同名对象在出队前多次 Add/Update 只会产生一个条目，
+// 且交付的是最新值。
 func TestFIFO_addUpdate(t *testing.T) {
 	f := NewFIFO(testFifoObjectKeyFunc)
 	defer f.Close()
@@ -178,6 +185,8 @@ func TestFIFO_addUpdate(t *testing.T) {
 	}
 }
 
+// TestFIFO_addReplace 验证 Replace 会以新列表整体覆盖待处理条目，
+// 同名旧值被替换而不是追加。
 func TestFIFO_addReplace(t *testing.T) {
 	f := NewFIFO(testFifoObjectKeyFunc)
 	defer f.Close()
@@ -209,6 +218,8 @@ func TestFIFO_addReplace(t *testing.T) {
 	}
 }
 
+// TestFIFO_detectLineJumpers 验证已在队列中的对象再次 Add 时保持原位置，
+// 不会插队到新对象之前。
 func TestFIFO_detectLineJumpers(t *testing.T) {
 	f := NewFIFO(testFifoObjectKeyFunc)
 
@@ -237,6 +248,8 @@ func TestFIFO_detectLineJumpers(t *testing.T) {
 	}
 }
 
+// TestFIFO_HasSynced 覆盖 HasSynced 的判定规则：必须发生过 Replace（初始
+// 全量同步），且 Replace 放入的条目都被 Pop 完才算同步。
 func TestFIFO_HasSynced(t *testing.T) {
 	tests := []struct {
 		actions        []func(f *FIFO)

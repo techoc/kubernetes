@@ -23,13 +23,16 @@ import (
 
 // SchemeGroupVersion is group version used to register these objects
 // TODO this should be in the "kubeconfig" group
+// 使用内部版本（APIVersionInternal）注册，表示该类型仅用于内部表示，不直接序列化到磁盘。
 var SchemeGroupVersion = schema.GroupVersion{Group: "", Version: runtime.APIVersionInternal}
 
 var (
+	// SchemeBuilder 负责把 Config 注册进 scheme。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	AddToScheme   = SchemeBuilder.AddToScheme
 )
 
+// addKnownTypes 注册 kubeconfig 的内部 Config 类型。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Config{},
@@ -37,6 +40,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	return nil
 }
 
+// GetObjectKind 返回对象自身的 Kind，使 Config 满足 runtime.Object 接口。
 func (obj *Config) GetObjectKind() schema.ObjectKind { return obj }
 func (obj *Config) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()

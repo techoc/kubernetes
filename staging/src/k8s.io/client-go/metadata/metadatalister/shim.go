@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// shim.go 把 metadatalister 的类型化 lister 适配为 informer 基础设施所需的
+// cache.GenericLister；包级说明见 lister.go。
+
 package metadatalister
 
 import (
@@ -22,6 +25,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// 编译期断言：两个 shim 分别实现对应的 generic 接口。
 var _ cache.GenericLister = &metadataListerShim{}
 var _ cache.GenericNamespaceLister = &metadataNamespaceListerShim{}
 
@@ -43,6 +47,8 @@ func (s *metadataListerShim) List(selector labels.Selector) (ret []runtime.Objec
 		return nil, err
 	}
 
+	// 逐元素拷贝到 runtime.Object 切片；这里不是原地转换，
+	// 因为切片元素类型不同，必须新建切片。
 	ret = make([]runtime.Object, len(objs))
 	for index, obj := range objs {
 		ret[index] = obj
@@ -55,6 +61,7 @@ func (s *metadataListerShim) Get(name string) (runtime.Object, error) {
 	return s.lister.Get(name)
 }
 
+// ByNamespace 返回绑定到指定命名空间的 generic lister 适配器。
 func (s *metadataListerShim) ByNamespace(namespace string) cache.GenericNamespaceLister {
 	return &metadataNamespaceListerShim{
 		namespaceLister: s.lister.Namespace(namespace),
@@ -74,6 +81,7 @@ func (ns *metadataNamespaceListerShim) List(selector labels.Selector) (ret []run
 		return nil, err
 	}
 
+	// 同 List：因元素类型不同而必须新建切片。
 	ret = make([]runtime.Object, len(objs))
 	for index, obj := range objs {
 		ret[index] = obj

@@ -37,6 +37,7 @@ const (
 
 	// if we see the same event that varies only by message
 	// more than 10 times in a 10 minute period, aggregate the event
+	// 10 分钟内相同事件（仅 message 不同）出现超过 10 次即合并，避免事件风暴。
 	defaultAggregateMaxEvents         = 10
 	defaultAggregateIntervalInSeconds = 600
 
@@ -44,11 +45,13 @@ const (
 	// but control the refill rate to 1 new event every 5 minutes
 	// this helps control the long-tail of events for things that are always
 	// unhealthy
+	// 令牌桶：允许突发 25 条，但每 5 分钟只回填 1 条，抑制长期不健康对象的刷屏。
 	defaultSpamBurst = 25
 	defaultSpamQPS   = 1. / 300.
 )
 
 // getEventKey builds unique event key based on source, involvedObject, reason, message.
+// 该 key 用于精确去重：message 也参与计算，因此只要消息不同就视为不同事件。
 func getEventKey(event *v1.Event) string {
 	return strings.Join([]string{
 		event.Source.Component,
@@ -67,6 +70,7 @@ func getEventKey(event *v1.Event) string {
 }
 
 // getSpamKey builds unique event key based on source, involvedObject.
+// 该 key 刻意不含 message/reason，用于按"来源+对象"维度统计频率以做限流。
 func getSpamKey(event *v1.Event) string {
 	return strings.Join([]string{
 		event.Source.Component,
@@ -89,6 +93,7 @@ type EventFilterFunc func(event *v1.Event) bool
 
 // EventSourceObjectSpamFilter is responsible for throttling
 // the amount of events a source and object can produce.
+// 以"来源+对象"为粒度做令牌桶限流；LRU 保证缓存条目数有上界。
 type EventSourceObjectSpamFilter struct {
 	// the cache that manages last synced state
 	cache *lru.Cache
@@ -125,6 +130,7 @@ type spamRecord struct {
 
 // Filter controls that a given source+object are not exceeding the allowed rate.
 // The event parameter must not be nil.
+// 返回 true 表示该事件应被丢弃（超过配额）。
 func (f *EventSourceObjectSpamFilter) Filter(event *v1.Event) bool {
 	var record spamRecord
 
@@ -138,6 +144,7 @@ func (f *EventSourceObjectSpamFilter) Filter(event *v1.Event) bool {
 	}
 
 	// verify we have a rate limiter for this record
+	// 首次见到该 key 时才创建令牌桶；此后复用同一个桶以保持配额状态。
 	if record.rateLimiter == nil {
 		record.rateLimiter = flowcontrol.NewTokenBucketPassiveRateLimiterWithClock(f.qps, f.burst, f.clock)
 	}
@@ -161,6 +168,7 @@ type EventAggregatorKeyFunc func(event *v1.Event) (aggregateKey string, localKey
 // event.Reason, event.ReportingController and event.ReportingInstance.
 // The event parameter must not be nil.
 func EventAggregatorByReasonFunc(event *v1.Event) (string, string) {
+	// aggregateKey 不含 message，使仅消息不同的事件归为同一组；localKey 用 message 区分组内成员。
 	return strings.Join([]string{
 		event.Source.Component,
 		event.Source.Host,
@@ -186,6 +194,7 @@ func EventAggregatorByReasonMessageFunc(event *v1.Event) string {
 }
 
 // EventAggregator identifies similar events and aggregates them into a single event
+// 内嵌 RWMutex 保护 cache 的并发读写。
 type EventAggregator struct {
 	sync.RWMutex
 
@@ -270,15 +279,18 @@ func (e *EventAggregator) EventAggregate(newEvent *v1.Event) (*v1.Event, string)
 	e.cache.Add(aggregateKey, record)
 
 	// If we are not yet over the threshold for unique events, don't correlate them
+	// 未达到阈值前返回原事件本身；达到阈值后才开始生成聚合事件。
 	if uint(record.localKeys.Len()) < e.maxEvents {
 		return newEvent, eventKey
 	}
 
 	// do not grow our local key set any larger than max
+	// 防止集合无限增长：每次聚合后移除一个任意元素，把大小维持在阈值内。
 	record.localKeys.PopAny()
 
 	// create a new aggregate event, and return the aggregateKey as the cache key
 	// (so that it can be overwritten.)
+	// 聚合事件的名字带纳秒时间戳，保证每次聚合生成的事件名唯一。
 	eventCopy := &v1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%v.%x", newEvent.InvolvedObject.Name, now.UnixNano()),
@@ -341,11 +353,13 @@ func (e *eventLogger) eventObserve(newEvent *v1.Event, key string) (*v1.Event, [
 	// If we found a result, prepare a patch
 	if lastObservation.count > 0 {
 		// update the event based on the last observation so patch will work as desired
+		// 复用上次事件的 name/resourceVersion/firstTimestamp，使服务端把它识别为同一事件的更新。
 		event.Name = lastObservation.name
 		event.ResourceVersion = lastObservation.resourceVersion
 		event.FirstTimestamp = lastObservation.firstTimestamp
 		event.Count = int32(lastObservation.count) + 1
 
+		// 构造用于补丁的"旧值"：把每次都会变化的字段清零，避免它们进入 patch。
 		eventCopy2 := *event
 		eventCopy2.Count = 0
 		eventCopy2.LastTimestamp = metav1.NewTime(time.Unix(0, 0))
@@ -453,6 +467,7 @@ func NewEventCorrelator(clock clock.PassiveClock) *EventCorrelator {
 	}
 }
 
+// NewEventCorrelatorWithOptions 使用调用方提供的选项构造 EventCorrelator，零值字段由 populateDefaults 补齐。
 func NewEventCorrelatorWithOptions(options CorrelatorOptions) *EventCorrelator {
 	optionsWithDefaults := populateDefaults(options)
 	spamFilter := NewEventSourceObjectSpamFilter(
@@ -511,6 +526,7 @@ func (c *EventCorrelator) EventCorrelate(newEvent *v1.Event) (*EventCorrelateRes
 	if newEvent == nil {
 		return nil, fmt.Errorf("event is nil")
 	}
+	// 顺序很重要：先聚合（可能缩减为单个聚合事件），再对聚合结果做去重计数，最后做限流。
 	aggregateEvent, ckey := c.aggregator.EventAggregate(newEvent)
 	observedEvent, patch, err := c.logger.eventObserve(aggregateEvent, ckey)
 	if c.filterFunc(observedEvent) {

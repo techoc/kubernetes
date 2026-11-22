@@ -34,9 +34,10 @@ import (
 	"k8s.io/client-go/testing"
 )
 
-// FakeDiscovery implements discovery.DiscoveryInterface and discovery.DiscoveryInterfaceWithContext.
-// It sometimes calls testing.Fake.Invoke with an action,
-// but doesn't respect the return value if any. There is a way to fake static values like ServerVersion by using the Faked... fields on the struct.
+// FakeDiscovery 实现 discovery.DiscoveryInterface 与 discovery.DiscoveryInterfaceWithContext。
+//
+// 它有时会用 action 调用 testing.Fake.Invoke，但不使用其返回值；
+// 需要固定返回值（如 ServerVersion）时，直接设置结构体上的 Faked... 字段。
 type FakeDiscovery struct {
 	*testing.Fake
 	FakedServerVersion *version.Info
@@ -54,17 +55,24 @@ var (
 // ServerResourcesForGroupVersionWithContext is a better alternative because it supports contextual logging and cancellation.
 //
 // Contextual logging: Use ServerResourcesForGroupVersionWithContext instead.
+//
+// ServerResourcesForGroupVersion 返回指定 group/version 支持的资源列表；
+// 新代码应使用带 context 的版本。
 func (c *FakeDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	return c.ServerResourcesForGroupVersionWithContext(context.Background(), groupVersion)
 }
 
 // ServerResourcesForGroupVersionWithContext returns the supported resources for a group
 // and version.
+//
+// 在 FakeDiscovery.Resources 中按 GroupVersion 查找；找不到时返回 NotFound 的 StatusError，
+// 模拟真实服务端的行为。
 func (c *FakeDiscovery) ServerResourcesForGroupVersionWithContext(ctx context.Context, groupVersion string) (*metav1.APIResourceList, error) {
 	action := testing.ActionImpl{
 		Verb:     "get",
 		Resource: schema.GroupVersionResource{Resource: "resource"},
 	}
+	// 记录一次 action，便于测试断言调用序列。
 	if _, err := c.Invokes(action, nil); err != nil {
 		return nil, err
 	}
@@ -97,6 +105,7 @@ func (c *FakeDiscovery) ServerGroupsAndResourcesWithContext(ctx context.Context)
 	if err != nil {
 		return nil, nil, err
 	}
+	// APIGroupList 中是值类型，这里取地址以避免复制整组数据。
 	resultGroups := []*metav1.APIGroup{}
 	for i := range sgs.Groups {
 		resultGroups = append(resultGroups, &sgs.Groups[i])
@@ -124,6 +133,8 @@ func (c *FakeDiscovery) ServerPreferredResources() ([]*metav1.APIResourceList, e
 
 // ServerPreferredResourcesWithContext returns the supported resources with the version
 // preferred by the server.
+//
+// fake 实现始终返回空结果。
 func (c *FakeDiscovery) ServerPreferredResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error) {
 	return nil, nil
 }
@@ -140,6 +151,8 @@ func (c *FakeDiscovery) ServerPreferredNamespacedResources() ([]*metav1.APIResou
 
 // ServerPreferredNamespacedResourcesWithContext returns the supported namespaced resources
 // with the version preferred by the server.
+//
+// fake 实现始终返回空结果。
 func (c *FakeDiscovery) ServerPreferredNamespacedResourcesWithContext(ctx context.Context) ([]*metav1.APIResourceList, error) {
 	return nil, nil
 }
@@ -156,6 +169,8 @@ func (c *FakeDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
 
 // ServerGroupsWithContext returns the supported groups, with information like supported
 // versions and the preferred version.
+//
+// 从 Resources 推导出所有 API 组；每个组第一次出现时被记录为 preferred version。
 func (c *FakeDiscovery) ServerGroupsWithContext(ctx context.Context) (*metav1.APIGroupList, error) {
 	action := testing.ActionImpl{
 		Verb:     "get",
@@ -174,6 +189,7 @@ func (c *FakeDiscovery) ServerGroupsWithContext(ctx context.Context) (*metav1.AP
 		}
 		group := groups[gv.Group]
 		if group == nil {
+			// 首次见到该组：把当前版本作为 preferred，并登记后续版本。
 			group = &metav1.APIGroup{
 				Name: gv.Group,
 				PreferredVersion: metav1.GroupVersionForDiscovery{
@@ -209,6 +225,8 @@ func (c *FakeDiscovery) ServerVersion() (*version.Info, error) {
 }
 
 // ServerVersionWithContext retrieves and parses the server's version.
+//
+// 优先返回 FakedServerVersion；未设置时返回编译期的客户端版本信息，保证测试中非空。
 func (c *FakeDiscovery) ServerVersionWithContext(ctx context.Context) (*version.Info, error) {
 	action := testing.ActionImpl{}
 	action.Verb = "get"
@@ -236,6 +254,8 @@ func (c *FakeDiscovery) OpenAPISchema() (*openapi_v2.Document, error) {
 }
 
 // OpenAPISchemaWithContext retrieves and parses the swagger API schema the server supports.
+//
+// fake 实现返回空文档，调用方无需处理 nil。
 func (c *FakeDiscovery) OpenAPISchemaWithContext(ctx context.Context) (*openapi_v2.Document, error) {
 	return &openapi_v2.Document{}, nil
 }
@@ -243,16 +263,21 @@ func (c *FakeDiscovery) OpenAPISchemaWithContext(ctx context.Context) (*openapi_
 // OpenAPIV3WithContext is a better alternative because it supports contextual logging and cancellation.
 //
 // Contextual logging: Use OpenAPIV3WithContext instead.
+//
+// OpenAPIV3 在 fake 中未实现，调用会 panic。
 func (c *FakeDiscovery) OpenAPIV3() openapi.Client {
 	panic("unimplemented")
 }
 
+// OpenAPIV3WithContext 在 fake 中未实现，调用会 panic。
 func (c *FakeDiscovery) OpenAPIV3WithContext(ctx context.Context) openapi.ClientWithContext {
 	panic("unimplemented")
 }
 
 // RESTClient returns a RESTClient that is used to communicate with API server
 // by this client implementation.
+//
+// fake 没有真实 REST 客户端，返回 nil。
 func (c *FakeDiscovery) RESTClient() restclient.Interface {
 	return nil
 }
@@ -260,10 +285,13 @@ func (c *FakeDiscovery) RESTClient() restclient.Interface {
 // WithLegacyWithContext is a better alternative because it supports contextual logging and cancellation.
 //
 // Contextual logging: Use WithLegacyWithContext instead.
+//
+// WithLegacy 在 fake 中未实现，调用会 panic。
 func (c *FakeDiscovery) WithLegacy() discovery.DiscoveryInterface {
 	panic("unimplemented")
 }
 
+// WithLegacyWithContext 在 fake 中未实现，调用会 panic。
 func (c *FakeDiscovery) WithLegacyWithContext(ctx context.Context) discovery.DiscoveryInterfaceWithContext {
 	panic("unimplemented")
 }

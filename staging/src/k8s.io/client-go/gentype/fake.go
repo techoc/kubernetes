@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package gentype 存放由代码生成器为各 typed client 复用的泛型实现，
+// 包括 fake client。泛型化让每个 API 组不再生成一份几乎相同的样板代码，
+// 同时保持各资源类型的方法签名与生成的接口一致。
 package gentype
 
 import (
@@ -32,6 +35,10 @@ import (
 )
 
 // FakeClient represents a fake client
+//
+// FakeClient 是所有 fake typed client 的泛型基座：它内嵌 testing.Fake，
+// 把方法调用转换成 testing.Action 交给已注册的 reactor 处理。
+// ns 为空表示集群级资源；newObject 用于在 reactor 未返回对象时提供零值。
 type FakeClient[T objectWithMeta] struct {
 	*testing.Fake
 	ns        string
@@ -41,18 +48,25 @@ type FakeClient[T objectWithMeta] struct {
 }
 
 // FakeClientWithList represents a fake client with support for lists.
+//
+// 通过组合 alsoFakeLister 增加 List/DeleteCollection；Go 不支持方法重载式的
+// 可选方法，只能用类型组合区分能力集。
 type FakeClientWithList[T objectWithMeta, L runtime.Object] struct {
 	*FakeClient[T]
 	alsoFakeLister[T, L]
 }
 
 // FakeClientWithApply represents a fake client with support for apply declarative configurations.
+//
+// 组合 alsoFakeApplier 以提供 Apply/ApplyStatus。
 type FakeClientWithApply[T objectWithMeta, C namedObject] struct {
 	*FakeClient[T]
 	alsoFakeApplier[T, C]
 }
 
 // FakeClientWithListAndApply represents a fake client with support for lists and apply declarative configurations.
+//
+// 同时组合 list 与 apply 两种能力，对应生成代码中的完整接口。
 type FakeClientWithListAndApply[T objectWithMeta, L runtime.Object, C namedObject] struct {
 	*FakeClient[T]
 	alsoFakeLister[T, L]
@@ -60,6 +74,9 @@ type FakeClientWithListAndApply[T objectWithMeta, L runtime.Object, C namedObjec
 }
 
 // Helper types for composition
+//
+// alsoFakeLister 用函数值打破泛型组合时对具体 List 类型的依赖：
+// 构造/复制 List 元数据、读取/写回条目都由调用方（生成的代码）注入。
 type alsoFakeLister[T objectWithMeta, L runtime.Object] struct {
 	client       *FakeClient[T]
 	newList      func() L
@@ -68,12 +85,16 @@ type alsoFakeLister[T objectWithMeta, L runtime.Object] struct {
 	setItems     func(L, []T)
 }
 
+// alsoFakeApplier 持有基座 client；Apply 系列方法只需要 resource/namespace/
+// newObject，无需额外的 List 相关函数。
 type alsoFakeApplier[T objectWithMeta, C namedObject] struct {
 	client *FakeClient[T]
 }
 
 // NewFakeClient constructs a fake client, namespaced or not, with no support for lists or apply.
 // Non-namespaced clients are constructed by passing an empty namespace ("").
+//
+// emptyObjectCreator 必须返回该类型的零值对象，reactor 缺省时作为返回值。
 func NewFakeClient[T objectWithMeta](
 	fake *testing.Fake, namespace string, resource schema.GroupVersionResource, kind schema.GroupVersionKind, emptyObjectCreator func() T,
 ) *FakeClient[T] {
@@ -81,6 +102,8 @@ func NewFakeClient[T objectWithMeta](
 }
 
 // NewFakeClientWithList constructs a namespaced client with support for lists.
+//
+// 传入的 list 相关函数由生成的代码提供，避免在泛型层对具体 List 做类型断言。
 func NewFakeClientWithList[T objectWithMeta, L runtime.Object](
 	fake *testing.Fake, namespace string, resource schema.GroupVersionResource, kind schema.GroupVersionKind, emptyObjectCreator func() T,
 	emptyListCreator func() L, listMetaCopier func(L, L), itemGetter func(L) []T, itemSetter func(L, []T),
@@ -117,6 +140,8 @@ func NewFakeClientWithListAndApply[T objectWithMeta, L runtime.Object, C namedOb
 }
 
 // Get takes name of a resource, and returns the corresponding object, and an error if there is any.
+//
+// reactor 返回 nil 时回退到零值对象，保证接口语义（总是返回单个对象）不变。
 func (c *FakeClient[T]) Get(ctx context.Context, name string, options metav1.GetOptions) (T, error) {
 	emptyResult := c.newObject()
 
@@ -128,10 +153,13 @@ func (c *FakeClient[T]) Get(ctx context.Context, name string, options metav1.Get
 	return obj.(T), err
 }
 
+// ToPointerSlice 把值切片转换成指针切片，保留 nil 与空切片的区别。
+// 生成的 lister 接口返回 []*T，而 List 结果持有 []T，需要该转换。
 func ToPointerSlice[T any](src []T) []*T {
 	if src == nil {
 		return nil
 	}
+	// 直接取 &src[i]，避免复制元素后指针指向临时变量。
 	result := make([]*T, len(src))
 	for i := range src {
 		result[i] = &src[i]
@@ -139,6 +167,7 @@ func ToPointerSlice[T any](src []T) []*T {
 	return result
 }
 
+// FromPointerSlice 把指针切片解引用为值切片，是 ToPointerSlice 的逆操作。
 func FromPointerSlice[T any](src []*T) []T {
 	if src == nil {
 		return nil
@@ -164,6 +193,8 @@ func (l *alsoFakeLister[T, L]) List(ctx context.Context, opts metav1.ListOptions
 		// Everything matches
 		return obj.(L), nil
 	}
+	// 非空 label selector 在 fake 层自行过滤：先在副本上复制 ListMeta，
+	// 再逐项按标签匹配，避免修改 reactor 返回的原始对象。
 	list := l.newList()
 	l.copyListMeta(list, obj.(L))
 	var items []T
@@ -182,6 +213,8 @@ func (l *alsoFakeLister[T, L]) List(ctx context.Context, opts metav1.ListOptions
 }
 
 // Watch returns a watch.Interface that watches the requested resources.
+//
+// 强制设置 opts.Watch，确保生成的 WatchAction 与 List 动作可区分。
 func (c *FakeClient[T]) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	opts.Watch = true
 	return c.Fake.
@@ -211,6 +244,8 @@ func (c *FakeClient[T]) Update(ctx context.Context, resource T, opts metav1.Upda
 }
 
 // UpdateStatus updates the resource's status and returns the updated resource.
+//
+// 走 status 子资源动作，使 reactor 可以只拦截状态更新而不影响 spec 更新。
 func (c *FakeClient[T]) UpdateStatus(ctx context.Context, resource T, opts metav1.UpdateOptions) (result T, err error) {
 	emptyResult := c.newObject()
 	obj, err := c.Fake.
@@ -230,6 +265,9 @@ func (c *FakeClient[T]) Delete(ctx context.Context, name string, opts metav1.Del
 }
 
 // DeleteCollection deletes a collection of objects.
+//
+// 它挂在 lister 组合类型上是为了复用资源与 namespace 信息；与真实 client 一致，
+// 通过 DeleteCollectionAction 携带 ListOptions 供 reactor 判断范围。
 func (l *alsoFakeLister[T, L]) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	_, err := l.client.Fake.
 		Invokes(testing.NewDeleteCollectionActionWithOptions(l.client.resource, l.client.ns, opts, listOpts), l.newList())
@@ -248,10 +286,14 @@ func (c *FakeClient[T]) Patch(ctx context.Context, name string, pt types.PatchTy
 }
 
 // Apply takes the given apply declarative configuration, applies it and returns the applied resource.
+//
+// 服务端 apply 在 HTTP 层就是 ApplyPatchType 的 PATCH，因此 fake 也构造
+// Patch 子资源动作，并把 ApplyOptions 转换为 PatchOptions。
 func (a *alsoFakeApplier[T, C]) Apply(ctx context.Context, configuration C, opts metav1.ApplyOptions) (result T, err error) {
 	if configuration == *new(C) {
 		return *new(T), fmt.Errorf("configuration provided to Apply must not be nil")
 	}
+	// 序列化配置作为 patch body；名字从对象本身提取，apply 不允许匿名对象。
 	data, err := json.Marshal(configuration)
 	if err != nil {
 		return *new(T), err
@@ -270,6 +312,8 @@ func (a *alsoFakeApplier[T, C]) Apply(ctx context.Context, configuration C, opts
 }
 
 // ApplyStatus applies the given apply declarative configuration to the resource's status and returns the updated resource.
+//
+// 与 Apply 相同，只是多带 "status" 子资源。
 func (a *alsoFakeApplier[T, C]) ApplyStatus(ctx context.Context, configuration C, opts metav1.ApplyOptions) (result T, err error) {
 	if configuration == *new(C) {
 		return *new(T), fmt.Errorf("configuration provided to Apply must not be nil")
@@ -292,14 +336,17 @@ func (a *alsoFakeApplier[T, C]) ApplyStatus(ctx context.Context, configuration C
 	return obj.(T), err
 }
 
+// Namespace 返回该 fake client 绑定的 namespace，空字符串表示集群级资源。
 func (c *FakeClient[T]) Namespace() string {
 	return c.ns
 }
 
+// Kind 返回该 fake client 关联的 GroupVersionKind，供 ListAction 等使用。
 func (c *FakeClient[T]) Kind() schema.GroupVersionKind {
 	return c.kind
 }
 
+// Resource 返回该 fake client 关联的 GroupVersionResource。
 func (c *FakeClient[T]) Resource() schema.GroupVersionResource {
 	return c.resource
 }

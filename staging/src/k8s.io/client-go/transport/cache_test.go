@@ -38,6 +38,9 @@ import (
 	"k8s.io/client-go/tools/metrics"
 )
 
+// TestTLSConfigKey 验证缓存键只由影响 TLS 的字段决定：
+// 凭据/UA 等不影响 TLS 的配置应共享空键；代理、拨号器、CA、证书、ServerName 等
+// 必须产生互不相同的键，否则会错误复用 transport。
 func TestTLSConfigKey(t *testing.T) {
 
 	clientfeaturestesting.SetFeatureDuringTest(t, clientgofeaturegate.ClientsAllowCARotation, true)
@@ -206,6 +209,8 @@ func TestTLSConfigKey(t *testing.T) {
 	}
 }
 
+// TestTLSConfigKeyCARotationDisabled 验证门控关闭时 CAFile 会被解析成 CAData，
+// 因此仅文件配置与等价的数据配置应得到相同缓存键，且不开启 ReloadCAFiles。
 func TestTLSConfigKeyCARotationDisabled(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientgofeaturegate.ClientsAllowCARotation, false)
 
@@ -242,6 +247,8 @@ func TestTLSConfigKeyCARotationDisabled(t *testing.T) {
 }
 
 // TestTLSTransportCacheCARotation tests transport cache behavior with CA rotation
+// 覆盖四种配置：仅 CAFile 时应包装为可轮换 transport；同时给出 CAData 或仅给
+// CAData 时不包装；完全无 TLS 配置时返回 DefaultTransport 且不缓存。
 func TestTLSTransportCacheCARotation(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientgofeaturegate.ClientsAllowCARotation, true)
 	caFile := writeCAFile(t, []byte(testCACert1))
@@ -365,6 +372,8 @@ func TestTLSTransportCacheCARotation(t *testing.T) {
 	}
 }
 
+// TestTLSTransportCacheCARotationDisabled 验证门控关闭时 CAFile 走普通 transport，
+// 不会生成 atomicTransportHolder。
 func TestTLSTransportCacheCARotationDisabled(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientgofeaturegate.ClientsAllowCARotation, false)
 
@@ -385,6 +394,8 @@ func TestTLSTransportCacheCARotationDisabled(t *testing.T) {
 	}
 }
 
+// TestEmptyCAFileRotationLifecycle 验证空 CA 文件启动时得到空根池，
+// 后续写入有效证书并在刷新窗口后即可被加载，无需重建客户端。
 func TestEmptyCAFileRotationLifecycle(t *testing.T) {
 	// Enable the feature gate for the duration of the test
 	clientfeaturestesting.SetFeatureDuringTest(t, clientgofeaturegate.ClientsAllowCARotation, true)
@@ -780,6 +791,9 @@ func TestCacheStaleEvictionSkipped(t *testing.T) {
 
 // TestCacheLeak does a black box test of TLS cache GC from New.
 // It uses a large number of cache entries generated in parallel.
+//
+// 通过弱引用缓存与大量并发创建，验证无强引用后条目会被 GC 清理，
+// 且每次清理都会上报 cache entries 指标。
 func TestCacheLeak(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientgofeaturegate.ClientsAllowTLSCacheGC, true)
 	_, gcCalls, _, cacheEntries := installFakeMetrics(t)
@@ -865,6 +879,7 @@ func TestCacheLeak(t *testing.T) {
 	}
 }
 
+// requireCacheLen 断言缓存条目数，失败时立即终止测试。
 func requireCacheLen(t *testing.T, c *tlsTransportCache, want int) {
 	t.Helper()
 
@@ -873,6 +888,8 @@ func requireCacheLen(t *testing.T, c *tlsTransportCache, want int) {
 	}
 }
 
+// cacheLen 返回当前缓存条目数，并顺带校验两种存储模式互斥：
+// 开启 GC 时使用弱引用表，关闭时使用强引用表，两者不能同时非空。
 func cacheLen(t *testing.T, c *tlsTransportCache) int {
 	t.Helper()
 
@@ -892,6 +909,8 @@ func cacheLen(t *testing.T, c *tlsTransportCache) int {
 	return len(c.transports)
 }
 
+// pollCacheSizeWithGC 反复强制 GC 直到缓存大小达到期望值，
+// 再额外 GC 几次确认大小稳定，以捕获“清理滞后/重复清理”类竞争问题。
 func pollCacheSizeWithGC(t *testing.T, c *tlsTransportCache, want int) {
 	t.Helper()
 
@@ -910,6 +929,7 @@ func pollCacheSizeWithGC(t *testing.T, c *tlsTransportCache, want int) {
 	requireCacheLen(t, c, want)
 }
 
+// recordingCreateCalls 记录 transport 创建指标的 hit/miss 序列，线程安全。
 type recordingCreateCalls struct {
 	mu    sync.Mutex
 	calls []string
@@ -929,6 +949,7 @@ func (r *recordingCreateCalls) reset() []string {
 	return c
 }
 
+// recordingCacheGCCalls 记录缓存清理指标（deleted/skipped）。
 type recordingCacheGCCalls struct {
 	mu    sync.Mutex
 	calls []string
@@ -948,6 +969,7 @@ func (r *recordingCacheGCCalls) reset() []string {
 	return c
 }
 
+// recordingCertRotationGCCalls 记录证书轮换 goroutine 被 GC 清理的次数。
 type recordingCertRotationGCCalls struct {
 	count atomic.Int64
 }
@@ -956,6 +978,7 @@ func (r *recordingCertRotationGCCalls) Increment() {
 	r.count.Add(1)
 }
 
+// recordingCacheEntries 记录每次观察到的缓存条目数。
 type recordingCacheEntries struct {
 	mu     sync.Mutex
 	values []int
@@ -975,6 +998,7 @@ func (r *recordingCacheEntries) reset() []int {
 	return v
 }
 
+// installFakeMetrics 用内存记录器替换四个 transport 指标，并在测试结束时恢复原值。
 func installFakeMetrics(t *testing.T) (*recordingCreateCalls, *recordingCacheGCCalls, *recordingCertRotationGCCalls, *recordingCacheEntries) {
 	createCalls := &recordingCreateCalls{}
 	gcCalls := &recordingCacheGCCalls{}

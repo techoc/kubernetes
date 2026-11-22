@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package consistencydetector 实现 WatchList 的“数据一致性检测”：
+// 通过与 etcd 快照做额外 LIST 对比，在 CI 中尽早发现 watch cache 漏事件或不一致。
 package consistencydetector
 
 import (
@@ -33,6 +35,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// dataConsistencyDetectionForWatchListEnabled 在 init 时一次性解析环境变量，
+// 之后只读，避免运行期反复读取环境变量造成不一致。
 var dataConsistencyDetectionForWatchListEnabled = false
 
 func init() {
@@ -55,10 +59,13 @@ func SetDataConsistencyDetectionForWatchListEnabledForTest(enabled bool) func() 
 	}
 }
 
+// RetrieveItemsFunc 返回已经被 informer 消费的对象，用于与 etcd 快照比较。
 type RetrieveItemsFunc[U any] func() []U
 
+// ListFunc 执行一次 LIST 请求；参数与普通列表一致，便于复用现有客户端。
 type ListFunc[T runtime.Object] func(ctx context.Context, options metav1.ListOptions) (T, error)
 
+// TransformFunc 在比较前对对象做归一化（例如剥离版本相关字段）。
 type TransformFunc func(interface{}) (interface{}, error)
 
 // CheckDataConsistency exists solely for testing purposes.
@@ -69,6 +76,7 @@ type TransformFunc func(interface{}) (interface{}, error)
 //
 // The identity string can be left empty if the logger in the context already
 // identifies what is being watched.
+// 中文：检测逻辑会额外发起一次指向 etcd 的 LIST，因此只应在 CI/测试中开启。
 func CheckDataConsistency[T runtime.Object, U any](ctx context.Context, identity string, lastSyncedResourceVersion string, listFn ListFunc[T], listItemTransformFunc TransformFunc, listOptions metav1.ListOptions, retrieveItemsFn RetrieveItemsFunc[U]) {
 	logger := klog.FromContext(ctx)
 	if identity != "" {
@@ -103,6 +111,7 @@ func CheckDataConsistency[T runtime.Object, U any](ctx context.Context, identity
 	if err != nil {
 		panic(err) // this should never happen
 	}
+	// 变换必须在两侧都应用，否则可能因序列化差异产生误报。
 	if listItemTransformFunc != nil {
 		for i := range rawListItems {
 			obj, err := listItemTransformFunc(rawListItems[i])
@@ -126,6 +135,7 @@ func CheckDataConsistency[T runtime.Object, U any](ctx context.Context, identity
 
 // canFormAdditionalListCall ensures that we can form a valid LIST requests
 // for checking data consistency.
+// 中文：Exact RV 查询不允许带 continue，也不允许 RV="0"，否则请求会被 apiserver 拒绝。
 func canFormAdditionalListCall(lastSyncedResourceVersion string, listOptions metav1.ListOptions) bool {
 	// since we are setting ResourceVersionMatch to metav1.ResourceVersionMatchExact
 	// we need to make sure that the continuation hasn't been set
@@ -169,12 +179,14 @@ func prepareListCallOptions(lastSyncedResourceVersion string, listOptions metav1
 	return listOptions
 }
 
+// byUID 以 UID 排序，保证两侧比较不受 LIST 顺序影响。
 type byUID []metav1.Object
 
 func (a byUID) Len() int           { return len(a) }
 func (a byUID) Less(i, j int) bool { return a[i].GetUID() < a[j].GetUID() }
 func (a byUID) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
+// toMetaObjectSliceOrDie 把任意对象切片转成 metav1.Object；传入非对象属于编程错误，直接 panic。
 func toMetaObjectSliceOrDie[T any](s []T) []metav1.Object {
 	result := make([]metav1.Object, len(s))
 	for i, v := range s {

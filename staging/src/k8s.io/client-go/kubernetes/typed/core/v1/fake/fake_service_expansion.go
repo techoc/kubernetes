@@ -21,6 +21,8 @@ import (
 	core "k8s.io/client-go/testing"
 )
 
+// ProxyGet 用伪造的 ProxyGetAction 记录这次调用，使测试能对“通过 apiserver 代理访问
+// Service”这一行为做断言，而不需要真的发起 HTTP 请求。
 func (c *fakeServices) ProxyGet(scheme, name, port, path string, params map[string]string) restclient.ResponseWrapper {
 	return c.Fake.InvokesProxy(core.NewProxyGetAction(c.Resource(), c.Namespace(), scheme, name, port, path, params))
 }

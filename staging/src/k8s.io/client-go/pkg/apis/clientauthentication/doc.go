@@ -17,4 +17,6 @@ limitations under the License.
 // +k8s:deepcopy-gen=package
 // +groupName=client.authentication.k8s.io
 
+// Package clientauthentication 定义 client-go 与 exec 凭据插件之间的内部 API 类型，
+// 用于在 KUBERNETES_EXEC_INFO 中传递集群信息、并在插件 stdout 中解析返回的凭据。
 package clientauthentication

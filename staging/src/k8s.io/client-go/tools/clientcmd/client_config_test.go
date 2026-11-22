@@ -32,6 +32,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestMergeSemantics 锁定 merge 的反射合并规则：标量/切片由非零 src 覆盖，
+// map 浅合并，指针整体覆盖（包括指针内的零值字段）。
 func TestMergeSemantics(t *testing.T) {
 	type U struct {
 		A string
@@ -255,6 +257,7 @@ func TestMergeSemantics(t *testing.T) {
 	}
 }
 
+// createValidTestConfig 构造最小可用配置：集群、用户、上下文三者同名且自洽。
 func createValidTestConfig() *clientcmdapi.Config {
 	const (
 		server = "https://anything.com:8080"
@@ -277,6 +280,7 @@ func createValidTestConfig() *clientcmdapi.Config {
 	return config
 }
 
+// createCAValidTestConfig 在有效配置上增加 CA 数据，用于测试 Insecure/CAFile 的互斥覆盖。
 func createCAValidTestConfig() *clientcmdapi.Config {
 
 	config := createValidTestConfig()
@@ -284,6 +288,7 @@ func createCAValidTestConfig() *clientcmdapi.Config {
 	return config
 }
 
+// TestDisableCompression 验证 override 中的 DisableCompression 会传递到 rest.Config。
 func TestDisableCompression(t *testing.T) {
 	config := createValidTestConfig()
 	clientBuilder := NewNonInteractiveClientConfig(*config, "clean", &ConfigOverrides{
@@ -300,6 +305,8 @@ func TestDisableCompression(t *testing.T) {
 	matchBoolArg(true, actualCfg.DisableCompression, t)
 }
 
+// TestInsecureOverridesCA 验证 InsecureSkipTLSVerify 生效时会清空 CA 配置，
+// 避免同时“跳过校验”和“使用 CA”造成语义冲突。
 func TestInsecureOverridesCA(t *testing.T) {
 	config := createCAValidTestConfig()
 	clientBuilder := NewNonInteractiveClientConfig(*config, "clean", &ConfigOverrides{
@@ -318,6 +325,8 @@ func TestInsecureOverridesCA(t *testing.T) {
 	matchByteArg(nil, actualCfg.TLSClientConfig.CAData, t)
 }
 
+// TestCAOverridesCAData 验证提供 CA 文件路径后会清空内联 CAData，
+// 与 REST 客户端“文件与数据二选一”的校验保持一致。
 func TestCAOverridesCAData(t *testing.T) {
 	file, err := os.CreateTemp("", "my.ca")
 	if err != nil {
@@ -342,6 +351,7 @@ func TestCAOverridesCAData(t *testing.T) {
 	matchByteArg(nil, actualCfg.TLSClientConfig.CAData, t)
 }
 
+// TestTLSServerName 验证 TLSServerName override 写入 rest.Config.ServerName。
 func TestTLSServerName(t *testing.T) {
 	config := createValidTestConfig()
 
@@ -361,6 +371,8 @@ func TestTLSServerName(t *testing.T) {
 	matchByteArg(nil, actualCfg.TLSClientConfig.CAData, t)
 }
 
+// TestTLSServerNameClearsWhenServerNameSet 验证一旦通过 override 设置了 Server，
+// 原集群的 TLSServerName 会被清空，避免旧 SNI 名与新地址不匹配。
 func TestTLSServerNameClearsWhenServerNameSet(t *testing.T) {
 	config := createValidTestConfig()
 
@@ -378,6 +390,7 @@ func TestTLSServerNameClearsWhenServerNameSet(t *testing.T) {
 	matchStringArg("", actualCfg.ServerName, t)
 }
 
+// TestFullImpersonateConfig 验证用户名、UID、组与额外信息全部传递到 rest.Config。
 func TestFullImpersonateConfig(t *testing.T) {
 	config := createValidTestConfig()
 	config.Clusters["clean"] = &clientcmdapi.Cluster{
@@ -415,6 +428,7 @@ func TestFullImpersonateConfig(t *testing.T) {
 	matchStringArg("some-value", actualCfg.Impersonate.Extra["some-key"][0], t)
 }
 
+// TestMergeContext 验证命名空间 override 会被标记为 overridden，未设置时则沿用上下文值。
 func TestMergeContext(t *testing.T) {
 	const namespace = "overridden-namespace"
 
@@ -448,6 +462,7 @@ func TestMergeContext(t *testing.T) {
 	matchStringArg(namespace, actual, t)
 }
 
+// TestModifyContext 验证 ModifyConfig 写回文件后，新增上下文与 current-context 都被持久化。
 func TestModifyContext(t *testing.T) {
 	expectedCtx := map[string]bool{
 		"updated": true,
@@ -495,6 +510,7 @@ func TestModifyContext(t *testing.T) {
 	}
 }
 
+// TestCertificateData 验证内联证书/私钥数据直接进入 rest.Config，且优先于文件路径。
 func TestCertificateData(t *testing.T) {
 	caData := []byte("ca-data")
 	certData := []byte("cert-data")
@@ -528,6 +544,8 @@ func TestCertificateData(t *testing.T) {
 	matchByteArg(keyData, clientConfig.TLSClientConfig.KeyData, t)
 }
 
+// TestProxyURL 验证 proxy-url 仅接受 http/https/socks5 方案；
+// 缺 scheme、未知 scheme、非 URL 等输入必须在构造配置阶段报错。
 func TestProxyURL(t *testing.T) {
 	tests := []struct {
 		desc      string
@@ -606,6 +624,7 @@ func TestProxyURL(t *testing.T) {
 	}
 }
 
+// TestBasicAuthData 验证用户名/密码写入 rest.Config。
 func TestBasicAuthData(t *testing.T) {
 	username := "myuser"
 	password := "mypass" // Fake value for testing.
@@ -636,6 +655,7 @@ func TestBasicAuthData(t *testing.T) {
 	matchStringArg(password, clientConfig.Password, t)
 }
 
+// TestBasicTokenFile 验证 token 文件内容被读入 rest.Config.BearerToken。
 func TestBasicTokenFile(t *testing.T) {
 	token := "exampletoken"
 	f, err := os.CreateTemp("", "tokenfile")
@@ -672,6 +692,7 @@ func TestBasicTokenFile(t *testing.T) {
 	matchStringArg(token, clientConfig.BearerToken, t)
 }
 
+// TestPrecedenceTokenFile 验证 Token 与 TokenFile 同时存在时，直接 Token 优先生效。
 func TestPrecedenceTokenFile(t *testing.T) {
 	token := "exampletoken"
 	f, err := os.CreateTemp("", "tokenfile")
@@ -710,6 +731,8 @@ func TestPrecedenceTokenFile(t *testing.T) {
 	matchStringArg(expectedToken, clientConfig.BearerToken, t)
 }
 
+// TestCreateClean 验证最基本的配置字段（Host/APIPath/Insecure/Token/ServerName）
+// 从 kubeconfig 原样映射到 rest.Config。
 func TestCreateClean(t *testing.T) {
 	config := createValidTestConfig()
 	clientBuilder := NewNonInteractiveClientConfig(*config, "clean", &ConfigOverrides{}, nil)
@@ -726,6 +749,8 @@ func TestCreateClean(t *testing.T) {
 	matchStringArg(config.Clusters["clean"].TLSServerName, clientConfig.ServerName, t)
 }
 
+// TestCreateCleanWithPrefix 验证 server 中的路径前缀与结尾斜杠被保留，
+// 且空 server 时使用 ClusterDefaults.Server。
 func TestCreateCleanWithPrefix(t *testing.T) {
 	tt := []struct {
 		server string
@@ -764,6 +789,8 @@ func TestCreateCleanWithPrefix(t *testing.T) {
 	}
 }
 
+// TestCreateCleanDefault 验证 NewDefaultClientConfig 与 NewNonInteractiveClientConfig
+// 对同一输入产生一致结果。
 func TestCreateCleanDefault(t *testing.T) {
 	config := createValidTestConfig()
 	clientBuilder := NewDefaultClientConfig(*config, &ConfigOverrides{})
@@ -779,6 +806,7 @@ func TestCreateCleanDefault(t *testing.T) {
 	matchStringArg(config.AuthInfos["clean"].Token, clientConfig.BearerToken, t)
 }
 
+// TestCreateCleanDefaultCluster 验证提供 ClusterDefaults 时，显式配置的集群字段仍优先。
 func TestCreateCleanDefaultCluster(t *testing.T) {
 	config := createValidTestConfig()
 	clientBuilder := NewDefaultClientConfig(*config, &ConfigOverrides{
@@ -796,6 +824,7 @@ func TestCreateCleanDefaultCluster(t *testing.T) {
 	matchStringArg(config.AuthInfos["clean"].Token, clientConfig.BearerToken, t)
 }
 
+// TestCreateMissingContextNoDefault 验证上下文缺失且无默认集群时直接报错。
 func TestCreateMissingContextNoDefault(t *testing.T) {
 	config := createValidTestConfig()
 	clientBuilder := NewNonInteractiveClientConfig(*config, "not-present", &ConfigOverrides{}, nil)
@@ -806,6 +835,8 @@ func TestCreateMissingContextNoDefault(t *testing.T) {
 	}
 }
 
+// TestCreateMissingContext 验证即使提供了 ClusterDefaults，缺失的上下文仍会报
+// "context was not found" 错误，而不是被默认值掩盖。
 func TestCreateMissingContext(t *testing.T) {
 	const expectedErrorContains = "context was not found for specified context: not-present"
 	config := createValidTestConfig()
@@ -822,6 +853,8 @@ func TestCreateMissingContext(t *testing.T) {
 	}
 }
 
+// TestCreateAuthConfigExecInstallHintCleanup 验证 exec 插件的 InstallHint
+// 中 ANSI 控制字符被转义，避免在终端中执行任意控制序列。
 func TestCreateAuthConfigExecInstallHintCleanup(t *testing.T) {
 	config := createValidTestConfig()
 	clientBuilder := NewNonInteractiveClientConfig(*config, "clean", &ConfigOverrides{
@@ -843,6 +876,8 @@ func TestCreateAuthConfigExecInstallHintCleanup(t *testing.T) {
 	matchStringArg(cleanedInstallHint, clientConfig.ExecProvider.InstallHint, t)
 }
 
+// TestInClusterClientConfigPrecedence 验证命令行 override 与集群内配置的优先级：
+// override 中非空的 Server/CA/Token 覆盖集群内值，未设置时保留集群内值。
 func TestInClusterClientConfigPrecedence(t *testing.T) {
 	tt := []struct {
 		overrides *ConfigOverrides
@@ -987,6 +1022,8 @@ func TestInClusterClientConfigPrecedence(t *testing.T) {
 	}
 }
 
+// matchBoolArg/matchStringArg/matchByteArg/matchIntArg 是断言辅助函数，
+// 统一错误信息格式，避免每个测试重复写 if 判断。
 func matchBoolArg(expected, got bool, t *testing.T) {
 	if expected != got {
 		t.Errorf("Expected %v, got %v", expected, got)
@@ -1011,6 +1048,7 @@ func matchIntArg(expected, got int, t *testing.T) {
 	}
 }
 
+// TestNamespaceOverride 验证仅有 override 时命名空间直接生效并标记为 overridden。
 func TestNamespaceOverride(t *testing.T) {
 	config := &DirectClientConfig{
 		overrides: &ConfigOverrides{
@@ -1033,6 +1071,8 @@ func TestNamespaceOverride(t *testing.T) {
 	matchStringArg("foo", ns, t)
 }
 
+// TestAuthConfigMerge 验证 exec 配置从 kubeconfig 读取后，args、provideClusterInfo
+// 以及扩展（audience 等）都被保留并序列化到 runtime.Unknown。
 func TestAuthConfigMerge(t *testing.T) {
 	content := `
 apiVersion: v1
@@ -1091,6 +1131,8 @@ users:
 	}
 }
 
+// TestCleanANSIEscapeCodes 验证控制字符被替换为 "U+XXXX" 文本，
+// 而普通空白、字母、符号与组合字符保持不变。
 func TestCleanANSIEscapeCodes(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1158,6 +1200,8 @@ func TestCleanANSIEscapeCodes(t *testing.T) {
 	}
 }
 
+// TestMergeRawConfigDoOverride 验证 MergedRawConfig 只把 override 应用到当前上下文，
+// 其他上下文及其关联的集群/用户保持不变。
 func TestMergeRawConfigDoOverride(t *testing.T) {
 	const (
 		server         = "https://anything.com:8080"
@@ -1223,6 +1267,8 @@ func TestMergeRawConfigDoOverride(t *testing.T) {
 	}
 }
 
+// TestClientCertOverrideData 验证 client cert/key 的“文件路径”与“内联数据”两种
+// override 会互斥地清空另一侧字段，避免 getAuthInfo 的校验冲突。
 func TestClientCertOverrideData(t *testing.T) {
 	// Test that when overrides contain cert/key file paths or data fields,
 	// the corresponding fields are properly handled to avoid validation conflicts

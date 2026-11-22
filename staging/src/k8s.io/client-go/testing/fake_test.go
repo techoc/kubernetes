@@ -25,6 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestOriginalObjectCaptured 校验 Fake 在调用 reactor 前会深拷贝 Action 中的对象：
+// reactor 对对象的修改只体现在返回值上，不应污染已记录到 f.actions 的原始动作。
+//
+// 这一不变量很重要：测试经常在 Invokes 返回后检查记录的动作，
+// 若两者共享同一对象，就无法区分“客户端请求的内容”和“reactor 伪造的响应”。
 func TestOriginalObjectCaptured(t *testing.T) {
 	// this ReactionFunc sets the resources SelfLink
 	const testSelfLink = "some-value"
@@ -88,6 +93,11 @@ func TestOriginalObjectCaptured(t *testing.T) {
 	}
 }
 
+// TestReactorChangesPersisted 校验 reactor 链内部的修改会依次传递：
+// 第一个 reactor 写入的字段，第二个 reactor 必须能看到。
+//
+// 与 TestOriginalObjectCaptured 的区别在于这里的修改发生在 Invokes 内部的副本上，
+// 因而可以在链中传播；但记录到 f.actions 的动作仍然保持原样。
 func TestReactorChangesPersisted(t *testing.T) {
 	// this ReactionFunc sets the resources SelfLink
 	const testSelfLink = "some-value"

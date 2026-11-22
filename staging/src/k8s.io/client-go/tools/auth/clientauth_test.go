@@ -24,6 +24,9 @@ import (
 	clientauth "k8s.io/client-go/tools/auth"
 )
 
+// TestLoadFromFile 验证从 JSON 凭据文件加载认证信息：正常内容解析为 Info，
+// 空文件（非法 JSON）必须返回错误而不是零值对象。断言失败时应能看出
+// “是否报错”与“解析结果”两个维度。
 func TestLoadFromFile(t *testing.T) {
 	loadAuthInfoTests := []struct {
 		authData  string

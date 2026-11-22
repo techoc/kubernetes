@@ -16,4 +16,8 @@ limitations under the License.
 
 // Package portforward adds support for SSH-like port forwarding from the client's
 // local host to remote containers.
+//
+// Package portforward 在客户端本地与远端容器之间建立类似 SSH 的端口转发。
+// 实现基于 SPDY 流：每个本地连接对应一条到 kubelet 的数据流，任一端关闭
+// 都会拆除整条连接；调用方负责在停止转发时关闭 PortForwarder 以释放流。
 package portforward

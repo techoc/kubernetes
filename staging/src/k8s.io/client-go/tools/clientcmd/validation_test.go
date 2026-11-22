@@ -29,6 +29,8 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
+// TestConfirmUsableBadInfoButOkConfig 验证 ConfirmUsable 只校验被选中的 context：
+// 即使配置中另有一个损坏的 context，使用 "clean" 仍应成功。
 func TestConfirmUsableBadInfoButOkConfig(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.Clusters["missing ca"] = &clientcmdapi.Cluster{
@@ -66,6 +68,8 @@ func TestConfirmUsableBadInfoButOkConfig(t *testing.T) {
 	badValidation.testConfig(t)
 }
 
+// TestConfirmUsableMissingObjects 验证 context 引用了不存在的 user/cluster 时，
+// ConfirmUsable 与 Validate 都给出指向性的错误信息。
 func TestConfirmUsableMissingObjects(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.Clusters["kind-cluster"] = &clientcmdapi.Cluster{
@@ -102,6 +106,7 @@ func TestConfirmUsableMissingObjects(t *testing.T) {
 	missingCluster.testConfig(t)
 }
 
+// TestConfirmUsableBadInfoConfig 验证被选中的 context 本身有问题时 ConfirmUsable 失败。
 func TestConfirmUsableBadInfoConfig(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.Clusters["missing ca"] = &clientcmdapi.Cluster{
@@ -124,6 +129,7 @@ func TestConfirmUsableBadInfoConfig(t *testing.T) {
 	test.testConfirmUsable("first", t)
 }
 
+// TestConfirmUsableEmptyConfig 验证空配置给出“no configuration has been provided”。
 func TestConfirmUsableEmptyConfig(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	test := configValidationTest{
@@ -134,6 +140,7 @@ func TestConfirmUsableEmptyConfig(t *testing.T) {
 	test.testConfirmUsable("", t)
 }
 
+// TestConfirmUsableMissingConfig 验证请求的 context 名不存在时的错误。
 func TestConfirmUsableMissingConfig(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	test := configValidationTest{
@@ -144,6 +151,7 @@ func TestConfirmUsableMissingConfig(t *testing.T) {
 	test.testConfirmUsable("not-here", t)
 }
 
+// TestValidateEmptyConfig 验证 Validate 对空配置报错。
 func TestValidateEmptyConfig(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	test := configValidationTest{
@@ -154,6 +162,7 @@ func TestValidateEmptyConfig(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateMissingCurrentContextConfig 验证 current-context 指向不存在的 context 时报错。
 func TestValidateMissingCurrentContextConfig(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = "anything"
@@ -165,6 +174,7 @@ func TestValidateMissingCurrentContextConfig(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestIsContextNotFound 验证错误分类辅助函数能从聚合错误中识别 context 缺失。
 func TestIsContextNotFound(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = "anything"
@@ -178,6 +188,7 @@ func TestIsContextNotFound(t *testing.T) {
 	}
 }
 
+// TestIsEmptyConfig 验证空配置被归类为 EmptyConfig，同时也属于 ConfigurationInvalid。
 func TestIsEmptyConfig(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 
@@ -190,6 +201,8 @@ func TestIsEmptyConfig(t *testing.T) {
 	}
 }
 
+// TestIsConfigurationInvalid 验证空错误列表返回 nil、单个错误被直接返回、
+// 多个错误才包装为聚合类型。
 func TestIsConfigurationInvalid(t *testing.T) {
 	if newErrConfigurationInvalid([]error{}) != nil {
 		t.Errorf("unexpected error")
@@ -205,6 +218,8 @@ func TestIsConfigurationInvalid(t *testing.T) {
 	}
 }
 
+// TestValidateMissingReferencesConfig 验证 context 同时引用缺失的 user 与 cluster 时，
+// 两个错误都会出现在聚合结果中，而不是只报第一个。
 func TestValidateMissingReferencesConfig(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = "anything"
@@ -218,6 +233,7 @@ func TestValidateMissingReferencesConfig(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateEmptyContext 验证 context 未指定 user/cluster 时的错误。
 func TestValidateEmptyContext(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = "anything"
@@ -231,6 +247,7 @@ func TestValidateEmptyContext(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateEmptyContextName 验证 context 名为空字符串时被拒绝。
 func TestValidateEmptyContextName(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.CurrentContext = "anything"
@@ -244,6 +261,7 @@ func TestValidateEmptyContextName(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateEmptyClusterInfo 验证 cluster 缺少 server 时报错。
 func TestValidateEmptyClusterInfo(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.Clusters["empty"] = clientcmdapi.NewCluster()
@@ -256,6 +274,7 @@ func TestValidateEmptyClusterInfo(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateClusterInfoErrEmptyCluster 验证空 cluster 只产生 ErrEmptyCluster 一个错误。
 func TestValidateClusterInfoErrEmptyCluster(t *testing.T) {
 	cluster := clientcmdapi.NewCluster()
 	errs := validateClusterInfo("", *cluster)
@@ -268,6 +287,7 @@ func TestValidateClusterInfoErrEmptyCluster(t *testing.T) {
 	}
 }
 
+// TestValidateMissingCAFileClusterInfo 验证引用了不存在的 CA 文件时报错。
 func TestValidateMissingCAFileClusterInfo(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.Clusters["missing ca"] = &clientcmdapi.Cluster{
@@ -283,6 +303,7 @@ func TestValidateMissingCAFileClusterInfo(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateCleanClusterInfo 验证仅含 server 的 cluster 合法。
 func TestValidateCleanClusterInfo(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.Clusters["clean"] = &clientcmdapi.Cluster{
@@ -313,6 +334,7 @@ func TestValidateCleanWithCAClusterInfo(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateEmptyAuthInfo 验证空 AuthInfo 合法：它表示匿名访问，由鉴权层决定是否允许。
 func TestValidateEmptyAuthInfo(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["error"] = &clientcmdapi.AuthInfo{}
@@ -324,6 +346,7 @@ func TestValidateEmptyAuthInfo(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateCertFilesNotFoundAuthInfo 验证客户端证书/私钥文件缺失时的两个错误都被报告。
 func TestValidateCertFilesNotFoundAuthInfo(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["error"] = &clientcmdapi.AuthInfo{
@@ -339,6 +362,8 @@ func TestValidateCertFilesNotFoundAuthInfo(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateCertDataOverridesFiles 验证同时指定 data 与文件路径被视为歧义配置
+// （与运行时“data 优先”的覆盖行为不同，验证阶段要求明确）。
 func TestValidateCertDataOverridesFiles(t *testing.T) {
 	tempFile, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, tempFile)
@@ -359,6 +384,7 @@ func TestValidateCertDataOverridesFiles(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateCleanCertFilesAuthInfo 验证存在的证书与私钥文件路径合法。
 func TestValidateCleanCertFilesAuthInfo(t *testing.T) {
 	tempFile, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, tempFile)
@@ -376,6 +402,7 @@ func TestValidateCleanCertFilesAuthInfo(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateCleanTokenAuthInfo 验证仅使用 token 的 AuthInfo 合法。
 func TestValidateCleanTokenAuthInfo(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["clean"] = &clientcmdapi.AuthInfo{
@@ -389,6 +416,8 @@ func TestValidateCleanTokenAuthInfo(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateMultipleMethodsAuthInfo 验证同时配置 token 与 basic auth 会被拒绝，
+// 因为无法确定应使用哪一种认证方式。
 func TestValidateMultipleMethodsAuthInfo(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["error"] = &clientcmdapi.AuthInfo{
@@ -404,6 +433,8 @@ func TestValidateMultipleMethodsAuthInfo(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoExec 验证完整的 exec 插件配置（命令、版本、参数、环境变量、
+// interactiveMode）可以顺利通过校验。
 func TestValidateAuthInfoExec(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -425,6 +456,7 @@ func TestValidateAuthInfoExec(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoExecNoVersion 验证 exec 插件缺少 apiVersion 时报错。
 func TestValidateAuthInfoExecNoVersion(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -444,6 +476,7 @@ func TestValidateAuthInfoExecNoVersion(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoExecNoCommand 验证 exec 插件缺少 command 时报错。
 func TestValidateAuthInfoExecNoCommand(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -463,6 +496,7 @@ func TestValidateAuthInfoExecNoCommand(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoExecWithAuthProvider 验证 exec 与 authProvider 不能同时配置。
 func TestValidateAuthInfoExecWithAuthProvider(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -486,6 +520,7 @@ func TestValidateAuthInfoExecWithAuthProvider(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoExecNoEnv 验证环境变量值为空是允许的（只有名字必填）。
 func TestValidateAuthInfoExecNoEnv(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -506,6 +541,8 @@ func TestValidateAuthInfoExecNoEnv(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoExecInteractiveModeMissing 验证 interactiveMode 为必填项，
+// 强制插件作者显式声明其交互能力。
 func TestValidateAuthInfoExecInteractiveModeMissing(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -525,6 +562,7 @@ func TestValidateAuthInfoExecInteractiveModeMissing(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoExecInteractiveModeInvalid 验证非法 interactiveMode 取值被拒绝。
 func TestValidateAuthInfoExecInteractiveModeInvalid(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -545,6 +583,7 @@ func TestValidateAuthInfoExecInteractiveModeInvalid(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoImpersonateUser 验证仅指定 impersonate user 的配置合法。
 func TestValidateAuthInfoImpersonateUser(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -557,6 +596,7 @@ func TestValidateAuthInfoImpersonateUser(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoImpersonateEverything 验证同时 impersonate user/uid/groups/extra 合法。
 func TestValidateAuthInfoImpersonateEverything(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -572,6 +612,8 @@ func TestValidateAuthInfoImpersonateEverything(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoImpersonateGroupsWithoutUserInvalid 验证未指定 impersonate user
+// 却请求 groups 是非法配置。
 func TestValidateAuthInfoImpersonateGroupsWithoutUserInvalid(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -587,6 +629,8 @@ func TestValidateAuthInfoImpersonateGroupsWithoutUserInvalid(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoImpersonateExtraWithoutUserInvalid 验证未指定 impersonate user
+// 却请求 user-extra 是非法配置。
 func TestValidateAuthInfoImpersonateExtraWithoutUserInvalid(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -602,6 +646,8 @@ func TestValidateAuthInfoImpersonateExtraWithoutUserInvalid(t *testing.T) {
 	test.testConfig(t)
 }
 
+// TestValidateAuthInfoImpersonateUIDWithoutUserInvalid 验证未指定 impersonate user
+// 却请求 uid 是非法配置。
 func TestValidateAuthInfoImpersonateUIDWithoutUserInvalid(t *testing.T) {
 	config := clientcmdapi.NewConfig()
 	config.AuthInfos["user"] = &clientcmdapi.AuthInfo{
@@ -617,11 +663,14 @@ func TestValidateAuthInfoImpersonateUIDWithoutUserInvalid(t *testing.T) {
 	test.testConfig(t)
 }
 
+// configValidationTest 把“配置 + 期望的错误子串”组合起来，
+// 由各个 test* 方法套用到不同的校验入口，避免重复断言逻辑。
 type configValidationTest struct {
 	config                 *clientcmdapi.Config
 	expectedErrorSubstring []string
 }
 
+// testContext 对单个 context 执行 validateContext，并检查错误是否包含期望子串。
 func (c configValidationTest) testContext(contextName string, t *testing.T) {
 	errs := validateContext(contextName, *c.config.Contexts[contextName], *c.config)
 
@@ -642,6 +691,7 @@ func (c configValidationTest) testContext(contextName string, t *testing.T) {
 	}
 }
 
+// testConfirmUsable 验证 ConfirmUsable 的结果；该入口只关注被选中的 context。
 func (c configValidationTest) testConfirmUsable(contextName string, t *testing.T) {
 	err := ConfirmUsable(*c.config, contextName)
 
@@ -662,6 +712,7 @@ func (c configValidationTest) testConfirmUsable(contextName string, t *testing.T
 	}
 }
 
+// testConfig 验证 Validate 的结果，并额外要求所有错误都实现 ConfigurationInvalid 分类。
 func (c configValidationTest) testConfig(t *testing.T) {
 	err := Validate(*c.config)
 
@@ -685,6 +736,7 @@ func (c configValidationTest) testConfig(t *testing.T) {
 	}
 }
 
+// testCluster 对单个 cluster 执行 validateClusterInfo 并断言错误。
 func (c configValidationTest) testCluster(clusterName string, t *testing.T) {
 	errs := validateClusterInfo(clusterName, *c.config.Clusters[clusterName])
 
@@ -705,6 +757,7 @@ func (c configValidationTest) testCluster(clusterName string, t *testing.T) {
 	}
 }
 
+// testAuthInfo 对单个 AuthInfo 执行 validateAuthInfo 并断言错误。
 func (c configValidationTest) testAuthInfo(authInfoName string, t *testing.T) {
 	errs := validateAuthInfo(authInfoName, *c.config.AuthInfos[authInfoName])
 
@@ -725,6 +778,7 @@ func (c configValidationTest) testAuthInfo(authInfoName string, t *testing.T) {
 	}
 }
 
+// alwaysMatchingError 的 Is 恒为 true，用于验证 errConfigurationInvalid 会调用成员的 Is。
 type alwaysMatchingError struct{}
 
 func (_ alwaysMatchingError) Error() string {
@@ -735,6 +789,7 @@ func (_ alwaysMatchingError) Is(_ error) bool {
 	return true
 }
 
+// someError 可比较（空结构体无字段），用于验证基于相等性的匹配。
 type someError struct{ msg string }
 
 func (se someError) Error() string {
@@ -744,6 +799,8 @@ func (se someError) Error() string {
 	return "err"
 }
 
+// TestErrConfigurationInvalidWithErrorsIs 验证聚合错误支持 errors.Is 的多种匹配方式：
+// 成员自定义 Is、值相等、嵌套聚合以及被 %w 包裹的情况。
 func TestErrConfigurationInvalidWithErrorsIs(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -786,6 +843,7 @@ func TestErrConfigurationInvalidWithErrorsIs(t *testing.T) {
 	}
 }
 
+// accessTrackingError 记录 Is 是否被调用，用于验证短路行为。
 type accessTrackingError struct {
 	wasAccessed bool
 }
@@ -801,6 +859,8 @@ func (ate *accessTrackingError) Is(_ error) bool {
 
 var _ error = &accessTrackingError{}
 
+// TestErrConfigurationInvalidWithErrorsIsShortCircuitsOnFirstMatch 验证 errors.Is
+// 在第一个匹配后立即返回，不会继续访问后续成员。
 func TestErrConfigurationInvalidWithErrorsIsShortCircuitsOnFirstMatch(t *testing.T) {
 	errC := errConfigurationInvalid{&accessTrackingError{}, &accessTrackingError{}}
 	_ = errors.Is(errC, &accessTrackingError{})

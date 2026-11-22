@@ -14,6 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package exec implements the client-go "exec" credential plugin: it runs a
+// user-provided binary to obtain bearer tokens or client certificates, and
+// rotates them before expiration.
+//
+// exec 包实现 kubeconfig 中的 exec 认证方式：调用用户指定的可执行文件，
+// 由其在 stdout 输出 client.authentication.k8s.io 组的 ExecCredential 对象，
+// 客户端据此获得 bearer token 或客户端证书。凭据会按 expirationTimestamp 过期，
+// 并在必要时重新执行插件；同一进程内对相同配置复用 Authenticator 与 TLS 连接。
 package exec
 
 import (
@@ -53,6 +61,7 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// execInfoEnv 是传给插件的环境变量名，值为序列化后的 ExecCredential（含 spec）。
 const execInfoEnv = "KUBERNETES_EXEC_INFO"
 const installHintVerboseHelp = `
 
@@ -61,6 +70,7 @@ It looks like you are trying to use a client-go credential plugin that is not in
 To learn more about this feature, consult the documentation available at:
       https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins`
 
+// scheme/codecs 用于编解码 ExecCredential；init 中安装外部版本以完成转换。
 var scheme = runtime.NewScheme()
 var codecs = serializer.NewCodecFactory(scheme)
 
@@ -71,8 +81,11 @@ func init() {
 var (
 	// Since transports can be constantly re-initialized by programs like kubectl,
 	// keep a cache of initialized authenticators keyed by a hash of their config.
+	//
+	// 缓存以配置内容的 dump 为键，避免相同配置反复创建 Authenticator 与 TLS 连接池。
 	globalCache = newCache()
 	// The list of API versions we accept.
+	// 支持的 ExecCredential API 版本；未列出的版本会在创建时被拒绝。
 	apiVersions = map[string]schema.GroupVersion{
 		clientauthenticationv1beta1.SchemeGroupVersion.String(): clientauthenticationv1beta1.SchemeGroupVersion,
 		clientauthenticationv1.SchemeGroupVersion.String():      clientauthenticationv1.SchemeGroupVersion,
@@ -83,6 +96,8 @@ func newCache() *cache {
 	return &cache{m: make(map[string]*Authenticator)}
 }
 
+// cacheKey 用配置与集群信息的结构化 dump 生成稳定键；包含 cluster 是因为
+// provideClusterInfo 时插件输出可能依赖它。
 func cacheKey(conf *api.ExecConfig, cluster *clientauthentication.Cluster) string {
 	key := struct {
 		conf    *api.ExecConfig
@@ -94,6 +109,7 @@ func cacheKey(conf *api.ExecConfig, cluster *clientauthentication.Cluster) strin
 	return dump.Pretty(key)
 }
 
+// cache 是并发安全的 Authenticator 缓存。
 type cache struct {
 	mu sync.Mutex
 	m  map[string]*Authenticator
@@ -108,6 +124,8 @@ func (c *cache) get(s string) (*Authenticator, bool) {
 
 // put inserts an authenticator into the cache. If an authenticator is already
 // associated with the key, the first one is returned instead.
+//
+// 同一配置并发创建时只保留先到者，保证进程内共享同一个 Authenticator 与连接跟踪器。
 func (c *cache) put(s string, a *Authenticator) *Authenticator {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -122,6 +140,9 @@ func (c *cache) put(s string, a *Authenticator) *Authenticator {
 // sometimes rate limits how often a function f() is called. Specifically, Do()
 // will run the provided function f() up to threshold times every interval
 // duration.
+//
+// sometimes 是固定窗口限流器：每个 interval 内最多执行 threshold 次。
+// 用于限制安装提示等日志的输出频率。
 type sometimes struct {
 	threshold int
 	interval  time.Duration
@@ -163,6 +184,7 @@ func GetAuthenticator(config *api.ExecConfig, cluster *clientauthentication.Clus
 	return newAuthenticator(globalCache, term.IsTerminal, config, cluster)
 }
 
+// newAuthenticator 构造（或复用）Authenticator。可注入 cache 与 isTerminalFunc 以便测试。
 func newAuthenticator(c *cache, isTerminalFunc func(int) bool, config *api.ExecConfig, cluster *clientauthentication.Cluster) (*Authenticator, error) {
 	key := cacheKey(config, cluster)
 	if a, ok := c.get(key); ok {
@@ -174,6 +196,7 @@ func newAuthenticator(c *cache, isTerminalFunc func(int) bool, config *api.ExecC
 		return nil, fmt.Errorf("exec plugin: invalid apiVersion %q", config.APIVersion)
 	}
 
+	// 连接跟踪器用于在客户端证书轮换后关闭旧连接，迫使后续请求使用新证书。
 	connTracker := connrotation.NewConnectionTracker()
 	defaultDialer := connrotation.NewDialerWithTracker(
 		(&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
@@ -184,6 +207,7 @@ func newAuthenticator(c *cache, isTerminalFunc func(int) bool, config *api.ExecC
 		return nil, fmt.Errorf("invalid plugin policy: %w", err)
 	}
 
+	// 仅把显式列出的命令加入查找集；其余条目不预置，避免未经解析的路径被信任。
 	allowlistLookup := sets.New[string]()
 	for _, entry := range config.PluginPolicy.Allowlist {
 		if entry.Command != "" {
@@ -225,12 +249,16 @@ func newAuthenticator(c *cache, isTerminalFunc func(int) bool, config *api.ExecC
 
 	// these functions are made comparable and stored in the cache so that repeated clientset
 	// construction with the same rest.Config results in a single TLS cache and Authenticator
+	//
+	// 以指针形式持有回调，使 transport.Config 可比较，从而命中 TLS 配置缓存。
 	a.getCert = &transport.GetCertHolder{GetCert: a.cert}
 	a.dial = &transport.DialHolder{Dial: defaultDialer.DialContext}
 
 	return c.put(key, a), nil
 }
 
+// isInteractive 根据 interactiveMode 判断是否需要为插件提供交互式 stdin。
+// stdin 不可用或非终端时会给出明确错误，而不是让插件静默挂起等待输入。
 func isInteractive(isTerminalFunc func(int) bool, config *api.ExecConfig) (bool, error) {
 	var shouldBeInteractive bool
 	switch config.InteractiveMode {
@@ -260,6 +288,9 @@ func isInteractive(isTerminalFunc func(int) bool, config *api.ExecConfig) (bool,
 
 // Authenticator is a client credential provider that rotates credentials by executing a plugin.
 // The plugin input and output are defined by the API group client.authentication.k8s.io.
+//
+// Authenticator 通过执行插件获取并轮换客户端凭据。并发安全：mu 同时保护缓存与插件调用，
+// 以确保交互式插件不会被并发执行多次。
 type Authenticator struct {
 	// Set by the config
 	cmd                string
@@ -269,6 +300,7 @@ type Authenticator struct {
 	cluster            *clientauthentication.Cluster
 	provideClusterInfo bool
 
+	// allowlistLookup 是已解析的允许命令集合；execPluginPolicy 是原始策略用于校验。
 	allowlistLookup  sets.Set[string]
 	execPluginPolicy api.PluginPolicy
 
@@ -303,6 +335,7 @@ type Authenticator struct {
 	dial *transport.DialHolder
 }
 
+// credentials 是插件返回的凭据；datapolicy 标签确保其可被脱敏工具识别。
 type credentials struct {
 	token string           `datapolicy:"token"`
 	cert  *tls.Certificate `datapolicy:"secret-key"`
@@ -310,6 +343,10 @@ type credentials struct {
 
 // UpdateTransportConfig updates the transport.Config to use credentials
 // returned by the plugin.
+//
+// UpdateTransportConfig 把 Authenticator 注入 transport.Config：安装包装 RoundTripper，
+// 并设置证书回调与拨号器。若用户已显式提供 token/basic/cert 认证，
+// 则完全跳过，以尊重调用方的显式选择。
 func (a *Authenticator) UpdateTransportConfig(c *transport.Config) error {
 	// If a bearer token is present in the request - avoid the GetCert callback when
 	// setting up the transport, as that triggers the exec action if the server is
@@ -337,6 +374,7 @@ func (a *Authenticator) UpdateTransportConfig(c *transport.Config) error {
 
 		// if c has a custom dialer, we have to wrap it
 		// TLS config caching is not supported for this config
+		// 包装自定义拨号器并接入连接跟踪，以便证书轮换后能关闭旧连接。
 		d := connrotation.NewDialerWithTracker(c.DialHolder.Dial, a.connTracker)
 		c.DialHolder = &transport.DialHolder{Dial: d.DialContext}
 	} else {
@@ -346,8 +384,10 @@ func (a *Authenticator) UpdateTransportConfig(c *transport.Config) error {
 	return nil
 }
 
+// 编译期断言：roundTripper 实现了 utilnet.RoundTripperWrapper。
 var _ utilnet.RoundTripperWrapper = &roundTripper{}
 
+// roundTripper 负责在每次请求时注入 Bearer token，并在收到 401 时触发凭据刷新。
 type roundTripper struct {
 	a    *Authenticator
 	base http.RoundTripper
@@ -376,6 +416,8 @@ func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 401 可能表示服务端认为凭据已失效（如提前吊销），尽力刷新一次供后续请求使用；
+	// 本次请求仍按原响应返回，避免重试带来副作用。
 	if res.StatusCode == http.StatusUnauthorized {
 		if err := r.a.maybeRefreshCreds(creds); err != nil {
 			klog.Errorf("refreshing credentials: %v", err)
@@ -384,6 +426,7 @@ func (r *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return res, nil
 }
 
+// credsExpired 判断缓存凭据是否已过期；exp 为零值表示永不过期。
 func (a *Authenticator) credsExpired() bool {
 	if a.exp.IsZero() {
 		return false
@@ -391,6 +434,7 @@ func (a *Authenticator) credsExpired() bool {
 	return a.now().After(a.exp)
 }
 
+// cert 实现 transport 的 GetCert 回调，按需返回客户端证书。
 func (a *Authenticator) cert() (*tls.Certificate, error) {
 	creds, err := a.getCreds()
 	if err != nil {
@@ -399,6 +443,8 @@ func (a *Authenticator) cert() (*tls.Certificate, error) {
 	return creds.cert, nil
 }
 
+// getCreds 返回缓存凭据；缓存缺失或已过期时执行插件刷新。持锁调用插件，
+// 保证并发场景下插件只被执行一次（尤其是交互式插件）。
 func (a *Authenticator) getCreds() (*credentials, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -422,6 +468,7 @@ func (a *Authenticator) maybeRefreshCreds(creds *credentials) error {
 
 	// Since we're not making a new pointer to a.cachedCreds in getCreds, no
 	// need to do deep comparison.
+	// 指针不一致说明期间已被其他请求刷新，无需重复执行插件。
 	if creds != a.cachedCreds {
 		// Credentials already rotated.
 		return nil
@@ -432,12 +479,15 @@ func (a *Authenticator) maybeRefreshCreds(creds *credentials) error {
 
 // refreshCredsLocked executes the plugin and reads the credentials from
 // stdout. It must be called while holding the Authenticator's mutex.
+//
+// refreshCredsLocked 执行插件、校验输出并更新缓存。调用前必须持有 a.mu。
 func (a *Authenticator) refreshCredsLocked() error {
 	interactive, err := a.interactiveFunc()
 	if err != nil {
 		return fmt.Errorf("exec plugin cannot support interactive mode: %w", err)
 	}
 
+	// 通过 KUBERNETES_EXEC_INFO 把 spec 传给插件（API 版本、集群信息、interactive 标志）。
 	cred := &clientauthentication.ExecCredential{
 		Spec: clientauthentication.ExecCredentialSpec{
 			Interactive: interactive,
@@ -459,10 +509,12 @@ func (a *Authenticator) refreshCredsLocked() error {
 	cmd.Env = env
 	cmd.Stderr = a.stderr
 	cmd.Stdout = stdout
+	// 仅交互模式才暴露 stdin，避免插件在无人值守场景下阻塞读取输入。
 	if interactive {
 		cmd.Stdin = a.stdin
 	}
 
+	// 执行前先按插件策略检查/解析可执行文件路径；这是安全边界，必须在 Run 之前完成。
 	err = a.updateCommandAndCheckAllowlistLocked(cmd)
 	incrementPolicyMetric(err)
 	if err != nil {
@@ -479,6 +531,7 @@ func (a *Authenticator) refreshCredsLocked() error {
 	if err != nil {
 		return fmt.Errorf("decoding stdout: %v", err)
 	}
+	// 拒绝版本不匹配的输出：不同版本的语义不同，混用会导致难以排查的问题。
 	if gvk.Group != a.group.Group || gvk.Version != a.group.Version {
 		return fmt.Errorf("exec plugin is configured to use API version %s, plugin returned version %s",
 			a.group, schema.GroupVersion{Group: gvk.Group, Version: gvk.Version})
@@ -490,6 +543,7 @@ func (a *Authenticator) refreshCredsLocked() error {
 	if cred.Status.Token == "" && cred.Status.ClientCertificateData == "" && cred.Status.ClientKeyData == "" {
 		return fmt.Errorf("exec plugin didn't return a token or cert/key pair")
 	}
+	// 证书与私钥必须成对出现，否则 tls.X509KeyPair 会失败且错误信息不直观。
 	if (cred.Status.ClientCertificateData == "") != (cred.Status.ClientKeyData == "") {
 		return fmt.Errorf("exec plugin returned only certificate or key, not both")
 	}
@@ -515,6 +569,8 @@ func (a *Authenticator) refreshCredsLocked() error {
 		//  https://golang.org/pkg/crypto/tls/#Certificate
 		// Populating leaf is useful for quickly accessing the underlying x509
 		// certificate values.
+		//
+		// 提前解析叶子证书以便读取 NotBefore/NotAfter，无需每次重新解析。
 		cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
 		if err != nil {
 			return fmt.Errorf("failed parsing client leaf certificate: %v", err)
@@ -526,6 +582,7 @@ func (a *Authenticator) refreshCredsLocked() error {
 	a.cachedCreds = newCreds
 	// Only close all connections when TLS cert rotates. Token rotation doesn't
 	// need the extra noise.
+	// 仅证书变化时才关闭所有连接（mTLS 下旧连接仍持有旧证书）；token 轮换通过请求头即可生效。
 	if oldCreds != nil && !reflect.DeepEqual(oldCreds.cert, a.cachedCreds.cert) {
 		// Can be nil if the exec auth plugin only returned token auth.
 		if oldCreds.cert != nil && oldCreds.cert.Leaf != nil {
@@ -549,6 +606,8 @@ func (a *Authenticator) refreshCredsLocked() error {
 func (a *Authenticator) wrapCmdRunErrorLocked(err error) error {
 	switch err.(type) {
 	case *exec.Error: // Binary does not exist (see exec.Error).
+		// 可执行文件缺失是最常见的用户错误，给出安装指引；
+		// 通过 sometimes 限流避免每条请求都重复打印长提示。
 		builder := strings.Builder{}
 		fmt.Fprintf(&builder, "exec: executable %s not found", a.cmd)
 
@@ -580,6 +639,7 @@ func (a *Authenticator) wrapCmdRunErrorLocked(err error) error {
 // explaining why.
 func (a *Authenticator) updateCommandAndCheckAllowlistLocked(cmd *exec.Cmd) error {
 	switch a.execPluginPolicy.PolicyType {
+	// "" 与 AllowAll 等价，保持向后兼容。
 	case "", api.PluginPolicyAllowAll:
 		return nil
 	case api.PluginPolicyDenyAll:
@@ -593,6 +653,9 @@ func (a *Authenticator) updateCommandAndCheckAllowlistLocked(cmd *exec.Cmd) erro
 
 // `checkAllowlistLocked` checks the specified plugin against the allowlist,
 // and may update the Authenticator's allowlistLookup set.
+//
+// 检查同时接受配置中的原始命令与 exec 解析后的绝对路径，
+// 并在必要时把允许列表项解析为绝对路径后再比较，防止 PATH 差异造成误判。
 func (a *Authenticator) checkAllowlistLocked(cmd *exec.Cmd) error {
 	// a.cmd is the original command as specified in the configuration, then filepath.Clean().
 	// cmd.Path is the possibly-resolved command.
@@ -611,6 +674,7 @@ func (a *Authenticator) checkAllowlistLocked(cmd *exec.Cmd) error {
 		// cmd.Path is unchanged, do LookPath ourselves
 		cmdResolvedPath, cmdResolvedErr = exec.LookPath(cmd.Path)
 		// update cmd.Path to cmdResolvedPath so we only run the resolved path
+		// 固定为解析后的路径，避免检查与执行之间 PATH 变化导致 TOCTOU。
 		if cmdResolvedPath != "" {
 			cmd.Path = cmdResolvedPath
 		}
@@ -626,6 +690,7 @@ func (a *Authenticator) checkAllowlistLocked(cmd *exec.Cmd) error {
 	}
 
 	// There is no verbatim match
+	// 允许列表中的条目可能也是相对命令名，尝试解析它们再比对。
 	a.resolveAllowListEntriesLocked(cmd.Path)
 
 	// allowlistLookup may have changed, recheck
@@ -658,6 +723,8 @@ func (a *Authenticator) resolveAllowListEntriesLocked(commandHint string) {
 	}
 }
 
+// ValidatePluginPolicy 校验插件策略配置的合法性与自洽性；
+// 由于这是安全开关，遇到疑似拼写错误时立即失败而非退化处理。
 func ValidatePluginPolicy(policy api.PluginPolicy) error {
 	switch policy.PolicyType {
 	// "" is equivalent to "AllowAll"
@@ -673,6 +740,7 @@ func ValidatePluginPolicy(policy api.PluginPolicy) error {
 	}
 }
 
+// 空条目用于识别零值条目，例如用户写了 `- {}`。
 var emptyAllowlistEntry api.AllowlistEntry
 
 func validateAllowlist(list []api.AllowlistEntry) error {
@@ -683,6 +751,7 @@ func validateAllowlist(list []api.AllowlistEntry) error {
 		return fmt.Errorf("credential plugin policy set to %q, but allowlist is unspecified", api.PluginPolicyAllowlist)
 	}
 
+	// 空允许列表等价于拒绝一切，但语义容易误读，明确建议改用 DenyAll。
 	if len(list) == 0 {
 		return fmt.Errorf("credential plugin policy set to %q, but allowlist is empty; use %q policy instead", api.PluginPolicyAllowlist, api.PluginPolicyDenyAll)
 	}
@@ -692,6 +761,7 @@ func validateAllowlist(list []api.AllowlistEntry) error {
 			return fmt.Errorf("misconfigured credential plugin allowlist: empty allowlist entry #%d", i+1)
 		}
 
+		// 要求条目已规范化，避免同一路径因写法不同而绕过或误伤比较。
 		if cleaned := filepath.Clean(item.Command); cleaned != item.Command {
 			return fmt.Errorf("non-normalized file path: %q vs %q", item.Command, cleaned)
 		} else if item.Command == "" {

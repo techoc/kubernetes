@@ -45,14 +45,21 @@ import (
 )
 
 const (
-	DefaultQPS   float32 = 5.0
-	DefaultBurst int     = 10
+	// DefaultQPS 是未设置 QPS 时的默认客户端限速（每秒请求数）。
+	DefaultQPS float32 = 5.0
+	// DefaultBurst 是未设置 Burst 时的默认令牌桶容量。
+	DefaultBurst int = 10
 )
 
+// ErrNotInCluster 在未定义 KUBERNETES_SERVICE_HOST/PORT 时由 InClusterConfig 返回。
 var ErrNotInCluster = errors.New("unable to load in-cluster configuration, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be defined")
 
 // Config holds the common attributes that can be passed to a Kubernetes client on
 // initialization.
+//
+// Config 是构造所有客户端的基础配置：连接地址、认证、TLS、序列化与限流。
+// 它同时被 kubeconfig 加载、controller 与 generated clientset 使用，
+// 因此字段语义变化需考虑向后兼容（见各字段注释）。
 type Config struct {
 	// Host must be a host string, a host:port pair, or a URL to the base of the apiserver.
 	// If a URL is given then the (optional) Path of that URL represents a prefix that must
@@ -168,8 +175,11 @@ type Config struct {
 var _ fmt.Stringer = new(Config)
 var _ fmt.GoStringer = new(Config)
 
+// sanitizedConfig 是 Config 的类型别名，仅用于 String/GoString：
+// 通过重新格式化别名类型，避免直接打印原始结构体时泄露敏感字段。
 type sanitizedConfig *Config
 
+// sanitizedAuthConfigPersister 隐藏持久化回调的内部状态，只保留占位说明。
 type sanitizedAuthConfigPersister struct{ AuthProviderConfigPersister }
 
 func (sanitizedAuthConfigPersister) GoString() string {
@@ -179,6 +189,7 @@ func (sanitizedAuthConfigPersister) String() string {
 	return "rest.AuthProviderConfigPersister(--- REDACTED ---)"
 }
 
+// sanitizedObject 隐藏 exec 插件配置中的任意对象内容。
 type sanitizedObject struct{ runtime.Object }
 
 func (sanitizedObject) GoString() string {
@@ -196,6 +207,9 @@ func (c *Config) GoString() string {
 
 // String implements fmt.Stringer and sanitizes sensitive fields of Config to
 // prevent accidental leaking via logs.
+//
+// 在副本上替换密码、Bearer token、auth persister 与 exec 配置，
+// 使 %v/%#v 等日志输出不会带出凭证。
 func (c *Config) String() string {
 	if c == nil {
 		return "<nil>"
@@ -218,6 +232,9 @@ func (c *Config) String() string {
 }
 
 // ImpersonationConfig has all the available impersonation options
+//
+// ImpersonationConfig 对应 kubeconfig 的 impersonate 配置，通过 Imprsonate-*
+// 请求头让 apiserver 以其他身份完成鉴权；调用方自身的 RBAC 仍需允许 impersonate。
 type ImpersonationConfig struct {
 	// UserName is the username to impersonate on each request.
 	UserName string
@@ -232,6 +249,9 @@ type ImpersonationConfig struct {
 
 // +k8s:deepcopy-gen=true
 // TLSClientConfig contains settings to enable transport layer security
+//
+// TLSClientConfig 描述客户端 TLS 行为。*Data 字段优先于对应的 *File 字段，
+// 便于直接嵌入 kubeconfig；若同时提供，文件路径会被忽略。
 type TLSClientConfig struct {
 	// Server should be accessed without verifying the TLS certificate. For testing only.
 	Insecure bool
@@ -277,6 +297,8 @@ func (c TLSClientConfig) GoString() string {
 
 // String implements fmt.Stringer and sanitizes sensitive fields of
 // TLSClientConfig to prevent accidental leaking via logs.
+//
+// 证书数据可公开，但私钥必须脱敏，因此两者使用不同的占位文本。
 func (c TLSClientConfig) String() string {
 	cc := sanitizedTLSClientConfig{
 		Insecure:   c.Insecure,
@@ -299,6 +321,8 @@ func (c TLSClientConfig) String() string {
 	return fmt.Sprintf("%#v", cc)
 }
 
+// ContentConfig 定义请求/响应的媒体类型与序列化器，与连接和认证无关，
+// 因此常被整体复用或复制到派生配置中。
 type ContentConfig struct {
 	// AcceptContentTypes specifies the types the client will accept and is optional.
 	// If not set, ContentType will be used to define the Accept header
@@ -336,6 +360,7 @@ func RESTClientFor(config *Config) (*RESTClient, error) {
 
 	// Validate config.Host before constructing the transport/client so we can fail fast.
 	// ServerURL will be obtained later in RESTClientForConfigAndClient()
+	// 提前校验 Host，避免在建立昂贵连接后才暴露 URL 配置错误。
 	_, _, err := DefaultServerUrlFor(config)
 	if err != nil {
 		return nil, err
@@ -370,6 +395,7 @@ func RESTClientForConfigAndClient(config *Config, httpClient *http.Client) (*RES
 		return nil, err
 	}
 
+	// QPS/Burst 仅在未提供自定义 RateLimiter 时生效；QPS<=0 表示禁用客户端限流。
 	rateLimiter := config.RateLimiter
 	if rateLimiter == nil {
 		qps := config.QPS
@@ -406,6 +432,7 @@ func RESTClientForConfigAndClient(config *Config, httpClient *http.Client) (*RES
 // and does nothing if both are nil.
 //
 // May be called for a nil client.
+// 两者同时设置时 WithContext 优先，以支持上下文日志。
 func maybeSetWarningHandler(c *RESTClient, handler WarningHandler, handlerWithContext WarningHandlerWithContext) {
 	if c == nil {
 		return
@@ -420,6 +447,8 @@ func maybeSetWarningHandler(c *RESTClient, handler WarningHandler, handlerWithCo
 
 // UnversionedRESTClientFor is the same as RESTClientFor, except that it allows
 // the config.Version to be empty.
+//
+// 未版本化客户端用于 discovery、/version、/healthz 等不属于某个 GroupVersion 的端点。
 func UnversionedRESTClientFor(config *Config) (*RESTClient, error) {
 	if config.NegotiatedSerializer == nil {
 		return nil, fmt.Errorf("NegotiatedSerializer is required when initializing a RESTClient")
@@ -467,6 +496,7 @@ func UnversionedRESTClientForConfigAndClient(config *Config, httpClient *http.Cl
 		}
 	}
 
+	// 未版本化场景默认使用 metav1 的 GV，以取得可用的默认编解码器。
 	gv := metav1.SchemeGroupVersion
 	if config.GroupVersion != nil {
 		gv = *config.GroupVersion
@@ -485,6 +515,8 @@ func UnversionedRESTClientForConfigAndClient(config *Config, httpClient *http.Cl
 
 // SetKubernetesDefaults sets default values on the provided client config for accessing the
 // Kubernetes API or returns an error if any of the defaults are impossible or invalid.
+//
+// 目前只补全 User-Agent；保留返回 error 是为了给未来新增校验留出兼容空间。
 func SetKubernetesDefaults(config *Config) error {
 	if len(config.UserAgent) == 0 {
 		config.UserAgent = DefaultKubernetesUserAgent()
@@ -493,6 +525,7 @@ func SetKubernetesDefaults(config *Config) error {
 }
 
 // adjustCommit returns sufficient significant figures of the commit's git hash.
+// 7 位是 git 常用缩写长度，既短又能避免大多数冲突。
 func adjustCommit(c string) string {
 	if len(c) == 0 {
 		return "unknown"
@@ -543,6 +576,9 @@ func DefaultKubernetesUserAgent() string {
 // kubernetes gives to pods. It's intended for clients that expect to be
 // running inside a pod running on kubernetes. It will return ErrNotInCluster
 // if called from a process not running in a kubernetes environment.
+//
+// 仅依赖 Pod 内注入的固定路径与 KUBERNETES_SERVICE_* 环境变量；
+// 不读取 kubeconfig，因此不会意外使用宿主机上的其他凭证。
 func InClusterConfig() (*Config, error) {
 	const (
 		tokenFile  = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -560,6 +596,7 @@ func InClusterConfig() (*Config, error) {
 
 	tlsClientConfig := TLSClientConfig{}
 
+	// 故意只记录而不失败：旧行为如此，且 token 认证在无 CA 时仍可能可用。
 	if _, err := certutil.NewPool(rootCAFile); err != nil {
 		//nolint:logcheck // The decision to log this instead of returning an error goes back to ~2016. It's part of the client-go API now, so not changing it just to support contextual logging.
 		klog.Errorf("Expected to load root CA config from %s, but got err: %v", rootCAFile, err)
@@ -584,6 +621,7 @@ func InClusterConfig() (*Config, error) {
 // Note: the Insecure flag is ignored when testing for this value, so MITM attacks are
 // still possible.
 func IsConfigTransportTLS(config Config) bool {
+	// 只看 URL scheme：Insecure 表示“跳过证书校验”，并不等于明文传输。
 	baseURL, _, err := DefaultServerUrlFor(&config)
 	if err != nil {
 		return false
@@ -612,6 +650,8 @@ func LoadTLSFiles(c *Config) error {
 
 // dataFromSliceOrFile returns data from the slice (if non-empty), or from the file,
 // or an error if an error occurred reading the file
+//
+// 切片优先：显式内联数据覆盖文件内容，这是 kubeconfig 中 *-data 字段的约定。
 func dataFromSliceOrFile(data []byte, file string) ([]byte, error) {
 	if len(data) > 0 {
 		return data, nil
@@ -626,6 +666,7 @@ func dataFromSliceOrFile(data []byte, file string) ([]byte, error) {
 	return nil, nil
 }
 
+// AddUserAgent 在默认 User-Agent 之后追加调用方标识；直接修改并返回入参。
 func AddUserAgent(config *Config, userAgent string) *Config {
 	fullUserAgent := DefaultKubernetesUserAgent() + "/" + userAgent
 	config.UserAgent = fullUserAgent
@@ -633,8 +674,11 @@ func AddUserAgent(config *Config, userAgent string) *Config {
 }
 
 // AnonymousClientConfig returns a copy of the given config with all user credentials (cert/key, bearer token, and username/password) and custom transports (WrapTransport, Transport) removed
+//
+// 典型用途是访问不需要认证的端点（如 /healthz 或公共发现信息）时避免泄露凭证。
 func AnonymousClientConfig(config *Config) *Config {
 	// copy only known safe fields
+	// 白名单式复制：新增的凭证字段不会被无意带入匿名配置。
 	return &Config{
 		Host:          config.Host,
 		APIPath:       config.APIPath,
@@ -660,6 +704,9 @@ func AnonymousClientConfig(config *Config) *Config {
 }
 
 // CopyConfig returns a copy of the given config
+//
+// 这是浅拷贝，但会对 ExecProvider.Config 做深拷贝，因为该 runtime.Object
+// 可能被多个客户端共享并修改，浅拷贝会导致意外的数据竞争。
 func CopyConfig(config *Config) *Config {
 	c := &Config{
 		Host:            config.Host,
@@ -714,6 +761,9 @@ func CopyConfig(config *Config) *Config {
 //
 // This is supported ONLY for use by clients generated with client-gen. The caller is responsible
 // for ensuring that the CodecFactory argument was constructed using the Scheme argument.
+//
+// 仅当 ClientsAllowCBOR 开启时才引入 CBOR 序列化；关闭时原样返回传入的 codecs，
+// 避免为每个生成客户端重复构建 CodecFactory。
 func CodecFactoryForGeneratedClient(scheme *runtime.Scheme, codecs serializer.CodecFactory) serializer.CodecFactory {
 	if !features.FeatureGates().Enabled(features.ClientsAllowCBOR) {
 		// NOTE: This assumes client-gen will not generate CBOR-enabled Codecs as long as

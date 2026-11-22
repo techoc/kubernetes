@@ -25,7 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestSplitGroupsAndResources 验证聚合发现（apidiscovery/v2）到传统
+// APIGroupList/APIResourceList 结构的拆分逻辑。每个用例同时断言三部分结果：
+// 组列表、按 GV 归并的资源列表，以及失效 GV 的错误集合。
 func TestSplitGroupsAndResources(t *testing.T) {
+	// 每个用例的 agg 是服务端返回的聚合发现数据，其余三个字段是期望的拆分结果。
 	tests := []struct {
 		name                string
 		agg                 apidiscovery.APIGroupDiscoveryList
@@ -34,6 +38,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 		expectedFailedGVs   map[schema.GroupVersion]error
 	}{
 		{
+			// 核心组（group 为空）只有一个版本和一个命名空间级资源。
 			name: "Aggregated discovery: core/v1 group and pod resource",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -94,6 +99,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 			expectedFailedGVs: map[schema.GroupVersion]error{},
 		},
 		{
+			// 一个组含多个版本时，首选版本取聚合列表中的第一个非 stale 版本。
 			name: "Aggregated discovery: 1 group/1 resources at /api, 1 group/2 versions/1 resources at /apis",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -184,6 +190,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 			expectedFailedGVs: map[schema.GroupVersion]error{},
 		},
 		{
+			// 核心组与 apps 组各自独立归并，资源列表按 GV 分开返回。
 			name: "Aggregated discovery: 1 group/2 resources at /api, 1 group/2 resources at /apis",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -319,6 +326,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 			expectedFailedGVs: map[schema.GroupVersion]error{},
 		},
 		{
+			// 集群级资源（ScopeCluster）必须映射为 Namespaced=false。
 			name: "Aggregated discovery: multiple groups with cluster-scoped resources",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -454,6 +462,8 @@ func TestSplitGroupsAndResources(t *testing.T) {
 			expectedFailedGVs: map[schema.GroupVersion]error{},
 		},
 		{
+			// 子资源会被展开成 "parent/subresource" 形式的独立 APIResource；
+			// 父资源的 shortNames/categories/verbs 只在父条目上出现。
 			name: "Aggregated discovery with single subresource",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -542,6 +552,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 			expectedFailedGVs: map[schema.GroupVersion]error{},
 		},
 		{
+			// 父资源缺少 GVK 时仍需容忍：只返回子资源，父条目被跳过。
 			name: "Aggregated discovery with single subresource and parent missing GVK",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -611,6 +622,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 			expectedFailedGVs: map[schema.GroupVersion]error{},
 		},
 		{
+			// 父 GVK 为空与非 nil 但字段全空等价，处理方式与缺少 GVK 相同。
 			name: "Aggregated discovery with single subresource and parent empty GVK",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -681,6 +693,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 			expectedFailedGVs: map[schema.GroupVersion]error{},
 		},
 		{
+			// 多个子资源保持聚合列表中的顺序，父资源仍排在最前。
 			name: "Aggregated discovery with multiple subresources",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -781,6 +794,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 			expectedFailedGVs: map[schema.GroupVersion]error{},
 		},
 		{
+			// 唯一的核心 GV 已失效：组仍保留但无版本，资源为空，并报告失败 GV。
 			name: "Aggregated discovery: single failed GV at /api",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -825,6 +839,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 			},
 		},
 		{
+			// apps 组唯一版本失效，行为与上例一致。
 			name: "Aggregated discovery: single failed GV at /apis",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -872,6 +887,8 @@ func TestSplitGroupsAndResources(t *testing.T) {
 			},
 		},
 		{
+			// 同一组中只有部分版本失效：失效版本不出现在组内，也不产生资源；
+			// 首选版本回退到仍有效的 v1。
 			name: "Aggregated discovery: 1 group/2 versions/1 failed GV at /apis",
 			agg: apidiscovery.APIGroupDiscoveryList{
 				Items: []apidiscovery.APIGroupDiscovery{
@@ -955,6 +972,7 @@ func TestSplitGroupsAndResources(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		// SplitGroupsAndResources 返回的组列表是指针，可能为 nil，这里按约定解引用后比较。
 		apiGroups, resourcesByGV, failedGVs := SplitGroupsAndResources(test.agg)
 		assert.Equal(t, test.expectedFailedGVs, failedGVs)
 		assert.Equal(t, test.expectedGroups, *apiGroups)

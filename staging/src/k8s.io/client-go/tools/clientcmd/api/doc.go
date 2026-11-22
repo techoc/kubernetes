@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件只承载包级生成指令：deepcopy-gen 会为本包所有类型生成 DeepCopy 方法，
+// 因此这里没有任何手写类型或函数。
 // +k8s:deepcopy-gen=package
 
 package api

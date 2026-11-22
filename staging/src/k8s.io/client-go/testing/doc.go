@@ -67,4 +67,15 @@ limitations under the License.
 // understanding. Our goal is to keep this package simple, maintainable, and
 // honest about what it provides so that it remains a reliable tool for the
 // cases it is designed to handle.
+//
+// 概要（中文）：
+//
+// testing 包提供用于单元测试的 fake Kubernetes 客户端，无需真实 kube-apiserver 即可模拟交互，
+// 使测试快速且自包含。
+//
+// 该 fake 客户端刻意简化，不追求完整复刻 apiserver 行为：字段默认值、校验、status 管理、
+// 战略合并补丁、server-side apply、高级 field selector 等均不支持，也无计划支持。
+// 它适合在结构层面验证代码如何与 API 交互（例如断言发出正确的 API 调用、用预置响应驱动特定分支）；
+// 若测试依赖 apiserver 的真实行为（校验、持久化、apply 语义、真实 watch 事件），
+// 应改用针对真实 apiserver 的集成测试。
 package testing

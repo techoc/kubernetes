@@ -42,6 +42,7 @@ const (
 	testAPIVersion = "testgroup/testversion"
 )
 
+// newUnstructured 构造最小 unstructured 对象，仅含 apiVersion/kind/metadata。
 func newUnstructured(apiVersion, kind, namespace, name string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -55,18 +56,23 @@ func newUnstructured(apiVersion, kind, namespace, name string) *unstructured.Uns
 	}
 }
 
+// newUnstructuredWithSpec 在标准对象上附加 spec 字段，供 Patch 测试使用。
 func newUnstructuredWithSpec(spec map[string]interface{}) *unstructured.Unstructured {
 	u := newUnstructured(testAPIVersion, testKind, testNamespace, testName)
 	u.Object["spec"] = spec
 	return u
 }
 
+// TestDoesClientSupportWatchListSemantics 断言 fake client 明确声明不支持 WatchList，
+// 从而让 informer 走传统的 List+Watch 路径，避免 fake 在未实现该协议时产生误判。
 func TestDoesClientSupportWatchListSemantics(t *testing.T) {
 	target := &FakeDynamicClient{}
 	if !watchlist.DoesClientNotSupportWatchListSemantics(target) {
 		t.Fatalf("FakeDynamicClient should NOT support WatchList semantics")
 	}
 }
+
+// TestGet 验证 Get 返回的对象保留 apiVersion/kind，并能按 GVR 与命名空间精确检索。
 func TestGet(t *testing.T) {
 	scheme := runtime.NewScheme()
 
@@ -91,6 +97,8 @@ func TestGet(t *testing.T) {
 	}
 }
 
+// TestListDecoding 复刻真实 List API 的解码路径，证明 dynamic client 返回的 list
+// 仍带有正确的 GVK（kind 为 TheKindList）。
 func TestListDecoding(t *testing.T) {
 	// this the duplication of logic from the real List API.  This will prove that our dynamic client actually returns the gvk
 	uncastObj, err := runtime.Decode(unstructured.UnstructuredJSONScheme, []byte(`{"apiVersion": "group/version", "kind": "TheKindList", "items":[]}`))
@@ -110,6 +118,7 @@ func TestListDecoding(t *testing.T) {
 	}
 }
 
+// TestGetDecoding 复刻真实 Get API 的解码路径，验证单对象解码后 GVK 完整。
 func TestGetDecoding(t *testing.T) {
 	// this the duplication of logic from the real Get API.  This will prove that our dynamic client actually returns the gvk
 	uncastObj, err := runtime.Decode(unstructured.UnstructuredJSONScheme, []byte(`{"apiVersion": "group/version", "kind": "TheKind"}`))
@@ -128,6 +137,10 @@ func TestGetDecoding(t *testing.T) {
 	}
 }
 
+// TestList 验证 List 只返回指定 GVR 的对象，并保持确定性的排序。
+//
+// 中文说明：fixture 中混入 group2/version 的对象，期望结果中被排除；同 GVR 的对象按
+// 名称升序返回（bar、baz、foo），避免 map 遍历顺序带来的不稳定断言。
 func TestList(t *testing.T) {
 	scheme := runtime.NewScheme()
 
@@ -156,6 +169,10 @@ func TestList(t *testing.T) {
 	}
 }
 
+// Test_ListKind 验证使用 UnstructuredList 作为种子时，List 返回正确的 list 元数据。
+//
+// 中文说明：fake tracker 的 resourceVersion 从 1 开始，每创建一个对象递增；种子里
+// 已有三个对象，因此 rv 为 4，continue 为空串。
 func Test_ListKind(t *testing.T) {
 	scheme := runtime.NewScheme()
 
@@ -200,6 +217,7 @@ func Test_ListKind(t *testing.T) {
 	}
 }
 
+// patchTestCase 描述一个 Patch 用例：输入对象、patch 类型与内容、期望错误或结果。
 type patchTestCase struct {
 	name                  string
 	object                runtime.Object
@@ -209,6 +227,7 @@ type patchTestCase struct {
 	expectedPatchedObject runtime.Object
 }
 
+// runner 用新构造的 fake client 执行 Patch，并校验错误与结果。
 func (tc *patchTestCase) runner(t *testing.T) {
 	client := NewSimpleDynamicClient(runtime.NewScheme(), tc.object)
 	resourceInterface := client.Resource(schema.GroupVersionResource{Group: testGroup, Version: testVersion, Resource: testResource}).Namespace(testNamespace)
@@ -227,6 +246,8 @@ func (tc *patchTestCase) runner(t *testing.T) {
 
 // verifyErr verifies that the given error returned from Patch is the error
 // expected by the test case.
+//
+// 中文：期望错误时要求错误文本完全一致；不期望错误时必须为 nil。
 func (tc *patchTestCase) verifyErr(err error) error {
 	if tc.wantErrMsg != "" && err == nil {
 		return fmt.Errorf("want error, got nil")
@@ -244,6 +265,7 @@ func (tc *patchTestCase) verifyErr(err error) error {
 	return nil
 }
 
+// verifyResult 对比 Patch 返回对象与期望对象；两者同为 nil 视为成功。
 func (tc *patchTestCase) verifyResult(result *unstructured.Unstructured) error {
 	if tc.expectedPatchedObject == nil && result == nil {
 		return nil
@@ -254,9 +276,15 @@ func (tc *patchTestCase) verifyResult(result *unstructured.Unstructured) error {
 	return nil
 }
 
+// TestPatch 覆盖 JSON Patch、Merge Patch 对 unstructured 的效果与边界。
+//
+// 中文说明：unstructured 不支持 StrategicMergePatch（没有 Go 类型信息可供合并策略），
+// 因此该类型会返回解析错误；JSON Patch 的 add/replace/remove 与 Merge Patch 的
+// 字段替换均应生效。
 func TestPatch(t *testing.T) {
 	testCases := []patchTestCase{
 		{
+			// 中文：strategic merge 不能处理 JSON patch 数组，报 invalid JSON document。
 			name:       "jsonpatch fails with merge type",
 			object:     newUnstructuredWithSpec(map[string]interface{}{"foo": "bar"}),
 			patchType:  types.StrategicMergePatchType,
@@ -291,6 +319,7 @@ func TestPatch(t *testing.T) {
 			patchBytes:            []byte(`[{"op": "remove", "path": "/spec/toremove"}]`),
 			expectedPatchedObject: newUnstructuredWithSpec(map[string]interface{}{"foo": "bar"}),
 		}, {
+			// 中文：把 JSON Patch 内容误标为 strategic merge，同样解析失败。
 			name:      "strategic merge patch fails with JSONPatch",
 			object:    newUnstructuredWithSpec(map[string]interface{}{"foo": "bar"}),
 			patchType: types.StrategicMergePatchType,
@@ -315,6 +344,9 @@ func TestPatch(t *testing.T) {
 
 // This test ensures list works when the fake dynamic client is seeded with a typed scheme and
 // unstructured type fixtures
+//
+// 中文说明：scheme 里注册了类型化对象（mockResource），但种子是 unstructured；List
+// 仍应返回 unstructured list，rv 为 2（一个对象 + 初始 1）。
 func TestListWithUnstructuredObjectsAndTypedScheme(t *testing.T) {
 	gvr := schema.GroupVersionResource{Group: testGroup, Version: testVersion, Resource: testResource}
 	gvk := gvr.GroupVersion().WithKind(testKind)
@@ -349,6 +381,8 @@ func TestListWithUnstructuredObjectsAndTypedScheme(t *testing.T) {
 	}
 }
 
+// TestListWithNoFixturesAndTypedScheme 验证没有种子对象时，List 返回空列表且
+// resourceVersion 为初始值 1。
 func TestListWithNoFixturesAndTypedScheme(t *testing.T) {
 	gvr := schema.GroupVersionResource{Group: testGroup, Version: testVersion, Resource: testResource}
 	gvk := gvr.GroupVersion().WithKind(testKind)
@@ -379,6 +413,8 @@ func TestListWithNoFixturesAndTypedScheme(t *testing.T) {
 
 // This test ensures list works when the dynamic client is seeded with an empty scheme and
 // unstructured typed fixtures
+//
+// 中文：空 scheme + unstructured 种子，List 仍能工作并返回带 RV 的 unstructured list。
 func TestListWithNoScheme(t *testing.T) {
 	gvr := schema.GroupVersionResource{Group: testGroup, Version: testVersion, Resource: testResource}
 	gvk := gvr.GroupVersion().WithKind(testKind)
@@ -413,6 +449,8 @@ func TestListWithNoScheme(t *testing.T) {
 
 // This test ensures list works when the dynamic client is seeded with an empty scheme and
 // unstructured typed fixtures
+//
+// 中文：种子是类型化对象，List 返回时被转换为等价的 unstructured 表示。
 func TestListWithTypedFixtures(t *testing.T) {
 	gvr := schema.GroupVersionResource{Group: testGroup, Version: testVersion, Resource: testResource}
 	gvk := gvr.GroupVersion().WithKind(testKind)
@@ -452,6 +490,8 @@ func TestListWithTypedFixtures(t *testing.T) {
 	}
 }
 
+// mockResource / mockResourceList 是测试用的极简类型化对象，只承载 TypeMeta 与元数据，
+// 用于验证 typed scheme 与 unstructured 之间的相互转换。
 type (
 	mockResource struct {
 		metav1.TypeMeta   `json:""`
@@ -465,11 +505,13 @@ type (
 	}
 )
 
+// DeepCopyObject 实现 runtime.Object；测试对象无指针字段，浅拷贝即可。
 func (l *mockResourceList) DeepCopyObject() runtime.Object {
 	o := *l
 	return &o
 }
 
+// DeepCopyObject 实现 runtime.Object；测试对象无指针字段，浅拷贝即可。
 func (r *mockResource) DeepCopyObject() runtime.Object {
 	o := *r
 	return &o

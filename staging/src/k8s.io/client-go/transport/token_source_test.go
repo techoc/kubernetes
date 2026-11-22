@@ -27,6 +27,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// testTokenSource 统计被调用次数并返回预设 token/error，用于断言缓存是否命中。
 type testTokenSource struct {
 	calls int
 	tok   *oauth2.Token
@@ -38,6 +39,7 @@ func (ts *testTokenSource) Token() (*oauth2.Token, error) {
 	return ts.tok, ts.err
 }
 
+// TestCachingTokenSource 校验提前 1 分钟刷新的缓存语义：未过期直接命中，过期才向 base 取新 token。
 func TestCachingTokenSource(t *testing.T) {
 	start := time.Now()
 	tokA := &oauth2.Token{
@@ -123,6 +125,7 @@ func TestCachingTokenSource(t *testing.T) {
 	}
 }
 
+// TestCachingTokenSourceRace 用 -race 验证并发 Token() 时基础 source 只被调用一次（单飞效果）。
 func TestCachingTokenSourceRace(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		tts := &testTokenSource{
@@ -163,6 +166,8 @@ func TestCachingTokenSourceRace(t *testing.T) {
 	}
 }
 
+// TestTokenSourceTransportRoundTrip 校验 RoundTrip 的认证路径：
+// 已有 Authorization 头时跳过 oauth；401 时清空缓存以便下次换 token。
 func TestTokenSourceTransportRoundTrip(t *testing.T) {
 	goodToken := &oauth2.Token{
 		AccessToken: "good",
@@ -236,6 +241,7 @@ func TestTokenSourceTransportRoundTrip(t *testing.T) {
 	}
 }
 
+// uncancellableRT 既未实现 CancelRequest 也未暴露底层 transport，用于验证取消降级行为。
 type uncancellableRT struct {
 	rt http.RoundTripper
 }
@@ -244,6 +250,7 @@ func (urt *uncancellableRT) RoundTrip(req *http.Request) (*http.Response, error)
 	return urt.rt.RoundTrip(req)
 }
 
+// TestTokenSourceTransportCancelRequest 校验 CancelRequest 能穿透 tokenSourceTransport 与 oauth 包装。
 func TestTokenSourceTransportCancelRequest(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -291,6 +298,7 @@ func TestTokenSourceTransportCancelRequest(t *testing.T) {
 	}
 }
 
+// testTransport 在收到 "Bearer bad" 时返回 401，并记录取消是否到达。
 type testTransport struct {
 	canceled bool
 	base     http.RoundTripper
@@ -303,6 +311,7 @@ func (rt *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return nil, nil
 }
 
+// CancelRequest 标记已取消，并在存在底层 transport 时继续向下传递。
 func (rt *testTransport) CancelRequest(req *http.Request) {
 	rt.canceled = true
 	if rt.base != nil {

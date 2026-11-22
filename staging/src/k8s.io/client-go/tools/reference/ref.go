@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package reference 提供把任意 runtime.Object 转换为 core/v1.ObjectReference 的工具。
+//
+// ObjectReference 是事件、OwnerReference 等场景里对对象实体的轻量引用，
+// 不携带对象正文，只保留定位所需的最小元数据。
 package reference
 
 import (
@@ -41,10 +45,13 @@ func GetReference(scheme *runtime.Scheme, obj runtime.Object) (*v1.ObjectReferen
 	}
 	if ref, ok := obj.(*v1.ObjectReference); ok {
 		// Don't make a reference to a reference.
+		//
+		// 引用本身已经是引用，再包一层只会丢失语义，直接原样返回。
 		return ref, nil
 	}
 
 	// An object that implements only List has enough metadata to build a reference
+	// 列表对象没有单个对象的元数据，退回 Common（ListMeta）取 resourceVersion。
 	var listMeta metav1.Common
 	objectMeta, err := meta.Accessor(obj)
 	if err != nil {
@@ -62,6 +69,9 @@ func GetReference(scheme *runtime.Scheme, obj runtime.Object) (*v1.ObjectReferen
 	// we are falling back to scheme.
 	//
 	// TODO: This doesn't work for CRDs, which are not registered in scheme.
+	//
+	// 反序列化后的对象通常已带 GVK；而手工构造的对象往往没有，
+	// 此时只能借助 scheme 反查。
 	if gvk.Empty() {
 		if scheme == nil {
 			return nil, errors.New("scheme is required to look up gvk")
@@ -83,6 +93,7 @@ func GetReference(scheme *runtime.Scheme, obj runtime.Object) (*v1.ObjectReferen
 	version := gvk.GroupVersion().String()
 
 	// only has list metadata
+	// 列表对象没有 name/namespace/uid，只能返回只带 resourceVersion 的引用。
 	if objectMeta == nil {
 		return &v1.ObjectReference{
 			Kind:            kind,
@@ -102,6 +113,9 @@ func GetReference(scheme *runtime.Scheme, obj runtime.Object) (*v1.ObjectReferen
 }
 
 // GetPartialReference is exactly like GetReference, but allows you to set the FieldPath.
+//
+// FieldPath 用于指向对象内部的具体字段（如 spec.containers{foo}），
+// 事件记录等场景借此精确标注出问题的子字段。
 func GetPartialReference(scheme *runtime.Scheme, obj runtime.Object, fieldPath string) (*v1.ObjectReference, error) {
 	ref, err := GetReference(scheme, obj)
 	if err != nil {

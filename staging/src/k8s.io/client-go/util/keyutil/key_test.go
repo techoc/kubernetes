@@ -24,6 +24,7 @@ import (
 const (
 	// rsaPrivateKey is a RSA Private Key in PKCS#1 format
 	// openssl genrsa -out rsa2048.pem 2048
+	// PKCS#1 格式的 RSA 私钥（测试数据）。
 	rsaPrivateKey = `-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA92mVjhBKOFsdxFzb/Pjq+7b5TJlODAdY5hK+WxLZTIrfhDPq
 FWrGKdjSNiHbXrdEtwJh9V+RqPZVSN3aWy1224RgkyNdMJsXhJKuCC24ZKY8SXtW
@@ -54,6 +55,7 @@ p8FdYQ1FkACQ+daO5VlClL/9l0sGjKXlNKbpmJ2H4ngZmXj5uGmxuQ==
 
 	// rsaPublicKey is a RSA Public Key in PEM encoded format
 	// openssl rsa -in rsa2048.pem -pubout -out rsa2048pub.pem
+	// PEM 编码的 RSA 公钥（测试数据）。
 	rsaPublicKey = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA92mVjhBKOFsdxFzb/Pjq
 +7b5TJlODAdY5hK+WxLZTIrfhDPqFWrGKdjSNiHbXrdEtwJh9V+RqPZVSN3aWy12
@@ -66,6 +68,7 @@ mwIDAQAB
 
 	// certificate is an x509 certificate in PEM encoded format
 	// openssl req -new -key rsa2048.pem -sha256 -nodes -x509 -days 1826 -out x509certificate.pem -subj "/C=US/CN=not-valid"
+	// PEM 编码的 x509 证书（测试数据）；用于验证从证书中提取公钥。
 	certificate = `-----BEGIN CERTIFICATE-----
 MIIDFTCCAf2gAwIBAgIJAN8B8NOwtiUCMA0GCSqGSIb3DQEBCwUAMCExCzAJBgNV
 BAYTAlVTMRIwEAYDVQQDDAlub3QtdmFsaWQwHhcNMTcwMzIyMDI1NjM2WhcNMjIw
@@ -88,6 +91,7 @@ Y708SlY38hmS1uTwDpyLOn8AKkZ8jtx75g==
 
 	// ecdsaPrivateKeyWithParams is a ECDSA Private Key with included EC Parameters block
 	// openssl ecparam -name prime256v1 -genkey -out ecdsa256params.pem
+	// 带 EC PARAMETERS 块的 ECDSA 私钥；解析器需要容忍额外的参数块。
 	ecdsaPrivateKeyWithParams = `-----BEGIN EC PARAMETERS-----
 BggqhkjOPQMBBw==
 -----END EC PARAMETERS-----
@@ -99,6 +103,7 @@ iIv6RpxE3VHvlHEIvYgCZkG0jHszTUopBg==
 
 	// ecdsaPrivateKey is a ECDSA Private Key in ASN.1 format
 	// openssl ecparam -name prime256v1 -genkey -noout -out ecdsa256.pem
+	// ASN.1 格式的 ECDSA 私钥（测试数据）。
 	ecdsaPrivateKey = `-----BEGIN EC PRIVATE KEY-----
 MHcCAQEEIP6Qw6dHDiLsSnLXUhQVTPE0fTQQrj3XSbiQAZPXnk5+oAoGCCqGSM49
 AwEHoUQDQgAEZZzi1u5f2/AEGFI/HYUhU+u6cTK1q2bbtE7r1JMK+/sQA5sNAp+7
@@ -107,12 +112,15 @@ Vdc3psr1OaNzyTyuhTECyRdFKXm63cMnGg==
 
 	// ecdsaPublicKey is a ECDSA Public Key in PEM encoded format
 	// openssl ec -in ecdsa256.pem -pubout -out ecdsa256pub.pem
+	// PEM 编码的 ECDSA 公钥（测试数据）。
 	ecdsaPublicKey = `-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZZzi1u5f2/AEGFI/HYUhU+u6cTK1
 q2bbtE7r1JMK+/sQA5sNAp+7Vdc3psr1OaNzyTyuhTECyRdFKXm63cMnGg==
 -----END PUBLIC KEY-----`
 )
 
+// TestReadPrivateKey 验证 PrivateKeyFromFile 能读取 PKCS#1 RSA、ASN.1 ECDSA 以及带参数块的 ECDSA 私钥，
+// 且空文件应返回错误。
 func TestReadPrivateKey(t *testing.T) {
 	f, err := os.CreateTemp("", "")
 	if err != nil {
@@ -120,10 +128,12 @@ func TestReadPrivateKey(t *testing.T) {
 	}
 	defer os.Remove(f.Name())
 
+	// 空文件不含任何 PEM 块，必须报错。
 	if _, err := PrivateKeyFromFile(f.Name()); err == nil {
 		t.Fatalf("Expected error reading key from empty file, got none")
 	}
 
+	// RSA 私钥。
 	if err := os.WriteFile(f.Name(), []byte(rsaPrivateKey), os.FileMode(0600)); err != nil {
 		t.Fatalf("error writing private key to tmpfile: %v", err)
 	}
@@ -146,6 +156,8 @@ func TestReadPrivateKey(t *testing.T) {
 	}
 }
 
+// TestReadPublicKeys 验证 PublicKeysFromFile 支持 RSA/ECDSA 公钥、一个文件中的多个公钥，
+// 以及直接从 x509 证书中提取公钥。
 func TestReadPublicKeys(t *testing.T) {
 	f, err := os.CreateTemp("", "")
 	if err != nil {
@@ -153,10 +165,12 @@ func TestReadPublicKeys(t *testing.T) {
 	}
 	defer os.Remove(f.Name())
 
+	// 空文件应报错。
 	if _, err := PublicKeysFromFile(f.Name()); err == nil {
 		t.Fatalf("Expected error reading keys from empty file, got none")
 	}
 
+	// 单个 RSA 公钥。
 	if err := os.WriteFile(f.Name(), []byte(rsaPublicKey), os.FileMode(0600)); err != nil {
 		t.Fatalf("error writing public key to tmpfile: %v", err)
 	}

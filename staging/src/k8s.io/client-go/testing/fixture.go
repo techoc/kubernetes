@@ -46,6 +46,9 @@ import (
 // ObjectTracker keeps track of objects. It is intended to be used to
 // fake calls to a server by returning objects based on their kind,
 // namespace and name.
+//
+// tracker 是 fake clientset 的“内存 API Server”：按 GVR 存储对象副本，
+// 并向 watch 订阅者广播事件。它不实现校验、默认值、准入与真正的子资源语义。
 type ObjectTracker interface {
 	// Add adds an object to the tracker. If object being added
 	// is a list, its items are added separately.
@@ -100,8 +103,7 @@ type ObjectScheme interface {
 // root resource are not automatically updated when a scale resource is updated, for example).
 func ObjectReaction(tracker ObjectTracker) ReactionFunc {
 	reactor := objectTrackerReact{tracker: tracker}
-	return func(action Action) (bool, runtime.Object, error) {
-		// Here and below we need to switch on implementation types,
+	return func(action Action) (bool, runtime.Object, error) { // Here and below we need to switch on implementation types,
 		// not on interfaces, as some interfaces are identical
 		// (e.g. UpdateAction and CreateAction), so if we use them,
 		// updates and creates end up matching the same case branch.
@@ -122,6 +124,7 @@ func ObjectReaction(tracker ObjectTracker) ReactionFunc {
 			obj, err := reactor.Delete(action)
 			return true, obj, err
 		case PatchActionImpl:
+			// apply 在 HTTP 层也是 PATCH，但需要按字段所有权合并，因此走单独分支。
 			if action.GetPatchType() == types.ApplyPatchType {
 				obj, err := reactor.Apply(action)
 				return true, obj, err
@@ -134,6 +137,8 @@ func ObjectReaction(tracker ObjectTracker) ReactionFunc {
 	}
 }
 
+// objectTrackerReact 把具体的 ActionImpl 适配到 ObjectTracker 的方法，
+// 避免 ObjectReaction 中混入 tracker 实现细节。
 type objectTrackerReact struct {
 	tracker ObjectTracker
 }
@@ -159,6 +164,7 @@ func (o objectTrackerReact) Create(action CreateActionImpl) (runtime.Object, err
 			return nil, err
 		}
 	} else {
+		// 子资源的 Create 在 fake 中没有真实语义，退化为对其所属对象的 Update。
 		oldObj, getOldObjErr := o.tracker.Get(gvr, ns, objMeta.GetName(), metav1.GetOptions{})
 		if getOldObjErr != nil {
 			return nil, getOldObjErr
@@ -185,6 +191,7 @@ func (o objectTrackerReact) Create(action CreateActionImpl) (runtime.Object, err
 	return obj, err
 }
 
+// Update 写入对象后重新从 tracker 读取，保证返回的是 tracker 中的副本而非调用方对象。
 func (o objectTrackerReact) Update(action UpdateActionImpl) (runtime.Object, error) {
 	ns := action.GetNamespace()
 	gvr := action.GetResource()
@@ -207,10 +214,12 @@ func (o objectTrackerReact) Delete(action DeleteActionImpl) (runtime.Object, err
 	return nil, err
 }
 
+// Apply 把 apply configuration 交给 tracker 合并；patch 内容可能是 YAML 或 JSON。
 func (o objectTrackerReact) Apply(action PatchActionImpl) (runtime.Object, error) {
 	ns := action.GetNamespace()
 	gvr := action.GetResource()
 
+	// apply configuration 没有固定的 Go 类型，用 unstructured 承载。
 	patchObj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	if err := yaml.Unmarshal(action.GetPatch(), &patchObj.Object); err != nil {
 		return nil, err
@@ -224,6 +233,7 @@ func (o objectTrackerReact) Apply(action PatchActionImpl) (runtime.Object, error
 	return obj, err
 }
 
+// Patch 在客户端计算补丁结果：先取当前对象序列化为旧值，应用补丁后再写回 tracker。
 func (o objectTrackerReact) Patch(action PatchActionImpl) (runtime.Object, error) {
 	ns := action.GetNamespace()
 	gvr := action.GetResource()
@@ -245,6 +255,7 @@ func (o objectTrackerReact) Patch(action PatchActionImpl) (runtime.Object, error
 
 	switch action.GetPatchType() {
 	case types.JSONPatchType:
+		// RFC 6902：由操作列表描述增删改，直接作用于旧 JSON。
 		patch, err := jsonpatch.DecodePatch(action.GetPatch())
 		if err != nil {
 			return nil, err
@@ -267,6 +278,7 @@ func (o objectTrackerReact) Patch(action PatchActionImpl) (runtime.Object, error
 			return nil, err
 		}
 	case types.StrategicMergePatchType:
+		// 需要 Go 类型上的 patchStrategy 标签，因此把 obj 作为 schema 传入。
 		mergedByte, err := strategicpatch.StrategicMergePatch(old, action.GetPatch(), obj)
 		if err != nil {
 			return nil, err
@@ -288,6 +300,8 @@ func (o objectTrackerReact) Patch(action PatchActionImpl) (runtime.Object, error
 type tracker struct {
 	scheme  ObjectScheme
 	decoder runtime.Decoder
+	// lock 同时保护 objects、watchers 与 resourceVersions；
+	// 广播事件时也持锁，保证 watcher 看到的事件顺序与写入顺序一致。
 	lock    sync.RWMutex
 	objects map[schema.GroupVersionResource]map[types.NamespacedName]versionedObject
 	// The value type of watchers is a map of which the key is either a namespace or
@@ -374,6 +388,7 @@ func (t *tracker) List(gvr schema.GroupVersionResource, gvk schema.GroupVersionK
 	defer t.lock.RUnlock()
 
 	if listMeta, err := meta.ListAccessor(list); err == nil {
+		// 空集合也从 1 开始，与真实 API Server 的 resourceVersion 语义保持一致。
 		resourceVersion, ok := t.resourceVersions[gvr]
 		if !ok {
 			resourceVersion = 1
@@ -390,6 +405,7 @@ func (t *tracker) List(gvr schema.GroupVersionResource, gvk schema.GroupVersionK
 	if err != nil {
 		return nil, err
 	}
+	// 只把对象本体放进 List，versionedObject 的包装不应泄漏给调用方。
 	matchingObjs := make([]runtime.Object, len(matchingVersionedObjs))
 	for i, obj := range matchingVersionedObjs {
 		matchingObjs[i] = obj.Object
@@ -432,6 +448,7 @@ func (t *tracker) Watch(gvr schema.GroupVersionResource, ns string, opts ...meta
 
 	fakewatcher := watch.NewRaceFreeFake()
 
+	// 注册 watcher 后再回灌已有对象，避免漏掉注册与回灌之间发生的写入。
 	if _, exists := t.watchers[gvr]; !exists {
 		t.watchers[gvr] = make(map[string][]*watch.RaceFreeFakeWatcher)
 	}
@@ -446,6 +463,7 @@ func (t *tracker) Watch(gvr schema.GroupVersionResource, ns string, opts ...meta
 			return nil, err
 		}
 		for _, obj := range matchingObjs {
+			// 只回灌比请求 resourceVersion 更新的对象，模拟“从某版本开始 watch”。
 			if addFromRV < obj.resourceVersion {
 				fakewatcher.Add(obj.Object)
 			}
@@ -479,6 +497,7 @@ func (t *tracker) Get(gvr schema.GroupVersionResource, ns, name string, opts ...
 	// correctly, as Add/Update methods enforce kind/namespace/name
 	// uniqueness.
 	obj := matchingObj.DeepCopyObject()
+	// 与真实服务端一致：body 中 StatusFailure 的对象在 Get 时转为错误返回。
 	if status, ok := obj.(*metav1.Status); ok {
 		if status.Status != metav1.StatusSuccess {
 			return nil, &apierrors.StatusError{ErrStatus: *status}
@@ -488,6 +507,7 @@ func (t *tracker) Get(gvr schema.GroupVersionResource, ns, name string, opts ...
 	return obj, nil
 }
 
+// Add 把对象加入 tracker；对象若有多个已注册 GVK，会分别以各自的 GVR 存储。
 func (t *tracker) Add(obj runtime.Object) error {
 	if meta.IsListType(obj) {
 		return t.addList(obj, false)
@@ -502,6 +522,7 @@ func (t *tracker) Add(obj runtime.Object) error {
 	}
 
 	if partial, ok := obj.(*metav1.PartialObjectMetadata); ok && len(partial.TypeMeta.APIVersion) > 0 {
+		// PartialObjectMetadata 的 Go 类型无法反查具体 GVK，只能依赖对象自带的 TypeMeta。
 		gvks = []schema.GroupVersionKind{partial.TypeMeta.GroupVersionKind()}
 	}
 
@@ -528,6 +549,7 @@ func (t *tracker) Add(obj runtime.Object) error {
 	return nil
 }
 
+// Create 以 replaceExisting=false 写入：对象已存在时返回 AlreadyExists。
 func (t *tracker) Create(gvr schema.GroupVersionResource, obj runtime.Object, ns string, opts ...metav1.CreateOptions) error {
 	_, err := assertOptionalSingleArgument(opts)
 	if err != nil {
@@ -536,6 +558,7 @@ func (t *tracker) Create(gvr schema.GroupVersionResource, obj runtime.Object, ns
 	return t.add(gvr, obj, ns, false)
 }
 
+// Update 以 replaceExisting=true 写入：对象不存在时返回 NotFound。
 func (t *tracker) Update(gvr schema.GroupVersionResource, obj runtime.Object, ns string, opts ...metav1.UpdateOptions) error {
 	_, err := assertOptionalSingleArgument(opts)
 	if err != nil {
@@ -544,6 +567,7 @@ func (t *tracker) Update(gvr schema.GroupVersionResource, obj runtime.Object, ns
 	return t.add(gvr, obj, ns, true)
 }
 
+// Patch 与 Update 相同：补丁结果已在上层算好，这里只做覆盖写。
 func (t *tracker) Patch(gvr schema.GroupVersionResource, patchedObject runtime.Object, ns string, opts ...metav1.PatchOptions) error {
 	_, err := assertOptionalSingleArgument(opts)
 	if err != nil {
@@ -552,6 +576,7 @@ func (t *tracker) Patch(gvr schema.GroupVersionResource, patchedObject runtime.O
 	return t.add(gvr, patchedObject, ns, true)
 }
 
+// Apply 在没有字段管理能力时用 strategic merge patch 模拟 apply。
 func (t *tracker) Apply(gvr schema.GroupVersionResource, applyConfiguration runtime.Object, ns string, opts ...metav1.PatchOptions) error {
 	_, err := assertOptionalSingleArgument(opts)
 	if err != nil {
@@ -606,6 +631,8 @@ func (t *tracker) IsWatchListSemanticsUnSupported() bool {
 	return true
 }
 
+// getWatches 返回匹配 namespace 的 watcher：集群级 watcher（NamespaceAll）
+// 会收到所有 namespace 的事件，因此两者都要包含。
 func (t *tracker) getWatches(gvr schema.GroupVersionResource, ns string) []*watch.RaceFreeFakeWatcher {
 	watches := []*watch.RaceFreeFakeWatcher{}
 	if t.watchers[gvr] != nil {
@@ -639,9 +666,11 @@ func (t *tracker) add(gvr schema.GroupVersionResource, obj runtime.Object, ns st
 
 	// Propagate namespace to the new object if hasn't already been set.
 	if len(newMeta.GetNamespace()) == 0 {
+		// 便于调用方在 tracker 上直接 Add 集群级对象而不必重复填写 namespace。
 		newMeta.SetNamespace(ns)
 	}
 
+	// 请求 namespace 与对象 namespace 不一致时拒绝，模拟服务端的路径校验。
 	if ns != newMeta.GetNamespace() {
 		msg := fmt.Sprintf("request namespace does not match object namespace, request: %q object: %q", ns, newMeta.GetNamespace())
 		return apierrors.NewBadRequest(msg)
@@ -653,6 +682,7 @@ func (t *tracker) add(gvr schema.GroupVersionResource, obj runtime.Object, ns st
 	}
 
 	// Determine resource version for the new or updated object.
+	// 每个 GVR 维护一个单调递增的版本号，用于 List/Watch 之间的衔接。
 	resourceVersion, ok := t.resourceVersions[gvr]
 	if !ok {
 		resourceVersion = 1
@@ -676,6 +706,7 @@ func (t *tracker) add(gvr schema.GroupVersionResource, obj runtime.Object, ns st
 
 	if replaceExisting {
 		// Tried to update but no matching object was found.
+		// 与真实服务端一样，Update 不存在的对象返回 NotFound，而不是隐式创建。
 		return apierrors.NewNotFound(gr, newMeta.GetName())
 	}
 
@@ -733,6 +764,8 @@ func (t *tracker) Delete(gvr schema.GroupVersionResource, ns, name string, opts 
 	return nil
 }
 
+// managedFieldObjectTracker 在普通 tracker 之上引入 managedfields.FieldManager，
+// 使 fake apply 能模拟字段所有权与冲突（409）语义。
 type managedFieldObjectTracker struct {
 	ObjectTracker
 	scheme          ObjectScheme
@@ -746,6 +779,7 @@ var _ ObjectTracker = &managedFieldObjectTracker{}
 // NewFieldManagedObjectTracker returns an ObjectTracker that can be used to keep track
 // of objects and managed fields for the fake clientset. Mostly useful for unit tests.
 func NewFieldManagedObjectTracker(scheme *runtime.Scheme, decoder runtime.Decoder, typeConverter managedfields.TypeConverter) ObjectTracker {
+	// mapper 延迟构造：RESTMapper 只依赖 scheme，且创建成本较高。
 	return &managedFieldObjectTracker{
 		ObjectTracker:   NewObjectTracker(scheme, decoder),
 		scheme:          scheme,
@@ -892,6 +926,7 @@ func (t *managedFieldObjectTracker) Apply(gvr schema.GroupVersionResource, apply
 	}
 	force := false
 	if opts.Force != nil {
+		// apply 的 force 语义：为 true 时抢占他人拥有的冲突字段。
 		force = *opts.Force
 	}
 	objWithManagedFields, err := mgr.Apply(liveObject, applyConfiguration, opts.FieldManager, force)
@@ -915,6 +950,7 @@ func (t *managedFieldObjectTracker) Apply(gvr schema.GroupVersionResource, apply
 }
 
 func (t *managedFieldObjectTracker) fieldManagerFor(gvk schema.GroupVersionKind) (*managedfields.FieldManager, error) {
+	// objectDefaulter 为空实现：fake client 不做默认值填充，避免测试依赖默认化行为。
 	return managedfields.NewDefaultFieldManager(
 		t.typeConverter,
 		t.objectConverter,
@@ -935,6 +971,8 @@ func (d *objectDefaulter) Default(_ runtime.Object) {}
 // filterByNamespace returns all objects in the collection that
 // match provided namespace. Empty namespace matches
 // non-namespaced objects.
+//
+// 结果按 namespace、name 排序，使 List 返回值稳定（map 遍历本身是随机的）。
 func filterByNamespace(objs map[types.NamespacedName]versionedObject, ns string) ([]versionedObject, error) {
 	var res []versionedObject
 
@@ -961,6 +999,7 @@ func filterByNamespace(objs map[types.NamespacedName]versionedObject, ns string)
 	return res, nil
 }
 
+// DefaultWatchReactor 返回一个始终命中、直接返回给定 watch.Interface 的 WatchReactionFunc。
 func DefaultWatchReactor(watchInterface watch.Interface, err error) WatchReactionFunc {
 	return func(action Action) (bool, watch.Interface, error) {
 		return true, watchInterface, err
@@ -977,6 +1016,7 @@ type SimpleReactor struct {
 }
 
 func (r *SimpleReactor) Handles(action Action) bool {
+	// "*" 通配所有 verb；resource 匹配逻辑封装在 resourceCovers 中。
 	verbCovers := r.Verb == "*" || r.Verb == action.GetVerb()
 	if !verbCovers {
 		return false
@@ -1021,6 +1061,8 @@ func (r *SimpleProxyReactor) React(action Action) (bool, restclient.ResponseWrap
 	return r.Reaction(action)
 }
 
+// resourceCovers 判断 reactor 的 resource 声明是否匹配 action。
+// 支持 "resource/subresource" 形式，也支持 "*" 通配。
 func resourceCovers(resource string, action Action) bool {
 	if resource == "*" {
 		return true

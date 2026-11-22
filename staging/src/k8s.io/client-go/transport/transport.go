@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package transport 构建 client-go 使用的 HTTP 传输层：
+// TLS 配置、证书加载与缓存，以及认证/调试等 RoundTripper 包装。
 package transport
 
 import (
@@ -39,6 +41,7 @@ func New(config *Config) (http.RoundTripper, error) {
 	metrics.EnsureRegistered()
 	// Set transport level security
 	if config.Transport != nil && (config.HasCA() || config.HasCertAuth() || config.HasCertCallback() || config.TLS.Insecure) {
+		// 自定义 transport 会绕过 TLS 配置，二者同时出现说明调用方意图冲突。
 		return nil, fmt.Errorf("using a custom transport with TLS certificate options or the insecure flag is not allowed")
 	}
 
@@ -54,6 +57,7 @@ func New(config *Config) (http.RoundTripper, error) {
 	if config.Transport != nil {
 		rt = config.Transport
 	} else {
+		// tlsCache 复用相同 TLS 配置的底层连接，避免连接数随客户端数量膨胀。
 		rt, err = tlsCache.get(config)
 		if err != nil {
 			return nil, err
@@ -63,6 +67,7 @@ func New(config *Config) (http.RoundTripper, error) {
 	return HTTPWrappersForConfig(config, rt)
 }
 
+// isValidHolders 校验 holder 非 nil 时其函数字段也已设置，避免运行时空指针。
 func isValidHolders(config *Config) bool {
 	if config.TLS.GetCertHolder != nil && config.TLS.GetCertHolder.GetCert == nil {
 		return false
@@ -78,12 +83,14 @@ func isValidHolders(config *Config) bool {
 // TLSConfigFor returns a tls.Config that will provide the transport level security defined
 // by the provided Config. Will return nil if no transport level security is requested.
 func TLSConfigFor(c *Config) (*tls.Config, error) {
+	// 未请求任何 TLS 能力时返回 nil，让调用方使用默认 transport。
 	if !(c.HasCA() || c.HasCertAuth() || c.HasCertCallback() || c.TLS.Insecure || len(c.TLS.ServerName) > 0 || len(c.TLS.NextProtos) > 0) {
 		return nil, nil
 	}
 	if c.HasCA() && c.TLS.Insecure {
 		return nil, fmt.Errorf("specifying a root certificates file with the insecure flag is not allowed")
 	}
+	// 把文件内容读入内存，后续 TLS 配置只依赖 Data 字段。
 	if err := loadTLSFiles(c); err != nil {
 		return nil, err
 	}
@@ -146,6 +153,7 @@ func TLSConfigFor(c *Config) (*tls.Config, error) {
 
 	var dynamicCertLoader func() (*tls.Certificate, error)
 	if c.TLS.ReloadTLSFiles {
+		// 仅当证书/私钥都来自文件时才启用热加载；Data 形式无法感知文件变化。
 		dynamicCertLoader = cachingCertificateLoader(c.TLS.CertFile, c.TLS.KeyFile)
 	}
 
@@ -213,6 +221,8 @@ func TLSConfigFor(c *Config) (*tls.Config, error) {
 // loadTLSFiles copies the data from the CertFile, KeyFile, and CAFile fields into the CertData,
 // KeyData, and CAFile fields, or returns an error. If no error is returned, all three fields are
 // either populated or were empty to start.
+//
+// 同时决定是否启用文件热加载：只有“纯文件来源”才安全，因为 Data 与 File 混用时无法判断优先级。
 func loadTLSFiles(c *Config) error {
 	// Check that we are purely loading CA from file
 	if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.ClientsAllowCARotation) {
@@ -261,6 +271,7 @@ func dataFromSliceOrFile(data []byte, file string) ([]byte, error) {
 
 // rootCertPool returns nil if caData is empty.  When passed along, this will mean "use system CAs".
 // When caData is not empty, it will be the ONLY information used in the CertPool.
+// 中文：语义是“要么用系统根证书，要么只用给定 CA”，不支持二者并存。
 func rootCertPool(caData []byte) (*x509.CertPool, error) {
 	// What we really want is a copy of x509.systemRootsPool, but that isn't exposed.  It's difficult to build (see the go
 	// code for a look at the platform specific insanity), so we'll use the fact that RootCAs == nil gives us the system values
@@ -284,6 +295,7 @@ func rootCertPool(caData []byte) (*x509.CertPool, error) {
 
 // createErrorParsingCAData ALWAYS returns an error.  We call it because know we failed to AppendCertsFromPEM
 // but we don't know the specific error because that API is just true/false
+// 中文：逐个 PEM block 解析，以给出比 “AppendCertsFromPEM=false” 更可诊断的错误。
 func createErrorParsingCAData(pemCerts []byte) error {
 	for len(pemCerts) > 0 {
 		var block *pem.Block
@@ -345,6 +357,7 @@ func ContextCanceller(ctx context.Context, err error) WrapperFunc {
 	}
 }
 
+// contextCanceller 在每次 RoundTrip 前检查 context，已取消则不再发起请求。
 type contextCanceller struct {
 	ctx context.Context
 	rt  http.RoundTripper
@@ -360,6 +373,7 @@ func (b *contextCanceller) RoundTrip(req *http.Request) (*http.Response, error) 
 	}
 }
 
+// tryCancelRequest 递归剥开 RoundTripper 包装器，找到实现了 CancelRequest 的底层 transport。
 func tryCancelRequest(rt http.RoundTripper, req *http.Request) {
 	type canceler interface {
 		CancelRequest(*http.Request)
@@ -374,6 +388,7 @@ func tryCancelRequest(rt http.RoundTripper, req *http.Request) {
 	}
 }
 
+// certificateCacheEntry 缓存一次证书加载的结果与加载时间。
 type certificateCacheEntry struct {
 	cert  *tls.Certificate
 	err   error
@@ -385,6 +400,7 @@ func (c *certificateCacheEntry) isStale() bool {
 	return time.Since(c.birth) > time.Second
 }
 
+// newCertificateCacheEntry 立即读取证书与私钥；错误也缓存，避免坏文件导致每秒重试风暴。
 func newCertificateCacheEntry(certFile, keyFile string) certificateCacheEntry {
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	return certificateCacheEntry{cert: &cert, err: err, birth: time.Now()}

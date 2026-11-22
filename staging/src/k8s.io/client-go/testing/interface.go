@@ -22,6 +22,8 @@ import (
 	restclient "k8s.io/client-go/rest"
 )
 
+// FakeClient 是各类 fake 客户端（clientset、metadata、dynamic 等）的公共行为集合。
+// reactor 链按顺序匹配，Prepend 的方法优先于 Add 的方法执行。
 type FakeClient interface {
 	// Tracker gives access to the ObjectTracker internal to the fake client.
 	Tracker() ObjectTracker
@@ -58,9 +60,11 @@ type FakeClient interface {
 	InvokesProxy(action Action) restclient.ResponseWrapper
 
 	// ClearActions clears the history of actions called on the fake client.
+	// 只清空记录，不影响 tracker 中的对象或 reactor。
 	ClearActions()
 
 	// Actions returns a chronologically ordered slice fake actions called on the
 	// fake client.
+	// 返回副本语义的实现应保证调用方修改切片不会影响内部记录。
 	Actions() []Action
 }

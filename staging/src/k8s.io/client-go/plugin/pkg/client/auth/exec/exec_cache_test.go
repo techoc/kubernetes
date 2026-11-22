@@ -36,6 +36,10 @@ import (
 //   - these rest configs are used to create distinct clientsets, then
 //
 // the underlying TLS config is shared between those clientsets.
+//
+// 缓存键由 exec 插件命令与参数等配置内容派生，而非 *rest.Config 指针：
+// 因此配置内容相同的客户端复用同一个 TLS 配置（共享证书与刷新状态），
+// 参数不同的客户端则必须各自独立，避免把 A 的凭据用于 B。
 func TestExecTLSCache(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
@@ -50,6 +54,7 @@ func TestExecTLSCache(t *testing.T) {
 	}
 	client1 := clientset.NewForConfigOrDie(config1)
 
+	// config2 与 config1 内容完全相同，但指针不同；预期共享 TLS 配置。
 	config2 := &rest.Config{
 		Host: "https://localhost",
 		ExecProvider: &clientcmdapi.ExecConfig{
@@ -60,6 +65,7 @@ func TestExecTLSCache(t *testing.T) {
 	}
 	client2 := clientset.NewForConfigOrDie(config2)
 
+	// config3 的 Args 不同，缓存键应不同，不得复用 config1/2 的 TLS 配置。
 	config3 := &rest.Config{
 		Host: "https://localhost",
 		ExecProvider: &clientcmdapi.ExecConfig{
@@ -71,6 +77,7 @@ func TestExecTLSCache(t *testing.T) {
 	}
 	client3 := clientset.NewForConfigOrDie(config3)
 
+	// 分别发起一次请求，迫使各客户端完成 TLS 配置的惰性构建。
 	_, _ = client1.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	_, _ = client2.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	_, _ = client3.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
@@ -100,6 +107,7 @@ func TestExecTLSCache(t *testing.T) {
 		t.Fatal("expected the same TLS config for matching exec config via rest config")
 	}
 
+	// 指针比较即可：缓存命中时返回的是同一个 *tls.Config 实例。
 	if tlsConfig1 == tlsConfig3 {
 		t.Fatal("expected different TLS config for non-matching exec config via rest config")
 	}

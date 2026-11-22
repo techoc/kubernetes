@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestRuntimeObj 是用于测试的最小对象：只有 TypeMeta/ObjectMeta。
+// DeepCopyObject 故意 panic，确保 GetReference 不会意外触发深拷贝。
 type TestRuntimeObj struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
@@ -33,6 +35,8 @@ func (o *TestRuntimeObj) DeepCopyObject() runtime.Object {
 	panic("die")
 }
 
+// TestGetReferenceRefVersion 验证 Reference.APIVersion 由 scheme 中注册的 GV 决定，
+// 核心组（空 group）只输出版本号，命名组输出 group/version。
 func TestGetReferenceRefVersion(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -73,6 +77,7 @@ func TestGetReferenceRefVersion(t *testing.T) {
 	}
 }
 
+// TestGetReferenceNilScheme 验证没有 scheme 时无法推断 GVK，应返回明确错误。
 func TestGetReferenceNilScheme(t *testing.T) {
 	input := &TestRuntimeObj{
 		ObjectMeta: metav1.ObjectMeta{},
@@ -86,6 +91,8 @@ func TestGetReferenceNilScheme(t *testing.T) {
 	}
 }
 
+// TestGetReferenceNilSchemeWithPopulatedGVK 验证对象自带 TypeMeta 时，
+// 即使没有 scheme 也能构造 Reference（这是 scheme 为 nil 时唯一可用的路径）。
 func TestGetReferenceNilSchemeWithPopulatedGVK(t *testing.T) {
 	input := &TestRuntimeObj{
 		TypeMeta: metav1.TypeMeta{

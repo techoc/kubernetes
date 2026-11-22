@@ -45,6 +45,9 @@ import (
 //
 // This runs in a synctest bubble, therefore time is virtual.
 func TestListAndWatch(t *testing.T) { synctest.Test(t, testListAndWatch) }
+
+// testListAndWatch 的实际用例体；外层用 synctest 提供虚拟时间，
+// 使 WaitForCacheSync 等依赖时间的逻辑无需真实等待。
 func testListAndWatch(t *testing.T) {
 	logger, ctx := ktesting.NewTestContext(t)
 	cm := &v1.ConfigMap{
@@ -77,6 +80,7 @@ func testListAndWatch(t *testing.T) {
 					t.Errorf("Expected ListOptions ResourceVersion 2, got %q", options.ResourceVersion)
 				}
 				logger.Info("Delaying Watch...")
+				// 人为延迟 Watch 启动，制造“List 之后、Watch 之前”发生写入的窗口。
 				<-createDone
 				logger.Info("Continuing Watch...")
 				return client.CoreV1().ConfigMaps("").Watch(context.Background(), options)
@@ -111,6 +115,8 @@ func testListAndWatch(t *testing.T) {
 			Namespace: "default",
 		},
 	}
+	// 该写入发生在 List 完成之后：fake Watch 必须依据 resourceVersion
+	// 只回放这一条新对象，而不能把 cm1 再发一次。
 	_, err = client.CoreV1().ConfigMaps(cm.Namespace).Create(ctx, cm, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Unexpected error creating ConfigMap: %v", err)

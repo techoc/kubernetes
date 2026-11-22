@@ -27,6 +27,8 @@ import (
 )
 
 // Test public interface
+//
+// doTestStore 是所有 Store 实现共享的一致性测试：增删改查、List 与 Replace 语义。
 func doTestStore(t *testing.T, store Store) {
 	mkObj := func(id string, val string) testStoreObject {
 		return testStoreObject{id: id, val: val}
@@ -71,6 +73,7 @@ func doTestStore(t *testing.T, store Store) {
 	}
 
 	// Test Replace.
+	// Replace 会整体替换内容，之前的 a/c/e 必须全部消失。
 	store.Replace([]interface{}{
 		mkObj("foo", "foo"),
 		mkObj("bar", "bar"),
@@ -92,6 +95,7 @@ func doTestStore(t *testing.T, store Store) {
 
 // Test public interface
 func doTestIndex(t *testing.T, indexer Indexer) {
+	// 期望的索引：val 作为索引键，映射到拥有该 val 的对象 id 集合。
 	mkObj := func(id string, val string) testStoreObject {
 		return testStoreObject{id: id, val: val}
 	}
@@ -142,10 +146,12 @@ type testStoreObject struct {
 	val string
 }
 
+// TestCache 验证普通 Store 的基本语义。
 func TestCache(t *testing.T) {
 	doTestStore(t, NewStore(testStoreKeyFunc))
 }
 
+// TestCacheWithTransformer 验证 WithTransformer 注入的转换函数确实在写入时被调用。
 func TestCacheWithTransformer(t *testing.T) {
 	transformerCalled := &atomic.Bool{}
 	doTestStore(t, NewStore(testStoreKeyFunc, WithTransformer(func(i interface{}) (interface{}, error) {
@@ -161,19 +167,23 @@ func TestCacheWithTransformer(t *testing.T) {
 	}
 }
 
+// TestFIFOCache 验证 FIFO 同样满足 Store 契约（额外的队列行为由其他测试覆盖）。
 func TestFIFOCache(t *testing.T) {
 	doTestStore(t, NewFIFO(testStoreKeyFunc))
 }
 
+// TestUndeltaStore 验证 UndeltaStore 在保持 Store 语义的同时不会因未注册回调而出错。
 func TestUndeltaStore(t *testing.T) {
 	nop := func([]interface{}) {}
 	doTestStore(t, NewUndeltaStore(nop, testStoreKeyFunc))
 }
 
+// TestIndex 验证 Indexer 按索引函数返回正确的结果集合。
 func TestIndex(t *testing.T) {
 	doTestIndex(t, NewIndexer(testStoreKeyFunc, testStoreIndexers()))
 }
 
+// TestKeyError 验证 KeyError 支持 errors.Unwrap/Is，嵌套包装也能正确匹配。
 func TestKeyError(t *testing.T) {
 	obj := 100
 	err := errors.New("error")
@@ -189,6 +199,8 @@ func TestKeyError(t *testing.T) {
 	}
 }
 
+// TestCacheTransactionShouldIndexErrors 验证事务式写入部分失败时，
+// SuccessfulIndices 准确记录成功的下标，便于调用方对失败项重试。
 func TestCacheTransactionShouldIndexErrors(t *testing.T) {
 	successObj1 := 1
 	successObj2 := 2
@@ -248,6 +260,8 @@ func TestCacheTransactionShouldIndexErrors(t *testing.T) {
 	}
 }
 
+// TestWithStoreMetricsDefaulting 验证传入 nil 的 metrics provider 时会回退到默认实现，
+// 而不是留下 nil 导致后续写入 panic。
 func TestWithStoreMetricsDefaulting(t *testing.T) {
 	name, err := NewInformerName("test-informer")
 	if err != nil {

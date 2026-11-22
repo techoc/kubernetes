@@ -23,6 +23,8 @@ import (
 	"testing"
 )
 
+// TestUpdateSymlinkExistingFileError 验证目标位置已存在普通文件（而非符号
+// 链接）时 updateSymlink 必须报错，避免覆盖用户数据。
 func TestUpdateSymlinkExistingFileError(t *testing.T) {
 	dir, err := os.MkdirTemp("", "k8s-test-update-symlink")
 	if err != nil {
@@ -47,6 +49,8 @@ func TestUpdateSymlinkExistingFileError(t *testing.T) {
 	}
 }
 
+// TestUpdateSymlinkNewFileNotExist 验证符号链接的创建与替换：
+// 首次创建成功；指向不存在的文件时应失败。
 func TestUpdateSymlinkNewFileNotExist(t *testing.T) {
 	dir, err := os.MkdirTemp("", "k8s-test-update-symlink")
 	if err != nil {
@@ -87,6 +91,7 @@ func TestUpdateSymlinkNewFileNotExist(t *testing.T) {
 	}
 }
 
+// TestUpdateSymlinkNoSymlink 验证当前不存在 *-current.pem 时会新建符号链接。
 func TestUpdateSymlinkNoSymlink(t *testing.T) {
 	dir, err := os.MkdirTemp("", "k8s-test-update-symlink")
 	if err != nil {
@@ -121,6 +126,8 @@ func TestUpdateSymlinkNoSymlink(t *testing.T) {
 	}
 }
 
+// TestUpdateSymlinkReplaceExistingSymlink 验证已有符号链接会被原子地替换为
+// 指向新文件，且旧文件仍然保留（便于回滚/排查）。
 func TestUpdateSymlinkReplaceExistingSymlink(t *testing.T) {
 	prefix := "kubelet"
 	dir, err := os.MkdirTemp("", "k8s-test-update-symlink")
@@ -176,6 +183,8 @@ func TestUpdateSymlinkReplaceExistingSymlink(t *testing.T) {
 	}
 }
 
+// TestLoadFile 验证 loadFile 不依赖 PEM 块顺序：证书在前或在后都能正确
+// 加载出证书与私钥，并填充 Leaf。
 func TestLoadFile(t *testing.T) {
 	dir, err := os.MkdirTemp("", "k8s-test-load-cert-key-blocks")
 	if err != nil {
@@ -215,6 +224,8 @@ func TestLoadFile(t *testing.T) {
 	}
 }
 
+// TestUpdateNoRotation 验证写入与当前证书相同的内容时，Update 仍返回
+// 合法证书（不触发轮转，但也不报错）。
 func TestUpdateNoRotation(t *testing.T) {
 	prefix := "kubelet-server"
 	dir, err := os.MkdirTemp("", "k8s-test-certstore-current")
@@ -250,6 +261,7 @@ func TestUpdateNoRotation(t *testing.T) {
 	}
 }
 
+// TestUpdateRotation 验证以新证书/私钥调用 Update 能成功轮转。
 func TestUpdateRotation(t *testing.T) {
 	prefix := "kubelet-server"
 	dir, err := os.MkdirTemp("", "k8s-test-certstore-current")
@@ -285,6 +297,8 @@ func TestUpdateRotation(t *testing.T) {
 	}
 }
 
+// TestUpdateTwoCerts 验证 PEM 中包含证书链（多张证书）时，Update 返回的
+// tls.Certificate 保留全部证书。
 func TestUpdateTwoCerts(t *testing.T) {
 	prefix := "kubelet-server"
 	dir, err := os.MkdirTemp("", "k8s-test-certstore-current")
@@ -323,6 +337,8 @@ func TestUpdateTwoCerts(t *testing.T) {
 	}
 }
 
+// TestUpdateWithBadCertKeyData 验证非法证书数据会导致 Update 返回错误且
+// 不返回证书，同时不应覆盖磁盘上的有效文件。
 func TestUpdateWithBadCertKeyData(t *testing.T) {
 	prefix := "kubelet-server"
 	dir, err := os.MkdirTemp("", "k8s-test-certstore-current")
@@ -358,6 +374,8 @@ func TestUpdateWithBadCertKeyData(t *testing.T) {
 	}
 }
 
+// TestCurrentPairFile 验证 Current 能通过 *-current.pem 符号链接读取
+// 合并的证书/私钥文件。
 func TestCurrentPairFile(t *testing.T) {
 	prefix := "kubelet-server"
 	dir, err := os.MkdirTemp("", "k8s-test-certstore-current")
@@ -370,6 +388,7 @@ func TestCurrentPairFile(t *testing.T) {
 		}
 	}()
 	pairFile := filepath.Join(dir, prefix+"-pair.pem")
+	// 合并 cert 与 key 为一个 PEM 文件。
 	data := append(storeCertData.certificatePEM, []byte("\n")...)
 	data = append(data, storeCertData.keyPEM...)
 	if err := os.WriteFile(pairFile, data, 0600); err != nil {
@@ -398,6 +417,8 @@ func TestCurrentPairFile(t *testing.T) {
 	}
 }
 
+// TestCurrentCertKeyFiles 验证当前证书以独立的 cert/key 文件形式存放时，
+// Current 能正确加载。
 func TestCurrentCertKeyFiles(t *testing.T) {
 	prefix := "kubelet-server"
 	dir, err := os.MkdirTemp("", "k8s-test-certstore-current")
@@ -436,6 +457,8 @@ func TestCurrentCertKeyFiles(t *testing.T) {
 	}
 }
 
+// TestCurrentTwoCerts 验证当前证书为证书链（两张证书）时，Current 返回
+// 完整的证书链。
 func TestCurrentTwoCerts(t *testing.T) {
 	prefix := "kubelet-server"
 	dir, err := os.MkdirTemp("", "k8s-test-certstore-current")
@@ -477,6 +500,8 @@ func TestCurrentTwoCerts(t *testing.T) {
 	}
 }
 
+// TestCurrentNoFiles 验证没有任何证书文件时，Current 返回 *NoCertKeyError，
+// 调用方可据此区分“尚未签发”与真实 IO 错误。
 func TestCurrentNoFiles(t *testing.T) {
 	dir, err := os.MkdirTemp("", "k8s-test-certstore-current")
 	if err != nil {

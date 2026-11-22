@@ -50,6 +50,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// storeCertData 是已签发且仍在有效期内的证书夹具，模拟 store 中已有的证书。
 var storeCertData = newCertificateData(`-----BEGIN CERTIFICATE-----
 MIICRzCCAfGgAwIBAgIJALMb7ecMIk3MMA0GCSqGSIb3DQEBCwUAMH4xCzAJBgNV
 BAYTAkdCMQ8wDQYDVQQIDAZMb25kb24xDzANBgNVBAcMBkxvbmRvbjEYMBYGA1UE
@@ -74,6 +75,8 @@ iQIgZX08DA8VfvcA5/Xj1Zjdey9FVY6POLXen6RPiabE97UCICp6eUW7ht+2jjar
 e35EltCRCjoejRHTuN9TC0uCoVipAiAXaJIx/Q47vGwiw6Y8KXsNU6y54gTbOSxX
 54LzHNk/+Q==
 -----END RSA PRIVATE KEY-----`)
+
+// storeTwoCertsData 包含两条证书链，用于覆盖多证书轮换/更新场景。
 var storeTwoCertsData = newCertificateData(`-----BEGIN CERTIFICATE-----
 MIIDfTCCAyegAwIBAgIUFBl4gUoqZDP/wUJDn37/VJ9upD0wDQYJKoZIhvcNAQEF
 BQAwfjELMAkGA1UEBhMCR0IxDzANBgNVBAgMBkxvbmRvbjEPMA0GA1UEBwwGTG9u
@@ -136,6 +139,8 @@ ju42DQKBgAPtbB/ON3+GtnSTHBSY6HwZvGJrBDicrXmr1U9zuA8yYxv8qaRXZkpn
 2cpLLvO2MJutwXMYf+T3x1ZCFMkE56pOswSTGrCQWRl3hOiJayLHQyAOYHPnYeZB
 78iRJPUZ0biEQUZQ62GBxWkcB0qkxa9m759h/TvLwvV0RrO5Uzd0
 -----END RSA PRIVATE KEY-----`)
+
+// expiredStoreCertData 是已过期证书，用来触发启动时的强制轮换。
 var expiredStoreCertData = newCertificateData(`-----BEGIN CERTIFICATE-----
 MIIBFzCBwgIJALhygXnxXmN1MA0GCSqGSIb3DQEBCwUAMBMxETAPBgNVBAMMCGhv
 c3QtMTIzMB4XDTE4MTEwNDIzNTc1NFoXDTE4MTEwNTIzNTc1NFowEzERMA8GA1UE
@@ -153,6 +158,8 @@ iQIgZX08DA8VfvcA5/Xj1Zjdey9FVY6POLXen6RPiabE97UCICp6eUW7ht+2jjar
 e35EltCRCjoejRHTuN9TC0uCoVipAiAXaJIx/Q47vGwiw6Y8KXsNU6y54gTbOSxX
 54LzHNk/+Q==
 -----END RSA PRIVATE KEY-----`)
+
+// bootstrapCertData 模拟 bootstrap 证书：权限受限，仅用于申请正式证书。
 var bootstrapCertData = newCertificateData(
 	`-----BEGIN CERTIFICATE-----
 MIICRzCCAfGgAwIBAgIJANXr+UzRFq4TMA0GCSqGSIb3DQEBCwUAMH4xCzAJBgNV
@@ -178,6 +185,8 @@ wQIgYV/tmQJeIh91q3wBepFQOClFykG8CTMoDUol/YyNqUkCIHfp6Rr7fGL3JIMq
 QQgf9DCK8SPZqq8DYXjdan0kKBJBAiEAyDb+07o2gpggo8BYUKSaiRCiyXfaq87f
 eVqgpBq/QN4=
 -----END RSA PRIVATE KEY-----`)
+
+// apiServerCertData 是 fake CSR API 返回的"已签发"证书。
 var apiServerCertData = newCertificateData(
 	`-----BEGIN CERTIFICATE-----
 MIICRzCCAfGgAwIBAgIJAIydTIADd+yqMA0GCSqGSIb3DQEBCwUAMH4xCzAJBgNV
@@ -204,12 +213,16 @@ bDQT1r8Q3Gx+h9LRqQeHgPBQ3F5ylqqBAiBaJ0hkYvrIdWxNlcLqD3065bJpHQ4S
 WQkuZUQN1M/Xvg==
 -----END RSA PRIVATE KEY-----`)
 
+// certificateData 把 PEM 原文、私钥和解析后的 tls.Certificate 放在一起，
+// 方便 fake store 在更新时找到匹配的私钥。
 type certificateData struct {
 	keyPEM         []byte
 	certificatePEM []byte
 	certificate    *tls.Certificate
 }
 
+// newCertificateData 解析证书/私钥对并填充 Leaf；夹具非法时直接 panic，
+// 因为测试初始化失败不应被误认为被测逻辑的错误。
 func newCertificateData(certificatePEM string, keyPEM string) *certificateData {
 	certificate, err := tls.X509KeyPair([]byte(certificatePEM), []byte(keyPEM))
 	if err != nil {
@@ -227,6 +240,7 @@ func newCertificateData(certificatePEM string, keyPEM string) *certificateData {
 	}
 }
 
+// TestNewManagerNoRotation 验证 store 中已有有效证书时 NewManager 不触发轮换。
 func TestNewManagerNoRotation(t *testing.T) {
 	store := &fakeStore{
 		cert: storeCertData.certificate,
@@ -240,22 +254,28 @@ func TestNewManagerNoRotation(t *testing.T) {
 	}
 }
 
+// metricMock 记录指标调用次数和最后一次值，用于断言轮换耗时指标。
 type metricMock struct {
 	calls     int
 	lastValue float64
 }
 
+// Set 实现 gauge 风格指标。
 func (g *metricMock) Set(v float64) {
 	g.calls++
 	g.lastValue = v
 }
 
+// Observe 实现 histogram/summary 风格指标。
 func (g *metricMock) Observe(v float64) {
 	g.calls++
 	g.lastValue = v
 }
 
+// TestSetRotationDeadline 验证 nextRotationDeadline 的取值：
+// 以证书有效期的 70% 处为基准（jitter 被固定），不同剩余寿命下结果一致。
 func TestSetRotationDeadline(t *testing.T) {
+	// 测试结束恢复全局 jitter 函数，避免影响其他用例。
 	defer func(original func(float64) time.Duration) { jitteryDuration = original }(jitteryDuration)
 
 	now := time.Now()
@@ -290,6 +310,7 @@ func TestSetRotationDeadline(t *testing.T) {
 				ctx:         ctx,
 			}
 			jitteryDuration = func(float64) time.Duration { return time.Duration(float64(tc.notAfter.Sub(tc.notBefore)) * 0.7) }
+			// 期望轮换点固定在有效期的 70%，而不是当前时间。
 			lowerBound := tc.notBefore.Add(time.Duration(float64(tc.notAfter.Sub(tc.notBefore)) * 0.7))
 
 			deadline := m.nextRotationDeadline(logger)
@@ -305,6 +326,8 @@ func TestSetRotationDeadline(t *testing.T) {
 	}
 }
 
+// TestCertSatisfiesTemplate 验证证书是否满足模板要求：
+// 证书必须覆盖模板中的全部 CN/组织/DNS/IP；证书多出的条目则允许。
 func TestCertSatisfiesTemplate(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -325,6 +348,7 @@ func TestCertSatisfiesTemplate(t *testing.T) {
 			shouldSatisfy: false,
 		},
 		{
+			// 模板为空时无需轮换：现有证书被视为满足要求。
 			name: "No template",
 			cert: &x509.Certificate{
 				Subject: pkix.Name{
@@ -349,6 +373,7 @@ func TestCertSatisfiesTemplate(t *testing.T) {
 			shouldSatisfy: false,
 		},
 		{
+			// 证书缺少模板要求的组织，视为不满足。
 			name: "Missing orgs in certificate",
 			cert: &x509.Certificate{
 				Subject: pkix.Name{
@@ -363,6 +388,7 @@ func TestCertSatisfiesTemplate(t *testing.T) {
 			shouldSatisfy: false,
 		},
 		{
+			// 证书多出组织不影响满足性。
 			name: "Extra orgs in certificate",
 			cert: &x509.Certificate{
 				Subject: pkix.Name{
@@ -377,6 +403,7 @@ func TestCertSatisfiesTemplate(t *testing.T) {
 			shouldSatisfy: true,
 		},
 		{
+			// DNS 名称与组织同理：缺一不可，多则无妨。
 			name: "Missing DNS names in certificate",
 			cert: &x509.Certificate{
 				Subject:  pkix.Name{},
@@ -401,6 +428,7 @@ func TestCertSatisfiesTemplate(t *testing.T) {
 			shouldSatisfy: true,
 		},
 		{
+			// IP SAN 同样按"必须包含"判断。
 			name: "Missing IP addresses in certificate",
 			cert: &x509.Certificate{
 				Subject:     pkix.Name{},
@@ -425,6 +453,7 @@ func TestCertSatisfiesTemplate(t *testing.T) {
 			shouldSatisfy: true,
 		},
 		{
+			// CN、组织、DNS、IP 全部匹配。
 			name: "Matching certificate",
 			cert: &x509.Certificate{
 				Subject: pkix.Name{
@@ -472,6 +501,8 @@ func TestCertSatisfiesTemplate(t *testing.T) {
 	}
 }
 
+// TestRotateCertCreateCSRError 验证创建 CSR 失败时 rotateCerts 返回 false 且不报错：
+// 失败应留待下一轮重试，而不是让 manager 退出。
 func TestRotateCertCreateCSRError(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	now := time.Now()
@@ -497,6 +528,8 @@ func TestRotateCertCreateCSRError(t *testing.T) {
 	}
 }
 
+// TestRotateCertWaitingForResultError 验证等待 CSR 结果失败（watch/list 错误）时
+// 同样只返回失败，由调用方决定后续重试。
 func TestRotateCertWaitingForResultError(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	now := time.Now()
@@ -516,6 +549,7 @@ func TestRotateCertWaitingForResultError(t *testing.T) {
 	}
 
 	defer func(t time.Duration) { certificateWaitTimeout = t }(certificateWaitTimeout)
+	// 缩短等待超时，避免测试真的等待默认时长。
 	certificateWaitTimeout = 1 * time.Millisecond
 	if success, err := m.rotateCerts(ctx); success {
 		t.Errorf("Got success from 'rotateCerts', wanted failure.")
@@ -524,6 +558,8 @@ func TestRotateCertWaitingForResultError(t *testing.T) {
 	}
 }
 
+// TestNewManagerBootstrap 验证只有 bootstrap 证书时会标记 forceRotation，
+// 以便启动后立即申请正式证书。
 func TestNewManagerBootstrap(t *testing.T) {
 	store := &fakeStore{}
 
@@ -551,6 +587,8 @@ func TestNewManagerBootstrap(t *testing.T) {
 	}
 }
 
+// TestNewManagerNoBootstrap 验证 store 已有有效证书时不会强制轮换，
+// 即使同时提供了 bootstrap 证书。
 func TestNewManagerNoBootstrap(t *testing.T) {
 	now := time.Now()
 	cert, err := tls.X509KeyPair(storeCertData.certificatePEM, storeCertData.keyPEM)
@@ -591,6 +629,8 @@ func TestNewManagerNoBootstrap(t *testing.T) {
 	}
 }
 
+// TestGetCurrentCertificateOrBootstrap 验证证书来源的优先级：
+// store 中的证书优先；都没有时返回 nil 并标记需要轮换。
 func TestGetCurrentCertificateOrBootstrap(t *testing.T) {
 	testCases := []struct {
 		description          string
@@ -602,6 +642,7 @@ func TestGetCurrentCertificateOrBootstrap(t *testing.T) {
 		expectedErrMsg       string
 	}{
 		{
+			// store 有证书时直接使用，不触发轮换。
 			"return cert from store",
 			storeCertData.certificate,
 			nil,
@@ -611,6 +652,7 @@ func TestGetCurrentCertificateOrBootstrap(t *testing.T) {
 			"",
 		},
 		{
+			// 无证书也无 bootstrap：返回 nil + shouldRotate，由 manager 首次轮换申请。
 			"no cert in store and no bootstrap cert",
 			nil,
 			nil,
@@ -658,6 +700,8 @@ func TestGetCurrentCertificateOrBootstrap(t *testing.T) {
 	}
 }
 
+// TestInitializeCertificateSigningRequestClient 覆盖 CSR 客户端的初始化与轮换：
+// 包括 v1/v1beta1 API 缺失、bootstrap 证书、store 证书有效/过期等组合。
 func TestInitializeCertificateSigningRequestClient(t *testing.T) {
 	var nilCertificate = &certificateData{}
 	testCases := []struct {
@@ -803,6 +847,8 @@ func TestInitializeCertificateSigningRequestClient(t *testing.T) {
 	}
 }
 
+// TestInitializeOtherRESTClients 验证不带特定 SignerName 的 manager 也能
+// 从 store/bootstrap 初始化，并在需要时轮换证书。
 func TestInitializeOtherRESTClients(t *testing.T) {
 	var nilCertificate = &certificateData{}
 	testCases := []struct {
@@ -908,7 +954,11 @@ func TestInitializeOtherRESTClients(t *testing.T) {
 	}
 }
 
+// TestServerHealth 验证 ServerHealthy 的判定：
+// 只有明确属于客户端问题的错误（未授权、非意外的 404）才保持健康；
+// 通用错误或服务端错误视为不健康。
 func TestServerHealth(t *testing.T) {
+	// certs 把每个场景用到的证书夹具打包，减少表驱动用例的重复字段。
 	type certs struct {
 		storeCert               *certificateData
 		bootstrapCert           *certificateData
@@ -944,11 +994,13 @@ func TestServerHealth(t *testing.T) {
 		expectHealthy    bool
 	}{
 		{
+			// 一切正常：轮换成功，manager 健康。
 			description:   "Current certificate, bootstrap certificate",
 			certs:         updatedCerts,
 			expectHealthy: true,
 		},
 		{
+			// 通用创建错误：轮换失败，且无法判断是客户端还是服务端问题，按不健康处理。
 			description: "Generic error on create",
 			certs:       currentCerts,
 
@@ -956,6 +1008,7 @@ func TestServerHealth(t *testing.T) {
 			expectRotateFail: true,
 		},
 		{
+			// 未授权说明凭据需要人工处理，但 apiserver 本身可达，保持健康。
 			description: "Unauthorized error on create",
 			certs:       currentCerts,
 
@@ -1057,6 +1110,7 @@ func TestServerHealth(t *testing.T) {
 	}
 }
 
+// TestRotationLogsDuration 验证轮换成功后把证书已存活时长记录到指标中。
 func TestRotationLogsDuration(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	h := metricMock{}
@@ -1093,6 +1147,7 @@ func TestRotationLogsDuration(t *testing.T) {
 
 }
 
+// TestStop 验证 manager 在 Stop 后退出，并在此之前完成首次证书获取。
 func TestStop(t *testing.T) {
 	// No certificate yet, will be added while manager runs.
 	store := &fakeStore{}
@@ -1134,6 +1189,8 @@ func TestStop(t *testing.T) {
 	}, 10*time.Second, time.Microsecond, "current certificate")
 }
 
+// TestContext 验证通过 Config.Ctx 控制 manager 生命周期，
+// 并确认日志使用调用方传入的上下文 logger。
 func TestContext(t *testing.T) {
 	logger := ktesting.NewLogger(t, ktesting.NewConfig(
 		ktesting.BufferLogs(true),
@@ -1185,6 +1242,7 @@ func TestContext(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return m.Current() != nil
 	}, 10*time.Second, time.Microsecond, "current certificate")
+	// 上下文日志应出现在传入的 buffer 中，证明 logger 被正确传递。
 	require.Contains(t, logger.GetSink().(ktesting.Underlier).GetBuffer().String(), "certificate: Rotating certificates", "contextual log output from manager.rotateCerts")
 }
 
@@ -1267,6 +1325,8 @@ eaVq8eqxqzGSxwanMrwbD/1PQ97kNdi53No=
 -----END PRIVATE KEY-----
 `
 
+// TestGenerateKeyConfig 验证 generateCSR 使用的私钥生成策略：
+// 未配置时回退到全局默认函数，配置后使用自定义 key，错误原样返回。
 func TestGenerateKeyConfig(t *testing.T) {
 	parsedECKey1 := parsePEMKey(t, testGenerateECKeyPEM1)
 	parsedECKey2 := parsePEMKey(t, testGenerateECKeyPEM2)
@@ -1333,6 +1393,7 @@ func TestGenerateKeyConfig(t *testing.T) {
 	}
 }
 
+// TestValidateKeyStrength 验证弱密钥（RSA<2048、ECDSA<P-256）被拒绝。
 func TestValidateKeyStrength(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -1372,6 +1433,7 @@ func TestValidateKeyStrength(t *testing.T) {
 	}
 }
 
+// parsePEMKey 解析测试用私钥夹具；失败直接终止测试。
 func parsePEMKey(t *testing.T, pem string) crypto.Signer {
 	t.Helper()
 
@@ -1382,6 +1444,7 @@ func parsePEMKey(t *testing.T, pem string) crypto.Signer {
 	return k.(crypto.Signer)
 }
 
+// fakeClientFailureType 控制 fake CSR 客户端注入哪类故障。
 type fakeClientFailureType int
 
 const (
@@ -1391,6 +1454,7 @@ const (
 	certificateSigningRequestDenied
 )
 
+// fakeClient 描述 fake clientset 的行为开关：API 版本可用性与返回的证书内容。
 type fakeClient struct {
 	noV1      bool
 	noV1beta1 bool
@@ -1400,6 +1464,8 @@ type fakeClient struct {
 	err            error
 }
 
+// newClientset 按 opts 装配 fake CSR 客户端。
+// create/watch 失败场景通过 PrependReactor 短路；正常场景按 v1/v1beta1 版本返回对应类型。
 func newClientset(opts fakeClient) *fake.Clientset {
 	f := fake.NewSimpleClientset()
 	switch opts.failureType {
@@ -1485,15 +1551,18 @@ func newClientset(opts fakeClient) *fake.Clientset {
 	return f
 }
 
+// fakeWatch 立即返回一个携带 CSR 条件的事件，模拟服务端签发完成。
 type fakeWatch struct {
 	version        string
 	failureType    fakeClientFailureType
 	certificatePEM []byte
 }
 
+// Stop 是空操作：fakeWatch 的结果 channel 已有缓冲，不需要清理。
 func (w *fakeWatch) Stop() {
 }
 
+// ResultChan 根据版本构造 v1 或 v1beta1 的 CSR，并附带 Approved/Denied 条件。
 func (w *fakeWatch) ResultChan() <-chan watch.Event {
 	var csr runtime.Object
 
@@ -1551,11 +1620,13 @@ func (w *fakeWatch) ResultChan() <-chan watch.Event {
 	return c
 }
 
+// fakeStore 是线程安全的 CertificateStore 假实现。
 type fakeStore struct {
 	mutex sync.Mutex
 	cert  *tls.Certificate
 }
 
+// Current 返回当前证书；未设置时返回 NoCertKeyError，与真实 store 行为一致。
 func (s *fakeStore) Current() (*tls.Certificate, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -1600,6 +1671,7 @@ func (s *fakeStore) Update(certPEM, keyPEM []byte) (*tls.Certificate, error) {
 	return s.cert, nil
 }
 
+// certificatesEqual 按 DER 字节比较证书链，忽略 Leaf 等解析结果。
 func certificatesEqual(c1 *tls.Certificate, c2 *tls.Certificate) bool {
 	if c1 == nil || c2 == nil {
 		return c1 == c2
@@ -1615,6 +1687,7 @@ func certificatesEqual(c1 *tls.Certificate, c2 *tls.Certificate) bool {
 	return true
 }
 
+// certificateString 生成便于阅读的证书摘要，用于错误信息。
 func certificateString(c *tls.Certificate) string {
 	if c == nil {
 		return "certificate == nil"

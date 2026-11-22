@@ -26,17 +26,28 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// EventRecorder 记录事件；别名指向 tools/internal/events，保证新旧入口类型
+// 完全一致。已弃用的是旧事件实现，此接口仍是推荐入口。
 type EventRecorder = internalevents.EventRecorder
+
+// EventRecorderLogger 是带 logger 的 EventRecorder，可附带上下文相关的日志
+// 字段。推荐新代码使用。
 type EventRecorderLogger = internalevents.EventRecorderLogger
+
+// AnnotatedEventRecorder 支持在事件上附加注解，例如记录触发源的额外信息。
 type AnnotatedEventRecorder = internalevents.AnnotatedEventRecorder
 
 // EventBroadcaster knows how to receive events and send them to any EventSink, watcher, or log.
 type EventBroadcaster interface {
 	// StartRecordingToSink starts sending events received from the specified eventBroadcaster.
 	// Deprecated: use StartRecordingToSinkWithContext instead.
+	//
+	// 旧接口无法感知 context 取消，新代码应使用带 Context 的版本。
 	StartRecordingToSink(stopCh <-chan struct{})
 
 	// StartRecordingToSink starts sending events received from the specified eventBroadcaster.
+	//
+	// 返回 error 而不是静默失败，便于调用方决定是否继续记录事件。
 	StartRecordingToSinkWithContext(ctx context.Context) error
 
 	// NewRecorder returns an EventRecorder that can be used to send events to this EventBroadcaster
@@ -60,6 +71,8 @@ type EventBroadcaster interface {
 	StartLogging(logger klog.Logger) (func(), error)
 
 	// Shutdown shuts down the broadcaster
+	//
+	// 关闭后不再接收新事件；未 Start 的 broadcaster 调用应为幂等。
 	Shutdown()
 }
 
@@ -68,8 +81,11 @@ type EventBroadcaster interface {
 // It is assumed that EventSink will return the same sorts of errors as
 // client-go's REST client.
 type EventSink interface {
+	// Create 持久化一个新事件。
 	Create(ctx context.Context, event *eventsv1.Event) (*eventsv1.Event, error)
+	// Update 覆盖已有事件，通常用于聚合计数。
 	Update(ctx context.Context, event *eventsv1.Event) (*eventsv1.Event, error)
+	// Patch 对事件做部分更新；data 是已序列化的 patch 内容。
 	Patch(ctx context.Context, oldEvent *eventsv1.Event, data []byte) (*eventsv1.Event, error)
 }
 
@@ -86,6 +102,8 @@ type EventBroadcasterAdapter interface {
 	NewRecorder(name string) EventRecorderLogger
 
 	// DeprecatedNewLegacyRecorder creates a legacy Event Recorder with specific name.
+	//
+	// 仅供尚未迁移到新 events API 的调用方使用，事件会走 core/v1 路径。
 	DeprecatedNewLegacyRecorder(name string) record.EventRecorderLogger
 
 	// Shutdown shuts down the broadcaster.

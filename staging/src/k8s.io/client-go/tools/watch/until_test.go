@@ -35,12 +35,16 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// fakePod 是最小的 runtime.Object 实现，仅用于在 watch 事件中携带一个可断言的类型。
+// DeepCopy 故意 panic，以暴露测试中不该发生的深拷贝。
 type fakePod struct {
 }
 
 func (obj *fakePod) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
 func (obj *fakePod) DeepCopyObject() runtime.Object   { panic("DeepCopyObject not supported by fakePod") }
 
+// TestUntil 验证条件按顺序消费事件：Add 满足第一个条件、Modify 满足第二个，
+// UntilWithoutRetry 返回最后一条已处理事件。
 func TestUntil(t *testing.T) {
 	fw := watch.NewFake()
 	go func() {
@@ -71,6 +75,8 @@ func TestUntil(t *testing.T) {
 	}
 }
 
+// TestUntilMultipleConditions 验证同一事件需依次满足所有条件，
+// 单条 Add 即可让两个条件都成立。
 func TestUntilMultipleConditions(t *testing.T) {
 	fw := watch.NewFake()
 	go func() {
@@ -100,6 +106,8 @@ func TestUntilMultipleConditions(t *testing.T) {
 	}
 }
 
+// TestUntilMultipleConditionsFail 验证条件链无法全部满足时，
+// 等待会在超时后以 ErrWaitTimeout 结束，并返回最后观察到的事件。
 func TestUntilMultipleConditionsFail(t *testing.T) {
 	fw := watch.NewFake()
 	go func() {
@@ -130,6 +138,8 @@ func TestUntilMultipleConditionsFail(t *testing.T) {
 	}
 }
 
+// TestUntilTimeout 使用 Background context（不会超时），
+// 验证条件满足后立即返回而不是等待 watch 关闭。
 func TestUntilTimeout(t *testing.T) {
 	fw := watch.NewFake()
 	go func() {
@@ -161,6 +171,8 @@ func TestUntilTimeout(t *testing.T) {
 	}
 }
 
+// TestUntilErrorCondition 验证条件函数返回的错误会原样传出，
+// 而不是被包装成超时错误。
 func TestUntilErrorCondition(t *testing.T) {
 	fw := watch.NewFake()
 	go func() {
@@ -185,6 +197,9 @@ func TestUntilErrorCondition(t *testing.T) {
 	}
 }
 
+// TestUntilWithSync 覆盖 UntilWithSync 的四种组合：
+// 无 precondition 时不等缓存同步、precondition 在无法同步时阻塞、
+// precondition 可提前结束循环，以及 precondition 放行后转入常规条件判断。
 func TestUntilWithSync(t *testing.T) {
 	// FIXME: test preconditions
 	tt := []struct {

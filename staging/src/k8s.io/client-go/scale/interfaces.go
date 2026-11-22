@@ -26,6 +26,9 @@ import (
 )
 
 // ScalesGetter can produce a ScaleInterface
+//
+// 分层的设计让调用方先绑定命名空间，再以 GroupResource 定位具体资源，
+// 避免每次调用都重复拼接 URL。
 type ScalesGetter interface {
 	// Scales produces a ScaleInterface for a particular namespace.
 	// Set namespace to the empty string for non-namespaced resources.
@@ -35,6 +38,10 @@ type ScalesGetter interface {
 // ScaleInterface can fetch and update scales for
 // resources in a particular namespace which implement
 // the scale subresource.
+//
+// 它面向的是实现了 scale 子资源的任意资源（Deployment、StatefulSet、ReplicaSet 等），
+// 因此方法都以 GroupResource 而非具体类型为参数，Get/Patch 使用 autoscaling/v1 的 Scale 对象
+// 作为统一的线上表示。
 type ScaleInterface interface {
 	// Get fetches the scale of the given scalable resource.
 	Get(ctx context.Context, resource schema.GroupResource, name string, opts metav1.GetOptions) (*autoscalingapi.Scale, error)

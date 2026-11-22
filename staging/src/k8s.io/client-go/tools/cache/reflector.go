@@ -54,11 +54,15 @@ const defaultExpectedTypeName = "<unspecified>"
 var (
 	// We try to spread the load on apiserver by setting timeouts for
 	// watch requests - it is random in [minWatchTimeout, 2*minWatchTimeout].
+	//
+	// watch 超时在 [min, max] 内随机，避免大量 reflector 同时到期造成惊群。
 	defaultMinWatchTimeout = 5 * time.Minute
 	defaultMaxWatchTimeout = 2 * defaultMinWatchTimeout
 	// We used to make the call every 1sec (1 QPS), the goal here is to achieve ~98% traffic reduction when
 	// API server is not healthy. With these parameters, backoff will stop at [30,60) sec interval which is
 	// 0.22 QPS.
+	//
+	// 指数退避参数：起始 800ms、上限 30s，用于 apiserver 不健康时大幅降低重试流量。
 	defaultBackoffInit = 800 * time.Millisecond
 	defaultBackoffMax  = 30 * time.Second
 	// If we don't backoff for 2min, assume API server is healthy and we reset the backoff.
@@ -68,6 +72,9 @@ var (
 )
 
 // ReflectorStore is the subset of cache.Store that the reflector uses
+//
+// ReflectorStore 是 reflector 对 store 的最小接口要求；DeltaFIFO、Indexer 等均可满足。
+// 使用最小接口便于在测试中用简单实现替换。
 type ReflectorStore interface {
 	// Add adds the given object to the accumulator associated with the given object's key
 	Add(obj interface{}) error
@@ -91,18 +98,27 @@ type ReflectorStore interface {
 
 // ReflectorBookmarkStore is an optional interface that allows a store
 // to be informed of bookmark events received by the reflector.
+//
+// ReflectorBookmarkStore 是可选接口：若 store 实现它，reflector 会把 bookmark 的
+// resourceVersion 转发给 store，使 store 能在无实际变更时也推进 RV。
 type ReflectorBookmarkStore interface {
 	Bookmark(resourceVersion string) error
 }
 
 // TransformingStore is an optional interface that can be implemented by the provided store.
 // If implemented on the provided store reflector will use the same transformer in its internal stores.
+//
+// TransformingStore 允许 store 声明其 TransformFunc，reflector 在内部临时 store
+// （如 watch-list 的临时存储）中复用同一转换，保证处理语义一致。
 type TransformingStore interface {
 	ReflectorStore
 	Transformer() TransformFunc
 }
 
 // Reflector watches a specified resource and causes all changes to be reflected in the given store.
+//
+// Reflector 是客户端缓存的“拉取引擎”：先 List 全量填充 store，再 Watch 增量更新，
+// 断线后按 resourceVersion 续watch，遇到 RV 过期则重新 List。
 type Reflector struct {
 	logger klog.Logger
 	// name identifies this reflector. By default, it will be a file:line if possible.
@@ -125,6 +141,7 @@ type Reflector struct {
 	listerWatcher ListerWatcherWithContext
 	// delay returns the next backoff interval for retries.
 	resyncPeriod time.Duration
+	// delayHandler 提供带重置语义的退避延迟函数（成功一次即重置）。
 	delayHandler wait.DelayFunc
 	// minWatchTimeout defines the minimum timeout for watch requests.
 	minWatchTimeout time.Duration
@@ -139,6 +156,9 @@ type Reflector struct {
 	// lastSyncResourceVersion is the resource version token last
 	// observed when doing a sync with the underlying store
 	// it is thread safe, but not synchronized with the underlying store
+	//
+	// RV 与 store 的写入并非原子一致：读取时可能比 store 内容略新或略旧，
+	// 这一宽松性由 watch 的重放语义兜底。
 	lastSyncResourceVersion string
 	// isLastSyncResourceVersionUnavailable is true if the previous list or watch request with
 	// lastSyncResourceVersion failed with an "expired" or "too large resource version" error.
@@ -167,13 +187,18 @@ type Reflector struct {
 	// might result in an increased memory consumption of the APIServer.
 	//
 	// See https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/3157-watch-list#design-details
+	//
+	// useWatchList 对应 WatchListClient 特性：用 SendInitialEvents 的流式 watch 代替分页 List，
+	// 以降低 apiserver 内存与 etcd 压力；服务端不支持时回退到 List。
 	useWatchList bool
 }
 
+// Name 返回 reflector 的标识名（默认取自调用栈的 file:line）。
 func (r *Reflector) Name() string {
 	return r.name
 }
 
+// TypeDescription 返回用于日志展示的类型描述，仅用于显示。
 func (r *Reflector) TypeDescription() string {
 	return r.typeDescription
 }
@@ -209,9 +234,14 @@ type WatchErrorHandler func(r *Reflector, err error)
 // Implementations of this handler may display the error message in other
 // ways. Implementations should return quickly - any expensive processing
 // should be offloaded.
+//
+// 与 WatchErrorHandler 相同，但携带 ctx 以支持结构化日志；新代码应优先使用带 ctx 的版本。
 type WatchErrorHandlerWithContext func(ctx context.Context, r *Reflector, err error)
 
 // DefaultWatchErrorHandler is the default implementation of WatchErrorHandlerWithContext.
+//
+// 默认实现按错误类型选择日志级别：EOF 视为正常结束，过期错误降为 V(4)，
+// 其余错误交给全局错误处理器（通常记录并上报）。
 func DefaultWatchErrorHandler(ctx context.Context, r *Reflector, err error) {
 	switch {
 	case isExpiredError(err):
@@ -299,6 +329,7 @@ func NewReflectorWithOptions(lw ListerWatcher, expectedType interface{}, store R
 		reflectorClock = clock.RealClock{}
 	}
 
+	// 低于默认下限的 MinWatchTimeout 不被采纳，避免对控制面造成过大压力。
 	minWatchTimeout := defaultMinWatchTimeout
 	maxWatchTimeout := defaultMaxWatchTimeout
 	if options.MinWatchTimeout > defaultMinWatchTimeout {
@@ -314,6 +345,7 @@ func NewReflectorWithOptions(lw ListerWatcher, expectedType interface{}, store R
 		maxWatchTimeout = minWatchTimeout
 	}
 
+	// 未提供自定义退避时，构造默认指数退避；Steps 使总时长约等于 Cap。
 	backoff := options.Backoff
 	if backoff == nil {
 		backoff = &wait.Backoff{
@@ -339,6 +371,7 @@ func NewReflectorWithOptions(lw ListerWatcher, expectedType interface{}, store R
 		expectedType:      reflect.TypeOf(expectedType),
 	}
 
+	// 默认名称取自调用栈，便于在日志中定位是哪个 informer。
 	if r.name == "" {
 		r.name = naming.GetNameFromCallsite(internalPackages...)
 	}
@@ -358,6 +391,8 @@ func NewReflectorWithOptions(lw ListerWatcher, expectedType interface{}, store R
 		r.expectedGVK = getExpectedGVKFromObject(expectedType)
 	}
 
+	// WatchListClient 特性开启且客户端支持其语义时，才走流式 watch-list；
+	// 在单元测试或旧客户端下自动禁用并提示。
 	r.useWatchList = clientfeatures.FeatureGates().Enabled(clientfeatures.WatchListClient)
 	if r.useWatchList && watchlist.DoesClientNotSupportWatchListSemantics(lw) {
 		r.logger.V(2).Info(
@@ -370,6 +405,8 @@ func NewReflectorWithOptions(lw ListerWatcher, expectedType interface{}, store R
 	return r
 }
 
+// getTypeDescriptionFromObject 推导类型描述：unstructured 对象优先用其 GVK，
+// 否则用 Go 类型名；nil 返回固定占位符。
 func getTypeDescriptionFromObject(expectedType interface{}) string {
 	if expectedType == nil {
 		return defaultExpectedTypeName
@@ -390,6 +427,8 @@ func getTypeDescriptionFromObject(expectedType interface{}) string {
 	return gvk.String()
 }
 
+// getExpectedGVKFromObject 仅对已设置 GVK 的 unstructured 返回 GVK，
+// 用于校验 watch 事件的对象类型；其余情况返回 nil 表示不校验。
 func getExpectedGVKFromObject(expectedType interface{}) *schema.GroupVersionKind {
 	obj, ok := expectedType.(*unstructured.Unstructured)
 	if !ok {
@@ -442,6 +481,8 @@ var (
 
 // resyncChan returns a channel which will receive something when a resync is
 // required, and a cleanup function.
+//
+// resyncPeriod 为 0 时返回 nil 通道，永不触发。
 func (r *Reflector) resyncChan() (<-chan time.Time, func() bool) {
 	if r.resyncPeriod == 0 {
 		// nothing will ever be sent down this channel
@@ -497,6 +538,7 @@ func (r *Reflector) ListAndWatchWithContext(ctx context.Context) error {
 		}
 	}
 
+	// watch-list 失败或未启用时退化为传统 List，保证最终能建立初始状态。
 	if fallbackToList {
 		err = r.list(ctx)
 		if err != nil {
@@ -523,6 +565,7 @@ func (r *Reflector) startResync(ctx context.Context, resyncerrc chan error) {
 		case <-ctx.Done():
 			return
 		}
+		// ShouldResync 为 nil 表示“总是需要 resync”。
 		if r.ShouldResync == nil || r.ShouldResync() {
 			logger.V(4).Info("Forcing resync", "reflector", r.name)
 			if err := r.store.Resync(); err != nil {
@@ -530,6 +573,7 @@ func (r *Reflector) startResync(ctx context.Context, resyncerrc chan error) {
 				return
 			}
 		}
+		// 每轮重新创建定时器，保证下一次从当前时刻开始计间隔。
 		cleanup()
 		resyncCh, cleanup = r.resyncChan()
 	}
@@ -585,6 +629,7 @@ func (r *Reflector) watch(ctx context.Context, w watch.Interface, resyncerrc cha
 		// if w is already initialized, it must be past any synthetic non-rv-ordered added events
 		propagateRVFromStart := true
 		if w == nil {
+			// 超时随机化可避免大量客户端在同一时刻重建 watch。
 			timeoutSeconds := int64(r.minWatchTimeout.Seconds() + rand.Float64()*(r.maxWatchTimeout.Seconds()-r.minWatchTimeout.Seconds()))
 			options := metav1.ListOptions{
 				ResourceVersion: r.LastSyncResourceVersion(),
@@ -604,6 +649,7 @@ func (r *Reflector) watch(ctx context.Context, w watch.Interface, resyncerrc cha
 
 			w, err = r.listerWatcher.WatchWithContext(ctx, options)
 			if err != nil {
+				// 连接被拒或 429 时只需退避后重连，不必重新 List。
 				if canRetry := isWatchErrorRetriable(err); canRetry {
 					logger.V(4).Info("Watch failed - backing off", "reflector", r.name, "type", r.typeDescription, "err", err)
 					select {
@@ -629,6 +675,9 @@ func (r *Reflector) watch(ctx context.Context, w watch.Interface, resyncerrc cha
 				// 2. The watch is started when the LastSyncResourceVersion field is empty. In this case, we may not
 				//    update the LastSyncResourceVersion until we receive at least one event that is not an added
 				//    event, since that is the only way to ensure that the watch has exited the initial list phase.
+				//
+				// 只有在确认已越过“合成 Added 事件”阶段后才推进 RV，
+				// 否则可能把乱序的合成事件对应的 RV 当作已同步点。
 				if propagateRVFromStart || eventReceivedBesidesAdded {
 					r.setLastSyncResourceVersion(rv)
 					if rvu, ok := r.store.(ResourceVersionUpdater); ok {
@@ -682,6 +731,8 @@ func (r *Reflector) list(ctx context.Context) error {
 	var err error
 	listCh := make(chan struct{}, 1)
 	panicCh := make(chan interface{}, 1)
+	// List 在独立 goroutine 中执行，使调用方能通过 ctx 取消；
+	// panic 通过 panicCh 转交，避免被 goroutine 边界吞掉。
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -693,6 +744,7 @@ func (r *Reflector) list(ctx context.Context) error {
 		pager := pager.New(pager.SimplePageFunc(func(opts metav1.ListOptions) (runtime.Object, error) {
 			return r.listerWatcher.ListWithContext(ctx, opts)
 		}))
+		// 分页策略：显式大小 > 首次已分页 > 有具体 RV 时禁用分页以便走 watch cache。
 		switch {
 		case r.WatchListPageSize != 0:
 			pager.PageSize = r.WatchListPageSize
@@ -725,9 +777,12 @@ func (r *Reflector) list(ctx context.Context) error {
 			// resource version it is listing at is expired or the cache may not yet be synced to the provided
 			// resource version. So we need to fallback to resourceVersion="" in all to recover and ensure
 			// the reflector makes forward progress.
+			//
+			// RV 过期时用空 RV 重新 List（由 etcd 做一致性读），确保能够前进。
 			list, paginatedResult, err = pager.ListWithAlloc(context.Background(), metav1.ListOptions{ResourceVersion: r.relistResourceVersion()})
 		}
 		if err == nil {
+			// Table 格式不是 reflector 支持的列表形态，直接报错而非尝试解析。
 			if unsupportedList, unsupportedListGVK := isUnsupportedTableListObject(list); unsupportedList {
 				err = fmt.Errorf("unsupported list gvk: %v, type: %v", unsupportedListGVK, r.typeDescription)
 			}
@@ -773,6 +828,7 @@ func (r *Reflector) list(ctx context.Context) error {
 		return fmt.Errorf("unable to understand list result %#v (%v)", list, err)
 	}
 	initTrace.Step("Objects extracted")
+	// Replace 是原子整体替换：保证 store 不会长时间处于半新半旧状态。
 	if err := r.syncWith(items, resourceVersion); err != nil {
 		return fmt.Errorf("unable to sync list result: %v", err)
 	}
@@ -801,6 +857,10 @@ func (r *Reflector) list(ctx context.Context) error {
 // After receiving a "Bookmark" event the reflector is considered to be synchronized.
 // It replaces its internal store with the collected items and
 // reuses the current watch requests for getting further events.
+//
+// watchList 以 watch-list（SendInitialEvents）方式获取初始全量快照：服务端先推送合成的 Added
+// 事件，再以带 initial-events-end 注解的 Bookmark 表示结束；收到该 Bookmark 后整体 Replace store，
+// 并复用同一条 watch 流继续接收增量事件。
 func (r *Reflector) watchList(ctx context.Context) (watch.Interface, error) {
 	stopCh := ctx.Done()
 	logger := klog.FromContext(ctx)
@@ -822,12 +882,15 @@ func (r *Reflector) watchList(ctx context.Context) (watch.Interface, error) {
 			// has either expired or it is greater than the server knows about.
 			// In that case we reset the RV and
 			// try to get a consistent snapshot from the watch cache (case 1)
+			//
+			// RV 不可用时清空，重试会走 case 1（从最新 RV 获取一致性快照）。
 			r.setIsLastSyncResourceVersionUnavailable(true)
 			return true
 		}
 		return false
 	}
 
+	// 若外部 store 声明了 transformer，临时 store 也使用同一转换，保证后续 Replace 语义一致。
 	var transformer TransformFunc
 	storeOpts := []StoreOption{}
 	if tr, ok := r.store.(TransformingStore); ok && tr.Transformer() != nil {
@@ -869,6 +932,7 @@ func (r *Reflector) watchList(ctx context.Context) (watch.Interface, error) {
 		}
 		watchListBookmarkReceived, err := handleListWatch(ctx, start, w, temporaryStore, r.expectedType, r.expectedGVK, r.name, r.typeDescription,
 			func(rv string, eventReceivedBesidesAdded bool) {
+				// 仅记录“非 Added”事件之后看到的 RV，避免采用合成事件的乱序 RV。
 				if eventReceivedBesidesAdded {
 					resourceVersion = rv
 				}
@@ -884,6 +948,7 @@ func (r *Reflector) watchList(ctx context.Context) (watch.Interface, error) {
 			}
 			return nil, err
 		}
+		// 收到结束 Bookmark 才算拿到完整初始状态；否则重来。
 		if watchListBookmarkReceived {
 			break
 		}
@@ -898,6 +963,7 @@ func (r *Reflector) watchList(ctx context.Context) (watch.Interface, error) {
 	// component as soon as it finishes replacing the content.
 	checkWatchListDataConsistencyIfRequested(ctx, r.name, resourceVersion, r.listerWatcher.ListWithContext, transformer, temporaryStore.List)
 
+	// 一次性 Replace，避免外部 store 看到中间态。
 	if err := r.store.Replace(temporaryStore.List(), resourceVersion); err != nil {
 		return nil, fmt.Errorf("unable to sync watch-list result: %w", err)
 	}
@@ -969,6 +1035,9 @@ func handleWatch(
 // The watcher will always be stopped, unless exitOnWatchListBookmarkReceived is
 // true and watchListBookmarkReceived is true. This allows the same watch stream
 // to be re-used by the caller to continue watching for new events.
+//
+// handleAnyWatch 是事件消费的核心循环：校验对象类型/GVK、按事件类型更新 store、
+// 维护 RV，并可按需在 watch-list 结束 bookmark 处退出且保留流供后续复用。
 func handleAnyWatch(
 	ctx context.Context,
 	start time.Time,
@@ -1010,6 +1079,7 @@ loop:
 			if event.Type == watch.Error {
 				return watchListBookmarkReceived, apierrors.FromObject(event.Object)
 			}
+			// 类型/GVK 不符的事件通常意味着配置错误或服务端协议问题，记录后跳过而非中断。
 			if expectedType != nil {
 				if e, a := expectedType, reflect.TypeOf(event.Object); e != a {
 					utilruntime.HandleErrorWithContext(ctx, nil, "Unexpected watch event object type", "reflector", name, "expectedType", e, "actualType", a)
@@ -1058,6 +1128,7 @@ loop:
 			case watch.Bookmark:
 				// A `Bookmark` means watch has synced here, just update the resourceVersion
 				eventReceivedBesidesAdded = true
+				// initial-events-end 注解标记 watch-list 初始全量推送结束。
 				if meta.GetAnnotations()[metav1.InitialEventsAnnotationKey] == "true" {
 					watchListBookmarkReceived = true
 				}
@@ -1075,6 +1146,7 @@ loop:
 			setLastSyncResourceVersion(resourceVersion, eventReceivedBesidesAdded)
 			eventCount++
 			if exitOnWatchListBookmarkReceived && watchListBookmarkReceived {
+				// 保留 watcher 不停止，交由调用方继续复用这条流。
 				stopWatcher = false
 				watchDuration := clock.Since(start)
 				klog.FromContext(ctx).V(4).Info("Exiting watch because received the bookmark that marks the end of initial events stream", "reflector", name, "totalItems", eventCount, "duration", watchDuration)
@@ -1087,6 +1159,7 @@ loop:
 	}
 
 	watchDuration := clock.Since(start)
+	// 一秒内无事件的关闭通常意味着代理或网络异常，单独报错以便上层退避。
 	if watchDuration < 1*time.Second && eventCount == 0 {
 		return watchListBookmarkReceived, &VeryShortWatchError{Name: name}
 	}
@@ -1151,6 +1224,7 @@ func (r *Reflector) setIsLastSyncResourceVersionUnavailable(isUnavailable bool) 
 	r.isLastSyncResourceVersionUnavailable = isUnavailable
 }
 
+// isExpiredError 识别 RV 过期/已删除（HTTP 410）两类错误。
 func isExpiredError(err error) bool {
 	// In Kubernetes 1.17 and earlier, the api server returns both apierrors.StatusReasonExpired and
 	// apierrors.StatusReasonGone for HTTP 410 (Gone) status code responses. In 1.18 the kube server is more consistent
@@ -1159,6 +1233,8 @@ func isExpiredError(err error) bool {
 	return apierrors.IsResourceExpired(err) || apierrors.IsGone(err)
 }
 
+// isTooLargeResourceVersionError 识别“请求的 RV 大于服务端已知值”的错误，
+// 同时兼容旧版本服务端不设置 cause 而只写消息文本的情况。
 func isTooLargeResourceVersionError(err error) bool {
 	if apierrors.HasStatusCause(err, metav1.CauseTypeResourceVersionTooLarge) {
 		return true
@@ -1232,6 +1308,8 @@ func newInitialEventsEndBookmarkTicker(logger klog.Logger, name string, c clock.
 }
 
 func newInitialEventsEndBookmarkTickerInternal(logger klog.Logger, name string, c clock.Clock, watchStart time.Time, tickInterval time.Duration, exitOnWatchListBookmarkReceived bool) *initialEventsEndBookmarkTicker {
+	// 仅当需要等待 watch-list 结束 bookmark 且时钟支持 Ticker 时才创建真实 ticker，
+	// 否则返回 noop，避免无意义的定时开销。
 	clockWithTicker, ok := c.(clock.WithTicker)
 	if !ok || !exitOnWatchListBookmarkReceived {
 		if exitOnWatchListBookmarkReceived {
@@ -1270,6 +1348,7 @@ func (t *initialEventsEndBookmarkTicker) produceWarningIfExpired() error {
 	if _, ok := t.Ticker.(*noopTicker); ok {
 		return nil /*noop ticker*/
 	}
+	// 尚未收到任何事件时以 watch 起点计算，便于尽早暴露“服务端不发送事件”的问题。
 	if t.lastEventObserveTime.IsZero() {
 		return fmt.Errorf("%s: awaiting required bookmark event for initial events stream, no events received for %v", t.name, t.clock.Since(t.watchStart))
 	}
@@ -1285,6 +1364,7 @@ func (t *initialEventsEndBookmarkTicker) produceWarningIfExpired() error {
 var _ clock.Ticker = &noopTicker{}
 
 // TODO(#115478): move to k8s/utils repo
+// noopTicker 是永不触发的 Ticker，用于禁用超时告警。
 type noopTicker struct{}
 
 func (t *noopTicker) C() <-chan time.Time { return nil }
@@ -1304,6 +1384,7 @@ func (e *VeryShortWatchError) Error() string {
 		"watch lasted less than a second and no items received", e.Name)
 }
 
+// unsupportedTableGVK 列出已知不支持的 Table 资源 GVK。
 var unsupportedTableGVK = map[schema.GroupVersionKind]bool{
 	metav1beta1.SchemeGroupVersion.WithKind("Table"): true,
 	metav1.SchemeGroupVersion.WithKind("Table"):      true,
@@ -1323,6 +1404,8 @@ func isUnsupportedTableObject(rawObject runtime.Object) bool {
 	return unsupportedTableGVK[rawObject.GetObjectKind().GroupVersionKind()]
 }
 
+// isUnsupportedTableListObject 判断列表对象是否为不支持的 Table 列表，
+// 并返回其 GVK 以便记录清晰的错误信息。
 func isUnsupportedTableListObject(rawObject runtime.Object) (bool, schema.GroupVersionKind) {
 	unstructuredObj, ok := rawObject.(*unstructured.UnstructuredList)
 	if !ok {

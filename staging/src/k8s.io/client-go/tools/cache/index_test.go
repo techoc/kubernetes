@@ -17,19 +17,22 @@ limitations under the License.
 package cache
 
 import (
-	"k8s.io/apimachinery/pkg/util/sets"
 	"strings"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// testIndexFunc 按 Pod 的 "foo" 标签值建立索引，用于验证自定义索引函数。
 func testIndexFunc(obj interface{}) ([]string, error) {
 	pod := obj.(*v1.Pod)
 	return []string{pod.Labels["foo"]}, nil
 }
 
+// TestGetIndexFuncValues 验证 ListIndexFuncValues 返回索引器中出现过的、去重后的索引键。
 func TestGetIndexFuncValues(t *testing.T) {
 	index := NewIndexer(MetaNamespaceKeyFunc, Indexers{"testmodes": testIndexFunc})
 
@@ -41,6 +44,7 @@ func TestGetIndexFuncValues(t *testing.T) {
 	index.Add(pod2)
 	index.Add(pod3)
 
+	// "bar" 被两个 Pod 共享，因此只剩两个不同键。
 	keys := index.ListIndexFuncValues("testmodes")
 	if len(keys) != 2 {
 		t.Errorf("Expected 2 keys but got %v", len(keys))
@@ -53,6 +57,8 @@ func TestGetIndexFuncValues(t *testing.T) {
 	}
 }
 
+// testUsersIndexFunc 把 Pod 注解中的逗号分隔用户列表拆成多个索引键，
+// 用于验证“一个对象映射到多个索引键”的行为。
 func testUsersIndexFunc(obj interface{}) ([]string, error) {
 	pod := obj.(*v1.Pod)
 	usersString := pod.Annotations["users"]
@@ -60,6 +66,7 @@ func testUsersIndexFunc(obj interface{}) ([]string, error) {
 	return strings.Split(usersString, ","), nil
 }
 
+// TestMultiIndexKeys 验证多键索引的建立，以及 Delete/Update 时旧键会被正确清理。
 func TestMultiIndexKeys(t *testing.T) {
 	index := NewIndexer(MetaNamespaceKeyFunc, Indexers{"byUser": testUsersIndexFunc})
 
@@ -71,6 +78,7 @@ func TestMultiIndexKeys(t *testing.T) {
 	index.Add(pod2)
 	index.Add(pod3)
 
+	// 期望的“用户 -> Pod 名集合”映射；"elmo1" 用于确认不存在的键返回空集。
 	expected := map[string]sets.Set[string]{}
 	expected["ernie"] = sets.New("one", "tre")
 	expected["bert"] = sets.New("one", "two")
@@ -93,6 +101,7 @@ func TestMultiIndexKeys(t *testing.T) {
 		}
 	}
 
+	// 删除 pod3 后，"ernie" 应只剩 pod1，"elmo" 应清空。
 	index.Delete(pod3)
 	erniePods, err := index.ByIndex("byUser", "ernie")
 	if err != nil {
@@ -115,6 +124,7 @@ func TestMultiIndexKeys(t *testing.T) {
 		t.Errorf("Expected 0 pods but got %v", len(elmoPods))
 	}
 
+	// 修改 pod2 的 users 后，旧键 "bert" 必须被移除，只保留 pod1。
 	copyOfPod2 := pod2.DeepCopy()
 	copyOfPod2.Annotations["users"] = "oscar"
 	index.Update(copyOfPod2)

@@ -24,7 +24,13 @@ import (
 	core "k8s.io/client-go/testing"
 )
 
+// Rollback 以 create 动作对 deployments/rollback 子资源发起调用。
+//
+// 历史 API 中没有独立的 rollback 子资源方法，服务端将其建模为子资源上的
+// create；fake 客户端复用同一套 action 记录，便于测试断言请求形状。
 func (c *fakeDeployments) Rollback(ctx context.Context, deploymentRollback *v1beta1.DeploymentRollback, opts metav1.CreateOptions) error {
+	// 显式构造 CreateAction，而不是走通用 Create，是因为对象不是 Deployment
+	// 而是 DeploymentRollback，且需要标记 subresource。
 	action := core.CreateActionImpl{}
 	action.Verb = "create"
 	action.Resource = c.Resource()

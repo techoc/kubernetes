@@ -37,6 +37,8 @@ type DelayingInterface TypedDelayingInterface[any]
 type TypedDelayingInterface[T comparable] interface {
 	TypedInterface[T]
 	// AddAfter adds an item to the workqueue after the indicated duration has passed
+	//
+	// duration <= 0 时立即入队；队列关闭后调用是安全的空操作。
 	AddAfter(item T, duration time.Duration)
 }
 
@@ -59,6 +61,8 @@ type TypedDelayingQueueConfig[T comparable] struct {
 	MetricsProvider MetricsProvider
 
 	// Clock optionally allows injecting a real or fake clock for testing purposes.
+	//
+	// 延迟队列完全依赖注入的时钟，测试用假时钟即可精确控制触发时机。
 	Clock clock.WithTicker
 
 	// Queue optionally allows injecting custom queue Interface instead of the default one.
@@ -98,6 +102,9 @@ func TypedNewDelayingQueue[T comparable]() TypedDelayingInterface[T] {
 
 // NewTypedDelayingQueueWithConfig constructs a new workqueue with options to
 // customize different properties.
+//
+// 会启动一个后台 waitingLoop 协程，负责在到期时把条目搬进底层队列；
+// 队列关闭时该协程退出。
 func NewTypedDelayingQueueWithConfig[T comparable](config TypedDelayingQueueConfig[T]) TypedDelayingInterface[T] {
 	logger := klog.Background()
 	if config.Logger != nil {
@@ -144,6 +151,8 @@ func NewDelayingQueueWithCustomClock(clock clock.WithTicker, name string) Delayi
 	})
 }
 
+// newDelayingQueue 构造延迟队列并启动 waitingLoop；heartbeat 为兜底的
+// 最长等待上限。
 func newDelayingQueue[T comparable](logger klog.Logger, clock clock.WithTicker, q TypedInterface[T], name string, provider MetricsProvider) *delayingType[T] {
 	ret := &delayingType[T]{
 		TypedInterface:  q,
@@ -168,12 +177,16 @@ type delayingType[T comparable] struct {
 	// stopCh lets us signal a shutdown to the waiting loop
 	stopCh chan struct{}
 	// stopOnce guarantees we only signal shutdown a single time
+	//
+	// 关闭已关闭的 channel 会 panic，因此 ShutDown 必须幂等。
 	stopOnce sync.Once
 
 	// heartbeat ensures we wait no more than maxWait before firing
 	heartbeat clock.Ticker
 
 	// waitingForAddCh is a buffered channel that feeds waitingForAdd
+	//
+	// 缓冲 1000 是为了吸收突发延迟入队，避免调用方在等待循环忙时被阻塞。
 	waitingForAddCh chan *waitFor[T]
 
 	// metrics counts the number of retries
@@ -185,6 +198,7 @@ type waitFor[T any] struct {
 	data    T
 	readyAt time.Time
 	// index in the priority queue (heap)
+	// index 由 container/heap 维护，用于 insert 时就地调整已有条目。
 	index int
 }
 
@@ -273,6 +287,9 @@ func (q *delayingType[T]) AddAfter(item T, duration time.Duration) {
 const maxWait = 10 * time.Second
 
 // waitingLoop runs until the workqueue is shutdown and keeps a check on the list of items to be added.
+//
+// 三个唤醒来源：停止信号、定时器（队首到期）、heartbeat（兜底扫描）。
+// 收到新条目时会一次性排空 waitingForAddCh，减少循环轮次。
 func (q *delayingType[T]) waitingLoop(logger klog.Logger) {
 	defer utilruntime.HandleCrashWithLogger(logger)
 
@@ -352,6 +369,9 @@ func (q *delayingType[T]) waitingLoop(logger klog.Logger) {
 }
 
 // insert adds the entry to the priority queue, or updates the readyAt if it already exists in the queue
+//
+// 同一对象多次延迟入队时只保留最早的时间：更晚的调度不能推迟已经承诺的
+// 重试，否则会无限拖延。
 func insert[T comparable](q *waitForPriorityQueue[T], knownEntries map[T]*waitFor[T], entry *waitFor[T]) {
 	// if the entry already exists, update the time only if it would cause the item to be queued sooner
 	existing, exists := knownEntries[entry.data]

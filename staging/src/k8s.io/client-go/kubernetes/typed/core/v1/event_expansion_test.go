@@ -28,13 +28,17 @@ import (
 	restfake "k8s.io/client-go/rest/fake"
 )
 
+// TestCreateWithEventNamespace 验证事件命名空间校验：事件对象必须与
+// Events 客户端绑定的命名空间一致，否则在发请求前就返回错误。
 func TestCreateWithEventNamespace(t *testing.T) {
+	// 固定的事件对象属于 default 命名空间。
 	event := &v1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "default",
 		},
 	}
+	// fake REST client 对任意请求都返回空 JSON，校验逻辑不依赖响应体。
 	cli := &restfake.RESTClient{
 		Client: restfake.CreateHTTPClient(func(request *http.Request) (*http.Response, error) {
 			resp := &http.Response{
@@ -53,11 +57,13 @@ func TestCreateWithEventNamespace(t *testing.T) {
 		wantErr bool
 	}{
 		{
+			// 事件命名空间与客户端一致，请求应正常发出。
 			name:  "create event",
 			ns:    "default",
 			event: event,
 		},
 		{
+			// 命名空间不一致时必须在客户端侧提前失败。
 			name:    "create event with different namespace",
 			ns:      "other",
 			event:   event,
@@ -66,6 +72,7 @@ func TestCreateWithEventNamespace(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// 用 tt.ns 构造 events 实例，模拟客户端绑定到不同命名空间。
 			e := newEvents(New(cli), tt.ns)
 			_, err := e.CreateWithEventNamespace(tt.event)
 			if (err != nil) != tt.wantErr {
@@ -76,6 +83,7 @@ func TestCreateWithEventNamespace(t *testing.T) {
 	}
 }
 
+// TestPatchWithEventNamespace 验证 Patch 路径同样拒绝与客户端命名空间不一致的事件。
 func TestPatchWithEventNamespace(t *testing.T) {
 	event := &v1.Event{
 		ObjectMeta: metav1.ObjectMeta{
@@ -127,6 +135,7 @@ func TestPatchWithEventNamespace(t *testing.T) {
 	}
 }
 
+// TestUpdateWithEventNamespace 验证 Update 路径的命名空间校验，行为与 Create/Patch 一致。
 func TestUpdateWithEventNamespace(t *testing.T) {
 	event := &v1.Event{
 		ObjectMeta: metav1.ObjectMeta{

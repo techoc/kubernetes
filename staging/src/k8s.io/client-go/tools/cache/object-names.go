@@ -21,6 +21,9 @@ import (
 )
 
 // ObjectName is a reference to an object of some implicit kind
+//
+// 与 types.NamespacedName 字段相同但方法不同，保留本类型是为了让缓存键的
+// 编码历史行为保持稳定（见 String 方法）。
 type ObjectName struct {
 	Namespace string
 	Name      string
@@ -39,6 +42,9 @@ func (objName ObjectName) Parts() (namespace, name string) {
 // String returns the standard string encoding,
 // which is designed to match the historical behavior of MetaNamespaceKeyFunc.
 // Note this behavior is different from the String method of types.NamespacedName.
+//
+// 空 namespace 时只返回 name；非空时返回 "namespace/name"。
+// 这正是 informer 缓存键的格式，改动会破坏已有缓存与测试的兼容性。
 func (objName ObjectName) String() string {
 	if len(objName.Namespace) > 0 {
 		return objName.Namespace + "/" + objName.Name
@@ -47,6 +53,8 @@ func (objName ObjectName) String() string {
 }
 
 // ParseObjectName tries to parse the standard encoding
+//
+// 解析规则与 SplitMetaNamespaceKey 一致，保证与 String 互逆。
 func ParseObjectName(str string) (ObjectName, error) {
 	var objName ObjectName
 	var err error

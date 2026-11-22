@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package main 演示如何用 client-go 的 informer 缓存与 workqueue 编写一个最小控制器：
+// informer 负责把 Pod 事件转换为队列中的 key，worker 只依据本地缓存处理 key。
 package main
 
 import (
@@ -38,8 +40,11 @@ import (
 
 // Controller demonstrates how to implement a controller with client-go.
 type Controller struct {
-	indexer  cache.Indexer
-	queue    workqueue.TypedRateLimitingInterface[string]
+	// indexer 是 informer 维护的本地缓存视图，worker 只读它而不直接访问 API server。
+	indexer cache.Indexer
+	// queue 以 namespace/name 为 key，保证同一对象不会被两个 worker 并发处理。
+	queue workqueue.TypedRateLimitingInterface[string]
+	// informer 是事件来源；它必须在处理队列之前完成首次同步。
 	informer cache.Controller
 }
 
@@ -52,6 +57,7 @@ func NewController(queue workqueue.TypedRateLimitingInterface[string], indexer c
 	}
 }
 
+// processNextItem 取出并处理一个 key；返回 false 表示队列已关闭、worker 应退出。
 func (c *Controller) processNextItem(logger klog.Logger) bool {
 	// Wait until there is a new item in the working queue
 	key, quit := c.queue.Get()
@@ -74,6 +80,7 @@ func (c *Controller) processNextItem(logger klog.Logger) bool {
 // information about the pod to stdout. In case an error happened, it has to simply return the error.
 // The retry logic should not be part of the business logic.
 func (c *Controller) syncToStdout(key string) error {
+	// 读取本地缓存而不是 API server：缓存可能比触发入队时更新，这正是期望的行为。
 	obj, exists, err := c.indexer.GetByKey(key)
 	if err != nil {
 		return fmt.Errorf("fetching object with key %s from store failed: %w", key, err)
@@ -140,6 +147,7 @@ func (c *Controller) Run(ctx context.Context, workers int) {
 	<-ctx.Done()
 }
 
+// runWorker 持续消费队列，直到 processNextItem 报告队列已关闭。
 func (c *Controller) runWorker(ctx context.Context) {
 	logger := klog.FromContext(ctx)
 	for c.processNextItem(logger) {
@@ -172,6 +180,7 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
+	// ctx 目前仅用于取消 controller；示例没有安装信号处理，因此实际不会触发取消。
 	ctx := context.Background()
 
 	// create the pod watcher
@@ -213,6 +222,7 @@ func main() {
 	// Let's suppose that we knew about a pod "mypod" on our last run, therefore add it to the cache.
 	// If this pod is not there anymore, the controller will be notified about the removal after the
 	// cache has synchronized.
+	// 手工放入一个缓存项，模拟上次运行遗留的状态。
 	indexer.Add(&v1.Pod{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name:      "mypod",

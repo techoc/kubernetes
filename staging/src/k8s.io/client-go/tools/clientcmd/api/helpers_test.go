@@ -28,6 +28,9 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// newMergedConfig 构造一个包含两套 context/cluster/user 的测试 kubeconfig。
+// 同时覆盖“内联数据”和“文件引用”两种表示，便于验证 Minify/Flatten/Shorten
+// 对两种形式的处理。三个文件路径会先写入对应内容。
 func newMergedConfig(certFile, certContent, keyFile, keyContent, caFile, caContent string, t *testing.T) Config {
 	if err := os.WriteFile(certFile, []byte(certContent), 0644); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -53,6 +56,8 @@ func newMergedConfig(certFile, certContent, keyFile, keyContent, caFile, caConte
 	}
 }
 
+// TestMinifySuccess 验证 MinifyConfig 只保留从 CurrentContext 可达的
+// context、cluster 与 user，未被引用的条目会被删除。
 func TestMinifySuccess(t *testing.T) {
 	certFile, _ := os.CreateTemp("", "")
 	keyFile, _ := os.CreateTemp("", "")
@@ -87,6 +92,7 @@ func TestMinifySuccess(t *testing.T) {
 	}
 }
 
+// TestMinifyMissingContext 验证当前 context 名称不存在时返回明确错误。
 func TestMinifyMissingContext(t *testing.T) {
 	certFile, _ := os.CreateTemp("", "")
 	keyFile, _ := os.CreateTemp("", "")
@@ -109,6 +115,7 @@ func TestMinifyMissingCluster(t *testing.T) {
 	caFile, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, certFile, keyFile, caFile)
 
+	// 删除当前 context 引用的 cluster，模拟配置损坏。
 	mutatingConfig := newMergedConfig(certFile.Name(), "cert", keyFile.Name(), "key", caFile.Name(), "ca", t)
 	delete(mutatingConfig.Clusters, mutatingConfig.Contexts[mutatingConfig.CurrentContext].Cluster)
 
@@ -119,12 +126,14 @@ func TestMinifyMissingCluster(t *testing.T) {
 	}
 }
 
+// TestMinifyMissingAuthInfo 验证当前 context 引用的用户不存在时返回明确错误。
 func TestMinifyMissingAuthInfo(t *testing.T) {
 	certFile, _ := os.CreateTemp("", "")
 	keyFile, _ := os.CreateTemp("", "")
 	caFile, _ := os.CreateTemp("", "")
 	defer utiltesting.CloseAndRemove(t, certFile, keyFile, caFile)
 
+	// 删除当前 context 引用的用户，模拟配置损坏。
 	mutatingConfig := newMergedConfig(certFile.Name(), "cert", keyFile.Name(), "key", caFile.Name(), "ca", t)
 	delete(mutatingConfig.AuthInfos, mutatingConfig.Contexts[mutatingConfig.CurrentContext].AuthInfo)
 
@@ -135,6 +144,8 @@ func TestMinifyMissingAuthInfo(t *testing.T) {
 	}
 }
 
+// TestFlattenSuccess 验证 FlattenConfig 把文件引用展开为内联数据：
+// 本已是内联的条目保持不变，引用了文件的条目被读入并清空文件字段。
 func TestFlattenSuccess(t *testing.T) {
 	certFile, _ := os.CreateTemp("", "")
 	keyFile, _ := os.CreateTemp("", "")
@@ -147,10 +158,12 @@ func TestFlattenSuccess(t *testing.T) {
 
 	unchangingCluster := "cow-cluster"
 	unchangingAuthInfo := "red-user"
+	// 以下两项使用文件引用，Flatten 后应变为内联数据。
 	changingCluster := "chicken-cluster"
 	changingAuthInfo := "blue-user"
 
 	startingConfig := newMergedConfig(certFile.Name(), certData, keyFile.Name(), keyData, caFile.Name(), caData, t)
+	// 注意 Config 中的 map 是引用类型，此处是浅拷贝，Flatten 会原地修改两边共享的条目。
 	mutatingConfig := startingConfig
 
 	if err := FlattenConfig(&mutatingConfig); err != nil {
@@ -198,6 +211,8 @@ func TestFlattenSuccess(t *testing.T) {
 
 }
 
+// Example_minifyAndShorten 演示 kubectl config view 的典型处理链：
+// 先裁剪掉不可达条目，再对敏感数据做脱敏，最后输出 YAML。
 func Example_minifyAndShorten() {
 	certFile, _ := os.CreateTemp("", "")
 	keyFile, _ := os.CreateTemp("", "")
@@ -232,6 +247,9 @@ func Example_minifyAndShorten() {
 	//     token: REDACTED
 }
 
+// TestShortenSuccess 验证 ShortenConfig 用占位符替换敏感数据：
+// CA、客户端证书与私钥替换为 “DATA+OMITTED”，token 替换为 “REDACTED”，
+// 其余非敏感字段保持不变。
 func TestShortenSuccess(t *testing.T) {
 	certFile, _ := os.CreateTemp("", "")
 	keyFile, _ := os.CreateTemp("", "")
@@ -244,6 +262,7 @@ func TestShortenSuccess(t *testing.T) {
 
 	unchangingCluster := "chicken-cluster"
 	unchangingAuthInfo := "blue-user"
+	// 以下两项使用内联数据，Shorten 后应被替换为占位符。
 	changingCluster := "cow-cluster"
 	changingAuthInfo := "red-user"
 
@@ -287,6 +306,8 @@ func TestShortenSuccess(t *testing.T) {
 	}
 }
 
+// TestRedactSecrets 验证 RedactSecrets 会清除内联的 token 与私钥数据，
+// 但对文件引用形式的数据与其余字段不做修改。
 func TestRedactSecrets(t *testing.T) {
 	certFile, _ := os.CreateTemp("", "")
 	defer os.Remove(certFile.Name())

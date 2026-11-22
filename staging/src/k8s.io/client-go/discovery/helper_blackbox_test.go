@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/rest/fake"
 )
 
+// objBody 把对象编码为 JSON，作为 fake HTTP 响应体。
 func objBody(object interface{}) io.ReadCloser {
 	output, err := json.MarshalIndent(object, "", "")
 	if err != nil {
@@ -43,6 +44,8 @@ func objBody(object interface{}) io.ReadCloser {
 	return io.NopCloser(bytes.NewReader([]byte(output)))
 }
 
+// TestServerSupportsVersion 验证 ServerSupportsVersion 对各种服务端响应的判定：
+// 版本匹配、版本缺失、403/404 以及网络层错误都应给出可区分的结果。
 func TestServerSupportsVersion(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -92,6 +95,7 @@ func TestServerSupportsVersion(t *testing.T) {
 
 	for _, test := range tests {
 		fakeClient := fake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
+			// sendErr 模拟传输层失败（如连接被拒绝），此时不应有 HTTP 响应。
 			if test.sendErr != nil {
 				return nil, test.sendErr
 			}
@@ -114,6 +118,8 @@ func TestServerSupportsVersion(t *testing.T) {
 	}
 }
 
+// TestFilteredBy 验证按 groupVersion 与 kind 过滤资源列表的逻辑，
+// 包括空输入、空资源列表与无匹配谓词等边界。
 func TestFilteredBy(t *testing.T) {
 	all := discovery.ResourcePredicateFunc(func(gv string, r *metav1.APIResource) bool {
 		return true
@@ -172,6 +178,7 @@ func TestFilteredBy(t *testing.T) {
 	}
 }
 
+// stringify 把资源列表扁平化为 "groupVersion.name" 便于集合比较。
 func stringify(rls []*metav1.APIResourceList) []string {
 	result := []string{}
 	for _, rl := range rls {

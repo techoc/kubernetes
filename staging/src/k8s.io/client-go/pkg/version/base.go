@@ -27,12 +27,16 @@ package version
 // strange. They are set by the build process with ldflags -X. The
 // in-tree values are dummy values used for "git archive", which also
 // works for GitHub tar downloads.
+//
+// 中文：这些变量在发布构建中通过 -ldflags -X 覆盖；源码中的值只是归档时的占位符。
 var (
 	// TODO: Deprecate gitMajor and gitMinor, use only gitVersion
 	// instead. First step in deprecation, keep the fields but make
 	// them irrelevant. (Next we'll take it out, which may muck with
 	// scripts consuming the kubectl version output - but most of
 	// these should be looking at gitVersion already anyways.)
+
+	// 中文：gitMajor/gitMinor 已仅作兼容保留，解析版本时应以 gitVersion 为准。
 	gitMajor string = "" // major version, always numeric
 	gitMinor string = "" // minor version, numeric possibly followed by "+"
 
@@ -50,6 +54,8 @@ var (
 	// NOTE: The $Format strings are replaced during 'git archive' thanks to the
 	// companion .gitattributes file containing 'export-subst' in this same
 	// directory.  See also https://git-scm.com/docs/gitattributes
+	//
+	// 中文：归档时由 export-subst 替换 $Format 占位符；正常构建则由 ldflags 注入。
 	gitVersion   string = "v0.0.0-master+$Format:%H$"
 	gitCommit    string = "$Format:%H$" // sha1 from git, output of $(git rev-parse HEAD)
 	gitTreeState string = ""            // state of git tree, either "clean" or "dirty"

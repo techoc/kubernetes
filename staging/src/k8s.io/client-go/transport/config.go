@@ -25,6 +25,10 @@ import (
 )
 
 // Config holds various options for establishing a transport.
+//
+// Config 是构建 http.RoundTripper 的声明式配置：认证字段之间互斥或按优先级
+// 覆盖（如 BearerTokenFile 的实时内容优先于 BearerToken），而 TLS 结构与
+// 函数字段都刻意做成可比较类型，以便整份配置能作为 transport 缓存键。
 type Config struct {
 	// UserAgent is an optional field that specifies the caller of this
 	// request.
@@ -80,11 +84,16 @@ type Config struct {
 }
 
 // DialHolder is used to make the wrapped function comparable so that it can be used as a map key.
+//
+// 函数值本身不可比较，包一层指针后 Config 可以整体比较，从而复用缓存的 transport。
 type DialHolder struct {
 	Dial func(ctx context.Context, network, address string) (net.Conn, error)
 }
 
 // ImpersonationConfig has all the available impersonation options
+//
+// 这些字段会被编码为 Impersonate-User/Groups/Extra 等请求头，
+// 用于以其他身份向 API Server 发起请求。
 type ImpersonationConfig struct {
 	// UserName matches user.Info.GetName()
 	UserName string
@@ -97,6 +106,8 @@ type ImpersonationConfig struct {
 }
 
 // HasCA returns whether the configuration has a certificate authority or not.
+//
+// 内联数据与文件路径任一存在即视为已配置 CA。
 func (c *Config) HasCA() bool {
 	return len(c.TLS.CAData) > 0 || len(c.TLS.CAFile) > 0
 }
@@ -107,17 +118,22 @@ func (c *Config) HasBasicAuth() bool {
 }
 
 // HasTokenAuth returns whether the configuration has token authentication or not.
+//
+// 只看 BearerToken/BearerTokenFile，两者都存在时由运行时决定优先级。
 func (c *Config) HasTokenAuth() bool {
 	return len(c.BearerToken) != 0 || len(c.BearerTokenFile) != 0
 }
 
 // HasCertAuth returns whether the configuration has certificate authentication or not.
+//
+// 证书与私钥必须成对出现才算有效的客户端证书认证。
 func (c *Config) HasCertAuth() bool {
 	return (len(c.TLS.CertData) != 0 || len(c.TLS.CertFile) != 0) && (len(c.TLS.KeyData) != 0 || len(c.TLS.KeyFile) != 0)
 }
 
 // HasCertCallback returns whether the configuration has certificate callback or not.
 func (c *Config) HasCertCallback() bool {
+	// 只判断 holder 是否存在，不调用回调；回调可能有副作用或开销。
 	return c.TLS.GetCertHolder != nil
 }
 
@@ -125,11 +141,16 @@ func (c *Config) HasCertCallback() bool {
 // an opportunity to wrap the underlying http.RoundTripper prior to the
 // first API call being made. The provided function is invoked after any
 // existing transport wrappers are invoked.
+//
+// 通过组合已有 wrapper 实现链式叠加，新加的 wrapper 位于最内层。
 func (c *Config) Wrap(fn WrapperFunc) {
 	c.WrapTransport = Wrappers(c.WrapTransport, fn)
 }
 
 // TLSConfig holds the information needed to set up a TLS transport.
+//
+// 以 *Data 结尾的内联数据优先于对应的 *File 路径；Reload* 标志用于要求
+// transport 在文件变化时重新加载，而不是只在启动时读取一次。
 type TLSConfig struct {
 	CAFile         string // Path of the PEM-encoded server trusted root certificates.
 	CertFile       string // Path of the PEM-encoded client certificate.
@@ -156,6 +177,8 @@ type TLSConfig struct {
 }
 
 // GetCertHolder is used to make the wrapped function comparable so that it can be used as a map key.
+//
+// 回调每次握手都会被调用，可用于轮换客户端证书。
 type GetCertHolder struct {
 	GetCert func() (*tls.Certificate, error)
 }

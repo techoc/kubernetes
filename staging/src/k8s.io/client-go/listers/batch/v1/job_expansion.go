@@ -27,6 +27,8 @@ import (
 
 // JobListerExpansion allows custom methods to be added to
 // JobLister.
+//
+// 中文说明：手写扩展接口，属于生成 lister 的一部分。
 type JobListerExpansion interface {
 	// GetPodJobs returns a list of Jobs that potentially
 	// match a Pod. Only the one specified in the Pod's ControllerRef
@@ -39,18 +41,25 @@ type JobListerExpansion interface {
 // match a Pod. Only the one specified in the Pod's ControllerRef
 // will actually manage it.
 // Returns an error only if no matching Jobs are found.
+//
+// 中文说明：返回值为 Job 的副本而非指针，避免调用方意外修改缓存中的对象。
+// 与 DaemonSet 版本不同，这里不显式排除空 selector：LabelSelectorAsSelector(nil)
+// 会得到 Nothing，天然满足“空 selector 不匹配任何对象”。
 func (l *jobLister) GetPodJobs(pod *v1.Pod) (jobs []batch.Job, err error) {
 	if len(pod.Labels) == 0 {
 		err = fmt.Errorf("no jobs found for pod %v because it has no labels", pod.Name)
 		return
 	}
 
+	// 中文：在 Pod 所在命名空间内列举 Job，再按 selector 过滤。
 	var list []*batch.Job
 	list, err = l.Jobs(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return
 	}
 	for _, job := range list {
+		// 中文：注意这里用 := 遮蔽了外层命名返回值 err；非法 selector 仅跳过该 Job，
+		// 不会污染最终返回的 error。
 		selector, err := metav1.LabelSelectorAsSelector(job.Spec.Selector)
 		if err != nil {
 			// This object has an invalid selector, it does not match the pod
@@ -69,4 +78,6 @@ func (l *jobLister) GetPodJobs(pod *v1.Pod) (jobs []batch.Job, err error) {
 
 // JobNamespaceListerExpansion allows custom methods to be added to
 // JobNamespaceLister.
+//
+// 中文说明：当前无命名空间级扩展方法，仅作为预留钩子。
 type JobNamespaceListerExpansion interface{}

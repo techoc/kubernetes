@@ -28,11 +28,14 @@ import (
 	"k8s.io/client-go/util/flowcontrol"
 )
 
+// parse 解析 URL；测试中只使用合法输入，忽略错误。
 func parse(raw string) *url.URL {
 	theUrl, _ := url.Parse(raw)
 	return theUrl
 }
 
+// TestURLBackoffFunctionalityCollisions 验证退避状态按 host:port 而非仅 host 区分，
+// 避免不同端口的 URL 互相污染退避计数。
 func TestURLBackoffFunctionalityCollisions(t *testing.T) {
 	myBackoff := &URLBackoff{
 		Backoff: flowcontrol.NewBackOff(1*time.Second, 60*time.Second),
@@ -49,6 +52,9 @@ func TestURLBackoffFunctionalityCollisions(t *testing.T) {
 }
 
 // TestURLBackoffFunctionality generally tests the URLBackoff wrapper.  We avoid duplicating tests from backoff and request.
+//
+// 用一条包含递增、重置、再递增的返回码序列，验证 2xx/3xx 会清零退避，而
+// 429/5xx 会按指数增长（断言允许 ±5s 的抖动余量）。
 func TestURLBackoffFunctionality(t *testing.T) {
 	myBackoff := &URLBackoff{
 		Backoff: flowcontrol.NewBackOff(1*time.Second, 60*time.Second),
@@ -82,6 +88,8 @@ func TestURLBackoffFunctionality(t *testing.T) {
 	}
 }
 
+// TestBackoffManagerNopContext 验证带 context 的包装函数只是把调用原样转发给
+// 内层 BackoffManager（mock 断言了参数与调用次数）。
 func TestBackoffManagerNopContext(t *testing.T) {
 	mock := NewMockBackoffManager(t)
 
@@ -100,6 +108,8 @@ func TestBackoffManagerNopContext(t *testing.T) {
 	wrapper.UpdateBackoffWithContext(ctx, url, err, responseCode)
 }
 
+// TestNoBackoff 验证 NoBackoff 永远不等待：计算恒为 0，Sleep 立即返回，
+// 且已取消的 context 不会导致睡眠。
 func TestNoBackoff(t *testing.T) {
 	var backoff NoBackoff
 	assert.Equal(t, 0*time.Second, backoff.CalculateBackoff(nil))

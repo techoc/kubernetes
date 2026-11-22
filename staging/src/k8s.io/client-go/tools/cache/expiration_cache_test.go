@@ -27,6 +27,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// TestTTLExpirationBasic 验证被判定过期的条目在 Get 时返回不存在，
+// 并且删除回调被触发（惰性清理确实删除了底层条目）。
 func TestTTLExpirationBasic(t *testing.T) {
 	testObj := testStoreObject{id: "foo", val: "bar"}
 	deleteChan := make(chan string, 1)
@@ -63,6 +65,8 @@ func TestTTLExpirationBasic(t *testing.T) {
 	close(deleteChan)
 }
 
+// TestReAddExpiredItem 验证过期条目被清除后，可以用同一 key 写入新值，
+// 且后续读取拿到的是新值而不是旧的时间戳条目。
 func TestReAddExpiredItem(t *testing.T) {
 	deleteChan := make(chan string, 1)
 	exp := &FakeExpirationPolicy{
@@ -116,6 +120,8 @@ func TestReAddExpiredItem(t *testing.T) {
 	close(deleteChan)
 }
 
+// TestTTLList 验证 List 只返回未过期条目，并顺带清理过期条目；
+// NeverExpire 中的 key 应当保留。
 func TestTTLList(t *testing.T) {
 	testObjs := []testStoreObject{
 		{id: "foo", val: "bar"},
@@ -162,6 +168,8 @@ func TestTTLList(t *testing.T) {
 	}
 }
 
+// TestTTLPolicy 用假时钟验证边界：恰好等于 TTL 不过期、超过才过期，
+// 且 TTL<=0 表示永不过期。
 func TestTTLPolicy(t *testing.T) {
 	fakeTime := time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC)
 	ttl := 30 * time.Second

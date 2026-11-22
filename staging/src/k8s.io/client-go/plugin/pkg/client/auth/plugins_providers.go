@@ -18,6 +18,10 @@ package auth
 
 import (
 	// Initialize client auth plugins for cloud providers.
+	//
+	// 通过空白导入触发各云厂商插件的 init()，把自身注册到 rest 的插件表；
+	// 只有显式导入本文件（或 auth/plugins.go）的二进制才会带上这些插件，
+	// 以免给不需要云认证的客户端增加依赖和二进制体积。
 	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 )

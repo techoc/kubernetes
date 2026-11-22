@@ -33,11 +33,16 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// TestReflectorDataConsistencyDetector 验证 WatchList 模式下的一致性检测不会误报：
+// 检测器会重新 list 并与 watch 期间收到的对象比较，本用例构造的数据必须使二者一致。
+// 通过 feature gate 的组合（InOrderInformers × TransformFunc）覆盖不同处理路径。
 func TestReflectorDataConsistencyDetector(t *testing.T) {
+	// WatchListClient 打开后 reflector 才走 WatchList 语义，一致性检测也只在此模式下启用。
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
 	restore := consistencydetector.SetDataConsistencyDetectionForWatchListEnabledForTest(true)
 	defer restore()
 
+	// 变换函数给每个 Pod 打上标签；若检测器比较的是变换前/后的不同视图，就会产生假的不一致。
 	markTransformed := func(obj interface{}) (interface{}, error) {
 		pod, ok := obj.(*v1.Pod)
 		if !ok {
@@ -67,6 +72,8 @@ func TestReflectorDataConsistencyDetector(t *testing.T) {
 	}
 }
 
+// runTestReflectorDataConsistencyDetector 搭建一个最小 reflector：List 返回一个 Pod，
+// Watch 先重复该 Pod 再发送带 InitialEventsAnnotationKey 的 Bookmark 表示初始事件结束。
 func runTestReflectorDataConsistencyDetector(t *testing.T, transformer TransformFunc) {
 	logger, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancel(ctx)
@@ -100,6 +107,8 @@ func runTestReflectorDataConsistencyDetector(t *testing.T, transformer Transform
 
 	r := NewReflector(lw, &v1.Pod{}, fifo, 0)
 
+	// 等到 reflector 记录下 resourceVersion（说明首轮同步已完成）后取消上下文，
+	// 否则 ListAndWatchWithContext 会一直阻塞在 watch 上。
 	go func() {
 		_ = wait.PollUntilContextTimeout(ctx, 10*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 			return r.LastSyncResourceVersion() != "", nil

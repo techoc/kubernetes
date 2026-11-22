@@ -17,4 +17,8 @@ limitations under the License.
 // Package fakeclient contains examples on how to use fakeclient in tests.
 // Note: This file is here to avoid warnings on go build since there are no
 // non-test files in this package.
+//
+// 本包只包含示例性测试，用来演示如何使用 fake clientset。示例代码在测试之外没有
+// 使用者，故保留一个仅含包声明的文件以满足 go build 对“非测试文件”的要求；
+// 其中的中文注释同样遵循这一约束，不引入任何可执行代码。
 package fakeclient

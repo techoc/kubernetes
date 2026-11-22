@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package transport 提供 client-go 的 HTTP 传输层：认证、伪装、调试日志与
+// 连接缓存等。
+//
+// 各功能通过 HTTP RoundTripper 逐层包装实现，顺序会影响最终请求头与日志；
+// 包装后的 transport 可被缓存复用，因此实现必须并发安全。
+
 package transport
 
 import (
@@ -38,6 +44,9 @@ import (
 // behavior but then must hijack the underlying connection (like WebSocket or
 // HTTP2 clients). Pure HTTP clients should use the RoundTripper returned from
 // New.
+//
+// 包装顺序从内到外依次是 Debug、认证、User-Agent、伪装；越靠外的层越晚
+// 写入请求头，后写者覆盖先写者。
 func HTTPWrappersForConfig(config *Config, rt http.RoundTripper) (http.RoundTripper, error) {
 	if config.WrapTransport != nil {
 		rt = config.WrapTransport(rt)
@@ -77,12 +86,15 @@ func HTTPWrappersForConfig(config *Config, rt http.RoundTripper) (http.RoundTrip
 // if that verbosity is >= 6. This may change in the future.
 func DebugWrappers(rt http.RoundTripper) http.RoundTripper {
 	//nolint:logcheck // The actual logging is done with a different logger, so only checking here is okay.
+	// 这里只看全局 verbosity 决定是否安装包装器；真正的日志级别在
+	// RoundTrip 中按请求上下文重新判定。
 	if klog.V(6).Enabled() {
 		rt = NewDebuggingRoundTripper(rt, DebugByContext)
 	}
 	return rt
 }
 
+// authProxyRoundTripper 为“终止认证的代理”场景注入已认证用户信息。
 type authProxyRoundTripper struct {
 	username string
 	uid      string
@@ -116,6 +128,7 @@ func NewAuthProxyRoundTripper(username, uid string, groups []string, extra map[s
 }
 
 func (rt *authProxyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// 克隆请求后再改头，避免修改调用方共享的 *http.Request。
 	req = utilnet.CloneRequest(req)
 	SetAuthProxyHeaders(req, rt.username, rt.uid, rt.groups, rt.extra)
 
@@ -124,6 +137,8 @@ func (rt *authProxyRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 
 // SetAuthProxyHeaders stomps the auth proxy header fields.  It mutates its argument.
 func SetAuthProxyHeaders(req *http.Request, username, uid string, groups []string, extra map[string][]string) {
+	// 先清空所有可能的旧值，防止调用方注入伪造身份；extra 头是动态前缀，
+	// 必须遍历已有头而不是只删已知键。
 	req.Header.Del("X-Remote-User")
 	req.Header.Del("X-Remote-Uid")
 	req.Header.Del("X-Remote-Group")
@@ -153,6 +168,7 @@ func (rt *authProxyRoundTripper) CancelRequest(req *http.Request) {
 
 func (rt *authProxyRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.rt }
 
+// userAgentRoundTripper 在请求未设置 User-Agent 时补充配置值。
 type userAgentRoundTripper struct {
 	agent string
 	rt    http.RoundTripper
@@ -180,6 +196,7 @@ func (rt *userAgentRoundTripper) CancelRequest(req *http.Request) {
 
 func (rt *userAgentRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.rt }
 
+// basicAuthRoundTripper 注入 HTTP Basic 认证头。
 type basicAuthRoundTripper struct {
 	username string
 	password string `datapolicy:"password"`
@@ -232,6 +249,7 @@ const (
 	ImpersonateUserExtraHeaderPrefix = "Impersonate-Extra-"
 )
 
+// impersonatingRoundTripper 通过 Impersonate-* 头让服务端以目标用户身份鉴权。
 type impersonatingRoundTripper struct {
 	impersonate ImpersonationConfig
 	delegate    http.RoundTripper
@@ -246,6 +264,9 @@ func NewImpersonatingRoundTripper(impersonate ImpersonationConfig, delegate http
 
 func (rt *impersonatingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// use the user header as marker for the rest.
+	//
+	// 只要已有 Impersonate-User 就认为调用方自行设置了伪装，整体跳过，
+	// 避免把两套身份信息拼在一起。
 	if len(req.Header.Get(ImpersonateUserHeader)) != 0 {
 		return rt.delegate.RoundTrip(req)
 	}
@@ -272,6 +293,7 @@ func (rt *impersonatingRoundTripper) CancelRequest(req *http.Request) {
 
 func (rt *impersonatingRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.delegate }
 
+// bearerAuthRoundTripper 注入 Bearer token，并可选地从文件刷新。
 type bearerAuthRoundTripper struct {
 	bearer string
 	source oauth2.TokenSource
@@ -314,6 +336,8 @@ func (rt *bearerAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 
 	req = utilnet.CloneRequest(req)
 	token := rt.bearer
+	// 刷新失败时沿用上一次的 token，让服务端决定是否真的失效；
+	// 这样短暂的读文件错误不会立即打断请求。
 	if rt.source != nil {
 		if refreshedToken, err := rt.source.Token(); err == nil {
 			token = refreshedToken.AccessToken
@@ -330,6 +354,9 @@ func (rt *bearerAuthRoundTripper) CancelRequest(req *http.Request) {
 func (rt *bearerAuthRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.rt }
 
 // requestInfo keeps track of information about a request/response combination
+//
+// 详细计时字段由 httptrace 回调并发写入，因此用 muTrace 保护；其余字段只在
+// RoundTrip 协程内读写。
 type requestInfo struct {
 	RequestHeaders http.Header `datapolicy:"token"`
 	RequestVerb    string
@@ -387,9 +414,12 @@ func (r *requestInfo) toCurl() string {
 
 // debuggingRoundTripper will display information about the requests passing
 // through it based on what is configured
+//
+// debuggingRoundTripper 按 levels 位掩码输出请求/响应诊断信息。
 type debuggingRoundTripper struct {
 	delegatedRoundTripper http.RoundTripper
-	levels                int
+	// levels 是 DebugLevel 的位集合，决定记录哪些字段。
+	levels int
 }
 
 var _ utilnet.RoundTripperWrapper = &debuggingRoundTripper{}
@@ -460,6 +490,9 @@ var knownAuthTypes = map[string]bool{
 
 // maskValue masks credential content from authorization headers
 // See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization
+//
+// 保留认证类型前缀（如 Bearer）便于排查，但隐藏凭证本身；未知类型整体
+// 替换为 <masked>，避免把自定义格式的密钥打进日志。
 func maskValue(key string, value string) string {
 	if !strings.EqualFold(key, "Authorization") {
 		return value
@@ -491,6 +524,8 @@ func (rt *debuggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 	// When logging depends on the context, it uses the verbosity of the per-context logger
 	// and a hard-coded mapping of verbosity to debug details. Otherwise all messages
 	// are logged as V(0).
+	//
+	// 逐级提升以便一次判定；高级别包含低级别信息。
 	if levels&(1<<DebugByContext) != 0 {
 		if loggerV := logger.V(9); loggerV.Enabled() {
 			logger = loggerV
@@ -642,6 +677,8 @@ type headersMap http.Header
 // newHeadersMap masks all sensitive values. This has to be done before
 // passing the map to a logger because while in practice all loggers
 // either use String or MarshalLog, that is not guaranteed.
+//
+// 复制而不是原地修改，避免把脱敏结果写回真实请求头。
 func newHeadersMap(header http.Header) headersMap {
 	h := make(headersMap, len(header))
 	for key, values := range header {
@@ -694,6 +731,9 @@ func shouldEscape(b byte) bool {
 	return !legalHeaderByte(b) || b == '%'
 }
 
+// headerKeyEscape 把 impersonate extra 的键编码成合法的 HTTP 头后缀。
+//
+// 规则与 URL path 转义一致，且额外编码 '%'，保证解码时不会产生歧义。
 func headerKeyEscape(key string) string {
 	buf := strings.Builder{}
 	for i := 0; i < len(key); i++ {

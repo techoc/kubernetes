@@ -40,20 +40,33 @@ import (
 // Implementations must be thread-safe.
 // OnAddOrupdate and OnDelete should be called from informer event handlers to increase
 // the accuracy of the cache.
+//
+// 读路径总是返回底层 store 与 mutation 缓存中较新的版本，因此调用方在自己
+// 刚写完对象后能立即读到新值，而不必等待 watch 事件回灌。MutationCache 只是
+// “更可能新鲜”的视图，不提供强一致保证。
 type MutationCache interface {
+	// GetByKey 返回指定 key 的最新视图。
 	GetByKey(key string) (interface{}, bool, error)
+	// ByIndex 按索引查询最新视图；未配置 Indexer 时返回错误。
 	ByIndex(indexName, indexKey string) ([]interface{}, error)
+	// Mutation 记录一次本地写入，供后续读取优先返回。
 	Mutation(interface{})
+	// OnAddOrUpdate 由 informer 的 add/update handler 调用，清理已过时的条目。
 	OnAddOrUpdate(obj runtime.Object)
+	// OnDelete 由 informer 的 delete handler 调用，写入 tombstone。
 	OnDelete(obj runtime.Object)
 
 	// This interface is not meant to be implemented elsewhere.
 	// Marking it as internal enables future changes without
 	// triggering apidiff.
+	//
+	// internal 通过未导出方法封闭实现集合；由于是未导出方法，包外无法实现该接口。
 	internal()
 }
 
 // ResourceVersionComparator is able to compare object versions.
+//
+// 返回值语义与 strings.Compare 一致：负数表示 lhs 更旧，0 表示相同，正数表示更新。
 type ResourceVersionComparator interface {
 	CompareResourceVersion(lhs, rhs runtime.Object) int
 }
@@ -108,11 +121,13 @@ type MutationCacheOptions struct {
 // quickly by a delete. The caller has to handle stale added objects by
 // checking whether they still exist once the TTL is over.
 func NewIntegerResourceVersionMutationCacheWithOptions(logger klog.Logger, backingCache Store, options MutationCacheOptions) MutationCache {
+	// 默认值与注释保持一致：100 条、5 分钟。
 	var (
 		maxCacheSize = 100
 		ttl          = 5 * time.Minute
 	)
 
+	// 0 表示“使用默认值”，因此无法显式配置为 0。
 	if options.MaxCacheSize != 0 {
 		maxCacheSize = options.MaxCacheSize
 	}
@@ -144,6 +159,9 @@ func NewIntegerResourceVersionMutationCache(logger klog.Logger, backingCache Sto
 // mutationCache doesn't guarantee that it returns values added via Mutation since they can page out and
 // since you can't distinguish between, "didn't observe create" and "was deleted after create",
 // if the key is missing from the backing cache, we always return it as missing
+//
+// lock 同时保护 backingCache 的读取与 mutationCache 的读写，保证“比较后删除”
+// 这一序列相对其他写操作是原子的。
 type mutationCache struct {
 	logger        klog.Logger
 	lock          sync.Mutex
@@ -203,6 +221,7 @@ func (c *mutationCache) GetByKey(key string) (interface{}, bool, error) {
 func (c *mutationCache) ByIndex(name string, indexKey string) ([]interface{}, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	// 索引查询依赖 Indexer；没有配置时无法推断对象的归属，直接报错。
 	if c.indexer == nil {
 		return nil, fmt.Errorf("no indexer has been provided to the mutation cache")
 	}
@@ -229,6 +248,8 @@ func (c *mutationCache) ByIndex(name string, indexKey string) ([]interface{}, er
 	}
 
 	if c.includeAdds {
+		// 索引中不存在的 key 可能对应尚未被 informer 观察到的本地新增，
+		// 需要额外遍历 mutation 缓存，用同一索引函数判断其是否匹配。
 		fn := c.indexer.GetIndexers()[name]
 		// Keys() is returned oldest to newest, so full traversal does not alter the LRU behavior
 		for _, key := range c.mutationCache.Keys() {
@@ -263,15 +284,19 @@ func (c *mutationCache) ByIndex(name string, indexKey string) ([]interface{}, er
 // newerObject checks the mutation cache for a newer object and returns one if found. If the
 // mutated object is older than the backing object, it is removed from the  Must be
 // called while the lock is held.
+//
+// 返回较新的一方，并顺带淘汰已过时的 mutation 条目，控制缓存规模。
 func (c *mutationCache) newerObject(key string, backing runtime.Object) runtime.Object {
 	mutatedObj, exists := c.mutationCache.Get(key)
 	if !exists {
 		return backing
 	}
+	// mutation 缓存中也可能存有 tombstone 等非 runtime.Object，忽略之。
 	mutatedObjRuntime, ok := mutatedObj.(runtime.Object)
 	if !ok {
 		return backing
 	}
+	// 相等也视为 backing 更新：避免本地缓存长期压制 store 中的同版本对象。
 	if c.comparator.CompareResourceVersion(backing, mutatedObjRuntime) >= 0 {
 		c.mutationCache.Remove(key)
 		return backing
@@ -298,6 +323,7 @@ func (c *mutationCache) Mutation(obj interface{}) {
 	if objRuntime, ok := obj.(runtime.Object); ok {
 		if mutatedObj, exists := c.mutationCache.Get(key); exists {
 			if mutatedObjRuntime, ok := mutatedObj.(runtime.Object); ok {
+				// 已有更新的本地写入时丢弃本次；乱序写入不会让视图回退。
 				cmp := c.comparator.CompareResourceVersion(objRuntime, mutatedObjRuntime)
 				if cmp < 0 {
 					return
@@ -308,6 +334,8 @@ func (c *mutationCache) Mutation(obj interface{}) {
 						// Don't store it, keep the tombstone.
 						return
 					}
+					// UID 相同意味着同一实例的另一个版本；既然已删除，
+					// 任何版本都不应复活，保留 tombstone。
 					objMeta, err := meta.Accessor(obj)
 					if err == nil && t.GetUID() == objMeta.GetUID() {
 						// Some other revision of this object instance
@@ -325,6 +353,8 @@ func (c *mutationCache) Mutation(obj interface{}) {
 // the store or updated in in. If the object is as recent as the cached object
 // or newer, the cached object gets removed because it is no longer
 // needed. This keeps the cache smaller.
+//
+// 这是纯粹的优化：即使调用方从不调用，正确性也不受影响，只是缓存会更大。
 func (c *mutationCache) OnAddOrUpdate(obj runtime.Object) {
 	key, err := DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
@@ -351,6 +381,7 @@ func (c *mutationCache) OnAddOrUpdate(obj runtime.Object) {
 // OnDelete can be called to informer the cache about an object deleted in the store.
 // If there is a cached object with the same UID or an older RV, it gets removed.
 func (c *mutationCache) OnDelete(obj runtime.Object) {
+	// 无法获取元数据的对象无法比较，静默忽略（该通知是可选的）。
 	objMeta, err := meta.Accessor(obj)
 	if err != nil {
 		return
@@ -408,6 +439,9 @@ func (c *mutationCache) internal() {}
 
 // etcdObjectVersioner implements versioning and extracting etcd node information
 // for objects that have an embedded ObjectMeta or ListMeta field.
+//
+// 该比较器假设 resourceVersion 是单调递增的十进制整数，这适用于 etcd 后端，
+// 但不适用于所有存储实现。
 type etcdObjectVersioner struct{}
 
 // ObjectResourceVersion implements Versioner
@@ -418,6 +452,7 @@ func (a etcdObjectVersioner) ObjectResourceVersion(obj runtime.Object) (uint64, 
 	}
 	version := accessor.GetResourceVersion()
 	if len(version) == 0 {
+		// 空 resourceVersion 视为 0，便于比较尚未持久化的对象。
 		return 0, nil
 	}
 	return strconv.ParseUint(version, 10, 64)
@@ -429,6 +464,7 @@ func (a etcdObjectVersioner) CompareResourceVersion(lhs, rhs runtime.Object) int
 	lhsVersion, err := a.ObjectResourceVersion(lhs)
 	if err != nil {
 		// coder error
+		// 无法解析说明对象类型或数据有误，属于调用方 bug，直接 panic。
 		panic(err)
 	}
 	rhsVersion, err := a.ObjectResourceVersion(rhs)
@@ -453,19 +489,26 @@ func (a etcdObjectVersioner) CompareResourceVersion(lhs, rhs runtime.Object) int
 // It implements GetName, GetNamespace, GetResourceVersion and GetUID and thus
 // the code above can compare it against other, normal objects. The difference
 // is that it never gets returned by ByIndex or GetByKey.
+//
+// tombstone 用“同 key 的墓碑”阻止已被删除对象通过并发到达的 Put/Update
+// 重新出现在缓存视图里。
 type tombstone struct {
 	namespace, name, rv string
 	uid                 types.UID
 }
 
+// 编译期断言：tombstone 必须能参与与其他对象的比较。
 var _ metav1.Object = &tombstone{}
 var _ runtime.Object = &tombstone{}
 
+// DeepCopyObject 返回浅拷贝即可：所有字段均为值类型。
 func (t *tombstone) DeepCopyObject() runtime.Object {
 	clone := *t
 	return &clone
 }
 
+// 除 GetNamespace/GetName/GetUID/GetResourceVersion 外，metav1.Object 的其余
+// 方法都不会被比较逻辑使用，因此以 panic 显式标记为不支持，避免误用。
 func (t *tombstone) GetObjectKind() schema.ObjectKind { panic("not implemented") }
 
 func (t *tombstone) GetNamespace() string                          { return t.namespace }

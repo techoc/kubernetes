@@ -35,6 +35,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestRESTMapper 验证 DiscoveryRESTMapper 的 GVR<->GVK 映射与版本优先级：
+// 未指定 group 时按 preferred version 选择，只有非首选版本才有的资源也应能找到。
 func TestRESTMapper(t *testing.T) {
 	resources := []*APIGroupResources{
 		{
@@ -71,6 +73,7 @@ func TestRESTMapper(t *testing.T) {
 		},
 
 		// This group tests finding and prioritizing resources that only exist in non-preferred versions
+		// 该组用于验证：只存在于非首选版本的资源也能被找到，并按版本优先级选择。
 		{
 			Group: metav1.APIGroup{
 				Name: "unpreferred",
@@ -155,6 +158,7 @@ func TestRESTMapper(t *testing.T) {
 			input: schema.GroupVersionResource{
 				Resource: "peas",
 			},
+			// peas 不在 preferred v1 中，应回退到 v2beta1 而不是 v2alpha1。
 			want: schema.GroupVersionKind{
 				Group:   "unpreferred",
 				Version: "v2beta1",
@@ -242,6 +246,8 @@ func TestRESTMapper(t *testing.T) {
 	}
 }
 
+// TestDeferredDiscoveryRESTMapper_CacheMiss 验证延迟 mapper 在缓存 miss 时只会 Invalidate 一次，
+// 且缓存已 fresh 时不会重复刷新。
 func TestDeferredDiscoveryRESTMapper_CacheMiss(t *testing.T) {
 	assert := assert.New(t)
 
@@ -266,6 +272,7 @@ func TestDeferredDiscoveryRESTMapper_CacheMiss(t *testing.T) {
 		Resource: "foo",
 	})
 	assert.NoError(err)
+	// 命中缓存后不应再触发刷新。
 	assert.Equal(1, cdc.invalidateCalls, "should NOT have called Invalidate() again")
 
 	gvk, err = m.KindFor(schema.GroupVersionResource{
@@ -274,8 +281,10 @@ func TestDeferredDiscoveryRESTMapper_CacheMiss(t *testing.T) {
 		Resource: "bar",
 	})
 	assert.Error(err)
+	// 虽然又是 miss，但缓存仍是 fresh，不应再次刷新。
 	assert.Equal(1, cdc.invalidateCalls, "should NOT have called Invalidate() again after another cache-miss, but with fresh==true")
 
+	// 缓存过期后再 miss，应再次刷新。
 	cdc.fresh = false
 	gvk, err = m.KindFor(schema.GroupVersionResource{
 		Group:    "a",
@@ -286,6 +295,8 @@ func TestDeferredDiscoveryRESTMapper_CacheMiss(t *testing.T) {
 	assert.Equal(2, cdc.invalidateCalls, "should HAVE called Invalidate() again after another cache-miss, but with fresh==false")
 }
 
+// TestGetAPIGroupResources 验证聚合 discovery 结果时的降级策略：
+// 组列表失败时是否仍能用资源列表兜底，以及单个 GV 失败时的合并行为。
 func TestGetAPIGroupResources(t *testing.T) {
 	type Test struct {
 		name string
@@ -373,6 +384,7 @@ func TestGetAPIGroupResources(t *testing.T) {
 
 var _ DiscoveryInterface = &fakeFailingDiscovery{}
 
+// fakeFailingDiscovery 可分别注入组列表与单个 GV 资源列表的错误，用于测试降级路径。
 type fakeFailingDiscovery struct {
 	groups    []metav1.APIGroup
 	groupsErr error
@@ -386,6 +398,7 @@ func (*fakeFailingDiscovery) RESTClient() restclient.Interface {
 }
 
 func (d *fakeFailingDiscovery) ServerGroups() (*metav1.APIGroupList, error) {
+	// 只有显式构造了空组列表且带错误时才返回 nil，模拟整体失败。
 	if d.groups == nil && d.groupsErr != nil {
 		return nil, d.groupsErr
 	}
@@ -426,6 +439,7 @@ func (c *fakeFailingDiscovery) WithLegacy() DiscoveryInterface {
 	panic("implement me")
 }
 
+// fakeCachedDiscoveryInterface 记录 Invalidate 次数，并提供可控的 fresh 状态。
 type fakeCachedDiscoveryInterface struct {
 	invalidateCalls int
 	fresh           bool
@@ -507,6 +521,7 @@ func (c *fakeCachedDiscoveryInterface) WithLegacy() DiscoveryInterface {
 	panic("implement me")
 }
 
+// 以下为测试共享的固定 API 组/资源定义。
 var (
 	aGroup = metav1.APIGroup{
 		Name: "a",

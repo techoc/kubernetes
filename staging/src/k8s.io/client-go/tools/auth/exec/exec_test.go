@@ -30,15 +30,21 @@ import (
 )
 
 // restInfo holds the rest.Client fields that we care about for test assertions.
+//
+// 仅抽取与 exec 插件相关信息相关的字段，避免比较整个 rest.Config。
 type restInfo struct {
 	host            string
 	tlsClientConfig rest.TLSClientConfig
 	proxyURL        string
 }
 
+// TestLoadExecCredential 表驱动验证 LoadExecCredential：从插件输出的 JSON 解析出
+// ExecCredential 并转换为 rest.Config，同时覆盖正常、字段缺失与各类错误输入。
 func TestLoadExecCredential(t *testing.T) {
 	t.Parallel()
 
+	// 用例覆盖：v1/v1beta1 正常路径、未设置 Config、非法 ProxyURL、缺少 Cluster、
+	// 非 ExecCredential 类型以及无法解析的数据。
 	tests := []struct {
 		name               string
 		data               []byte
@@ -257,6 +263,7 @@ func TestLoadExecCredential(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
+			// 错误分支只校验错误前缀，避免测试与具体措辞耦合。
 			execCredential, restConfig, err := LoadExecCredential(test.data)
 			if test.wantErrorPrefix != "" {
 				if err == nil {
@@ -267,6 +274,7 @@ func TestLoadExecCredential(t *testing.T) {
 			} else if err != nil {
 				t.Error(err)
 			} else {
+				// 分别比较序列化对象、Host、TLS 配置与解析后的代理 URL。
 				if diff := cmp.Diff(test.wantExecCredential, execCredential); diff != "" {
 					t.Error(diff)
 				}
@@ -290,6 +298,7 @@ func TestLoadExecCredential(t *testing.T) {
 	}
 }
 
+// marshal 按给定 GroupVersion 序列化对象，用于构造插件 stdout 的字节内容。
 func marshal(t *testing.T, gv schema.GroupVersion, obj runtime.Object) []byte {
 	t.Helper()
 

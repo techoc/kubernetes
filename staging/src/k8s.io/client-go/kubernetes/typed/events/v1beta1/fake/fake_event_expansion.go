@@ -23,6 +23,10 @@ import (
 )
 
 // CreateWithEventNamespace creats a new event. Returns the copy of the event the server returns, or an error.
+//
+// 事件 API 允许目标对象与事件本身位于不同 namespace，因此这里不能用 c.Create：
+// 当客户端配置了事件 namespace 时构造带 namespace 的 CreateAction，
+// 否则退回 root 作用域动作，保证 fake 的 action 记录与真实请求语义一致。
 func (c *fakeEvents) CreateWithEventNamespace(event *v1beta1.Event) (*v1beta1.Event, error) {
 	action := core.NewRootCreateAction(c.Resource(), event)
 	if c.Namespace() != "" {
@@ -37,6 +41,9 @@ func (c *fakeEvents) CreateWithEventNamespace(event *v1beta1.Event) (*v1beta1.Ev
 }
 
 // UpdateWithEventNamespace replaces an existing event. Returns the copy of the event the server returns, or an error.
+//
+// 与 CreateWithEventNamespace 相同，namespace 由 fake 客户端配置决定，
+// 而不是从 event 对象上读取。
 func (c *fakeEvents) UpdateWithEventNamespace(event *v1beta1.Event) (*v1beta1.Event, error) {
 	action := core.NewRootUpdateAction(c.Resource(), event)
 	if c.Namespace() != "" {
@@ -51,6 +58,9 @@ func (c *fakeEvents) UpdateWithEventNamespace(event *v1beta1.Event) (*v1beta1.Ev
 }
 
 // PatchWithEventNamespace patches an existing event. Returns the copy of the event the server returns, or an error.
+//
+// 固定使用 strategic merge patch：事件对象没有需要 JSON merge 的特殊语义，
+// strategic merge 与真实客户端的行为保持一致。
 func (c *fakeEvents) PatchWithEventNamespace(event *v1beta1.Event, data []byte) (*v1beta1.Event, error) {
 	pt := types.StrategicMergePatchType
 	action := core.NewRootPatchAction(c.Resource(), event.Name, pt, data)

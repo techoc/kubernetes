@@ -15,6 +15,9 @@ limitations under the License.
 */
 
 // Note: the example only works with the code within the same release/branch.
+//
+// 该示例演示用 dynamic 客户端对 Deployment 完成创建、更新、列举、删除。
+// 对象以 unstructured 形式构造，字段名与 apps/v1 的 JSON 结构一一对应。
 package main
 
 import (
@@ -44,6 +47,7 @@ import (
 )
 
 func main() {
+	// 默认读取 ~/.kube/config；home 目录不可用时留空，交由调用者显式传入路径。
 	var kubeconfig *string
 	if home := homedir.HomeDir(); home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
@@ -52,6 +56,7 @@ func main() {
 	}
 	flag.Parse()
 
+	// 示例代码用 panic 简化错误处理；生产代码应向上返回错误。
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
 		panic(err)
@@ -61,8 +66,11 @@ func main() {
 		panic(err)
 	}
 
+	// 动态客户端以 GVR 定位资源，无需导入 apps/v1 的 Go 类型。
 	deploymentRes := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
 
+	// Deployment 以 map 形式描述；字段名与 apps/v1 的 JSON 结构一致。
+	// 注意后续用 SetNestedField 修改数值字段时必须传 int64。
 	deployment := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "apps/v1",
@@ -105,6 +113,8 @@ func main() {
 	}
 
 	// Create Deployment
+	// Namespace(apiv1.NamespaceDefault) 显式指定命名空间；返回结果中的 metadata
+	// 已由服务端补全（含 resourceVersion、uid 等）。
 	fmt.Println("Creating deployment...")
 	result, err := client.Resource(deploymentRes).Namespace(apiv1.NamespaceDefault).Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
@@ -127,6 +137,8 @@ func main() {
 	//
 	// More Info:
 	// https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency
+	//
+	// 下面采用方案 2：冲突时重新读取最新对象再改，避免覆盖他人写入。
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Retrieve the latest version of Deployment before attempting update
@@ -148,6 +160,7 @@ func main() {
 		}
 
 		// update container[0] image
+		// 先改副本再写回整个 containers 切片，保持嵌套结构一致。
 		if err := unstructured.SetNestedField(containers[0].(map[string]interface{}), "nginx:1.13", "image"); err != nil {
 			panic(err)
 		}
@@ -171,6 +184,7 @@ func main() {
 		panic(err)
 	}
 	for _, d := range list.Items {
+		// replicas 在 unstructured 中为 int64，因此用 NestedInt64 读取。
 		replicas, found, err := unstructured.NestedInt64(d.Object, "spec", "replicas")
 		if err != nil || !found {
 			fmt.Printf("Replicas not found for deployment %s: error=%s", d.GetName(), err)
@@ -180,6 +194,7 @@ func main() {
 	}
 
 	// Delete Deployment
+	// 使用 Foreground 删除：等待依赖对象清理完毕后再返回，便于示例串行演示。
 	prompt()
 	fmt.Println("Deleting deployment...")
 	deletePolicy := metav1.DeletePropagationForeground
@@ -193,6 +208,7 @@ func main() {
 	fmt.Println("Deleted deployment.")
 }
 
+// prompt 暂停等待用户按回车，便于逐步观察每个阶段的输出。
 func prompt() {
 	fmt.Printf("-> Press Return key to continue.")
 	scanner := bufio.NewScanner(os.Stdin)

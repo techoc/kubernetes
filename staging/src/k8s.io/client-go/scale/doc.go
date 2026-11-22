@@ -18,4 +18,9 @@ limitations under the License.
 // and updating Scale for any resource which implements the `scale` subresource,
 // as long as that subresource operates on a version of scale convertable to
 // autoscaling.Scale.
+//
+// 中文概述：本包面向“任意实现了 scale 子资源的资源”提供统一客户端。调用方只给出
+// GroupResource，包内通过 RESTMapper 找到首选版本，并用 ScaleKindResolver 把结果
+// 归一化为 autoscaling/v1.Scale，因此调用方无需感知 extensions/v1beta1、
+// apps/v1beta1 等历史版本差异。
 package scale

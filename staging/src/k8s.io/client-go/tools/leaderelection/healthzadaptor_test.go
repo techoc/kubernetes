@@ -28,6 +28,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// fakeLock 是 resourcelock.Interface 的空实现；健康检查只读取 identity 与配置，
+// 不会真正访问锁资源，因此各方法直接返回零值即可。
 type fakeLock struct {
 	identity string
 }
@@ -61,10 +63,14 @@ func (fl *fakeLock) Describe() string {
 }
 
 // TestLeaderElectionHealthChecker tests that the healthcheck for leader election handles its edge cases.
+//
+// 健康检查的语义：只有“本实例仍认为自己是 leader，但租约已过期且超出 adaptorTimeout”
+// 时才报错；尚未参与选举、由他人持有租约、或仍在正常续约窗口内都应返回健康。
 func TestLeaderElectionHealthChecker(t *testing.T) {
 	current := time.Now()
 	req := &http.Request{}
 
+	// 各用例通过 fake clock 把“现在”推到不同位置来模拟租约的时效状态。
 	tests := []struct {
 		description    string
 		expected       error
@@ -148,6 +154,7 @@ func TestLeaderElectionHealthChecker(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		// 新建的 adaptor 在绑定 elector 之前应保持“尚未开始”的状态。
 		adaptor := NewLeaderHealthzAdaptor(test.adaptorTimeout)
 		if adaptor.le != nil {
 			t.Errorf("[%s] leaderChecker started with a LeaderElector %v", test.description, adaptor.le)

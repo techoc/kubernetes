@@ -28,6 +28,8 @@ import (
 	"k8s.io/client-go/openapi/openapitest"
 )
 
+// TestOpenAPIV3Root_GroupVersions 验证从 OpenAPI V3 根文档的 paths 映射中
+// 解析出 GroupVersion 列表：无效路径被忽略，结果按 GV 排序。
 func TestOpenAPIV3Root_GroupVersions(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -36,6 +38,7 @@ func TestOpenAPIV3Root_GroupVersions(t *testing.T) {
 		forcedErr   error
 	}{
 		{
+			// 空 paths 应返回空切片而不是 nil，便于调用方直接 range。
 			name:        "OpenAPI V3 Root: No openapi.Paths() equals no GroupVersions.",
 			expectedGVs: []schema.GroupVersion{},
 		},
@@ -49,6 +52,7 @@ func TestOpenAPIV3Root_GroupVersions(t *testing.T) {
 			},
 		},
 		{
+			// 核心组路径形如 "api/v1"，与带组名的 "apis/<group>/<version>" 不同。
 			name: "OpenAPI V3 Root: Multiple openapi.Paths equals multiple GroupVersions.",
 			paths: map[string]openapi.GroupVersion{
 				"apis/apps/v1":       nil,
@@ -63,6 +67,7 @@ func TestOpenAPIV3Root_GroupVersions(t *testing.T) {
 			},
 		},
 		{
+			// 前缀错误、缺版本、缺组名的路径都应被跳过，而不是报错中断。
 			name: "Multiple GroupVersions, some invalid",
 			paths: map[string]openapi.GroupVersion{
 				"apis/batch/v1beta1":              nil,
@@ -82,6 +87,7 @@ func TestOpenAPIV3Root_GroupVersions(t *testing.T) {
 			},
 		},
 		{
+			// 底层 openapi 客户端失败时，错误应原样向上传播。
 			name:      "OpenAPI V3 Root: Forced error returns error.",
 			forcedErr: fmt.Errorf("openapi client error"),
 		},
@@ -108,6 +114,8 @@ func TestOpenAPIV3Root_GroupVersions(t *testing.T) {
 	}
 }
 
+// TestOpenAPIV3Root_GVSpec 验证按 GV 获取解码后的 OpenAPI V3 文档，
+// 使用内嵌的测试文件客户端避免真实网络请求。
 func TestOpenAPIV3Root_GVSpec(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -142,6 +150,7 @@ func TestOpenAPIV3Root_GVSpec(t *testing.T) {
 			},
 		},
 		{
+			// 文档中不存在该 GV 时返回带 GV 信息的专用错误。
 			name: "OpenAPI V3 spec not found",
 			gv:   schema.GroupVersion{Group: "not", Version: "found"},
 			err:  &GroupVersionNotFoundError{gv: schema.GroupVersion{Group: "not", Version: "found"}},
@@ -167,6 +176,8 @@ func TestOpenAPIV3Root_GVSpec(t *testing.T) {
 	}
 }
 
+// TestOpenAPIV3Root_GVSpecAsMap 验证以 map[string]interface{} 形式返回文档，
+// 调用方无需依赖 spec3 的具体类型即可访问字段。
 func TestOpenAPIV3Root_GVSpecAsMap(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -226,6 +237,8 @@ func TestOpenAPIV3Root_GVSpecAsMap(t *testing.T) {
 	}
 }
 
+// TestOpenAPIV3Root_GroupVersionToPath 验证 GV 到 API 路径的拼接规则：
+// 核心组走 "api/<version>"，其他组走 "apis/<group>/<version>"。
 func TestOpenAPIV3Root_GroupVersionToPath(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -266,6 +279,8 @@ func TestOpenAPIV3Root_GroupVersionToPath(t *testing.T) {
 	}
 }
 
+// TestOpenAPIV3Root_PathToGroupVersion 验证路径到 GV 的反向解析，
+// 并对缺少版本段的路径返回错误。
 func TestOpenAPIV3Root_PathToGroupVersion(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -282,6 +297,7 @@ func TestOpenAPIV3Root_PathToGroupVersion(t *testing.T) {
 			},
 		},
 		{
+			// "apis/apps" 只有组名没有版本，无法构成合法 GV。
 			name:        "Group without Version throws error",
 			path:        "apis/apps",
 			expectedErr: true,

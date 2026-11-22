@@ -42,11 +42,13 @@ import (
 
 func init() {
 	// Enable klog which is used in dependencies
+	// 依赖链中会打日志；打开详细日志便于失败时定位。
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 	flag.Set("v", "9")
 }
 
+// testObject 是最小化的 runtime.Object，只携带 resourceVersion 供测试使用。
 type testObject struct {
 	resourceVersion string
 }
@@ -55,6 +57,7 @@ func (o testObject) GetObjectKind() schema.ObjectKind { return schema.EmptyObjec
 func (o testObject) DeepCopyObject() runtime.Object   { return o }
 func (o testObject) GetResourceVersion() string       { return o.resourceVersion }
 
+// withCounter 包装 Watcher 并统计 Watch 被调用次数，用来断言重连行为。
 func withCounter(w cache.Watcher) (*uint32, cache.WatcherWithContext) {
 	var counter uint32
 	return &counter, &cache.ListWatch{
@@ -65,6 +68,7 @@ func withCounter(w cache.Watcher) (*uint32, cache.WatcherWithContext) {
 	}
 }
 
+// makeTestEvent 构造一个带指定 resourceVersion 的 Added 事件。
 func makeTestEvent(rv int) watch.Event {
 	return watch.Event{
 		Type: watch.Added,
@@ -74,6 +78,7 @@ func makeTestEvent(rv int) watch.Event {
 	}
 }
 
+// arrayToChannel 把事件切片转为带缓冲 channel；ProxyWatcher 从其关闭推断 watch 结束。
 func arrayToChannel(array []watch.Event) chan watch.Event {
 	ch := make(chan watch.Event, len(array))
 
@@ -98,6 +103,8 @@ func parseResourceVersionOrDie(resourceVersion string) uint64 {
 	return version
 }
 
+// fromRV 模拟服务端行为：过滤掉 resourceVersion 不大于请求值的事件，
+// 错误事件在首次有效事件之前被丢弃。
 func fromRV(resourceVersion string, array []watch.Event) []watch.Event {
 	var result []watch.Event
 	rv := parseResourceVersionOrDie(resourceVersion)
@@ -122,6 +129,8 @@ func fromRV(resourceVersion string, array []watch.Event) []watch.Event {
 	return result
 }
 
+// closeAfterN 返回一个在转发 n 个事件后自行关闭的 channel，
+// 用于模拟服务端周期性断开 watch 连接。
 func closeAfterN(n int, source chan watch.Event) chan watch.Event {
 	result := make(chan watch.Event, 0)
 	go func() {
@@ -134,6 +143,8 @@ func closeAfterN(n int, source chan watch.Event) chan watch.Event {
 	return result
 }
 
+// unexpectedError 模拟返回了非 Status 的未知错误对象，用于验证 RetryWatcher
+// 不会因类型断言失败而崩溃。
 type unexpectedError struct {
 	// Inheriting any struct fulfilling runtime.Object interface would do.
 	metav1.Status
@@ -141,6 +152,8 @@ type unexpectedError struct {
 
 var _ runtime.Object = &unexpectedError{}
 
+// TestNewRetryWatcher 验证空 resourceVersion 与 "0" 在构造阶段即被拒绝：
+// 底层 WATCH 对这两个值语义不可靠，提前失败比运行期静默错误更好。
 func TestNewRetryWatcher(t *testing.T) {
 	tt := []struct {
 		name      string
@@ -168,6 +181,9 @@ func TestNewRetryWatcher(t *testing.T) {
 	}
 }
 
+// TestRetryWatcher 是核心表驱动测试：覆盖连接错误、410 Gone、超时/5xx、
+// 未知错误码/类型、watch 正常关闭、以及从任意 resourceVersion 续传等情形。
+// 每个用例断言收到的事件序列与底层 Watch 的调用次数。
 func TestRetryWatcher(t *testing.T) {
 	tt := []struct {
 		name        string
@@ -630,6 +646,8 @@ func TestRetryWatcher(t *testing.T) {
 	}
 }
 
+// TestRetryWatcherToFinishWithUnreadEvents 验证 Stop 在仍有未读事件时也能
+// 及时关闭 Done 与 ResultChan，且重复 Stop 不会 panic。
 func TestRetryWatcherToFinishWithUnreadEvents(t *testing.T) {
 	watcher, err := NewRetryWatcher("1", &cache.ListWatch{
 		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {

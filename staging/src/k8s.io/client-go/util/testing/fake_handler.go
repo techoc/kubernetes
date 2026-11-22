@@ -39,6 +39,8 @@ type LogInterface interface {
 // FakeHandler is to assist in testing HTTP requests. Notice that FakeHandler is
 // not thread safe and you must not direct traffic to except for the request
 // you want to test. You can do this by hiding it in an http.ServeMux.
+//
+// 只能记录一次请求：记录后若再有请求进来会 panic，用于发现意外的重试/额外调用。
 type FakeHandler struct {
 	RequestReceived *http.Request
 	RequestBody     string
@@ -53,15 +55,19 @@ type FakeHandler struct {
 	requestCount   int
 	hasBeenChecked bool
 
+	// SkipRequestFn 返回 true 时直接返回预设响应，不记录请求（用于探活等噪声请求）。
 	SkipRequestFn func(verb string, url url.URL) bool
 }
 
+// SetResponseBody 加锁更新响应体，便于测试中途改变行为。
 func (f *FakeHandler) SetResponseBody(responseBody string) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.ResponseBody = responseBody
 }
 
+// ServeHTTP 记录请求并返回预设状态码/响应体；响应先写出，再读取请求体，
+// 使调用方能及时得到响应。
 func (f *FakeHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -75,6 +81,7 @@ func (f *FakeHandler) ServeHTTP(response http.ResponseWriter, request *http.Requ
 
 	f.requestCount++
 	if f.hasBeenChecked {
+		// 校验之后仍有请求，说明被测代码发生了预期外的调用。
 		panic("got request after having been validated")
 	}
 
@@ -93,6 +100,7 @@ func (f *FakeHandler) ServeHTTP(response http.ResponseWriter, request *http.Requ
 	}
 }
 
+// ValidateRequestCount 断言收到的请求次数，并标记 handler 已校验（后续请求会 panic）。
 func (f *FakeHandler) ValidateRequestCount(t TestInterface, count int) bool {
 	ok := true
 	f.lock.Lock()
@@ -122,6 +130,7 @@ func (f *FakeHandler) ValidateRequest(t TestInterface, expectedPath, expectedMet
 		t.Errorf("Unexpected nil request received for %s", expectedPath)
 		return
 	}
+	// 分别比较 path/query/method/body，失败时错误信息能直接指出差异字段。
 	if f.RequestReceived.URL.Path != expectURL.Path {
 		t.Errorf("Unexpected request path for request %#v, received: %q, expected: %q", f.RequestReceived, f.RequestReceived.URL.Path, expectURL.Path)
 	}

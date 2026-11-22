@@ -36,11 +36,14 @@ import (
 	testclocks "k8s.io/utils/clock/testing"
 )
 
+// TestEventf 验证 Eventf 构造 events/v1.Event 的正确性：
+// 对象引用、related 对象、格式化后的 note、上报者身份，以及事件名的生成规则。
 func TestEventf(t *testing.T) {
 	// use a fixed time for generated names that depend on the unix timestamp
 	fakeClock := testclocks.NewFakeClock(time.Date(2023, time.January, 1, 12, 0, 0, 0, time.UTC))
 
 	testCases := []struct {
+		// desc 同时作为子测试名；regarding/related 是事件关联对象。
 		desc          string
 		regarding     runtime.Object
 		related       runtime.Object
@@ -52,6 +55,7 @@ func TestEventf(t *testing.T) {
 		expectedEvent *eventsv1.Event
 	}{
 		{
+			// 普通事件：事件名由 regarding 名称加纳秒时间戳组成。
 			desc: "normal event",
 			regarding: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -85,6 +89,7 @@ func TestEventf(t *testing.T) {
 			},
 		},
 		{
+			// related 对象与格式化参数都应反映到最终 Event 中。
 			desc: "event with related object and format args",
 			regarding: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -131,6 +136,7 @@ func TestEventf(t *testing.T) {
 				ReportingInstance:   "i1",
 			},
 		}, {
+			// IPAddress 名称包含冒号等字符，无法作为合法事件名，应回退为随机名。
 			desc: "event with invalid Event name",
 			regarding: &networkingv1.IPAddress{
 				ObjectMeta: metav1.ObjectMeta{
@@ -161,6 +167,7 @@ func TestEventf(t *testing.T) {
 				ReportingInstance:   "i1",
 			},
 		}, {
+			// 超长 regarding 名称会被截断/替换，最终事件名必须符合 DNS 子域名规则。
 			desc: "large event name",
 			regarding: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -196,7 +203,9 @@ func TestEventf(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			// 广播器缓冲 1 个事件且满时阻塞，确保测试能同步读取到刚发出的事件。
 			broadcaster := watch.NewBroadcaster(1, watch.WaitIfChannelFull)
+			// recorderImpl 直接注入 scheme/身份/时钟，跳过 NewRecorder 的客户端依赖。
 			recorder := &recorderImpl{
 				scheme:              runtime.NewScheme(),
 				reportingController: "c1",
@@ -205,6 +214,7 @@ func TestEventf(t *testing.T) {
 				clock:               fakeClock,
 			}
 
+			// 注册核心与 networking 类型，使 Eventf 能为相关对象解析出 Kind/APIVersion。
 			if err := v1.AddToScheme(recorder.scheme); err != nil {
 				t.Fatal(err)
 			}
@@ -220,11 +230,13 @@ func TestEventf(t *testing.T) {
 			select {
 			case event := <-ch.ResultChan():
 				actualEvent := event.Object.(*eventsv1.Event)
+				// 无论输入名称多奇怪，最终事件名都必须是合法 DNS 子域名。
 				if errs := apimachineryvalidation.NameIsDNSSubdomain(actualEvent.Name, false); len(errs) > 0 {
 					t.Errorf("Event Name = %s; not a valid name: %v", actualEvent.Name, errs)
 				} // Overwrite fields that are not relevant for comparison
 				tc.expectedEvent.EventTime = actualEvent.EventTime
 				// invalid event names generate random names
+				// 无效事件名会改为随机名，因此比较前把期望名与结果名都清空。
 				if tc.expectedEvent.Name == "" {
 					actualEvent.Name = ""
 				}
@@ -232,6 +244,7 @@ func TestEventf(t *testing.T) {
 					t.Errorf("Unexpected event diff (-want, +got):\n%s", diff)
 				}
 			case <-time.After(time.Second):
+				// 事件未在 1 秒内到达说明 Eventf 未正确广播。
 				t.Errorf("Timeout waiting for event")
 			}
 

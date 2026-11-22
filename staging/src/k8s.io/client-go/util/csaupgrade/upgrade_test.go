@@ -32,6 +32,8 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
+// TestFindOwners 验证 FindFieldsOwners 能按 operation + 字段路径找出拥有者，
+// 覆盖根字段、嵌套字段、多字段、部分匹配与 Apply/Update 两种 operation。
 func TestFindOwners(t *testing.T) {
 	testCases := []struct {
 		Name              string
@@ -271,6 +273,7 @@ func TestFindOwners(t *testing.T) {
 			var entries struct {
 				ManagedFields []metav1.ManagedFieldsEntry `json:"managedFields"`
 			}
+			// 从 YAML 片段解析出 managedFields，测试数据与真实对象结构保持一致。
 			err := yaml.Unmarshal([]byte(tcase.ManagedFieldsYAML), &entries)
 			require.NoError(t, err)
 
@@ -278,6 +281,7 @@ func TestFindOwners(t *testing.T) {
 
 			// Compare owner names since they uniquely identify the selected entries
 			// (given that the operation is provided)
+			// 在 operation 已限定的前提下，manager 名即可唯一标识条目。
 			ownerNames := []string{}
 			for _, entry := range result {
 				ownerNames = append(ownerNames, entry.Manager)
@@ -288,6 +292,8 @@ func TestFindOwners(t *testing.T) {
 	}
 }
 
+// TestUpgradeCSA 验证把 client-side apply 的 managedFields 迁移为 server-side apply 的整体行为：
+// 包括直接改名、与已有 SSA 条目合并、版本不匹配时丢弃、无操作、多 manager 合并及 subresource。
 func TestUpgradeCSA(t *testing.T) {
 
 	cases := []struct {
@@ -1249,6 +1255,7 @@ status:
 				t.Fatal(err)
 			}
 
+			// 在副本上执行升级，保留 initialObject 供后续 patch 测试使用。
 			upgraded := initialObject.DeepCopy()
 			err = csaupgrade.UpgradeManagedFields(
 				upgraded,
@@ -1274,7 +1281,7 @@ status:
 			// Show that the UpgradeManagedFieldsPatch yields a patch that does
 			// nothing more and nothing less than make the object equal to output
 			// of UpgradeManagedFields
-
+			// 验证补丁路径与直接修改路径结果一致：应用补丁后的对象应等于 upgraded。
 			initialCopy := initialObject.DeepCopyObject()
 			patchBytes, err := csaupgrade.UpgradeManagedFieldsPatch(
 				initialCopy, sets.New(testCase.CSAManagers...), testCase.SSAManager, testCase.Options...)

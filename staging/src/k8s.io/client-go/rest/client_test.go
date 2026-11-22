@@ -40,6 +40,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestParam 汇总 validate 所需的断言期望值。
 type TestParam struct {
 	actualError           error
 	expectingError        bool
@@ -51,6 +52,7 @@ type TestParam struct {
 }
 
 // TestSerializer makes sure that you're always able to decode metav1.Status
+// 即便请求的是 extensions/v1beta1，状态对象也以 v1 编码返回，必须能解码。
 func TestSerializer(t *testing.T) {
 	gv := v1beta1.SchemeGroupVersion
 	contentConfig := ContentConfig{
@@ -73,6 +75,7 @@ func TestSerializer(t *testing.T) {
 	}
 }
 
+// TestDoRequestSuccess 验证 200 响应能原样返回响应体且不报错。
 func TestDoRequestSuccess(t *testing.T) {
 	testServer, fakeHandler, status := testServerEnv(t, 200)
 	defer testServer.Close()
@@ -88,6 +91,7 @@ func TestDoRequestSuccess(t *testing.T) {
 	validate(testParam, t, body, fakeHandler)
 }
 
+// TestDoRequestFailed 验证 404 会转换为 APIStatus 错误，且状态内容与服务器一致。
 func TestDoRequestFailed(t *testing.T) {
 	status := &metav1.Status{
 		Code:    http.StatusNotFound,
@@ -123,6 +127,7 @@ func TestDoRequestFailed(t *testing.T) {
 	}
 }
 
+// TestDoRawRequestFailed 验证 Raw 路径在错误响应下仍能返回 body 供调用方检查。
 func TestDoRawRequestFailed(t *testing.T) {
 	status := &metav1.Status{
 		Code:    http.StatusNotFound,
@@ -163,6 +168,7 @@ func TestDoRawRequestFailed(t *testing.T) {
 	}
 }
 
+// TestDoRequestCreated 验证 201 会让 WasCreated 置为 true。
 func TestDoRequestCreated(t *testing.T) {
 	testServer, fakeHandler, status := testServerEnv(t, 201)
 	defer testServer.Close()
@@ -179,6 +185,7 @@ func TestDoRequestCreated(t *testing.T) {
 	validate(testParam, t, body, fakeHandler)
 }
 
+// TestDoRequestNotCreated 验证 202 不会被误判为“已创建”。
 func TestDoRequestNotCreated(t *testing.T) {
 	testServer, fakeHandler, expectedStatus := testServerEnv(t, 202)
 	defer testServer.Close()
@@ -193,6 +200,7 @@ func TestDoRequestNotCreated(t *testing.T) {
 	validate(testParam, t, body, fakeHandler)
 }
 
+// TestDoRequestAcceptedNoContentReturned 验证 204 无响应体时不算错误。
 func TestDoRequestAcceptedNoContentReturned(t *testing.T) {
 	testServer, fakeHandler, _ := testServerEnv(t, 204)
 	defer testServer.Close()
@@ -208,6 +216,7 @@ func TestDoRequestAcceptedNoContentReturned(t *testing.T) {
 	validate(testParam, t, body, fakeHandler)
 }
 
+// TestBadRequest 验证 400 会作为错误返回，同时仍能读到状态 body。
 func TestBadRequest(t *testing.T) {
 	testServer, fakeHandler, _ := testServerEnv(t, 400)
 	defer testServer.Close()
@@ -222,6 +231,7 @@ func TestBadRequest(t *testing.T) {
 	validate(testParam, t, body, fakeHandler)
 }
 
+// validate 是上述 Do 测试共用的断言入口，核对错误、created 标志、body 与请求路径。
 func validate(testParam TestParam, t *testing.T, body []byte, fakeHandler *utiltesting.FakeHandler) {
 	switch {
 	case testParam.expectingError && testParam.actualError == nil:
@@ -253,6 +263,7 @@ func validate(testParam TestParam, t *testing.T, body []byte, fakeHandler *utilt
 
 }
 
+// TestHTTPMethods 确认每种 HTTP 动词都能构造出非 nil 的请求对象。
 func TestHTTPMethods(t *testing.T) {
 	testServer, _, _ := testServerEnv(t, 200)
 	defer testServer.Close()
@@ -284,6 +295,7 @@ func TestHTTPMethods(t *testing.T) {
 	}
 }
 
+// TestHTTPProxy 验证配置 Proxy 后请求确实经过代理，且响应体被代理追加了前缀。
 func TestHTTPProxy(t *testing.T) {
 	ctx := context.Background()
 	testServer, fh, _ := testServerEnv(t, 200)
@@ -335,6 +347,8 @@ func TestHTTPProxy(t *testing.T) {
 	}
 }
 
+// TestCreateBackoffManager 覆盖退避配置的三种情形：
+// 正基数+时长产生指数退避；时长为 0 不退避；未设置环境变量不退避。
 func TestCreateBackoffManager(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	theUrl, _ := url.Parse("http://localhost")
@@ -371,6 +385,7 @@ func TestCreateBackoffManager(t *testing.T) {
 
 }
 
+// testServerEnv 启动一个返回固定状态码与 Status body 的测试服务器。
 func testServerEnv(t *testing.T, statusCode int) (*httptest.Server, *utiltesting.FakeHandler, *metav1.Status) {
 	status := &metav1.Status{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Status"}, Status: fmt.Sprintf("%s", metav1.StatusSuccess)}
 	expectedBody, _ := runtime.Encode(scheme.Codecs.LegacyCodec(v1.SchemeGroupVersion), status)
@@ -383,6 +398,7 @@ func testServerEnv(t *testing.T, statusCode int) (*httptest.Server, *utiltesting
 	return testServer, &fakeHandler, status
 }
 
+// restClient 针对测试服务器构造使用 core/v1 配置的 RESTClient。
 func restClient(testServer *httptest.Server) (*RESTClient, error) {
 	c, err := RESTClientFor(&Config{
 		Host: testServer.URL,

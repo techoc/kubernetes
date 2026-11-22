@@ -22,14 +22,18 @@ import (
 	"k8s.io/client-go/util/watchlist"
 )
 
+// fakeWatchListClient 模拟客户端对 WatchList 语义的支持情况。
 type fakeWatchListClient struct {
 	unSupportedWatchListSemantics bool
 }
 
+// IsWatchListSemanticsUnSupported 返回预设值，供包装函数探测。
 func (f fakeWatchListClient) IsWatchListSemanticsUnSupported() bool {
 	return f.unSupportedWatchListSemantics
 }
 
+// TestToListWatcherWithWatchListSemantics 验证包装后的 ListWatch 能正确反映
+// 客户端的 WatchList 能力；未实现该接口的客户端按“支持”处理。
 func TestToListWatcherWithWatchListSemantics(t *testing.T) {
 	scenarios := []struct {
 		name                                string

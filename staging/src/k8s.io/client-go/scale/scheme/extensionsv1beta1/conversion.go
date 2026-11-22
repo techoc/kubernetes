@@ -25,11 +25,15 @@ import (
 	scheme "k8s.io/client-go/scale/scheme"
 )
 
+// Convert_scheme_ScaleStatus_To_v1beta1_ScaleStatus 把内部 ScaleStatus 转成
+// extensions/v1beta1 表示。旧版本同时有 map 形式 Selector 与字符串 TargetSelector，
+// 这里把结构化选择器展开成两者以兼容老客户端。
 func Convert_scheme_ScaleStatus_To_v1beta1_ScaleStatus(in *scheme.ScaleStatus, out *v1beta1.ScaleStatus, s conversion.Scope) error {
 	out.Replicas = in.Replicas
 	out.Selector = nil
 	out.TargetSelector = ""
 	if in.Selector != nil {
+		// 只有纯 MatchLabels 才能无损映射到 map 形式；带表达式时仅保留字符串形式。
 		if in.Selector.MatchExpressions == nil || len(in.Selector.MatchExpressions) == 0 {
 			out.Selector = in.Selector.MatchLabels
 		}
@@ -44,6 +48,7 @@ func Convert_scheme_ScaleStatus_To_v1beta1_ScaleStatus(in *scheme.ScaleStatus, o
 	return nil
 }
 
+// Convert_v1beta1_ScaleStatus_To_scheme_ScaleStatus 把 v1beta1 表示归一化为内部结构。
 func Convert_v1beta1_ScaleStatus_To_scheme_ScaleStatus(in *v1beta1.ScaleStatus, out *scheme.ScaleStatus, s conversion.Scope) error {
 	out.Replicas = in.Replicas
 
@@ -51,6 +56,7 @@ func Convert_v1beta1_ScaleStatus_To_scheme_ScaleStatus(in *v1beta1.ScaleStatus, 
 	// old clients can't be expected to know about new fields but clients that know about the
 	// new field can be expected to know about the old field (though that's not quite true, due
 	// to kubectl apply). However, these fields are readonly, so any non-nil value should work.
+	// 优先解析信息更丰富的 TargetSelector（支持表达式），失败或为空时退回 map 形式。
 	if in.TargetSelector != "" {
 		labelSelector, err := metav1.ParseToLabelSelector(in.TargetSelector)
 		if err != nil {
@@ -59,6 +65,7 @@ func Convert_v1beta1_ScaleStatus_To_scheme_ScaleStatus(in *v1beta1.ScaleStatus, 
 		}
 		out.Selector = labelSelector
 	} else if in.Selector != nil {
+		// 必须深拷贝 map，避免内部对象与输入共享底层存储。
 		out.Selector = new(metav1.LabelSelector)
 		selector := make(map[string]string)
 		for key, val := range in.Selector {

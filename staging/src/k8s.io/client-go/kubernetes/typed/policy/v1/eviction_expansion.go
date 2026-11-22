@@ -23,11 +23,19 @@ import (
 )
 
 // The EvictionExpansion interface allows manually adding extra methods to the ScaleInterface.
+// （原文如此：此处实际扩展的是 EvictionInterface。）
+//
+// EvictionExpansion 通过手写代码为生成的 EvictionInterface 补充 Evict 方法，
+// 因为 eviction 是以 Pod 子资源的形式提供的，无法由代码生成器直接表达。
 type EvictionExpansion interface {
 	Evict(ctx context.Context, eviction *policy.Eviction) error
 }
 
+// Evict 向指定 Pod 的 eviction 子资源 POST 一个 Eviction 对象。
+// 该请求可能被 PDB 拒绝（返回 429），调用方需按约定处理重试。
 func (c *evictions) Evict(ctx context.Context, eviction *policy.Eviction) error {
+	// eviction 子资源固定挂在 core/v1 的 pods 之下，与 policy/v1 的组版本无关，
+	// 因此这里显式使用 /api/v1 绝对路径。
 	return c.GetClient().Post().
 		AbsPath("/api/v1").
 		Namespace(eviction.Namespace).

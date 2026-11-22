@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package kubernetes_test 端到端验证 kubernetes clientset 的构造与 informer 行为，
+// 特别是 watch-list（SendInitialEvents）语义的支持判定与回退。
 package kubernetes_test
 
 import (
@@ -41,6 +43,8 @@ import (
 	"k8s.io/client-go/util/watchlist"
 )
 
+// TestDoesClientSupportWatchListSemanticsForKubeClient 确认类型化 clientset 被标记为支持
+// watch-list 语义（其底层 REST 客户端能正确处理 SendInitialEvents）。
 func TestDoesClientSupportWatchListSemanticsForKubeClient(t *testing.T) {
 	target, err := kubernetes.NewForConfig(&rest.Config{})
 	if err != nil {
@@ -51,9 +55,13 @@ func TestDoesClientSupportWatchListSemanticsForKubeClient(t *testing.T) {
 	}
 }
 
+// TestWatchListSemanticsSimple 用最小 watch 端点验证：开启 WatchListClient 后，
+// informer 会先发起带 watch 参数的流式请求，并在收到 initial-events-end Bookmark 后完成同步。
 func TestWatchListSemanticsSimple(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
 
+	// 服务端只允许一次 watch 请求，并立即返回结束 Bookmark；
+	// 若客户端改走 List，则测试失败。
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if _, ok := req.URL.Query()["watch"]; !ok {
 			t.Errorf("expected a watch request, params: %v", req.URL.Query())
@@ -116,6 +124,8 @@ func TestWatchListSemanticsSimple(t *testing.T) {
 }
 
 func TestUnSupportWatchListSemantics(t *testing.T) {
+	// TestUnSupportWatchListSemantics 验证 fake clientset 不支持 watch-list 时能自动回退，
+	// informer 仍可正常同步（fake 客户端只实现普通 List/Watch）。
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, true)
 	// The fake client doesn’t support WatchList semantics,
 	// so we don’t need to prepare a response.
@@ -134,6 +144,8 @@ func TestUnSupportWatchListSemantics(t *testing.T) {
 	}
 }
 
+// TestClientUserAgent 验证 User-Agent 的默认值与应用自定义值两种情况：
+// 空值时使用 client-go 默认 UA，自定义值时原样发送。
 func TestClientUserAgent(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -153,6 +165,7 @@ func TestClientUserAgent(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// 服务端在收到请求时断言 UA；同时覆盖核心组与另一资源，确认 UA 对所有请求一致。
 			ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				userAgent := r.Header.Get("User-Agent")
 				if userAgent != tc.expect {

@@ -31,10 +31,13 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// alwaysRetryError 让所有错误都被判定为可重试，用于构造重试耗尽的场景。
 var alwaysRetryError = IsRetryableErrorFunc(func(_ *http.Request, _ error) bool {
 	return true
 })
 
+// TestIsNextRetry 覆盖 withRetry 的重试判定与退避计算：
+// 只有可重试错误或 429/5xx 才会重试，重试次数用尽后停止，并记录 Retry-After 信息。
 func TestIsNextRetry(t *testing.T) {
 	fakeError := errors.New("fake error")
 	tests := []struct {
@@ -49,6 +52,7 @@ func TestIsNextRetry(t *testing.T) {
 		retryAfterExpected []*RetryAfter
 	}{
 		{
+			// response 和 err 都为 nil 属于非法输入，不应重试。
 			name:               "bad input, response and err are nil",
 			maxRetries:         2,
 			attempts:           1,
@@ -59,6 +63,7 @@ func TestIsNextRetry(t *testing.T) {
 			retryAfterExpected: []*RetryAfter{nil},
 		},
 		{
+			// maxRetries=0 表示禁用重试，即使响应带 Retry-After 也不重试。
 			name:          "zero maximum retry",
 			maxRetries:    0,
 			attempts:      1,
@@ -95,6 +100,7 @@ func TestIsNextRetry(t *testing.T) {
 			},
 		},
 		{
+			// 429 且带 Retry-After 时，等待时长取服务端建议值，并记录 FlowSchema UID 便于定位限流来源。
 			name:       "server returned a retryable HTTP 429 response",
 			maxRetries: 3,
 			attempts:   1,
@@ -117,6 +123,7 @@ func TestIsNextRetry(t *testing.T) {
 			},
 		},
 		{
+			// 5xx 默认可重试，Retry-After 同样生效。
 			name:       "server returned a retryable HTTP 5xx response",
 			maxRetries: 3,
 			attempts:   1,
@@ -138,6 +145,7 @@ func TestIsNextRetry(t *testing.T) {
 			},
 		},
 		{
+			// 没有 Retry-After 头时无法确定等待时间，不发起重试。
 			name:       "server returned a non response without without a Retry-After header",
 			maxRetries: 1,
 			attempts:   1,
@@ -155,6 +163,7 @@ func TestIsNextRetry(t *testing.T) {
 			},
 		},
 		{
+			// err 与 response 同时存在时，err 优先，按可重试错误处理。
 			name:       "both response and err are set, err takes precedence",
 			maxRetries: 1,
 			attempts:   1,
@@ -177,6 +186,7 @@ func TestIsNextRetry(t *testing.T) {
 			},
 		},
 		{
+			// attempts=4、maxRetries=3：前三次返回 true，第四次耗尽后返回 false。
 			name:             "all retries are exhausted",
 			maxRetries:       3,
 			attempts:         4,
@@ -216,6 +226,7 @@ func TestIsNextRetry(t *testing.T) {
 					base: &url.URL{},
 				},
 			}
+			// 同一个 withRetry 上连续调用，模拟真实请求的多次尝试。
 			r := &withRetry{maxRetries: test.maxRetries}
 
 			retryGot := make([]bool, 0)
@@ -236,6 +247,8 @@ func TestIsNextRetry(t *testing.T) {
 	}
 }
 
+// TestWrapPreviousError 验证重试失败后如何包装错误：
+// 当前错误应保持可用 errors.Is/As 判定的身份，同时错误消息中附加上一次尝试的错误。
 func TestWrapPreviousError(t *testing.T) {
 	const (
 		attempt                = 2
@@ -328,6 +341,7 @@ func TestWrapPreviousError(t *testing.T) {
 			contains:    fmt.Sprintf(containsFormatExpected, io.EOF.Error()),
 		},
 		{
+			// url.Error 内部通常已经包含底层错误，这里只取其 Err 字段避免重复或信息丢失。
 			name:        "previous error should be unwrapped if it is url.Error",
 			currentErr:  urlEOFErr,
 			previousErr: &url.Error{Err: io.ErrUnexpectedEOF},
@@ -365,6 +379,7 @@ func TestWrapPreviousError(t *testing.T) {
 					t.Errorf("Expected error message to contain %q, but got: %v", test.contains, err)
 				}
 
+				// 包装后应能用 errors.Unwrap 取回原始当前错误。
 				currentErrGot := err
 				if test.wrapped {
 					currentErrGot = errors.Unwrap(err)
@@ -377,6 +392,8 @@ func TestWrapPreviousError(t *testing.T) {
 	}
 
 	t.Run("Before should track previous error", func(t *testing.T) {
+		// Before 在请求开始前检查 ctx：上下文已取消时应立即返回错误，
+		// 并把上一次的 currentErr 移到 previousErr，供后续错误包装使用。
 		retry := &withRetry{
 			currentErr: io.EOF,
 		}

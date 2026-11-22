@@ -14,6 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package metadata provides a client for retrieving only object metadata
+// (in the form of PartialObjectMetadata) from any Kubernetes-compatible API.
+//
+// metadata 包提供只获取对象元数据（以 PartialObjectMetadata 形式）的客户端。
+// 它通过 Accept: application/vnd.kubernetes.protobuf;as=PartialObjectMetadata
+// 之类的请求头让服务端裁剪响应，从而降低带宽与解码成本。
 package metadata
 
 import (
@@ -27,12 +33,21 @@ import (
 
 // Interface allows a caller to get the metadata (in the form of PartialObjectMetadata objects)
 // from any Kubernetes compatible resource API.
+//
+// Interface 允许调用方以 PartialObjectMetadata 的形式获取任意兼容 Kubernetes 的资源元数据。
+// 相比完整对象，元数据请求可显著降低传输量与解码开销，适合事件分发、
+// 标签筛选、按名字查询等只关心 metadata 的场景。
 type Interface interface {
+	// Resource 返回指定 GVR 对应的 Getter。
 	Resource(resource schema.GroupVersionResource) Getter
 }
 
 // ResourceInterface contains the set of methods that may be invoked on objects by their metadata.
 // Update is not supported by the server, but Patch can be used for the actions Update would handle.
+//
+// ResourceInterface 列出可对对象元数据执行的操作。
+// 服务端不支持 Update（那需要完整对象），但可用 Patch 达到与 Update 相同的效果；
+// 这些方法均支持可变参数 subresources，用于访问 status 等子资源。
 type ResourceInterface interface {
 	Delete(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error
 	DeleteCollection(ctx context.Context, options metav1.DeleteOptions, listOptions metav1.ListOptions) error
@@ -43,6 +58,10 @@ type ResourceInterface interface {
 }
 
 // Getter handles both namespaced and non-namespaced resource types consistently.
+//
+// Getter 同时覆盖命名空间作用域和集群作用域资源：
+// 直接调用 Getter 的方法作用于集群作用域（或默认范围），
+// Namespace(n) 则返回绑定到命名空间 n 的操作句柄。
 type Getter interface {
 	Namespace(string) ResourceInterface
 	ResourceInterface

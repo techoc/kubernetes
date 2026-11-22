@@ -29,6 +29,7 @@ import (
 // Version is the string that represents the current external default version.
 const Version = "v1"
 
+// ExternalVersion 是当前对外版本的 GroupVersion（core 组，无 group 前缀）。
 var ExternalVersion = schema.GroupVersion{Group: "", Version: "v1"}
 
 // OldestVersion is the string that represents the oldest server version supported,
@@ -42,10 +43,14 @@ const OldestVersion = "v1"
 var Versions = []string{"v1"}
 
 var (
-	Codec  runtime.Codec
+	// Codec 用于在内部 kubeconfig 表示与 v1 之间编解码（默认 YAML）。
+	Codec runtime.Codec
+	// Scheme 注册了内部类型与 v1 类型，供转换与编解码使用。
 	Scheme *runtime.Scheme
 )
 
+// init 构建全局 Scheme 与 Codec。Codec 配置为“先默认化再转换到 v1”，
+// 这样反序列化旧版 kubeconfig 时会自动补齐默认值。
 func init() {
 	Scheme = runtime.NewScheme()
 	utilruntime.Must(api.AddToScheme(Scheme))

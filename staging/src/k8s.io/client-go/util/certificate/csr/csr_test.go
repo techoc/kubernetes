@@ -28,6 +28,8 @@ import (
 	certificates "k8s.io/api/certificates/v1"
 )
 
+// TestEnsureCompatible 验证 ensureCompatible 的 signerName 规则：
+// 空值视为通配，两个非空值必须完全一致；所有用例还隐含验证 CSR 与私钥的签名匹配。
 func TestEnsureCompatible(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -40,6 +42,7 @@ func TestEnsureCompatible(t *testing.T) {
 		privateKey interface{}
 		err        string
 	}{
+		// 空值通常来自旧版对象或未指定 signer 的请求，因此视为兼容。
 		"nil signerName on 'new' matches any signerName on 'orig'": {
 			new: &certificates.CertificateSigningRequest{
 				Spec: certificates.CertificateSigningRequestSpec{
@@ -54,6 +57,7 @@ func TestEnsureCompatible(t *testing.T) {
 			},
 			privateKey: privateKey,
 		},
+		// 旧对象未记录 signerName 时同样按通配处理。
 		"nil signerName on 'orig' matches any signerName on 'new'": {
 			new: &certificates.CertificateSigningRequest{
 				Spec: certificates.CertificateSigningRequestSpec{
@@ -83,6 +87,7 @@ func TestEnsureCompatible(t *testing.T) {
 			},
 			privateKey: privateKey,
 		},
+		// 两个非空 signerName 不同说明请求已不属于同一签发者，必须拒绝复用。
 		"signerName on 'orig' does not match signerName on 'new'": {
 			new: &certificates.CertificateSigningRequest{
 				Spec: certificates.CertificateSigningRequestSpec{
@@ -115,6 +120,7 @@ func TestEnsureCompatible(t *testing.T) {
 	}
 }
 
+// pemWithPrivateKey 用给定私钥生成一个带有固定 Subject 的 CSR（PEM 编码）。
 func pemWithPrivateKey(pk crypto.PrivateKey) []byte {
 	template := &x509.CertificateRequest{
 		Subject: pkix.Name{
@@ -125,6 +131,7 @@ func pemWithPrivateKey(pk crypto.PrivateKey) []byte {
 	return pemWithTemplate(template, pk)
 }
 
+// pemWithTemplate 按模板生成 DER 再编码为 PEM；失败说明测试夹具本身有问题，直接 panic。
 func pemWithTemplate(template *x509.CertificateRequest, key crypto.PrivateKey) []byte {
 	csrDER, err := x509.CreateCertificateRequest(rand.Reader, template, key)
 	if err != nil {

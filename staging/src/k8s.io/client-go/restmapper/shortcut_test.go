@@ -34,6 +34,8 @@ import (
 	"k8s.io/klog/v2/ktesting"
 )
 
+// TestReplaceAliases 验证短名/别名展开：把 hpa、dpl 等缩写解析成真实资源名，
+// 并在多个同名匹配时按发现顺序取优先级最高者。
 func TestReplaceAliases(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -145,6 +147,7 @@ func TestReplaceAliases(t *testing.T) {
 	}
 }
 
+// TestKindFor 验证在只给出短名（sc）时，shortcut 展开会把资源名与 group 补全后再交给委托 mapper。
 func TestKindFor(t *testing.T) {
 	tests := []struct {
 		in       schema.GroupVersionResource
@@ -201,6 +204,8 @@ func TestKindFor(t *testing.T) {
 	}
 }
 
+// TestKindForWithNewCRDs 验证当 CRD 在缓存建立之后才安装时，
+// 首次未命中会触发发现缓存失效并重新发现，从而成功映射新资源。
 func TestKindForWithNewCRDs(t *testing.T) {
 	tests := map[string]struct {
 		in       schema.GroupVersionResource
@@ -262,6 +267,8 @@ func TestKindForWithNewCRDs(t *testing.T) {
 	}
 }
 
+// TestWarnAmbigious 验证短名匹配到多个资源时，会针对优先级较低的候选发出警告，
+// 同时仍选择优先级最高（发现顺序最靠前）的那一个。
 func TestWarnAmbigious(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 
@@ -459,6 +466,7 @@ func TestWarnAmbigious(t *testing.T) {
 	}
 }
 
+// fakeRESTMapper 记录最近一次 KindFor 的输入，用于断言 shortcut 展开后的参数。
 type fakeRESTMapper struct {
 	kindForInput schema.GroupVersionResource
 }
@@ -492,6 +500,7 @@ func (f *fakeRESTMapper) ResourceSingularizer(resource string) (singular string,
 	return "", nil
 }
 
+// fakeDiscoveryClient 通过可注入的 handlers 提供发现数据，模拟真实的 discovery 客户端。
 type fakeDiscoveryClient struct {
 	serverResourcesHandler func() ([]*metav1.APIResourceList, error)
 }
@@ -522,6 +531,7 @@ func (c *fakeDiscoveryClient) ServerGroups() (*metav1.APIGroupList, error) {
 	}, nil
 }
 
+// ServerResourcesForGroupVersion 仅为 a/v1 返回固定资源，其余一律 NotFound。
 func (c *fakeDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	if groupVersion == "a/v1" {
 		return &metav1.APIResourceList{APIResources: []metav1.APIResource{{Name: "widgets", Kind: "Widget"}}}, nil
@@ -530,6 +540,7 @@ func (c *fakeDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string
 	return nil, errors.NewNotFound(schema.GroupResource{}, "")
 }
 
+// ServerGroupsAndResources 优先使用注入的 handler 返回资源列表，便于测试按需改变发现结果。
 func (c *fakeDiscoveryClient) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
 	sgs, err := c.ServerGroups()
 	if err != nil {
@@ -570,6 +581,8 @@ func (c *fakeDiscoveryClient) WithLegacy() discovery.DiscoveryInterface {
 	panic("implement me")
 }
 
+// fakeCachedDiscoveryClient 在 fakeDiscoveryClient 之上增加 Fresh/Invalidate 行为，
+// 通过 handler 控制缓存何时被视为新鲜。
 type fakeCachedDiscoveryClient struct {
 	discovery.DiscoveryInterface
 	freshHandler      func() bool

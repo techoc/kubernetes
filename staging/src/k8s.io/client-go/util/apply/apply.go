@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package apply 帮助构造 server-side apply 请求。
+//
+// 编码格式由特性门控决定：默认 JSON（即 apply-patch+yaml 语义），同时开启
+// ClientsAllowCBOR 与 ClientsPreferCBOR 时改用 CBOR。
 package apply
 
 import (
@@ -31,10 +35,19 @@ import (
 // be set to application/apply-patch with the appropriate structured syntax name suffix (today,
 // either +yaml or +cbor, see
 // https://www.iana.org/assignments/media-type-structured-suffix/media-type-structured-suffix.xhtml).
+// NewRequest builds a new server-side apply request. The provided apply configuration object will
+// be marshalled to the request's body using the default encoding, and the Content-Type header will
+// be set to application/apply-patch with the appropriate structured syntax name suffix (today,
+// either +yaml or +cbor, see
+// https://www.iana.org/assignments/media-type-structured-suffix/media-type-structured-suffix.xhtml).
 func NewRequest(client rest.Interface, applyConfiguration interface{}) (*rest.Request, error) {
+	// 默认沿用 YAML 后缀以保持与历史行为兼容：JSON 是 YAML 的子集，
+	// 服务端按 apply-patch+yaml 解析即可。
 	pt := types.ApplyYAMLPatchType
 	marshal := json.Marshal
 
+	// 必须两个门控同时开启才切 CBOR：Allow 表示客户端有能力，Prefer 表示
+	// 默认就想用；只有 Prefer 而无 Allow 时仍走 JSON。
 	if features.FeatureGates().Enabled(features.ClientsAllowCBOR) && features.FeatureGates().Enabled(features.ClientsPreferCBOR) {
 		pt = types.ApplyCBORPatchType
 		marshal = cbor.Marshal

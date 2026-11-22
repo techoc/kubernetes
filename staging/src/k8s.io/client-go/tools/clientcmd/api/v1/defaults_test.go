@@ -22,6 +22,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestSetDefaults_Config 覆盖 ExecConfig 的 interactiveMode 默认化：
+// v1alpha1/v1beta1 未设置时补 IfAvailable；已设置则保留；v1 未设置时保持为空
+// （由后续校验要求显式声明）。
 func TestSetDefaults_Config(t *testing.T) {
 	tests := []struct {
 		name        string

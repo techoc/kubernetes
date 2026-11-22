@@ -32,6 +32,9 @@ const (
 
 // ParseCertsPEM returns the x509.Certificates contained in the given PEM-encoded byte array
 // Returns an error if a certificate could not be parsed, or if the data does not contain any certificates
+//
+// 遇到无法解析的证书立即返回已解析部分与错误；完全没有有效证书时也报错，
+// 防止调用方拿着空列表继续建立不安全的连接。
 func ParseCertsPEM(pemCerts []byte) ([]*x509.Certificate, error) {
 	ok := false
 	certs := []*x509.Certificate{}
@@ -65,6 +68,7 @@ func ParseCertsPEM(pemCerts []byte) ([]*x509.Certificate, error) {
 func EncodeCertificates(certs ...*x509.Certificate) ([]byte, error) {
 	b := bytes.Buffer{}
 	for _, cert := range certs {
+		// 统一使用标准 "CERTIFICATE" 类型，确保证书链可被通用 PEM 解析器读取。
 		if err := pem.Encode(&b, &pem.Block{Type: CertificateBlockType, Bytes: cert.Raw}); err != nil {
 			return []byte{}, err
 		}

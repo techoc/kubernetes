@@ -22,6 +22,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// Example_emptyConfig 展示 NewConfig 生成的空 kubeconfig 的 YAML 形态；
+// 它同时是序列化输出格式的稳定契约（clusters/contexts/users 为空时仍输出 {}）。
 func Example_emptyConfig() {
 	defaultConfig := NewConfig()
 
@@ -38,6 +40,8 @@ func Example_emptyConfig() {
 	// users: {}
 }
 
+// Example_ofOptionsConfig 展示各类可选字段（TLS 跳过校验、压缩开关、证书、令牌、
+// auth-provider 配置）在 YAML 中的键名与省略规则——false/空值不会出现在输出里。
 func Example_ofOptionsConfig() {
 	defaultConfig := NewConfig()
 	defaultConfig.Preferences.Colors = true

@@ -31,11 +31,15 @@ import (
 // the most recent rules are used.  This is useful in cases where you bind flags to loading rule parameters before
 // the parse happens and you want your calling code to be ignorant of how the values are being mutated to avoid
 // passing extraneous information down a call stack
+//
+// 关键语义是“延迟”：构造时不读取任何文件，直到首次调用 ClientConfig/Namespace/RawConfig
+// 才按当时的 loader 规则加载，并在进程内缓存结果。
 type DeferredLoadingClientConfig struct {
 	loader         ClientConfigLoader
 	overrides      *ConfigOverrides
 	fallbackReader io.Reader
 
+	// clientConfig 是首次加载后的缓存；loadingLock 保证并发首调只加载一次。
 	clientConfig ClientConfig
 	loadingLock  sync.Mutex
 
@@ -50,15 +54,18 @@ type InClusterConfig interface {
 }
 
 // NewNonInteractiveDeferredLoadingClientConfig creates a ClientConfig using the passed context name
+// 不允许交互式输入凭据，适用于非终端场景（如 daemon）。
 func NewNonInteractiveDeferredLoadingClientConfig(loader ClientConfigLoader, overrides *ConfigOverrides) ClientConfig {
 	return &DeferredLoadingClientConfig{loader: loader, overrides: overrides, icc: &inClusterClientConfig{overrides: overrides}}
 }
 
 // NewInteractiveDeferredLoadingClientConfig creates a ClientConfig using the passed context name and the fallback auth reader
+// fallbackReader 用于在需要时向用户索取凭据（如证书口令或登录确认）。
 func NewInteractiveDeferredLoadingClientConfig(loader ClientConfigLoader, overrides *ConfigOverrides, fallbackReader io.Reader) ClientConfig {
 	return &DeferredLoadingClientConfig{loader: loader, overrides: overrides, icc: &inClusterClientConfig{overrides: overrides}, fallbackReader: fallbackReader}
 }
 
+// createClientConfig 惰性构建并缓存底层 ClientConfig；双检锁避免重复加载文件。
 func (config *DeferredLoadingClientConfig) createClientConfig() (ClientConfig, error) {
 	config.loadingLock.Lock()
 	defer config.loadingLock.Unlock()
@@ -71,6 +78,7 @@ func (config *DeferredLoadingClientConfig) createClientConfig() (ClientConfig, e
 		return nil, err
 	}
 
+	// 覆盖项中的 CurrentContext 优先于 kubeconfig 自身的 current-context。
 	var currentContext string
 	if config.overrides != nil {
 		currentContext = config.overrides.CurrentContext
@@ -111,12 +119,14 @@ func (config *DeferredLoadingClientConfig) ClientConfig() (*restclient.Config, e
 	case mergedConfig != nil:
 		// the configuration is valid, but if this is equal to the defaults we should try
 		// in-cluster configuration
+		// 仅“空配置”错误不致命，继续尝试集群内配置。
 		if !config.loader.IsDefaultConfig(mergedConfig) {
 			return mergedConfig, nil
 		}
 	}
 
 	// check for in-cluster configuration and use it
+	// 在 Pod 中运行时，ServiceAccount 挂载的配置优先级高于 kubeconfig 默认值。
 	if config.icc.Possible() {
 		//nolint:logcheck // A helper function like this should not log. But this is probably part of the the established client-go API and not worth changing.
 		klog.V(4).Infof("Using in-cluster configuration")
@@ -149,6 +159,8 @@ func (config *DeferredLoadingClientConfig) Namespace() (string, bool, error) {
 		}
 
 		// if we got a default namespace, determine whether it was explicit or implicit
+		// “default”既可能是用户显式写的，也可能是缺省值；只有显式指定才应压过
+		// ServiceAccount 命名空间。
 		if raw, err := mergedKubeConfig.RawConfig(); err == nil {
 			// determine the current context
 			currentContext := raw.CurrentContext

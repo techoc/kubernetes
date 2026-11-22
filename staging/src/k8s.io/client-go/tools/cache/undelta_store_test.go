@@ -23,12 +23,15 @@ import (
 
 // store_test.go checks that UndeltaStore conforms to the Store interface
 // behavior.  This test just tests that it calls the push func in addition.
+//
+// 这里的测试验证 UndeltaStore 在满足 Store 接口行为的同时，还会额外调用 push 回调。
 
 type testUndeltaObject struct {
 	name string
 	val  interface{}
 }
 
+// testUndeltaKeyFunc 用对象内嵌的 name 字段作为 key。
 func testUndeltaKeyFunc(obj interface{}) (string, error) {
 	return obj.(testUndeltaObject).name, nil
 }
@@ -41,6 +44,7 @@ var (
 )
 */
 
+// TestUpdateCallsPush 验证 Add 与 Update 都会触发 push，且 push 收到的是更新后的完整列表。
 func TestUpdateCallsPush(t *testing.T) {
 	mkObj := func(name string, val interface{}) testUndeltaObject {
 		return testUndeltaObject{name: name, val: val}
@@ -67,6 +71,7 @@ func TestUpdateCallsPush(t *testing.T) {
 	}
 }
 
+// TestDeleteCallsPush 验证 Delete 也会触发 push，且删除后推送的是空列表。
 func TestDeleteCallsPush(t *testing.T) {
 	mkObj := func(name string, val interface{}) testUndeltaObject {
 		return testUndeltaObject{name: name, val: val}
@@ -92,6 +97,7 @@ func TestDeleteCallsPush(t *testing.T) {
 	}
 }
 
+// TestReadsDoNotCallPush 验证纯读操作（List/Get）不会触发 push。
 func TestReadsDoNotCallPush(t *testing.T) {
 	push := func(m []interface{}) {
 		t.Errorf("Unexpected call to push!")
@@ -104,6 +110,7 @@ func TestReadsDoNotCallPush(t *testing.T) {
 	_, _, _ = u.Get(testUndeltaObject{"a", ""})
 }
 
+// TestReplaceCallsPush 验证 Replace 触发一次 push，并推送替换后的完整列表。
 func TestReplaceCallsPush(t *testing.T) {
 	mkObj := func(name string, val interface{}) testUndeltaObject {
 		return testUndeltaObject{name: name, val: val}

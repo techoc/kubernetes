@@ -42,12 +42,16 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// TestGoldenRequest 是请求侧的“黄金文件”测试：每个子测试用动态客户端发起一种
+// 操作，把服务端实际收到的原始 HTTP 请求与 testdata 下的快照逐字节比对。
+// 这样任何会改变线上协议（路径、查询参数、头部、body）的客户端改动都会被发现。
 func TestGoldenRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		do   func(context.Context, dynamic.Interface) error
 	}{
 		{
+			// 创建时带 fieldValidation 与 dryRun（后一个位置参数 "fin"）。
 			name: "create",
 			do: func(ctx context.Context, client dynamic.Interface) error {
 				_, err := client.Resource(schema.GroupVersionResource{Group: "flops", Version: "v1alpha1", Resource: "flips"}).Namespace("mops").Create(
@@ -77,6 +81,7 @@ func TestGoldenRequest(t *testing.T) {
 		},
 		{
 			name: "updatestatus",
+			// 走 status 子资源，用于确认客户端把更新目标正确地映射到 /status。
 			do: func(ctx context.Context, client dynamic.Interface) error {
 				_, err := client.Resource(schema.GroupVersionResource{Group: "flops", Version: "v1alpha1", Resource: "flips"}).Namespace("mops").UpdateStatus(
 					ctx,
@@ -101,6 +106,7 @@ func TestGoldenRequest(t *testing.T) {
 		},
 		{
 			name: "deletecollection",
+			// 集合删除需同时携带 DryRun 与 resourceVersion，验证两者都进入查询参数。
 			do: func(ctx context.Context, client dynamic.Interface) error {
 				return client.Resource(schema.GroupVersionResource{Group: "flops", Version: "v1alpha1", Resource: "flips"}).Namespace("mops").DeleteCollection(
 					ctx,
@@ -133,6 +139,7 @@ func TestGoldenRequest(t *testing.T) {
 		},
 		{
 			name: "watch",
+			// Watch 需要服务端保持连接，这里不关心结果，只看请求本身。
 			do: func(ctx context.Context, client dynamic.Interface) error {
 				_, err := client.Resource(schema.GroupVersionResource{Group: "flops", Version: "v1alpha1", Resource: "flips"}).Namespace("mops").Watch(
 					ctx,
@@ -157,6 +164,7 @@ func TestGoldenRequest(t *testing.T) {
 		},
 		{
 			name: "apply",
+			// Apply 的 Content-Type 与 fieldManager 是 SSA 协议的关键，必须体现在快照中。
 			do: func(ctx context.Context, client dynamic.Interface) error {
 				_, err := client.Resource(schema.GroupVersionResource{Group: "flops", Version: "v1alpha1", Resource: "flips"}).Namespace("mops").Apply(
 					ctx,
@@ -172,6 +180,7 @@ func TestGoldenRequest(t *testing.T) {
 		},
 		{
 			name: "applystatus",
+			// 同上，但作用于 status 子资源。
 			do: func(ctx context.Context, client dynamic.Interface) error {
 				_, err := client.Resource(schema.GroupVersionResource{Group: "flops", Version: "v1alpha1", Resource: "flips"}).Namespace("mops").ApplyStatus(
 					ctx,
@@ -186,10 +195,12 @@ func TestGoldenRequest(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// handled 用于确认服务端确实收到请求，避免客户端提前返回却被误判为通过。
 			handled := make(chan struct{})
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				defer close(handled)
 
+				// DumpRequest 的第二个参数为 true，表示连 body 一起快照。
 				got, err := httputil.DumpRequest(r, true)
 				if err != nil {
 					t.Fatal(err)
@@ -197,6 +208,7 @@ func TestGoldenRequest(t *testing.T) {
 
 				path := filepath.Join("testdata", filepath.FromSlash(t.Name()))
 
+				// 设置环境变量即可重新生成快照；日常 CI 中只读取不写入。
 				if os.Getenv("UPDATE_DYNAMIC_CLIENT_FIXTURES") == "true" {
 					err := os.WriteFile(path, got, os.FileMode(0755))
 					if err != nil {
@@ -251,6 +263,7 @@ func TestGoldenRequest(t *testing.T) {
 	}
 }
 
+// RoundTripperFunc 让普通函数可以充当 http.RoundTripper，方便在测试中伪造传输层。
 type RoundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f RoundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -259,6 +272,9 @@ func (f RoundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 
 // TestGoldenResponse tests that the objects returned from dynamic client methods, given a fixed
 // HTTP response, are not changed unintentionally by changes to the client.
+//
+// 与请求侧对称：用固定的 HTTP 响应文件喂给真实的客户端，再比较解析出的结构化结果，
+// 防止反序列化路径（尤其 list 与 watch）被无意改变。
 func TestGoldenResponse(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -317,6 +333,7 @@ func TestGoldenResponse(t *testing.T) {
 		{
 			name:     "list",
 			response: "list",
+			// List 返回的是 UnstructuredList，比较其内容可确认列表的包装结构未变。
 			do: func(t *testing.T, client dynamic.ResourceInterface) interface{} {
 				got, err := client.List(context.Background(), metav1.ListOptions{})
 				if err != nil {
@@ -330,6 +347,7 @@ func TestGoldenResponse(t *testing.T) {
 		{
 			name:     "watch",
 			response: "events",
+			// 用 watch 事件流文件驱动解码器，把事件重新序列化后与快照比较。
 			do: func(t *testing.T, client dynamic.ResourceInterface) interface{} {
 				w, err := client.Watch(context.Background(), metav1.ListOptions{})
 				if err != nil {
@@ -357,6 +375,7 @@ func TestGoldenResponse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			client, err := dynamic.NewForConfig(&rest.Config{
 
+				// 传输层直接返回预先录制的 HTTP 响应，不经过网络。
 				Transport: RoundTripperFunc(func(request *http.Request) (*http.Response, error) {
 					fd, err := os.Open(filepath.Join("testdata", filepath.FromSlash(parentTestName), "responses", tc.response))
 					if err != nil {
@@ -379,6 +398,7 @@ func TestGoldenResponse(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// 空的 GVR 即可：请求 URL 由测试桩忽略，这里只关心响应解码。
 			got := tc.do(t, client.Resource(schema.GroupVersionResource{}))
 
 			path := filepath.Join("testdata", filepath.FromSlash(t.Name()))

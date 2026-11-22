@@ -24,6 +24,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// testMetrics 统计队列的 add/get/done 次数，并通过 updateCalled 通知 unfinished-work 更新发生。
 type testMetrics struct {
 	added, gotten, finished int64
 
@@ -35,6 +36,7 @@ func (m *testMetrics) get(item any)          { m.gotten++ }
 func (m *testMetrics) done(item any)         { m.finished++ }
 func (m *testMetrics) updateUnfinishedWork() { m.updateCalled <- struct{}{} }
 
+// TestMetricShutdown 验证队列关闭后不会再触发 unfinished-work 指标更新，避免 goroutine 泄漏。
 func TestMetricShutdown(t *testing.T) {
 	ch := make(chan struct{})
 	m := &testMetrics{
@@ -51,6 +53,7 @@ func TestMetricShutdown(t *testing.T) {
 	<-ch
 	q.ShutDown()
 
+	// ShutDown 之后即使时钟大幅前进，也不应再有更新被投递。
 	c.Step(time.Hour)
 	select {
 	default:
@@ -60,6 +63,7 @@ func TestMetricShutdown(t *testing.T) {
 	}
 }
 
+// testMetric 是一个线程安全的通用指标替身，记录 inc/dec/set/observe 调用结果。
 type testMetric struct {
 	inc int64
 	dec int64
@@ -102,6 +106,7 @@ func (m *testMetric) Observe(f float64) {
 	m.notify()
 }
 
+// gaugeValue 优先返回最近一次 Set 的值；没有 Set 过则退化为 inc-dec 的净计数。
 func (m *testMetric) gaugeValue() float64 {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -123,12 +128,14 @@ func (m *testMetric) observationCount() int {
 	return m.observedCount
 }
 
+// notify 在设置了通知通道时发送信号，让测试在指标更新后再读取，避免竞态。
 func (m *testMetric) notify() {
 	if m.notifyCh != nil {
 		m.notifyCh <- struct{}{}
 	}
 }
 
+// testMetricsProvider 为每类指标返回固定的 testMetric，便于断言。
 type testMetricsProvider struct {
 	depth      testMetric
 	adds       testMetric
@@ -167,6 +174,8 @@ func (m *testMetricsProvider) NewRetriesMetric(name string) CounterMetric {
 	return &m.retries
 }
 
+// TestMetrics 验证队列在 add/get/done 全流程中上报的各指标：adds、depth、latency、
+// work duration、unfinished work 与 longest running processor。使用假时钟精确控制时间推进。
 func TestMetrics(t *testing.T) {
 	mp := testMetricsProvider{}
 	t0 := time.Unix(0, 0)

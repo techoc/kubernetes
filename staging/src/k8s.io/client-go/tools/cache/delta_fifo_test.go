@@ -85,11 +85,14 @@ func (f *DeltaFIFO) getByKey(key string) (item interface{}, exists bool, err err
 }
 
 // helper function to reduce stuttering
+// testPop 取出下一个条目并返回其最新 delta 的对象；FIFO 为空时会阻塞，
+// 因此只用于确定有数据的场景。
 func testPop(f *DeltaFIFO) testFifoObject {
 	return Pop(f).(Deltas).Newest().Object.(testFifoObject)
 }
 
 // testPopIfAvailable returns `{}, false` if Pop returns a nil object
+// 用于后台消费协程：Close 后 Pop 返回 nil，它便自然退出。
 func testPopIfAvailable(f *DeltaFIFO) (testFifoObject, bool) {
 	obj := Pop(f)
 	if obj == nil {
@@ -124,6 +127,8 @@ func (kl literalListerGetter) GetByKey(key string) (interface{}, bool, error) {
 	return nil, false, nil
 }
 
+// TestDeltaFIFO_basic 用两个并发生产者验证：同一 key 的多条 delta 会合并，
+// 且全局出队顺序稳定；每个 key 的值必须单调递增。
 func TestDeltaFIFO_basic(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{KeyFunction: testFifoObjectKeyFunc})
 	const amount = 500
@@ -189,6 +194,9 @@ func TestDeltaFIFO_replaceWithDeleteDeltaIn(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue 验证 Replace 的删除
+// 语义：队列中存在但新快照中缺失的对象应产生一条 Delete（或 tombstone），
+// 且无论是否配置 KnownObjects 结果一致、不残留额外 delta。
 func TestDeltaFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue(t *testing.T) {
 	obj := mkFifoObj("foo", 2)
 	objV2 := mkFifoObj("foo", 3)
@@ -311,6 +319,8 @@ func TestDeltaFIFOW_ReplaceMakesDeletionsForObjectsOnlyInQueue(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_addUpdate 验证同一 key 的 Add/Update/Delete 会合并为一个条目，
+// Pop 只返回最新对象，消费后条目被移除。
 func TestDeltaFIFO_addUpdate(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{KeyFunction: testFifoObjectKeyFunc})
 	defer f.Close()
@@ -353,11 +363,14 @@ func TestDeltaFIFO_addUpdate(t *testing.T) {
 	}
 }
 
+// rvAndXfrm 在测试对象上记录资源版本与变换次数。
 type rvAndXfrm struct {
 	rv   int
 	xfrm int
 }
 
+// TestDeltaFIFO_transformer 验证 Transformer 对每次入队恰好调用一次：
+// 普通对象与 tombstone 包装的对象都不应被重复变换。
 func TestDeltaFIFO_transformer(t *testing.T) {
 	mk := func(name string, rv int) testFifoObject {
 		return mkFifoObj(name, &rvAndXfrm{rv, 0})
@@ -435,6 +448,8 @@ func TestDeltaFIFO_transformer(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_enqueueingNoLister 无 KnownObjects 时，删除一个从未出现过的 key
+// 不应产生任何 delta。
 func TestDeltaFIFO_enqueueingNoLister(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{KeyFunction: testFifoObjectKeyFunc})
 	f.Add(mkFifoObj("foo", 10))
@@ -456,6 +471,8 @@ func TestDeltaFIFO_enqueueingNoLister(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_enqueueingWithLister 有 KnownObjects 时，删除一个仅存在于
+// KnownObjects 的 key 也应入队，确保 informer 能看到删除事件。
 func TestDeltaFIFO_enqueueingWithLister(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
@@ -480,6 +497,8 @@ func TestDeltaFIFO_enqueueingWithLister(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_addReplace 验证 Add 后紧跟 Replace 时，只保留最新版本的
+// 一次消费，不会产生重复出队。
 func TestDeltaFIFO_addReplace(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{KeyFunction: testFifoObjectKeyFunc})
 	defer f.Close()
@@ -511,6 +530,8 @@ func TestDeltaFIFO_addReplace(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_ResyncNonExisting 对已删除的 key 做 Resync 不应重新产生 Sync，
+// 已有的 Delete 保持原样。
 func TestDeltaFIFO_ResyncNonExisting(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
@@ -530,6 +551,7 @@ func TestDeltaFIFO_ResyncNonExisting(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_Resync 对 KnownObjects 中的每个对象为队列补一条 Sync delta。
 func TestDeltaFIFO_Resync(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
@@ -548,6 +570,8 @@ func TestDeltaFIFO_Resync(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_DeleteExistingNonPropagated 验证 Delete 会追加在已有 delta 之后，
+// 而不是覆盖它们（历史 delta 仍需被消费者看到）。
 func TestDeltaFIFO_DeleteExistingNonPropagated(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
@@ -567,6 +591,9 @@ func TestDeltaFIFO_DeleteExistingNonPropagated(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_ReplaceMakesDeletions 覆盖 Replace 生成删除事件的多种历史组合：
+// 先有 Delete、先有 Add、队列中已删除又重建、以及替换前已 Sync 等场景，
+// 重点确认 tombstone 携带的是“最新”的对象版本。
 func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 	// We test with only one pre-existing object because there is no
 	// promise about how their deletes are ordered.
@@ -756,6 +783,8 @@ func TestDeltaFIFO_ReplaceDeltaType(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_UpdateResyncRace 复现 Update 与 Resync 的竞态：
+// Resync 不应覆盖或重复已存在的 Update delta。
 func TestDeltaFIFO_UpdateResyncRace(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
@@ -779,6 +808,7 @@ func TestDeltaFIFO_UpdateResyncRace(t *testing.T) {
 }
 
 // pop2 captures both parameters, unlike Pop().
+// 同时拿到对象和 isInInitialList 标志，用于验证初次同步状态。
 func pop2[T any](queue Queue) (T, bool) {
 	var result interface{}
 	var isList bool
@@ -790,6 +820,8 @@ func pop2[T any](queue Queue) (T, bool) {
 	return result.(T), isList
 }
 
+// TestDeltaFIFO_HasSyncedCorrectOnDeletion 验证 Replace 之后、所有初始条目
+// （包括生成的删除事件）被消费之前，HasSynced 保持 false；全部出队后才为 true。
 func TestDeltaFIFO_HasSyncedCorrectOnDeletion(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{
 		KeyFunction: testFifoObjectKeyFunc,
@@ -824,6 +856,8 @@ func TestDeltaFIFO_HasSyncedCorrectOnDeletion(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_detectLineJumpers 同一个 key 再次入队不应跳到队首：
+// 它保持原有队列位置，但 Pop 时返回最新值。
 func TestDeltaFIFO_detectLineJumpers(t *testing.T) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{KeyFunction: testFifoObjectKeyFunc})
 
@@ -852,6 +886,8 @@ func TestDeltaFIFO_detectLineJumpers(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_KeyOf 验证 KeyOf 能从裸对象、tombstone 以及 Deltas 中
+// 一致地提取 key。
 func TestDeltaFIFO_KeyOf(t *testing.T) {
 	f := DeltaFIFO{keyFunc: testFifoObjectKeyFunc}
 
@@ -877,6 +913,9 @@ func TestDeltaFIFO_KeyOf(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_HasSynced 以表驱动方式验证 HasSynced 的判定：
+// 空 FIFO 为 false；Add 或空 Replace 后为 true；非空 Replace 必须等初始条目
+// 全部消费后才为 true。
 func TestDeltaFIFO_HasSynced(t *testing.T) {
 	tests := []struct {
 		actions        []func(f *DeltaFIFO)
@@ -975,6 +1014,8 @@ func TestDeltaFIFO_PopShouldUnblockWhenClosed(t *testing.T) {
 	}
 }
 
+// BenchmarkDeltaFIFOListKeys 评估大量条目下 listKeys 的并发读性能；
+// 重点在于 RLock 路径不应随条目数量产生额外拷贝开销。
 func BenchmarkDeltaFIFOListKeys(b *testing.B) {
 	f := NewDeltaFIFOWithOptions(DeltaFIFOOptions{KeyFunction: testFifoObjectKeyFunc})
 	const amount = 10000

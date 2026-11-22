@@ -24,6 +24,8 @@ import (
 	kjson "sigs.k8s.io/json"
 )
 
+// TestOpenAPIEmbeddedTest 验证内嵌文件客户端能列出路径、命中已知路径，
+// 且每个路径的 schema 都能严格反序列化为 OpenAPI v3 文档。
 func TestOpenAPIEmbeddedTest(t *testing.T) {
 	client := openapitest.NewEmbeddedFileClient()
 
@@ -37,6 +39,7 @@ func TestOpenAPIEmbeddedTest(t *testing.T) {
 	}
 
 	// spot check specific paths
+	// 抽查内置的核心/常用 API 组路径，防止内嵌数据整体缺失。
 	expectedPaths := []string{
 		"api/v1",
 		"apis/apps/v1",
@@ -51,6 +54,7 @@ func TestOpenAPIEmbeddedTest(t *testing.T) {
 	}
 
 	// make sure all paths can load
+	// 逐个加载 schema 并做严格反序列化，确保内嵌文件都是合法的 OpenAPI v3。
 	for path, gv := range paths {
 		data, err := gv.Schema("application/json")
 		if err != nil {
@@ -67,6 +71,8 @@ func TestOpenAPIEmbeddedTest(t *testing.T) {
 	}
 }
 
+// TestOpenAPITest 与 TestOpenAPIEmbeddedTest 类似，但读取 testdata 目录下的文件，
+// 验证基于文件的客户端实现（而非内嵌数据）。
 func TestOpenAPITest(t *testing.T) {
 	client := openapitest.NewFileClient("testdata")
 

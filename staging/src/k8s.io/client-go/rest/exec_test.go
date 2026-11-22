@@ -34,6 +34,9 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TestConfigToExecCluster 验证把 REST Config 转换为 exec 插件可见的 Cluster
+// 信息时的各条路径：CA 来自内存/文件、无 CA、proxy 为 nil/报错/返回 nil，
+// 以及非法 Host 的错误前缀。
 func TestConfigToExecCluster(t *testing.T) {
 	t.Parallel()
 
@@ -207,9 +210,12 @@ func TestConfigToExecCluster(t *testing.T) {
 	}
 }
 
+// TestConfigToExecClusterRoundtrip 用随机填充的 Config 做 Config -> Cluster -> Config
+// 往返，确保转换不会丢字段；函数类型的字段需要注入可比较的假实现。
 func TestConfigToExecClusterRoundtrip(t *testing.T) {
 	t.Parallel()
 
+	// NilChance/NumElements 控制随机数据的稀疏度，减少无意义的大集合。
 	f := randfill.New().NilChance(0.5).NumElements(1, 1)
 	f.Funcs(
 		func(r *runtime.Codec, f randfill.Continue) {
@@ -310,6 +316,7 @@ func TestConfigToExecClusterRoundtrip(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// 反向转换会丢弃 ExecProvider（它本身就是输入），因此这里不比较。
 		actual, err := ExecClusterToConfig(cluster)
 		if err != nil {
 			t.Fatal(err)
@@ -343,6 +350,8 @@ func TestConfigToExecClusterRoundtrip(t *testing.T) {
 	}
 }
 
+// TestExecClusterToConfigRoundtrip 验证 Cluster -> Config -> Cluster 往返稳定；
+// Cluster.Config 不是 Config 能表达的字段，因此随机填充时固定为 nil。
 func TestExecClusterToConfigRoundtrip(t *testing.T) {
 	t.Parallel()
 

@@ -28,6 +28,12 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// TestGroupVersion 验证 GroupVersion.Schema 在多种客户端前缀（client prefix）配置下
+// 都能取到正确的 schema。
+//
+// 中文说明：API server 可能被部署在子路径下，discovery 返回的 serverRelativeURL 可能
+// 带或不带该前缀，客户端必须两种都支持。测试用 httptest 模拟 /openapi/v3 发现文档与
+// 具体 group/version 的 schema 端点，并断言 hash 查询参数被原样保留。
 func TestGroupVersion(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -35,16 +41,19 @@ func TestGroupVersion(t *testing.T) {
 		serverReturnsPrefix bool
 	}{
 		{
+			// 中文：无反代前缀，最普通的情况。
 			name:                "no prefix",
 			prefix:              "",
 			serverReturnsPrefix: false,
 		},
 		{
+			// 中文：Host 带前缀但 discovery 返回的 URL 不带，走 RequestURI 分支。
 			name:                "prefix not in discovery",
 			prefix:              "/test-endpoint",
 			serverReturnsPrefix: false,
 		},
 		{
+			// 中文：discovery 返回的 URL 自带前缀，需要拆分路径与查询参数后走 AbsPath 分支。
 			name:                "prefix in discovery",
 			prefix:              "/test-endpoint",
 			serverReturnsPrefix: true,
@@ -56,11 +65,13 @@ func TestGroupVersion(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch {
 				case r.URL.Path == test.prefix+"/openapi/v3/apis/apps/v1" && r.URL.RawQuery == "hash=014fbff9a07c":
+					// 中文：schema 端点要求 hash 参数存在，以此验证客户端保留了查询串。
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
 					w.Write([]byte(`{"openapi":"3.0.0","info":{"title":"Kubernetes","version":"unversioned"}}`))
 				case r.URL.Path == test.prefix+"/openapi/v3":
 					// return root content
+					// 中文：发现文档；serverReturnsPrefix 决定 URL 是否包含部署前缀。
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
 					if test.serverReturnsPrefix {
@@ -69,6 +80,7 @@ func TestGroupVersion(t *testing.T) {
 						w.Write([]byte(`{"paths":{"apis/apps/v1":{"serverRelativeURL":"/openapi/v3/apis/apps/v1?hash=014fbff9a07c"}}}`))
 					}
 				default:
+					// 中文：任何未预期的请求都直接失败，防止测试掩盖错误的 URL 构造。
 					t.Errorf("unexpected request: %s", r.URL.String())
 					w.WriteHeader(http.StatusNotFound)
 					return
@@ -76,6 +88,7 @@ func TestGroupVersion(t *testing.T) {
 			}))
 			defer server.Close()
 
+			// 中文：RESTClient 的 Host 带前缀，模拟 API server 部署在子路径下的场景。
 			c, err := rest.RESTClientFor(&rest.Config{
 				Host: server.URL + test.prefix,
 				ContentConfig: rest.ContentConfig{
@@ -93,6 +106,7 @@ func TestGroupVersion(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error occurred: %v", err)
 			}
+			// 中文：按 discovery 文档中的原始 key 取句柄，键名不做归一化。
 			schema, err := paths["apis/apps/v1"].Schema(runtime.ContentTypeJSON)
 			if err != nil {
 				t.Fatalf("unexpected error occurred: %v", err)

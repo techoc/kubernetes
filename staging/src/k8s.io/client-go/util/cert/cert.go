@@ -40,6 +40,8 @@ import (
 const duration365d = time.Hour * 24 * 365
 
 // Config contains the basic fields required for creating a certificate
+//
+// 仅用于 NewSelfSignedCACert；服务端证书请使用 SelfSignedCertKeyOptions。
 type Config struct {
 	CommonName   string
 	Organization []string
@@ -60,12 +62,14 @@ type AltNames struct {
 func NewSelfSignedCACert(cfg Config, key crypto.Signer) (*x509.Certificate, error) {
 	now := time.Now()
 	// returns a uniform random value in [0, max-1), then add 1 to serial to make it a uniform random value in [1, max).
+	// 随机序列号避免不同 CA 之间发生序列号冲突。
 	serial, err := cryptorand.Int(cryptorand.Reader, new(big.Int).SetInt64(math.MaxInt64-1))
 	if err != nil {
 		return nil, err
 	}
 	serial = new(big.Int).Add(serial, big.NewInt(1))
 	notBefore := now.UTC()
+	// 允许调用方把生效时间提前，以便容忍客户端与服务端的时钟偏差。
 	if !cfg.NotBefore.IsZero() {
 		notBefore = cfg.NotBefore.UTC()
 	}
@@ -81,6 +85,7 @@ func NewSelfSignedCACert(cfg Config, key crypto.Signer) (*x509.Certificate, erro
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 	}
+	// CommonName 同时作为 SAN，否则现代 TLS 校验（忽略 CN）不会认可该证书。
 	if len(cfg.CommonName) > 0 {
 		tmpl.DNSNames = []string{cfg.CommonName}
 	}
@@ -111,6 +116,8 @@ type SelfSignedCertKeyOptions struct {
 	// <host>_<ip>-<ip>_<alternateDNS>-<alternateDNS>.crt
 	// <host>_<ip>-<ip>_<alternateDNS>-<alternateDNS>.key
 	// Certs/keys not existing in that directory are created with a duration of 100 years.
+	//
+	// 复用 fixture 可避免测试每次运行都重新生成密钥，显著缩短测试时间。
 	FixtureDirectory string
 }
 
@@ -153,6 +160,7 @@ func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte
 		maxAge = 365 * 24 * time.Hour
 	}
 
+	// 提前一小时生效，避免因两端时钟轻微偏差导致刚生成的证书暂时不可用。
 	validFrom := time.Now().Add(-time.Hour) // valid an hour earlier to avoid flakes due to clock skew
 
 	baseName := fmt.Sprintf("%s_%s_%s", host, strings.Join(ipsToStrings(alternateIPs), "-"), strings.Join(alternateDNS, "-"))
@@ -163,6 +171,7 @@ func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte
 		if err == nil {
 			key, err := os.ReadFile(keyFixturePath)
 			if err == nil {
+				// 命中缓存直接返回，避免重复生成 RSA 密钥带来的性能开销。
 				return cert, key, nil
 			}
 			return nil, nil, fmt.Errorf("cert %s can be read, but key %s cannot: %v", certFixturePath, keyFixturePath, err)
@@ -226,6 +235,8 @@ func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte
 		BasicConstraintsValid: true,
 	}
 
+	// host 既可能是 IP 也可能是 DNS 名，必须放入对应的 SAN 字段，
+	// 放错字段会导致校验失败。
 	if ip := netutils.ParseIPSloppy(host); ip != nil {
 		template.IPAddresses = append(template.IPAddresses, ip)
 	} else {
@@ -241,6 +252,7 @@ func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte
 	}
 
 	// Generate cert, followed by ca
+	// PEM 中依次写入叶子证书与 CA，便于使用者直接作为完整证书链加载。
 	certBuffer := bytes.Buffer{}
 	if err := pem.Encode(&certBuffer, &pem.Block{Type: CertificateBlockType, Bytes: derBytes}); err != nil {
 		return nil, nil, err
@@ -259,6 +271,7 @@ func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte
 		if err := os.WriteFile(certFixturePath, certBuffer.Bytes(), 0644); err != nil {
 			return nil, nil, fmt.Errorf("failed to write cert fixture to %s: %v", certFixturePath, err)
 		}
+		// 私钥权限收紧为 0600，避免同机其他用户读取。
 		if err := os.WriteFile(keyFixturePath, keyBuffer.Bytes(), 0600); err != nil {
 			return nil, nil, fmt.Errorf("failed to write key fixture to %s: %v", certFixturePath, err)
 		}
@@ -267,6 +280,7 @@ func GenerateSelfSignedCertKeyWithOptions(opts SelfSignedCertKeyOptions) ([]byte
 	return certBuffer.Bytes(), keyBuffer.Bytes(), nil
 }
 
+// ipsToStrings 把 IP 切片转为字符串，用于拼接 fixture 文件名。
 func ipsToStrings(ips []net.IP) []string {
 	ss := make([]string, 0, len(ips))
 	for _, ip := range ips {

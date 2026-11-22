@@ -26,16 +26,25 @@ import (
 
 // StaleGroupVersionError encasulates failed GroupVersion marked "stale"
 // in the returned AggregatedDiscovery format.
+//
+// StaleGroupVersionError 表示聚合发现响应中某个 GroupVersion 被标记为 "stale"。
+// 之所以不用普通错误返回，是因为聚合发现会同时返回部分成功的数据；
+// 调用方既需要失败的 GV 列表，也需要继续使用其余可用结果。
 type StaleGroupVersionError struct {
 	gv schema.GroupVersion
 }
 
+// Error 实现 error 接口；gv 为空的零值错误不应被构造或返回。
 func (s StaleGroupVersionError) Error() string {
 	return fmt.Sprintf("stale GroupVersion discovery: %v", s.gv)
 }
 
 // SplitGroupsAndResources transforms "aggregated" discovery top-level structure into
 // the previous "unaggregated" discovery groups and resources.
+//
+// SplitGroupsAndResources 把 /api、/apis 返回的聚合发现（APIGroupDiscoveryList）
+// 降级为旧版客户端期望的 APIGroupList 与按 GroupVersion 索引的 APIResourceList。
+// 这样旧调用方无需修改即可使用新版聚合发现接口，也便于统一两条代码路径。
 func SplitGroupsAndResources(aggregatedGroups apidiscovery.APIGroupDiscoveryList) (
 	*metav1.APIGroupList,
 	map[schema.GroupVersion]*metav1.APIResourceList,
@@ -46,6 +55,7 @@ func SplitGroupsAndResources(aggregatedGroups apidiscovery.APIGroupDiscoveryList
 	failedGVs := map[schema.GroupVersion]error{}
 	resourcesByGV := map[schema.GroupVersion]*metav1.APIResourceList{}
 	for _, aggGroup := range aggregatedGroups.Items {
+		// 逐组转换；同一 GV 在聚合结果中只会出现一次，因此直接覆盖即可。
 		group, resources, failed := convertAPIGroup(aggGroup)
 		groups = append(groups, group)
 		for gv, resourceList := range resources {
@@ -56,6 +66,7 @@ func SplitGroupsAndResources(aggregatedGroups apidiscovery.APIGroupDiscoveryList
 		}
 	}
 	// Transform slice of groups to group list before returning.
+	// 预先分配容量，避免大量 API 组时反复扩容。
 	groupList := &metav1.APIGroupList{}
 	groupList.Groups = make([]metav1.APIGroup, 0, len(groups))
 	for _, group := range groups {
@@ -66,6 +77,9 @@ func SplitGroupsAndResources(aggregatedGroups apidiscovery.APIGroupDiscoveryList
 
 // convertAPIGroup tranforms an "aggregated" APIGroupDiscovery to an "legacy" APIGroup,
 // also returning the map of APIResourceList for resources within GroupVersions.
+//
+// convertAPIGroup 只处理单个聚合 API 组，返回旧版 APIGroup 以及该组各版本的资源列表。
+// 被标记为 stale 的版本会被跳过并记录到 failedGVs，而不是让整组失败。
 func convertAPIGroup(g apidiscovery.APIGroupDiscovery) (
 	*metav1.APIGroup,
 	map[schema.GroupVersion]*metav1.APIResourceList,
@@ -78,6 +92,8 @@ func convertAPIGroup(g apidiscovery.APIGroupDiscovery) (
 	for _, v := range g.Versions {
 		gv := schema.GroupVersion{Group: g.Name, Version: v.Version}
 		if v.Freshness == apidiscovery.DiscoveryFreshnessStale {
+			// stale 表示该版本的数据可能来自不可达的聚合 apiserver；
+			// 保留为失败项，让上层决定是否重试，避免把过期数据当成最新。
 			failedGVs[gv] = StaleGroupVersionError{gv: gv}
 			continue
 		}
@@ -86,6 +102,7 @@ func convertAPIGroup(g apidiscovery.APIGroupDiscovery) (
 		version.Version = v.Version
 		group.Versions = append(group.Versions, version)
 		// PreferredVersion is first non-stale Version
+		// 旧版语义要求 PreferredVersion 是第一个可用版本，因此跳过 stale 版本。
 		if group.PreferredVersion == (metav1.GroupVersionForDiscovery{}) {
 			group.PreferredVersion = version
 		}
@@ -99,6 +116,8 @@ func convertAPIGroup(g apidiscovery.APIGroupDiscovery) (
 			// Subresources field in new format get transformed into full APIResources.
 			// It is possible a partial result with an error was returned to be used
 			// as the parent resource for the subresource.
+			// 子资源需要父资源的名称/可见性来拼接成 "parent/subresource"；
+			// 即使父资源缺少 GVK 而未被加入列表，仍用其部分结果构造子资源。
 			for _, subresource := range r.Subresources {
 				sr, err := convertAPISubresource(resource, subresource)
 				if err == nil {
@@ -111,12 +130,16 @@ func convertAPIGroup(g apidiscovery.APIGroupDiscovery) (
 	return group, gvResources, failedGVs
 }
 
+// emptyKind 用于判断 ResponseKind 指针是否指向零值；零值等同于“未提供 GVK”。
 var emptyKind = metav1.GroupVersionKind{}
 
 // convertAPIResource tranforms a APIResourceDiscovery to an APIResource. We are
 // resilient to missing GVK, since this resource might be the parent resource
 // for a subresource. If the parent is missing a GVK, it is not returned in
 // discovery, and the subresource MUST have the GVK.
+//
+// 缺少 GVK 时返回部分结果与错误：部分结果仅用于父资源名字/作用域，
+// 供子资源转换使用，调用方不应把它加入发现列表。
 func convertAPIResource(in apidiscovery.APIResourceDiscovery) (metav1.APIResource, error) {
 	result := metav1.APIResource{
 		Name:         in.Resource,
@@ -136,10 +159,14 @@ func convertAPIResource(in apidiscovery.APIResourceDiscovery) (metav1.APIResourc
 	}
 	// Can return partial result with error, which can be the parent for a
 	// subresource. Do not add this result to the returned discovery resources.
+	// 返回部分结果 + 错误，由调用方决定是否使用（仅用于子资源父级）。
 	return result, err
 }
 
 // convertAPISubresource tranforms a APISubresourceDiscovery to an APIResource.
+//
+// 子资源的 Name 采用 "parent/subresource"，而 SingularName、Namespaced 继承自父资源，
+// 这与旧版非聚合发现返回的条目形态保持一致。GVK 必须由子资源自身提供。
 func convertAPISubresource(parent metav1.APIResource, in apidiscovery.APISubresourceDiscovery) (metav1.APIResource, error) {
 	result := metav1.APIResource{}
 	if in.ResponseKind == nil || (*in.ResponseKind) == emptyKind {

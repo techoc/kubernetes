@@ -25,6 +25,9 @@ import (
 
 // ReplicationControllerListerExpansion allows custom methods to be added to
 // ReplicationControllerLister.
+//
+// 扩展接口由手写代码实现，生成器会把该接口嵌入 ReplicationControllerLister，
+// 从而在不修改生成文件的前提下增加自定义方法。
 type ReplicationControllerListerExpansion interface {
 	GetPodControllers(pod *v1.Pod) ([]*v1.ReplicationController, error)
 }
@@ -36,11 +39,16 @@ type ReplicationControllerNamespaceListerExpansion interface{}
 // GetPodControllers returns a list of ReplicationControllers that potentially match a pod.
 // Only the one specified in the Pod's ControllerRef will actually manage it.
 // Returns an error only if no matching ReplicationControllers are found.
+//
+// 该方法只按标签筛选“候选”控制器；最终归属仍由 Pod 的 ownerReferences
+// （ControllerRef）决定。因此调用方需自行比对 controllerRef 才能确定唯一管理者。
 func (s *replicationControllerLister) GetPodControllers(pod *v1.Pod) ([]*v1.ReplicationController, error) {
+	// 无标签的 Pod 不可能被选择器匹配，直接报错可避免误判为“无控制器”。
 	if len(pod.Labels) == 0 {
 		return nil, fmt.Errorf("no controllers found for pod %v because it has no labels", pod.Name)
 	}
 
+	// 从本地缓存读取同命名空间的全部 RC，不产生 API 调用。
 	items, err := s.ReplicationControllers(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err
@@ -52,6 +60,7 @@ func (s *replicationControllerLister) GetPodControllers(pod *v1.Pod) ([]*v1.Repl
 		selector := labels.Set(rc.Spec.Selector).AsSelectorPreValidated()
 
 		// If an rc with a nil or empty selector creeps in, it should match nothing, not everything.
+		// 空选择器在 K8s 语义中表示“不选中任何对象”，不能退化为 labels.Everything()。
 		if selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
 			continue
 		}

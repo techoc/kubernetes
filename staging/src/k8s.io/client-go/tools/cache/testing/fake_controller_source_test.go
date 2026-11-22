@@ -26,6 +26,8 @@ import (
 )
 
 // ensure the watch delivers the requested and only the requested items.
+// consume 依次消费 watch 通道中的事件，断言其 resourceVersion 与期望序列一致，
+// 并确认之后不会再多出任何事件。done 用于与测试主协程同步。
 func consume(t *testing.T, w watch.Interface, rvs []string, done *sync.WaitGroup) {
 	defer done.Done()
 	for _, rv := range rvs {
@@ -48,6 +50,8 @@ func consume(t *testing.T, w watch.Interface, rvs []string, done *sync.WaitGroup
 	}
 }
 
+// TestRCNumber 验证 FakeControllerSource 的 resourceVersion 递增语义，以及从不同 RV 开始
+// watch 时只会收到之后的事件。
 func TestRCNumber(t *testing.T) {
 	pod := func(name string) *v1.Pod {
 		return &v1.Pod{
@@ -60,11 +64,13 @@ func TestRCNumber(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
 
+	// Add 产生 RV=1，两次 Modify 依次产生 RV=2、3。
 	source := NewFakeControllerSource()
 	source.Add(pod("foo"))
 	source.Modify(pod("foo"))
 	source.Modify(pod("foo"))
 
+	// 从 RV=1 开始 watch，应依次收到 2、3。
 	w, err := source.Watch(metav1.ListOptions{ResourceVersion: "1"})
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -96,6 +102,7 @@ func TestRCNumber(t *testing.T) {
 
 // TestResetWatch validates that the FakeController correctly mocks a watch
 // falling behind and ResourceVersions aging out.
+// 验证 ResetWatch 会丢弃历史变更：过旧的 RV 无法再 watch，但当前 RV 仍可正常监听后续事件。
 func TestResetWatch(t *testing.T) {
 	pod := func(name string) *v1.Pod {
 		return &v1.Pod{

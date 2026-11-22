@@ -28,6 +28,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// makeMutationTestPod 构造仅含名字、UID 与 resourceVersion 的 pod，用于驱动 mutation cache 的版本比较。
 func makeMutationTestPod(name string, uid types.UID, rv string) *v1.Pod {
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -38,6 +39,8 @@ func makeMutationTestPod(name string, uid types.UID, rv string) *v1.Pod {
 	}
 }
 
+// TestMutationCacheOnAddOrUpdate 验证 informer 推送 OnAddOrUpdate 时，只有当 store 的版本
+// 不旧于 mutation 的版本，缓存中的 mutation 才会被清除（即 mutation 已过时）。
 func TestMutationCacheOnAddOrUpdate(t *testing.T) {
 	tests := map[string]struct {
 		mutationRV  string
@@ -97,6 +100,8 @@ func TestMutationCacheOnAddOrUpdate(t *testing.T) {
 
 // TestMutationCacheOnDelete checks the behavior of OnDelete
 // when invoked after Mutation.
+// 验证 OnDelete 之后哪些情况下 mutation 会被清除：同一 UID 的旧版本（可能来自 tombstone）
+// 以及新 UID 都应清除；只有"旧版本且不同 UID"这一无法确认已删除的情况会保留 mutation。
 func TestMutationCacheOnDelete(t *testing.T) {
 	tests := map[string]struct {
 		deleteUID  types.UID
@@ -144,6 +149,8 @@ func TestMutationCacheOnDelete(t *testing.T) {
 
 // TestMutationCacheUpdateConcurrentDelete checks the behavior when
 // Mutation is called after some informer events.
+// 模拟"更新后立即被删除"的竞态：informer 事件晚于实际变更到达，
+// 过期的 Mutation 因缓存中存在 tombstone 而被丢弃。
 func TestMutationCacheUpdateConcurrentDelete(t *testing.T) {
 	store := NewStore(MetaNamespaceKeyFunc)
 	indexer := NewIndexer(MetaNamespaceKeyFunc, Indexers{})
@@ -175,6 +182,8 @@ func TestMutationCacheUpdateConcurrentDelete(t *testing.T) {
 
 // TestMutationCacheUpdateConcurrentRecreate checks the behavior when
 // Mutation is called after some informer events.
+// 模拟"对象被删除后同名重建"的竞态：store 中已有更新的同名对象，
+// 过期的 Mutation 应被识别并丢弃。
 func TestMutationCacheUpdateConcurrentRecreate(t *testing.T) {
 	store := NewStore(MetaNamespaceKeyFunc)
 	indexer := NewIndexer(MetaNamespaceKeyFunc, Indexers{})
@@ -218,6 +227,9 @@ func TestMutationCacheUpdateConcurrentRecreate(t *testing.T) {
 //  2. The object is deleted on the server; the backing store is now empty.
 //  3. Without OnDelete the mutation would linger in the cache and ByIndex
 //     would still return it, preventing the caller from recreating it.
+//
+// 核心回归点：OnDelete 必须清除 update 之后残留的 mutation，否则 ByIndex 会持续返回
+// 已删除的对象，导致调用方以为对象仍存在而无法重建。
 func TestMutationCacheOnDeleteClearsStaleMutation(t *testing.T) {
 	store := NewStore(MetaNamespaceKeyFunc)
 	byNameIndex := "by-name"

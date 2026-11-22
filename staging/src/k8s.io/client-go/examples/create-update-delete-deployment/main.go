@@ -15,6 +15,11 @@ limitations under the License.
 */
 
 // Note: the example only works with the code within the same release/branch.
+//
+// 该示例演示 Deployment 的创建、更新、列出与删除。更新部分刻意演示两种写法：
+// 直接改本地对象并 Update（会覆盖他人修改）与 Get-改-UPDATE 冲突重试（推荐）。
+// 运行前需要有可用的 kubeconfig，示例会在 default 命名空间留下资源，删除失败
+// 可能需要手工清理。
 package main
 
 import (
@@ -43,7 +48,9 @@ import (
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )
 
+// main 依次执行创建、更新、列出、删除四个步骤，每一步之间等待用户按键。
 func main() {
+	// 优先使用 $HOME/.kube/config，取不到 HOME 时要求显式传入路径。
 	var kubeconfig *string
 	if home := homedir.HomeDir(); home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
@@ -61,8 +68,10 @@ func main() {
 		panic(err)
 	}
 
+	// 固定使用 default 命名空间，避免示例意外影响其他命名空间。
 	deploymentsClient := clientset.AppsV1().Deployments(apiv1.NamespaceDefault)
 
+	// 两副本 nginx Deployment；selector 与 Pod 模板标签必须一致。
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "demo-deployment",
@@ -100,6 +109,7 @@ func main() {
 	}
 
 	// Create Deployment
+	// 服务端可能因准入、配额或已存在同名对象而拒绝，示例直接 panic。
 	fmt.Println("Creating deployment...")
 	result, err := deploymentsClient.Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
@@ -126,6 +136,9 @@ func main() {
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// Retrieve the latest version of Deployment before attempting update
 		// RetryOnConflict uses exponential backoff to avoid exhausting the apiserver
+		//
+		// 每次重试都重新 Get，取得最新 resourceVersion；若直接用旧的 result
+		// 重试，冲突永远不会消除。
 		result, getErr := deploymentsClient.Get(context.TODO(), "demo-deployment", metav1.GetOptions{})
 		if getErr != nil {
 			panic(fmt.Errorf("Failed to get latest version of Deployment: %v", getErr))
@@ -142,6 +155,7 @@ func main() {
 	fmt.Println("Updated deployment...")
 
 	// List Deployments
+	// 列出当前命名空间全部 Deployment，仅用于展示结果。
 	prompt()
 	fmt.Printf("Listing deployments in namespace %q:\n", apiv1.NamespaceDefault)
 	list, err := deploymentsClient.List(context.TODO(), metav1.ListOptions{})
@@ -153,6 +167,7 @@ func main() {
 	}
 
 	// Delete Deployment
+	// 使用 Foreground 级联删除：等待依赖对象（ReplicaSet、Pod）全部清理后才返回。
 	prompt()
 	fmt.Println("Deleting deployment...")
 	deletePolicy := metav1.DeletePropagationForeground
@@ -164,6 +179,7 @@ func main() {
 	fmt.Println("Deleted deployment.")
 }
 
+// prompt 阻塞直到用户输入一个换行，用于分步观察示例输出。
 func prompt() {
 	fmt.Printf("-> Press Return key to continue.")
 	scanner := bufio.NewScanner(os.Stdin)

@@ -44,16 +44,20 @@ import (
 	coretesting "k8s.io/client-go/testing"
 )
 
+// bytesBody 把字节切片包装成可关闭的响应体。
 func bytesBody(bodyBytes []byte) io.ReadCloser {
 	return io.NopCloser(bytes.NewReader(bodyBytes))
 }
 
+// defaultHeaders 构造 fake API Server 的标准响应头。
 func defaultHeaders() http.Header {
 	header := http.Header{}
 	header.Set("Content-Type", runtime.ContentTypeJSON)
 	return header
 }
 
+// fakeScaleClient 组装一个由 fake discovery 驱动的 RESTMapper 和 fake HTTP 客户端，
+// 覆盖 core、extensions、apps 以及一个独有的 CRD 风格组，用以证明实现不依赖静态 mapper。
 func fakeScaleClient(t *testing.T) (ScalesGetter, []schema.GroupResource) {
 	fakeDiscoveryClient := &fakedisco.FakeDiscovery{Fake: &coretesting.Fake{}}
 	fakeDiscoveryClient.Resources = []*metav1.APIResourceList{
@@ -169,6 +173,7 @@ func fakeScaleClient(t *testing.T) (ScalesGetter, []schema.GroupResource) {
 	}
 
 	fakeReqHandler := func(req *http.Request) (*http.Response, error) {
+		// 只接受已知的 scale 子资源路径，其他路径直接失败，防止测试悄悄走错分支。
 		scale, isScalePath := resourcePaths[req.URL.Path]
 		if !isScalePath {
 			return nil, fmt.Errorf("unexpected request for URL %q with method %q", req.URL.String(), req.Method)
@@ -182,6 +187,8 @@ func fakeScaleClient(t *testing.T) (ScalesGetter, []schema.GroupResource) {
 			}
 			return &http.Response{StatusCode: http.StatusOK, Header: defaultHeaders(), Body: bytesBody(res)}, nil
 		case "PUT":
+			// 从请求体解码出 Scale，并校验其 GVK 与该资源实际使用的 scale 版本一致，
+			// 这正是客户端做版本协商后应发送的格式。
 			decoder := codecs.UniversalDeserializer()
 			body, err := io.ReadAll(req.Body)
 			if err != nil {
@@ -200,6 +207,7 @@ func fakeScaleClient(t *testing.T) (ScalesGetter, []schema.GroupResource) {
 			}
 			return &http.Response{StatusCode: http.StatusOK, Header: defaultHeaders(), Body: bytesBody(res)}, nil
 		case "PATCH":
+			// patch type 由 Content-Type 决定，MergePatch 与 JSONPatch 分别处理。
 			body, err := io.ReadAll(req.Body)
 			if err != nil {
 				return nil, err
@@ -243,6 +251,7 @@ func fakeScaleClient(t *testing.T) (ScalesGetter, []schema.GroupResource) {
 	}
 
 	resolver := NewDiscoveryScaleKindResolver(fakeDiscoveryClient)
+	// VersionedAPIPath 故意设为无效值，确保实际路径完全由 RESTMapper 推导。
 	client := New(fakeClient, restMapper, dynamic.LegacyAPIPathResolverFunc, resolver)
 
 	groupResources := []schema.GroupResource{
@@ -255,6 +264,7 @@ func fakeScaleClient(t *testing.T) (ScalesGetter, []schema.GroupResource) {
 	return client, groupResources
 }
 
+// TestGetScale 验证对每个组都能 Get 到 scale，且都归一化为 autoscaling/v1 表示。
 func TestGetScale(t *testing.T) {
 	scaleClient, groupResources := fakeScaleClient(t)
 	expectedScale := &autoscalingv1.Scale{
@@ -283,6 +293,8 @@ func TestGetScale(t *testing.T) {
 	}
 }
 
+// TestUpdateScale 验证 Update 会按各资源自身的 scale 版本编码请求体，
+// 并把响应统一转换回 autoscaling/v1。
 func TestUpdateScale(t *testing.T) {
 	scaleClient, groupResources := fakeScaleClient(t)
 	expectedScale := &autoscalingv1.Scale{
@@ -311,6 +323,8 @@ func TestUpdateScale(t *testing.T) {
 	}
 }
 
+// TestPatchScale 对 MergePatch 与 JSONPatch 两种补丁类型分别验证；
+// 注意 spec.replicas 变为 5 而 status.replicas 仍为 10，符合“patch 只改 spec”的预期。
 func TestPatchScale(t *testing.T) {
 	scaleClient, groupResources := fakeScaleClient(t)
 	expectedScale := &autoscalingv1.Scale{
@@ -329,6 +343,7 @@ func TestPatchScale(t *testing.T) {
 	}
 	gvrs := make([]schema.GroupVersionResource, 0, len(groupResources))
 	for _, gr := range groupResources {
+		// Patch 需要具体版本才能构造 URL，这里按资源所属组的首选版本补全。
 		switch gr.Group {
 		case corev1.GroupName:
 			gvrs = append(gvrs, gr.WithVersion(corev1.SchemeGroupVersion.Version))

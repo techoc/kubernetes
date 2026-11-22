@@ -44,6 +44,8 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TestIsConfigTransportTLS 覆盖 IsConfigTransportTLS 的判定分支：
+// https scheme、显式证书、Insecure，以及非法 URL 的回退行为。
 func TestIsConfigTransportTLS(t *testing.T) {
 	testCases := []struct {
 		Config       *Config
@@ -99,6 +101,7 @@ func TestIsConfigTransportTLS(t *testing.T) {
 	}
 }
 
+// TestSetKubernetesDefaultsUserAgent 验证默认 User-Agent 会被设置为包含 "kubernetes/" 的字符串。
 func TestSetKubernetesDefaultsUserAgent(t *testing.T) {
 	config := &Config{}
 	if err := SetKubernetesDefaults(config); err != nil {
@@ -109,6 +112,7 @@ func TestSetKubernetesDefaultsUserAgent(t *testing.T) {
 	}
 }
 
+// TestAdjustVersion 验证版本号会被裁剪为三段，且预发布后缀被丢弃。
 func TestAdjustVersion(t *testing.T) {
 	assert := assert.New(t)
 	assert.Equal("1.2.3", adjustVersion("1.2.3-alpha4"))
@@ -117,6 +121,7 @@ func TestAdjustVersion(t *testing.T) {
 	assert.Equal("unknown", adjustVersion(""))
 }
 
+// TestAdjustCommit 验证 commit 被截断为 7 位，空值返回 "unknown"。
 func TestAdjustCommit(t *testing.T) {
 	assert := assert.New(t)
 	assert.Equal("1234567", adjustCommit("1234567890"))
@@ -124,6 +129,7 @@ func TestAdjustCommit(t *testing.T) {
 	assert.Equal("unknown", adjustCommit(""))
 }
 
+// TestAdjustCommand 验证命令行只保留可执行文件名（base name），空值返回 "unknown"。
 func TestAdjustCommand(t *testing.T) {
 	assert := assert.New(t)
 	assert.Equal("beans", adjustCommand(filepath.Join("home", "bob", "Downloads", "beans")))
@@ -132,6 +138,7 @@ func TestAdjustCommand(t *testing.T) {
 	assert.Equal("unknown", adjustCommand(""))
 }
 
+// TestBuildUserAgent 验证 User-Agent 的拼接格式：client/product (os/arch) kubernetes/commit。
 func TestBuildUserAgent(t *testing.T) {
 	assert.New(t).Equal(
 		"lynx/nicest (beos/itanium) kubernetes/baaaaaaaaad",
@@ -141,10 +148,13 @@ func TestBuildUserAgent(t *testing.T) {
 }
 
 // This function untestable since it doesn't accept arguments.
+//
+// TestDefaultKubernetesUserAgent 仅验证默认 UA 中包含 "kubernetes"。
 func TestDefaultKubernetesUserAgent(t *testing.T) {
 	assert.New(t).Contains(DefaultKubernetesUserAgent(), "kubernetes")
 }
 
+// TestRESTClientRequires 验证构造 RESTClient 时必须同时提供 NegotiatedSerializer 与 GroupVersion。
 func TestRESTClientRequires(t *testing.T) {
 	if _, err := RESTClientFor(&Config{Host: "127.0.0.1", ContentConfig: ContentConfig{NegotiatedSerializer: scheme.Codecs}}); err == nil {
 		t.Errorf("unexpected non-error")
@@ -157,6 +167,8 @@ func TestRESTClientRequires(t *testing.T) {
 	}
 }
 
+// TestRESTClientLimiter 验证 rate limiter 的选择：默认 QPS、显式 QPS、QPS=-1 表示不限流、
+// 以及显式 RateLimiter 优先。versioned 与 unversioned 客户端都要覆盖。
 func TestRESTClientLimiter(t *testing.T) {
 	testCases := []struct {
 		Name    string
@@ -214,6 +226,7 @@ func TestRESTClientLimiter(t *testing.T) {
 	}
 }
 
+// fakeLimiter 是测试用的 RateLimiter，返回预设的 Saturation/QPS。
 type fakeLimiter struct {
 	FakeSaturation float64
 	FakeQPS        float32
@@ -239,6 +252,7 @@ func (t *fakeLimiter) Stop() {}
 
 func (t *fakeLimiter) Accept() {}
 
+// fakeCodec 是仅实现接口、不做实际编解码的 codec。
 type fakeCodec struct{}
 
 func (c *fakeCodec) Decode([]byte, *schema.GroupVersionKind, runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
@@ -253,6 +267,7 @@ func (c *fakeCodec) Identifier() runtime.Identifier {
 	return runtime.Identifier("fake")
 }
 
+// fakeRoundTripper 是测试用的空 RoundTripper。
 type fakeRoundTripper struct{}
 
 func (r *fakeRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
@@ -267,6 +282,7 @@ type fakeWarningHandler struct{}
 
 func (f fakeWarningHandler) HandleWarningHeader(code int, agent string, message string) {}
 
+// fakeWarningHandlerWithLogging 记录收到的 warning 消息，便于断言。
 type fakeWarningHandlerWithLogging struct {
 	messages []string
 }
@@ -280,6 +296,7 @@ type fakeWarningHandlerWithContext struct{}
 func (f fakeWarningHandlerWithContext) HandleWarningHeaderWithContext(ctx context.Context, code int, agent string, message string) {
 }
 
+// fakeNegotiatedSerializer 返回 fakeCodec，用于避免真实序列化依赖。
 type fakeNegotiatedSerializer struct{}
 
 func (n *fakeNegotiatedSerializer) SupportedMediaTypes() []runtime.SerializerInfo {
@@ -312,8 +329,11 @@ func (fakeAuthProviderConfigPersister) Persist(map[string]string) error {
 
 var fakeAuthProviderConfigPersisterError = errors.New("fakeAuthProviderConfigPersisterError")
 
+// TestAnonymousAuthConfig 用 fuzz 配置验证 AnonymousClientConfig 会清除所有敏感字段，
+// 同时保留非敏感字段（Dial/Proxy 等通过行为比较验证）。
 func TestAnonymousAuthConfig(t *testing.T) {
 	f := randfill.New().NilChance(0.0).NumElements(1, 1)
+	// 为无法直接比较的接口/函数字段注入可比较的 fake 实现。
 	f.Funcs(
 		func(r *runtime.Codec, f randfill.Continue) {
 			codec := &fakeCodec{}
@@ -372,6 +392,7 @@ func TestAnonymousAuthConfig(t *testing.T) {
 
 		// this is the list of known security related fields, add to this list if a new field
 		// is added to Config, update AnonymousClientConfig to preserve the field otherwise.
+		// 这些都是必须被清空的敏感字段；新增 Config 字段时需同步更新此列表。
 		expected.Impersonate = ImpersonationConfig{}
 		expected.BearerToken = ""
 		expected.BearerTokenFile = ""
@@ -387,6 +408,7 @@ func TestAnonymousAuthConfig(t *testing.T) {
 		expected.Transport = nil
 		expected.WrapTransport = nil
 
+		// 函数字段无法用 DeepEqual 比较，改为调用后比较返回值。
 		if actual.Dial != nil {
 			_, actualError := actual.Dial(context.Background(), "", "")
 			_, expectedError := expected.Dial(context.Background(), "", "")
@@ -413,6 +435,8 @@ func TestAnonymousAuthConfig(t *testing.T) {
 	}
 }
 
+// TestCopyConfig 用 fuzz 配置验证 CopyConfig 不丢失任何字段；
+// 函数/接口字段通过调用结果比较，其余字段用 cmp.Diff 比较。
 func TestCopyConfig(t *testing.T) {
 	f := randfill.New().NilChance(0.0).NumElements(1, 1)
 	f.Funcs(
@@ -516,6 +540,7 @@ func TestCopyConfig(t *testing.T) {
 	}
 }
 
+// TestConfigStringer 验证 Config.String() 会输出非敏感信息、但对密码/令牌/证书私钥等打码。
 func TestConfigStringer(t *testing.T) {
 	formatBytes := func(b []byte) string {
 		// %#v for []byte always pre-pends "[]byte{".
@@ -564,6 +589,7 @@ func TestConfigStringer(t *testing.T) {
 					Config: &runtime.Unknown{Raw: []byte("here is some config data")},
 				},
 			},
+			// 非敏感字段原样输出，敏感值替换为固定占位符。
 			expectContent: []string{
 				"localhost:8080",
 				"gopher",
@@ -605,6 +631,7 @@ func TestConfigStringer(t *testing.T) {
 	}
 }
 
+// TestConfigSprint 验证 %s/%v/%+v/%#v 四种格式下 Config 的输出一致，且敏感字段被替换。
 func TestConfigSprint(t *testing.T) {
 	c := &Config{
 		Host:    "localhost:8080",
@@ -663,6 +690,8 @@ func TestConfigSprint(t *testing.T) {
 	}
 }
 
+// TestConfigWarningHandler 验证 RESTClient 对新旧 warning handler 的选择：
+// 未设置时为 nil；只设置新接口时直接使用；两者都设置时优先新接口。
 func TestConfigWarningHandler(t *testing.T) {
 	config := &Config{}
 	config.GroupVersion = &schema.GroupVersion{}

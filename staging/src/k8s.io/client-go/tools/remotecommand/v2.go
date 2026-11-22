@@ -31,6 +31,8 @@ import (
 // and exec. The original streaming protocol was metav1. As a result, this
 // version is referred to as version 2, even though it is the first actual
 // numbered version.
+// 与 v1 的关键差异：流可以直接读写 io.Reader/io.ReadWriteCloser，stdin 关闭与错误解码
+// 都有明确语义，因而能正确处理非交互 stdin 和执行错误。
 type streamProtocolV2 struct {
 	StreamOptions
 
@@ -40,6 +42,7 @@ type streamProtocolV2 struct {
 	remoteStderr io.Reader
 }
 
+// 编译期断言：v2 必须满足协议处理器接口。
 var _ streamProtocolHandler = &streamProtocolV2{}
 
 func newStreamProtocolV2(options StreamOptions) streamProtocolHandler {
@@ -48,6 +51,8 @@ func newStreamProtocolV2(options StreamOptions) streamProtocolHandler {
 	}
 }
 
+// createStreams 先建错误流，再按需建立 stdin/stdout/stderr。
+// 所有流必须全部建好后再开始拷贝，原因同 v1：服务端要收齐 stream 才会启动处理。
 func (p *streamProtocolV2) createStreams(conn streamCreator) error {
 	var err error
 	headers := http.Header{}
@@ -88,6 +93,8 @@ func (p *streamProtocolV2) createStreams(conn streamCreator) error {
 	return nil
 }
 
+// copyStdin 同时启动两个 goroutine：一个把本地输入送进远端，另一个消费远端 stdin
+// 直到服务端关闭它。两者的关闭都用 sync.Once 保护，避免重复 Close。
 func (p *streamProtocolV2) copyStdin(logger klog.Logger) {
 	if p.Stdin != nil {
 		var once sync.Once
@@ -133,6 +140,8 @@ func (p *streamProtocolV2) copyStdin(logger klog.Logger) {
 	}
 }
 
+// copyStdout 在 wg 上登记一条输出流。defer 中先排空远端再 Done，
+// 以防服务端仍在写入时本地提前返回导致流阻塞。
 func (p *streamProtocolV2) copyStdout(logger klog.Logger, wg *sync.WaitGroup) {
 	if p.Stdout == nil {
 		return
@@ -153,6 +162,7 @@ func (p *streamProtocolV2) copyStdout(logger klog.Logger, wg *sync.WaitGroup) {
 	}()
 }
 
+// copyStderr 与 copyStdout 对称；TTY 模式下 stderr 已合并进 stdout，故直接返回。
 func (p *streamProtocolV2) copyStderr(logger klog.Logger, wg *sync.WaitGroup) {
 	if p.Stderr == nil || p.Tty {
 		return
@@ -170,6 +180,7 @@ func (p *streamProtocolV2) copyStderr(logger klog.Logger, wg *sync.WaitGroup) {
 	}()
 }
 
+// stream 的完成条件：stdout/stderr 拷贝结束，并且错误流给出最终结果（成功时读到 EOF）。
 func (p *streamProtocolV2) stream(logger klog.Logger, conn streamCreator, ready chan<- struct{}) error {
 	if err := p.createStreams(conn); err != nil {
 		return err
@@ -198,6 +209,8 @@ func (p *streamProtocolV2) stream(logger klog.Logger, conn streamCreator, ready 
 }
 
 // errorDecoderV2 interprets the error channel data as plain text.
+//
+// v2 的错误流是纯文本；v3/v4 才会使用带状态的结构化编码。
 type errorDecoderV2 struct{}
 
 func (d *errorDecoderV2) decode(message []byte) error {

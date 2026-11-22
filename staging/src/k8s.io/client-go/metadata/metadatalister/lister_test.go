@@ -28,6 +28,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// TestNamespaceGetMethod 验证按 namespace 过滤的 lister 只返回该 namespace 下的对象，
+// 且请求不存在的对象时返回错误。
 func TestNamespaceGetMethod(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -95,6 +97,7 @@ func TestNamespaceGetMethod(t *testing.T) {
 	}
 }
 
+// TestNamespaceListMethod 验证按 namespace 过滤的 List 只返回该 namespace 的对象。
 func TestNamespaceListMethod(t *testing.T) {
 	// test data
 	objs := []runtime.Object{
@@ -126,6 +129,8 @@ func TestNamespaceListMethod(t *testing.T) {
 	assertListOrDie(expectedOutput, actualOutput, t)
 }
 
+// TestListerGetMethod 验证非 namespace 作用域的 Get：
+// 空 namespace 的对象可被跨 namespace 的 lister 取到，而指定 namespace 的 lister 不会取到其他 namespace 的对象。
 func TestListerGetMethod(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -193,6 +198,7 @@ func TestListerGetMethod(t *testing.T) {
 	}
 }
 
+// TestListerListMethod 验证非 namespace 作用域的 List 返回索引器中的全部对象。
 func TestListerListMethod(t *testing.T) {
 	// test data
 	objs := []runtime.Object{
@@ -222,6 +228,7 @@ func TestListerListMethod(t *testing.T) {
 	assertListOrDie(expectedOutput, actualOutput, t)
 }
 
+// assertListOrDie 比较列表长度与逐对象内容；忽略顺序，按名称匹配。
 func assertListOrDie(expected, actual []*metav1.PartialObjectMetadata, t *testing.T) {
 	if len(actual) != len(expected) {
 		t.Fatalf("unexpected number of items returned, expected = %d, actual = %d", len(expected), len(actual))
@@ -242,6 +249,7 @@ func assertListOrDie(expected, actual []*metav1.PartialObjectMetadata, t *testin
 	}
 }
 
+// newPartialObjectMetadata 构造测试用的 PartialObjectMetadata。
 func newPartialObjectMetadata(apiVersion, kind, namespace, name string) *metav1.PartialObjectMetadata {
 	return &metav1.PartialObjectMetadata{
 		TypeMeta: metav1.TypeMeta{

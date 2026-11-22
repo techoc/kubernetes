@@ -32,26 +32,35 @@ import (
 // streamProtocolV4 implements version 4 of the streaming protocol for attach
 // and exec. This version adds support for exit codes on the error stream through
 // the use of metav1.Status instead of plain text messages.
+//
+// 它复用 v3 的流创建与 resize 逻辑，仅替换错误流解码器。
 type streamProtocolV4 struct {
 	*streamProtocolV3
 }
 
 var _ streamProtocolHandler = &streamProtocolV4{}
 
+// newStreamProtocolV4 构造 v4 协议处理器，内嵌 v3 实现。
 func newStreamProtocolV4(options StreamOptions) streamProtocolHandler {
 	return &streamProtocolV4{
 		streamProtocolV3: newStreamProtocolV3(options).(*streamProtocolV3),
 	}
 }
 
+// createStreams 直接复用 v3 的流创建逻辑。
 func (p *streamProtocolV4) createStreams(conn streamCreator) error {
 	return p.streamProtocolV3.createStreams(conn)
 }
 
+// handleResizes 直接复用 v3 的终端尺寸同步逻辑。
 func (p *streamProtocolV4) handleResizes(logger klog.Logger) {
 	p.streamProtocolV3.handleResizes(logger)
 }
 
+// stream 按 v4 协议完成一次 attach/exec 会话。
+//
+// ready 在所有流创建后关闭，用于通知调用方可以开始传输；随后并发复制
+// stdin/stdout/stderr，并等待错误流给出最终结果（退出码或错误）。
 func (p *streamProtocolV4) stream(logger klog.Logger, conn streamCreator, ready chan<- struct{}) error {
 	if err := p.createStreams(conn); err != nil {
 		return err
@@ -85,6 +94,11 @@ func (p *streamProtocolV4) stream(logger klog.Logger, conn streamCreator, ready 
 // and creates an exec.ExitError from it.
 type errorDecoderV4 struct{}
 
+// decode 解析错误流上的 metav1.Status，并映射为 Go 错误。
+//
+// 成功状态返回 nil；失败状态若带 NonZeroExitCodeReason，则从 Causes 中
+// 提取退出码并返回 exec.CodeExitError，供调用方区分“命令失败”与
+// “协议/传输失败”。
 func (d *errorDecoderV4) decode(message []byte) error {
 	status := metav1.Status{}
 	err := json.Unmarshal(message, &status)

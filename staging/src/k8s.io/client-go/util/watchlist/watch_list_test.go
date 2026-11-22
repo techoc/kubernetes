@@ -27,14 +27,18 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// supportsWLS 伪造“支持 WatchList 语义”的客户端：该方法返回 false 表示未声明不支持。
 type supportsWLS struct{}
 
 func (supportsWLS) IsWatchListSemanticsUnSupported() bool { return false }
 
+// doesNotSupportWLS 伪造显式声明不支持 WatchList 语义的客户端（例如旧版本服务端或代理）。
 type doesNotSupportWLS struct{}
 
 func (doesNotSupportWLS) IsWatchListSemanticsUnSupported() bool { return true }
 
+// TestDoesClientNotSupportWatchListSemantics 覆盖接口探测的四种情况：返回 false/true、
+// 未实现该可选接口、以及 nil 客户端。未实现与 nil 都按“支持”处理，以保持向后兼容。
 func TestDoesClientNotSupportWatchListSemantics(t *testing.T) {
 	scenarios := []struct {
 		name                                string
@@ -80,6 +84,12 @@ func TestDoesClientNotSupportWatchListSemantics(t *testing.T) {
 // +--------------------------+-----------------+---------+-----------------+
 // | unset/NotOlderThan/Exact | unset/0/100     | unset/4 | unset/FakeToken |
 // +--------------------------+-----------------+---------+-----------------+
+//
+// 能否改写为 watch-list 请求由 feature gate 与这四个字段共同决定：
+//   - feature gate 关闭：一律不改写。
+//   - 已带 Continue：说明调用方处在分页 list 过程中，不能替换语义。
+//   - ResourceVersionMatch=Exact 且指定了 ResourceVersion：exact 语义与 watch-list 不兼容。
+//   - 其余组合（含 NotOlderThan）都可安全改写，并把 RV 原样带过去。
 func TestPrepareWatchListOptionsFromListOptions(t *testing.T) {
 	scenarios := []struct {
 		name              string
@@ -124,6 +134,8 @@ func TestPrepareWatchListOptionsFromListOptions(t *testing.T) {
 			expectToPrepareWatchListOptions: true,
 			expectedWatchListOptions:        expectedWatchListOptionsFor("100"),
 		},
+		// legacy 前缀的用例来自旧版 client-go 的调用路径：即便带 Limit 也允许改写，
+		// 因为 watch-list 本身不使用分页。
 		{
 			name:                            "legacy: can enable watch list for: RVM=unset, RV=0, Limit=4,  Continuation=unset",
 			listOptions:                     metav1.ListOptions{ResourceVersion: "0", Limit: 4},
@@ -233,6 +245,8 @@ func TestPrepareWatchListOptionsFromListOptions(t *testing.T) {
 	}
 }
 
+// expectedWatchListOptionsFor 构造 watch-list 请求的预期选项：它把普通 list 转换为
+// “带 NotOlderThan 语义的 watch，并要求服务端发送初始事件与 bookmark”。
 func expectedWatchListOptionsFor(rv string) metav1.ListOptions {
 	var watchListOptions metav1.ListOptions
 

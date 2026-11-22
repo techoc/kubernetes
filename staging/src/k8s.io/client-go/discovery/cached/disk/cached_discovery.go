@@ -42,6 +42,10 @@ import (
 
 // CachedDiscoveryClient implements the functions that discovery server-supported API groups,
 // versions and resources.
+//
+// 它把 discovery 结果以 JSON 文件形式缓存在本地目录，进程重启后仍可复用，
+// 从而减少启动阶段对 API Server 的请求。delegate 通常已是内存缓存客户端，
+// 因此读取路径是“磁盘 -> 内存 -> 实时请求”的逐级回退。
 type CachedDiscoveryClient struct {
 	delegate discovery.DiscoveryInterfaceWithContext
 
@@ -65,6 +69,7 @@ type CachedDiscoveryClient struct {
 	openapiClient *cachedopenapi.Client
 }
 
+// 编译期断言：同时兼容旧接口与新接口，避免上游调用方因迁移而中断。
 var (
 	//nolint:staticcheck // Intentionally using the old interface here.
 	_ discovery.CachedDiscoveryInterface            = &CachedDiscoveryClient{}
@@ -76,12 +81,15 @@ var (
 // ServerResourcesForGroupVersionWithContext is a better alternative because it supports contextual logging and cancellation.
 //
 // Contextual logging: Use ServerResourcesForGroupVersionWithContext instead.
+//
+// 无 context 版本仅为兼容旧接口，内部使用 Background。
 func (d *CachedDiscoveryClient) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
 	return d.ServerResourcesForGroupVersionWithContext(context.Background(), groupVersion)
 }
 
 // ServerResourcesForGroupVersionWithContext returns the supported resources for a group and version.
 func (d *CachedDiscoveryClient) ServerResourcesForGroupVersionWithContext(ctx context.Context, groupVersion string) (*metav1.APIResourceList, error) {
+	// 每个 group/version 单独一个目录，文件名固定，便于外部工具检查缓存内容。
 	filename := filepath.Join(d.cacheDirectory, groupVersion, "serverresources.json")
 	cachedBytes, err := d.getCachedFile(filename)
 	// don't fail on errors, we either don't have a file or won't be able to run the cached check. Either way we can fallback.
@@ -99,6 +107,7 @@ func (d *CachedDiscoveryClient) ServerResourcesForGroupVersionWithContext(ctx co
 		return liveResources, err
 	}
 	if liveResources == nil || len(liveResources.APIResources) == 0 {
+		// 空结果不落盘：否则一次异常响应会把空资源列表缓存一整个 TTL。
 		klog.FromContext(ctx).V(3).Info("skipped caching discovery info, no resources found")
 		return liveResources, err
 	}
@@ -137,6 +146,7 @@ func (d *CachedDiscoveryClient) ServerGroups() (*metav1.APIGroupList, error) {
 // ServerGroupsWithContext returns the supported groups, with information like supported versions and the
 // preferred version.
 func (d *CachedDiscoveryClient) ServerGroupsWithContext(ctx context.Context) (*metav1.APIGroupList, error) {
+	// groups 列表是全局的，直接放在缓存目录根下。
 	filename := filepath.Join(d.cacheDirectory, "servergroups.json")
 	cachedBytes, err := d.getCachedFile(filename)
 	// don't fail on errors, we either don't have a file or won't be able to run the cached check. Either way we can fallback.
@@ -165,8 +175,11 @@ func (d *CachedDiscoveryClient) ServerGroupsWithContext(ctx context.Context) (*m
 	return liveGroups, nil
 }
 
+// getCachedFile 读取缓存文件并检查 TTL；任何失败都返回错误，由调用方回退到
+// 实时请求，因此这里不区分“不存在/已过期/被失效”的原因（日志之外）。
 func (d *CachedDiscoveryClient) getCachedFile(filename string) ([]byte, error) {
 	// after invalidation ignore cache files not created by this process
+	// 失效后只信任本进程写出的文件，避免沿用其他进程可能写入的陈旧内容。
 	d.mutex.Lock()
 	_, ourFile := d.ourFiles[filename]
 	if d.invalidated && !ourFile {
@@ -196,6 +209,8 @@ func (d *CachedDiscoveryClient) getCachedFile(filename string) ([]byte, error) {
 		return nil, err
 	}
 
+	// 只要用到一个非本进程写入的文件，Fresh() 就应返回 false，
+	// 提示调用方在缓存未命中时重试（而不是断言资源不存在）。
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	d.fresh = d.fresh && ourFile
@@ -203,6 +218,8 @@ func (d *CachedDiscoveryClient) getCachedFile(filename string) ([]byte, error) {
 	return cachedBytes, nil
 }
 
+// writeCachedFile 把 obj 编码后原子地写入 filename。
+// 先写临时文件再 rename，保证并发读者永远看不到半截 JSON。
 func (d *CachedDiscoveryClient) writeCachedFile(filename string, obj runtime.Object) error {
 	if err := os.MkdirAll(filepath.Dir(filename), 0750); err != nil {
 		return err
@@ -235,6 +252,8 @@ func (d *CachedDiscoveryClient) writeCachedFile(filename string, obj runtime.Obj
 	}
 
 	// atomic rename
+	// rename 与 ourFiles 更新必须在同一把锁内完成，否则并发 Invalidate 可能
+	// 清空 ourFiles 后又被这里补回，破坏“失效后不信任旧文件”的语义。
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 	err = os.Rename(name, filename)
@@ -320,6 +339,8 @@ func (d *CachedDiscoveryClient) OpenAPIV3WithContext(ctx context.Context) openap
 	return d.openAPIV3(ctx)
 }
 
+// openAPIV3 惰性创建并缓存 OpenAPI v3 客户端，使同一进程内的多个调用方共用
+// 一份已拉取的 schema。
 func (d *CachedDiscoveryClient) openAPIV3(ctx context.Context) *cachedopenapi.Client {
 	// Must take lock since Invalidate call may modify openapiClient
 	d.mutex.Lock()
@@ -350,6 +371,7 @@ func (d *CachedDiscoveryClient) FreshWithContext(ctx context.Context) bool {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
+	// 只读取标志，ctx 目前仅用于与 WithContext 系列签名保持一致。
 	return d.fresh
 }
 
@@ -367,10 +389,14 @@ func (d *CachedDiscoveryClient) InvalidateWithContext(ctx context.Context) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
+	// 清空 ourFiles 并标记 invalidated：已有文件仍留在磁盘上，但除了本次
+	// 失效之后重新写入的文件外都不再被读取。fresh 置 true 表示从现在起
+	// 缓存内容都来自本进程，可以信任。
 	d.ourFiles = map[string]struct{}{}
 	d.fresh = true
 	d.invalidated = true
 	d.openapiClient = nil
+	// delegate 可能是旧接口实现，需要先做一次适配；这保证内层缓存也被清空。
 	ad, ok := d.delegate.(discovery.CachedDiscoveryInterfaceWithContext)
 	if !ok {
 		//nolint:staticcheck // Intentionally using the old interface here.
@@ -409,6 +435,7 @@ func NewCachedDiscoveryClientForConfig(config *restclient.Config, discoveryCache
 	if len(httpCacheDir) > 0 {
 		// update the given restconfig with a custom roundtripper that
 		// understands how to handle cache responses.
+		// 复制 config 再包裹，避免修改调用方传入的共享配置。
 		config = restclient.CopyConfig(config)
 		config.Wrap(func(rt http.RoundTripper) http.RoundTripper {
 			return newCacheRoundTripper(httpCacheDir, rt)
@@ -428,6 +455,7 @@ func NewCachedDiscoveryClientForConfig(config *restclient.Config, discoveryCache
 
 // NewCachedDiscoveryClient creates a new DiscoveryClient.  cacheDirectory is the directory where discovery docs are held.  It must be unique per host:port combination to work well.
 func newCachedDiscoveryClient(delegate discovery.DiscoveryInterfaceWithContext, cacheDirectory string, ttl time.Duration) *CachedDiscoveryClient {
+	// fresh 初始为 true：刚创建时还没有读取任何外部文件。
 	return &CachedDiscoveryClient{
 		delegate:       delegate,
 		cacheDirectory: cacheDirectory,

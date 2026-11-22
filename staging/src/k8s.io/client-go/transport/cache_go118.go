@@ -19,6 +19,7 @@ limitations under the License.
 package transport
 
 // this is just to make the "unused" linter rule happy
+// 同时触发下方的编译期严格可比较断言。
 var _ = isCacheKeyComparable[tlsCacheKey]
 
 // assert at compile time that tlsCacheKey is comparable in a way that will never panic at runtime.
@@ -40,7 +41,9 @@ var _ = isCacheKeyComparable[tlsCacheKey]
 //
 // Original suggestion from https://github.com/golang/go/issues/56548#issuecomment-1317673963
 func isCacheKeyComparable[K tlsCacheKey]() {
+	// 若 tlsCacheKey 含 interface 等非严格可比较字段，此处无法满足 comparable 约束。
 	_ = isComparable[K]
 }
 
+// isComparable 仅用于在编译期约束 T 必须是严格可比较类型。
 func isComparable[T comparable]() {}

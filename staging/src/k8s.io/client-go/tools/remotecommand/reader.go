@@ -36,6 +36,7 @@ type readerWrapper struct {
 	reader io.Reader
 }
 
+// Read 只暴露 io.Reader，隐藏底层可能存在的 WriteTo，从而避免 io.Copy 生成超大 SPDY 帧。
 func (r readerWrapper) Read(p []byte) (int, error) {
 	return r.reader.Read(p)
 }

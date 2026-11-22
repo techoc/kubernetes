@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// deleteScheme/parameterScheme 只注册 metav1 基础类型，分别服务于删除选项编码和查询参数编码。
 var deleteScheme = runtime.NewScheme()
 var parameterScheme = runtime.NewScheme()
 var deleteOptionsCodec = serializer.NewCodecFactory(deleteScheme)
@@ -63,8 +64,10 @@ var _ Interface = &Client{}
 // appropriate metadata client defaults set.
 func ConfigFor(inConfig *rest.Config) *rest.Config {
 	config := rest.CopyConfig(inConfig)
+	// 优先请求 protobuf 以降低带宽；回退 JSON 兼容不支持 protobuf 的端点。
 	config.AcceptContentTypes = "application/vnd.kubernetes.protobuf,application/json"
 	config.ContentType = "application/vnd.kubernetes.protobuf"
+	// WithoutConversion 让 meta.k8s.io 内部类型直接用于序列化，省去版本转换。
 	config.NegotiatedSerializer = metainternalversionscheme.Codecs.WithoutConversion()
 	if config.UserAgent == "" {
 		config.UserAgent = rest.DefaultKubernetesUserAgent()
@@ -103,6 +106,8 @@ func NewForConfig(inConfig *rest.Config) (Interface, error) {
 func NewForConfigAndClient(inConfig *rest.Config, h *http.Client) (Interface, error) {
 	config := ConfigFor(inConfig)
 	// for serializing the options
+	// GroupVersion 与 APIPath 留占位值：实际路径由每个请求的 AbsPath 决定，
+	// 这里的值绝不会出现在线上请求中。
 	config.GroupVersion = &schema.GroupVersion{}
 	config.APIPath = "/this-value-should-never-be-sent"
 
@@ -114,6 +119,10 @@ func NewForConfigAndClient(inConfig *rest.Config, h *http.Client) (Interface, er
 	return &Client{client: restClient}, nil
 }
 
+// client 绑定某一 GVR，并可选绑定命名空间。
+//
+// 值拷贝语义（Namespace 中复制结构体）使不同命名空间的视图互不影响，
+// 也避免共享可变状态。
 type client struct {
 	client    *Client
 	namespace string
@@ -145,6 +154,8 @@ func (c *client) Delete(ctx context.Context, name string, opts metav1.DeleteOpti
 	// server-side will reply with 406 errors.
 	// The special treatment here is to be compatible with CRD Handler
 	// see: https://github.com/kubernetes/kubernetes/blob/1a845ccd076bbf1b03420fe694c85a5cd3bd6bed/staging/src/k8s.io/apiextensions-apiserver/pkg/apiserver/customresource_handler.go#L843
+	//
+	// 因此这里手工编码 JSON 并显式设置 Content-Type，绕过协商序列化器。
 	deleteOptionsByte, err := runtime.Encode(deleteOptionsCodec.LegacyCodec(schema.GroupVersion{Version: "v1"}), &opts)
 	if err != nil {
 		return err
@@ -162,6 +173,7 @@ func (c *client) Delete(ctx context.Context, name string, opts metav1.DeleteOpti
 // DeleteCollection triggers deletion of all resources in the specified scope (namespace or cluster).
 func (c *client) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOptions metav1.ListOptions) error {
 	// See comment on Delete
+	// 同样手工编码 DeleteOptions，避免 CRD 端点因 protobuf Content-Type 返回 406。
 	deleteOptionsByte, err := runtime.Encode(deleteOptionsCodec.LegacyCodec(schema.GroupVersion{Version: "v1"}), &opts)
 	if err != nil {
 		return err
@@ -182,6 +194,8 @@ func (c *client) Get(ctx context.Context, name string, opts metav1.GetOptions, s
 	if len(name) == 0 {
 		return nil, fmt.Errorf("name is required")
 	}
+	// Accept 头同时声明 PartialObjectMetadata（protobuf 与 JSON），
+	// 让支持 meta.k8s.io/v1 的服务器只返回元数据而非完整对象。
 	result := c.client.client.Get().AbsPath(append(c.makeURLSegments(name), subresources...)...).
 		SetHeader("Accept", "application/vnd.kubernetes.protobuf;as=PartialObjectMetadata;g=meta.k8s.io;v=v1,application/json;as=PartialObjectMetadata;g=meta.k8s.io;v=v1,application/json").
 		SpecificallyVersionedParams(&opts, dynamicParameterCodec, versionV1).
@@ -191,6 +205,8 @@ func (c *client) Get(ctx context.Context, name string, opts metav1.GetOptions, s
 	}
 	obj, err := result.Get()
 	if runtime.IsNotRegisteredError(err) {
+		// 旧服务器（1.14 及更早）不认识 PartialObjectMetadata，返回的是完整对象；
+		// 这里从原始字节中尽力提取 ObjectMeta。
 		klog.FromContext(ctx).V(5).Info("Could not retrieve PartialObjectMetadata", "err", err)
 		rawBytes, err := result.Raw()
 		if err != nil {
@@ -200,6 +216,7 @@ func (c *client) Get(ctx context.Context, name string, opts metav1.GetOptions, s
 		if err := json.Unmarshal(rawBytes, &partial); err != nil {
 			return nil, fmt.Errorf("unable to decode returned object as PartialObjectMetadata: %v", err)
 		}
+		// 校验关键元数据字段，防止把任意 JSON 误当作对象元数据。
 		if !isLikelyObjectMetadata(&partial) {
 			return nil, fmt.Errorf("object does not appear to match the ObjectMeta schema: %#v", partial)
 		}
@@ -227,6 +244,7 @@ func (c *client) List(ctx context.Context, opts metav1.ListOptions) (*metav1.Par
 	}
 	obj, err := result.Get()
 	if runtime.IsNotRegisteredError(err) {
+		// 同 Get：兼容旧服务器，从完整对象列表中退化为元数据列表。
 		klog.FromContext(ctx).V(5).Info("Could not retrieve PartialObjectMetadataList", "err", err)
 		rawBytes, err := result.Raw()
 		if err != nil {
@@ -255,6 +273,7 @@ func (c *client) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Inte
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
 	}
+	// watch 请求必须显式置位 Watch=true，事件同样以 PartialObjectMetadata 形式返回。
 	opts.Watch = true
 	return c.client.client.Get().
 		AbsPath(c.makeURLSegments("")...).
@@ -281,6 +300,7 @@ func (c *client) Patch(ctx context.Context, name string, pt types.PatchType, dat
 	}
 	obj, err := result.Get()
 	if runtime.IsNotRegisteredError(err) {
+		// 旧服务器返回完整对象，按同样策略做 JSON 降级解码。
 		rawBytes, err := result.Raw()
 		if err != nil {
 			return nil, err
@@ -305,6 +325,8 @@ func (c *client) Patch(ctx context.Context, name string, pt types.PatchType, dat
 	return partial, nil
 }
 
+// makeURLSegments 按 Kubernetes REST 路径约定拼装请求路径：
+// 核心组用 /api，其余组用 /apis/<group>，命名空间资源额外插入 namespaces/<ns>。
 func (c *client) makeURLSegments(name string) []string {
 	url := []string{}
 	if len(c.resource.Group) == 0 {
@@ -326,6 +348,8 @@ func (c *client) makeURLSegments(name string) []string {
 	return url
 }
 
+// isLikelyObjectMetadata 用若干必填元数据字段做启发式校验：
+// 真正的对象至少应有 UID、creationTimestamp、name 或 generateName 之一。
 func isLikelyObjectMetadata(meta *metav1.PartialObjectMetadata) bool {
 	return len(meta.UID) > 0 || !meta.CreationTimestamp.IsZero() || len(meta.Name) > 0 || len(meta.GenerateName) > 0
 }

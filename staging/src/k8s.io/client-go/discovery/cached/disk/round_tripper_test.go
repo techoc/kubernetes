@@ -30,6 +30,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// testRoundTripper 是记录请求并返回预置响应的桩，便于观察缓存层是否真正发出了请求。
 // copied from k8s.io/client-go/transport/round_trippers_test.go
 type testRoundTripper struct {
 	Request  *http.Request
@@ -42,6 +43,7 @@ func (rt *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	return rt.Response, rt.Err
 }
 
+// BenchmarkDiskCache 衡量底层磁盘缓存 Set/Get/Delete 的吞吐。
 func BenchmarkDiskCache(b *testing.B) {
 	cacheDir, err := os.MkdirTemp("", "cache-rt")
 	if err != nil {
@@ -71,6 +73,7 @@ func BenchmarkDiskCache(b *testing.B) {
 	}
 }
 
+// TestCacheRoundTripper 验证首次请求写入磁盘缓存，而二次请求在收到 304 时复用缓存内容。
 func TestCacheRoundTripper(t *testing.T) {
 	rt := &testRoundTripper{}
 	cacheDir, err := os.MkdirTemp("", "cache-rt")
@@ -128,6 +131,7 @@ func TestCacheRoundTripper(t *testing.T) {
 	}
 }
 
+// TestCacheRoundTripperPathPerm 校验写入的目录与文件权限分别固定为 0750/0660。
 func TestCacheRoundTripperPathPerm(t *testing.T) {
 	assert := assert.New(t)
 
@@ -177,6 +181,8 @@ func TestCacheRoundTripperPathPerm(t *testing.T) {
 	assert.NoError(err)
 }
 
+// TestSumDiskCache 覆盖带校验和的磁盘缓存的各种边界：
+// 缺失文件、空文件、校验和不匹配都应视为 miss；重复写入应覆盖旧值；删除幂等。
 func TestSumDiskCache(t *testing.T) {
 	assert := assert.New(t)
 

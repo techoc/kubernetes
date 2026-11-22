@@ -27,14 +27,17 @@ import (
 )
 
 const (
+	// concurrencyLevel 指定 benchmark 中并行生产事件的 goroutine 数量。
 	concurrencyLevel = 5
 )
 
+// mockSynced 用 context 是否已取消来表示“已同步”。
 type mockSynced struct {
 	context.Context
 	cancel func()
 }
 
+// newMockSynced 创建 mock；synced 为 true 时立即取消 context（HasSynced 返回 false）。
 func newMockSynced(tb testing.TB, synced bool) *mockSynced {
 	m := &mockSynced{}
 	m.Context, m.cancel = context.WithCancel(context.Background())
@@ -49,6 +52,7 @@ func (m *mockSynced) Name() string {
 	return "mock"
 }
 
+// BenchmarkListener 衡量 processListener 在高并发 add 场景下的吞吐与分配。
 func BenchmarkListener(b *testing.B) {
 	var notification addNotification
 

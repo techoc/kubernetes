@@ -25,8 +25,12 @@ import (
 )
 
 // Deprecated: Interface is deprecated, use TypedInterface instead.
+//
+// 已弃用：Interface 是 TypedInterface[any] 的别名，新代码应直接使用泛型版本。
 type Interface TypedInterface[any]
 
+// TypedInterface 是工作队列的公开契约：同一 item 在进入处理前可被多次 Add，
+// 但只会被处理一次；处理完成后若期间又被 Add，则会重新入队。
 type TypedInterface[T comparable] interface {
 	Add(item T)
 	Len() int
@@ -39,6 +43,9 @@ type TypedInterface[T comparable] interface {
 
 // Queue is the underlying storage for items. The functions below are always
 // called from the same goroutine.
+//
+// 由于调用方（Typed）已持有自己的锁，这里无需再做同步；
+// 自定义实现只需保证 FIFO 语义与 Len/Pop 的一致性。
 type Queue[T comparable] interface {
 	// Touch can be hooked when an existing item is added again. This may be
 	// useful if the implementation allows priority change for the given item.
@@ -73,6 +80,8 @@ func (q *queue[T]) Pop() (item T) {
 	item = (*q)[0]
 
 	// The underlying array still exists and reference this object, so the object will not be garbage collected.
+	//
+	// 清空已弹出位置，避免底层数组一直持有对象引用导致内存无法回收。
 	(*q)[0] = *new(T)
 	*q = (*q)[1:]
 
@@ -81,8 +90,11 @@ func (q *queue[T]) Pop() (item T) {
 
 // QueueConfig specifies optional configurations to customize an Interface.
 // Deprecated: use TypedQueueConfig instead.
+//
+// 已弃用：请使用 TypedQueueConfig；本别名为保持 API 兼容而保留。
 type QueueConfig = TypedQueueConfig[any]
 
+// TypedQueueConfig 是队列的可选配置；零值即表示使用默认实现。
 type TypedQueueConfig[T comparable] struct {
 	// Name for the queue. If unnamed, the metrics will not be registered.
 	Name string
@@ -101,6 +113,8 @@ type TypedQueueConfig[T comparable] struct {
 // New constructs a new work queue (see the package comment).
 //
 // Deprecated: use NewTyped instead.
+//
+// 已弃用：请使用 NewTyped，以便获得类型安全的接口。
 func New() *Type {
 	return NewWithConfig(QueueConfig{
 		Name: "",
@@ -118,6 +132,8 @@ func NewTyped[T comparable]() *Typed[T] {
 // customize different properties.
 //
 // Deprecated: use NewTypedWithConfig instead.
+//
+// 已弃用：请使用 NewTypedWithConfig。
 func NewWithConfig(config QueueConfig) *Type {
 	return NewTypedWithConfig(config)
 }
@@ -130,6 +146,8 @@ func NewTypedWithConfig[T comparable](config TypedQueueConfig[T]) *Typed[T] {
 
 // NewNamed creates a new named queue.
 // Deprecated: Use NewWithConfig instead.
+//
+// 已弃用：请使用 NewWithConfig；命名只影响 metrics 注册。
 func NewNamed(name string) *Type {
 	return NewWithConfig(QueueConfig{
 		Name: name,
@@ -144,6 +162,7 @@ func newQueueWithConfig[T comparable](config TypedQueueConfig[T], updatePeriod t
 		metricsProvider = config.MetricsProvider
 	}
 
+	// Clock/Queue 都可以留空，这里统一补默认值，避免调用方处理 nil。
 	if config.Clock == nil {
 		config.Clock = clock.RealClock{}
 	}
@@ -174,6 +193,8 @@ func newQueue[T comparable](c clock.WithTicker, queue Queue[T], metrics queueMet
 
 	// Don't start the goroutine for a type of noMetrics so we don't consume
 	// resources unnecessarily
+	//
+	// noMetrics 表示 metrics 关闭，此时没必要为“未完成工作量”统计启动 ticker goroutine。
 	if _, ok := metrics.(noMetrics[T]); !ok {
 		t.wg.Go(t.updateUnfinishedWorkLoop)
 	}
@@ -185,6 +206,8 @@ const defaultUnfinishedWorkUpdatePeriod = 500 * time.Millisecond
 
 // Type is a work queue (see the package comment).
 // Deprecated: Use Typed instead.
+//
+// 已弃用：Type 是 Typed[any] 的别名，新代码应使用 Typed。
 type Type = Typed[any]
 
 type Typed[t comparable] struct {
@@ -243,6 +266,8 @@ func (q *Typed[T]) Add(item T) {
 
 	q.dirty.Insert(item)
 	if q.processing.Has(item) {
+		// 正在处理中：只标记 dirty，等 Done 时再重新入队，
+		// 避免同一时刻有两个 worker 处理同一个 item。
 		return
 	}
 
@@ -277,6 +302,7 @@ func (q *Typed[T]) Get() (item T, shutdown bool) {
 
 	q.metrics.get(item)
 
+	// 进入 processing 并移出 dirty：处理期间再次 Add 会重新标记 dirty。
 	q.processing.Insert(item)
 	q.dirty.Delete(item)
 
@@ -294,9 +320,11 @@ func (q *Typed[T]) Done(item T) {
 
 	q.processing.Delete(item)
 	if q.dirty.Has(item) {
+		// 处理期间被再次 Add：立即重新入队，保证不丢失这次更新。
 		q.queue.Push(item)
 		q.cond.Signal()
 	} else if q.processing.Len() == 0 {
+		// 没有积压时唤醒可能在 ShutDownWithDrain 中等待的调用方。
 		q.cond.Signal()
 	}
 }
@@ -336,6 +364,7 @@ func (q *Typed[T]) ShutDownWithDrain() {
 	q.shuttingDown = true
 	q.cond.Broadcast()
 
+	// 等待正在处理的 item 全部 Done；ShutDown 会把 drain 置 false 从而提前解除等待。
 	for q.processing.Len() != 0 && q.drain {
 		q.cond.Wait()
 	}

@@ -24,6 +24,8 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
+// testClientConfig 是可控的 ClientConfig 测试桩；rawconfig 为 nil 时表示
+// 不应调用 RawConfig，从而能断言调用路径。
 type testClientConfig struct {
 	rawconfig          *clientcmdapi.Config
 	config             *restclient.Config
@@ -48,6 +50,8 @@ func (c *testClientConfig) ConfigAccess() ConfigAccess {
 	return nil
 }
 
+// testICC 模拟 inClusterClientConfig，记录 Possible() 是否被调用，
+// 用于验证 DeferredLoadingClientConfig 何时回退到集群内配置。
 type testICC struct {
 	testClientConfig
 
@@ -60,6 +64,8 @@ func (icc *testICC) Possible() bool {
 	return icc.possible
 }
 
+// TestInClusterConfig 覆盖 DeferredLoadingClientConfig.ClientConfig 的回退条件：
+// 仅当磁盘配置为空（ErrEmptyConfig）或与默认配置相同时才尝试集群内配置。
 func TestInClusterConfig(t *testing.T) {
 	default1 := &DirectClientConfig{
 		config:      *createValidTestConfig(),
@@ -79,6 +85,7 @@ func TestInClusterConfig(t *testing.T) {
 		config:    *invalidDefaultConfig,
 		overrides: &ConfigOverrides{},
 	}
+	// 默认配置本身无效时无法用于比较，应直接跳过 in-cluster 回退。
 	if _, err := defaultInvalid.ClientConfig(); err == nil || !IsConfigurationInvalid(err) {
 		t.Fatal(err)
 	}
@@ -209,6 +216,8 @@ func TestInClusterConfig(t *testing.T) {
 	}
 }
 
+// TestInClusterConfigNamespace 验证命名空间解析同样会在磁盘配置为空时
+// 回退到集群内配置，并正确报告该命名空间是否来自显式覆盖。
 func TestInClusterConfigNamespace(t *testing.T) {
 	err1 := fmt.Errorf("unique error")
 

@@ -37,12 +37,17 @@ import (
 // can be retried, otherwise it returns false.
 // We have four mode of communications - 'Stream', 'Watch', 'Do' and 'DoRaw', this
 // function allows us to customize the retryability aspect of each.
+//
+// IsRetryableErrorFunc 允许调用方自定义错误是否可重试。
+// 四种通信模式（Stream/Watch/Do/DoRaw）的重试语义各不相同，因此用回调注入。
 type IsRetryableErrorFunc func(request *http.Request, err error) bool
 
+// IsErrorRetryable 调用回调判断错误是否可重试。
 func (r IsRetryableErrorFunc) IsErrorRetryable(request *http.Request, err error) bool {
 	return r(request, err)
 }
 
+// neverRetryError 是恒不重试的策略。
 var neverRetryError = IsRetryableErrorFunc(func(_ *http.Request, _ error) bool {
 	return false
 })
@@ -50,6 +55,9 @@ var neverRetryError = IsRetryableErrorFunc(func(_ *http.Request, _ error) bool {
 // WithRetry allows the client to retry a request up to a certain number of times
 // Note that WithRetry is not safe for concurrent use by multiple
 // goroutines without additional locking or coordination.
+//
+// WithRetry 负责一次请求的重试计数与退避。
+// 注意：单个 WithRetry 实例不能被多个 goroutine 并发使用，除非外层另有同步。
 type WithRetry interface {
 	// IsNextRetry advances the retry counter appropriately
 	// and returns true if the request should be retried,
@@ -68,6 +76,9 @@ type WithRetry interface {
 	// err: the server sent this error to us, if err is set then resp is nil.
 	// f: a IsRetryableErrorFunc function provided by the client that determines
 	//    if the err sent by the server is retryable.
+	//
+	// IsNextRetry 推进重试计数，并返回是否应重试。
+	// 达到上限、错误不可重试、服务端未给出 429/5xx + Retry-After、或请求体无法重置时返回 false。
 	IsNextRetry(ctx context.Context, restReq *Request, httpReq *http.Request, resp *http.Response, err error, f IsRetryableErrorFunc) bool
 
 	// Before should be invoked prior to each attempt, including
@@ -77,9 +88,14 @@ type WithRetry interface {
 	// Before may also be additionally responsible for preparing
 	// the request for the next retry, namely in terms of resetting
 	// the request body in case it has been read.
+	//
+	// Before 在每次尝试（含第一次）之前调用；返回错误则立即终止请求。
+	// 它也负责为重试准备请求（例如重置已被读取的请求体）。
 	Before(ctx context.Context, r *Request) error
 
 	// After should be invoked immediately after an attempt is made.
+	//
+	// After 在每次尝试之后立即调用，用于更新指标与退避状态。
 	After(ctx context.Context, r *Request, resp *http.Response, err error)
 
 	// WrapPreviousError wraps the error from any previous attempt into
@@ -96,10 +112,15 @@ type WithRetry interface {
 	//  b: errors.Unwrap(err) = finalErr if finalErr does not
 	//     implements Unwrap
 	//  c: errors.Is(err, otherErr) = errors.Is(finalErr, otherErr)
+	//
+	// WrapPreviousError 把上一次尝试的错误附加到最终错误上，便于定位失败原因，
+	// 同时保持错误链的 Unwrap/Is 语义不变。
 	WrapPreviousError(finalErr error) (err error)
 }
 
 // RetryAfter holds information associated with the next retry.
+//
+// RetryAfter 描述下一次重试的相关参数。
 type RetryAfter struct {
 	// Wait is the duration the server has asked us to wait before
 	// the next retry is initiated.
@@ -114,6 +135,7 @@ type RetryAfter struct {
 	Reason string
 }
 
+// withRetry 是 WithRetry 的默认实现。
 type withRetry struct {
 	maxRetries int
 	attempts   int
@@ -137,6 +159,7 @@ type withRetry struct {
 	previousErr, currentErr error
 }
 
+// trackPreviousError 记录最近两次错误，供最终错误包装使用。
 func (r *withRetry) trackPreviousError(err error) {
 	// keep track of two most recent errors
 	if r.currentErr != nil {
@@ -145,6 +168,7 @@ func (r *withRetry) trackPreviousError(err error) {
 	r.currentErr = err
 }
 
+// IsNextRetry 推进重试计数并判断是否应重试；具体规则见接口注释。
 func (r *withRetry) IsNextRetry(ctx context.Context, restReq *Request, httpReq *http.Request, resp *http.Response, err error, f IsRetryableErrorFunc) bool {
 	defer r.trackPreviousError(err)
 
@@ -155,6 +179,7 @@ func (r *withRetry) IsNextRetry(ctx context.Context, restReq *Request, httpReq *
 
 	if restReq.body != nil {
 		// we have an opaque reader, we can't safely reset it
+		// 请求体是不可重置的 reader，无法安全重放，因此不重试。
 		return false
 	}
 
@@ -170,6 +195,8 @@ func (r *withRetry) IsNextRetry(ctx context.Context, restReq *Request, httpReq *
 		errIsRetryable = true
 		// we have a retryable error, for which we will create an
 		// artificial "Retry-After" response.
+		// 对可重试错误伪造一个 500 + Retry-After: 1 的响应，
+		// 以便复用统一的等待逻辑。
 		resp = retryAfterResponse()
 	}
 	if err != nil && !errIsRetryable {
@@ -192,6 +219,7 @@ func (r *withRetry) IsNextRetry(ctx context.Context, restReq *Request, httpReq *
 	return true
 }
 
+// Before 在每次尝试前执行退避与限流；首次尝试也执行退避（保持既有行为）。
 func (r *withRetry) Before(ctx context.Context, request *Request) error {
 	// If the request context is already canceled there
 	// is no need to retry.
@@ -215,6 +243,7 @@ func (r *withRetry) Before(ctx context.Context, request *Request) error {
 	}
 
 	// if we are here, we have made attempt(s) at least once before.
+	// 重试时取客户端退避与 Retry-After 的较大值，避免早于服务端要求的时间重试。
 	if request.backoff != nil {
 		delay := request.backoff.CalculateBackoffWithContext(ctx, url)
 		if r.retryAfter.Wait > delay {
@@ -235,6 +264,7 @@ func (r *withRetry) Before(ctx context.Context, request *Request) error {
 	return nil
 }
 
+// After 在每次尝试后更新指标与退避；首次尝试记为 retry=2。
 func (r *withRetry) After(ctx context.Context, request *Request, resp *http.Response, err error) {
 	// 'After' is invoked immediately after an attempt is made, let's label
 	// the attempt we have just made as attempt 'N'.
@@ -265,6 +295,7 @@ func (r *withRetry) After(ctx context.Context, request *Request, resp *http.Resp
 	}
 }
 
+// WrapPreviousError 用 wrapPreviousError 把上一次尝试的错误附加到当前错误。
 func (r *withRetry) WrapPreviousError(currentErr error) error {
 	if currentErr == nil || r.previousErr == nil {
 		return currentErr
@@ -283,6 +314,8 @@ func (r *withRetry) WrapPreviousError(currentErr error) error {
 	// avoid error message like:
 	//  Error: Get "http://foo.bar/api/v1": context deadline exceeded - error \
 	//  from a previous attempt: Error: Get "http://foo.bar/api/v1": EOF
+	//
+	// 去掉重复的 url 前缀，让“上一次尝试的错误”更易读。
 	if urlErr, ok := r.previousErr.(*url.Error); ok && urlErr != nil {
 		if urlErr.Unwrap() != nil {
 			previousErr = urlErr.Unwrap()
@@ -295,6 +328,7 @@ func (r *withRetry) WrapPreviousError(currentErr error) error {
 	}
 }
 
+// wrapPreviousError 组合当前错误与上一次尝试的错误，Unwrap 只暴露当前错误。
 type wrapPreviousError struct {
 	currentErr, previousError error
 }
@@ -306,6 +340,8 @@ func (w *wrapPreviousError) Error() string {
 
 // checkWait returns true along with a number of seconds if
 // the server instructed us to wait before retrying.
+//
+// checkWait 只对 429 与 5xx 检查 Retry-After；其他状态码不触发等待。
 func checkWait(resp *http.Response) (int, bool) {
 	switch r := resp.StatusCode; {
 	// any 500 error code and 429 can trigger a wait
@@ -317,6 +353,7 @@ func checkWait(resp *http.Response) (int, bool) {
 	return i, ok
 }
 
+// getRetryReason 生成人类可读的重试原因，用于限流日志与指标。
 func getRetryReason(retries, seconds int, resp *http.Response, err error) string {
 	// priority and fairness sets the UID of the FlowSchema
 	// associated with a request in the following response Header.
@@ -337,6 +374,7 @@ func getRetryReason(retries, seconds int, resp *http.Response, err error) string
 	}
 }
 
+// readAndCloseResponseBody 在重连前读完并关闭响应体。
 func readAndCloseResponseBody(resp *http.Response) {
 	if resp == nil {
 		return
@@ -348,19 +386,23 @@ func readAndCloseResponseBody(resp *http.Response) {
 	const maxBodySlurpSize = 2 << 10
 	defer resp.Body.Close()
 
+	// 只丢弃有限大小的内容，避免为复用连接而读取超大响应体。
 	if resp.ContentLength <= maxBodySlurpSize {
 		io.Copy(io.Discard, &io.LimitedReader{R: resp.Body, N: maxBodySlurpSize})
 	}
 }
 
+// retryAfterResponse 构造 Retry-After: 1 的伪造响应（用于可重试错误）。
 func retryAfterResponse() *http.Response {
 	return retryAfterResponseWithDelay("1")
 }
 
+// retryAfterResponseWithDelay 构造指定 Retry-After 秒数的 500 响应，供测试使用。
 func retryAfterResponseWithDelay(delay string) *http.Response {
 	return retryAfterResponseWithCodeAndDelay(http.StatusInternalServerError, delay)
 }
 
+// retryAfterResponseWithCodeAndDelay 构造指定状态码与 Retry-After 的响应。
 func retryAfterResponseWithCodeAndDelay(code int, delay string) *http.Response {
 	return &http.Response{
 		StatusCode: code,

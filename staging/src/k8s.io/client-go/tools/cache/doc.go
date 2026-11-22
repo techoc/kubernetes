@@ -21,4 +21,10 @@ limitations under the License.
 // list currently available nodes), and one that additionally acts as
 // a FIFO queue (for example, to allow a scheduler to process incoming
 // pods).
+//
+// Package cache 实现客户端本地缓存：Reflector 对服务端执行 watch，
+// 把增量事件写入 Store，从而减少直接调用 API Server 的次数。
+// 提供两类 Store：纯缓存型（如调度器查看可用节点）与带 FIFO 语义的队列型
+// （如调度器按序处理新到达的 Pod）。缓存与事件处理均非事务性，调用方需
+// 自行容忍短暂的陈旧数据与事件重复投递。
 package cache

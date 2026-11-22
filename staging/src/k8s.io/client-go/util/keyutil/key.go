@@ -42,6 +42,8 @@ const (
 )
 
 // MakeEllipticPrivateKeyPEM creates an ECDSA private key
+//
+// 固定使用 P-256：兼容性最好，且比 RSA 生成更快、密钥更短。
 func MakeEllipticPrivateKeyPEM() ([]byte, error) {
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
 	if err != nil {
@@ -64,6 +66,9 @@ func MakeEllipticPrivateKeyPEM() ([]byte, error) {
 // The key file will be created with file mode 0600.
 // If the key file already exists, it will be overwritten.
 // The parent directory of the keyPath will be created as needed with file mode 0755.
+//
+// 私钥文件权限必须是 0600，避免同机其他用户读取；已存在的文件会被原地
+// 覆盖而不是创建新 inode，权限保持不变。
 func WriteKey(keyPath string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(keyPath), os.FileMode(0755)); err != nil {
 		return err
@@ -73,6 +78,9 @@ func WriteKey(keyPath string, data []byte) error {
 
 // LoadOrGenerateKeyFile looks for a key in the file at the given path. If it
 // can't find one, it will generate a new key and store it there.
+//
+// 文件存在但内容损坏时不会覆盖，而是报错：静默替换会破坏依赖旧公钥的
+// 系统，应让运维显式决定如何处理。
 func LoadOrGenerateKeyFile(keyPath string) (data []byte, wasGenerated bool, err error) {
 	loadedData, err := os.ReadFile(keyPath)
 	// Call verifyKeyData to ensure the file wasn't empty/corrupt.
@@ -96,6 +104,8 @@ func LoadOrGenerateKeyFile(keyPath string) (data []byte, wasGenerated bool, err 
 // MarshalPrivateKeyToPEM converts a known private key type of RSA or ECDSA to
 // a PEM encoded block or returns an error.
 func MarshalPrivateKeyToPEM(privateKey crypto.PrivateKey) ([]byte, error) {
+	// RSA 使用 PKCS#1 块类型，ECDSA 使用 SEC1；这是历史兼容格式，
+	// 下游工具普遍能识别。
 	switch t := privateKey.(type) {
 	case *ecdsa.PrivateKey:
 		derBytes, err := x509.MarshalECPrivateKey(t)
@@ -157,6 +167,8 @@ func verifyKeyData(data []byte) bool {
 
 // ParsePrivateKeyPEM returns a private key parsed from a PEM block in the supplied data.
 // Recognizes PEM blocks for "EC PRIVATE KEY", "RSA PRIVATE KEY", or "PRIVATE KEY"
+//
+// 会跳过无法解析的块继续查找，因此文件里混有证书、参数块也能正常工作。
 func ParsePrivateKeyPEM(keyData []byte) (interface{}, error) {
 	var privateKeyPemBlock *pem.Block
 	for {
@@ -193,6 +205,9 @@ func ParsePrivateKeyPEM(keyData []byte) (interface{}, error) {
 
 // ParsePublicKeysPEM is a helper function for reading an array of rsa.PublicKey or ecdsa.PublicKey from a PEM-encoded byte array.
 // Reads public keys from both public and private key files.
+//
+// 私钥文件也可以提取公钥，方便调用方只持有一个密钥文件；无法识别的块被
+// 忽略以兼容附带注释或其他 PEM 内容的文件。
 func ParsePublicKeysPEM(keyData []byte) ([]interface{}, error) {
 	var block *pem.Block
 	keys := []interface{}{}
@@ -232,6 +247,9 @@ func ParsePublicKeysPEM(keyData []byte) ([]interface{}, error) {
 }
 
 // parseRSAPublicKey parses a single RSA public key from the provided data
+//
+// 先按 PKIX 解析，失败再尝试把数据当作证书取其中公钥；这是为了兼容
+// 直接粘贴 PEM 证书的旧用法。
 func parseRSAPublicKey(data []byte) (*rsa.PublicKey, error) {
 	var err error
 
@@ -256,6 +274,8 @@ func parseRSAPublicKey(data []byte) (*rsa.PublicKey, error) {
 }
 
 // parseRSAPrivateKey parses a single RSA private key from the provided data
+//
+// 兼容 PKCS#1 与传统 PKCS#8 两种编码。
 func parseRSAPrivateKey(data []byte) (*rsa.PrivateKey, error) {
 	var err error
 

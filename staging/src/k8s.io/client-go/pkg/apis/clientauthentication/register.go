@@ -22,9 +22,14 @@ import (
 )
 
 // GroupName is the group name use in this package
+//
+// ExecCredential 等类型在 API 上属于该组；实际序列化格式由 v1/v1beta1 等外部版本定义。
 const GroupName = "client.authentication.k8s.io"
 
 // SchemeGroupVersion is group version used to register these objects
+//
+// 这里注册的是内部版本（APIVersionInternal），只用于在内存中做类型转换，
+// 不会被直接写入 exec 插件的 stdin/stdout 协议。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
 // Kind takes an unqualified kind and returns a Group qualified GroupKind
@@ -38,10 +43,13 @@ func Resource(resource string) schema.GroupResource {
 }
 
 var (
+	// SchemeBuilder 收集本组需要注册到 runtime.Scheme 的类型构造函数。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	AddToScheme   = SchemeBuilder.AddToScheme
+	// AddToScheme 将本组类型加入给定 Scheme，通常由 install 包聚合调用。
+	AddToScheme = SchemeBuilder.AddToScheme
 )
 
+// addKnownTypes 注册内部版本类型；新增类型时必须同步实现 DeepCopy 与转换逻辑。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&ExecCredential{},

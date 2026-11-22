@@ -27,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// TestThreadSafeStoreDeleteRemovesEmptySetsFromIndex 验证删除最后一个引用某索引值的对象后，
+// 索引中对应的集合会被一并清除，而不是留下空集合。
 func TestThreadSafeStoreDeleteRemovesEmptySetsFromIndex(t *testing.T) {
 	testIndexer := "testIndexer"
 
@@ -60,6 +62,8 @@ func TestThreadSafeStoreDeleteRemovesEmptySetsFromIndex(t *testing.T) {
 	}
 }
 
+// TestThreadSafeStoreAddKeepsNonEmptySetPostDeleteFromIndex 验证删除一个对象后，
+// 与其共享索引值的其他对象仍然保留在索引集合中。
 func TestThreadSafeStoreAddKeepsNonEmptySetPostDeleteFromIndex(t *testing.T) {
 	testIndexer := "testIndexer"
 	testIndex := "testIndex"
@@ -98,9 +102,12 @@ func TestThreadSafeStoreAddKeepsNonEmptySetPostDeleteFromIndex(t *testing.T) {
 	}
 }
 
+// TestThreadSafeStoreIndexingFunctionsWithMultipleValues 验证单个对象可映射到多个索引值，
+// 且 Update/Delete 时旧索引值会被正确移除、新索引值会被正确添加。
 func TestThreadSafeStoreIndexingFunctionsWithMultipleValues(t *testing.T) {
 	testIndexer := "testIndexer"
 
+	// 索引函数按逗号拆分对象值，从而产生多个索引键。
 	indexers := Indexers{
 		testIndexer: func(obj interface{}) ([]string, error) {
 			return strings.Split(obj.(string), ","), nil
@@ -115,6 +122,7 @@ func TestThreadSafeStoreIndexingFunctionsWithMultipleValues(t *testing.T) {
 
 	assert := assert.New(t)
 
+	// compare 比较某个索引值对应的 key 集合，忽略顺序。
 	compare := func(key string, expected []string) error {
 		values := sets.List(store.index.indices[testIndexer][key])
 		if cmp.Equal(values, expected) {
@@ -167,6 +175,8 @@ func TestThreadSafeStoreIndexingFunctionsWithMultipleValues(t *testing.T) {
 	assert.NoError(compare("baz", []string{}))
 }
 
+// TestThreadSafeStoreRV 验证 store 会跟踪写入过程中见到的最大 resourceVersion，
+// 覆盖 Add/Update/Delete/Replace/Transaction 等各条路径。
 func TestThreadSafeStoreRV(t *testing.T) {
 	t.Run("Initial state", func(t *testing.T) {
 		store := NewThreadSafeStore(Indexers{}, Indices{}).(*threadSafeMap)
@@ -197,6 +207,7 @@ func TestThreadSafeStoreRV(t *testing.T) {
 		}
 
 		// Delete an earlier object with a newer RV
+		// 删除携带的 RV 也应被计入，因为 watch 事件中的删除同样推进了同步进度。
 		store.DeleteWithObject("key4", &metav1.ObjectMeta{ResourceVersion: "30"})
 		if rv := store.LastStoreSyncResourceVersion(); rv != "30" {
 			t.Errorf("Expected RV to become \"30\" after deletion %q", rv)
@@ -220,6 +231,7 @@ func TestThreadSafeStoreRV(t *testing.T) {
 			t.Errorf("Expected RV to remain \"40\" after delete, got %q", rv)
 		}
 
+		// 批量事务中的 RV 不应回退：只保留最大值。
 		txns := []ThreadSafeStoreTransaction{
 			{
 				Transaction{
@@ -262,6 +274,7 @@ func TestThreadSafeStoreRV(t *testing.T) {
 			"key2": &metav1.ObjectMeta{ResourceVersion: "30"},
 		}
 
+		// Replace 使用显式传入的 resourceVersion 作为同步点。
 		store.Replace(items, "50")
 
 		if rv := store.LastStoreSyncResourceVersion(); rv != "50" {
@@ -285,6 +298,8 @@ func TestThreadSafeStoreRV(t *testing.T) {
 	})
 }
 
+// BenchmarkIndexer 衡量大量更新场景下 threadSafeMap 的索引维护开销，
+// 模拟按 (namespace, name) 等静态键索引 5000 个节点的情形。
 func BenchmarkIndexer(b *testing.B) {
 	testIndexer := "testIndexer"
 
@@ -301,7 +316,7 @@ func BenchmarkIndexer(b *testing.B) {
 	// The following benchmark imitates what is happening in indexes
 	// used in storage layer, where indexing is mostly static (e.g.
 	// indexing objects by their (namespace, name)).
-	// The 5000 number imitates indexing nodes in 5000-node cluster.
+	// The 5000 number imitates indexing nodes in a 5000-node cluster.
 	objectCount := 5000
 	objects := make([]string, 0, 5000)
 	for i := 0; i < objectCount; i++ {

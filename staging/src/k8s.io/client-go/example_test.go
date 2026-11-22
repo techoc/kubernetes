@@ -43,6 +43,8 @@ import (
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
 
+// Example_inClusterConfiguration 演示使用 Pod 的服务账号在集群内创建 clientset。
+// 运行在集群外时请改用 kubeconfig。
 func Example_inClusterConfiguration() {
 	// This example demonstrates how to create a clientset for an application
 	// running inside a Kubernetes cluster. It uses the pod's service account
@@ -75,6 +77,8 @@ func Example_inClusterConfiguration() {
 	fmt.Printf("There are %d pods in the default namespace\n", len(pods.Items))
 }
 
+// Example_outOfClusterConfiguration 演示通过 kubeconfig 在集群外创建 clientset，
+// 这是本地开发和命令行工具的常见方式。
 func Example_outOfClusterConfiguration() {
 	// This example demonstrates how to create a clientset for an application
 	// running outside of a Kubernetes cluster, using a kubeconfig file. This is
@@ -116,6 +120,8 @@ func Example_outOfClusterConfiguration() {
 	fmt.Printf("There are %d pods in the default namespace\n", len(pods.Items))
 }
 
+// Example_handlingAPIErrors 演示如何用 apimachinery 的 errors 包区分常见 API 错误。
+// 这里手工构造 NotFound，避免依赖真实集群。
 func Example_handlingAPIErrors() {
 	// This example demonstrates how to handle common API errors.
 	// Create a NotFound error to simulate a failed API request.
@@ -135,6 +141,8 @@ func Example_handlingAPIErrors() {
 	// Pod not found
 }
 
+// Example_usingDynamicClient 演示用 dynamic client 访问没有 Go 类型定义的资源
+// （典型场景是 Custom Resource）。
 func Example_usingDynamicClient() {
 	// This example demonstrates how to create and use a dynamic client to work
 	// with Custom Resources or other objects without needing their Go type
@@ -160,6 +168,7 @@ func Example_usingDynamicClient() {
 
 	// Define the GroupVersionResource for the object you want to access.
 	// For Pods, this is {Group: "", Version: "v1", Resource: "pods"}.
+	// 核心组的 Group 为空字符串，资源名使用复数小写形式。
 	gvr := schema.GroupVersionResource{Version: "v1", Resource: "pods"}
 
 	// Use the dynamic client to list all pods in the "default" namespace.
@@ -181,6 +190,8 @@ func Example_usingDynamicClient() {
 	}
 }
 
+// Example_usingInformers 演示 informer 的基本用法：共享缓存、事件回调、
+// 双 channel 优雅退出以及等待首次同步完成。
 func Example_usingInformers() {
 	// This example demonstrates the basic pattern for using an informer to watch
 	// for changes to Pods. This is a conceptual example; a real controller would
@@ -204,6 +215,7 @@ func Example_usingInformers() {
 
 	// A SharedInformerFactory provides a shared cache for multiple informers,
 	// which reduces memory and network overhead.
+	// 第二个参数是 resync 周期：即使对象没有变化，也会按该周期重放一次 Update 事件。
 	factory := informers.NewSharedInformerFactory(clientset, 10*time.Minute)
 	podInformer := factory.Core().V1().Pods().Informer()
 
@@ -268,6 +280,8 @@ func Example_usingInformers() {
 	log.Println("Shutting down...")
 }
 
+// Example_serverSideApply 演示用 applyconfiguration 构造声明式对象并执行
+// Server-Side Apply（SSA），这是控制器和 operator 的推荐写法。
 func Example_serverSideApply() {
 	// This example demonstrates how to use Server-Side Apply to declaratively
 	// manage a Deployment object. Server-Side Apply is the recommended approach
@@ -297,6 +311,7 @@ func Example_serverSideApply() {
 
 	// The FieldManager is a required field that identifies the controller managing
 	// this object's state.
+	// 不同 FieldManager 各自拥有自己写入的字段，字段冲突会在 Apply 时被服务端拒绝。
 	fieldManager := "my-controller"
 
 	// Build the apply configuration.
@@ -331,6 +346,8 @@ func Example_serverSideApply() {
 	fmt.Printf("Deployment %q applied successfully.\n", result.Name)
 }
 
+// Example_leaderElection 演示副本间的主备选举：只有拿到 Lease 的副本执行实际工作，
+// 失去租约时通过回调停止工作。
 func Example_leaderElection() {
 	// This example demonstrates the leader election pattern. A controller running
 	// multiple replicas uses leader election to ensure that only one replica is
@@ -387,6 +404,8 @@ func Example_leaderElection() {
 	}
 
 	// Create the leader elector.
+	// 三个时间参数必须满足 LeaseDuration > RenewDeadline > RetryPeriod*1.2，
+	// 否则 NewLeaderElector 会直接返回错误。
 	elector, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
 		Lock:          lock,
 		LeaseDuration: 15 * time.Second,

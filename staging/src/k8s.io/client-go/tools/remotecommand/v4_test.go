@@ -22,6 +22,8 @@ import (
 	"testing"
 )
 
+// TestV4ErrorDecoder 覆盖 v4 错误通道协议的各分支：空对象、截断 JSON、
+// 成功状态、带消息的失败，以及 NonZeroExitCode 的退出码解析。
 func TestV4ErrorDecoder(t *testing.T) {
 	dec := errorDecoderV4{}
 

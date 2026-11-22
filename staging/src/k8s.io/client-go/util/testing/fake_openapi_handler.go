@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testing 为 client-go 的测试提供可复用的假服务器与辅助工具。
 package testing
 
 import (
@@ -31,6 +32,10 @@ import (
 	"k8s.io/kube-openapi/pkg/spec3"
 )
 
+// FakeOpenAPIServer 模拟 API Server 的 OpenAPI V3 端点。
+//
+// ServedDocuments 保存按 GroupVersion 索引的规范，便于测试断言；
+// RequestCounters 按请求路径累计次数，用于验证客户端缓存是否生效。
 type FakeOpenAPIServer struct {
 	HttpServer      *httptest.Server
 	ServedDocuments map[string]*spec3.OpenAPI
@@ -50,6 +55,7 @@ func NewFakeOpenAPIV3Server(specsPath string) (*FakeOpenAPIServer, error) {
 	}
 	server := httptest.NewServer(mux)
 
+	// 复用真实的 handler3 实现，确保客户端看到的发现文档结构与生产一致。
 	openAPIVersionedService := handler3.NewOpenAPIService()
 	err := openAPIVersionedService.RegisterOpenAPIV3VersionedService("/openapi/v3", mux)
 	if err != nil {
@@ -71,6 +77,7 @@ func NewFakeOpenAPIV3Server(specsPath string) (*FakeOpenAPIServer, error) {
 			panic(err)
 		}
 
+		// 用相对路径去掉扩展名作为 GroupVersion 键，例如 apps/v1beta1。
 		rel, err := filepath.Rel(specsPath, path)
 		if err == nil {
 			grouped[rel[:(len(rel)-len(filepath.Ext(rel)))]] = vals
@@ -78,6 +85,7 @@ func NewFakeOpenAPIV3Server(specsPath string) (*FakeOpenAPIServer, error) {
 	}
 
 	filepath.WalkDir(specsPath, func(path string, d fs.DirEntry, err error) error {
+		// 只加载 .json 文件，目录本身与无关文件跳过。
 		if filepath.Ext(path) != ".json" || d.IsDir() {
 			return nil
 		}
@@ -93,6 +101,7 @@ func NewFakeOpenAPIV3Server(specsPath string) (*FakeOpenAPIServer, error) {
 			return nil, err
 		}
 
+		// 同时保留一份解析后的文档供测试断言，并注册到可服务的版本列表中。
 		testV3Specs[gv] = spec
 		openAPIVersionedService.UpdateGroupVersion(gv, spec)
 	}
@@ -110,6 +119,7 @@ func NewFakeOpenAPIV3Server(specsPath string) (*FakeOpenAPIServer, error) {
 // Implements the mux interface used by handler3 for registering the OpenAPI
 //	handlers
 
+// testMux 是最小可用的 http 路由：支持精确匹配与最长前缀匹配，并统计请求次数。
 type testMux struct {
 	lock      sync.Mutex
 	prefixMap map[string]http.Handler
@@ -138,6 +148,7 @@ func (t *testMux) HandlePrefix(path string, handler http.Handler) {
 }
 
 func (t *testMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// 整个分发过程持锁，简化并发测试；计数与 handler 调用因此是原子的。
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -151,6 +162,7 @@ func (t *testMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		t.counts[req.URL.Path] = 1
 	}
 
+	// 精确匹配优先于前缀匹配，与 net/http.ServeMux 的直觉一致。
 	if handler, ok := t.pathMap[req.URL.Path]; ok {
 		handler.ServeHTTP(w, req)
 		return

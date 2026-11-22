@@ -19,4 +19,8 @@ limitations under the License.
 // It doesn't have any of its own types -- it's just necessary to
 // get the expected behavior out of runtime.Scheme.ConvertToVersion
 // and associated methods.
+//
+// appsint 包提供 extensions/apps 内部版本所需的“脚手架”，仅供 conversion 逻辑使用。
+// 包内没有自有类型，只是为了让 runtime.Scheme.ConvertToVersion 及其相关方法
+// 能按预期完成版本转换（例如把外部版本转换为内部版本）。
 package appsint

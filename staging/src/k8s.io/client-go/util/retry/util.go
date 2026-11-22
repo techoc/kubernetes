@@ -25,6 +25,9 @@ import (
 
 // DefaultRetry is the recommended retry for a conflict where multiple clients
 // are making changes to the same resource.
+//
+// 步数多、间隔短、近似固定间隔，适合“抢同一对象”的高频冲突：
+// 尽快重读并重试通常比指数退避更有效。
 var DefaultRetry = wait.Backoff{
 	Steps:    5,
 	Duration: 10 * time.Millisecond,
@@ -35,6 +38,9 @@ var DefaultRetry = wait.Backoff{
 // DefaultBackoff is the recommended backoff for a conflict where a client
 // may be attempting to make an unrelated modification to a resource under
 // active management by one or more controllers.
+//
+// 步数少、间隔指数增长，适合与控制器“抢写”的场景：给控制器留出处理时间，
+// 避免客户端持续制造冲突。
 var DefaultBackoff = wait.Backoff{
 	Steps:    4,
 	Duration: 10 * time.Millisecond,
@@ -45,6 +51,9 @@ var DefaultBackoff = wait.Backoff{
 // OnError allows the caller to retry fn in case the error returned by fn is retriable
 // according to the provided function. backoff defines the maximum retries and the wait
 // interval between two retries.
+//
+// 一旦遇到不可重试错误立即返回原错误；若重试次数耗尽，则返回最后一次
+// 可重试错误，而不是 wait.ErrWaitTimeout，便于调用方判断根因。
 func OnError(backoff wait.Backoff, retriable func(error) bool, fn func() error) error {
 	var lastErr error
 	err := wait.ExponentialBackoff(backoff, func() (bool, error) {
@@ -100,6 +109,9 @@ func OnError(backoff wait.Backoff, retriable func(error) bool, fn func() error) 
 //	...
 //
 // TODO: Make Backoff an interface?
+//
+// RetryOnConflict 只在 errors.IsConflict 时重试；fn 必须在每次尝试中
+// 重新读取对象的最新版本，否则会一直用旧 resourceVersion 触发冲突。
 func RetryOnConflict(backoff wait.Backoff, fn func() error) error {
 	return OnError(backoff, errors.IsConflict, fn)
 }

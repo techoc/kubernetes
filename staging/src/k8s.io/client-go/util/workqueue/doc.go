@@ -24,4 +24,8 @@ limitations under the License.
 //     item to be reenqueued while it is being processed.
 //     In this case it will be processed again.
 //   - Shutdown notifications.
+//
+// Package workqueue 提供控制器常用的工作队列：同一对象在处理期间不会被并发处理，
+// 重复入队会被去重，但处理中再次入队保证会被再次处理。多个消费者可安全并行，
+// 失败重试由 RateLimitingQueue 的退避策略配合 Done/Dirty 语义实现。
 package workqueue

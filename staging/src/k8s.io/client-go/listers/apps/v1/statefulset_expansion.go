@@ -27,25 +27,32 @@ import (
 
 // StatefulSetListerExpansion allows custom methods to be added to
 // StatefulSetLister.
+// 扩展接口由生成的 StatefulSetLister 嵌入，避免手写方法被 lister-gen 覆盖。
 type StatefulSetListerExpansion interface {
 	GetPodStatefulSets(pod *v1.Pod) ([]*apps.StatefulSet, error)
 }
 
 // StatefulSetNamespaceListerExpansion allows custom methods to be added to
 // StatefulSetNamespaceLister.
+// 当前没有命名空间级扩展方法，保留空接口以支持后续增量添加而不破坏 API。
 type StatefulSetNamespaceListerExpansion interface{}
 
 // GetPodStatefulSets returns a list of StatefulSets that potentially match a pod.
 // Only the one specified in the Pod's ControllerRef will actually manage it.
 // Returns an error only if no matching StatefulSets are found.
+//
+// 只做标签选择器的粗筛，调用方需再检查 ControllerRef 才能确定真正管理该 Pod 的对象。
 func (s *statefulSetLister) GetPodStatefulSets(pod *v1.Pod) ([]*apps.StatefulSet, error) {
 	var selector labels.Selector
 	var ps *apps.StatefulSet
 
+	// 没有标签的 Pod 不可能匹配任何选择器，直接返回错误而不是空列表，
+	// 便于调用方把"无候选"与"查询失败"区分开。
 	if len(pod.Labels) == 0 {
 		return nil, fmt.Errorf("no StatefulSets found for pod %v because it has no labels", pod.Name)
 	}
 
+	// 先按命名空间缩小范围；StatefulSet 只能管理同命名空间的 Pod。
 	list, err := s.StatefulSets(pod.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err
@@ -54,6 +61,7 @@ func (s *statefulSetLister) GetPodStatefulSets(pod *v1.Pod) ([]*apps.StatefulSet
 	var psList []*apps.StatefulSet
 	for i := range list {
 		ps = list[i]
+		// 缓存中可能混入其他命名空间的对象，这里再校验一次。
 		if ps.Namespace != pod.Namespace {
 			continue
 		}
@@ -64,6 +72,7 @@ func (s *statefulSetLister) GetPodStatefulSets(pod *v1.Pod) ([]*apps.StatefulSet
 		}
 
 		// If a StatefulSet with a nil or empty selector creeps in, it should match nothing, not everything.
+		// labels.Everything() 的语义与空选择器不同，必须显式排除，否则会误匹配全部 Pod。
 		if selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
 			continue
 		}

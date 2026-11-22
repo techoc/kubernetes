@@ -46,6 +46,8 @@ const maxQueuedEvents = 1000
 // EventSink must respect the namespace that will be embedded in 'event'.
 // It is assumed that EventSink will return the same sorts of errors as
 // pkg/client's REST client.
+//
+// 名称里虽只有 Create/Update/Patch，实现方通常直接包一层 typed client 的 Events 接口。
 type EventSink interface {
 	Create(event *v1.Event) (*v1.Event, error)
 	Update(event *v1.Event) (*v1.Event, error)
@@ -54,6 +56,8 @@ type EventSink interface {
 
 // CorrelatorOptions allows you to change the default of the EventSourceObjectSpamFilter
 // and EventAggregator in EventCorrelator
+//
+// 零值字段会由 EventCorrelator 的构造函数补上默认值，调用方只需覆盖关心的项。
 type CorrelatorOptions struct {
 	// The lru cache size used for both EventSourceObjectSpamFilter and the EventAggregator
 	// If not specified (zero value), the default specified in events_cache.go will be picked
@@ -157,6 +161,8 @@ type EventBroadcaster interface {
 
 // EventRecorderAdapter is a wrapper around a "k8s.io/client-go/tools/record".EventRecorder
 // implementing the new "k8s.io/client-go/tools/events".EventRecorder interface.
+//
+// 用于让仍只支持 events/v1 的调用方复用旧的 core/v1 事件记录器。
 type EventRecorderAdapter struct {
 	recorder EventRecorderLogger
 }
@@ -189,6 +195,9 @@ func (a *EventRecorderAdapter) WithLogger(logger klog.Logger) internalevents.Eve
 }
 
 // Creates a new event broadcaster.
+//
+// 默认使用长度 1000、满则丢弃的 watch 队列：事件属于尽力而为的观测数据，
+// 宁可丢弃也不能阻塞业务逻辑。
 func NewBroadcaster(opts ...BroadcasterOption) EventBroadcaster {
 	c := config{
 		sleepDuration: defaultSleepDuration,
@@ -294,6 +303,9 @@ func (e *eventBroadcasterImpl) Shutdown() {
 func (e *eventBroadcasterImpl) recordToSink(sink EventSink, event *v1.Event, eventCorrelator *EventCorrelator) {
 	// Make a copy before modification, because there could be multiple listeners.
 	// Events are safe to copy like this.
+	//
+	// 同一事件会先经过 correlation/aggregation 再写 sink，
+	// 复制一份可避免修改广播给其他监听器看到的原始对象。
 	eventCopy := *event
 	event = &eventCopy
 	result, err := eventCorrelator.EventCorrelate(event)
@@ -316,6 +328,9 @@ func (e *eventBroadcasterImpl) recordToSink(sink EventSink, event *v1.Event, eve
 
 		// Randomize the first sleep so that various clients won't all be
 		// synced up if the master goes down.
+		//
+		// 首次重试使用 [0, sleepDuration) 的随机延迟，避免大量客户端在
+		// apiserver 恢复瞬间同时重试造成惊群。
 		delay := e.sleepDuration
 		if tries == 1 {
 			delay = time.Duration(float64(delay) * rand.Float64())
@@ -340,6 +355,8 @@ func recordEvent(ctx context.Context, sink EventSink, event *v1.Event, patch []b
 		newEvent, err = sink.Patch(event, patch)
 	}
 	// Update can fail because the event may have been removed and it no longer exists.
+	// 聚合事件可能已被 TTL 清理，Patch 返回 NotFound 时退回 Create，
+	// 并清空 ResourceVersion，否则服务端会拒绝带旧 RV 的创建请求。
 	if !updateExistingEvent || util.IsKeyNotFoundError(err) {
 		// Making sure that ResourceVersion is empty on creation
 		event.ResourceVersion = ""
@@ -359,6 +376,8 @@ func recordEvent(ctx context.Context, sink EventSink, event *v1.Event, patch []b
 		klog.FromContext(ctx).Error(err, "Unable to construct event (will not retry!)", "event", event)
 		return true
 	case *errors.StatusError:
+		// 服务端明确拒绝（已存在、namespace 正在终止等）属于确定性错误，
+		// 重试无意义，但也不应阻塞后续事件。
 		if errors.IsAlreadyExists(err) || errors.HasStatusCause(err, v1.NamespaceTerminatingCause) {
 			klog.FromContext(ctx).V(5).Info("Server rejected event (will not retry!)", "event", event, "err", err)
 		} else {
@@ -416,6 +435,7 @@ func (e *eventBroadcasterImpl) StartEventWatcher(eventHandler func(*v1.Event)) w
 				return
 			case watchEvent, ok := <-watcher.ResultChan():
 				if !ok {
+					// Broadcaster 已关闭；必须退出，否则会在此处忙等已关闭的 channel。
 					return
 				}
 				event, ok := watchEvent.Object.(*v1.Event)
@@ -446,6 +466,7 @@ type recorderImpl struct {
 var _ EventRecorder = &recorderImpl{}
 
 func (recorder *recorderImpl) generateEvent(logger klog.Logger, object runtime.Object, annotations map[string]string, eventtype, reason, message string) {
+	// 事件引用必须能在 recorder 的 scheme 中解析，否则调用方传入了未注册类型。
 	ref, err := ref.GetReference(recorder.scheme, object)
 	if err != nil {
 		logger.Error(err, "Could not construct reference, will not report event", "object", object, "eventType", eventtype, "reason", reason, "message", message)
@@ -468,6 +489,8 @@ func (recorder *recorderImpl) generateEvent(logger klog.Logger, object runtime.O
 	// when we go to shut down this broadcaster.  Just drop events if we get overloaded,
 	// and log an error if that happens (we've configured the broadcaster to drop
 	// outgoing events anyway).
+	//
+	// ActionOrDrop 内部不会阻塞：队列满时返回 sent=false，由这里记日志。
 	sent, err := recorder.ActionOrDrop(watch.Added, event)
 	if err != nil {
 		logger.Error(err, "Unable to record event (will not retry!)")
@@ -498,6 +521,7 @@ func (recorder *recorderImpl) makeEvent(ref *v1.ObjectReference, annotations map
 	}
 	return &v1.Event{
 		ObjectMeta: metav1.ObjectMeta{
+			// 名称包含纳秒时间戳，避免同一对象短时间内产生同名事件。
 			Name:        util.GenerateEventName(ref.Name, t.UnixNano()),
 			Namespace:   namespace,
 			Annotations: annotations,

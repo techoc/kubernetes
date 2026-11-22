@@ -32,9 +32,12 @@ import (
 type streamProtocolV3 struct {
 	*streamProtocolV2
 
+	// resizeStream 仅在启用 TTY 且调用方提供了 TerminalSizeQueue 时才会创建，
+	// 客户端通过它把窗口尺寸事件推送回容器。
 	resizeStream io.Writer
 }
 
+// 编译期断言：v3 处理器满足统一的协议接口。
 var _ streamProtocolHandler = &streamProtocolV3{}
 
 func newStreamProtocolV3(options StreamOptions) streamProtocolHandler {
@@ -45,6 +48,7 @@ func newStreamProtocolV3(options StreamOptions) streamProtocolHandler {
 
 func (p *streamProtocolV3) createStreams(conn streamCreator) error {
 	// set up the streams from v2
+	// v3 在 v2 的 stdin/stdout/stderr/error 之外只增加了 resize 流，先复用父实现。
 	if err := p.streamProtocolV2.createStreams(conn); err != nil {
 		return err
 	}
@@ -64,6 +68,7 @@ func (p *streamProtocolV3) createStreams(conn streamCreator) error {
 }
 
 func (p *streamProtocolV3) handleResizes(logger klog.Logger) {
+	// 非 TTY 或没有尺寸来源时无需转发，避免启动无意义的 goroutine。
 	if p.resizeStream == nil || p.TerminalSizeQueue == nil {
 		return
 	}
@@ -73,10 +78,12 @@ func (p *streamProtocolV3) handleResizes(logger klog.Logger) {
 		encoder := json.NewEncoder(p.resizeStream)
 		for {
 			size := p.TerminalSizeQueue.Next()
+			// Next 返回 nil 表示队列已关闭或调用方不再提供尺寸，转发循环随之终止。
 			if size == nil {
 				return
 			}
 			if err := encoder.Encode(&size); err != nil {
+				// 单个尺寸编码失败不应中断会话，记录后继续尝试后续事件。
 				runtime.HandleErrorWithLogger(logger, err, "Encoding terminal size failed")
 			}
 		}
@@ -95,6 +102,7 @@ func (p *streamProtocolV3) stream(logger klog.Logger, conn streamCreator, ready 
 
 	// now that all the streams have been created, proceed with reading & copying
 
+	// 错误流异步读取，主协程随后并行拷贝 stdin/stdout/stderr。
 	errorChan := watchErrorStream(logger, p.errorStream, &errorDecoderV3{})
 
 	p.handleResizes(logger)
@@ -109,9 +117,11 @@ func (p *streamProtocolV3) stream(logger klog.Logger, conn streamCreator, ready 
 	wg.Wait()
 
 	// waits for errorStream to finish reading with an error or nil
+	// error 流的结果是最终的退出状态：stdout/stderr 拷贝完不代表命令成功。
 	return <-errorChan
 }
 
+// errorDecoderV3 沿用 v2 的错误帧格式，此处仅作为协议版本标识。
 type errorDecoderV3 struct {
 	errorDecoderV2
 }

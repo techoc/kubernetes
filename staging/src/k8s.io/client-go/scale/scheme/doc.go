@@ -19,4 +19,8 @@ limitations under the License.
 // Package scheme contains a runtime.Scheme to be used for serializing
 // and deserializing different versions of Scale, and for converting
 // in between them.
+//
+// Package scheme 持有 Scale 各版本共用的 runtime.Scheme：注册内部版本与
+// extensions/v1beta1、apps/v1beta2 等外部版本，使不同版本之间可以互相转换。
+// 上方生成器指令表示为本包所有类型生成 DeepCopy 方法。
 package scheme

@@ -25,8 +25,14 @@ import (
 )
 
 // Deprecated: RateLimiter is deprecated, use TypedRateLimiter instead.
+//
+// 非泛型版本等价于 TypedRateLimiter[any]，仅用于兼容旧调用方。
 type RateLimiter TypedRateLimiter[any]
 
+// TypedRateLimiter 决定一个条目应等待多久再重试。
+//
+// 实现需要按条目记录失败次数，因此必须并发安全；Forget 是释放记录的
+// 唯一入口，长期不调用会导致内存持续增长。
 type TypedRateLimiter[T comparable] interface {
 	// When gets an item and gets to decide how long that item should wait
 	When(item T) time.Duration
@@ -59,20 +65,26 @@ func DefaultTypedControllerRateLimiter[T comparable]() TypedRateLimiter[T] {
 type BucketRateLimiter = TypedBucketRateLimiter[any]
 
 // TypedBucketRateLimiter adapts a standard bucket to the workqueue ratelimiter API
+//
+// 令牌桶只限制整体重试速率，不跟踪单个条目；因此 NumRequeues 恒为 0，
+// 需要条目级退避时应与指数退避限流器组合使用。
 type TypedBucketRateLimiter[T comparable] struct {
 	*rate.Limiter
 }
 
 var _ RateLimiter = &BucketRateLimiter{}
 
+// When 预留一个令牌并返回需要等待的时间；桶空时延迟会自然增长。
 func (r *TypedBucketRateLimiter[T]) When(item T) time.Duration {
 	return r.Limiter.Reserve().Delay()
 }
 
+// NumRequeues 对令牌桶没有意义，恒返回 0。
 func (r *TypedBucketRateLimiter[T]) NumRequeues(item T) int {
 	return 0
 }
 
+// Forget 是空操作：令牌桶不按条目记录状态。
 func (r *TypedBucketRateLimiter[T]) Forget(item T) {
 }
 
@@ -96,6 +108,8 @@ func NewItemExponentialFailureRateLimiter(baseDelay time.Duration, maxDelay time
 	return NewTypedItemExponentialFailureRateLimiter[any](baseDelay, maxDelay)
 }
 
+// NewTypedItemExponentialFailureRateLimiter 构造指数退避限流器：
+// 第 n 次失败等待 baseDelay * 2^n，封顶 maxDelay。
 func NewTypedItemExponentialFailureRateLimiter[T comparable](baseDelay time.Duration, maxDelay time.Duration) TypedRateLimiter[T] {
 	return &TypedItemExponentialFailureRateLimiter[T]{
 		failures:  map[T]int{},
@@ -109,6 +123,7 @@ func DefaultItemBasedRateLimiter() RateLimiter {
 	return DefaultTypedItemBasedRateLimiter[any]()
 }
 
+// DefaultTypedItemBasedRateLimiter 返回毫秒起步、封顶约 16 分钟的纯条目级退避。
 func DefaultTypedItemBasedRateLimiter[T comparable]() TypedRateLimiter[T] {
 	return NewTypedItemExponentialFailureRateLimiter[T](time.Millisecond, 1000*time.Second)
 }
@@ -117,10 +132,12 @@ func (r *TypedItemExponentialFailureRateLimiter[T]) When(item T) time.Duration {
 	r.failuresLock.Lock()
 	defer r.failuresLock.Unlock()
 
+	// 先取当前失败次数用于计算，再把计数加一：首次失败按 2^0 退避。
 	exp := r.failures[item]
 	r.failures[item] = r.failures[item] + 1
 
 	// The backoff is capped such that 'calculated' value never overflows.
+	// 用浮点计算后再判断溢出，避免整数移位在极端次数下回绕成负值。
 	backoff := float64(r.baseDelay.Nanoseconds()) * math.Pow(2, float64(exp))
 	if backoff > math.MaxInt64 {
 		return r.maxDelay
@@ -134,6 +151,7 @@ func (r *TypedItemExponentialFailureRateLimiter[T]) When(item T) time.Duration {
 	return calculated
 }
 
+// NumRequeues 返回该条目累计的失败次数（含尚未 Forget 的历史）。
 func (r *TypedItemExponentialFailureRateLimiter[T]) NumRequeues(item T) int {
 	r.failuresLock.Lock()
 	defer r.failuresLock.Unlock()
@@ -141,6 +159,7 @@ func (r *TypedItemExponentialFailureRateLimiter[T]) NumRequeues(item T) int {
 	return r.failures[item]
 }
 
+// Forget 清除条目的失败记录，使下次 When 重新从 baseDelay 起算。
 func (r *TypedItemExponentialFailureRateLimiter[T]) Forget(item T) {
 	r.failuresLock.Lock()
 	defer r.failuresLock.Unlock()
@@ -169,6 +188,8 @@ func NewItemFastSlowRateLimiter(fastDelay, slowDelay time.Duration, maxFastAttem
 	return NewTypedItemFastSlowRateLimiter[any](fastDelay, slowDelay, maxFastAttempts)
 }
 
+// NewTypedItemFastSlowRateLimiter 构造“先快后慢”限流器：前 maxFastAttempts
+// 次失败使用 fastDelay，之后一律 slowDelay。
 func NewTypedItemFastSlowRateLimiter[T comparable](fastDelay, slowDelay time.Duration, maxFastAttempts int) TypedRateLimiter[T] {
 	return &TypedItemFastSlowRateLimiter[T]{
 		failures:        map[T]int{},
@@ -178,6 +199,7 @@ func NewTypedItemFastSlowRateLimiter[T comparable](fastDelay, slowDelay time.Dur
 	}
 }
 
+// When 先自增失败次数再判断阈值，使“第 maxFastAttempts 次”仍算快速重试。
 func (r *TypedItemFastSlowRateLimiter[T]) When(item T) time.Duration {
 	r.failuresLock.Lock()
 	defer r.failuresLock.Unlock()
@@ -219,6 +241,7 @@ type TypedMaxOfRateLimiter[T comparable] struct {
 	limiters []TypedRateLimiter[T]
 }
 
+// When 返回所有子限流器中的最大延迟，即“最坏情况”重试间隔。
 func (r *TypedMaxOfRateLimiter[T]) When(item T) time.Duration {
 	ret := time.Duration(0)
 	for _, limiter := range r.limiters {
@@ -236,10 +259,12 @@ func NewMaxOfRateLimiter(limiters ...TypedRateLimiter[any]) RateLimiter {
 	return NewTypedMaxOfRateLimiter(limiters...)
 }
 
+// NewTypedMaxOfRateLimiter 组合多个限流器，任一限流器要求等待都必须等待。
 func NewTypedMaxOfRateLimiter[T comparable](limiters ...TypedRateLimiter[T]) TypedRateLimiter[T] {
 	return &TypedMaxOfRateLimiter[T]{limiters: limiters}
 }
 
+// NumRequeues 返回所有子限流器中的最大重试次数。
 func (r *TypedMaxOfRateLimiter[T]) NumRequeues(item T) int {
 	ret := 0
 	for _, limiter := range r.limiters {
@@ -252,6 +277,7 @@ func (r *TypedMaxOfRateLimiter[T]) NumRequeues(item T) int {
 	return ret
 }
 
+// Forget 通知所有子限流器清除该条目的记录。
 func (r *TypedMaxOfRateLimiter[T]) Forget(item T) {
 	for _, limiter := range r.limiters {
 		limiter.Forget(item)
@@ -273,10 +299,14 @@ func NewWithMaxWaitRateLimiter(limiter RateLimiter, maxDelay time.Duration) Rate
 	return NewTypedWithMaxWaitRateLimiter[any](limiter, maxDelay)
 }
 
+// NewTypedWithMaxWaitRateLimiter 包装限流器并给延迟设置上限。
+//
+// 用于防止指数退避在长时间故障时把重试间隔拉到不可接受的程度。
 func NewTypedWithMaxWaitRateLimiter[T comparable](limiter TypedRateLimiter[T], maxDelay time.Duration) TypedRateLimiter[T] {
 	return &TypedWithMaxWaitRateLimiter[T]{limiter: limiter, maxDelay: maxDelay}
 }
 
+// When 返回被 maxDelay 截断后的延迟。
 func (w TypedWithMaxWaitRateLimiter[T]) When(item T) time.Duration {
 	delay := w.limiter.When(item)
 	if delay > w.maxDelay {
@@ -286,10 +316,12 @@ func (w TypedWithMaxWaitRateLimiter[T]) When(item T) time.Duration {
 	return delay
 }
 
+// Forget 透传给被包装的限流器。
 func (w TypedWithMaxWaitRateLimiter[T]) Forget(item T) {
 	w.limiter.Forget(item)
 }
 
+// NumRequeues 透传给被包装的限流器。
 func (w TypedWithMaxWaitRateLimiter[T]) NumRequeues(item T) int {
 	return w.limiter.NumRequeues(item)
 }

@@ -19,4 +19,9 @@ limitations under the License.
 // +k8s:defaulter-gen=Kind
 // +k8s:validation-gen=false
 
+// Package v1 定义 kubeconfig 文件的外部版本（v1）类型。
+//
+// 该版本是写入磁盘与对外交换的稳定格式；内部表示见
+// k8s.io/client-go/tools/clientcmd/api。两者之间的转换由生成的
+// zz_generated.conversion.go 完成，因此新增字段时必须同时更新两处。
 package v1

@@ -41,6 +41,7 @@ import (
 	"k8s.io/utils/clock"
 )
 
+// createLockObject 按对象类型构造锁对象；record 非 nil 时以注解/LeaseSpec 形式写入。
 func createLockObject(t *testing.T, objectType, namespace, name string, record *rl.LeaderElectionRecord) (obj runtime.Object) {
 	objectMeta := metav1.ObjectMeta{
 		Namespace: namespace,
@@ -58,6 +59,7 @@ func createLockObject(t *testing.T, objectType, namespace, name string, record *
 	case "configmaps":
 		obj = &corev1.ConfigMap{ObjectMeta: objectMeta}
 	case "leases":
+		// Lease 使用结构化字段而非注解保存记录，需做一次转换。
 		var spec coordinationv1.LeaseSpec
 		if record != nil {
 			spec = rl.LeaderElectionRecordToLeaseSpec(record)
@@ -69,12 +71,16 @@ func createLockObject(t *testing.T, objectType, namespace, name string, record *
 	return
 }
 
+// Reactor 描述 fake clientset 上注册的单条反应器：verb + 对象类型 + 处理函数。
 type Reactor struct {
 	verb       string
 	objectType string
 	reaction   fakeclient.ReactionFunc
 }
 
+// testTryAcquireOrRenew 表驱动验证 tryAcquireOrRenew 的获取/续约决策：
+// 在“无对象、无注解、他持有且过期/未过期、自己持有”等场景下是否成功，
+// 以及 HolderIdentity 与 LeaderTransitions 的期望值。
 func testTryAcquireOrRenew(t *testing.T, objectType string) {
 	clock := clock.RealClock{}
 	future := clock.Now().Add(1000 * time.Hour)
@@ -355,6 +361,8 @@ func testTryAcquireOrRenew(t *testing.T, objectType string) {
 	}
 }
 
+// TestTryCoordinatedRenew 验证 Coordinated 模式下的续约路径：
+// 仅当他人的租约已过期时才可接管，否则必须保持现状。
 func TestTryCoordinatedRenew(t *testing.T) {
 	objectType := "leases"
 	clock := clock.RealClock{}
@@ -499,10 +507,14 @@ func TestTryCoordinatedRenew(t *testing.T) {
 }
 
 // Will test leader election using lease as the resource
+//
+// 以 Lease 为资源运行 tryAcquireOrRenew 的全部用例。
 func TestTryAcquireOrRenewLeases(t *testing.T) {
 	testTryAcquireOrRenew(t, "leases")
 }
 
+// TestLeaseSpecToLeaderElectionRecordRoundTrip 验证 LeaseSpec 与 LeaderElectionRecord
+// 双向转换后语义不变（字段一一对应且无精度损失）。
 func TestLeaseSpecToLeaderElectionRecordRoundTrip(t *testing.T) {
 	holderIdentity := "foo"
 	leaseDurationSeconds := int32(10)
@@ -529,6 +541,7 @@ func TestLeaseSpecToLeaderElectionRecordRoundTrip(t *testing.T) {
 	}
 }
 
+// GetRawRecordOrDie 序列化记录为 raw bytes，模拟从 API 读到的原始注解内容。
 func GetRawRecordOrDie(t *testing.T, objectType string, ler rl.LeaderElectionRecord) (ret []byte) {
 	var err error
 	switch objectType {
@@ -543,6 +556,7 @@ func GetRawRecordOrDie(t *testing.T, objectType string, ler rl.LeaderElectionRec
 	return
 }
 
+// testReleaseLease 验证主动释放锁：获取成功后 release 会把 HolderIdentity 清空。
 func testReleaseLease(t *testing.T, objectType string) {
 	tests := []struct {
 		name           string
@@ -687,11 +701,14 @@ func testReleaseLease(t *testing.T, objectType string) {
 }
 
 // Will test leader election using endpoints as the resource
+// （历史注释如此，实际现在只测试 Lease。）
 func TestReleaseLeaseLeases(t *testing.T) {
 	testReleaseLease(t, "leases")
 }
 
 // TestReleaseMethodCallsGet test release method calls Get
+//
+// 验证 release 会先 Get 最新锁内容再 Update，避免用过期的 record 覆盖。
 func TestReleaseMethodCallsGet(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	objectType := "leases"
@@ -747,6 +764,8 @@ func TestReleaseMethodCallsGet(t *testing.T) {
 
 // TestReleaseRetriesOnConflict verifies that release retries when the
 // Update call returns a conflict error (e.g. from an inflight renew).
+//
+// 首次 Update 返回 Conflict，release 应重新 Get 并重试直至成功。
 func TestReleaseRetriesOnConflict(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	objectType := "leases"
@@ -804,10 +823,14 @@ func TestReleaseRetriesOnConflict(t *testing.T) {
 	}
 }
 
+// TestReleaseOnCancellation_Leases 验证 ReleaseOnCancel=true 时，ctx 取消后（无论
+// 取消发生在 Update 还是 Get）都会尝试释放锁并记录 stopped leading 事件。
 func TestReleaseOnCancellation_Leases(t *testing.T) {
 	testReleaseOnCancellation(t, "leases")
 }
 
+// testReleaseOnCancellation 是两个取消场景的公共驱动器：
+// 用 channel 精确控制 renew 的进行与恢复，从而断言“取消后仍会执行 release”。
 func testReleaseOnCancellation(t *testing.T, objectType string) {
 	var (
 		onNewLeader   = make(chan struct{})
@@ -836,6 +859,7 @@ func testReleaseOnCancellation(t *testing.T, objectType string) {
 		RetryPeriod:   1 * time.Second,
 
 		// This is what we're testing
+		// 关键配置：取消时主动释放锁。
 		ReleaseOnCancel: true,
 
 		Callbacks: LeaderCallbacks{
@@ -1036,6 +1060,8 @@ func testReleaseOnCancellation(t *testing.T, objectType string) {
 	}
 }
 
+// TestLeaderElectionConfigValidation 验证 NewLeaderElector 的配置校验，
+// 特别是空的 Lock identity 必须被拒绝。
 func TestLeaderElectionConfigValidation(t *testing.T) {
 	resourceLockConfig := rl.ResourceLockConfig{
 		Identity: "baz",
@@ -1071,6 +1097,7 @@ func TestLeaderElectionConfigValidation(t *testing.T) {
 	assert.EqualError(t, err, "Lock identity is empty")
 }
 
+// assertEqualEvents 按顺序校验事件通道内容，并确认没有多余事件。
 func assertEqualEvents(t *testing.T, expected []string, actual <-chan string) {
 	c := time.After(wait.ForeverTestTimeout)
 	for _, e := range expected {
@@ -1095,6 +1122,8 @@ func assertEqualEvents(t *testing.T, expected []string, actual <-chan string) {
 	}
 }
 
+// TestFastPathLeaderElection 验证快路径：已持有锁且未过期时，续约只需一次 Update，
+// 不进行 Get；若 Update 冲突则回退到慢路径（Get + 重试）。
 func TestFastPathLeaderElection(t *testing.T) {
 	objectType := "leases"
 	var (
@@ -1250,6 +1279,8 @@ func TestFastPathLeaderElection(t *testing.T) {
 	}
 }
 
+// TestCheckMethodRace 以激进的时间参数并发调用 Check 与 Run，
+// 配合 -race 验证 observedRecord 的锁保护（读路径不产生数据竞争）。
 func TestCheckMethodRace(t *testing.T) {
 	objectType := "leases"
 	objectMeta := metav1.ObjectMeta{Namespace: "foo", Name: "bar"}
@@ -1294,6 +1325,7 @@ func TestCheckMethodRace(t *testing.T) {
 	}
 
 	// aggressive timing to provoke the race
+	// 极短 RetryPeriod 让续约与 Check 高频交错，放大竞争窗口。
 	lec := LeaderElectionConfig{
 		Lock:          lock,
 		LeaseDuration: 2 * time.Second,

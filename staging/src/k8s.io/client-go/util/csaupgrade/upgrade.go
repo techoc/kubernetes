@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package csaupgrade 帮助把对象上由客户端 apply（client-side apply, CSA）
+// 记录的 managedFields 迁移到服务端 apply（server-side apply, SSA）的 field manager
+// 名下，使后续 Apply 能接管原有字段而不产生冲突。
 package csaupgrade
 
 import (
@@ -34,6 +37,8 @@ import (
 //
 // If there is an error decoding one of the fieldsets for any reason, it is ignored
 // and assumed not to match the query.
+//
+// “owns all of fields”通过差集是否为空判断：fields - entry 为空即包含。
 func FindFieldsOwners(
 	managedFields []metav1.ManagedFieldsEntry,
 	operation metav1.ManagedFieldsOperationType,
@@ -47,6 +52,7 @@ func FindFieldsOwners(
 
 		fieldSet, err := decodeManagedFieldsEntrySet(entry)
 		if err != nil {
+			// 解码失败通常意味着条目来自不兼容版本或已损坏；跳过而非中断整个查询。
 			continue
 		}
 
@@ -77,6 +83,8 @@ func FindFieldsOwners(
 // obj - Target of the operation which has been managed with CSA in the past
 // csaManagerNames - Names of FieldManagers to merge into ssaManagerName
 // ssaManagerName - Name of FieldManager to be used for `Apply` operations
+//
+// 就地修改 obj 的 managedFields；如需并发安全的写回，请使用 UpgradeManagedFieldsPatch。
 func UpgradeManagedFields(
 	obj runtime.Object,
 	csaManagerNames sets.Set[string],
@@ -95,6 +103,7 @@ func UpgradeManagedFields(
 
 	filteredManagers := accessor.GetManagedFields()
 
+	// 逐个 CSA manager 处理；每一步都基于上一步结果，便于多个旧 manager 合并。
 	for csaManagerName := range csaManagerNames {
 		filteredManagers, err = upgradedManagedFields(
 			filteredManagers, csaManagerName, ssaManagerName, o)
@@ -154,6 +163,7 @@ func UpgradeManagedFieldsPatch(
 	// Just include all managed fields since that is only thing that will change
 	//
 	// Also include test for RV to avoid race condition
+	// 用资源版本做条件写：若服务端在读取后已被他人修改，patch 会失败而不是覆盖。
 	jsonPatch := []map[string]interface{}{
 		{
 			"op":    "replace",
@@ -219,6 +229,7 @@ func upgradedManagedFields(
 		}
 
 		// Convert CSA manager into SSA manager
+		// 直接改写最新 CSA 条目的类型与名字，避免新增一条导致所有权分裂。
 		managedFields[replaceIndex].Operation = metav1.ManagedFieldsOperationApply
 		managedFields[replaceIndex].Manager = ssaManagerName
 	}
@@ -228,6 +239,7 @@ func upgradedManagedFields(
 	}
 
 	// Create version of managed fields which has no CSA managers with the given name
+	// 其余 Update 条目是旧版本残留，迁移后统一删除，防止同一字段被多个 manager 声明。
 	filteredManagers := filter(managedFields, func(entry metav1.ManagedFieldsEntry) bool {
 		return !(entry.Manager == csaManagerName &&
 			entry.Operation == metav1.ManagedFieldsOperationUpdate &&
@@ -250,6 +262,7 @@ func unionManagerIntoIndex(
 
 	// find Update manager of same APIVersion, union ssa fields with it.
 	// discard all other Update managers of the same name
+	// 只在同一 APIVersion 内合并：不同版本的字段路径语义可能不同。
 	csaManagerIndex, csaManagerExists := findFirstIndex(entries,
 		func(entry metav1.ManagedFieldsEntry) bool {
 			return entry.Manager == csaManagerName &&
@@ -291,6 +304,7 @@ func findFirstIndex[T any](
 	collection []T,
 	predicate func(T) bool,
 ) (int, bool) {
+	// 返回第一个匹配项；managedFields 已按“最近者在前”排序，因此即最新条目。
 	for idx, entry := range collection {
 		if predicate(entry) {
 			return idx, true
@@ -304,6 +318,7 @@ func filter[T any](
 	collection []T,
 	predicate func(T) bool,
 ) []T {
+	// 结果为空时返回 nil 而非空切片，以便与“字段未设置”在 reflect.DeepEqual 中一致。
 	result := make([]T, 0, len(collection))
 
 	for _, value := range collection {

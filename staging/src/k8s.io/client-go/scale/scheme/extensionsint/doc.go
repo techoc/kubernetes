@@ -19,4 +19,8 @@ limitations under the License.
 // It doesn't have any of its own types -- it's just necessary to
 // get the expected behavior out of runtime.Scheme.ConvertToVersion
 // and associated methods.
+//
+// Package extensionsint 只提供 extensions 内部版本在转换逻辑中的脚手架，
+// 自身不定义类型。这样 runtime.Scheme.ConvertToVersion 才能在
+// extensions/v1beta1 与内部版本之间找到正确的转换路径。
 package extensionsint

@@ -25,7 +25,9 @@ import (
 	"time"
 )
 
+// TestCloseAll 验证 CloseAll 能关闭所有已建立的连接，并且 Dialer 在 CloseAll 之后仍可复用。
 func TestCloseAll(t *testing.T) {
+	// 每个连接关闭时向 channel 发送信号，缓冲足够容纳一轮的全部连接。
 	closed := make(chan struct{}, 50)
 	dialFn := func(ctx context.Context, network, address string) (net.Conn, error) {
 		return closeOnlyConn{onClose: func() { closed <- struct{}{} }}, nil
@@ -42,6 +44,7 @@ func TestCloseAll(t *testing.T) {
 			}
 		}
 		dialer.CloseAll()
+		// 1 秒内必须收到全部关闭通知，否则说明有连接被遗漏。
 		deadline := time.After(time.Second)
 		for j := 0; j < numConns; j++ {
 			select {
@@ -54,6 +57,7 @@ func TestCloseAll(t *testing.T) {
 }
 
 // TestCloseAllRace ensures CloseAll works with connections being simultaneously dialed
+// 压测 Dial 与 CloseAll 的并发：两者都在频繁修改跟踪集合，必须无竞态且不丢连接。
 func TestCloseAllRace(t *testing.T) {
 	conns := int64(0)
 	dialer := NewDialer(func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -91,6 +95,7 @@ func TestCloseAllRace(t *testing.T) {
 	}()
 
 	// Trigger both goroutines as close to the same time as possible
+	// 同时放行两个 goroutine，制造最大并发窗口。
 	begin.Done()
 
 	// Wait for goroutines
@@ -114,11 +119,14 @@ func TestCloseAllRace(t *testing.T) {
 	}
 }
 
+// closeOnlyConn 是只实现 Close 的最小 net.Conn，用于统计连接是否被关闭。
+// Close 在独立 goroutine 中回调，避免在锁内执行测试逻辑造成死锁。
 type closeOnlyConn struct {
 	net.Conn
 	onClose func()
 }
 
+// Close 触发回调并返回 nil；nil net.Conn 嵌入后其他方法不应被调用。
 func (c closeOnlyConn) Close() error {
 	go c.onClose()
 	return nil

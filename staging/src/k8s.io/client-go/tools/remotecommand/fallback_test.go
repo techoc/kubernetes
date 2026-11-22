@@ -42,6 +42,8 @@ import (
 	"k8s.io/streaming/pkg/httpstream"
 )
 
+// TestFallbackClient_WebSocketPrimarySucceeds 验证主执行器（WebSocket）成功时
+// 不会触发回退，数据经 STDIN 写入、STDOUT 读回后保持一致。
 func TestFallbackClient_WebSocketPrimarySucceeds(t *testing.T) {
 	// Create fake WebSocket server. Copy received STDIN data back onto STDOUT stream.
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -109,6 +111,8 @@ func TestFallbackClient_WebSocketPrimarySucceeds(t *testing.T) {
 	}
 }
 
+// TestFallbackClient_SPDYSecondarySucceeds 验证主执行器不可用时按回调判定
+// 回退到 SPDY，且数据完整性不受影响。
 func TestFallbackClient_SPDYSecondarySucceeds(t *testing.T) {
 	// Create fake SPDY server. Copy received STDIN data back onto STDOUT stream.
 	spdyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -175,6 +179,8 @@ func TestFallbackClient_SPDYSecondarySucceeds(t *testing.T) {
 	}
 }
 
+// TestFallbackClient_PrimaryAndSecondaryFail 验证两个执行器都失败时向调用方
+// 返回错误，而不是静默成功。将主执行器协议改成 V4 以模拟服务端不支持的版本。
 func TestFallbackClient_PrimaryAndSecondaryFail(t *testing.T) {
 	// Create fake WebSocket server. Copy received STDIN data back onto STDOUT stream.
 	websocketServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -238,6 +244,8 @@ func TestFallbackClient_PrimaryAndSecondaryFail(t *testing.T) {
 	}
 }
 
+// TestFallbackClient_SPDYSecondaryNonZeroExitCode 验证回退后的 SPDY 路径仍能
+// 把非零退出码解析为 utilexec.ExitError，并保留退出前的 stdout 输出。
 func TestFallbackClient_SPDYSecondaryNonZeroExitCode(t *testing.T) {
 	const expectedExitCode = 23
 	const expectedStdout = "stdout-before-exit"
@@ -360,6 +368,9 @@ KR8NJEkK99Vh/tew6jAMll70xFrE7aF8VLXJVE7w4sQzuvHxl9Q=
 `)
 
 // See (https://github.com/kubernetes/kubernetes/issues/126134).
+//
+// TestFallbackClient_WebSocketHTTPSProxyNoFallback 验证经由 HTTPS 代理时
+// WebSocket 升级失败不会被误判为可回退错误，也不会重复调用代理。
 func TestFallbackClient_WebSocketHTTPSProxyNoFallback(t *testing.T) {
 	cert, err := tls.X509KeyPair(localhostCert, localhostKey)
 	if err != nil {

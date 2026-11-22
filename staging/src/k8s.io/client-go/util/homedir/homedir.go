@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package homedir 以跨平台方式定位当前用户的主目录。
+// 主要用于找到默认的 ~/.kube/config。
 package homedir
 
 import (
@@ -28,6 +30,8 @@ import (
 // 2. if none of those locations contain a `.kube\config` file, the first of %HOME%, %USERPROFILE%, %HOMEDRIVE%%HOMEPATH% that exists and is writeable is returned.
 // 3. if none of those locations are writeable, the first of %HOME%, %USERPROFILE%, %HOMEDRIVE%%HOMEPATH% that exists is returned.
 // 4. if none of those locations exists, the first of %HOME%, %USERPROFILE%, %HOMEDRIVE%%HOMEPATH% that is set is returned.
+//
+// 非 Windows 平台直接返回 $HOME（可能为空），由调用方决定是否报错。
 func HomeDir() string {
 	if runtime.GOOS == "windows" {
 		home := os.Getenv("HOME")
@@ -53,6 +57,7 @@ func HomeDir() string {
 		firstExistingPath := ""
 
 		// Prefer %USERPROFILE% over %HOMEDRIVE%/%HOMEPATH% for compatibility with other auth-writing tools
+		// 本轮的顺序与上面不同：优先 USERPROFILE，历史原因见注释。
 		for _, p := range []string{home, userProfile, homeDriveHomePath} {
 			if len(p) == 0 {
 				continue
@@ -69,6 +74,7 @@ func HomeDir() string {
 				// remember the first path that exists
 				firstExistingPath = p
 			}
+			// 权限位 0700 中的 owner-write 位；目录可写才能安全落盘 kubeconfig。
 			if info.IsDir() && info.Mode().Perm()&(1<<(uint(7))) != 0 {
 				// return first path that is writeable
 				return p

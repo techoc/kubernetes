@@ -1,6 +1,6 @@
-//This package is copied from Go library text/template.
-//The original private functions eq, ge, gt, le, lt, and ne
-//are exported as public functions.
+// This package is copied from Go library text/template.
+// The original private functions eq, ge, gt, le, lt, and ne
+// are exported as public functions.
 package template
 
 import (
@@ -9,11 +9,13 @@ import (
 )
 
 var (
+	// 与标准库 text/template 相同的错误文本，保持模板求值的行为一致。
 	errBadComparisonType = errors.New("invalid type for comparison")
 	errBadComparison     = errors.New("incompatible types for comparison")
 	errNoComparison      = errors.New("missing argument for comparison")
 )
 
+// kind 把 Go 的多种数值类型归并为可比较的类别。
 type kind int
 
 const (
@@ -27,6 +29,7 @@ const (
 	uintKind
 )
 
+// basicKind 将 reflect.Kind 映射为比较类别；不支持的类型返回 errBadComparisonType。
 func basicKind(v reflect.Value) (kind, error) {
 	switch v.Kind() {
 	case reflect.Bool:
@@ -46,6 +49,9 @@ func basicKind(v reflect.Value) (kind, error) {
 }
 
 // Equal evaluates the comparison a == b || a == c || ...
+//
+// 对应模板中的 eq 函数：任一参数与 arg1 相等即返回 true。
+// 无符号与有符号整数可跨符号比较（负数视为不相等/更小），其余类型不匹配则报错。
 func Equal(arg1 interface{}, arg2 ...interface{}) (bool, error) {
 	v1 := reflect.ValueOf(arg1)
 	k1, err := basicKind(v1)
@@ -64,6 +70,7 @@ func Equal(arg1 interface{}, arg2 ...interface{}) (bool, error) {
 		truth := false
 		if k1 != k2 {
 			// Special case: Can compare integer values regardless of type's sign.
+			// 负数先单独判断，避免 uint64 转换后产生回绕导致误判。
 			switch {
 			case k1 == intKind && k2 == uintKind:
 				truth = v1.Int() >= 0 && uint64(v1.Int()) == v2.Uint()
@@ -87,6 +94,7 @@ func Equal(arg1 interface{}, arg2 ...interface{}) (bool, error) {
 			case uintKind:
 				truth = v1.Uint() == v2.Uint()
 			default:
+				// basicKind 已排除其它类型，走到这里说明类别表与 switch 不一致。
 				panic("invalid kind")
 			}
 		}
@@ -100,11 +108,14 @@ func Equal(arg1 interface{}, arg2 ...interface{}) (bool, error) {
 // NotEqual evaluates the comparison a != b.
 func NotEqual(arg1, arg2 interface{}) (bool, error) {
 	// != is the inverse of ==.
+	// 出错时仍返回取反后的值，保持与标准库一致的“错误值无意义”约定。
 	equal, err := Equal(arg1, arg2)
 	return !equal, err
 }
 
 // Less evaluates the comparison a < b.
+//
+// 对应模板的 lt：bool 与 complex 不可排序；有符号/无符号整数可跨符号比较。
 func Less(arg1, arg2 interface{}) (bool, error) {
 	v1 := reflect.ValueOf(arg1)
 	k1, err := basicKind(v1)

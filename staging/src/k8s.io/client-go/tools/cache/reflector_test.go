@@ -57,8 +57,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// nevererrc 是一个永远为 nil 的错误通道，供不关心 watchErrorHandler 的测试使用。
 var nevererrc chan error
 
+// TestCloseWatchChannelOnError 验证 watch 发送 Error 事件后，反射器会关闭
+// watch 通道并退出 ListAndWatch，而不是继续消费。
 func TestCloseWatchChannelOnError(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	r := NewReflector(&ListWatch{}, &v1.Pod{}, NewStore(MetaNamespaceKeyFunc), 0)
@@ -85,6 +88,8 @@ func TestCloseWatchChannelOnError(t *testing.T) {
 	}
 }
 
+// TestRunUntil 验证上下文取消时 RunWithContext 会停止 watch 并关闭结果通道，
+// RunWithContext 返回与 watch 关闭两个条件都需要满足。
 func TestRunUntil(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -106,6 +111,7 @@ func TestRunUntil(t *testing.T) {
 	}()
 	// Synchronously add a dummy pod into the watch channel so we
 	// know the RunUntil go routine is in the watch handler.
+	// 先塞入一个事件，确保 goroutine 已进入 watch 处理循环，再触发取消。
 	fw.Add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "bar"}})
 
 	cancel(errors.New("done"))
@@ -131,6 +137,8 @@ func TestRunUntil(t *testing.T) {
 	}
 }
 
+// TestReflectorResyncChan 验证配置了 resyncPeriod 时 resyncChan 会在该周期
+// 后触发，用于周期性调用 Store.Resync。
 func TestReflectorResyncChan(t *testing.T) {
 	s := NewStore(MetaNamespaceKeyFunc)
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, time.Millisecond)
@@ -146,6 +154,8 @@ func TestReflectorResyncChan(t *testing.T) {
 
 // TestReflectorWatchStoppedBefore ensures that neither List nor Watch are
 // called if the stop channel is closed before Reflector.watch is called.
+//
+// 取消发生在 watch 之前时，不应发起任何 List/Watch 请求。
 func TestReflectorWatchStoppedBefore(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -170,6 +180,8 @@ func TestReflectorWatchStoppedBefore(t *testing.T) {
 
 // TestReflectorWatchStoppedAfter ensures that Reflector.watch always stops
 // the watcher when the stop channel is closed.
+//
+// 取消发生在 watch 建立之后时，必须调用 watcher.Stop，避免 goroutine 泄漏。
 func TestReflectorWatchStoppedAfter(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -201,6 +213,8 @@ func TestReflectorWatchStoppedAfter(t *testing.T) {
 	require.True(t, watchers[0].IsStopped())
 }
 
+// BenchmarkReflectorResyncChanMany 衡量反复创建/停止 resync 定时器的开销，
+// 用于确认 Stop 定时器带来的性能改进。
 func BenchmarkReflectorResyncChanMany(b *testing.B) {
 	s := NewStore(MetaNamespaceKeyFunc)
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, 25*time.Millisecond)
@@ -216,6 +230,8 @@ func BenchmarkReflectorResyncChanMany(b *testing.B) {
 // TestReflectorHandleWatchStoppedBefore ensures that handleWatch returns when
 // stopCh is already closed before handleWatch was called. It also ensures that
 // ResultChan and Stop are both called once.
+//
+// 即使上下文已取消，也必须成对调用 ResultChan 与 Stop。
 func TestReflectorHandleWatchStoppedBefore(t *testing.T) {
 	s := NewStore(MetaNamespaceKeyFunc)
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, 0)
@@ -244,6 +260,8 @@ func TestReflectorHandleWatchStoppedBefore(t *testing.T) {
 // TestReflectorHandleWatchStoppedAfter ensures that handleWatch returns when
 // stopCh is closed after handleWatch was called. It also ensures that
 // ResultChan and Stop are both called once.
+//
+// 覆盖处理过程中取消的路径，同样要求 ResultChan/Stop 各调用一次。
 func TestReflectorHandleWatchStoppedAfter(t *testing.T) {
 	s := NewStore(MetaNamespaceKeyFunc)
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, 0)
@@ -277,6 +295,8 @@ func TestReflectorHandleWatchStoppedAfter(t *testing.T) {
 // TestReflectorHandleWatchResultChanClosedBefore ensures that handleWatch
 // returns when the result channel is closed before handleWatch was called.
 // It also ensures that ResultChan and Stop are both called once.
+//
+// 结果通道提前关闭应返回 VeryShortWatchError，触发外层重新建立 watch。
 func TestReflectorHandleWatchResultChanClosedBefore(t *testing.T) {
 	s := NewStore(MetaNamespaceKeyFunc)
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, 0)
@@ -303,6 +323,8 @@ func TestReflectorHandleWatchResultChanClosedBefore(t *testing.T) {
 // TestReflectorHandleWatchResultChanClosedAfter ensures that handleWatch
 // returns when the result channel is closed after handleWatch has started
 // watching. It also ensures that ResultChan and Stop are both called once.
+//
+// 与 Before 版本对应，只是关闭发生在开始消费之后。
 func TestReflectorHandleWatchResultChanClosedAfter(t *testing.T) {
 	s := NewStore(MetaNamespaceKeyFunc)
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, 0)
@@ -331,6 +353,9 @@ func TestReflectorHandleWatchResultChanClosedAfter(t *testing.T) {
 	assert.Equal(t, []string{"ResultChan", "Stop"}, calls)
 }
 
+// TestReflectorWatchHandler 验证 handleWatch 对 watch 事件的解码与应用：
+// 类型不匹配的事件被拒绝，Added/Modified/Deleted 正确更新 Store，
+// 且 LastSyncResourceVersion 跟随最后一个事件的 RV。
 func TestReflectorWatchHandler(t *testing.T) {
 	s := NewStore(MetaNamespaceKeyFunc)
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, 0)
@@ -391,6 +416,7 @@ func TestReflectorWatchHandler(t *testing.T) {
 	}
 }
 
+// TestReflectorStopWatch 验证上下文取消时 handleWatch 返回 errorStopRequested。
 func TestReflectorStopWatch(t *testing.T) {
 	s := NewStore(MetaNamespaceKeyFunc)
 	g := NewReflector(&ListWatch{}, &v1.Pod{}, s, 0)
@@ -402,6 +428,9 @@ func TestReflectorStopWatch(t *testing.T) {
 	require.Equal(t, err, errorStopRequested)
 }
 
+// TestReflectorListAndWatch 覆盖 ListAndWatch 的两种初始同步模式：
+// WatchList 模式下直接 watch 并用 initial-events bookmark 完成同步；
+// 传统模式下先 list 再 watch。两种模式都要正确去重并更新 Store。
 func TestReflectorListAndWatch(t *testing.T) {
 	type listResult struct {
 		Object runtime.Object
@@ -417,6 +446,7 @@ func TestReflectorListAndWatch(t *testing.T) {
 		expectedStore        []metav1.Object
 	}{
 		{
+			// WatchList 模式：不调用 List，watch 请求带 SendInitialEvents。
 			name:         "UseWatchList enabled",
 			useWatchList: true,
 			watchEvents: []watch.Event{
@@ -473,6 +503,7 @@ func TestReflectorListAndWatch(t *testing.T) {
 			},
 		},
 		{
+			// 传统模式：先 list（RV=0 表示任意版本），再从列表 RV 开始 watch。
 			name:         "UseWatchList disabled",
 			useWatchList: false,
 			listResults: []listResult{
@@ -582,6 +613,7 @@ func TestReflectorListAndWatch(t *testing.T) {
 			}()
 			// Stop ListAndWatch and wait for the error channel to close.
 			// Validate it didn't error in Cleanup, not a defer.
+			// 放在 Cleanup 而非 defer，是为了在断言之前完成取消并收集错误。
 			t.Cleanup(func() {
 				cancel()
 				for err := range errCh {
@@ -622,6 +654,8 @@ func TestReflectorListAndWatch(t *testing.T) {
 	}
 }
 
+// TestReflectorListAndWatchWithErrors 验证 ListAndWatch 在 list/watch 出错
+// 后能恢复：每一轮先核对 Store 与预期 list 一致，再模拟错误并继续循环。
 func TestReflectorListAndWatchWithErrors(t *testing.T) {
 	mkPod := func(id string, rv string) *v1.Pod {
 		return &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: id, ResourceVersion: rv}}
@@ -727,6 +761,8 @@ func TestReflectorListAndWatchWithErrors(t *testing.T) {
 	}
 }
 
+// TestReflectorListAndWatchInitConnBackoff 验证初始连接失败时按指数退避
+// 重试，并在达到 Cap 后保持恒定间隔。使用 FakeClock 精确推进时间。
 func TestReflectorListAndWatchInitConnBackoff(t *testing.T) {
 	maxBackoff := 50 * time.Millisecond
 	table := []struct {
@@ -811,6 +847,8 @@ func TestReflectorListAndWatchInitConnBackoff(t *testing.T) {
 	}
 }
 
+// TestNewReflectorWithCustomBackoff 验证 ReflectorOptions.Backoff 能覆盖
+// 默认退避策略；未提供时走默认（含抖动，因此只校验时间上界）。
 func TestNewReflectorWithCustomBackoff(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -887,15 +925,19 @@ func TestNewReflectorWithCustomBackoff(t *testing.T) {
 	}
 }
 
+// fakeDelayFunc 记录退避调用次数，并让退避立即返回（不真正等待）。
 type fakeDelayFunc struct {
 	calls int
 }
 
+// delayFunc 满足 Reflector 的 delayHandler 签名，返回零延迟。
 func (f *fakeDelayFunc) delayFunc() time.Duration {
 	f.calls++
 	return 0
 }
 
+// TestBackoffOnTooManyRequests 验证 watch 建连返回 429 或收到 429 Error
+// 事件时都会触发退避重试，而不是直接放弃。
 func TestBackoffOnTooManyRequests(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	err := apierrors.NewTooManyRequests("too many requests", 1)
@@ -942,6 +984,8 @@ func TestBackoffOnTooManyRequests(t *testing.T) {
 	}
 }
 
+// TestNoRelistOnTooManyRequests 验证 429 只影响 watch 重试，不会触发
+// 重新 list：list 只调用一次，watch 调用五次后正常结束。
 func TestNoRelistOnTooManyRequests(t *testing.T) {
 	err := apierrors.NewTooManyRequests("too many requests", 1)
 	clock := &clock.RealClock{}
@@ -987,6 +1031,8 @@ func TestNoRelistOnTooManyRequests(t *testing.T) {
 	}
 }
 
+// TestRetryInternalError 验证 MaxInternalErrorRetryDuration 对内部错误
+// （如 etcd 无 leader）的重试上限：关闭时不重试，开启时按时间窗口重试。
 func TestRetryInternalError(t *testing.T) {
 	testCases := []struct {
 		name                string
@@ -1061,6 +1107,8 @@ func TestRetryInternalError(t *testing.T) {
 	}
 }
 
+// TestReflectorResync 验证 resyncPeriod 到期会调用 Store.Resync；
+// Resync 返回错误不会终止 reflector 循环。
 func TestReflectorResync(t *testing.T) {
 	iteration := 0
 	_, ctx := ktesting.NewTestContext(t)
@@ -1095,6 +1143,8 @@ func TestReflectorResync(t *testing.T) {
 	}
 }
 
+// TestReflectorWatchListPageSize 验证首次 list 使用 RV=0 时也会按
+// WatchListPageSize 分页，直到 Continue 为空。
 func TestReflectorWatchListPageSize(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -1141,6 +1191,8 @@ func TestReflectorWatchListPageSize(t *testing.T) {
 	}
 }
 
+// TestReflectorNotPaginatingNotConsistentReads 验证当 list 使用非零
+// resourceVersion（非一致性读）时不分页，以避免跨页的版本不一致。
 func TestReflectorNotPaginatingNotConsistentReads(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -1177,6 +1229,8 @@ func TestReflectorNotPaginatingNotConsistentReads(t *testing.T) {
 	}
 }
 
+// TestReflectorPaginatingNonConsistentReadsIfWatchCacheDisabled 验证首个
+// RV=0 的 list 被分页后，后续 list 会沿用分页状态继续分页。
 func TestReflectorPaginatingNonConsistentReadsIfWatchCacheDisabled(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	var cancel func(error)
@@ -1233,6 +1287,8 @@ func TestReflectorPaginatingNonConsistentReadsIfWatchCacheDisabled(t *testing.T)
 // TestReflectorResyncWithResourceVersion ensures that a reflector keeps track of the ResourceVersion and sends
 // it in relist requests to prevent the reflector from traveling back in time if the relist is to a api-server or
 // etcd that is partitioned and serving older data than the reflector has already processed.
+//
+// 首次 relist 使用 RV=0，之后使用上次同步的 RV（本例为 10），避免看到旧数据。
 func TestReflectorResyncWithResourceVersion(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	cancelCtx, cancel := context.WithCancelCause(ctx)
@@ -1293,6 +1349,8 @@ func TestReflectorResyncWithResourceVersion(t *testing.T) {
 // an "Expired" error is returned if the ResourceVersion has expired (etcd has compacted it).
 // (In kubernetes 1.17, or when the watch cache is enabled, the List will instead return the list that is no older than
 // the requested ResourceVersion).
+//
+// RV=10 已过期时，reflector 应回退到 RV="" 做一次完整 list。
 func TestReflectorExpiredExactResourceVersion(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	var cancelCtx context.Context
@@ -1353,6 +1411,8 @@ func TestReflectorExpiredExactResourceVersion(t *testing.T) {
 	}
 }
 
+// TestReflectorFullListIfExpired 验证分页 relist 中某一页返回 Expired 时，
+// reflector 放弃分页并改为一次性完整 list，而不是整体失败。
 func TestReflectorFullListIfExpired(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	var cancelCtx context.Context
@@ -1427,6 +1487,8 @@ func TestReflectorFullListIfExpired(t *testing.T) {
 	}
 }
 
+// TestReflectorFullListIfTooLarge 覆盖“请求的 RV 超过服务端当前 RV”的三种
+// 历史错误格式；reflector 应回退到 RV="" 重新 list。
 func TestReflectorFullListIfTooLarge(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	var cancelCtx context.Context
@@ -1501,6 +1563,8 @@ func TestReflectorFullListIfTooLarge(t *testing.T) {
 	}
 }
 
+// TestGetTypeDescriptionFromObject 验证类型描述的回退规则：
+// 普通类型输出 Go 类型名，带 GVK 的 Unstructured 优先输出 GVK 字符串。
 func TestGetTypeDescriptionFromObject(t *testing.T) {
 	obj := &unstructured.Unstructured{}
 	gvk := schema.GroupVersionKind{
@@ -1540,6 +1604,8 @@ func TestGetTypeDescriptionFromObject(t *testing.T) {
 	}
 }
 
+// TestGetExpectedGVKFromObject 验证只有带 GVK 的 Unstructured 才会返回期望
+// GVK；其他类型（包括无 GVK 的 Unstructured）返回 nil。
 func TestGetExpectedGVKFromObject(t *testing.T) {
 	obj := &unstructured.Unstructured{}
 	gvk := schema.GroupVersionKind{
@@ -1579,6 +1645,8 @@ func TestGetExpectedGVKFromObject(t *testing.T) {
 	}
 }
 
+// TestWatchTimeout 验证 watch 请求的 TimeoutSeconds：未配置或配置过小时
+// 使用默认下限，配置较大时采用配置值，并带随机抖动。
 func TestWatchTimeout(t *testing.T) {
 
 	testCases := []struct {
@@ -1641,6 +1709,8 @@ func TestWatchTimeout(t *testing.T) {
 	}
 }
 
+// storeWithRV 是记录 UpdateResourceVersion 调用的 Store 包装，用于断言
+// reflector 把每个事件的 RV 传递给存储层。
 type storeWithRV struct {
 	Store
 
@@ -1648,16 +1718,20 @@ type storeWithRV struct {
 	resourceVersions []string
 }
 
+// UpdateResourceVersion 记录一次 RV 更新。
 func (s *storeWithRV) UpdateResourceVersion(resourceVersion string) {
 	s.resourceVersions = append(s.resourceVersions, resourceVersion)
 }
 
+// newStoreWithRV 构造带 RV 记录的 Store。
 func newStoreWithRV() *storeWithRV {
 	return &storeWithRV{
 		Store: NewStore(MetaNamespaceKeyFunc),
 	}
 }
 
+// TestReflectorResourceVersionUpdate 验证 Added/Modified/Bookmark/Deleted
+// 事件都会把对应 RV 传递给 Store.UpdateResourceVersion。
 func TestReflectorResourceVersionUpdate(t *testing.T) {
 	s := newStoreWithRV()
 
@@ -1699,11 +1773,16 @@ func TestReflectorResourceVersionUpdate(t *testing.T) {
 }
 
 const (
-	fakeItemsNum      = 100
+	// fakeItemsNum 是每个测试页的对象数，也用作分页大小。
+	fakeItemsNum = 100
+	// exemptObjectIndex 指定每页中不会被删除、用于验证“未被误清理”的对象。
 	exemptObjectIndex = fakeItemsNum / 4
-	pageNum           = 3
+	// pageNum 是 BenchmarkReflectorList 使用的页数。
+	pageNum = 3
 )
 
+// getPodListItems 构造一页字段较丰富的 Pod，用于基准测试和 GC 测试。
+// 返回首页对象名、被豁免对象名和列表本身。
 func getPodListItems(start int, numItems int) (string, string, *v1.PodList) {
 	out := &v1.PodList{
 		Items: make([]v1.Pod, numItems),
@@ -1867,6 +1946,7 @@ func getPodListItems(start int, numItems int) (string, string, *v1.PodList) {
 	return out.Items[0].GetName(), out.Items[exemptObjectIndex].GetName(), out
 }
 
+// getConfigmapListItems 构造一页 ConfigMap，用于对比不同类型列表的解析开销。
 func getConfigmapListItems(start int, numItems int) (string, string, *v1.ConfigMapList) {
 	out := &v1.ConfigMapList{
 		Items: make([]v1.ConfigMap, numItems),
@@ -1898,6 +1978,8 @@ func getConfigmapListItems(start int, numItems int) (string, string, *v1.ConfigM
 	return out.Items[0].GetName(), out.Items[exemptObjectIndex].GetName(), out
 }
 
+// TestPagingPodsLW 是分页用的假 ListWatch：每次 List 返回一页，并在
+// 未到最后一页时设置 Continue 标记。
 type TestPagingPodsLW struct {
 	totalPageCount   int
 	fetchedPageCount int
@@ -1906,6 +1988,7 @@ type TestPagingPodsLW struct {
 	exemptObjectNameList   []string
 }
 
+// newPageTestLW 构造指定页数的分页测试 ListWatch。
 func newPageTestLW(totalPageNum int) *TestPagingPodsLW {
 	return &TestPagingPodsLW{
 		totalPageCount:   totalPageNum,
@@ -1913,6 +1996,7 @@ func newPageTestLW(totalPageNum int) *TestPagingPodsLW {
 	}
 }
 
+// List 返回下一页；未到最后一页时设置 Continue，驱动 reflector 继续拉取。
 func (t *TestPagingPodsLW) List(options metav1.ListOptions) (runtime.Object, error) {
 	firstPodName, exemptPodName, list := getPodListItems(t.fetchedPageCount*fakeItemsNum, fakeItemsNum)
 	t.detectedObjectNameList = append(t.detectedObjectNameList, firstPodName)
@@ -1925,10 +2009,14 @@ func (t *TestPagingPodsLW) List(options metav1.ListOptions) (runtime.Object, err
 	return list, nil
 }
 
+// Watch 返回 nil：该测试只关心 list 分页。
 func (t *TestPagingPodsLW) Watch(options metav1.ListOptions) (watch.Interface, error) {
 	return nil, nil
 }
 
+// TestReflectorListExtract 验证分页 list 过程中临时对象能被 GC 回收：
+// 每页第一个对象会被设置 finalizer，删除后应收到回收通知。
+// 这用于防止 reflector 在分页拼接时意外持有整页对象的引用。
 func TestReflectorListExtract(t *testing.T) {
 	_, ctx := ktesting.NewTestContext(t)
 	store := NewStore(func(obj interface{}) (string, error) {
@@ -2006,6 +2094,9 @@ func TestReflectorListExtract(t *testing.T) {
 	}
 }
 
+// TestReflectorReplacesStoreOnUnsafeDelete 验证收到 StoreReadError（存储
+// 层发现损坏对象并已不安全删除）后，reflector 会重新 list 并整体替换 Store，
+// 从而同时清掉损坏对象、保留其他已有对象。
 func TestReflectorReplacesStoreOnUnsafeDelete(t *testing.T) {
 	mkPod := func(id string, rv string) *v1.Pod {
 		return &v1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: id, ResourceVersion: rv}}
@@ -2140,6 +2231,9 @@ func TestReflectorReplacesStoreOnUnsafeDelete(t *testing.T) {
 	}
 }
 
+// TestReflectorRespectStoreTransformer 验证 RealFIFO 与 DeltaFIFO 的
+// Transformer 都会被 reflector 应用：进入 Store 的对象已经被转换，
+// 且初始同步、Replace、后续更新各阶段的调用次数符合预期。
 func TestReflectorRespectStoreTransformer(t *testing.T) {
 	for name, test := range map[string]struct {
 		storeBuilder func(counter *atomic.Int32) ReflectorStore
@@ -2287,12 +2381,14 @@ func TestReflectorRespectStoreTransformer(t *testing.T) {
 	}
 }
 
+// fakeStore 在 Replace 前后插入回调，用于观察替换时序与错误。
 type fakeStore struct {
 	ReflectorStore
 	beforeReplace func(list []interface{}, s string)
 	afterReplace  func(rv string, err error)
 }
 
+// Replace 先执行 beforeReplace，再委托底层 Store，最后执行 afterReplace。
 func (f *fakeStore) Replace(list []interface{}, rv string) error {
 	f.beforeReplace(list, rv)
 	err := f.ReflectorStore.Replace(list, rv)
@@ -2300,6 +2396,8 @@ func (f *fakeStore) Replace(list []interface{}, rv string) error {
 	return err
 }
 
+// BenchmarkExtractList 对比 meta.ExtractList 在 PodList 与 ConfigMapList
+// 上的解析/复制开销。
 func BenchmarkExtractList(b *testing.B) {
 	_, _, podList := getPodListItems(0, fakeItemsNum)
 	_, _, configMapList := getConfigmapListItems(0, fakeItemsNum)
@@ -2331,6 +2429,7 @@ func BenchmarkExtractList(b *testing.B) {
 	}
 }
 
+// BenchmarkEachListItem 衡量逐个遍历列表项（复用元数据访问器）的开销。
 func BenchmarkEachListItem(b *testing.B) {
 	_, _, podList := getPodListItems(0, fakeItemsNum)
 	_, _, configMapList := getConfigmapListItems(0, fakeItemsNum)
@@ -2364,6 +2463,8 @@ func BenchmarkEachListItem(b *testing.B) {
 	}
 }
 
+// BenchmarkExtractListWithAlloc 与 BenchmarkExtractList 相同，但使用
+// 预分配版本的 ExtractListWithAlloc，用于对比分配次数。
 func BenchmarkExtractListWithAlloc(b *testing.B) {
 	_, _, podList := getPodListItems(0, fakeItemsNum)
 	_, _, configMapList := getConfigmapListItems(0, fakeItemsNum)
@@ -2395,6 +2496,7 @@ func BenchmarkExtractListWithAlloc(b *testing.B) {
 	}
 }
 
+// BenchmarkEachListItemWithAlloc 衡量预分配版本的逐项遍历开销。
 func BenchmarkEachListItemWithAlloc(b *testing.B) {
 	_, _, podList := getPodListItems(0, fakeItemsNum)
 	_, _, configMapList := getConfigmapListItems(0, fakeItemsNum)
@@ -2428,6 +2530,7 @@ func BenchmarkEachListItemWithAlloc(b *testing.B) {
 	}
 }
 
+// BenchmarkReflectorList 端到端衡量 reflector.list 对分页列表的处理开销。
 func BenchmarkReflectorList(b *testing.B) {
 	store := NewStore(func(obj interface{}) (string, error) {
 		o, err := meta.Accessor(obj)
@@ -2480,6 +2583,8 @@ func BenchmarkReflectorList(b *testing.B) {
 	}
 }
 
+// TestIsUnsupportedTableObject 验证仅 meta.k8s.io 组的 Table 对象会被识别
+// 为不支持的列表类型；其他组或无 Table 类型的对象不受影响。
 func TestIsUnsupportedTableObject(t *testing.T) {
 	tests := []struct {
 		name     string

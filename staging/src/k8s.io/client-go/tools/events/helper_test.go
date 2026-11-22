@@ -27,6 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TestGetFieldSelector 验证按事件 API 版本生成字段选择器：
+// events.k8s.io/v1(beta1) 使用 regarding.* 字段，core/v1 使用 involvedObject.*，
+// 未知版本则返回错误。
 func TestGetFieldSelector(t *testing.T) {
 	tests := []struct {
 		desc                      string
@@ -134,6 +137,7 @@ func TestGetFieldSelector(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		// 空参数时选择器为空集合；非空时用 Matches 比较，避免依赖 fields.Set 的内部顺序。
 		result, err := GetFieldSelector(test.eventsGroupVersion, test.regardingGroupVersionKind, test.regardingName, test.regardingUID)
 		if !test.expectedErr && err != nil {
 			t.Errorf("Unable to get field selector with %v", err)

@@ -28,6 +28,9 @@ import (
 // Config holds the information needed to build connect to remote kubernetes clusters as a given user
 // IMPORTANT if you add fields to this struct, please update IsConfigEmpty()
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+//
+// 这是 kubeconfig 的内部（非版本化）表示：加载多个文件后合并为 Config，再由
+// DefaultClientConfig 按 CurrentContext 组装成 rest.Config。
 type Config struct {
 	// Legacy field from pkg/api/types.go TypeMeta.
 	// TODO(jlowdermilk): remove this after eliminating downstream dependencies.
@@ -41,6 +44,7 @@ type Config struct {
 	APIVersion string `json:"apiVersion,omitempty"`
 	// Preferences holds general information to be use for cli interactions
 	// Deprecated: this field is deprecated in v1.34. It is not used by any of the Kubernetes components.
+	// 已弃用：该字段自 v1.34 起不再被任何 Kubernetes 组件使用。
 	Preferences Preferences `json:"preferences,omitzero"`
 	// Clusters is a map of referencable names to cluster configs
 	Clusters map[string]*Cluster `json:"clusters"`
@@ -57,6 +61,8 @@ type Config struct {
 
 // IMPORTANT if you add fields to this struct, please update IsConfigEmpty()
 // Deprecated: this structure is deprecated in v1.34. It is not used by any of the Kubernetes components.
+//
+// 已弃用：自 v1.34 起不再被使用；保留仅为 kubeconfig 往返兼容。
 type Preferences struct {
 	// +optional
 	Colors bool `json:"colors,omitempty"`
@@ -68,6 +74,7 @@ type Preferences struct {
 // Cluster contains information about how to communicate with a kubernetes cluster
 type Cluster struct {
 	// LocationOfOrigin indicates where this object came from.  It is used for round tripping config post-merge, but never serialized.
+	// 合并后写回时据此定位原始文件，确保只改动该条目所在的 kubeconfig。
 	// +k8s:conversion-gen=false
 	LocationOfOrigin string `json:"-"`
 	// Server is the address of the kubernetes cluster (https://hostname:port).
@@ -82,6 +89,7 @@ type Cluster struct {
 	// +optional
 	CertificateAuthority string `json:"certificate-authority,omitempty"`
 	// CertificateAuthorityData contains PEM-encoded certificate authority certificates. Overrides CertificateAuthority
+	// 内联数据优先于路径；两者同时存在时忽略 CertificateAuthority。
 	// +optional
 	CertificateAuthorityData []byte `json:"certificate-authority-data,omitempty"`
 	// ProxyURL is the URL to the proxy to be used for all requests made by this
@@ -148,6 +156,7 @@ type AuthInfo struct {
 	// +optional
 	Password string `json:"password,omitempty" datapolicy:"password"`
 	// AuthProvider specifies a custom authentication plugin for the kubernetes cluster.
+	// 旧的进程外认证方式，逐步被 Exec 取代；同一条目不应同时配置两者。
 	// +optional
 	AuthProvider *AuthProviderConfig `json:"auth-provider,omitempty"`
 	// Exec specifies a custom exec-based authentication plugin for the kubernetes cluster.
@@ -178,6 +187,7 @@ type Context struct {
 // AuthProviderConfig holds the configuration for a specified auth provider.
 type AuthProviderConfig struct {
 	Name string `json:"name"`
+	// Config 可能包含 token、refresh token 等机密，禁止直接打印。
 	// +optional
 	Config map[string]string `json:"config,omitempty"`
 }
@@ -326,6 +336,8 @@ type PluginPolicy struct {
 	Allowlist []AllowlistEntry `json:"-"`
 }
 
+// PolicyType 是凭据插件执行策略的枚举值：
+// AllowAll 不限制；DenyAll 禁止所有凭据插件；Allowlist 仅允许 allowlist 中匹配的插件。
 type PolicyType string
 
 const (
@@ -346,6 +358,7 @@ func (c ExecConfig) GoString() string {
 // String implements fmt.Stringer and sanitizes sensitive fields of ExecConfig
 // to prevent accidental leaking via logs.
 func (c ExecConfig) String() string {
+	// Args 与 Env 里可能夹带 token，Config 也可能含机密，统一打码。
 	var args []string
 	if len(c.Args) > 0 {
 		args = []string{"--- REDACTED ---"}
@@ -389,6 +402,7 @@ const (
 )
 
 // NewConfig is a convenience function that returns a new Config object with non-nil maps
+// 非 nil 的 map 让调用方可以直接赋值，避免到处判空。
 func NewConfig() *Config {
 	return &Config{
 		Clusters:   make(map[string]*Cluster),
@@ -422,6 +436,8 @@ func NewAuthInfo() *AuthInfo {
 // NewPreferences is a convenience function that returns a new
 // Preferences object with non-nil maps
 // Deprecated: this method is deprecated in v1.34. It is not used by any of the Kubernetes components.
+//
+// 已弃用：自 v1.34 起不再被使用。
 func NewPreferences() *Preferences {
 	return &Preferences{Extensions: make(map[string]runtime.Object)}
 }

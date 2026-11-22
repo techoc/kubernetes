@@ -25,6 +25,9 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// NewTypeConverter 从服务端 OpenAPI 文档构建 managedFields 类型转换器。
+// 它把各 GroupVersion schema 的 components 合并成一张全局 schema 表，
+// 供 server-side apply 在结构化数据与 typed 对象之间转换。
 func NewTypeConverter(client Client, preserveUnknownFields bool) (managedfields.TypeConverter, error) {
 	spec := map[string]*spec.Schema{}
 	paths, err := client.Paths()
@@ -40,6 +43,7 @@ func NewTypeConverter(client Client, preserveUnknownFields bool) (managedfields.
 		if err := json.Unmarshal(s, &openapi); err != nil {
 			return nil, fmt.Errorf("failed to parse schema: %w", err)
 		}
+		// schema 定义以 kube-openapi 的引用名为 key，跨 GroupVersion 合并时依赖该命名约定。
 		for k, v := range openapi.Components.Schemas {
 			spec[k] = v
 		}

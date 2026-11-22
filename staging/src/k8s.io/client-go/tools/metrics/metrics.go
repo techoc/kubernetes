@@ -16,6 +16,10 @@ limitations under the License.
 
 // Package metrics provides abstractions for registering which metrics
 // to record.
+//
+// 本包只定义指标接口与进程级全局变量，具体实现（如 Prometheus）由适配包
+// 通过 Register 注入。默认全部为空实现，因此未注册时记录指标不会 panic，
+// 也不会引入额外依赖。
 package metrics
 
 import (
@@ -51,6 +55,8 @@ var (
 // "first-observation" to "first client construction", meaning the metric
 // series is visible to Promteheus scrapes from process startup rather than
 // appearing only after the first request.
+//
+// 利用 sync.Once 保证回调只执行一次；回调未安装时直接返回。
 func EnsureRegistered() {
 	if ensureRegisteredFn != nil {
 		ensureRegisteredOnce.Do(ensureRegisteredFn)
@@ -72,6 +78,7 @@ type LatencyMetric interface {
 	Observe(ctx context.Context, verb string, u url.URL, latency time.Duration)
 }
 
+// ResolverLatencyMetric 观测 DNS 解析延迟，按主机名区分。
 type ResolverLatencyMetric interface {
 	Observe(ctx context.Context, host string, latency time.Duration)
 }
@@ -93,6 +100,8 @@ type CallsMetric interface {
 }
 
 // CallsMetric counts the success or failure of execution for exec plugins.
+//
+// 名称沿用历史注释，实际统计的是 exec 插件策略检查结果（allowed/denied）。
 type PolicyCallsMetric interface {
 	// Increment increments a counter per status { "allowed", "denied" }
 	Increment(status string)
@@ -134,6 +143,7 @@ type TransportCacheGCCallsMetric interface {
 }
 
 var (
+	// 以下变量在 Register 之前均为空实现，因此任何调用点都可以安全记录指标。
 	// ClientCertExpiry is the expiry time of a client certificate
 	ClientCertExpiry ExpiryMetric = noopExpiry{}
 	// ClientCertRotationAge is the age of a certificate that has just been rotated.
@@ -176,6 +186,8 @@ var (
 )
 
 // RegisterOpts contains all the metrics to register. Metrics may be nil.
+//
+// nil 字段表示“保持默认空实现”，这样适配包可以只注册自己关心的指标。
 type RegisterOpts struct {
 	ClientCertExpiry             ExpiryMetric
 	ClientCertRotationAge        DurationMetric
@@ -203,6 +215,8 @@ type RegisterOpts struct {
 
 // Register registers metrics for the rest client to use. This can
 // only be called once.
+//
+// 使用 sync.Once 保证只有首次调用生效，避免多个适配包互相覆盖。
 func Register(opts RegisterOpts) {
 	registerMetrics.Do(func() {
 		if opts.ClientCertExpiry != nil {
@@ -259,6 +273,7 @@ func Register(opts RegisterOpts) {
 	})
 }
 
+// 以下类型是各指标接口的空实现，用于未注册适配包时的默认值。
 type noopDuration struct{}
 
 func (noopDuration) Observe(time.Duration) {}

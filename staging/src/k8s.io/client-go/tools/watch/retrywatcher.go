@@ -47,12 +47,14 @@ type resourceVersionGetter interface {
 // Please note that this is not resilient to etcd cache not having the resource version anymore - you would need to
 // use Informers for that.
 type RetryWatcher struct {
-	cancel              func(error)
+	cancel func(error)
+	// lastResourceVersion 是下一条 watch 的起点；每个事件（包括 bookmark）都会推进它。
 	lastResourceVersion string
 	watcherClient       cache.WatcherWithContext
-	resultChan          chan watch.Event
-	doneChan            chan struct{}
-	minRestartDelay     time.Duration
+	// resultChan 无缓冲：消费者不读取时会反压到 watch 循环。
+	resultChan      chan watch.Event
+	doneChan        chan struct{}
+	minRestartDelay time.Duration
 }
 
 // NewRetryWatcher creates a new RetryWatcher.
@@ -60,6 +62,7 @@ type RetryWatcher struct {
 // The initialResourceVersion will be given to watch method when first called.
 //
 // Deprecated: use NewRetryWatcherWithContext instead.
+// 旧构造函数没有 ctx，无法在启动前取消。
 func NewRetryWatcher(initialResourceVersion string, watcherClient cache.Watcher) (*RetryWatcher, error) {
 	return NewRetryWatcherWithContext(context.Background(), initialResourceVersion, cache.ToWatcherWithContext(watcherClient))
 }
@@ -72,6 +75,8 @@ func NewRetryWatcherWithContext(ctx context.Context, initialResourceVersion stri
 }
 
 func newRetryWatcher(ctx context.Context, initialResourceVersion string, watcherClient cache.WatcherWithContext, minRestartDelay time.Duration) (*RetryWatcher, error) {
+	// 空 RV 或 "0" 会让服务端先做一次隐式 list，期间可能漏掉事件；
+	// RetryWatcher 依赖严格从指定 RV 继续，因此拒绝这两种输入。
 	switch initialResourceVersion {
 	case "", "0":
 		// TODO: revisit this if we ever get WATCH v2 where it means start "now"
@@ -81,6 +86,7 @@ func newRetryWatcher(ctx context.Context, initialResourceVersion string, watcher
 		break
 	}
 
+	// 使用 CancelCause，便于 Stop 与内部错误区分退出原因。
 	ctx, cancel := context.WithCancelCause(ctx)
 
 	rw := &RetryWatcher{
@@ -99,6 +105,7 @@ func newRetryWatcher(ctx context.Context, initialResourceVersion string, watcher
 func (rw *RetryWatcher) send(ctx context.Context, event watch.Event) bool {
 	// Writing to an unbuffered channel is blocking operation
 	// and we need to check if stop wasn't requested while doing so.
+	// 返回 false 表示 ctx 已取消，调用方应终止接收循环。
 	select {
 	case rw.resultChan <- event:
 		return true
@@ -109,6 +116,9 @@ func (rw *RetryWatcher) send(ctx context.Context, event watch.Event) bool {
 
 // doReceive returns true when it is done, false otherwise.
 // If it is not done the second return value holds the time to wait before calling it again.
+//
+// done=false 表示可恢复，调用方会用 lastResourceVersion 重建 watch；
+// done=true 表示不可继续（ctx 取消、权限错误或数据不一致）。
 func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 	watcher, err := rw.watcherClient.WatchWithContext(ctx, metav1.ListOptions{
 		ResourceVersion:     rw.lastResourceVersion,
@@ -168,6 +178,7 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 
 		// Resource expired or 410 Gone errors (e.g. resource version too old)
 		// are expected and recoverable, so log at a lower verbosity instead of ERROR.
+		// 这类错误可通过重新 list（informer）或调用方兜底恢复；本组件本身无法补数据。
 		if apierrors.IsResourceExpired(err) || apierrors.IsGone(err) {
 			klog.FromContext(ctx).V(4).Info(msg, "err", err)
 			return false, 0
@@ -222,6 +233,7 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 				}
 
 				// All is fine; send the non-bookmark events and update resource version.
+				// bookmark 只用于推进 RV，不向消费者投递，以免破坏既有事件语义。
 				if event.Type != watch.Bookmark {
 					ok = rw.send(ctx, event)
 					if !ok {
@@ -252,6 +264,7 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 				switch status.Code {
 				case http.StatusGone:
 					// Never retry RV too old errors
+					// 410 无法从当前位置续接，必须交给上层重新 list。
 					_ = rw.send(ctx, event)
 					return true, 0
 
@@ -287,6 +300,8 @@ func (rw *RetryWatcher) doReceive(ctx context.Context) (bool, time.Duration) {
 
 // receive reads the result from a watcher, restarting it if necessary.
 func (rw *RetryWatcher) receive(ctx context.Context) {
+	// 退出时两个 channel 都会被关闭：消费者先观察到 resultChan 关闭，
+	// 再通过 Done 确认后台循环已结束。
 	defer close(rw.doneChan)
 	defer close(rw.resultChan)
 
@@ -299,6 +314,7 @@ func (rw *RetryWatcher) receive(ctx context.Context) {
 
 	// We use non sliding until so we don't introduce delays on happy path when WATCH call
 	// timeouts or gets closed and we need to reestablish it while also avoiding hot loops.
+	// 非滑动间隔：正常路径不会被周期推迟，同时 minRestartDelay 防止忙等。
 	wait.NonSlidingUntilWithContext(ctx, func(ctx context.Context) {
 		done, retryAfter := rw.doReceive(ctx)
 		if done {
@@ -319,6 +335,7 @@ func (rw *RetryWatcher) receive(ctx context.Context) {
 }
 
 // ResultChan implements Interface.
+// resultChan 在 receive 退出时关闭，消费者应处理 channel 关闭。
 func (rw *RetryWatcher) ResultChan() <-chan watch.Event {
 	return rw.resultChan
 }

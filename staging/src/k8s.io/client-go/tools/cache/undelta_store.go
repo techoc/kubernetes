@@ -23,8 +23,13 @@ package cache
 // It is thread-safe.  It guarantees that every change (Add, Update, Replace, Delete) results
 // in one call to PushFunc, but sometimes PushFunc may be called twice with the same values.
 // PushFunc should be thread safe.
+//
+// 用途：把 Reflector 的增量事件转换为“每次变更后的完整快照”推送。内嵌 Store 负责
+// 存储，UndeltaStore 只在其上叠加快照回调。
 type UndeltaStore struct {
 	Store
+	// PushFunc 接收完整状态切片；实现必须并发安全，且不得长期持有该切片（Store.List
+	// 每次返回新切片，但仍建议只读）。
 	PushFunc func([]interface{})
 }
 
@@ -42,6 +47,8 @@ var _ Store = &UndeltaStore{}
 // 3                                         Store.Add(b)
 // 4               Store.List() -> [a,b]
 // 5                                         Store.List() -> [a,b]
+//
+// 因此 PushFunc 可能收到重复快照，消费端需要按快照内容自行去重或幂等处理。
 func (u *UndeltaStore) Add(obj interface{}) error {
 	if err := u.Store.Add(obj); err != nil {
 		return err
@@ -72,6 +79,8 @@ func (u *UndeltaStore) Delete(obj interface{}) error {
 // 'u' takes ownership of the list, you should not reference the list again
 // after calling this function.
 // The new contents complete state will be sent by calling PushFunc after replacement.
+//
+// 典型调用方是 Reflector 的全量 List 阶段。
 func (u *UndeltaStore) Replace(list []interface{}, resourceVersion string) error {
 	if err := u.Store.Replace(list, resourceVersion); err != nil {
 		return err

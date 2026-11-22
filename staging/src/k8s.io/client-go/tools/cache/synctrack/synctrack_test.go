@@ -23,6 +23,8 @@ import (
 	"testing"
 )
 
+// testSingleFileFuncs/testAsyncFuncs 把两种 Tracker 适配成同一组回调，
+// 使同一张表可以覆盖两者的同步语义。
 func testSingleFileFuncs() (upstreamHasSynced func(), start func(), finished func(), hasSynced func() bool, synced <-chan struct{}) {
 	tracker := NewSingleFileTracker("")
 	return tracker.UpstreamHasSynced, tracker.Start, tracker.Finished, tracker.HasSynced, tracker.Done()
@@ -33,6 +35,9 @@ func testAsyncFuncs() (upstreamHasSynced func(), start func(), finished func(), 
 	return tracker.UpstreamHasSynced, func() { tracker.Start("key") }, func() { tracker.Finished("key") }, tracker.HasSynced, tracker.Done()
 }
 
+// TestBasicLogic 验证同步状态的两个条件：上游已同步，且所有已启动的工作项都已结束。
+// 表里用 syncedBeforeFinish 覆盖“上游先同步”与“工作项先结束”两种事件顺序，
+// 两者都不应在另一个条件满足前提前报告 HasSynced。
 func TestBasicLogic(t *testing.T) {
 	table := []struct {
 		name      string
@@ -52,10 +57,13 @@ func TestBasicLogic(t *testing.T) {
 				finish       bool
 				expectSynced bool
 			}{
+				// 只启动未结束：未同步。
 				{false, false, true, true, false},
+				// 上游同步但工作未结束：未同步。
 				{true, false, true, false, false},
 				{true, true, true, false, false},
 				{false, false, true, false, false},
+				// 上游同步且工作结束：同步。
 				{true, false, true, true, true},
 				{true, true, true, true, true},
 			}
@@ -70,6 +78,7 @@ func TestBasicLogic(t *testing.T) {
 					}
 				}
 
+				// 启动前必须既未同步、Done 也未关闭。
 				if hasSynced() {
 					t.Errorf("for %#v got HasSynced() true before start (wanted false)", tt)
 				}
@@ -132,6 +141,8 @@ func TestBasicLogic(t *testing.T) {
 	}
 }
 
+// TestAsyncLocking 并发地对不同 key 执行 Start/Finished（配合 -race 检测竞态），
+// 最后确认计数归零后 UpstreamHasSynced 能使 tracker 进入已同步状态。
 func TestAsyncLocking(t *testing.T) {
 	aft := NewAsyncTracker[int]("")
 
@@ -154,6 +165,9 @@ func TestAsyncLocking(t *testing.T) {
 
 }
 
+// TestSingleFileCounting 验证 SingleFileTracker 对多次 Start/Finished 的计数：
+// 计数未归零时不报告同步；归零且上游同步了才同步。
+// 额外调用 Finished 会 panic（负计数），这是刻意用来暴露调用方配对错误的行为。
 func TestSingleFileCounting(t *testing.T) {
 	sft := NewSingleFileTracker("")
 
@@ -199,11 +213,14 @@ func TestSingleFileCounting(t *testing.T) {
 	}()
 
 	// Negative counter still means it is synced
+	// panic 后计数为负，但仍满足“无未完成工作”，因此 HasSynced 保持 true。
 	if !sft.HasSynced() {
 		t.Fatal("Unexpectedly not synced?")
 	}
 }
 
+// TestSingleFile 用表驱动覆盖 starts/stops 与上游同步的先后顺序，
+// 重点验证停止次数为 0 时即使上游已同步也不会报告同步。
 func TestSingleFile(t *testing.T) {
 	table := []struct {
 		synced            bool

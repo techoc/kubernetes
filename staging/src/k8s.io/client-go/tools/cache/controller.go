@@ -43,10 +43,16 @@ import (
 // .
 
 // Config contains all the settings for one of these low-level controllers.
+//
+// 控制器只做两件事：驱动 Reflector 把事件写入 Queue，以及循环 Pop 出来交给
+// Process/ProcessBatch。它不关心业务语义，因此 handler 的耗时直接决定队列
+// 积压程度。
 type Config struct {
 	// The queue for your objects - has to be a DeltaFIFO due to
 	// assumptions in the implementation. Your Process() function
 	// should accept the output of this Queue's Pop() method.
+	//
+	// 必须是有序 FIFO；实现依赖它保证同一对象的同一时刻只有一次处理。
 	Queue
 
 	// Something that can list and watch your objects.
@@ -64,6 +70,9 @@ type Config struct {
 	// * The client InOrderInformersBatchProcess feature gate must be enabled
 	//
 	// If any of those are false, Process is used and no batch processing is done.
+	//
+	// 批量模式的前提还包括 InOrderInformers：事件必须已按序到达，否则
+	// 批量应用 Delta 会破坏对象最终状态。
 	ProcessBatch ProcessBatchFunc
 
 	// ObjectType is an example object of the type this controller is
@@ -74,6 +83,8 @@ type Config struct {
 	ObjectDescription string
 
 	// FullResyncPeriod is the period at which ShouldResync is considered.
+	//
+	// 只决定何时询问 ShouldResync，本身不会强制重放全部对象。
 	FullResyncPeriod time.Duration
 
 	// MinWatchTimeout, if set, will define the minimum timeout for watch requests send
@@ -98,21 +109,35 @@ type Config struct {
 	WatchErrorHandlerWithContext WatchErrorHandlerWithContext
 
 	// WatchListPageSize is the requested chunk size of initial and relist watch lists.
+	//
+	// 设为 0 表示使用服务端默认值；分块过小会增加往返次数。
 	WatchListPageSize int64
 }
 
 // ShouldResyncFunc is a type of function that indicates if a reflector should perform a
 // resync or not. It can be used by a shared informer to support multiple event handlers with custom
 // resync periods.
+//
+// 共享 informer 的多个 handler 可能要求不同周期，因此返回 bool 而非固定周期。
 type ShouldResyncFunc func() bool
 
 // ProcessFunc processes a single object.
+//
+// obj 通常是 Deltas（同一个键的多次变更合并），isInInitialList 表示该对象是否
+// 来自 informer 的首次全量列表。
 type ProcessFunc func(obj interface{}, isInInitialList bool) error
 
 // ProcessBatchFunc processes multiple objects in batch.
 // The deltas must not contain multiple entries for the same object.
+//
+// 同一批次内同一对象只出现一次，是保证批量事务语义的前提。
 type ProcessBatchFunc func(deltas []Delta, isInInitialList bool) error
 
+// controller 是 Controller 的默认实现，持有 Reflector 供 LastSyncResourceVersion 使用。
+//
+// reflector 在 RunWithContext 中创建，故用读写锁保护，允许其他 goroutine
+// 并发读取其同步进度。
+//
 // `*controller` implements Controller
 type controller struct {
 	config         Config
@@ -151,11 +176,15 @@ type Controller interface {
 
 	// LastSyncResourceVersion delegates to the Reflector when there
 	// is one, otherwise returns the empty string
+	//
+	// Reflector 尚未创建（Run 之前）时返回空串，调用方不能把它当作有效的
+	// resourceVersion 使用。
 	LastSyncResourceVersion() string
 }
 
 // New makes a new Controller from the given Config.
 func New(c *Config) Controller {
+	// 复制 Config 值，避免调用方在 Run 之前修改配置导致数据竞争。
 	ctlr := &controller{
 		config: *c,
 		clock:  &clock.RealClock{},
@@ -171,6 +200,8 @@ func (c *controller) Run(stopCh <-chan struct{}) {
 // RunWithContext implements [Controller.RunWithContext].
 func (c *controller) RunWithContext(ctx context.Context) {
 	defer utilruntime.HandleCrashWithContext(ctx)
+	// 上下文结束时关闭 Queue，让阻塞在 Pop 上的消费者退出；
+	// 关闭后 Pop 返回 ErrFIFOClosed，processLoop 据此结束。
 	go func() {
 		<-ctx.Done()
 		c.config.Queue.Close()
@@ -190,6 +221,8 @@ func (c *controller) RunWithContext(ctx context.Context) {
 	)
 	r.ShouldResync = c.config.ShouldResync
 	r.WatchListPageSize = c.config.WatchListPageSize
+	// 优先使用旧的无上下文 handler；两者都设置时新 handler 被忽略，
+	// 这是为保持既有配置行为不变。
 	if c.config.WatchErrorHandler != nil {
 		r.watchErrorHandler = func(_ context.Context, r *Reflector, err error) {
 			c.config.WatchErrorHandler(r, err)
@@ -198,6 +231,7 @@ func (c *controller) RunWithContext(ctx context.Context) {
 		r.watchErrorHandler = c.config.WatchErrorHandlerWithContext
 	}
 
+	// 先发布 reflector 再启动，保证 LastSyncResourceVersion 能观察到它。
 	c.reflectorMutex.Lock()
 	c.reflector = r
 	c.reflectorMutex.Unlock()
@@ -206,6 +240,8 @@ func (c *controller) RunWithContext(ctx context.Context) {
 
 	wg.StartWithContext(ctx, r.RunWithContext)
 
+	// processLoop 内部自行处理上下文取消；外层 Until 以 1 秒间隔重入，
+	// 用于在异常返回后继续消费队列。
 	wait.UntilWithContext(ctx, c.processLoop, time.Second)
 	wg.Wait()
 }
@@ -222,6 +258,7 @@ func (c *controller) HasSyncedChecker() DoneChecker {
 	return c.config.Queue.HasSyncedChecker()
 }
 
+// LastSyncResourceVersion 返回 Reflector 最近一次成功同步的 resourceVersion。
 func (c *controller) LastSyncResourceVersion() string {
 	c.reflectorMutex.RLock()
 	defer c.reflectorMutex.RUnlock()
@@ -236,6 +273,8 @@ func (c *controller) LastSyncResourceVersion() string {
 // to make sure that we don't end up processing the same object multiple times
 // concurrently.
 func (c *controller) processLoop(ctx context.Context) {
+	// 批量能力在进入循环前判定一次，避免每次 Pop 都做接口断言和门控查询；
+	// 三个条件缺一不可，否则退回逐条处理。
 	useBatchProcess := false
 	batchQueue, ok := c.config.Queue.(QueueWithBatch)
 	if ok && c.config.ProcessBatch != nil && clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.InOrderInformersBatchProcess) {
@@ -248,12 +287,14 @@ func (c *controller) processLoop(ctx context.Context) {
 		default:
 			var err error
 			if useBatchProcess {
+				// PopBatch 在内部循环取队首连续批次，并保证同对象顺序。
 				err = batchQueue.PopBatch(c.config.ProcessBatch, PopProcessFunc(c.config.Process))
 			} else {
 				// otherwise fallback to non-batch process behavior
 				_, err = c.config.Pop(PopProcessFunc(c.config.Process))
 			}
 			if err != nil {
+				// 队列关闭是正常退出路径，其他错误交给上层 Until 重试。
 				if errors.Is(err, ErrFIFOClosed) {
 					return
 				}
@@ -278,6 +319,9 @@ func (c *controller) processLoop(ctx context.Context) {
 //     it will get an object of type DeletedFinalStateUnknown. This can
 //     happen if the watch is closed and misses the delete event and we don't
 //     notice the deletion until the subsequent re-list.
+//
+// handler 在 informer 自己的协程中串行调用；任何阻塞都会拖慢整个缓存同步，
+// 耗时操作应转交工作队列。isInInitialList 仅对 OnAdd 有意义。
 type ResourceEventHandler interface {
 	OnAdd(obj interface{}, isInInitialList bool)
 	OnUpdate(oldObj, newObj interface{})
@@ -298,6 +342,9 @@ type Object interface {
 }
 
 // TypedResourceEventHandler is a type-safe variant of ResourceEventHandler.
+//
+// T 必须是可比较的具名对象指针（见 Object），这样编译器能阻止把错误类型
+// 传入 handler，同时保留与未类型化版本相同的事件顺序语义。
 type TypedResourceEventHandler[T Object] interface {
 	OnAdd(obj T, isInInitialList bool)
 	OnUpdate(oldObj, newObj T)
@@ -344,6 +391,9 @@ type DeletedObject[T Object] struct {
 // cannot fail because T is guaranteed to have a name and namespace and
 // the key of FinalStateUnknown, if invalid, is simply treated as a
 // name without a namespace.
+//
+// 优先信任 FinalStateUnknown.Key：它来自缓存索引，即使对象内容已过期也
+// 仍能唯一标识被删除的对象。
 func (d DeletedObject[T]) GetObjectName() ObjectName {
 	if d.FinalStateUnknown != nil {
 		// Same splitting as SplitMetaNamespaceKey and ParseObjectName,
@@ -388,6 +438,9 @@ func (d DeletedObject[T]) GetNamespace() string {
 //
 // This is a type-safe variant of [DeletionHandlingMetaNamespaceKeyFunc]
 // which cannot fail because T is guaranteed to have a name and namespace.
+//
+// 编码规则与 MetaNamespaceKeyFunc 一致：有命名空间时为 namespace/name，
+// 否则仅为 name。
 func (d DeletedObject[T]) GetKey() string {
 	if d.FinalStateUnknown != nil {
 		return d.FinalStateUnknown.Key
@@ -438,6 +491,9 @@ func (r ResourceEventHandlerFuncs) OnDelete(obj interface{}) {
 	}
 }
 
+// TypedResourceEventHandlerFuncs 是 TypedResourceEventHandler 的函数适配器。
+//
+// 与未类型化版本相同：未设置的函数会被跳过，因此可以只关心部分事件。
 type TypedResourceEventHandlerFuncs[T Object] struct {
 	AddFunc    func(obj T)
 	UpdateFunc func(oldObj, newObj T)
@@ -494,6 +550,8 @@ func (r ResourceEventHandlerDetailedFuncs) OnDelete(obj interface{}) {
 	}
 }
 
+// TypedResourceEventHandlerDetailedFuncs 是 TypedResourceEventHandler 的函数适配器，
+// 且 AddFunc 带 isInInitialList，用于向上游传播 HasSynced。
 type TypedResourceEventHandlerDetailedFuncs[T Object] struct {
 	AddFunc    func(obj T, isInInitialList bool)
 	UpdateFunc func(oldObj, newObj T)
@@ -525,6 +583,9 @@ func (r TypedResourceEventHandlerDetailedFuncs[T]) OnDelete(obj DeletedObject[T]
 // that starts passing the filter after an update is considered an add, and an
 // object that stops passing the filter after an update is considered a delete.
 // Like the handlers, the filter MUST NOT modify the objects it is given.
+//
+// 这种“过滤状态迁移”设计让下游 handler 只需处理自己关心的对象，
+// 不必自行维护成员集合。
 type FilteringResourceEventHandler struct {
 	FilterFunc func(obj interface{}) bool
 	Handler    ResourceEventHandler
@@ -540,6 +601,7 @@ func (r FilteringResourceEventHandler) OnAdd(obj interface{}, isInInitialList bo
 
 // OnUpdate ensures the proper handler is called depending on whether the filter matches
 func (r FilteringResourceEventHandler) OnUpdate(oldObj, newObj interface{}) {
+	// 分别计算新旧对象的过滤结果，以识别进入/离开过滤集合的边界。
 	newer := r.FilterFunc(newObj)
 	older := r.FilterFunc(oldObj)
 	switch {
@@ -579,6 +641,7 @@ func (r TypedFilteringResourceEventHandler[T]) OnAdd(obj T, isInInitialList bool
 
 // OnUpdate ensures the proper handler is called depending on whether the filter matches
 func (r TypedFilteringResourceEventHandler[T]) OnUpdate(oldObj, newObj T) {
+	// 与未类型化版本一致，用新旧对象各自是否通过过滤器来决定事件类型。
 	newer := r.FilterFunc(newObj)
 	older := r.FilterFunc(oldObj)
 	switch {
@@ -607,6 +670,9 @@ func (r TypedFilteringResourceEventHandler[T]) OnDelete(obj DeletedObject[T]) {
 // DeletionHandlingMetaNamespaceKeyFunc checks for
 // DeletedFinalStateUnknown objects before calling
 // MetaNamespaceKeyFunc.
+//
+// DeletedFinalStateUnknown 携带的 Key 已经是计算好的索引键，直接复用可避免
+// 对可能已失效的对象再次取元数据。
 func DeletionHandlingMetaNamespaceKeyFunc(obj interface{}) (string, error) {
 	if d, ok := obj.(DeletedFinalStateUnknown); ok {
 		return d.Key, nil
@@ -625,6 +691,9 @@ func DeletionHandlingObjectToName(obj interface{}) (ObjectName, error) {
 }
 
 // InformerOptions configure a Reflector.
+//
+// 这些选项最终被翻译成 Queue/Reflector 的配置；字符串化的 Identifier 用于
+// 指标标签，因此生产代码应尽量设置。
 type InformerOptions struct {
 	// Logger, if not nil, is used instead of klog.Background() for logging.
 	Logger *klog.Logger
@@ -645,6 +714,9 @@ type InformerOptions struct {
 	// This is useful for synchronizing objects that configure external resources
 	// (e.g. configure cloud provider functionalities).
 	// Optional - if unset, store resyncing is not happening periodically.
+	//
+	// 注意这是“本地重放”而非重新 List：事件中的对象来自缓存，resourceVersion
+	// 未必变化，handler 必须幂等。
 	ResyncPeriod time.Duration
 
 	// MinWatchTimeout, if set, will define the minimum timeout for watch requests send
@@ -677,8 +749,12 @@ type InformerOptions struct {
 // while also providing event notifications. You should only used the returned
 // Store for Get/List operations; Add/Modify/Deletes will cause the event
 // notifications to be faulty.
+//
+// 返回的 Store 与 controller 共享同一个底层缓存；若调用方直接写入 Store，
+// 会绕过 Queue 的事件合并逻辑，导致 handler 收到不一致的通知。
 func NewInformerWithOptions(options InformerOptions) (Store, Controller) {
 	var clientState Store
+	// 只有需要按字段/标签查询时才构建 Indexer，普通 Store 更轻量。
 	if options.Indexers == nil {
 		clientState = NewStore(DeletionHandlingMetaNamespaceKeyFunc, WithStoreMetrics(options.Identifier, options.InformerMetricsProvider))
 	} else {
@@ -820,6 +896,9 @@ func NewTransformingIndexerInformer(
 
 // Multiplexes updates in the form of a list of Deltas into a Store, and informs
 // a given handler of events OnUpdate, OnAdd, OnDelete
+//
+// Delta 中的对象可能来自本地重放，因此“更新”不保证内容变化；handler 需
+// 自行按 resourceVersion 或语义去重。
 func processDeltas(
 	logger klog.Logger,
 	// Object which receives event notifications from the given deltas
@@ -835,6 +914,8 @@ func processDeltas(
 
 		switch d.Type {
 		case ReplacedAll:
+			// 原子替换：所有变更被封装在一个事件中，先整体落盘再回调，
+			// 避免 handler 看到中间状态。
 			info, ok := obj.(ReplacedAllInfo)
 			if !ok {
 				return fmt.Errorf("ReplacedAll did not contain ReplacedAllInfo: %T", obj)
@@ -843,6 +924,7 @@ func processDeltas(
 				return err
 			}
 		case SyncAll:
+			// SyncAll 不改变 Store，只是把所有现存对象当作一次更新重放。
 			_, ok := obj.(SyncAllInfo)
 			if !ok {
 				return fmt.Errorf("SyncAll did not contain SyncAllInfo: %T", obj)
@@ -853,6 +935,8 @@ func processDeltas(
 			}
 			return nil
 		case Sync, Replaced, Added, Updated:
+			// 以 Store 中是否已有该键来区分新增与更新：首次 List 得到的所有
+			// 对象都会走 OnAdd，并携带 isInInitialList。
 			if old, exists, err := clientState.Get(obj); err == nil && exists {
 				if err := clientState.Update(obj); err != nil {
 					return err
@@ -865,11 +949,13 @@ func processDeltas(
 				handler.OnAdd(obj, isInInitialList)
 			}
 		case Deleted:
+			// 先删缓存再通知，保证 OnDelete 中查缓存看不到已删除对象。
 			if err := clientState.Delete(obj); err != nil {
 				return err
 			}
 			handler.OnDelete(obj)
 		case Bookmark:
+			// Bookmark 只推进 resourceVersion，不产生用户可见事件。
 			info, ok := obj.(BookmarkInfo)
 			if !ok {
 				return fmt.Errorf("bookmark delta did not contain BookmarkInfo: %T", obj)
@@ -902,6 +988,8 @@ func processDeltasInBatch(
 	callbacks := make([]func(), 0)
 	txnStore, txnSupported := clientState.(TransactionStore)
 	if !txnSupported {
+		// Store 不支持事务时退化为逐条处理，牺牲原子性但保持功能可用；
+		// 错误聚合后一次性返回，避免静默丢事件。
 		var errs []error
 		for _, delta := range deltas {
 			if err := processDeltas(logger, handler, clientState, Deltas{delta}, isInInitialList, keyFunc); err != nil {
@@ -918,6 +1006,8 @@ func processDeltasInBatch(
 		obj := d.Object
 		switch d.Type {
 		case Sync, Replaced, Added, Updated:
+			// 事务内查询 Store 仍能看到提交前状态，因此 old 是该批次的“前像”；
+			// 回调延迟到事务提交后执行，避免 handler 看到未提交数据。
 			// it will only return one old object for each because items are unique
 			if old, exists, err := clientState.Get(obj); err == nil && exists {
 				txn := Transaction{
@@ -954,6 +1044,7 @@ func processDeltasInBatch(
 
 	err := txnStore.Transaction(txns...)
 	if err != nil {
+		// 部分成功时只对已提交的条目触发回调，保证回调与缓存状态一致。
 		// if txn had error, only execute the callbacks for the successful ones
 		for _, i := range err.SuccessfulIndices {
 			if i < len(callbacks) {
@@ -969,6 +1060,10 @@ func processDeltasInBatch(
 	return nil
 }
 
+// processReplacedAllInfo 处理一次 ReplacedAll：先比对旧集合算出删除与新增/更新，
+// 再整体替换 Store，最后按“先删除、后增改”的顺序回调。
+//
+// 这个顺序与 RealFIFO#Replace 保持一致，下游 handler 可以依赖相同语义。
 func processReplacedAllInfo(logger klog.Logger, handler ResourceEventHandler, info ReplacedAllInfo, clientState Store, isInInitialList bool, keyFunc KeyFunc) error {
 	var deletions []DeletedFinalStateUnknown
 	type replacement struct {
@@ -1030,6 +1125,7 @@ func newInformer(clientState Store, options InformerOptions, keyFunc KeyFunc) Co
 	if options.Logger != nil {
 		logger = *options.Logger
 	}
+	// FIFO 会为日志附加自身名称，因此这里接收返回的 logger 供 Process 使用。
 	logger, fifo := newQueueFIFO(logger, options.ObjectType, clientState, options.Transform, options.Identifier, options.InformerMetricsProvider)
 
 	cfg := &Config{
@@ -1060,6 +1156,9 @@ func newInformer(clientState Store, options InformerOptions, keyFunc KeyFunc) Co
 // It returns the FIFO and the logger used by the FIFO.
 // That logger includes the name used for the FIFO,
 // in contrast to the logger which was passed in.
+//
+// 新实现（RealFIFO）按序交付事件；旧 DeltaFIFO 为兼容保留，关闭门控时仍会
+// 使用，因此两条路径必须保持可观察行为一致。
 func newQueueFIFO(logger klog.Logger, objectType any, clientState Store, transform TransformFunc, identifier InformerNameAndResource, metricsProvider InformerMetricsProvider) (klog.Logger, Queue) {
 	if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.InOrderInformers) {
 		options := RealFIFOOptions{
@@ -1077,6 +1176,7 @@ func newQueueFIFO(logger klog.Logger, objectType any, clientState Store, transfo
 			options.UnlockWhileProcessing = clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.UnlockWhileProcessingFIFO)
 			options.EmitDeltaTypeBookmark = true
 		} else {
+			// 非原子模式下 FIFO 需要 KnownObjects 来计算 Resync/Replace 的增量。
 			options.KnownObjects = clientState
 		}
 		f := NewRealFIFOWithOptions(options)

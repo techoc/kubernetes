@@ -41,6 +41,8 @@ func getDecoder() runtime.Decoder {
 	return directCodecFactory.DecoderToVersion(jsonSerializer, v1.SchemeGroupVersion)
 }
 
+// TestDecoder 对每种 watch 事件类型验证“编码 -> 流式解码”的往返一致性，
+// 并确认流关闭后继续 Decode 会返回错误而不是阻塞。
 func TestDecoder(t *testing.T) {
 	table := []watch.EventType{watch.Added, watch.Deleted, watch.Modified, watch.Error, watch.Bookmark}
 
@@ -105,6 +107,8 @@ func TestDecoder(t *testing.T) {
 	}
 }
 
+// TestDecoder_SourceClose 验证底层 pipe 被关闭时 Decode 能及时返回错误，
+// 而不是永久阻塞（watch 连接断开是常见场景）。
 func TestDecoder_SourceClose(t *testing.T) {
 	out, in := io.Pipe()
 	decoder := NewDecoder(streaming.NewDecoder(out, getDecoder()), getDecoder())

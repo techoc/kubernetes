@@ -15,6 +15,8 @@ limitations under the License.
 */
 
 // Package exec contains helper utilities for exec credential plugins.
+// 本包为 exec 凭据插件（kubeconfig 中 user.exec 指定的外部命令）提供辅助函数：
+// 插件通过环境变量 KUBERNETES_EXEC_INFO 拿到集群信息，再据此访问 API server。
 package exec
 
 import (
@@ -30,12 +32,14 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// execInfoEnv 是 transport 向 exec 插件传递集群信息的约定环境变量名。
 const execInfoEnv = "KUBERNETES_EXEC_INFO"
 
 var scheme = runtime.NewScheme()
 var codecs = serializer.NewCodecFactory(scheme)
 
 func init() {
+	// 注册所有已知的 client.authentication.k8s.io 版本，使插件可按任意受支持版本反序列化。
 	install.Install(scheme)
 }
 
@@ -67,11 +71,13 @@ func LoadExecCredentialFromEnv() (runtime.Object, *rest.Config, error) {
 // Note that the returned rest.Config will use anonymous authentication, since the exec plugin has
 // not returned credentials for this cluster yet.
 func LoadExecCredential(data []byte) (runtime.Object, *rest.Config, error) {
+	// 用 UniversalDeserializer 避免预先确定版本；之后再显式转换到内部类型。
 	obj, gvk, err := codecs.UniversalDeserializer().Decode(data, nil, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("decode: %w", err)
 	}
 
+	// 仅接受 ExecCredential，防止插件误传其他资源类型。
 	expectedGK := schema.GroupKind{
 		Group: clientauthentication.SchemeGroupVersion.Group,
 		Kind:  "ExecCredential",
@@ -91,6 +97,7 @@ func LoadExecCredential(data []byte) (runtime.Object, *rest.Config, error) {
 		return nil, nil, fmt.Errorf("cannot convert to ExecCredential: %w", err)
 	}
 
+	// 缺少集群信息时插件无法自行访问 API server，直接返回错误而不是半成品配置。
 	if execCredential.Spec.Cluster == nil {
 		return nil, nil, errors.New("ExecCredential does not contain cluster information")
 	}

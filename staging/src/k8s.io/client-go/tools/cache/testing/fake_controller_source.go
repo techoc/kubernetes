@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package framework provides fake list/watch sources used by cache and reflector tests.
+//
+// Package framework 提供用于测试的假数据源：它同时实现 List 与 Watch，
+// 可模拟资源版本、事件丢失、连接中断与过期（ResourceExpired）等场景。
 package framework
 
 import (
@@ -32,6 +36,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
+// NewFakeControllerSource 创建通用数据源；100 的缓冲区在测试规模下足够，
+// 满时阻塞发送端（WaitIfChannelFull）以模拟背压。
 func NewFakeControllerSource() *FakeControllerSource {
 	return &FakeControllerSource{
 		Items:       map[nnu]runtime.Object{},
@@ -39,6 +45,7 @@ func NewFakeControllerSource() *FakeControllerSource {
 	}
 }
 
+// NewFakePVControllerSource 创建只返回 PersistentVolumeList 的假数据源。
 func NewFakePVControllerSource() *FakePVControllerSource {
 	return &FakePVControllerSource{
 		FakeControllerSource{
@@ -47,6 +54,7 @@ func NewFakePVControllerSource() *FakePVControllerSource {
 		}}
 }
 
+// NewFakePVCControllerSource 创建只返回 PersistentVolumeClaimList 的假数据源。
 func NewFakePVCControllerSource() *FakePVCControllerSource {
 	return &FakePVCControllerSource{
 		FakeControllerSource{
@@ -56,6 +64,9 @@ func NewFakePVCControllerSource() *FakePVCControllerSource {
 }
 
 // FakeControllerSource implements listing/watching for testing.
+//
+// 所有字段由 lock 保护；changes 保留每个 resourceVersion 对应的事件，
+// 使从任意较新 RV 开始的 watch 都能重放。
 type FakeControllerSource struct {
 	lock        sync.RWMutex
 	Items       map[nnu]runtime.Object
@@ -67,15 +78,18 @@ type FakeControllerSource struct {
 	ListError error
 }
 
+// FakePVControllerSource 复用通用逻辑，仅定制 List 返回的类型。
 type FakePVControllerSource struct {
 	FakeControllerSource
 }
 
+// FakePVCControllerSource 复用通用逻辑，仅定制 List 返回的类型。
 type FakePVCControllerSource struct {
 	FakeControllerSource
 }
 
 // namespace, name, uid to be used as a key.
+// 键包含 UID：同名对象删除后重建会被视为不同对象。
 type nnu struct {
 	namespace, name string
 	uid             types.UID
@@ -83,6 +97,9 @@ type nnu struct {
 
 // ResetWatch simulates connection problems; creates a new Broadcaster and flushes
 // the change queue so that clients have to re-list and watch.
+//
+// 清空 changes 后，旧 RV 的 watch 会收到 ResourceExpired，正是测试 Reflector
+// 重新 list 的路径。
 func (f *FakeControllerSource) ResetWatch() {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -112,6 +129,8 @@ func (f *FakeControllerSource) Delete(lastValue runtime.Object) {
 // AddDropWatch adds an object to the set but forgets to send an add event to
 // watchers.
 // obj's ResourceVersion is set.
+//
+// watchProbability 为 0，用于模拟事件丢失：对象已进入存储但 watch 客户端看不到。
 func (f *FakeControllerSource) AddDropWatch(obj runtime.Object) {
 	f.Change(watch.Event{Type: watch.Added, Object: obj}, 0)
 }
@@ -130,12 +149,16 @@ func (f *FakeControllerSource) DeleteDropWatch(lastValue runtime.Object) {
 	f.Change(watch.Event{Type: watch.Deleted, Object: lastValue}, 0)
 }
 
+// key 生成对象在 Items 中的索引。
 func (f *FakeControllerSource) key(accessor metav1.Object) nnu {
 	return nnu{accessor.GetNamespace(), accessor.GetName(), accessor.GetUID()}
 }
 
 // Change records the given event (setting the object's resource version) and
 // sends a watch event with the specified probability.
+//
+// 先更新存储与 changes 再广播，保证 watch 客户端收到事件时状态已可见；
+// watchProbability 用于刻意丢弃事件，以测试客户端的重新同步逻辑。
 func (f *FakeControllerSource) Change(e watch.Event, watchProbability float64) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -161,6 +184,7 @@ func (f *FakeControllerSource) Change(e watch.Event, watchProbability float64) {
 	}
 }
 
+// getListItemsLocked 调用方必须持有读锁；返回深拷贝避免客户端修改内部状态。
 func (f *FakeControllerSource) getListItemsLocked() ([]runtime.Object, error) {
 	list := make([]runtime.Object, 0, len(f.Items))
 	for _, obj := range f.Items {
@@ -194,6 +218,7 @@ func (f *FakeControllerSource) List(options metav1.ListOptions) (runtime.Object,
 	if err != nil {
 		return nil, err
 	}
+	// list 的 RV 必须是当前最新值，否则 watch 会从错误的起点开始。
 	listAccessor.SetResourceVersion(strconv.Itoa(f.lastRV))
 	return listObj, nil
 }
@@ -240,6 +265,9 @@ func (f *FakePVCControllerSource) List(options metav1.ListOptions) (runtime.Obje
 
 // Watch returns a watch, which will be pre-populated with all changes
 // after resourceVersion.
+//
+// 三种情况：RV 落后则重放尚未被 flush 的事件；RV 过旧返回 ResourceExpired；
+// RV 在未来则直接报错（真实 apiserver 也不会接受）。
 func (f *FakeControllerSource) Watch(options metav1.ListOptions) (watch.Interface, error) {
 	f.lock.RLock()
 	defer f.lock.RUnlock()

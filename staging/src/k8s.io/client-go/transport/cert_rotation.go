@@ -34,10 +34,13 @@ import (
 const workItemKey = "key"
 
 // CertCallbackRefreshDuration is exposed so that integration tests can crank up the reload speed.
+// 轮询证书回调的周期；导出以便集成测试调小等待时间。
 var CertCallbackRefreshDuration = 5 * time.Minute
 
+// reloadFunc 由 GetClientCertificate 调用，返回最新的客户端证书。
 type reloadFunc func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
 
+// dynamicClientCert 实现 TLS 客户端证书的周期性重载，并在证书变化时关闭旧连接以促成重新握手。
 type dynamicClientCert struct {
 	logger     klog.Logger
 	clientCert *tls.Certificate
@@ -47,9 +50,11 @@ type dynamicClientCert struct {
 	connDialer *connrotation.Dialer
 
 	// queue only ever has one item, but it has nice error handling backoff/retry semantics
+	// 队列中始终只有一项；复用它是为了获得现成的限速退避重试语义。
 	queue workqueue.TypedRateLimitingInterface[string]
 }
 
+// certRotatingDialer 构造动态证书控制器，并包装 dial 以支持在证书轮换时关闭所有连接。
 func certRotatingDialer(logger klog.Logger, reload reloadFunc, dial utilnet.DialFunc) *dynamicClientCert {
 	d := &dynamicClientCert{
 		logger:     logger,
@@ -85,11 +90,13 @@ func (c *dynamicClientCert) loadClientCert() (*tls.Certificate, error) {
 	c.certMtx.Unlock()
 
 	// The first certificate requested is not a rotation that is worth closing connections for
+	// 首次获取证书时没有旧连接需要关闭，避免无谓地打断启动阶段的连接。
 	if !haveCert {
 		return cert, nil
 	}
 
 	c.logger.V(1).Info("Certificate rotation detected, shutting down client connections to start using new credentials")
+	// 仅替换证书不够：已有连接仍使用旧证书，必须关闭以触发新连接在握手时使用新证书。
 	c.connDialer.CloseAll()
 
 	return cert, nil
@@ -105,6 +112,7 @@ func certsEqual(left, right *tls.Certificate) bool {
 		return false
 	}
 
+	// 用 DeepEqual 比较私钥：私钥可能是 *rsa.PrivateKey 等含内部状态的类型，不宜逐字节比较。
 	if !reflect.DeepEqual(left.PrivateKey, right.PrivateKey) {
 		return false
 	}
@@ -120,6 +128,7 @@ func certsEqual(left, right *tls.Certificate) bool {
 	return true
 }
 
+// byteMatrixEqual 比较二维字节切片，长度或任一元素不同即视为不同。
 func byteMatrixEqual(left, right [][]byte) bool {
 	if len(left) != len(right) {
 		return false
@@ -141,6 +150,7 @@ func (c *dynamicClientCert) run(stopCh <-chan struct{}) {
 	c.logger.V(3).Info("Starting client certificate rotation controller")
 	defer c.logger.V(3).Info("Shutting down client certificate rotation controller")
 
+	// worker 从队列取出重载任务；轮询器周期性投递任务。
 	go wait.Until(c.runWorker, time.Second, stopCh)
 
 	go wait.PollImmediateUntil(CertCallbackRefreshDuration, func() (bool, error) {
@@ -151,11 +161,13 @@ func (c *dynamicClientCert) run(stopCh <-chan struct{}) {
 	<-stopCh
 }
 
+// runWorker 持续处理队列中的重载任务，直到队列被关闭。
 func (c *dynamicClientCert) runWorker() {
 	for c.processNextWorkItem() {
 	}
 }
 
+// processNextWorkItem 取出一个重载任务；成功则忘记重试计数，失败则按限速策略重新入队。
 func (c *dynamicClientCert) processNextWorkItem() bool {
 	dsKey, quit := c.queue.Get()
 	if quit {
@@ -175,6 +187,8 @@ func (c *dynamicClientCert) processNextWorkItem() bool {
 	return true
 }
 
+// GetClientCertificate 满足 tls.Config.GetClientCertificate 回调签名：每次握手时按需重载证书。
+// 这样即使后台轮询尚未触发，新建连接也能拿到最新证书。
 func (c *dynamicClientCert) GetClientCertificate(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 	return c.loadClientCert()
 }

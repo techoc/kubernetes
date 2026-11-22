@@ -44,6 +44,9 @@ import (
 	testutil "k8s.io/client-go/util/testing"
 )
 
+// TestCachedDiscoveryClient_Fresh 验证 Fresh 的判定与文件缓存复用：
+// 同一实例调用只打一次后端；用同一目录新建实例后 Fresh 为 false（走了磁盘缓存，
+// 不算“新鲜”）；Invalidate 后重新请求后端。
 func TestCachedDiscoveryClient_Fresh(t *testing.T) {
 	assert := assert.New(t)
 
@@ -88,6 +91,8 @@ func TestCachedDiscoveryClient_Fresh(t *testing.T) {
 	assert.Equal(2, c.resourceCalls)
 }
 
+// TestNewCachedDiscoveryClient_TTL 验证 TTL 过期后会重新请求后端，
+// 这里用 1ns TTL 让缓存必然过期。
 func TestNewCachedDiscoveryClient_TTL(t *testing.T) {
 	assert := assert.New(t)
 
@@ -106,6 +111,8 @@ func TestNewCachedDiscoveryClient_TTL(t *testing.T) {
 	assert.Equal(2, c.groupCalls)
 }
 
+// TestNewCachedDiscoveryClient_PathPerm 验证缓存目录为 0750、文件为 0660：
+// 既防止其他用户读取集群信息，又允许同组进程共享缓存。
 func TestNewCachedDiscoveryClient_PathPerm(t *testing.T) {
 	assert := assert.New(t)
 
@@ -134,6 +141,9 @@ func TestNewCachedDiscoveryClient_PathPerm(t *testing.T) {
 
 // Tests that schema instances returned by openapi cached and returned after
 // successive calls
+//
+// 验证 OpenAPI v3 的三级缓存：实例内存 -> 磁盘 HTTP 缓存 -> 服务端。Invalidate
+// 只清 discovery 缓存，不应使已落盘的 OpenAPI schema 失效。
 func TestOpenAPIDiskCache(t *testing.T) {
 	// Create discovery cache dir (unused)
 	discoCache, err := os.MkdirTemp("", "test-cached-discovery-client-disco-*")
@@ -223,6 +233,9 @@ func TestOpenAPIDiskCache(t *testing.T) {
 }
 
 // Tests function "ServerGroups" when the "unaggregated" discovery is returned.
+//
+// 覆盖旧版 /api + /apis 发现格式：多 group 的多个版本应被合并到同一 group 下，
+// 且只写出一份 servergroups.json。
 func TestCachedDiscoveryClientUnaggregatedServerGroups(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -388,6 +401,9 @@ func TestCachedDiscoveryClientUnaggregatedServerGroups(t *testing.T) {
 }
 
 // Aggregated discovery format returned
+//
+// 覆盖 apidiscovery/v2 聚合格式：首个版本即 preferred version；/api 为空时
+// 只应出现 /apis 中的 group；缓存同样只生成一份 servergroups.json。
 func TestCachedDiscoveryClientAggregatedServerGroups(t *testing.T) {
 	tests := []struct {
 		name                      string
@@ -683,6 +699,7 @@ func TestCachedDiscoveryClientAggregatedServerGroups(t *testing.T) {
 	}
 }
 
+// numFilesFound 统计目录树下指定文件名出现次数，用于确认缓存文件没有重复写入。
 func numFilesFound(dir string, filename string) (int, error) {
 	numFound := 0
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -700,6 +717,7 @@ func numFilesFound(dir string, filename string) (int, error) {
 	return numFound, nil
 }
 
+// fakeDiscoveryClient 是带调用计数的 discovery 实现，用来验证缓存是否命中。
 type fakeDiscoveryClient struct {
 	groupCalls    int
 	resourceCalls int
@@ -793,6 +811,7 @@ func (d *fakeDiscoveryClient) WithLegacy() discovery.DiscoveryInterface {
 	panic("unimplemented")
 }
 
+// groupNamesFromList 提取 group 名，保持顺序以便与期望值比较。
 func groupNamesFromList(groups *metav1.APIGroupList) []string {
 	result := []string{}
 	for _, group := range groups.Groups {
@@ -801,6 +820,7 @@ func groupNamesFromList(groups *metav1.APIGroupList) []string {
 	return result
 }
 
+// preferredVersionsFromList 提取每个 group 的首选 GroupVersion。
 func preferredVersionsFromList(groups *metav1.APIGroupList) []string {
 	result := []string{}
 	for _, group := range groups.Groups {
@@ -810,6 +830,7 @@ func preferredVersionsFromList(groups *metav1.APIGroupList) []string {
 	return result
 }
 
+// groupVersionsFromGroups 展平所有 group 的所有 GroupVersion。
 func groupVersionsFromGroups(groups *metav1.APIGroupList) []string {
 	result := []string{}
 	for _, group := range groups.Groups {
