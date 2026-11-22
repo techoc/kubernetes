@@ -22,6 +22,8 @@ import (
 	"testing"
 )
 
+// TestRunner 验证 Runner 的 Start/Stop 会启动并正常停止所有工作函数：
+// 每个函数都记录启动与停止事件，共应产生 20 条事件。
 func TestRunner(t *testing.T) {
 	var (
 		lock   sync.Mutex

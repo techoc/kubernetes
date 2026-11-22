@@ -14,15 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package slice provides utility methods for common operations on slices.
+// Package slice 提供切片常用操作的工具函数。
 package slice
 
 import (
 	"slices"
 )
 
-// CopyStrings copies the contents of the specified string slice
-// into a new slice.
+// CopyStrings 将指定字符串切片的内容复制到一个新切片中。
 //
 // Deprecated: Use slices.Clone instead.
 //
@@ -31,8 +30,8 @@ func CopyStrings(s []string) []string {
 	return slices.Clone(s)
 }
 
-// SortStrings sorts the specified string slice in place. It returns the same
-// slice that was provided in order to facilitate method chaining.
+// SortStrings 原地排序指定的字符串切片。
+// 返回传入的同一个切片，方便链式调用。
 //
 // Deprecated: Use slices.Sort instead.
 func SortStrings(s []string) []string {
@@ -40,8 +39,8 @@ func SortStrings(s []string) []string {
 	return s
 }
 
-// ContainsString checks if a given slice of strings contains the provided string.
-// If a modifier func is provided, it is called with the slice item before the comparation.
+// ContainsString 检查给定的字符串切片是否包含指定的字符串。
+// 如果提供了 modifier 函数，比较前会先用它转换切片中的元素。
 //
 // Deprecated: Use slices.ContainsFunc or slices.Contains instead.
 func ContainsString(slice []string, s string, modifier func(s string) string) bool {
@@ -54,8 +53,8 @@ func ContainsString(slice []string, s string, modifier func(s string) string) bo
 	return false
 }
 
-// RemoveString returns a newly created []string that contains all items from slice that
-// are not equal to s and modifier(s) in case modifier func is provided.
+// RemoveString 返回一个新切片，包含 slice 中所有既不等于 s、
+// 也不在经 modifier 转换后等于 s 的元素（若提供了 modifier）。
 func RemoveString(slice []string, s string, modifier func(s string) string) []string {
 	newSlice := make([]string, 0)
 	for _, item := range slice {
@@ -68,8 +67,7 @@ func RemoveString(slice []string, s string, modifier func(s string) string) []st
 		newSlice = append(newSlice, item)
 	}
 	if len(newSlice) == 0 {
-		// Sanitize for unit tests so we don't need to distinguish empty array
-		// and nil.
+		// 归一化为 nil，这样单测里就不必区分空切片和 nil。
 		newSlice = nil
 	}
 	return newSlice

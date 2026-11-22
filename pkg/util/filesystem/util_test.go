@@ -26,6 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestIsUnixDomainSocket 覆盖 Unix 套接字文件、普通文件和不存在的文件三种情况，
+// 验证检测结果与错误行为。
 func TestIsUnixDomainSocket(t *testing.T) {
 	tests := []struct {
 		label          string
@@ -71,10 +73,10 @@ func TestIsUnixDomainSocket(t *testing.T) {
 		}
 		result, err := IsUnixDomainSocket(fileToTest)
 		if test.listenOnSocket {
-			// this takes care of removing the file associated with the domain socket
+			// 关闭监听器会同时删除套接字对应的文件
 			ln.Close()
 		} else {
-			// explicitly remove regular file
+			// 普通文件需要显式删除
 			os.Remove(addr)
 		}
 		if test.expectError {
@@ -86,13 +88,15 @@ func TestIsUnixDomainSocket(t *testing.T) {
 	}
 }
 
+// TestIsCleanPath 验证 IsPathClean 对统一形式与含 ".."、"//" 等非规范路径的判断，
+// 并在 Windows 上追加盘符和反斜杠相关的用例。
 func TestIsCleanPath(t *testing.T) {
 	type Case struct {
 		path     string
 		expected bool
 	}
 
-	// Credits https://github.com/kubernetes/kubernetes/pull/124084/files#r1557566941
+	// 参考 https://github.com/kubernetes/kubernetes/pull/124084/files#r1557566941
 	cases := []Case{
 		{path: "/logs", expected: true},
 		{path: "/var/lib/something", expected: true},
@@ -105,7 +109,7 @@ func TestIsCleanPath(t *testing.T) {
 		{path: "/var/./lib/something", expected: false},
 	}
 
-	// Additional cases applicable on Windows
+	// 仅在 Windows 上适用的额外用例
 	if runtime.GOOS == "windows" {
 		cases = append(cases, []Case{
 			{path: "\\", expected: true},

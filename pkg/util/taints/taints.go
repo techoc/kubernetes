@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// package taints implements utilities for working with taints
+// Package taints 提供处理污点（taint）的工具函数。
 package taints
 
 import (
@@ -27,14 +27,15 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core/helper"
 )
 
+// 污点操作结果的类型常量。
 const (
 	MODIFIED  = "modified"
 	TAINTED   = "tainted"
 	UNTAINTED = "untainted"
 )
 
-// parseTaint parses a taint from a string, whose form must be either
-// '<key>=<value>:<effect>', '<key>:<effect>', or '<key>'.
+// parseTaint 从字符串中解析污点，格式必须为
+// '<key>=<value>:<effect>'、'<key>:<effect>' 或 '<key>' 之一。
 func parseTaint(st string) (v1.Taint, error) {
 	var taint v1.Taint
 
@@ -78,6 +79,7 @@ func parseTaint(st string) (v1.Taint, error) {
 	return taint, nil
 }
 
+// validateTaintEffect 校验污点效果是否为受支持的取值。
 func validateTaintEffect(effect v1.TaintEffect) error {
 	if effect != v1.TaintEffectNoSchedule && effect != v1.TaintEffectPreferNoSchedule && effect != v1.TaintEffectNoExecute {
 		return fmt.Errorf("invalid taint effect: %v, unsupported taint effect", effect)
@@ -86,14 +88,15 @@ func validateTaintEffect(effect v1.TaintEffect) error {
 	return nil
 }
 
-// ParseTaints takes a spec which is an array and creates slices for new taints to be added, taints to be deleted.
-// It also validates the spec. For example, the form `<key>` may be used to remove a taint, but not to add one.
+// ParseTaints 接受字符串数组形式的 spec，生成待添加和待删除污点的切片，并校验 spec。
+// 例如 `<key>` 形式只能用于删除污点，不能用于添加。
 func ParseTaints(spec []string) ([]v1.Taint, []v1.Taint, error) {
 	var taints, taintsToRemove []v1.Taint
 	uniqueTaints := map[v1.TaintEffect]sets.String{}
 
 	for _, taintSpec := range spec {
 		if strings.HasSuffix(taintSpec, "-") {
+			// 以 "-" 结尾表示删除污点，此时无需指定 value。
 			taintToRemove, err := parseTaint(strings.TrimSuffix(taintSpec, "-"))
 			if err != nil {
 				return nil, nil, err
@@ -104,15 +107,15 @@ func ParseTaints(spec []string) ([]v1.Taint, []v1.Taint, error) {
 			if err != nil {
 				return nil, nil, err
 			}
-			// validate that the taint has an effect, which is required to add the taint
+			// 添加污点必须指定 effect。
 			if len(newTaint.Effect) == 0 {
 				return nil, nil, fmt.Errorf("invalid taint spec: %v", taintSpec)
 			}
-			// validate if taint is unique by <key, effect>
+			// 按 <key, effect> 校验污点唯一性。
 			if len(uniqueTaints[newTaint.Effect]) > 0 && uniqueTaints[newTaint.Effect].Has(newTaint.Key) {
 				return nil, nil, fmt.Errorf("duplicated taints with the same key and effect: %v", newTaint)
 			}
-			// add taint to existingTaints for uniqueness check
+			// 记录已添加的污点，供后续重复检查使用。
 			if len(uniqueTaints[newTaint.Effect]) == 0 {
 				uniqueTaints[newTaint.Effect] = sets.String{}
 			}
@@ -124,7 +127,7 @@ func ParseTaints(spec []string) ([]v1.Taint, []v1.Taint, error) {
 	return taints, taintsToRemove, nil
 }
 
-// CheckIfTaintsAlreadyExists checks if the node already has taints that we want to add and returns a string with taint keys.
+// CheckIfTaintsAlreadyExists 检查节点上是否已存在待添加的污点，返回以逗号分隔的污点 key 列表。
 func CheckIfTaintsAlreadyExists(oldTaints []v1.Taint, taints []v1.Taint) string {
 	var existingTaintList = make([]string, 0)
 	for _, taint := range taints {
@@ -137,7 +140,7 @@ func CheckIfTaintsAlreadyExists(oldTaints []v1.Taint, taints []v1.Taint) string 
 	return strings.Join(existingTaintList, ",")
 }
 
-// DeleteTaintsByKey removes all the taints that have the same key to given taintKey
+// DeleteTaintsByKey 删除所有 key 与给定 taintKey 相同的污点。
 func DeleteTaintsByKey(taints []v1.Taint, taintKey string) ([]v1.Taint, bool) {
 	newTaints := []v1.Taint{}
 	deleted := false
@@ -151,7 +154,7 @@ func DeleteTaintsByKey(taints []v1.Taint, taintKey string) ([]v1.Taint, bool) {
 	return newTaints, deleted
 }
 
-// DeleteTaint removes all the taints that have the same key and effect to given taintToDelete.
+// DeleteTaint 删除所有 key 和 effect 与给定 taintToDelete 相同的污点。
 func DeleteTaint(taints []v1.Taint, taintToDelete *v1.Taint) ([]v1.Taint, bool) {
 	newTaints := []v1.Taint{}
 	deleted := false
@@ -165,9 +168,10 @@ func DeleteTaint(taints []v1.Taint, taintToDelete *v1.Taint) ([]v1.Taint, bool) 
 	return newTaints, deleted
 }
 
-// RemoveTaint tries to remove a taint from annotations list. Returns a new copy of updated Node and true if something was updated
-// false otherwise.
+// RemoveTaint 尝试从节点污点列表中移除指定污点。
+// 若有变更则返回更新后节点的副本和 true，否则返回 false。
 func RemoveTaint(node *v1.Node, taint *v1.Taint) (*v1.Node, bool, error) {
+	// 深拷贝避免修改调用方的对象。
 	newNode := node.DeepCopy()
 	nodeTaints := newNode.Spec.Taints
 	if len(nodeTaints) == 0 {
@@ -183,9 +187,10 @@ func RemoveTaint(node *v1.Node, taint *v1.Taint) (*v1.Node, bool, error) {
 	return newNode, true, nil
 }
 
-// AddOrUpdateTaint tries to add a taint to annotations list. Returns a new copy of updated Node and true if something was updated
-// false otherwise.
+// AddOrUpdateTaint 尝试向节点的污点列表添加或更新指定污点。
+// 若有变更则返回更新后节点的副本和 true，否则返回 false。
 func AddOrUpdateTaint(node *v1.Node, taint *v1.Taint) (*v1.Node, bool, error) {
+	// 深拷贝避免修改调用方的对象。
 	newNode := node.DeepCopy()
 	nodeTaints := newNode.Spec.Taints
 
@@ -193,6 +198,7 @@ func AddOrUpdateTaint(node *v1.Node, taint *v1.Taint) (*v1.Node, bool, error) {
 	updated := false
 	for i := range nodeTaints {
 		if taint.MatchTaint(&nodeTaints[i]) {
+			// 已存在且完全相同，无需变更。
 			if helper.Semantic.DeepEqual(*taint, nodeTaints[i]) {
 				return newNode, false, nil
 			}
@@ -204,6 +210,7 @@ func AddOrUpdateTaint(node *v1.Node, taint *v1.Taint) (*v1.Node, bool, error) {
 		newTaints = append(newTaints, nodeTaints[i])
 	}
 
+	// 没有匹配项说明是新污点，直接追加。
 	if !updated {
 		newTaints = append(newTaints, *taint)
 	}
@@ -212,7 +219,7 @@ func AddOrUpdateTaint(node *v1.Node, taint *v1.Taint) (*v1.Node, bool, error) {
 	return newNode, true, nil
 }
 
-// TaintExists checks if the given taint exists in list of taints. Returns true if exists false otherwise.
+// TaintExists 检查给定污点是否存在于污点列表中。
 func TaintExists(taints []v1.Taint, taintToFind *v1.Taint) bool {
 	for _, taint := range taints {
 		if taint.MatchTaint(taintToFind) {
@@ -222,7 +229,7 @@ func TaintExists(taints []v1.Taint, taintToFind *v1.Taint) bool {
 	return false
 }
 
-// TaintKeyExists checks if the given taint key exists in list of taints. Returns true if exists false otherwise.
+// TaintKeyExists 检查给定污点 key 是否存在于污点列表中。
 func TaintKeyExists(taints []v1.Taint, taintKeyToMatch string) bool {
 	for _, taint := range taints {
 		if taint.Key == taintKeyToMatch {
@@ -232,11 +239,9 @@ func TaintKeyExists(taints []v1.Taint, taintKeyToMatch string) bool {
 	return false
 }
 
-// TaintSetDiff finds the difference between two taint slices and
-// returns all new and removed elements of the new slice relative to the old slice.
-// for example:
-// input: taintsNew=[a b] taintsOld=[a c]
-// output: taintsToAdd=[b] taintsToRemove=[c]
+// TaintSetDiff 求两个污点切片的差异，返回新切片相对于旧切片新增和删除的元素。示例：
+// 输入：taintsNew=[a b]，taintsOld=[a c]
+// 输出：taintsToAdd=[b]，taintsToRemove=[c]
 func TaintSetDiff(taintsNew, taintsOld []v1.Taint) (taintsToAdd []*v1.Taint, taintsToRemove []*v1.Taint) {
 	for _, taint := range taintsNew {
 		if !TaintExists(taintsOld, &taint) {
@@ -255,7 +260,7 @@ func TaintSetDiff(taintsNew, taintsOld []v1.Taint) (taintsToAdd []*v1.Taint, tai
 	return
 }
 
-// TaintSetFilter filters from the taint slice according to the passed fn function to get the filtered taint slice.
+// TaintSetFilter 按给定函数 fn 过滤污点切片，返回满足条件的污点。
 func TaintSetFilter(taints []v1.Taint, fn func(*v1.Taint) bool) []v1.Taint {
 	res := []v1.Taint{}
 
@@ -268,8 +273,7 @@ func TaintSetFilter(taints []v1.Taint, fn func(*v1.Taint) bool) []v1.Taint {
 	return res
 }
 
-// CheckTaintValidation checks if the given taint is valid.
-// Returns error if the given taint is invalid.
+// CheckTaintValidation 校验给定污点是否合法，非法时返回错误。
 func CheckTaintValidation(taint v1.Taint) error {
 	if errs := validation.IsQualifiedName(taint.Key); len(errs) > 0 {
 		return fmt.Errorf("invalid taint key: %s", strings.Join(errs, "; "))

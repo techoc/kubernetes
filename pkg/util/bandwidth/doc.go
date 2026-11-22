@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package bandwidth provides utilities for bandwidth shaping
+// Package bandwidth 提供带宽整形（限速）相关的工具函数。
 package bandwidth

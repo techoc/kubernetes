@@ -18,12 +18,12 @@ limitations under the License.
 
 package coverage
 
-// InitCoverage is illegal when not running with coverage.
+// InitCoverage 在未启用覆盖率检测时调用属于非法操作，直接 panic 以尽早暴露误用。
 func InitCoverage(name string) {
 	panic("Called InitCoverage when not built with coverage instrumentation.")
 }
 
-// FlushCoverage is a no-op when not running with coverage.
+// FlushCoverage 在未启用覆盖率检测时为空操作。
 func FlushCoverage() {
 
 }

@@ -28,27 +28,27 @@ import (
 	"k8s.io/kubernetes/pkg/util/iptables"
 )
 
-// IPTablesDump represents a parsed IPTables rules dump (ie, the output of
-// "iptables-save" or input to "iptables-restore")
+// IPTablesDump 表示解析后的 iptables 规则转储，
+// 即 "iptables-save" 的输出或 "iptables-restore" 的输入。
 type IPTablesDump struct {
 	Tables []Table
 }
 
-// Table represents an IPTables table
+// Table 表示 iptables 的一个表。
 type Table struct {
 	Name   iptables.Table
 	Chains []Chain
 }
 
-// Chain represents an IPTables chain
+// Chain 表示 iptables 的一个链及其包/字节计数和规则列表。
 type Chain struct {
 	Name    iptables.Chain
 	Packets uint64
 	Bytes   uint64
 	Rules   []*Rule
 
-	// Deleted is set if the input contained a "-X Name" line; this would never
-	// appear in iptables-save output but it could appear in iptables-restore *input*.
+	// 输入中包含 "-X Name" 行时置位。iptables-save 不会输出这种行，
+	// 但 iptables-restore 的输入中可以出现。
 	Deleted bool
 }
 
@@ -57,6 +57,7 @@ var declareChainRegex = regexp.MustCompile(`^:([^ ]*) - \[([0-9]*):([0-9]*)\]$`)
 var addRuleRegex = regexp.MustCompile(`^-A ([^ ]*) (.*)$`)
 var deleteChainRegex = regexp.MustCompile(`^-X (.*)$`)
 
+// parseState 标记当前解析到转储的哪个阶段。
 type parseState int
 
 const (
@@ -65,7 +66,7 @@ const (
 	parseChains
 )
 
-// ParseIPTablesDump parses an IPTables rules dump. Note: this may ignore some bad data.
+// ParseIPTablesDump 解析 iptables 规则转储。注意：可能会忽略部分非法数据。
 func ParseIPTablesDump(data string) (*IPTablesDump, error) {
 	dump := &IPTablesDump{}
 	state := parseTableDeclaration
@@ -81,7 +82,7 @@ func ParseIPTablesDump(data string) (*IPTablesDump, error) {
 
 		switch state {
 		case parseTableDeclaration:
-			// Parse table declaration line ("*filter").
+			// 解析表声明行，如 "*filter"。
 			match := declareTableRegex.FindStringSubmatch(line)
 			if match == nil {
 				return nil, fmt.Errorf("could not parse iptables data (table %d starts with %q not a table name)", len(dump.Tables)+1, line)
@@ -152,6 +153,7 @@ func ParseIPTablesDump(data string) (*IPTablesDump, error) {
 	return dump, nil
 }
 
+// String 将解析结果重新序列化为 iptables-save 风格的文本。
 func (dump *IPTablesDump) String() string {
 	buffer := &strings.Builder{}
 	for _, t := range dump.Tables {
@@ -174,6 +176,7 @@ func (dump *IPTablesDump) String() string {
 	return buffer.String()
 }
 
+// GetTable 按表名查找表；不存在时返回错误。
 func (dump *IPTablesDump) GetTable(table iptables.Table) (*Table, error) {
 	for i := range dump.Tables {
 		if dump.Tables[i].Name == table {
@@ -183,6 +186,7 @@ func (dump *IPTablesDump) GetTable(table iptables.Table) (*Table, error) {
 	return nil, fmt.Errorf("no such table %q", table)
 }
 
+// GetChain 按表名和链名查找链；任一级不存在时返回错误。
 func (dump *IPTablesDump) GetChain(table iptables.Table, chain iptables.Chain) (*Chain, error) {
 	t, err := dump.GetTable(table)
 	if err != nil {
@@ -196,30 +200,23 @@ func (dump *IPTablesDump) GetChain(table iptables.Table, chain iptables.Chain) (
 	return nil, fmt.Errorf("no such chain %q", chain)
 }
 
-// Rule represents a single parsed IPTables rule. (This currently covers all of the rule
-// types that we actually use in pkg/proxy/iptables or pkg/proxy/ipvs.)
+// Rule 表示一条解析后的 iptables 规则（目前覆盖 pkg/proxy/iptables 与
+// pkg/proxy/ipvs 实际使用的全部规则类型）。
 //
-// The parsing is mostly-automated based on type reflection. The `param` tag on a field
-// indicates the parameter whose value will be placed into that field. (The code assumes
-// that we don't use both the short and long forms of any parameter names (eg, "-s" vs
-// "--source"), which is currently true, but it could be extended if necessary.) The
-// `negatable` tag indicates if a parameter is allowed to be preceded by "!".
+// 解析主要靠类型反射完成：字段上的 `param` 标签指明哪个参数的值放入该字段。
+// 代码假定同一参数不会同时使用短名和长名（如 "-s" 与 "--source"），目前确实如此，
+// 需要时可扩展。`negatable` 标签表示该参数是否允许前置 "!"。
 //
-// Parameters that take a value are stored as type `*IPTablesValue`, which encapsulates a
-// string value and whether the rule was negated (ie, whether the rule requires that we
-// *match* or *don't match* that value). But string-valued parameters that can't be
-// negated use `IPTablesValue` rather than `string` too, just for API consistency.
+// 带值的参数存为 `*IPTablesValue`，其中封装了字符串值及是否被取反
+// （即规则要求*匹配*还是*不匹配*该值）。不可取反的字符串参数也用 IPTablesValue
+// 而非 string，纯粹为了 API 一致。
 //
-// Parameters that don't take a value are stored as `*bool`, where the value is `nil` if
-// the parameter was not present, `&true` if the parameter was present, or `&false` if the
-// parameter was present but negated.
+// 不带值的参数存为 `*bool`：未出现为 nil，出现为 &true，出现且取反为 &false。
 //
-// Parsing skips over "-m MODULE" parameters because most parameters have unique names
-// anyway even ignoring the module name, and in the cases where they don't (eg "-m tcp
-// --sport" vs "-m udp --sport") the parameters are mutually-exclusive and it's more
-// convenient to store them in the same struct field anyway.
+// 解析会跳过 "-m MODULE"，因为多数参数名本身已足够唯一；少数重名情况
+// （如 "-m tcp --sport" 与 "-m udp --sport"）彼此互斥，放在同一字段反而更方便。
 type Rule struct {
-	// Raw contains the original raw rule string
+	// Raw 保留原始规则文本，便于日志与回写。
 	Raw string
 
 	Chain   iptables.Chain `param:"-A"`
@@ -242,13 +239,13 @@ type Rule struct {
 	Probability     *IPTablesValue `param:"--probability"`
 	DNATDestination *IPTablesValue `param:"--to-destination"`
 
-	// We don't actually use the values of these, but we care if they are present
+	// 这些参数的值并不使用，只关心它们是否出现。
 	AffinityCheck *bool          `param:"--rcheck" negatable:"true"`
 	MarkCheck     *IPTablesValue `param:"--mark" negatable:"true"`
 	CTStateCheck  *IPTablesValue `param:"--ctstate" negatable:"true"`
 
-	// We don't currently care about any of these in the unit tests, but we expect
-	// them to be present in some rules that we parse, so we define how to parse them.
+	// 单测目前不关心这些值，但被解析的规则里确实会出现，
+	// 因此仍需定义其解析方式，避免误判为未知参数。
 	AffinityName    *IPTablesValue `param:"--name"`
 	AffinitySeconds *IPTablesValue `param:"--seconds"`
 	AffinitySet     *bool          `param:"--set" negatable:"true"`
@@ -256,14 +253,13 @@ type Rule struct {
 	StatisticMode   *IPTablesValue `param:"--mode"`
 }
 
-// IPTablesValue is a value of a parameter in an Rule, where the parameter is
-// possibly negated.
+// IPTablesValue 表示规则中一个参数的值，并记录该参数是否被取反。
 type IPTablesValue struct {
 	Negated bool
 	Value   string
 }
 
-// for debugging; otherwise %v will just print the pointer value
+// String 便于调试输出；否则 %v 只会打印指针地址。
 func (v *IPTablesValue) String() string {
 	if v.Negated {
 		return fmt.Sprintf("NOT %q", v.Value)
@@ -272,8 +268,7 @@ func (v *IPTablesValue) String() string {
 	}
 }
 
-// Matches returns true if cmp equals / doesn't equal v.Value (depending on
-// v.Negated).
+// Matches 按 v.Negated 判断 cmp 是否等于 / 不等于 v.Value。
 func (v *IPTablesValue) Matches(cmp string) bool {
 	if v.Negated {
 		return v.Value != cmp
@@ -282,8 +277,8 @@ func (v *IPTablesValue) Matches(cmp string) bool {
 	}
 }
 
-// findParamField finds a field in value with the struct tag "param:${param}" and if found,
-// returns a pointer to the Value of that field, and the value of its "negatable" tag.
+// findParamField 在 value 中查找带有 `param:"${param}"` 标签的字段，
+// 返回该字段值的指针及其 "negatable" 标签值。
 func findParamField(value reflect.Value, param string) (*reflect.Value, bool) {
 	typ := value.Type()
 	for i := 0; i < typ.NumField(); i++ {
@@ -296,43 +291,38 @@ func findParamField(value reflect.Value, param string) (*reflect.Value, bool) {
 	return nil, false
 }
 
-// wordRegex matches a single word or a quoted string (at the start of the string, or
-// preceded by whitespace)
+// wordRegex 匹配单个词或带引号的字符串，要求其位于串首或前面是空白。
 var wordRegex = regexp.MustCompile(`(?:^|\s)("[^"]*"|[^"]\S*)`)
 
-// Used by ParseRule
+// ParseRule 用来区分两类参数字段的类型。
 var boolPtrType = reflect.PointerTo(reflect.TypeOf(true))
 var ipTablesValuePtrType = reflect.TypeOf((*IPTablesValue)(nil))
 
-// ParseRule parses rule. If strict is false, it will parse the recognized
-// parameters and ignore unrecognized ones. If it is true, parsing will fail if there are
-// unrecognized parameters.
+// ParseRule 解析一条规则。strict 为 false 时只解析已识别参数、忽略未知参数；
+// 为 true 时遇到未知参数即报错。
 func ParseRule(rule string, strict bool) (*Rule, error) {
 	parsed := &Rule{Raw: rule}
 
-	// Split rule into "words" (where a quoted string is a single word).
+	// 按“词”切分规则，带引号的字符串视为一个词。
 	var words []string
 	for _, match := range wordRegex.FindAllStringSubmatch(rule, -1) {
 		words = append(words, strings.Trim(match[1], `"`))
 	}
 
-	// The chain name must come first (and can't be the only thing there)
+	// 链名必须出现在最前面，且不能是唯一内容。
 	if len(words) < 2 || words[0] != "-A" {
 		return nil, fmt.Errorf(`bad iptables rule (does not start with "-A CHAIN")`)
 	} else if len(words) < 3 {
 		return nil, fmt.Errorf("bad iptables rule (no match rules)")
 	}
 
-	// For each word, see if it is a known iptables parameter, based on the struct
-	// field tags in Rule. Note that in the non-strict case we implicitly assume that
-	// no unrecognized parameter will take an argument that could be mistaken for
-	// another parameter.
+	// 逐词根据 Rule 的字段标签识别 iptables 参数。非严格模式下隐含假设：
+	// 未知参数不会携带一个看起来像其他参数的参数值。
 	v := reflect.ValueOf(parsed).Elem()
 	negated := false
 	for w := 0; w < len(words); {
 		if words[w] == "-m" && w < len(words)-1 {
-			// Skip "-m MODULE"; we don't pay attention to that since the
-			// parameter names are unique enough anyway.
+			// 跳过 "-m MODULE"：参数名本身已足够唯一，无需关心模块名。
 			w += 2
 			continue
 		}
@@ -343,7 +333,7 @@ func ParseRule(rule string, strict bool) (*Rule, error) {
 			continue
 		}
 
-		// For everything else, see if it corresponds to a field of Rule
+		// 其余词尝试匹配 Rule 的字段。
 		if field, negatable := findParamField(v, words[w]); field != nil {
 			if negated && !negatable {
 				return nil, fmt.Errorf("cannot negate parameter %q", words[w])
@@ -366,7 +356,7 @@ func ParseRule(rule string, strict bool) (*Rule, error) {
 		} else if strict {
 			return nil, fmt.Errorf("unrecognized parameter %q", words[w])
 		} else {
-			// skip
+			// 非严格模式下忽略未知参数。
 			w++
 		}
 

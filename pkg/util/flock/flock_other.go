@@ -18,7 +18,8 @@ limitations under the License.
 
 package flock
 
-// Acquire is not implemented on non-unix systems.
+// Acquire 在非 Unix 系统上没有实现，直接返回 nil。
+// 也就是说这些平台上文件锁是空操作。
 func Acquire(path string) error {
 	return nil
 }

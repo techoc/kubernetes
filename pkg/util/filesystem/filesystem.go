@@ -22,9 +22,9 @@ import (
 	"time"
 )
 
-// Filesystem is an interface that we can use to mock various filesystem operations
+// Filesystem 是对 os 包文件系统操作的抽象，便于在测试中 mock。
 type Filesystem interface {
-	// from "os"
+	// 以下方法来自 "os" 包
 	Stat(name string) (os.FileInfo, error)
 	Create(name string) (File, error)
 	Rename(oldpath, newpath string) error
@@ -33,7 +33,7 @@ type Filesystem interface {
 	RemoveAll(path string) error
 	Remove(name string) error
 
-	// from "os"
+	// 以下方法来自 "os" 包
 	ReadFile(filename string) ([]byte, error)
 	TempDir(dir, prefix string) (string, error)
 	TempFile(dir, prefix string) (File, error)
@@ -41,10 +41,9 @@ type Filesystem interface {
 	Walk(root string, walkFn filepath.WalkFunc) error
 }
 
-// File is an interface that we can use to mock various filesystem operations typically
-// accessed through the File object from the "os" package
+// File 是对 os.File 常用方法的抽象，便于 mock 文件操作。
 type File interface {
-	// for now, the only os.File methods used are those below, add more as necessary
+	// 目前只用到 os.File 的这些方法，有其他需求时再按需添加
 	Name() string
 	Write(b []byte) (n int, err error)
 	Sync() error

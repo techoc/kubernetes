@@ -23,9 +23,9 @@ import (
 	"k8s.io/utils/dump"
 )
 
-// DeepHashObject writes specified object to hash using the spew library
-// which follows pointers and prints actual values of the nested objects
-// ensuring the hash does not change when a pointer changes.
+// DeepHashObject 使用 spew 库将指定对象写入 hasher。
+// spew 会解引用指针、打印嵌套对象的实际值，
+// 从而保证指针地址变化不会影响哈希结果。
 func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
 	hasher.Reset()
 	fmt.Fprintf(hasher, "%v", dump.ForHash(objectToWrite))

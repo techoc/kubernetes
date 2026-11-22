@@ -24,14 +24,15 @@ import (
 	"k8s.io/apimachinery/pkg/util/version"
 )
 
+// readFileFunc 抽象文件读取，便于测试中注入不同的读取实现。
 type readFileFunc func(string) ([]byte, error)
 
-// GetVersion returns currently running kernel version.
+// GetVersion 返回当前运行内核的版本。
 func GetVersion() (*version.Version, error) {
 	return getVersion(os.ReadFile)
 }
 
-// getVersion reads os release file from the give readFile function.
+// getVersion 通过给定的 readFile 函数读取内核版本文件并解析版本。
 func getVersion(readFile readFileFunc) (*version.Version, error) {
 	kernelVersionFile := "/proc/sys/kernel/osrelease"
 	fileContent, err := readFile(kernelVersionFile)

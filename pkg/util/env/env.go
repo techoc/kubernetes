@@ -21,8 +21,8 @@ import (
 	"strconv"
 )
 
-// GetEnvAsStringOrFallback returns the env variable for the given key
-// and falls back to the given defaultValue if not set
+// GetEnvAsStringOrFallback 返回指定 key 的环境变量值；
+// 未设置时回退到 defaultValue。
 func GetEnvAsStringOrFallback(key, defaultValue string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -30,8 +30,8 @@ func GetEnvAsStringOrFallback(key, defaultValue string) string {
 	return defaultValue
 }
 
-// GetEnvAsIntOrFallback returns the env variable (parsed as integer) for
-// the given key and falls back to the given defaultValue if not set
+// GetEnvAsIntOrFallback 返回指定 key 的环境变量值并解析为整数；
+// 未设置时回退到 defaultValue。解析失败时返回默认值和错误。
 func GetEnvAsIntOrFallback(key string, defaultValue int) (int, error) {
 	if v := os.Getenv(key); v != "" {
 		value, err := strconv.Atoi(v)
@@ -43,8 +43,8 @@ func GetEnvAsIntOrFallback(key string, defaultValue int) (int, error) {
 	return defaultValue, nil
 }
 
-// GetEnvAsFloat64OrFallback returns the env variable (parsed as float64) for
-// the given key and falls back to the given defaultValue if not set
+// GetEnvAsFloat64OrFallback 返回指定 key 的环境变量值并解析为 float64；
+// 未设置时回退到 defaultValue。解析失败时返回默认值和错误。
 func GetEnvAsFloat64OrFallback(key string, defaultValue float64) (float64, error) {
 	if v := os.Getenv(key); v != "" {
 		value, err := strconv.ParseFloat(v, 64)

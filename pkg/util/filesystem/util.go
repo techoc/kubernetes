@@ -20,8 +20,9 @@ import (
 	"path/filepath"
 )
 
-// IsPathClean will replace slashes to Separator (which is OS-specific).
-// This will make sure that all slashes are the same before comparing.
+// IsPathClean 判断路径是否已经是规范形式。
+// 先把斜杠统一转换为系统分隔符，再比较 Clean 前后的结果，
+// 避免不同平台分隔符差异导致误判。
 func IsPathClean(path string) bool {
 	return filepath.ToSlash(filepath.Clean(path)) == filepath.ToSlash(path)
 }

@@ -24,7 +24,7 @@ import (
 	"path/filepath"
 )
 
-// IsUnixDomainSocket returns whether a given file is a AF_UNIX socket file
+// IsUnixDomainSocket 判断给定文件是否为 AF_UNIX 套接字文件。
 func IsUnixDomainSocket(filePath string) (bool, error) {
 	fi, err := os.Stat(filePath)
 	if err != nil {
@@ -36,17 +36,17 @@ func IsUnixDomainSocket(filePath string) (bool, error) {
 	return true, nil
 }
 
-// Chmod is the same as os.Chmod on Unix.
+// Chmod 在 Unix 上等同于 os.Chmod。
 func Chmod(name string, mode os.FileMode) error {
 	return os.Chmod(name, mode)
 }
 
-// MkdirAll is same as os.MkdirAll on Unix.
+// MkdirAll 在 Unix 上等同于 os.MkdirAll。
 func MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
-// IsAbs is same as filepath.IsAbs on Unix.
+// IsAbs 在 Unix 上等同于 filepath.IsAbs。
 func IsAbs(path string) bool {
 	return filepath.IsAbs(path)
 }

@@ -22,16 +22,15 @@ import (
 	"time"
 )
 
-// This is an implementation of testing.testDeps. It doesn't need to do anything, because
-// no tests are actually run. It does need a concrete implementation of at least ImportPath,
-// which is called unconditionally when running tests.
+// fakeTestDeps 是 testing.testDeps 的实现。由于并不真正运行测试，这些方法可以什么都不做；
+// 但至少要提供 ImportPath 的具体实现，因为运行测试时它会被无条件调用。
 //
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 type fakeTestDeps struct{}
 
-// https://go.dev/src/testing/fuzz.go#L88
+// corpusEntry 的类型定义与 testing 包内部保持一致，见 https://go.dev/src/testing/fuzz.go#L88
 //
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 type corpusEntry = struct {
 	Parent     string
 	Path       string
@@ -41,77 +40,77 @@ type corpusEntry = struct {
 	IsSeed     bool
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) ImportPath() string {
 	return ""
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) ModulePath() string {
 	return ""
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) MatchString(pat, str string) (bool, error) {
 	return false, nil
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) SetPanicOnExit0(bool) {}
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) StartCPUProfile(io.Writer) error {
 	return nil
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) StopCPUProfile() {}
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) StartTestLog(io.Writer) {}
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) StopTestLog() error {
 	return nil
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) WriteHeapProfile(io.Writer) error {
 	return nil
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) WriteProfileTo(string, io.Writer, int) error {
 	return nil
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) CoordinateFuzzing(time.Duration, int64, time.Duration, int64, int, []corpusEntry, []reflect.Type, string, string) error {
 	return nil
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) RunFuzzWorker(func(corpusEntry) error) error {
 	return nil
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) ReadCorpus(string, []reflect.Type) ([]corpusEntry, error) {
 	return nil, nil
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) CheckCorpus([]any, []reflect.Type) error {
 	return nil
 }
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) ResetCoverage() {}
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) SnapshotCoverage() {}
 
-//nolint:unused // U1000 see comment above, we know it's unused normally.
+//nolint:unused // U1000 见上方说明，正常情况下确实未被使用。
 func (fakeTestDeps) InitRuntimeCoverage() (mode string, tearDown func(string, string) (string, error), snapcov func() float64) {
 	return "", nil, nil
 }

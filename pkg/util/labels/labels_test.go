@@ -23,6 +23,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestCloneAndAddLabel 验证 CloneAndAddLabel 不会改动原 map，
+// 并顺带验证 CloneAndRemoveLabel 能还原为原始标签集。
 func TestCloneAndAddLabel(t *testing.T) {
 	labels := map[string]string{
 		"foo1": "bar1",
@@ -58,7 +60,7 @@ func TestCloneAndAddLabel(t *testing.T) {
 		if !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("[Add] got %v, want %v", got, tc.want)
 		}
-		// now test the inverse.
+		// 再验证反向操作能回到原标签集。
 		got_rm := CloneAndRemoveLabel(got, tc.labelKey)
 		if !reflect.DeepEqual(got_rm, tc.labels) {
 			t.Errorf("[RM] got %v, want %v", got_rm, tc.labels)
@@ -66,6 +68,7 @@ func TestCloneAndAddLabel(t *testing.T) {
 	}
 }
 
+// TestAddLabel 验证 AddLabel 在空值、已有标签和 nil map 情况下的行为。
 func TestAddLabel(t *testing.T) {
 	labels := map[string]string{
 		"foo1": "bar1",
@@ -112,6 +115,8 @@ func TestAddLabel(t *testing.T) {
 	}
 }
 
+// TestCloneSelectorAndAddLabel 验证克隆 LabelSelector 后添加标签不会影响原始 selector，
+// 并覆盖 nil MatchLabels 的情况。
 func TestCloneSelectorAndAddLabel(t *testing.T) {
 	labels := map[string]string{
 		"foo1": "bar1",
@@ -161,6 +166,8 @@ func TestCloneSelectorAndAddLabel(t *testing.T) {
 	}
 }
 
+// TestAddLabelToSelector 验证 AddLabelToSelector 原地修改 selector 的 MatchLabels，
+// 包括 nil map 场景。
 func TestAddLabelToSelector(t *testing.T) {
 	labels := map[string]string{
 		"foo1": "bar1",

@@ -22,13 +22,12 @@ import (
 )
 
 const (
-	// blockSize is the block size used in tail.
+	// blockSize 是 tail 使用的块大小。
 	blockSize = 1024
 )
 
-// ReadAtMost reads at most max bytes from the end of the file identified by path or
-// returns an error. It returns true if the file was longer than max. It will
-// allocate up to max bytes.
+// ReadAtMost 从 path 指定的文件末尾读取至多 max 个字节，失败时返回错误。
+// 第二返回值表示文件长度是否超过 max。最多分配 max 个字节。
 func ReadAtMost(path string, max int64) ([]byte, bool, error) {
 	f, err := os.Open(path)
 	if err != nil {

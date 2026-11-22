@@ -30,6 +30,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestParseRule 验证 ParseRule 能正确解析各类 iptables 规则，并按严格模式返回预期结果或错误。
 func TestParseRule(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -225,7 +226,8 @@ func TestParseRule(t *testing.T) {
 	}
 }
 
-// Helper for TestParseIPTablesDump. Obviously it should not be used in TestParseRule...
+// mustParseRule 是 TestParseIPTablesDump 的辅助函数，解析失败时直接 panic。
+// 显然不应在 TestParseRule 中使用它，那里需要检验错误信息。
 func mustParseRule(rule string) *Rule {
 	parsed, err := ParseRule(rule, false)
 	if err != nil {
@@ -234,6 +236,7 @@ func mustParseRule(rule string) *Rule {
 	return parsed
 }
 
+// TestParseIPTablesDump 验证 ParseIPTablesDump 能正确解析 iptables-save 输出，并处理空白、注释、删除链及各类非法输入。
 func TestParseIPTablesDump(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

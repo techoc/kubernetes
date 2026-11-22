@@ -25,14 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// MakeChainLine return an iptables-save/restore formatted chain line given a Chain
+// MakeChainLine 返回 iptables-save/restore 格式的链声明行。
 func MakeChainLine(chain Chain) string {
 	return fmt.Sprintf(":%s - [0:0]", chain)
 }
 
-// GetChainsFromTable parses iptables-save data to find the chains that are defined. It
-// assumes that save contains a single table's data, and returns a set with keys for every
-// chain defined in that table.
+// GetChainsFromTable 解析 iptables-save 输出以找出定义了哪些链。
+// 它假定 save 只包含一个表的数据，返回的集合中包含该表中每条链的名称。
 func GetChainsFromTable(save []byte) sets.Set[Chain] {
 	chainsSet := sets.New[Chain]()
 
@@ -45,7 +44,7 @@ func GetChainsFromTable(save []byte) sets.Set[Chain] {
 		save = save[start:]
 		end := bytes.Index(save, []byte(" "))
 		if end == -1 {
-			// shouldn't happen, but...
+			// 按格式不应出现，但避免异常输入导致死循环。
 			break
 		}
 		chain := Chain(save[:end])

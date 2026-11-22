@@ -35,96 +35,90 @@ import (
 	utiltrace "k8s.io/utils/trace"
 )
 
-// RulePosition holds the -I/-A flags for iptable
+// RulePosition 表示规则的插入位置，对应 iptables 的 -I/-A 标志。
 type RulePosition string
 
 const (
-	// Prepend is the insert flag for iptable
+	// Prepend 表示将规则插入链首（-I）。
 	Prepend RulePosition = "-I"
-	// Append is the append flag for iptable
+	// Append 表示将规则追加到链尾（-A）。
 	Append RulePosition = "-A"
 )
 
-// Interface is an injectable interface for running iptables commands.  Implementations must be goroutine-safe.
+// Interface 是可注入的 iptables 命令执行接口。实现必须保证并发安全。
 type Interface interface {
-	// EnsureChain checks if the specified chain exists and, if not, creates it.  If the chain existed, return true.
+	// EnsureChain 检查指定链是否存在，不存在则创建；链原本已存在时返回 true。
 	EnsureChain(table Table, chain Chain) (bool, error)
-	// FlushChain clears the specified chain.  If the chain did not exist, return error.
+	// FlushChain 清空指定链；链不存在时返回错误。
 	FlushChain(table Table, chain Chain) error
-	// DeleteChain deletes the specified chain.  If the chain did not exist, return error.
+	// DeleteChain 删除指定链；链不存在时返回错误。
 	DeleteChain(table Table, chain Chain) error
-	// ChainExists tests whether the specified chain exists, returning an error if it
-	// does not, or if it is unable to check.
+	// ChainExists 判断指定链是否存在；链不存在或无法检查时返回错误。
 	ChainExists(table Table, chain Chain) (bool, error)
-	// EnsureRule checks if the specified rule is present and, if not, creates it.  If the rule existed, return true.
+	// EnsureRule 检查指定规则是否存在，不存在则创建；规则原本已存在时返回 true。
 	EnsureRule(position RulePosition, table Table, chain Chain, args ...string) (bool, error)
-	// DeleteRule checks if the specified rule is present and, if so, deletes it.
+	// DeleteRule 检查指定规则是否存在，存在则删除。
 	DeleteRule(table Table, chain Chain, args ...string) error
-	// IsIPv6 returns true if this is managing ipv6 tables.
+	// IsIPv6 判断是否管理 IPv6 表。
 	IsIPv6() bool
-	// Protocol returns the IP family this instance is managing,
+	// Protocol 返回本实例所管理的 IP 协议族。
 	Protocol() Protocol
-	// SaveInto calls `iptables-save` for table and stores result in a given buffer.
+	// SaveInto 对指定表执行 `iptables-save`，并将结果写入给定缓冲区。
 	SaveInto(table Table, buffer *bytes.Buffer) error
-	// Restore runs `iptables-restore` passing data through []byte.
-	// table is the Table to restore
-	// data should be formatted like the output of SaveInto()
-	// flush sets the presence of the "--noflush" flag. see: FlushFlag
-	// counters sets the "--counters" flag. see: RestoreCountersFlag
+	// Restore 通过 `iptables-restore` 恢复规则。
+	// table 为待恢复的表；data 的格式须与 SaveInto() 的输出一致。
+	// flush 控制 "--noflush" 标志，见 FlushFlag。
+	// counters 控制 "--counters" 标志，见 RestoreCountersFlag。
 	Restore(table Table, data []byte, flush FlushFlag, counters RestoreCountersFlag) error
-	// RestoreAll is the same as Restore except that no table is specified.
+	// RestoreAll 与 Restore 相同，但不指定表。
 	RestoreAll(data []byte, flush FlushFlag, counters RestoreCountersFlag) error
-	// Monitor detects when the given iptables tables have been flushed by an external
-	// tool (e.g. a firewall reload) by creating canary chains and polling to see if
-	// they have been deleted. (Specifically, it polls tables[0] every interval until
-	// the canary has been deleted from there, then waits a short additional time for
-	// the canaries to be deleted from the remaining tables as well. You can optimize
-	// the polling by listing a relatively empty table in tables[0]). When a flush is
-	// detected, this calls the reloadFunc so the caller can reload their own iptables
-	// rules. If it is unable to create the canary chains (either initially or after
-	// a reload) it will log an error and stop monitoring.
-	// (This function should be called from a goroutine.)
+	// Monitor 通过创建金丝雀链并轮询其是否被删除，检测外部工具（如防火墙重载）
+	// 是否清空了给定的 iptables 表。具体做法：每隔 interval 轮询 tables[0]，
+	// 直到其中的金丝雀链被删除，再稍等片刻确认其余表中的金丝雀链也被删除。
+	// 把相对空闲的表放在 tables[0] 可以降低轮询开销。检测到清空后调用 reloadFunc，
+	// 让调用方重新加载自己的规则。若无法创建金丝雀链（初次或重载后），记录错误并停止监控。
+	// 该方法应在 goroutine 中调用。
 	Monitor(canary Chain, tables []Table, reloadFunc func(), interval time.Duration, stopCh <-chan struct{})
 
-	// Present checks if the kernel supports the iptable interface
+	// Present 检查当前内核是否支持 iptables 接口。
 	Present() error
 }
 
-// Protocol defines the ip protocol either ipv4 or ipv6
+// Protocol 表示 IP 协议族，取值为 IPv4 或 IPv6。
 type Protocol string
 
 const (
-	// ProtocolIPv4 represents ipv4 protocol in iptables
+	// ProtocolIPv4 表示 iptables 中的 IPv4 协议。
 	ProtocolIPv4 Protocol = "IPv4"
-	// ProtocolIPv6 represents ipv6 protocol in iptables
+	// ProtocolIPv6 表示 iptables 中的 IPv6 协议。
 	ProtocolIPv6 Protocol = "IPv6"
 )
 
-// Table represents different iptable like filter,nat, mangle and raw
+// Table 表示不同的 iptables 表，如 filter、nat、mangle。
 type Table string
 
 const (
-	// TableNAT represents the built-in nat table
+	// TableNAT 表示内置的 nat 表。
 	TableNAT Table = "nat"
-	// TableFilter represents the built-in filter table
+	// TableFilter 表示内置的 filter 表。
 	TableFilter Table = "filter"
-	// TableMangle represents the built-in mangle table
+	// TableMangle 表示内置的 mangle 表。
 	TableMangle Table = "mangle"
 )
 
-// Chain represents the different rules
+// Chain 表示 iptables 的规则链。
 type Chain string
 
 const (
-	// ChainPostrouting used for source NAT in nat table
+	// ChainPostrouting 用于 nat 表的源地址转换（SNAT）。
 	ChainPostrouting Chain = "POSTROUTING"
-	// ChainPrerouting used for DNAT (destination NAT) in nat table
+	// ChainPrerouting 用于 nat 表的目的地址转换（DNAT）。
 	ChainPrerouting Chain = "PREROUTING"
-	// ChainOutput used for the packets going out from local
+	// ChainOutput 用于处理本机发出的包。
 	ChainOutput Chain = "OUTPUT"
-	// ChainInput used for incoming packets
+	// ChainInput 用于处理进入本机的包。
 	ChainInput Chain = "INPUT"
-	// ChainForward used for the packets for another NIC
+	// ChainForward 用于处理需要转发到其他网卡的包。
 	ChainForward Chain = "FORWARD"
 )
 
@@ -137,37 +131,37 @@ const (
 	cmdIP6Tables        string = "ip6tables"
 )
 
-// RestoreCountersFlag is an option flag for Restore
+// RestoreCountersFlag 是 Restore 的选项标志，控制是否恢复计数器。
 type RestoreCountersFlag bool
 
-// RestoreCounters a boolean true constant for the option flag RestoreCountersFlag
+// RestoreCounters 表示恢复计数器（RestoreCountersFlag 的 true 值）。
 const RestoreCounters RestoreCountersFlag = true
 
-// NoRestoreCounters a boolean false constant for the option flag RestoreCountersFlag
+// NoRestoreCounters 表示不恢复计数器（RestoreCountersFlag 的 false 值）。
 const NoRestoreCounters RestoreCountersFlag = false
 
-// FlushFlag an option flag for Flush
+// FlushFlag 是 Flush 的选项标志，控制是否清空表。
 type FlushFlag bool
 
-// FlushTables a boolean true constant for option flag FlushFlag
+// FlushTables 表示清空表（FlushFlag 的 true 值）。
 const FlushTables FlushFlag = true
 
-// NoFlushTables a boolean false constant for option flag FlushFlag
+// NoFlushTables 表示不清空表（FlushFlag 的 false 值）。
 const NoFlushTables FlushFlag = false
 
-// WaitString a constant for specifying the wait flag
+// WaitString 是指定等待标志的常量。
 const WaitString = "-w"
 
-// WaitSecondsValue a constant for specifying the default wait seconds
+// WaitSecondsValue 是默认等待秒数的常量。
 const WaitSecondsValue = "5"
 
-// runner implements Interface in terms of exec("iptables").
+// runner 通过 exec("iptables") 实现 Interface。
 type runner struct {
 	exec     utilexec.Interface
 	protocol Protocol
 }
 
-// newInternal returns a new Interface which will exec iptables
+// newInternal 返回一个通过 exec 执行 iptables 的 Interface。
 func newInternal(exec utilexec.Interface, protocol Protocol) Interface {
 	runner := &runner{
 		exec:     exec,
@@ -177,13 +171,14 @@ func newInternal(exec utilexec.Interface, protocol Protocol) Interface {
 	return runner
 }
 
-// New returns a new Interface which will exec iptables.
-// Note that this function will return a single iptables Interface *and* an error, if only
-// a single family is supported.
+// New 返回一个通过 exec 执行 iptables 的 Interface。
+// 注意：即使只支持单个协议族，该函数也只返回一个 iptables Interface，不会返回错误。
 func New(protocol Protocol) Interface {
 	return newInternal(utilexec.New(), protocol)
 }
 
+// newDualStackInternal 返回受支持协议族到对应 Interface 的映射：
+// 仅当对应协议族的 iptables 可用时才将其纳入。
 func newDualStackInternal(exec utilexec.Interface) map[v1.IPFamily]Interface {
 	interfaces := map[v1.IPFamily]Interface{}
 	iptv4 := newInternal(exec, ProtocolIPv4)
@@ -197,16 +192,15 @@ func newDualStackInternal(exec utilexec.Interface) map[v1.IPFamily]Interface {
 	return interfaces
 }
 
-// NewBestEffort returns a map containing an IPv4 Interface (if IPv4 iptables is
-// supported) and an IPv6 Interface (if IPv6 iptables is supported). If iptables is not
-// supported, then it just returns an empty map. This function is intended to make things
-// simple for callers that just want "best-effort" iptables support, where neither partial
-// nor complete lack of iptables support is considered an error.
+// NewBestEffort 返回一个映射：若支持 IPv4 iptables 则包含 IPv4 Interface，
+// 若支持 IPv6 iptables 则包含 IPv6 Interface；若都不支持则返回空映射。
+// 该函数服务于"尽力而为"的场景——部分支持或完全不支持都不算错误。
 func NewBestEffort() map[v1.IPFamily]Interface {
 	return newDualStackInternal(utilexec.New())
 }
 
-// EnsureChain is part of Interface.
+// EnsureChain 实现 Interface 的 EnsureChain 方法。
+// 链已存在属于正常情况，因此把退出码 1 视为"已创建"而不是错误。
 func (runner *runner) EnsureChain(table Table, chain Chain) (bool, error) {
 	fullArgs := makeFullArgs(table, chain)
 
@@ -222,7 +216,7 @@ func (runner *runner) EnsureChain(table Table, chain Chain) (bool, error) {
 	return false, nil
 }
 
-// FlushChain is part of Interface.
+// FlushChain 实现 Interface 的 FlushChain 方法。
 func (runner *runner) FlushChain(table Table, chain Chain) error {
 	fullArgs := makeFullArgs(table, chain)
 
@@ -233,7 +227,7 @@ func (runner *runner) FlushChain(table Table, chain Chain) error {
 	return nil
 }
 
-// DeleteChain is part of Interface.
+// DeleteChain 实现 Interface 的 DeleteChain 方法。
 func (runner *runner) DeleteChain(table Table, chain Chain) error {
 	fullArgs := makeFullArgs(table, chain)
 
@@ -244,7 +238,8 @@ func (runner *runner) DeleteChain(table Table, chain Chain) error {
 	return nil
 }
 
-// EnsureRule is part of Interface.
+// EnsureRule 实现 Interface 的 EnsureRule 方法。
+// 先检查再添加，保证规则幂等。
 func (runner *runner) EnsureRule(position RulePosition, table Table, chain Chain, args ...string) (bool, error) {
 	fullArgs := makeFullArgs(table, chain, args...)
 
@@ -262,7 +257,8 @@ func (runner *runner) EnsureRule(position RulePosition, table Table, chain Chain
 	return false, nil
 }
 
-// DeleteRule is part of Interface.
+// DeleteRule 实现 Interface 的 DeleteRule 方法。
+// 规则不存在时直接返回成功，使删除操作幂等。
 func (runner *runner) DeleteRule(table Table, chain Chain, args ...string) error {
 	fullArgs := makeFullArgs(table, chain, args...)
 
@@ -280,20 +276,22 @@ func (runner *runner) DeleteRule(table Table, chain Chain, args ...string) error
 	return nil
 }
 
+// IsIPv6 实现 Interface 的 IsIPv6 方法。
 func (runner *runner) IsIPv6() bool {
 	return runner.protocol == ProtocolIPv6
 }
 
+// Protocol 实现 Interface 的 Protocol 方法。
 func (runner *runner) Protocol() Protocol {
 	return runner.protocol
 }
 
-// SaveInto is part of Interface.
+// SaveInto 实现 Interface 的 SaveInto 方法。
 func (runner *runner) SaveInto(table Table, buffer *bytes.Buffer) error {
 	trace := utiltrace.New("iptables save")
 	defer trace.LogIfLong(2 * time.Second)
 
-	// run and return
+	// 执行命令并返回结果。
 	iptablesSaveCmd := iptablesSaveCommand(runner.protocol)
 	args := []string{"-t", string(table)}
 	klog.V(4).InfoS("Running", "command", iptablesSaveCmd, "arguments", args)
@@ -304,26 +302,26 @@ func (runner *runner) SaveInto(table Table, buffer *bytes.Buffer) error {
 
 	err := cmd.Run()
 	if err != nil {
-		stderrBuffer.WriteTo(buffer) // ignore error, since we need to return the original error
+		stderrBuffer.WriteTo(buffer) // 忽略写入错误，优先返回原始执行错误。
 	}
 	return err
 }
 
-// Restore is part of Interface.
+// Restore 实现 Interface 的 Restore 方法。
 func (runner *runner) Restore(table Table, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
-	// setup args
+	// 准备指定表的参数。
 	args := []string{"-T", string(table)}
 	return runner.restoreInternal(args, data, flush, counters)
 }
 
-// RestoreAll is part of Interface.
+// RestoreAll 实现 Interface 的 RestoreAll 方法。
 func (runner *runner) RestoreAll(data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
-	// setup args
+	// 不指定表，参数留空。
 	args := make([]string, 0)
 	return runner.restoreInternal(args, data, flush, counters)
 }
 
-// restoreInternal is the shared part of Restore/RestoreAll
+// restoreInternal 是 Restore/RestoreAll 的公共实现。
 func (runner *runner) restoreInternal(args []string, data []byte, flush FlushFlag, counters RestoreCountersFlag) error {
 	trace := utiltrace.New("iptables restore")
 	defer trace.LogIfLong(2 * time.Second)
@@ -335,7 +333,7 @@ func (runner *runner) restoreInternal(args []string, data []byte, flush FlushFla
 		args = append(args, "--counters")
 	}
 
-	// run the command and return the output or an error including the output and error
+	// 执行命令并返回输出；出错时把输出一并带上，便于定位问题。
 	fullArgs := append([]string{WaitString, WaitSecondsValue}, args...)
 	iptablesRestoreCmd := iptablesRestoreCommand(runner.protocol)
 	klog.V(4).InfoS("Running", "command", iptablesRestoreCmd, "arguments", fullArgs)
@@ -352,6 +350,7 @@ func (runner *runner) restoreInternal(args []string, data []byte, flush FlushFla
 	return nil
 }
 
+// iptablesSaveCommand 按协议族返回对应的 save 命令名。
 func iptablesSaveCommand(protocol Protocol) string {
 	if protocol == ProtocolIPv6 {
 		return cmdIP6TablesSave
@@ -359,6 +358,7 @@ func iptablesSaveCommand(protocol Protocol) string {
 	return cmdIPTablesSave
 }
 
+// iptablesRestoreCommand 按协议族返回对应的 restore 命令名。
 func iptablesRestoreCommand(protocol Protocol) string {
 	if protocol == ProtocolIPv6 {
 		return cmdIP6TablesRestore
@@ -366,6 +366,7 @@ func iptablesRestoreCommand(protocol Protocol) string {
 	return cmdIPTablesRestore
 }
 
+// iptablesCommand 按协议族返回对应的 iptables 命令名。
 func iptablesCommand(protocol Protocol) string {
 	if protocol == ProtocolIPv6 {
 		return cmdIP6Tables
@@ -373,10 +374,12 @@ func iptablesCommand(protocol Protocol) string {
 	return cmdIPTables
 }
 
+// run 使用 context.TODO() 执行单条 iptables 操作。
 func (runner *runner) run(op operation, args []string) ([]byte, error) {
 	return runner.runContext(context.TODO(), op, args)
 }
 
+// runContext 在给定 context 下执行单条 iptables 操作。
 func (runner *runner) runContext(ctx context.Context, op operation, args []string) ([]byte, error) {
 	iptablesCmd := iptablesCommand(runner.protocol)
 	fullArgs := append([]string{WaitString, WaitSecondsValue, string(op)}, args...)
@@ -385,11 +388,11 @@ func (runner *runner) runContext(ctx context.Context, op operation, args []strin
 		return runner.exec.Command(iptablesCmd, fullArgs...).CombinedOutput()
 	}
 	return runner.exec.CommandContext(ctx, iptablesCmd, fullArgs...).CombinedOutput()
-	// Don't log err here - callers might not think it is an error.
+	// 此处不记录错误：调用方可能并不把它当作错误。
 }
 
-// Returns (bool, nil) if it was able to check the existence of the rule, or
-// (<undefined>, error) if the process of checking failed.
+// checkRule 检查规则是否存在。成功检查返回 (bool, nil)；
+// 检查过程本身失败则返回 (<未定义>, error)。
 func (runner *runner) checkRule(args []string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -402,8 +405,8 @@ func (runner *runner) checkRule(args []string) (bool, error) {
 		return true, nil
 	}
 	if ee, ok := err.(utilexec.ExitError); ok {
-		// iptables uses exit(1) to indicate a failure of the operation,
-		// as compared to a malformed commandline, for example.
+		// iptables 用退出码 1 表示规则不存在（操作失败），
+		// 与命令行格式错误等其他失败区分开。
 		if ee.Exited() && ee.ExitStatus() == 1 {
 			return false, nil
 		}
@@ -412,13 +415,14 @@ func (runner *runner) checkRule(args []string) (bool, error) {
 }
 
 const (
-	// Max time we wait for an iptables flush to complete after we notice it has started
+	// 发现清空开始后，等待 iptables 清空完成的最长时间。
 	iptablesFlushTimeout = 5 * time.Second
-	// How often we poll while waiting for an iptables flush to complete
+	// 等待清空完成时轮询的间隔。
 	iptablesFlushPollTime = 100 * time.Millisecond
 )
 
-// Monitor is part of Interface
+// Monitor 实现 Interface 的 Monitor 方法。
+// 外层循环负责在每次重载后重新建立金丝雀链，应对反复发生的清空。
 func (runner *runner) Monitor(canary Chain, tables []Table, reloadFunc func(), interval time.Duration, stopCh <-chan struct{}) {
 	for {
 		_ = utilwait.PollImmediateUntil(interval, func() (bool, error) {
@@ -431,17 +435,17 @@ func (runner *runner) Monitor(canary Chain, tables []Table, reloadFunc func(), i
 			return true, nil
 		}, stopCh)
 
-		// Poll until stopCh is closed or iptables is flushed
+		// 轮询直到 stopCh 关闭或 iptables 被清空。
 		err := utilwait.PollUntil(interval, func() (bool, error) {
 			if exists, err := runner.ChainExists(tables[0], canary); exists {
 				return false, nil
 			} else if isResourceError(err) {
+				// 资源错误（如拿不到锁）不代表清空，继续等待。
 				klog.ErrorS(err, "Could not check for iptables canary", "table", tables[0], "chain", canary)
 				return false, nil
 			}
 			klog.V(2).InfoS("IPTables canary deleted", "table", tables[0], "chain", canary)
-			// Wait for the other canaries to be deleted too before returning
-			// so we don't start reloading too soon.
+			// 等其余金丝雀链也被删除再返回，避免过早开始重载。
 			err := utilwait.PollImmediate(iptablesFlushPollTime, iptablesFlushTimeout, func() (bool, error) {
 				for i := 1; i < len(tables); i++ {
 					if exists, err := runner.ChainExists(tables[i], canary); exists || isResourceError(err) {
@@ -456,7 +460,7 @@ func (runner *runner) Monitor(canary Chain, tables []Table, reloadFunc func(), i
 			return true, nil
 		}, stopCh)
 		if err != nil {
-			// stopCh was closed
+			// stopCh 已关闭，清理金丝雀链后退出。
 			for _, table := range tables {
 				_ = runner.DeleteChain(table, canary)
 			}
@@ -468,7 +472,7 @@ func (runner *runner) Monitor(canary Chain, tables []Table, reloadFunc func(), i
 	}
 }
 
-// ChainExists is part of Interface
+// ChainExists 实现 Interface 的 ChainExists 方法。
 func (runner *runner) ChainExists(table Table, chain Chain) (bool, error) {
 	fullArgs := makeFullArgs(table, chain)
 
@@ -482,6 +486,7 @@ func (runner *runner) ChainExists(table Table, chain Chain) (bool, error) {
 	return true, nil
 }
 
+// operation 表示传给 iptables 的操作标志。
 type operation string
 
 const (
@@ -493,12 +498,12 @@ const (
 	opDeleteRule  operation = "-D"
 )
 
+// makeFullArgs 将表名和链名拼接到操作参数之前，生成完整的 iptables 参数列表。
 func makeFullArgs(table Table, chain Chain, args ...string) []string {
 	return append([]string{string(chain), "-t", string(table)}, args...)
 }
 
-// Present tests if iptable is supported on current kernel by checking the existence
-// of default table and chain
+// Present 通过检查默认表和链是否存在，判断当前内核是否支持 iptables。
 func (runner *runner) Present() error {
 	if _, err := runner.ChainExists(TableNAT, ChainPostrouting); err != nil {
 		return err
@@ -506,22 +511,23 @@ func (runner *runner) Present() error {
 	return nil
 }
 
+// iptablesNotFoundStrings 汇总了不同 iptables 版本/后端表示"未找到"的错误文本。
 var iptablesNotFoundStrings = []string{
 	// iptables-legacy [-A|-I] BAD-CHAIN [...]
-	// iptables-legacy [-C|-D] GOOD-CHAIN [...non-matching rule...]
+	// iptables-legacy [-C|-D] GOOD-CHAIN [...规则不匹配...]
 	// iptables-legacy [-X|-F|-Z] BAD-CHAIN
 	// iptables-nft -X BAD-CHAIN
-	// NB: iptables-nft [-F|-Z] BAD-CHAIN exits with no error
+	// 注意：iptables-nft [-F|-Z] BAD-CHAIN 不会报错。
 	"No chain/target/match by that name",
 
 	// iptables-legacy [...] -j BAD-CHAIN
 	// iptables-nft-1.8.0 [-A|-I] BAD-CHAIN [...]
 	// iptables-nft-1.8.0 [-A|-I] GOOD-CHAIN -j BAD-CHAIN
-	// NB: also matches some other things like "-m BAD-MODULE"
+	// 注意：也会匹配其他情况，比如 "-m BAD-MODULE"。
 	"No such file or directory",
 
 	// iptables-legacy [-C|-D] BAD-CHAIN [...]
-	// iptables-nft [-C|-D] GOOD-CHAIN [...non-matching rule...]
+	// iptables-nft [-C|-D] GOOD-CHAIN [...规则不匹配...]
 	"does a matching rule exist",
 
 	// iptables-nft-1.8.2 [-A|-C|-D|-I] BAD-CHAIN [...]
@@ -529,10 +535,8 @@ var iptablesNotFoundStrings = []string{
 	"does not exist",
 }
 
-// IsNotFoundError returns true if the error indicates "not found".  It parses
-// the error string looking for known values, which is imperfect; beware using
-// this function for anything beyond deciding between logging or ignoring an
-// error.
+// IsNotFoundError 判断错误是否表示"未找到"。它通过匹配错误文本中的已知值实现，
+// 并不精确；请勿用于"记录日志还是忽略错误"之外的场景。
 func IsNotFoundError(err error) bool {
 	es := err.Error()
 	for _, str := range iptablesNotFoundStrings {
@@ -543,11 +547,11 @@ func IsNotFoundError(err error) bool {
 	return false
 }
 
+// iptablesStatusResourceProblem 是 iptables 表示"资源问题"的退出码。
 const iptablesStatusResourceProblem = 4
 
-// isResourceError returns true if the error indicates that iptables ran into a "resource
-// problem" and was unable to attempt the request. In particular, this will be true if it
-// times out trying to get the iptables lock.
+// isResourceError 判断错误是否表示 iptables 遇到"资源问题"、
+// 无法执行请求，典型情况是获取 iptables 锁超时。
 func isResourceError(err error) bool {
 	if ee, isExitError := err.(utilexec.ExitError); isExitError {
 		return ee.ExitStatus() == iptablesStatusResourceProblem
@@ -555,44 +559,46 @@ func isResourceError(err error) bool {
 	return false
 }
 
-// ParseError records the payload when iptables reports an error parsing its input.
+// ParseError 记录 iptables 报告输入解析错误时的信息。
 type ParseError interface {
-	// Line returns the line number on which the parse error was reported.
-	// NOTE: First line is 1.
+	// Line 返回报告解析错误的行号。
+	// 注意：首行行号为 1。
 	Line() int
-	// Error returns the error message of the parse error, including line number.
+	// Error 返回包含行号的解析错误消息。
 	Error() string
 }
 
+// parseError 是 ParseError 的具体实现。
 type parseError struct {
 	cmd  string
 	line int
 }
 
+// Line 实现 ParseError 的 Line 方法。
 func (e parseError) Line() int {
 	return e.line
 }
 
+// Error 实现 ParseError 的 Error 方法。
 func (e parseError) Error() string {
 	return fmt.Sprintf("%s: input error on line %d: ", e.cmd, e.line)
 }
 
-// LineData represents a single numbered line of data.
+// LineData 表示带行号的一行数据。
 type LineData struct {
-	// Line holds the line number (the first line is 1).
+	// Line 为行号（首行为 1）。
 	Line int
-	// The data of the line.
+	// Data 为该行的内容。
 	Data string
 }
 
+// regexpParseError 用于从 iptables 的错误文本中提取失败行号。
 var regexpParseError = regexp.MustCompile("line ([1-9][0-9]*) failed$")
 
-// parseRestoreError extracts the line from the error, if it matches returns parseError
-// for example:
-// input: iptables-restore: line 51 failed
-// output: parseError:  cmd = iptables-restore, line = 51
-// NOTE: parseRestoreError depends on the error format of iptables, if it ever changes
-// we need to update this function
+// parseRestoreError 从错误中提取行号；匹配成功时返回 parseError。示例：
+// 输入：iptables-restore: line 51 failed
+// 输出：parseError，其中 cmd = iptables-restore，line = 51
+// 注意：该函数依赖 iptables 的错误格式，格式变化时需同步更新。
 func parseRestoreError(str string) (ParseError, bool) {
 	errors := strings.Split(str, ":")
 	if len(errors) != 2 {
@@ -610,10 +616,10 @@ func parseRestoreError(str string) (ParseError, bool) {
 	return parseError{cmd: cmd, line: line}, true
 }
 
-// ExtractLines extracts the -count and +count data from the lineNum row of lines and return
-// NOTE: lines start from line 1
+// ExtractLines 提取 lines 中第 line 行前后 count 行的数据（共 2*count+1 行，边界除外）。
+// 注意：行号从 1 开始。
 func ExtractLines(lines []byte, line, count int) []LineData {
-	// first line is line 1, so line can't be smaller than 1
+	// 首行行号为 1，因此 line 不能小于 1。
 	if line < 1 {
 		return nil
 	}

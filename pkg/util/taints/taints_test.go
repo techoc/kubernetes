@@ -26,6 +26,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestAddOrUpdateTaint 验证 AddOrUpdateTaint 能新增、去重及更新 taint，
+// 并正确返回是否发生了变更。
 func TestAddOrUpdateTaint(t *testing.T) {
 	taint := v1.Taint{
 		Key:    "foo",
@@ -101,6 +103,7 @@ func TestAddOrUpdateTaint(t *testing.T) {
 	}
 }
 
+// TestTaintExists 验证 TaintExists 按 key/value/effect 精确匹配 taint。
 func TestTaintExists(t *testing.T) {
 	testingTaints := []v1.Taint{
 		{
@@ -147,6 +150,7 @@ func TestTaintExists(t *testing.T) {
 	}
 }
 
+// TestTaintKeyExists 验证 TaintKeyExists 只按 key 匹配 taint。
 func TestTaintKeyExists(t *testing.T) {
 	testingTaints := []v1.Taint{
 		{
@@ -189,6 +193,7 @@ func TestTaintKeyExists(t *testing.T) {
 	}
 }
 
+// TestTaintSetFilter 验证 TaintSetFilter 按谓词筛出需要删除的 taint 集合。
 func TestTaintSetFilter(t *testing.T) {
 	testTaint1 := v1.Taint{
 		Key:    "foo_1",
@@ -249,6 +254,8 @@ func TestTaintSetFilter(t *testing.T) {
 	}
 }
 
+// TestRemoveTaint 验证 RemoveTaint 在节点上删除指定 taint 的行为，
+// 包括删除成功、无匹配及节点无 taint 的情况。
 func TestRemoveTaint(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -330,6 +337,7 @@ func TestRemoveTaint(t *testing.T) {
 	}
 }
 
+// TestDeleteTaint 验证 DeleteTaint 按 key 与 effect 从 taint 列表中删除指定项。
 func TestDeleteTaint(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -404,6 +412,7 @@ func TestDeleteTaint(t *testing.T) {
 	}
 }
 
+// TestDeleteTaintByKey 验证 DeleteTaintsByKey 只按 key 删除所有匹配的 taint。
 func TestDeleteTaintByKey(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -464,6 +473,8 @@ func TestDeleteTaintByKey(t *testing.T) {
 	}
 }
 
+// TestCheckIfTaintsAlreadyExists 验证 CheckIfTaintsAlreadyExists 能找出与新 taint
+// 重复的旧项，并以逗号拼接返回其 key。
 func TestCheckIfTaintsAlreadyExists(t *testing.T) {
 	oldTaints := []v1.Taint{
 		{
@@ -537,6 +548,8 @@ func TestCheckIfTaintsAlreadyExists(t *testing.T) {
 	}
 }
 
+// TestParseTaints 覆盖 ParseTaints 的各类输入：非法 spec 格式与取值、
+// 合法的新增/删除 taint spec，以及混合场景。
 func TestParseTaints(t *testing.T) {
 	cases := []struct {
 		name                   string
@@ -550,7 +563,7 @@ func TestParseTaints(t *testing.T) {
 			spec:        []string{""},
 			expectedErr: true,
 		},
-		// taint spec format without the suffix '-' must be either '<key>=<value>:<effect>', '<key>:<effect>', or '<key>'
+		// 不带后缀 '-' 的 taint spec 只能是 '<key>=<value>:<effect>'、'<key>:<effect>' 或 '<key>' 三种形式
 		{
 			name:        "invalid spec format without effect",
 			spec:        []string{"foo=abc"},
@@ -571,7 +584,7 @@ func TestParseTaints(t *testing.T) {
 			spec:        []string{"foo"},
 			expectedErr: true,
 		},
-		// taint spec must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character.
+		// taint spec 只能包含字母数字、'-'、'_' 或 '.'，且必须以字母数字开头和结尾
 		{
 			name:        "invalid spec taint value with special chars '%^@'",
 			spec:        []string{"foo=nospecialchars%^@:NoSchedule"},
@@ -607,7 +620,7 @@ func TestParseTaints(t *testing.T) {
 			spec:        []string{"foo=ends.with.dot.:NoSchedule"},
 			expectedErr: true,
 		},
-		// The value range of taint effect is "NoSchedule", "PreferNoSchedule", "NoExecute"
+		// taint effect 的合法取值为 "NoSchedule"、"PreferNoSchedule"、"NoExecute"
 		{
 			name:        "invalid spec effect for adding taint",
 			spec:        []string{"foo=abc:invalid_effect"},
@@ -748,6 +761,8 @@ func TestParseTaints(t *testing.T) {
 	}
 }
 
+// TestValidateTaint 验证 CheckTaintValidation 对非法 key、value、effect 报错，
+// 对合法 taint 放行。
 func TestValidateTaint(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -795,6 +810,8 @@ func TestValidateTaint(t *testing.T) {
 	}
 }
 
+// TestTaintSetDiff 验证 TaintSetDiff 能正确计算两个 taint 集合间需要新增和删除的项，
+// 包括 nil、独有、共享但取值不同等场景。
 func TestTaintSetDiff(t *testing.T) {
 	cases := []struct {
 		name                   string

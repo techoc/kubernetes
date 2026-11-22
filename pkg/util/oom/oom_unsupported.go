@@ -24,6 +24,8 @@ import (
 
 var unsupportedErr = errors.New("setting OOM scores is unsupported in this build")
 
+// NewOOMAdjuster 创建一个 OOMAdjuster，其所有调整函数都返回“不支持”错误。
+// 用于非 Linux 构建的占位实现，保证接口一致性。
 func NewOOMAdjuster() *OOMAdjuster {
 	return &OOMAdjuster{
 		ApplyOOMScoreAdj:          unsupportedApplyOOMScoreAdj,

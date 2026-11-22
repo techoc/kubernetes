@@ -28,14 +28,14 @@ import (
 	"k8s.io/kubernetes/pkg/util/iptables"
 )
 
-// FakeIPTables is no-op implementation of iptables Interface.
+// FakeIPTables 是 iptables.Interface 的内存实现，不执行任何真实 iptables 命令。
 type FakeIPTables struct {
 	protocol iptables.Protocol
 
 	Dump *IPTablesDump
 }
 
-// NewFake returns a no-op iptables.Interface
+// NewFake 返回一个 IPv4 的空实现，预置了 nat、filter 和 mangle 表。
 func NewFake() *FakeIPTables {
 	f := &FakeIPTables{
 		protocol: iptables.ProtocolIPv4,
@@ -69,14 +69,14 @@ func NewFake() *FakeIPTables {
 	return f
 }
 
-// NewIPv6Fake returns a no-op iptables.Interface with IsIPv6() == true
+// NewIPv6Fake 返回一个 IsIPv6() 为 true 的空实现。
 func NewIPv6Fake() *FakeIPTables {
 	f := NewFake()
 	f.protocol = iptables.ProtocolIPv6
 	return f
 }
 
-// EnsureChain is part of iptables.Interface
+// EnsureChain 实现 iptables.Interface：确保链存在，返回是否为已存在的链。
 func (f *FakeIPTables) EnsureChain(table iptables.Table, chain iptables.Chain) (bool, error) {
 	t, err := f.Dump.GetTable(table)
 	if err != nil {
@@ -89,7 +89,7 @@ func (f *FakeIPTables) EnsureChain(table iptables.Table, chain iptables.Chain) (
 	return false, nil
 }
 
-// FlushChain is part of iptables.Interface
+// FlushChain 实现 iptables.Interface：清空链中的规则。
 func (f *FakeIPTables) FlushChain(table iptables.Table, chain iptables.Chain) error {
 	if c, _ := f.Dump.GetChain(table, chain); c != nil {
 		c.Rules = nil
@@ -97,7 +97,7 @@ func (f *FakeIPTables) FlushChain(table iptables.Table, chain iptables.Chain) er
 	return nil
 }
 
-// DeleteChain is part of iptables.Interface
+// DeleteChain 实现 iptables.Interface：删除链。
 func (f *FakeIPTables) DeleteChain(table iptables.Table, chain iptables.Chain) error {
 	t, err := f.Dump.GetTable(table)
 	if err != nil {
@@ -112,7 +112,7 @@ func (f *FakeIPTables) DeleteChain(table iptables.Table, chain iptables.Chain) e
 	return nil
 }
 
-// ChainExists is part of iptables.Interface
+// ChainExists 实现 iptables.Interface：判断链是否存在。
 func (f *FakeIPTables) ChainExists(table iptables.Table, chain iptables.Chain) (bool, error) {
 	if _, err := f.Dump.GetTable(table); err != nil {
 		return false, err
@@ -123,7 +123,7 @@ func (f *FakeIPTables) ChainExists(table iptables.Table, chain iptables.Chain) (
 	return false, nil
 }
 
-// EnsureRule is part of iptables.Interface
+// EnsureRule 实现 iptables.Interface：按插入位置确保规则存在，返回是否已存在。
 func (f *FakeIPTables) EnsureRule(position iptables.RulePosition, table iptables.Table, chain iptables.Chain, args ...string) (bool, error) {
 	c, err := f.Dump.GetChain(table, chain)
 	if err != nil {
@@ -150,7 +150,7 @@ func (f *FakeIPTables) EnsureRule(position iptables.RulePosition, table iptables
 	return false, nil
 }
 
-// DeleteRule is part of iptables.Interface
+// DeleteRule 实现 iptables.Interface：删除匹配的规则。
 func (f *FakeIPTables) DeleteRule(table iptables.Table, chain iptables.Chain, args ...string) error {
 	c, err := f.Dump.GetChain(table, chain)
 	if err != nil {
@@ -167,16 +167,17 @@ func (f *FakeIPTables) DeleteRule(table iptables.Table, chain iptables.Chain, ar
 	return nil
 }
 
-// IsIPv6 is part of iptables.Interface
+// IsIPv6 实现 iptables.Interface：返回是否为 IPv6 实现。
 func (f *FakeIPTables) IsIPv6() bool {
 	return f.protocol == iptables.ProtocolIPv6
 }
 
-// Protocol is part of iptables.Interface
+// Protocol 实现 iptables.Interface：返回协议族。
 func (f *FakeIPTables) Protocol() iptables.Protocol {
 	return f.protocol
 }
 
+// saveTable 将指定表按 iptables-save 格式写入 buffer。
 func (f *FakeIPTables) saveTable(table iptables.Table, buffer *bytes.Buffer) error {
 	t, err := f.Dump.GetTable(table)
 	if err != nil {
@@ -196,11 +197,10 @@ func (f *FakeIPTables) saveTable(table iptables.Table, buffer *bytes.Buffer) err
 	return nil
 }
 
-// SaveInto is part of iptables.Interface
+// SaveInto 实现 iptables.Interface：将规则转储写入 buffer。
 func (f *FakeIPTables) SaveInto(table iptables.Table, buffer *bytes.Buffer) error {
 	if table == "" {
-		// As a secret extension to the API, FakeIPTables treats table="" as
-		// meaning "all tables"
+		// 对 API 的隐式扩展：FakeIPTables 将 table="" 解释为“所有表”。
 		for i := range f.Dump.Tables {
 			err := f.saveTable(f.Dump.Tables[i].Name, buffer)
 			if err != nil {
@@ -213,9 +213,11 @@ func (f *FakeIPTables) SaveInto(table iptables.Table, buffer *bytes.Buffer) erro
 	return f.saveTable(table, buffer)
 }
 
-// This is not a complete list but it's enough to pass the unit tests
+// 内置 target 列表并不完整，但足以让单测通过。
 var builtinTargets = sets.New("ACCEPT", "DROP", "RETURN", "REJECT", "DNAT", "SNAT", "MASQUERADE", "MARK")
 
+// restoreTable 按 restore 参数将 newTable 合入当前转储，并校验所有跳转目标是否有效。
+// 校验失败时回滚到合并前的链集合，避免留下半更新状态。
 func (f *FakeIPTables) restoreTable(newDump *IPTablesDump, newTable *Table, flush iptables.FlushFlag, counters iptables.RestoreCountersFlag) error {
 	oldTable, err := f.Dump.GetTable(newTable.Name)
 	if err != nil {
@@ -225,7 +227,7 @@ func (f *FakeIPTables) restoreTable(newDump *IPTablesDump, newTable *Table, flus
 	backupChains := make([]Chain, len(oldTable.Chains))
 	copy(backupChains, oldTable.Chains)
 
-	// Update internal state
+	// 先更新内部状态，稍后再统一校验跳转目标。
 	if flush == iptables.FlushTables {
 		oldTable.Chains = make([]Chain, 0, len(newTable.Chains))
 	}
@@ -233,13 +235,13 @@ func (f *FakeIPTables) restoreTable(newDump *IPTablesDump, newTable *Table, flus
 		oldChain, _ := f.Dump.GetChain(newTable.Name, newChain.Name)
 		switch {
 		case oldChain == nil && newChain.Deleted:
-			// no-op
+			// 删除本就不存在的链，无需操作。
 		case oldChain == nil && !newChain.Deleted:
 			oldTable.Chains = append(oldTable.Chains, newChain)
 		case oldChain != nil && newChain.Deleted:
 			_ = f.DeleteChain(newTable.Name, newChain.Name)
 		case oldChain != nil && !newChain.Deleted:
-			// replace old data with new
+			// 用新规则替换旧规则；计数器按标志决定是否同步。
 			oldChain.Rules = newChain.Rules
 			if counters == iptables.RestoreCounters {
 				oldChain.Packets = newChain.Packets
@@ -248,7 +250,7 @@ func (f *FakeIPTables) restoreTable(newDump *IPTablesDump, newTable *Table, flus
 		}
 	}
 
-	// Now check that all old/new jumps are valid
+	// 检查新旧规则中所有跳转目标都有效：真实 iptables-restore 会拒绝无效跳转。
 	for _, chain := range oldTable.Chains {
 		for _, rule := range chain.Rules {
 			if rule.Jump == nil {
@@ -262,13 +264,11 @@ func (f *FakeIPTables) restoreTable(newDump *IPTablesDump, newTable *Table, flus
 			if jumpedChain == nil {
 				newChain, _ := newDump.GetChain(oldTable.Name, iptables.Chain(rule.Jump.Value))
 				if newChain != nil {
-					// rule is an old rule that jumped to a chain which
-					// was deleted by newDump.
+					// 旧规则跳转到被本次 restore 删除的链。
 					oldTable.Chains = backupChains
 					return fmt.Errorf("deleted chain %q is referenced by existing rules", newChain.Name)
 				} else {
-					// rule is a new rule that jumped to a chain that was
-					// neither created nor pre-existing
+					// 新规则跳转到既未创建也不存在的链。
 					oldTable.Chains = backupChains
 					return fmt.Errorf("rule %q jumps to a non-existent chain", rule.Raw)
 				}
@@ -279,7 +279,7 @@ func (f *FakeIPTables) restoreTable(newDump *IPTablesDump, newTable *Table, flus
 	return nil
 }
 
-// Restore is part of iptables.Interface
+// Restore 实现 iptables.Interface：恢复单个表。
 func (f *FakeIPTables) Restore(table iptables.Table, data []byte, flush iptables.FlushFlag, counters iptables.RestoreCountersFlag) error {
 	dump, err := ParseIPTablesDump(string(data))
 	if err != nil {
@@ -294,7 +294,7 @@ func (f *FakeIPTables) Restore(table iptables.Table, data []byte, flush iptables
 	return f.restoreTable(dump, newTable, flush, counters)
 }
 
-// RestoreAll is part of iptables.Interface
+// RestoreAll 实现 iptables.Interface：恢复转储中的所有表。
 func (f *FakeIPTables) RestoreAll(data []byte, flush iptables.FlushFlag, counters iptables.RestoreCountersFlag) error {
 	dump, err := ParseIPTablesDump(string(data))
 	if err != nil {
@@ -310,10 +310,11 @@ func (f *FakeIPTables) RestoreAll(data []byte, flush iptables.FlushFlag, counter
 	return nil
 }
 
-// Monitor is part of iptables.Interface
+// Monitor 实现 iptables.Interface：空实现，不启动监控。
 func (f *FakeIPTables) Monitor(canary iptables.Chain, tables []iptables.Table, reloadFunc func(), interval time.Duration, stopCh <-chan struct{}) {
 }
 
+// Present 实现 iptables.Interface：空实现，始终认为 iptables 可用。
 func (f *FakeIPTables) Present() error {
 	return nil
 }

@@ -18,17 +18,17 @@ package parsers
 
 import (
 	"fmt"
-	//  Import the crypto sha256 algorithm for the docker image parser to work
+	// 注册 sha256 算法，docker 镜像解析器依赖它。
 	_ "crypto/sha256"
-	//  Import the crypto/sha512 algorithm for the docker image parser to work with 384 and 512 sha hashes
+	// 注册 sha512 算法，供 docker 镜像解析器处理 384/512 位哈希。
 	_ "crypto/sha512"
 
 	dockerref "github.com/distribution/reference"
 	"github.com/robfig/cron/v3"
 )
 
-// ParseImageName parses a docker image string into three parts: repo, tag and digest.
-// If both tag and digest are empty, a default image tag will be returned.
+// ParseImageName 将 docker 镜像字符串解析为三部分：repo、tag 和 digest。
+// 若 tag 和 digest 都为空，则返回默认的镜像 tag。
 func ParseImageName(image string) (string, string, string, error) {
 	named, err := dockerref.ParseNormalizedNamed(image)
 	if err != nil {
@@ -47,15 +47,15 @@ func ParseImageName(image string) (string, string, string, error) {
 	if ok {
 		digest = digested.Digest().String()
 	}
-	// If no tag was specified, use the default "latest".
+	// 既没有 tag 也没有 digest 时，默认使用 "latest"。
 	if len(tag) == 0 && len(digest) == 0 {
 		tag = "latest"
 	}
 	return repoToPull, tag, digest, nil
 }
 
-// ParseCronScheduleWithPanicRecovery safely parses a cron schedule, recovering from panics
-// that can occur in cron.ParseStandard for malformed schedules like "TZ=0".
+// ParseCronScheduleWithPanicRecovery 安全地解析 cron 表达式，
+// 捕获 cron.ParseStandard 遇到 "TZ=0" 等畸形表达式时产生的 panic。
 func ParseCronScheduleWithPanicRecovery(schedule string) (sched cron.Schedule, err error) {
 	defer func() {
 		if r := recover(); r != nil {

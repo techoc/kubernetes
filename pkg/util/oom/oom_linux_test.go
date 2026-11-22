@@ -21,15 +21,16 @@ package oom
 import (
 	"os"
 
-	"github.com/opencontainers/cgroups"
 	"testing"
+
+	"github.com/opencontainers/cgroups"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// Converts a sequence of PID lists into a PID lister.
-// The PID lister returns pidListSequence[i] on the ith call. If i >= length of pidListSequence
-// then return the last element of pidListSequence (the sequence is considered to have) stabilized.
+// sequenceToPidLister 把 PID 列表序列转换成一个 PID 列举函数。
+// 第 i 次调用返回 pidListSequence[i]；若调用次数超出序列长度，
+// 则返回最后一个元素（认为序列已经稳定）。
 func sequenceToPidLister(pidListSequence [][]int) func(string) ([]int, error) {
 	var numCalls int
 	return func(cgroupName string) ([]int, error) {
@@ -43,12 +44,12 @@ func sequenceToPidLister(pidListSequence [][]int) func(string) ([]int, error) {
 	}
 }
 
-// Tests that applyOOMScoreAdjContainer correctly applies OOM scores to relevant processes, or
-// returns the right error.
+// applyOOMScoreAdjContainerTester 验证 applyOOMScoreAdjContainer 是否正确地为相关进程设置 OOM 分数，
+// 或者在预期场景下返回正确的错误。
 func applyOOMScoreAdjContainerTester(pidListSequence [][]int, maxTries int, appliedPids []int, expectedError bool, t *testing.T) {
 	pidOOMs := make(map[int]bool)
 
-	// Mock ApplyOOMScoreAdj and pidLister.
+	// 用 mock 替换 ApplyOOMScoreAdj 和 pidLister，记录实际被调整的 PID。
 	oomAdjuster := NewOOMAdjuster()
 	oomAdjuster.ApplyOOMScoreAdj = func(pid int, oomScoreAdj int) error {
 		pidOOMs[pid] = true
@@ -57,7 +58,7 @@ func applyOOMScoreAdjContainerTester(pidListSequence [][]int, maxTries int, appl
 	oomAdjuster.pidLister = sequenceToPidLister(pidListSequence)
 	err := oomAdjuster.ApplyOOMScoreAdjContainer("", 100, maxTries)
 
-	// Check error value.
+	// 校验错误返回值是否符合预期。
 	if expectedError && err == nil {
 		t.Errorf("Expected error %+v when running ApplyOOMScoreAdjContainer but got no error", expectedError)
 		return
@@ -67,7 +68,7 @@ func applyOOMScoreAdjContainerTester(pidListSequence [][]int, maxTries int, appl
 	} else if err != nil {
 		return
 	}
-	// Check that OOM scores were applied to the right processes.
+	// 校验 OOM 分数确实应用到了预期的进程集合。
 	if len(appliedPids) != len(pidOOMs) {
 		t.Errorf("Applied OOM scores to incorrect number of processes - %+v vs %v", appliedPids, pidOOMs)
 		return
@@ -79,6 +80,8 @@ func applyOOMScoreAdjContainerTester(pidListSequence [][]int, maxTries int, appl
 	}
 }
 
+// TestOOMScoreAdjContainer 覆盖进程列表为空、包含进程以及列表延迟稳定的场景，
+// 验证 applyOOMScoreAdjContainer 的重试和错误行为。
 func TestOOMScoreAdjContainer(t *testing.T) {
 	pidListSequenceEmpty := [][]int{}
 	applyOOMScoreAdjContainerTester(pidListSequenceEmpty, 3, nil, true, t)
@@ -100,6 +103,7 @@ func TestOOMScoreAdjContainer(t *testing.T) {
 	applyOOMScoreAdjContainerTester(pidListSequenceLag, 4, []int{1, 2, 4}, false, t)
 }
 
+// TestPidListerFailure 验证 cgroup 路径不存在时，getPids 返回“不存在”错误。
 func TestPidListerFailure(t *testing.T) {
 	_, err := getPids("/does/not/exist")
 	assert.True(t, cgroups.IsNotFound(err) || os.IsNotExist(err), "expected getPids to return not exists error. Got %v", err)

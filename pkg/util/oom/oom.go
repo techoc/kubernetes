@@ -16,8 +16,8 @@ limitations under the License.
 
 package oom
 
-// This is a struct instead of an interface to allow injection of process ID listers and
-// applying OOM score in tests.
+// OOMAdjuster 调整进程的 OOM 分数。
+// 这里用结构体而非接口，是为了便于在测试中注入进程 PID 列举函数和 OOM 分数写入函数。
 // TODO: make this an interface, and inject a mock ioutil struct for testing.
 type OOMAdjuster struct {
 	pidLister                 func(cgroupName string) ([]int, error)

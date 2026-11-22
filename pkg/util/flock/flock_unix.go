@@ -20,16 +20,14 @@ package flock
 
 import "golang.org/x/sys/unix"
 
-// Acquire acquires a lock on a file for the duration of the process. This method
-// is reentrant.
+// Acquire 获取文件锁，锁的持有周期为整个进程生命周期。该方法可重入。
 func Acquire(path string) error {
 	fd, err := unix.Open(path, unix.O_CREAT|unix.O_RDWR|unix.O_CLOEXEC, 0600)
 	if err != nil {
 		return err
 	}
 
-	// We don't need to close the fd since we should hold
-	// it until the process exits.
+	// 不关闭 fd：需要一直持有它直到进程退出。
 
 	return unix.Flock(fd, unix.LOCK_EX)
 }

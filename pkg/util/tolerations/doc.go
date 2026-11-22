@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package tolerations provides utilities to work with pod spec tolerations.
+// Package tolerations 提供处理 Pod spec 中 toleration（容忍）的工具函数。
 package tolerations

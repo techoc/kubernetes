@@ -28,6 +28,7 @@ import (
 	"k8s.io/kubernetes/pkg/util/iptables"
 )
 
+// TestFakeIPTables 全面验证 Fake IPTables 的行为：链与规则的增删改查、保存/恢复及错误处理。
 func TestFakeIPTables(t *testing.T) {
 	fake := NewFake()
 	buf := bytes.NewBuffer(nil)
@@ -55,7 +56,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Fatalf("bad initial dump. expected:\n%s\n\ngot:\n%s\n", expected, buf.Bytes())
 	}
 
-	// EnsureChain
+	// EnsureChain：覆盖表不存在、链不存在、链已存在三种情况。
 	existed, err := fake.EnsureChain(iptables.Table("blah"), iptables.Chain("KUBE-TEST"))
 	if err == nil {
 		t.Errorf("did not get expected error creating chain in non-existent table")
@@ -75,7 +76,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Errorf("wrong return value from EnsureChain with existing chain")
 	}
 
-	// ChainExists
+	// ChainExists：分别检查存在和不存在的链。
 	exists, err := fake.ChainExists(iptables.TableNAT, iptables.Chain("KUBE-TEST"))
 	if err != nil {
 		t.Errorf("unexpected error checking chain: %v", err)
@@ -89,7 +90,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Errorf("wrong return value from ChainExists with non-existent chain")
 	}
 
-	// EnsureRule
+	// EnsureRule：覆盖非法表、非法链、追加和插入，以及重复规则的情况。
 	existed, err = fake.EnsureRule(iptables.Append, iptables.Table("blah"), iptables.Chain("KUBE-TEST"), "-j", "ACCEPT")
 	if err == nil {
 		t.Errorf("did not get expected error creating rule in non-existent table")
@@ -121,7 +122,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Errorf("wrong return value from EnsureRule with already-existing rule")
 	}
 
-	// Sanity-check...
+	// 检查当前规则转储是否符合预期。
 	buf.Reset()
 	err = fake.SaveInto("", buf)
 	if err != nil {
@@ -149,7 +150,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Fatalf("bad sanity-check dump. expected:\n%s\n\ngot:\n%s\n", expected, buf.Bytes())
 	}
 
-	// DeleteRule
+	// DeleteRule：非法表/链应报错，删除不存在的规则应静默成功。
 	err = fake.DeleteRule(iptables.Table("blah"), iptables.Chain("KUBE-TEST"), "-j", "DROP")
 	if err == nil {
 		t.Errorf("did not get expected error deleting rule in non-existent table")
@@ -167,7 +168,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Errorf("unexpected error deleting rule: %v", err)
 	}
 
-	// Restore
+	// Restore：恢复规则，验证链、跳转规则及注释的还原。
 	rules := dedent.Dedent(strings.Trim(`
 		*nat
 		:KUBE-RESTORED - [0:0]
@@ -185,7 +186,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Fatalf("unexpected error from Restore: %v", err)
 	}
 
-	// We used NoFlushTables, so this should leave KUBE-TEST unchanged
+	// 使用了 NoFlushTables，KUBE-TEST 应保持不变。
 	buf.Reset()
 	err = fake.SaveInto("", buf)
 	if err != nil {
@@ -220,7 +221,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Fatalf("bad post-restore dump. expected:\n%s\n\ngot:\n%s\n", expected, buf.Bytes())
 	}
 
-	// Trying to use Restore to delete a chain that another chain jumps to will fail
+	// 通过 Restore 删除仍被其他链引用的链应失败。
 	rules = dedent.Dedent(strings.Trim(`
 		*nat
 		:KUBE-MISC-TWO - [0:0]
@@ -232,7 +233,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Fatalf("Expected 'referenced by existing rules' error from Restore, got %v", err)
 	}
 
-	// Trying to use Restore to add a jump to a non-existent chain will fail
+	// 通过 Restore 添加指向不存在链的跳转应失败。
 	rules = dedent.Dedent(strings.Trim(`
 		*nat
 		:KUBE-MISC-TWO - [0:0]
@@ -244,7 +245,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Fatalf("Expected 'non-existent chain' error from Restore, got %v", err)
 	}
 
-	// more Restore; empty out one chain and delete another, but also update its counters
+	// 再次 Restore：清空一条链、删除另一条链，同时验证计数器被更新。
 	rules = dedent.Dedent(strings.Trim(`
 		*nat
 		:KUBE-RESTORED - [0:0]
@@ -288,7 +289,7 @@ func TestFakeIPTables(t *testing.T) {
 		t.Fatalf("bad post-second-restore dump. expected:\n%s\n\ngot:\n%s\n", expected, buf.Bytes())
 	}
 
-	// RestoreAll, FlushTables
+	// RestoreAll 配合 FlushTables：恢复所有表并清空原有内容。
 	rules = dedent.Dedent(strings.Trim(`
 		*filter
 		:INPUT - [0:0]

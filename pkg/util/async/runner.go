@@ -20,21 +20,21 @@ import (
 	"sync"
 )
 
-// Runner is an abstraction to make it easy to start and stop groups of things that can be
-// described by a single function which waits on a channel close to exit.
+// Runner 封装一组可重复启停的循环任务：每个任务都是一个函数，
+// 通过监听传入的 stop 通道关闭来退出。
 type Runner struct {
 	lock      sync.Mutex
 	loopFuncs []func(stop chan struct{})
 	stop      *chan struct{}
 }
 
-// NewRunner makes a runner for the given function(s). The function(s) should loop until
-// the channel is closed.
+// NewRunner 用给定的循环函数创建 Runner；
+// 这些函数应在 stop 通道关闭后退出。
 func NewRunner(f ...func(stop chan struct{})) *Runner {
 	return &Runner{loopFuncs: f}
 }
 
-// Start begins running.
+// Start 启动所有循环任务；重复调用无效果。
 func (r *Runner) Start() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -47,7 +47,7 @@ func (r *Runner) Start() {
 	}
 }
 
-// Stop stops running.
+// Stop 关闭 stop 通道以停止所有任务；未运行时调用无效果。
 func (r *Runner) Stop() {
 	r.lock.Lock()
 	defer r.lock.Unlock()

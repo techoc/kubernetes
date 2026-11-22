@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package labels provides utilities to work with Kubernetes labels.
+// Package labels 提供操作 Kubernetes 标签的工具函数。
 package labels

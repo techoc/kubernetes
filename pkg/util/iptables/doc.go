@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package iptables provides an interface and implementations for running iptables commands.
+// Package iptables 提供运行 iptables 命令的接口及实现。
 package iptables

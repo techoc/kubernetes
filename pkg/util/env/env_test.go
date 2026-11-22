@@ -23,6 +23,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestGetEnvAsStringOrFallback 验证环境变量已设置时返回值，
+// 未设置时返回 fallback，且 fallback 本身不再被解析。
 func TestGetEnvAsStringOrFallback(t *testing.T) {
 	const expected = "foo"
 
@@ -36,6 +38,8 @@ func TestGetEnvAsStringOrFallback(t *testing.T) {
 	assert.Equal(expected, GetEnvAsStringOrFallback(key, expected))
 }
 
+// TestGetEnvAsIntOrFallback 覆盖整数环境变量已设置、未设置和值非法三种情况；
+// 值非法时返回 fallback 并携带解析错误。
 func TestGetEnvAsIntOrFallback(t *testing.T) {
 	const expected = 1
 
@@ -59,6 +63,8 @@ func TestGetEnvAsIntOrFallback(t *testing.T) {
 	}
 }
 
+// TestGetEnvAsFloat64OrFallback 覆盖浮点环境变量已设置、未设置和值非法三种情况，
+// 并断言非法值产生的具体解析错误。
 func TestGetEnvAsFloat64OrFallback(t *testing.T) {
 	const expected = 1.0
 

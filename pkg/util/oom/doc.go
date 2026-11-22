@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package oom implements utility functions relating to out of memory management.
+// Package oom 提供与内存溢出（OOM）管理相关的工具函数。
 package oom

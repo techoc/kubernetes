@@ -118,10 +118,11 @@ var (
 	}
 )
 
+// TestIsSuperset 验证 isSuperset 的超集判定：逐一检查每种容忍与其他容忍的包含关系。
 func TestIsSuperset(t *testing.T) {
 	tests := []struct {
 		toleration string
-		ss         []string // t should be a superset of these
+		ss         []string // 该容忍应为这些容忍的超集
 	}{{
 		"all",
 		[]string{"all-nosched", "all-noexec", "foo", "foo-bar", "foo-nosched", "foo-bar-nosched", "foo-baz-nosched", "faz-nosched", "faz-baz-nosched", "foo-prefnosched", "foo-noexec", "foo-bar-noexec", "foo-noexec-10", "foo-noexec-0", "foo-bar-noexec-10"},
@@ -191,6 +192,7 @@ func TestIsSuperset(t *testing.T) {
 	}
 }
 
+// TestVerifyAgainstWhitelist 验证白名单校验：输入容忍须被白名单覆盖，空输入或空白名单均视为通过。
 func TestVerifyAgainstWhitelist(t *testing.T) {
 	tests := []struct {
 		testName  string
@@ -262,6 +264,7 @@ func TestVerifyAgainstWhitelist(t *testing.T) {
 	}
 }
 
+// TestMergeTolerations 验证合并结果：去除冗余、保留并集，结果按序比较。
 func TestMergeTolerations(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -305,11 +308,12 @@ func TestMergeTolerations(t *testing.T) {
 	}
 }
 
+// TestFuzzed 用固定随机种子生成大量合法容忍，验证白名单校验与合并的包含关系性质。
 func TestFuzzed(t *testing.T) {
-	r := rand.New(rand.NewSource(1234)) // Fixed source to prevent flakes.
+	r := rand.New(rand.NewSource(1234)) // 固定种子，避免测试偶发失败。
 
 	const (
-		allProbability               = 0.01 // Chance of getting a tolerate all
+		allProbability               = 0.01 // 生成"容忍所有"的概率
 		existsProbability            = 0.3
 		tolerationSecondsProbability = 0.5
 	)
@@ -322,7 +326,7 @@ func TestFuzzed(t *testing.T) {
 			gen = tolerations["all"]
 			return gen
 		}
-		// Small key/value space to encourage collisions
+		// 缩小 key/value 取值空间，增加碰撞概率。
 		gen.Key = strings.Repeat("a", r.Intn(6)+1)
 		if r.Float32() < existsProbability {
 			gen.Operator = api.TolerationOpExists
@@ -333,7 +337,7 @@ func TestFuzzed(t *testing.T) {
 		if gen.Effect == api.TaintEffectNoExecute && r.Float32() < tolerationSecondsProbability {
 			gen.TolerationSeconds = ptr.To[int64](r.Int63n(10))
 		}
-		// Ensure only valid tolerations are generated.
+		// 确保只生成合法的容忍，避免把非法输入当作测试失败。
 		require.NoError(t, validation.ValidateTolerations([]api.Toleration{gen}, field.NewPath(""), validation.PodValidationOptions{}).ToAggregate(), "%#v", gen)
 		return gen
 	}
@@ -345,7 +349,7 @@ func TestFuzzed(t *testing.T) {
 		return result
 	}
 
-	// Check whether the toleration is a subset of a toleration in the set.
+	// 检查容忍是否为集合中某个容忍的子集（即被其覆盖）。
 	isContained := func(toleration api.Toleration, set []api.Toleration) bool {
 		for _, ss := range set {
 			if isSuperset(ss, toleration) {
@@ -367,7 +371,7 @@ func TestFuzzed(t *testing.T) {
 	t.Run("VerifyAgainstWhitelist", func(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			input := genTolerations()
-			whitelist := append(genTolerations(), genToleration()) // Non-empty
+			whitelist := append(genTolerations(), genToleration()) // 保证非空
 			if VerifyAgainstWhitelist(input, whitelist) {
 				for _, tol := range input {
 					require.True(t, isContained(tol, whitelist), debugMsg(input, whitelist))
@@ -397,6 +401,7 @@ func TestFuzzed(t *testing.T) {
 	})
 }
 
+// getTolerations 按名称列表从预设表中取出对应的容忍。
 func getTolerations(names []string) []api.Toleration {
 	result := []api.Toleration{}
 	for _, name := range names {

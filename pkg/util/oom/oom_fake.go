@@ -16,8 +16,12 @@ limitations under the License.
 
 package oom
 
+// FakeOOMAdjuster 是 OOMAdjuster 的空占位类型；实际使用的是
+// NewFakeOOMAdjuster 返回的、注入了空操作的 OOMAdjuster。
 type FakeOOMAdjuster struct{}
 
+// NewFakeOOMAdjuster 返回一个不会触碰真实 /proc 或 cgroup 的 OOMAdjuster，
+// 供 hollow kubelet 和测试在无需特权环境时使用。
 func NewFakeOOMAdjuster() *OOMAdjuster {
 	return &OOMAdjuster{
 		pidLister:                 func(cgroupName string) ([]int, error) { return make([]int, 0), nil },

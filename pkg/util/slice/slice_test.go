@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestCopyStrings 验证 CopyStrings 返回的是独立副本：
+// 修改原切片不会影响复制出的切片，同时保留 nil/空切片的语义。
 func TestCopyStrings(t *testing.T) {
 	var src1 []string
 	dest1 := CopyStrings(src1)
@@ -49,6 +51,7 @@ func TestCopyStrings(t *testing.T) {
 	}
 }
 
+// TestSortStrings 验证 SortStrings 原地排序并返回同一个切片。
 func TestSortStrings(t *testing.T) {
 	src := []string{"a", "c", "b"}
 	dest := SortStrings(src)
@@ -63,6 +66,7 @@ func TestSortStrings(t *testing.T) {
 	}
 }
 
+// TestContainsString 验证 ContainsString 的直接匹配与 modifier 转换后匹配。
 func TestContainsString(t *testing.T) {
 	src := []string{"aa", "bb", "cc"}
 	if !ContainsString(src, "bb", nil) {
@@ -85,6 +89,8 @@ func TestContainsString(t *testing.T) {
 	}
 }
 
+// TestRemoveString 覆盖 RemoveString 的多种场景：nil 输入、无匹配、
+// 全部删除（结果为 nil）、单个/多个删除，以及 modifier 参与匹配的情况。
 func TestRemoveString(t *testing.T) {
 	modifier := func(s string) string {
 		if s == "ab" {

@@ -16,8 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package coverage provides tools for coverage-instrumented binaries to collect and
-// flush coverage information.
+// Package coverage 为启用了覆盖率检测的二进制提供收集与刷写覆盖率信息的工具。
 package coverage
 
 import (
@@ -33,17 +32,16 @@ import (
 
 var coverageFile string
 
-// tempCoveragePath returns a temporary file to write coverage information to.
-// The file is in the same directory as the destination, ensuring os.Rename will work.
+// tempCoveragePath 返回写入覆盖率信息的临时文件路径。
+// 临时文件与目标文件位于同一目录，确保 os.Rename 能正常工作。
 func tempCoveragePath() string {
 	return coverageFile + ".tmp"
 }
 
-// InitCoverage is called from the dummy unit test to prepare Go's coverage framework.
-// Clients should never need to call it.
+// InitCoverage 由占位单元测试调用，用于初始化 Go 的覆盖率框架。
+// 普通调用方不应直接使用它。
 func InitCoverage(name string) {
-	// We read the coverage destination in from the KUBE_COVERAGE_FILE env var,
-	// or if it's empty we just use a default in /tmp
+	// 目标路径来自 KUBE_COVERAGE_FILE；未设置时回退到 /tmp 下的默认路径。
 	coverageFile = os.Getenv("KUBE_COVERAGE_FILE")
 	if coverageFile == "" {
 		coverageFile = "/tmp/k8s-" + name + ".cov"
@@ -60,20 +58,19 @@ func InitCoverage(name string) {
 		}
 	}
 
-	// Set up the unit test framework with the required arguments to activate test coverage.
+	// 伪装成带 -test.coverprofile 参数启动，激活测试框架的覆盖率输出。
 	flag.CommandLine.Parse([]string{"-test.coverprofile", tempCoveragePath()})
 
-	// Begin periodic logging
+	// 启动周期性刷写
 	go wait.Forever(FlushCoverage, flushInterval)
 }
 
-// FlushCoverage flushes collected coverage information to disk.
-// The destination file is configured at startup and cannot be changed.
-// Calling this function also sends a line like "coverage: 5% of statements" to stdout.
+// FlushCoverage 将收集到的覆盖率信息刷写到磁盘。
+// 目标文件在启动时确定，之后不可更改。
+// 调用该函数还会向标准输出打印类似 "coverage: 5% of statements" 的一行。
 func FlushCoverage() {
-	// We're not actually going to run any tests, but we need Go to think we did so it writes
-	// coverage information to disk. To achieve this, we create a bunch of empty test suites and
-	// have it "run" them.
+	// 实际上没有测试可跑，但必须让 Go 以为跑过测试才会落盘覆盖率数据，
+	// 因此构造一批空的测试套件并“运行”它们。
 	tests := []testing.InternalTest{}
 	benchmarks := []testing.InternalBenchmark{}
 	examples := []testing.InternalExample{}
@@ -84,9 +81,7 @@ func FlushCoverage() {
 	dummyRun := testing.MainStart(deps, tests, benchmarks, fuzztargets, examples)
 	dummyRun.Run()
 
-	// Once it writes to the temporary path, we move it to the intended path.
-	// This gets us atomic updates from the perspective of another process trying to access
-	// the file.
+	// 写入临时文件后再移动到目标路径，使并发读取方看到的是原子替换。
 	if err := os.Rename(tempCoveragePath(), coverageFile); err != nil {
 		klog.Errorf("Couldn't move coverage file from %s to %s", coverageFile, tempCoveragePath())
 	}

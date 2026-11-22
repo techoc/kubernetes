@@ -31,6 +31,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// NewOOMAdjuster 创建一个使用 Linux 真实实现的 OOMAdjuster，
+// 其中 PID 列举和 OOM 分数写入均通过 Linux 具体实现注入。
 func NewOOMAdjuster() *OOMAdjuster {
 	oomAdjuster := &OOMAdjuster{
 		pidLister:        getPids,
@@ -44,8 +46,9 @@ func getPids(cgroupName string) ([]int, error) {
 	return cmutil.GetPids(filepath.Join("/", cgroupName))
 }
 
-// Writes 'value' to /proc/<pid>/oom_score_adj. PID = 0 means self
-// Returns os.ErrNotExist if the `pid` does not exist.
+// applyOOMScoreAdj 将 value 写入 /proc/<pid>/oom_score_adj；pid 为 0 时表示当前进程自身。
+// 若 pid 不存在，返回 os.ErrNotExist。
+// 写入失败时最多重试两次，以容忍进程刚退出或 /proc 项尚不稳定的短暂竞争。
 func applyOOMScoreAdj(pid int, oomScoreAdj int) error {
 	if pid < 0 {
 		return fmt.Errorf("invalid PID %d specified for oom_score_adj", pid)
@@ -83,8 +86,8 @@ func applyOOMScoreAdj(pid int, oomScoreAdj int) error {
 	return err
 }
 
-// Writes 'value' to /proc/<pid>/oom_score_adj for all processes in cgroup cgroupName.
-// Keeps trying to write until the process list of the cgroup stabilizes, or until maxTries tries.
+// applyOOMScoreAdjContainer 为 cgroup cgroupName 中的所有进程写入 oom_score_adj。
+// 它会持续重试，直到 cgroup 的进程列表稳定或达到 maxTries 次尝试。
 func (oomAdjuster *OOMAdjuster) applyOOMScoreAdjContainer(cgroupName string, oomScoreAdj, maxTries int) error {
 	adjustedProcessSet := make(map[int]bool)
 	for i := 0; i < maxTries; i++ {
@@ -92,7 +95,7 @@ func (oomAdjuster *OOMAdjuster) applyOOMScoreAdjContainer(cgroupName string, oom
 		pidList, err := oomAdjuster.pidLister(cgroupName)
 		if err != nil {
 			if os.IsNotExist(err) {
-				// Nothing to do since the container doesn't exist anymore.
+				// 容器已经不存在，无需再调整其进程的 OOM 分数。
 				return os.ErrNotExist
 			}
 			continueAdjusting = true
@@ -112,18 +115,17 @@ func (oomAdjuster *OOMAdjuster) applyOOMScoreAdjContainer(cgroupName string, oom
 						klog.V(10).Infof("cannot adjust oom score for pid %d - %v", pid, err)
 						continueAdjusting = true
 					}
-					// Processes can come and go while we try to apply oom score adjust value. So ignore errors here.
+					// 调整过程中进程可能随时退出，这类错误无需中断整体流程。
 				}
 			}
 		}
 		if !continueAdjusting {
 			return nil
 		}
-		// There's a slight race. A process might have forked just before we write its OOM score adjust.
-		// The fork might copy the parent process's old OOM score, then this function might execute and
-		// update the parent's OOM score, but the forked process id might not be reflected in cgroup.procs
-		// for a short amount of time. So this function might return without changing the forked process's
-		// OOM score. Very unlikely race, so ignoring this for now.
+		// 存在微小竞争：进程可能在我们写入 OOM 分数前刚 fork 出子进程，
+		// 子进程复制了父进程的旧分数；随后我们更新了父进程，但子进程的 PID
+		// 短时间内还没出现在 cgroup.procs 中，导致本函数返回时子进程分数未更新。
+		// 概率极低，暂不处理。
 	}
 	return fmt.Errorf("exceeded maxTries, some processes might not have desired OOM score")
 }

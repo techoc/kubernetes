@@ -22,6 +22,7 @@ import (
 	"testing"
 )
 
+// TestReadAtMost 验证从文件末尾读取指定字节数：覆盖 max 为负/零、截断及超过文件长度的情况。
 func TestReadAtMost(t *testing.T) {
 	file, err := os.CreateTemp("", "TestFileReadAtMost")
 	if err != nil {
@@ -34,7 +35,7 @@ func TestReadAtMost(t *testing.T) {
 		line + "\n" +
 		line + "\n" +
 		line + "\n" +
-		line[blockSize/2:]) // incomplete line
+		line[blockSize/2:]) // 模拟不完整的最后一行
 
 	file.Write(testBytes)
 	testCases := []struct {

@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/version"
 )
 
+// TestGetVersion 验证 getVersion 能正确解析常规内核版本、WSL2 版本，
+// 并对读取失败和格式非法的版本返回预期错误。
 func TestGetVersion(t *testing.T) {
 	testCases := []struct {
 		name         string

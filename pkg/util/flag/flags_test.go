@@ -30,6 +30,7 @@ import (
 	kubeletconfig "k8s.io/kubernetes/pkg/kubelet/apis/config"
 )
 
+// TestIPVar 验证 IPVar 接受合法 IP、拒绝非法 IP，并在出错时保留默认值。
 func TestIPVar(t *testing.T) {
 	defaultIP := "0.0.0.0"
 	testCases := []struct {
@@ -77,6 +78,7 @@ func TestIPVar(t *testing.T) {
 	}
 }
 
+// TestIPPortVar 覆盖 IPPortVar 对 IPv4/IPv6 及带端口格式的解析与校验。
 func TestIPPortVar(t *testing.T) {
 	defaultIPPort := "0.0.0.0:8080"
 	testCases := []struct {
@@ -171,6 +173,8 @@ func TestIPPortVar(t *testing.T) {
 	}
 }
 
+// TestReservedMemoryVar 验证 ReservedMemoryVar 对单个/多个 NUMA 节点预留内存的解析，
+// 以及各类非法输入的报错。
 func TestReservedMemoryVar(t *testing.T) {
 	resourceNameHugepages1Gi := v1.ResourceName(fmt.Sprintf("%s1Gi", v1.ResourceHugePagesPrefix))
 	memory1Gi := resource.MustParse("1Gi")
@@ -308,6 +312,8 @@ func TestReservedMemoryVar(t *testing.T) {
 	}
 }
 
+// TestTaintsVar 验证 RegisterWithTaintsVar 能解析逗号分隔的 taint 列表，
+// 并保留空值等边界情况。
 func TestTaintsVar(t *testing.T) {
 	cases := []struct {
 		f   string

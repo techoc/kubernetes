@@ -22,7 +22,8 @@ import (
 	"errors"
 )
 
-// SetNumFiles sets the rlimit for the maximum open files.
+// SetNumFiles 设置最大打开文件数的 rlimit。
+// 该平台不支持此操作，始终返回错误。
 func SetNumFiles(maxOpenFiles uint64) error {
 	return errors.New("SetRLimit unsupported in this platform")
 }

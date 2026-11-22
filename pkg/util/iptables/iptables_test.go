@@ -31,12 +31,14 @@ import (
 	fakeexec "k8s.io/utils/exec/testing"
 )
 
+// testCommand 描述一条预期被执行的命令及其对应的 fake 动作。
 type testCommand struct {
 	command string
 	action  fakeexec.FakeAction
 }
 
-// Creates a FakeExec that expects exactly commands to be run (and will fail otherwise).
+// fakeExecForCommands 构造一个按给定顺序、且仅执行给定命令的 FakeExec；
+// 命令不符时 FakeExec 会失败，从而把预期落空暴露出来。
 func fakeExecForCommands(commands []testCommand) *fakeexec.FakeExec {
 	fexec := &fakeexec.FakeExec{
 		CommandScript: make([]fakeexec.FakeCommandAction, len(commands)),
@@ -52,6 +54,7 @@ func fakeExecForCommands(commands []testCommand) *fakeexec.FakeExec {
 	return fexec
 }
 
+// TestFakeExecForCommands 验证 fakeExecForCommands 对匹配命令放行、对不匹配命令 panic。
 func TestFakeExecForCommands(t *testing.T) {
 	var panicresult interface{}
 	defer func() {
@@ -84,6 +87,7 @@ func TestFakeExecForCommands(t *testing.T) {
 	}
 }
 
+// TestNewDualStack 覆盖双栈探测的四种结果：都可用、仅 IPv4、IPv4 可用但 IPv6 被禁用、都不可用。
 func TestNewDualStack(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -95,12 +99,12 @@ func TestNewDualStack(t *testing.T) {
 			name: "both available",
 			commands: []testCommand{
 				{
-					// ipv4 Present()
+					// 探测 IPv4 iptables 是否可用
 					command: "iptables -w 5 -S POSTROUTING -t nat",
 					action:  func() ([]byte, []byte, error) { return nil, nil, nil },
 				},
 				{
-					// ipv6 Present()
+					// 探测 IPv6 iptables 是否可用
 					command: "ip6tables -w 5 -S POSTROUTING -t nat",
 					action:  func() ([]byte, []byte, error) { return nil, nil, nil },
 				},
@@ -112,12 +116,12 @@ func TestNewDualStack(t *testing.T) {
 			name: "ipv4 available, ipv6 not installed",
 			commands: []testCommand{
 				{
-					// ipv4 Present()
+					// 探测 IPv4 iptables 是否可用
 					command: "iptables -w 5 -S POSTROUTING -t nat",
 					action:  func() ([]byte, []byte, error) { return nil, nil, nil },
 				},
 				{
-					// ipv6 Present()
+					// 探测 IPv6 iptables 是否可用
 					command: "ip6tables -w 5 -S POSTROUTING -t nat",
 					action:  func() ([]byte, []byte, error) { return nil, nil, fmt.Errorf("no such file or directory") },
 				},
@@ -129,12 +133,12 @@ func TestNewDualStack(t *testing.T) {
 			name: "ipv4 available, ipv6 disabled",
 			commands: []testCommand{
 				{
-					// ipv4 Present()
+					// 探测 IPv4 iptables 是否可用
 					command: "iptables -w 5 -S POSTROUTING -t nat",
 					action:  func() ([]byte, []byte, error) { return nil, nil, nil },
 				},
 				{
-					// ipv6 Present()
+					// 探测 IPv6 iptables 是否可用
 					command: "ip6tables -w 5 -S POSTROUTING -t nat",
 					action:  func() ([]byte, []byte, error) { return nil, nil, fmt.Errorf("ipv6 is broken") },
 				},
@@ -146,12 +150,12 @@ func TestNewDualStack(t *testing.T) {
 			name: "no iptables support",
 			commands: []testCommand{
 				{
-					// ipv4 Present()
+					// 探测 IPv4 iptables 是否可用
 					command: "iptables -w 5 -S POSTROUTING -t nat",
 					action:  func() ([]byte, []byte, error) { return nil, nil, fmt.Errorf("no such file or directory") },
 				},
 				{
-					// ipv6 Present()
+					// 探测 IPv6 iptables 是否可用
 					command: "ip6tables -w 5 -S POSTROUTING -t nat",
 					action:  func() ([]byte, []byte, error) { return nil, nil, fmt.Errorf("no such file or directory") },
 				},
@@ -179,14 +183,16 @@ func TestNewDualStack(t *testing.T) {
 		})
 	}
 }
+
+// testEnsureChain 覆盖 EnsureChain 的新建、已存在和失败三种分支。
 func testEnsureChain(t *testing.T, protocol Protocol) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success.
+			// 成功。
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-			// Exists.
+			// 链已存在。
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 1} },
-			// Failure.
+			// 失败。
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 2} },
 		},
 	}
@@ -198,7 +204,7 @@ func testEnsureChain(t *testing.T, protocol Protocol) {
 		},
 	}
 	runner := newInternal(fexec, protocol)
-	// Success.
+	// 成功。
 	exists, err := runner.EnsureChain(TableNAT, Chain("FOOBAR"))
 	if err != nil {
 		t.Errorf("%s new chain: Expected success, got %v", protocol, err)
@@ -206,7 +212,7 @@ func testEnsureChain(t *testing.T, protocol Protocol) {
 	if exists {
 		t.Errorf("%s new chain: Expected exists = false", protocol)
 	}
-	numCalls := len(fcmd.CombinedOutputScript) - 2 // we haven't used all of fcmd.CombinedOutputScript yet
+	numCalls := len(fcmd.CombinedOutputScript) - 2 // 尚未用尽脚本中的全部动作
 	if fcmd.CombinedOutputCalls != numCalls {
 		t.Errorf("%s new chain: Expected %d CombinedOutput() calls, got %d", protocol, numCalls, fcmd.CombinedOutputCalls)
 	}
@@ -214,7 +220,7 @@ func testEnsureChain(t *testing.T, protocol Protocol) {
 	if !sets.New(fcmd.CombinedOutputLog[numCalls-1]...).HasAll(cmd, "-t", "nat", "-N", "FOOBAR") {
 		t.Errorf("%s new chain: Expected cmd containing '%s -t nat -N FOOBAR', got %s", protocol, cmd, fcmd.CombinedOutputLog[numCalls-1])
 	}
-	// Exists.
+	// 链已存在。
 	exists, err = runner.EnsureChain(TableNAT, Chain("FOOBAR"))
 	if err != nil {
 		t.Errorf("%s existing chain: Expected success, got %v", protocol, err)
@@ -222,27 +228,30 @@ func testEnsureChain(t *testing.T, protocol Protocol) {
 	if !exists {
 		t.Errorf("%s existing chain: Expected exists = true", protocol)
 	}
-	// Simulate failure.
+	// 模拟失败。
 	_, err = runner.EnsureChain(TableNAT, Chain("FOOBAR"))
 	if err == nil {
 		t.Errorf("%s: Expected failure", protocol)
 	}
 }
 
+// TestEnsureChainIPv4 在 IPv4 协议下运行 EnsureChain 用例。
 func TestEnsureChainIPv4(t *testing.T) {
 	testEnsureChain(t, ProtocolIPv4)
 }
 
+// TestEnsureChainIPv6 在 IPv6 协议下运行 EnsureChain 用例。
 func TestEnsureChainIPv6(t *testing.T) {
 	testEnsureChain(t, ProtocolIPv6)
 }
 
+// TestFlushChain 验证 FlushChain 成功时生成正确命令，失败时返回错误。
 func TestFlushChain(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success.
+			// 成功。
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-			// Failure.
+			// 失败。
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 1} },
 		},
 	}
@@ -253,31 +262,32 @@ func TestFlushChain(t *testing.T) {
 		},
 	}
 	runner := newInternal(fexec, ProtocolIPv4)
-	// Success.
+	// 成功。
 	err := runner.FlushChain(TableNAT, Chain("FOOBAR"))
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
 	}
-	numCalls := len(fcmd.CombinedOutputScript) - 1 // we haven't used all of fcmd.CombinedOutputScript yet
+	numCalls := len(fcmd.CombinedOutputScript) - 1 // 尚未用尽脚本中的全部动作
 	if fcmd.CombinedOutputCalls != numCalls {
 		t.Errorf("expected %d CombinedOutput() calls, got %d", numCalls, fcmd.CombinedOutputCalls)
 	}
 	if !sets.New(fcmd.CombinedOutputLog[numCalls-1]...).HasAll("iptables", "-t", "nat", "-F", "FOOBAR") {
 		t.Errorf("wrong CombinedOutput() log, got %s", fcmd.CombinedOutputLog[numCalls-1])
 	}
-	// Failure.
+	// 失败。
 	err = runner.FlushChain(TableNAT, Chain("FOOBAR"))
 	if err == nil {
 		t.Errorf("expected failure")
 	}
 }
 
+// TestDeleteChain 验证 DeleteChain 成功时生成正确命令，失败时返回错误。
 func TestDeleteChain(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success.
+			// 成功。
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-			// Failure.
+			// 失败。
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 1} },
 		},
 	}
@@ -288,29 +298,30 @@ func TestDeleteChain(t *testing.T) {
 		},
 	}
 	runner := newInternal(fexec, ProtocolIPv4)
-	// Success.
+	// 成功。
 	err := runner.DeleteChain(TableNAT, Chain("FOOBAR"))
 	if err != nil {
 		t.Errorf("expected success, got %v", err)
 	}
-	numCalls := len(fcmd.CombinedOutputScript) - 1 // we haven't used all of fcmd.CombinedOutputScript yet
+	numCalls := len(fcmd.CombinedOutputScript) - 1 // 尚未用尽脚本中的全部动作
 	if fcmd.CombinedOutputCalls != numCalls {
 		t.Errorf("expected %d CombinedOutput() calls, got %d", numCalls, fcmd.CombinedOutputCalls)
 	}
 	if !sets.New(fcmd.CombinedOutputLog[numCalls-1]...).HasAll("iptables", "-t", "nat", "-X", "FOOBAR") {
 		t.Errorf("wrong CombinedOutput() log, got %s", fcmd.CombinedOutputLog[numCalls-1])
 	}
-	// Failure.
+	// 失败。
 	err = runner.DeleteChain(TableNAT, Chain("FOOBAR"))
 	if err == nil {
 		t.Errorf("expected failure")
 	}
 }
 
+// TestEnsureRuleAlreadyExists 验证 -C 检查成功时直接返回 exists=true，不再执行添加。
 func TestEnsureRuleAlreadyExists(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success on the -C call, meaning the rule exists.
+			// -C 检查成功，表示规则已存在。
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
 		},
 	}
@@ -336,12 +347,13 @@ func TestEnsureRuleAlreadyExists(t *testing.T) {
 	}
 }
 
+// TestEnsureRuleNew 验证 -C 返回 1 时会继续执行 -A 添加规则。
 func TestEnsureRuleNew(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Status 1 on the -C call, meaning the rule doesn't exist
+			// -C 返回 1，表示规则不存在
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 1} },
-			// Success on the -A call.
+			// -A 添加成功。
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
 		},
 	}
@@ -368,10 +380,11 @@ func TestEnsureRuleNew(t *testing.T) {
 	}
 }
 
+// TestEnsureRuleErrorChecking 验证 -C 检查异常（退出码 2）时直接返回错误。
 func TestEnsureRuleErrorChecking(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Status 2 on the -C call, meaning something went wrong while checking.
+			// -C 返回 2，表示检查过程本身出错。
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 2} },
 		},
 	}
@@ -391,12 +404,13 @@ func TestEnsureRuleErrorChecking(t *testing.T) {
 	}
 }
 
+// TestEnsureRuleErrorCreating 验证 -A 添加失败时返回错误。
 func TestEnsureRuleErrorCreating(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Status 1 on the -C call, meaning the rule doesn't exist.
+			// -C 返回 1，表示规则不存在。
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 1} },
-			// Status 1 on the -A call, meaning failure adding it.
+			// -A 返回 1，表示添加失败。
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 1} },
 		},
 	}
@@ -417,10 +431,11 @@ func TestEnsureRuleErrorCreating(t *testing.T) {
 	}
 }
 
+// TestDeleteRuleDoesNotExist 验证规则不存在（-C 返回 1）时视为成功，不执行删除。
 func TestDeleteRuleDoesNotExist(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Status 1 on the -C call, meaning the rule doesn't exist.
+			// -C 返回 1，表示规则不存在。
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 1} },
 		},
 	}
@@ -443,12 +458,13 @@ func TestDeleteRuleDoesNotExist(t *testing.T) {
 	}
 }
 
+// TestDeleteRuleExists 验证规则存在时先 -C 后 -D，并生成正确命令。
 func TestDeleteRuleExists(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success on the -C call, meaning the rule exists.
+			// -C 检查成功，表示规则已存在。
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-			// Success on the -D call.
+			// -D 删除成功。
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
 		},
 	}
@@ -472,10 +488,11 @@ func TestDeleteRuleExists(t *testing.T) {
 	}
 }
 
+// TestDeleteRuleErrorChecking 验证 -C 检查异常时直接返回错误。
 func TestDeleteRuleErrorChecking(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Status 2 on the -C call, meaning something went wrong while checking.
+			// -C 返回 2，表示检查过程本身出错。
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 2} },
 		},
 	}
@@ -496,12 +513,13 @@ func TestDeleteRuleErrorChecking(t *testing.T) {
 	}
 }
 
+// TestDeleteRuleErrorDeleting 验证 -D 删除失败时返回错误。
 func TestDeleteRuleErrorDeleting(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
-			// Success on the -C call, meaning the rule exists.
+			// -C 检查成功，表示规则已存在。
 			func() ([]byte, []byte, error) { return []byte{}, nil, nil },
-			// Status 1 on the -D call, meaning failure to delete it.
+			// -D 返回 1，表示删除失败。
 			func() ([]byte, []byte, error) { return nil, nil, &fakeexec.FakeExitError{Status: 1} },
 		},
 	}
@@ -522,6 +540,7 @@ func TestDeleteRuleErrorDeleting(t *testing.T) {
 	}
 }
 
+// TestIPTablesCommands 校验各协议下 iptables / save / restore 命令名映射正确。
 func TestIPTablesCommands(t *testing.T) {
 	testCases := []struct {
 		funcName    string
@@ -551,6 +570,7 @@ func TestIPTablesCommands(t *testing.T) {
 	}
 }
 
+// testSaveInto 验证 SaveInto 只把标准输出写入 buffer，失败时则把 stderr 写入 buffer。
 func testSaveInto(t *testing.T, protocol Protocol) {
 	version := " v1.9.22"
 	iptablesSaveCmd := iptablesSaveCommand(protocol)
@@ -563,7 +583,7 @@ func testSaveInto(t *testing.T, protocol Protocol) {
 COMMIT
 # Completed on Thu Jan 19 11:38:09 2017`, iptablesSaveCmd+version)
 
-	stderrOutput := "#STDERR OUTPUT" // SaveInto() should should NOT capture stderr into the buffer
+	stderrOutput := "#STDERR OUTPUT" // SaveInto() 不应把 stderr 写入 buffer
 
 	fcmd := fakeexec.FakeCmd{
 		RunScript: []fakeexec.FakeAction{
@@ -580,7 +600,7 @@ COMMIT
 	runner := newInternal(fexec, protocol)
 	buffer := bytes.NewBuffer(nil)
 
-	// Success.
+	// 成功。
 	err := runner.SaveInto(TableNAT, buffer)
 	if err != nil {
 		t.Fatalf("%s: Expected success, got %v", protocol, err)
@@ -602,7 +622,7 @@ COMMIT
 		t.Errorf("%s: Expected cmd containing '%s -t nat', got '%s'", protocol, iptablesSaveCmd, fcmd.RunLog[numRunCalls-1])
 	}
 
-	// Failure.
+	// 失败。
 	buffer.Reset()
 	err = runner.SaveInto(TableNAT, buffer)
 	if err == nil {
@@ -613,14 +633,17 @@ COMMIT
 	}
 }
 
+// TestSaveIntoIPv4 在 IPv4 协议下运行 SaveInto 用例。
 func TestSaveIntoIPv4(t *testing.T) {
 	testSaveInto(t, ProtocolIPv4)
 }
 
+// TestSaveIntoIPv6 在 IPv6 协议下运行 SaveInto 用例。
 func TestSaveIntoIPv6(t *testing.T) {
 	testSaveInto(t, ProtocolIPv6)
 }
 
+// testRestore 覆盖 Restore 四种 flush/counters 标志组合对应的命令行参数。
 func testRestore(t *testing.T, protocol Protocol) {
 	iptablesRestoreCmd := iptablesRestoreCommand(protocol)
 
@@ -645,7 +668,7 @@ func testRestore(t *testing.T, protocol Protocol) {
 	runner := newInternal(fexec, protocol)
 	numCalls := 0
 
-	// both flags true
+	// 两个标志都为 true
 	err := runner.Restore(TableNAT, []byte{}, FlushTables, RestoreCounters)
 	if err != nil {
 		t.Errorf("%s flush,restore: Expected success, got %v", protocol, err)
@@ -657,7 +680,7 @@ func testRestore(t *testing.T, protocol Protocol) {
 		t.Errorf("%s flush, restore: Expected cmd containing '%s -T %s --counters', got '%s'", protocol, iptablesRestoreCmd, string(TableNAT), fcmd.CombinedOutputLog[numCalls-1])
 	}
 
-	// FlushTables, NoRestoreCounters
+	// FlushTables + NoRestoreCounters
 	err = runner.Restore(TableNAT, []byte{}, FlushTables, NoRestoreCounters)
 	if err != nil {
 		t.Errorf("%s flush, no restore: Expected success, got %v", protocol, err)
@@ -669,7 +692,7 @@ func testRestore(t *testing.T, protocol Protocol) {
 		t.Errorf("%s flush, no restore: Expected cmd containing '--noflush' or '--counters', got '%s'", protocol, fcmd.CombinedOutputLog[numCalls-1])
 	}
 
-	// NoFlushTables, RestoreCounters
+	// NoFlushTables + RestoreCounters
 	err = runner.Restore(TableNAT, []byte{}, NoFlushTables, RestoreCounters)
 	if err != nil {
 		t.Errorf("%s no flush, restore: Expected success, got %v", protocol, err)
@@ -681,7 +704,7 @@ func testRestore(t *testing.T, protocol Protocol) {
 		t.Errorf("%s no flush, restore: Expected cmd containing '--noflush' and '--counters', got '%s'", protocol, fcmd.CombinedOutputLog[numCalls-1])
 	}
 
-	// NoFlushTables, NoRestoreCounters
+	// NoFlushTables + NoRestoreCounters
 	err = runner.Restore(TableNAT, []byte{}, NoFlushTables, NoRestoreCounters)
 	if err != nil {
 		t.Errorf("%s no flush, no restore: Expected success, got %v", protocol, err)
@@ -697,22 +720,24 @@ func testRestore(t *testing.T, protocol Protocol) {
 		t.Errorf("%s: Expected %d total CombinedOutput() calls, got %d", protocol, numCalls, fcmd.CombinedOutputCalls)
 	}
 
-	// Failure.
+	// 失败。
 	err = runner.Restore(TableNAT, []byte{}, FlushTables, RestoreCounters)
 	if err == nil {
 		t.Errorf("%s Expected a failure", protocol)
 	}
 }
 
+// TestRestoreIPv4 在 IPv4 协议下运行 Restore 用例。
 func TestRestoreIPv4(t *testing.T) {
 	testRestore(t, ProtocolIPv4)
 }
 
+// TestRestoreIPv6 在 IPv6 协议下运行 Restore 用例。
 func TestRestoreIPv6(t *testing.T) {
 	testRestore(t, ProtocolIPv6)
 }
 
-// TestRestoreAll tests only the simplest use case, as flag handling code is already tested in TestRestore
+// TestRestoreAll 只覆盖最简单的成功与失败路径，标志处理逻辑已在 TestRestore 中验证。
 func TestRestoreAll(t *testing.T) {
 	fcmd := fakeexec.FakeCmd{
 		CombinedOutputScript: []fakeexec.FakeAction{
@@ -743,14 +768,14 @@ func TestRestoreAll(t *testing.T) {
 		t.Errorf("wrong CombinedOutput() log, got %s", fcmd.CombinedOutputLog[numCalls-1])
 	}
 
-	// Failure.
+	// 失败。
 	err = runner.Restore(TableNAT, []byte{}, FlushTables, RestoreCounters)
 	if err == nil {
 		t.Errorf("expected failure")
 	}
 }
 
-// TestExtractLines tests that
+// TestExtractLines 验证 ExtractLines 在指定行号前后按数量取行的边界行为。
 func TestExtractLines(t *testing.T) {
 	mkLines := func(lines ...LineData) []LineData {
 		return lines

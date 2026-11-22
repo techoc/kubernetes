@@ -23,25 +23,23 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// FSWatcher is a callback-based filesystem watcher abstraction for fsnotify.
+// FSWatcher 是基于回调的文件系统监听抽象，底层为 fsnotify。
 type FSWatcher interface {
-	// Initializes the watcher with the given watch handlers.
-	// Called before all other methods.
+	// Init 用给定的事件和错误处理器初始化监听器，须在所有其他方法之前调用。
 	Init(FSEventHandler, FSErrorHandler) error
 
-	// Starts listening for events and errors.
-	// When an event or error occurs, the corresponding handler is called.
-	// The watcher stops and releases resources when ctx is canceled.
+	// Run 开始监听事件和错误，发生事件或错误时调用相应的处理器。
+	// ctx 被取消时监听器停止并释放资源。
 	Run(ctx context.Context)
 
-	// Add a filesystem path to watch
+	// AddWatch 添加一个待监听的文件系统路径。
 	AddWatch(path string) error
 }
 
-// FSEventHandler is called when a fsnotify event occurs.
+// FSEventHandler 在 fsnotify 事件发生时被调用。
 type FSEventHandler func(event fsnotify.Event)
 
-// FSErrorHandler is called when a fsnotify error occurs.
+// FSErrorHandler 在 fsnotify 错误发生时被调用。
 type FSErrorHandler func(err error)
 
 type fsnotifyWatcher struct {
@@ -52,16 +50,17 @@ type fsnotifyWatcher struct {
 
 var _ FSWatcher = &fsnotifyWatcher{}
 
-// NewFsnotifyWatcher returns an implementation of FSWatcher that continuously listens for
-// fsnotify events and calls the event handler as soon as an event is received.
+// NewFsnotifyWatcher 返回一个 FSWatcher 实现：持续监听 fsnotify 事件，收到事件后立即调用事件处理器。
 func NewFsnotifyWatcher() FSWatcher {
 	return &fsnotifyWatcher{}
 }
 
+// AddWatch 实现 FSWatcher 的 AddWatch 方法。
 func (w *fsnotifyWatcher) AddWatch(path string) error {
 	return w.watcher.Add(path)
 }
 
+// Init 实现 FSWatcher 的 Init 方法。
 func (w *fsnotifyWatcher) Init(eventHandler FSEventHandler, errorHandler FSErrorHandler) error {
 	var err error
 	w.watcher, err = fsnotify.NewWatcher()
@@ -74,8 +73,10 @@ func (w *fsnotifyWatcher) Init(eventHandler FSEventHandler, errorHandler FSError
 	return nil
 }
 
+// Run 实现 FSWatcher 的 Run 方法。
 func (w *fsnotifyWatcher) Run(ctx context.Context) {
 	go func() {
+		// ctx 取消时退出循环，同时关闭 watcher 释放资源。
 		defer w.watcher.Close()
 		for {
 			select {

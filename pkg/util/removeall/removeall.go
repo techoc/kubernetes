@@ -25,21 +25,20 @@ import (
 	"k8s.io/mount-utils"
 )
 
-// RemoveAllOneFilesystemCommon removes the path and any children it contains,
-// using the provided remove function. It removes everything it can but returns
-// the first error it encounters. If the path does not exist, RemoveAll
-// returns nil (no error).
-// It makes sure it does not cross mount boundary, i.e. it does *not* remove
-// files from another filesystems. Like 'rm -rf --one-file-system'.
-// It is copied from RemoveAll() sources, with IsLikelyNotMountPoint
+// RemoveAllOneFilesystemCommon 使用传入的 remove 函数删除 path 及其所有子内容。
+// 它会尽可能删除所有能删的内容，但只返回遇到的第一个错误。
+// path 不存在时返回 nil（无错误）。
+// 它会确保不跨越挂载边界，即*不会*删除其他文件系统上的文件，
+// 类似 'rm -rf --one-file-system'。
+// 实现拷贝自 RemoveAll()，额外加上了 IsLikelyNotMountPoint 检查。
 func RemoveAllOneFilesystemCommon(mounter mount.Interface, path string, remove func(string) error) error {
-	// Simple case: if Remove works, we're done.
+	// 简单情况：直接删除成功就结束。
 	err := remove(path)
 	if err == nil || os.IsNotExist(err) {
 		return nil
 	}
 
-	// Otherwise, is this a directory we need to recurse into?
+	// 否则，判断这是否是我们需要递归处理的目录。
 	dir, serr := os.Lstat(path)
 	if serr != nil {
 		if serr, ok := serr.(*os.PathError); ok && (os.IsNotExist(serr.Err) || serr.Err == syscall.ENOTDIR) {
@@ -48,11 +47,11 @@ func RemoveAllOneFilesystemCommon(mounter mount.Interface, path string, remove f
 		return serr
 	}
 	if !dir.IsDir() {
-		// Not a directory; return the error from remove.
+		// 不是目录，直接返回 remove 的错误。
 		return err
 	}
 
-	// Directory.
+	// 是目录。先确认它不是挂载点，避免误删其他文件系统的内容。
 	isNotMount, err := mounter.IsLikelyNotMountPoint(path)
 	if err != nil {
 		return err
@@ -64,14 +63,14 @@ func RemoveAllOneFilesystemCommon(mounter mount.Interface, path string, remove f
 	fd, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Race. It was deleted between the Lstat and Open.
-			// Return nil per RemoveAll's docs.
+			// 竞态：目录在 Lstat 与 Open 之间被删除了。
+			// 按 RemoveAll 的语义返回 nil。
 			return nil
 		}
 		return err
 	}
 
-	// Remove contents & return first error.
+	// 删除目录内容，只保留第一个错误。
 	err = nil
 	for {
 		names, err1 := fd.Readdirnames(100)
@@ -84,7 +83,7 @@ func RemoveAllOneFilesystemCommon(mounter mount.Interface, path string, remove f
 		if err1 == io.EOF {
 			break
 		}
-		// If Readdirnames returned an error, use it.
+		// 如果 Readdirnames 返回了错误，记录它。
 		if err == nil {
 			err = err1
 		}
@@ -93,10 +92,10 @@ func RemoveAllOneFilesystemCommon(mounter mount.Interface, path string, remove f
 		}
 	}
 
-	// Close directory, because windows won't remove opened directory.
+	// 先关闭目录，因为 Windows 上无法删除处于打开状态的目录。
 	fd.Close()
 
-	// Remove directory.
+	// 删除目录本身。
 	err1 := remove(path)
 	if err1 == nil || os.IsNotExist(err1) {
 		return nil
@@ -107,22 +106,19 @@ func RemoveAllOneFilesystemCommon(mounter mount.Interface, path string, remove f
 	return err
 }
 
-// RemoveAllOneFilesystem removes the path and any children it contains, using
-// the os.Remove function. It makes sure it does not cross mount boundaries,
-// i.e. it returns an error rather than remove files from another filesystem.
-// It removes everything it can but returns the first error it encounters.
-// If the path does not exist, it returns nil (no error).
+// RemoveAllOneFilesystem 使用 os.Remove 删除 path 及其所有子内容。
+// 它会确保不跨越挂载边界，即遇到其他文件系统的内容时返回错误而不是删除。
+// 它会尽可能删除所有能删的内容，但只返回遇到的第一个错误。
+// path 不存在时返回 nil（无错误）。
 func RemoveAllOneFilesystem(mounter mount.Interface, path string) error {
 	return RemoveAllOneFilesystemCommon(mounter, path, os.Remove)
 }
 
-// RemoveDirsOneFilesystem removes the path and any empty subdirectories it
-// contains, using the syscall.Rmdir function. Unlike RemoveAllOneFilesystem,
-// RemoveDirsOneFilesystem will remove only directories and returns an error if
-// it encounters any files in the directory tree. It makes sure it does not
-// cross mount boundaries, i.e. it returns an error rather than remove dirs
-// from another filesystem. It removes everything it can but returns the first
-// error it encounters. If the path does not exist, it returns nil (no error).
+// RemoveDirsOneFilesystem 使用 syscall.Rmdir 删除 path 及其包含的空子目录。
+// 与 RemoveAllOneFilesystem 不同，它只删除目录；如果目录树中遇到任何文件就返回错误。
+// 它会确保不跨越挂载边界，即遇到其他文件系统的目录时返回错误而不是删除。
+// 它会尽可能删除所有能删的内容，但只返回遇到的第一个错误。
+// path 不存在时返回 nil（无错误）。
 func RemoveDirsOneFilesystem(mounter mount.Interface, path string) error {
 	return RemoveAllOneFilesystemCommon(mounter, path, syscall.Rmdir)
 }

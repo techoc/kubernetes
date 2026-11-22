@@ -20,14 +20,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Clones the given map and returns a new map with the given key and value added.
-// Returns the given map, if labelKey is empty.
+// CloneAndAddLabel 克隆给定的 map，并加入给定的 key 和 value 后返回。
+// 若 labelKey 为空则直接返回原 map。
 func CloneAndAddLabel(labels map[string]string, labelKey, labelValue string) map[string]string {
 	if labelKey == "" {
-		// Don't need to add a label.
+		// 无需添加标签。
 		return labels
 	}
-	// Clone.
+	// 克隆原 map，避免修改调用方的数据。
 	newLabels := map[string]string{}
 	for key, value := range labels {
 		newLabels[key] = value
@@ -36,14 +36,14 @@ func CloneAndAddLabel(labels map[string]string, labelKey, labelValue string) map
 	return newLabels
 }
 
-// CloneAndRemoveLabel clones the given map and returns a new map with the given key removed.
-// Returns the given map, if labelKey is empty.
+// CloneAndRemoveLabel 克隆给定的 map，并删除给定的 key 后返回。
+// 若 labelKey 为空则直接返回原 map。
 func CloneAndRemoveLabel(labels map[string]string, labelKey string) map[string]string {
 	if labelKey == "" {
-		// Don't need to add a label.
+		// 无需删除标签。
 		return labels
 	}
-	// Clone.
+	// 克隆原 map，避免修改调用方的数据。
 	newLabels := map[string]string{}
 	for key, value := range labels {
 		newLabels[key] = value
@@ -52,10 +52,11 @@ func CloneAndRemoveLabel(labels map[string]string, labelKey string) map[string]s
 	return newLabels
 }
 
-// AddLabel returns a map with the given key and value added to the given map.
+// AddLabel 在给定的 map 中加入给定的 key 和 value 并返回。
+// 会原地修改传入的 map；若 labelKey 为空则直接返回原 map。
 func AddLabel(labels map[string]string, labelKey, labelValue string) map[string]string {
 	if labelKey == "" {
-		// Don't need to add a label.
+		// 无需添加标签。
 		return labels
 	}
 	if labels == nil {
@@ -65,18 +66,18 @@ func AddLabel(labels map[string]string, labelKey, labelValue string) map[string]
 	return labels
 }
 
-// Clones the given selector and returns a new selector with the given key and value added.
-// Returns the given selector, if labelKey is empty.
+// CloneSelectorAndAddLabel 克隆给定的 selector，并加入给定的 key 和 value 后返回。
+// 若 labelKey 为空则直接返回原 selector。
 func CloneSelectorAndAddLabel(selector *metav1.LabelSelector, labelKey, labelValue string) *metav1.LabelSelector {
 	if labelKey == "" {
-		// Don't need to add a label.
+		// 无需添加标签。
 		return selector
 	}
 
-	// Clone.
+	// 克隆 selector。
 	newSelector := new(metav1.LabelSelector)
 
-	// TODO(madhusudancs): Check if you can use deepCopy_extensions_LabelSelector here.
+	// TODO(madhusudancs): 检查这里能否改用 deepCopy_extensions_LabelSelector。
 	newSelector.MatchLabels = make(map[string]string)
 	if selector.MatchLabels != nil {
 		for key, val := range selector.MatchLabels {
@@ -105,10 +106,11 @@ func CloneSelectorAndAddLabel(selector *metav1.LabelSelector, labelKey, labelVal
 	return newSelector
 }
 
-// AddLabelToSelector returns a selector with the given key and value added to the given selector's MatchLabels.
+// AddLabelToSelector 在给定 selector 的 MatchLabels 中加入 key 和 value 并返回。
+// 会原地修改传入的 selector；若 labelKey 为空则直接返回原 selector。
 func AddLabelToSelector(selector *metav1.LabelSelector, labelKey, labelValue string) *metav1.LabelSelector {
 	if labelKey == "" {
-		// Don't need to add a label.
+		// 无需添加标签。
 		return selector
 	}
 	if selector.MatchLabels == nil {
@@ -118,7 +120,7 @@ func AddLabelToSelector(selector *metav1.LabelSelector, labelKey, labelValue str
 	return selector
 }
 
-// SelectorHasLabel checks if the given selector contains the given label key in its MatchLabels
+// SelectorHasLabel 检查给定 selector 的 MatchLabels 是否包含给定的 label key。
 func SelectorHasLabel(selector *metav1.LabelSelector, labelKey string) bool {
 	return len(selector.MatchLabels[labelKey]) > 0
 }

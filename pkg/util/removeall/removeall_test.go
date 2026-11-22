@@ -31,7 +31,8 @@ type fakeMounter struct {
 	mount.FakeMounter
 }
 
-// IsLikelyNotMountPoint overrides mount.FakeMounter.IsLikelyNotMountPoint for our use.
+// IsLikelyNotMountPoint 覆盖 mount.FakeMounter 的实现：
+// 名字以 "mount" 开头的目录视为挂载点，以 "err" 开头的则模拟报错。
 func (f *fakeMounter) IsLikelyNotMountPoint(file string) (bool, error) {
 	name := filepath.Base(file)
 	if strings.HasPrefix(name, "mount") {
@@ -43,13 +44,14 @@ func (f *fakeMounter) IsLikelyNotMountPoint(file string) (bool, error) {
 	return true, nil
 }
 
+// TestRemoveAllOneFilesystem 验证 RemoveAllOneFilesystem 的行为：
+// 普通目录能正常删除，遇到挂载点或探测出错时返回错误。
 func TestRemoveAllOneFilesystem(t *testing.T) {
 	tests := []struct {
 		name string
-		// Items of the test directory. Directories end with "/".
-		// Directories starting with "mount" are considered to be mount points.
-		// Directories starting with "err" will cause an error in
-		// IsLikelyNotMountPoint.
+		// 测试目录中的内容项。以 "/" 结尾表示目录。
+		// 以 "mount" 开头的目录视为挂载点。
+		// 以 "err" 开头的目录会让 IsLikelyNotMountPoint 报错。
 		items       []string
 		expectError bool
 	}{
@@ -112,7 +114,7 @@ func TestRemoveAllOneFilesystem(t *testing.T) {
 			t.Fatalf("Can't make a tmp dir: %v", err)
 		}
 		defer os.RemoveAll(tmpDir)
-		// Create the directory structure
+		// 按 items 的描述创建目录结构
 		for _, item := range test.items {
 			if strings.HasSuffix(item, "/") {
 				item = strings.TrimRight(item, "/")
@@ -139,13 +141,14 @@ func TestRemoveAllOneFilesystem(t *testing.T) {
 	}
 }
 
+// TestRemoveDirsOneFilesystem 验证 RemoveDirsOneFilesystem 只删除空目录树：
+// 只要目录中含有文件、遇到挂载点或探测出错就返回错误。
 func TestRemoveDirsOneFilesystem(t *testing.T) {
 	tests := []struct {
 		name string
-		// Items of the test directory. Directories end with "/".
-		// Directories starting with "mount" are considered to be mount points.
-		// Directories starting with "err" will cause an error in
-		// IsLikelyNotMountPoint.
+		// 测试目录中的内容项。以 "/" 结尾表示目录。
+		// 以 "mount" 开头的目录视为挂载点。
+		// 以 "err" 开头的目录会让 IsLikelyNotMountPoint 报错。
 		items       []string
 		expectError bool
 	}{
@@ -232,7 +235,7 @@ func TestRemoveDirsOneFilesystem(t *testing.T) {
 			t.Fatalf("Can't make a tmp dir: %v", err)
 		}
 		defer os.RemoveAll(tmpDir)
-		// Create the directory structure
+		// 按 items 的描述创建目录结构
 		for _, item := range test.items {
 			if strings.HasSuffix(item, "/") {
 				item = strings.TrimRight(item, "/")

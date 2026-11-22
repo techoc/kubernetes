@@ -30,7 +30,8 @@ import (
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 )
 
-// PatchPodStatus patches pod status. It returns true and avoids an update if the patch contains no changes.
+// PatchPodStatus 通过 strategic merge patch 更新 Pod 状态。
+// 如果 patch 没有任何实际改动，返回 true 且跳过更新请求。
 func PatchPodStatus(ctx context.Context, c clientset.Interface, namespace, name string, uid types.UID, oldPodStatus, newPodStatus v1.PodStatus) (*v1.Pod, []byte, bool, error) {
 	patchBytes, unchanged, err := preparePatchBytesForPodStatus(namespace, name, uid, oldPodStatus, newPodStatus)
 	if err != nil {
@@ -56,7 +57,7 @@ func preparePatchBytesForPodStatus(namespace, name string, uid types.UID, oldPod
 	}
 
 	newData, err := json.Marshal(v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{UID: uid}, // only put the uid in the new object to ensure it appears in the patch as a precondition
+		ObjectMeta: metav1.ObjectMeta{UID: uid}, // 只在新对象里放 uid，确保它作为前置条件出现在 patch 中
 		Status:     newPodStatus,
 	})
 	if err != nil {
@@ -70,7 +71,8 @@ func preparePatchBytesForPodStatus(namespace, name string, uid types.UID, oldPod
 	return patchBytes, bytes.Equal(patchBytes, []byte(fmt.Sprintf(`{"metadata":{"uid":%q}}`, uid))), nil
 }
 
-// ReplaceOrAppendPodCondition replaces the first pod condition with equal type or appends if there is none
+// ReplaceOrAppendPodCondition 替换第一个类型相同的 Pod condition；
+// 若不存在同类型的，则追加到末尾。
 func ReplaceOrAppendPodCondition(conditions []v1.PodCondition, condition *v1.PodCondition) []v1.PodCondition {
 	if i, _ := podutil.GetPodConditionFromList(conditions, condition.Type); i >= 0 {
 		conditions[i] = *condition

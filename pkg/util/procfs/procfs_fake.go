@@ -16,11 +16,12 @@ limitations under the License.
 
 package procfs
 
+// FakeProcFS 是 ProcFS 的测试替身，所有查询均返回空结果。
 type FakeProcFS struct{}
 
-// GetFullContainerName gets the container name given the root process id of the container.
-// E.g. if the devices cgroup for the container is stored in /sys/fs/cgroup/devices/docker/nginx,
-// return docker/nginx. Assumes that the process is part of exactly one cgroup hierarchy.
+// GetFullContainerName 根据容器的根进程 ID 返回容器名称。
+// 例如容器的 devices cgroup 位于 /sys/fs/cgroup/devices/docker/nginx 时，
+// 返回 docker/nginx。假定进程只属于一个 cgroup 层级。
 func (fakePfs *FakeProcFS) GetFullContainerName(pid int) (string, error) {
 	return "", nil
 }

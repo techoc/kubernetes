@@ -14,5 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package procfs implements utility functions relating to the /proc mount.
+// Package procfs 提供与 /proc 挂载相关的工具函数。
 package procfs

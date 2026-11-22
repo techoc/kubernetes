@@ -14,9 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package procfs 提供通过 /proc 查询容器进程信息的接口。
 package procfs
 
+// ProcFSInterface 抽象了从进程 ID 获取容器名称的能力，
+// 便于在不同平台上提供各自的实现。
 type ProcFSInterface interface {
-	// GetFullContainerName gets the container name given the root process id of the container.
+	// GetFullContainerName 根据容器的根进程 ID 获取容器名称。
 	GetFullContainerName(pid int) (string, error)
 }

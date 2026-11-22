@@ -36,6 +36,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// TestIsUnixDomainSocketPipe 验证 Windows 命名管道不会被误判为 Unix 域套接字。
 func TestIsUnixDomainSocketPipe(t *testing.T) {
 	generatePipeName := func(suffixLen int) string {
 		letter := []rune("abcdef0123456789")
@@ -55,20 +56,18 @@ func TestIsUnixDomainSocketPipe(t *testing.T) {
 	assert.False(t, result, "Unexpected result: true from IsUnixDomainSocket.")
 }
 
-// This is required as on Windows it's possible for the socket file backing a Unix domain socket to
-// exist but not be ready for socket communications yet as per
-// https://github.com/kubernetes/kubernetes/issues/104584
+// TestPendingUnixDomainSocket 验证 Windows 上套接字文件已存在但尚未就绪时，
+// IsUnixDomainSocket 会重试等待其可用。
+// 参见 https://github.com/kubernetes/kubernetes/issues/104584
 func TestPendingUnixDomainSocket(t *testing.T) {
-	// Create a temporary file that will simulate the Unix domain socket file in a
-	// not-yet-ready state. We need this because the Kubelet keeps an eye on file
-	// changes and acts on them, leading to potential race issues as described in
-	// the referenced issue above
+	// 创建一个临时文件模拟“尚未就绪”的套接字文件。
+	// kubelet 会监听文件变化并立即响应，若不重试就会触发上述问题中的竞争。
 	f, err := os.CreateTemp("", "test-domain-socket")
 	require.NoErrorf(t, err, "Failed to create file for test purposes: %v", err)
 	testFile := f.Name()
 	f.Close()
 
-	// Start the check at this point
+	// 在文件替换为真实套接字之前启动检查，触发重试逻辑。
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -78,23 +77,24 @@ func TestPendingUnixDomainSocket(t *testing.T) {
 		wg.Done()
 	}()
 
-	// Wait a sufficient amount of time to make sure the retry logic kicks in
+	// 等待足够长的时间，确保重试逻辑已经介入。
 	time.Sleep(socketDialRetryPeriod)
 
-	// Replace the temporary file with an actual Unix domain socket file
+	// 用真正的 Unix 域套接字文件替换临时文件。
 	os.Remove(testFile)
 	ta, err := net.ResolveUnixAddr("unix", testFile)
 	require.NoError(t, err, "Failed to ResolveUnixAddr.")
 	unixln, err := net.ListenUnix("unix", ta)
 	require.NoError(t, err, "Failed to ListenUnix.")
 
-	// Wait for the goroutine to finish, then close the socket
+	// 等待检查 goroutine 结束，再关闭套接字。
 	wg.Wait()
 	unixln.Close()
 }
 
+// TestWindowsChmod 验证 Chmod 在 Windows 上生成的 SDDL 安全描述符是否符合预期。
 func TestWindowsChmod(t *testing.T) {
-	// Note: OWNER will be replaced with the actual owner SID in the test cases
+	// 测试用例中的 OWNER 会在运行后替换为真实的 owner SID。
 	testCases := []struct {
 		fileMode           os.FileMode
 		expectedDescriptor string
@@ -105,11 +105,11 @@ func TestWindowsChmod(t *testing.T) {
 		},
 		{
 			fileMode:           0750,
-			expectedDescriptor: "O:OWNERG:BAD:PAI(A;OICI;FA;;;OWNER)(A;OICI;0x1200a9;;;BA)", // 0x1200a9 = GENERIC_READ | GENERIC_EXECUTE
+			expectedDescriptor: "O:OWNERG:BAD:PAI(A;OICI;FA;;;OWNER)(A;OICI;0x1200a9;;;BA)", // 0x1200a9 表示 GENERIC_READ | GENERIC_EXECUTE
 		},
 		{
 			fileMode:           0664,
-			expectedDescriptor: "O:OWNERG:BAD:PAI(A;OICI;0x12019f;;;OWNER)(A;OICI;0x12019f;;;BA)(A;OICI;FR;;;BU)", // 0x12019f = GENERIC_READ | GENERIC_WRITE
+			expectedDescriptor: "O:OWNERG:BAD:PAI(A;OICI;0x12019f;;;OWNER)(A;OICI;0x12019f;;;BA)(A;OICI;FR;;;BU)", // 0x12019f 表示 GENERIC_READ | GENERIC_WRITE
 		},
 	}
 
@@ -118,7 +118,7 @@ func TestWindowsChmod(t *testing.T) {
 		require.NoError(t, err, "Failed to create temporary directory.")
 		defer os.RemoveAll(tempDir)
 
-		// Set the file OWNER to current user and GROUP to BUILTIN\Administrators (BA) for test determinism
+		// 把文件 OWNER 设为当前用户、GROUP 设为 BUILTIN\Administrators（BA），保证结果可预测。
 		currentUserSID, err := getCurrentUserSID()
 		require.NoError(t, err, "Failed to get current user SID")
 
@@ -135,16 +135,15 @@ func TestWindowsChmod(t *testing.T) {
 		require.NoError(t, err, "Failed to get permissions for directory.")
 
 		expectedDescriptor := strings.ReplaceAll(testCase.expectedDescriptor, "OWNER", owner)
-		// In cases where there is a single account in the Administrators group (which the case in CI)
-		// the SDDL format will simply say LA (for Local Administrator) instead of the actual SID,
-		// but we want to replace that with the actual SID for determinism
+		// 当管理员组只有一个账户时（CI 常见情况），SDDL 会用 LA（本地管理员）
+		// 代替真实 SID；这里统一替换为实际 SID，保证断言结果稳定。
 		descriptor = strings.ReplaceAll(descriptor, "LA", owner)
 
 		assert.Equal(t, expectedDescriptor, descriptor, "Unexpected DACL for directory. when setting permissions to %o", testCase.fileMode)
 	}
 }
 
-// Gets the SID for the current user
+// getCurrentUserSID 返回当前用户的 SID。
 func getCurrentUserSID() (string, error) {
 	token := windows.GetCurrentProcessToken()
 	user, err := token.GetTokenUser()
@@ -155,7 +154,7 @@ func getCurrentUserSID() (string, error) {
 	return user.User.Sid.String(), nil
 }
 
-// Gets the owner, group, and entire security descriptor of a file or directory in the SDDL format
+// getPermissionsInfo 以 SDDL 格式返回文件或目录的所有者、组和完整安全描述符。
 // https://learn.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-definition-language
 func getPermissionsInfo(path string) (string, string, string, error) {
 	sd, err := windows.GetNamedSecurityInfo(
@@ -180,7 +179,7 @@ func getPermissionsInfo(path string) (string, string, string, error) {
 	return owner.String(), group.String(), sdString, nil
 }
 
-// Sets the OWNER of a file or a directory to the specific SID
+// setOwnerInfo 将文件或目录的 OWNER 设置为指定 SID。
 func setOwnerInfo(path, owner string) error {
 	ownerSID, err := windows.StringToSid(owner)
 	if err != nil {
@@ -190,8 +189,8 @@ func setOwnerInfo(path, owner string) error {
 	err = windows.SetNamedSecurityInfo(
 		path, windows.SE_FILE_OBJECT,
 		windows.OWNER_SECURITY_INFORMATION,
-		ownerSID, // ownerSID
-		nil,      // Group SID
+		ownerSID, // 所有者 SID
+		nil,      // 组 SID
 		nil,      // DACL
 		nil,      // SACL
 	)
@@ -202,7 +201,7 @@ func setOwnerInfo(path, owner string) error {
 	return nil
 }
 
-// Sets the GROUP of a file or a directory to the specified group
+// setGroupInfo 将文件或目录的 GROUP 设置为指定组。
 func setGroupInfo(path, group string) error {
 	groupSID, err := windows.StringToSid(group)
 	if err != nil {
@@ -214,10 +213,10 @@ func setGroupInfo(path, group string) error {
 		path,
 		windows.SE_FILE_OBJECT,
 		windows.GROUP_SECURITY_INFORMATION,
-		nil, // owner SID
+		nil, // 所有者 SID
 		groupSID,
 		nil, // DACL
-		nil, //SACL
+		nil, // SACL
 	)
 
 	if err != nil {
@@ -227,12 +226,12 @@ func setGroupInfo(path, group string) error {
 	return nil
 }
 
-// TestDeleteFilePermissions tests that when a folder's permissions are set to 0660, child items
-// cannot be deleted in the folder but when a folder's permissions are set to 0770, child items can be deleted.
+// TestDeleteFilePermissions 验证目录权限为 0660 时无法删除其中的子项，
+// 而权限为 0770 时可以删除。
 func TestDeleteFilePermissions(t *testing.T) {
 
-	// On Windows, connections under an SSH session acquire SeBackupPrivilege and SeRestorePrivilege
-	// which allows you to delete a file bypassing ACLs (which invalidates this test)
+	// SSH 会话中的 Windows 连接会获得 SeBackupPrivilege 和 SeRestorePrivilege，
+	// 可绕过 ACL 删除文件，使本测试失去意义，因此直接跳过。
 	if sshConn := os.Getenv("SSH_CONNECTION"); sshConn != "" {
 		t.Skip("Skipping test when running over SSH connection.")
 	}
@@ -259,8 +258,9 @@ func TestDeleteFilePermissions(t *testing.T) {
 	require.NoError(t, err, "Failed to remove directory.")
 }
 
+// TestAbsWithSlash 验证 IsAbs 能正确识别 Windows 上以斜杠开头的绝对路径。
 func TestAbsWithSlash(t *testing.T) {
-	// On Windows, filepath.IsAbs will not return True for paths prefixed with a slash
+	// Windows 上 filepath.IsAbs 不会将以斜杠开头的路径判为绝对路径，因此需要包装。
 	assert.True(t, IsAbs("/test"))
 	assert.True(t, IsAbs("\\test"))
 

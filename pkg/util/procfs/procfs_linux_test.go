@@ -30,6 +30,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// verifyContainerName 校验 containerNameFromProcCgroup 的解析结果：
+// 按 expectedErr 决定应返回错误还是应得到 expectedName。
 func verifyContainerName(procCgroupText, expectedName string, expectedErr bool, t *testing.T) {
 	name, err := containerNameFromProcCgroup(procCgroupText)
 	if expectedErr && err == nil {
@@ -46,6 +48,8 @@ func verifyContainerName(procCgroupText, expectedName string, expectedErr bool, 
 	}
 }
 
+// TestContainerNameFromProcCgroup 覆盖 cgroup 内容中 devices 行存在、缺失，
+// 以及真实示例文件和格式非法等情况。
 func TestContainerNameFromProcCgroup(t *testing.T) {
 	procCgroupValid := "2:devices:docker/kubelet"
 	verifyContainerName(procCgroupValid, "docker/kubelet", false, t)
@@ -66,6 +70,7 @@ func TestContainerNameFromProcCgroup(t *testing.T) {
 	verifyContainerName(procCgroupInvalid, "", true, t)
 }
 
+// TestPidOf 验证 PidOf 能按当前测试进程名找到自身 PID。
 func TestPidOf(t *testing.T) {
 	pids, err := PidOf(filepath.Base(os.Args[0]))
 	assert.Empty(t, err)
@@ -73,6 +78,8 @@ func TestPidOf(t *testing.T) {
 	assert.Contains(t, pids, os.Getpid())
 }
 
+// TestPKill 用 SIGCONT 向自身进程发送信号，验证 PKill 能命中目标进程。
+// 选择 SIGCONT 是为了不打断测试进程。
 func TestPKill(t *testing.T) {
 	sig := syscall.SIGCONT
 	c := make(chan os.Signal, 1)
@@ -89,6 +96,7 @@ func TestPKill(t *testing.T) {
 	}
 }
 
+// BenchmarkGetPids 测量 getPids 遍历 /proc 的开销；断言操作在计时之外进行。
 func BenchmarkGetPids(b *testing.B) {
 	re, err := regexp.Compile("(^|/)" + filepath.Base(os.Args[0]) + "$")
 	assert.Empty(b, err)

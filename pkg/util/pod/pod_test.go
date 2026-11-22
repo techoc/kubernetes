@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+// TestPatchPodStatus 验证状态变更生成的 strategic merge patch：无变更时只带 UID。
 func TestPatchPodStatus(t *testing.T) {
 	ns := "ns"
 	name := "name"
@@ -102,6 +103,7 @@ func TestPatchPodStatus(t *testing.T) {
 	}
 }
 
+// getPodStatus 构造测试用例使用的基准 Pod 状态。
 func getPodStatus() v1.PodStatus {
 	return v1.PodStatus{
 		Phase: v1.PodRunning,
@@ -129,6 +131,7 @@ func getPodStatus() v1.PodStatus {
 	}
 }
 
+// TestReplaceOrAppendPodCondition 验证按类型新增或替换 Pod 条件。
 func TestReplaceOrAppendPodCondition(t *testing.T) {
 	cType := v1.PodConditionType("ExampleType")
 	testCases := []struct {

@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package exponentialbackoff contains logic for implementing exponential
-// backoff for GoRoutineMap and NestedPendingOperations.
+// Package exponentialbackoff 为 GoRoutineMap 和 NestedPendingOperations
+// 提供指数退避逻辑。
 package exponentialbackoff
 
 import (
@@ -24,29 +24,24 @@ import (
 )
 
 const (
-	// initialDurationBeforeRetry is the amount of time after an error occurs
-	// that GoroutineMap will refuse to allow another operation to start with
-	// the same target (if exponentialBackOffOnError is enabled). Each
-	// successive error results in a wait 2x times the previous.
+	// initialDurationBeforeRetry 是出错后 GoroutineMap 拒绝在同一目标上
+	// 启动新操作的初始时长（启用 exponentialBackOffOnError 时生效）。
+	// 每次连续出错都会使等待时长翻倍。
 	initialDurationBeforeRetry = 500 * time.Millisecond
 
-	// maxDurationBeforeRetry is the maximum amount of time that
-	// durationBeforeRetry will grow to due to exponential backoff.
-	// Value is slightly offset from 2 minutes to make timeouts due to this
-	// constant recognizable.
+	// maxDurationBeforeRetry 是 durationBeforeRetry 指数增长的上限。
+	// 取值比 2 分钟略多一些，便于从日志中识别出由此常量造成的超时。
 	maxDurationBeforeRetry = 2*time.Minute + 2*time.Second
 )
 
-// ExponentialBackoff contains the last occurrence of an error and the duration
-// that retries are not permitted.
+// ExponentialBackoff 记录最近一次错误及禁止重试的时长。
 type ExponentialBackoff struct {
 	lastError           error
 	lastErrorTime       time.Time
 	durationBeforeRetry time.Duration
 }
 
-// SafeToRetry returns an error if the durationBeforeRetry period for the given
-// lastErrorTime has not yet expired. Otherwise it returns nil.
+// SafeToRetry 在距离 lastErrorTime 的退避期尚未结束时返回错误，否则返回 nil。
 func (expBackoff *ExponentialBackoff) SafeToRetry(operationName string) error {
 	if time.Since(expBackoff.lastErrorTime) <= expBackoff.durationBeforeRetry {
 		return NewExponentialBackoffError(operationName, *expBackoff)
@@ -55,6 +50,7 @@ func (expBackoff *ExponentialBackoff) SafeToRetry(operationName string) error {
 	return nil
 }
 
+// Update 将退避时长翻倍（首次从初始值起算），并刷新错误及其发生时间。
 func (expBackoff *ExponentialBackoff) Update(err *error) {
 	if expBackoff.durationBeforeRetry == 0 {
 		expBackoff.durationBeforeRetry = initialDurationBeforeRetry
@@ -69,6 +65,7 @@ func (expBackoff *ExponentialBackoff) Update(err *error) {
 	expBackoff.lastErrorTime = time.Now()
 }
 
+// GenerateNoRetriesPermittedMsg 生成禁止重试的说明信息，包含最早可重试的时间。
 func (expBackoff *ExponentialBackoff) GenerateNoRetriesPermittedMsg(operationName string) string {
 	return fmt.Sprintf("Operation for %q failed. No retries permitted until %v (durationBeforeRetry %v). Error: %v",
 		operationName,
@@ -77,7 +74,7 @@ func (expBackoff *ExponentialBackoff) GenerateNoRetriesPermittedMsg(operationNam
 		expBackoff.lastError)
 }
 
-// NewExponentialBackoffError returns a new instance of ExponentialBackoff error.
+// NewExponentialBackoffError 创建一个新的指数退避错误。
 func NewExponentialBackoffError(
 	operationName string, expBackoff ExponentialBackoff) error {
 	return exponentialBackoffError{
@@ -86,10 +83,8 @@ func NewExponentialBackoffError(
 	}
 }
 
-// IsExponentialBackoff returns true if an error returned from GoroutineMap
-// indicates that a new operation can not be started because
-// exponentialBackOffOnError is enabled and a previous operation with the same
-// operation failed within the durationBeforeRetry period.
+// IsExponentialBackoff 判断 GoroutineMap 返回的错误是否表示：
+// 因启用 exponentialBackOffOnError 且同名操作在退避期内失败过，新操作无法启动。
 func IsExponentialBackoff(err error) bool {
 	switch err.(type) {
 	case exponentialBackoffError:
@@ -99,10 +94,8 @@ func IsExponentialBackoff(err error) bool {
 	}
 }
 
-// exponentialBackoffError is the error returned returned from GoroutineMap when
-// a new operation can not be started because exponentialBackOffOnError is
-// enabled and a previous operation with the same operation failed within the
-// durationBeforeRetry period.
+// exponentialBackoffError 是 GoroutineMap 在因退避而拒绝启动新操作时返回的错误：
+// 启用了 exponentialBackOffOnError，且同名操作在 durationBeforeRetry 期内失败过。
 type exponentialBackoffError struct {
 	operationName string
 	expBackoff    ExponentialBackoff
@@ -110,6 +103,7 @@ type exponentialBackoffError struct {
 
 var _ error = exponentialBackoffError{}
 
+// Error 实现 error 接口，输出操作名、上次失败时间及最早可重试时间。
 func (err exponentialBackoffError) Error() string {
 	return fmt.Sprintf(
 		"Failed to create operation with name %q. An operation with that name failed at %v. No retries permitted until %v (%v). Last error: %q.",

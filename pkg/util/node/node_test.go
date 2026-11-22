@@ -28,6 +28,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestGetPreferredAddress 验证按优先顺序选取地址：无匹配时报错，hostname 优先取 status 而非 label。
 func TestGetPreferredAddress(t *testing.T) {
 	testcases := map[string]struct {
 		Labels      map[string]string
@@ -94,6 +95,7 @@ func TestGetPreferredAddress(t *testing.T) {
 	}
 }
 
+// TestGetNodeHostIPs 验证节点主机 IP 的选取：InternalIP 优先、双栈配对及无 IP 时报错。
 func TestGetNodeHostIPs(t *testing.T) {
 	testcases := []struct {
 		name      string
@@ -192,6 +194,7 @@ func TestGetNodeHostIPs(t *testing.T) {
 	}
 }
 
+// TestIsNodeReady 验证节点 Ready 判定：仅当 Ready 条件为 True 时返回 true。
 func TestIsNodeReady(t *testing.T) {
 	testCases := []struct {
 		name   string

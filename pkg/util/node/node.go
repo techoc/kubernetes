@@ -25,27 +25,24 @@ import (
 )
 
 const (
-	// NodeUnreachablePodReason is the reason on a pod when its state cannot be confirmed as kubelet is unresponsive
-	// on the node it is (was) running.
+	// NodeUnreachablePodReason 是 Pod 状态无法确认时的原因：节点上 kubelet 无响应。
 	NodeUnreachablePodReason = "NodeLost"
-	// NodeUnreachablePodMessage is the message on a pod when its state cannot be confirmed as kubelet is unresponsive
-	// on the node it is (was) running.
+	// NodeUnreachablePodMessage 是 Pod 状态无法确认时的消息：运行该 Pod 的节点 kubelet 无响应。
 	NodeUnreachablePodMessage = "Node %v which was running pod %v is unresponsive"
 )
 
-// NoMatchError is a typed implementation of the error interface. It indicates a failure to get a matching Node.
+// NoMatchError 是 error 接口的具体实现，表示未能找到匹配的节点地址。
 type NoMatchError struct {
 	addresses []v1.NodeAddress
 }
 
-// Error is the implementation of the conventional interface for
-// representing an error condition, with the nil value representing no error.
+// Error 实现 error 接口，nil 表示没有错误。
 func (e *NoMatchError) Error() string {
 	return fmt.Sprintf("no preferred addresses found; known addresses: %v", e.addresses)
 }
 
-// GetPreferredNodeAddress returns the address of the provided node, using the provided preference order.
-// If none of the preferred address types are found, an error is returned.
+// GetPreferredNodeAddress 按给定的优先顺序返回节点的地址。
+// 若找不到任何优先地址类型，则返回错误。
 func GetPreferredNodeAddress(node *v1.Node, preferredAddressTypes []v1.NodeAddressType) (string, error) {
 	for _, addressType := range preferredAddressTypes {
 		for _, address := range node.Status.Addresses {
@@ -57,13 +54,11 @@ func GetPreferredNodeAddress(node *v1.Node, preferredAddressTypes []v1.NodeAddre
 	return "", &NoMatchError{addresses: node.Status.Addresses}
 }
 
-// GetNodeHostIPs returns the provided node's IP(s); either a single "primary IP" for the
-// node in a single-stack cluster, or a dual-stack pair of IPs in a dual-stack cluster
-// (for nodes that actually have dual-stack IPs). Among other things, the IPs returned
-// from this function are used as the `.status.PodIPs` values for host-network pods on the
-// node, and the first IP is used as the `.status.HostIP` for all pods on the node.
+// GetNodeHostIPs 返回节点的 IP：单栈集群返回单个"主 IP"，双栈集群（节点确实拥有双栈 IP 时）
+// 返回一对 IP。返回的 IP 一方面用作节点上 hostNetwork Pod 的 `.status.PodIPs`，
+// 其中第一个 IP 还用作节点上所有 Pod 的 `.status.HostIP`。
 func GetNodeHostIPs(node *v1.Node) ([]net.IP, error) {
-	// Re-sort the addresses with InternalIPs first and then ExternalIPs
+	// 重新排序地址：InternalIP 在前，ExternalIP 在后。
 	allIPs := make([]net.IP, 0, len(node.Status.Addresses))
 	for _, addr := range node.Status.Addresses {
 		if addr.Type == v1.NodeInternalIP {
@@ -85,6 +80,7 @@ func GetNodeHostIPs(node *v1.Node) ([]net.IP, error) {
 		return nil, fmt.Errorf("host IP unknown; known addresses: %v", node.Status.Addresses)
 	}
 
+	// 取第一个 IP 作为主 IP；再找第一个协议族不同的 IP 组成双栈对。
 	nodeIPs := []net.IP{allIPs[0]}
 	for _, ip := range allIPs {
 		if netutils.IsIPv6(ip) != netutils.IsIPv6(nodeIPs[0]) {
@@ -96,7 +92,7 @@ func GetNodeHostIPs(node *v1.Node) ([]net.IP, error) {
 	return nodeIPs, nil
 }
 
-// IsNodeReady returns true if a node is ready; false otherwise.
+// IsNodeReady 判断节点是否处于 Ready 状态。
 func IsNodeReady(node *v1.Node) bool {
 	for _, c := range node.Status.Conditions {
 		if c.Type == v1.NodeReady {

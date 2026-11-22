@@ -43,6 +43,7 @@ func (c C) String() string {
 	return fmt.Sprintf("%d:%s", c.x, c.y)
 }
 
+// TestDeepHashObject 验证各种对象类型的深哈希具有确定性。
 func TestDeepHashObject(t *testing.T) {
 	successCases := []func() interface{}{
 		func() interface{} { return 8675309 },
@@ -92,6 +93,7 @@ func TestDeepHashObject(t *testing.T) {
 	}
 }
 
+// toString 生成对象的可读表示，用于失败信息。
 func toString(obj interface{}) string {
 	return dump.Pretty(obj)
 }
@@ -106,8 +108,9 @@ type unicycle struct {
 	tags           map[string]string
 }
 
+// TestDeepObjectPointer 验证深哈希按指针所指的值计算：值相同则哈希相同，与指针身份无关。
 func TestDeepObjectPointer(t *testing.T) {
-	// Arrange
+	// 准备数据。
 	wheel1 := wheel{radius: 17}
 	wheel2 := wheel{radius: 22}
 	wheel3 := wheel{radius: 17}
@@ -116,12 +119,12 @@ func TestDeepObjectPointer(t *testing.T) {
 	myUni2 := unicycle{licencePlateID: "blah", primaryWheel: &wheel2, tags: map[string]string{"color": "blue", "name": "john"}}
 	myUni3 := unicycle{licencePlateID: "blah", primaryWheel: &wheel3, tags: map[string]string{"color": "blue", "name": "john"}}
 
-	// Run it more than once to verify determinism of hasher.
+	// 多次运行以验证哈希的确定性。
 	for i := 0; i < 100; i++ {
 		hasher1 := adler32.New()
 		hasher2 := adler32.New()
 		hasher3 := adler32.New()
-		// Act
+		// 执行哈希。
 		DeepHashObject(hasher1, myUni1)
 		hash1 := hasher1.Sum32()
 		DeepHashObject(hasher1, myUni1)
@@ -131,7 +134,7 @@ func TestDeepObjectPointer(t *testing.T) {
 		DeepHashObject(hasher3, myUni3)
 		hash3 := hasher3.Sum32()
 
-		// Assert
+		// 断言。
 		if hash1 != hash1a {
 			t.Errorf("repeated hash of the same object produced different results: %d vs %d", hash1, hash1a)
 		}

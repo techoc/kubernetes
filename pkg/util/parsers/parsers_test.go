@@ -22,8 +22,11 @@ import (
 	"time"
 )
 
-// Based on Docker test case removed in:
+// 基于 Docker 已删除的测试用例：
 // https://github.com/docker/docker/commit/4352da7803d182a6013a5238ce20a7c749db979a
+//
+// TestParseImageName 验证 ParseImageName 对镜像名、标签、摘要的解析，
+// 以及无效输入的错误提示。
 func TestParseImageName(t *testing.T) {
 	testCases := []struct {
 		Input         string
@@ -60,6 +63,8 @@ func TestParseImageName(t *testing.T) {
 	}
 }
 
+// TestParseCronSchedule 验证带 panic 恢复的解析函数能正确处理合法 schedule
+// （含时区声明），并把格式错误的输入转成错误而非 panic。
 func TestParseCronSchedule(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -115,7 +120,7 @@ func TestParseCronSchedule(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// This should not panic even with malformed schedules
+			// 即使 schedule 格式错误也不应 panic
 			sched, err := ParseCronScheduleWithPanicRecovery(tc.schedule)
 
 			if tc.expectError {
@@ -145,8 +150,8 @@ func TestParseCronSchedule(t *testing.T) {
 					return
 				}
 
-				// Verify that the schedule is actually valid by calling Next
-				// This ensures we got a real cron.Schedule, not just a non-nil value
+				// 调用 Next 验证 schedule 确实可用，
+				// 确保拿到的是真正的 cron.Schedule 而不只是非 nil 值
 				next := sched.Next(time.Now())
 				if next.IsZero() {
 					t.Errorf("Expected valid next execution time for schedule %q, but got zero time", tc.schedule)
@@ -156,8 +161,9 @@ func TestParseCronSchedule(t *testing.T) {
 	}
 }
 
+// TestParseCronSchedulePanicRecovery 验证解析时产生的 panic 会被正确恢复并转成错误。
 func TestParseCronSchedulePanicRecovery(t *testing.T) {
-	// Test that panics are properly recovered and converted to errors
+	// 各种会引发 panic 的 schedule 输入
 	panicSchedules := []string{
 		"TZ=0",
 		"TZ=",
@@ -167,20 +173,20 @@ func TestParseCronSchedulePanicRecovery(t *testing.T) {
 
 	for _, schedule := range panicSchedules {
 		t.Run("panic_recovery_"+schedule, func(t *testing.T) {
-			// This should not panic
+			// 不应 panic
 			sched, err := ParseCronScheduleWithPanicRecovery(schedule)
 
-			// Should get an error
+			// 应返回错误
 			if err == nil {
 				t.Errorf("Expected error for panic-causing schedule %q, but got none", schedule)
 			}
 
-			// Should get nil schedule
+			// 出错时应返回 nil schedule
 			if sched != nil {
 				t.Errorf("Expected nil schedule for panic-causing schedule %q, but got: %v", schedule, sched)
 			}
 
-			// Error message should contain "invalid schedule format"
+			// 错误信息中应包含 "invalid schedule format"
 			errMsg := err.Error()
 			if !strings.Contains(errMsg, "invalid schedule format") {
 				t.Errorf("Expected error message to contain 'invalid schedule format', but got: %s", errMsg)

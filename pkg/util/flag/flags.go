@@ -34,7 +34,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-// TODO(mikedanese): remove these flag wrapper types when we remove command line flags
+// TODO(mikedanese): 移除命令行 flag 时一并删除这些 flag 包装类型
 
 var (
 	_ pflag.Value = &IPVar{}
@@ -44,12 +44,12 @@ var (
 	_ pflag.Value = &RegisterWithTaintsVar{}
 )
 
-// IPVar is used for validating a command line option that represents an IP. It implements the pflag.Value interface
+// IPVar 用于校验表示 IP 的命令行选项，实现了 pflag.Value 接口。
 type IPVar struct {
 	Val *string
 }
 
-// Set sets the flag value
+// Set 解析并设置命令行 flag 的值
 func (v *IPVar) Set(s string) error {
 	if len(s) == 0 {
 		v.Val = nil
@@ -59,14 +59,14 @@ func (v *IPVar) Set(s string) error {
 		return fmt.Errorf("%q is not a valid IP address", s)
 	}
 	if v.Val == nil {
-		// it's okay to panic here since this is programmer error
+		// 这是调用方的编程错误，直接 panic 即可
 		panic("the string pointer passed into IPVar should not be nil")
 	}
 	*v.Val = s
 	return nil
 }
 
-// String returns the flag value
+// String 返回命令行 flag 当前的值
 func (v *IPVar) String() string {
 	if v.Val == nil {
 		return ""
@@ -74,17 +74,17 @@ func (v *IPVar) String() string {
 	return *v.Val
 }
 
-// Type gets the flag type
+// Type 返回命令行 flag 的类型名称
 func (v *IPVar) Type() string {
 	return "ip"
 }
 
-// IPPortVar is used for validating a command line option that represents an IP and a port. It implements the pflag.Value interface
+// IPPortVar 用于校验表示 IP 和端口的命令行选项，实现了 pflag.Value 接口。
 type IPPortVar struct {
 	Val *string
 }
 
-// Set sets the flag value
+// Set 解析并设置命令行 flag 的值
 func (v *IPPortVar) Set(s string) error {
 	if len(s) == 0 {
 		v.Val = nil
@@ -92,18 +92,18 @@ func (v *IPPortVar) Set(s string) error {
 	}
 
 	if v.Val == nil {
-		// it's okay to panic here since this is programmer error
+		// 这是调用方的编程错误，直接 panic 即可
 		panic("the string pointer passed into IPPortVar should not be nil")
 	}
 
-	// Both IP and IP:port are valid.
-	// Attempt to parse into IP first.
+	// IP 和 IP:port 两种格式都合法。
+	// 先尝试按纯 IP 解析。
 	if netutils.ParseIPSloppy(s) != nil {
 		*v.Val = s
 		return nil
 	}
 
-	// Can not parse into IP, now assume IP:port.
+	// 按 IP 解析失败，再按 IP:port 解析。
 	host, port, err := net.SplitHostPort(s)
 	if err != nil {
 		return fmt.Errorf("%q is not in a valid format (ip or ip:port): %v", s, err)
@@ -118,7 +118,7 @@ func (v *IPPortVar) Set(s string) error {
 	return nil
 }
 
-// String returns the flag value
+// String 返回命令行 flag 当前的值
 func (v *IPPortVar) String() string {
 	if v.Val == nil {
 		return ""
@@ -126,30 +126,30 @@ func (v *IPPortVar) String() string {
 	return *v.Val
 }
 
-// Type gets the flag type
+// Type 返回命令行 flag 的类型名称
 func (v *IPPortVar) Type() string {
 	return "ipport"
 }
 
-// PortRangeVar is used for validating a command line option that represents a port range. It implements the pflag.Value interface
+// PortRangeVar 用于校验表示端口范围的命令行选项，实现了 pflag.Value 接口。
 type PortRangeVar struct {
 	Val *string
 }
 
-// Set sets the flag value
+// Set 解析并设置命令行 flag 的值
 func (v PortRangeVar) Set(s string) error {
 	if _, err := utilnet.ParsePortRange(s); err != nil {
 		return fmt.Errorf("%q is not a valid port range: %v", s, err)
 	}
 	if v.Val == nil {
-		// it's okay to panic here since this is programmer error
+		// 这是调用方的编程错误，直接 panic 即可
 		panic("the string pointer passed into PortRangeVar should not be nil")
 	}
 	*v.Val = s
 	return nil
 }
 
-// String returns the flag value
+// String 返回命令行 flag 当前的值
 func (v PortRangeVar) String() string {
 	if v.Val == nil {
 		return ""
@@ -157,18 +157,18 @@ func (v PortRangeVar) String() string {
 	return *v.Val
 }
 
-// Type gets the flag type
+// Type 返回命令行 flag 的类型名称
 func (v PortRangeVar) Type() string {
 	return "port-range"
 }
 
-// ReservedMemoryVar is used for validating a command line option that represents a reserved memory. It implements the pflag.Value interface
+// ReservedMemoryVar 用于校验表示预留内存的命令行选项，实现了 pflag.Value 接口。
 type ReservedMemoryVar struct {
 	Value       *[]kubeletconfig.MemoryReservation
-	initialized bool // set to true after the first Set call
+	initialized bool // 第一次调用 Set 后置为 true
 }
 
-// Set sets the flag value
+// Set 解析并设置命令行 flag 的值
 func (v *ReservedMemoryVar) Set(s string) error {
 	if v.Value == nil {
 		return fmt.Errorf("no target (nil pointer to *[]MemoryReservation)")
@@ -231,7 +231,7 @@ func (v *ReservedMemoryVar) Set(s string) error {
 	return nil
 }
 
-// String returns the flag value
+// String 返回命令行 flag 当前的值
 func (v *ReservedMemoryVar) String() string {
 	if v == nil || v.Value == nil {
 		return ""
@@ -252,17 +252,18 @@ func (v *ReservedMemoryVar) String() string {
 	return strings.Join(slices, ",")
 }
 
-// Type gets the flag type
+// Type 返回命令行 flag 的类型名称
 func (v *ReservedMemoryVar) Type() string {
 	return "reserved-memory"
 }
 
-// RegisterWithTaintsVar is used for validating a command line option that represents a register with taints. It implements the pflag.Value interface
+// RegisterWithTaintsVar 用于校验表示节点注册时所带 taints 的命令行选项，
+// 实现了 pflag.Value 接口。
 type RegisterWithTaintsVar struct {
 	Value *[]v1.Taint
 }
 
-// Set sets the flag value
+// Set 解析并设置命令行 flag 的值
 func (t RegisterWithTaintsVar) Set(s string) error {
 	if t.Value == nil {
 		return fmt.Errorf("no target (nil pointer to []v1.Taint)")
@@ -285,7 +286,7 @@ func (t RegisterWithTaintsVar) Set(s string) error {
 	return nil
 }
 
-// String returns the flag value
+// String 返回命令行 flag 当前的值
 func (t RegisterWithTaintsVar) String() string {
 	if t.Value == nil || len(*t.Value) == 0 {
 		return ""
@@ -297,7 +298,7 @@ func (t RegisterWithTaintsVar) String() string {
 	return strings.Join(taints, ",")
 }
 
-// Type gets the flag type
+// Type 返回命令行 flag 的类型名称
 func (t RegisterWithTaintsVar) Type() string {
 	return "[]v1.Taint"
 }
