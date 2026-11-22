@@ -25,8 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// testMember 是一个空结构，用于配合 mock extractor 只测试 Union 逻辑本身。
 type testMember struct{}
 
+// TestUnion 验证非判别式 union 的约束：恰好设置一个成员。
+// 每个用例都分别跑指针和值两种泛型实例，确认两条实现路径一致。
 func TestUnion(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -35,12 +38,14 @@ func TestUnion(t *testing.T) {
 		expected    field.ErrorList
 	}{
 		{
+			// 恰好一个成员被设置，合法。
 			name:        "one member set",
 			fields:      []string{"a", "b", "c", "d"},
 			fieldValues: []bool{false, false, false, true},
 			expected:    nil,
 		},
 		{
+			// 多个成员同时设置：错误信息列出所有已设置的字段名。
 			name:        "two members set",
 			fields:      []string{"a", "b", "c", "d"},
 			fieldValues: []bool{false, true, false, true},
@@ -53,6 +58,7 @@ func TestUnion(t *testing.T) {
 			expected:    field.ErrorList{field.Invalid(nil, "{a, b, c, d}", "must specify exactly one of: `a`, `b`, `c`, `d`")}.WithOrigin("union"),
 		},
 		{
+			// 一个都不设置：错误信息是 "must specify one of"，与"多选"的措辞不同。
 			name:        "no member set",
 			fields:      []string{"a", "b", "c", "d"},
 			fieldValues: []bool{false, false, false, false},
@@ -70,6 +76,7 @@ func TestUnion(t *testing.T) {
 			t.Run("pointer", func(t *testing.T) {
 				// Create mock extractors that return predefined values instead of
 				// actually extracting from the object.
+				// 依赖 Go 1.22 起 range 变量按迭代创建，闭包各自捕获自己的 val。
 				extractors := make([]ExtractorFn[*testMember, bool], len(tc.fieldValues))
 				for i, val := range tc.fieldValues {
 					extractors[i] = func(_ *testMember) bool { return val }
@@ -99,6 +106,8 @@ func TestUnion(t *testing.T) {
 	}
 }
 
+// TestDiscriminatedUnion 验证判别式 union：由 discriminator 字段决定唯一允许的成员，
+// 其他成员一旦设置即报错；discriminator 指向的成员缺失也会报错。
 func TestDiscriminatedUnion(t *testing.T) {
 	testCases := []struct {
 		name               string
@@ -123,6 +132,7 @@ func TestDiscriminatedUnion(t *testing.T) {
 			fieldValues:        []bool{false, false, true, false},
 		},
 		{
+			// discriminator 为 C，但设置的是 b：既报 b 不该设置，也报 c 必须设置。
 			name:               "invalid, discriminator not set to member that is specified",
 			discriminatorField: "type",
 			fields:             [][2]string{{"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D"}},
@@ -134,6 +144,7 @@ func TestDiscriminatedUnion(t *testing.T) {
 			}.WithOrigin("union"),
 		},
 		{
+			// discriminator 本身正确（C），但 b、d 也被设置；c 合法所以不报 c。
 			name:               "invalid, discriminator correct, multiple members set",
 			discriminatorField: "type",
 			fields:             [][2]string{{"a", "A"}, {"b", "B"}, {"c", "C"}, {"d", "D"}},
@@ -189,6 +200,8 @@ func TestDiscriminatedUnion(t *testing.T) {
 	}
 }
 
+// testStruct 用四种不同形状的成员（指针、指针、切片、map）覆盖 extractor 的
+// "是否设置"判定：长度为零的切片/map 视为未设置。
 type testStruct struct {
 	M1 *m1               `json:"m1"`
 	M2 *m2               `json:"m2"`
@@ -226,6 +239,9 @@ var extractors = []ExtractorFn[*testStruct, bool]{
 	},
 }
 
+// TestUnionRatcheting 验证 update 时的 ratcheting：
+// 旧对象已存在时，原本就违反 union 约束的字段不会被重新判为错误；
+// 只有在新旧状态之间"变成非法"才会报错。
 func TestUnionRatcheting(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -234,6 +250,7 @@ func TestUnionRatcheting(t *testing.T) {
 		expected  field.ErrorList
 	}{
 		{
+			// 旧对象为 nil 无法 ratchet，空对象依旧违反"恰好一个"。
 			name:      "old nil - no ratcheting",
 			oldStruct: nil,
 			newStruct: &testStruct{},
@@ -247,6 +264,7 @@ func TestUnionRatcheting(t *testing.T) {
 			newStruct: &testStruct{},
 		},
 		{
+			// 旧状态本来就多选，保持多选不算新错误。
 			name: "both have more than one member",
 			oldStruct: &testStruct{
 				M1: &m1{},
@@ -258,6 +276,7 @@ func TestUnionRatcheting(t *testing.T) {
 			},
 		},
 		{
+			// 从合法（单成员）变为非法（多成员），必须报错。
 			name: "change to invalid",
 			oldStruct: &testStruct{
 				M1: &m1{},
@@ -271,6 +290,7 @@ func TestUnionRatcheting(t *testing.T) {
 			}.WithOrigin("union"),
 		},
 		{
+			// 切片内容变化但"是否设置"不变（都非空），不算新的 union 违规。
 			name:      "slice member ratcheting: unchanged membership",
 			oldStruct: &testStruct{M3: []string{"a"}},
 			newStruct: &testStruct{M3: []string{"b"}},
@@ -281,6 +301,7 @@ func TestUnionRatcheting(t *testing.T) {
 			newStruct: &testStruct{M4: map[string]string{"k": "v2"}},
 		},
 		{
+			// 空切片不算"已设置"，因此仍然是"一个都没选"。
 			name:      "empty slice is not set",
 			oldStruct: nil,
 			newStruct: &testStruct{M3: []string{}},
@@ -289,6 +310,7 @@ func TestUnionRatcheting(t *testing.T) {
 			}.WithOrigin("union"),
 		},
 		{
+			// 空 map 与空切片同理。
 			name:      "empty map is not set",
 			oldStruct: nil,
 			newStruct: &testStruct{M4: map[string]string{}},
@@ -310,6 +332,8 @@ func TestUnionRatcheting(t *testing.T) {
 	}
 }
 
+// testDiscriminatedStruct 在 testStruct 基础上增加判别字段 D，
+// 成员名与判别值一一对应，方便复用同一组 extractor 语义。
 type testDiscriminatedStruct struct {
 	D  string            `json:"d"`
 	M1 *m1               `json:"m1"`
@@ -351,6 +375,8 @@ var testDiscriminatedExtractors = []ExtractorFn[*testDiscriminatedStruct, bool]{
 	},
 }
 
+// TestDiscriminatedUnionRatcheting 覆盖判别式 union 的 ratcheting：
+// 旧对象已存在但已违规时保持违规状态可通过；改变判别值导致新的不匹配则报错。
 func TestDiscriminatedUnionRatcheting(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -367,6 +393,7 @@ func TestDiscriminatedUnionRatcheting(t *testing.T) {
 			newStruct: &testDiscriminatedStruct{},
 		},
 		{
+			// 旧状态已违规（D=m1 却设置了 m2），保持不变不算新错误。
 			name: "pass with both not set to member that is specified",
 			oldStruct: &testDiscriminatedStruct{
 				D:  "m1",
@@ -391,6 +418,7 @@ func TestDiscriminatedUnionRatcheting(t *testing.T) {
 			},
 		},
 		{
+			// 判别值 m1 合法，新增的 m2 是新违规，必须报错。
 			name: "fail on changing to invalid with both set",
 			oldStruct: &testDiscriminatedStruct{
 				D:  "m1",
@@ -406,6 +434,7 @@ func TestDiscriminatedUnionRatcheting(t *testing.T) {
 			}.WithOrigin("union"),
 		},
 		{
+			// 判别值从 m1 改为 m2：旧成员 m1 变成多余，新成员 m2 又缺失，两处都要报。
 			name: "fail on changing the discriminator",
 			oldStruct: &testDiscriminatedStruct{
 				D:  "m1",
@@ -443,6 +472,7 @@ func TestDiscriminatedUnionRatcheting(t *testing.T) {
 			},
 		},
 		{
+			// 从"已设置"变为空切片：设置状态丢失，判为必须设置。
 			name: "empty slice is not set",
 			oldStruct: &testDiscriminatedStruct{
 				D:  "m3",
@@ -457,6 +487,7 @@ func TestDiscriminatedUnionRatcheting(t *testing.T) {
 			}.WithOrigin("union"),
 		},
 		{
+			// 同上，map 版本。
 			name: "empty map is not set",
 			oldStruct: &testDiscriminatedStruct{
 				D:  "m4",

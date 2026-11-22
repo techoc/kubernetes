@@ -114,6 +114,8 @@ var _ runtime.Serializer = &Serializer{}
 var _ recognizer.RecognizingDecoder = &Serializer{}
 
 // gvkWithDefaults returns group kind and version defaulting from provided default
+// Only missing components are filled in; an explicitly supplied group/version
+// is never overwritten, so defaults cannot silently change the target.
 func gvkWithDefaults(actual, defaultGVK schema.GroupVersionKind) schema.GroupVersionKind {
 	if len(actual.Kind) == 0 {
 		actual.Kind = defaultGVK.Kind
@@ -138,6 +140,7 @@ func gvkWithDefaults(actual, defaultGVK schema.GroupVersionKind) schema.GroupVer
 // The gvk calculate priority will be originalData > default gvk > into
 func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	data := originalData
+	// YAML is converted to JSON first so there is a single decoding path below.
 	if s.options.Yaml {
 		altered, err := yaml.YAMLToJSON(data)
 		if err != nil {
@@ -146,15 +149,19 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 		data = altered
 	}
 
+	// Read the type information actually present in the document.
 	actual, err := s.meta.Interpret(data)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// Caller-provided defaults fill in whatever the document omitted.
 	if gvk != nil {
 		*actual = gvkWithDefaults(*actual, *gvk)
 	}
 
+	// Unknown means "keep the raw bytes and let the caller decide later", so no
+	// schema resolution is attempted.
 	if unk, ok := into.(*runtime.Unknown); ok && unk != nil {
 		unk.Raw = originalData
 		unk.ContentType = runtime.ContentTypeJSON
@@ -167,6 +174,8 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 		types, _, err := s.typer.ObjectKinds(into)
 		switch {
 		case runtime.IsNotRegisteredError(err), isUnstructured:
+			// Unregistered or unstructured target: decode JSON directly without
+			// creating a scheme object. Strict-mode duplicates are still checked.
 			strictErrs, err := s.unmarshal(into, data, originalData)
 			if err != nil {
 				return nil, actual, err
@@ -190,10 +199,12 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 		case err != nil:
 			return nil, actual, err
 		default:
+			// The into object is registered; its GVK is the next default.
 			*actual = gvkWithDefaults(*actual, types[0])
 		}
 	}
 
+	// Without kind/version the document cannot be resolved to a Go type.
 	if len(actual.Kind) == 0 {
 		return nil, actual, runtime.NewMissingKindErr(string(originalData))
 	}
@@ -211,6 +222,8 @@ func (s *Serializer) Decode(originalData []byte, gvk *schema.GroupVersionKind, i
 	if err != nil {
 		return nil, actual, err
 	} else if len(strictErrs) > 0 {
+		// Duplicate fields are reported but the object is still returned, so
+		// callers can choose to treat the warning as an error.
 		return obj, actual, runtime.NewStrictDecodingError(strictErrs)
 	}
 	return obj, actual, nil
@@ -225,6 +238,8 @@ func (s *Serializer) Encode(obj runtime.Object, w io.Writer) error {
 }
 
 func (s *Serializer) doEncode(obj runtime.Object, w io.Writer) error {
+	// YAML output is produced by round-tripping through JSON, which guarantees
+	// the YAML is exactly the JSON-subset the serializer supports.
 	if s.options.Yaml {
 		json, err := json.Marshal(obj)
 		if err != nil {
@@ -238,6 +253,7 @@ func (s *Serializer) doEncode(obj runtime.Object, w io.Writer) error {
 		return err
 	}
 
+	// Pretty printing is a client-facing convenience; it must stay valid JSON.
 	if s.options.Pretty {
 		data, err := json.MarshalIndent(obj, "", "  ")
 		if err != nil {
@@ -246,6 +262,8 @@ func (s *Serializer) doEncode(obj runtime.Object, w io.Writer) error {
 		_, err = w.Write(data)
 		return err
 	}
+	// Collections can be streamed item by item to keep memory bounded; if the
+	// object is not a collection this falls through to the standard encoder.
 	if s.options.StreamingCollectionsEncoding {
 		ok, err := streamEncodeCollections(obj, w)
 		if err != nil {
@@ -255,6 +273,8 @@ func (s *Serializer) doEncode(obj runtime.Object, w io.Writer) error {
 			return nil
 		}
 	}
+	// json.Encoder appends a newline, which also acts as the frame separator
+	// for streaming readers.
 	encoder := json.NewEncoder(w)
 	return encoder.Encode(obj)
 }
@@ -267,6 +287,8 @@ func (s *Serializer) IsStrict() bool {
 
 func (s *Serializer) unmarshal(into runtime.Object, data, originalData []byte) (strictErrs []error, err error) {
 	// If the deserializer is non-strict, return here.
+	// Case-sensitive and int-preserving: Kubernetes field names are exact and
+	// large integers must not be silently converted to float64.
 	if !s.options.Strict {
 		if err := kjson.UnmarshalCaseSensitivePreserveInts(data, into); err != nil {
 			return nil, err
@@ -299,6 +321,7 @@ func (s *Serializer) unmarshal(into runtime.Object, data, originalData []byte) (
 		// fatal decoding error, not due to strictness
 		return nil, err
 	}
+	// Duplicate-field warnings are collected rather than returned as fatal.
 	strictErrs = append(strictErrs, strictJSONErrs...)
 	return strictErrs, nil
 }
@@ -312,6 +335,7 @@ func (s *Serializer) Identifier() runtime.Identifier {
 func (s *Serializer) RecognizesData(data []byte) (ok, unknown bool, err error) {
 	if s.options.Yaml {
 		// we could potentially look for '---'
+		// YAML is a superset of JSON, so a JSON check cannot rule it in.
 		return false, true, nil
 	}
 	return utilyaml.IsJSONBuffer(data), false, nil

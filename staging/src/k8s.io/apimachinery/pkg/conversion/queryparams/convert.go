@@ -24,6 +24,9 @@ import (
 )
 
 // Marshaler converts an object to a query parameter string representation
+//
+// 实现此接口的类型会优先于反射展开被序列化，用于 Duration 等需要特殊
+// 文本表示的值类型。
 type Marshaler interface {
 	MarshalQueryParameter() (string, error)
 }
@@ -33,6 +36,8 @@ type Unmarshaler interface {
 	UnmarshalQueryParameter(string) error
 }
 
+// jsonTag 提取结构体字段的 JSON 标签名以及是否带 omitempty。被标记为 "-"
+// 的字段返回空名，调用方据此跳过该字段；无标签同样视为不参与查询参数。
 func jsonTag(field reflect.StructField) (string, bool) {
 	structTag, exists := field.Tag.Lookup("json")
 	if !exists || len(structTag) == 0 {
@@ -62,6 +67,8 @@ func isStructKind(kind reflect.Kind) bool {
 	return kind == reflect.Struct
 }
 
+// isValueKind 判断类型是否可作为一个标量查询参数值直接格式化。注意这里
+// 不包含 uintptr，也不包含复合类型。
 func isValueKind(kind reflect.Kind) bool {
 	switch kind {
 	case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16,
@@ -74,10 +81,14 @@ func isValueKind(kind reflect.Kind) bool {
 	}
 }
 
+// zeroValue 用 DeepEqual 比较零值，因此对 slice/map 等不可比较类型也成立。
+// 注意：nil 与非 nil 的空 slice 并不相等，omitempty 对二者行为不同。
 func zeroValue(value reflect.Value) bool {
 	return reflect.DeepEqual(reflect.Zero(value.Type()).Interface(), value.Interface())
 }
 
+// customMarshalValue 尝试让值通过 MarshalQueryParameter 自行编码。值接收者
+// 和指针接收者都要支持：反射拿到的 field 不可寻址时，只能依赖值接收者实现。
 func customMarshalValue(value reflect.Value) (reflect.Value, bool) {
 	// Return unless we implement a custom query marshaler
 	if !value.CanInterface() {
@@ -110,6 +121,8 @@ func customMarshalValue(value reflect.Value) (reflect.Value, bool) {
 	return reflect.ValueOf(v), true
 }
 
+// addParam 把单个值格式化为字符串加入查询参数。fmt 的 "<nil>" 被转成空串，
+// 因为 nil 指针在 URL 中应表现为“参数存在但值为空”，而不是字面量 "<nil>"。
 func addParam(values url.Values, tag string, omitempty bool, value reflect.Value) {
 	if omitempty && zeroValue(value) {
 		return
@@ -123,6 +136,8 @@ func addParam(values url.Values, tag string, omitempty bool, value reflect.Value
 	values.Add(tag, val)
 }
 
+// addListOfParams 为列表的每个元素追加同名参数（重复 key），而不是把列表
+// 编码成逗号分隔的单个值，这是 url.Values 的标准多值语义。
 func addListOfParams(values url.Values, tag string, omitempty bool, list reflect.Value) {
 	for i := 0; i < list.Len(); i++ {
 		addParam(values, tag, omitempty, list.Index(i))
@@ -132,6 +147,9 @@ func addListOfParams(values url.Values, tag string, omitempty bool, list reflect
 // Convert takes an object and converts it to a url.Values object using JSON tags as
 // parameter names. Only top-level simple values, arrays, and slices are serialized.
 // Embedded structs, maps, etc. will not be serialized.
+//
+// 唯一支持的输入是指针（或指向结构体的 interface）；nil 返回空参数集而不是
+// 错误，便于调用方无条件下传。map 没有对应语义，因此被静默忽略而不是报错。
 func Convert(obj interface{}) (url.Values, error) {
 	result := url.Values{}
 	if obj == nil {
@@ -155,10 +173,13 @@ func Convert(obj interface{}) (url.Values, error) {
 	return result, nil
 }
 
+// convertStruct 递归展开结构体。非 nil 指针字段会强制关闭 omitempty，
+// 因为“显式设置了指针”本身就是要表达的意图（即使指向零值）。
 func convertStruct(result url.Values, st reflect.Type, sv reflect.Value) {
 	for i := 0; i < st.NumField(); i++ {
 		field := sv.Field(i)
 		tag, omitempty := jsonTag(st.Field(i))
+		// 没有标签（含 json:"-"）的字段不参与查询参数。
 		if len(tag) == 0 {
 			continue
 		}
@@ -180,10 +201,12 @@ func convertStruct(result url.Values, st reflect.Type, sv reflect.Value) {
 		case isValueKind(kind):
 			addParam(result, tag, omitempty, field)
 		case kind == reflect.Array || kind == reflect.Slice:
+			// 只处理标量元素列表；结构体/指针切片无定义行为，跳过。
 			if isValueKind(ft.Elem().Kind()) {
 				addListOfParams(result, tag, omitempty, field)
 			}
 		case isStructKind(kind) && !(zeroValue(field) && omitempty):
+			// 结构体优先尝试自定义序列化，否则递归展开其字段。
 			if marshalValue, ok := customMarshalValue(field); ok {
 				addParam(result, tag, omitempty, marshalValue)
 			} else {

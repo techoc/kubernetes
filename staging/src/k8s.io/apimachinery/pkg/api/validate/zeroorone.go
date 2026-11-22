@@ -25,11 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// ZeroOrOneOfUnion verifies that at most one member of a union is specified.
+// ZeroOrOneOfUnion 校验一个联合体（union）中至多指定一个成员。
 //
-// ZeroOrOneOfMembership must define all the members of the union.
+// ZeroOrOneOfMembership 必须定义该联合体的全部成员。
 //
-// For example:
+// 例如：
 //
 //	var ZeroOrOneOfMembershipForABC = validate.NewUnionMembership(
 //		validate.NewUnionMember("a"),
@@ -46,6 +46,7 @@ import (
 //		return errs
 //	}
 func ZeroOrOneOfUnion[T any](_ context.Context, op operation.Operation, fldPath *field.Path, obj, oldObj T, union *UnionMembership, isSetFns ...ExtractorFn[T, bool]) field.ErrorList {
+	// ErrorForEmpty 为 nil：零个成员是合法的，这正是与 OneOfUnion 的关键区别。
 	options := UnionValidationOptions{
 		ErrorForEmpty: nil,
 		ErrorForMultiple: func(fldPath *field.Path, specifiedFields []string, allFields []string) *field.Error {

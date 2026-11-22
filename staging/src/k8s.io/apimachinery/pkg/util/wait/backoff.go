@@ -26,35 +26,27 @@ import (
 	"k8s.io/utils/clock"
 )
 
-// Backoff holds parameters applied to a Backoff function.
+// Backoff 保存 Backoff 函数所用的参数。
 type Backoff struct {
-	// The initial duration.
+	// 初始时长。
 	Duration time.Duration
-	// Duration is multiplied by factor each iteration, if factor is not zero
-	// and the limits imposed by Steps and Cap have not been reached.
-	// Should not be negative.
-	// The jitter does not contribute to the updates to the duration parameter.
+	// 在未达到 Steps 与 Cap 限制时，每次迭代把 Duration 乘以 Factor。
+	// 不应为负数。
+	// jitter 不会影响 duration 参数的更新。
 	Factor float64
-	// The sleep at each iteration is the duration plus an additional
-	// amount chosen uniformly at random from the interval between
-	// zero and `jitter*duration`.
+	// 每次迭代的休眠时长为 duration 加上在 [0, jitter*duration) 区间内
+	// 均匀随机选取的额外量。
 	Jitter float64
-	// The remaining number of iterations in which the duration
-	// parameter may change (but progress can be stopped earlier by
-	// hitting the cap). If not positive, the duration is not
-	// changed. Used for exponential backoff in combination with
-	// Factor and Cap.
+	// Duration 参数还可继续变化的剩余迭代次数（但可能因触达上限而提前停止）。
+	// 若不为正，则 Duration 不再变化。与 Factor、Cap 配合用于指数退避。
 	Steps int
-	// A limit on revised values of the duration parameter. If a
-	// multiplication by the factor parameter would make the duration
-	// exceed the cap then the duration is set to the cap and the
-	// steps parameter is set to zero.
+	// Duration 参数修订值的上限。若乘以 Factor 后会超过该上限，
+	// 则把 duration 设为该上限并把 steps 置零。
 	Cap time.Duration
 }
 
-// Step returns an amount of time to sleep determined by the original
-// Duration and Jitter. The backoff is mutated to update its Steps and
-// Duration. A nil Backoff always has a zero-duration step.
+// Step 返回由原始 Duration 与 Jitter 决定的休眠时长。
+// 调用会修改 Backoff 的 Steps 与 Duration。nil 的 Backoff 始终返回零时长。
 func (b *Backoff) Step() time.Duration {
 	if b == nil {
 		return 0
@@ -64,10 +56,10 @@ func (b *Backoff) Step() time.Duration {
 	return nextDuration
 }
 
-// DelayFunc returns a function that will compute the next interval to
-// wait given the arguments in b. It does not mutate the original backoff
-// but the function is safe to use only from a single goroutine.
+// DelayFunc 返回一个函数，用于根据 b 的参数计算下一次等待间隔。
+// 它不会修改原始 backoff，但返回的函数只可安全地由单个 goroutine 使用。
 func (b Backoff) DelayFunc() DelayFunc {
+	// 把字段复制到闭包内，避免修改调用方传入的 Backoff。
 	steps := b.Steps
 	duration := b.Duration
 	cap := b.Cap
@@ -76,15 +68,15 @@ func (b Backoff) DelayFunc() DelayFunc {
 
 	return func() time.Duration {
 		var nextDuration time.Duration
-		// jitter is applied per step and is not cumulative over multiple steps
+		// jitter 每一步单独应用，不会在多次步骤间累积。
 		nextDuration, duration, steps = delay(steps, duration, cap, factor, jitter)
 		return nextDuration
 	}
 }
 
-// Timer returns a timer implementation appropriate to this backoff's parameters
-// for use with wait functions.
+// Timer 返回适合该 backoff 参数、可与 wait 系列函数配合使用的计时器实现。
 func (b Backoff) Timer() Timer {
+	// 需要逐步变化或抖动时使用可变计时器；固定时长则复用 Ticker。
 	if b.Steps > 1 || b.Jitter != 0 {
 		return &variableTimer{new: internalClock.NewTimer, fn: b.DelayFunc()}
 	}
@@ -94,9 +86,10 @@ func (b Backoff) Timer() Timer {
 	return newNoopTimer()
 }
 
-// delay implements the core delay algorithm used in this package.
+// delay 实现本包的核心延迟算法。
+// 返回本次休眠时长、下一次的基准 duration 以及剩余的 steps。
 func delay(steps int, duration, cap time.Duration, factor, jitter float64) (_ time.Duration, next time.Duration, nextSteps int) {
-	// when steps is non-positive, do not alter the base duration
+	// steps 非正时不再改变基准 duration。
 	if steps < 1 {
 		if jitter > 0 {
 			return Jitter(duration, jitter), duration, 0
@@ -105,7 +98,7 @@ func delay(steps int, duration, cap time.Duration, factor, jitter float64) (_ ti
 	}
 	steps--
 
-	// calculate the next step's interval
+	// 计算下一步的间隔。
 	if factor != 0 {
 		next = time.Duration(float64(duration) * factor)
 		if cap > 0 && next > cap {
@@ -116,7 +109,7 @@ func delay(steps int, duration, cap time.Duration, factor, jitter float64) (_ ti
 		next = duration
 	}
 
-	// add jitter for this step
+	// 为本步加上 jitter。
 	if jitter > 0 {
 		duration = Jitter(duration, jitter)
 	}
@@ -125,13 +118,12 @@ func delay(steps int, duration, cap time.Duration, factor, jitter float64) (_ ti
 
 }
 
-// DelayWithReset returns a DelayFunc that will return the appropriate next interval to
-// wait. Every resetInterval the backoff parameters are reset to their initial state.
-// This method is safe to invoke from multiple goroutines, but all calls will advance
-// the backoff state when Factor is set. If Factor is zero, this method is the same as
-// invoking b.DelayFunc() since Steps has no impact without Factor. If resetInterval is
-// zero no backoff will be performed as the same calling DelayFunc with a zero factor
-// and steps.
+// DelayWithReset 返回一个 DelayFunc，用于计算下一次等待间隔。
+// 每隔 resetInterval 就把 backoff 参数重置为初始状态。
+// 该方法可安全地被多个 goroutine 调用，但设置 Factor 时所有调用都会推进
+// backoff 状态。若 Factor 为零，则等同于调用 b.DelayFunc()，因为没有 Factor
+// 时 Steps 不起作用。若 resetInterval 为零，则不执行退避，等同于调用
+// factor 和 steps 都为零的 DelayFunc。
 func (b Backoff) DelayWithReset(c clock.Clock, resetInterval time.Duration) DelayFunc {
 	if b.Factor <= 0 {
 		return b.DelayFunc()
@@ -152,91 +144,81 @@ func (b Backoff) DelayWithReset(c clock.Clock, resetInterval time.Duration) Dela
 	}).Step
 }
 
-// Until loops until stop channel is closed, running f every period.
+// Until 循环执行 f，直到 stopCh 关闭，每次间隔 period。
 //
-// Until is syntactic sugar on top of JitterUntil with zero jitter factor and
-// with sliding = true (which means the timer for period starts after the f
-// completes).
+// Until 是 JitterUntil 的语法糖：jitter 为零且 sliding = true
+// （即 period 计时在 f 完成后才开始）。
 //
-// Contextual logging: UntilWithContext should be used instead of Until in code which supports contextual logging.
+// 上下文日志：支持上下文日志的代码应改用 UntilWithContext。
 func Until(f func(), period time.Duration, stopCh <-chan struct{}) {
 	JitterUntil(f, period, 0.0, true, stopCh)
 }
 
-// UntilWithContext loops until context is done, running f every period.
+// UntilWithContext 循环执行 f，直到 context 结束，每次间隔 period。
 //
-// UntilWithContext is syntactic sugar on top of JitterUntilWithContext
-// with zero jitter factor and with sliding = true (which means the timer
-// for period starts after the f completes).
+// UntilWithContext 是 JitterUntilWithContext 的语法糖：jitter 为零且
+// sliding = true（即 period 计时在 f 完成后才开始）。
 func UntilWithContext(ctx context.Context, f func(context.Context), period time.Duration) {
 	JitterUntilWithContext(ctx, f, period, 0.0, true)
 }
 
-// NonSlidingUntil loops until stop channel is closed, running f every
-// period.
+// NonSlidingUntil 循环执行 f，直到 stopCh 关闭，每次间隔 period。
 //
-// NonSlidingUntil is syntactic sugar on top of JitterUntil with zero jitter
-// factor, with sliding = false (meaning the timer for period starts at the same
-// time as the function starts).
+// NonSlidingUntil 是 JitterUntil 的语法糖：jitter 为零且 sliding = false
+// （即 period 计时与函数开始同时启动）。
 //
-// Contextual logging: NonSlidingUntilWithContext should be used instead of NonSlidingUntil in code which supports contextual logging.
+// 上下文日志：支持上下文日志的代码应改用 NonSlidingUntilWithContext。
 func NonSlidingUntil(f func(), period time.Duration, stopCh <-chan struct{}) {
 	JitterUntil(f, period, 0.0, false, stopCh)
 }
 
-// NonSlidingUntilWithContext loops until context is done, running f every
-// period.
+// NonSlidingUntilWithContext 循环执行 f，直到 context 结束，每次间隔 period。
 //
-// NonSlidingUntilWithContext is syntactic sugar on top of JitterUntilWithContext
-// with zero jitter factor, with sliding = false (meaning the timer for period
-// starts at the same time as the function starts).
+// NonSlidingUntilWithContext 是 JitterUntilWithContext 的语法糖：jitter 为零且
+// sliding = false（即 period 计时与函数开始同时启动）。
 func NonSlidingUntilWithContext(ctx context.Context, f func(context.Context), period time.Duration) {
 	JitterUntilWithContext(ctx, f, period, 0.0, false)
 }
 
-// JitterUntil loops until stop channel is closed, running f every period.
+// JitterUntil 循环执行 f，直到 stopCh 关闭，每次间隔 period。
 //
-// If jitterFactor is positive, the period is jittered before every run of f.
-// If jitterFactor is not positive, the period is unchanged and not jittered.
+// 若 jitterFactor 为正，每次运行 f 前都会对 period 加抖动。
+// 若 jitterFactor 非正，period 保持不变、不加抖动。
 //
-// If sliding is true, the period is computed after f runs. If it is false then
-// period includes the runtime for f.
+// 若 sliding 为 true，period 在 f 运行结束后计算；若为 false，period 包含 f 的运行时间。
 //
-// Close stopCh to stop. f may not be invoked if stop channel is already
-// closed. Pass NeverStop to if you don't want it stop.
+// 关闭 stopCh 即可停止。若 stopCh 已关闭，f 可能不会被调用。
+// 不想停止时传入 NeverStop。
 //
-// Contextual logging: JitterUntilWithContext should be used instead of JitterUntil in code which supports contextual logging.
+// 上下文日志：支持上下文日志的代码应改用 JitterUntilWithContext。
 func JitterUntil(f func(), period time.Duration, jitterFactor float64, sliding bool, stopCh <-chan struct{}) {
 	BackoffUntil(f, NewJitteredBackoffManager(period, jitterFactor, &clock.RealClock{}), sliding, stopCh)
 }
 
-// JitterUntilWithContext loops until context is done, running f every period.
+// JitterUntilWithContext 循环执行 f，直到 context 结束，每次间隔 period。
 //
-// If jitterFactor is positive, the period is jittered before every run of f.
-// If jitterFactor is not positive, the period is unchanged and not jittered.
+// 若 jitterFactor 为正，每次运行 f 前都会对 period 加抖动。
+// 若 jitterFactor 非正，period 保持不变、不加抖动。
 //
-// If sliding is true, the period is computed after f runs. If it is false then
-// period includes the runtime for f.
+// 若 sliding 为 true，period 在 f 运行结束后计算；若为 false，period 包含 f 的运行时间。
 //
-// Cancel context to stop. f may not be invoked if context is already done.
+// 取消 context 即可停止。若 context 已结束，f 可能不会被调用。
 func JitterUntilWithContext(ctx context.Context, f func(context.Context), period time.Duration, jitterFactor float64, sliding bool) {
 	BackoffUntilWithContext(ctx, f, NewJitteredBackoffManager(period, jitterFactor, &clock.RealClock{}), sliding)
 }
 
-// BackoffUntil loops until stop channel is closed, run f every duration given by BackoffManager.
+// BackoffUntil 循环执行 f，直到 stopCh 关闭，每次间隔由 BackoffManager 决定。
 //
-// If sliding is true, the period is computed after f runs. If it is false then
-// period includes the runtime for f.
+// 若 sliding 为 true，period 在 f 运行结束后计算；若为 false，period 包含 f 的运行时间。
 //
-// Contextual logging: BackoffUntilWithContext should be used instead of BackoffUntil in code which supports contextual logging.
+// 上下文日志：支持上下文日志的代码应改用 BackoffUntilWithContext。
 func BackoffUntil(f func(), backoff BackoffManager, sliding bool, stopCh <-chan struct{}) {
 	BackoffUntilWithContext(ContextForChannel(stopCh), func(context.Context) { f() }, backoff, sliding)
 }
 
-// BackoffUntilWithContext loops until context is done, run f every duration given by BackoffManager.
+// BackoffUntilWithContext 循环执行 f，直到 context 结束，每次间隔由 BackoffManager 决定。
 //
-// If sliding is true, the period is computed after f runs. If it is false then
-// period includes the runtime for f.
+// 若 sliding 为 true，period 在 f 运行结束后计算；若为 false，period 包含 f 的运行时间。
 func BackoffUntilWithContext(ctx context.Context, f func(ctx context.Context), backoff BackoffManager, sliding bool) {
 	var t clock.Timer
 	for {
@@ -250,6 +232,7 @@ func BackoffUntilWithContext(ctx context.Context, f func(ctx context.Context), b
 			t = backoff.Backoff()
 		}
 
+		// 用 HandleCrash 包裹 f，避免单次 panic 终止整个循环。
 		func() {
 			defer runtime.HandleCrashWithContext(ctx)
 			f(ctx)
@@ -259,13 +242,12 @@ func BackoffUntilWithContext(ctx context.Context, f func(ctx context.Context), b
 			t = backoff.Backoff()
 		}
 
-		// NOTE: b/c there is no priority selection in golang
-		// it is possible for this to race, meaning we could
-		// trigger t.C and stopCh, and t.C select falls through.
-		// In order to mitigate we re-check stopCh at the beginning
-		// of every loop to prevent extra executions of f().
+		// 注意：Go 的 select 没有优先级，这里存在竞态：
+		// t.C 与 ctx.Done() 同时就绪时可能选中 t.C。为缓解该问题，
+		// 每次循环开始都会重新检查 ctx.Done()，避免多执行一次 f()。
 		select {
 		case <-ctx.Done():
+			// 尽量停止计时器；若已触发则先排空通道，避免泄漏。
 			if !t.Stop() {
 				<-t.C()
 			}
@@ -275,7 +257,7 @@ func BackoffUntilWithContext(ctx context.Context, f func(ctx context.Context), b
 	}
 }
 
-// backoffManager provides simple backoff behavior in a threadsafe manner to a caller.
+// backoffManager 以线程安全的方式向调用方提供简单的退避行为。
 type backoffManager struct {
 	backoff        Backoff
 	initialBackoff Backoff
@@ -288,7 +270,7 @@ type backoffManager struct {
 	timer     clock.Timer
 }
 
-// Step returns the expected next duration to wait.
+// Step 返回期望的下一次等待时长，并按 resetInterval 周期性重置退避状态。
 func (b *backoffManager) Step() time.Duration {
 	b.lock.Lock()
 	defer b.lock.Unlock()
@@ -303,9 +285,8 @@ func (b *backoffManager) Step() time.Duration {
 	return b.backoff.Step()
 }
 
-// Backoff implements BackoffManager.Backoff, it returns a timer so caller can block on the timer
-// for exponential backoff. The returned timer must be drained before calling Backoff() the second
-// time.
+// Backoff 实现 BackoffManager.Backoff，返回一个计时器供调用方阻塞等待指数退避。
+// 第二次调用 Backoff() 前必须先排空上一次返回的计时器。
 func (b *backoffManager) Backoff() clock.Timer {
 	b.lock.Lock()
 	defer b.lock.Unlock()
@@ -317,19 +298,17 @@ func (b *backoffManager) Backoff() clock.Timer {
 	return b.timer
 }
 
-// Timer returns a new Timer instance that shares the clock and the reset behavior with all other
-// timers.
+// Timer 返回一个新的 Timer 实例，与所有其他计时器共享时钟与重置行为。
 func (b *backoffManager) Timer() Timer {
 	return DelayFunc(b.Step).Timer(b.clock)
 }
 
-// BackoffManager manages backoff with a particular scheme based on its underlying implementation.
+// BackoffManager 根据底层实现以特定方案管理退避。
 type BackoffManager interface {
-	// Backoff returns a shared clock.Timer that is Reset on every invocation. This method is not
-	// safe for use from multiple threads. It returns a timer for backoff, and caller shall backoff
-	// until Timer.C() drains. If the second Backoff() is called before the timer from the first
-	// Backoff() call finishes, the first timer will NOT be drained and result in undetermined
-	// behavior.
+	// Backoff 返回一个每次调用都会 Reset 的共享 clock.Timer。该方法不保证
+	// 多线程安全。调用方应等待 Timer.C() 排空后再继续退避。若在上一个
+	// Backoff() 返回的计时器完成前再次调用 Backoff()，第一个计时器不会被排空，
+	// 行为不确定。
 	Backoff() clock.Timer
 }
 
@@ -343,21 +322,21 @@ type exponentialBackoffManagerImpl struct {
 	clock                clock.Clock
 }
 
-// NewExponentialBackoffManager returns a manager for managing exponential backoff. Each backoff is jittered and
-// backoff will not exceed the given max. If the backoff is not called within resetDuration, the backoff is reset.
-// This backoff manager is used to reduce load during upstream unhealthiness.
+// NewExponentialBackoffManager 返回一个管理指数退避的 manager。每次退避都会加抖动，
+// 且不超过给定的最大值。若在 resetDuration 内未调用退避，则重置退避状态。
+// 该 manager 用于在上游不健康时降低负载。
 //
-// Deprecated: Will be removed when the legacy Poll methods are removed. Callers should construct a
-// Backoff struct, use DelayWithReset() to get a DelayFunc that periodically resets itself, and then
-// invoke Timer() when calling wait.BackoffUntil.
+// Deprecated: 将在旧版 Poll 方法移除时删除。调用方应构造 Backoff 结构体，
+// 用 DelayWithReset() 获得会周期性自我重置的 DelayFunc，然后在调用
+// wait.BackoffUntil 时使用其 Timer()。
 //
-// Instead of:
+// 不要这样：
 //
 //	bm := wait.NewExponentialBackoffManager(init, max, reset, factor, jitter, clock)
 //	...
 //	wait.BackoffUntil(..., bm.Backoff, ...)
 //
-// Use:
+// 而应这样：
 //
 //	delayFn := wait.Backoff{
 //	  Duration: init,
@@ -374,8 +353,8 @@ func NewExponentialBackoffManager(initBackoff, maxBackoff, resetDuration time.Du
 			Factor:   backoffFactor,
 			Jitter:   jitter,
 
-			// the current impl of wait.Backoff returns Backoff.Duration once steps are used up, which is not
-			// what we ideally need here, we set it to max int and assume we will never use up the steps
+			// 当前 wait.Backoff 在 steps 用尽后返回 Backoff.Duration，这并非此处
+			// 理想行为；因此把 Steps 设为 max int，假定永远不会用完。
 			Steps: math.MaxInt32,
 			Cap:   maxBackoff,
 		},
@@ -387,6 +366,7 @@ func NewExponentialBackoffManager(initBackoff, maxBackoff, resetDuration time.Du
 	}
 }
 
+// getNextBackoff 在超过重置窗口时把退避状态恢复为初始值，并返回下一次等待时长。
 func (b *exponentialBackoffManagerImpl) getNextBackoff() time.Duration {
 	if b.clock.Now().Sub(b.lastBackoffStart) > b.backoffResetDuration {
 		b.backoff.Steps = math.MaxInt32
@@ -396,8 +376,8 @@ func (b *exponentialBackoffManagerImpl) getNextBackoff() time.Duration {
 	return b.backoff.Step()
 }
 
-// Backoff implements BackoffManager.Backoff, it returns a timer so caller can block on the timer for exponential backoff.
-// The returned timer must be drained before calling Backoff() the second time
+// Backoff 实现 BackoffManager.Backoff，返回一个计时器供调用方阻塞等待指数退避。
+// 第二次调用 Backoff() 前必须先排空上一次返回的计时器。
 func (b *exponentialBackoffManagerImpl) Backoff() clock.Timer {
 	if b.backoffTimer == nil {
 		b.backoffTimer = b.clock.NewTimer(b.getNextBackoff())
@@ -415,19 +395,19 @@ type jitteredBackoffManagerImpl struct {
 	backoffTimer clock.Timer
 }
 
-// NewJitteredBackoffManager returns a BackoffManager that backoffs with given duration plus given jitter. If the jitter
-// is negative, backoff will not be jittered.
+// NewJitteredBackoffManager 返回一个按给定时长加抖动的 BackoffManager。
+// 若 jitter 为负，则不加抖动。
 //
-// Deprecated: Will be removed when the legacy Poll methods are removed. Callers should construct a
-// Backoff struct and invoke Timer() when calling wait.BackoffUntil.
+// Deprecated: 将在旧版 Poll 方法移除时删除。调用方应构造 Backoff 结构体，
+// 并在调用 wait.BackoffUntil 时使用其 Timer()。
 //
-// Instead of:
+// 不要这样：
 //
 //	bm := wait.NewJitteredBackoffManager(duration, jitter, clock)
 //	...
 //	wait.BackoffUntil(..., bm.Backoff, ...)
 //
-// Use:
+// 而应这样：
 //
 //	wait.BackoffUntil(..., wait.Backoff{Duration: duration, Jitter: jitter}.Timer(), ...)
 func NewJitteredBackoffManager(duration time.Duration, jitter float64, c clock.Clock) BackoffManager {
@@ -439,6 +419,7 @@ func NewJitteredBackoffManager(duration time.Duration, jitter float64, c clock.C
 	}
 }
 
+// getNextBackoff 返回加抖动后的下一次等待时长。
 func (j *jitteredBackoffManagerImpl) getNextBackoff() time.Duration {
 	jitteredPeriod := j.duration
 	if j.jitter > 0.0 {
@@ -447,8 +428,8 @@ func (j *jitteredBackoffManagerImpl) getNextBackoff() time.Duration {
 	return jitteredPeriod
 }
 
-// Backoff implements BackoffManager.Backoff, it returns a timer so caller can block on the timer for jittered backoff.
-// The returned timer must be drained before calling Backoff() the second time
+// Backoff 实现 BackoffManager.Backoff，返回一个计时器供调用方阻塞等待抖动退避。
+// 第二次调用 Backoff() 前必须先排空上一次返回的计时器。
 func (j *jitteredBackoffManagerImpl) Backoff() clock.Timer {
 	backoff := j.getNextBackoff()
 	if j.backoffTimer == nil {
@@ -459,19 +440,18 @@ func (j *jitteredBackoffManagerImpl) Backoff() clock.Timer {
 	return j.backoffTimer
 }
 
-// ExponentialBackoff repeats a condition check with exponential backoff.
+// ExponentialBackoff 以指数退避重复执行条件检查。
 //
-// It repeatedly checks the condition and then sleeps, using `backoff.Step()`
-// to determine the length of the sleep and adjust Duration and Steps.
-// Stops and returns as soon as:
-// 1. the condition check returns true or an error,
-// 2. `backoff.Steps` checks of the condition have been done, or
-// 3. a sleep truncated by the cap on duration has been completed.
-// In case (1) the returned error is what the condition function returned.
-// In all other cases, ErrWaitTimeout is returned.
+// 它反复检查条件然后休眠，用 `backoff.Step()` 决定休眠时长并调整
+// Duration 与 Steps。以下任一情况发生时停止并返回：
+// 1. 条件检查返回 true 或错误，
+// 2. 已执行 `backoff.Steps` 次条件检查，或
+// 3. 完成了一次被时长上限截断的休眠。
+// 情况 (1) 返回条件函数给出的错误。
+// 其他所有情况返回 ErrWaitTimeout。
 //
-// Since backoffs are often subject to cancellation, we recommend using
-// ExponentialBackoffWithContext and passing a context to the method.
+// 由于退避经常需要被取消，建议使用 ExponentialBackoffWithContext
+// 并向方法传入 context。
 func ExponentialBackoff(backoff Backoff, condition ConditionFunc) error {
 	for backoff.Steps > 0 {
 		if ok, err := runConditionWithCrashProtection(condition); err != nil || ok {
@@ -485,11 +465,10 @@ func ExponentialBackoff(backoff Backoff, condition ConditionFunc) error {
 	return ErrWaitTimeout
 }
 
-// ExponentialBackoffWithContext repeats a condition check with exponential backoff.
-// It immediately returns an error if the condition returns an error, the context is cancelled
-// or hits the deadline, or if the maximum attempts defined in backoff is exceeded (ErrWaitTimeout).
-// If an error is returned by the condition the backoff stops immediately. The condition will
-// never be invoked more than backoff.Steps times.
+// ExponentialBackoffWithContext 以指数退避重复执行条件检查。
+// 若条件返回错误、context 被取消或超时，或超过 backoff 定义的最大尝试次数
+// （ErrWaitTimeout），立即返回错误。条件返回错误时退避立即停止。
+// 条件函数的调用次数不会超过 backoff.Steps。
 func ExponentialBackoffWithContext(ctx context.Context, backoff Backoff, condition ConditionWithContextFunc) error {
 	for backoff.Steps > 0 {
 		select {
@@ -502,11 +481,13 @@ func ExponentialBackoffWithContext(ctx context.Context, backoff Backoff, conditi
 			return err
 		}
 
+		// 最后一次尝试后不再休眠，直接以超时结束。
 		if backoff.Steps == 1 {
 			break
 		}
 
 		waitBeforeRetry := backoff.Step()
+		// 等待期间也要响应取消，避免不可中断的 sleep。
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

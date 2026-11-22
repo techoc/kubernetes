@@ -29,6 +29,8 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// timerWithClock 把 Backoff 产生的定时器替换为使用 fakeClock 的版本，
+// 使测试可以手动推进时间而不真正等待。
 func timerWithClock(t Timer, c clock.WithTicker) Timer {
 	switch t := t.(type) {
 	case *fixedTimer:
@@ -41,6 +43,8 @@ func timerWithClock(t Timer, c clock.WithTicker) Timer {
 	return t
 }
 
+// Test_loopConditionWithContextImmediateDelay 验证 immediate=false 时
+// 首次条件执行前会等待一个 delay；推进 fake clock 后才应执行条件。
 func Test_loopConditionWithContextImmediateDelay(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Time{})
 	backoff := Backoff{Duration: time.Second}
@@ -83,6 +87,10 @@ func Test_loopConditionWithContextImmediateDelay(t *testing.T) {
 	}
 }
 
+// Test_loopConditionUntilContext_semantic 覆盖循环的语义边界：
+// immediate/sliding 组合、上下文取消/超时、条件返回错误或成功的时机。
+//
+// 用例通过 attemptsExpected 与 errExpected 精确描述"执行了几次、以什么错误退出"。
 func Test_loopConditionUntilContext_semantic(t *testing.T) {
 	defaultCallback := func(_ int) (bool, error) {
 		return false, nil
@@ -289,14 +297,19 @@ func Test_loopConditionUntilContext_semantic(t *testing.T) {
 	}
 }
 
+// timerWrapper 记录每次 Reset 的时长，并在重置时推进 fake clock，
+// 让循环无需真实等待即可前进。
 type timerWrapper struct {
 	timer   clock.Timer
 	resets  []time.Duration
 	onReset func(d time.Duration)
 }
 
+// C 暴露底层定时器的通道。
 func (w *timerWrapper) C() <-chan time.Time { return w.timer.C() }
 func (w *timerWrapper) Stop() bool          { return w.timer.Stop() }
+
+// Reset 记录并转发重置操作，同时触发 onReset 回调。
 func (w *timerWrapper) Reset(d time.Duration) bool {
 	w.resets = append(w.resets, d)
 	b := w.timer.Reset(d)
@@ -306,6 +319,8 @@ func (w *timerWrapper) Reset(d time.Duration) bool {
 	return b
 }
 
+// Test_loopConditionUntilContext_timings 验证 delay 函数返回的时长被正确传给
+// 定时器，并检查 sliding 模式下"实际间隔"与"请求间隔"的关系。
 func Test_loopConditionUntilContext_timings(t *testing.T) {
 	// Verify that timings returned by the delay func are passed to the timer, and that
 	// the timer advancing is enough to drive the state machine. Not a deep verification
@@ -446,6 +461,9 @@ func Test_loopConditionUntilContext_timings(t *testing.T) {
 // candidate to run during normal unit test execution (nor is it a benchmark or example). Instead,
 // it can be run manually if there is a scenario where we suspect the timings are off and other
 // tests haven't caught it. A final sanity test that would have to be run serially in isolation.
+//
+// 注意 fail 默认是 t.Logf 而不是 t.Fatalf：CI 环境抖动大，时长超标只记录，
+// 需要严格验证时再手动改为 Fatal。
 func Test_loopConditionUntilContext_Elapsed(t *testing.T) {
 	const maxAttempts = 10
 	// TODO: this may be too aggressive, but the overhead should be minor
@@ -506,6 +524,7 @@ func Test_loopConditionUntilContext_Elapsed(t *testing.T) {
 	}
 }
 
+// Benchmark_loopConditionUntilContext_ZeroDuration 衡量零延迟下循环本身的开销。
 func Benchmark_loopConditionUntilContext_ZeroDuration(b *testing.B) {
 	ctx := context.Background()
 	b.ResetTimer()
@@ -520,6 +539,8 @@ func Benchmark_loopConditionUntilContext_ZeroDuration(b *testing.B) {
 	}
 }
 
+// Benchmark_loopConditionUntilContext_ShortDuration 衡量微秒级延迟下
+// 定时器创建/重置带来的开销。
 func Benchmark_loopConditionUntilContext_ShortDuration(b *testing.B) {
 	ctx := context.Background()
 	b.ResetTimer()

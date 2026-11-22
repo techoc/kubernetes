@@ -22,6 +22,8 @@ import (
 )
 
 // ValidateTableOptions returns any invalid flags on TableOptions.
+// IncludeObject accepts the three defined enum values plus the empty string,
+// which predates the enum and must remain valid for compatibility.
 func ValidateTableOptions(opts *metav1.TableOptions) field.ErrorList {
 	var allErrs field.ErrorList
 	switch opts.IncludeObject {

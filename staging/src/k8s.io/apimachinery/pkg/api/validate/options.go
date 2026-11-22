@@ -26,6 +26,11 @@ import (
 
 // IfOption conditionally evaluates a validation function. If the option and enabled are both true the validator
 // is called. If the option and enabled are both false the validator is called. Otherwise, the validator is not called.
+//
+// The enabled flag is the desired state: validation only runs when the actual
+// option state agrees with it. An option that is not defined on the operation
+// is a programming error and yields an InternalError rather than silently
+// skipping validation.
 func IfOption[T any](ctx context.Context, op operation.Operation, fldPath *field.Path, value, oldValue T,
 	optionName string, enabled bool, validator func(context.Context, operation.Operation, *field.Path, T, T) field.ErrorList,
 ) field.ErrorList {

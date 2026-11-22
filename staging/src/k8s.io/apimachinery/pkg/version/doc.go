@@ -19,4 +19,6 @@ limitations under the License.
 //
 
 // Package version supplies the type for version information.
+//
+// 该包定义组件的版本信息结构，用于 /version 等端点向客户端报告构建版本。
 package version

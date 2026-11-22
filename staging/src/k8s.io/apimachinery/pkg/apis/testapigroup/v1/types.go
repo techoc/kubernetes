@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// 以下类型是测试用的枚举/别名类型，模拟真实 API 中常见的字符串枚举与阶段字段。
 type (
 	ConditionStatus   string
 	CarpConditionType string
@@ -54,6 +55,7 @@ type Carp struct {
 
 // CarpStatus represents information about the status of a carp. Status may trail the actual
 // state of a system.
+// 中文补充：status 由系统填充、只读，且可能滞后于实际状态，因此客户端不应依赖其即时性。
 type CarpStatus struct {
 	// Current condition of the carp.
 	// More info: http://kubernetes.io/docs/user-guide/carp-states#carp-phase
@@ -90,6 +92,9 @@ type CarpStatus struct {
 
 	// Carp infos are provided by different clients, hence the map type.
 	//
+	// 中文补充：listType=map 且以 a/b/c 三个键做联合唯一，说明客户端可能并发写入
+	// 同一列表，server-side apply 依赖这些键做合并。
+	//
 	// +listType=map
 	// +listMapKey=a
 	// +listMapKey=b
@@ -97,6 +102,7 @@ type CarpStatus struct {
 	Infos []CarpInfo `json:"infos,omitempty" protobuf:"bytes,8,rep,name=infos"`
 }
 
+// CarpCondition 描述 carp 的单个状态条件，字段语义与 core/v1 的 PodCondition 类似。
 type CarpCondition struct {
 	// Type is the type of the condition.
 	// Currently only Ready.
@@ -120,6 +126,7 @@ type CarpCondition struct {
 	Message string `json:"message,omitempty" protobuf:"bytes,6,opt,name=message"`
 }
 
+// CarpInfo 是 Infos 列表的元素，a/b 为必填联合键，c 为可选第三键。
 type CarpInfo struct {
 	// A is the first map key.
 	// +required
@@ -136,6 +143,7 @@ type CarpInfo struct {
 }
 
 // CarpSpec is a description of a carp
+// 中文补充：spec 表达期望状态，与 status 分离；字段多与 PodSpec 对应，用于覆盖转换/校验测试。
 type CarpSpec struct {
 	// Restart policy for all containers within the carp.
 	// One of Always, OnFailure, Never.

@@ -16,4 +16,8 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package v1 提供 runtime 包测试与基准使用的 v1 版本辅助类型。
+//
+// 该包只服务于测试：其中的类型实现 runtime.Object 等接口，用于构造
+// 编码/解码场景，不对外提供 API 兼容性保证。
 package v1

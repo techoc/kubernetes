@@ -31,6 +31,8 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TestAPIObjectMeta 验证 meta.Accessor/TypeAccessor 的读写都会直接作用在
+// 原对象上（不复制），并且能通过 ObjectMetaAccessor 接口访问标准字段。
 func TestAPIObjectMeta(t *testing.T) {
 	j := &testapigroup.Carp{
 		TypeMeta: metav1.TypeMeta{APIVersion: "/a", Kind: "b"},
@@ -49,12 +51,14 @@ func TestAPIObjectMeta(t *testing.T) {
 			},
 		},
 	}
+	// 编译期断言：Carp 必须满足 ObjectMetaAccessor，ObjectMeta 必须满足 Object。
 	var _ metav1.Object = &j.ObjectMeta
 	var _ metav1.ObjectMetaAccessor = j
 	accessor, err := meta.Accessor(j)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	// accessor 与原始对象指向同一份 ObjectMeta，而不是副本。
 	if accessor != metav1.Object(j) {
 		t.Fatalf("should have returned the same pointer: %#v\n\n%#v", accessor, j)
 	}
@@ -140,6 +144,8 @@ func TestAPIObjectMeta(t *testing.T) {
 	}
 }
 
+// TestGenericTypeMeta 用本地定义的结构体验证 TypeAccessor 不依赖具体类型，
+// 只要能反射到 APIVersion/Kind 字段即可。
 func TestGenericTypeMeta(t *testing.T) {
 	type TypeMeta struct {
 		Kind              string                  `json:"kind,omitempty"`
@@ -191,6 +197,8 @@ func TestGenericTypeMeta(t *testing.T) {
 	}
 }
 
+// InternalTypeMeta 实现 ListInterface 所需的访问器；JSON tag 与标准类型
+// 不同（例如 continue 映射为 next），用于证明访问器按接口而非 tag 工作。
 type InternalTypeMeta struct {
 	Kind               string                  `json:"kind,omitempty"`
 	Namespace          string                  `json:"namespace,omitempty"`
@@ -218,6 +226,7 @@ func (m *InternalTypeMeta) SetContinue(c string)           { m.Continue = c }
 func (m *InternalTypeMeta) GetRemainingItemCount() *int64  { return m.RemainingItemCount }
 func (m *InternalTypeMeta) SetRemainingItemCount(c *int64) { m.RemainingItemCount = c }
 
+// MyAPIObject 是自定义的 API 对象，内嵌 InternalTypeMeta 并实现 ListInterface。
 type MyAPIObject struct {
 	TypeMeta InternalTypeMeta `json:""`
 }
@@ -235,6 +244,8 @@ func (obj *MyAPIObject) DeepCopyObject() runtime.Object {
 	panic("MyAPIObject does not support DeepCopy")
 }
 
+// MyIncorrectlyMarkedAsAPIObject 实现了 runtime.Object，但没有可访问的
+// resourceVersion 字段，用来验证访问器返回错误而不是 panic。
 type MyIncorrectlyMarkedAsAPIObject struct{}
 
 func (obj *MyIncorrectlyMarkedAsAPIObject) GetObjectKind() schema.ObjectKind {
@@ -244,6 +255,7 @@ func (obj *MyIncorrectlyMarkedAsAPIObject) DeepCopyObject() runtime.Object {
 	panic("MyIncorrectlyMarkedAsAPIObject does not support DeepCopy")
 }
 
+// TestResourceVersionerOfAPI 覆盖 ResourceVersioner 的读取、设置与错误路径。
 func TestResourceVersionerOfAPI(t *testing.T) {
 	type T struct {
 		runtime.Object
@@ -298,11 +310,17 @@ func TestResourceVersionerOfAPI(t *testing.T) {
 	}
 }
 
+// MyAPIObject2 内嵌标准 ObjectMeta，用于 ownerReferences 的 fuzz 测试。
 type MyAPIObject2 struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
 }
 
+// getObjectMetaAndOwnerReferences 用 fuzz 填充一个对象，并返回其
+// OwnerReferences 的期望副本。
+//
+// 两处 make(..., 0) 是为了抹平 nil 与空切片的差异：getter 在 setter 之后
+// 可能返回非 nil 空切片，而 DeepEqual 会认为它与 nil 不同。
 func getObjectMetaAndOwnerReferences() (myAPIObject2 MyAPIObject2, metaOwnerReferences []metav1.OwnerReference) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -329,6 +347,7 @@ func getObjectMetaAndOwnerReferences() (myAPIObject2 MyAPIObject2, metaOwnerRefe
 	return myAPIObject2, metaOwnerReferences
 }
 
+// testGetOwnerReferences 验证 getter 返回的 ownerReferences 与对象中的一致。
 func testGetOwnerReferences(t *testing.T) {
 	obj, expected := getObjectMetaAndOwnerReferences()
 	accessor, err := meta.Accessor(&obj)
@@ -341,6 +360,7 @@ func testGetOwnerReferences(t *testing.T) {
 	}
 }
 
+// testSetOwnerReferences 验证 setter 写回后对象字段与输入完全一致。
 func testSetOwnerReferences(t *testing.T) {
 	expected, references := getObjectMetaAndOwnerReferences()
 	obj := MyAPIObject2{}
@@ -354,6 +374,8 @@ func testSetOwnerReferences(t *testing.T) {
 	}
 }
 
+// TestAccessOwnerReferences 重复多轮 fuzz，以覆盖不同随机结构（nil/空/
+// 多元素）下 getter 与 setter 的往返一致性。
 func TestAccessOwnerReferences(t *testing.T) {
 	fuzzIter := 5
 	for i := 0; i < fuzzIter; i++ {
@@ -363,6 +385,9 @@ func TestAccessOwnerReferences(t *testing.T) {
 }
 
 // BenchmarkAccessorSetFastPath shows the interface fast path
+//
+// 对象实现 ObjectMetaAccessor 时，meta.Accessor 直接返回接口本身，不走
+// 反射路径；此 benchmark 用于监控该快路径的开销。
 func BenchmarkAccessorSetFastPath(b *testing.B) {
 	obj := &testapigroup.Carp{
 		TypeMeta: metav1.TypeMeta{APIVersion: "/a", Kind: "b"},

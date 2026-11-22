@@ -29,12 +29,16 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// int64BinaryUnmarshaler 是实现了 encoding.BinaryUnmarshaler 的整型测试类型，
+// 用于验证解码器对“非字符串类型但实现了该接口”的对象的行为。
 type int64BinaryUnmarshaler int64
 
 func (i *int64BinaryUnmarshaler) UnmarshalBinary(_ []byte) error {
 	return nil
 }
 
+// TestDecode 按 CBOR 数据项种类（RFC 8949 第 2 节）分组验证各解码模式的行为：
+// 正常值、类型不匹配、越界与规范性检查。每个用例可选择只在特定模式下运行。
 func TestDecode(t *testing.T) {
 	hex := func(h string) []byte {
 		b, err := hex.DecodeString(h)
@@ -44,6 +48,7 @@ func TestDecode(t *testing.T) {
 		return b
 	}
 
+	// test 描述单个解码用例：输入字节、目标类型原型、期望值与错误断言。
 	type test struct {
 		name          string
 		modes         []cbor.DecMode // most tests should run for all modes
@@ -55,6 +60,7 @@ func TestDecode(t *testing.T) {
 
 	// Test cases are grouped by the kind of the CBOR data item being decoded, as enumerated in
 	// https://www.rfc-editor.org/rfc/rfc8949.html#section-2.
+	// group 把一组用例放在同名子测试下；用例未指定模式时对全部模式运行。
 	group := func(t *testing.T, name string, tests []test) {
 		t.Run(name, func(t *testing.T) {
 			for _, test := range tests {
@@ -73,6 +79,7 @@ func TestDecode(t *testing.T) {
 						t.Run(fmt.Sprintf("%s/mode=%s", test.name, modeName), func(t *testing.T) {
 							var dst reflect.Value
 							if test.into == nil {
+								// into 为 nil 时解码到空 interface，验证通用解码结果。
 								var i interface{}
 								dst = reflect.ValueOf(&i)
 							} else {
@@ -92,6 +99,7 @@ func TestDecode(t *testing.T) {
 		})
 	}
 
+	// 无符号整数：解码到 interface{} 时表示为 int64，并覆盖 int64 上界溢出。
 	group(t, "unsigned integer", []test{
 		{
 			name:          "unsigned integer decodes to interface{} as int64",
@@ -124,6 +132,7 @@ func TestDecode(t *testing.T) {
 		},
 	})
 
+	// 负整数：覆盖 int64 下界与超出范围的编码。
 	group(t, "negative integer", []test{
 		{
 			name:          "int64 max negative value",
@@ -150,6 +159,8 @@ func TestDecode(t *testing.T) {
 		},
 	})
 
+	// 字节串：验证“字节串按 base64 语义解码到 []byte”的约定，
+	// 以及带编码标签、实现 BinaryUnmarshaler 等情形。
 	group(t, "byte string", []test{
 		{
 			name:          "empty byte string",
@@ -227,6 +238,7 @@ func TestDecode(t *testing.T) {
 		},
 	})
 
+	// 文本串：验证非法 UTF-8 会被拒绝、不定长文本串可被拼接，以及自定义反序列化器。
 	group(t, "text string", []test{
 		{
 			name: "reject text string containing invalid utf-8 sequence",
@@ -266,6 +278,7 @@ func TestDecode(t *testing.T) {
 		},
 	})
 
+	// 数组：验证嵌套的不定长数组可被正确展开。
 	group(t, "array", []test{
 		{
 			name: "nested indefinite-length array",
@@ -278,6 +291,8 @@ func TestDecode(t *testing.T) {
 		},
 	})
 
+	// 映射：重点验证重复键（含不同编码方式下的同一个键）会被拒绝，
+	// 以及严格/宽松模式下大小写不敏感字段匹配的差异。
 	group(t, "map", []test{
 		{
 			name:          "reject duplicate negative int keys into struct",
@@ -507,6 +522,7 @@ func TestDecode(t *testing.T) {
 		},
 	})
 
+	// 浮点数：覆盖半/单/双精度、无穷与 NaN 的拒绝、极值以及无小数部分的浮点值。
 	group(t, "floating-point number", []test{
 		{
 			name: "half precision infinity",
@@ -639,6 +655,8 @@ func TestDecode(t *testing.T) {
 		},
 	})
 
+	// 简单值：显式列出 20-23 号具名值，再生成全部 0-255 个取值。
+	// 24-31 是保留值（语法错误），其余未识别值应报 UnacceptableDataItemError。
 	group(t, "simple value", append([]test{
 		{
 			name:          "simple value 20",
@@ -669,6 +687,7 @@ func TestDecode(t *testing.T) {
 		},
 	}, func() (generated []test) {
 		// Generate test cases for all simple values (0 to 255) because the number of possible simple values is fixed and small.
+		// 简单值取值固定且数量有限，穷举 0-255 以覆盖所有分支。
 		for i := 0; i <= 255; i++ {
 			each := test{
 				name: fmt.Sprintf("simple value %d", i),
@@ -681,9 +700,11 @@ func TestDecode(t *testing.T) {
 			}
 			switch i {
 			case 20, 21, 22, 23: // recognized values with explicit cases
+				// 已在上面显式定义，跳过生成。
 				continue
 			case 24, 25, 26, 27, 28, 29, 30, 31: // reserved
 				// these are considered not well-formed
+				// 保留值被视为格式错误，应返回语法错误。
 				each.assertOnError = assertOnConcreteError(func(t *testing.T, e *cbor.SyntaxError) {
 					if e == nil {
 						t.Error("expected non-nil error")
@@ -693,6 +714,7 @@ func TestDecode(t *testing.T) {
 				})
 			default:
 				// reject all unrecognized simple values
+				// 所有未识别的简单值都必须被拒绝。
 				each.assertOnError = assertOnConcreteError(func(t *testing.T, e *cbor.UnacceptableDataItemError) {
 					if diff := cmp.Diff(&cbor.UnacceptableDataItemError{CBORType: "primitives", Message: fmt.Sprintf("simple value %d is not recognized", i)}, e); diff != "" {
 						t.Errorf("unexpected error diff:\n%s", diff)
@@ -705,6 +727,7 @@ func TestDecode(t *testing.T) {
 	}()...))
 
 	t.Run("tag", func(t *testing.T) {
+		// 标签：RFC3339 时间（tag 0）、epoch 时间（tag 1）与 bignum/未识别标签。
 		group(t, "rfc3339 time", []test{
 			{
 				name:          "tag 0 RFC3339 text string",
@@ -725,6 +748,8 @@ func TestDecode(t *testing.T) {
 			},
 		})
 
+		// epoch 时间：整数与各精度浮点都应可转换；无穷与 NaN 被拒绝；
+		// 超出 RFC3339 年份范围的时间报错。
 		group(t, "epoch time", []test{
 			{
 				name:          "tag 1 timestamp unsigned integer",
@@ -809,6 +834,7 @@ func TestDecode(t *testing.T) {
 			},
 		})
 
+		// bignum 不被接受，避免与 JSON 的数值语义产生分歧。
 		group(t, "unsigned bignum", []test{
 			{
 				name: "rejected",
@@ -821,6 +847,7 @@ func TestDecode(t *testing.T) {
 			},
 		})
 
+		// 负 bignum 同样不被接受。
 		group(t, "negative bignum", []test{
 			{
 				name: "rejected",
@@ -833,6 +860,7 @@ func TestDecode(t *testing.T) {
 			},
 		})
 
+		// 未识别标签：忽略标签本身，按其携带的数组内容解码。
 		group(t, "unrecognized", []test{
 			{
 				name:          "decimal fraction",

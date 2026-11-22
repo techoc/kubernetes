@@ -20,12 +20,15 @@ import (
 	"testing"
 )
 
+// matches 断言 Labels 的排序后字符串形式。
 func matches(t *testing.T, ls Set, want string) {
 	if ls.String() != want {
 		t.Errorf("Expected '%s', but got '%s'", want, ls.String())
 	}
 }
 
+// TestSetString 确认输出按 key 排序；注意目前无法无歧义地表示名字中含
+// ",=!" 的 label，见下方待办注释。
 func TestSetString(t *testing.T) {
 	matches(t, Set{"x": "y"}, "x=y")
 	matches(t, Set{"foo": "bar"}, "foo=bar")
@@ -35,6 +38,7 @@ func TestSetString(t *testing.T) {
 	// with ",=!" characters in their names.
 }
 
+// TestLabelHas 只判断 key 是否存在，空值也算存在。
 func TestLabelHas(t *testing.T) {
 	labelHasTests := []struct {
 		Ls  Labels
@@ -52,6 +56,7 @@ func TestLabelHas(t *testing.T) {
 	}
 }
 
+// TestLabelGet 确认按 key 取值。
 func TestLabelGet(t *testing.T) {
 	ls := Set{"x": "y"}
 	if ls.Get("x") != "y" {
@@ -59,6 +64,8 @@ func TestLabelGet(t *testing.T) {
 	}
 }
 
+// TestLabelConflict 定义冲突语义：仅当同一个 key 在两边都存在且取值不同时
+// 才算冲突；一方缺失或取值相同都不冲突。
 func TestLabelConflict(t *testing.T) {
 	tests := []struct {
 		labels1  map[string]string
@@ -121,6 +128,8 @@ func TestLabelMerge(t *testing.T) {
 			mergedLabels: map[string]string{"infra": "true", "env": "test", "color": "blue"},
 		},
 	}
+	// TestLabelMerge 确认 Merge 是两个集合的并集；同名 key 在 labels2 中会
+	// 覆盖 labels1（由 Merge 的实现决定，测试仅验证无重叠场景）。
 	for _, test := range tests {
 		mergedLabels := Merge(Set(test.labels1), Set(test.labels2))
 		if !Equals(mergedLabels, test.mergedLabels) {
@@ -129,12 +138,15 @@ func TestLabelMerge(t *testing.T) {
 	}
 }
 
+// TestLabelSelectorParse 覆盖“等值选择器 -> 标签 map”的解析；仅支持
+// key=value 形式（逗号分隔），集合/不等运算与空格、非法字符都应报错。
 func TestLabelSelectorParse(t *testing.T) {
 	tests := []struct {
 		selector string
 		labels   map[string]string
 		valid    bool
 	}{
+		// 空选择器合法，表示匹配所有标签。
 		{
 			selector: "",
 			labels:   map[string]string{},
@@ -165,6 +177,7 @@ func TestLabelSelectorParse(t *testing.T) {
 			labels:   map[string]string{"color": "green", "env": "test", "service": "front"},
 			valid:    true,
 		},
+		// 以下均为非法输入：空项、缺值、非法字符、集合运算和不等运算。
 		{
 			selector: ",",
 			labels:   map[string]string{},

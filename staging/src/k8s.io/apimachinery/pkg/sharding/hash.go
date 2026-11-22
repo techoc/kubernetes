@@ -21,10 +21,12 @@ import (
 	"hash/fnv"
 )
 
-// HashField computes a hash of value and returns it
-// as a 16-character lowercase hex string (no "0x" prefix).
+// HashField 计算 value 的哈希，并以 16 字符的小写十六进制字符串返回（不带 "0x" 前缀）。
+// 使用 FNV-1a 64 位哈希，追求的是计算快、分布均匀，而非密码学安全性；
+// 固定宽度（%016x 左补零）保证不同长度的哈希可以直接按字符串比较或作为分片键。
 func HashField(value string) string {
 	h := fnv.New64a()
+	// 写入字符串的字节表示；Hash.Write 不会返回错误，因此忽略其返回值。
 	h.Write([]byte(value))
 	return fmt.Sprintf("%016x", h.Sum64())
 }

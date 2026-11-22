@@ -15,4 +15,7 @@ limitations under the License.
 */
 
 // Package types implements various generic types used throughout kubernetes.
+//
+// 该包集中定义跨组件共享的基础类型（UID、NodeName、NamespaceName 等），
+// 统一放在这里可避免各组件重复定义导致类型不兼容。
 package types

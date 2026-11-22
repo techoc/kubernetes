@@ -35,7 +35,10 @@ type Timestamp struct {
 	Nanos int32 `json:"nanos" protobuf:"varint,2,opt,name=nanos"`
 }
 
-// Timestamp returns the Time as a new Timestamp value.
+// ProtoTime returns the Time as a new Timestamp value.
+// Nanoseconds are deliberately dropped: the JSON encoding of Time uses RFC3339
+// with second precision, and emitting nanos here would make protobuf clients
+// observe fields that JSON clients do not, breaking round-trip equality.
 func (m *Time) ProtoTime() *Timestamp {
 	if m == nil {
 		return &Timestamp{}
@@ -59,6 +62,7 @@ func (m *Time) Size() (n int) {
 
 // Reset implements the protobuf marshalling interface.
 func (m *Time) Unmarshal(data []byte) error {
+	// An empty payload represents the zero time, not an error.
 	if len(data) == 0 {
 		m.Time = time.Time{}
 		return nil
@@ -67,6 +71,9 @@ func (m *Time) Unmarshal(data []byte) error {
 	if err := p.Unmarshal(data); err != nil {
 		return err
 	}
+	// Nanos are ignored for the same compatibility reason as in ProtoTime:
+	// JSON only carries seconds, so protobuf input with nanos must not change
+	// observable state that JSON clients cannot see.
 	// leaving this here for the record.  our JSON only handled seconds, so this results in writes by
 	// protobuf clients storing values that aren't read by json clients, which results in unexpected
 	// field mutation, which fails various validation and equality code.

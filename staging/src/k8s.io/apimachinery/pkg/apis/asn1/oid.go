@@ -14,30 +14,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package asn1 定义 Kubernetes 使用的 ASN.1 对象标识符（OID）。
 package asn1
 
 import "encoding/asn1"
 
-// These constants store suffixes for use with the CNCF Private Enterprise Number allocated to Kubernetes:
+// 以下常量是 Kubernetes 在 CNCF 私有企业号下的后缀：
 // https://www.iana.org/assignments/enterprise-numbers.txt
 //
-// Root: 1.3.6.1.4.1.57683
+// 根节点：1.3.6.1.4.1.57683
 //
 // Cloud Native Computing Foundation
 const (
-	// single-value, string value
+	// 单值，字符串类型
 	x509UIDSuffix = 2
 )
 
+// makeOID 在 CNCF 分配的 Kubernetes 根 OID 下拼接给定后缀。
 func makeOID(suffix int) asn1.ObjectIdentifier {
 	return asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57683, suffix}
 }
 
-// X509UID returns an OID (1.3.6.1.4.1.57683.2) for an element of an x509 distinguished name representing a user UID.
-// The UID is a unique value for a particular user that will change if the user is removed from the system
-// and another user is added with the same username.
+// X509UID 返回表示用户 UID 的 x509 可分辨名称元素的 OID（1.3.6.1.4.1.57683.2）。
+// 该 UID 对特定用户唯一；当用户从系统中删除、再加入同名用户时会发生变化。
 //
-// This element must not appear more than once in a distinguished name, and the value must be a string
+// 此元素在一个可分辨名称中最多出现一次，且值必须是字符串。
 func X509UID() asn1.ObjectIdentifier {
 	return makeOID(x509UIDSuffix)
 }

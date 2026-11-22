@@ -16,4 +16,6 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 
+// Package testing 提供 runtime 包的测试辅助类型与通用测试例程（如缓存对象测试），
+// 供 runtime 及其子包的测试复用，避免各包各写一份测试用对象。
 package testing

@@ -30,6 +30,8 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestValidateLabels 验证标签键值校验：合法的键（含可选 DNS 子域前缀）、非法字符、
+// 过长键值、以及含反斜杠/逗号等非法值都会得到预期错误。
 func TestValidateLabels(t *testing.T) {
 	successCases := []map[string]string{
 		{"simple": "bar"},
@@ -100,6 +102,7 @@ func TestValidateLabels(t *testing.T) {
 	}
 }
 
+// TestValidDryRun 验证合法的 dry-run 取值：空列表与重复的 "All" 都允许。
 func TestValidDryRun(t *testing.T) {
 	tests := [][]string{
 		{},
@@ -116,6 +119,7 @@ func TestValidDryRun(t *testing.T) {
 	}
 }
 
+// TestInvalidDryRun 验证非法的 dry-run 取值会被拒绝。
 func TestInvalidDryRun(t *testing.T) {
 	tests := [][]string{
 		{"False"},
@@ -131,6 +135,10 @@ func TestInvalidDryRun(t *testing.T) {
 	}
 }
 
+// TestValidateDeleteOptionsWithIgnoreStoreReadError 验证
+// ignoreStoreReadErrorWithClusterBreakingPotential 与其他删除选项互斥：
+// 为 true 时不能同时设置 propagationPolicy、orphanDependents、gracePeriodSeconds
+// 或 preconditions，以免绕过存储读取错误时产生语义歧义。
 func TestValidateDeleteOptionsWithIgnoreStoreReadError(t *testing.T) {
 	fieldPath := field.NewPath("ignoreStoreReadErrorWithClusterBreakingPotential")
 	tests := []struct {
@@ -237,6 +245,8 @@ func TestValidateDeleteOptionsWithIgnoreStoreReadError(t *testing.T) {
 	}
 }
 
+// TestValidPatchOptions 验证合法的 PatchOptions：apply patch 要求 fieldManager，
+// 非 apply 的 patch 类型可带 fieldManager 或 force。
 func TestValidPatchOptions(t *testing.T) {
 	tests := []struct {
 		opts      metav1.PatchOptions
@@ -283,6 +293,8 @@ func TestValidPatchOptions(t *testing.T) {
 	}
 }
 
+// TestInvalidPatchOptions 验证非法 PatchOptions：apply patch 缺少 fieldManager，
+// 或在非 apply patch 上设置 force/fieldManager。
 func TestInvalidPatchOptions(t *testing.T) {
 	tests := []struct {
 		opts      metav1.PatchOptions
@@ -325,6 +337,7 @@ func TestInvalidPatchOptions(t *testing.T) {
 	}
 }
 
+// TestValidateFieldManagerValid 验证 fieldManager 允许 Unicode（中文、emoji）等任意可打印字符。
 func TestValidateFieldManagerValid(t *testing.T) {
 	tests := []string{
 		"filedManager",
@@ -342,6 +355,7 @@ func TestValidateFieldManagerValid(t *testing.T) {
 	}
 }
 
+// TestValidateFieldManagerInvalid 验证 fieldManager 拒绝控制字符与超过 128 字符的输入。
 func TestValidateFieldManagerInvalid(t *testing.T) {
 	tests := []string{
 		"field\nmanager", // Contains invalid character \n
@@ -358,6 +372,8 @@ func TestValidateFieldManagerInvalid(t *testing.T) {
 	}
 }
 
+// TestValidateManagedFieldsInvalid 验证非法 managedFields 条目：未知 fieldsType/operation、
+// 缺少 operation、非法 manager、过长的 subresource 都应报错；两种校验选项都要覆盖。
 func TestValidateManagedFieldsInvalid(t *testing.T) {
 	tests := []metav1.ManagedFieldsEntry{{
 		Operation:  metav1.ManagedFieldsOperationUpdate,
@@ -398,6 +414,8 @@ func TestValidateManagedFieldsInvalid(t *testing.T) {
 	}
 }
 
+// TestValidateMangedFieldsValid 验证合法 managedFields：fieldsType 可缺省、manager 可用 emoji、
+// subresource 合法时两种校验选项都应通过。
 func TestValidateMangedFieldsValid(t *testing.T) {
 	tests := []metav1.ManagedFieldsEntry{{
 		Operation:  metav1.ManagedFieldsOperationUpdate,
@@ -433,6 +451,8 @@ func TestValidateMangedFieldsValid(t *testing.T) {
 	}
 }
 
+// TestValidateConditions 验证 Condition 各字段的校验，并覆盖若干易错规则：
+// 类型重复、reason 允许冒号和逗号、reason 不能以分隔符结尾。
 func TestValidateConditions(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -531,6 +551,8 @@ func TestValidateConditions(t *testing.T) {
 	}
 }
 
+// TestLabelSelectorMatchExpression 验证 LabelSelector 中 matchExpressions 的键、操作符、
+// 值分别非法时的错误数量与错误信息。
 func TestLabelSelectorMatchExpression(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -610,6 +632,7 @@ func TestLabelSelectorMatchExpression(t *testing.T) {
 	}
 }
 
+// hasError 判断错误列表中是否存在与 needle 完全相同的 Error() 输出。
 func hasError(errs field.ErrorList, needle string) bool {
 	for _, curr := range errs {
 		if curr.Error() == needle {
@@ -619,6 +642,7 @@ func hasError(errs field.ErrorList, needle string) bool {
 	return false
 }
 
+// hasPrefixError 判断是否有错误的 Error() 以 prefix 开头，常用于只校验字段路径前缀。
 func hasPrefixError(errs field.ErrorList, prefix string) bool {
 	for _, curr := range errs {
 		if strings.HasPrefix(curr.Error(), prefix) {
@@ -628,6 +652,7 @@ func hasPrefixError(errs field.ErrorList, prefix string) bool {
 	return false
 }
 
+// partStringInErrorMessage 判断是否有错误的 Error() 包含给定子串。
 func partStringInErrorMessage(errs field.ErrorList, prefix string) bool {
 	for _, curr := range errs {
 		if strings.Contains(curr.Error(), prefix) {
@@ -637,6 +662,7 @@ func partStringInErrorMessage(errs field.ErrorList, prefix string) bool {
 	return false
 }
 
+// errorsAsString 把错误列表拼成多行字符串，便于测试失败时输出。
 func errorsAsString(errs field.ErrorList) string {
 	messages := []string{}
 	for _, curr := range errs {

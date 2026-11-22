@@ -28,6 +28,9 @@ import (
 	"testing"
 )
 
+// TestYAMLDecoderReadBytesLength 验证 DocumentDecoder.Read 的契约：
+// 单个 YAML 文档超过缓冲区时返回 io.ErrShortBuffer 并给出已读长度，
+// 缓冲区足够大时一次读完整篇文档。
 func TestYAMLDecoderReadBytesLength(t *testing.T) {
 	d := `---
 stuff: 1
@@ -53,6 +56,8 @@ stuff: 1
 	}
 }
 
+// TestBigYAML 覆盖大文档的两条边界：
+// 缓冲区小于文档 -> ErrShortBuffer；超过 5MB 上限 -> bufio.ErrTooLong。
 func TestBigYAML(t *testing.T) {
 	d := `
 stuff: 1
@@ -80,6 +85,8 @@ stuff: 1
 	}
 }
 
+// TestYAMLDecoderCallsAfterErrShortBufferRestOfFrame 验证 ErrShortBuffer 之后
+// 继续 Read 能拿到文档剩余部分，而不是从头重来或丢失数据。
 func TestYAMLDecoderCallsAfterErrShortBufferRestOfFrame(t *testing.T) {
 	d := `---
 stuff: 1
@@ -110,6 +117,9 @@ stuff: 1
 	}
 }
 
+// TestSplitYAMLDocument 验证 bufio.SplitFunc 的语义：
+// 只有遇到行首的 "---" 才切分；atEOF 为 false 时末尾不完整的内容必须等待更多数据，
+// 因此返回 adv=0（不消耗）而不是提前切出一个不完整的文档。
 func TestSplitYAMLDocument(t *testing.T) {
 	testCases := []struct {
 		input  string
@@ -146,6 +156,8 @@ func TestSplitYAMLDocument(t *testing.T) {
 	}
 }
 
+// TestGuessJSON 验证 GuessJSONStream 会跳过前导空白再判断首字符，
+// 并把完整内容（含空白）留给返回的 reader。
 func TestGuessJSON(t *testing.T) {
 	if r, _, isJSON := GuessJSONStream(bytes.NewReader([]byte(" \n{}")), 100); !isJSON {
 		t.Fatalf("expected stream to be JSON")
@@ -161,6 +173,8 @@ func TestGuessJSON(t *testing.T) {
 	}
 }
 
+// TestScanYAML 验证 splitYAMLDocument 可直接作为 bufio.Scanner 的 SplitFunc 使用：
+// 两个文档应产生两次 Scan，之后扫描结束且无错误。
 func TestScanYAML(t *testing.T) {
 	s := bufio.NewScanner(bytes.NewReader([]byte(`---
 stuff: 1
@@ -184,6 +198,8 @@ stuff: 1
 	}
 }
 
+// TestDecodeYAML 验证 YAMLToJSONDecoder 能连续解码多个文档，
+// 空文档解码为空对象，流结束后返回 io.EOF。
 func TestDecodeYAML(t *testing.T) {
 	s := NewYAMLToJSONDecoder(bytes.NewReader([]byte(`---
 stuff: 1
@@ -210,6 +226,8 @@ stuff: 1
 	}
 }
 
+// TestDecodeYAMLSeparatorValidation 验证分隔行：
+// "---  # 注释" 合法；"--- 后面跟未注释内容" 应报 YAMLSyntaxError。
 func TestDecodeYAMLSeparatorValidation(t *testing.T) {
 	s := NewYAMLToJSONDecoder(bytes.NewReader([]byte(`---
 stuff: 1
@@ -244,6 +262,7 @@ stuff: 3
 	}
 }
 
+// TestDecodeBrokenYAML 验证 YAML 语法错误会带上行号，便于用户定位缩进问题。
 func TestDecodeBrokenYAML(t *testing.T) {
 	s := NewYAMLOrJSONDecoder(bytes.NewReader([]byte(`---
 stuff: 1
@@ -262,6 +281,7 @@ stuff: 1
 	}
 }
 
+// TestDecodeBrokenJSON 验证损坏的 JSON 会返回带 json 前缀的语法错误。
 func TestDecodeBrokenJSON(t *testing.T) {
 	s := NewYAMLOrJSONDecoder(bytes.NewReader([]byte(`{
 	"foo": {
@@ -281,8 +301,11 @@ func TestDecodeBrokenJSON(t *testing.T) {
 	}
 }
 
+// generic 是测试用的宽松 JSON/YAML 对象，便于直接比较解码结果。
 type generic map[string]interface{}
 
+// TestYAMLOrJSONDecoder 覆盖自动嗅探 JSON/YAML 的各种组合：
+// 缓冲区大小对嗅探的影响、连续 JSON 文档、混合格式流，以及首文档决定整体格式的规则。
 func TestYAMLOrJSONDecoder(t *testing.T) {
 	testCases := []struct {
 		input  string
@@ -291,6 +314,7 @@ func TestYAMLOrJSONDecoder(t *testing.T) {
 		err    bool
 		out    []generic
 	}{
+		// 相邻的两个 JSON 对象无需分隔符即可连续解码。
 		{` {"1":2}{"3":4}`, 2, true, false, []generic{
 			{"1": 2},
 			{"3": 4},
@@ -301,6 +325,7 @@ func TestYAMLOrJSONDecoder(t *testing.T) {
 		{" \na: b", 2, false, false, []generic{
 			{"a": "b"},
 		}},
+		// 缓冲区只有 2 字节，嗅探时看不到完整 JSON 开头，回退为 YAML 并失败。
 		{" \n{\"a\": \"b\"}", 2, false, true, []generic{
 			{"a": "b"},
 		}},
@@ -381,12 +406,14 @@ func TestYAMLOrJSONDecoder(t *testing.T) {
 			{"baz": "biz"},
 		}},
 		// First 2 documents are JSON, third is YAML (stream is JSON)
+		// 格式由首个文档锁定：后续出现 YAML 会报错，而不是切换解码器。
 		{"{\"foo\": \"bar\"}\n{\"baz\": \"biz\"}\n---\n{qux: zrb}", 100, true, true, nil},
 	}
 	for i, testCase := range testCases {
 		decoder := NewYAMLOrJSONDecoder(bytes.NewReader([]byte(testCase.input)), testCase.buffer)
 		objs := []generic{}
 
+		// 循环解码直到出错；io.EOF 是正常结束，其他错误按 err 期望判断。
 		var err error
 		for {
 			out := make(generic)
@@ -424,10 +451,12 @@ func TestYAMLOrJSONDecoder(t *testing.T) {
 	}
 }
 
+// TestReadSingleLongLine 验证 LineReader 能读取超过 64KB 的单行（不依赖 bufio.Scanner 的默认上限）。
 func TestReadSingleLongLine(t *testing.T) {
 	testReadLines(t, []int{128 * 1024})
 }
 
+// TestReadRandomLineLengths 用随机行长覆盖 LineReader 在不同缓冲区边界下的行为。
 func TestReadRandomLineLengths(t *testing.T) {
 	minLength := 100
 	maxLength := 96 * 1024
@@ -441,6 +470,7 @@ func TestReadRandomLineLengths(t *testing.T) {
 	testReadLines(t, lineLengths)
 }
 
+// testReadLines 构造随机内容的多行输入，验证 LineReader.Read 逐行原样返回。
 func testReadLines(t *testing.T, lineLengths []int) {
 	var (
 		lines       [][]byte
@@ -484,6 +514,8 @@ func testReadLines(t *testing.T, lineLengths []int) {
 	}
 }
 
+// TestTypedJSONOrYamlErrors 验证错误被包装成可判定的具体类型
+// （JSONSyntaxError/YAMLSyntaxError），调用方可以据此区分格式来源。
 func TestTypedJSONOrYamlErrors(t *testing.T) {
 	s := NewYAMLOrJSONDecoder(bytes.NewReader([]byte(`{
 	"foo": {
@@ -517,7 +549,10 @@ stuff: 1
 	}
 }
 
+// TestUnmarshal 验证 YAML 数字在目标为 interface{} 时统一解码为 int64；
+// 但当 map 的键类型不是 string 时，数字会走 float64 路径（JSON 兼容行为）。
 func TestUnmarshal(t *testing.T) {
+	// map[string]interface{} 是 JSON 兼容路径，数字保持整数语义（int64）。
 	mapWithIntegerBytes := []byte(`replicas: 1`)
 	mapWithInteger := make(map[string]interface{})
 	if err := Unmarshal(mapWithIntegerBytes, &mapWithInteger); err != nil {
@@ -545,6 +580,7 @@ func TestUnmarshal(t *testing.T) {
 		t.Fatalf(`Expected number to be int64 but got "%T"`, integer)
 	}
 
+	// 键类型为 int 时无法走 JSON 中转，退回原生 YAML 解码，数字变为 float64。
 	otherTypeBytes := []byte(`123: 2`)
 	otherType := make(map[int]interface{})
 	if err := Unmarshal(otherTypeBytes, &otherType); err != nil {

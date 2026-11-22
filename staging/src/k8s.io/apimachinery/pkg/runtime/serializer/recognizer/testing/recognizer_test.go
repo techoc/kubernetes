@@ -25,13 +25,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer/recognizer"
 )
 
+// A 是用于识别器测试的最小 runtime.Object，只有类型元信息，没有实际字段。
 type A struct{}
 
+// GetObjectKind 返回空的 ObjectKind，满足 runtime.Object 接口。
 func (A) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
+
+// DeepCopyObject 对无字段类型直接返回自身副本。
 func (a A) DeepCopyObject() runtime.Object {
 	return a
 }
 
+// TestRecognizer 验证 recognizer.Decoder 能在多编码器之间自动选择：
+// 同样的 kind/apiVersion，分别以 YAML 和 JSON 输入时都应被正确识别并解码。
 func TestRecognizer(t *testing.T) {
 	s := runtime.NewScheme()
 	s.AddKnownTypes(schema.GroupVersion{Version: "v1"}, &A{})
@@ -39,6 +45,7 @@ func TestRecognizer(t *testing.T) {
 		json.NewSerializerWithOptions(json.DefaultMetaFactory, s, s, json.SerializerOptions{}),
 		json.NewSerializerWithOptions(json.DefaultMetaFactory, s, s, json.SerializerOptions{Yaml: true}),
 	)
+	// YAML 输入：识别器应选中 YAML 序列化器。
 	out, _, err := d.Decode([]byte(`
 kind: A
 apiVersion: v1
@@ -48,6 +55,7 @@ apiVersion: v1
 	}
 	t.Logf("%#v", out)
 
+	// JSON 输入：同一识别器应改选 JSON 序列化器。
 	out, _, err = d.Decode([]byte(`
 {
   "kind":"A",

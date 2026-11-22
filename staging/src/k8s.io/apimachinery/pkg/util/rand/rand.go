@@ -23,6 +23,8 @@ import (
 	"time"
 )
 
+// rng 是全局随机源：math/rand 的 Rand 不是并发安全的，因此用互斥锁串行化
+// 所有访问。种子取自启动时间。
 var rng = struct {
 	sync.Mutex
 	rand *rand.Rand
@@ -39,6 +41,8 @@ func Int() int {
 
 // Intn generates an integer in range [0,max).
 // By design this should panic if input is invalid, <= 0.
+//
+// 与 math/rand.Intn 一致：max <= 0 时 panic 而不是返回错误。
 func Intn(max int) int {
 	rng.Lock()
 	defer rng.Unlock()
@@ -62,6 +66,8 @@ func Int63nRange(min, max int64) int64 {
 }
 
 // Seed seeds the rng with the provided seed.
+//
+// 替换整个 Rand 实例而不是调用 Seed，保证并发下状态切换是原子的。
 func Seed(seed int64) {
 	rng.Lock()
 	defer rng.Unlock()
@@ -95,6 +101,8 @@ const (
 // - we generate random int63's
 // - from each int63, we are extracting multiple random letters by bit-shifting and masking
 // - if some index is out of range of alphanums we neglect it (unlikely to happen multiple times in a row)
+//
+// 位切片（bit slicing）复用每个 int63 的低位，减少对随机源的调用次数。
 func String(n int) string {
 	b := make([]byte, n)
 	rng.Lock()
@@ -104,8 +112,10 @@ func String(n int) string {
 	remaining := maxAlphanumsPerInt
 	for i := 0; i < n; {
 		if remaining == 0 {
+			// 当前 int63 的可用位耗尽，取新的随机数。
 			randomInt63, remaining = rng.rand.Int63(), maxAlphanumsPerInt
 		}
+		// 索引越界（29..31）时丢弃该位段，重试。
 		if idx := int(randomInt63 & alphanumsIdxMask); idx < len(alphanums) {
 			b[i] = alphanums[idx]
 			i++

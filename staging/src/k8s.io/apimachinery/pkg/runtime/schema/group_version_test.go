@@ -20,6 +20,9 @@ import (
 	"testing"
 )
 
+// TestGroupVersionParse 验证 "group/version" 字符串的解析：
+// 无斜杠时整体作为 version；"/v1" 视为空 group + v1；"v1/" 视为 group=v1 + 空 version；
+// 两个斜杠则报错。
 func TestGroupVersionParse(t *testing.T) {
 	tests := []struct {
 		input string
@@ -49,6 +52,8 @@ func TestGroupVersionParse(t *testing.T) {
 	}
 }
 
+// TestGroupResourceParse 验证 "resource.group" 形式的解析：只按最后一个点切分，
+// 因此 "b.v1.a" 解析为 resource=b、group=v1.a（group 本身可以含点）。
 func TestGroupResourceParse(t *testing.T) {
 	tests := []struct {
 		input string
@@ -68,6 +73,8 @@ func TestGroupResourceParse(t *testing.T) {
 	}
 }
 
+// TestParseResourceArg 验证 kubectl 风格 "resource.version.group" 参数的解析：
+// 段数不足 3 时只返回 GroupResource，段数足够时同时返回带版本的 GVR。
 func TestParseResourceArg(t *testing.T) {
 	tests := []struct {
 		input string
@@ -91,6 +98,9 @@ func TestParseResourceArg(t *testing.T) {
 	}
 }
 
+// TestKindForGroupVersionKinds 验证 GroupVersions 的优先级选择：
+// 输入中若存在该组已注册的版本，则原样返回；否则回退到该组中优先级最高的版本；
+// 组完全未知时 ok=false。
 func TestKindForGroupVersionKinds(t *testing.T) {
 	gvks := GroupVersions{
 		GroupVersion{Group: "batch", Version: "v1"},
@@ -135,6 +145,8 @@ func TestKindForGroupVersionKinds(t *testing.T) {
 	}
 }
 
+// TestParseKindArg 验证 kubectl 风格 "kind.version.group" 参数的解析，
+// 与 ParseResourceArg 类似，段数不足 3 时只返回 GroupKind。
 func TestParseKindArg(t *testing.T) {
 	tests := []struct {
 		input string
@@ -160,6 +172,7 @@ func TestParseKindArg(t *testing.T) {
 	}
 }
 
+// TestParseGroupKind 验证 "Kind.group" 形式的解析：只按最后一个点切分。
 func TestParseGroupKind(t *testing.T) {
 	tests := []struct {
 		input string
@@ -179,6 +192,8 @@ func TestParseGroupKind(t *testing.T) {
 	}
 }
 
+// TestToAPIVersionAndKind 验证 GroupVersionKind 到 (apiVersion, kind) 的拆分，
+// 包括空值这一边界。
 func TestToAPIVersionAndKind(t *testing.T) {
 	tests := []struct {
 		desc         string
@@ -210,6 +225,8 @@ func TestToAPIVersionAndKind(t *testing.T) {
 	}
 }
 
+// TestBestMatch 验证 bestMatch 的选择策略：
+// 优先选择 targets 中与 kinds 匹配的项；若没有匹配项，则回退到第一个 target。
 func TestBestMatch(t *testing.T) {
 	tests := []struct {
 		desc    string

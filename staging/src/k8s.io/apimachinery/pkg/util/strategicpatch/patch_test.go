@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件是 strategicpatch 包的测试。大部分用例以 YAML 或原始 JSON 形式内联在文件中，
+// 并针对三种 schema 来源（Go 结构体标签、OpenAPI v2、OpenAPI v3）各跑一遍，
+// 以保证不同 schema 提供者产出的 patch 语义完全一致。
+
 package strategicpatch
 
 import (
@@ -33,6 +37,8 @@ import (
 	"k8s.io/utils/dump"
 )
 
+// 三份测试用 schema：mergeItem 用于列表合并、retainKeys 等主要语义，
+// precisionItem 专门用于数值精度相关的转换测试。v2 与 v3 各一份以覆盖两代 OpenAPI 实现。
 var (
 	fakeMergeItemSchema     = sptest.Fake{Path: filepath.Join("testdata", "swagger-merge-item.json")}
 	fakePrecisionItemSchema = sptest.Fake{Path: filepath.Join("testdata", "swagger-precision-item.json")}
@@ -41,50 +47,69 @@ var (
 	fakePrecisionItemV3Schema = sptest.OpenAPIV3Getter{Path: filepath.Join("testdata", "swagger-precision-item-v3.json")}
 )
 
+// SortMergeListTestCases 是 SortMergeList 测试用例的集合，对应 YAML 中的 testCases 字段。
 type SortMergeListTestCases struct {
 	TestCases []SortMergeListTestCase
 }
 
+// SortMergeListTestCase 描述一个排序用例：把 Original 中的合并列表按 schema 规定的键排序后
+// 应与 Sorted 一致。
 type SortMergeListTestCase struct {
 	Description string
 	Original    map[string]interface{}
 	Sorted      map[string]interface{}
 }
 
+// StrategicMergePatchTestCases 是 StrategicMergePatch 测试用例的集合。
 type StrategicMergePatchTestCases struct {
 	TestCases []StrategicMergePatchTestCase
 }
 
+// StrategicMergePatchTestCase 是一条以结构化对象描述的 patch 用例。
 type StrategicMergePatchTestCase struct {
 	Description string
 	StrategicMergePatchTestCaseData
 }
 
+// StrategicMergePatchRawTestCase 是一条以原始 YAML/JSON 字节描述的 patch 用例，
+// 用于表达结构化对象无法精确表达的格式（如字段顺序、重复键、旧客户端格式）。
 type StrategicMergePatchRawTestCase struct {
 	Description string
 	StrategicMergePatchRawTestCaseData
 }
 
+// StrategicMergePatchTestCaseData 保存一条 patch 用例的输入与期望输出。
+// 三方合并场景下 Original/Modified/Current 分别对应 last-applied 注解、用户期望配置与服务端实时配置。
 type StrategicMergePatchTestCaseData struct {
 	// Original is the original object (last-applied config in annotation)
+	// Original 是原始对象（注解中的 last-applied 配置）。
 	Original map[string]interface{}
 	// Modified is the modified object (new config we want)
+	// Modified 是修改后的对象（用户期望的新配置）。
 	Modified map[string]interface{}
 	// Current is the current object (live config in the server)
+	// Current 是当前对象（服务端的实时配置）。
 	Current map[string]interface{}
 	// TwoWay is the expected two-way merge patch diff between original and modified
+	// TwoWay 是 Original 与 Modified 之间期望得到的双向合并补丁。
 	TwoWay map[string]interface{}
 	// ThreeWay is the expected three-way merge patch
+	// ThreeWay 是期望得到的三方合并补丁。
 	ThreeWay map[string]interface{}
 	// Result is the expected object after applying the three-way patch on current object.
+	// Result 是在 Current 上应用三方补丁后期望得到的对象。
 	Result map[string]interface{}
 	// TwoWayResult is the expected object after applying the two-way patch on current object.
 	// If nil, Modified is used.
+	// TwoWayResult 是在 Current 上应用双向补丁后期望得到的对象；为 nil 时使用 Modified。
 	TwoWayResult map[string]interface{}
 }
 
 // The meaning of each field is the same as StrategicMergePatchTestCaseData's.
 // The difference is that all the fields in StrategicMergePatchRawTestCaseData are json-encoded data.
+//
+// 各字段含义与 StrategicMergePatchTestCaseData 相同，区别在于全部字段都是 JSON 编码后的数据。
+// 之所以需要原始形式，是因为某些用例依赖 YAML 的重复键、null 与字段顺序等结构化对象无法保留的信息。
 type StrategicMergePatchRawTestCaseData struct {
 	Original      []byte
 	Modified      []byte
@@ -96,6 +121,8 @@ type StrategicMergePatchRawTestCaseData struct {
 	ExpectedError string
 }
 
+// MergeItem 是测试 schema 的主体类型，覆盖了 strategic merge patch 支持的各种字段形态：
+// 合并列表、非合并列表、标量列表、指针、map、替换型字段、retainKeys 以及嵌套合并列表。
 type MergeItem struct {
 	Name                  string               `json:"name,omitempty"`
 	Value                 string               `json:"value,omitempty"`
@@ -112,6 +139,7 @@ type MergeItem struct {
 	RetainKeysMergingList []MergeItem          `json:"retainKeysMergingList,omitempty" patchStrategy:"merge,retainKeys" patchMergeKey:"name"`
 }
 
+// RetainKeysMergeItem 用于测试 retainKeys 策略：应用补丁时未出现在补丁中的字段会被清除。
 type RetainKeysMergeItem struct {
 	Name           string            `json:"name,omitempty"`
 	Value          string            `json:"value,omitempty"`
@@ -122,6 +150,8 @@ type RetainKeysMergeItem struct {
 	NonMergingList []MergeItem       `json:"nonMergingList,omitempty"`
 }
 
+// mergeItem 是取类型用的零值；mergeItemStructSchema 是基于该类型标签构建的 schema，
+// 与 OpenAPI schema 并列作为被测实现之一。
 var (
 	mergeItem             MergeItem
 	mergeItemStructSchema = PatchMetaFromStruct{T: GetTagStructTypeOrDie(mergeItem)}
@@ -129,6 +159,8 @@ var (
 
 // These are test cases for SortMergeList, used to assert that it (recursively)
 // sorts both merging and non merging lists correctly.
+//
+// 这些是 SortMergeList 的用例，用于断言它能（递归地）正确排序合并列表与非合并列表。
 var sortMergeListTestCaseData = []byte(`
 testCases:
   - description: sort one list of maps
@@ -284,6 +316,10 @@ testCases:
         - name: 3
 `)
 
+// TestSortMergeLists 验证 sortJsonOrFail 能把对象中的合并列表按合并键排序。
+//
+// 同一组用例分别在三种 schema 上执行：结构体标签、OpenAPI v2 与 OpenAPI v3，
+// 任何实现出现排序差异都会在此暴露。
 func TestSortMergeLists(t *testing.T) {
 	mergeItemOpenapiSchema := PatchMetaFromOpenAPI{
 		Schema: sptest.GetSchemaOrDie(&fakeMergeItemSchema, "mergeItem"),
@@ -307,6 +343,7 @@ func TestSortMergeLists(t *testing.T) {
 
 	for _, schema := range schemas {
 		for _, c := range tc.TestCases {
+			// 先把两侧都转成 JSON 并排序，再按字节比较，避免 map 遍历顺序带来的假阳性。
 			temp := testObjectToJSONOrFail(t, c.Original)
 			got := sortJsonOrFail(t, temp, c.Description, schema)
 			expected := testObjectToJSONOrFail(t, c.Sorted)
@@ -324,6 +361,10 @@ func TestSortMergeLists(t *testing.T) {
 // - generate duplicate integers for a merging list patch.
 // - generate empty merging lists.
 // - use patch format from an old client.
+//
+// 这些用例用于测试 CreateTwoWayMergePatch 无法生成的补丁，原因可能包括：
+// 未使用 replace 指令、为合并列表生成重复整数、生成空的合并列表，
+// 或使用旧客户端产生的补丁格式。它们只验证"应用补丁"这一侧的行为。
 var customStrategicMergePatchTestCaseData = []byte(`
 testCases:
   - description: unique scalars when merging lists
@@ -569,6 +610,8 @@ testCases:
         - 1
 `)
 
+// customStrategicMergePatchRawTestCases 是手工构造的原始补丁用例，
+// 用于覆盖 $setElementOrder 等旧版或非标准格式的输入。
 var customStrategicMergePatchRawTestCases = []StrategicMergePatchRawTestCase{
 	{
 		Description: "$setElementOrder contains item that is not present in the list to be merged",
@@ -771,6 +814,10 @@ nonMergingIntList:
 	},
 }
 
+// TestCustomStrategicMergePatch 验证手工构造的补丁能被正确应用。
+//
+// 与 TestStrategicMergePatch 不同，这里不检查补丁的"生成"过程，
+// 只断言给定的补丁在给定原始对象上应用后的结果，因此可以覆盖生成器不会产出的格式。
 func TestCustomStrategicMergePatch(t *testing.T) {
 	mergeItemOpenapiSchema := PatchMetaFromOpenAPI{
 		Schema: sptest.GetSchemaOrDie(&fakeMergeItemSchema, "mergeItem"),
@@ -800,6 +847,7 @@ func TestCustomStrategicMergePatch(t *testing.T) {
 					testPatchApplication(t, original, expectedTwoWayPatch, expectedResult, c.Description, "", schema)
 				})
 
+				// 原始 YAML 用例也放在这里执行，覆盖结构化用例无法表达的格式细节。
 				for _, c := range customStrategicMergePatchRawTestCases {
 					original, expectedTwoWayPatch, _, expectedResult := twoWayRawTestCaseToJSONOrFail(t, c)
 					testPatchApplication(t, original, expectedTwoWayPatch, expectedResult, c.Description, c.ExpectedError, schema)
@@ -813,6 +861,10 @@ func TestCustomStrategicMergePatch(t *testing.T) {
 // yields the correct outcome. They are also test cases for CreateTwoWayMergePatch
 // and CreateThreeWayMergePatch, to assert that they both generate the correct patch
 // for the given set of input documents.
+//
+// 这些是 StrategicMergePatch 的用例，断言应用补丁能得到正确结果；
+// 同时也是 CreateTwoWayMergePatch 与 CreateThreeWayMergePatch 的用例，
+// 断言二者能为给定输入生成正确的补丁。
 var createStrategicMergePatchTestCaseData = []byte(`
 testCases:
   - description: nil original
@@ -1265,6 +1317,8 @@ testCases:
         name: foo
 `)
 
+// strategicMergePatchRawTestCases 是主测试使用的大批量原始用例，
+// 覆盖列表删除、$patch 指令、标量列表合并、retainKeys 等场景。
 var strategicMergePatchRawTestCases = []StrategicMergePatchRawTestCase{
 	{
 		Description: "nested patch merge with empty list",
@@ -6176,7 +6230,12 @@ mergeItemPtr:
 	},
 }
 
+// TestStrategicMergePatch 是主测试入口，覆盖双向与三方补丁的生成与应用。
+//
+// 先校验若干非法输入的报错，再对结构化用例与原始用例各跑一遍；
+// 每个用例都在三种 schema 上执行，确保不同 schema 来源的行为一致。
 func TestStrategicMergePatch(t *testing.T) {
+	// 结构体本身非法时应在构建 schema 阶段就报错，而不是等到应用补丁时。
 	testStrategicMergePatchWithCustomArgumentsUsingStruct(t, "bad struct",
 		"{}", "{}", []byte("<THIS IS NOT A STRUCT>"), mergepatch.ErrBadArgKind(struct{}{}, []byte{}))
 
@@ -6203,6 +6262,7 @@ func TestStrategicMergePatch(t *testing.T) {
 	for _, schema := range schemas {
 		t.Run(schema.Name(), func(t *testing.T) {
 
+			// 非法 JSON 与 nil schema 都应返回稳定的哨兵错误，便于上层识别。
 			testStrategicMergePatchWithCustomArguments(t, "bad original",
 				"<THIS IS NOT JSON>", "{}", schema, mergepatch.ErrBadJSONDoc)
 			testStrategicMergePatchWithCustomArguments(t, "bad patch",
@@ -6221,6 +6281,7 @@ func TestStrategicMergePatch(t *testing.T) {
 		})
 
 		// run multiple times to exercise different map traversal orders
+		// 多次重复运行，以覆盖 map 遍历顺序不同的情况；补丁算法必须与遍历顺序无关。
 		for i := 0; i < 10; i++ {
 			for _, c := range strategicMergePatchRawTestCases {
 				t.Run(c.Description+"/TwoWay", func(t *testing.T) {
@@ -6234,9 +6295,12 @@ func TestStrategicMergePatch(t *testing.T) {
 	}
 }
 
+// testStrategicMergePatchWithCustomArgumentsUsingStruct 先由结构体构建 schema；
+// 若构建失败则直接比对错误，否则再用得到的 schema 执行补丁测试。
 func testStrategicMergePatchWithCustomArgumentsUsingStruct(t *testing.T, description, original, patch string, dataStruct interface{}, expected error) {
 	schema, actual := NewPatchMetaFromStruct(dataStruct)
 	// If actual is not nil, check error. If errors match, return.
+	// 若实际返回了错误，检查其是否与预期一致后返回。
 	if actual != nil {
 		checkErrorsEqual(t, description, expected, actual, schema)
 		return
@@ -6244,11 +6308,16 @@ func testStrategicMergePatchWithCustomArgumentsUsingStruct(t *testing.T, descrip
 	testStrategicMergePatchWithCustomArguments(t, description, original, patch, schema, expected)
 }
 
+// testStrategicMergePatchWithCustomArguments 以给定 schema 应用补丁，并校验返回的错误。
 func testStrategicMergePatchWithCustomArguments(t *testing.T, description, original, patch string, schema LookupPatchMeta, expected error) {
 	_, actual := StrategicMergePatch([]byte(original), []byte(patch), schema)
 	checkErrorsEqual(t, description, expected, actual, schema)
 }
 
+// checkErrorsEqual 比较预期错误与实际错误。
+//
+// 优先比较错误指针；若不同，再退化为比较错误文本。这样既能兼容哨兵错误的直接比较，
+// 也能覆盖带上下文信息、无法预先生成同指针的错误。
 func checkErrorsEqual(t *testing.T, description string, expected, actual error, schema LookupPatchMeta) {
 	if actual != expected {
 		if actual == nil {
@@ -6263,6 +6332,7 @@ func checkErrorsEqual(t *testing.T, description string, expected, actual error, 
 	}
 }
 
+// testTwoWayPatch 生成双向补丁，并分别校验补丁内容与在原始对象上的应用结果。
 func testTwoWayPatch(t *testing.T, c StrategicMergePatchTestCase, schema LookupPatchMeta) {
 	original, expectedPatch, modified, expectedResult := twoWayTestCaseToJSONOrFail(t, c, schema)
 
@@ -6277,6 +6347,8 @@ func testTwoWayPatch(t *testing.T, c StrategicMergePatchTestCase, schema LookupP
 	testPatchApplication(t, original, actualPatch, expectedResult, c.Description, "", schema)
 }
 
+// testTwoWayPatchForRawTestCase 与 testTwoWayPatch 相同，但输入是原始 YAML 字节，
+// 并额外校验用例声明的预期错误。
 func testTwoWayPatchForRawTestCase(t *testing.T, c StrategicMergePatchRawTestCase, schema LookupPatchMeta) {
 	original, expectedPatch, modified, expectedResult := twoWayRawTestCaseToJSONOrFail(t, c)
 
@@ -6291,6 +6363,9 @@ func testTwoWayPatchForRawTestCase(t *testing.T, c StrategicMergePatchRawTestCas
 	testPatchApplication(t, original, actualPatch, expectedResult, c.Description, c.ExpectedError, schema)
 }
 
+// twoWayTestCaseToJSONOrFail 把用例各字段转为已排序的 JSON 字节。
+//
+// TwoWayResult 未设置时回退为 Modified：双向补丁的目标就是让对象变成 Modified。
 func twoWayTestCaseToJSONOrFail(t *testing.T, c StrategicMergePatchTestCase, schema LookupPatchMeta) ([]byte, []byte, []byte, []byte) {
 	expectedResult := c.TwoWayResult
 	if expectedResult == nil {
@@ -6302,6 +6377,7 @@ func twoWayTestCaseToJSONOrFail(t *testing.T, c StrategicMergePatchTestCase, sch
 		sortJsonOrFail(t, testObjectToJSONOrFail(t, expectedResult), c.Description, schema)
 }
 
+// twoWayRawTestCaseToJSONOrFail 把原始 YAML 用例转为 JSON 字节；TwoWayResult 同样回退为 Modified。
 func twoWayRawTestCaseToJSONOrFail(t *testing.T, c StrategicMergePatchRawTestCase) ([]byte, []byte, []byte, []byte) {
 	expectedResult := c.TwoWayResult
 	if expectedResult == nil {
@@ -6313,16 +6389,22 @@ func twoWayRawTestCaseToJSONOrFail(t *testing.T, c StrategicMergePatchRawTestCas
 		yamlToJSONOrError(t, expectedResult)
 }
 
+// testThreeWayPatch 生成三方补丁并校验结果。
+//
+// 冲突是三方合并的正常分支：若用例描述中包含 "conflict"，则期望生成冲突错误；
+// 冲突后若用例仍给出了 Result，则改用 force 模式重新生成，验证强制覆盖能成功。
 func testThreeWayPatch(t *testing.T, c StrategicMergePatchTestCase, schema LookupPatchMeta) {
 	original, modified, current, expected, result := threeWayTestCaseToJSONOrFail(t, c, schema)
 	actual, err := CreateThreeWayMergePatch(original, modified, current, schema, false)
 	if err != nil {
+		// 非冲突类错误一律视为用例失败，避免把实现缺陷误当成预期冲突。
 		if !mergepatch.IsConflict(err) {
 			t.Errorf("using %s error: %s\nin test case: %s\ncannot create three way patch:\n%s\n",
 				getSchemaType(schema), err, c.Description, mergepatch.ToYAMLOrError(c.StrategicMergePatchTestCaseData))
 			return
 		}
 
+		// 用例描述未声明冲突，却出现冲突，说明合并逻辑判断有误。
 		if !strings.Contains(c.Description, "conflict") {
 			t.Errorf("using %s unexpected conflict: %s\nin test case: %s\ncannot create three way patch:\n%s\n",
 				getSchemaType(schema), err, c.Description, mergepatch.ToYAMLOrError(c.StrategicMergePatchTestCaseData))
@@ -6330,6 +6412,7 @@ func testThreeWayPatch(t *testing.T, c StrategicMergePatchTestCase, schema Looku
 		}
 
 		if len(c.Result) > 0 {
+			// force=true 时冲突应被调用方的意图覆盖，从而得到可用补丁。
 			actual, err := CreateThreeWayMergePatch(original, modified, current, schema, true)
 			if err != nil {
 				t.Errorf("using %s error: %s\nin test case: %s\ncannot force three way patch application:\n%s\n",
@@ -6344,6 +6427,7 @@ func testThreeWayPatch(t *testing.T, c StrategicMergePatchTestCase, schema Looku
 		return
 	}
 
+	// 未报冲突，但用例期望冲突或没有给出结果，说明冲突检测漏报。
 	if strings.Contains(c.Description, "conflict") || len(c.Result) < 1 {
 		t.Errorf("using %s error in test case: %s\nexpected conflict did not occur:\n%s\n",
 			getSchemaType(schema), c.Description, mergepatch.ToYAMLOrError(c.StrategicMergePatchTestCaseData))
@@ -6354,6 +6438,7 @@ func testThreeWayPatch(t *testing.T, c StrategicMergePatchTestCase, schema Looku
 	testPatchApplication(t, current, actual, result, c.Description, "", schema)
 }
 
+// testThreeWayPatchForRawTestCase 与 testThreeWayPatch 相同，输入为原始 YAML 字节。
 func testThreeWayPatchForRawTestCase(t *testing.T, c StrategicMergePatchRawTestCase, schema LookupPatchMeta) {
 	original, modified, current, expected, result := threeWayRawTestCaseToJSONOrFail(t, c)
 	actual, err := CreateThreeWayMergePatch(original, modified, current, schema, false)
@@ -6395,6 +6480,7 @@ func testThreeWayPatchForRawTestCase(t *testing.T, c StrategicMergePatchRawTestC
 	testPatchApplication(t, current, actual, result, c.Description, c.ExpectedError, schema)
 }
 
+// threeWayTestCaseToJSONOrFail 把三方用例的各字段转为已排序的 JSON 字节。
 func threeWayTestCaseToJSONOrFail(t *testing.T, c StrategicMergePatchTestCase, schema LookupPatchMeta) ([]byte, []byte, []byte, []byte, []byte) {
 	return sortJsonOrFail(t, testObjectToJSONOrFail(t, c.Original), c.Description, schema),
 		sortJsonOrFail(t, testObjectToJSONOrFail(t, c.Modified), c.Description, schema),
@@ -6403,6 +6489,7 @@ func threeWayTestCaseToJSONOrFail(t *testing.T, c StrategicMergePatchTestCase, s
 		sortJsonOrFail(t, testObjectToJSONOrFail(t, c.Result), c.Description, schema)
 }
 
+// threeWayRawTestCaseToJSONOrFail 把原始 YAML 三方用例的各字段转为 JSON 字节。
 func threeWayRawTestCaseToJSONOrFail(t *testing.T, c StrategicMergePatchRawTestCase) ([]byte, []byte, []byte, []byte, []byte) {
 	return yamlToJSONOrError(t, c.Original),
 		yamlToJSONOrError(t, c.Modified),
@@ -6411,6 +6498,7 @@ func threeWayRawTestCaseToJSONOrFail(t *testing.T, c StrategicMergePatchRawTestC
 		yamlToJSONOrError(t, c.Result)
 }
 
+// testPatchCreation 断言生成的补丁与期望补丁一致；不一致时以 YAML 形式输出便于人工比对。
 func testPatchCreation(t *testing.T, expected, actual []byte, description string) {
 	if !reflect.DeepEqual(actual, expected) {
 		t.Errorf("error in test case: %s\nexpected patch:\n%s\ngot:\n%s\n",
@@ -6419,6 +6507,10 @@ func testPatchCreation(t *testing.T, expected, actual []byte, description string
 	}
 }
 
+// testPatchApplication 在 original 上应用 patch，并按需校验错误或结果。
+//
+// expectedError 非空时只关心错误文本是否包含该片段，这允许错误消息附带额外上下文；
+// expectedError 为空时则要求应用成功且结果与 expected 完全一致。
 func testPatchApplication(t *testing.T, original, patch, expected []byte, description, expectedError string, schema LookupPatchMeta) {
 	result, err := StrategicMergePatchUsingLookupPatchMeta(original, patch, schema)
 	if len(expectedError) != 0 {
@@ -6442,6 +6534,7 @@ func testPatchApplication(t *testing.T, original, patch, expected []byte, descri
 	}
 }
 
+// testObjectToJSONOrFail 把对象转为 JSON；nil 对象返回 nil，以区分"空对象"与"缺失"。
 func testObjectToJSONOrFail(t *testing.T, o map[string]interface{}) []byte {
 	if o == nil {
 		return nil
@@ -6454,6 +6547,9 @@ func testObjectToJSONOrFail(t *testing.T, o map[string]interface{}) []byte {
 	return j
 }
 
+// sortJsonOrFail 按 schema 中的合并键对 JSON 中的列表排序。
+//
+// 排序使比较与 map 遍历顺序无关，因此测试可以安全地多次运行以覆盖不同遍历顺序。
 func sortJsonOrFail(t *testing.T, j []byte, description string, schema LookupPatchMeta) []byte {
 	if j == nil {
 		return nil
@@ -6467,10 +6563,12 @@ func sortJsonOrFail(t *testing.T, j []byte, description string, schema LookupPat
 	return r
 }
 
+// getSchemaType 返回 schema 的具体类型名，用于错误消息中区分是哪种实现失败。
 func getSchemaType(schema LookupPatchMeta) string {
 	return reflect.TypeOf(schema).String()
 }
 
+// jsonToYAMLOrError 把 JSON 转为 YAML 用于展示；失败时返回错误文本，避免二次出错。
 func jsonToYAMLOrError(j []byte) string {
 	y, err := jsonToYAML(j)
 	if err != nil {
@@ -6480,6 +6578,7 @@ func jsonToYAMLOrError(j []byte) string {
 	return string(y)
 }
 
+// toJSON 序列化为 JSON，失败时附带格式化转储，便于定位不可序列化的值。
 func toJSON(v interface{}) ([]byte, error) {
 	j, err := json.Marshal(v)
 	if err != nil {
@@ -6489,6 +6588,7 @@ func toJSON(v interface{}) ([]byte, error) {
 	return j, nil
 }
 
+// jsonToYAML 把 JSON 字节转换为 YAML 字节。
 func jsonToYAML(j []byte) ([]byte, error) {
 	y, err := yaml.JSONToYAML(j)
 	if err != nil {
@@ -6498,6 +6598,7 @@ func jsonToYAML(j []byte) ([]byte, error) {
 	return y, nil
 }
 
+// yamlToJSON 把 YAML 字节转换为 JSON 字节。
 func yamlToJSON(y []byte) ([]byte, error) {
 	j, err := yaml.YAMLToJSON(y)
 	if err != nil {
@@ -6507,6 +6608,7 @@ func yamlToJSON(y []byte) ([]byte, error) {
 	return j, nil
 }
 
+// yamlToJSONOrError 是 yamlToJSON 的测试便捷版本：失败时记录错误并返回 nil。
 func yamlToJSONOrError(t *testing.T, y []byte) []byte {
 	j, err := yamlToJSON(y)
 	if err != nil {
@@ -6516,6 +6618,7 @@ func yamlToJSONOrError(t *testing.T, y []byte) []byte {
 	return j
 }
 
+// PrecisionItem 用于测试各类数值在 JSON 往返与补丁生成中的精度保持情况。
 type PrecisionItem struct {
 	Name    string  `json:"name,omitempty"`
 	Int32   int32   `json:"int32,omitempty"`
@@ -6529,6 +6632,11 @@ var (
 	precisionItemStructSchema = PatchMetaFromStruct{T: GetTagStructTypeOrDie(precisionItem)}
 )
 
+// TestNumberConversion 验证数值在补丁生成与应用过程中不发生精度损失。
+//
+// 覆盖 int32/int64 的最大值以及 float32/float64 的最大值：这些值在 JSON 中
+// 以浮点或科学计数法表示，若实现中把数字统一当作 float64 处理，就会丢失低位精度，
+// 进而把"未变化"误判为"有变化"而生成多余补丁。
 func TestNumberConversion(t *testing.T) {
 	testcases := map[string]struct {
 		Old            string
@@ -6600,11 +6708,13 @@ func TestNumberConversion(t *testing.T) {
 				t.Errorf("using %s in testcase %s: unexpected error %v", getSchemaType(schema), k, err)
 				continue
 			}
+			// 只有 name 变化时，补丁中不应出现任何数值字段，否则说明精度比较失效。
 			if tc.ExpectedPatch != string(patch) {
 				t.Errorf("using %s in testcase %s: expected %s, got %s", getSchemaType(schema), k, tc.ExpectedPatch, string(patch))
 				continue
 			}
 
+			// 应用补丁后原数值必须原样保留。
 			result, err := StrategicMergePatchUsingLookupPatchMeta([]byte(tc.Old), patch, schema)
 			if err != nil {
 				t.Errorf("using %s in testcase %s: unexpected error %v", getSchemaType(schema), k, err)
@@ -6618,6 +6728,8 @@ func TestNumberConversion(t *testing.T) {
 	}
 }
 
+// replaceRawExtensionPatchTestCases 验证 patchStrategy:"replace" 字段的整体替换语义：
+// 补丁中出现的 replace 字段会整体覆盖原值，其内部的 map 不做逐键合并。
 var replaceRawExtensionPatchTestCases = []StrategicMergePatchRawTestCase{
 	{
 		Description: "replace RawExtension field, rest unchanched",
@@ -6794,6 +6906,7 @@ replacingItem:
 	},
 }
 
+// TestReplaceWithRawExtension 在三种 schema 上同时验证 replace 字段的双向与三方补丁。
 func TestReplaceWithRawExtension(t *testing.T) {
 	mergeItemOpenapiSchema := PatchMetaFromOpenAPI{
 		Schema: sptest.GetSchemaOrDie(&fakeMergeItemSchema, "mergeItem"),
@@ -6816,6 +6929,14 @@ func TestReplaceWithRawExtension(t *testing.T) {
 	}
 }
 
+// TestUnknownField 覆盖 schema 中未声明字段（未知字段）的处理规则。
+//
+// 分为两类：
+//   - 可以成功合并的用例：未知字段作为不透明 JSON 处理，其中的 null 会被过滤，
+//     但已存在于原对象中的 null 会被保留；
+//   - 无法成功合并的用例：未知字段的值发生变化时无法定位到 schema 字段，应返回错误。
+//
+// 这些规则关系到旧客户端写入新字段时的兼容性，因此单独成组测试。
 func TestUnknownField(t *testing.T) {
 	testcases := map[string]struct {
 		Original string

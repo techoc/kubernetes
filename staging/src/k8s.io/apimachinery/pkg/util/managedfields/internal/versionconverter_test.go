@@ -32,6 +32,8 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/typed"
 )
 
+// testTypeConverter 从 testdata/swagger.json 构建类型转换器，供本包多个测试共用。
+// 初始化失败直接 panic：测试环境缺少数据属于配置错误，应尽早暴露。
 var testTypeConverter = func() TypeConverter {
 	data, err := os.ReadFile(filepath.Join("testdata", "swagger.json"))
 	if err != nil {
@@ -55,6 +57,8 @@ var testTypeConverter = func() TypeConverter {
 }()
 
 // TestVersionConverter tests the version converter
+//
+// 验证 v1beta1 的 TypedValue 经转换后与 v1 对象语义一致。
 func TestVersionConverter(t *testing.T) {
 	oc := fakeObjectConvertorForTestSchema{
 		gvkForVersion("v1beta1"): objForGroupVersion("apps/v1beta1"),
@@ -81,6 +85,8 @@ func TestVersionConverter(t *testing.T) {
 	}
 }
 
+// TestVersionConverterSameVersion 验证同版本转换走快速路径：
+// 直接返回输入，不调用 TypedToObject 或 ConvertToVersion。
 func TestVersionConverterSameVersion(t *testing.T) {
 	tc := &countingTypeConverter{TypeConverter: testTypeConverter}
 	oc := &countingObjectConvertor{ObjectConvertor: fakeObjectConvertorForTestSchema{}}
@@ -105,26 +111,31 @@ func TestVersionConverterSameVersion(t *testing.T) {
 	}
 }
 
+// countingTypeConverter 记录 TypedToObject 调用次数，用于断言快速路径未被触发。
 type countingTypeConverter struct {
 	TypeConverter
 	typedToObjectCalls int
 }
 
+// TypedToObject 计数后委托给内嵌的 TypeConverter。
 func (c *countingTypeConverter) TypedToObject(value *typed.TypedValue) (runtime.Object, error) {
 	c.typedToObjectCalls++
 	return c.TypeConverter.TypedToObject(value)
 }
 
+// countingObjectConvertor 记录 ConvertToVersion 调用次数。
 type countingObjectConvertor struct {
 	runtime.ObjectConvertor
 	convertToVersionCalls int
 }
 
+// ConvertToVersion 计数后委托给内嵌的 ObjectConvertor。
 func (c *countingObjectConvertor) ConvertToVersion(in runtime.Object, gv runtime.GroupVersioner) (runtime.Object, error) {
 	c.convertToVersionCalls++
 	return c.ObjectConvertor.ConvertToVersion(in, gv)
 }
 
+// gvkForVersion 构造 apps 组 Deployment 的 GVK。
 func gvkForVersion(v string) schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   "apps",
@@ -133,6 +144,7 @@ func gvkForVersion(v string) schema.GroupVersionKind {
 	}
 }
 
+// objForGroupVersion 构造指定 apiVersion 的空 Deployment。
 func objForGroupVersion(gv string) runtime.Object {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -142,10 +154,12 @@ func objForGroupVersion(gv string) runtime.Object {
 	}
 }
 
+// fakeObjectConvertorForTestSchema 用 GVK->对象 的映射模拟版本转换。
 type fakeObjectConvertorForTestSchema map[schema.GroupVersionKind]runtime.Object
 
 var _ runtime.ObjectConvertor = fakeObjectConvertorForTestSchema{}
 
+// ConvertToVersion 通过 GroupVersioner 在已知 GVK 中选择目标，再返回对应对象。
 func (c fakeObjectConvertorForTestSchema) ConvertToVersion(_ runtime.Object, gv runtime.GroupVersioner) (runtime.Object, error) {
 	allKinds := make([]schema.GroupVersionKind, 0)
 	for kind := range c {
@@ -155,10 +169,12 @@ func (c fakeObjectConvertorForTestSchema) ConvertToVersion(_ runtime.Object, gv 
 	return c[gvk], nil
 }
 
+// Convert 未实现，仅用于满足接口。
 func (fakeObjectConvertorForTestSchema) Convert(_, _, _ interface{}) error {
 	return fmt.Errorf("function not implemented")
 }
 
+// ConvertFieldLabel 未实现，仅用于满足接口。
 func (fakeObjectConvertorForTestSchema) ConvertFieldLabel(_ schema.GroupVersionKind, _, _ string) (string, string, error) {
 	return "", "", fmt.Errorf("function not implemented")
 }

@@ -27,18 +27,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// buildUnstructuredDecodable 构造指定 GVK 的 Unstructured 对象。
 func buildUnstructuredDecodable(gvk schema.GroupVersionKind) runtime.Object {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(gvk)
 	return obj
 }
 
+// buildUnstructuredListDecodable 构造指定 GVK 的 UnstructuredList 对象。
 func buildUnstructuredListDecodable(gvk schema.GroupVersionKind) runtime.Object {
 	obj := &unstructured.UnstructuredList{}
 	obj.SetGroupVersionKind(gvk)
 	return obj
 }
 
+// TestEncodeUnstructured 验证 Codec 编码 Unstructured 时如何确定目标版本：
+// GVK 与编码版本一致时跳过 typer 与转换；不一致时需经 convertor 转换；
+// 无编码版本时回退到 typer 建议的版本；类型无法识别或版本不匹配时报错。
 func TestEncodeUnstructured(t *testing.T) {
 	v1GVK := schema.GroupVersionKind{
 		Group:   "crispy",
@@ -135,6 +140,7 @@ func TestEncodeUnstructured(t *testing.T) {
 		codec := NewCodec(serializer, serializer, testCase.convertor, nil, testCase.typer, nil, testCase.targetVersion, nil, "noxu-scheme")
 		err := codec.Encode(testCase.outObj, ioutil.Discard)
 		if testCase.errFunc != nil {
+			// 期望报错的用例：由 errFunc 校验具体错误。
 			if !testCase.errFunc(err) {
 				t.Errorf("%v: failed: %v", testCase.name, err)
 			}
@@ -145,6 +151,7 @@ func TestEncodeUnstructured(t *testing.T) {
 	}
 }
 
+// errNotRecognizedGVK 表示 convertor 不认识目标 GVK，并列出它声称支持的 GVK。
 type errNotRecognizedGVK struct {
 	failedGVK    schema.GroupVersionKind
 	claimingGVKs []schema.GroupVersionKind
@@ -154,10 +161,13 @@ func (e errNotRecognizedGVK) Error() string {
 	return fmt.Sprintf("unrecognized gvk %v, should be one of %v", e.failedGVK, e.claimingGVKs)
 }
 
+// mockUnstructuredNopConvertor 是只做 GVK 校验与深拷贝的 Unstructured 转换器，
+// 用于验证 Codec 的版本转换流程而不引入真实转换逻辑。
 type mockUnstructuredNopConvertor struct {
 	claimingGVKs []schema.GroupVersionKind
 }
 
+// recognizeGVK 检查目标 GVK 是否在声明支持的列表中。
 func (c *mockUnstructuredNopConvertor) recognizeGVK(gvkToCheck schema.GroupVersionKind) error {
 	matched := false
 	for _, gvk := range c.claimingGVKs {
@@ -174,6 +184,8 @@ func (c *mockUnstructuredNopConvertor) recognizeGVK(gvkToCheck schema.GroupVersi
 	return nil
 }
 
+// Convert 把 in 深拷贝到 out，并保留 out 预先设置的 GVK；
+// 用于模拟 “目标对象已带期望 GVK” 的转换行为。
 func (c *mockUnstructuredNopConvertor) Convert(in, out, context interface{}) error {
 	inObj := in.(*unstructured.Unstructured)
 	outObj := out.(*unstructured.Unstructured)
@@ -186,6 +198,7 @@ func (c *mockUnstructuredNopConvertor) Convert(in, out, context interface{}) err
 	return nil
 }
 
+// ConvertToVersion 深拷贝对象并把 GVK 改为目标版本；目标版本无法确定时报错。
 func (c *mockUnstructuredNopConvertor) ConvertToVersion(in runtime.Object, outVersion runtime.GroupVersioner) (runtime.Object, error) {
 	out := in.DeepCopyObject()
 	targetGVK, matched := outVersion.KindForGroupVersionKinds([]schema.GroupVersionKind{in.GetObjectKind().GroupVersionKind()})
@@ -199,10 +212,14 @@ func (c *mockUnstructuredNopConvertor) ConvertToVersion(in runtime.Object, outVe
 	return out, nil
 }
 
+// ConvertFieldLabel 在此 mock 中不应被调用，调用即返回错误。
 func (c *mockUnstructuredNopConvertor) ConvertFieldLabel(gvk schema.GroupVersionKind, label, value string) (string, string, error) {
 	return "", "", fmt.Errorf("unexpected call to ConvertFieldLabel")
 }
 
+// TestDecodeUnstructured 验证 Codec 解码 Unstructured 的目标版本选择：
+// 按建议版本转换、into 对象为 nil 或已有对象时的行为、
+// serializer 返回同一对象时跳过转换，以及转换失败时传播错误。
 func TestDecodeUnstructured(t *testing.T) {
 	internalGVK := schema.GroupVersionKind{
 		Group:   "crispy",
@@ -326,6 +343,7 @@ func TestDecodeUnstructured(t *testing.T) {
 		codec := NewCodec(testCase.serializer, testCase.serializer, testCase.convertor, nil, nil, nil, nil, testCase.suggestedConvertVersion, "noxu-scheme")
 		actualObj, actualSerializedGVK, err := codec.Decode([]byte(`{}`), testCase.defaultGVK, testCase.intoObj)
 		if testCase.errFunc != nil {
+			// 期望报错的用例：由 errFunc 校验具体错误。
 			if !testCase.errFunc(err) {
 				t.Errorf("%v: failed: %v", testCase.name, err)
 			}

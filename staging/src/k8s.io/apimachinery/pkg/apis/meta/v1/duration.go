@@ -30,6 +30,7 @@ type Duration struct {
 
 // UnmarshalJSON implements the json.Unmarshaller interface.
 func (d *Duration) UnmarshalJSON(b []byte) error {
+	// A JSON number would lose unit information, so only strings are accepted.
 	var str string
 	err := json.Unmarshal(b, &str)
 	if err != nil {
@@ -45,6 +46,8 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 }
 
 // MarshalJSON implements the json.Marshaler interface.
+// Durations serialize as strings (e.g. "1m30s") so they are valid JSON map
+// keys and remain human-readable.
 func (d Duration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d.Duration.String())
 }

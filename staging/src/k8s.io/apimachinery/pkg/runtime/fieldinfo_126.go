@@ -20,6 +20,8 @@ package runtime
 
 import "reflect"
 
+// isInlinedFromTag 在 Go 1.27 之前的版本中恒返回 false，用于屏蔽新版本才支持的
+// ",inline" tag 语义，保证同一套 fieldinfo 逻辑在各 Go 版本下行为一致。
 func isInlinedFromTag(fieldType reflect.StructField, tagName string, tagDirectives []string) bool {
 	// go <1.27 doesn't honor ",inline"
 	return false

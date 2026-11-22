@@ -16,4 +16,6 @@ limitations under the License.
 
 // Package sets has generic set and specified sets. Generic set will
 // replace specified ones over time. And specific ones are deprecated.
+//
+// 中文补充：新代码应使用泛型 Set[T]/New[T]，带具体类型的 Set 变体仅为兼容保留。
 package sets

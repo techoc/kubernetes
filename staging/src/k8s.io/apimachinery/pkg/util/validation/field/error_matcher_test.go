@@ -23,7 +23,11 @@ import (
 	"testing"
 )
 
+// TestErrorMatcher_Matches 覆盖 ErrorMatcher 各匹配维度的组合：
+// ByType/ByField/ByValue/ByOrigin/ByDetailExact/ByDetailSubstring/
+// ByDetailRegexp/Exactly，以及字段归一化、来源与短路匹配。
 func TestErrorMatcher_Matches(t *testing.T) {
+	// baseErr 是各用例的期望错误模板，用例只覆盖需要比较的字段。
 	baseErr := func() *Error {
 		return &Error{
 			Type:     ErrorTypeInvalid,
@@ -65,6 +69,8 @@ func TestErrorMatcher_Matches(t *testing.T) {
 		actualErr: &Error{Field: "other"},
 		matches:   false,
 	}, {
+		// ByFieldNormalized：先把旧路径 f[0].a 归一化为新路径 f[0].x.a 再比较，
+		// 让同一份期望错误可覆盖字段路径演进前后的 API。
 		name: "ByFieldNormalized: older API to latest",
 		matcher: ErrorMatcher{}.ByFieldNormalized([]NormalizationRule{
 			{Regexp: regexp.MustCompile(`f\[(\d+)\]\.a`), Replacement: "f[$1].x.a"},
@@ -356,6 +362,8 @@ func TestErrorMatcher_Matches(t *testing.T) {
 		actualErr: &Error{ShortCircuit: false},
 		matches:   false,
 	}, {
+		// MatchAncestorShortCircuit：父字段错误触发短路后，子字段错误可能不再出现；
+		// 该匹配器允许用“父路径 + 任意类型”的短路错误来匹配期望中的子字段错误。
 		name:    "MatchAncestorShortCircuit: child field match",
 		matcher: ErrorMatcher{}.ByType().ByField().MatchAncestorShortCircuit(),
 		wantedErr: func() *Error {
@@ -444,7 +452,7 @@ func TestErrorMatcher_Matches(t *testing.T) {
 	}
 }
 
-// fakeTestIntf is used to test the testing support.
+// fakeTestIntf 实现 TestIntf，用于在不依赖 *testing.T 的情况下捕获断言输出。
 type fakeTestIntf struct {
 	errs []string
 }
@@ -457,6 +465,8 @@ func (ft *fakeTestIntf) Errorf(format string, args ...any) {
 	ft.errs = append(ft.errs, fmt.Sprintf(format, args...))
 }
 
+// TestErrorMatcher_Test 覆盖 ErrorMatcher.Test 的匹配/不匹配报告：
+// 缺少错误、多余错误、重复错误以及归一化路径的匹配。
 func TestErrorMatcher_Test(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -616,6 +626,8 @@ func TestErrorMatcher_Test(t *testing.T) {
 	}
 }
 
+// TestErrorMatcher_Render 覆盖 ErrorMatcher.Render 生成的调试字符串：
+// 只输出已启用的维度，并对归一化路径同时展示原始与规范化形式。
 func TestErrorMatcher_Render(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -727,6 +739,9 @@ func TestErrorMatcher_Render(t *testing.T) {
 	}
 }
 
+// TestIsChildPath 覆盖 isChildPath 的边界判定：必须是真正的后代路径，
+// 仅有公共前缀（spec.container vs spec.containers）、相等路径或父路径为空
+// 都不算子路径。
 func TestIsChildPath(t *testing.T) {
 	testCases := []struct {
 		name     string

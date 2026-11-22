@@ -26,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestMonotonic 覆盖 Monotonic 校验：创建时忽略、更新时不允许减小、
+// 有符号/无符号整数均适用。
 func TestMonotonic(t *testing.T) {
 	testMonotonicPositive[int](t)
 	testMonotonicNegative[int](t)
@@ -33,6 +35,7 @@ func TestMonotonic(t *testing.T) {
 	testMonotonicPositive[uint64](t)
 }
 
+// monotonicTestCase 是单个 Monotonic 测试用例。
 type monotonicTestCase[T constraints.Integer] struct {
 	name     string
 	op       operation.Operation
@@ -41,6 +44,8 @@ type monotonicTestCase[T constraints.Integer] struct {
 	wantErrs field.ErrorList
 }
 
+// testMonotonicPositive 覆盖非负场景：创建忽略、持平、增大均通过，减小报错，
+// 任一侧为 nil 时跳过校验。
 func testMonotonicPositive[T constraints.Integer](t *testing.T) {
 	t.Helper()
 	v0 := T(0)
@@ -63,6 +68,7 @@ func testMonotonicPositive[T constraints.Integer](t *testing.T) {
 		value:    &v2,
 		oldValue: &v1,
 	}, {
+		// 唯一期望报错的用例：值从 2 减小到 1。
 		name:     "update decrease",
 		op:       operation.Operation{Type: operation.Update},
 		value:    &v1,
@@ -85,6 +91,8 @@ func testMonotonicPositive[T constraints.Integer](t *testing.T) {
 	doTestMonotonic[T](t, cases)
 }
 
+// testMonotonicNegative 覆盖负数场景，确认比较是数值比较而非字符串比较
+// （-1 > -2 应视为增大）。
 func testMonotonicNegative[T constraints.Signed](t *testing.T) {
 	t.Helper()
 	vM1 := T(-1)
@@ -108,6 +116,7 @@ func testMonotonicNegative[T constraints.Signed](t *testing.T) {
 	doTestMonotonic[T](t, cases)
 }
 
+// doTestMonotonic 逐个运行用例，按类型名 + 用例名生成子测试名。
 func doTestMonotonic[T constraints.Integer](t *testing.T, cases []monotonicTestCase[T]) {
 	t.Helper()
 	matcher := field.ErrorMatcher{}.ByOrigin().ByDetailSubstring().ByField().ByType()

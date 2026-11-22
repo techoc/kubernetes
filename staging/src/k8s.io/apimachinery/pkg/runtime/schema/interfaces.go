@@ -16,25 +16,25 @@ limitations under the License.
 
 package schema
 
-// All objects that are serialized from a Scheme encode their type information. This interface is used
-// by serialization to set type information from the Scheme onto the serialized version of an object.
-// For objects that cannot be serialized or have unique requirements, this interface may be a no-op.
+// 所有被序列化的对象都会在 Scheme 中编码类型信息。序列化过程通过该接口
+// 把 Scheme 中的类型信息写入对象的序列化形式。对于无法序列化或有特殊
+// 需求的对象，该接口可以是空实现。
 type ObjectKind interface {
-	// SetGroupVersionKind sets or clears the intended serialized kind of an object. Passing kind nil
-	// should clear the current setting.
+	// SetGroupVersionKind 设置或清除对象期望序列化的 kind。
+	// 传入 nil 的效果等价于清除当前设置。
 	SetGroupVersionKind(kind GroupVersionKind)
-	// GroupVersionKind returns the stored group, version, and kind of an object, or an empty struct
-	// if the object does not expose or provide these fields.
+	// GroupVersionKind 返回对象存储的 group、version、kind；
+	// 若对象不暴露这些字段，则返回空结构体。
 	GroupVersionKind() GroupVersionKind
 }
 
-// EmptyObjectKind implements the ObjectKind interface as a noop
+// EmptyObjectKind 实现 ObjectKind 接口，所有方法均为空操作。
 var EmptyObjectKind = emptyObjectKind{}
 
 type emptyObjectKind struct{}
 
-// SetGroupVersionKind implements the ObjectKind interface
+// SetGroupVersionKind 实现 ObjectKind 接口（空操作）。
 func (emptyObjectKind) SetGroupVersionKind(gvk GroupVersionKind) {}
 
-// GroupVersionKind implements the ObjectKind interface
+// GroupVersionKind 实现 ObjectKind 接口（始终返回空值）。
 func (emptyObjectKind) GroupVersionKind() GroupVersionKind { return GroupVersionKind{} }

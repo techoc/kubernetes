@@ -24,6 +24,8 @@ import (
 	utiljson "k8s.io/apimachinery/pkg/util/json"
 )
 
+// TestVerbsMarshalJSON 验证 Verbs 的序列化行为：
+// nil 与空切片必须区分（null 与 []），否则依赖字段是否存在判断的客户端会出错。
 func TestVerbsMarshalJSON(t *testing.T) {
 	cases := []struct {
 		input  APIResource
@@ -45,6 +47,8 @@ func TestVerbsMarshalJSON(t *testing.T) {
 	}
 }
 
+// TestVerbsJsonIterUnmarshalJSON 使用基于 jsoniter 的 util/json 反序列化，
+// 确认 "verbs":null 与缺失字段得到相同的零值，而 "verbs":[] 得到非 nil 的空切片。
 func TestVerbsJsonIterUnmarshalJSON(t *testing.T) {
 	cases := []struct {
 		input  string
@@ -67,7 +71,9 @@ func TestVerbsJsonIterUnmarshalJSON(t *testing.T) {
 	}
 }
 
-// TestMarshalJSONWithOmit tests that we don't have regressions regarding nil and empty slices with "omit"
+// TestMarshalJSONWithOmit 确认带 omitempty 的切片字段在 nil 与空切片时都被省略，
+// 防止历史回归：空切片曾被错误地序列化为 "matchExpressions":[]。
+// 注意：包含一个零值元素的切片不是空切片，仍会被序列化。
 func TestMarshalJSONWithOmit(t *testing.T) {
 	cases := []struct {
 		input  LabelSelector
@@ -89,6 +95,8 @@ func TestMarshalJSONWithOmit(t *testing.T) {
 	}
 }
 
+// TestVerbsUnmarshalJSON 使用标准库 encoding/json 验证 Verbs 的反序列化，
+// 与 jsoniter 版本保持一致的语义。
 func TestVerbsUnmarshalJSON(t *testing.T) {
 	cases := []struct {
 		input  string
@@ -111,6 +119,8 @@ func TestVerbsUnmarshalJSON(t *testing.T) {
 	}
 }
 
+// TestVerbsProto 验证 APIResource 的 protobuf 往返（Marshal -> Unmarshal）保持幂等，
+// 覆盖 nil、空切片与有值切片三种情况。
 func TestVerbsProto(t *testing.T) {
 	cases := []APIResource{
 		{},

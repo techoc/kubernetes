@@ -16,6 +16,9 @@ limitations under the License.
 
 // Package install installs the certificates API group, making it available as
 // an option to all of the API encoding/decoding machinery.
+//
+// 注：包注释中的 "certificates" 是历史遗留措辞；实际安装的是 testapigroup
+// （测试用的 Carp 类型）。该包仅服务于 apimachinery 的测试与示例。
 package install
 
 import (
@@ -26,6 +29,9 @@ import (
 )
 
 // Install registers the API group and adds types to a scheme
+//
+// 先注册内部版本，再注册 v1 外部版本，最后把 v1 设为默认版本；
+// 顺序很重要，否则 scheme 无法在内部/外部版本之间转换。
 func Install(scheme *runtime.Scheme) {
 	utilruntime.Must(testapigroup.AddToScheme(scheme))
 	utilruntime.Must(v1.AddToScheme(scheme))

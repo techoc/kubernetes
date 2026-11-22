@@ -24,7 +24,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestResourceMapper 验证 EquivalentResourceRegistry：注册 GVR/subresource 到 GVK 的映射后，
+// KindFor 能查回原 GVK；EquivalentResourcesFor 则按 IdentityFunc 决定哪些资源被视为等价。
 func TestResourceMapper(t *testing.T) {
+	// 简写构造器，避免表里重复写结构体字面量。
 	gvr := func(g, v, r string) schema.GroupVersionResource {
 		return schema.GroupVersionResource{Group: g, Version: v, Resource: r}
 	}
@@ -33,6 +36,8 @@ func TestResourceMapper(t *testing.T) {
 		return schema.GroupVersionKind{Group: g, Version: v, Kind: k}
 	}
 
+	// 注册表刻意包含同一资源跨多个版本、以及带 scale/status 子资源的情形；
+	// apps/v1alpha1 没有 scale 子资源，用来验证等价集合的差异。
 	kindsToRegister := []struct {
 		gvr         schema.GroupVersionResource
 		subresource string
@@ -57,6 +62,8 @@ func TestResourceMapper(t *testing.T) {
 		{gvr("extensions", "v1beta1", "deployments"), "status", gvk("extensions", "v1beta1", "Deployment")},
 	}
 
+	// 四个用例分别验证：无 IdentityFunc、IdentityFunc 返回空串、返回同一常量、
+	// 以及仅把 deployments 视为同族时，等价资源集合的差异。
 	testcases := []struct {
 		Name                           string
 		IdentityFunc                   func(schema.GroupResource) string
@@ -114,6 +121,7 @@ func TestResourceMapper(t *testing.T) {
 				mapper.RegisterKindFor(data.gvr, data.subresource, data.gvk)
 			}
 			// verify
+			// 每个注册项都应能原样查回。
 			for _, data := range kindsToRegister {
 				if kind := mapper.KindFor(data.gvr, data.subresource); kind != data.gvk {
 					t.Errorf("KindFor(%#v, %v) returned %#v, expected %#v", data.gvr, data.subresource, kind, data.gvk)

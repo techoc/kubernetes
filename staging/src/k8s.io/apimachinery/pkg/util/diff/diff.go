@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package diff 提供用于测试与调试的对象差异字符串生成工具。
 package diff
 
 import (
@@ -29,11 +30,16 @@ import (
 // When built without the usegocmp tag, it uses go-difflib/difflib to generate a
 // unified diff of the objects. It attempts to use JSON serialization first,
 // falling back to an object dump via the dump package if JSON marshaling fails.
+//
+// Diff 返回两个对象差异的字符串表示。优先使用 JSON 序列化，
+// JSON 序列化失败时回退到 dump 包的对象转储；
+// 未使用 usegocmp 构建标签时通过 go-difflib/difflib 生成统一 diff。
 func Diff(a, b any) string {
 
 	aStr, aErr := toPrettyJSON(a)
 	bStr, bErr := toPrettyJSON(b)
 	if aErr != nil || bErr != nil {
+		// 任一对象无法 JSON 序列化（如含不可导出字段、函数等）时改用 dump。
 		aStr = dump.Pretty(a)
 		bStr = dump.Pretty(b)
 	}
@@ -52,7 +58,7 @@ func Diff(a, b any) string {
 	return diffstr
 }
 
-// toPrettyJSON converts an object to a pretty-printed JSON string.
+// toPrettyJSON 把对象转换为带缩进的 JSON 字符串。
 func toPrettyJSON(data any) (string, error) {
 	jsonData, err := json.MarshalIndent(data, "", " ")
 	return string(jsonData), err

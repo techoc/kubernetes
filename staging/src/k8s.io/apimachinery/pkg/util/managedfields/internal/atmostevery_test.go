@@ -23,6 +23,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/managedfields/internal"
 )
 
+// TestAtMostEvery 用 1 秒窗口、2ms tick 的高频调用验证限流上界：
+// 调用次数不得超过 duration/delay+1（允许边界处的额外一次）。
+// 这是概率性测试，只检查上界，不检查下界，避免在慢机器上抖动。
 func TestAtMostEvery(t *testing.T) {
 	duration := time.Second
 	delay := 179 * time.Millisecond
@@ -37,14 +40,17 @@ func TestAtMostEvery(t *testing.T) {
 	for !done {
 		select {
 		case <-exit.C:
+			// 1 秒到点，停止。
 			done = true
 		case <-tick.C:
+			// 每 2ms 尝试一次，实际执行频率受 atMostEvery 限制。
 			atMostEvery.Do(func() {
 				count++
 			})
 		}
 	}
 
+	// 上界放宽一次：第一个调用可能立即放行，也可能在窗口边界再多一次。
 	if expected := int(duration/delay) + 1; count > expected {
 		t.Fatalf("Function called %d times, should have been called less than or equal to %d times", count, expected)
 	}

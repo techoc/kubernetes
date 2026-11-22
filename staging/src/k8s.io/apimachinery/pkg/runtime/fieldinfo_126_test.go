@@ -18,4 +18,6 @@ limitations under the License.
 
 package runtime_test
 
+// stdlibSupportsEmbedTag 表示当前 Go 版本的标准库是否支持 struct tag 中的 "embed" 指令。
+// 在 Go 1.27 之前为 false，供测试按版本选择预期结果。
 const stdlibSupportsEmbedTag = false

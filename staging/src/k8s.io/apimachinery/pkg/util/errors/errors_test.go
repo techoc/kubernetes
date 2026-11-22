@@ -24,6 +24,8 @@ import (
 	"testing"
 )
 
+// TestEmptyAggregate 验证空切片（以及直接构造的空 aggregate）不产生错误对象，
+// 其 Error()/Errors() 分别返回空串与空切片。
 func TestEmptyAggregate(t *testing.T) {
 	var slice []error
 	var agg Aggregate
@@ -52,6 +54,7 @@ func TestEmptyAggregate(t *testing.T) {
 	}
 }
 
+// TestAggregateWithNil 验证 nil 元素会被过滤：全 nil 返回 nil，混合时只保留非 nil 错误。
 func TestAggregateWithNil(t *testing.T) {
 	var slice []error
 	slice = []error{nil}
@@ -92,6 +95,7 @@ func TestAggregateWithNil(t *testing.T) {
 	}
 }
 
+// TestSingularAggregate 验证只有一个错误时 Error() 直接返回该错误的文本，不加方括号。
 func TestSingularAggregate(t *testing.T) {
 	var slice = []error{fmt.Errorf("err")}
 	var agg Aggregate
@@ -120,6 +124,7 @@ func TestSingularAggregate(t *testing.T) {
 	}
 }
 
+// TestPluralAggregate 验证多个错误时 Error() 输出 "[a, b]" 形式，Errors() 保留全部条目。
 func TestPluralAggregate(t *testing.T) {
 	var slice = []error{fmt.Errorf("abc"), fmt.Errorf("123")}
 	var agg Aggregate
@@ -148,6 +153,7 @@ func TestPluralAggregate(t *testing.T) {
 	}
 }
 
+// TestDedupeAggregate 验证 Error() 输出会去重，但 Errors() 仍返回原始条目（长度不变）。
 func TestDedupeAggregate(t *testing.T) {
 	var slice = []error{fmt.Errorf("abc"), fmt.Errorf("abc")}
 	var agg Aggregate
@@ -164,6 +170,7 @@ func TestDedupeAggregate(t *testing.T) {
 	}
 }
 
+// TestDedupePluralAggregate 验证多个不同错误时去重后的输出顺序与首次出现顺序一致。
 func TestDedupePluralAggregate(t *testing.T) {
 	var slice = []error{fmt.Errorf("abc"), fmt.Errorf("abc"), fmt.Errorf("123")}
 	var agg Aggregate
@@ -180,6 +187,8 @@ func TestDedupePluralAggregate(t *testing.T) {
 	}
 }
 
+// TestFlattenAndDedupeAggregate 验证嵌套 Aggregate 会先展平再去重，
+// 但 Errors() 返回的是展平后的原始条目而非去重结果。
 func TestFlattenAndDedupeAggregate(t *testing.T) {
 	var slice = []error{fmt.Errorf("abc"), fmt.Errorf("abc"), NewAggregate([]error{fmt.Errorf("abc")})}
 	var agg Aggregate
@@ -196,6 +205,7 @@ func TestFlattenAndDedupeAggregate(t *testing.T) {
 	}
 }
 
+// TestFlattenAggregate 验证多层嵌套的 Aggregate 被递归展平，且重复消息在输出中去重。
 func TestFlattenAggregate(t *testing.T) {
 	var slice = []error{fmt.Errorf("abc"), fmt.Errorf("abc"), NewAggregate([]error{fmt.Errorf("abc"), fmt.Errorf("def"), NewAggregate([]error{fmt.Errorf("def"), fmt.Errorf("ghi")})})}
 	var agg Aggregate
@@ -212,6 +222,8 @@ func TestFlattenAggregate(t *testing.T) {
 	}
 }
 
+// TestFilterOut 验证 FilterOut 的匹配语义：任一 Matcher 返回 true 即剔除该错误；
+// 嵌套的 Aggregate 会被逐层过滤，过滤后为空的子聚合也会被丢弃。
 func TestFilterOut(t *testing.T) {
 	testCases := []struct {
 		err      error
@@ -282,6 +294,8 @@ func TestFilterOut(t *testing.T) {
 	}
 }
 
+// TestFlatten 验证 Flatten 把任意深度的 Aggregate 拉平为一层；
+// 输入 nil 或空聚合时返回 nil。
 func TestFlatten(t *testing.T) {
 	testCases := []struct {
 		agg      Aggregate
@@ -328,6 +342,8 @@ func TestFlatten(t *testing.T) {
 	}
 }
 
+// TestCreateAggregateFromMessageCountMap 验证从“消息->次数”映射重建聚合错误：
+// 次数大于 1 时追加 "(repeated N times)"，且输出按消息排序以保证确定性。
 func TestCreateAggregateFromMessageCountMap(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -369,6 +385,8 @@ func TestCreateAggregateFromMessageCountMap(t *testing.T) {
 	}
 }
 
+// TestAggregateGoroutines 验证 AggregateGoroutines 并发收集错误：nil 被忽略，
+// 结果顺序不确定，因此只比较错误集合。
 func TestAggregateGoroutines(t *testing.T) {
 	testCases := []struct {
 		errs     []error
@@ -432,18 +450,23 @@ func TestAggregateGoroutines(t *testing.T) {
 	}
 }
 
+// alwaysMatchingError 的 Is 恒为 true，用于验证 Aggregate 的 errors.Is 会遍历内部错误。
 type alwaysMatchingError struct{}
 
+// Error 返回固定文本，内容不影响匹配测试。
 func (_ alwaysMatchingError) Error() string {
 	return "error"
 }
 
+// Is 忽略目标错误，始终报告匹配。
 func (_ alwaysMatchingError) Is(_ error) bool {
 	return true
 }
 
+// someError 是可比较的值类型错误，用于测试 errors.Is 的“相等匹配”分支。
 type someError struct{ msg string }
 
+// Error 在未设置消息时回落到 "err"，让空值也能参与比较。
 func (se someError) Error() string {
 	if se.msg != "" {
 		return se.msg
@@ -451,6 +474,8 @@ func (se someError) Error() string {
 	return "err"
 }
 
+// TestAggregateWithErrorsIs 验证 Aggregate 实现了 errors.Is 语义：
+// 支持内部错误的 Is 方法、值相等、嵌套聚合以及外层 %w 包装。
 func TestAggregateWithErrorsIs(t *testing.T) {
 	testCases := []struct {
 		name         string
@@ -499,21 +524,27 @@ func TestAggregateWithErrorsIs(t *testing.T) {
 	}
 }
 
+// accessTrackingError 记录其 Is 是否被调用，用来验证匹配的短路行为。
 type accessTrackingError struct {
 	wasAccessed bool
 }
 
+// Error 返回固定文本。
 func (accessTrackingError) Error() string {
 	return "err"
 }
 
+// Is 记录被访问并返回 true。
 func (ate *accessTrackingError) Is(_ error) bool {
 	ate.wasAccessed = true
 	return true
 }
 
+// 编译期确认 *accessTrackingError 实现了 error。
 var _ error = &accessTrackingError{}
 
+// TestErrConfigurationInvalidWithErrorsIsShortCircuitsOnFirstMatch 验证 errors.Is
+// 在第一个匹配后立即返回，不会继续访问后续错误（避免无谓的副作用与开销）。
 func TestErrConfigurationInvalidWithErrorsIsShortCircuitsOnFirstMatch(t *testing.T) {
 	errC := aggregate{&accessTrackingError{}, &accessTrackingError{}}
 	_ = errors.Is(errC, &accessTrackingError{})

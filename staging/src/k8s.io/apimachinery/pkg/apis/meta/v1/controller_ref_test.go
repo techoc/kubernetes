@@ -22,11 +22,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// metaObj 是同时内嵌 ObjectMeta 与 TypeMeta 的测试对象，用于验证 controllerRef 相关函数。
 type metaObj struct {
 	ObjectMeta
 	TypeMeta
 }
 
+// TestNewControllerRef 验证 NewControllerRef 用对象 UID 构造引用，
+// 并把 Controller 与 BlockOwnerDeletion 置为 true、填好 apiVersion/kind/name。
 func TestNewControllerRef(t *testing.T) {
 	gvk := schema.GroupVersionKind{
 		Group:   "group",
@@ -56,6 +59,8 @@ func TestNewControllerRef(t *testing.T) {
 	}
 }
 
+// TestGetControllerOf 验证 GetControllerOf 只返回 Controller=true 的 owner 引用，
+// 无此类引用时返回 nil，并且返回值是深拷贝（指针字段不共享）。
 func TestGetControllerOf(t *testing.T) {
 	gvk := schema.GroupVersionKind{
 		Group:   "group",
@@ -97,13 +102,15 @@ func TestGetControllerOf(t *testing.T) {
 		t.Errorf("Incorrect result of GetControllerOf: %v", c)
 	}
 
-	// test that all pointers are also deep copied
+	// 测试指针字段也被深拷贝
 	if (c.Controller == controllerRef.Controller) ||
 		(c.BlockOwnerDeletion != nil && c.BlockOwnerDeletion == controllerRef.BlockOwnerDeletion) {
 		t.Errorf("GetControllerOf did not return deep copy: %v", c)
 	}
 }
 
+// BenchmarkGetControllerOf 衡量在多个 owner 引用中查找 controller 引用的分配与耗时；
+// 引用列表中包含两个非 controller 引用，用于覆盖跳过逻辑。
 func BenchmarkGetControllerOf(b *testing.B) {
 	gvk := schema.GroupVersionKind{
 		Group:   "group",
@@ -137,6 +144,7 @@ func BenchmarkGetControllerOf(b *testing.B) {
 	}
 }
 
+// TestIsControlledBy 验证 IsControlledBy 只检查直接 owner 关系，不追溯更上层的 owner。
 func TestIsControlledBy(t *testing.T) {
 	gvk := schema.GroupVersionKind{
 		Group:   "group",

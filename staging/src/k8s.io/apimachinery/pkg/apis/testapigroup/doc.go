@@ -19,4 +19,7 @@ limitations under the License.
 //
 // package testapigroup contains an testapigroup API used to demonstrate how to create api groups. Moreover, this is
 // used within tests.
+//
+// 这是一个仅用于演示与测试的最小 API 组，不对外发布；修改它会连带影响
+// 依赖它的转换、默认值与序列化测试。
 package testapigroup

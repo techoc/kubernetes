@@ -27,17 +27,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/framer"
 )
 
+// fakeDecoder 记录最近一次收到的帧数据，并按预设返回对象/错误，用于验证流式解码器传帧正确。
 type fakeDecoder struct {
 	got []byte
 	obj runtime.Object
 	err error
 }
 
+// Decode 保存收到的数据并原样返回预设结果。
 func (d *fakeDecoder) Decode(data []byte, gvk *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	d.got = data
 	return d.obj, nil, d.err
 }
 
+// TestEmptyDecoder 验证输入流为空时，解码返回 io.EOF 而不是其他错误。
 func TestEmptyDecoder(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{})
 	d := &fakeDecoder{}
@@ -47,6 +50,8 @@ func TestEmptyDecoder(t *testing.T) {
 	}
 }
 
+// TestDecoder 用长度前缀帧写入四帧（含一帧 17MB 超过默认上限），验证：
+// 正常帧逐帧解码、超大帧返回 ErrObjectTooLarge 且不污染解码器状态、流结束返回 io.EOF。
 func TestDecoder(t *testing.T) {
 	frames := [][]byte{
 		make([]byte, 1025),

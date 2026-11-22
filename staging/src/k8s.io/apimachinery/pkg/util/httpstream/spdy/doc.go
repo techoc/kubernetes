@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package spdy contains compatibility wrappers for the SPDY transport stack.
+// Package spdy 提供 SPDY 传输栈的兼容性封装，使旧代码无需立即迁移。
 //
-// Deprecated: use k8s.io/streaming/pkg/httpstream/spdy directly.
+// Deprecated: 请直接使用 k8s.io/streaming/pkg/httpstream/spdy。
 package spdy

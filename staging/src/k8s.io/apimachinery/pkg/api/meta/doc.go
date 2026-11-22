@@ -16,4 +16,6 @@ limitations under the License.
 
 // Package meta provides functions for retrieving API metadata from objects
 // belonging to the Kubernetes API
+//
+// Package meta 提供从属于 Kubernetes API 的对象中读取 API 元数据的函数。
 package meta

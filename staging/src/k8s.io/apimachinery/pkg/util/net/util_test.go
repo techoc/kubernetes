@@ -33,18 +33,21 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// getIPNet 解析 CIDR 并返回 *net.IPNet；解析失败时返回 nil。
 func getIPNet(cidr string) *net.IPNet {
 	_, ipnet, _ := netutils.ParseCIDRSloppy(cidr)
 	return ipnet
 }
 
+// TestIPNetEqual 覆盖 IPNetEqual：掩码与网段都相同才算相等，
+// 主机位不同（10.0.0.0/24 vs 10.0.0.1/24）仍视为同一网段。
 func TestIPNetEqual(t *testing.T) {
 	testCases := []struct {
 		ipnet1 *net.IPNet
 		ipnet2 *net.IPNet
 		expect bool
 	}{
-		// null case
+		// nil 输入场景（解析 "" 得到 nil）。
 		{
 			getIPNet("10.0.0.1/24"),
 			getIPNet(""),
@@ -79,6 +82,8 @@ func TestIPNetEqual(t *testing.T) {
 	}
 }
 
+// TestIsConnectionRefused 验证只有 ECONNREFUSED 被判为连接被拒绝，
+// ECONNRESET 不算；嵌套在 os.SyscallError 中也能识别。
 func TestIsConnectionRefused(t *testing.T) {
 	testCases := []struct {
 		err    error
@@ -104,12 +109,15 @@ func TestIsConnectionRefused(t *testing.T) {
 	}
 }
 
+// tcpLB 是一个极简 TCP 代理，用于模拟“连接存在但对端停止转发”的故障。
 type tcpLB struct {
 	t         *testing.T
 	ln        net.Listener
 	serverURL string
 }
 
+// handleConnection 建立到后端的连接并双向复制数据，直到 stopCh 关闭。
+// stopCh 关闭后只关闭后端连接，故意不关闭入站连接，以模拟半开/损坏的 TCP 连接。
 func (lb *tcpLB) handleConnection(in net.Conn, stopCh chan struct{}) {
 	out, err := net.Dial("tcp", lb.serverURL)
 	if err != nil {
@@ -124,6 +132,7 @@ func (lb *tcpLB) handleConnection(in net.Conn, stopCh chan struct{}) {
 	}
 }
 
+// serve 接受一个连接并交给 handleConnection 处理。
 func (lb *tcpLB) serve(stopCh chan struct{}) {
 	conn, err := lb.ln.Accept()
 	if err != nil {
@@ -132,6 +141,7 @@ func (lb *tcpLB) serve(stopCh chan struct{}) {
 	lb.handleConnection(conn, stopCh)
 }
 
+// newLB 在 127.0.0.1 的随机端口上监听，返回指向 serverURL 的代理。
 func newLB(t *testing.T, serverURL string) *tcpLB {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -145,6 +155,9 @@ func newLB(t *testing.T, serverURL string) *tcpLB {
 	return &lb
 }
 
+// TestIsConnectionReset 通过 HTTP/2 与 TCP 代理复现连接丢失：
+// 先正常完成一次请求，然后让代理停止转发，确认第二次请求返回的错误
+// 能被 IsHTTP2ConnectionLost 识别。
 func TestIsConnectionReset(t *testing.T) {
 	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, %s", r.Proto)
@@ -174,6 +187,7 @@ func TestIsConnectionReset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to configure *http.Transport: %+v", err)
 	}
+	// 缩短空闲与 ping 超时，让连接丢失能快速暴露。
 	t2.ReadIdleTimeout = time.Second
 	t2.PingTimeout = time.Second
 	resp, err := c.Get("https://" + lb.ln.Addr().String())
@@ -189,9 +203,7 @@ func TestIsConnectionReset(t *testing.T) {
 		t.Fatalf("unexpected response: %s", data)
 	}
 
-	// Deliberately let the LB stop proxying traffic for the current
-	// connection. This mimics a broken TCP connection that's not properly
-	// closed.
+	// 故意让代理停止为当前连接转发流量，模拟未被正确关闭的损坏 TCP 连接。
 	close(stopCh)
 	<-stoppedCh
 	_, err = c.Get("https://" + lb.ln.Addr().String())

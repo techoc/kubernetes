@@ -26,8 +26,9 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
-// TestFieldsRoundTrip tests that a fields trie can be round tripped as a path set
+// TestFieldsRoundTrip 验证 fields trie（FieldsV1）与 path set 之间可以无损往返。
 func TestFieldsRoundTrip(t *testing.T) {
+	// 一个非空 trie 与一个空 Fields 都参与往返。
 	tests := []metav1.FieldsV1{
 		*metav1.NewFieldsV1(`{"f:metadata":{".":{},"f:name":{}}}`),
 		EmptyFields,
@@ -48,7 +49,8 @@ func TestFieldsRoundTrip(t *testing.T) {
 	}
 }
 
-// TestFieldsToSetError tests that errors are picked up by FieldsToSet
+// TestFieldsToSetError 验证 FieldsToSet 会把非法的字段路径（这里是非法的
+// k:{...} 键）作为错误返回，而不是静默忽略。
 func TestFieldsToSetError(t *testing.T) {
 	tests := []struct {
 		fields    metav1.FieldsV1
@@ -70,7 +72,8 @@ func TestFieldsToSetError(t *testing.T) {
 	}
 }
 
-// TestSetToFieldsError tests that errors are picked up by SetToFields
+// TestSetToFieldsError 验证 SetToFields 遇到不含任何标识（既无字段名也无
+// 键值）的非法 PathElement 时返回错误。
 func TestSetToFieldsError(t *testing.T) {
 	validName := "ok"
 	invalidPath := fieldpath.Path([]fieldpath.PathElement{{}, {FieldName: &validName}})
@@ -93,6 +96,7 @@ func TestSetToFieldsError(t *testing.T) {
 	}
 }
 
+// BenchmarkSetToFields 测量把包含列表索引与键字段的 path set 转换为 fields trie 的开销。
 func BenchmarkSetToFields(b *testing.B) {
 	set := fieldpath.NewSet(
 		fieldpath.MakePathOrDie("foo", 0, "bar", "baz"),
@@ -116,6 +120,8 @@ func BenchmarkSetToFields(b *testing.B) {
 	}
 }
 
+// BenchmarkFieldsToSet 测量反向转换（fields trie -> path set）的开销。
+// trie 的构造在计时开始前完成，只测量 FieldsToSet。
 func BenchmarkFieldsToSet(b *testing.B) {
 	set := fieldpath.NewSet(
 		fieldpath.MakePathOrDie("foo", 0, "bar", "baz"),

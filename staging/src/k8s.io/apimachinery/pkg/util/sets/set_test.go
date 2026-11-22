@@ -23,6 +23,7 @@ import (
 	"testing"
 )
 
+// TestStringSet 验证集合的插入、删除、Has/HasAll 与 IsSuperset 的基本语义。
 func TestStringSet(t *testing.T) {
 	s := String{}
 	s2 := String{}
@@ -61,6 +62,7 @@ func TestStringSet(t *testing.T) {
 	}
 }
 
+// TestStringSetDeleteMultiples 验证 Delete 可一次删除多个元素，且仅删除指定的元素。
 func TestStringSetDeleteMultiples(t *testing.T) {
 	s := String{}
 	s.Insert("a", "b", "c")
@@ -84,6 +86,7 @@ func TestStringSetDeleteMultiples(t *testing.T) {
 
 }
 
+// TestNewStringSet 验证 NewString 用给定元素构造集合并保持去重语义。
 func TestNewStringSet(t *testing.T) {
 	s := NewString("a", "b", "c")
 	if len(s) != 3 {
@@ -94,6 +97,7 @@ func TestNewStringSet(t *testing.T) {
 	}
 }
 
+// TestStringSetList 验证 List 返回按字典序排序的切片，保证输出稳定。
 func TestStringSetList(t *testing.T) {
 	s := NewString("z", "y", "x", "a")
 	if !reflect.DeepEqual(s.List(), []string{"a", "x", "y", "z"}) {
@@ -101,6 +105,7 @@ func TestStringSetList(t *testing.T) {
 	}
 }
 
+// TestStringSetDifference 验证差集 a-b 只包含 a 中不属于 b 的元素，且运算不对称。
 func TestStringSetDifference(t *testing.T) {
 	a := NewString("1", "2", "3")
 	b := NewString("1", "2", "4", "5")
@@ -120,6 +125,7 @@ func TestStringSetDifference(t *testing.T) {
 	}
 }
 
+// TestStringSetSymmetricDifference 验证对称差（只属于其中一方的元素），且运算可交换。
 func TestStringSetSymmetricDifference(t *testing.T) {
 	a := NewString("1", "2", "3")
 	b := NewString("1", "2", "4", "5")
@@ -133,6 +139,7 @@ func TestStringSetSymmetricDifference(t *testing.T) {
 	}
 }
 
+// TestStringSetHasAny 验证 HasAny 在任一元素命中时为 true，全部不命中时为 false。
 func TestStringSetHasAny(t *testing.T) {
 	a := NewString("1", "2", "3")
 
@@ -145,21 +152,23 @@ func TestStringSetHasAny(t *testing.T) {
 	}
 }
 
+// TestStringSetEquals 验证集合相等性：与顺序无关、重复元素被忽略，
+// 并覆盖空集合、空字符串元素以及增删操作后的相等判断。
 func TestStringSetEquals(t *testing.T) {
-	// Simple case (order doesn't matter)
+	// 简单情况（顺序无关）
 	a := NewString("1", "2")
 	b := NewString("2", "1")
 	if !a.Equal(b) {
 		t.Errorf("Expected to be equal: %v vs %v", a, b)
 	}
 
-	// It is a set; duplicates are ignored
+	// 这是集合；重复元素会被忽略
 	b = NewString("2", "2", "1")
 	if !a.Equal(b) {
 		t.Errorf("Expected to be equal: %v vs %v", a, b)
 	}
 
-	// Edge cases around empty sets / empty strings
+	// 空集合/空字符串元素的边界情况
 	a = NewString()
 	b = NewString()
 	if !a.Equal(b) {
@@ -176,7 +185,7 @@ func TestStringSetEquals(t *testing.T) {
 		t.Errorf("Expected to be not-equal: %v vs %v", a, b)
 	}
 
-	// Check for equality after mutation
+	// 验证变更后的相等性
 	a = NewString()
 	a.Insert("1")
 	if a.Equal(b) {
@@ -199,6 +208,7 @@ func TestStringSetEquals(t *testing.T) {
 	}
 }
 
+// TestStringUnion 验证并集包含双方全部元素，并覆盖一方为空、双方皆空的情形。
 func TestStringUnion(t *testing.T) {
 	tests := []struct {
 		s1       String
@@ -239,6 +249,7 @@ func TestStringUnion(t *testing.T) {
 	}
 }
 
+// TestStringIntersection 验证交集只包含双方共有的元素，并覆盖空集合的情形。
 func TestStringIntersection(t *testing.T) {
 	tests := []struct {
 		s1       String
@@ -284,8 +295,10 @@ func TestStringIntersection(t *testing.T) {
 	}
 }
 
+// randomStringAlphabet 是随机字符串的字符表。
 type randomStringAlphabet string
 
+// makeString 生成一个长度在 [minLen, maxLen) 随机区间内的随机字符串。
 func (a randomStringAlphabet) makeString(minLen, maxLen int) string {
 	n := minLen
 	if minLen < maxLen {
@@ -298,8 +311,10 @@ func (a randomStringAlphabet) makeString(minLen, maxLen int) string {
 	return s
 }
 
+// randomStringMaker 是基准测试使用的字符表实例（小写字母加数字）。
 var randomStringMaker = randomStringAlphabet("abcdefghijklmnopqrstuvwxyz0123456789")
 
+// BenchmarkStringSet 在多种集合规模下测量插入、取键集合、查找、交并/对称差与列表的开销。
 func BenchmarkStringSet(b *testing.B) {
 	cases := []struct {
 		size         int

@@ -23,15 +23,23 @@ import (
 )
 
 // Managed groups a fieldpath.ManagedFields together with the timestamps associated with each operation.
+//
+// Managed 把 fieldpath.ManagedFields 与各操作对应的时间戳组合在一起。
 type Managed interface {
 	// Fields gets the fieldpath.ManagedFields.
+	//
+	// Fields 返回 fieldpath.ManagedFields。
 	Fields() fieldpath.ManagedFields
 
 	// Times gets the timestamps associated with each operation.
+	//
+	// Times 返回各操作对应的时间戳。
 	Times() map[string]*metav1.Time
 }
 
 // Manager updates the managed fields and merges applied configurations.
+//
+// Manager 负责更新 managed fields 并合并 apply 的配置。
 type Manager interface {
 	// Update is used when the object has already been merged (non-apply
 	// use-case), and simply updates the managed fields in the output
@@ -40,6 +48,11 @@ type Manager interface {
 	//  * `newObj` may be mutated by this function
 	// Returns the new object with managedFields removed, and the object's new
 	// proposed managedFields separately.
+	//
+	// Update 用于对象已完成合并的场景（非 apply），只更新输出对象中的 managed fields。
+	//  * 不会修改 `liveObj`
+	//  * 可能修改 `newObj`
+	// 返回移除 managedFields 的新对象，以及对象新的建议 managedFields（分开返回）。
 	Update(liveObj, newObj runtime.Object, managed Managed, manager string) (runtime.Object, Managed, error)
 
 	// Apply is used when server-side apply is called, as it merges the
@@ -48,5 +61,10 @@ type Manager interface {
 	//  * `newObj` may be mutated by this function
 	// Returns the new object with managedFields removed, and the object's new
 	// proposed managedFields separately.
+	//
+	// Apply 用于 server-side apply：合并对象并更新 managed fields。
+	//  * 不会修改 `liveObj`
+	//  * 可能修改 `newObj`
+	// 返回移除 managedFields 的新对象，以及对象新的建议 managedFields（分开返回）。
 	Apply(liveObj, appliedObj runtime.Object, managed Managed, fieldManager string, force bool) (runtime.Object, Managed, error)
 }

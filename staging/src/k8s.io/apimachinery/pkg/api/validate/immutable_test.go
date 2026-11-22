@@ -25,6 +25,9 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestImmutable 固定 validate.Immutable 对调用方的契约：校验器本身无法
+// 判断两个值是否语义相等，跳过“未变化”的调用是生成校验层 ratcheting 的
+// 职责。因此它只应在 Create（不报错）或真正的 Update（必报错）时被调用。
 func TestImmutable(t *testing.T) {
 	// The Immutable function relies on validation ratcheting to avoid being
 	// called when old and new values are equivalent. This unit test only needs
@@ -41,16 +44,20 @@ func TestImmutable(t *testing.T) {
 		name string
 		fn   func(op operation.Operation, fldPath *field.Path) field.ErrorList
 	}{{
+		// 基础类型覆盖最常见的标量场景。
 		name: "with primitive type",
 		fn: func(op operation.Operation, fld *field.Path) field.ErrorList {
 			return Immutable(context.Background(), op, fld, ptr.To(123), ptr.To(456))
 		},
 	}, {
+		// 结构体值用于确认报错路径不依赖 T 是否可比较。
 		name: "with struct type",
 		fn: func(op operation.Operation, fld *field.Path) field.ErrorList {
 			return Immutable(context.Background(), op, fld, &simpleStruct{S: "a"}, &simpleStruct{S: "b"})
 		},
 	}, {
+		// nil 指针用于确认解引用安全；更新时仍报错，因为调用方已经
+		// 判定发生了变更。
 		name: "with nil values",
 		fn: func(op operation.Operation, fld *field.Path) field.ErrorList {
 			// Explicitly type the nil to satisfy the generic function signature.

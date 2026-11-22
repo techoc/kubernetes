@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// TestCompareResourceVersion 验证资源版本比较：按数值而非字典序比较，
+// 支持超出 int64 的大数；空串、前导零、非数字与 "0" 视为非法并返回错误。
 func TestCompareResourceVersion(t *testing.T) {
 	testCases := []struct {
 		name     string

@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package dump 是 k8s.io/utils/dump 的兼容转发层，
+// 保留旧函数名以平滑迁移，新代码应直接使用 k8s.io/utils/dump。
 package dump
 
 import (
@@ -22,6 +24,8 @@ import (
 
 // Deprecated: Use k8s.io/utils/dump.Pretty instead.
 //
+// 已弃用：请改用 k8s.io/utils/dump.Pretty。
+//
 //go:fix inline
 func Pretty(a interface{}) string {
 	return dump.Pretty(a)
@@ -29,12 +33,16 @@ func Pretty(a interface{}) string {
 
 // Deprecated: Use k8s.io/utils/dump.ForHash instead.
 //
+// 已弃用：请改用 k8s.io/utils/dump.ForHash。
+//
 //go:fix inline
 func ForHash(a interface{}) string {
 	return dump.ForHash(a)
 }
 
 // Deprecated: Use k8s.io/utils/dump.OneLine instead.
+//
+// 已弃用：请改用 k8s.io/utils/dump.OneLine。
 //
 //go:fix inline
 func OneLine(a interface{}) string {

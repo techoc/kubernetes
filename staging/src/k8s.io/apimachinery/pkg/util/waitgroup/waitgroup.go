@@ -21,19 +21,19 @@ import (
 	"sync"
 )
 
-// SafeWaitGroup must not be copied after first use.
+// SafeWaitGroup 是带保护的 sync.WaitGroup：一旦进入等待，就拒绝新增请求，
+// 避免 Wait 与 Add 的竞争。首次使用后不得复制。
 type SafeWaitGroup struct {
 	wg sync.WaitGroup
 	mu sync.RWMutex
-	// wait indicate whether Wait is called, if true,
-	// then any Add with positive delta will return error.
+	// wait 表示 Wait 是否已被调用；为 true 时任何正增量的 Add 都会返回错误。
 	wait bool
 }
 
-// Add adds delta, which may be negative, similar to sync.WaitGroup.
-// If Add with a positive delta happens after Wait, it will return error,
-// which prevent unsafe Add.
+// Add 增加 delta（可以为负），与 sync.WaitGroup 类似。
+// 如果在 Wait 之后发生正增量的 Add，会返回错误，从而阻止不安全的 Add。
 func (wg *SafeWaitGroup) Add(delta int) error {
+	// 用读锁而非互斥锁：Add 与 Add 之间可以并发，只需与 Wait 的写互斥。
 	wg.mu.RLock()
 	defer wg.mu.RUnlock()
 	if wg.wait && delta > 0 {
@@ -43,12 +43,13 @@ func (wg *SafeWaitGroup) Add(delta int) error {
 	return nil
 }
 
-// Done decrements the WaitGroup counter.
+// Done 递减 WaitGroup 计数。
 func (wg *SafeWaitGroup) Done() {
 	wg.wg.Done()
 }
 
-// Wait blocks until the WaitGroup counter is zero.
+// Wait 阻塞直到 WaitGroup 计数归零。
+// 它先把状态标记为“等待中”，再实际等待：这样在进入等待后到达的 Add 会被拒绝。
 func (wg *SafeWaitGroup) Wait() {
 	wg.mu.Lock()
 	wg.wait = true

@@ -29,10 +29,14 @@ import (
 // object. (Will modify internalObject.) (Assumes JSON serialization.)
 // TODO: verify that the correct external version is chosen on encode...
 func CheckCodec(c Codec, internalType Object, externalTypes ...schema.GroupVersionKind) error {
+	// Encoding the internal type exercises the encoder's versioning and type
+	// resolution. The first error wins so the report stays actionable.
 	if _, err := Encode(c, internalType); err != nil {
 		return fmt.Errorf("internal type not encodable: %v", err)
 	}
 	for _, et := range externalTypes {
+		// Build a minimal document so Decode alone has to resolve the external
+		// type to the registered internal type.
 		typeMeta := TypeMeta{
 			Kind:       et.Kind,
 			APIVersion: et.GroupVersion().String(),
@@ -45,9 +49,11 @@ func CheckCodec(c Codec, internalType Object, externalTypes ...schema.GroupVersi
 		if err != nil {
 			return fmt.Errorf("external type %s not interpretable: %v", et, err)
 		}
+		// Decoding must round back to the internal type, not a look-alike.
 		if reflect.TypeOf(obj) != reflect.TypeOf(internalType) {
 			return fmt.Errorf("decode of external type %s produced: %#v", et, obj)
 		}
+		// DecodeInto additionally verifies an explicit conversion path exists.
 		if err = DecodeInto(c, exBytes, internalType); err != nil {
 			return fmt.Errorf("external type %s not convertible to internal type: %v", et, err)
 		}

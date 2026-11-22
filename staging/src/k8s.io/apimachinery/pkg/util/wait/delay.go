@@ -25,6 +25,8 @@ import (
 )
 
 // DelayFunc returns the next time interval to wait.
+// 中文说明：每次调用可返回不同的间隔，因此可以实现退避、抖动等策略；
+// 调用方不应假设其无副作用。
 type DelayFunc func() time.Duration
 
 // Timer takes an arbitrary delay function and returns a timer that can handle arbitrary interval changes.
@@ -41,6 +43,9 @@ func (fn DelayFunc) Until(ctx context.Context, immediate, sliding bool, conditio
 
 // Concurrent returns a version of this DelayFunc that is safe for use by multiple goroutines that
 // wish to share a single delay timer.
+//
+// 中文说明：通过在调用处串行化来实现，代价是共享同一函数的所有 goroutine
+// 会互相阻塞——这只适合 DelayFunc 本身很轻的场景。
 func (fn DelayFunc) Concurrent() DelayFunc {
 	var lock sync.Mutex
 	return func() time.Duration {

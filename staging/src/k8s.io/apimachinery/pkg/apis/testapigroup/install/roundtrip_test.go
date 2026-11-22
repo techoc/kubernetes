@@ -23,6 +23,8 @@ import (
 	testapigroupfuzzer "k8s.io/apimachinery/pkg/apis/testapigroup/fuzzer"
 )
 
+// TestRoundTrip 用通用往返框架验证 testapigroup 的“裸” install 已足以完成
+// internal/external 转换与 JSON、protobuf 编解码。
 func TestRoundTrip(t *testing.T) {
 	roundtrip.RoundTripTestForAPIGroup(t, Install, testapigroupfuzzer.Funcs)
 	roundtrip.RoundTripProtobufTestForAPIGroup(t, Install, testapigroupfuzzer.Funcs)

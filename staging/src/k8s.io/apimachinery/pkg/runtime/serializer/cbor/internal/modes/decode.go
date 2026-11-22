@@ -22,6 +22,8 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
+// simpleValues 注册允许的 CBOR simple value：只放行 false/true/null，
+// 其余（包括规范中保留的 24-31）一律拒绝，避免非 JSON 可表达的语义混入。
 var simpleValues *cbor.SimpleValueRegistry = func() *cbor.SimpleValueRegistry {
 	var opts []func(*cbor.SimpleValueRegistry) error
 	for sv := 0; sv <= 255; sv++ {
@@ -47,6 +49,9 @@ var simpleValues *cbor.SimpleValueRegistry = func() *cbor.SimpleValueRegistry {
 // decode is the basis for the Decode mode, with no JSONUnmarshalerTranscoder
 // configured. TranscodeToJSON uses this directly rather than Decode to avoid an initialization
 // cycle between the two. Everything else should use one of the exported DecModes.
+//
+// 中文补充：这里的每个选项都以“与 JSON 序列化器行为一致”为目标；差异点（如重复键
+// 直接报错）在注释中单独说明。
 var decode cbor.DecMode = func() cbor.DecMode {
 	decode, err := cbor.DecOptions{
 		// Maps with duplicate keys are well-formed but invalid according to the CBOR spec
@@ -164,6 +169,7 @@ var Decode cbor.DecMode = func() cbor.DecMode {
 	// When decoding into a value of a type that implements json.Unmarshaler (and does not
 	// implement cbor.Unmarshaler), transcode the input to JSON and pass it to the value's
 	// UnmarshalJSON method.
+	// 中文补充：这让大量只实现了 UnmarshalJSON 的既有类型无需改动即可支持 CBOR。
 	opts.JSONUnmarshalerTranscoder = TranscodeFunc(TranscodeToJSON)
 	dm, err := opts.DecMode()
 	if err != nil {
@@ -173,8 +179,10 @@ var Decode cbor.DecMode = func() cbor.DecMode {
 }()
 
 // DecodeLax is derived from Decode, but does not complain about unknown fields in the input.
+// 中文补充：用于非严格解码路径；严格解码会在遇到未知字段时报错，以支持字段拼写错误的提示。
 var DecodeLax cbor.DecMode = func() cbor.DecMode {
 	opts := Decode.DecOptions()
+	// 清除“未知字段报错”这一位，其余严格性设置保持不变。
 	opts.ExtraReturnErrors &^= cbor.ExtraDecErrorUnknownField // clear bit
 	dm, err := opts.DecMode()
 	if err != nil {

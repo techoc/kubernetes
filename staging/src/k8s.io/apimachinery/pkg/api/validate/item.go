@@ -24,6 +24,7 @@ import (
 )
 
 // MatchItemFunc takes an item and returns true if it matches the criteria.
+// It is expected to target a unique key within the list.
 type MatchItemFunc[T any] func(T) bool
 
 // ValSliceItem finds the first item in a list of values which satisfies the
@@ -54,6 +55,7 @@ func ValSliceItem[TList ~[]TItem, TItem any](
 	var matchedNew, matchedOld *TItem
 	var newIndex int
 
+	// Only the first match is processed; later duplicates are ignored by design.
 	for i := range newList {
 		if match(&newList[i]) {
 			matchedNew = &newList[i]
@@ -61,10 +63,12 @@ func ValSliceItem[TList ~[]TItem, TItem any](
 			break
 		}
 	}
+	// The item is absent from the new list, so there is nothing to validate.
 	if matchedNew == nil {
 		return nil
 	}
 
+	// Find the same item in the old list to enable ratcheting.
 	for i := range oldList {
 		if match(&oldList[i]) {
 			matchedOld = &oldList[i]
@@ -72,6 +76,8 @@ func ValSliceItem[TList ~[]TItem, TItem any](
 		}
 	}
 
+	// Ratcheting: on update, an unchanged item skips validation so that
+	// previously persisted data is not rejected by newer, stricter rules.
 	if op.Type == operation.Update && matchedOld != nil && equiv(matchedNew, matchedOld) {
 		return nil
 	}
@@ -107,6 +113,7 @@ func PtrSliceItem[TList ~[]*TItem, TItem any](
 	var matchedNew, matchedOld *TItem
 	var newIndex int
 
+	// Nil entries are tolerated here; PtrSliceNoNils reports them separately.
 	for i := range newList {
 		if newList[i] == nil {
 			// Ignore nil items; they are supposed to have been checked by PtrSliceNoNils.
@@ -122,6 +129,7 @@ func PtrSliceItem[TList ~[]*TItem, TItem any](
 		return nil
 	}
 
+	// Nil entries in the old list cannot match and are skipped.
 	for i := range oldList {
 		if oldList[i] == nil {
 			continue
@@ -132,6 +140,7 @@ func PtrSliceItem[TList ~[]*TItem, TItem any](
 		}
 	}
 
+	// Same ratcheting rule as ValSliceItem: unchanged items skip validation.
 	if op.Type == operation.Update && matchedOld != nil && equiv(matchedNew, matchedOld) {
 		return nil
 	}

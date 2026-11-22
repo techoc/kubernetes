@@ -22,6 +22,8 @@ import (
 	"testing"
 )
 
+// TestIsDecimalInteger 验证 IsDecimalInteger 的严格十进制整数规则：
+// 只接受可选负号加无前导零的十进制数字，拒绝正号、前导零、空白、进制前缀与各类分隔符。
 func TestIsDecimalInteger(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -29,7 +31,7 @@ func TestIsDecimalInteger(t *testing.T) {
 		shouldPass  bool
 		errContains string
 	}{
-		// valid
+		// 合法输入
 		{name: "zero", input: "0", shouldPass: true},
 		{name: "positive single digit 1", input: "1", shouldPass: true},
 		{name: "positive single digit 2", input: "2", shouldPass: true},
@@ -58,7 +60,7 @@ func TestIsDecimalInteger(t *testing.T) {
 		{name: "very long valid number", input: "12345678901234567890", shouldPass: true},
 		{name: "all nines", input: "999999999999", shouldPass: true},
 
-		// invalid
+		// 非法输入
 		{name: "negative zero", input: "-0", shouldPass: false},
 		{name: "double zero", input: "00", shouldPass: false},
 		{name: "triple zero", input: "000", shouldPass: false},
@@ -77,7 +79,7 @@ func TestIsDecimalInteger(t *testing.T) {
 		{name: "positive plus sign", input: "+5", shouldPass: false},
 		{name: "plus zero", input: "+0", shouldPass: false},
 
-		// Invalid cases - empty and whitespace
+		// 非法用例：空串与空白
 		{name: "empty string", input: "", shouldPass: false, errContains: "non-empty"},
 		{name: "just minus sign", input: "-", shouldPass: false},
 		{name: "just plus sign", input: "+", shouldPass: false},
@@ -171,6 +173,7 @@ func TestIsDecimalInteger(t *testing.T) {
 				if len(errs) == 0 {
 					t.Errorf("IsDecimalInteger(%q) = no errors, want errors", tc.input)
 				} else if tc.errContains != "" {
+					// 仅在指定时校验错误信息中包含特定片段
 					found := false
 					for _, err := range errs {
 						if strings.Contains(err, tc.errContains) {
@@ -186,7 +189,7 @@ func TestIsDecimalInteger(t *testing.T) {
 		})
 	}
 
-	// Additional verification: valid strings should parse with strconv.ParseInt
+	// 额外校验：合法串应能被 strconv.ParseInt 解析
 	validCases := []string{
 		"0", "1", "2", "5", "9",
 		"-1", "-5", "-9",
@@ -198,15 +201,15 @@ func TestIsDecimalInteger(t *testing.T) {
 		if errs := IsDecimalInteger(validCase); len(errs) != 0 {
 			t.Errorf("Valid case %q should return no errors, got: %v", validCase, errs)
 		}
-		// Verify it can also be parsed by strconv.ParseInt (within range)
-		if len(validCase) <= 19 { // Only test cases that fit in int64
+		// 同时验证在 int64 范围内时 strconv.ParseInt 也能解析
+		if len(validCase) <= 19 { // 只测试能放入 int64 的用例
 			if _, err := strconv.ParseInt(validCase, 10, 64); err != nil {
 				t.Errorf("Valid case %q should be parseable by strconv.ParseInt: %v", validCase, err)
 			}
 		}
 	}
 
-	// Verify that our function rejects what we intend to reject (even if strconv.ParseInt accepts it)
+	// 验证本函数会拒绝那些我们明确要拒绝的输入（即使 strconv.ParseInt 接受）
 	rejectedCases := []string{
 		"0700", "0950", "01", "02", "09",
 		"+123", "+5", "+0",
@@ -219,14 +222,14 @@ func TestIsDecimalInteger(t *testing.T) {
 		}
 	}
 
-	// Edge case: verify strconv.ParseInt accepts things we reject (proving we're stricter)
+	// 边界校验：证明本函数比 strconv.ParseInt 更严格（后者接受这些输入）
 	strconvAcceptsButWeReject := []string{"+123", "0700", "01"}
 	for _, case_ := range strconvAcceptsButWeReject {
-		// strconv.ParseInt should accept it
+		// strconv.ParseInt 应接受
 		if _, err := strconv.ParseInt(case_, 10, 64); err != nil {
 			t.Errorf("strconv.ParseInt should accept %q but got error: %v", case_, err)
 		}
-		// But our function should reject it
+		// 但本函数应拒绝
 		if errs := IsDecimalInteger(case_); len(errs) == 0 {
 			t.Errorf("IsDecimalInteger should reject %q (stricter than strconv)", case_)
 		}

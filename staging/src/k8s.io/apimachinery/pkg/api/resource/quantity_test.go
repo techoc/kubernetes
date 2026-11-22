@@ -37,32 +37,39 @@ import (
 )
 
 var (
+	// 预先构造 int64 边界的大整数，供 BigDec 等测试直接复用。
 	bigMostPositive = big.NewInt(mostPositive)
 	bigMostNegative = big.NewInt(mostNegative)
 )
 
+// dec 构造一个指数表示法的十进制量：Scale 是 exponent 的相反数。
 func dec(i int64, exponent int) infDecAmount {
 	// See the below test-- scale is the negative of an exponent.
 	return infDecAmount{inf.NewDec(i, inf.Scale(-exponent))}
 }
 
+// bigDec 与 dec 相同，但支持超出 int64 的大整数。
 func bigDec(i *big.Int, exponent int) infDecAmount {
 	// See the below test-- scale is the negative of an exponent.
 	return infDecAmount{inf.NewDecBig(i, inf.Scale(-exponent))}
 }
 
+// decQuantity 构造以 inf.Dec 存储的 Quantity，用于测试期望值。
 func decQuantity(i int64, exponent int, format Format) Quantity {
 	return Quantity{d: dec(i, exponent), Format: format}
 }
 
+// bigDecQuantity 构造以大整数 inf.Dec 存储的 Quantity。
 func bigDecQuantity(i *big.Int, exponent int, format Format) Quantity {
 	return Quantity{d: bigDec(i, exponent), Format: format}
 }
 
+// intQuantity 构造以 int64Amount 存储的 Quantity。
 func intQuantity(i int64, exponent Scale, format Format) Quantity {
 	return Quantity{i: int64Amount{value: i, scale: exponent}, Format: format}
 }
 
+// TestDec 验证 inf.Dec 在给定 scale 下的字符串表现符合指数语义。
 func TestDec(t *testing.T) {
 	table := []struct {
 		got    infDecAmount
@@ -85,6 +92,7 @@ func TestDec(t *testing.T) {
 	}
 }
 
+// TestBigDec 验证大整数（超出 int64 范围）在正负指数下的字符串表现。
 func TestBigDec(t *testing.T) {
 	table := []struct {
 		got    infDecAmount
@@ -118,6 +126,7 @@ func TestBigDec(t *testing.T) {
 }
 
 // TestQuantityParseZero ensures that when a 0 quantity is passed, its string value is 0
+// 零值无论以何种后缀解析，序列化都应得到 "0"，而不带任何单位。
 func TestQuantityParseZero(t *testing.T) {
 	zero := MustParse("0")
 	if expected, actual := "0", zero.String(); expected != actual {
@@ -127,6 +136,7 @@ func TestQuantityParseZero(t *testing.T) {
 
 // TestQuantityParseNonNumericPanic ensures that when a non-numeric string is parsed
 // it panics
+// MustParse 在解析失败时会 panic，这里确认该约定没有被悄悄改掉。
 func TestQuantityParseNonNumericPanic(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
@@ -138,6 +148,7 @@ func TestQuantityParseNonNumericPanic(t *testing.T) {
 
 // TestQuantityAddZeroPreservesSuffix verifies that a suffix is preserved
 // independent of the order of operations when adding a zero and non-zero val
+// 加零不应改变值的规范字符串形式，两个操作数顺序都要覆盖。
 func TestQuantityAddZeroPreservesSuffix(t *testing.T) {
 	testValues := []string{"100m", "1Gi"}
 	zero := MustParse("0")
@@ -162,6 +173,7 @@ func TestQuantityAddZeroPreservesSuffix(t *testing.T) {
 
 // TestQuantitySubZeroPreservesSuffix verifies that a suffix is preserved
 // independent of the order of operations when subtracting a zero and non-zero val
+// 减零保持值不变，零减非零则得到相反数，两种情况都要保留后缀表示。
 func TestQuantitySubZeroPreservesSuffix(t *testing.T) {
 	testValues := []string{"100m", "1Gi"}
 	zero := MustParse("0")
@@ -187,6 +199,7 @@ func TestQuantitySubZeroPreservesSuffix(t *testing.T) {
 }
 
 // TestQuantityCanocicalizeZero verifies that you get 0 as canonical value if internal value is 0, and not 0<suffix>
+// 即 1000m 减去 1 之后内部为 0，规范字符串必须收敛为 "0" 而非 "0m"。
 func TestQuantityCanocicalizeZero(t *testing.T) {
 	val := MustParse("1000m")
 	val.i.Sub(int64Amount{value: 1})
@@ -196,6 +209,8 @@ func TestQuantityCanocicalizeZero(t *testing.T) {
 	}
 }
 
+// TestQuantityCmp 覆盖 int64Amount 与 inf.Dec 两种内部表示下的比较语义，
+// 包括 nil 值（视为 0）与零值之间的边界。
 func TestQuantityCmp(t *testing.T) {
 	// Test when d is nil
 	table := []struct {
@@ -239,6 +254,8 @@ func TestQuantityCmp(t *testing.T) {
 	}
 }
 
+// TestParseQuantityString 验证底层词法拆分：符号、整数部分、小数部分与后缀各自独立返回，
+// 非法输入（如单独的小数点）也在这一层接受并交由上层处理。
 func TestParseQuantityString(t *testing.T) {
 	table := []struct {
 		input              string
@@ -265,6 +282,9 @@ func TestParseQuantityString(t *testing.T) {
 	}
 }
 
+// TestQuantityParse 是解析与序列化的主表驱动测试：覆盖二进制/十进制后缀、
+// 指数记法、小数、饱和与舍入，以及非法输入。同一组用例还会分别以 AsDec 表示、
+// 取负、加显式 "+" 的方式重跑，确保这些变换不改变数值与格式。
 func TestQuantityParse(t *testing.T) {
 	if _, err := ParseQuantity(""); err == nil {
 		t.Errorf("expected empty string to return error")
@@ -393,6 +413,7 @@ func TestQuantityParse(t *testing.T) {
 		{"1.G", decQuantity(1, 9, DecimalSI)},
 	}
 
+	// 分别以默认表示和强制转换为 inf.Dec 表示各跑一遍，验证两条内部路径结果一致。
 	for _, asDec := range []bool{false, true} {
 		for _, item := range table {
 			got, err := ParseQuantity(item.input)
@@ -412,6 +433,7 @@ func TestQuantityParse(t *testing.T) {
 			}
 
 			if asDec {
+				// 已用 inf.Dec 表示的量不可能再以 int64 精确返回。
 				if i, ok := got.AsInt64(); i != 0 || ok {
 					t.Errorf("%v: expected inf.Dec to return false for AsInt64: %d", item.input, i)
 				}
@@ -433,6 +455,7 @@ func TestQuantityParse(t *testing.T) {
 			}
 		}
 
+		// 验证从 inf.Dec 再构造成 Quantity 后与原值可比较（三种 Format 都试）。
 		for _, item := range table {
 			got, err := ParseQuantity(item.input)
 			if err != nil {
@@ -454,7 +477,7 @@ func TestQuantityParse(t *testing.T) {
 				}
 			}
 
-			// verify that we can decompose the input and get the same result by building up from the base.
+			// 把输入拆成符号、整数、小数、后缀后再拼回，应得到同一数值。
 			positive, _, num, denom, suffix, err := parseQuantityString(item.input)
 			if err != nil {
 				t.Errorf("%v: unexpected error: %v", item.input, err)
@@ -488,6 +511,7 @@ func TestQuantityParse(t *testing.T) {
 		}
 
 		// Try the negative version of everything
+		// 取负后数值应为相反数、格式保持不变。
 		desired := &inf.Dec{}
 		expect := Quantity{d: infDecAmount{Dec: desired}}
 		for _, item := range table {
@@ -512,6 +536,7 @@ func TestQuantityParse(t *testing.T) {
 		}
 
 		// Try everything with an explicit +
+		// 显式正号不应影响解析结果。
 		for _, item := range table {
 			got, err := ParseQuantity("+" + strings.TrimLeftFunc(item.input, unicode.IsSpace))
 			if err != nil {
@@ -531,6 +556,7 @@ func TestQuantityParse(t *testing.T) {
 		}
 	}
 
+	// 非法输入必须被拒绝；注意首尾空白也不允许。
 	invalid := []string{
 		"1.1.M",
 		"1+1.0M",
@@ -554,6 +580,8 @@ func TestQuantityParse(t *testing.T) {
 	}
 }
 
+// TestQuantityRoundUp 验证按给定 scale 向上舍入：ok 表示舍入是否精确（未发生进位）；
+// 同时覆盖正负值以及 int64Amount/inf.Dec 两种内部表示。
 func TestQuantityRoundUp(t *testing.T) {
 	table := []struct {
 		in     string
@@ -596,6 +624,8 @@ func TestQuantityRoundUp(t *testing.T) {
 	}
 }
 
+// TestQuantityCmpInt64AndDec 验证 int64Amount 与 inf.Dec 混用、以及大数溢出边界下的比较；
+// 每轮都要求 a.Cmp(b) == -b.Cmp(a)，比较必须反对称。
 func TestQuantityCmpInt64AndDec(t *testing.T) {
 	table := []struct {
 		a, b Quantity
@@ -673,6 +703,7 @@ func TestQuantityCmpInt64AndDec(t *testing.T) {
 	}
 }
 
+// TestQuantityNeg 验证取负不修改源对象，且两种内部表示得到的规范字符串一致。
 func TestQuantityNeg(t *testing.T) {
 	table := []struct {
 		a   Quantity
@@ -694,6 +725,8 @@ func TestQuantityNeg(t *testing.T) {
 	}
 }
 
+// TestQuantityString 验证各 Format 下的规范字符串输出，并检查解析会缓存规范串、
+// 等价的替代写法会被归一化，且负数输出不会出现 "-0"。
 func TestQuantityString(t *testing.T) {
 	table := []struct {
 		in        Quantity
@@ -787,6 +820,7 @@ func TestQuantityString(t *testing.T) {
 	}
 }
 
+// TestQuantityParseEmit 验证“解析-输出”往返：某些非规范输入（如 1024Mi）会被归一到更简短的规范形式。
 func TestQuantityParseEmit(t *testing.T) {
 	table := []struct {
 		in     string
@@ -828,6 +862,8 @@ func TestQuantityParseEmit(t *testing.T) {
 	}
 }
 
+// fuzzer 生成结构合法的随机 Quantity，覆盖三种 Format 及 int64/inf.Dec 两种存储形态，
+// 特别构造 1Mi、1M 这类带单位的边界值。JSON/CBOR 往返测试共用它。
 var fuzzer = randfill.New().Funcs(
 	func(q *Quantity, c randfill.Continue) {
 		q.i = Zero
@@ -867,6 +903,7 @@ var fuzzer = randfill.New().Funcs(
 	},
 )
 
+// TestQuantityDeepCopy 验证深拷贝后修改副本不影响原值，覆盖 nil 与 inf.Dec 两种存储。
 func TestQuantityDeepCopy(t *testing.T) {
 	// Test when d is nil
 	slice := []string{"0", "100m", "50m", "10000T"}
@@ -895,6 +932,7 @@ func TestQuantityDeepCopy(t *testing.T) {
 	}
 }
 
+// TestJSON 用随机生成的 Quantity 做 500 次 JSON 编解码往返，数值必须保持不变。
 func TestJSON(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		q := &Quantity{}
@@ -916,6 +954,8 @@ func TestJSON(t *testing.T) {
 	}
 }
 
+// TestJSONWhitespace 验证 JSON 解码允许数字前后带空白（包括字符串形式），
+// 这与 ParseQuantity 本身拒绝空白的规则不同，属于 JSON 层的容忍。
 func TestJSONWhitespace(t *testing.T) {
 	q := Quantity{}
 	testCases := []struct {
@@ -941,6 +981,8 @@ func TestJSONWhitespace(t *testing.T) {
 	}
 }
 
+// TestMilliNewSet 验证 NewMilliQuantity 与 SetMilli 的语义一致；BinarySI 下不精确的值
+// 允许格式改变，因此只在 exact 为 true 时校验往返。
 func TestMilliNewSet(t *testing.T) {
 	table := []struct {
 		value  int64
@@ -982,6 +1024,7 @@ func TestMilliNewSet(t *testing.T) {
 	}
 }
 
+// TestNewSet 验证 NewQuantity 与 Set 产生相同的规范字符串，并对 int64 和 inf.Dec 两条路径分别校验。
 func TestNewSet(t *testing.T) {
 	table := []struct {
 		value  int64
@@ -1027,6 +1070,8 @@ func TestNewSet(t *testing.T) {
 	}
 }
 
+// TestNewScaledSet 验证 NewScaledQuantity 与 SetScaled 在相同 scale 下等价，
+// 并覆盖 Nano/Micro/Milli/0 四档。
 func TestNewScaledSet(t *testing.T) {
 	table := []struct {
 		value  int64
@@ -1066,6 +1111,7 @@ func TestNewScaledSet(t *testing.T) {
 	}
 }
 
+// TestScaledValue 验证 ScaledValue 的换算：把 1 从 fromScale 换算到 toScale 应得的整数倍。
 func TestScaledValue(t *testing.T) {
 	table := []struct {
 		fromScale Scale
@@ -1099,6 +1145,7 @@ func TestScaledValue(t *testing.T) {
 	}
 }
 
+// TestUninitializedNoCrash 确保零值 Quantity 调用各访问器不会 panic——调用方经常依赖零值可用。
 func TestUninitializedNoCrash(t *testing.T) {
 	var q Quantity
 
@@ -1109,6 +1156,7 @@ func TestUninitializedNoCrash(t *testing.T) {
 	q.MarshalJSON()
 }
 
+// TestDeepCopy 验证 DeepCopy 返回独立副本，修改副本不影响原值。
 func TestDeepCopy(t *testing.T) {
 	q := NewQuantity(5, DecimalSI)
 	c := q.DeepCopy()
@@ -1118,6 +1166,7 @@ func TestDeepCopy(t *testing.T) {
 	}
 }
 
+// TestSub 验证减法：结果格式跟随被减数（接收者），零值接收者视为 0。
 func TestSub(t *testing.T) {
 	tests := []struct {
 		a        Quantity
@@ -1140,6 +1189,7 @@ func TestSub(t *testing.T) {
 	}
 }
 
+// TestNeg 验证取负后数值相等但符号相反；inf.Dec 存储的零值取负后会退化为 int64Amount 零值。
 func TestNeg(t *testing.T) {
 	tests := []struct {
 		a        Quantity
@@ -1165,6 +1215,7 @@ func TestNeg(t *testing.T) {
 	}
 }
 
+// TestAdd 验证加法：结果格式跟随被加数（接收者），零值接收者视为 0。
 func TestAdd(t *testing.T) {
 	tests := []struct {
 		a        Quantity
@@ -1187,6 +1238,7 @@ func TestAdd(t *testing.T) {
 	}
 }
 
+// TestMul 验证乘法返回值是否精确（ok），并覆盖 int64 溢出后降级为 inf.Dec 的情形。
 func TestMul(t *testing.T) {
 	tests := []struct {
 		a        Quantity
@@ -1239,6 +1291,7 @@ func TestMul(t *testing.T) {
 	}
 }
 
+// TestAddSubRoundTrip 验证同一 scale 下连续加、再按原顺序减，结果精确归零（无精度漂移）。
 func TestAddSubRoundTrip(t *testing.T) {
 	for k := -10; k <= 10; k++ {
 		q := Quantity{Format: DecimalSI}
@@ -1257,6 +1310,8 @@ func TestAddSubRoundTrip(t *testing.T) {
 	}
 }
 
+// TestAddSubRoundTripAcrossScales 与 TestAddSubRoundTrip 类似，但每次操作使用不同的随机 scale，
+// 验证跨 scale 加减仍能精确抵消。
 func TestAddSubRoundTripAcrossScales(t *testing.T) {
 	q := Quantity{Format: DecimalSI}
 	var order []int64
@@ -1273,6 +1328,7 @@ func TestAddSubRoundTripAcrossScales(t *testing.T) {
 	}
 }
 
+// TestNegateRoundTrip 验证两次取负后与原值相等，int64 与 inf.Dec 两种表示都覆盖。
 func TestNegateRoundTrip(t *testing.T) {
 	for _, asDec := range []bool{false, true} {
 		for k := -10; k <= 10; k++ {
@@ -1294,8 +1350,9 @@ func TestNegateRoundTrip(t *testing.T) {
 	}
 }
 
+// TestQuantityAsApproximateFloat64 验证快速近似转换的正确性（含 float64 溢出为 Inf 的情形）。
+// NOTE: this table should be kept in sync with TestQuantityAsFloat64Slow
 func TestQuantityAsApproximateFloat64(t *testing.T) {
-	// NOTE: this table should be kept in sync with TestQuantityAsFloat64Slow
 	table := []struct {
 		in  Quantity
 		out float64
@@ -1365,8 +1422,9 @@ func TestQuantityAsApproximateFloat64(t *testing.T) {
 	}
 }
 
+// TestQuantityAsFloat64Slow 验证慢速精确转换路径，与 TestQuantityAsApproximateFloat64 用同一张表对照。
+// NOTE: this table should be kept in sync with TestQuantityAsApproximateFloat64
 func TestQuantityAsFloat64Slow(t *testing.T) {
-	// NOTE: this table should be kept in sync with TestQuantityAsApproximateFloat64
 	table := []struct {
 		in  Quantity
 		out float64
@@ -1436,6 +1494,7 @@ func TestQuantityAsFloat64Slow(t *testing.T) {
 	}
 }
 
+// TestStringQuantityAsApproximateFloat64 从字符串输入出发，验证带小数的二进制单位换算为 float64 的精度。
 func TestStringQuantityAsApproximateFloat64(t *testing.T) {
 	table := []struct {
 		in  string
@@ -1470,6 +1529,7 @@ func TestStringQuantityAsApproximateFloat64(t *testing.T) {
 	}
 }
 
+// TestStringQuantityAsFloat64Slow 从字符串输入出发，验证慢速精确转换路径。
 func TestStringQuantityAsFloat64Slow(t *testing.T) {
 	table := []struct {
 		in  string
@@ -1504,6 +1564,7 @@ func TestStringQuantityAsFloat64Slow(t *testing.T) {
 	}
 }
 
+// benchmarkQuantities 返回一组覆盖三种 Format 与不同 scale 的代表性 Quantity，供各基准复用。
 func benchmarkQuantities() []Quantity {
 	return []Quantity{
 		intQuantity(1024*1024*1024, 0, BinarySI),
@@ -1520,6 +1581,7 @@ func benchmarkQuantities() []Quantity {
 	}
 }
 
+// BenchmarkQuantityString 测量清空缓存后的规范字符串生成开销。
 func BenchmarkQuantityString(b *testing.B) {
 	values := benchmarkQuantities()
 	b.ResetTimer()
@@ -1535,6 +1597,7 @@ func BenchmarkQuantityString(b *testing.B) {
 	}
 }
 
+// BenchmarkQuantityStringPrecalc 测量已缓存规范字符串时的读取开销，用于对比缓存收益。
 func BenchmarkQuantityStringPrecalc(b *testing.B) {
 	values := benchmarkQuantities()
 	for i := range values {
@@ -1552,6 +1615,7 @@ func BenchmarkQuantityStringPrecalc(b *testing.B) {
 	}
 }
 
+// BenchmarkQuantityStringBinarySI 测量 BinarySI 格式下的字符串生成，该格式需按 1024 的幂换算。
 func BenchmarkQuantityStringBinarySI(b *testing.B) {
 	values := benchmarkQuantities()
 	for i := range values {
@@ -1570,6 +1634,7 @@ func BenchmarkQuantityStringBinarySI(b *testing.B) {
 	}
 }
 
+// BenchmarkQuantityMarshalJSON 测量 JSON 序列化（依赖规范字符串生成）的开销。
 func BenchmarkQuantityMarshalJSON(b *testing.B) {
 	values := benchmarkQuantities()
 	b.ResetTimer()
@@ -1583,6 +1648,7 @@ func BenchmarkQuantityMarshalJSON(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkQuantityUnmarshalJSON 测量 JSON 反序列化（即解析字符串）的开销。
 func BenchmarkQuantityUnmarshalJSON(b *testing.B) {
 	values := benchmarkQuantities()
 	var json [][]byte
@@ -1601,6 +1667,7 @@ func BenchmarkQuantityUnmarshalJSON(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkParseQuantity 测量字符串解析的开销。
 func BenchmarkParseQuantity(b *testing.B) {
 	values := benchmarkQuantities()
 	var strings []string
@@ -1616,6 +1683,7 @@ func BenchmarkParseQuantity(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkCanonicalize 测量复用缓冲区生成规范字节的开销。
 func BenchmarkCanonicalize(b *testing.B) {
 	values := benchmarkQuantities()
 	b.ResetTimer()
@@ -1629,6 +1697,7 @@ func BenchmarkCanonicalize(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkQuantityRoundUp 测量按 scale -3（毫）向上舍入的开销。
 func BenchmarkQuantityRoundUp(b *testing.B) {
 	values := benchmarkQuantities()
 	b.ResetTimer()
@@ -1640,6 +1709,7 @@ func BenchmarkQuantityRoundUp(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkQuantityCopy 测量 DeepCopy 的开销。
 func BenchmarkQuantityCopy(b *testing.B) {
 	values := benchmarkQuantities()
 	b.ResetTimer()
@@ -1649,6 +1719,7 @@ func BenchmarkQuantityCopy(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkQuantityAdd 测量把各基准量累加到同一个基数上的开销。
 func BenchmarkQuantityAdd(b *testing.B) {
 	values := benchmarkQuantities()
 	base := &Quantity{}
@@ -1662,6 +1733,7 @@ func BenchmarkQuantityAdd(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkQuantityCmp 测量自比较（相等）路径的开销。
 func BenchmarkQuantityCmp(b *testing.B) {
 	values := benchmarkQuantities()
 	b.ResetTimer()
@@ -1674,6 +1746,7 @@ func BenchmarkQuantityCmp(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkQuantityAsApproximateFloat64 测量快速近似转换的开销。
 func BenchmarkQuantityAsApproximateFloat64(b *testing.B) {
 	values := benchmarkQuantities()
 	b.ResetTimer()
@@ -1686,6 +1759,7 @@ func BenchmarkQuantityAsApproximateFloat64(b *testing.B) {
 	b.StopTimer()
 }
 
+// BenchmarkQuantityAsFloat64Slow 测量慢速精确转换的开销。
 func BenchmarkQuantityAsFloat64Slow(b *testing.B) {
 	values := benchmarkQuantities()
 	b.ResetTimer()
@@ -1698,8 +1772,10 @@ func BenchmarkQuantityAsFloat64Slow(b *testing.B) {
 	b.StopTimer()
 }
 
+// 编译期断言：QuantityValue 必须实现 pflag.Value，供命令行参数使用。
 var _ pflag.Value = &QuantityValue{}
 
+// TestQuantityValueSet 验证 QuantityValue.Set 拒绝非法输入、接受合法值，并检查其 JSON 编码。
 func TestQuantityValueSet(t *testing.T) {
 	q := QuantityValue{}
 
@@ -1725,6 +1801,7 @@ func TestQuantityValueSet(t *testing.T) {
 	}
 }
 
+// ExampleQuantityValue 演示把 QuantityValue 注册为 pflag 参数后，帮助信息中会显示默认值。
 func ExampleQuantityValue() {
 	q := QuantityValue{
 		Quantity: MustParse("1Mi"),
@@ -1737,6 +1814,8 @@ func ExampleQuantityValue() {
 	// --mem quantity   sets amount of memory (default 1Mi)
 }
 
+// TestQuantityUnmarshalCBOR 验证 CBOR 解码接受 null、文本串与字节串输入，
+// 且空白被容忍、非法输入返回精确的错误信息。
 func TestQuantityUnmarshalCBOR(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -1799,6 +1878,7 @@ func TestQuantityUnmarshalCBOR(t *testing.T) {
 	}
 }
 
+// TestQuantityRoundtripCBOR 用随机生成的 Quantity 做 500 次 CBOR 编解码往返，数值必须保持不变。
 func TestQuantityRoundtripCBOR(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		var initial, final Quantity
@@ -1822,6 +1902,8 @@ func TestQuantityRoundtripCBOR(t *testing.T) {
 	}
 }
 
+// TestParseQuantity 针对 int64 边界附近的数值，逐项校验 AsInt64/AsDec 的返回以及
+// 重新序列化得到的规范形式（canonical 为空表示应原样回显）。
 func TestParseQuantity(t *testing.T) {
 	ptrDec := func(s string) *infDecAmount {
 		d, ok := new(inf.Dec).SetString(s)
@@ -1982,6 +2064,7 @@ func TestParseQuantity(t *testing.T) {
 	}
 }
 
+// TestQuantityPtrEqual 验证 QuantityPtrEqual 对 nil、相等值、不等值的判定。
 func TestQuantityPtrEqual(t *testing.T) {
 	q1 := MustParse("100m")
 	q2 := MustParse("100m")

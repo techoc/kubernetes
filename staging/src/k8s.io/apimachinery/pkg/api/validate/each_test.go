@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// 测试用结构体，覆盖可比较、不可比较、带 key 与带指针字段等情形。
 type TestStruct struct {
 	I int
 	D string
@@ -58,6 +59,8 @@ type NonComparableStructWithPtr struct {
 	P *int
 }
 
+// TestEachValSliceVal 验证 EachValSliceVal 对值切片逐项回调：
+// 创建场景下 oldVal 必须为 nil，且回调次数等于元素个数（空/nil 切片为零次）。
 func TestEachValSliceVal(t *testing.T) {
 	testEachValSliceVal(t, "valid", []int{11, 12, 13})
 	testEachValSliceVal(t, "valid", []string{"a", "b", "c"})
@@ -84,6 +87,7 @@ func TestEachValSliceVal(t *testing.T) {
 	testEachValSliceValUpdate[TestStruct](t, "nil", nil)
 }
 
+// testEachValSliceVal 是创建场景的通用辅助：回调必须收到 nil oldVal，且调用次数与元素数一致。
 func testEachValSliceVal[T any](t *testing.T, name string, input []T) {
 	t.Helper()
 	var zero T
@@ -103,6 +107,8 @@ func testEachValSliceVal[T any](t *testing.T, name string, input []T) {
 	})
 }
 
+// testEachValSliceValUpdate 是更新场景的通用辅助：
+// 把 old 逆序后传入，验证匹配函数能把每项与其旧值配对（oldVal == newVal），且调用次数不变。
 func testEachValSliceValUpdate[T any](t *testing.T, name string, input []T) {
 	t.Helper()
 	var zero T
@@ -129,6 +135,8 @@ func testEachValSliceValUpdate[T any](t *testing.T, name string, input []T) {
 	})
 }
 
+// TestEachValSliceValRatcheting 验证更新时对 “未变化的元素” 跳过校验（ratcheting）：
+// 仅调整顺序、删减元素或替换指针等语义等价的情形都不应触发回调。
 func TestEachValSliceValRatcheting(t *testing.T) {
 	testEachValSliceValRatcheting(t, "ComparableStruct same data different order",
 		[]TestStruct{
@@ -199,6 +207,8 @@ func TestEachValSliceValRatcheting(t *testing.T) {
 
 }
 
+// testEachValSliceValRatcheting 用会立即报错的回调驱动 EachValSliceVal；
+// 若 ratcheting 生效，回调不应被调用，因此错误列表必须为空。
 func testEachValSliceValRatcheting[T any](t *testing.T, name string, old, new []T, match, equiv MatchFunc[*T]) {
 	t.Helper()
 	var zero T
@@ -213,6 +223,7 @@ func testEachValSliceValRatcheting[T any](t *testing.T, name string, old, new []
 	})
 }
 
+// TestEachMapVal 验证 EachMapVal 对 map 值逐项回调：创建场景下 oldVal 为 nil，回调次数等于条目数。
 func TestEachMapVal(t *testing.T) {
 	testEachMapVal(t, "valid", map[string]int{"one": 11, "two": 12, "three": 13})
 	testEachMapVal(t, "valid", map[string]string{"A": "a", "B": "b", "C": "c"})
@@ -227,6 +238,7 @@ func TestEachMapVal(t *testing.T) {
 	testEachMapVal[TestStruct](t, "nil", nil)
 }
 
+// testEachMapVal 是 EachMapVal 创建场景的通用辅助。
 func testEachMapVal[T any](t *testing.T, name string, input map[string]T) {
 	t.Helper()
 	var zero T
@@ -246,6 +258,9 @@ func testEachMapVal[T any](t *testing.T, name string, input map[string]T) {
 	})
 }
 
+// TestEachMapValRatcheting 验证更新时仅对 “新增或值有变化的条目” 调用校验：
+// 语义等价的 map（顺序不同、旧条目被删除、指针值相等）应零调用；
+// nil 与空 map 视为等价，而 nil -> 非空会触发每个新条目的校验。
 func TestEachMapValRatcheting(t *testing.T) {
 	testEachMapValRatcheting(t, "primitive same data",
 		map[string]int{"one": 11, "two": 12, "three": 13},
@@ -348,6 +363,7 @@ func TestEachMapValRatcheting(t *testing.T) {
 	)
 }
 
+// testEachMapValRatcheting 统计 EachMapVal 在更新场景下实际触发的校验次数，并与期望值比较。
 func testEachMapValRatcheting[K ~string, V any](t *testing.T, name string, old, new map[K]V, equiv MatchFunc[*V], wantCalls int) {
 	t.Helper()
 	var zero V
@@ -364,13 +380,16 @@ func testEachMapValRatcheting[K ~string, V any](t *testing.T, name string, old, 
 	})
 }
 
+// StringType 用于验证 ~string 约束下自定义 key 类型同样可用。
 type StringType string
 
+// TestEachMapKey 验证 EachMapKey 遍历所有 key，且创建场景下 oldVal 为 nil。
 func TestEachMapKey(t *testing.T) {
 	testEachMapKey(t, "valid", map[string]int{"one": 11, "two": 12, "three": 13})
 	testEachMapKey(t, "valid", map[StringType]string{"A": "a", "B": "b", "C": "c"})
 }
 
+// testEachMapKey 是 EachMapKey 创建场景的通用辅助。
 func testEachMapKey[K ~string, V any](t *testing.T, name string, input map[K]V) {
 	t.Helper()
 	var zero K
@@ -390,6 +409,7 @@ func testEachMapKey[K ~string, V any](t *testing.T, name string, input map[K]V) 
 	})
 }
 
+// TestEachMapKeyRatcheting 验证更新时已存在于旧 map 中的 key 不再校验，只有新增 key 触发回调。
 func TestEachMapKeyRatcheting(t *testing.T) {
 	testEachMapKeyRatcheting(t, "same data, 0 validation calls",
 		map[string]int{"one": 11, "two": 12, "three": 13},
@@ -408,6 +428,7 @@ func TestEachMapKeyRatcheting(t *testing.T) {
 	)
 }
 
+// testEachMapKeyRatcheting 统计 EachMapKey 在更新场景下实际触发的校验次数。
 func testEachMapKeyRatcheting[K ~string, V any](t *testing.T, name string, old, new map[K]V, wantCalls int) {
 	t.Helper()
 	var zero V
@@ -424,6 +445,8 @@ func testEachMapKeyRatcheting[K ~string, V any](t *testing.T, name string, old, 
 	})
 }
 
+// TestValSliceUniqueComparableValues 验证可比较类型的切片唯一性检查：
+// 每个重复值都应产生一条错误，分别用直接比较与反射深比较两种 equiv 实现。
 func TestValSliceUniqueComparableValues(t *testing.T) {
 	testValSliceUnique(t, "int_nil", []int(nil), 0)
 	testValSliceUnique(t, "int_empty", []int{}, 0)
@@ -446,6 +469,7 @@ func TestValSliceUniqueComparableValues(t *testing.T) {
 	testValSliceUnique(t, "struct_dup", []isComparable{{1, "a"}, {2, "b"}, {3, "c"}, {2, "b"}, {1, "a"}}, 2)
 }
 
+// testValSliceUnique 以 direct 与 reflect 两种比较方式各跑一遍，期望错误数一致。
 func testValSliceUnique[T comparable](t *testing.T, name string, input []T, wantErrs int) {
 	t.Helper()
 	t.Run(fmt.Sprintf("%s(direct)", name), func(t *testing.T) {
@@ -462,6 +486,7 @@ func testValSliceUnique[T comparable](t *testing.T, name string, input []T, want
 	})
 }
 
+// TestValSliceUniqueNonComparableValues 验证含切片字段（不可比较）的结构体只能走反射深比较路径。
 func TestValSliceUniqueNonComparableValues(t *testing.T) {
 	type nonComparable struct {
 		I int
@@ -479,6 +504,7 @@ func TestValSliceUniqueNonComparableValues(t *testing.T) {
 		{1, []string{"a"}}}, 2)
 }
 
+// testValSliceUniqueByReflect 仅使用反射深比较运行唯一性检查。
 func testValSliceUniqueByReflect[T any](t *testing.T, name string, input []T, wantErrs int) {
 	t.Helper()
 	var zero T
@@ -490,6 +516,7 @@ func testValSliceUniqueByReflect[T any](t *testing.T, name string, input []T, wa
 	})
 }
 
+// TestEachPtrSliceVal 验证指针切片遍历：nil 元素被跳过，只对非 nil 元素回调。
 func TestEachPtrSliceVal(t *testing.T) {
 	testEachPtrSliceVal(t, "valid", []*int{new(11), new(12), new(13)})
 	testEachPtrSliceVal(t, "valid", []*string{new("a"), new("b"), new("c")})
@@ -498,7 +525,7 @@ func TestEachPtrSliceVal(t *testing.T) {
 	testEachPtrSliceVal(t, "empty", []*int{})
 	testEachPtrSliceVal[int](t, "nil", nil)
 
-	// Test nil elements
+	// 测试 nil 元素：应被跳过，只有两个非 nil 元素触发回调
 	t.Run("nil elements", func(t *testing.T) {
 		input := []*int{new(11), nil, new(13)}
 		calls := 0
@@ -518,6 +545,7 @@ func TestEachPtrSliceVal(t *testing.T) {
 	testEachPtrSliceValUpdate(t, "valid", []*int{new(11), new(12), new(13)})
 }
 
+// testEachPtrSliceVal 是指针切片创建场景的通用辅助。
 func testEachPtrSliceVal[T any](t *testing.T, name string, input []*T) {
 	t.Helper()
 	var zero T
@@ -540,6 +568,7 @@ func testEachPtrSliceVal[T any](t *testing.T, name string, input []*T) {
 	})
 }
 
+// testEachPtrSliceValUpdate 是指针切片更新场景的通用辅助：old 逆序后按值匹配到对应旧元素。
 func testEachPtrSliceValUpdate[T any](t *testing.T, name string, input []*T) {
 	t.Helper()
 	var zero T
@@ -569,6 +598,7 @@ func testEachPtrSliceValUpdate[T any](t *testing.T, name string, input []*T) {
 	})
 }
 
+// TestEachPtrSliceValRatcheting 验证指针切片在仅调整顺序时不会触发校验。
 func TestEachPtrSliceValRatcheting(t *testing.T) {
 	testEachPtrSliceValRatcheting(t, "ComparableStruct same data different order",
 		[]*TestStruct{{11, "a"}, {12, "b"}, {13, "c"}},
@@ -578,6 +608,7 @@ func TestEachPtrSliceValRatcheting(t *testing.T) {
 	)
 }
 
+// testEachPtrSliceValRatcheting 用会报错的回调驱动 EachPtrSliceVal，验证 ratcheting 生效时零调用。
 func testEachPtrSliceValRatcheting[T any](t *testing.T, name string, old, new []*T, match, equiv MatchFunc[*T]) {
 	t.Helper()
 	var zero T
@@ -592,6 +623,7 @@ func testEachPtrSliceValRatcheting[T any](t *testing.T, name string, old, new []
 	})
 }
 
+// TestPtrSliceUnique 验证指针切片唯一性：按指向的值判重，nil 元素不参与比较也不产生错误。
 func TestPtrSliceUnique(t *testing.T) {
 	testPtrSliceUnique(t, "int_nil", []*int(nil), 0, 0)
 	testPtrSliceUnique(t, "int_empty", []*int{}, 0, 0)
@@ -601,6 +633,7 @@ func TestPtrSliceUnique(t *testing.T) {
 	testPtrSliceUnique(t, "int_dup_and_nil", []*int{new(1), nil, new(1), nil}, 1, 0)
 }
 
+// testPtrSliceUnique 分别统计重复（Duplicate）与必填（Required）两类错误数量。
 func testPtrSliceUnique[T comparable](t *testing.T, name string, input []*T, wantDupErrs, wantReqErrs int) {
 	t.Helper()
 	t.Run(fmt.Sprintf("%s(direct)", name), func(t *testing.T) {
@@ -612,6 +645,7 @@ func testPtrSliceUnique[T comparable](t *testing.T, name string, input []*T, wan
 	})
 }
 
+// countErrors 按错误类型统计 Duplicate 与 Required 错误数。
 func countErrors(errs field.ErrorList) (dup, req int) {
 	for _, err := range errs {
 		switch err.Type {
@@ -624,6 +658,7 @@ func countErrors(errs field.ErrorList) (dup, req int) {
 	return
 }
 
+// TestPtrSliceNoNils 验证 PtrSliceNoNils 为每个 nil 元素生成一条 Required 错误，非 nil 元素不报错。
 func TestPtrSliceNoNils(t *testing.T) {
 	tests := []struct {
 		name     string

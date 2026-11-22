@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestPriorityRESTMapperResourceForErrorHandling 覆盖 ResourceFor 在代理返回错误时的行为：
+// 错误必须原样上抛，同时仍要尽量返回已匹配到的资源，便于调用方在报错时提供上下文。
 func TestPriorityRESTMapperResourceForErrorHandling(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -40,12 +42,14 @@ func TestPriorityRESTMapperResourceForErrorHandling(t *testing.T) {
 			err:      "delegateError",
 		},
 		{
+			// 只有一个匹配时，即使代理报错也返回该结果。
 			name:     "single hit + error",
 			delegate: fixedRESTMapper{resourcesFor: []schema.GroupVersionResource{{Resource: "single-hit"}}, err: errors.New("delegateError")},
 			result:   schema.GroupVersionResource{Resource: "single-hit"},
 			err:      "delegateError",
 		},
 		{
+			// 通过 Group+AnyVersion+AnyResource 模式收窄到一组。
 			name: "group selection + error",
 			delegate: fixedRESTMapper{resourcesFor: []schema.GroupVersionResource{
 				{Group: "one", Version: "a", Resource: "first"},
@@ -64,6 +68,7 @@ func TestPriorityRESTMapperResourceForErrorHandling(t *testing.T) {
 			result:   schema.GroupVersionResource{Resource: "single-hit"},
 		},
 		{
+			// 无优先级模式且多个资源都能匹配时，不能擅自选择。
 			name: "ambiguous match",
 			delegate: fixedRESTMapper{resourcesFor: []schema.GroupVersionResource{
 				{Group: "one", Version: "a", Resource: "first"},
@@ -83,6 +88,7 @@ func TestPriorityRESTMapperResourceForErrorHandling(t *testing.T) {
 			result: schema.GroupVersionResource{Group: "one", Version: "a", Resource: "first"},
 		},
 		{
+			// 第一个模式匹配为空时应继续尝试后续模式，而不是立即失败。
 			name: "empty match continues",
 			delegate: fixedRESTMapper{resourcesFor: []schema.GroupVersionResource{
 				{Group: "one", Version: "a", Resource: "first"},
@@ -95,6 +101,7 @@ func TestPriorityRESTMapperResourceForErrorHandling(t *testing.T) {
 			result: schema.GroupVersionResource{Group: "one", Version: "a", Resource: "first"},
 		},
 		{
+			// 先按组收窄，再按版本收窄；第一个模式已经唯一确定时后一个模式不再参与。
 			name: "group followed by version selection",
 			delegate: fixedRESTMapper{resourcesFor: []schema.GroupVersionResource{
 				{Group: "one", Version: "a", Resource: "first"},
@@ -108,6 +115,7 @@ func TestPriorityRESTMapperResourceForErrorHandling(t *testing.T) {
 			result: schema.GroupVersionResource{Group: "one", Version: "a", Resource: "first"},
 		},
 		{
+			// 同一组版本下按资源名收窄。
 			name: "resource selection",
 			delegate: fixedRESTMapper{resourcesFor: []schema.GroupVersionResource{
 				{Group: "one", Version: "a", Resource: "first"},
@@ -123,6 +131,8 @@ func TestPriorityRESTMapperResourceForErrorHandling(t *testing.T) {
 	for _, tc := range tcs {
 		mapper := PriorityRESTMapper{Delegate: tc.delegate, ResourcePriority: tc.resourcePatterns}
 
+		// ResourceFor 的入参只作为匹配目标；约束来自 ResourcePriority，
+		// 这里传空 GVR 以让优先级模式自行筛选。
 		actualResult, actualErr := mapper.ResourceFor(schema.GroupVersionResource{})
 		if e, a := tc.result, actualResult; e != a {
 			t.Errorf("%s: expected %v, got %v", tc.name, e, a)
@@ -144,6 +154,8 @@ func TestPriorityRESTMapperResourceForErrorHandling(t *testing.T) {
 	}
 }
 
+// TestPriorityRESTMapperKindForErrorHandling 与 ResourceFor 版本一一对应，
+// 验证 KindFor 的参数错误传播、优先级收窄与歧义检测。
 func TestPriorityRESTMapperKindForErrorHandling(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -263,7 +275,10 @@ func TestPriorityRESTMapperKindForErrorHandling(t *testing.T) {
 	}
 }
 
+// TestPriorityRESTMapperRESTMapping 验证 RESTMapping 在代理可能返回多个候选项时，
+// 如何依据 KindPriority 选择唯一映射，以及如何传播/合并错误。
 func TestPriorityRESTMapperRESTMapping(t *testing.T) {
+	// 三个映射器分别代表：同 Kind 的 v1alpha1、同 Kind 的 v1、其他 group 的 v1。
 	mapping1 := &RESTMapping{
 		GroupVersionKind: schema.GroupVersionKind{Kind: "Foo", Version: "v1alpha1"},
 	}
@@ -293,12 +308,14 @@ func TestPriorityRESTMapperRESTMapping(t *testing.T) {
 			err:    &NoKindMatchError{GroupKind: schema.GroupKind{Kind: "Foo"}},
 		},
 		{
+			// NoKindMatchError 表示"这个代理不认识该类型"，不算致命错误，继续尝试下一个代理。
 			name:   "ignore not found",
 			mapper: PriorityRESTMapper{Delegate: MultiRESTMapper{fixedRESTMapper{err: &NoKindMatchError{GroupKind: schema.GroupKind{Kind: "IGNORE_THIS"}}}}},
 			input:  schema.GroupKind{Kind: "Foo"},
 			err:    &NoKindMatchError{GroupKind: schema.GroupKind{Kind: "Foo"}},
 		},
 		{
+			// 非 NoKindMatch 的错误是真正的失败，应立即返回而不是继续。
 			name:   "accept first failure",
 			mapper: PriorityRESTMapper{Delegate: MultiRESTMapper{fixedRESTMapper{err: errors.New("fail on this")}, fixedRESTMapper{mappings: []*RESTMapping{mapping1}}}},
 			input:  schema.GroupKind{Kind: "Foo"},
@@ -312,6 +329,7 @@ func TestPriorityRESTMapperRESTMapping(t *testing.T) {
 			err:    errors.New("fail on this"),
 		},
 		{
+			// 歧义时返回 AmbiguousKindError，并携带全部候选项供调用方展示。
 			name: "return error for ambiguous",
 			mapper: PriorityRESTMapper{
 				Delegate: allMappers,
@@ -335,6 +353,7 @@ func TestPriorityRESTMapperRESTMapping(t *testing.T) {
 			result: mapping1,
 		},
 		{
+			// 优先级把 v1 排在 v1alpha1 之前，应选择 mapping2。
 			name: "return single priority",
 			mapper: PriorityRESTMapper{
 				Delegate:     allMappers,
@@ -344,6 +363,7 @@ func TestPriorityRESTMapperRESTMapping(t *testing.T) {
 			result: mapping2,
 		},
 		{
+			// core group 没有候选，AnyGroup+v1 模式跨组匹配到 other group 的 v1。
 			name: "return out of group match",
 			mapper: PriorityRESTMapper{
 				Delegate:     allMappers,
@@ -371,6 +391,8 @@ func TestPriorityRESTMapperRESTMapping(t *testing.T) {
 	}
 }
 
+// TestPriorityRESTMapperRESTMappingHonorsUserVersion 验证调用方显式指定版本时，
+// 版本参数优先于 KindPriority：用户要 v1 就不能返回 preferred 的 v2alpha1。
 func TestPriorityRESTMapperRESTMappingHonorsUserVersion(t *testing.T) {
 	mappingV2alpha1 := &RESTMapping{
 		GroupVersionKind: schema.GroupVersionKind{Group: "Bar", Kind: "Foo", Version: "v2alpha1"},
@@ -389,6 +411,7 @@ func TestPriorityRESTMapperRESTMappingHonorsUserVersion(t *testing.T) {
 		KindPriority: []schema.GroupVersionKind{{Group: "Bar", Version: "v2alpha1", Kind: AnyKind}, {Group: "Bar", Version: AnyVersion, Kind: AnyKind}},
 	}
 
+	// 优先级配置偏向 v2alpha1，但显式请求 v1 必须得到 v1 的映射。
 	outMapping1, err := mapper.RESTMapping(schema.GroupKind{Group: "Bar", Kind: "Foo"}, "v1")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)

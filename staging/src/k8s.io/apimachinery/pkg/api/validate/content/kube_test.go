@@ -21,6 +21,9 @@ import (
 	"testing"
 )
 
+// TestIsLabelKey 覆盖 label key 的合法/非法边界：合法集合包含 DNS 子域名
+// 前缀（最长 253）加可选的 "/" 与 name（最长 63）的组合；非法集合覆盖
+// 非法字符、首尾连字符、多个斜杠、大写前缀、下划线前缀以及超长。
 func TestIsLabelKey(t *testing.T) {
 	successCases := []string{
 		"simple",
@@ -66,6 +69,8 @@ func TestIsLabelKey(t *testing.T) {
 	}
 }
 
+// TestIsLabelValue 覆盖 label value 的边界：value 允许为空、允许以数字开头、
+// 最长 63；不允许非法字符、非 ASCII、反斜杠、首尾的 "." 或 "-"，以及超长。
 func TestIsLabelValue(t *testing.T) {
 	successCases := []string{
 		"simple",
@@ -99,6 +104,8 @@ func TestIsLabelValue(t *testing.T) {
 	}
 }
 
+// TestIsPrefixedLabelKey 只接受带前缀的形式（且前缀必须是 DNS 子域名）；
+// 无前缀的 key 在 IsLabelKey 中合法，但在这里必须被拒绝。
 func TestIsPrefixedLabelKey(t *testing.T) {
 	successCases := []string{
 		"simple/simple",

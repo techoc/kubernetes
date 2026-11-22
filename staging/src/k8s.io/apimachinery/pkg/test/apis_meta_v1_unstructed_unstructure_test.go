@@ -33,6 +33,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TestDecodeUnstructured 验证 DecodeList 会把列表中的 runtime.Unknown 和
+// 已存在的 Unstructured 统一解码为 Unstructured；Unknown 缺少 kind 时也
+// 应从原始 JSON 中补齐。
 func TestDecodeUnstructured(t *testing.T) {
 	groupVersionString := "v1"
 	rawJson := fmt.Sprintf(`{"kind":"Pod","apiVersion":"%s","metadata":{"name":"test"}}`, groupVersionString)
@@ -69,6 +72,8 @@ func TestDecodeUnstructured(t *testing.T) {
 	}
 }
 
+// TestDecode 覆盖 UnstructuredJSONScheme 对单个对象、空列表与带 items 的
+// 列表的识别；列表中的数字统一解码为 int64。
 func TestDecode(t *testing.T) {
 	tcs := []struct {
 		json []byte
@@ -124,6 +129,8 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+// TestUnstructuredGetters 覆盖从 map 读取所有 Object 接口字段时的类型转换，
+// 尤其是时间戳、*bool 与 *int64 的还原。
 func TestUnstructuredGetters(t *testing.T) {
 	trueVar := true
 	ten := int64(10)
@@ -252,6 +259,8 @@ func TestUnstructuredGetters(t *testing.T) {
 	}
 }
 
+// TestUnstructuredSetters 是 getter 测试的逆过程：逐个调用 setter 后，
+// 整个 map 必须与手工构造的期望结构完全一致。
 func TestUnstructuredSetters(t *testing.T) {
 	unstruct := unstructured.Unstructured{}
 	trueVar := true
@@ -341,6 +350,8 @@ func TestUnstructuredSetters(t *testing.T) {
 	}
 }
 
+// TestOwnerReferences 对每一条 ownerReference 单独做 Set/Get 往返，验证
+// 可选的 *bool 字段（controller/blockOwnerDeletion）不会丢失。
 func TestOwnerReferences(t *testing.T) {
 	t.Parallel()
 	trueVar := true
@@ -386,6 +397,7 @@ func TestOwnerReferences(t *testing.T) {
 	}
 }
 
+// TestUnstructuredListGetters 验证列表级字段的读取。
 func TestUnstructuredListGetters(t *testing.T) {
 	unstruct := unstructured.UnstructuredList{
 		Object: map[string]interface{}{
@@ -415,6 +427,7 @@ func TestUnstructuredListGetters(t *testing.T) {
 	}
 }
 
+// TestUnstructuredListSetters 验证列表级字段的写入。
 func TestUnstructuredListSetters(t *testing.T) {
 	unstruct := unstructured.UnstructuredList{}
 
@@ -439,6 +452,8 @@ func TestUnstructuredListSetters(t *testing.T) {
 	}
 }
 
+// TestDecodeNumbers 防止大整数在 structured -> unstructured -> structured
+// 往返中被转成浮点数而丢失精度：1000030003 必须仍以整数形式输出。
 func TestDecodeNumbers(t *testing.T) {
 
 	// Start with a valid pod
@@ -497,6 +512,9 @@ func TestDecodeNumbers(t *testing.T) {
 // TestAccessorMethods does opaque roundtrip testing against an Unstructured
 // instance's Object methods to ensure that what is "Set" matches what you
 // subsequently "Get" without any assertions against internal state.
+//
+// 通过反射按名字查找 Set<Field>/Get<Field>，因此新增访问器会被自动覆盖；
+// nilVal 用于测试显式写入 nil 的路径（与“不设置”区分）。
 func TestAccessorMethods(t *testing.T) {
 	int64p := func(i int) *int64 {
 		v := int64(i)

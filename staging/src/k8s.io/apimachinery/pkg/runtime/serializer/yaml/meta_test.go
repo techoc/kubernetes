@@ -23,6 +23,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestInterpret 验证 DefaultMetaFactory.Interpret 从 YAML/JSON 文档中提取 GVK。
+//
+// 关注点：
+//   - 只给 apiVersion 或只给 kind 时，另一部分留空而不是报错；
+//   - 空文档、仅分隔符、无关字段都返回空 GVK；
+//   - 多文档只取第一个；
+//   - 语法错误或顶层是数组等结构时返回错误。
 func TestInterpret(t *testing.T) {
 	testCases := []struct {
 		name     string

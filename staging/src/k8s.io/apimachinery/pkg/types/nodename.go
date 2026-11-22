@@ -40,4 +40,7 @@ package types
 //	For AWS, the InstanceID is not yet suitable for use as a Node.Name, so we actually use the
 //	PrivateDnsName for the Node.Name.  And this is _not_ always the same as the hostname: if
 //	we are using a custom DHCP domain it won't be.
+//
+// 译注：NodeName 是独立的命名类型，用类型系统区分节点名与主机名、云厂商实例名等
+// 相似概念，避免在函数签名之间误传。
 type NodeName string

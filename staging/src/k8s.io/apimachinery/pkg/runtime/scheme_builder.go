@@ -16,15 +16,15 @@ limitations under the License.
 
 package runtime
 
-// SchemeBuilder collects functions that add things to a scheme. It's to allow
-// code to compile without explicitly referencing generated types. You should
-// declare one in each package that will have generated deep copy or conversion
-// functions.
+// SchemeBuilder 收集向 scheme 注册内容的函数。
+// 这样生成代码可以编译而不必显式引用生成的类型；每个会产生生成的深拷贝或转换函数的包
+// 都应声明一个 SchemeBuilder。
 type SchemeBuilder []func(*Scheme) error
 
-// AddToScheme applies all the stored functions to the scheme. A non-nil error
-// indicates that one function failed and the attempt was abandoned.
+// AddToScheme 把所有已保存的函数依次应用到 scheme。
+// 返回非 nil 错误表示某个函数失败，且注册过程就此中止（已执行的部分不会回滚）。
 func (sb *SchemeBuilder) AddToScheme(s *Scheme) error {
+	// 顺序执行：注册函数之间可能存在依赖（如先注册类型再注册转换），因此不能并行或乱序。
 	for _, f := range *sb {
 		if err := f(s); err != nil {
 			return err
@@ -33,14 +33,14 @@ func (sb *SchemeBuilder) AddToScheme(s *Scheme) error {
 	return nil
 }
 
-// Register adds a scheme setup function to the list.
+// Register 向列表追加一个 scheme 初始化函数。
 func (sb *SchemeBuilder) Register(funcs ...func(*Scheme) error) {
 	for _, f := range funcs {
 		*sb = append(*sb, f)
 	}
 }
 
-// NewSchemeBuilder calls Register for you.
+// NewSchemeBuilder 替你调用 Register，返回一个已包含给定函数的 SchemeBuilder。
 func NewSchemeBuilder(funcs ...func(*Scheme) error) SchemeBuilder {
 	var sb SchemeBuilder
 	sb.Register(funcs...)

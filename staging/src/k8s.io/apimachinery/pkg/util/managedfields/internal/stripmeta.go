@@ -23,6 +23,9 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
+// stripMetaManager decorates a Manager, removing metadata and type metadata
+// from the recorded field set. This prevents every writer from appearing to own
+// apiVersion, kind, and common metadata.
 type stripMetaManager struct {
 	fieldManager Manager
 
@@ -33,6 +36,8 @@ type stripMetaManager struct {
 var _ Manager = &stripMetaManager{}
 
 // NewStripMetaManager creates a new Manager that strips metadata and typemeta fields from the manager's fieldset.
+// The paths are a fixed deny-list; anything not listed (e.g. labels and
+// annotations) is still tracked because those are legitimately owned.
 func NewStripMetaManager(fieldManager Manager) Manager {
 	return &stripMetaManager{
 		fieldManager: fieldManager,
@@ -80,6 +85,8 @@ func (f *stripMetaManager) stripFields(managed fieldpath.ManagedFields, manager 
 		if vs == nil {
 			panic(fmt.Sprintf("Found unexpected nil manager which should never happen: %s", manager))
 		}
+		// Subtract the deny-list; if nothing is left the manager owns no
+		// significant fields and its entry is dropped entirely.
 		newSet := vs.Set().Difference(f.stripSet)
 		if newSet.Empty() {
 			delete(managed, manager)

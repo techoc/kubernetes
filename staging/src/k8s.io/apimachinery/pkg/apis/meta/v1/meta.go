@@ -22,14 +22,14 @@ import (
 )
 
 // TODO: move this, Object, List, and Type to a different package
+// ObjectMetaAccessor 由任何能提供 Object 元数据访问器的对象实现。
 type ObjectMetaAccessor interface {
 	GetObjectMeta() Object
 }
 
-// Object lets you work with object metadata from any of the versioned or
-// internal API objects. Attempting to set or retrieve a field on an object that does
-// not support that field (Name, UID, Namespace on lists) will be a no-op and return
-// a default value.
+// Object 允许以统一方式操作任意版本化或内部 API 对象的元数据。
+// 对于不支持某字段的对象（例如列表对象上的 Name、UID、Namespace），
+// 设置或读取该字段将是空操作并返回默认值，调用方无需先做类型判断。
 type Object interface {
 	GetNamespace() string
 	SetNamespace(namespace string)
@@ -63,14 +63,13 @@ type Object interface {
 	SetManagedFields(managedFields []ManagedFieldsEntry)
 }
 
-// ListMetaAccessor retrieves the list interface from an object
+// ListMetaAccessor 用于从对象中取出列表元数据接口。
 type ListMetaAccessor interface {
 	GetListMeta() ListInterface
 }
 
-// Common lets you work with core metadata from any of the versioned or
-// internal API objects. Attempting to set or retrieve a field on an object that does
-// not support that field will be a no-op and return a default value.
+// Common 允许以统一方式操作任意版本化或内部 API 对象的通用元数据。
+// 对不支持某字段的对象，设置或读取该字段是空操作并返回默认值。
 // TODO: move this, and TypeMeta and ListMeta, to a different package
 type Common interface {
 	GetResourceVersion() string
@@ -79,9 +78,8 @@ type Common interface {
 	SetSelfLink(selfLink string)
 }
 
-// ListInterface lets you work with list metadata from any of the versioned or
-// internal API objects. Attempting to set or retrieve a field on an object that does
-// not support that field will be a no-op and return a default value.
+// ListInterface 允许以统一方式操作任意版本化或内部 API 对象的列表元数据。
+// 对不支持某字段的对象，设置或读取该字段是空操作并返回默认值。
 // TODO: move this, and TypeMeta and ListMeta, to a different package
 type ListInterface interface {
 	GetResourceVersion() string
@@ -94,14 +92,14 @@ type ListInterface interface {
 	SetRemainingItemCount(c *int64)
 }
 
-// ShardedListInterface can be implemented by list types to indicate that they
-// represent a sharded subset of the full collection rather than the complete list.
+// ShardedListInterface 可由列表类型实现，以表明该列表只代表完整集合的一个分片，
+// 而非完整结果。ShardInfo 描述分片边界，供调用方合并多个分片。
 type ShardedListInterface interface {
 	GetShardInfo() *ShardInfo
 	SetShardInfo(*ShardInfo)
 }
 
-// Type exposes the type and APIVersion of versioned or internal API objects.
+// Type 暴露版本化或内部 API 对象的类型与 APIVersion。
 // TODO: move this, and TypeMeta and ListMeta, to a different package
 type Type interface {
 	GetAPIVersion() string
@@ -110,8 +108,10 @@ type Type interface {
 	SetKind(kind string)
 }
 
+// 编译期断言：ListMeta 必须实现 ListInterface。
 var _ ListInterface = &ListMeta{}
 
+// ListMeta 对 ListInterface 的实现；各方法直接读写同名字段，因此无需额外校验。
 func (meta *ListMeta) GetResourceVersion() string        { return meta.ResourceVersion }
 func (meta *ListMeta) SetResourceVersion(version string) { meta.ResourceVersion = version }
 func (meta *ListMeta) GetSelfLink() string               { return meta.SelfLink }
@@ -123,24 +123,30 @@ func (meta *ListMeta) SetRemainingItemCount(c *int64)    { meta.RemainingItemCou
 func (meta *ListMeta) GetShardInfo() *ShardInfo          { return meta.ShardInfo }
 func (meta *ListMeta) SetShardInfo(s *ShardInfo)         { meta.ShardInfo = s }
 
+// GetObjectKind 返回自身，使嵌入 TypeMeta 的对象自动满足 ObjectKind 接口。
 func (obj *TypeMeta) GetObjectKind() schema.ObjectKind { return obj }
 
 // SetGroupVersionKind satisfies the ObjectKind interface for all objects that embed TypeMeta
+// 将 GVK 拆成 APIVersion 与 Kind 两个字段写入，二者是同一信息的序列化形式。
 func (obj *TypeMeta) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	obj.APIVersion, obj.Kind = gvk.ToAPIVersionAndKind()
 }
 
 // GroupVersionKind satisfies the ObjectKind interface for all objects that embed TypeMeta
+// 从 APIVersion 与 Kind 字段重建 GVK；字段缺失时返回零值 GVK。
 func (obj *TypeMeta) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(obj.APIVersion, obj.Kind)
 }
 
+// GetListMeta 返回自身，使 ListMeta 满足 ListMetaAccessor。
 func (obj *ListMeta) GetListMeta() ListInterface { return obj }
 
+// GetObjectMeta 返回自身，使 ObjectMeta 满足 ObjectMetaAccessor。
 func (obj *ObjectMeta) GetObjectMeta() Object { return obj }
 
 // Namespace implements metav1.Object for any object with an ObjectMeta typed field. Allows
 // fast, direct access to metadata fields for API objects.
+// 以下方法组是 ObjectMeta 对 Object 接口的直接实现：全部是字段读写，无副作用。
 func (meta *ObjectMeta) GetNamespace() string                { return meta.Namespace }
 func (meta *ObjectMeta) SetNamespace(namespace string)       { meta.Namespace = namespace }
 func (meta *ObjectMeta) GetName() string                     { return meta.Name }

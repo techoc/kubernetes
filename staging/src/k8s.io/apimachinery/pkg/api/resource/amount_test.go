@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// TestInt64AmountAsInt64 验证 int64Amount 转 int64 仅在能精确表示时成功：
+// 负 scale 会丢小数位，超大正 scale 会溢出，两者都必须返回 ok=false 而不是静默截断。
 func TestInt64AmountAsInt64(t *testing.T) {
 	for _, test := range []struct {
 		value  int64
@@ -42,6 +44,8 @@ func TestInt64AmountAsInt64(t *testing.T) {
 	}
 }
 
+// TestInt64AmountAdd 验证 int64Amount 的加法：不同 scale 要先对齐，溢出时返回 false
+// 且不得改写接收者；同时正反两个方向相加（交换律）结果一致。
 func TestInt64AmountAdd(t *testing.T) {
 	for _, test := range []struct {
 		a, b, c int64Amount
@@ -72,7 +76,7 @@ func TestInt64AmountAdd(t *testing.T) {
 			}
 		}
 
-		// addition is commutative
+		// 加法具有交换律
 		c = test.b
 		if ok := c.Add(test.a); ok != test.ok {
 			t.Errorf("%v: unexpected ok: %t", test, ok)
@@ -89,6 +93,8 @@ func TestInt64AmountAdd(t *testing.T) {
 	}
 }
 
+// TestInt64AmountMul 验证 int64Amount 的乘法：溢出或无法保持精度时返回 false，
+// 并且失败时不得改写接收者；覆盖正负边界值。
 func TestInt64AmountMul(t *testing.T) {
 	for _, test := range []struct {
 		a  int64Amount
@@ -131,6 +137,8 @@ func TestInt64AmountMul(t *testing.T) {
 	}
 }
 
+// TestInt64AsCanonicalString 验证 int64Amount 渲染为规范形式：去掉尾随零，
+// 返回的指数与字符串值相乘后应等于原值。
 func TestInt64AsCanonicalString(t *testing.T) {
 	for _, test := range []struct {
 		value    int64
@@ -153,6 +161,7 @@ func TestInt64AsCanonicalString(t *testing.T) {
 	}
 }
 
+// TestAmountSign 验证符号判断只取决于 value 的正负/零，与 scale 无关。
 func TestAmountSign(t *testing.T) {
 	table := []struct {
 		i      int64Amount
@@ -175,6 +184,8 @@ func TestAmountSign(t *testing.T) {
 	}
 }
 
+// TestInt64AmountAsScaledInt64 验证换算到指定 scale 时的小数截断与溢出语义：
+// 截断向零取整，无法精确表示或溢出的情况由 ok 标记。
 func TestInt64AmountAsScaledInt64(t *testing.T) {
 	for _, test := range []struct {
 		name   string

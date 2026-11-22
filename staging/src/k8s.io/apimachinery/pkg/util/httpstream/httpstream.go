@@ -25,6 +25,7 @@ import (
 	"time"
 )
 
+// HTTP 头常量：Connection/Upgrade 用于连接升级，X-Stream-Protocol-Version 系列用于子协议协商。
 const (
 	HeaderConnection               = "Connection"
 	HeaderUpgrade                  = "Upgrade"
@@ -35,6 +36,7 @@ const (
 // NewStreamHandler defines a function that is called when a new Stream is
 // received. If no error is returned, the Stream is accepted; otherwise,
 // the stream is rejected. After the reply frame has been sent, replySent is closed.
+// 中文补充：replySent 关闭即表示服务端已把应答帧写出，handler 可据此做后续清理。
 type NewStreamHandler func(stream Stream, replySent <-chan struct{}) error
 
 // NoOpNewStreamHandler is a stream handler that accepts a new stream and
@@ -46,6 +48,7 @@ type Dialer interface {
 
 	// Dial opens a streaming connection to a server using one of the protocols
 	// specified (in order of most preferred to least preferred).
+	// 中文补充：协议按偏好降序传入；返回实际选中的协议名供调用方记录。
 	Dial(protocols ...string) (Connection, string, error)
 }
 
@@ -56,6 +59,7 @@ type Dialer interface {
 type UpgradeRoundTripper interface {
 	http.RoundTripper
 	// NewConnection validates the response and creates a new Connection.
+	// 中文补充：升级失败时由该调用返回错误，而不是在 RoundTrip 中暴露。
 	NewConnection(resp *http.Response) (Connection, error)
 }
 
@@ -65,6 +69,7 @@ type ResponseUpgrader interface {
 	// UpgradeResponse upgrades an HTTP response to one that supports multiplexed
 	// streams. newStreamHandler will be called asynchronously whenever the
 	// other end of the upgraded connection creates a new stream.
+	// 中文补充：handler 在独立 goroutine 中调用，实现需自行保证并发安全。
 	UpgradeResponse(w http.ResponseWriter, req *http.Request, newStreamHandler NewStreamHandler) Connection
 }
 
@@ -89,6 +94,7 @@ type Stream interface {
 	io.ReadWriteCloser
 	// Reset closes both directions of the stream, indicating that neither client
 	// or server can use it any more.
+	// 中文补充：Reset 用于异常终止，与正常 Close 的区别是不保证数据完整传输。
 	Reset() error
 	// Headers returns the headers used to create the stream.
 	Headers() http.Header
@@ -102,12 +108,14 @@ type UpgradeFailureError struct {
 	Cause error
 }
 
+// Error 返回包含底层原因的升级失败描述。
 func (u *UpgradeFailureError) Error() string {
 	return fmt.Sprintf("unable to upgrade streaming request: %s", u.Cause)
 }
 
 // IsUpgradeFailure returns true if the passed error is (or wrapped error contains)
 // the UpgradeFailureError.
+// 中文补充：用 errors.As 检查包装链，调用方无需自行 Unwrap。
 func IsUpgradeFailure(err error) bool {
 	if err == nil {
 		return false
@@ -118,6 +126,7 @@ func IsUpgradeFailure(err error) bool {
 
 // isHTTPSProxyError returns true if error is Gorilla/Websockets HTTPS Proxy dial error;
 // false otherwise (see https://github.com/kubernetes/kubernetes/issues/126134).
+// 中文补充：Gorilla 的代理错误没有类型可断言，只能匹配其错误文本，因此该函数是启发式的。
 func IsHTTPSProxyError(err error) bool {
 	if err == nil {
 		return false
@@ -126,6 +135,8 @@ func IsHTTPSProxyError(err error) bool {
 }
 
 // IsUpgradeRequest returns true if the given request is a connection upgrade request
+// 中文补充：按 RFC 7230 逐个检查 Connection 头中的 token（大小写不敏感），
+// 而不是简单比较整串，以兼容 "keep-alive, Upgrade" 这类组合值。
 func IsUpgradeRequest(req *http.Request) bool {
 	for _, h := range req.Header[http.CanonicalHeaderKey(HeaderConnection)] {
 		if strings.Contains(strings.ToLower(h), strings.ToLower(HeaderUpgrade)) {
@@ -135,6 +146,8 @@ func IsUpgradeRequest(req *http.Request) bool {
 	return false
 }
 
+// negotiateProtocol 按客户端偏好顺序寻找第一个服务端也支持的协议；
+// 嵌套循环的顺序决定了“客户端优先级”优先于“服务端优先级”。
 func negotiateProtocol(clientProtocols, serverProtocols []string) string {
 	for i := range clientProtocols {
 		for j := range serverProtocols {
@@ -146,6 +159,8 @@ func negotiateProtocol(clientProtocols, serverProtocols []string) string {
 	return ""
 }
 
+// commaSeparatedHeaderValues 把可能包含逗号分隔多个值的头部拆成扁平列表，
+// 并丢弃空 token（如尾部多余的逗号）。
 func commaSeparatedHeaderValues(header []string) []string {
 	var parsedClientProtocols []string
 	for i := range header {
@@ -164,7 +179,10 @@ func commaSeparatedHeaderValues(header []string) []string {
 // If a match is found, Handshake adds a response header indicating the chosen subprotocol.
 // If no match is found, HTTP forbidden is returned, along with a response header containing
 // the list of protocols the server can accept.
+//
+// 中文补充：各失败分支直接写 HTTP 响应，因此调用方不应再向 w 写入内容。
 func Handshake(req *http.Request, w http.ResponseWriter, serverProtocols []string) (string, error) {
+	// 服务端没有可协商协议属于编程错误，用 panic 尽早暴露。
 	if len(serverProtocols) == 0 {
 		panic(fmt.Errorf("unable to upgrade: serverProtocols is required"))
 	}
@@ -188,6 +206,7 @@ func Handshake(req *http.Request, w http.ResponseWriter, serverProtocols []strin
 
 	negotiatedProtocol := negotiateProtocol(clientProtocols, serverProtocols)
 	if len(negotiatedProtocol) == 0 {
+		// 协商失败时把服务端支持的协议列表回传，便于客户端诊断或降级。
 		for i := range serverProtocols {
 			w.Header().Add(HeaderAcceptedProtocolVersions, serverProtocols[i])
 		}
@@ -196,6 +215,7 @@ func Handshake(req *http.Request, w http.ResponseWriter, serverProtocols []strin
 		return "", err
 	}
 
+	// 成功时回写选定的子协议，客户端据此确认后续帧使用的协议。
 	w.Header().Add(HeaderProtocolVersion, negotiatedProtocol)
 	return negotiatedProtocol, nil
 }

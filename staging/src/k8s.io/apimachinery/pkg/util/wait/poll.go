@@ -241,6 +241,7 @@ func PollImmediateInfiniteWithContext(ctx context.Context, interval time.Duratio
 //
 // Deprecated: will be removed in favor of loopConditionUntilContext.
 func poll(ctx context.Context, immediate bool, wait waitWithContextFunc, condition ConditionWithContextFunc) error {
+	// Immediate mode guarantees at least one invocation before any waiting.
 	if immediate {
 		done, err := runConditionWithCrashProtectionWithContext(ctx, condition)
 		if err != nil {
@@ -255,6 +256,8 @@ func poll(ctx context.Context, immediate bool, wait waitWithContextFunc, conditi
 	case <-ctx.Done():
 		// returning ctx.Err() will break backward compatibility, use new PollUntilContext*
 		// methods instead
+		// The deprecated Poll* family reports ErrWaitTimeout on both deadline and
+		// cancellation; only the context-aware variants expose the real cause.
 		return ErrWaitTimeout
 	default:
 		return waitForWithContext(ctx, wait, condition)
@@ -277,6 +280,8 @@ func poller(interval, timeout time.Duration) waitWithContextFunc {
 	return waitWithContextFunc(func(ctx context.Context) <-chan struct{} {
 		ch := make(chan struct{})
 
+		// The ticker goroutine is the reason a non-zero timeout (or a cancelled
+		// context) must always be able to terminate it; otherwise it leaks.
 		go func() {
 			defer close(ch)
 

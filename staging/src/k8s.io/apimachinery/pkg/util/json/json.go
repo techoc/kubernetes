@@ -26,6 +26,7 @@ import (
 
 // NewEncoder delegates to json.NewEncoder
 // It is only here so this package can be a drop-in for common encoding/json uses
+// 仅做转发，使调用方可以整体切换到本包而无需改动编码代码。
 func NewEncoder(w io.Writer) *json.Encoder {
 	return json.NewEncoder(w)
 }
@@ -37,17 +38,20 @@ func Marshal(v interface{}) ([]byte, error) {
 }
 
 // limit recursive depth to prevent stack overflow errors
+// maxDepth 限制递归遍历深度，防止恶意嵌套 JSON 导致栈溢出。
 const maxDepth = 10000
 
 // Unmarshal unmarshals the given data.
 // Object keys are case-sensitive.
 // Numbers decoded into interface{} fields are converted to int64 or float64.
+// 与标准库不同，这里键名大小写敏感且尽量保留整数精度，这是 API 兼容性要求。
 func Unmarshal(data []byte, v interface{}) error {
 	return kjson.UnmarshalCaseSensitivePreserveInts(data, v)
 }
 
 // ConvertInterfaceNumbers converts any json.Number values to int64 or float64.
 // Values which are map[string]interface{} or []interface{} are recursively visited
+// 对传入值的顶层做一次转换；depth 由调用方传入，用于限制递归深度。
 func ConvertInterfaceNumbers(v *interface{}, depth int) error {
 	var err error
 	switch v2 := (*v).(type) {
@@ -63,6 +67,7 @@ func ConvertInterfaceNumbers(v *interface{}, depth int) error {
 
 // ConvertMapNumbers traverses the map, converting any json.Number values to int64 or float64.
 // values which are map[string]interface{} or []interface{} are recursively visited
+// 遍历 map 并就地替换 json.Number；遇到嵌套容器时递归，深度超限即报错。
 func ConvertMapNumbers(m map[string]interface{}, depth int) error {
 	if depth > maxDepth {
 		return fmt.Errorf("exceeded max depth of %d", maxDepth)
@@ -87,6 +92,7 @@ func ConvertMapNumbers(m map[string]interface{}, depth int) error {
 
 // ConvertSliceNumbers traverses the slice, converting any json.Number values to int64 or float64.
 // values which are map[string]interface{} or []interface{} are recursively visited
+// 遍历切片并就地替换 json.Number；深度限制与 ConvertMapNumbers 一致。
 func ConvertSliceNumbers(s []interface{}, depth int) error {
 	if depth > maxDepth {
 		return fmt.Errorf("exceeded max depth of %d", maxDepth)
@@ -110,6 +116,7 @@ func ConvertSliceNumbers(s []interface{}, depth int) error {
 }
 
 // convertNumber converts a json.Number to an int64 or float64, or returns an error
+// 优先转 int64 以保留整数精度，失败（含溢出）时退回 float64。
 func convertNumber(n json.Number) (interface{}, error) {
 	// Attempt to convert to an int64 first
 	if i, err := n.Int64(); err == nil {

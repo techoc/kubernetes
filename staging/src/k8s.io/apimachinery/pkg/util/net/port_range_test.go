@@ -22,6 +22,8 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
+// TestPortRange 通过 pflag.Value 接口验证 PortRange.Set/String 的解析与回显：
+// 覆盖单端口、区间、偏移三种记法，空串清空，以及越界、倒序、混合记法等非法输入。
 func TestPortRange(t *testing.T) {
 	testCases := []struct {
 		input    string

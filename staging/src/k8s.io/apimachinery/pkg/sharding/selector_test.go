@@ -24,12 +24,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// testObject is a minimal runtime.Object for testing.
+// testObject 是用于测试的最小 runtime.Object，只带类型与对象元信息。
 type testObject struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata"`
 }
 
+// DeepCopyObject 复制元信息，避免测试对象之间共享指针。
 func (t *testObject) DeepCopyObject() runtime.Object {
 	return &testObject{
 		TypeMeta:   t.TypeMeta,
@@ -37,6 +38,8 @@ func (t *testObject) DeepCopyObject() runtime.Object {
 	}
 }
 
+// TestSelectorMatches 验证 sharding.Selector 的范围判定：空选择器与 Everything()
+// 匹配全部对象；范围比较按哈希字符串的大小进行；边界应是“左闭右开”。
 func TestSelectorMatches(t *testing.T) {
 	obj := &testObject{
 		ObjectMeta: metav1.ObjectMeta{
@@ -46,6 +49,7 @@ func TestSelectorMatches(t *testing.T) {
 		},
 	}
 
+	// 用对象 UID 计算分片哈希，作为各用例的参照值。
 	hash := "0x" + HashField("test-uid-123")
 
 	tests := []struct {
@@ -77,7 +81,7 @@ func TestSelectorMatches(t *testing.T) {
 			selector: NewSelector(ShardRangeRequirement{
 				Key:   "object.metadata.uid",
 				Start: hash,
-				End:   hash + "f", // hash + "f" is always > hash
+				End:   hash + "f", // hash + "f" 一定大于 hash
 			}),
 			wantMatch: true,
 		},
@@ -88,6 +92,7 @@ func TestSelectorMatches(t *testing.T) {
 				Start: "0xffffffffffffffff",
 				End:   "0x10000000000000000",
 			}),
+			// 起点高于哈希时是否匹配取决于实际哈希，用同一比较表达式保证断言自洽。
 			wantMatch: hash >= "0xffffffffffffffff",
 		},
 		{
@@ -97,6 +102,7 @@ func TestSelectorMatches(t *testing.T) {
 				Start: "0x0000000000000000",
 				End:   "0x0000000000000001",
 			}),
+			// 区间右端开放：哈希等于 End 时不应匹配，这里用它验证边界语义。
 			wantMatch: hash < "0x0000000000000001",
 		},
 	}
@@ -114,6 +120,8 @@ func TestSelectorMatches(t *testing.T) {
 	}
 }
 
+// TestSelectorEmpty 验证 Empty 判定：Everything() 与无要求的选择器为空，
+// 带任一范围要求的选择器不为空。
 func TestSelectorEmpty(t *testing.T) {
 	if !Everything().Empty() {
 		t.Error("Everything() should be empty")
@@ -128,6 +136,7 @@ func TestSelectorEmpty(t *testing.T) {
 	}
 }
 
+// TestSelectorString 验证选择器的字符串表示稳定，便于日志与调试。
 func TestSelectorString(t *testing.T) {
 	sel := NewSelector(ShardRangeRequirement{
 		Key:   "object.metadata.uid",

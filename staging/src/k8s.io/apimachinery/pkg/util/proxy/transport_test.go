@@ -29,6 +29,8 @@ import (
 	"testing"
 )
 
+// parseURLOrDie parses a test URL and panics on malformed input; test fixtures
+// are expected to be correct, so a parse failure is a test bug.
 func parseURLOrDie(inURL string) *url.URL {
 	parsed, err := url.Parse(inURL)
 	if err != nil {
@@ -37,6 +39,11 @@ func parseURLOrDie(inURL string) *url.URL {
 	return parsed
 }
 
+// TestProxyTransport verifies the proxy's response rewriting: absolute-path
+// links are rebased onto the proxy prefix, relative links are left alone,
+// same-host absolute links are treated as internal, external hosts are
+// untouched, requests get X-Forwarded-* headers, and redirect targets are
+// rewritten (and escaped) consistently.
 func TestProxyTransport(t *testing.T) {
 	testTransport := &Transport{
 		Scheme:      "http",
@@ -48,6 +55,8 @@ func TestProxyTransport(t *testing.T) {
 		Host:        "foo.com",
 		PathPrepend: "/proxy/node/node1:8080",
 	}
+	// Each transport variant exercises a different combination of explicit and
+	// inferred scheme/host.
 	emptyHostTransport := &Transport{
 		Scheme:      "https",
 		PathPrepend: "/proxy/node/node1:10250",
@@ -274,6 +283,8 @@ func TestProxyTransport(t *testing.T) {
 		defer server.Close()
 
 		// Replace source URL with our test server address.
+		// The fixtures hard-code "mynode.com"; retargeting them at the httptest
+		// server keeps redirects and same-host detection meaningful.
 		sourceURL := parseURLOrDie(item.sourceURL)
 		serverURL := parseURLOrDie(server.URL)
 		item.input = strings.Replace(item.input, sourceURL.Host, serverURL.Host, -1)
@@ -315,6 +326,9 @@ func TestProxyTransport(t *testing.T) {
 	}
 }
 
+// TestRewriteResponse verifies that response bodies are decompressed and
+// recompressed transparently for both gzip and deflate, including bodies far
+// larger than the internal read buffer (the fix for truncation regressions).
 func TestRewriteResponse(t *testing.T) {
 	gzipbuf := bytes.NewBuffer(nil)
 	flatebuf := bytes.NewBuffer(nil)
@@ -324,6 +338,8 @@ func TestRewriteResponse(t *testing.T) {
 		Host:        "foo.com",
 		PathPrepend: "/proxy/node/node1:10250",
 	}
+	// expected covers a short body and one large enough to require multiple
+	// reads through the rewriting pipeline.
 	expected := []string{
 		"short body test",
 		strings.Repeat("long body test", 4097),

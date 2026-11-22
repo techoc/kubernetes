@@ -102,19 +102,24 @@ func makeUsefulPanic(v reflect.Value) {
 // recursive types.
 // equateNilAndEmpty controls whether empty maps/slices are equivalent to nil
 func (e Equalities) deepValueEqual(v1, v2 reflect.Value, visited map[visit]bool, equateNilAndEmpty bool, depth int) bool {
+	// Turn a panic from an unexported field into an annotated one so the full
+	// access path is visible in the stack trace.
 	defer makeUsefulPanic(v1)
 
 	if !v1.IsValid() || !v2.IsValid() {
+		// An invalid Value represents a nil interface; two nils are equal.
 		return v1.IsValid() == v2.IsValid()
 	}
 	if v1.Type() != v2.Type() {
 		return false
 	}
+	// A registered equality function overrides the structural comparison.
 	if fv, ok := e[v1.Type()]; ok {
 		return fv.Call([]reflect.Value{v1, v2})[0].Bool()
 	}
 
 	hard := func(k reflect.Kind) bool {
+		// Only container-like kinds can be recursive and need cycle tracking.
 		switch k {
 		case reflect.Array, reflect.Map, reflect.Slice, reflect.Struct:
 			return true
@@ -136,6 +141,8 @@ func (e Equalities) deepValueEqual(v1, v2 reflect.Value, visited map[visit]bool,
 		}
 
 		// ... or already seen
+		// Assuming in-progress comparisons are equal is safe for a
+		// well-formed graph and necessary to terminate on cycles.
 		typ := v1.Type()
 		v := visit{addr1, addr2, typ}
 		if visited[v] {
@@ -277,6 +284,8 @@ func (e Equalities) DeepEqualWithNilDifferentFromEmpty(a1, a2 interface{}) bool 
 	return e.deepEqual(a1, a2, false)
 }
 
+// deepEqual is the interface-level entry point; it unwraps to reflect.Values
+// and seeds the cycle-detection map.
 func (e Equalities) deepEqual(a1, a2 interface{}, equateNilAndEmpty bool) bool {
 	if a1 == nil || a2 == nil {
 		return a1 == a2
@@ -290,6 +299,7 @@ func (e Equalities) deepEqual(a1, a2 interface{}, equateNilAndEmpty bool) bool {
 }
 
 func (e Equalities) deepValueDerive(v1, v2 reflect.Value, visited map[visit]bool, depth int) bool {
+	// Same panic annotation as deepValueEqual.
 	defer makeUsefulPanic(v1)
 
 	if !v1.IsValid() || !v2.IsValid() {
@@ -345,6 +355,8 @@ func (e Equalities) deepValueDerive(v1, v2 reflect.Value, visited map[visit]bool
 		}
 		return true
 	case reflect.Slice:
+		// In derive semantics an empty or nil "wanted" slice imposes no
+		// constraint; it matches any actual slice.
 		if v1.IsNil() || v1.Len() == 0 {
 			return true
 		}
@@ -361,6 +373,7 @@ func (e Equalities) deepValueDerive(v1, v2 reflect.Value, visited map[visit]bool
 		}
 		return true
 	case reflect.String:
+		// An empty string is considered unset and therefore matches anything.
 		if v1.Len() == 0 {
 			return true
 		}
@@ -422,6 +435,7 @@ func (e Equalities) deepValueDerive(v1, v2 reflect.Value, visited map[visit]bool
 //
 // The unset fields include a nil pointer and an empty string.
 func (e Equalities) DeepDerivative(a1, a2 interface{}) bool {
+	// A nil "wanted" object matches everything, including nil.
 	if a1 == nil {
 		return true
 	}

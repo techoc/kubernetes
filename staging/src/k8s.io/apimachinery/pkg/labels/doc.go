@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package labels implements a simple label system, parsing and matching
-// selectors with sets of labels.
+// Package labels 实现一个简单的标签系统，负责解析 selector 并将其与标签集合进行匹配。
+// 标签是不可变的键值对，selector 则是基于这些键值的表达式；二者共同构成
+// Kubernetes 中资源筛选与关联的基础机制。
 package labels

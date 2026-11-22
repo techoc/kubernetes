@@ -26,8 +26,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestListOptions 验证 meta/internalversion scheme 中 ListOptions 的三条契约：
+// metav1 与 internalversion 之间可无损往返转换、非法选择器会在转换时被拒绝，
+// 以及 ParameterCodec 能把 ListOptions 编解码为 URL 查询参数。
 func TestListOptions(t *testing.T) {
-	// verify round trip conversion
+	// 验证往返转换
 	ten := int64(10)
 	in := &metav1.ListOptions{
 		LabelSelector:   "a=1",
@@ -48,7 +51,8 @@ func TestListOptions(t *testing.T) {
 		t.Errorf("unexpected: %s", cmp.Diff(in, actual))
 	}
 
-	// verify failing conversion
+	// 验证非法转换会被拒绝：internalversion 转换需要解析选择器，语法错误的表达式必须报错，
+	// 否则非法查询会一路透传到存储层。
 	for i, failingObject := range []*metav1.ListOptions{
 		{LabelSelector: "a!!!"},
 		{FieldSelector: "a!!!"},
@@ -59,7 +63,7 @@ func TestListOptions(t *testing.T) {
 		}
 	}
 
-	// verify kind registration
+	// 验证 kind 注册：两个版本的 ListOptions 都必须以自身 GroupVersion 注册，且不是 unversioned。
 	if gvks, unversioned, err := Scheme.ObjectKinds(in); err != nil || unversioned || gvks[0] != metav1.SchemeGroupVersion.WithKind("ListOptions") {
 		t.Errorf("unexpected: %v %v %v", gvks[0], unversioned, err)
 	}
@@ -67,6 +71,7 @@ func TestListOptions(t *testing.T) {
 		t.Errorf("unexpected: %v %v %v", gvks[0], unversioned, err)
 	}
 
+	// watch=1 必须被解析为 true；这是 internalversion 参数解码的典型用例。
 	actual = &metav1.ListOptions{}
 	if err := ParameterCodec.DecodeParameters(url.Values{"watch": []string{"1"}}, metav1.SchemeGroupVersion, actual); err != nil {
 		t.Fatal(err)
@@ -75,7 +80,7 @@ func TestListOptions(t *testing.T) {
 		t.Errorf("unexpected watch decode: %#v", actual)
 	}
 
-	// check ParameterCodec
+	// 检查 ParameterCodec 编码后再解码能还原全部字段。
 	query, err := ParameterCodec.EncodeParameters(in, metav1.SchemeGroupVersion)
 	if err != nil {
 		t.Fatal(err)

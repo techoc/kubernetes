@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package internal 实现服务端 apply 的字段管理逻辑：解码/编码
+// managedFields、合并 apply 配置，并通过一系列 Manager 包装叠加版本检查、
+// last-applied 记录、创建时跟踪概率等语义。
 package internal
 
 import (
@@ -36,12 +39,18 @@ const DefaultMaxUpdateManagers int = 10
 
 // DefaultTrackOnCreateProbability defines the default probability that the field management of an object
 // starts being tracked from the object's creation, instead of from the first time the object is applied to.
+// 中文说明：设为 1 表示完全从创建时开始跟踪，避免为省开销而随机跳过，
+// 从而保证 apply 语义确定。
 const DefaultTrackOnCreateProbability float32 = 1
 
+// atMostEverySecond 限制错误日志频率，避免 managedFields 失败时刷屏。
 var atMostEverySecond = NewAtMostEvery(time.Second)
 
 // FieldManager updates the managed fields and merges applied
 // configurations.
+//
+// 中文说明：它把内层 Manager 链与实际 API 对象的编解码隔离开——调用方只需
+// 传入 live/new 对象，FieldManager 负责取用、合并与回写 managedFields。
 type FieldManager struct {
 	fieldManager Manager
 	subresource  string
@@ -54,6 +63,10 @@ func NewFieldManager(f Manager, subresource string) *FieldManager {
 }
 
 // newDefaultFieldManager is a helper function which wraps a Manager with certain default logic.
+//
+// 中文说明：包装顺序即语义叠加顺序，从内到外依次为：剥离类型元信息、
+// 按 manager 归属更新、容量上限、创建时跟踪概率、last-applied 维护、
+// 版本校验。顺序有依赖，不能随意调整。
 func NewDefaultFieldManager(f Manager, typeConverter TypeConverter, objectConverter runtime.ObjectConvertor, objectCreater runtime.ObjectCreater, kind schema.GroupVersionKind, subresource string) *FieldManager {
 	return NewFieldManager(
 		NewVersionCheckManager(
@@ -74,6 +87,10 @@ func NewDefaultFieldManager(f Manager, typeConverter TypeConverter, objectConver
 	)
 }
 
+// decodeLiveOrNew 决定本次操作应以哪一份 managedFields 为基础。
+// ignoreManagedFieldsFromRequestObject 为 true（子资源请求）时信任 live 对象；
+// 否则优先使用请求对象，但若其为空或解码失败则退回 live，避免不感知
+// managedFields 的客户端误删数据。
 func decodeLiveOrNew(liveObj, newObj runtime.Object, ignoreManagedFieldsFromRequestObject bool) (Managed, error) {
 	liveAccessor, err := meta.Accessor(liveObj)
 	if err != nil {
@@ -93,6 +110,7 @@ func decodeLiveOrNew(liveObj, newObj runtime.Object, ignoreManagedFieldsFromRequ
 		return nil, err
 	}
 
+	// 显式的空列表（或单个空条目）是“重置 managedFields”的约定信号。
 	if isResetManagedFields(newAccessor.GetManagedFields()) {
 		return NewEmptyManaged(), nil
 	}
@@ -107,6 +125,8 @@ func decodeLiveOrNew(liveObj, newObj runtime.Object, ignoreManagedFieldsFromRequ
 	return managed, nil
 }
 
+// emptyManagedFieldsOnErr 在解码失败时降级为空的 managedFields 而不是报错，
+// 保证写入路径在数据损坏时仍可继续（旧数据会被下一次写入覆盖）。
 func emptyManagedFieldsOnErr(managed Managed, err error) (Managed, error) {
 	if err != nil {
 		return NewEmptyManaged(), nil

@@ -34,6 +34,9 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// testArgs 描述一个 apply 冲突场景：last-applied 注解（客户端 apply 遗留）、
+// 已存在对象、请求 apply 的对象，以及期望的冲突字段集合。expectConflictSet
+// 为 nil 表示期望成功。
 type testArgs struct {
 	lastApplied       []byte
 	original          []byte
@@ -45,6 +48,10 @@ type testArgs struct {
 // TestApplyUsingLastAppliedAnnotation tests that applying to an object
 // created with the client-side apply last-applied annotation
 // will not give conflicts
+//
+// 中文说明：复用同一 kubectl manager 时，只有 last-applied 中未声明的字段
+// 变更才会冲突；不同 manager 则要把所有被他人改过的字段都视为冲突。
+// 用例还覆盖 apiVersion 不匹配与非法 last-applied 的降级行为。
 func TestApplyUsingLastAppliedAnnotation(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
@@ -565,6 +572,8 @@ spec:
 	testConflicts(t, f, tests)
 }
 
+// TestServiceApply 验证 Service 的 apply：selector 是原子字段，修改或清空会
+// 以整体为冲突单位；同一 manager 可以清除 selector，不同 manager 不能。
 func TestServiceApply(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Service"))
 
@@ -676,6 +685,8 @@ spec:
 	testConflicts(t, f, tests)
 }
 
+// TestReplicationControllerApply 与 Service 类似：同一 manager 可更新
+// replicas 与 selector，不同 manager 则两者都冲突。
 func TestReplicationControllerApply(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "ReplicationController"))
 
@@ -739,6 +750,8 @@ spec:
 	testConflicts(t, f, tests)
 }
 
+// TestPodApply 验证 Pod 的 nodeSelector/nodeName 更新：同一 manager 可自由
+// 修改；不同 manager 修改原子字段 nodeSelector（含清空）或 nodeName 会冲突。
 func TestPodApply(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"))
 
@@ -917,6 +930,13 @@ spec:
 	testConflicts(t, f, tests)
 }
 
+// testConflicts 是各用例共用的执行骨架：
+//  1. 重置 manager，解析 original；
+//  2. 未显式给出 lastApplied 时退化为 original（模拟客户端 apply 的默认行为）；
+//  3. 先以 test_client_side_apply 做一次 Update 写入 last-applied；
+//  4. 执行目标 manager 的 Apply，比对冲突集合；
+//  5. 若预期冲突，再用 force=true 重试，确认 force 能接管全部冲突字段；
+//  6. 最终 live 对象必须包含 applied 的所有字段。
 func testConflicts(t *testing.T, f managedfieldstest.TestFieldManager, tests []testArgs) {
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
@@ -954,6 +974,8 @@ func testConflicts(t *testing.T, f managedfieldstest.TestFieldManager, tests []t
 					t.Errorf("expected to get conflicts but got %v", err)
 				}
 
+				// 构造期望的 ConflictError：每条冲突都归属于执行 Update 的
+				// test_client_side_apply。
 				expectedConflicts := merge.Conflicts{}
 				test.expectConflictSet.Iterate(func(p fieldpath.Path) {
 					expectedConflicts = append(expectedConflicts, merge.Conflict{
@@ -975,6 +997,8 @@ func testConflicts(t *testing.T, f managedfieldstest.TestFieldManager, tests []t
 			}
 
 			// Eventually resource should contain applied changes
+			// 中文说明：DeepDerivative 只要求 applied 中出现的字段在 live 中一致，
+			// 不反对 server 补充默认字段。
 			if !apiequality.Semantic.DeepDerivative(appliedObj, f.Live()) {
 				t.Errorf("expected equal resource: \n%#v, got: \n%#v", appliedObj, f.Live())
 			}
@@ -982,6 +1006,8 @@ func testConflicts(t *testing.T, f managedfieldstest.TestFieldManager, tests []t
 	}
 }
 
+// yamlToJSON 把 YAML 解码为 Unstructured 后再经 JSON scheme 重新编码，
+// 保证与 API 接受的数据形态一致（字段名、类型均规范化）。
 func yamlToJSON(y []byte) (string, error) {
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	if err := yaml.Unmarshal(y, &obj.Object); err != nil {
@@ -998,6 +1024,7 @@ func yamlToJSON(y []byte) (string, error) {
 	return string(json), nil
 }
 
+// setLastAppliedFromEncoded 把给定 YAML/JSON 写入对象的 last-applied 注解。
 func setLastAppliedFromEncoded(obj runtime.Object, lastApplied []byte) error {
 	lastAppliedJSON, err := yamlToJSON(lastApplied)
 	if err != nil {

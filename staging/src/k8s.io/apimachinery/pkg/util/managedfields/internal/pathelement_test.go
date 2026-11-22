@@ -18,6 +18,8 @@ package internal
 
 import "testing"
 
+// TestPathElementRoundTrip 验证路径元素字符串的解析与再序列化是幂等的，
+// 覆盖字段、索引、key（含 JSON 对象）与 value（含 null/字符串/数字/对象）四类。
 func TestPathElementRoundTrip(t *testing.T) {
 	tests := []string{
 		`i:0`,
@@ -53,6 +55,8 @@ func TestPathElementRoundTrip(t *testing.T) {
 	}
 }
 
+// TestPathElementIgnoreUnknown 验证未知限定符（如 r:）被忽略而不是报错，
+// 以便向前兼容未来新增的路径元素类型。
 func TestPathElementIgnoreUnknown(t *testing.T) {
 	_, err := NewPathElement("r:Hello")
 	if err != nil {
@@ -60,6 +64,8 @@ func TestPathElementIgnoreUnknown(t *testing.T) {
 	}
 }
 
+// TestNewPathElementError 覆盖各类非法输入：缺冒号、索引非整数、
+// 空索引、非法 JSON 等都必须返回错误。
 func TestNewPathElementError(t *testing.T) {
 	tests := []string{
 		``,

@@ -42,6 +42,8 @@ import (
 	jsonserializer "k8s.io/apimachinery/pkg/runtime/serializer/json"
 )
 
+// TestNilUnstructuredContent 验证零值 Unstructured 的 UnstructuredContent()
+// 返回非 nil 的空 map，且不会因此修改对象本身（DeepCopy 后仍相等）。
 func TestNilUnstructuredContent(t *testing.T) {
 	var u unstructured.Unstructured
 	uCopy := u.DeepCopy()
@@ -56,6 +58,10 @@ func TestNilUnstructuredContent(t *testing.T) {
 // First, it fuzzes an empty ObjectMeta and sets this value as the metadata for an unstructured object.
 // Next, it uses metadata accessor methods to set these fuzzed values to another unstructured object.
 // Finally, it checks that both the unstructured objects are equal.
+//
+// 中文说明：先用 converter 把 ObjectMeta 整体写入 metadata，再用 getter/setter
+// 逐字段复制到另一个对象；两者应完全一致。这验证 accessor 与
+// ToUnstructured 的语义（尤其是 omitempty）没有偏差。
 func TestUnstructuredMetadataRoundTrip(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -85,6 +91,9 @@ func TestUnstructuredMetadataRoundTrip(t *testing.T) {
 // The fuzzing test above should catch these cases but this is here just to be safe.
 // Example: the metadata.clusterName field has the omitempty json tag
 // so if it is set to it's zero value (""), it should be removed from the metadata map.
+//
+// 中文说明：把所有字段显式设为零值，metadata map 必须完全为空，证明
+// setter 遵守 omitempty 而不是留下 "name": "" 之类的条目。
 func TestUnstructuredMetadataOmitempty(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -140,6 +149,8 @@ func TestRoundTripJSONCBORUnstructuredList(t *testing.T) {
 	roundtripType[*unstructured.UnstructuredList](t)
 }
 
+// setObjectMeta 用通用的 unstructured 转换把 ObjectMeta 写入 metadata 字段。
+// objectMeta 为 nil 时删除整个 metadata；这为“无元数据”提供了统一表示。
 func setObjectMeta(u *unstructured.Unstructured, objectMeta *metav1.ObjectMeta) error {
 	if objectMeta == nil {
 		unstructured.RemoveNestedField(u.UnstructuredContent(), "metadata")
@@ -153,6 +164,9 @@ func setObjectMeta(u *unstructured.Unstructured, objectMeta *metav1.ObjectMeta) 
 	return nil
 }
 
+// setObjectMetaUsingAccessors 通过 Unstructured 的 getter/setter 逐字段复制
+// 元数据。字段清单必须与 setObjectMeta 的覆盖范围保持一致，否则测试会
+// 误报或漏报。
 func setObjectMetaUsingAccessors(u, uCopy *unstructured.Unstructured) {
 	uCopy.SetName(u.GetName())
 	uCopy.SetGenerateName(u.GetGenerateName())
@@ -175,6 +189,9 @@ func setObjectMetaUsingAccessors(u, uCopy *unstructured.Unstructured) {
 // unstructured or unstructuredList object between two formats (A and B) in forward
 // and backward directions
 // Original and final unstructured/list are compared along with all intermediate ones
+//
+// 两种顺序都要跑（JSON→CBOR 与 CBOR→JSON），因为不同编码对数字、
+// null、空容器等的保留行为可能不对称。
 func roundtripType[U runtime.Unstructured](t *testing.T) {
 	scheme := runtime.NewScheme()
 	fuzzer := fuzzer.FuzzerFor(fuzzer.MergeFuzzerFuncs(metafuzzer.Funcs, unstructuredFuzzerFuncs), rand.NewSource(getSeed(t)), serializer.NewCodecFactory(scheme))
@@ -263,6 +280,8 @@ func roundtrip(t *testing.T, original runtime.Unstructured, a, b runtime.Seriali
 	}
 }
 
+// getSeed 返回 fuzz 随机种子。默认基于当前纳秒时间，可通过
+// TEST_RAND_SEED 环境变量固定以便复现失败用例；种子会打印到日志中。
 func getSeed(t *testing.T) int64 {
 	seed := int64(time.Now().Nanosecond())
 	if override := os.Getenv("TEST_RAND_SEED"); len(override) > 0 {
@@ -278,11 +297,15 @@ func getSeed(t *testing.T) int64 {
 	return seed
 }
 
+// 限制生成对象的深度与每层条目数，避免良构但极其庞大的数据拖慢 fuzz。
 const (
 	maxUnstructuredDepth  = 64
 	maxUnstructuredFanOut = 5
 )
 
+// unstructuredFuzzerFuncs 注册自定义 fuzz 函数：随机填充 Unstructured 的
+// Object map，以及 UnstructuredList 的 Object 与 Items。apiVersion/kind 使用
+// 合法格式，避免生成无法被 serializer 接受的对象。
 func unstructuredFuzzerFuncs(codecs serializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(u *unstructured.Unstructured, c randfill.Continue) {
@@ -311,6 +334,8 @@ func unstructuredFuzzerFuncs(codecs serializer.CodecFactory) []interface{} {
 	}
 }
 
+// generateNonEmptyString 反复生成随机字符串直到非空；fuzz 库可能生成空串，
+// 而 apiVersion/kind 等字段不能为空。
 func generateNonEmptyString(c randfill.Continue) string {
 	temp := c.String(0)
 	for len(temp) == 0 {
@@ -320,6 +345,7 @@ func generateNonEmptyString(c randfill.Continue) string {
 }
 
 // generateNonEmptyNoSlashString generates a non-empty string without any slashes
+// 中文说明：apiVersion 的 group 与 version 部分都不能包含 "/"。
 func generateNonEmptyNoSlashString(c randfill.Continue) string {
 	temp := strings.ReplaceAll(generateNonEmptyString(c), "/", "")
 	for len(temp) == 0 {
@@ -330,6 +356,7 @@ func generateNonEmptyNoSlashString(c randfill.Continue) string {
 
 // generateValidAPIVersionString generates valid apiVersion string with formats:
 // <string>/<string> or <string>
+// 中文说明：前者表示 <group>/<version>，后者表示核心组的 <version>。
 func generateValidAPIVersionString(c randfill.Continue) string {
 	if c.Bool() {
 		return generateNonEmptyNoSlashString(c) + "/" + generateNonEmptyNoSlashString(c)
@@ -355,6 +382,9 @@ func generateValidAPIVersionString(c randfill.Continue) string {
 // All external-versioned builtin types are exercised through RoundtripToUnstructured
 // in apitesting package. Types like metav1.Time are implicitly being exercised
 // because they appear as fields in those types.
+//
+// 中文说明：该函数只生成 unstructured 解码后可能出现的类型集合。数组与
+// 对象会递归调用，深度到达 0 时只生成非递归类型，防止无限展开。
 func generateRandomTypeValue(depth int, c randfill.Continue) interface{} {
 	t := c.Rand.Intn(120)
 	// If the max depth for unstructured is reached, only add non-recursive types
@@ -407,6 +437,9 @@ func unstructuredEqual(t *testing.T, a, b runtime.Unstructured) bool {
 // float64 fits into int64 range. Otherwise, the non-decimal float64 remains a float.
 // As a result, this func does an int64 to float64 conversion using math/big package
 // to ensure the conversion is lossless before comparison.
+//
+// 中文说明：如果 int64 无法被 float64 精确表示，则两个数不可能相等，
+// 直接返回 false，避免引入舍入误差。
 func numberEqual(a int64, b float64) bool {
 	// Ensure roundtrip int64 to float64 conversion is lossless
 	f, accuracy := big.NewInt(a).Float64()
@@ -417,6 +450,9 @@ func numberEqual(a int64, b float64) bool {
 	return false
 }
 
+// anyEqual 递归比较任意 unstructured 值。b 必须是解码后允许的类型集合，
+// 否则视为测试数据异常并直接 Fatal；a 可以是任意合法类型，遇到未知类型
+// 同样 Fatal。数值比较走 numberEqual 以容忍 int64/float64 的规范化。
 func anyEqual(t *testing.T, a, b interface{}) bool {
 	switch b.(type) {
 	case nil, bool, string, int64, float64, []interface{}, map[string]interface{}:

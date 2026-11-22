@@ -28,6 +28,8 @@ import (
 )
 
 // Version is an opaque representation of a version number
+//
+// Version 是版本号的不透明表示。
 type Version struct {
 	components    []uint
 	semver        bool
@@ -37,11 +39,18 @@ type Version struct {
 
 var (
 	// versionMatchRE splits a version string into numeric and "extra" parts
+	//
+	// versionMatchRE 把版本字符串拆分为数字部分与 “额外” 部分。
 	versionMatchRE = regexp.MustCompile(`^\s*v?([0-9]+(?:\.[0-9]+)*)(.*)*$`)
 	// extraMatchRE splits the "extra" part of versionMatchRE into semver pre-release and build metadata; it does not validate the "no leading zeroes" constraint for pre-release
+	//
+	// extraMatchRE 把 versionMatchRE 的 “额外” 部分拆分为 semver 的 pre-release 与 build metadata；
+	// 它不校验 pre-release 的 “无前导零” 约束（由 parse 另行检查）。
 	extraMatchRE = regexp.MustCompile(`^(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?\s*$`)
 )
 
+// parse 解析版本字符串。semver 为 true 时要求严格的 X.Y.Z 形式并解析 pre-release/build metadata；
+// 为 false 时只要求至少两段数字，其余内容忽略。
 func parse(str string, semver bool) (*Version, error) {
 	parts := versionMatchRE.FindStringSubmatch(str)
 	if parts == nil {
@@ -59,6 +68,7 @@ func parse(str string, semver bool) (*Version, error) {
 		semver:     semver,
 	}
 	for i, comp := range components {
+		// 主版本号（以及 semver 的所有段）不允许前导零。
 		if (i == 0 || semver) && strings.HasPrefix(comp, "0") && comp != "0" {
 			return nil, fmt.Errorf("illegal zero-prefixed version component %q in %q", comp, str)
 		}
@@ -76,6 +86,7 @@ func parse(str string, semver bool) (*Version, error) {
 		}
 		v.preRelease, v.buildMetadata = extraParts[1], extraParts[2]
 
+		// 纯数字的 pre-release 段同样不允许前导零（如 "01" 非法）。
 		for _, comp := range strings.Split(v.preRelease, ".") {
 			if _, err := strconv.ParseUint(comp, 10, 0); err == nil {
 				if strings.HasPrefix(comp, "0") && comp != "0" {
@@ -90,6 +101,9 @@ func parse(str string, semver bool) (*Version, error) {
 
 // HighestSupportedVersion returns the highest supported version
 // This function assumes that the highest supported version must be v1.x.
+//
+// HighestSupportedVersion 返回受支持的最高版本；假定最高支持版本必须是 v1.x。
+// 会跳过解析失败与 major > 1 的版本；找不到任何 v1.x 版本时返回错误。
 func HighestSupportedVersion(versions []string) (*Version, error) {
 	if len(versions) == 0 {
 		return nil, errors.New("empty array for supported versions")
@@ -100,6 +114,7 @@ func HighestSupportedVersion(versions []string) (*Version, error) {
 		theErr                  error
 	)
 
+	// 逆序遍历，尽量保留首个解析错误用于最终报错。
 	for i := len(versions) - 1; i >= 0; i-- {
 		currentHighestVer, err := ParseGeneric(versions[i])
 		if err != nil {
@@ -107,6 +122,7 @@ func HighestSupportedVersion(versions []string) (*Version, error) {
 			continue
 		}
 
+		// 只接受 v1.x；更高的 major 不在支持范围内。
 		if currentHighestVer.Major() > 1 {
 			continue
 		}
@@ -134,11 +150,17 @@ func HighestSupportedVersion(versions []string) (*Version, error) {
 // followed by arbitrary uninterpreted data (which need not be separated from the final
 // numeric field by punctuation). For convenience, leading and trailing whitespace is
 // ignored, and the version can be preceded by the letter "v". See also ParseSemantic.
+//
+// ParseGeneric 解析 “通用” 版本字符串：至少两段以点分隔的数字（第一段不能有前导零），
+// 其后可跟任意不解释的数据（与最后一个数字段之间不要求标点分隔）。
+// 为方便使用，忽略首尾空白，且版本前可带字母 "v"。另见 ParseSemantic。
 func ParseGeneric(str string) (*Version, error) {
 	return parse(str, false)
 }
 
 // MustParseGeneric is like ParseGeneric except that it panics on error
+//
+// MustParseGeneric 同 ParseGeneric，但解析失败时 panic。
 func MustParseGeneric(str string) *Version {
 	v, err := ParseGeneric(str)
 	if err != nil {
@@ -149,6 +171,8 @@ func MustParseGeneric(str string) *Version {
 
 // Parse tries to do ParseSemantic first to keep more information.
 // If ParseSemantic fails, it would just do ParseGeneric.
+//
+// Parse 优先按 ParseSemantic 解析以保留更多信息；失败时回退到 ParseGeneric。
 func Parse(str string) (*Version, error) {
 	v, err := parse(str, true)
 	if err != nil {
@@ -158,6 +182,8 @@ func Parse(str string) (*Version, error) {
 }
 
 // MustParse is like Parse except that it panics on error
+//
+// MustParse 同 Parse，但解析失败时 panic。
 func MustParse(str string) *Version {
 	v, err := Parse(str)
 	if err != nil {
@@ -167,6 +193,8 @@ func MustParse(str string) *Version {
 }
 
 // ParseMajorMinor parses a "generic" version string and returns a version with the major and minor version.
+//
+// ParseMajorMinor 解析 “通用” 版本字符串，并返回只含 major/minor 的版本。
 func ParseMajorMinor(str string) (*Version, error) {
 	v, err := ParseGeneric(str)
 	if err != nil {
@@ -176,6 +204,8 @@ func ParseMajorMinor(str string) (*Version, error) {
 }
 
 // MustParseMajorMinor is like ParseMajorMinor except that it panics on error
+//
+// MustParseMajorMinor 同 ParseMajorMinor，但解析失败时 panic。
 func MustParseMajorMinor(str string) *Version {
 	v, err := ParseMajorMinor(str)
 	if err != nil {
@@ -189,11 +219,16 @@ func MustParseMajorMinor(str string) *Version {
 // leading and trailing whitespace, and allows the version to be preceded by "v"). For
 // version strings that are not guaranteed to obey the Semantic Versioning syntax, use
 // ParseGeneric.
+//
+// ParseSemantic 解析严格遵循 Semantic Versioning 规范（http://semver.org/）的版本字符串
+// （忽略首尾空白，并允许前缀 "v"）。不保证符合 semver 语法的版本请用 ParseGeneric。
 func ParseSemantic(str string) (*Version, error) {
 	return parse(str, true)
 }
 
 // MustParseSemantic is like ParseSemantic except that it panics on error
+//
+// MustParseSemantic 同 ParseSemantic，但解析失败时 panic。
 func MustParseSemantic(str string) *Version {
 	v, err := ParseSemantic(str)
 	if err != nil {
@@ -203,21 +238,29 @@ func MustParseSemantic(str string) *Version {
 }
 
 // MajorMinor returns a version with the provided major and minor version.
+//
+// MajorMinor 返回由给定 major/minor 构成的版本（无 patch、非 semver）。
 func MajorMinor(major, minor uint) *Version {
 	return &Version{components: []uint{major, minor}}
 }
 
 // Major returns the major release number
+//
+// Major 返回主版本号。
 func (v *Version) Major() uint {
 	return v.components[0]
 }
 
 // Minor returns the minor release number
+//
+// Minor 返回次版本号。
 func (v *Version) Minor() uint {
 	return v.components[1]
 }
 
 // Patch returns the patch release number if v is a Semantic Version, or 0
+//
+// Patch 在 v 为语义化版本时返回修订号，否则返回 0。
 func (v *Version) Patch() uint {
 	if len(v.components) < 3 {
 		return 0
@@ -226,21 +269,29 @@ func (v *Version) Patch() uint {
 }
 
 // BuildMetadata returns the build metadata, if v is a Semantic Version, or ""
+//
+// BuildMetadata 在 v 为语义化版本时返回 build metadata，否则返回空串。
 func (v *Version) BuildMetadata() string {
 	return v.buildMetadata
 }
 
 // PreRelease returns the prerelease metadata, if v is a Semantic Version, or ""
+//
+// PreRelease 在 v 为语义化版本时返回 pre-release 信息，否则返回空串。
 func (v *Version) PreRelease() string {
 	return v.preRelease
 }
 
 // Components returns the version number components
+//
+// Components 返回版本号的各数字段。
 func (v *Version) Components() []uint {
 	return v.components
 }
 
 // WithMajor returns copy of the version object with requested major number
+//
+// WithMajor 返回把主版本号替换为指定值的版本副本（含 patch 段）。
 func (v *Version) WithMajor(major uint) *Version {
 	result := *v
 	result.components = []uint{major, v.Minor(), v.Patch()}
@@ -248,6 +299,8 @@ func (v *Version) WithMajor(major uint) *Version {
 }
 
 // WithMinor returns copy of the version object with requested minor number
+//
+// WithMinor 返回把次版本号替换为指定值的版本副本（含 patch 段）。
 func (v *Version) WithMinor(minor uint) *Version {
 	result := *v
 	result.components = []uint{v.Major(), minor, v.Patch()}
@@ -256,6 +309,9 @@ func (v *Version) WithMinor(minor uint) *Version {
 
 // SubtractMinor returns the version with offset from the original minor, with the same major and no patch.
 // If -offset >= current minor, the minor would be 0.
+//
+// OffsetMinor 返回在原 minor 上加上 offset 的版本（major 不变、无 patch 段）。
+// 若 -offset >= 当前 minor，则 minor 取 0。
 func (v *Version) OffsetMinor(offset int) *Version {
 	var minor uint
 	if offset >= 0 {
@@ -271,16 +327,23 @@ func (v *Version) OffsetMinor(offset int) *Version {
 
 // SubtractMinor returns the version diff minor versions back, with the same major and no patch.
 // If diff >= current minor, the minor would be 0.
+//
+// SubtractMinor 返回向前回退 diff 个 minor 的版本（major 不变、无 patch 段）。
+// 若 diff >= 当前 minor，则 minor 取 0。
 func (v *Version) SubtractMinor(diff uint) *Version {
 	return v.OffsetMinor(-int(diff))
 }
 
 // AddMinor returns the version diff minor versions forward, with the same major and no patch.
+//
+// AddMinor 返回向后前进 diff 个 minor 的版本（major 不变、无 patch 段）。
 func (v *Version) AddMinor(diff uint) *Version {
 	return v.OffsetMinor(int(diff))
 }
 
 // WithPatch returns copy of the version object with requested patch number
+//
+// WithPatch 返回把 patch 号替换为指定值的版本副本。
 func (v *Version) WithPatch(patch uint) *Version {
 	result := *v
 	result.components = []uint{v.Major(), v.Minor(), patch}
@@ -288,6 +351,8 @@ func (v *Version) WithPatch(patch uint) *Version {
 }
 
 // WithPreRelease returns copy of the version object with requested prerelease
+//
+// WithPreRelease 返回把 pre-release 替换为指定值的版本副本；传入空串时原样返回。
 func (v *Version) WithPreRelease(preRelease string) *Version {
 	if len(preRelease) == 0 {
 		return v
@@ -299,6 +364,8 @@ func (v *Version) WithPreRelease(preRelease string) *Version {
 }
 
 // WithBuildMetadata returns copy of the version object with requested buildMetadata
+//
+// WithBuildMetadata 返回把 build metadata 替换为指定值的版本副本。
 func (v *Version) WithBuildMetadata(buildMetadata string) *Version {
 	result := *v
 	result.components = []uint{v.Major(), v.Minor(), v.Patch()}
@@ -309,6 +376,8 @@ func (v *Version) WithBuildMetadata(buildMetadata string) *Version {
 // String converts a Version back to a string; note that for versions parsed with
 // ParseGeneric, this will not include the trailing uninterpreted portion of the version
 // number.
+//
+// String 把 Version 转回字符串；注意经 ParseGeneric 解析的版本不会包含末尾未被解释的部分。
 func (v *Version) String() string {
 	if v == nil {
 		return "<nil>"
@@ -335,6 +404,10 @@ func (v *Version) String() string {
 
 // compareInternal returns -1 if v is less than other, 1 if it is greater than other, or 0
 // if they are equal
+//
+// compareInternal 在 v 小于 other 时返回 -1，大于时返回 1，相等时返回 0。
+// 先逐段比较数字；数字段相同后，任一方非零的多余段使其更大；
+// 只有双方都是 semver 时才继续比较 pre-release。
 func (v *Version) compareInternal(other *Version) int {
 
 	vLen := len(v.components)
@@ -348,7 +421,7 @@ func (v *Version) compareInternal(other *Version) int {
 		}
 	}
 
-	// If components are common but one has more items and they are not zeros, it is bigger
+	// 公共段相同但一方有更多段时：若多出的段不全是零，则该方更大。
 	switch {
 	case oLen < vLen && !onlyZeros(v.components[oLen:]):
 		return 1
@@ -360,15 +433,17 @@ func (v *Version) compareInternal(other *Version) int {
 		return 0
 	}
 
+	// semver 规则：有 pre-release 的版本小于无 pre-release 的版本。
 	switch {
 	case v.preRelease == "" && other.preRelease != "":
 		return 1
 	case v.preRelease != "" && other.preRelease == "":
 		return -1
-	case v.preRelease == other.preRelease: // includes case where both are ""
+	case v.preRelease == other.preRelease: // 包括两者都为空
 		return 0
 	}
 
+	// 逐段比较 pre-release：纯数字段按数值比较，其余按字典序比较。
 	vPR := strings.Split(v.preRelease, ".")
 	oPR := strings.Split(other.preRelease, ".")
 	for i := 0; i < len(vPR) && i < len(oPR); i++ {
@@ -393,6 +468,7 @@ func (v *Version) compareInternal(other *Version) int {
 		}
 	}
 
+	// 前缀相同：段数更多的一方更大。
 	switch {
 	case len(oPR) < len(vPR):
 		return 1
@@ -404,6 +480,8 @@ func (v *Version) compareInternal(other *Version) int {
 }
 
 // returns false if array contain any non-zero element
+//
+// onlyZeros 在数组包含任何非零元素时返回 false。
 func onlyZeros(array []uint) bool {
 	for _, num := range array {
 		if num != 0 {
@@ -414,6 +492,8 @@ func onlyZeros(array []uint) bool {
 }
 
 // EqualTo tests if a version is equal to a given version.
+//
+// EqualTo 判断 v 是否等于给定版本；两者均为 nil 视为相等。
 func (v *Version) EqualTo(other *Version) bool {
 	if v == nil {
 		return other == nil
@@ -428,6 +508,9 @@ func (v *Version) EqualTo(other *Version) bool {
 // Versions are Semantic Versions, this will use the Semantic Version comparison
 // algorithm. Otherwise, it will compare only the numeric components, with non-present
 // components being considered "0" (ie, "1.4" is equal to "1.4.0").
+//
+// AtLeast 判断 v 是否不低于给定最低版本。双方都是语义化版本时使用 semver 比较算法；
+// 否则只比较数字段，缺失段视为 0（即 "1.4" 等于 "1.4.0"）。
 func (v *Version) AtLeast(min *Version) bool {
 	return v.compareInternal(min) != -1
 }
@@ -435,11 +518,15 @@ func (v *Version) AtLeast(min *Version) bool {
 // LessThan tests if a version is less than a given version. (It is exactly the opposite
 // of AtLeast, for situations where asking "is v too old?" makes more sense than asking
 // "is v new enough?".)
+//
+// LessThan 判断 v 是否小于给定版本（与 AtLeast 正好相反，用于 “v 是否太旧” 的语义）。
 func (v *Version) LessThan(other *Version) bool {
 	return v.compareInternal(other) == -1
 }
 
 // GreaterThan tests if a version is greater than a given version.
+//
+// GreaterThan 判断 v 是否大于给定版本。
 func (v *Version) GreaterThan(other *Version) bool {
 	return v.compareInternal(other) == 1
 }
@@ -447,6 +534,9 @@ func (v *Version) GreaterThan(other *Version) bool {
 // Compare compares v against a version string (which will be parsed as either Semantic
 // or non-Semantic depending on v). On success it returns -1 if v is less than other, 1 if
 // it is greater than other, or 0 if they are equal.
+//
+// Compare 把 v 与版本字符串比较（按 v 是否为 semver 选择解析方式）。
+// 成功时返回 -1（v 更小）、1（v 更大）或 0（相等）。
 func (v *Version) Compare(other string) (int, error) {
 	ov, err := parse(other, v.semver)
 	if err != nil {
@@ -457,6 +547,9 @@ func (v *Version) Compare(other string) (int, error) {
 
 // WithInfo returns copy of the version object.
 // Deprecated: The Info field has been removed from the Version struct. This method no longer modifies the Version object.
+//
+// WithInfo 返回版本对象的副本。
+// 已弃用：Info 字段已从 Version 结构体中移除，该方法不再修改 Version 对象。
 func (v *Version) WithInfo(info apimachineryversion.Info) *Version {
 	result := *v
 	return &result
@@ -464,11 +557,14 @@ func (v *Version) WithInfo(info apimachineryversion.Info) *Version {
 
 // Info returns the version information of a component.
 // Deprecated: Use Info() from effective version instead.
+//
+// Info 返回组件的版本信息。
+// 已弃用：请改用 effective version 的 Info()。
 func (v *Version) Info() *apimachineryversion.Info {
 	if v == nil {
 		return nil
 	}
-	// in case info is empty, or the major and minor in info is different from the actual major and minor
+	// 若 info 为空，或其 major/minor 与实际不符，则以实际 major/minor 为准。
 	return &apimachineryversion.Info{
 		Major:      Itoa(v.Major()),
 		Minor:      Itoa(v.Minor()),
@@ -476,6 +572,7 @@ func (v *Version) Info() *apimachineryversion.Info {
 	}
 }
 
+// Itoa 把 uint 转为十进制字符串；0 返回空串（用于 major/minor 字段的约定）。
 func Itoa(i uint) string {
 	if i == 0 {
 		return ""

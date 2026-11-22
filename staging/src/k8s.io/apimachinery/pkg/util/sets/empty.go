@@ -16,6 +16,9 @@ limitations under the License.
 
 package sets
 
-// Empty is public since it is used by some internal API objects for conversions between external
-// string arrays and internal sets, and conversion logic requires public types today.
+// Empty 是集合的占位值类型。
+//
+// Empty 之所以导出，是因为部分内部 API 对象需要在外部字符串数组与内部集合之间转换，
+// 而当前的转换代码要求使用导出类型。作为 map 的值类型，空结构体不占额外内存，
+// 这正是用 map[T]Empty 表示集合的关键。
 type Empty struct{}

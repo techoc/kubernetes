@@ -27,6 +27,8 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/value"
 )
 
+// 路径元素是 FieldsV1 的序列化单元，格式为 "<type>:<content>"，
+// 其中 type 取值为 f/v/i/k，分别对应字段名、字段值、数组下标和 list-map 键。
 const (
 	// Field indicates that the content of this path element is a field's name
 	Field = "f"
@@ -45,6 +47,9 @@ const (
 )
 
 // NewPathElement parses a serialized path element
+//
+// 只按第一个冒号切分，因为内容本身可能含冒号（如 "v:foo:bar" 的值是 "foo:bar"）。
+// 未知类型返回空元素而不报错，为未来扩展留出前向兼容空间。
 func NewPathElement(s string) (fieldpath.PathElement, error) {
 	split := strings.SplitN(s, Separator, 2)
 	if len(split) < 2 {
@@ -72,6 +77,7 @@ func NewPathElement(s string) (fieldpath.PathElement, error) {
 			Index: &i,
 		}, nil
 	case Key:
+		// key 的内容是一个 JSON 对象，每个成员都要转成 value.Value。
 		kv := map[string]json.RawMessage{}
 		err := json.Unmarshal([]byte(split[1]), &kv)
 		if err != nil {
@@ -103,11 +109,15 @@ func NewPathElement(s string) (fieldpath.PathElement, error) {
 }
 
 // PathElementString serializes a path element
+//
+// 序列化是 NewPathElement 的逆操作，供 FieldsV1 输出使用；
+// 同时设置了多个字段的 PathElement 会被判定为非法。
 func PathElementString(pe fieldpath.PathElement) (string, error) {
 	switch {
 	case pe.FieldName != nil:
 		return Field + Separator + *pe.FieldName, nil
 	case pe.Key != nil:
+		// 先转成 RawMessage 再统一 Marshal，避免重复编码与转义差异。
 		kv := map[string]json.RawMessage{}
 		for _, k := range *pe.Key {
 			b, err := value.ToJSON(k.Value)

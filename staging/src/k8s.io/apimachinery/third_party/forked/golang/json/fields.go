@@ -26,6 +26,9 @@ const (
 // struct field given the struct type and the JSON name of the field.
 // It returns field type, a slice of patch strategies, merge key and error.
 // TODO: fix the returned errors to be introspectable.
+//
+// 查找顺序与 encoding/json 一致：优先精确匹配 JSON 名，其次大小写不敏感匹配；
+// 字段可能位于匿名字段链中，因此需要沿 index 逐层下钻。
 func LookupPatchMetadataForStruct(t reflect.Type, jsonField string) (
 	elemType reflect.Type, patchStrategies []string, patchMergeKey string, e error) {
 	if t.Kind() == reflect.Pointer {
@@ -48,6 +51,7 @@ func LookupPatchMetadataForStruct(t reflect.Type, jsonField string) (
 			break
 		}
 		// Do case-insensitive comparison.
+		// 精确匹配失败时记录第一个大小写不敏感匹配，但不立即跳出，以便后续精确匹配优先。
 		if f == nil && ff.equalFold(ff.nameBytes, jf) {
 			f = ff
 		}
@@ -70,6 +74,7 @@ func LookupPatchMetadataForStruct(t reflect.Type, jsonField string) (
 }
 
 // A field represents a single field found in a struct.
+// 该结构与 encoding/json 内部的 field 对应，但额外记录了 patch tag 所需的信息。
 type field struct {
 	name      string
 	nameBytes []byte                 // []byte(name)
@@ -85,10 +90,12 @@ type field struct {
 	quoted    bool
 }
 
+// String 便于调试时打印字段信息。
 func (f field) String() string {
 	return fmt.Sprintf("{name: %s, type: %v, tag: %v, index: %v, omitEmpty: %v, quoted: %v}", f.name, f.typ, f.tag, f.index, f.omitEmpty, f.quoted)
 }
 
+// fillField 预计算字段名的字节形式与大小写折叠函数，避免比较时重复转换。
 func fillField(f field) field {
 	f.nameBytes = []byte(f.name)
 	f.equalFold = foldFunc(f.nameBytes)
@@ -98,6 +105,7 @@ func fillField(f field) field {
 // byName sorts field by name, breaking ties with depth,
 // then breaking ties with "name came from json tag", then
 // breaking ties with index sequence.
+// 排序规则与 encoding/json 一致，是后续"字段遮蔽"消除算法的前提。
 type byName []field
 
 func (x byName) Len() int { return len(x) }
@@ -118,12 +126,14 @@ func (x byName) Less(i, j int) bool {
 }
 
 // byIndex sorts field by index sequence.
+// 按字段在结构体中的声明顺序排序，使最终输出稳定。
 type byIndex []field
 
 func (x byIndex) Len() int { return len(x) }
 
 func (x byIndex) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
 
+// Less 逐层比较 index 序列，短序列优先。
 func (x byIndex) Less(i, j int) bool {
 	for k, xik := range x[i].index {
 		if k >= len(x[j].index) {
@@ -139,6 +149,7 @@ func (x byIndex) Less(i, j int) bool {
 // typeFields returns a list of fields that JSON should recognize for the given type.
 // The algorithm is breadth-first search over the set of structs to include - the top struct
 // and then any reachable anonymous structs.
+// 该实现直接取自 encoding/json，确保字段选择规则与标准库完全一致。
 func typeFields(t reflect.Type) []field {
 	// Anonymous fields to explore at the current level and the next.
 	current := []field{}
@@ -154,6 +165,7 @@ func typeFields(t reflect.Type) []field {
 	// Fields found.
 	var fields []field
 
+	// 逐层（BFS）展开匿名字段，浅层字段优先于深层字段。
 	for len(next) > 0 {
 		current, next = next, current[:0]
 		count, nextCount = nextCount, map[reflect.Type]int{}
@@ -229,6 +241,7 @@ func typeFields(t reflect.Type) []field {
 	// The fields are sorted in primary order of name, secondary order
 	// of field index length. Loop over names; for each name, delete
 	// hidden fields by choosing the one dominant field that survives.
+	// 同名冲突时只保留 dominant 字段；排序后同一名字的字段必然相邻。
 	out := fields[:0]
 	for advance, i := 0, 0; i < len(fields); i += advance {
 		// One iteration per name.
@@ -295,6 +308,8 @@ func dominantField(fields []field) (field, bool) {
 	return fields[0], true
 }
 
+// fieldCache 缓存每个类型计算出的字段列表。
+// 字段解析只依赖类型本身，因此可以全局缓存；计算过程不持锁，允许并发重复计算。
 var fieldCache struct {
 	sync.RWMutex
 	m map[reflect.Type][]field
@@ -313,6 +328,7 @@ func cachedTypeFields(t reflect.Type) []field {
 	// Might duplicate effort but won't hold other computations back.
 	f = typeFields(t)
 	if f == nil {
+		// 用空切片而非 nil 表示"已缓存"，否则下次仍会重复计算。
 		f = []field{}
 	}
 
@@ -325,6 +341,8 @@ func cachedTypeFields(t reflect.Type) []field {
 	return f
 }
 
+// isValidTag 判断 JSON tag 中的名字是否合法：空名不合法，反斜杠与引号保留，
+// 其余标点与字母数字允许。
 func isValidTag(s string) bool {
 	if s == "" {
 		return false
@@ -359,12 +377,15 @@ const (
 // 4) simpleLetterEqualFold, no specials, no non-letters.
 //
 // The letters S and K are special because they map to 3 runes, not just 2:
-//  * S maps to s and to U+017F 'ſ' Latin small letter long s
-//  * k maps to K and to U+212A 'K' Kelvin sign
+//   - S maps to s and to U+017F 'ſ' Latin small letter long s
+//   - k maps to K and to U+212A 'K' Kelvin sign
+//
 // See http://play.golang.org/p/tTxjOc0OGo
 //
 // The returned function is specialized for matching against s and
 // should only be given s. It's not curried for performance reasons.
+//
+// 根据 s 的字符特征选择最廉价的大小写折叠实现；返回的函数只适用于与 s 比较。
 func foldFunc(s []byte) func(s, t []byte) bool {
 	nonLetter := false
 	special := false // special letter
@@ -393,6 +414,7 @@ func foldFunc(s []byte) func(s, t []byte) bool {
 // known to be all ASCII (including punctuation), but contains an 's',
 // 'S', 'k', or 'K', requiring a Unicode fold on the bytes in t.
 // See comments on foldFunc.
+// 因为 s 含特殊字母，t 中对应位置可能是开尔文符号或长 s，需要逐 rune 比较。
 func equalFoldRight(s, t []byte) bool {
 	for _, sb := range s {
 		if len(t) == 0 {
@@ -465,6 +487,7 @@ func asciiEqualFold(s, t []byte) bool {
 // use when s is all ASCII letters (no underscores, etc) and also
 // doesn't contain 'k', 'K', 's', or 'S'.
 // See comments on foldFunc.
+// 这是最快的路径：长度相等且逐字节只比较大小写位。
 func simpleLetterEqualFold(s, t []byte) bool {
 	if len(s) != len(t) {
 		return false
@@ -493,6 +516,7 @@ func parseTag(tag string) (string, tagOptions) {
 // Contains reports whether a comma-separated list of options
 // contains a particular substr flag. substr must be surrounded by a
 // string boundary or commas.
+// 逐项比较而非子串匹配，避免 "omitemptyx" 被误判为包含 "omitempty"。
 func (o tagOptions) Contains(optionName string) bool {
 	if len(o) == 0 {
 		return false

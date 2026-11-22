@@ -24,7 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// NEQ validates that the specified comparable value is not equal to the disallowed value.
+// NEQ 校验给定的可比较值不等于被禁止的取值。
+// value 为 nil 时表示未设置，直接通过；否则相等即报错，
+// 并在错误来源中标记为 "neq" 以便客户端区分校验类型。
 func NEQ[T comparable](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ *T, disallowed T) field.ErrorList {
 	if value == nil {
 		return nil

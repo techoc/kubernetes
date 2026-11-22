@@ -23,6 +23,8 @@ import (
 	cbor "k8s.io/apimachinery/pkg/runtime/serializer/cbor/direct"
 )
 
+// RFC3339Micro 是 MicroTime 的线格式：RFC3339 加 6 位小数秒。
+// 固定 6 位小数保证编码结果稳定、可逐字节比较。
 const RFC3339Micro = "2006-01-02T15:04:05.000000Z07:00"
 
 // MicroTime is version of Time with microsecond level precision.
@@ -30,6 +32,9 @@ const RFC3339Micro = "2006-01-02T15:04:05.000000Z07:00"
 // +protobuf.options.marshal=false
 // +protobuf.as=Timestamp
 // +protobuf.options.(gogoproto.goproto_stringer)=false
+//
+// MicroTime 以 time.Time 内嵌，但序列化时只保留微秒精度；protobuf 指令让
+// 生成代码把它当作 Timestamp 处理，而不是普通结构体。
 type MicroTime struct {
 	time.Time `protobuf:"-"`
 }
@@ -37,6 +42,8 @@ type MicroTime struct {
 // DeepCopy returns a deep-copy of the MicroTime value.  The underlying time.Time
 // type is effectively immutable in the time API, so it is safe to
 // copy-by-assign, despite the presence of (unexported) Pointer fields.
+//
+// time.Time 在 API 语义上不可变，按值复制即可，无需深拷贝其内部字段。
 func (t *MicroTime) DeepCopyInto(out *MicroTime) {
 	*out = *t
 }
@@ -58,6 +65,8 @@ func NowMicro() MicroTime {
 }
 
 // IsZero returns true if the value is nil or time is zero.
+//
+// nil 接收者视为零值，便于在指针字段未设置时直接调用。
 func (t *MicroTime) IsZero() bool {
 	if t == nil {
 		return true
@@ -66,6 +75,8 @@ func (t *MicroTime) IsZero() bool {
 }
 
 // Before reports whether the time instant t is before u.
+//
+// 任一侧为 nil 都返回 false：nil 代表“未设置”，不参与时间比较。
 func (t *MicroTime) Before(u *MicroTime) bool {
 	if t != nil && u != nil {
 		return t.Time.Before(u.Time)
@@ -74,6 +85,8 @@ func (t *MicroTime) Before(u *MicroTime) bool {
 }
 
 // Equal reports whether the time instant t is equal to u.
+//
+// 两个 nil 视为相等；一 nil 一非 nil 视为不等。
 func (t *MicroTime) Equal(u *MicroTime) bool {
 	if t == nil && u == nil {
 		return true
@@ -110,6 +123,8 @@ func UnixMicro(sec int64, nsec int64) MicroTime {
 }
 
 // UnmarshalJSON implements the json.Unmarshaller interface.
+//
+// JSON null 被规范化为零值 time.Time，而不是保留 nil 指针语义。
 func (t *MicroTime) UnmarshalJSON(b []byte) error {
 	if len(b) == 4 && string(b) == "null" {
 		t.Time = time.Time{}
@@ -127,10 +142,13 @@ func (t *MicroTime) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	// 统一转成本地时区，保证同一时刻在不同时区解析后 DeepEqual 一致。
 	t.Time = pt.Local()
 	return nil
 }
 
+// UnmarshalCBOR 反序列化 CBOR 编码的 MicroTime；null 同样映射为零值。
+// 该方法由 fxamacker/cbor 按接口约定自动调用。
 func (t *MicroTime) UnmarshalCBOR(b []byte) error {
 	var s *string
 	if err := cbor.Unmarshal(b, &s); err != nil {
@@ -151,6 +169,8 @@ func (t *MicroTime) UnmarshalCBOR(b []byte) error {
 }
 
 // UnmarshalQueryParameter converts from a URL query parameter value to an object
+//
+// 空字符串与字面量 "null" 都视为未设置，兼容旧客户端用 JSON 拼 query 的行为。
 func (t *MicroTime) UnmarshalQueryParameter(str string) error {
 	if len(str) == 0 {
 		t.Time = time.Time{}
@@ -172,6 +192,8 @@ func (t *MicroTime) UnmarshalQueryParameter(str string) error {
 }
 
 // MarshalJSON implements the json.Marshaler interface.
+//
+// 零值输出 JSON null；非零值统一转为 UTC 后按固定微秒格式输出。
 func (t MicroTime) MarshalJSON() ([]byte, error) {
 	if t.IsZero() {
 		// Encode unset/nil objects as JSON's "null".
@@ -181,6 +203,7 @@ func (t MicroTime) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.UTC().Format(RFC3339Micro))
 }
 
+// MarshalCBOR 输出与 MarshalJSON 对应的 CBOR 表示：零值为 null，否则为字符串。
 func (t MicroTime) MarshalCBOR() ([]byte, error) {
 	if t.IsZero() {
 		return cbor.Marshal(nil)
@@ -199,6 +222,8 @@ func (_ MicroTime) OpenAPISchemaType() []string { return []string{"string"} }
 func (_ MicroTime) OpenAPISchemaFormat() string { return "date-time" }
 
 // MarshalQueryParameter converts to a URL query parameter value
+//
+// 零值编码为空串（而不是 "null"），与 UnmarshalQueryParameter 的空串约定对称。
 func (t MicroTime) MarshalQueryParameter() (string, error) {
 	if t.IsZero() {
 		// Encode unset/nil objects as an empty string

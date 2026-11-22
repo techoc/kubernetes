@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/fuzzer"
 )
 
+// TestRoundTrip 用 fuzzer 生成的对象验证 Scheme 中注册类型的编解码往返：
+// 序列化再反序列化后必须与原始对象语义一致。
 func TestRoundTrip(t *testing.T) {
 	roundtrip.RoundTripTestForScheme(t, Scheme, fuzzer.Funcs)
 }

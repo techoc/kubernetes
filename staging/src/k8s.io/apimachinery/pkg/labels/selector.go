@@ -33,20 +33,24 @@ import (
 )
 
 var (
+	// unaryOperators 是只需键、不需要值的操作符。
 	unaryOperators = []string{
 		string(selection.Exists), string(selection.DoesNotExist),
 	}
+	// binaryOperators 是需要键和值的操作符。
 	binaryOperators = []string{
 		string(selection.In), string(selection.NotIn),
 		string(selection.Equals), string(selection.DoubleEquals), string(selection.NotEquals),
 		string(selection.GreaterThan), string(selection.LessThan),
 	}
+	// validRequirementOperators 汇总所有合法操作符，用于错误提示。
 	validRequirementOperators = append(binaryOperators, unaryOperators...)
 )
 
-// Requirements is AND of all requirements.
+// Requirements 是各 Requirement 的逻辑与（AND）。
 type Requirements []Requirement
 
+// String 以逗号分隔的形式返回所有 Requirement。
 func (r Requirements) String() string {
 	var sb strings.Builder
 
@@ -60,39 +64,37 @@ func (r Requirements) String() string {
 	return sb.String()
 }
 
-// Selector represents a label selector.
+// Selector 表示标签选择器。
 type Selector interface {
-	// Matches returns true if this selector matches the given set of labels.
+	// Matches 返回该选择器是否匹配给定的标签集合。
 	Matches(Labels) bool
 
-	// Empty returns true if this selector does not restrict the selection space.
+	// Empty 返回该选择器是否不限制选择范围。
 	Empty() bool
 
-	// String returns a human readable string that represents this selector.
+	// String 返回该选择器的人类可读字符串表示。
 	String() string
 
-	// Add adds requirements to the Selector
+	// Add 向选择器添加条件。
 	Add(r ...Requirement) Selector
 
-	// Requirements converts this interface into Requirements to expose
-	// more detailed selection information.
-	// If there are querying parameters, it will return converted requirements and selectable=true.
-	// If this selector doesn't want to select anything, it will return selectable=false.
+	// Requirements 把接口转换为 Requirements，以暴露更详细的选择信息。
+	// 若存在查询参数，会返回转换后的条件且 selectable=true。
+	// 若该选择器不选择任何对象，则返回 selectable=false。
 	Requirements() (requirements Requirements, selectable bool)
 
-	// Make a deep copy of the selector.
+	// DeepCopySelector 对选择器做深拷贝。
 	DeepCopySelector() Selector
 
-	// RequiresExactMatch allows a caller to introspect whether a given selector
-	// requires a single specific label to be set, and if so returns the value it
-	// requires.
+	// RequiresExactMatch 允许调用方探查选择器是否要求某个标签必须被设置为
+	// 特定值，若是则返回该值。
 	RequiresExactMatch(label string) (value string, found bool)
 }
 
-// Sharing this saves 1 alloc per use; this is safe because it's immutable.
+// 共享该实例每次使用可省一次分配；它是不可变的，因此安全。
 var sharedEverythingSelector Selector = internalSelector{}
 
-// Everything returns a selector that matches all labels.
+// Everything 返回匹配所有标签的选择器。
 func Everything() Selector {
 	return sharedEverythingSelector
 }
@@ -109,30 +111,31 @@ func (n nothingSelector) RequiresExactMatch(label string) (value string, found b
 	return "", false
 }
 
-// Sharing this saves 1 alloc per use; this is safe because it's immutable.
+// 共享该实例每次使用可省一次分配；它是不可变的，因此安全。
 var sharedNothingSelector Selector = nothingSelector{}
 
-// Nothing returns a selector that matches no labels
+// Nothing 返回不匹配任何标签的选择器。
 func Nothing() Selector {
 	return sharedNothingSelector
 }
 
-// MatchesNothing only returns true for selectors which are definitively determined to match no objects.
-// This currently only detects the `labels.Nothing()` selector, but may change over time to detect more selectors that match no objects.
+// MatchesNothing 仅对确定不匹配任何对象的选择器返回 true。
+// 目前只识别 `labels.Nothing()`，未来可能扩展识别更多选择器。
 //
-// Note: The current implementation does not check for selector conflict scenarios (e.g., a=a,a!=a).
-// Support for detecting such cases can be added in the future.
+// 注意：当前实现不检测选择器内部冲突（例如 a=a,a!=a）。
+// 未来可加入此类检测。
 func MatchesNothing(selector Selector) bool {
 	return selector == sharedNothingSelector
 }
 
-// NewSelector returns a nil selector
+// NewSelector 返回一个 nil 选择器。
 func NewSelector() Selector {
 	return internalSelector(nil)
 }
 
 type internalSelector []Requirement
 
+// DeepCopy 返回 internalSelector 的深拷贝；nil 保持为 nil。
 func (s internalSelector) DeepCopy() internalSelector {
 	if s == nil {
 		return nil
@@ -144,11 +147,12 @@ func (s internalSelector) DeepCopy() internalSelector {
 	return result
 }
 
+// DeepCopySelector 实现 Selector 接口。
 func (s internalSelector) DeepCopySelector() Selector {
 	return s.DeepCopy()
 }
 
-// ByKey sorts requirements by key to obtain deterministic parser
+// ByKey 按 key 排序 Requirement，以获得确定性的解析结果。
 type ByKey []Requirement
 
 func (a ByKey) Len() int { return len(a) }
@@ -157,31 +161,30 @@ func (a ByKey) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
 func (a ByKey) Less(i, j int) bool { return a[i].key < a[j].key }
 
-// Requirement contains values, a key, and an operator that relates the key and values.
-// The zero value of Requirement is invalid.
-// Requirement implements both set based match and exact match
-// Requirement should be initialized via NewRequirement constructor for creating a valid Requirement.
+// Requirement 包含值、键以及连接键值的操作符。
+// Requirement 的零值无效。
+// Requirement 同时实现基于集合的匹配与精确匹配。
+// 应通过 NewRequirement 构造函数创建有效的 Requirement。
 // +k8s:deepcopy-gen=true
 type Requirement struct {
 	key      string
 	operator selection.Operator
-	// In huge majority of cases we have at most one value here.
-	// It is generally faster to operate on a single-element slice
-	// than on a single-element map, so we have a slice here.
+	// 绝大多数情况下这里最多只有一个值。
+	// 对单元素切片操作通常比对单元素 map 更快，因此使用切片。
 	strValues []string
 }
 
-// NewRequirement is the constructor for a Requirement.
-// If any of these rules is violated, an error is returned:
-//  1. The operator can only be In, NotIn, Equals, DoubleEquals, Gt, Lt, NotEquals, Exists, or DoesNotExist.
-//  2. If the operator is In or NotIn, the values set must be non-empty.
-//  3. If the operator is Equals, DoubleEquals, or NotEquals, the values set must contain one value.
-//  4. If the operator is Exists or DoesNotExist, the value set must be empty.
-//  5. If the operator is Gt or Lt, the values set must contain only one value, which will be interpreted as an integer.
-//  6. The key is invalid due to its length, or sequence of characters. See validateLabelKey for more details.
+// NewRequirement 是 Requirement 的构造函数。
+// 违反以下任一规则都会返回错误：
+//  1. 操作符只能是 In、NotIn、Equals、DoubleEquals、Gt、Lt、NotEquals、Exists 或 DoesNotExist。
+//  2. 若操作符为 In 或 NotIn，值集合必须非空。
+//  3. 若操作符为 Equals、DoubleEquals 或 NotEquals，值集合必须恰好包含一个值。
+//  4. 若操作符为 Exists 或 DoesNotExist，值集合必须为空。
+//  5. 若操作符为 Gt 或 Lt，值集合必须只包含一个值，且该值会被解释为整数。
+//  6. key 因长度或字符序列非法。详见 validateLabelKey。
 //
-// The empty string is a valid value in the input values set.
-// Returned error, if not nil, is guaranteed to be an aggregated field.ErrorList
+// 输入值集合中空字符串是合法值。
+// 若返回的 error 非 nil，保证是聚合后的 field.ErrorList。
 func NewRequirement(key string, op selection.Operator, vals []string, opts ...field.PathOption) (*Requirement, error) {
 	var allErrs field.ErrorList
 	path := field.ToPath(opts...)
@@ -224,6 +227,7 @@ func NewRequirement(key string, op selection.Operator, vals []string, opts ...fi
 	return &Requirement{key: key, operator: op, strValues: vals}, allErrs.ToAggregate()
 }
 
+// hasValue 判断值是否在 strValues 中。
 func (r *Requirement) hasValue(value string) bool {
 	for i := range r.strValues {
 		if r.strValues[i] == value {
@@ -233,17 +237,13 @@ func (r *Requirement) hasValue(value string) bool {
 	return false
 }
 
-// Matches returns true if the Requirement matches the input Labels.
-// There is a match in the following cases:
-//  1. The operator is Exists and Labels has the Requirement's key.
-//  2. The operator is In, Labels has the Requirement's key and Labels'
-//     value for that key is in Requirement's value set.
-//  3. The operator is NotIn, Labels has the Requirement's key and
-//     Labels' value for that key is not in Requirement's value set.
-//  4. The operator is DoesNotExist or NotIn and Labels does not have the
-//     Requirement's key.
-//  5. The operator is GreaterThanOperator or LessThanOperator, and Labels has
-//     the Requirement's key and the corresponding value satisfies mathematical inequality.
+// Matches 返回 Requirement 是否匹配输入 Labels。
+// 以下情况视为匹配：
+//  1. 操作符为 Exists 且 Labels 含有 Requirement 的 key。
+//  2. 操作符为 In，Labels 含有该 key，且该 key 的值在 Requirement 的值集合中。
+//  3. 操作符为 NotIn，Labels 含有该 key，且该 key 的值不在 Requirement 的值集合中。
+//  4. 操作符为 DoesNotExist 或 NotIn，且 Labels 不含该 key。
+//  5. 操作符为 GreaterThan 或 LessThan，Labels 含有该 key，且对应值满足数学不等式。
 func (r *Requirement) Matches(ls Labels) bool {
 	switch r.operator {
 	case selection.In, selection.Equals, selection.DoubleEquals:
@@ -274,7 +274,7 @@ func (r *Requirement) Matches(ls Labels) bool {
 			return false
 		}
 
-		// There should be only one strValue in r.strValues, and can be converted to an integer.
+		// r.strValues 应只有一个值，且可转换为整数。
 		if len(r.strValues) != 1 {
 			//nolint:logcheck // Extending the API is not worth it for contextual, structured logging of this.
 			klog.V(10).InfoS("Invalid values count: for 'Gt', 'Lt' operators, exactly one value is required", "count", len(r.strValues), "requirement", r)
@@ -296,17 +296,17 @@ func (r *Requirement) Matches(ls Labels) bool {
 	}
 }
 
-// Key returns requirement key
+// Key 返回 requirement 的键。
 func (r *Requirement) Key() string {
 	return r.key
 }
 
-// Operator returns requirement operator
+// Operator 返回 requirement 的操作符。
 func (r *Requirement) Operator() selection.Operator {
 	return r.operator
 }
 
-// Values returns requirement values
+// Values 以集合形式返回 requirement 的值。
 func (r *Requirement) Values() sets.String {
 	ret := sets.String{}
 	for i := range r.strValues {
@@ -315,14 +315,14 @@ func (r *Requirement) Values() sets.String {
 	return ret
 }
 
-// ValuesUnsorted returns a copy of requirement values as passed to NewRequirement without sorting.
+// ValuesUnsorted 返回传给 NewRequirement 的值副本，保持原始顺序、不排序。
 func (r *Requirement) ValuesUnsorted() []string {
 	ret := make([]string, 0, len(r.strValues))
 	ret = append(ret, r.strValues...)
 	return ret
 }
 
-// Equal checks the equality of requirement.
+// Equal 判断两个 requirement 是否相等。
 func (r Requirement) Equal(x Requirement) bool {
 	if r.key != x.key {
 		return false
@@ -333,7 +333,7 @@ func (r Requirement) Equal(x Requirement) bool {
 	return slices.Equal(r.strValues, x.strValues)
 }
 
-// Empty returns true if the internalSelector doesn't restrict selection space
+// Empty 返回 internalSelector 是否不限制选择范围。
 func (s internalSelector) Empty() bool {
 	if s == nil {
 		return true
@@ -341,17 +341,16 @@ func (s internalSelector) Empty() bool {
 	return len(s) == 0
 }
 
-// String returns a human-readable string that represents this
-// Requirement. If called on an invalid Requirement, an error is
-// returned. See NewRequirement for creating a valid Requirement.
+// String 返回该 Requirement 的人类可读字符串。
+// 对无效 Requirement 调用会得到错误形式；请使用 NewRequirement 创建有效值。
 func (r *Requirement) String() string {
 	var sb strings.Builder
 	sb.Grow(
-		// length of r.key
+		// r.key 的长度
 		len(r.key) +
-			// length of 'r.operator' + 2 spaces for the worst case ('in' and 'notin')
+			// 'r.operator' 的长度 + 最坏情况下（'in' 和 'notin'）2 个空格
 			len(r.operator) + 2 +
-			// length of 'r.strValues' slice times. Heuristically 5 chars per word
+			// r.strValues 切片长度乘以启发式的每词 5 个字符
 			+5*len(r.strValues))
 	if r.operator == selection.DoesNotExist {
 		sb.WriteString("!")
@@ -383,9 +382,9 @@ func (r *Requirement) String() string {
 	}
 	if len(r.strValues) == 1 {
 		sb.WriteString(r.strValues[0])
-	} else { // only > 1 since == 0 prohibited by NewRequirement
-		// normalizes value order on output, without mutating the in-memory selector representation
-		// also avoids normalization when it is not required, and ensures we do not mutate shared data
+	} else { // 只可能是 > 1，因为 NewRequirement 禁止 == 0
+		// 输出时规范化值顺序，但不修改内存中的选择器表示，
+		// 既避免不必要的归一化，也确保不修改共享数据。
 		sb.WriteString(strings.Join(safeSort(r.strValues), ","))
 	}
 
@@ -396,7 +395,7 @@ func (r *Requirement) String() string {
 	return sb.String()
 }
 
-// safeSort sorts input strings without modification
+// safeSort 在不修改输入的前提下排序字符串。
 func safeSort(in []string) []string {
 	if sort.StringsAreSorted(in) {
 		return in
@@ -407,7 +406,7 @@ func safeSort(in []string) []string {
 	return out
 }
 
-// Add adds requirements to the selector. It copies the current selector returning a new one
+// Add 向选择器添加条件。它复制当前选择器并返回新实例。
 func (s internalSelector) Add(reqs ...Requirement) Selector {
 	ret := make(internalSelector, 0, len(s)+len(reqs))
 	ret = append(ret, s...)
@@ -416,9 +415,8 @@ func (s internalSelector) Add(reqs ...Requirement) Selector {
 	return ret
 }
 
-// Matches for a internalSelector returns true if all
-// its Requirements match the input Labels. If any
-// Requirement does not match, false is returned.
+// Matches 对 internalSelector 返回 true 表示其所有 Requirement 都匹配输入 Labels。
+// 任一 Requirement 不匹配则返回 false。
 func (s internalSelector) Matches(l Labels) bool {
 	for ix := range s {
 		if matches := s[ix].Matches(l); !matches {
@@ -430,8 +428,7 @@ func (s internalSelector) Matches(l Labels) bool {
 
 func (s internalSelector) Requirements() (Requirements, bool) { return Requirements(s), true }
 
-// String returns a comma-separated string of all
-// the internalSelector Requirements' human-readable strings.
+// String 返回所有 internalSelector Requirement 可读字符串的逗号分隔形式。
 func (s internalSelector) String() string {
 	var reqs []string
 	for ix := range s {
@@ -440,8 +437,7 @@ func (s internalSelector) String() string {
 	return strings.Join(reqs, ",")
 }
 
-// RequiresExactMatch introspects whether a given selector requires a single specific field
-// to be set, and if so returns the value it requires.
+// RequiresExactMatch 探查选择器是否要求某个特定字段必须被设置，若是则返回所需的值。
 func (s internalSelector) RequiresExactMatch(label string) (value string, found bool) {
 	for ix := range s {
 		if s[ix].key == label {
@@ -457,7 +453,7 @@ func (s internalSelector) RequiresExactMatch(label string) (value string, found 
 	return "", false
 }
 
-// Token represents constant definition for lexer token
+// Token 表示词法分析器（lexer）的 token 常量。
 type Token int
 
 const (
@@ -491,8 +487,8 @@ const (
 	OpenParToken
 )
 
-// string2token contains the mapping between lexer Token and token literal
-// (except IdentifierToken, EndOfStringToken and ErrorToken since it makes no sense)
+// string2token 保存词法 Token 与 token 字面量之间的映射
+// （不含 IdentifierToken、EndOfStringToken 与 ErrorToken，因为它们没有意义）。
 var string2token = map[string]Token{
 	")":     ClosedParToken,
 	",":     CommaToken,
@@ -507,18 +503,18 @@ var string2token = map[string]Token{
 	"(":     OpenParToken,
 }
 
-// ScannedItem contains the Token and the literal produced by the lexer.
+// ScannedItem 包含词法分析器产生的 Token 与字面量。
 type ScannedItem struct {
 	tok     Token
 	literal string
 }
 
-// isWhitespace returns true if the rune is a space, tab, or newline.
+// isWhitespace 判断字符是否为空格、制表符或换行。
 func isWhitespace(ch byte) bool {
 	return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'
 }
 
-// isSpecialSymbol detects if the character ch can be an operator
+// isSpecialSymbol 判断字符 ch 是否可作为操作符的一部分。
 func isSpecialSymbol(ch byte) bool {
 	switch ch {
 	case '=', '!', '(', ')', ',', '>', '<':
@@ -527,17 +523,16 @@ func isSpecialSymbol(ch byte) bool {
 	return false
 }
 
-// Lexer represents the Lexer struct for label selector.
-// It contains necessary informationt to tokenize the input string
+// Lexer 是标签选择器的词法分析器。
+// 它包含对输入字符串进行分词所需的信息。
 type Lexer struct {
-	// s stores the string to be tokenized
+	// s 保存待分词的字符串。
 	s string
-	// pos is the position currently tokenized
+	// pos 是当前分词位置。
 	pos int
 }
 
-// read returns the character currently lexed
-// increment the position and check the buffer overflow
+// read 返回当前读取的字符，同时递增位置并检查缓冲区越界。
 func (l *Lexer) read() (b byte) {
 	b = 0
 	if l.pos < len(l.s) {
@@ -547,12 +542,12 @@ func (l *Lexer) read() (b byte) {
 	return b
 }
 
-// unread 'undoes' the last read character
+// unread 撤销上一次 read 读取的字符。
 func (l *Lexer) unread() {
 	l.pos--
 }
 
-// scanIDOrKeyword scans string to recognize literal token (for example 'in') or an identifier.
+// scanIDOrKeyword 扫描字符串，识别字面量 token（例如 'in'）或标识符。
 func (l *Lexer) scanIDOrKeyword() (tok Token, lit string) {
 	var buffer []byte
 IdentifierLoop:
@@ -568,14 +563,14 @@ IdentifierLoop:
 		}
 	}
 	s := string(buffer)
-	if val, ok := string2token[s]; ok { // is a literal token?
+	if val, ok := string2token[s]; ok { // 是否为字面量 token？
 		return val, s
 	}
-	return IdentifierToken, s // otherwise is an identifier
+	return IdentifierToken, s // 否则视为标识符
 }
 
-// scanSpecialSymbol scans string starting with special symbol.
-// special symbol identify non literal operators. "!=", "==", "="
+// scanSpecialSymbol 扫描以特殊符号开头的字符串。
+// 特殊符号用于识别非字面量操作符："!="、"=="、"="。
 func (l *Lexer) scanSpecialSymbol() (Token, string) {
 	lastScannedItem := ScannedItem{}
 	var buffer []byte
@@ -589,6 +584,7 @@ SpecialSymbolLoop:
 			if token, ok := string2token[string(buffer)]; ok {
 				lastScannedItem = ScannedItem{tok: token, literal: string(buffer)}
 			} else if lastScannedItem.tok != 0 {
+				// 已匹配到最长合法操作符，多读的符号需回退。
 				l.unread()
 				break SpecialSymbolLoop
 			}
@@ -603,8 +599,7 @@ SpecialSymbolLoop:
 	return lastScannedItem.tok, lastScannedItem.literal
 }
 
-// skipWhiteSpaces consumes all blank characters
-// returning the first non blank character
+// skipWhiteSpaces 消费所有空白字符，返回第一个非空白字符。
 func (l *Lexer) skipWhiteSpaces(ch byte) byte {
 	for {
 		if !isWhitespace(ch) {
@@ -614,8 +609,8 @@ func (l *Lexer) skipWhiteSpaces(ch byte) byte {
 	}
 }
 
-// Lex returns a pair of Token and the literal
-// literal is meaningfull only for IdentifierToken token
+// Lex 返回一个 Token 及其字面量。
+// 字面量仅对 IdentifierToken 有意义。
 func (l *Lexer) Lex() (tok Token, lit string) {
 	switch ch := l.skipWhiteSpaces(l.read()); {
 	case ch == 0:
@@ -629,7 +624,7 @@ func (l *Lexer) Lex() (tok Token, lit string) {
 	}
 }
 
-// Parser data structure contains the label selector parser data structure
+// Parser 包含标签选择器解析器的数据结构。
 type Parser struct {
 	l            *Lexer
 	scannedItems []ScannedItem
@@ -637,23 +632,23 @@ type Parser struct {
 	path         *field.Path
 }
 
-// ParserContext represents context during parsing:
-// some literal for example 'in' and 'notin' can be
-// recognized as operator for example 'x in (a)' but
-// it can be recognized as value for example 'value in (in)'
+// ParserContext 表示解析期间的上下文：
+// 某些字面量（例如 'in' 和 'notin'）既可被识别为操作符（如 'x in (a)'），
+// 也可被识别为值（如 'value in (in)'）。
 type ParserContext int
 
 const (
-	// KeyAndOperator represents key and operator
+	// KeyAndOperator 表示解析 key 与操作符的上下文。
 	KeyAndOperator ParserContext = iota
-	// Values represents values
+	// Values 表示解析值的上下文。
 	Values
 )
 
-// lookahead func returns the current token and string. No increment of current position
+// lookahead 返回当前 token 与字符串，不递增当前位置。
 func (p *Parser) lookahead(context ParserContext) (Token, string) {
 	tok, lit := p.scannedItems[p.position].tok, p.scannedItems[p.position].literal
 	if context == Values {
+		// 在值位置，in/notin 应作为普通标识符处理。
 		switch tok {
 		case InToken, NotInToken:
 			tok = IdentifierToken
@@ -662,7 +657,7 @@ func (p *Parser) lookahead(context ParserContext) (Token, string) {
 	return tok, lit
 }
 
-// consume returns current token and string. Increments the position
+// consume 返回当前 token 与字符串，并递增位置。
 func (p *Parser) consume(context ParserContext) (Token, string) {
 	p.position++
 	tok, lit := p.scannedItems[p.position-1].tok, p.scannedItems[p.position-1].literal
@@ -675,8 +670,8 @@ func (p *Parser) consume(context ParserContext) (Token, string) {
 	return tok, lit
 }
 
-// scan runs through the input string and stores the ScannedItem in an array
-// Parser can now lookahead and consume the tokens
+// scan 遍历输入字符串并把 ScannedItem 存入数组，
+// 之后 Parser 即可进行 lookahead 与 consume。
 func (p *Parser) scan() {
 	for {
 		token, literal := p.l.Lex()
@@ -687,10 +682,9 @@ func (p *Parser) scan() {
 	}
 }
 
-// parse runs the left recursive descending algorithm
-// on input string. It returns a list of Requirement objects.
+// parse 对输入字符串运行左递归下降算法，返回 Requirement 列表。
 func (p *Parser) parse() (internalSelector, error) {
-	p.scan() // init scannedItems
+	p.scan() // 初始化 scannedItems
 
 	var requirements internalSelector
 	for {
@@ -722,12 +716,13 @@ func (p *Parser) parse() (internalSelector, error) {
 	}
 }
 
+// parseRequirement 解析单个 requirement：key、可选操作符与值。
 func (p *Parser) parseRequirement() (*Requirement, error) {
 	key, operator, err := p.parseKeyAndInferOperator()
 	if err != nil {
 		return nil, err
 	}
-	if operator == selection.Exists || operator == selection.DoesNotExist { // operator found lookahead set checked
+	if operator == selection.Exists || operator == selection.DoesNotExist { // 已通过 lookahead 确定操作符
 		return NewRequirement(key, operator, []string{}, field.WithPath(p.path))
 	}
 	operator, err = p.parseOperator()
@@ -748,9 +743,8 @@ func (p *Parser) parseRequirement() (*Requirement, error) {
 
 }
 
-// parseKeyAndInferOperator parses literals.
-// in case of no operator '!, in, notin, ==, =, !=' are found
-// the 'exists' operator is inferred
+// parseKeyAndInferOperator 解析字面量。
+// 若未发现 '!, in, notin, ==, =, !=' 等操作符，则推断为 'exists' 操作符。
 func (p *Parser) parseKeyAndInferOperator() (string, selection.Operator, error) {
 	var operator selection.Operator
 	tok, literal := p.consume(Values)
@@ -765,6 +759,7 @@ func (p *Parser) parseKeyAndInferOperator() (string, selection.Operator, error) 
 	if err := validateLabelKey(literal, p.path); err != nil {
 		return "", "", err
 	}
+	// 若 key 之后直接结束或遇到逗号，则这是只有 key 的 requirement。
 	if t, _ := p.lookahead(Values); t == EndOfStringToken || t == CommaToken {
 		if operator != selection.DoesNotExist {
 			operator = selection.Exists
@@ -773,12 +768,12 @@ func (p *Parser) parseKeyAndInferOperator() (string, selection.Operator, error) 
 	return literal, operator, nil
 }
 
-// parseOperator returns operator and eventually matchType
-// matchType can be exact
+// parseOperator 返回操作符。
+// 这里的 matchType 可以是 exact。
 func (p *Parser) parseOperator() (op selection.Operator, err error) {
 	tok, lit := p.consume(KeyAndOperator)
 	switch tok {
-	// DoesNotExistToken shouldn't be here because it's a unary operator, not a binary operator
+	// DoesNotExistToken 不应出现在这里，因为它是单目操作符而非双目操作符。
 	case InToken:
 		op = selection.In
 	case EqualsToken:
@@ -799,7 +794,7 @@ func (p *Parser) parseOperator() (op selection.Operator, err error) {
 	return op, nil
 }
 
-// parseValues parses the values for set based matching (x,y,z)
+// parseValues 解析基于集合匹配的值列表 (x,y,z)。
 func (p *Parser) parseValues() (sets.String, error) {
 	tok, lit := p.consume(Values)
 	if tok != OpenParToken {
@@ -808,7 +803,7 @@ func (p *Parser) parseValues() (sets.String, error) {
 	tok, lit = p.lookahead(Values)
 	switch tok {
 	case IdentifierToken, CommaToken:
-		s, err := p.parseIdentifiersList() // handles general cases
+		s, err := p.parseIdentifiersList() // 处理一般情况
 		if err != nil {
 			return s, err
 		}
@@ -824,8 +819,7 @@ func (p *Parser) parseValues() (sets.String, error) {
 	}
 }
 
-// parseIdentifiersList parses a (possibly empty) list of
-// of comma separated (possibly empty) identifiers
+// parseIdentifiersList 解析（可能为空的）逗号分隔标识符列表。
 func (p *Parser) parseIdentifiersList() (sets.String, error) {
 	s := sets.NewString()
 	for {
@@ -842,28 +836,29 @@ func (p *Parser) parseIdentifiersList() (sets.String, error) {
 			default:
 				return nil, fmt.Errorf("found '%s', expected: ',' or ')'", lit2)
 			}
-		case CommaToken: // handled here since we can have "(,"
+		case CommaToken: // 在此处理，因为可能出现 "(,"
 			if s.Len() == 0 {
-				s.Insert("") // to handle (,
+				s.Insert("") // 处理 (,
 			}
 			tok2, _ := p.lookahead(Values)
 			if tok2 == ClosedParToken {
-				s.Insert("") // to handle ,)  Double "" removed by StringSet
+				s.Insert("") // 处理 ,)，重复的 "" 会被 StringSet 去重
 				return s, nil
 			}
 			if tok2 == CommaToken {
-				s.Insert("") // to handle ,, Double "" removed by StringSet
+				s.Insert("") // 处理 ,,，重复的 "" 会被 StringSet 去重
 			}
-		default: // it can be operator
+		default: // 也可能是操作符
 			return s, fmt.Errorf("found '%s', expected: ',', or identifier", lit)
 		}
 	}
 }
 
-// parseExactValue parses the only value for exact match style
+// parseExactValue 解析精确匹配风格所需的唯一值。
 func (p *Parser) parseExactValue() (sets.String, error) {
 	s := sets.NewString()
 	tok, _ := p.lookahead(Values)
+	// key= 后直接结束或逗号，表示空字符串值。
 	if tok == EndOfStringToken || tok == CommaToken {
 		s.Insert("")
 		return s, nil
@@ -876,10 +871,9 @@ func (p *Parser) parseExactValue() (sets.String, error) {
 	return nil, fmt.Errorf("found '%s', expected: identifier", lit)
 }
 
-// Parse takes a string representing a selector and returns a selector
-// object, or an error. This parsing function differs from ParseSelector
-// as they parse different selectors with different syntaxes.
-// The input will cause an error if it does not follow this form:
+// Parse 接收选择器字符串并返回选择器对象，或返回错误。
+// 该解析函数与 ParseSelector 不同，二者解析的语法不同。
+// 若输入不符合以下形式则报错：
 //
 //	<selector-syntax>         ::= <requirement> | <requirement> "," <selector-syntax>
 //	<requirement>             ::= [!] KEY [ <set-based-restriction> | <exact-match-restriction> ]
@@ -891,22 +885,19 @@ func (p *Parser) parseExactValue() (sets.String, error) {
 //	<values>                  ::= VALUE | VALUE "," <values>
 //	<exact-match-restriction> ::= ["="|"=="|"!="] VALUE
 //
-// KEY is a sequence of one or more characters following [ DNS_SUBDOMAIN "/" ] DNS_LABEL. Max length is 63 characters.
-// VALUE is a sequence of zero or more characters "([A-Za-z0-9_-\.])". Max length is 63 characters.
-// Delimiter is white space: (' ', '\t')
-// Example of valid syntax:
+// KEY 是遵循 [ DNS_SUBDOMAIN "/" ] DNS_LABEL 的一个或多个字符，最大长度 63。
+// VALUE 是零个或多个 "([A-Za-z0-9_-\.])" 字符，最大长度 63。
+// 分隔符为空白字符：(' ', '\t')
+// 合法语法示例：
 //
 //	"x in (foo,,baz),y,z notin ()"
 //
-// Note:
-//  1. Inclusion - " in " - denotes that the KEY exists and is equal to any of the
-//     VALUEs in its requirement
-//  2. Exclusion - " notin " - denotes that the KEY is not equal to any
-//     of the VALUEs in its requirement or does not exist
-//  3. The empty string is a valid VALUE
-//  4. A requirement with just a KEY - as in "y" above - denotes that
-//     the KEY exists and can be any VALUE.
-//  5. A requirement with just !KEY requires that the KEY not exist.
+// 注意：
+//  1. 包含 - " in " - 表示 KEY 存在且等于其 requirement 中任一 VALUE。
+//  2. 排除 - " notin " - 表示 KEY 不等于其 requirement 中任一 VALUE，或不存在。
+//  3. 空字符串是合法的 VALUE。
+//  4. 只有 KEY 的 requirement（如上面的 "y"）表示 KEY 存在且可为任意 VALUE。
+//  5. 只有 !KEY 的 requirement 要求 KEY 不存在。
 func Parse(selector string, opts ...field.PathOption) (Selector, error) {
 	parsedSelector, err := parse(selector, field.ToPath(opts...))
 	if err == nil {
@@ -915,20 +906,20 @@ func Parse(selector string, opts ...field.PathOption) (Selector, error) {
 	return nil, err
 }
 
-// parse parses the string representation of the selector and returns the internalSelector struct.
-// The callers of this method can then decide how to return the internalSelector struct to their
-// callers. This function has two callers now, one returns a Selector interface and the other
-// returns a list of requirements.
+// parse 解析选择器字符串并返回 internalSelector。
+// 调用方可决定如何把 internalSelector 返回给自己的调用方。
+// 目前有两个调用方：一个返回 Selector 接口，另一个返回 requirement 列表。
 func parse(selector string, path *field.Path) (internalSelector, error) {
 	p := &Parser{l: &Lexer{s: selector, pos: 0}, path: path}
 	items, err := p.parse()
 	if err != nil {
 		return nil, err
 	}
-	sort.Sort(ByKey(items)) // sort to grant determistic parsing
+	sort.Sort(ByKey(items)) // 排序以保证解析结果确定
 	return internalSelector(items), err
 }
 
+// validateLabelKey 校验标签键是否合法。
 func validateLabelKey(k string, path *field.Path) *field.Error {
 	if errs := content.IsLabelKey(k); len(errs) != 0 {
 		return field.Invalid(path, k, strings.Join(errs, "; "))
@@ -936,6 +927,7 @@ func validateLabelKey(k string, path *field.Path) *field.Error {
 	return nil
 }
 
+// validateLabelValue 校验标签值是否合法；错误路径会带上键名以便定位。
 func validateLabelValue(k, v string, path *field.Path) *field.Error {
 	if errs := validation.IsValidLabelValue(v); len(errs) != 0 {
 		return field.Invalid(path.Key(k), v, strings.Join(errs, "; "))
@@ -943,17 +935,16 @@ func validateLabelValue(k, v string, path *field.Path) *field.Error {
 	return nil
 }
 
-// SelectorFromSet returns a Selector which will match exactly the given Set. A
-// nil and empty Sets are considered equivalent to Everything().
-// It does not perform any validation, which means the server will reject
-// the request if the Set contains invalid values.
+// SelectorFromSet 返回恰好匹配给定 Set 的选择器。
+// nil 与空 Set 等价于 Everything()。
+// 它不做任何校验，因此若 Set 含非法值，服务端会拒绝该请求。
 func SelectorFromSet(ls Set) Selector {
 	return SelectorFromValidatedSet(ls)
 }
 
-// ValidatedSelectorFromSet returns a Selector which will match exactly the given Set. A
-// nil and empty Sets are considered equivalent to Everything().
-// The Set is validated client-side, which allows to catch errors early.
+// ValidatedSelectorFromSet 返回恰好匹配给定 Set 的选择器。
+// nil 与空 Set 等价于 Everything()。
+// Set 会在客户端校验，从而尽早发现错误。
 func ValidatedSelectorFromSet(ls Set) (Selector, error) {
 	if ls == nil || len(ls) == 0 {
 		return internalSelector{}, nil
@@ -966,16 +957,16 @@ func ValidatedSelectorFromSet(ls Set) (Selector, error) {
 		}
 		requirements = append(requirements, *r)
 	}
-	// sort to have deterministic string representation
+	// 排序以获得确定的字符串表示
 	sort.Sort(ByKey(requirements))
 	return internalSelector(requirements), nil
 }
 
-// SelectorFromValidatedSet returns a Selector which will match exactly the given Set.
-// A nil and empty Sets are considered equivalent to Everything().
-// It assumes that Set is already validated and doesn't do any validation.
-// Note: this method copies the Set; if the Set is immutable, consider wrapping it with ValidatedSetSelector
-// instead, which does not copy.
+// SelectorFromValidatedSet 返回恰好匹配给定 Set 的选择器。
+// nil 与空 Set 等价于 Everything()。
+// 它假定 Set 已校验，不做任何校验。
+// 注意：该方法会复制 Set；若 Set 不可变，可考虑用 ValidatedSetSelector 包装，
+// 后者不复制。
 func SelectorFromValidatedSet(ls Set) Selector {
 	if ls == nil || len(ls) == 0 {
 		return internalSelector{}
@@ -984,32 +975,31 @@ func SelectorFromValidatedSet(ls Set) Selector {
 	for label, value := range ls {
 		requirements = append(requirements, Requirement{key: label, operator: selection.Equals, strValues: []string{value}})
 	}
-	// sort to have deterministic string representation
+	// 排序以获得确定的字符串表示
 	sort.Sort(ByKey(requirements))
 	return internalSelector(requirements)
 }
 
-// ParseToRequirements takes a string representing a selector and returns a list of
-// requirements. This function is suitable for those callers that perform additional
-// processing on selector requirements.
-// See the documentation for Parse() function for more details.
+// ParseToRequirements 接收选择器字符串并返回 requirement 列表。
+// 适合需要对选择器条件做额外处理的调用方。
+// 详见 Parse() 的文档。
 // TODO: Consider exporting the internalSelector type instead.
 func ParseToRequirements(selector string, opts ...field.PathOption) ([]Requirement, error) {
 	return parse(selector, field.ToPath(opts...))
 }
 
-// ValidatedSetSelector wraps a Set, allowing it to implement the Selector interface. Unlike
-// Set.AsSelectorPreValidated (which copies the input Set), this type simply wraps the underlying
-// Set. As a result, it is substantially more efficient. A nil and empty Sets are considered
-// equivalent to Everything().
+// ValidatedSetSelector 包装一个 Set，使其实现 Selector 接口。
+// 与 Set.AsSelectorPreValidated（会复制输入 Set）不同，该类型只是包装底层 Set，
+// 因此效率高得多。nil 与空 Set 等价于 Everything()。
 //
-// Callers MUST ensure the underlying Set is not mutated, and that it is already validated. If these
-// constraints are not met, Set.AsValidatedSelector should be preferred
+// 调用方必须确保底层 Set 不会被修改，且已经过校验。若不满足这些约束，
+// 应优先使用 Set.AsValidatedSelector。
 //
-// None of the Selector methods mutate the underlying Set, but Add() and Requirements() convert to
-// the less optimized version.
+// Selector 的方法都不会修改底层 Set，但 Add() 与 Requirements() 会转换为
+// 优化程度较低的版本。
 type ValidatedSetSelector Set
 
+// Matches 判断包装的 Set 是否完全包含于给定标签中（键值均相等）。
 func (s ValidatedSetSelector) Matches(labels Labels) bool {
 	for k, v := range s {
 		val, exists := labels.Lookup(k)
@@ -1020,16 +1010,18 @@ func (s ValidatedSetSelector) Matches(labels Labels) bool {
 	return true
 }
 
+// Empty 返回包装的 Set 是否为空。
 func (s ValidatedSetSelector) Empty() bool {
 	return len(s) == 0
 }
 
+// String 返回排序后的 key=value 逗号分隔字符串，保证输出确定。
 func (s ValidatedSetSelector) String() string {
 	keys := make([]string, 0, len(s))
 	for k := range s {
 		keys = append(keys, k)
 	}
-	// Ensure deterministic output
+	// 保证输出确定
 	sort.Strings(keys)
 	b := strings.Builder{}
 	for i, key := range keys {
@@ -1045,14 +1037,17 @@ func (s ValidatedSetSelector) String() string {
 	return b.String()
 }
 
+// Add 转换为完整选择器后添加条件（因为 Set 形式无法直接表达任意操作符）。
 func (s ValidatedSetSelector) Add(r ...Requirement) Selector {
 	return s.toFullSelector().Add(r...)
 }
 
+// Requirements 转换为完整选择器后返回条件列表。
 func (s ValidatedSetSelector) Requirements() (requirements Requirements, selectable bool) {
 	return s.toFullSelector().Requirements()
 }
 
+// DeepCopySelector 复制包装的 Set，返回新的选择器。
 func (s ValidatedSetSelector) DeepCopySelector() Selector {
 	res := make(ValidatedSetSelector, len(s))
 	for k, v := range s {
@@ -1061,11 +1056,13 @@ func (s ValidatedSetSelector) DeepCopySelector() Selector {
 	return res
 }
 
+// RequiresExactMatch 返回指定 key 的值（若存在），因为 Set 中的每项都是精确匹配。
 func (s ValidatedSetSelector) RequiresExactMatch(label string) (value string, found bool) {
 	v, f := s[label]
 	return v, f
 }
 
+// toFullSelector 把 Set 形式转换为通用的 internalSelector。
 func (s ValidatedSetSelector) toFullSelector() Selector {
 	return SelectorFromValidatedSet(Set(s))
 }

@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestUpdateValue 验证基于值比较的 UpdateValueByCompare：Create 操作不做约束检查，
+// Update 时按 NoSet/NoUnset/NoModify 的语义区分"未设置"与"空值"。
 func TestUpdateValue(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -158,6 +160,7 @@ func TestUpdateValue(t *testing.T) {
 	}
 }
 
+// TestUpdatePointer 验证指针语义下的更新约束：nil 代表未设置，非 nil 指向空字符串仍算已设置。
 func TestUpdatePointer(t *testing.T) {
 	stringPtr := func(s string) *string { return &s }
 
@@ -268,6 +271,8 @@ func TestUpdatePointer(t *testing.T) {
 	}
 }
 
+// TestUpdateValueByReflect 验证基于反射的结构体更新约束：零值视为未设置，
+// 因此零值<->非零值的转换不算"修改"。
 func TestUpdateValueByReflect(t *testing.T) {
 	type CustomStruct struct {
 		Field1 string
@@ -357,6 +362,7 @@ func TestUpdateValueByReflect(t *testing.T) {
 	}
 }
 
+// TestUpdateStruct 验证结构体更新约束；与 ByReflect 不同，这里零值到非零值会被视为修改。
 func TestUpdateStruct(t *testing.T) {
 	type TestStruct struct {
 		Field1 string
@@ -429,6 +435,8 @@ func TestUpdateStruct(t *testing.T) {
 	}
 }
 
+// TestValSliceUpdate 验证值切片的更新约束：NoSet/NoUnset 作用于整个切片，
+// NoAddItem/NoRemoveItem 按 match 函数判断元素是否新增或删除，允许重排。
 func TestValSliceUpdate(t *testing.T) {
 	type keyed struct {
 		Name  string
@@ -602,6 +610,8 @@ func TestValSliceUpdate(t *testing.T) {
 	})
 }
 
+// TestUpdateMap 验证 map 的更新约束：NoAddItem/NoRemoveItem 只关注键集合，
+// 修改已存在键的值不违反约束。
 func TestUpdateMap(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -685,6 +695,7 @@ func TestUpdateMap(t *testing.T) {
 	}
 }
 
+// TestPtrSliceUpdate 验证指针切片的更新约束；nil 元素会被忽略，不参与增删判断。
 func TestPtrSliceUpdate(t *testing.T) {
 	type keyed struct {
 		Name  string

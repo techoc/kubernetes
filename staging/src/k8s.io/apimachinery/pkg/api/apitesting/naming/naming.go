@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package naming verifies that API types follow Kubernetes naming
+// conventions: groups end in .k8s.io, external types carry JSON tags, and
+// internal types do not.
 package naming
 
 import (
@@ -35,9 +38,13 @@ var (
 
 // VerifyGroupNames ensures that all groups in the scheme ends with the k8s.io suffix.
 // Exceptions can be tolerated using the legacyUnsuffixedGroups parameter
+//
+// The suffix keeps first-party APIs from colliding with the core group or
+// with groups registered by other projects.
 func VerifyGroupNames(scheme *runtime.Scheme, legacyUnsuffixedGroups sets.String) error {
 	errs := []error{}
 	for _, gv := range scheme.PrioritizedVersionsAllGroups() {
+		// Unsuffixed groups are only tolerated when explicitly grandfathered in.
 		if !strings.HasSuffix(gv.Group, ".k8s.io") && !legacyUnsuffixedGroups.Has(gv.Group) {
 			errs = append(errs, fmt.Errorf("group %s does not have the standard kubernetes API group suffix of .k8s.io", gv.Group))
 		}
@@ -51,6 +58,8 @@ func VerifyTagNaming(scheme *runtime.Scheme, typesAllowedTags map[reflect.Type]b
 	errs := []error{}
 	for gvk, knownType := range scheme.AllKnownTypes() {
 		var err error
+		// Internal types are never serialized directly, so a tag there only hides
+		// a bug; external types must be fully tagged for JSON compatibility.
 		if gvk.Version == runtime.APIVersionInternal {
 			err = errors.NewAggregate(ensureNoTags(gvk, knownType, nil, typesAllowedTags))
 		} else {
@@ -63,13 +72,17 @@ func VerifyTagNaming(scheme *runtime.Scheme, typesAllowedTags map[reflect.Type]b
 	return errors.NewAggregate(errs)
 }
 
+// ensureNoTags walks a type graph and reports any json or protobuf tags on
+// fields of internal types. typesAllowedTags lets specific types opt out, e.g.
+// types that implement their own marshalling.
 func ensureNoTags(gvk schema.GroupVersionKind, tp reflect.Type, parents []reflect.Type, typesAllowedTags map[reflect.Type]bool) []error {
 	errs := []error{}
 	if _, ok := typesAllowedTags[tp]; ok {
 		return errs
 	}
 
-	// Don't look at the same type multiple times
+	// Don't look at the same type multiple times. This also terminates walks
+	// through self-referential types such as lists.
 	if containsType(parents, tp) {
 		return nil
 	}
@@ -80,7 +93,7 @@ func ensureNoTags(gvk schema.GroupVersionKind, tp reflect.Type, parents []reflec
 		errs = append(errs, ensureNoTags(gvk, tp.Elem(), parents, typesAllowedTags)...)
 
 	case reflect.String, reflect.Bool, reflect.Float32, reflect.Float64, reflect.Int32, reflect.Int64, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr, reflect.Interface:
-		// no-op
+		// Scalar values cannot carry tags, so there is nothing to inspect.
 
 	case reflect.Struct:
 		for i := 0; i < tp.NumField(); i++ {
@@ -88,6 +101,7 @@ func ensureNoTags(gvk schema.GroupVersionKind, tp reflect.Type, parents []reflec
 			if f.PkgPath != "" {
 				continue // Ignore unexported fields
 			}
+			// Unexported fields are not encoded and therefore need no tags.
 			_, jsonTagExists := f.Tag.Lookup("json")
 			protoTag := f.Tag.Get("protobuf")
 			if jsonTagExists || len(protoTag) > 0 {
@@ -103,6 +117,9 @@ func ensureNoTags(gvk schema.GroupVersionKind, tp reflect.Type, parents []reflec
 	return errs
 }
 
+// ensureTags walks a type graph and reports external fields without JSON tags
+// and JSON names that do not start with a lowercase letter.
+// allowedNonstandardJSONNames permits specific types to use another name.
 func ensureTags(gvk schema.GroupVersionKind, tp reflect.Type, parents []reflect.Type, allowedNonstandardJSONNames map[reflect.Type]string) []error {
 	errs := []error{}
 	// This type handles its own encoding/decoding and doesn't need json tags
@@ -110,7 +127,8 @@ func ensureTags(gvk schema.GroupVersionKind, tp reflect.Type, parents []reflect.
 		return errs
 	}
 
-	// Don't look at the same type multiple times
+	// Don't look at the same type multiple times. This also terminates walks
+	// through self-referential types such as lists.
 	if containsType(parents, tp) {
 		return nil
 	}
@@ -121,7 +139,7 @@ func ensureTags(gvk schema.GroupVersionKind, tp reflect.Type, parents []reflect.
 		errs = append(errs, ensureTags(gvk, tp.Elem(), parents, allowedNonstandardJSONNames)...)
 
 	case reflect.String, reflect.Bool, reflect.Float32, reflect.Float64, reflect.Int32, reflect.Int64, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr, reflect.Interface:
-		// no-op
+		// Scalar values cannot carry tags, so there is nothing to inspect.
 
 	case reflect.Struct:
 		for i := 0; i < tp.NumField(); i++ {
@@ -135,6 +153,8 @@ func ensureTags(gvk schema.GroupVersionKind, tp reflect.Type, parents []reflect.
 				}
 			}
 
+			// Kubernetes JSON names are lowerCamelCase; "-" means the field is
+			// skipped and any name is permitted, and opted-out types are exempt.
 			jsonTagName := strings.Split(jsonTag, ",")[0]
 			if len(jsonTagName) > 0 && (jsonTagName[0] < 'a' || jsonTagName[0] > 'z') && jsonTagName != "-" && allowedNonstandardJSONNames[tp] != jsonTagName {
 				errs = append(errs, fmt.Errorf("external types should have json names starting with lowercase letter. %#v has json tag on field %v with name %s.\n%s", gvk, f.Name, jsonTagName, fmtParentString(parents)))
@@ -149,6 +169,8 @@ func ensureTags(gvk schema.GroupVersionKind, tp reflect.Type, parents []reflect.
 	return errs
 }
 
+// fmtParentString renders the traversal chain for error messages so that the
+// offending nested field can be located.
 func fmtParentString(parents []reflect.Type) string {
 	str := "Type parents:\n"
 	for i, tp := range parents {

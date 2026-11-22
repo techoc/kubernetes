@@ -22,6 +22,8 @@ package sets
 // new ways:
 // s1 := Set[int64]{}
 // s2 := New[int64]()
+//
+// 该类型是泛型 Set[int64] 的兼容包装；新代码应直接使用泛型版本。
 type Int64 map[int64]Empty
 
 // NewInt64 creates a Int64 from a list of values.

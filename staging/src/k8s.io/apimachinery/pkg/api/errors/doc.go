@@ -14,5 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package errors provides detailed error types for api field validation.
+// Package errors 为 API 字段校验提供详细的错误类型，
+// 把校验失败的原因以结构化、可被客户端解析的方式返回。
 package errors

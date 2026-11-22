@@ -31,6 +31,9 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// TestLastAppliedUpdater 验证 last-applied 注解只由 kubectl 维护：非 kubectl
+// manager 的 apply 不应改动该注解，而 kubectl 的 apply 必须把它更新为
+// 本次应用的配置。
 func TestLastAppliedUpdater(t *testing.T) {
 	f := internaltesting.NewTestFieldManagerImpl(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"),
 		"",
@@ -96,6 +99,9 @@ spec:
 	}
 }
 
+// TestLargeLastApplied 覆盖注解大小上限的边界：当新的 last-applied 序列化后
+// 过大时，系统应放弃写入（删除该注解）而不是写出超大注解或报错。
+// 两个子用例分别制造超大 data 与超大 annotations 内容。
 func TestLargeLastApplied(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -250,6 +256,8 @@ func TestLargeLastApplied(t *testing.T) {
 	}
 }
 
+// getLastApplied 读取对象的 last-applied 注解；缺失或无法访问时返回错误，
+// 便于测试区分“注解为空”与“注解不存在”。
 func getLastApplied(obj runtime.Object) (string, error) {
 	accessor := meta.NewAccessor()
 	annotations, err := accessor.Annotations(obj)

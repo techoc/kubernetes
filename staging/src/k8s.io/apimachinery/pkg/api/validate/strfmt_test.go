@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestShortName 校验 ShortName 格式（RFC 1123 label，最长 63 字节）：
+// 空值、超长、首尾 '-'、大写和非法字符都应被拒绝，错误 origin 为 format=k8s-short-name。
 func TestShortName(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
@@ -85,6 +87,8 @@ func TestShortName(t *testing.T) {
 	}
 }
 
+// TestLongName 校验 LongName 格式（RFC 1123 subdomain，最长 253 字节），
+// 允许以 '.' 分段的域名形式，但各段仍需满足首尾字母数字、全小写等约束。
 func TestLongName(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
@@ -145,6 +149,8 @@ func TestLongName(t *testing.T) {
 	}
 }
 
+// TestLabelKey 校验 LabelKey 格式：可选的 DNS 子域前缀 + '/' + 最长 63 的 name，
+// 其中 name 允许大写、'-'、'_'、'.'，但必须以字母数字开头和结尾。
 func TestLabelKey(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
@@ -229,6 +235,8 @@ func TestLabelKey(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			var value *string
+			// "nil value" 用例特意让 value 保持 nil：格式校验对 nil 应直接放过，
+			// 是否必填由 Required 校验器负责。
 			if tc.name != "nil value" {
 				v := tc.input
 				value = &v
@@ -239,6 +247,8 @@ func TestLabelKey(t *testing.T) {
 	}
 }
 
+// TestPrefixedLabelKey 与 TestLabelKey 类似，但要求必须带域名前缀；
+// 无斜杠的普通 key（哪怕本身合法）也应报错。
 func TestPrefixedLabelKey(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
@@ -341,6 +351,8 @@ func TestPrefixedLabelKey(t *testing.T) {
 	}
 }
 
+// TestK8sUUID 校验 k8s UUID 格式：必须为 8-4-4-4-12 的连字符形式且全小写；
+// 大写的标准 UUID、urn:uuid: 前缀和无连字符形式都不接受。
 func TestK8sUUID(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
@@ -413,6 +425,8 @@ func TestK8sUUID(t *testing.T) {
 	}
 }
 
+// TestLabelValue 校验 LabelValue 格式：允许空串；非空时为最长 63 的
+// 字母数字/'-'/'_'/'.' 组合，且首尾必须是字母数字。
 func TestLabelValue(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
@@ -514,6 +528,8 @@ func TestLabelValue(t *testing.T) {
 	}
 }
 
+// TestPathSegmentName 校验 PathSegmentName 只拒绝会破坏 URL 路径的字符，
+// 空串与长度上限由其他校验器（Required、maxLength）负责，故这里视为合法。
 func TestPathSegmentName(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
@@ -609,6 +625,7 @@ func TestPathSegmentName(t *testing.T) {
 	}
 }
 
+// TestLongNameCaseless 校验 LongNameCaseless：与 LongName 相同，但不限制大小写。
 func TestLongNameCaseless(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
@@ -667,6 +684,8 @@ func TestLongNameCaseless(t *testing.T) {
 	}
 }
 
+// TestResourcePoolName 校验 ResourcePoolName：以 '/' 分段的 DNS 风格名称，
+// 每段需满足 RFC 1123 子域规则，且不允许空段（首/尾/连续斜杠）。
 func TestResourcePoolName(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
@@ -770,6 +789,8 @@ func TestResourcePoolName(t *testing.T) {
 	}
 }
 
+// TestExtendedResourceName 校验扩展资源名（如 example.com/foo）：
+// 必须有域名前缀、name 部分符合标签键规则，且禁止保留的 kubernetes.io 域名与 requests. 前缀。
 func TestExtendedResourceName(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")
@@ -857,6 +878,9 @@ func TestExtendedResourceName(t *testing.T) {
 	}
 }
 
+// TestResourceFullyQualifiedName 校验 fully-qualified 资源名：
+// 形如 domain/name，name 需满足 C 标识符规则（允许大写、不允许 '.'/'-'）。
+// 部分历史行为被记录为“当前不校验”，例如多于一个斜杠。
 func TestResourceFullyQualifiedName(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("test")

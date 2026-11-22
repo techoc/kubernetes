@@ -28,7 +28,12 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TestAsPartialObjectMetadata 用随机数据填充对象，验证
+// AsPartialObjectMetadata 生成的 PartialObjectMetadata 完整复制了 ObjectMeta，
+// 不丢失任何字段（包括 nil 字段）。两种输入类型分别验证。
 func TestAsPartialObjectMetadata(t *testing.T) {
+	// NilChance(.5) 让一半的指针/切片为 nil，NumElements(0,1) 限制集合大小，
+	// 固定随机种子以保证可复现。
 	f := randfill.New().NilChance(.5).NumElements(0, 1).RandSource(rand.NewSource(1))
 
 	for i := 0; i < 100; i++ {
@@ -40,6 +45,7 @@ func TestAsPartialObjectMetadata(t *testing.T) {
 		}
 	}
 
+	// v1beta1.PartialObjectMetadata 走相同实现，确认其对象元数据也能无损拷贝。
 	for i := 0; i < 100; i++ {
 		m := &metav1beta1.PartialObjectMetadata{}
 		f.Fill(&m.ObjectMeta)

@@ -16,4 +16,8 @@ limitations under the License.
 
 // Package fields implements a simple field system, parsing and matching
 // selectors with sets of fields.
+//
+// fields 包实现了一套简单的字段系统：解析字段选择器（如 metadata.name=foo）
+// 并将其与字段集合进行匹配。它不涉及类型信息，字段以点分路径字符串表示，
+// 常用于对已解码对象做轻量过滤。
 package fields

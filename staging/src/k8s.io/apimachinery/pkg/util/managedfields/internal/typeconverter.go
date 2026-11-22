@@ -36,6 +36,8 @@ type TypeConverter interface {
 	TypedToObject(*typed.TypedValue) (runtime.Object, error)
 }
 
+// typeConverter 基于 OpenAPI schema 建立 GVK 到 typed.ParseableType 的索引；
+// 只有 schema 中声明了 GVK 扩展的类型才能被精确转换。
 type typeConverter struct {
 	parser map[schema.GroupVersionKind]*typed.ParseableType
 }
@@ -72,6 +74,8 @@ func (c *typeConverter) TypedToObject(value *typed.TypedValue) (runtime.Object, 
 	return valueToObject(value.AsValue())
 }
 
+// deducedTypeConverter 不依赖 schema，直接把对象按“所有字段均为 atomic”
+// 的推导类型处理。
 type deducedTypeConverter struct{}
 
 // DeducedTypeConverter is a TypeConverter for CRDs that don't have a
@@ -79,6 +83,9 @@ type deducedTypeConverter struct{}
 // same types of objects), so that everything can still work the same.
 // CRDs are merged with all their fields being "atomic" (lists
 // included).
+//
+// 中文说明：没有 schema 的 CRD 无法得知字段粒度，只能整体原子合并——
+// 这会导致字段所有权更粗，但至少保证行为可预测。
 func NewDeducedTypeConverter() TypeConverter {
 	return deducedTypeConverter{}
 }
@@ -99,6 +106,7 @@ func (deducedTypeConverter) TypedToObject(value *typed.TypedValue) (runtime.Obje
 	return valueToObject(value.AsValue())
 }
 
+// valueToObject 仅接受顶层为 map 的值；其他形状无法表示为 Kubernetes 对象。
 func valueToObject(val value.Value) (runtime.Object, error) {
 	vu := val.Unstructured()
 	switch o := vu.(type) {
@@ -127,6 +135,8 @@ func GroupVersionOfTypedValue(object *typed.TypedValue) (schema.GroupVersion, bo
 	return groupVersion, true
 }
 
+// indexModels 扫描 OpenAPI schema 中的 x-kubernetes-group-version-kind 扩展，
+// 建立 GVK -> ParseableType 的索引；没有扩展或 kind 为空的模型会被跳过。
 func indexModels(
 	typeParser *typed.Parser,
 	openAPISchemas map[string]*spec.Schema,
@@ -149,6 +159,9 @@ func indexModels(
 }
 
 // Get and parse GroupVersionKind from the extension. Returns empty if it doesn't have one.
+//
+// 中文说明：OpenAPI 扩展经不同反序列化路径可能得到 map[interface{}]interface{}
+// （YAML）或 map[string]interface{}（JSON），因此两种都要处理。
 func parseGroupVersionKind(extensions map[string]interface{}) []schema.GroupVersionKind {
 	gvkListResult := []schema.GroupVersionKind{}
 

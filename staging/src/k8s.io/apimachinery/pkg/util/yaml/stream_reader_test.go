@@ -23,6 +23,8 @@ import (
 )
 
 // srt = StreamReaderTest
+// srtStep 描述对 StreamReader 的一次操作及其期望结果；
+// expected 只对读类操作有意义，size 对不同操作分别是缓冲区大小、回退/消费字节数或期望计数。
 type srtStep struct {
 	op       string
 	expected string
@@ -30,28 +32,42 @@ type srtStep struct {
 	size     int
 }
 
+// srtRead 构造一次 Read 操作步骤。
 func srtRead(size int, expected string, err error) srtStep {
 	return srtStep{op: "Read", size: size, expected: expected, err: err}
 }
+
+// srtReadN 构造一次 ReadN（读满或报错）操作步骤。
 func srtReadN(size int, expected string, err error) srtStep {
 	return srtStep{op: "ReadN", size: size, expected: expected, err: err}
 }
+
+// srtPeek 构造一次 Peek 操作步骤。
 func srtPeek(size int, expected string, err error) srtStep {
 	return srtStep{op: "Peek", size: size, expected: expected, err: err}
 }
+
+// srtRewind 构造一次回退到已消费起点的操作。
 func srtRewind() srtStep {
 	return srtStep{op: "Rewind"}
 }
+
+// srtRewindN 构造一次回退 N 字节的操作。
 func srtRewindN(size int) srtStep {
 	return srtStep{op: "RewindN", size: size}
 }
+
+// srtConsume 构造一次跳过/丢弃 N 字节的操作。
 func srtConsume(size int) srtStep {
 	return srtStep{op: "Consume", size: size}
 }
+
+// srtConsumed 构造一次断言当前已消费字节数的操作。
 func srtConsumed(exp int) srtStep {
 	return srtStep{op: "Consumed", size: exp}
 }
 
+// srtRun 按顺序执行步骤；错误用 == 比较，因为测试依赖具体的 io.EOF 等哨兵值。
 func srtRun(t *testing.T, reader *StreamReader, steps []srtStep) {
 	t.Helper()
 
@@ -98,6 +114,9 @@ func srtRun(t *testing.T, reader *StreamReader, steps []srtStep) {
 	}
 }
 
+// TestStreamReader_Read 覆盖 Read 的基本契约：
+// 读满请求量时无错误；到达 EOF 时返回剩余数据（短读）且 err 为 nil，
+// 再次读取才返回 io.EOF。
 func TestStreamReader_Read(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -132,6 +151,8 @@ func TestStreamReader_Read(t *testing.T) {
 		steps: []srtStep{
 			srtRead(3, "012", nil), // fill buffer
 			srtRewind(),
+			// 回退后缓冲区里只有 3 字节，Read 不会为了满足请求而继续读底层，
+			// 这是 StreamReader 有意保留的"短读"语义。
 			srtRead(4, "012", nil), // short read from buffer
 			srtRewind(),
 			srtRead(4, "012", nil),  // still short
@@ -149,6 +170,8 @@ func TestStreamReader_Read(t *testing.T) {
 	}
 }
 
+// TestStreamReader_Rewind 验证 Rewind 能回到"已消费位置"而不是流的绝对起点，
+// 因此多次 Rewind 后仍能读到尚未消费的数据。
 func TestStreamReader_Rewind(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -203,6 +226,8 @@ func TestStreamReader_Rewind(t *testing.T) {
 	}
 }
 
+// TestStreamReader_RewindN 验证按字节回退，且回退量超过已读内容时会被钳制，
+// 不会 panic 或读到错误位置。
 func TestStreamReader_RewindN(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -240,6 +265,8 @@ func TestStreamReader_RewindN(t *testing.T) {
 	}
 }
 
+// TestStreamReader_Consume 验证 Consume 永久丢弃字节并推进"已消费"计数；
+// 消费量超过剩余数据时计数保持在可消费上限，不会越界。
 func TestStreamReader_Consume(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -297,6 +324,8 @@ func TestStreamReader_Consume(t *testing.T) {
 	}
 }
 
+// TestStreamReader_ReadN 验证 ReadN 与 Read 的关键差异：
+// ReadN 会尽量读满请求量（必要时从底层继续读），只有遇到 EOF 才返回短读加 io.EOF。
 func TestStreamReader_ReadN(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -356,6 +385,8 @@ func TestStreamReader_ReadN(t *testing.T) {
 	}
 }
 
+// TestStreamReader_Peek 验证 Peek 只填充缓冲区而不推进读位置，
+// 因此随后 Read 仍从头开始；初始缓冲区为 0 时也要能正确扩容。
 func TestStreamReader_Peek(t *testing.T) {
 	tests := []struct {
 		name  string

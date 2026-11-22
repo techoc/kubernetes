@@ -35,54 +35,73 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer/protobuf"
 )
 
+// testObject 是最小化的 runtime.Object：只维护 GVK，用于隔离序列化器与具体类型。
 type testObject struct {
 	gvk schema.GroupVersionKind
 }
 
-func (d *testObject) GetObjectKind() schema.ObjectKind                { return d }
+// GetObjectKind 返回自身，满足 runtime.Object 的 ObjectKind 接口。
+func (d *testObject) GetObjectKind() schema.ObjectKind { return d }
+
+// SetGroupVersionKind 设置 GVK，使编码测试能控制写入 wire 的 apiVersion/kind。
 func (d *testObject) SetGroupVersionKind(gvk schema.GroupVersionKind) { d.gvk = gvk }
-func (d *testObject) GroupVersionKind() schema.GroupVersionKind       { return d.gvk }
+
+// GroupVersionKind 返回当前 GVK。
+func (d *testObject) GroupVersionKind() schema.GroupVersionKind { return d.gvk }
+
+// DeepCopyObject 故意 panic：这些替身不参与需要深拷贝的路径。
 func (d *testObject) DeepCopyObject() runtime.Object {
 	panic("testObject does not support DeepCopy")
 }
 
+// testMarshalable 通过 Marshal() 返回预置数据，模拟走“慢路径”的 protobuf 对象。
 type testMarshalable struct {
 	testObject
 	data []byte
 	err  error
 }
 
+// Marshal 直接返回预置的字节与错误，便于验证序列化器的错误传播。
 func (d *testMarshalable) Marshal() ([]byte, error) {
 	return d.data, d.err
 }
 
+// DeepCopyObject 故意 panic，理由同 testObject。
 func (d *testMarshalable) DeepCopyObject() runtime.Object {
 	panic("testMarshalable does not support DeepCopy")
 }
 
+// testBufferedMarshalable 实现 MarshalTo/Size，模拟 protobuf “快路径”；
+// Marshal 固定报错，确保序列化器确实走了缓冲区写入路径。
 type testBufferedMarshalable struct {
 	testObject
 	data []byte
 	err  error
 }
 
+// Marshal 始终返回错误，用来证明编码器优先使用 MarshalTo 而非 Marshal。
 func (d *testBufferedMarshalable) Marshal() ([]byte, error) {
 	return nil, fmt.Errorf("not invokable")
 }
 
+// MarshalTo 把预置数据复制到目标缓冲区，返回写入长度。
 func (d *testBufferedMarshalable) MarshalTo(data []byte) (int, error) {
 	copy(data, d.data)
 	return len(d.data), d.err
 }
 
+// Size 返回序列化后的字节数，供编码器预分配缓冲区。
 func (d *testBufferedMarshalable) Size() int {
 	return len(d.data)
 }
 
+// DeepCopyObject 故意 panic，理由同 testObject。
 func (d *testBufferedMarshalable) DeepCopyObject() runtime.Object {
 	panic("testBufferedMarshalable does not support DeepCopy")
 }
 
+// TestRecognize 验证 protobuf 识别依据是 4 字节前缀 "k8s\0"：
+// 长度不足、前缀不符或第 4 字节非 0 的数据都不能被识别。
 func TestRecognize(t *testing.T) {
 	s := protobuf.NewSerializer(nil, nil)
 	ignores := [][]byte{
@@ -107,6 +126,9 @@ func TestRecognize(t *testing.T) {
 	}
 }
 
+// TestEncode 验证 protobuf 编码的完整 wire 格式（前缀 + Unknown 信封 + 原始数据），
+// 并对比 MarshalTo“快路径”与 Marshal“慢路径”的输出必须一致；不可 marshal 的对象
+// 与底层错误需原样上抛。
 func TestEncode(t *testing.T) {
 	obj1 := &testMarshalable{testObject: testObject{}, data: []byte{}}
 	wire1 := []byte{
@@ -203,6 +225,8 @@ func TestEncode(t *testing.T) {
 	}
 }
 
+// TestProtobufDecode 验证解码到 runtime.Unknown：空数据、非 protobuf 前缀都会报错；
+// 带前缀的数据会把原始字节与 ContentType 填入 Unknown。
 func TestProtobufDecode(t *testing.T) {
 	wire1 := []byte{
 		0x6b, 0x38, 0x73, 0x00, // prefix
@@ -282,6 +306,8 @@ func TestProtobufDecode(t *testing.T) {
 	}
 }
 
+// TestDecodeObjects 验证完整对象解码：先校验 NestedMarshalTo 生成的 wire 与 Marshal 一致，
+// 再加上前缀后用带 scheme 的序列化器解码，结果应与原 Carp 对象语义相等。
 func TestDecodeObjects(t *testing.T) {
 	obj1 := &v1.Carp{
 		ObjectMeta: metav1.ObjectMeta{
@@ -318,6 +344,7 @@ func TestDecodeObjects(t *testing.T) {
 
 	wire1 = append([]byte{0x6b, 0x38, 0x73, 0x00}, wire1...)
 
+	// 解码结果需要带上 GVK，因为 protobuf 解码不会像 JSON 那样从 body 内推断类型。
 	obj1WithKind := obj1.DeepCopyObject()
 	obj1WithKind.GetObjectKind().SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Carp"})
 	testCases := []struct {

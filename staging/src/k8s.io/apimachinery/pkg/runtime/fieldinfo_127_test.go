@@ -18,4 +18,6 @@ limitations under the License.
 
 package runtime_test
 
+// stdlibSupportsEmbedTag 指示标准库是否原生支持 `embed` 结构体标签。
+// 该文件仅在 go1.27 及以上版本参与编译；低版本由配套文件提供 false。
 const stdlibSupportsEmbedTag = true

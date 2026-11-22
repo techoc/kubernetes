@@ -36,8 +36,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// atomsToAttrs states which attributes of which tags require URL substitution.
-// Sources: http://www.w3.org/TR/REC-html40/index/attributes.html
+// atomsToAttrs 记录哪些标签的哪些属性需要做 URL 替换。
+// 只覆盖 HTML 规范中取值为 URL 的属性；遗漏会导致代理后的页面链接仍指向后端地址。
+// 来源：http://www.w3.org/TR/REC-html40/index/attributes.html
 //
 //	http://www.w3.org/html/wg/drafts/html/master/index.html#attributes-1
 var atomsToAttrs = map[atom.Atom]sets.String{
@@ -68,10 +69,13 @@ var atomsToAttrs = map[atom.Atom]sets.String{
 	atom.Video:      sets.NewString("poster", "src"),
 
 	// TODO: css URLs hidden in style elements.
+	// style 元素与 style 属性中的 url(...) 尚未处理，属于已知缺口。
 }
 
-// Transport is a transport for text/html content that replaces URLs in html
-// content with the prefix of the proxy server
+// Transport 是处理 text/html 内容的 http.RoundTripper：
+// 它会把 HTML 中指向后端的 URL 改写为经由代理服务器前缀访问的 URL，
+// 使代理后的页面资源仍能通过代理加载。
+// Scheme/Host/PathPrepend 描述代理对外暴露的地址与路径前缀。
 type Transport struct {
 	Scheme      string
 	Host        string
@@ -80,10 +84,12 @@ type Transport struct {
 	http.RoundTripper
 }
 
-// RoundTrip implements the http.RoundTripper interface
+// RoundTrip 实现 http.RoundTripper 接口：转发请求、按需改写重定向与 HTML 响应中的链接。
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Add reverse proxy headers.
+	// 添加反向代理相关头，使后端能感知原始请求的 URI、Host 与协议。
+	// 使用 EscapedPath 保留原始转义，避免路径中的特殊字符被二次编码或解码。
 	forwardedURI := path.Join(t.PathPrepend, req.URL.EscapedPath())
+	// path.Join 会去掉末尾斜杠，但末尾斜杠对某些后端有意义，需要补回。
 	if strings.HasSuffix(req.URL.Path, "/") {
 		forwardedURI = forwardedURI + "/"
 	}
@@ -95,16 +101,19 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		req.Header.Set("X-Forwarded-Proto", t.Scheme)
 	}
 
+	// 未显式注入 RoundTripper 时退回默认实现，便于零值 Transport 也能工作。
 	rt := t.RoundTripper
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
 	resp, err := rt.RoundTrip(req)
 
+	// 把网络层错误转换为 503，让客户端知道是后端不可达而非请求本身有问题。
 	if err != nil {
 		return nil, errors.NewServiceUnavailable(fmt.Sprintf("error trying to reach service: %v", err))
 	}
 
+	// 重定向响应只需改写 Location 头，无需处理响应体。
 	if redirect := resp.Header.Get("Location"); redirect != "" {
 		targetURL, err := url.Parse(redirect)
 		if err != nil {
@@ -114,70 +123,74 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, nil
 	}
 
+	// 只处理 HTML；先去掉 charset 等参数再比较，避免 "text/html; charset=utf-8" 被漏掉。
 	cType := resp.Header.Get("Content-Type")
 	cType = strings.TrimSpace(strings.SplitN(cType, ";", 2)[0])
 	if cType != "text/html" {
-		// Do nothing, simply pass through
+		// 非 HTML 内容原样透传。
 		return resp, nil
 	}
 
 	return t.rewriteResponse(req, resp)
 }
 
+// 编译期断言：Transport 实现 net.RoundTripperWrapper，便于上层解包出内层 RoundTripper。
 var _ = net.RoundTripperWrapper(&Transport{})
 
+// WrappedRoundTripper 返回被包装的底层 RoundTripper。
 func (rt *Transport) WrappedRoundTripper() http.RoundTripper {
 	return rt.RoundTripper
 }
 
-// rewriteURL rewrites a single URL to go through the proxy, if the URL refers
-// to the same host as sourceURL, which is the page on which the target URL
-// occurred, or if the URL matches the sourceRequestHost.
+// rewriteURL 在目标 URL 与 sourceURL（目标 URL 所在页面）同主机、
+// 或与 sourceRequestHost 匹配时，将其改写为经由代理访问的形式；
+// 其他主机的 URL 保持原样，避免把外部链接也代理到本地。
 func (t *Transport) rewriteURL(url *url.URL, sourceURL *url.URL, sourceRequestHost string) string {
-	// Example:
-	//      When API server processes a proxy request to a service (e.g. /api/v1/namespace/foo/service/bar/proxy/),
-	//      the sourceURL.Host (i.e. req.URL.Host) is the endpoint IP address of the service. The
-	//      sourceRequestHost (i.e. req.Host) is the Host header that specifies the host on which the
-	//      URL is sought, which can be different from sourceURL.Host. For example, if user sends the
-	//      request through "kubectl proxy" locally (i.e. localhost:8001/api/v1/namespace/foo/service/bar/proxy/),
-	//      sourceRequestHost is "localhost:8001".
+	// 示例：
+	//      当 API server 处理对某个 service 的代理请求时（如 /api/v1/namespace/foo/service/bar/proxy/），
+	//      sourceURL.Host（即 req.URL.Host）是 service 的 endpoint IP 地址；
+	//      sourceRequestHost（即 req.Host）是请求中指定的 Host 头，可能与 sourceURL.Host 不同。
+	//      例如用户通过本地的 "kubectl proxy" 发起请求
+	//      （localhost:8001/api/v1/namespace/foo/service/bar/proxy/），
+	//      则 sourceRequestHost 为 "localhost:8001"。
 	//
-	//      If the service's response URL contains non-empty host, and url.Host is equal to either sourceURL.Host
-	//      or sourceRequestHost, we should not consider the returned URL to be a completely different host.
-	//      It's the API server's responsibility to rewrite a same-host-and-absolute-path URL and append the
-	//      necessary URL prefix (i.e. /api/v1/namespace/foo/service/bar/proxy/).
+	//      若 service 返回的 URL 带有非空 host，且 url.Host 等于 sourceURL.Host 或
+	//      sourceRequestHost，就不应把它视为完全不同的主机；
+	//      改写同主机绝对路径 URL 并追加必要前缀是 API server 的职责
+	//      （即 /api/v1/namespace/foo/service/bar/proxy/）。
+	// 不同主机或相对路径都不改写：相对路径本就相对于代理后的页面，无需加前缀。
 	isDifferentHost := url.Host != "" && url.Host != sourceURL.Host && url.Host != sourceRequestHost
 	isRelative := !strings.HasPrefix(url.Path, "/")
 	if isDifferentHost || isRelative {
 		return url.String()
 	}
 
-	// Do not rewrite scheme and host if the Transport has empty scheme and host
-	// when targetURL already contains the sourceRequestHost
+	// 当目标 URL 已包含 sourceRequestHost，且 Transport 未配置 scheme/host 时，
+	// 保留原有 scheme 与 host，避免把有效地址清空。
 	if !(url.Host == sourceRequestHost && t.Scheme == "" && t.Host == "") {
 		url.Scheme = t.Scheme
 		url.Host = t.Host
 	}
 
 	origPath := url.Path
-	// Do not rewrite URL if the sourceURL already contains the necessary prefix.
+	// 若路径已包含代理前缀，说明此前已改写，重复改写会产生前缀叠加。
 	if strings.HasPrefix(url.Path, t.PathPrepend) {
 		return url.String()
 	}
 	url.Path = path.Join(t.PathPrepend, url.Path)
 	if strings.HasSuffix(origPath, "/") {
-		// Add back the trailing slash, which was stripped by path.Join().
+		// path.Join 会去掉末尾斜杠，这里补回以保持目录语义。
 		url.Path += "/"
 	}
 
 	return url.String()
 }
 
-// rewriteHTML scans the HTML for tags with url-valued attributes, and updates
-// those values with the urlRewriter function. The updated HTML is output to the
-// writer.
+// rewriteHTML 扫描 HTML 中带 URL 属性的标签，用 urlRewriter 更新其取值，
+// 并把更新后的 HTML 写入 writer。
+// 它采用流式 tokenizer，避免把整个文档解析成 DOM 带来的内存开销。
 func rewriteHTML(reader io.Reader, writer io.Writer, urlRewriter func(*url.URL) string) error {
-	// Note: This assumes the content is UTF-8.
+	// 注意：这里假定内容是 UTF-8。
 	tokenizer := html.NewTokenizer(reader)
 
 	var err error
@@ -193,9 +206,8 @@ func rewriteHTML(reader io.Reader, writer io.Writer, urlRewriter func(*url.URL) 
 					if urlAttrs.Has(attr.Key) {
 						url, err := url.Parse(attr.Val)
 						if err != nil {
-							// Do not rewrite the URL if it isn't valid.  It is intended not
-							// to error here to prevent the inability to understand the
-							// content of the body to cause a fatal error.
+							// URL 无法解析时不改写也不报错：
+							// 不能因为看不懂响应体中的某个链接就让整个代理请求失败。
 							continue
 						}
 						token.Attr[i].Val = urlRewriter(url)
@@ -213,15 +225,17 @@ func rewriteHTML(reader io.Reader, writer io.Writer, urlRewriter func(*url.URL) 
 	return nil
 }
 
-// rewriteResponse modifies an HTML response by updating absolute links referring
-// to the original host to instead refer to the proxy transport.
+// rewriteResponse 改写 HTML 响应：把指向原始主机的绝对链接改为指向代理 Transport。
+// 支持 gzip/deflate 压缩响应；未知编码则原样返回，避免破坏内容。
 func (t *Transport) rewriteResponse(req *http.Request, resp *http.Response) (*http.Response, error) {
+	// 改写后需要替换 resp.Body，因此负责关闭原始 body。
 	origBody := resp.Body
 	defer origBody.Close()
 
 	newContent := &bytes.Buffer{}
 	var reader io.Reader = origBody
 	var writer io.Writer = newContent
+	// 按 Content-Encoding 解压/再压缩，保持响应编码与头部一致。
 	encoding := resp.Header.Get("Content-Encoding")
 	switch encoding {
 	case "gzip":
@@ -230,6 +244,7 @@ func (t *Transport) rewriteResponse(req *http.Request, resp *http.Response) (*ht
 		if err != nil {
 			return nil, fmt.Errorf("errorf making gzip reader: %v", err)
 		}
+		// 边解压边压缩回 gzip；Close 必须在返回前执行以刷出压缩尾部。
 		gzw := gzip.NewWriter(writer)
 		defer gzw.Close()
 		writer = gzw
@@ -240,15 +255,16 @@ func (t *Transport) rewriteResponse(req *http.Request, resp *http.Response) (*ht
 		if err != nil {
 			return nil, fmt.Errorf("errorf making flate writer: %v", err)
 		}
+		// 先 Flush 再 Close，确保所有压缩数据都已写入底层缓冲。
 		defer func() {
 			flw.Close()
 			flw.Flush()
 		}()
 		writer = flw
 	case "":
-		// This is fine
+		// 未压缩，直接处理。
 	default:
-		// Some encoding we don't understand-- don't try to parse this
+		// 不认识的编码：不要尝试解析，否则可能损坏内容或产生错误输出。
 		klog.FromContext(req.Context()).Error(nil, "Proxy encountered unknown encoding for text/html, can't understand this so not fixing links", "encoding", encoding)
 		return resp, nil
 	}
@@ -256,6 +272,7 @@ func (t *Transport) rewriteResponse(req *http.Request, resp *http.Response) (*ht
 	urlRewriter := func(targetUrl *url.URL) string {
 		return t.rewriteURL(targetUrl, req.URL, req.Host)
 	}
+	// 注意：writer 可能是压缩 writer，其 Close 由上面的 defer 负责。
 	err := rewriteHTML(reader, writer, urlRewriter)
 	if err != nil {
 		klog.FromContext(req.Context()).Error(err, "Failed to rewrite URLs")
@@ -263,8 +280,9 @@ func (t *Transport) rewriteResponse(req *http.Request, resp *http.Response) (*ht
 	}
 
 	resp.Body = io.NopCloser(newContent)
-	// Update header node with new content-length
+	// 内容已被改写，原 Content-Length 不再正确，必须删除并由新的长度替换。
 	// TODO: Remove any hash/signature headers here?
+	// 内容变化后，摘要/签名类头也会失效，后续应考虑一并移除。
 	resp.Header.Del("Content-Length")
 	resp.ContentLength = int64(newContent.Len())
 

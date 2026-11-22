@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package managedfieldstest 为测试提供服务端 apply / 字段跟踪的轻量模拟
+// 实现，无需真实 apiserver。
 package managedfieldstest
 
 import (
@@ -35,6 +37,9 @@ import (
 // You can use this rather than NewDefaultTestFieldManager if you want
 // to specify either a sub-resource, or a set of modified Manager to
 // test them specifically.
+//
+// 中文说明：接口刻意保持窄小，测试只需构造对象、执行 apply/update 并检查
+// 最终的 managedFields，无需关心 manager 链内部结构。
 type TestFieldManager interface {
 	// APIVersion of the object that we're tracking.
 	APIVersion() string
@@ -88,6 +93,8 @@ func NewFakeFieldManager(typeConverter managedfields.TypeConverter, gvk schema.G
 		"",
 		nil)
 	if err != nil {
+		// 参数全部来自调用方且均为测试用的 fake 实现，构造失败即代码错误，
+		// 直接 panic 比返回 error 更适合测试辅助函数。
 		panic(err)
 	}
 	return ffm

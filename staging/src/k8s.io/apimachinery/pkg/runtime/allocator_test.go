@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestAllocatorRandomInputs 用随机大小（最多 5MB）反复调用 Allocate，
+// 验证返回缓冲区的 cap 足够大、len 恰好等于请求字节数。
 func TestAllocatorRandomInputs(t *testing.T) {
 	maxBytes := 5 * 1000000 // 5 MB
 	iterations := rand.Intn(10000) + 10
@@ -38,6 +40,8 @@ func TestAllocatorRandomInputs(t *testing.T) {
 	}
 }
 
+// TestAllocatorNeverShrinks 验证分配器是单调增长的：后续较小的请求仍复用
+// 之前的大缓冲区（cap 不缩小），只是 len 相应减小。
 func TestAllocatorNeverShrinks(t *testing.T) {
 	target := &Allocator{}
 	initialSize := 1000000 // 1MB
@@ -57,6 +61,8 @@ func TestAllocatorNeverShrinks(t *testing.T) {
 	}
 }
 
+// TestAllocatorZero 验证分配 0 字节时返回 len=0 但仍保留已有容量，
+// 避免调用方拿到 nil 缓冲区而丢失复用能力。
 func TestAllocatorZero(t *testing.T) {
 	target := &Allocator{}
 	initialSize := 1000000 // 1MB

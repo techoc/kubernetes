@@ -21,22 +21,24 @@ import (
 	"slices"
 )
 
-// Set is a set of the same type elements, implemented via map[comparable]struct{} for minimal memory consumption.
+// Set 是同一类型元素的集合，底层用 map[comparable]struct{} 实现，以最小的内存开销获得 O(1) 查找。
 type Set[T comparable] map[T]Empty
 
-// cast transforms specified set to generic Set[T].
+// cast 把底层 map 视图转换为 Set[T]，不复制数据。
+// 之所以需要它，是因为部分 API 返回 map 而调用方期望 Set。
 func cast[T comparable](s map[T]Empty) Set[T] { return s }
 
-// New creates a Set from a list of values.
+// New 从一组值构造 Set。
 // NOTE: type param must be explicitly instantiated if given items are empty.
+// 空参数时 Go 无法推断 T，必须写成 New[string]()。
 func New[T comparable](items ...T) Set[T] {
 	ss := make(Set[T], len(items))
 	ss.Insert(items...)
 	return ss
 }
 
-// KeySet creates a Set from a keys of a map[comparable](? extends interface{}).
-// If the value passed in is not actually a map, this will panic.
+// KeySet 从 map[comparable]V 的键构造 Set。
+// 若传入的不是 map（例如 nil 接口），range 会 panic。
 func KeySet[T comparable, V any](theMap map[T]V) Set[T] {
 	ret := make(Set[T], len(theMap))
 	for keyValue := range theMap {
@@ -45,7 +47,7 @@ func KeySet[T comparable, V any](theMap map[T]V) Set[T] {
 	return ret
 }
 
-// Insert adds items to the set.
+// Insert 向集合添加元素，并返回集合本身以支持链式调用。
 func (s Set[T]) Insert(items ...T) Set[T] {
 	for _, item := range items {
 		s[item] = Empty{}
@@ -53,11 +55,12 @@ func (s Set[T]) Insert(items ...T) Set[T] {
 	return s
 }
 
+// Insert 是非方法形式（便于在表达式中使用），行为与 Set.Insert 相同。
 func Insert[T comparable](set Set[T], items ...T) Set[T] {
 	return set.Insert(items...)
 }
 
-// Delete removes all items from the set.
+// Delete 从集合删除元素，并返回集合本身以支持链式调用。
 func (s Set[T]) Delete(items ...T) Set[T] {
 	for _, item := range items {
 		delete(s, item)
@@ -65,21 +68,20 @@ func (s Set[T]) Delete(items ...T) Set[T] {
 	return s
 }
 
-// Clear empties the set.
-// It is preferable to replace the set with a newly constructed set,
-// but not all callers can do that (when there are other references to the map).
+// Clear 清空集合。
+// 优先建议直接新建集合，但存在其他引用指向同一 map 时无法这么做（本方法就地清空）。
 func (s Set[T]) Clear() Set[T] {
 	clear(s)
 	return s
 }
 
-// Has returns true if and only if item is contained in the set.
+// Has 判断元素是否在集合中。
 func (s Set[T]) Has(item T) bool {
 	_, contained := s[item]
 	return contained
 }
 
-// HasAll returns true if and only if all items are contained in the set.
+// HasAll 判断所有元素是否都在集合中；空参数返回 true。
 func (s Set[T]) HasAll(items ...T) bool {
 	for _, item := range items {
 		if !s.Has(item) {
@@ -89,7 +91,7 @@ func (s Set[T]) HasAll(items ...T) bool {
 	return true
 }
 
-// HasAny returns true if any items are contained in the set.
+// HasAny 判断是否至少有一个元素在集合中；空参数返回 false。
 func (s Set[T]) HasAny(items ...T) bool {
 	for _, item := range items {
 		if s.Has(item) {
@@ -99,7 +101,7 @@ func (s Set[T]) HasAny(items ...T) bool {
 	return false
 }
 
-// Clone returns a new set which is a copy of the current set.
+// Clone 返回当前集合的副本，修改副本不影响原集合。
 func (s Set[T]) Clone() Set[T] {
 	result := make(Set[T], len(s))
 	for key := range s {
@@ -108,8 +110,8 @@ func (s Set[T]) Clone() Set[T] {
 	return result
 }
 
-// Difference returns a set of objects that are not in s2.
-// For example:
+// Difference 返回存在于 s1 但不在 s2 中的元素集合。
+// 例如：
 // s1 = {a1, a2, a3}
 // s2 = {a1, a2, a4, a5}
 // s1.Difference(s2) = {a3}
@@ -124,8 +126,8 @@ func (s1 Set[T]) Difference(s2 Set[T]) Set[T] {
 	return result
 }
 
-// SymmetricDifference returns a set of elements which are in either of the sets, but not in their intersection.
-// For example:
+// SymmetricDifference 返回只属于其中一个集合、不在交集中的元素。
+// 例如：
 // s1 = {a1, a2, a3}
 // s2 = {a1, a2, a4, a5}
 // s1.SymmetricDifference(s2) = {a3, a4, a5}
@@ -134,8 +136,8 @@ func (s1 Set[T]) SymmetricDifference(s2 Set[T]) Set[T] {
 	return s1.Difference(s2).Union(s2.Difference(s1))
 }
 
-// Union returns a new set which includes items in either s1 or s2.
-// For example:
+// Union 返回包含 s1 或 s2 中所有元素的新集合。
+// 例如：
 // s1 = {a1, a2}
 // s2 = {a3, a4}
 // s1.Union(s2) = {a1, a2, a3, a4}
@@ -148,11 +150,12 @@ func (s1 Set[T]) Union(s2 Set[T]) Set[T] {
 	return result
 }
 
-// Intersection returns a new set which includes the item in BOTH s1 and s2
-// For example:
+// Intersection 返回同时存在于 s1 与 s2 中的元素集合。
+// 例如：
 // s1 = {a1, a2}
 // s2 = {a2, a3}
 // s1.Intersection(s2) = {a2}
+// 遍历较小的集合，可将查找次数降到两集合规模的较小值。
 func (s1 Set[T]) Intersection(s2 Set[T]) Set[T] {
 	var walk, other Set[T]
 	result := New[T]()
@@ -171,7 +174,7 @@ func (s1 Set[T]) Intersection(s2 Set[T]) Set[T] {
 	return result
 }
 
-// IsSuperset returns true if and only if s1 is a superset of s2.
+// IsSuperset 判断 s1 是否为 s2 的超集（包含 s2 的所有元素）。
 func (s1 Set[T]) IsSuperset(s2 Set[T]) bool {
 	for item := range s2 {
 		if !s1.Has(item) {
@@ -181,24 +184,21 @@ func (s1 Set[T]) IsSuperset(s2 Set[T]) bool {
 	return true
 }
 
-// Equal returns true if and only if s1 is equal (as a set) to s2.
-// Two sets are equal if their membership is identical.
-// (In practice, this means same elements, order doesn't matter)
+// Equal 判断两个集合作为集合是否相等：元素成员完全相同，与顺序无关。
 func (s1 Set[T]) Equal(s2 Set[T]) bool {
 	return len(s1) == len(s2) && s1.IsSuperset(s2)
 }
 
-// List returns the contents as a sorted T slice.
+// List 返回排好序的 T 切片。
 //
-// This is a separate function and not a method because not all types supported
-// by Generic are ordered and only those can be sorted.
+// 这是函数而非方法，因为并非所有可用于 Set 的类型都可排序（cmp.Ordered 限制）。
 func List[T cmp.Ordered](s Set[T]) []T {
 	res := s.UnsortedList()
 	slices.Sort(res)
 	return res
 }
 
-// UnsortedList returns the slice with contents in random order.
+// UnsortedList 以任意顺序（map 迭代顺序）返回元素切片。
 func (s Set[T]) UnsortedList() []T {
 	res := make([]T, 0, len(s))
 	for key := range s {
@@ -207,7 +207,7 @@ func (s Set[T]) UnsortedList() []T {
 	return res
 }
 
-// PopAny returns a single element from the set.
+// PopAny 从集合中移除并返回任意一个元素；集合为空时返回零值与 false。
 func (s Set[T]) PopAny() (T, bool) {
 	for key := range s {
 		s.Delete(key)
@@ -217,7 +217,7 @@ func (s Set[T]) PopAny() (T, bool) {
 	return zeroValue, false
 }
 
-// Len returns the size of the set.
+// Len 返回集合大小。
 func (s Set[T]) Len() int {
 	return len(s)
 }

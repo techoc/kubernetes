@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package field 定义 API 字段校验使用的字段路径与错误类型，
+// 便于把校验失败定位到具体字段并以结构化形式返回。
 package field
 
 import (
@@ -22,21 +24,22 @@ import (
 	"strconv"
 )
 
+// pathOptions 收集可选参数，供 ToPath 构造 Path。
 type pathOptions struct {
 	path *Path
 }
 
-// PathOption modifies a pathOptions
+// PathOption 修改 pathOptions 的函数式选项。
 type PathOption func(o *pathOptions)
 
-// WithPath generates a PathOption
+// WithPath 生成一个把 path 写入选项的 PathOption。
 func WithPath(p *Path) PathOption {
 	return func(o *pathOptions) {
 		o.path = p
 	}
 }
 
-// ToPath produces *Path from a set of PathOption
+// ToPath 根据一组 PathOption 生成 *Path。
 func ToPath(opts ...PathOption) *Path {
 	c := &pathOptions{}
 	for _, opt := range opts {
@@ -45,14 +48,14 @@ func ToPath(opts ...PathOption) *Path {
 	return c.path
 }
 
-// Path represents the path from some root to a particular field.
+// Path 表示从某个根到特定字段的路径。
 type Path struct {
 	name   string // the name of this field or "" if this is an index
 	index  string // if name == "", this is a subscript (index or map key) of the previous element
 	parent *Path  // nil if this is the root element
 }
 
-// NewPath creates a root Path object.
+// NewPath 创建根 Path，后续名称通过链式挂到父节点上。
 func NewPath(name string, moreNames ...string) *Path {
 	r := &Path{name: name, parent: nil}
 	for _, anotherName := range moreNames {
@@ -61,7 +64,7 @@ func NewPath(name string, moreNames ...string) *Path {
 	return r
 }
 
-// Root returns the root element of this Path.
+// Root 沿 parent 链返回路径的根元素。
 func (p *Path) Root() *Path {
 	for ; p.parent != nil; p = p.parent {
 		// Do nothing.
@@ -69,31 +72,32 @@ func (p *Path) Root() *Path {
 	return p
 }
 
-// Child creates a new Path that is a child of the method receiver.
+// Child 创建以当前路径为父节点的新路径。
 func (p *Path) Child(name string, moreNames ...string) *Path {
 	r := NewPath(name, moreNames...)
 	r.Root().parent = p
 	return r
 }
 
-// Index indicates that the previous Path is to be subscripted by an int.
-// This sets the same underlying value as Key.
+// Index 表示对前一个路径按整数下标取值。
+// 与 Key 共用同一底层字段。
 func (p *Path) Index(index int) *Path {
 	return &Path{index: strconv.Itoa(index), parent: p}
 }
 
-// Key indicates that the previous Path is to be subscripted by a string.
-// This sets the same underlying value as Index.
+// Key 表示对前一个路径按字符串键取值。
+// 与 Index 共用同一底层字段。
 func (p *Path) Key(key string) *Path {
 	return &Path{index: key, parent: p}
 }
 
-// String produces a string representation of the Path.
+// String 生成路径的字符串表示。
 func (p *Path) String() string {
 	if p == nil {
 		return "<nil>"
 	}
 	// make a slice to iterate
+	// 先收集节点再反向输出：parent 链是从叶子指向根。
 	elems := []*Path{}
 	for ; p != nil; p = p.parent {
 		elems = append(elems, p)
@@ -105,11 +109,13 @@ func (p *Path) String() string {
 		p := elems[len(elems)-1-i]
 		if p.parent != nil && len(p.name) > 0 {
 			// This is either the root or it is a subscript.
+			// 非根且带名字的节点前要加点号，形成 "a.b" 这样可读的路径。
 			buf.WriteString(".")
 		}
 		if len(p.name) > 0 {
 			buf.WriteString(p.name)
 		} else {
+			// 下标节点输出为 "[i]" 或 "[key]"。
 			fmt.Fprintf(buf, "[%s]", p.index)
 		}
 	}

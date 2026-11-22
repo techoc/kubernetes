@@ -29,6 +29,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestV1EncodeDecodeStatus 验证 internal 版本的 Status 经 codec 编码后会带上
+// 正确的 TypeMeta（kind=Status、apiVersion=v1），解码回来与原对象相等。
+// 该断言保证序列化层会为用户提供可识别的 GVK 而不是空值。
 func TestV1EncodeDecodeStatus(t *testing.T) {
 	status := &metav1.Status{
 		Status:  metav1.StatusFailure,
@@ -63,6 +66,9 @@ func TestV1EncodeDecodeStatus(t *testing.T) {
 	}
 }
 
+// TestExperimentalEncodeDecodeStatus 与上面的测试类似，但预期 apiVersion
+// 为 "v1"。注意断言中的错误信息文案写作 "\"\""，实际期望值是 "v1"；
+// 这只是提示文本，不改变断言逻辑。
 func TestExperimentalEncodeDecodeStatus(t *testing.T) {
 	status := &metav1.Status{
 		Status:  metav1.StatusFailure,

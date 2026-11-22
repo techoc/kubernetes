@@ -28,7 +28,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// requireInterned fails the test if the two strings do not point to the exact same memory address.
+// 本文件仅在构建标签 fieldsv1string 下编译，用于测试 FieldsV1 的字符串驻留（interning）实现。
+// 驻留可以显著减少大量相同 FieldsV1 负载带来的内存占用，因此这里直接用 unsafe
+// 校验两个字符串是否指向同一块内存，而不是仅仅比较内容。
+
+// requireInterned 在字符串不指向同一内存地址时让测试失败。
 func requireInterned(t *testing.T, a, b string) {
 	t.Helper()
 	ptrA := unsafe.StringData(a)
@@ -38,6 +42,7 @@ func requireInterned(t *testing.T, a, b string) {
 	}
 }
 
+// TestFieldsV1_String 验证 String() 对零值、已初始化的空句柄与有效负载的输出。
 func TestFieldsV1_String(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -68,6 +73,7 @@ func TestFieldsV1_String(t *testing.T) {
 	}
 }
 
+// TestFieldsV1_Equal 验证 Equal 的语义：零值与空句柄相等，内容相同即相等，并检查其可交换性。
 func TestFieldsV1_Equal(t *testing.T) {
 	valid := *metav1.NewFieldsV1(`{"f:app":{}}`)
 	validClone := *metav1.NewFieldsV1(`{"f:app":{}}`)
@@ -89,7 +95,7 @@ func TestFieldsV1_Equal(t *testing.T) {
 			if got := tc.a.Equal(tc.b); got != tc.expected {
 				t.Errorf("expected Equal() to be %v, got %v", tc.expected, got)
 			}
-			// Commutative property
+			// Equal 必须满足可交换性：a.Equal(b) 与 b.Equal(a) 结果一致。
 			if got := tc.b.Equal(tc.a); got != tc.expected {
 				t.Errorf("expected Equal() commutative to be %v, got %v", tc.expected, got)
 			}
@@ -97,6 +103,7 @@ func TestFieldsV1_Equal(t *testing.T) {
 	}
 }
 
+// TestFieldsV1_GetRawReader 验证 GetRawReader 在 nil 接收者、零值与有效负载下都返回可读内容。
 func TestFieldsV1_GetRawReader(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -121,6 +128,8 @@ func TestFieldsV1_GetRawReader(t *testing.T) {
 	}
 }
 
+// TestFieldsV1_GetRawBytes 验证 GetRawBytes 的返回值：
+// nil 接收者与零值必须返回严格 nil（而非空切片），且返回值不得与内部存储共享内存。
 func TestFieldsV1_GetRawBytes(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -137,27 +146,29 @@ func TestFieldsV1_GetRawBytes(t *testing.T) {
 			if !bytes.Equal(got, tc.expected) {
 				t.Errorf("expected %v, got %v", tc.expected, got)
 			}
-			// Explicitly check for nil
+			// bytes.Equal 认为 nil 与空切片相等，因此需要单独断言"严格 nil"这一契约。
 			if tc.expected == nil && got != nil {
 				t.Errorf("expected strict nil, got %v", got)
 			}
 		})
 	}
 
+	// 修改返回的字节切片不得影响内部驻留字符串，否则调用方会意外破坏共享数据。
 	t.Run("mutation safety", func(t *testing.T) {
 		f := metav1.NewFieldsV1(`{"f:app":{}}`)
 		b := f.GetRawBytes()
 
-		// Mutate the returned bytes
+		// 修改返回的字节切片。
 		b[2] = 'X'
 
-		// The original interned string must remain unchanged
+		// 原始驻留字符串必须保持不变。
 		if got := f.GetRawString(); got != `{"f:app":{}}` {
 			t.Errorf("GetRawBytes returned an unisolated slice! Mutating it corrupted the handle. Got: %s", got)
 		}
 	})
 }
 
+// TestFieldsV1_GetRawString 验证 GetRawString 在各种状态下都返回空串或原始负载。
 func TestFieldsV1_GetRawString(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -177,6 +188,8 @@ func TestFieldsV1_GetRawString(t *testing.T) {
 	}
 }
 
+// TestFieldsV1_SetRawBytes 验证 SetRawBytes 的边界行为：nil 接收者不 panic、
+// nil/空切片都归一化为空串，且内容相同的不同切片最终驻留到同一地址。
 func TestFieldsV1_SetRawBytes(t *testing.T) {
 	t.Run("nil receiver", func(t *testing.T) {
 		var f *metav1.FieldsV1        // nil
@@ -202,7 +215,7 @@ func TestFieldsV1_SetRawBytes(t *testing.T) {
 	t.Run("interning behavior", func(t *testing.T) {
 		payload := []byte(`{"f:app":{}}`)
 
-		// Two distinct slices with identical content
+		// 构造两个内容相同但底层数组不同的切片，确保驻留不是靠共享底层数组实现的。
 		b1 := append([]byte(nil), payload...)
 		b2 := append([]byte(nil), payload...)
 
@@ -220,6 +233,7 @@ func TestFieldsV1_SetRawBytes(t *testing.T) {
 	})
 }
 
+// TestFieldsV1_SetRawString 验证 SetRawString 对 nil 接收者的容错，以及相同内容的驻留行为。
 func TestFieldsV1_SetRawString(t *testing.T) {
 	t.Run("nil receiver", func(t *testing.T) {
 		var f *metav1.FieldsV1 // nil
@@ -229,7 +243,8 @@ func TestFieldsV1_SetRawString(t *testing.T) {
 	t.Run("interning behavior", func(t *testing.T) {
 		payload := `{"f:app":{}}`
 
-		// Force string copy to avoid compiler static string optimization if possible
+		// 通过 append 强制产生新的字符串副本，避免编译器把相同字面量合并为同一静态字符串，
+		// 否则测试无法证明是 SetRawString 在驻留。
 		s1 := string(append([]byte(nil), payload...))
 		s2 := string(append([]byte(nil), payload...))
 
@@ -243,6 +258,7 @@ func TestFieldsV1_SetRawString(t *testing.T) {
 	})
 }
 
+// TestFieldsV1_NewFieldsV1 验证构造函数同样会对相同内容做驻留。
 func TestFieldsV1_NewFieldsV1(t *testing.T) {
 	t.Run("interning behavior", func(t *testing.T) {
 		payload := `{"f:app":{}}`
@@ -256,6 +272,8 @@ func TestFieldsV1_NewFieldsV1(t *testing.T) {
 	})
 }
 
+// TestFieldsV1_DeepCopyInto 验证深拷贝保留驻留（拷贝不复制字符串内容），
+// 零值拷贝正确，且拷贝后修改副本不影响原对象。
 func TestFieldsV1_DeepCopyInto(t *testing.T) {
 	t.Run("preserves interning", func(t *testing.T) {
 		orig := metav1.NewFieldsV1(`{"f:app":{}}`)
@@ -287,15 +305,18 @@ func TestFieldsV1_DeepCopyInto(t *testing.T) {
 		var clone metav1.FieldsV1
 		orig.DeepCopyInto(&clone)
 
-		// Modify the clone
+		// 修改副本。
 		clone.SetRawString(`{"f:new":{}}`)
 
-		// The original should be completely untouched
+		// 原对象必须完全不受影响，否则说明深拷贝没有正确隔离。
 		if got := orig.GetRawString(); got != `{"f:app":{}}` {
 			t.Errorf("DeepCopyInto failed to isolate clone! Modifying clone corrupted original. Got: %s", got)
 		}
 	})
 }
+
+// TestFieldsV1_UnmarshalInterning 验证 JSON、protobuf 与 CBOR 三条反序列化路径
+// 都会把相同内容驻留到同一地址——这是内存优化的关键契约。
 func TestFieldsV1_UnmarshalInterning(t *testing.T) {
 	jsonPayload := []byte(`{"f:metadata":{"f:labels":{"f:app":{}}}}`)
 	orig := metav1.NewFieldsV1(string(jsonPayload))
@@ -346,7 +367,7 @@ func TestFieldsV1_UnmarshalInterning(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Ensure independent slice memory
+			// 使用相互独立的底层数组，确保驻留效果来自反序列化逻辑而非输入共享。
 			b1 := append([]byte(nil), tc.payload...)
 			b2 := append([]byte(nil), tc.payload...)
 

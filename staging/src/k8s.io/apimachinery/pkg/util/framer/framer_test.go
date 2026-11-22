@@ -28,6 +28,9 @@ import (
 	netutil "k8s.io/apimachinery/pkg/util/net"
 )
 
+// TestRead 用 4 字节大端长度前缀的帧流验证读取语义：
+// 缓冲区小于帧时返回 ErrShortBuffer，恰好/大于帧时正常返回，空帧返回 0 字节，
+// 流末尾返回 io.EOF。
 func TestRead(t *testing.T) {
 	data := []byte{
 		0x00, 0x00, 0x00, 0x04,
@@ -73,6 +76,7 @@ func TestRead(t *testing.T) {
 	}
 }
 
+// TestReadLarge 使用远大于各帧的缓冲区，验证每次 Read 只返回一帧、不会跨帧拼接。
 func TestReadLarge(t *testing.T) {
 	data := []byte{
 		0x00, 0x00, 0x00, 0x04,
@@ -104,6 +108,7 @@ func TestReadLarge(t *testing.T) {
 	}
 }
 
+// TestReadInvalidFrame 验证帧被截断时：先返回已读到的部分数据，再以 io.ErrUnexpectedEOF 结束。
 func TestReadInvalidFrame(t *testing.T) {
 	data := []byte{
 		0x00, 0x00, 0x00, 0x04,
@@ -126,6 +131,8 @@ func TestReadInvalidFrame(t *testing.T) {
 	}
 }
 
+// TestReadClientTimeout 验证底层 HTTP 连接超时会被原样透出，
+// 使调用方能通过 netutil.IsTimeout 识别并重试，而不会误判为格式错误。
 func TestReadClientTimeout(t *testing.T) {
 	header := []byte{
 		0x00, 0x00, 0x00, 0x04,
@@ -166,6 +173,8 @@ func TestReadClientTimeout(t *testing.T) {
 	}
 }
 
+// TestJSONFrameReader 验证 JSON 帧读取器按空白/换行切分连续 JSON 值，
+// 支持对象、数字、数组等非自定界值。
 func TestJSONFrameReader(t *testing.T) {
 	b := bytes.NewBufferString("{\"test\":true}\n1\n[\"a\"]")
 	r := NewJSONFramedReader(io.NopCloser(b))
@@ -184,6 +193,8 @@ func TestJSONFrameReader(t *testing.T) {
 	}
 }
 
+// TestJSONFrameReaderShortBuffer 验证缓冲区小于一个 JSON 值时，
+// 读取器会分块返回并附带 io.ErrShortBuffer，直到该值读完。
 func TestJSONFrameReaderShortBuffer(t *testing.T) {
 	b := bytes.NewBufferString("{\"test\":true}\n1\n[\"a\"]")
 	r := NewJSONFramedReader(io.NopCloser(b))
@@ -221,6 +232,8 @@ func TestJSONFrameReaderShortBuffer(t *testing.T) {
 	}
 }
 
+// TestJSONFrameReaderShortBufferNoUnderlyingArrayReuse 验证读取器不会复用调用方的底层数组：
+// 在 ShortBuffer 之后改写缓冲内容，剩余数据仍能正确读出。
 func TestJSONFrameReaderShortBufferNoUnderlyingArrayReuse(t *testing.T) {
 	b := bytes.NewBufferString("{}")
 	r := NewJSONFramedReader(io.NopCloser(b))

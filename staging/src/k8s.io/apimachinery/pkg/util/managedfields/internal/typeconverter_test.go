@@ -31,6 +31,8 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// TestTypeConverter 用若干真实对象（Deployment、Pod）验证两种 TypeConverter
+// （测试用 schema 转换器与 DeducedTypeConverter）都能把 unstructured 转成 typed 再转回。
 func TestTypeConverter(t *testing.T) {
 	dtc := NewDeducedTypeConverter()
 
@@ -109,6 +111,7 @@ spec:
 	}
 }
 
+// testObjectToTyped 执行 unstructured → typed → unstructured 往返并断言结果与原对象深度相等。
 func testObjectToTyped(t *testing.T, tc TypeConverter, y string) {
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	if err := yaml.Unmarshal([]byte(y), &obj.Object); err != nil {
@@ -131,8 +134,11 @@ Final object:
 	}
 }
 
+// result 接收基准测试的最终输出，防止编译器优化掉被测调用。
 var result typed.TypedValue
 
+// BenchmarkObjectToTyped 测量 ObjectToTyped 的开销；选用 extensions/v1beta1 Deployment
+// 是因为其嵌套 schema 足够复杂、能反映真实转换成本。
 func BenchmarkObjectToTyped(b *testing.B) {
 	y := `
 apiVersion: extensions/v1beta1
@@ -173,9 +179,12 @@ spec:
 	result = *r
 }
 
+// TestIndexModels 验证依据 OpenAPI 的 x-kubernetes-group-version-kind 扩展建立
+// GVK → schema 定义的索引：空 GVK、nil GVK 被忽略，单/多版本绑定都正确，
+// 且 map[string]interface{} 与 map[interface{}]interface{} 两种解码形态都支持。
 func TestIndexModels(t *testing.T) {
 	myDefs := map[string]*spec.Schema{
-		// Show empty GVK extension is ignored
+		// 验证空的 GVK 扩展会被忽略
 		"def0": {
 			VendorExtensible: spec.VendorExtensible{
 				Extensions: spec.Extensions{
@@ -183,7 +192,7 @@ func TestIndexModels(t *testing.T) {
 				},
 			},
 		},
-		// Show nil GVK is ignored
+		// 验证 nil GVK 会被忽略
 		"def0.0": {
 			VendorExtensible: spec.VendorExtensible{
 				Extensions: spec.Extensions{
@@ -191,9 +200,9 @@ func TestIndexModels(t *testing.T) {
 				},
 			},
 		},
-		// Show this is ignored
+		// 验证该定义会被忽略（无 GVK 扩展）
 		"def0.1": {},
-		// Show allows binding a single GVK
+		// 验证可以绑定单个 GVK
 		"def1": {
 			VendorExtensible: spec.VendorExtensible{
 				Extensions: spec.Extensions{
@@ -207,7 +216,7 @@ func TestIndexModels(t *testing.T) {
 				},
 			},
 		},
-		// Show allows bindings with two versions
+		// 验证可以绑定两个版本
 		"def2": {
 			VendorExtensible: spec.VendorExtensible{
 				Extensions: spec.Extensions{
@@ -226,9 +235,8 @@ func TestIndexModels(t *testing.T) {
 				},
 			},
 		},
-		// Show that we can mix and match GVKs from other definitions, and
-		// that both map[interface{}]interface{} and map[string]interface{}
-		// are allowed
+		// 验证可以混用来自其它定义的 GVK，且 map[interface{}]interface{} 与
+		// map[string]interface{} 两种形态都允许
 		"def3": {
 			VendorExtensible: spec.VendorExtensible{
 				Extensions: spec.Extensions{

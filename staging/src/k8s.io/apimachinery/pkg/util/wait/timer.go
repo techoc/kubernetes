@@ -27,6 +27,8 @@ import (
 // to use the Backoff type as the primary mechanism for acquiring a Timer. The
 // interface is a simplification of clock.Timer to prevent misuse. Timers are not
 // expected to be safe for calls from multiple goroutines.
+//
+// 接口刻意只暴露三个方法：C/Next/Stop，防止调用方使用 Reset 等易错 API。
 type Timer interface {
 	// C returns a channel that will receive a struct{} each time the timer fires.
 	// The channel should not be waited on after Stop() is invoked. It is allowed
@@ -41,6 +43,7 @@ type Timer interface {
 	Stop()
 }
 
+// noopTimer 始终就绪，用于不需要真正等待的路径（如 Backoff 已耗尽）。
 type noopTimer struct {
 	closedCh <-chan time.Time
 }
@@ -59,6 +62,8 @@ func (t noopTimer) C() <-chan time.Time {
 func (noopTimer) Next() {}
 func (noopTimer) Stop() {}
 
+// variableTimer 每次 Next 都重新计算延迟，对应指数退避等场景。
+// 惰性创建底层 timer，避免未使用的 Timer 占用运行时资源。
 type variableTimer struct {
 	fn  DelayFunc
 	t   clock.Timer
@@ -73,6 +78,7 @@ func (t *variableTimer) C() <-chan time.Time {
 	return t.t.C()
 }
 func (t *variableTimer) Next() {
+	// 尚未创建 timer 时无需重置；下次 C() 会用新的延迟创建。
 	if t.t == nil {
 		return
 	}
@@ -87,6 +93,7 @@ func (t *variableTimer) Stop() {
 	t.t = nil
 }
 
+// fixedTimer 使用固定间隔的 Ticker，Next 为空操作。
 type fixedTimer struct {
 	interval time.Duration
 	t        clock.Ticker

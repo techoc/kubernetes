@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/diff"
 )
 
+// testDecodable 是测试用的 runtime.Object 实现，记录自身的 GVK。
 type testDecodable struct {
 	Other string
 	Value int `json:"value"`
@@ -40,9 +41,12 @@ func (d *testDecodable) SetGroupVersionKind(gvk schema.GroupVersionKind) { d.gvk
 func (d *testDecodable) GroupVersionKind() schema.GroupVersionKind       { return d.gvk }
 func (d *testDecodable) DeepCopyObject() runtime.Object {
 	// no real deepcopy because these tests check for pointer equality
+	// 不做真正的深拷贝：测试通过指针相等判断是否返回了同一对象。
 	return d
 }
 
+// testNestedDecodable 在 testDecodable 基础上实现嵌套编解码钩子，
+// 用于验证 codec 是否回调 EncodeNestedObjects/DecodeNestedObjects。
 type testNestedDecodable struct {
 	Other string
 	Value int `json:"value"`
@@ -70,6 +74,7 @@ func (d *testNestedDecodable) DecodeNestedObjects(_ runtime.Decoder) error {
 	return d.nestedErr
 }
 
+// TestNestedDecode 验证解码路径会调用嵌套解码器，并把其错误原样返回。
 func TestNestedDecode(t *testing.T) {
 	n := &testNestedDecodable{nestedErr: fmt.Errorf("unable to decode")}
 	decoder := &mockSerializer{obj: n}
@@ -82,6 +87,8 @@ func TestNestedDecode(t *testing.T) {
 	}
 }
 
+// TestNestedDecodeStrictDecodingError 验证嵌套解码返回严格解码错误时，
+// codec 仍返回已解码对象，并把严格解码错误完整保存（可经 AsStrictDecodingError 取出）。
 func TestNestedDecodeStrictDecodingError(t *testing.T) {
 	strictErr := runtime.NewStrictDecodingError([]error{fmt.Errorf("duplicate field")})
 	n := &testNestedDecodable{nestedErr: strictErr}
@@ -99,6 +106,8 @@ func TestNestedDecodeStrictDecodingError(t *testing.T) {
 	}
 }
 
+// TestNestedEncode 验证编码前会先把对象转换为目标版本，嵌套编码在转换后的对象上执行，
+// 因此错误来自 n2 而不是原始对象 n。
 func TestNestedEncode(t *testing.T) {
 	n := &testNestedDecodable{nestedErr: fmt.Errorf("unable to decode")}
 	n2 := &testNestedDecodable{nestedErr: fmt.Errorf("unable to decode 2")}
@@ -120,6 +129,8 @@ func TestNestedEncode(t *testing.T) {
 	}
 }
 
+// TestNestedEncodeError 验证编码失败时不会改动输入对象的 GVK：
+// 编码器应在临时副本/转换结果上工作，保持调用方对象不变。
 func TestNestedEncodeError(t *testing.T) {
 	n := &testNestedDecodable{nestedErr: fmt.Errorf("unable to encode")}
 	gvk1 := schema.GroupVersionKind{Kind: "test", Group: "other", Version: "v1"}
@@ -143,6 +154,8 @@ func TestNestedEncodeError(t *testing.T) {
 	}
 }
 
+// TestDecode 以表格驱动验证 Decode 在不同 serializer/convertor/GroupVersioner 组合下的行为：
+// 返回的 GVK、是否复用 into 对象、以及走转换还是直接解码路径。
 func TestDecode(t *testing.T) {
 	gvk1 := &schema.GroupVersionKind{Kind: "Test", Group: "other", Version: "blah"}
 	decodable1 := &testDecodable{}
@@ -182,6 +195,7 @@ func TestDecode(t *testing.T) {
 			decodes:     schema.GroupVersion{Group: "other", Version: runtime.APIVersionInternal},
 		},
 		// defaultGVK.Group is allowed to force a conversion to the destination group
+		// defaultGVK 的 Group 可强制把解码结果转换到目标组。
 		{
 			serializer:  &mockSerializer{actual: gvk1, obj: decodable1},
 			defaultGVK:  &schema.GroupVersionKind{Group: "force"},
@@ -191,6 +205,7 @@ func TestDecode(t *testing.T) {
 			decodes:     schema.GroupVersion{Group: "force", Version: runtime.APIVersionInternal},
 		},
 		// uses direct conversion for into when objects differ
+		// 目标对象类型与解码结果不同时，走直接转换（Convert）而非版本转换。
 		{
 			into:        decodable3,
 			serializer:  &mockSerializer{actual: gvk1, obj: decodable1},
@@ -199,6 +214,7 @@ func TestDecode(t *testing.T) {
 			sameObject:  decodable3,
 		},
 		// decode into the same version as the serialized object
+		// 解码目标版本与序列化对象版本相同时，应直接返回同一对象。
 		{
 			decodes: schema.GroupVersions{gvk1.GroupVersion()},
 
@@ -255,6 +271,8 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+// checkConvertor 是“校验参数”的假转换器：核对传入的对象与目标版本是否符合预期，
+// 并可通过 directConvert 区分应走 Convert 还是 ConvertToVersion。
 type checkConvertor struct {
 	err           error
 	in, obj       runtime.Object
@@ -290,6 +308,7 @@ func (c *checkConvertor) ConvertFieldLabel(gvk schema.GroupVersionKind, label, v
 	return "", "", fmt.Errorf("unexpected call to ConvertFieldLabel")
 }
 
+// mockConvertor 只做最小的 GVK 重写，用于测试编码路径上的版本转换。
 type mockConvertor struct {
 }
 
@@ -312,6 +331,7 @@ func (c *mockConvertor) ConvertFieldLabel(gvk schema.GroupVersionKind, label, va
 	return "", "", fmt.Errorf("unexpected call to ConvertFieldLabel")
 }
 
+// mockSerializer 记录调用参数的假序列化器，便于断言 codec 的调用方式。
 type mockSerializer struct {
 	err            error
 	obj            runtime.Object
@@ -337,6 +357,7 @@ func (s *mockSerializer) Identifier() runtime.Identifier {
 	return runtime.Identifier("mock")
 }
 
+// mockTyper 固定返回预置的 GVK 列表，便于控制编码器选择的版本。
 type mockTyper struct {
 	gvks        []schema.GroupVersionKind
 	unversioned bool
@@ -351,6 +372,8 @@ func (t *mockTyper) Recognizes(_ schema.GroupVersionKind) bool {
 	return true
 }
 
+// TestDirectCodecEncode 验证带版本编码器会把对象的 GVK 重写为目标组，
+// 即使 typer 同时给出了错误的组。
 func TestDirectCodecEncode(t *testing.T) {
 	serializer := mockSerializer{}
 	typer := mockTyper{
@@ -377,6 +400,7 @@ func TestDirectCodecEncode(t *testing.T) {
 	}
 }
 
+// TestCacheableObject 复用通用测试，验证编码器对 CacheableObject 的缓存编码行为正确。
 func TestCacheableObject(t *testing.T) {
 	gvk1 := schema.GroupVersionKind{Group: "group", Version: "version1", Kind: "MockCacheableObject"}
 	gvk2 := schema.GroupVersionKind{Group: "group", Version: "version2", Kind: "MockCacheableObject"}
@@ -391,6 +415,8 @@ func TestCacheableObject(t *testing.T) {
 	runtimetesting.CacheableObjectTest(t, encoder)
 }
 
+// BenchmarkIdentifier 测量 identifier 的生成开销；
+// 读取首字节可防止编译器把整次调用优化掉。
 func BenchmarkIdentifier(b *testing.B) {
 	encoder := &mockSerializer{}
 	gv := schema.GroupVersion{Group: "group", Version: "version"}

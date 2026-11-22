@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package wsstream contains compatibility wrappers for websocket streaming.
+// Package wsstream 是 websocket 流式传输的兼容包装层，仅为旧调用方保留。
 //
-// Deprecated: use k8s.io/streaming/pkg/httpstream/wsstream directly.
+// Deprecated: 请直接使用 k8s.io/streaming/pkg/httpstream/wsstream。
 package wsstream

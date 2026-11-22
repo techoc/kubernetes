@@ -14,18 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package safe 提供一组泛型辅助函数，用于安全地访问可能为 nil 的指针与接口，
+// 以表达式形式替代冗长的显式判空代码。
 package safe
 
-// Field takes a pointer to any value (which may or may not be nil) and a
-// function that traverses to a target type R (a typical use case is to
-// dereference a field), and returns the result of the traversal, or the zero
-// value of the target type.
+// Field 接收任意值的指针（可能为 nil）和一个把指针遍历为目标类型 R 的函数
+// （典型用法是解引用某个字段），返回遍历结果；若指针为 nil 则返回 R 的零值。
 //
-// This is roughly equivalent to:
+// 大致等价于支持三元运算符的语言中的：
 //
 //	value != nil ? fn(value) : zero-value
-//
-// ...in languages that support the ternary operator.
 func Field[V any, R any](value *V, fn func(*V) R) R {
 	if value == nil {
 		var zero R
@@ -35,22 +33,19 @@ func Field[V any, R any](value *V, fn func(*V) R) R {
 	return o
 }
 
-// Cast takes any value, attempts to cast it to T, and returns the T value if
-// the cast is successful, or else the zero value of T.
+// Cast 尝试把任意值断言为 T，成功时返回该值，否则返回 T 的零值。
+// 有意吞掉断言失败的 ok 标志，用于“类型不匹配就当作缺失”的场景。
 func Cast[T any](value any) T {
 	result, _ := value.(T)
 	return result
 }
 
-// Value takes a pointer to any value (which may or may not be nil) and a
-// function that returns a pointer to the same type.  If the value is not nil,
-// it is returned, otherwise the result of the function is returned.
+// Value 接收任意值的指针（可能为 nil）和一个返回同类型指针的函数。
+// 若值非 nil 则返回该值，否则返回函数的结果。
 //
-// This is roughly equivalent to:
+// 大致等价于支持三元运算符的语言中的：
 //
 //	value != nil ? value : fn()
-//
-// ...in languages that support the ternary operator.
 func Value[T any](value *T, fn func() *T) *T {
 	if value != nil {
 		return value

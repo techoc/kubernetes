@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestRESTMapperVersionAndKindForResource 验证 KindFor 由资源名反查 GVK 的匹配规则：
+// 资源名必须与按 Kind 推导出的单数/复数资源名精确匹配，拼写错误一律报错。
 func TestRESTMapperVersionAndKindForResource(t *testing.T) {
 	testGroup := "test.group"
 	testVersion := "test"
@@ -63,6 +65,8 @@ func TestRESTMapperVersionAndKindForResource(t *testing.T) {
 	}
 }
 
+// TestRESTMapperGroupForResource 验证在多个组注册同名资源时，资源名（区分大小写）
+// 能正确定位到所属组的 GVK；不存在的资源名必须报错。
 func TestRESTMapperGroupForResource(t *testing.T) {
 	testCases := []struct {
 		Resource         schema.GroupVersionResource
@@ -91,6 +95,8 @@ func TestRESTMapperGroupForResource(t *testing.T) {
 	}
 }
 
+// TestRESTMapperKindsFor 验证 KindsFor 在资源名可解析出多个候选 Kind 时的选择与排序：
+// 优先精确匹配，其次组前缀匹配；前缀有歧义时返回全部候选，而 KindFor 则报“匹配到多个”。
 func TestRESTMapperKindsFor(t *testing.T) {
 	testCases := []struct {
 		Name                     string
@@ -102,7 +108,7 @@ func TestRESTMapperKindsFor(t *testing.T) {
 		ExpectedKindErr string
 	}{
 		{
-			// exact matches are preferred
+			// 精确匹配优先
 			Name: "groups, with group exact",
 			PreferredOrder: []schema.GroupVersion{
 				{Group: "first-group-1", Version: "first-version"},
@@ -120,7 +126,7 @@ func TestRESTMapperKindsFor(t *testing.T) {
 		},
 
 		{
-			// group prefixes work
+			// 组前缀也能匹配
 			Name: "groups, with group prefix",
 			PreferredOrder: []schema.GroupVersion{
 				{Group: "second-group", Version: "first-version"},
@@ -138,7 +144,7 @@ func TestRESTMapperKindsFor(t *testing.T) {
 		},
 
 		{
-			// group prefixes can be ambiguous
+			// 组前缀可能产生歧义
 			Name: "groups, with ambiguous group prefix",
 			PreferredOrder: []schema.GroupVersion{
 				{Group: "first-group-1", Version: "first-version"},
@@ -259,6 +265,8 @@ func TestRESTMapperKindsFor(t *testing.T) {
 	}
 }
 
+// TestRESTMapperResourcesFor 与 TestRESTMapperKindsFor 对称：验证 ResourcesFor 对
+// 单数/复数资源名的候选排序，以及 ResourceFor 在多个匹配时报错的行为。
 func TestRESTMapperResourcesFor(t *testing.T) {
 	testCases := []struct {
 		Name                             string
@@ -271,7 +279,7 @@ func TestRESTMapperResourcesFor(t *testing.T) {
 		ExpectedResourceErr string
 	}{
 		{
-			// exact matches are preferred
+			// 精确匹配优先
 			Name: "groups, with group exact",
 			PreferredOrder: []schema.GroupVersion{
 				{Group: "first-group-1", Version: "first-version"},
@@ -290,7 +298,7 @@ func TestRESTMapperResourcesFor(t *testing.T) {
 		},
 
 		{
-			// group prefixes work
+			// 组前缀也能匹配
 			Name: "groups, with group prefix",
 			PreferredOrder: []schema.GroupVersion{
 				{Group: "second-group", Version: "first-version"},
@@ -309,7 +317,7 @@ func TestRESTMapperResourcesFor(t *testing.T) {
 		},
 
 		{
-			// group prefixes can be ambiguous
+			// 组前缀可能产生歧义
 			Name: "groups, with ambiguous group prefix",
 			PreferredOrder: []schema.GroupVersion{
 				{Group: "first-group-1", Version: "first-version"},
@@ -437,6 +445,8 @@ func TestRESTMapperResourcesFor(t *testing.T) {
 	}
 }
 
+// TestKindToResource 验证 UnsafeGuessKindToResource 的复数化规则：
+// 以 y 结尾加 "ies"、以 s 结尾加 "es"、其余加 "s"，单数形式则是小写 Kind。
 func TestKindToResource(t *testing.T) {
 	testCases := []struct {
 		Kind             string
@@ -446,11 +456,11 @@ func TestKindToResource(t *testing.T) {
 
 		{Kind: "ReplicationController", Plural: "replicationcontrollers", Singular: "replicationcontroller"},
 
-		// Add "ies" when ending with "y"
+		// 以 "y" 结尾时加 "ies"
 		{Kind: "ImageRepository", Plural: "imagerepositories", Singular: "imagerepository"},
-		// Add "es" when ending with "s"
+		// 以 "s" 结尾时加 "es"
 		{Kind: "miss", Plural: "misses", Singular: "miss"},
-		// Add "s" otherwise
+		// 其余情况加 "s"
 		{Kind: "lowercase", Plural: "lowercases", Singular: "lowercase"},
 	}
 	for i, testCase := range testCases {
@@ -463,6 +473,8 @@ func TestKindToResource(t *testing.T) {
 	}
 }
 
+// TestRESTMapperResourceSingularizer 验证已注册资源名能还原为单数形式，
+// 包括以 "es"/"ies" 结尾的复数，以及历史上对复数字面量再次加 s 的行为（见下方待办注释）。
 func TestRESTMapperResourceSingularizer(t *testing.T) {
 	testGroupVersion := schema.GroupVersion{Group: "tgroup", Version: "test"}
 
@@ -477,13 +489,13 @@ func TestRESTMapperResourceSingularizer(t *testing.T) {
 		{Kind: "Status", Plural: "statuses", Singular: "status"},
 
 		{Kind: "lowercase", Plural: "lowercases", Singular: "lowercase"},
-		// TODO this test is broken.  This updates to reflect actual behavior.  Kinds are expected to be singular
-		// old (incorrect), comment: Don't add extra s if the original object is already plural
+		// TODO 这个测试本身就是坏的。下列期望值只是反映当前实际行为。Kind 本应是单数形式。
+		// 旧（错误）注释：Don't add extra s if the original object is already plural
 		{Kind: "lowercases", Plural: "lowercaseses", Singular: "lowercases"},
 	}
 	for i, testCase := range testCases {
 		mapper := NewDefaultRESTMapper([]schema.GroupVersion{testGroupVersion})
-		// create singular/plural mapping
+		// 建立单数/复数映射
 		mapper.Add(testGroupVersion.WithKind(testCase.Kind), RESTScopeNamespace)
 
 		singular, err := mapper.ResourceSingularizer(testCase.Plural)
@@ -496,6 +508,8 @@ func TestRESTMapperResourceSingularizer(t *testing.T) {
 	}
 }
 
+// TestRESTMapperRESTMapping 验证 RESTMapping 在未注册 Kind、空版本列表、指定版本等
+// 情况下的错误与结果资源名；部分用例重复以覆盖不同版本参数的组合。
 func TestRESTMapperRESTMapping(t *testing.T) {
 	testGroup := "tgroup"
 	testGroupVersion := schema.GroupVersion{Group: testGroup, Version: "test"}
@@ -559,6 +573,8 @@ func TestRESTMapperRESTMapping(t *testing.T) {
 	}
 }
 
+// TestRESTMapperRESTMappingSelectsVersion 验证 RESTMapping 的版本选择：
+// 无显式版本时按默认搜索顺序选；显式传入不匹配的版本必须报错；显式搜索顺序可覆盖默认顺序。
 func TestRESTMapperRESTMappingSelectsVersion(t *testing.T) {
 	expectedGroupVersion1 := schema.GroupVersion{Group: "tgroup", Version: "test1"}
 	expectedGroupVersion2 := schema.GroupVersion{Group: "tgroup", Version: "test2"}
@@ -570,7 +586,7 @@ func TestRESTMapperRESTMappingSelectsVersion(t *testing.T) {
 	mapper.Add(expectedGroupVersion1.WithKind("InternalObject"), RESTScopeNamespace)
 	mapper.Add(expectedGroupVersion2.WithKind("OtherObject"), RESTScopeNamespace)
 
-	// pick default matching object kind based on search order
+	// 按搜索顺序选取默认匹配的对象 Kind
 	mapping, err := mapper.RESTMapping(otherObjectGK)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -587,7 +603,7 @@ func TestRESTMapperRESTMappingSelectsVersion(t *testing.T) {
 		t.Errorf("unexpected mapping: %#v", mapping)
 	}
 
-	// mismatch of version
+	// 版本不匹配
 	_, err = mapper.RESTMapping(internalObjectGK, expectedGroupVersion2.Version)
 	if err == nil {
 		t.Errorf("unexpected non-error")
@@ -597,13 +613,13 @@ func TestRESTMapperRESTMappingSelectsVersion(t *testing.T) {
 		t.Errorf("unexpected non-error")
 	}
 
-	// not in the search versions
+	// 不在搜索版本范围内
 	_, err = mapper.RESTMapping(otherObjectGK, expectedGroupVersion3.Version)
 	if err == nil {
 		t.Errorf("unexpected non-error")
 	}
 
-	// explicit search order
+	// 显式指定搜索顺序
 	_, err = mapper.RESTMapping(otherObjectGK, expectedGroupVersion3.Version, expectedGroupVersion1.Version)
 	if err == nil {
 		t.Errorf("unexpected non-error")
@@ -618,6 +634,8 @@ func TestRESTMapperRESTMappingSelectsVersion(t *testing.T) {
 	}
 }
 
+// TestRESTMapperRESTMappings 验证 RESTMappings 会为同一 GroupKind 返回所有匹配版本的
+// 映射，且顺序遵循默认版本顺序；指定不存在的版本时必须报错。
 func TestRESTMapperRESTMappings(t *testing.T) {
 	testGroup := "tgroup"
 	testGroupVersion := schema.GroupVersion{Group: testGroup, Version: "v1"}
@@ -636,10 +654,10 @@ func TestRESTMapperRESTMappings(t *testing.T) {
 
 		{DefaultVersions: []schema.GroupVersion{testGroupVersion}, Kind: "Unknown", Err: true},
 
-		// ask for specific version - not available - thus error
+		// 请求指定版本：不存在，因此报错
 		{DefaultVersions: []schema.GroupVersion{testGroupVersion}, Kind: "InternalObject", APIGroupVersions: []schema.GroupVersion{{Group: testGroup, Version: "v2"}}, Err: true},
 
-		// ask for specific version - available - check ExpectedRESTMappings
+		// 请求指定版本：存在，检查 ExpectedRESTMappings
 		{
 			DefaultVersions:      []schema.GroupVersion{testGroupVersion},
 			Kind:                 "InternalObject",
@@ -648,7 +666,7 @@ func TestRESTMapperRESTMappings(t *testing.T) {
 			ExpectedRESTMappings: []*RESTMapping{{Resource: schema.GroupVersionResource{Group: testGroup, Version: "v2", Resource: "internalobjects"}, GroupVersionKind: schema.GroupVersionKind{Group: testGroup, Version: "v2", Kind: "InternalObject"}}},
 		},
 
-		// ask for specific versions - only one available - check ExpectedRESTMappings
+		// 请求多个指定版本：只有一个可用，检查 ExpectedRESTMappings
 		{
 			DefaultVersions:      []schema.GroupVersion{testGroupVersion},
 			Kind:                 "InternalObject",
@@ -657,7 +675,7 @@ func TestRESTMapperRESTMappings(t *testing.T) {
 			ExpectedRESTMappings: []*RESTMapping{{Resource: schema.GroupVersionResource{Group: testGroup, Version: "v2", Resource: "internalobjects"}, GroupVersionKind: schema.GroupVersionKind{Group: testGroup, Version: "v2", Kind: "InternalObject"}}},
 		},
 
-		// do not ask for specific version - search through default versions - check ExpectedRESTMappings
+		// 不指定版本：遍历默认版本，检查 ExpectedRESTMappings
 		{
 			DefaultVersions:     []schema.GroupVersion{testGroupVersion, {Group: testGroup, Version: "v2"}},
 			Kind:                "InternalObject",
@@ -710,6 +728,8 @@ func TestRESTMapperRESTMappings(t *testing.T) {
 	}
 }
 
+// TestRESTMapperReportsErrorOnBadVersion 验证请求未注册的版本时 RESTMapping 返回错误，
+// 而不是回退到其它版本。
 func TestRESTMapperReportsErrorOnBadVersion(t *testing.T) {
 	expectedGroupVersion1 := schema.GroupVersion{Group: "tgroup", Version: "test1"}
 	expectedGroupVersion2 := schema.GroupVersion{Group: "tgroup", Version: "test2"}

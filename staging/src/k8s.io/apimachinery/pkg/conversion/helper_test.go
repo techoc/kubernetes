@@ -18,6 +18,9 @@ package conversion
 
 import "testing"
 
+// TestInvalidPtrValueKind 验证 EnforcePtr 对非指针值返回错误。
+// 注意当前实现是在 default 分支中调用，等价于只覆盖 interface{} 的动态
+// 非指针情形。
 func TestInvalidPtrValueKind(t *testing.T) {
 	var simple interface{}
 	switch obj := simple.(type) {
@@ -29,6 +32,8 @@ func TestInvalidPtrValueKind(t *testing.T) {
 	}
 }
 
+// TestEnforceNilPtr 验证类型正确但值为 nil 的指针也会被拒绝：调用方
+// 不能把 nil 指针当作可写的目标。
 func TestEnforceNilPtr(t *testing.T) {
 	var nilPtr *struct{}
 	_, err := EnforcePtr(nilPtr)

@@ -25,6 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestDiscriminated exercises Discriminated's dispatch and ratcheting rules:
+// the rule selected by the discriminator runs, an absent rule falls back to the
+// default validator, and updates that change neither the discriminator nor the
+// value skip validation entirely.
 func TestDiscriminated(t *testing.T) {
 	errMatch := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "match error")}
 	errDefault := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "default error")}
@@ -172,6 +176,8 @@ func TestDiscriminated(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Create has no old object; default oldDiscriminator to the new one so
+			// update cases that don't set it explicitly read as "unchanged".
 			oldDisc := tc.oldDiscriminator
 			if oldDisc == "" {
 				oldDisc = tc.discriminator
@@ -197,6 +203,8 @@ func TestDiscriminated(t *testing.T) {
 	}
 }
 
+// TestDiscriminatedIntDiscriminator verifies the generic discriminator type
+// works for non-string keys (here int).
 func TestDiscriminatedIntDiscriminator(t *testing.T) {
 	errMatch := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "match error")}
 	errDefault := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "default error")}
@@ -228,6 +236,8 @@ func TestDiscriminatedIntDiscriminator(t *testing.T) {
 	}
 }
 
+// TestDiscriminatedBoolDiscriminator verifies the generic discriminator type
+// works for bool keys.
 func TestDiscriminatedBoolDiscriminator(t *testing.T) {
 	errMatch := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "match error")}
 	errDefault := field.ErrorList{field.Invalid(field.NewPath("foo"), "bar", "default error")}

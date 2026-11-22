@@ -27,8 +27,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// TestHasFieldsType makes sure that we fail if we don't have a
-// FieldsType set properly.
+// TestHasFieldsType 确保 fieldsType 未正确设置时解码会失败：
+// 合法值 FieldsV1 通过；FieldsV2 与缺失 fieldsType 都必须报错。
 func TestHasFieldsType(t *testing.T) {
 	var unmarshaled []metav1.ManagedFieldsEntry
 	if err := yaml.Unmarshal([]byte(`- apiVersion: v1
@@ -44,7 +44,7 @@ func TestHasFieldsType(t *testing.T) {
 		t.Fatalf("did not expect decoding error but got: %v", err)
 	}
 
-	// Invalid fieldsType V2.
+	// 非法值：目前只支持 FieldsV1。
 	if err := yaml.Unmarshal([]byte(`- apiVersion: v1
   fieldsType: FieldsV2
   fieldsV1:
@@ -58,7 +58,7 @@ func TestHasFieldsType(t *testing.T) {
 		t.Fatal("Expect decoding error but got none")
 	}
 
-	// Missing fieldsType.
+	// 缺失 fieldsType 同样视为非法。
 	if err := yaml.Unmarshal([]byte(`- apiVersion: v1
   fieldsV1:
     f:field: {}
@@ -72,8 +72,7 @@ func TestHasFieldsType(t *testing.T) {
 	}
 }
 
-// TestHasAPIVersion makes sure that we fail if we don't have an
-// APIVersion set.
+// TestHasAPIVersion 确保缺少 apiVersion 时解码会失败。
 func TestHasAPIVersion(t *testing.T) {
 	var unmarshaled []metav1.ManagedFieldsEntry
 	if err := yaml.Unmarshal([]byte(`- apiVersion: v1
@@ -89,7 +88,7 @@ func TestHasAPIVersion(t *testing.T) {
 		t.Fatalf("did not expect decoding error but got: %v", err)
 	}
 
-	// Missing apiVersion.
+	// 缺失 apiVersion：无法确定字段集合所属版本，必须报错。
 	unmarshaled = nil
 	if err := yaml.Unmarshal([]byte(`- fieldsType: FieldsV1
   fieldsV1:
@@ -104,8 +103,8 @@ func TestHasAPIVersion(t *testing.T) {
 	}
 }
 
-// TestHasOperation makes sure that we fail if we don't have an
-// Operation set properly.
+// TestHasOperation 确保 operation 未正确设置时解码会失败：
+// 合法值 Apply 通过；非法值 Invalid 与缺失 operation 都必须报错。
 func TestHasOperation(t *testing.T) {
 	var unmarshaled []metav1.ManagedFieldsEntry
 	if err := yaml.Unmarshal([]byte(`- apiVersion: v1
@@ -121,7 +120,7 @@ func TestHasOperation(t *testing.T) {
 		t.Fatalf("did not expect decoding error but got: %v", err)
 	}
 
-	// Invalid operation.
+	// 非法值：operation 只允许 Apply/Update。
 	if err := yaml.Unmarshal([]byte(`- apiVersion: v1
   fieldsType: FieldsV1
   fieldsV1:
@@ -135,7 +134,7 @@ func TestHasOperation(t *testing.T) {
 		t.Fatal("Expect decoding error but got none")
 	}
 
-	// Missing operation.
+	// 缺失 operation 同样非法。
 	unmarshaled = nil
 	if err := yaml.Unmarshal([]byte(`- apiVersion: v1
   fieldsType: FieldsV1
@@ -150,8 +149,9 @@ func TestHasOperation(t *testing.T) {
 	}
 }
 
-// TestRoundTripManagedFields will roundtrip ManagedFields from the wire format
-// (api format) to the format used by sigs.k8s.io/structured-merge-diff and back
+// TestRoundTripManagedFields 验证 managedFields 从线格式（API 格式）到
+// sigs.k8s.io/structured-merge-diff 内部格式再回到线格式的往返完全一致。
+// 覆盖 null、数值/布尔字段键、集合键（k:）、数组索引（i:）、嵌套字段与 subresource。
 func TestRoundTripManagedFields(t *testing.T) {
 	tests := []string{
 		`null
@@ -295,6 +295,9 @@ func TestRoundTripManagedFields(t *testing.T) {
 	}
 }
 
+// TestBuildManagerIdentifier 验证 manager 标识符的构造：
+// Update 操作包含 apiVersion；Apply 操作不包含；subresource 仅在设置时出现。
+// 标识符用于判断两个 managedFields 条目是否属于同一个 manager。
 func TestBuildManagerIdentifier(t *testing.T) {
 	tests := []struct {
 		managedFieldsEntry string
@@ -353,6 +356,10 @@ time: "2001-02-03T04:05:06Z"
 	}
 }
 
+// TestSortEncodedManagedFields 验证 managedFields 的规范化排序规则：
+// Apply 条目排在 Update 之前；无时间的条目排在有时间的之前；
+// 同类条目按 manager 名、再按时间排序；比较时间时忽略纳秒；
+// 带 subresource 的条目按 subresource 名排序。
 func TestSortEncodedManagedFields(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -360,6 +367,7 @@ func TestSortEncodedManagedFields(t *testing.T) {
 		expected      []metav1.ManagedFieldsEntry
 	}{
 		{
+			// 空切片与 nil 必须保持原样（nil 不能被改成空切片）。
 			name:          "empty",
 			managedFields: []metav1.ManagedFieldsEntry{},
 			expected:      []metav1.ManagedFieldsEntry{},
@@ -381,6 +389,7 @@ func TestSortEncodedManagedFields(t *testing.T) {
 			},
 		},
 		{
+			// 同一 manager 下，无时间的条目应排在前面。
 			name: "manager without time first",
 			managedFields: []metav1.ManagedFieldsEntry{
 				{Manager: "a", Operation: metav1.ManagedFieldsOperationApply, Time: nil},
@@ -392,6 +401,7 @@ func TestSortEncodedManagedFields(t *testing.T) {
 			},
 		},
 		{
+			// 先按"是否有时间"分组，再在组内按 manager 名排序。
 			name: "manager without time first name last",
 			managedFields: []metav1.ManagedFieldsEntry{
 				{Manager: "a", Operation: metav1.ManagedFieldsOperationApply, Time: parseTimeOrPanic("2001-01-01T01:00:00Z")},
@@ -405,6 +415,7 @@ func TestSortEncodedManagedFields(t *testing.T) {
 			},
 		},
 		{
+			// Apply 条目优先于 Update 条目。
 			name: "apply first",
 			managedFields: []metav1.ManagedFieldsEntry{
 				{Manager: "a", Operation: metav1.ManagedFieldsOperationUpdate, Time: parseTimeOrPanic("2001-01-01T01:00:00Z")},
@@ -416,6 +427,7 @@ func TestSortEncodedManagedFields(t *testing.T) {
 			},
 		},
 		{
+			// 同一 manager 的 Update 条目按时间升序排列，最新的在最后。
 			name: "newest last",
 			managedFields: []metav1.ManagedFieldsEntry{
 				{Manager: "c", Operation: metav1.ManagedFieldsOperationUpdate, Time: parseTimeOrPanic("2001-01-01T01:00:00Z")},
@@ -431,6 +443,7 @@ func TestSortEncodedManagedFields(t *testing.T) {
 			},
 		},
 		{
+			// 不同 manager 的条目按 manager 名排序。
 			name: "manager last",
 			managedFields: []metav1.ManagedFieldsEntry{
 				{Manager: "c", Operation: metav1.ManagedFieldsOperationUpdate, Time: parseTimeOrPanic("2001-01-01T01:00:00Z")},
@@ -446,6 +459,7 @@ func TestSortEncodedManagedFields(t *testing.T) {
 			},
 		},
 		{
+			// 综合场景：Apply 组按 manager 排序，Update 组按时间排序。
 			name: "manager sorted",
 			managedFields: []metav1.ManagedFieldsEntry{
 				{Manager: "c", Operation: metav1.ManagedFieldsOperationUpdate, Time: parseTimeOrPanic("2001-01-01T01:00:00Z")},
@@ -471,6 +485,8 @@ func TestSortEncodedManagedFields(t *testing.T) {
 			},
 		},
 		{
+			// 排序比较会截断到秒：三个仅纳秒不同的时间被视为同一秒，
+			// 因此最终顺序由稳定的次级键（manager 名）决定。
 			name: "sort drops nanoseconds",
 			managedFields: []metav1.ManagedFieldsEntry{
 				{Manager: "c", Operation: metav1.ManagedFieldsOperationUpdate, Time: &metav1.Time{Time: time.Date(2000, time.January, 0, 0, 0, 0, 1, time.UTC)}},
@@ -484,6 +500,7 @@ func TestSortEncodedManagedFields(t *testing.T) {
 			},
 		},
 		{
+			// subresource 作为次级排序键，空 subresource 排在最前。
 			name: "entries with subresource field",
 			managedFields: []metav1.ManagedFieldsEntry{
 				{Manager: "a", Operation: metav1.ManagedFieldsOperationApply, Subresource: "status"},
@@ -511,6 +528,8 @@ func TestSortEncodedManagedFields(t *testing.T) {
 	}
 }
 
+// parseTimeOrPanic 解析 RFC3339 时间，失败时 panic；
+// 仅用于测试数据构造，避免在表驱动用例中反复写错误处理。
 func parseTimeOrPanic(s string) *metav1.Time {
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {

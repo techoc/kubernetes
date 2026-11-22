@@ -25,11 +25,13 @@ import (
 	. "k8s.io/apimachinery/pkg/watch"
 )
 
+// testType 是仅实现 runtime.Object 的最小类型，事件内容用字符串即可比较。
 type testType string
 
 func (obj testType) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
 func (obj testType) DeepCopyObject() runtime.Object   { return obj }
 
+// TestFake 验证 Fake watcher 按发送顺序投递事件，Stop 后 ResultChan 关闭。
 func TestFake(t *testing.T) {
 	f := NewFake()
 
@@ -45,6 +47,7 @@ func TestFake(t *testing.T) {
 	}
 
 	// Prove that f implements Interface by phrasing this as a function.
+	// 把消费逻辑声明为接收 Interface 的函数，顺带在编译期证明 Fake 实现了接口。
 	consumer := func(w Interface) {
 		for _, expect := range table {
 			got, ok := <-w.ResultChan()
@@ -58,6 +61,7 @@ func TestFake(t *testing.T) {
 				t.Fatalf("Expected %v, got %v", expect.s, a)
 			}
 		}
+		// Stop 之后通道必须关闭，读取返回 ok=false。
 		_, stillOpen := <-w.ResultChan()
 		if stillOpen {
 			t.Fatal("Never stopped")
@@ -65,6 +69,7 @@ func TestFake(t *testing.T) {
 	}
 
 	sender := func() {
+		// 混合使用 Add/Action/Modify/Delete/Error，覆盖所有事件类型入口。
 		f.Add(testType("foo"))
 		f.Action(Modified, testType("qux"))
 		f.Modify(testType("bar"))
@@ -77,6 +82,8 @@ func TestFake(t *testing.T) {
 	consumer(f)
 }
 
+// TestRaceFreeFake 与 TestFake 行为相同，但使用带锁的 RaceFreeFake；
+// 在 -race 下并发 Stop/发送不应产生数据竞争。
 func TestRaceFreeFake(t *testing.T) {
 	f := NewRaceFreeFake()
 
@@ -92,6 +99,7 @@ func TestRaceFreeFake(t *testing.T) {
 	}
 
 	// Prove that f implements Interface by phrasing this as a function.
+	// 把消费逻辑声明为接收 Interface 的函数，顺带在编译期证明 Fake 实现了接口。
 	consumer := func(w Interface) {
 		for _, expect := range table {
 			got, ok := <-w.ResultChan()
@@ -105,6 +113,7 @@ func TestRaceFreeFake(t *testing.T) {
 				t.Fatalf("Expected %v, got %v", expect.s, a)
 			}
 		}
+		// Stop 之后通道必须关闭，读取返回 ok=false。
 		_, stillOpen := <-w.ResultChan()
 		if stillOpen {
 			t.Fatal("Never stopped")
@@ -112,6 +121,7 @@ func TestRaceFreeFake(t *testing.T) {
 	}
 
 	sender := func() {
+		// 混合使用 Add/Action/Modify/Delete/Error，覆盖所有事件类型入口。
 		f.Add(testType("foo"))
 		f.Action(Modified, testType("qux"))
 		f.Modify(testType("bar"))
@@ -124,6 +134,7 @@ func TestRaceFreeFake(t *testing.T) {
 	consumer(f)
 }
 
+// TestEmpty 验证 EmptyWatch 的通道立即关闭，且 Stop 幂等。
 func TestEmpty(t *testing.T) {
 	w := NewEmptyWatch()
 	_, ok := <-w.ResultChan()
@@ -137,6 +148,8 @@ func TestEmpty(t *testing.T) {
 	}
 }
 
+// TestProxyWatcher 验证 ProxyWatcher 转发底层通道事件、Stop 关闭 StopChan，
+// 并容忍重复 Stop。
 func TestProxyWatcher(t *testing.T) {
 	events := []Event{
 		{Added, testType("foo")},
@@ -171,5 +184,6 @@ func TestProxyWatcher(t *testing.T) {
 	}
 
 	// Test double close
+	// Stop 必须幂等：重复调用不能 panic（close 已关闭通道会 panic）。
 	w.Stop()
 }

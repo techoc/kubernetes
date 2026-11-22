@@ -21,22 +21,31 @@ import (
 	"reflect"
 )
 
+// typePair 用源/目标反射类型作为转换函数的查找键。
 type typePair struct {
 	source reflect.Type
 	dest   reflect.Type
 }
 
+// NameFunc 根据反射类型返回一个名字，用于日志与调试。
 type NameFunc func(t reflect.Type) string
 
+// DefaultNameFunc 返回类型的 Go 名称，是 NameFunc 的默认实现。
 var DefaultNameFunc = func(t reflect.Type) string { return t.Name() }
 
 // ConversionFunc converts the object a into the object b, reusing arrays or objects
 // or pointers if necessary. It should return an error if the object cannot be converted
 // or if some data is invalid. If you do not wish a and b to share fields or nested
 // objects, you must copy a before calling this function.
+//
+// 约定：a、b 均为指针；函数应尽量复用 b 中已有的容器以减少分配，
+// 因此若调用方不希望共享底层数据，需自行先深拷贝 a。
 type ConversionFunc func(a, b interface{}, scope Scope) error
 
 // Converter knows how to convert one type to another.
+//
+// Converter 维护类型对到转换函数的映射。查找优先级：
+// ignored（无操作） > 手动注册 > 生成代码注册；都不命中则报"unknown conversion"。
 type Converter struct {
 	// Map from the conversion pair to a function which can
 	// do the conversion.
@@ -55,6 +64,7 @@ func NewConverter(NameFunc) *Converter {
 		generatedConversionFuncs:  NewConversionFuncs(),
 		ignoredUntypedConversions: make(map[typePair]struct{}),
 	}
+	// 预注册 []byte 的转换：默认反射拷贝会逐字节递归，代价高且无意义。
 	c.RegisterUntypedConversionFunc(
 		(*[]byte)(nil), (*[]byte)(nil),
 		func(a, b interface{}, s Scope) error {
@@ -66,6 +76,9 @@ func NewConverter(NameFunc) *Converter {
 
 // WithConversions returns a Converter that is a copy of c but with the additional
 // fns merged on top.
+//
+// 返回浅拷贝：映射表通过 Merge 生成新表，因此原 Converter 不会被修改，
+// 可安全地作为模板派生出多个变体。
 func (c *Converter) WithConversions(fns ConversionFuncs) *Converter {
 	copied := *c
 	copied.conversionFuncs = c.conversionFuncs.Merge(fns)
@@ -80,6 +93,7 @@ func (c *Converter) DefaultMeta(t reflect.Type) *Meta {
 // Convert_Slice_byte_To_Slice_byte prevents recursing into every byte
 func Convert_Slice_byte_To_Slice_byte(in *[]byte, out *[]byte, s Scope) error {
 	if *in == nil {
+		// 保持 nil 与空切片的区别。
 		*out = nil
 		return nil
 	}
@@ -94,18 +108,22 @@ func Convert_Slice_byte_To_Slice_byte(in *[]byte, out *[]byte, s Scope) error {
 type Scope interface {
 	// Call Convert to convert sub-objects. Note that if you call it with your own exact
 	// parameters, you'll run out of stack space before anything useful happens.
+	//
+	// 用相同参数递归调用会无限递归，最终栈溢出。
 	Convert(src, dest interface{}) error
 
 	// Meta returns any information originally passed to Convert.
 	Meta() *Meta
 }
 
+// NewConversionFuncs 创建一个空的转换函数表。
 func NewConversionFuncs() ConversionFuncs {
 	return ConversionFuncs{
 		untyped: make(map[typePair]ConversionFunc),
 	}
 }
 
+// ConversionFuncs 是类型对到转换函数的映射集合。
 type ConversionFuncs struct {
 	untyped map[typePair]ConversionFunc
 }
@@ -132,6 +150,7 @@ func (c ConversionFuncs) Merge(other ConversionFuncs) ConversionFuncs {
 	for k, v := range c.untyped {
 		merged.untyped[k] = v
 	}
+	// 后写入 other，实现"other 优先"的覆盖语义。
 	for k, v := range other.untyped {
 		merged.untyped[k] = v
 	}
@@ -170,6 +189,8 @@ func (c *Converter) RegisterUntypedConversionFunc(a, b interface{}, fn Conversio
 // RegisterGeneratedUntypedConversionFunc registers a function that converts between a and b by passing objects of those
 // types to the provided function. The function *must* accept objects of a and b - this machinery will not enforce
 // any other guarantee.
+//
+// 生成代码单独存放，避免手动注册覆盖生成函数时难以排查；查找时手动注册优先。
 func (c *Converter) RegisterGeneratedUntypedConversionFunc(a, b interface{}, fn ConversionFunc) error {
 	return c.generatedConversionFuncs.AddUntyped(a, b, fn)
 }
@@ -206,6 +227,7 @@ func (c *Converter) Convert(src, dest interface{}, meta *Meta) error {
 	if _, ok := c.ignoredUntypedConversions[pair]; ok {
 		return nil
 	}
+	// 手动注册的函数优先于生成代码，便于调用方覆盖特定行为。
 	if fn, ok := c.conversionFuncs.untyped[pair]; ok {
 		return fn(src, dest, scope)
 	}
@@ -213,6 +235,8 @@ func (c *Converter) Convert(src, dest interface{}, meta *Meta) error {
 		return fn(src, dest, scope)
 	}
 
+	// 没有注册函数时只做参数校验，然后返回明确错误；不做反射拷贝，
+	// 因为任意结构的反射拷贝容易产生错误语义。
 	dv, err := EnforcePtr(dest)
 	if err != nil {
 		return err

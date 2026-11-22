@@ -51,6 +51,8 @@ var _ metav1.ListInterface = &Unstructured{}
 
 func (obj *Unstructured) GetObjectKind() schema.ObjectKind { return obj }
 
+// IsList reports whether the object carries an "items" array, which is the
+// only structural signal distinguishing a list from an ordinary object.
 func (obj *Unstructured) IsList() bool {
 	field, ok := obj.Object["items"]
 	if !ok {
@@ -59,12 +61,18 @@ func (obj *Unstructured) IsList() bool {
 	_, ok = field.([]interface{})
 	return ok
 }
+
+// ToList converts the object into an UnstructuredList. If the object is not a
+// list it is wrapped as a list whose Object is the original map and whose Items
+// is empty; this preserves the original metadata instead of failing.
 func (obj *Unstructured) ToList() (*UnstructuredList, error) {
 	if !obj.IsList() {
 		// return an empty list back
 		return &UnstructuredList{Object: obj.Object}, nil
 	}
 
+	// The list view shares the underlying map with the object; callers that
+	// mutate one will observe the change in the other.
 	ret := &UnstructuredList{}
 	ret.Object = obj.Object
 
@@ -80,6 +88,9 @@ func (obj *Unstructured) ToList() (*UnstructuredList, error) {
 	return ret, nil
 }
 
+// EachListItem invokes fn for every element of the "items" array. Each element
+// must be a JSON object; the contract is lenient so that malformed data yields
+// a descriptive error instead of a panic.
 func (obj *Unstructured) EachListItem(fn func(runtime.Object) error) error {
 	field, ok := obj.Object["items"]
 	if !ok {
@@ -101,11 +112,15 @@ func (obj *Unstructured) EachListItem(fn func(runtime.Object) error) error {
 	return nil
 }
 
+// EachListItemWithAlloc is the allocating variant of EachListItem. Since
+// EachListItem already allocates an Unstructured per item, this simply delegates.
 func (obj *Unstructured) EachListItemWithAlloc(fn func(runtime.Object) error) error {
 	// EachListItem has allocated a new Object for the user, we can use it directly.
 	return obj.EachListItem(fn)
 }
 
+// UnstructuredContent returns the underlying map. A nil object is normalized to
+// an empty map so callers can mutate the result unconditionally.
 func (obj *Unstructured) UnstructuredContent() map[string]interface{} {
 	if obj.Object == nil {
 		return make(map[string]interface{})
@@ -113,6 +128,8 @@ func (obj *Unstructured) UnstructuredContent() map[string]interface{} {
 	return obj.Object
 }
 
+// SetUnstructuredContent replaces the whole payload. The map is adopted, not
+// copied, so the caller must not mutate it afterwards.
 func (obj *Unstructured) SetUnstructuredContent(content map[string]interface{}) {
 	obj.Object = content
 }
@@ -142,6 +159,9 @@ func (in *Unstructured) NewEmptyInstance() runtime.Unstructured {
 	return out
 }
 
+// DeepCopy returns a fully independent copy, including all nested maps and
+// slices. It must not use the generated DeepCopyInto here because the payload
+// is not a typed struct.
 func (in *Unstructured) DeepCopy() *Unstructured {
 	if in == nil {
 		return nil
@@ -152,6 +172,8 @@ func (in *Unstructured) DeepCopy() *Unstructured {
 	return out
 }
 
+// setNestedField creates the object map lazily so accessors work on a zero
+// Unstructured without a separate initializer.
 func (u *Unstructured) setNestedField(value interface{}, fields ...string) {
 	if u.Object == nil {
 		u.Object = make(map[string]interface{})
@@ -185,6 +207,8 @@ func (u *Unstructured) GetOwnerReferences() []metav1.OwnerReference {
 	if !found || err != nil {
 		return nil
 	}
+	// Malformed data yields nil rather than an error; metadata accessors are
+	// intentionally forgiving so that validation can report the problem.
 	original, ok := field.([]interface{})
 	if !ok {
 		return nil
@@ -202,6 +226,8 @@ func (u *Unstructured) GetOwnerReferences() []metav1.OwnerReference {
 }
 
 func (u *Unstructured) SetOwnerReferences(references []metav1.OwnerReference) {
+	// A nil slice removes the field entirely so the serialized object has no
+	// empty array, matching Go struct omitempty behavior.
 	if references == nil {
 		RemoveNestedField(u.Object, "metadata", "ownerReferences")
 		return
@@ -211,6 +237,8 @@ func (u *Unstructured) SetOwnerReferences(references []metav1.OwnerReference) {
 	for _, reference := range references {
 		out, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&reference)
 		if err != nil {
+			// Skip the bad entry but tell the user; the remaining references are
+			// still stored so metadata is not lost wholesale.
 			utilruntime.HandleError(fmt.Errorf("unable to convert Owner Reference: %v", err))
 			continue
 		}
@@ -239,6 +267,9 @@ func (u *Unstructured) GetNamespace() string {
 	return getNestedString(u.Object, "metadata", "namespace")
 }
 
+// SetNamespace stores the namespace under metadata. An empty value removes the
+// key instead of writing "", which keeps serialized objects minimal and lets
+// omitempty-style comparisons work.
 func (u *Unstructured) SetNamespace(namespace string) {
 	if len(namespace) == 0 {
 		RemoveNestedField(u.Object, "metadata", "namespace")
@@ -303,6 +334,8 @@ func (u *Unstructured) GetGeneration() int64 {
 	return val
 }
 
+// SetGeneration removes the field when the value is zero, mirroring the
+// omitempty behavior of the typed metadata structs.
 func (u *Unstructured) SetGeneration(generation int64) {
 	if generation == 0 {
 		RemoveNestedField(u.Object, "metadata", "generation")
@@ -355,6 +388,8 @@ func (u *Unstructured) GetCreationTimestamp() metav1.Time {
 
 func (u *Unstructured) SetCreationTimestamp(timestamp metav1.Time) {
 	ts, _ := timestamp.MarshalQueryParameter()
+	// A zero timestamp must not be persisted; otherwise every object would
+	// carry a "0001-01-01T00:00:00Z" value.
 	if len(ts) == 0 || timestamp.Time.IsZero() {
 		RemoveNestedField(u.Object, "metadata", "creationTimestamp")
 		return
@@ -422,11 +457,15 @@ func (u *Unstructured) SetAnnotations(annotations map[string]string) {
 	u.setNestedMap(annotations, "metadata", "annotations")
 }
 
+// SetGroupVersionKind writes apiVersion and kind separately, since the
+// unstructured payload stores them as top-level string fields.
 func (u *Unstructured) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	u.SetAPIVersion(gvk.GroupVersion().String())
 	u.SetKind(gvk.Kind)
 }
 
+// GroupVersionKind parses apiVersion back into a GVK. A malformed apiVersion
+// yields an empty GVK rather than an error, keeping this accessor panic-free.
 func (u *Unstructured) GroupVersionKind() schema.GroupVersionKind {
 	gv, err := schema.ParseGroupVersion(u.GetAPIVersion())
 	if err != nil {
@@ -475,6 +514,9 @@ func (u *Unstructured) GetManagedFields() []metav1.ManagedFieldsEntry {
 	return managedFields
 }
 
+// SetManagedFields converts each entry with the default converter, which can
+// fail if an entry holds a value the typed struct cannot represent; in that case
+// the update is aborted and an error is reported through utilruntime.
 func (u *Unstructured) SetManagedFields(managedFields []metav1.ManagedFieldsEntry) {
 	if managedFields == nil {
 		RemoveNestedField(u.Object, "metadata", "managedFields")

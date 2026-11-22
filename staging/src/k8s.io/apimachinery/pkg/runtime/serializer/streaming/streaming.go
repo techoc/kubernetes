@@ -74,12 +74,17 @@ var ErrObjectTooLarge = fmt.Errorf("object to decode was longer than maximum all
 func (d *decoder) Decode(defaults *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	base := 0
 	for {
+		// The reader may return io.ErrShortBuffer when the frame does not fit;
+		// in that case grow the buffer and retry.
 		n, err := d.reader.Read(d.buf[base:])
 		if err == io.ErrShortBuffer {
 			if n == 0 {
+				// A short read with no progress would loop forever.
 				return nil, nil, fmt.Errorf("got short buffer with n=0, base=%d, cap=%d", base, cap(d.buf))
 			}
 			if d.resetRead {
+				// Still draining the oversized frame; keep consuming until the
+				// reader stops returning ErrShortBuffer.
 				continue
 			}
 			// double the buffer size up to maxBytes
@@ -89,6 +94,8 @@ func (d *decoder) Decode(defaults *schema.GroupVersionKind, into runtime.Object)
 				continue
 			}
 			// must read the rest of the frame (until we stop getting ErrShortBuffer)
+			// Dropping out now would leave the stream positioned mid-frame and
+			// corrupt the next decode, so drain it before reporting the error.
 			d.resetRead = true
 			return nil, nil, ErrObjectTooLarge
 		}
@@ -127,6 +134,8 @@ func NewEncoder(w io.Writer, e runtime.Encoder) Encoder {
 
 // Encode writes the provided object to the nested writer.
 func (e *encoder) Encode(obj runtime.Object) error {
+	// Encode into an intermediate buffer so a partial write cannot corrupt the
+	// stream: the frame is emitted with a single Write call.
 	if err := e.encoder.Encode(obj, e.buf); err != nil {
 		return err
 	}

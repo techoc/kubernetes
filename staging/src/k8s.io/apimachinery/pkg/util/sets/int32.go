@@ -22,6 +22,9 @@ package sets
 // new ways:
 // s1 := Set[int32]{}
 // s2 := New[int32]()
+//
+// 这是泛型化之前的具体类型，保留仅为兼容；所有方法都只是对泛型实现的
+// 薄封装，行为以 Set[int32] 为准。
 type Int32 map[int32]Empty
 
 // NewInt32 creates a Int32 from a list of values.
@@ -31,6 +34,9 @@ func NewInt32(items ...int32) Int32 {
 
 // Int32KeySet creates a Int32 from a keys of a map[int32](? extends interface{}).
 // If the value passed in is not actually a map, this will panic.
+//
+// 类型参数 T 允许任意 value 类型，实际只取 key，因此常用于把
+// map[int32]SomeStruct 快速转成集合。
 func Int32KeySet[T any](theMap map[int32]T) Int32 {
 	return Int32(KeySet(theMap))
 }
@@ -71,6 +77,8 @@ func (s Int32) Clone() Int32 {
 // s2 = {a1, a2, a4, a5}
 // s1.Difference(s2) = {a3}
 // s2.Difference(s1) = {a4, a5}
+//
+// 返回新集合，不修改 s1 或 s2。
 func (s1 Int32) Difference(s2 Int32) Int32 {
 	return Int32(cast(s1).Difference(cast(s2)))
 }
@@ -117,6 +125,8 @@ func (s1 Int32) Equal(s2 Int32) bool {
 }
 
 // List returns the contents as a sorted int32 slice.
+//
+// 排序保证输出稳定，适合用于比较与测试；若不需要顺序可用 UnsortedList。
 func (s Int32) List() []int32 {
 	return List(cast(s))
 }
@@ -127,6 +137,8 @@ func (s Int32) UnsortedList() []int32 {
 }
 
 // PopAny returns a single element from the set.
+//
+// 返回值与“是否非空”，空集时返回零值和 false，调用方必须检查第二个返回值。
 func (s Int32) PopAny() (int32, bool) {
 	return cast(s).PopAny()
 }

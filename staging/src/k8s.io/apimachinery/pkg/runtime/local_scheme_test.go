@@ -25,6 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestPreferredVersionsAllGroups 验证版本优先级计算：
+//   - 只观测到版本（observedOnly）：按出现顺序保留；
+//   - 只显式指定优先级（specifiedOnly）：以指定顺序为准；
+//   - 两者并存（both）：显式优先级在前，其余观测版本按发现顺序追加。
+//
+// 同时覆盖 PrioritizedVersionsForGroup / PrioritizedVersionsAllGroups /
+// PreferredVersionAllGroups 三个入口的一致性。
 func TestPreferredVersionsAllGroups(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -34,6 +41,7 @@ func TestPreferredVersionsAllGroups(t *testing.T) {
 		expectedPreferred   map[schema.GroupVersion]bool
 	}{
 		{
+			// 没有配置优先级时，按观测顺序排序，每组第一个为 preferred。
 			name: "observedOnly",
 			observedVersions: []schema.GroupVersion{
 				{Group: "", Version: "v3"},
@@ -57,6 +65,7 @@ func TestPreferredVersionsAllGroups(t *testing.T) {
 			},
 		},
 		{
+			// 只配置优先级时，完全按配置排序，不依赖观测数据。
 			name: "specifiedOnly",
 			versionPriority: map[string][]string{
 				"":    {"v3", "v1"},
@@ -78,6 +87,7 @@ func TestPreferredVersionsAllGroups(t *testing.T) {
 			},
 		},
 		{
+			// 显式优先级优先，未列出的观测版本按发现顺序补在后面。
 			name: "both",
 			versionPriority: map[string][]string{
 				"":    {"v3", "v1"},
@@ -118,6 +128,7 @@ func TestPreferredVersionsAllGroups(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			scheme := NewScheme()
+			// 直接注入内部字段，避免依赖 discovery 流程。
 			scheme.versionPriority = test.versionPriority
 			scheme.observedVersions = test.observedVersions
 
@@ -128,6 +139,7 @@ func TestPreferredVersionsAllGroups(t *testing.T) {
 				}
 			}
 
+			// 全局入口必须按 group 聚合后与分组结果一致。
 			prioritizedAll := scheme.PrioritizedVersionsAllGroups()
 			actualPrioritizedAll := map[string][]schema.GroupVersion{}
 			for _, actual := range prioritizedAll {

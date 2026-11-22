@@ -35,6 +35,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// testDecodable 是解码测试的核心目标类型：包含带 tag/不带 tag 的字段、
+// 嵌套结构体与 interface{} 字段，用来验证 GVK 推断与字段匹配规则。
 type testDecodable struct {
 	metav1.TypeMeta `json:""`
 
@@ -45,6 +47,7 @@ type testDecodable struct {
 }
 
 // DecodableSpec has 15 fields.
+// 中文补充：字段数量较多，用来验证编码器对“大结构体”的字段匹配是否区分大小写。
 type DecodableSpec struct {
 	A int `json:"A"`
 	B int `json:"B"`
@@ -63,6 +66,7 @@ type DecodableSpec struct {
 	O int `json:"o"`
 }
 
+// DeepCopyObject 实现 runtime.Object；nil 接收者返回 nil，与生成代码的惯例一致。
 func (d *testDecodable) DeepCopyObject() runtime.Object {
 	if d == nil {
 		return nil
@@ -71,6 +75,8 @@ func (d *testDecodable) DeepCopyObject() runtime.Object {
 	d.DeepCopyInto(out)
 	return out
 }
+
+// DeepCopyInto 逐字段复制；interface{} 字段直接赋引用即可满足测试需要。
 func (d *testDecodable) DeepCopyInto(out *testDecodable) {
 	*out = *d
 	out.Other = d.Other
@@ -80,6 +86,8 @@ func (d *testDecodable) DeepCopyInto(out *testDecodable) {
 	return
 }
 
+// testDecodeCoercion 覆盖严格解码时各种 JSON 类型到 Go 类型的“强制转换”行为
+// （null、空字符串、空数组/对象、整数与浮点数）。
 type testDecodeCoercion struct {
 	metav1.TypeMeta `json:""`
 
@@ -100,6 +108,7 @@ type testDecodeCoercion struct {
 	Map   map[string]string `json:"map"`
 }
 
+// DeepCopyObject 实现 runtime.Object。
 func (d *testDecodeCoercion) DeepCopyObject() runtime.Object {
 	if d == nil {
 		return nil
@@ -108,11 +117,16 @@ func (d *testDecodeCoercion) DeepCopyObject() runtime.Object {
 	d.DeepCopyInto(out)
 	return out
 }
+
+// DeepCopyInto 直接复制值；该类型没有需要深拷贝的引用字段。
 func (d *testDecodeCoercion) DeepCopyInto(out *testDecodeCoercion) {
 	*out = *d
 	return
 }
 
+// TestDecode 是 JSON/YAML 解码行为的总表驱动测试，覆盖：
+// GVK 缺失与补全、unstructured 与结构化目标、creater/typer 错误传播、
+// 大小写敏感匹配、严格模式下的未知字段/重复字段、以及类型强制转换。
 func TestDecode(t *testing.T) {
 	type testCase struct {
 		creater runtime.ObjectCreater
@@ -853,6 +867,7 @@ func TestDecode(t *testing.T) {
 		t.Logf("data=%s\n\tinto=%T, yaml=%v, strict=%v", string(tc.data), tc.into, tc.yaml, tc.strict)
 	}
 
+	// 每个用例独立构造序列化器，避免 yaml/strict 选项相互污染。
 	for i, test := range testCases {
 		var s runtime.Serializer
 		if test.yaml {
@@ -881,6 +896,7 @@ func TestDecode(t *testing.T) {
 				logTestCase(t, test)
 				t.Errorf("%d: failed: %v", i, err)
 			}
+			// 严格解码错误属于“部分成功”：对象可能已被填充，因此允许非 nil 返回。
 			if !runtime.IsStrictDecodingError(err) && obj != nil {
 				logTestCase(t, test)
 				t.Errorf("%d: should have returned nil object", i)
@@ -888,6 +904,7 @@ func TestDecode(t *testing.T) {
 			continue
 		}
 
+		// 传入 into 时，解码器应复用并返回同一对象，而不是新建实例。
 		if test.into != nil && test.into != obj {
 			logTestCase(t, test)
 			t.Errorf("%d: expected into to be returned: %v", i, obj)
@@ -901,6 +918,8 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+// TestCacheableObject 复用 runtime/testing 的通用用例，验证 JSON 序列化器
+// 满足 CacheableObject 的缓存/编码约定。
 func TestCacheableObject(t *testing.T) {
 	gvk := schema.GroupVersionKind{Group: "group", Version: "version", Kind: "MockCacheableObject"}
 	creater := &mockCreater{obj: &runtimetesting.MockCacheableObject{}}
@@ -910,6 +929,7 @@ func TestCacheableObject(t *testing.T) {
 	runtimetesting.CacheableObjectTest(t, serializer)
 }
 
+// mockCreater 是 runtime.ObjectCreater 的替身：记录请求的 GVK 并返回预置对象或错误。
 type mockCreater struct {
 	apiVersion string
 	kind       string
@@ -917,16 +937,19 @@ type mockCreater struct {
 	obj        runtime.Object
 }
 
+// New 记录调用参数并返回配置的结果，便于断言解码器是否按 GVK 请求对象。
 func (c *mockCreater) New(kind schema.GroupVersionKind) (runtime.Object, error) {
 	c.apiVersion, c.kind = kind.GroupVersion().String(), kind.Kind
 	return c.obj, c.err
 }
 
+// mockTyper 是 runtime.ObjectTyper 的替身：固定返回一个 GVK（或错误）。
 type mockTyper struct {
 	gvk *schema.GroupVersionKind
 	err error
 }
 
+// ObjectKinds 返回预置 GVK；gvk 为 nil 时返回 nil 列表与配置的错误。
 func (t *mockTyper) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind, bool, error) {
 	if t.gvk == nil {
 		return nil, false, t.err
@@ -934,10 +957,12 @@ func (t *mockTyper) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind, 
 	return []schema.GroupVersionKind{*t.gvk}, false, t.err
 }
 
+// Recognizes 固定返回 false：测试用例通过 ObjectKinds 的错误来控制“未注册”场景。
 func (t *mockTyper) Recognizes(_ schema.GroupVersionKind) bool {
 	return false
 }
 
+// testEncodableDuplicateTag 的两个字段使用相同 json tag，验证编码器会全部忽略而不是报错。
 type testEncodableDuplicateTag struct {
 	metav1.TypeMeta `json:""`
 
@@ -945,10 +970,12 @@ type testEncodableDuplicateTag struct {
 	A2 int `json:"a"` //nolint:govet // This is intentional to test that the encoder will not encode two map entries with the same key.
 }
 
+// DeepCopyObject 故意 panic：编码测试不涉及深拷贝。
 func (testEncodableDuplicateTag) DeepCopyObject() runtime.Object {
 	panic("unimplemented")
 }
 
+// testEncodableTagMatchesUntaggedName 验证“有 tag 的字段优先于同名的无 tag 字段”。
 type testEncodableTagMatchesUntaggedName struct {
 	metav1.TypeMeta `json:""`
 
@@ -956,26 +983,36 @@ type testEncodableTagMatchesUntaggedName struct {
 	TaggedA int `json:"A"`
 }
 
+// DeepCopyObject 故意 panic：编码测试不涉及深拷贝。
 func (testEncodableTagMatchesUntaggedName) DeepCopyObject() runtime.Object {
 	panic("unimplemented")
 }
 
+// staticTextMarshaler 的所有取值都序列化为同一个字符串 "static"，
+// 用来构造“键不相等但序列化后重复”的 map。
 type staticTextMarshaler int
 
+// MarshalText 恒定返回 "static"，使不同的 key 在 JSON 中变成同一个属性名。
 func (staticTextMarshaler) MarshalText() ([]byte, error) {
 	return []byte("static"), nil
 }
 
+// testEncodableMap 是可用作 JSON 对象键的 map 类型，用于测试键的 TextMarshaler 行为。
 type testEncodableMap[K comparable] map[K]interface{}
 
+// GetObjectKind 故意 panic：该类型仅用于编码测试。
 func (testEncodableMap[K]) GetObjectKind() schema.ObjectKind {
 	panic("unimplemented")
 }
 
+// DeepCopyObject 故意 panic：该类型仅用于编码测试。
 func (testEncodableMap[K]) DeepCopyObject() runtime.Object {
 	panic("unimplemented")
 }
 
+// TestEncode 验证编码器遵循 encoding/json 的字段可见性规则：
+// 同层存在 tag 字段时只编码 tag 字段；重复 tag 的字段全部忽略；
+// 以及 TextMarshaler 键可能产生重复属性名（不报错）。
 func TestEncode(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -1050,6 +1087,8 @@ func TestEncode(t *testing.T) {
 // if, when unmarshaling into interface{}, the decoder encounters a JSON number with no decimal
 // point in the input, it produces a value with concrete type int64 as long as the number can be
 // precisely represented by an int64.
+//
+// 中文补充：超出 int64 精确范围的大数仍保持 float64，这解释了为何只有部分值发生类型变化。
 func TestRoundtripUnstructuredFractionlessFloat64(t *testing.T) {
 	s := json.NewSerializerWithOptions(json.DefaultMetaFactory, runtime.NewScheme(), runtime.NewScheme(), json.SerializerOptions{})
 

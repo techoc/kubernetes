@@ -23,6 +23,8 @@ import (
 	. "k8s.io/apimachinery/pkg/watch"
 )
 
+// TestFilter 验证 Filter 只放行回调返回 true 的事件（过滤掉以 'b' 开头的对象），
+// 且事件顺序保持不变。
 func TestFilter(t *testing.T) {
 	table := []Event{
 		{Type: Added, Object: testType("foo")},
@@ -58,6 +60,8 @@ func TestFilter(t *testing.T) {
 	}
 }
 
+// TestFilterStop 验证对过滤后的 watch 调用 Stop 会终止转发：
+// 已发送的事件仍可收到，随后 ResultChan 关闭。
 func TestFilterStop(t *testing.T) {
 	source := NewFake()
 	filtered := Filter(source, func(e Event) (Event, bool) {
@@ -83,6 +87,8 @@ func TestFilterStop(t *testing.T) {
 	}
 }
 
+// TestRecorder 验证 Recorder 在不改变事件流的前提下完整记录所有事件，
+// 且记录内容与源事件逐一相等。
 func TestRecorder(t *testing.T) {
 	events := []Event{
 		{Type: Added, Object: testType("foo")},

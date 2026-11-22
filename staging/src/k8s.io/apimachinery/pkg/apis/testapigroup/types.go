@@ -21,41 +21,43 @@ import (
 )
 
 type (
-	ConditionStatus   string
+	// ConditionStatus 表示某个状况的取值，语义同 core/v1.ConditionStatus。
+	ConditionStatus string
+	// CarpConditionType 是状况的类型标识。
 	CarpConditionType string
-	CarpPhase         string
-	RestartPolicy     string
+	// CarpPhase 描述 Carp 所处的生命周期阶段。
+	CarpPhase string
+	// RestartPolicy 描述容器退出后的重启策略。
+	RestartPolicy string
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Carp is a collection of containers, used as either input (create, update) or as output (list, get).
+// Carp 是一组容器的集合，可作为输入（创建、更新）或输出（列表、获取）使用。
 type Carp struct {
 	metav1.TypeMeta
 	// +optional
 	metav1.ObjectMeta
 
-	// Spec defines the behavior of a carp.
+	// Spec 定义 carp 的行为。
 	// +optional
 	Spec CarpSpec
 
-	// Status represents the current information about a carp. This data may not be up
-	// to date.
+	// Status 表示 carp 的当前信息，这些数据可能不是最新的。
 	// +optional
 	Status CarpStatus
 }
 
-// CarpStatus represents information about the status of a carp. Status may trail the actual
-// state of a system.
+// CarpStatus 描述 carp 的状态信息。状态可能滞后于系统的实际状态。
 type CarpStatus struct {
 	// +optional
 	Phase CarpPhase
 	// +optional
 	Conditions []CarpCondition
-	// A human readable message indicating details about why the carp is in this state.
+	// 一段人类可读的消息，说明 carp 处于当前状态的原因。
 	// +optional
 	Message string
-	// A brief CamelCase message indicating details about why the carp is in this state. e.g. 'DiskPressure'
+	// 一段简短的 CamelCase 消息，说明 carp 处于当前状态的原因，例如 'DiskPressure'。
 	// +optional
 	Reason string
 
@@ -64,12 +66,12 @@ type CarpStatus struct {
 	// +optional
 	CarpIP string
 
-	// Date and time at which the object was acknowledged by the Kubelet.
-	// This is before the Kubelet pulled the container image(s) for the carp.
+	// 对象被 Kubelet 确认的时间。
+	// 该时间早于 Kubelet 为 carp 拉取容器镜像的时间。
 	// +optional
 	StartTime *metav1.Time
 
-	// Carp infos are provided by different clients, hence the map type.
+	// CarpInfo 由不同客户端提供，因此使用 map 语义的列表。
 	//
 	// +listType=map
 	// +listKey=a
@@ -78,6 +80,7 @@ type CarpStatus struct {
 	Infos []CarpInfo
 }
 
+// CarpCondition 描述 carp 的一项状况及其最近一次探测与状态切换的时间。
 type CarpCondition struct {
 	Type   CarpConditionType
 	Status ConditionStatus
@@ -91,67 +94,66 @@ type CarpCondition struct {
 	Message string
 }
 
+// CarpInfo 是 Infos 列表的元素。其 A/B/C 三个字段被声明为列表键，
+// 因而该列表按这三个字段的组合来识别同一元素。
 type CarpInfo struct {
-	// A is the first map key.
+	// A 是第一个 map 键。
 	// +required
 	A int64
-	// B is the second map key.
+	// B 是第二个 map 键。
 	// +required
 	B string
-	// C is the third, optional map key
+	// C 是第三个、可选的 map 键。
 	// +optional
 	C *string
 
-	// Some data for each pair of A and B.
+	// 每个 A 与 B 组合对应的数据。
 	Data string
 }
 
-// CarpSpec is a description of a carp
+// CarpSpec 是 carp 的描述。
 type CarpSpec struct {
 	// +optional
 	RestartPolicy RestartPolicy
-	// Optional duration in seconds the carp needs to terminate gracefully. May be decreased in delete request.
-	// Value must be non-negative integer. The value zero indicates delete immediately.
-	// If this value is nil, the default grace period will be used instead.
-	// The grace period is the duration in seconds after the processes running in the carp are sent
-	// a termination signal and the time when the processes are forcibly halted with a kill signal.
-	// Set this value longer than the expected cleanup time for your process.
+	// carp 优雅终止所需的可选时长（秒）。可在删除请求中缩短。
+	// 取值必须为非负整数，零表示立即删除。
+	// 若为 nil，则使用默认宽限期。
+	// 宽限期指从向 carp 中运行的进程发送终止信号，到用 kill 信号强制停止进程之间的时长。
+	// 应将该值设为长于预期的清理时间。
 	// +optional
 	TerminationGracePeriodSeconds *int64
-	// Optional duration in seconds relative to the StartTime that the carp may be active on a node
-	// before the system actively tries to terminate the carp; value must be positive integer
+	// 相对于 StartTime 的可选时长（秒），carp 可在此期间内于节点上保持活动，
+	// 超过后系统会主动尝试终止 carp；取值必须为正整数。
 	// +optional
 	ActiveDeadlineSeconds *int64
-	// NodeSelector is a selector which must be true for the carp to fit on a node
+	// NodeSelector 是一个选择器，只有其条件为真时 carp 才能被调度到该节点。
 	// +optional
 	NodeSelector map[string]string
 
-	// ServiceAccountName is the name of the ServiceAccount to use to run this carp
-	// The carp will be allowed to use secrets referenced by the ServiceAccount
+	// ServiceAccountName 是运行该 carp 所用的 ServiceAccount 名称。
+	// carp 可以使用该 ServiceAccount 引用的 secret。
 	ServiceAccountName string
 
-	// NodeName is a request to schedule this carp onto a specific node.  If it is non-empty,
-	// the scheduler simply schedules this carp onto that node, assuming that it fits resource
-	// requirements.
+	// NodeName 请求将 carp 调度到指定节点。若非空，调度器会直接把 carp 调度到该节点，
+	// 前提是其满足资源需求。
 	// +optional
 	NodeName string
-	// Specifies the hostname of the Carp.
-	// If not specified, the carp's hostname will be set to a system-defined value.
+	// 指定 Carp 的主机名。
+	// 若未指定，则 carp 的主机名由系统定义。
 	// +optional
 	Hostname string
-	// If specified, the fully qualified Carp hostname will be "<hostname>.<subdomain>.<carp namespace>.svc.<cluster domain>".
-	// If not specified, the carp will not have a domainname at all.
+	// 若指定，Carp 的完整限定主机名将为 "<hostname>.<subdomain>.<carp namespace>.svc.<cluster domain>"。
+	// 若未指定，carp 将没有域名。
 	// +optional
 	Subdomain string
-	// If specified, the carp will be dispatched by specified scheduler.
-	// If not specified, the carp will be dispatched by default scheduler.
+	// 若指定，carp 将由指定的调度器调度；否则由默认调度器调度。
 	// +optional
 	SchedulerName string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// CarpList is a list of Carps.
+// CarpList 是 Carp 的列表。
 type CarpList struct {
 	metav1.TypeMeta
 	// +optional

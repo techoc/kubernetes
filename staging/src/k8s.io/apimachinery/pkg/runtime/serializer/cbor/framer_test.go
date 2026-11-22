@@ -31,10 +31,13 @@ import (
 // well-formedness error in the input stream. According to RFC 8742 Section 2.8: "[...] if any data
 // item in the sequence is not well formed, it is not possible to reliably decode the rest of the
 // sequence."
+//
+// TestFrameReaderReadError 验证 frame reader 遇到输入流中的格式错误后不会恢复读取：
+// 按 RFC 8742 §2.8，序列中任一数据项格式非法时，无法可靠解码后续内容。
 func TestFrameReaderReadError(t *testing.T) {
 	input := []byte{
-		0xff, // ill-formed initial break
-		0xa0, // followed by well-formed empty map
+		0xff, // 非法的初始 break
+		0xa0, // 后跟格式正确的空 map
 	}
 	fr := cbor.NewFramer().NewFrameReader(io.NopCloser(bytes.NewReader(input)))
 	for i := 0; i < 3; i++ {
@@ -48,7 +51,11 @@ func TestFrameReaderReadError(t *testing.T) {
 	}
 }
 
+// TestFrameReaderRead 验证 frame reader 在多种分块方式下正确重组每个 frame：
+// 覆盖连续 frame、零长度目标缓冲、以及跨多次读取溢出的 frame；
+// 并检查读取不会写到目标切片长度之外。
 func TestFrameReaderRead(t *testing.T) {
+	// ChunkedFrame 是单个 frame 按读取次数切分后的字节块序列。
 	type ChunkedFrame [][]byte
 
 	for _, tc := range []struct {
@@ -97,6 +104,8 @@ func TestFrameReaderRead(t *testing.T) {
 			for _, frame := range tc.Frames {
 				var want, got []byte
 				for i, chunk := range frame {
+					// 目标切片长度与 chunk 相同、容量加倍，并在容量区间预填 0xff，
+					// 以便检测读取是否越界写入。
 					dst := make([]byte, len(chunk), 2*len(chunk))
 					for i := len(dst); i < cap(dst); i++ {
 						dst[:cap(dst)][i] = 0xff
@@ -127,6 +136,7 @@ func TestFrameReaderRead(t *testing.T) {
 	}
 }
 
+// fakeReadCloser 是用于测试 Close 行为的 ReadCloser，Read 总是返回 (0, nil)。
 type fakeReadCloser struct {
 	err error
 }
@@ -139,6 +149,7 @@ func (rc fakeReadCloser) Close() error {
 	return rc.err
 }
 
+// TestFrameReaderClose 验证 Close 会把底层 ReadCloser 的错误原样返回。
 func TestFrameReaderClose(t *testing.T) {
 	want := errors.New("test")
 	if got := cbor.NewFramer().NewFrameReader(fakeReadCloser{err: want}).Close(); !errors.Is(got, want) {

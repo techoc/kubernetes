@@ -38,6 +38,7 @@ type benchDeployment struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 }
 
+// DeepCopyObject 实现 runtime.Object；基准里不调用它，但类型必须满足接口。
 func (d *benchDeployment) DeepCopyObject() runtime.Object {
 	out := &benchDeployment{TypeMeta: d.TypeMeta}
 	d.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
@@ -75,6 +76,7 @@ func unstructuredDeployment(apiVersion string, n int) runtime.Object {
 	}}
 }
 
+// metaMaps 生成 n 个 label 与 n 个 annotation，用于控制对象规模。
 func metaMaps(n int) (labels, annotations map[string]string) {
 	labels = make(map[string]string, n)
 	annotations = make(map[string]string, n)
@@ -85,6 +87,7 @@ func metaMaps(n int) (labels, annotations map[string]string) {
 	return labels, annotations
 }
 
+// toInterfaceMap 把 map[string]string 转成 unstructured 需要的 map[string]interface{}。
 func toInterfaceMap(m map[string]string) map[string]interface{} {
 	out := make(map[string]interface{}, len(m))
 	for k, v := range m {
@@ -93,6 +96,7 @@ func toInterfaceMap(m map[string]string) map[string]interface{} {
 	return out
 }
 
+// benchVersionConverter 构造一个只认识 apps/v1beta1 与 apps/v1 的转换器。
 func benchVersionConverter() merge.Converter {
 	oc := fakeObjectConvertorForTestSchema{
 		gvkForVersion("v1beta1"): objForGroupVersion("apps/v1beta1"),
@@ -101,6 +105,7 @@ func benchVersionConverter() merge.Converter {
 	return newVersionConverter(testTypeConverter, oc, schema.GroupVersion{Group: "apps", Version: runtime.APIVersionInternal})
 }
 
+// benchBackings 覆盖内置类型（反射）与 CRD（unstructured）两种底层表示。
 var benchBackings = []struct {
 	name  string
 	build func(apiVersion string, n int) runtime.Object
@@ -109,6 +114,7 @@ var benchBackings = []struct {
 	{"unstructured", unstructuredDeployment},
 }
 
+// benchConversions 区分同版本（快速路径）与跨版本（回退路径）。
 var benchConversions = []struct {
 	name    string
 	version fieldpath.APIVersion
@@ -117,6 +123,7 @@ var benchConversions = []struct {
 	{"cross-version", "apps/v1"},
 }
 
+// benchSizes 控制对象字段数量，观察转换成本随规模的变化。
 var benchSizes = []int{0, 10, 100, 1000}
 
 // BenchmarkVersionConverter measures versionConverter.Convert across reflect-backed
@@ -127,6 +134,7 @@ func BenchmarkVersionConverter(b *testing.B) {
 	for _, backing := range benchBackings {
 		for _, conv := range benchConversions {
 			for _, n := range benchSizes {
+				// 输入在计时外构造一次，避免把 ObjectToTyped 的成本算进 Convert。
 				input, err := testTypeConverter.ObjectToTyped(backing.build("apps/v1beta1", n))
 				if err != nil {
 					b.Fatalf("ObjectToTyped(%s, fields=%d): %v", backing.name, n, err)
@@ -189,6 +197,7 @@ func TestBenchmarkFastPathEngages(t *testing.T) {
 	}
 }
 
+// benchObjectConvertor 返回与 benchVersionConverter 相同配置的转换器。
 func benchObjectConvertor() fakeObjectConvertorForTestSchema {
 	return fakeObjectConvertorForTestSchema{
 		gvkForVersion("v1beta1"): objForGroupVersion("apps/v1beta1"),

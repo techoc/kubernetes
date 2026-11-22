@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package coverage 提供声明式校验（validation-gen 生成的规则）的覆盖率断言工具。
+// 测试进程登记“声明了什么规则”和“实际观察到了什么错误”，最后用
+// AssertDeclarativeCoverage 检查每条声明规则都至少被触发过一次。
 package coverage
 
 import (
@@ -28,17 +31,17 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// Rule is one declared field-validation error: error type plus optional origin.
+// Rule 表示一条已声明的字段校验错误：错误类型加上可选的来源。
 type Rule struct {
 	ErrorType string
 	Origin    string
 }
 
-// FieldRules maps field path → declared rules for a single Kind.
+// FieldRules 把字段路径映射到单个 Kind 上声明的规则列表。
 type FieldRules map[string][]Rule
 
-// ruleKey is the flat identity of one declared-or-observed rule across the
-// whole test process.
+// ruleKey 是一条声明或观测规则在整个测试进程中的扁平身份，
+// 用于对两个集合做差集。
 type ruleKey struct {
 	gvk       schema.GroupVersionKind
 	path      string
@@ -46,8 +49,8 @@ type ruleKey struct {
 	origin    string
 }
 
-// indexKeyRe normalizes runtime path subscripts ("[0]", "[my-key]") to "[*]"
-// so observed paths line up with the canonical paths from validation-gen.
+// indexKeyRe 把运行时路径下标（"[0]"、"[my-key]"）归一化为 "[*]"，
+// 使观测到的路径能与 validation-gen 生成的标准路径对齐。
 var indexKeyRe = regexp.MustCompile(`\[[^\]]+\]`)
 
 var (
@@ -57,8 +60,7 @@ var (
 	nilPathString = (*field.Path)(nil).String()
 )
 
-// RegisterDeclaredRules records the rules declared for one GVK by
-// validation-gen.
+// RegisterDeclaredRules 记录 validation-gen 为一个 GVK 声明的规则。
 func RegisterDeclaredRules(gvk schema.GroupVersionKind, rules FieldRules) {
 	rulesMu.Lock()
 	defer rulesMu.Unlock()
@@ -69,17 +71,18 @@ func RegisterDeclaredRules(gvk schema.GroupVersionKind, rules FieldRules) {
 	}
 }
 
-// RecordObservedRules marks every error in errs as observed for the given GVK.
-// Idempotent per (GVK, path, errorType, origin). Callers compute the GVK from
-// whatever context they have (e.g., a runtime scheme + request info).
+// RecordObservedRules 把 errs 中的每个错误标记为已针对给定 GVK 观测到。
+// 对 (GVK, path, errorType, origin) 幂等。调用方需从自身上下文中推导 GVK
+// （例如运行时 scheme 加请求信息）。
 func RecordObservedRules(gvk schema.GroupVersionKind, errs field.ErrorList) {
 	rulesMu.Lock()
 	defer rulesMu.Unlock()
-	// Runtime errors carry the actual subscript ("spec.items[3]",
-	// "metadata.labels[my-key]"); declared paths use "[*]". Replace every
-	// "[...]" with "[*]" so the lookup in AssertDeclarativeCoverage matches.
+	// 运行时错误带真实下标（"spec.items[3]"、"metadata.labels[my-key]"），
+	// 而声明路径使用 "[*]"。把所有 "[...]" 替换为 "[*]"，以便与 AssertDeclarativeCoverage
+	// 中的差集查找匹配。
 	for _, e := range errs {
 		path := e.Field
+		// nil 路径在运行时用 "<nil>" 之类的字符串表示，归一化为空串与声明侧一致。
 		if path == nilPathString {
 			path = ""
 		}
@@ -88,9 +91,8 @@ func RecordObservedRules(gvk schema.GroupVersionKind, errs field.ErrorList) {
 	}
 }
 
-// AssertDeclarativeCoverage returns nil if every rule registered via
-// RegisterDeclaredRules was observed at least once during this test process;
-// otherwise an error listing the uncovered rules.
+// AssertDeclarativeCoverage 在通过 RegisterDeclaredRules 登记的每条规则都至少被观测到
+// 一次时返回 nil；否则返回列出未覆盖规则的错误。
 func AssertDeclarativeCoverage() error {
 	rulesMu.Lock()
 	uncovered := declared.Difference(observed).UnsortedList()
@@ -101,8 +103,9 @@ func AssertDeclarativeCoverage() error {
 	return fmt.Errorf("%d uncovered declarative-validation rules:\n%s", len(uncovered), formatUncovered(uncovered))
 }
 
-// formatUncovered renders uncovered rules grouped by GVK, one rule per line.
-// GVKs are sorted by group/version/kind; rules within a GVK by path/errorType/origin.
+// formatUncovered 按 GVK 分组渲染未覆盖的规则，每条一行。
+// GVK 按 group/version/kind 排序；同一 GVK 内按 path/errorType/origin 排序，
+// 保证失败输出稳定、可 diff。
 //
 // Example:
 //
@@ -110,6 +113,7 @@ func AssertDeclarativeCoverage() error {
 //	  spec.name  FieldValueRequired
 //	  spec.name  FieldValueInvalid origin="format=dns-label"
 func formatUncovered(uncovered []ruleKey) string {
+	// 先按 GVK 分组，再分别排序，避免依赖 map 遍历顺序导致输出抖动。
 	gvksToRules := map[schema.GroupVersionKind][]ruleKey{}
 	for _, k := range uncovered {
 		gvksToRules[k.gvk] = append(gvksToRules[k.gvk], k)
@@ -129,6 +133,7 @@ func formatUncovered(uncovered []ruleKey) string {
 	})
 	var sb strings.Builder
 	for _, gvk := range gvks {
+		// core 组的 group 为空，此时只用版本号（如 "v1"）表示，与 API 惯例一致。
 		gv := gvk.Group + "/" + gvk.Version
 		if gvk.Group == "" {
 			gv = gvk.Version

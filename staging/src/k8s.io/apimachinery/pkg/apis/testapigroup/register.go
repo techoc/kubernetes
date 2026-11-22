@@ -22,27 +22,30 @@ import (
 )
 
 var (
+	// SchemeBuilder 收集本包的类型注册函数（addKnownTypes）。
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	AddToScheme   = SchemeBuilder.AddToScheme
+	// AddToScheme 把本包的类型加入给定的 Scheme。
+	AddToScheme = SchemeBuilder.AddToScheme
 )
 
-// GroupName is the group name use in this package
+// GroupName 是本包使用的 API 组名。
 const GroupName = "testapigroup.apimachinery.k8s.io"
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组/版本；内部版本用于测试转换。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接收不带组前缀的 kind，返回带组限定的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// Resource takes an unqualified resource and returns a Group qualified GroupResource
+// Resource 接收不带组前缀的 resource，返回带组限定的 GroupResource。
 func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-// Adds the list of known types to the given scheme.
+// addKnownTypes 把 Car 及其列表类型注册到 Scheme 的内部版本。
+// 只注册一对类型即可让测试覆盖列表与单项的编解码路径。
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&Carp{},

@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestEnum 覆盖普通 string 枚举的合法与非法取值，并校验错误消息中列出全部允许值。
 func TestEnum(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -67,6 +68,8 @@ func TestEnum(t *testing.T) {
 	}
 }
 
+// TestEnumTypedef 验证带命名的自定义字符串类型也能通过泛型 Enum 校验，
+// 并确认错误消息中的允许值按字典序输出（bar、foo、qux）。
 func TestEnumTypedef(t *testing.T) {
 	type StringType string
 	const (
@@ -116,6 +119,8 @@ func TestEnumTypedef(t *testing.T) {
 	}
 }
 
+// TestEnumExclude 验证 EnumExclusion 在特性门控下的生效规则：
+// 当 Option 的值等于 ExcludeWhen 时该枚举值被排除；未声明 option 视为内部错误。
 func TestEnumExclude(t *testing.T) {
 	type TestEnum string
 	const (
@@ -131,6 +136,8 @@ func TestEnumExclude(t *testing.T) {
 	)
 
 	testEnumValues := sets.New(ValueA, ValueB, ValueC, ValueD)
+	// 每条排除规则在某个特性开关取特定值时生效：A 在 FeatureA=true 时排除，
+	// B 在 FeatureB=false 时排除；D 同时受两个开关影响，分别在各自条件下被排除。
 	testEnumExclusions := []EnumExclusion[TestEnum]{
 		{Value: ValueA, Option: FeatureA, ExcludeWhen: true},
 		{Value: ValueB, Option: FeatureB, ExcludeWhen: false},
@@ -215,6 +222,7 @@ func TestEnumExclude(t *testing.T) {
 			errs := Enum(context.Background(), op, field.NewPath("fld"), &tc.value, nil, testEnumValues, testEnumExclusions)
 
 			if tc.expectInternal {
+				// 未声明的 option 属于调用方/生成器的编程错误，应以 Internal 错误而非用户错误呈现。
 				if len(errs) != 1 || errs[0].Type != field.ErrorTypeInternal {
 					t.Fatalf("expected a single internal error, but got: %v", errs)
 				}

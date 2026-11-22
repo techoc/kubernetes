@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// TestLookupPtrToStruct 验证对结构体指针按 JSON 字段名查找时，
+// 能返回字段类型、patchStrategy 列表与 patchMergeKey。
 func TestLookupPtrToStruct(t *testing.T) {
 	type Elem struct {
 		Key   string

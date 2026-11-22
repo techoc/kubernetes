@@ -29,13 +29,18 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// resource 构造核心组（group 为空）的 GroupResource，便于测试时少写样板。
 func resource(resource string) schema.GroupResource {
 	return schema.GroupResource{Group: "", Resource: resource}
 }
+
+// kind 构造核心组（group 为空）的 GroupKind。
 func kind(kind string) schema.GroupKind {
 	return schema.GroupKind{Group: "", Kind: kind}
 }
 
+// TestErrorNew 验证各构造函数生成的错误只会命中对应的 Is* 判断，
+// 同时校验 SuggestsClientDelay 对 RetryAfterSeconds 的解读（含 0 秒这一边界）。
 func TestErrorNew(t *testing.T) {
 	err := NewAlreadyExists(resource("tests"), "1")
 	if !IsAlreadyExists(err) {
@@ -121,6 +126,8 @@ func TestErrorNew(t *testing.T) {
 	}
 }
 
+// TestNewInvalid 逐类校验 field.Error 到 StatusCause 的映射（类型、字段路径、消息），
+// 并确认 nil 错误列表会生成不带 cause、仅含 "is invalid" 的简洁消息。
 func TestNewInvalid(t *testing.T) {
 	testCases := []struct {
 		Err     *field.Error
@@ -199,6 +206,7 @@ func TestNewInvalid(t *testing.T) {
 	}
 	for i, testCase := range testCases {
 		vErr, expected := testCase.Err, testCase.Details
+		// cause 的 Message 由 ErrorBody 派生，这里动态补齐期望值，避免在表里重复书写。
 		if vErr != nil && expected != nil {
 			expected.Causes[0].Message = vErr.ErrorBody()
 		}
@@ -220,12 +228,14 @@ func TestNewInvalid(t *testing.T) {
 	}
 }
 
+// TestReasonForError 确认 nil 错误被映射为 StatusReasonUnknown。
 func TestReasonForError(t *testing.T) {
 	if e, a := metav1.StatusReasonUnknown, ReasonForError(nil); e != a {
 		t.Errorf("unexpected reason type: %#v", a)
 	}
 }
 
+// TestType 是一个最小化的 runtime.Object 实现，用于验证 FromObject 对非 Status 对象的处理。
 type TestType struct{}
 
 func (obj *TestType) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
@@ -237,6 +247,7 @@ func (obj *TestType) DeepCopyObject() runtime.Object {
 	return &clone
 }
 
+// TestFromObject 验证 Status 对象被原样转为 StatusError，而非 Status 对象则返回 UnexpectedObjectError。
 func TestFromObject(t *testing.T) {
 	table := []struct {
 		obj     runtime.Object
@@ -253,6 +264,8 @@ func TestFromObject(t *testing.T) {
 	}
 }
 
+// TestReasonForErrorSupportsWrappedErrors 覆盖直接匹配、多层 %w 包装、不匹配以及 nil 四种情况，
+// 确保 ReasonForError 能穿透任意层包装找到 StatusError。
 func TestReasonForErrorSupportsWrappedErrors(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -294,6 +307,8 @@ func TestReasonForErrorSupportsWrappedErrors(t *testing.T) {
 	}
 }
 
+// TestIsTooManyRequestsSupportsWrappedErrors 验证 IsTooManyRequests 既能按 reason 也能按状态码 429 命中，
+// 且该兜底逻辑同样适用于被包装的错误。
 func TestIsTooManyRequestsSupportsWrappedErrors(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -342,6 +357,9 @@ func TestIsTooManyRequestsSupportsWrappedErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestIsRequestEntityTooLargeErrorSupportsWrappedErrors 与 TooManyRequests 类似，
+// 验证 413 的 reason/状态码双路径判断及对包装错误的支持。
 func TestIsRequestEntityTooLargeErrorSupportsWrappedErrors(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -391,6 +409,8 @@ func TestIsRequestEntityTooLargeErrorSupportsWrappedErrors(t *testing.T) {
 	}
 }
 
+// TestIsUnexpectedServerError 验证只有携带 UnexpectedServerResponse cause 的错误才会命中，
+// 并覆盖包装与 nil 情况。
 func TestIsUnexpectedServerError(t *testing.T) {
 	unexpectedServerErr := func() error {
 		return &StatusError{
@@ -441,6 +461,7 @@ func TestIsUnexpectedServerError(t *testing.T) {
 	}
 }
 
+// TestIsUnexpectedObjectError 验证 IsUnexpectedObjectError 对直接、包装、无关错误及 nil 的判断。
 func TestIsUnexpectedObjectError(t *testing.T) {
 	unexpectedObjectErr := func() error {
 		return &UnexpectedObjectError{}
@@ -485,6 +506,8 @@ func TestIsUnexpectedObjectError(t *testing.T) {
 	}
 }
 
+// TestSuggestsClientDelaySupportsWrapping 验证 SuggestsClientDelay 对 ServerTimeout reason 的识别，
+// 并确保穿透包装错误。
 func TestSuggestsClientDelaySupportsWrapping(t *testing.T) {
 	suggestsClientDelayErr := func() error {
 		return &StatusError{
@@ -534,6 +557,10 @@ func TestSuggestsClientDelaySupportsWrapping(t *testing.T) {
 	}
 }
 
+// TestIsErrorTypesByReasonAndCode 校验 Is* 函数的判定优先级：
+// 已知 reason 必须命中；reason 未知时按状态码兜底；
+// 对 tooManyRequests/requestEntityTooLarge 等历史遗留函数，状态码命中即可，不要求 reason 未知；
+// 其他函数则要求 reason 必须未知，否则可能出现语义误判。
 func TestIsErrorTypesByReasonAndCode(t *testing.T) {
 	testCases := []struct {
 		name                  string
@@ -576,6 +603,7 @@ func TestIsErrorTypesByReasonAndCode(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// reason 明确且已知时必须命中，不依赖状态码。
 			t.Run("by known reason", func(t *testing.T) {
 				err := &StatusError{
 					metav1.Status{
@@ -589,6 +617,7 @@ func TestIsErrorTypesByReasonAndCode(t *testing.T) {
 				}
 			})
 
+			// reason 为 Unknown（即不在 knownReasons 中）时，状态码成为兜底依据。
 			t.Run("by code and unknown reason", func(t *testing.T) {
 				err := &StatusError{
 					metav1.Status{
@@ -603,10 +632,12 @@ func TestIsErrorTypesByReasonAndCode(t *testing.T) {
 				}
 			})
 
+			// 历史遗留函数不区分 reason 是否已知，跳过后续这条反向断言。
 			if !tc.otherReasonConsidered {
 				return
 			}
 
+			// reason 已知但与状态码语义不一致时不应命中，防止状态码覆盖明确的语义。
 			t.Run("by code and other known reason", func(t *testing.T) {
 				err := &StatusError{
 					metav1.Status{
@@ -626,6 +657,8 @@ func TestIsErrorTypesByReasonAndCode(t *testing.T) {
 	}
 }
 
+// TestStatusCauseSupportsWrappedErrors 验证 StatusCause 在 nil、错误类型、错误 cause 名等情况下返回 false，
+// 并能穿透一层或多层包装找到匹配的 cause。
 func TestStatusCauseSupportsWrappedErrors(t *testing.T) {
 	err := &StatusError{ErrStatus: metav1.Status{
 		Details: &metav1.StatusDetails{
@@ -658,6 +691,8 @@ func TestStatusCauseSupportsWrappedErrors(t *testing.T) {
 	}
 }
 
+// BenchmarkIsAlreadyExistsWrappedErrors 对比 nil、未包装与包装错误三种输入下 IsAlreadyExists 的开销，
+// 用于观察 errors.As 在包装链上的额外成本。
 func BenchmarkIsAlreadyExistsWrappedErrors(b *testing.B) {
 	err := NewAlreadyExists(schema.GroupResource{}, "")
 	wrapped := fmt.Errorf("once: %w", err)
@@ -681,6 +716,8 @@ func BenchmarkIsAlreadyExistsWrappedErrors(b *testing.B) {
 	})
 }
 
+// BenchmarkIsNotFoundWrappedErrors 与 IsAlreadyExists 的基准对应，
+// 额外体现 IsNotFound 走 reason+code 双判断路径的成本。
 func BenchmarkIsNotFoundWrappedErrors(b *testing.B) {
 	err := NewNotFound(schema.GroupResource{}, "")
 	wrapped := fmt.Errorf("once: %w", err)

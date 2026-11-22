@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
+// EmbeddedTest 在内部表示中直接内嵌 runtime.Object，用于验证转换时对
+// 嵌套对象的处理。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type EmbeddedTest struct {
 	runtime.TypeMeta
@@ -32,6 +34,8 @@ type EmbeddedTest struct {
 	EmptyObject runtime.Object
 }
 
+// EmbeddedTestExternal 是 EmbeddedTest 的对外版本：嵌套对象用
+// RawExtension 承载，序列化时保持原始字节。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type EmbeddedTestExternal struct {
 	runtime.TypeMeta `json:""`
@@ -40,6 +44,7 @@ type EmbeddedTestExternal struct {
 	EmptyObject      runtime.RawExtension `json:"emptyObject,omitempty"`
 }
 
+// ObjectTest 用切片承载任意 runtime.Object，用于测试列表语义。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ObjectTest struct {
 	runtime.TypeMeta
@@ -48,6 +53,7 @@ type ObjectTest struct {
 	Items []runtime.Object
 }
 
+// ObjectTestExternal 是 ObjectTest 的对外版本，元素改为 RawExtension。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ObjectTestExternal struct {
 	runtime.TypeMeta `yaml:",inline" json:""`
@@ -56,54 +62,66 @@ type ObjectTestExternal struct {
 	Items []runtime.RawExtension `json:"items,omitempty"`
 }
 
+// InternalSimple 是最小的内部类型，用于基础编解码测试。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type InternalSimple struct {
 	runtime.TypeMeta `json:""`
 	TestString       string `json:"testString"`
 }
 
+// ExternalSimple 与 InternalSimple 结构相同但类型不同，用于验证版本转换
+// 确实经过转换而非直接复用指针。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalSimple struct {
 	runtime.TypeMeta `json:""`
 	TestString       string `json:"testString"`
 }
 
+// ExtensionA 与 ExtensionB 用于测试扩展字段（RawExtension）在不同
+// 目标类型下的解码。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExtensionA struct {
 	runtime.TypeMeta `json:""`
 	TestString       string `json:"testString"`
 }
 
+// ExtensionB 是 ExtensionA 的对照类型。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExtensionB struct {
 	runtime.TypeMeta `json:""`
 	TestString       string `json:"testString"`
 }
 
+// ExternalExtensionType 的 Extension 字段必填，用于测试缺字段时的行为。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalExtensionType struct {
 	runtime.TypeMeta `json:""`
 	Extension        runtime.RawExtension `json:"extension"`
 }
 
+// InternalExtensionType 与 ExternalExtensionType 对应，内部用 runtime.Object。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type InternalExtensionType struct {
 	runtime.TypeMeta `json:""`
 	Extension        runtime.Object `json:"extension"`
 }
 
+// ExternalOptionalExtensionType 的扩展字段可省略，用于验证 omitempty 语义。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalOptionalExtensionType struct {
 	runtime.TypeMeta `json:""`
 	Extension        runtime.RawExtension `json:"extension,omitempty"`
 }
 
+// InternalOptionalExtensionType 与 ExternalOptionalExtensionType 对应。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type InternalOptionalExtensionType struct {
 	runtime.TypeMeta `json:""`
 	Extension        runtime.Object `json:"extension,omitempty"`
 }
 
+// InternalComplex 覆盖多种基础数值类型，且没有任何 json tag，用于验证
+// 默认字段命名与类型转换。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type InternalComplex struct {
 	runtime.TypeMeta
@@ -114,6 +132,8 @@ type InternalComplex struct {
 	Bool      bool
 }
 
+// ExternalComplex 是 InternalComplex 的对外版本，刻意使用不同的 tag
+// （含 description、omitempty 与无 tag 字段）来测试标签差异。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalComplex struct {
 	runtime.TypeMeta `json:""`
@@ -125,6 +145,9 @@ type ExternalComplex struct {
 }
 
 // Test a weird version/kind embedding format.
+//
+// 自定义的 GVK 字段名（myVersionKey/myKindKey）用于验证序列化器不依赖
+// 固定的 apiVersion/kind 字段名，而是通过 ObjectKind 接口读写。
 // +k8s:deepcopy-gen=false
 type MyWeirdCustomEmbeddedVersionKindField struct {
 	ID         string `json:"ID,omitempty"`
@@ -134,6 +157,7 @@ type MyWeirdCustomEmbeddedVersionKindField struct {
 	Y          uint64 `json:"Y,omitempty"`
 }
 
+// TestType1 覆盖全部整数宽度、map、指针与切片字段，是转换测试的主力类型。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type TestType1 struct {
 	MyWeirdCustomEmbeddedVersionKindField `json:""`
@@ -155,18 +179,23 @@ type TestType1 struct {
 	P                                     []TestType2          `json:"Q,omitempty"`
 }
 
+// TestType2 是 TestType1 的嵌套元素类型。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type TestType2 struct {
 	A string `json:"A,omitempty"`
 	B int    `json:"B,omitempty"`
 }
 
+// ExternalTestType2 是 TestType2 的对外版本，二者字段相同但类型独立，
+// 使转换器必须逐字段拷贝。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalTestType2 struct {
 	A string `json:"A,omitempty"`
 	B int    `json:"B,omitempty"`
 }
 
+// ExternalTestType1 是 TestType1 的对外版本；注意 P 字段的 JSON 名是 "Q"，
+// 这是刻意保留的历史怪癖，用于验证 tag 解析不受字段名影响。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalTestType1 struct {
 	MyWeirdCustomEmbeddedVersionKindField `json:""`
@@ -188,18 +217,22 @@ type ExternalTestType1 struct {
 	P                                     []ExternalTestType2          `json:"Q,omitempty"`
 }
 
+// ExternalInternalSame 的字段类型是内部类型 TestType2，用于验证同一个
+// 类型同时出现在内部与外部结构中时不会重复转换。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ExternalInternalSame struct {
 	MyWeirdCustomEmbeddedVersionKindField `json:""`
 	A                                     TestType2 `json:"A,omitempty"`
 }
 
+// UnversionedType 用于验证无版本对象在编解码时不做版本转换。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type UnversionedType struct {
 	MyWeirdCustomEmbeddedVersionKindField `json:""`
 	A                                     string `json:"A,omitempty"`
 }
 
+// UnknownType 模拟未注册类型，用于验证 runtime.Unknown 的降级路径。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type UnknownType struct {
 	MyWeirdCustomEmbeddedVersionKindField `json:""`
@@ -217,6 +250,7 @@ func (obj *MyWeirdCustomEmbeddedVersionKindField) GroupVersionKind() schema.Grou
 func (obj *TestType2) GetObjectKind() schema.ObjectKind         { return schema.EmptyObjectKind }
 func (obj *ExternalTestType2) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
 
+// Unstructured 是最小化的 Unstructured 实现，字段值只允许 JSON 兼容类型。
 // +k8s:deepcopy-gen=false
 type Unstructured struct {
 	// Object is a JSON compatible map with string, float, int, bool, []interface{}, or
@@ -229,6 +263,7 @@ var _ runtime.Unstructured = &Unstructured{}
 
 func (obj *Unstructured) GetObjectKind() schema.ObjectKind { return obj }
 
+// IsList 以是否存在 "items" 字段判断列表，这与真实 Unstructured 的约定一致。
 func (obj *Unstructured) IsList() bool {
 	if obj.Object != nil {
 		_, ok := obj.Object["items"]
@@ -237,6 +272,8 @@ func (obj *Unstructured) IsList() bool {
 	return false
 }
 
+// EachListItem 逐项回调；items 不是 []interface{} 时返回 nil（视为空列表），
+// 而元素不是对象时报错，避免把非对象内容静默丢弃。
 func (obj *Unstructured) EachListItem(fn func(runtime.Object) error) error {
 	if obj.Object == nil {
 		return fmt.Errorf("content is not a list")
@@ -266,6 +303,8 @@ func (obj *Unstructured) EachListItemWithAlloc(fn func(runtime.Object) error) er
 	return obj.EachListItem(fn)
 }
 
+// NewEmptyInstance 返回同 GVK 的空实例；接收者为 nil 时返回零值实例，
+// 调用方无需预先判空。
 func (obj *Unstructured) NewEmptyInstance() runtime.Unstructured {
 	out := new(Unstructured)
 	if obj != nil {
@@ -274,6 +313,8 @@ func (obj *Unstructured) NewEmptyInstance() runtime.Unstructured {
 	return out
 }
 
+// UnstructuredContent 返回内部 map 本身（非拷贝），调用方的修改会直接
+// 反映到对象上；nil map 返回空 map 以简化调用方处理。
 func (obj *Unstructured) UnstructuredContent() map[string]interface{} {
 	if obj.Object == nil {
 		return make(map[string]interface{})
@@ -301,6 +342,7 @@ func (in *Unstructured) DeepCopyObject() runtime.Object {
 	return in.DeepCopy()
 }
 
+// DeepCopy 深拷贝内部 map；nil 接收者返回 nil，保持指针语义。
 func (in *Unstructured) DeepCopy() *Unstructured {
 	if in == nil {
 		return nil
@@ -311,6 +353,8 @@ func (in *Unstructured) DeepCopy() *Unstructured {
 	return out
 }
 
+// GroupVersionKind 从 map 中的 apiVersion/kind 解析 GVK；任一字段缺失或
+// 格式非法时返回零值 GVK，而不是报错。
 func (u *Unstructured) GroupVersionKind() schema.GroupVersionKind {
 	apiVersion, ok := u.Object["apiVersion"].(string)
 	if !ok {
@@ -327,6 +371,8 @@ func (u *Unstructured) GroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{}
 }
 
+// SetGroupVersionKind 把 GVK 写回 map；必要时先初始化 map，使零值对象
+// 也可直接使用。
 func (u *Unstructured) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	if u.Object == nil {
 		u.Object = make(map[string]interface{})

@@ -27,29 +27,23 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// MaxLength verifies that the specified value is not longer than max
-// characters.
+// MaxLength 校验 value 的字符数（rune 数，而非字节数）不超过 max。
+// 采用两级快速路径避免对长字符串做昂贵的 rune 计数：
+// 字节长度不超过 max 时必然合规；字节长度 /4 的最小字符数已超过 max 时必然不合规。
 func MaxLength[T ~string](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ *T, max int) field.ErrorList {
 	if value == nil {
 		return nil
 	}
 
-	// if the length of the value in bytes is less
-	// than the maximum size then we can confidently
-	// say that this value is within the bounds
-	// enforced by the maximum value regardless
-	// of the actual makeup of characters in the value
+	// 字节长度不超过 max 时，字符数必然也不超过 max（每个字符至少占 1 字节），
+	// 无需再做 rune 计数。
 	byteLength := len(*value)
 	if byteLength <= max {
 		return nil
 	}
 
-	// because runes are up to 4 byte characters, if we assume all characters
-	// in the input are runes, the minimum number of characters that
-	// are specified is len(value)/4. If the minimum multi-byte
-	// character count is greater than our enforced maximum, we
-	// can confidently say that the value is invalid without having
-	// to actually perform the more expensive rune counting step
+	// rune 最多占 4 字节，因此实际字符数至少是 len(value)/4（向上取整）。
+	// 若这个下限已经超过 max，可以确定超长，从而跳过昂贵的 rune 计数。
 	minimum := int(math.Ceil(float64(byteLength) / 4.0))
 	if minimum > max || utf8.RuneCountInString(string(*value)) > max {
 		return field.ErrorList{field.TooLongCharacters(fldPath, *value, max).WithOrigin("maxLength")}
@@ -57,7 +51,7 @@ func MaxLength[T ~string](_ context.Context, _ operation.Operation, fldPath *fie
 	return nil
 }
 
-// MaxBytes verifies that the specified value is not longer than max bytes.
+// MaxBytes 校验 value 的字节长度不超过 max。value 为 nil 时视为未设置，直接通过。
 func MaxBytes[T ~string](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ *T, max int) field.ErrorList {
 	if value == nil {
 		return nil
@@ -70,7 +64,7 @@ func MaxBytes[T ~string](_ context.Context, _ operation.Operation, fldPath *fiel
 	return nil
 }
 
-// MaxItems verifies that the specified slice is not longer than max items.
+// MaxItems 校验切片元素个数不超过 max。nil 切片长度为 0，天然通过。
 func MaxItems[T any](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ []T, max int) field.ErrorList {
 	if len(value) > max {
 		return field.ErrorList{field.TooMany(fldPath, len(value), max).WithOrigin("maxItems")}
@@ -78,7 +72,7 @@ func MaxItems[T any](_ context.Context, _ operation.Operation, fldPath *field.Pa
 	return nil
 }
 
-// MaxProperties verifies that the specified map has no more than max keys.
+// MaxProperties 校验 map 的键数量不超过 max。nil map 视为未设置，直接通过。
 func MaxProperties[K comparable, V any](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ map[K]V, max int) field.ErrorList {
 	if value == nil {
 		return nil
@@ -90,7 +84,7 @@ func MaxProperties[K comparable, V any](_ context.Context, _ operation.Operation
 	return nil
 }
 
-// MinItems verifies that the specified slice is not shorter than min items.
+// MinItems 校验切片元素个数不少于 min。
 func MinItems[T any](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ []T, min int) field.ErrorList {
 	if len(value) < min {
 		return field.ErrorList{field.TooFew(fldPath, len(value), min).WithOrigin("minItems")}
@@ -98,7 +92,7 @@ func MinItems[T any](_ context.Context, _ operation.Operation, fldPath *field.Pa
 	return nil
 }
 
-// MinProperties verifies that the specified map is not shorter than min properties.
+// MinProperties 校验 map 的键数量不少于 min。
 func MinProperties[K comparable, V any](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ map[K]V, min int) field.ErrorList {
 	if len(value) < min {
 		return field.ErrorList{field.TooFew(fldPath, len(value), min).WithOrigin("minProperties")}
@@ -106,7 +100,7 @@ func MinProperties[K comparable, V any](_ context.Context, _ operation.Operation
 	return nil
 }
 
-// Minimum verifies that the specified value is greater than or equal to min.
+// Minimum 校验整数 value 不小于 min。value 为 nil 时视为未设置，直接通过。
 func Minimum[T constraints.Integer](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ *T, min T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -117,7 +111,7 @@ func Minimum[T constraints.Integer](_ context.Context, _ operation.Operation, fl
 	return nil
 }
 
-// Maximum verifies that the specified value is less than or equal to max.
+// Maximum 校验整数 value 不大于 max。value 为 nil 时视为未设置，直接通过。
 func Maximum[T constraints.Integer](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ *T, max T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -128,7 +122,8 @@ func Maximum[T constraints.Integer](_ context.Context, _ operation.Operation, fl
 	return nil
 }
 
-// MinLength verifies that the specified value is at least min characters, if non-nil.
+// MinLength 校验 value 的字符数（rune 数）不少于 min；value 为 nil 时直接通过。
+// 同样使用两级快速路径：先看字节长度能否直接给出结论，必要时才做 rune 计数。
 func MinLength[T ~string](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ *T, min int) field.ErrorList {
 	if value == nil {
 		return nil
@@ -136,23 +131,14 @@ func MinLength[T ~string](_ context.Context, _ operation.Operation, fldPath *fie
 
 	byteLength := len(*value)
 
-	// because runes are up to 4 byte characters, if we assume all characters
-	// in the input are 4 byte runes, the minimum number of characters that
-	// are specified is len(value)/4. If the minimum multi-byte
-	// character count is greater than or equal to our enforced minimum, we
-	// can confidently say that the value is valid without having
-	// to actually perform the more expensive rune counting step
+	// rune 最多占 4 字节，所以字符数至少是 len(value)/4（向上取整）。
+	// 若该下限已不小于 min，可以确定合规，跳过 rune 计数。
 	if int(math.Ceil(float64(byteLength)/4.0)) >= min {
 		return nil
 	}
 
-	// if the length of the value in bytes is less
-	// than the minimum size then we can confidently
-	// say that this value is not within the bounds
-	// enforced by the maximum value regardless
-	// of the actual makeup of characters in the value.
-	// Otherwise, perform a rune count to determine if the
-	// number of characters is less than the minimum.
+	// 字节长度小于 min 时字符数必然也小于 min，可直接判定过短；
+	// 否则再做 rune 计数确认字符数是否不足。
 	if byteLength < min || utf8.RuneCountInString(string(*value)) < min {
 		return field.ErrorList{field.TooShort(fldPath, *value, min).WithOrigin("minLength")}
 	}

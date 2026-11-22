@@ -28,7 +28,11 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/merge"
 )
 
-// TestNewConflictError tests that NewConflictError creates the correct StatusError for a given smd Conflicts
+// TestNewConflictError 验证 NewConflictError 能把 structured-merge-diff 的冲突
+// 转换为正确的 StatusError：
+// 单个冲突生成单条 cause 与单行消息；多个冲突按 manager 分组，
+// 且消息中的顺序与 cause 顺序可能不同（分组后按 manager 排序）。
+// 第三个用例覆盖带 subresource 的 manager 信息。
 func TestNewConflictError(t *testing.T) {
 	testCases := []struct {
 		conflict merge.Conflicts
@@ -60,6 +64,7 @@ func TestNewConflictError(t *testing.T) {
 			},
 		},
 		{
+			// 两个不同 manager 的冲突：验证分组与复数措辞（conflicts with ...）。
 			conflict: merge.Conflicts{
 				merge.Conflict{
 					Manager: `{"manager":"foo","operation":"Update","apiVersion":"v1","time":"2001-02-03T04:05:06Z"}`,
@@ -97,6 +102,7 @@ conflicts with "foo" using v1 at 2001-02-03T04:05:06Z:
 			},
 		},
 		{
+			// 带 subresource 的 manager：消息中应包含 subresource 信息。
 			conflict: merge.Conflicts{
 				merge.Conflict{
 					Manager: `{"manager":"foo","operation":"Update","subresource":"scale","apiVersion":"v1","time":"2001-02-03T04:05:06Z"}`,

@@ -37,6 +37,8 @@ func (gr *GroupResource) String() string {
 	if gr == nil {
 		return "<nil>"
 	}
+	// The core group is implicit, so only resource is printed for it. The
+	// "resource.group" shape matches how kubectl displays resources.
 	if len(gr.Group) == 0 {
 		return gr.Resource
 	}
@@ -57,6 +59,7 @@ func (gvr *GroupVersionResource) String() string {
 	if gvr == nil {
 		return "<nil>"
 	}
+	// Layout used in log messages and errors: "group/version, Resource=name".
 	return strings.Join([]string{gvr.Group, "/", gvr.Version, ", Resource=", gvr.Resource}, "")
 }
 
@@ -73,6 +76,7 @@ func (gk *GroupKind) String() string {
 	if gk == nil {
 		return "<nil>"
 	}
+	// The core group is omitted from the human-readable form.
 	if len(gk.Group) == 0 {
 		return gk.Kind
 	}
@@ -89,6 +93,8 @@ type GroupVersionKind struct {
 	Kind    string `json:"kind" protobuf:"bytes,3,opt,name=kind"`
 }
 
+// String renders the kind in "group/version, Kind=name" form, the layout used
+// in errors and logs. It is intentionally pointer-free so it works on values.
 func (gvk GroupVersionKind) String() string {
 	return gvk.Group + "/" + gvk.Version + ", Kind=" + gvk.Kind
 }
@@ -115,6 +121,7 @@ func (gv GroupVersion) String() string {
 	}
 
 	// special case of "v1" for backward compatibility
+	// Core-group v1 is written as just "v1" rather than "/v1".
 	if len(gv.Group) == 0 && gv.Version == "v1" {
 		return gv.Version
 	}
@@ -127,12 +134,16 @@ func (gv GroupVersion) String() string {
 // MarshalJSON implements the json.Marshaller interface.
 func (gv GroupVersion) MarshalJSON() ([]byte, error) {
 	s := gv.String()
+	// A GroupVersion is "group/version", so more than one slash is malformed;
+	// reject it early rather than emitting an unparseable apiVersion.
 	if strings.Count(s, "/") > 1 {
 		return []byte{}, fmt.Errorf("illegal GroupVersion %v: contains more than one /", s)
 	}
 	return json.Marshal(s)
 }
 
+// unmarshal is shared by UnmarshalJSON and UnmarshalText so both accept the
+// same "group/version" syntax, including the bare "v1" core-group form.
 func (gv *GroupVersion) unmarshal(value []byte) error {
 	var s string
 	if err := json.Unmarshal(value, &s); err != nil {

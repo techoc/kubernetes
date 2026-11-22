@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// notRegisteredErr 表示某个 GVK、Go 类型或转换目标未在 scheme 中注册。
+// 各字段按错误场景按需填写，Error() 据此选择最贴切的提示文案。
 type notRegisteredErr struct {
 	schemeName string
 	gvk        schema.GroupVersionKind
@@ -31,22 +33,27 @@ type notRegisteredErr struct {
 	t          reflect.Type
 }
 
+// NewNotRegisteredErrForKind 构造“该 GVK 未注册”的错误。
 func NewNotRegisteredErrForKind(schemeName string, gvk schema.GroupVersionKind) error {
 	return &notRegisteredErr{schemeName: schemeName, gvk: gvk}
 }
 
+// NewNotRegisteredErrForType 构造“该 Go 类型未注册”的错误。
 func NewNotRegisteredErrForType(schemeName string, t reflect.Type) error {
 	return &notRegisteredErr{schemeName: schemeName, t: t}
 }
 
+// NewNotRegisteredErrForTarget 构造“该类型无法转换为目标版本”的错误。
 func NewNotRegisteredErrForTarget(schemeName string, t reflect.Type, target GroupVersioner) error {
 	return &notRegisteredErr{schemeName: schemeName, t: t, target: target}
 }
 
+// NewNotRegisteredGVKErrForTarget 构造“该 GVK 无法转换为目标版本”的错误。
 func NewNotRegisteredGVKErrForTarget(schemeName string, gvk schema.GroupVersionKind, target GroupVersioner) error {
 	return &notRegisteredErr{schemeName: schemeName, gvk: gvk, target: target}
 }
 
+// Error 按已填充的字段组合出最具体的错误信息；判定顺序从“类型+目标”到“仅 GVK”。
 func (k *notRegisteredErr) Error() string {
 	if k.t != nil && k.target != nil {
 		return fmt.Sprintf("%v is not suitable for converting to %q in scheme %q", k.t, k.target, k.schemeName)
@@ -68,8 +75,8 @@ func (k *notRegisteredErr) Error() string {
 	return fmt.Sprintf("no kind %q is registered for version %q in scheme %q", k.gvk.Kind, k.gvk.GroupVersion(), k.schemeName)
 }
 
-// IsNotRegisteredError returns true if the error indicates the provided
-// object or input data is not registered.
+// IsNotRegisteredError 判断错误是否表示给定对象或输入数据未注册。
+// 采用类型断言而非 errors.Is，因为这是包内私有错误类型，无需链式比较。
 func IsNotRegisteredError(err error) bool {
 	if err == nil {
 		return false
@@ -78,10 +85,12 @@ func IsNotRegisteredError(err error) bool {
 	return ok
 }
 
+// missingKindErr 表示解码输入缺少 Kind 字段。
 type missingKindErr struct {
 	data string
 }
 
+// NewMissingKindErr 构造缺少 Kind 的错误，data 为原始输入片段，便于定位。
 func NewMissingKindErr(data string) error {
 	return &missingKindErr{data}
 }
@@ -90,8 +99,7 @@ func (k *missingKindErr) Error() string {
 	return fmt.Sprintf("Object 'Kind' is missing in '%s'", k.data)
 }
 
-// IsMissingKind returns true if the error indicates that the provided object
-// is missing a 'Kind' field.
+// IsMissingKind 判断错误是否表示对象缺少 'Kind' 字段。
 func IsMissingKind(err error) bool {
 	if err == nil {
 		return false
@@ -100,10 +108,12 @@ func IsMissingKind(err error) bool {
 	return ok
 }
 
+// missingVersionErr 表示解码输入缺少 apiVersion 字段。
 type missingVersionErr struct {
 	data string
 }
 
+// NewMissingVersionErr 构造缺少 apiVersion 的错误，data 为原始输入片段。
 func NewMissingVersionErr(data string) error {
 	return &missingVersionErr{data}
 }
@@ -112,8 +122,7 @@ func (k *missingVersionErr) Error() string {
 	return fmt.Sprintf("Object 'apiVersion' is missing in '%s'", k.data)
 }
 
-// IsMissingVersion returns true if the error indicates that the provided object
-// is missing a 'Version' field.
+// IsMissingVersion 判断错误是否表示对象缺少 'Version'（apiVersion）字段。
 func IsMissingVersion(err error) bool {
 	if err == nil {
 		return false
@@ -124,6 +133,7 @@ func IsMissingVersion(err error) bool {
 
 // strictDecodingError is a base error type that is returned by a strict Decoder such
 // as UniversalStrictDecoder.
+// 严格解码会收集所有未知字段、重复字段等违规项，统一包装为此类型返回。
 type strictDecodingError struct {
 	errors []error
 }
@@ -135,6 +145,7 @@ func NewStrictDecodingError(errors []error) error {
 	}
 }
 
+// Error 把所有子错误用逗号拼接，保留每一项的具体信息。
 func (e *strictDecodingError) Error() string {
 	var s strings.Builder
 	s.WriteString("strict decoding error: ")
@@ -147,12 +158,12 @@ func (e *strictDecodingError) Error() string {
 	return s.String()
 }
 
+// Errors 返回全部严格解码违规项，调用方需保持返回切片的只读约定。
 func (e *strictDecodingError) Errors() []error {
 	return e.errors
 }
 
-// IsStrictDecodingError returns true if the error indicates that the provided object
-// strictness violations.
+// IsStrictDecodingError 判断错误是否为严格解码错误（可能含多条违规）。
 func IsStrictDecodingError(err error) bool {
 	if err == nil {
 		return false
@@ -161,8 +172,8 @@ func IsStrictDecodingError(err error) bool {
 	return ok
 }
 
-// AsStrictDecodingError returns a strict decoding error
-// containing all the strictness violations.
+// AsStrictDecodingError 把错误转换为具体的严格解码错误类型，
+// 以便调用方取出并逐条检查违规项。
 func AsStrictDecodingError(err error) (*strictDecodingError, bool) {
 	if err == nil {
 		return nil, false

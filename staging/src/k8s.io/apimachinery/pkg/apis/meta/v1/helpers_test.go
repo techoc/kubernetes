@@ -28,6 +28,8 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TestLabelSelectorAsSelector 验证 API LabelSelector 到 labels.Selector 的转换，
+// 包括 nil/空选择器语义、MatchLabels 与 MatchExpressions 的组合，以及非法运算符。
 func TestLabelSelectorAsSelector(t *testing.T) {
 	matchLabels := map[string]string{"foo": "bar"}
 	matchExpressions := []LabelSelectorRequirement{{
@@ -93,6 +95,8 @@ func TestLabelSelectorAsSelector(t *testing.T) {
 	}
 }
 
+// BenchmarkLabelSelectorAsSelector 衡量典型选择器（两个标签 + 一个 Exists 表达式）
+// 的转换开销；该函数位于 list/watch 热路径上。
 func BenchmarkLabelSelectorAsSelector(b *testing.B) {
 	selector := &LabelSelector{
 		MatchLabels: map[string]string{
@@ -113,6 +117,8 @@ func BenchmarkLabelSelectorAsSelector(b *testing.B) {
 	}
 }
 
+// TestLabelSelectorAsMap 验证选择器转 map 时对无法表达的运算符返回错误，
+// 并返回已转换出的部分结果。
 func TestLabelSelectorAsMap(t *testing.T) {
 	matchLabels := map[string]string{"foo": "bar"}
 	matchExpressions := func(operator LabelSelectorOperator, values []string) []LabelSelectorRequirement {
@@ -183,6 +189,10 @@ func TestLabelSelectorAsMap(t *testing.T) {
 	}
 }
 
+// TestResetObjectMetaForStatus 验证 /status 更新只保留允许的元数据字段。
+//
+// 测试用 randfill 填满 existingMeta，再把不应被 Reset 覆盖的字段清零，
+// 最终要求两者 DeepEqual。
 func TestResetObjectMetaForStatus(t *testing.T) {
 	meta := &ObjectMeta{}
 	existingMeta := &ObjectMeta{}
@@ -196,6 +206,9 @@ func TestResetObjectMetaForStatus(t *testing.T) {
 	// set them all to their zero values.  Before you add anything to this list, consider whether or not
 	// you're enforcing immutability (those are fine) and whether /status should be able to update
 	// these values (these are usually not fine).
+	//
+	// 下面这些字段不应由 Reset 从 existingMeta 复制过来；把它们清零后若与
+	// Reset 结果不一致，就说明 Reset 越权复制了字段。
 
 	// generateName doesn't do anything after create
 	existingMeta.SetGenerateName("")
@@ -215,6 +228,8 @@ func TestResetObjectMetaForStatus(t *testing.T) {
 	}
 }
 
+// TestSetMetaDataLabel 验证 SetMetaDataLabel 在 nil map、覆盖已有 key、
+// 新增 key 三种情况下的行为。
 func TestSetMetaDataLabel(t *testing.T) {
 	tests := []struct {
 		obj   *ObjectMeta
@@ -250,6 +265,9 @@ func TestSetMetaDataLabel(t *testing.T) {
 	}
 }
 
+// TestFieldsV1MarshalJSON 覆盖 FieldsV1 的 JSON 编码：
+// 空值输出 null，CBOR 对象转码为 JSON，合法 JSON 原样输出，非法内容原样透传，
+// 而无法解码的 CBOR 则报错。
 func TestFieldsV1MarshalJSON(t *testing.T) {
 	for _, tc := range []struct {
 		Name     string
@@ -312,6 +330,8 @@ func TestFieldsV1MarshalJSON(t *testing.T) {
 	}
 }
 
+// TestFieldsV1MarshalCBOR 覆盖 FieldsV1 的 CBOR 编码：空值输出 null，
+// JSON 对象转码为 CBOR map，合法 CBOR 原样输出，非法 JSON 则报错。
 func TestFieldsV1MarshalCBOR(t *testing.T) {
 	for _, tc := range []struct {
 		Name     string
@@ -375,6 +395,8 @@ func TestFieldsV1MarshalCBOR(t *testing.T) {
 	}
 }
 
+// TestFieldsV1UnmarshalJSON 验证 JSON 解码只保存原始字节，且 json null
+// 不修改接收者（符合 json.Unmarshaler 的惯例）。
 func TestFieldsV1UnmarshalJSON(t *testing.T) {
 	for _, tc := range []struct {
 		Name  string
@@ -428,6 +450,8 @@ func TestFieldsV1UnmarshalJSON(t *testing.T) {
 	}
 }
 
+// TestFieldsV1UnmarshalCBOR 验证 CBOR 解码只保存原始字节，且 CBOR null
+// 不修改接收者。
 func TestFieldsV1UnmarshalCBOR(t *testing.T) {
 	for _, tc := range []struct {
 		Name  string

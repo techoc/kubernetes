@@ -22,12 +22,16 @@ import (
 	"testing"
 )
 
+// testItem 描述一个版本测试项：输入字符串、期望的 String() 结果，
+// 以及是否与前一项相等（用于验证排序与相等语义）。
 type testItem struct {
 	version    string
 	unparsed   string
 	equalsPrev bool
 }
 
+// testOne 校验单个版本的解析结果：
+// String() 输出正确、与前一项的比较结果符合 equalsPrev、且反向比较互为相反数。
 func testOne(v *Version, item, prev testItem) error {
 	str := v.String()
 	if item.unparsed == "" {
@@ -69,6 +73,8 @@ func testOne(v *Version, item, prev testItem) error {
 	return nil
 }
 
+// TestSemanticVersions 用 semver 2.0 规范中的全部版本字符串（严格递增排列）验证
+// ParseSemantic 的解析、排序与相等语义。
 func TestSemanticVersions(t *testing.T) {
 	tests := []testItem{
 		// This is every version string that appears in the 2.0 semver spec,
@@ -122,6 +128,8 @@ func TestSemanticVersions(t *testing.T) {
 	}
 }
 
+// TestBadSemanticVersions 验证 ParseSemantic 拒绝所有违反 semver 规范的字符串：
+// 段数/数字格式错误、前导零、非法的 pre-release/build metadata、空白与 "v" 前缀误用等。
 func TestBadSemanticVersions(t *testing.T) {
 	tests := []string{
 		// "MUST take the form X.Y.Z"
@@ -178,6 +186,8 @@ func TestBadSemanticVersions(t *testing.T) {
 	}
 }
 
+// TestGenericVersions 验证 ParseGeneric 的宽松解析：
+// 允许额外数字段与任意后缀，String() 只保留被解释的数字部分，因此多个不同输入可能得到相等版本。
 func TestGenericVersions(t *testing.T) {
 	tests := []testItem{
 		// This is all of the strings from TestSemanticVersions, plus some strings
@@ -247,6 +257,7 @@ func TestGenericVersions(t *testing.T) {
 	}
 }
 
+// TestBadGenericVersions 验证 ParseGeneric 拒绝的输入：少于两段数字、前导零、负数、空白与 "v" 前缀误用等。
 func TestBadGenericVersions(t *testing.T) {
 	tests := []string{
 		"1",
@@ -275,6 +286,7 @@ func TestBadGenericVersions(t *testing.T) {
 	}
 }
 
+// TestComponents 验证解析后 Components/Major/Minor/Patch/PreRelease/BuildMetadata 的取值。
 func TestComponents(t *testing.T) {
 
 	var tests = []struct {
@@ -347,6 +359,8 @@ func TestComponents(t *testing.T) {
 	}
 }
 
+// TestHighestSupportedVersion 验证从版本列表中挑选最高 v1.x 版本：
+// 跳过无法解析与 major > 1 的项；找不到 v1.x 或列表为空时报错。
 func TestHighestSupportedVersion(t *testing.T) {
 	testCases := []struct {
 		versions                        []string
@@ -453,6 +467,7 @@ func TestHighestSupportedVersion(t *testing.T) {
 	}
 }
 
+// TestOffsetMinor 验证 minor 偏移：正偏移相加、负偏移相减，下溢时 minor 归零，且结果不含 patch。
 func TestOffsetMinor(t *testing.T) {
 	var tests = []struct {
 		version            string
@@ -494,6 +509,7 @@ func TestOffsetMinor(t *testing.T) {
 	}
 }
 
+// TestParse 验证 Parse 优先按 semver 解析、失败后回退到通用解析的行为。
 func TestParse(t *testing.T) {
 
 	var tests = []struct {

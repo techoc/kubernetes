@@ -20,6 +20,9 @@ import (
 	"testing"
 )
 
+// TestSortDiscoveryGroupsTopo 验证 MergePreservingRelativeOrder 合并多组有序列表的规则：
+// 尽量保留各组给出的相对顺序；无先后约束的项按字典序排列；
+// 出现互相矛盾的顺序（成环）时退化为纯字典序。
 func TestSortDiscoveryGroupsTopo(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -70,6 +73,7 @@ func TestSortDiscoveryGroupsTopo(t *testing.T) {
 				{"A", "D", "E"},
 			},
 			// A, B, C have no precedence constraints, so lexical order
+			// A、B、C 之间没有先后约束，因此按字典序排列。
 			want: []string{"A", "B", "C", "D", "E"},
 		},
 		{
@@ -80,6 +84,7 @@ func TestSortDiscoveryGroupsTopo(t *testing.T) {
 				{"A", "B", "E"},
 			},
 			// A comes first (consensus), then B, C, D (lexical), then E (consensus)
+			// A 在共识中最先，B、C、D 无约束按字典序，E 在共识中最后。
 			want: []string{"A", "B", "C", "D", "E"},
 		},
 		{
@@ -91,6 +96,7 @@ func TestSortDiscoveryGroupsTopo(t *testing.T) {
 			},
 			// Creates cycle: A->B, B->C, C->A
 			// Fallback to lexicographic sort
+			// 形成环 A->B->C->A，无法满足全部约束，退化为字典序。
 			want: []string{"A", "B", "C"},
 		},
 		{
@@ -103,6 +109,7 @@ func TestSortDiscoveryGroupsTopo(t *testing.T) {
 			// A->B->C->D from first list, but B->A from second
 			// Creates cycle between A and B
 			// Fallback to lexicographic sort
+			// 第一组给出 A->B->C->D，第二组给出 B->A，A 与 B 成环，退化为字典序。
 			want: []string{"A", "B", "C", "D"},
 		},
 		{
@@ -115,6 +122,7 @@ func TestSortDiscoveryGroupsTopo(t *testing.T) {
 			// A->B from first, B->A from third (cycle)
 			// C->D is independent
 			// Fallback to lexicographic sort
+			// 第一组给出 A->B，第三组给出 B->A（成环）；C->D 独立，整体仍退化为字典序。
 			want: []string{"A", "B", "C", "D"},
 		},
 		{
@@ -126,6 +134,7 @@ func TestSortDiscoveryGroupsTopo(t *testing.T) {
 			},
 			// Creates cycle: A->B->C->A
 			// Fallback to lexicographic sort
+			// 形成环 A->B->C->A，退化为字典序。
 			want: []string{"A", "B", "C"},
 		},
 	}

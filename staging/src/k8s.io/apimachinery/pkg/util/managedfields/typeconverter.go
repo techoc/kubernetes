@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package managedfields 提供服务端 apply（SSA）所需的字段管理能力。
+//
+// 该包是 internal 实现之上的稳定门面：对外暴露 TypeConverter 与 FieldManager
+// 等入口，避免调用方直接依赖 internal 包。
 package managedfields
 
 import (
@@ -51,6 +55,9 @@ func NewTypeConverter(openapiSpec map[string]*spec.Schema, preserveUnknownFields
 
 // NewSchemeTypeConverter creates a TypeConverter that uses the provided scheme to
 // convert between runtime.Objects and TypedValues.
+//
+// 与基于 OpenAPI 的转换器不同，它直接从 Go 类型结构推导字段模型，
+// 适合内置类型；parser 决定如何处理未知字段与重复字段。
 func NewSchemeTypeConverter(scheme *runtime.Scheme, parser *typed.Parser) TypeConverter {
 	return internal.NewSchemeTypeConverter(scheme, parser)
 }

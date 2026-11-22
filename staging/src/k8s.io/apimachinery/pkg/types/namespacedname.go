@@ -25,11 +25,13 @@ package types
 // consider using NamespacedNameOrDie() in testing.go in this package.
 
 type NamespacedName struct {
+	// Namespace 是对象所在的命名空间。
 	Namespace string
 	Name      string
 }
 
 const (
+	// Separator 是 String() 中 namespace 与 name 的分隔符。
 	Separator = '/'
 )
 
@@ -39,6 +41,9 @@ func (n NamespacedName) String() string {
 }
 
 // MarshalLog emits a struct containing required key/value pair
+//
+// 实现 logr.Marshaler，使日志中输出结构化的 name/namespace，
+// 而不是退化为对整个结构体的 %+v。
 func (n NamespacedName) MarshalLog() interface{} {
 	return struct {
 		Name      string `json:"name"`

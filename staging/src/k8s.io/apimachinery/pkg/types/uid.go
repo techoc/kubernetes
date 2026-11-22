@@ -19,4 +19,7 @@ package types
 // UID is a type that holds unique ID values, including UUIDs.  Because we
 // don't ONLY use UUIDs, this is an alias to string.  Being a type captures
 // intent and helps make sure that UIDs and names do not get conflated.
+//
+// UID 不限于 UUID，因此用 string 承载；定义成独立类型可以防止与 name 等
+// 字符串字段混用。
 type UID string

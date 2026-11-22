@@ -69,6 +69,8 @@ func NewManaged(f fieldpath.ManagedFields, t map[string]*metav1.Time) ManagedInt
 // RemoveObjectManagedFields removes the ManagedFields from the object
 // before we merge so that it doesn't appear in the ManagedFields
 // recursively.
+// It panics if the object cannot provide metadata, which indicates a
+// programming error rather than bad input.
 func RemoveObjectManagedFields(obj runtime.Object) {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
@@ -101,14 +103,18 @@ func DecodeManagedFields(encodedManagedFields []metav1.ManagedFieldsEntry) (Mana
 	managed.times = make(map[string]*metav1.Time, len(encodedManagedFields))
 
 	for i, encodedVersionedSet := range encodedManagedFields {
+		// Only Apply and Update are persistable operations.
 		switch encodedVersionedSet.Operation {
 		case metav1.ManagedFieldsOperationApply, metav1.ManagedFieldsOperationUpdate:
 		default:
 			return nil, fmt.Errorf("operation must be `Apply` or `Update`")
 		}
+		// Every entry must identify the API version it was recorded against.
 		if len(encodedVersionedSet.APIVersion) < 1 {
 			return nil, fmt.Errorf("apiVersion must not be empty")
 		}
+		// FieldsV1 is the only format this implementation understands; an empty
+		// value means a malformed entry, anything else is unsupported.
 		switch encodedVersionedSet.FieldsType {
 		case "FieldsV1":
 			// Valid case.
@@ -134,6 +140,8 @@ func DecodeManagedFields(encodedManagedFields []metav1.ManagedFieldsEntry) (Mana
 func BuildManagerIdentifier(encodedManager *metav1.ManagedFieldsEntry) (manager string, err error) {
 	encodedManagerCopy := *encodedManager
 
+	// The identifier must be stable across repeated applies, so volatile fields
+	// (fields, type, time) are excluded from the key.
 	// Never include fields type in the manager identifier
 	encodedManagerCopy.FieldsType = ""
 
@@ -192,6 +200,8 @@ func encodeManagedFields(managed ManagedInterface) (encodedManagedFields []metav
 }
 
 func sortEncodedManagedFields(encodedManagedFields []metav1.ManagedFieldsEntry) (sortedManagedFields []metav1.ManagedFieldsEntry, err error) {
+	// A deterministic order keeps serialized objects stable, which in turn
+	// avoids spurious updates and goroutine-diff noise.
 	sort.Slice(encodedManagedFields, func(i, j int) bool {
 		p, q := encodedManagedFields[i], encodedManagedFields[j]
 

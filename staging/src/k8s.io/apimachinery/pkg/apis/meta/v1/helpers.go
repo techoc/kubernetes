@@ -35,12 +35,15 @@ import (
 // Note: This function should be kept in sync with the selector methods in pkg/labels/selector.go
 func LabelSelectorAsSelector(ps *LabelSelector) (labels.Selector, error) {
 	if ps == nil {
+		// nil 选择器在 API 语义中表示"不匹配任何对象"，与空选择器（匹配全部）相反。
 		return labels.Nothing(), nil
 	}
 	if len(ps.MatchLabels)+len(ps.MatchExpressions) == 0 {
+		// 显式给出的空选择器表示"匹配全部"。
 		return labels.Everything(), nil
 	}
 	requirements := make([]labels.Requirement, 0, len(ps.MatchLabels)+len(ps.MatchExpressions))
+	// MatchLabels 等价于一组 Equals 表达式。
 	for k, v := range ps.MatchLabels {
 		r, err := labels.NewRequirement(k, selection.Equals, []string{v})
 		if err != nil {
@@ -50,6 +53,7 @@ func LabelSelectorAsSelector(ps *LabelSelector) (labels.Selector, error) {
 	}
 	for _, expr := range ps.MatchExpressions {
 		var op selection.Operator
+		// API 枚举到内部运算符的映射；未知值直接报错，避免静默放宽选择条件。
 		switch expr.Operator {
 		case LabelSelectorOpIn:
 			op = selection.In
@@ -62,6 +66,7 @@ func LabelSelectorAsSelector(ps *LabelSelector) (labels.Selector, error) {
 		default:
 			return nil, fmt.Errorf("%q is not a valid label selector operator", expr.Operator)
 		}
+		// 复制 Values，防止生成的 Requirement 与调用方共享底层数组。
 		r, err := labels.NewRequirement(expr.Key, op, append([]string(nil), expr.Values...))
 		if err != nil {
 			return nil, err
@@ -89,11 +94,13 @@ func LabelSelectorAsMap(ps *LabelSelector) (map[string]string, error) {
 		switch expr.Operator {
 		case LabelSelectorOpIn:
 			if len(expr.Values) != 1 {
+				// 只能表达单值等式，多值 In 会丢失语义。
 				return selector, fmt.Errorf("operator %q without a single value cannot be converted into the old label selector format", expr.Operator)
 			}
 			// Should we do anything in case this will override a previous key-value pair?
 			selector[expr.Key] = expr.Values[0]
 		case LabelSelectorOpNotIn, LabelSelectorOpExists, LabelSelectorOpDoesNotExist:
+			// 这些运算符无法用 map 表示；返回已转换的部分以便调用方诊断。
 			return selector, fmt.Errorf("operator %q cannot be converted into the old label selector format", expr.Operator)
 		default:
 			return selector, fmt.Errorf("%q is not a valid selector operator", expr.Operator)
@@ -110,6 +117,7 @@ func ParseToLabelSelector(selector string) (*LabelSelector, error) {
 		return nil, fmt.Errorf("couldn't parse the selector string \"%s\": %v", selector, err)
 	}
 
+	// 即使没有条件也初始化 map/slice，保证序列化结果是 {} / [] 而不是 null。
 	labelSelector := &LabelSelector{
 		MatchLabels:      map[string]string{},
 		MatchExpressions: []LabelSelectorRequirement{},
@@ -118,6 +126,7 @@ func ParseToLabelSelector(selector string) (*LabelSelector, error) {
 		var op LabelSelectorOperator
 		switch req.Operator() {
 		case selection.Equals, selection.DoubleEquals:
+			// 单值等式回填到 MatchLabels，与 API 中的惯用表示一致。
 			vals := req.Values()
 			if vals.Len() != 1 {
 				return nil, fmt.Errorf("equals operator must have exactly one value")
@@ -138,6 +147,7 @@ func ParseToLabelSelector(selector string) (*LabelSelector, error) {
 			op = LabelSelectorOpDoesNotExist
 		case selection.GreaterThan, selection.LessThan:
 			// Adding a separate case for these operators to indicate that this is deliberate
+			// 字符串选择器支持数值比较，但 LabelSelector API 不支持，因此显式拒绝。
 			return nil, fmt.Errorf("%q isn't supported in label selectors", req.Operator())
 		default:
 			return nil, fmt.Errorf("%q is not a valid label selector operator", req.Operator())
@@ -154,6 +164,7 @@ func ParseToLabelSelector(selector string) (*LabelSelector, error) {
 // SetAsLabelSelector converts the labels.Set object into a LabelSelector api object.
 func SetAsLabelSelector(ls labels.Set) *LabelSelector {
 	if ls == nil {
+		// 保留 nil 与空 map 的区别：前者表示"未设置"。
 		return nil
 	}
 
@@ -168,6 +179,9 @@ func SetAsLabelSelector(ls labels.Set) *LabelSelector {
 }
 
 // FormatLabelSelector convert labelSelector into plain string
+//
+// 仅用于日志/错误信息展示：转换失败时返回 "<error>"，空选择器返回 "<none>"，
+// 避免在展示路径上再抛出错误。
 func FormatLabelSelector(labelSelector *LabelSelector) string {
 	selector, err := LabelSelectorAsSelector(labelSelector)
 	if err != nil {
@@ -181,6 +195,7 @@ func FormatLabelSelector(labelSelector *LabelSelector) string {
 	return l
 }
 
+// ExtractGroupVersions 从 APIGroupList 中收集所有 group/version 字符串。
 func ExtractGroupVersions(l *APIGroupList) []string {
 	var groupVersions []string
 	for _, g := range l.Groups {
@@ -198,6 +213,8 @@ func HasAnnotation(obj ObjectMeta, ann string) bool {
 }
 
 // SetMetaDataAnnotation sets the annotation and value
+//
+// 若 map 为 nil 则先初始化，使调用方无需关心是否已有注解。
 func SetMetaDataAnnotation(obj *ObjectMeta, ann string, value string) {
 	if obj.Annotations == nil {
 		obj.Annotations = make(map[string]string)
@@ -212,6 +229,8 @@ func HasLabel(obj ObjectMeta, label string) bool {
 }
 
 // SetMetaDataLabel sets the label and value
+//
+// 若 map 为 nil 则先初始化。
 func SetMetaDataLabel(obj *ObjectMeta, label string, value string) {
 	if obj.Labels == nil {
 		obj.Labels = make(map[string]string)
@@ -220,6 +239,9 @@ func SetMetaDataLabel(obj *ObjectMeta, label string, value string) {
 }
 
 // SingleObject returns a ListOptions for watching a single object.
+//
+// 通过 metadata.name 字段选择器把 list/watch 限定到单个对象，并带上其
+// resourceVersion 以从已知点开始 watch。
 func SingleObject(meta ObjectMeta) ListOptions {
 	return ListOptions{
 		FieldSelector:   fields.OneTermEqualSelector("metadata.name", meta.Name).String(),
@@ -236,6 +258,8 @@ func NewDeleteOptions(grace int64) *DeleteOptions {
 }
 
 // NewPreconditionDeleteOptions returns a DeleteOptions with a UID precondition set.
+//
+// UID 前置条件让删除只对特定对象生效，避免在"读取-删除"之间对象被重建后误删。
 func NewPreconditionDeleteOptions(uid string) *DeleteOptions {
 	u := types.UID(uid)
 	p := Preconditions{UID: &u}
@@ -249,12 +273,16 @@ func NewUIDPreconditions(uid string) *Preconditions {
 }
 
 // NewRVDeletionPrecondition returns a DeleteOptions with a ResourceVersion precondition set.
+//
+// 资源版本前置条件用于实现乐观并发：若对象在此期间被修改，删除会失败。
 func NewRVDeletionPrecondition(rv string) *DeleteOptions {
 	p := Preconditions{ResourceVersion: &rv}
 	return &DeleteOptions{Preconditions: &p}
 }
 
 // HasObjectMetaSystemFieldValues returns true if fields that are managed by the system on ObjectMeta have values.
+//
+// 用于判断对象是否已被持久化：创建时间与 UID 都由系统在写入时填充。
 func HasObjectMetaSystemFieldValues(meta Object) bool {
 	return !meta.GetCreationTimestamp().Time.IsZero() ||
 		len(meta.GetUID()) != 0
@@ -262,6 +290,10 @@ func HasObjectMetaSystemFieldValues(meta Object) bool {
 
 // ResetObjectMetaForStatus forces the meta fields for a status update to match the meta fields
 // for a pre-existing object. This is opt-in for new objects with Status subresource.
+//
+// 原因：/status 子资源不应能修改元数据。把元数据字段（labels、annotations、ownerRefs、
+// finalizers 等）覆盖为已有对象的值，可以防止客户端通过 status 更新绕过校验。
+// 注意 managedFields 不在此列：它需要在 status 更新中被重新计算。
 func ResetObjectMetaForStatus(meta, existingMeta Object) {
 	meta.SetDeletionTimestamp(existingMeta.GetDeletionTimestamp())
 	meta.SetGeneration(existingMeta.GetGeneration())
@@ -284,6 +316,8 @@ func (f FieldsV1) MarshalJSON() ([]byte, error) {
 		return []byte("null"), nil
 	}
 	if f.getContentType() == fieldsV1InvalidOrValidCBORObject {
+		// 存储的是 CBOR，需要转码为 JSON。先解码为通用结构再序列化，
+		// 以兼容任意合法的 map 内容。
 		var u map[string]interface{}
 		if err := cbor.Unmarshal(raw, &u); err != nil {
 			return nil, fmt.Errorf("metav1.FieldsV1 cbor invalid: %w", err)
@@ -294,6 +328,9 @@ func (f FieldsV1) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements json.Unmarshaler
+//
+// 只保存原始字节而不解析：FieldsV1 的内容通常原样透传给客户端，延迟解析可以
+// 减少开销，也允许保留未知/非法内容。
 func (f *FieldsV1) UnmarshalJSON(b []byte) error {
 	if f == nil {
 		return errors.New("metav1.FieldsV1: UnmarshalJSON on nil pointer")
@@ -307,6 +344,7 @@ func (f *FieldsV1) UnmarshalJSON(b []byte) error {
 var _ json.Marshaler = FieldsV1{}
 var _ json.Unmarshaler = &FieldsV1{}
 
+// MarshalCBOR 把 FieldsV1 编码为 CBOR；若原始字节是 JSON，则先转码。
 func (f FieldsV1) MarshalCBOR() ([]byte, error) {
 	raw := f.GetRawBytes()
 	if len(raw) == 0 {
@@ -322,8 +360,10 @@ func (f FieldsV1) MarshalCBOR() ([]byte, error) {
 	return raw, nil
 }
 
+// cborNull 是 CBOR 的 null 简单值；UnmarshalCBOR 用它识别"显式 null"。
 var cborNull = []byte{0xf6}
 
+// UnmarshalCBOR 保存原始 CBOR 字节，null 则保持零值。
 func (f *FieldsV1) UnmarshalCBOR(b []byte) error {
 	if f == nil {
 		return errors.New("metav1.FieldsV1: UnmarshalCBOR on nil pointer")
@@ -334,6 +374,7 @@ func (f *FieldsV1) UnmarshalCBOR(b []byte) error {
 	return nil
 }
 
+// FieldsV1 的内容类型判定结果。
 const (
 	// fieldsV1InvalidOrEmpty indicates that a FieldsV1 either contains no raw bytes or its raw
 	// bytes don't represent an allowable value in any supported encoding.
@@ -363,6 +404,9 @@ const (
 // CBOR-encoded value can begin with the null simple value, an initial byte with major type "map",
 // or, if a tag-enclosed map, an initial byte with major type "tag" (0xf6, 0xa0...0xbf, or
 // 0xc6...0xdb). The two sets of valid initial bytes don't intersect.
+//
+// 注意这些常量名都是 "InvalidOr..."：只看首字节无法确认整个值是否合法，只能确认
+// "可能是哪种编码"。真正的合法性在转码时由解码器判定。
 func (f FieldsV1) getContentType() int {
 	reader := f.GetRawReader()
 	if reader.Size() > 0 {

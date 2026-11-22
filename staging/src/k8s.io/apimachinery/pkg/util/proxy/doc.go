@@ -15,4 +15,7 @@ limitations under the License.
 */
 
 // Package proxy provides transport and upgrade support for proxies.
+//
+// 主要服务于 apiserver 的代理子资源（pod/service/node proxy），
+// 包括对 HTTP Upgrade（如 SPDY/WebSocket）的转发。
 package proxy

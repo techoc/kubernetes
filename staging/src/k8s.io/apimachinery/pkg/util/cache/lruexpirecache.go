@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package cache 提供带容量上限与 TTL 的并发安全缓存。
 package cache
 
 import (
@@ -22,7 +23,8 @@ import (
 	"time"
 )
 
-// Clock defines an interface for obtaining the current time
+// Clock defines an interface for obtaining the current time.
+// 中文说明：抽出时钟是为了测试能确定性地控制过期时间，而不必真实 sleep。
 type Clock interface {
 	Now() time.Time
 }
@@ -34,6 +36,10 @@ func (realClock) Now() time.Time { return time.Now() }
 
 // LRUExpireCache is a cache that ensures the mostly recently accessed keys are returned with
 // a ttl beyond which keys are forcibly expired.
+//
+// 中文说明：evictionList 以“最近使用在前”的顺序维护元素，entries 提供
+// O(1) 查找；两个结构必须在锁内同步更新。容量满时淘汰最久未使用的条目，
+// 过期条目则在 Get 时惰性删除。
 type LRUExpireCache struct {
 	// clock is used to obtain the current time
 	clock Clock
@@ -52,6 +58,8 @@ func NewLRUExpireCache(maxSize int) *LRUExpireCache {
 
 // NewLRUExpireCacheWithClock creates an expiring cache with the given size, using the specified clock to obtain the current time.
 func NewLRUExpireCacheWithClock(maxSize int, clock Clock) *LRUExpireCache {
+	// maxSize 为 0 会让 evictionList.Len() >= maxSize 恒成立却无元素可淘汰，
+	// 因此直接拒绝。
 	if maxSize <= 0 {
 		panic("maxSize must be > 0")
 	}
@@ -63,6 +71,8 @@ func NewLRUExpireCacheWithClock(maxSize int, clock Clock) *LRUExpireCache {
 	}
 }
 
+// cacheEntry 是 evictionList 中存储的实际值；key 单独保存，便于淘汰时
+// 同步删除 entries。
 type cacheEntry struct {
 	key        interface{}
 	value      interface{}
@@ -75,6 +85,8 @@ func (c *LRUExpireCache) Add(key interface{}, value interface{}, ttl time.Durati
 	defer c.lock.Unlock()
 
 	// Key already exists
+	// 中文说明：已存在的 key 只更新值、TTL 并提升优先级，不新建节点，
+	// 从而保证 entries 与链表始终一一对应。
 	oldElement, ok := c.entries[key]
 	if ok {
 		c.evictionList.MoveToFront(oldElement)
@@ -111,6 +123,7 @@ func (c *LRUExpireCache) Get(key interface{}) (interface{}, bool) {
 		return nil, false
 	}
 
+	// 过期条目在读取时惰性删除，避免后台清理 goroutine 带来的复杂度。
 	if c.clock.Now().After(element.Value.(*cacheEntry).expireTime) {
 		c.evictionList.Remove(element)
 		delete(c.entries, key)
@@ -141,6 +154,7 @@ func (c *LRUExpireCache) RemoveAll(predicate func(key any) bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	// 在遍历中删除 map 条目是安全的（Go 明确规定）。
 	for key, element := range c.entries {
 		if predicate(key) {
 			c.evictionList.Remove(element)
@@ -155,6 +169,9 @@ func (c *LRUExpireCache) RemoveAll(predicate func(key any) bool) {
 // might return "not found".
 //
 // Keys are returned ordered from least recently used to most recently used.
+//
+// 中文说明：只读遍历，不删除已过期条目（Get 会负责清理）；返回值顺序
+// 依赖链表，故从 Back 向前遍历得到“最久未用优先”的顺序。
 func (c *LRUExpireCache) Keys() []interface{} {
 	c.lock.Lock()
 	defer c.lock.Unlock()

@@ -34,7 +34,10 @@ import (
 	"k8s.io/kube-openapi/pkg/validation/spec"
 )
 
+// TestFieldManagerUpdateNoErrors 验证 UpdateNoErrors 在底层 Manager 报错时仍保持幂等：
+// managedFields 不应因一次失败的更新而变化。
 func TestFieldManagerUpdateNoErrors(t *testing.T) {
+	// fakeManager 记录底层 Manager，便于注入错误。
 	fm := &fakeManager{}
 	f := internaltesting.NewTestFieldManagerImpl(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"),
 		"",
@@ -43,6 +46,7 @@ func TestFieldManagerUpdateNoErrors(t *testing.T) {
 			return fm
 		})
 
+	// podWithLabels 构造只带 labels 的 Pod。
 	podWithLabels := func(labels ...string) runtime.Object {
 		labelMap := map[string]interface{}{}
 		for _, key := range labels {
@@ -65,12 +69,13 @@ func TestFieldManagerUpdateNoErrors(t *testing.T) {
 		t.Fatalf("expected managedFields to be set, but they are empty")
 	}
 
+	// 保存更新后的 managedFields 快照，用于比较后续失败更新是否造成变化。
 	before := []metav1.ManagedFieldsEntry{}
 	for _, m := range f.ManagedFields() {
 		before = append(before, *m.DeepCopy())
 	}
 
-	// Inject an error so UpdateNoErrors will hit the error code path.
+	// 注入错误，让 UpdateNoErrors 走错误处理路径。
 	fm.Error = errors.New("test error")
 	f.UpdateNoErrors(podWithLabels("one", "two"), "fieldmanager_test_update_1")
 
@@ -79,6 +84,8 @@ func TestFieldManagerUpdateNoErrors(t *testing.T) {
 	}
 }
 
+// fakeTypeConverter 从仓库中的 swagger.json 构建真实的 TypeConverter，
+// 使测试覆盖结构化 schema 解析；文件缺失或解析失败直接 panic。
 var fakeTypeConverter = func() internal.TypeConverter {
 	data, err := os.ReadFile(filepath.Join(
 		strings.Repeat(".."+string(filepath.Separator), 8),

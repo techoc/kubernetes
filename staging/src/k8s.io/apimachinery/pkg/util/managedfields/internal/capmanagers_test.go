@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
+// fakeManager 是可注入错误或委托目标的测试替身。
 type fakeManager struct {
 	Manager internal.Manager
 	Error   error
@@ -42,6 +43,7 @@ type fakeManager struct {
 
 var _ internal.Manager = &fakeManager{}
 
+// Update 优先返回注入的错误；否则委托给 Manager（若设置），最后退化为 no-op。
 func (f *fakeManager) Update(liveObj, newObj runtime.Object, managed internal.Managed, manager string) (runtime.Object, internal.Managed, error) {
 	if f.Error != nil {
 		return nil, nil, f.Error
@@ -52,10 +54,16 @@ func (f *fakeManager) Update(liveObj, newObj runtime.Object, managed internal.Ma
 	return newObj, managed, nil
 }
 
+// Apply 未使用，调用即 panic，确保测试不会意外走到该路径。
 func (f *fakeManager) Apply(_, _ runtime.Object, _ internal.Managed, _ string, _ bool) (runtime.Object, internal.Managed, error) {
 	panic("not implemented")
 }
 
+// TestCapManagersManagerMergesEntries 验证超过上限的旧 managedFields 条目
+// 会被合并为 "ancient-changes" 条目，从而限制条目数量增长。
+//
+// 连续 4 次 update、上限为 3，预期最旧的两个条目被合并，
+// 且每一步之后再次 update 都不应改变 managedFields（幂等）。
 func TestCapManagersManagerMergesEntries(t *testing.T) {
 	f := internaltesting.NewTestFieldManagerImpl(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"),
 		"",
@@ -122,6 +130,10 @@ func TestCapManagersManagerMergesEntries(t *testing.T) {
 	expectManagesField(t, f, "fieldmanager_test_update_4", fieldpath.MakePathOrDie("metadata", "labels", "four"))
 }
 
+// TestCapUpdateManagers 直接验证 capUpdateManagers 对 managedFields 列表的合并规则。
+//
+// 每个用例给出输入条目与期望输出，覆盖单版本/多版本、已有/没有
+// "ancient-changes" 条目的组合；同版本相邻条目会被合并，跨版本则不合并。
 func TestCapUpdateManagers(t *testing.T) {
 	f := internaltesting.NewTestFieldManagerImpl(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"),
 		"",
@@ -129,6 +141,7 @@ func TestCapUpdateManagers(t *testing.T) {
 			return internal.NewCapManagersManager(m, 3)
 		})
 
+	// set 把字段路径列表构造成 FieldsV1 JSON。
 	set := func(fields ...string) *metav1.FieldsV1 {
 		s := fieldpath.NewSet()
 		for _, f := range fields {
@@ -141,6 +154,7 @@ func TestCapUpdateManagers(t *testing.T) {
 		return metav1.NewFieldsV1(string(b))
 	}
 
+	// entry 构造一个 Update 操作的 ManagedFieldsEntry；order 用于生成递增时间戳。
 	entry := func(name string, version string, order int, fields *metav1.FieldsV1) metav1.ManagedFieldsEntry {
 		return metav1.ManagedFieldsEntry{
 			Manager:    name,
@@ -261,6 +275,8 @@ func TestCapUpdateManagers(t *testing.T) {
 }
 
 // expectIdempotence does a no-op update and ensures that managedFields doesn't change by calling capUpdateManagers.
+//
+// 合并逻辑必须是幂等的，否则每次 update 都会产生新的差异。
 func expectIdempotence(t *testing.T, f managedfieldstest.TestFieldManager) {
 	before := []metav1.ManagedFieldsEntry{}
 	for _, m := range f.ManagedFields() {
@@ -294,6 +310,7 @@ func expectManagesField(t *testing.T, f managedfieldstest.TestFieldManager, m st
 	t.Fatalf("exected to find manager name %v, but got: %#v", m, f.ManagedFields())
 }
 
+// mustMarshal 把值格式化为缩进 JSON，用于失败时打印可读的差异。
 func mustMarshal(i interface{}) string {
 	b, err := json.MarshalIndent(i, "", "  ")
 	if err != nil {

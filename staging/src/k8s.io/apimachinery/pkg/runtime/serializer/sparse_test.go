@@ -26,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// FakeV1Obj 是 v1 版本的测试对象；DeepCopyObject 直接 panic，因为这些
+// 用例只走编码/解码路径，不应触发深拷贝。
 type FakeV1Obj struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
@@ -35,6 +37,8 @@ func (*FakeV1Obj) DeepCopyObject() runtime.Object {
 	panic("not supported")
 }
 
+// FakeV2DifferentObj 与 FakeV1Obj 结构相似，但属于不同的 Go 类型，
+// 用于证明不同版本对象经过同一编码器时不会相互串味。
 type FakeV2DifferentObj struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
@@ -43,6 +47,10 @@ type FakeV2DifferentObj struct {
 func (*FakeV2DifferentObj) DeepCopyObject() runtime.Object {
 	panic("not supported")
 }
+
+// TestSparse 验证“稀疏”编码：同一个 LegacyCodec 可以编码属于不同版本的
+// 对象，且各自解码回原始类型后字段无损。TypeMeta 在比较前被清空，因为
+// 编解码会重写 apiVersion/kind，而该值不属于被测内容。
 func TestSparse(t *testing.T) {
 	v1 := schema.GroupVersion{Group: "mygroup", Version: "v1"}
 	v2 := schema.GroupVersion{Group: "mygroup", Version: "v2"}
@@ -55,6 +63,8 @@ func TestSparse(t *testing.T) {
 	srcObj1 := &FakeV1Obj{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 	srcObj2 := &FakeV2DifferentObj{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
+	// encoder/decoder 都以 v2, v1 为可接受版本；编码器按对象自身的类型工作，
+	// 这说明它并不强制把对象转换到某个固定版本。
 	encoder := codecs.LegacyCodec(v2, v1)
 	decoder := codecs.UniversalDecoder(v2, v1)
 

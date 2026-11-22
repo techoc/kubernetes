@@ -45,11 +45,13 @@ type UnstructuredConverter interface {
 	FromUnstructured(u map[string]interface{}, obj interface{}) error
 }
 
+// structField 作为字段缓存键：结构体类型 + 字段下标，足以唯一标识一个字段。
 type structField struct {
 	structType reflect.Type
 	field      int
 }
 
+// fieldInfo 缓存单个字段的 JSON 元数据，避免每次转换都重新解析 struct tag。
 type fieldInfo struct {
 	name      string
 	nameValue reflect.Value
@@ -57,8 +59,11 @@ type fieldInfo struct {
 	omitzero  func(dv reflect.Value) bool
 }
 
+// fieldsCacheMap 是字段元数据的只读快照；写入时整体替换，读路径无需加锁。
 type fieldsCacheMap map[structField]*fieldInfo
 
+// fieldsCache 采用 copy-on-write + atomic.Value：读操作无锁，写操作串行化。
+// 这种设计让热点转换路径避免了 mutex 竞争。
 type fieldsCache struct {
 	sync.Mutex
 	value atomic.Value
@@ -76,6 +81,9 @@ var (
 	fieldCache             = newFieldsCache()
 
 	// DefaultUnstructuredConverter performs unstructured to Go typed object conversions.
+	//
+	// 比较函数把 time.Time 按 UTC 归一化，因为同一时刻可能因时区不同而
+	// DeepEqual 失败。KUBE_PATCH_CONVERSION_DETECTOR 可开启测试用的双重校验。
 	DefaultUnstructuredConverter = &unstructuredConverter{
 		mismatchDetection: parseBool(os.Getenv("KUBE_PATCH_CONVERSION_DETECTOR")),
 		comparison: conversion.EqualitiesOrDie(
@@ -86,6 +94,7 @@ var (
 	}
 )
 
+// parseBool 解析环境变量开关；非法值只记录错误并按 false 处理，避免启动失败。
 func parseBool(key string) bool {
 	if len(key) == 0 {
 		return false
@@ -105,6 +114,7 @@ type unstructuredConverter struct {
 	// This is supposed to be set only in tests.
 	mismatchDetection bool
 	// comparison is the default test logic used to compare
+	// the results of reflection-based and json-based conversions.
 	comparison conversion.Equalities
 }
 
@@ -117,6 +127,9 @@ func NewTestUnstructuredConverter(comparison conversion.Equalities) Unstructured
 
 // NewTestUnstrucutredConverterWithValidation allows for access to
 // FromUnstructuredWithValidation from within tests.
+//
+// 函数名中的拼写错误是历史遗留，为保持兼容不修改；返回具体类型以便调用
+// FromUnstructuredWithValidation。
 func NewTestUnstructuredConverterWithValidation(comparison conversion.Equalities) *unstructuredConverter {
 	return &unstructuredConverter{
 		mismatchDetection: true,
@@ -155,6 +168,8 @@ type fromUnstructuredContext struct {
 // pushMatchedKeyTracker adds a placeholder set for tracking
 // matched keys for the given level. This should only be
 // called from `structFromUnstructured`.
+//
+// 每个结构体层级压入一个占位集合；未知字段检测关闭时完全跳过以省分配。
 func (c *fromUnstructuredContext) pushMatchedKeyTracker() {
 	if !c.returnUnknownFields {
 		return
@@ -171,6 +186,7 @@ func (c *fromUnstructuredContext) recordMatchedKey(key string) {
 		return
 	}
 
+	// 惰性初始化：只有真的出现字段匹配时才分配 map。
 	last := len(c.matchedKeys) - 1
 	if c.matchedKeys[last] == nil {
 		c.matchedKeys[last] = map[string]struct{}{}
@@ -194,6 +210,7 @@ func (c *fromUnstructuredContext) popAndVerifyMatchedKeys(mapValue reflect.Value
 	curMatchedKeys := c.matchedKeys[last]
 	c.matchedKeys[last] = nil
 	c.matchedKeys = c.matchedKeys[:last]
+	// 源数据中未被目标结构体消费的 key 即未知字段。
 	for _, key := range mapValue.MapKeys() {
 		if _, ok := curMatchedKeys[key.String()]; !ok {
 			c.recordUnknownField(key.String())
@@ -201,6 +218,8 @@ func (c *fromUnstructuredContext) popAndVerifyMatchedKeys(mapValue reflect.Value
 	}
 }
 
+// recordUnknownField 生成带完整路径的未知字段错误；路径通过临时压入 key 再
+// 回退得到，避免复制 parentPath。
 func (c *fromUnstructuredContext) recordUnknownField(field string) {
 	if !c.returnUnknownFields {
 		return
@@ -213,6 +232,7 @@ func (c *fromUnstructuredContext) recordUnknownField(field string) {
 	c.unknownFieldErrors = append(c.unknownFieldErrors, fmt.Errorf(`unknown field "%s"`, errPath))
 }
 
+// pushIndex 把数组下标以 "[i]" 形式追加到路径中。
 func (c *fromUnstructuredContext) pushIndex(index int) {
 	if !c.returnUnknownFields {
 		return
@@ -221,6 +241,7 @@ func (c *fromUnstructuredContext) pushIndex(index int) {
 	c.parentPath = append(c.parentPath, "[", strconv.Itoa(index), "]")
 }
 
+// pushKey 把字段名追加到路径中，非首段前加 "." 分隔。
 func (c *fromUnstructuredContext) pushKey(key string) {
 	if !c.returnUnknownFields {
 		return
@@ -248,6 +269,7 @@ func (c *unstructuredConverter) FromUnstructuredWithValidation(u map[string]inte
 	}
 	err := fromUnstructured(reflect.ValueOf(u), value.Elem(), fromUnstructuredContext)
 	if c.mismatchDetection {
+		// 测试模式：再用标准库 JSON 路径转换一次，两条路径的结果必须一致。
 		newObj := reflect.New(t.Elem()).Interface()
 		newErr := fromUnstructuredViaJSON(u, newObj)
 		if (err != nil) != (newErr != nil) {
@@ -263,6 +285,7 @@ func (c *unstructuredConverter) FromUnstructuredWithValidation(u map[string]inte
 		return err
 	}
 	if returnUnknownFields && len(fromUnstructuredContext.unknownFieldErrors) > 0 {
+		// 排序保证错误输出稳定，便于测试断言与用户阅读。
 		sort.Slice(fromUnstructuredContext.unknownFieldErrors, func(i, j int) bool {
 			return fromUnstructuredContext.unknownFieldErrors[i].Error() <
 				fromUnstructuredContext.unknownFieldErrors[j].Error()
@@ -278,6 +301,7 @@ func (c *unstructuredConverter) FromUnstructured(u map[string]interface{}, obj i
 	return c.FromUnstructuredWithValidation(u, obj, false)
 }
 
+// fromUnstructuredViaJSON 是测试对照路径：走标准库 JSON 编解码完成同样的转换。
 func fromUnstructuredViaJSON(u map[string]interface{}, obj interface{}) error {
 	data, err := json.Marshal(u)
 	if err != nil {
@@ -286,9 +310,12 @@ func fromUnstructuredViaJSON(u map[string]interface{}, obj interface{}) error {
 	return json.Unmarshal(data, obj)
 }
 
+// fromUnstructured 把源值 sv 递归转换为目标类型 dv。它刻意模仿 encoding/json
+// 的转换规则（而非 Go 的 ConvertibleTo），因为 wire 格式只允许 JSON 支持的转换。
 func fromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error {
 	sv = unwrapInterface(sv)
 	if !sv.IsValid() {
+		// 源值缺失（nil interface）时把目标置零。
 		dv.Set(reflect.Zero(dv.Type()))
 		return nil
 	}
@@ -337,6 +364,7 @@ func fromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error 
 					dv.Set(sv.Convert(dt))
 					return nil
 				}
+				// 浮点转整数仅在小数部分为 0 时允许，与 JSON 解码语义一致。
 				if sv.Float() == math.Trunc(sv.Float()) {
 					dv.Set(sv.Convert(dt))
 					return nil
@@ -347,6 +375,7 @@ func fromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error 
 	}
 
 	// Check if the object has a custom JSON marshaller/unmarshaller.
+	// 自定义转换（structured-merge-diff 的 TypeReflectEntry）优先于反射逻辑。
 	entry := value.TypeReflectEntryOf(dv.Type())
 	if entry.CanConvertFromUnstructured() {
 		return entry.FromUnstructured(sv, dv)
@@ -369,6 +398,8 @@ func fromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error 
 
 }
 
+// fieldInfoFromField 解析并缓存字段的 json tag 信息。缓存采用读无锁、
+// 写时复制的方式，避免在并发转换热点路径上争抢锁。
 func fieldInfoFromField(structType reflect.Type, field int) *fieldInfo {
 	fieldCacheMap := fieldCache.value.Load().(fieldsCacheMap)
 	if info, ok := fieldCacheMap[structField{structType, field}]; ok {
@@ -389,6 +420,7 @@ func fieldInfoFromField(structType reflect.Type, field int) *fieldInfo {
 		info.name = items[0]
 		if isInlinedFromTag(typeField, items[0], items[1:]) {
 			// match stdlib behavior when controlled by tag
+			// 空名 + 内联选项表示该字段的键应展开到父对象。
 			info.name = ""
 		} else if len(info.name) == 0 && !typeField.Anonymous {
 			// match stdlib behavior for naming fields that don't specify a json tag name
@@ -406,6 +438,7 @@ func fieldInfoFromField(structType reflect.Type, field int) *fieldInfo {
 	}
 	info.nameValue = reflect.ValueOf(info.name)
 
+	// 写路径加锁并基于最新快照复制，保证已发布的 map 不会被并发修改。
 	fieldCache.Lock()
 	defer fieldCache.Unlock()
 	fieldCacheMap = fieldCache.value.Load().(fieldsCacheMap)
@@ -418,6 +451,7 @@ func fieldInfoFromField(structType reflect.Type, field int) *fieldInfo {
 	return info
 }
 
+// unwrapInterface 剥掉所有 interface 包装，得到具体的动态值。
 func unwrapInterface(v reflect.Value) reflect.Value {
 	for v.Kind() == reflect.Interface {
 		v = v.Elem()
@@ -425,6 +459,8 @@ func unwrapInterface(v reflect.Value) reflect.Value {
 	return v
 }
 
+// mapFromUnstructured 把 map 源值复制到目标 map；键需可赋值或可转换，
+// 值为 nil interface 时写入零值。
 func mapFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error {
 	st, dt := sv.Type(), dv.Type()
 	if st.Kind() != reflect.Map {
@@ -436,6 +472,7 @@ func mapFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) err
 	}
 
 	if sv.IsNil() {
+		// nil map 与空 map 语义不同，必须保留 nil。
 		dv.Set(reflect.Zero(dt))
 		return nil
 	}
@@ -447,6 +484,7 @@ func mapFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) err
 				return err
 			}
 		} else {
+			// 源值为 nil interface 时，目标元素置零。
 			value.Set(reflect.Zero(dt.Elem()))
 		}
 		if st.Key().AssignableTo(dt.Key()) {
@@ -458,12 +496,15 @@ func mapFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) err
 	return nil
 }
 
+// sliceFromUnstructured 处理切片转换，并兼容 wire 上 []byte 被表示为 string
+// 的特殊情况。
 func sliceFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error {
 	st, dt := sv.Type(), dv.Type()
 	if st.Kind() == reflect.String && dt.Elem().Kind() == reflect.Uint8 {
 		// We store original []byte representation as string.
 		// This conversion is allowed, but we need to be careful about
 		// marshaling data appropriately.
+		// []byte 在 JSON 中是 base64 字符串，先 Marshal 再 Unmarshal 才能正确还原。
 		if len(sv.Interface().(string)) > 0 {
 			marshalled, err := json.Marshal(sv.Interface())
 			if err != nil {
@@ -489,10 +530,12 @@ func sliceFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) e
 		dv.Set(reflect.Zero(dt))
 		return nil
 	}
+	// 预分配与源相同容量，避免逐元素扩容。
 	dv.Set(reflect.MakeSlice(dt, sv.Len(), sv.Cap()))
 
 	pathLen := len(ctx.parentPath)
 	defer func() {
+		// 无论成功失败都恢复路径，保证错误路径不会污染后续兄弟节点。
 		ctx.parentPath = ctx.parentPath[:pathLen]
 	}()
 	for i := 0; i < sv.Len(); i++ {
@@ -505,6 +548,8 @@ func sliceFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) e
 	return nil
 }
 
+// pointerFromUnstructured 为指针目标分配新值后递归转换；源为 nil 指针时
+// 目标也置 nil。
 func pointerFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error {
 	st, dt := sv.Type(), dv.Type()
 
@@ -521,6 +566,8 @@ func pointerFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext)
 	}
 }
 
+// structFromUnstructured 按字段名匹配源 map。内联字段（json tag 名为空）
+// 复用同一层的匹配集合；非内联字段则各层独立记录，用于未知字段检测。
 func structFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) error {
 	st, dt := sv.Type(), dv.Type()
 	if st.Kind() != reflect.Map {
@@ -543,6 +590,7 @@ func structFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) 
 		if len(fieldInfo.name) == 0 {
 			// This field is inlined, recurse into fromUnstructured again
 			// with the same set of matched keys.
+			// 内联字段的键直接属于当前层，因此沿用同一匹配集合。
 			ctx.isInlined = true
 			if err := fromUnstructured(sv, fv, ctx); err != nil {
 				return err
@@ -565,6 +613,7 @@ func structFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) 
 				ctx.parentPath = ctx.parentPath[:pathLen]
 				ctx.isInlined = svInlined
 			} else {
+				// 源数据缺少该字段时显式置零，避免复用对象时残留旧值。
 				fv.Set(reflect.Zero(fv.Type()))
 			}
 		}
@@ -575,6 +624,7 @@ func structFromUnstructured(sv, dv reflect.Value, ctx *fromUnstructuredContext) 
 	return nil
 }
 
+// interfaceFromUnstructured 直接把源值赋给 interface{} 目标。
 func interfaceFromUnstructured(sv, dv reflect.Value) error {
 	// TODO: Is this conversion safe?
 	dv.Set(sv)
@@ -583,6 +633,8 @@ func interfaceFromUnstructured(sv, dv reflect.Value) error {
 
 // ToUnstructured converts an object into map[string]interface{} representation.
 // It uses encoding/json/Marshaler if object implements it or reflection if not.
+//
+// 已是 Unstructured 的对象直接复用其内容（不做拷贝）；其余对象走反射转换。
 func (c *unstructuredConverter) ToUnstructured(obj interface{}) (map[string]interface{}, error) {
 	var u map[string]interface{}
 	var err error
@@ -598,6 +650,7 @@ func (c *unstructuredConverter) ToUnstructured(obj interface{}) (map[string]inte
 		err = toUnstructured(value.Elem(), reflect.ValueOf(&u).Elem())
 	}
 	if c.mismatchDetection {
+		// 测试模式：与标准库 JSON 路径交叉验证。
 		newUnstr := map[string]interface{}{}
 		newErr := toUnstructuredViaJSON(obj, &newUnstr)
 		if (err != nil) != (newErr != nil) {
@@ -625,6 +678,9 @@ func DeepCopyJSON(x map[string]interface{}) map[string]interface{} {
 // DeepCopyJSONValue deep copies the passed value, assuming it is a valid JSON representation i.e. only contains
 // types produced by json.Unmarshal() and also int64.
 // bool, int64, float64, string, []interface{}, map[string]interface{}, json.Number and nil
+//
+// 只复制 JSON 可表达的类型；遇到其他类型直接 panic，因为那说明调用方
+// 传入了非法的 unstructured 内容。
 func DeepCopyJSONValue(x interface{}) interface{} {
 	switch x := x.(type) {
 	case map[string]interface{}:
@@ -648,12 +704,14 @@ func DeepCopyJSONValue(x interface{}) interface{} {
 		}
 		return clone
 	case string, int64, bool, float64, nil, encodingjson.Number:
+		// 标量不可变，直接返回。
 		return x
 	default:
 		panic(fmt.Errorf("cannot deep copy %T", x))
 	}
 }
 
+// toUnstructuredViaJSON 是测试对照路径：走标准库 JSON 编解码完成转换。
 func toUnstructuredViaJSON(obj interface{}, u *map[string]interface{}) error {
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -662,8 +720,10 @@ func toUnstructuredViaJSON(obj interface{}, u *map[string]interface{}) error {
 	return json.Unmarshal(data, u)
 }
 
+// toUnstructured 把 Go 值递归转换为 JSON 兼容的 interface{} 值。
 func toUnstructured(sv, dv reflect.Value) error {
 	// Check if the object has a custom string converter.
+	// 自定义转换优先于反射，保证特殊类型（如 resource.Quantity）的语义。
 	entry := value.TypeReflectEntryOf(sv.Type())
 	if entry.CanConvertToUnstructured() {
 		v, err := entry.ToUnstructured(sv)
@@ -684,6 +744,7 @@ func toUnstructured(sv, dv reflect.Value) error {
 		dv.Set(reflect.ValueOf(sv.Bool()))
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		// 所有有符号整数统一提升为 int64，这是 unstructured 的约定。
 		dv.Set(reflect.ValueOf(sv.Int()))
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -711,6 +772,7 @@ func toUnstructured(sv, dv reflect.Value) error {
 	}
 }
 
+// mapToUnstructured 转换 map；当目标是空接口时自动选择 map[string]interface{}。
 func mapToUnstructured(sv, dv reflect.Value) error {
 	st, dt := sv.Type(), dv.Type()
 	if sv.IsNil() {
@@ -746,6 +808,7 @@ func mapToUnstructured(sv, dv reflect.Value) error {
 	return nil
 }
 
+// sliceToUnstructured 转换切片；[]byte 按 JSON 约定编码为 base64 字符串。
 func sliceToUnstructured(sv, dv reflect.Value) error {
 	st, dt := sv.Type(), dv.Type()
 	if sv.IsNil() {
@@ -753,6 +816,7 @@ func sliceToUnstructured(sv, dv reflect.Value) error {
 		return nil
 	}
 	if st.Elem().Kind() == reflect.Uint8 {
+		// []byte 在 JSON 中不是数组，而是 base64 字符串；先经 json 转换。
 		dv.Set(reflect.New(stringType))
 		data, err := json.Marshal(sv.Bytes())
 		if err != nil {
@@ -781,6 +845,7 @@ func sliceToUnstructured(sv, dv reflect.Value) error {
 	return nil
 }
 
+// pointerToUnstructured 解引用指针；nil 指针不写入任何键，保持“未设置”语义。
 func pointerToUnstructured(sv, dv reflect.Value) error {
 	if sv.IsNil() {
 		// We're done - we don't need to store anything.
@@ -789,6 +854,7 @@ func pointerToUnstructured(sv, dv reflect.Value) error {
 	return toUnstructured(sv.Elem(), dv)
 }
 
+// isEmpty 实现 encoding/json 的 omitempty 语义。
 func isEmpty(v reflect.Value) bool {
 	switch v.Kind() {
 	case reflect.Array, reflect.String:
@@ -803,6 +869,7 @@ func isEmpty(v reflect.Value) bool {
 		return v.Float() == 0
 	case reflect.Map, reflect.Slice:
 		// TODO: It seems that 0-len maps are ignored in it.
+		// 与 encoding/json 一致：nil 或长度为 0 都算空。
 		return v.IsNil() || v.Len() == 0
 	case reflect.Pointer, reflect.Interface:
 		return v.IsNil()
@@ -810,6 +877,8 @@ func isEmpty(v reflect.Value) bool {
 	return false
 }
 
+// structToUnstructured 按 json tag 把结构体字段写入目标 map，规则与
+// encoding/json 对齐：忽略 "-"、omitempty、omitzero，并展开内联字段。
 func structToUnstructured(sv, dv reflect.Value) error {
 	st, dt := sv.Type(), dv.Type()
 	if dt.Kind() == reflect.Interface && dv.NumMethod() == 0 {
@@ -840,11 +909,13 @@ func structToUnstructured(sv, dv reflect.Value) error {
 		}
 		if len(fieldInfo.name) == 0 {
 			// This field is inlined.
+			// 内联字段的键直接写入当前 map。
 			if err := toUnstructured(fv, dv); err != nil {
 				return err
 			}
 			continue
 		}
+		// 基本类型走快速路径，避免反射递归；其他类型递归处理。
 		switch fv.Type().Kind() {
 		case reflect.String:
 			realMap[fieldInfo.name] = fv.String()
@@ -871,6 +942,7 @@ func structToUnstructured(sv, dv reflect.Value) error {
 	return nil
 }
 
+// interfaceToUnstructured 解包 interface 后递归转换；nil 接口置零。
 func interfaceToUnstructured(sv, dv reflect.Value) error {
 	if !sv.IsValid() || sv.IsNil() {
 		dv.Set(reflect.Zero(dv.Type()))
@@ -879,6 +951,8 @@ func interfaceToUnstructured(sv, dv reflect.Value) error {
 	return toUnstructured(sv.Elem(), dv)
 }
 
+// uintToUnstructuredHelper 把无符号整数提升为 int64；超出范围时报错而不是
+// 静默截断，因为 unstructured 数值统一用 int64 表示。
 func uintToUnstructuredHelper(uVal uint64) (int64, error) {
 	if uVal > math.MaxInt64 {
 		return 0, fmt.Errorf("unsigned value %d does not fit into int64 (overflow)", uVal)

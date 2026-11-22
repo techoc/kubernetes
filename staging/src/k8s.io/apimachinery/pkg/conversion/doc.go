@@ -21,4 +21,8 @@ limitations under the License.
 // but for the fields which did not change, copying is automated. This makes it
 // easy to modify the structures you use in memory without affecting the format
 // you store on disk or respond to in your external API calls.
+//
+// Package conversion 提供 Go 对象的版本化支持：同一对象可以定义多个版本，
+// 开发者只需编写有差异字段的转换函数，其余字段由自动复制完成。这样可以在
+// 内存中自由演进结构，而不影响磁盘格式或对外 API 响应。
 package conversion

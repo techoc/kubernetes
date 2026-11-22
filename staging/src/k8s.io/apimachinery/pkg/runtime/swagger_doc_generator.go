@@ -32,6 +32,8 @@ import (
 )
 
 // Pair of strings. We keed the name of fields and the doc
+//
+// Pair 保存“字段名（或类型名）+ 文档文本”的组合。
 type Pair struct {
 	Name, Doc string
 }
@@ -39,6 +41,8 @@ type Pair struct {
 // KubeTypes is an array to represent all available types in a parsed file. [0] is for the type itself
 type KubeTypes []Pair
 
+// astFrom 解析单个 Go 源文件并构造 doc.Package；解析失败时打印错误并返回 nil，
+// 调用方需容忍 nil（生成器随后会 panic 或产出空结果）。
 func astFrom(filePath string) *doc.Package {
 	fset := token.NewFileSet()
 	m := make(map[string]*ast.File)
@@ -55,6 +59,9 @@ func astFrom(filePath string) *doc.Package {
 	return doc.New(apkg, "", 0)
 }
 
+// fmtRawDoc 把 godoc 文本压平成可嵌入 Go 字符串字面量的单行文本：
+// 丢弃 "---" 之后的内容、单行 TODO 与生成器指令，保留段落与代码块缩进，
+// 最后转义引号/换行/制表符。
 func fmtRawDoc(rawDoc string) string {
 	var buffer bytes.Buffer
 	delPrevChar := func() {
@@ -64,6 +71,7 @@ func fmtRawDoc(rawDoc string) string {
 	}
 
 	// Ignore all lines after ---
+	// "---" 之后通常是示例或补充说明，不属于 swagger 描述。
 	rawDoc = strings.Split(rawDoc, "---")[0]
 
 	for _, line := range strings.Split(rawDoc, "\n") {
@@ -76,6 +84,7 @@ func fmtRawDoc(rawDoc string) string {
 		case strings.HasPrefix(leading, "TODO"): // Ignore one line TODOs
 		case strings.HasPrefix(leading, "+"): // Ignore instructions to the generators
 		default:
+			// 缩进行视为代码块，前后补换行以保留排版。
 			if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
 				delPrevChar()
 				line = "\n" + line + "\n" // Replace it with newline. This is useful when we have a line with: "Example:\n\tJSON-someting..."
@@ -97,6 +106,9 @@ func fmtRawDoc(rawDoc string) string {
 
 // fieldName returns the name of the field as it should appear in JSON format
 // "-" indicates that this field is not part of the JSON representation
+//
+// 与 encoding/json 的命名规则保持一致：显式 tag 优先；无 tag 时用字段名；
+// 匿名内嵌字段声明了 json tag 且 tag 名为空时返回 "-"（该字段整体不展开）。
 func fieldName(field *ast.Field) (string, error) {
 	jsonTag := ""
 	if field.Tag != nil {
@@ -117,17 +129,21 @@ func fieldName(field *ast.Field) (string, error) {
 		if field.Names != nil {
 			return field.Names[0].Name, nil
 		}
+		// 匿名字段无 tag：用类型名作为键。
 		return field.Type.(*ast.Ident).Name, nil
 	}
 	return jsonTag, nil
 }
 
 // A buffer of lines that will be written.
+//
+// bufferedLine 保存一行文本及其缩进层级，统一在 flush 时展开为制表符。
 type bufferedLine struct {
 	line        string
 	indentation int
 }
 
+// buffer 按顺序收集待输出行，最后一次性写入 io.Writer。
 type buffer struct {
 	lines []bufferedLine
 }
@@ -142,6 +158,7 @@ func (b *buffer) addLine(line string, indent int) {
 	b.lines = append(b.lines, bufferedLine{line, indent})
 }
 
+// flushLines 把缓冲的行按缩进展开后写入 w。
 func (b *buffer) flushLines(w io.Writer) error {
 	for _, line := range b.lines {
 		indentation := strings.Repeat("\t", line.indentation)
@@ -153,11 +170,13 @@ func (b *buffer) flushLines(w io.Writer) error {
 	return nil
 }
 
+// writeFuncHeader 开始一个 map 变量声明，后续 writeMapBody 填充条目。
 func writeFuncHeader(b *buffer, structName string, indent int) {
 	s := fmt.Sprintf("var map_%s = map[string]string {\n", structName)
 	b.addLine(s, indent)
 }
 
+// writeFuncFooter 结束 map 声明并生成 SwaggerDoc() 方法。
 func writeFuncFooter(b *buffer, structName string, indent int) {
 	b.addLine("}\n", indent) // Closes the map definition
 
@@ -168,6 +187,7 @@ func writeFuncFooter(b *buffer, structName string, indent int) {
 	b.addLine("}\n", indent) // Closes the function definition
 }
 
+// writeMapBody 为每个字段生成一行 `"name": "doc",` 条目。
 func writeMapBody(b *buffer, kubeType []Pair, indent int) {
 	format := "\"%s\": \"%s\",\n"
 	for _, pair := range kubeType {
@@ -180,6 +200,9 @@ func writeMapBody(b *buffer, kubeType []Pair, indent int) {
 // array. Each type is again represented as an array (we have to use arrays as we
 // need to be sure for the order of the fields). This function returns fields and
 // struct definitions that have no documentation as {name, ""}.
+//
+// 用数组而非 map 保存字段，确保生成顺序与源码一致；无文档的字段仍保留，
+// 由 VerifySwaggerDocsExist 负责报告缺失。
 func ParseDocumentationFrom(src string) ([]KubeTypes, error) {
 	var docForTypes []KubeTypes
 	var errs []error
@@ -214,6 +237,7 @@ func WriteSwaggerDocFunc(kubeTypes []KubeTypes, w io.Writer) error {
 		kubeType[0].Name = ""
 
 		// Ignore empty documentation
+		// 只保留有文档的字段，避免生成大量空字符串条目。
 		docfulTypes := make(KubeTypes, 0, len(kubeType))
 		for _, pair := range kubeType {
 			if pair.Doc != "" {
@@ -243,6 +267,8 @@ func WriteSwaggerDocFunc(kubeTypes []KubeTypes, w io.Writer) error {
 
 // VerifySwaggerDocsExist writes in a io.Writer a list of structs and fields that
 // are missing of documentation.
+//
+// 返回缺失文档的数量；调用方据此决定是否让 verify 失败。
 func VerifySwaggerDocsExist(kubeTypes []KubeTypes, w io.Writer) (int, error) {
 	missingDocs := 0
 	buffer := newBuffer()

@@ -25,6 +25,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestMakeFuncs 验证各构造器产生的 ErrorType 正确。
 func TestMakeFuncs(t *testing.T) {
 	testCases := []struct {
 		fn       func() *Error
@@ -64,6 +65,8 @@ func TestMakeFuncs(t *testing.T) {
 	}
 }
 
+// TestToAggregate 验证 ErrorList.ToAggregate 的语义：空列表返回 nil，
+// 单个错误直接包装，多个错误聚合。
 func TestToAggregate(t *testing.T) {
 	testCases := struct {
 		ErrList         []ErrorList
@@ -109,6 +112,8 @@ func TestToAggregate(t *testing.T) {
 	}
 }
 
+// TestErrListFilter 验证 Filter 会移除匹配类型的错误：过滤掉 Duplicate
+// 后应剩 2 条 Invalid，过滤掉 Invalid 后应剩 1 条 Duplicate。
 func TestErrListFilter(t *testing.T) {
 	list := ErrorList{
 		Invalid(NewPath("test.field"), "", ""),
@@ -123,6 +128,7 @@ func TestErrListFilter(t *testing.T) {
 	}
 }
 
+// TestErrorOrigin 验证 WithOrigin 是原地修改：返回值和原对象都带 origin。
 func TestErrorOrigin(t *testing.T) {
 	err := Invalid(NewPath("field"), "value", "detail")
 
@@ -136,6 +142,8 @@ func TestErrorOrigin(t *testing.T) {
 	}
 }
 
+// TestErrorListOrigin 验证 ErrorList.WithOrigin 对列表中每条错误生效，
+// 并且同样会修改原列表（共享底层 Error 指针）。
 func TestErrorListOrigin(t *testing.T) {
 	// Create an ErrorList with multiple errors
 	list := ErrorList{
@@ -161,6 +169,7 @@ func TestErrorListOrigin(t *testing.T) {
 	}
 }
 
+// TestErrorMarkDeclarative 验证单个 Error 的声明式覆盖标记。
 func TestErrorMarkDeclarative(t *testing.T) {
 	// Test for single Error
 	err := Invalid(NewPath("field"), "value", "detail")
@@ -175,6 +184,7 @@ func TestErrorMarkDeclarative(t *testing.T) {
 	}
 }
 
+// TestErrorListMarkDeclarative 验证 ErrorList 批量标记声明式覆盖。
 func TestErrorListMarkDeclarative(t *testing.T) {
 	// Test for ErrorList
 	list := ErrorList{
@@ -200,6 +210,7 @@ func TestErrorListMarkDeclarative(t *testing.T) {
 	}
 }
 
+// TestErrorMarkFromImperative 验证单个 Error 的命令式来源标记。
 func TestErrorMarkFromImperative(t *testing.T) {
 	// Test for single Error
 	err := Invalid(NewPath("field"), "value", "detail")
@@ -214,6 +225,7 @@ func TestErrorMarkFromImperative(t *testing.T) {
 	}
 }
 
+// TestErrorListMarkFromImperative 验证 ErrorList 批量标记命令式来源。
 func TestErrorListMarkFromImperative(t *testing.T) {
 	// Test for ErrorList
 	list := ErrorList{
@@ -239,6 +251,8 @@ func TestErrorListMarkFromImperative(t *testing.T) {
 	}
 }
 
+// TestErrorListExtractCoveredByDeclarative 验证提取“仅被声明式覆盖”的错误子集：
+// 未被标记的错误不出现在结果中。
 func TestErrorListExtractCoveredByDeclarative(t *testing.T) {
 	testCases := []struct {
 		list         ErrorList
@@ -266,6 +280,8 @@ func TestErrorListExtractCoveredByDeclarative(t *testing.T) {
 	}
 }
 
+// TestErrorListRemoveCoveredByDeclarative 验证移除已被声明式覆盖的错误，
+// 保留其余错误。
 func TestErrorListRemoveCoveredByDeclarative(t *testing.T) {
 	testCases := []struct {
 		list         ErrorList
@@ -289,6 +305,9 @@ func TestErrorListRemoveCoveredByDeclarative(t *testing.T) {
 	}
 }
 
+// TestErrorFormatting 用表驱动方式锁定 Error.Error() 的输出格式：
+// 字段路径、错误类型文案、坏值渲染与 detail 的拼接顺序都必须稳定，
+// 因为下游工具可能依赖这些字符串。
 func TestErrorFormatting(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -692,8 +711,10 @@ func TestErrorFormatting(t *testing.T) {
 	}
 }
 
+// StringType 是字符串的别名，用于验证坏值渲染不会因命名类型而加引号。
 type StringType string
 
+// TinyStruct 用于验证结构体坏值被序列化为紧凑 JSON。
 type TinyStruct struct {
 	StringField string `json:"stringField"`
 	IntField    int    `json:"intField"`
@@ -708,6 +729,8 @@ func mkTinyStruct() TinyStruct {
 	}
 }
 
+// SelfMarshalerStringer 的 MarshalJSON 总是失败，但实现了 String()，
+// 因此坏值渲染应回退到 String()。
 type SelfMarshalerStringer struct{ S string }
 
 func (SelfMarshalerStringer) MarshalJSON() ([]byte, error) {
@@ -718,6 +741,8 @@ func (SelfMarshalerStringer) String() string {
 	return "magic"
 }
 
+// SelfMarshalerNonStringer 的 MarshalJSON 失败且没有 String()，
+// 坏值渲染应回退到 %#v。
 type SelfMarshalerNonStringer struct{ S string }
 
 func (SelfMarshalerNonStringer) MarshalJSON() ([]byte, error) {

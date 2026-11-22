@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// The tests in this package focus on the correctness of its implementation of
-// runtime.Serializer. The specific behavior of marshaling Go values to CBOR bytes and back is
-// tested in the ./internal/modes package, which is used both by the Serializer implementation and
-// the package-scoped Marshal/Unmarshal functions in the ./direct package.
+// 本包测试聚焦 runtime.Serializer 实现的正确性。Go 值与 CBOR 字节之间编解码的具体行为
+// 由 ./internal/modes 包测试——该包同时被本 Serializer 与 ./direct 包中的
+// Marshal/Unmarshal 函数使用。
+
 package cbor
 
 import (
@@ -38,6 +38,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestRecognizesData 验证 CBOR 识别只依赖 self-described tag 前缀 0xd9d9f7：
+// 前缀不完整或不匹配时返回 false，且 unknown 始终为 false（不猜测其它格式）。
 func TestRecognizesData(t *testing.T) {
 	for _, tc := range []struct {
 		in         []byte
@@ -92,36 +94,44 @@ func TestRecognizesData(t *testing.T) {
 	}
 }
 
+// stubWriter 返回预设的写入结果，用于模拟底层 writer 的短写/错误。
 type stubWriter struct {
 	n   int
 	err error
 }
 
+// Write 忽略输入，返回预设的字节数与错误。
 func (w stubWriter) Write([]byte) (int, error) {
 	return w.n, w.err
 }
 
-// anyObject wraps arbitrary concrete values to be encoded or decoded.
+// anyObject 包装任意具体值，使其可以被编码或解码（测试 CBOR 编组器本身）。
 type anyObject struct {
 	Value interface{}
 }
 
+// GetObjectKind 返回空 ObjectKind，满足 runtime.Object 接口。
 func (p anyObject) GetObjectKind() schema.ObjectKind {
 	return schema.EmptyObjectKind
 }
 
+// DeepCopyObject 不实现，仅在测试中用作占位。
 func (anyObject) DeepCopyObject() runtime.Object {
 	panic("unimplemented")
 }
 
+// MarshalCBOR 用确定性编码模式编组内部值。
 func (p anyObject) MarshalCBOR() ([]byte, error) {
 	return modes.Encode.Marshal(p.Value)
 }
 
+// UnmarshalCBOR 用解码模式把字节解码进内部值。
 func (p *anyObject) UnmarshalCBOR(in []byte) error {
 	return modes.Decode.Unmarshal(in, &p.Value)
 }
 
+// structWithRawFields 覆盖四种“原始字节”字段形态（值/指针 × FieldsV1/RawExtension），
+// 用于验证 transcode 选项是否能把它们转成 JSON。
 type structWithRawFields struct {
 	FieldsV1            metav1.FieldsV1       `json:"f"`
 	FieldsV1Pointer     *metav1.FieldsV1      `json:"fp"`
@@ -129,23 +139,29 @@ type structWithRawFields struct {
 	RawExtensionPointer *runtime.RawExtension `json:"rp"`
 }
 
+// GetObjectKind 返回空 ObjectKind。
 func (structWithRawFields) GetObjectKind() schema.ObjectKind {
 	return schema.EmptyObjectKind
 }
 
+// DeepCopyObject 不实现，仅在测试中用作占位。
 func (structWithRawFields) DeepCopyObject() runtime.Object {
 	panic("unimplemented")
 }
 
+// structWithEmbeddedMetas 模拟真实 API 对象：内嵌 TypeMeta 与 ObjectMeta。
 type structWithEmbeddedMetas struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 }
 
+// DeepCopyObject 不实现，仅在测试中用作占位。
 func (structWithEmbeddedMetas) DeepCopyObject() runtime.Object {
 	panic("unimplemented")
 }
 
+// TestEncode 验证 Encode 的输出前缀、流式列表编码、TextMarshaler 处理，
+// 以及底层 writer 出错时的错误传播。每个用例自带 writer 与错误断言。
 func TestEncode(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
@@ -255,6 +271,8 @@ func TestEncode(t *testing.T) {
 	}
 }
 
+// TestDecode 是解码路径的主测试：覆盖 GVK 推断、strict/transcode 选项、
+// 预分配对象、不支持的 typer/creater，以及完整列表解码等场景。
 func TestDecode(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
@@ -356,12 +374,9 @@ func TestDecode(t *testing.T) {
 			expectedObj: &structWithRawFields{
 				FieldsV1:        *metav1.NewFieldsV1(string([]byte{0xa1, 0x41, 'a', 0x01})),
 				FieldsV1Pointer: metav1.NewFieldsV1(string([]byte{0xa1, 0x41, 'z', 0x02})),
-				// RawExtension's UnmarshalCBOR ensures the self-described CBOR tag
-				// is present in the result so that there is never any ambiguity in
-				// distinguishing CBOR from JSON or Protobuf. It is unnecessary for
-				// FieldsV1 to do the same because the initial byte is always
-				// sufficient to distinguish a valid JSON-encoded FieldsV1 from a
-				// valid CBOR-encoded FieldsV1.
+				// RawExtension 的 UnmarshalCBOR 会保证结果中存在 self-described CBOR tag，
+				// 从而在区分 CBOR 与 JSON/Protobuf 时永不产生歧义。FieldsV1 不需要同样处理：
+				// 首字节已足以区分合法的 JSON 编码与合法的 CBOR 编码。
 				RawExtension:        runtime.RawExtension{Raw: []byte{0xd9, 0xd9, 0xf7, 0xa1, 0x41, 'b', 0x03}},
 				RawExtensionPointer: &runtime.RawExtension{Raw: []byte{0xd9, 0xd9, 0xf7, 0xa1, 0x41, 'y', 0x04}},
 			},
@@ -707,20 +722,26 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+// textMarshalerObject 实现 encoding.TextMarshaler，用于验证 CBOR 编码是否遵循文本编组接口。
 type textMarshalerObject struct{}
 
+// GetObjectKind 返回空 ObjectKind。
 func (p textMarshalerObject) GetObjectKind() schema.ObjectKind {
 	return schema.EmptyObjectKind
 }
 
+// DeepCopyObject 不实现，仅在测试中用作占位。
 func (textMarshalerObject) DeepCopyObject() runtime.Object {
 	panic("unimplemented")
 }
 
+// MarshalText 返回固定文本，供编码测试断言。
 func (textMarshalerObject) MarshalText() ([]byte, error) {
 	return []byte("test"), nil
 }
 
+// TestMetaFactoryInterpret 验证默认 metaFactory 的 GVK 推断：空输入报错，
+// 含 apiVersion/kind 的 CBOR map 能被正确拆解。
 func TestMetaFactoryInterpret(t *testing.T) {
 	mf := &defaultMetaFactory{}
 	_, err := mf.Interpret(nil)
@@ -736,61 +757,75 @@ func TestMetaFactoryInterpret(t *testing.T) {
 	}
 }
 
+// stubTyper 返回预设的 GVK 列表与错误，用于隔离 Decode 的 typer 依赖。
 type stubTyper struct {
 	gvks        []schema.GroupVersionKind
 	unversioned bool
 	err         error
 }
 
+// ObjectKinds 直接返回预设结果。
 func (t stubTyper) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind, bool, error) {
 	return t.gvks, t.unversioned, t.err
 }
 
+// Recognizes 恒返回 false。
 func (stubTyper) Recognizes(schema.GroupVersionKind) bool {
 	return false
 }
 
+// stubCreater 返回预设对象或错误。
 type stubCreater struct {
 	obj runtime.Object
 	err error
 }
 
+// New 直接返回预设结果。
 func (c stubCreater) New(gvk schema.GroupVersionKind) (runtime.Object, error) {
 	return c.obj, c.err
 }
 
+// notRegisteredTyper 模拟“对象类型未注册”的场景。
 type notRegisteredTyper struct{}
 
+// ObjectKinds 始终返回 NotRegisteredError。
 func (notRegisteredTyper) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind, bool, error) {
 	return nil, false, runtime.NewNotRegisteredErrForType("test", reflect.TypeOf(obj))
 }
 
+// Recognizes 恒返回 false。
 func (notRegisteredTyper) Recognizes(schema.GroupVersionKind) bool {
 	return false
 }
 
+// stubMetaFactory 返回预设 GVK 或错误。
 type stubMetaFactory struct {
 	gvk *schema.GroupVersionKind
 	err error
 }
 
+// Interpret 直接返回预设结果。
 func (mf stubMetaFactory) Interpret([]byte) (*schema.GroupVersionKind, error) {
 	return mf.gvk, mf.err
 }
 
+// oneMapField 只包含一个 map 字段，用于测试非确定性编码时 map 键顺序被打乱。
 type oneMapField struct {
 	metav1.TypeMeta `json:""`
 	Map             map[string]interface{} `json:"map"`
 }
 
+// DeepCopyObject 不实现，仅在测试中用作占位。
 func (o oneMapField) DeepCopyObject() runtime.Object {
 	panic("unimplemented")
 }
 
+// GetObjectKind 不实现，仅在测试中用作占位。
 func (o oneMapField) GetObjectKind() schema.ObjectKind {
 	panic("unimplemented")
 }
 
+// eightStringFields 含 8 个字符串字段，用于测试非确定性编码时结构体字段顺序被打乱。
 type eightStringFields struct {
 	metav1.TypeMeta `json:""`
 	A               string `json:"1"`
@@ -803,19 +838,19 @@ type eightStringFields struct {
 	H               string `json:"8"`
 }
 
+// DeepCopyObject 不实现，仅在测试中用作占位。
 func (o eightStringFields) DeepCopyObject() runtime.Object {
 	panic("unimplemented")
 }
 
+// GetObjectKind 不实现，仅在测试中用作占位。
 func (o eightStringFields) GetObjectKind() schema.ObjectKind {
 	panic("unimplemented")
 }
 
-// TestEncodeNondeterministic tests that repeated encodings of multi-field structs and maps do not
-// encode to precisely the same bytes when repeatedly encoded with EncodeNondeterministic. When
-// using EncodeNondeterministic, the order of items in CBOR maps should be intentionally shuffled to
-// prevent applications from inadvertently depending on encoding determinism. All permutations do
-// not necessarily have equal probability.
+// TestEncodeNondeterministic 验证反复用 EncodeNondeterministic 编码多字段结构体/map 时，
+// 输出字节不会每次都完全相同。该模式下 CBOR map 的元素顺序会被有意打乱，
+// 以防应用无意中依赖编码的确定性。注意各排列出现的概率不一定相等。
 func TestEncodeNondeterministic(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

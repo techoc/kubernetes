@@ -33,11 +33,15 @@ import (
 // hook returns false, the handler returns immediately with a server error.
 // Ensure that this is only used in tests. This code has not been security
 // reviewed.
+//
+// 中文补充：hook 在反向代理转发之前调用，可用于断言请求（如 HTTPS_PROXY 是否生效）；
+// 返回 false 会直接中断请求，便于模拟代理失败。
 func NewHTTPProxyHandler(t testing.TB, hook func(req *http.Request) bool) *HTTPProxyHandler {
 	h := &HTTPProxyHandler{
 		hook: hook,
 		httpProxy: httputil.ReverseProxy{
 			Director: func(req *http.Request) {
+				// 普通 HTTP 代理请求的 URL 已是绝对地址，这里把目标改写为请求的 Host。
 				req.URL.Scheme = "http"
 				req.URL.Host = req.Host
 			},
@@ -50,6 +54,7 @@ func NewHTTPProxyHandler(t testing.TB, hook func(req *http.Request) bool) *HTTPP
 // HTTPProxyHandler implements a simple handler for http_proxy and https_proxy
 // requests for use in testing.
 type HTTPProxyHandler struct {
+	// handlerDone 跟踪进行中的请求，Wait 用于避免测试结束时仍有 goroutine 运行。
 	handlerDone sync.WaitGroup
 	hook        func(r *http.Request) bool
 	// httpProxy is the reverse proxy we use for standard http proxy requests.
@@ -58,6 +63,7 @@ type HTTPProxyHandler struct {
 }
 
 // ServeHTTP handles an HTTP proxy request.
+// 中文补充：普通 HTTP 请求走 ReverseProxy；HTTPS 通过 CONNECT 建立隧道后手动双向复制。
 func (h *HTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	h.handlerDone.Add(1)
 	defer h.handlerDone.Done()
@@ -69,6 +75,7 @@ func (h *HTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) 
 		}
 	}
 
+	// 打印请求内容仅用于测试诊断，失败不影响代理。
 	b, err := httputil.DumpRequest(req, false)
 	if err != nil {
 		h.t.Logf("Failed to dump request, host=%s: %v", req.Host, err)
@@ -82,6 +89,7 @@ func (h *HTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) 
 	}
 
 	// CONNECT proxy
+	// CONNECT 隧道：先连后端，再劫持客户端连接，然后双向拷贝字节流。
 
 	sconn, err := net.Dial("tcp", req.Host)
 	if err != nil {
@@ -98,6 +106,7 @@ func (h *HTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) 
 		return
 	}
 
+	// 必须在 Hijack 之前写出 200，客户端收到后才开始隧道传输。
 	rw.WriteHeader(http.StatusOK)
 
 	conn, brw, err := hj.Hijack()
@@ -107,10 +116,12 @@ func (h *HTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) 
 	}
 	defer conn.Close()
 
+	// 把 Hijack 前缓冲的写数据刷给客户端。
 	if err := brw.Flush(); err != nil {
 		h.t.Logf("Failed to flush pending writes to client, host=%s: %v", req.Host, err)
 		return
 	}
+	// 把 Hijack 前缓冲的读数据转给后端，避免丢失客户端抢先发送的字节。
 	if _, err := io.Copy(sconn, io.LimitReader(brw, int64(brw.Reader.Buffered()))); err != nil {
 		h.t.Logf("Failed to flush buffered reads to server, host=%s: %v", req.Host, err)
 		return
@@ -119,6 +130,7 @@ func (h *HTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) 
 	var wg sync.WaitGroup
 	wg.Add(2)
 
+	// 两个方向各自阻塞到对端关闭；任一方向结束不影响另一方向，故需等两者都退出。
 	go func() {
 		defer wg.Done()
 		defer h.t.Logf("Server read close, host=%s", req.Host)
@@ -134,6 +146,7 @@ func (h *HTTPProxyHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) 
 	h.t.Logf("Done handling CONNECT request, host=%s", req.Host)
 }
 
+// Wait 阻塞到所有已进入 ServeHTTP 的请求处理完毕。
 func (h *HTTPProxyHandler) Wait() {
 	h.handlerDone.Wait()
 }

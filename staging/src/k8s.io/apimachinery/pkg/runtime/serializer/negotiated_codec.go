@@ -22,10 +22,15 @@ import (
 
 // TODO: We should split negotiated serializers that we can change versions on from those we can change
 // serialization formats on
+// negotiatedSerializerWrapper exposes a single fixed SerializerInfo as a
+// NegotiatedSerializer. Version selection is a no-op because the wrapped
+// encoder/decoder already targets one version.
 type negotiatedSerializerWrapper struct {
 	info runtime.SerializerInfo
 }
 
+// NegotiatedSerializerWrapper returns a NegotiatedSerializer that always
+// presents the given SerializerInfo and ignores version requests.
 func NegotiatedSerializerWrapper(info runtime.SerializerInfo) runtime.NegotiatedSerializer {
 	return &negotiatedSerializerWrapper{info}
 }
@@ -34,10 +39,13 @@ func (n *negotiatedSerializerWrapper) SupportedMediaTypes() []runtime.Serializer
 	return []runtime.SerializerInfo{n.info}
 }
 
+// EncoderForVersion returns e unchanged: the wrapper cannot reinterpret an
+// arbitrary encoder for another version.
 func (n *negotiatedSerializerWrapper) EncoderForVersion(e runtime.Encoder, _ runtime.GroupVersioner) runtime.Encoder {
 	return e
 }
 
+// DecoderToVersion returns d unchanged for the same reason as EncoderForVersion.
 func (n *negotiatedSerializerWrapper) DecoderToVersion(d runtime.Decoder, _gv runtime.GroupVersioner) runtime.Decoder {
 	return d
 }

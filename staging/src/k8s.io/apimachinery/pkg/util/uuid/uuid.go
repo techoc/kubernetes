@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package uuid 提供生成 Kubernetes UID 的单入口，屏蔽底层 UUID 实现。
 package uuid
 
 import (
@@ -22,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// NewUUID 返回随机（v4）UUID 并包装为 types.UID。
+// 使用 google/uuid 的随机源，确保 UID 不可预测、碰撞概率可忽略。
 func NewUUID() types.UID {
 	return types.UID(uuid.New().String())
 }

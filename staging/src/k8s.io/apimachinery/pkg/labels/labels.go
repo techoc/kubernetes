@@ -24,75 +24,71 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// Labels allows you to present labels independently from their storage.
+// Labels 允许把标签的展示与存储方式解耦。
 type Labels interface {
-	// Has returns whether the provided label exists.
+	// Has 返回给定标签是否存在。
 	Has(label string) (exists bool)
 
-	// Get returns the value for the provided label.
+	// Get 返回给定标签的值。
 	Get(label string) (value string)
 
-	// Lookup returns the value for the provided label if it exists and whether the provided label exist
+	// Lookup 返回给定标签的值（若存在）以及是否存在。
 	Lookup(label string) (value string, exists bool)
 }
 
-// Set is a map of label:value. It implements Labels.
+// Set 是 label:value 的 map，实现 Labels 接口。
 type Set map[string]string
 
-// String returns all labels listed as a human readable string.
-// Conveniently, exactly the format that ParseSelector takes.
+// String 以人类可读形式返回所有标签。
+// 其格式恰好与 ParseSelector 接受的输入一致。
 func (ls Set) String() string {
 	selector := make([]string, 0, len(ls))
 	for key, value := range ls {
 		selector = append(selector, key+"="+value)
 	}
-	// Sort for determinism.
+	// 排序以保证输出确定。
 	sort.StringSlice(selector).Sort()
 	return strings.Join(selector, ",")
 }
 
-// Has returns whether the provided label exists in the map.
+// Has 返回 map 中是否存在给定标签。
 func (ls Set) Has(label string) bool {
 	_, exists := ls[label]
 	return exists
 }
 
-// Get returns the value in the map for the provided label.
+// Get 返回 map 中给定标签的值。
 func (ls Set) Get(label string) string {
 	return ls[label]
 }
 
-// Lookup returns the value for the provided label if it exists and whether the provided label exist
+// Lookup 返回给定标签的值（若存在）以及是否存在。
 func (ls Set) Lookup(label string) (string, bool) {
 	val, exists := ls[label]
 	return val, exists
 }
 
-// AsSelector converts labels into a selectors. It does not
-// perform any validation, which means the server will reject
-// the request if the Set contains invalid values.
+// AsSelector 把标签转换为选择器。它不做任何校验，因此若 Set 含非法值，
+// 服务端会拒绝该请求。
 func (ls Set) AsSelector() Selector {
 	return SelectorFromSet(ls)
 }
 
-// AsValidatedSelector converts labels into a selectors.
-// The Set is validated client-side, which allows to catch errors early.
+// AsValidatedSelector 把标签转换为选择器。
+// Set 会在客户端校验，从而尽早发现错误。
 func (ls Set) AsValidatedSelector() (Selector, error) {
 	return ValidatedSelectorFromSet(ls)
 }
 
-// AsSelectorPreValidated converts labels into a selector, but
-// assumes that labels are already validated and thus doesn't
-// perform any validation.
-// According to our measurements this is significantly faster
-// in codepaths that matter at high scale.
-// Note: this method copies the Set; if the Set is immutable, consider wrapping it with ValidatedSetSelector
-// instead, which does not copy.
+// AsSelectorPreValidated 把标签转换为选择器，但假定标签已校验，因此不做校验。
+// 根据我们的测量，在高并发关键路径上这样明显更快。
+// 注意：该方法会复制 Set；若 Set 不可变，可考虑用 ValidatedSetSelector 包装，
+// 后者不复制。
 func (ls Set) AsSelectorPreValidated() Selector {
 	return SelectorFromValidatedSet(ls)
 }
 
-// FormatLabels converts label map into plain string
+// FormatLabels 把标签 map 转换为普通字符串；空 map 输出 "<none>"。
 func FormatLabels(labelMap map[string]string) string {
 	l := Set(labelMap).String()
 	if l == "" {
@@ -101,9 +97,9 @@ func FormatLabels(labelMap map[string]string) string {
 	return l
 }
 
-// Conflicts takes 2 maps and returns true if there a key match between
-// the maps but the value doesn't match, and returns false in other cases
+// Conflicts 接收两个 map，若存在相同 key 但值不同则返回 true，其余情况返回 false。
 func Conflicts(labels1, labels2 Set) bool {
+	// 遍历较小的 map 以减少比较次数。
 	small := labels1
 	big := labels2
 	if len(labels2) < len(labels1) {
@@ -122,8 +118,7 @@ func Conflicts(labels1, labels2 Set) bool {
 	return false
 }
 
-// Merge combines given maps, and does not check for any conflicts
-// between the maps. In case of conflicts, second map (labels2) wins
+// Merge 合并给定的 map，不检查冲突。冲突时第二个 map（labels2）优先。
 func Merge(labels1, labels2 Set) Set {
 	mergedMap := Set{}
 
@@ -136,7 +131,7 @@ func Merge(labels1, labels2 Set) Set {
 	return mergedMap
 }
 
-// Equals returns true if the given maps are equal
+// Equals 判断给定的两个 map 是否相等。
 func Equals(labels1, labels2 Set) bool {
 	if len(labels1) != len(labels2) {
 		return false
@@ -154,8 +149,8 @@ func Equals(labels1, labels2 Set) bool {
 	return true
 }
 
-// ConvertSelectorToLabelsMap converts selector string to labels map
-// and validates keys and values
+// ConvertSelectorToLabelsMap 把选择器字符串转换为标签 map，并校验键和值。
+// 只支持 key=value 形式，逗号分隔；空字符串返回空 map。
 func ConvertSelectorToLabelsMap(selector string, opts ...field.PathOption) (Set, error) {
 	labelsMap := Set{}
 

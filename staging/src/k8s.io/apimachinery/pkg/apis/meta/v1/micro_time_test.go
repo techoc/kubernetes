@@ -30,10 +30,13 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// MicroTimeHolder 是带 MicroTime 字段的测试包装，用于验证 JSON/YAML 编解码。
 type MicroTimeHolder struct {
 	T MicroTime `json:"t"`
 }
 
+// TestMicroTimeMarshalYAML 验证 MicroTime 的 YAML 输出：零值编码为 null，
+// 非零值统一转成 UTC 并保留六位小数（微秒精度）。
 func TestMicroTimeMarshalYAML(t *testing.T) {
 	cases := []struct {
 		input  MicroTime
@@ -56,6 +59,8 @@ func TestMicroTimeMarshalYAML(t *testing.T) {
 	}
 }
 
+// TestMicroTimeUnmarshalYAML 验证 YAML 反序列化：null 得到零值，
+// RFC3339 时间戳解析后转换为本地时区。
 func TestMicroTimeUnmarshalYAML(t *testing.T) {
 	cases := []struct {
 		input  string
@@ -76,6 +81,7 @@ func TestMicroTimeUnmarshalYAML(t *testing.T) {
 	}
 }
 
+// TestMicroTimeMarshalJSON 验证 JSON 输出：零值为 null，非零值以 RFC3339 格式（UTC、微秒精度）输出。
 func TestMicroTimeMarshalJSON(t *testing.T) {
 	cases := []struct {
 		input  MicroTime
@@ -98,6 +104,7 @@ func TestMicroTimeMarshalJSON(t *testing.T) {
 	}
 }
 
+// TestMicroTimeUnmarshalJSON 验证 JSON 反序列化：null 得到零值，RFC3339 时间戳转为本地时区。
 func TestMicroTimeUnmarshalJSON(t *testing.T) {
 	cases := []struct {
 		input  string
@@ -118,6 +125,8 @@ func TestMicroTimeUnmarshalJSON(t *testing.T) {
 	}
 }
 
+// TestMicroTimeMarshalCBOR 验证 CBOR 编码：零值为 null，时间字符串固定六位小数，
+// 纳秒部分按微秒截断。
 func TestMicroTimeMarshalCBOR(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -140,6 +149,7 @@ func TestMicroTimeMarshalCBOR(t *testing.T) {
 	}
 }
 
+// TestMicroTimeUnmarshalCBOR 验证 CBOR 解码：null、合法时间戳与非法输入（类型错误、格式错误）的错误信息。
 func TestMicroTimeUnmarshalCBOR(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -171,6 +181,7 @@ func TestMicroTimeUnmarshalCBOR(t *testing.T) {
 	}
 }
 
+// TestMicroTimeProto 验证 protobuf 编解码往返的幂等性。
 func TestMicroTimeProto(t *testing.T) {
 	cases := []struct {
 		input MicroTime
@@ -196,6 +207,7 @@ func TestMicroTimeProto(t *testing.T) {
 	}
 }
 
+// TestMicroTimeEqual 验证 Equal 对 nil/nil、同指针与 nil/非 nil 组合的语义。
 func TestMicroTimeEqual(t *testing.T) {
 	t1 := NewMicroTime(time.Now())
 	cases := []struct {
@@ -220,6 +232,7 @@ func TestMicroTimeEqual(t *testing.T) {
 	}
 }
 
+// TestMicroTimeEqualTime 验证 MicroTime 与 Time 跨类型比较的 nil 语义与相等判断。
 func TestMicroTimeEqualTime(t *testing.T) {
 	t1 := NewMicroTime(time.Now())
 	t2 := NewTime(t1.Time)
@@ -245,6 +258,7 @@ func TestMicroTimeEqualTime(t *testing.T) {
 	}
 }
 
+// TestMicroTimeBefore 验证 Before 在任一侧为 nil 或两者相等时均返回 false。
 func TestMicroTimeBefore(t *testing.T) {
 	t1 := NewMicroTime(time.Now())
 	cases := []struct {
@@ -267,6 +281,8 @@ func TestMicroTimeBefore(t *testing.T) {
 		})
 	}
 }
+
+// TestMicroTimeBeforeTime 验证 MicroTime 与 Time 跨类型 Before 比较的 nil 语义。
 func TestMicroTimeBeforeTime(t *testing.T) {
 	t1 := NewMicroTime(time.Now())
 	t2 := NewTime(t1.Time)
@@ -291,6 +307,7 @@ func TestMicroTimeBeforeTime(t *testing.T) {
 	}
 }
 
+// TestMicroTimeIsZero 验证 nil 与零时间都视为 zero，非零时间返回 false。
 func TestMicroTimeIsZero(t *testing.T) {
 	t1 := NewMicroTime(time.Now())
 	cases := []struct {
@@ -312,6 +329,8 @@ func TestMicroTimeIsZero(t *testing.T) {
 	}
 }
 
+// TestMicroTimeUnmarshalJSONAndProtoEqual 验证同一 MicroTime 经 JSON 与 proto 两条路径
+// 编解码后结果相等，包括纳秒被截断到微秒的情形。
 func TestMicroTimeUnmarshalJSONAndProtoEqual(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -350,6 +369,8 @@ func TestMicroTimeUnmarshalJSONAndProtoEqual(t *testing.T) {
 	}
 }
 
+// TestMicroTimeProtoUnmarshalRaw 用预先生成的 protobuf Timestamp 字节验证解码，
+// 包括纳秒精度输入被截断为微秒的情况。
 func TestMicroTimeProtoUnmarshalRaw(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -377,6 +398,8 @@ func TestMicroTimeProtoUnmarshalRaw(t *testing.T) {
 
 }
 
+// TestMicroTimeRoundtripCBOR 用随机值做 CBOR 往返，验证编码/解码保持相等；
+// 失败时输出 CBOR 诊断编码以便定位问题。
 func TestMicroTimeRoundtripCBOR(t *testing.T) {
 	fuzzer := randfill.New()
 	for i := 0; i < 500; i++ {

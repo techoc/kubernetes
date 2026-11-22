@@ -29,7 +29,10 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// TestNoUpdateBeforeFirstApply 验证 SkipNonAppliedManager 下的首次 apply：
+// 不依赖此前的 update 记录，直接产生一条 apply 的 managedFields 条目。
 func TestNoUpdateBeforeFirstApply(t *testing.T) {
+	// 用 SkipNonAppliedManager 包装底层 Manager，模拟 “首次 apply 前无字段记录” 的场景。
 	f := internaltesting.NewTestFieldManagerImpl(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"), "", func(m internal.Manager) internal.Manager {
 		return internal.NewSkipNonAppliedManager(m, &internaltesting.FakeObjectCreater{})
 	})
@@ -65,6 +68,8 @@ func TestNoUpdateBeforeFirstApply(t *testing.T) {
 	}
 }
 
+// TestUpdateBeforeFirstApply 验证首次 apply 之前先有 update 时的冲突语义：
+// 首次 apply 不强制会与 "before-first-apply" 记录冲突，force 后两个 manager 并存。
 func TestUpdateBeforeFirstApply(t *testing.T) {
 	f := internaltesting.NewTestFieldManagerImpl(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"), "", func(m internal.Manager) internal.Manager {
 		return internal.NewSkipNonAppliedManager(m, &internaltesting.FakeObjectCreater{})
@@ -79,6 +84,7 @@ func TestUpdateBeforeFirstApply(t *testing.T) {
 		t.Fatalf("failed to update object: %v", err)
 	}
 
+	// update 不应单独产生 managedFields 条目。
 	if m := f.ManagedFields(); len(m) != 0 {
 		t.Fatalf("managedFields were tracked on update only: %v", m)
 	}
@@ -101,6 +107,7 @@ func TestUpdateBeforeFirstApply(t *testing.T) {
 		t.Fatalf("error decoding YAML: %v", err)
 	}
 
+	// 非强制 apply 应因 labels.app 与 before-first-apply 记录冲突而失败。
 	err := f.Apply(appliedObj, "fieldmanager_test_apply", false)
 	apiStatus, _ := err.(apierrors.APIStatus)
 	if err == nil || !apierrors.IsConflict(err) || len(apiStatus.Status().Details.Causes) != 1 {
@@ -115,6 +122,7 @@ func TestUpdateBeforeFirstApply(t *testing.T) {
 		t.Fatalf("Expecting conflict message to contain %q but got %q: %v", e, a, err)
 	}
 
+	// 强制 apply 后应成功，并保留两个 manager。
 	if err := f.Apply(appliedObj, "fieldmanager_test_apply", true); err != nil {
 		t.Fatalf("failed to update object: %v", err)
 	}

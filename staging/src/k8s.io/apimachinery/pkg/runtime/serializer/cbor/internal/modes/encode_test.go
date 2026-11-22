@@ -28,12 +28,17 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// int64BinaryMarshaler 用于验证编码器不会调用 encoding.BinaryMarshaler，
+// 否则输出会是空的字节串而不是整数。
 type int64BinaryMarshaler int64
 
+// MarshalBinary 存在即让该类型实现 encoding.BinaryMarshaler。
 func (i int64BinaryMarshaler) MarshalBinary() ([]byte, error) {
 	return []byte{}, nil
 }
 
+// TestEncode 逐项验证各编码模式与 JSON 序列化器的一致性：
+// 重复 json tag、未打 tag 的字段、big.Int、[N]byte、[]byte、TextMarshaler、JSONMarshaler 的输出。
 func TestEncode(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
@@ -110,6 +115,7 @@ func TestEncode(t *testing.T) {
 		},
 	} {
 		encModes := tc.modes
+		// 未指定模式时默认在所有已注册的编码模式上跑一遍，确保模式间行为一致。
 		if len(encModes) == 0 {
 			encModes = allEncModes
 		}

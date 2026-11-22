@@ -14,28 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// package v1beta1 is alpha objects from meta that will be introduced.
 package v1beta1
 
 import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Table is a tabular representation of a set of API resources. The server transforms the
-// object into a set of preferred columns for quickly reviewing the objects.
+// Table 是某组 API 资源的表格化表示。服务端把对象转换为便于快速浏览的
+// 首选列集合。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +protobuf=false
 type Table = v1.Table
 
-// TableColumnDefinition contains information about a column returned in the Table.
+// TableColumnDefinition 描述 Table 中返回的一列。
 // +protobuf=false
 type TableColumnDefinition = v1.TableColumnDefinition
 
-// TableRow is an individual row in a table.
+// TableRow 是表格中的单独一行。
 // +protobuf=false
 type TableRow = v1.TableRow
 
-// TableRowCondition allows a row to be marked with additional information.
+// TableRowCondition 允许为某行附加额外状态信息。
 // +protobuf=false
 type TableRowCondition = v1.TableRowCondition
 
@@ -45,33 +44,34 @@ type ConditionStatus = v1.ConditionStatus
 
 type IncludeObjectPolicy = v1.IncludeObjectPolicy
 
-// TableOptions are used when a Table is requested by the caller.
+// TableOptions 是调用方请求 Table 时使用的选项。
 // +k8s:conversion-gen:explicit-from=net/url.Values
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type TableOptions = v1.TableOptions
 
-// PartialObjectMetadata is a generic representation of any object with ObjectMeta. It allows clients
-// to get access to a particular ObjectMeta schema without knowing the details of the version.
+// PartialObjectMetadata 是任何带 ObjectMeta 对象的通用表示。它让客户端
+// 无需了解具体版本，即可访问特定的 ObjectMeta 模式。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type PartialObjectMetadata = v1.PartialObjectMetadata
 
-// IMPORTANT: PartialObjectMetadataList has different protobuf field ids in v1beta1 than
-// v1 because ListMeta was accidentally omitted prior to 1.15. Therefore this type must
-// remain independent of v1.PartialObjectMetadataList to preserve mappings.
+// 重要：v1beta1 的 PartialObjectMetadataList 与 v1 的 protobuf 字段号不同，
+// 因为 ListMeta 在 1.15 之前被意外遗漏。因此该类型必须保持独立于
+// v1.PartialObjectMetadataList，以保留字段映射。
 
-// PartialObjectMetadataList contains a list of objects containing only their metadata.
+// PartialObjectMetadataList 是只包含元数据的对象列表。
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type PartialObjectMetadataList struct {
 	v1.TypeMeta `json:""`
-	// Standard list metadata.
-	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// 标准列表元数据。
+	// 更多信息：https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
 	// +optional
 	v1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,2,opt,name=metadata"`
 
-	// items contains each of the included items.
+	// items 包含列表中的每个条目。
 	Items []v1.PartialObjectMetadata `json:"items" protobuf:"bytes,1,rep,name=items"`
 }
 
+// 这些常量是 v1 对应常量的别名，保留在此以免破坏旧引用。
 const (
 	RowCompleted = v1.RowCompleted
 

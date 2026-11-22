@@ -21,6 +21,10 @@ import (
 	"testing"
 )
 
+// TestIsDNS1123Label pins down the accepted grammar of a DNS label: lowercase
+// alphanumerics and '-', must start and end with an alphanumeric, and at most
+// 63 characters. Every boundary (length 63/64, leading/trailing '-', invalid
+// characters) is represented.
 func TestIsDNS1123Label(t *testing.T) {
 	goodValues := []string{
 		"a", "ab", "abc", "a1", "a-1", "a--1--2--b",
@@ -48,6 +52,9 @@ func TestIsDNS1123Label(t *testing.T) {
 	}
 }
 
+// TestIsDNS1123Subdomain covers dot-separated labels with a total length limit
+// of 253 characters; each label must satisfy the label rules, so mixed-case or
+// uppercase segments anywhere in the name are rejected.
 func TestIsDNS1123Subdomain(t *testing.T) {
 	goodValues := []string{
 		"a", "ab", "abc", "a1", "a-1", "a--1--2--b",
@@ -86,6 +93,9 @@ func TestIsDNS1123Subdomain(t *testing.T) {
 	}
 }
 
+// TestIsDNS1123SubdomainCaseless is the same grammar as IsDNS1123Subdomain but
+// permits uppercase letters, used where case does not matter (for example some
+// annotation keys). Length and character-class rules still apply.
 func TestIsDNS1123SubdomainCaseless(t *testing.T) {
 	goodValues := []string{
 		"a", "ab", "abc", "a1", "a-1", "a--1--2--b",

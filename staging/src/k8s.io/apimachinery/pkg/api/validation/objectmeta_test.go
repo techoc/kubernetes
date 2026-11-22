@@ -33,12 +33,15 @@ import (
 )
 
 const (
+	// 以下是从校验错误 detail 中截取的片段，用于断言错误类型而非完整文案，
+	// 以便错误措辞调整时测试不会大面积失效。
 	maxLengthErrMsg = "must be no more than"
 	namePartErrMsg  = "name part must consist of"
 	nameErrMsg      = "a valid label key must consist of"
 )
 
-// Ensure custom name functions are allowed
+// TestValidateObjectMetaCustomName 验证调用方可以注入自定义名称校验函数：
+// 该函数会同时作用于 name 与 generateName，因此两者各自的合法性都要覆盖。
 func TestValidateObjectMetaCustomName(t *testing.T) {
 	testCases := []struct {
 		name   string
@@ -98,7 +101,9 @@ func TestValidateObjectMetaCustomName(t *testing.T) {
 	}
 }
 
-// Ensure custom name functions work
+// TestValidateObjectMetaWithOptsName 验证接受 field.Path 的新式名称校验
+// 回调也能生效；与上一个测试的区别是回调签名更完整，可直接构造
+// field.Invalid 错误。
 func TestValidateObjectMetaWithOptsName(t *testing.T) {
 	testCases := []struct {
 		name   string
@@ -153,7 +158,8 @@ func TestValidateObjectMetaWithOptsName(t *testing.T) {
 	}
 }
 
-// Ensure namespace names follow dns label format
+// TestValidateObjectMetaNamespaces 验证 namespace 必须符合 DNS label 格式：
+// 含 "." 的值不合法；超长值应同时触发格式与长度两类错误（因此期望 2 个错误）。
 func TestValidateObjectMetaNamespaces(t *testing.T) {
 	errs := validateObjectMetaAccessorWithOptsCommon(
 		&metav1.ObjectMeta{Name: "test", Namespace: "foo.bar"},
@@ -181,6 +187,9 @@ func TestValidateObjectMetaNamespaces(t *testing.T) {
 	}
 }
 
+// TestValidateObjectMetaOwnerReferences 覆盖 ownerReferences 的校验规则：
+// Event 不能被当作 owner；apiVersion 必须是 <group>/<version> 或 <version>；
+// 最多只能有一个引用的 controller 标记为 true。
 func TestValidateObjectMetaOwnerReferences(t *testing.T) {
 	trueVar := true
 	falseVar := false
@@ -341,6 +350,9 @@ func TestValidateObjectMetaOwnerReferences(t *testing.T) {
 	}
 }
 
+// TestValidateObjectMetaUpdateIgnoresCreationTimestamp 验证更新时
+// creationTimestamp 的校验行为：新旧值中仅一侧为零值时仍算不匹配而报错；
+// 两侧非零但不同也报错。该字段被视为不可变（由 server 设置）。
 func TestValidateObjectMetaUpdateIgnoresCreationTimestamp(t *testing.T) {
 	if errs := ValidateObjectMetaUpdate(
 		&metav1.ObjectMeta{Name: "test", ResourceVersion: "1"},
@@ -365,6 +377,9 @@ func TestValidateObjectMetaUpdateIgnoresCreationTimestamp(t *testing.T) {
 	}
 }
 
+// TestValidateFinalizersUpdate 验证 finalizer 的更新语义：对象进入删除流程后
+// （DeletionTimestamp 已设置）不允许新增或替换 finalizer，只允许移除；
+// 未进入删除流程时则允许自由新增。
 func TestValidateFinalizersUpdate(t *testing.T) {
 	testcases := map[string]struct {
 		Old         metav1.ObjectMeta
@@ -404,6 +419,8 @@ func TestValidateFinalizersUpdate(t *testing.T) {
 	}
 }
 
+// TestValidateFinalizersPreventConflictingFinalizers 验证 orphan 与
+// delete-dependents 这两个互斥 finalizer 不能同时设置。
 func TestValidateFinalizersPreventConflictingFinalizers(t *testing.T) {
 	testcases := map[string]struct {
 		ObjectMeta  metav1.ObjectMeta
@@ -426,6 +443,9 @@ func TestValidateFinalizersPreventConflictingFinalizers(t *testing.T) {
 	}
 }
 
+// TestValidateObjectMetaUpdatePreventsDeletionFieldMutation 验证删除相关字段
+// （deletionTimestamp、deletionGracePeriodSeconds）在更新时不可变：设置、
+// 清空或修改都会报错。注意校验不应改动入参对象（ExpectedNew 与 New 相同）。
 func TestValidateObjectMetaUpdatePreventsDeletionFieldMutation(t *testing.T) {
 	now := metav1.NewTime(time.Unix(1000, 0).UTC())
 	later := metav1.NewTime(time.Unix(2000, 0).UTC())
@@ -509,6 +529,8 @@ func TestValidateObjectMetaUpdatePreventsDeletionFieldMutation(t *testing.T) {
 	}
 }
 
+// TestObjectMetaGenerationUpdate 验证 generation 只能递增，不能递减；
+// 保持不变或递增都是合法的。
 func TestObjectMetaGenerationUpdate(t *testing.T) {
 	testcases := map[string]struct {
 		Old          metav1.ObjectMeta
@@ -552,7 +574,8 @@ func TestObjectMetaGenerationUpdate(t *testing.T) {
 	}
 }
 
-// Ensure trailing dash is allowed in generate name
+// TestValidateObjectMetaTrimsTrailingDash 验证 generateName 允许以 "-" 结尾：
+// 生成器会在后缀拼接前做处理，因此这里不能按普通名称规则拒绝。
 func TestValidateObjectMetaTrimsTrailingDash(t *testing.T) {
 	errs := ValidateObjectMeta(
 		&metav1.ObjectMeta{Name: "test", GenerateName: "foo-"},
@@ -564,6 +587,9 @@ func TestValidateObjectMetaTrimsTrailingDash(t *testing.T) {
 	}
 }
 
+// TestValidateAnnotations 验证 annotation 的 key 格式与整体大小限制：
+// 成功集合覆盖合法 key 与恰好等于上限的组合；失败集合分别覆盖非法 key
+// 与超过 TotalAnnotationSizeLimitB 的总量。
 func TestValidateAnnotations(t *testing.T) {
 	successCases := []map[string]string{
 		{"simple": "bar"},
@@ -626,6 +652,10 @@ func TestValidateAnnotations(t *testing.T) {
 	}
 }
 
+// TestValidateObjectMetaDeclaratively 覆盖基于声明式校验框架（validate 包）
+// 的路径。同一用例会在 betaEnabled 与 allDeclarativeEnforced 的四种组合下
+// 运行：未全面强制时，alpha/beta 规则应以 imperative 来源返回且不携带
+// stability level，因此 toExpectedErrs 会相应地改写期望值。
 func TestValidateObjectMetaDeclaratively(t *testing.T) {
 	ctx := context.Background()
 	fldPath := field.NewPath("metadata")
@@ -736,8 +766,13 @@ func TestValidateObjectMetaDeclaratively(t *testing.T) {
 		},
 	}
 
+	// 只比较字段路径、错误类型、来源与 origin，不比较文案，避免措辞变化
+	// 导致测试脆弱。
 	matcher := field.ErrorMatcher{}.ByField().ByType().BySource().ByOrigin()
 
+	// toExpectedErrs 根据是否全面强制声明式校验，把期望错误改写为实际应返回
+	// 的形式：未强制的 alpha（以及 beta 关闭时的 beta）规则由 imperative
+	// 路径兜底，来源与 stability level 都会不同。
 	toExpectedErrs := func(allDeclarativeEnforced bool, betaEnabled bool, errs field.ErrorList) field.ErrorList {
 		expected := make(field.ErrorList, 0, len(errs))
 		for _, err := range errs {
@@ -752,6 +787,7 @@ func TestValidateObjectMetaDeclaratively(t *testing.T) {
 	}
 
 	for _, tc := range createCases {
+		// 四种组合都要跑：beta 开关与是否全面强制会影响错误的来源和级别。
 		for _, betaEnabled := range []bool{true, false} {
 			for _, allDeclarativeEnforced := range []bool{true, false} {
 				t.Run(fmt.Sprintf("Create: %s (betaEnabled=%v, allDeclarativeEnforced=%v)", tc.name, betaEnabled, allDeclarativeEnforced), func(t *testing.T) {
@@ -915,6 +951,8 @@ func TestValidateObjectMetaDeclaratively(t *testing.T) {
 }
 
 func mkMeta(tweaks ...func(*metav1.ObjectMeta)) *metav1.ObjectMeta {
+	// 先构造一个全部合法的最小对象，再由 tweak 函数按需破坏单个字段，
+	// 这样每个用例的差异一目了然。
 	obj := &metav1.ObjectMeta{
 		Name:      "valid-name",
 		Namespace: "valid-ns",
@@ -924,6 +962,8 @@ func mkMeta(tweaks ...func(*metav1.ObjectMeta)) *metav1.ObjectMeta {
 	}
 	return obj
 }
+
+// 以下 tweak 系列函数用于在测试中以函数式方式修改单个字段。
 
 func tweakName(n string) func(*metav1.ObjectMeta) {
 	return func(o *metav1.ObjectMeta) { o.Name = n }
@@ -986,6 +1026,7 @@ func tweakOwnerRefs(refs ...metav1.OwnerReference) func(*metav1.ObjectMeta) {
 }
 
 func mkOwnerRef(tweaks ...func(*metav1.OwnerReference)) metav1.OwnerReference {
+	// 返回合法的 OwnerReference，再由 tweak 修改单个字段。
 	r := &metav1.OwnerReference{
 		APIVersion: "v1",
 		Kind:       "Pod",

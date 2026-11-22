@@ -24,6 +24,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestValidateListOptions 覆盖 ListOptions 的合法性组合，重点是 WatchList
+// 相关的 ResourceVersionMatch/SendInitialEvents 约束以及 feature gate 开关的影响。
+// 多个用例同名 "watch-sendInitialEvents-no-watchlist-fg-disabled" 是历史遗留，
+// 后一个实际测试的是 continue 与 resourceVersionMatch 的互斥。
 func TestValidateListOptions(t *testing.T) {
 	cases := []struct {
 		name                    string
@@ -34,12 +38,14 @@ func TestValidateListOptions(t *testing.T) {
 		name: "valid-default",
 		opts: internalversion.ListOptions{},
 	}, {
+		// exact 搭配具体 RV 是标准用法。
 		name: "valid-resourceversionmatch-exact",
 		opts: internalversion.ListOptions{
 			ResourceVersion:      "1",
 			ResourceVersionMatch: metav1.ResourceVersionMatchExact,
 		},
 	}, {
+		// RV=0 是"任意/最新"的哨兵值，exact 语义下没有意义，必须拒绝。
 		name: "invalid-resourceversionmatch-exact",
 		opts: internalversion.ListOptions{
 			ResourceVersion:      "0",
@@ -60,6 +66,7 @@ func TestValidateListOptions(t *testing.T) {
 		},
 		expectErrors: []string{"resourceVersionMatch: Unsupported value: \"foo\": supported values: \"Exact\", \"NotOlderThan\", \"\""},
 	}, {
+		// list 不能用 sendInitialEvents（那是 watch 的语义）。
 		name: "list-sendInitialEvents-forbidden",
 		opts: internalversion.ListOptions{
 			SendInitialEvents: ptr.To(true),
@@ -89,6 +96,7 @@ func TestValidateListOptions(t *testing.T) {
 		},
 		watchListFeatureEnabled: true,
 	}, {
+		// WatchList 语义要求 NotOlderThan，单独给 resourceVersionMatch 不合法。
 		name: "watch-resourceversionmatch-without-sendInitialEvents-forbidden",
 		opts: internalversion.ListOptions{
 			Watch:                true,
@@ -96,6 +104,7 @@ func TestValidateListOptions(t *testing.T) {
 		},
 		expectErrors: []string{"resourceVersionMatch: Forbidden: resourceVersionMatch is forbidden for watch unless sendInitialEvents is provided"},
 	}, {
+		// gate 关闭时启用 sendInitialEvents 被拒；同时缺 NotOlderThan 也报错。
 		name: "watch-sendInitialEvents-without-resourceversionmatch-forbidden",
 		opts: internalversion.ListOptions{
 			Watch:             true,
@@ -149,6 +158,7 @@ func TestValidateListOptions(t *testing.T) {
 		},
 		watchListFeatureEnabled: true,
 	}, {
+		// gate 关闭时即使参数齐全，sendInitialEvents 仍被拒绝。
 		name: "watch-sendInitialEvents-no-watchlist-fg-disabled",
 		opts: internalversion.ListOptions{
 			Watch:                true,
@@ -158,6 +168,7 @@ func TestValidateListOptions(t *testing.T) {
 		},
 		expectErrors: []string{"sendInitialEvents: Forbidden: sendInitialEvents is forbidden for watch unless the WatchList feature gate is enabled"},
 	}, {
+		// watch 同时带 continue 时 resourceVersionMatch 无意义，拒绝该组合。
 		name: "watch-sendInitialEvents-no-watchlist-fg-disabled",
 		opts: internalversion.ListOptions{
 			Watch:                true,
@@ -173,6 +184,7 @@ func TestValidateListOptions(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			errs := ValidateListOptions(&tc.opts, tc.watchListFeatureEnabled)
+			// 错误顺序是校验实现的一部分，这里逐条按序比较，避免掩盖顺序回归。
 			if len(tc.expectErrors) > 0 {
 				if len(errs) != len(tc.expectErrors) {
 					t.Errorf("expected %d errors but got %d errors", len(tc.expectErrors), len(errs))

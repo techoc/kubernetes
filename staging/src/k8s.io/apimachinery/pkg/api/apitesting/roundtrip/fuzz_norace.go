@@ -18,5 +18,6 @@ limitations under the License.
 
 package roundtrip
 
-// in non-race-detection mode, a higher number of iterations is reasonable
+// 未启用竞态检测时，单次往返测试的开销较低，可以多迭代一些轮次以提高
+// 随机数据覆盖率。启用 -race 时对应的常量定义在 fuzz_race.go 中，数值更小。
 const defaultFuzzIters = 20

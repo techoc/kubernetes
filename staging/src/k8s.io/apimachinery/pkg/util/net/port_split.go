@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// validSchemes 是 SplitSchemeNamePort 接受的前缀；空字符串表示省略 scheme。
 var validSchemes = sets.NewString("http", "https", "")
 
 // SplitSchemeNamePort takes a string of the following forms:
@@ -33,6 +34,9 @@ var validSchemes = sets.NewString("http", "https", "")
 // Scheme must be "http" or "https" if specified
 // Port is returned as a string, and it is not required to be numeric (could be
 // used for a named port, for example).
+//
+// 中文说明：段的个数多于 3 或 name 为空都返回 false；scheme 缺省时只允许
+// 两段/一段形式，从而避免与 IPv6 之类的冒号语法混淆。
 func SplitSchemeNamePort(id string) (scheme, name, port string, valid bool) {
 	parts := strings.Split(id, ":")
 	switch len(parts) {
@@ -64,6 +68,9 @@ func SplitSchemeNamePort(id string) (scheme, name, port string, valid bool) {
 // None of the parameters may contain a ':' character
 // Name is required
 // Scheme must be "", "http", or "https"
+//
+// 中文说明：段数由非空参数个数决定；空 port 与空 scheme 会被省略，因此
+// 拼接结果可以被 SplitSchemeNamePort 原样解析。
 func JoinSchemeNamePort(scheme, name, port string) string {
 	if len(scheme) > 0 {
 		// Must include three segments to specify scheme

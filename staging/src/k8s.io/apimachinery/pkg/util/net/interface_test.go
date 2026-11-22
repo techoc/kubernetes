@@ -27,6 +27,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// 以下常量为 /proc/net/route（IPv4）与 /proc/net/ipv6_route（IPv6）的样例内容，
+// 覆盖默认路由位于首行、中间、末行，以及无默认路由、地址非法、十六进制长度非法等情形。
 const gatewayfirst = `Iface	Destination	Gateway 	Flags	RefCnt	Use	Metric	Mask		MTU	Window	IRTT                                                       
 eth3	00000000	0100FE0A	0003	0	0	1024	00000000	0	0	0                                                                   
 eth3	0000FE0A	00000000	0001	0	0	0	0080FFFF	0	0	0                                                                      
@@ -96,6 +98,7 @@ const v6route_Invalidhex = `000000000000000000000000000000000 00 000000000000000
 
 `
 
+// 网卡标志位组合，模拟 up/down/loopback/point-to-point 四类接口。
 const (
 	flagUp       = net.FlagUp | net.FlagBroadcast | net.FlagMulticast
 	flagDown     = net.FlagBroadcast | net.FlagMulticast
@@ -103,6 +106,7 @@ const (
 	flagP2P      = net.FlagUp | net.FlagPointToPoint
 )
 
+// makeIntf 构造测试用网卡，MAC 地址随 index 变化以便区分。
 func makeIntf(index int, name string, flags net.Flags) net.Interface {
 	mac := net.HardwareAddr{0, 0x32, 0x7d, 0x69, 0xf7, byte(0x30 + index)}
 	return net.Interface{
@@ -113,6 +117,7 @@ func makeIntf(index int, name string, flags net.Flags) net.Interface {
 		Flags:        flags}
 }
 
+// 预置的网卡与默认路由样例，供各测试用例复用。
 var (
 	downIntf     = makeIntf(1, "eth3", flagDown)
 	loopbackIntf = makeIntf(1, "lo", flagLoopback)
@@ -132,6 +137,8 @@ var (
 	bothRoutes = []Route{ipv4Route, ipv6Route}
 )
 
+// TestGetIPv4Routes 验证从 /proc/net/route 解析默认路由：
+// 无论默认路由在首/中/末行都能识别；非法地址或非法十六进制返回错误；无默认路由时返回空。
 func TestGetIPv4Routes(t *testing.T) {
 	testCases := []struct {
 		tcase      string
@@ -174,6 +181,7 @@ func TestGetIPv4Routes(t *testing.T) {
 	}
 }
 
+// TestGetIPv6Routes 验证从 /proc/net/ipv6_route 解析默认路由，覆盖与 IPv4 相同的行位置与非法输入场景。
 func TestGetIPv6Routes(t *testing.T) {
 	testCases := []struct {
 		tcase      string
@@ -215,6 +223,7 @@ func TestGetIPv6Routes(t *testing.T) {
 	}
 }
 
+// TestParseIP 验证把十六进制地址字符串解析为 net.IP：长度必须与地址族匹配，内容非法时返回 nil。
 func TestParseIP(t *testing.T) {
 	testCases := []struct {
 		tcase    string
@@ -242,6 +251,7 @@ func TestParseIP(t *testing.T) {
 	}
 }
 
+// TestIsInterfaceUp 验证只有带 FlagUp 的网卡被视为 up，nil 网卡返回 false。
 func TestIsInterfaceUp(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -261,6 +271,7 @@ func TestIsInterfaceUp(t *testing.T) {
 	}
 }
 
+// addrStruct 是实现了 net.Addr 的测试地址，仅携带字符串形式的值。
 type addrStruct struct{ val string }
 
 func (a addrStruct) Network() string {
@@ -270,6 +281,8 @@ func (a addrStruct) String() string {
 	return a.val
 }
 
+// TestFinalIP 验证从网卡地址中挑选可用全局 IP 时跳过 loopback、link-local 与非法 CIDR，
+// 且只返回指定地址族的地址。
 func TestFinalIP(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -299,6 +312,7 @@ func TestFinalIP(t *testing.T) {
 	}
 }
 
+// TestAddrs 验证 networkInterfacer 的 Addrs 包装返回底层地址列表。
 func TestAddrs(t *testing.T) {
 	var nw networkInterfacer = validNetworkInterface{}
 	intf := net.Interface{Index: 0, MTU: 0, Name: "eth3", HardwareAddr: nil, Flags: 0}
@@ -311,7 +325,7 @@ func TestAddrs(t *testing.T) {
 	}
 }
 
-// Has a valid IPv4 address (IPv6 is LLA)
+// validNetworkInterface 有一个全局 IPv4 地址（IPv6 仅 link-local）。
 type validNetworkInterface struct {
 }
 
@@ -328,7 +342,7 @@ func (_ validNetworkInterface) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{upIntf}, nil
 }
 
-// Both IPv4 and IPv6 addresses (expecting IPv4 to be used)
+// v4v6NetworkInterface 同时有 IPv4 与 IPv6 全局地址（用于验证地址族偏好）。
 type v4v6NetworkInterface struct {
 }
 
@@ -345,7 +359,7 @@ func (_ v4v6NetworkInterface) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{upIntf}, nil
 }
 
-// Interface with only IPv6 address
+// ipv6NetworkInterface 只有 IPv6 全局地址。
 type ipv6NetworkInterface struct {
 }
 
@@ -362,7 +376,7 @@ func (_ ipv6NetworkInterface) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{upIntf}, nil
 }
 
-// Only with link local addresses
+// networkInterfaceWithOnlyLinkLocals 只有 link-local 地址。
 type networkInterfaceWithOnlyLinkLocals struct {
 }
 
@@ -378,7 +392,7 @@ func (_ networkInterfaceWithOnlyLinkLocals) Interfaces() ([]net.Interface, error
 	return []net.Interface{upIntf}, nil
 }
 
-// Unable to get interface(s)
+// failGettingNetworkInterface 模拟获取网卡失败。
 type failGettingNetworkInterface struct {
 }
 
@@ -392,7 +406,7 @@ func (_ failGettingNetworkInterface) Interfaces() ([]net.Interface, error) {
 	return nil, fmt.Errorf("mock failed getting all interfaces")
 }
 
-// No interfaces
+// noNetworkInterface 模拟系统中没有任何网卡。
 type noNetworkInterface struct {
 }
 
@@ -406,7 +420,7 @@ func (_ noNetworkInterface) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{}, nil
 }
 
-// Interface is down
+// downNetworkInterface 模拟处于 down 状态的网卡。
 type downNetworkInterface struct {
 }
 
@@ -423,7 +437,7 @@ func (_ downNetworkInterface) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{downIntf}, nil
 }
 
-// Loopback interface
+// loopbackNetworkInterface 模拟只有 loopback 网卡。
 type loopbackNetworkInterface struct {
 }
 
@@ -440,7 +454,7 @@ func (_ loopbackNetworkInterface) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{loopbackIntf}, nil
 }
 
-// Point to point interface
+// p2pNetworkInterface 模拟 point-to-point 网卡。
 type p2pNetworkInterface struct {
 }
 
@@ -457,7 +471,8 @@ func (_ p2pNetworkInterface) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{p2pIntf}, nil
 }
 
-// Interface with link locals and loopback interface with global addresses
+// linkLocalLoopbackNetworkInterface 的普通网卡只有 link-local 地址，
+// loopback 网卡上配置了全局地址（用于验证回退到 loopback 全局地址）。
 type linkLocalLoopbackNetworkInterface struct {
 }
 
@@ -481,7 +496,7 @@ func (_ linkLocalLoopbackNetworkInterface) Interfaces() ([]net.Interface, error)
 	return []net.Interface{upIntf, loopbackIntf}, nil
 }
 
-// Interface and loopback interface with global addresses
+// globalsNetworkInterface 的普通网卡与 loopback 网卡都配置了全局地址。
 type globalsNetworkInterface struct {
 }
 
@@ -506,7 +521,7 @@ func (_ globalsNetworkInterface) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{upIntf, loopbackIntf}, nil
 }
 
-// Unable to get IP addresses for interface
+// networkInterfaceFailGetAddrs 模拟获取网卡地址失败。
 type networkInterfaceFailGetAddrs struct {
 }
 
@@ -520,7 +535,7 @@ func (_ networkInterfaceFailGetAddrs) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{upIntf}, nil
 }
 
-// No addresses for interface
+// networkInterfaceWithNoAddrs 模拟网卡没有任何地址。
 type networkInterfaceWithNoAddrs struct {
 }
 
@@ -535,7 +550,7 @@ func (_ networkInterfaceWithNoAddrs) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{upIntf}, nil
 }
 
-// Invalid addresses for interface
+// networkInterfaceWithInvalidAddr 模拟网卡地址无法解析为 CIDR。
 type networkInterfaceWithInvalidAddr struct {
 }
 
@@ -551,6 +566,8 @@ func (_ networkInterfaceWithInvalidAddr) Interfaces() ([]net.Interface, error) {
 	return []net.Interface{upIntf}, nil
 }
 
+// TestGetIPFromInterface 验证从指定网卡获取全局 IP：
+// 跳过 down 网卡、无匹配地址族、非法 CIDR，并在获取失败时返回对应错误。
 func TestGetIPFromInterface(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -584,6 +601,8 @@ func TestGetIPFromInterface(t *testing.T) {
 	}
 }
 
+// TestGetIPFromLoopbackInterface 验证 loopback 网卡上的全局地址可作为回退选择，
+// 仅有 loopback 地址时返回 nil。
 func TestGetIPFromLoopbackInterface(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -612,6 +631,8 @@ func TestGetIPFromLoopbackInterface(t *testing.T) {
 	}
 }
 
+// TestChooseHostInterfaceFromRoute 验证依据默认路由选择主机 IP：
+// 覆盖单栈/双栈、地址族偏好、link-local 回退到 loopback、无路由与获取失败等情形。
 func TestChooseHostInterfaceFromRoute(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -649,6 +670,7 @@ func TestChooseHostInterfaceFromRoute(t *testing.T) {
 	}
 }
 
+// TestMemberOf 验证地址族归属判断：IPv4 地址只属于 familyIPv4，IPv6 地址只属于 familyIPv6。
 func TestMemberOf(t *testing.T) {
 	testCases := []struct {
 		tcase    string
@@ -668,6 +690,8 @@ func TestMemberOf(t *testing.T) {
 	}
 }
 
+// TestGetIPFromHostInterfaces 验证遍历所有网卡选择 IP 的行为：
+// 跳过 down、loopback-only、p2p、无地址或非法地址的网卡，并按地址族偏好返回结果。
 func TestGetIPFromHostInterfaces(t *testing.T) {
 	logger, _ := ktesting.NewTestContext(t)
 	testCases := []struct {
@@ -705,6 +729,7 @@ func TestGetIPFromHostInterfaces(t *testing.T) {
 	}
 }
 
+// makeRouteFile 把路由表内容写入临时文件，供读取路由文件的测试使用。
 func makeRouteFile(content string, t *testing.T) (*os.File, error) {
 	routeFile, err := os.CreateTemp("", "route")
 	if err != nil {
@@ -718,6 +743,7 @@ func makeRouteFile(content string, t *testing.T) (*os.File, error) {
 	return routeFile, err
 }
 
+// TestFailGettingIPv4Routes 验证读取不存在的 IPv4 路由文件时返回错误。
 func TestFailGettingIPv4Routes(t *testing.T) {
 	defer func() { v4File.name = ipv4RouteFile }()
 
@@ -733,6 +759,7 @@ func TestFailGettingIPv4Routes(t *testing.T) {
 	}
 }
 
+// TestFailGettingIPv6Routes 验证读取不存在的 IPv6 路由文件时返回错误。
 func TestFailGettingIPv6Routes(t *testing.T) {
 	defer func() { v6File.name = ipv6RouteFile }()
 
@@ -748,6 +775,7 @@ func TestFailGettingIPv6Routes(t *testing.T) {
 	}
 }
 
+// TestGetAllDefaultRoutesFailNoV4RouteFile 验证 IPv4 路由文件缺失时 getAllDefaultRoutes 返回错误。
 func TestGetAllDefaultRoutesFailNoV4RouteFile(t *testing.T) {
 	defer func() { v4File.name = ipv4RouteFile }()
 
@@ -763,6 +791,8 @@ func TestGetAllDefaultRoutesFailNoV4RouteFile(t *testing.T) {
 	}
 }
 
+// TestGetAllDefaultRoutes 验证合并 IPv4/IPv6 路由表后的默认路由集合：
+// 无默认路由时报错，仅 v4、仅 v6、双栈分别返回对应路由。
 func TestGetAllDefaultRoutes(t *testing.T) {
 	testCases := []struct {
 		tcase      string

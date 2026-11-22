@@ -14,4 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package scheme 提供注册 meta.k8s.io 内部版本类型到 runtime.Scheme 的便捷入口，
+// 供需要处理 ListOptions、Table、PartialObjectMetadata 等 meta 类型的组件使用。
 package scheme

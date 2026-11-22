@@ -30,6 +30,9 @@ import (
 	runtimeschema "k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// TestExtractInto 验证 ExtractInto 能按字段管理者从对象的 managedFields 中
+// 还原其拥有的字段：只取匹配 manager（及 subresource）的字段，忽略其他管理者的声明；
+// 同时覆盖 unstructured 与结构化对象两种输入。
 func TestExtractInto(t *testing.T) {
 	one := int32(1)
 	parser, err := typed.NewParser(schemaYAML)
@@ -138,6 +141,8 @@ func TestExtractInto(t *testing.T) {
 	}
 }
 
+// applyFieldsEntry 构造一条 apply 操作产生的 managedFields 记录；
+// fieldsJSON 使用 FieldsV1 的 "f:" 路径语法描述该 manager 拥有的字段集。
 func applyFieldsEntry(fieldManager string, fieldsJSON string, subresource string) metav1.ManagedFieldsEntry {
 	return metav1.ManagedFieldsEntry{
 		Manager:     fieldManager,
@@ -149,32 +154,41 @@ func applyFieldsEntry(fieldManager string, fieldsJSON string, subresource string
 	}
 }
 
+// fakeDeployment 是测试用的结构化对象，字段布局对应下方 schemaYAML 中的 Deployment 定义。
 type fakeDeployment struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 	Spec              fakeDeploymentSpec   `json:"spec"`
 	Status            fakeDeploymentStatus `json:"status"`
 }
 
+// fakeDeploymentSpec 只需包含测试涉及的两个字段（replicas、paused）。
 type fakeDeploymentSpec struct {
 	Replicas *int32 `json:"replicas"`
 	Paused   bool   `json:"paused,omitempty"`
 }
 
+// fakeDeploymentStatus 对应 Deployment 的 status 子资源。
 type fakeDeploymentStatus struct {
 	Replicas *int32 `json:"replicas"`
 }
 
+// GetObjectMeta 返回对象元数据，使 fakeDeployment 满足 metav1.Object 接口。
 func (o *fakeDeployment) GetObjectMeta() metav1.ObjectMeta {
 	return o.ObjectMeta
 }
+
+// GetObjectKind 返回空的 ObjectKind：测试不关心 GVK。
 func (o *fakeDeployment) GetObjectKind() runtimeschema.ObjectKind {
 	return runtimeschema.EmptyObjectKind
 }
+
+// DeepCopyObject 直接返回自身，测试中对象不会被并发修改，无需真正深拷贝。
 func (o *fakeDeployment) DeepCopyObject() runtime.Object {
 	return o
 }
 
 // trimmed up schema for test purposes
+// 中文补充：只保留测试路径上会用到的类型与字段，避免依赖完整 OpenAPI schema。
 const schemaYAML = typed.YAMLObject(`types:
 - name: io.k8s.api.apps.v1.Deployment
   map:

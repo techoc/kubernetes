@@ -28,6 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// 预定义错误：校验 List 类型布局失败时返回，调用方据此回退到通用编码器。
+// 错误信息本身就是对期望布局的说明。
 var (
 	errFieldCount          = errors.New("expected ListType to have 3 fields")
 	errTypeMetaField       = errors.New("expected TypeMeta field to have TypeMeta type")
@@ -44,6 +46,10 @@ var (
 // * Validate proto tags to prevent incompatibility with proto standard package.
 // * ListMetaAccessor doesn't distinguish empty from nil value.
 // * TypeAccessor reparsing "apiVersion" and serializing it with "{group}/{version}"
+//
+// 不复用 meta 包 accessor 的原因：需要严格校验 protobuf tag 与字段布局，
+// 并保留 nil/空 Items 的区别；TypeAccessor 重新解析 apiVersion 也会改变
+// 编码结果。
 func getStreamingListData(list runtime.Object) (data streamingListData, err error) {
 	listValue, err := conversion.EnforcePtr(list)
 	if err != nil {
@@ -54,6 +60,7 @@ func getStreamingListData(list runtime.Object) (data streamingListData, err erro
 		return data, errFieldCount
 	}
 	// TypeMeta: validated, but not returned as is not serialized.
+	// TypeMeta 在 protobuf 中不序列化（GVK 由外层 Unknown 承载），这里只校验。
 	_, ok := listValue.Field(0).Interface().(metav1.TypeMeta)
 	if !ok {
 		return data, errTypeMetaField
@@ -67,11 +74,13 @@ func getStreamingListData(list runtime.Object) (data streamingListData, err erro
 		return data, errListMetaField
 	}
 	// if we were ever to relax the protobuf tag check we should update the hardcoded `0xa` below when writing ListMeta.
+	// 字段号 1 对应 wire tag 0xa；放宽校验时必须同步修改硬编码。
 	if listType.Field(1).Tag.Get("protobuf") != "bytes,1,opt,name=metadata" {
 		return data, errListMetaProtobufTag
 	}
 	data.listMeta = listMeta
 	// Items; if we were ever to relax the protobuf tag check we should update the hardcoded `0x12` below when writing Items.
+	// 字段号 2 对应 wire tag 0x12。
 	if listType.Field(2).Tag.Get("protobuf") != "bytes,2,rep,name=items" {
 		return data, errItemsProtobufTag
 	}
@@ -80,10 +89,12 @@ func getStreamingListData(list runtime.Object) (data streamingListData, err erro
 		return data, err
 	}
 	data.items = items
+	// 预先计算各段大小，供一次性分配与 Unknown 头部使用。
 	data.totalSize, data.listMetaSize, data.itemsSizes, err = listSize(listMeta, items)
 	return data, err
 }
 
+// streamingListData 缓存流式编码 List 所需的元数据与尺寸，避免重复 Size() 调用。
 type streamingListData struct {
 	// totalSize is the total size of the serialized List object, including their proto headers/size bytes
 	totalSize int
@@ -97,12 +108,15 @@ type streamingListData struct {
 	items      []runtime.Object
 }
 
+// sizer 是 generated.pb.go 中 proto.Sizer 的本地最小接口。
 type sizer interface {
 	Size() int
 }
 
 // listSize return size of ListMeta and items to be later used for preallocations.
 // listMetaSize and itemSizes do not include header bytes (field identifier, size).
+//
+// 每个元素的大小都加上 1 字节 tag 与 varint 长度前缀，得到精确的 wire 大小。
 func listSize(listMeta metav1.ListMeta, items []runtime.Object) (totalSize, listMetaSize int, itemSizes []int, err error) {
 	// ListMeta
 	listMetaSize = listMeta.Size()
@@ -112,6 +126,7 @@ func listSize(listMeta metav1.ListMeta, items []runtime.Object) (totalSize, list
 	for i, item := range items {
 		sizer, ok := item.(sizer)
 		if !ok {
+			// 无法预知大小则拒绝流式编码，由调用方回退。
 			return totalSize, listMetaSize, nil, errItemsSizer
 		}
 		n := sizer.Size()
@@ -121,6 +136,8 @@ func listSize(listMeta metav1.ListMeta, items []runtime.Object) (totalSize, list
 	return totalSize, listMetaSize, itemSizes, nil
 }
 
+// streamingEncodeUnknownList 写出 runtime 前缀，并把 List 内容作为
+// runtime.Unknown 的 Raw 字段流式写入。
 func streamingEncodeUnknownList(w io.Writer, unk runtime.Unknown, listData streamingListData, memAlloc runtime.MemoryAllocator) error {
 	_, err := w.Write(protoEncodingPrefix)
 	if err != nil {
@@ -134,8 +151,10 @@ func streamingEncodeUnknownList(w io.Writer, unk runtime.Unknown, listData strea
 	return err
 }
 
+// streamingEncodeList 按 protobuf wire 格式写出 ListMeta 与 Items，返回写入字节数。
 func streamingEncodeList(w io.Writer, listData streamingListData, memAlloc runtime.MemoryAllocator) (size int, err error) {
 	// headerScratch escapes via w.Write, so allocate it once per call instead of once per item.
+	// 头部缓冲会被 w.Write 立即消费，因此每次调用分配一次即可，避免逐项分配。
 	headerScratch := make([]byte, 1+binary.MaxVarintLen64)
 	// ListMeta; 0xa = (1 << 3) | 2; field number: 1, type: 2 (LEN). https://protobuf.dev/programming-guides/encoding/#structure
 	n, err := doEncodeWithHeader(&listData.listMeta, w, 0xa, listData.listMetaSize, headerScratch, memAlloc)
@@ -155,11 +174,15 @@ func streamingEncodeList(w io.Writer, listData streamingListData, memAlloc runti
 }
 
 // sovGenerated is copied from `generated.pb.go` returns size of varint.
+//
+// 与生成代码保持一致，保证尺寸计算与真实编码完全匹配。
 func sovGenerated(v uint64) int {
 	return (bits.Len64(v|1) + 6) / 7
 }
 
 // encodeVarintGenerated is copied from `generated.pb.go` encodes varint.
+//
+// 先按 varint 长度回退偏移，再正向写入字节；与生成代码逐字节兼容。
 func encodeVarintGenerated(dAtA []byte, offset int, v uint64) int {
 	offset -= sovGenerated(v)
 	base := offset

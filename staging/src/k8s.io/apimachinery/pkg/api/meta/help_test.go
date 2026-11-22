@@ -28,10 +28,13 @@ import (
 )
 
 const (
+	// fakeObjectItemsNum 是测试列表的规模。
 	fakeObjectItemsNum = 1000
-	exemptObjectIndex  = fakeObjectItemsNum / 4
+	// exemptObjectIndex 预留为“豁免位置”的样例下标（四分之一处）；当前文件未使用。
+	exemptObjectIndex = fakeObjectItemsNum / 4
 )
 
+// SampleSpec 与 FooSpec 内容相同，但分属不同结构体，用于覆盖两种接收者形态。
 type SampleSpec struct {
 	Flied int
 }
@@ -40,6 +43,7 @@ type FooSpec struct {
 	Flied int
 }
 
+// FooList 的值接收者列表，Item 为 Foo（值类型实现 runtime.Object）。
 type FooList struct {
 	metav1.TypeMeta
 	metav1.ListMeta
@@ -48,6 +52,7 @@ type FooList struct {
 
 func (s *FooList) DeepCopyObject() runtime.Object { panic("unimplemented") }
 
+// SampleList 的 Item 为 Sample，由指针实现 runtime.Object，模拟 corev1.Pod 等真实类型。
 type SampleList struct {
 	metav1.TypeMeta
 	metav1.ListMeta
@@ -56,6 +61,7 @@ type SampleList struct {
 
 func (s *SampleList) DeepCopyObject() runtime.Object { panic("unimplemented") }
 
+// RawExtensionList 的 Item 是 runtime.RawExtension，验证 meta 工具对包装类型的处理。
 type RawExtensionList struct {
 	metav1.TypeMeta
 	metav1.ListMeta
@@ -66,6 +72,7 @@ type RawExtensionList struct {
 func (l RawExtensionList) DeepCopyObject() runtime.Object { panic("unimplemented") }
 
 // NOTE: Foo struct itself is the implementer of runtime.Object.
+// Foo 以值类型实现 runtime.Object，与下面 Sample 的指针实现形成对照。
 type Foo struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
@@ -81,6 +88,7 @@ func (f Foo) DeepCopyObject() runtime.Object { panic("unimplemented") }
 
 // NOTE: the pointer of Sample that is the implementer of runtime.Object.
 // the behavior is similar to our corev1.Pod. corev1.Node
+// Sample 由指针实现 runtime.Object，与真实 API 类型一致。
 type Sample struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta
@@ -94,6 +102,8 @@ func (s *Sample) GetObjectKind() schema.ObjectKind {
 
 func (s *Sample) DeepCopyObject() runtime.Object { panic("unimplemented") }
 
+// fakeSampleList 构造 numItems 个带 TypeMeta/ObjectMeta/Spec 的 Sample，
+// 名称即索引，便于在测试中核对每个元素都被访问到。
 func fakeSampleList(numItems int) *SampleList {
 	out := &SampleList{
 		Items: make([]Sample, numItems),
@@ -123,6 +133,8 @@ func fakeSampleList(numItems int) *SampleList {
 	return out
 }
 
+// fakeExtensionList 每个元素是持有 Foo 对象的 RawExtension，用于验证
+// ExtractList/EachListItem 对 RawExtension 的解包。
 func fakeExtensionList(numItems int) *RawExtensionList {
 	out := &RawExtensionList{
 		Items: make([]runtime.RawExtension, numItems),
@@ -154,6 +166,7 @@ func fakeExtensionList(numItems int) *RawExtensionList {
 	return out
 }
 
+// fakeUnstructuredList 返回 map 形态的 UnstructuredList，覆盖非结构化路径。
 func fakeUnstructuredList(numItems int) runtime.Unstructured {
 	out := &unstructured.UnstructuredList{
 		Items: make([]unstructured.Unstructured, numItems),
@@ -178,6 +191,7 @@ func fakeUnstructuredList(numItems int) runtime.Unstructured {
 	return out
 }
 
+// fakeFooList 构造 Item 为值类型 Foo 的列表，与 fakeSampleList 覆盖不同接收者形态。
 func fakeFooList(numItems int) *FooList {
 	out := &FooList{
 		Items: make([]Foo, numItems),
@@ -207,6 +221,8 @@ func fakeFooList(numItems int) *FooList {
 	return out
 }
 
+// TestEachList 验证 EachListItem 与 EachListItemWithAlloc 对四种列表实现
+// （值接收者、指针接收者、RawExtension、Unstructured）都能遍历到全部元素。
 func TestEachList(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -246,6 +262,7 @@ func TestEachList(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Run("EachListItem", func(t *testing.T) {
+				// 用“名字集合”记账：每访问一个元素就删除其名字，最后必须清空。
 				expectObjectNames := map[string]struct{}{}
 				for i := 0; i < tc.expectObjectNum; i++ {
 					expectObjectNames[strconv.Itoa(i)] = struct{}{}
@@ -291,6 +308,8 @@ func TestEachList(t *testing.T) {
 	}
 }
 
+// TestExtractList 验证 ExtractList 与 ExtractListWithAlloc 返回的元素数量与内容正确；
+// 值类型元素需要先取地址才能拿到 Accessor。
 func TestExtractList(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -347,6 +366,7 @@ func TestExtractList(t *testing.T) {
 					)
 
 					if reflect.TypeOf(obj).Kind() == reflect.Struct {
+						// 值类型元素不可寻址，复制一份后再取 Accessor。
 						copy := reflect.New(reflect.TypeOf(obj))
 						copy.Elem().Set(reflect.ValueOf(obj))
 						o, err = Accessor(copy.Interface())
@@ -398,6 +418,7 @@ func TestExtractList(t *testing.T) {
 	}
 }
 
+// TestLenList 覆盖 nil 列表、空列表与各具体列表类型的长度计算。
 func TestLenList(t *testing.T) {
 	tests := []struct {
 		name string
@@ -444,6 +465,7 @@ func TestLenList(t *testing.T) {
 	}
 }
 
+// BenchmarkExtractListItem 测量 ExtractList 在不同列表实现下的开销。
 func BenchmarkExtractListItem(b *testing.B) {
 	tests := []struct {
 		name string
@@ -476,6 +498,7 @@ func BenchmarkExtractListItem(b *testing.B) {
 	}
 }
 
+// BenchmarkEachListItem 测量 EachListItem 的遍历开销（含 Unstructured 路径）。
 func BenchmarkEachListItem(b *testing.B) {
 	tests := []struct {
 		name string
@@ -514,6 +537,7 @@ func BenchmarkEachListItem(b *testing.B) {
 	}
 }
 
+// BenchmarkExtractListItemWithAlloc 测量带分配版本 ExtractListWithAlloc 的开销。
 func BenchmarkExtractListItemWithAlloc(b *testing.B) {
 	tests := []struct {
 		name string
@@ -546,6 +570,7 @@ func BenchmarkExtractListItemWithAlloc(b *testing.B) {
 	}
 }
 
+// BenchmarkEachListItemWithAlloc 测量带分配版本 EachListItemWithAlloc 的开销。
 func BenchmarkEachListItemWithAlloc(b *testing.B) {
 	tests := []struct {
 		name string

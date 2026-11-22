@@ -30,10 +30,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// nilPointerFor 返回指定类型的 nil 指针，用于构造“类型已知但值为 nil”的用例。
 func nilPointerFor[T interface{}]() *T {
 	return nil
 }
 
+// RoundtrippableText 通过 encoding.TextMarshaler 接口自定义编码。
 type RoundtrippableText struct{ Text string }
 
 func (rt RoundtrippableText) MarshalText() ([]byte, error) {
@@ -45,6 +47,7 @@ func (rt *RoundtrippableText) UnmarshalText(text []byte) error {
 	return nil
 }
 
+// RoundtrippableJSON 通过 json.Marshaler 接口自定义编码，原始字节原样嵌入。
 type RoundtrippableJSON struct{ Raw string }
 
 func (rj RoundtrippableJSON) MarshalJSON() ([]byte, error) {
@@ -57,6 +60,11 @@ func (rj *RoundtrippableJSON) UnmarshalJSON(raw []byte) error {
 }
 
 // TestRoundtrip roundtrips object serialization to interface{} and back via CBOR.
+//
+// 对每种编码/解码模式组合验证三条路径：
+// 原始值 -> CBOR -> interface{} -> CBOR -> interface{}；
+// 原始值 -> CBOR -> 原始类型；
+// 原始值 -> CBOR -> interface{} -> 原始类型。
 func TestRoundtrip(t *testing.T) {
 	type modePair struct {
 		enc modes.EncMode
@@ -298,6 +306,7 @@ func TestRoundtrip(t *testing.T) {
 		modePairs := tc.modePairs
 		if len(modePairs) == 0 {
 			// Default is all modes to all modes.
+			// 未指定时对编码模式 x 解码模式做全组合，确保模式间兼容。
 			modePairs = []modePair{}
 			for _, encMode := range allEncModes {
 				for _, decMode := range allDecModes {
@@ -337,6 +346,7 @@ func TestRoundtrip(t *testing.T) {
 
 				{
 					// interface{} to interface{}
+					// 路径一：unstructured 表示本身必须稳定。
 					var iface2 interface{}
 					if err := modePair.dec.Unmarshal(cborFromIface, &iface2); err != nil {
 						t.Fatalf("unexpected error from Unmarshal into %T: %v", &iface2, err)
@@ -348,6 +358,7 @@ func TestRoundtrip(t *testing.T) {
 
 				{
 					// original to original
+					// 路径二：原生类型直接往返，nil 与空值语义必须保持。
 					final := reflect.New(reflect.TypeOf(original))
 					err = modePair.dec.Unmarshal(cborFromOriginal, final.Interface())
 					if err != nil {
@@ -360,6 +371,7 @@ func TestRoundtrip(t *testing.T) {
 
 				{
 					// original to interface{} to original
+					// 路径三：经 interface{} 中转后仍能还原为原类型。
 					finalViaIface := reflect.New(reflect.TypeOf(original))
 					err = modePair.dec.Unmarshal(cborFromIface, finalViaIface.Interface())
 					if err != nil {
@@ -375,6 +387,9 @@ func TestRoundtrip(t *testing.T) {
 }
 
 // TestRoundtripTextEncoding exercises roundtrips between []byte and string.
+//
+// []byte 在 CBOR 中编码为 byte string，但解码到 interface{}/string 时按
+// JSON 兼容规则转为 base64 文本；两种方向都必须可逆。
 func TestRoundtripTextEncoding(t *testing.T) {
 	for _, encMode := range allEncModes {
 		for _, decMode := range allDecModes {

@@ -21,19 +21,22 @@ import (
 	"io"
 )
 
+// SwaggerDoc 返回 FieldsV1 的 OpenAPI 描述。
 func (FieldsV1) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"": "FieldsV1 stores a set of fields in a data structure like a Trie, in JSON format.\n\nEach key is either a '.' representing the field itself, and will always map to an empty set, or a string representing a sub-field or item. The string will follow one of these four formats: 'f:<name>', where <name> is the name of a field in a struct, or key in a map 'v:<value>', where <value> is the exact json formatted value of a list item 'i:<index>', where <index> is position of a item in a list 'k:<keys>', where <keys> is a map of  a list item's key fields to their unique values If a key maps to an empty Fields value, the field that key represents is part of the set.\n\nThe exact format is defined in sigs.k8s.io/structured-merge-diff",
 	}
 }
 
+// FieldsV1Reader 是带长度信息的只读接口，供需要随机读取原始数据的调用方使用。
 type FieldsV1Reader interface {
 	io.Reader
 	io.ReaderAt
-	// Size returns the original byte length of the underlying data. Size is the number of bytes available for reading via ReadAt.
+	// Size 返回底层数据的原始字节长度，即可通过 ReadAt 读取的字节数。
 	Size() int64
 }
 
+// DeepCopy 返回 FieldsV1 的深拷贝；nil 接收者返回 nil。
 func (f *FieldsV1) DeepCopy() *FieldsV1 {
 	if f == nil {
 		return nil
@@ -43,6 +46,7 @@ func (f *FieldsV1) DeepCopy() *FieldsV1 {
 	return out
 }
 
+// Marshal 返回 FieldsV1 的 protobuf 编码。
 func (f *FieldsV1) Marshal() (dAtA []byte, err error) {
 	size := f.Size()
 	dAtA = make([]byte, size)
@@ -53,11 +57,13 @@ func (f *FieldsV1) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
+// MarshalTo 把 FieldsV1 编码到 dAtA；调用方需保证缓冲区足够大（见 Size）。
 func (f *FieldsV1) MarshalTo(dAtA []byte) (int, error) {
 	size := f.Size()
 	return f.MarshalToSizedBuffer(dAtA[:size])
 }
 
+// MarshalToSizedBuffer 从缓冲区末尾向前写入编码（gogo protobuf 的惯用做法）。
 func (f *FieldsV1) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
@@ -65,6 +71,8 @@ func (f *FieldsV1) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = l
 	rawBytes := f.GetRawBytes()
 	if len(rawBytes) > 0 {
+		// 字段 1（Raw）的 wire type 为 2（length-delimited）：
+		// 依次写入负载、长度 varint 和 tag 0xa。
 		i -= len(rawBytes)
 		copy(dAtA[i:], rawBytes)
 		i = encodeVarintGenerated(dAtA, i, uint64(len(rawBytes)))
@@ -74,6 +82,7 @@ func (f *FieldsV1) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+// Size 返回 FieldsV1 的 protobuf 编码长度；nil 接收者返回 0。
 func (f *FieldsV1) Size() (n int) {
 	if f == nil {
 		return 0
@@ -86,12 +95,14 @@ func (f *FieldsV1) Size() (n int) {
 	return n
 }
 
+// Unmarshal 解析 FieldsV1 的 protobuf 编码；未知字段会被跳过。
 func (f *FieldsV1) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
 		var wire uint64
+		// 读取 tag varint；shift 上限 64 位，防止恶意超长输入导致溢出。
 		for shift := uint(0); ; shift += 7 {
 			if shift >= 64 {
 				return ErrIntOverflowGenerated
@@ -148,6 +159,7 @@ func (f *FieldsV1) Unmarshal(dAtA []byte) error {
 			f.SetRawBytes(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
+			// 未知字段：按 wire type 计算长度后跳过，保证向前兼容。
 			iNdEx = preIndex
 			skippy, err := skipGenerated(dAtA[iNdEx:])
 			if err != nil {

@@ -23,41 +23,40 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// Selector represents a shard selector that can match objects based on
-// hash ranges of their metadata fields. It follows the labels.Selector
-// pattern from the Kubernetes API.
+// Selector 表示按元数据字段的哈希范围匹配对象的分片选择器，
+// 遵循 Kubernetes API 中 labels.Selector 的模式。
 type Selector interface {
-	// Matches returns true if the given object matches the shard selector.
+	// Matches 判断给定对象是否命中该分片选择器。
 	Matches(obj runtime.Object) (bool, error)
 
-	// Empty returns true if the selector matches everything (no filtering).
+	// Empty 在匹配一切（不做过滤）时返回 true。
 	Empty() bool
 
-	// String returns the wire-format string representation that can be
-	// round-tripped through Parse.
+	// String 返回可经 Parse 往返的线上格式字符串。
 	String() string
 
-	// Requirements returns the list of shard range requirements.
+	// Requirements 返回分片范围要求列表。
 	Requirements() []ShardRangeRequirement
 
-	// DeepCopySelector returns a deep copy of the selector.
+	// DeepCopySelector 返回选择器的深拷贝。
 	DeepCopySelector() Selector
 }
 
-// Everything returns a selector that matches all objects.
+// Everything 返回匹配所有对象的选择器。
 func Everything() Selector {
 	return &everythingSelector{}
 }
 
 type everythingSelector struct{}
 
+// 空选择器对任意对象都返回匹配，且不携带任何要求。
 func (s *everythingSelector) Matches(_ runtime.Object) (bool, error) { return true, nil }
 func (s *everythingSelector) Empty() bool                            { return true }
 func (s *everythingSelector) String() string                         { return "" }
 func (s *everythingSelector) Requirements() []ShardRangeRequirement  { return nil }
 func (s *everythingSelector) DeepCopySelector() Selector             { return &everythingSelector{} }
 
-// shardSelector implements Selector with one or more shard range requirements.
+// shardSelector 用一条或多条分片范围要求实现 Selector。
 type shardSelector struct {
 	requirements []ShardRangeRequirement
 }
@@ -69,6 +68,8 @@ func (s *shardSelector) Matches(obj runtime.Object) (bool, error) {
 	// All requirements must share the same key so we resolve the field value
 	// and compute the hash once. The parser enforces this, but we verify here
 	// to guard against selectors constructed through other means.
+	// 所有要求必须使用同一 key，这样字段值与哈希只需计算一次。
+	// 解析器已强制该约束，这里再校验一次以防绕过解析器构造选择器。
 	key := s.requirements[0].Key
 	for _, req := range s.requirements[1:] {
 		if req.Key != key {
@@ -82,6 +83,7 @@ func (s *shardSelector) Matches(obj runtime.Object) (bool, error) {
 	}
 	hash := "0x" + HashField(value)
 
+	// 采用左闭右开区间 [Start, End)，保证相邻分片不会重叠或遗漏。
 	for _, req := range s.requirements {
 		if !HexLess(hash, req.Start) && HexLess(hash, req.End) {
 			return true, nil
@@ -90,10 +92,11 @@ func (s *shardSelector) Matches(obj runtime.Object) (bool, error) {
 	return false, nil
 }
 
-// HexLess compares two 0x-prefixed lowercase hex strings numerically.
-// Both values must be normalized to 16 hex digits (e.g. "0x0000000000000000"),
-// except for the special upper bound "0x10000000000000000" (2^64) which has 17.
+// HexLess 按数值比较两个带 0x 前缀的小写十六进制字符串。
+// 两个值都必须规范化为 16 个十六进制数字（如 "0x0000000000000000"），
+// 唯一例外是特殊上界 "0x10000000000000000"（2^64），它有 17 位。
 func HexLess(a, b string) bool {
+	// 长度不同意味着大小不同（规范化后较长的数值更大）。
 	if len(a) != len(b) {
 		return len(a) < len(b)
 	}
@@ -112,21 +115,23 @@ func (s *shardSelector) String() string {
 	return strings.Join(parts, " || ")
 }
 
+// Requirements 返回要求列表的副本，避免调用方修改内部状态。
 func (s *shardSelector) Requirements() []ShardRangeRequirement {
 	result := make([]ShardRangeRequirement, len(s.requirements))
 	copy(result, s.requirements)
 	return result
 }
 
+// DeepCopySelector 复制要求切片，返回与原选择器互不共享底层数组的新选择器。
 func (s *shardSelector) DeepCopySelector() Selector {
 	reqs := make([]ShardRangeRequirement, len(s.requirements))
 	copy(reqs, s.requirements)
 	return &shardSelector{requirements: reqs}
 }
 
-// NewSelector creates a Selector from the given requirements.
-// All requirements must use the same Key; this is validated at match time.
-// If no requirements are provided, returns Everything().
+// NewSelector 用给定要求创建 Selector。
+// 所有要求必须使用同一 Key，该约束在匹配时校验。
+// 未提供任何要求时返回 Everything()，避免下游对空选择器做特殊处理。
 func NewSelector(reqs ...ShardRangeRequirement) Selector {
 	if len(reqs) == 0 {
 		return Everything()

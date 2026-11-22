@@ -28,6 +28,8 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/merge"
 )
 
+// lastAppliedManager 包装一个真正的字段管理器，并在 Apply 时额外处理
+// client-side apply 遗留的 last-applied 注解，实现 CSA 到 SSA 的无冲突升级。
 type lastAppliedManager struct {
 	fieldManager    Manager
 	typeConverter   TypeConverter
@@ -40,6 +42,8 @@ var _ Manager = &lastAppliedManager{}
 // NewLastAppliedManager converts the client-side apply annotation to
 // server-side apply managed fields
 func NewLastAppliedManager(fieldManager Manager, typeConverter TypeConverter, objectConverter runtime.ObjectConvertor, groupVersion schema.GroupVersion) Manager {
+	// groupVersion 用于把 live 对象转换到注解中记录的版本，二者必须一致才能
+	// 做字段级比较。
 	return &lastAppliedManager{
 		fieldManager:    fieldManager,
 		typeConverter:   typeConverter,
@@ -56,6 +60,9 @@ func (f *lastAppliedManager) Update(liveObj, newObj runtime.Object, managed Mana
 // Apply will consider the last-applied annotation
 // for upgrading an object managed by client-side apply to server-side apply
 // without conflicts.
+//
+// 策略：先正常 apply；只有在出现冲突、且冲突字段都包含在 last-applied
+// 注解中时才以 force 重试，从而把“此前由 CSA 管理的字段”视为本管理器所有。
 func (f *lastAppliedManager) Apply(liveObj, newObj runtime.Object, managed Managed, manager string, force bool) (runtime.Object, Managed, error) {
 	newLiveObj, newManaged, newErr := f.fieldManager.Apply(liveObj, newObj, managed, manager, force)
 	// Upgrade the client-side apply annotation only from kubectl server-side-apply.
@@ -68,6 +75,7 @@ func (f *lastAppliedManager) Apply(liveObj, newObj runtime.Object, managed Manag
 	if newErr == nil {
 		return newLiveObj, newManaged, newErr
 	}
+	// 只有字段冲突才尝试自动升级；其他错误原样返回。
 	conflicts, ok := newErr.(merge.Conflicts)
 	if !ok {
 		return newLiveObj, newManaged, newErr
@@ -80,6 +88,7 @@ func (f *lastAppliedManager) Apply(liveObj, newObj runtime.Object, managed Manag
 	if err != nil {
 		return newLiveObj, newManaged, newErr
 	}
+	// 存在任何不被 last-applied 覆盖的冲突时，不能 force，只返回剩余冲突。
 	if !conflictSet.Difference(allowedConflictSet).Empty() {
 		newConflicts := conflictsDifference(conflicts, allowedConflictSet)
 		return newLiveObj, newManaged, newConflicts
@@ -88,6 +97,9 @@ func (f *lastAppliedManager) Apply(liveObj, newObj runtime.Object, managed Manag
 	return f.fieldManager.Apply(liveObj, newObj, managed, manager, true)
 }
 
+// allowedConflictsFromLastApplied 计算“可以无冲突接管”的字段集合：取
+// last-applied 字段集，再减去在 live 对象中被修改、新增或删除的部分，
+// 因为那些字段的实际归属已经无法从注解推断。
 func (f *lastAppliedManager) allowedConflictsFromLastApplied(liveObj runtime.Object) (*fieldpath.Set, error) {
 	var accessor, err = meta.Accessor(liveObj)
 	if err != nil {
@@ -120,6 +132,7 @@ func (f *lastAppliedManager) allowedConflictsFromLastApplied(liveObj runtime.Obj
 		return nil, fmt.Errorf("failed to decode last applied obj: %v in '%s'", err, lastApplied)
 	}
 
+	// 注解与 live 对象的 apiVersion 必须一致，否则字段路径无法对齐。
 	if lastAppliedObj.GetAPIVersion() != f.groupVersion.String() {
 		return nil, fmt.Errorf("expected version of last applied to match live object '%s', but got '%s': %v", f.groupVersion.String(), lastAppliedObj.GetAPIVersion(), err)
 	}
@@ -134,6 +147,7 @@ func (f *lastAppliedManager) allowedConflictsFromLastApplied(liveObj runtime.Obj
 		return nil, fmt.Errorf("failed to create fieldset for last applied object: %v", err)
 	}
 
+	// Compare 返回三类差异，用于剔除不可信的字段路径。
 	comparison, err := lastAppliedObjTyped.Compare(liveObjTyped)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compare last applied object and live object: %v", err)
@@ -152,6 +166,8 @@ func (f *lastAppliedManager) allowedConflictsFromLastApplied(liveObj runtime.Obj
 }
 
 // TODO: replace with merge.Conflicts.ToSet()
+//
+// 把冲突列表转换为字段路径集合，便于做集合差运算。
 func conflictsToSet(conflicts merge.Conflicts) *fieldpath.Set {
 	conflictSet := fieldpath.NewSet()
 	for _, conflict := range []merge.Conflict(conflicts) {
@@ -160,6 +176,8 @@ func conflictsToSet(conflicts merge.Conflicts) *fieldpath.Set {
 	return conflictSet
 }
 
+// conflictsDifference 过滤掉位于 s 中的冲突路径，保留真正需要报告给用户的
+// 冲突，避免把已由 last-applied 覆盖的字段重复报错。
 func conflictsDifference(conflicts merge.Conflicts, s *fieldpath.Set) merge.Conflicts {
 	newConflicts := []merge.Conflict{}
 	for _, conflict := range []merge.Conflict(conflicts) {

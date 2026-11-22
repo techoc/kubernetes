@@ -80,6 +80,8 @@ func (c *Expiring) Get(key interface{}) (val interface{}, ok bool) {
 	if !ok {
 		return nil, false
 	}
+	// Expiry is checked on read, not only during GC, so an entry can never be
+	// returned after its deadline even if GC has not run yet.
 	if !c.AllowExpiredGet && !c.clock.Now().Before(e.expiry) {
 		return nil, false
 	}
@@ -99,6 +101,8 @@ func (c *Expiring) Set(key interface{}, val interface{}, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Bump the generation so any cleanup already scheduled for the previous
+	// value of this key becomes a no-op.
 	c.generation++
 
 	c.cache[key] = entry{
@@ -136,6 +140,8 @@ func (c *Expiring) del(key interface{}, generation uint64) {
 	if !ok {
 		return
 	}
+	// A stale cleanup (generation mismatch) must not remove a newer value for
+	// the same key.
 	if generation != 0 && generation != e.generation {
 		return
 	}
@@ -162,6 +168,8 @@ func (c *Expiring) gc(now time.Time) {
 			return
 		}
 		cleanup := heap.Pop(&c.heap).(*expiringHeapEntry)
+		// del ignores the entry if it has since been overwritten; the newer
+		// entry has its own heap record with a later expiry.
 		c.del(cleanup.key, cleanup.generation)
 	}
 }

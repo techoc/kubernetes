@@ -14,4 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件只有 package 声明：v1beta1 的类型都是 meta/v1 的别名，手写
+// DeepCopy 没有意义，实际实现由 zz_generated.deepcopy.go 生成。
+// 保留空文件是为了让该包在构建与代码生成工具中有一个稳定的锚点。
+
 package v1beta1

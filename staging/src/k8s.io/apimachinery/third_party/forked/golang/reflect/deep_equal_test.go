@@ -8,6 +8,9 @@ import (
 	"testing"
 )
 
+// TestEqualities 验证 Equalities.DeepEqual 与 DeepEqualWithNilDifferentFromEmpty 的判定：
+// 前者把 nil 与空集合视为相等（与 reflect.DeepEqual 一致），
+// 后者则区分二者；两者都应遵循通过 AddFuncs 注册的自定义比较函数。
 func TestEqualities(t *testing.T) {
 	e := Equalities{}
 	type Bar struct {
@@ -20,6 +23,8 @@ func TestEqualities(t *testing.T) {
 		A []int
 		B map[string][]int
 	}
+	// 注册两个自定义比较函数：int 用 a+1==b，Bar 用 a.X*10==b.X。
+	// 这些函数会覆盖默认的逐字段比较，用于验证自定义相等性在各层嵌套中的传播。
 	err := e.AddFuncs(
 		func(a, b int) bool {
 			return a+1 == b
@@ -41,7 +46,7 @@ func TestEqualities(t *testing.T) {
 		deepEqual                          bool // Expected result for DeepEqual
 		deepEqualWithNilDifferentFromEmpty bool // Expected result for DeepEqualWithNilDifferentFromEmpty
 	}{
-		// Custom equality functions
+		// 自定义相等函数：Foo 的 int 字段应使用注册的函数（1 与 2 相等）。
 		{1, 2, true, true},
 		{2, 1, false, false},
 		{"foo", "fo", false, false},
@@ -52,37 +57,37 @@ func TestEqualities(t *testing.T) {
 		{Bar{1}, Bar{10}, true, true},
 		{&Bar{1}, &Bar{10}, true, true},
 		{Baz{Bar{1}}, Baz{Bar{10}}, true, true},
-		// Arrays
+		// 数组：长度与元素都必须匹配。
 		{[...]string{}, [...]string{"1", "2", "3"}, false, false},
 		{[...]string{"1"}, [...]string{"1", "2", "3"}, false, false},
 		{[...]string{"1", "2", "3"}, [...]string{}, false, false},
 		{[...]string{"1", "2", "3"}, [...]string{"1", "2", "3"}, true, true},
-		// Maps with custom equality
+		// 带自定义相等性的 map：键集合与值都要比较，值使用自定义函数。
 		{map[string]int{"foo": 1}, map[string]int{}, false, false},
 		{map[string]int{"foo": 1}, map[string]int{"foo": 2}, true, true},
 		{map[string]int{"foo": 2}, map[string]int{"foo": 1}, false, false},
 		{map[string]int{"foo": 1}, map[string]int{"foo": 2, "bar": 6}, false, false},
 		{map[string]int{"foo": 1, "bar": 6}, map[string]int{"foo": 2}, false, false},
-		// Nil vs empty (DeepEqual treats as equal, DeepEqualWithNilDifferentFromEmpty treats as different)
+		// nil 与空集合：DeepEqual 视为相等，DeepEqualWithNilDifferentFromEmpty 视为不同。
 		{map[string]int{}, map[string]int(nil), true, false},
 		{[]string(nil), []string(nil), true, true},
 		{[]string{}, []string(nil), true, false},
 		{[]string(nil), []string{}, true, false},
 		{[]int{}, []int(nil), true, false},
-		// Nil vs filled (both functions should return false)
+		// nil 与有内容：两个函数都应返回 false。
 		{[]string{"1"}, []string(nil), false, false},
-		// Empty vs filled (both functions should return false)
+		// 空集合与有内容：两个函数都应返回 false。
 		{[]string{}, []string{"1"}, false, false},
 		{[]string{}, []string{"1", "2", "3"}, false, false},
 		{[]int{}, []int{1, 2, 3}, false, false},
 		{map[string]int{}, map[string]int{"foo": 1}, false, false},
-		// Filled vs empty (both functions should return false)
+		// 有内容与空集合：两个函数都应返回 false。
 		{[]string{"1"}, []string{}, false, false},
 		{[]string{"1"}, []string{"1", "2", "3"}, false, false},
 		{[]string{"1", "2", "3"}, []string{}, false, false},
 		{[]int{1, 2, 3}, []int{}, false, false},
 		{map[string]int{"foo": 1}, map[string]int{}, false, false},
-		// Nested nil/empty (DeepEqual treats as equal, DeepEqualWithNilDifferentFromEmpty treats as different)
+		// 嵌套的 nil/空：同样只在 DeepEqualWithNilDifferentFromEmpty 中被视为不同。
 		{map[string][]int{}, map[string][]int(nil), true, false},
 		{map[string][]int{"foo": nil}, map[string][]int{"foo": {}}, true, false},
 		{Zap{A: nil, B: map[string][]int{"foo": nil}}, Zap{A: []int{}, B: map[string][]int{"foo": {}}}, true, false},
@@ -98,6 +103,9 @@ func TestEqualities(t *testing.T) {
 	}
 }
 
+// TestDerivatives 验证 DeepDerivative 的"派生"语义：
+// 只比较 a 中出现的字段，b 中多出的字段被忽略；nil 与空集合视为相等，
+// 且自定义相等函数同样生效。
 func TestDerivatives(t *testing.T) {
 	e := Equalities{}
 	type Bar struct {
@@ -106,6 +114,8 @@ func TestDerivatives(t *testing.T) {
 	type Baz struct {
 		Y Bar
 	}
+	// 注册两个自定义比较函数：int 用 a+1==b，Bar 用 a.X*10==b.X。
+	// 这些函数会覆盖默认的逐字段比较，用于验证自定义相等性在各层嵌套中的传播。
 	err := e.AddFuncs(
 		func(a, b int) bool {
 			return a+1 == b
@@ -122,6 +132,7 @@ func TestDerivatives(t *testing.T) {
 		X int
 	}
 
+	// 与 TestEqualities 相同的比较函数，但期望值按"a 是 b 的子集"语义给出。
 	table := []struct {
 		a, b  interface{}
 		equal bool

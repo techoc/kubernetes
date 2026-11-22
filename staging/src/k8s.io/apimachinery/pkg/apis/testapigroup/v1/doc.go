@@ -24,4 +24,6 @@ limitations under the License.
 // +k8s:prerelease-lifecycle-gen=true
 // +groupName=testapigroup.apimachinery.k8s.io
 
+// Package v1 是 testapigroup.apimachinery.k8s.io 的 v1 版本，仅用于
+// 演示 API 组的版本化与转换流程。类型定义在 types.go 中。
 package v1

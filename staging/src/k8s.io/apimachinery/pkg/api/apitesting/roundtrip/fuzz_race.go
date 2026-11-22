@@ -18,5 +18,6 @@ limitations under the License.
 
 package roundtrip
 
-// in race-detection mode, lower the number of iterations to keep reasonable runtimes in CI
+// 在竞态检测（-race）构建下，模糊测试单次迭代的开销远高于普通构建，
+// 因此降低迭代次数，保证 CI 中竞态检测任务的运行时长可控。
 const defaultFuzzIters = 5

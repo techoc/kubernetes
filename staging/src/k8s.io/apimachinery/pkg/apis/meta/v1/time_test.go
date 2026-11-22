@@ -30,10 +30,13 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TimeHolder 是测试用的包装结构，让 Time 通过结构体字段参与 JSON/YAML 编解码。
 type TimeHolder struct {
 	T Time `json:"t"`
 }
 
+// TestTimeMarshalYAML 验证 Time 序列化为 YAML 时：零值输出 null，
+// 非 UTC 时区的时间会转换为 UTC（RFC3339 格式）。
 func TestTimeMarshalYAML(t *testing.T) {
 	cases := []struct {
 		input  Time
@@ -56,6 +59,8 @@ func TestTimeMarshalYAML(t *testing.T) {
 	}
 }
 
+// TestTimeUnmarshalYAML 验证 YAML 中的 null 解析为零值 Time，
+// 而带时区偏移的时间会被转换到本地时区存储（Time 内部保留 Location 信息）。
 func TestTimeUnmarshalYAML(t *testing.T) {
 	cases := []struct {
 		input  string
@@ -76,6 +81,8 @@ func TestTimeUnmarshalYAML(t *testing.T) {
 	}
 }
 
+// TestTimeMarshalJSON 验证 Time 的 JSON 输出为 RFC3339 UTC 字符串，
+// 零值序列化为 null（与 omitempty 语义配合）。
 func TestTimeMarshalJSON(t *testing.T) {
 	cases := []struct {
 		input  Time
@@ -98,6 +105,8 @@ func TestTimeMarshalJSON(t *testing.T) {
 	}
 }
 
+// TestTimeUnmarshalJSON 验证 JSON 解析保留纳秒精度（RFC3339Nano），
+// 且解析结果转换为本地时区。
 func TestTimeUnmarshalJSON(t *testing.T) {
 	cases := []struct {
 		input  string
@@ -119,6 +128,8 @@ func TestTimeUnmarshalJSON(t *testing.T) {
 	}
 }
 
+// TestTimeMarshalJSONUnmarshalYAML 验证跨格式往返：JSON 序列化后再用 YAML 解析，
+// 时区名称/偏移与 UnixNano 都应保持不变。
 func TestTimeMarshalJSONUnmarshalYAML(t *testing.T) {
 	cases := []struct {
 		input Time
@@ -153,6 +164,8 @@ func TestTimeMarshalJSONUnmarshalYAML(t *testing.T) {
 	}
 }
 
+// TestTimeMarshalCBOR 验证 CBOR 编码：零值为 null（0xf6），
+// 非零值编码为 RFC3339 字符串且纳秒被截断。
 func TestTimeMarshalCBOR(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -177,6 +190,8 @@ func TestTimeMarshalCBOR(t *testing.T) {
 	}
 }
 
+// TestTimeUnmarshalCBOR 验证 CBOR 解码：接受 null、秒级与纳秒级时间戳，
+// 对错误类型与格式错误的时间字符串返回明确错误。
 func TestTimeUnmarshalCBOR(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -209,6 +224,7 @@ func TestTimeUnmarshalCBOR(t *testing.T) {
 	}
 }
 
+// TestTimeProto 验证 protobuf 编解码往返后与原始值完全一致（reflect.DeepEqual）。
 func TestTimeProto(t *testing.T) {
 	cases := []struct {
 		input Time
@@ -234,6 +250,8 @@ func TestTimeProto(t *testing.T) {
 	}
 }
 
+// TestTimeEqual 验证 nil 接收者与 nil 参数的安全比较：两个 nil 视为相等，
+// nil 与非 nil 视为不等。
 func TestTimeEqual(t *testing.T) {
 	t1 := NewTime(time.Now())
 	cases := []struct {
@@ -258,6 +276,8 @@ func TestTimeEqual(t *testing.T) {
 	}
 }
 
+// TestTimeBefore 验证 Before 对 nil 输入一律返回 false（包括同一时刻与 nil 组合），
+// 避免调用方需要额外的 nil 判断。
 func TestTimeBefore(t *testing.T) {
 	t1 := NewTime(time.Now())
 	cases := []struct {
@@ -281,6 +301,7 @@ func TestTimeBefore(t *testing.T) {
 	}
 }
 
+// TestTimeIsZero 验证 IsZero：nil 接收者视为零值，非 nil 实例返回 false。
 func TestTimeIsZero(t *testing.T) {
 	t1 := NewTime(time.Now())
 	cases := []struct {
@@ -302,6 +323,8 @@ func TestTimeIsZero(t *testing.T) {
 	}
 }
 
+// TestTimeRoundtripCBOR 用随机填充的 Time 做 500 次 CBOR 往返，
+// 确保任意取值（含边界时间）解码后都等于原值。
 func TestTimeRoundtripCBOR(t *testing.T) {
 	fuzzer := randfill.New()
 	for i := 0; i < 500; i++ {

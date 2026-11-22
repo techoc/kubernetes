@@ -32,6 +32,10 @@ const LastAppliedConfigAnnotation = "kubectl.kubernetes.io/last-applied-configur
 
 // SetLastApplied sets the last-applied annotation the given value in
 // the object.
+//
+// 若加入注解后总大小超限，会删除该注解而不是返回错误：last-applied 是
+// 尽力而为的信息，不能因此阻止写入。函数签名保留 error 以兼容调用方，
+// 目前恒为 nil。
 func SetLastApplied(obj runtime.Object, value string) error {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {

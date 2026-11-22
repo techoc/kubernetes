@@ -22,11 +22,14 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
-// RandFill satisfies randfill.NativeSelfFiller
+// RandFill 满足 randfill.NativeSelfFiller 接口，为 IntOrString 生成随机值。
+// 它会同时维护 Type 与对应字段的一致性：选择 Int 时清空 StrVal，选择 String 时清空 IntVal，
+// 避免产生"类型与值不匹配"的非法对象。
 func (intstr *IntOrString) RandFill(c randfill.Continue) {
 	if intstr == nil {
 		return
 	}
+	// 以 50% 概率生成整数或字符串；两个分支都显式清零另一侧字段。
 	if c.Bool() {
 		intstr.Type = Int
 		c.Fill(&intstr.IntVal)
@@ -38,5 +41,5 @@ func (intstr *IntOrString) RandFill(c randfill.Continue) {
 	}
 }
 
-// ensure IntOrString implements fuzz.Interface
+// 编译期断言：IntOrString 实现 randfill.NativeSelfFiller。
 var _ randfill.NativeSelfFiller = &IntOrString{}

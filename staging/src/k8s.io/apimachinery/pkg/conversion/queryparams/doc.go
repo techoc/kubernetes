@@ -16,4 +16,7 @@ limitations under the License.
 
 // Package queryparams provides conversion from versioned
 // runtime objects to URL query values
+//
+// 主要用于把 ListOptions 等参数对象编码为 HTTP 查询串；只支持简单值、
+// 切片和 map，复杂的嵌套对象不适合放进 query。
 package queryparams

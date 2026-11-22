@@ -20,18 +20,23 @@ import (
 	"testing"
 )
 
+// matches 断言 Fields 的字符串形式；Set 的 String() 按 key 排序输出，
+// 因此期望值必须使用排序后的顺序。
 func matches(t *testing.T, ls Set, want string) {
 	if ls.String() != want {
 		t.Errorf("Expected '%s', but got '%s'", want, ls.String())
 	}
 }
 
+// TestSetString 确认 String() 的输出是稳定、可比较的 key=value 列表。
 func TestSetString(t *testing.T) {
 	matches(t, Set{"x": "y"}, "x=y")
 	matches(t, Set{"foo": "bar"}, "foo=bar")
+	// 多字段时按 key 字典序，而不是插入顺序。
 	matches(t, Set{"foo": "bar", "baz": "qup"}, "baz=qup,foo=bar")
 }
 
+// TestFieldHas 区分“key 存在但值为空”与“key 不存在”：Has 只看 key。
 func TestFieldHas(t *testing.T) {
 	fieldHasTests := []struct {
 		Ls  Fields
@@ -49,6 +54,7 @@ func TestFieldHas(t *testing.T) {
 	}
 }
 
+// TestFieldGet 确认 Get 返回对应 key 的值。
 func TestFieldGet(t *testing.T) {
 	ls := Set{"x": "y"}
 	if ls.Get("x") != "y" {

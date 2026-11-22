@@ -26,6 +26,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestMaxLength 验证 MaxLength 按“字符（rune）数”而非字节数计算长度。
+// 关键用例：多字节字符在字节上更长但字符数不超限时不应报错；
+// max 为负数时任何非空内容都应报错。
 func TestMaxLength(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -163,6 +166,8 @@ func TestMinItems(t *testing.T) {
 	}
 }
 
+// TestMinProperties 验证 MinProperties 对 map 键数量的下界检查，
+// 并覆盖较大阈值（10 万）以确认不会出现边界计算错误。
 func TestMinProperties(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -216,6 +221,7 @@ func TestMinProperties(t *testing.T) {
 	}, {
 		// Note: While JSON Schema does not allow negative values for minProperties,
 		// we test that the validator handles it safely if it ever occurs at runtime.
+		// JSON Schema 不允许 minProperties 为负；这里只确认运行期若出现该值也不会出错。
 		name:       "0 properties, min -1",
 		properties: 0,
 		min:        -1,
@@ -234,6 +240,7 @@ func TestMinProperties(t *testing.T) {
 	}
 }
 
+// TestMaxItems 验证 MaxItems 对切片元素个数的上界检查；max 为负时任何数量都应报错。
 func TestMaxItems(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -281,6 +288,8 @@ func TestMaxItems(t *testing.T) {
 	}
 }
 
+// TestMaxProperties 验证 MaxProperties 对 map 键数量的上界检查，
+// 包含 10 万量级的阈值边界。
 func TestMaxProperties(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -323,6 +332,7 @@ func TestMaxProperties(t *testing.T) {
 	}, {
 		// Note: While JSON Schema does not allow negative values for maxProperties,
 		// we test that the validator handles it safely if it ever occurs at runtime.
+		// JSON Schema 不允许 maxProperties 为负；这里只确认运行期若出现该值也不会出错。
 		name:       "0 properties, max -1",
 		properties: 0,
 		max:        -1,
@@ -345,6 +355,8 @@ func TestMaxProperties(t *testing.T) {
 	}
 }
 
+// TestMinimum 对所有有符号与无符号整数类型验证 Minimum。
+// 无符号类型只测非负分支（无法表示负数）。
 func TestMinimum(t *testing.T) {
 	testMinimumPositive[int](t)
 	testMinimumNegative[int](t)
@@ -370,6 +382,7 @@ type minimumTestCase[T constraints.Integer] struct {
 	wantErrs field.ErrorList
 }
 
+// testMinimumPositive 覆盖最小值 >= 0 的情形：等于 min 通过，小于 min 报错。
 func testMinimumPositive[T constraints.Integer](t *testing.T) {
 	t.Helper()
 	cases := []minimumTestCase[T]{{
@@ -394,6 +407,7 @@ func testMinimumPositive[T constraints.Integer](t *testing.T) {
 	doTestMinimum[T](t, cases)
 }
 
+// testMinimumNegative 覆盖负的最小值，确认负数比较不会因符号处理而出错。
 func testMinimumNegative[T constraints.Signed](t *testing.T) {
 	t.Helper()
 	cases := []minimumTestCase[T]{{
@@ -410,6 +424,7 @@ func testMinimumNegative[T constraints.Signed](t *testing.T) {
 	doTestMinimum[T](t, cases)
 }
 
+// doTestMinimum 是 Minimum 的通用执行器：为每个用例构造可读子测试名并比对错误。
 func doTestMinimum[T constraints.Integer](t *testing.T, cases []minimumTestCase[T]) {
 	t.Helper()
 	matcher := field.ErrorMatcher{}.ByOrigin().ByDetailSubstring().ByField().ByType()
@@ -423,6 +438,8 @@ func doTestMinimum[T constraints.Integer](t *testing.T, cases []minimumTestCase[
 	}
 }
 
+// TestMaximum 对所有有符号与无符号整数类型验证 Maximum。
+// 无符号类型只测非负分支。
 func TestMaximum(t *testing.T) {
 	testMaximumPositive[int](t)
 	testMaximumNegative[int](t)
@@ -448,6 +465,7 @@ type maximumTestCase[T constraints.Integer] struct {
 	wantErrs field.ErrorList
 }
 
+// testMaximumPositive 覆盖最大值 >= 0 的情形：等于 max 通过，大于 max 报错。
 func testMaximumPositive[T constraints.Integer](t *testing.T) {
 	t.Helper()
 	cases := []maximumTestCase[T]{{
@@ -472,6 +490,7 @@ func testMaximumPositive[T constraints.Integer](t *testing.T) {
 	doTestMaximum[T](t, cases)
 }
 
+// testMaximumNegative 覆盖负的最大值，确认负数比较语义正确。
 func testMaximumNegative[T constraints.Signed](t *testing.T) {
 	t.Helper()
 	cases := []maximumTestCase[T]{{
@@ -488,6 +507,7 @@ func testMaximumNegative[T constraints.Signed](t *testing.T) {
 	doTestMaximum[T](t, cases)
 }
 
+// doTestMaximum 是 Maximum 的通用执行器：为每个用例构造可读子测试名并比对错误。
 func doTestMaximum[T constraints.Integer](t *testing.T, cases []maximumTestCase[T]) {
 	t.Helper()
 	matcher := field.ErrorMatcher{}.ByOrigin().ByDetailSubstring().ByField().ByType()
@@ -501,6 +521,8 @@ func doTestMaximum[T constraints.Integer](t *testing.T, cases []maximumTestCase[
 	}
 }
 
+// TestMaxBytes 验证 MaxBytes 按“字节数”而非字符数计算长度。
+// 与 TestMaxLength 形成对照：多字节字符在字节维度上更容易超限。
 func TestMaxBytes(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -585,6 +607,8 @@ func TestMaxBytes(t *testing.T) {
 	}
 }
 
+// TestMinLength 验证 MinLength 按字符（rune）数计算长度。
+// 关键用例：字节数够但字符数不足时应报错（多字节字符）。
 func TestMinLength(t *testing.T) {
 	cases := []struct {
 		name     string

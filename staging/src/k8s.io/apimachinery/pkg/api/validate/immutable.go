@@ -30,8 +30,13 @@ import (
 // relies on the default ratcheting mechanism to only be called when a
 // change to the field has already been detected.  This avoids a redundant
 // equivalence check across ratcheting and this function.
+//
+// 不可变性校验与“ratcheting”机制配合：默认的字段比较会先判断新旧值是否
+// 相等，只有检测到变化时才会调用本函数。因此这里无需再比较值，直接报错；
+// 若在非 Update 操作中调用则无事可做。
 func Immutable[T any](_ context.Context, op operation.Operation, fldPath *field.Path, _, _ T) field.ErrorList {
 	if op.Type != operation.Update {
+		// Create/Delete 等操作不存在“变更”概念，直接通过。
 		return nil
 	}
 	return field.ErrorList{

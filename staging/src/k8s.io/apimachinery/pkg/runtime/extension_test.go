@@ -28,6 +28,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestEmbeddedRawExtensionMarshal 验证 RawExtension 作为结构体字段被 JSON 编码时，
+// 其 Raw 字节被原样内联，而不是作为字节数组（base64）输出。
 func TestEmbeddedRawExtensionMarshal(t *testing.T) {
 	type test struct {
 		Ext runtime.RawExtension
@@ -42,6 +44,9 @@ func TestEmbeddedRawExtensionMarshal(t *testing.T) {
 		t.Errorf("unexpected data: %s", string(data))
 	}
 }
+
+// TestEmbeddedRawExtensionUnmarshal 验证 JSON 反序列化能把内联对象还原为 RawExtension，
+// 且对“非空对象”和“空对象”两种输入都保持与原始结构相等。
 func TestEmbeddedRawExtensionUnmarshal(t *testing.T) {
 	type test struct {
 		Ext runtime.RawExtension
@@ -70,6 +75,8 @@ func TestEmbeddedRawExtensionUnmarshal(t *testing.T) {
 	}
 }
 
+// TestEmbeddedRawExtensionRoundTrip 验证 RawExtension 经过两轮 encode/decode 后
+// 字节输出稳定且结构不变，避免序列化结果随往返次数漂移。
 func TestEmbeddedRawExtensionRoundTrip(t *testing.T) {
 	type test struct {
 		Ext runtime.RawExtension
@@ -115,6 +122,10 @@ func TestEmbeddedRawExtensionRoundTrip(t *testing.T) {
 	}
 }
 
+// TestRawExtensionMarshalUnstructured 验证 RawExtension 在 CBOR 与 JSON 两种编码下的
+// “unstructured 化”规则：Object 为 nil 时输出 null；Raw 为 JSON 时按 JSON 解析；
+// 带 CBOR self-described tag（55799）的字节按 CBOR 解析；无标记且无法判定类型时
+// 回退为原样输出或报错——这些区分是多格式 API 共存的关键。
 func TestRawExtensionMarshalUnstructured(t *testing.T) {
 	for _, tc := range []struct {
 		Name              string
@@ -221,6 +232,8 @@ func TestRawExtensionMarshalUnstructured(t *testing.T) {
 	}
 }
 
+// TestRawExtensionUnmarshalCBOR 验证 CBOR 反序列化：null 视为 no-op（与 UnmarshalJSON 约定一致），
+// 输入已带 self-described tag 时原样保存，缺失时补上该 tag 以保证后续能识别为 CBOR。
 func TestRawExtensionUnmarshalCBOR(t *testing.T) {
 	for _, tc := range []struct {
 		Name string

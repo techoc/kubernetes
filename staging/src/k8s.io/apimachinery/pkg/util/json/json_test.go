@@ -29,6 +29,9 @@ import (
 	"testing"
 )
 
+// TestEvaluateTypes 验证本包 Unmarshal/Marshal 对 JSON 标量、整数/浮点数
+// 边界、字符串、数组与 map 的类型推断与输出规范化：
+// 整数在 int64 范围内保持整数，溢出后退化为 float64；浮点数按最短表示输出。
 func TestEvaluateTypes(t *testing.T) {
 	testCases := []struct {
 		In   string
@@ -280,15 +283,17 @@ func TestEvaluateTypes(t *testing.T) {
 		},
 	}
 
+	// 每个用例分别以 map 成员、数组元素和独立对象三种形态解码，
+	// 以覆盖不同上下文中的类型推断路径。
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d_map", i), func(t *testing.T) {
-			// decode the input as a map item
+			// 把输入作为 map 的一个条目解码
 			inputJSON := fmt.Sprintf(`{"data":%s}`, tc.In)
 			expectedJSON := fmt.Sprintf(`{"data":%s}`, tc.Out)
 			m := map[string]interface{}{}
 			err := Unmarshal([]byte(inputJSON), &m)
 			if tc.Err && err != nil {
-				// Expected error
+				// 期望的错误
 				return
 			}
 			if err != nil {
@@ -316,13 +321,13 @@ func TestEvaluateTypes(t *testing.T) {
 		})
 
 		t.Run(fmt.Sprintf("%d_slice", i), func(t *testing.T) {
-			// decode the input as an array item
+			// 把输入作为数组元素解码
 			inputJSON := fmt.Sprintf(`[0,%s]`, tc.In)
 			expectedJSON := fmt.Sprintf(`[0,%s]`, tc.Out)
 			m := []interface{}{}
 			err := Unmarshal([]byte(inputJSON), &m)
 			if tc.Err && err != nil {
-				// Expected error
+				// 期望的错误
 				return
 			}
 			if err != nil {
@@ -350,13 +355,13 @@ func TestEvaluateTypes(t *testing.T) {
 		})
 
 		t.Run(fmt.Sprintf("%d_raw", i), func(t *testing.T) {
-			// decode the input as a standalone object
+			// 把输入作为独立对象解码
 			inputJSON := tc.In
 			expectedJSON := tc.Out
 			var m interface{}
 			err := Unmarshal([]byte(inputJSON), &m)
 			if tc.Err && err != nil {
-				// Expected error
+				// 期望的错误
 				return
 			}
 			if err != nil {
@@ -382,6 +387,8 @@ func TestEvaluateTypes(t *testing.T) {
 	}
 }
 
+// TestUnmarshalNil 验证向 nil 指针 Unmarshal 时的错误与标准库 encoding/json 一致，
+// 避免包装层悄悄改变错误语义。
 func TestUnmarshalNil(t *testing.T) {
 	{
 		var v *interface{}

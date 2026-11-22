@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package unstructuredscheme 提供完全基于 unstructured 对象的
+// NegotiatedSerializer/Typer/Creator 实现，用于无需注册具体 Go 类型的
+// 客户端场景（如 kubectl 的通用序列化）。
 package unstructuredscheme
 
 import (
@@ -26,9 +29,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer/versioning"
 )
 
+// scheme 是共享的空 Scheme，仅用于 versioning codec 的 group/version 选择；
+// 它不需要注册任何类型，因为 typer/creator 全部由 unstructured 实现承担。
 var scheme = runtime.NewScheme()
 
 // NewUnstructuredNegotiatedSerializer returns a simple, negotiated serializer
+//
+// 返回的序列化器只支持 JSON/YAML，且不做任何 defaulting。
 func NewUnstructuredNegotiatedSerializer() runtime.NegotiatedSerializer {
 	return unstructuredNegotiatedSerializer{
 		scheme:  scheme,
@@ -37,12 +44,16 @@ func NewUnstructuredNegotiatedSerializer() runtime.NegotiatedSerializer {
 	}
 }
 
+// unstructuredNegotiatedSerializer 仅持有 typer/creator/scheme 三件套，
+// 具体编解码完全交给内部构造的 json.Serializer。
 type unstructuredNegotiatedSerializer struct {
 	scheme  *runtime.Scheme
 	typer   runtime.ObjectTyper
 	creator runtime.ObjectCreater
 }
 
+// SupportedMediaTypes 暴露 JSON 和 YAML；只有 JSON 提供流式接口，
+// 因为 YAML 流式解码需要额外的分帧策略。
 func (s unstructuredNegotiatedSerializer) SupportedMediaTypes() []runtime.SerializerInfo {
 	return []runtime.SerializerInfo{
 		{
@@ -68,14 +79,19 @@ func (s unstructuredNegotiatedSerializer) SupportedMediaTypes() []runtime.Serial
 	}
 }
 
+// EncoderForVersion 用 versioning codec 把对象转换到目标 group/version；
+// defaulter 传 nil，因为 unstructured 没有 defaulting 逻辑。
 func (s unstructuredNegotiatedSerializer) EncoderForVersion(encoder runtime.Encoder, gv runtime.GroupVersioner) runtime.Encoder {
 	return versioning.NewDefaultingCodecForScheme(s.scheme, encoder, nil, gv, nil)
 }
 
+// DecoderToVersion 与编码方向对称，同样不设置 defaulter。
 func (s unstructuredNegotiatedSerializer) DecoderToVersion(decoder runtime.Decoder, gv runtime.GroupVersioner) runtime.Decoder {
 	return versioning.NewDefaultingCodecForScheme(s.scheme, nil, decoder, nil, gv)
 }
 
+// unstructuredObjectTyper 直接信任对象自身携带的 apiVersion/kind，
+// 不依赖任何已注册的类型表。
 type unstructuredObjectTyper struct {
 }
 
@@ -84,6 +100,8 @@ func NewUnstructuredObjectTyper() runtime.ObjectTyper {
 	return unstructuredObjectTyper{}
 }
 
+// ObjectKinds 只接受实现了 runtime.Unstructured 的对象；
+// 对普通 Go 类型返回错误，避免静默地产生错误类型信息。
 func (t unstructuredObjectTyper) ObjectKinds(obj runtime.Object) ([]schema.GroupVersionKind, bool, error) {
 	// Delegate for things other than Unstructured.
 	if _, ok := obj.(runtime.Unstructured); !ok {
@@ -100,10 +118,13 @@ func (t unstructuredObjectTyper) ObjectKinds(obj runtime.Object) ([]schema.Group
 	return []schema.GroupVersionKind{obj.GetObjectKind().GroupVersionKind()}, false, nil
 }
 
+// Recognizes 总是返回 true：unstructured 世界的类型信息来自数据本身，
+// typer 无法也不应预先枚举。
 func (t unstructuredObjectTyper) Recognizes(gvk schema.GroupVersionKind) bool {
 	return true
 }
 
+// unstructuredCreator 根据请求的 GVK 创建空 Unstructured。
 type unstructuredCreator struct{}
 
 // NewUnstructuredCreator returns a simple object creator that always returns an unstructured
@@ -111,12 +132,14 @@ func NewUnstructuredCreator() runtime.ObjectCreater {
 	return unstructuredCreator{}
 }
 
+// New 创建的对象会预先设置 GVK，保证后续序列化能得到正确的 apiVersion/kind。
 func (c unstructuredCreator) New(kind schema.GroupVersionKind) (runtime.Object, error) {
 	ret := &unstructured.Unstructured{}
 	ret.SetGroupVersionKind(kind)
 	return ret, nil
 }
 
+// unstructuredDefaulter 是空实现占位，便于接口装配。
 type unstructuredDefaulter struct {
 }
 
@@ -125,5 +148,6 @@ func NewUnstructuredDefaulter() runtime.ObjectDefaulter {
 	return unstructuredDefaulter{}
 }
 
+// Default 不做任何事：unstructured 对象不应在序列化层被改写。
 func (d unstructuredDefaulter) Default(in runtime.Object) {
 }

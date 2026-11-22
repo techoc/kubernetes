@@ -23,32 +23,39 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupName is the group name for this API.
+// GroupName 是该 API 的组名。
 const GroupName = "meta.k8s.io"
 
 var (
 	// TODO: move SchemeBuilder with zz_generated.deepcopy.go to k8s.io/api.
 	// localSchemeBuilder and AddToScheme will stay in k8s.io/kubernetes.
+	// SchemeBuilder 收集需要注册到 Scheme 的函数；AddToScheme 是对它的便捷封装，
+	// 让调用方无需关心内部是否使用局部变量。
 	SchemeBuilder      runtime.SchemeBuilder
 	localSchemeBuilder = &SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme
 )
 
-// SchemeGroupVersion is group version used to register these objects
+// SchemeGroupVersion 是注册这些对象所用的组版本。
+// 使用 APIVersionInternal 表明这是仅存在于进程内部的版本，不对外暴露。
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
 
-// Kind takes an unqualified kind and returns a Group qualified GroupKind
+// Kind 接收不带组限定的 kind，返回带组限定的 GroupKind。
 func Kind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
-// addToGroupVersion registers common meta types into schemas.
+// addToGroupVersion 把通用 meta 类型注册到 scheme 中。
+// 由于 meta 内部版本是"汇聚点"，这里同时注册了 metav1 与 metav1beta1 的类型，
+// 使内部版本可以直接与各外部版本互转。
 func addToGroupVersion(scheme *runtime.Scheme) error {
+	// TypeMeta 只有 TypeMeta -> TypeMeta 这一种转换，显式忽略可避免转换器生成器报错。
 	if err := scheme.AddIgnoredConversionType(&metav1.TypeMeta{}, &metav1.TypeMeta{}); err != nil {
 		return err
 	}
-	// ListOptions is the only options struct which needs conversion (it exposes labels and fields
-	// as selectors for convenience). The other types have only a single representation today.
+	// ListOptions 是唯一需要转换的 options 结构（它为了方便把 labels/fields 暴露为 selector）；
+	// 其他 options 类型目前只有一种表示形式，注册即可。
+	// 注意：ListOptions 的转换函数需要手工实现（见 conversion.go），因为它涉及 selector 的拆解。
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&ListOptions{},
 		&metav1.GetOptions{},
@@ -62,13 +69,15 @@ func addToGroupVersion(scheme *runtime.Scheme) error {
 		&metav1beta1.PartialObjectMetadata{},
 		&metav1beta1.PartialObjectMetadataList{},
 	)
+	// 先注册 beta1，再注册 v1，使后者在存在同名类型时获得优先权。
 	if err := metav1beta1.AddMetaToScheme(scheme); err != nil {
 		return err
 	}
 	if err := metav1.AddMetaToScheme(scheme); err != nil {
 		return err
 	}
-	// Allow delete options to be decoded across all version in this scheme (we may want to be more clever than this)
+	// 把 options 注册为 unversioned 类型，使其在所有版本下都能被解码
+	// （这样客户端无论使用哪个版本发送请求，服务端都能识别这些 options）。
 	scheme.AddUnversionedTypes(SchemeGroupVersion,
 		&metav1.DeleteOptions{},
 		&metav1.CreateOptions{},
@@ -81,8 +90,8 @@ func addToGroupVersion(scheme *runtime.Scheme) error {
 	return nil
 }
 
-// Unlike other API groups, meta internal knows about all meta external versions, but keeps
-// the logic for conversion private.
+// 与其他 API 组不同，meta 内部版本了解所有 meta 外部版本，但把转换逻辑保持为私有。
+// 通过 init 注册而非导出，避免外部代码依赖内部转换细节。
 func init() {
 	localSchemeBuilder.Register(addToGroupVersion)
 }

@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// Wildcard values used in priority patterns; a pattern component equal to the
+// wildcard matches any value in the candidate.
 const (
 	AnyGroup    = "*"
 	AnyVersion  = "*"
@@ -30,6 +32,8 @@ const (
 	AnyKind     = "*"
 )
 
+// Compile-time assertions that the priority mappers implement the full
+// RESTMapper surface, including reset and string formatting.
 var (
 	_ ResettableRESTMapper            = PriorityRESTMapper{}
 	_ ResettableRESTMapperWithContext = PriorityRESTMapperWithContext{}
@@ -87,6 +91,7 @@ func (m PriorityRESTMapperWithContext) String() string {
 }
 
 func ToPriorityRESTMapperWithContext(m PriorityRESTMapper) PriorityRESTMapperWithContext {
+	// The context-aware variant is preferred; this bridges the legacy mapper.
 	return PriorityRESTMapperWithContext{
 		Delegate:         ToRESTMapperWithContext(m.Delegate),
 		ResourcePriority: m.ResourcePriority,
@@ -157,13 +162,17 @@ func (m PriorityRESTMapper) Reset() {
 // ResourceFor finds all resources, then passes them through the ResourcePriority patterns to find a single matching hit.
 func (m PriorityRESTMapperWithContext) ResourceForWithContext(ctx context.Context, partiallySpecifiedResource schema.GroupVersionResource) (schema.GroupVersionResource, error) {
 	originalGVRs, originalErr := m.Delegate.ResourcesForWithContext(ctx, partiallySpecifiedResource)
+	// If the delegate found nothing usable, surface its error verbatim rather
+	// than masking it with an ambiguity error.
 	if originalErr != nil && len(originalGVRs) == 0 {
 		return schema.GroupVersionResource{}, originalErr
 	}
+	// A single match needs no disambiguation; keep any non-fatal error.
 	if len(originalGVRs) == 1 {
 		return originalGVRs[0], originalErr
 	}
 
+	// Copy so the delegate's slice is never mutated while narrowing.
 	remainingGVRs := append([]schema.GroupVersionResource{}, originalGVRs...)
 	for _, pattern := range m.ResourcePriority {
 		matchedGVRs := []schema.GroupVersionResource{}
@@ -193,6 +202,7 @@ func (m PriorityRESTMapperWithContext) ResourceForWithContext(ctx context.Contex
 // KindFor finds all kinds, then passes them through the KindPriority patterns to find a single matching hit.
 func (m PriorityRESTMapperWithContext) KindForWithContext(ctx context.Context, partiallySpecifiedResource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
 	originalGVKs, originalErr := m.Delegate.KindsForWithContext(ctx, partiallySpecifiedResource)
+	// Same narrowing strategy as ResourceForWithContext, applied to kinds.
 	if originalErr != nil && len(originalGVKs) == 0 {
 		return schema.GroupVersionKind{}, originalErr
 	}
@@ -200,6 +210,7 @@ func (m PriorityRESTMapperWithContext) KindForWithContext(ctx context.Context, p
 		return originalGVKs[0], originalErr
 	}
 
+	// Copy to avoid mutating the delegate's slice.
 	remainingGVKs := append([]schema.GroupVersionKind{}, originalGVKs...)
 	for _, pattern := range m.KindPriority {
 		matchedGVKs := []schema.GroupVersionKind{}
@@ -226,6 +237,8 @@ func (m PriorityRESTMapperWithContext) KindForWithContext(ctx context.Context, p
 	return schema.GroupVersionKind{}, &AmbiguousResourceError{PartialResource: partiallySpecifiedResource, MatchingKinds: originalGVKs}
 }
 
+// resourceMatches reports whether a resource satisfies a priority pattern.
+// Each wildcard component of the pattern matches anything.
 func resourceMatches(pattern schema.GroupVersionResource, resource schema.GroupVersionResource) bool {
 	if pattern.Group != AnyGroup && pattern.Group != resource.Group {
 		return false
@@ -240,6 +253,8 @@ func resourceMatches(pattern schema.GroupVersionResource, resource schema.GroupV
 	return true
 }
 
+// kindMatches reports whether a kind satisfies a priority pattern.
+// Each wildcard component of the pattern matches anything.
 func kindMatches(pattern schema.GroupVersionKind, kind schema.GroupVersionKind) bool {
 	if pattern.Group != AnyGroup && pattern.Group != kind.Group {
 		return false
@@ -256,6 +271,7 @@ func kindMatches(pattern schema.GroupVersionKind, kind schema.GroupVersionKind) 
 
 func (m PriorityRESTMapperWithContext) RESTMappingWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) (mapping *RESTMapping, err error) {
 	mappings, originalErr := m.Delegate.RESTMappingsWithContext(ctx, gk, versions...)
+	// No candidates: return the delegate error unchanged.
 	if originalErr != nil && len(mappings) == 0 {
 		return nil, originalErr
 	}
@@ -263,6 +279,8 @@ func (m PriorityRESTMapperWithContext) RESTMappingWithContext(ctx context.Contex
 	// any versions the user provides take priority
 	priorities := m.KindPriority
 	if len(versions) > 0 {
+		// Explicit versions outrank the configured priorities: build wildcard-kind
+		// patterns for each requested version and prepend them.
 		priorities = make([]schema.GroupVersionKind, 0, len(m.KindPriority)+len(versions))
 		for _, version := range versions {
 			gv := schema.GroupVersion{
@@ -300,6 +318,7 @@ func (m PriorityRESTMapperWithContext) RESTMappingWithContext(ctx context.Contex
 		return remaining[0], originalErr
 	}
 
+	// No pattern narrowed the result to a single mapping; report all candidates.
 	var kinds []schema.GroupVersionKind
 	for _, m := range mappings {
 		kinds = append(kinds, m.GroupVersionKind)

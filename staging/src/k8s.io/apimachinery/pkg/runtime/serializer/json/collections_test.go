@@ -33,6 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// TestCollectionsEncoding 对同一组用例分别跑普通编码与流式编码，确认两种
+// 实现产出完全相同的字节（流式只是分批写出，不改变语义）。
 func TestCollectionsEncoding(t *testing.T) {
 	t.Run("Normal", func(t *testing.T) {
 		testCollectionsEncoding(t, NewSerializerWithOptions(DefaultMetaFactory, nil, nil, SerializerOptions{}), false)
@@ -43,6 +45,9 @@ func TestCollectionsEncoding(t *testing.T) {
 }
 
 // testCollectionsEncoding should provide comprehensive tests to validate streaming implementation of encoder.
+//
+// 除输出字节外，还用 writeCountingBuffer 断言 Write 调用次数：流式模式
+// 必须写出多次，非流式模式只能写一次（含 cannotStream 的降级情形）。
 func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool) {
 	var buf writeCountingBuffer
 	var remainingItems int64 = 1
@@ -56,9 +61,12 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 		// allow provides allowed alternate representations.
 		// For the json v1->v2 transition, this is used to tolerate changes
 		// in how malformed input in munged.
+		// allow 提供可接受的等价输出。json v1->v2 过渡期用于容忍畸形输入
+		// 处理方式的差异。
 		allow []string
 	}{
 		// Preserving the distinction between integers and floating-point numbers
+		// 整数 1 与浮点 1.0 必须输出不同文本，避免下游把类型搞混。
 		{
 			name: "Struct with floats",
 			in: &StructWithFloatsList{
@@ -99,6 +107,7 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			expect: "{\"items\":[{\"float32\":1,\"float64\":1.1,\"int\":1}]}\n",
 		},
 		// Handling structs with duplicate field names (JSON tag names) without producing duplicate keys in the encoded output
+		// 两个字段映射到同一个 JSON key 时，期望行为是丢弃而不是输出重复键。
 		{
 			name: "StructWithDuplicatedTags",
 			in: &StructWithDuplicatedTagsList{
@@ -112,6 +121,7 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			expect: "{\"metadata\":{},\"items\":[{\"metadata\":{}}]}\n",
 		},
 		// Encoding Go strings containing invalid UTF-8 sequences without error
+		// 非法 UTF-8 被替换为 U+FFFD，而不是报错或原样透传。
 		{
 			name: "UnstructuredList object invalid UTF-8 ",
 			in: &unstructured.UnstructuredList{
@@ -139,6 +149,8 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			allow: []string{"{\"items\":[{\"key\":\"\ufffd\"}]}\n"},
 		},
 		// Preserving the distinction between absent, present-but-null, and present-and-empty states for slices and maps
+		// nil slice/map 输出 null，空 slice/map 输出 []/{ }；对 Unstructured
+		// 而言 nil Items 会被规范化为 []，而 typed list 保留 null。
 		{
 			name: "CarpList items nil",
 			in: &testapigroupv1.CarpList{
@@ -322,6 +334,7 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			expect: "{\"items\":[],\"map\":{}}\n",
 		},
 		// Handling structs implementing MarshallJSON method, especially built-in collection types.
+		// 顶层列表若实现 MarshalJSON，整体输出由它决定，无法逐项流式写出。
 		{
 			name:         "List with MarshallJSON cannot be streamed",
 			in:           &ListWithMarshalJSONList{},
@@ -338,6 +351,8 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 			expect: "{\"metadata\":{},\"items\":[\"marshallJSON\"]}\n",
 		},
 		// Handling raw bytes.
+		// []byte 编码为 base64 字符串，[N]byte 编码为数字数组（与 encoding/json
+		// 一致）。
 		{
 			name: "Struct with raw bytes",
 			in: &StructWithRawBytesList{
@@ -587,9 +602,11 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 				t.Fatalf("unexpected error: %v", err)
 			}
 			t.Logf("encoded: %s", buf.String())
+			// allow 中的等价形式只容忍格式差异，不放过语义差异。
 			if got := buf.String(); got != tc.expect && !slices.Contains(tc.allow, got) {
 				t.Errorf("not matching:\n%s", cmp.Diff(got, tc.expect))
 			}
+			// 用 Write 次数验证是否真的走了流式路径。
 			expectStreaming := !tc.cannotStream && streamingEnabled
 			if expectStreaming && buf.writeCount <= 1 {
 				t.Errorf("expected streaming but Write was called only: %d", buf.writeCount)
@@ -601,6 +618,8 @@ func testCollectionsEncoding(t *testing.T, s *Serializer, streamingEnabled bool)
 	}
 }
 
+// StructWithFloatsList 是测试用列表类型；DeepCopyObject 返回 nil 即可，
+// 编码路径不会调用它。
 type StructWithFloatsList struct {
 	metav1.TypeMeta `json:""`
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
@@ -611,6 +630,7 @@ func (l *StructWithFloatsList) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// StructWithFloats 无 json tag，用于验证默认字段名与数值类型的保留。
 type StructWithFloats struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
@@ -634,6 +654,8 @@ func (l *StructWithDuplicatedTagsList) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// StructWithDuplicatedTags 故意让 Key1/Key2 共用 json:"key"，触发重复键
+// 处理逻辑；nolint 是因为 govet 会报告重复 tag。
 type StructWithDuplicatedTags struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
@@ -646,6 +668,8 @@ func (s *StructWithDuplicatedTags) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// ListWithMarshalJSONList 在列表级别实现 MarshalJSON，用于验证该情形
+// 会整体降级为非流式编码。
 type ListWithMarshalJSONList struct {
 	metav1.TypeMeta `json:""`
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
@@ -670,6 +694,8 @@ func (s *StructWithMarshalJSONList) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// StructWithMarshalJSON 在元素级别实现 MarshalJSON；列表仍可流式编码，
+// 每个元素单独调用自定义序列化。
 type StructWithMarshalJSON struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
@@ -693,6 +719,7 @@ func (s *StructWithRawBytesList) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// StructWithRawBytes 验证 []byte 与 [N]byte 的不同 JSON 表示。
 type StructWithRawBytes struct {
 	metav1.TypeMeta   `json:""`
 	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
@@ -704,6 +731,8 @@ func (s *StructWithRawBytes) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// ListWithAdditionalFields 带有 ListMeta/Items 之外的字段，因此无法只
+// 流式输出 items，必须整体编码。
 type ListWithAdditionalFields struct {
 	metav1.TypeMeta `json:""`
 	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
@@ -715,6 +744,8 @@ func (s *ListWithAdditionalFields) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// writeCountingBuffer 统计 Write 调用次数，用来区分流式与非流式实现；
+// 它嵌入 bytes.Buffer 以保留全部写入内容。
 type writeCountingBuffer struct {
 	writeCount int
 	bytes.Buffer
@@ -730,7 +761,10 @@ func (b *writeCountingBuffer) Reset() {
 	b.Buffer.Reset()
 }
 
+// TestFuzzCollectionsEncoding 用随机填充的列表做差分测试：流式编码器的
+// 输出必须与普通编码器逐字节一致。随机源不固定，以扩大覆盖面。
 func TestFuzzCollectionsEncoding(t *testing.T) {
+	// FieldsV1 的内部结构对随机填充不友好，直接跳过。
 	disableFuzzFieldsV1 := func(field *metav1.FieldsV1, c randfill.Continue) {}
 	fuzzUnstructuredList := func(list *unstructured.UnstructuredList, c randfill.Continue) {
 		list.Object = map[string]interface{}{
@@ -757,6 +791,7 @@ func TestFuzzCollectionsEncoding(t *testing.T) {
 	normalSerializer := NewSerializerWithOptions(DefaultMetaFactory, nil, nil, SerializerOptions{StreamingCollectionsEncoding: false})
 	normalBuffer := &bytes.Buffer{}
 	t.Run("CarpList", func(t *testing.T) {
+		// 每轮都重置两个 buffer，确保比较的是单次编码结果。
 		for range 1000 {
 			list := &testapigroupv1.CarpList{}
 			f.Fill(list)
@@ -804,6 +839,8 @@ func TestFuzzCollectionsEncoding(t *testing.T) {
 	})
 }
 
+// BenchmarkStreamEncodeCollections 对两种列表类型分别测量流式编码开销。
+// 随机源固定为 12345，保证两次运行的输入一致、结果可比。
 func BenchmarkStreamEncodeCollections(b *testing.B) {
 	disableFuzzFieldsV1 := func(field *metav1.FieldsV1, c randfill.Continue) {}
 	fuzzMap := func(kvs map[string]interface{}, c randfill.Continue) {
@@ -839,6 +876,7 @@ func BenchmarkStreamEncodeCollections(b *testing.B) {
 	b.Run("CarpList", func(b *testing.B) {
 		var buf bytes.Buffer
 		b.ReportAllocs()
+		// 重置计时器以排除上面的数据准备时间。
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			buf.Reset()

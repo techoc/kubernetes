@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package yaml 在 JSON 序列化器之上增加 YAML 解码能力：先把 YAML 转成 JSON，
+// 再交给内嵌的 JSON 序列化器处理，避免为 YAML 单独实现一套解码逻辑。
 package yaml
 
 import (
@@ -23,6 +25,7 @@ import (
 )
 
 // yamlSerializer converts YAML passed to the Decoder methods to JSON.
+// 中文补充：只覆写 Decode；编码仍沿用内嵌的 JSON 序列化器。
 type yamlSerializer struct {
 	// the nested serializer
 	runtime.Serializer
@@ -32,10 +35,13 @@ type yamlSerializer struct {
 var _ runtime.Serializer = yamlSerializer{}
 
 // NewDecodingSerializer adds YAML decoding support to a serializer that supports JSON.
+// 中文补充：传入的 jsonSerializer 必须能处理 JSON 输入，YAML 只是前置转换层。
 func NewDecodingSerializer(jsonSerializer runtime.Serializer) runtime.Serializer {
 	return &yamlSerializer{jsonSerializer}
 }
 
+// Decode 先将 YAML 数据转换为等价的 JSON，再委托给内嵌序列化器解码；
+// 转换失败时直接返回错误，不做任何部分解码。
 func (c yamlSerializer) Decode(data []byte, gvk *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	out, err := yaml.ToJSON(data)
 	if err != nil {

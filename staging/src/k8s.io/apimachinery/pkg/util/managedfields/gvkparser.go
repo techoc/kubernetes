@@ -32,6 +32,9 @@ import (
 const groupVersionKindExtensionKey = "x-kubernetes-group-version-kind"
 
 // GvkParser contains a Parser that allows introspecting the schema.
+//
+// 它把 GVK 映射到 OpenAPI 模型名，再由 structured-merge-diff 的 parser 提供
+// 类型化的字段路径操作；managed fields 的合并与比较都依赖这一映射。
 type GvkParser struct {
 	gvks   map[schema.GroupVersionKind]string
 	parser typed.Parser
@@ -39,6 +42,8 @@ type GvkParser struct {
 
 // Type returns a helper which can produce objects of the given type. Any
 // errors are deferred until a further function is called.
+//
+// 未知 GVK 返回 nil；调用方必须检查，否则会在后续字段操作时 panic。
 func (p *GvkParser) Type(gvk schema.GroupVersionKind) *typed.ParseableType {
 	typeName, ok := p.gvks[gvk]
 	if !ok {
@@ -51,6 +56,9 @@ func (p *GvkParser) Type(gvk schema.GroupVersionKind) *typed.ParseableType {
 // NewGVKParser builds a GVKParser from a proto.Models. This
 // will automatically find the proper version of the object, and the
 // corresponding schema information.
+//
+// 同一个 GVK 出现在多个模型中属于 OpenAPI 定义错误，直接返回错误而不是
+// 后者覆盖前者，以免静默地选错 schema。
 func NewGVKParser(models proto.Models, preserveUnknownFields bool) (*GvkParser, error) {
 	typeSchema, err := schemaconv.ToSchemaWithPreserveUnknownFields(models, preserveUnknownFields)
 	if err != nil {
@@ -80,6 +88,9 @@ func NewGVKParser(models proto.Models, preserveUnknownFields bool) (*GvkParser, 
 }
 
 // Get and parse GroupVersionKind from the extension. Returns empty if it doesn't have one.
+//
+// 容错解析：任何结构不符合预期的条目都被跳过而不是整体报错，因为扩展只是
+// 元数据，不应阻止 schema 的正常使用。
 func parseGroupVersionKind(s proto.Schema) []schema.GroupVersionKind {
 	extensions := s.GetExtensions()
 

@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// TestHashField 验证 HashField 的输出形态与基本性质：固定 16 位小写十六进制、
+// 对同一输入确定、对不同输入不同。输入含空串与典型 UID 形式。
 func TestHashField(t *testing.T) {
 	tests := []struct {
 		input string

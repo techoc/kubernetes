@@ -29,6 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// structuredMergeManager 把对象转换为 SMD（structured-merge-diff）的 TypedValue，
+// 调用 merge.Updater 计算新的字段所有权，再转换回对象。
 type structuredMergeManager struct {
 	typeConverter   TypeConverter
 	objectConverter runtime.ObjectConvertor
@@ -53,6 +55,7 @@ func NewStructuredMergeManager(typeConverter TypeConverter, objectConverter runt
 		groupVersion:    gv,
 		hubVersion:      hub,
 		updater: merge.Updater{
+			// 转换器负责在 hub 版本与目标版本之间转换字段路径。
 			Converter:    newVersionConverter(typeConverter, objectConverter, hub), // This is the converter provided to SMD from k8s
 			IgnoreFilter: resetFields,
 		},
@@ -70,12 +73,15 @@ func NewCRDStructuredMergeManager(typeConverter TypeConverter, objectConverter r
 		groupVersion:    gv,
 		hubVersion:      hub,
 		updater: merge.Updater{
+			// CRD 使用宽松版本转换器：没有 OpenAPI 模型时也要能工作。
 			Converter:    newCRDVersionConverter(typeConverter, objectConverter, hub),
 			IgnoreFilter: resetFields,
 		},
 	}, nil
 }
 
+// objectGVKNN 返回 "namespace/name; GVK" 形式的对象标识，用于错误信息。
+// 取不到元数据时用 <unknown> 占位，保证错误信息仍可读。
 func objectGVKNN(obj runtime.Object) string {
 	name := "<unknown>"
 	namespace := "<unknown>"
@@ -88,6 +94,9 @@ func objectGVKNN(obj runtime.Object) string {
 }
 
 // Update implements Manager.
+//
+// 更新请求不合并补丁，只重新计算 newObj 相对于 liveObj 的字段所有权：
+// 把两个对象都转成目标版本的 TypedValue，交给 SMD 的 Update。
 func (f *structuredMergeManager) Update(liveObj, newObj runtime.Object, managed Managed, manager string) (runtime.Object, Managed, error) {
 	newObjVersioned, err := f.toVersioned(newObj)
 	if err != nil {
@@ -97,6 +106,8 @@ func (f *structuredMergeManager) Update(liveObj, newObj runtime.Object, managed 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to convert live object (%v) to proper version: %v", objectGVKNN(liveObj), err)
 	}
+	// Update 路径允许重复字段：kubectl 等客户端可能提交含重复项的对象，
+	// 这里选择容忍而不是直接拒绝。
 	newObjTyped, err := f.typeConverter.ObjectToTyped(newObjVersioned, typed.AllowDuplicates)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to convert new object (%v) to smd typed: %v", objectGVKNN(newObjVersioned), err)
@@ -112,14 +123,19 @@ func (f *structuredMergeManager) Update(liveObj, newObj runtime.Object, managed 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to update ManagedFields (%v): %v", objectGVKNN(newObjVersioned), err)
 	}
+	// 时间戳沿用旧的：Update 不改变字段所有者的 apply 时间。
 	managed = NewManaged(managedFields, managed.Times())
 
 	return newObj, managed, nil
 }
 
 // Apply implements Manager.
+//
+// Apply 与服务端 apply 语义一致：以 patchObj 为唯一所有者计算冲突，
+// 再把结果转回对象。force=true 时覆盖冲突。
 func (f *structuredMergeManager) Apply(liveObj, patchObj runtime.Object, managed Managed, manager string, force bool) (runtime.Object, Managed, error) {
 	// Check that the patch object has the same version as the live object
+	// 版本必须一致，否则字段路径无法直接比较，容易产生错误的冲突判断。
 	if patchVersion := patchObj.GetObjectKind().GroupVersionKind().GroupVersion(); patchVersion != f.groupVersion {
 		return nil, nil,
 			errors.NewBadRequest(
@@ -132,6 +148,7 @@ func (f *structuredMergeManager) Apply(liveObj, patchObj runtime.Object, managed
 	if err != nil {
 		return nil, nil, fmt.Errorf("couldn't get accessor: %v", err)
 	}
+	// 客户端不得自带 managedFields，否则可以伪造字段所有权。
 	if patchObjMeta.GetManagedFields() != nil {
 		return nil, nil, errors.NewBadRequest("metadata.managedFields must be nil")
 	}
@@ -142,6 +159,7 @@ func (f *structuredMergeManager) Apply(liveObj, patchObj runtime.Object, managed
 	}
 
 	// Don't allow duplicates in the applied object.
+	// 与 Update 不同，apply 的 patch 必须是规范的，重复字段直接报错。
 	patchObjTyped, err := f.typeConverter.ObjectToTyped(patchObj)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create typed patch object (%v): %v", objectGVKNN(patchObj), err)
@@ -160,6 +178,7 @@ func (f *structuredMergeManager) Apply(liveObj, patchObj runtime.Object, managed
 	managed = NewManaged(managedFields, managed.Times())
 
 	if newObjTyped == nil {
+		// nil 表示 apply 后对象没有变化；managed 仍可能更新。
 		return nil, managed, nil
 	}
 
@@ -168,6 +187,8 @@ func (f *structuredMergeManager) Apply(liveObj, patchObj runtime.Object, managed
 		return nil, nil, fmt.Errorf("failed to convert new typed object (%v) to object: %v", objectGVKNN(patchObj), err)
 	}
 
+	// 依次转换到目标版本、执行默认化、再转回 hub 版本：
+	// 默认化必须在目标版本进行，因为默认值是按版本定义的。
 	newObjVersioned, err := f.toVersioned(newObj)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to convert new object (%v) to proper version: %v", objectGVKNN(patchObj), err)
@@ -181,10 +202,12 @@ func (f *structuredMergeManager) Apply(liveObj, patchObj runtime.Object, managed
 	return newObjUnversioned, managed, nil
 }
 
+// toVersioned 把对象转换到该 Manager 服务的 groupVersion。
 func (f *structuredMergeManager) toVersioned(obj runtime.Object) (runtime.Object, error) {
 	return f.objectConverter.ConvertToVersion(obj, f.groupVersion)
 }
 
+// toUnversioned 把对象转换回 hub（内部）版本。
 func (f *structuredMergeManager) toUnversioned(obj runtime.Object) (runtime.Object, error) {
 	return f.objectConverter.ConvertToVersion(obj, f.hubVersion)
 }

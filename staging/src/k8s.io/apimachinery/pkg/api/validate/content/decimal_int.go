@@ -16,17 +16,16 @@ limitations under the License.
 
 package content
 
+// decimalIntegerErrMsg 统一用于所有非规范形式，避免泄露具体哪一位不合法。
 const decimalIntegerErrMsg string = "must be a valid decimal integer in canonical form"
 
-// IsDecimalInteger validates that a string represents a decimal integer in strict canonical form.
-// This means the string must be formatted exactly as a human would naturally write an integer,
-// without any programming language conventions like leading zeros, plus signs, or alternate bases.
+// IsDecimalInteger 校验字符串是否为严格规范形式的十进制整数。
+// 所谓规范，即人类书写整数的自然形式：不允许前导零、正号或其它进制前缀。
 //
-// valid values:"0" or Non-zero integers (i.e., "123", "-456") where the first digit is 1-9,
-// followed by any digits 0-9.
+// 合法值："0" 或以 1-9 开头的非零整数（如 "123"、"-456"），其后跟任意 0-9 数字。
 //
-// This validator is stricter than strconv.ParseInt, which accepts leading zeros values (i.e, "0700")
-// and interprets them as decimal 700, potentially causing confusion with octal notation.
+// 该校验比 strconv.ParseInt 更严格：后者接受前导零（如 "0700"）并当作十进制 700，
+// 容易与八进制写法混淆。
 func IsDecimalInteger(value string) []string {
 	n := len(value)
 	if n == 0 {
@@ -35,12 +34,14 @@ func IsDecimalInteger(value string) []string {
 
 	i := 0
 	if value[0] == '-' {
+		// 只有单独的 "-" 不构成整数。
 		if n == 1 {
 			return []string{decimalIntegerErrMsg}
 		}
 		i = 1
 	}
 
+	// 首位为 0 时，只有整个值恰为 "0" 才合法；"00"、"-0"、"0700" 均拒绝。
 	if value[i] == '0' {
 		if n == 1 && i == 0 {
 			return nil
@@ -48,10 +49,12 @@ func IsDecimalInteger(value string) []string {
 		return []string{decimalIntegerErrMsg}
 	}
 
+	// 首位必须是 1-9；这也顺带拒绝了 "+"、"a" 等非法字符。
 	if value[i] < '1' || value[i] > '9' {
 		return []string{decimalIntegerErrMsg}
 	}
 
+	// 其余各位必须是纯 ASCII 数字，拒绝空格、下划线等分隔符。
 	for i++; i < n; i++ {
 		if value[i] < '0' || value[i] > '9' {
 			return []string{decimalIntegerErrMsg}

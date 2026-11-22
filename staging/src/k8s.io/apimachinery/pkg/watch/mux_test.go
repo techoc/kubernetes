@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
+// myType 是最小的 runtime.Object 测试实现，仅携带 ID 与 Value。
 type myType struct {
 	ID    string
 	Value string
@@ -42,6 +43,7 @@ func (obj *myType) DeepCopyObject() runtime.Object {
 	return &clone
 }
 
+// TestBroadcaster 验证每个 watcher 都能按顺序收到全部事件，Shutdown 后通道关闭。
 func TestBroadcaster(t *testing.T) {
 	table := []Event{
 		{Type: Added, Object: &myType{"foo", "hello world 1"}},
@@ -51,9 +53,10 @@ func TestBroadcaster(t *testing.T) {
 	}
 
 	// The broadcaster we're testing
+	// 被测试的 broadcaster
 	m := NewBroadcaster(0, WaitIfChannelFull)
 
-	// Add a bunch of watchers
+	// 添加若干 watcher
 	const testWatchers = 2
 	wg := sync.WaitGroup{}
 	wg.Add(testWatchers)
@@ -62,7 +65,7 @@ func TestBroadcaster(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Unable start event watcher: '%v' (will not retry!)", err)
 		}
-		// Verify that each watcher gets the events in the correct order
+		// 校验每个 watcher 按正确顺序收到事件
 		go func(watcher int, w Interface) {
 			tableLine := 0
 			for {
@@ -92,6 +95,8 @@ func TestBroadcaster(t *testing.T) {
 	wg.Wait()
 }
 
+// TestBroadcasterWatcherClose 验证 Stop 关闭该 watcher 的通道、Shutdown 关闭其余 watcher 的通道，
+// 且重复 Stop 不会 panic。
 func TestBroadcasterWatcherClose(t *testing.T) {
 	m := NewBroadcaster(0, WaitIfChannelFull)
 	w, err := m.Watch()
@@ -110,11 +115,13 @@ func TestBroadcasterWatcherClose(t *testing.T) {
 	if _, open := <-w2.ResultChan(); open {
 		t.Errorf("Shutdown didn't work?")
 	}
-	// Extra stops don't hurt things
+	// 重复 Stop 不会出问题
 	w.Stop()
 	w2.Stop()
 }
 
+// TestBroadcasterWatcherStopDeadlock 验证在 distribute 正尝试向某 watcher 发送事件时
+// 停止该 watcher 不会造成死锁。
 func TestBroadcasterWatcherStopDeadlock(t *testing.T) {
 	done := make(chan bool)
 	m := NewBroadcaster(0, WaitIfChannelFull)
@@ -127,9 +134,8 @@ func TestBroadcasterWatcherStopDeadlock(t *testing.T) {
 		t.Fatalf("Unable start event watcher: '%v' (will not retry!)", err)
 	}
 	go func(w0, w1 Interface) {
-		// We know Broadcaster is in the distribute loop once one watcher receives
-		// an event. Stop the other watcher while distribute is trying to
-		// send to it.
+		// 一旦某个 watcher 收到事件，说明 Broadcaster 正处于 distribute 循环中；
+		// 此时停止另一个 watcher，以覆盖 “分发中停止” 的路径。
 		select {
 		case <-w0.ResultChan():
 			w1.Stop()
@@ -147,6 +153,8 @@ func TestBroadcasterWatcherStopDeadlock(t *testing.T) {
 	m.Shutdown()
 }
 
+// TestBroadcasterDropIfChannelFull 验证 DropIfChannelFull 模式下，
+// 队列容量为 1 的 watcher 只收到第一个事件，第二个事件被丢弃，且不阻塞其他 watcher。
 func TestBroadcasterDropIfChannelFull(t *testing.T) {
 	m := NewBroadcaster(1, DropIfChannelFull)
 
@@ -163,19 +171,18 @@ func TestBroadcasterDropIfChannelFull(t *testing.T) {
 		}
 	}
 
-	// Send a couple events before closing the broadcast channel.
+	// 在关闭广播通道前发送两个事件
 	t.Log("Sending event 1")
 	m.Action(event1.Type, event1.Object)
 	t.Log("Sending event 2")
 	m.Action(event2.Type, event2.Object)
 	m.Shutdown()
 
-	// Pull events from the queue.
+	// 从队列拉取事件
 	wg := sync.WaitGroup{}
 	wg.Add(len(watches))
 	for i := range watches {
-		// Verify that each watcher only gets the first event because its watch
-		// queue of length one was full from the first one.
+		// 校验每个 watcher 只收到第一个事件：其长度为 1 的队列已被首个事件占满。
 		go func(watcher int, w Interface) {
 			defer wg.Done()
 			e1, ok := <-w.ResultChan()
@@ -197,6 +204,7 @@ func TestBroadcasterDropIfChannelFull(t *testing.T) {
 	wg.Wait()
 }
 
+// BenchmarkBroadCaster 衡量并行调用 Action 的吞吐（每个 goroutine 发送同一事件）。
 func BenchmarkBroadCaster(b *testing.B) {
 	event1 := Event{Type: Added, Object: &myType{"foo", "hello world 1"}}
 	m := NewBroadcaster(0, WaitIfChannelFull)
@@ -209,6 +217,7 @@ func BenchmarkBroadCaster(b *testing.B) {
 	b.StopTimer()
 }
 
+// TestBroadcasterWatchAfterShutdown 验证 Shutdown 后再调用 Watch/WatchWithPrefix 返回错误。
 func TestBroadcasterWatchAfterShutdown(t *testing.T) {
 	event1 := Event{Type: Added, Object: &myType{"foo", "hello world 1"}}
 	event2 := Event{Type: Added, Object: &myType{"bar", "hello world 2"}}
@@ -223,6 +232,8 @@ func TestBroadcasterWatchAfterShutdown(t *testing.T) {
 	assert.EqualError(t, err, "broadcaster already stopped", "WatchWithPrefix should report error id broadcaster is shutdown")
 }
 
+// TestBroadcasterSendEventAfterShutdown 验证 Shutdown 后 Action 与 ActionOrDrop
+// 都返回错误，且 ActionOrDrop 返回 false（不会向已关闭通道发送）。
 func TestBroadcasterSendEventAfterShutdown(t *testing.T) {
 	m := NewBroadcaster(1, DropIfChannelFull)
 
@@ -235,7 +246,7 @@ func TestBroadcasterSendEventAfterShutdown(t *testing.T) {
 	}
 	m.Shutdown()
 
-	// Send a couple events after closing the broadcast channel.
+	// 在关闭广播通道后发送事件
 	t.Log("Sending event")
 
 	err := m.Action(event.Type, event.Object)
@@ -248,11 +259,14 @@ func TestBroadcasterSendEventAfterShutdown(t *testing.T) {
 
 // Test this since we see usage patterns where the broadcaster and watchers are
 // stopped simultaneously leading to races.
+//
+// TestBroadcasterShutdownRace 覆盖 broadcaster 与 watcher 同时停止的竞态场景
+// （真实用法见 startRecordingEvents）。
 func TestBroadcasterShutdownRace(t *testing.T) {
 	m := NewBroadcaster(1, WaitIfChannelFull)
 	stopCh := make(chan struct{})
 
-	// Add a bunch of watchers
+	// 添加若干 watcher
 	const testWatchers = 2
 	for i := 0; i < testWatchers; i++ {
 		i := i
@@ -261,8 +275,7 @@ func TestBroadcasterShutdownRace(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Unable start event watcher: '%v' (will not retry!)", err)
 		}
-		// This is how we force the watchers to close down independently of the
-		// eventbroadcaster, see real usage pattern in startRecordingEvents()
+		// 模拟 watcher 独立于 eventbroadcaster 自行关闭的场景。
 		go func() {
 			<-stopCh
 			t.Log("Stopping Watchers")
@@ -276,11 +289,10 @@ func TestBroadcasterShutdownRace(t *testing.T) {
 		t.Fatalf("error sending event: %v", err)
 	}
 
-	// Manually simulate m.Shutdown() but change it to force a race scenario
-	// 1. Close watcher stopchannel, so watchers are closed independently of the
-	// eventBroadcaster
-	// 2. Shutdown the m.incoming slightly Before m.stopped so that the watcher's
-	// call of Blockqueue can pass the m.stopped check.
+	// 手动模拟 m.Shutdown()，但调整为强制触发竞态：
+	// 1. 关闭 watcher 的 stop 通道，让 watcher 独立于 eventBroadcaster 关闭；
+	// 2. 先关闭 m.incoming 再关闭 m.stopped，使 watcher 调用 blockQueue 时
+	//    能通过 m.stopped 检查，从而命中竞态窗口。
 	m.blockQueue(func() {
 		close(stopCh)
 		close(m.incoming)

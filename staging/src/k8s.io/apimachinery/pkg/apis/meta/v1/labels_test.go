@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestCloneSelectorAndAddLabel 验证 CloneSelectorAndAddLabel 不修改入参选择器，
+// 且能正确处理 key/value 为空（不添加）与 labels 为 nil（新建 map）的情形。
 func TestCloneSelectorAndAddLabel(t *testing.T) {
 	labels := map[string]string{
 		"foo1": "bar1",
@@ -73,6 +75,8 @@ func TestCloneSelectorAndAddLabel(t *testing.T) {
 	}
 }
 
+// TestAddLabelToSelector 验证 AddLabelToSelector 原地修改选择器的 MatchLabels，
+// 覆盖空 label、追加 label 与 nil labels 三种情况。
 func TestAddLabelToSelector(t *testing.T) {
 	labels := map[string]string{
 		"foo1": "bar1",

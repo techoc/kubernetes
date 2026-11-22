@@ -27,6 +27,8 @@ import (
 )
 
 // unsafeObjectConvertor implements ObjectConvertor using the unsafe conversion path.
+// 中文说明：它把转换委托给 Scheme.UnsafeConvertToVersion，调用方必须保证
+// 不会复用或修改输入对象。
 type unsafeObjectConvertor struct {
 	*Scheme
 }
@@ -48,6 +50,7 @@ func UnsafeObjectConvertor(scheme *Scheme) ObjectConvertor {
 
 // SetField puts the value of src, into fieldName, which must be a member of v.
 // The value of src must be assignable to the field.
+// 中文说明：优先直接赋值，不可赋值时尝试显式类型转换；两者都失败才报错。
 func SetField(src interface{}, v reflect.Value, fieldName string) error {
 	field := v.FieldByName(fieldName)
 	if !field.IsValid() {
@@ -72,6 +75,7 @@ func Field(v reflect.Value, fieldName string, dest interface{}) error {
 	if !field.IsValid() {
 		return fmt.Errorf("couldn't find %v field in %T", fieldName, v.Interface())
 	}
+	// dest 必须是非 nil 指针，否则无法写回。
 	destValue, err := conversion.EnforcePtr(dest)
 	if err != nil {
 		return err
@@ -99,6 +103,7 @@ func FieldPtr(v reflect.Value, fieldName string, dest interface{}) error {
 	if err != nil {
 		return err
 	}
+	// 取字段地址后再做赋值/转换，目标是存放指针的变量。
 	field = field.Addr()
 	if field.Type().AssignableTo(v.Type()) {
 		v.Set(field)
@@ -118,6 +123,7 @@ func EncodeList(e Encoder, objects []Object) error {
 	for i := range objects {
 		data, err := Encode(e, objects[i])
 		if err != nil {
+			// 单个对象编码失败不影响其余对象，最后统一聚合错误。
 			errs = append(errs, err)
 			continue
 		}
@@ -127,6 +133,9 @@ func EncodeList(e Encoder, objects []Object) error {
 	return errors.NewAggregate(errs)
 }
 
+// decodeListItem 依次尝试 decoder 解码 Unknown 中的原始字节。遇到
+// NotRegisteredError 时换下一个 decoder；其它错误立即返回。全部解码器都
+// 不认识该类型时，再尝试把 TypeMeta 解出到 obj 上并保留为 Unknown。
 func decodeListItem(obj *Unknown, decoders []Decoder) (Object, error) {
 	for _, decoder := range decoders {
 		// TODO: Decode based on ContentType.
@@ -152,6 +161,9 @@ func decodeListItem(obj *Unknown, decoders []Decoder) (Object, error) {
 // DecodeList alters the list in place, attempting to decode any objects found in
 // the list that have the Unknown type. Any errors that occur are returned
 // after the entire list is processed. Decoders are tried in order.
+//
+// 中文说明：非 Unknown 元素保持不变；所有错误收集后返回，避免一个坏元素
+// 阻止其余元素解码。
 func DecodeList(objects []Object, decoders ...Decoder) []error {
 	errs := []error(nil)
 	for i, obj := range objects {
@@ -169,6 +181,8 @@ func DecodeList(objects []Object, decoders ...Decoder) []error {
 }
 
 // MultiObjectTyper returns the types of objects across multiple schemes in order.
+// 中文说明：按顺序询问各 ObjectTyper，第一个能识别对象的即返回；Recognizes
+// 则对任一 typer 识别即为真。适合组合多个 scheme 的编解码器。
 type MultiObjectTyper []ObjectTyper
 
 var _ ObjectTyper = MultiObjectTyper{}
@@ -204,6 +218,7 @@ func SetZeroValue(objPtr Object) error {
 
 // DefaultFramer is valid for any stream that can read objects serially without
 // any separation in the stream.
+// 中文说明：不做任何分帧，读写两端直接透传。
 var DefaultFramer = defaultFramer{}
 
 type defaultFramer struct{}
@@ -212,6 +227,8 @@ func (defaultFramer) NewFrameReader(r io.ReadCloser) io.ReadCloser { return r }
 func (defaultFramer) NewFrameWriter(w io.Writer) io.Writer         { return w }
 
 // WithVersionEncoder serializes an object and ensures the GVK is set.
+// 中文说明：编码前临时把对象的 GVK 改为目标版本对应的值，编码后恢复，
+// 以免污染调用方持有的对象。
 type WithVersionEncoder struct {
 	Version GroupVersioner
 	Encoder
@@ -222,6 +239,8 @@ type WithVersionEncoder struct {
 func (e WithVersionEncoder) Encode(obj Object, stream io.Writer) error {
 	gvks, _, err := e.ObjectTyper.ObjectKinds(obj)
 	if err != nil {
+		// 未注册类型无法推断 GVK，直接交给底层 encoder，可能仍能按对象
+		// 自带的 TypeMeta 序列化。
 		if IsNotRegisteredError(err) {
 			return e.Encoder.Encode(obj, stream)
 		}
@@ -262,6 +281,8 @@ func (d WithoutVersionDecoder) Decode(data []byte, defaults *schema.GroupVersion
 	return obj, gvk, err
 }
 
+// encoderWithAllocator 把支持内存分配器的 encoder 适配成普通 Encoder，
+// 供只接受 Encoder 的调用方使用。
 type encoderWithAllocator struct {
 	encoder      EncoderWithAllocator
 	memAllocator MemoryAllocator
@@ -289,6 +310,8 @@ func (e *encoderWithAllocator) Identifier() Identifier {
 // https://github.com/kubernetes/kubernetes/blob/4a1340bfd58fdb3846d4342c101e0bcb574fbfb1/staging/src/k8s.io/apiserver/pkg/endpoints/discovery/util.go#L101-L107
 var _ Serializer = nondeterministicEncoderToEncoderAdapter{}
 
+// nondeterministicEncoderToEncoderAdapter 把 NondeterministicEncoder 适配成
+// Serializer，使 discovery 等旧接口可以在不保证输出稳定的前提下复用。
 type nondeterministicEncoderToEncoderAdapter struct {
 	NondeterministicEncoder
 
@@ -302,6 +325,9 @@ func (e nondeterministicEncoderToEncoderAdapter) Encode(obj Object, w io.Writer)
 // UseNondeterministicEncoding returns an Encoder that encodes objects using the provided
 // Serializer's EncodeNondeterministic method if it implements NondeterministicEncoder, otherwise it
 // returns the provided Serializer as-is.
+//
+// 中文说明：用于 map 顺序不需要稳定的场景（例如 discovery），避免为此付出
+// 排序开销；需要确定性输出的地方不要使用。
 func UseNondeterministicEncoding(serializer Serializer) Encoder {
 	if nondeterministic, ok := serializer.(NondeterministicEncoder); ok {
 		return nondeterministicEncoderToEncoderAdapter{NondeterministicEncoder: nondeterministic, Decoder: serializer}

@@ -28,23 +28,24 @@ import (
 )
 
 var (
-	scaleGroupVersion   = schema.GroupVersion{Group: "autoscaling", Version: "v1"}
+	// scale 子资源固定使用 autoscaling/v1 的组版本。
+	scaleGroupVersion = schema.GroupVersion{Group: "autoscaling", Version: "v1"}
+	// replicas 在 scale 子资源中的字段路径。
 	replicasPathInScale = fieldpath.MakePathOrDie("spec", "replicas")
 )
 
-// ResourcePathMappings maps a group/version to its replicas path. The
-// assumption is that all the paths correspond to leaf fields.
+// ResourcePathMappings 把 group/version 映射到该版本下 replicas 的字段路径。
+// 假设所有路径都指向叶子字段（managed fields 只能精确到叶子）。
 type ResourcePathMappings map[string]fieldpath.Path
 
-// ScaleHandler manages the conversion of managed fields between a main
-// resource and the scale subresource
+// ScaleHandler 管理主资源与 scale 子资源之间 managed fields 的转换。
 type ScaleHandler struct {
 	parentEntries []metav1.ManagedFieldsEntry
 	groupVersion  schema.GroupVersion
 	mappings      ResourcePathMappings
 }
 
-// NewScaleHandler creates a new ScaleHandler
+// NewScaleHandler 根据主资源的 managed fields、目标组版本与路径映射创建 ScaleHandler。
 func NewScaleHandler(parentEntries []metav1.ManagedFieldsEntry, groupVersion schema.GroupVersion, mappings ResourcePathMappings) *ScaleHandler {
 	return &ScaleHandler{
 		parentEntries: parentEntries,
@@ -53,12 +54,10 @@ func NewScaleHandler(parentEntries []metav1.ManagedFieldsEntry, groupVersion sch
 	}
 }
 
-// ToSubresource filter the managed fields of the main resource and convert
-// them so that they can be handled by scale.
-// For the managed fields that have a replicas path it performs two changes:
-//  1. APIVersion is changed to the APIVersion of the scale subresource
-//  2. Replicas path of the main resource is transformed to the replicas path of
-//     the scale subresource
+// ToSubresource 过滤主资源的 managed fields 并转换，使其可用于 scale 子资源。
+// 对包含 replicas 路径的条目做两处修改：
+//  1. APIVersion 改为 scale 子资源的 APIVersion
+//  2. 主资源的 replicas 路径改写为 scale 子资源中的 replicas 路径
 func (h *ScaleHandler) ToSubresource() ([]metav1.ManagedFieldsEntry, error) {
 	managed, err := internal.DecodeManagedFields(h.parentEntries)
 	if err != nil {
@@ -70,11 +69,13 @@ func (h *ScaleHandler) ToSubresource() ([]metav1.ManagedFieldsEntry, error) {
 	for manager, versionedSet := range managed.Fields() {
 		path, ok := h.mappings[string(versionedSet.APIVersion())]
 		// Skip the entry if the APIVersion is unknown
+		// APIVersion 未知的条目无法定位 replicas，直接跳过。
 		if !ok || path == nil {
 			continue
 		}
 
 		if versionedSet.Set().Has(path) {
+			// 该条目拥有 replicas 字段，转换为 scale 子资源下的等价条目。
 			newVersionedSet := fieldpath.NewVersionedSet(
 				fieldpath.NewSet(replicasPathInScale),
 				fieldpath.APIVersion(scaleGroupVersion.String()),
@@ -89,8 +90,7 @@ func (h *ScaleHandler) ToSubresource() ([]metav1.ManagedFieldsEntry, error) {
 	return managedFieldsEntries(internal.NewManaged(f, t))
 }
 
-// ToParent merges `scaleEntries` with the entries of the main resource and
-// transforms them accordingly
+// ToParent 把 scaleEntries 与主资源的条目合并并做相应转换。
 func (h *ScaleHandler) ToParent(scaleEntries []metav1.ManagedFieldsEntry) ([]metav1.ManagedFieldsEntry, error) {
 	decodedParentEntries, err := internal.DecodeManagedFields(h.parentEntries)
 	if err != nil {
@@ -111,6 +111,7 @@ func (h *ScaleHandler) ToParent(scaleEntries []metav1.ManagedFieldsEntry) ([]met
 		// Get the main resource "replicas" path
 		path, ok := h.mappings[string(versionedSet.APIVersion())]
 		// Drop the entry if the APIVersion is unknown.
+		// APIVersion 未知的条目无法映射路径，直接丢弃。
 		if !ok {
 			continue
 		}
@@ -118,6 +119,8 @@ func (h *ScaleHandler) ToParent(scaleEntries []metav1.ManagedFieldsEntry) ([]met
 		// If the parent entry does not have the replicas path or it is nil, just
 		// keep it as it is. The path is nil for Custom Resources without scale
 		// subresource.
+		// 主资源条目不含 replicas 路径、或该路径为 nil（无 scale 子资源的 CRD）时，
+		// 原样保留该条目。
 		if path == nil || !versionedSet.Set().Has(path) {
 			f[manager] = versionedSet
 			t[manager] = decodedParentEntries.Times()[manager]
@@ -126,8 +129,11 @@ func (h *ScaleHandler) ToParent(scaleEntries []metav1.ManagedFieldsEntry) ([]met
 
 		if _, ok := scaleFields[manager]; !ok {
 			// "Steal" the replicas path from the main resource entry
+			// scale 侧没有同名 manager 时，把 replicas 字段从主资源条目中“偷走”，
+			// 避免同一字段被重复声明归属。
 			newSet := versionedSet.Set().Difference(fieldpath.NewSet(path))
 
+			// 偷走后集合为空则整条丢弃，没有剩余字段可保留。
 			if !newSet.Empty() {
 				newVersionedSet := fieldpath.NewVersionedSet(
 					newSet,
@@ -139,12 +145,14 @@ func (h *ScaleHandler) ToParent(scaleEntries []metav1.ManagedFieldsEntry) ([]met
 			}
 		} else {
 			// Field wasn't stolen, let's keep the entry as it is.
+			// scale 侧已有同名条目，主资源条目保持原样，并消费掉 scale 条目避免重复处理。
 			f[manager] = versionedSet
 			t[manager] = decodedParentEntries.Times()[manager]
 			delete(scaleFields, manager)
 		}
 	}
 
+	// 剩余的 scale 条目（未与主资源条目重名的）映射回主资源的 replicas 路径。
 	for manager, versionedSet := range scaleFields {
 		if !versionedSet.Set().Has(replicasPathInScale) {
 			continue
@@ -161,6 +169,8 @@ func (h *ScaleHandler) ToParent(scaleEntries []metav1.ManagedFieldsEntry) ([]met
 	return managedFieldsEntries(internal.NewManaged(f, t))
 }
 
+// managedFieldsEntries 把内部 Managed 结构重新编码进一个空的 unstructured 对象，
+// 再通过访问器取出标准形式的 ManagedFieldsEntry 列表。
 func managedFieldsEntries(entries internal.ManagedInterface) ([]metav1.ManagedFieldsEntry, error) {
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	if err := internal.EncodeObjectManagedFields(obj, entries); err != nil {

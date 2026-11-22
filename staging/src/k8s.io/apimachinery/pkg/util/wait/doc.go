@@ -14,6 +14,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package wait provides tools for polling or listening for changes
-// to a condition.
+// Package wait 提供用于轮询或监听某个条件变化的工具。
 package wait

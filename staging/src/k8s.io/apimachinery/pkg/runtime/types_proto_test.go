@@ -25,6 +25,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// TestVarint pins the encoded length of MaxUint64 at the maximum varint size;
+// this guards the size computation used by the generated marshallers.
 func TestVarint(t *testing.T) {
 	varintBuffer := make([]byte, maxUint64VarIntLength)
 	offset := encodeVarintGenerated(varintBuffer, len(varintBuffer), math.MaxUint64)
@@ -34,6 +36,10 @@ func TestVarint(t *testing.T) {
 	}
 }
 
+// TestNestedMarshalToWriter verifies that three encoding strategies for
+// Unknown -- ordinary Marshal with an inlined Raw, NestedMarshalTo, and the
+// streaming MarshalToWriter -- produce byte-identical output, including for an
+// empty payload.
 func TestNestedMarshalToWriter(t *testing.T) {
 	testcases := []struct {
 		name string
@@ -99,6 +105,8 @@ func TestNestedMarshalToWriter(t *testing.T) {
 	}
 }
 
+// copyMarshaler is a trivial Marshaler used to feed raw bytes through the
+// nested-marshal paths without involving the generated code.
 type copyMarshaler []byte
 
 func (c copyMarshaler) Size() int {

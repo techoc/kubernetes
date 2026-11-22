@@ -38,6 +38,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// testConversions counts conversion invocations so tests can assert that a
+// codec path actually performed a conversion rather than returning the input.
 type testConversions struct {
 	internalToExternalCalls int
 	externalToInternalCalls int
@@ -57,6 +59,8 @@ func (c *testConversions) externalToInternalSimple(in *runtimetesting.ExternalSi
 	return nil
 }
 
+// registerConversions installs both directions of the simple type's conversion
+// so the scheme can be exercised as a codec.
 func (c *testConversions) registerConversions(s *runtime.Scheme) error {
 	if err := s.AddConversionFunc((*runtimetesting.InternalSimple)(nil), (*runtimetesting.ExternalSimple)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return c.internalToExternalSimple(a.(*runtimetesting.InternalSimple), b.(*runtimetesting.ExternalSimple), scope)
@@ -71,6 +75,10 @@ func (c *testConversions) registerConversions(s *runtime.Scheme) error {
 	return nil
 }
 
+// TestScheme covers the core scheme/codec round trips: encode then decode back
+// to the internal type, decode directly to the external type, conversion to
+// and from unstructured, and the requirement that unstructured objects carry
+// both kind and version.
 func TestScheme(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	internalGVK := internalGV.WithKind("Simple")
@@ -247,6 +255,9 @@ func TestScheme(t *testing.T) {
 	})
 }
 
+// TestBadJSONRejection verifies the JSON serializer rejects documents that
+// lack a kind or name an unregistered kind, instead of decoding into a random
+// type.
 func TestBadJSONRejection(t *testing.T) {
 	scheme := runtime.NewScheme()
 	codecs := serializer.NewCodecFactory(scheme)
@@ -263,6 +274,8 @@ func TestBadJSONRejection(t *testing.T) {
 	}
 }
 
+// TestExternalToInternalMapping verifies that serialized external types are
+// decoded into their registered internal counterparts and compare equal.
 func TestExternalToInternalMapping(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "test.group", Version: "testExternal"}
@@ -294,6 +307,8 @@ func TestExternalToInternalMapping(t *testing.T) {
 	}
 }
 
+// TestExtensionMapping verifies that embedded extension objects are encoded
+// with their own apiVersion/kind and decoded back into runtime.Unknown.
 func TestExtensionMapping(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "test.group", Version: "testExternal"}
@@ -370,6 +385,9 @@ func TestExtensionMapping(t *testing.T) {
 	}
 }
 
+// TestEncode verifies that encoding an internal object through a versioned
+// codec produces data that decodes back to the same internal object, and that
+// the returned GVK is the target external version.
 func TestEncode(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	internalGVK := internalGV.WithKind("Simple")
@@ -403,6 +421,9 @@ func TestEncode(t *testing.T) {
 	}
 }
 
+// TestUnversionedTypes verifies that types registered as unversioned keep the
+// group/version they were declared in even when the codec targets another
+// group; unversioned objects are never converted.
 func TestUnversionedTypes(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	internalGVK := internalGV.WithKind("Simple")
@@ -467,6 +488,8 @@ func TestUnversionedTypes(t *testing.T) {
 }
 
 // Returns a new Scheme set up with the test objects.
+// The registrations deliberately cover the same Go type under several
+// group/version/kind combinations to exercise ambiguity handling.
 func GetTestScheme() *runtime.Scheme {
 	internalGV := schema.GroupVersion{Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Version: "v1"}
@@ -495,6 +518,8 @@ func GetTestScheme() *runtime.Scheme {
 	return s
 }
 
+// TestKnownTypes verifies KnownTypes returns exactly the types registered for a
+// group/version and nothing for an unregistered group/version.
 func TestKnownTypes(t *testing.T) {
 	s := GetTestScheme()
 	if len(s.KnownTypes(schema.GroupVersion{Group: "group", Version: "v2"})) != 0 {
@@ -509,6 +534,9 @@ func TestKnownTypes(t *testing.T) {
 	}
 }
 
+// TestAddKnownTypesIdemPotent verifies that registering the same type twice,
+// by any registration entry point, leaves a single entry rather than
+// duplicating or panicking. This matters because init paths can run twice.
 func TestAddKnownTypesIdemPotent(t *testing.T) {
 	s := runtime.NewScheme()
 
@@ -557,6 +585,9 @@ type InternalSimple struct {
 
 func (s *InternalSimple) DeepCopyObject() runtime.Object { return nil }
 
+// TestConflictingAddKnownTypes verifies that registering two different Go
+// types under the same kind panics: silently accepting would make decoding
+// nondeterministic.
 func TestConflictingAddKnownTypes(t *testing.T) {
 	s := runtime.NewScheme()
 	gv := schema.GroupVersion{Group: "foo", Version: "v1"}
@@ -592,6 +623,8 @@ func TestConflictingAddKnownTypes(t *testing.T) {
 	}
 }
 
+// TestConvertToVersionBasic checks the simplest internal-to-external
+// conversion through the scheme.
 func TestConvertToVersionBasic(t *testing.T) {
 	s := GetTestScheme()
 	tt := &runtimetesting.TestType1{A: "I'm not a pointer object"}
@@ -608,6 +641,8 @@ func TestConvertToVersionBasic(t *testing.T) {
 	}
 }
 
+// testGroupVersioner is a GroupVersioner with a fixed target and success flag,
+// used to drive conversion decisions deterministically.
 type testGroupVersioner struct {
 	target schema.GroupVersionKind
 	ok     bool
@@ -621,6 +656,11 @@ func (m testGroupVersioner) Identifier() string {
 	return "testGroupVersioner"
 }
 
+// TestConvertToVersion covers version targeting: conversion to internal and
+// external versions, unregistered/unstructured inputs, multi-group targets,
+// and the invariant that ConvertToVersion never returns the input object and
+// never mutates it. The same: true cases additionally assert that
+// UnsafeConvertToVersion returns the original object when no copy is needed.
 func TestConvertToVersion(t *testing.T) {
 	testCases := []struct {
 		scheme *runtime.Scheme
@@ -887,6 +927,8 @@ func TestConvertToVersion(t *testing.T) {
 	}
 }
 
+// TestConvert covers explicit into-object conversion, including converting an
+// internal object into unstructured with a target version.
 func TestConvert(t *testing.T) {
 	testCases := []struct {
 		scheme *runtime.Scheme
@@ -930,6 +972,8 @@ func TestConvert(t *testing.T) {
 	}
 }
 
+// TestMetaValues verifies the conversion callbacks receive the right scope and
+// that a round trip internal->external->internal preserves the value.
 func TestMetaValues(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "test.group", Version: "externalVersion"}
@@ -973,6 +1017,8 @@ func TestMetaValues(t *testing.T) {
 	}
 }
 
+// TestMetaValuesUnregisteredConvert verifies conversion functions registered
+// for types that are not in the scheme still run when explicitly invoked.
 func TestMetaValuesUnregisteredConvert(t *testing.T) {
 	type InternalSimple struct {
 		Version    string `json:"apiVersion,omitempty"`
@@ -1016,6 +1062,9 @@ func TestMetaValuesUnregisteredConvert(t *testing.T) {
 	}
 }
 
+// TestRegisterValidate verifies the scheme dispatches to per-type validation
+// functions for both create and update, and that subresources and options are
+// passed through to them.
 func TestRegisterValidate(t *testing.T) {
 	invalidValue := field.Invalid(field.NewPath("testString"), "", "Invalid value").WithOrigin("invalid-value")
 	invalidLength := field.Invalid(field.NewPath("testString"), "", "Invalid length").WithOrigin("invalid-length")
@@ -1097,6 +1146,7 @@ func TestRegisterValidate(t *testing.T) {
 	}
 }
 
+// TestType1 is a minimal runtime.Object used only by TestRegisterValidate.
 type TestType1 struct {
 	Version    string `json:"apiVersion,omitempty"`
 	Kind       string `json:"kind,omitempty"`
@@ -1107,6 +1157,8 @@ func (TestType1) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKi
 
 func (TestType1) DeepCopyObject() runtime.Object { return nil }
 
+// TestType2 is a second minimal runtime.Object used only by
+// TestRegisterValidate, so registration of multiple validators is exercised.
 type TestType2 struct {
 	Version    string `json:"apiVersion,omitempty"`
 	Kind       string `json:"kind,omitempty"`
@@ -1117,6 +1169,9 @@ func (TestType2) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKi
 
 func (TestType2) DeepCopyObject() runtime.Object { return nil }
 
+// TestToOpenAPIDefinitionName verifies the deterministic name synthesized for
+// an unstructured GVK and the errors returned when part of the GVK is missing.
+// The name is used to key OpenAPI schemas, so it must be stable.
 func TestToOpenAPIDefinitionName(t *testing.T) {
 	testCases := []struct {
 		name        string

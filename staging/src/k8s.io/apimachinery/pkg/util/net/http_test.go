@@ -33,6 +33,8 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// TestGetClientIP 覆盖 GetClientIP 的取值优先级：
+// X-Real-Ip > X-Forwarded-For 最后一个合法地址 > RemoteAddr；非法值被忽略。
 func TestGetClientIP(t *testing.T) {
 	ipString := "10.0.0.1"
 	ip := netutils.ParseIPSloppy(ipString)
@@ -113,6 +115,8 @@ func TestGetClientIP(t *testing.T) {
 	}
 }
 
+// TestAppendForwardedForHeader 验证向 X-Forwarded-For 追加客户端 IP：
+// 无已有值时直接写入，有值时以逗号分隔追加。
 func TestAppendForwardedForHeader(t *testing.T) {
 	testCases := []struct {
 		addr, forwarded, expected string
@@ -139,6 +143,8 @@ func TestAppendForwardedForHeader(t *testing.T) {
 	}
 }
 
+// TestProxierWithNoProxyCIDR 验证 NO_PROXY 中的 CIDR（含 IPv4/IPv6、带端口形式）
+// 能命中时就不委托给底层代理；主机名与不匹配的网段仍会委托。
 func TestProxierWithNoProxyCIDR(t *testing.T) {
 	testCases := []struct {
 		name    string
@@ -227,6 +233,8 @@ func TestProxierWithNoProxyCIDR(t *testing.T) {
 	}
 }
 
+// fakeTLSClientConfigHolder 实现 TLSClientConfigHolder 与 RoundTripper，
+// 用于验证 TLSClientConfig 能在传输链中正确找到 TLS 配置。
 type fakeTLSClientConfigHolder struct {
 	called bool
 }
@@ -239,6 +247,7 @@ func (f *fakeTLSClientConfigHolder) RoundTrip(*http.Request) (*http.Response, er
 	return nil, nil
 }
 
+// TestTLSClientConfigHolder 验证 TLSClientConfig 能从 RoundTripper 中取出 TLS 配置。
 func TestTLSClientConfigHolder(t *testing.T) {
 	rt := &fakeTLSClientConfigHolder{}
 	TLSClientConfig(rt)
@@ -248,6 +257,8 @@ func TestTLSClientConfigHolder(t *testing.T) {
 	}
 }
 
+// TestJoinPreservingTrailingSlash 验证 JoinPreservingTrailingSlash 在两侧
+// 为空、仅有尾斜杠、两侧都有路径时都能保留结尾的斜杠。
 func TestJoinPreservingTrailingSlash(t *testing.T) {
 	tests := []struct {
 		a    string
@@ -285,6 +296,8 @@ func TestJoinPreservingTrailingSlash(t *testing.T) {
 	}
 }
 
+// TestAllowsHTTP2 验证 allowsHTTP2 仅在 NextProtos 明确包含 h2 时返回 false；
+// 空配置或零长度 NextProtos 视为允许（由 Go 自动协商）。
 func TestAllowsHTTP2(t *testing.T) {
 	testcases := []struct {
 		Name         string
@@ -338,6 +351,9 @@ func TestAllowsHTTP2(t *testing.T) {
 	}
 }
 
+// TestSourceIPs 覆盖 SourceIPs 的地址收集顺序：X-Forwarded-For（从左到右）
+// 在前，X-Real-Ip 次之，RemoteAddr 最后；非法项被跳过，重复项被去除，
+// IPv4-mapped IPv6 会归一化为 IPv4。
 func TestSourceIPs(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -463,6 +479,9 @@ func TestSourceIPs(t *testing.T) {
 	}
 }
 
+// TestParseWarningHeader 覆盖 RFC 7234 Warning 头的解析：
+// 代码/代理/文本/可选日期、引号转义、RFC 2047 编码文本，
+// 以及控制字符、非 UTF-8、未闭合引号等非法输入。
 func TestParseWarningHeader(t *testing.T) {
 	tests := []struct {
 		name string
@@ -628,6 +647,8 @@ func TestParseWarningHeader(t *testing.T) {
 	}
 }
 
+// TestNewWarningHeader 覆盖 Warning 头序列化：代码需在 0-999，agent 与 text
+// 需通过合法性校验；并验证与 ParseWarningHeader 的往返一致。
 func TestNewWarningHeader(t *testing.T) {
 	tests := []struct {
 		name string
@@ -794,6 +815,8 @@ func TestNewWarningHeader(t *testing.T) {
 	}
 }
 
+// TestParseWarningHeaders 覆盖多个 Warning 头字段的批量解析：
+// 合法项被收集，非法项以错误形式返回，且不影响其他合法项。
 func TestParseWarningHeaders(t *testing.T) {
 	tests := []struct {
 		name string
@@ -853,6 +876,9 @@ func TestParseWarningHeaders(t *testing.T) {
 	}
 }
 
+// TestIsProbableEOF 验证 IsProbableEOF 能把常见的连接中断类错误
+// （EOF、broken connection、GOAWAY、reset by peer、closed network connection）
+// 识别为“可安全重试”的 EOF。
 func TestIsProbableEOF(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -915,6 +941,8 @@ func TestIsProbableEOF(t *testing.T) {
 	}
 }
 
+// TestReadIdleTimeoutSeconds 验证环境变量 HTTP2_READ_IDLE_TIMEOUT_SECONDS
+// 生效，非法值回退到默认 30 秒。
 func TestReadIdleTimeoutSeconds(t *testing.T) {
 	t.Setenv("HTTP2_READ_IDLE_TIMEOUT_SECONDS", "60")
 	if e, a := 60, readIdleTimeoutSeconds(); e != a {
@@ -927,6 +955,8 @@ func TestReadIdleTimeoutSeconds(t *testing.T) {
 	}
 }
 
+// TestPingTimeoutSeconds 验证环境变量 HTTP2_PING_TIMEOUT_SECONDS 生效，
+// 非法值回退到默认 15 秒。
 func TestPingTimeoutSeconds(t *testing.T) {
 	t.Setenv("HTTP2_PING_TIMEOUT_SECONDS", "60")
 	if e, a := 60, pingTimeoutSeconds(); e != a {
@@ -939,6 +969,7 @@ func TestPingTimeoutSeconds(t *testing.T) {
 	}
 }
 
+// Benchmark_ParseQuotedString 测量从 Warning 头中解析带引号字符串的开销。
 func Benchmark_ParseQuotedString(b *testing.B) {
 	str := `"The quick brown" fox jumps over the lazy dog`
 	b.ReportAllocs()

@@ -22,13 +22,19 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 //
 // TODO(#115478): once the watch-list fg is always on we register this function in the scheme (via AddTypeDefaultingFunc).
 // TODO(#115478): when the function is registered in the scheme remove all callers of this method.
+//
+// 中文补充：开启 watch-list 特性时，对使用 legacy resourceVersion（空或 "0"）的
+// watch 请求默认启用 SendInitialEvents 与 NotOlderThan，从而实现“先列后 watch”的语义。
 func SetListOptionsDefaults(obj *ListOptions, isWatchListFeatureEnabled bool) {
+	// 特性未开启时保持旧行为，不注入任何默认值。
 	if !isWatchListFeatureEnabled {
 		return
 	}
+	// 用户已显式指定 SendInitialEvents 或 ResourceVersionMatch 时尊重其选择，不覆盖。
 	if obj.SendInitialEvents != nil || len(obj.ResourceVersionMatch) != 0 {
 		return
 	}
+	// 只有 legacy resourceVersion 才适用默认值；指定了具体版本时语义已由用户确定。
 	legacy := obj.ResourceVersion == "" || obj.ResourceVersion == "0"
 	if obj.Watch && legacy {
 		turnOnInitialEvents := true

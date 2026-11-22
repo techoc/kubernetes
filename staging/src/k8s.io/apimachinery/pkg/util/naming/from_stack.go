@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package naming 从调用栈中推导出简短、可读的组件名称。
+//
+// 典型用途是给 reflector/controller 生成日志标识：同一段代码创建的多个实例
+// 会得到相同的名称，便于在日志中区分来源。
 package naming
 
 import (
@@ -30,6 +34,8 @@ import (
 func GetNameFromCallsite(ignoredPackages ...string) string {
 	name := "????"
 	const maxStack = 10
+	// 只向上看有限层，避免深层调用栈带来过大开销；超出后尝试从 goroutine
+	// 创建位置（created by）提取。
 	for i := 1; i < maxStack; i++ {
 		_, file, line, ok := goruntime.Caller(i)
 		if !ok {
@@ -39,6 +45,7 @@ func GetNameFromCallsite(ignoredPackages ...string) string {
 			}
 			i += maxStack
 		}
+		// 跳过被忽略的包以及 runtime 汇编桩，它们对定位调用方没有帮助。
 		if hasPackage(file, append(ignoredPackages, "/runtime/asm_")) {
 			continue
 		}
@@ -61,6 +68,9 @@ func hasPackage(file string, ignoredPackages []string) bool {
 }
 
 // trimPackagePrefix reduces duplicate values off the front of a package name.
+//
+// 依次尝试 vendor/src/pkg 三种路径前缀，取最靠后的一种，使不同构建布局下
+// 得到的名称尽量一致。
 func trimPackagePrefix(file string) string {
 	if l := strings.LastIndex(file, "/vendor/"); l >= 0 {
 		return file[l+len("/vendor/"):]
@@ -74,6 +84,7 @@ func trimPackagePrefix(file string) string {
 	return file
 }
 
+// stackCreator 匹配 debug.Stack() 末尾的 "created by func\n file:line +0x..."。
 var stackCreator = regexp.MustCompile(`(?m)^created by (.*)\n\s+(.*):(\d+) \+0x[[:xdigit:]]+$`)
 
 // extractStackCreator retrieves the goroutine file and line that launched this stack. Returns false

@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// TestResolveFieldValue 验证 ResolveFieldValue 的固定白名单：仅支持
+// object.metadata.uid 与 object.metadata.namespace，name/labels 等其它路径一律报错。
 func TestResolveFieldValue(t *testing.T) {
 	obj := &testObject{
 		ObjectMeta: metav1.ObjectMeta{

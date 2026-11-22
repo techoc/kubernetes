@@ -21,6 +21,8 @@ import (
 	"testing"
 )
 
+// TestIsPathSegmentPrefix 校验 "路径元素前缀" 语义：只要不含 '/' 或 '%' 即可接受，
+// 允许 '.'/'..' 以及空串（空串在 JSONPath 场景中表示根）。
 func TestIsPathSegmentPrefix(t *testing.T) {
 	testcases := map[string]struct {
 		Name        string
@@ -49,6 +51,7 @@ func TestIsPathSegmentPrefix(t *testing.T) {
 			Name:        "Iñtërnâtiônàlizætiøn",
 			ExpectedMsg: "",
 		},
+		// 前缀后面还会拼接实际字段名，因此单独的 '.' 和 '..' 合法。
 		"dot": {
 			Name:        ".",
 			ExpectedMsg: "",
@@ -65,10 +68,12 @@ func TestIsPathSegmentPrefix(t *testing.T) {
 			Name:        "..test",
 			ExpectedMsg: "",
 		},
+		// '/' 会让后续解析把内容误当作新的路径层级。
 		"slash": {
 			Name:        "foo/bar",
 			ExpectedMsg: "/",
 		},
+		// '%' 会触发 URL 解码，导致前缀与实际路径不一致。
 		"percent": {
 			Name:        "foo%bar",
 			ExpectedMsg: "%",
@@ -89,6 +94,8 @@ func TestIsPathSegmentPrefix(t *testing.T) {
 	}
 }
 
+// TestIsPathSegmentName 与 Prefix 版本的差异在于完整名称不允许等于 "." 或 ".."，
+// 因为它们会被路径规范化逻辑当作当前/上级目录。
 func TestIsPathSegmentName(t *testing.T) {
 	testcases := map[string]struct {
 		Name        string
@@ -117,6 +124,7 @@ func TestIsPathSegmentName(t *testing.T) {
 			Name:        "Iñtërnâtiônàlizætiøn",
 			ExpectedMsg: "",
 		},
+		// 单独 "." 是路径遍历风险。
 		"dot": {
 			Name:        ".",
 			ExpectedMsg: ".",
@@ -125,6 +133,7 @@ func TestIsPathSegmentName(t *testing.T) {
 			Name:        ".test",
 			ExpectedMsg: "",
 		},
+		// 单独 ".." 同样是路径遍历风险。
 		"dot dot": {
 			Name:        "..",
 			ExpectedMsg: "..",

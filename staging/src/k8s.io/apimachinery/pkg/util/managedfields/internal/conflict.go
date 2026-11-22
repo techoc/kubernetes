@@ -30,6 +30,9 @@ import (
 )
 
 // NewConflictError returns an error including details on the requests apply conflicts
+//
+// NewConflictError 构造包含 apply 冲突详情的错误：
+// 每个冲突路径生成一条 FieldManagerConflict 类型的 StatusCause。
 func NewConflictError(conflicts merge.Conflicts) *errors.StatusError {
 	causes := []metav1.StatusCause{}
 	for _, conflict := range conflicts {
@@ -42,6 +45,8 @@ func NewConflictError(conflicts merge.Conflicts) *errors.StatusError {
 	return errors.NewApplyConflict(causes, getConflictMessage(conflicts))
 }
 
+// getConflictMessage 生成人类可读的冲突摘要：
+// 单个冲突直接给出 manager 与路径；多个冲突按 manager 排序后分组列出，保证输出稳定。
 func getConflictMessage(conflicts merge.Conflicts) string {
 	if len(conflicts) == 1 {
 		return fmt.Sprintf("Apply failed with 1 conflict: conflict with %v: %v", printManager(conflicts[0].Manager), conflicts[0].Path)
@@ -57,7 +62,7 @@ func getConflictMessage(conflicts merge.Conflicts) string {
 		uniqueManagers = append(uniqueManagers, manager)
 	}
 
-	// Print conflicts by sorted managers.
+	// 按排序后的 manager 输出冲突，避免 map 遍历顺序导致信息不稳定。
 	sort.Strings(uniqueManagers)
 
 	messages := []string{}
@@ -70,6 +75,8 @@ func getConflictMessage(conflicts merge.Conflicts) string {
 	return fmt.Sprintf("Apply failed with %d conflicts: %s", len(conflicts), strings.Join(messages, "\n"))
 }
 
+// printManager 把内部编码的 manager 字符串（JSON 形式的 ManagedFieldsEntry）转换为可读描述。
+// 解码失败时按普通字符串加引号输出，保证错误信息总能生成。
 func printManager(manager string) string {
 	encodedManager := &metav1.ManagedFieldsEntry{}
 	if err := json.Unmarshal([]byte(manager), encodedManager); err != nil {
@@ -80,6 +87,7 @@ func printManager(manager string) string {
 		managerStr = fmt.Sprintf("%s with subresource %q", managerStr, encodedManager.Subresource)
 	}
 	if encodedManager.Operation == metav1.ManagedFieldsOperationUpdate {
+		// update 类条目补充 apiVersion 与时间，便于定位是何时由谁写入的。
 		if encodedManager.Time == nil {
 			return fmt.Sprintf("%s using %v", managerStr, encodedManager.APIVersion)
 		}

@@ -35,8 +35,12 @@ import (
 // If you wish to ensure ALPN negotiates http2 then set NextProto=[]string{"http2"} in the
 // TLSConfig of the http.Transport
 func DialURL(ctx context.Context, url *url.URL, transport http.RoundTripper) (net.Conn, error) {
+	// CanonicalAddr handles default ports and IPv6 brackets consistently with
+	// the transport's own dialing.
 	dialAddr := netutil.CanonicalAddr(url)
 
+	// The error is intentionally non-fatal: if the transport cannot be unwrapped
+	// we fall back to a standard dialer below.
 	dialer, err := utilnet.DialerFor(transport)
 	if err != nil {
 		klog.FromContext(ctx).V(5).Info("Unable to unwrap transport to get dialer", "type", fmt.Sprintf("%T", transport), "err", err)
@@ -53,6 +57,8 @@ func DialURL(ctx context.Context, url *url.URL, transport http.RoundTripper) (ne
 		// Get the tls config from the transport if we recognize it
 		tlsConfig, err := utilnet.TLSClientConfig(transport)
 		if err != nil {
+			// Without a config a plain tls.Dialer still works, but without custom
+			// verification settings.
 			klog.FromContext(ctx).V(5).Info("Unable to unwrap transport to get at TLS config", "type", fmt.Sprintf("%T", transport), "err", err)
 		}
 
@@ -67,6 +73,8 @@ func DialURL(ctx context.Context, url *url.URL, transport http.RoundTripper) (ne
 				// tls.Client requires non-nil config
 				klog.FromContext(ctx).Info("Warning: using custom dialer with no TLSClientConfig, defaulting to InsecureSkipVerify")
 				// tls.Handshake() requires ServerName or InsecureSkipVerify
+				// The custom dialer may tunnel the connection elsewhere, so no
+				// reliable ServerName can be inferred; skip verification explicitly.
 				tlsConfig = &tls.Config{
 					InsecureSkipVerify: true,
 				}
@@ -92,6 +100,7 @@ func DialURL(ctx context.Context, url *url.URL, transport http.RoundTripper) (ne
 			}
 
 			tlsConn := tls.Client(netConn, tlsConfig)
+			// Close the raw connection on handshake failure so the fd is not leaked.
 			if err := tlsConn.HandshakeContext(ctx); err != nil {
 				netConn.Close()
 				return nil, err
@@ -109,6 +118,8 @@ func DialURL(ctx context.Context, url *url.URL, transport http.RoundTripper) (ne
 	}
 }
 
+// supportsHTTP11 reports whether HTTP/1.1 may be negotiated. An empty NextProtos
+// means the client did not restrict ALPN, which includes http/1.1.
 func supportsHTTP11(nextProtos []string) bool {
 	if len(nextProtos) == 0 {
 		return true

@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+// versionCheckManager 包装 FieldManager，确保 apply 的对象版本与预期 GVK 一致。
 type versionCheckManager struct {
 	fieldManager Manager
 	gvk          schema.GroupVersionKind
@@ -31,19 +32,19 @@ type versionCheckManager struct {
 
 var _ Manager = &versionCheckManager{}
 
-// NewVersionCheckManager creates a manager that makes sure that the
-// applied object is in the proper version.
+// NewVersionCheckManager 创建用于校验 apply 对象版本的管理器。
 func NewVersionCheckManager(fieldManager Manager, gvk schema.GroupVersionKind) Manager {
 	return &versionCheckManager{fieldManager: fieldManager, gvk: gvk}
 }
 
-// Update implements Manager.
+// Update 实现 Manager：更新路径的版本一致性已在其他环节校验，这里直接透传。
 func (f *versionCheckManager) Update(liveObj, newObj runtime.Object, managed Managed, manager string) (runtime.Object, Managed, error) {
 	// Nothing to do for updates, this is checked in many other places.
 	return f.fieldManager.Update(liveObj, newObj, managed, manager)
 }
 
-// Apply implements Manager.
+// Apply 实现 Manager：apply 的对象 GVK 必须与预期一致，否则返回 BadRequest，
+// 防止把错误版本的对象应用到资源上。
 func (f *versionCheckManager) Apply(liveObj, appliedObj runtime.Object, managed Managed, fieldManager string, force bool) (runtime.Object, Managed, error) {
 	if gvk := appliedObj.GetObjectKind().GroupVersionKind(); gvk != f.gvk {
 		return nil, nil, errors.NewBadRequest(fmt.Sprintf("invalid object type: %v", gvk))

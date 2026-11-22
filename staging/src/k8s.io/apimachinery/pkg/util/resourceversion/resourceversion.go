@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package resourceversion 提供对 etcd resourceVersion 字符串的比较工具。
+//
+// resourceVersion 是十进制正整数，且不保证连续；由于可能超过 int64，
+// 这里按"先比长度、再按字典序"的方式比较，避免整数溢出。
 package resourceversion
 
 import (
@@ -21,6 +25,8 @@ import (
 	"strings"
 )
 
+// InvalidResourceVersion 表示传入的 resourceVersion 不满足格式要求。
+// 错误中保留原始字符串，方便排查客户端传参问题。
 type InvalidResourceVersion struct {
 	rv string
 }
@@ -42,6 +48,9 @@ func (i InvalidResourceVersion) Error() string {
 // formatted integer will not contain leading zeros or non integer characters.
 // Zero is also considered an invalid value as it is used as a special value in
 // list/watch events and will never be a live resource version.
+//
+// 关键不变量：格式良好的十进制串没有前导零，因此"位数更多 = 数值更大"，
+// 位数相同则字典序与数值序一致；这样无需 strconv 就能支持任意长度。
 func CompareResourceVersion(a, b string) (int, error) {
 	if !isWellFormed(a) {
 		return 0, InvalidResourceVersion{rv: a}
@@ -65,6 +74,7 @@ func CompareResourceVersion(a, b string) (int, error) {
 	}
 }
 
+// isWellFormed 要求非空、无前导零（因此 "0" 本身也非法）且全为数字。
 func isWellFormed(s string) bool {
 	if len(s) == 0 {
 		return false
@@ -80,6 +90,7 @@ func isWellFormed(s string) bool {
 	return true
 }
 
+// isDigit 手写判断而非 unicode.IsDigit，避免为 ASCII 场景引入额外依赖与开销。
 func isDigit(b byte) bool {
 	return b >= '0' && b <= '9'
 }

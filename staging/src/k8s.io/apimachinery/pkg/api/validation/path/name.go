@@ -23,6 +23,9 @@ import (
 // IsValidPathSegmentName validates the name can be safely encoded as a path segment
 //
 // Deprecated: use content.IsPathSegmentName directly.
+//
+// 保留此别名是为了不破坏既有调用方；实际实现已迁到 content 包，
+// 两处行为必须保持一致。
 var IsValidPathSegmentName = content.IsPathSegmentName
 
 // IsValidPathSegmentPrefix validates the name can be used as a prefix for a name which will be encoded as a path segment
@@ -34,6 +37,9 @@ var IsValidPathSegmentPrefix = content.IsPathSegmentPrefix
 // ValidatePathSegmentName validates the name can be safely encoded as a path segment
 //
 // Deprecated: use a locally defined function.
+//
+// prefix 为 true 时按前缀规则校验（允许结尾部分尚未确定），否则按完整
+// 名称校验。返回值是可直接拼进 field.ErrorList 的错误描述列表。
 func ValidatePathSegmentName(name string, prefix bool) []string {
 	if prefix {
 		return IsValidPathSegmentPrefix(name)

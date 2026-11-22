@@ -54,11 +54,15 @@ var _ MemoryAllocator = &Allocator{}
 // Note that the returned array is not zeroed, it is the caller's
 // responsibility to clean the memory if needed.
 func (a *Allocator) Allocate(n uint64) []byte {
+	// Reuse the cached backing array when it is large enough. The buffer is
+	// deliberately not zeroed: serializers overwrite every byte they use.
 	if uint64(cap(a.buf)) >= n {
 		a.buf = a.buf[:n]
 		return a.buf
 	}
 	// grow the buffer
+	// Grow geometrically (2x current capacity) plus the requested size so that
+	// repeated allocations amortize to O(n) copying.
 	size := uint64(2*cap(a.buf)) + n
 	a.buf = make([]byte, size)
 	a.buf = a.buf[:n]
@@ -71,6 +75,8 @@ type SimpleAllocator struct{}
 
 var _ MemoryAllocator = &SimpleAllocator{}
 
+// Allocate returns a fresh zeroed buffer of exactly n bytes; unlike Allocator
+// it keeps no state and is safe for concurrent use.
 func (sa *SimpleAllocator) Allocate(n uint64) []byte {
 	return make([]byte, n)
 }

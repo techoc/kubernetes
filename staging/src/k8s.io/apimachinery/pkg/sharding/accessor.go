@@ -34,11 +34,15 @@ import (
 //   - "object.metadata.uid"
 //   - "object.metadata.namespace"
 func ResolveFieldValue(obj runtime.Object, fieldPath string) (string, error) {
+	// All supported paths live under metadata, so the accessor is obtained
+	// once up front.
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
 		return "", fmt.Errorf("failed to access object metadata: %w", err)
 	}
 
+	// Only fields whose values are stable and shardable are accepted; unknown
+	// paths are an error so typos do not silently produce a wrong partition.
 	switch fieldPath {
 	case "object.metadata.uid":
 		return string(accessor.GetUID()), nil

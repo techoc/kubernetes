@@ -28,6 +28,9 @@ import (
 
 // MatchFunc is a function that compares two values of the same type,
 // according to some criteria, and returns true if they match.
+//
+// match 既可用于完整比较，也可只比较作为唯一标识的字段，
+// 后者需要配合 equiv 才能正确实现 ratcheting。
 type MatchFunc[T any] func(T, T) bool
 
 // EachValSliceVal performs validation on each element of a slice of values
@@ -47,10 +50,14 @@ type MatchFunc[T any] func(T, T) bool
 // The match and equiv functions will never be called with nil arguments.
 //
 // Note: The slice element type must be non-nilable.
+//
+// 这是切片版 ratcheting 的核心：只有 update 且能在旧值中找到对应元素、
+// 并且确认其等价时才跳过校验，从而允许既有数据继续通过新加的校验规则。
 func EachValSliceVal[T any](ctx context.Context, op operation.Operation, fldPath *field.Path, newSlice, oldSlice []T,
 	match, equiv MatchFunc[*T], validator ValidateFunc[*T]) field.ErrorList {
 	var errs field.ErrorList
 	for i := range newSlice {
+		// 取地址而不是复制，保证 validator 看到的是新切片中的实际元素。
 		val := &newSlice[i]
 
 		var old *T
@@ -63,6 +70,8 @@ func EachValSliceVal[T any](ctx context.Context, op operation.Operation, fldPath
 		// 2. The equiv function confirms the values are equivalent (either directly or semantically)
 		//
 		// The equiv function provides equality comparison when match uses partial comparison.
+		//
+		// equiv 为 nil 意味着 match 已经做了完整比较，找到即等价。
 		if op.Type == operation.Update && old != nil && (equiv == nil || equiv(val, old)) {
 			continue
 		}
@@ -86,6 +95,9 @@ func EachValSliceVal[T any](ctx context.Context, op operation.Operation, fldPath
 // perform full value comparison.
 //
 // The match and equiv functions will never be called with nil arguments.
+//
+// 指针切片版本额外容忍 nil 元素：nil 的必填性由 PtrSliceNoNils 单独负责，
+// 这里跳过可避免在解引用 nil 时 panic，也避免重复报错。
 func EachPtrSliceVal[T any](ctx context.Context, op operation.Operation, fldPath *field.Path, newSlice, oldSlice []*T,
 	match, equiv MatchFunc[*T], validator ValidateFunc[*T]) field.ErrorList {
 	var errs field.ErrorList
@@ -100,6 +112,7 @@ func EachPtrSliceVal[T any](ctx context.Context, op operation.Operation, fldPath
 		if match != nil && len(oldSlice) > 0 {
 			old = lookupPointer(oldSlice, val, match)
 		}
+		// ratcheting 逻辑与值切片一致，只是旧值来自指针切片。
 		if op.Type == operation.Update && old != nil && (equiv == nil || equiv(val, old)) {
 			continue
 		}
@@ -110,6 +123,9 @@ func EachPtrSliceVal[T any](ctx context.Context, op operation.Operation, fldPath
 
 // lookup returns a pointer to the first element in the list that matches the
 // target, according to the provided comparison function, or else nil.
+//
+// 返回首个匹配项是约定：当列表中存在多个"相同标识"的元素时，
+// 唯一性校验会另行报告，这里无需关心。
 func lookup[T any](list []T, target *T, match MatchFunc[*T]) *T {
 	for i := range list {
 		if match(&list[i], target) {
@@ -122,6 +138,8 @@ func lookup[T any](list []T, target *T, match MatchFunc[*T]) *T {
 // lookupPointer returns the first non-nil element in the list that matches the
 // target, according to the provided comparison function, or else nil.
 // Nil elements in the list are skipped.
+//
+// 旧数据中可能残留 nil 指针，直接跳过比报错更符合 ratcheting 的宽松语义。
 func lookupPointer[T any](list []*T, target *T, match MatchFunc[*T]) *T {
 	for i := range list {
 		if list[i] == nil {
@@ -145,12 +163,15 @@ func lookupPointer[T any](list []*T, target *T, match MatchFunc[*T]) *T {
 // The equiv function will never be called with nil arguments.
 //
 // If equiv is nil, value-based ratcheting is disabled and all values will be validated.
+//
+// map 的键是 string 别名，键本身由 EachMapKey 负责校验，这里只校验值。
 func EachMapVal[K ~string, V any](ctx context.Context, op operation.Operation, fldPath *field.Path, newMap, oldMap map[K]V,
 	equiv MatchFunc[*V], validator ValidateFunc[*V]) field.ErrorList {
 	var errs field.ErrorList
 	for key, val := range newMap {
 		var old *V
 		if o, found := oldMap[key]; found {
+			// 复制一份再取地址，避免把 range 变量的地址交给 validator 后混淆。
 			old = &o
 		}
 		// If the operation is an update, for validation ratcheting, skip re-validating if the old
@@ -165,6 +186,8 @@ func EachMapVal[K ~string, V any](ctx context.Context, op operation.Operation, f
 
 // EachMapKey validates each element of newMap with the specified
 // validation function.
+//
+// 只对新增的键调用校验函数：键一旦存在于旧 map，就视为已通过（ratcheting）。
 func EachMapKey[K ~string, T any](ctx context.Context, op operation.Operation, fldPath *field.Path, newMap, oldMap map[K]T,
 	validator ValidateFunc[*K]) field.ErrorList {
 	var errs field.ErrorList
@@ -189,14 +212,19 @@ func EachMapKey[K ~string, T any](ctx context.Context, op operation.Operation, f
 // every other element and returns errors for non-unique items.
 //
 // The match function will never be called with nil arguments.
+//
+// 复杂度 O(n^2) 但切片通常很小；只把"后出现"的重复项记为错误，
+// 保证每个重复组只报告一次，而不是所有两两组合。
 func ValSliceUnique[T any](_ context.Context, _ operation.Operation, fldPath *field.Path, newSlice, _ []T, match MatchFunc[*T]) field.ErrorList {
 	var dups []int
 	for i := range newSlice {
 		for j := i + 1; j < len(newSlice); j++ {
+			// 延迟分配 dups，无重复时避免任何额外分配。
 			if match(&newSlice[i], &newSlice[j]) {
 				if dups == nil {
 					dups = make([]int, 0, len(newSlice))
 				}
+				// 同一个 j 可能与多个 i 重复，去重以免对同一位置报多次。
 				if !slices.Contains(dups, j) {
 					dups = append(dups, j)
 				}
@@ -205,6 +233,7 @@ func ValSliceUnique[T any](_ context.Context, _ operation.Operation, fldPath *fi
 	}
 
 	var errs field.ErrorList
+	// 按索引排序，使错误顺序稳定，便于测试和用户阅读。
 	sort.Ints(dups)
 	for _, i := range dups {
 		var val any = newSlice[i]
@@ -223,6 +252,8 @@ func ValSliceUnique[T any](_ context.Context, _ operation.Operation, fldPath *fi
 // every other element and returns errors for non-unique items.
 //
 // The match function will never be called with nil arguments.
+//
+// nil 元素由 PtrSliceNoNils 负责，这里跳过，防止 match 被传入 nil。
 func PtrSliceUnique[T any](_ context.Context, _ operation.Operation, fldPath *field.Path, newSlice, _ []*T, match MatchFunc[*T]) field.ErrorList {
 	var errs field.ErrorList
 	var dups []int
@@ -261,6 +292,9 @@ func PtrSliceUnique[T any](_ context.Context, _ operation.Operation, fldPath *fi
 // arguments of type interface{}/any. The wrapper satisfies the type
 // constraints of MatchFunc while leveraging the underlying semantic equality
 // logic. It can be used by any other function that needs to call DeepEqual.
+//
+// 直接调用 equality.Semantic.DeepEqual 需要 interface{} 参数，
+// 泛型函数类型不匹配，因此用这层包装把 *T 转成 any。
 func SemanticDeepEqual[T any](a, b T) bool {
 	return equality.Semantic.DeepEqual(a, b)
 }
@@ -271,6 +305,7 @@ func SemanticDeepEqual[T any](a, b T) bool {
 // It can be used by any other function that needs to compare two pointees
 // directly.
 func DirectEqual[T comparable](a, b *T) bool {
+	// 先比较指针本身，既处理双 nil，也快速通过同一对象。
 	if a == b {
 		return true
 	}

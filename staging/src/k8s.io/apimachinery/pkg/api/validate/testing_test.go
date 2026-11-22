@@ -25,6 +25,13 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestFixedResult 验证 FixedResult 在给定 pass 预期下的行为：
+// pass 为 true 时必须不产生任何错误，为 false 时必须恰好产生一条
+// 带有指定来源与 detail 的 Invalid 错误。
+//
+// 用例覆盖字符串、数值、布尔、nil 指针、空/非空切片与空/非空 map 等常见取值，
+// 同一取值会分别以 pass=false 和 pass=true 各跑一次，以确认结果只由 pass 决定，
+// 而不被具体取值的内容干扰。
 func TestFixedResult(t *testing.T) {
 	cases := []struct {
 		value any
@@ -121,17 +128,21 @@ func TestFixedResult(t *testing.T) {
 		pass:  true,
 	}}
 
+	// 只比对来源与 detail，字段名由调用方固定为 fldpath，因此无需纳入匹配条件。
 	matcher := field.ErrorMatcher{}.ByOrigin().ByDetailExact()
 	for i, tc := range cases {
 		result := FixedResult(context.Background(), operation.Operation{}, field.NewPath("fldpath"), tc.value, nil, tc.pass, "detail string")
+		// pass=true 却出现错误，说明 FixedResult 未能按预期放行。
 		if len(result) != 0 && tc.pass {
 			t.Errorf("case %d: unexpected failure: %v", i, fmtErrs(result))
 			continue
 		}
+		// pass=false 却没产生错误，说明强制失败未生效。
 		if len(result) == 0 && !tc.pass {
 			t.Errorf("case %d: unexpected success", i)
 			continue
 		}
+		// pass=false 的场景要求恰好一条错误，多条说明结果合并逻辑有偏差。
 		if len(result) > 0 {
 			if len(result) > 1 {
 				t.Errorf("case %d: unexepected multi-error: %v", i, fmtErrs(result))

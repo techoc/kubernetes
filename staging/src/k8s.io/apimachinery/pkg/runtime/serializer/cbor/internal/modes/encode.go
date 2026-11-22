@@ -25,6 +25,9 @@ import (
 // encode is the basis for the Encode mode, with no JSONMarshalerTranscoder
 // configured. TranscodeFromJSON uses this directly rather than Encode to avoid an initialization
 // cycle between the two. Everything else should use one of the exported EncModes.
+//
+// 这组选项的目标是让相同语义的值产生相同字节（确定性编码），并尽量与
+// JSON 序列化器的行为对齐，使 JSON 与 CBOR 转换可逆。
 var encode = EncMode{
 	delegate: func() cbor.UserBufferEncMode {
 		encode, err := cbor.EncOptions{
@@ -110,6 +113,8 @@ var encode = EncMode{
 	deterministic: true,
 }
 
+// Encode 是默认的确定性编码模式：在 encode 的基础上增加 JSONMarshaler 的
+// 转码支持，使只实现了 MarshalJSON 的类型也能产出 CBOR。
 var Encode = EncMode{
 	delegate: func() cbor.UserBufferEncMode {
 		opts := encode.options()
@@ -126,6 +131,9 @@ var Encode = EncMode{
 	deterministic: true,
 }
 
+// EncodeNondeterministic 与 Encode 相同，但 map key 采用快速打乱而非排序。
+// 仅用于不要求字节稳定性的场景（如测试或性能敏感路径），不能用于生成
+// 需要缓存或比较的序列化输出。
 var EncodeNondeterministic = EncMode{
 	delegate: func() cbor.UserBufferEncMode {
 		opts := Encode.options()
@@ -139,19 +147,25 @@ var EncodeNondeterministic = EncMode{
 	deterministic: false,
 }
 
+// EncMode 封装底层的 CBOR 编码模式，并显式记录是否保证确定性输出。
+// deterministic 不能从 delegate 推断，故单独保存供调用方查询。
 type EncMode struct {
 	delegate      cbor.UserBufferEncMode
 	deterministic bool
 }
 
+// options 返回底层选项的副本，供派生模式修改而不会影响当前模式。
 func (em EncMode) options() cbor.EncOptions {
 	return em.delegate.EncOptions()
 }
 
+// IsDeterministic 报告该模式的输出是否与 map 迭代顺序无关。
 func (em EncMode) IsDeterministic() bool {
 	return em.deterministic
 }
 
+// MarshalTo 编码到 writer。若目标本身就是内部 buffer，则直接写入以省去
+// 一次拷贝；否则从对象池借 buffer，编码完成后再复制到 w。
 func (em EncMode) MarshalTo(v interface{}, w io.Writer) error {
 	if buf, ok := w.(*buffer); ok {
 		return em.delegate.MarshalToBuffer(v, &buf.Buffer)
@@ -170,6 +184,8 @@ func (em EncMode) MarshalTo(v interface{}, w io.Writer) error {
 	return nil
 }
 
+// Marshal 返回独立的字节切片。对象池中的 buffer 会被复用，必须 clone，
+// 否则调用方拿到的数据可能在后续编码中被覆盖。
 func (em EncMode) Marshal(v interface{}) ([]byte, error) {
 	buf := buffers.Get()
 	defer buffers.Put(buf)

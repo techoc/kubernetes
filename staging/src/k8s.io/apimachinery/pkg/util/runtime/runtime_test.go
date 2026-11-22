@@ -37,6 +37,8 @@ import (
 	"k8s.io/klog/v2/textlogger"
 )
 
+// TestHandleCrash 验证 HandleCrash 会记录 panic 后重新抛出（re-panic），
+// 而不是吞掉异常。
 func TestHandleCrash(t *testing.T) {
 	defer func() {
 		if x := recover(); x == nil {
@@ -48,6 +50,7 @@ func TestHandleCrash(t *testing.T) {
 	panic("Test Panic")
 }
 
+// TestCustomHandleCrash 验证替换 PanicHandlers 后自定义处理器能收到 panic 值。
 func TestCustomHandleCrash(t *testing.T) {
 	old := PanicHandlers
 	defer func() { PanicHandlers = old }()
@@ -72,6 +75,7 @@ func TestCustomHandleCrash(t *testing.T) {
 	}
 }
 
+// TestCustomHandleError 验证替换 ErrorHandlers 后自定义处理器能收到错误。
 func TestCustomHandleError(t *testing.T) {
 	old := ErrorHandlers
 	defer func() { ErrorHandlers = old }()
@@ -89,6 +93,10 @@ func TestCustomHandleError(t *testing.T) {
 	}
 }
 
+// TestHandleCrashLog 验证 panic 日志的格式与 Go 标准库堆栈模式一致。
+//
+// 这里刻意用正则匹配 "Observed a panic"、goroutine 头、符号化函数名和
+// file:line+offset；若 Go 版本改变堆栈格式，这些断言需要同步更新。
 func TestHandleCrashLog(t *testing.T) {
 	log, err := captureStderr(func() {
 		defer func() {
@@ -130,6 +138,8 @@ func TestHandleCrashLog(t *testing.T) {
 	}
 }
 
+// TestHandleCrashContextual 覆盖 HandleCrashWithLogger/HandleCrashWithContext：
+// 无 panic、字符串 panic、非字符串 panic 三种输入，以及日志调用栈深度。
 func TestHandleCrashContextual(t *testing.T) {
 	for name, handleCrash := range map[string]func(logger klog.Logger, trigger func(), additionalHandlers ...func(context.Context, interface{})){
 		"WithLogger": func(logger klog.Logger, trigger func(), additionalHandlers ...func(context.Context, interface{})) {
@@ -196,6 +206,8 @@ func TestHandleCrashContextual(t *testing.T) {
 	}
 }
 
+// TestHandleCrashLogSilenceHTTPErrAbortHandler 验证 http.ErrAbortHandler
+// 被特殊处理：不记录日志，但仍会 re-panic 以中止连接。
 func TestHandleCrashLogSilenceHTTPErrAbortHandler(t *testing.T) {
 	log, err := captureStderr(func() {
 		defer func() {
@@ -227,6 +239,7 @@ func captureStderr(f func()) (string, error) {
 
 	resultCh := make(chan string)
 	// copy the output in a separate goroutine so printing can't block indefinitely
+	// 管道缓冲区有限，必须在另一个 goroutine 中持续读取。
 	go func() {
 		var buf bytes.Buffer
 		io.Copy(&buf, r)
@@ -239,6 +252,8 @@ func captureStderr(f func()) (string, error) {
 	return <-resultCh, nil
 }
 
+// Test_rudimentaryErrorBackoff_OnError_ParallelSleep 验证多个 goroutine
+// 并发触发 OnError 时不会各自串行等待，总耗时仍接近单个 minPeriod。
 func Test_rudimentaryErrorBackoff_OnError_ParallelSleep(t *testing.T) {
 	r := &rudimentaryErrorBackoff{
 		minPeriod: time.Second,
@@ -263,6 +278,8 @@ func Test_rudimentaryErrorBackoff_OnError_ParallelSleep(t *testing.T) {
 	}
 }
 
+// TestHandleError 验证 HandleErrorWithLogger/HandleErrorWithContext 的日志格式，
+// 包括无错误和有错误 + 键值对两种情形。
 func TestHandleError(t *testing.T) {
 	for name, handleError := range map[string]func(logger klog.Logger, err error, msg string, keysAndValues ...interface{}){
 		"WithLogger": func(logger klog.Logger, err error, msg string, keysAndValues ...interface{}) {
@@ -312,6 +329,8 @@ func TestHandleError(t *testing.T) {
 	}
 }
 
+// TestErrorToString 验证 ErrorToString 的输出：nil 错误只输出消息，
+// 多行值会被折叠为可读的缩进形式。
 func TestErrorToString(t *testing.T) {
 	for name, tt := range map[string]struct {
 		err          error

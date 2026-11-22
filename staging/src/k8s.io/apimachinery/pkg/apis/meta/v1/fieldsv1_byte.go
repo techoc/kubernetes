@@ -22,35 +22,39 @@ import (
 	"bytes"
 )
 
-// FieldsV1 stores a set of fields in a data structure like a Trie, in JSON format.
+// FieldsV1 以类似 Trie 的 JSON 结构存储一组字段。
 //
-// Each key is either a '.' representing the field itself, and will always map to an empty set,
-// or a string representing a sub-field or item. The string will follow one of these four formats:
-// 'f:<name>', where <name> is the name of a field in a struct, or key in a map
-// 'v:<value>', where <value> is the exact json formatted value of a list item
-// 'i:<index>', where <index> is position of a item in a list
-// 'k:<keys>', where <keys> is a map of  a list item's key fields to their unique values
-// If a key maps to an empty Fields value, the field that key represents is part of the set.
+// 每个键要么是 '.'，表示字段自身且总映射到空集合；
+// 要么是表示子字段或列表项的字符串，格式为以下四种之一：
+// 'f:<name>'，<name> 为结构体字段名或 map 键
+// 'v:<value>'，<value> 为列表项的确切 JSON 值
+// 'i:<index>'，<index> 为列表项的位置
+// 'k:<keys>'，<keys> 为列表项各关键字段到其唯一值的映射
+// 若某键映射到空的 Fields 值，则该键所代表的字段属于该集合。
 //
-// The exact format is defined in sigs.k8s.io/structured-merge-diff
+// 具体格式由 sigs.k8s.io/structured-merge-diff 定义。
 // +k8s:deepcopy-gen=false
 // +protobuf.options.marshal=false
 // +protobuf.options.(gogoproto.goproto_stringer)=false
 type FieldsV1 struct {
-	// Raw is the underlying serialization of this object.
+	// Raw 是此对象的底层序列化结果。
 	//
-	// Deprecated: Direct access to this field is deprecated. Use GetRawBytes, GetRawString, SetRawBytes, SetRawString, GetRawReader, NewFieldsV1 instead.
+	// Deprecated: 直接访问该字段已废弃。请改用 GetRawBytes、GetRawString、SetRawBytes、SetRawString、GetRawReader、NewFieldsV1。
 	Raw []byte `json:"-" protobuf:"bytes,1,opt,name=Raw"`
 }
 
+// String 返回字段集合的原始 JSON 字符串。
 func (f FieldsV1) String() string {
 	return string(f.Raw)
 }
 
+// Equal 按原始字节逐字节比较两个字段集合是否相同。
 func (f FieldsV1) Equal(f2 FieldsV1) bool {
 	return bytes.Equal(f.Raw, f2.Raw)
 }
 
+// GetRawReader 返回读取原始字节的 Reader。
+// 空值或 nil 接收者返回一个读到 EOF 的空 Reader，调用方无需判空。
 func (f *FieldsV1) GetRawReader() FieldsV1Reader {
 	if f == nil || len(f.Raw) == 0 {
 		return bytes.NewReader(nil)
@@ -58,10 +62,10 @@ func (f *FieldsV1) GetRawReader() FieldsV1Reader {
 	return bytes.NewReader(f.Raw)
 }
 
-// GetRawBytes returns the raw bytes.
-// These may or may not be a copy of the underlying bytes.
-// If mutating the underlying bytes is desired, the returned bytes may be mutated and then passed to SetRawBytes().
-// If mutating the underlying bytes is not desired, make a copy of the returned bytes.
+// GetRawBytes 返回原始字节。
+// 返回值可能是底层字节的副本，也可能直接引用底层字节。
+// 若希望修改底层字节，可修改返回的字节后传给 SetRawBytes()；
+// 若不希望修改，请自行复制返回的字节。
 func (f *FieldsV1) GetRawBytes() []byte {
 	if f == nil {
 		return nil
@@ -69,7 +73,7 @@ func (f *FieldsV1) GetRawBytes() []byte {
 	return f.Raw
 }
 
-// GetRawString returns the raw data as a string.
+// GetRawString 以字符串形式返回原始数据。
 func (f *FieldsV1) GetRawString() string {
 	if f == nil {
 		return ""
@@ -77,24 +81,26 @@ func (f *FieldsV1) GetRawString() string {
 	return string(f.Raw)
 }
 
-// SetRawBytes sets the raw bytes. It does not retain the passed-in byte slice.
+// SetRawBytes 设置原始字节。不会保留传入的字节切片（内部会克隆）。
 func (f *FieldsV1) SetRawBytes(b []byte) {
 	if f != nil {
 		f.Raw = bytes.Clone(b)
 	}
 }
 
-// SetRawString sets the raw data from a string.
+// SetRawString 用字符串设置原始数据。
 func (f *FieldsV1) SetRawString(s string) {
 	if f != nil {
 		f.Raw = []byte(s)
 	}
 }
 
+// NewFieldsV1 用给定的原始 JSON 字符串构造 FieldsV1。
 func NewFieldsV1(raw string) *FieldsV1 {
 	return &FieldsV1{Raw: []byte(raw)}
 }
 
+// DeepCopyInto 把接收者深拷贝到 out。Raw 为字节切片，必须复制而非共享底层数组。
 func (f *FieldsV1) DeepCopyInto(out *FieldsV1) {
 	*out = *f
 	if f.Raw != nil {

@@ -17,6 +17,10 @@ limitations under the License.
 // Package direct provides functions for marshaling and unmarshaling between arbitrary Go values and
 // CBOR data, with behavior that is compatible with that of the CBOR serializer. In particular,
 // types that implement cbor.Marshaler and cbor.Unmarshaler should use these functions.
+//
+// Package direct 提供与 CBOR serializer 行为一致的直接编解码入口。自定义
+// Marshaler/Unmarshaler 必须使用这里的函数，否则可能使用与 serializer 不同的
+// 编码选项，导致字节表示不一致。
 package direct
 
 import (
@@ -38,6 +42,8 @@ func Unmarshal(src []byte, dst any) error {
 // Diagnose accepts well-formed CBOR bytes and returns a string representing the same data item in
 // human-readable diagnostic notation (RFC 8949 Section 8). The diagnostic notation is not meant to
 // be parsed.
+//
+// 诊断文本仅用于日志和错误信息，不要依赖其格式做解析。
 func Diagnose(src []byte) (string, error) {
 	return modes.Diagnostic.Diagnose(src)
 }

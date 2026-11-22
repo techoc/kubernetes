@@ -24,6 +24,8 @@ import (
 	utiljson "k8s.io/apimachinery/pkg/util/json"
 )
 
+// testcase 描述一个 JSON 解析压力用例：输入数据、期望的错误判定方式，
+// 以及是否只用于基准测试（benchmark 用例在 TestJSONLimits 中被跳过）。
 type testcase struct {
 	name     string
 	data     []byte
@@ -32,14 +34,16 @@ type testcase struct {
 	benchmark bool
 }
 
+// testcases 构造覆盖各类嵌套结构的 3MB 输入。目的是比较标准库与
+// apimachinery 的 JSON 实现在深层嵌套下的行为与性能上限。
 func testcases() []testcase {
-	// verify we got an error of some kind
+	// 只要报错即可：这类输入不保证有具体错误信息。
 	nonNilError := func(t testing.TB, err error) {
 		if err == nil {
 			t.Errorf("expected error, got none")
 		}
 	}
-	// verify the parse completed, either with success or a max depth error
+	// 解析要么成功，要么因超过最大深度被拒绝——两者都是可接受的安全结果。
 	successOrMaxDepthError := func(t testing.TB, err error) {
 		if err != nil && !strings.Contains(err.Error(), "max depth") {
 			t.Errorf("expected success or error containing 'max depth', got: %v", err)
@@ -120,11 +124,14 @@ func testcases() []testcase {
 	}
 }
 
+// decoders 是被比较的两个 JSON 解码器：标准库与 apimachinery 的替换实现。
 var decoders = map[string]func([]byte, interface{}) error{
 	"gojson":   gojson.Unmarshal,
 	"utiljson": utiljson.Unmarshal,
 }
 
+// TestJSONLimits 用两个解码器分别解析深层嵌套/不平衡的 JSON，验证二者对
+// 最大深度与畸形输入的处理一致（不会因实现差异而出现未受控的递归或崩溃）。
 func TestJSONLimits(t *testing.T) {
 	for _, tc := range testcases() {
 		if tc.benchmark {
@@ -147,6 +154,8 @@ func TestJSONLimits(t *testing.T) {
 	}
 }
 
+// BenchmarkJSONLimits 用同一组 3MB 输入对两个解码器做基准测试，
+// 关注大输入下的吞吐与分配差异。
 func BenchmarkJSONLimits(b *testing.B) {
 	for _, tc := range testcases() {
 		b.Run(tc.name, func(b *testing.B) {

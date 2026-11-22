@@ -20,19 +20,19 @@ import (
 	"sync"
 )
 
-// FilterFunc should take an event, possibly modify it in some way, and return
-// the modified event. If the event should be ignored, then return keep=false.
+// FilterFunc 接收一个事件，可对其进行修改，并返回修改后的事件。
+// 若该事件应被忽略，则返回 keep=false。
 type FilterFunc func(in Event) (out Event, keep bool)
 
-// Filter passes all events through f before allowing them to pass on.
-// Putting a filter on a watch, as an unavoidable side-effect due to the way
-// go channels work, effectively causes the watch's event channel to have its
-// queue length increased by one.
+// Filter 让所有事件先经过 f 再继续传递。
+// 由于 Go channel 的工作方式，给 watch 加过滤器不可避免地会让事件 channel 的
+// 有效队列长度增加一（多了一层无缓冲转发）。
 //
-// WARNING: filter has a fatal flaw, in that it can't properly update the
-// Type field (Add/Modified/Deleted) to reflect items beginning to pass the
-// filter when they previously didn't.
+// WARNING: filter 有一个致命缺陷：当某个对象此前不满足过滤条件、现在开始通过时，
+// 它无法正确更新事件的 Type 字段（Add/Modified/Deleted）。
+// 因此不应依赖过滤后的 Add/Modified 序列重建对象生命周期。
 func Filter(w Interface, f FilterFunc) Interface {
+	// result 是无缓冲 channel：消费方不读取时会阻塞 loop，从而对上游施加背压。
 	fw := &filteredWatch{
 		incoming: w,
 		result:   make(chan Event),
@@ -42,23 +42,24 @@ func Filter(w Interface, f FilterFunc) Interface {
 	return fw
 }
 
+// filteredWatch 是 Filter 返回的 watch 实现，在内部 goroutine 中完成过滤与转发。
 type filteredWatch struct {
 	incoming Interface
 	result   chan Event
 	f        FilterFunc
 }
 
-// ResultChan returns a channel which will receive filtered events.
+// ResultChan 返回接收过滤后事件的 channel。
 func (fw *filteredWatch) ResultChan() <-chan Event {
 	return fw.result
 }
 
-// Stop stops the upstream watch, which will eventually stop this watch.
+// Stop 停止上游 watch；上游关闭后本 watch 的 loop 也会结束并关闭 result。
 func (fw *filteredWatch) Stop() {
 	fw.incoming.Stop()
 }
 
-// loop waits for new values, filters them, and resends them.
+// loop 等待新事件、过滤后转发；上游 channel 关闭时关闭 result，通知消费方结束。
 func (fw *filteredWatch) loop() {
 	defer close(fw.result)
 	for event := range fw.incoming.ResultChan() {
@@ -69,7 +70,8 @@ func (fw *filteredWatch) loop() {
 	}
 }
 
-// Recorder records all events that are sent from the watch until it is closed.
+// Recorder 记录从 watch 收到、直到其关闭为止的所有事件。
+// 它通过 Filter 拦截事件，同时仍把事件透传给下游。
 type Recorder struct {
 	Interface
 
@@ -77,16 +79,17 @@ type Recorder struct {
 	events []Event
 }
 
+// 编译期断言：Recorder 实现 watch.Interface。
 var _ Interface = &Recorder{}
 
-// NewRecorder wraps an Interface and records any changes sent across it.
+// NewRecorder 包装一个 Interface，并记录其中传递的所有变化。
 func NewRecorder(w Interface) *Recorder {
 	r := &Recorder{}
 	r.Interface = Filter(w, r.record)
 	return r
 }
 
-// record is a FilterFunc and tracks each received event.
+// record 是 FilterFunc，记录每个收到的事件，并原样放行。
 func (r *Recorder) record(in Event) (Event, bool) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -94,7 +97,8 @@ func (r *Recorder) record(in Event) (Event, bool) {
 	return in, true
 }
 
-// Events returns a copy of the events sent across this recorder.
+// Events 返回已记录事件的副本。
+// 返回副本而非内部切片，避免调用方在锁外修改或读取时与 record 产生数据竞争。
 func (r *Recorder) Events() []Event {
 	r.lock.Lock()
 	defer r.lock.Unlock()

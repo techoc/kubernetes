@@ -21,49 +21,52 @@ import (
 	"io"
 )
 
-// ProtobufReverseMarshaller can precompute size, and marshals to the start of the provided data buffer.
+// ProtobufMarshaller 是向后兼容的 protobuf 编组接口：调用方可预先计算大小，
+// 并从头开始填充给定缓冲区。
 type ProtobufMarshaller interface {
-	// Size returns the number of bytes a call to MarshalTo would consume.
+	// Size 返回调用 MarshalTo 将写入的字节数。
 	Size() int
-	// MarshalTo marshals to the start of the data buffer, which must be at least as big as Size(),
-	// and returns the number of bytes written, which must be identical to the return value of Size().
+	// MarshalTo 从 data 缓冲区起始处开始编组（缓冲区至少要有 Size() 字节），
+	// 返回写入的字节数，必须与 Size() 的返回值一致。
 	MarshalTo(data []byte) (int, error)
 }
 
-// ProtobufReverseMarshaller can precompute size, and marshals to the end of the provided data buffer.
+// ProtobufReverseMarshaller 可预先计算大小，并从给定缓冲区的末尾向前编组。
+// 这种“反向”写法的优点是一次预分配即可，无需先算长度再写，避免多余分配。
 type ProtobufReverseMarshaller interface {
-	// Size returns the number of bytes a call to MarshalToSizedBuffer would consume.
+	// Size 返回调用 MarshalToSizedBuffer 将写入的字节数。
 	Size() int
-	// MarshalToSizedBuffer marshals to the end of the data buffer, which must be at least as big as Size(),
-	// and returns the number of bytes written, which must be identical to the return value of Size().
+	// MarshalToSizedBuffer 从 data 缓冲区末尾向前编组（缓冲区至少要有 Size() 字节），
+	// 返回写入的字节数，必须与 Size() 的返回值一致。
 	MarshalToSizedBuffer(data []byte) (int, error)
 }
 
 const (
+	// 以下 tag 是 Unknown 结构体各字段在 protobuf wire 格式中的字段号与 wire type 组合。
 	typeMetaTag        = 0xa
 	rawTag             = 0x12
 	contentEncodingTag = 0x1a
 	contentTypeTag     = 0x22
 
-	// max length of a varint for a uint64
+	// uint64 的 varint 最长 10 字节
 	maxUint64VarIntLength = 10
 )
 
-// MarshalToWriter allows a caller to provide a streaming writer for raw bytes,
-// instead of populating them inside the Unknown struct.
-// rawSize is the number of bytes rawWriter will write in a success case.
-// writeRaw is called when it is time to write the raw bytes. It must return `rawSize, nil` or an error.
+// MarshalToWriter 允许调用方提供流式 writer 来输出 raw 字节，而不是先把它们填充进 Unknown 结构体，
+// 从而避免为可能很大的原始负载分配整块内存。
+// rawSize 是成功情况下 rawWriter 将写入的字节数；writeRaw 在需要写入 raw 字节时被调用，
+// 它必须返回 rawSize, nil 或一个错误。
 func (m *Unknown) MarshalToWriter(w io.Writer, rawSize int, writeRaw func(io.Writer) (int, error)) (int, error) {
 	size := 0
 
-	// reuse the buffer for varint marshaling
+	// 复用一个缓冲区来编组 varint，避免每次写字段都分配。
 	varintBuffer := make([]byte, maxUint64VarIntLength)
 	writeVarint := func(i int) (int, error) {
 		offset := encodeVarintGenerated(varintBuffer, len(varintBuffer), uint64(i))
 		return w.Write(varintBuffer[offset:])
 	}
 
-	// TypeMeta
+	// TypeMeta 字段
 	{
 		n, err := w.Write([]byte{typeMetaTag})
 		size += n
@@ -89,7 +92,7 @@ func (m *Unknown) MarshalToWriter(w io.Writer, rawSize int, writeRaw func(io.Wri
 		}
 	}
 
-	// Raw, delegating write to writeRaw()
+	// Raw 字段，写入委托给 writeRaw()
 	{
 		n, err := w.Write([]byte{rawTag})
 		size += n
@@ -108,12 +111,13 @@ func (m *Unknown) MarshalToWriter(w io.Writer, rawSize int, writeRaw func(io.Wri
 		if err != nil {
 			return size, err
 		}
+		// 实际写入量与声明的 rawSize 必须一致，否则 wire 格式里的长度前缀就是错的。
 		if n != int(rawSize) {
 			return size, fmt.Errorf("the size value was %d, but encoding wrote %d bytes to data", rawSize, n)
 		}
 	}
 
-	// ContentEncoding
+	// ContentEncoding 字段
 	{
 		n, err := w.Write([]byte{contentEncodingTag})
 		size += n
@@ -134,7 +138,7 @@ func (m *Unknown) MarshalToWriter(w io.Writer, rawSize int, writeRaw func(io.Wri
 		}
 	}
 
-	// ContentEncoding
+	// ContentType 字段
 	{
 		n, err := w.Write([]byte{contentTypeTag})
 		size += n
@@ -157,16 +161,17 @@ func (m *Unknown) MarshalToWriter(w io.Writer, rawSize int, writeRaw func(io.Wri
 	return size, nil
 }
 
-// NestedMarshalTo allows a caller to avoid extra allocations during serialization of an Unknown
-// that will contain an object that implements ProtobufMarshaller or ProtobufReverseMarshaller.
+// NestedMarshalTo 允许调用方在序列化“嵌套了一个实现了 ProtobufMarshaller 或
+// ProtobufReverseMarshaller 的对象”的 Unknown 时避免额外分配。
+// 由于 protobuf 的长度前缀依赖总长度，这里先用 Size() 预计算，再从缓冲区末尾反向写入。
 func (m *Unknown) NestedMarshalTo(data []byte, b ProtobufMarshaller, size uint64) (int, error) {
-	// Calculate the full size of the message.
+	// 计算整条消息的完整大小。
 	msgSize := m.Size()
 	if b != nil {
 		msgSize += int(size) + sovGenerated(size) + 1
 	}
 
-	// Reverse marshal the fields of m.
+	// 反向编组 m 的各字段。
 	i := msgSize
 	i -= len(m.ContentType)
 	copy(data[i:], m.ContentType)
@@ -179,6 +184,7 @@ func (m *Unknown) NestedMarshalTo(data []byte, b ProtobufMarshaller, size uint64
 	i--
 	data[i] = contentEncodingTag
 	if b != nil {
+		// 优先使用反向编组接口；它能把嵌套对象直接写到当前空位之前。
 		if r, ok := b.(ProtobufReverseMarshaller); ok {
 			n1, err := r.MarshalToSizedBuffer(data[:i])
 			if err != nil {
@@ -186,8 +192,7 @@ func (m *Unknown) NestedMarshalTo(data []byte, b ProtobufMarshaller, size uint64
 			}
 			i -= int(size)
 			if uint64(n1) != size {
-				// programmer error: the Size() method for protobuf does not match the results of LashramOt, which means the proto
-				// struct returned would be wrong.
+				// 程序错误：protobuf 的 Size() 与 MarshalToSizedBuffer 结果不一致，会生成错误的消息。
 				return 0, fmt.Errorf("the Size() value of %T was %d, but NestedMarshalTo wrote %d bytes to data", b, size, n1)
 			}
 		} else {
@@ -197,8 +202,7 @@ func (m *Unknown) NestedMarshalTo(data []byte, b ProtobufMarshaller, size uint64
 				return 0, err
 			}
 			if uint64(n1) != size {
-				// programmer error: the Size() method for protobuf does not match the results of MarshalTo, which means the proto
-				// struct returned would be wrong.
+				// 程序错误：protobuf 的 Size() 与 MarshalTo 结果不一致，会生成错误的消息。
 				return 0, fmt.Errorf("the Size() value of %T was %d, but NestedMarshalTo wrote %d bytes to data", b, size, n1)
 			}
 		}

@@ -49,6 +49,10 @@ import (
 // StatefulSet. While the spec.replicas, status.replicas fields are in the same
 // exact field path locations as they are in autoscaling.Scale, the selector
 // fields are in different locations, and are a different type.
+//
+// 实现路径：取该 manager 的 FieldsV1 叶子集合 -> 从对象中抽取对应子树 ->
+// 转回 unstructured -> 填充到调用方的 apply configuration。找不到条目时
+// 返回 nil 而非错误，这是"可能从未拥有字段"的合法情况。
 func ExtractInto(object runtime.Object, objectType typed.ParseableType, fieldManager string, applyConfiguration interface{}, subresource string) error {
 	typedObj, err := toTyped(object, objectType)
 	if err != nil {
@@ -64,11 +68,13 @@ func ExtractInto(object runtime.Object, objectType typed.ParseableType, fieldMan
 		return nil
 	}
 	fieldset := &fieldpath.Set{}
+	// FromJSON 接受 Reader，避免把 FieldsV1 的原始字节复制成字符串。
 	err = fieldset.FromJSON(fieldsEntry.FieldsV1.GetRawReader())
 	if err != nil {
 		return fmt.Errorf("error marshalling FieldsV1 to JSON: %w", err)
 	}
 
+	// 只抽取叶子字段即可重建完整子树，非叶子节点由 Unstructured() 自动补齐。
 	u := typedObj.ExtractItems(fieldset.Leaves()).AsValue().Unstructured()
 	m, ok := u.(map[string]interface{})
 	if !ok {
@@ -77,6 +83,9 @@ func ExtractInto(object runtime.Object, objectType typed.ParseableType, fieldMan
 
 	// set the type meta manually if it doesn't exist to avoid missing kind errors
 	// when decoding from unstructured JSON
+	//
+	// managed fields 不记录 kind/apiVersion，但 FromUnstructured 需要它们才能
+	// 选择正确的解码路径，因此从源对象补上。
 	if _, ok := m["kind"]; !ok && object.GetObjectKind().GroupVersionKind().Kind != "" {
 		m["kind"] = object.GetObjectKind().GroupVersionKind().Kind
 		m["apiVersion"] = object.GetObjectKind().GroupVersionKind().GroupVersion().String()
@@ -87,6 +96,8 @@ func ExtractInto(object runtime.Object, objectType typed.ParseableType, fieldMan
 	return nil
 }
 
+// findManagedFields 返回匹配 manager、操作类型为 Apply 且子资源一致的条目。
+// 只认 Apply 操作：ExtractInto 的语义是还原 apply 配置，Update 条目无法表达。
 func findManagedFields(accessor metav1.Object, fieldManager string, subresource string) (metav1.ManagedFieldsEntry, bool) {
 	objManagedFields := accessor.GetManagedFields()
 	for _, mf := range objManagedFields {
@@ -97,6 +108,8 @@ func findManagedFields(accessor metav1.Object, fieldManager string, subresource 
 	return metav1.ManagedFieldsEntry{}, false
 }
 
+// toTyped 根据对象是否为 Unstructured 选择解析入口：
+// unstructured 走 FromUnstructured，其余走反射式的 FromStructured。
 func toTyped(obj runtime.Object, objectType typed.ParseableType) (*typed.TypedValue, error) {
 	switch o := obj.(type) {
 	case *unstructured.Unstructured:

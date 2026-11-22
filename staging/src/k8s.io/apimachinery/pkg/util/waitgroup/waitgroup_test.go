@@ -21,6 +21,9 @@ import (
 	"testing"
 )
 
+// TestWaitGroup 复刻标准库 WaitGroup 的屏障语义，并验证 SafeWaitGroup
+// 的 Wait 会阻塞直到所有 Done 被调用。先让 wg1 归零、再逐个释放 wg2，
+// 每一步都检查没有任何 goroutine 提前越过屏障。
 func TestWaitGroup(t *testing.T) {
 	wg1 := &SafeWaitGroup{}
 	wg2 := &SafeWaitGroup{}
@@ -49,6 +52,8 @@ func TestWaitGroup(t *testing.T) {
 	}
 }
 
+// TestWaitGroupAddFail 固定 SafeWaitGroup 的关键差异：Wait 返回后再 Add
+// 必须报错，防止复用一个已关闭的组造成计数错乱。
 func TestWaitGroupAddFail(t *testing.T) {
 	wg := &SafeWaitGroup{}
 	wg.Add(1)

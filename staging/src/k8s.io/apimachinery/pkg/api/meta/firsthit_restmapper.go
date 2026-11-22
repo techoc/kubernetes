@@ -27,16 +27,19 @@ var (
 	_ ResettableRESTMapper = &FirstHitRESTMapper{}
 )
 
-// FirstHitRESTMapper is a wrapper for multiple RESTMappers which returns the
-// first successful result for the singular requests
+// FirstHitRESTMapper 包装多个 RESTMapper：对每个请求按顺序询问，返回第一个成功的结果。
+// 它不要求各 mapper 的意见一致，适合“互补而非重叠”的映射来源（例如内置资源与聚合 API）。
 type FirstHitRESTMapper struct {
 	MultiRESTMapper
 }
 
+// String 返回便于调试的字符串表示。
 func (m FirstHitRESTMapper) String() string {
 	return fmt.Sprintf("FirstHitRESTMapper{\n\t%v\n}", m.MultiRESTMapper)
 }
 
+// ResourceFor 依次向底层 mapper 查询资源的规范化 GroupVersionResource，返回首个命中。
+// 全部失败时把各 mapper 的错误合并返回。
 func (m FirstHitRESTMapper) ResourceFor(resource schema.GroupVersionResource) (schema.GroupVersionResource, error) {
 	errors := []error{}
 	for _, t := range m.MultiRESTMapper {
@@ -44,12 +47,14 @@ func (m FirstHitRESTMapper) ResourceFor(resource schema.GroupVersionResource) (s
 		if err == nil {
 			return ret, nil
 		}
+		// 保留每个 mapper 的错误，便于全部未命中时定位是哪个来源缺了注册。
 		errors = append(errors, err)
 	}
 
 	return schema.GroupVersionResource{}, collapseAggregateErrors(errors)
 }
 
+// KindFor 依次向底层 mapper 查询资源对应的 GroupVersionKind，返回首个命中。
 func (m FirstHitRESTMapper) KindFor(resource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
 	errors := []error{}
 	for _, t := range m.MultiRESTMapper {
@@ -63,9 +68,8 @@ func (m FirstHitRESTMapper) KindFor(resource schema.GroupVersionResource) (schem
 	return schema.GroupVersionKind{}, collapseAggregateErrors(errors)
 }
 
-// RESTMapping provides the REST mapping for the resource based on the
-// kind and version. This implementation supports multiple REST schemas and
-// return the first match.
+// RESTMapping 基于 kind 和 version 返回 REST 映射。该实现支持多个 REST schema，
+// 并返回第一个匹配的结果。
 func (m FirstHitRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string) (*RESTMapping, error) {
 	errors := []error{}
 	for _, t := range m.MultiRESTMapper {
@@ -79,12 +83,13 @@ func (m FirstHitRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string)
 	return nil, collapseAggregateErrors(errors)
 }
 
+// Reset 清除底层 mapper 的缓存，用于发现失败后重建发现信息。
 func (m FirstHitRESTMapper) Reset() {
 	m.MultiRESTMapper.Reset()
 }
 
-// collapseAggregateErrors returns the minimal errors.  it handles empty as nil, handles one item in a list
-// by returning the item, and collapses all NoMatchErrors to a single one (since they should all be the same)
+// collapseAggregateErrors 返回最小化的错误：空切片返回 nil，单个元素直接返回该元素，
+// 且当所有错误都是 NoMatchError 时折叠为第一个——它们对外含义相同，逐个列举只会造成噪音。
 func collapseAggregateErrors(errors []error) error {
 	if len(errors) == 0 {
 		return nil

@@ -34,9 +34,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer/cbor/internal/modes"
 )
 
-// TestStreamingCollectionsEncoding verifies that streaming encoding produces
-// output identical to normal non-streaming encoding, and that the streaming
-// encoder actually uses multiple Write calls (not just buffering everything).
+// TestStreamingCollectionsEncoding 验证流式编码与普通非流式编码的输出逐字节一致，
+// 且流式编码器确实会多次调用 Write（而不是先把所有内容缓冲起来）。
+// 该测试覆盖流式路径需要特别处理的各类边界：数值类型区分、重复 JSON 标签、
+// 非法 UTF-8、nil/空/缺失的切片与 map、自定义 Marshaler、原始字节以及带额外字段的 List。
 func TestStreamingCollectionsEncoding(t *testing.T) {
 	var buf writeCountingBuffer
 	var remainingItems int64 = 1
@@ -45,7 +46,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 		in           runtime.Object
 		cannotStream bool
 	}{
-		// Preserving the distinction between integers and floating-point numbers
+		// 保留整数与浮点数之间的区分：CBOR 中二者是不同的主类型，不能混为一谈。
 		{
 			name: "Struct with floats",
 			in: &StructWithFloatsList{
@@ -82,7 +83,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 				},
 			},
 		},
-		// Handling structs with duplicate field names (JSON tag names) without producing duplicate keys in the encoded output
+		// 处理具有重复 JSON 字段名的结构体：编码输出中不能出现重复的 map 键。
 		{
 			name: "StructWithDuplicatedTags",
 			in: &StructWithDuplicatedTagsList{
@@ -94,7 +95,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 				},
 			},
 		},
-		// Encoding Go strings containing invalid UTF-8 sequences without error
+		// Go 字符串可能包含非法 UTF-8 序列；编码时不得因此报错。
 		{
 			name: "UnstructuredList object invalid UTF-8",
 			in: &unstructured.UnstructuredList{
@@ -115,7 +116,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 				},
 			},
 		},
-		// Preserving the distinction between absent, present-but-null, and present-and-empty states for slices and maps
+		// 保留切片/map 的三种状态：缺失、存在但为 null、存在且为空。
 		{
 			name: "CarpList items nil",
 			in: &testapigroupv1.CarpList{
@@ -280,7 +281,8 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 				},
 			},
 		},
-		// Handling structs implementing json.Marshaler method
+		// 处理实现了 json.Marshaler 的结构体：List 顶层若自定义 Marshaler 则无法流式编码，
+		// 但元素级自定义 Marshaler 不影响流式输出。
 		{
 			name:         "List with json.Marshaler cannot be streamed",
 			in:           &ListWithMarshalJSONList{},
@@ -294,7 +296,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 				},
 			},
 		},
-		// Handling structs implementing cbor.Marshaler but NOT json.Marshaler
+		// 处理实现 cbor.Marshaler 但未实现 json.Marshaler 的结构体。
 		{
 			name:         "List with cbor.Marshaler cannot be streamed",
 			in:           &ListWithMarshalCBORList{},
@@ -308,7 +310,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 				},
 			},
 		},
-		// Handling structs implementing both json.Marshaler and cbor.Marshaler
+		// 处理同时实现 json.Marshaler 与 cbor.Marshaler 的结构体。
 		{
 			name:         "List with json.Marshaler and cbor.Marshaler cannot be streamed",
 			in:           &ListWithBothMarshalersList{},
@@ -322,7 +324,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 				},
 			},
 		},
-		// Handling raw bytes.
+		// 处理原始字节：[]byte 与 [N]byte 在 CBOR 中都应编码为 byte string。
 		{
 			name: "Struct with raw bytes",
 			in: &StructWithRawBytesList{
@@ -356,7 +358,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 				},
 			},
 		},
-		// Other scenarios:
+		// 其他场景：仅 TypeMeta、空列表、带 continue/remainingItemCount 的列表、多元素列表。
 		{
 			name: "List just kind",
 			in: &testapigroupv1.CarpList{
@@ -435,6 +437,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 			},
 		},
 		{
+			// 顶层存在额外字段时，流式编码无法保证输出与非流式一致，必须回退。
 			name: "List with extra field cannot be streamed",
 			in: &ListWithAdditionalFields{
 				TypeMeta: metav1.TypeMeta{
@@ -466,6 +469,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 			cannotStream: true,
 		},
 		{
+			// 非集合类型（单个对象）自然不适用流式集合编码。
 			name: "Not a collection cannot be streamed",
 			in: &testapigroupv1.Carp{
 				TypeMeta: metav1.TypeMeta{
@@ -557,6 +561,8 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 			},
 		},
 		{
+			// UnstructuredList 的 Object 中已存在 items，与 Items 字段冲突；
+			// 必须与非流式编码保持一致，不能因流式路径而重复输出 items。
 			name: "UnstructuredList conflict on items",
 			in: &unstructured.UnstructuredList{
 				Object: map[string]interface{}{
@@ -579,6 +585,7 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// 用同一份输入分别做流式与非流式编码，然后逐字节比较。
 			buf.Reset()
 			s := NewSerializer(nil, nil, StreamingCollectionsEncoding(true))
 			if err := s.Encode(tc.in, &buf); err != nil {
@@ -595,6 +602,8 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 				t.Errorf("streaming and normal encoding differ:\n%s", diff)
 			}
 
+			// 通过 Write 调用次数判断是否真的走了流式路径：
+			// 非流式路径通常只写一次，流式路径至少写 map 头、items 键与各元素。
 			expectStreaming := !tc.cannotStream
 			if expectStreaming && buf.writeCount <= 2 {
 				t.Errorf("expected streaming but Write was called only: %d", buf.writeCount)
@@ -605,6 +614,9 @@ func TestStreamingCollectionsEncoding(t *testing.T) {
 		})
 	}
 }
+
+// 以下类型是流式编码测试用的最小化 fixture。它们只实现 DeepCopyObject
+// 以满足 runtime.Object，不参与真实业务逻辑。
 
 type StructWithFloatsList struct {
 	metav1.TypeMeta `json:",inline"`
@@ -815,23 +827,33 @@ func (s *ListWithCBORTagList) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// writeCountingBuffer 在 bytes.Buffer 基础上统计 Write 调用次数，
+// 用于区分流式与非流式编码路径（流式会分多次写出）。
 type writeCountingBuffer struct {
 	writeCount int
 	bytes.Buffer
 }
 
+// Write 记录调用次数后写入底层缓冲区。
 func (b *writeCountingBuffer) Write(data []byte) (int, error) {
 	b.writeCount++
 	return b.Buffer.Write(data)
 }
 
+// Reset 同时清空计数与缓冲内容，便于在测试用例之间复用。
 func (b *writeCountingBuffer) Reset() {
 	b.writeCount = 0
 	b.Buffer.Reset()
 }
 
+// TestFuzzCollectionsEncoding 用随机填充的对象反复验证三条不变式：
+// 流式确定性编码与非流式编码逐字节相同；流式路径确实多次写出；
+// 非确定性编码与确定性编码在语义（解码后的值与类型化对象）上等价。
 func TestFuzzCollectionsEncoding(t *testing.T) {
+	// FieldsV1 的内部表示不适合随机填充（可能生成非法 JSON），直接保持零值。
 	disableFuzzFieldsV1 := func(field *metav1.FieldsV1, c randfill.Continue) {}
+	// 为 UnstructuredList 生成结构合理的 Object：metadata 中的 resourceVersion 等
+	// 必须是字符串形式，否则反序列化到类型化对象时会失败。
 	fuzzUnstructuredList := func(list *unstructured.UnstructuredList, c randfill.Continue) {
 		list.Object = map[string]interface{}{
 			"kind":       "List",
@@ -853,6 +875,7 @@ func TestFuzzCollectionsEncoding(t *testing.T) {
 		kvs[c.String(0)] = int64(c.Intn(1000000)) // Limit to int64 range
 		kvs[c.String(0)] = c.String(0)
 	}
+	// 注册自定义填充函数，覆盖默认的随机生成逻辑。
 	f := randfill.New().Funcs(disableFuzzFieldsV1, fuzzUnstructuredList, fuzzMap)
 	streamingSerializer := NewSerializer(nil, nil)
 	normalSerializer := NewSerializer(nil, nil, StreamingCollectionsEncoding(false))
@@ -867,17 +890,18 @@ func TestFuzzCollectionsEncoding(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var streamingBuf writeCountingBuffer
 			var normalBuf, ndetBuf bytes.Buffer
+			// 多次试验以覆盖随机组合；失败信息中带上 trial 编号便于复现。
 			for i := range 1000 {
 				obj := tc.newObj()
 				f.Fill(obj)
 
-				// Non-streaming, deterministic encode as the reference for all comparisons.
+				// 以非流式确定性编码作为所有比较的基准。
 				normalBuf.Reset()
 				if err := normalSerializer.Encode(obj, &normalBuf); err != nil {
 					t.Fatalf("trial %d: normal encode error: %v", i, err)
 				}
 
-				// Streaming deterministic encode must match the reference byte-for-byte.
+				// 流式确定性编码必须与基准逐字节一致。
 				streamingBuf.Reset()
 				if err := streamingSerializer.Encode(obj, &streamingBuf); err != nil {
 					t.Fatalf("trial %d: streaming encode error: %v", i, err)
@@ -891,7 +915,7 @@ func TestFuzzCollectionsEncoding(t *testing.T) {
 					t.Errorf("trial %d: expected streaming encoding to use more than 2 writes, got %d", i, streamingBuf.writeCount)
 				}
 
-				// Streaming nondeterministic encode must decode to the same value.
+				// 流式非确定性编码只要求语义等价：字节可以不同，但解码结果必须相同。
 				ndetBuf.Reset()
 				if err := streamingSerializer.EncodeNondeterministic(obj, &ndetBuf); err != nil {
 					t.Fatalf("trial %d: nondeterministic encode error: %v", i, err)
@@ -924,8 +948,8 @@ func TestFuzzCollectionsEncoding(t *testing.T) {
 	}
 }
 
-// mustCBORSelfDescribed encodes v to CBOR and prepends the self-described CBOR
-// tag (0xd9d9f7), matching how runtime.RawExtension stores CBOR-content bytes.
+// mustCBORSelfDescribed 把 v 编码为 CBOR，并在前面加上自描述 CBOR 标签（0xd9d9f7），
+// 以匹配 runtime.RawExtension 存储 CBOR 内容字节时的格式。
 func mustCBORSelfDescribed(t *testing.T, v interface{}) []byte {
 	t.Helper()
 	data, err := modes.Encode.Marshal(v)
@@ -935,27 +959,25 @@ func mustCBORSelfDescribed(t *testing.T, v interface{}) []byte {
 	return append([]byte{0xd9, 0xd9, 0xf7}, data...)
 }
 
-// TestStreamEncodeListRawExtension is a regression test for streaming encoding of
-// a metav1.List whose Items are runtime.RawExtension. Streaming encoding must be
-// byte-identical to non-streaming encoding, and must round-trip.
+// TestStreamEncodeListRawExtension 是针对 Items 为 runtime.RawExtension 的 metav1.List
+// 流式编码的回归测试。流式编码必须与非流式编码逐字节一致，并且能够往返。
 //
-// Previously the streaming path routed items through meta.ExtractList, which
-// flattens a RawExtension holding raw bytes into a runtime.Unknown (dropping its
-// content type). runtime.Unknown implements MarshalJSON but not MarshalCBOR, so
-// CBOR-content bytes were either misencoded as a struct or, worse, failed while
-// the encoder attempted to transcode them from JSON. The streaming path now
-// marshals each RawExtension directly, honoring runtime.RawExtension.MarshalCBOR.
+// 此前流式路径通过 meta.ExtractList 处理 items，会把持有原始字节的 RawExtension
+// 展平为 runtime.Unknown（丢失其 content type）。runtime.Unknown 实现了 MarshalJSON
+// 但没有实现 MarshalCBOR，导致 CBOR 内容要么被错误地按结构体编码，要么在编码器
+// 尝试从 JSON 转码时直接失败。现在的流式路径直接对每个 RawExtension 做 marshal，
+// 从而尊重 runtime.RawExtension.MarshalCBOR。
 func TestStreamEncodeListRawExtension(t *testing.T) {
 	streamingSerializer := NewSerializer(nil, nil)
 	normalSerializer := NewSerializer(nil, nil, StreamingCollectionsEncoding(false))
 
 	for _, tc := range []struct {
 		name string
-		// nonEmpty indicates Items encodes as a non-empty array (should stream).
+		// nonEmpty 表示 Items 会编码为非空数组（应走流式路径）。
 		nonEmpty bool
-		// roundTrips indicates decoding the output reproduces the input exactly.
-		// Only holds for CBOR-content RawExtension: decoding normalizes JSON bytes
-		// and populated Objects into CBOR Raw bytes.
+		// roundTrips 表示解码输出能精确还原输入。
+		// 仅对 CBOR 内容的 RawExtension 成立：解码会把 JSON 字节和已填充的 Object
+		// 归一化为 CBOR 的 Raw 字节。
 		roundTrips bool
 		items      []runtime.RawExtension
 	}{
@@ -1014,14 +1036,12 @@ func TestStreamEncodeListRawExtension(t *testing.T) {
 				t.Errorf("streaming output differs from normal encoding:\n%s", diff)
 			}
 
-			// Non-empty lists should exercise the streaming path (more than the
-			// map-head + items-key writes).
+			// 非空列表应真正走流式路径（写入次数多于 map 头 + items 键）。
 			if tc.nonEmpty && streamingBuf.writeCount <= 2 {
 				t.Errorf("expected streaming encoding to use more than 2 writes, got %d", streamingBuf.writeCount)
 			}
 
-			// Round-trip: decoding the streamed bytes must reproduce the input
-			// for CBOR-content items (see roundTrips doc above).
+			// 往返校验：对 CBOR 内容项，解码流式输出必须还原输入（见上方 roundTrips 说明）。
 			if tc.roundTrips {
 				out := &metav1.List{}
 				if err := modes.Decode.Unmarshal(streamingBuf.Bytes(), out); err != nil {
@@ -1035,8 +1055,8 @@ func TestStreamEncodeListRawExtension(t *testing.T) {
 	}
 }
 
-// TestStreamEncodeCollectionsDeterministic verifies that the streaming serializer
-// produces output identical to the normal non-streaming serializer.
+// TestStreamEncodeCollectionsDeterministic 验证流式序列化器的输出与普通非流式序列化器完全一致。
+// 它使用带完整顶层字段的列表，覆盖 map 头、字段顺序与 items 流式写出的组合。
 func TestStreamEncodeCollectionsDeterministic(t *testing.T) {
 	streamingSerializer := NewSerializer(nil, nil)
 	normalSerializer := NewSerializer(nil, nil, StreamingCollectionsEncoding(false))
@@ -1079,19 +1099,19 @@ func TestStreamEncodeCollectionsDeterministic(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// Encode with streaming enabled.
+			// 开启流式编码。
 			var streamingBuf writeCountingBuffer
 			if err := streamingSerializer.Encode(tc.in, &streamingBuf); err != nil {
 				t.Fatalf("streaming encode error: %v", err)
 			}
 
-			// Encode with normal non-streaming encoder.
+			// 使用普通非流式编码器作为对照。
 			var normalBuf bytes.Buffer
 			if err := normalSerializer.Encode(tc.in, &normalBuf); err != nil {
 				t.Fatalf("normal encode error: %v", err)
 			}
 
-			// Output must be identical.
+			// 两者输出必须完全相同。
 			if diff := cmp.Diff(normalBuf.Bytes(), streamingBuf.Bytes()); diff != "" {
 				t.Logf("normal: %x", normalBuf.Bytes())
 				t.Logf("streaming: %x", streamingBuf.Bytes())
@@ -1105,18 +1125,17 @@ func TestStreamEncodeCollectionsDeterministic(t *testing.T) {
 	}
 }
 
-// TestStreamEncodeCollectionsNondeterministic verifies that the streaming serializer's
-// EncodeNondeterministic method:
-//  1. Semantic correctness: the output decodes to the same object as deterministic encoding.
-//  2. Non-idempotence: across multiple trials the key order is observed to vary
-//     (probabilistic; uses a multi-key object to make the probability of flake negligible).
+// TestStreamEncodeCollectionsNondeterministic 验证流式序列化器的 EncodeNondeterministic 方法：
+//  1. 语义正确：输出解码后与确定性编码得到相同对象；
+//  2. 非幂等：多次试验中可观察到 key 顺序变化
+//     （这是概率性断言；使用多 key 对象使误报概率低到可忽略）。
 func TestStreamEncodeCollectionsNondeterministic(t *testing.T) {
 	streamingSerializer := NewSerializer(nil, nil)
 	normalSerializer := NewSerializer(nil, nil, StreamingCollectionsEncoding(false))
 
-	// A list with kind+apiVersion+metadata+items = 4 keys.
-	// With SortFastShuffle the number of possible orderings is 4! = 24.
-	// Over 200 trials the probability of seeing only 1 unique ordering is (1/24)^199 ≈ 0.
+	// 列表包含 kind+apiVersion+metadata+items 共 4 个 key。
+	// 使用 SortFastShuffle 时可能的排列数为 4! = 24。
+	// 200 次试验中只出现 1 种排列的概率为 (1/24)^199 ≈ 0，因此该断言不会随机失败。
 	const nTrials = 200
 
 	for _, tc := range []struct {
@@ -1157,7 +1176,7 @@ func TestStreamEncodeCollectionsNondeterministic(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// Encode once with non-streaming, deterministic mode as reference for semantic equality.
+			// 先做一次非流式确定性编码，作为语义等价比较的基准。
 			var detBuf bytes.Buffer
 			if err := normalSerializer.Encode(tc.in, &detBuf); err != nil {
 				t.Fatalf("deterministic encode error: %v", err)
@@ -1171,8 +1190,7 @@ func TestStreamEncodeCollectionsNondeterministic(t *testing.T) {
 				t.Fatalf("decode deterministic output into %T: %v", tc.in, err)
 			}
 
-			// Run nTrials of nondeterministic encoding, stopping early once we
-			// observe a second distinct byte sequence.
+			// 进行 nTrials 次非确定性编码；一旦观察到第二种不同的字节序列即可提前结束。
 			var firstEncoding string
 			for i := range nTrials {
 				var buf writeCountingBuffer
@@ -1181,7 +1199,7 @@ func TestStreamEncodeCollectionsNondeterministic(t *testing.T) {
 				}
 				payload := buf.Bytes()
 
-				// Semantic correctness: decoded value must equal the deterministic reference.
+				// 语义正确性：解码结果必须与确定性基准相同。
 				var ndetObj map[string]interface{}
 				if err := modes.Decode.Unmarshal(payload, &ndetObj); err != nil {
 					t.Fatalf("trial %d: decode nondeterministic output: %v", i, err)
@@ -1215,23 +1233,23 @@ func TestStreamEncodeCollectionsNondeterministic(t *testing.T) {
 	}
 }
 
-// TestCollectionHeadMatchesLibrary verifies that writeArrayHead and writeMapHead
-// produce byte-identical output to the fxamacker/cbor library's own head encoding
-// at every length-encoding width boundary (and its neighbors) reachable by
-// allocating a real collection. The library encodes an n-element array/map with a
-// leading definite-length head, so our streamed head must equal that prefix.
+// TestCollectionHeadMatchesLibrary 验证 writeArrayHead 与 writeMapHead 的输出，
+// 在所有可通过实际分配集合达到的长度编码宽度边界（及其相邻值）上，
+// 与 fxamacker/cbor 库自身的 head 编码逐字节一致。
+// 该库对 n 元素数组/map 会先写一个确定长度的 head，因此我们流式写出的 head 必须等于该前缀。
 //
-// The reachable sizes exercise the 1-, 2-, 3-, and 5-byte argument forms (the last
-// at n=65536). The 8-byte form (n > 2^32) cannot be produced by allocation and is
-// covered against explicit RFC 8949 bytes by TestWriteCollectionHeadBoundaries.
+// 可达到的尺寸覆盖 1、2、3、5 字节参数形式（最后一种在 n=65536 时出现）。
+// 8 字节形式（n > 2^32）无法通过分配产生，改由 TestWriteCollectionHeadBoundaries
+// 对照 RFC 8949 的显式字节进行覆盖。
 func TestCollectionHeadMatchesLibrary(t *testing.T) {
-	// Width-class boundaries and neighbors:
-	//   n <= 23           -> 1-byte head
-	//   24    <= n <= 255 -> 2-byte head
-	//   256   <= n <= 65535 -> 3-byte head
-	//   65536 <= n        -> 5-byte head
+	// 宽度类别边界及其相邻值：
+	//   n <= 23             -> 1 字节 head
+	//   24    <= n <= 255   -> 2 字节 head
+	//   256   <= n <= 65535 -> 3 字节 head
+	//   65536 <= n          -> 5 字节 head
 	sizes := []int{0, 1, 23, 24, 25, 255, 256, 257, 65535, 65536, 65537}
 
+	// 只比较 head 前缀：库输出还包含集合内容，而我们只关心长度头。
 	assertPrefix := func(t *testing.T, kind string, n int, head, lib []byte) {
 		t.Helper()
 		end := min(len(head), len(lib))
@@ -1270,12 +1288,11 @@ func TestCollectionHeadMatchesLibrary(t *testing.T) {
 	}
 }
 
-// TestWriteCollectionHeadBoundaries checks writeCollectionHead against explicit
-// RFC 8949 Section 3 expected bytes at every additional-information width boundary
-// and its neighbors, for both the array (0x80) and map (0xa0) major types. Unlike
-// TestCollectionHeadMatchesLibrary, this calls writeCollectionHead directly, so it
-// can cover the 8-byte argument form (n > 2^32) that no allocatable collection can
-// reach.
+// TestWriteCollectionHeadBoundaries 对照 RFC 8949 第 3 节的显式期望字节，
+// 检查 writeCollectionHead 在每种 additional-information 宽度边界及其相邻值上的输出，
+// 数组（主类型 0x80）与 map（主类型 0xa0）都要覆盖。
+// 与 TestCollectionHeadMatchesLibrary 不同，这里直接调用 writeCollectionHead，
+// 因此可以覆盖没有任何可分配集合能达到的 8 字节参数形式（n > 2^32）。
 func TestWriteCollectionHeadBoundaries(t *testing.T) {
 	for _, tc := range []struct {
 		n     int64

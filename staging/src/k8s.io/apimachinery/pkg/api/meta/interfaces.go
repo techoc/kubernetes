@@ -25,24 +25,28 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// ListMetaAccessor 表示能够暴露 ListMeta 的对象，通常是 `*List` 类型。
 type ListMetaAccessor interface {
 	GetListMeta() List
 }
 
-// List lets you work with list metadata from any of the versioned or
-// internal API objects. Attempting to set or retrieve a field on an object that does
-// not support that field will be a no-op and return a default value.
+// List 让你可以从任意 versioned 或 internal API 对象上操作列表元数据。
+// 对不支持某字段的对象执行读取或写入是 no-op，并返回默认值。
+//
+// 这里用类型别名的方式复用 metav1.ListInterface，避免两处接口定义漂移。
 type List metav1.ListInterface
 
-// Type exposes the type and APIVersion of versioned or internal API objects.
+// Type 暴露 versioned 或 internal API 对象的 type 与 apiVersion。
 type Type metav1.Type
 
-// MetadataAccessor lets you work with object and list metadata from any of the versioned or
-// internal API objects. Attempting to set or retrieve a field on an object that does
-// not support that field (Name, UID, Namespace on lists) will be a no-op and return
-// a default value.
+// MetadataAccessor 让你可以从任意 versioned 或 internal API 对象上操作对象
+// 与列表元数据。对不支持某字段的对象（例如在 List 上操作 Name、UID、
+// Namespace）执行读取或写入是 no-op，并返回默认值。
 //
-// MetadataAccessor exposes Interface in a way that can be used with multiple objects.
+// MetadataAccessor 以“可作用于多个对象”的方式暴露 Interface；它按
+// runtime.Object 取参而不是依赖具体类型断言，因此调用方可以用同一套
+// 代码处理不同版本的资源。resourceVersion 相关方法通过内嵌
+// runtime.ResourceVersioner 获得。
 type MetadataAccessor interface {
 	APIVersion(obj runtime.Object) (string, error)
 	SetAPIVersion(obj runtime.Object, version string) error
@@ -77,96 +81,99 @@ type MetadataAccessor interface {
 	runtime.ResourceVersioner
 }
 
+// RESTScopeName 是 REST 资源作用域的名称；字符串值参与 API 路径构造，
+// 不应随意改动。
 type RESTScopeName string
 
 const (
+	// RESTScopeNameNamespace 表示命名空间内资源。
 	RESTScopeNameNamespace RESTScopeName = "namespace"
-	RESTScopeNameRoot      RESTScopeName = "root"
+	// RESTScopeNameRoot 表示集群级（非命名空间）资源。
+	RESTScopeNameRoot RESTScopeName = "root"
 )
 
-// RESTScope contains the information needed to deal with REST resources that are in a resource hierarchy
+// RESTScope 描述处理层级化 REST 资源所需的信息。
 type RESTScope interface {
-	// Name of the scope
+	// Name 返回作用域名称。
 	Name() RESTScopeName
 }
 
-// RESTMapping contains the information needed to deal with objects of a specific
-// resource and kind in a RESTful manner.
+// RESTMapping 描述如何以 RESTful 方式处理某个特定资源与 kind 的对象。
 type RESTMapping struct {
-	// Resource is the GroupVersionResource (location) for this endpoint
+	// Resource 是该 endpoint 的 GroupVersionResource（即位置）。
 	Resource schema.GroupVersionResource
 
-	// GroupVersionKind is the GroupVersionKind (data format) to submit to this endpoint
+	// GroupVersionKind 是提交给该 endpoint 的数据格式（GVK）。
 	GroupVersionKind schema.GroupVersionKind
 
-	// Scope contains the information needed to deal with REST Resources that are in a resource hierarchy
+	// Scope 描述处理层级化 REST 资源所需的信息。
 	Scope RESTScope
 }
 
-// RESTMapper allows clients to map resources to kind, and map kind and version
-// to interfaces for manipulating those objects. It is primarily intended for
-// consumers of Kubernetes compatible REST APIs as defined in docs/devel/api-conventions.md.
+// RESTMapper 允许客户端在资源与 kind 之间做映射，并把 kind/version 映射到
+// 操作对象的接口。它主要面向 kubernetes 兼容 REST API 的使用者，规范见
+// docs/devel/api-conventions.md。
 //
-// The Kubernetes API provides versioned resources and object kinds which are scoped
-// to API groups. In other words, kinds and resources should not be assumed to be
-// unique across groups.
+// Kubernetes API 提供按 API group 划分的 versioned 资源与对象 kind；换言之
+// 不应假设 kind 和 resource 在 group 之间唯一。
 //
-// RESTMapperWithContext is a better alternative because it supports contextual logging and cancellation.
+// RESTMapperWithContext 是更好的替代方案，因为它支持上下文日志与取消。
 //
 // Contextual logging: Use RESTMapperWithContext instead.
 type RESTMapper interface {
-	// KindFor takes a partial resource and returns the single match.  Returns an error if there are multiple matches
+	// KindFor 接收一个部分限定的资源并返回唯一匹配；若存在多个匹配则报错。
 	KindFor(resource schema.GroupVersionResource) (schema.GroupVersionKind, error)
 
-	// KindsFor takes a partial resource and returns the list of potential kinds in priority order
+	// KindsFor 接收一个部分限定的资源并按优先级返回所有可能匹配的 kind。
 	KindsFor(resource schema.GroupVersionResource) ([]schema.GroupVersionKind, error)
 
-	// ResourceFor takes a partial resource and returns the single match.  Returns an error if there are multiple matches
+	// ResourceFor 接收一个部分限定的资源并返回唯一匹配；若存在多个匹配则报错。
 	ResourceFor(input schema.GroupVersionResource) (schema.GroupVersionResource, error)
 
-	// ResourcesFor takes a partial resource and returns the list of potential resource in priority order
+	// ResourcesFor 接收一个部分限定的资源并按优先级返回所有可能的资源。
 	ResourcesFor(input schema.GroupVersionResource) ([]schema.GroupVersionResource, error)
 
-	// RESTMapping identifies a preferred resource mapping for the provided group kind.
+	// RESTMapping 为给定的 group kind 返回首选的资源映射。
 	RESTMapping(gk schema.GroupKind, versions ...string) (*RESTMapping, error)
-	// RESTMappings returns all resource mappings for the provided group kind if no
-	// version search is provided. Otherwise identifies a preferred resource mapping for
-	// the provided version(s).
+	// RESTMappings 在未指定版本时返回该 group kind 的所有资源映射；否则
+	// 在给定版本中识别首选映射。
 	RESTMappings(gk schema.GroupKind, versions ...string) ([]*RESTMapping, error)
 
+	// ResourceSingularizer 返回资源名对应的单数形式。
 	ResourceSingularizer(resource string) (singular string, err error)
 }
 
-// RESTMapperWithContext allows clients to map resources to kind, and map kind and version
-// to interfaces for manipulating those objects. It is primarily intended for
-// consumers of Kubernetes compatible REST APIs as defined in docs/devel/api-conventions.md.
+// RESTMapperWithContext 是 RESTMapper 的上下文感知版本，语义与 RESTMapper
+// 完全一致，但每个方法都接受 context 以支持上下文日志、取消与超时。
 //
-// The Kubernetes API provides versioned resources and object kinds which are scoped
-// to API groups. In other words, kinds and resources should not be assumed to be
-// unique across groups.
+// Kubernetes API 提供按 API group 划分的 versioned 资源与对象 kind；换言之
+// 不应假设 kind 和 resource 在 group 之间唯一。
 type RESTMapperWithContext interface {
-	// KindFor takes a partial resource and returns the single match.  Returns an error if there are multiple matches
+	// KindForWithContext 接收一个部分限定的资源并返回唯一匹配；若存在多个匹配则报错。
 	KindForWithContext(ctx context.Context, resource schema.GroupVersionResource) (schema.GroupVersionKind, error)
 
-	// KindsFor takes a partial resource and returns the list of potential kinds in priority order
+	// KindsForWithContext 接收一个部分限定的资源并按优先级返回所有可能匹配的 kind。
 	KindsForWithContext(ctx context.Context, resource schema.GroupVersionResource) ([]schema.GroupVersionKind, error)
 
-	// ResourceFor takes a partial resource and returns the single match.  Returns an error if there are multiple matches
+	// ResourceForWithContext 接收一个部分限定的资源并返回唯一匹配；若存在多个匹配则报错。
 	ResourceForWithContext(ctx context.Context, input schema.GroupVersionResource) (schema.GroupVersionResource, error)
 
-	// ResourcesFor takes a partial resource and returns the list of potential resource in priority order
+	// ResourcesForWithContext 接收一个部分限定的资源并按优先级返回所有可能的资源。
 	ResourcesForWithContext(ctx context.Context, input schema.GroupVersionResource) ([]schema.GroupVersionResource, error)
 
-	// RESTMapping identifies a preferred resource mapping for the provided group kind.
+	// RESTMappingWithContext 为给定的 group kind 返回首选的资源映射。
 	RESTMappingWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) (*RESTMapping, error)
-	// RESTMappings returns all resource mappings for the provided group kind if no
-	// version search is provided. Otherwise identifies a preferred resource mapping for
-	// the provided version(s).
+	// RESTMappingsWithContext 在未指定版本时返回该 group kind 的所有资源映射；
+	// 否则在给定版本中识别首选映射。
 	RESTMappingsWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) ([]*RESTMapping, error)
 
+	// ResourceSingularizerWithContext 返回资源名对应的单数形式。
 	ResourceSingularizerWithContext(ctx context.Context, resource string) (singular string, err error)
 }
 
+// ToRESTMapperWithContext 把 RESTMapper 适配为 RESTMapperWithContext。
+// 若 m 已实现上下文版本则直接返回（避免无意义的包装）；nil 透传为 nil，
+// 这样上层对 nil 的判断无需改动。
 func ToRESTMapperWithContext(m RESTMapper) RESTMapperWithContext {
 	if m == nil {
 		return nil
@@ -179,6 +186,8 @@ func ToRESTMapperWithContext(m RESTMapper) RESTMapperWithContext {
 	}
 }
 
+// restMapperWrapper 为没有上下文方法的旧实现补上 ctx 参数；ctx 被丢弃，
+// 因此它只适用于迁移期，无法真正获得取消能力。
 type restMapperWrapper struct {
 	delegate RESTMapper
 }
@@ -205,12 +214,11 @@ func (m *restMapperWrapper) ResourceSingularizerWithContext(ctx context.Context,
 	return m.delegate.ResourceSingularizer(resource)
 }
 
-// ResettableRESTMapper is a RESTMapper which is capable of resetting itself
-// from discovery.
-// All rest mappers that delegate to other rest mappers must implement this interface and dynamically
-// check if the delegate mapper supports the Reset() operation.
+// ResettableRESTMapper 是可以从 discovery 信息重置自身的 RESTMapper。
+// 所有委托给其他 mapper 的实现都必须实现该接口，并动态检查 delegate 是否
+// 支持 Reset()，否则重置请求会静默丢失。
 //
-// ResettableRESTMapperWithContext is a better alternative because it supports contextual logging and cancellation.
+// ResettableRESTMapperWithContext 是更好的替代方案，因为它支持上下文日志与取消。
 //
 // Contextual logging: Use ResettableRESTMapperWithContext instead.
 type ResettableRESTMapper interface {
@@ -218,15 +226,16 @@ type ResettableRESTMapper interface {
 	Reset()
 }
 
-// ResettableRESTMapperWithContext is a RESTMapper which is capable of resetting itself
-// from discovery.
-// All rest mappers that delegate to other rest mappers must implement this interface and dynamically
-// check if the delegate mapper supports the ResetWithContext() operation.
+// ResettableRESTMapperWithContext 是上下文感知的可重置 RESTMapper。
+// 所有委托给其他 mapper 的实现都必须实现该接口，并动态检查 delegate 是否
+// 支持 ResetWithContext()。
 type ResettableRESTMapperWithContext interface {
 	RESTMapperWithContext
 	ResetWithContext(ctx context.Context)
 }
 
+// ToResettableRESTMapperWithContext 把 ResettableRESTMapper 适配为
+// ResettableRESTMapperWithContext；若已实现则直接复用，nil 透传为 nil。
 func ToResettableRESTMapperWithContext(m ResettableRESTMapper) ResettableRESTMapperWithContext {
 	if m == nil {
 		return nil
@@ -240,6 +249,7 @@ func ToResettableRESTMapperWithContext(m ResettableRESTMapper) ResettableRESTMap
 	}
 }
 
+// resettableRESTMapperWrapper 复用非重置版的适配结果，只补上 ResetWithContext。
 type resettableRESTMapperWrapper struct {
 	RESTMapperWithContext
 	delegate ResettableRESTMapper

@@ -30,9 +30,12 @@ import (
 )
 
 var (
+	// 错误比较时忽略 Detail 字段：它包含的是给人看的描述，不影响错误类型与字段路径的判定。
 	ignoreDetail = cmpopts.IgnoreFields(field.Error{}, "Detail")
 )
 
+// TestSelectorParse 验证选择器语法：合法串解析后再 String() 会去掉空白还原为规范化形式，
+// 非法串（如 "||"、链式 "=="）必须报错。
 func TestSelectorParse(t *testing.T) {
 	testGoodStrings := []string{
 		"x=a,y=b,z=c",
@@ -69,6 +72,8 @@ func TestSelectorParse(t *testing.T) {
 	}
 }
 
+// TestDeterministicParse 验证语义相同的选择器无论键的书写顺序如何，String() 输出一致——
+// 选择器字符串会被用作缓存键和日志内容，必须稳定。
 func TestDeterministicParse(t *testing.T) {
 	s1, err := Parse("x=a,a=x")
 	s2, err2 := Parse("a=x,x=a")
@@ -80,6 +85,7 @@ func TestDeterministicParse(t *testing.T) {
 	}
 }
 
+// expectMatch 断言选择器字符串解析后能匹配给定标签集；解析失败直接判失败。
 func expectMatch(t *testing.T, selector string, ls Set) {
 	lq, err := Parse(selector)
 	if err != nil {
@@ -91,6 +97,7 @@ func expectMatch(t *testing.T, selector string, ls Set) {
 	}
 }
 
+// expectNoMatch 断言选择器字符串解析后不匹配给定标签集；解析失败同样判失败。
 func expectNoMatch(t *testing.T, selector string, ls Set) {
 	lq, err := Parse(selector)
 	if err != nil {
@@ -102,6 +109,7 @@ func expectNoMatch(t *testing.T, selector string, ls Set) {
 	}
 }
 
+// TestEverything 验证空选择器（Everything）匹配任意标签集，且 Empty() 为 true。
 func TestEverything(t *testing.T) {
 	if !Everything().Matches(Set{"x": "y"}) {
 		t.Errorf("Nil selector didn't match")
@@ -111,12 +119,14 @@ func TestEverything(t *testing.T) {
 	}
 }
 
+// TestSelectorMatches 覆盖各操作符（=、!=、in/notin 的等价形式、存在性、大小比较）
+// 在命中与不命中两种标签集上的行为。
 func TestSelectorMatches(t *testing.T) {
 	expectMatch(t, "", Set{"x": "y"})
 	expectMatch(t, "x=y", Set{"x": "y"})
 	expectMatch(t, "x=y,z=w", Set{"x": "y", "z": "w"})
 	expectMatch(t, "x!=y,z!=w", Set{"x": "z", "z": "a"})
-	expectMatch(t, "notin=in", Set{"notin": "in"}) // in and notin in exactMatch
+	expectMatch(t, "notin=in", Set{"notin": "in"}) // in 与 notin 在精确匹配场景下等价
 	expectMatch(t, "x", Set{"x": "z"})
 	expectMatch(t, "!x", Set{"y": "z"})
 	expectMatch(t, "x>1", Set{"x": "2"})
@@ -142,12 +152,15 @@ func TestSelectorMatches(t *testing.T) {
 	expectNoMatch(t, "foo=bar,foobar=bar,baz=blah", labelset)
 }
 
+// expectMatchDirect 用 SelectorFromSet 直接构造选择器（绕开解析），断言其匹配。
 func expectMatchDirect(t *testing.T, selector, ls Set) {
 	if !SelectorFromSet(selector).Matches(ls) {
 		t.Errorf("Wanted %s to match '%s', but it did not.\n", selector, ls)
 	}
 }
 
+// expectNoMatchDirect 用 SelectorFromSet 直接构造选择器，断言其不匹配。
+//
 //nolint:staticcheck,unused //iccheck // U1000 currently commented out in TODO of TestSetMatches
 func expectNoMatchDirect(t *testing.T, selector, ls Set) {
 	if SelectorFromSet(selector).Matches(ls) {
@@ -155,6 +168,8 @@ func expectNoMatchDirect(t *testing.T, selector, ls Set) {
 	}
 }
 
+// TestSetMatches 验证由 Set 直接构造的选择器（不经过字符串解析）对标签集的匹配。
+// 注意：非法值的用例暂时被注释掉，见下方的待办注释。
 func TestSetMatches(t *testing.T) {
 	labelset := Set{
 		"foo": "bar",
@@ -171,6 +186,8 @@ func TestSetMatches(t *testing.T) {
 	//expectNoMatchDirect(t, Set{"foo": "=bar", "foobar": "bar", "baz": "blah"}, labelset)
 }
 
+// TestNilMapIsValid 验证 nil Set 转换出的选择器等价于 Everything，而不是 nil 选择器——
+// 调用方常在“无标签约束”时传 nil，必须能安全使用。
 func TestNilMapIsValid(t *testing.T) {
 	selector := Set(nil).AsSelector()
 	if selector == nil {
@@ -181,6 +198,7 @@ func TestNilMapIsValid(t *testing.T) {
 	}
 }
 
+// TestSetIsEmpty 验证空 Set 与空选择器的 Empty() 均为 true。
 func TestSetIsEmpty(t *testing.T) {
 	if !(Set{}).AsSelector().Empty() {
 		t.Errorf("Empty set should be empty")
@@ -190,6 +208,8 @@ func TestSetIsEmpty(t *testing.T) {
 	}
 }
 
+// TestLexer 验证词法分析器对单个输入的切分：长操作符优先（"!=" 不会被拆成 "!" 和 "="），
+// 非特殊字符按标识符处理。
 func TestLexer(t *testing.T) {
 	testcases := []struct {
 		s string
@@ -203,12 +223,12 @@ func TestLexer(t *testing.T) {
 		{"==", DoubleEqualsToken},
 		{">", GreaterThanToken},
 		{"<", LessThanToken},
-		//Note that Lex returns the longest valid token found
+		// 注意 Lex 返回已发现的最长合法 token
 		{"!", DoesNotExistToken},
 		{"!=", NotEqualsToken},
 		{"(", OpenParToken},
 		{")", ClosedParToken},
-		//Non-"special" characters are considered part of an identifier
+		// 非“特殊”字符都被视为标识符的一部分
 		{"~", IdentifierToken},
 		{"||", IdentifierToken},
 	}
@@ -224,6 +244,7 @@ func TestLexer(t *testing.T) {
 	}
 }
 
+// TestLexerSequence 验证对完整表达式连续切分得到的 token 序列，覆盖 in/notin 括号形式。
 func TestLexerSequence(t *testing.T) {
 	testcases := []struct {
 		s string
@@ -260,6 +281,9 @@ func TestLexerSequence(t *testing.T) {
 		}
 	}
 }
+
+// TestParserLookahead 验证解析器预扫描容量以及 lookahead 与 consume 返回的 token 一致，
+// 包括流末尾的 EndOfStringToken。
 func TestParserLookahead(t *testing.T) {
 	testcases := []struct {
 		s string
@@ -297,6 +321,8 @@ func TestParserLookahead(t *testing.T) {
 	}
 }
 
+// TestParseOperator 验证 parseOperator 只接受二元操作符；存在性操作符、括号等
+// 出现在需要二元操作符的位置时必须报错。
 func TestParseOperator(t *testing.T) {
 	testcases := []struct {
 		token         string
@@ -324,6 +350,9 @@ func TestParseOperator(t *testing.T) {
 	}
 }
 
+// TestRequirementConstructor 验证 NewRequirement 的输入校验：in/notin/equals 等操作符的
+// 取值数量、数值比较的值格式、键与值的合法性，以及不支持的运算符，各自产生对应的
+// field.Error（错误定位到 key/values 路径）。
 func TestRequirementConstructor(t *testing.T) {
 	requirementConstructorTests := []struct {
 		Key     string
@@ -452,7 +481,7 @@ func TestRequirementConstructor(t *testing.T) {
 			},
 		},
 		{
-			Key: strings.Repeat("a", 254), //breaks DNS rule that len(key) <= 253
+			Key: strings.Repeat("a", 254), // 违反 DNS 规则：键长度必须 <= 253
 			Op:  selection.Exists,
 			WantErr: field.ErrorList{
 				&field.Error{
@@ -506,6 +535,8 @@ func TestRequirementConstructor(t *testing.T) {
 	}
 }
 
+// TestToString 验证 internalSelector 的字符串序列化：各操作符还原为规范写法，
+// 空需求（尾随逗号）等非法组合不产生有效输出。
 func TestToString(t *testing.T) {
 	var req Requirement
 	toStringTests := []struct {
@@ -526,7 +557,7 @@ func TestToString(t *testing.T) {
 			"x notin (abc,def),y!=jkl,!z", true},
 		{&internalSelector{
 			getRequirement("x", selection.In, sets.NewString("abc", "def"), t),
-			req}, // adding empty req for the trailing ','
+			req}, // 为尾随逗号添加一个空需求
 			"x in (abc,def),", false},
 		{&internalSelector{
 			getRequirement("x", selection.NotIn, sets.NewString("abc"), t),
@@ -554,6 +585,8 @@ func TestToString(t *testing.T) {
 	}
 }
 
+// TestRequirementSelectorMatching 验证需求集合的匹配语义，特别是“键不存在”与
+// “键存在但值为空”在 notin/exists/doesNotExist 下的区别。
 func TestRequirementSelectorMatching(t *testing.T) {
 	var req Requirement
 	labelSelectorMatchingTests := []struct {
@@ -601,6 +634,8 @@ func TestRequirementSelectorMatching(t *testing.T) {
 	}
 }
 
+// TestSetSelectorParser 是选择器解析的主表驱动测试：覆盖空白处理、DNS 形式的键名、
+// 空值/重复值/尾随逗号、大小比较，以及各种非法语法（"||"、缺逗号、括号不匹配等）。
 func TestSetSelectorParser(t *testing.T) {
 	setSelectorParserTests := []struct {
 		In    string
@@ -699,11 +734,11 @@ func TestSetSelectorParser(t *testing.T) {
 		}, true, true},
 		{"a in (x,y,notin, z,in)", internalSelector{
 			getRequirement("a", selection.In, sets.NewString("in", "notin", "x", "y", "z"), t),
-		}, true, true}, // operator 'in' inside list of identifiers
-		{"a in (xyz abc)", nil, false, false}, // no comma
-		{"a notin(", nil, true, false},        // bad formed
-		{"a (", nil, false, false},            // cpar
-		{"(", nil, false, false},              // opar
+		}, true, true}, // 标识符列表中出现的 in/notin 只是普通值
+		{"a in (xyz abc)", nil, false, false}, // 缺少逗号
+		{"a notin(", nil, true, false},        // 格式不完整
+		{"a (", nil, false, false},            // 闭合括号
+		{"(", nil, false, false},              // 开括号
 	}
 
 	for _, ssp := range setSelectorParserTests {
@@ -717,6 +752,7 @@ func TestSetSelectorParser(t *testing.T) {
 	}
 }
 
+// getRequirement 构造需求，构造失败即让测试失败并返回零值。
 func getRequirement(key string, op selection.Operator, vals sets.String, t *testing.T) Requirement {
 	req, err := NewRequirement(key, op, vals.List())
 	if err != nil {
@@ -726,6 +762,7 @@ func getRequirement(key string, op selection.Operator, vals sets.String, t *test
 	return *req
 }
 
+// TestAdd 验证 Selector.Add 返回追加了需求的新选择器，且不修改原选择器（值语义）。
 func TestAdd(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -767,6 +804,7 @@ func TestAdd(t *testing.T) {
 	}
 }
 
+// TestSafeSort 验证 safeSort 返回有序切片的同时不修改入参——调用方可能仍持有原切片。
 func TestSafeSort(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -811,6 +849,7 @@ func TestSafeSort(t *testing.T) {
 	}
 }
 
+// BenchmarkSelectorFromValidatedSet 测量用预先校验过的 Set 构造选择器并匹配的开销。
 func BenchmarkSelectorFromValidatedSet(b *testing.B) {
 	set := map[string]string{
 		"foo": "foo",
@@ -833,6 +872,8 @@ func BenchmarkSelectorFromValidatedSet(b *testing.B) {
 	}
 }
 
+// BenchmarkSetSelector 测量 ValidatedSetSelector 构造与匹配的开销，用于和
+// BenchmarkSelectorFromValidatedSet 对比。
 func BenchmarkSetSelector(b *testing.B) {
 	set := map[string]string{
 		"foo": "foo",
@@ -855,6 +896,7 @@ func BenchmarkSetSelector(b *testing.B) {
 	}
 }
 
+// TestSetSelectorString 验证 Set 转选择器后字符串按 key 排序，保证输出稳定。
 func TestSetSelectorString(t *testing.T) {
 	cases := []struct {
 		set Set
@@ -883,6 +925,8 @@ func TestSetSelectorString(t *testing.T) {
 	}
 }
 
+// TestRequiresExactMatch 验证“该选择器是否恰好锁定某一键的唯一值”的判定：
+// 只有单值且操作符为 In/Equals/DoubleEquals 时才返回该值。
 func TestRequiresExactMatch(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -961,6 +1005,8 @@ func TestRequiresExactMatch(t *testing.T) {
 	}
 }
 
+// TestValidatedSelectorFromSet 验证 ValidatedSelectorFromSet 对合法 Set 产出正确的
+// 选择器，对非法值（如超长值）返回定位准确的校验错误。
 func TestValidatedSelectorFromSet(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -1005,6 +1051,7 @@ func TestValidatedSelectorFromSet(t *testing.T) {
 	}
 }
 
+// BenchmarkRequirementString 测量单个需求的字符串渲染开销（ReportAllocs 关注分配次数）。
 func BenchmarkRequirementString(b *testing.B) {
 	r := Requirement{
 		key:      "environment",
@@ -1023,6 +1070,7 @@ func BenchmarkRequirementString(b *testing.B) {
 	}
 }
 
+// BenchmarkRequirementMatches 测量单个需求对标签集的匹配开销，关注分配。
 func BenchmarkRequirementMatches(b *testing.B) {
 	r := Requirement{
 		key:      "environment",
@@ -1043,6 +1091,7 @@ func BenchmarkRequirementMatches(b *testing.B) {
 	}
 }
 
+// TestRequirementEqual 验证需求相等性：key、operator、值集合任一不同即不相等。
 func TestRequirementEqual(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1115,6 +1164,8 @@ func TestRequirementEqual(t *testing.T) {
 	}
 }
 
+// TestMatchesNothing 验证 MatchesNothing 的判定：只有 Nothing() 及其共享实例被判为
+// “永远不匹配”；Everything、空集合以及各种非空选择器（包括自相矛盾的组合）都不是。
 func TestMatchesNothing(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1220,6 +1271,7 @@ func TestMatchesNothing(t *testing.T) {
 	}
 }
 
+// expectMatchNothing 断言 MatchesNothing(selector) 与期望一致。
 func expectMatchNothing(t *testing.T, selector Selector, want bool) {
 	if MatchesNothing(selector) != want {
 		t.Errorf("Wanted %s to MatchNothing '%t', but it did not.\n", selector, want)

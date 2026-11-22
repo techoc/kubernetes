@@ -32,11 +32,15 @@ import (
 // interfaces.
 var errNotList = fmt.Errorf("object does not implement the List interfaces")
 
+// errNotCommon is returned when an object exposes neither ListMeta nor ObjectMeta
+// via the common metadata interfaces.
 var errNotCommon = fmt.Errorf("object does not implement the common interface for accessing the SelfLink")
 
 // CommonAccessor returns a Common interface for the provided object or an error if the object does
 // not provide List.
 func CommonAccessor(obj interface{}) (metav1.Common, error) {
+	// Both the local and metav1 ListMetaAccessor interfaces are accepted so
+	// that callers can use either the internal or the public meta packages.
 	switch t := obj.(type) {
 	case List:
 		return t, nil
@@ -44,6 +48,7 @@ func CommonAccessor(obj interface{}) (metav1.Common, error) {
 		if m := t.GetListMeta(); m != nil {
 			return m, nil
 		}
+		// A nil ListMeta means the object is not list-like after all.
 		return nil, errNotCommon
 	case metav1.ListMetaAccessor:
 		if m := t.GetListMeta(); m != nil {
@@ -67,6 +72,7 @@ func CommonAccessor(obj interface{}) (metav1.Common, error) {
 // IMPORTANT: Objects are NOT a superset of lists. Do not use this check to determine whether an
 // object *is* a List.
 func ListAccessor(obj interface{}) (List, error) {
+	// Lists are identified by the presence of ListMeta, not by Go type alone.
 	switch t := obj.(type) {
 	case List:
 		return t, nil
@@ -94,6 +100,8 @@ var errNotObject = fmt.Errorf("object does not implement the Object interfaces")
 // required fields are missing. Fields that are not required return the default
 // value and are a no-op if set.
 func Accessor(obj interface{}) (metav1.Object, error) {
+	// Prefer the direct metav1.Object implementation; the accessor interface is
+	// a fallback for types that embed metadata rather than offer it directly.
 	switch t := obj.(type) {
 	case metav1.Object:
 		return t, nil
@@ -110,6 +118,8 @@ func Accessor(obj interface{}) (metav1.Object, error) {
 // AsPartialObjectMetadata takes the metav1 interface and returns a partial object.
 // TODO: consider making this solely a conversion action.
 func AsPartialObjectMetadata(m metav1.Object) *metav1.PartialObjectMetadata {
+	// Fast path: the object already wraps an ObjectMeta, so it can be reused
+	// without copying every individual field.
 	switch t := m.(type) {
 	case *metav1.ObjectMeta:
 		return &metav1.PartialObjectMetadata{ObjectMeta: *t}
@@ -142,6 +152,8 @@ func AsPartialObjectMetadata(m metav1.Object) *metav1.PartialObjectMetadata {
 // in round tripping (objects which can use apiVersion/kind, but do not fit the Kube
 // api conventions).
 func TypeAccessor(obj interface{}) (Type, error) {
+	// Objects that already implement runtime.Object can answer GroupVersionKind
+	// directly, so no reflection is needed.
 	if typed, ok := obj.(runtime.Object); ok {
 		return objectAccessor{typed}, nil
 	}
@@ -154,6 +166,8 @@ func TypeAccessor(obj interface{}) (Type, error) {
 		return nil, fmt.Errorf("expected struct, but got %v: %v (%#v)", v.Kind(), t, v.Interface())
 	}
 
+	// Locate the embedded TypeMeta and collect pointers to its fields so that
+	// later SetKind/SetAPIVersion calls mutate the original struct in place.
 	typeMeta := v.FieldByName("TypeMeta")
 	if !typeMeta.IsValid() {
 		return nil, fmt.Errorf("struct %v lacks embedded TypeMeta type", t)
@@ -165,6 +179,8 @@ func TypeAccessor(obj interface{}) (Type, error) {
 	return a, nil
 }
 
+// objectAccessor adapts a runtime.Object to the Type interface using its
+// TypeMeta.
 type objectAccessor struct {
 	runtime.Object
 }
@@ -187,6 +203,7 @@ func (obj objectAccessor) SetAPIVersion(version string) {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	gv, err := schema.ParseGroupVersion(version)
 	if err != nil {
+		// Tolerate a bare version ("v1") by treating it as the core group.
 		gv = schema.GroupVersion{Version: version}
 	}
 	gvk.Group, gvk.Version = gv.Group, gv.Version
@@ -392,6 +409,8 @@ func extractFromOwnerReference(v reflect.Value, o *metav1.OwnerReference) error 
 	if err := runtime.Field(v, "Controller", &controllerPtr); err != nil {
 		return err
 	}
+	// Dereference and copy so the returned OwnerReference does not alias the
+	// reflected struct; a nil pointer simply leaves the field unset.
 	if controllerPtr != nil {
 		controller := *controllerPtr
 		o.Controller = &controller
@@ -421,6 +440,8 @@ func setOwnerReference(v reflect.Value, o *metav1.OwnerReference) error {
 	if err := runtime.SetField(o.UID, v, "UID"); err != nil {
 		return err
 	}
+	// A nil pointer means "unset"; leave the destination field untouched rather
+	// than writing a false value, which would change semantics on round-trip.
 	if o.Controller != nil {
 		controller := *(o.Controller)
 		if err := runtime.SetField(&controller, v, "Controller"); err != nil {
@@ -437,7 +458,8 @@ func setOwnerReference(v reflect.Value, o *metav1.OwnerReference) error {
 }
 
 // genericAccessor contains pointers to strings that can modify an arbitrary
-// struct and implements the Accessor interface.
+// struct and implements the Accessor interface. Fields that the target type
+// does not have are left nil and their accessors become no-ops.
 type genericAccessor struct {
 	namespace         *string
 	name              *string
@@ -599,6 +621,7 @@ func (a genericAccessor) SetFinalizers(finalizers []string) {
 func (a genericAccessor) GetOwnerReferences() []metav1.OwnerReference {
 	var ret []metav1.OwnerReference
 	s := a.ownerReferences
+	// ownerReferences is a slice field, so it must be reached through a pointer.
 	if s.Kind() != reflect.Pointer || s.Elem().Kind() != reflect.Slice {
 		//nolint:logcheck // Should not happen.
 		klog.Errorf("expect %v to be a pointer to slice", s)
@@ -606,6 +629,8 @@ func (a genericAccessor) GetOwnerReferences() []metav1.OwnerReference {
 	}
 	s = s.Elem()
 	// Set the capacity to one element greater to avoid copy if the caller later append an element.
+	// This matters because append on a shared backing array could alias the
+	// object's own storage.
 	ret = make([]metav1.OwnerReference, s.Len(), s.Len()+1)
 	for i := 0; i < s.Len(); i++ {
 		if err := extractFromOwnerReference(s.Index(i), &ret[i]); err != nil {
@@ -624,6 +649,7 @@ func (a genericAccessor) SetOwnerReferences(references []metav1.OwnerReference) 
 		klog.Errorf("expect %v to be a pointer to slice", s)
 	}
 	s = s.Elem()
+	// Build into a fresh slice so the caller's slice is never aliased.
 	newReferences := reflect.MakeSlice(s.Type(), len(references), len(references))
 	for i := 0; i < len(references); i++ {
 		if err := setOwnerReference(newReferences.Index(i), &references[i]); err != nil {

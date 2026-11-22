@@ -16,5 +16,8 @@ limitations under the License.
 
 // Package httpstream contains compatibility wrappers for streaming transport APIs.
 //
+// httpstream 包保留旧的流式传输 API 入口，实际实现已迁移到 k8s.io/streaming；
+// 这里仅作为兼容层，新代码不应依赖。
+//
 // Deprecated: use k8s.io/streaming/pkg/httpstream directly.
 package httpstream

@@ -21,6 +21,8 @@ import (
 	"time"
 )
 
+// TestHumanDuration 验证 HumanDuration 的基本单位选择：秒级最多 2 分钟、分钟级最多 3 小时、
+// 小时级最多 2 天，超过则进位到 d/y。
 func TestHumanDuration(t *testing.T) {
 	tests := []struct {
 		d    time.Duration
@@ -46,6 +48,8 @@ func TestHumanDuration(t *testing.T) {
 	}
 }
 
+// TestHumanDurationBoundaries 覆盖各进位阈值前后的取值（含 -1ms），
+// 用来锁定“何时切换单位”的精确边界；负值统一输出 <invalid>。
 func TestHumanDurationBoundaries(t *testing.T) {
 	tests := []struct {
 		d    time.Duration
@@ -98,6 +102,8 @@ func TestHumanDurationBoundaries(t *testing.T) {
 	}
 }
 
+// TestShortHumanDurationBoundaries 验证 ShortHumanDuration 只输出一个单位分量
+// （如 59s、1m、23h），并检查其阈值与 HumanDuration 不同：2m 起即显示 1m。
 func TestShortHumanDurationBoundaries(t *testing.T) {
 	tests := []struct {
 		d    time.Duration

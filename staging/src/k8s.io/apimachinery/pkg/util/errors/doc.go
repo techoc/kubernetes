@@ -15,4 +15,6 @@ limitations under the License.
 */
 
 // Package errors implements various utility functions and types around errors.
+//
+// Package errors 实现围绕错误的各类工具函数与类型，包括聚合错误（Aggregate）。
 package errors

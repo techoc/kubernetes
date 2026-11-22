@@ -23,6 +23,7 @@ import (
 	"testing"
 )
 
+// errWrapper 实现 Unwrap，errors.Is 可以穿透它识别内部错误。
 type errWrapper struct {
 	wrapped error
 }
@@ -34,6 +35,8 @@ func (w errWrapper) Error() string {
 	return fmt.Sprintf("wrapped: %v", w.wrapped)
 }
 
+// errNotWrapper 不实现 Unwrap，errors.Is 无法穿透，用于验证 Interrupted
+// 不会误判包装错误。
 type errNotWrapper struct {
 	wrapped error
 }
@@ -42,6 +45,8 @@ func (w errNotWrapper) Error() string {
 	return fmt.Sprintf("wrapped: %v", w.wrapped)
 }
 
+// TestInterrupted 验证 Interrupted 的判定：ErrWaitTimeout、context 取消/
+// 超时以及它们的 Unwrap 链都算中断；普通错误和不可穿透的包装不算。
 func TestInterrupted(t *testing.T) {
 	tests := []struct {
 		name string
@@ -113,12 +118,15 @@ func TestInterrupted(t *testing.T) {
 	}
 }
 
+// TestErrorInterrupted 验证 ErrorInterrupted 的包装契约：幂等（已包装的
+// 不再重复包装）、满足 errors.Is(err, errWaitTimeout)、保留原始错误文本。
 func TestErrorInterrupted(t *testing.T) {
 	internalErr := errInterrupted{}
 	if ErrorInterrupted(internalErr) != internalErr {
 		t.Fatalf("error should not be wrapped twice")
 	}
 
+	// 嵌套的 errInterrupted 也必须原样返回（幂等性不只看最外层）。
 	internalErr = errInterrupted{errInterrupted{}}
 	if ErrorInterrupted(internalErr) != internalErr {
 		t.Fatalf("object should be identical")
@@ -132,6 +140,7 @@ func TestErrorInterrupted(t *testing.T) {
 	if !errors.Is(actual, errWaitTimeout) {
 		t.Fatalf("does not obey errors.Is contract")
 	}
+	// 包装后对外展示的错误文本必须与原始错误一致。
 	if actual.Error() != in.Error() {
 		t.Fatalf("unexpected error output")
 	}

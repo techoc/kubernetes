@@ -25,6 +25,9 @@ import (
 
 // RequiredValue verifies that the specified value is not the zero-value for
 // its type.
+//
+// value 与 oldValue 的签名遵循该包的校验函数约定：大多数校验函数会用到旧值，
+// 但 required 语义与更新无关，故两个 context/operation/oldValue 参数均忽略。
 func RequiredValue[T comparable](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	var zero T
 	if *value != zero {
@@ -35,6 +38,7 @@ func RequiredValue[T comparable](_ context.Context, _ operation.Operation, fldPa
 
 // RequiredPointer verifies that the specified pointer is not nil.
 func RequiredPointer[T any](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
+	// 注意这里判断的是指针本身，而不是其指向的值：*value 为 nil 指针也应报错。
 	if value != nil {
 		return nil
 	}
@@ -43,6 +47,7 @@ func RequiredPointer[T any](_ context.Context, _ operation.Operation, fldPath *f
 
 // RequiredSlice verifies that the specified slice is not empty.
 func RequiredSlice[T any](_ context.Context, _ operation.Operation, fldPath *field.Path, value, _ []T) field.ErrorList {
+	// 空 slice 与 nil slice 视为等价，都是"未设置"。
 	if len(value) > 0 {
 		return nil
 	}
@@ -99,6 +104,7 @@ func OptionalValue[T comparable](_ context.Context, _ operation.Operation, fldPa
 	if *value != zero {
 		return nil
 	}
+	// 与 RequiredValue 共用 Required 错误码，但附加说明以便区分"未指定"与"必填缺失"。
 	return field.ErrorList{field.Required(fldPath, "optional value was not specified")}
 }
 

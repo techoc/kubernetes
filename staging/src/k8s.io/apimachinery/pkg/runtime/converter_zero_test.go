@@ -17,6 +17,10 @@ limitations under the License.
 // These tests are in a separate package to break cyclic dependency in tests.
 // Unstructured type depends on unstructured converter package but we want to test how the converter handles
 // the Unstructured type so we need to import both.
+//
+// 中文说明：本文件专门测试 omitzero 标签在 Unstructured 转换与 JSON 序列化
+// 之间的一致性——两条路径对“零值”的判断必须相同，否则同一条数据在不同
+// 编码下会以不同字段集出现。
 
 package runtime
 
@@ -32,6 +36,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+// ZeroParent 是所有字段都带 omitzero 的父结构，覆盖值/指针、内置/自定义
+// 类型、可比较/不可比较类型的组合。
 type ZeroParent struct {
 	Int               int                    `json:"int,omitzero"`
 	IntP              *int                   `json:"intP,omitzero"`
@@ -54,9 +60,14 @@ type ZeroParent struct {
 	CustomPStruct     ZeroCustomPStruct      `json:"customPStruct,omitzero"`
 	CustomPStructP    *ZeroCustomPStructP    `json:"customPStructP,omitzero"`
 }
+
+// ZeroChild 是普通嵌套结构，没有自定义 IsZero，因此只有零值字段才被省略。
 type ZeroChild struct {
 	Data int `json:"data"`
 }
+
+// 以下自定义类型把 42 定义为“零值”，用于验证 omitzero 会尊重其 IsZero
+// 方法，而不是简单比较字段是否为零。
 
 type ZeroCustomPrimitive int
 
@@ -82,6 +93,8 @@ type ZeroCustomStructP struct {
 	Data int `json:"data"`
 }
 
+// ZeroCustomStructP 的 IsZero 定义在指针接收者上，覆盖“非指针字段但方法
+// 需要取地址”的情形。
 func (z ZeroCustomStructP) IsZero() bool {
 	return z.Data == 42
 }
@@ -114,6 +127,8 @@ func (z *ZeroCustomPStructP) IsZero() bool {
 	return z.Data == 42
 }
 
+// TestOmitZero2 验证 JSON 与 ToUnstructured 对 omitzero 的判定一致：普通
+// 零值字段被省略，而“零值=42”的自定义类型（初始值 0 并非其零值）被保留。
 func TestOmitZero2(t *testing.T) {
 	testcases := []struct {
 		name   string
@@ -156,12 +171,15 @@ func TestOmitZero2(t *testing.T) {
 	}
 }
 
+// NonZeroStruct 永远报告“非零”，用于验证 omitzero 不会省略它。
 type NonZeroStruct struct{}
 
 func (nzs NonZeroStruct) IsZero() bool {
 	return false
 }
 
+// NoPanicStruct 的 IsZero 在指针接收者上解引用字段；nil 指针调用时必须
+// 被安全处理（不 panic），这是 omitzero 实现的边界条件。
 type NoPanicStruct struct {
 	Int int `json:"int,omitzero"`
 }
@@ -174,6 +192,8 @@ type isZeroer interface {
 	IsZero() bool
 }
 
+// OptionalsZero 集中覆盖 omitzero 的各种组合：内联/显式标签、切片、map、
+// 浮点、接口、nil 指针与具体类型。字段名即断言中的 JSON key。
 type OptionalsZero struct {
 	Sr string `json:"sr"`
 	So string `json:"so,omitzero"`
@@ -217,6 +237,9 @@ type OptionalsZero struct {
 	NoPanicStruct4 NoPanicStruct  `json:"nps4,omitzero"`           // concrete type
 }
 
+// TestOmitZero 验证 omitzero 与 omitempty 的差异：omitzero 只按“零值”判断，
+// 因而 -0、空但非 nil 的切片、非 nil 的空 map、空 struct 等仍会被输出
+// （如 "fr": 0、"slononnil": []、"Mo": {}），而 nil 切片输出 null。
 func TestOmitZero(t *testing.T) {
 	const want = `{
  "Mo": {},
@@ -264,6 +287,8 @@ func TestOmitZero(t *testing.T) {
 	}
 }
 
+// TestOmitZeroMap 验证 omitzero 在 map value（而非指针）上的行为：map 中的
+// 结构体是按值复制后转换的，零值字段同样应被省略。
 func TestOmitZeroMap(t *testing.T) {
 	const want = `{
  "foo": {
@@ -297,6 +322,8 @@ func TestOmitZeroMap(t *testing.T) {
 	}
 }
 
+// OptionalsEmptyZero 同时带 omitempty 与 omitzero，用于确定两者的组合语义：
+// omitzero 优先判断零值，omitzero 不认为零值时再由 omitempty 决定。
 type OptionalsEmptyZero struct {
 	Sr string `json:"sr"`
 	So string `json:"so,omitempty,omitzero"`
@@ -327,6 +354,8 @@ type OptionalsEmptyZero struct {
 	Nzs  NonZeroStruct `json:"nzs,omitempty,omitzero"`
 }
 
+// TestOmitEmptyZero 验证 omitempty+omitzero 组合：空但非 nil 的 map 因非零值
+// 被保留（"mr": {}），空切片则被 omitempty 省略。
 func TestOmitEmptyZero(t *testing.T) {
 	const want = `{
  "br": false,

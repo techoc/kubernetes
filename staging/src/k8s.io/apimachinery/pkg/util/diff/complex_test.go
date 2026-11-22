@@ -27,6 +27,9 @@ import (
 
 // TestDiffWithRealGoCmp is a comprehensive test that compares our Diff with the actual go-cmp Diff
 // across a variety of data structures and types to ensure compatibility.
+//
+// 由于 Diff 可能在不同 json v1/v2 实现下产生不同措辞，这里不比对完整
+// 文本，只断言关键字段与取值都出现在输出中。
 func TestDiffWithRealGoCmp(t *testing.T) {
 	// Test with simple types
 	t.Run("SimpleTypes", func(t *testing.T) {
@@ -58,6 +61,7 @@ func TestDiffWithRealGoCmp(t *testing.T) {
 	})
 
 	// Test with a simple struct
+	// 验证字段名、旧值与新值都出现在 diff 中。
 	t.Run("SimpleStruct", func(t *testing.T) {
 		type TestStruct struct {
 			Name string
@@ -101,6 +105,7 @@ func TestDiffWithRealGoCmp(t *testing.T) {
 	})
 
 	// Test with a complex nested struct
+	// 覆盖 map 中缺失键、切片元素增删与 interface 嵌套的差异表达。
 	t.Run("ComplexNestedStruct", func(t *testing.T) {
 		type Address struct {
 			Street     string
@@ -225,6 +230,7 @@ func TestDiffWithRealGoCmp(t *testing.T) {
 	})
 
 	// Test with slices and maps
+	// 切片按下标显示变化，map 按 key 显示增删改。
 	t.Run("SlicesAndMaps", func(t *testing.T) {
 		// Test with slices
 		a1 := []int{1, 2, 3, 4, 5}
@@ -258,6 +264,8 @@ func TestDiffWithRealGoCmp(t *testing.T) {
 	})
 
 	// Test with unexported fields
+	// Diff 基于 JSON 序列化，未导出字段本就不会出现；与 go-cmp 配合
+	// IgnoreUnexported 的结果保持一致。
 	t.Run("UnexportedFields", func(t *testing.T) {
 		type WithUnexported struct {
 			Exported   int
@@ -280,6 +288,7 @@ func TestDiffWithRealGoCmp(t *testing.T) {
 	})
 
 	// Test with embedded structs
+	// 内嵌字段在 JSON 中会被提升，diff 输出应表现为普通字段。
 	t.Run("EmbeddedStructs", func(t *testing.T) {
 		type Embedded struct {
 			Value int
@@ -305,6 +314,7 @@ func TestDiffWithRealGoCmp(t *testing.T) {
 	})
 
 	// Test with interface values of same type
+	// 同为 int 的 interface 值应直接显示数值差异。
 	t.Run("InterfaceValues", func(t *testing.T) {
 		type Container struct {
 			Value interface{}
@@ -326,6 +336,8 @@ func TestDiffWithRealGoCmp(t *testing.T) {
 	})
 
 	// Test with objects that cannot be marshaled to JSON
+	// 循环引用会让 json.Marshal 失败，Diff 必须退回 dump.Pretty 而不是
+	// 返回空字符串或 panic。
 	t.Run("UnmarshalableObjects", func(t *testing.T) {
 		// Test with a circular reference, which cannot be marshaled to JSON
 		type Node struct {

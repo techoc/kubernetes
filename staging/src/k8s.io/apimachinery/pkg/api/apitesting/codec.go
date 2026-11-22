@@ -28,16 +28,17 @@ import (
 )
 
 var (
+	// 经 init 从环境变量解析出的 media type；为空表示未指定、沿用 LegacyCodec。
 	testCodecMediaType        string
 	testStorageCodecMediaType string
 )
 
-// TestCodec returns the codec for the API version to test against, as set by the
-// KUBE_TEST_API_TYPE env var.
+// TestCodec 返回用于测试目标 API 版本的 codec，格式由 KUBE_TEST_API_TYPE 环境变量指定。
 func TestCodec(codecs runtimeserializer.CodecFactory, gvs ...schema.GroupVersion) runtime.Codec {
 	if len(testCodecMediaType) != 0 {
 		serializerInfo, ok := runtime.SerializerInfoForMediaType(codecs.SupportedMediaTypes(), testCodecMediaType)
 		if !ok {
+			// 环境变量要求的格式必须受支持，否则测试配置有误，直接 panic 更快暴露问题。
 			panic(fmt.Sprintf("no serializer for %s", testCodecMediaType))
 		}
 		return codecs.CodecForVersions(serializerInfo.Serializer, codecs.UniversalDeserializer(), schema.GroupVersions(gvs), nil)
@@ -45,22 +46,23 @@ func TestCodec(codecs runtimeserializer.CodecFactory, gvs ...schema.GroupVersion
 	return codecs.LegacyCodec(gvs...)
 }
 
-// TestStorageCodec returns the codec for the API version to test against used in storage, as set by the
-// KUBE_TEST_API_STORAGE_TYPE env var.
+// TestStorageCodec 返回用于测试存储层序列化的 codec，格式由 KUBE_TEST_API_STORAGE_TYPE 环境变量指定。
 func TestStorageCodec(codecs runtimeserializer.CodecFactory, gvs ...schema.GroupVersion) runtime.Codec {
 	if len(testStorageCodecMediaType) != 0 {
 		serializerInfo, ok := runtime.SerializerInfoForMediaType(codecs.SupportedMediaTypes(), testStorageCodecMediaType)
 		if !ok {
+			// 同 TestCodec：未知格式属于测试配置错误。
 			panic(fmt.Sprintf("no serializer for %s", testStorageCodecMediaType))
 		}
 
-		// etcd2 only supports string data - we must wrap any result before returning
+		// etcd2 只支持字符串数据，因此返回前需对非文本编码做一层 base64 包装。
 		// TODO: remove for etcd3 / make parameterizable
 		serializer := serializerInfo.Serializer
 		if !serializerInfo.EncodesAsText {
 			serializer = runtime.NewBase64Serializer(serializer, serializer)
 		}
 
+		// 解码时用 recognizer 同时接受包装后的存储格式与通用格式，便于读取历史数据。
 		decoder := recognizer.NewDecoder(serializer, codecs.UniversalDeserializer())
 		return codecs.CodecForVersions(serializer, decoder, schema.GroupVersions(gvs), nil)
 
@@ -68,6 +70,7 @@ func TestStorageCodec(codecs runtimeserializer.CodecFactory, gvs ...schema.Group
 	return codecs.LegacyCodec(gvs...)
 }
 
+// init 在启动时解析测试格式环境变量。格式非法时 panic，因为这是测试环境配置错误。
 func init() {
 	var err error
 	if apiMediaType := os.Getenv("KUBE_TEST_API_TYPE"); len(apiMediaType) > 0 {
@@ -85,10 +88,11 @@ func init() {
 	}
 }
 
-// InstallOrDieFunc mirrors install functions that require success
+// InstallOrDieFunc 对应不返回错误的 install 函数，调用方假定其必定成功。
 type InstallOrDieFunc func(scheme *runtime.Scheme)
 
-// SchemeForInstallOrDie builds a simple test scheme and codecfactory pair for easy unit testing from higher level install methods
+// SchemeForInstallOrDie 构造测试用的 Scheme 与 CodecFactory，
+// 便于直接复用上层不返回错误的 install 方法。
 func SchemeForInstallOrDie(installFns ...InstallOrDieFunc) (*runtime.Scheme, runtimeserializer.CodecFactory) {
 	scheme := runtime.NewScheme()
 	codecFactory := runtimeserializer.NewCodecFactory(scheme)
@@ -99,10 +103,11 @@ func SchemeForInstallOrDie(installFns ...InstallOrDieFunc) (*runtime.Scheme, run
 	return scheme, codecFactory
 }
 
-// InstallFunc mirrors install functions that can return an error
+// InstallFunc 对应可能返回错误的 install 函数。
 type InstallFunc func(scheme *runtime.Scheme) error
 
-// SchemeForOrDie builds a simple test scheme and codecfactory pair for easy unit testing from the bare registration methods.
+// SchemeForOrDie 构造测试用的 Scheme 与 CodecFactory；
+// 任一注册函数返回错误时 panic，适合在测试初始化阶段使用。
 func SchemeForOrDie(installFns ...InstallFunc) (*runtime.Scheme, runtimeserializer.CodecFactory) {
 	scheme := runtime.NewScheme()
 	codecFactory := runtimeserializer.NewCodecFactory(scheme)

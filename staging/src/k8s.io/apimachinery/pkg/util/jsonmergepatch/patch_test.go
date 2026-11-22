@@ -27,10 +27,13 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// FilterNullTestCases is the YAML shape of the null-handling fixtures.
 type FilterNullTestCases struct {
 	TestCases []FilterNullTestCase
 }
 
+// FilterNullTestCase describes one keep-or-delete-null scenario: the input plus
+// the expected output with nulls kept and with nulls removed.
 type FilterNullTestCase struct {
 	Description         string
 	OriginalObj         map[string]interface{}
@@ -178,6 +181,9 @@ testCases:
       - v3
 `)
 
+// TestKeepOrDeleteNullInObj verifies the recursive null filter: in "keep" mode
+// explicit nulls are retained, in "delete" mode they are dropped, and empty
+// maps/slices are preserved rather than confused with null.
 func TestKeepOrDeleteNullInObj(t *testing.T) {
 	tc := FilterNullTestCases{}
 	err := yaml.Unmarshal(filterNullTestCaseData, &tc)
@@ -204,15 +210,20 @@ func TestKeepOrDeleteNullInObj(t *testing.T) {
 	}
 }
 
+// JSONMergePatchTestCases is the YAML shape of the three-way patch fixtures.
 type JSONMergePatchTestCases struct {
 	TestCases []JSONMergePatchTestCase
 }
 
+// JSONMergePatchTestCase is one named three-way merge scenario.
 type JSONMergePatchTestCase struct {
 	Description string
 	JSONMergePatchTestCaseData
 }
 
+// JSONMergePatchTestCaseData holds the four inputs/outputs of a three-way
+// merge: the original and modified configurations, the current live object,
+// the patch expected to be generated, and the result of applying it.
 type JSONMergePatchTestCaseData struct {
 	// Original is the original object (last-applied config in annotation)
 	Original map[string]interface{}
@@ -655,6 +666,8 @@ testCases:
       - a
 `)
 
+// TestCreateThreeWayJSONMergePatch runs every fixture through both the patch
+// generation and the patch application checks.
 func TestCreateThreeWayJSONMergePatch(t *testing.T) {
 	tc := JSONMergePatchTestCases{}
 	err := yaml.Unmarshal(createJSONMergePatchTestCaseData, &tc)
@@ -668,6 +681,8 @@ func TestCreateThreeWayJSONMergePatch(t *testing.T) {
 	}
 }
 
+// testThreeWayPatch checks that the generated patch matches the fixture and
+// that applying it to the current object yields the expected result.
 func testThreeWayPatch(t *testing.T, c JSONMergePatchTestCase) {
 	original, modified, current, expected, result := threeWayTestCaseToJSONOrFail(t, c)
 	actual, err := CreateThreeWayJSONMergePatch(original, modified, current)
@@ -678,6 +693,8 @@ func testThreeWayPatch(t *testing.T, c JSONMergePatchTestCase) {
 	testPatchApplication(t, current, actual, result, c.Description)
 }
 
+// testPatchCreation compares the generated patch against the fixture, printing
+// both as YAML for readable diffs.
 func testPatchCreation(t *testing.T, expected, actual []byte, description string) {
 	if !reflect.DeepEqual(actual, expected) {
 		t.Errorf("error in test case: %s\nexpected patch:\n%s\ngot:\n%s\n",
@@ -686,6 +703,8 @@ func testPatchCreation(t *testing.T, expected, actual []byte, description string
 	}
 }
 
+// testPatchApplication applies the patch with an independent RFC 7386
+// implementation so the test does not simply echo the code under test.
 func testPatchApplication(t *testing.T, original, patch, expected []byte, description string) {
 	result, err := jsonpatch.MergePatch(original, patch)
 	if err != nil {
@@ -703,6 +722,8 @@ func testPatchApplication(t *testing.T, original, patch, expected []byte, descri
 	}
 }
 
+// threeWayTestCaseToJSONOrFail serializes all five fixture maps, preserving nil
+// as a nil byte slice so "absent original" stays distinct from "{}".
 func threeWayTestCaseToJSONOrFail(t *testing.T, c JSONMergePatchTestCase) ([]byte, []byte, []byte, []byte, []byte) {
 	return testObjectToJSONOrFail(t, c.Original),
 		testObjectToJSONOrFail(t, c.Modified),
@@ -711,6 +732,8 @@ func threeWayTestCaseToJSONOrFail(t *testing.T, c JSONMergePatchTestCase) ([]byt
 		testObjectToJSONOrFail(t, c.Result)
 }
 
+// testObjectToJSONOrFail marshals a fixture map, or returns nil for an absent
+// original.
 func testObjectToJSONOrFail(t *testing.T, o map[string]interface{}) []byte {
 	if o == nil {
 		return nil
@@ -722,6 +745,8 @@ func testObjectToJSONOrFail(t *testing.T, o map[string]interface{}) []byte {
 	return j
 }
 
+// jsonToYAMLOrError renders JSON as YAML for failure messages; a conversion
+// failure is returned inline so the test still reports something useful.
 func jsonToYAMLOrError(j []byte) string {
 	y, err := jsonToYAML(j)
 	if err != nil {
@@ -730,6 +755,8 @@ func jsonToYAMLOrError(j []byte) string {
 	return string(y)
 }
 
+// toJSON marshals a fixture, including a pretty-printed dump in the error to
+// make unexpected input easy to diagnose.
 func toJSON(v interface{}) ([]byte, error) {
 	j, err := json.Marshal(v)
 	if err != nil {
@@ -738,6 +765,8 @@ func toJSON(v interface{}) ([]byte, error) {
 	return j, nil
 }
 
+// jsonToYAML converts JSON to YAML, embedding the original bytes in the error
+// on failure.
 func jsonToYAML(j []byte) ([]byte, error) {
 	y, err := yaml.JSONToYAML(j)
 	if err != nil {

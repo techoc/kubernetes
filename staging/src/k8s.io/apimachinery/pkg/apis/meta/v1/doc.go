@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// 本文件只承载包级生成器指令，包文档在 types.go。指令与 package 子句之间
+// 留空行，使这些注释不会被 godoc 当作第二份包注释。
+
 // +k8s:conversion-gen=false
 // +k8s:deepcopy-gen=package
 // +k8s:openapi-gen=true

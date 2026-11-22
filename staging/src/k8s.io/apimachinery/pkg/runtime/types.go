@@ -32,16 +32,21 @@ package runtime
 // TypeMeta is provided here for convenience. You may use it directly from this package or define
 // your own with the same fields.
 //
+// 该类型不参与深拷贝生成（见下方指令），因为它只含两个字符串。
+//
 // +k8s:deepcopy-gen=false
 // +protobuf=true
 // +k8s:openapi-gen=true
 type TypeMeta struct {
+	// APIVersion 形如 "group/version"；core group 只写版本。
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty" yaml:"apiVersion,omitempty" protobuf:"bytes,1,opt,name=apiVersion"`
+	// Kind 是资源类型名，需与 APIVersion 配对使用。
 	// +optional
 	Kind string `json:"kind,omitempty" yaml:"kind,omitempty" protobuf:"bytes,2,opt,name=kind"`
 }
 
+// 常量集中定义 apiserver 支持的媒体类型，避免各处硬编码字符串不一致。
 const (
 	ContentTypeJSON         string = "application/json"
 	ContentTypeYAML         string = "application/yaml"
@@ -97,6 +102,9 @@ const (
 // in the Object. (TODO: In the case where the object is of an unknown type, a
 // runtime.Unknown object will be created and stored.)
 //
+// Raw 与 Object 互斥地承载数据：解码后填 Raw，转换到内部版本后填 Object。
+// 两者都标了 json:"-"，因此不会被直接序列化，实际输出由自定义 MarshalJSON 决定。
+//
 // +k8s:deepcopy-gen=true
 // +protobuf=true
 // +k8s:openapi-gen=true
@@ -115,6 +123,9 @@ type RawExtension struct {
 // TypeMeta features-- kind, version, etc.
 // TODO: Make this object have easy access to field based accessors and settors for
 // metadata and field mutatation.
+//
+// 这是"透传"语义的载体：apiserver 不认识该类型时仍能保留原始字节，
+// 在后续版本或插件侧再解析，避免数据丢失。
 //
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -28,10 +28,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-// TestAppendixA roundtrips the examples of encoded CBOR data items in RFC 8949 Appendix A. For
-// completeness, all examples from the appendix are included, even those those that are rejected by
-// this decoder or are re-encoded to a different sequence of CBOR bytes (with explanation).
+// TestAppendixA 对 RFC 8949 附录 A 中列出的每个 CBOR 示例执行往返。为保证完整，
+// 附录中的全部示例都纳入，包括被本解码器拒绝、或会被重新编码为不同字节序列的示例
+// （后者会给出原因）。
 func TestAppendixA(t *testing.T) {
+	// hex 把十六进制字符串转为字节；非法输入直接终止测试。
 	hex := func(h string) []byte {
 		b, err := hex.DecodeString(h)
 		if err != nil {
@@ -41,10 +42,9 @@ func TestAppendixA(t *testing.T) {
 	}
 
 	eq := conversion.EqualitiesOrDie(
-		// NaN float64 values are always inequal and have multiple representations. RFC 8949
-		// Section 4.2.2 recommends protocols not supporting NaN payloads or signaling NaNs
-		// choose a single representation for all NaN values. For the purposes of this test,
-		// all NaN representations are equivalent.
+		// NaN 的 float64 值永不相等且有多种表示。RFC 8949 第 4.2.2 节建议不支持 NaN
+		// payload 或 signaling NaN 的协议为所有 NaN 选用单一表示。在本测试中，
+		// 所有 NaN 表示均视为等价。
 		func(a float64, b float64) bool {
 			if math.IsNaN(a) && math.IsNaN(b) {
 				return true
@@ -53,6 +53,7 @@ func TestAppendixA(t *testing.T) {
 		},
 	)
 
+	// 下列常量说明“重新编码后字节不同”的具体原因，测试输出中会引用。
 	const (
 		reasonArrayFixedLength  = "indefinite-length arrays are re-encoded with fixed length"
 		reasonByteString        = "strings are encoded as the byte string major type"
@@ -64,11 +65,11 @@ func TestAppendixA(t *testing.T) {
 	)
 
 	for _, tc := range []struct {
-		example []byte // example data item
+		example []byte // 示例数据项
 		decoded interface{}
-		reject  string   // reason the decoder rejects the example
-		encoded []byte   // re-encoded object (only if different from example encoding)
-		reasons []string // reasons for re-encode difference
+		reject  string   // 解码器拒绝该示例的原因
+		encoded []byte   // 重新编码后的对象（仅在与示例编码不同时给出）
+		reasons []string // 重新编码结果不同的原因
 	}{
 		{
 			example: hex("00"),

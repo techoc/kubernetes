@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package runtime 提供进程级的 panic/错误处理原语（HandleCrash、HandleError），
+// 用于在无法向上返回错误的 goroutine 中统一记录与兜底，并提供 Must、
+// GetCaller 等小工具。
 package runtime
 
 import (
@@ -35,6 +38,9 @@ var (
 	// true. It's exposed so components can optionally set to false
 	// to restore prior behavior. This flag is mostly used for tests to validate
 	// crash conditions.
+	//
+	// 中文说明：仅用于测试；生产代码不应把它设为 false，否则真正的 panic
+	// 会被吞掉。
 	ReallyCrash = true
 )
 
@@ -44,6 +50,9 @@ var (
 // klog.FromContext(ctx) already skips over the panic handler itself and
 // several other intermediate functions, ideally such that the log output
 // is attributed to the code which triggered the panic.
+//
+// 中文说明：这是全局可替换的钩子，测试或组件可以追加/替换处理器；默认
+// 处理器 logPanic 会打印调用栈。
 var PanicHandlers = []func(context.Context, interface{}){logPanic}
 
 // HandleCrash simply catches a crash and logs an error. Meant to be called via
@@ -54,6 +63,9 @@ var PanicHandlers = []func(context.Context, interface{}){logPanic}
 // E.g., you can provide one or more additional handlers for something like shutting down go routines gracefully.
 //
 // Contextual logging: HandleCrashWithContext or HandleCrashWithLogger should be used instead of HandleCrash in code which supports contextual logging.
+//
+// 中文说明：在非上下文场景中调用；内部把无 ctx 的处理器适配成带 ctx 的
+// 形式后复用统一实现，保证调用栈深度一致。
 func HandleCrash(additionalHandlers ...func(interface{})) {
 	if r := recover(); r != nil {
 		additionalHandlersWithContext := make([]func(context.Context, interface{}), len(additionalHandlers))
@@ -75,6 +87,7 @@ func HandleCrash(additionalHandlers ...func(interface{})) {
 // E.g., you can provide one or more additional handlers for something like shutting down go routines gracefully.
 //
 // The context is used to determine how to log.
+// 中文说明：上下文中的 logger 决定日志输出位置，适合请求级代码。
 func HandleCrashWithContext(ctx context.Context, additionalHandlers ...func(context.Context, interface{})) {
 	if r := recover(); r != nil {
 		handleCrash(ctx, r, additionalHandlers...)
@@ -87,6 +100,8 @@ func HandleCrashWithContext(ctx context.Context, additionalHandlers ...func(cont
 // handlers and logging the panic message.
 //
 // E.g., you can provide one or more additional handlers for something like shutting down go routines gracefully.
+//
+// 中文说明：已有 logger 但无 ctx 时使用；内部把 logger 放进新的 ctx。
 func HandleCrashWithLogger(logger klog.Logger, additionalHandlers ...func(context.Context, interface{})) {
 	if r := recover(); r != nil {
 		ctx := klog.NewContext(context.Background(), logger)
@@ -97,6 +112,9 @@ func HandleCrashWithLogger(logger klog.Logger, additionalHandlers ...func(contex
 // handleCrash is the common implementation of the HandleCrash* variants.
 // Having those call a common implementation ensures that the stack depth
 // is the same regardless through which path the handlers get invoked.
+//
+// 中文说明：ReallyCrash 为 false 时仅记录不重新 panic，便于测试验证
+// 崩溃路径；生产环境默认继续 panic 以保留 fast-fail 语义。
 func handleCrash(ctx context.Context, r any, additionalHandlers ...func(context.Context, interface{})) {
 	// We don't really know how many call frames to skip because the Go
 	// panic handler is between us and the code where the panic occurred.
@@ -124,6 +142,7 @@ func logPanic(ctx context.Context, r interface{}) {
 		//   ErrAbortHandler is a sentinel panic value to abort a handler.
 		//   While any panic from ServeHTTP aborts the response to the client,
 		//   panicking with ErrAbortHandler also suppresses logging of a stack trace to the server's error log.
+		// 中文说明：这是 net/http 约定的“静默中止”信号，日志处理器必须放行。
 		return
 	}
 
@@ -175,6 +194,9 @@ type ErrorHandler func(ctx context.Context, err error, msg string, keysAndValues
 // Does not include a trailing newline.
 //
 // Use errors.New if an error instead of a string is needed.
+//
+// 中文说明：临时构造一个输出到 buffer 的 textlogger，从而让字符串格式化
+// 与真实日志保持一致；不带头部（时间/级别），便于嵌入其他消息。
 func ErrorToString(err error, msg string, keysAndValues ...interface{}) string {
 	var buffer bytes.Buffer
 	config := textlogger.NewConfig(
@@ -196,6 +218,7 @@ func ErrorToString(err error, msg string, keysAndValues ...interface{}) string {
 // Contextual logging: HandleErrorWithContext should be used instead of HandleError in code which supports contextual logging.
 func HandleError(err error) {
 	// this is sometimes called with a nil error.  We probably shouldn't fail and should do nothing instead
+	// 中文说明：nil 错误静默忽略，与 HandleErrorWithContext 明确不同。
 	if err == nil {
 		return
 	}
@@ -225,6 +248,9 @@ func HandleError(err error) {
 // This variant should be used instead of HandleError because it supports
 // structured, contextual logging. Alternatively, [HandleErrorWithLogger] can
 // be used if a logger is available instead of a context.
+//
+// 中文说明：即使 err 为 nil 也会记录一条日志（用于没有错误对象但需要上报
+// 异常状态的情形），因此不要为了“有 err”而包装一个假错误。
 func HandleErrorWithContext(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
 	handleError(ctx, err, msg, keysAndValues...)
 }
@@ -238,6 +264,9 @@ func HandleErrorWithLogger(logger klog.Logger, err error, msg string, keysAndVal
 // handleError is the common implementation of the HandleError* variants.
 // Using this common implementation ensures that the stack depth
 // is the same regardless through which path the handlers get invoked.
+//
+// 中文说明：按注册顺序调用所有 ErrorHandlers——默认是“记录 + 限速”，
+// 替换列表即可把错误转发到远程分析系统。
 func handleError(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
 	for _, fn := range ErrorHandlers {
 		fn(ctx, err, msg, keysAndValues...)
@@ -246,6 +275,8 @@ func handleError(ctx context.Context, err error, msg string, keysAndValues ...in
 
 // logError prints an error with the call stack of the location it was reported.
 // It expects to be called as <caller> -> HandleError[WithContext] -> handleError -> logError.
+//
+// 中文说明：WithCallDepth(3) 正好跳过 logError/handleError/HandleError* 三层。
 func logError(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
 	logger := klog.FromContext(ctx).WithCallDepth(3)
 	logger = klog.LoggerWithName(logger, "UnhandledError")
@@ -253,6 +284,7 @@ func logError(ctx context.Context, err error, msg string, keysAndValues ...inter
 }
 
 // backoffError blocks if it is called more often than the minPeriod.
+// 中文说明：包装成无状态外观，但内部共享同一 backoff 实例以便全局限速。
 func backoffError(minPeriod time.Duration) ErrorHandler {
 	r := &rudimentaryErrorBackoff{
 		lastErrorTime: time.Now(),
@@ -264,6 +296,8 @@ func backoffError(minPeriod time.Duration) ErrorHandler {
 	}
 }
 
+// rudimentaryErrorBackoff 用“上次报错时间”实现全局最小间隔；锁只保护时间
+// 字段，不覆盖 sleep。
 type rudimentaryErrorBackoff struct {
 	minPeriod time.Duration // immutable
 	// TODO(lavalamp): use the clock for testability. Need to move that
@@ -289,6 +323,8 @@ func (r *rudimentaryErrorBackoff) OnError() {
 }
 
 // GetCaller returns the caller of the function that calls it.
+// 中文说明：Callers 的 skip=3 跳过 runtime.Callers、GetCaller 与直接调用者，
+// 得到实际业务代码位置；依赖固定调用层级，包装会增加跳过层数。
 func GetCaller() string {
 	var pc [1]uintptr
 	runtime.Callers(3, pc[:])
@@ -302,6 +338,9 @@ func GetCaller() string {
 // RecoverFromPanic replaces the specified error with an error containing the
 // original error, and  the call tree when a panic occurs. This enables error
 // handlers to handle errors and panics the same way.
+//
+// 中文说明：典型用法是 `defer utilruntime.RecoverFromPanic(&err)`，让
+// “函数返回错误”和“panic”在调用方看来是同一种失败。
 func RecoverFromPanic(err *error) {
 	if r := recover(); r != nil {
 		// Same as stdlib http server code. Manually allocate stack trace buffer size
@@ -319,6 +358,7 @@ func RecoverFromPanic(err *error) {
 }
 
 // Must panics on non-nil errors. Useful to handling programmer level errors.
+// 中文说明：只用于启动期、不可恢复的编程错误；不要把用户输入错误交给它。
 func Must(err error) {
 	if err != nil {
 		panic(err)

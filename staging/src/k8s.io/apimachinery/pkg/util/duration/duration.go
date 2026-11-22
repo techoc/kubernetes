@@ -21,11 +21,12 @@ import (
 	"time"
 )
 
-// ShortHumanDuration returns a succinct representation of the provided duration
-// with limited precision for consumption by humans.
+// ShortHumanDuration 返回时长的简洁人类可读表示，精度有限，适合事件时间等场景。
+// 例如 90s 显示为 "1m"，25h 显示为 "1d"，400d 显示为 "1y"。
 func ShortHumanDuration(d time.Duration) string {
 	// Allow deviation no more than 2 seconds(excluded) to tolerate machine time
 	// inconsistence, it can be considered as almost now.
+	// 小于 -1 秒视为时钟偏差导致的“未来”时间，直接标记为无效。
 	if seconds := int(d.Seconds()); seconds < -1 {
 		return "<invalid>"
 	} else if seconds < 0 {
@@ -42,9 +43,8 @@ func ShortHumanDuration(d time.Duration) string {
 	return fmt.Sprintf("%dy", int(d.Hours()/24/365))
 }
 
-// HumanDuration returns a succinct representation of the provided duration
-// with limited precision for consumption by humans. It provides ~2-3 significant
-// figures of duration.
+// HumanDuration 返回时长的简洁人类可读表示，约 2-3 位有效数字，
+// 在相邻量级之间保留更细的组合（如 "1m30s"、"2h10m"、"3d4h"）。
 func HumanDuration(d time.Duration) string {
 	// Allow deviation no more than 2 seconds(excluded) to tolerate machine time
 	// inconsistence, it can be considered as almost now.
@@ -55,6 +55,7 @@ func HumanDuration(d time.Duration) string {
 	} else if seconds < 60*2 {
 		return fmt.Sprintf("%ds", seconds)
 	}
+	// 以下按分钟、小时、天、年逐级切换，并在接近边界时输出两级组合以保留有效数字。
 	minutes := int(d / time.Minute)
 	if minutes < 10 {
 		s := int(d/time.Second) % 60

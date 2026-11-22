@@ -26,12 +26,18 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // ListOptions is the query options to a standard REST list call.
+//
+// ListOptions 是内部版本（internal）的列表/监听选项。它与 metav1.ListOptions 的
+// 区别在于选择器已经解析成 labels.Selector / fields.Selector，从而让内部组件
+// 不必重复解析字符串；字符串形式仅在 API 边界使用。
 type ListOptions struct {
 	metav1.TypeMeta
 
 	// A selector based on labels
+	// 已解析的标签选择器；为 nil 时表示"全部匹配"。
 	LabelSelector labels.Selector
 	// A selector based on fields
+	// 已解析的字段选择器；为 nil 时表示"全部匹配"。
 	FieldSelector fields.Selector
 	// If true, watch for changes to this list
 	Watch bool
@@ -41,6 +47,9 @@ type ListOptions struct {
 	// assume bookmarks are returned at any specific interval, nor may they
 	// assume the server will send any BOOKMARK event during a session.
 	// If this is not a watch, this field is ignored.
+	//
+	// BOOKMARK 事件携带最新 resourceVersion，用于客户端在 watch 断开后从已知点恢复，
+	// 而不必重新 list 全量数据。服务端可自行决定发送时机。
 	AllowWatchBookmarks bool
 	// resourceVersion sets a constraint on what resource versions a request may be served from.
 	// See https://kubernetes.io/docs/reference/using-api/api-concepts/#resource-versions for
@@ -54,6 +63,7 @@ type ListOptions struct {
 	ResourceVersionMatch metav1.ResourceVersionMatch
 
 	// Timeout for the list/watch call.
+	// 由 API 服务器在请求处理层转换为超时；watch 请求会据此限定时长。
 	TimeoutSeconds *int64
 	// Limit specifies the maximum number of results to return from the server. The server may
 	// not support this field on all resource types, but if it does and more results remain it
@@ -88,17 +98,26 @@ type ListOptions struct {
 	//
 	// Defaults to true if `resourceVersion=""` or `resourceVersion="0"` (for backward
 	// compatibility reasons) and to false otherwise.
+	//
+	// 该字段由服务端在转换 ListOptions 时根据 resourceVersion 补默认值，因此内部版本中
+	// 可能已经是非 nil。
 	SendInitialEvents *bool
 
 	// ShardSelector is the raw shard selector string from the request.
 	// Parsing is deferred to the apiserver storage layer where the CEL
 	// parser dependency is available.
+	//
+	// 延迟解析的原因：apimachinery 不依赖 CEL，存储层才有解析器。这样可保持依赖方向
+	// 单一，同时让分片选择器在存储层与其它过滤条件一起生效。
 	ShardSelector string
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // List holds a list of objects, which may not be known by the server.
+//
+// List 是内部版本的列表类型。Items 使用 runtime.Object 而非具体类型，因为内部
+// 版本通常不知道具体资源类型，由调用方按需断言。
 type List struct {
 	metav1.TypeMeta
 	// +optional

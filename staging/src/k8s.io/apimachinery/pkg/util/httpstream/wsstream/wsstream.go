@@ -27,6 +27,7 @@ import (
 	streamws "k8s.io/streaming/pkg/httpstream/wsstream"
 )
 
+// 这些常量是上游实现中协议头与通道协议的别名。
 const (
 	WebSocketProtocolHeader        = streamws.WebSocketProtocolHeader
 	ChannelWebSocketProtocol       = streamws.ChannelWebSocketProtocol
@@ -35,6 +36,7 @@ const (
 
 type ChannelType = streamws.ChannelType
 
+// 通道方向常量，与上游 ChannelType 定义一一对应。
 const (
 	IgnoreChannel    = streamws.IgnoreChannel
 	ReadChannel      = streamws.ReadChannel
@@ -42,51 +44,61 @@ const (
 	ReadWriteChannel = streamws.ReadWriteChannel
 )
 
+// IsWebSocketRequest 判断请求是否为 WebSocket 升级请求。
 func IsWebSocketRequest(req *http.Request) bool {
 	return streamws.IsWebSocketRequest(req)
 }
 
+// IsWebSocketRequestWithStreamCloseProtocol 判断请求是否协商了流关闭协议。
 func IsWebSocketRequestWithStreamCloseProtocol(req *http.Request) bool {
 	return streamws.IsWebSocketRequestWithStreamCloseProtocol(req)
 }
 
+// IsWebSocketRequestWithTunnelingProtocol 判断请求是否协商了隧道协议（用于 SPDY 等）。
 func IsWebSocketRequestWithTunnelingProtocol(req *http.Request) bool {
 	return streamws.IsWebSocketRequestWithTunnelingProtocol(req)
 }
 
+// IgnoreReceives 在 timeout 内持续丢弃连接上的数据，用于防止对端因写入阻塞。
 func IgnoreReceives(ws *websocket.Conn, timeout time.Duration) {
 	streamws.IgnoreReceives(ws, timeout)
 }
 
+// IgnoreReceivesWithLogger 与 IgnoreReceives 相同，但使用指定的 logger 记录日志。
 func IgnoreReceivesWithLogger(logger klog.Logger, ws *websocket.Conn, timeout time.Duration) {
 	streamws.IgnoreReceivesWithLogger(logger, ws, timeout)
 }
 
 type ChannelProtocolConfig = streamws.ChannelProtocolConfig
 
+// NewDefaultChannelProtocols 为给定通道列表构造默认的协议映射。
 func NewDefaultChannelProtocols(channels []ChannelType) map[string]ChannelProtocolConfig {
 	return streamws.NewDefaultChannelProtocols(channels)
 }
 
 type Conn = streamws.Conn
 
+// NewConn 基于协议映射创建一个多路复用的 WebSocket 连接。
 func NewConn(protocols map[string]ChannelProtocolConfig) *Conn {
 	return streamws.NewConn(protocols)
 }
 
 type ReaderProtocolConfig = streamws.ReaderProtocolConfig
 
+// NewDefaultReaderProtocols 返回默认的读取端协议映射。
 func NewDefaultReaderProtocols() map[string]ReaderProtocolConfig {
 	return streamws.NewDefaultReaderProtocols()
 }
 
 type Reader = streamws.Reader
 
+// NewReader 从 io.Reader 构造协议读取器；ping 为 true 时响应 ping 帧。
 func NewReader(r io.Reader, ping bool, protocols map[string]ReaderProtocolConfig) *Reader {
 	//nolint:logcheck // Intentionally using the non-contextual variant here.
 	return streamws.NewReader(r, ping, protocols)
 }
 
+// NewReaderWithLogger 与 NewReader 相同，但使用指定的 logger。
 func NewReaderWithLogger(logger klog.Logger, r io.Reader, ping bool, protocols map[string]ReaderProtocolConfig) *Reader {
 	return streamws.NewReaderWithLogger(logger, r, ping, protocols)
 }

@@ -24,6 +24,7 @@ import (
 	testingclock "k8s.io/utils/clock/testing"
 )
 
+// expectEntry 断言 key 在缓存中存在且值等于 value。
 func expectEntry(t *testing.T, c *LRUExpireCache, key interface{}, value interface{}) {
 	t.Helper()
 	result, ok := c.Get(key)
@@ -32,6 +33,7 @@ func expectEntry(t *testing.T, c *LRUExpireCache, key interface{}, value interfa
 	}
 }
 
+// expectNotEntry 断言 key 不存在（或已过期）于缓存中。
 func expectNotEntry(t *testing.T, c *LRUExpireCache, key interface{}) {
 	t.Helper()
 	if result, ok := c.Get(key); ok {
@@ -41,6 +43,8 @@ func expectNotEntry(t *testing.T, c *LRUExpireCache, key interface{}) {
 
 // Note: Check keys before checking individual entries, because Get() changes
 // the eviction list.
+// assertKeys 在比较键序列前不进任何 Get 调用：Get 会改变 LRU 驱逐顺序，
+// 从而影响 Keys() 的返回顺序。
 func assertKeys(t *testing.T, gotKeys, wantKeys []interface{}) {
 	t.Helper()
 	if diff := cmp.Diff(gotKeys, wantKeys); diff != "" {
@@ -48,6 +52,7 @@ func assertKeys(t *testing.T, gotKeys, wantKeys []interface{}) {
 	}
 }
 
+// TestSimpleGet 验证写入后能按键取回值。
 func TestSimpleGet(t *testing.T) {
 	c := NewLRUExpireCache(10)
 	c.Add("long-lived", "12345", 10*time.Hour)
@@ -57,6 +62,7 @@ func TestSimpleGet(t *testing.T) {
 	expectEntry(t, c, "long-lived", "12345")
 }
 
+// TestSimpleRemove 验证 Remove 后键从缓存中消失。
 func TestSimpleRemove(t *testing.T) {
 	c := NewLRUExpireCache(10)
 	c.Add("long-lived", "12345", 10*time.Hour)
@@ -67,6 +73,7 @@ func TestSimpleRemove(t *testing.T) {
 	expectNotEntry(t, c, "long-lived")
 }
 
+// TestSimpleRemoveAll 验证按谓词批量删除：只移除命中项，其余保留。
 func TestSimpleRemoveAll(t *testing.T) {
 	c := NewLRUExpireCache(10)
 	c.Add("long-lived", "12345", 10*time.Hour)
@@ -81,6 +88,7 @@ func TestSimpleRemoveAll(t *testing.T) {
 	expectEntry(t, c, "other-long-lived", "12345")
 }
 
+// TestExpiredGet 用假时钟推进时间使条目过期，验证过期条目既取不到也不出现在 Keys 中。
 func TestExpiredGet(t *testing.T) {
 	fakeClock := testingclock.NewFakeClock(time.Now())
 	c := NewLRUExpireCacheWithClock(10, fakeClock)
@@ -94,6 +102,7 @@ func TestExpiredGet(t *testing.T) {
 	expectNotEntry(t, c, "short-lived")
 }
 
+// TestLRUOverflow 验证超过容量时淘汰最久未使用的条目（elem1）。
 func TestLRUOverflow(t *testing.T) {
 	c := NewLRUExpireCache(4)
 	c.Add("elem1", "1", 10*time.Hour)
@@ -111,6 +120,8 @@ func TestLRUOverflow(t *testing.T) {
 	expectEntry(t, c, "elem5", "5")
 }
 
+// TestAddBringsToFront 验证重复 Add 会把条目提升为最近使用，
+// 从而在后续溢出时被淘汰的是更早的 elem2。
 func TestAddBringsToFront(t *testing.T) {
 	c := NewLRUExpireCache(4)
 	c.Add("elem1", "1", 10*time.Hour)
@@ -131,6 +142,7 @@ func TestAddBringsToFront(t *testing.T) {
 	expectEntry(t, c, "elem5", "5")
 }
 
+// TestGetBringsToFront 验证读取也会提升条目的最近使用顺序。
 func TestGetBringsToFront(t *testing.T) {
 	c := NewLRUExpireCache(4)
 	c.Add("elem1", "1", 10*time.Hour)
@@ -151,6 +163,7 @@ func TestGetBringsToFront(t *testing.T) {
 	expectEntry(t, c, "elem5", "5")
 }
 
+// TestLRUKeys 验证 Keys 按写入（最近使用）顺序返回。
 func TestLRUKeys(t *testing.T) {
 	c := NewLRUExpireCache(4)
 	c.Add("elem1", "1", 10*time.Hour)

@@ -41,6 +41,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// fakeTypeConverter 从仓库根目录的 OpenAPI swagger.json 构建类型转换器。
+// 路径向上 7 层定位到 kubernetes 根目录；初始化失败直接 panic。
 var fakeTypeConverter = func() managedfields.TypeConverter {
 	data, err := os.ReadFile(filepath.Join(strings.Repeat(".."+string(filepath.Separator), 7),
 		"api", "openapi-spec", "swagger.json"))
@@ -65,6 +67,9 @@ var fakeTypeConverter = func() managedfields.TypeConverter {
 
 // TestUpdateApplyConflict tests that applying to an object, which
 // wasn't created by apply, will give conflicts
+//
+// 先用 Update 写入 replicas=3，再用另一个 manager apply replicas=101，
+// 预期得到冲突而不是静默覆盖。
 func TestUpdateApplyConflict(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
@@ -126,6 +131,8 @@ func TestUpdateApplyConflict(t *testing.T) {
 	}
 }
 
+// TestApplyStripsFields 验证客户端提交的 managedFields 会被忽略，
+// 不会作为用户字段被记录（managedFields 由服务端管理）。
 func TestApplyStripsFields(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
@@ -158,6 +165,8 @@ func TestApplyStripsFields(t *testing.T) {
 	}
 }
 
+// TestVersionCheck 验证 apply patch 的 apiVersion 必须与 live 对象一致，
+// 不一致时返回 400 Bad Request。
 func TestVersionCheck(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
@@ -199,6 +208,8 @@ func TestVersionCheck(t *testing.T) {
 	}
 }
 
+// TestVersionCheckDoesNotPanic 验证 patch 完全没有 apiVersion 时
+// 版本检查仍返回错误而不是 panic。
 func TestVersionCheckDoesNotPanic(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
@@ -238,6 +249,7 @@ func TestVersionCheckDoesNotPanic(t *testing.T) {
 	}
 }
 
+// TestApplyDoesNotStripLabels 验证普通 labels 不会被当作受管元数据剥离。
 func TestApplyDoesNotStripLabels(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"))
 
@@ -264,6 +276,7 @@ func TestApplyDoesNotStripLabels(t *testing.T) {
 	}
 }
 
+// getObjectBytes 读取 testdata 中的对象 YAML；失败即 panic（测试数据缺失）。
 func getObjectBytes(file string) []byte {
 	s, err := os.ReadFile(file)
 	if err != nil {
@@ -272,6 +285,8 @@ func getObjectBytes(file string) []byte {
 	return s
 }
 
+// TestApplyNewObject 验证对全新的 Pod/Node/Endpoints 执行 apply 不会失败，
+// 覆盖不同结构（含列表与 map）的字段建模。
 func TestApplyNewObject(t *testing.T) {
 	tests := []struct {
 		gvk schema.GroupVersionKind
@@ -307,6 +322,7 @@ func TestApplyNewObject(t *testing.T) {
 	}
 }
 
+// TestApplyFailsWithManagedFields 验证 apply 时携带 managedFields 会被拒绝。
 func TestApplyFailsWithManagedFields(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"))
 
@@ -332,6 +348,7 @@ func TestApplyFailsWithManagedFields(t *testing.T) {
 	}
 }
 
+// TestApplySuccessWithNoManagedFields 验证不带 managedFields 的 apply 正常成功。
 func TestApplySuccessWithNoManagedFields(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"))
 
@@ -355,6 +372,9 @@ func TestApplySuccessWithNoManagedFields(t *testing.T) {
 }
 
 // Run an update and apply, and make sure that nothing has changed.
+//
+// 换 manager apply 会新增 managedFields 条目，因此对象应变化；
+// 而相同 manager 的 no-op update/apply 不应改变对象（包括时间戳）。
 func TestNoOpChanges(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"))
 
@@ -406,6 +426,8 @@ func TestNoOpChanges(t *testing.T) {
 
 // Tests that one can reset the managedFields by sending either an empty
 // list
+//
+// 发送 managedFields: [] 是"停止跟踪"的显式信号。
 func TestResetManagedFieldsEmptyList(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"))
 
@@ -447,6 +469,7 @@ func TestResetManagedFieldsEmptyList(t *testing.T) {
 }
 
 // Tests that one can reset the managedFields by sending either a list with one empty item.
+// Tests that one can reset the managedFields by sending either a list with one empty item.
 func TestResetManagedFieldsEmptyItem(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"))
 
@@ -487,6 +510,8 @@ func TestResetManagedFieldsEmptyItem(t *testing.T) {
 	}
 }
 
+// TestServerSideApplyWithInvalidLastApplied 验证 last-applied 注解非法时：
+// 普通 apply 返回冲突且不修改注解；force apply 成功并修复注解。
 func TestServerSideApplyWithInvalidLastApplied(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
@@ -566,6 +591,8 @@ spec:
 	}
 }
 
+// TestInteropForClientSideApplyAndServerSideApply 验证从客户端 apply 平滑迁移到
+// 服务端 apply：字段被 kubectl 接管，last-applied 注解同步更新。
 func TestInteropForClientSideApplyAndServerSideApply(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
@@ -650,6 +677,8 @@ spec:
 	}
 }
 
+// TestNoTrackManagedFieldsForClientSideApply 验证 managedFields 的"停止/恢复跟踪"行为：
+// 发送空列表后不再记录；之后的服务端 apply 会重新开始跟踪并保留 "before-first-apply"。
 func TestNoTrackManagedFieldsForClientSideApply(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("apps/v1", "Deployment"))
 
@@ -789,6 +818,7 @@ spec:
 	}
 }
 
+// yamlToJSON 把 YAML 解码为 unstructured 后再编码为 JSON 字符串。
 func yamlToJSON(y []byte) (string, error) {
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	if err := yaml.Unmarshal(y, &obj.Object); err != nil {
@@ -805,6 +835,7 @@ func yamlToJSON(y []byte) (string, error) {
 	return string(json), nil
 }
 
+// setLastAppliedFromEncoded 把 YAML 形式的对象转成 JSON 后写入 last-applied 注解。
 func setLastAppliedFromEncoded(obj runtime.Object, lastApplied []byte) error {
 	lastAppliedJSON, err := yamlToJSON(lastApplied)
 	if err != nil {
@@ -813,6 +844,7 @@ func setLastAppliedFromEncoded(obj runtime.Object, lastApplied []byte) error {
 	return internal.SetLastApplied(obj, lastAppliedJSON)
 }
 
+// getLastApplied 读取对象上的 last-applied 注解；缺失时返回错误。
 func getLastApplied(obj runtime.Object) (string, error) {
 	accessor := meta.NewAccessor()
 	annotations, err := accessor.Annotations(obj)
@@ -830,6 +862,7 @@ func getLastApplied(obj runtime.Object) (string, error) {
 	return lastApplied, nil
 }
 
+// TestUpdateViaSubresources 验证通过子资源更新时，客户端不能修改或重置 managedFields。
 func TestUpdateViaSubresources(t *testing.T) {
 	f := managedfieldstest.NewTestFieldManagerSubresource(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "Pod"), "scale")
 
@@ -884,6 +917,9 @@ func TestUpdateViaSubresources(t *testing.T) {
 }
 
 // Ensures that a no-op Apply does not mutate managed fields
+//
+// 两个 manager 先后 apply 后，第一个 manager 再次 apply 相同内容，
+// managedFields（含时间戳）必须完全不变。
 func TestApplyDoesNotChangeManagedFields(t *testing.T) {
 	originalManagedFields := []metav1.ManagedFieldsEntry{}
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter,
@@ -978,6 +1014,7 @@ func TestApplyDoesNotChangeManagedFields(t *testing.T) {
 }
 
 // Ensures that a no-op Update does not mutate managed fields
+// Ensures that a no-op Update does not mutate managed fields
 func TestUpdateDoesNotChangeManagedFields(t *testing.T) {
 	originalManagedFields := []metav1.ManagedFieldsEntry{}
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter,
@@ -1049,6 +1086,8 @@ func TestUpdateDoesNotChangeManagedFields(t *testing.T) {
 	}
 }
 
+// This test makes sure that the liveObject during a patch does not mutate
+// its managed fields.
 // This test makes sure that the liveObject during a patch does not mutate
 // its managed fields.
 func TestLiveObjectManagedFieldsNotRemoved(t *testing.T) {

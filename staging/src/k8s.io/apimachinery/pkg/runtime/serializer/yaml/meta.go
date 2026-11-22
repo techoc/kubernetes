@@ -33,10 +33,15 @@ var DefaultMetaFactory = SimpleMetaFactory{}
 // that are identified with an "apiVersion" and "kind" fields in their JSON
 // serialization. It may be parameterized with the names of the fields in memory, or an
 // optional list of base structs to search for those fields in memory.
+//
+// 当前实现不保存任何配置，仅按标准字段名解析；保留结构体是为了将来支持
+// 自定义字段名而不破坏 API。
 type SimpleMetaFactory struct{}
 
 // Interpret will return the APIVersion and Kind of the JSON wire-format
 // encoding of an object, or an error.
+//
+// 用 yaml.Unmarshal 解析（YAML 是 JSON 超集），因此同时支持两种输入格式。
 func (SimpleMetaFactory) Interpret(data []byte) (*schema.GroupVersionKind, error) {
 	gvk := runtime.TypeMeta{}
 	if err := yaml.Unmarshal(data, &gvk); err != nil {

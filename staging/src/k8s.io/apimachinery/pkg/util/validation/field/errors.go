@@ -26,50 +26,47 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// Error is an implementation of the 'error' interface, which represents a
-// field-level validation error.
+// Error 是 'error' 接口的实现，表示字段级校验错误。
 type Error struct {
 	Type     ErrorType
 	Field    string
 	BadValue interface{}
 	Detail   string
 
-	// Origin uniquely identifies where this error was generated from. It is used in testing to
-	// compare expected errors against actual errors without relying on exact detail string matching.
-	// This allows tests to verify the correct validation logic triggered the error
-	// regardless of how the error message might be formatted or localized.
+	// Origin 唯一标识该错误产生的来源。测试中用它把期望错误与实际错误进行
+	// 比较，而无需依赖精确的 detail 字符串匹配。这样无论错误消息如何格式化
+	// 或本地化，测试都能验证是正确的那条校验逻辑触发了错误。
 	//
-	// The value should be either:
-	// - A simple camelCase identifier (e.g., "maximum", "maxItems")
-	// - A structured format using "format=<dash-style-identifier>" for validation errors related to specific formats
-	//   (e.g. "format=k8s-short-name")
+	// 取值应为以下之一：
+	// - 简单的 camelCase 标识符（如 "maximum"、"maxItems"）
+	// - 针对特定格式校验错误的 "format=<dash-style-identifier>" 结构化格式
+	//   （如 "format=k8s-short-name"）
 	//
-	// If the Origin corresponds to an existing declarative validation tag or JSON Schema keyword,
-	// use that same name for consistency.
+	// 若 Origin 对应已有的声明式校验标签或 JSON Schema 关键字，应沿用同名以保持一致。
 	//
-	// Origin should be set in the most deeply nested validation function that
-	// can still identify the unique source of the error.
+	// Origin 应在仍能识别错误唯一来源的最深层校验函数中设置。
 	Origin string
 
-	// CoveredByDeclarative is true when this error is covered by declarative
-	// validation. This field is to identify errors from imperative validation
-	// that should also be caught by declarative validation.
+	// CoveredByDeclarative 为 true 时表示该错误已被声明式校验覆盖。
+	// 该字段用于标识那些同样会被声明式校验捕获的命令式校验错误。
 	CoveredByDeclarative bool
 
-	// FromImperative denotes these errors are originating from  the hand written validations.
+	// FromImperative 表示这些错误来源于手写校验。
 	FromImperative bool
 
-	// ShortCircuit denotes that this error prevents further validation of the current field's children.
+	// ShortCircuit 表示该错误会阻止对当前字段子字段的进一步校验。
 	ShortCircuit bool
 
-	// ShortCircuitedInDeclarative denotes this error is covered by declarative validation. But not returned by declarative validation due to a short circuiting behavior for the current input.
+	// ShortCircuitedInDeclarative 表示该错误本应被声明式校验覆盖，但由于当前输入
+	// 触发短路行为，声明式校验未返回它。
 	ShortCircuitedInDeclarative bool
 
-	// ValidationStabilityLevel denotes the validation stability level of the declarative validation from this error is returned. This should be used in the declarative validations only.
+	// ValidationStabilityLevel 表示产生该错误的声明式校验的稳定性级别。
+	// 仅应在声明式校验中使用。
 	ValidationStabilityLevel ValidationStabilityLevel
 }
 
-// ValidationStabilityLevel denotes the stability level of a validation.
+// ValidationStabilityLevel 表示校验的稳定性级别。
 type ValidationStabilityLevel int
 
 const (
@@ -78,6 +75,7 @@ const (
 	stabilityLevelBeta
 )
 
+// String 返回稳定性级别的可读名称。
 func (v ValidationStabilityLevel) String() string {
 	switch v {
 	case stabilityLevelAlpha:
@@ -91,27 +89,28 @@ func (v ValidationStabilityLevel) String() string {
 
 var _ error = &Error{}
 
-// IsAlpha returns true if the error is an alpha validation error.
+// IsAlpha 判断该错误是否为 alpha 级别的校验错误。
 func (e *Error) IsAlpha() bool {
 	return e.ValidationStabilityLevel == stabilityLevelAlpha
 }
 
-// IsBeta returns true if the error is a beta validation error.
+// IsBeta 判断该错误是否为 beta 级别的校验错误。
 func (e *Error) IsBeta() bool {
 	return e.ValidationStabilityLevel == stabilityLevelBeta
 }
 
-// Error implements the error interface.
+// Error 实现 error 接口。
 func (e *Error) Error() string {
 	return fmt.Sprintf("%s: %s", e.Field, e.ErrorBody())
 }
 
+// OmitValueType 是 BadValue 的哨兵类型，用于在错误消息中省略具体值。
 type OmitValueType struct{}
 
 var omitValue = OmitValueType{}
 
-// ErrorBody returns the error message without the field name.  This is useful
-// for building nice-looking higher-level error reporting.
+// ErrorBody 返回不含字段名的错误消息。
+// 这有助于构建更友好的上层错误报告。
 func (e *Error) ErrorBody() string {
 	var s string
 	switch e.Type {
@@ -125,22 +124,22 @@ func (e *Error) ErrorBody() string {
 		}
 		switch t := e.BadValue.(type) {
 		case int64, int32, float64, float32, bool:
-			// use simple printer for simple types
+			// 简单类型使用简单格式化。
 			s = fmt.Sprintf("%s: %v", e.Type, t)
 		case string:
 			s = fmt.Sprintf("%s: %q", e.Type, t)
 		default:
-			// use more complex techniques to render more complex types
+			// 复杂类型需要更复杂的渲染方式。
 			valstr := ""
 			jb, err := json.Marshal(e.BadValue)
 			if err == nil {
-				// best case
+				// 最佳情况：JSON 可序列化。
 				valstr = string(jb)
 			} else if stringer, ok := e.BadValue.(fmt.Stringer); ok {
-				// anything that defines String() is better than raw struct
+				// 定义了 String() 的类型比原始结构体更易读。
 				valstr = stringer.String()
 			} else {
-				// worst case - fallback to raw struct
+				// 最差情况：回退到原始结构体。
 				// TODO: internal types have panic guards against json.Marshalling to prevent
 				// accidental use of internal types in external serialized form.  For now, use
 				// %#v, although it would be better to show a more expressive output in the future
@@ -149,6 +148,7 @@ func (e *Error) ErrorBody() string {
 			s = fmt.Sprintf("%s: %s", e.Type, valstr)
 		}
 	default:
+		// 未处理的错误码说明代码有缺陷，用内部错误形式报告。
 		internal := InternalError(nil, fmt.Errorf("unhandled error code: %s: please report this", e.Type))
 		s = internal.ErrorBody()
 	}
@@ -159,69 +159,59 @@ func (e *Error) ErrorBody() string {
 	return s
 }
 
-// WithOrigin adds origin information to the FieldError
+// WithOrigin 为 FieldError 添加来源信息。
 func (e *Error) WithOrigin(o string) *Error {
 	e.Origin = o
 	return e
 }
 
-// MarkCoveredByDeclarative marks the error as covered by declarative validation.
+// MarkCoveredByDeclarative 把错误标记为已被声明式校验覆盖。
 func (e *Error) MarkCoveredByDeclarative() *Error {
 	e.CoveredByDeclarative = true
 	return e
 }
 
-// ErrorType is a machine readable value providing more detail about why
-// a field is invalid.  These values are expected to match 1-1 with
-// CauseType in api/types.go.
+// ErrorType 是机器可读的值，进一步说明字段为何非法。
+// 这些值应与 api/types.go 中的 CauseType 一一对应。
 type ErrorType string
 
 // TODO: These values are duplicated in api/types.go, but there's a circular dep.  Fix it.
 const (
-	// ErrorTypeNotFound is used to report failure to find a requested value
-	// (e.g. looking up an ID).  See NotFound().
+	// ErrorTypeNotFound 用于报告找不到请求的值（例如查找 ID）。见 NotFound()。
 	ErrorTypeNotFound ErrorType = "FieldValueNotFound"
-	// ErrorTypeRequired is used to report required values that are not
-	// provided (e.g. empty strings, null values, or empty arrays).  See
-	// Required().
+	// ErrorTypeRequired 用于报告未提供必需值（例如空字符串、null 或空数组）。
+	// 见 Required()。
 	ErrorTypeRequired ErrorType = "FieldValueRequired"
-	// ErrorTypeDuplicate is used to report collisions of values that must be
-	// unique (e.g. unique IDs).  See Duplicate().
+	// ErrorTypeDuplicate 用于报告必须唯一的值发生冲突（例如唯一 ID）。
+	// 见 Duplicate()。
 	ErrorTypeDuplicate ErrorType = "FieldValueDuplicate"
-	// ErrorTypeInvalid is used to report malformed values (e.g. failed regex
-	// match, too long, out of bounds).  See Invalid().
+	// ErrorTypeInvalid 用于报告格式非法的值（例如正则不匹配、过长、越界）。
+	// 见 Invalid()。
 	ErrorTypeInvalid ErrorType = "FieldValueInvalid"
-	// ErrorTypeNotSupported is used to report unknown values for enumerated
-	// fields (e.g. a list of valid values).  See NotSupported().
+	// ErrorTypeNotSupported 用于报告枚举字段的未知取值（例如合法值列表）。
+	// 见 NotSupported()。
 	ErrorTypeNotSupported ErrorType = "FieldValueNotSupported"
-	// ErrorTypeForbidden is used to report valid (as per formatting rules)
-	// values which would be accepted under some conditions, but which are not
-	// permitted by the current conditions (such as security policy).  See
-	// Forbidden().
+	// ErrorTypeForbidden 用于报告格式合法、在某些条件下可接受，但当前条件
+	// （如安全策略）不允许的值。见 Forbidden()。
 	ErrorTypeForbidden ErrorType = "FieldValueForbidden"
-	// ErrorTypeTooLong is used to report that the given value is too long.
-	// This is similar to ErrorTypeInvalid, but the error will not include the
-	// too-long value.  See TooLong().
+	// ErrorTypeTooLong 用于报告给定值过长。
+	// 它类似 ErrorTypeInvalid，但错误中不会包含过长的值。见 TooLong()。
 	ErrorTypeTooLong ErrorType = "FieldValueTooLong"
-	// ErrorTypeTooMany is used to report "too many". This is used to
-	// report that a given list has too many items. This is similar to FieldValueTooLong,
-	// but the error indicates quantity instead of length.
+	// ErrorTypeTooMany 用于报告“过多”。用于表示给定列表项过多。
+	// 它类似 FieldValueTooLong，但表示数量而非长度。
 	ErrorTypeTooMany ErrorType = "FieldValueTooMany"
-	// ErrorTypeTooFew is used to report "too few". This is used to
-	// report that a given list has too few items. This is similar to FieldValueTooLong,
-	// but the error indicates quantity instead of length.
+	// ErrorTypeTooFew 用于报告“过少”。用于表示给定列表项过少。
+	// 它类似 FieldValueTooLong，但表示数量而非长度。
 	ErrorTypeTooFew ErrorType = "FieldValueTooFew"
-	// ErrorTypeInternal is used to report other errors that are not related
-	// to user input.  See InternalError().
+	// ErrorTypeInternal 用于报告与用户输入无关的其他错误。见 InternalError()。
 	ErrorTypeInternal ErrorType = "InternalError"
-	// ErrorTypeTypeInvalid is for the value did not match the schema type for that field
+	// ErrorTypeTypeInvalid 表示值与该字段的 schema 类型不匹配。
 	ErrorTypeTypeInvalid ErrorType = "FieldValueTypeInvalid"
-	// ErrorTypeTooShort is used to report that the given value is too short.
-	// This is similar to ErrorTypeInvalid. See TooShort().
+	// ErrorTypeTooShort 用于报告给定值过短。它类似 ErrorTypeInvalid。见 TooShort()。
 	ErrorTypeTooShort ErrorType = "FieldValueTooShort"
 )
 
-// String converts a ErrorType into its corresponding canonical error message.
+// String 把 ErrorType 转换为其对应的规范错误消息。
 func (t ErrorType) String() string {
 	switch t {
 	case ErrorTypeNotFound:
@@ -253,7 +243,7 @@ func (t ErrorType) String() string {
 	}
 }
 
-// TypeInvalid returns a *Error indicating "type is invalid"
+// TypeInvalid 返回表示“类型非法”的 *Error。
 func TypeInvalid(field *Path, value interface{}, detail string) *Error {
 	return &Error{
 		Type:     ErrorTypeTypeInvalid,
@@ -263,8 +253,8 @@ func TypeInvalid(field *Path, value interface{}, detail string) *Error {
 	}
 }
 
-// NotFound returns a *Error indicating "value not found".  This is
-// used to report failure to find a requested value (e.g. looking up an ID).
+// NotFound 返回表示“值未找到”的 *Error。
+// 用于报告找不到请求的值（例如查找 ID）。
 func NotFound(field *Path, value interface{}) *Error {
 	return &Error{
 		Type:     ErrorTypeNotFound,
@@ -273,9 +263,8 @@ func NotFound(field *Path, value interface{}) *Error {
 	}
 }
 
-// Required returns a *Error indicating "value required".  This is used
-// to report required values that are not provided (e.g. empty strings, null
-// values, or empty arrays).
+// Required 返回表示“缺少必需值”的 *Error。
+// 用于报告未提供必需值（例如空字符串、null 或空数组）。
 func Required(field *Path, detail string) *Error {
 	return &Error{
 		Type:     ErrorTypeRequired,
@@ -285,8 +274,8 @@ func Required(field *Path, detail string) *Error {
 	}
 }
 
-// Duplicate returns a *Error indicating "duplicate value".  This is
-// used to report collisions of values that must be unique (e.g. names or IDs).
+// Duplicate 返回表示“值重复”的 *Error。
+// 用于报告必须唯一的值发生冲突（例如名称或 ID）。
 func Duplicate(field *Path, value interface{}) *Error {
 	return &Error{
 		Type:     ErrorTypeDuplicate,
@@ -295,8 +284,8 @@ func Duplicate(field *Path, value interface{}) *Error {
 	}
 }
 
-// Invalid returns a *Error indicating "invalid value".  This is used
-// to report malformed values (e.g. failed regex match, too long, out of bounds).
+// Invalid 返回表示“值非法”的 *Error。
+// 用于报告格式非法的值（例如正则不匹配、过长、越界）。
 func Invalid(field *Path, value interface{}, detail string) *Error {
 	return &Error{
 		Type:     ErrorTypeInvalid,
@@ -307,9 +296,8 @@ func Invalid(field *Path, value interface{}, detail string) *Error {
 
 }
 
-// NotSupported returns a *Error indicating "unsupported value".
-// This is used to report unknown values for enumerated fields (e.g. a list of
-// valid values).
+// NotSupported 返回表示“值不受支持”的 *Error。
+// 用于报告枚举字段的未知取值（例如合法值列表）。
 func NotSupported[T ~string](field *Path, value interface{}, validValues []T) *Error {
 	detail := ""
 	if len(validValues) > 0 {
@@ -327,10 +315,8 @@ func NotSupported[T ~string](field *Path, value interface{}, validValues []T) *E
 	}
 }
 
-// Forbidden returns a *Error indicating "forbidden".  This is used to
-// report valid (as per formatting rules) values which would be accepted under
-// some conditions, but which are not permitted by current conditions (e.g.
-// security policy).
+// Forbidden 返回表示“禁止”的 *Error。
+// 用于报告格式合法、在某些条件下可接受，但当前条件（如安全策略）不允许的值。
 func Forbidden(field *Path, detail string) *Error {
 	return &Error{
 		Type:     ErrorTypeForbidden,
@@ -340,10 +326,9 @@ func Forbidden(field *Path, detail string) *Error {
 	}
 }
 
-// TooLong returns a *Error indicating "too long".  This is used to report that
-// the given value is too long.  This is similar to Invalid, but the returned
-// error will not include the too-long value. If maxLength is negative, it will
-// be included in the message.  The value argument is not used.
+// TooLong 返回表示“过长”的 *Error。
+// 用于报告给定值过长。它类似 Invalid，但返回的错误不会包含过长的值。
+// 若 maxLength 为负，则会在消息中包含该信息。value 参数未被使用。
 func TooLong(field *Path, _ interface{}, maxLength int) *Error {
 	var msg string
 	if maxLength >= 0 {
@@ -363,10 +348,9 @@ func TooLong(field *Path, _ interface{}, maxLength int) *Error {
 	}
 }
 
-// TooLongCharacters returns a *Error indicating "too long".  This is used to report that
-// the given value is too long in characters (including multi-byte characters).
-// This is similar to Invalid, but the returned  error will not include the too-long value.
-// If maxLength is negative, it will be included in the message. The value argument is not used.
+// TooLongCharacters 返回表示“过长”的 *Error。
+// 用于报告给定值按字符计（含多字节字符）过长。它类似 Invalid，但返回的错误
+// 不会包含过长的值。若 maxLength 为负，则会在消息中包含该信息。value 参数未被使用。
 func TooLongCharacters[T ~string](field *Path, _ T, maxLength int) *Error {
 	var msg string
 	if maxLength >= 0 {
@@ -386,15 +370,14 @@ func TooLongCharacters[T ~string](field *Path, _ T, maxLength int) *Error {
 	}
 }
 
-// TooLongMaxLength returns a *Error indicating "too long".
-// Deprecated: Use TooLong instead.
+// TooLongMaxLength 返回表示“过长”的 *Error。
+// Deprecated: 请改用 TooLong。
 func TooLongMaxLength(field *Path, value interface{}, maxLength int) *Error {
 	return TooLong(field, "", maxLength)
 }
 
-// TooMany returns a *Error indicating "too many". This is used to
-// report that a given list has too many items. This is similar to TooLong,
-// but the returned error indicates quantity instead of length.
+// TooMany 返回表示“过多”的 *Error。
+// 用于报告给定列表项过多。它类似 TooLong，但表示数量而非长度。
 func TooMany(field *Path, actualQuantity, maxQuantity int) *Error {
 	var msg string
 
@@ -409,6 +392,7 @@ func TooMany(field *Path, actualQuantity, maxQuantity int) *Error {
 	}
 
 	var actual interface{}
+	// 实际数量未知（负数）时省略该值，避免输出误导性的 -1。
 	if actualQuantity >= 0 {
 		actual = actualQuantity
 	} else {
@@ -423,9 +407,8 @@ func TooMany(field *Path, actualQuantity, maxQuantity int) *Error {
 	}
 }
 
-// InternalError returns a *Error indicating "internal error".  This is used
-// to signal that an error was found that was not directly related to user
-// input.  The err argument must be non-nil.
+// InternalError 返回表示“内部错误”的 *Error。
+// 用于表示发现的错误与用户输入无直接关系。err 参数必须非 nil。
 func InternalError(field *Path, err error) *Error {
 	return &Error{
 		Type:     ErrorTypeInternal,
@@ -435,9 +418,9 @@ func InternalError(field *Path, err error) *Error {
 	}
 }
 
-// TooShort returns a *Error indicating "too short".  This is used to report that
-// the given value is too short in characters. This is similar to Invalid.
-// If minLength is non-negative, it will  be included in the message.
+// TooShort 返回表示“过短”的 *Error。
+// 用于报告给定值按字符计过短。它类似 Invalid。
+// 若 minLength 非负，则会在消息中包含该信息。
 func TooShort[T ~string](field *Path, value T, minLength int) *Error {
 	var msg string
 	if minLength >= 0 {
@@ -457,13 +440,12 @@ func TooShort[T ~string](field *Path, value T, minLength int) *Error {
 	}
 }
 
-// ErrorList holds a set of Errors.  It is plausible that we might one day have
-// non-field errors in this same umbrella package, but for now we don't, so
-// we can keep it simple and leave ErrorList here.
+// ErrorList 是一组 Error 的集合。未来可能在同一包中加入非字段错误，
+// 但目前没有，因此可以保持简单，把 ErrorList 放在这里。
 type ErrorList []*Error
 
-// NewErrorTypeMatcher returns an errors.Matcher that returns true
-// if the provided error is a Error and has the provided ErrorType.
+// NewErrorTypeMatcher 返回一个 errors.Matcher：当给定错误是 Error 且
+// ErrorType 匹配时返回 true。
 func NewErrorTypeMatcher(t ErrorType) utilerrors.Matcher {
 	return func(err error) bool {
 		if e, ok := err.(*Error); ok {
@@ -473,7 +455,7 @@ func NewErrorTypeMatcher(t ErrorType) utilerrors.Matcher {
 	}
 }
 
-// WithOrigin sets the origin for all errors in the list and returns the updated list.
+// WithOrigin 为列表中所有错误设置来源，并返回更新后的列表。
 func (list ErrorList) WithOrigin(origin string) ErrorList {
 	for _, err := range list {
 		err.Origin = origin
@@ -481,7 +463,7 @@ func (list ErrorList) WithOrigin(origin string) ErrorList {
 	return list
 }
 
-// MarkCoveredByDeclarative marks all errors in the list as covered by declarative validation.
+// MarkCoveredByDeclarative 把列表中所有错误标记为已被声明式校验覆盖。
 func (list ErrorList) MarkCoveredByDeclarative() ErrorList {
 	for _, err := range list {
 		err.CoveredByDeclarative = true
@@ -489,7 +471,7 @@ func (list ErrorList) MarkCoveredByDeclarative() ErrorList {
 	return list
 }
 
-// PrefixDetail adds a prefix to the Detail for all errors in the list and returns the updated list.
+// PrefixDetail 为列表中所有错误的 Detail 添加前缀，并返回更新后的列表。
 func (list ErrorList) PrefixDetail(prefix string) ErrorList {
 	for _, err := range list {
 		err.Detail = prefix + err.Detail
@@ -497,7 +479,7 @@ func (list ErrorList) PrefixDetail(prefix string) ErrorList {
 	return list
 }
 
-// ToAggregate converts the ErrorList into an errors.Aggregate.
+// ToAggregate 把 ErrorList 转换为 errors.Aggregate，并按错误字符串去重。
 func (list ErrorList) ToAggregate() utilerrors.Aggregate {
 	if len(list) == 0 {
 		return nil
@@ -515,6 +497,7 @@ func (list ErrorList) ToAggregate() utilerrors.Aggregate {
 	return utilerrors.NewAggregate(errs)
 }
 
+// fromAggregate 把 Aggregate 还原为 ErrorList；要求其中元素均为 *Error。
 func fromAggregate(agg utilerrors.Aggregate) ErrorList {
 	errs := agg.Errors()
 	list := make(ErrorList, len(errs))
@@ -524,17 +507,17 @@ func fromAggregate(agg utilerrors.Aggregate) ErrorList {
 	return list
 }
 
-// Filter removes items from the ErrorList that match the provided fns.
+// Filter 从 ErrorList 中移除匹配任一 matcher 的项。
 func (list ErrorList) Filter(fns ...utilerrors.Matcher) ErrorList {
 	err := utilerrors.FilterOut(list.ToAggregate(), fns...)
 	if err == nil {
 		return nil
 	}
-	// FilterOut takes an Aggregate and returns an Aggregate
+	// FilterOut 接收 Aggregate 并返回 Aggregate。
 	return fromAggregate(err.(utilerrors.Aggregate))
 }
 
-// ExtractCoveredByDeclarative returns a new ErrorList containing only the errors that should be covered by declarative validation.
+// ExtractCoveredByDeclarative 返回仅包含“应被声明式校验覆盖”错误的新 ErrorList。
 func (list ErrorList) ExtractCoveredByDeclarative() ErrorList {
 	newList := ErrorList{}
 	for _, err := range list {
@@ -545,19 +528,20 @@ func (list ErrorList) ExtractCoveredByDeclarative() ErrorList {
 	return newList
 }
 
-// MarkAlpha marks the error as an alpha validation error.
+// MarkAlpha 把错误标记为 alpha 级别校验错误。
 func (e *Error) MarkAlpha() *Error {
 	e.ValidationStabilityLevel = stabilityLevelAlpha
 	return e
 }
 
-// MarkShortCircuitedInDV marks that this error is not returned by declarative validations, because DV returns before running the current validation. Handwritten validations still return it.
+// MarkShortCircuitedInDV 标记该错误不会由声明式校验返回，因为声明式校验在
+// 运行当前校验前就返回了。手写校验仍会返回它。
 func (e *Error) MarkShortCircuitedInDV() *Error {
 	e.ShortCircuitedInDeclarative = true
 	return e
 }
 
-// MarkAlpha marks the errors as alpha validation errors.
+// MarkAlpha 把列表中的错误标记为 alpha 级别校验错误。
 func (list ErrorList) MarkAlpha() ErrorList {
 	for _, err := range list {
 		err.ValidationStabilityLevel = stabilityLevelAlpha
@@ -565,13 +549,13 @@ func (list ErrorList) MarkAlpha() ErrorList {
 	return list
 }
 
-// MarkBeta marks the error as a beta validation error.
+// MarkBeta 把错误标记为 beta 级别校验错误。
 func (e *Error) MarkBeta() *Error {
 	e.ValidationStabilityLevel = stabilityLevelBeta
 	return e
 }
 
-// MarkBeta marks the errors as beta validation errors.
+// MarkBeta 把列表中的错误标记为 beta 级别校验错误。
 func (list ErrorList) MarkBeta() ErrorList {
 	for _, err := range list {
 		err.ValidationStabilityLevel = stabilityLevelBeta
@@ -579,11 +563,13 @@ func (list ErrorList) MarkBeta() ErrorList {
 	return list
 }
 
+// MarkFromImperative 把错误标记为来自手写（命令式）校验。
 func (e *Error) MarkFromImperative() *Error {
 	e.FromImperative = true
 	return e
 }
 
+// MarkFromImperative 把列表中的错误标记为来自手写（命令式）校验。
 func (list ErrorList) MarkFromImperative() ErrorList {
 	for _, err := range list {
 		err.FromImperative = true
@@ -591,7 +577,7 @@ func (list ErrorList) MarkFromImperative() ErrorList {
 	return list
 }
 
-// MarkShortCircuit marks the errors as short-circuit errors.
+// MarkShortCircuit 把列表中的错误标记为短路错误。
 func (list ErrorList) MarkShortCircuit() ErrorList {
 	for _, err := range list {
 		err.ShortCircuit = true
@@ -599,7 +585,7 @@ func (list ErrorList) MarkShortCircuit() ErrorList {
 	return list
 }
 
-// RemoveCoveredByDeclarative returns a new ErrorList containing only the errors that should not be covered by declarative validation.
+// RemoveCoveredByDeclarative 返回仅包含“不应被声明式校验覆盖”错误的新 ErrorList。
 func (list ErrorList) RemoveCoveredByDeclarative() ErrorList {
 	newList := ErrorList{}
 	for _, err := range list {
@@ -610,9 +596,8 @@ func (list ErrorList) RemoveCoveredByDeclarative() ErrorList {
 	return newList
 }
 
-// TooFew returns a *Error indicating "too few". This is used to
-// report that a given list has too few items. This is similar to TooLong,
-// but the returned error indicates quantity instead of length.
+// TooFew 返回表示“过少”的 *Error。
+// 用于报告给定列表项过少。它类似 TooLong，但表示数量而非长度。
 func TooFew(field *Path, actualQuantity, minQuantity int) *Error {
 	var msg string
 

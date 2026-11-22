@@ -23,6 +23,8 @@ import (
 	"testing"
 )
 
+// TestConverter_byteSlice 确认未注册任何转换函数时，相同类型仍能完成默认的
+// 逐字段/逐元素复制（[]byte 是常见需要此回退路径的类型）。
 func TestConverter_byteSlice(t *testing.T) {
 	c := NewConverter(nil)
 	src := []byte{1, 2, 3}
@@ -36,6 +38,8 @@ func TestConverter_byteSlice(t *testing.T) {
 	}
 }
 
+// TestConverter_MismatchedTypes 验证不同类型的转换完全依赖已注册函数，
+// 不会尝试结构体字段名匹配。
 func TestConverter_MismatchedTypes(t *testing.T) {
 	c := NewConverter(nil)
 
@@ -66,6 +70,8 @@ func TestConverter_MismatchedTypes(t *testing.T) {
 	}
 }
 
+// TestConverter_CallsRegisteredFunctions 验证双向注册各自生效，
+// 且已注册函数返回的错误会原样传播。
 func TestConverter_CallsRegisteredFunctions(t *testing.T) {
 	type A struct {
 		Foo string
@@ -141,11 +147,14 @@ func TestConverter_CallsRegisteredFunctions(t *testing.T) {
 	); err != nil {
 		t.Fatalf("unexpected error %v", err)
 	}
+	// 转换函数返回错误时必须让 Convert 失败，而不是静默吞掉。
 	if err := c.Convert(&A{}, &C{}, nil); err == nil {
 		t.Errorf("unexpected non-error")
 	}
 }
 
+// TestConverter_IgnoredConversion 验证 RegisterIgnoredConversion 会让匹配的
+// 类型对直接跳过转换，即使已注册了真正的转换函数。
 func TestConverter_IgnoredConversion(t *testing.T) {
 	type A struct{}
 	type B struct{}
@@ -177,6 +186,8 @@ func TestConverter_IgnoredConversion(t *testing.T) {
 	}
 }
 
+// TestConverter_GeneratedConversionOverridden 验证后注册的 generated 函数
+// 会覆盖先前注册的普通转换函数（生成的转换通常更精确）。
 func TestConverter_GeneratedConversionOverridden(t *testing.T) {
 	type A struct{}
 	type B struct{}
@@ -211,6 +222,8 @@ func TestConverter_GeneratedConversionOverridden(t *testing.T) {
 	}
 }
 
+// TestConverter_WithConversionOverridden 验证 WithConversions 返回的副本
+// 使用外部注册的函数，而原 Converter 保持不变（不可变配置）。
 func TestConverter_WithConversionOverridden(t *testing.T) {
 	type A struct{}
 	type B struct{}
@@ -249,14 +262,18 @@ func TestConverter_WithConversionOverridden(t *testing.T) {
 
 	a := A{}
 	b := B{}
+	// 原 converter 仍走 generated 函数，故返回错误。
 	if err := c.Convert(&a, &b, nil); err == nil || err.Error() != "conversion function should be overridden" {
 		t.Errorf("unexpected error: %v", err)
 	}
+	// 新 converter 使用 WithConversions 注入的实现，应当成功。
 	if err := newc.Convert(&a, &b, nil); err != nil {
 		t.Errorf("%v", err)
 	}
 }
 
+// TestConverter_meta 验证传给 Convert 的 Meta 会被原样传给注册的转换函数，
+// 这是转换过程中共享上下文（如目标版本信息）的机制。
 func TestConverter_meta(t *testing.T) {
 	type Foo struct{ A string }
 	type Bar struct{ A string }

@@ -15,4 +15,7 @@ limitations under the License.
 */
 
 // Package validation contains generic api type validation functions.
+//
+// 该包放置与具体 API 类型无关、可跨资源复用的校验工具；校验失败统一用
+// field.ErrorList 表达，调用方再决定如何汇总成错误响应。
 package validation

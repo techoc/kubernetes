@@ -34,6 +34,9 @@ import (
 	"k8s.io/apimachinery/pkg/test"
 )
 
+// TestObjectToUnstructuredConversion 覆盖 scheme 将具体对象转换为
+// Unstructured 的路径。关键约束：带版本的对外对象可直接转换；Internal
+// （hub）对象因为没有唯一的首选版本，必须显式指定目标版本，否则报错。
 func TestObjectToUnstructuredConversion(t *testing.T) {
 	scheme, _ := test.TestScheme()
 	testCases := []struct {
@@ -43,12 +46,15 @@ func TestObjectToUnstructuredConversion(t *testing.T) {
 		expectedConvertedUnstructured *unstructured.Unstructured
 	}{
 		{
+			// 空指针没有类型信息，无法映射到任何 GVK，因此必须失败。
 			name:                          "convert nil object to unstructured should fail",
 			objectToConvert:               nil,
 			expectedErr:                   fmt.Errorf("unable to convert object type <nil> to Unstructured, must be a runtime.Object"),
 			expectedConvertedUnstructured: &unstructured.Unstructured{},
 		},
 		{
+			// 空对象也要保留 metadata/spec/status 三个字段，因为类型元数据
+			// 来自 Go 类型，而不是值本身。
 			name:            "convert versioned empty object to unstructured should work",
 			objectToConvert: &testapigroupv1.Carp{},
 			expectedConvertedUnstructured: &unstructured.Unstructured{
@@ -86,6 +92,8 @@ func TestObjectToUnstructuredConversion(t *testing.T) {
 			},
 		},
 		{
+			// Internal 类型不属于任何确定版本，缺少 preferred version 时
+			// 无法决定 apiVersion，故报错。
 			name:            "convert hub-versioned object to unstructured should fail",
 			objectToConvert: &testapigroup.Carp{},
 			expectedErr:     fmt.Errorf("unable to convert the internal object type *testapigroup.Carp to Unstructured without providing a preferred version to convert to"),
@@ -93,6 +101,7 @@ func TestObjectToUnstructuredConversion(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// nil target version 表示“以 Out 的类型为准”，在此场景下不参与决策。
 			outUnstructured := &unstructured.Unstructured{}
 			err := scheme.Convert(testCase.objectToConvert, outUnstructured, nil)
 			if err != nil {
@@ -104,6 +113,8 @@ func TestObjectToUnstructuredConversion(t *testing.T) {
 	}
 }
 
+// TestUnstructuredToObjectConversion 覆盖反向路径：把 Unstructured 解码进
+// 指定对象。对象类型决定目标 GVK，因此目标与 map 中的 kind 必须匹配。
 func TestUnstructuredToObjectConversion(t *testing.T) {
 	scheme, _ := test.TestScheme()
 	testCases := []struct {
@@ -115,6 +126,7 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 		expectedConvertedObject runtime.Object
 	}{
 		{
+			// 没有 kind 就无法定位注册类型，这是最常见的输入错误。
 			name: "convert empty unstructured w/o gvk to versioned object should fail",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{},
@@ -125,6 +137,7 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 			},
 		},
 		{
+			// 只有 GVK 没有字段时解码结果就是目标对象的零值。
 			name: "convert empty versioned unstructured to versioned object should work",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -136,6 +149,7 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 			expectedConvertedObject: &testapigroupv1.Carp{},
 		},
 		{
+			// 与前面重复，保留以固定错误信息行为不变。
 			name: "convert empty unstructured w/o gvk to versioned object should fail",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{},
@@ -146,6 +160,7 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 			},
 		},
 		{
+			// 逐字段解码：metadata.name 与 spec.hostname 应被还原。
 			name: "convert valid versioned unstructured to versioned object should work",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -171,6 +186,7 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 			},
 		},
 		{
+			// 目标是 Internal 类型时会经过转换：先把 v1 解码，再转成 hub 版本。
 			name: "convert valid versioned unstructured to hub-versioned object should work",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -196,6 +212,7 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 			},
 		},
 		{
+			// v9 未在 scheme 中注册，属于未知版本。
 			name: "convert unexisting-versioned unstructured to hub-versioned object should fail",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -220,6 +237,7 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 			},
 		},
 		{
+			// 源是 Carp、目标是 CreateOptions：kind 与目标类型不匹配。
 			name: "convert valid versioned unstructured to object w/ a mismatching kind should fail",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -242,6 +260,8 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// 部分畸形输入可能触发 panic；用 recover 把“是否 panic”也纳入
+			// 期望值，避免测试进程直接崩溃。
 			defer func() {
 				v := recover()
 				assert.Equal(t, testCase.expectPanic, v != nil, "unexpected panic")
@@ -262,9 +282,13 @@ func TestUnstructuredToObjectConversion(t *testing.T) {
 	}
 }
 
+// TestUnstructuredToGVConversion 验证 ConvertToVersion 的目标版本选择逻辑：
+// 调用方只给 GroupVersion，scheme 必须自行找到该版本对应的 Go 类型。
 func TestUnstructuredToGVConversion(t *testing.T) {
 	scheme, _ := test.TestScheme()
 	// HACK: registering fake internal/v1beta1 api
+	// 注册伪造的 foo 组版本，用于构造“目标版本存在但类型不对”的场景；
+	// 这不对应真实的 API 组，只服务本测试。
 	scheme.AddKnownTypes(schema.GroupVersion{Group: "foo", Version: "v1beta1"}, &testapigroup.Carp{})
 	scheme.AddKnownTypes(schema.GroupVersion{Group: "foo", Version: "__internal"}, &testapigroup.Carp{})
 
@@ -277,6 +301,7 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 		expectedConvertedObject runtime.Object
 	}{
 		{
+			// 目标版本与源相同，无需做实际转换，但仍应回填 TypeMeta。
 			name: "convert versioned unstructured to valid external version should work",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -293,6 +318,7 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 			},
 		},
 		{
+			// Internal 版本没有 apiVersion 的概念，转换后 TypeMeta 为空。
 			name: "convert hub-versioned unstructured to hub version should work",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -315,6 +341,7 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 			expectedConvertedObject: nil,
 		},
 		{
+			// 目标版本可用但类型别名的 group 不匹配（Carp 属于默认组）。
 			name: "convert versioned unstructured to mismatching external version should fail",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -330,6 +357,7 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 			expectedConvertedObject: nil,
 		},
 		{
+			// 同样是伪造的 foo 组，确认 Internal 版本也走相同的类型注册检查。
 			name: "convert versioned unstructured to mismatching internal version should fail",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -345,6 +373,7 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 			expectedConvertedObject: nil,
 		},
 		{
+			// 同版本转换必须保留全部字段。
 			name: "convert valid versioned unstructured to its own version should work",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -374,6 +403,7 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 			},
 		},
 		{
+			// 转入 Internal 时丢弃 TypeMeta，这是 Internal 类型的约定。
 			name: "convert valid versioned unstructured to hub-version should work ignoring type meta",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -399,6 +429,7 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 			},
 		},
 		{
+			// v9 不在 scheme 中，报 NotRegisteredGVK。
 			name: "convert valid versioned unstructured to unexisting version should fail",
 			unstructuredToConvert: &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -426,6 +457,7 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			// 与上一个测试类似，panic 也算一种受控的结果。
 			defer func() {
 				v := recover()
 				assert.Equal(t, testCase.expectPanic, v != nil, "unexpected panic")
@@ -442,6 +474,9 @@ func TestUnstructuredToGVConversion(t *testing.T) {
 	}
 }
 
+// TestUnstructuredToUnstructuredConversion 固定当前的宽松行为：两个
+// Unstructured 之间的转换只是拷贝，不做任何跨版本语义转换。未来可能
+// 收紧为报错，届时需同步调整此测试。
 func TestUnstructuredToUnstructuredConversion(t *testing.T) {
 	// eventually, we don't want any inter-unstructured conversion happen, but for now, the conversion
 	// just copy/pastes
@@ -458,6 +493,8 @@ func TestUnstructuredToUnstructuredConversion(t *testing.T) {
 	assert.Equal(t, inUnstructured, outUnstructured)
 }
 
+// benchmarkCarp 构造一个字段覆盖较全的 Carp，作为 benchmark 的固定输入，
+// 避免把对象构造时间计入计时。
 func benchmarkCarp() *testapigroupv1.Carp {
 	t := metav1.Date(2015, 1, 1, 12, 0, 0, 0, time.UTC)
 	return &testapigroupv1.Carp{
@@ -495,6 +532,8 @@ func benchmarkCarp() *testapigroupv1.Carp {
 	}
 }
 
+// BenchmarkToUnstructured measures typed-object to map conversion. The result
+// always has exactly apiVersion, kind and metadata/spec/status keys.
 func BenchmarkToUnstructured(b *testing.B) {
 	carp := benchmarkCarp()
 	converter := runtime.DefaultUnstructuredConverter
@@ -511,6 +550,8 @@ func BenchmarkToUnstructured(b *testing.B) {
 	}
 }
 
+// BenchmarkFromUnstructured measures the reverse conversion; the assertion on
+// Status.Phase guards against the compiler optimizing away the result.
 func BenchmarkFromUnstructured(b *testing.B) {
 	carp := benchmarkCarp()
 	converter := runtime.DefaultUnstructuredConverter

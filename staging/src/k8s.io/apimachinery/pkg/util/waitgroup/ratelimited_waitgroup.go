@@ -22,41 +22,39 @@ import (
 	"sync"
 )
 
-// RateLimiter abstracts the rate limiter used by RateLimitedSafeWaitGroup.
-// The implementation must be thread-safe.
+// RateLimiter 抽象出 RateLimitedSafeWaitGroup 使用的限速器。
+// 实现必须是线程安全的：Done 会在释放内部锁之后并发调用它。
 type RateLimiter interface {
 	Wait(ctx context.Context) error
 }
 
-// RateLimiterFactoryFunc is used by the RateLimitedSafeWaitGroup to create a new
-// instance of a RateLimiter that will be used to rate limit the return rate
-// of the active number of request(s). 'count' is the number of requests in
-// flight that are expected to invoke 'Done' on this wait group.
+// RateLimiterFactoryFunc 由 RateLimitedSafeWaitGroup 调用来创建限速器实例，
+// 该限速器用于限制在途请求归还（Done）的速率。'count' 是预计会对该 wait group
+// 调用 'Done' 的在途请求数。
 type RateLimiterFactoryFunc func(count int) (RateLimiter, context.Context, context.CancelFunc)
 
-// RateLimitedSafeWaitGroup must not be copied after first use.
+// RateLimitedSafeWaitGroup 在 SafeWaitGroup 的基础上，对进入等待状态后发生的
+// Done 施加限速，用于平滑关闭一批请求。首次使用后不得复制。
 type RateLimitedSafeWaitGroup struct {
 	wg sync.WaitGroup
-	// Once Wait is initiated, all consecutive Done invocation will be
-	// rate limited using this rate limiter.
+	// 一旦 Wait 开始，之后所有 Done 调用都会被该限速器限速。
 	limiter RateLimiter
 	stopCtx context.Context
 
 	mu sync.Mutex
-	// wait indicate whether Wait is called, if true,
-	// then any Add with positive delta will return error.
+	// wait 表示 Wait 是否已被调用；为 true 时任何正增量的 Add 都会返回错误。
 	wait bool
-	// number of request(s) currently using the wait group
+	// 当前仍在使用该 wait group 的请求数。
 	count int
 }
 
-// Add adds delta, which may be negative, similar to sync.WaitGroup.
-// If Add with a positive delta happens after Wait, it will return error,
-// which prevent unsafe Add.
+// Add 增加 delta（可以为负），与 sync.WaitGroup 类似。
+// 如果在 Wait 之后发生正增量的 Add，会返回错误，从而阻止不安全的 Add。
 func (wg *RateLimitedSafeWaitGroup) Add(delta int) error {
 	wg.mu.Lock()
 	defer wg.mu.Unlock()
 
+	// Wait 之后不允许再新增请求：否则 Wait 可能在请求尚未结束时提前返回。
 	if wg.wait && delta > 0 {
 		return fmt.Errorf("add with positive delta after Wait is forbidden")
 	}
@@ -65,8 +63,7 @@ func (wg *RateLimitedSafeWaitGroup) Add(delta int) error {
 	return nil
 }
 
-// Done decrements the WaitGroup counter, rate limiting is applied only
-// when the wait group is in waiting mode.
+// Done 递减 WaitGroup 计数；仅当 wait group 处于等待模式时才应用限速。
 func (wg *RateLimitedSafeWaitGroup) Done() {
 	var limiter RateLimiter
 	func() {
@@ -75,23 +72,22 @@ func (wg *RateLimitedSafeWaitGroup) Done() {
 
 		wg.count -= 1
 		if wg.wait {
-			// we are using the limiter outside the scope of the lock
+			// 只在持锁期间取出限速器，实际限速在锁外执行，避免持锁等待拖慢其它 Done。
 			limiter = wg.limiter
 		}
 	}()
 
+	// 先归还 WaitGroup 计数，再限速：这样 Wait 的硬性超时保护不会被限速拖住。
 	defer wg.wg.Done()
 	if limiter != nil {
 		limiter.Wait(wg.stopCtx)
 	}
 }
 
-// Wait blocks until the WaitGroup counter is zero or a hard limit has elapsed.
-// It returns the number of active request(s) accounted for at the time Wait
-// has been invoked, number of request(s) that have drianed (done using the
-// wait group immediately before Wait returns).
-// Ideally, the both numbers returned should be equal, to indicate that all
-// request(s) using the wait group have released their lock.
+// Wait 阻塞直到 WaitGroup 计数归零或达到硬性超时。
+// 它返回调用 Wait 时刻记录的活跃请求数，以及 Wait 即将返回前已排空的请求数
+// （即刚刚通过该 wait group 完成 Done 的数量）。
+// 理想情况下两者相等，表示所有使用该 wait group 的请求都已释放。
 func (wg *RateLimitedSafeWaitGroup) Wait(limiterFactory RateLimiterFactoryFunc) (int, int, error) {
 	if limiterFactory == nil {
 		return 0, 0, fmt.Errorf("rate limiter factory must be specified")
@@ -103,14 +99,14 @@ func (wg *RateLimitedSafeWaitGroup) Wait(limiterFactory RateLimiterFactoryFunc) 
 		wg.mu.Lock()
 		defer wg.mu.Unlock()
 
+		// 用当前在途数创建限速器，并在持锁期间切换到等待模式，保证之后进入的 Done 都能看到限速器。
 		wg.limiter, wg.stopCtx, cancel = limiterFactory(wg.count)
 		countNow = wg.count
 		wg.wait = true
 	}()
 
 	defer cancel()
-	// there should be a hard stop, in case request(s) are not responsive
-	// enough to invoke Done before the grace period is over.
+	// 必须有硬性超时兜底：万一请求迟迟不调用 Done，等待也不能无限持续。
 	waitDoneCh := make(chan struct{})
 	go func() {
 		defer close(waitDoneCh)
@@ -124,6 +120,7 @@ func (wg *RateLimitedSafeWaitGroup) Wait(limiterFactory RateLimiterFactoryFunc) 
 	case <-waitDoneCh:
 	}
 
+	// 在返回前再读一次计数，作为“排空”数量；此时请求可能仍在陆续 Done。
 	func() {
 		wg.mu.Lock()
 		defer wg.mu.Unlock()

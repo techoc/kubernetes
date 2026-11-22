@@ -30,6 +30,9 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
+// TestDecodeEmptyRawExtensionAsObject 验证嵌入的 RawExtension 在解码时保留原始
+// 字节：空对象解码为 "{}"，带 kind/apiVersion 的对象也原样保留，而不是被
+// 提前解析或丢弃。
 func TestDecodeEmptyRawExtensionAsObject(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "test.group", Version: "v1test"}
@@ -67,6 +70,8 @@ func TestDecodeEmptyRawExtensionAsObject(t *testing.T) {
 	}
 }
 
+// TestArrayOfRuntimeObject 验证 []runtime.Object 经 EncodableList 编码后，
+// 再通过 ExtractList/DecodeList 解码可完整还原，包括 Unknown 原始字节与嵌套列表。
 func TestArrayOfRuntimeObject(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "test.group", Version: "v1test"}
@@ -87,6 +92,7 @@ func TestArrayOfRuntimeObject(t *testing.T) {
 		&runtimetesting.EmbeddedTest{ID: "foo"},
 		&runtimetesting.EmbeddedTest{ID: "bar"},
 		// TODO: until YAML is removed, this JSON must be in ascending key order to ensure consistent roundtrip serialization
+		// 中文说明：在 YAML 移除之前，这段 JSON 的键必须按升序排列，才能保证序列化往返一致。
 		&runtime.Unknown{
 			Raw:         []byte(`{"apiVersion":"unknown.group/unknown","foo":"bar","kind":"OtherTest"}`),
 			ContentType: runtime.ContentTypeJSON,
@@ -136,13 +142,16 @@ func TestArrayOfRuntimeObject(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// we want DecodeList to set type meta if possible, even on runtime.Unknown objects
+	// DecodeList 应尽可能为 runtime.Unknown 对象补全 TypeMeta。
 	internal.Items[2].(*runtime.Unknown).TypeMeta = runtime.TypeMeta{Kind: "OtherTest", APIVersion: "unknown.group/unknown"}
 	if e, a := internal.Items, list; !reflect.DeepEqual(e, a) {
 		t.Errorf("mismatched decoded: %s", diff.ObjectGoPrintSideBySide(e, a))
 	}
 }
 
+// TestNestedObject 验证嵌套 runtime.Object 的编码/解码行为：内部对象先以
+// Unknown 形式保留原始字节，需显式再解码；同时检查外部类型的 JSON 反序列化
+// 保留原始字节，而内部类型无法直接通过 JSON 还原嵌套对象。
 func TestNestedObject(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "test.group", Version: "v1test"}
@@ -175,7 +184,7 @@ func TestNestedObject(t *testing.T) {
 		t.Fatalf("Unexpected decode error %v", err)
 	}
 
-	// for later tests
+	// 为后续比较做准备：把编码前的对象也指向内部对象。
 	outer.Object = inner
 
 	if e, a := outer, decoded; reflect.DeepEqual(e, a) {
@@ -191,8 +200,7 @@ func TestNestedObject(t *testing.T) {
 		t.Errorf("Expected equal %#v %#v", e, a)
 	}
 
-	// test JSON decoding of the external object, which should preserve
-	// raw bytes
+	// 测试外部类型的 JSON 解码：应保留原始字节。
 	var externalViaJSON runtimetesting.EmbeddedTestExternal
 	err = json.Unmarshal(wire, &externalViaJSON)
 	if err != nil {
@@ -205,10 +213,9 @@ func TestNestedObject(t *testing.T) {
 		t.Errorf("Expected deserialization of empty nested objects into empty bytes, got %#v", externalViaJSON)
 	}
 
-	// test JSON decoding, too, since Decode uses yaml unmarshalling.
-	// Generic Unmarshalling of JSON cannot load the nested objects because there is
-	// no default schema set.  Consumers wishing to get direct JSON decoding must use
-	// the external representation
+	// 同时测试 JSON 解码，因为 Decode 使用 yaml 反序列化。
+	// JSON 的通用反序列化无法加载嵌套对象，因为没有设置默认 schema。
+	// 需要直接 JSON 解码的使用方必须使用外部表示。
 	var decodedViaJSON runtimetesting.EmbeddedTest
 	err = json.Unmarshal(wire, &decodedViaJSON)
 	if err == nil {
@@ -222,7 +229,8 @@ func TestNestedObject(t *testing.T) {
 	}
 }
 
-// TestDeepCopyOfRuntimeObject checks to make sure that runtime.Objects's can be passed through DeepCopy with fidelity
+// TestDeepCopyOfRuntimeObject 检查 runtime.Object 经过 DeepCopy 后仍能保真：
+// 深拷贝与原对象深度相等，且编码结果一致。
 func TestDeepCopyOfRuntimeObject(t *testing.T) {
 	internalGV := schema.GroupVersion{Group: "test.group", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "test.group", Version: "v1test"}

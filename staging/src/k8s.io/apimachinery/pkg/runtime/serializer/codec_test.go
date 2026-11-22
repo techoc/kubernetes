@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package serializer 测试 CodecFactory 的序列化、版本转换与严格解码行为。
+//
+// 测试覆盖自定义 MetaFactory、多 kind 注册、Strict 模式与 DirectCodec，
+// 是 serializer 子包共同依赖的行为基线。
 package serializer
 
 import (
@@ -41,6 +45,8 @@ import (
 
 var fuzzIters = flag.Int("fuzz-iters", 50, "How many fuzzing iterations to do.")
 
+// testMetaFactory 用非标准的 JSON 键（myVersionKey/myKindKey）读取 GVK，
+// 验证 MetaFactory 可插拔、不依赖固定的 TypeMeta 字段名。
 type testMetaFactory struct{}
 
 func (testMetaFactory) Interpret(data []byte) (*schema.GroupVersionKind, error) {
@@ -64,6 +70,8 @@ func (testMetaFactory) Interpret(data []byte) (*schema.GroupVersionKind, error) 
 var TestObjectFuzzer = randfill.New().NilChance(.5).NumElements(1, 100).Funcs(
 	func(j *runtimetesting.MyWeirdCustomEmbeddedVersionKindField, c randfill.Continue) {
 		c.FillNoCustom(j)
+		// 内嵌的 APIVersion/ObjectKind 在往返中由 codec 重写，fuzz 时清空
+		// 以免干扰比较。
 		j.APIVersion = ""
 		j.ObjectKind = ""
 	},
@@ -96,6 +104,8 @@ func GetTestScheme() (*runtime.Scheme, runtime.Codec) {
 	return s, codec
 }
 
+// semantic 在比较时忽略内嵌的 APIVersion/ObjectKind，因为 codec 会在编码
+// 时按目标版本重写它们。
 var semantic = conversion.EqualitiesOrDie(
 	func(a, b runtimetesting.MyWeirdCustomEmbeddedVersionKindField) bool {
 		a.APIVersion, a.ObjectKind = "", ""
@@ -104,6 +114,8 @@ var semantic = conversion.EqualitiesOrDie(
 	},
 )
 
+// runTest fuzz 填充 source，验证 Encode -> Decode 与 Encode -> DecodeInto
+// 两条路径都还原出语义相等的对象。
 func runTest(t *testing.T, source interface{}) {
 	name := reflect.TypeOf(source).Elem().Name()
 	TestObjectFuzzer.Fill(source)
@@ -134,6 +146,7 @@ func runTest(t *testing.T, source interface{}) {
 	}
 }
 
+// TestTypes 对每种测试类型重复 fuzz 往返，覆盖随机字段组合。
 func TestTypes(t *testing.T) {
 	table := []interface{}{
 		&runtimetesting.TestType1{},
@@ -147,6 +160,9 @@ func TestTypes(t *testing.T) {
 	}
 }
 
+// TestVersionedEncoding 验证 EncoderForVersion 的版本转换：
+// 存在的版本正常编码；不存在的版本报错；InternalGroupVersioner 直接写内部
+// 表示（无 TypeMeta）。
 func TestVersionedEncoding(t *testing.T) {
 	s, _ := GetTestScheme()
 	cf := newCodecFactory(s, newSerializersForScheme(s, testMetaFactory{}, CodecFactoryOptions{Pretty: true, Strict: true}))
@@ -165,6 +181,7 @@ func TestVersionedEncoding(t *testing.T) {
 	codec = cf.EncoderForVersion(encoder, schema.GroupVersion{Version: "v3"})
 	_, err = runtime.Encode(codec, &runtimetesting.TestType1{})
 	if err == nil {
+		// v3 未注册，编码必须失败而不是静默降级。
 		t.Fatal(err)
 	}
 
@@ -179,6 +196,8 @@ func TestVersionedEncoding(t *testing.T) {
 	}
 }
 
+// TestMultipleNames 验证同一内部类型注册了多个外部 kind 时，解码后重新编码
+// 使用首选 kind（TestType1）。
 func TestMultipleNames(t *testing.T) {
 	_, codec := GetTestScheme()
 
@@ -200,6 +219,7 @@ func TestMultipleNames(t *testing.T) {
 	}
 }
 
+// TestStrictOption 验证 Strict 模式会把重复键当作错误，而非严格模式会接受。
 func TestStrictOption(t *testing.T) {
 	s, _ := GetTestScheme()
 	duplicateKeys := `{"myKindKey":"TestType3","myVersionKey":"v1","myVersionKey":"v1","A":"value"}`
@@ -217,6 +237,8 @@ func TestStrictOption(t *testing.T) {
 	}
 }
 
+// TestConvertTypesWhenDefaultNamesMatch 验证内部/外部类型同名时仍按
+// 注册顺序选择首选类型并完成转换。
 func TestConvertTypesWhenDefaultNamesMatch(t *testing.T) {
 	internalGV := schema.GroupVersion{Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Version: "v1"}
@@ -263,6 +285,7 @@ func TestConvertTypesWhenDefaultNamesMatch(t *testing.T) {
 	}
 }
 
+// TestEncode_Ptr 验证编码指针对象后解码得到同类型的指针。
 func TestEncode_Ptr(t *testing.T) {
 	_, codec := GetTestScheme()
 	tt := &runtimetesting.TestType1{A: "I am a pointer object"}
@@ -279,6 +302,8 @@ func TestEncode_Ptr(t *testing.T) {
 	}
 }
 
+// TestBadJSONRejection 验证缺失/未知 kind、缺失/未知 version、kind 不匹配
+// 等坏输入都被拒绝，同时合法的空数据/默认 GVK 组合仍被接受。
 func TestBadJSONRejection(t *testing.T) {
 	log.SetOutput(os.Stderr)
 	_, codec := GetTestScheme()
@@ -335,6 +360,8 @@ func GetDirectCodecTestScheme() *runtime.Scheme {
 	return s
 }
 
+// TestDirectCodec 验证 WithoutConversion 的编解码器直接按外部类型读写，
+// 即使指定了不存在的 group/version 也不做转换。
 func TestDirectCodec(t *testing.T) {
 	s := GetDirectCodecTestScheme()
 	cf := newCodecFactory(s, newSerializersForScheme(s, testMetaFactory{}, CodecFactoryOptions{Pretty: true, Strict: true}))

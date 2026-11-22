@@ -24,6 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// skipNonAppliedManager 是兼容性垫片：历史对象没有 managed fields，
+// 直接接管会把这些字段全部判给第一个写请求者，造成冲突。
+// 因此只在对象首次被 apply 之后才开始跟踪。
 type skipNonAppliedManager struct {
 	fieldManager           Manager
 	objectCreater          runtime.ObjectCreater
@@ -40,6 +43,8 @@ func NewSkipNonAppliedManager(fieldManager Manager, objectCreater runtime.Object
 
 // NewProbabilisticSkipNonAppliedManager creates a new wrapped FieldManager that starts tracking managers after the first apply,
 // or starts tracking on create with p probability.
+//
+// 概率参数用于灰度：对新建对象以 p 的概率提前开始跟踪，便于逐步铺开而不必等下一次 apply。
 func NewProbabilisticSkipNonAppliedManager(fieldManager Manager, objectCreater runtime.ObjectCreater, p float32) Manager {
 	return &skipNonAppliedManager{
 		fieldManager:           fieldManager,
@@ -50,6 +55,11 @@ func NewProbabilisticSkipNonAppliedManager(fieldManager Manager, objectCreater r
 }
 
 // Update implements Manager.
+//
+// 三种情况：
+//   - 已有 managed fields：正常委托；
+//   - 无 managed fields 且是 create（UID 为空）：按概率决定是否跟踪；
+//   - 无 managed fields 且是 update：确定跳过，因为无法追溯历史归属。
 func (f *skipNonAppliedManager) Update(liveObj, newObj runtime.Object, managed Managed, manager string) (runtime.Object, Managed, error) {
 	accessor, err := meta.Accessor(liveObj)
 	if err != nil {
@@ -73,6 +83,9 @@ func (f *skipNonAppliedManager) Update(liveObj, newObj runtime.Object, managed M
 }
 
 // Apply implements Manager.
+//
+// 首次 apply 时，先以 "before-first-apply" 的名义把现存字段登记给一个虚拟 manager，
+// 再从空对象出发执行真正的 apply，从而只把本次 apply 显式设置的字段算给用户。
 func (f *skipNonAppliedManager) Apply(liveObj, appliedObj runtime.Object, managed Managed, fieldManager string, force bool) (runtime.Object, Managed, error) {
 	if len(managed.Fields()) == 0 {
 		gvk := appliedObj.GetObjectKind().GroupVersionKind()
@@ -80,6 +93,7 @@ func (f *skipNonAppliedManager) Apply(liveObj, appliedObj runtime.Object, manage
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create empty object of type %v: %v", gvk, err)
 		}
+		// unstructured 对象的 GVK 需要在创建后显式设置，否则后续类型转换会失败。
 		if unstructured, isUnstructured := emptyObj.(runtime.Unstructured); isUnstructured {
 			unstructured.GetObjectKind().SetGroupVersionKind(gvk)
 		}

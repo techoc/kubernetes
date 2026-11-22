@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package fuzzer 为 testapigroup 提供 randfill 填充函数。
+//
+// testapigroup 是 apimachinery 内部的测试 API 组，不对外发布；这里的 fuzz
+// 函数只保证生成的值能通过序列化与往返测试。
 package fuzzer
 
 import (
@@ -31,11 +35,16 @@ import (
 
 // overrideMetaFuncs override some generic fuzzer funcs from k8s.io/apimachinery in order to have more realistic
 // values in a Kubernetes context.
+//
+// 覆盖 apimachinery 的通用 fuzz 函数，让 runtime.Object / RawExtension 的取值
+// 更接近真实 API 场景（而不是随机结构）。
 func overrideMetaFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(j *runtime.Object, c randfill.Continue) {
 			// TODO: uncomment when round trip starts from a versioned object
 			if true { // c.Bool() {
+				// 始终生成 runtime.Unknown：其 Raw 内容在往返中保持不变，
+				// 避免随机类型引入无法比较的字段。
 				*j = &runtime.Unknown{
 					// We do not set TypeMeta here because it is not carried through a round trip
 					Raw:         []byte(`{"apiVersion":"unknown.group/unknown","kind":"Something","someKey":"someValue"}`),
@@ -55,6 +64,7 @@ func overrideMetaFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 			c.Fill(obj)
 
 			// Convert the object to raw bytes
+			// 用与测试相同的 codec 编码，保证 RawExtension 内容可被解码回同一类型。
 			bytes, err := runtime.Encode(apitesting.TestCodec(codecs, v1.SchemeGroupVersion), obj)
 			if err != nil {
 				panic(fmt.Sprintf("Failed to encode object: %v", err))
@@ -66,22 +76,27 @@ func overrideMetaFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	}
 }
 
+// testapigroupFuncs 为 Carp 的字段提供合法取值（默认值、枚举集合），
+// 避免 fuzz 出 API 校验会拒绝的字符串。
 func testapigroupFuncs(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(s *testapigroup.CarpSpec, c randfill.Continue) {
 			c.FillNoCustom(s)
 			// has a default value
+			// TerminationGracePeriodSeconds 有默认值 30，随机一半概率保留默认。
 			ttl := int64(30)
 			if c.Bool() {
 				ttl = int64(c.Uint32())
 			}
 			s.TerminationGracePeriodSeconds = &ttl
 
+			// 调度器名称在真实对象中总会被 default 逻辑填充，这里模拟该行为。
 			if s.SchedulerName == "" {
 				s.SchedulerName = "default-scheduler"
 			}
 		},
 		func(j *testapigroup.CarpPhase, c randfill.Continue) {
+			// 只从合法枚举中取值，避免 fuzz 出无法序列化的状态。
 			statuses := []testapigroup.CarpPhase{"Pending", "Running", "Succeeded", "Failed", "Unknown"}
 			*j = statuses[c.Rand.Intn(len(statuses))]
 		},

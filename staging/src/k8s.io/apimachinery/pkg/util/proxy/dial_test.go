@@ -33,7 +33,11 @@ import (
 	utilnet "k8s.io/apimachinery/pkg/util/net"
 )
 
+// TestDialURL 覆盖 DialURL 在各类 TLS 配置下的行为：
+// 证书校验、ServerName 匹配、自定义 Dialer，以及 ALPN 协商结果。
+// 每个用例同时断言 DialURL 不会修改 transport 中的 TLSConfig（它必须只操作副本）。
 func TestDialURL(t *testing.T) {
+	// roots 用于校验 httptest 服务器自签发的 localhost 证书。
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(localhostCert) {
 		t.Fatal("error setting up localhostCert pool")
@@ -55,6 +59,7 @@ func TestDialURL(t *testing.T) {
 			TLSConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 		"secure, no roots": {
+			// 没有根证书时必然校验失败，错误文案在不同 Go 版本略有差异。
 			TLSConfig:   &tls.Config{InsecureSkipVerify: false},
 			ExpectError: "unknown authority|not trusted",
 		},
@@ -66,9 +71,11 @@ func TestDialURL(t *testing.T) {
 			ExpectError: "not bogus.com",
 		},
 		"secure with matched server": {
+			// 证书 SAN 中包含 example.com。
 			TLSConfig: &tls.Config{InsecureSkipVerify: false, RootCAs: roots, ServerName: "example.com"},
 		},
 
+		// 以下为相同矩阵加上自定义 Dialer 的版本，验证 DialURL 会保留调用方的拨号逻辑。
 		"insecure, custom dial": {
 			TLSConfig: &tls.Config{InsecureSkipVerify: true},
 			Dial:      d.DialContext,
@@ -92,16 +99,19 @@ func TestDialURL(t *testing.T) {
 			Dial:      d.DialContext,
 		},
 		"ensure we use http2 if specified": {
+			// NextProtos 只列 http2，协商结果必须是 h2。
 			TLSConfig:   &tls.Config{InsecureSkipVerify: false, RootCAs: roots, ServerName: "example.com", NextProtos: []string{"http2"}},
 			Dial:        d.DialContext,
 			ExpectProto: "http2",
 		},
 		"ensure we use http/1.1 if unspecified": {
+			// 未指定 ALPN 时默认落到 http/1.1。
 			TLSConfig:   &tls.Config{InsecureSkipVerify: false, RootCAs: roots, ServerName: "example.com"},
 			Dial:        d.DialContext,
 			ExpectProto: "http/1.1",
 		},
 		"ensure we use http/1.1 if available": {
+			// 偏好顺序以客户端为准，这里把 http/1.1 排在前面。
 			TLSConfig:   &tls.Config{InsecureSkipVerify: false, RootCAs: roots, ServerName: "example.com", NextProtos: []string{"http2", "http/1.1"}},
 			Dial:        d.DialContext,
 			ExpectProto: "http/1.1",
@@ -109,6 +119,7 @@ func TestDialURL(t *testing.T) {
 	}
 
 	for k, tc := range testcases {
+		// 用立即执行的闭包隔离 defer，避免循环中累积服务器连接。
 		func() {
 			ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {}))
 			defer ts.Close()
@@ -128,6 +139,8 @@ func TestDialURL(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// 通过 %p 比较函数指针：utilnet.DialerFor 必须返回 transport 中原样的 dialer
+			// （未设置时返回 nil，与 tc.Dial 的 nil 相等）。
 			if fmt.Sprintf("%p", extractedDial) != fmt.Sprintf("%p", tc.Dial) {
 				t.Fatalf("%s: Unexpected dial", k)
 			}
@@ -140,6 +153,7 @@ func TestDialURL(t *testing.T) {
 				t.Fatalf("%s: Expected tlsConfig", k)
 			}
 
+			// httptest 绑定在 127.0.0.1，用同一地址重建 URL 以确保 SNI/证书匹配。
 			u, _ := url.Parse(ts.URL)
 			_, p, _ := net.SplitHostPort(u.Host)
 			u.Host = net.JoinHostPort("127.0.0.1", p)

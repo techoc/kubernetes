@@ -25,14 +25,15 @@ import (
 	"k8s.io/utils/dump"
 )
 
-// ObjectGoPrintSideBySide prints a and b as textual dumps side by side,
-// enabling easy visual scanning for mismatches.
+// ObjectGoPrintSideBySide 把 a 和 b 的文本转储左右并排打印，便于肉眼快速扫描差异。
+// 保留此函数是为了兼容仍在调用它的旧代码；新代码应使用 go-cmp。
 func ObjectGoPrintSideBySide(a, b interface{}) string {
 	sA := dump.Pretty(a)
 	sB := dump.Pretty(b)
 
 	linesA := strings.Split(sA, "\n")
 	linesB := strings.Split(sB, "\n")
+	// 先求出两侧最长行的宽度，作为 tabwriter 的第一列最小宽度，保证两列对齐。
 	width := 0
 	for _, s := range linesA {
 		l := len(s)
@@ -52,6 +53,7 @@ func ObjectGoPrintSideBySide(a, b interface{}) string {
 	if len(linesB) > max {
 		max = len(linesB)
 	}
+	// 按行并行输出；较短一侧不足的部分留空，保证行号对应关系不乱。
 	for i := 0; i < max; i++ {
 		var a, b string
 		if i < len(linesA) {

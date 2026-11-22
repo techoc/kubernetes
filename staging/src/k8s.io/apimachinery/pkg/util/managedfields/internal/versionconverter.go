@@ -28,6 +28,10 @@ import (
 
 // versionConverter is an implementation of
 // sigs.k8s.io/structured-merge-diff/merge.Converter
+//
+// 中文说明：merge 引擎只认 typed value，而版本转换只能通过运行时对象做，
+// 因此这里“typed -> 对象 -> hub 版本 -> 目标版本 -> typed”往返一次。
+// hubGetter 区分内置类型（同 group 的 hub 版本）与 CRD（固定 hub）。
 type versionConverter struct {
 	typeConverter   TypeConverter
 	objectConvertor runtime.ObjectConvertor
@@ -41,6 +45,7 @@ func newVersionConverter(t TypeConverter, o runtime.ObjectConvertor, h schema.Gr
 	return &versionConverter{
 		typeConverter:   t,
 		objectConvertor: o,
+		// 内置类型：保留原 group，只把版本换成 hub 版本。
 		hubGetter: func(from schema.GroupVersion) schema.GroupVersion {
 			return schema.GroupVersion{
 				Group:   from.Group,
@@ -55,6 +60,7 @@ func newCRDVersionConverter(t TypeConverter, o runtime.ObjectConvertor, h schema
 	return &versionConverter{
 		typeConverter:   t,
 		objectConvertor: o,
+		// CRD 的 hub 版本固定为给定值（可能跨 group）。
 		hubGetter: func(from schema.GroupVersion) schema.GroupVersion {
 			return h
 		},
@@ -81,6 +87,8 @@ func (v *versionConverter) Convert(object *typed.TypedValue, version fieldpath.A
 	fromVersion := objectToConvert.GetObjectKind().GroupVersionKind().GroupVersion()
 
 	// Convert to internal
+	// 中文说明：先转到 hub 版本再转到目标版本，避免任意两版本之间都注册
+	// 转换函数（平方级组合）。
 	internalObject, err := v.objectConvertor.ConvertToVersion(objectToConvert, v.hubGetter(fromVersion))
 	if err != nil {
 		return object, err
@@ -96,11 +104,13 @@ func (v *versionConverter) Convert(object *typed.TypedValue, version fieldpath.A
 	return v.typeConverter.ObjectToTyped(convertedObject)
 }
 
-// IsMissingVersionError
+// IsMissingVersionError 判断错误是否表示“该版本/类型不可用”，从而让 merge
+// 引擎决定是否可以跳过转换而不是直接失败。
 func (v *versionConverter) IsMissingVersionError(err error) bool {
 	return runtime.IsNotRegisteredError(err) || isNoCorrespondingTypeError(err)
 }
 
+// noCorrespondingTypeErr 表示 TypeConverter 的 schema 索引中没有该 GVK。
 type noCorrespondingTypeErr struct {
 	gvk schema.GroupVersionKind
 }
@@ -113,6 +123,8 @@ func (k *noCorrespondingTypeErr) Error() string {
 	return fmt.Sprintf("no corresponding type for %v", k.gvk)
 }
 
+// isNoCorrespondingTypeError 用类型断言而非 errors.Is 判断；该错误不支持
+// 包装链匹配，与调用点的使用方式一致。
 func isNoCorrespondingTypeError(err error) bool {
 	if err == nil {
 		return false

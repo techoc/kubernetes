@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+// TestSet 验证泛型 Set 的基本操作：Insert/Has/Delete/HasAll/IsSuperset 的语义。
 func TestSet(t *testing.T) {
 	s := sets.Set[string]{}
 	s2 := sets.Set[string]{}
@@ -61,6 +62,7 @@ func TestSet(t *testing.T) {
 	}
 }
 
+// TestSetDeleteMultiples 验证一次 Delete 多个元素时只移除给定元素。
 func TestSetDeleteMultiples(t *testing.T) {
 	s := sets.Set[string]{}
 	s.Insert("a", "b", "c")
@@ -84,6 +86,7 @@ func TestSetDeleteMultiples(t *testing.T) {
 
 }
 
+// TestSetClear 验证 Clear 清空集合。
 func TestSetClear(t *testing.T) {
 	s := sets.Set[string]{}
 	s.Insert("a", "b", "c")
@@ -97,6 +100,8 @@ func TestSetClear(t *testing.T) {
 	}
 }
 
+// TestSetClearWithSharedReference 验证 Clear 作用于共享的底层 map：
+// 对一个引用的清空会同时影响另一个引用（Set 是 map 的别名）。
 func TestSetClearWithSharedReference(t *testing.T) {
 	s := sets.Set[string]{}
 	s.Insert("a", "b", "c")
@@ -114,6 +119,8 @@ func TestSetClearWithSharedReference(t *testing.T) {
 	}
 }
 
+// TestSetClearInSeparateFunction 验证在另一个函数中 Clear 后继续 Insert 的行为，
+// 确保清空与后续写入都作用于同一个共享 map。
 func TestSetClearInSeparateFunction(t *testing.T) {
 	s := sets.Set[string]{}
 	s.Insert("a", "b", "c")
@@ -130,11 +137,13 @@ func TestSetClearInSeparateFunction(t *testing.T) {
 	}
 }
 
+// clearSetAndAdd 清空集合并插入一个新元素，用于验证跨函数调用时共享引用的语义。
 func clearSetAndAdd[T comparable](s sets.Set[T], a T) {
 	s.Clear()
 	s.Insert(a)
 }
 
+// TestNewSet 验证 sets.New 用给定元素构造集合。
 func TestNewSet(t *testing.T) {
 	s := sets.New("a", "b", "c")
 	if len(s) != 3 {
@@ -145,6 +154,7 @@ func TestNewSet(t *testing.T) {
 	}
 }
 
+// TestKeySet 验证 KeySet 取 map 的全部键构造集合。
 func TestKeySet(t *testing.T) {
 	m := map[string]int{"a": 1, "b": 2, "c": 3}
 	ss := sets.KeySet[string](m)
@@ -153,6 +163,7 @@ func TestKeySet(t *testing.T) {
 	}
 }
 
+// TestNewEmptySet 验证 New 不带参数时创建空集合，且之后可正常插入。
 func TestNewEmptySet(t *testing.T) {
 	s := sets.New[string]()
 	if len(s) != 0 {
@@ -167,6 +178,7 @@ func TestNewEmptySet(t *testing.T) {
 	}
 }
 
+// TestSortedList 验证 List 返回按字典序排序的结果。
 func TestSortedList(t *testing.T) {
 	s := sets.New("z", "y", "x", "a")
 	if !reflect.DeepEqual(sets.List(s), []string{"a", "x", "y", "z"}) {
@@ -174,6 +186,7 @@ func TestSortedList(t *testing.T) {
 	}
 }
 
+// TestSetDifference 验证双向差集：a-b 与 b-a 各自只保留对方没有的元素。
 func TestSetDifference(t *testing.T) {
 	a := sets.New("1", "2", "3")
 	b := sets.New("1", "2", "4", "5")
@@ -193,6 +206,7 @@ func TestSetDifference(t *testing.T) {
 	}
 }
 
+// TestSetSymmetricDifference 验证对称差与运算顺序无关。
 func TestSetSymmetricDifference(t *testing.T) {
 	a := sets.New("1", "2", "3")
 	b := sets.New("1", "2", "4", "5")
@@ -206,6 +220,7 @@ func TestSetSymmetricDifference(t *testing.T) {
 	}
 }
 
+// TestSetHasAny 验证 HasAny 在至少一个元素存在时返回 true。
 func TestSetHasAny(t *testing.T) {
 	a := sets.New("1", "2", "3")
 
@@ -218,6 +233,8 @@ func TestSetHasAny(t *testing.T) {
 	}
 }
 
+// TestSetEquals 验证集合相等与顺序无关、重复元素被忽略，并覆盖空集合与空字符串等边界，
+// 以及插入/删除后相等性的变化。
 func TestSetEquals(t *testing.T) {
 	// Simple case (order doesn't matter)
 	a := sets.New("1", "2")
@@ -272,6 +289,7 @@ func TestSetEquals(t *testing.T) {
 	}
 }
 
+// TestUnion 验证并集，包括与空集合运算及两个空集合运算。
 func TestUnion(t *testing.T) {
 	tests := []struct {
 		s1       sets.Set[string]
@@ -312,6 +330,7 @@ func TestUnion(t *testing.T) {
 	}
 }
 
+// TestIntersection 验证交集，包括相同集合、与空集合运算及两个空集合运算。
 func TestIntersection(t *testing.T) {
 	tests := []struct {
 		s1       sets.Set[string]
@@ -357,6 +376,7 @@ func TestIntersection(t *testing.T) {
 	}
 }
 
+// BenchmarkListSmall 衡量对 10 个元素的小集合调用 List 的开销。
 func BenchmarkListSmall(b *testing.B) {
 	s := sets.New("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
 	for b.Loop() {
@@ -364,6 +384,7 @@ func BenchmarkListSmall(b *testing.B) {
 	}
 }
 
+// BenchmarkListLarge 衡量对约 1.2 万个元素的大集合调用 List（排序）的开销。
 func BenchmarkListLarge(b *testing.B) {
 	s := make(sets.Set[int], 12345)
 	for i := range 12345 {

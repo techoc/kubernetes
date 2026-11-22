@@ -21,4 +21,7 @@ limitations under the License.
 
 // +groupName=meta.k8s.io
 
+// Package v1beta1 提供 Kubernetes 元数据的 v1beta1 版本类型，
+// 用于兼容仍依赖该版本 API 的客户端。
+// 上方生成器指令声明了 deepcopy、OpenAPI 与默认值的生成配置。
 package v1beta1

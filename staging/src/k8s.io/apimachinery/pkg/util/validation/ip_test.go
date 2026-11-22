@@ -24,6 +24,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestIsValidIP 对同一批输入分别跑三种校验：
+//   - IsValidIP：新字段使用的严格规则（规范形式、禁止前导 0 等）；
+//   - IsValidIPForLegacyField(..., false)：历史宽松规则，用于已有字段；
+//   - IsValidIPForLegacyField(..., true)：在宽松规则上叠加严格检查，
+//     但可通过 validOldIPs 放行已存在的旧值（ratcheting）。
+//
+// 这样能同时锁定新字段的收紧行为与老对象的兼容行为。
 func TestIsValidIP(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -204,6 +211,8 @@ func TestIsValidIP(t *testing.T) {
 		},
 	}
 
+	// 收集所有严格模式下非法的输入，稍后作为 validOldIPs 传入，验证
+	// ratcheting 会无条件放行它们。
 	var badIPs []string
 	for _, tc := range testCases {
 		if tc.legacyStrictErr != "" {
@@ -252,6 +261,7 @@ func TestIsValidIP(t *testing.T) {
 				}
 			}
 
+			// validOldIPs 命中时，即使严格规则判定非法也应放行。
 			errs = IsValidIPForLegacyField(field.NewPath(""), tc.in, true, badIPs)
 			if len(errs) != 0 {
 				t.Errorf("expected %q to be accepted when using validOldIPs, but got: %v", tc.in, errs)
@@ -260,6 +270,8 @@ func TestIsValidIP(t *testing.T) {
 	}
 }
 
+// TestGetWarningsForIP 覆盖“非标准但可接受”的地址：校验通过，同时给出
+// 规范化建议的 warning，便于客户端逐步修正。
 func TestGetWarningsForIP(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -313,6 +325,9 @@ func TestGetWarningsForIP(t *testing.T) {
 	}
 }
 
+// TestIsValidCIDR 与 TestIsValidIP 对应，覆盖 CIDR 的三种校验模式。
+// 除地址本身外还检查前缀长度：超出前缀的位、前导 0、符号等都属于
+// 非规范或非法形式。
 func TestIsValidCIDR(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -471,6 +486,7 @@ func TestIsValidCIDR(t *testing.T) {
 		},
 	}
 
+	// 与 IP 测试相同：收集严格模式下非法的值供 ratcheting 使用。
 	var badCIDRs []string
 	for _, tc := range testCases {
 		if tc.legacyStrictErr != "" {
@@ -519,6 +535,7 @@ func TestIsValidCIDR(t *testing.T) {
 				}
 			}
 
+			// 命中 validOldCIDRs 时同样放行。
 			errs = IsValidCIDRForLegacyField(field.NewPath(""), tc.in, true, badCIDRs)
 			if len(errs) != 0 {
 				t.Errorf("expected %q to be accepted when using validOldCIDRs, but got: %v", tc.in, errs)
@@ -527,6 +544,8 @@ func TestIsValidCIDR(t *testing.T) {
 	}
 }
 
+// TestGetWarningsForCIDR 验证 CIDR 的 warning 文案，包括“前缀之外仍有
+// 置位”这种语义歧义（可能是网段也可能是接口地址）的提示。
 func TestGetWarningsForCIDR(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -605,6 +624,9 @@ func TestGetWarningsForCIDR(t *testing.T) {
 	}
 }
 
+// TestIsValidInterfaceAddress 校验“接口地址”形式：必须是 CIDR，且地址
+// 部分允许前缀之外有置位（与 IsValidCIDR 的网段语义不同），但仍要求
+// 规范形式。
 func TestIsValidInterfaceAddress(t *testing.T) {
 	for _, tc := range []struct {
 		name string

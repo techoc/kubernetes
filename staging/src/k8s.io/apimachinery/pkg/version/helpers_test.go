@@ -20,6 +20,8 @@ import (
 	"testing"
 )
 
+// TestCompareKubeAwareVersionStrings 覆盖比较规则的各个分支：主版本号、alpha/beta/GA
+// 成熟度、次版本号的数值（而非字典序）比较，以及非 kube 风格版本串的兜底排序。
 func TestCompareKubeAwareVersionStrings(t *testing.T) {
 	tests := []*struct {
 		v1, v2          string
@@ -27,17 +29,17 @@ func TestCompareKubeAwareVersionStrings(t *testing.T) {
 	}{
 		{"v1", "v2", false},
 		{"v2", "v1", true},
-		{"v10", "v2", true},
-		{"v1", "v2alpha1", true},
-		{"v1", "v2beta1", true},
+		{"v10", "v2", true},      // 主版本号按数值比较
+		{"v1", "v2alpha1", true}, // GA 优先于 alpha
+		{"v1", "v2beta1", true},  // GA 优先于 beta
 		{"v1alpha2", "v1alpha1", true},
-		{"v1beta1", "v2alpha3", true},
-		{"v1alpha10", "v1alpha2", true},
+		{"v1beta1", "v2alpha3", true},   // beta 整体优先于 alpha
+		{"v1alpha10", "v1alpha2", true}, // 次版本号按数值比较
 		{"v1beta10", "v1beta2", true},
-		{"foo", "v1beta2", false},
+		{"foo", "v1beta2", false}, // 不可识别版本排在可识别版本之后
 		{"bar", "foo", true},
-		{"version1", "version2", true},  // Non kube-like versions are sorted alphabetically
-		{"version1", "version10", true}, // Non kube-like versions are sorted alphabetically
+		{"version1", "version2", true},  // 非 kube 风格版本按字典序排序
+		{"version1", "version10", true}, // 非 kube 风格版本按字典序排序
 	}
 
 	for _, tc := range tests {
@@ -51,6 +53,8 @@ func TestCompareKubeAwareVersionStrings(t *testing.T) {
 	}
 }
 
+// Test_parseKubeVersion 覆盖版本解析的正例与反例：v1.1、v1alpha1.1 等非法格式必须被拒绝，
+// alpha/beta/GA 三类合法版本要正确拆出主/次版本号与成熟度。
 func Test_parseKubeVersion(t *testing.T) {
 	tests := []struct {
 		name             string

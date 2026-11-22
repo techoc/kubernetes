@@ -24,9 +24,13 @@ import (
 // EnforcePtr ensures that obj is a pointer of some sort. Returns a reflect.Value
 // of the dereferenced pointer, ensuring that it is settable/addressable.
 // Returns an error if this is not possible.
+//
+// 转换函数需要可写的目标，因此这里不仅要求是指针，还要求非 nil；
+// Elem() 得到的是可寻址值，可直接 Set。
 func EnforcePtr(obj interface{}) (reflect.Value, error) {
 	v := reflect.ValueOf(obj)
 	if v.Kind() != reflect.Pointer {
+		// 单独区分 nil interface，便于给出比 "%!v(<nil>)" 更有用的错误。
 		if v.Kind() == reflect.Invalid {
 			return reflect.Value{}, fmt.Errorf("expected pointer, but got invalid kind")
 		}

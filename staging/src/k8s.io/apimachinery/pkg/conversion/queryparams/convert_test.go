@@ -28,9 +28,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// namedString / namedBool 验证自定义字符串/布尔类型按底层类型处理。
 type namedString string
 type namedBool bool
 
+// bar 验证基本类型、omitempty、未打 tag 字段的行为；未打 tag 的字段应被忽略。
 type bar struct {
 	Float1   float32 `json:"float1"`
 	Float2   float64 `json:"float2"`
@@ -44,6 +46,7 @@ type bar struct {
 
 func (obj *bar) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
 
+// foo 验证嵌套结构体、切片、map、命名类型与自定义类型的组合。
 type foo struct {
 	Str       string            `json:"str"`
 	Integer   int               `json:"integer,omitempty"`
@@ -57,6 +60,7 @@ type foo struct {
 
 func (obj *foo) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
 
+// baz 验证指针字段：nil 且无 omitempty 时输出空串，nil 且有 omitempty 时省略。
 type baz struct {
 	Ptr  *int  `json:"ptr"`
 	Bptr *bool `json:"bptr,omitempty"`
@@ -66,6 +70,8 @@ func (obj *baz) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKin
 
 // childStructs tests some of the types we serialize to query params for log API calls
 // notably, the nested time struct
+//
+// 覆盖指针/非指针的 metav1.Time 以及自定义 marshaller 的 nil 处理。
 type childStructs struct {
 	Container      string       `json:"container,omitempty"`
 	Follow         bool         `json:"follow,omitempty"`
@@ -79,7 +85,9 @@ type childStructs struct {
 
 func (obj *childStructs) GetObjectKind() schema.ObjectKind { return schema.EmptyObjectKind }
 
+// validateResult 双向比较 actual/expected：实际结果不得多键、不得缺键、值必须一致。
 func validateResult(t *testing.T, input interface{}, actual, expected url.Values) {
+	// 复制一份 expected，避免在比较过程中修改调用方的数据。
 	local := url.Values{}
 	for k, v := range expected {
 		local[k] = v
@@ -99,6 +107,8 @@ func validateResult(t *testing.T, input interface{}, actual, expected url.Values
 	}
 }
 
+// TestConvert 覆盖 queryparams.Convert 的主要编码规则：omitempty、未打 tag
+// 字段忽略、内嵌结构体展开、命名类型、指针 nil 语义以及自定义 marshaller。
 func TestConvert(t *testing.T) {
 	sinceSeconds := int64(123)
 	tailLines := int64(0)
@@ -142,6 +152,7 @@ func TestConvert(t *testing.T) {
 		},
 		{
 			// Ignore untagged fields
+			// 未打 json tag 的字段不进入 query 参数。
 			input: &bar{
 				Float1:   23.5,
 				Float2:   100.7,

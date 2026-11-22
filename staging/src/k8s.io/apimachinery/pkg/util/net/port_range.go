@@ -22,20 +22,21 @@ import (
 	"strings"
 )
 
-// PortRange represents a range of TCP/UDP ports.  To represent a single port,
-// set Size to 1.
+// PortRange 表示一段 TCP/UDP 端口区间；表示单个端口时 Size 为 1。
+// Base 是起始端口，Size 是端口个数（而非结束端口），因此结束端口为 Base+Size-1。
 type PortRange struct {
 	Base int
 	Size int
 }
 
-// Contains tests whether a given port falls within the PortRange.
+// Contains 判断给定端口是否落在区间内。
+// 使用 (p-Base) < Size 而非 p <= Base+Size-1，可避免 Base+Size 溢出。
 func (pr *PortRange) Contains(p int) bool {
 	return (p >= pr.Base) && ((p - pr.Base) < pr.Size)
 }
 
-// String converts the PortRange to a string representation, which can be
-// parsed by PortRange.Set or ParsePortRange.
+// String 把 PortRange 转为 "min-max" 形式，可被 PortRange.Set 或 ParsePortRange 解析回去。
+// Size 为 0 时返回空串。
 func (pr PortRange) String() string {
 	if pr.Size == 0 {
 		return ""
@@ -43,10 +44,10 @@ func (pr PortRange) String() string {
 	return fmt.Sprintf("%d-%d", pr.Base, pr.Base+pr.Size-1)
 }
 
-// Set parses a string of the form "value", "min-max", or "min+offset", inclusive at both ends, and
-// sets the PortRange from it.  This is part of the flag.Value and pflag.Value
-// interfaces.
+// Set 解析 "value"、"min-max" 或 "min+offset" 形式（两端闭区间），并据此设置 PortRange。
+// 这是 flag.Value 与 pflag.Value 接口的一部分。
 func (pr *PortRange) Set(value string) error {
+	// 用位标志记录出现了哪种记法，便于在 switch 中集中报错。
 	const (
 		SinglePortNotation = 1 << iota
 		HyphenNotation
@@ -57,6 +58,7 @@ func (pr *PortRange) Set(value string) error {
 	hyphenIndex := strings.Index(value, "-")
 	plusIndex := strings.Index(value, "+")
 
+	// 空串表示清空区间，而不是解析失败——命令行中允许显式取消设置。
 	if value == "" {
 		pr.Base = 0
 		pr.Size = 0
@@ -96,6 +98,7 @@ func (pr *PortRange) Set(value string) error {
 			return err
 		}
 	case PlusNotation:
+		// "base+offset" 中的 offset 是相对偏移量，而非结束端口。
 		var offset int
 		low, err = strconv.Atoi(value[:plusIndex])
 		if err != nil {
@@ -107,6 +110,7 @@ func (pr *PortRange) Set(value string) error {
 		}
 		high = low + offset
 	default:
+		// 同时出现 '-' 和 '+' 等组合视为非法。
 		return fmt.Errorf("unable to parse port range: %s", value)
 	}
 
@@ -123,14 +127,12 @@ func (pr *PortRange) Set(value string) error {
 	return nil
 }
 
-// Type returns a descriptive string about this type.  This is part of the
-// pflag.Value interface.
+// Type 返回该类型的描述字符串，供 pflag 在帮助信息中展示。
 func (*PortRange) Type() string {
 	return "portRange"
 }
 
-// ParsePortRange parses a string of the form "min-max", inclusive at both
-// ends, and initializes a new PortRange from it.
+// ParsePortRange 解析 "min-max" 形式（两端闭区间）并构造新的 PortRange。
 func ParsePortRange(value string) (*PortRange, error) {
 	pr := &PortRange{}
 	err := pr.Set(value)
@@ -140,6 +142,8 @@ func ParsePortRange(value string) (*PortRange, error) {
 	return pr, nil
 }
 
+// ParsePortRangeOrDie 与 ParsePortRange 相同，但解析失败时 panic，
+// 仅适用于启动阶段由代码常量构造区间的场景。
 func ParsePortRangeOrDie(value string) *PortRange {
 	pr, err := ParsePortRange(value)
 	if err != nil {

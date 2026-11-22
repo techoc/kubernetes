@@ -20,18 +20,23 @@ import (
 	"testing"
 )
 
+// TestFmtRawDoc 验证 swagger 文档注释的规范化：
+// 去掉 TODO 行、空行转换为字面量 \n、保留缩进，并折叠为单行。
 func TestFmtRawDoc(t *testing.T) {
 	tests := []struct {
 		t, expected string
 	}{
+		// 注释中出现 "---" 或 TODO 时，其后的内容被截断/忽略。
 		{"aaa\n  --- asd\n TODO: tooooodo\n toooodoooooo\n", "aaa"},
 		{"aaa\nasd\n TODO: tooooodo\nbbbb\n --- toooodoooooo\n", "aaa asd bbbb"},
 		{" TODO: tooooodo\n", ""},
+		// 空行转为字面量 \n，以保留段落结构。
 		{"Par1\n\nPar2\n\n", "Par1\\n\\nPar2"},
 		{"", ""},
 		{" ", ""},
 		{" \n", ""},
 		{" \n\n ", ""},
+		// 缩进（制表符）需要保留。
 		{"Example:\n\tl1\n\t\tl2\n", "Example:\\n\\tl1\\n\\t\\tl2"},
 	}
 

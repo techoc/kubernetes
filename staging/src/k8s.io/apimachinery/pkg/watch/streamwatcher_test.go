@@ -27,6 +27,7 @@ import (
 	. "k8s.io/apimachinery/pkg/watch"
 )
 
+// fakeDecoder 是可注入事件的假解码器：从通道读取事件，通道关闭时返回 io.EOF。
 type fakeDecoder struct {
 	items chan Event
 	err   error
@@ -43,12 +44,14 @@ func (f fakeDecoder) Decode() (action EventType, object runtime.Object, err erro
 	return item.Type, item.Object, nil
 }
 
+// Close 关闭事件通道，便于让 Decode 返回 EOF 而不泄漏 goroutine。
 func (f fakeDecoder) Close() {
 	if f.items != nil {
 		close(f.items)
 	}
 }
 
+// fakeReporter 记录传入的错误，并返回空的 unstructured 对象作为错误上报载体。
 type fakeReporter struct {
 	err error
 }
@@ -58,6 +61,7 @@ func (f *fakeReporter) AsObject(err error) runtime.Object {
 	return runtime.Unstructured(nil)
 }
 
+// TestStreamWatcher 验证事件从解码器透传到结果通道，Stop 后结果通道被关闭。
 func TestStreamWatcher(t *testing.T) {
 	table := []Event{
 		{Type: Added, Object: testType("foo")},
@@ -85,6 +89,7 @@ func TestStreamWatcher(t *testing.T) {
 	}
 }
 
+// TestStreamWatcherError 验证解码错误被转换为 Error 事件发送一次，随后通道关闭。
 func TestStreamWatcherError(t *testing.T) {
 	fd := fakeDecoder{err: fmt.Errorf("test error")}
 	fr := &fakeReporter{}
@@ -109,6 +114,8 @@ func TestStreamWatcherError(t *testing.T) {
 	}
 }
 
+// TestStreamWatcherRace 验证解码器立即出错与 Stop 并发时，
+// 不会向已关闭的结果通道发送事件（避免 panic 或悬挂的 pending send）。
 func TestStreamWatcherRace(t *testing.T) {
 	fd := fakeDecoder{err: fmt.Errorf("test error")}
 	fr := &fakeReporter{}

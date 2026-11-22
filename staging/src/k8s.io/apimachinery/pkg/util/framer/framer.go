@@ -15,6 +15,9 @@ limitations under the License.
 */
 
 // Package framer implements simple frame decoding techniques for an io.ReadCloser
+//
+// 中文说明：提供两种分帧协议——4 字节大端长度前缀，以及依赖 JSON 对象
+// 边界的流式分帧，用于 watch 等连续对象流。
 package framer
 
 import (
@@ -23,6 +26,7 @@ import (
 	"io"
 )
 
+// lengthDelimitedFrameWriter 在每次 Write 前写入 4 字节长度前缀。
 type lengthDelimitedFrameWriter struct {
 	w io.Writer
 	h [4]byte
@@ -40,12 +44,15 @@ func (w *lengthDelimitedFrameWriter) Write(data []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	// 短写说明底层 writer 状态不可信，继续写 body 会产生错位数据。
 	if n != len(w.h) {
 		return 0, io.ErrShortWrite
 	}
 	return w.w.Write(data)
 }
 
+// lengthDelimitedFrameReader 按长度前缀读取一帧；remaining 记录当前帧尚未
+// 读出的字节数，跨 Read 调用保持状态。
 type lengthDelimitedFrameReader struct {
 	r         io.ReadCloser
 	remaining int
@@ -73,6 +80,7 @@ func NewLengthDelimitedFrameReader(r io.ReadCloser) io.ReadCloser {
 func (r *lengthDelimitedFrameReader) Read(data []byte) (int, error) {
 	if r.remaining <= 0 {
 		header := [4]byte{}
+		// 先读满 4 字节头部；ReadAtLeast 保证短读时返回错误。
 		n, err := io.ReadAtLeast(r.r, header[:4], 4)
 		if err != nil {
 			return 0, err
@@ -95,6 +103,7 @@ func (r *lengthDelimitedFrameReader) Read(data []byte) (int, error) {
 		return n, err
 	}
 	if r.remaining > 0 {
+		// 调用方缓冲区不够大：本帧未读完，下次调用继续。
 		return n, io.ErrShortBuffer
 	}
 	if n != expect {
@@ -108,6 +117,8 @@ func (r *lengthDelimitedFrameReader) Close() error {
 	return r.r.Close()
 }
 
+// jsonFrameReader 使用 json.Decoder 把连续 JSON 对象拆成独立帧；remaining
+// 保存上一次因缓冲区不足而未返回的尾部字节。
 type jsonFrameReader struct {
 	r         io.ReadCloser
 	decoder   *json.Decoder
@@ -164,6 +175,7 @@ func (r *jsonFrameReader) Read(data []byte) (int, error) {
 	if len(m) > len(data) {
 		// The bytes beyond len(data) were stored in data's underlying array, which we do
 		// not own after this function returns.
+		// 中文说明：这里必须复制，否则底层数组可能被调用方复用或改写。
 		r.remaining = append([]byte(nil), m[len(data):]...)
 		return len(data), io.ErrShortBuffer
 	}

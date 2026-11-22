@@ -26,87 +26,92 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// nonCacheableTestObject implements json.Marshaler and proto.Marshaler interfaces
-// for mocking purpose.
+// noncacheableTestObject 实现 json.Marshaler 与 proto.Marshaler 接口，
+// 用于测试目的。
 // +k8s:deepcopy-gen=false
 type noncacheableTestObject struct {
 	gvk schema.GroupVersionKind
 }
 
-// MarshalJSON implements json.Marshaler interface.
+// MarshalJSON 实现 json.Marshaler 接口。
 func (*noncacheableTestObject) MarshalJSON() ([]byte, error) {
 	return []byte("\"json-result\""), nil
 }
 
-// Marshal implements proto.Marshaler interface.
+// Marshal 实现 proto.Marshaler 接口。
 func (*noncacheableTestObject) Marshal() ([]byte, error) {
 	return []byte("\"proto-result\""), nil
 }
 
-// DeepCopyObject implements runtime.Object interface.
+// DeepCopyObject 实现 runtime.Object 接口（测试桩，调用即 panic）。
 func (*noncacheableTestObject) DeepCopyObject() runtime.Object {
 	panic("DeepCopy unimplemented for noncacheableTestObject")
 }
 
-// GetObjectKind implements runtime.Object interface.
+// GetObjectKind 实现 runtime.Object 接口。
 func (o *noncacheableTestObject) GetObjectKind() schema.ObjectKind {
 	return o
 }
 
-// GroupVersionKind implements schema.ObjectKind interface.
+// GroupVersionKind 实现 schema.ObjectKind 接口。
 func (o *noncacheableTestObject) GroupVersionKind() schema.GroupVersionKind {
 	return o.gvk
 }
 
-// SetGroupVersionKind implements schema.ObjectKind interface.
+// SetGroupVersionKind 实现 schema.ObjectKind 接口。
 func (o *noncacheableTestObject) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	o.gvk = gvk
 }
 
 var _ runtime.CacheableObject = &MockCacheableObject{}
 
-// MochCacheableObject is used to test CacheableObject interface.
+// MockCacheableObject 用于测试 CacheableObject 接口。
+// 它记录编码器传入的 Identifier，并可按配置执行真实编码或返回预置结果。
 // +k8s:deepcopy-gen=false
 type MockCacheableObject struct {
 	gvk schema.GroupVersionKind
 
 	t *testing.T
 
-	runEncode      bool
+	// runEncode 为 true 时调用真实的 encode 回调，否则直接写出 expectedResult。
+	runEncode bool
+	// returnSelf 控制 GetObject 返回自身还是 noncacheableTestObject。
 	returnSelf     bool
 	expectedResult string
 	expectedError  error
 
+	// intercepted 记录每次 CacheEncode 收到的 Identifier，供断言使用。
 	intercepted []runtime.Identifier
 }
 
-// DeepCopyObject implements runtime.Object interface.
+// DeepCopyObject 实现 runtime.Object 接口（测试桩，调用即 panic）。
 func (m *MockCacheableObject) DeepCopyObject() runtime.Object {
 	panic("DeepCopy unimplemented for MockCacheableObject")
 }
 
-// GetObjectKind implements runtime.Object interface.
+// GetObjectKind 实现 runtime.Object 接口。
 func (m *MockCacheableObject) GetObjectKind() schema.ObjectKind {
 	return m
 }
 
-// GroupVersionKind implements schema.ObjectKind interface.
+// GroupVersionKind 实现 schema.ObjectKind 接口。
 func (m *MockCacheableObject) GroupVersionKind() schema.GroupVersionKind {
 	return m.gvk
 }
 
-// SetGroupVersionKind implements schema.ObjectKind interface.
+// SetGroupVersionKind 实现 schema.ObjectKind 接口。
 func (m *MockCacheableObject) SetGroupVersionKind(gvk schema.GroupVersionKind) {
 	m.gvk = gvk
 }
 
-// Marshal implements proto.Marshaler interface.
-// This is implemented to avoid errors from protobuf serializer.
+// Marshal 实现 proto.Marshaler 接口。
+// 提供该实现是为了避免 protobuf 序列化器报错。
 func (*MockCacheableObject) Marshal() ([]byte, error) {
 	return []byte("\"proto-result\""), nil
 }
 
-// CacheEncode implements runtime.CacheableObject interface.
+// CacheEncode 实现 runtime.CacheableObject 接口。
+// 先记录 identifier，再根据 runEncode 决定委托真实编码还是写出预置结果。
 func (m *MockCacheableObject) CacheEncode(id runtime.Identifier, encode func(runtime.Object, io.Writer) error, w io.Writer) error {
 	m.intercepted = append(m.intercepted, id)
 	if m.runEncode {
@@ -118,7 +123,7 @@ func (m *MockCacheableObject) CacheEncode(id runtime.Identifier, encode func(run
 	return m.expectedError
 }
 
-// GetObject implements runtime.CacheableObject interface.
+// GetObject 实现 runtime.CacheableObject 接口。
 func (m *MockCacheableObject) GetObject() runtime.Object {
 	if m.returnSelf {
 		return m
@@ -127,29 +132,31 @@ func (m *MockCacheableObject) GetObject() runtime.Object {
 	return &noncacheableTestObject{gvk: gvk}
 }
 
+// interceptedCalls 返回已记录的 CacheEncode identifier 列表。
 func (m *MockCacheableObject) interceptedCalls() []runtime.Identifier {
 	return m.intercepted
 }
 
+// testBuffer 包装 io.Writer，用于断言编码器确实通过 CacheEncode 路径写入，
+// 而不是绕过缓存直接序列化对象。
 type testBuffer struct {
 	writer io.Writer
 	t      *testing.T
 	object *MockCacheableObject
 }
 
-// Write implements io.Writer interface.
+// Write 实现 io.Writer 接口。
 func (b *testBuffer) Write(p []byte) (int, error) {
-	// Before writing any byte, check if <object> has already
-	// intercepted any CacheEncode operation.
+	// 写入任何字节之前，检查 <object> 是否已经拦截过 CacheEncode 调用。
 	if len(b.object.interceptedCalls()) == 0 {
 		b.t.Errorf("writing to buffer without handling MockCacheableObject")
 	}
 	return b.writer.Write(p)
 }
 
-// CacheableObjectTest implements a test that should be run for every
-// runtime.Encoder interface implementation.
-// It checks whether CacheableObject is properly supported by it.
+// CacheableObjectTest 是一个应对每个 runtime.Encoder 实现运行的测试，
+// 用于检查该编码器是否正确支持 CacheableObject。
+// 用例覆盖：委托真实编码、委托且 GetObject 返回自身、命中缓存成功、命中缓存失败。
 func CacheableObjectTest(t *testing.T, e runtime.Encoder) {
 	gvk1 := schema.GroupVersionKind{Group: "group", Version: "version1", Kind: "MockCacheableObject"}
 

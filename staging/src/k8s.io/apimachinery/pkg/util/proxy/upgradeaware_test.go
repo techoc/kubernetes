@@ -48,6 +48,8 @@ import (
 
 const fakeStatusCode = 567
 
+// fakeResponder 记录代理错误并写出一个非标准状态码，方便测试区分“代理
+// 自己报错”与后端响应；重复调用视为错误。
 type fakeResponder struct {
 	t      *testing.T
 	called bool
@@ -69,6 +71,7 @@ func (r *fakeResponder) Error(w http.ResponseWriter, req *http.Request, err erro
 	r.err = err
 }
 
+// fakeConn 是始终返回同一错误的 net.Conn，用于模拟拨号成功但读写失败。
 type fakeConn struct {
 	err error // The error to return when io is performed over the connection.
 }
@@ -82,6 +85,8 @@ func (fakeConn) SetDeadline(t time.Time) error      { return nil }
 func (fakeConn) SetReadDeadline(t time.Time) error  { return nil }
 func (fakeConn) SetWriteDeadline(t time.Time) error { return nil }
 
+// SimpleBackendHandler 记录收到的请求并返回预设响应，供 TestServeHTTP
+// 断言代理是否正确转发。
 type SimpleBackendHandler struct {
 	requestURL     url.URL
 	requestHost    string
@@ -113,6 +118,7 @@ func (s *SimpleBackendHandler) ServeHTTP(w http.ResponseWriter, req *http.Reques
 	w.Write([]byte(s.responseBody))
 }
 
+// validateParameters 断言每个期望参数都存在且首值匹配。
 func validateParameters(t *testing.T, name string, actual url.Values, expected map[string]string) {
 	for k, v := range expected {
 		actualValue, ok := actual[k]
@@ -127,6 +133,8 @@ func validateParameters(t *testing.T, name string, actual url.Values, expected m
 	}
 }
 
+// validateHeaders 同时检查“必须存在”与“必须不存在”的 header，后者用于
+// 验证 CORS/Hop-by-hop 头被剥离。
 func validateHeaders(t *testing.T, name string, actual http.Header, expected map[string]string, notExpected []string) {
 	for k, v := range expected {
 		actualValue, ok := actual[k]
@@ -149,6 +157,8 @@ func validateHeaders(t *testing.T, name string, actual http.Header, expected map
 	}
 }
 
+// TestServeHTTP 覆盖普通 HTTP 转发（非升级）的各种路径、方法、查询参数、
+// 请求/响应头，以及 upgradeRequired 与 Location 路径拼接等选项。
 func TestServeHTTP(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -385,12 +395,16 @@ func TestServeHTTP(t *testing.T) {
 	}
 }
 
+// RoundTripperFunc 把函数适配为 http.RoundTripper，便于注入自定义传输。
 type RoundTripperFunc func(req *http.Request) (*http.Response, error)
 
 func (fn RoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return fn(req)
 }
 
+// TestProxyUpgrade 用 websocket 走完整的 101 升级流程，覆盖明文 HTTP、
+// HTTP/2 协商后退回 1.1、TLS 证书校验的三种方式，以及自定义升级传输
+// 注入 bearer token 的情形。
 func TestProxyUpgrade(t *testing.T) {
 
 	localhostPool := x509.NewCertPool()
@@ -551,6 +565,7 @@ func TestProxyUpgrade(t *testing.T) {
 	}
 }
 
+// noErrorsAllowed 让任何代理错误都直接导致测试失败。
 type noErrorsAllowed struct {
 	t *testing.T
 }
@@ -559,6 +574,8 @@ func (r *noErrorsAllowed) Error(w http.ResponseWriter, req *http.Request, err er
 	r.t.Error(err)
 }
 
+// TestProxyUpgradeConnectionErrorResponse 验证升级请求在拨号/读写失败时，
+// 错误经 responder 转成 fakeStatusCode 响应，而不是挂起或静默关闭。
 func TestProxyUpgradeConnectionErrorResponse(t *testing.T) {
 	var (
 		responder   *fakeResponder
@@ -605,6 +622,9 @@ func TestProxyUpgradeConnectionErrorResponse(t *testing.T) {
 	assert.Contains(t, string(msg), expectedErr.Error())
 }
 
+// TestProxyUpgradeErrorResponseTerminates 验证后端返回非 101 时，代理会
+// 完整转发状态码与响应体，随后关闭连接（读取得到 EOF），并且不会把同一
+// 连接上的后续请求转发给后端。
 func TestProxyUpgradeErrorResponseTerminates(t *testing.T) {
 	for _, code := range []int{400, 500} {
 		t.Run(fmt.Sprintf("code=%v", code), func(t *testing.T) {
@@ -664,6 +684,8 @@ func TestProxyUpgradeErrorResponseTerminates(t *testing.T) {
 	}
 }
 
+// TestProxyUpgradeErrorResponse 验证后端返回重定向等非 101 响应时，升级
+// 请求被拒绝并交给 responder 处理，客户端看到 fakeStatusCode。
 func TestProxyUpgradeErrorResponse(t *testing.T) {
 	for _, code := range []int{200, 300, 302, 307} {
 		t.Run(fmt.Sprintf("code=%v", code), func(t *testing.T) {
@@ -703,6 +725,8 @@ func TestProxyUpgradeErrorResponse(t *testing.T) {
 	}
 }
 
+// TestRejectForwardingRedirectsOption 固定 RejectForwardingRedirects 的语义：
+// 带 Location 的 3xx/304 一律转成 502；不带 Location 的 304 原样透传。
 func TestRejectForwardingRedirectsOption(t *testing.T) {
 	originalBody := []byte(`some data`)
 	testCases := []struct {
@@ -801,6 +825,8 @@ func TestRejectForwardingRedirectsOption(t *testing.T) {
 	}
 }
 
+// TestDefaultProxyTransport 验证默认代理传输会以目标 URL 的 scheme/host
+// 覆盖 Location，并正确计算需要前置到 Location 路径的公共前缀。
 func TestDefaultProxyTransport(t *testing.T) {
 	tests := []struct {
 		name,
@@ -854,6 +880,9 @@ func TestDefaultProxyTransport(t *testing.T) {
 	}
 }
 
+// TestProxyRequestContentLengthAndTransferEncoding 手工构造原始 HTTP 请求，
+// 验证 Content-Length 与 chunked Transfer-Encoding 在代理后如何被规范化：
+// 代理会解掉 chunked，但保留 Content-Encoding 与原始长度。
 func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 	chunk := func(data []byte) []byte {
 		out := &bytes.Buffer{}
@@ -1050,6 +1079,8 @@ func TestProxyRequestContentLengthAndTransferEncoding(t *testing.T) {
 	}
 }
 
+// TestFlushIntervalHeaders 确认后端 Flush 之后到达的响应头能及时透传给
+// 客户端（代理不能缓冲到响应结束）。stopCh 让后端在测试结束时释放。
 func TestFlushIntervalHeaders(t *testing.T) {
 	const expected = "hi"
 	stopCh := make(chan struct{})
@@ -1091,6 +1122,7 @@ func TestFlushIntervalHeaders(t *testing.T) {
 	}
 }
 
+// fakeRT 是始终返回指定错误的 RoundTripper，用于测试错误传播。
 type fakeRT struct {
 	err error
 }
@@ -1100,6 +1132,9 @@ func (frt *fakeRT) RoundTrip(*http.Request) (*http.Response, error) {
 }
 
 // TestErrorPropagation checks if the default transport doesn't swallow the errors by providing a fakeResponder that intercepts and stores the error.
+//
+// 后端 handler 故意 panic，确保请求根本到不了后端：错误必须来自
+// 传输层并被 responder 捕获。
 func TestErrorPropagation(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		panic("unreachable")
@@ -1138,6 +1173,8 @@ func TestErrorPropagation(t *testing.T) {
 	}
 }
 
+// TestProxyRedirectsforRootPath 验证空路径请求会被重定向到 "/"（仅 GET/HEAD），
+// 其他方法直接交给代理，避免把写请求的语义改变。
 func TestProxyRedirectsforRootPath(t *testing.T) {
 
 	tests := []struct {

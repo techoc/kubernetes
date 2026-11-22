@@ -18,16 +18,24 @@ package selection
 
 // Operator represents a key/field's relationship to value(s).
 // See labels.Requirement and fields.Requirement for more details.
+//
+// 中文说明：Operator 的字符串值直接出现在 label selector 语法中（如
+// "env in (prod,staging)"），必须与用户的查询表达式保持一致，不能随意改动。
 type Operator string
 
 const (
+	// DoesNotExist 表示键不存在；不带 value。
 	DoesNotExist Operator = "!"
+	// Equals 与 DoubleEquals 在语义上等价，都是精确相等。
 	Equals       Operator = "="
 	DoubleEquals Operator = "=="
-	In           Operator = "in"
-	NotEquals    Operator = "!="
-	NotIn        Operator = "notin"
-	Exists       Operator = "exists"
-	GreaterThan  Operator = "gt"
-	LessThan     Operator = "lt"
+	// In 表示键的值属于给定集合。
+	In        Operator = "in"
+	NotEquals Operator = "!="
+	// NotIn 表示键的值不在给定集合中。
+	NotIn Operator = "notin"
+	// Exists 表示键存在；不带 value。
+	Exists      Operator = "exists"
+	GreaterThan Operator = "gt"
+	LessThan    Operator = "lt"
 )

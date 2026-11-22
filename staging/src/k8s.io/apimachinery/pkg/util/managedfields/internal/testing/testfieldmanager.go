@@ -33,6 +33,8 @@ import (
 // objects (unstructured) of the given GVK.
 type FakeObjectCreater struct{}
 
+// New 创建一个只带 apiVersion/kind 的空 unstructured 对象，
+// 供 field manager 在创建路径上生成占位对象。
 func (f *FakeObjectCreater) New(gvk schema.GroupVersionKind) (runtime.Object, error) {
 	u := unstructured.Unstructured{Object: map[string]interface{}{}}
 	u.SetAPIVersion(gvk.GroupVersion().String())
@@ -42,18 +44,23 @@ func (f *FakeObjectCreater) New(gvk schema.GroupVersionKind) (runtime.Object, er
 
 // FakeObjectConvertor implements runtime.ObjectConvertor but it
 // actually does nothing but return its input.
+// 中文补充：测试里所有对象都是同一版本的 unstructured，因此转换可以退化为恒等操作。
 type FakeObjectConvertor struct{}
 
+// Convert 是空实现：仅给 out 赋一个会被丢弃的值以维持旧签名兼容。
+//
 //nolint:staticcheck,ineffassign // SA4009 backwards compatibility
 func (c *FakeObjectConvertor) Convert(in, out, context interface{}) error {
 	out = in
 	return nil
 }
 
+// ConvertToVersion 直接返回输入对象，不做任何版本转换。
 func (c *FakeObjectConvertor) ConvertToVersion(in runtime.Object, _ runtime.GroupVersioner) (runtime.Object, error) {
 	return in, nil
 }
 
+// ConvertFieldLabel 未实现：测试不涉及字段标签转换。
 func (c *FakeObjectConvertor) ConvertFieldLabel(_ schema.GroupVersionKind, _, _ string) (string, string, error) {
 	return "", "", errors.New("not implemented")
 }
@@ -62,8 +69,11 @@ func (c *FakeObjectConvertor) ConvertFieldLabel(_ schema.GroupVersionKind, _, _ 
 // does nothing.
 type FakeObjectDefaulter struct{}
 
+// Default 空实现：测试对象不依赖默认值填充。
 func (d *FakeObjectDefaulter) Default(in runtime.Object) {}
 
+// TestFieldManagerImpl 是 internal.FieldManager 的测试包装：
+// 持有一个“live”对象并在每次 Apply/Update 成功后用返回结果替换它，模拟 API 服务器状态。
 type TestFieldManagerImpl struct {
 	fieldManager *internal.FieldManager
 	apiVersion   string
@@ -82,12 +92,14 @@ func (f *TestFieldManagerImpl) Reset() {
 }
 
 // Live returns a copy of the current liveObject.
+// 中文补充：返回深拷贝，避免调用方修改内部状态。
 func (f *TestFieldManagerImpl) Live() runtime.Object {
 	return f.liveObj.DeepCopyObject()
 }
 
 // Apply applies the given object on top of the current liveObj, for the
 // given manager and force flag.
+// 中文补充：只有成功时才提交新状态，失败时 liveObj 保持不变。
 func (f *TestFieldManagerImpl) Apply(obj runtime.Object, manager string, force bool) error {
 	out, err := f.fieldManager.Apply(f.liveObj, obj, manager, force)
 	if err == nil {
@@ -107,6 +119,7 @@ func (f *TestFieldManagerImpl) Update(obj runtime.Object, manager string) error 
 }
 
 // UpdateNoErrors is the same as Update, but it will not return errors.
+// 中文补充：用于构造“即使存在冲突也接受”的测试前置状态。
 func (f *TestFieldManagerImpl) UpdateNoErrors(obj runtime.Object, manager string) {
 	f.liveObj = f.fieldManager.UpdateNoErrors(f.liveObj, obj, manager)
 }
@@ -123,6 +136,8 @@ func (f *TestFieldManagerImpl) ManagedFields() []metav1.ManagedFieldsEntry {
 }
 
 // NewTestFieldManager creates a new manager for the given GVK.
+// 中文补充：手工组装与 internal.NewDefaultFieldManager 相同的 manager 链，
+// 但省略 CapManager 与 FieldManager 外层，便于测试更细粒度的行为。
 func NewTestFieldManagerImpl(typeConverter managedfields.TypeConverter, gvk schema.GroupVersionKind, subresource string, chainFieldManager func(internal.Manager) internal.Manager) *TestFieldManagerImpl {
 	f, err := internal.NewStructuredMergeManager(
 		typeConverter,
@@ -135,6 +150,7 @@ func NewTestFieldManagerImpl(typeConverter managedfields.TypeConverter, gvk sche
 	if err != nil {
 		panic(err)
 	}
+	// live 是初始空对象，后续 Apply/Update 都基于它演进。
 	live := &unstructured.Unstructured{}
 	live.SetKind(gvk.Kind)
 	live.SetAPIVersion(gvk.GroupVersion().String())
@@ -155,6 +171,7 @@ func NewTestFieldManagerImpl(typeConverter managedfields.TypeConverter, gvk sche
 			),
 		), gvk,
 	)
+	// 允许调用方在最外层再包一层 manager，以测试额外的拦截逻辑。
 	if chainFieldManager != nil {
 		f = chainFieldManager(f)
 	}

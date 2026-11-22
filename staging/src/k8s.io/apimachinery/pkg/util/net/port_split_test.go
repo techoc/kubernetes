@@ -20,6 +20,9 @@ import (
 	"testing"
 )
 
+// TestSplitSchemeNamePort 覆盖 scheme:name:port 的解析规则，并对合法输入
+// 做 Join -> Split 往返验证。normalized 表示 Join 后的字符串是否应与输入
+// 完全相同（省略尾部冒号等写法会被规范化）。
 func TestSplitSchemeNamePort(t *testing.T) {
 	table := []struct {
 		in                 string
@@ -97,6 +100,7 @@ func TestSplitSchemeNamePort(t *testing.T) {
 			t.Errorf("%q: Wanted %t, got %t", item.in, e, a)
 		}
 
+		// 合法输入必须能重新拼回并再次解析出相同字段。
 		// Make sure valid items round trip through JoinSchemeNamePort
 		if item.valid {
 			out := JoinSchemeNamePort(scheme, name, port)

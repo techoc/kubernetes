@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestIsDNS1123Label 覆盖 DNS-1123 label 规则：小写字母/数字/连字符，
+// 首尾必须是字母数字，最长 63。
 func TestIsDNS1123Label(t *testing.T) {
 	goodValues := []string{
 		"a", "ab", "abc", "a1", "a-1", "a--1--2--b",
@@ -51,6 +53,8 @@ func TestIsDNS1123Label(t *testing.T) {
 	}
 }
 
+// TestIsDNS1123Subdomain 覆盖 DNS-1123 subdomain 规则：由点分隔的 label，
+// 总长不超过 253，禁止连续点。
 func TestIsDNS1123Subdomain(t *testing.T) {
 	goodValues := []string{
 		"a", "ab", "abc", "a1", "a-1", "a--1--2--b",
@@ -89,6 +93,8 @@ func TestIsDNS1123Subdomain(t *testing.T) {
 	}
 }
 
+// TestIsDNS1035Label 覆盖 DNS-1035 label 规则：比 DNS-1123 更严格，
+// 必须以字母开头。
 func TestIsDNS1035Label(t *testing.T) {
 	goodValues := []string{
 		"a", "ab", "abc", "a1", "a-1", "a--1--2--b",
@@ -116,6 +122,7 @@ func TestIsDNS1035Label(t *testing.T) {
 	}
 }
 
+// TestIsValidPortNum 验证端口范围 [1, 65535]。
 func TestIsValidPortNum(t *testing.T) {
 	goodValues := []int{1, 2, 1000, 16384, 32768, 65535}
 	for _, val := range goodValues {
@@ -132,6 +139,7 @@ func TestIsValidPortNum(t *testing.T) {
 	}
 }
 
+// TestIsInRange 验证闭区间边界（min 与 max 本身都是合法值）。
 func TestIsInRange(t *testing.T) {
 	goodValues := []struct {
 		value int
@@ -156,6 +164,7 @@ func TestIsInRange(t *testing.T) {
 	}
 }
 
+// createGroupIDs 把可变参数转成 []int64，便于编写用例。
 func createGroupIDs(ids ...int64) []int64 {
 	var output []int64
 	for _, id := range ids {
@@ -164,6 +173,7 @@ func createGroupIDs(ids ...int64) []int64 {
 	return output
 }
 
+// createUserIDs 把可变参数转成 []int64，便于编写用例。
 func createUserIDs(ids ...int64) []int64 {
 	var output []int64
 	for _, id := range ids {
@@ -172,6 +182,7 @@ func createUserIDs(ids ...int64) []int64 {
 	return output
 }
 
+// TestIsValidGroupID 验证组 ID 范围 [0, 2^31-1]。
 func TestIsValidGroupID(t *testing.T) {
 	goodValues := createGroupIDs(0, 1, 1000, 65535, 2147483647)
 	for _, val := range goodValues {
@@ -188,6 +199,7 @@ func TestIsValidGroupID(t *testing.T) {
 	}
 }
 
+// TestIsValidUserID 验证用户 ID 范围 [0, 2^31-1]。
 func TestIsValidUserID(t *testing.T) {
 	goodValues := createUserIDs(0, 1, 1000, 65535, 2147483647)
 	for _, val := range goodValues {
@@ -204,6 +216,8 @@ func TestIsValidUserID(t *testing.T) {
 	}
 }
 
+// TestIsValidPortName 覆盖 IANA 端口名规则：最多 15 个字符，
+// 允许字母数字与单个连字符，且至少含一个字母。
 func TestIsValidPortName(t *testing.T) {
 	goodValues := []string{"telnet", "re-mail-ck", "pop3", "a", "a-1", "1-a", "a-1-b-2-c", "1-a-2-b-3"}
 	for _, val := range goodValues {
@@ -220,6 +234,7 @@ func TestIsValidPortName(t *testing.T) {
 	}
 }
 
+// TestIsQualifiedName 覆盖带可选 DNS 前缀的 label key 校验（如 example.com/name）。
 func TestIsQualifiedName(t *testing.T) {
 	successCases := []string{
 		"simple",
@@ -265,6 +280,8 @@ func TestIsQualifiedName(t *testing.T) {
 	}
 }
 
+// TestIsValidLabelValue 覆盖 label value 规则：可为空，最长 63，
+// 首尾必须是字母数字。
 func TestIsValidLabelValue(t *testing.T) {
 	successCases := []string{
 		"simple",
@@ -298,6 +315,7 @@ func TestIsValidLabelValue(t *testing.T) {
 	}
 }
 
+// TestIsHTTPHeaderName 覆盖 RFC 7230 token 形式的 HTTP 头名称校验。
 func TestIsHTTPHeaderName(t *testing.T) {
 	goodValues := []string{
 		// Common ones
@@ -325,6 +343,7 @@ func TestIsHTTPHeaderName(t *testing.T) {
 	}
 }
 
+// TestIsValidPercent 覆盖百分比字符串：必须以 % 结尾，% 前为非负整数。
 func TestIsValidPercent(t *testing.T) {
 	goodValues := []string{
 		"0%",
@@ -361,6 +380,8 @@ func TestIsValidPercent(t *testing.T) {
 	}
 }
 
+// TestIsConfigMapKey 覆盖 ConfigMap/Secret key 规则：不能是 "."、".."，
+// 且只能包含字母数字、'-'、'_'、'.'。
 func TestIsConfigMapKey(t *testing.T) {
 	successCases := []string{
 		"a",
@@ -394,6 +415,8 @@ func TestIsConfigMapKey(t *testing.T) {
 	}
 }
 
+// TestIsWildcardDNS1123Subdomain 验证通配符域名：只允许最左侧为 "*"，
+// 且其后必须紧跟一个点。
 func TestIsWildcardDNS1123Subdomain(t *testing.T) {
 	goodValues := []string{
 		"*.example.com",
@@ -420,6 +443,8 @@ func TestIsWildcardDNS1123Subdomain(t *testing.T) {
 	}
 }
 
+// TestIsFullyQualifiedDomainName 验证 FQDN：至少两个点，允许末尾点，
+// 总长不超过 253。
 func TestIsFullyQualifiedDomainName(t *testing.T) {
 	goodValues := []string{
 		"a.com",
@@ -464,6 +489,8 @@ func TestIsFullyQualifiedDomainName(t *testing.T) {
 	}
 }
 
+// TestIsFullyQualifiedName 验证"完全限定名"：不允许末尾点，
+// 并要求至少三段，最后还检查错误文案的要点。
 func TestIsFullyQualifiedName(t *testing.T) {
 	goodValues := []string{
 		"dev.k8s.io",
@@ -538,6 +565,8 @@ func TestIsFullyQualifiedName(t *testing.T) {
 	}
 }
 
+// TestIsDomainPrefixedPath 验证"域名/路径"格式：域名部分遵循 FQDN，
+// 路径部分只允许有限字符且长度受限。
 func TestIsDomainPrefixedPath(t *testing.T) {
 	goodValues := []string{
 		"a/b",
@@ -585,6 +614,8 @@ func TestIsDomainPrefixedPath(t *testing.T) {
 	}
 }
 
+// TestIsRelaxedEnvVarName 验证宽松环境变量名：除 '=' 与控制字符外，
+// 允许较多标点，用于兼容历史 API 字段。
 func TestIsRelaxedEnvVarName(t *testing.T) {
 	goodValues := []string{
 		"-", ":", "_", "+a", ">a", "<a",
@@ -612,6 +643,8 @@ func TestIsRelaxedEnvVarName(t *testing.T) {
 	}
 }
 
+// TestIsDNS1123SubdomainWithUnderscore 验证允许下划线的 subdomain 变体，
+// 并检查错误信息中包含预期的格式化说明。
 func TestIsDNS1123SubdomainWithUnderscore(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -695,6 +728,8 @@ func TestIsDNS1123SubdomainWithUnderscore(t *testing.T) {
 	}
 }
 
+// TestIsDomainPrefixedKey 验证"域名/名称"形式的 key：前半段是 DNS 域名，
+// 后半段是 label 名称，并逐项比对完整错误对象。
 func TestIsDomainPrefixedKey(t *testing.T) {
 	tests := []struct {
 		name     string

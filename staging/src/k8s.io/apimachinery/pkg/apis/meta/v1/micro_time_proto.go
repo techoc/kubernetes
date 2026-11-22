@@ -22,7 +22,10 @@ import (
 
 // Timestamp is declared in time_proto.go
 
-// Timestamp returns the Time as a new Timestamp value.
+// ProtoMicroTime returns the Time as a new Timestamp value, truncated to
+// microsecond precision because MicroTime's JSON form only carries
+// microseconds. Round-tripping the two forms must agree, so the conversion
+// drops sub-microsecond nanos.
 func (m *MicroTime) ProtoMicroTime() *Timestamp {
 	if m == nil {
 		return &Timestamp{}
@@ -46,6 +49,7 @@ func (m *MicroTime) Size() (n int) {
 
 // Reset implements the protobuf marshalling interface.
 func (m *MicroTime) Unmarshal(data []byte) error {
+	// An empty payload represents the zero time, not an error.
 	if len(data) == 0 {
 		m.Time = time.Time{}
 		return nil
@@ -56,6 +60,7 @@ func (m *MicroTime) Unmarshal(data []byte) error {
 	}
 
 	// truncate precision to microseconds to match JSON marshaling/unmarshaling
+	// .Local() matches Time.UnmarshalJSON so both paths produce identical values.
 	truncatedNanoseconds := time.Duration(p.Nanos).Truncate(time.Microsecond)
 	m.Time = time.Unix(p.Seconds, int64(truncatedNanoseconds)).Local()
 	return nil

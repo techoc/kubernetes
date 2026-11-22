@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package modes_test 从外部验证 modes 包暴露的编码/解码模式；这些模式被
+// 逐项收集到列表中，便于后续对每种模式统一跑同一组断言。
 package modes_test
 
 import (
@@ -25,6 +27,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer/cbor/internal/modes"
 )
 
+// encModeNames/allEncModes 是编码模式及其可读名称，测试失败时用于标识
+// 具体是哪个模式出问题。
 var encModeNames = map[modes.EncMode]string{
 	modes.Encode:                 "Encode",
 	modes.EncodeNondeterministic: "EncodeNondeterministic",
@@ -35,6 +39,8 @@ var allEncModes = []modes.EncMode{
 	modes.EncodeNondeterministic,
 }
 
+// decModeNames/allDecModes 同上，对应解码模式；DecodeLax 允许非首选编码
+// （例如非最短长度的整数），用于兼容性场景。
 var decModeNames = map[cbor.DecMode]string{
 	modes.Decode:    "Decode",
 	modes.DecodeLax: "DecodeLax",
@@ -45,12 +51,15 @@ var allDecModes = []cbor.DecMode{
 	modes.DecodeLax,
 }
 
+// assertNilError 断言无错误。
 func assertNilError(t *testing.T, e error) {
 	if e != nil {
 		t.Errorf("expected nil error, got: %v", e)
 	}
 }
 
+// assertOnConcreteError 把 error 断言为具体类型 E 后再交给 fn 进一步检查，
+// 避免各用例重复写 errors.As。
 func assertOnConcreteError[E error](fn func(*testing.T, E)) func(t *testing.T, e error) {
 	return func(t *testing.T, ei error) {
 		var ec E
@@ -62,6 +71,8 @@ func assertOnConcreteError[E error](fn func(*testing.T, E)) func(t *testing.T, e
 	}
 }
 
+// assertErrorMessage 精确比较错误文案；CBOR 编解码错误的可读信息属于预期
+// 行为的一部分，因此这里不做模糊匹配。
 func assertErrorMessage(want string) func(*testing.T, error) {
 	return func(t *testing.T, got error) {
 		if got == nil {
@@ -74,6 +85,8 @@ func assertErrorMessage(want string) func(*testing.T, error) {
 	}
 }
 
+// assertIdenticalError 断言 error 与期望值在结构上完全一致（用 cmp.Diff
+// 展示差异），适合含字段值的具体错误类型。
 func assertIdenticalError[E error](expected E) func(*testing.T, error) {
 	return assertOnConcreteError(func(t *testing.T, actual E) {
 		if diff := cmp.Diff(expected, actual); diff != "" {

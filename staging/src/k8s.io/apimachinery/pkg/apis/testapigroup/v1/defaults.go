@@ -20,6 +20,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addDefaultingFuncs 注册该版本的默认值函数。
+//
+// testapigroup 是测试用的 API 组，没有需要默认化的字段，因此这里不做任何事。
+// 保留函数是因为 scheme 构建代码按统一约定调用它；返回值 nil 表示注册成功。
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	// return RegisterDefaults(scheme)
 	return nil

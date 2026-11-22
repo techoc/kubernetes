@@ -33,6 +33,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// TestManagedFieldsUpdateDoesModifyTime 验证 update 实际改变字段时，对应 manager 的
+// ManagedFields 时间戳会被刷新——这是“该 manager 最近一次改动”的可见依据。
 func TestManagedFieldsUpdateDoesModifyTime(t *testing.T) {
 	var err error
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "ConfigMap"))
@@ -74,6 +76,8 @@ func TestManagedFieldsUpdateDoesModifyTime(t *testing.T) {
 	}
 }
 
+// TestManagedFieldsApplyDoesModifyTime 与 update 用例对称：apply 实际改变字段时，
+// 时间戳同样应刷新。
 func TestManagedFieldsApplyDoesModifyTime(t *testing.T) {
 	var err error
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "ConfigMap"))
@@ -115,6 +119,8 @@ func TestManagedFieldsApplyDoesModifyTime(t *testing.T) {
 	}
 }
 
+// TestManagedFieldsUpdateWithoutChangesDoesNotModifyTime 验证 update 内容未变时
+// 时间戳保持不变：避免无意义的写入造成 managedFields 抖动与额外的 etcd 写。
 func TestManagedFieldsUpdateWithoutChangesDoesNotModifyTime(t *testing.T) {
 	var err error
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "ConfigMap"))
@@ -156,6 +162,8 @@ func TestManagedFieldsUpdateWithoutChangesDoesNotModifyTime(t *testing.T) {
 	}
 }
 
+// TestManagedFieldsApplyWithoutChangesDoesNotModifyTime 与 update 用例对称：
+// apply 内容未变时时间戳也不变。
 func TestManagedFieldsApplyWithoutChangesDoesNotModifyTime(t *testing.T) {
 	var err error
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "ConfigMap"))
@@ -197,6 +205,8 @@ func TestManagedFieldsApplyWithoutChangesDoesNotModifyTime(t *testing.T) {
 	}
 }
 
+// TestNonManagedFieldsUpdateDoesNotModifyTime 验证一个 manager update 时，不会影响
+// 其它 manager（此处为 fieldmanager_b_test）的 ManagedFields 条目。
 func TestNonManagedFieldsUpdateDoesNotModifyTime(t *testing.T) {
 	var err error
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "ConfigMap"))
@@ -260,6 +270,8 @@ func TestNonManagedFieldsUpdateDoesNotModifyTime(t *testing.T) {
 	}
 }
 
+// TestNonManagedFieldsApplyDoesNotModifyTime 与 update 用例对称：一个 manager apply 时，
+// 其它 manager 的时间戳应保持不变。
 func TestNonManagedFieldsApplyDoesNotModifyTime(t *testing.T) {
 	var err error
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "ConfigMap"))
@@ -323,6 +335,8 @@ func TestNonManagedFieldsApplyDoesNotModifyTime(t *testing.T) {
 	}
 }
 
+// TestTakingOverManagedFieldsDuringUpdateDoesNotModifyPreviousManagerTime 验证 update
+// 接管他人字段时，只更新接管者的条目，不刷新被接管者原有条目的时间戳。
 func TestTakingOverManagedFieldsDuringUpdateDoesNotModifyPreviousManagerTime(t *testing.T) {
 	var err error
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "ConfigMap"))
@@ -374,6 +388,8 @@ func TestTakingOverManagedFieldsDuringUpdateDoesNotModifyPreviousManagerTime(t *
 	}
 }
 
+// TestTakingOverManagedFieldsDuringApplyDoesNotModifyPreviousManagerTime 与 update 用例
+// 对称：apply 接管字段时也不刷新被接管者的时间戳。
 func TestTakingOverManagedFieldsDuringApplyDoesNotModifyPreviousManagerTime(t *testing.T) {
 	var err error
 	f := managedfieldstest.NewTestFieldManager(fakeTypeConverter, schema.FromAPIVersionAndKind("v1", "ConfigMap"))
@@ -425,12 +441,15 @@ func TestTakingOverManagedFieldsDuringApplyDoesNotModifyPreviousManagerTime(t *t
 	}
 }
 
+// NoopManager 是一个什么都不做的下层 manager，用于隔离 ManagedFieldsUpdater 自身的行为。
 type NoopManager struct{}
 
+// Apply 返回 nil 对象，表示下层未做任何改动。
 func (NoopManager) Apply(liveObj, appliedObj runtime.Object, managed internal.Managed, fieldManager string, force bool) (runtime.Object, internal.Managed, error) {
 	return nil, managed, nil
 }
 
+// Update 返回 nil 对象与 nil managed，表示下层未做任何改动。
 func (NoopManager) Update(liveObj, newObj runtime.Object, managed internal.Managed, manager string) (runtime.Object, internal.Managed, error) {
 	return nil, nil, nil
 }
@@ -446,6 +465,7 @@ func updateObject(f managedfieldstest.TestFieldManager, fieldManagerName string,
 	return nil
 }
 
+// applyObject 把 YAML/JSON 文本解码为 unstructured 并执行 Apply（force=true）。
 func applyObject(f managedfieldstest.TestFieldManager, fieldManagerName string, object []byte) error {
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	if err := yaml.Unmarshal(object, &obj.Object); err != nil {
@@ -457,12 +477,11 @@ func applyObject(f managedfieldstest.TestFieldManager, fieldManagerName string, 
 	return nil
 }
 
-// Ensures that if ManagedFieldsUpdater gets a nil value from its nested manager
-// chain (meaning the operation was a no-op), then the ManagedFieldsUpdater
-// itself will return a copy of the input live object, with its managed fields
-// removed
+// TestNilNewObjectReplacedWithDeepCopyExcludingManagedFields 确保当 ManagedFieldsUpdater
+// 从下层 manager 链拿到 nil 值（表示操作是 no-op）时，它自己会返回输入 live 对象的副本，
+// 并去掉该副本中的 managedFields。
 func TestNilNewObjectReplacedWithDeepCopyExcludingManagedFields(t *testing.T) {
-	// Initialize our "live object" with some managed fields
+	// 初始化一个带 managedFields 的“live object”
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{}}
 	if err := yaml.Unmarshal([]byte(`{
 		"apiVersion": "v1",
@@ -496,7 +515,7 @@ func TestNilNewObjectReplacedWithDeepCopyExcludingManagedFields(t *testing.T) {
 		t.Fatalf("couldn't get accessor: %v", err)
 	}
 
-	// Decode the managed fields in the live object, since it isn't allowed in the patch.
+	// 从 live object 中解码 managedFields，因为它不允许出现在 patch 中。
 	managed, err := internal.DecodeManagedFields(accessor.GetManagedFields())
 	if err != nil {
 		t.Fatalf("failed to decode managed fields: %v", err)
@@ -513,8 +532,7 @@ func TestNilNewObjectReplacedWithDeepCopyExcludingManagedFields(t *testing.T) {
 		t.Fatalf("returned newObject must not be the same instance as the passed in liveObj")
 	}
 
-	// Rip off managed fields of live, and check that it is deeply
-	// equal to newObject
+	// 去掉 live 对象的 managedFields，检查它与返回的 newObject 深度相等。
 	liveWithoutManaged := obj.DeepCopyObject()
 	internal.RemoveObjectManagedFields(liveWithoutManaged)
 

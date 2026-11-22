@@ -22,6 +22,8 @@ import (
 	"reflect"
 )
 
+// 这些哨兵错误用于区分 patch 的失败原因，调用方可据此选择不同的响应
+// （例如 precondition 失败返回 409/412）。
 var (
 	ErrBadJSONDoc                           = errors.New("invalid JSON document")
 	ErrNoListOfLists                        = errors.New("lists of lists are not supported")
@@ -32,16 +34,20 @@ var (
 	ErrUnsupportedStrategicMergePatchFormat = errors.New("strategic merge patch format is not supported")
 )
 
+// ErrNoMergeKey 表示 map 元素缺少类型定义声明的 merge key，无法确定匹配对象。
 func ErrNoMergeKey(m map[string]interface{}, k string) error {
 	return fmt.Errorf("map: %v does not contain declared merge key: %s", m, k)
 }
 
+// ErrBadArgType 报告实际类型的完整类型名（而非 kind），便于定位具体的不匹配。
 func ErrBadArgType(expected, actual interface{}) error {
 	return fmt.Errorf("expected a %s, but received a %s",
 		reflect.TypeOf(expected),
 		reflect.TypeOf(actual))
 }
 
+// ErrBadArgKind 与 ErrBadArgType 类似，但只比较 kind 且显式处理 nil，
+// 因为 nil 没有 Type 可打印。
 func ErrBadArgKind(expected, actual interface{}) error {
 	var expectedKindString, actualKindString string
 	if expected == nil {
@@ -57,6 +63,7 @@ func ErrBadArgKind(expected, actual interface{}) error {
 	return fmt.Errorf("expected a %s, but received a %s", expectedKindString, actualKindString)
 }
 
+// ErrBadPatchType 表示 patch 中出现了无法识别的指令类型。
 func ErrBadPatchType(t interface{}, m map[string]interface{}) error {
 	return fmt.Errorf("unknown patch type: %s in map: %v", t, m)
 }
@@ -68,10 +75,12 @@ func IsPreconditionFailed(err error) bool {
 	return ok
 }
 
+// ErrPreconditionFailed 携带失败的目标对象内容，便于用户定位。
 type ErrPreconditionFailed struct {
 	message string
 }
 
+// NewErrPreconditionFailed 构造 precondition 失败错误。
 func NewErrPreconditionFailed(target map[string]interface{}) ErrPreconditionFailed {
 	s := fmt.Sprintf("precondition failed for: %v", target)
 	return ErrPreconditionFailed{s}
@@ -81,10 +90,13 @@ func (err ErrPreconditionFailed) Error() string {
 	return err.message
 }
 
+// ErrConflict 表示 patch 与并发修改冲突，错误信息同时包含 patch 和当前差异。
 type ErrConflict struct {
 	message string
 }
 
+// NewErrConflict 构造冲突错误，同时输出 patch 内容和从原始到当前的变更，
+// 让用户能直接看出冲突来源。
 func NewErrConflict(patch, current string) ErrConflict {
 	s := fmt.Sprintf("patch:\n%s\nconflicts with changes made from original to current:\n%s\n", patch, current)
 	return ErrConflict{s}

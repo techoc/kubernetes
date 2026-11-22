@@ -22,7 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// 子协议版本号越高功能越全；服务端与客户端协商时取共同支持的最高版本，
+// 因此 v1 必须长期保留以兼容旧客户端。
 const (
+	// DefaultStreamCreationTimeout 是创建流的默认超时；超时后连接被视为
+	// 失败，避免半开连接长期占用。
 	DefaultStreamCreationTimeout = 30 * time.Second
 
 	// The SPDY subprotocol "channel.k8s.io" is used for remote command
@@ -51,11 +55,16 @@ const (
 	// adds support for a CLOSE signal.
 	StreamProtocolV5Name = "v5.channel.k8s.io"
 
+	// NonZeroExitCodeReason/ExitCodeCauseType 用于把容器退出码包装成
+	// Status 的 reason 与 cause，客户端据此区分“命令失败”与传输错误。
 	NonZeroExitCodeReason = metav1.StatusReason("NonZeroExitCode")
 	ExitCodeCauseType     = metav1.CauseType("ExitCode")
 
 	// RemoteCommand stream identifiers. The first three identifiers (for STDIN,
 	// STDOUT, STDERR) are the same as their file descriptors.
+	//
+	// 其余通道：StreamErr 传输错误状态，StreamResize 传输终端尺寸，
+	// StreamClose 用于 v5 的半关闭语义（255 故意远离小整数，避免与 fd 冲突）。
 	StreamStdIn  = 0
 	StreamStdOut = 1
 	StreamStdErr = 2
@@ -64,4 +73,7 @@ const (
 	StreamClose  = 255
 )
 
+// SupportedStreamingProtocols 按从新到旧排列，协商时优先选择前面的版本；
+// 列表不包含 v5，因此默认协商不会选中 v5，需要 CLOSE 语义的调用方必须
+// 显式指定协议版本。
 var SupportedStreamingProtocols = []string{StreamProtocolV4Name, StreamProtocolV3Name, StreamProtocolV2Name, StreamProtocolV1Name}

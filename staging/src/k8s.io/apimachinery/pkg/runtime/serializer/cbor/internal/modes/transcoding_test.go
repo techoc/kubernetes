@@ -22,6 +22,8 @@ import (
 	"testing"
 )
 
+// TestTranscodeFromJSON 验证 JSON 到 CBOR 的转码：各基础类型应产生规范的最小编码，
+// 同时对多余数据、空输入、截断输入与非法 JSON 返回相应错误。
 func TestTranscodeFromJSON(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -103,6 +105,8 @@ func TestTranscodeFromJSON(t *testing.T) {
 	}
 }
 
+// TestTranscodeToJSON 验证 CBOR 到 JSON 的转码，以及超出单个数据项、截断与
+// 非法 CBOR 时的错误。
 func TestTranscodeToJSON(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -179,12 +183,15 @@ func TestTranscodeToJSON(t *testing.T) {
 	}
 }
 
+// write 描述一次期望的写入：参数内容、返回的字节数与错误。
 type write struct {
 	p   string
 	n   int
 	err error
 }
 
+// mockWriter 按预期顺序核对每次写入的参数并返回预设结果；
+// 出现未预期的调用会直接让测试失败，从而暴露协议错误。
 type mockWriter struct {
 	t     testing.TB
 	calls []write
@@ -202,6 +209,9 @@ func (m *mockWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// TestTrailingLinefeedSuppressor 验证尾部换行抑制器的缓冲语义：
+// 一次写入末尾的换行会暂存到下一次写入时才决定是否转发，
+// 只有确认后面还有内容时才输出该换行；覆盖多次写入、仅换行、空写入与委托错误等组合。
 func TestTrailingLinefeedSuppressor(t *testing.T) {
 	for _, tc := range []struct {
 		name      string

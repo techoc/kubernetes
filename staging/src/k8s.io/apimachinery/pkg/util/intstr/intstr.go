@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package intstr 提供可同时承载整数或字符串的类型，用于既能接受数量
+// 又能接受名称/百分比的 API 字段。
 package intstr
 
 import (
@@ -29,10 +31,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// IntOrString is a type that can hold an int32 or a string.  When used in
-// JSON or YAML marshalling and unmarshalling, it produces or consumes the
-// inner type.  This allows you to have, for example, a JSON field that can
-// accept a name or number.
+// IntOrString 可承载 int32 或 string。在 JSON/YAML 编解码时会生成或消费
+// 其内部的值类型，因此字段可以同时接受名称或数字。
 // TODO: Rename to Int32OrString
 //
 // +protobuf=true
@@ -45,38 +45,36 @@ type IntOrString struct {
 	StrVal string `protobuf:"bytes,3,opt,name=strVal"`
 }
 
-// Type represents the stored type of IntOrString.
+// Type 表示 IntOrString 内部存储的值的类型。
 type Type int64
 
 const (
-	Int    Type = iota // The IntOrString holds an int.
-	String             // The IntOrString holds a string.
+	Int    Type = iota // IntOrString 存储整数。
+	String             // IntOrString 存储字符串。
 )
 
-// FromInt creates an IntOrString object with an int32 value. It is
-// your responsibility not to call this method with a value greater
-// than int32.
-// Deprecated: use FromInt32 instead.
+// FromInt 用 int 值创建 IntOrString。调用方有责任保证值不超出 int32 范围。
+// Deprecated: 请改用 FromInt32。
 func FromInt(val int) IntOrString {
 	if val > math.MaxInt32 || val < math.MinInt32 {
+		// 超出 int32 时记录错误与调用栈以便定位，但仍按截断后的值构造。
 		//nolint:logcheck // Should not be reached.
 		klog.Errorf("value: %d overflows int32\n%s\n", val, debug.Stack())
 	}
 	return IntOrString{Type: Int, IntVal: int32(val)}
 }
 
-// FromInt32 creates an IntOrString object with an int32 value.
+// FromInt32 用 int32 值创建 IntOrString。
 func FromInt32(val int32) IntOrString {
 	return IntOrString{Type: Int, IntVal: val}
 }
 
-// FromString creates an IntOrString object with a string value.
+// FromString 用字符串值创建 IntOrString。
 func FromString(val string) IntOrString {
 	return IntOrString{Type: String, StrVal: val}
 }
 
-// Parse the given string and try to convert it to an int32 integer before
-// setting it as a string value.
+// Parse 解析给定字符串，若能转换为 int32 则以整数形式保存，否则作为字符串保存。
 func Parse(val string) IntOrString {
 	i, err := strconv.ParseInt(val, 10, 32)
 	if err != nil {
@@ -85,7 +83,8 @@ func Parse(val string) IntOrString {
 	return FromInt32(int32(i))
 }
 
-// UnmarshalJSON implements the json.Unmarshaller interface.
+// UnmarshalJSON 实现 json.Unmarshaller 接口。
+// 以引号开头的值按字符串解码，否则按整数解码，与 JSON 的常见写法保持一致。
 func (intstr *IntOrString) UnmarshalJSON(value []byte) error {
 	if value[0] == '"' {
 		intstr.Type = String
@@ -95,6 +94,8 @@ func (intstr *IntOrString) UnmarshalJSON(value []byte) error {
 	return json.Unmarshal(value, &intstr.IntVal)
 }
 
+// UnmarshalCBOR 解析 CBOR 值：先尝试字符串，失败再尝试整数，
+// 与 UnmarshalJSON 的宽松语义保持一致。
 func (intstr *IntOrString) UnmarshalCBOR(value []byte) error {
 	if err := cbor.Unmarshal(value, &intstr.StrVal); err == nil {
 		intstr.Type = String
@@ -109,7 +110,7 @@ func (intstr *IntOrString) UnmarshalCBOR(value []byte) error {
 	return nil
 }
 
-// String returns the string value, or the Itoa of the int value.
+// String 返回字符串值；若存储的是整数，则返回其十进制表示；nil 接收者返回 "<nil>"。
 func (intstr *IntOrString) String() string {
 	if intstr == nil {
 		return "<nil>"
@@ -120,9 +121,8 @@ func (intstr *IntOrString) String() string {
 	return strconv.Itoa(intstr.IntValue())
 }
 
-// IntValue returns the IntVal if type Int, or if
-// it is a String, will attempt a conversion to int,
-// returning 0 if a parsing error occurs.
+// IntValue 在类型为 Int 时返回 IntVal；若为 String，则尝试转换为 int，
+// 解析失败时返回 0。
 func (intstr *IntOrString) IntValue() int {
 	if intstr.Type == String {
 		i, _ := strconv.Atoi(intstr.StrVal)
@@ -131,7 +131,7 @@ func (intstr *IntOrString) IntValue() int {
 	return int(intstr.IntVal)
 }
 
-// MarshalJSON implements the json.Marshaller interface.
+// MarshalJSON 实现 json.Marshaller 接口：按内部类型输出整数或字符串。
 func (intstr IntOrString) MarshalJSON() ([]byte, error) {
 	switch intstr.Type {
 	case Int:
@@ -143,6 +143,7 @@ func (intstr IntOrString) MarshalJSON() ([]byte, error) {
 	}
 }
 
+// MarshalCBOR 按内部类型将 IntOrString 编码为 CBOR。
 func (intstr IntOrString) MarshalCBOR() ([]byte, error) {
 	switch intstr.Type {
 	case Int:
@@ -154,20 +155,19 @@ func (intstr IntOrString) MarshalCBOR() ([]byte, error) {
 	}
 }
 
-// OpenAPISchemaType is used by the kube-openapi generator when constructing
-// the OpenAPI spec of this type.
+// OpenAPISchemaType 供 kube-openapi 生成器在构建本类型的 OpenAPI 规范时使用。
 //
 // See: https://github.com/kubernetes/kube-openapi/tree/master/pkg/generators
 func (IntOrString) OpenAPISchemaType() []string { return []string{"string"} }
 
-// OpenAPISchemaFormat is used by the kube-openapi generator when constructing
-// the OpenAPI spec of this type.
+// OpenAPISchemaFormat 供 kube-openapi 生成器在构建 OpenAPI 规范时使用。
 func (IntOrString) OpenAPISchemaFormat() string { return "int-or-string" }
 
-// OpenAPIV3OneOfTypes is used by the kube-openapi generator when constructing
-// the OpenAPI v3 spec of this type.
+// OpenAPIV3OneOfTypes 供 kube-openapi 生成器在构建 OpenAPI v3 规范时使用，
+// 声明该值可以是整数或字符串。
 func (IntOrString) OpenAPIV3OneOfTypes() []string { return []string{"integer", "string"} }
 
+// ValueOrDefault 在 intOrPercent 为 nil 时返回默认值，否则返回原值。
 func ValueOrDefault(intOrPercent *IntOrString, defaultValue IntOrString) *IntOrString {
 	if intOrPercent == nil {
 		return &defaultValue
@@ -175,11 +175,9 @@ func ValueOrDefault(intOrPercent *IntOrString, defaultValue IntOrString) *IntOrS
 	return intOrPercent
 }
 
-// GetScaledValueFromIntOrPercent is meant to replace GetValueFromIntOrPercent.
-// This method returns a scaled value from an IntOrString type. If the IntOrString
-// is a percentage string value it's treated as a percentage and scaled appropriately
-// in accordance to the total, if it's an int value it's treated as a simple value and
-// if it is a string value which is either non-numeric or numeric but lacking a trailing '%' it returns an error.
+// GetScaledValueFromIntOrPercent 用于替代 GetValueFromIntOrPercent。
+// 它返回 IntOrString 的缩放值：百分比字符串按 total 缩放；
+// 整数按原值返回；非数字或缺少 '%' 后缀的字符串则返回错误。
 func GetScaledValueFromIntOrPercent(intOrPercent *IntOrString, total int, roundUp bool) (int, error) {
 	if intOrPercent == nil {
 		return 0, errors.New("nil value for IntOrString")
@@ -189,6 +187,7 @@ func GetScaledValueFromIntOrPercent(intOrPercent *IntOrString, total int, roundU
 		return 0, fmt.Errorf("invalid value for IntOrString: %v", err)
 	}
 	if isPercent {
+		// 百分比按 total 缩放；roundUp 控制向上或向下取整。
 		if roundUp {
 			value = int(math.Ceil(float64(value) * (float64(total)) / 100))
 		} else {
@@ -198,9 +197,8 @@ func GetScaledValueFromIntOrPercent(intOrPercent *IntOrString, total int, roundU
 	return value, nil
 }
 
-// GetValueFromIntOrPercent was deprecated in favor of
-// GetScaledValueFromIntOrPercent. This method was treating all int as a numeric value and all
-// strings with or without a percent symbol as a percentage value.
+// GetValueFromIntOrPercent 已由 GetScaledValueFromIntOrPercent 取代。
+// 旧实现把所有整数当作数值、把所有字符串（无论是否带百分号）都当作百分比。
 // Deprecated
 func GetValueFromIntOrPercent(intOrPercent *IntOrString, total int, roundUp bool) (int, error) {
 	if intOrPercent == nil {
@@ -220,13 +218,15 @@ func GetValueFromIntOrPercent(intOrPercent *IntOrString, total int, roundUp bool
 	return value, nil
 }
 
-// getIntOrPercentValue is a legacy function and only meant to be called by GetValueFromIntOrPercent
-// For a more correct implementation call getIntOrPercentSafely
+// getIntOrPercentValue 是遗留实现，只应被 GetValueFromIntOrPercent 调用。
+// 更正确的实现是 getIntOrPercentValueSafely。
 func getIntOrPercentValue(intOrStr *IntOrString) (int, bool, error) {
 	switch intOrStr.Type {
 	case Int:
 		return intOrStr.IntValue(), false, nil
 	case String:
+		// 旧的宽松语义：直接剥离所有 '%' 后按数字解析，因此 "50foo" 之外的
+		// 非百分比字符串也会被当作百分比处理。
 		s := strings.Replace(intOrStr.StrVal, "%", "", -1)
 		v, err := strconv.Atoi(s)
 		if err != nil {
@@ -237,6 +237,8 @@ func getIntOrPercentValue(intOrStr *IntOrString) (int, bool, error) {
 	return 0, false, fmt.Errorf("invalid type: neither int nor percentage")
 }
 
+// getIntOrPercentValueSafely 是严格实现：只有以 '%' 结尾的字符串才视为百分比，
+// 其余字符串一律报错，从而避免把名称误当数字。
 func getIntOrPercentValueSafely(intOrStr *IntOrString) (int, bool, error) {
 	switch intOrStr.Type {
 	case Int:

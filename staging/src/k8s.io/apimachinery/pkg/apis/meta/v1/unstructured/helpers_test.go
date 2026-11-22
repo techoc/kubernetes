@@ -31,6 +31,9 @@ import (
 
 // TestCodecOfUnstructuredList tests that there are no data races in Encode().
 // i.e. that it does not mutate the object being encoded.
+//
+// 测试方式：多个 goroutine 并发编码同一个 UnstructuredList。Encode 若在
+// 编码过程中修改对象内部 map，-race 检测会报数据竞争；正常实现应只读。
 func TestCodecOfUnstructuredList(t *testing.T) {
 	var wg sync.WaitGroup
 	concurrency := 10
@@ -41,12 +44,15 @@ func TestCodecOfUnstructuredList(t *testing.T) {
 	for i := 0; i < concurrency; i++ {
 		go func() {
 			defer wg.Done()
+			// 输出丢弃即可，测试关注的是并发安全而非编码结果。
 			assert.NoError(t, UnstructuredJSONScheme.Encode(&list, ioutil.Discard))
 		}()
 	}
 	wg.Wait()
 }
 
+// TestRemoveNestedField 覆盖逐级删除：先删深层字段保留兄弟字段，再删空
+// 父字段，最后验证删除不存在的路径是幂等的。
 func TestRemoveNestedField(t *testing.T) {
 	obj := map[string]interface{}{
 		"x": map[string]interface{}{
@@ -64,6 +70,8 @@ func TestRemoveNestedField(t *testing.T) {
 	assert.Empty(t, obj)
 }
 
+// TestNestedFieldNoCopy 验证 NestedFieldNoCopy 的语义：找到的值是原对象的
+// 引用而非拷贝；并覆盖字段缺失、中间字段为 null、路径经过非 map 等边界。
 func TestNestedFieldNoCopy(t *testing.T) {
 	target := map[string]interface{}{"foo": "bar"}
 
@@ -127,6 +135,8 @@ func TestNestedFieldNoCopy(t *testing.T) {
 	assert.Nil(t, res)
 }
 
+// TestNestedFieldCopy 验证 NestedFieldCopy 返回深拷贝：修改原对象不影响
+// 结果。其余边界与 NestedFieldNoCopy 基本一致。
 func TestNestedFieldCopy(t *testing.T) {
 	target := map[string]interface{}{"foo": "bar"}
 
@@ -165,10 +175,14 @@ func TestNestedFieldCopy(t *testing.T) {
 	assert.Nil(t, res)
 }
 
+// TestCacheableObject 复用 runtime/testing 的通用契约测试，确认
+// UnstructuredJSONScheme 产生的对象是可安全缓存的。
 func TestCacheableObject(t *testing.T) {
 	runtimetesting.CacheableObjectTest(t, UnstructuredJSONScheme)
 }
 
+// TestSetNestedStringSlice 验证 SetNestedStringSlice 会把 []string 转换
+// 为 []interface{} 并写入指定路径。
 func TestSetNestedStringSlice(t *testing.T) {
 	obj := map[string]interface{}{
 		"x": map[string]interface{}{
@@ -184,6 +198,7 @@ func TestSetNestedStringSlice(t *testing.T) {
 	assert.Equal(t, "bar", obj["x"].(map[string]interface{})["z"].([]interface{})[0])
 }
 
+// TestSetNestedSlice 验证直接写入 []interface{} 到嵌套路径。
 func TestSetNestedSlice(t *testing.T) {
 	obj := map[string]interface{}{
 		"x": map[string]interface{}{
@@ -199,6 +214,8 @@ func TestSetNestedSlice(t *testing.T) {
 	assert.Equal(t, "bar", obj["x"].(map[string]interface{})["z"].([]interface{})[0])
 }
 
+// TestSetNestedStringMap 验证 map[string]string 会被转换为
+// map[string]interface{} 后写入。
 func TestSetNestedStringMap(t *testing.T) {
 	obj := map[string]interface{}{
 		"x": map[string]interface{}{
@@ -214,6 +231,7 @@ func TestSetNestedStringMap(t *testing.T) {
 	assert.Equal(t, "bar", obj["x"].(map[string]interface{})["z"].(map[string]interface{})["b"])
 }
 
+// TestSetNestedMap 验证已符合 unstructured 表示形式的 map 直接写入。
 func TestSetNestedMap(t *testing.T) {
 	obj := map[string]interface{}{
 		"x": map[string]interface{}{
@@ -229,6 +247,9 @@ func TestSetNestedMap(t *testing.T) {
 	assert.Equal(t, "bar", obj["x"].(map[string]interface{})["z"].(map[string]interface{})["b"])
 }
 
+// TestNestedNumberAsFloat64 覆盖数值读取路径：接受 float64 与 int64，
+// 拒绝其他类型；int64 超出 float64 可精确表示范围时必须报错而不是静默
+// 舍入（否则下游会拿到错误的数值）。
 func TestNestedNumberAsFloat64(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
@@ -300,6 +321,9 @@ func TestNestedNumberAsFloat64(t *testing.T) {
 	}
 }
 
+// TestNestedNullCoercingStringMap 覆盖“宽松”的字符串 map 读取：null 值
+// 被强制转换为空字符串；但非字符串、非 null 的值会报错并返回 found=false，
+// 避免把类型错误悄悄吞掉。
 func TestNestedNullCoercingStringMap(t *testing.T) {
 	for _, tc := range []struct {
 		name           string

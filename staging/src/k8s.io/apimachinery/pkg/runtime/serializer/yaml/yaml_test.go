@@ -24,6 +24,8 @@ import (
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
+// testcase 描述一个 YAML 解码压力用例：data 为输入，error 为期望错误子串
+// （为空表示应成功），benchmark 表示是否只在基准测试中运行。
 type testcase struct {
 	name  string
 	data  []byte
@@ -32,6 +34,8 @@ type testcase struct {
 	benchmark bool
 }
 
+// testcases 返回 YAML 解码器必须抵御的攻击性输入：别名炸弹（多种元素类型）、
+// 超深嵌套、以及 3MB 级别的大输入。这些用例保护解析器不被恶意 YAML 拖垮。
 func testcases() []testcase {
 	return []testcase{
 		{
@@ -361,11 +365,15 @@ b: &b [*a]`),
 	}
 }
 
+// decoders 对两种 YAML->JSON 实现跑同一组用例：sigs.k8s.io/yaml 与
+// apimachinery 自带的 util/yaml，确保两者的限制行为一致。
 var decoders = map[string]func([]byte) ([]byte, error){
 	"sigsyaml": sigsyaml.YAMLToJSON,
 	"utilyaml": yaml.ToJSON,
 }
 
+// TestYAMLLimits 验证各解码器对恶意/超大 YAML 的处理：要么拒绝并返回预期错误，
+// 要么安全地完成解码，不允许挂起或栈溢出。
 func TestYAMLLimits(t *testing.T) {
 	for _, tc := range testcases() {
 		if tc.benchmark {
@@ -390,6 +398,8 @@ func TestYAMLLimits(t *testing.T) {
 	}
 }
 
+// BenchmarkYAMLLimits 对所有用例（含标记为 benchmark 的大输入）测量解码耗时，
+// 用于跟踪解析器在恶意输入下的性能表现。
 func BenchmarkYAMLLimits(b *testing.B) {
 	for _, tc := range testcases() {
 		b.Run(tc.name, func(b *testing.B) {

@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// ValidateFunc is a function that validates a value, possibly considering the
-// old value (if any).
+// ValidateFunc 校验一个值，必要时参考旧值（如果存在）。
+//
+// 使用泛型是为了让各校验函数可组合：调用方传入新旧值即可，无需关心
+// 底层类型；oldValue 在创建场景通常为零值。
 type ValidateFunc[T any] func(ctx context.Context, op operation.Operation, fldPath *field.Path, newValue, oldValue T) field.ErrorList

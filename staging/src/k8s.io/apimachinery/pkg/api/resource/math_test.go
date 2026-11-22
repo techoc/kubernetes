@@ -20,6 +20,9 @@ import (
 	"testing"
 )
 
+// TestDetectOverflowAdd 验证 int64Add 在正常与溢出边界上的结果与溢出标志。
+// 重点覆盖 int64 极值：任何跨越最大值/最小值的加法都必须报告溢出，
+// 且交换操作数后结果与溢出标志保持一致（加法可交换）。
 func TestDetectOverflowAdd(t *testing.T) {
 	for _, test := range []struct {
 		a, b int64
@@ -55,6 +58,7 @@ func TestDetectOverflowAdd(t *testing.T) {
 			t.Errorf("%v: unexpected overflow: %t", test, ok)
 		}
 		// addition is commutative
+		// 交换操作数后结果与溢出标志必须完全一致。
 		d, ok2 := int64Add(test.b, test.a)
 		if c != d || ok != ok2 {
 			t.Errorf("%v: not commutative: %d %t", test, d, ok2)
@@ -62,6 +66,8 @@ func TestDetectOverflowAdd(t *testing.T) {
 	}
 }
 
+// TestDetectOverflowMultiply 验证 int64Multiply 的乘法结果与溢出标志。
+// 覆盖 0、±1、正负组合以及 int64 极值相乘，并检查乘法可交换。
 func TestDetectOverflowMultiply(t *testing.T) {
 	for _, test := range []struct {
 		a, b int64
@@ -100,6 +106,7 @@ func TestDetectOverflowMultiply(t *testing.T) {
 			t.Errorf("%v: unexpected overflow: %t", test, ok)
 		}
 		// multiplication is commutative
+		// 交换操作数后结果与溢出标志必须完全一致。
 		d, ok2 := int64Multiply(test.b, test.a)
 		if c != d || ok != ok2 {
 			t.Errorf("%v: not commutative: %d %t", test, d, ok2)
@@ -107,9 +114,12 @@ func TestDetectOverflowMultiply(t *testing.T) {
 	}
 }
 
+// TestDetectOverflowScale 校验乘以 10 的幂的专用实现与通用乘法一致。
+// 这些专用函数是 Quantity 十进制缩放的快路径，正确性必须与 int64Multiply 等价。
 func TestDetectOverflowScale(t *testing.T) {
 	for _, a := range []int64{0, -1, 1, 10, -10, mostPositive, mostNegative, -mostPositive} {
 		for _, b := range []int64{1, 2, 10, 100, 1000, mostPositive} {
+			// 以通用乘法为基准，验证 int64MultiplyScale 的结果与溢出标志。
 			expect, expectOk := int64Multiply(a, b)
 
 			c, ok := int64MultiplyScale(a, b)
@@ -140,6 +150,7 @@ func TestDetectOverflowScale(t *testing.T) {
 	}
 }
 
+// TestRemoveInt64Factors 验证从数值中反复除以 max 因子，返回剩余值与缩放次数。
 func TestRemoveInt64Factors(t *testing.T) {
 	for _, test := range []struct {
 		value  int64
@@ -162,6 +173,8 @@ func TestRemoveInt64Factors(t *testing.T) {
 	}
 }
 
+// TestNegativeScaleInt64 验证按 10 的负幂缩放时的舍入结果与“是否精确”标志。
+// 正负数值都应向远离零的方向做对称舍入；负缩放属于未定义行为，仅验证其不崩溃。
 func TestNegativeScaleInt64(t *testing.T) {
 	for _, test := range []struct {
 		base   int64
@@ -198,6 +211,7 @@ func TestNegativeScaleInt64(t *testing.T) {
 		{0, 2, 0, true},
 
 		// negative scale is undefined behavior
+		// 负缩放未定义，这里仅确认实现不会因此 panic 或产生异常结果。
 		{1000, -1, 1000, true},
 	} {
 		result, exact := negativeScaleInt64(test.base, test.scale)

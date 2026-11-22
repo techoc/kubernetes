@@ -26,6 +26,9 @@ import (
 	"sigs.k8s.io/structured-merge-diff/v6/fieldpath"
 )
 
+// TestTransformManagedFieldsToSubresource 验证把父资源（如 Deployment）的 managedFields
+// 转换为 scale 子资源视角：只保留映射路径上的字段，APIVersion 改写为 autoscaling/v1；
+// 无法识别的 API 版本条目会被整体丢弃。
 func TestTransformManagedFieldsToSubresource(t *testing.T) {
 	testTime, _ := time.ParseInLocation("2006-Jan-02", "2013-Feb-03", time.Local)
 	managedFieldTime := metav1.NewTime(testTime)
@@ -137,6 +140,7 @@ func TestTransformManagedFieldsToSubresource(t *testing.T) {
 			schema.GroupVersion{Group: "apps", Version: "v1"},
 			defaultMappings(),
 		)
+		// ToSubresource 不修改入参，返回新的条目列表。
 		subresourceEntries, err := handler.ToSubresource()
 		if err != nil {
 			t.Fatalf("test %q - expected no error but got %v", test.desc, err)
@@ -148,6 +152,9 @@ func TestTransformManagedFieldsToSubresource(t *testing.T) {
 	}
 }
 
+// TestTransformingManagedFieldsToParent 验证把 scale 子资源的 managedFields 合并回父资源：
+// 子资源拥有的 replicas 路径从父条目中扣除；manager 与 operation 相同与否影响条目合并方式；
+// 未知 API 版本的父条目被丢弃。
 func TestTransformingManagedFieldsToParent(t *testing.T) {
 	tests := []struct {
 		desc        string
@@ -622,6 +629,7 @@ func TestTransformingManagedFieldsToParent(t *testing.T) {
 				schema.GroupVersion{Group: "apps", Version: "v1"},
 				defaultMappings(),
 			)
+			// ToParent 接收子资源条目，返回合并后的父资源条目。
 			parentEntries, err := handler.ToParent(test.subresource)
 			if err != nil {
 				t.Fatalf("test: %q - expected no error but got %v", test.desc, err)
@@ -633,6 +641,8 @@ func TestTransformingManagedFieldsToParent(t *testing.T) {
 	}
 }
 
+// TestTransformingManagedFieldsToParentMultiVersion 验证同一父资源存在多个版本时，
+// 按各自版本的字段路径映射转换；映射为 nil 的版本表示不支持 scale 子资源。
 func TestTransformingManagedFieldsToParentMultiVersion(t *testing.T) {
 	tests := []struct {
 		desc         string
@@ -778,6 +788,7 @@ func TestTransformingManagedFieldsToParentMultiVersion(t *testing.T) {
 	}
 }
 
+// defaultMappings 是测试用默认映射：apps/v1 的 replicas 字段对应路径 spec.replicas。
 func defaultMappings() ResourcePathMappings {
 	return ResourcePathMappings{
 		"apps/v1": fieldpath.MakePathOrDie("spec", "replicas"),

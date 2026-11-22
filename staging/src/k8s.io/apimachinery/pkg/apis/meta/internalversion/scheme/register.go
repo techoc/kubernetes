@@ -23,17 +23,17 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// Scheme is the registry for any type that adheres to the meta API spec.
+// Scheme 是遵循 meta API 规范的类型的注册表。
 var Scheme = runtime.NewScheme()
 
-// Codecs provides access to encoding and decoding for the scheme.
+// Codecs 提供基于 Scheme 的编码与解码能力。
 var Codecs = serializer.NewCodecFactory(Scheme)
 
-// ParameterCodec handles versioning of objects that are converted to query parameters.
+// ParameterCodec 负责在对象与查询参数之间做版本化转换。
 var ParameterCodec = runtime.NewParameterCodec(Scheme)
 
-// Unlike other API groups, meta internal knows about all meta external versions, but keeps
-// the logic for conversion private.
+// 与其他 API 组不同，meta internal 知晓所有 meta 外部版本，但将转换逻辑保持私有。
+// 因此在这里完成注册，使调用方无需感知 internal 与各外部版本之间的映射细节。
 func init() {
 	utilruntime.Must(internalversion.AddToScheme(Scheme))
 }

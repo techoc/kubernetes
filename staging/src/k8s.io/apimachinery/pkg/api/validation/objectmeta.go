@@ -33,21 +33,23 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// FieldImmutableErrorMsg is a error message for field is immutable.
+// FieldImmutableErrorMsg 是字段不可变时使用的错误消息。
 const FieldImmutableErrorMsg string = `field is immutable`
 
+// TotalAnnotationSizeLimitB 是对象所有 annotation 的键值总长度上限（256 kB）。
 const TotalAnnotationSizeLimitB int = 256 * (1 << 10) // 256 kB
 
-// BannedOwners is a black list of object that are not allowed to be owners.
+// BannedOwners 是不允许作为 owner 的对象黑名单。
 var BannedOwners = map[schema.GroupVersionKind]struct{}{
 	{Group: "", Version: "v1", Kind: "Event"}: {},
 }
 
-// ValidateAnnotations validates that a set of annotations are correctly defined.
+// ValidateAnnotations 校验一组 annotation 的定义是否合法：
+// 键需为 QualifiedName（不区分大小写），且总大小不超过限制。
 func ValidateAnnotations(annotations map[string]string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for k := range annotations {
-		// The rule is QualifiedName except that case doesn't matter, so convert to lowercase before checking.
+		// 规则是 QualifiedName，但不区分大小写，因此先转小写再校验。
 		for _, msg := range validation.IsQualifiedName(strings.ToLower(k)) {
 			allErrs = append(allErrs, field.Invalid(fldPath, k, msg).WithOrigin("format=k8s-label-key"))
 		}
@@ -58,6 +60,7 @@ func ValidateAnnotations(annotations map[string]string, fldPath *field.Path) fie
 	return allErrs
 }
 
+// ValidateAnnotationsSize 检查所有 annotation 键值总长度是否超过上限。
 func ValidateAnnotationsSize(annotations map[string]string) error {
 	var totalSize int64
 	for k, v := range annotations {
@@ -69,10 +72,12 @@ func ValidateAnnotationsSize(annotations map[string]string) error {
 	return nil
 }
 
+// validateOwnerReference 校验单个 ownerReference 的 apiVersion/kind/name/uid
+// 是否齐全且合法，并检查 owner 是否在黑名单中。
 func validateOwnerReference(ownerReference metav1.OwnerReference, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	gv, err := schema.ParseGroupVersion(ownerReference.APIVersion)
-	// gvk.Group is empty for the legacy group.
+	// 对遗留组而言 gvk.Group 为空。
 	if len(ownerReference.APIVersion) == 0 {
 		allErrs = append(allErrs, field.Required(fldPath.Child("apiVersion"), "must not be empty").MarkCoveredByDeclarative())
 	} else if err != nil || len(gv.Version) == 0 {
@@ -94,7 +99,8 @@ func validateOwnerReference(ownerReference metav1.OwnerReference, fldPath *field
 	return allErrs
 }
 
-// ValidateOwnerReferences validates that a set of owner references are correctly defined.
+// ValidateOwnerReferences 校验一组 ownerReference 的定义是否合法，
+// 并确保最多只有一个引用的 Controller 为 true。
 func ValidateOwnerReferences(ownerReferences []metav1.OwnerReference, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	firstControllerName := ""
@@ -113,7 +119,7 @@ func ValidateOwnerReferences(ownerReferences []metav1.OwnerReference, fldPath *f
 	return allErrs
 }
 
-// ValidateFinalizerName validates finalizer names.
+// ValidateFinalizerName 校验 finalizer 名称。
 func ValidateFinalizerName(stringValue string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, msg := range validation.IsQualifiedName(stringValue) {
@@ -123,7 +129,7 @@ func ValidateFinalizerName(stringValue string, fldPath *field.Path) field.ErrorL
 	return allErrs
 }
 
-// ValidateNoNewFinalizers validates the new finalizers has no new finalizers compare to old finalizers.
+// ValidateNoNewFinalizers 校验对象正在删除时没有新增 finalizer。
 func ValidateNoNewFinalizers(newFinalizers []string, oldFinalizers []string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	extra := sets.NewString(newFinalizers...).Difference(sets.NewString(oldFinalizers...))
@@ -133,7 +139,7 @@ func ValidateNoNewFinalizers(newFinalizers []string, oldFinalizers []string, fld
 	return allErrs
 }
 
-// ValidateImmutableField validates the new value and the old value are deeply equal.
+// ValidateImmutableField 校验新值与旧值深度相等（即字段不可变）。
 func ValidateImmutableField(newVal, oldVal interface{}, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	if !apiequality.Semantic.DeepEqual(oldVal, newVal) {
@@ -142,10 +148,10 @@ func ValidateImmutableField(newVal, oldVal interface{}, fldPath *field.Path) fie
 	return allErrs
 }
 
-// ValidateObjectMetaDeclaratively validates an ObjectMeta instance declaratively and deduplicates handwritten errors.
-// betaEnabled controls whether declarative validation rules at the Beta stability level are enforced.
-// NOTE: This method should be used in the types for which declarative validation is not enabled yet or cannot be enabled. The types
-// for which declarative validation is enabled and valdiation code is generated must use ValidateObjectMeta and ValidateObjectMetaUpdate.
+// ValidateObjectMetaDeclaratively 以声明式方式校验 ObjectMeta，并去重手写校验产生的错误。
+// betaEnabled 控制是否强制执行 Beta 稳定级别的声明式校验规则。
+// 注意：该方法应用于尚未启用或无法启用声明式校验的类型。已启用声明式校验且校验代码
+// 由生成器生成的类型必须使用 ValidateObjectMeta 与 ValidateObjectMetaUpdate。
 func ValidateObjectMetaDeclaratively(ctx context.Context, op operation.Type, obj, oldObj *metav1.ObjectMeta, requiresNamespace bool, nameFn ValidateNameFunc, fldPath *field.Path, betaEnabled bool) field.ErrorList {
 	var errs field.ErrorList
 	switch op {
@@ -154,6 +160,8 @@ func ValidateObjectMetaDeclaratively(ctx context.Context, op operation.Type, obj
 	case operation.Update:
 		errs = ValidateObjectMetaUpdate(obj, oldObj, fldPath)
 	}
+	// 先运行声明式校验，再根据稳定性级别过滤，最后剔除被声明式覆盖的手写错误，
+	// 避免同一问题报两次。
 	dvErrs := v1validation.Validate_ObjectMeta(ctx, operation.Operation{Type: op}, fldPath, obj, oldObj)
 	enforcedDVErrs := validate.FilterEnforcedDeclarativeErrors(ctx, dvErrs, betaEnabled)
 	errs = errs.MarkFromImperative()
@@ -161,8 +169,7 @@ func ValidateObjectMetaDeclaratively(ctx context.Context, op operation.Type, obj
 	return append(errs, enforcedDVErrs...)
 }
 
-// ValidateObjectMeta validates an object's metadata on creation. It expects that name generation has already
-// been performed.
+// ValidateObjectMeta 在创建时校验对象元数据。它假定 name 生成已经完成。
 func ValidateObjectMeta(objMeta *metav1.ObjectMeta, requiresNamespace bool, nameFn ValidateNameFunc, fldPath *field.Path) field.ErrorList {
 	metadata, err := meta.Accessor(objMeta)
 	if err != nil {
@@ -173,25 +180,21 @@ func ValidateObjectMeta(objMeta *metav1.ObjectMeta, requiresNamespace bool, name
 	return ValidateObjectMetaAccessor(metadata, requiresNamespace, nameFn, fldPath)
 }
 
-// objectMetaValidationOptions defines behavioral modifications for validating
-// an ObjectMeta.
+// objectMetaValidationOptions 定义校验 ObjectMeta 时的行为修改项。
 type objectMetaValidationOptions struct {
 	/* nothing here yet */
 }
 
-// ObjectMetaValidationOption specifies a behavioral modifier for
-// ValidateObjectMetaWithOpts and ValidateObjectMetaAccessorWithOpts.
+// ObjectMetaValidationOption 指定 ValidateObjectMetaWithOpts 与
+// ValidateObjectMetaAccessorWithOpts 的行为修改器。
 type ObjectMetaValidationOption func(opts *objectMetaValidationOptions)
 
-// ValidateObjectMetaWithOpts validates an object's metadata on creation. It
-// expects that name generation has already been performed, so name validation
-// is always executed.
+// ValidateObjectMetaWithOpts 在创建时校验对象元数据。它假定 name 生成已经完成，
+// 因此总是执行 name 校验。
 //
-// This is similar to ValidateObjectMeta, but uses options to buy future-safety
-// and uses different signature for the name validation function.  It also does
-// not directly validate the generateName field, because name generation
-// should have already been performed and it is the result of that generastion
-// that must conform to the nameFn.
+// 该函数与 ValidateObjectMeta 类似，但通过 options 提供未来扩展能力，并使用
+// 不同签名的 name 校验函数。它也不直接校验 generateName 字段，因为 name 生成
+// 应已完成，需要符合 nameFn 的是生成结果。
 func ValidateObjectMetaWithOpts(objMeta *metav1.ObjectMeta, isNamespaced bool, nameFn ValidateNameFuncWithErrors, fldPath *field.Path, options ...ObjectMetaValidationOption) field.ErrorList {
 	metadata, err := meta.Accessor(objMeta)
 	if err != nil {
@@ -202,8 +205,7 @@ func ValidateObjectMetaWithOpts(objMeta *metav1.ObjectMeta, isNamespaced bool, n
 	return ValidateObjectMetaAccessorWithOpts(metadata, isNamespaced, nameFn, fldPath, options...)
 }
 
-// ValidateObjectMetaAccessor validates an object's metadata on creation. It expects that name generation has already
-// been performed.
+// ValidateObjectMetaAccessor 在创建时校验对象元数据。它假定 name 生成已经完成。
 func ValidateObjectMetaAccessor(meta metav1.Object, requiresNamespace bool, nameFn ValidateNameFunc, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -212,9 +214,9 @@ func ValidateObjectMetaAccessor(meta metav1.Object, requiresNamespace bool, name
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("generateName"), meta.GetGenerateName(), msg))
 		}
 	}
-	// If the generated name validates, but the calculated value does not, it's a problem with generation, and we
-	// report it here. This may confuse users, but indicates a programming bug and still must be validated.
-	// If there are multiple fields out of which one is required then add an or as a separator
+	// 若 generateName 校验通过但计算出的 name 不通过，说明生成逻辑有问题，
+	// 仍需在此报告。这可能让用户困惑，但代表程序缺陷，必须校验。
+	// 若有多个字段满足其一即可，则用 or 作为分隔符。
 	if len(meta.GetName()) == 0 {
 		allErrs = append(allErrs, field.Required(fldPath.Child("name"), "name or generateName is required"))
 	} else {
@@ -226,15 +228,12 @@ func ValidateObjectMetaAccessor(meta metav1.Object, requiresNamespace bool, name
 	return append(allErrs, validateObjectMetaAccessorWithOptsCommon(meta, requiresNamespace, fldPath, nil)...)
 }
 
-// ValidateObjectMetaAccessorWithOpts validates an object's metadata on
-// creation. It expects that name generation has already been performed, so
-// name validation is always executed.
+// ValidateObjectMetaAccessorWithOpts 在创建时校验对象元数据。它假定 name 生成
+// 已经完成，因此总是执行 name 校验。
 //
-// This is similar to ValidateObjectMetaAccessor, but uses options to buy
-// future-safety and uses different signature for the name validation function.
-// It also does not directly validate the generateName field, because name
-// generation should have already been performed and it is the result of that
-// generastion that must conform to the nameFn.
+// 该函数与 ValidateObjectMetaAccessor 类似，但通过 options 提供未来扩展能力，
+// 并使用不同签名的 name 校验函数。它也不直接校验 generateName 字段，因为
+// name 生成应已完成，需要符合 nameFn 的是生成结果。
 func ValidateObjectMetaAccessorWithOpts(meta metav1.Object, isNamespaced bool, nameFn ValidateNameFuncWithErrors, fldPath *field.Path, options ...ObjectMetaValidationOption) field.ErrorList {
 	opts := objectMetaValidationOptions{}
 	for _, opt := range options {
@@ -243,15 +242,11 @@ func ValidateObjectMetaAccessorWithOpts(meta metav1.Object, isNamespaced bool, n
 
 	var allErrs field.ErrorList
 
-	// generateName is not directly validated here. Types can have
-	// different rules for name generation, and the nameFn is for validating
-	// the post-generation data, not the input. In the past we assumed that
-	// name generation was always "append 5 random characters", but that's not
-	// NECESSARILY true. Also, the nameFn should always be considering the max
-	// length of the name, and it doesn't know enough about the name generation
-	// to do that. Also, given a bad generateName, the user will get errors
-	// for both the generateName and name fields. We will focus validation on
-	// the name field, which should give a better UX overall.
+	// 此处不直接校验 generateName。不同类型可能有不同的 name 生成规则，
+	// 而 nameFn 校验的是生成后的数据而非输入。过去我们假定 name 生成总是
+	// “追加 5 个随机字符”，但这并非必然。另外 nameFn 应始终考虑 name 最大长度，
+	// 而它并不了解 name 生成细节。若 generateName 非法，用户会同时收到
+	// generateName 与 name 两个字段的错误；把校验集中在 name 字段上整体体验更好。
 	// TODO(thockin): should we do a max-length check here? e.g. 1K or 4K?
 
 	if len(meta.GetGenerateName()) != 0 && len(meta.GetName()) == 0 {
@@ -267,8 +262,9 @@ func ValidateObjectMetaAccessorWithOpts(meta metav1.Object, isNamespaced bool, n
 	return append(allErrs, validateObjectMetaAccessorWithOptsCommon(meta, isNamespaced, fldPath, &opts)...)
 }
 
-// validateObjectMetaAccessorWithOptsCommon is a shared function for validating
-// the parts of an ObjectMeta with are handled the same in both paths..
+// validateObjectMetaAccessorWithOptsCommon 是两条校验路径共享的实现，
+// 负责校验 namespace、generation、labels、annotations、ownerReferences、
+// finalizers 与 managedFields 等通用字段。
 func validateObjectMetaAccessorWithOptsCommon(meta metav1.Object, isNamespaced bool, fldPath *field.Path, _ *objectMetaValidationOptions) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -296,7 +292,8 @@ func validateObjectMetaAccessorWithOptsCommon(meta metav1.Object, isNamespaced b
 	return allErrs
 }
 
-// ValidateFinalizers tests if the finalizers name are valid, and if there are conflicting finalizers.
+// ValidateFinalizers 校验 finalizer 名称是否合法，并检查 finalizer 之间是否冲突
+// （OrphanDependents 与 DeleteDependents 不能同时设置）。
 func ValidateFinalizers(finalizers []string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	hasFinalizerOrphanDependents := false
@@ -316,7 +313,7 @@ func ValidateFinalizers(finalizers []string, fldPath *field.Path) field.ErrorLis
 	return allErrs
 }
 
-// ValidateObjectMetaUpdate validates an object's metadata when updated.
+// ValidateObjectMetaUpdate 在更新时校验对象元数据。
 func ValidateObjectMetaUpdate(newMeta, oldMeta *metav1.ObjectMeta, fldPath *field.Path) field.ErrorList {
 	newMetadata, err := meta.Accessor(newMeta)
 	if err != nil {
@@ -333,26 +330,27 @@ func ValidateObjectMetaUpdate(newMeta, oldMeta *metav1.ObjectMeta, fldPath *fiel
 	return ValidateObjectMetaAccessorUpdate(newMetadata, oldMetadata, fldPath)
 }
 
-// ValidateObjectMetaAccessorUpdate validates an object's metadata when updated.
+// ValidateObjectMetaAccessorUpdate 在更新时校验对象元数据。
 func ValidateObjectMetaAccessorUpdate(newMeta, oldMeta metav1.Object, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	// Finalizers cannot be added if the object is already being deleted.
+	// 对象已在删除中时，不允许新增 finalizer。
 	if oldMeta.GetDeletionTimestamp() != nil {
 		allErrs = append(allErrs, ValidateNoNewFinalizers(newMeta.GetFinalizers(), oldMeta.GetFinalizers(), fldPath.Child("finalizers"))...)
 	}
 
-	// Reject updates that don't specify a resource version
+	// 拒绝未指定 resourceVersion 的更新（无法做乐观并发控制）。
 	if len(newMeta.GetResourceVersion()) == 0 {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("resourceVersion"), newMeta.GetResourceVersion(), "must be specified for an update"))
 	}
 
-	// Generation shouldn't be decremented
+	// generation 不应被递减。
 	allErrs = append(allErrs, ValidateNonnegativeField(newMeta.GetGeneration(), fldPath.Child("generation")).MarkCoveredByDeclarative()...)
 	if newMeta.GetGeneration() < oldMeta.GetGeneration() {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("generation"), newMeta.GetGeneration(), "must not be decremented"))
 	}
 
+	// 以下字段在更新时不可变。
 	allErrs = append(allErrs, ValidateImmutableField(newMeta.GetName(), oldMeta.GetName(), fldPath.Child("name"))...)
 	allErrs = append(allErrs, ValidateImmutableField(newMeta.GetNamespace(), oldMeta.GetNamespace(), fldPath.Child("namespace"))...)
 	allErrs = append(allErrs, ValidateImmutableField(newMeta.GetUID(), oldMeta.GetUID(), fldPath.Child("uid")).WithOrigin("immutable").MarkCoveredByDeclarative()...)

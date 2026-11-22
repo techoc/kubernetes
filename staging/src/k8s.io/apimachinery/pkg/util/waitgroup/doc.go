@@ -16,4 +16,8 @@ limitations under the License.
 
 // Package waitgroup implements SafeWaitGroup wrap of sync.WaitGroup.
 // Add with positive delta when waiting will fail, to prevent sync.WaitGroup race issue.
+//
+// 中文说明：Sync.WaitGroup 在 Wait 期间调用 Add 属于未定义行为（可能 panic
+// 或漏计）。SafeWaitGroup 选择在 Wait 中直接让 Add 失败，让调用方显式处理，
+// 而不是把竞态藏起来。
 package waitgroup

@@ -18,6 +18,9 @@ package validation
 
 import "testing"
 
+// TestMaskTrailingDash 验证 maskTrailingDash 的边界行为：
+// 空串、仅一个 dash、前导 dash 均原样返回；只有末尾 dash 会被替换；
+// 同时存在前导与末尾 dash 时仅处理末尾那个。
 func TestMaskTrailingDash(t *testing.T) {
 	testCases := []struct {
 		beforeMasking        string
@@ -30,6 +33,7 @@ func TestMaskTrailingDash(t *testing.T) {
 			description:          "empty string",
 		},
 		{
+			// 单个 dash 不能被视为“末尾 dash”，否则会变成空串。
 			beforeMasking:        "-",
 			expectedAfterMasking: "-",
 			description:          "only a single dash",
@@ -40,6 +44,7 @@ func TestMaskTrailingDash(t *testing.T) {
 			description:          "has leading dash",
 		},
 		{
+			// 注意期望值 "foa" 是掩码算法的既有行为，不是笔误。
 			beforeMasking:        "-foo-",
 			expectedAfterMasking: "-foa",
 			description:          "has both leading and trailing dashes",

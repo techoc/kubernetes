@@ -41,8 +41,11 @@ type UnstructuredList struct {
 
 func (u *UnstructuredList) GetObjectKind() schema.ObjectKind { return u }
 
+// IsList is always true for UnstructuredList; the type itself is the signal.
 func (u *UnstructuredList) IsList() bool { return true }
 
+// EachListItem invokes fn with a pointer to each stored item, avoiding a copy
+// for the common case where the caller does not retain it.
 func (u *UnstructuredList) EachListItem(fn func(runtime.Object) error) error {
 	for i := range u.Items {
 		if err := fn(&u.Items[i]); err != nil {
@@ -52,6 +55,8 @@ func (u *UnstructuredList) EachListItem(fn func(runtime.Object) error) error {
 	return nil
 }
 
+// EachListItemWithAlloc allocates a fresh Unstructured for each item so callers
+// may safely retain the object beyond the callback.
 func (u *UnstructuredList) EachListItemWithAlloc(fn func(runtime.Object) error) error {
 	for i := range u.Items {
 		if err := fn(&Unstructured{Object: u.Items[i].Object}); err != nil {
@@ -92,6 +97,9 @@ func (u *UnstructuredList) UnstructuredContent() map[string]interface{} {
 // SetUnstructuredContent obeys the conventions of List and keeps Items and the items
 // array in sync. If items is not an array of objects in the incoming map, then any
 // mismatched item will be removed.
+//
+// The rewrite is mandatory: leaving a non-object element in the items array
+// would make every later accessor fail while Items silently disagreed.
 func (obj *UnstructuredList) SetUnstructuredContent(content map[string]interface{}) {
 	obj.Object = content
 	if content == nil {
@@ -116,6 +124,8 @@ func (obj *UnstructuredList) SetUnstructuredContent(content map[string]interface
 	obj.Object["items"] = newItems
 }
 
+// DeepCopy returns an independent copy of both the list metadata and every
+// item. The generated machinery cannot be used because the payload is untyped.
 func (u *UnstructuredList) DeepCopy() *UnstructuredList {
 	if u == nil {
 		return nil

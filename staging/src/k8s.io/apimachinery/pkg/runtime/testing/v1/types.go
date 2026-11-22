@@ -21,6 +21,11 @@ import (
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// ExternalSimple 是用于测试的简单外部版本类型。
+//
+// 内嵌的 TypeMeta 使用空 json tag，因此其 apiVersion/kind 字段会与外层对象平铺，
+// 与真实 API 类型的序列化布局保持一致；TestString 则是可被测试随意赋值的普通字段。
 type ExternalSimple struct {
 	runtime.TypeMeta `json:""`
 	TestString       string `json:"testString"`

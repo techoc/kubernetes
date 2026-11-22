@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package test 提供 apimachinery 测试共用的示例 Scheme 与辅助类型。
 package test
 
 import (
@@ -26,8 +27,8 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
-// List and ListV1 should be kept in sync with k8s.io/kubernetes/pkg/api#List
-// and k8s.io/api/core/v1#List.
+// List 与 ListV1 应与 k8s.io/kubernetes/pkg/api#List 及 k8s.io/api/core/v1#List 保持同步：
+// 它们是序列化测试中使用的简化列表类型。
 //
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -38,6 +39,7 @@ type List struct {
 	Items []runtime.Object
 }
 
+// ListV1 是 List 的 v1 版本，Items 使用 RawExtension 以支持任意内嵌对象。
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ListV1 struct {
@@ -47,6 +49,8 @@ type ListV1 struct {
 	Items []runtime.RawExtension `json:"items" protobuf:"bytes,2,rep,name=items"`
 }
 
+// TestScheme 构造包含 internal 与 v1 两组类型的示例 Scheme 及对应的 CodecFactory，
+// 供序列化、转换相关测试直接复用。
 func TestScheme() (*runtime.Scheme, apiserializer.CodecFactory) {
 	internalGV := schema.GroupVersion{Group: "", Version: runtime.APIVersionInternal}
 	externalGV := schema.GroupVersion{Group: "", Version: "v1"}

@@ -22,10 +22,17 @@ import (
 	"reflect"
 )
 
+// isInlinedFromTag 判断字段是否通过 `json:",inline"`（Go 1.27 起的 "embed" 指令）
+// 内联到父结构体中。
+//
+// 判断条件：字段必须是（可单层解引用的）结构体，且 tag 没有自定义名称、
+// 只含唯一的 "embed" 指令。待办注释中提到的边界情况（非结构体内联、embed 与其他指令混用）
+// 待切换到 json/v2 后再做严格报错。
 func isInlinedFromTag(field reflect.StructField, tagName string, tagDirectives []string) bool {
 	fieldType := field.Type
 	if fieldType.Kind() == reflect.Pointer && fieldType.Name() == "" {
 		// optionally unwrap a single level
+		// 只解一层指针：指向结构体的字段也可内联。
 		fieldType = fieldType.Elem()
 	}
 	// TODO: when switching to direct use of json/v2, error on non-struct embedding and use of embed with other directives

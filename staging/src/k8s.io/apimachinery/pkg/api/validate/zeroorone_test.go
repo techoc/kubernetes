@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// TestZeroOrOneOfUnion 覆盖 ZeroOrOneOfUnion 的成员计数逻辑：
+// 0 个或 1 个成员合法，2 个及以上报错，错误中列出已设置与全部成员。
 func TestZeroOrOneOfUnion(t *testing.T) {
 	testCases := []struct {
 		name        string
@@ -54,7 +56,7 @@ func TestZeroOrOneOfUnion(t *testing.T) {
 			name:        "no member set - allowed for ZeroOrOneOf",
 			fields:      []string{"a", "b", "c", "d"},
 			fieldValues: []bool{false, false, false, false},
-			expected:    nil, // This is the key difference from Union
+			expected:    nil, // 与 OneOf 的关键区别：零个成员是允许的。
 		},
 	}
 
@@ -65,8 +67,7 @@ func TestZeroOrOneOfUnion(t *testing.T) {
 				members = append(members, NewUnionMember(f))
 			}
 
-			// Create mock extractors that return predefined values instead of
-			// actually extracting from the object.
+			// 构造返回预置布尔值的 mock extractor，避免真正从对象中取值。
 			extractors := make([]ExtractorFn[*testMember, bool], len(tc.fieldValues))
 			for i, val := range tc.fieldValues {
 				extractors[i] = func(_ *testMember) bool { return val }
@@ -81,6 +82,9 @@ func TestZeroOrOneOfUnion(t *testing.T) {
 	}
 }
 
+// TestZeroOrOneOfUnionRatcheting 验证更新时的 ratcheting 行为：
+// 若新旧对象都存在同样的多个成员（历史遗留非法数据），不重复报错；
+// 只有从合法状态变为非法状态时才报错。
 func TestZeroOrOneOfUnionRatcheting(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -99,6 +103,7 @@ func TestZeroOrOneOfUnionRatcheting(t *testing.T) {
 			newStruct: &testStruct{},
 		},
 		{
+			// 旧值已非法时允许保持原样（ratcheting）。
 			name: "both have more than one member",
 			oldStruct: &testStruct{
 				M1: &m1{},
@@ -110,6 +115,7 @@ func TestZeroOrOneOfUnionRatcheting(t *testing.T) {
 			},
 		},
 		{
+			// 从单个成员变为两个成员，必须报错。
 			name: "change to invalid",
 			oldStruct: &testStruct{
 				M1: &m1{},

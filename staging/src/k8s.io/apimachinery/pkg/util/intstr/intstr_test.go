@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// TestFromInt 验证构造函数把整数标记为 Int 类型。
 func TestFromInt(t *testing.T) {
 	i := FromInt(93)
 	if i.Type != Int || i.IntVal != 93 {
@@ -37,6 +38,7 @@ func TestFromInt(t *testing.T) {
 	}
 }
 
+// TestFromInt32 验证 int32 输入同样产生 Int 类型且不丢失数值。
 func TestFromInt32(t *testing.T) {
 	i := FromInt32(93)
 	if i.Type != Int || i.IntVal != 93 {
@@ -44,6 +46,7 @@ func TestFromInt32(t *testing.T) {
 	}
 }
 
+// TestFromString 验证字符串输入始终标记为 String 类型，即使内容是数字。
 func TestFromString(t *testing.T) {
 	i := FromString("76")
 	if i.Type != String || i.StrVal != "76" {
@@ -51,10 +54,14 @@ func TestFromString(t *testing.T) {
 	}
 }
 
+// IntOrStringHolder 把 IntOrString 包在结构体字段中，避免顶层值走
+// encoding/json 的特殊处理，从而测试真实的字段编解码路径。
 type IntOrStringHolder struct {
 	IOrS IntOrString `json:"val"`
 }
 
+// TestIntOrStringUnmarshalJSON 验证 JSON 数字解码为 Int，JSON 字符串解码为
+// String——两者不能混同，否则百分比等语义会丢失。
 func TestIntOrStringUnmarshalJSON(t *testing.T) {
 	cases := []struct {
 		input  string
@@ -75,6 +82,8 @@ func TestIntOrStringUnmarshalJSON(t *testing.T) {
 	}
 }
 
+// TestIntOrStringMarshalJSON 验证序列化保持原始类型：Int 输出为数字，
+// String 输出为带引号的字符串。
 func TestIntOrStringMarshalJSON(t *testing.T) {
 	cases := []struct {
 		input  IntOrString
@@ -96,6 +105,8 @@ func TestIntOrStringMarshalJSON(t *testing.T) {
 	}
 }
 
+// TestIntOrStringMarshalJSONUnmarshalYAML 验证 JSON 编码结果可被 YAML 解析
+// 并还原为等价值——YAML 是 JSON 的超集，这条路径保证跨格式兼容。
 func TestIntOrStringMarshalJSONUnmarshalYAML(t *testing.T) {
 	cases := []struct {
 		input IntOrString
@@ -123,6 +134,9 @@ func TestIntOrStringMarshalJSONUnmarshalYAML(t *testing.T) {
 	}
 }
 
+// TestGetIntFromIntOrString 覆盖取值的宽松解析：Int 直接返回；String 仅在以
+// "%" 结尾且前缀为合法整数时视为百分比。注意 "200"（纯数字字符串）会报错，
+// 因为字符串形式只允许百分比。
 func TestGetIntFromIntOrString(t *testing.T) {
 	tests := []struct {
 		input      IntOrString
@@ -195,6 +209,8 @@ func TestGetIntFromIntOrString(t *testing.T) {
 
 }
 
+// TestGetIntFromIntOrPercent 验证百分比按总量缩放时的取整方向：
+// 90% of 95 向上取整为 86，向下取整为 85；非法格式与纯数字字符串均报错。
 func TestGetIntFromIntOrPercent(t *testing.T) {
 	tests := []struct {
 		input     IntOrString
@@ -264,6 +280,7 @@ func TestGetIntFromIntOrPercent(t *testing.T) {
 	}
 }
 
+// TestGetValueFromIntOrPercentNil 验证 nil 输入必须报错而非 panic。
 func TestGetValueFromIntOrPercentNil(t *testing.T) {
 	_, err := GetScaledValueFromIntOrPercent(nil, 0, false)
 	if err == nil {
@@ -271,6 +288,9 @@ func TestGetValueFromIntOrPercentNil(t *testing.T) {
 	}
 }
 
+// TestParse 验证 Parse 只把落在 int32 范围内的十进制解析为 Int，超出范围
+// （包括 int64 范围）一律保留为 String，避免不同平台 int 宽度差异导致
+// 语义漂移。
 func TestParse(t *testing.T) {
 	tests := []struct {
 		input  string
@@ -331,6 +351,8 @@ func TestParse(t *testing.T) {
 	}
 }
 
+// TestMarshalCBOR 验证 CBOR 编码使用规范的最短整数编码：Int 按数值大小选择
+// 1/2/3/5 字节表示，String 按 UTF-8 长度编码；非法 Type 必须报错。
 func TestMarshalCBOR(t *testing.T) {
 	for _, tc := range []struct {
 		in            IntOrString
@@ -436,6 +458,8 @@ func TestMarshalCBOR(t *testing.T) {
 	}
 }
 
+// TestUnmarshalCBOR 是 MarshalCBOR 的逆过程：整数解码为 Int、文本字符串解码
+// 为 String，map 等不支持的输入必须报错。
 func TestUnmarshalCBOR(t *testing.T) {
 	for _, tc := range []struct {
 		in            []byte
@@ -543,6 +567,8 @@ func TestUnmarshalCBOR(t *testing.T) {
 	}
 }
 
+// TestIntOrStringRoundtripCBOR 随机生成 IntOrString 并做 CBOR 往返，验证
+// 编码/解码在任意合法值上都保持完全相等；失败时输出诊断编码以便定位。
 func TestIntOrStringRoundtripCBOR(t *testing.T) {
 	fuzzer := randfill.New()
 	for i := 0; i < 500; i++ {

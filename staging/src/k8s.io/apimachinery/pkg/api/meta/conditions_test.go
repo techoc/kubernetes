@@ -24,6 +24,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TestSetStatusCondition 覆盖 SetStatusCondition 的插入/更新语义：
+// 新类型追加到末尾；已存在的类型原位替换，并按状态是否变化决定是否保留
+// 原有的 LastTransitionTime。
 func TestSetStatusCondition(t *testing.T) {
 	oneHourBefore := time.Now().Add(-1 * time.Hour)
 	oneHourAfter := time.Now().Add(1 * time.Hour)
@@ -36,6 +39,7 @@ func TestSetStatusCondition(t *testing.T) {
 		expected      []metav1.Condition
 	}{
 		{
+			// 新条件应追加到列表末尾，并返回 changed=true。
 			name: "should-add",
 			conditions: []metav1.Condition{
 				{Type: "first"},
@@ -50,6 +54,7 @@ func TestSetStatusCondition(t *testing.T) {
 			},
 		},
 		{
+			// 状态发生变化时，采用调用方提供的 LastTransitionTime。
 			name: "use-supplied-time",
 			conditions: []metav1.Condition{
 				{Type: "first"},
@@ -65,6 +70,8 @@ func TestSetStatusCondition(t *testing.T) {
 			},
 		},
 		{
+			// 状态未变时，LastTransitionTime 保留旧值，其余字段（Reason/Message/
+			// ObservedGeneration）更新为新值。
 			name: "update-fields",
 			conditions: []metav1.Condition{
 				{Type: "first"},
@@ -80,6 +87,7 @@ func TestSetStatusCondition(t *testing.T) {
 			},
 		},
 		{
+			// 所有字段都相同则视为无变化，changed=false。
 			name: "nothing changes",
 			conditions: []metav1.Condition{{
 				Type:               "type",
@@ -108,6 +116,8 @@ func TestSetStatusCondition(t *testing.T) {
 	}
 }
 
+// TestRemoveStatusCondition 覆盖 RemoveStatusCondition：存在则删除并返回 true，
+// 不存在或列表为空时保持原样并返回 false。
 func TestRemoveStatusCondition(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -165,6 +175,8 @@ func TestRemoveStatusCondition(t *testing.T) {
 	}
 }
 
+// TestFindStatusCondition 覆盖 FindStatusCondition 的查找结果：
+// 不存在返回 nil，存在返回指向该条件的指针。
 func TestFindStatusCondition(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -201,6 +213,7 @@ func TestFindStatusCondition(t *testing.T) {
 	}
 }
 
+// TestIsStatusConditionPresentAndEqual 覆盖“条件存在且状态相等”的组合判定。
 func TestIsStatusConditionPresentAndEqual(t *testing.T) {
 	tests := []struct {
 		name            string

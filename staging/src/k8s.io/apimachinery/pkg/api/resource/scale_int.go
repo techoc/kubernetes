@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package resource 提供用于表示和运算资源数量的类型（如 Quantity），
+// 以及其内部使用的十进制缩放整数运算。
 package resource
 
 import (
@@ -23,7 +25,7 @@ import (
 )
 
 var (
-	// A sync pool to reduce allocation.
+	// 一个 sync.Pool，用于减少 big.Int 的重复分配。
 	intPool  sync.Pool
 	maxInt64 = big.NewInt(math.MaxInt64)
 )
@@ -34,41 +36,41 @@ func init() {
 	}
 }
 
-// scaledValue scales given unscaled value from scale to new Scale and returns
-// an int64. It ALWAYS rounds up the result when scale down. The final result might
-// overflow.
+// scaledValue 把给定未缩放值从 scale 换算到 newScale，并返回 int64。
+// 缩小（scale down）时结果总是向上取整；最终结果可能溢出。
 //
-// scale, newScale represents the scale of the unscaled decimal.
-// The mathematical value of the decimal is unscaled * 10**(-scale).
+// scale 与 newScale 表示未缩放十进制数的标度。
+// 该十进制数的数学值为 unscaled * 10**(-scale)。
 func scaledValue(unscaled *big.Int, scale, newScale int) int64 {
 	dif := scale - newScale
 	if dif == 0 {
 		return unscaled.Int64()
 	}
 
-	// Handle scale up
-	// This is an easy case, we do not need to care about rounding and overflow.
-	// If any intermediate operation causes overflow, the result will overflow.
+	// 处理放大（scale up）
+	// 这是简单情形，无需考虑舍入与溢出：
+	// 任何中间运算若溢出，最终结果也会溢出。
 	if dif < 0 {
 		return unscaled.Int64() * int64(math.Pow10(-dif))
 	}
 
-	// Handle scale down
-	// We have to be careful about the intermediate operations.
+	// 处理缩小（scale down）
+	// 必须小心处理中间运算。
 
-	// fast path when unscaled < max.Int64 and exp(10,dif) < max.Int64
+	// 当 unscaled < max.Int64 且 exp(10,dif) < max.Int64 时走快路径
 	const log10MaxInt64 = 19
 	if unscaled.Cmp(maxInt64) < 0 && dif < log10MaxInt64 {
 		divide := int64(math.Pow10(dif))
 		result := unscaled.Int64() / divide
 		mod := unscaled.Int64() % divide
 		if mod != 0 {
+			// 有余数说明需要向上取整
 			return result + 1
 		}
 		return result
 	}
 
-	// We should only convert back to int64 when getting the result.
+	// 仅在取得最终结果时才转回 int64，避免中间值溢出。
 	divisor := intPool.Get().(*big.Int)
 	exp := intPool.Get().(*big.Int)
 	result := intPool.Get().(*big.Int)
@@ -81,13 +83,14 @@ func scaledValue(unscaled *big.Int, scale, newScale int) int64 {
 	// divisor = 10^(dif)
 	// TODO: create loop up table if exp costs too much.
 	divisor.Exp(bigTen, exp.SetInt64(int64(dif)), nil)
-	// reuse exp
+	// 复用 exp 作为余数
 	remainder := exp
 
 	// result = unscaled / divisor
 	// remainder = unscaled % divisor
 	result.DivMod(unscaled, divisor, remainder)
 	if remainder.Sign() != 0 {
+		// 有余数，向上取整
 		return result.Int64() + 1
 	}
 

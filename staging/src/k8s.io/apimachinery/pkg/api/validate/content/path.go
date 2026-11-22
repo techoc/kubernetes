@@ -21,19 +21,18 @@ import (
 	"strings"
 )
 
-// Strings that cannot be used as names specified as path segments (like the
-// REST API or etcd store).
+// 不能作为路径段名称（REST API 或 etcd 存储）出现的完整字符串。
+// "." 与 ".." 在文件系统/URL 归一化中具有特殊含义，直接使用会导致路径穿越。
 var pathSegmentNameMayNotBe = []string{".", ".."}
 
-// Substrings that cannot be used in names specified as path segments (like the
-// REST API or etcd store).
+// 不能出现在以路径段形式使用（REST API 或 etcd 存储）的名称中的子串。
+// "/" 会改变路径层级，"%"" 可能被 URL 解码逻辑二次解释。
 var pathSegmentNameMayNotContain = []string{"/", "%"}
 
-// IsPathSegmentName validates the name can be safely encoded as a path
-// segment.
+// IsPathSegmentName 校验 name 可以被安全地编码为单个路径段。
 //
-// Note that, for historical reason, this function does not check for
-// empty strings or impose a limit on the length of the name.
+// 注意：出于历史兼容原因，该函数不检查空字符串，也不限制名称长度；
+// 调用方若需要这些约束需自行叠加。
 func IsPathSegmentName(name string) []string {
 	for _, illegalName := range pathSegmentNameMayNotBe {
 		if name == illegalName {
@@ -44,13 +43,10 @@ func IsPathSegmentName(name string) []string {
 	return IsPathSegmentPrefix(name)
 }
 
-// IsPathSegmentPrefix validates the name can be used as a prefix for a
-// name which will be encoded as a path segment It does not check for exact
-// matches with disallowed names, since an arbitrary suffix might make the name
-// valid.
+// IsPathSegmentPrefix 校验 name 可以作为将以路径段形式编码的名称前缀。
+// 它不检查与禁用名称的精确匹配，因为任意后缀可能使该名称重新变得合法。
 //
-// Note that, for historical reason, this function does not check for
-// empty strings or impose a limit on the length of the name.
+// 注意：出于历史兼容原因，该函数不检查空字符串，也不限制名称长度。
 func IsPathSegmentPrefix(name string) []string {
 	var errors []string
 	for _, illegalContent := range pathSegmentNameMayNotContain {

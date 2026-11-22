@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package net 提供主机网络接口与路由的探测工具，用于为守护进程选择
+// 合适的绑定地址（优先 IPv4），并屏蔽测试对真实 /proc 与 net 库的依赖。
 package net
 
 import (
@@ -30,6 +32,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// AddressFamily 是 IP 地址族（4 或 6），值本身即协议版本号。
 type AddressFamily uint
 
 const (
@@ -37,6 +40,8 @@ const (
 	familyIPv6 AddressFamily = 6
 )
 
+// AddressFamilyPreference 是按优先顺序排列的地址族列表；调用方按顺序尝试，
+// 因此 "preferIPv4" 表示 IPv4 优先。
 type AddressFamilyPreference []AddressFamily
 
 var (
@@ -50,10 +55,12 @@ const (
 )
 
 const (
+	// Linux 的 /proc 路由表格式；这里只解析默认路由。
 	ipv4RouteFile = "/proc/net/route"
 	ipv6RouteFile = "/proc/net/ipv6_route"
 )
 
+// Route 是路由表中的一条默认路由。
 type Route struct {
 	Interface   string
 	Destination net.IP
@@ -61,6 +68,7 @@ type Route struct {
 	Family      AddressFamily
 }
 
+// RouteFile 描述一个路由文件及其解析函数；把路径与解析逻辑分开便于测试。
 type RouteFile struct {
 	name  string
 	parse func(input io.Reader) ([]Route, error)
@@ -93,6 +101,8 @@ var (
 	v6File = RouteFile{name: ipv6RouteFile, parse: getIPv6DefaultRoutes}
 )
 
+// extract 打开路由文件并把内容交给解析函数。调用方需区分“文件不存在”
+// （走接口探测兜底）与“解析失败”（直接报错）。
 func (rf RouteFile) extract() ([]Route, error) {
 	file, err := os.Open(rf.name)
 	if err != nil {
@@ -128,6 +138,7 @@ func getIPv4DefaultRoutes(input io.Reader) ([]Route, error) {
 		if err != nil {
 			return nil, err
 		}
+		// 只保留默认路由（目的地址为 0.0.0.0）。
 		if !dest.Equal(net.IPv4zero) {
 			continue
 		}
@@ -141,6 +152,9 @@ func getIPv4DefaultRoutes(input io.Reader) ([]Route, error) {
 	return routes, nil
 }
 
+// getIPv6DefaultRoutes 解析 /proc/net/ipv6_route，列位置与 IPv4 不同：
+// 目的地址、网关、接口名分别在第 0、4、9 列。网关为零的条目是 loopback，
+// 需要排除。
 func getIPv6DefaultRoutes(input io.Reader) ([]Route, error) {
 	routes := []Route{}
 	scanner := bufio.NewReader(input)
@@ -180,6 +194,9 @@ func getIPv6DefaultRoutes(input io.Reader) ([]Route, error) {
 
 // parseIP takes the hex IP address string from route file and converts it
 // to a net.IP address. For IPv4, the value must be converted to big endian.
+//
+// 中文说明：/proc 中的 IPv4 地址按主机字节序存储，需反转字节才能得到网络序；
+// IPv6 已经是网络序，直接用。
 func parseIP(str string, family AddressFamily) (net.IP, error) {
 	if str == "" {
 		return nil, fmt.Errorf("input is nil")
@@ -201,6 +218,7 @@ func parseIP(str string, family AddressFamily) (net.IP, error) {
 	return net.IP(bytes), nil
 }
 
+// isInterfaceUp 判断接口是否处于 up 状态；nil 接口视为不可用。
 func isInterfaceUp(logger klog.Logger, intf *net.Interface) bool {
 	if intf == nil {
 		return false
@@ -212,6 +230,8 @@ func isInterfaceUp(logger klog.Logger, intf *net.Interface) bool {
 	return false
 }
 
+// isLoopbackOrPointToPoint 判断接口是否应被直接跳过：loopback 与点对点接口
+// 的地址通常不能代表节点对外可达的 IP。
 func isLoopbackOrPointToPoint(intf *net.Interface) bool {
 	return intf.Flags&(net.FlagLoopback|net.FlagPointToPoint) != 0
 }
@@ -239,6 +259,7 @@ func getMatchingGlobalIP(logger klog.Logger, addrs []net.Addr, family AddressFam
 
 		}
 	}
+	// 没有匹配时返回 nil, nil 而不是错误：调用方会继续尝试其他接口。
 	return nil, nil
 }
 
@@ -269,6 +290,9 @@ func getIPFromInterface(logger klog.Logger, intfName string, forFamily AddressFa
 
 // getIPFromLoopbackInterface gets the IPs on a loopback interface and returns a global unicast address, if any.
 // The loopback interface must be up, the IP must in the family requested, and the IP must be a global unicast address.
+//
+// 中文说明：RFC5549 场景下默认路由的接口只有 link-local 地址，而真正的
+// 全局地址挂在 loopback 上，因此在路由接口找不到时需回退到这里。
 func getIPFromLoopbackInterface(logger klog.Logger, forFamily AddressFamily, nw networkInterfacer) (net.IP, error) {
 	intfs, err := nw.Interfaces()
 	if err != nil {
@@ -374,10 +398,14 @@ func ChooseHostInterface() (net.IP, error) {
 // interfaces. Otherwise, it will use IPv4 and IPv6 route information to return the
 // IP of the interface with a gateway on it (with priority given to IPv4). For a node
 // with no internet connection, it returns error.
+//
+// 中文说明：这是支持上下文日志的主入口；无 logger 的版本仅为兼容保留。
 func ChooseHostInterfaceWithLogger(logger klog.Logger) (net.IP, error) {
 	return chooseHostInterface(logger, preferIPv4)
 }
 
+// chooseHostInterface 决定探测策略：Linux 上若有 IPv4 路由文件则按默认路由
+// 选地址，否则（或非 Linux）退化为遍历接口查找全局单播地址。
 func chooseHostInterface(logger klog.Logger, addressFamilies AddressFamilyPreference) (net.IP, error) {
 	var nw networkInterfacer = networkInterface{}
 	if _, err := os.Stat(ipv4RouteFile); os.IsNotExist(err) {
@@ -424,6 +452,7 @@ func getAllDefaultRoutes() ([]Route, error) {
 	if err != nil {
 		return nil, err
 	}
+	// IPv6 路由文件是可选的：缺失或不可读时忽略，不阻塞 IPv4 结果。
 	v6Routes, _ := v6File.extract()
 	routes = append(routes, v6Routes...)
 	if len(routes) == 0 {
@@ -487,6 +516,9 @@ func ResolveBindAddress(bindAddress net.IP) (net.IP, error) {
 // If bindAddress is unspecified or loopback, it returns the default IP of the same
 // address family as bindAddress.
 // Otherwise, it just returns bindAddress.
+//
+// 中文说明：绑定到 unspecified（0.0.0.0/::）或 loopback 时，实际对外地址仍需
+// 从主机接口选择，且保持与用户指定地址相同的族（IPv4/IPv6）。
 func ResolveBindAddressWithLogger(logger klog.Logger, bindAddress net.IP) (net.IP, error) {
 	addressFamilies := preferIPv4
 	if bindAddress != nil && memberOf(bindAddress, familyIPv6) {

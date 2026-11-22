@@ -29,6 +29,9 @@ import (
 )
 
 // NewDefaultingCodecForScheme is a convenience method for callers that are using a scheme.
+//
+// 语义转换、类型创建、类型识别与默认值都委托给同一个 scheme；调用方只需
+// 提供底层的编解码器与目标版本。
 func NewDefaultingCodecForScheme(
 	// TODO: I should be a scheme interface?
 	scheme *runtime.Scheme,
@@ -43,6 +46,9 @@ func NewDefaultingCodecForScheme(
 // NewCodec takes objects in their internal versions and converts them to external versions before
 // serializing them. It assumes the serializer provided to it only deals with external versions.
 // This class is also a serializer, but is generally used with a specific version.
+//
+// encodeVersion 为 nil 时不做版本转换；decodeVersion 决定解码后的目标版本。
+// identifier 在构造时计算一次，作为缓存键参与 CacheEncode。
 func NewCodec(
 	encoder runtime.Encoder,
 	decoder runtime.Decoder,
@@ -72,6 +78,8 @@ func NewCodec(
 	return internal
 }
 
+// codec 在底层编解码器之外叠加版本转换与默认值处理，因此底层序列化器
+// 只需要理解外部版本（具体 API 版本的 JSON/YAML 等）。
 type codec struct {
 	encoder   runtime.Encoder
 	decoder   runtime.Decoder
@@ -91,8 +99,12 @@ type codec struct {
 
 var _ runtime.EncoderWithAllocator = &codec{}
 
+// identifiersMap 缓存已计算的标识，避免每次构造 codec 都做一次 JSON 编组；
+// 以 sync.Map 支持并发读写。
 var identifiersMap sync.Map
 
+// codecIdentifier 是 codec 标识的稳定序列化形式，字段名即缓存键的一部分，
+// 改动会改变缓存键（可接受，因为进程内一致即可）。
 type codecIdentifier struct {
 	EncodeGV string `json:"encodeGV,omitempty"`
 	Encoder  string `json:"encoder,omitempty"`
@@ -126,6 +138,9 @@ func identifier(encodeGV runtime.GroupVersioner, encoder runtime.Encoder) runtim
 // Decode attempts a decode of the object, then tries to convert it to the internal version. If into is provided and the decoding is
 // successful, the returned runtime.Object will be the value passed as into. Note that this may bypass conversion if you pass an
 // into that matches the serialized version.
+//
+// 严格解码错误不会立即返回：只要对象本身仍能解出，就先把错误累积起来，
+// 连同转换结果一起交还调用方，让上层决定是否降级处理。
 func (c *codec) Decode(data []byte, defaultGVK *schema.GroupVersionKind, into runtime.Object) (runtime.Object, *schema.GroupVersionKind, error) {
 	// If the into object is unstructured and expresses an opinion about its group/version,
 	// create a new instance of the type so we always exercise the conversion path (skips short-circuiting on `into == obj`)
@@ -167,6 +182,7 @@ func (c *codec) Decode(data []byte, defaultGVK *schema.GroupVersionKind, into ru
 	// if we specify a target, use generic conversion.
 	if into != nil {
 		// perform defaulting if requested
+		// 默认值必须在转换之前应用，因为默认值函数注册在外部类型上。
 		if c.defaulter != nil {
 			c.defaulter.Default(obj)
 		}
@@ -208,6 +224,8 @@ func (c *codec) Encode(obj runtime.Object, w io.Writer) error {
 	return c.encode(obj, w, nil)
 }
 
+// encode 先经过 CacheableObject 的编码缓存：命中时直接复用已序列化的字节，
+// 避免重复的版本转换与序列化开销。
 func (c *codec) encode(obj runtime.Object, w io.Writer, memAlloc runtime.MemoryAllocator) error {
 	if co, ok := obj.(runtime.CacheableObject); ok {
 		return co.CacheEncode(c.Identifier(), func(obj runtime.Object, w io.Writer) error { return c.doEncode(obj, w, memAlloc) }, w)
@@ -215,6 +233,8 @@ func (c *codec) encode(obj runtime.Object, w io.Writer, memAlloc runtime.MemoryA
 	return c.doEncode(obj, w, memAlloc)
 }
 
+// doEncode 执行实际的版本转换与序列化。若提供的编码器不支持内存分配器，
+// 则退回普通 Encode 并记录日志，而不是失败。
 func (c *codec) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.MemoryAllocator) error {
 	encodeFn := c.encoder.Encode
 	if memAlloc != nil {
@@ -227,6 +247,7 @@ func (c *codec) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.Memor
 			klog.V(6).Infof("a memory allocator was provided but the encoder %s doesn't implement the runtime.EncoderWithAllocator, using regular encoder.Encode method", c.encoder.Identifier())
 		}
 	}
+	// Unknown 已携带原始字节，无需转换，直接输出。
 	switch obj := obj.(type) {
 	case *runtime.Unknown:
 		return encodeFn(obj, w)
@@ -258,8 +279,11 @@ func (c *codec) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.Memor
 	objectKind := obj.GetObjectKind()
 	old := objectKind.GroupVersionKind()
 	// restore the old GVK after encoding
+	// 编码过程中会临时改写对象的 GVK；无论成功失败都要恢复，避免调用方
+	// 看到被副作用修改过的对象。
 	defer objectKind.SetGroupVersionKind(old)
 
+	// encodeVersion 为 nil 或对象无版本时，无需转换，只回填其自身 GVK。
 	if c.encodeVersion == nil || isUnversioned {
 		if e, ok := obj.(runtime.NestedObjectEncoder); ok {
 			if err := e.EncodeNestedObjects(runtime.WithVersionEncoder{Encoder: c.encoder, ObjectTyper: c.typer}); err != nil {
@@ -287,6 +311,8 @@ func (c *codec) doEncode(obj runtime.Object, w io.Writer, memAlloc runtime.Memor
 }
 
 // Identifier implements runtime.Encoder interface.
+//
+// 标识在构造时已计算并缓存，返回值恒定，可安全用作缓存键。
 func (c *codec) Identifier() runtime.Identifier {
 	return c.identifier
 }

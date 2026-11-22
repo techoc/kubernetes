@@ -18,13 +18,16 @@ package fields
 
 import "k8s.io/apimachinery/pkg/selection"
 
-// Requirements is AND of all requirements.
+// Requirements 是各 Requirement 的逻辑与（AND）：所有条件都满足才算匹配。
 type Requirements []Requirement
 
-// Requirement contains a field, a value, and an operator that relates the field and value.
-// This is currently for reading internal selection information of field selector.
+// Requirement 描述字段选择器中的一个条件：字段、值以及连接二者的操作符。
+// 目前用于读取字段选择器的内部选择信息。
 type Requirement struct {
+	// Operator 是作用在 Field 与 Value 上的比较操作符。
 	Operator selection.Operator
-	Field    string
-	Value    string
+	// Field 是条件所针对的字段选择器路径。
+	Field string
+	// Value 是参与比较的字段值。
+	Value string
 }

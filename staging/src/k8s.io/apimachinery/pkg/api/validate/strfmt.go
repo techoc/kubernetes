@@ -26,6 +26,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
+// 本文件集中实现各类"字符串格式"校验（名称、标签、UUID 等）。
+// 这些校验只做格式检查，不负责必填/可选与长度语义之外的判断；
+// 因此调用方若需要更精确的错误（如 required、maxLength），需自行补充校验。
 const (
 	uuidErrorMessage              = "must be a lowercase UUID in 8-4-4-4-12 format"
 	defaultResourceRequestsPrefix = "requests."
@@ -34,16 +37,14 @@ const (
 	resourceDeviceMaxLength        = 32
 )
 
-// ShortName verifies that the specified value is a valid "short name"
-// (sometimes known as a "DNS label").
-//   - must not be empty
-//   - must be less than 64 characters long
-//   - must start and end with lower-case alphanumeric characters
-//   - must contain only lower-case alphanumeric characters or dashes
+// ShortName 校验 value 是否为合法的 "short name"（有时也称为 "DNS label"）：
+//   - 不能为空
+//   - 长度必须小于 64 个字符
+//   - 必须以小写字母或数字开头和结尾
+//   - 只能包含小写字母、数字或连字符
 //
-// All errors returned by this function will be "invalid" type errors. If the
-// caller wants better errors, it must take responsibility for checking things
-// like required/optional and max-length.
+// 本函数返回的所有错误都是 "invalid" 类型。若调用方需要更精确的错误
+// （如 required/optional、max-length），需自行补充校验。
 func ShortName[T ~string](_ context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -55,16 +56,14 @@ func ShortName[T ~string](_ context.Context, op operation.Operation, fldPath *fi
 	return allErrs
 }
 
-// LongName verifies that the specified value is a valid "long name"
-// (sometimes known as a "DNS subdomain").
-//   - must not be empty
-//   - must be less than 254 characters long
-//   - each element must start and end with lower-case alphanumeric characters
-//   - each element must contain only lower-case alphanumeric characters or dashes
+// LongName 校验 value 是否为合法的 "long name"（有时也称为 "DNS subdomain"）：
+//   - 不能为空
+//   - 长度必须小于 254 个字符
+//   - 以点分隔的每一段都必须以小写字母或数字开头和结尾
+//   - 每一段只能包含小写字母、数字或连字符
 //
-// All errors returned by this function will be "invalid" type errors. If the
-// caller wants better errors, it must take responsibility for checking things
-// like required/optional and max-length.
+// 本函数返回的所有错误都是 "invalid" 类型。若调用方需要更精确的错误
+// （如 required/optional、max-length），需自行补充校验。
 func LongName[T ~string](_ context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -76,16 +75,16 @@ func LongName[T ~string](_ context.Context, op operation.Operation, fldPath *fie
 	return allErrs
 }
 
-// LabelKey verifies that the specified value is a valid label key.
-// A label key is composed of an optional prefix and a name, separated by a '/'.
-// The name part is required and must:
-//   - be 63 characters or less
-//   - begin and end with an alphanumeric character ([a-z0-9A-Z])
-//   - contain only alphanumeric characters, dashes (-), underscores (_), or dots (.)
+// LabelKey 校验 value 是否为合法的 label key。
+// label key 由可选前缀与名称组成，二者以 '/' 分隔。
+// 名称部分必填，且必须：
+//   - 不超过 63 个字符
+//   - 以字母或数字（[a-z0-9A-Z]）开头和结尾
+//   - 只包含字母、数字、连字符（-）、下划线（_）或点（.）
 //
-// The prefix is optional and must:
-//   - be a DNS subdomain
-//   - be no more than 253 characters
+// 前缀可选，且必须：
+//   - 是合法的 DNS subdomain
+//   - 不超过 253 个字符
 func LabelKey[T ~string](_ context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -97,17 +96,16 @@ func LabelKey[T ~string](_ context.Context, op operation.Operation, fldPath *fie
 	return allErrs
 }
 
-// PrefixedLabelKey verifies that the specified value is a valid label key with
-// a domain prefix.
-// A prefixed label key is composed of a prefix and a name, separated by a '/'.
-// The name part is required and must:
-//   - be 63 characters or less
-//   - begin and end with an alphanumeric character ([a-z0-9A-Z])
-//   - contain only alphanumeric characters, dashes (-), underscores (_), or dots (.)
+// PrefixedLabelKey 校验 value 是否为带域前缀的合法 label key。
+// 带前缀的 label key 由前缀与名称组成，二者以 '/' 分隔。
+// 名称部分必填，且必须：
+//   - 不超过 63 个字符
+//   - 以字母或数字（[a-z0-9A-Z]）开头和结尾
+//   - 只包含字母、数字、连字符（-）、下划线（_）或点（.）
 //
-// The prefix must:
-//   - be a DNS subdomain
-//   - be no more than 253 characters
+// 前缀必须：
+//   - 是合法的 DNS subdomain
+//   - 不超过 253 个字符
 func PrefixedLabelKey[T ~string](_ context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -119,15 +117,15 @@ func PrefixedLabelKey[T ~string](_ context.Context, op operation.Operation, fldP
 	return allErrs
 }
 
-// LongNameCaseless verifies that the specified value is a valid "long name"
-// (sometimes known as a "DNS subdomain"), but is case-insensitive.
-//   - must not be empty
-//   - must be less than 254 characters long
-//   - each element must start and end with alphanumeric characters
-//   - each element must contain only alphanumeric characters or dashes
+// LongNameCaseless 校验 value 是否为合法但大小写不敏感的 "long name"
+// （有时也称为 "DNS subdomain"）：
+//   - 不能为空
+//   - 长度必须小于 254 个字符
+//   - 以点分隔的每一段都必须以字母或数字开头和结尾
+//   - 每一段只能包含字母、数字或连字符
 //
-// Deprecated: Case-insensitive names are not recommended as they can lead to ambiguity
-// (e.g., 'Foo', 'FOO', and 'foo' would be allowed names for foo). Use LongName for strict, lowercase validation.
+// Deprecated: 大小写不敏感的名称容易产生歧义（例如 'Foo'、'FOO' 与 'foo' 都会被当作 foo 的合法名称），
+// 因此不推荐使用；需要严格的小写校验请改用 LongName。
 func LongNameCaseless[T ~string](_ context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -139,11 +137,11 @@ func LongNameCaseless[T ~string](_ context.Context, op operation.Operation, fldP
 	return allErrs
 }
 
-// LabelValue verifies that the specified value is a valid label value.
-//   - can be empty
-//   - must be no more than 63 characters
-//   - must start and end with alphanumeric characters
-//   - must contain only alphanumeric characters, dashes, underscores, or dots
+// LabelValue 校验 value 是否为合法的 label value：
+//   - 可以为空
+//   - 不超过 63 个字符
+//   - 以字母或数字开头和结尾
+//   - 只包含字母、数字、连字符、下划线或点
 func LabelValue[T ~string](_ context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -155,12 +153,12 @@ func LabelValue[T ~string](_ context.Context, op operation.Operation, fldPath *f
 	return allErrs
 }
 
-// PathSegmentName verifies that the specified value is a valid path segment name.
-// A path segment name can be safely encoded as a path segment in URLs and file paths.
-//   - must not be exactly "." or ".."
-//   - must not contain "/" (forward slash)
-//   - must not contain "%" (percent sign)
-//   - can contain any other characters including mixed case, numbers, dots, hyphens, underscores, and non-ASCII characters
+// PathSegmentName 校验 value 是否为合法的路径段名称。
+// 合法的路径段名称可以安全地作为 URL 或文件路径中的一段进行编码。
+//   - 不能恰好是 "." 或 ".."
+//   - 不能包含 "/"（正斜杠）
+//   - 不能包含 "%"（百分号）
+//   - 可以包含其他任意字符，包括大小写混合字母、数字、点、连字符、下划线以及非 ASCII 字符
 func PathSegmentName[T ~string](_ context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -172,27 +170,29 @@ func PathSegmentName[T ~string](_ context.Context, op operation.Operation, fldPa
 	return allErrs
 }
 
-// UUID verifies that the specified value is a valid UUID (RFC 4122).
-//   - must be 36 characters long
-//   - must be in the normalized form `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
-//   - must use only lowercase hexadecimal characters
+// UUID 校验 value 是否为合法的 UUID（RFC 4122）：
+//   - 长度必须为 36 个字符
+//   - 必须采用规范形式 `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+//   - 只能使用小写十六进制字符
 func UUID[T ~string](_ context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
 	}
 	val := (string)(*value)
+	// 长度不符时无需逐字符检查，直接返回统一错误。
 	if len(val) != 36 {
 		return field.ErrorList{field.Invalid(fldPath, val, uuidErrorMessage).WithOrigin("format=k8s-uuid")}
 	}
 	for idx := 0; idx < len(val); idx++ {
 		character := val[idx]
 		switch idx {
+		// 8-4-4-4-12 格式中连字符固定出现在这四个位置。
 		case 8, 13, 18, 23:
 			if character != '-' {
 				return field.ErrorList{field.Invalid(fldPath, val, uuidErrorMessage).WithOrigin("format=k8s-uuid")}
 			}
 		default:
-			// should be lower case hexadecimal.
+			// 其余位置必须是小写十六进制字符（大写会被拒绝，以保持规范化形式）。
 			if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
 				return field.ErrorList{field.Invalid(fldPath, val, uuidErrorMessage).WithOrigin("format=k8s-uuid")}
 			}
@@ -201,8 +201,8 @@ func UUID[T ~string](_ context.Context, op operation.Operation, fldPath *field.P
 	return nil
 }
 
-// ResourcePoolName verifies that the specified value is one or more valid "long name"
-// parts separated by a '/' and no longer than 253 characters.
+// ResourcePoolName 校验 value 是否为一个或多个合法 "long name" 段以 '/' 分隔组成，
+// 且总长度不超过 253 个字符。
 func ResourcePoolName[T ~string](ctx context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -212,46 +212,49 @@ func ResourcePoolName[T ~string](ctx context.Context, op operation.Operation, fl
 	if len(val) > 253 {
 		allErrs = append(allErrs, field.TooLong(fldPath, val, 253))
 	}
+	// 逐段复用 LongName 校验；空段单独报错，避免底层校验产生难以定位的通用信息。
 	parts := strings.Split(val, "/")
 	for i, part := range parts {
 		if len(part) == 0 {
 			allErrs = append(allErrs, field.Invalid(fldPath, val, fmt.Sprintf("segment %d: must not be empty", i)))
 			continue
 		}
-		// Note that we are overwriting the origin from the underlying LongName validation.
+		// 注意：这里用带段号的前缀覆盖底层 LongName 校验留下的 origin，
+		// 以便错误信息能指明是第几段出错。
 		allErrs = append(allErrs, LongName(ctx, op, fldPath, &part, nil).PrefixDetail(fmt.Sprintf("segment %d: ", i))...)
 	}
 	return allErrs.WithOrigin("format=k8s-resource-pool-name")
 }
 
-// ExtendedResourceName verifies that the specified value is a valid extended resource name.
-// An extended resource name is a domain-prefixed name that does not use the "kubernetes.io"
-// or "requests." prefixes. Must be a valid label key when appended to "requests.", as in quota.
+// ExtendedResourceName 校验 value 是否为合法的扩展资源名。
+// 扩展资源名是带域前缀的名称，且不得使用 "kubernetes.io" 或 "requests." 前缀。
+// 它必须能作为 "requests." 前缀拼接后的合法 label key（配额计算即按此形式处理）。
 //
-//   - must have slash domain and name.
-//   - must not have the "kubernetes.io" domain
-//   - must not have the "requests." prefix
-//   - name must be 63 characters or less
-//   - must be a valid label key when appended to "requests.", as in quota
-//     -- must contain only alphanumeric characters, dashes, underscores, or dots
-//     -- must end with an alphanumeric character
+//   - 必须包含斜杠分隔的域与名称
+//   - 不能使用 "kubernetes.io" 域
+//   - 不能使用 "requests." 前缀
+//   - 名称不超过 63 个字符
+//   - 拼接 "requests." 后必须是合法 label key（与配额场景一致）
+//     -- 只能包含字母、数字、连字符、下划线或点
+//     -- 必须以字母或数字结尾
 func ExtendedResourceName[T ~string](_ context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
 	}
 	val := string(*value)
 	allErrs := field.ErrorList{}
+	// 必须带域前缀；同时禁止保留域，避免与内置资源或配额前缀冲突。
 	if !strings.Contains(val, "/") {
 		allErrs = append(allErrs, field.Invalid(fldPath, val, "a name must be a domain-prefixed path, such as 'example.com/my-prop'"))
 	} else if strings.Contains(val, resourceDefaultNamespacePrefix) {
 		allErrs = append(allErrs, field.Invalid(fldPath, val, fmt.Sprintf("must not have %q domain", resourceDefaultNamespacePrefix)))
 	}
-	// Ensure extended resource is not type of quota.
+	// 确保扩展资源名不会被误当作配额资源（配额资源以 "requests." 为前缀）。
 	if strings.HasPrefix(val, defaultResourceRequestsPrefix) {
 		allErrs = append(allErrs, field.Invalid(fldPath, val, fmt.Sprintf("must not have %q prefix", defaultResourceRequestsPrefix)))
 	}
 
-	// Ensure it satisfies the rules in IsLabelKey() after converted into quota resource name
+	// 转换为配额资源名后必须满足 label key 规则，这样同一名称在配额系统中也能被接受。
 	nameForQuota := fmt.Sprintf("%s%s", defaultResourceRequestsPrefix, val)
 	for _, msg := range content.IsLabelKey(nameForQuota) {
 		allErrs = append(allErrs, field.Invalid(fldPath, val, msg))
@@ -259,13 +262,12 @@ func ExtendedResourceName[T ~string](_ context.Context, op operation.Operation, 
 	return allErrs.WithOrigin("format=k8s-extended-resource-name")
 }
 
-// resourcesQualifiedName verifies that the specified value is a valid Kubernetes resources
-// qualified name.
-//   - must not be empty
-//   - must be composed of an optional prefix and a name, separated by a slash (e.g., "prefix/name")
-//   - the prefix, if specified, must be a DNS subdomain
-//   - the name part must be a C identifier
-//   - the name part must be no more than 32 characters
+// resourcesQualifiedName 校验 value 是否为合法的 Kubernetes 资源限定名：
+//   - 不能为空
+//   - 由可选前缀与名称组成，以斜杠分隔（如 "prefix/name"）
+//   - 若指定前缀，必须是 DNS subdomain
+//   - 名称部分必须是 C 标识符
+//   - 名称部分不超过 32 个字符
 func resourcesQualifiedName[T ~string](ctx context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -276,10 +278,13 @@ func resourcesQualifiedName[T ~string](ctx context.Context, op operation.Operati
 	// TODO: This validation and the corresponding handwritten validation validateQualifiedName in
 	// pkg/apis/resource/validation/validation.go are not validating whether there are more than 1
 	// slash. This should be fixed in both places.
+	// 仅接受"无前缀"或"一个前缀 + 名称"两种形式；多余斜杠会在下面通过长度分支被忽略，
+	// 这是已知缺陷（见上方待办注释）。
 	switch len(parts) {
 	case 1:
 		allErrs = append(allErrs, validateCIdentifier(parts[0], resourceDeviceMaxLength, fldPath)...)
 	case 2:
+		// 形如 "/name" 时前缀为空，需显式报错而不是交给 DNS 校验。
 		if len(parts[0]) == 0 {
 			allErrs = append(allErrs, field.Invalid(fldPath, "", "prefix must not be empty"))
 		} else {
@@ -288,6 +293,7 @@ func resourcesQualifiedName[T ~string](ctx context.Context, op operation.Operati
 			}
 			allErrs = append(allErrs, LongName(ctx, op, fldPath, &parts[0], nil).PrefixDetail("prefix: ")...)
 		}
+		// 形如 "prefix/" 时名称为空，同样单独报错。
 		if len(parts[1]) == 0 {
 			allErrs = append(allErrs, field.Invalid(fldPath, "", "name must not be empty"))
 		} else {
@@ -297,13 +303,12 @@ func resourcesQualifiedName[T ~string](ctx context.Context, op operation.Operati
 	return allErrs
 }
 
-// ResourceFullyQualifiedName verifies that the specified value is a valid Kubernetes
-// fully qualified name.
-//   - must not be empty
-//   - must be composed of a prefix and a name, separated by a slash (e.g., "prefix/name")
-//   - the prefix must be a DNS subdomain
-//   - the name part must be a C identifier
-//   - the name part must be no more than 32 characters
+// ResourceFullyQualifiedName 校验 value 是否为合法的 Kubernetes 完全限定名：
+//   - 不能为空
+//   - 必须由前缀与名称组成，以斜杠分隔（如 "prefix/name"）
+//   - 前缀必须是 DNS subdomain
+//   - 名称部分必须是 C 标识符
+//   - 名称部分不超过 32 个字符
 func ResourceFullyQualifiedName[T ~string](ctx context.Context, op operation.Operation, fldPath *field.Path, value, _ *T) field.ErrorList {
 	if value == nil {
 		return nil
@@ -311,12 +316,15 @@ func ResourceFullyQualifiedName[T ~string](ctx context.Context, op operation.Ope
 	var allErrs field.ErrorList
 	s := string(*value)
 	allErrs = append(allErrs, resourcesQualifiedName(ctx, op, fldPath, &s, nil)...)
+	// 在共享校验基础上，完全限定名额外要求必须带前缀。
 	if !strings.Contains(s, "/") {
 		allErrs = append(allErrs, field.Invalid(fldPath, s, "a fully qualified name must be a domain and a name separated by a slash"))
 	}
 	return allErrs.WithOrigin("format=k8s-resource-fully-qualified-name")
 }
 
+// validateCIdentifier 校验 id 是否为不超过 length 个字符的 C 标识符。
+// 长度检查与字符合法性检查彼此独立，因此两者可能同时报错。
 func validateCIdentifier(id string, length int, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(id) > length {

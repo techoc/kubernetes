@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/randfill"
 )
 
+// simpleEquality 把 time.Time 归一化到 UTC 后比较，避免时区差异导致误报。
 var simpleEquality = conversion.EqualitiesOrDie(
 	func(a, b time.Time) bool {
 		return a.UTC() == b.UTC()
@@ -48,6 +49,8 @@ var simpleEquality = conversion.EqualitiesOrDie(
 )
 
 // Define a number of test types.
+// 以下测试类型刻意覆盖不同形态：基本类型、嵌套结构体、内嵌结构体、
+// interface{} 切片、[]byte、自定义 MarshalJSON 等。
 type A struct {
 	A int    `json:"aa,omitempty"`
 	B string `json:"ab,omitempty"`
@@ -62,6 +65,7 @@ type B struct {
 	D []string          `json:"bd"`
 }
 
+// C 内嵌 B，覆盖匿名内联字段的展开。
 type C struct {
 	A []A `json:"ca"`
 	B `json:""`
@@ -74,14 +78,17 @@ type C struct {
 	I []interface{}  `json:"ci"`
 }
 
+// D 覆盖 interface{} 切片的各种内容。
 type D struct {
 	A []interface{} `json:"da"`
 }
 
+// E 覆盖顶层 interface{} 字段。
 type E struct {
 	A interface{} `json:"ea"`
 }
 
+// F 覆盖各类切片的合法/非法输入。
 type F struct {
 	A string            `json:"fa"`
 	B map[string]string `json:"fb"`
@@ -95,6 +102,7 @@ type F struct {
 	J []byte            `json:"fj"`
 }
 
+// G 同时覆盖值接收者与指针接收者的自定义 JSON marshaller。
 type G struct {
 	CustomValue1   CustomValue    `json:"customValue1"`
 	CustomValue2   *CustomValue   `json:"customValue2"`
@@ -102,11 +110,13 @@ type G struct {
 	CustomPointer2 *CustomPointer `json:"customPointer2"`
 }
 
+// H 覆盖多层内嵌。
 type H struct {
 	A A `json:"ha"`
 	C `json:""`
 }
 
+// I 覆盖三层内嵌 + 深层未知字段检测。
 type I struct {
 	A A `json:"ia"`
 	H `json:""`
@@ -114,6 +124,8 @@ type I struct {
 	UL1 UnknownLevel1 `json:"ul1"`
 }
 
+// UnknownLevel1/2/3 与 InlinedAA/AAA/BB/BBB/CC/CCC 构造多层内联结构，
+// 用于验证未知字段路径能穿透任意深度的内联。
 type UnknownLevel1 struct {
 	A          int64 `json:"a"`
 	InlinedAA  `json:""`
@@ -152,6 +164,8 @@ type InlinedCCC struct {
 	CCC int64 `json:"ccc"`
 }
 
+// CustomValue 以值接收者实现 MarshalJSON；CustomPointer 以指针接收者实现，
+// 两者在 ToUnstructured 中必须都被识别为自定义转换。
 type CustomValue struct {
 	data []byte
 }
@@ -170,6 +184,8 @@ func (c *CustomPointer) MarshalJSON() ([]byte, error) {
 	return c.data, nil
 }
 
+// doRoundTrip 依次执行：JSON 往返 -> ToUnstructured -> DeepCopy -> FromUnstructured，
+// 每一步之后对象都必须与原始值相等。这是转换器最核心的正确性检查。
 func doRoundTrip(t *testing.T, item interface{}) {
 	data, err := json.Marshal(item)
 	if err != nil {
@@ -207,6 +223,7 @@ func doRoundTrip(t *testing.T, item interface{}) {
 		return
 	}
 
+	// 先深拷贝再反序列化，确保 FromUnstructured 不会意外复用/修改原 map。
 	copiedNewUnstr := runtime.DeepCopyJSONValue(newUnstr)
 	if value, ok := copiedNewUnstr.(map[string]interface{}); ok {
 		newUnstr = value
@@ -227,6 +244,8 @@ func doRoundTrip(t *testing.T, item interface{}) {
 	}
 }
 
+// TestRoundTrip 覆盖 nil/空/非空容器、内嵌结构体、interface{} 切片、
+// uint 以及 Unstructured 自身的往返。
 func TestRoundTrip(t *testing.T) {
 	intVal := int64(42)
 	testCases := []struct {
@@ -358,9 +377,12 @@ func TestRoundTrip(t *testing.T) {
 // TestUnknownFields checks for the collection of unknown
 // field errors from the various possible locations of
 // unknown fields (e.g. fields on struct, inlined struct, slice, etc)
+//
+// 未知字段错误必须带完整路径（含数组下标与内联展开），且各层级互不串扰。
 func TestUnknownFields(t *testing.T) {
 	// simples checks that basic unknown fields are found
 	// in fields, subfields and slices.
+	// 基础场景：结构体字段、切片元素中的未知字段。
 	var simplesData = `{
 "ca": [
 	{
@@ -391,6 +413,9 @@ func TestUnknownFields(t *testing.T) {
 	//
 	// The opposite for "aaa", which exists at the
 	// nested level but not at the root.
+	//
+	// 同名不同层：验证匹配集合按层级隔离，根层的 "cc" 不会掩盖 ul1 内的
+	// 未知 "cc"，反之亦然。
 	var sameNameDiffLevelData = `
 	{
 		"cc": "foo",
@@ -410,6 +435,7 @@ func TestUnknownFields(t *testing.T) {
 	// inlined-inlined confirms that we see
 	// fields that are doubly nested and don't recognize
 	// those that aren't
+	// 双层内联：已知键应被识别，未知键仍要报错。
 	var inlinedInlinedData = `{
 		"bb": "foo",
 		"bc": {
@@ -424,6 +450,7 @@ func TestUnknownFields(t *testing.T) {
 	}
 
 	// combined tests everything together
+	// 综合场景：多层内联 + 切片 + 根层未知字段同时出现。
 	var combinedData = `
 	{
 		"ia": {
@@ -627,6 +654,8 @@ func TestUnknownFields(t *testing.T) {
 			if err != nil {
 				errString = err.Error()
 			}
+			// 逐条消解期望错误：先确认都存在，再把已匹配的文本从错误串中移除；
+			// 最后剩余的文本必须是空，才能证明没有多报错误。
 			missedErrs := []string{}
 			failed := false
 			for _, expected := range tc.expectedErrs {
@@ -653,6 +682,8 @@ func TestUnknownFields(t *testing.T) {
 // BenchmarkFromUnstructuredWithValidation benchmarks
 // the time and memory required to perform FromUnstructured
 // with the various validation directives (Ignore, Warn, Strict)
+//
+// 对比开启/关闭未知字段检测的分配与耗时，防止检测逻辑造成性能回退。
 func BenchmarkFromUnstructuredWithValidation(b *testing.B) {
 	re := regexp.MustCompile("^I$")
 	f := randfill.NewWithSeed(1).NilChance(0.1).SkipFieldsWithPattern(re)
@@ -682,6 +713,8 @@ func BenchmarkFromUnstructuredWithValidation(b *testing.B) {
 // 1) serialized json -> object
 // 2) serialized json -> map[string]interface{} -> object
 // produces the same object.
+//
+// 验证转换器与标准库 JSON 对同一输入产生相同对象（含错误行为一致）。
 func doUnrecognized(t *testing.T, jsonData string, item interface{}, expectedErr error) {
 	unmarshalledObj := reflect.New(reflect.TypeOf(item).Elem()).Interface()
 	err := json.Unmarshal([]byte(jsonData), unmarshalledObj)
@@ -707,6 +740,8 @@ func doUnrecognized(t *testing.T, jsonData string, item interface{}, expectedErr
 	}
 }
 
+// TestUnrecognized 表驱动地验证各类“类型不匹配”输入：合法转换必须与
+// 标准库结果一致，非法转换必须产生与标准库同类的错误。
 func TestUnrecognized(t *testing.T) {
 	testCases := []struct {
 		data string
@@ -900,6 +935,7 @@ func TestUnrecognized(t *testing.T) {
 	}
 }
 
+// TestDeepCopyJSON 验证所有 JSON 原生类型（含 json.Number 与 nil）的深拷贝。
 func TestDeepCopyJSON(t *testing.T) {
 	src := map[string]interface{}{
 		"a": nil,
@@ -918,6 +954,7 @@ func TestDeepCopyJSON(t *testing.T) {
 	assert.Equal(t, src, deepCopy)
 }
 
+// TestFloatIntConversion 验证整数形式的 float64（如 3.0）可无损转换为 int。
 func TestFloatIntConversion(t *testing.T) {
 	unstr := map[string]interface{}{"fd": float64(3)}
 
@@ -940,6 +977,7 @@ func TestFloatIntConversion(t *testing.T) {
 	}
 }
 
+// TestIntFloatConversion 验证 int64 可无损转换为 float32 字段。
 func TestIntFloatConversion(t *testing.T) {
 	unstr := map[string]interface{}{"ch": int64(3)}
 
@@ -962,6 +1000,8 @@ func TestIntFloatConversion(t *testing.T) {
 	}
 }
 
+// TestCustomToUnstructured 验证值/指针接收者的 MarshalJSON 在所有字段形态
+// （值、指针、可寻址/不可寻址）下都被正确调用。
 func TestCustomToUnstructured(t *testing.T) {
 	testcases := []struct {
 		Data     string
@@ -995,6 +1035,7 @@ func TestCustomToUnstructured(t *testing.T) {
 	}
 }
 
+// TestCustomToUnstructuredTopLevel 验证顶层对象直接使用自定义 MarshalJSON。
 func TestCustomToUnstructuredTopLevel(t *testing.T) {
 	// Only objects are supported at the top level
 	topLevelCases := []interface{}{
@@ -1012,10 +1053,13 @@ func TestCustomToUnstructuredTopLevel(t *testing.T) {
 	}
 }
 
+// OmitemptyNameField 的 json tag 名恰好是 "omitempty"：它应被当作字段名，
+// 而不是 omitempty 选项。
 type OmitemptyNameField struct {
 	I int `json:"omitempty"`
 }
 
+// TestOmitempty 验证 tag 中的 "omitempty" 位于名字位置时不会被误解析为选项。
 func TestOmitempty(t *testing.T) {
 	expected := `{"omitempty":0}`
 
@@ -1041,11 +1085,14 @@ func TestOmitempty(t *testing.T) {
 	}
 }
 
+// InlineTestPrimitive 覆盖非结构体字段上的空名/内联/omitempty 组合。
 type InlineTestPrimitive struct {
 	NoNameTagPrimitive          int64 `json:""`
 	NoNameTagInlinePrimitive    int64 `json:",inline"`
 	NoNameTagOmitemptyPrimitive int64 `json:",omitempty"`
 }
+
+// InlineTestAnonymous 覆盖匿名内嵌字段在不同 tag 下的展开行为。
 type InlineTestAnonymous struct {
 	NoTag
 	NoNameTag          `json:""`
@@ -1054,6 +1101,9 @@ type InlineTestAnonymous struct {
 	NoNameTagEmbed     `json:",embed"` //nolint:staticcheck // SA5008 intentionally exercising a tag not present until Go 1.27
 	NoNameTagOmitempty `json:",omitempty"`
 }
+
+// InlineTestNamed 与 InlineTestAnonymous 相同，但字段是具名的，验证具名与
+// 匿名字段在 tag 语义上的差异。
 type InlineTestNamed struct {
 	NoTag              NoTag
 	NoNameTag          NoNameTag          `json:""`
@@ -1081,6 +1131,8 @@ type NoNameTagEmbed struct {
 	Data5 int `json:"data5"`
 }
 
+// TestInline 用标准库 encoding/json 的结果作为基准，验证 ToUnstructured
+// 对所有内联 tag 组合的处理完全一致；同时捕获转换器可能出现的 panic。
 func TestInline(t *testing.T) {
 	testcases := []struct {
 		name   string
@@ -1188,6 +1240,7 @@ func TestInline(t *testing.T) {
 			}()
 
 			// Check the expectation against stdlib
+			// 第一步：先确认期望值本身与标准库一致，避免测试基准错误。
 			jsonData, err := json.Marshal(tc.obj)
 			if err != nil {
 				t.Fatal(err)

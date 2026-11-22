@@ -24,10 +24,14 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// DurationHolder 用结构体包裹 Duration，验证它作为字段时的编解码行为，
+// 而不是依赖顶层值。
 type DurationHolder struct {
 	D Duration `json:"d"`
 }
 
+// TestDurationMarshalYAML 覆盖 Duration 在 YAML 中的规范输出形式：始终使用
+// Go 的 duration 语法，零值单位会被省略（如 2m0s）。
 func TestDurationMarshalYAML(t *testing.T) {
 	cases := []struct {
 		input  Duration
@@ -65,6 +69,9 @@ func TestDurationUnmarshalYAML(t *testing.T) {
 		{"d: 1h0.003s\n", Duration{time.Hour + 3*time.Millisecond}},
 	}
 
+	// TestDurationUnmarshalYAML 验证解析既能接受规范形式，也能接受省略零值
+	// 单位的写法（2m 等价于 2m0s）；后者是用户手写 YAML 时的常见形式，
+	// 必须保持兼容。
 	for _, c := range cases {
 		var result DurationHolder
 		if err := yaml.Unmarshal([]byte(c.input), &result); err != nil {
@@ -76,6 +83,8 @@ func TestDurationUnmarshalYAML(t *testing.T) {
 	}
 }
 
+// TestDurationMarshalJSON 确认 JSON 输出与 YAML 一致，都是字符串形式的
+// duration（而不是纳秒整数）。
 func TestDurationMarshalJSON(t *testing.T) {
 	cases := []struct {
 		input  Duration
@@ -113,6 +122,8 @@ func TestDurationUnmarshalJSON(t *testing.T) {
 		{`{"d":"1h0.003s"}`, Duration{time.Hour + 3*time.Millisecond}},
 	}
 
+	// TestDurationUnmarshalJSON 与 YAML 用例对应，额外确认省略零值单位的
+	// 字符串同样可被解析。
 	for _, c := range cases {
 		var result DurationHolder
 		if err := json.Unmarshal([]byte(c.input), &result); err != nil {
@@ -124,6 +135,9 @@ func TestDurationUnmarshalJSON(t *testing.T) {
 	}
 }
 
+// TestDurationMarshalJSONUnmarshalYAML 验证 JSON 与 YAML 之间的互通：先用
+// JSON 序列化再交给 YAML 解析，最终值必须与原始值相等。这保证两种格式
+// 表达的是同一种 duration 语义。
 func TestDurationMarshalJSONUnmarshalYAML(t *testing.T) {
 	cases := []struct {
 		input Duration

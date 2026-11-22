@@ -24,6 +24,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// benchmarkPayloads 是两段形态不同的 managedFields JSON：一段较小，
+// 一段更深、更大，用于覆盖不同大小的解码/相等比较路径。
 var benchmarkPayloads = []string{
 	// Small managed fields payload
 	`{"f:metadata":{"f:labels":{"f:app":{}},"f:annotations":{"f:revision":{}}},"f:spec":{"f:replicas":{},"f:template":{"f:metadata":{"f:labels":{"f:app":{}}},"f:spec":{"f:containers":{"k:{\"name\":\"nginx\"}":{".":{},"f:image":{},"f:name":{}}}}}}}`,
@@ -34,6 +36,9 @@ var benchmarkPayloads = []string{
 // BenchmarkDecodeDuplicate measures the allocation and speed of unmarshaling
 // exactly identical payloads repeatedly, which is the most common case for
 // heavily replicated resources (DaemonSets, ReplicaSets) in the API server.
+//
+// 重复解码同一段字节可以命中 FieldsV1 内部的字符串驻留缓存，因此这是"热"路径；
+// retained 保存结果是为了防止编译器把解码结果优化掉，也让堆分配可被测量。
 func BenchmarkDecodeDuplicate(b *testing.B) {
 	for _, payload := range benchmarkPayloads {
 		b.Run(fmt.Sprintf("Size%d", len(payload)), func(b *testing.B) {
@@ -63,6 +68,7 @@ func BenchmarkDecodeUnique(b *testing.B) {
 			var retained []metav1.FieldsV1
 			for j := 0; j < b.N; j++ {
 				// Inject the iteration counter to guarantee the string is unique
+				// 用 payload[1:] 跳过开头的 '{'，再把计数器拼进去，保持 JSON 合法。
 				novelPayload := fmt.Appendf(nil, `{"f:iter":%d,%s`, j, payload[1:])
 				var f metav1.FieldsV1
 				if err := json.Unmarshal(novelPayload, &f); err != nil {
@@ -96,6 +102,8 @@ func BenchmarkParallelDecode(b *testing.B) {
 }
 
 // BenchmarkEqual_Same measures the fast-path equality check for identical structs.
+//
+// 相同输入构造出的两个 FieldsV1 共享底层字节，Equal 应走快速路径。
 func BenchmarkEqual_Same(b *testing.B) {
 	f1 := metav1.NewFieldsV1(benchmarkPayloads[1])
 	f2 := metav1.NewFieldsV1(benchmarkPayloads[1])
@@ -107,6 +115,8 @@ func BenchmarkEqual_Same(b *testing.B) {
 }
 
 // BenchmarkEqual_Different measures the fallback-path equality check for differing structs.
+//
+// 不同输入迫使 Equal 走回退比较（解析 JSON），用于衡量最坏情况成本。
 func BenchmarkEqual_Different(b *testing.B) {
 	f1 := metav1.NewFieldsV1(benchmarkPayloads[1])
 	f2 := metav1.NewFieldsV1(benchmarkPayloads[0])

@@ -21,27 +21,29 @@ import (
 	"testing"
 )
 
+// TestSplitTerms 覆盖逗号分隔的字段选择器切分，重点验证转义逗号/反斜杠
+// 不会被误当作分隔符，以及空项与多字节字符的处理。
 func TestSplitTerms(t *testing.T) {
 	testcases := map[string][]string{
-		// Simple selectors
+		// 简单选择器
 		`a`:                            {`a`},
 		`a=avalue`:                     {`a=avalue`},
 		`a=avalue,b=bvalue`:            {`a=avalue`, `b=bvalue`},
 		`a=avalue,b==bvalue,c!=cvalue`: {`a=avalue`, `b==bvalue`, `c!=cvalue`},
 
-		// Empty terms
+		// 空项：保留空字符串以维持位置。
 		``:     nil,
 		`a=a,`: {`a=a`, ``},
 		`,a=a`: {``, `a=a`},
 
-		// Escaped values
-		`k=\,,k2=v2`:   {`k=\,`, `k2=v2`},   // escaped comma in value
-		`k=\\,k2=v2`:   {`k=\\`, `k2=v2`},   // escaped backslash, unescaped comma
-		`k=\\\,,k2=v2`: {`k=\\\,`, `k2=v2`}, // escaped backslash and comma
-		`k=\a\b\`:      {`k=\a\b\`},         // non-escape sequences
-		`k=\`:          {`k=\`},             // orphan backslash
+		// 转义值
+		`k=\,,k2=v2`:   {`k=\,`, `k2=v2`},   // 值中的转义逗号
+		`k=\\,k2=v2`:   {`k=\\`, `k2=v2`},   // 转义反斜杠，逗号未转义
+		`k=\\\,,k2=v2`: {`k=\\\,`, `k2=v2`}, // 转义反斜杠和逗号
+		`k=\a\b\`:      {`k=\a\b\`},         // 非转义序列
+		`k=\`:          {`k=\`},             // 孤立反斜杠
 
-		// Multi-byte
+		// 多字节字符
 		`함=수,목=록`: {`함=수`, `목=록`},
 	}
 
@@ -52,6 +54,8 @@ func TestSplitTerms(t *testing.T) {
 	}
 }
 
+// TestSplitTerm 覆盖单个 term 的 key/operator/value 拆分，
+// 包括 ==/!= 等操作符、转义字符与非法输入。
 func TestSplitTerm(t *testing.T) {
 	testcases := map[string]struct {
 		lhs string
@@ -59,21 +63,21 @@ func TestSplitTerm(t *testing.T) {
 		rhs string
 		ok  bool
 	}{
-		// Simple terms
+		// 简单 term
 		`a=value`:  {lhs: `a`, op: `=`, rhs: `value`, ok: true},
 		`b==value`: {lhs: `b`, op: `==`, rhs: `value`, ok: true},
 		`c!=value`: {lhs: `c`, op: `!=`, rhs: `value`, ok: true},
 
-		// Empty or invalid terms
+		// 空或非法 term
 		``:  {lhs: ``, op: ``, rhs: ``, ok: false},
 		`a`: {lhs: ``, op: ``, rhs: ``, ok: false},
 
-		// Escaped values
+		// 转义值
 		`k=\,`:          {lhs: `k`, op: `=`, rhs: `\,`, ok: true},
 		`k=\=`:          {lhs: `k`, op: `=`, rhs: `\=`, ok: true},
 		`k=\\\a\b\=\,\`: {lhs: `k`, op: `=`, rhs: `\\\a\b\=\,\`, ok: true},
 
-		// Multi-byte
+		// 多字节字符
 		`함=수`: {lhs: `함`, op: `=`, rhs: `수`, ok: true},
 	}
 
@@ -90,8 +94,10 @@ func TestSplitTerm(t *testing.T) {
 	}
 }
 
+// TestEscapeValue 验证 EscapeValue/UnescapeValue 互逆，
+// 且非法转义序列返回 InvalidEscapeSequence 类型错误。
 func TestEscapeValue(t *testing.T) {
-	// map values to their normalized escaped values
+	// map 的值是规范化后的转义形式。
 	testcases := map[string]string{
 		``:      ``,
 		`a`:     `a`,
@@ -116,11 +122,11 @@ func TestEscapeValue(t *testing.T) {
 		}
 	}
 
-	// test invalid escape sequences
+	// 测试非法转义序列
 	invalidTestcases := []string{
-		`\`,   // orphan slash is invalid
-		`\\\`, // orphan slash is invalid
-		`\a`,  // unrecognized escape sequence is invalid
+		`\`,   // 孤立斜杠非法
+		`\\\`, // 孤立斜杠非法
+		`\a`,  // 未识别的转义序列非法
 	}
 	for _, invalidValue := range invalidTestcases {
 		_, err := UnescapeValue(invalidValue)
@@ -130,6 +136,8 @@ func TestEscapeValue(t *testing.T) {
 	}
 }
 
+// TestSelectorParse 覆盖 ParseSelector 的合法/非法输入，
+// 并验证合法输入重新序列化后与原文一致。
 func TestSelectorParse(t *testing.T) {
 	testGoodStrings := []string{
 		"x=a,y=b,z=c",
@@ -163,6 +171,7 @@ func TestSelectorParse(t *testing.T) {
 	}
 }
 
+// TestDeterministicParse 验证相同条件以不同顺序输入时，解析结果序列化一致。
 func TestDeterministicParse(t *testing.T) {
 	s1, err := ParseSelector("x=a,a=x")
 	s2, err2 := ParseSelector("a=x,x=a")
@@ -174,6 +183,7 @@ func TestDeterministicParse(t *testing.T) {
 	}
 }
 
+// expectMatch 断言选择器能匹配给定字段集。
 func expectMatch(t *testing.T, selector string, ls Set) {
 	lq, err := ParseSelector(selector)
 	if err != nil {
@@ -185,6 +195,7 @@ func expectMatch(t *testing.T, selector string, ls Set) {
 	}
 }
 
+// expectNoMatch 断言选择器不能匹配给定字段集。
 func expectNoMatch(t *testing.T, selector string, ls Set) {
 	lq, err := ParseSelector(selector)
 	if err != nil {
@@ -196,6 +207,7 @@ func expectNoMatch(t *testing.T, selector string, ls Set) {
 	}
 }
 
+// TestEverything 验证 Everything() 匹配任意字段集且被视为空选择器。
 func TestEverything(t *testing.T) {
 	if !Everything().Matches(Set{"x": "y"}) {
 		t.Errorf("Nil selector didn't match")
@@ -205,12 +217,14 @@ func TestEverything(t *testing.T) {
 	}
 }
 
+// TestSelectorMatches 覆盖解析后的选择器匹配，包括相等/不等、多个条件，
+// 以及含转义字符的值。
 func TestSelectorMatches(t *testing.T) {
 	expectMatch(t, "", Set{"x": "y"})
 	expectMatch(t, "x=y", Set{"x": "y"})
 	expectMatch(t, "x=y,z=w", Set{"x": "y", "z": "w"})
 	expectMatch(t, "x!=y,z!=w", Set{"x": "z", "z": "a"})
-	expectMatch(t, "notin=in", Set{"notin": "in"}) // in and notin in exactMatch
+	expectMatch(t, "notin=in", Set{"notin": "in"}) // in 和 notin 在 exactMatch 中
 	expectNoMatch(t, "x=y", Set{"x": "z"})
 	expectNoMatch(t, "x=y,z=w", Set{"x": "w", "z": "w"})
 	expectNoMatch(t, "x!=y,z!=w", Set{"x": "z", "z": "w"})
@@ -229,6 +243,7 @@ func TestSelectorMatches(t *testing.T) {
 	expectNoMatch(t, "foo=bar,foobar=bar,baz=blah", fieldset)
 }
 
+// TestOneTermEqualSelector 验证 OneTermEqualSelector 的匹配与不匹配。
 func TestOneTermEqualSelector(t *testing.T) {
 	if !OneTermEqualSelector("x", "y").Matches(Set{"x": "y"}) {
 		t.Errorf("No match when match expected.")
@@ -238,18 +253,21 @@ func TestOneTermEqualSelector(t *testing.T) {
 	}
 }
 
+// expectMatchDirect 断言由 Set 直接构造的选择器能匹配给定字段集。
 func expectMatchDirect(t *testing.T, selector, ls Set) {
 	if !SelectorFromSet(selector).Matches(ls) {
 		t.Errorf("Wanted %s to match '%s', but it did not.\n", selector, ls)
 	}
 }
 
+// expectNoMatchDirect 断言由 Set 直接构造的选择器不能匹配给定字段集。
 func expectNoMatchDirect(t *testing.T, selector, ls Set) {
 	if SelectorFromSet(selector).Matches(ls) {
 		t.Errorf("Wanted '%s' to not match '%s', but it did.", selector, ls)
 	}
 }
 
+// TestSetMatches 覆盖 SelectorFromSet 的匹配语义：子集匹配、空选择器匹配全部。
 func TestSetMatches(t *testing.T) {
 	labelset := Set{
 		"foo": "bar",
@@ -264,6 +282,7 @@ func TestSetMatches(t *testing.T) {
 	expectNoMatchDirect(t, Set{"foo": "=bar", "foobar": "bar", "baz": "blah"}, labelset)
 }
 
+// TestNilMapIsValid 验证 nil Set 生成的选择器等价于 Everything 且 Empty 为 true。
 func TestNilMapIsValid(t *testing.T) {
 	selector := Set(nil).AsSelector()
 	if selector == nil {
@@ -274,6 +293,7 @@ func TestNilMapIsValid(t *testing.T) {
 	}
 }
 
+// TestSetIsEmpty 覆盖空判断在空 Set、nil/嵌套 andTerm、hasTerm/notHasTerm 上的行为。
 func TestSetIsEmpty(t *testing.T) {
 	if !(Set{}).AsSelector().Empty() {
 		t.Errorf("Empty set should be empty")
@@ -295,6 +315,8 @@ func TestSetIsEmpty(t *testing.T) {
 	}
 }
 
+// TestRequiresExactMatch 覆盖从选择器中提取精确匹配值的行为：
+// 只有单值的 Equals/DoubleEquals/In 才会返回值，notHasTerm 不返回。
 func TestRequiresExactMatch(t *testing.T) {
 	testCases := map[string]struct {
 		S     Selector
@@ -326,6 +348,8 @@ func TestRequiresExactMatch(t *testing.T) {
 	}
 }
 
+// TestTransform 覆盖 ParseAndTransformSelector 的字段重写与删除：
+// 返回空字段名表示删除该条件，全部删除后选择器变为空。
 func TestTransform(t *testing.T) {
 	testCases := []struct {
 		name      string

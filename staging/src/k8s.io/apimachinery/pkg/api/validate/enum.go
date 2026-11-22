@@ -26,18 +26,24 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// Enum verifies that a given value is a member of a set of enum values.
-// Exclude Rules that apply when options are enabled or disabled are also considered.
-// If ANY exclude rule matches for a value, that value is excluded from the enum when validating.
+// Enum 校验给定值是否属于枚举取值集合。
+// 同时会考虑“选项启用/禁用时生效的排除规则”：只要某值的任一排除规则命中，
+// 该值在本次校验中即被排除。
+//
+// 参数说明：value 为待校验值的指针（nil 视为未设置，直接通过）；
+// validValues 为完整枚举集合；exclusions 为条件排除规则。
 func Enum[T ~string](_ context.Context, op operation.Operation, fldPath *field.Path, value, _ *T, validValues sets.Set[T], exclusions []EnumExclusion[T]) field.ErrorList {
 	if value == nil {
 		return nil
 	}
+	// 先判定条件排除；选项未定义属于策略配置错误，应作为内部错误暴露。
 	excluded, err := isExcluded(op, exclusions, *value)
 	if err != nil {
 		return field.ErrorList{field.InternalError(fldPath, err)}
 	}
 	if !validValues.Has(*value) || excluded {
+		// 报错时需要列出当前实际可用的值（已剔除被排除项），
+		// 否则用户会看到自己无法使用的“受支持值”。
 		supported, err := supportedValues(op, validValues, exclusions)
 		if err != nil {
 			return field.ErrorList{field.InternalError(fldPath, err)}
@@ -47,8 +53,8 @@ func Enum[T ~string](_ context.Context, op operation.Operation, fldPath *field.P
 	return nil
 }
 
-// supportedValues returns a sorted list of supported values.
-// Excluded enum values are not included in the list.
+// supportedValues 返回排序后的受支持值列表。
+// 被排除的枚举值不会出现在结果中，保证错误信息与实际可用集合一致。
 func supportedValues[T ~string](op operation.Operation, values sets.Set[T], exclusions []EnumExclusion[T]) ([]T, error) {
 	res := make([]T, 0, len(values))
 	for key := range values {
@@ -61,22 +67,25 @@ func supportedValues[T ~string](op operation.Operation, values sets.Set[T], excl
 		}
 		res = append(res, key)
 	}
+	// 集合遍历顺序不确定，排序以保证错误信息稳定、可断言。
 	slices.Sort(res)
 	return res, nil
 }
 
-// EnumExclusion represents a single enum exclusion rule.
+// EnumExclusion 表示单条枚举排除规则。
 type EnumExclusion[T ~string] struct {
-	// Value specifies the enum value to be conditionally excluded.
+	// Value 指定被条件排除的枚举值。
 	Value T
-	// ExcludeWhen determines the condition for exclusion.
-	// If true, the value is excluded if the option is present.
-	// If false, the value is excluded if the option is NOT present.
+	// ExcludeWhen 决定排除条件。
+	// 为 true 时，选项存在则排除该值；
+	// 为 false 时，选项不存在则排除该值。
 	ExcludeWhen bool
-	// Option is the name of the feature option that controls the exclusion.
+	// Option 是控制该排除的选项（特性开关）名称。
 	Option string
 }
 
+// isExcluded 判断 value 是否命中任一排除规则。
+// 选项未定义时返回错误，而不是静默视为禁用——那会掩盖策略配置遗漏。
 func isExcluded[T ~string](op operation.Operation, exclusions []EnumExclusion[T], value T) (bool, error) {
 	for _, rule := range exclusions {
 		on, defined := op.HasOption(rule.Option)

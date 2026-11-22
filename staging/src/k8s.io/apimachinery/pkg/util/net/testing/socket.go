@@ -25,10 +25,9 @@ import (
 	"testing"
 )
 
-// MakeSocketNameForTest returns a socket name to use for the duration of a test.
-// On Operating systems that support abstract sockets, it the name is prefixed with `@` to make it an abstract socket.
-// On Operating systems that do not support abstract sockets, the name is treated as a filename and a cleanup hook is
-// registered to delete the socket at the end of the test.
+// MakeSocketNameForTest 返回供测试期间使用的 socket 名称。
+// 在支持抽象套接字的操作系统上，名称会加上 `@` 前缀以成为抽象套接字（不落到文件系统，也就不会残留）；
+// 在不支持抽象套接字的系统（darwin、windows）上，名称被当作文件名，并注册 cleanup 钩子在测试结束时删除它。
 func MakeSocketNameForTest(t testing.TB, name string) string {
 	var sockname = name
 	switch goruntime.GOOS {

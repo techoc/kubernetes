@@ -27,6 +27,10 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// parseIP 解析并校验 IP，返回解析结果与全部错误。
+//
+// 先用宽松解析器保证历史格式可读，再在严格模式下用 net/netip 检查
+// 前导零与 IPv4-mapped IPv6 这两种有歧义的写法。
 func parseIP(fldPath *field.Path, value string, strictValidation bool) (net.IP, field.ErrorList) {
 	var allErrors field.ErrorList
 
@@ -41,9 +45,11 @@ func parseIP(fldPath *field.Path, value string, strictValidation bool) (net.IP, 
 		if err != nil {
 			// If netutils.ParseIPSloppy parsed it, but netip.ParseAddr
 			// doesn't, then it must have illegal leading 0s.
+			// 宽松解析器接受 "010.0.0.1"，严格解析器拒绝：差异只可能来自前导零。
 			allErrors = append(allErrors, field.Invalid(fldPath, value, "must not have leading 0s"))
 		}
 		if addr.Is4In6() {
+			// IPv4-mapped IPv6 可能被不同软件分别当作 IPv4/IPv6，存在安全风险。
 			allErrors = append(allErrors, field.Invalid(fldPath, value, "must not be an IPv4-mapped IPv6 address"))
 		}
 	}
@@ -80,6 +86,7 @@ func parseIP(fldPath *field.Path, value string, strictValidation bool) (net.IP, 
 // StrictIPCIDRValidation feature gate is disabled. Use IsValidIP for parsing new fields.
 func IsValidIPForLegacyField(fldPath *field.Path, value string, strictValidation bool, validOldIPs []string) field.ErrorList {
 	if slices.Contains(validOldIPs, value) {
+		// 旧对象中已存在的值必须继续接受，否则更新会因未修改的字段而失败。
 		return nil
 	}
 	_, allErrors := parseIP(fldPath, value, strictValidation)
@@ -88,6 +95,8 @@ func IsValidIPForLegacyField(fldPath *field.Path, value string, strictValidation
 
 // IsValidIP tests that the argument is a valid IP address, according to current
 // Kubernetes standards for IP address validation.
+//
+// 严格校验还要求规范形式：例如 IPv6 必须使用 RFC 5952 的压缩写法。
 func IsValidIP(fldPath *field.Path, value string) field.ErrorList {
 	ip, allErrors := parseIP(fldPath, value, true)
 	if len(allErrors) != 0 {
@@ -131,6 +140,9 @@ func GetWarningsForIP(fldPath *field.Path, value string) []string {
 	return nil
 }
 
+// parseCIDR 解析并校验 CIDR，逻辑与 parseIP 对应：
+// 宽松解析保证可读，严格模式额外检查前导零、IPv4-mapped IPv6，
+// 以及"前缀之后仍有置位"的接口地址写法。
 func parseCIDR(fldPath *field.Path, value string, strictValidation bool) (*net.IPNet, field.ErrorList) {
 	var allErrors field.ErrorList
 
@@ -150,6 +162,7 @@ func parseCIDR(fldPath *field.Path, value string, strictValidation bool) (*net.I
 		} else if prefix.Addr().Is4In6() {
 			allErrors = append(allErrors, field.Invalid(fldPath, value, "must not have an IPv4-mapped IPv6 address"))
 		} else if prefix.Addr() != prefix.Masked().Addr() {
+			// "192.168.1.5/24" 这类接口地址在 subnet 语义下是歧义的。
 			allErrors = append(allErrors, field.Invalid(fldPath, value, "must not have bits set beyond the prefix length"))
 		}
 	}
@@ -184,6 +197,7 @@ func parseCIDR(fldPath *field.Path, value string, strictValidation bool) (*net.I
 // IsValidInterfaceAddress for parsing new fields.
 func IsValidCIDRForLegacyField(fldPath *field.Path, value string, strictValidation bool, validOldCIDRs []string) field.ErrorList {
 	if slices.Contains(validOldCIDRs, value) {
+		// 与 IP 相同：旧值豁免，保证既有对象仍可更新。
 		return nil
 	}
 
@@ -270,6 +284,7 @@ func IsValidInterfaceAddress(fldPath *field.Path, value string) field.ErrorList 
 	maskSize, _ := ipnet.Mask.Size()
 	if netutils.IsIPv4(ip) && maskSize > net.IPv4len*8 {
 		// "::ffff:192.168.0.1/120" -> "192.168.0.1/24"
+		// 去掉 IPv4-mapped 前缀带来的 96 位。
 		maskSize -= (net.IPv6len - net.IPv4len) * 8
 	}
 	canonical := fmt.Sprintf("%s/%d", ip.String(), maskSize)

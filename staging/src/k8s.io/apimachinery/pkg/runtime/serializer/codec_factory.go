@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer/versioning"
 )
 
+// newSerializersForScheme 构造内置的 JSON/YAML/protobuf 序列化器列表，
+// 并追加 options.serializers 中的自定义序列化器。
 func newSerializersForScheme(scheme *runtime.Scheme, mf json.MetaFactory, options CodecFactoryOptions) []runtime.SerializerInfo {
 	jsonSerializer := json.NewSerializerWithOptions(
 		mf, scheme, scheme,
@@ -36,16 +38,19 @@ func newSerializersForScheme(scheme *runtime.Scheme, mf json.MetaFactory, option
 		MediaTypeSubType: "json",
 		EncodesAsText:    true,
 		Serializer:       jsonSerializer,
+		// 严格模式单独实例化，供需要拒绝未知字段的调用方使用。
 		StrictSerializer: json.NewSerializerWithOptions(
 			mf, scheme, scheme,
 			json.SerializerOptions{Yaml: false, Pretty: false, Strict: true, StreamingCollectionsEncoding: options.StreamingCollectionsEncodingToJSON},
 		),
+		// 流式序列化器用于 watch 等场景，按帧输出。
 		StreamSerializer: &runtime.StreamSerializerInfo{
 			EncodesAsText: true,
 			Serializer:    jsonSerializer,
 			Framer:        json.Framer,
 		},
 	}
+	// Pretty 序列化器按需构造，避免不必要的开销。
 	if options.Pretty {
 		jsonSerializerType.PrettySerializer = json.NewSerializerWithOptions(
 			mf, scheme, scheme,
@@ -81,8 +86,7 @@ func newSerializersForScheme(scheme *runtime.Scheme, mf json.MetaFactory, option
 			MediaTypeType:    "application",
 			MediaTypeSubType: "vnd.kubernetes.protobuf",
 			Serializer:       protoSerializer,
-			// note, strict decoding is unsupported for protobuf,
-			// fall back to regular serializing
+			// 注意：protobuf 不支持严格解码，回退到普通序列化器。
 			StrictSerializer: protoSerializer,
 			StreamSerializer: &runtime.StreamSerializerInfo{
 				Serializer: protoRawSerializer,
@@ -98,8 +102,7 @@ func newSerializersForScheme(scheme *runtime.Scheme, mf json.MetaFactory, option
 	return serializers
 }
 
-// CodecFactory provides methods for retrieving codecs and serializers for specific
-// versions and content types.
+// CodecFactory 提供按版本和内容类型获取 codec 与 serializer 的方法。
 type CodecFactory struct {
 	scheme    *runtime.Scheme
 	universal runtime.Decoder
@@ -108,70 +111,74 @@ type CodecFactory struct {
 	legacySerializer runtime.Serializer
 }
 
-// CodecFactoryOptions holds the options for configuring CodecFactory behavior
+// CodecFactoryOptions 保存 CodecFactory 的行为配置。
 type CodecFactoryOptions struct {
-	// Strict configures all serializers in strict mode
+	// Strict 让所有序列化器运行在严格模式。
 	Strict bool
-	// Pretty includes a pretty serializer along with the non-pretty one
+	// Pretty 在非美化序列化器之外额外包含一个美化序列化器。
 	Pretty bool
 
-	StreamingCollectionsEncodingToJSON     bool
+	// StreamingCollectionsEncodingToJSON 控制 JSON 是否对集合使用流式编码。
+	StreamingCollectionsEncodingToJSON bool
+	// StreamingCollectionsEncodingToProtobuf 控制 protobuf 是否对集合使用流式编码。
 	StreamingCollectionsEncodingToProtobuf bool
 
+	// serializers 保存通过 WithSerializer 追加的自定义序列化器构造函数。
 	serializers []func(runtime.ObjectCreater, runtime.ObjectTyper) runtime.SerializerInfo
 }
 
-// CodecFactoryOptionsMutator takes a pointer to an options struct and then modifies it.
-// Functions implementing this type can be passed to the NewCodecFactory() constructor.
+// CodecFactoryOptionsMutator 接收 options 指针并修改它。
+// 实现该类型的函数可传给 NewCodecFactory() 构造函数。
 type CodecFactoryOptionsMutator func(*CodecFactoryOptions)
 
-// EnablePretty enables including a pretty serializer along with the non-pretty one
+// EnablePretty 在非美化序列化器之外额外包含一个美化序列化器。
 func EnablePretty(options *CodecFactoryOptions) {
 	options.Pretty = true
 }
 
-// DisablePretty disables including a pretty serializer along with the non-pretty one
+// DisablePretty 不包含美化序列化器。
 func DisablePretty(options *CodecFactoryOptions) {
 	options.Pretty = false
 }
 
-// EnableStrict enables configuring all serializers in strict mode
+// EnableStrict 让所有序列化器运行在严格模式。
 func EnableStrict(options *CodecFactoryOptions) {
 	options.Strict = true
 }
 
-// DisableStrict disables configuring all serializers in strict mode
+// DisableStrict 关闭严格模式。
 func DisableStrict(options *CodecFactoryOptions) {
 	options.Strict = false
 }
 
-// WithSerializer configures a serializer to be supported in addition to the default serializers.
+// WithSerializer 在默认序列化器之外额外支持一个自定义序列化器。
 func WithSerializer(f func(runtime.ObjectCreater, runtime.ObjectTyper) runtime.SerializerInfo) CodecFactoryOptionsMutator {
 	return func(options *CodecFactoryOptions) {
 		options.serializers = append(options.serializers, f)
 	}
 }
 
+// WithStreamingCollectionEncodingToJSON 开启 JSON 集合的流式编码。
 func WithStreamingCollectionEncodingToJSON() CodecFactoryOptionsMutator {
 	return func(options *CodecFactoryOptions) {
 		options.StreamingCollectionsEncodingToJSON = true
 	}
 }
 
+// WithStreamingCollectionEncodingToProtobuf 开启 protobuf 集合的流式编码。
 func WithStreamingCollectionEncodingToProtobuf() CodecFactoryOptionsMutator {
 	return func(options *CodecFactoryOptions) {
 		options.StreamingCollectionsEncodingToProtobuf = true
 	}
 }
 
-// NewCodecFactory provides methods for retrieving serializers for the supported wire formats
-// and conversion wrappers to define preferred internal and external versions. In the future,
-// as the internal version is used less, callers may instead use a defaulting serializer and
-// only convert objects which are shared internally (Status, common API machinery).
+// NewCodecFactory 提供获取受支持线格式的序列化器，以及定义首选内部/外部版本
+// 的转换包装器的方法。未来随着内部版本使用减少，调用方可能改用默认序列化器，
+// 只转换内部共享的对象（Status、通用 API machinery）。
 //
-// Mutators can be passed to change the CodecFactoryOptions before construction of the factory.
-// It is recommended to explicitly pass mutators instead of relying on defaults.
-// By default, Pretty is enabled -- this is conformant with previously supported behavior.
+// 可在构造工厂前传入 Mutator 修改 CodecFactoryOptions。
+// 建议显式传入 mutator 而不是依赖默认值。
+// 默认启用 Pretty，与此前支持的行为保持一致。
 //
 // TODO: allow other codecs to be compiled in?
 // TODO: accept a scheme interface
@@ -185,7 +192,7 @@ func NewCodecFactory(scheme *runtime.Scheme, mutators ...CodecFactoryOptionsMuta
 	return newCodecFactory(scheme, serializers)
 }
 
-// newCodecFactory is a helper for testing that allows a different metafactory to be specified.
+// newCodecFactory 是供测试使用的辅助函数，允许指定不同的 metafactory。
 func newCodecFactory(scheme *runtime.Scheme, serializers []runtime.SerializerInfo) CodecFactory {
 	decoders := make([]runtime.Decoder, 0, len(serializers))
 	var accepts []runtime.SerializerInfo
@@ -194,11 +201,13 @@ func newCodecFactory(scheme *runtime.Scheme, serializers []runtime.SerializerInf
 	var legacySerializer runtime.Serializer
 	for _, d := range serializers {
 		decoders = append(decoders, d.Serializer)
+		// 同一 MediaType 只暴露一次，避免重复协商。
 		if _, ok := alreadyAccepted[d.MediaType]; ok {
 			continue
 		}
 		alreadyAccepted[d.MediaType] = struct{}{}
 
+		// 浅拷贝 StreamSerializer，避免调用方修改影响工厂内部状态。
 		acceptedSerializerShallowCopy := d
 		if d.StreamSerializer != nil {
 			cloned := *d.StreamSerializer
@@ -210,6 +219,7 @@ func newCodecFactory(scheme *runtime.Scheme, serializers []runtime.SerializerInf
 			legacySerializer = d.Serializer
 		}
 	}
+	// 没有 JSON 序列化器时退化为第一个序列化器，保证 LegacyCodec 可用。
 	if legacySerializer == nil {
 		legacySerializer = serializers[0].Serializer
 	}
@@ -224,23 +234,21 @@ func newCodecFactory(scheme *runtime.Scheme, serializers []runtime.SerializerInf
 	}
 }
 
-// WithoutConversion returns a NegotiatedSerializer that performs no conversion, even if the
-// caller requests it.
+// WithoutConversion 返回一个即使调用方请求转换也不执行转换的 NegotiatedSerializer。
 func (f CodecFactory) WithoutConversion() runtime.NegotiatedSerializer {
 	return WithoutConversionCodecFactory{f}
 }
 
-// SupportedMediaTypes returns the RFC2046 media types that this factory has serializers for.
+// SupportedMediaTypes 返回该工厂支持的 RFC2046 媒体类型。
 func (f CodecFactory) SupportedMediaTypes() []runtime.SerializerInfo {
 	return f.accepts
 }
 
-// LegacyCodec encodes output to a given API versions, and decodes output into the internal form from
-// any recognized source. The returned codec will always encode output to JSON. If a type is not
-// found in the list of versions an error will be returned.
+// LegacyCodec 把输出编码为给定 API 版本，并把任何可识别来源的输入解码为内部形式。
+// 返回的 codec 始终以 JSON 编码输出。若类型不在给定版本列表中则返回错误。
 //
-// This method is deprecated - clients and servers should negotiate a serializer by mime-type and
-// invoke CodecForVersions. Callers that need only to read data should use UniversalDecoder().
+// 该方法已废弃：客户端与服务端应通过 mime-type 协商序列化器并调用
+// CodecForVersions。只需读取数据的调用方应使用 UniversalDecoder()。
 //
 // TODO: make this call exist only in pkg/api, and initialize it with the set of default versions.
 // All other callers will be forced to request a Codec directly.
@@ -248,18 +256,17 @@ func (f CodecFactory) LegacyCodec(version ...schema.GroupVersion) runtime.Codec 
 	return versioning.NewDefaultingCodecForScheme(f.scheme, f.legacySerializer, f.universal, schema.GroupVersions(version), runtime.InternalGroupVersioner)
 }
 
-// UniversalDeserializer can convert any stored data recognized by this factory into a Go object that satisfies
-// runtime.Object. It does not perform conversion. It does not perform defaulting.
+// UniversalDeserializer 把该工厂可识别的任意存储数据转换为满足 runtime.Object
+// 的 Go 对象。它不执行转换，也不执行默认值填充。
 func (f CodecFactory) UniversalDeserializer() runtime.Decoder {
 	return f.universal
 }
 
-// UniversalDecoder returns a runtime.Decoder capable of decoding all known API objects in all known formats. Used
-// by clients that do not need to encode objects but want to deserialize API objects stored on disk. Only decodes
-// objects in groups registered with the scheme. The GroupVersions passed may be used to select alternate
-// versions of objects to return - by default, runtime.APIVersionInternal is used. If any versions are specified,
-// unrecognized groups will be returned in the version they are encoded as (no conversion). This decoder performs
-// defaulting.
+// UniversalDecoder 返回可解码所有已知格式、所有已知 API 对象的 runtime.Decoder。
+// 供只需反序列化磁盘上 API 对象、无需编码的客户端使用。它只解码在 scheme 中
+// 注册的组。传入的 GroupVersions 可用于选择返回对象的替代版本——默认使用
+// runtime.APIVersionInternal。若指定了版本，未识别的组会以编码时的版本返回
+// （不做转换）。该解码器会执行默认值填充。
 //
 // TODO: the decoder will eventually be removed in favor of dealing with objects in their versioned form
 // TODO: only accept a group versioner
@@ -273,9 +280,9 @@ func (f CodecFactory) UniversalDecoder(versions ...schema.GroupVersion) runtime.
 	return f.CodecForVersions(nil, f.universal, nil, versioner)
 }
 
-// CodecForVersions creates a codec with the provided serializer. If an object is decoded and its group is not in the list,
-// it will default to runtime.APIVersionInternal. If encode is not specified for an object's group, the object is not
-// converted. If encode or decode are nil, no conversion is performed.
+// CodecForVersions 用给定的序列化器创建 codec。若解码对象的组不在列表中，
+// 则默认使用 runtime.APIVersionInternal。若未为某对象的组指定 encode，则该对象
+// 不做转换。若 encode 或 decode 为 nil，则不执行转换。
 func (f CodecFactory) CodecForVersions(encoder runtime.Encoder, decoder runtime.Decoder, encode runtime.GroupVersioner, decode runtime.GroupVersioner) runtime.Codec {
 	// TODO: these are for backcompat, remove them in the future
 	if encode == nil {
@@ -287,25 +294,24 @@ func (f CodecFactory) CodecForVersions(encoder runtime.Encoder, decoder runtime.
 	return versioning.NewDefaultingCodecForScheme(f.scheme, encoder, decoder, encode, decode)
 }
 
-// DecoderToVersion returns a decoder that targets the provided group version.
+// DecoderToVersion 返回面向给定 group version 的解码器。
 func (f CodecFactory) DecoderToVersion(decoder runtime.Decoder, gv runtime.GroupVersioner) runtime.Decoder {
 	return f.CodecForVersions(nil, decoder, nil, gv)
 }
 
-// EncoderForVersion returns an encoder that targets the provided group version.
+// EncoderForVersion 返回面向给定 group version 的编码器。
 func (f CodecFactory) EncoderForVersion(encoder runtime.Encoder, gv runtime.GroupVersioner) runtime.Encoder {
 	return f.CodecForVersions(encoder, nil, gv, nil)
 }
 
-// WithoutConversionCodecFactory is a CodecFactory that will explicitly ignore requests to perform conversion.
-// This wrapper is used while code migrates away from using conversion (such as external clients) and in the future
-// will be unnecessary when we change the signature of NegotiatedSerializer.
+// WithoutConversionCodecFactory 是显式忽略转换请求的 CodecFactory。
+// 该包装器用于代码正在迁移离开转换逻辑的阶段（例如外部客户端），
+// 将来 NegotiatedSerializer 签名变更后可能不再需要。
 type WithoutConversionCodecFactory struct {
 	CodecFactory
 }
 
-// EncoderForVersion returns an encoder that does not do conversion, but does set the group version kind of the object
-// when serialized.
+// EncoderForVersion 返回不做转换、但在序列化时设置对象 group version kind 的编码器。
 func (f WithoutConversionCodecFactory) EncoderForVersion(serializer runtime.Encoder, version runtime.GroupVersioner) runtime.Encoder {
 	return runtime.WithVersionEncoder{
 		Version:     version,
@@ -314,7 +320,7 @@ func (f WithoutConversionCodecFactory) EncoderForVersion(serializer runtime.Enco
 	}
 }
 
-// DecoderToVersion returns an decoder that does not do conversion.
+// DecoderToVersion 返回不做转换的解码器。
 func (f WithoutConversionCodecFactory) DecoderToVersion(serializer runtime.Decoder, _ runtime.GroupVersioner) runtime.Decoder {
 	return runtime.WithoutVersionDecoder{
 		Decoder: serializer,

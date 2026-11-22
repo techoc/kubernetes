@@ -50,4 +50,7 @@ limitations under the License.
 //
 // As a bonus, a few common types useful from all api objects and versions
 // are provided in types.go.
+//
+// 简言之：Scheme 是类型注册表，Codec 负责在内部/外部版本间转换并编解码；
+// 所有 API 包在 init 中向 Scheme 注册自己的类型与转换函数。
 package runtime

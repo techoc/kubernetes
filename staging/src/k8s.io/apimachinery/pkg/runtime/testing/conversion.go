@@ -21,6 +21,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// convertEmbeddedTestToEmbeddedTestExternal 把内部版 EmbeddedTest 转换为外部版；
+// runtime.Object 字段需经 RawExtension 转换函数桥接。
 func convertEmbeddedTestToEmbeddedTestExternal(in *EmbeddedTest, out *EmbeddedTestExternal, s conversion.Scope) error {
 	out.TypeMeta = in.TypeMeta
 	out.ID = in.ID
@@ -33,6 +35,7 @@ func convertEmbeddedTestToEmbeddedTestExternal(in *EmbeddedTest, out *EmbeddedTe
 	return nil
 }
 
+// convertEmbeddedTestExternalToEmbeddedTest 是上一个函数的反向转换，RawExtension 需解回 runtime.Object。
 func convertEmbeddedTestExternalToEmbeddedTest(in *EmbeddedTestExternal, out *EmbeddedTest, s conversion.Scope) error {
 	out.TypeMeta = in.TypeMeta
 	out.ID = in.ID
@@ -45,6 +48,7 @@ func convertEmbeddedTestExternalToEmbeddedTest(in *EmbeddedTestExternal, out *Em
 	return nil
 }
 
+// convertObjectTestToObjectTestExternal 转换对象切片；nil 切片保持 nil，避免空切片与 nil 的语义漂移。
 func convertObjectTestToObjectTestExternal(in *ObjectTest, out *ObjectTestExternal, s conversion.Scope) error {
 	out.TypeMeta = in.TypeMeta
 	out.ID = in.ID
@@ -61,6 +65,7 @@ func convertObjectTestToObjectTestExternal(in *ObjectTest, out *ObjectTestExtern
 	return nil
 }
 
+// convertObjectTestExternalToObjectTest 是对象切片反向转换；同样保持 nil 语义。
 func convertObjectTestExternalToObjectTest(in *ObjectTestExternal, out *ObjectTest, s conversion.Scope) error {
 	out.TypeMeta = in.TypeMeta
 	out.ID = in.ID
@@ -77,18 +82,22 @@ func convertObjectTestExternalToObjectTest(in *ObjectTestExternal, out *ObjectTe
 	return nil
 }
 
+// convertInternalSimpleToExternalSimple 转换简单类型；TypeMeta 按值复制。
 func convertInternalSimpleToExternalSimple(in *InternalSimple, out *ExternalSimple, s conversion.Scope) error {
 	out.TypeMeta = in.TypeMeta
 	out.TestString = in.TestString
 	return nil
 }
 
+// convertExternalSimpleToInternalSimple 是简单类型的反向转换。
 func convertExternalSimpleToInternalSimple(in *ExternalSimple, out *InternalSimple, s conversion.Scope) error {
 	out.TypeMeta = in.TypeMeta
 	out.TestString = in.TestString
 	return nil
 }
 
+// convertInternalExtensionTypeToExternalExtensionType 转换带扩展字段的类型；
+// Extension 由 runtime.Object 编码为 RawExtension。
 func convertInternalExtensionTypeToExternalExtensionType(in *InternalExtensionType, out *ExternalExtensionType, s conversion.Scope) error {
 	out.TypeMeta = in.TypeMeta
 	if err := runtime.Convert_runtime_Object_To_runtime_RawExtension(&in.Extension, &out.Extension, s); err != nil {
@@ -97,6 +106,7 @@ func convertInternalExtensionTypeToExternalExtensionType(in *InternalExtensionTy
 	return nil
 }
 
+// convertExternalExtensionTypeToInternalExtensionType 是带扩展字段类型的反向转换。
 func convertExternalExtensionTypeToInternalExtensionType(in *ExternalExtensionType, out *InternalExtensionType, s conversion.Scope) error {
 	out.TypeMeta = in.TypeMeta
 	if err := runtime.Convert_runtime_RawExtension_To_runtime_Object(&in.Extension, &out.Extension, s); err != nil {
@@ -105,6 +115,7 @@ func convertExternalExtensionTypeToInternalExtensionType(in *ExternalExtensionTy
 	return nil
 }
 
+// convertInternalOptionalExtensionTypeToExternalOptionalExtensionType 转换可选扩展字段类型。
 func convertInternalOptionalExtensionTypeToExternalOptionalExtensionType(in *InternalOptionalExtensionType, out *ExternalOptionalExtensionType, s conversion.Scope) error {
 	out.TypeMeta = in.TypeMeta
 	if err := runtime.Convert_runtime_Object_To_runtime_RawExtension(&in.Extension, &out.Extension, s); err != nil {
@@ -113,6 +124,7 @@ func convertInternalOptionalExtensionTypeToExternalOptionalExtensionType(in *Int
 	return nil
 }
 
+// convertExternalOptionalExtensionTypeToInternalOptionalExtensionType 是可选扩展字段类型的反向转换。
 func convertExternalOptionalExtensionTypeToInternalOptionalExtensionType(in *ExternalOptionalExtensionType, out *InternalOptionalExtensionType, s conversion.Scope) error {
 	out.TypeMeta = in.TypeMeta
 	if err := runtime.Convert_runtime_RawExtension_To_runtime_Object(&in.Extension, &out.Extension, s); err != nil {
@@ -121,6 +133,8 @@ func convertExternalOptionalExtensionTypeToInternalOptionalExtensionType(in *Ext
 	return nil
 }
 
+// convertTestType1ToExternalTestType1 转换测试用的大结构体：逐字段复制，
+// 对 map、指针、切片分别处理 nil，避免把 nil 变成空容器。
 func convertTestType1ToExternalTestType1(in *TestType1, out *ExternalTestType1, s conversion.Scope) error {
 	out.MyWeirdCustomEmbeddedVersionKindField = in.MyWeirdCustomEmbeddedVersionKindField
 	out.A = in.A
@@ -167,6 +181,7 @@ func convertTestType1ToExternalTestType1(in *TestType1, out *ExternalTestType1, 
 	return nil
 }
 
+// convertExternalTestType1ToTestType1 是 convertTestType1ToExternalTestType1 的反向转换。
 func convertExternalTestType1ToTestType1(in *ExternalTestType1, out *TestType1, s conversion.Scope) error {
 	out.MyWeirdCustomEmbeddedVersionKindField = in.MyWeirdCustomEmbeddedVersionKindField
 	out.A = in.A
@@ -213,19 +228,24 @@ func convertExternalTestType1ToTestType1(in *ExternalTestType1, out *TestType1, 
 	return nil
 }
 
+// convertTestType2ToExternalTestType2 转换测试用的小结构体。
 func convertTestType2ToExternalTestType2(in *TestType2, out *ExternalTestType2, s conversion.Scope) error {
 	out.A = in.A
 	out.B = in.B
 	return nil
 }
 
+// convertExternalTestType2ToTestType2 是 convertTestType2ToExternalTestType2 的反向转换。
 func convertExternalTestType2ToTestType2(in *ExternalTestType2, out *TestType2, s conversion.Scope) error {
 	out.A = in.A
 	out.B = in.B
 	return nil
 }
 
+// RegisterConversions 把所有手写的双向转换函数注册到 scheme。
+// 注册顺序无关，因为每个函数按源/目标类型精确匹配。
 func RegisterConversions(s *runtime.Scheme) error {
+	// EmbeddedTest <-> EmbeddedTestExternal
 	if err := s.AddConversionFunc((*EmbeddedTest)(nil), (*EmbeddedTestExternal)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return convertEmbeddedTestToEmbeddedTestExternal(a.(*EmbeddedTest), b.(*EmbeddedTestExternal), scope)
 	}); err != nil {
@@ -236,6 +256,7 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	// ObjectTest <-> ObjectTestExternal
 	if err := s.AddConversionFunc((*ObjectTest)(nil), (*ObjectTestExternal)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return convertObjectTestToObjectTestExternal(a.(*ObjectTest), b.(*ObjectTestExternal), scope)
 	}); err != nil {
@@ -246,6 +267,7 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	// InternalSimple <-> ExternalSimple
 	if err := s.AddConversionFunc((*InternalSimple)(nil), (*ExternalSimple)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return convertInternalSimpleToExternalSimple(a.(*InternalSimple), b.(*ExternalSimple), scope)
 	}); err != nil {
@@ -256,6 +278,7 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	// InternalExtensionType <-> ExternalExtensionType
 	if err := s.AddConversionFunc((*InternalExtensionType)(nil), (*ExternalExtensionType)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return convertInternalExtensionTypeToExternalExtensionType(a.(*InternalExtensionType), b.(*ExternalExtensionType), scope)
 	}); err != nil {
@@ -266,6 +289,7 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	// InternalOptionalExtensionType <-> ExternalOptionalExtensionType
 	if err := s.AddConversionFunc((*InternalOptionalExtensionType)(nil), (*ExternalOptionalExtensionType)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return convertInternalOptionalExtensionTypeToExternalOptionalExtensionType(a.(*InternalOptionalExtensionType), b.(*ExternalOptionalExtensionType), scope)
 	}); err != nil {
@@ -276,6 +300,7 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	// TestType1 <-> ExternalTestType1
 	if err := s.AddConversionFunc((*TestType1)(nil), (*ExternalTestType1)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return convertTestType1ToExternalTestType1(a.(*TestType1), b.(*ExternalTestType1), scope)
 	}); err != nil {
@@ -286,6 +311,7 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	// TestType2 <-> ExternalTestType2
 	if err := s.AddConversionFunc((*TestType2)(nil), (*ExternalTestType2)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return convertTestType2ToExternalTestType2(a.(*TestType2), b.(*ExternalTestType2), scope)
 	}); err != nil {

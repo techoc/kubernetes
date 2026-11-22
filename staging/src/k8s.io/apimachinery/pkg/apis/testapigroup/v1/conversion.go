@@ -20,6 +20,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+// addConversionFuncs is the hook for hand-written conversions between the
+// test API group's versions. All conversions for this fixture are currently
+// generated, so there is nothing to add.
 func addConversionFuncs(scheme *runtime.Scheme) error {
 	// Add non-generated conversion functions here. Currently there are none.
 	return nil

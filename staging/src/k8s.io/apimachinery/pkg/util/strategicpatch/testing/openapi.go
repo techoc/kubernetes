@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package testing 提供测试用的 OpenAPI 文档辅助工具，便于在单元测试中
+// 从本地 swagger 文件加载 schema。
 package testing
 
 import (
@@ -24,8 +26,8 @@ import (
 	openapi "k8s.io/kube-openapi/pkg/util/proto"
 )
 
-// Fake opens and returns a openapi swagger from a file Path. It will
-// parse only once and then return the same copy everytime.
+// Fake 打开并返回文件路径中的 OpenAPI swagger 文档。
+// 它只解析一次，之后每次调用都返回同一份副本。
 type Fake struct {
 	Path string
 
@@ -34,7 +36,9 @@ type Fake struct {
 	err      error
 }
 
-// OpenAPISchema returns the openapi document and a potential error.
+// OpenAPISchema 返回 OpenAPI 文档及可能的错误。
+// 首次调用执行文件读取与解析；后续调用复用缓存结果（含错误），
+// 因此同一 Fake 只会产生一次 I/O 与解析开销。
 func (f *Fake) OpenAPISchema() (*openapi_v2.Document, error) {
 	f.once.Do(func() {
 		_, err := os.Stat(f.Path)
@@ -52,6 +56,7 @@ func (f *Fake) OpenAPISchema() (*openapi_v2.Document, error) {
 	return f.document, f.err
 }
 
+// getSchema 加载文档并按模型名查找对应的 schema。
 func getSchema(f *Fake, model string) (openapi.Schema, error) {
 	s, err := f.OpenAPISchema()
 	if err != nil {
@@ -64,7 +69,8 @@ func getSchema(f *Fake, model string) (openapi.Schema, error) {
 	return m.LookupModel(model), nil
 }
 
-// GetSchemaOrDie returns the openapi schema.
+// GetSchemaOrDie 返回指定模型的 OpenAPI schema；加载或查找失败时 panic，
+// 适用于测试中“schema 必然存在”的场景。
 func GetSchemaOrDie(f *Fake, model string) openapi.Schema {
 	s, err := getSchema(f, model)
 	if err != nil {

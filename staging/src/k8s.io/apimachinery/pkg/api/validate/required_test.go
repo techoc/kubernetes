@@ -26,6 +26,10 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+// TestRequiredValue 覆盖 RequiredValue 对常见 Go 类型的零值判定。
+//
+// 每个 case 用闭包构造输入，err 是该 case 期望的错误正则（空表示应通过）。
+// 注意指针类型：指向零值的非 nil 指针不算零值，而 nil 指针算零值。
 func TestRequiredValue(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -109,6 +113,8 @@ func TestRequiredValue(t *testing.T) {
 	}
 }
 
+// TestRequiredPointer 验证 RequiredPointer 只关心指针本身是否为 nil，
+// 与指向的值是否为零值无关。
 func TestRequiredPointer(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -192,6 +198,7 @@ func TestRequiredPointer(t *testing.T) {
 	}
 }
 
+// TestRequiredSlice 验证 RequiredSlice 以长度为判据：元素内容即使是零值也算已设置。
 func TestRequiredSlice(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -264,6 +271,7 @@ func TestRequiredSlice(t *testing.T) {
 	}
 }
 
+// TestRequiredMap 验证 RequiredMap 以条目数为判据，key/value 为零值不影响结果。
 func TestRequiredMap(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -325,6 +333,8 @@ func TestRequiredMap(t *testing.T) {
 	}
 }
 
+// TestOptionalValue 与 TestRequiredValue 场景相同，但期望错误信息带有
+// "optional value was not specified" 说明。
 func TestOptionalValue(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -408,6 +418,7 @@ func TestOptionalValue(t *testing.T) {
 	}
 }
 
+// TestOptionalPointer 验证 OptionalPointer 的 nil 指针判定及错误文案。
 func TestOptionalPointer(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -491,6 +502,7 @@ func TestOptionalPointer(t *testing.T) {
 	}
 }
 
+// TestOptionalSlice 验证 OptionalSlice 的空切片判定及错误文案。
 func TestOptionalSlice(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -563,6 +575,7 @@ func TestOptionalSlice(t *testing.T) {
 	}
 }
 
+// TestOptionalMap 验证 OptionalMap 的空 map 判定及错误文案。
 func TestOptionalMap(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -624,6 +637,7 @@ func TestOptionalMap(t *testing.T) {
 	}
 }
 
+// TestForbiddenValue 验证 ForbiddenValue 仅在零值时通过。
 func TestForbiddenValue(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -707,6 +721,7 @@ func TestForbiddenValue(t *testing.T) {
 	}
 }
 
+// TestForbiddenPointer 验证 ForbiddenPointer 仅在指针为 nil 时通过。
 func TestForbiddenPointer(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -790,6 +805,7 @@ func TestForbiddenPointer(t *testing.T) {
 	}
 }
 
+// TestForbiddenSlice 验证 ForbiddenSlice 仅在切片为空时通过。
 func TestForbiddenSlice(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList
@@ -862,6 +878,7 @@ func TestForbiddenSlice(t *testing.T) {
 	}
 }
 
+// TestForbiddenMap 验证 ForbiddenMap 仅在 map 为空时通过。
 func TestForbiddenMap(t *testing.T) {
 	cases := []struct {
 		fn  func(op operation.Operation, fp *field.Path) field.ErrorList

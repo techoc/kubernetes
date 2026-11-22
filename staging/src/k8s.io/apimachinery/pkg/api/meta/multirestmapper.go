@@ -32,24 +32,28 @@ var (
 	_ fmt.Stringer                    = MultiRESTMapperWithContext{}
 )
 
-// MultiRESTMapper is a wrapper for multiple RESTMappers.
+// MultiRESTMapper 包装多个 RESTMapper。
 //
-// MultiRESTMapperWithContext is a better alternative because it supports contextual logging and cancellation.
+// MultiRESTMapperWithContext 是更好的替代方案，因为它支持上下文日志与取消。
 //
-// Contextual logging: Use MultiRESTMapperWithContext instead.
+// 上下文日志：请使用 MultiRESTMapperWithContext。
 type MultiRESTMapper []RESTMapper
 
-// MultiRESTMapperWithContext is a wrapper for multiple RESTMapperWithContext instances.
+// MultiRESTMapperWithContext 包装多个 RESTMapperWithContext 实例。
 type MultiRESTMapperWithContext []RESTMapperWithContext
 
+// String 返回便于调试的多行字符串表示。
 func (m MultiRESTMapper) String() string {
 	return stringifyMapper("MultiRESTMapper", m)
 }
 
+// String 返回便于调试的多行字符串表示。
 func (m MultiRESTMapperWithContext) String() string {
 	return stringifyMapper("MultiRESTMapperWithContext", m)
 }
 
+// stringifyMapper 把每个 mapper 的字符串表示缩进后拼成一个整体，
+// 保证嵌套输出可读。
 func stringifyMapper[T any](typeName string, m []T) string {
 	nested := make([]string, 0, len(m))
 	for _, t := range m {
@@ -61,6 +65,8 @@ func stringifyMapper[T any](typeName string, m []T) string {
 	return fmt.Sprintf("%s{\n\t%s\n}", typeName, strings.Join(nested, "\n\t"))
 }
 
+// ToMultiRESTMapperWithContext 把 MultiRESTMapper 转换为带上下文的版本。
+// nil 输入返回 nil，保持 nil 语义。
 func ToMultiRESTMapperWithContext(m MultiRESTMapper) MultiRESTMapperWithContext {
 	if m == nil {
 		return nil
@@ -72,76 +78,81 @@ func ToMultiRESTMapperWithContext(m MultiRESTMapper) MultiRESTMapperWithContext 
 	return mc
 }
 
-// ResourceSingularizer converts a REST resource name from plural to singular (e.g., from pods to pod)
-// This implementation supports multiple REST schemas and return the first match.
+// ResourceSingularizer 把 REST 资源名从复数转为单数（例如 pods -> pod）。
+// 该实现支持多个 REST schema，并返回第一个匹配结果。
 //
-// MultiRESTMapperWithContext.ResourceSingularizerWithContext is a better alternative because it supports contextual logging and cancellation.
+// MultiRESTMapperWithContext.ResourceSingularizerWithContext 是更好的替代方案，
+// 因为它支持上下文日志与取消。
 //
-// Contextual logging: Use MultiRESTMapperWithContext.ResourceSingularizerWithContext instead.
+// 上下文日志：请使用 MultiRESTMapperWithContext.ResourceSingularizerWithContext。
 func (m MultiRESTMapper) ResourceSingularizer(resource string) (singular string, err error) {
 	return ToMultiRESTMapperWithContext(m).ResourceSingularizerWithContext(context.Background(), resource)
 }
 
-// MultiRESTMapperWithContext.ResourcesForWithContext is a better alternative because it supports contextual logging and cancellation.
+// MultiRESTMapperWithContext.ResourcesForWithContext 是更好的替代方案，
+// 因为它支持上下文日志与取消。
 //
-// Contextual logging: Use MultiRESTMapperWithContext.ResourcesForWithContext instead.
+// 上下文日志：请使用 MultiRESTMapperWithContext.ResourcesForWithContext。
 func (m MultiRESTMapper) ResourcesFor(resource schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
 	return ToMultiRESTMapperWithContext(m).ResourcesForWithContext(context.Background(), resource)
 }
 
-// MultiRESTMapperWithContext.KindsForWithContext is a better alternative because it supports contextual logging and cancellation.
+// MultiRESTMapperWithContext.KindsForWithContext 是更好的替代方案，
+// 因为它支持上下文日志与取消。
 //
-// Contextual logging: Use MultiRESTMapperWithContext.KindsForWithContext instead.
+// 上下文日志：请使用 MultiRESTMapperWithContext.KindsForWithContext。
 func (m MultiRESTMapper) KindsFor(resource schema.GroupVersionResource) (gvk []schema.GroupVersionKind, err error) {
 	return ToMultiRESTMapperWithContext(m).KindsForWithContext(context.Background(), resource)
 }
 
-// MultiRESTMapperWithContext.ResourceForWithContext is a better alternative because it supports contextual logging and cancellation.
+// MultiRESTMapperWithContext.ResourceForWithContext 是更好的替代方案，
+// 因为它支持上下文日志与取消。
 //
-// Contextual logging: Use MultiRESTMapperWithContext.ResourceForWithContext instead.
+// 上下文日志：请使用 MultiRESTMapperWithContext.ResourceForWithContext。
 func (m MultiRESTMapper) ResourceFor(resource schema.GroupVersionResource) (schema.GroupVersionResource, error) {
 	return ToMultiRESTMapperWithContext(m).ResourceForWithContext(context.Background(), resource)
 }
 
-// MultiRESTMapperWithContext.KindForWithContext is a better alternative because it supports contextual logging and cancellation.
+// MultiRESTMapperWithContext.KindForWithContext 是更好的替代方案，
+// 因为它支持上下文日志与取消。
 //
-// Contextual logging: Use MultiRESTMapperWithContext.KindForWithContext instead.
+// 上下文日志：请使用 MultiRESTMapperWithContext.KindForWithContext。
 func (m MultiRESTMapper) KindFor(resource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
 	return ToMultiRESTMapperWithContext(m).KindForWithContext(context.Background(), resource)
 }
 
-// RESTMapping provides the REST mapping for the resource based on the
-// kind and version. This implementation supports multiple REST schemas and
-// return the first match.
+// RESTMapping 根据 kind 和版本返回资源的 REST 映射。
+// 该实现支持多个 REST schema，并返回第一个匹配结果。
 //
-// MultiRESTMapperWithContext.RESTMappingWithContext is a better alternative because it supports contextual logging and cancellation.
+// MultiRESTMapperWithContext.RESTMappingWithContext 是更好的替代方案，
+// 因为它支持上下文日志与取消。
 //
-// Contextual logging: Use MultiRESTMapperWithContext.RESTMappingWithContext instead.
+// 上下文日志：请使用 MultiRESTMapperWithContext.RESTMappingWithContext。
 func (m MultiRESTMapper) RESTMapping(gk schema.GroupKind, versions ...string) (*RESTMapping, error) {
 	return ToMultiRESTMapperWithContext(m).RESTMappingWithContext(context.Background(), gk, versions...)
 }
 
-// RESTMappings returns all possible RESTMappings for the provided group kind, or an error
-// if the type is not recognized.
+// RESTMappings 返回给定 group kind 的所有可能 RESTMapping；若类型无法识别则返回错误。
 //
-// MultiRESTMapperWithContext.RESTMappingsWithContext is a better alternative because it supports contextual logging and cancellation.
+// MultiRESTMapperWithContext.RESTMappingsWithContext 是更好的替代方案，
+// 因为它支持上下文日志与取消。
 //
-// Contextual logging: Use MultiRESTMapperWithContext.RESTMappingsWithContext instead.
+// 上下文日志：请使用 MultiRESTMapperWithContext.RESTMappingsWithContext。
 func (m MultiRESTMapper) RESTMappings(gk schema.GroupKind, versions ...string) ([]*RESTMapping, error) {
 	return ToMultiRESTMapperWithContext(m).RESTMappingsWithContext(context.Background(), gk, versions...)
 }
 
-// MultiRESTMapperWithContext.Reset is a better alternative because it supports contextual logging and cancellation.
+// MultiRESTMapperWithContext.Reset 是更好的替代方案，因为它支持上下文日志与取消。
 //
-// Contextual logging: Use MultiRESTMapperWithContext.Reset instead.
+// 上下文日志：请使用 MultiRESTMapperWithContext.Reset。
 func (m MultiRESTMapper) Reset() {
 	for _, t := range m {
 		MaybeResetRESTMapper(t)
 	}
 }
 
-// ResourceSingularizer converts a REST resource name from plural to singular (e.g., from pods to pod)
-// This implementation supports multiple REST schemas and return the first match.
+// ResourceSingularizerWithContext 把 REST 资源名从复数转为单数（例如 pods -> pod）。
+// 该实现支持多个 REST schema，并返回第一个成功的结果。
 func (m MultiRESTMapperWithContext) ResourceSingularizerWithContext(ctx context.Context, resource string) (singular string, err error) {
 	for _, t := range m {
 		singular, err = t.ResourceSingularizerWithContext(ctx, resource)
@@ -152,11 +163,13 @@ func (m MultiRESTMapperWithContext) ResourceSingularizerWithContext(ctx context.
 	return
 }
 
+// ResourcesForWithContext 聚合各 mapper 的结果并去重；忽略 NoMatch 错误，
+// 其他错误立即返回。若最终无任何匹配则返回 NoResourceMatchError。
 func (m MultiRESTMapperWithContext) ResourcesForWithContext(ctx context.Context, resource schema.GroupVersionResource) ([]schema.GroupVersionResource, error) {
 	allGVRs := []schema.GroupVersionResource{}
 	for _, t := range m {
 		gvrs, err := t.ResourcesForWithContext(ctx, resource)
-		// ignore "no match" errors, but any other error percolates back up
+		// 忽略“无匹配”错误，其他错误向上传播。
 		if IsNoMatchError(err) {
 			continue
 		}
@@ -164,7 +177,7 @@ func (m MultiRESTMapperWithContext) ResourcesForWithContext(ctx context.Context,
 			return nil, err
 		}
 
-		// walk the existing values to de-dup
+		// 遍历已有结果去重。
 		for _, curr := range gvrs {
 			found := false
 			for _, existing := range allGVRs {
@@ -187,11 +200,13 @@ func (m MultiRESTMapperWithContext) ResourcesForWithContext(ctx context.Context,
 	return allGVRs, nil
 }
 
+// KindsForWithContext 聚合各 mapper 的结果并去重；忽略 NoMatch 错误，
+// 其他错误立即返回。若最终无任何匹配则返回 NoResourceMatchError。
 func (m MultiRESTMapperWithContext) KindsForWithContext(ctx context.Context, resource schema.GroupVersionResource) (gvk []schema.GroupVersionKind, err error) {
 	allGVKs := []schema.GroupVersionKind{}
 	for _, t := range m {
 		gvks, err := t.KindsForWithContext(ctx, resource)
-		// ignore "no match" errors, but any other error percolates back up
+		// 忽略“无匹配”错误，其他错误向上传播。
 		if IsNoMatchError(err) {
 			continue
 		}
@@ -199,7 +214,7 @@ func (m MultiRESTMapperWithContext) KindsForWithContext(ctx context.Context, res
 			return nil, err
 		}
 
-		// walk the existing values to de-dup
+		// 遍历已有结果去重。
 		for _, curr := range gvks {
 			found := false
 			for _, existing := range allGVKs {
@@ -222,6 +237,8 @@ func (m MultiRESTMapperWithContext) KindsForWithContext(ctx context.Context, res
 	return allGVKs, nil
 }
 
+// ResourceForWithContext 要求 ResourcesForWithContext 恰好返回一个结果，
+// 否则返回 AmbiguousResourceError。
 func (m MultiRESTMapperWithContext) ResourceForWithContext(ctx context.Context, resource schema.GroupVersionResource) (schema.GroupVersionResource, error) {
 	resources, err := m.ResourcesForWithContext(ctx, resource)
 	if err != nil {
@@ -234,6 +251,8 @@ func (m MultiRESTMapperWithContext) ResourceForWithContext(ctx context.Context, 
 	return schema.GroupVersionResource{}, &AmbiguousResourceError{PartialResource: resource, MatchingResources: resources}
 }
 
+// KindForWithContext 要求 KindsForWithContext 恰好返回一个结果，
+// 否则返回 AmbiguousResourceError。
 func (m MultiRESTMapperWithContext) KindForWithContext(ctx context.Context, resource schema.GroupVersionResource) (schema.GroupVersionKind, error) {
 	kinds, err := m.KindsForWithContext(ctx, resource)
 	if err != nil {
@@ -246,16 +265,15 @@ func (m MultiRESTMapperWithContext) KindForWithContext(ctx context.Context, reso
 	return schema.GroupVersionKind{}, &AmbiguousResourceError{PartialResource: resource, MatchingKinds: kinds}
 }
 
-// RESTMapping provides the REST mapping for the resource based on the
-// kind and version. This implementation supports multiple REST schemas and
-// return the first match.
+// RESTMappingWithContext 根据 kind 和版本返回资源的 REST 映射。
+// 该实现支持多个 REST schema，并返回第一个匹配结果。
 func (m MultiRESTMapperWithContext) RESTMappingWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) (*RESTMapping, error) {
 	allMappings := []*RESTMapping{}
 	errors := []error{}
 
 	for _, t := range m {
 		currMapping, err := t.RESTMappingWithContext(ctx, gk, versions...)
-		// ignore "no match" errors, but any other error percolates back up
+		// 忽略“无匹配”错误，其他错误收集起来稍后聚合。
 		if IsNoMatchError(err) {
 			continue
 		}
@@ -267,7 +285,7 @@ func (m MultiRESTMapperWithContext) RESTMappingWithContext(ctx context.Context, 
 		allMappings = append(allMappings, currMapping)
 	}
 
-	// if we got exactly one mapping, then use it even if other requested failed
+	// 即使部分 mapper 失败，只要恰好得到一个映射就直接采用。
 	if len(allMappings) == 1 {
 		return allMappings[0], nil
 	}
@@ -284,15 +302,15 @@ func (m MultiRESTMapperWithContext) RESTMappingWithContext(ctx context.Context, 
 	return nil, &NoKindMatchError{GroupKind: gk, SearchedVersions: versions}
 }
 
-// RESTMappings returns all possible RESTMappings for the provided group kind, or an error
-// if the type is not recognized.
+// RESTMappingsWithContext 返回给定 group kind 的所有可能 RESTMapping；
+// 若类型无法识别则返回错误。
 func (m MultiRESTMapperWithContext) RESTMappingsWithContext(ctx context.Context, gk schema.GroupKind, versions ...string) ([]*RESTMapping, error) {
 	var allMappings []*RESTMapping
 	var errors []error
 
 	for _, t := range m {
 		currMappings, err := t.RESTMappingsWithContext(ctx, gk, versions...)
-		// ignore "no match" errors, but any other error percolates back up
+		// 忽略“无匹配”错误，其他错误收集起来稍后聚合。
 		if IsNoMatchError(err) {
 			continue
 		}
@@ -311,6 +329,7 @@ func (m MultiRESTMapperWithContext) RESTMappingsWithContext(ctx context.Context,
 	return allMappings, nil
 }
 
+// ResetWithContext 重置所有支持重置的 mapper，用于刷新缓存。
 func (m MultiRESTMapperWithContext) ResetWithContext(ctx context.Context) {
 	for _, t := range m {
 		MaybeResetRESTMapperWithContext(ctx, t)
